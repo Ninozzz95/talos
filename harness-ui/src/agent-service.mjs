@@ -431,6 +431,8 @@ export async function avviaSessione({
   onWorkflowFn,
   /* Automazioni a due porte (08/10/2026): il canale degli attrezzi `automation_*`, inoltrato com'è (lo lega il registro). */
   onAutomazioneFn,
+  /* 0.1.25 (owner 09/10/2026): il canale degli attrezzi `provider_*` (fornitori esclusi), inoltrato com'è (lo lega il registro). */
+  onFornitoriFn,
   /*
    * ⛔⛔ Rilievo 3 (piano 0.1.19 §1.7, 28/09) — il canale di `request_plan_mode`: inoltrato così
    *   com'è (il registro lo costruisce: accoda il cambio del modo, la patch va a fine giro).
@@ -2244,6 +2246,7 @@ export async function avviaSessione({
       onLetturaSezione, memorieNelPrompt, // 27/09/2026, decisione owner: le letture delle sezioni e le memorie nel prompt
       onWorkflowFn, // F-012 (piano 0.1.19 §1.5): i tre attrezzi dei run, inoltrato com'è
       onAutomazioneFn, // automazioni a due porte (08/10/2026): inoltrato com'è
+      onFornitoriFn, // 0.1.25: i fornitori esclusi, inoltrato com'è
       onRichiestaPianoFn, // Rilievo 3 (§1.7): la richiesta del modo Piano, inoltrata com'è
       onRicercaLista, onRicercaAvvia, onRicercaLeggi, onRicercaRinomina,
       onRicercaPausa, onRicercaRiprendi, onRicercaAnnulla, onRicercaElimina,

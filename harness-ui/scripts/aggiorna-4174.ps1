@@ -58,7 +58,17 @@ if (-not $env:TALOS_HARNESS_UI_SESSIONS_DIR -and $env:APPDATA) {
 }
 $cartellaStore = if ($env:TALOS_HARNESS_UI_SESSIONS_DIR) { $env:TALOS_HARNESS_UI_SESSIONS_DIR } else { Join-Path $harness '.sessions-store' }
 Write-Output ("archivio delle sessioni: {0}" -f $cartellaStore)
-$fileGettone = Join-Path $cartellaStore '.spegnimento-gettone'
+# ⛔⛔ 09/10/2026 — un gettone PER PORTA (`server.mjs`): la cartella è condivisa con l'app installata dal 07/10, e col nome unico
+#   l'ultimo server partito vinceva ⇒ 401 ⇒ -Force (visto il 09/10 alle 00:22). Il nome vecchio resta SOLO come ripiego di
+#   transizione, per un server partito prima di questa cura; lo si dice, perché se intanto è partita l'app può essere suo.
+$fileGettone = Join-Path $cartellaStore ('.spegnimento-gettone-{0}' -f $Porta)
+if (-not (Test-Path $fileGettone)) {
+  $vecchio = Join-Path $cartellaStore '.spegnimento-gettone'
+  if (Test-Path $vecchio) {
+    Write-Output ("nessun gettone per la porta {0}: uso il nome vecchio {1} (server partito prima della cura del 09/10; se nel frattempo e' partita l'app installata puo' essere il suo, e lo stop gentile rispondera' 401)" -f $Porta, $vecchio)
+    $fileGettone = $vecchio
+  }
+}
 
 # ── 1) costruisci e consegna ────────────────────────────────────────────────────────────────────
 if ($PSCmdlet.ShouldProcess($frontend, 'npm run build e consegna in public/')) {

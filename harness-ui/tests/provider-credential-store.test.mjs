@@ -160,3 +160,36 @@ test('PROVIDER-STORE-07 ignoraSemiAmbiente — l\'app installata non eredita chi
   const sviluppo = createProviderCredentialStore({ env: { OPENROUTER_API_KEY: secret }, keyring: fakeKeyring() });
   assert.equal(sviluppo.hasKey('openrouter'), true, 'il dev semina da ambiente: default invariato');
 });
+
+/*
+ * 08/10/2026 (bugfixer, foto del collega sul 4174): OpenRouter salvato con l'indirizzo DI SERIE diceva «Indirizzo
+ * personalizzato». La riga pubblica dice ora se il valore coincide col predefinito (`endpointPredefinito`), confrontato dopo
+ * la stessa normalizzazione; `endpointConfigured` NON cambia senso: per un fornitore locale vuol dire «scelto dalla persona»
+ * e rende TALOS pronto anche all'indirizzo di serie (setup-stato.mjs:31).
+ */
+test('PROVIDER-STORE-PREDEFINITO — salvato uguale al predefinito ⇒ endpointPredefinito; diverso o mai salvato ⇒ come prima', async () => {
+  const { statoPrimoAvvio } = await import('../src/setup-stato.mjs');
+  const store = createProviderCredentialStore({ env: {}, keyring: fakeKeyring() });
+  const riga = (id) => store.listPublic().find((r) => r.id === id);
+  // mai salvato: il predefinito è mostrato, ma non è «configurato»
+  assert.equal(riga('openrouter').endpointConfigured, false);
+  assert.equal(riga('openrouter').endpointPredefinito, true);
+  // salvato col predefinito, scritto con la barra finale e l'host in maiuscolo: è sempre quello di serie
+  store.setRuntime('openrouter', { endpoint: 'https://OpenRouter.ai/api/v1/' });
+  assert.equal(riga('openrouter').endpointConfigured, true);
+  assert.equal(riga('openrouter').endpointPredefinito, true);
+  // AL CONTRARIO: un indirizzo diverso
+  store.setRuntime('openrouter', { endpoint: 'https://proxy.esempio.test/api/v1' });
+  assert.equal(riga('openrouter').endpointPredefinito, false);
+  // un fornitore senza predefinito (Azure) non è mai «di serie»
+  assert.equal(riga('azure').endpointPredefinito, false);
+  // un fornitore senza indirizzo non porta mai il campo a true (l'agente esterno non lo ha proprio)
+  assert.equal(store.listPublic().filter((r) => !r.supportsEndpoint).some((r) => r.endpointPredefinito === true), false);
+  // Ollama scelto all'indirizzo di serie resta «configurato» e TALOS resta pronto
+  store.setRuntime('ollama', { endpoint: 'http://127.0.0.1:11434/' });
+  assert.equal(riga('ollama').endpointConfigured, true);
+  assert.equal(riga('ollama').endpointPredefinito, true);
+  const stato = statoPrimoAvvio({ providerStore: store });
+  assert.equal(stato.provider.pronto, true);
+  assert.deepEqual([...stato.provider.conIndirizzo], ['ollama']);
+});

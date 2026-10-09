@@ -393,7 +393,12 @@ for (const modo of ['dark', 'light']) {
         expect(letto.codice).toBe('cat .env');
         /* 3. «Per questa sessione» NON c'è: non smetterebbe di chiedere, sarebbe una promessa falsa. */
         expect(letto.bottoni, `i bottoni erano: ${letto.bottoni.join(' · ')}`).not.toContain('Per questa sessione');
-        expect(letto.bottoni).toEqual(['Consenti una volta', 'Nega']);
+        /* ⛔ 08/10/2026 (bugfixer) — dal 04/10 (f7873f8ce, BUG-A) c'è un TERZO pulsante, e non è la promessa falsa di sopra:
+           consente SOLO il percorso esatto della domanda (`ambito: 'percorso'`), il registro lo conserva in
+           `consensiSessione.segretiConsentiti` e il kernel non ridomanda quel percorso e ridomanda tutti gli altri
+           (tests/segreti-consentiti.test.mjs, BUG-A KERNEL-2). Il pulsante si toglie quando nella stessa domanda entrano
+           sospetti, percorsi di rete, la radice di WSL o una cartella esterna. */
+        expect(letto.bottoni).toEqual(['Consenti una volta', 'Consenti questo percorso per la sessione', 'Nega']);
         /* ⛔ LA FOTO SI SCATTA PRIMA DEL CLIC. La prima versione fotografava dopo, e `rispondi()`
            spegne i pulsanti: lo scatto mostrava una carta GRIGIA, cioè uno stato che la persona non
            vede mai nel momento in cui deve decidere. Una foto della schermata sbagliata non prova

@@ -432,6 +432,8 @@ const ATTREZZI_NEGATI_AI_PASSI = new Set([
   'request_plan_mode',
   // Automazioni a due porte (08/10/2026): un passo non tocca le automazioni (difesa in profondità: il registro già non le offre)
   'automation_list', 'automation_runs', 'automation_create', 'automation_update', 'automation_pause', 'automation_resume', 'automation_run', 'automation_stop',
+  // 0.1.25: un passo non tocca i fornitori esclusi (difesa in profondità: il registro già non li offre)
+  'provider_exclusions_list', 'provider_exclude', 'provider_allow',
 ]);
 const UUID_LEGAME = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 const NODO_LEGAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u;
@@ -2310,6 +2312,8 @@ export const STRUMENTI_ESTESI_PREDEFINITI = Object.freeze([
   'request_plan_mode',
   // Automazioni a due porte (owner 08/10/2026 notte): il kernel li offre solo al root e solo con `onAutomazioneFn` (il desktop).
   'automation_list', 'automation_runs', 'automation_create', 'automation_update', 'automation_pause', 'automation_resume', 'automation_run', 'automation_stop',
+  // 0.1.25 (owner 09/10/2026): i fornitori esclusi — il kernel li offre solo al root e solo con `onFornitoriFn` (il desktop)
+  'provider_exclusions_list', 'provider_exclude', 'provider_allow',
   'research_list', 'research_start', 'research_read', 'research_rename',
   'research_pause', 'research_resume', 'research_cancel', 'research_delete',
   /*
@@ -2844,6 +2848,7 @@ export function createSessionRegistry({
   /* Automazioni a due porte (08/10/2026): la fabbrica dell'ospite degli attrezzi `automation_*` (`automation-per-il-modello.mjs`),
      collegata dal server DOPO aver creato negozio e scheduler, che a loro volta hanno bisogno di questo registro. */
   let ospiteAutomazioni = null;
+  let ospiteFornitori = null; // 0.1.25: la fabbrica di `onFornitoriFn` (`collegaFornitori`)
   const tokenProntezzaDelega = Symbol('talos.delegation-readiness');
   /*
    * REV-SESSION-READY v6 (Codex v5, punto 2): una sessione ELIMINATA non si riscrive più, da nessun percorso. Il blocco di
@@ -6646,6 +6651,18 @@ export function createSessionRegistry({
         return { onAutomazioneFn: (nome, argomenti, opzioni) => ospite(nome, argomenti, opzioni) };
       })(),
       /*
+       * ⭐ 0.1.25 (owner 09/10/2026) — la seconda porta dei fornitori esclusi. Stesse regole delle automazioni: mai ai passi di
+       *   Workflow, mai a una sessione senza interfaccia che non sia un giro; un giro di automazione legge ma non cambia (l'ospite
+       *   lo rifiuta: nessuno risponderebbe alla carta).
+       */
+      ...(() => {
+        if (typeof ospiteFornitori !== 'function' || voce.legameWorkflow) return {};
+        const automazioneDelGiro = typeof voce.taskId === 'string' && voce.taskId.startsWith('automazione:') ? voce.taskId.slice('automazione:'.length) : null;
+        if (voce.senzaInterfaccia && !automazioneDelGiro) return {};
+        const ospite = ospiteFornitori({ automazioneDelGiro });
+        return { onFornitoriFn: (nome, argomenti, opzioni) => ospite(nome, argomenti, opzioni) };
+      })(),
+      /*
        * ⭐⭐⭐⭐ L8 (12/09/2026) — il compositore del record del rapporto. Non è un callback di
        * sessione (è puro): si passa sempre, ed è il kernel a usarlo solo dentro
        * `research_deposit`. Sta qui e non fra gli `onRicerca*` perché non delega niente
@@ -7373,7 +7390,54 @@ export function createSessionRegistry({
     return { ok: true, ...(nonUniti.length ? { nonUniti } : {}) }; // C2-R7: chi è rimasto «nega», solo se qualcuno
   }
 
+  /*
+   * ⭐ Owner, 08/10/2026 notte: Note, Attività e Memoria sono della PERSONA, non di una sessione — si leggono anche senza una
+   *   sessione aperta (rotte `/api/v1/me/…`). Queste tre sono l'UNICA lettura degli elenchi: le rotte con la sessione le chiamano
+   *   dopo aver verificato che la sessione esista, quelle personali direttamente. Stessa forma nei due casi.
+   */
+  async function leggiNotePersonali() {
+    let note;
+    try {
+      note = await elencaNoteRegistroFn({ cartella: cartellaNote });
+    } catch (errore) {
+      if (errore instanceof NoteStoreError) return { ok: true, note: null, errore: errore.message };
+      throw errore;
+    }
+    return { ok: true, note: note.map((n) => ({ id: n.id, titolo: n.titolo, contenuto: n.contenuto, aggiornataAlle: n.aggiornataAlle })), errore: null };
+  }
+  async function leggiAttivitaPersonali() {
+    let attivita;
+    try {
+      attivita = await elencaAttivitaRegistroFn({ cartella: cartellaAttivita });
+    } catch (errore) {
+      if (errore instanceof TaskStoreError) return { ok: true, attivita: null, errore: errore.message };
+      throw errore;
+    }
+    return {
+      ok: true,
+      attivita: attivita.map((a) => ({ id: a.id, titolo: a.titolo, descrizione: a.descrizione, priorita: a.priorita, stato: a.stato, aggiornataAlle: a.aggiornataAlle })),
+      errore: null,
+    };
+  }
+  async function leggiMemoriePersonali() {
+    let memorie;
+    try {
+      memorie = await elencaMemorieRegistroFn({ cartella: cartellaMemoria });
+    } catch (errore) {
+      if (errore instanceof MemoryStoreError) return { ok: true, memorie: null, errore: errore.message };
+      throw errore;
+    }
+    return {
+      ok: true,
+      memorie: memorie.map((m) => ({ id: m.id, titolo: m.titolo, contenuto: m.contenuto, genere: m.genere, aggiornataAlle: m.aggiornataAlle })),
+      errore: null,
+    };
+  }
+
   registryApi = Object.freeze({
+    elencaNotePersonali: leggiNotePersonali,
+    elencaAttivitaPersonali: leggiAttivitaPersonali,
+    elencaMemoriePersonali: leggiMemoriePersonali,
     /* Le capacità che chi usa il registro (la CLI nello stesso processo) può interrogare prima di offrire una funzione. */
     capacita: Object.freeze({ forkPrimaDelGiro: true }),
     async leggiOutputProcesso(sessionId,args,options) {
@@ -8510,6 +8574,11 @@ export function createSessionRegistry({
       ospiteAutomazioni = typeof fabbrica === 'function' ? fabbrica : null;
     },
 
+    /** 0.1.25 — collega la fabbrica dell'ospite degli attrezzi `provider_*` (fornitori esclusi); vale dai giri che partono dopo. */
+    collegaFornitori(fabbrica) {
+      ospiteFornitori = typeof fabbrica === 'function' ? fabbrica : null;
+    },
+
     /**
      * F3-32 — l'esito di un passo letto dal suo file (per la riconciliazione dopo un crollo). `null` se il file non c'è.
      * Una sessione ancora viva risponde `in-corso`; una finita senza terminale nel file, `interrupted`.
@@ -9607,20 +9676,8 @@ export function createSessionRegistry({
      * esista, stesso principio di elencaSkill/elencaLibreria.
      */
     async elencaNote(sessionId) {
-      const voce = sessioni.get(sessionId);
-      if (!voce) return rifiuto('NOT_FOUND', 'session-not-found', 'Session not found');
-      let note;
-      try {
-        note = await elencaNoteRegistroFn({ cartella: cartellaNote });
-      } catch (errore) {
-        if (errore instanceof NoteStoreError) return { ok: true, note: null, errore: errore.message };
-        throw errore;
-      }
-      return {
-        ok: true,
-        note: note.map((n) => ({ id: n.id, titolo: n.titolo, contenuto: n.contenuto, aggiornataAlle: n.aggiornataAlle })),
-        errore: null,
-      };
+      if (!sessioni.get(sessionId)) return rifiuto('NOT_FOUND', 'session-not-found', 'Session not found');
+      return leggiNotePersonali();
     },
 
     /**
@@ -9629,20 +9686,8 @@ export function createSessionRegistry({
      * (GLOBALE), MAI `voce.cartella`.
      */
     async elencaAttivita(sessionId) {
-      const voce = sessioni.get(sessionId);
-      if (!voce) return rifiuto('NOT_FOUND', 'session-not-found', 'Session not found');
-      let attivita;
-      try {
-        attivita = await elencaAttivitaRegistroFn({ cartella: cartellaAttivita });
-      } catch (errore) {
-        if (errore instanceof TaskStoreError) return { ok: true, attivita: null, errore: errore.message };
-        throw errore;
-      }
-      return {
-        ok: true,
-        attivita: attivita.map((a) => ({ id: a.id, titolo: a.titolo, descrizione: a.descrizione, priorita: a.priorita, stato: a.stato, aggiornataAlle: a.aggiornataAlle })),
-        errore: null,
-      };
+      if (!sessioni.get(sessionId)) return rifiuto('NOT_FOUND', 'session-not-found', 'Session not found');
+      return leggiAttivitaPersonali();
     },
 
     /**
@@ -9651,20 +9696,8 @@ export function createSessionRegistry({
      * (GLOBALE), MAI `voce.cartella`.
      */
     async elencaMemorie(sessionId) {
-      const voce = sessioni.get(sessionId);
-      if (!voce) return rifiuto('NOT_FOUND', 'session-not-found', 'Session not found');
-      let memorie;
-      try {
-        memorie = await elencaMemorieRegistroFn({ cartella: cartellaMemoria });
-      } catch (errore) {
-        if (errore instanceof MemoryStoreError) return { ok: true, memorie: null, errore: errore.message };
-        throw errore;
-      }
-      return {
-        ok: true,
-        memorie: memorie.map((m) => ({ id: m.id, titolo: m.titolo, contenuto: m.contenuto, genere: m.genere, aggiornataAlle: m.aggiornataAlle })),
-        errore: null,
-      };
+      if (!sessioni.get(sessionId)) return rifiuto('NOT_FOUND', 'session-not-found', 'Session not found');
+      return leggiMemoriePersonali();
     },
     /**
      * ⭐⭐⭐ FASE N, ottavo sistema (30/8) — Deep Research, il pannello

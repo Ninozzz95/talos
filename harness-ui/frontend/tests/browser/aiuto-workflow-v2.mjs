@@ -4,6 +4,8 @@
  * (dimostrativi, `R4-UI-MOCKUP-LIVELLI-2026-09-23.md`), NON dati di produzione: la prova dichiara la fixture.
  * ⛔ Solo letture: ogni richiesta non-GET alle API si ferma e si conta (`scritture`), così la prova può girare anche sul 4174.
  */
+import { attendiFineStoria, flussoConConfine } from './aiuto-confine.mjs';
+
 const MODELLO = 'z-ai/glm-5.3-flash';
 const INIZIO = Date.parse('2026-09-25T10:00:00.000Z');
 
@@ -283,7 +285,8 @@ export async function instradaScena(page, scena, { frame = null, vuota = false, 
         { type: 'ToolCallStart', toolCallId: 'c2', toolCallName: 'file_edit' }, { type: 'ToolCallArgs', toolCallId: 'c2', delta: '{"percorso":"src/agents/processor.py"}' },
       ].map((e) => `data: ${JSON.stringify(e)}\n\n`).join('') + 'retry: 600000\n\n' });
     }
-    if (p === `/api/v1/sessions/${S}/events`) return route.fulfill({ contentType: 'text/event-stream', body: '' });
+    // ⛔ 09/10/2026: il flusso finto porta il confine fra storia e presente (aiuto-confine.mjs): senza, la chat e il rail restavano velati
+    if (p === `/api/v1/sessions/${S}/events`) return flussoConConfine(route);
     if (p === `/api/v1/sessions/${S}/children`) return json(route, { figli: [] });
     if (p.startsWith(`/api/v1/sessions/${S}/tree`)) return json(route, { voci: [] });
     return route.fallback();
@@ -299,6 +302,7 @@ export async function apriRailDellaScena(page, scena) {
   await page.evaluate((id) => {
     window.__talosHarnessUiRuntime.passaASessione(id, 'workspace', 'W1-02 registro processi', 'z-ai/glm-5.3-flash', { conclusa: false });
   }, scena.sessionId);
+  await attendiFineStoria(page);
   if (!(await page.locator('#railTabs [data-rail="agenti"]').isVisible())) await page.locator('#schermoChat [data-azione="dettagli"]').click();
   await page.locator('#railTabs [data-rail="agenti"]').click();
   return page.locator('#railAgenti');

@@ -653,7 +653,10 @@ test('P0-B-4b — IL PANNELLO PARLA UNA LINGUA SOLA: stessa schermata in italian
 test('P0-B-4b — LA LINGUA CAMBIATA A CALDO: nessuna parola del pannello resta indietro', async ({ page }, info) => {
   mkdirSync(CARTELLA_FOTO, { recursive: true });
   const ITALIANO = { titolo: 'Non sono riuscito ad aprire questa pagina', motivo: 'Questo indirizzo non esiste', rimedio: 'Controlla l’indirizzo.', riprova: 'Riprova', annulla: 'Annulla' };
-  const INGLESE = { titolo: 'I could not open this page', motivo: 'That address does not exist', rimedio: 'Check the address.', riprova: 'Try again', annulla: 'Cancel' };
+  /* ⛔ 08/10/2026 (bugfixer): il pannello legge SOLO il dizionario dal 03/10 (lingua, corsia E): `varie.browser.failure.dns` «This
+     address…» (frasePerGenere, browser.js:145 — il motivo del server non si traduce) e `varie.browser.action.retry` «Retry»
+     (browser.js:62). «That address…» e «Try again» venivano dalla vecchia tabella `en.js`, che questo pannello non legge più. */
+  const INGLESE = { titolo: 'I could not open this page', motivo: 'This address does not exist', rimedio: 'Check the address.', riprova: 'Retry', annulla: 'Cancel' };
 
   /** Tutto ciò che il pannello dice: le cinque parti per nome, e ogni testo che contiene. */
   const leggiPannello = () => page.evaluate(() => {

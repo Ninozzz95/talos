@@ -6519,6 +6519,8 @@ var init_processi = __esm({
         "output.stateLimited": "Limite di conservazione raggiunto: una parte dell’output non è stata conservata.",
         "output.stateFailed": "Registrazione incompleta: i dati disponibili potrebbero non contenere tutto l’output.",
         "output.stateInterrupted": "Registrazione interrotta: i dati disponibili potrebbero non contenere tutto l’output.",
+        "output.stateBackground": "Passato in sottofondo: questo è ciò che aveva scritto fino a lì. Il resto va nel suo file di output; nella scheda Processi vedi se è ancora in corso.",
+        "output.stateBackgroundLimited": "Passato in sottofondo dopo aver raggiunto il limite di conservazione: una parte di ciò che aveva scritto fino a lì non è stata conservata. Il resto va nel suo file di output; nella scheda Processi vedi se è ancora in corso.",
         "output.summary": "Consulta output conservato",
         "output.stream": "Flusso",
         "output.streamLabel": "Flusso dell’output",
@@ -6741,6 +6743,8 @@ var init_processi = __esm({
         "output.stateLimited": "Storage limit reached: part of the output was not kept.",
         "output.stateFailed": "Recording incomplete: the available data may not contain all of the output.",
         "output.stateInterrupted": "Recording stopped: the available data may not contain all of the output.",
+        "output.stateBackground": "Moved to the background: this is what it printed until then. What it prints next goes to its output file; the Processes tab shows whether it is still running.",
+        "output.stateBackgroundLimited": "Moved to the background after the storage limit was reached: part of what it printed until then was not kept. What it prints next goes to its output file; the Processes tab shows whether it is still running.",
         "output.summary": "View stored output",
         "output.stream": "Stream",
         "output.streamLabel": "Output stream",
@@ -7541,6 +7545,12 @@ var init_modelli = __esm({
         "provider.excludedCountMany": "{n} fornitori",
         "provider.excludedProvidersFullOne": "Puoi escludere al massimo {n} fornitore.",
         "provider.excludedProvidersFullMany": "Puoi escludere al massimo {n} fornitori.",
+        "provider.defaultExcludedTitle": "Esclusi di serie",
+        "provider.defaultExcludedNote": "per {model}: non chiama gli attrezzi",
+        "provider.defaultAllowedNote": "{name} di nuovo ammesso per {model}",
+        "provider.allowDefaultExcludedAgain": "Riammetti {name} per {model}",
+        "provider.excludeAgainAction": "Escludi di nuovo",
+        "provider.excludeDefaultAgain": "Escludi di nuovo {name} per {model}",
         "provider.keySaveFailed": "La chiave non è stata salvata: {reason}",
         "provider.numberedKey": "Chiave {number}{fingerprint}",
         "provider.removeNumberedKey": "Rimuovi chiave {number}",
@@ -8597,6 +8607,12 @@ var init_modelli = __esm({
         "provider.excludedCountMany": "{n} providers",
         "provider.excludedProvidersFullOne": "You can exclude up to {n} provider.",
         "provider.excludedProvidersFullMany": "You can exclude up to {n} providers.",
+        "provider.defaultExcludedTitle": "Excluded by default",
+        "provider.defaultExcludedNote": "for {model}: it doesn't call tools",
+        "provider.defaultAllowedNote": "{name} allowed again for {model}",
+        "provider.allowDefaultExcludedAgain": "Allow {name} again for {model}",
+        "provider.excludeAgainAction": "Exclude again",
+        "provider.excludeDefaultAgain": "Exclude {name} again for {model}",
         "provider.keySaveFailed": "The key was not saved: {reason}",
         "provider.numberedKey": "Key {number}{fingerprint}",
         "provider.removeNumberedKey": "Remove key {number}",
@@ -12081,6 +12097,9 @@ var init_varie = __esm({
         "tools.name.automationResume": "automazione riaccesa",
         "tools.name.automationRun": "giro immediato di un’automazione",
         "tools.name.automationStop": "giro fermato",
+        "tools.name.providerExclusionsList": "fornitori esclusi",
+        "tools.name.providerExclude": "fornitore escluso",
+        "tools.name.providerAllow": "fornitore riammesso",
         "tools.name.askParent": "domanda all’agente che l’ha avviato",
         "tools.name.answerParentQuestion": "risposta all’agente che l’ha avviato",
         "tools.name.askChild": "domanda a un sotto-agente",
@@ -12152,6 +12171,22 @@ var init_varie = __esm({
         "tools.description.automationResume": "Riaccende un’automazione; la approvi su una carta.",
         "tools.description.automationRun": "Fa girare subito un’automazione, fuori dal suo orario; lo approvi su una carta.",
         "tools.description.automationStop": "Ferma il giro di un’automazione in corso adesso.",
+        "tools.description.providerExclusionsList": "Elenca i fornitori di OpenRouter che le richieste saltano, i tuoi e quelli esclusi di serie.",
+        "tools.description.providerExclude": "Fa saltare a OpenRouter un fornitore dalla prossima richiesta, dopo il tuo sì.",
+        "tools.description.providerAllow": "Fa usare di nuovo a OpenRouter un fornitore escluso, dopo il tuo sì.",
+        "providerCard.badge": "Fornitore OpenRouter",
+        "providerCard.exclude": "TALOS vuole che OpenRouter salti {name} per ogni modello.",
+        "providerCard.excludeForModel": "TALOS vuole che OpenRouter salti di nuovo {name} per {model}, come fa di serie.",
+        "providerCard.allow": "TALOS vuole che OpenRouter usi di nuovo {name}.",
+        "providerCard.allowForModel": "TALOS vuole che OpenRouter usi di nuovo {name} per {model}, che di serie lo esclude.",
+        "providerCard.allowBoth": "TALOS vuole che OpenRouter usi di nuovo {name}, anche per {model}, che di serie lo esclude.",
+        "providerCard.forModel": "Per {model}",
+        "providerCard.before": "Adesso",
+        "providerCard.after": "Dopo",
+        "providerCard.none": "nessuno",
+        "providerCard.everyModelNote": "Vale per ogni modello e ogni sessione, dalla prossima richiesta.",
+        "providerCard.excludedByDefault": "escluso (di serie)",
+        "providerCard.allowedAgain": "di nuovo ammesso",
         "tools.description.askParent": "Un sotto-agente chiede un fatto o una decisione all’agente che lo ha avviato, e aspetta la risposta.",
         "tools.description.answerParentQuestion": "Un sotto-agente risponde a una domanda dell’agente che lo ha avviato.",
         "tools.description.askChild": "Manda una domanda a un sotto-agente; la risposta arriva dopo, senza fermare il giro.",
@@ -12982,6 +13017,9 @@ var init_varie = __esm({
         "tools.name.automationResume": "automation turned on",
         "tools.name.automationRun": "automation run now",
         "tools.name.automationStop": "automation run stopped",
+        "tools.name.providerExclusionsList": "excluded providers",
+        "tools.name.providerExclude": "provider excluded",
+        "tools.name.providerAllow": "provider allowed again",
         "tools.name.askParent": "asking the parent agent",
         "tools.name.answerParentQuestion": "answering the parent agent",
         "tools.name.askChild": "asking a sub-agent",
@@ -13053,6 +13091,22 @@ var init_varie = __esm({
         "tools.description.automationResume": "Turns an automation back on; you approve it on a card.",
         "tools.description.automationRun": "Runs an automation now, outside its schedule; you approve it on a card.",
         "tools.description.automationStop": "Stops the run of an automation that is going right now.",
+        "tools.description.providerExclusionsList": "Lists the OpenRouter providers that requests skip, yours and the ones excluded by default.",
+        "tools.description.providerExclude": "Makes OpenRouter skip a provider from the next request on, after you approve it.",
+        "tools.description.providerAllow": "Lets OpenRouter use an excluded provider again, after you approve it.",
+        "providerCard.badge": "OpenRouter provider",
+        "providerCard.exclude": "TALOS wants OpenRouter to skip {name} for every model.",
+        "providerCard.excludeForModel": "TALOS wants OpenRouter to skip {name} again for {model}, as it does by default.",
+        "providerCard.allow": "TALOS wants OpenRouter to use {name} again.",
+        "providerCard.allowForModel": "TALOS wants OpenRouter to use {name} again for {model}, which excludes it by default.",
+        "providerCard.allowBoth": "TALOS wants OpenRouter to use {name} again, also for {model}, which excludes it by default.",
+        "providerCard.forModel": "For {model}",
+        "providerCard.before": "Now",
+        "providerCard.after": "After",
+        "providerCard.none": "none",
+        "providerCard.everyModelNote": "It applies to every model and every session, from the next request on.",
+        "providerCard.excludedByDefault": "excluded (by default)",
+        "providerCard.allowedAgain": "allowed again",
         "tools.description.askParent": "A sub-agent asks the agent that started it for a fact or a decision, and waits for the answer.",
         "tools.description.answerParentQuestion": "A sub-agent answers a question from the agent that started it.",
         "tools.description.askChild": "Sends a question to a sub-agent; the answer arrives later, without stopping the turn.",
@@ -13341,6 +13395,8 @@ var init_errori = __esm({
         "AUTH_REQUIRED.message": "Questo server accetta solo la finestra TALOS che lo ha avviato",
         "CHAT_FILE_ORIGIN_FORBIDDEN.message": "Carica il file dalla finestra TALOS di questa sessione",
         "PAGE_ORIGIN_FORBIDDEN.message": "Apri la pagina dalla finestra TALOS di questa sessione",
+        "HOST_FORBIDDEN.message": "TALOS risponde solo al suo indirizzo locale (127.0.0.1 o localhost)",
+        "ORIGIN_FORBIDDEN.message": "Le modifiche si fanno solo dalla finestra di TALOS",
         "TERMINAL_LIMIT_REACHED.message": "Hai già il massimo di terminali aperti per questa sessione: chiudine uno e riprova",
         "TERMINAL_STORE_UNAVAILABLE.message": "I terminali non sono disponibili su questo server",
         "BROWSER_PROXY_SOLO_LOCALE.message": "Il proxy con annotazione vale solo per un dev server sul tuo computer",
@@ -14092,6 +14148,8 @@ var init_errori = __esm({
         "AUTH_REQUIRED.message": "This server only accepts the TALOS window that started it",
         "CHAT_FILE_ORIGIN_FORBIDDEN.message": "Upload the file from this session’s TALOS window",
         "PAGE_ORIGIN_FORBIDDEN.message": "Open the page from this session’s TALOS window",
+        "HOST_FORBIDDEN.message": "TALOS answers only at its own local address (127.0.0.1 or localhost)",
+        "ORIGIN_FORBIDDEN.message": "Changes can be made only from the TALOS window",
         "TERMINAL_LIMIT_REACHED.message": "You already have the maximum number of open terminals for this session: close one and try again",
         "TERMINAL_STORE_UNAVAILABLE.message": "Terminals are not available on this server",
         "BROWSER_PROXY_SOLO_LOCALE.message": "The annotation proxy only works for a dev server on your computer",
@@ -20245,18 +20303,18 @@ function tn(uno2, molti, n, parametri) {
 function attributiDaTradurre(valore) {
   return String(valore ?? "").split(";").map((pezzo2) => /^\s*\[([a-zA-Z-]+)\]\s*(\S+)\s*$/u.exec(pezzo2)).filter(Boolean).map((m) => [m[1], m[2]]);
 }
-function primoTesto(el34) {
-  for (const nodo14 of el34.childNodes) if (nodo14.nodeType === 3 && nodo14.data.trim()) return nodo14;
+function primoTesto(el35) {
+  for (const nodo14 of el35.childNodes) if (nodo14.nodeType === 3 && nodo14.data.trim()) return nodo14;
   return null;
 }
-function ancoraDelModello(el34, dove, chiave, attuale) {
+function ancoraDelModello(el35, dove, chiave, attuale) {
   const ora4 = normale(attuale);
-  return ora4 === "" || ora4 === normale(scrittoDaQui.get(el34)?.[dove]) || ora4 === TESTI.it?.[chiave] || ora4 === TESTI[LINGUA_DI_RISERVA][chiave];
+  return ora4 === "" || ora4 === normale(scrittoDaQui.get(el35)?.[dove]) || ora4 === TESTI.it?.[chiave] || ora4 === TESTI[LINGUA_DI_RISERVA][chiave];
 }
-function ricorda(el34, dove, valore) {
-  const voce2 = scrittoDaQui.get(el34) ?? {};
+function ricorda(el35, dove, valore) {
+  const voce2 = scrittoDaQui.get(el35) ?? {};
   voce2[dove] = valore;
-  scrittoDaQui.set(el34, voce2);
+  scrittoDaQui.set(el35, voce2);
 }
 function applicaLingua(root2, lingua) {
   const d = DIZIONARIO[lingua] || DIZIONARIO[LINGUA_PREDEFINITA];
@@ -20266,35 +20324,35 @@ function applicaLingua(root2, lingua) {
   if (radice2.dataset) radice2.dataset.linguaApplicata = lingua;
   let toccati = 0;
   const stabile = (k) => FORMA_DELLA_CHIAVE.test(k || "") && TESTI[LINGUA_DI_RISERVA][k] !== void 0;
-  for (const el34 of root2.querySelectorAll("[data-t]")) {
-    const chiave = el34.getAttribute("data-t");
+  for (const el35 of root2.querySelectorAll("[data-t]")) {
+    const chiave = el35.getAttribute("data-t");
     const valore = stabile(chiave) ? t(chiave) : d[chiave];
     if (!valore) continue;
-    const testo2 = primoTesto(el34);
+    const testo2 = primoTesto(el35);
     if (stabile(chiave)) {
-      if (!ancoraDelModello(el34, "#testo", chiave, testo2 ? testo2.data : el34.textContent)) continue;
-      ricorda(el34, "#testo", valore);
+      if (!ancoraDelModello(el35, "#testo", chiave, testo2 ? testo2.data : el35.textContent)) continue;
+      ricorda(el35, "#testo", valore);
     }
     if (testo2) {
       const testaSpazio = /^\s/.test(testo2.data) ? " " : "";
       const codaSpazio = /\s$/.test(testo2.data) ? " " : "";
       testo2.data = testaSpazio + valore + codaSpazio;
-    } else el34.textContent = valore;
+    } else el35.textContent = valore;
     toccati += 1;
   }
-  for (const el34 of root2.querySelectorAll("[data-ph]")) {
-    const valore = d[el34.getAttribute("data-ph")];
+  for (const el35 of root2.querySelectorAll("[data-ph]")) {
+    const valore = d[el35.getAttribute("data-ph")];
     if (!valore) continue;
-    el34.placeholder = valore;
+    el35.placeholder = valore;
     toccati += 1;
   }
-  for (const el34 of root2.querySelectorAll("[data-t-attr]")) {
-    for (const [nome, chiave] of attributiDaTradurre(el34.getAttribute("data-t-attr"))) {
+  for (const el35 of root2.querySelectorAll("[data-t-attr]")) {
+    for (const [nome, chiave] of attributiDaTradurre(el35.getAttribute("data-t-attr"))) {
       if (!stabile(chiave)) continue;
-      if (!ancoraDelModello(el34, nome, chiave, el34.getAttribute(nome))) continue;
+      if (!ancoraDelModello(el35, nome, chiave, el35.getAttribute(nome))) continue;
       const valore = t(chiave);
-      ricorda(el34, nome, valore);
-      el34.setAttribute(nome, valore);
+      ricorda(el35, nome, valore);
+      el35.setAttribute(nome, valore);
       toccati += 1;
     }
   }
@@ -20452,23 +20510,23 @@ function createOverlayManager(doc) {
   const inertBefore = /* @__PURE__ */ new Map();
   let observer = null;
   let restoring = false;
-  const shown = (el34) => el34.isConnected && !el34.hidden && (el34.tagName !== "DIALOG" || el34.hasAttribute("open"));
-  const visible = (el34) => shown(el34) && !el34.closest("[hidden],[inert]") && el34.getClientRects().length > 0 && doc.defaultView?.getComputedStyle(el34).visibility !== "hidden";
+  const shown = (el35) => el35.isConnected && !el35.hidden && (el35.tagName !== "DIALOG" || el35.hasAttribute("open"));
+  const visible = (el35) => shown(el35) && !el35.closest("[hidden],[inert]") && el35.getClientRects().length > 0 && doc.defaultView?.getComputedStyle(el35).visibility !== "hidden";
   const top = () => stack.at(-1);
   const modalBaseZ = () => Number.parseInt(doc.defaultView?.getComputedStyle(doc.documentElement).getPropertyValue("--ui-z-modal") || "200", 10) || 200;
   function focusable(entry) {
-    return [...entry.content.querySelectorAll(candidates)].filter((el34) => el34.tabIndex >= 0 && !el34.matches(":disabled") && visible(el34));
+    return [...entry.content.querySelectorAll(candidates)].filter((el35) => el35.tabIndex >= 0 && !el35.matches(":disabled") && visible(el35));
   }
   function foreignNativeModal() {
-    return [...doc.querySelectorAll("dialog[open]")].some((el34) => el34.matches(":modal") && !stack.some((e) => e.layer === el34));
+    return [...doc.querySelectorAll("dialog[open]")].some((el35) => el35.matches(":modal") && !stack.some((e) => e.layer === el35));
   }
   function releaseInert() {
-    for (const [el34, before] of inertBefore) el34.inert = before;
+    for (const [el35, before] of inertBefore) el35.inert = before;
     inertBefore.clear();
   }
-  function restoreAttribute(el34, name, value) {
-    if (value === null) el34.removeAttribute(name);
-    else el34.setAttribute(name, value);
+  function restoreAttribute(el35, name, value) {
+    if (value === null) el35.removeAttribute(name);
+    else el35.setAttribute(name, value);
   }
   function refresh() {
     const current = top();
@@ -20481,13 +20539,13 @@ function createOverlayManager(doc) {
         }
       }
     }
-    for (const [el34, before] of inertBefore) if (!wanted.has(el34)) {
-      el34.inert = before;
-      inertBefore.delete(el34);
+    for (const [el35, before] of inertBefore) if (!wanted.has(el35)) {
+      el35.inert = before;
+      inertBefore.delete(el35);
     }
-    for (const el34 of wanted) if (!inertBefore.has(el34)) {
-      inertBefore.set(el34, el34.inert);
-      el34.inert = true;
+    for (const el35 of wanted) if (!inertBefore.has(el35)) {
+      inertBefore.set(el35, el35.inert);
+      el35.inert = true;
     }
   }
   function focusFirst(entry, preferred) {
@@ -20506,7 +20564,7 @@ function createOverlayManager(doc) {
     const owner = entry.opener;
     let target = owner && typeof owner.focus === "function" && visible(owner) ? owner : null;
     if (!target && entry.openerId) target = doc.getElementById(entry.openerId);
-    if (!target && entry.openerAction) target = [...doc.querySelectorAll("[data-home-action]")].find((el34) => el34.dataset.homeAction === entry.openerAction) || null;
+    if (!target && entry.openerAction) target = [...doc.querySelectorAll("[data-home-action]")].find((el35) => el35.dataset.homeAction === entry.openerAction) || null;
     const current = top();
     if (current && (!target || !current.content.contains(target))) {
       focusFirst(current);
@@ -20784,10 +20842,10 @@ var init_motion_mockup = __esm({
 
 // src/components/modale-td.js
 function nodo(doc, tag2, classe, testo2) {
-  const el34 = doc.createElement(tag2);
-  if (classe) el34.className = classe;
-  if (testo2 !== void 0 && testo2 !== null) el34.textContent = String(testo2);
-  return el34;
+  const el35 = doc.createElement(tag2);
+  if (classe) el35.className = classe;
+  if (testo2 !== void 0 && testo2 !== null) el35.textContent = String(testo2);
+  return el35;
 }
 function icona(doc, nome) {
   const svg2 = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -24123,6 +24181,10 @@ var init_nomi_attrezzi = __esm({
       automation_resume: "varie.tools.name.automationResume",
       automation_run: "varie.tools.name.automationRun",
       automation_stop: "varie.tools.name.automationStop",
+      // 0.1.25 (owner 09/10/2026): i fornitori a valle esclusi su OpenRouter
+      provider_exclusions_list: "varie.tools.name.providerExclusionsList",
+      provider_exclude: "varie.tools.name.providerExclude",
+      provider_allow: "varie.tools.name.providerAllow",
       ask_parent: "varie.tools.name.askParent",
       answer_parent_question: "varie.tools.name.answerParentQuestion",
       ask_child: "varie.tools.name.askChild",
@@ -24227,6 +24289,9 @@ var init_nomi_attrezzi = __esm({
       automation_resume: "varie.tools.description.automationResume",
       automation_run: "varie.tools.description.automationRun",
       automation_stop: "varie.tools.description.automationStop",
+      provider_exclusions_list: "varie.tools.description.providerExclusionsList",
+      provider_exclude: "varie.tools.description.providerExclude",
+      provider_allow: "varie.tools.description.providerAllow",
       ask_parent: "varie.tools.description.askParent",
       answer_parent_question: "varie.tools.description.answerParentQuestion",
       ask_child: "varie.tools.description.askChild",
@@ -25869,9 +25934,9 @@ function disegnaAgenti(d, contenitore, agenti, azioni = {}) {
     if (a.avviataAlle && !azioni.compatta) righe.push([t("processi.agents.rowStarted"), oraBreve(a.avviataAlle)]);
     if (ev) righe.push([t("processi.agents.rowDone"), `${tn("processi.agents.callsOne", "processi.agents.callsMany", Number(ev.toolCalls || 0), { n: conteggioIntero(Number(ev.toolCalls || 0)) })} · ${tn("processi.agents.writesOne", "processi.agents.writesMany", Number(ev.scritture || 0), { n: conteggioIntero(Number(ev.scritture || 0)) })}`]);
     for (const [k, v] of righe) {
-      const kv6 = el3(d, "div", "talos-kv");
-      kv6.append(el3(d, "span", "talos-kv__k", k), el3(d, "span", "talos-kv__v talos-mono", v));
-      card.append(kv6);
+      const kv7 = el3(d, "div", "talos-kv");
+      kv7.append(el3(d, "span", "talos-kv__k", k), el3(d, "span", "talos-kv__v talos-mono", v));
+      card.append(kv7);
     }
     const collisioni = Array.isArray(a.collisioni) ? a.collisioni : [];
     if (collisioni.length) {
@@ -26411,11 +26476,11 @@ function aggiornaCronologia(nav, conversazione, { fuoco = null, voci = null, seg
   const attivaVera = Number(nav.dataset.attivaVera || nav.dataset.attiva || 0);
   let contaTuoi = 0;
   let contaSue = 0;
-  const metti = (el34, nome, valore) => {
-    if (el34.getAttribute(nome) !== valore) el34.setAttribute(nome, valore);
+  const metti = (el35, nome, valore) => {
+    if (el35.getAttribute(nome) !== valore) el35.setAttribute(nome, valore);
   };
-  const togli = (el34, nome) => {
-    if (el34.hasAttribute(nome)) el34.removeAttribute(nome);
+  const togli = (el35, nome) => {
+    if (el35.hasAttribute(nome)) el35.removeAttribute(nome);
   };
   const bottoni = [...lista.querySelectorAll(".talos-cronologia__voce")];
   bottoni.forEach((b, i2) => {
@@ -26678,8 +26743,8 @@ function montaProviderRetry({ contenitore, onShow = () => {
     nodo14.dataset.fase = stato2.retry.fase;
     const testi = testoRetry(stato2.retry, Date.now());
     for (const nome of ["titolo", "motivo", "tempo"]) {
-      const el34 = nodo14.querySelector(`.talos-provider-retry__${nome}`);
-      if (el34.textContent !== testi[nome]) el34.textContent = testi[nome];
+      const el35 = nodo14.querySelector(`.talos-provider-retry__${nome}`);
+      if (el35.textContent !== testi[nome]) el35.textContent = testi[nome];
     }
     const conta2 = stato2.retry.fase === "attesa" && stato2.retry.retryAt > Date.now();
     if (conta2 && timer2 === null) timer2 = setInterval(disegna2, 1e3);
@@ -26962,10 +27027,282 @@ var init_loghi_fornitori = __esm({
   }
 });
 
+// src/components/coordinazione.js
+function coordinazioneAccesaNellaCatena(sceltePerAnello) {
+  const anelli = Array.isArray(sceltePerAnello) ? sceltePerAnello : [];
+  if (anelli.length === 0) return false;
+  const scelte = anelli.map((m) => eMappa(m) && Object.hasOwn(m, CHIAVE_COORDINAZIONE) ? m[CHIAVE_COORDINAZIONE] : void 0);
+  if (scelte.some((s) => s !== void 0 && s !== "sempre")) return false;
+  return scelte[scelte.length - 1] === "sempre";
+}
+function mappaPerUnaSessioneNuova(mappa) {
+  if (!eMappa(mappa)) return {};
+  const { [CHIAVE_COORDINAZIONE]: _tolta, ...resto } = mappa;
+  return resto;
+}
+var CHIAVE_COORDINAZIONE, TETTO_AVVII_DA_SOLO, eMappa;
+var init_coordinazione = __esm({
+  "src/components/coordinazione.js"() {
+    CHIAVE_COORDINAZIONE = "delega_sottotask";
+    TETTO_AVVII_DA_SOLO = 20;
+    eMappa = (mappa) => Boolean(mappa) && typeof mappa === "object" && !Array.isArray(mappa);
+  }
+});
+
+// src/components/politiche.js
+function politica(valore) {
+  return PER_VALORE.get(String(valore || "").trim()) || null;
+}
+function nomeUmanoPolitica(valore) {
+  return politica(valore)?.nome || String(valore || "");
+}
+function descrizionePolitica(valore) {
+  return politica(valore)?.descrizione || "";
+}
+function notaPolitica(valore) {
+  return politica(valore)?.nota || "";
+}
+function valoriPolitiche() {
+  return POLITICHE.map((p) => p.valore);
+}
+var politicaDa, POLITICHE, PER_VALORE;
+var init_politiche = __esm({
+  "src/components/politiche.js"() {
+    init_lingua();
+    politicaDa = (valore, chiave, rischio) => Object.freeze(Object.defineProperties({ valore, rischio }, {
+      nome: { enumerable: true, get: () => t(`chat.foot.permission.${chiave}`) },
+      descrizione: { enumerable: true, get: () => t(`varie.policy.${chiave}.description`) },
+      nota: { enumerable: true, get: () => t(`varie.policy.${chiave}.note`) }
+    }));
+    POLITICHE = Object.freeze([
+      politicaDa("Read only", "readOnly", "basso"),
+      politicaDa("Workspace write", "workspaceWrite", "medio"),
+      politicaDa("On request", "onRequest", "medio"),
+      politicaDa("Full access", "fullAccess", "massimo")
+    ]);
+    PER_VALORE = new Map(POLITICHE.map((p) => [p.valore, p]));
+  }
+});
+
+// src/components/chat-foot.js
+function etichettaPermesso(permesso) {
+  if (NOME_PERMESSO[permesso]) return NOME_PERMESSO[permesso];
+  if (Object.hasOwn(CHIAVI_PERMESSO_NON_SCEGLIBILI, permesso)) return t(CHIAVI_PERMESSO_NON_SCEGLIBILI[permesso]);
+  return typeof permesso === "string" && permesso.trim() ? permesso : t("chat.foot.permission.notSelected");
+}
+function etichettaPermessoConEccezioni(permesso, permessiPerAttrezzo) {
+  const base = etichettaPermesso(permesso);
+  const regole = regolePerAttrezzo(permessiPerAttrezzo);
+  if (regole.length === 0) return base;
+  return tn("chat.foot.permission.exceptionsOne", "chat.foot.permission.exceptionsMany", regole.length, { base });
+}
+function nomeModelloUmano(id4) {
+  if (typeof id4 !== "string" || !id4.trim()) return "";
+  const grezzo = id4.trim();
+  if (!/^local:/i.test(grezzo)) return grezzo.replace(/^~/u, "").split("/").pop();
+  let resto = grezzo.replace(/^local:/i, "").replace(/[-_.]gguf$/i, "");
+  const quant = /[-_](IQ\d\w*|Q\d(?:[-_]\d)?(?:[-_][A-Z]+)*)(?=[-_]|$)/i.exec(resto);
+  const parametri = /(?:^|[-_])(\d+(?:[.,]\d+)?B)(?:[-_]A(\d+(?:[.,]\d+)?B))?(?=[-_]|$)/i.exec(resto);
+  let nome = resto;
+  if (parametri) nome = resto.slice(0, parametri.index);
+  nome = nome.replace(/[-_](GGUF|MLX|AWQ|GPTQ)$/i, "");
+  const pezzi = nome.split(/[-_]/).filter(Boolean);
+  if (pezzi.length > 1) pezzi.shift();
+  const pulito = pezzi.join(" ").replace(/\s+/g, " ").trim();
+  const parti = [pulito || resto];
+  if (parametri) parti.push(parametri[2] ? t("chat.foot.activeOf", { totali: parametri[1], attivi: parametri[2].replace(/^A/i, "") }) : parametri[1]);
+  if (quant) parti.push(quant[1].toUpperCase().replace(/-/g, "_"));
+  return parti.filter(Boolean).join(" · ");
+}
+function fondoInVista({ scrollHeight = 0, scrollTop = 0, clientHeight = 0, coda: coda2 = 0, soglia = 4 } = {}) {
+  if (Number(scrollHeight) <= Number(clientHeight)) return true;
+  const distanza = Number(scrollHeight) - Number(scrollTop) - Number(clientHeight);
+  if (!Number.isFinite(distanza)) return true;
+  return distanza <= Math.max(0, Number(coda2) || 0) + soglia;
+}
+function dettaglioUtile(cosa, dettaglio) {
+  const pulisci = (t2) => String(t2 ?? "").replace(/[…\.]+$/u, "").trim().toLowerCase();
+  const a = pulisci(cosa);
+  const b = pulisci(dettaglio);
+  if (!b || !a) return String(dettaglio ?? "").trim();
+  if (a === b || a.startsWith(b) || b.startsWith(a)) return "";
+  return String(dettaglio).trim();
+}
+function tonoPermesso(permesso) {
+  if (permesso === "Full access") return "danger";
+  if (permesso === "Workspace write") return "warning";
+  return null;
+}
+function kilo2(n) {
+  const v = Number(n) || 0;
+  if (v < 1e3) return String(Math.round(v));
+  return `${conSeparatoreDecimale((v / 1e3).toFixed(1))}k`;
+}
+function testoVelocitaLocale(modelloId, velocita) {
+  const id4 = String(modelloId || "");
+  if (!/^local:/i.test(id4)) return "";
+  return String(velocita || "").trim();
+}
+function testiUsage(usage, { tettoGiri = null, usageSessione = null } = {}) {
+  const sessione = usageSessione && typeof usageSessione === "object" ? usageSessione : usage;
+  if ((!usage || typeof usage !== "object") && (!sessione || typeof sessione !== "object")) return { tokenGiri: "", cache: "", giri: null, velocita: "" };
+  const prompt = Number(sessione?.prompt_tokens ?? 0) || 0;
+  const completion = Number(sessione?.completion_tokens ?? 0) || 0;
+  const cache = Number(sessione?.cached_tokens ?? 0) || 0;
+  const baseCache = Number.isFinite(sessione?.prompt_tokens_con_cache) ? sessione.prompt_tokens_con_cache : prompt;
+  const giriSessione = Number.isFinite(Number(sessione?.giri)) ? Number(sessione.giri) : null;
+  const giri = Number.isFinite(Number(usage?.giri)) ? Number(usage.giri) : null;
+  const totale2 = prompt + completion;
+  const parti = [];
+  if (totale2 > 0) parti.push(`${kilo2(totale2)} token`);
+  if (giriSessione !== null) parti.push(tn("chat.foot.turnsOne", "chat.foot.turnsMany", giriSessione, { tetto: Number.isFinite(tettoGiri) && tettoGiri > 0 && sessione === usage ? t("chat.foot.turnsOf", { tetto: tettoGiri }) : "" }));
+  const throughput = Number(usage?.tokens_per_second ?? usage?.tokensPerSecond ?? sessione?.tokens_per_second ?? sessione?.tokensPerSecond);
+  return {
+    tokenGiri: parti.join(" · "),
+    cache: cache > 0 && baseCache > 0 ? `cache ${Math.round(cache / baseCache * 100)}%` : "",
+    giri,
+    velocita: Number.isFinite(throughput) && throughput > 0 ? `${Math.round(throughput)} token/s` : ""
+  };
+}
+function testoLatenza(ms2) {
+  if (!Number.isFinite(ms2) || ms2 <= 0) return "";
+  return ms2 >= 1e3 ? t("chat.foot.firstTokenSeconds", { tempo: conSeparatoreDecimale((ms2 / 1e3).toFixed(1)) }) : t("chat.foot.firstTokenMillis", { tempo: Math.round(ms2) });
+}
+function scrivi(el35, testo2) {
+  if (!el35) return;
+  const t2 = testo2 || "";
+  if (el35.textContent !== t2) el35.textContent = t2;
+  el35.hidden = t2 === "";
+}
+function statoGiri(giri, tettoGiri) {
+  if (!Number.isFinite(Number(giri))) return null;
+  const n = Number(giri);
+  const tetto = Number(tettoGiri);
+  if (!Number.isFinite(tetto) || tetto <= 0) return n > 0 ? "quieto" : null;
+  const quota = n / tetto;
+  if (quota < 0.5) return null;
+  return quota >= 0.8 ? "vicino" : "quieto";
+}
+function inoltraRotellaConversazione(evento, piede) {
+  if (evento.ctrlKey) return;
+  const scroller = piede.closest?.("#schermoChat")?.querySelector(".talos-conversation");
+  if (!scroller) return;
+  let delta = Number(evento.deltaY) || 0;
+  if (evento.deltaMode === 1) {
+    delta *= 16;
+  } else if (evento.deltaMode === 2) {
+    delta *= scroller.clientHeight;
+  }
+  if (!delta) return;
+  const prima = scroller.scrollTop;
+  scroller.scrollTop = prima + delta;
+  if (scroller.scrollTop === prima) return;
+  if (evento.cancelable) evento.preventDefault();
+}
+function aggiornaPiedeChat(piede, dati = {}) {
+  if (!piede) return;
+  const documentObj = piede.ownerDocument;
+  const tornaInFondo = piede.querySelector("#chatTornaInFondo");
+  if (tornaInFondo) {
+    tornaInFondo.hidden = dati.inFondo !== false;
+    if (!tornaInFondo.dataset.portaInFondo) {
+      tornaInFondo.dataset.portaInFondo = "1";
+      tornaInFondo.addEventListener("click", () => {
+        tornaInFondo.dispatchEvent(new CustomEvent("talos-vai-in-fondo", { bubbles: true }));
+      });
+      tornaInFondo.addEventListener("wheel", (evento) => inoltraRotellaConversazione(evento, piede), { passive: false });
+    }
+  }
+  const striscia = piede.querySelector(".talos-status-strip");
+  if (striscia) {
+    const contattoPerso = dati.attivo === true && dati.contatto === "perso";
+    striscia.hidden = !dati.attivo || dati.inFondo === true && !contattoPerso;
+    striscia.classList.toggle("talos-status-strip--senza-contatto", contattoPerso);
+    if (!striscia.dataset.portaInFondo) {
+      striscia.dataset.portaInFondo = "1";
+      striscia.style.cursor = "pointer";
+      striscia.setAttribute("title", t("chat.foot.status.returnToWriting"));
+      striscia.addEventListener("click", (evento) => {
+        if (evento.target.closest("button")) return;
+        striscia.dispatchEvent(new CustomEvent("talos-vai-in-fondo", { bubbles: true }));
+      });
+    }
+    const cosa = striscia.querySelector("[data-run-what]");
+    if (cosa) {
+      cosa.replaceChildren();
+      cosa.append(documentObj.createTextNode(contattoPerso ? t("chat.foot.status.connectionLost") : dati.cosa || t("chat.foot.status.working")));
+      if (dati.dettaglio && !contattoPerso) {
+        cosa.append(documentObj.createTextNode(" · "));
+        const mono = documentObj.createElement("span");
+        mono.className = "talos-mono talos-measure";
+        mono.textContent = dati.dettaglio;
+        cosa.append(mono);
+      }
+    }
+    const meta2 = striscia.querySelector("[data-run-meta]");
+    const pezzi = [];
+    if (Number.isFinite(dati.giro)) pezzi.push(t("chat.foot.status.turn", { n: dati.giro }));
+    if (Number.isFinite(dati.secondi)) pezzi.push(`${Math.max(0, Math.round(dati.secondi))} s`);
+    scrivi(meta2, contattoPerso ? t("chat.foot.status.unknownRunning") : pezzi.join(" · "));
+    const ferma = striscia.querySelector(".stop-run");
+    if (ferma) {
+      ferma.disabled = contattoPerso;
+      ferma.title = contattoPerso ? t("chat.foot.status.stopUnreachable") : "";
+    }
+  }
+  const modello = piede.querySelector('[data-open-sheet="model"] .talos-chip__label');
+  if (modello) modello.textContent = dati.modello || t("chat.foot.model.choose");
+  const pillolaModello = piede.querySelector('[data-open-sheet="model"]');
+  if (pillolaModello) pillolaModello.title = dati.modelloId ? t("chat.foot.model.changeNamed", { modello: dati.modelloId }) : t("chat.foot.model.change");
+  const permesso = piede.querySelector('[data-open-sheet="permissions"]');
+  if (permesso) {
+    const label = permesso.querySelector(".talos-chip__label");
+    if (label) label.textContent = etichettaPermessoConEccezioni(dati.permesso, dati.permessiPerAttrezzo);
+    const regole = regolePerAttrezzo(dati.permessiPerAttrezzo);
+    permesso.title = regole.length ? t("chat.foot.permission.changeWithExceptions", { eccezioni: regole.map(([k, v]) => `${k} → ${v}`).join(", ") }) : t("chat.foot.permission.change");
+    permesso.classList.remove("talos-badge--warning", "talos-badge--danger");
+    const tono = tonoPermesso(dati.permesso);
+    if (tono) permesso.classList.add(`talos-badge--${tono}`);
+  }
+  const u = testiUsage(dati.usage, { tettoGiri: dati.tettoGiri, usageSessione: dati.usageSessione });
+  const giriChip = piede.querySelector("[data-runtime-giri]");
+  if (giriChip) {
+    const stato2 = statoGiri(u.giri, dati.tettoGiri);
+    giriChip.hidden = stato2 === null || dati.storiaInCaricamento === true;
+    giriChip.classList.toggle("talos-badge--warning", stato2 === "vicino");
+    const n = giriChip.querySelector(".talos-mono");
+    if (n && u.giri !== null) n.textContent = Number.isFinite(Number(dati.tettoGiri)) && Number(dati.tettoGiri) > 0 ? `${u.giri}/${dati.tettoGiri}` : String(u.giri);
+    giriChip.title = Number.isFinite(Number(dati.tettoGiri)) && Number(dati.tettoGiri) > 0 ? t("chat.foot.turnsHintWithLimit", { n: dati.tettoGiri }) : t("chat.foot.turnsHint");
+  }
+  const costoChip = piede.querySelector("[data-runtime-costo]");
+  if (costoChip) {
+    costoChip.hidden = !dati.costo;
+    const n = costoChip.querySelector(".talos-mono");
+    if (n && dati.costo) n.textContent = dati.costo;
+  }
+  scrivi(piede.querySelector('[data-statusbar="tema"]'), testoVelocitaLocale(dati.modelloId, u.velocita));
+  scrivi(piede.querySelector("[data-runtime-usage]"), u.tokenGiri);
+  scrivi(piede.querySelector("[data-runtime-cache]"), u.cache);
+  scrivi(piede.querySelector("[data-runtime-latenza]"), testoLatenza(dati.latenzaMs) || u.velocita);
+}
+var conSeparatoreDecimale, CHIAVI_PERMESSO, NOME_PERMESSO, CHIAVI_PERMESSO_NON_SCEGLIBILI, regolePerAttrezzo;
+var init_chat_foot = __esm({
+  "src/components/chat-foot.js"() {
+    init_lingua();
+    init_coordinazione();
+    init_politiche();
+    conSeparatoreDecimale = (testo2) => linguaCorrenteDiT() === "en" ? testo2 : testo2.replace(".", ",");
+    CHIAVI_PERMESSO = { "Read only": "chat.foot.permission.readOnly", "Workspace write": "chat.foot.permission.workspaceWrite", "On request": "chat.foot.permission.onRequest", "Full access": "chat.foot.permission.fullAccess" };
+    NOME_PERMESSO = Object.freeze(Object.defineProperties({}, Object.fromEntries(POLITICHE.map((p) => [p.valore, { enumerable: true, get: () => t(CHIAVI_PERMESSO[p.valore]) }]))));
+    CHIAVI_PERMESSO_NON_SCEGLIBILI = Object.freeze({ Research: "chat.foot.permission.research" });
+    regolePerAttrezzo = (permessiPerAttrezzo) => permessiPerAttrezzo && typeof permessiPerAttrezzo === "object" ? Object.entries(permessiPerAttrezzo).filter(([attrezzo, valore]) => valore && attrezzo !== CHIAVE_COORDINAZIONE) : [];
+  }
+});
+
 // src/components/provider-card.js
 function etichettaIndirizzo(row = {}) {
   if (!row.supportsEndpoint) return null;
-  if (row.endpointConfigured) return t("modelli.provider.customEndpoint");
+  if (row.endpointConfigured && row.endpointPredefinito !== true) return t("modelli.provider.customEndpoint");
   return row.endpoint ? t("modelli.provider.defaultEndpoint") : t("modelli.provider.missingEndpoint");
 }
 function statoProvider(row = {}, prova = null) {
@@ -27170,19 +27507,74 @@ function campoEsclusi(row) {
       input.removeAttribute("aria-invalid");
     }
   });
-  wrap.append(titolo2, nota, elenco3, vuoto, riga2, errore2);
+  const vociSerie = Array.isArray(row.esclusiDiSerie) ? row.esclusiDiSerie.filter((v) => v && typeof v.slug === "string" && typeof v.modello === "string") : [];
+  const chiaveSerie = (v) => `${v.modello}#${v.slug}`;
+  const serieIniziale = new Map(vociSerie.map((v) => [chiaveSerie(v), v.attivo !== false]));
+  const serieBozza = new Map(serieIniziale);
+  const titoloSerie = el4("span", "talos-muted", t("modelli.provider.defaultExcludedTitle"));
+  titoloSerie.id = "esclusi-di-serie-titolo-" + row.id;
+  const serie = el4("ul", "talos-stack");
+  serie.dataset.providerEsclusiDiSerie = row.id;
+  serie.setAttribute("aria-labelledby", titoloSerie.id);
+  Object.assign(serie.style, { margin: "0 0 8px", padding: "0", listStyle: "none", gap: "6px" });
+  const disegnaSerie = () => {
+    serie.replaceChildren(...vociSerie.map((v) => {
+      const attivo = serieBozza.get(chiaveSerie(v));
+      const modello = nomeModelloUmano(v.modello) || v.modello;
+      const li = el4("li", "talos-cluster");
+      Object.assign(li.style, { padding: "0", borderTop: "0", gap: "8px", flexWrap: "wrap" });
+      li.dataset.esclusoDiSerie = chiaveSerie(v);
+      li.dataset.attivo = String(attivo);
+      const nota2 = el4("span", "talos-muted", t(attivo ? "modelli.provider.defaultExcludedNote" : "modelli.provider.defaultAllowedNote", { name: v.slug, model: modello }));
+      if (attivo) {
+        const chip3 = el4("button", "talos-button talos-button--secondary talos-button--sm", v.slug);
+        chip3.type = "button";
+        chip3.dataset.providerEsclusoDiSerie = chiaveSerie(v);
+        chip3.setAttribute("aria-label", t("modelli.provider.allowDefaultExcludedAgain", { name: v.slug, model: modello }));
+        chip3.append(iconaAzione("chiudi", "14px"));
+        chip3.addEventListener("click", () => {
+          serieBozza.set(chiaveSerie(v), false);
+          disegnaSerie();
+          serie.querySelector(`[data-provider-rimetti-di-serie="${CSS.escape(chiaveSerie(v))}"]`)?.focus({ preventScroll: true });
+        });
+        li.append(chip3, nota2);
+      } else {
+        const rimetti = el4("button", "talos-button talos-button--secondary talos-button--sm", t("modelli.provider.excludeAgainAction"));
+        rimetti.type = "button";
+        rimetti.dataset.providerRimettiDiSerie = chiaveSerie(v);
+        rimetti.setAttribute("aria-label", t("modelli.provider.excludeDefaultAgain", { name: v.slug, model: modello }));
+        rimetti.addEventListener("click", () => {
+          serieBozza.set(chiaveSerie(v), true);
+          disegnaSerie();
+          serie.querySelector(`[data-provider-escluso-di-serie="${CSS.escape(chiaveSerie(v))}"]`)?.focus({ preventScroll: true });
+        });
+        li.append(nota2, rimetti);
+      }
+      return li;
+    }));
+    serie.hidden = vociSerie.length === 0;
+    titoloSerie.hidden = serie.hidden;
+  };
+  wrap.append(titolo2, nota, elenco3, vuoto, titoloSerie, serie, riga2, errore2);
   disegna2();
-  bozzeEsclusi.set(wrap, { prendiDalCampo, bozza: () => [...bozza], cambiati: () => bozza.length !== iniziali.length || bozza.some((s, i2) => s !== iniziali[i2]) });
+  disegnaSerie();
+  bozzeEsclusi.set(wrap, {
+    prendiDalCampo,
+    bozza: () => [...bozza],
+    cambiati: () => bozza.length !== iniziali.length || bozza.some((s, i2) => s !== iniziali[i2]),
+    diSerieCambiati: () => vociSerie.filter((v) => serieBozza.get(chiaveSerie(v)) !== serieIniziale.get(chiaveSerie(v))).map((v) => ({ modello: v.modello, slug: v.slug, attivo: serieBozza.get(chiaveSerie(v)) }))
+  });
   return wrap;
 }
-async function salvaEsclusiFornitori(esclusi, { fetchImpl = globalThis.fetch, baseUrl = globalThis.window?.__talosHarnessApiBase || "" } = {}) {
+async function salvaEsclusioniFornitori({ esclusi = null, diSerie = [] }, { fetchImpl = globalThis.fetch, baseUrl = globalThis.window?.__talosHarnessApiBase || "" } = {}) {
+  const corpo = { ...Array.isArray(esclusi) ? { esclusi } : {}, ...diSerie.length ? { diSerie: diSerie.map(({ modello, slug: slug2, attivo }) => ({ modello, slug: slug2, attivo })) } : {} };
   let risposta;
   try {
     risposta = await fetchImpl(`${baseUrl}/api/v1/providers/openrouter/esclusi`, {
       method: "POST",
       credentials: "same-origin",
       headers: { Accept: "application/json", "Content-Type": "application/json" },
-      body: JSON.stringify({ esclusi })
+      body: JSON.stringify(corpo)
     });
   } catch {
     throw new Error(t("modelli.provider.saveServerUnavailable"));
@@ -27194,7 +27586,7 @@ async function salvaEsclusiFornitori(esclusi, { fetchImpl = globalThis.fetch, ba
     throw new Error(t("modelli.provider.saveInvalidResponse"));
   }
   if (!risposta.ok || esito?.ok !== true || !Array.isArray(esito.data?.esclusi)) throw new Error(t("modelli.provider.saveCheckFields"));
-  return esito.data.esclusi;
+  return { esclusi: esito.data.esclusi, esclusiDiSerie: Array.isArray(esito.data.esclusiDiSerie) ? esito.data.esclusiDiSerie : [] };
 }
 function aggiungiCampiAgente(body, row) {
   const a = row.agente || {};
@@ -27342,7 +27734,8 @@ function apriConfigurazioneProvider(card, row, { onSalvaConfigurazione = null, o
       const esclusi = bozzeEsclusi.get(corpo.querySelector("[data-provider-esclusi]"));
       if (esclusi && !esclusi.prendiDalCampo()) return;
       const esclusiNuovi = esclusi?.cambiati() ? esclusi.bozza() : null;
-      if (!chiave && !collegamento && !configurazionePropria && !esclusiNuovi) {
+      const diSerieNuovi = esclusi?.diSerieCambiati?.() ?? [];
+      if (!chiave && !collegamento && !configurazionePropria && !esclusiNuovi && !diSerieNuovi.length) {
         avvisa(t("modelli.provider.nothingToSave"), false);
         return;
       }
@@ -27369,9 +27762,9 @@ function apriConfigurazioneProvider(card, row, { onSalvaConfigurazione = null, o
           await chiama({ collegamento }, "collegamento");
           salvato.push("collegamento");
         }
-        if (esclusiNuovi) {
+        if (esclusiNuovi || diSerieNuovi.length) {
           try {
-            await salvaEsclusiFornitori(esclusiNuovi);
+            await salvaEsclusioniFornitori({ esclusi: esclusiNuovi, diSerie: diSerieNuovi });
           } catch (e) {
             throw Object.assign(e, { fase: "collegamento" });
           }
@@ -27672,7 +28065,11 @@ function creaProviderCard(row, { aperta: aperta2 = false, prova = null, occupato
   card.append(head);
   const fatti = el4("div", "talos-provider__fatti");
   vesti(fatti, VESTITO.fatti);
-  const esclusiDellaCard = row.id === "openrouter" && Array.isArray(row.esclusi) && row.esclusi.length ? tn("modelli.provider.excludedCountOne", "modelli.provider.excludedCountMany", row.esclusi.length) : null;
+  const contatiEsclusi = row.id === "openrouter" ? (/* @__PURE__ */ new Set([
+    ...Array.isArray(row.esclusi) ? row.esclusi : [],
+    ...Array.isArray(row.esclusiDiSerie) ? row.esclusiDiSerie.filter((v) => v && v.attivo !== false).map((v) => v.slug) : []
+  ])).size : 0;
+  const esclusiDellaCard = contatiEsclusi ? tn("modelli.provider.excludedCountOne", "modelli.provider.excludedCountMany", contatiEsclusi) : null;
   for (const [k, v] of [[t("modelli.provider.credential"), d.chiave], [t("modelli.provider.configuration"), etichettaIndirizzo(row)], [t("modelli.provider.excludedProviders"), esclusiDellaCard], [t("modelli.provider.lastTest"), d.prova]])
     if (v) {
       const riga2 = el4("div", "talos-kv");
@@ -27786,7 +28183,7 @@ function creaProviderCard(row, { aperta: aperta2 = false, prova = null, occupato
     const test = button("test", esterno ? t("modelli.provider.testConnection") : t("modelli.provider.verifyAccess"));
     const vociMenu = [];
     if (d.tempo) vociMenu.push({ chiave: "save-runtime", etichetta: row.supportsEndpoint || esterno ? t("modelli.provider.saveConnection") : t("modelli.provider.saveTimeout"), icona: "i-clock", elemento: aggiungiNascosto(button("save-runtime", row.supportsEndpoint || esterno ? t("modelli.provider.saveConnection") : t("modelli.provider.saveTimeout"))) });
-    if (row.supportsEndpoint && row.endpointConfigured) vociMenu.push({ chiave: "reset-runtime", etichetta: t("modelli.provider.resetEndpoint"), icona: "i-history", elemento: aggiungiNascosto(button("reset-runtime", t("modelli.provider.resetEndpoint"))) });
+    if (row.supportsEndpoint && row.endpointConfigured && row.endpointPredefinito !== true) vociMenu.push({ chiave: "reset-runtime", etichetta: t("modelli.provider.resetEndpoint"), icona: "i-history", elemento: aggiungiNascosto(button("reset-runtime", t("modelli.provider.resetEndpoint"))) });
     if (row.keyConfigured && !poolCollegato) vociMenu.push({ chiave: "remove-key", etichetta: pool.length > 1 ? t("modelli.provider.removeAllKeys") : t("modelli.provider.removeKey"), icona: "i-trash", pericolo: true, separaPrima: true, elemento: aggiungiNascosto(button("remove-key", pool.length > 1 ? t("modelli.provider.removeAllKeys") : t("modelli.provider.removeKey"), "ghost talos-button--danger")) });
     if (configurazionePropria) {
       const salvaRuntime = vociMenu.find((v) => v.chiave === "save-runtime").elemento;
@@ -27986,6 +28383,7 @@ var init_provider_card = __esm({
     init_lingua();
     init_testo_server();
     init_loghi_fornitori();
+    init_chat_foot();
     localeUI5 = () => linguaCorrenteDiT() === "en" ? "en-US" : "it-IT";
     VESTITO = Object.freeze({
       /* ⛔ `align-items` NON si dichiara: il mockup non lo dichiara, e le sue due card — una con TRE
@@ -28074,63 +28472,6 @@ var init_provider_card = __esm({
     });
     filtroVuoto = () => ({ cerca: "", credenziale: [], prova: [] });
     statoLista = /* @__PURE__ */ new WeakMap();
-  }
-});
-
-// src/components/politiche.js
-function politica(valore) {
-  return PER_VALORE.get(String(valore || "").trim()) || null;
-}
-function nomeUmanoPolitica(valore) {
-  return politica(valore)?.nome || String(valore || "");
-}
-function descrizionePolitica(valore) {
-  return politica(valore)?.descrizione || "";
-}
-function notaPolitica(valore) {
-  return politica(valore)?.nota || "";
-}
-function valoriPolitiche() {
-  return POLITICHE.map((p) => p.valore);
-}
-var politicaDa, POLITICHE, PER_VALORE;
-var init_politiche = __esm({
-  "src/components/politiche.js"() {
-    init_lingua();
-    politicaDa = (valore, chiave, rischio) => Object.freeze(Object.defineProperties({ valore, rischio }, {
-      nome: { enumerable: true, get: () => t(`chat.foot.permission.${chiave}`) },
-      descrizione: { enumerable: true, get: () => t(`varie.policy.${chiave}.description`) },
-      nota: { enumerable: true, get: () => t(`varie.policy.${chiave}.note`) }
-    }));
-    POLITICHE = Object.freeze([
-      politicaDa("Read only", "readOnly", "basso"),
-      politicaDa("Workspace write", "workspaceWrite", "medio"),
-      politicaDa("On request", "onRequest", "medio"),
-      politicaDa("Full access", "fullAccess", "massimo")
-    ]);
-    PER_VALORE = new Map(POLITICHE.map((p) => [p.valore, p]));
-  }
-});
-
-// src/components/coordinazione.js
-function coordinazioneAccesaNellaCatena(sceltePerAnello) {
-  const anelli = Array.isArray(sceltePerAnello) ? sceltePerAnello : [];
-  if (anelli.length === 0) return false;
-  const scelte = anelli.map((m) => eMappa(m) && Object.hasOwn(m, CHIAVE_COORDINAZIONE) ? m[CHIAVE_COORDINAZIONE] : void 0);
-  if (scelte.some((s) => s !== void 0 && s !== "sempre")) return false;
-  return scelte[scelte.length - 1] === "sempre";
-}
-function mappaPerUnaSessioneNuova(mappa) {
-  if (!eMappa(mappa)) return {};
-  const { [CHIAVE_COORDINAZIONE]: _tolta, ...resto } = mappa;
-  return resto;
-}
-var CHIAVE_COORDINAZIONE, TETTO_AVVII_DA_SOLO, eMappa;
-var init_coordinazione = __esm({
-  "src/components/coordinazione.js"() {
-    CHIAVE_COORDINAZIONE = "delega_sottotask";
-    TETTO_AVVII_DA_SOLO = 20;
-    eMappa = (mappa) => Boolean(mappa) && typeof mappa === "object" && !Array.isArray(mappa);
   }
 });
 
@@ -28249,221 +28590,6 @@ var init_avvio_sessione = __esm({
   "src/components/avvio-sessione.js"() {
     init_politiche();
     init_lingua();
-  }
-});
-
-// src/components/chat-foot.js
-function etichettaPermesso(permesso) {
-  if (NOME_PERMESSO[permesso]) return NOME_PERMESSO[permesso];
-  if (Object.hasOwn(CHIAVI_PERMESSO_NON_SCEGLIBILI, permesso)) return t(CHIAVI_PERMESSO_NON_SCEGLIBILI[permesso]);
-  return typeof permesso === "string" && permesso.trim() ? permesso : t("chat.foot.permission.notSelected");
-}
-function etichettaPermessoConEccezioni(permesso, permessiPerAttrezzo) {
-  const base = etichettaPermesso(permesso);
-  const regole = regolePerAttrezzo(permessiPerAttrezzo);
-  if (regole.length === 0) return base;
-  return tn("chat.foot.permission.exceptionsOne", "chat.foot.permission.exceptionsMany", regole.length, { base });
-}
-function nomeModelloUmano(id4) {
-  if (typeof id4 !== "string" || !id4.trim()) return "";
-  const grezzo = id4.trim();
-  if (!/^local:/i.test(grezzo)) return grezzo.replace(/^~/u, "").split("/").pop();
-  let resto = grezzo.replace(/^local:/i, "").replace(/[-_.]gguf$/i, "");
-  const quant = /[-_](IQ\d\w*|Q\d(?:[-_]\d)?(?:[-_][A-Z]+)*)(?=[-_]|$)/i.exec(resto);
-  const parametri = /(?:^|[-_])(\d+(?:[.,]\d+)?B)(?:[-_]A(\d+(?:[.,]\d+)?B))?(?=[-_]|$)/i.exec(resto);
-  let nome = resto;
-  if (parametri) nome = resto.slice(0, parametri.index);
-  nome = nome.replace(/[-_](GGUF|MLX|AWQ|GPTQ)$/i, "");
-  const pezzi = nome.split(/[-_]/).filter(Boolean);
-  if (pezzi.length > 1) pezzi.shift();
-  const pulito = pezzi.join(" ").replace(/\s+/g, " ").trim();
-  const parti = [pulito || resto];
-  if (parametri) parti.push(parametri[2] ? t("chat.foot.activeOf", { totali: parametri[1], attivi: parametri[2].replace(/^A/i, "") }) : parametri[1]);
-  if (quant) parti.push(quant[1].toUpperCase().replace(/-/g, "_"));
-  return parti.filter(Boolean).join(" · ");
-}
-function fondoInVista({ scrollHeight = 0, scrollTop = 0, clientHeight = 0, coda: coda2 = 0, soglia = 4 } = {}) {
-  if (Number(scrollHeight) <= Number(clientHeight)) return true;
-  const distanza = Number(scrollHeight) - Number(scrollTop) - Number(clientHeight);
-  if (!Number.isFinite(distanza)) return true;
-  return distanza <= Math.max(0, Number(coda2) || 0) + soglia;
-}
-function dettaglioUtile(cosa, dettaglio) {
-  const pulisci = (t2) => String(t2 ?? "").replace(/[…\.]+$/u, "").trim().toLowerCase();
-  const a = pulisci(cosa);
-  const b = pulisci(dettaglio);
-  if (!b || !a) return String(dettaglio ?? "").trim();
-  if (a === b || a.startsWith(b) || b.startsWith(a)) return "";
-  return String(dettaglio).trim();
-}
-function tonoPermesso(permesso) {
-  if (permesso === "Full access") return "danger";
-  if (permesso === "Workspace write") return "warning";
-  return null;
-}
-function kilo2(n) {
-  const v = Number(n) || 0;
-  if (v < 1e3) return String(Math.round(v));
-  return `${conSeparatoreDecimale((v / 1e3).toFixed(1))}k`;
-}
-function testoVelocitaLocale(modelloId, velocita) {
-  const id4 = String(modelloId || "");
-  if (!/^local:/i.test(id4)) return "";
-  return String(velocita || "").trim();
-}
-function testiUsage(usage, { tettoGiri = null, usageSessione = null } = {}) {
-  const sessione = usageSessione && typeof usageSessione === "object" ? usageSessione : usage;
-  if ((!usage || typeof usage !== "object") && (!sessione || typeof sessione !== "object")) return { tokenGiri: "", cache: "", giri: null, velocita: "" };
-  const prompt = Number(sessione?.prompt_tokens ?? 0) || 0;
-  const completion = Number(sessione?.completion_tokens ?? 0) || 0;
-  const cache = Number(sessione?.cached_tokens ?? 0) || 0;
-  const baseCache = Number.isFinite(sessione?.prompt_tokens_con_cache) ? sessione.prompt_tokens_con_cache : prompt;
-  const giriSessione = Number.isFinite(Number(sessione?.giri)) ? Number(sessione.giri) : null;
-  const giri = Number.isFinite(Number(usage?.giri)) ? Number(usage.giri) : null;
-  const totale2 = prompt + completion;
-  const parti = [];
-  if (totale2 > 0) parti.push(`${kilo2(totale2)} token`);
-  if (giriSessione !== null) parti.push(tn("chat.foot.turnsOne", "chat.foot.turnsMany", giriSessione, { tetto: Number.isFinite(tettoGiri) && tettoGiri > 0 && sessione === usage ? t("chat.foot.turnsOf", { tetto: tettoGiri }) : "" }));
-  const throughput = Number(usage?.tokens_per_second ?? usage?.tokensPerSecond ?? sessione?.tokens_per_second ?? sessione?.tokensPerSecond);
-  return {
-    tokenGiri: parti.join(" · "),
-    cache: cache > 0 && baseCache > 0 ? `cache ${Math.round(cache / baseCache * 100)}%` : "",
-    giri,
-    velocita: Number.isFinite(throughput) && throughput > 0 ? `${Math.round(throughput)} token/s` : ""
-  };
-}
-function testoLatenza(ms2) {
-  if (!Number.isFinite(ms2) || ms2 <= 0) return "";
-  return ms2 >= 1e3 ? t("chat.foot.firstTokenSeconds", { tempo: conSeparatoreDecimale((ms2 / 1e3).toFixed(1)) }) : t("chat.foot.firstTokenMillis", { tempo: Math.round(ms2) });
-}
-function scrivi(el34, testo2) {
-  if (!el34) return;
-  const t2 = testo2 || "";
-  if (el34.textContent !== t2) el34.textContent = t2;
-  el34.hidden = t2 === "";
-}
-function statoGiri(giri, tettoGiri) {
-  if (!Number.isFinite(Number(giri))) return null;
-  const n = Number(giri);
-  const tetto = Number(tettoGiri);
-  if (!Number.isFinite(tetto) || tetto <= 0) return n > 0 ? "quieto" : null;
-  const quota = n / tetto;
-  if (quota < 0.5) return null;
-  return quota >= 0.8 ? "vicino" : "quieto";
-}
-function inoltraRotellaConversazione(evento, piede) {
-  if (evento.ctrlKey) return;
-  const scroller = piede.closest?.("#schermoChat")?.querySelector(".talos-conversation");
-  if (!scroller) return;
-  let delta = Number(evento.deltaY) || 0;
-  if (evento.deltaMode === 1) {
-    delta *= 16;
-  } else if (evento.deltaMode === 2) {
-    delta *= scroller.clientHeight;
-  }
-  if (!delta) return;
-  const prima = scroller.scrollTop;
-  scroller.scrollTop = prima + delta;
-  if (scroller.scrollTop === prima) return;
-  if (evento.cancelable) evento.preventDefault();
-}
-function aggiornaPiedeChat(piede, dati = {}) {
-  if (!piede) return;
-  const documentObj = piede.ownerDocument;
-  const tornaInFondo = piede.querySelector("#chatTornaInFondo");
-  if (tornaInFondo) {
-    tornaInFondo.hidden = dati.inFondo !== false;
-    if (!tornaInFondo.dataset.portaInFondo) {
-      tornaInFondo.dataset.portaInFondo = "1";
-      tornaInFondo.addEventListener("click", () => {
-        tornaInFondo.dispatchEvent(new CustomEvent("talos-vai-in-fondo", { bubbles: true }));
-      });
-      tornaInFondo.addEventListener("wheel", (evento) => inoltraRotellaConversazione(evento, piede), { passive: false });
-    }
-  }
-  const striscia = piede.querySelector(".talos-status-strip");
-  if (striscia) {
-    const contattoPerso = dati.attivo === true && dati.contatto === "perso";
-    striscia.hidden = !dati.attivo || dati.inFondo === true && !contattoPerso;
-    striscia.classList.toggle("talos-status-strip--senza-contatto", contattoPerso);
-    if (!striscia.dataset.portaInFondo) {
-      striscia.dataset.portaInFondo = "1";
-      striscia.style.cursor = "pointer";
-      striscia.setAttribute("title", t("chat.foot.status.returnToWriting"));
-      striscia.addEventListener("click", (evento) => {
-        if (evento.target.closest("button")) return;
-        striscia.dispatchEvent(new CustomEvent("talos-vai-in-fondo", { bubbles: true }));
-      });
-    }
-    const cosa = striscia.querySelector("[data-run-what]");
-    if (cosa) {
-      cosa.replaceChildren();
-      cosa.append(documentObj.createTextNode(contattoPerso ? t("chat.foot.status.connectionLost") : dati.cosa || t("chat.foot.status.working")));
-      if (dati.dettaglio && !contattoPerso) {
-        cosa.append(documentObj.createTextNode(" · "));
-        const mono = documentObj.createElement("span");
-        mono.className = "talos-mono talos-measure";
-        mono.textContent = dati.dettaglio;
-        cosa.append(mono);
-      }
-    }
-    const meta2 = striscia.querySelector("[data-run-meta]");
-    const pezzi = [];
-    if (Number.isFinite(dati.giro)) pezzi.push(t("chat.foot.status.turn", { n: dati.giro }));
-    if (Number.isFinite(dati.secondi)) pezzi.push(`${Math.max(0, Math.round(dati.secondi))} s`);
-    scrivi(meta2, contattoPerso ? t("chat.foot.status.unknownRunning") : pezzi.join(" · "));
-    const ferma = striscia.querySelector(".stop-run");
-    if (ferma) {
-      ferma.disabled = contattoPerso;
-      ferma.title = contattoPerso ? t("chat.foot.status.stopUnreachable") : "";
-    }
-  }
-  const modello = piede.querySelector('[data-open-sheet="model"] .talos-chip__label');
-  if (modello) modello.textContent = dati.modello || t("chat.foot.model.choose");
-  const pillolaModello = piede.querySelector('[data-open-sheet="model"]');
-  if (pillolaModello) pillolaModello.title = dati.modelloId ? t("chat.foot.model.changeNamed", { modello: dati.modelloId }) : t("chat.foot.model.change");
-  const permesso = piede.querySelector('[data-open-sheet="permissions"]');
-  if (permesso) {
-    const label = permesso.querySelector(".talos-chip__label");
-    if (label) label.textContent = etichettaPermessoConEccezioni(dati.permesso, dati.permessiPerAttrezzo);
-    const regole = regolePerAttrezzo(dati.permessiPerAttrezzo);
-    permesso.title = regole.length ? t("chat.foot.permission.changeWithExceptions", { eccezioni: regole.map(([k, v]) => `${k} → ${v}`).join(", ") }) : t("chat.foot.permission.change");
-    permesso.classList.remove("talos-badge--warning", "talos-badge--danger");
-    const tono = tonoPermesso(dati.permesso);
-    if (tono) permesso.classList.add(`talos-badge--${tono}`);
-  }
-  const u = testiUsage(dati.usage, { tettoGiri: dati.tettoGiri, usageSessione: dati.usageSessione });
-  const giriChip = piede.querySelector("[data-runtime-giri]");
-  if (giriChip) {
-    const stato2 = statoGiri(u.giri, dati.tettoGiri);
-    giriChip.hidden = stato2 === null || dati.storiaInCaricamento === true;
-    giriChip.classList.toggle("talos-badge--warning", stato2 === "vicino");
-    const n = giriChip.querySelector(".talos-mono");
-    if (n && u.giri !== null) n.textContent = Number.isFinite(Number(dati.tettoGiri)) && Number(dati.tettoGiri) > 0 ? `${u.giri}/${dati.tettoGiri}` : String(u.giri);
-    giriChip.title = Number.isFinite(Number(dati.tettoGiri)) && Number(dati.tettoGiri) > 0 ? t("chat.foot.turnsHintWithLimit", { n: dati.tettoGiri }) : t("chat.foot.turnsHint");
-  }
-  const costoChip = piede.querySelector("[data-runtime-costo]");
-  if (costoChip) {
-    costoChip.hidden = !dati.costo;
-    const n = costoChip.querySelector(".talos-mono");
-    if (n && dati.costo) n.textContent = dati.costo;
-  }
-  scrivi(piede.querySelector('[data-statusbar="tema"]'), testoVelocitaLocale(dati.modelloId, u.velocita));
-  scrivi(piede.querySelector("[data-runtime-usage]"), u.tokenGiri);
-  scrivi(piede.querySelector("[data-runtime-cache]"), u.cache);
-  scrivi(piede.querySelector("[data-runtime-latenza]"), testoLatenza(dati.latenzaMs) || u.velocita);
-}
-var conSeparatoreDecimale, CHIAVI_PERMESSO, NOME_PERMESSO, CHIAVI_PERMESSO_NON_SCEGLIBILI, regolePerAttrezzo;
-var init_chat_foot = __esm({
-  "src/components/chat-foot.js"() {
-    init_lingua();
-    init_coordinazione();
-    init_politiche();
-    conSeparatoreDecimale = (testo2) => linguaCorrenteDiT() === "en" ? testo2 : testo2.replace(".", ",");
-    CHIAVI_PERMESSO = { "Read only": "chat.foot.permission.readOnly", "Workspace write": "chat.foot.permission.workspaceWrite", "On request": "chat.foot.permission.onRequest", "Full access": "chat.foot.permission.fullAccess" };
-    NOME_PERMESSO = Object.freeze(Object.defineProperties({}, Object.fromEntries(POLITICHE.map((p) => [p.valore, { enumerable: true, get: () => t(CHIAVI_PERMESSO[p.valore]) }]))));
-    CHIAVI_PERMESSO_NON_SCEGLIBILI = Object.freeze({ Research: "chat.foot.permission.research" });
-    regolePerAttrezzo = (permessiPerAttrezzo) => permessiPerAttrezzo && typeof permessiPerAttrezzo === "object" ? Object.entries(permessiPerAttrezzo).filter(([attrezzo, valore]) => valore && attrezzo !== CHIAVE_COORDINAZIONE) : [];
   }
 });
 
@@ -31617,10 +31743,10 @@ function creaAnteprimaScena(contenitore, { document: doc = globalThis.document, 
   };
 }
 function nodo3(doc, tag2, classe, testo2) {
-  const el34 = doc.createElement(tag2);
-  if (classe) el34.className = classe;
-  if (testo2 !== void 0 && testo2 !== null) el34.textContent = String(testo2);
-  return el34;
+  const el35 = doc.createElement(tag2);
+  if (classe) el35.className = classe;
+  if (testo2 !== void 0 && testo2 !== null) el35.textContent = String(testo2);
+  return el35;
 }
 function icona2(doc, nome) {
   const svg2 = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -32278,10 +32404,10 @@ function scenaDellAspetto(doc = globalThis.document, disponibili = /* @__PURE__ 
   return scenaPerAspetto({ tema, scena: valoreAspetto("sceneOverrideSelect", doc) || "follow-theme" }, disponibili);
 }
 function nodo4(doc, tag2, classe, testo2) {
-  const el34 = doc.createElement(tag2);
-  if (classe) el34.className = classe;
-  if (testo2 !== void 0 && testo2 !== null) el34.textContent = String(testo2);
-  return el34;
+  const el35 = doc.createElement(tag2);
+  if (classe) el35.className = classe;
+  if (testo2 !== void 0 && testo2 !== null) el35.textContent = String(testo2);
+  return el35;
 }
 function icona3(doc, nome, classe = "") {
   const svg2 = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -32453,6 +32579,13 @@ var init_anteprima_tema = __esm({
 });
 
 // src/features/settings/settings-view.ts
+function segnaModaleImpostazioni(doc) {
+  if (!doc) return;
+  doc.documentElement.classList.toggle(
+    CLASSE_MODALE_IMPOSTAZIONI,
+    doc.querySelector("dialog.settings-palette[open]:modal, dialog.settings-add-dialog[open]:modal") !== null
+  );
+}
 function iconaSprite(sprite, className) {
   const svg2 = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg2.setAttribute("class", "i " + className);
@@ -32680,7 +32813,9 @@ function createSettingsView(screen, options) {
   if (modale) {
     aggiungi.addEventListener("click", () => {
       if (!modale.open) modale.showModal();
+      segnaModaleImpostazioni(modale.ownerDocument);
     }, { signal });
+    modale.addEventListener("close", () => segnaModaleImpostazioni(modale.ownerDocument), { signal });
     modale.querySelector("[data-settings-add-close]")?.addEventListener("click", () => modale.close(), { signal });
     modale.addEventListener("click", (event) => {
       if (event.target === modale) modale.close();
@@ -32795,9 +32930,10 @@ function createSettingsView(screen, options) {
   }
   const risultati = (termine) => searchSettings(buildSettingsIndex(options.fields, options.studioIds, options.language(), options.translate), termine);
   function disegnaPalette() {
-    const matches = risultati(paletteQuery.value);
-    paletteStatus.textContent = options.language() === "en" ? `${matches.length} ${matches.length === 1 ? "result" : "results"}` : `${matches.length} ${matches.length === 1 ? "risultato" : "risultati"}`;
-    paletteEmpty.hidden = matches.length > 0;
+    const cercato = paletteQuery.value.trim() !== "";
+    const matches = cercato ? risultati(paletteQuery.value) : [];
+    paletteStatus.textContent = !cercato ? "" : options.language() === "en" ? `${matches.length} ${matches.length === 1 ? "result" : "results"}` : `${matches.length} ${matches.length === 1 ? "risultato" : "risultati"}`;
+    paletteEmpty.hidden = !cercato || matches.length > 0;
     paletteList.replaceChildren(...matches.map((entry) => {
       const li = node2("li");
       li.append(bottoneRisultato(entry, true));
@@ -32808,6 +32944,7 @@ function createSettingsView(screen, options) {
     if (palette2.open) return;
     disegnaPalette();
     palette2.showModal();
+    segnaModaleImpostazioni(palette2.ownerDocument);
     paletteQuery.select();
     paletteQuery.focus({ preventScroll: true });
   }
@@ -32818,6 +32955,7 @@ function createSettingsView(screen, options) {
   }, { signal });
   palette2.addEventListener("close", () => {
     paletteQuery.value = "";
+    segnaModaleImpostazioni(palette2.ownerDocument);
   }, { signal });
   const cercaBottone = node2("button", "settings-nav__search talos-nav-item");
   cercaBottone.type = "button";
@@ -32832,9 +32970,9 @@ function createSettingsView(screen, options) {
   nav.insertBefore(cercaBottone, list);
   nav.insertBefore(toolbar, list);
   const scrive = (target) => {
-    const el34 = target;
-    if (!el34 || !el34.tagName) return false;
-    return el34.tagName === "INPUT" || el34.tagName === "TEXTAREA" || el34.tagName === "SELECT" || el34.isContentEditable;
+    const el35 = target;
+    if (!el35 || !el35.tagName) return false;
+    return el35.tagName === "INPUT" || el35.tagName === "TEXTAREA" || el35.tagName === "SELECT" || el35.isContentEditable;
   };
   doc.addEventListener("keydown", (event) => {
     if (!(event.ctrlKey || event.metaKey) || event.altKey || event.key.toLowerCase() !== "k") return;
@@ -33138,12 +33276,16 @@ function createSettingsView(screen, options) {
       osservaTema.disconnect();
       osservaFatti.disconnect();
       controller.abort();
+      if (palette2.open) palette2.close();
+      const aggiuntaAperta = q2("#settingsAddModel");
+      if (aggiuntaAperta?.open) aggiuntaAperta.close();
+      segnaModaleImpostazioni(doc);
       anteprimaTema?.ferma();
       anteprimaTema = null;
     }
   };
 }
-var SPRITE_SEZIONE, words, GRUPPI, TESTATE_CARTA;
+var SPRITE_SEZIONE, CLASSE_MODALE_IMPOSTAZIONI, words, GRUPPI, TESTATE_CARTA;
 var init_settings_view = __esm({
   "src/features/settings/settings-view.ts"() {
     init_anteprima_tema();
@@ -33157,6 +33299,7 @@ var init_settings_view = __esm({
       chart: "bolt",
       activity: "user"
     };
+    CLASSE_MODALE_IMPOSTAZIONI = "talos-impostazioni-modale-aperta";
     words = {
       title: localTextKey("impostazioni.view.words.title"),
       subtitle: localTextKey("impostazioni.view.words.subtitle"),
@@ -34239,13 +34382,13 @@ function salvaPreferenze(chiave, valori, storage = globalThis.localStorage) {
 }
 function perId(radice2, selettore2, campo3, valore) {
   const cercato = String(valore ?? "");
-  return [...radice2.querySelectorAll(selettore2)].find((el34) => el34.dataset[campo3] === cercato) || null;
+  return [...radice2.querySelectorAll(selettore2)].find((el35) => el35.dataset[campo3] === cercato) || null;
 }
 function nodo6(doc, tag2, classe, testo2) {
-  const el34 = doc.createElement(tag2);
-  if (classe) el34.className = classe;
-  if (testo2 !== void 0 && testo2 !== null) el34.textContent = String(testo2);
-  return el34;
+  const el35 = doc.createElement(tag2);
+  if (classe) el35.className = classe;
+  if (testo2 !== void 0 && testo2 !== null) el35.textContent = String(testo2);
+  return el35;
 }
 function icona5(doc, nome, classe = "i") {
   const svg2 = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -34257,9 +34400,9 @@ function icona5(doc, nome, classe = "i") {
   return svg2;
 }
 function etichetta(doc, testo2, tono = "") {
-  const el34 = nodo6(doc, "span", "td-tag", testo2);
-  if (tono) el34.dataset.tone = tono;
-  return el34;
+  const el35 = nodo6(doc, "span", "td-tag", testo2);
+  if (tono) el35.dataset.tone = tono;
+  return el35;
 }
 function disegnoVuoto(doc, nomeIcona) {
   const NS = "http://www.w3.org/2000/svg";
@@ -34544,9 +34687,9 @@ function collegaDivisorio(doc, stato2) {
 function fotografaSchede(contenitore) {
   const mappa = /* @__PURE__ */ new Map();
   if (!contenitore?.querySelectorAll) return mappa;
-  for (const el34 of contenitore.querySelectorAll("[data-item]")) {
+  for (const el35 of contenitore.querySelectorAll("[data-item]")) {
     try {
-      mappa.set(el34.dataset.item, el34.getBoundingClientRect());
+      mappa.set(el35.dataset.item, el35.getBoundingClientRect());
     } catch {
     }
   }
@@ -34555,24 +34698,24 @@ function fotografaSchede(contenitore) {
 function flipSchede(doc, contenitore, prima) {
   if (!prima.size || !contenitore?.querySelectorAll) return;
   if (movimentoSpento({ document: doc, leva: LEVA_SUPERFICI })) return;
-  for (const el34 of contenitore.querySelectorAll("[data-item]")) {
+  for (const el35 of contenitore.querySelectorAll("[data-item]")) {
     let dopo;
     try {
-      dopo = el34.getBoundingClientRect();
+      dopo = el35.getBoundingClientRect();
     } catch {
       continue;
     }
-    const a = prima.get(el34.dataset.item);
+    const a = prima.get(el35.dataset.item);
     const invisibile = (r) => !r || r.width === 0 && r.height === 0;
     if (invisibile(dopo) || a && invisibile(a)) continue;
     if (a) {
       const dx = a.x - dopo.x;
       const dy = a.y - dopo.y;
       if (Math.abs(dx) + Math.abs(dy) > 1) {
-        motion(el34, [{ transform: `translate(${dx}px,${dy}px)` }, { transform: "none" }], { fattore: 1.35, leva: LEVA_SUPERFICI, document: doc });
+        motion(el35, [{ transform: `translate(${dx}px,${dy}px)` }, { transform: "none" }], { fattore: 1.35, leva: LEVA_SUPERFICI, document: doc });
       }
     } else {
-      motion(el34, [{ opacity: 0, transform: "translateY(5px)" }, { opacity: 1, transform: "none" }], { leva: LEVA_SUPERFICI, document: doc });
+      motion(el35, [{ opacity: 0, transform: "translateY(5px)" }, { opacity: 1, transform: "none" }], { leva: LEVA_SUPERFICI, document: doc });
     }
   }
 }
@@ -35054,10 +35197,10 @@ var init_automazioni_v2 = __esm({
 
 // src/components/automazioni-sezione.js
 function nodo7(doc, tag2, classe, testo2) {
-  const el34 = doc.createElement(tag2);
-  if (classe) el34.className = classe;
-  if (testo2 !== void 0 && testo2 !== null) el34.textContent = String(testo2);
-  return el34;
+  const el35 = doc.createElement(tag2);
+  if (classe) el35.className = classe;
+  if (testo2 !== void 0 && testo2 !== null) el35.textContent = String(testo2);
+  return el35;
 }
 function bottone3(doc, testo2, { variante = "secondary", esegui, disabilitato = false } = {}) {
   const b = nodo7(doc, "button", `talos-button talos-button--${variante} talos-button--sm`, testo2);
@@ -35675,6 +35818,62 @@ var init_automazione_carta = __esm({
   }
 });
 
+// src/components/fornitori-carta.js
+function el14(doc, tag2, classe, testo2) {
+  const n = doc.createElement(tag2);
+  if (classe) n.className = classe;
+  if (testo2 !== void 0) n.textContent = testo2;
+  return n;
+}
+function kv6(doc, k, v) {
+  const n = el14(doc, "div", "talos-kv");
+  n.append(el14(doc, "span", "talos-kv__k", k), el14(doc, "span", "talos-kv__v", v));
+  return n;
+}
+function testiCartaFornitori(azione) {
+  const slug2 = typeof azione?.fornitore === "string" ? azione.fornitore : "";
+  const cambi = cambiDi(azione);
+  const persona = cambi.some((c) => c.campo === "persona");
+  const serie = cambi.find((c) => c.campo === "di-serie");
+  const frase = azione?.tipo === "provider_exclude" ? persona ? "varie.providerCard.exclude" : "varie.providerCard.excludeForModel" : persona && serie ? "varie.providerCard.allowBoth" : persona ? "varie.providerCard.allow" : "varie.providerCard.allowForModel";
+  return {
+    badge: t("varie.providerCard.badge"),
+    bersaglio: slug2,
+    perche: t(frase, { name: slug2, model: serie ? nomeModello2(serie.modello) : "" }),
+    motivo: "",
+    /* foto dal vivo del 09/10: nel blocco la frase usciva in corpo pieno, più grande delle righe Adesso/Dopo; il suo posto è la
+       nota del piede della carta (`creaApprovazione`, la stessa di «scade a fine sessione»). Solo se cambia la lista di ogni modello. */
+    nota: persona ? t("varie.providerCard.everyModelNote") : ""
+  };
+}
+function creaBloccoCartaFornitori(doc, azione) {
+  const blocco = el14(doc, "div", "talos-approval__automazione");
+  blocco.dataset.dettaglioFornitori = azione?.tipo ?? "";
+  const nessuno = t("varie.providerCard.none");
+  const stato2 = (attivo) => t(attivo ? "varie.providerCard.excludedByDefault" : "varie.providerCard.allowedAgain");
+  for (const c of cambiDi(azione)) {
+    if (c.campo === "persona") {
+      const prima = Array.isArray(c.prima) && c.prima.length ? c.prima.join(", ") : nessuno;
+      const dopo = Array.isArray(c.dopo) && c.dopo.length ? c.dopo.join(", ") : nessuno;
+      blocco.append(kv6(doc, t("varie.providerCard.before"), prima), kv6(doc, t("varie.providerCard.after"), dopo));
+    } else {
+      blocco.append(kv6(doc, t("varie.providerCard.forModel", { model: nomeModello2(c.modello) }), `${stato2(c.prima === true)} → ${stato2(c.dopo === true)}`));
+    }
+  }
+  return blocco;
+}
+var ATTREZZI_FORNITORI_CON_CARTA, eCartaFornitori, cambiDi, nomeModello2;
+var init_fornitori_carta = __esm({
+  "src/components/fornitori-carta.js"() {
+    init_lingua();
+    init_chat_foot();
+    ATTREZZI_FORNITORI_CON_CARTA = Object.freeze(["provider_exclude", "provider_allow"]);
+    eCartaFornitori = (azione) => ATTREZZI_FORNITORI_CON_CARTA.includes(azione?.tipo);
+    cambiDi = (azione) => Array.isArray(azione?.cambi) ? azione.cambi.filter((c) => c && (c.campo === "persona" || c.campo === "di-serie")) : [];
+    nomeModello2 = (id4) => nomeModelloUmano(id4) || id4 || "";
+  }
+});
+
 // src/components/officina.js
 function statoToolForgiato(abilitato) {
   if (abilitato === true) return { testo: t("modelli.forge.enabled"), tono: "success", azione: t("modelli.forge.disable"), prossimo: false };
@@ -35694,14 +35893,14 @@ function filtraOfficina(strumenti, { query = "", stato: stato2 = "tutti" } = {})
   const q2 = String(query).trim().toLocaleLowerCase("it");
   return strumenti.filter((s) => (stato2 === "tutti" || (stato2 === "abilitati" ? s.abilitato === true : s.abilitato === false)) && (!q2 || [s.id, testiToolForgiato(s).titolo, testiToolForgiato(s).descrizione, ...Array.isArray(s.capacita) ? s.capacita : [], ...capacitaToolForgiato(s.capacita)].join(" ").toLocaleLowerCase("it").includes(q2)));
 }
-function el14(doc, tag2, classe, testo2) {
+function el15(doc, tag2, classe, testo2) {
   const n = doc.createElement(tag2);
   if (classe) n.className = classe;
   if (testo2 !== void 0) n.textContent = testo2;
   return n;
 }
 function icona6(doc) {
-  const contenitore = el14(doc, "span", "talos-list-row__icon"), svg2 = doc.createElementNS("http://www.w3.org/2000/svg", "svg"), use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
+  const contenitore = el15(doc, "span", "talos-list-row__icon"), svg2 = doc.createElementNS("http://www.w3.org/2000/svg", "svg"), use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
   svg2.setAttribute("class", "i");
   svg2.setAttribute("aria-hidden", "true");
   use.setAttribute("href", "#i-code");
@@ -35710,7 +35909,7 @@ function icona6(doc) {
   return contenitore;
 }
 function creaForgeRow(strumento, { document: doc = globalThis.document, selezionabile = true, selezionata = false, onSeleziona, onAbilita, salvataggio = false, salvataggioId = null } = {}) {
-  const dati = testiToolForgiato(strumento), stato2 = statoToolForgiato(strumento.abilitato), riga2 = el14(doc, selezionabile ? "button" : "div", "talos-list-row");
+  const dati = testiToolForgiato(strumento), stato2 = statoToolForgiato(strumento.abilitato), riga2 = el15(doc, selezionabile ? "button" : "div", "talos-list-row");
   riga2.dataset.forgeId = strumento.id;
   if (selezionabile) {
     riga2.type = "button";
@@ -35720,12 +35919,12 @@ function creaForgeRow(strumento, { document: doc = globalThis.document, selezion
     riga2.tabIndex = selezionata ? 0 : -1;
     riga2.addEventListener("click", () => onSeleziona?.(strumento.id));
   } else riga2.setAttribute("role", "group");
-  const testo2 = el14(doc, "span", "talos-list-row__text");
-  testo2.append(el14(doc, "span", "talos-list-row__title", dati.titolo), el14(doc, "span", "talos-list-row__sub", dati.descrizione), el14(doc, "span", "talos-list-row__sub", capacitaToolForgiato(strumento.capacita).join(" · ")));
-  const aside = el14(doc, "span", "talos-list-row__aside");
-  aside.append(el14(doc, "span", "talos-badge" + (stato2.tono ? " talos-badge--" + stato2.tono : "") + " talos-badge--sm", stato2.testo));
+  const testo2 = el15(doc, "span", "talos-list-row__text");
+  testo2.append(el15(doc, "span", "talos-list-row__title", dati.titolo), el15(doc, "span", "talos-list-row__sub", dati.descrizione), el15(doc, "span", "talos-list-row__sub", capacitaToolForgiato(strumento.capacita).join(" · ")));
+  const aside = el15(doc, "span", "talos-list-row__aside");
+  aside.append(el15(doc, "span", "talos-badge" + (stato2.tono ? " talos-badge--" + stato2.tono : "") + " talos-badge--sm", stato2.testo));
   if (!selezionabile) {
-    const bottone8 = el14(doc, "button", "talos-button talos-button--secondary talos-button--sm", salvataggio && salvataggioId === strumento.id ? t("modelli.common.saving") : stato2.azione);
+    const bottone8 = el15(doc, "button", "talos-button talos-button--secondary talos-button--sm", salvataggio && salvataggioId === strumento.id ? t("modelli.common.saving") : stato2.azione);
     bottone8.type = "button";
     bottone8.disabled = salvataggio || stato2.prossimo === null;
     bottone8.setAttribute("aria-label", t("modelli.forge.actionTitle", { action: stato2.azione, title: dati.titolo }));
@@ -35805,7 +36004,7 @@ function renderOfficina(schermo, pagina) {
     });
     return riga2;
   }));
-  if (!visibili.length) lista.append(el14(doc, "p", "talos-list-row talos-muted", opzioni.errore || (opzioni.caricamento ? t("modelli.forge.loading") : strumenti.length ? t("modelli.tools.noMatches") : t("modelli.forge.noTools"))));
+  if (!visibili.length) lista.append(el15(doc, "p", "talos-list-row talos-muted", opzioni.errore || (opzioni.caricamento ? t("modelli.forge.loading") : strumenti.length ? t("modelli.tools.noMatches") : t("modelli.forge.noTools"))));
   if (focusId) [...lista.querySelectorAll("[data-forge-id]")].find((r) => r.dataset.forgeId === focusId)?.focus({ preventScroll: true });
   const scelto = visibili.find((s) => s.id === pagina.scelto), dettaglio = schermo.querySelector("[data-forge-dettaglio]");
   dettaglio.hidden = !scelto;
@@ -36173,10 +36372,10 @@ function frasiRiverifica(riverifica) {
   return pezzi.length ? `${testa}: ${pezzi.join(" · ")}` : testa;
 }
 function nodo8(doc, tag2, classe, testo2) {
-  const el34 = doc.createElement(tag2);
-  if (classe) el34.className = classe;
-  if (testo2 !== void 0 && testo2 !== null) el34.textContent = String(testo2);
-  return el34;
+  const el35 = doc.createElement(tag2);
+  if (classe) el35.className = classe;
+  if (testo2 !== void 0 && testo2 !== null) el35.textContent = String(testo2);
+  return el35;
 }
 function iconaSvg(doc, nome) {
   const svg2 = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -36188,9 +36387,9 @@ function iconaSvg(doc, nome) {
   return svg2;
 }
 function tag(doc, testo2, tono) {
-  const el34 = nodo8(doc, "span", "td-tag", testo2);
-  if (tono) el34.dataset.tone = tono;
-  return el34;
+  const el35 = nodo8(doc, "span", "td-tag", testo2);
+  if (tono) el35.dataset.tone = tono;
+  return el35;
 }
 function prosaInNodi(doc, prosa, rendiMarkdown, titoloGiaDetto = "") {
   const contenitore = nodo8(doc, "div", "td-prosa-rapporto");
@@ -37138,7 +37337,7 @@ function testiRicerca(ricerca) {
 function riepilogoRicerche(ricerche) {
   return tn("sezioni.research.summary.one", "sezioni.research.summary.many", ricerche.length);
 }
-function el15(doc, tag2, classe, testo2) {
+function el16(doc, tag2, classe, testo2) {
   const n = doc.createElement(tag2);
   if (classe) n.className = classe;
   if (testo2 !== void 0) n.textContent = testo2;
@@ -37146,31 +37345,31 @@ function el15(doc, tag2, classe, testo2) {
 }
 function creaReportRow(ricerca, { document: doc = globalThis.document, aperta: aperta2 = false, onEspandi, onApriRapporto } = {}) {
   const t2 = testiRicerca(ricerca), stato2 = statoRicerca(ricerca);
-  const riga2 = el15(doc, "div", "talos-list-row");
+  const riga2 = el16(doc, "div", "talos-list-row");
   riga2.dataset.c = "ReportRow";
   riga2.dataset.researchId = ricerca?.id || "";
   riga2.setAttribute("role", "listitem");
-  const icona16 = el15(doc, "span", "talos-list-row__icon"), svg2 = doc.createElementNS("http://www.w3.org/2000/svg", "svg"), use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
+  const icona16 = el16(doc, "span", "talos-list-row__icon"), svg2 = doc.createElementNS("http://www.w3.org/2000/svg", "svg"), use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
   svg2.setAttribute("class", "i");
   svg2.setAttribute("aria-hidden", "true");
   use.setAttribute("href", "#i-globe");
   svg2.append(use);
   icona16.append(svg2);
-  const testo2 = el15(doc, "span", "talos-list-row__text"), titolo2 = el15(doc, "span", "talos-list-row__title", t2.titolo), sotto = el15(doc, "span", "talos-list-row__sub");
+  const testo2 = el16(doc, "span", "talos-list-row__text"), titolo2 = el16(doc, "span", "talos-list-row__title", t2.titolo), sotto = el16(doc, "span", "talos-list-row__sub");
   titolo2.title = t2.titolo;
   testo2.append(titolo2, sotto);
   if (ricerca?.stato === "running" && ricerca?.avanzamento) {
     const av = creaAvanzamentoRicerca(doc, ricerca.avanzamento, { etichetta: t("sezioni.research.row.progressLabel", { title: t2.titolo }) });
     if (av) testo2.append(av);
   }
-  const aside = el15(doc, "span", "talos-list-row__aside");
-  aside.append(el15(doc, "span", "talos-badge" + (stato2.tono ? " talos-badge--" + stato2.tono : ""), stato2.testo));
-  const apri = el15(doc, "button", "talos-button talos-button--ghost talos-button--sm", t("sezioni.research.row.openReport"));
+  const aside = el16(doc, "span", "talos-list-row__aside");
+  aside.append(el16(doc, "span", "talos-badge" + (stato2.tono ? " talos-badge--" + stato2.tono : ""), stato2.testo));
+  const apri = el16(doc, "button", "talos-button talos-button--ghost talos-button--sm", t("sezioni.research.row.openReport"));
   apri.type = "button";
   apri.hidden = !(ricerca?.reportLibraryId && typeof onApriRapporto === "function");
   apri.setAttribute("aria-label", t("sezioni.research.row.openReportLabel", { title: t2.titolo }));
   apri.addEventListener("click", () => onApriRapporto?.(ricerca));
-  const dettagli2 = el15(doc, "button", "talos-button talos-button--ghost talos-button--sm");
+  const dettagli2 = el16(doc, "button", "talos-button talos-button--ghost talos-button--sm");
   dettagli2.type = "button";
   function mostra() {
     riga2.dataset.aperta = String(aperta2);
@@ -37290,7 +37489,7 @@ function azioniLibreria({ sessionId, fetch: rete = globalThis.fetch } = {}) {
     apri: (id4) => manda(base(id4) + "/apri", { method: "POST" })
   };
 }
-function el16(doc, tag2, classe, testo2) {
+function el17(doc, tag2, classe, testo2) {
   const n = doc.createElement(tag2);
   if (classe) n.className = classe;
   if (testo2 !== void 0) n.textContent = testo2;
@@ -37299,25 +37498,25 @@ function el16(doc, tag2, classe, testo2) {
 function creaLibraryRow(voce2, { document: doc = globalThis.document, aperta: aperta2 = false, onEspandi, sessionId = "", azioni = null, modo = "normale", bozza = null, onModo, onCambiata, onMenu, nomeSessione, copia: copia3 } = {}) {
   const t2 = testiVoceLibreria(voce2), tipo = tipoVoceLibreria(voce2?.fileType), origine = origineVoceLibreria(voce2?.origine), id4 = voce2?.id || "";
   const prov = provenienzaVoceLibreria(voce2, { nomeSessione });
-  const riga2 = el16(doc, "div", "talos-list-row");
+  const riga2 = el17(doc, "div", "talos-list-row");
   riga2.dataset.c = "LibraryRow";
   riga2.dataset.libraryId = id4;
   riga2.setAttribute("role", "listitem");
-  const icona16 = el16(doc, "span", "talos-list-row__icon"), svg2 = doc.createElementNS("http://www.w3.org/2000/svg", "svg"), use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
+  const icona16 = el17(doc, "span", "talos-list-row__icon"), svg2 = doc.createElementNS("http://www.w3.org/2000/svg", "svg"), use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
   svg2.setAttribute("class", "i");
   svg2.setAttribute("aria-hidden", "true");
   use.setAttribute("href", "#i-" + tipo.icona);
   svg2.append(use);
   icona16.append(svg2);
-  const testo2 = el16(doc, "span", "talos-list-row__text"), titolo2 = el16(doc, "span", "talos-list-row__title", t2.nome), sotto = el16(doc, "span", "talos-list-row__sub");
-  const aside = el16(doc, "span", "talos-list-row__aside");
-  aside.append(el16(doc, "span", "talos-badge" + (voce2?.origine === "generated" ? " talos-badge--accent" : ""), origine));
+  const testo2 = el17(doc, "span", "talos-list-row__text"), titolo2 = el17(doc, "span", "talos-list-row__title", t2.nome), sotto = el17(doc, "span", "talos-list-row__sub");
+  const aside = el17(doc, "span", "talos-list-row__aside");
+  aside.append(el17(doc, "span", "talos-badge" + (voce2?.origine === "generated" ? " talos-badge--accent" : ""), origine));
   const indirizzo = indirizzoFileLibreria(sessionId, id4), servizio = azioni || azioniLibreria({ sessionId });
-  const messaggio = el16(doc, "span", "talos-list-row__messaggio");
+  const messaggio = el17(doc, "span", "talos-list-row__messaggio");
   messaggio.hidden = true;
   const bottoni = [];
   const nuovoBottone = (etichetta3, nomeAccessibile, azione, extra) => {
-    const b = el16(doc, "button", "talos-button talos-button--ghost talos-button--sm" + (extra || ""), etichetta3);
+    const b = el17(doc, "button", "talos-button talos-button--ghost talos-button--sm" + (extra || ""), etichetta3);
     b.type = "button";
     b.dataset.azione = azione;
     b.setAttribute("aria-label", nomeAccessibile);
@@ -37325,13 +37524,13 @@ function creaLibraryRow(voce2, { document: doc = globalThis.document, aperta: ap
     return b;
   };
   const nuovaAncora = (etichetta3, nomeAccessibile, azione) => {
-    const a = el16(doc, "a", "talos-button talos-button--ghost talos-button--sm", etichetta3);
+    const a = el17(doc, "a", "talos-button talos-button--ghost talos-button--sm", etichetta3);
     a.href = indirizzo;
     a.dataset.azione = azione;
     a.setAttribute("aria-label", nomeAccessibile);
     return a;
   };
-  const gruppo = el16(doc, "span", "talos-list-row__azioni");
+  const gruppo = el17(doc, "span", "talos-list-row__azioni");
   gruppo.setAttribute("role", "group");
   gruppo.setAttribute("aria-label", t("sezioni.common.actionsFor", { name: t2.nome }));
   let rinominaBtn = null, eliminaBtn = null, rivelaBtn = null;
@@ -37390,38 +37589,38 @@ function creaLibraryRow(voce2, { document: doc = globalThis.document, aperta: ap
       onMenu?.(riga2.vociMenu(), { x: e.clientX, y: e.clientY });
     });
   }
-  const forma = el16(doc, "form", "talos-list-row__rinomina");
+  const forma = el17(doc, "form", "talos-list-row__rinomina");
   forma.hidden = true;
-  const campo3 = el16(doc, "input", "talos-list-row__nome");
+  const campo3 = el17(doc, "input", "talos-list-row__nome");
   campo3.type = "text";
   campo3.value = bozza ?? t2.nome;
   campo3.maxLength = 255;
   campo3.autocomplete = "off";
   campo3.spellcheck = false;
   campo3.setAttribute("aria-label", t("sezioni.library.row.newNameLabel", { name: t2.nome }));
-  const salva = el16(doc, "button", "talos-button talos-button--primary talos-button--sm", t("sezioni.common.save"));
+  const salva = el17(doc, "button", "talos-button talos-button--primary talos-button--sm", t("sezioni.common.save"));
   salva.type = "submit";
   salva.dataset.azione = "rinomina-salva";
   salva.setAttribute("aria-label", t("sezioni.library.row.saveLabel", { name: t2.nome }));
-  const annullaRinomina = el16(doc, "button", "talos-button talos-button--ghost talos-button--sm", t("sezioni.common.cancel"));
+  const annullaRinomina = el17(doc, "button", "talos-button talos-button--ghost talos-button--sm", t("sezioni.common.cancel"));
   annullaRinomina.type = "button";
   annullaRinomina.dataset.azione = "rinomina-annulla";
   annullaRinomina.setAttribute("aria-label", t("sezioni.library.row.cancelRenameLabel", { name: t2.nome }));
   bottoni.push(salva, annullaRinomina);
   forma.append(campo3, salva, annullaRinomina);
-  const conferma = el16(doc, "span", "talos-list-row__conferma");
+  const conferma = el17(doc, "span", "talos-list-row__conferma");
   conferma.hidden = true;
-  const noElimina = el16(doc, "button", "talos-button talos-button--ghost talos-button--sm", t("sezioni.common.cancel"));
+  const noElimina = el17(doc, "button", "talos-button talos-button--ghost talos-button--sm", t("sezioni.common.cancel"));
   noElimina.type = "button";
   noElimina.dataset.azione = "elimina-annulla";
   noElimina.setAttribute("aria-label", t("sezioni.library.row.cancelDeleteLabel", { name: t2.nome }));
-  const siElimina = el16(doc, "button", "talos-button talos-button--danger talos-button--sm", t("sezioni.common.delete"));
+  const siElimina = el17(doc, "button", "talos-button talos-button--danger talos-button--sm", t("sezioni.common.delete"));
   siElimina.type = "button";
   siElimina.dataset.azione = "elimina-conferma";
   siElimina.setAttribute("aria-label", t("sezioni.library.row.confirmDeleteLabel", { name: t2.nome }));
   bottoni.push(noElimina, siElimina);
-  conferma.append(el16(doc, "span", "talos-list-row__conferma-testo", t("sezioni.library.row.confirmText")), noElimina, siElimina);
-  const dettagli2 = el16(doc, "button", "talos-button talos-button--ghost talos-button--sm");
+  conferma.append(el17(doc, "span", "talos-list-row__conferma-testo", t("sezioni.library.row.confirmText")), noElimina, siElimina);
+  const dettagli2 = el17(doc, "button", "talos-button talos-button--ghost talos-button--sm");
   dettagli2.type = "button";
   dettagli2.dataset.azione = "dettagli";
   let stato2 = servizio && id4 ? String(modo || "normale") : "normale", occupata = false, avviso = null;
@@ -37568,7 +37767,7 @@ function riepilogoAttivita(attivita) {
   const aperte = attivita.filter((a) => a?.stato === "todo" || a?.stato === "doing").length, fatte = attivita.filter((a) => a?.stato === "done").length, ignote = attivita.length - aperte - fatte;
   return tn("sezioni.tasks.summary.openOne", "sezioni.tasks.summary.openMany", aperte) + " · " + tn("sezioni.tasks.summary.doneOne", "sezioni.tasks.summary.doneMany", fatte) + (ignote ? " · " + tn("sezioni.tasks.summary.unknownOne", "sezioni.tasks.summary.unknownMany", ignote) : "");
 }
-function el17(doc, tag2, classe, testo2) {
+function el18(doc, tag2, classe, testo2) {
   const n = doc.createElement(tag2);
   if (classe) n.className = classe;
   if (testo2 !== void 0) n.textContent = testo2;
@@ -37576,29 +37775,29 @@ function el17(doc, tag2, classe, testo2) {
 }
 function creaTaskRow(a, { document: doc = globalThis.document, aperta: aperta2 = false, onEspandi } = {}) {
   const t2 = testiAttivita(a), s = statoAttivita(a?.stato);
-  const riga2 = el17(doc, "div", "talos-list-row" + (a?.stato === "done" ? " talos-list-row--done" : ""));
+  const riga2 = el18(doc, "div", "talos-list-row" + (a?.stato === "done" ? " talos-list-row--done" : ""));
   riga2.dataset.c = "TaskRow";
   riga2.dataset.taskId = a?.id || "";
   riga2.setAttribute("role", "listitem");
-  const segna = el17(doc, "button", "talos-checkbox");
+  const segna = el18(doc, "button", "talos-checkbox");
   segna.type = "button";
   segna.hidden = true;
   segna.dataset.richiede = "fase3";
   segna.setAttribute("role", "checkbox");
   segna.setAttribute("aria-checked", String(a?.stato === "done"));
   segna.setAttribute("aria-label", t("sezioni.tasks.row.markDone"));
-  const icona16 = el17(doc, "span", "talos-list-row__icon"), svg2 = doc.createElementNS("http://www.w3.org/2000/svg", "svg"), use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
+  const icona16 = el18(doc, "span", "talos-list-row__icon"), svg2 = doc.createElementNS("http://www.w3.org/2000/svg", "svg"), use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
   svg2.setAttribute("class", "i");
   svg2.setAttribute("aria-hidden", "true");
   use.setAttribute("href", "#i-" + s.icona);
   svg2.append(use);
   icona16.append(svg2);
-  const testo2 = el17(doc, "span", "talos-list-row__text"), titolo2 = el17(doc, "span", "talos-list-row__title", t2.titolo), sotto = el17(doc, "span", "talos-list-row__sub");
+  const testo2 = el18(doc, "span", "talos-list-row__text"), titolo2 = el18(doc, "span", "talos-list-row__title", t2.titolo), sotto = el18(doc, "span", "talos-list-row__sub");
   titolo2.title = t2.titolo;
   testo2.append(titolo2, sotto);
-  const aside = el17(doc, "span", "talos-list-row__aside");
-  aside.append(el17(doc, "span", "talos-badge" + (s.tono ? " talos-badge--" + s.tono : ""), s.testo));
-  const leggi = el17(doc, "button", "talos-button talos-button--ghost talos-button--sm");
+  const aside = el18(doc, "span", "talos-list-row__aside");
+  aside.append(el18(doc, "span", "talos-badge" + (s.tono ? " talos-badge--" + s.tono : ""), s.testo));
+  const leggi = el18(doc, "button", "talos-button talos-button--ghost talos-button--sm");
   leggi.type = "button";
   function mostra() {
     riga2.dataset.aperta = String(aperta2);
@@ -37647,7 +37846,7 @@ function testiMemoria(memoria) {
   const data = typeof memoria?.aggiornataAlle === "string" ? new Date(memoria.aggiornataAlle) : null;
   return { titolo: typeof memoria?.titolo === "string" && memoria.titolo.trim() ? memoria.titolo : t("sezioni.memory.untitled"), contenuto, anteprima: compatto4.length > 80 ? compatto4.slice(0, 80) + "…" : compatto4, aggiornata: data && Number.isFinite(data.getTime()) ? data.toLocaleString(localeUI17()) : null };
 }
-function el18(doc, tag2, classe, testo2) {
+function el19(doc, tag2, classe, testo2) {
   const n = doc.createElement(tag2);
   if (classe) n.className = classe;
   if (testo2 !== void 0) n.textContent = testo2;
@@ -37655,24 +37854,24 @@ function el18(doc, tag2, classe, testo2) {
 }
 function creaMemoryRow(memoria, { document: doc = globalThis.document, aperta: aperta2 = false, onEspandi } = {}) {
   const t2 = testiMemoria(memoria), g = genereMemoria(memoria?.genere);
-  const riga2 = el18(doc, "div", "talos-list-row");
+  const riga2 = el19(doc, "div", "talos-list-row");
   riga2.dataset.c = "MemoryRow";
   riga2.setAttribute("role", "listitem");
   riga2.dataset.memoryId = memoria?.id || "";
-  const icona16 = el18(doc, "span", "talos-list-row__icon"), svg2 = doc.createElementNS("http://www.w3.org/2000/svg", "svg"), use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
+  const icona16 = el19(doc, "span", "talos-list-row__icon"), svg2 = doc.createElementNS("http://www.w3.org/2000/svg", "svg"), use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
   svg2.setAttribute("class", "i");
   svg2.setAttribute("aria-hidden", "true");
   use.setAttribute("href", "#i-" + g.icona);
   svg2.append(use);
   icona16.append(svg2);
-  const testo2 = el18(doc, "span", "talos-list-row__text"), titolo2 = el18(doc, "span", "talos-list-row__title", t2.titolo), sotto = el18(doc, "span", "talos-list-row__sub");
+  const testo2 = el19(doc, "span", "talos-list-row__text"), titolo2 = el19(doc, "span", "talos-list-row__title", t2.titolo), sotto = el19(doc, "span", "talos-list-row__sub");
   titolo2.title = t2.titolo;
   testo2.append(titolo2, sotto);
-  const aside = el18(doc, "span", "talos-list-row__aside");
-  aside.append(el18(doc, "span", "talos-badge" + (g.tono ? " talos-badge--" + g.tono : ""), g.testo));
-  const leggi = el18(doc, "button", "talos-button talos-button--ghost talos-button--sm");
+  const aside = el19(doc, "span", "talos-list-row__aside");
+  aside.append(el19(doc, "span", "talos-badge" + (g.tono ? " talos-badge--" + g.tono : ""), g.testo));
+  const leggi = el19(doc, "button", "talos-button talos-button--ghost talos-button--sm");
   leggi.type = "button";
-  const correggi = el18(doc, "button", "talos-button talos-button--ghost talos-button--sm", t("sezioni.memory.row.correct"));
+  const correggi = el19(doc, "button", "talos-button talos-button--ghost talos-button--sm", t("sezioni.memory.row.correct"));
   correggi.type = "button";
   correggi.hidden = true;
   correggi.dataset.richiede = "fase3";
@@ -37846,10 +38045,10 @@ function magazzinoFileLibreria(schermo) {
   return magazzino;
 }
 function nodo9(doc, tag2, classe, testo2) {
-  const el34 = doc.createElement(tag2);
-  if (classe) el34.className = classe;
-  if (testo2 !== void 0 && testo2 !== null) el34.textContent = String(testo2);
-  return el34;
+  const el35 = doc.createElement(tag2);
+  if (classe) el35.className = classe;
+  if (testo2 !== void 0 && testo2 !== null) el35.textContent = String(testo2);
+  return el35;
 }
 function bottone4(doc, testo2, esegui, variante = "secondary") {
   const b = nodo9(doc, "button", `talos-button talos-button--${variante} talos-button--sm`, testo2);
@@ -38239,10 +38438,10 @@ function anteprimaTipografica(testo2) {
   return { titolo: titolo2, righe: quote };
 }
 function nodo10(doc, tag2, classe = "", testo2 = "") {
-  const el34 = doc.createElement(tag2);
-  if (classe) el34.className = classe;
-  if (testo2) el34.textContent = testo2;
-  return el34;
+  const el35 = doc.createElement(tag2);
+  if (classe) el35.className = classe;
+  if (testo2) el35.textContent = testo2;
+  return el35;
 }
 function iconaSprite2(doc, id4, classe = "i") {
   const svg2 = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -38889,10 +39088,10 @@ function applicaCollocazioneToast(regione, collocazione) {
     else regione.style.removeProperty(nome);
   }
 }
-function creaPilaToast(regione, { animaUscita = (el34, fine) => fine(), entra = () => {
+function creaPilaToast(regione, { animaUscita = (el35, fine) => fine(), entra = () => {
 }, fuocoDiRitorno = () => null } = {}) {
   let progressivo = 0;
-  const vivi = () => [...regione.querySelectorAll(".talos-toast:not([hidden])")].filter((el34) => !el34.dataset.demo);
+  const vivi = () => [...regione.querySelectorAll(".talos-toast:not([hidden])")].filter((el35) => !el35.dataset.demo);
   const rimuovi2 = (scheda) => {
     if (!scheda?.isConnected || scheda.dataset.uscita) return;
     scheda.dataset.uscita = "1";
@@ -39048,8 +39247,8 @@ function paroleErroreRete(codice, schema, { azione = t("varie.voice.action.save"
   return t("varie.voice.error.generic", { action: azione });
 }
 function servizioVoci({ schema, sessionId, rete } = {}) {
-  if (!schema || !sessionId || typeof rete?.post !== "function" || typeof rete?.patch !== "function" || typeof rete?.elimina !== "function") return null;
-  const base = `/api/v1/sessions/${encodeURIComponent(sessionId)}/${schema.risorsa}`;
+  if (!schema || typeof rete?.post !== "function" || typeof rete?.patch !== "function" || typeof rete?.elimina !== "function") return null;
+  const base = sessionId ? `/api/v1/sessions/${encodeURIComponent(sessionId)}/${schema.risorsa}` : `/api/v1/me/${schema.risorsa}`;
   const voceUrl = (id4) => `${base}/${encodeURIComponent(String(id4 ?? ""))}`;
   return {
     schema,
@@ -39064,10 +39263,10 @@ function servizioVoci({ schema, sessionId, rete } = {}) {
   };
 }
 function nodo11(doc, tag2, classe, testo2) {
-  const el34 = doc.createElement(tag2);
-  if (classe) el34.className = classe;
-  if (testo2 !== void 0 && testo2 !== null) el34.textContent = String(testo2);
-  return el34;
+  const el35 = doc.createElement(tag2);
+  if (classe) el35.className = classe;
+  if (testo2 !== void 0 && testo2 !== null) el35.textContent = String(testo2);
+  return el35;
 }
 function mostraConteggio(lunghezza, massimo) {
   return Number(lunghezza) >= Number(massimo) * 0.9;
@@ -39534,10 +39733,10 @@ function notificatore(opzioni) {
   };
 }
 function nodo12(doc, tag2, classe, testo2) {
-  const el34 = doc.createElement(tag2);
-  if (classe) el34.className = classe;
-  if (testo2 !== void 0 && testo2 !== null) el34.textContent = String(testo2);
-  return el34;
+  const el35 = doc.createElement(tag2);
+  if (classe) el35.className = classe;
+  if (testo2 !== void 0 && testo2 !== null) el35.textContent = String(testo2);
+  return el35;
 }
 function bottone5(doc, testo2, { variante = "secondary", esegui, pericolo = false } = {}) {
   const b = nodo12(doc, "button", `talos-button talos-button--${variante} talos-button--sm${pericolo ? " talos-button--danger" : ""}`, testo2);
@@ -40288,7 +40487,7 @@ function aggiornaPaginaLibreria(schermo, voci, opzioni = {}) {
     const riga2 = sezione?.querySelector(".td-detail .td-riuso-riga > .talos-list-row");
     const voci2 = riga2?.vociMenu?.();
     if (!voci2?.length) return;
-    const siVede = (el34) => Boolean(el34?.isConnected) && el34.getBoundingClientRect().width > 0;
+    const siVede = (el35) => Boolean(el35?.isConnected) && el35.getBoundingClientRect().width > 0;
     const ancoraVisibile = [cardDi()?.querySelector(".td-lib-menu"), sezione?.querySelector('.td-detail .td-riuso-riga [data-azione="menu"]'), ancora?.ancoraEl].find(siVede) ?? null;
     opzioni.onMenu(voci2, (ancora?.ancoraEl || !siVede(cardDi())) && ancoraVisibile ? { ancoraEl: ancoraVisibile } : ancora);
   }
@@ -41133,9 +41332,12 @@ function renderizzaMarkdown(testoGrezzo, opzioni = {}) {
     String.raw`\*\*([^*]+)\*\*`,
     "`([^`]+)`",
     String.raw`\*([^*]+)\*`,
-    "_([^_]+)_"
+    /* `_x_`: mai DENTRO una parola (CommonMark 0.31.2 §6.2, regole 2 e 4, esempio 374: «Intraword emphasis is disallowed for
+       `_`», letta l'08/10/2026). Prima `call_shell_1.log` usciva «call*shell*1.log». Non aperto dopo una lettera/cifra/`_`, non
+       chiuso prima di una lettera/cifra/`_`, e niente spazio subito dentro i due trattini. */
+    String.raw`(?<![\p{L}\p{N}_])_(?![\s_])([^_]+)(?<!\s)_(?![\p{L}\p{N}_])`
   ];
-  const PATTERN_INLINE = new RegExp(PARTI_INLINE.join("|"), "g");
+  const PATTERN_INLINE = new RegExp(PARTI_INLINE.join("|"), "gu");
   const GRUPPI3 = { conv: -1, convId: -1, link: -1, linkUrl: -1 };
   let prossimoGruppo = 1;
   if (conConversazioni) {
@@ -41150,7 +41352,7 @@ function renderizzaMarkdown(testoGrezzo, opzioni = {}) {
   }
   Object.assign(GRUPPI3, { forte: prossimoGruppo, codice: prossimoGruppo + 1, corsivoA: prossimoGruppo + 2, corsivoB: prossimoGruppo + 3 });
   function applicaInline(contenitore, segmento) {
-    const pattern = new RegExp(PATTERN_INLINE.source, "g");
+    const pattern = new RegExp(PATTERN_INLINE.source, PATTERN_INLINE.flags);
     let ultimo = 0;
     let match;
     while (match = pattern.exec(segmento)) {
@@ -41405,7 +41607,7 @@ function oraBreve2(iso) {
   const istante2 = Date.parse(iso);
   return Number.isFinite(istante2) ? new Date(istante2).toLocaleTimeString(linguaCorrenteDiT() === "en" ? "en-GB" : "it-IT", { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "";
 }
-function el19(d, tag2, classe = "", testo2 = null) {
+function el20(d, tag2, classe = "", testo2 = null) {
   const n = d.createElement(tag2);
   if (classe) n.className = classe;
   if (testo2 !== null) n.textContent = testo2;
@@ -41424,18 +41626,18 @@ function creaDettaglioAgente(figlia, { document: documento, sezione: sezioneIniz
   const d = documento || globalThis.document;
   let dati = figlia || {};
   let sezione = SEZIONI_AGENTE.some(([id4]) => id4 === sezioneIniziale) ? sezioneIniziale : "panoramica";
-  const elemento = el19(d, "div", "talos-agente");
+  const elemento = el20(d, "div", "talos-agente");
   elemento.dataset.c = "DettaglioAgente";
   if (dati.sessionId) elemento.dataset.sessioneFiglia = String(dati.sessionId);
-  const cima = el19(d, "div", "talos-agente__cima");
-  const indietro = el19(d, "button", "talos-button talos-button--ghost talos-button--sm talos-agente__indietro");
+  const cima = el20(d, "div", "talos-agente__cima");
+  const indietro = el20(d, "button", "talos-button talos-button--ghost talos-button--sm talos-agente__indietro");
   indietro.type = "button";
   indietro.dataset.azione = "tutti-gli-agenti";
   indietro.append(icona7(d, "i-arrow-left"), d.createTextNode(t("agenti.agent.backToAll")));
   indietro.addEventListener("click", () => azioni.indietro?.());
   cima.appendChild(indietro);
   if (typeof azioni.apriGrafo === "function") {
-    const grafo = el19(d, "button", "talos-button talos-button--ghost talos-button--sm");
+    const grafo = el20(d, "button", "talos-button talos-button--ghost talos-button--sm");
     grafo.type = "button";
     grafo.setAttribute("aria-label", t("agenti.agent.openInDiagram"));
     grafo.title = t("agenti.agent.openInDiagram");
@@ -41443,31 +41645,31 @@ function creaDettaglioAgente(figlia, { document: documento, sezione: sezioneIniz
     grafo.addEventListener("click", () => azioni.apriGrafo(dati));
     cima.append(grafo);
   }
-  const chi = el19(d, "div", "talos-agente__chi");
-  const segno = el19(d, "span", "talos-agente__icona");
+  const chi = el20(d, "div", "talos-agente__chi");
+  const segno = el20(d, "span", "talos-agente__icona");
   segno.appendChild(icona7(d, "i-robot"));
-  const nomi2 = el19(d, "div", "talos-agente__nomi");
-  const nome = el19(d, "b", "talos-agente__nome");
-  const ruolo = el19(d, "span", "talos-agente__ruolo talos-muted");
+  const nomi2 = el20(d, "div", "talos-agente__nomi");
+  const nome = el20(d, "b", "talos-agente__nome");
+  const ruolo = el20(d, "span", "talos-agente__ruolo talos-muted");
   nomi2.append(nome, ruolo);
-  const stato2 = el19(d, "span", "talos-badge talos-badge--sm");
+  const stato2 = el20(d, "span", "talos-badge talos-badge--sm");
   stato2.setAttribute("role", "status");
   chi.append(segno, nomi2, stato2);
-  const pillole = el19(d, "div", "talos-agente__sezioni");
+  const pillole = el20(d, "div", "talos-agente__sezioni");
   pillole.setAttribute("role", "group");
   pillole.setAttribute("aria-label", t("agenti.agent.sectionsLabel"));
   const bottoni = /* @__PURE__ */ new Map();
   for (const [id4, chiave] of SEZIONI_AGENTE) {
-    const b = el19(d, "button", "talos-agente__sezione", t(chiave));
+    const b = el20(d, "button", "talos-agente__sezione", t(chiave));
     b.type = "button";
     b.dataset.sezione = id4;
     b.addEventListener("click", () => mostra(id4));
     bottoni.set(id4, b);
     pillole.appendChild(b);
   }
-  const corpo = el19(d, "div", "talos-agente__corpo");
+  const corpo = el20(d, "div", "talos-agente__corpo");
   const pannelli = new Map(SEZIONI_AGENTE.map(([id4]) => {
-    const p = el19(d, "div", "talos-agente__pannello");
+    const p = el20(d, "div", "talos-agente__pannello");
     p.dataset.pannello = id4;
     corpo.appendChild(p);
     return [id4, p];
@@ -41475,29 +41677,29 @@ function creaDettaglioAgente(figlia, { document: documento, sezione: sezioneIniz
   const slotConversazione = pannelli.get("conversazione");
   elemento.append(cima, chi, pillole, corpo);
   function collegamentoFile(voce2) {
-    const b = el19(d, "button", "talos-agente__file");
+    const b = el20(d, "button", "talos-agente__file");
     b.type = "button";
     b.dataset.percorso = voce2.percorso;
     const nomeFile2 = voce2.percorso.includes("/") ? voce2.percorso.slice(voce2.percorso.lastIndexOf("/") + 1) : voce2.percorso;
-    b.append(icona7(d, "i-file"), el19(d, "span", "talos-agente__file-nome", nomeFile2), el19(d, "span", "talos-agente__file-segno talos-muted", segnoFileAgente(voce2)));
+    b.append(icona7(d, "i-file"), el20(d, "span", "talos-agente__file-nome", nomeFile2), el20(d, "span", "talos-agente__file-segno talos-muted", segnoFileAgente(voce2)));
     b.title = t("agenti.agent.showInFilesTab", { percorso: voce2.percorso });
     b.addEventListener("click", () => azioni.apriFile?.(voce2.percorso));
     return b;
   }
   function riga2(k, v) {
-    const r = el19(d, "div", "talos-kv");
-    r.append(el19(d, "span", "talos-kv__k", k), el19(d, "span", "talos-kv__v", v));
+    const r = el20(d, "div", "talos-kv");
+    r.append(el20(d, "span", "talos-kv__k", k), el20(d, "span", "talos-kv__v", v));
     return r;
   }
   function disegnaPanoramica() {
     const p = pannelli.get("panoramica");
     const attivita = dati.attivita || {};
     const pezzi = [];
-    pezzi.push(el19(d, "p", "talos-agente__etichetta talos-muted", t("agenti.agent.task")));
-    const compito = el19(d, "div", "talos-agente__compito");
+    pezzi.push(el20(d, "p", "talos-agente__etichetta talos-muted", t("agenti.agent.task")));
+    const compito = el20(d, "div", "talos-agente__compito");
     compito.append(renderizzaMarkdown(dati.task || dati.taskCorto || t("agenti.agent.noTaskRecorded"), { document: d, linkMarkdown: true }));
     pezzi.push(compito);
-    const fatti = el19(d, "div", "talos-agente__fatti");
+    const fatti = el20(d, "div", "talos-agente__fatti");
     if (dati.modello) fatti.appendChild(riga2(t("agenti.agent.model"), String(dati.modello)));
     const avvio = dati.avvio ?? dati.avvioDelega;
     if (avvio === "da-solo" || avvio === "consentito") {
@@ -41511,28 +41713,28 @@ function creaDettaglioAgente(figlia, { document: documento, sezione: sezioneIniz
     if (fatti.childElementCount > 0) pezzi.push(fatti);
     const collisioni = Array.isArray(dati.collisioni) ? dati.collisioni : [];
     if (collisioni.length > 0) {
-      pezzi.push(el19(d, "div", "talos-callout talos-agente__avviso", tn("agenti.agent.collisionOne", "agenti.agent.collisionMany", collisioni.length, { elenco: collisioni.map((c) => c.percorso).join(", ") })));
+      pezzi.push(el20(d, "div", "talos-callout talos-agente__avviso", tn("agenti.agent.collisionOne", "agenti.agent.collisionMany", collisioni.length, { elenco: collisioni.map((c) => c.percorso).join(", ") })));
     }
     if (typeof azioni.apriSessione === "function") {
-      const apri = el19(d, "button", "talos-button talos-button--secondary talos-button--sm", t("agenti.agent.openAsSession"));
+      const apri = el20(d, "button", "talos-button talos-button--secondary talos-button--sm", t("agenti.agent.openAsSession"));
       apri.type = "button";
       apri.dataset.azione = "apri-sessione";
       apri.addEventListener("click", () => azioni.apriSessione());
       pezzi.push(apri);
     }
     const file = Array.isArray(attivita.file) ? attivita.file : [];
-    pezzi.push(el19(d, "b", "talos-agente__titoletto", t("agenti.agent.filesInvolved")));
-    if (file.length === 0) pezzi.push(el19(d, "p", "talos-muted talos-agente__vuoto", dati.conclusa === true ? t("agenti.agent.noFilesDone") : t("agenti.agent.noFilesYet")));
+    pezzi.push(el20(d, "b", "talos-agente__titoletto", t("agenti.agent.filesInvolved")));
+    if (file.length === 0) pezzi.push(el20(d, "p", "talos-muted talos-agente__vuoto", dati.conclusa === true ? t("agenti.agent.noFilesDone") : t("agenti.agent.noFilesYet")));
     else pezzi.push(...file.slice(0, 5).map(collegamentoFile));
     if (file.length > 5) {
-      const altri = el19(d, "button", "talos-button talos-button--ghost talos-button--sm", t("agenti.agent.seeAllFiles", { n: file.length + (attivita.fileTagliati || 0) }));
+      const altri = el20(d, "button", "talos-button talos-button--ghost talos-button--sm", t("agenti.agent.seeAllFiles", { n: file.length + (attivita.fileTagliati || 0) }));
       altri.type = "button";
       altri.addEventListener("click", () => mostra("file"));
       pezzi.push(altri);
     }
     if (typeof dati.riassuntoDelega === "string" && dati.riassuntoDelega.trim()) {
-      const sintesi = el19(d, "div", "talos-agente__compito");
-      sintesi.append(el19(d, "b", "talos-agente__etichetta", t("agenti.agent.reported")), renderizzaMarkdown(dati.riassuntoDelega, { document: d, linkMarkdown: true }));
+      const sintesi = el20(d, "div", "talos-agente__compito");
+      sintesi.append(el20(d, "b", "talos-agente__etichetta", t("agenti.agent.reported")), renderizzaMarkdown(dati.riassuntoDelega, { document: d, linkMarkdown: true }));
       pezzi.push(sintesi);
     }
     p.replaceChildren(...pezzi);
@@ -41541,23 +41743,23 @@ function creaDettaglioAgente(figlia, { document: documento, sezione: sezioneIniz
     const p = pannelli.get("file");
     const attivita = dati.attivita || {};
     const file = Array.isArray(attivita.file) ? attivita.file : [];
-    const pezzi = [el19(d, "b", "talos-agente__titoletto", t("agenti.agent.filesReadAndEdited"))];
-    if (file.length === 0) pezzi.push(el19(d, "p", "talos-muted talos-agente__vuoto", t("agenti.agent.noFilesForNow")));
+    const pezzi = [el20(d, "b", "talos-agente__titoletto", t("agenti.agent.filesReadAndEdited"))];
+    if (file.length === 0) pezzi.push(el20(d, "p", "talos-muted talos-agente__vuoto", t("agenti.agent.noFilesForNow")));
     else pezzi.push(...file.map(collegamentoFile));
-    if (attivita.fileTagliati > 0) pezzi.push(el19(d, "p", "talos-muted talos-agente__nota", t("agenti.agent.olderFiles", { n: attivita.fileTagliati })));
+    if (attivita.fileTagliati > 0) pezzi.push(el20(d, "p", "talos-muted talos-agente__nota", t("agenti.agent.olderFiles", { n: attivita.fileTagliati })));
     p.replaceChildren(...pezzi);
   }
   function disegnaEventi() {
     const p = pannelli.get("eventi");
     const attivita = dati.attivita || {};
     const passi = (Array.isArray(attivita.passi) ? attivita.passi : []).map((passo2) => ({ passo: passo2, frase: frasePasso(passo2) })).filter((x) => x.frase);
-    const pezzi = [el19(d, "b", "talos-agente__titoletto", t("agenti.agent.whatItDid"))];
-    if (attivita.passiTagliati > 0) pezzi.push(el19(d, "p", "talos-muted talos-agente__nota", t("agenti.agent.olderSteps", { n: attivita.passiTagliati })));
-    if (passi.length === 0) pezzi.push(el19(d, "p", "talos-muted talos-agente__vuoto", t("agenti.agent.noStepsYet")));
+    const pezzi = [el20(d, "b", "talos-agente__titoletto", t("agenti.agent.whatItDid"))];
+    if (attivita.passiTagliati > 0) pezzi.push(el20(d, "p", "talos-muted talos-agente__nota", t("agenti.agent.olderSteps", { n: attivita.passiTagliati })));
+    if (passi.length === 0) pezzi.push(el20(d, "p", "talos-muted talos-agente__vuoto", t("agenti.agent.noStepsYet")));
     for (const { passo: passo2, frase } of passi) {
-      const r = el19(d, "div", "talos-agente__passo");
+      const r = el20(d, "div", "talos-agente__passo");
       r.dataset.tipo = passo2.tipo;
-      r.append(el19(d, "span", "talos-agente__ora talos-mono talos-muted", oraBreve2(passo2.quando)), el19(d, "span", "talos-agente__frase", frase));
+      r.append(el20(d, "span", "talos-agente__ora talos-mono talos-muted", oraBreve2(passo2.quando)), el20(d, "span", "talos-agente__frase", frase));
       pezzi.push(r);
     }
     p.replaceChildren(...pezzi);
@@ -43848,14 +44050,14 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
   };
   let corrente = dati, disegno, zoom = 1, x = 0, y = 0, primo2 = true, segui = false, morto = false;
   let vistaToccata = false, gruppoAperto = null, paginaGruppo = 0;
-  const el34 = (tag2, classe, testo2) => {
+  const el35 = (tag2, classe, testo2) => {
     const n = d.createElement(tag2);
     if (classe) n.className = classe;
     if (testo2 != null) n.textContent = testo2;
     return n;
   };
   const bottone8 = (testo2, azione, aria) => {
-    const b = el34("button", "talos-button talos-button--ghost talos-button--sm", testo2);
+    const b = el35("button", "talos-button talos-button--ghost talos-button--sm", testo2);
     b.type = "button";
     if (aria) b.setAttribute("aria-label", aria);
     b.addEventListener("click", azione);
@@ -43871,42 +44073,42 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
     return svg3;
   };
   const tasto = (classe, aria, nomeIcona, azione) => {
-    const b = el34("button", classe);
+    const b = el35("button", classe);
     b.type = "button";
     if (aria) b.setAttribute("aria-label", aria);
     if (nomeIcona) b.append(icona16(nomeIcona));
     if (azione) b.addEventListener("click", azione);
     return b;
   };
-  const root2 = el34("section", "talos-grafo talos-wfg talos-grafo--deleghe");
+  const root2 = el35("section", "talos-grafo talos-wfg talos-grafo--deleghe");
   root2.dataset.c = "GrafoAgenti";
   root2.setAttribute("aria-label", t("agenti.delegations.title"));
-  const cima = el34("header", "talos-wfg__cima talos-grafo__cima");
-  const titoli = el34("div", "talos-wfg__titoli");
-  const sommario = el34("p", "talos-wfg__sommario"), descrizione = el34("p", "talos-wfg__descrizione", t("agenti.delegations.description"));
-  titoli.append(el34("h2", "talos-wfg__titolo", t("agenti.delegations.title")), sommario, descrizione);
-  const lato = el34("div", "talos-wfg__lato"), latoRiga = el34("div", "talos-wfg__lato-riga");
-  const aggiornato = el34("div", "talos-wfg__aggiornato"), aggiornatoOra = el34("span", "talos-wfg__aggiornato-ora");
+  const cima = el35("header", "talos-wfg__cima talos-grafo__cima");
+  const titoli = el35("div", "talos-wfg__titoli");
+  const sommario = el35("p", "talos-wfg__sommario"), descrizione = el35("p", "talos-wfg__descrizione", t("agenti.delegations.description"));
+  titoli.append(el35("h2", "talos-wfg__titolo", t("agenti.delegations.title")), sommario, descrizione);
+  const lato = el35("div", "talos-wfg__lato"), latoRiga = el35("div", "talos-wfg__lato-riga");
+  const aggiornato = el35("div", "talos-wfg__aggiornato"), aggiornatoOra = el35("span", "talos-wfg__aggiornato-ora");
   aggiornato.append(aggiornatoOra);
-  const torna = el34("button", "talos-button talos-button--secondary talos-button--sm talos-wfg__torna", t("agenti.delegations.backToChat"));
+  const torna = el35("button", "talos-button talos-button--secondary talos-button--sm talos-wfg__torna", t("agenti.delegations.backToChat"));
   torna.type = "button";
   torna.setAttribute("aria-label", t("agenti.delegations.closeDiagram"));
   torna.addEventListener("click", () => onChiudi?.());
   latoRiga.append(aggiornato, torna);
   lato.append(latoRiga);
   cima.append(titoli, lato);
-  const comandi = el34("div", "gv-comandi talos-grafo__comandi");
+  const comandi = el35("div", "gv-comandi talos-grafo__comandi");
   comandi.setAttribute("role", "toolbar");
   comandi.setAttribute("aria-label", t("agenti.delegations.controlsLabel"));
-  const viste = el34("div", "gv-viste");
+  const viste = el35("div", "gv-viste");
   viste.setAttribute("role", "radiogroup");
   viste.setAttribute("aria-label", t("agenti.delegations.scopeLabel"));
   const vociAmbito = new Map([["sessione", t("agenti.delegations.scopeSession"), "i-branch"], ["workspace", t("agenti.delegations.scopeFolder"), "i-folder"]].map(([id4, testo2, ic]) => {
-    const b = el34("button", "gv-vista");
+    const b = el35("button", "gv-vista");
     b.type = "button";
     b.setAttribute("role", "radio");
     b.dataset.ambito = id4;
-    b.append(icona16(ic), el34("span", null, testo2));
+    b.append(icona16(ic), el35("span", null, testo2));
     b.addEventListener("click", () => {
       opzioni.ambito = id4;
       disegnaComandi();
@@ -43923,19 +44125,19 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
     vociAmbito.get(prossimo).click();
     vociAmbito.get(prossimo).focus();
   });
-  const menuStato = el34("div", "talos-wfg__menu-vista");
-  const sceltaStato = el34("button", "talos-wfg__scelta");
+  const menuStato = el35("div", "talos-wfg__menu-vista");
+  const sceltaStato = el35("button", "talos-wfg__scelta");
   sceltaStato.type = "button";
   sceltaStato.setAttribute("aria-haspopup", "menu");
   sceltaStato.setAttribute("aria-expanded", "false");
-  const sceltaTesto = el34("span");
+  const sceltaTesto = el35("span");
   sceltaStato.append(sceltaTesto, icona16("i-chev", "talos-wfg__scelta-freccia"));
-  const vociStato = el34("div", "talos-wfg__menu");
+  const vociStato = el35("div", "talos-wfg__menu");
   vociStato.setAttribute("role", "menu");
   vociStato.setAttribute("aria-label", t("agenti.delegations.filterStatusLabel"));
   vociStato.hidden = true;
   for (const [id4, chiave] of Object.entries(stati)) {
-    const b = el34("button", "talos-wfg__menu-voce", t(chiave));
+    const b = el35("button", "talos-wfg__menu-voce", t(chiave));
     b.type = "button";
     b.setAttribute("role", "menuitemradio");
     b.tabIndex = -1;
@@ -43948,7 +44150,7 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
   }
   sceltaStato.addEventListener("click", () => vociStato.hidden ? apriMenu(sceltaStato, vociStato) : chiudiMenu(sceltaStato, vociStato));
   menuStato.append(sceltaStato, vociStato);
-  const ricerca = el34("input", "talos-wfg__cerca");
+  const ricerca = el35("input", "talos-wfg__cerca");
   ricerca.type = "search";
   ricerca.placeholder = t("agenti.delegations.searchPlaceholder");
   ricerca.setAttribute("aria-label", t("agenti.delegations.searchLabel"));
@@ -43989,19 +44191,19 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
     follow.setAttribute("aria-pressed", String(segui));
     if (segui) centraAttivo();
   });
-  follow.append(el34("span", null, t("agenti.delegations.follow")));
+  follow.append(el35("span", null, t("agenti.delegations.follow")));
   follow.setAttribute("aria-pressed", "false");
   follow.title = t("agenti.delegations.followHint");
-  const menuAltro = el34("div", "talos-wfg__menu-vista");
+  const menuAltro = el35("div", "talos-wfg__menu-vista");
   const altro = tasto("talos-wfg__icona-bottone", t("agenti.delegations.moreControls"), "i-more");
   altro.setAttribute("aria-haspopup", "menu");
   altro.setAttribute("aria-expanded", "false");
-  const vociAltro = el34("div", "talos-wfg__menu talos-wfg__menu--destra");
+  const vociAltro = el35("div", "talos-wfg__menu talos-wfg__menu--destra");
   vociAltro.setAttribute("role", "menu");
   vociAltro.setAttribute("aria-label", t("agenti.delegations.moreControls"));
   vociAltro.hidden = true;
   const voceAltro = (testo2, azione) => {
-    const b = el34("button", "talos-wfg__menu-voce", testo2);
+    const b = el35("button", "talos-wfg__menu-voce", testo2);
     b.type = "button";
     b.setAttribute("role", "menuitem");
     b.tabIndex = -1;
@@ -44038,9 +44240,9 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
   });
   altro.addEventListener("click", () => vociAltro.hidden ? apriMenu(altro, vociAltro) : chiudiMenu(altro, vociAltro));
   menuAltro.append(altro, vociAltro);
-  const sinistra = el34("div", "gv-comandi-gruppo");
+  const sinistra = el35("div", "gv-comandi-gruppo");
   sinistra.append(viste, menuStato);
-  const destra = el34("div", "gv-comandi-gruppo");
+  const destra = el35("div", "gv-comandi-gruppo");
   destra.append(ricerca, cerca, meno, misura, piu, adattaTasto, letturaTasto, follow, menuAltro);
   comandi.append(sinistra, destra);
   const attrezziTela = [meno, misura, piu, adattaTasto, letturaTasto, follow, isola, affianca];
@@ -44090,25 +44292,25 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
     if (!vociAgente.hidden && !detAltro.contains(e.target)) chiudiMenu(menuAgente, vociAgente);
   };
   d.addEventListener("pointerdown", chiudiMenuFuori, true);
-  const avviso = el34("p", "talos-wfg__avviso talos-grafo__stato");
+  const avviso = el35("p", "talos-wfg__avviso talos-grafo__stato");
   avviso.setAttribute("role", "status");
-  const riepilogo = el34("div", "talos-grafo__riepilogo");
+  const riepilogo = el35("div", "talos-grafo__riepilogo");
   riepilogo.setAttribute("aria-label", t("agenti.delegations.summaryLabel"));
-  const recenti = el34("details", "talos-grafo__recenti");
-  recenti.append(el34("summary", "", t("agenti.delegations.recentActivity")));
-  const elencoRecenti = el34("div", "talos-grafo__eventi");
+  const recenti = el35("details", "talos-grafo__recenti");
+  recenti.append(el35("summary", "", t("agenti.delegations.recentActivity")));
+  const elencoRecenti = el35("div", "talos-grafo__eventi");
   recenti.append(elencoRecenti);
-  const canvas = el34("div", "talos-grafo__canvas");
+  const canvas = el35("div", "talos-grafo__canvas");
   canvas.tabIndex = 0;
   canvas.setAttribute("aria-label", t("agenti.delegations.canvasLabel"));
-  const mondo = el34("div", "talos-grafo__mondo");
+  const mondo = el35("div", "talos-grafo__mondo");
   canvas.append(mondo);
-  const piede = el34("p", "talos-grafo__legenda", t("agenti.delegations.legend"));
-  const area = el34("div", "talos-grafo__area");
-  const anteprima4 = el34("aside", "talos-grafo__anteprima");
+  const piede = el35("p", "talos-grafo__legenda", t("agenti.delegations.legend"));
+  const area = el35("div", "talos-grafo__area");
+  const anteprima4 = el35("aside", "talos-grafo__anteprima");
   anteprima4.hidden = true;
   anteprima4.setAttribute("aria-label", t("agenti.delegations.sideFileLabel"));
-  const fileCima = el34("div", "talos-grafo__file-cima"), titoloFile = el34("strong", "", t("agenti.delegations.agentFiles"));
+  const fileCima = el35("div", "talos-grafo__file-cima"), titoloFile = el35("strong", "", t("agenti.delegations.agentFiles"));
   const chiudiFile = tasto("talos-wfg__icona-bottone", t("agenti.delegations.closeSide"), "i-x", () => {
     letturaFile++;
     anteprima4.hidden = true;
@@ -44116,27 +44318,27 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
     adatta();
   });
   fileCima.append(titoloFile, chiudiFile);
-  const menuFile = el34("div", "talos-wfg__menu-vista talos-grafo__file-scelta");
-  const sceltaFile = el34("button", "talos-wfg__scelta");
+  const menuFile = el35("div", "talos-wfg__menu-vista talos-grafo__file-scelta");
+  const sceltaFile = el35("button", "talos-wfg__scelta");
   sceltaFile.type = "button";
   sceltaFile.setAttribute("aria-haspopup", "menu");
   sceltaFile.setAttribute("aria-expanded", "false");
   sceltaFile.setAttribute("aria-label", t("agenti.delegations.fileToShow"));
-  const sceltaFileTesto = el34("span");
+  const sceltaFileTesto = el35("span");
   sceltaFile.append(sceltaFileTesto, icona16("i-chev", "talos-wfg__scelta-freccia"));
-  const vociFile = el34("div", "talos-wfg__menu");
+  const vociFile = el35("div", "talos-wfg__menu");
   vociFile.setAttribute("role", "menu");
   vociFile.setAttribute("aria-label", t("agenti.delegations.fileToShow"));
   vociFile.hidden = true;
   sceltaFile.addEventListener("click", () => vociFile.hidden ? apriMenu(sceltaFile, vociFile) : chiudiMenu(sceltaFile, vociFile));
   menuFile.append(sceltaFile, vociFile);
-  const fileTesto = el34("pre", "");
+  const fileTesto = el35("pre", "");
   anteprima4.append(fileCima, menuFile, fileTesto);
-  const aggregato = el34("section", "talos-grafo__aggregato");
+  const aggregato = el35("section", "talos-grafo__aggregato");
   aggregato.hidden = true;
   aggregato.setAttribute("aria-label", t("agenti.delegations.groupedByStatus"));
-  const gruppi = el34("div", "talos-grafo__gruppi");
-  const gruppoDettaglio = el34("div", "talos-grafo__gruppo-dettaglio");
+  const gruppi = el35("div", "talos-grafo__gruppi");
+  const gruppoDettaglio = el35("div", "talos-grafo__gruppo-dettaglio");
   aggregato.append(gruppi, gruppoDettaglio);
   area.append(canvas, aggregato, anteprima4);
   const mini = d.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -44173,7 +44375,7 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
       trasforma();
     }
   });
-  const timeline = el34("div", "gv-rip talos-grafo__timeline");
+  const timeline = el35("div", "gv-rip talos-grafo__timeline");
   timeline.setAttribute("role", "group");
   timeline.setAttribute("aria-label", t("agenti.delegations.playbackLabel"));
   const riproduci = tasto("gv-rip-gioca", t("agenti.delegations.play"), "i-play", () => {
@@ -44192,11 +44394,11 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
   const eventoPrecedente = tasto("gv-rip-gioca gv-rip-passo", t("agenti.delegations.previousEvent"), "i-chevron-right", () => mostraIstante(posizione == null ? storico.length - 1 : Math.max(0, posizione - 1)));
   eventoPrecedente.classList.add("gv-rip-passo--indietro");
   const eventoSuccessivo = tasto("gv-rip-gioca gv-rip-passo", t("agenti.delegations.nextEvent"), "i-chevron-right", () => mostraIstante(posizione == null ? storico.length - 1 : Math.min(storico.length - 1, posizione + 1)));
-  const ripVelocita = el34("div", "gv-rip-velocita");
+  const ripVelocita = el35("div", "gv-rip-velocita");
   ripVelocita.setAttribute("role", "radiogroup");
   ripVelocita.setAttribute("aria-label", t("agenti.delegations.speedLabel"));
   for (const v of [1, 2, 4, 16]) {
-    const b = el34("button", "gv-rip-v", `${v}×`);
+    const b = el35("button", "gv-rip-v", `${v}×`);
     b.type = "button";
     b.setAttribute("role", "radio");
     b.setAttribute("aria-checked", String(v === velocita));
@@ -44207,40 +44409,40 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
     });
     ripVelocita.append(b);
   }
-  const cursore = el34("input", "gv-rip-cursore");
+  const cursore = el35("input", "gv-rip-cursore");
   cursore.type = "range";
   cursore.min = "0";
   cursore.max = "0";
   cursore.step = "1";
   cursore.setAttribute("aria-label", t("agenti.delegations.sliderLabel"));
   cursore.addEventListener("input", () => mostraIstante(Number(cursore.value)));
-  const istanteReplay = el34("span", "gv-rip-testo", t("agenti.delegations.live")), descrizioneReplay = el34("span", "gv-rip-nota talos-grafo__limite", t("agenti.delegations.loadingHistory"));
-  const tornaLive = el34("button", "talos-button talos-button--secondary talos-button--sm gv-rip-vivo", t("agenti.delegations.backToLive"));
+  const istanteReplay = el35("span", "gv-rip-testo", t("agenti.delegations.live")), descrizioneReplay = el35("span", "gv-rip-nota talos-grafo__limite", t("agenti.delegations.loadingHistory"));
+  const tornaLive = el35("button", "talos-button talos-button--secondary talos-button--sm gv-rip-vivo", t("agenti.delegations.backToLive"));
   tornaLive.type = "button";
   tornaLive.hidden = true;
   tornaLive.addEventListener("click", () => mostraIstante(null));
-  const riprovaCronologia = el34("button", "talos-button talos-button--secondary talos-button--sm", t("agenti.delegations.retryHistory"));
+  const riprovaCronologia = el35("button", "talos-button talos-button--secondary talos-button--sm", t("agenti.delegations.retryHistory"));
   riprovaCronologia.type = "button";
   riprovaCronologia.hidden = true;
   riprovaCronologia.addEventListener("click", () => caricaCronologia());
   timeline.append(riproduci, eventoPrecedente, eventoSuccessivo, ripVelocita, cursore, istanteReplay, tornaLive, riprovaCronologia, descrizioneReplay);
-  const dettaglio = el34("section", "talos-wfg__dettaglio gv-dettaglio talos-grafo__dettaglio");
+  const dettaglio = el35("section", "talos-wfg__dettaglio gv-dettaglio talos-grafo__dettaglio");
   dettaglio.hidden = true;
   dettaglio.setAttribute("aria-label", t("agenti.delegations.detailLabel"));
-  const detChi = el34("div", "talos-wfg__dettaglio-chi");
-  const detProve = el34("section", "talos-wfg__dettaglio-colonna");
+  const detChi = el35("div", "talos-wfg__dettaglio-chi");
+  const detProve = el35("section", "talos-wfg__dettaglio-colonna");
   detProve.setAttribute("aria-label", t("agenti.delegations.recentEvidence"));
-  const detCompito = el34("section", "talos-wfg__dettaglio-colonna");
+  const detCompito = el35("section", "talos-wfg__dettaglio-colonna");
   detCompito.setAttribute("aria-label", t("agenti.delegations.currentTask"));
-  const detAltro = el34("div", "talos-wfg__dettaglio-altro");
+  const detAltro = el35("div", "talos-wfg__dettaglio-altro");
   const menuAgente = tasto("talos-wfg__icona-bottone", t("agenti.delegations.agentActions"), "i-more");
   menuAgente.setAttribute("aria-haspopup", "menu");
   menuAgente.setAttribute("aria-expanded", "false");
-  const vociAgente = el34("div", "talos-wfg__menu talos-wfg__menu--destra");
+  const vociAgente = el35("div", "talos-wfg__menu talos-wfg__menu--destra");
   vociAgente.setAttribute("role", "menu");
   vociAgente.hidden = true;
   const voceAgente = (testo2, azione) => {
-    const b = el34("button", "talos-wfg__menu-voce", testo2);
+    const b = el35("button", "talos-wfg__menu-voce", testo2);
     b.type = "button";
     b.setAttribute("role", "menuitem");
     b.tabIndex = -1;
@@ -44292,7 +44494,7 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
       if (typeof onLeggiFile === "function") void leggiFile(agente, percorso);
     };
     vociFile.replaceChildren(...files.map((f) => {
-      const b = el34("button", "talos-wfg__menu-voce", f.percorso);
+      const b = el35("button", "talos-wfg__menu-voce", f.percorso);
       b.type = "button";
       b.setAttribute("role", "menuitemradio");
       b.tabIndex = -1;
@@ -44499,14 +44701,14 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
     dettaglio.hidden = false;
     const a = attivitaNodoGrafo(n.dati, posizione == null ? Date.now() : clockReplay);
     const tono = TONO_STATO[n.stato] ?? "neutro";
-    const segno = el34("span", "talos-wfg__dettaglio-icona");
+    const segno = el35("span", "talos-wfg__dettaglio-icona");
     segno.append(icona16(n.id === corrente.corrente.sessionId ? "i-branch" : "i-robot"));
-    const testi = el34("div", "talos-wfg__dettaglio-testi"), testa = el34("div", "talos-wfg__dettaglio-testa");
-    const pill = el34("span", "talos-wfg__pill");
+    const testi = el35("div", "talos-wfg__dettaglio-testi"), testa = el35("div", "talos-wfg__dettaglio-testa");
+    const pill = el35("span", "talos-wfg__pill");
     pill.dataset.tono = tono;
     if (ICONA_TONO[tono]) pill.append(icona16(ICONA_TONO[tono], "talos-wfg__pill-icona"));
-    pill.append(el34("span", null, t(etichetta2[n.stato])));
-    testa.append(el34("h3", "talos-wfg__dettaglio-nome", n.nome), pill);
+    pill.append(el35("span", null, t(etichetta2[n.stato])));
+    testa.append(el35("h3", "talos-wfg__dettaglio-nome", n.nome), pill);
     const avvio = istante(n.dati.avviataAlle);
     const sotto = [
       n.dati.modello || (n.id === corrente.corrente.sessionId ? t("agenti.delegations.mainSession") : t("agenti.delegations.subAgent")),
@@ -44514,44 +44716,44 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
       a.durataMs != null ? tempo(a.durataMs) : null,
       avvio != null ? t("agenti.delegations.startedAt", { ora: oraBreve3(avvio) }) : null
     ].filter(Boolean).join(" · ");
-    testi.append(testa, el34("span", "talos-wfg__passo-modello", sotto));
+    testi.append(testa, el35("span", "talos-wfg__passo-modello", sotto));
     detChi.replaceChildren(segno, testi);
-    const provaTesta = el34("h4", "talos-wfg__dettaglio-titolo");
-    provaTesta.append(icona16("i-doc"), el34("span", null, t("agenti.delegations.recentEvidence")));
-    const elenco3 = el34("ul", "talos-wfg__evidenze");
+    const provaTesta = el35("h4", "talos-wfg__dettaglio-titolo");
+    provaTesta.append(icona16("i-doc"), el35("span", null, t("agenti.delegations.recentEvidence")));
+    const elenco3 = el35("ul", "talos-wfg__evidenze");
     const passi = (Array.isArray(n.dati.attivita?.passi) ? n.dati.attivita.passi : []).filter((p) => p.tipo === "attrezzo").slice(-4).reverse();
     const files = (a.file ?? []).slice(0, Math.max(0, 5 - passi.length));
     for (const p of passi) {
-      const voce2 = el34("li", "talos-wfg__evidenza");
-      voce2.append(icona16(p.esito === false ? "i-x" : "i-check"), el34("span", "talos-wfg__evidenza-nome", nomeUmanoAttrezzo(p.attrezzo)));
+      const voce2 = el35("li", "talos-wfg__evidenza");
+      voce2.append(icona16(p.esito === false ? "i-x" : "i-check"), el35("span", "talos-wfg__evidenza-nome", nomeUmanoAttrezzo(p.attrezzo)));
       if (p.percorso) {
-        const o = el34("code", "talos-wfg__evidenza-oggetto", p.percorso);
+        const o = el35("code", "talos-wfg__evidenza-oggetto", p.percorso);
         o.title = p.percorso;
         voce2.append(o);
       }
       elenco3.append(voce2);
     }
     for (const f of files) {
-      const voce2 = el34("li", "talos-wfg__evidenza");
-      voce2.append(icona16("i-file"), el34("span", "talos-wfg__evidenza-nome", f.creato ? t("agenti.agent.fileCreated") : f.scritto ? t("agenti.agent.fileEdited") : t("agenti.agent.fileRead")));
-      const o = el34("code", "talos-wfg__evidenza-oggetto", f.percorso);
+      const voce2 = el35("li", "talos-wfg__evidenza");
+      voce2.append(icona16("i-file"), el35("span", "talos-wfg__evidenza-nome", f.creato ? t("agenti.agent.fileCreated") : f.scritto ? t("agenti.agent.fileEdited") : t("agenti.agent.fileRead")));
+      const o = el35("code", "talos-wfg__evidenza-oggetto", f.percorso);
       o.title = f.percorso;
       voce2.append(o);
       elenco3.append(voce2);
     }
-    if (!elenco3.children.length) elenco3.append(el34("li", "talos-wfg__vuoto", a.chiamate == null ? t("agenti.delegations.activityUnavailableForAgent") : t("agenti.delegations.noToolsYet")));
+    if (!elenco3.children.length) elenco3.append(el35("li", "talos-wfg__vuoto", a.chiamate == null ? t("agenti.delegations.activityUnavailableForAgent") : t("agenti.delegations.noToolsYet")));
     detProve.replaceChildren(provaTesta, elenco3);
-    const compitoTesta = el34("h4", "talos-wfg__dettaglio-titolo");
-    compitoTesta.append(icona16("i-eye"), el34("span", null, t("agenti.delegations.currentTask")));
+    const compitoTesta = el35("h4", "talos-wfg__dettaglio-titolo");
+    compitoTesta.append(icona16("i-eye"), el35("span", null, t("agenti.delegations.currentTask")));
     const compito = String(n.dati.task ?? n.dati.taskDelega ?? n.dati.taskCorto ?? "").trim();
     const parti = [compitoTesta];
     if (compito) {
-      const primo3 = el34("p", "talos-wfg__compito-titolo", compito);
+      const primo3 = el35("p", "talos-wfg__compito-titolo", compito);
       primo3.title = compito;
       parti.push(primo3);
-    } else parti.push(el34("p", "talos-wfg__vuoto", t("agenti.delegations.taskUnavailable")));
+    } else parti.push(el35("p", "talos-wfg__vuoto", t("agenti.delegations.taskUnavailable")));
     const ora4 = a.operazione || (n.stato === "active" ? t("agenti.delegations.betweenOperations") : null);
-    if (ora4) parti.push(el34("p", "talos-wfg__compito-resto", ora4));
+    if (ora4) parti.push(el35("p", "talos-wfg__compito-resto", ora4));
     detCompito.replaceChildren(...parti);
   }
   function centraAttivo() {
@@ -44572,7 +44774,7 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
   svg2.setAttribute("aria-hidden", "true");
   mondo.append(svg2);
   const chiaveMarcatori = Math.random().toString(36).slice(2, 8);
-  const vuoto = el34("p", "talos-grafo__vuoto", t("agenti.delegations.noAgentForFilters"));
+  const vuoto = el35("p", "talos-grafo__vuoto", t("agenti.delegations.noAgentForFilters"));
   mondo.append(vuoto);
   function disegnaAggregato(modello) {
     const perStato = /* @__PURE__ */ new Map();
@@ -44596,8 +44798,8 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
       card.dataset.stato = chiave;
       card.setAttribute("aria-pressed", String(gruppoAperto === chiave));
       card.setAttribute("aria-label", tn("agenti.delegations.groupCardOne", "agenti.delegations.groupCardMany", quanti, { stato: t(stati[chiave]), n: conteggio(quanti) }));
-      card.append(el34("span", "", t(stati[chiave])), el34("strong", "talos-mono", conteggio(quanti)));
-      const barra = el34("span", "talos-grafo__gruppo-barra");
+      card.append(el35("span", "", t(stati[chiave])), el35("strong", "talos-mono", conteggio(quanti)));
+      const barra = el35("span", "talos-grafo__gruppo-barra");
       barra.style.width = `${Math.max(3, Math.round(quanti / modello.nodi.length * 100))}%`;
       card.append(barra);
       return card;
@@ -44605,8 +44807,8 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
     const selezionati = perStato.get(gruppoAperto) || [];
     paginaGruppo = Math.min(paginaGruppo, Math.max(0, Math.ceil(selezionati.length / 12) - 1));
     const inizio = paginaGruppo * 12;
-    const titolo2 = el34("h3", "", `${gruppoAperto in stati ? t(stati[gruppoAperto]) : t("agenti.delegations.sessionsFallback")} · ${conteggio(selezionati.length)}`);
-    const elenco3 = el34("div", "talos-grafo__gruppo-elenco");
+    const titolo2 = el35("h3", "", `${gruppoAperto in stati ? t(stati[gruppoAperto]) : t("agenti.delegations.sessionsFallback")} · ${conteggio(selezionati.length)}`);
+    const elenco3 = el35("div", "talos-grafo__gruppo-elenco");
     for (const nodo14 of selezionati.slice(inizio, inizio + 12)) {
       const apri = bottone8(nodo14.nome, () => {
         opzioni.selezionato = nodo14.id;
@@ -44618,7 +44820,7 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
       apri.setAttribute("aria-label", t("agenti.delegations.openDetailOf", { nome: nodo14.nome }));
       elenco3.append(apri);
     }
-    const pagine = el34("nav", "talos-grafo__gruppo-pagine");
+    const pagine = el35("nav", "talos-grafo__gruppo-pagine");
     pagine.setAttribute("aria-label", t("agenti.delegations.groupPages"));
     const precedente = bottone8(t("agenti.delegations.previous"), () => {
       paginaGruppo--;
@@ -44630,7 +44832,7 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
     }, t("agenti.delegations.nextGroupPage"));
     precedente.disabled = paginaGruppo === 0;
     successiva.disabled = inizio + 12 >= selezionati.length;
-    pagine.append(precedente, el34("span", "talos-mono", t("agenti.delegations.pageRange", { da: conteggio(selezionati.length ? inizio + 1 : 0), a: conteggio(Math.min(inizio + 12, selezionati.length)), totale: conteggio(selezionati.length) })), successiva);
+    pagine.append(precedente, el35("span", "talos-mono", t("agenti.delegations.pageRange", { da: conteggio(selezionati.length ? inizio + 1 : 0), a: conteggio(Math.min(inizio + 12, selezionati.length)), totale: conteggio(selezionati.length) })), successiva);
     gruppoDettaglio.replaceChildren(titolo2, elenco3, pagine);
   }
   function ridisegna2() {
@@ -44645,14 +44847,14 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
     disegno = denso ? { nodi: [], archi: [], width: 0, height: 0 } : layoutGrafoAgenti(filtrato);
     const t2 = telemetriaGrafoAgenti(intero2);
     root2.dataset.obsoleto = String(Boolean(corrente.errore));
-    sommario.replaceChildren(el34("strong", null, tn("agenti.delegations.sessionsInDiagramOne", "agenti.delegations.sessionsInDiagramMany", intero2.nodi.length, { n: conteggio(intero2.nodi.length) })), ` ${t(opzioni.ambito === "workspace" ? "agenti.delegations.inDiagramFolder" : "agenti.delegations.inDiagramSession")}`);
+    sommario.replaceChildren(el35("strong", null, tn("agenti.delegations.sessionsInDiagramOne", "agenti.delegations.sessionsInDiagramMany", intero2.nodi.length, { n: conteggio(intero2.nodi.length) })), ` ${t(opzioni.ambito === "workspace" ? "agenti.delegations.inDiagramFolder" : "agenti.delegations.inDiagramSession")}`);
     aggiornatoOra.textContent = corrente.aggiornato ? t("agenti.delegations.lastUpdate", { ora: oraBreve3(corrente.aggiornato) }) : "";
     const statistica = (chiave, numero12, testo2, filtra) => {
-      const n = filtra ? bottone8("", () => impostaStato(filtra)) : el34("div", "");
+      const n = filtra ? bottone8("", () => impostaStato(filtra)) : el35("div", "");
       n.classList.add("talos-grafo__statistica");
       n.dataset.statistica = chiave;
       if (filtra) n.dataset.stato = filtra;
-      n.append(el34("strong", "talos-mono", numero12 == null ? "—" : compatto(numero12)), el34("span", "", testo2));
+      n.append(el35("strong", "talos-mono", numero12 == null ? "—" : compatto(numero12)), el35("span", "", testo2));
       return n;
     };
     riepilogo.replaceChildren(
@@ -44664,7 +44866,7 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
       statistica("file", t2.file, t("agenti.agent.filesInvolved")),
       statistica("token", t2.token, t("agenti.delegations.statTokens"))
     );
-    const copertura = el34("small", "talos-grafo__copertura", [
+    const copertura = el35("small", "talos-grafo__copertura", [
       t("agenti.delegations.coverageHead", { totale: conteggio(t2.totale), strumenti: conteggio(t2.copertura), file: conteggio(t2.coperturaFile), consumo: conteggio(t2.coperturaToken) }),
       t2.parziale ? t("agenti.delegations.coveragePartial") : "",
       t2.scritti != null ? t("agenti.delegations.coverageFilesWritten", { n: conteggio(t2.scritti) }) : "",
@@ -44734,7 +44936,7 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
       vivi.add(n.id);
       let nodo14 = nodiDom.get(n.id);
       if (!nodo14) {
-        nodo14 = el34("article", "talos-grafo__nodo");
+        nodo14 = el35("article", "talos-grafo__nodo");
         nodo14.dataset.nodoId = n.id;
         const apri = bottone8("", () => {
           const fresco = disegno.nodi.find((v) => v.id === n.id);
@@ -44748,16 +44950,16 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
           if (event.target.closest('button,a,input,select,textarea,[role="button"]')) return;
           apri.click();
         });
-        const meta2 = el34("span", "talos-grafo__meta"), operazione = el34("span", "talos-grafo__operazione"), misure = el34("span", "talos-grafo__misure"), durata2 = el34("span", "talos-grafo__durata");
+        const meta2 = el35("span", "talos-grafo__meta"), operazione = el35("span", "talos-grafo__operazione"), misure = el35("span", "talos-grafo__misure"), durata2 = el35("span", "talos-grafo__durata");
         const collassa = bottone8("", () => {
           opzioni.collassati = opzioni.collassati.includes(n.id) ? opzioni.collassati.filter((id4) => id4 !== n.id) : [...opzioni.collassati, n.id];
           ridisegna2();
         });
         collassa.className = "talos-wfg__link talos-grafo__collassa";
-        const testata = el34("div", "talos-grafo__testata-nodo"), pallino = el34("span", "talos-wfg__punto talos-grafo__pallino");
+        const testata = el35("div", "talos-grafo__testata-nodo"), pallino = el35("span", "talos-wfg__punto talos-grafo__pallino");
         pallino.setAttribute("aria-hidden", "true");
-        const rigaStato = el34("div", "talos-grafo__riga-stato"), badge6 = el34("span", "talos-wfg__pill talos-grafo__badge-stato");
-        const fondo = el34("div", "talos-grafo__fondo-nodo");
+        const rigaStato = el35("div", "talos-grafo__riga-stato"), badge6 = el35("span", "talos-wfg__pill talos-grafo__badge-stato");
+        const fondo = el35("div", "talos-grafo__fondo-nodo");
         testata.append(pallino, apri, durata2);
         rigaStato.append(badge6, misure);
         fondo.append(operazione, collassa);
@@ -44782,7 +44984,7 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
       ui.badge.dataset.tono = tono;
       ui.badge.replaceChildren();
       if (ICONA_TONO[tono]) ui.badge.append(icona16(ICONA_TONO[tono], "talos-wfg__pill-icona"));
-      ui.badge.append(el34("span", null, t(etichetta2[n.stato])));
+      ui.badge.append(el35("span", null, t(etichetta2[n.stato])));
       ui.operazione.textContent = a.operazione || (n.stato === "active" ? t("agenti.delegations.betweenOperations") : a.ultimo ? t("agenti.delegations.lastActivityAt", { ora: oraBreve3(a.ultimo.quando) }) : t("agenti.delegations.noActivityRecorded"));
       ui.operazione.title = ui.operazione.textContent;
       ui.misure.textContent = a.chiamate == null ? t("agenti.delegations.activityUnavailable") : [
@@ -44813,7 +45015,7 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
       b.title = b.textContent;
       return b;
     }));
-    if (!passi.length) elencoRecenti.append(el34("p", "", t("agenti.delegations.noTimedActivity")));
+    if (!passi.length) elencoRecenti.append(el35("p", "", t("agenti.delegations.noTimedActivity")));
     avviso.textContent = corrente.errore ? t("agenti.delegations.staleDataRetry", { errore: corrente.errore }) : [t("agenti.delegations.visibleNodes", { nodi: disegno.nodi.length, archi: disegno.archi.length }), corrente.aggiornato ? t("agenti.delegations.readAt", { ora: oraCompleta(corrente.aggiornato) }) : ""].filter(Boolean).join(" · ");
     aggiornaTimeline();
     aggiornaMini();
@@ -45630,54 +45832,54 @@ function righeAumento(ceilingRaise = {}) {
 }
 function apriConfermaRun(doc, { sopra, titolo: titolo2, testo: testo2, righe = [], scelte = null, conferma, pericolo = false, opener = null, gestore = null } = {}) {
   return new Promise((risolvi) => {
-    const el34 = (tag2, classe, t2) => {
+    const el35 = (tag2, classe, t2) => {
       const n = doc.createElement(tag2);
       if (classe) n.className = classe;
       if (t2 != null) n.textContent = t2;
       return n;
     };
     const id4 = `conferma-run-${Math.random().toString(36).slice(2, 9)}`;
-    const dialogo = el34("dialog", "talos-wfg-conferma");
+    const dialogo = el35("dialog", "talos-wfg-conferma");
     dialogo.setAttribute("role", "alertdialog");
     dialogo.setAttribute("aria-labelledby", `${id4}-titolo`);
     dialogo.setAttribute("aria-describedby", `${id4}-testo`);
-    const scatola = el34("div", "talos-dialog talos-wfg-conferma__scatola");
-    const testa = el34("div", "talos-dialog__header");
-    const titoli = el34("div", "talos-grow");
-    if (sopra) titoli.append(el34("span", "talos-eyebrow", sopra));
-    const h = el34("h2", "talos-dialog__title", titolo2);
+    const scatola = el35("div", "talos-dialog talos-wfg-conferma__scatola");
+    const testa = el35("div", "talos-dialog__header");
+    const titoli = el35("div", "talos-grow");
+    if (sopra) titoli.append(el35("span", "talos-eyebrow", sopra));
+    const h = el35("h2", "talos-dialog__title", titolo2);
     h.id = `${id4}-titolo`;
     titoli.append(h);
     testa.append(titoli);
-    const corpo = el34("div", "talos-dialog__body");
-    const p = el34("p", "talos-wfg-conferma__testo", testo2);
+    const corpo = el35("div", "talos-dialog__body");
+    const p = el35("p", "talos-wfg-conferma__testo", testo2);
     p.id = `${id4}-testo`;
     corpo.append(p);
     if (righe.length) {
-      const dl = el34("dl", "talos-wfg-conferma__righe");
+      const dl = el35("dl", "talos-wfg-conferma__righe");
       for (const [chiave, valore] of righe) {
-        const r = el34("div", "talos-wfg-conferma__riga");
-        r.append(el34("dt", null, chiave), el34("dd", null, valore));
+        const r = el35("div", "talos-wfg-conferma__riga");
+        r.append(el35("dt", null, chiave), el35("dd", null, valore));
         dl.append(r);
       }
       corpo.append(dl);
     }
-    const piede = el34("div", "talos-dialog__footer");
-    const no = el34("button", "talos-button talos-button--secondary", t("chat.run.confirm.notNow"));
+    const piede = el35("div", "talos-dialog__footer");
+    const no = el35("button", "talos-button talos-button--secondary", t("chat.run.confirm.notNow"));
     no.type = "button";
-    const si = el34("button", `talos-button ${pericolo ? "talos-button--secondary talos-button--danger" : "talos-button--primary"}`, conferma);
+    const si = el35("button", `talos-button ${pericolo ? "talos-button--secondary talos-button--danger" : "talos-button--primary"}`, conferma);
     si.type = "button";
     if (scelte && Array.isArray(scelte.voci) && scelte.voci.length) {
-      const gruppo = el34("div", "talos-wfg-conferma__scelte");
+      const gruppo = el35("div", "talos-wfg-conferma__scelte");
       gruppo.setAttribute("role", "radiogroup");
       if (scelte.etichetta) gruppo.setAttribute("aria-label", scelte.etichetta);
       const opzioni = scelte.voci.map((voce2) => {
-        const b = el34("button", "talos-wfg-conferma__scelta");
+        const b = el35("button", "talos-wfg-conferma__scelta");
         b.type = "button";
         b.setAttribute("role", "radio");
         b.dataset.valore = voce2.valore;
-        b.append(el34("span", "talos-wfg-conferma__scelta-nome", voce2.testo ?? voce2.valore));
-        if (voce2.dettaglio) b.append(el34("span", "talos-wfg-conferma__scelta-dettaglio", voce2.dettaglio));
+        b.append(el35("span", "talos-wfg-conferma__scelta-nome", voce2.testo ?? voce2.valore));
+        if (voce2.dettaglio) b.append(el35("span", "talos-wfg-conferma__scelta-dettaglio", voce2.dettaglio));
         return b;
       });
       const segna = (valore) => {
@@ -45704,7 +45906,7 @@ function apriConfermaRun(doc, { sopra, titolo: titolo2, testo: testo2, righe = [
       corpo.append(gruppo);
       segna(scelte.voci.some((v) => v.valore === scelte.valore) ? scelte.valore : null);
     }
-    piede.append(el34("span", "talos-grow"), no, si);
+    piede.append(el35("span", "talos-grow"), no, si);
     scatola.append(testa, corpo, piede);
     dialogo.append(scatola);
     const manager = gestore;
@@ -50303,24 +50505,24 @@ function oraBreve4(valore) {
 function creaTempo(host, { icona: icona16, onSeleziona, onZoom }) {
   const d = host.ownerDocument;
   const finestra = d.defaultView;
-  const el34 = (tag2, classe, testo2) => {
+  const el35 = (tag2, classe, testo2) => {
     const n = d.createElement(tag2);
     if (classe) n.className = classe;
     if (testo2 != null) n.textContent = testo2;
     return n;
   };
-  const radice2 = el34("div", "gv-tempo");
-  const testa = el34("div", "gv-tempo-testa");
-  const testaNomi = el34("div", "gv-tempo-testa-nomi", t("agenti.timeline.agentColumn"));
-  const asse = el34("div", "gv-tempo-asse");
+  const radice2 = el35("div", "gv-tempo");
+  const testa = el35("div", "gv-tempo-testa");
+  const testaNomi = el35("div", "gv-tempo-testa-nomi", t("agenti.timeline.agentColumn"));
+  const asse = el35("div", "gv-tempo-asse");
   testa.append(testaNomi, asse);
-  const corpo = el34("div", "gv-tempo-corpo");
+  const corpo = el35("div", "gv-tempo-corpo");
   corpo.tabIndex = 0;
   corpo.setAttribute("role", "list");
   corpo.setAttribute("aria-label", t("agenti.timeline.listLabel"));
-  const spazio = el34("div", "gv-tempo-spazio");
-  const sfondo = el34("div", "gv-tempo-sfondo");
-  const righeHost = el34("div", "gv-tempo-righe");
+  const spazio = el35("div", "gv-tempo-spazio");
+  const sfondo = el35("div", "gv-tempo-sfondo");
+  const righeHost = el35("div", "gv-tempo-righe");
   spazio.append(sfondo, righeHost);
   corpo.append(spazio);
   radice2.append(testa, corpo);
@@ -50363,41 +50565,41 @@ function creaTempo(host, { icona: icona16, onSeleziona, onZoom }) {
     for (const s of a.segmenti) {
       if (s.compresso) {
         const x0 = s.asseDa * pxMs, x1 = s.asseA * pxMs;
-        const vuoto = el34("div", "gv-tempo-vuoto");
+        const vuoto = el35("div", "gv-tempo-vuoto");
         vuoto.style.transform = `translateX(${x0}px)`;
         vuoto.style.width = `${Math.max(6, x1 - x0)}px`;
         vuoto.title = t("agenti.timeline.idleTitle", { da: ora2(s.da), a: ora2(s.a) });
-        vuoto.append(el34("span", "gv-tempo-vuoto-etichetta", t("agenti.timeline.idleLabel", { durata: formattaDurata(s.a - s.da) })));
+        vuoto.append(el35("span", "gv-tempo-vuoto-etichetta", t("agenti.timeline.idleLabel", { durata: formattaDurata(s.a - s.da) })));
         asse.append(vuoto);
-        const fascia = el34("div", "gv-tempo-fascia");
+        const fascia = el35("div", "gv-tempo-fascia");
         fascia.style.transform = `translateX(${LARGHEZZA_NOMI + x0}px)`;
         fascia.style.width = `${Math.max(6, x1 - x0)}px`;
         sfondo.append(fascia);
         continue;
       }
       for (let t3 = Math.ceil(s.da / passo2) * passo2; t3 < s.a; t3 += passo2) {
-        const tacca = el34("span", "gv-tempo-tacca", ora2(t3));
+        const tacca = el35("span", "gv-tempo-tacca", ora2(t3));
         tacca.style.transform = `translateX(${a.versoAsse(t3) * pxMs}px)`;
         asse.append(tacca);
-        const linea = el34("div", "gv-tempo-griglia");
+        const linea = el35("div", "gv-tempo-griglia");
         linea.style.transform = `translateX(${LARGHEZZA_NOMI + a.versoAsse(t3) * pxMs}px)`;
         sfondo.append(linea);
       }
     }
-    const adesso = el34("div", "gv-tempo-adesso");
+    const adesso = el35("div", "gv-tempo-adesso");
     adesso.style.transform = `translateX(${x(a.t1)}px)`;
-    adesso.append(el34("span", null, t("agenti.timeline.now", { ora: ora2(a.t1) })));
+    adesso.append(el35("span", null, t("agenti.timeline.now", { ora: ora2(a.t1) })));
     sfondo.append(adesso);
     const t2 = dati.tempoCorrente();
     if (t2 !== null) {
-      const rip = el34("div", "gv-tempo-rip");
+      const rip = el35("div", "gv-tempo-rip");
       rip.style.transform = `translateX(${x(t2)}px)`;
-      rip.append(el34("span", null, ora2(t2)));
+      rip.append(el35("span", null, ora2(t2)));
       sfondo.append(rip);
     }
   }
   function barra(n, da, a, { tono, classe = "", titolo: titolo2, cliccabile = null }) {
-    const b = el34(cliccabile ? "button" : "span", `gv-tempo-barra ${classe}`.trim());
+    const b = el35(cliccabile ? "button" : "span", `gv-tempo-barra ${classe}`.trim());
     if (cliccabile) {
       b.type = "button";
       b.tabIndex = -1;
@@ -50415,19 +50617,19 @@ function creaTempo(host, { icona: icona16, onSeleziona, onZoom }) {
   }
   function riga2(i2) {
     const voce2 = righe[i2];
-    const n = el34("div", `gv-tempo-riga gv-tempo-riga--${voce2.tipo}`);
+    const n = el35("div", `gv-tempo-riga gv-tempo-riga--${voce2.tipo}`);
     n.style.transform = `translateY(${i2 * ALTEZZA_RIGA}px)`;
     n.setAttribute("role", "listitem");
     const t2 = dati.tempoCorrente();
     const fine = t2 ?? dati.asse().t1;
     if (voce2.tipo === "fase") {
-      const b = el34("button", "gv-tempo-nome gv-tempo-nome--fase");
+      const b = el35("button", "gv-tempo-nome gv-tempo-nome--fase");
       b.type = "button";
       b.dataset.phaseId = voce2.g.phaseId;
       b.setAttribute("aria-expanded", String(!chiuse.has(voce2.g.phaseId)));
       b.append(icona16("i-chevron", chiuse.has(voce2.g.phaseId) ? "gv-gira-giu" : ""), icona16(iconaDellaFase(voce2.g)));
       const c = dati.conteggi(voce2.g.phaseId) ?? { terminated: 0, attention: 0 };
-      b.append(el34("span", "gv-tempo-nome-testo", voce2.g.label), el34("span", "gv-tempo-nome-conto", `${cifra2(c.terminated)}/${cifra2(voce2.g.total)}`));
+      b.append(el35("span", "gv-tempo-nome-testo", voce2.g.label), el35("span", "gv-tempo-nome-conto", `${cifra2(c.terminated)}/${cifra2(voce2.g.total)}`));
       b.addEventListener("click", () => {
         if (chiuse.has(voce2.g.phaseId)) chiuse.delete(voce2.g.phaseId);
         else chiuse.add(voce2.g.phaseId);
@@ -50437,7 +50639,7 @@ function creaTempo(host, { icona: icona16, onSeleziona, onZoom }) {
       n.append(b);
       const campata = dati.campata(voce2.g.phaseId);
       if (campata && campata.da < fine) {
-        const s = el34("span", "gv-tempo-campata");
+        const s = el35("span", "gv-tempo-campata");
         s.dataset.tono = c.attention ? "errore" : c.terminated === voce2.g.total ? "ok" : "corso";
         s.style.transform = `translateX(${x(campata.da)}px)`;
         s.style.width = `${Math.max(3, x(Math.min(campata.a ?? dati.asse().t1, fine)) - x(campata.da))}px`;
@@ -50448,20 +50650,20 @@ function creaTempo(host, { icona: icona16, onSeleziona, onZoom }) {
     const r = dati.cella(voce2.g.phaseId, voce2.indice);
     if (!r) {
       n.dataset.carica = "true";
-      n.append(el34("span", "gv-tempo-nome gv-tempo-nome--carica", t("agenti.timeline.loading")));
+      n.append(el35("span", "gv-tempo-nome gv-tempo-nome--carica", t("agenti.timeline.loading")));
       return n;
     }
     const stato2 = dati.statoDi(r.nodeId) ?? r.state;
     const tono = tonoDi(stato2);
-    const nome = el34("button", "gv-tempo-nome");
+    const nome = el35("button", "gv-tempo-nome");
     nome.type = "button";
     nome.dataset.nodoId = r.nodeId;
     nome.setAttribute("aria-pressed", String(dati.selezionato() === r.nodeId));
-    const punto = el34("span", "talos-wfg__punto");
+    const punto = el35("span", "talos-wfg__punto");
     punto.dataset.tono = tono;
-    nome.append(punto, el34("span", "gv-tempo-nome-testo", r.label));
+    nome.append(punto, el35("span", "gv-tempo-nome-testo", r.label));
     const tentativi = (dati.tentativi().get(r.nodeId) ?? []).filter((x0) => x0.da <= fine);
-    if (!tentativi.length) nome.append(el34("span", "gv-tempo-nome-stato", parolaDi(stato2)));
+    if (!tentativi.length) nome.append(el35("span", "gv-tempo-nome-stato", parolaDi(stato2)));
     nome.setAttribute("aria-label", `${r.label}, ${parolaDi(stato2)}`);
     nome.addEventListener("click", () => onSeleziona?.(r.nodeId));
     n.append(nome);
@@ -50482,7 +50684,7 @@ function creaTempo(host, { icona: icona16, onSeleziona, onZoom }) {
       const titolo2 = `${r.label} · ${parolaDi(stato2)} · ${ora2(tt2.da)} → ${finito ? ora2(tt2.a) : t("agenti.timeline.stillRunning")} · ${durata2}`;
       const { b, w } = barra(n, tt2.da, a, { tono, titolo: titolo2, cliccabile: r.nodeId });
       b.dataset.stato = stato2;
-      if (w > 64) b.append(el34("span", "gv-tempo-barra-testo", durata2));
+      if (w > 64) b.append(el35("span", "gv-tempo-barra-testo", durata2));
     });
     if (dati.selezionato() === r.nodeId) n.dataset.scelto = "true";
     return n;
@@ -50658,7 +50860,7 @@ function creaTela(host, opzioni) {
   const d = host.ownerDocument;
   const finestra = d.defaultView;
   const { icona: icona16, onSeleziona, onGruppo, onZoom, onDisegnati, onMancano } = opzioni;
-  const el34 = (tag2, classe, testo2) => {
+  const el35 = (tag2, classe, testo2) => {
     const n = d.createElement(tag2);
     if (classe) n.className = classe;
     if (testo2 != null) n.textContent = testo2;
@@ -50669,12 +50871,12 @@ function creaTela(host, opzioni) {
     for (const [k, v] of Object.entries(attributi)) n.setAttribute(k, v);
     return n;
   };
-  const tela = el34("div", "gv-tela");
+  const tela = el35("div", "gv-tela");
   tela.tabIndex = 0;
   tela.setAttribute("role", "group");
   tela.setAttribute("aria-roledescription", t("agenti.graph.diagramRole"));
   tela.setAttribute("aria-label", t("agenti.graph.diagramLabel"));
-  const mondo = el34("div", "gv-mondo");
+  const mondo = el35("div", "gv-mondo");
   const fili = svg2("svg", { class: "gv-fili", "aria-hidden": "true" });
   const defs = svg2("defs");
   for (const [id4, classe] of [["gv-freccia", "gv-freccia"], ["gv-freccia-fatto", "gv-freccia gv-freccia--fatto"], ["gv-freccia-fronte", "gv-freccia gv-freccia--fronte"], ["gv-freccia-focus", "gv-freccia gv-freccia--focus"]]) {
@@ -50685,15 +50887,15 @@ function creaTela(host, opzioni) {
   fili.append(defs);
   const gFili = svg2("g");
   fili.append(gFili);
-  const strato = { blocchi: el34("div", "gv-blocchi"), nodi: el34("div", "gv-nodi") };
-  const cartaSessione = el34("div", "gv-sessione");
+  const strato = { blocchi: el35("div", "gv-blocchi"), nodi: el35("div", "gv-nodi") };
+  const cartaSessione = el35("div", "gv-sessione");
   cartaSessione.dataset.coordinatore = "true";
   mondo.append(fili, strato.blocchi, cartaSessione, strato.nodi);
-  const lod = el34("canvas", "gv-lod");
+  const lod = el35("canvas", "gv-lod");
   lod.setAttribute("aria-hidden", "true");
-  const etichette = el34("div", "gv-etichette");
+  const etichette = el35("div", "gv-etichette");
   etichette.setAttribute("aria-hidden", "true");
-  const minimappa = el34("div", "gv-minimappa nowheel");
+  const minimappa = el35("div", "gv-minimappa nowheel");
   minimappa.setAttribute("aria-hidden", "true");
   const miniSvg = svg2("svg", { class: "gv-minimappa-svg" });
   const miniBlocchi = svg2("g");
@@ -50701,7 +50903,7 @@ function creaTela(host, opzioni) {
   const miniCornice = svg2("rect", { class: "gv-minimappa-vista" });
   miniSvg.append(miniBlocchi, miniVista, miniCornice);
   minimappa.append(miniSvg);
-  const annuncio = el34("p", "gv-sr");
+  const annuncio = el35("p", "gv-sr");
   annuncio.setAttribute("role", "status");
   tela.append(mondo, lod, etichette, minimappa, annuncio);
   host.append(tela);
@@ -50796,32 +50998,32 @@ function creaTela(host, opzioni) {
   }
   const movimentoRidotto2 = () => finestra?.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
   function segmentata(counts, totale2) {
-    const barra = el34("span", "gv-segmenti");
+    const barra = el35("span", "gv-segmenti");
     barra.setAttribute("role", "img");
     const c = conteggiFase(counts);
     const parti = FAMIGLIE3.map(([chiave, parola3, tono]) => ({ n: c[chiave], parola: parola3, tono })).concat([{ n: c.annullati, parola: "agenti.family.cancelled", tono: "neutro" }]).filter((p) => p.n > 0);
     barra.setAttribute("aria-label", parti.map((p) => t("agenti.graph.segmentCount", { parola: t(p.parola), n: cifra2(p.n) })).join(", ") || t("agenti.graph.noSteps"));
     for (const p of parti) {
-      const s = el34("span", "gv-segmento");
+      const s = el35("span", "gv-segmento");
       s.dataset.tono = p.tono;
       s.style.flexGrow = String(p.n);
       s.style.minWidth = "2px";
       barra.append(s);
     }
-    if (!totale2) barra.append(el34("span", "gv-segmento gv-segmento--vuoto"));
+    if (!totale2) barra.append(el35("span", "gv-segmento gv-segmento--vuoto"));
     return barra;
   }
   const percento2 = (c) => c?.progress === null || c?.progress === void 0 ? "—" : `${Math.floor(c.progress * 100)}%`;
   function riempiTestaFase(testa, g, b) {
     testa.replaceChildren();
     const c = dati.conteggi(g.phaseId) ?? { counts: {}, terminated: 0, attention: 0, total: g.total, progress: null };
-    const riga2 = el34("div", "gv-testa-riga");
-    const ic = el34("span", "gv-testa-icona");
+    const riga2 = el35("div", "gv-testa-riga");
+    const ic = el35("span", "gv-testa-icona");
     ic.append(icona16(iconaDellaFase(g)));
-    const nome = el34("span", "gv-testa-nome talos-wfg__fase-nome", t("agenti.graph.phaseTitle", { n: g.order + 1, nome: g.label }));
+    const nome = el35("span", "gv-testa-nome talos-wfg__fase-nome", t("agenti.graph.phaseTitle", { n: g.order + 1, nome: g.label }));
     nome.title = t("agenti.graph.phaseTitle", { n: g.order + 1, nome: g.label });
-    const perc = el34("span", "gv-testa-perc", percento2(c));
-    const chiudi = el34("button", "gv-testa-chiudi nopan");
+    const perc = el35("span", "gv-testa-perc", percento2(c));
+    const chiudi = el35("button", "gv-testa-chiudi nopan");
     chiudi.type = "button";
     chiudi.setAttribute("aria-label", t("agenti.graph.closeGroup", { nome: g.label }));
     chiudi.dataset.focusKey = `chiudi:${g.phaseId}`;
@@ -50831,32 +51033,32 @@ function creaTela(host, opzioni) {
       onGruppo?.(g.phaseId, false, b);
     });
     riga2.append(ic, nome, perc, chiudi);
-    const sotto = el34("div", "gv-testa-sotto");
-    sotto.append(segmentata(c.counts, g.total), el34("span", "gv-testa-conto", `${t("agenti.graph.finishedOf", { fatti: cifra2(c.terminated), totale: cifra2(g.total) })}${c.attention ? ` · ${t("agenti.graph.toCheck", { n: c.attention })}` : ""}`));
+    const sotto = el35("div", "gv-testa-sotto");
+    sotto.append(segmentata(c.counts, g.total), el35("span", "gv-testa-conto", `${t("agenti.graph.finishedOf", { fatti: cifra2(c.terminated), totale: cifra2(g.total) })}${c.attention ? ` · ${t("agenti.graph.toCheck", { n: c.attention })}` : ""}`));
     testa.append(riga2, sotto);
   }
   function riempiCartaGruppo(carta, g) {
     carta.replaceChildren();
     const c = dati.conteggi(g.phaseId) ?? { counts: {}, terminated: 0, attention: 0, total: g.total, progress: null };
     const conti = conteggiFase(c.counts);
-    const ic = el34("span", "talos-wfg__gruppo-icona");
+    const ic = el35("span", "talos-wfg__gruppo-icona");
     ic.append(icona16(iconaDellaFase(g)));
-    const nome = el34("span", "talos-wfg__gruppo-nome", t("agenti.graph.phaseTitle", { n: g.order + 1, nome: g.label }));
+    const nome = el35("span", "talos-wfg__gruppo-nome", t("agenti.graph.phaseTitle", { n: g.order + 1, nome: g.label }));
     const totaleDetto = tn("agenti.graph.agentOne", "agenti.graph.agentMany", g.total, { n: cifra2(g.total) });
-    const conto = el34("span", "talos-wfg__gruppo-conto", totaleDetto);
-    const barra = el34("span", "gv-gruppo-barra");
-    barra.append(segmentata(c.counts, g.total), el34("span", "talos-wfg__barra-valore", percento2(c)));
-    const dl = el34("dl", "talos-wfg__conti");
+    const conto = el35("span", "talos-wfg__gruppo-conto", totaleDetto);
+    const barra = el35("span", "gv-gruppo-barra");
+    barra.append(segmentata(c.counts, g.total), el35("span", "talos-wfg__barra-valore", percento2(c)));
+    const dl = el35("dl", "talos-wfg__conti");
     for (const [chiave, chiaveTesto, tono] of FAMIGLIE3) {
-      const r = el34("div", "talos-wfg__conto");
-      const dt2 = el34("dt");
-      const punto = el34("span", conti[chiave] > 0 ? "talos-wfg__punto" : "talos-wfg__punto talos-wfg__punto--vuoto");
+      const r = el35("div", "talos-wfg__conto");
+      const dt2 = el35("dt");
+      const punto = el35("span", conti[chiave] > 0 ? "talos-wfg__punto" : "talos-wfg__punto talos-wfg__punto--vuoto");
       punto.dataset.tono = conti[chiave] > 0 ? tono : "neutro";
       dt2.append(punto, t(chiaveTesto));
-      r.append(dt2, el34("dd", null, cifra2(conti[chiave])));
+      r.append(dt2, el35("dd", null, cifra2(conti[chiave])));
       dl.append(r);
     }
-    const apri = el34("span", "gv-gruppo-apri", t("agenti.graph.openHere"));
+    const apri = el35("span", "gv-gruppo-apri", t("agenti.graph.openHere"));
     carta.append(ic, nome, conto, barra, dl, apri);
     carta.setAttribute("aria-label", c.progress === null || c.progress === void 0 ? t("agenti.graph.groupAria", { n: g.order + 1, nome: g.label, totale: totaleDetto }) : t("agenti.graph.groupAriaProgress", { n: g.order + 1, nome: g.label, totale: totaleDetto, perc: Math.floor(c.progress * 100) }));
     carta.dataset.tono = c.attention > 0 ? "errore" : conti.inCorso > 0 ? "corso" : g.total > 0 && conti.conclusi === g.total ? "ok" : "attesa";
@@ -50867,7 +51069,7 @@ function creaTela(host, opzioni) {
     for (const b of disp.blocchi) {
       const g = dati.panoramica.groups.find((x) => x.phaseId === b.phaseId);
       if (b.tipo === "gruppo") {
-        const carta = el34("button", "talos-wfg__gruppo gv-gruppo nopan");
+        const carta = el35("button", "talos-wfg__gruppo gv-gruppo nopan");
         carta.type = "button";
         carta.dataset.blocco = b.id;
         carta.dataset.phaseId = b.phaseId;
@@ -50878,13 +51080,13 @@ function creaTela(host, opzioni) {
         strato.blocchi.append(carta);
         blocchiVivi.set(b.id, { carta, g, b });
       } else {
-        const corsia = el34("section", "gv-corsia");
+        const corsia = el35("section", "gv-corsia");
         corsia.dataset.forma = b.tipo;
         corsia.dataset.blocco = b.id;
         corsia.dataset.phaseId = b.phaseId;
         corsia.setAttribute("aria-label", t("agenti.graph.phaseLane", { n: g.order + 1, nome: g.label }));
         posiziona(corsia, b.x, b.y, b.w, b.h);
-        const testa = el34("header", "gv-testa talos-wfg__fase");
+        const testa = el35("header", "gv-testa talos-wfg__fase");
         riempiTestaFase(testa, g, b);
         corsia.append(testa);
         strato.blocchi.append(corsia);
@@ -50898,20 +51100,20 @@ function creaTela(host, opzioni) {
   function riempiSessione() {
     cartaSessione.replaceChildren();
     const sessione = dati.sessione();
-    const ic = el34("span", "talos-wfg__coordinatore-icona");
+    const ic = el35("span", "talos-wfg__coordinatore-icona");
     ic.append(icona16("i-coordina"));
-    const corpo = el34("span", "talos-wfg__coordinatore-corpo");
-    const riga2 = el34("span", "talos-wfg__coordinatore-riga");
+    const corpo = el35("span", "talos-wfg__coordinatore-corpo");
+    const riga2 = el35("span", "talos-wfg__coordinatore-riga");
     const st2 = dati.statoRun();
-    const pill = el34("span", "talos-wfg__pill");
+    const pill = el35("span", "talos-wfg__pill");
     pill.dataset.tono = st2.tono;
     if (ICONA_TONO[st2.tono]) pill.append(icona16(ICONA_TONO[st2.tono], "talos-wfg__pill-icona"));
-    pill.append(el34("span", null, st2.parola));
+    pill.append(el35("span", null, st2.parola));
     riga2.append(pill);
-    if (sessione.durata) riga2.append(el34("span", "talos-wfg__passo-durata", sessione.durata));
-    corpo.append(el34("span", "talos-wfg__coordinatore-nome", sessione.titolo));
+    if (sessione.durata) riga2.append(el35("span", "talos-wfg__passo-durata", sessione.durata));
+    corpo.append(el35("span", "talos-wfg__coordinatore-nome", sessione.titolo));
     corpo.append(riga2);
-    if (sessione.sotto) corpo.append(el34("span", "talos-wfg__passo-modello", sessione.sotto));
+    if (sessione.sotto) corpo.append(el35("span", "talos-wfg__passo-modello", sessione.sotto));
     cartaSessione.append(ic, corpo);
     cartaSessione.setAttribute("aria-label", t("agenti.graph.mainSession", { titolo: sessione.titolo }));
   }
@@ -50982,7 +51184,7 @@ function creaTela(host, opzioni) {
   const rigaDi = (chiave, pos) => pos.forma === "mini" ? dati.cella(pos.phaseId, pos.indice) : dati.riga(chiave);
   function cartaPasso() {
     const carta = pool.pop() ?? (() => {
-      const b = el34("button", "gv-passo nopan");
+      const b = el35("button", "gv-passo nopan");
       b.type = "button";
       b.addEventListener("click", () => {
         if (b.dataset.nodoId) onSeleziona?.(b.dataset.nodoId);
@@ -51002,7 +51204,7 @@ function creaTela(host, opzioni) {
       carta.dataset.forma = pos.forma;
       carta.dataset.carica = "true";
       delete carta.dataset.stato;
-      carta.replaceChildren(el34("span", "gv-passo-scheletro"));
+      carta.replaceChildren(el35("span", "gv-passo-scheletro"));
       carta.setAttribute("aria-label", t("agenti.graph.loadingAgent"));
       carta.disabled = true;
       return;
@@ -51021,21 +51223,21 @@ function creaTela(host, opzioni) {
     if (carta.dataset.firma === firma) return;
     carta.dataset.firma = firma;
     carta.replaceChildren();
-    const testa = el34("span", "gv-passo-testa");
-    const punto = el34("span", "talos-wfg__punto");
+    const testa = el35("span", "gv-passo-testa");
+    const punto = el35("span", "talos-wfg__punto");
     punto.dataset.tono = tono;
-    testa.append(punto, el34("span", "gv-passo-nome", riga2.label), el34("span", "gv-passo-durata", durata2 ?? "—"));
-    const pill = el34("span", "talos-wfg__pill gv-passo-pill");
+    testa.append(punto, el35("span", "gv-passo-nome", riga2.label), el35("span", "gv-passo-durata", durata2 ?? "—"));
+    const pill = el35("span", "talos-wfg__pill gv-passo-pill");
     pill.dataset.tono = tono;
     if (ICONA_TONO[tono]) pill.append(icona16(ICONA_TONO[tono], "talos-wfg__pill-icona"));
-    pill.append(el34("span", null, parolaDi2(stato2)));
+    pill.append(el35("span", null, parolaDi2(stato2)));
     if (pos.forma === "mini") carta.append(testa, pill);
     else {
-      const ruolo = el34("span", "gv-passo-ruolo");
+      const ruolo = el35("span", "gv-passo-ruolo");
       ruolo.append(icona16(iconaDelPasso(riga2)));
       const modello = dati.modelloDi(riga2);
       carta.append(testa);
-      if (modello) carta.append(el34("span", "gv-passo-modello", modello));
+      if (modello) carta.append(el35("span", "gv-passo-modello", modello));
       carta.append(pill, ruolo);
     }
     carta.setAttribute("aria-label", `${riga2.label}, ${parolaDi2(stato2)}${durata2 ? `, ${durata2}` : ""}`);
@@ -51088,7 +51290,7 @@ function creaTela(host, opzioni) {
   let tavolozza = null;
   function colori() {
     if (tavolozza) return tavolozza;
-    const prova = el34("span", "gv-sonda");
+    const prova = el35("span", "gv-sonda");
     tela.append(prova);
     tavolozza = {};
     const stile = (n) => finestra.getComputedStyle(n).color;
@@ -51140,7 +51342,7 @@ function creaTela(host, opzioni) {
     for (const b of disp.blocchi) {
       const x = b.x * vista.zoom + vista.x, y = b.y * vista.zoom + vista.y;
       const g = dati.panoramica.groups.find((q2) => q2.phaseId === b.phaseId);
-      const t2 = el34("span", "gv-etichetta", `${g.label} · ${percento2(dati.conteggi(b.phaseId))}`);
+      const t2 = el35("span", "gv-etichetta", `${g.label} · ${percento2(dati.conteggi(b.phaseId))}`);
       t2.title = t2.textContent;
       t2.style.maxWidth = `${Math.max(40, (b.w + 60) * vista.zoom)}px`;
       t2.style.transform = `translate(${Math.max(8, x)}px, ${Math.max(8, y - 24)}px)`;
@@ -51444,29 +51646,29 @@ var init_tela = __esm({
 // src/components/workflow-results-panel.js
 function montaPannelloRisultati(host, { client, sorgente, onRitorno } = {}) {
   const d = host.ownerDocument;
-  const el34 = (tag2, classe, testo2) => {
+  const el35 = (tag2, classe, testo2) => {
     const nodo14 = d.createElement(tag2);
     if (classe) nodo14.className = classe;
     if (testo2 != null) nodo14.textContent = testo2;
     return nodo14;
   };
   const id4 = `talos-wfg-risultati-${++prossimoId}`;
-  const pannello = el34("aside", "talos-wfg__result-panel");
+  const pannello = el35("aside", "talos-wfg__result-panel");
   pannello.id = id4;
   pannello.hidden = true;
   pannello.setAttribute("aria-label", t("agenti.results.panelLabel"));
-  const testata = el34("header", "talos-wfg__result-head");
-  const titolo2 = el34("h3", null, t("agenti.results.panelLabel"));
+  const testata = el35("header", "talos-wfg__result-head");
+  const titolo2 = el35("h3", null, t("agenti.results.panelLabel"));
   titolo2.tabIndex = -1;
-  const chiudi = el34("button", "talos-button talos-button--ghost talos-button--sm", t("agenti.results.close"));
+  const chiudi = el35("button", "talos-button talos-button--ghost talos-button--sm", t("agenti.results.close"));
   chiudi.type = "button";
   testata.append(titolo2, chiudi);
-  const sommario = el34("p", "talos-wfg__result-summary");
-  const regione = el34("div", "talos-wfg__result-scroll");
+  const sommario = el35("p", "talos-wfg__result-summary");
+  const regione = el35("div", "talos-wfg__result-scroll");
   regione.setAttribute("role", "region");
   regione.setAttribute("aria-label", t("agenti.results.listLabel"));
   regione.tabIndex = 0;
-  const elenco3 = el34("ol", "talos-wfg__outputs");
+  const elenco3 = el35("ol", "talos-wfg__outputs");
   regione.append(elenco3);
   pannello.append(testata, sommario, regione);
   host.append(pannello);
@@ -51541,47 +51743,47 @@ function montaPannelloRisultati(host, { client, sorgente, onRitorno } = {}) {
     const righe = [];
     for (const ref of dati.outputs) {
       if (!ref?.resultId) continue;
-      const item = el34("li", "talos-wfg__output");
+      const item = el35("li", "talos-wfg__output");
       item.dataset.resultId = ref.resultId;
       if (ref.isError) item.dataset.errore = "true";
-      item.append(el34("strong", "talos-wfg__output-id", ref.resultId));
-      item.append(el34("p", "talos-wfg__output-meta", [ref.kind || t("agenti.results.kindFallback"), ref.contentType || t("agenti.results.typeUnknown"), dimensione(ref)].join(" · ")));
-      if (ref.isError) item.append(el34("p", "talos-wfg__output-error", t("agenti.results.toolError")));
+      item.append(el35("strong", "talos-wfg__output-id", ref.resultId));
+      item.append(el35("p", "talos-wfg__output-meta", [ref.kind || t("agenti.results.kindFallback"), ref.contentType || t("agenti.results.typeUnknown"), dimensione(ref)].join(" · ")));
+      if (ref.isError) item.append(el35("p", "talos-wfg__output-error", t("agenti.results.toolError")));
       const risultato = full.get(ref.resultId);
       if (typeof risultato?.content === "string") {
-        const completo = el34("pre", "talos-wfg__output-full", risultato.content);
+        const completo = el35("pre", "talos-wfg__output-full", risultato.content);
         completo.tabIndex = -1;
         item.append(completo);
       } else if (risultato?.content === null) {
-        item.append(el34("p", "talos-wfg__vuoto", t("agenti.results.binary")));
+        item.append(el35("p", "talos-wfg__vuoto", t("agenti.results.binary")));
       } else {
         if (ref.preview) {
-          item.append(el34("p", "talos-wfg__output-preview-label", ref.truncated ? t("agenti.results.previewTruncated") : t("agenti.results.preview")));
-          item.append(el34("pre", "talos-wfg__output-preview", ref.preview));
-        } else item.append(el34("p", "talos-wfg__vuoto", t("agenti.results.previewUnavailable")));
-        if (risultato?.error) item.append(el34("p", "talos-wfg__output-error", t("agenti.results.readFailed", { motivo: risultato.error })));
+          item.append(el35("p", "talos-wfg__output-preview-label", ref.truncated ? t("agenti.results.previewTruncated") : t("agenti.results.preview")));
+          item.append(el35("pre", "talos-wfg__output-preview", ref.preview));
+        } else item.append(el35("p", "talos-wfg__vuoto", t("agenti.results.previewUnavailable")));
+        if (risultato?.error) item.append(el35("p", "talos-wfg__output-error", t("agenti.results.readFailed", { motivo: risultato.error })));
         if (testoAmmesso(ref.contentType)) {
-          const open = el34("button", "talos-wfg__link talos-wfg__output-open", risultato?.error ? t("agenti.results.retryRead") : t("agenti.results.showAll"));
+          const open = el35("button", "talos-wfg__link talos-wfg__output-open", risultato?.error ? t("agenti.results.retryRead") : t("agenti.results.showAll"));
           open.type = "button";
           open.disabled = Boolean(caricamento);
           open.addEventListener("click", () => void leggiTutto(ref));
           item.append(open);
         }
       }
-      const raw = el34("a", "talos-wfg__link talos-wfg__output-download", t("agenti.results.download"));
+      const raw = el35("a", "talos-wfg__link talos-wfg__output-download", t("agenti.results.download"));
       raw.href = client.outputRawUrl(sorgente, dati.nodeId, ref.resultId);
       raw.setAttribute("download", "");
       item.append(raw);
       righe.push(item);
     }
-    if (!righe.length) righe.push(el34("li", "talos-wfg__vuoto", t("agenti.results.none")));
+    if (!righe.length) righe.push(el35("li", "talos-wfg__vuoto", t("agenti.results.none")));
     if (Number.isSafeInteger(dati.nextOutputOffset)) {
-      const more = el34("button", "talos-wfg__link talos-wfg__output-more", t("agenti.results.showMore", { n: Math.max(0, dati.totalOutputs - dati.outputs.length) }));
+      const more = el35("button", "talos-wfg__link talos-wfg__output-more", t("agenti.results.showMore", { n: Math.max(0, dati.totalOutputs - dati.outputs.length) }));
       more.type = "button";
       more.disabled = Boolean(caricamento);
       more.addEventListener("click", () => void altraPagina());
-      const footer = el34("li", "talos-wfg__output-footer");
-      if (errorePagina) footer.append(el34("p", "talos-wfg__output-error", t("agenti.results.readFailed", { motivo: errorePagina })));
+      const footer = el35("li", "talos-wfg__output-footer");
+      if (errorePagina) footer.append(el35("p", "talos-wfg__output-error", t("agenti.results.readFailed", { motivo: errorePagina })));
       footer.append(more);
       righe.push(footer);
     }
@@ -51653,7 +51855,7 @@ function montaGrafoWorkflow(host, {
 } = {}) {
   const d = host.ownerDocument;
   const finestra = d.defaultView;
-  const el34 = (tag2, classe, testo2) => {
+  const el35 = (tag2, classe, testo2) => {
     const n = d.createElement(tag2);
     if (classe) n.className = classe;
     if (testo2 != null) n.textContent = testo2;
@@ -51669,7 +51871,7 @@ function montaGrafoWorkflow(host, {
     return svg2;
   };
   const bottone8 = (testo2, classe, aria) => {
-    const b = el34("button", classe, testo2);
+    const b = el35("button", classe, testo2);
     b.type = "button";
     if (aria) b.setAttribute("aria-label", aria);
     return b;
@@ -51718,59 +51920,59 @@ function montaGrafoWorkflow(host, {
   let generazione = 0, versioneDisposizione = 0;
   const elk = creaElk();
   const fonte = creaFonte({ client, sorgente, onCambio: () => programmaAggiorna() });
-  const root2 = el34("section", "talos-grafo talos-wfg");
+  const root2 = el35("section", "talos-grafo talos-wfg");
   root2.dataset.c = "GrafoAgenti";
   root2.dataset.sorgente = "workflow";
   root2.setAttribute("aria-label", t("agenti.delegations.title"));
-  const cima = el34("header", "talos-wfg__cima");
-  const titoli = el34("div", "talos-wfg__titoli");
-  const titolo2 = el34("h2", "talos-wfg__titolo", t("agenti.delegations.title"));
-  const sommario = el34("p", "talos-wfg__sommario");
-  const descrizione = el34("p", "talos-wfg__descrizione");
-  const fuocoChip = el34("p", "gv-fuoco");
+  const cima = el35("header", "talos-wfg__cima");
+  const titoli = el35("div", "talos-wfg__titoli");
+  const titolo2 = el35("h2", "talos-wfg__titolo", t("agenti.delegations.title"));
+  const sommario = el35("p", "talos-wfg__sommario");
+  const descrizione = el35("p", "talos-wfg__descrizione");
+  const fuocoChip = el35("p", "gv-fuoco");
   fuocoChip.hidden = true;
   titoli.append(titolo2, sommario, descrizione, fuocoChip);
-  const lato = el34("div", "talos-wfg__lato");
-  const aggiornato = el34("div", "talos-wfg__aggiornato");
-  const aggiornatoTesto = el34("span", "talos-wfg__aggiornato-ora");
-  const statoRun = el34("span", "talos-wfg__stato-run");
+  const lato = el35("div", "talos-wfg__lato");
+  const aggiornato = el35("div", "talos-wfg__aggiornato");
+  const aggiornatoTesto = el35("span", "talos-wfg__aggiornato-ora");
+  const statoRun = el35("span", "talos-wfg__stato-run");
   statoRun.setAttribute("role", "status");
   aggiornato.append(aggiornatoTesto, statoRun);
   const torna = bottone8(t("agenti.delegations.backToChat"), "talos-button talos-button--secondary talos-button--sm talos-wfg__torna");
   torna.addEventListener("click", () => onChiudi?.());
-  const comandiRun = el34("div", "talos-wfg__run");
+  const comandiRun = el35("div", "talos-wfg__run");
   comandiRun.hidden = true;
   const principaleRun = bottone8("", "talos-button talos-button--secondary talos-button--sm talos-wfg__run-principale");
   principaleRun.dataset.focusKey = "run:principale";
-  const menuRun = el34("div", "talos-wfg__menu-run");
+  const menuRun = el35("div", "talos-wfg__menu-run");
   const altroRun = bottone8("", "talos-wfg__icona-bottone", t("agenti.workflow.runCommandsMore"));
   altroRun.append(icona16("i-more"));
   altroRun.setAttribute("aria-haspopup", "menu");
   altroRun.setAttribute("aria-expanded", "false");
   altroRun.dataset.focusKey = "run:menu";
-  const vociRun = el34("div", "talos-wfg__menu talos-wfg__menu--destra");
+  const vociRun = el35("div", "talos-wfg__menu talos-wfg__menu--destra");
   vociRun.setAttribute("role", "menu");
   vociRun.setAttribute("aria-label", t("agenti.workflow.runCommands"));
   vociRun.hidden = true;
   menuRun.append(altroRun, vociRun);
   comandiRun.append(principaleRun, menuRun);
-  const esitoRun = el34("p", "talos-wfg__esito-run");
+  const esitoRun = el35("p", "talos-wfg__esito-run");
   esitoRun.setAttribute("role", "status");
   esitoRun.hidden = true;
-  const riga1 = el34("div", "talos-wfg__lato-riga");
+  const riga1 = el35("div", "talos-wfg__lato-riga");
   riga1.append(aggiornato, comandiRun, torna);
   lato.append(riga1, esitoRun);
   cima.append(titoli, lato);
-  const comandi = el34("div", "gv-comandi");
+  const comandi = el35("div", "gv-comandi");
   comandi.setAttribute("role", "toolbar");
   comandi.setAttribute("aria-label", t("agenti.delegations.controlsLabel"));
-  const viste = el34("div", "gv-viste");
+  const viste = el35("div", "gv-viste");
   viste.setAttribute("role", "radiogroup");
   viste.setAttribute("aria-label", t("agenti.workflow.view"));
   const vociVista = new Map(VISTE2.map(([id4, chiave, ic]) => {
     const b = bottone8("", "gv-vista");
     b.setAttribute("role", "radio");
-    b.append(icona16(ic), el34("span", null, t(chiave)));
+    b.append(icona16(ic), el35("span", null, t(chiave)));
     b.dataset.vista = id4;
     b.dataset.focusKey = `vista:${id4}`;
     if (id4 === "tempo" && !run) {
@@ -51792,7 +51994,7 @@ function montaGrafoWorkflow(host, {
   });
   const percorso = bottone8("", "talos-wfg__icona-bottone gv-percorso");
   percorso.setAttribute("aria-pressed", "false");
-  percorso.append(icona16("i-history"), el34("span", null, t("agenti.workflow.path")));
+  percorso.append(icona16("i-history"), el35("span", null, t("agenti.workflow.path")));
   percorso.title = run ? t("agenti.workflow.pathHint") : t("agenti.workflow.pathNotStarted");
   percorso.disabled = !run;
   percorso.addEventListener("click", () => {
@@ -51801,7 +52003,7 @@ function montaGrafoWorkflow(host, {
     void calcolaBloccati();
     evidenzia();
   });
-  const campoCerca = el34("input", "talos-wfg__cerca nopan");
+  const campoCerca = el35("input", "talos-wfg__cerca nopan");
   campoCerca.type = "search";
   campoCerca.placeholder = t("agenti.workflow.searchPlaceholder");
   campoCerca.setAttribute("aria-label", t("agenti.workflow.searchLabel"));
@@ -51815,12 +52017,12 @@ function montaGrafoWorkflow(host, {
   piu.append(icona16("i-plus"));
   const adatta = bottone8("", "talos-wfg__icona-bottone", t("agenti.delegations.fit"));
   adatta.append(icona16("i-fit"));
-  const menuGruppi = el34("div", "talos-wfg__menu-vista");
+  const menuGruppi = el35("div", "talos-wfg__menu-vista");
   const altroGruppi = bottone8("", "talos-wfg__icona-bottone", t("agenti.workflow.groups"));
   altroGruppi.append(icona16("i-layers"));
   altroGruppi.setAttribute("aria-haspopup", "menu");
   altroGruppi.setAttribute("aria-expanded", "false");
-  const vociGruppi = el34("div", "talos-wfg__menu talos-wfg__menu--destra");
+  const vociGruppi = el35("div", "talos-wfg__menu talos-wfg__menu--destra");
   vociGruppi.setAttribute("role", "menu");
   vociGruppi.setAttribute("aria-label", t("agenti.workflow.groups"));
   vociGruppi.hidden = true;
@@ -51851,26 +52053,26 @@ function montaGrafoWorkflow(host, {
   });
   altroGruppi.addEventListener("click", () => vociGruppi.hidden ? apriMenu(altroGruppi, vociGruppi) : chiudiMenu(altroGruppi, vociGruppi));
   menuGruppi.append(altroGruppi, vociGruppi);
-  const comandiSinistra = el34("div", "gv-comandi-gruppo");
+  const comandiSinistra = el35("div", "gv-comandi-gruppo");
   comandiSinistra.append(viste, percorso);
-  const comandiDestra = el34("div", "gv-comandi-gruppo");
+  const comandiDestra = el35("div", "gv-comandi-gruppo");
   comandiDestra.append(campoCerca, cerca, meno, percento2, piu, adatta, menuGruppi);
   comandi.append(comandiSinistra, comandiDestra);
-  const esitoCerca = el34("p", "talos-wfg__esito-cerca");
+  const esitoCerca = el35("p", "talos-wfg__esito-cerca");
   esitoCerca.setAttribute("role", "status");
-  const avviso = el34("p", "talos-wfg__avviso");
+  const avviso = el35("p", "talos-wfg__avviso");
   avviso.setAttribute("role", "status");
-  const area = el34("div", "gv-area");
-  const lettura = el34("div", "talos-wfg__lettura gv-lettura");
+  const area = el35("div", "gv-area");
+  const lettura = el35("div", "talos-wfg__lettura gv-lettura");
   lettura.hidden = true;
-  const rip = el34("div", "gv-rip");
+  const rip = el35("div", "gv-rip");
   rip.setAttribute("role", "group");
   rip.setAttribute("aria-label", t("agenti.workflow.playbackLabel"));
   rip.hidden = !run;
   rip.dataset.pronta = "false";
   const ripGioca = bottone8("", "gv-rip-gioca", t("agenti.workflow.playRun"));
   ripGioca.append(icona16("i-play"));
-  const ripVelocita = el34("div", "gv-rip-velocita");
+  const ripVelocita = el35("div", "gv-rip-velocita");
   ripVelocita.setAttribute("role", "radiogroup");
   ripVelocita.setAttribute("aria-label", t("agenti.workflow.speedLabel"));
   for (const [v, testo2] of LENTEZZE) {
@@ -51884,38 +52086,38 @@ function montaGrafoWorkflow(host, {
     });
     ripVelocita.append(b);
   }
-  const ripBinario = el34("div", "gv-rip-binario nopan");
+  const ripBinario = el35("div", "gv-rip-binario nopan");
   ripBinario.tabIndex = 0;
   ripBinario.setAttribute("role", "slider");
   ripBinario.setAttribute("aria-label", t("agenti.workflow.sliderLabel"));
-  const ripVuoti = el34("div", "gv-rip-vuoti");
-  const ripPieno = el34("div", "gv-rip-pieno");
-  const ripManiglia = el34("div", "gv-rip-maniglia");
+  const ripVuoti = el35("div", "gv-rip-vuoti");
+  const ripPieno = el35("div", "gv-rip-pieno");
+  const ripManiglia = el35("div", "gv-rip-maniglia");
   ripBinario.append(ripVuoti, ripPieno, ripManiglia);
-  const ripTesto = el34("span", "gv-rip-testo", t("agenti.workflow.loadingHistory"));
+  const ripTesto = el35("span", "gv-rip-testo", t("agenti.workflow.loadingHistory"));
   const ripVivo = bottone8(t("agenti.delegations.backToLive"), "talos-button talos-button--secondary talos-button--sm gv-rip-vivo");
   ripVivo.hidden = true;
-  const ripNota = el34("span", "gv-rip-nota", t("agenti.workflow.replayNote"));
+  const ripNota = el35("span", "gv-rip-nota", t("agenti.workflow.replayNote"));
   rip.append(ripGioca, ripVelocita, ripBinario, ripTesto, ripVivo, ripNota);
-  const dettaglio = el34("section", "talos-wfg__dettaglio gv-dettaglio");
+  const dettaglio = el35("section", "talos-wfg__dettaglio gv-dettaglio");
   dettaglio.hidden = true;
   dettaglio.setAttribute("aria-label", t("agenti.delegations.detailLabel"));
-  const detChi = el34("div", "talos-wfg__dettaglio-chi");
-  const detProve = el34("section", "talos-wfg__dettaglio-colonna");
+  const detChi = el35("div", "talos-wfg__dettaglio-chi");
+  const detProve = el35("section", "talos-wfg__dettaglio-colonna");
   detProve.setAttribute("aria-label", t("agenti.delegations.recentEvidence"));
-  const detCompito = el34("section", "talos-wfg__dettaglio-colonna");
+  const detCompito = el35("section", "talos-wfg__dettaglio-colonna");
   detCompito.setAttribute("aria-label", t("agenti.delegations.currentTask"));
-  const detAltro = el34("div", "talos-wfg__dettaglio-altro");
+  const detAltro = el35("div", "talos-wfg__dettaglio-altro");
   const menuAgente = bottone8("", "talos-wfg__icona-bottone", t("agenti.delegations.agentActions"));
   menuAgente.append(icona16("i-more"));
   menuAgente.setAttribute("aria-haspopup", "menu");
   menuAgente.setAttribute("aria-expanded", "false");
   menuAgente.dataset.focusKey = "dettaglio:menu";
-  const vociAgente = el34("div", "talos-wfg__menu talos-wfg__menu--destra");
+  const vociAgente = el35("div", "talos-wfg__menu talos-wfg__menu--destra");
   vociAgente.setAttribute("role", "menu");
   vociAgente.hidden = true;
   const voceAgente = (testo2, azione) => {
-    const b = el34("button", "talos-wfg__menu-voce", testo2);
+    const b = el35("button", "talos-wfg__menu-voce", testo2);
     b.type = "button";
     b.setAttribute("role", "menuitem");
     b.tabIndex = -1;
@@ -52238,16 +52440,16 @@ function montaGrafoWorkflow(host, {
     campoCerca.hidden = !stato2.cercaAperta;
     if (!p) return;
     root2.dataset.livello = livelloPer(p.total);
-    const forte = (testo2) => el34("strong", null, testo2);
+    const forte = (testo2) => el35("strong", null, testo2);
     sommario.replaceChildren(...fraseConNodi("agenti.workflow.summary", { agenti: forte(plurale2(p.total, ...AGENTE)), fasi: forte(plurale2(p.groups.length, ...FASE)) }));
     descrizione.textContent = run ? t("agenti.workflow.descriptionRun") : t("agenti.workflow.descriptionProposal");
     const alle = stato2.t === null ? oraBreve4(stato2.aggiornatoAlle) : null;
     aggiornatoTesto.textContent = stato2.t !== null ? t("agenti.workflow.replayAt", { ora: oraBreve4(stato2.t) }) : alle ? t("agenti.delegations.lastUpdate", { ora: alle }) : "";
     const grezzo = grezzoDelRun();
     const terminati = stato2.t === null ? p.terminated : p.groups.reduce((somma3, g) => somma3 + (fonte.conteggi(g.phaseId, stato2.t)?.terminated ?? 0), 0);
-    const punto = el34("span", "talos-wfg__punto");
+    const punto = el35("span", "talos-wfg__punto");
     punto.dataset.tono = TONO_RUN[grezzo] ?? "neutro";
-    statoRun.replaceChildren(punto, el34("span", null, `${parolaDelRun(grezzo)}${run ? ` · ${t("agenti.graph.finishedOf", { fatti: cifra2(terminati ?? 0), totale: cifra2(p.total) })}` : ""}`));
+    statoRun.replaceChildren(punto, el35("span", null, `${parolaDelRun(grezzo)}${run ? ` · ${t("agenti.graph.finishedOf", { fatti: cifra2(terminati ?? 0), totale: cifra2(p.total) })}` : ""}`));
     if (stato2.focus) {
       fuocoChip.hidden = false;
       const r = fonte.riga(stato2.focus.nodeId);
@@ -52255,7 +52457,7 @@ function montaGrafoWorkflow(host, {
       const via2 = bottone8("", "gv-fuoco-via", t("agenti.workflow.removeFocus"));
       via2.append(icona16("i-x"));
       via2.addEventListener("click", () => togliFocus());
-      fuocoChip.replaceChildren(icona16("i-branch"), el34("span", null, t(stato2.focus.verso === "monte" ? "agenti.workflow.focusUpstream" : "agenti.workflow.focusDownstream", { nome: r?.label ?? "", agenti: plurale2(n, ...AGENTE) })), via2);
+      fuocoChip.replaceChildren(icona16("i-branch"), el35("span", null, t(stato2.focus.verso === "monte" ? "agenti.workflow.focusUpstream" : "agenti.workflow.focusDownstream", { nome: r?.label ?? "", agenti: plurale2(n, ...AGENTE) })), via2);
     } else fuocoChip.hidden = true;
   }
   function seleziona(nodeId, { muovi = true, riga: riga2 = null } = {}) {
@@ -52356,10 +52558,10 @@ function montaGrafoWorkflow(host, {
   function pillola(statoGrezzo, classe = "") {
     const { tono } = statoPasso(statoGrezzo);
     const parola3 = parolaDelPasso(statoGrezzo);
-    const p = el34("span", `talos-wfg__pill ${classe}`.trim());
+    const p = el35("span", `talos-wfg__pill ${classe}`.trim());
     p.dataset.tono = tono;
     if (ICONA_TONO[tono]) p.append(icona16(ICONA_TONO[tono], "talos-wfg__pill-icona"));
-    p.append(el34("span", null, parola3));
+    p.append(el35("span", null, parola3));
     return p;
   }
   function disegnaDettaglio2() {
@@ -52372,18 +52574,18 @@ function montaGrafoWorkflow(host, {
     dettaglio.hidden = false;
     const riga2 = { ...fonte.riga(stato2.selezionato) ?? {}, ...info };
     const st2 = statoDi(stato2.selezionato) ?? riga2.state;
-    const segno = el34("span", "talos-wfg__dettaglio-icona");
+    const segno = el35("span", "talos-wfg__dettaglio-icona");
     segno.append(icona16(iconaDelPasso(riga2)));
-    const testi = el34("div", "talos-wfg__dettaglio-testi");
-    const testa = el34("div", "talos-wfg__dettaglio-testa");
-    testa.append(el34("h3", "talos-wfg__dettaglio-nome", riga2.label ?? riga2.nodeId), pillola(st2));
+    const testi = el35("div", "talos-wfg__dettaglio-testi");
+    const testa = el35("div", "talos-wfg__dettaglio-testa");
+    testa.append(el35("h3", "talos-wfg__dettaglio-nome", riga2.label ?? riga2.nodeId), pillola(st2));
     testi.append(testa);
     const tentativo = (fonte.tentativi().get(stato2.selezionato) ?? []).filter((x) => stato2.t === null || x.da <= stato2.t).at(-1);
     const fine = tentativo && tentativo.a !== null && (stato2.t === null || tentativo.a <= stato2.t) ? tentativo.a : null;
     const quando = !run ? null : tentativo ? `${oraBreve4(tentativo.da)}${fine !== null ? `–${oraBreve4(fine)}` : ` → ${t("agenti.timeline.stillRunning")}`}` : t("agenti.workflow.notStartedYet");
     const sotto = [modelloDelPasso(riga2, sessione.modello), durataDi(stato2.selezionato, st2), quando].filter(Boolean).join(" · ");
-    if (sotto) testi.append(el34("span", "talos-wfg__passo-modello", sotto));
-    const focus = el34("div", "gv-dettaglio-focus");
+    if (sotto) testi.append(el35("span", "talos-wfg__passo-modello", sotto));
+    const focus = el35("div", "gv-dettaglio-focus");
     for (const [verso, testo2] of [["monte", t("agenti.workflow.dependsOn")], ["valle", t("agenti.workflow.waitsForIt")]]) {
       const n = stato2.lignaggio?.[verso];
       const b = bottone8(n === void 0 ? testo2 : `${testo2} (${cifra2(n)})`, "talos-wfg__link");
@@ -52397,32 +52599,32 @@ function montaGrafoWorkflow(host, {
     }
     testi.append(focus);
     detChi.replaceChildren(segno, testi);
-    const provaTesta = el34("h4", "talos-wfg__dettaglio-titolo");
-    provaTesta.append(icona16("i-doc"), el34("span", null, t("agenti.delegations.recentEvidence")));
-    const elenco3 = el34("ul", "talos-wfg__evidenze");
-    if (!run) elenco3.append(el34("li", "talos-wfg__vuoto", t("agenti.workflow.evidenceNotStarted")));
-    else if (!riga2.stepSessionId) elenco3.append(el34("li", "talos-wfg__vuoto", t("agenti.workflow.evidenceNoSession")));
-    else if (!stato2.evidenze) elenco3.append(el34("li", "talos-wfg__vuoto", t("agenti.workflow.evidenceReading")));
-    else if (stato2.evidenze.length === 0) elenco3.append(el34("li", "talos-wfg__vuoto", t("agenti.delegations.noToolsYet")));
+    const provaTesta = el35("h4", "talos-wfg__dettaglio-titolo");
+    provaTesta.append(icona16("i-doc"), el35("span", null, t("agenti.delegations.recentEvidence")));
+    const elenco3 = el35("ul", "talos-wfg__evidenze");
+    if (!run) elenco3.append(el35("li", "talos-wfg__vuoto", t("agenti.workflow.evidenceNotStarted")));
+    else if (!riga2.stepSessionId) elenco3.append(el35("li", "talos-wfg__vuoto", t("agenti.workflow.evidenceNoSession")));
+    else if (!stato2.evidenze) elenco3.append(el35("li", "talos-wfg__vuoto", t("agenti.workflow.evidenceReading")));
+    else if (stato2.evidenze.length === 0) elenco3.append(el35("li", "talos-wfg__vuoto", t("agenti.delegations.noToolsYet")));
     else for (const prova of stato2.evidenze) {
-      const voce2 = el34("li", "talos-wfg__evidenza");
-      voce2.append(icona16(prova.esito ? "i-check" : "i-clock"), el34("span", "talos-wfg__evidenza-nome", maiuscola(nomeUmanoAttrezzo(prova.nome))));
+      const voce2 = el35("li", "talos-wfg__evidenza");
+      voce2.append(icona16(prova.esito ? "i-check" : "i-clock"), el35("span", "talos-wfg__evidenza-nome", maiuscola(nomeUmanoAttrezzo(prova.nome))));
       if (prova.oggetto) {
-        const oggetto4 = el34("code", "talos-wfg__evidenza-oggetto");
+        const oggetto4 = el35("code", "talos-wfg__evidenza-oggetto");
         for (const pezzo2 of prova.oggetto.split(/(?<=[/\\])/u)) oggetto4.append(pezzo2, d.createElement("wbr"));
         oggetto4.title = prova.oggetto;
         voce2.append(oggetto4);
       }
-      if (!prova.esito) voce2.append(el34("span", "talos-wfg__evidenza-quando", t("agenti.timeline.stillRunning")));
+      if (!prova.esito) voce2.append(el35("span", "talos-wfg__evidenza-quando", t("agenti.timeline.stillRunning")));
       elenco3.append(voce2);
     }
-    if (stato2.t !== null && run) elenco3.append(el34("li", "talos-wfg__vuoto", t("agenti.workflow.evidenceReplayNote")));
+    if (stato2.t !== null && run) elenco3.append(el35("li", "talos-wfg__vuoto", t("agenti.workflow.evidenceReplayNote")));
     const outputParts = [provaTesta, elenco3];
     if (run && !info.carica && (info.totalOutputs > 0 || info.outputs?.length > 0)) {
       const total = Number.isSafeInteger(info.totalOutputs) ? info.totalOutputs : info.outputs?.length ?? 0;
-      outputParts.push(el34("h4", "talos-wfg__dettaglio-titolo", t("agenti.workflow.resultsTitle", { n: cifra2(total) })));
+      outputParts.push(el35("h4", "talos-wfg__dettaglio-titolo", t("agenti.workflow.resultsTitle", { n: cifra2(total) })));
       const tipi = new Set((info.outputs ?? []).map((ref) => ref?.kind).filter(Boolean));
-      outputParts.push(el34("p", "talos-wfg__result-compact", [
+      outputParts.push(el35("p", "talos-wfg__result-compact", [
         tn("agenti.workflow.resultsCountOne", "agenti.workflow.resultsCountMany", total, { n: cifra2(total) }),
         tipi.size ? [...tipi].join(", ") : t("agenti.results.typeUnknown"),
         t("agenti.workflow.resultsHint")
@@ -52439,20 +52641,20 @@ function montaGrafoWorkflow(host, {
       outputParts.push(open);
     }
     detProve.replaceChildren(...outputParts);
-    const compitoTesta = el34("h4", "talos-wfg__dettaglio-titolo");
-    compitoTesta.append(icona16("i-eye"), el34("span", null, t("agenti.delegations.currentTask")));
+    const compitoTesta = el35("h4", "talos-wfg__dettaglio-titolo");
+    compitoTesta.append(icona16("i-eye"), el35("span", null, t("agenti.delegations.currentTask")));
     const righe = String(info.instructions ?? "").split(/\r?\n/u).map((r) => r.trim()).filter(Boolean);
     const parti = [compitoTesta];
     if (righe.length) {
-      const primo2 = el34("p", "talos-wfg__compito-titolo", righe[0]);
+      const primo2 = el35("p", "talos-wfg__compito-titolo", righe[0]);
       primo2.title = righe[0];
       parti.push(primo2);
       if (righe.length > 1) {
-        const resto = el34("p", "talos-wfg__compito-resto", righe.slice(1).join(" "));
+        const resto = el35("p", "talos-wfg__compito-resto", righe.slice(1).join(" "));
         resto.title = resto.textContent;
         parti.push(resto);
       }
-    } else parti.push(el34("p", "talos-wfg__vuoto", info.carica ? t("agenti.workflow.taskReading") : t("agenti.workflow.taskUnavailable")));
+    } else parti.push(el35("p", "talos-wfg__vuoto", info.carica ? t("agenti.workflow.taskReading") : t("agenti.workflow.taskUnavailable")));
     detCompito.replaceChildren(...parti);
     apriConversazione.disabled = !riga2.stepSessionId || typeof onApriSessione !== "function";
   }
@@ -52475,12 +52677,12 @@ function montaGrafoWorkflow(host, {
   function disegnaLettura() {
     const p = fonte.panoramica;
     if (!p) return;
-    const albero = el34("ul", "talos-wfg__albero-lettura");
+    const albero = el35("ul", "talos-wfg__albero-lettura");
     albero.setAttribute("role", "tree");
     albero.setAttribute("aria-label", t("agenti.workflow.readingTreeLabel"));
     const voci = [];
     p.groups.forEach((gruppo, indice2) => {
-      const fase = el34("li", "talos-wfg__voce talos-wfg__voce--fase");
+      const fase = el35("li", "talos-wfg__voce talos-wfg__voce--fase");
       fase.setAttribute("role", "treeitem");
       const aperta2 = stato2.espansi.has(gruppo.phaseId);
       fase.setAttribute("aria-expanded", String(aperta2));
@@ -52492,10 +52694,10 @@ function montaGrafoWorkflow(host, {
       const c = fonte.conteggi(gruppo.phaseId, stato2.t);
       const cento = c && run ? percentualeFase({ progress: c.progress }) : null;
       const agentiDellaFase = plurale2(gruppo.total, ...AGENTE);
-      fase.append(el34("span", "talos-wfg__voce-testo", cento === null ? t("agenti.workflow.readingPhaseNotStarted", { nome: gruppo.label, i: indice2 + 1, n: p.groups.length, agenti: agentiDellaFase }) : t("agenti.workflow.readingPhaseProgress", { nome: gruppo.label, i: indice2 + 1, n: p.groups.length, agenti: agentiDellaFase, fatti: cifra2(c.terminated), totale: cifra2(gruppo.total) })));
+      fase.append(el35("span", "talos-wfg__voce-testo", cento === null ? t("agenti.workflow.readingPhaseNotStarted", { nome: gruppo.label, i: indice2 + 1, n: p.groups.length, agenti: agentiDellaFase }) : t("agenti.workflow.readingPhaseProgress", { nome: gruppo.label, i: indice2 + 1, n: p.groups.length, agenti: agentiDellaFase, fatti: cifra2(c.terminated), totale: cifra2(gruppo.total) })));
       voci.push(fase);
       if (aperta2) {
-        const gruppoAria = el34("ul", "talos-wfg__voce-figli");
+        const gruppoAria = el35("ul", "talos-wfg__voce-figli");
         gruppoAria.setAttribute("role", "group");
         const quanti = Math.min(gruppo.total, stato2.mostrati.get(gruppo.phaseId) ?? PAGINA_ELENCO);
         for (let i2 = 0; i2 < quanti; i2 += 1) {
@@ -52504,7 +52706,7 @@ function montaGrafoWorkflow(host, {
             fonte.chiedi(gruppo.phaseId, i2, quanti - 1);
             break;
           }
-          const passo2 = el34("li", "talos-wfg__voce");
+          const passo2 = el35("li", "talos-wfg__voce");
           passo2.setAttribute("role", "treeitem");
           passo2.setAttribute("aria-level", "2");
           passo2.setAttribute("aria-setsize", String(gruppo.total));
@@ -52520,7 +52722,7 @@ function montaGrafoWorkflow(host, {
         }
         if (quanti < gruppo.total) {
           const resto = gruppo.total - quanti;
-          const altri = el34("li", "talos-wfg__voce talos-wfg__voce--altri", t("agenti.workflow.readingShowMore", { n: cifra2(Math.min(PAGINA_ELENCO, resto)), resto: cifra2(resto) }));
+          const altri = el35("li", "talos-wfg__voce talos-wfg__voce--altri", t("agenti.workflow.readingShowMore", { n: cifra2(Math.min(PAGINA_ELENCO, resto)), resto: cifra2(resto) }));
           altri.setAttribute("role", "treeitem");
           altri.setAttribute("aria-level", "2");
           altri.dataset.chiave = `altri:${gruppo.phaseId}`;
@@ -52716,7 +52918,7 @@ function montaGrafoWorkflow(host, {
     const a = asse();
     const L = Math.max(1, a.lunghezza);
     for (const s of a.vuoti) {
-      const v = el34("span", "gv-rip-vuoto");
+      const v = el35("span", "gv-rip-vuoto");
       v.style.left = `${s.asseDa / L * 100}%`;
       v.style.width = `${Math.max(0.4, (s.asseA - s.asseDa) / L * 100)}%`;
       v.title = t("agenti.workflow.idleCompressed", { durata: formattaDurata(s.a - s.da) });
@@ -52724,7 +52926,7 @@ function montaGrafoWorkflow(host, {
     }
     for (const voce2 of fonte.storia) {
       if (voce2.scope !== "node" || voce2.state !== "failed") continue;
-      const m = el34("span", "gv-rip-segno");
+      const m = el35("span", "gv-rip-segno");
       m.dataset.tono = "errore";
       m.style.left = `${a.versoAsse(Date.parse(voce2.at)) / L * 100}%`;
       m.title = t("agenti.workflow.failedAt", { nome: fonte.riga(voce2.nodeId)?.label ?? t("agenti.workflow.anAgent"), ora: oraBreve4(voce2.at) });
@@ -52874,11 +53076,11 @@ function montaGrafoWorkflow(host, {
     const voci = [];
     menuRunVoci.forEach((voce2, indice2) => {
       if (voce2.pericolo && indice2 > 0) {
-        const sep = el34("div", "talos-wfg__menu-separatore");
+        const sep = el35("div", "talos-wfg__menu-separatore");
         sep.setAttribute("role", "separator");
         voci.push(sep);
       }
-      const b = el34("button", `talos-wfg__menu-voce${voce2.pericolo ? " talos-wfg__menu-voce--pericolo" : ""}`, voce2.etichetta);
+      const b = el35("button", `talos-wfg__menu-voce${voce2.pericolo ? " talos-wfg__menu-voce--pericolo" : ""}`, voce2.etichetta);
       b.type = "button";
       b.setAttribute("role", "menuitem");
       b.tabIndex = -1;
@@ -53370,7 +53572,7 @@ function montaRailWorkflow(contenitore, {
   pianifica = (f) => (globalThis.requestAnimationFrame ?? setTimeout)(f)
 } = {}) {
   const d = contenitore.ownerDocument;
-  const el34 = (tag2, classe, testo2) => {
+  const el35 = (tag2, classe, testo2) => {
     const n = d.createElement(tag2);
     if (classe) n.className = classe;
     if (testo2 != null) n.textContent = testo2;
@@ -53386,7 +53588,7 @@ function montaRailWorkflow(contenitore, {
     return svg2;
   };
   const bottone8 = (classe, testo2) => {
-    const b = el34("button", classe, testo2);
+    const b = el35("button", classe, testo2);
     b.type = "button";
     return b;
   };
@@ -53394,24 +53596,24 @@ function montaRailWorkflow(contenitore, {
   const stato2 = { panoramica: null, lista: nuovaLista(), modo: null, filtro: null, query: "", errore: null, carica: true, evidenza: null };
   let morto = false, seguendo = false, chiudiFlusso = () => {
   }, rilettura = null, ultimaRilettura = 0, generazione = 0, visto = null, ultimoConteggio = null;
-  const root2 = el34("section", "talos-wfr");
+  const root2 = el35("section", "talos-wfr");
   root2.dataset.c = "WorkflowRail";
   root2.setAttribute("aria-label", t("agenti.rail.regionLabel"));
   const porta = bottone8("talos-wfr__link talos-wfr__porta", null);
-  porta.append(icona16("i-coordina"), el34("span", null, t("agenti.rail.openDiagram")));
+  porta.append(icona16("i-coordina"), el35("span", null, t("agenti.rail.openDiagram")));
   porta.addEventListener("click", () => onApri?.(null));
-  const testaAttenzione = el34("div", "talos-wfr__testa");
+  const testaAttenzione = el35("div", "talos-wfr__testa");
   const vediTutto = bottone8("talos-wfr__link", t("agenti.rail.seeAll"));
-  testaAttenzione.append(el34("h3", "talos-wfr__titolo", t("agenti.rail.filterAttention")), vediTutto);
-  const attenzione = el34("ul", "talos-wfr__attenzione");
+  testaAttenzione.append(el35("h3", "talos-wfr__titolo", t("agenti.rail.filterAttention")), vediTutto);
+  const attenzione = el35("ul", "talos-wfr__attenzione");
   attenzione.setAttribute("aria-label", t("agenti.rail.filterAttention"));
-  const campo3 = el34("div", "talos-wfr__campo");
-  const cerca = el34("input", "talos-wfr__cerca");
+  const campo3 = el35("div", "talos-wfr__campo");
+  const cerca = el35("input", "talos-wfr__cerca");
   cerca.type = "search";
   cerca.placeholder = t("agenti.rail.searchPlaceholder");
   cerca.setAttribute("aria-label", t("agenti.rail.searchLabel"));
   campo3.append(icona16("i-search", "talos-wfr__lente"), cerca);
-  const interruttore = el34("div", "talos-wfr__modi");
+  const interruttore = el35("div", "talos-wfr__modi");
   interruttore.setAttribute("role", "group");
   interruttore.setAttribute("aria-label", t("agenti.rail.showBy"));
   const modoGruppi = bottone8("talos-wfr__modo", t("agenti.rail.modeGroups"));
@@ -53419,18 +53621,18 @@ function montaRailWorkflow(contenitore, {
   const modoAgenti = bottone8("talos-wfr__modo", t("agenti.rail.modeAgents"));
   modoAgenti.dataset.modo = "agenti";
   interruttore.append(modoGruppi, modoAgenti);
-  const testaElenco = el34("div", "talos-wfr__testa talos-wfr__testa--elenco");
-  const titoloElenco = el34("h3", "talos-wfr__titolo");
-  const contoElenco = el34("span", "talos-wfr__conto");
+  const testaElenco = el35("div", "talos-wfr__testa talos-wfr__testa--elenco");
+  const titoloElenco = el35("h3", "talos-wfr__titolo");
+  const contoElenco = el35("span", "talos-wfr__conto");
   const togliFiltro = bottone8("talos-wfr__togli", null);
-  togliFiltro.append(el34("span", null, t("agenti.rail.showAll")), icona16("i-x"));
+  togliFiltro.append(el35("span", null, t("agenti.rail.showAll")), icona16("i-x"));
   togliFiltro.setAttribute("aria-label", t("agenti.rail.clearFilter"));
   testaElenco.append(titoloElenco, contoElenco, togliFiltro);
-  const elenco3 = el34("ul", "talos-wfr__elenco");
+  const elenco3 = el35("ul", "talos-wfr__elenco");
   const altri = bottone8("talos-wfr__link talos-wfr__altri", t("agenti.rail.showMore"));
-  const esito = el34("p", "talos-wfr__esito");
+  const esito = el35("p", "talos-wfr__esito");
   esito.setAttribute("role", "status");
-  const totali = el34("section", "talos-wfr__totali");
+  const totali = el35("section", "talos-wfr__totali");
   totali.setAttribute("aria-label", t("agenti.rail.totalsLabel"));
   root2.append(porta, testaAttenzione, attenzione, campo3, interruttore, testaElenco, elenco3, altri, esito, totali);
   contenitore.append(root2);
@@ -53525,7 +53727,7 @@ function montaRailWorkflow(contenitore, {
       attenzione.dataset.chiavi = chiavi;
       voceAttenzione.clear();
       attenzione.replaceChildren(...voci.map((v) => {
-        const li = el34("li");
+        const li = el35("li");
         const b = bottone8("talos-wfr__voce-attenzione");
         b.dataset.chiave = v.chiave;
         b.addEventListener("click", () => scegliFiltro(b.dataset.chiave));
@@ -53539,10 +53741,10 @@ function montaRailWorkflow(contenitore, {
       b.dataset.tono = v.tono;
       b.dataset.zero = String(v.titolo.startsWith("0 "));
       b.setAttribute("aria-pressed", String(stato2.filtro === v.chiave));
-      const segno = el34("span", "talos-wfr__segno");
+      const segno = el35("span", "talos-wfr__segno");
       segno.append(icona16(v.icona));
-      const testi = el34("span", "talos-wfr__testi");
-      testi.append(el34("span", "talos-wfr__voce-titolo", v.titolo), el34("span", "talos-wfr__voce-sotto", v.sotto));
+      const testi = el35("span", "talos-wfr__testi");
+      testi.append(el35("span", "talos-wfr__voce-titolo", v.titolo), el35("span", "talos-wfr__voce-sotto", v.sotto));
       b.replaceChildren(segno, testi, icona16("i-chevron-right", "talos-wfr__freccia"));
       b.setAttribute("aria-label", t("agenti.rail.attentionAria", { titolo: v.titolo, sotto: v.sotto }));
     }
@@ -53558,16 +53760,16 @@ function montaRailWorkflow(contenitore, {
   function riempiGruppo(b, gruppo) {
     const cento = percentualeFase(gruppo);
     b.dataset.tono = tonoFase(gruppo);
-    const segno = el34("span", "talos-wfr__segno");
+    const segno = el35("span", "talos-wfr__segno");
     segno.append(icona16(iconaDellaFase(gruppo)));
-    const testi = el34("span", "talos-wfr__testi");
-    const barra = el34("span", "talos-wfr__barra");
-    const traccia = el34("span", "talos-wfr__barra-traccia");
-    const pieno = el34("span", "talos-wfr__barra-pieno");
+    const testi = el35("span", "talos-wfr__testi");
+    const barra = el35("span", "talos-wfr__barra");
+    const traccia = el35("span", "talos-wfr__barra-traccia");
+    const pieno = el35("span", "talos-wfr__barra-pieno");
     pieno.style.width = `${cento ?? 0}%`;
     traccia.append(pieno);
-    barra.append(traccia, el34("span", "talos-wfr__barra-valore", cento === null ? "—" : `${cento}%`));
-    testi.append(el34("span", "talos-wfr__voce-titolo", gruppo.label), el34("span", "talos-wfr__voce-sotto", plurale3(gruppo.total, "agenti.graph.agentOne", "agenti.graph.agentMany")), barra);
+    barra.append(traccia, el35("span", "talos-wfr__barra-valore", cento === null ? "—" : `${cento}%`));
+    testi.append(el35("span", "talos-wfr__voce-titolo", gruppo.label), el35("span", "talos-wfr__voce-sotto", plurale3(gruppo.total, "agenti.graph.agentOne", "agenti.graph.agentMany")), barra);
     b.replaceChildren(segno, testi, icona16("i-chevron-right", "talos-wfr__freccia"));
     const agenti = plurale3(gruppo.total, "agenti.graph.agentOne", "agenti.graph.agentMany");
     b.setAttribute("aria-label", cento === null ? t("agenti.rail.groupAriaNotStarted", { nome: gruppo.label, agenti }) : t("agenti.rail.groupAriaProgress", { nome: gruppo.label, agenti, fatti: cifra2(gruppo.terminated), totale: cifra2(gruppo.total) }));
@@ -53583,7 +53785,7 @@ function montaRailWorkflow(contenitore, {
   function riempiAgente(b, riga2) {
     const parola3 = parolaDelPasso(riga2.state);
     b.dataset.tono = tonoDelPasso(riga2.state);
-    b.replaceChildren(el34("span", "talos-wfr__punto"), el34("span", "talos-wfr__nome", riga2.label), el34("span", "talos-wfr__stato", parola3));
+    b.replaceChildren(el35("span", "talos-wfr__punto"), el35("span", "talos-wfr__nome", riga2.label), el35("span", "talos-wfr__stato", parola3));
     b.setAttribute("aria-label", t("agenti.rail.agentAria", { nome: riga2.label, stato: parola3 }));
   }
   function applicaEvidenza() {
@@ -53608,7 +53810,7 @@ function montaRailWorkflow(contenitore, {
         firmaElenco = firma;
         righeVive.clear();
         elenco3.replaceChildren(...gruppi.map((g) => {
-          const li = el34("li");
+          const li = el35("li");
           const b = rigaGruppo(g);
           righeVive.set(g.phaseId, b);
           li.append(b);
@@ -53628,7 +53830,7 @@ function montaRailWorkflow(contenitore, {
         firmaElenco = firma;
         righeVive.clear();
         elenco3.replaceChildren(...righe.map((r) => {
-          const li = el34("li");
+          const li = el35("li");
           const b = rigaAgente(r);
           righeVive.set(r.nodeId, b);
           li.append(b);
@@ -53646,13 +53848,13 @@ function montaRailWorkflow(contenitore, {
   function disegnaTotali() {
     const p = stato2.panoramica;
     const cella = (etichetta3, valore, { icona: nome = null, tono = null } = {}) => {
-      const c = el34("div", "talos-wfr__totale");
+      const c = el35("div", "talos-wfr__totale");
       if (tono) c.dataset.tono = tono;
-      const e = el34("span", "talos-wfr__totale-etichetta");
+      const e = el35("span", "talos-wfr__totale-etichetta");
       if (nome) e.append(icona16(nome));
-      else if (tono) e.append(el34("span", "talos-wfr__punto"));
-      e.append(el34("span", null, etichetta3));
-      c.append(e, el34("strong", "talos-wfr__totale-valore", cifra2(valore)));
+      else if (tono) e.append(el35("span", "talos-wfr__punto"));
+      e.append(el35("span", null, etichetta3));
+      c.append(e, el35("strong", "talos-wfr__totale-valore", cifra2(valore)));
       return c;
     };
     const conti = conteggiFase(p.groups.reduce((acc, g) => {
@@ -54535,7 +54737,7 @@ function selezionaSessioniBoard(sessioni, { stato: stato2 = "tutte", cartella = 
   const data = (s) => Number.isFinite(Date.parse(s.avviataAlle)) ? Date.parse(s.avviataAlle) : null;
   return dati.sort((a, b) => ordine === "nome" ? (a.nome || a.taskId || "").localeCompare(b.nome || b.taskId || "", "it", { numeric: true, sensitivity: "base" }) : ordine === "token" ? confrontoNumero(totale(a), totale(b)) : confrontoNumero(data(a), data(b), ordine === "vecchie"));
 }
-function el20(doc, tag2, classe, testo2) {
+function el21(doc, tag2, classe, testo2) {
   const nodo14 = doc.createElement(tag2);
   if (classe) nodo14.className = classe;
   if (testo2 !== void 0) nodo14.textContent = testo2;
@@ -54543,22 +54745,22 @@ function el20(doc, tag2, classe, testo2) {
 }
 function creaRigaBoard(sessione, { document: doc = globalThis.document, metriche = {}, adesso, onApri, onMenu } = {}) {
   const t2 = testiBoard(sessione, metriche, adesso), stato2 = statoBoard(sessione);
-  const riga2 = el20(doc, "tr");
+  const riga2 = el21(doc, "tr");
   riga2.dataset.boardSessionId = sessione.sessionId;
-  const titolo2 = el20(doc, "td", "title", void 0), apri = el20(doc, "button", "talos-board-session", t2.titolo);
+  const titolo2 = el21(doc, "td", "title", void 0), apri = el21(doc, "button", "talos-board-session", t2.titolo);
   apri.type = "button";
   apri.title = t2.titolo;
   apri.setAttribute("aria-label", t("sezioni.common.openName", { name: t2.titolo }));
   titolo2.append(apri);
   riga2.append(titolo2);
-  const cellaStato = el20(doc, "td");
-  cellaStato.append(el20(doc, "span", "talos-badge" + (stato2.tono ? " talos-badge--" + stato2.tono : "") + " talos-badge--sm", stato2.testo));
+  const cellaStato = el21(doc, "td");
+  cellaStato.append(el21(doc, "span", "talos-badge" + (stato2.tono ? " talos-badge--" + stato2.tono : "") + " talos-badge--sm", stato2.testo));
   riga2.append(cellaStato);
-  const modello = el20(doc, "td", "talos-mono talos-board-model", t2.modello);
+  const modello = el21(doc, "td", "talos-mono talos-board-model", t2.modello);
   modello.title = sessione.modello || t("sezioni.board.modelNotRecorded");
   riga2.append(modello);
   for (const campo3 of ["giri", "token", "cache", "primo"]) {
-    const cella = el20(doc, "td", "num talos-mono talos-measure", t2[campo3]);
+    const cella = el21(doc, "td", "num talos-mono talos-measure", t2[campo3]);
     const invii = esecuzioniDellaSessione(sessione);
     const daInvii = valido(invii) ? " · " + tn("sezioni.board.tooltip.sendsOne", "sezioni.board.tooltip.sendsMany", invii) : "";
     if (campo3 === "token" && valido(totale(sessione))) cella.title = t("sezioni.board.tooltip.tokens", { count: totale(sessione).toLocaleString(localeUI24()) }) + daInvii;
@@ -54571,12 +54773,12 @@ function creaRigaBoard(sessione, { document: doc = globalThis.document, metriche
     }
     riga2.append(cella);
   }
-  riga2.append(el20(doc, "td", t2.chiusura === "—" ? "talos-muted" : null, t2.chiusura));
-  const costo2 = el20(doc, "td", "num talos-mono talos-measure--estimate");
+  riga2.append(el21(doc, "td", t2.chiusura === "—" ? "talos-muted" : null, t2.chiusura));
+  const costo2 = el21(doc, "td", "num talos-mono talos-measure--estimate");
   costo2.hidden = true;
   costo2.dataset.richiede = "fase3";
   riga2.append(costo2);
-  const data = el20(doc, "td", "talos-muted", t2.avviata);
+  const data = el21(doc, "td", "talos-muted", t2.avviata);
   data.title = sessione.avviataAlle || t("sezioni.common.dateNotRecorded");
   riga2.append(data);
   riga2.addEventListener("click", (event) => onApri?.(sessione, event));
@@ -54597,17 +54799,17 @@ function creaRigaBoard(sessione, { document: doc = globalThis.document, metriche
 }
 function creaTabellaBoard(sessioni, opzioni = {}) {
   const doc = opzioni.document || globalThis.document;
-  const card = el20(doc, "div", "talos-card talos-table-wrap");
+  const card = el21(doc, "div", "talos-card talos-table-wrap");
   card.dataset.c = "DataTable";
   card.id = "boardTabella";
   card.setAttribute("role", "tabpanel");
   card.setAttribute("aria-label", t("sezioni.board.table.filtered"));
-  const tabella = el20(doc, "table", "talos-table");
+  const tabella = el21(doc, "table", "talos-table");
   tabella.setAttribute("aria-label", t("sezioni.board.table.label"));
-  const testa = el20(doc, "thead"), riga2 = el20(doc, "tr");
+  const testa = el21(doc, "thead"), riga2 = el21(doc, "tr");
   const ordine = opzioni.ordine || "recenti";
   [t("sezioni.board.column.session"), t("sezioni.board.column.status"), t("sezioni.board.column.model"), t("sezioni.board.column.turns"), t("sezioni.board.column.tokens"), t("sezioni.board.column.cache"), t("sezioni.board.column.firstToken"), t("sezioni.board.column.closedFor"), t("sezioni.board.column.cost"), t("sezioni.board.column.started")].forEach((nome, i2) => {
-    const th = el20(doc, "th", [3, 4, 5, 6, 8].includes(i2) ? "num" : null, nome);
+    const th = el21(doc, "th", [3, 4, 5, 6, 8].includes(i2) ? "num" : null, nome);
     th.scope = "col";
     if (i2 === 8) {
       th.hidden = true;
@@ -54617,10 +54819,10 @@ function creaTabellaBoard(sessioni, opzioni = {}) {
     riga2.append(th);
   });
   testa.append(riga2);
-  const corpo = el20(doc, "tbody");
+  const corpo = el21(doc, "tbody");
   for (const sessione of sessioni) corpo.append(creaRigaBoard(sessione, { ...opzioni, metriche: opzioni.metriche?.[sessione.sessionId] }));
   if (!sessioni.length) {
-    const tr2 = el20(doc, "tr"), td = el20(doc, "td", "talos-muted", opzioni.vuoto || t("sezioni.board.noMatches"));
+    const tr2 = el21(doc, "tr"), td = el21(doc, "td", "talos-muted", opzioni.vuoto || t("sezioni.board.noMatches"));
     td.colSpan = 9;
     tr2.append(td);
     corpo.append(tr2);
@@ -54674,7 +54876,7 @@ function renderBoard(schermo, vista) {
   const alternative = [["", t("sezioni.board.folder.all")], ...percorsi.map((p) => [p, p]), ...opzioni.cartelleCaricate && sessioni.some((s) => !cartelle[s.sessionId]) ? [["@assente", t("sezioni.board.folder.unrecorded")]] : []];
   if (JSON.stringify(alternative) !== vista.alternative) {
     selettore2.replaceChildren(...alternative.map(([valore, testo2]) => {
-      const o = el20(doc, "option", null, testo2);
+      const o = el21(doc, "option", null, testo2);
       o.value = valore;
       return o;
     }));
@@ -54794,7 +54996,7 @@ var init_session_deletion_feedback = __esm({
 // src/components/process-output.js
 function normalizzaRicevutaOutput(value, expected = {}) {
   if (!value || value.schema !== "talos.process-output.v1" || !states.has(value.state) || !["sessionId", "runId", "toolCallId"].every((k) => id3(value[k])) || !/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/iu.test(value.outputId) || ["sessionId", "runId", "toolCallId", "outputId"].some((k) => expected[k] !== void 0 && value[k] !== expected[k])) return null;
-  return Object.freeze(Object.fromEntries(["schema", "sessionId", "runId", "toolCallId", "outputId", "state"].map((k) => [k, value[k]])));
+  return Object.freeze({ ...Object.fromEntries(["schema", "sessionId", "runId", "toolCallId", "outputId", "state"].map((k) => [k, value[k]])), ...value.termination === "background" ? { termination: "background" } : {} });
 }
 function creaClientOutput({ receipt, fetchFn = globalThis.fetch, API: API2 = (p) => p } = {}) {
   const identity4 = normalizzaRicevutaOutput(receipt);
@@ -54829,45 +55031,45 @@ function creaLettoreOutput({ receipt, API: API2, fetchFn, signal, document: doc 
   let current = normalizzaRicevutaOutput(receipt);
   if (!current) invalid();
   const client = creaClientOutput({ receipt: current, API: API2, fetchFn });
-  const el34 = (tag2, text2, className) => {
+  const el35 = (tag2, text2, className) => {
     const n = doc.createElement(tag2);
     if (text2) n.textContent = text2;
     if (className) n.className = className;
     return n;
   };
-  const root2 = el34("details", null, "talos-process-output");
-  const summary = el34("summary", t("processi.output.summary"));
-  const controls = el34("div", null, "talos-process-output__controls");
-  const label = el34("label", `${t("processi.output.stream")} `), select = el34("select");
+  const root2 = el35("details", null, "talos-process-output");
+  const summary = el35("summary", t("processi.output.summary"));
+  const controls = el35("div", null, "talos-process-output__controls");
+  const label = el35("label", `${t("processi.output.stream")} `), select = el35("select");
   select.setAttribute("aria-label", t("processi.output.streamLabel"));
   for (const [value, text2] of [["stdout", t("processi.output.streamStdout")], ["stderr", t("processi.output.streamStderr")]]) {
-    const option = el34("option", text2);
+    const option = el35("option", text2);
     option.value = value;
     select.append(option);
   }
   label.append(select);
   const button2 = (text2) => {
-    const n = el34("button", text2, "talos-button talos-button--secondary");
+    const n = el35("button", text2, "talos-button talos-button--secondary");
     n.type = "button";
     return n;
   };
   const refresh = button2(t("processi.output.refresh")), first = button2(t("processi.output.firstPage")), next = button2(t("processi.output.nextPage"));
-  const status = el34("p", stateLabel(current.state), "talos-process-output__status");
+  const status = el35("p", stateLabel(current.state, current.termination), "talos-process-output__status");
   status.setAttribute("role", "status");
   status.setAttribute("aria-live", "polite");
-  const range = el34("p", "", "talos-process-output__range");
-  const pre = el34("pre"), code = el34("code");
+  const range = el35("p", "", "talos-process-output__range");
+  const pre = el35("pre"), code = el35("code");
   pre.append(code);
   pre.tabIndex = 0;
   pre.setAttribute("aria-label", t("processi.output.pageContentLabel"));
-  const download = el34("a", t("processi.output.downloadPage"), "talos-button talos-button--secondary");
+  const download = el35("a", t("processi.output.downloadPage"), "talos-button talos-button--secondary");
   download.setAttribute("download", "");
   download.hidden = true;
-  const completeDownload = el34("a", t("processi.output.downloadStored"), "talos-button talos-button--secondary");
+  const completeDownload = el35("a", t("processi.output.downloadStored"), "talos-button talos-button--secondary");
   completeDownload.setAttribute("download", "");
   completeDownload.hidden = true;
   completeDownload.title = t("processi.output.downloadStoredHint");
-  const nav = el34("div", null, "talos-process-output__controls");
+  const nav = el35("div", null, "talos-process-output__controls");
   nav.append(first, next, download, completeDownload);
   controls.append(label, refresh);
   root2.append(summary, controls, status, range, pre, nav);
@@ -54901,7 +55103,7 @@ function creaLettoreOutput({ receipt, API: API2, fetchFn, signal, document: doc 
       const p = await client.leggi({ stream: select.value, offset: at2, signal: controller.signal });
       if (closed || version !== epoch || signal?.aborted) return;
       page = p;
-      status.textContent = stateLabel(p.state);
+      status.textContent = stateLabel(p.state, current.termination);
       if (p.availableBytes > 0 && !["excluded", "absent", "not-applicable"].includes(p.footerStatus)) status.textContent += ` ${t("processi.output.footerMarker")}`;
       const cifreDellaPagina = { disponibili: p.availableBytes.toLocaleString(localeNumeri3()), conservati: p.storedBytes.toLocaleString(localeNumeri3()), osservati: p.observedBytes.toLocaleString(localeNumeri3()) };
       range.textContent = p.bytes ? t("processi.output.rangeWithBytes", { da: p.offset + 1, a: p.offset + p.bytes, ...cifreDellaPagina }) : t("processi.output.rangeNoBytes", cifreDellaPagina);
@@ -54960,13 +55162,13 @@ function creaLettoreOutput({ receipt, API: API2, fetchFn, signal, document: doc 
       const nextReceipt = normalizzaRicevutaOutput(value, current);
       if (!nextReceipt) return false;
       current = nextReceipt;
-      if (!pending) status.textContent = stateLabel(current.state);
+      if (!pending) status.textContent = stateLabel(current.state, current.termination);
       return true;
     },
     dispose
   };
 }
-var PAGE_BYTES, states, id3, integer, errore, invalid, localeNumeri3, CHIAVI_STATO, stateLabel;
+var PAGE_BYTES, states, id3, integer, errore, invalid, localeNumeri3, CHIAVI_STATO, CHIAVI_SFONDO, stateLabel;
 var init_process_output = __esm({
   "src/components/process-output.js"() {
     init_lingua();
@@ -54986,7 +55188,8 @@ var init_process_output = __esm({
       failed: "processi.output.stateFailed",
       interrupted: "processi.output.stateInterrupted"
     };
-    stateLabel = (stato2) => t(CHIAVI_STATO[stato2]);
+    CHIAVI_SFONDO = { complete: "processi.output.stateBackground", limited: "processi.output.stateBackgroundLimited" };
+    stateLabel = (stato2, terminazione) => t(terminazione === "background" && CHIAVI_SFONDO[stato2] ? CHIAVI_SFONDO[stato2] : CHIAVI_STATO[stato2]);
   }
 });
 
@@ -55364,7 +55567,7 @@ var init_schede = __esm({
 });
 
 // src/components/conversazione.js
-function el21(documentObj, tag2, className, testo2) {
+function el22(documentObj, tag2, className, testo2) {
   const nodo14 = documentObj.createElement(tag2);
   if (className) nodo14.className = className;
   if (testo2 !== void 0 && testo2 !== null) nodo14.textContent = String(testo2);
@@ -55385,9 +55588,9 @@ function oraMessaggio(quando = /* @__PURE__ */ new Date()) {
 }
 function creaTurno({ numeri = [] } = {}, opzioni = {}) {
   const documentObj = opzioni.document || globalThis.document;
-  const turno = el21(documentObj, "div", "talos-turn");
+  const turno = el22(documentObj, "div", "talos-turn");
   turno.setAttribute("data-c", "Turn");
-  const spine = el21(documentObj, "div", "talos-turn-spine");
+  const spine = el22(documentObj, "div", "talos-turn-spine");
   spine.setAttribute("data-c", "TurnSpine");
   for (const voce2 of numeri) aggiungiGiroAllaSpine(spine, voce2);
   turno.append(spine);
@@ -55396,8 +55599,8 @@ function creaTurno({ numeri = [] } = {}, opzioni = {}) {
 function aggiungiGiroAllaSpine(spine, { n, tick = 1, tono = null } = {}) {
   if (!spine) return;
   const documentObj = spine.ownerDocument;
-  spine.append(el21(documentObj, "span", "talos-turn-spine__n", n));
-  const segno = el21(documentObj, "button", `talos-turn-spine__tick${tono ? ` talos-turn-spine__tick--${tono}` : ""}`);
+  spine.append(el22(documentObj, "span", "talos-turn-spine__n", n));
+  const segno = el22(documentObj, "button", `talos-turn-spine__tick${tono ? ` talos-turn-spine__tick--${tono}` : ""}`);
   segno.type = "button";
   segno.dataset.tick = String(Math.min(5, Math.max(1, Math.trunc(tick) || 1)));
   segno.dataset.giro = String(n ?? "");
@@ -55493,31 +55696,31 @@ function impostaTonoUltimoTick(spine, tono) {
 }
 function creaMessaggioUtente({ testo: testo2 = "", ora: ora4 = "", meta: meta2 = "" } = {}, opzioni = {}) {
   const documentObj = opzioni.document || globalThis.document;
-  const messaggio = el21(documentObj, "div", "talos-message talos-message--user");
+  const messaggio = el22(documentObj, "div", "talos-message talos-message--user");
   messaggio.setAttribute("data-c", "Message");
-  const testata = el21(documentObj, "div", "talos-message__head");
-  testata.append(el21(documentObj, "span", "talos-message__who", t("chat.message.you")), el21(documentObj, "span", "talos-message__meta", [ora4, meta2].filter(Boolean).join(" · ")));
-  const corpo = el21(documentObj, "div", "talos-message__body message-bubble");
-  const p = el21(documentObj, "p", null, testo2);
+  const testata = el22(documentObj, "div", "talos-message__head");
+  testata.append(el22(documentObj, "span", "talos-message__who", t("chat.message.you")), el22(documentObj, "span", "talos-message__meta", [ora4, meta2].filter(Boolean).join(" · ")));
+  const corpo = el22(documentObj, "div", "talos-message__body message-bubble");
+  const p = el22(documentObj, "p", null, testo2);
   corpo.append(p);
   messaggio.append(testata, corpo);
   return messaggio;
 }
 function creaMessaggioTalos({ modello = "", ora: ora4 = "", paragrafi = [], working = false } = {}, opzioni = {}) {
   const documentObj = opzioni.document || globalThis.document;
-  const messaggio = el21(documentObj, "div", "talos-message");
+  const messaggio = el22(documentObj, "div", "talos-message");
   messaggio.setAttribute("data-c", "Message");
-  const testata = el21(documentObj, "div", "talos-message__head");
-  const orb = el21(documentObj, "span", working ? "talos-orb working" : "talos-orb");
+  const testata = el22(documentObj, "div", "talos-message__head");
+  const orb = el22(documentObj, "span", working ? "talos-orb working" : "talos-orb");
   orb.setAttribute("aria-hidden", "true");
   orb.setAttribute("data-testid", "talos-message-orb");
-  const marchio = el21(documentObj, "span", "talos-short-logo");
-  marchio.append(el21(documentObj, "span", "talos-short-logo-mark"));
+  const marchio = el22(documentObj, "span", "talos-short-logo");
+  marchio.append(el22(documentObj, "span", "talos-short-logo-mark"));
   orb.append(marchio);
   testata.append(orb);
-  testata.append(el21(documentObj, "span", "talos-message__who talos-message__who--talos", "TALOS"), el21(documentObj, "span", "talos-message__meta", [modello, ora4].filter(Boolean).join(" · ")));
+  testata.append(el22(documentObj, "span", "talos-message__who talos-message__who--talos", "TALOS"), el22(documentObj, "span", "talos-message__meta", [modello, ora4].filter(Boolean).join(" · ")));
   messaggio.append(testata);
-  for (const testo2 of paragrafi) messaggio.append(el21(documentObj, "p", null, testo2));
+  for (const testo2 of paragrafi) messaggio.append(el22(documentObj, "p", null, testo2));
   return messaggio;
 }
 function segnaFornitoreAValle(messaggio, fornitore, opzioni = {}) {
@@ -55529,7 +55732,7 @@ function segnaFornitoreAValle(messaggio, fornitore, opzioni = {}) {
   messaggio.dataset.fornitoriAValle = nomi2.join("\n");
   let via2 = testata.querySelector(":scope > .talos-message__via");
   if (!via2) {
-    via2 = el21(documentObj, "span", "talos-message__via");
+    via2 = el22(documentObj, "span", "talos-message__via");
     testata.append(via2);
   }
   via2.textContent = t("chat.message.via", { nomi: nomi2.join(", ") });
@@ -55544,12 +55747,12 @@ function creaAzioniMessaggio({ ascolta = true } = {}, opzioni = {}) {
   const finestra = opzioni.finestra || globalThis;
   const radiceMenu = opzioni.radiceMenu || documentObj.body;
   const vociMenu = typeof opzioni.vociMenu === "function" ? opzioni.vociMenu : null;
-  const gruppo = el21(documentObj, "div", "talos-message__actions message-actions");
+  const gruppo = el22(documentObj, "div", "talos-message__actions message-actions");
   gruppo.setAttribute("role", "group");
   const etichettaGruppo = typeof opzioni.etichetta === "string" && opzioni.etichetta.trim() ? opzioni.etichetta.trim() : TESTI_MESSAGGIO.azioniRisposta;
   gruppo.setAttribute("aria-label", etichettaGruppo);
   const bottone8 = (nome, titolo2, icona16) => {
-    const b = el21(documentObj, "button", "talos-button talos-button--ghost talos-icon-button talos-button--sm");
+    const b = el22(documentObj, "button", "talos-button talos-button--ghost talos-icon-button talos-button--sm");
     b.type = "button";
     b.title = titolo2;
     b.setAttribute("aria-label", titolo2);
@@ -55667,21 +55870,21 @@ function creaFileScaricabile({ allegato, percorso, sessionId } = {}, opzioni = {
   const nome = String(allegato?.nome || percorso || "").split(/[\\/]/).pop() || "file";
   const formato = String(allegato?.formato || nome.split(".").pop() || "").toUpperCase();
   const indirizzo = opzioni.indirizzo ?? indirizzoScarico({ sessionId, percorso });
-  const scheda = el21(d, "div", "talos-file-scaricabile");
+  const scheda = el22(d, "div", "talos-file-scaricabile");
   scheda.dataset.c = "FileScaricabile";
-  const testo2 = el21(d, "div", "talos-file-scaricabile__testo");
-  testo2.append(el21(d, "span", "talos-file-scaricabile__nome", nome));
+  const testo2 = el22(d, "div", "talos-file-scaricabile__testo");
+  testo2.append(el22(d, "span", "talos-file-scaricabile__nome", nome));
   const misura = [formato, dimensioneLeggibile2(allegato?.byte)].filter(Boolean).join(" · ");
-  if (misura) testo2.append(el21(d, "span", "talos-file-scaricabile__misura", misura));
+  if (misura) testo2.append(el22(d, "span", "talos-file-scaricabile__misura", misura));
   scheda.append(testo2);
   if (indirizzo) {
-    const link = el21(d, "a", "talos-file-scaricabile__scarica", t("chat.file.download"));
+    const link = el22(d, "a", "talos-file-scaricabile__scarica", t("chat.file.download"));
     link.href = indirizzo;
     link.setAttribute("download", nome);
     link.setAttribute("aria-label", t("chat.file.downloadNamed", { nome }));
     scheda.append(link);
   } else {
-    scheda.append(el21(d, "span", "talos-file-scaricabile__assente", t("chat.file.unavailable")));
+    scheda.append(el22(d, "span", "talos-file-scaricabile__assente", t("chat.file.unavailable")));
   }
   return scheda;
 }
@@ -55724,18 +55927,18 @@ function aggiornaBottone(bottone8, chiuso) {
 function creaBloccoCodice({ testo: testo2 = "", linguaggio = "", chiuso = true } = {}, opzioni = {}) {
   const documentObj = opzioni.document || globalThis.document;
   const etichetta3 = etichettaLinguaggio(linguaggio);
-  const blocco = el21(documentObj, "div", "code-block");
+  const blocco = el22(documentObj, "div", "code-block");
   blocco.dataset.lingua = chiaveLinguaggio(linguaggio);
-  const intestazione = el21(documentObj, "div", "code-block-head");
-  const nome = el21(documentObj, "span", "code-block-lang", etichetta3 || t("chat.code.plainText"));
-  const bottone8 = el21(documentObj, "button", "code-block-copy");
+  const intestazione = el22(documentObj, "div", "code-block-head");
+  const nome = el22(documentObj, "span", "code-block-lang", etichetta3 || t("chat.code.plainText"));
+  const bottone8 = el22(documentObj, "button", "code-block-copy");
   bottone8.type = "button";
   intestazione.append(nome, bottone8);
-  const pre = el21(documentObj, "pre");
+  const pre = el22(documentObj, "pre");
   pre.setAttribute("tabindex", "0");
   pre.setAttribute("role", "group");
   pre.setAttribute("aria-label", [t("chat.code.block"), etichetta3].filter(Boolean).join(" "));
-  const code = el21(documentObj, "code");
+  const code = el22(documentObj, "code");
   pre.append(code);
   const parti = {
     pre,
@@ -55771,19 +55974,19 @@ function iconaAttrezzo(nome) {
 }
 function creaAttivita({ riassunto = t("chat.activity.pending"), id: id4, aperto = false, tempo: tempo2 = null, token = null } = {}, opzioni = {}) {
   const documentObj = opzioni.document || globalThis.document;
-  const card = el21(documentObj, "div", "talos-card talos-activity");
+  const card = el22(documentObj, "div", "talos-card talos-activity");
   card.setAttribute("data-c", "ActivityBundle");
   const idCorpo = id4 || `attivita-${Math.random().toString(36).slice(2, 8)}`;
-  const testa = el21(documentObj, "button", "talos-activity__head");
+  const testa = el22(documentObj, "button", "talos-activity__head");
   testa.type = "button";
   testa.setAttribute("aria-expanded", String(Boolean(aperto)));
   testa.setAttribute("aria-controls", idCorpo);
   testa.append(simbolo(documentObj, "i talos-activity__chev", "i-chev"));
-  const summaryText = el21(documentObj, "span", "talos-grow tool-note-summary-text", riassunto);
+  const summaryText = el22(documentObj, "span", "talos-grow tool-note-summary-text", riassunto);
   testa.append(summaryText);
-  if (tempo2) testa.append(el21(documentObj, "span", "talos-mono talos-measure", tempo2));
-  if (token) testa.append(el21(documentObj, "span", "talos-mono talos-measure--estimate", token));
-  const contenitore = el21(documentObj, "div", "talos-activity__body tool-batch-items");
+  if (tempo2) testa.append(el22(documentObj, "span", "talos-mono talos-measure", tempo2));
+  if (token) testa.append(el22(documentObj, "span", "talos-mono talos-measure--estimate", token));
+  const contenitore = el22(documentObj, "div", "talos-activity__body tool-batch-items");
   contenitore.id = idCorpo;
   contenitore.hidden = !aperto;
   card.append(testa, contenitore);
@@ -55795,11 +55998,11 @@ function impostaDiffAttivita(testa, aggiunte, rimozioni) {
   let piu = testa.querySelector(".talos-diff-num--plus");
   let meno = testa.querySelector(".talos-diff-num--minus");
   if (!piu) {
-    piu = el21(documentObj, "span", "talos-diff-num talos-diff-num--plus");
+    piu = el22(documentObj, "span", "talos-diff-num talos-diff-num--plus");
     testa.append(piu);
   }
   if (!meno) {
-    meno = el21(documentObj, "span", "talos-diff-num talos-diff-num--minus");
+    meno = el22(documentObj, "span", "talos-diff-num talos-diff-num--minus");
     testa.append(meno);
   }
   piu.textContent = `+${aggiunte}`;
@@ -55807,13 +56010,13 @@ function impostaDiffAttivita(testa, aggiunte, rimozioni) {
 }
 function creaRigaAttrezzo({ attrezzo = "", nome = "", dettaglio = "", esito = null, conDettaglio = false, id: id4 } = {}, opzioni = {}) {
   const documentObj = opzioni.document || globalThis.document;
-  const riga2 = el21(documentObj, "div", "talos-tool-row");
+  const riga2 = el22(documentObj, "div", "talos-tool-row");
   riga2.setAttribute("data-c", "ToolRow");
-  const icona16 = el21(documentObj, "span", "talos-tool-row__icon");
+  const icona16 = el22(documentObj, "span", "talos-tool-row__icon");
   icona16.append(simbolo(documentObj, "i", iconaAttrezzo(attrezzo)));
-  const summaryText = el21(documentObj, "span", "talos-tool-row__name tool-note-summary-text", nome);
-  const dettaglioEl = el21(documentObj, "span", "talos-tool-row__detail", dettaglio);
-  const pallino = el21(documentObj, "span", "talos-dot");
+  const summaryText = el22(documentObj, "span", "talos-tool-row__name tool-note-summary-text", nome);
+  const dettaglioEl = el22(documentObj, "span", "talos-tool-row__detail", dettaglio);
+  const pallino = el22(documentObj, "span", "talos-dot");
   riga2.append(icona16, summaryText, dettaglioEl, pallino);
   impostaEsitoRiga(riga2, esito);
   let corpo = null;
@@ -55823,7 +56026,7 @@ function creaRigaAttrezzo({ attrezzo = "", nome = "", dettaglio = "", esito = nu
     riga2.tabIndex = 0;
     riga2.setAttribute("aria-expanded", "false");
     riga2.setAttribute("aria-controls", idCorpo);
-    corpo = el21(documentObj, "pre", "talos-tool-row__body tool-note-detail");
+    corpo = el22(documentObj, "pre", "talos-tool-row__body tool-note-detail");
     corpo.id = idCorpo;
     riga2.addEventListener("keydown", (event) => {
       if (event.key !== "Enter" && event.key !== " ") return;
@@ -55845,36 +56048,36 @@ function impostaEsitoRiga(riga2, esito) {
 }
 function creaNotaSistema({ tipo = "info", badge: badge6 = t("chat.note.badge"), titolo: titolo2 = "", testo: testo2 = "" } = {}, opzioni = {}) {
   const documentObj = opzioni.document || globalThis.document;
-  const nota = el21(documentObj, "div", "talos-system-note");
+  const nota = el22(documentObj, "div", "talos-system-note");
   nota.setAttribute("data-c", "SystemNote");
-  nota.append(el21(documentObj, "span", `talos-badge talos-badge--${tipo} talos-badge--sm`, badge6));
-  const corpo = el21(documentObj, "div");
-  if (titolo2) corpo.append(el21(documentObj, "div", "talos-system-note__title", titolo2));
-  corpo.append(el21(documentObj, "p", "assistant-copy", testo2));
+  nota.append(el22(documentObj, "span", `talos-badge talos-badge--${tipo} talos-badge--sm`, badge6));
+  const corpo = el22(documentObj, "div");
+  if (titolo2) corpo.append(el22(documentObj, "div", "talos-system-note__title", titolo2));
+  corpo.append(el22(documentObj, "p", "assistant-copy", testo2));
   nota.append(corpo);
   return nota;
 }
 function creaNotaErrore({ badge: badge6 = t("chat.note.errorBadge"), titolo: titolo2 = t("chat.note.errorTitle"), spiegazione = null, tono = "danger" } = {}, opzioni = {}) {
   const documentObj = opzioni.document || globalThis.document;
-  const nota = el21(documentObj, "div");
+  const nota = el22(documentObj, "div");
   nota.className = `talos-system-note talos-system-note--${tono === "danger" ? "errore" : "nota"}`;
   nota.setAttribute("data-c", "SystemNote");
   nota.setAttribute("data-tone", tono);
-  nota.append(el21(documentObj, "span", `talos-badge talos-badge--${tono} talos-badge--sm`, badge6));
-  const corpo = el21(documentObj, "div");
-  if (titolo2) corpo.append(el21(documentObj, "div", "talos-system-note__title", titolo2));
-  corpo.append(el21(documentObj, "p", "assistant-copy", spiegazione?.cosa || ""));
-  if (spiegazione?.perche) corpo.append(el21(documentObj, "p", "talos-system-note__perche", spiegazione.perche));
+  nota.append(el22(documentObj, "span", `talos-badge talos-badge--${tono} talos-badge--sm`, badge6));
+  const corpo = el22(documentObj, "div");
+  if (titolo2) corpo.append(el22(documentObj, "div", "talos-system-note__title", titolo2));
+  corpo.append(el22(documentObj, "p", "assistant-copy", spiegazione?.cosa || ""));
+  if (spiegazione?.perche) corpo.append(el22(documentObj, "p", "talos-system-note__perche", spiegazione.perche));
   if (Array.isArray(spiegazione?.rimedi) && spiegazione.rimedi.length) {
-    const lista = el21(documentObj, "ul", "talos-system-note__rimedi");
-    for (const r of spiegazione.rimedi) lista.append(el21(documentObj, "li", "", r));
+    const lista = el22(documentObj, "ul", "talos-system-note__rimedi");
+    for (const r of spiegazione.rimedi) lista.append(el22(documentObj, "li", "", r));
     corpo.append(lista);
   }
   const azioni = Array.isArray(opzioni.azioni) ? opzioni.azioni.slice(0, 2) : [];
   if (azioni.length > 0) {
-    const riga2 = el21(documentObj, "div", "talos-cluster talos-system-note__azioni");
+    const riga2 = el22(documentObj, "div", "talos-cluster talos-system-note__azioni");
     for (const [i2, [testoAzione, fai]] of azioni.entries()) {
-      const b = el21(documentObj, "button", `talos-button talos-button--${i2 === 0 ? "primary" : "secondary"} talos-button--sm`, testoAzione);
+      const b = el22(documentObj, "button", `talos-button talos-button--${i2 === 0 ? "primary" : "secondary"} talos-button--sm`, testoAzione);
       b.type = "button";
       b.dataset.notaAzione = String(i2);
       if (typeof fai === "function") b.addEventListener("click", fai);
@@ -55887,7 +56090,7 @@ function creaNotaErrore({ badge: badge6 = t("chat.note.errorBadge"), titolo: tit
     dettaglio.className = "talos-system-note__tecnico";
     const riassunto = documentObj.createElement("summary");
     riassunto.textContent = t("chat.note.serverText");
-    dettaglio.append(riassunto, el21(documentObj, "pre", "talos-system-note__grezzo", spiegazione.tecnico));
+    dettaglio.append(riassunto, el22(documentObj, "pre", "talos-system-note__grezzo", spiegazione.tecnico));
     corpo.append(dettaglio);
   }
   nota.append(corpo);
@@ -55895,40 +56098,40 @@ function creaNotaErrore({ badge: badge6 = t("chat.note.errorBadge"), titolo: tit
 }
 function creaDiff(righe = [], opzioni = {}) {
   const documentObj = opzioni.document || globalThis.document;
-  const diff = el21(documentObj, "div", "talos-diff");
+  const diff = el22(documentObj, "div", "talos-diff");
   diff.setAttribute("data-c", "DiffView");
-  for (const r of righe) diff.append(el21(documentObj, "div", `talos-diff__line talos-diff__line--${r.tipo || "ctx"}`, r.testo));
+  for (const r of righe) diff.append(el22(documentObj, "div", `talos-diff__line talos-diff__line--${r.tipo || "ctx"}`, r.testo));
   return diff;
 }
 function creaApprovazione({ badge: badge6 = t("chat.approval.requestsToWrite"), bersaglio = "", aggiunte = null, rimozioni = null, perche = "", codice = "", motivo = "", diff = null, nota = t("chat.approval.expiresAtSessionEnd"), onUnaVolta, onSessione, onNega } = {}, opzioni = {}) {
   const documentObj = opzioni.document || globalThis.document;
-  const scheda = el21(documentObj, "div", "talos-approval");
+  const scheda = el22(documentObj, "div", "talos-approval");
   scheda.setAttribute("data-c", "ApprovalCard");
-  const testa = el21(documentObj, "div", "talos-approval__head");
-  const etichetta3 = el21(documentObj, "span", "talos-badge talos-badge--accent");
+  const testa = el22(documentObj, "div", "talos-approval__head");
+  const etichetta3 = el22(documentObj, "span", "talos-badge talos-badge--accent");
   etichetta3.append(simbolo(documentObj, "i i--sm", "i-shield"), documentObj.createTextNode(badge6));
-  testa.append(etichetta3, el21(documentObj, "span", "talos-mono talos-measure talos-grow talos-truncate", bersaglio));
-  if (Number.isFinite(aggiunte)) testa.append(el21(documentObj, "span", "talos-diff-num talos-diff-num--plus", `+${aggiunte}`));
-  if (Number.isFinite(rimozioni)) testa.append(el21(documentObj, "span", "talos-diff-num talos-diff-num--minus", `−${rimozioni}`));
+  testa.append(etichetta3, el22(documentObj, "span", "talos-mono talos-measure talos-grow talos-truncate", bersaglio));
+  if (Number.isFinite(aggiunte)) testa.append(el22(documentObj, "span", "talos-diff-num talos-diff-num--plus", `+${aggiunte}`));
+  if (Number.isFinite(rimozioni)) testa.append(el22(documentObj, "span", "talos-diff-num talos-diff-num--minus", `−${rimozioni}`));
   scheda.append(testa);
-  const perchéEl = el21(documentObj, "p", "talos-approval__why assistant-copy", perche);
+  const perchéEl = el22(documentObj, "p", "talos-approval__why assistant-copy", perche);
   scheda.append(perchéEl);
   let codiceEl = null;
   if (codice) {
-    codiceEl = el21(documentObj, "pre", "talos-approval__codice", String(codice));
+    codiceEl = el22(documentObj, "pre", "talos-approval__codice", String(codice));
     codiceEl.tabIndex = 0;
     codiceEl.setAttribute("aria-label", t("chat.approval.exactCommand"));
     scheda.append(codiceEl);
   }
   let motivoEl = null;
   if (motivo) {
-    motivoEl = el21(documentObj, "p", "talos-approval__motivo", motivo);
+    motivoEl = el22(documentObj, "p", "talos-approval__motivo", motivo);
     scheda.append(motivoEl);
   }
   if (Array.isArray(diff) && diff.length > 0) scheda.append(creaDiff(diff, opzioni));
-  const piede = el21(documentObj, "div", "talos-approval__foot sheet-actions");
+  const piede = el22(documentObj, "div", "talos-approval__foot sheet-actions");
   const bottone8 = (classi, testo2, onClick) => {
-    const b = el21(documentObj, "button", classi, testo2);
+    const b = el22(documentObj, "button", classi, testo2);
     b.type = "button";
     if (typeof onClick === "function") b.addEventListener("click", onClick);
     return b;
@@ -55936,7 +56139,7 @@ function creaApprovazione({ badge: badge6 = t("chat.approval.requestsToWrite"), 
   const unaVolta = bottone8("talos-button talos-button--primary talos-button--md", t("chat.approval.allowOnce"), onUnaVolta);
   const sessione = bottone8("talos-button talos-button--secondary", t("chat.approval.forThisSession"), onSessione);
   const nega = bottone8("talos-button talos-button--ghost talos-button--danger", t("chat.approval.deny"), onNega);
-  piede.append(unaVolta, sessione, nega, el21(documentObj, "span", "talos-grow"), el21(documentObj, "span", "talos-approval__foot-note", nota));
+  piede.append(unaVolta, sessione, nega, el22(documentObj, "span", "talos-grow"), el22(documentObj, "span", "talos-approval__foot-note", nota));
   scheda.append(piede);
   return { scheda, perche: perchéEl, codice: codiceEl, motivo: motivoEl, piede, pulsanti: { unaVolta, sessione, nega } };
 }
@@ -55947,27 +56150,27 @@ function segnaEsitoApprovazione(scheda, { approvato = false, altrove = false, am
   scheda.querySelector(".sheet-actions")?.remove();
   const esistente = scheda.querySelector(".talos-approval__esito");
   if (esistente) esistente.remove();
-  const cartaAutomazione = Boolean(scheda.dataset?.cartaAutomazione);
+  const cartaAutomazione = Boolean(scheda.dataset?.cartaAutomazione || scheda.dataset?.cartaFornitori);
   const modificata = !approvato && motivo === "modificata-dalla-persona";
   const esito = approvato ? ambito === "cartella" ? t("chat.approval.allowedInFolder") : t("chat.common.approved") : modificata ? t("chat.approval.editedByYou") : motivo === "nessuna-interfaccia" ? t("chat.approval.deniedNoOneCanAnswer") : cartaAutomazione ? t("chat.approval.cancelled") : t("chat.approval.denied");
-  const riga2 = el21(documentObj, "p", `talos-approval__esito talos-approval__esito--${approvato || modificata ? "si" : "no"}`, t("chat.approval.outcomeWithOrigin", { esito, altrove: altrove && motivo !== "nessuna-interfaccia" ? t("chat.common.fromAnotherWindow") : "" }));
+  const riga2 = el22(documentObj, "p", `talos-approval__esito talos-approval__esito--${approvato || modificata ? "si" : "no"}`, t("chat.approval.outcomeWithOrigin", { esito, altrove: altrove && motivo !== "nessuna-interfaccia" ? t("chat.common.fromAnotherWindow") : "" }));
   riga2.setAttribute("role", "status");
   scheda.append(riga2);
   const attrezzoNonSalvato = approvato ? scheda.dataset?.sempreNonSalvato : "";
   if (attrezzoNonSalvato && !scheda.querySelector(".talos-approval__sempre-non-salvato")) {
-    scheda.append(el21(documentObj, "p", "talos-approval__motivo talos-approval__sempre-non-salvato", t("chat.approval.alwaysNotSaved", { attrezzo: attrezzoNonSalvato })));
+    scheda.append(el22(documentObj, "p", "talos-approval__motivo talos-approval__sempre-non-salvato", t("chat.approval.alwaysNotSaved", { attrezzo: attrezzoNonSalvato })));
   }
   return riga2;
 }
 function creaFileToccati(file = [], opzioni = {}) {
   const documentObj = opzioni.document || globalThis.document;
-  const card = el21(documentObj, "div", "talos-card talos-touched");
+  const card = el22(documentObj, "div", "talos-card talos-touched");
   card.setAttribute("data-c", "TouchedFiles");
-  const testa = el21(documentObj, "div", "talos-touched__head");
+  const testa = el22(documentObj, "div", "talos-touched__head");
   const quanti = tn("chat.files.changedOne", "chat.files.changedMany", file.length);
-  testa.append(el21(documentObj, "span", "talos-touched__titolo", quanti), el21(documentObj, "span", "talos-grow"));
+  testa.append(el22(documentObj, "span", "talos-touched__titolo", quanti), el22(documentObj, "span", "talos-grow"));
   if (typeof opzioni.onVediTutto === "function") {
-    const vedi = el21(documentObj, "button", "talos-button talos-button--ghost talos-button--sm", TESTI_MESSAGGIO.vediModifiche);
+    const vedi = el22(documentObj, "button", "talos-button talos-button--ghost talos-button--sm", TESTI_MESSAGGIO.vediModifiche);
     vedi.type = "button";
     vedi.dataset.touchedAction = "vedi-tutto";
     vedi.addEventListener("click", opzioni.onVediTutto);
@@ -55979,14 +56182,14 @@ function creaFileToccati(file = [], opzioni = {}) {
 }
 function rigaFileToccato({ percorso = "", etichetta: etichetta3 = "", aggiunte = 0, rimozioni = 0, onApri } = {}, opzioni = {}) {
   const documentObj = opzioni.document || globalThis.document;
-  const riga2 = el21(documentObj, "button", "talos-touched__row");
+  const riga2 = el22(documentObj, "button", "talos-touched__row");
   riga2.type = "button";
   riga2.dataset.percorso = percorso;
   riga2.title = percorso;
   riga2.append(
-    el21(documentObj, "span", "talos-touched__name talos-truncate", etichetta3 || percorso),
-    el21(documentObj, "span", "talos-diff-num talos-diff-num--plus", `+${aggiunte}`),
-    el21(documentObj, "span", "talos-diff-num talos-diff-num--minus", `−${rimozioni}`),
+    el22(documentObj, "span", "talos-touched__name talos-truncate", etichetta3 || percorso),
+    el22(documentObj, "span", "talos-diff-num talos-diff-num--plus", `+${aggiunte}`),
+    el22(documentObj, "span", "talos-diff-num talos-diff-num--minus", `−${rimozioni}`),
     simbolo(documentObj, "i i--sm talos-touched__freccia", "i-chevron-right")
   );
   if (typeof onApri === "function") riga2.addEventListener("click", onApri);
@@ -55994,12 +56197,12 @@ function rigaFileToccato({ percorso = "", etichetta: etichetta3 = "", aggiunte =
 }
 function creaArtefatto({ titolo: titolo2 = t("chat.artifact.badge"), formato = "", src = "", onApri } = {}, opzioni = {}) {
   const documentObj = opzioni.document || globalThis.document;
-  const card = el21(documentObj, "div", "talos-card talos-artifact");
+  const card = el22(documentObj, "div", "talos-card talos-artifact");
   card.setAttribute("data-c", "ArtifactCard");
-  const testa = el21(documentObj, "div", "talos-artifact__head");
-  testa.append(el21(documentObj, "span", "talos-badge talos-badge--accent talos-badge--sm", t("chat.artifact.badge")), el21(documentObj, "span", "talos-artifact__title talos-grow talos-truncate", titolo2));
-  if (formato) testa.append(el21(documentObj, "span", "talos-mono talos-muted", formato));
-  const apri = el21(documentObj, "button", "talos-button talos-button--ghost talos-button--sm", t("chat.common.open"));
+  const testa = el22(documentObj, "div", "talos-artifact__head");
+  testa.append(el22(documentObj, "span", "talos-badge talos-badge--accent talos-badge--sm", t("chat.artifact.badge")), el22(documentObj, "span", "talos-artifact__title talos-grow talos-truncate", titolo2));
+  if (formato) testa.append(el22(documentObj, "span", "talos-mono talos-muted", formato));
+  const apri = el22(documentObj, "button", "talos-button talos-button--ghost talos-button--sm", t("chat.common.open"));
   apri.type = "button";
   if (typeof onApri === "function") apri.addEventListener("click", onApri);
   testa.append(apri);
@@ -56020,13 +56223,13 @@ function creaAttesa({ etichetta: etichetta3 = t("chat.wait.thinking") } = {}, op
   } catch {
     menoMovimento = false;
   }
-  const blocco = el21(documentObj, "div", "talos-stack talos-waiting");
+  const blocco = el22(documentObj, "div", "talos-stack talos-waiting");
   blocco.setAttribute("role", "status");
   blocco.setAttribute("aria-live", "polite");
   blocco.setAttribute("aria-atomic", "true");
-  const riga2 = el21(documentObj, "div", "talos-waiting__row");
-  const label = el21(documentObj, "span", "talos-waiting__label run-activity-label", etichetta3);
-  const elapsed = el21(documentObj, "span", "talos-mono talos-muted run-activity-elapsed", "0s");
+  const riga2 = el22(documentObj, "div", "talos-waiting__row");
+  const label = el22(documentObj, "span", "talos-waiting__label run-activity-label", etichetta3);
+  const elapsed = el22(documentObj, "span", "talos-mono talos-muted run-activity-elapsed", "0s");
   elapsed.setAttribute("aria-hidden", "true");
   riga2.append(label, elapsed);
   blocco.append(riga2);
@@ -56036,34 +56239,34 @@ function creaAttesa({ etichetta: etichetta3 = t("chat.wait.thinking") } = {}, op
 function creaDiffInChat(gruppi, { percorso = "", apertoSeSotto = 40, document: doc } = {}) {
   const documentObj = doc || globalThis.document;
   if (!gruppi || !Array.isArray(gruppi.pezzi) || gruppi.pezzi.length === 0) return null;
-  const blocco = el21(documentObj, "div", "talos-diff-chat");
+  const blocco = el22(documentObj, "div", "talos-diff-chat");
   blocco.setAttribute("data-c", "DiffInChat");
   const righeTotali = gruppi.pezzi.reduce((n, p) => n + p.righe.length, 0);
-  const dettaglio = el21(documentObj, "details", "");
+  const dettaglio = el22(documentObj, "details", "");
   if (righeTotali <= apertoSeSotto) dettaglio.open = true;
-  const riassunto = el21(documentObj, "summary", "");
+  const riassunto = el22(documentObj, "summary", "");
   const quanti = gruppi.pezzi.length;
   riassunto.textContent = quanti === 1 ? tn("chat.diff.titleOne", "chat.diff.titleMany", righeTotali, { percorso: percorso ? t("chat.diff.inFile", { percorso }) : "" }) : t("chat.diff.titleWithLocations", { percorso: percorso ? t("chat.diff.inFile", { percorso }) : "", punti: quanti, n: righeTotali });
   dettaglio.append(riassunto);
   for (const pezzo2 of gruppi.pezzi) {
-    const testa = el21(documentObj, "div", "talos-diff-chat__pezzo");
+    const testa = el22(documentObj, "div", "talos-diff-chat__pezzo");
     const dove = pezzo2.daRiga === null ? t("chat.diff.removedLines") : pezzo2.daRiga === pezzo2.aRiga ? t("chat.diff.line", { n: pezzo2.daRiga }) : t("chat.diff.lines", { da: pezzo2.daRiga, a: pezzo2.aRiga });
-    testa.append(el21(documentObj, "span", "talos-diff-chat__righe", dove));
+    testa.append(el22(documentObj, "span", "talos-diff-chat__righe", dove));
     dettaglio.append(testa);
-    const corpo = el21(documentObj, "div", "talos-diff");
+    const corpo = el22(documentObj, "div", "talos-diff");
     corpo.setAttribute("data-c", "DiffView");
     for (const r of pezzo2.righe) {
-      const riga2 = el21(documentObj, "div");
+      const riga2 = el22(documentObj, "div");
       riga2.className = `talos-diff__line talos-diff__line--${r.tipo}`;
-      riga2.append(el21(documentObj, "span", "talos-diff-chat__num", r.numero === null ? "" : String(r.numero)));
-      riga2.append(el21(documentObj, "span", "talos-diff-chat__segno", r.tipo === "add" ? "+" : r.tipo === "del" ? "−" : " "));
+      riga2.append(el22(documentObj, "span", "talos-diff-chat__num", r.numero === null ? "" : String(r.numero)));
+      riga2.append(el22(documentObj, "span", "talos-diff-chat__segno", r.tipo === "add" ? "+" : r.tipo === "del" ? "−" : " "));
       riga2.append(documentObj.createTextNode(r.testo));
       corpo.append(riga2);
     }
     dettaglio.append(corpo);
   }
   if (gruppi.tagliato) {
-    const resto = el21(documentObj, "div", "talos-diff-chat__resto");
+    const resto = el22(documentObj, "div", "talos-diff-chat__resto");
     resto.textContent = tn("chat.diff.hiddenLocationsOne", "chat.diff.hiddenLocationsMany", gruppi.pezziNascosti, {
       punti: gruppi.pezziNascosti,
       righe: tn("chat.diff.lineCountOne", "chat.diff.lineCountMany", gruppi.righeNascoste),
@@ -56488,7 +56691,7 @@ function nomeCampanella(quante) {
   if (quante === 0) return t("sezioni.notifications.bell.none");
   return quante === 1 ? t("sezioni.notifications.bell.one") : t("sezioni.notifications.bell.many", { n: quante });
 }
-function el22(documentObj, tag2, classe, testo2) {
+function el23(documentObj, tag2, classe, testo2) {
   const n = documentObj.createElement(tag2);
   if (classe) n.className = classe;
   if (testo2 != null) n.textContent = testo2;
@@ -56510,20 +56713,20 @@ function aggiornaPannelloNotifiche(pannello, notifiche = [], { ora: ora4 = () =>
   const toolbar = pannello.querySelector(".talos-toolbar");
   const sistema = pannello.querySelector(".talos-notification-panel__sistema");
   for (const n of [...pannello.children]) if (n !== toolbar && n !== sistema) n.remove();
-  pannello.append(el22(documentObj, "p", "talos-muted", sommarioNotifiche(notifiche.length)));
+  pannello.append(el23(documentObj, "p", "talos-muted", sommarioNotifiche(notifiche.length)));
   const righe = [];
   for (const { sessione, stato: stato2 } of notifiche) {
-    const b = el22(documentObj, "button", "talos-list-row");
+    const b = el23(documentObj, "button", "talos-list-row");
     b.type = "button";
     b.dataset.c = "ListRow";
     b.dataset.notifica = stato2;
     if (sessione?.sessionId) b.dataset.sessionId = sessione.sessionId;
-    const ic = el22(documentObj, "span", "talos-list-row__icon");
+    const ic = el23(documentObj, "span", "talos-list-row__icon");
     ic.appendChild(icona8(documentObj, GLIFI_NOTIFICA[stato2] || "i-bell"));
-    const testo2 = el22(documentObj, "span", "talos-list-row__text");
+    const testo2 = el23(documentObj, "span", "talos-list-row__text");
     testo2.append(
-      el22(documentObj, "span", "talos-list-row__title", sessione?.nome || sessione?.taskId || t("sezioni.notifications.sessionFallback")),
-      el22(documentObj, "span", "talos-list-row__sub", [ETICHETTE_NOTIFICA[stato2] || stato2, ora4(sessione)].filter(Boolean).join(" · "))
+      el23(documentObj, "span", "talos-list-row__title", sessione?.nome || sessione?.taskId || t("sezioni.notifications.sessionFallback")),
+      el23(documentObj, "span", "talos-list-row__sub", [ETICHETTE_NOTIFICA[stato2] || stato2, ora4(sessione)].filter(Boolean).join(" · "))
     );
     b.append(ic, testo2);
     pannello.appendChild(b);
@@ -56531,7 +56734,7 @@ function aggiornaPannelloNotifiche(pannello, notifiche = [], { ora: ora4 = () =>
   }
   let tutte = null;
   if (notifiche.length > 0) {
-    tutte = el22(documentObj, "button", "talos-button talos-button--ghost talos-button--sm");
+    tutte = el23(documentObj, "button", "talos-button talos-button--ghost talos-button--sm");
     tutte.type = "button";
     tutte.dataset.azione = "segna-tutte";
     tutte.append(icona8(documentObj, "i-check"), documentObj.createTextNode(` ${t("sezioni.notifications.markAllSeen")}`));
@@ -56676,7 +56879,7 @@ function filtraInstallati(modelli = [], { query = "", stato: stato2 = "tutti", r
     return [m.name, m.id, m.repo].some((v) => String(v || "").toLowerCase().includes(q2));
   });
 }
-function el23(documentObj, tag2, classe, testo2) {
+function el24(documentObj, tag2, classe, testo2) {
   const n = documentObj.createElement(tag2);
   if (classe) n.className = classe;
   if (testo2 != null) n.textContent = testo2;
@@ -56692,28 +56895,28 @@ function icona9(documentObj, nome, classe = "i") {
   return svg2;
 }
 function badge(documentObj, testo2, tono) {
-  const b = el23(documentObj, "span", `talos-badge talos-badge--sm${tono ? ` talos-badge--${tono}` : ""}`, testo2);
+  const b = el24(documentObj, "span", `talos-badge talos-badge--sm${tono ? ` talos-badge--${tono}` : ""}`, testo2);
   b.dataset.c = "Badge";
   return b;
 }
 function creaRigaInstallata(dati, { selezionato = false, seleziona, document: documentObj = globalThis.document } = {}) {
-  const b = el23(documentObj, "button", "talos-list-row");
+  const b = el24(documentObj, "button", "talos-list-row");
   b.type = "button";
   b.dataset.c = "ListRow";
   b.dataset.model = dati.id;
   b.dataset.match = dati.match;
   b.dataset.installedState = dati.stato;
   b.setAttribute("aria-pressed", String(Boolean(selezionato)));
-  const ic = el23(documentObj, "span", "talos-list-row__icon");
+  const ic = el24(documentObj, "span", "talos-list-row__icon");
   ic.appendChild(icona9(documentObj, "i-bolt"));
-  const testo2 = el23(documentObj, "span", "talos-list-row__text");
-  const sub = el23(documentObj, "span", "talos-list-row__sub", dati.sotto);
+  const testo2 = el24(documentObj, "span", "talos-list-row__text");
+  const sub = el24(documentObj, "span", "talos-list-row__sub", dati.sotto);
   if (dati.sottoDue) {
     sub.appendChild(documentObj.createElement("br"));
     sub.appendChild(documentObj.createTextNode(dati.sottoDue));
   }
-  testo2.append(el23(documentObj, "span", "talos-list-row__title", dati.nome), sub);
-  const aside = el23(documentObj, "span", "talos-list-row__aside");
+  testo2.append(el24(documentObj, "span", "talos-list-row__title", dati.nome), sub);
+  const aside = el24(documentObj, "span", "talos-list-row__aside");
   if (dati.stato === "caricato" || dati.stato === "incompleto" || dati.stato === "guasto") aside.appendChild(badge(documentObj, dati.etichettaStato, dati.tonoStato));
   if (dati.verdetto) aside.appendChild(badge(documentObj, dati.verdetto.etichetta, dati.verdetto.tono));
   b.append(ic, testo2, aside);
@@ -56741,23 +56944,23 @@ function verdettoAzioneModello(esito, { azione = "elimina", nome = "" } = {}) {
   };
 }
 function creaConfermaEliminazione(dati, { inCorso = false, verdetto = null, onAnnulla, onEsegui, document: d = globalThis.document } = {}) {
-  const card = el23(d, "div", "talos-check-card talos-check-card--danger talos-lab__space");
+  const card = el24(d, "div", "talos-check-card talos-check-card--danger talos-lab__space");
   card.dataset.c = "ConfermaEliminazione";
   card.dataset.modello = dati.id;
-  card.appendChild(el23(d, "span", "talos-check-card__stripe"));
-  const corpo = el23(d, "div", "talos-check-card__body");
+  card.appendChild(el24(d, "span", "talos-check-card__stripe"));
+  const corpo = el24(d, "div", "talos-check-card__body");
   corpo.append(
-    el23(d, "b", "talos-check-card__title", t("modelli.installed.deleteQuestion", { name: dati.nome })),
-    el23(d, "p", "", t("modelli.installed.deleteExplanation", { size: dati.dimensione ? ` (${dati.dimensione})` : "" }))
+    el24(d, "b", "talos-check-card__title", t("modelli.installed.deleteQuestion", { name: dati.nome })),
+    el24(d, "p", "", t("modelli.installed.deleteExplanation", { size: dati.dimensione ? ` (${dati.dimensione})` : "" }))
   );
-  const az = el23(d, "div", "talos-check-card__actions");
-  const annulla = el23(d, "button", "talos-button talos-button--secondary talos-button--sm", t("modelli.installed.cancel"));
+  const az = el24(d, "div", "talos-check-card__actions");
+  const annulla = el24(d, "button", "talos-button talos-button--secondary talos-button--sm", t("modelli.installed.cancel"));
   annulla.type = "button";
   annulla.dataset.c = "Button";
   annulla.dataset.action = "annullaEliminaModello";
   annulla.disabled = inCorso;
   if (onAnnulla) annulla.addEventListener("click", () => onAnnulla(dati.id));
-  const esegui = el23(d, "button", "talos-button talos-button--danger talos-button--sm", inCorso ? t("modelli.installed.deleting") : t("modelli.installed.deleteFromDisk"));
+  const esegui = el24(d, "button", "talos-button talos-button--danger talos-button--sm", inCorso ? t("modelli.installed.deleting") : t("modelli.installed.deleteFromDisk"));
   esegui.type = "button";
   esegui.dataset.c = "Button";
   esegui.dataset.action = "eseguiEliminaModello";
@@ -56770,15 +56973,15 @@ function creaConfermaEliminazione(dati, { inCorso = false, verdetto = null, onAn
   return card;
 }
 function creaCampoRinomina(dati, { bozza = "", inCorso = false, errore: errore2 = null, verdetto = null, onAnnulla, onSalva, onBozza, document: d = globalThis.document } = {}) {
-  const card = el23(d, "div", "talos-check-card talos-check-card--info talos-lab__space");
+  const card = el24(d, "div", "talos-check-card talos-check-card--info talos-lab__space");
   card.dataset.c = "CampoRinomina";
   card.dataset.modello = dati.id;
-  card.appendChild(el23(d, "span", "talos-check-card__stripe"));
-  const corpo = el23(d, "div", "talos-check-card__body");
+  card.appendChild(el24(d, "span", "talos-check-card__stripe"));
+  const corpo = el24(d, "div", "talos-check-card__body");
   const idCampo = `nomeModello-${String(dati.id).replace(/[^a-z0-9_-]/giu, "-")}`;
-  const etichetta3 = el23(d, "label", "talos-stack", t("modelli.installed.displayName"));
+  const etichetta3 = el24(d, "label", "talos-stack", t("modelli.installed.displayName"));
   etichetta3.htmlFor = idCampo;
-  const campo3 = el23(d, "input", "talos-field__input");
+  const campo3 = el24(d, "input", "talos-field__input");
   campo3.type = "text";
   campo3.id = idCampo;
   campo3.value = bozza;
@@ -56787,11 +56990,11 @@ function creaCampoRinomina(dati, { bozza = "", inCorso = false, errore: errore2 
   campo3.dataset.campo = "nomeModello";
   campo3.disabled = inCorso;
   etichetta3.appendChild(campo3);
-  const aiuto = el23(d, "p", "talos-muted", t("modelli.installed.renameHelp", { n: NOME_MODELLO_MAX }));
+  const aiuto = el24(d, "p", "talos-muted", t("modelli.installed.renameHelp", { n: NOME_MODELLO_MAX }));
   aiuto.id = `${idCampo}-aiuto`;
   corpo.append(etichetta3, aiuto);
   if (errore2) {
-    const allarme = el23(d, "p", "talos-muted", errore2);
+    const allarme = el24(d, "p", "talos-muted", errore2);
     allarme.dataset.campoErrore = "";
     allarme.setAttribute("role", "alert");
     allarme.id = `${idCampo}-errore`;
@@ -56799,14 +57002,14 @@ function creaCampoRinomina(dati, { bozza = "", inCorso = false, errore: errore2 
     campo3.setAttribute("aria-describedby", `${aiuto.id} ${allarme.id}`);
     corpo.appendChild(allarme);
   } else campo3.setAttribute("aria-describedby", aiuto.id);
-  const az = el23(d, "div", "talos-check-card__actions");
-  const annulla = el23(d, "button", "talos-button talos-button--secondary talos-button--sm", t("modelli.installed.cancel"));
+  const az = el24(d, "div", "talos-check-card__actions");
+  const annulla = el24(d, "button", "talos-button talos-button--secondary talos-button--sm", t("modelli.installed.cancel"));
   annulla.type = "button";
   annulla.dataset.c = "Button";
   annulla.dataset.action = "annullaRinominaModello";
   annulla.disabled = inCorso;
   if (onAnnulla) annulla.addEventListener("click", () => onAnnulla(dati.id));
-  const salva = el23(d, "button", "talos-button talos-button--primary talos-button--sm", inCorso ? t("modelli.installed.saving") : t("modelli.installed.saveName"));
+  const salva = el24(d, "button", "talos-button talos-button--primary talos-button--sm", inCorso ? t("modelli.installed.saving") : t("modelli.installed.saveName"));
   salva.type = "button";
   salva.dataset.c = "Button";
   salva.dataset.action = "salvaNomeModello";
@@ -56829,7 +57032,7 @@ function creaCampoRinomina(dati, { bozza = "", inCorso = false, errore: errore2 
   return card;
 }
 function creaRigaEsitoModello(verdetto, { document: d = globalThis.document } = {}) {
-  const riga2 = el23(d, "p", "talos-lab__space");
+  const riga2 = el24(d, "p", "talos-lab__space");
   riga2.dataset.c = "EsitoModello";
   riga2.dataset.tono = verdetto.tono;
   riga2.setAttribute("role", "status");
@@ -56846,44 +57049,44 @@ function aggiornaDettaglioInstallato(aside, dati, { runtime = {}, azioni = {}, n
     return;
   }
   aside.hidden = false;
-  const stato2 = el23(documentObj, "span");
+  const stato2 = el24(documentObj, "span");
   stato2.id = "modelloStato";
   stato2.appendChild(badge(documentObj, dati.caricato ? t("modelli.installed.usedInChat") : dati.etichettaStato, dati.caricato ? "accent" : dati.tonoStato));
-  const nome = el23(documentObj, "h3", "", dati.nome);
+  const nome = el24(documentObj, "h3", "", dati.nome);
   nome.id = "modelloNome";
-  const desc = el23(documentObj, "p", "talos-detail__desc", t("modelli.installed.localModelDescription"));
+  const desc = el24(documentObj, "p", "talos-detail__desc", t("modelli.installed.localModelDescription"));
   desc.id = "modelloDescrizione";
-  const kv6 = (k, v, id4) => {
-    const r = el23(documentObj, "div", "talos-kv");
-    const val = el23(documentObj, "span", "talos-kv__v");
+  const kv7 = (k, v, id4) => {
+    const r = el24(documentObj, "div", "talos-kv");
+    const val = el24(documentObj, "span", "talos-kv__v");
     if (id4) {
-      const s = el23(documentObj, "span", "", v);
+      const s = el24(documentObj, "span", "", v);
       s.id = id4;
       val.appendChild(s);
     } else val.textContent = v;
-    r.append(el23(documentObj, "span", "talos-kv__k", k), val);
+    r.append(el24(documentObj, "span", "talos-kv__k", k), val);
     return r;
   };
-  aside.append(stato2, nome, desc, kv6(t("modelli.installed.format"), dati.formato), kv6(t("modelli.installed.diskFile"), dati.dimensione, "modelloDimensione"), kv6(t("modelli.installed.origin"), dati.origine), kv6(t("modelli.installed.license"), dati.licenza, "modelloLicenza"), el23(documentObj, "hr", "talos-lab__rule"));
-  aside.append(kv6(t("modelli.installed.estimateContext"), contestoK(runtime.contestoStimaToken || 8192) || t("modelli.installed.defaultContext")), el23(documentObj, "p", "talos-muted talos-lab__space", t("modelli.installed.estimateSettings")));
-  const stima2 = el23(documentObj, "div", "talos-lab__space");
+  aside.append(stato2, nome, desc, kv7(t("modelli.installed.format"), dati.formato), kv7(t("modelli.installed.diskFile"), dati.dimensione, "modelloDimensione"), kv7(t("modelli.installed.origin"), dati.origine), kv7(t("modelli.installed.license"), dati.licenza, "modelloLicenza"), el24(documentObj, "hr", "talos-lab__rule"));
+  aside.append(kv7(t("modelli.installed.estimateContext"), contestoK(runtime.contestoStimaToken || 8192) || t("modelli.installed.defaultContext")), el24(documentObj, "p", "talos-muted talos-lab__space", t("modelli.installed.estimateSettings")));
+  const stima2 = el24(documentObj, "div", "talos-lab__space");
   if (dati.verdetto) {
     stima2.appendChild(badge(documentObj, dati.verdetto.etichetta, dati.verdetto.tono));
     stima2.appendChild(documentObj.createTextNode(" "));
-    const s = el23(documentObj, "span");
+    const s = el24(documentObj, "span");
     s.id = "modelloStima";
     const richiesti = dati.verdetto.dettaglio.match(/~([\d.,]+ GB)/)?.[1];
     if (richiesti) {
-      const m = el23(documentObj, "span", "talos-measure talos-measure--estimate", richiesti);
+      const m = el24(documentObj, "span", "talos-measure talos-measure--estimate", richiesti);
       m.dataset.c = "Measure";
       s.append(m, documentObj.createTextNode(t("modelli.installed.requiredSuffix")));
     } else s.textContent = dati.verdetto.dettaglio;
     stima2.appendChild(s);
   } else {
-    stima2.appendChild(el23(documentObj, "span", "talos-muted", t("modelli.installed.notCheckedOnMachine")));
+    stima2.appendChild(el24(documentObj, "span", "talos-muted", t("modelli.installed.notCheckedOnMachine")));
   }
   aside.appendChild(stima2);
-  const azione = el23(documentObj, "button", "talos-button talos-button--secondary talos-button--block");
+  const azione = el24(documentObj, "button", "talos-button talos-button--secondary talos-button--block");
   azione.id = "azioneModello";
   azione.type = "button";
   if (dati.caricato) {
@@ -56898,14 +57101,14 @@ function aggiornaDettaglioInstallato(aside, dati, { runtime = {}, azioni = {}, n
     if (azioni.verifica) azione.addEventListener("click", () => azioni.verifica(dati.id));
   }
   aside.appendChild(azione);
-  const effetto = el23(documentObj, "p", "talos-muted talos-lab__space");
+  const effetto = el24(documentObj, "p", "talos-muted talos-lab__space");
   effetto.id = "modelloEffetto";
   effetto.textContent = dati.caricato && Number.isFinite(runtime.usatiDalModelloBytes) ? t("modelli.installed.releaseEffect", { memory: gb(runtime.usatiDalModelloBytes), size: dati.dimensione }) : t("modelli.installed.fileStays", { size: dati.dimensione });
   aside.appendChild(effetto);
   if (nodoFit) aside.appendChild(nodoFit);
-  const cluster = el23(documentObj, "div", "talos-cluster talos-lab__space");
+  const cluster = el24(documentObj, "div", "talos-cluster talos-lab__space");
   const pulsante = (testo2, classe, nome2, fn2) => {
-    const b = el23(documentObj, "button", classe, testo2);
+    const b = el24(documentObj, "button", classe, testo2);
     b.type = "button";
     b.dataset.c = "Button";
     b.dataset.azione = nome2;
@@ -56941,7 +57144,7 @@ function aggiornaInstallati(panel, modelli = [], opzioni = {}) {
   panel.setAttribute("aria-busy", String(Boolean(caricamento)));
   if (!lista) return null;
   if (errore2) {
-    lista.replaceChildren(el23(documentObj, "p", "talos-card--pad talos-muted", t("modelli.installed.modelsUnavailable", { error: errore2.message || errore2 })));
+    lista.replaceChildren(el24(documentObj, "p", "talos-card--pad talos-muted", t("modelli.installed.modelsUnavailable", { error: errore2.message || errore2 })));
     if (vuoto) vuoto.hidden = true;
     aggiornaDettaglioInstallato(dettaglio, null, { document: documentObj });
     return null;
@@ -56950,8 +57153,8 @@ function aggiornaInstallati(panel, modelli = [], opzioni = {}) {
   const scelto = visibili.find((m) => m.id === selezionato) || visibili[0] || null;
   lista.replaceChildren(...visibili.flatMap((m) => [documentObj.createTextNode("\n"), creaRigaInstallata(datiModelloInstallato(m, { runtime, fit: fit.get?.(m.id) || null }), { selezionato: scelto?.id === m.id, seleziona, document: documentObj })]), documentObj.createTextNode("\n"));
   if (visibili.length === 0) {
-    if (caricamento) lista.replaceChildren(el23(documentObj, "p", "talos-card--pad talos-muted", t("modelli.installed.readingDiskModels")));
-    else if (modelli.length === 0) lista.replaceChildren(el23(documentObj, "p", "talos-card--pad talos-muted", t("modelli.installed.noComputerModels")));
+    if (caricamento) lista.replaceChildren(el24(documentObj, "p", "talos-card--pad talos-muted", t("modelli.installed.readingDiskModels")));
+    else if (modelli.length === 0) lista.replaceChildren(el24(documentObj, "p", "talos-card--pad talos-muted", t("modelli.installed.noComputerModels")));
     if (vuoto) vuoto.hidden = !(modelli.length > 0 && !caricamento);
   } else if (vuoto) vuoto.hidden = true;
   aggiornaDettaglioInstallato(dettaglio, scelto ? datiModelloInstallato(scelto, { runtime, fit: fit.get?.(scelto.id) || null }) : null, { runtime, azioni, nodoFit: scelto && nodoFit ? nodoFit(scelto.id) : null, document: documentObj });
@@ -56985,7 +57188,7 @@ function montaInstallati(originale, canonico, { document: documentObj = globalTh
     progress.value = 0;
     progress.hidden = true;
     progress.className = "talos-lab__meter";
-    const annulla = el23(documentObj, "button", "talos-button talos-button--ghost talos-button--sm", t("modelli.installed.cancel"));
+    const annulla = el24(documentObj, "button", "talos-button talos-button--ghost talos-button--sm", t("modelli.installed.cancel"));
     annulla.type = "button";
     annulla.id = "modelLabImportCancelButton";
     annulla.hidden = true;
@@ -57262,7 +57465,7 @@ function parametriLeggibiliHf(n) {
 function notaFaccetteHf() {
   return t("modelli.hf.filtersNote");
 }
-function el24(d, tag2, classe, testo2) {
+function el25(d, tag2, classe, testo2) {
   const n = d.createElement(tag2);
   if (classe) n.className = classe;
   if (testo2 != null) n.textContent = testo2;
@@ -57278,12 +57481,12 @@ function icona10(d, nome, classe = "i") {
   return svg2;
 }
 function badge2(d, testo2, tono) {
-  const b = el24(d, "span", `talos-badge talos-badge--sm${tono ? ` talos-badge--${tono}` : ""}`, testo2);
+  const b = el25(d, "span", `talos-badge talos-badge--sm${tono ? ` talos-badge--${tono}` : ""}`, testo2);
   b.dataset.c = "Badge";
   return b;
 }
 function creaRigaHf(dati, { selezionato = false, seleziona, document: d = globalThis.document } = {}) {
-  const b = el24(d, "button", "talos-list-row");
+  const b = el25(d, "button", "talos-list-row");
   b.type = "button";
   b.dataset.c = "ListRow";
   b.dataset.hf = dati.id;
@@ -57292,21 +57495,21 @@ function creaRigaHf(dati, { selezionato = false, seleziona, document: d = global
   b.setAttribute("aria-pressed", String(Boolean(selezionato)));
   const nome = String(dati.titolo || "").replace(/\s*\/\s*/u, " / ");
   b.setAttribute("aria-label", dati.capacita.misura ? t("modelli.hf.repositoryDownloadLabel", { name: nome, status: dati.stato.testo, count: dati.capacita.misura }) : t("modelli.hf.repositoryLabel", { name: nome, status: dati.stato.testo }));
-  const ic = el24(d, "span", "talos-list-row__icon");
+  const ic = el25(d, "span", "talos-list-row__icon");
   ic.dataset.c = "Glyph";
   ic.appendChild(icona10(d, "i-files"));
-  const testo2 = el24(d, "span", "talos-list-row__text");
-  const titolo2 = el24(d, "span", "talos-list-row__title", nome);
+  const testo2 = el25(d, "span", "talos-list-row__text");
+  const titolo2 = el25(d, "span", "talos-list-row__title", nome);
   if (dati.badge) titolo2.appendChild(badge2(d, dati.badge.testo, dati.badge.tono));
-  const etichette = el24(d, "span", "talos-hf-etichette");
+  const etichette = el25(d, "span", "talos-hf-etichette");
   etichette.dataset.c = "ModelTags";
   for (const testoEtichetta of dati.etichette ?? []) etichette.appendChild(badge2(d, testoEtichetta));
-  const meta2 = el24(d, "span", "talos-list-row__sub", dati.riga ?? dati.sub1);
-  const stato2 = el24(d, "span", "talos-list-row__sub");
-  const rigaStato = el24(d, "span", "talos-cluster");
-  const pallino = el24(d, "span", `talos-dot talos-dot--sm talos-dot--${dati.stato.tono}`);
+  const meta2 = el25(d, "span", "talos-list-row__sub", dati.riga ?? dati.sub1);
+  const stato2 = el25(d, "span", "talos-list-row__sub");
+  const rigaStato = el25(d, "span", "talos-cluster");
+  const pallino = el25(d, "span", `talos-dot talos-dot--sm talos-dot--${dati.stato.tono}`);
   pallino.setAttribute("aria-hidden", "true");
-  rigaStato.append(pallino, el24(d, "span", "", dati.stato.nota ? `${dati.stato.testo} · ${dati.stato.nota}` : dati.stato.testo));
+  rigaStato.append(pallino, el25(d, "span", "", dati.stato.nota ? `${dati.stato.testo} · ${dati.stato.nota}` : dati.stato.testo));
   stato2.append(rigaStato);
   testo2.append(titolo2, ...etichette.children.length ? [etichette] : [], meta2, stato2);
   const chevron2 = icona10(d, "i-chevron-right", "i talos-hf-chevron");
@@ -57316,29 +57519,29 @@ function creaRigaHf(dati, { selezionato = false, seleziona, document: d = global
   return b;
 }
 function creaGruppoHf(gruppo, { document: d = globalThis.document } = {}) {
-  const testa = el24(d, "div", "talos-cluster");
+  const testa = el25(d, "div", "talos-cluster");
   testa.dataset.hfGruppo = gruppo.chiave;
-  const etichetta3 = el24(d, "span", "talos-eyebrow", gruppo.etichetta);
+  const etichetta3 = el25(d, "span", "talos-eyebrow", gruppo.etichetta);
   etichetta3.setAttribute("role", "heading");
   etichetta3.setAttribute("aria-level", "3");
-  testa.append(etichetta3, el24(d, "span", "talos-grow", ""), el24(d, "span", "talos-muted talos-mono--xs", new Intl.NumberFormat(localeUI26()).format(gruppo.righe.length)));
+  testa.append(etichetta3, el25(d, "span", "talos-grow", ""), el25(d, "span", "talos-muted talos-mono--xs", new Intl.NumberFormat(localeUI26()).format(gruppo.righe.length)));
   return testa;
 }
 function creaBarraScopertaHf(d = globalThis.document, { onCambia } = {}) {
-  const barra = el24(d, "section", "talos-stack");
+  const barra = el25(d, "section", "talos-stack");
   barra.id = "modelLabHfScoperta";
   barra.dataset.hfScoperta = "";
   barra.setAttribute("aria-label", t("modelli.hf.discoveryFilters"));
-  const ambito = el24(d, "div", "talos-cluster");
+  const ambito = el25(d, "div", "talos-cluster");
   ambito.dataset.hfAmbito = "";
-  const faccette = el24(d, "div", "talos-choice-grid");
+  const faccette = el25(d, "div", "talos-choice-grid");
   faccette.dataset.hfFaccette = "";
   const gruppi = /* @__PURE__ */ new Map();
   for (const { chiave, titolo: titolo2, forma } of FACCETTE_HF) {
     if (forma !== "select") continue;
-    const campo3 = el24(d, "label", "talos-field talos-field--sm");
-    campo3.append(el24(d, "span", "talos-muted", titolo2));
-    const sel = el24(d, "select", "talos-select talos-select--sm");
+    const campo3 = el25(d, "label", "talos-field talos-field--sm");
+    campo3.append(el25(d, "span", "talos-muted", titolo2));
+    const sel = el25(d, "select", "talos-select talos-select--sm");
     sel.dataset.hfFaccetta = chiave;
     sel.id = `modelLabHfFaccetta-${chiave}`;
     sel.setAttribute("aria-label", titolo2);
@@ -57346,16 +57549,16 @@ function creaBarraScopertaHf(d = globalThis.document, { onCambia } = {}) {
     faccette.append(campo3);
     gruppi.set(chiave, sel);
   }
-  const nota = el24(d, "p", "talos-muted", notaFaccetteHf());
-  const testa = el24(d, "div", "talos-cluster");
-  const conteggio3 = el24(d, "p", "talos-cluster");
+  const nota = el25(d, "p", "talos-muted", notaFaccetteHf());
+  const testa = el25(d, "div", "talos-cluster");
+  const conteggio3 = el25(d, "p", "talos-cluster");
   conteggio3.dataset.hfConteggio = "";
   conteggio3.setAttribute("role", "status");
   conteggio3.setAttribute("aria-live", "polite");
-  const forte = el24(d, "strong", "", "—");
-  const coda2 = el24(d, "span", "talos-muted", "");
+  const forte = el25(d, "strong", "", "—");
+  const coda2 = el25(d, "span", "talos-muted", "");
   conteggio3.append(forte, coda2);
-  const azzera = el24(d, "button", "talos-button talos-button--ghost talos-button--sm", t("modelli.hf.resetFilters"));
+  const azzera = el25(d, "button", "talos-button talos-button--ghost talos-button--sm", t("modelli.hf.resetFilters"));
   azzera.type = "button";
   azzera.dataset.hfAzzera = "";
   azzera.hidden = true;
@@ -57389,7 +57592,7 @@ function creaBarraScopertaHf(d = globalThis.document, { onCambia } = {}) {
       if (forma !== "chip") continue;
       const voci = vociFaccettaHf(risultati, chiave, filtri[chiave]);
       if (!voci.length) continue;
-      const gruppoChip = el24(d, "span", "talos-cluster");
+      const gruppoChip = el25(d, "span", "talos-cluster");
       gruppoChip.dataset.hfChipGruppo = chiave;
       gruppoChip.setAttribute("role", "group");
       gruppoChip.setAttribute("aria-label", titolo2);
@@ -57435,14 +57638,14 @@ function creaBarraScopertaHf(d = globalThis.document, { onCambia } = {}) {
   return barra;
 }
 function chip2(d, etichetta3, chiave, valore, { premuto = false, conteggio: conteggio3 = null, disabilitato = false, titolo: titolo2 = null } = {}) {
-  const b = el24(d, "button", `talos-button talos-button--sm ${premuto ? "talos-button--primary" : "talos-button--secondary"}`, etichetta3);
+  const b = el25(d, "button", `talos-button talos-button--sm ${premuto ? "talos-button--primary" : "talos-button--secondary"}`, etichetta3);
   b.type = "button";
   b.dataset.hfChip = chiave;
   b.dataset.hfValore = valore;
   b.setAttribute("aria-pressed", String(premuto));
   if (disabilitato) b.disabled = true;
   if (titolo2) b.title = titolo2;
-  if (conteggio3 !== null && conteggio3 !== void 0) b.append(el24(d, "span", "talos-badge talos-badge--sm", new Intl.NumberFormat(localeUI26()).format(conteggio3)));
+  if (conteggio3 !== null && conteggio3 !== void 0) b.append(el25(d, "span", "talos-badge talos-badge--sm", new Intl.NumberFormat(localeUI26()).format(conteggio3)));
   return b;
 }
 function montaSceltaFileHf(contenitore, detail, { stima: stima2 = /* @__PURE__ */ new Map(), scelta = null, azioni = {}, prefissoId = "hf", conAccesso = true, document: d = globalThis.document } = {}) {
@@ -57459,48 +57662,48 @@ function montaSceltaFileHf(contenitore, detail, { stima: stima2 = /* @__PURE__ *
   });
   const nonMisurabile = !inMisura && gruppi.length > 0 && gruppi.every((g) => stima2.get?.(g.chiave)?.state === "unknown");
   if (misurabile) {
-    const barra = el24(d, "div", "talos-hf-misura");
-    const misura = el24(d, "button", "talos-button talos-button--secondary talos-button--sm", inMisura ? t("modelli.hf.measuring") : misurato ? t("modelli.hf.remeasure") : t("modelli.hf.measure"));
+    const barra = el25(d, "div", "talos-hf-misura");
+    const misura = el25(d, "button", "talos-button talos-button--secondary talos-button--sm", inMisura ? t("modelli.hf.measuring") : misurato ? t("modelli.hf.remeasure") : t("modelli.hf.measure"));
     misura.type = "button";
     misura.dataset.c = "Button";
     misura.dataset.azione = "misura";
     misura.disabled = inMisura;
     if (azioni.misura) misura.addEventListener("click", () => azioni.misura(gruppi));
     barra.appendChild(misura);
-    if (misurato && !inMisura) barra.appendChild(el24(d, "span", "talos-muted talos-hf-misura__quando", t("modelli.hf.measuredNow")));
+    if (misurato && !inMisura) barra.appendChild(el25(d, "span", "talos-muted talos-hf-misura__quando", t("modelli.hf.measuredNow")));
     contenitore.appendChild(barra);
     if (nonMisurabile) {
-      const avviso = el24(d, "div", "talos-callout");
+      const avviso = el25(d, "div", "talos-callout");
       avviso.dataset.c = "Callout";
-      const testo2 = el24(d, "div");
-      testo2.append(el24(d, "b", "", t("modelli.hf.memoryUnavailable")), el24(d, "p", "", t("modelli.hf.memoryUnavailableNote")));
+      const testo2 = el25(d, "div");
+      testo2.append(el25(d, "b", "", t("modelli.hf.memoryUnavailable")), el25(d, "p", "", t("modelli.hf.memoryUnavailableNote")));
       avviso.appendChild(testo2);
       contenitore.appendChild(avviso);
     }
   }
-  const radio = el24(d, "div", "talos-stack");
+  const radio = el25(d, "div", "talos-stack");
   radio.id = idDi("fileChoices");
   radio.dataset.hfFileChoices = "";
   radio.setAttribute("role", "radiogroup");
   radio.setAttribute("aria-label", t("modelli.hf.filesToDownload"));
   gruppi.forEach((g, i2) => {
-    const b = el24(d, "button", "talos-choice");
+    const b = el25(d, "button", "talos-choice");
     b.type = "button";
     b.setAttribute("role", "radio");
     b.setAttribute("aria-checked", String(g === scelto));
     b.dataset.hfFile = String(i2);
     b.dataset.variante = g.chiave;
     const st2 = descriviStima(stima2.get?.(g.chiave), g.bytes);
-    const titolo2 = el24(d, "span", "talos-choice__title", g.incompleto ? t("modelli.hf.incompleteVariant", { quantization: g.quant, size: gb(g.bytes), files: g.file.length, expected: g.attesi }) : t("modelli.hf.variant", { quantization: g.quant, size: gb(g.bytes) }));
+    const titolo2 = el25(d, "span", "talos-choice__title", g.incompleto ? t("modelli.hf.incompleteVariant", { quantization: g.quant, size: gb(g.bytes), files: g.file.length, expected: g.attesi }) : t("modelli.hf.variant", { quantization: g.quant, size: gb(g.bytes) }));
     if (consiglio && consiglio.gruppo === g) titolo2.appendChild(badge2(d, consiglio.motivo === "convenzione" ? t("modelli.hf.usuallyRecommended") : t("modelli.hf.recommended"), "accent"));
     b.appendChild(titolo2);
     const glossa = glossaQuant(g.quant);
-    if (glossa) b.appendChild(el24(d, "span", "talos-muted talos-choice__glossa", glossa));
-    b.appendChild(el24(d, "span", "talos-muted", g.senzaHash ? t("modelli.hf.missingHash") : st2.testo));
+    if (glossa) b.appendChild(el25(d, "span", "talos-muted talos-choice__glossa", glossa));
+    b.appendChild(el25(d, "span", "talos-muted", g.senzaHash ? t("modelli.hf.missingHash") : st2.testo));
     if (azioni.scegli) b.addEventListener("click", () => azioni.scegli(g.chiave));
     radio.appendChild(b);
   });
-  if (!gruppi.length) radio.appendChild(el24(d, "p", "talos-muted", t("modelli.hf.noGgufFiles")));
+  if (!gruppi.length) radio.appendChild(el25(d, "p", "talos-muted", t("modelli.hf.noGgufFiles")));
   contenitore.appendChild(radio);
   const indiceScelto = scelto ? gruppi.indexOf(scelto) : -1;
   const nodoScelto = indiceScelto >= 0 ? radio.children[indiceScelto] : null;
@@ -57510,28 +57713,28 @@ function montaSceltaFileHf(contenitore, detail, { stima: stima2 = /* @__PURE__ *
     if (radio.clientHeight && basso > radio.clientHeight) radio.scrollTop = alto - 8;
   }
   if (misurato && !consiglio && gruppi.length) {
-    contenitore.appendChild(el24(d, "p", "talos-muted talos-hf-nessuno", t("modelli.hf.noRecommendedVariant")));
+    contenitore.appendChild(el25(d, "p", "talos-muted talos-hf-nessuno", t("modelli.hf.noRecommendedVariant")));
   }
   if (conAccesso) {
-    const callout = el24(d, "div", "talos-callout");
+    const callout = el25(d, "div", "talos-callout");
     callout.id = idDi("accesso");
     callout.dataset.c = "Callout";
     callout.hidden = !detail.gated;
-    const cb = el24(d, "div");
-    cb.append(el24(d, "b", "", t("modelli.hf.repositoryAccessRequired")), el24(d, "p", "", t("modelli.hf.requestAccessNote")));
+    const cb = el25(d, "div");
+    cb.append(el25(d, "b", "", t("modelli.hf.repositoryAccessRequired")), el25(d, "p", "", t("modelli.hf.requestAccessNote")));
     callout.appendChild(cb);
     contenitore.appendChild(callout);
   }
-  const stimaP = el24(d, "p", "talos-muted talos-lab__space");
+  const stimaP = el25(d, "p", "talos-muted talos-lab__space");
   stimaP.id = idDi("stima");
   const voce2 = scelto ? stima2.get?.(scelto.chiave) : null;
   if (scelto && voce2 && !voce2.inCorso && Number.isFinite(voce2.memory?.requiredBytes)) {
-    const m = el24(d, "span", "talos-measure talos-measure--estimate", gb(voce2.memory.requiredBytes));
+    const m = el25(d, "span", "talos-measure talos-measure--estimate", gb(voce2.memory.requiredBytes));
     m.dataset.c = "Measure";
     stimaP.append(m, d.createTextNode(Number.isFinite(voce2.memory?.availableBytes) ? t("modelli.hf.requiredWithAvailable", { size: gb(voce2.memory.availableBytes) }) : t("modelli.hf.required")));
   } else stimaP.textContent = scelto ? voce2?.inCorso ? t("modelli.hf.measuring") : t("modelli.hf.measurementNote") : "";
   contenitore.appendChild(stimaP);
-  const scarica = el24(d, "button", "talos-button talos-button--primary talos-button--block");
+  const scarica = el25(d, "button", "talos-button talos-button--primary talos-button--block");
   scarica.id = idDi("scarica");
   scarica.type = "button";
   scarica.dataset.action = "download";
@@ -57550,31 +57753,31 @@ function aggiornaDettaglioHf(aside, detail, { stima: stima2 = /* @__PURE__ */ ne
   }
   aside.hidden = false;
   const [autore, nome] = String(detail.repo || "").split("/");
-  const h = el24(d, "h3", "", (nome || detail.repo || "").replace(/-GGUF$/i, "").replace(/-/g, " "));
+  const h = el25(d, "h3", "", (nome || detail.repo || "").replace(/-GGUF$/i, "").replace(/-/g, " "));
   h.id = "hfNome";
-  const p = el24(d, "p", "talos-detail__desc", t("modelli.hf.publishedBy", { author: autore || t("modelli.hf.unknownAuthor") }));
+  const p = el25(d, "p", "talos-detail__desc", t("modelli.hf.publishedBy", { author: autore || t("modelli.hf.unknownAuthor") }));
   p.id = "hfAutore";
-  const kv6 = (k, v, id4) => {
-    const r = el24(d, "div", "talos-kv");
-    const val = el24(d, "span", "talos-kv__v");
+  const kv7 = (k, v, id4) => {
+    const r = el25(d, "div", "talos-kv");
+    const val = el25(d, "span", "talos-kv__v");
     if (id4) {
-      const s = el24(d, "span", "", v);
+      const s = el25(d, "span", "", v);
       s.id = id4;
       val.appendChild(s);
     } else val.textContent = v;
-    r.append(el24(d, "span", "talos-kv__k", k), val);
+    r.append(el25(d, "span", "talos-kv__k", k), val);
     return r;
   };
   const revisione = detail.revision ? t("modelli.hf.verifiedRevision", { revision: String(detail.revision).slice(0, 12) }) : t("modelli.hf.verifyBeforeDownload");
-  aside.append(h, p, kv6(t("modelli.hf.license"), detail.license || t("modelli.hf.notDeclared"), "hfLicenza"), kv6(t("modelli.hf.revision"), revisione), el24(d, "hr", "talos-lab__rule"));
-  const tutti = el24(d, "button", "talos-button talos-button--secondary", t("modelli.hf.allFiles"));
+  aside.append(h, p, kv7(t("modelli.hf.license"), detail.license || t("modelli.hf.notDeclared"), "hfLicenza"), kv7(t("modelli.hf.revision"), revisione), el25(d, "hr", "talos-lab__rule"));
+  const tutti = el25(d, "button", "talos-button talos-button--secondary", t("modelli.hf.allFiles"));
   tutti.id = "hfTuttiFile";
   tutti.type = "button";
   tutti.dataset.apreVelo = "veloFileModello";
   if (azioni.tuttiFile) tutti.addEventListener("click", () => azioni.tuttiFile(detail));
-  aside.append(tutti, el24(d, "h3", "", t("modelli.hf.chooseFile")));
+  aside.append(tutti, el25(d, "h3", "", t("modelli.hf.chooseFile")));
   const scelto = montaSceltaFileHf(aside, detail, { stima: stima2, scelta, azioni, prefissoId: "hf", conAccesso: true, document: d });
-  const scheda = el24(d, "button", "talos-button talos-button--ghost talos-button--sm", t("modelli.hf.readModelCard"));
+  const scheda = el25(d, "button", "talos-button talos-button--ghost talos-button--sm", t("modelli.hf.readModelCard"));
   scheda.type = "button";
   scheda.dataset.c = "Button";
   scheda.dataset.azione = "scheda";
@@ -57585,7 +57788,7 @@ function aggiornaDettaglioHf(aside, detail, { stima: stima2 = /* @__PURE__ */ ne
     azioni.scheda(detail, scheda);
   });
   aside.appendChild(scheda);
-  const cont = el24(d, "div", "talos-card talos-card--pad talos-lab__space");
+  const cont = el25(d, "div", "talos-card talos-card--pad talos-lab__space");
   cont.id = "hfScheda";
   cont.hidden = true;
   aside.appendChild(cont);
@@ -57621,16 +57824,16 @@ function aggiornaHf(panel, risultati = [], { selezionato = null, detail = null, 
   });
   barra.aggiorna({ risultati, visibili, filtri, senzaDati, altri });
   if (errore2) {
-    lista.replaceChildren(el24(d, "p", "talos-card--pad talos-muted", t("modelli.hf.searchUnavailable", { reason: errore2.message || errore2 })));
+    lista.replaceChildren(el25(d, "p", "talos-card--pad talos-muted", t("modelli.hf.searchUnavailable", { reason: errore2.message || errore2 })));
     if (vuoto) vuoto.hidden = true;
   } else if (caricamento && !risultati.length) {
-    lista.replaceChildren(el24(d, "p", "talos-card--pad talos-muted", t("modelli.hf.searching")));
+    lista.replaceChildren(el25(d, "p", "talos-card--pad talos-muted", t("modelli.hf.searching")));
     if (vuoto) vuoto.hidden = true;
   } else if (!risultati.length) {
     lista.replaceChildren();
     if (vuoto) vuoto.hidden = false;
   } else if (!visibili.length) {
-    lista.replaceChildren(el24(d, "p", "talos-card--pad talos-muted", t("modelli.hf.noMatchingRepository")));
+    lista.replaceChildren(el25(d, "p", "talos-card--pad talos-muted", t("modelli.hf.noMatchingRepository")));
     if (vuoto) vuoto.hidden = true;
   } else {
     const nodi = [];
@@ -57648,7 +57851,7 @@ function aggiornaHf(panel, risultati = [], { selezionato = null, detail = null, 
     bottoneAltri.textContent = errorePagina ? t("modelli.hf.retryLoading") : caricamento ? t("modelli.hf.loading") : t("modelli.hf.loadMoreModels");
     let messaggio = panel.querySelector("[data-hf-errore-pagina]");
     if (!messaggio) {
-      messaggio = el24(d, "p", "talos-muted");
+      messaggio = el25(d, "p", "talos-muted");
       messaggio.dataset.hfErrorePagina = "";
       messaggio.setAttribute("role", "status");
       bottoneAltri.before(messaggio);
@@ -58005,14 +58208,14 @@ function riepilogoConsumo(sessioni = []) {
   }
   return totali;
 }
-function el25(d, tag2, classe, testo2) {
+function el26(d, tag2, classe, testo2) {
   const n = d.createElement(tag2);
   if (classe) n.className = classe;
   if (testo2 != null) n.textContent = testo2;
   return n;
 }
 function badge3(d, testo2, tono) {
-  const b = el25(d, "span", `talos-badge talos-badge--sm${tono ? ` talos-badge--${tono}` : ""}`, testo2);
+  const b = el26(d, "span", `talos-badge talos-badge--sm${tono ? ` talos-badge--${tono}` : ""}`, testo2);
   b.dataset.c = "Badge";
   return b;
 }
@@ -58032,7 +58235,7 @@ function riempiTabella(tabella, righe, etichettaDi, { document: d = globalThis.d
   if (!corpo) return;
   if (!righe.length) {
     const tr2 = d.createElement("tr");
-    const td = el25(d, "td", "talos-muted", t("varie.costs.table.empty"));
+    const td = el26(d, "td", "talos-muted", t("varie.costs.table.empty"));
     td.colSpan = 5;
     tr2.appendChild(td);
     corpo.replaceChildren(tr2);
@@ -58040,10 +58243,10 @@ function riempiTabella(tabella, righe, etichettaDi, { document: d = globalThis.d
   }
   corpo.replaceChildren(...righe.map((r) => {
     const tr2 = d.createElement("tr");
-    tr2.appendChild(el25(d, "th", "", etichettaDi(r)));
+    tr2.appendChild(el26(d, "th", "", etichettaDi(r)));
     tr2.firstChild.setAttribute("scope", "row");
     for (const v of [NUM.format(r.sessioni), NUM.format(r.giri), r.tokenNoti ? compatto3(r.token) : "—", r.cache ? compatto3(r.cache) : "—"]) {
-      tr2.appendChild(el25(d, "td", "talos-mono", v));
+      tr2.appendChild(el26(d, "td", "talos-mono", v));
     }
     return tr2;
   }));
@@ -58064,7 +58267,7 @@ function aggiornaCosti(pannello, sessioni = [], { document: d = globalThis.docum
     if (tot.senzaModello) voci.push(badge3(d, t("varie.costs.badge.noModel", { n: NUM.format(tot.senzaModello) }), "warning"));
     if (tot.senzaData) voci.push(badge3(d, t("varie.costs.badge.noDate", { n: NUM.format(tot.senzaData) }), "warning"));
     const aperta2 = sessioneId ? sessioni.find((s) => s.sessionId === sessioneId) : null;
-    const cache = el25(d, "p", "talos-muted", t("varie.costs.cacheReuse", { text: testoRiusoCache(aperta2?.cacheSessione) }));
+    const cache = el26(d, "p", "talos-muted", t("varie.costs.cacheReuse", { text: testoRiusoCache(aperta2?.cacheSessione) }));
     cache.dataset.cacheSessione = "";
     voci.push(cache);
     riepilogo.replaceChildren(...voci);
@@ -59000,7 +59203,7 @@ function frasiRipartizione(r) {
   const fonte = r.fonteFinestra === "profilo" ? ` · ${t("varie.context.measure.windowFromProfile")}` : r.fonteFinestra === "catalogo" ? ` · ${t("varie.context.measure.windowFromCatalog")}` : "";
   return t("varie.context.measure.estimate", { text: `${testa}${fonte}${mancanti}` });
 }
-function el26(d, tag2, classe, testo2) {
+function el27(d, tag2, classe, testo2) {
   const n = d.createElement(tag2);
   if (classe) n.className = classe;
   if (testo2 != null) n.textContent = testo2;
@@ -59023,7 +59226,7 @@ function aggiornaContesto(pannello, ripartizione, { document: d = globalThis.doc
     if (senzaScala) barra.replaceChildren();
     else {
       barra.replaceChildren(...ripartizione.voci.map((v) => {
-        const f = el26(d, "span", `talos-contesto__fetta talos-contesto__fetta--${v.id}`, void 0);
+        const f = el27(d, "span", `talos-contesto__fetta talos-contesto__fetta--${v.id}`, void 0);
         f.dataset.fetta = v.id;
         f.style.width = `${Math.max(0, Math.min(100, v.percentuale))}%`;
         return f;
@@ -59036,16 +59239,16 @@ function aggiornaContesto(pannello, ripartizione, { document: d = globalThis.doc
       return ripartizione;
     }
     voci.replaceChildren(...ripartizione.voci.map((v) => {
-      const riga2 = el26(d, "div", "talos-contesto-voce");
-      const punto = el26(d, "span", `talos-contesto-voce__punto talos-contesto__fetta--${v.id}`, void 0);
+      const riga2 = el27(d, "div", "talos-contesto-voce");
+      const punto = el27(d, "span", `talos-contesto-voce__punto talos-contesto__fetta--${v.id}`, void 0);
       const valore = v.percentuale == null ? t("varie.context.slice.tokens", { n: num2(v.token) }) : t("varie.context.slice.tokensPercent", { n: num2(v.token), percent: decimale(v.percentuale) });
-      riga2.append(punto, el26(d, "span", "talos-contesto-voce__k", v.nome), el26(d, "span", "talos-contesto-voce__v", valore));
+      riga2.append(punto, el27(d, "span", "talos-contesto-voce__k", v.nome), el27(d, "span", "talos-contesto-voce__v", valore));
       return riga2;
     }));
     const mancanti = ripartizione.mancanti || [];
     if (mancanti.length) {
       const nomi2 = elenco(mancanti.map((id4) => t(id4 === "istruzioni" ? "varie.context.unmeasured.instructions" : "varie.context.unmeasured.memories")));
-      voci.appendChild(el26(d, "p", "talos-muted talos-contesto-mancanti", t(mancanti.length > 1 ? "varie.context.unmeasured.many" : "varie.context.unmeasured.one", { names: nomi2 })));
+      voci.appendChild(el27(d, "p", "talos-muted talos-contesto-mancanti", t(mancanti.length > 1 ? "varie.context.unmeasured.many" : "varie.context.unmeasured.one", { names: nomi2 })));
     }
   }
   return ripartizione;
@@ -59170,7 +59373,7 @@ function riepilogoCoda(items = []) {
   }
   return c;
 }
-function el27(d, tag2, classe, testo2) {
+function el28(d, tag2, classe, testo2) {
   const n = d.createElement(tag2);
   if (classe) n.className = classe;
   if (testo2 != null) n.textContent = testo2;
@@ -59186,12 +59389,12 @@ function icona11(d, nome, classe = "i") {
   return svg2;
 }
 function badge4(d, testo2, tono) {
-  const b = el27(d, "span", `talos-badge talos-badge--sm${tono ? ` talos-badge--${tono}` : ""}`, testo2);
+  const b = el28(d, "span", `talos-badge talos-badge--sm${tono ? ` talos-badge--${tono}` : ""}`, testo2);
   b.dataset.c = "Badge";
   return b;
 }
 function bottone7(d, testo2, classe, azione, fn2) {
-  const b = el27(d, "button", classe, testo2);
+  const b = el28(d, "button", classe, testo2);
   b.type = "button";
   b.dataset.c = "Button";
   b.dataset.action = azione;
@@ -59203,21 +59406,21 @@ function comandoCatalogo(radice2) {
   return carta?.querySelector('[data-model-lab-tab="huggingface"]') ?? null;
 }
 function creaStatoVuotoDownload(radice2, { azioni = {}, document: d = globalThis.document } = {}) {
-  const riquadro = el27(d, "div", "empty-state");
+  const riquadro = el28(d, "div", "empty-state");
   riquadro.dataset.c = "EmptyState";
   riquadro.dataset.codaVuota = "";
   riquadro.append(
     icona11(d, "i-download"),
-    el27(d, "h3", "", t("modelli.download.emptyQueue")),
+    el28(d, "h3", "", t("modelli.download.emptyQueue")),
     /* ⛔ Il mockup dice «il catalogo di esempio»: qui il catalogo degli esempi non esiste, e
        chiamare «di esempio» quello vero di Hugging Face sarebbe una bugia sul prodotto. */
-    el27(d, "p", "", t("modelli.download.emptyQueueDescription"))
+    el28(d, "p", "", t("modelli.download.emptyQueueDescription"))
   );
-  const bottone8 = el27(d, "button", "talos-button talos-button--secondary");
+  const bottone8 = el28(d, "button", "talos-button talos-button--secondary");
   bottone8.type = "button";
   bottone8.dataset.c = "Button";
   bottone8.dataset.action = "esploraCatalogo";
-  bottone8.append(icona11(d, "i-plus"), el27(d, "span", "", t("modelli.download.exploreCatalog")));
+  bottone8.append(icona11(d, "i-plus"), el28(d, "span", "", t("modelli.download.exploreCatalog")));
   if (typeof azioni.esploraCatalogo === "function") bottone8.addEventListener("click", azioni.esploraCatalogo);
   else {
     const comando = comandoCatalogo(radice2);
@@ -59347,22 +59550,22 @@ function tornaAlComando(panel, id4, azione) {
   comando?.focus?.();
 }
 function creaRigaDownload(dati, { azioni = {}, azioniModello = null, statoAzioni = null, document: d = globalThis.document } = {}) {
-  const art = el27(d, "article", "talos-lab__download");
+  const art = el28(d, "article", "talos-lab__download");
   art.dataset.c = "DownloadRow";
   art.dataset.downloadId = dati.id;
   art.dataset.state = dati.stato;
-  const testa = el27(d, "div", "talos-toolbar");
-  const titoli = el27(d, "div");
-  titoli.append(el27(d, "h3", "talos-lab__heading", dati.nomeFile), el27(d, "p", "talos-muted", dati.sotto));
-  const statoWrap = el27(d, "span");
+  const testa = el28(d, "div", "talos-toolbar");
+  const titoli = el28(d, "div");
+  titoli.append(el28(d, "h3", "talos-lab__heading", dati.nomeFile), el28(d, "p", "talos-muted", dati.sotto));
+  const statoWrap = el28(d, "span");
   statoWrap.appendChild(badge4(d, dati.etichettaStato, dati.tono));
   testa.append(titoli, dati.stato === "ready" ? badge4(d, dati.etichettaStato, dati.tono) : statoWrap);
   art.appendChild(testa);
   if (dati.stato === "ready") {
     const esito = statoAzioni?.esiti?.[dati.id] || null;
     const eliminato = esito?.azione === "elimina" && esito.tono === "success";
-    const piede2 = el27(d, "div", "talos-toolbar");
-    const nota = el27(d, "span", "talos-muted", eliminato ? t("modelli.download.deletedNote") : t("modelli.download.availableInstalled"));
+    const piede2 = el28(d, "div", "talos-toolbar");
+    const nota = el28(d, "span", "talos-muted", eliminato ? t("modelli.download.deletedNote") : t("modelli.download.availableInstalled"));
     const vedi = bottone7(d, t("modelli.download.viewModel"), "talos-button talos-button--secondary talos-button--sm", "vediModello", () => azioni.vediModello?.(dati.id));
     if (eliminato) {
       vedi.disabled = true;
@@ -59372,7 +59575,7 @@ function creaRigaDownload(dati, { azioni = {}, azioniModello = null, statoAzioni
     art.appendChild(piede2);
     const apertoQui = statoAzioni?.aperto && statoAzioni.aperto.id === dati.id ? statoAzioni.aperto : null;
     if (azioniModello && !eliminato && !apertoQui) {
-      const cluster2 = el27(d, "div", "talos-cluster");
+      const cluster2 = el28(d, "div", "talos-cluster");
       cluster2.append(
         bottone7(d, t("modelli.download.rename"), "talos-button talos-button--secondary talos-button--sm", "rinominaModello", () => azioniModello.apriRinomina(dati.id, dati.nome)),
         bottone7(d, t("modelli.download.deleteFromDisk"), "talos-button talos-button--secondary talos-button--sm", "eliminaModello", () => azioniModello.apriElimina(dati.id))
@@ -59406,11 +59609,11 @@ function creaRigaDownload(dati, { azioni = {}, azioniModello = null, statoAzioni
     return art;
   }
   if (dati.stato === "failed") {
-    const card = el27(d, "div", "talos-check-card talos-check-card--danger talos-lab__space");
-    card.appendChild(el27(d, "span", "talos-check-card__stripe"));
-    const corpo = el27(d, "div", "talos-check-card__body");
-    corpo.append(el27(d, "b", "", dati.errore.titolo), el27(d, "p", "", dati.errore.testo));
-    const az = el27(d, "div", "talos-check-card__actions");
+    const card = el28(d, "div", "talos-check-card talos-check-card--danger talos-lab__space");
+    card.appendChild(el28(d, "span", "talos-check-card__stripe"));
+    const corpo = el28(d, "div", "talos-check-card__body");
+    corpo.append(el28(d, "b", "", dati.errore.titolo), el28(d, "p", "", dati.errore.testo));
+    const az = el28(d, "div", "talos-check-card__actions");
     const dettagli2 = bottone7(d, t("modelli.download.details"), "talos-button talos-button--ghost talos-button--sm", "dettagli", null);
     dettagli2.title = dati.errore.dettagli;
     dettagli2.setAttribute("aria-label", t("modelli.download.detailsLabel", { details: dati.errore.dettagli }));
@@ -59420,7 +59623,7 @@ function creaRigaDownload(dati, { azioni = {}, azioniModello = null, statoAzioni
         p.hidden = !p.hidden;
         return;
       }
-      const n = el27(d, "p", "talos-muted", dati.errore.dettagli);
+      const n = el28(d, "p", "talos-muted", dati.errore.dettagli);
       n.dataset.dettagli = "";
       corpo.insertBefore(n, az);
     });
@@ -59431,33 +59634,33 @@ function creaRigaDownload(dati, { azioni = {}, azioniModello = null, statoAzioni
     return art;
   }
   if (dati.misurabile) {
-    const barra = el27(d, "progress", "talos-lab__meter", `${dati.percento}%`);
+    const barra = el28(d, "progress", "talos-lab__meter", `${dati.percento}%`);
     barra.max = 100;
     barra.value = dati.percento;
     barra.setAttribute("aria-label", t("modelli.download.progressLabel", { file: dati.nomeFile, percent: dati.percento }));
     art.appendChild(barra);
   } else {
-    const barra = el27(d, "progress", "talos-lab__meter", t("modelli.download.progressUnknown"));
+    const barra = el28(d, "progress", "talos-lab__meter", t("modelli.download.progressUnknown"));
     barra.max = 100;
     barra.setAttribute("aria-label", t("modelli.download.unknownProgressLabel", { file: dati.nomeFile }));
     art.appendChild(barra);
   }
-  const piede = el27(d, "div", "talos-toolbar");
-  const misure = el27(d, "span", "talos-muted");
+  const piede = el28(d, "div", "talos-toolbar");
+  const misure = el28(d, "span", "talos-muted");
   if (dati.misurabile) {
-    misure.append(el27(d, "strong", "", `${dati.percento}%`), d.createTextNode(t("modelli.download.receivedOfTotal", { received: dati.ricevuti.replace(" GB", ""), total: dati.totale })));
+    misure.append(el28(d, "strong", "", `${dati.percento}%`), d.createTextNode(t("modelli.download.receivedOfTotal", { received: dati.ricevuti.replace(" GB", ""), total: dati.totale })));
   } else {
     misure.append(d.createTextNode(t("modelli.download.receivedUnknownTotal", { received: dati.ricevuti })));
   }
   if (dati.velocita) misure.append(d.createTextNode(` · ${dati.velocita}`));
   if (dati.resto) {
     misure.append(d.createTextNode(" · "));
-    const m = el27(d, "span", "talos-measure talos-measure--estimate", dati.resto);
+    const m = el28(d, "span", "talos-measure talos-measure--estimate", dati.resto);
     m.dataset.c = "Measure";
     misure.append(m, d.createTextNode(t("modelli.download.remainingSuffix")));
   } else if (dati.stato === "verifying") misure.append(d.createTextNode(t("modelli.download.checkingSuffix")));
   else if (dati.stato === "paused") misure.append(d.createTextNode(t("modelli.download.pausedSuffix")));
-  const cluster = el27(d, "div", "talos-cluster");
+  const cluster = el28(d, "div", "talos-cluster");
   if (["queued", "running"].includes(dati.stato)) cluster.appendChild(bottone7(d, t("modelli.download.pause"), "talos-button talos-button--secondary talos-button--sm", "pausa", () => azioni.pausa?.(dati.id)));
   if (dati.stato === "paused") cluster.appendChild(bottone7(d, t("modelli.download.resume"), "talos-button talos-button--secondary talos-button--sm", "riprendi", () => azioni.riprendi?.(dati.id)));
   if (!["ready", "failed", "cancelled"].includes(dati.stato)) {
@@ -59472,7 +59675,7 @@ function creaRigaDownload(dati, { azioni = {}, azioniModello = null, statoAzioni
 function notaDelFiltro(conteggi, d) {
   let nota = conteggi.querySelector("[data-coda-nota]");
   if (nota) return nota;
-  nota = el27(d, "span", "talos-count__nota talos-muted");
+  nota = el28(d, "span", "talos-count__nota talos-muted");
   nota.dataset.codaNota = "";
   nota.setAttribute("role", "status");
   nota.setAttribute("aria-atomic", "true");
@@ -59545,7 +59748,7 @@ function aggiornaCodaDownload(panel, items = [], opzioni = {}) {
   if (!coda2) return;
   if (errore2) {
     if (coda2.hidden) coda2.hidden = false;
-    coda2.replaceChildren(el27(d, "p", "talos-card--pad talos-muted", t("modelli.download.queueUnavailable", { error: errore2.message || errore2 })));
+    coda2.replaceChildren(el28(d, "p", "talos-card--pad talos-muted", t("modelli.download.queueUnavailable", { error: errore2.message || errore2 })));
     statoVuotoDelPannello(panel, d, azioni, false);
     return;
   }
@@ -59556,7 +59759,7 @@ function aggiornaCodaDownload(panel, items = [], opzioni = {}) {
     return;
   }
   if (!visibili.length) {
-    coda2.replaceChildren(el27(d, "p", "talos-card--pad talos-muted", t("modelli.download.noActiveDownloads")));
+    coda2.replaceChildren(el28(d, "p", "talos-card--pad talos-muted", t("modelli.download.noActiveDownloads")));
     return;
   }
   coda2.replaceChildren(...visibili.flatMap((i2) => [d.createTextNode("\n"), creaRigaDownload(datiDownload(i2, { stima: stime.get?.(i2.id) || null }), {
@@ -59642,7 +59845,7 @@ var init_download_coda = __esm({
 });
 
 // src/components/review.js
-function el28(documentObj, tag2, className, testo2) {
+function el29(documentObj, tag2, className, testo2) {
   const nodo14 = documentObj.createElement(tag2);
   if (className) nodo14.className = className;
   if (testo2 !== void 0 && testo2 !== null) nodo14.textContent = String(testo2);
@@ -59710,10 +59913,10 @@ function etichettaFileReview(voce2, tutte = [voce2]) {
   return ancoraOmonimi.length === 0 ? conCartella : accorciaPercorso(percorso, PERCORSO_SU_LINGUETTA);
 }
 function riempiLinguettaFile(scheda, voce2, tutte = [voce2], documentObj = scheda.ownerDocument || globalThis.document) {
-  scheda.append(el28(documentObj, "span", "talos-mono", etichettaFileReview(voce2, tutte)));
+  scheda.append(el29(documentObj, "span", "talos-mono", etichettaFileReview(voce2, tutte)));
   const c = contaDiff(voce2);
-  scheda.append(el28(documentObj, "span", "talos-diff-num talos-diff-num--plus", `+${c.aggiunte}`));
-  if (c.rimozioni > 0) scheda.append(el28(documentObj, "span", "talos-diff-num talos-diff-num--minus", `−${c.rimozioni}`));
+  scheda.append(el29(documentObj, "span", "talos-diff-num talos-diff-num--plus", `+${c.aggiunte}`));
+  if (c.rimozioni > 0) scheda.append(el29(documentObj, "span", "talos-diff-num talos-diff-num--minus", `−${c.rimozioni}`));
   return scheda;
 }
 function creaSchedeReview(striscia, { azioni = {}, root: root2 = globalThis.document?.body } = {}) {
@@ -59750,7 +59953,7 @@ function aggiornaDiffReview(card, voce2) {
       testa.querySelector(".talos-truncate").textContent = "—";
       for (const n of testa.querySelectorAll(".talos-badge, .talos-diff-num")) n.hidden = true;
     }
-    if (diff) diff.replaceChildren(el28(documentObj, "div", "talos-diff__line talos-diff__line--ctx", t("varie.review.noFilesYet")));
+    if (diff) diff.replaceChildren(el29(documentObj, "div", "talos-diff__line talos-diff__line--ctx", t("varie.review.noFilesYet")));
     return;
   }
   if (testa) {
@@ -59782,16 +59985,16 @@ function aggiornaDiffReview(card, voce2) {
       const tipo = Array.isArray(riga2) ? riga2[0] : riga2?.tipo;
       const testo2 = Array.isArray(riga2) ? riga2[1] : riga2?.testo;
       const classe = tipo === "add" ? "add" : tipo === "del" ? "del" : "ctx";
-      return el28(documentObj, "div", `talos-diff__line talos-diff__line--${classe}`, testo2 ?? "");
+      return el29(documentObj, "div", `talos-diff__line talos-diff__line--${classe}`, testo2 ?? "");
     }));
   }
   if (voce2.simboliPersi?.length > 0 && diff) {
-    const avviso = el28(documentObj, "div", "talos-system-note talos-review__avviso");
+    const avviso = el29(documentObj, "div", "talos-system-note talos-review__avviso");
     avviso.setAttribute("data-c", "SystemNote");
-    avviso.append(el28(documentObj, "span", "talos-badge talos-badge--warning talos-badge--sm", t("varie.review.warning")));
-    const corpo = el28(documentObj, "div");
-    corpo.append(el28(documentObj, "div", "talos-system-note__title", t(voce2.simboliPersi.length === 1 ? "varie.review.removesOneSymbol" : "varie.review.removesManySymbols", { n: voce2.simboliPersi.length })));
-    corpo.append(el28(documentObj, "p", null, voce2.simboliPersi.join(", ")));
+    avviso.append(el29(documentObj, "span", "talos-badge talos-badge--warning talos-badge--sm", t("varie.review.warning")));
+    const corpo = el29(documentObj, "div");
+    corpo.append(el29(documentObj, "div", "talos-system-note__title", t(voce2.simboliPersi.length === 1 ? "varie.review.removesOneSymbol" : "varie.review.removesManySymbols", { n: voce2.simboliPersi.length })));
+    corpo.append(el29(documentObj, "p", null, voce2.simboliPersi.join(", ")));
     avviso.append(corpo);
     diff.before(avviso);
   }
@@ -60439,7 +60642,7 @@ function prossimaDopoChiusura(lista, indice2) {
   return resto[indice2] ?? resto[indice2 - 1] ?? null;
 }
 function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
-  const el34 = {
+  const el35 = {
     riepilogo: $2(schermo, "#browserRiepilogo"),
     schede: $2(schermo, "#browserSchede"),
     indietro: $2(schermo, '[data-browser-demo="back"], [data-browser-action="back"]'),
@@ -60493,7 +60696,7 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
     if (id4) stato2.modi[id4] = m;
   };
   const modoAttivo = () => modoDi(stato2.attiva);
-  const frameAttivo = () => el34.live?.querySelector("iframe") || null;
+  const frameAttivo = () => el35.live?.querySelector("iframe") || null;
   const dialogaConOverlay = (messaggio) => {
     try {
       frameAttivo()?.contentWindow?.postMessage({ fonte: "talos-genitore", ...messaggio }, "*");
@@ -60521,37 +60724,37 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
   });
   const attiva = () => stato2.schede.find((s) => s.id === stato2.attiva) || null;
   const indiceAttiva = () => stato2.schede.findIndex((s) => s.id === stato2.attiva);
-  el34.indietro?.addEventListener("click", () => {
+  el35.indietro?.addEventListener("click", () => {
     const i2 = indiceAttiva();
     if (i2 > 0) azioni.seleziona?.(stato2.schede[i2 - 1].id);
   });
-  el34.avanti?.addEventListener("click", () => {
+  el35.avanti?.addEventListener("click", () => {
     const i2 = indiceAttiva();
     if (i2 >= 0 && i2 < stato2.schede.length - 1) azioni.seleziona?.(stato2.schede[i2 + 1].id);
   });
-  el34.fuori?.addEventListener("click", () => {
+  el35.fuori?.addEventListener("click", () => {
     const s = attiva();
     if (s) azioni.apriFuori?.(s);
   });
-  el34.rileggi?.addEventListener("click", () => {
+  el35.rileggi?.addEventListener("click", () => {
     const s = attiva();
     if (s) azioni.rileggi?.(s);
   });
-  el34.annota?.addEventListener("click", () => {
+  el35.annota?.addEventListener("click", () => {
     const s = attiva();
     if (!s) return;
     if (paginaAnnotabile(s)) azioni.annota?.(s, !stato2.annotaAttivo);
     else azioni.annota?.(s);
   });
-  el34.copia?.addEventListener("click", () => {
+  el35.copia?.addEventListener("click", () => {
     const s = attiva();
     if (s) azioni.copia?.(s);
   });
-  for (const b of el34.modi || []) {
+  for (const b of el35.modi || []) {
     b.addEventListener("click", () => {
       const suo = b.dataset.browserModo === "testo" ? "testo" : "pagina";
       const opposto = suo === "testo" ? "pagina" : "testo";
-      const solo = (el34.modi || []).length < 2;
+      const solo = (el35.modi || []).length < 2;
       const scelto = modoAttivo() === suo ? solo ? opposto : suo : suo;
       const lettura = attiva();
       if (scelto === "pagina" && lettura && lettura.tipo !== "viva" && lettura.incorniciabile === false && lettura.url) {
@@ -60569,78 +60772,78 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
       renderizza();
     });
   }
-  el34.nota?.addEventListener("click", (e) => {
+  el35.nota?.addEventListener("click", (e) => {
     e.stopPropagation();
-    const aperto = !el34.editorNota.hidden;
-    el34.editorNota.hidden = aperto;
-    el34.nota.setAttribute("aria-expanded", String(!aperto));
+    const aperto = !el35.editorNota.hidden;
+    el35.editorNota.hidden = aperto;
+    el35.nota.setAttribute("aria-expanded", String(!aperto));
     if (!aperto) {
       const s = attiva();
-      el34.notaInput.value = s && stato2.note[s.url] || "";
-      el34.notaInput.focus();
+      el35.notaInput.value = s && stato2.note[s.url] || "";
+      el35.notaInput.focus();
     }
   });
-  el34.conservaNota?.addEventListener("click", () => {
+  el35.conservaNota?.addEventListener("click", () => {
     const s = attiva();
     if (!s) return;
-    azioni.salvaNota?.(s, el34.notaInput.value.trim());
-    el34.editorNota.hidden = true;
-    el34.nota?.setAttribute("aria-expanded", "false");
-    el34.nota?.focus();
+    azioni.salvaNota?.(s, el35.notaInput.value.trim());
+    el35.editorNota.hidden = true;
+    el35.nota?.setAttribute("aria-expanded", "false");
+    el35.nota?.focus();
   });
-  el34.chiudiNota?.addEventListener("click", () => {
-    el34.editorNota.hidden = true;
-    el34.nota?.setAttribute("aria-expanded", "false");
-    el34.nota?.focus();
+  el35.chiudiNota?.addEventListener("click", () => {
+    el35.editorNota.hidden = true;
+    el35.nota?.setAttribute("aria-expanded", "false");
+    el35.nota?.focus();
   });
-  el34.consenti?.addEventListener("click", () => {
+  el35.consenti?.addEventListener("click", () => {
     if (stato2.richiesta) azioni.decidi?.(stato2.richiesta.requestId, true);
   });
-  el34.nega?.addEventListener("click", () => {
+  el35.nega?.addEventListener("click", () => {
     if (stato2.richiesta) azioni.decidi?.(stato2.richiesta.requestId, false);
   });
-  el34.annulla?.addEventListener("click", () => {
+  el35.annulla?.addEventListener("click", () => {
     const s = attiva();
     if (!s) return;
     if (azioni.annullaApertura) azioni.annullaApertura(s);
     else azioni.chiudi?.(s.id);
   });
-  if (el34.url) {
-    el34.url.addEventListener("keydown", (e) => {
+  if (el35.url) {
+    el35.url.addEventListener("keydown", (e) => {
       if (e.key === "Enter") {
         e.preventDefault();
-        const u = urlApribile(el34.url.value);
+        const u = urlApribile(el35.url.value);
         if (u) {
           azioni.apri?.(u);
-          el34.url.blur();
+          el35.url.blur();
         } else {
-          el34.url.setAttribute("aria-invalid", "true");
+          el35.url.setAttribute("aria-invalid", "true");
           mostraAvviso(t("varie.browser.address.notAnAddress"));
         }
       }
       if (e.key === "Escape") {
         e.preventDefault();
-        el34.url.value = attiva()?.url || "";
-        el34.url.removeAttribute("aria-invalid");
-        el34.url.blur();
+        el35.url.value = attiva()?.url || "";
+        el35.url.removeAttribute("aria-invalid");
+        el35.url.blur();
       }
     });
-    el34.url.addEventListener("focus", () => el34.url.select());
-    el34.url.addEventListener("input", () => el34.url.removeAttribute("aria-invalid"));
+    el35.url.addEventListener("focus", () => el35.url.select());
+    el35.url.addEventListener("input", () => el35.url.removeAttribute("aria-invalid"));
   }
-  el34.nuovaScheda?.addEventListener("click", () => {
-    if (!el34.url) return;
-    el34.url.value = "";
-    el34.url.focus();
-    el34.url.removeAttribute("aria-invalid");
+  el35.nuovaScheda?.addEventListener("click", () => {
+    if (!el35.url) return;
+    el35.url.value = "";
+    el35.url.focus();
+    el35.url.removeAttribute("aria-invalid");
   });
   function mostraAvviso(testo2) {
-    if (!el34.avviso) return;
-    el34.avviso.textContent = testo2 || "";
-    el34.avviso.hidden = !testo2;
+    if (!el35.avviso) return;
+    el35.avviso.textContent = testo2 || "";
+    el35.avviso.hidden = !testo2;
   }
-  const schedeBrowser = el34.schede ? creaSchede(el34.schede.closest(".talos-tabstrip") || el34.schede, {
-    lista: el34.schede,
+  const schedeBrowser = el35.schede ? creaSchede(el35.schede.closest(".talos-tabstrip") || el35.schede, {
+    lista: el35.schede,
     root: schermo.ownerDocument?.body || document.body,
     chiave: "browserId",
     classe: "talos-tabstrip__scheda",
@@ -60724,13 +60927,13 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
     scheda.dataset.tipLato = "sotto";
   }
   function renderizzaSchede() {
-    if (!el34.schede || !schedeBrowser) return;
-    const cornice = el34.schede.closest(".talos-tabstrip");
+    if (!el35.schede || !schedeBrowser) return;
+    const cornice = el35.schede.closest(".talos-tabstrip");
     if (cornice) cornice.hidden = stato2.schede.length === 0;
     schedeBrowser.aggiorna(stato2.schede, stato2.attiva);
   }
   function scriviTestoAcquisito(grezzo) {
-    const contenitore = el34.testo;
+    const contenitore = el35.testo;
     if (!contenitore) return;
     contenitore.replaceChildren();
     if (!sembraHtml(grezzo)) {
@@ -60752,13 +60955,13 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
     contenitore.append(pulito, dettaglio);
   }
   function renderizzaCornice(s) {
-    if (!el34.live) return;
+    if (!el35.live) return;
     const vuoleViva = s && s.tipo === "viva" && statoDellaScheda(s) === "loaded" && s.viaVista !== "vivo";
     const vuoleLettura = s && s.tipo !== "viva" && modoDi(s.id) === "pagina" && Boolean(s.url) && /^https?:/i.test(s.url) && s.incorniciabile !== false && s.incorniciabile !== null;
     const vuole = Boolean(vuoleViva || vuoleLettura);
-    const cornici = [...el34.live.querySelectorAll("iframe")];
+    const cornici = [...el35.live.querySelectorAll("iframe")];
     for (const c of cornici) c.hidden = !(vuole && c.dataset.browserId === s.id);
-    el34.live.hidden = !vuole;
+    el35.live.hidden = !vuole;
     if (!vuole) return;
     let frame3 = cornici.find((c) => c.dataset.browserId === s.id) || null;
     if (frame3) {
@@ -60795,7 +60998,7 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
         renderizza();
       }, 4e3);
     }
-    el34.live.append(frame3);
+    el35.live.append(frame3);
   }
   function corniceDellaLettura(s) {
     if (!s || s.tipo === "viva" || !s.url || !/^https?:/i.test(s.url)) return "";
@@ -60812,8 +61015,8 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
   let pannelloStato = null;
   function nodoStato() {
     if (pannelloStato?.isConnected) return pannelloStato;
-    if (!el34.live?.parentNode) return null;
-    const doc = el34.live.ownerDocument;
+    if (!el35.live?.parentNode) return null;
+    const doc = el35.live.ownerDocument;
     const box = doc.createElement("div");
     box.id = "browserStatoScheda";
     box.className = "talos-browser__request talos-browser__stato";
@@ -60848,7 +61051,7 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
     });
     cluster.append(riprova, annulla);
     box.append(titolo2, motivo, rimedio, cluster);
-    el34.live.parentNode.insertBefore(box, el34.live);
+    el35.live.parentNode.insertBefore(box, el35.live);
     pannelloStato = box;
     return box;
   }
@@ -60862,14 +61065,14 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
     const situazione = statoDellaScheda(s);
     const riposata = Boolean(s && stato2.riposate.has(s.id));
     const lavora = situazione === "loading" || situazione === "retrying";
-    if (el34.caricamento) {
-      el34.caricamento.hidden = !lavora;
-      el34.caricamento.dataset.stato = lavora ? situazione : "";
-      const suoTitolo = el34.caricamento.querySelector(".talos-browser__heading");
+    if (el35.caricamento) {
+      el35.caricamento.hidden = !lavora;
+      el35.caricamento.dataset.stato = lavora ? situazione : "";
+      const suoTitolo = el35.caricamento.querySelector(".talos-browser__heading");
       if (suoTitolo && lavora) suoTitolo.textContent = situazione === "retrying" ? TESTI4.statoRiprovo(Number(s?.tentativi || 0), Number(s?.tentativiMassimi || 0)) : TESTI4.statoApro;
-      const suoSotto = el34.caricamento.querySelector("p.talos-muted");
+      const suoSotto = el35.caricamento.querySelector("p.talos-muted");
       if (suoSotto && lavora) suoSotto.textContent = situazione === "retrying" ? TESTI4.statoRiprovoSotto : TESTI4.statoAproSotto;
-      if (el34.annulla && lavora) el34.annulla.textContent = TESTI4.annullaNavigazione;
+      if (el35.annulla && lavora) el35.annulla.textContent = TESTI4.annullaNavigazione;
     }
     const vivaARiposo = Boolean(s?.vivaARiposo) && situazione === "loaded";
     const parla = !lavora && situazione !== "loaded" || (riposata || vivaARiposo) && !lavora;
@@ -60936,36 +61139,36 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
     const avvisoCornice = corniceDellaLettura(s);
     const letture = stato2.schede.filter((x) => x.tipo !== "viva").length;
     const vive2 = stato2.schede.length - letture;
-    if (el34.riepilogo) el34.riepilogo.textContent = stato2.schede.length === 0 ? TESTI4.riepilogoVuoto : vive2 === 0 ? TESTI4.riepilogoLetture(letture) : TESTI4.riepilogoMisto(letture, vive2);
+    if (el35.riepilogo) el35.riepilogo.textContent = stato2.schede.length === 0 ? TESTI4.riepilogoVuoto : vive2 === 0 ? TESTI4.riepilogoLetture(letture) : TESTI4.riepilogoMisto(letture, vive2);
     renderizzaSchede();
-    if (el34.rileggi) el34.rileggi.textContent = TESTI4.barraRileggi;
-    if (el34.annota) el34.annota.textContent = TESTI4.barraAnnota;
-    if (el34.nota) el34.nota.textContent = TESTI4.barraNota;
-    if (el34.copia) el34.copia.textContent = TESTI4.barraCopia;
-    for (const b of el34.modi) b.textContent = b.dataset.browserModo === "pagina" ? TESTI4.barraModoPagina : TESTI4.barraModoTesto;
+    if (el35.rileggi) el35.rileggi.textContent = TESTI4.barraRileggi;
+    if (el35.annota) el35.annota.textContent = TESTI4.barraAnnota;
+    if (el35.nota) el35.nota.textContent = TESTI4.barraNota;
+    if (el35.copia) el35.copia.textContent = TESTI4.barraCopia;
+    for (const b of el35.modi) b.textContent = b.dataset.browserModo === "pagina" ? TESTI4.barraModoPagina : TESTI4.barraModoTesto;
     const i2 = indiceAttiva();
-    if (el34.indietro) el34.indietro.disabled = i2 <= 0;
-    if (el34.avanti) el34.avanti.disabled = i2 < 0 || i2 >= stato2.schede.length - 1;
-    if (el34.url && document.activeElement !== el34.url) el34.url.value = s?.url || "";
-    if (el34.fuori) el34.fuori.disabled = !s || !/^https?:\/\//i.test(s.url);
-    for (const b of [el34.rileggi, el34.annota, el34.nota, el34.copia]) if (b) b.disabled = !s;
-    if (el34.copia) el34.copia.disabled = !s || s.tipo === "viva";
-    if (el34.rileggi) el34.rileggi.title = s?.tipo === "viva" ? t("varie.browser.rereadTitle.live") : t("varie.browser.rereadTitle.reading");
-    if (el34.posizione) {
+    if (el35.indietro) el35.indietro.disabled = i2 <= 0;
+    if (el35.avanti) el35.avanti.disabled = i2 < 0 || i2 >= stato2.schede.length - 1;
+    if (el35.url && document.activeElement !== el35.url) el35.url.value = s?.url || "";
+    if (el35.fuori) el35.fuori.disabled = !s || !/^https?:\/\//i.test(s.url);
+    for (const b of [el35.rileggi, el35.annota, el35.nota, el35.copia]) if (b) b.disabled = !s;
+    if (el35.copia) el35.copia.disabled = !s || s.tipo === "viva";
+    if (el35.rileggi) el35.rileggi.title = s?.tipo === "viva" ? t("varie.browser.rereadTitle.live") : t("varie.browser.rereadTitle.reading");
+    if (el35.posizione) {
       const qui = statoDellaScheda(s);
-      el34.posizione.textContent = !s ? "" : s.tipo === "viva" ? qui === "loading" || qui === "retrying" ? TESTI4.posizioneCaricamento : qui === "error" || qui === "unreachable" || qui === "cancelled" ? TESTI4.posizioneBloccata : TESTI4.posizioneViva : TESTI4.posizioneLettura(stato2.schede.filter((x) => x.tipo !== "viva").indexOf(s) + 1, letture);
+      el35.posizione.textContent = !s ? "" : s.tipo === "viva" ? qui === "loading" || qui === "retrying" ? TESTI4.posizioneCaricamento : qui === "error" || qui === "unreachable" || qui === "cancelled" ? TESTI4.posizioneBloccata : TESTI4.posizioneViva : TESTI4.posizioneLettura(stato2.schede.filter((x) => x.tipo !== "viva").indexOf(s) + 1, letture);
     }
     const richiesta = stato2.richiesta;
-    if (el34.bloccato) {
-      el34.bloccato.hidden = !richiesta;
-      if (richiesta && el34.bloccatoTesto) el34.bloccatoTesto.textContent = t("varie.browser.ask.notice", { url: richiesta.url });
+    if (el35.bloccato) {
+      el35.bloccato.hidden = !richiesta;
+      if (richiesta && el35.bloccatoTesto) el35.bloccatoTesto.textContent = t("varie.browser.ask.notice", { url: richiesta.url });
     }
-    if (el34.vuoto) el34.vuoto.hidden = stato2.schede.length > 0;
-    if (el34.articolo) el34.articolo.hidden = !s;
-    const testata = el34.titolo?.closest(".talos-browser__testata");
+    if (el35.vuoto) el35.vuoto.hidden = stato2.schede.length > 0;
+    if (el35.articolo) el35.articolo.hidden = !s;
+    const testata = el35.titolo?.closest(".talos-browser__testata");
     if (testata) testata.hidden = !s || s.tipo === "viva";
     const lettura = Boolean(s) && s.tipo !== "viva";
-    for (const b of el34.modi || []) {
+    for (const b of el35.modi || []) {
       b.hidden = !lettura;
       const suo = b.dataset.browserModo === modoDi(s?.id);
       b.setAttribute("aria-pressed", String(suo));
@@ -60987,34 +61190,34 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
       }
     }
     const modoQui = modoDi(s?.id);
-    if (el34.testo) el34.testo.hidden = !lettura || modoQui === "pagina";
+    if (el35.testo) el35.testo.hidden = !lettura || modoQui === "pagina";
     if (lettura) {
-      if (el34.titolo) el34.titolo.textContent = titoloDaLettura(s);
-      if (el34.provenienza) el34.provenienza.textContent = formattaProvenienza(s);
-      if (el34.testo && modoQui !== "pagina") scriviTestoAcquisito(s.testo || "");
+      if (el35.titolo) el35.titolo.textContent = titoloDaLettura(s);
+      if (el35.provenienza) el35.provenienza.textContent = formattaProvenienza(s);
+      if (el35.testo && modoQui !== "pagina") scriviTestoAcquisito(s.testo || "");
     }
     const situazione = statoDellaScheda(s);
     mostraAvviso(situazione === "loaded" ? avvisoCornice || "" : "");
     renderizzaStato(s);
     renderizzaCornice(s);
     const nota = s ? stato2.note[s.url] : "";
-    if (el34.notaSalvata) {
-      el34.notaSalvata.hidden = !nota;
-      el34.notaSalvata.textContent = nota ? t("varie.browser.note.saved", { note: nota }) : "";
+    if (el35.notaSalvata) {
+      el35.notaSalvata.hidden = !nota;
+      el35.notaSalvata.textContent = nota ? t("varie.browser.note.saved", { note: nota }) : "";
     }
-    if (!s || el34.editorNota && !el34.editorNota.hidden && el34.editorNota.dataset.browserId !== s.id) {
-      if (el34.editorNota) el34.editorNota.hidden = true;
-      el34.nota?.setAttribute("aria-expanded", "false");
+    if (!s || el35.editorNota && !el35.editorNota.hidden && el35.editorNota.dataset.browserId !== s.id) {
+      if (el35.editorNota) el35.editorNota.hidden = true;
+      el35.nota?.setAttribute("aria-expanded", "false");
     }
-    if (el34.editorNota && s) el34.editorNota.dataset.browserId = s.id;
-    if (el34.limiti) el34.limiti.textContent = vive2 > 0 ? TESTI4.limitiVive : TESTI4.limitiLetture;
+    if (el35.editorNota && s) el35.editorNota.dataset.browserId = s.id;
+    if (el35.limiti) el35.limiti.textContent = vive2 > 0 ? TESTI4.limitiVive : TESTI4.limitiLetture;
     const annotabile = paginaAnnotabile(s);
-    if (el34.annotazioni) {
+    if (el35.annotazioni) {
       const lista = annotabile ? stato2.annotazioni[s.id] || [] : [];
       if (!annotabile) {
-        el34.annotazioni.hidden = true;
+        el35.annotazioni.hidden = true;
       } else {
-        renderizzaAnnotazioni(el34.annotazioni, {
+        renderizzaAnnotazioni(el35.annotazioni, {
           annotazioni: lista,
           attivo: stato2.annotaAttivo,
           onAttiva: (on2) => azioni.annota?.(s, on2),
@@ -61029,12 +61232,12 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
           },
           onInvia: () => azioni.inviaAnnotazioni?.(s)
         });
-        el34.annotazioni.hidden = lista.length === 0 && !stato2.annotaAttivo;
+        el35.annotazioni.hidden = lista.length === 0 && !stato2.annotaAttivo;
       }
     }
-    if (el34.annota) {
-      el34.annota.setAttribute("aria-pressed", String(annotabile && stato2.annotaAttivo));
-      el34.annota.title = annotabile ? t("varie.browser.annotate.on") : t("varie.browser.annotate.off");
+    if (el35.annota) {
+      el35.annota.setAttribute("aria-pressed", String(annotabile && stato2.annotaAttivo));
+      el35.annota.title = annotabile ? t("varie.browser.annotate.on") : t("varie.browser.annotate.off");
     }
     dialogaConOverlay({ tipo: "annota", attivo: annotabile && stato2.annotaAttivo });
   }
@@ -61048,12 +61251,12 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
       const vivi = new Set(stato2.schede.map((x) => x.id));
       for (const mappa of [stato2.modi, stato2.modiChiesti]) for (const k of Object.keys(mappa)) if (!vivi.has(k)) delete mappa[k];
       for (const insieme of [stato2.riaperte, stato2.riposate]) for (const k of [...insieme]) if (!vivi.has(k)) insieme.delete(k);
-      for (const c of el34.live?.querySelectorAll("iframe") || []) if (!vivi.has(c.dataset.browserId)) c.remove();
+      for (const c of el35.live?.querySelectorAll("iframe") || []) if (!vivi.has(c.dataset.browserId)) c.remove();
       if (stato2.annotaAttivo && stato2.annotazioni && Object.values(stato2.annotazioni).flat().length >= MASSIMO_ANNOTAZIONI) stato2.annotaAttivo = false;
       renderizza();
     },
     fuocoSullaScheda() {
-      el34.schede?.querySelector('[aria-selected="true"]')?.focus();
+      el35.schede?.querySelector('[aria-selected="true"]')?.focus();
     },
     /*
      * ⛔ 11/09/2026 — L'APERTURA VIVE FUORI DA QUI, E PUÒ FALLIRE FUORI DA QUI.
@@ -62253,7 +62456,7 @@ function digerisciEventoFiglia(r, e) {
       break;
   }
 }
-function el29(d, tag2, classe, testo2) {
+function el30(d, tag2, classe, testo2) {
   const nodo14 = d.createElement(tag2);
   if (classe) nodo14.className = classe;
   if (testo2 !== void 0 && testo2 !== null) nodo14.textContent = String(testo2);
@@ -62295,44 +62498,44 @@ function montaConversazioneFiglia(contenitore, {
   let scorrimentoDaRimettere = SCORRIMENTI.has(sessionId) ? SCORRIMENTI.get(sessionId) : null;
   let istantaneaDaCache = ISTANTANEE.get(sessionId) || null;
   const fuocoPrecedente = d.activeElement ?? null;
-  const elemento = el29(d, "div", "talos-card talos-inspector-card talos-figlia");
+  const elemento = el30(d, "div", "talos-card talos-inspector-card talos-figlia");
   elemento.dataset.c = "ConversazioneFiglia";
   if (sessionId) elemento.dataset.sessioneFiglia = String(sessionId);
   elemento.tabIndex = -1;
   elemento.setAttribute("role", "region");
-  const testata = el29(d, "div", "talos-inspector-card__head talos-figlia__head");
-  const indietro = el29(d, "button", "talos-button talos-button--ghost talos-button--sm talos-figlia__indietro");
+  const testata = el30(d, "div", "talos-inspector-card__head talos-figlia__head");
+  const indietro = el30(d, "button", "talos-button talos-button--ghost talos-button--sm talos-figlia__indietro");
   indietro.type = "button";
   indietro.append(simbolo2(d, "i i--sm", "i-arrow-left"), d.createTextNode(t("chat.common.back")));
   indietro.setAttribute("aria-label", t("chat.child.backToList"));
-  const titolo2 = el29(d, "b", "talos-figlia__titolo talos-truncate", nome || t("chat.child.noTask"));
-  const badge6 = el29(d, "span", "talos-badge talos-badge--sm");
+  const titolo2 = el30(d, "b", "talos-figlia__titolo talos-truncate", nome || t("chat.child.noTask"));
+  const badge6 = el30(d, "span", "talos-badge talos-badge--sm");
   badge6.setAttribute("role", "status");
   testata.append(indietro, titolo2, badge6);
   elemento.append(testata);
-  const misure = el29(d, "div", "talos-kv talos-figlia__misure");
-  const misureChiave = el29(d, "span", "talos-kv__k", t("chat.common.model"));
-  const misureValore = el29(d, "span", "talos-kv__v talos-mono", "—");
+  const misure = el30(d, "div", "talos-kv talos-figlia__misure");
+  const misureChiave = el30(d, "span", "talos-kv__k", t("chat.common.model"));
+  const misureValore = el30(d, "span", "talos-kv__v talos-mono", "—");
   misure.append(misureChiave, misureValore);
-  const conteggi = el29(d, "div", "talos-kv talos-figlia__misure");
-  const conteggiChiave = el29(d, "span", "talos-kv__k", t("chat.child.did"));
-  const conteggiValore = el29(d, "span", "talos-kv__v talos-mono", "—");
+  const conteggi = el30(d, "div", "talos-kv talos-figlia__misure");
+  const conteggiChiave = el30(d, "span", "talos-kv__k", t("chat.child.did"));
+  const conteggiValore = el30(d, "span", "talos-kv__v talos-mono", "—");
   conteggi.append(conteggiChiave, conteggiValore);
   elemento.append(misure, conteggi);
-  const nota = el29(d, "p", "talos-inspector__hint talos-figlia__nota");
+  const nota = el30(d, "p", "talos-inspector__hint talos-figlia__nota");
   nota.hidden = true;
   elemento.append(nota);
-  const corpo = el29(d, "div", "talos-figlia__corpo");
+  const corpo = el30(d, "div", "talos-figlia__corpo");
   corpo.tabIndex = 0;
   elemento.append(corpo);
-  const vuoto = el29(d, "p", "talos-inspector__hint talos-figlia__vuoto", t("chat.child.empty"));
-  const scheletro = el29(d, "p", "talos-inspector__hint talos-figlia__scheletro", t("chat.child.connecting"));
+  const vuoto = el30(d, "p", "talos-inspector__hint talos-figlia__vuoto", t("chat.child.empty"));
+  const scheletro = el30(d, "p", "talos-inspector__hint talos-figlia__scheletro", t("chat.child.connecting"));
   scheletro.setAttribute("role", "status");
   corpo.append(scheletro, vuoto);
   const disegnati = /* @__PURE__ */ new Map();
   const chiaveBlocco = (b) => b.tipo === "attrezzo" ? `a:${b.id}` : b.tipo === "testo" ? `t:${b.id}` : `e:${b.id}`;
   function creaVistaTurno(turno) {
-    const nodo14 = el29(d, "div", "talos-figlia__turno");
+    const nodo14 = el30(d, "div", "talos-figlia__turno");
     if (turno.consegna) nodo14.append(creaMessaggioUtente({ testo: turno.consegna, meta: turno.meta }, { document: d }));
     corpo.append(nodo14);
     return { elemento: nodo14, blocchi: /* @__PURE__ */ new Map() };
@@ -62344,7 +62547,7 @@ function montaConversazioneFiglia(contenitore, {
   function creaVistaBlocco(vistaTurno, blocco, gruppo, modello) {
     if (blocco.tipo === "testo") {
       const messaggio = creaMessaggioTalos({ modello: modello || "", paragrafi: [] }, { document: d });
-      const p = el29(d, "div", "assistant-copy");
+      const p = el30(d, "div", "assistant-copy");
       rendiMarkdown(p, blocco.testo);
       messaggio.append(p);
       vistaTurno.elemento.append(messaggio);
@@ -62353,14 +62556,14 @@ function montaConversazioneFiglia(contenitore, {
     if (blocco.tipo === "ragionamento") {
       const creato = creaAttivita({ riassunto: t("chat.child.reasoning"), aperto: false }, { document: d });
       creato.card.dataset.c = "ReasoningBundle";
-      const corpoTesto = el29(d, "div", "assistant-copy talos-figlia__ragionamento");
+      const corpoTesto = el30(d, "div", "assistant-copy talos-figlia__ragionamento");
       rendiMarkdown(corpoTesto, blocco.testo);
       creato.contenitore.append(corpoTesto);
       vistaTurno.elemento.append(creato.card);
       return { tipo: "ragionamento", p: corpoTesto, testoMostrato: blocco.testo };
     }
     if (blocco.tipo === "errore") {
-      const box = el29(d, "p", "talos-inspector__hint talos-inspector__hint--danger talos-figlia__errore", blocco.messaggio);
+      const box = el30(d, "p", "talos-inspector__hint talos-inspector__hint--danger talos-figlia__errore", blocco.messaggio);
       vistaTurno.elemento.append(box);
       return { tipo: "errore", box };
     }
@@ -62601,10 +62804,10 @@ var init_conversazione_figlia = __esm({
 });
 
 // src/components/scala-composer.js
-function etichettaTagliata(el34, win = globalThis) {
-  if (!el34 || !el34.isConnected || el34.getClientRects().length === 0) return false;
-  if (win.getComputedStyle(el34).position === "absolute") return false;
-  return el34.scrollWidth > el34.clientWidth + 1;
+function etichettaTagliata(el35, win = globalThis) {
+  if (!el35 || !el35.isConnected || el35.getClientRects().length === 0) return false;
+  if (win.getComputedStyle(el35).position === "absolute") return false;
+  return el35.scrollWidth > el35.clientWidth + 1;
 }
 function adattaScala(barra, win = globalThis) {
   if (!barra) return 0;
@@ -62965,7 +63168,7 @@ var init_risultati_ricerca = __esm({
 });
 
 // src/components/richiesta-mcp.js
-function el30(documentObj, tag2, className, testo2) {
+function el31(documentObj, tag2, className, testo2) {
   const nodo14 = documentObj.createElement(tag2);
   if (className) nodo14.className = className;
   if (testo2 !== void 0 && testo2 !== null) nodo14.textContent = String(testo2);
@@ -62982,18 +63185,18 @@ function simbolo3(documentObj, classe, nome) {
 function campoDelModulo(documentObj, nome, schema, obbligatorio) {
   const id4 = `talosMcpCampo${++prossimoId3}`;
   const titolo2 = typeof schema.title === "string" && schema.title.trim() ? schema.title.trim() : nome;
-  const contenitore = el30(documentObj, "div", "talos-mcp-campo talos-field--stack");
+  const contenitore = el31(documentObj, "div", "talos-mcp-campo talos-field--stack");
   contenitore.dataset.campo = nome;
-  const aiuto = typeof schema.description === "string" && schema.description.trim() ? el30(documentObj, "small", "talos-mcp-campo__aiuto", schema.description.trim()) : null;
+  const aiuto = typeof schema.description === "string" && schema.description.trim() ? el31(documentObj, "small", "talos-mcp-campo__aiuto", schema.description.trim()) : null;
   if (aiuto) aiuto.id = `${id4}-aiuto`;
   const intestazione = (tag2 = "label") => {
-    const etichetta4 = el30(documentObj, tag2, "talos-mcp-campo__etichetta", titolo2);
-    if (obbligatorio) etichetta4.append(el30(documentObj, "span", "talos-mcp-campo__obbligatorio", t("chat.mcp.field.required")));
+    const etichetta4 = el31(documentObj, tag2, "talos-mcp-campo__etichetta", titolo2);
+    if (obbligatorio) etichetta4.append(el31(documentObj, "span", "talos-mcp-campo__obbligatorio", t("chat.mcp.field.required")));
     return etichetta4;
   };
   const scelte = schema.type === "array" ? schema.items?.enum : schema.type === "string" ? schema.enum : null;
   if (Array.isArray(scelte)) {
-    const gruppo = el30(documentObj, "fieldset", "talos-mcp-campo__scelte");
+    const gruppo = el31(documentObj, "fieldset", "talos-mcp-campo__scelte");
     gruppo.append(intestazione("legend"));
     if (aiuto) {
       gruppo.append(aiuto);
@@ -63003,13 +63206,13 @@ function campoDelModulo(documentObj, nome, schema, obbligatorio) {
     const predefiniti = multi ? Array.isArray(schema.default) ? schema.default : [] : [schema.default];
     const nomi2 = Array.isArray(schema.enumNames) ? schema.enumNames : [];
     const caselle = scelte.map((valore3, i2) => {
-      const riga2 = el30(documentObj, "label", "sheet-toggle-row");
-      const casella = el30(documentObj, "input");
+      const riga2 = el31(documentObj, "label", "sheet-toggle-row");
+      const casella = el31(documentObj, "input");
       casella.type = multi ? "checkbox" : "radio";
       casella.name = id4;
       casella.value = valore3;
       casella.checked = predefiniti.includes(valore3);
-      riga2.append(casella, el30(documentObj, "span", "talos-mcp-campo__scelta", nomi2[i2] || valore3));
+      riga2.append(casella, el31(documentObj, "span", "talos-mcp-campo__scelta", nomi2[i2] || valore3));
       gruppo.append(riga2);
       return casella;
     });
@@ -63018,8 +63221,8 @@ function campoDelModulo(documentObj, nome, schema, obbligatorio) {
     return { nome, titolo: titolo2, schema, obbligatorio, contenitore, valore: valore2, vuoto: () => multi ? valore2().length === 0 : valore2() === void 0, fuoco: () => caselle[0]?.focus() };
   }
   if (schema.type === "boolean") {
-    const riga2 = el30(documentObj, "label", "talos-mcp-campo__interruttore");
-    const casella = el30(documentObj, "input", "talos-switch");
+    const riga2 = el31(documentObj, "label", "talos-mcp-campo__interruttore");
+    const casella = el31(documentObj, "input", "talos-switch");
     casella.type = "checkbox";
     casella.setAttribute("role", "switch");
     casella.id = id4;
@@ -63032,7 +63235,7 @@ function campoDelModulo(documentObj, nome, schema, obbligatorio) {
   }
   const etichetta3 = intestazione("label");
   etichetta3.htmlFor = id4;
-  const input = el30(documentObj, "input", "talos-field__input");
+  const input = el31(documentObj, "input", "talos-field__input");
   input.id = id4;
   input.name = nome;
   if (schema.type === "number" || schema.type === "integer") {
@@ -63048,7 +63251,7 @@ function campoDelModulo(documentObj, nome, schema, obbligatorio) {
   }
   if (obbligatorio) input.required = true;
   if (aiuto) input.setAttribute("aria-describedby", aiuto.id);
-  const campo3 = el30(documentObj, "div", "talos-field");
+  const campo3 = el31(documentObj, "div", "talos-field");
   campo3.append(input);
   contenitore.append(etichetta3, campo3);
   if (aiuto) contenitore.append(aiuto);
@@ -63084,28 +63287,28 @@ function erroreDelModulo(campi) {
 function creaRichiestaMcp(richiesta = {}, azioni = {}, opzioni = {}) {
   const documentObj = opzioni.document || globalThis.document;
   const pagina = richiesta.mode === "url";
-  const scheda = el30(documentObj, "div", "talos-approval talos-mcp-richiesta");
+  const scheda = el31(documentObj, "div", "talos-approval talos-mcp-richiesta");
   scheda.setAttribute("data-c", "McpRequestCard");
   scheda.dataset.modo = pagina ? "url" : "form";
-  const testa = el30(documentObj, "div", "talos-approval__head");
-  const etichetta3 = el30(documentObj, "span", "talos-badge talos-badge--accent");
+  const testa = el31(documentObj, "div", "talos-approval__head");
+  const etichetta3 = el31(documentObj, "span", "talos-badge talos-badge--accent");
   etichetta3.append(simbolo3(documentObj, "i i--sm", pagina ? "i-link" : "i-edit"), documentObj.createTextNode(pagina ? t("chat.mcp.badge.page") : t("chat.mcp.badge.data")));
   const server = typeof richiesta.server === "string" && richiesta.server ? richiesta.server : "mcp";
-  const chi = el30(documentObj, "span", "talos-mono talos-measure talos-grow talos-truncate", t("chat.mcp.server", { server }));
+  const chi = el31(documentObj, "span", "talos-mono talos-measure talos-grow talos-truncate", t("chat.mcp.server", { server }));
   chi.title = t("chat.mcp.serverTooltip", { server });
   testa.append(etichetta3, chi);
-  scheda.append(testa, el30(documentObj, "p", "talos-approval__why assistant-copy", richiesta.message || ""));
-  const corpo = el30(documentObj, "div", pagina ? "talos-mcp-pagina" : "talos-mcp-modulo");
+  scheda.append(testa, el31(documentObj, "p", "talos-approval__why assistant-copy", richiesta.message || ""));
+  const corpo = el31(documentObj, "div", pagina ? "talos-mcp-pagina" : "talos-mcp-modulo");
   corpo.dataset.corpo = "";
-  const errore2 = el30(documentObj, "p", "talos-mcp-richiesta__errore");
+  const errore2 = el31(documentObj, "p", "talos-mcp-richiesta__errore");
   errore2.setAttribute("role", "alert");
   errore2.hidden = true;
   corpo.addEventListener("input", () => {
     if (!errore2.hidden) mostraErrore("");
   });
-  const piede = el30(documentObj, "div", "talos-approval__foot sheet-actions");
+  const piede = el31(documentObj, "div", "talos-approval__foot sheet-actions");
   const bottone8 = (classi, testo2) => {
-    const b = el30(documentObj, "button", classi, testo2);
+    const b = el31(documentObj, "button", classi, testo2);
     b.type = "button";
     return b;
   };
@@ -63114,11 +63317,11 @@ function creaRichiestaMcp(richiesta = {}, azioni = {}, opzioni = {}) {
   const pulsanti = { rifiuta, annulla };
   let campi = [];
   if (pagina) {
-    corpo.append(el30(documentObj, "p", "talos-mcp-pagina__dominio", richiesta.dominio || ""));
-    const indirizzo = el30(documentObj, "pre", "talos-approval__codice talos-mcp-pagina__indirizzo", richiesta.url || "");
+    corpo.append(el31(documentObj, "p", "talos-mcp-pagina__dominio", richiesta.dominio || ""));
+    const indirizzo = el31(documentObj, "pre", "talos-approval__codice talos-mcp-pagina__indirizzo", richiesta.url || "");
     indirizzo.tabIndex = 0;
     indirizzo.setAttribute("aria-label", t("chat.mcp.page.addressLabel"));
-    corpo.append(indirizzo, el30(documentObj, "p", "talos-approval__motivo", t("chat.mcp.page.hint")));
+    corpo.append(indirizzo, el31(documentObj, "p", "talos-approval__motivo", t("chat.mcp.page.hint")));
     const apri = bottone8("talos-button talos-button--primary talos-button--md", t("chat.mcp.page.open"));
     const fatto = bottone8("talos-button talos-button--primary talos-button--md", t("chat.mcp.page.done"));
     fatto.hidden = true;
@@ -63139,7 +63342,7 @@ function creaRichiestaMcp(richiesta = {}, azioni = {}, opzioni = {}) {
     const richiesti = new Set(Array.isArray(schema.required) ? schema.required : []);
     campi = Object.entries(schema.properties || {}).map(([nome, s]) => campoDelModulo(documentObj, nome, s || {}, richiesti.has(nome)));
     for (const c of campi) corpo.append(c.contenitore);
-    if (!campi.length) corpo.append(el30(documentObj, "p", "talos-approval__motivo", t("chat.mcp.noFields")));
+    if (!campi.length) corpo.append(el31(documentObj, "p", "talos-approval__motivo", t("chat.mcp.noFields")));
     const invia = bottone8("talos-button talos-button--primary talos-button--md", t("chat.common.send"));
     invia.addEventListener("click", () => {
       const sbaglio = erroreDelModulo(campi);
@@ -63160,7 +63363,7 @@ function creaRichiestaMcp(richiesta = {}, azioni = {}, opzioni = {}) {
   annulla.addEventListener("click", () => {
     if (typeof azioni.onAnnulla === "function") azioni.onAnnulla();
   });
-  piede.append(el30(documentObj, "span", "talos-grow"), el30(documentObj, "span", "talos-approval__foot-note", t("chat.mcp.footNote")));
+  piede.append(el31(documentObj, "span", "talos-grow"), el31(documentObj, "span", "talos-approval__foot-note", t("chat.mcp.footNote")));
   corpo.append(errore2);
   scheda.append(corpo, piede);
   function valoriDelModulo() {
@@ -63185,7 +63388,7 @@ function segnaEsitoRichiestaMcp(scheda, { action, modo = "form", altrove = false
   for (const parte of [...scheda.querySelectorAll("[data-corpo], .talos-approval__foot, .sheet-actions, .talos-mcp-richiesta__errore, .talos-approval__esito")]) parte.remove();
   const testo2 = action === "accept" ? modo === "url" ? t("chat.mcp.outcome.doneOnPage") : t("chat.mcp.outcome.sent") : action === "decline" ? t("chat.mcp.outcome.declined") : motivo === "fermato" ? t("chat.mcp.outcome.sessionStopped") : motivo === "reindirizzamento" ? t("chat.mcp.outcome.redirected") : motivo === "non-in-attesa" ? t("chat.mcp.outcome.notWaiting") : t("chat.common.cancelled");
   const tono = action === "accept" ? "si" : action === "decline" ? "no" : "neutro";
-  const riga2 = el30(documentObj, "p", `talos-approval__esito talos-approval__esito--${tono}`, t("chat.mcp.outcome.withOrigin", { testo: testo2, altrove: altrove ? t("chat.common.fromAnotherWindow") : "" }));
+  const riga2 = el31(documentObj, "p", `talos-approval__esito talos-approval__esito--${tono}`, t("chat.mcp.outcome.withOrigin", { testo: testo2, altrove: altrove ? t("chat.common.fromAnotherWindow") : "" }));
   riga2.setAttribute("role", "status");
   scheda.append(riga2);
   scheda.dataset.esito = action;
@@ -64416,10 +64619,10 @@ function collegaTooltip(documentObj = globalThis.document, { ritardo = RITARDO_M
   let timer2 = null;
   let dentroLaBolla = false;
   let modalita = "pointer";
-  const daTastiera = (el34) => {
+  const daTastiera = (el35) => {
     if (modalita !== "keyboard") return false;
     try {
-      return el34.matches(":focus-visible");
+      return el35.matches(":focus-visible");
     } catch {
       return true;
     }
@@ -64855,7 +65058,7 @@ function normalizzaVoce(elemento, dati) {
     comandoDellaPersona: Boolean(info.comandoDellaPersona)
   };
 }
-function el31(tag2, classe, testo2) {
+function el32(tag2, classe, testo2) {
   const n = document.createElement(tag2);
   if (classe) n.className = classe;
   if (testo2 !== void 0 && testo2 !== null) n.textContent = String(testo2);
@@ -64879,7 +65082,7 @@ function nascondiTrovabile(nodo14, nascosto) {
 function annuncia(testo2) {
   let regione = document.getElementById("talosAnnunciAttivita");
   if (!regione) {
-    regione = el31("div", "sr-only");
+    regione = el32("div", "sr-only");
     regione.id = "talosAnnunciAttivita";
     regione.setAttribute("role", "status");
     regione.setAttribute("aria-live", "polite");
@@ -64932,50 +65135,50 @@ var init_attivita_segmento = __esm({
         this.timer = null;
         this.ultimo = { vivo: false, misurato: false };
         this.ultimoRiassunto = null;
-        const card = el31("div", "talos-card talos-activity talos-activity--segment");
+        const card = el32("div", "talos-card talos-activity talos-activity--segment");
         card.setAttribute("data-c", "ActivitySegment");
         card.dataset.segmento = "r4";
         this.card = card;
         const idCorpo = nuovoId("segmento-corpo");
-        const testa = el31("button", "talos-activity__head");
+        const testa = el32("button", "talos-activity__head");
         testa.type = "button";
         testa.setAttribute("aria-expanded", "false");
         testa.setAttribute("aria-controls", idCorpo);
         testa.append(icona12("i-chev", "i talos-activity__chev"));
-        this.statoEl = el31("span", "talos-activity__stato");
-        this.summaryText = el31("span", "talos-activity__conteggi");
-        this.bersagliEl = el31("span", "talos-activity__bersagli");
-        this.misureEl = el31("span", "talos-activity__misure");
-        this.diffEl = el31("span", "talos-activity__diff");
-        this.erroreEl = el31("span", "talos-activity__errore");
-        this.tempoEl = el31("span", "talos-activity__tempo");
+        this.statoEl = el32("span", "talos-activity__stato");
+        this.summaryText = el32("span", "talos-activity__conteggi");
+        this.bersagliEl = el32("span", "talos-activity__bersagli");
+        this.misureEl = el32("span", "talos-activity__misure");
+        this.diffEl = el32("span", "talos-activity__diff");
+        this.erroreEl = el32("span", "talos-activity__errore");
+        this.tempoEl = el32("span", "talos-activity__tempo");
         this.tempoEl.setAttribute("aria-hidden", "true");
         this.misureEl.append(this.diffEl, this.erroreEl, this.tempoEl);
-        this.descrizioneEl = el31("span", "sr-only talos-activity__descrizione");
+        this.descrizioneEl = el32("span", "sr-only talos-activity__descrizione");
         this.descrizioneEl.id = nuovoId("segmento-descrizione");
         testa.setAttribute("aria-describedby", this.descrizioneEl.id);
         testa.append(this.statoEl, this.summaryText, this.bersagliEl, this.misureEl);
         this.testa = testa;
-        const altro = el31("button", "talos-activity__altro");
+        const altro = el32("button", "talos-activity__altro");
         altro.type = "button";
         altro.setAttribute("aria-label", t("chat.activity.actions"));
         altro.setAttribute("aria-haspopup", "menu");
         altro.setAttribute("aria-expanded", "false");
         altro.append(icona12("i-more"));
         this.altro = altro;
-        this.fissate = el31("div", "talos-activity__fissate");
+        this.fissate = el32("div", "talos-activity__fissate");
         this.fissate.hidden = true;
-        const corpo = el31("div", "talos-activity__body");
+        const corpo = el32("div", "talos-activity__body");
         corpo.id = idCorpo;
         nascondiTrovabile(corpo, true);
-        const interno = el31("div", "talos-activity__interno");
-        this.filtriEl = el31("div", "talos-activity__filtri");
+        const interno = el32("div", "talos-activity__interno");
+        this.filtriEl = el32("div", "talos-activity__filtri");
         this.filtriEl.setAttribute("role", "group");
         this.filtriEl.setAttribute("aria-label", t("chat.activity.filter.label"));
         this.filtriEl.hidden = true;
-        this.notaEl = el31("p", "talos-activity__nota");
+        this.notaEl = el32("p", "talos-activity__nota");
         this.notaEl.hidden = true;
-        this.contenitore = el31("div", "talos-activity__voci tool-batch-items");
+        this.contenitore = el32("div", "talos-activity__voci tool-batch-items");
         interno.append(this.filtriEl, this.notaEl, this.contenitore);
         corpo.append(interno);
         this.corpo = corpo;
@@ -65087,15 +65290,15 @@ var init_attivita_segmento = __esm({
         this.decorati.add(riga2);
         if (voce2.tipo === "reasoning") {
           riga2.dataset.voce = "ragionamento";
-          const ic = el31("span", "talos-voce__icona");
+          const ic = el32("span", "talos-voce__icona");
           ic.append(icona12("i-brain"));
           riga2.prepend(ic);
-          const oggetto4 = el31("span", "talos-voce__oggetto");
+          const oggetto4 = el32("span", "talos-voce__oggetto");
           riga2.querySelector(".tool-note-summary-text")?.after(oggetto4);
           return;
         }
         riga2.dataset.voce = "attrezzo";
-        const meta2 = el31("span", "talos-voce__meta");
+        const meta2 = el32("span", "talos-voce__meta");
         const pallino = riga2.querySelector(":scope > .talos-dot");
         if (pallino) pallino.before(meta2);
         else riga2.append(meta2);
@@ -65129,7 +65332,7 @@ var init_attivita_segmento = __esm({
             const atteso = `+${voce2.diff.piu} −${voce2.diff.meno}`;
             if (meta2.dataset.diff !== atteso) {
               meta2.dataset.diff = atteso;
-              meta2.replaceChildren(el31("span", "talos-activity__piu", `+${voce2.diff.piu}`), " ", el31("span", "talos-activity__meno", `−${voce2.diff.meno}`));
+              meta2.replaceChildren(el32("span", "talos-activity__piu", `+${voce2.diff.piu}`), " ", el32("span", "talos-activity__meno", `−${voce2.diff.meno}`));
             }
           } else if (meta2.textContent !== testoMeta) {
             delete meta2.dataset.diff;
@@ -65161,7 +65364,7 @@ var init_attivita_segmento = __esm({
         if (!vivo && this.eraVivo && this.fine === null && misurato) this.fine = this.orologio();
         this.statoEl.replaceChildren();
         if (vivo) {
-          const p = el31("span", "talos-dot talos-dot--live");
+          const p = el32("span", "talos-dot talos-dot--live");
           p.setAttribute("aria-hidden", "true");
           this.statoEl.append(p);
         }
@@ -65175,7 +65378,7 @@ var init_attivita_segmento = __esm({
           const atteso = `+${r.diff.piu} −${r.diff.meno}`;
           if (this.diffEl.dataset.diff !== atteso) {
             this.diffEl.dataset.diff = atteso;
-            this.diffEl.replaceChildren(el31("span", "talos-activity__piu", `+${r.diff.piu}`), " ", el31("span", "talos-activity__meno", `−${r.diff.meno}`));
+            this.diffEl.replaceChildren(el32("span", "talos-activity__piu", `+${r.diff.piu}`), " ", el32("span", "talos-activity__meno", `−${r.diff.meno}`));
             this.diffEl.setAttribute("aria-label", t("chat.activity.diffSummary", {
               aggiunte: tn("chat.activity.linesAddedOne", "chat.activity.linesAddedMany", r.diff.piu),
               tolte: tn("chat.activity.linesRemovedOne", "chat.activity.linesRemovedMany", r.diff.meno)
@@ -65232,7 +65435,7 @@ var init_attivita_segmento = __esm({
         if (this.summaryText.dataset.firma === firma) return;
         this.summaryText.dataset.firma = firma;
         this.summaryText.replaceChildren();
-        if (adesso) this.summaryText.append(el31("span", "talos-activity__adesso", adesso), parti.length ? " · " : "");
+        if (adesso) this.summaryText.append(el32("span", "talos-activity__adesso", adesso), parti.length ? " · " : "");
         this.summaryText.append(parti.join(" · ") || (this.vivo ? "" : t("chat.activity.agentActivity")));
         this.summaryText.dataset.forma = breve2 ? "breve" : "intera";
         this.summaryText.title = breve2 ? r.parti.join(" · ") : "";
@@ -65279,13 +65482,13 @@ var init_attivita_segmento = __esm({
           return;
         }
         this.fissate.replaceChildren(...fallite.map(({ riga: riga2 }) => {
-          const b = el31("button", "talos-activity__fissata");
+          const b = el32("button", "talos-activity__fissata");
           b.type = "button";
           b.append(
             icona12("i-x", "i talos-activity__fissata-icona"),
-            el31("span", "talos-voce__verbo", riga2.querySelector(".tool-note-summary-text")?.textContent ?? ""),
-            el31("span", "talos-voce__oggetto", riga2.querySelector(".talos-tool-row__detail")?.textContent ?? ""),
-            el31("span", "talos-voce__meta", riga2.querySelector(".talos-voce__meta")?.textContent ?? "")
+            el32("span", "talos-voce__verbo", riga2.querySelector(".tool-note-summary-text")?.textContent ?? ""),
+            el32("span", "talos-voce__oggetto", riga2.querySelector(".talos-tool-row__detail")?.textContent ?? ""),
+            el32("span", "talos-voce__meta", riga2.querySelector(".talos-voce__meta")?.textContent ?? "")
           );
           b.addEventListener("click", () => this.apriVoce(riga2, { fuoco: true }));
           return b;
@@ -65326,7 +65529,7 @@ var init_attivita_segmento = __esm({
         if (this.filtriEl.dataset.firma !== firma) {
           this.filtriEl.dataset.firma = firma;
           this.filtriEl.replaceChildren(...chiavi.map((k) => {
-            const b = el31("button", "talos-filtro", `${etichetta3(k)} ${quanti(k)}`);
+            const b = el32("button", "talos-filtro", `${etichetta3(k)} ${quanti(k)}`);
             b.type = "button";
             b.dataset.filtro = k;
             b.setAttribute("aria-pressed", String(k === this.filtro));
@@ -66755,7 +66958,7 @@ function riassuntoControlli(conteggi) {
 function fraseControlli(conteggi) {
   return riassuntoControlli(conteggi).map(({ esito, n }) => tn(FRASE_ESITO[esito][0], FRASE_ESITO[esito][1], n)).join(", ");
 }
-function el32(doc, tag2, classe = "", testo2 = null) {
+function el33(doc, tag2, classe = "", testo2 = null) {
   const n = doc.createElement(tag2);
   if (classe) n.className = classe;
   if (testo2 !== null && testo2 !== void 0) n.textContent = testo2;
@@ -66798,7 +67001,7 @@ function icona14(doc, id4) {
   return svg2;
 }
 function bottoneIcona2(doc, id4, etichetta3, fai) {
-  const b = el32(doc, "button", "talos-button talos-button--ghost talos-button--sm talos-icon-button");
+  const b = el33(doc, "button", "talos-button talos-button--ghost talos-button--sm talos-icon-button");
   b.type = "button";
   b.setAttribute("aria-label", etichetta3);
   b.title = etichetta3;
@@ -66807,7 +67010,7 @@ function bottoneIcona2(doc, id4, etichetta3, fai) {
   return b;
 }
 function bottoneTesto2(doc, testo2, fai, variante = "ghost") {
-  const b = el32(doc, "button", `talos-button talos-button--${variante} talos-button--sm`, testo2);
+  const b = el33(doc, "button", `talos-button talos-button--${variante} talos-button--sm`, testo2);
   b.type = "button";
   b.addEventListener("click", fai);
   return b;
@@ -66815,9 +67018,9 @@ function bottoneTesto2(doc, testo2, fai, variante = "ghost") {
 function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, conferma, menu, avvisa = () => {
 }, onSchermoIntero = null }) {
   const stato2 = { dati: null, errore: null, nonRepository: false, vista: "elenco", diff: null, messaggio: "", occupato: false, chiusi: /* @__PURE__ */ new Set(["storia", "pr"]), schermoIntero: false, richiesta: null, modifica: null, accantonati: [], storia: null, generando: false, storiaAperte: /* @__PURE__ */ new Map(), pr: null, modulo: null };
-  const elenco3 = el32(doc, "div", "talos-github");
+  const elenco3 = el33(doc, "div", "talos-github");
   elenco3.dataset.c = "SchedaGithub";
-  const vistaDiff = el32(doc, "section", "talos-lettore talos-github-diff");
+  const vistaDiff = el33(doc, "section", "talos-lettore talos-github-diff");
   vistaDiff.hidden = true;
   radice2.replaceChildren(elenco3, vistaDiff);
   const voceDi = (percorso) => stato2.dati?.voci?.find((v) => v.percorso === percorso) ?? null;
@@ -66935,11 +67138,11 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
   }
   function disegnaRichiesta() {
     const r = stato2.richiesta;
-    const carta = el32(doc, "form", "talos-card talos-inspector-card talos-github-richiesta");
+    const carta = el33(doc, "form", "talos-card talos-inspector-card talos-github-richiesta");
     carta.setAttribute("aria-label", r.titolo);
     carta.noValidate = true;
-    carta.append(el32(doc, "p", "talos-github-richiesta__titolo", r.titolo));
-    const campo3 = el32(doc, "input", "talos-field__input talos-github-richiesta__campo");
+    carta.append(el33(doc, "p", "talos-github-richiesta__titolo", r.titolo));
+    const campo3 = el33(doc, "input", "talos-field__input talos-github-richiesta__campo");
     campo3.type = "text";
     campo3.value = r.valore;
     campo3.placeholder = r.etichetta;
@@ -66947,7 +67150,7 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
     campo3.spellcheck = false;
     campo3.autocomplete = "off";
     campo3.dataset.fuoco = "richiesta";
-    const si = el32(doc, "button", "talos-button talos-button--primary talos-button--sm", r.verbo);
+    const si = el33(doc, "button", "talos-button talos-button--primary talos-button--sm", r.verbo);
     si.type = "submit";
     const aggiorna = () => {
       si.disabled = !r.facoltativo && r.valore.trim() === "";
@@ -66966,14 +67169,14 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
     carta.append(campo3);
     if (r.errore) {
       const id4 = "talos-github-richiesta-errore";
-      const errore2 = el32(doc, "p", "talos-field__error talos-github-richiesta__errore", r.errore);
+      const errore2 = el33(doc, "p", "talos-field__error talos-github-richiesta__errore", r.errore);
       errore2.id = id4;
       errore2.setAttribute("role", "alert");
       campo3.setAttribute("aria-invalid", "true");
       campo3.setAttribute("aria-describedby", id4);
       carta.append(errore2);
     }
-    const piede = el32(doc, "div", "talos-github-richiesta__piede");
+    const piede = el33(doc, "div", "talos-github-richiesta__piede");
     piede.append(bottoneTesto2(doc, t("github.common.cancel"), () => chiudiRichiesta()), si);
     aggiorna();
     carta.append(piede);
@@ -67339,23 +67542,23 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
   function disegnaSincronizzazione() {
     const s = stato2.sinc;
     if (!s) return null;
-    const riga2 = el32(doc, "div", "talos-github-sinc");
+    const riga2 = el33(doc, "div", "talos-github-sinc");
     riga2.dataset.c = "SincronizzazioneGithub";
     if (!Array.isArray(s.remoti) || s.remoti.length === 0) {
-      riga2.append(el32(doc, "p", "talos-inspector__hint talos-github-sinc__nota", t("github.sync.status.noRemote")));
+      riga2.append(el33(doc, "p", "talos-inspector__hint talos-github-sinc__nota", t("github.sync.status.noRemote")));
       return riga2;
     }
     if (!s.ramo) {
-      riga2.append(el32(doc, "p", "talos-inspector__hint talos-github-sinc__nota", t("github.sync.status.detachedHead")));
+      riga2.append(el33(doc, "p", "talos-inspector__hint talos-github-sinc__nota", t("github.sync.status.detachedHead")));
       return riga2;
     }
     const azione = azioneSinc(s);
     const inCorso = stato2.inCorso;
-    const bottone8 = el32(doc, "button", "talos-button talos-button--secondary talos-button--sm talos-github-sinc__azione");
+    const bottone8 = el33(doc, "button", "talos-button talos-button--secondary talos-button--sm talos-github-sinc__azione");
     bottone8.type = "button";
     bottone8.dataset.azione = inCorso ?? azione;
     bottone8.dataset.fuoco = "sinc";
-    bottone8.append(icona14(doc, ICONA_SINC[inCorso ?? azione]), el32(doc, "span", "", inCorso ? t(IN_CORSO[inCorso]) : etichettaSinc(azione, s)));
+    bottone8.append(icona14(doc, ICONA_SINC[inCorso ?? azione]), el33(doc, "span", "", inCorso ? t(IN_CORSO[inCorso]) : etichettaSinc(azione, s)));
     if (inCorso) {
       bottone8.disabled = true;
       bottone8.setAttribute("aria-busy", "true");
@@ -67374,36 +67577,36 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
       riga2.append(ferma);
     }
     if (s.riferimento && !s.riferimentoSparito && Number.isInteger(s.indietro) && Number.isInteger(s.avanti)) {
-      const conti = el32(doc, "span", "talos-github-sinc__conti");
+      const conti = el33(doc, "span", "talos-github-sinc__conti");
       conti.setAttribute("role", "img");
       conti.setAttribute("aria-label", t("github.sync.status.behindAhead", { behind: s.indietro, ahead: s.avanti }));
       conti.title = conti.getAttribute("aria-label");
-      conti.append(el32(doc, "span", "talos-github-sinc__conto", `↓${s.indietro}`), el32(doc, "span", "talos-github-sinc__conto", `↑${s.avanti}`));
+      conti.append(el33(doc, "span", "talos-github-sinc__conto", `↓${s.indietro}`), el33(doc, "span", "talos-github-sinc__conto", `↑${s.avanti}`));
       riga2.append(conti);
     }
     const quando = s.ultimoRecupero ? tempoFa(s.ultimoRecupero, linguaCorrenteDiT()) : null;
-    const recupero = el32(doc, "span", "talos-github-sinc__recupero", quando ? t("github.sync.status.fetched", { when: quando }) : t("github.sync.status.neverFetched"));
+    const recupero = el33(doc, "span", "talos-github-sinc__recupero", quando ? t("github.sync.status.fetched", { when: quando }) : t("github.sync.status.neverFetched"));
     if (s.ultimoRecupero) recupero.title = new Date(s.ultimoRecupero).toLocaleString(linguaCorrenteDiT());
     riga2.append(recupero);
     if (s.riferimentoSparito) {
-      riga2.append(el32(doc, "p", "talos-inspector__hint talos-github-sinc__nota", t("github.sync.status.remoteGone", { ref: s.riferimento?.corto ?? "" })));
+      riga2.append(el33(doc, "p", "talos-inspector__hint talos-github-sinc__nota", t("github.sync.status.remoteGone", { ref: s.riferimento?.corto ?? "" })));
     }
     return riga2;
   }
   function disegnaBloccoScarica() {
     const b = stato2.bloccoScarica;
-    const carta = el32(doc, "div", "talos-card talos-inspector-card talos-github-richiesta talos-github-blocco");
+    const carta = el33(doc, "div", "talos-card talos-inspector-card talos-github-richiesta talos-github-blocco");
     carta.setAttribute("role", "group");
     carta.setAttribute("aria-label", t("github.sync.pull.notStarted"));
-    carta.append(el32(doc, "p", "talos-github-richiesta__titolo", t("github.sync.pull.notStarted")));
-    carta.append(el32(doc, "p", "talos-inspector__hint talos-github-blocco__testo", b.messaggio));
-    const piede = el32(doc, "div", "talos-github-richiesta__piede");
+    carta.append(el33(doc, "p", "talos-github-richiesta__titolo", t("github.sync.pull.notStarted")));
+    carta.append(el33(doc, "p", "talos-inspector__hint talos-github-blocco__testo", b.messaggio));
+    const piede = el33(doc, "div", "talos-github-richiesta__piede");
     const lascia = bottoneTesto2(doc, t("github.common.cancel"), () => {
       stato2.bloccoScarica = null;
       ridisegnaElenco();
       elenco3.querySelector('[data-fuoco="sinc"]')?.focus({ preventScroll: true });
     });
-    const si = el32(doc, "button", "talos-button talos-button--primary talos-button--sm", t("github.sync.pull.stashAndPull"));
+    const si = el33(doc, "button", "talos-button talos-button--primary talos-button--sm", t("github.sync.pull.stashAndPull"));
     si.type = "button";
     si.dataset.fuoco = "blocco-scarica";
     si.addEventListener("click", () => {
@@ -67454,22 +67657,22 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
   }
   function righeDeiFile(aperta2, riga2, larghezza2) {
     const figlia = (contenuto, nota = false) => {
-      const li = el32(doc, "li", `talos-github-riga talos-github-riga--file-commit${nota ? " talos-github-riga--nota" : ""}`);
+      const li = el33(doc, "li", `talos-github-riga talos-github-riga--file-commit${nota ? " talos-github-riga--nota" : ""}`);
       li.dataset.gruppo = "storia";
       const corsie = grafoDellaRiga(doc, disegnoSegnaposto(riga2.uscita, ALTEZZA_RIGA_FILE_STORIA), larghezza2);
       if (nota) corsie.setAttribute("preserveAspectRatio", "none");
       li.append(corsie, contenuto);
       return li;
     };
-    if (aperta2.caricando) return [figlia(el32(doc, "p", "talos-inspector__hint", t("github.files.loading")), true)];
-    if (aperta2.errore) return [figlia(el32(doc, "p", "talos-inspector__hint", aperta2.errore), true)];
+    if (aperta2.caricando) return [figlia(el33(doc, "p", "talos-inspector__hint", t("github.files.loading")), true)];
+    if (aperta2.errore) return [figlia(el33(doc, "p", "talos-inspector__hint", aperta2.errore), true)];
     const righe = aperta2.file.map((f) => {
-      const apri = el32(doc, "button", "talos-github-riga__apri");
+      const apri = el33(doc, "button", "talos-github-riga__apri");
       apri.type = "button";
       apri.dataset.fuoco = `storia-file:${aperta2.a}:${f.percorso}`;
-      const lettera = el32(doc, "span", `talos-github-riga__lettera talos-github-riga__lettera--${f.stato}`, f.stato);
+      const lettera = el33(doc, "span", `talos-github-riga__lettera talos-github-riga__lettera--${f.stato}`, f.stato);
       lettera.title = PAROLA_DI[f.stato] ? t(PAROLA_DI[f.stato]) : f.stato;
-      apri.append(lettera, el32(doc, "span", "talos-github-riga__nome", nomeDi(f.percorso)), el32(doc, "span", "talos-github-riga__cartella", f.prima ? t("github.files.row.renamedFrom", { before: f.prima }) : cartellaDi(f.percorso)));
+      apri.append(lettera, el33(doc, "span", "talos-github-riga__nome", nomeDi(f.percorso)), el33(doc, "span", "talos-github-riga__cartella", f.prima ? t("github.files.row.renamedFrom", { before: f.prima }) : cartellaDi(f.percorso)));
       apri.title = f.prima ? `${f.prima} → ${f.percorso}` : f.percorso;
       apri.addEventListener("click", () => {
         void apriDiff(f.percorso, "commit", { da: aperta2.da, a: aperta2.a, prima: f.prima ?? null, titolo: aperta2.titolo, daVuoto: aperta2.daVuoto });
@@ -67483,7 +67686,7 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
     if (!aperta2.file.length) note.push(t("github.files.empty"));
     if (aperta2.altri) note.push(t("github.files.truncated", { n: aperta2.file.length }));
     if (aperta2.fuori > 0) note.push(tn("github.files.outsideOne", "github.files.outsideMany", aperta2.fuori));
-    for (const n of note) righe.push(figlia(el32(doc, "p", "talos-inspector__hint", n), true));
+    for (const n of note) righe.push(figlia(el33(doc, "p", "talos-inspector__hint", n), true));
     return righe;
   }
   async function caricaStoria() {
@@ -67532,16 +67735,16 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
     return { etichetta: t("github.files.row.stage"), fai: (voce2) => prepara([voce2.percorso]) };
   }
   function disegnaRiga(voce2, gruppo) {
-    const riga2 = el32(doc, "li", "talos-github-riga");
+    const riga2 = el33(doc, "li", "talos-github-riga");
     riga2.dataset.percorso = voce2.percorso;
     riga2.dataset.gruppo = gruppo;
     const { lettera, parola: parola3 } = letteraStato(voce2, gruppo);
-    const apri = el32(doc, "button", "talos-github-riga__apri");
+    const apri = el33(doc, "button", "talos-github-riga__apri");
     apri.type = "button";
-    const segno = el32(doc, "span", `talos-github-riga__lettera talos-github-riga__lettera--${lettera === "!" ? "conflitto" : lettera}`, lettera);
+    const segno = el33(doc, "span", `talos-github-riga__lettera talos-github-riga__lettera--${lettera === "!" ? "conflitto" : lettera}`, lettera);
     segno.setAttribute("aria-hidden", "true");
-    const nome = el32(doc, "span", "talos-github-riga__nome", nomeDi(voce2.percorso));
-    const dove = el32(doc, "span", "talos-github-riga__cartella", voce2.da ? `${cartellaDi(voce2.percorso)} ← ${voce2.da}`.replace(/^ ← /u, "← ") : cartellaDi(voce2.percorso));
+    const nome = el33(doc, "span", "talos-github-riga__nome", nomeDi(voce2.percorso));
+    const dove = el33(doc, "span", "talos-github-riga__cartella", voce2.da ? `${cartellaDi(voce2.percorso)} ← ${voce2.da}`.replace(/^ ← /u, "← ") : cartellaDi(voce2.percorso));
     apri.append(segno, nome, dove);
     apri.setAttribute("aria-label", `${voce2.percorso}, ${parola3}`);
     apri.title = `${voce2.percorso} · ${parola3}`;
@@ -67563,13 +67766,13 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
     return riga2;
   }
   function interruttoreGruppo(chiave, titolo2, conto, suApertura = null) {
-    const interruttore = el32(doc, "button", "talos-github-gruppo__titolo");
+    const interruttore = el33(doc, "button", "talos-github-gruppo__titolo");
     interruttore.type = "button";
     interruttore.dataset.fuoco = `gruppo:${chiave}`;
     const aperto = !stato2.chiusi.has(chiave);
     interruttore.setAttribute("aria-expanded", String(aperto));
-    interruttore.append(icona14(doc, "i-chevron"), el32(doc, "span", "", titolo2));
-    if (conto !== null) interruttore.append(el32(doc, "span", "talos-github-gruppo__conto", conto));
+    interruttore.append(icona14(doc, "i-chevron"), el33(doc, "span", "", titolo2));
+    if (conto !== null) interruttore.append(el33(doc, "span", "talos-github-gruppo__conto", conto));
     interruttore.addEventListener("click", () => {
       const apre = stato2.chiusi.has(chiave);
       if (apre) stato2.chiusi.delete(chiave);
@@ -67580,9 +67783,9 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
     return interruttore;
   }
   function disegnaGruppo(chiave, titolo2, voci) {
-    const sezione = el32(doc, "section", "talos-github-gruppo");
+    const sezione = el33(doc, "section", "talos-github-gruppo");
     sezione.dataset.gruppo = chiave;
-    const testa = el32(doc, "div", "talos-github-gruppo__testa");
+    const testa = el33(doc, "div", "talos-github-gruppo__testa");
     const aperto = !stato2.chiusi.has(chiave);
     testa.append(interruttoreGruppo(chiave, titolo2, String(voci.length)));
     const percorsi = voci.map((v) => v.percorso);
@@ -67590,7 +67793,7 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
     else if (chiave !== "conflitti") testa.append(bottoneTesto2(doc, t("github.files.group.stageAll"), () => prepara(percorsi)));
     sezione.append(testa);
     if (aperto) {
-      const lista = el32(doc, "ul", "talos-github-gruppo__righe");
+      const lista = el33(doc, "ul", "talos-github-gruppo__righe");
       for (const v of voci) lista.append(disegnaRiga(v, chiave));
       sezione.append(lista);
     }
@@ -67598,25 +67801,25 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
   }
   function disegnaAccantonati() {
     const voci = stato2.accantonati;
-    const sezione = el32(doc, "section", "talos-github-gruppo");
+    const sezione = el33(doc, "section", "talos-github-gruppo");
     sezione.dataset.gruppo = "accantonati";
-    const testa = el32(doc, "div", "talos-github-gruppo__testa");
+    const testa = el33(doc, "div", "talos-github-gruppo__testa");
     testa.append(interruttoreGruppo("accantonati", t("github.stash.group.title"), String(voci.length)));
     sezione.append(testa);
     if (stato2.chiusi.has("accantonati")) return sezione;
     const lingua = linguaCorrenteDiT();
-    const lista = el32(doc, "ul", "talos-github-gruppo__righe");
+    const lista = el33(doc, "ul", "talos-github-gruppo__righe");
     for (const v of voci) {
       const { ramo, nota, automatica } = leggiAccantonato(v.messaggio);
-      const riga2 = el32(doc, "li", "talos-github-riga");
+      const riga2 = el33(doc, "li", "talos-github-riga");
       riga2.dataset.gruppo = "accantonati";
       riga2.dataset.commit = v.commit;
-      const corpo = el32(doc, "div", "talos-github-riga__apri talos-github-riga__apri--fermo");
-      const segno = el32(doc, "span", "talos-github-riga__lettera");
+      const corpo = el33(doc, "div", "talos-github-riga__apri talos-github-riga__apri--fermo");
+      const segno = el33(doc, "span", "talos-github-riga__lettera");
       segno.append(icona14(doc, "i-layers"));
-      const nome = el32(doc, "span", "talos-github-riga__nome", automatica ? t("github.stash.noNote") : nota);
-      const dove = el32(doc, "span", "talos-github-riga__cartella", [ramo ? t("github.stash.row.onBranch", { branch: ramo }) : null, tempoFa(v.data, lingua)].filter(Boolean).join(" · "));
-      const testi = el32(doc, "span", "talos-github-riga__testi");
+      const nome = el33(doc, "span", "talos-github-riga__nome", automatica ? t("github.stash.noNote") : nota);
+      const dove = el33(doc, "span", "talos-github-riga__cartella", [ramo ? t("github.stash.row.onBranch", { branch: ramo }) : null, tempoFa(v.data, lingua)].filter(Boolean).join(" · "));
+      const testi = el33(doc, "span", "talos-github-riga__testi");
       testi.append(nome, dove);
       corpo.append(segno, testi);
       corpo.title = v.messaggio;
@@ -67640,9 +67843,9 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
   }
   function disegnaStoria() {
     const s = stato2.storia;
-    const sezione = el32(doc, "section", "talos-github-gruppo");
+    const sezione = el33(doc, "section", "talos-github-gruppo");
     sezione.dataset.gruppo = "storia";
-    const testa = el32(doc, "div", "talos-github-gruppo__testa");
+    const testa = el33(doc, "div", "talos-github-gruppo__testa");
     const conto = s && !s.caricando && !s.errore ? `${s.commit.length}${s.altri ? "+" : ""}` : null;
     testa.append(interruttoreGruppo("storia", t("github.history.title"), conto, () => {
       void caricaStoria();
@@ -67650,15 +67853,15 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
     sezione.append(testa);
     if (stato2.chiusi.has("storia")) return sezione;
     if (!s || s.caricando) {
-      sezione.append(el32(doc, "p", "talos-inspector__hint", t("github.history.loading")));
+      sezione.append(el33(doc, "p", "talos-inspector__hint", t("github.history.loading")));
       return sezione;
     }
     if (s.errore) {
-      sezione.append(el32(doc, "p", "talos-inspector__hint", s.errore));
+      sezione.append(el33(doc, "p", "talos-inspector__hint", s.errore));
       return sezione;
     }
     if (!s.commit.length) {
-      sezione.append(el32(doc, "p", "talos-inspector__hint", t("github.history.empty")));
+      sezione.append(el33(doc, "p", "talos-inspector__hint", t("github.history.empty")));
       return sezione;
     }
     const lingua = linguaCorrenteDiT();
@@ -67672,12 +67875,12 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
     };
     const disegni = righe.map((r) => disegnoDellaRiga(r, ALTEZZA_RIGA_STORIA));
     const larghezzaGrafo = Math.max(...disegni.map((d) => d.larghezza));
-    const lista = el32(doc, "ul", "talos-github-gruppo__righe talos-github-storia");
+    const lista = el33(doc, "ul", "talos-github-gruppo__righe talos-github-storia");
     for (const [i2, r] of righe.entries()) {
-      const riga2 = el32(doc, "li", "talos-github-riga talos-github-riga--commit");
+      const riga2 = el33(doc, "li", "talos-github-riga talos-github-riga--commit");
       riga2.dataset.gruppo = "storia";
       riga2.dataset.tipo = r.tipo;
-      const corpo = el32(doc, "button", "talos-github-riga__apri talos-github-riga__apri--due-righe");
+      const corpo = el33(doc, "button", "talos-github-riga__apri talos-github-riga__apri--due-righe");
       corpo.type = "button";
       const chiave = r.tipo === "in-arrivo" || r.tipo === "in-uscita" ? r.tipo : r.id;
       const confronto = r.tipo === "in-arrivo" ? { da: s.baseComune, a: s.remoto, titolo: t("github.history.incomingRef", { ref: rif }) } : r.tipo === "in-uscita" ? { da: s.baseComune, a: s.testa, titolo: t("github.history.outgoingRef", { ref: rif }) } : { da: null, a: r.id, titolo: `${r.voce.breve} · ${r.voce.soggetto}` };
@@ -67690,8 +67893,8 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
       if (r.tipo === "in-arrivo" || r.tipo === "in-uscita") {
         const n = quanti(r.tipo);
         corpo.append(
-          el32(doc, "span", "talos-github-riga__nome", r.tipo === "in-arrivo" ? t("github.history.incoming") : t("github.history.outgoing")),
-          el32(doc, "span", "talos-github-riga__cartella", r.tipo === "in-arrivo" ? tn("github.history.toPullOne", "github.history.toPullMany", n, { ref: rif }) : tn("github.history.toPushOne", "github.history.toPushMany", n, { ref: rif }))
+          el33(doc, "span", "talos-github-riga__nome", r.tipo === "in-arrivo" ? t("github.history.incoming") : t("github.history.outgoing")),
+          el33(doc, "span", "talos-github-riga__cartella", r.tipo === "in-arrivo" ? tn("github.history.toPullOne", "github.history.toPullMany", n, { ref: rif }) : tn("github.history.toPushOne", "github.history.toPushMany", n, { ref: rif }))
         );
       } else {
         const c = r.voce;
@@ -67701,8 +67904,8 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
         if (remoto) riga2.dataset.lato = "in-arrivo";
         if (r.tipo === "testa") riga2.setAttribute("aria-current", "true");
         corpo.append(
-          el32(doc, "span", "talos-github-riga__nome", c.soggetto),
-          el32(doc, "span", "talos-github-riga__cartella", [c.breve, c.autore, tempoFa(c.data, lingua), remoto ? t("github.history.row.toPull") : c.inviato ? t("github.history.row.pushed") : t("github.history.row.localOnly")].filter(Boolean).join(" · "))
+          el33(doc, "span", "talos-github-riga__nome", c.soggetto),
+          el33(doc, "span", "talos-github-riga__cartella", [c.breve, c.autore, tempoFa(c.data, lingua), remoto ? t("github.history.row.toPull") : c.inviato ? t("github.history.row.pushed") : t("github.history.row.localOnly")].filter(Boolean).join(" · "))
         );
         corpo.title = `${c.breve} · ${c.soggetto}`;
       }
@@ -67711,7 +67914,7 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
       if (aperta2) lista.append(...righeDeiFile(aperta2, r, larghezzaGrafo));
     }
     sezione.append(lista);
-    if (s.altri) sezione.append(el32(doc, "p", "talos-inspector__hint", t("github.history.truncated", { n: s.commit.length })));
+    if (s.altri) sezione.append(el33(doc, "p", "talos-inspector__hint", t("github.history.truncated", { n: s.commit.length })));
     return sezione;
   }
   function testoBase(base) {
@@ -67739,13 +67942,13 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
     }
   }
   function disegnaNonRepository() {
-    const c = el32(doc, "div", "talos-card talos-inspector-card talos-github-richiesta talos-github-init");
+    const c = el33(doc, "div", "talos-card talos-inspector-card talos-github-richiesta talos-github-init");
     c.dataset.c = "InizializzaRepository";
     c.setAttribute("role", "group");
     c.setAttribute("aria-label", t("github.repo.none.title"));
     c.append(
-      el32(doc, "p", "talos-github-richiesta__titolo", t("github.repo.none.title")),
-      el32(doc, "p", "talos-inspector__hint talos-github-blocco__testo", t("github.repo.none.explain"))
+      el33(doc, "p", "talos-github-richiesta__titolo", t("github.repo.none.title")),
+      el33(doc, "p", "talos-inspector__hint talos-github-blocco__testo", t("github.repo.none.explain"))
     );
     const inCorso = stato2.inCorso === "inizializza";
     const fai = bottoneTesto2(doc, inCorso ? t("github.repo.init.progress") : t("github.repo.init.action"), () => {
@@ -67754,7 +67957,7 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
     fai.dataset.fuoco = "inizializza";
     fai.disabled = inCorso || stato2.occupato;
     if (inCorso) c.setAttribute("aria-busy", "true");
-    const piede = el32(doc, "div", "talos-github-richiesta__piede");
+    const piede = el33(doc, "div", "talos-github-richiesta__piede");
     piede.append(fai);
     c.append(piede);
     return c;
@@ -67793,26 +67996,26 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
       return;
     }
     if (stato2.errore) {
-      const carta2 = el32(doc, "div", "talos-card talos-inspector-card");
-      carta2.append(el32(doc, "p", "talos-inspector__hint", stato2.errore));
+      const carta2 = el33(doc, "div", "talos-card talos-inspector-card");
+      carta2.append(el33(doc, "p", "talos-inspector__hint", stato2.errore));
       elenco3.append(carta2);
       return;
     }
     if (!dati) {
-      elenco3.append(el32(doc, "p", "talos-inspector__hint", t("github.repo.loading")));
+      elenco3.append(el33(doc, "p", "talos-inspector__hint", t("github.repo.loading")));
       return;
     }
     const g = raggruppaVoci(dati.voci);
     const quanteModifiche = g.conflitti.length + g.preparati.length + g.modificati.length + g.nuovi.length;
-    const testa = el32(doc, "div", "talos-file-head talos-github__testa");
+    const testa = el33(doc, "div", "talos-file-head talos-github__testa");
     const nomeRamo = dati.ramo ?? (dati.staccata ? t("github.repo.header.detachedHead") : t("github.repo.header.noBranch"));
-    const ramo = el32(doc, "button", "talos-github__ramo");
+    const ramo = el33(doc, "button", "talos-github__ramo");
     ramo.type = "button";
     ramo.dataset.fuoco = "ramo";
     ramo.setAttribute("aria-haspopup", "menu");
     ramo.setAttribute("aria-label", t("github.repo.header.branch", { name: nomeRamo }));
     ramo.title = t("github.repo.header.branch", { name: nomeRamo });
-    ramo.append(icona14(doc, "i-branch"), el32(doc, "b", "talos-file-head__nome", nomeRamo), icona14(doc, "i-chevron"));
+    ramo.append(icona14(doc, "i-branch"), el33(doc, "b", "talos-file-head__nome", nomeRamo), icona14(doc, "i-chevron"));
     ramo.addEventListener("click", (e) => {
       void apriMenuRami(e.currentTarget);
     });
@@ -67839,10 +68042,10 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
     const sinc = disegnaSincronizzazione();
     if (sinc) elenco3.append(sinc);
     if (stato2.bloccoScarica) elenco3.append(disegnaBloccoScarica());
-    elenco3.append(el32(doc, "p", "talos-inspector__hint talos-github__base", testoBase(dati.base)));
+    elenco3.append(el33(doc, "p", "talos-inspector__hint talos-github__base", testoBase(dati.base)));
     if (stato2.richiesta) elenco3.append(disegnaRichiesta());
     if (dati.preparatiFuori > 0) {
-      const avviso = el32(doc, "div", "talos-callout talos-github__fuori", tn(
+      const avviso = el33(doc, "div", "talos-callout talos-github__fuori", tn(
         "github.commit.blocked.outsideOne",
         "github.commit.blocked.outsideMany",
         dati.preparatiFuori
@@ -67851,20 +68054,20 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
       avviso.setAttribute("role", "status");
       elenco3.append(avviso);
     }
-    const carta = el32(doc, "div", "talos-card talos-inspector-card talos-github-commit");
+    const carta = el33(doc, "div", "talos-card talos-inspector-card talos-github-commit");
     if (stato2.modifica) {
-      const modo = el32(doc, "div", "talos-github-commit__modo");
+      const modo = el33(doc, "div", "talos-github-commit__modo");
       modo.setAttribute("role", "status");
-      modo.append(el32(doc, "span", "", t("github.commit.amend.banner", { hash: stato2.modifica.breve })), bottoneTesto2(doc, t("github.common.cancel"), () => lasciaStareModifica()));
+      modo.append(el33(doc, "span", "", t("github.commit.amend.banner", { hash: stato2.modifica.breve })), bottoneTesto2(doc, t("github.common.cancel"), () => lasciaStareModifica()));
       carta.append(modo);
     }
-    const campo3 = el32(doc, "textarea", "talos-textarea talos-github-commit__messaggio");
+    const campo3 = el33(doc, "textarea", "talos-textarea talos-github-commit__messaggio");
     campo3.dataset.fuoco = "messaggio";
     campo3.rows = 3;
     campo3.placeholder = t("github.commit.messageLabel");
     campo3.setAttribute("aria-label", t("github.commit.messageLabel"));
     campo3.value = stato2.messaggio;
-    const pulsante = el32(doc, "button", "talos-button talos-button--primary talos-button--sm talos-github-commit__fai");
+    const pulsante = el33(doc, "button", "talos-button talos-button--primary talos-button--sm talos-github-commit__fai");
     pulsante.type = "button";
     const aggiornaPulsante = () => {
       let testo2;
@@ -67893,7 +68096,7 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
       void committa();
     });
     aggiornaPulsante();
-    const campoBox = el32(doc, "div", "talos-github-commit__campo");
+    const campoBox = el33(doc, "div", "talos-github-commit__campo");
     campoBox.append(campo3);
     if (typeof api.generaMessaggio === "function") {
       const genera = bottoneIcona2(doc, "i-sparkles", stato2.generando ? t("github.commit.generate.writing") : t("github.commit.generate.action"), () => {
@@ -67906,9 +68109,9 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
       campoBox.append(genera);
     }
     carta.append(campoBox, pulsante);
-    if (g.conflitti.length > 0) carta.append(el32(doc, "p", "talos-inspector__hint", t("github.commit.blocked.conflicts")));
+    if (g.conflitti.length > 0) carta.append(el33(doc, "p", "talos-inspector__hint", t("github.commit.blocked.conflicts")));
     elenco3.append(carta);
-    if (quanteModifiche === 0) elenco3.append(el32(doc, "p", "talos-inspector__hint talos-github__vuoto", t("github.commit.blocked.noChanges")));
+    if (quanteModifiche === 0) elenco3.append(el33(doc, "p", "talos-inspector__hint talos-github__vuoto", t("github.commit.blocked.noChanges")));
     for (const { chiave, titolo: titolo2 } of GRUPPI2) {
       if (g[chiave].length) elenco3.append(disegnaGruppo(chiave, titolo2, g[chiave]));
     }
@@ -68160,15 +68363,15 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
     return errore2?.message || t("github.common.failed");
   }
   function esitiInCifre(conteggi) {
-    const esiti = el32(doc, "span", "talos-github-pr__esiti");
+    const esiti = el33(doc, "span", "talos-github-pr__esiti");
     const frase = fraseControlli(conteggi);
     esiti.setAttribute("role", "img");
     esiti.setAttribute("aria-label", frase || t(CHIAVI_PR.nessunControllo));
     esiti.title = esiti.getAttribute("aria-label");
     for (const { esito, n } of riassuntoControlli(conteggi)) {
-      const voce2 = el32(doc, "span", "talos-github-pr__esito");
+      const voce2 = el33(doc, "span", "talos-github-pr__esito");
       voce2.dataset.esito = esito;
-      voce2.append(icona14(doc, ICONA_ESITO[esito]), el32(doc, "span", "", String(n)));
+      voce2.append(icona14(doc, ICONA_ESITO[esito]), el33(doc, "span", "", String(n)));
       esiti.append(voce2);
     }
     return esiti;
@@ -68179,22 +68382,22 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
     return pr2.bozza ? t(CHIAVI_PR.bozza) : t(CHIAVI_PR.aperta);
   }
   function rigaPrDelRamo(pr2) {
-    const riga2 = el32(doc, "li", "talos-github-riga talos-github-riga--pr");
+    const riga2 = el33(doc, "li", "talos-github-riga talos-github-riga--pr");
     riga2.dataset.gruppo = "pr";
     riga2.dataset.numero = String(pr2.numero);
     riga2.dataset.stato = pr2.stato;
     riga2.dataset.bozza = String(pr2.bozza === true);
     const conControlli = (pr2.controlli?.totale ?? 0) > 0;
-    const corpo = el32(doc, "button", "talos-github-riga__apri");
+    const corpo = el33(doc, "button", "talos-github-riga__apri");
     corpo.type = "button";
     corpo.dataset.fuoco = "pr-ramo";
-    const segno = el32(doc, "span", "talos-github-riga__lettera");
+    const segno = el33(doc, "span", "talos-github-riga__lettera");
     segno.append(icona14(doc, "i-git"));
-    const testi = el32(doc, "span", "talos-github-riga__testi");
-    const seconda = el32(doc, "span", "talos-github-riga__cartella talos-github-pr__seconda");
-    seconda.append(el32(doc, "span", "", parolaStatoPr(pr2)));
+    const testi = el33(doc, "span", "talos-github-riga__testi");
+    const seconda = el33(doc, "span", "talos-github-riga__cartella talos-github-pr__seconda");
+    seconda.append(el33(doc, "span", "", parolaStatoPr(pr2)));
     if (conControlli) seconda.append(esitiInCifre(pr2.controlli.conteggi));
-    testi.append(el32(doc, "span", "talos-github-riga__nome", `#${pr2.numero} ${pr2.titolo}`), seconda);
+    testi.append(el33(doc, "span", "talos-github-riga__nome", `#${pr2.numero} ${pr2.titolo}`), seconda);
     corpo.append(segno, testi);
     corpo.title = `#${pr2.numero} · ${pr2.titolo}`;
     if (conControlli) {
@@ -68215,15 +68418,15 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
   }
   function righeControlli(pr2) {
     return pr2.controlli.voci.map((c) => {
-      const riga2 = el32(doc, "li", "talos-github-riga talos-github-riga--controllo");
+      const riga2 = el33(doc, "li", "talos-github-riga talos-github-riga--controllo");
       riga2.dataset.gruppo = "pr";
       riga2.dataset.esito = c.stato;
-      const corpo = el32(doc, "button", "talos-github-riga__apri");
+      const corpo = el33(doc, "button", "talos-github-riga__apri");
       corpo.type = "button";
-      const segno = el32(doc, "span", "talos-github-riga__lettera");
+      const segno = el33(doc, "span", "talos-github-riga__lettera");
       segno.dataset.esito = c.stato;
       segno.append(icona14(doc, ICONA_ESITO[c.stato] ?? "i-ignoto"));
-      corpo.append(segno, el32(doc, "span", "talos-github-riga__nome", c.nome), el32(doc, "span", "talos-github-riga__cartella", [t(PAROLA_ESITO[c.stato] ?? c.stato), c.flusso].filter(Boolean).join(" · ")));
+      corpo.append(segno, el33(doc, "span", "talos-github-riga__nome", c.nome), el33(doc, "span", "talos-github-riga__cartella", [t(PAROLA_ESITO[c.stato] ?? c.stato), c.flusso].filter(Boolean).join(" · ")));
       corpo.setAttribute("aria-label", `${c.nome}: ${t(PAROLA_ESITO[c.stato] ?? c.stato)}${c.flusso ? ` · ${c.flusso}` : ""}`);
       if (c.indirizzo) {
         corpo.addEventListener("click", () => apriFuori(c.indirizzo));
@@ -68234,16 +68437,16 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
     });
   }
   function rigaPrAperta(pr2, account) {
-    const riga2 = el32(doc, "li", "talos-github-riga talos-github-riga--pr-aperta");
+    const riga2 = el33(doc, "li", "talos-github-riga talos-github-riga--pr-aperta");
     riga2.dataset.gruppo = "pr";
     riga2.dataset.numero = String(pr2.numero);
-    const corpo = el32(doc, "button", "talos-github-riga__apri talos-github-riga__apri--due-righe");
+    const corpo = el33(doc, "button", "talos-github-riga__apri talos-github-riga__apri--due-righe");
     corpo.type = "button";
     corpo.dataset.fuoco = `pr:${pr2.numero}`;
     const quando = tempoFa(pr2.aggiornata, linguaCorrenteDiT());
     corpo.append(
-      el32(doc, "span", "talos-github-riga__nome", `#${pr2.numero} ${pr2.titolo}`),
-      el32(doc, "span", "talos-github-riga__cartella", [`${pr2.ramo} → ${pr2.base}`, pr2.autore && pr2.autore === account ? t(CHIAVI_PR.tua) : pr2.autore, pr2.bozza ? t(CHIAVI_PR.inBozza) : null, quando].filter(Boolean).join(" · "))
+      el33(doc, "span", "talos-github-riga__nome", `#${pr2.numero} ${pr2.titolo}`),
+      el33(doc, "span", "talos-github-riga__cartella", [`${pr2.ramo} → ${pr2.base}`, pr2.autore && pr2.autore === account ? t(CHIAVI_PR.tua) : pr2.autore, pr2.bozza ? t(CHIAVI_PR.inBozza) : null, quando].filter(Boolean).join(" · "))
     );
     corpo.title = `#${pr2.numero} · ${pr2.titolo} — ${t(CHIAVI_PR.apri)}`;
     corpo.addEventListener("click", () => apriFuori(pr2.url));
@@ -68253,15 +68456,15 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
   function cartaStatoGh(p) {
     const gh = p.gh;
     const carta = (titolo2, testo2) => {
-      const c = el32(doc, "div", "talos-card talos-inspector-card talos-github-richiesta talos-github-pr__stato");
+      const c = el33(doc, "div", "talos-card talos-inspector-card talos-github-richiesta talos-github-pr__stato");
       c.setAttribute("role", "group");
       c.setAttribute("aria-label", titolo2);
-      c.append(el32(doc, "p", "talos-github-richiesta__titolo", titolo2));
-      if (testo2) c.append(el32(doc, "p", "talos-inspector__hint talos-github-blocco__testo", testo2));
+      c.append(el33(doc, "p", "talos-github-richiesta__titolo", titolo2));
+      if (testo2) c.append(el33(doc, "p", "talos-inspector__hint talos-github-blocco__testo", testo2));
       return c;
     };
     const piede = (...bottoni) => {
-      const d = el32(doc, "div", "talos-github-richiesta__piede");
+      const d = el33(doc, "div", "talos-github-richiesta__piede");
       d.append(...bottoni);
       return d;
     };
@@ -68272,8 +68475,8 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
     }
     if (p.collegamento?.codice) {
       const c = carta(t(CHIAVI_PR.collega), t(CHIAVI_PR.collegaCodice));
-      const riga2 = el32(doc, "div", "talos-github-pr__codice-riga");
-      const codice = el32(doc, "output", "talos-github-pr__codice", p.collegamento.codice);
+      const riga2 = el33(doc, "div", "talos-github-pr__codice-riga");
+      const codice = el33(doc, "output", "talos-github-pr__codice", p.collegamento.codice);
       codice.setAttribute("aria-label", `${t(CHIAVI_PR.codice)}: ${p.collegamento.codice.split("").join(" ")}`);
       const copia3 = bottoneIcona2(doc, "i-copy", t(CHIAVI_PR.copiaCodice), () => {
         void copiaCodice(p.collegamento.codice);
@@ -68290,7 +68493,7 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
     if (!gh?.gh?.trovato) {
       const vecchia = gh?.gh?.sistemaTroppoVecchio;
       const c = carta(t(vecchia ? CHIAVI_PR.ghVecchia : CHIAVI_PR.ghAssente), gh?.installabile === false ? t(CHIAVI_PR.ghNonInstallabile) : vecchia ? t(CHIAVI_PR.ghVecchiaSpiega, { installed: vecchia, official: gh?.versioneTalos ?? "" }) : t(CHIAVI_PR.ghSpiega, { official: gh?.versioneTalos ?? "" }));
-      if (gh?.installazione?.errore) c.append(el32(doc, "p", "talos-github-richiesta__errore", testoDelCampo(gh.installazione, "errore")));
+      if (gh?.installazione?.errore) c.append(el33(doc, "p", "talos-github-richiesta__errore", testoDelCampo(gh.installazione, "errore")));
       const azione = gh?.installabile === false ? bottoneTesto2(doc, t(CHIAVI_PR.ghPagina), () => apriFuori("https://github.com/cli/cli#installation"), "primary") : bottoneTesto2(doc, t(CHIAVI_PR.ghScarica), () => {
         void installaGh();
       }, "primary");
@@ -68311,10 +68514,10 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
   }
   function disegnaModuloPr() {
     const m = stato2.modulo;
-    const carta = el32(doc, "form", "talos-card talos-inspector-card talos-github-richiesta talos-github-pr__modulo");
+    const carta = el33(doc, "form", "talos-card talos-inspector-card talos-github-richiesta talos-github-pr__modulo");
     carta.setAttribute("aria-label", t(CHIAVI_PR.nuova));
     carta.noValidate = true;
-    carta.append(el32(doc, "p", "talos-github-richiesta__titolo", t(CHIAVI_PR.nuova)));
+    carta.append(el33(doc, "p", "talos-github-richiesta__titolo", t(CHIAVI_PR.nuova)));
     const esc = (e) => {
       if (e.key === "Escape") {
         e.preventDefault();
@@ -68322,37 +68525,37 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
         chiudiModuloPr();
       }
     };
-    const piede = el32(doc, "div", "talos-github-richiesta__piede");
+    const piede = el33(doc, "div", "talos-github-richiesta__piede");
     const lasciaStare = bottoneTesto2(doc, t(CHIAVI_PR.annulla), () => chiudiModuloPr());
     if (m.caricando && !m.ramo) {
-      carta.append(el32(doc, "p", "talos-inspector__hint", t(CHIAVI_PR.preparoBozza)));
+      carta.append(el33(doc, "p", "talos-inspector__hint", t(CHIAVI_PR.preparoBozza)));
       piede.append(lasciaStare);
       carta.append(piede);
       return carta;
     }
     if (!m.ramo) {
-      carta.append(el32(doc, "p", "talos-github-richiesta__errore", m.errore || t("github.common.failed")));
+      carta.append(el33(doc, "p", "talos-github-richiesta__errore", m.errore || t("github.common.failed")));
       piede.append(lasciaStare);
       carta.append(piede);
       return carta;
     }
-    const rami = el32(doc, "div", "talos-github-pr__rami");
-    const base = el32(doc, "button", "talos-github__ramo talos-github-pr__base");
+    const rami = el33(doc, "div", "talos-github-pr__rami");
+    const base = el33(doc, "button", "talos-github__ramo talos-github-pr__base");
     base.type = "button";
     base.dataset.fuoco = "pr-base";
     base.setAttribute("aria-haspopup", "menu");
     base.setAttribute("aria-label", `${t(CHIAVI_PR.base, { base: m.base ?? "—" })}. ${t(CHIAVI_PR.scegliBase)}`);
     base.title = t(CHIAVI_PR.scegliBase);
-    base.append(icona14(doc, "i-branch"), el32(doc, "b", "talos-file-head__nome", m.base ?? "—"), icona14(doc, "i-chevron"));
+    base.append(icona14(doc, "i-branch"), el33(doc, "b", "talos-file-head__nome", m.base ?? "—"), icona14(doc, "i-chevron"));
     base.addEventListener("click", (e) => scegliBase(e.currentTarget));
-    const ramo = el32(doc, "span", "talos-github-pr__ramo", m.ramo);
+    const ramo = el33(doc, "span", "talos-github-pr__ramo", m.ramo);
     ramo.title = m.ramo;
-    rami.append(ramo, el32(doc, "span", "talos-github-pr__freccia", "→"), base);
+    rami.append(ramo, el33(doc, "span", "talos-github-pr__freccia", "→"), base);
     carta.append(rami);
-    if (m.caricando) carta.append(el32(doc, "p", "talos-inspector__hint", t(CHIAVI_PR.preparoBozza)));
-    else if (!m.baseTrovata) carta.append(el32(doc, "p", "talos-inspector__hint", t(CHIAVI_PR.baseAssente, { base: m.base ?? "—", remote: m.remoto ?? "" })));
-    else carta.append(el32(doc, "p", "talos-inspector__hint", m.commitOltre ? t(CHIAVI_PR.oltreCommit, { n: m.commit, base: m.base }) : tn(CHIAVI_PR.unCommit, CHIAVI_PR.piuCommit, m.commit, { base: m.base })));
-    const titolo2 = el32(doc, "input", "talos-field__input talos-github-richiesta__campo");
+    if (m.caricando) carta.append(el33(doc, "p", "talos-inspector__hint", t(CHIAVI_PR.preparoBozza)));
+    else if (!m.baseTrovata) carta.append(el33(doc, "p", "talos-inspector__hint", t(CHIAVI_PR.baseAssente, { base: m.base ?? "—", remote: m.remoto ?? "" })));
+    else carta.append(el33(doc, "p", "talos-inspector__hint", m.commitOltre ? t(CHIAVI_PR.oltreCommit, { n: m.commit, base: m.base }) : tn(CHIAVI_PR.unCommit, CHIAVI_PR.piuCommit, m.commit, { base: m.base })));
+    const titolo2 = el33(doc, "input", "talos-field__input talos-github-richiesta__campo");
     titolo2.type = "text";
     titolo2.value = m.titolo ?? "";
     titolo2.placeholder = t(CHIAVI_PR.titolo);
@@ -68360,36 +68563,36 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
     titolo2.maxLength = 256;
     titolo2.autocomplete = "off";
     titolo2.dataset.fuoco = "pr-titolo";
-    const testo2 = el32(doc, "textarea", "talos-textarea talos-github-pr__testo");
+    const testo2 = el33(doc, "textarea", "talos-textarea talos-github-pr__testo");
     testo2.rows = 5;
     testo2.value = m.testo ?? "";
     testo2.placeholder = t(CHIAVI_PR.testo);
     testo2.setAttribute("aria-label", t(CHIAVI_PR.testo));
     testo2.dataset.fuoco = "pr-testo";
-    const casella = el32(doc, "label", "talos-github-pr__bozza");
-    const spunta = el32(doc, "input", "talos-checkbox");
+    const casella = el33(doc, "label", "talos-github-pr__bozza");
+    const spunta = el33(doc, "input", "talos-checkbox");
     spunta.type = "checkbox";
     spunta.checked = m.bozza === true;
     spunta.dataset.fuoco = "pr-bozza";
     spunta.addEventListener("change", () => {
       m.bozza = spunta.checked;
     });
-    const parole = el32(doc, "span", "talos-github-pr__bozza-testi");
-    parole.append(el32(doc, "span", "", t(CHIAVI_PR.bozzaCasella)), el32(doc, "span", "talos-github-riga__cartella", t(CHIAVI_PR.bozzaSpiega)));
+    const parole = el33(doc, "span", "talos-github-pr__bozza-testi");
+    parole.append(el33(doc, "span", "", t(CHIAVI_PR.bozzaCasella)), el33(doc, "span", "talos-github-riga__cartella", t(CHIAVI_PR.bozzaSpiega)));
     casella.append(spunta, parole);
     carta.append(titolo2, testo2, casella);
     const azione = azioneSinc(stato2.sinc);
-    if (azione === "pubblica") carta.append(el32(doc, "p", "talos-inspector__hint", t(CHIAVI_PR.pubblicaPrima)));
-    else if (azione === "invia") carta.append(el32(doc, "p", "talos-inspector__hint", tn(CHIAVI_PR.unDaInviare, CHIAVI_PR.piuDaInviare, stato2.sinc.avanti)));
+    if (azione === "pubblica") carta.append(el33(doc, "p", "talos-inspector__hint", t(CHIAVI_PR.pubblicaPrima)));
+    else if (azione === "invia") carta.append(el33(doc, "p", "talos-inspector__hint", tn(CHIAVI_PR.unDaInviare, CHIAVI_PR.piuDaInviare, stato2.sinc.avanti)));
     if (m.errore) {
-      const errore2 = el32(doc, "p", "talos-field__error talos-github-richiesta__errore", m.errore);
+      const errore2 = el33(doc, "p", "talos-field__error talos-github-richiesta__errore", m.errore);
       errore2.id = "talos-github-pr-errore";
       errore2.setAttribute("role", "alert");
       titolo2.setAttribute("aria-describedby", errore2.id);
       if (!String(m.titolo ?? "").trim()) titolo2.setAttribute("aria-invalid", "true");
       carta.append(errore2);
     }
-    const crea2 = el32(doc, "button", "talos-button talos-button--primary talos-button--sm", m.creando ? t(CHIAVI_PR.creo) : t(CHIAVI_PR.crea));
+    const crea2 = el33(doc, "button", "talos-button talos-button--primary talos-button--sm", m.creando ? t(CHIAVI_PR.creo) : t(CHIAVI_PR.crea));
     crea2.type = "submit";
     crea2.dataset.fuoco = "pr-invia";
     const aggiorna = () => {
@@ -68418,9 +68621,9 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
   }
   function disegnaPr() {
     const p = stato2.pr;
-    const sezione = el32(doc, "section", "talos-github-gruppo talos-github-pr");
+    const sezione = el33(doc, "section", "talos-github-gruppo talos-github-pr");
     sezione.dataset.gruppo = "pr";
-    const testa = el32(doc, "div", "talos-github-gruppo__testa");
+    const testa = el33(doc, "div", "talos-github-gruppo__testa");
     testa.append(interruttoreGruppo("pr", t(CHIAVI_PR.gruppo), p?.dati ? String(p.dati.aperte.length) : null, () => {
       void caricaPr();
     }));
@@ -68447,7 +68650,7 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
       return sezione;
     }
     if (!p || p.caricando && !p.gh && !p.errore) {
-      sezione.append(el32(doc, "p", "talos-inspector__hint", t(CHIAVI_PR.leggo)));
+      sezione.append(el33(doc, "p", "talos-inspector__hint", t(CHIAVI_PR.leggo)));
       return sezione;
     }
     if (p.gh || p.installando || p.collegamento) {
@@ -68458,36 +68661,36 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
       }
     }
     if (p.errore) {
-      sezione.append(el32(doc, "p", "talos-inspector__hint", testoErrorePr(p.errore)));
+      sezione.append(el33(doc, "p", "talos-inspector__hint", testoErrorePr(p.errore)));
       return sezione;
     }
     if (!p.dati) {
-      sezione.append(el32(doc, "p", "talos-inspector__hint", t(CHIAVI_PR.leggo)));
+      sezione.append(el33(doc, "p", "talos-inspector__hint", t(CHIAVI_PR.leggo)));
       return sezione;
     }
     const d = p.dati;
     if (d.prDelRamo) {
-      const lista = el32(doc, "ul", "talos-github-gruppo__righe talos-github-pr__righe");
+      const lista = el33(doc, "ul", "talos-github-gruppo__righe talos-github-pr__righe");
       lista.append(rigaPrDelRamo(d.prDelRamo));
       if (stato2.pr.controlliAperti && (d.prDelRamo.controlli?.totale ?? 0) > 0) lista.append(...righeControlli(d.prDelRamo));
       sezione.append(lista);
     } else if (stato2.modulo) {
       sezione.append(disegnaModuloPr());
     } else if (d.ramoPredefinito && d.ramo === d.ramoPredefinito) {
-      sezione.append(el32(doc, "p", "talos-inspector__hint", t(CHIAVI_PR.ramoPrincipale)));
+      sezione.append(el33(doc, "p", "talos-inspector__hint", t(CHIAVI_PR.ramoPrincipale)));
     } else {
-      const vuota = el32(doc, "div", "talos-github-pr__vuota");
+      const vuota = el33(doc, "div", "talos-github-pr__vuota");
       const crea2 = bottoneTesto2(doc, t(CHIAVI_PR.crea), () => {
         void apriModuloPr();
       }, "secondary");
       crea2.dataset.fuoco = "pr-crea";
-      vuota.append(el32(doc, "p", "talos-inspector__hint", t(CHIAVI_PR.nessunaPr)), crea2);
+      vuota.append(el33(doc, "p", "talos-inspector__hint", t(CHIAVI_PR.nessunaPr)), crea2);
       sezione.append(vuota);
     }
     const altre = d.aperte.filter((x) => x.numero !== d.prDelRamo?.numero);
     if (altre.length) {
-      sezione.append(el32(doc, "p", "talos-inspector__hint talos-github-pr__sotto", t(CHIAVI_PR.aperteNelProgetto)));
-      const lista = el32(doc, "ul", "talos-github-gruppo__righe talos-github-pr__aperte");
+      sezione.append(el33(doc, "p", "talos-inspector__hint talos-github-pr__sotto", t(CHIAVI_PR.aperteNelProgetto)));
+      const lista = el33(doc, "ul", "talos-github-gruppo__righe talos-github-pr__aperte");
       for (const x of altre) lista.append(rigaPrAperta(x, d.account));
       sezione.append(lista);
     }
@@ -68514,7 +68717,7 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
     });
   }
   function comandiPezzo(indice2, dove) {
-    const comandi = el32(doc, "span", "talos-github-pezzo__comandi");
+    const comandi = el33(doc, "span", "talos-github-pezzo__comandi");
     const area = stato2.diff.area;
     const principale = area === "preparato" ? bottoneTesto2(doc, t("github.diff.hunk.unstage"), () => {
       void azionePezzo(indice2, "togli", dove);
@@ -68543,16 +68746,16 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
     const diCommit = area === "commit";
     vistaDiff.replaceChildren();
     vistaDiff.setAttribute("aria-label", t("github.diff.title", { path: percorso }));
-    const testata = el32(doc, "header", "talos-lettore__testata");
+    const testata = el33(doc, "header", "talos-lettore__testata");
     const indietro = bottoneIcona2(doc, "i-chevron", t("github.diff.back"), () => chiudiDiff());
     indietro.classList.add("talos-github-diff__indietro");
-    const titoli = el32(doc, "div", "talos-lettore__titoli");
-    const nome = el32(doc, "h3", "talos-lettore__nome", nomeDi(percorso));
+    const titoli = el33(doc, "div", "talos-lettore__titoli");
+    const nome = el33(doc, "h3", "talos-lettore__nome", nomeDi(percorso));
     nome.title = percorso;
     nome.tabIndex = -1;
-    const meta2 = el32(doc, "p", "talos-lettore__meta", [diCommit ? confronto?.titolo : area === "preparato" ? t("github.diff.staged") : t("github.diff.notStaged"), cartellaDi(percorso)].filter(Boolean).join(" · "));
+    const meta2 = el33(doc, "p", "talos-lettore__meta", [diCommit ? confronto?.titolo : area === "preparato" ? t("github.diff.staged") : t("github.diff.notStaged"), cartellaDi(percorso)].filter(Boolean).join(" · "));
     titoli.append(nome, meta2);
-    const comandi = el32(doc, "div", "talos-lettore__comandi");
+    const comandi = el33(doc, "div", "talos-lettore__comandi");
     if (typeof onSchermoIntero === "function") {
       const schermo = bottoneIcona2(doc, "i-layout", stato2.schermoIntero ? t("github.diff.fullScreen.exit") : t("github.diff.fullScreen.enter"), () => {
         stato2.schermoIntero = !stato2.schermoIntero;
@@ -68574,39 +68777,39 @@ function creaSchedaGithub({ doc = globalThis.document, radice: radice2, api, con
       comandi.append(altro);
     }
     testata.append(indietro, titoli, comandi);
-    const corpo = el32(doc, "div", "talos-lettore__corpo talos-github-diff__corpo");
+    const corpo = el33(doc, "div", "talos-lettore__corpo talos-github-diff__corpo");
     corpo.setAttribute("role", "region");
     corpo.setAttribute("aria-label", t("github.diff.title", { path: percorso }));
     corpo.tabIndex = 0;
-    if (caricando) corpo.append(el32(doc, "p", "talos-inspector__hint", t("github.diff.loading")));
-    else if (errore2) corpo.append(el32(doc, "p", "talos-inspector__hint", errore2));
+    if (caricando) corpo.append(el33(doc, "p", "talos-inspector__hint", t("github.diff.loading")));
+    else if (errore2) corpo.append(el33(doc, "p", "talos-inspector__hint", errore2));
     else if (dati) {
-      corpo.append(el32(doc, "p", "talos-inspector__hint talos-github__base", diCommit ? dati.daVuoto ? t("github.diff.firstCommit") : t("github.diff.comparing", { from: String(dati.da ?? "").slice(0, 7), to: String(dati.a ?? "").slice(0, 7) }) : testoBase(dati.base)));
-      if (dati.binario) corpo.append(el32(doc, "p", "talos-inspector__hint", t("github.diff.binary")));
+      corpo.append(el33(doc, "p", "talos-inspector__hint talos-github__base", diCommit ? dati.daVuoto ? t("github.diff.firstCommit") : t("github.diff.comparing", { from: String(dati.da ?? "").slice(0, 7), to: String(dati.a ?? "").slice(0, 7) }) : testoBase(dati.base)));
+      if (dati.binario) corpo.append(el33(doc, "p", "talos-inspector__hint", t("github.diff.binary")));
       else {
         const { pezzi, aggiunte, rimozioni } = analizzaDiffUnificato(dati.testo);
-        const blocco = el32(doc, "div", "talos-diff-chat talos-github-diff__pezzi");
-        const conti = el32(doc, "div", "talos-diff-chat__pezzo");
-        conti.append(el32(doc, "span", "talos-diff-num talos-diff-num--plus", `+${aggiunte}`), el32(doc, "span", "talos-diff-num talos-diff-num--minus", `−${rimozioni}`));
+        const blocco = el33(doc, "div", "talos-diff-chat talos-github-diff__pezzi");
+        const conti = el33(doc, "div", "talos-diff-chat__pezzo");
+        conti.append(el33(doc, "span", "talos-diff-num talos-diff-num--plus", `+${aggiunte}`), el33(doc, "span", "talos-diff-num talos-diff-num--minus", `−${rimozioni}`));
         blocco.append(conti);
         const conPezzi = typeof dati.impronta === "string" && !dati.troncato && voce2 && voce2.tipo !== "nonTracciato" && !voce2.conflitto;
         pezzi.forEach((pezzo2, indice2) => {
-          const testaPezzo = el32(doc, "div", "talos-diff-chat__pezzo");
+          const testaPezzo = el33(doc, "div", "talos-diff-chat__pezzo");
           const dove = pezzo2.daRiga === null ? t("github.diff.lines.removed") : pezzo2.daRiga === pezzo2.aRiga ? t("github.diff.lines.one", { n: pezzo2.daRiga }) : t("github.diff.lines.range", { from: pezzo2.daRiga, to: pezzo2.aRiga });
-          testaPezzo.append(el32(doc, "span", "talos-diff-chat__righe", dove));
+          testaPezzo.append(el33(doc, "span", "talos-diff-chat__righe", dove));
           if (conPezzi) testaPezzo.append(comandiPezzo(indice2, dove));
-          const righe = el32(doc, "div", "talos-diff");
+          const righe = el33(doc, "div", "talos-diff");
           righe.dataset.c = "DiffView";
           for (const r of pezzo2.righe) {
-            const riga2 = el32(doc, "div", `talos-diff__line talos-diff__line--${r.tipo}`, void 0);
-            riga2.append(el32(doc, "span", "talos-diff-chat__num", String(r.numero)), el32(doc, "span", "talos-diff-chat__segno", r.tipo === "add" ? "+" : r.tipo === "del" ? "−" : " "));
+            const riga2 = el33(doc, "div", `talos-diff__line talos-diff__line--${r.tipo}`, void 0);
+            riga2.append(el33(doc, "span", "talos-diff-chat__num", String(r.numero)), el33(doc, "span", "talos-diff-chat__segno", r.tipo === "add" ? "+" : r.tipo === "del" ? "−" : " "));
             riga2.append(doc.createTextNode(r.testo));
             righe.append(riga2);
           }
           blocco.append(testaPezzo, righe);
         });
-        if (!pezzi.length) blocco.append(el32(doc, "div", "talos-diff-chat__resto", t("github.diff.textUnchanged")));
-        if (dati.troncato) blocco.append(el32(doc, "div", "talos-diff-chat__resto", t("github.diff.tooLong")));
+        if (!pezzi.length) blocco.append(el33(doc, "div", "talos-diff-chat__resto", t("github.diff.textUnchanged")));
+        if (dati.troncato) blocco.append(el33(doc, "div", "talos-diff-chat__resto", t("github.diff.tooLong")));
         corpo.append(blocco);
       }
     }
@@ -69616,7 +69819,7 @@ var init_compattazione_legacy = __esm({
 });
 
 // src/components/stato-vuoto.js
-function el33(documentObj, tag2, className, testo2) {
+function el34(documentObj, tag2, className, testo2) {
   const nodo14 = documentObj.createElement(tag2);
   if (className) nodo14.className = className;
   if (testo2 !== void 0 && testo2 !== null) nodo14.textContent = String(testo2);
@@ -69648,44 +69851,44 @@ function suggerimentiDallaCartella({ voci = [], packageJson = null, totaleTest =
 }
 function creaStatoVuoto(dati = {}, opzioni = {}) {
   const documentObj = opzioni.document || globalThis.document;
-  const colonna = el33(documentObj, "div", "talos-conversation__column talos-empty");
-  const marchio = el33(documentObj, "span", "talos-brand__mark talos-empty__mark");
+  const colonna = el34(documentObj, "div", "talos-conversation__column talos-empty");
+  const marchio = el34(documentObj, "span", "talos-brand__mark talos-empty__mark");
   marchio.setAttribute("aria-hidden", "true");
   marchio.append(simbolo4(documentObj, "glyph", "glifo"));
-  const titolo2 = el33(documentObj, "h2", "talos-empty__title");
-  titolo2.append(documentObj.createTextNode(`${t("varie.emptyState.titleBefore")} `), el33(documentObj, "span", "talos-empty__project", dati.progetto || t("varie.emptyState.thisFolder")), documentObj.createTextNode("?"));
-  const lead = el33(documentObj, "p", "talos-empty__lead", dati.lead || t("varie.emptyState.lead"));
-  const nome = el33(documentObj, "span", "talos-empty__marchio talos-orbitron-brand", "TALOS");
+  const titolo2 = el34(documentObj, "h2", "talos-empty__title");
+  titolo2.append(documentObj.createTextNode(`${t("varie.emptyState.titleBefore")} `), el34(documentObj, "span", "talos-empty__project", dati.progetto || t("varie.emptyState.thisFolder")), documentObj.createTextNode("?"));
+  const lead = el34(documentObj, "p", "talos-empty__lead", dati.lead || t("varie.emptyState.lead"));
+  const nome = el34(documentObj, "span", "talos-empty__marchio talos-orbitron-brand", "TALOS");
   nome.setAttribute("aria-hidden", "true");
   colonna.append(marchio, nome, titolo2, lead);
   const suggerimenti = Array.isArray(dati.suggerimenti) ? dati.suggerimenti : [];
   if (suggerimenti.length > 0) {
-    const lista = el33(documentObj, "div", "talos-card talos-list");
+    const lista = el34(documentObj, "div", "talos-card talos-list");
     lista.setAttribute("data-c", "SuggestionList");
     for (const s of suggerimenti) {
-      const riga2 = el33(documentObj, "button", "talos-list-row");
+      const riga2 = el34(documentObj, "button", "talos-list-row");
       riga2.type = "button";
       riga2.setAttribute("data-c", "ListRow");
-      const icona16 = el33(documentObj, "span", "talos-list-row__icon");
+      const icona16 = el34(documentObj, "span", "talos-list-row__icon");
       icona16.append(simbolo4(documentObj, "i", s.icona || "i-bolt"));
-      const testo2 = el33(documentObj, "span", "talos-list-row__text");
-      testo2.append(el33(documentObj, "span", "talos-list-row__title", s.titolo), el33(documentObj, "span", "talos-list-row__sub", s.sub || ""));
-      riga2.append(icona16, testo2, el33(documentObj, "span", "talos-kbd", "↵"));
+      const testo2 = el34(documentObj, "span", "talos-list-row__text");
+      testo2.append(el34(documentObj, "span", "talos-list-row__title", s.titolo), el34(documentObj, "span", "talos-list-row__sub", s.sub || ""));
+      riga2.append(icona16, testo2, el34(documentObj, "span", "talos-kbd", "↵"));
       if (typeof opzioni.onSuggerimento === "function") riga2.addEventListener("click", () => opzioni.onSuggerimento(s));
       lista.append(riga2);
     }
     colonna.append(lista);
   }
-  const piede = el33(documentObj, "div", "talos-cluster talos-empty__foot");
+  const piede = el34(documentObj, "div", "talos-cluster talos-empty__foot");
   if (dati.ultimaSessione) {
-    const riapri = el33(documentObj, "button", "talos-button talos-button--secondary talos-button--sm");
+    const riapri = el34(documentObj, "button", "talos-button talos-button--secondary talos-button--sm");
     riapri.type = "button";
     riapri.append(simbolo4(documentObj, "i i--sm", "i-clock"), documentObj.createTextNode(t("varie.emptyState.reopenLast")));
     riapri.title = dati.ultimaSessione.nome || "";
     if (typeof opzioni.onRiapri === "function") riapri.addEventListener("click", opzioni.onRiapri);
     piede.append(riapri);
   }
-  piede.append(el33(documentObj, "span", "talos-muted talos-empty__hint", dati.hint || (suggerimenti.length > 0 ? t("varie.emptyState.hintWithExamples") : t("varie.emptyState.hintWithoutExamples"))));
+  piede.append(el34(documentObj, "span", "talos-muted talos-empty__hint", dati.hint || (suggerimenti.length > 0 ? t("varie.emptyState.hintWithExamples") : t("varie.emptyState.hintWithoutExamples"))));
   colonna.append(piede);
   return colonna;
 }
@@ -71642,6 +71845,7 @@ var init_app2 = __esm({
     init_automazioni_v2();
     init_automazione_foglio();
     init_automazione_carta();
+    init_fornitori_carta();
     init_officina();
     init_ricerca();
     init_libreria();
@@ -71990,6 +72194,8 @@ var init_app2 = __esm({
           ragionamentoBubble: /* @__PURE__ */ new Map(),
           inRigiocata: false,
           // ⭐ 13/09 notte: vero fra l'apertura del flusso e `talos.fine-rigiocata`
+          preferenzeDaSalvareAlConfine: false,
+          // B3 09/10: un giro della storia ha cambiato il modo; si salva al confine, una volta
           ragionamentiInCorso: null,
           // ⭐ 13/09 notte: { sessionId, inizi } — l'inizio vero dei ragionamenti aperti, dal registro
           /** ⛔⛔⛔ 27/8, owner: "ricevo risposte duplicate" — ogni evento.`_sequenza` (assegnato dal server, vedi session-registry.mjs broadcast()) entra qui la PRIMA volta che passa da handleRealEvent; una riconnessione (EventSource nativo dopo una caduta, o runDirectShell che ne apre una fresca) rimanda l'intero buffer da capo, e questo Set lo riconosce e lo scarta invece di duplicare bubble/testo. Sopravvive a un `continua:true` (stessa sessione, nuovo giro) — si azzera SOLO per una sessione davvero diversa. */
@@ -72354,6 +72560,7 @@ var init_app2 = __esm({
         let ultimoGestoRuota = 0;
         let frameRiarmoRuota = null;
         let riarmoDaGesto = null;
+        let ultimoTopVistoAlloScroll = scroller.scrollTop;
         let toccoConversazione = null;
         fermaRiarmoRuotaConversazione = (preservaTocco = false) => {
           ultimoGestoRuota += 1;
@@ -72400,7 +72607,7 @@ var init_app2 = __esm({
             streamingLastTargetTop = null;
           } else if (direzione > 0 && streamingUserScrollHold) {
             const generation = state.realSession.generation;
-            riarmoDaGesto = { generation, gesto, top: scroller.scrollTop };
+            riarmoDaGesto = { generation, gesto, top: Math.min(scroller.scrollTop, ultimoTopVistoAlloScroll) };
             const frame3 = window.requestAnimationFrame(() => {
               if (frameRiarmoRuota === frame3) frameRiarmoRuota = null;
               if (generation !== state.realSession.generation || gesto !== ultimoGestoRuota) return;
@@ -72519,6 +72726,7 @@ var init_app2 = __esm({
         let revisioneVistaAlloScroll = revisioneLayoutConversazione;
         let altezzaVistaAlloScroll = scroller.scrollHeight;
         scroller.addEventListener("scroll", () => {
+          ultimoTopVistoAlloScroll = scroller.scrollTop;
           fondoInVistaRicordato = null;
           const diLayout = scrollDiLayout(revisioneVistaAlloScroll, altezzaVistaAlloScroll, scroller);
           revisioneVistaAlloScroll = revisioneLayoutConversazione;
@@ -73112,20 +73320,17 @@ var init_app2 = __esm({
           if (stato2) stato2.textContent = t("app.projects.readFailed", { motivo: messaggioErroreUtente(errore2, t("app.errors.retryShortly")) });
         }
       }
+      function indirizzoArchivioPersonale(risorsa, sessionId = state.realSession.id) {
+        return sessionId ? `/api/v1/sessions/${encodeURIComponent(sessionId)}/${risorsa}` : `/api/v1/me/${risorsa}`;
+      }
       async function caricaPaginaNote() {
         const schermo = $3("#schermoNote");
         if (!schermo) return;
         const id4 = state.realSession.id;
         const stato2 = $3("[data-note-stato]", schermo);
-        if (!id4) {
-          noteCaricate = [];
-          montaNote(schermo, [], { cerca: "" });
-          if (stato2) stato2.textContent = t("app.notes.openSessionHint");
-          return;
-        }
         if (stato2) stato2.textContent = t("app.notes.reading");
         try {
-          const dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(id4)}/notes`);
+          const dati = await apiGet(indirizzoArchivioPersonale("notes", id4));
           noteCaricate = Array.isArray(dati?.note) ? dati.note : [];
         } catch (errore2) {
           noteCaricate = [];
@@ -73158,7 +73363,7 @@ ${nota?.contenuto || ""}`.trim(), t("app.notes.copied")),
           onMenu: apriMenuAzioniLibreria,
           onCambiata: () => {
             void caricaPaginaNote();
-            void aggiornaContatoriLuoghi(state.sessionSelection.available?.size ?? 0);
+            void aggiornaContatoriLuoghi(state.sessionSelection.available?.size ?? 0, { forza: true });
           },
           copia: (testo2) => copyText(testo2, t("app.notes.copied")),
           rendiMarkdown: renderizzaMarkdownSemplice
@@ -73493,11 +73698,11 @@ ${nota?.contenuto || ""}`.trim(), t("app.notes.copied")),
         return true;
       }
       const mostraToast = creaPilaToast(toastRegion, {
-        animaUscita: (el34, fine) => animateExit(el34, {}, fine),
-        entra: (el34) => markMotionEnter(el34),
+        animaUscita: (el35, fine) => animateExit(el35, {}, fine),
+        entra: (el35) => markMotionEnter(el35),
         fuocoDiRitorno: () => $3("#campanella") || $3("#composerInput")
       });
-      const visibileDavvero = (el34) => Boolean(el34 && !el34.hidden && el34.getClientRects().length > 0);
+      const visibileDavvero = (el35) => Boolean(el35 && !el35.hidden && el35.getClientRects().length > 0);
       function misuraPilaToast() {
         const barraDestra = [...document.querySelectorAll(".talos-inspector")].find(visibileDavvero);
         if (barraDestra) {
@@ -75506,15 +75711,15 @@ ${nota?.contenuto || ""}`.trim(), t("app.notes.copied")),
       let statoFonteRicerca = null;
       let ricercaWebInCorso = false;
       function messaggioFonteRicerca(mount, testo2, errore2 = false) {
-        let el34 = mount.querySelector(errore2 ? "[data-search-error]" : "[data-search-feedback]");
-        if (!el34) {
-          el34 = textElement("p", "talos-muted", "");
-          el34.dataset[errore2 ? "searchError" : "searchFeedback"] = "";
-          el34.setAttribute("role", errore2 ? "alert" : "status");
-          mount.append(el34);
+        let el35 = mount.querySelector(errore2 ? "[data-search-error]" : "[data-search-feedback]");
+        if (!el35) {
+          el35 = textElement("p", "talos-muted", "");
+          el35.dataset[errore2 ? "searchError" : "searchFeedback"] = "";
+          el35.setAttribute("role", errore2 ? "alert" : "status");
+          mount.append(el35);
         }
-        el34.textContent = testo2;
-        el34.hidden = !testo2;
+        el35.textContent = testo2;
+        el35.hidden = !testo2;
       }
       async function caricaPannelloRicercaWeb() {
         const mount = $3("#searchSourceMount");
@@ -75543,9 +75748,9 @@ ${nota?.contenuto || ""}`.trim(), t("app.notes.copied")),
         ricercaWebInCorso = true;
         const origine = document.activeElement;
         const focus = mount.contains(origine) ? { source: origine.dataset.searchSource, action: origine.dataset.searchAction, id: origine.id } : null;
-        const disabilitati = [...mount.querySelectorAll("button,input")].map((el34) => [el34, el34.disabled]);
+        const disabilitati = [...mount.querySelectorAll("button,input")].map((el35) => [el35, el35.disabled]);
         mount.setAttribute("aria-busy", "true");
-        for (const [el34] of disabilitati) el34.disabled = true;
+        for (const [el35] of disabilitati) el35.disabled = true;
         messaggioFonteRicerca(mount, "", true);
         messaggioFonteRicerca(mount, prova ? t("app.settings.searchSource.searching") : t("app.settings.searchSource.updating"));
         const precedente = mount.querySelector("[data-search-result]");
@@ -75578,7 +75783,7 @@ ${nota?.contenuto || ""}`.trim(), t("app.notes.copied")),
             riprova.addEventListener("click", caricaPannelloRicercaWeb);
             mount.append(riprova);
           }
-          for (const [el34, prima] of disabilitati) if (el34.isConnected) el34.disabled = prima;
+          for (const [el35, prima] of disabilitati) if (el35.isConnected) el35.disabled = prima;
           if (focus && (document.activeElement === document.body || document.activeElement === origine) && origine.isConnected && mount.getClientRects().length) {
             origine.focus({ preventScroll: true });
             mount.querySelector("[data-search-error]")?.scrollIntoView({ block: "nearest", behavior: "instant" });
@@ -76327,7 +76532,7 @@ ${nota?.contenuto || ""}`.trim(), t("app.notes.copied")),
                */
               onCambiata: () => {
                 caricaPannelloLibreria({ pagina: true });
-                void aggiornaContatoriLuoghi(state.sessionSelection.available?.size ?? 0);
+                void aggiornaContatoriLuoghi(state.sessionSelection.available?.size ?? 0, { forza: true });
               },
               onMenu: apriMenuAzioniLibreria,
               /* ⭐ BC-38 (12/09) — «da quale sessione»: il nome VIVO, non quello congelato nel meta.
@@ -76381,14 +76586,10 @@ ${nota?.contenuto || ""}`.trim(), t("app.notes.copied")),
       async function caricaPannelloNote() {
         const mount = $3("#notesListMount", sheetBody);
         if (!mount) return;
-        if (!state.realSession.id) {
-          mount.replaceChildren(textElement("p", "board-empty", t("app.board.notes.noSession")));
-          return;
-        }
         mount.replaceChildren(textElement("p", "board-empty", t("app.board.notes.loading")));
         let dati;
         try {
-          dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/notes`);
+          dati = await apiGet(indirizzoArchivioPersonale("notes"));
         } catch (error) {
           mount.replaceChildren(textElement("p", "board-empty", t("app.board.notes.unavailable", { motivo: error.message })));
           return;
@@ -76439,7 +76640,7 @@ ${nota?.contenuto || ""}`.trim(), t("app.notes.copied")),
               onMenu: apriMenuAzioniLibreria,
               onCambiata: () => {
                 caricaPannelloAttivita({ pagina: true });
-                void aggiornaContatoriLuoghi(state.sessionSelection.available?.size ?? 0);
+                void aggiornaContatoriLuoghi(state.sessionSelection.available?.size ?? 0, { forza: true });
               },
               copia: (testo2) => copyText(testo2, t("app.board.tasks.copied"))
             });
@@ -76453,13 +76654,9 @@ ${nota?.contenuto || ""}`.trim(), t("app.notes.copied")),
           mostra([], { errore: t("app.board.noBackend") });
           return;
         }
-        if (!sessionId) {
-          mostra([], { errore: t("app.board.tasks.openSession") });
-          return;
-        }
         mostra([], { caricamento: true });
         try {
-          const dati = await apiGet("/api/v1/sessions/" + encodeURIComponent(sessionId) + "/tasks");
+          const dati = await apiGet(indirizzoArchivioPersonale("tasks", sessionId));
           if (!attuale()) return;
           if (dati.errore) {
             mostra([], { errore: t("app.board.tasks.unavailableWith", { motivo: dati.errore }) });
@@ -76494,7 +76691,7 @@ ${nota?.contenuto || ""}`.trim(), t("app.notes.copied")),
               onMenu: apriMenuAzioniLibreria,
               onCambiata: () => {
                 caricaPannelloMemoria({ pagina: true });
-                void aggiornaContatoriLuoghi(state.sessionSelection.available?.size ?? 0);
+                void aggiornaContatoriLuoghi(state.sessionSelection.available?.size ?? 0, { forza: true });
               },
               copia: (testo2) => copyText(testo2, t("app.board.memory.copied"))
             });
@@ -76508,13 +76705,9 @@ ${nota?.contenuto || ""}`.trim(), t("app.notes.copied")),
           mostra([], { errore: t("app.board.noBackend") });
           return;
         }
-        if (!sessionId) {
-          mostra([], { errore: t("app.board.memory.openSession") });
-          return;
-        }
         mostra([], { caricamento: true });
         try {
-          const dati = await apiGet("/api/v1/sessions/" + encodeURIComponent(sessionId) + "/memory");
+          const dati = await apiGet(indirizzoArchivioPersonale("memory", sessionId));
           if (!attuale()) return;
           if (dati.errore) {
             mostra([], { errore: t("app.board.memory.unavailableWith", { motivo: dati.errore }) });
@@ -77322,10 +77515,10 @@ ${nota?.contenuto || ""}`.trim(), t("app.notes.copied")),
         const labelsRow = document.createElement("div");
         labelsRow.className = "effort-picker-labels";
         const labelEls = livelli.map((l, i2) => {
-          const el34 = textElement("span", "effort-picker-tick", l.etichetta);
-          el34.style.left = `${i2 / (livelli.length - 1) * 100}%`;
-          labelsRow.appendChild(el34);
-          return el34;
+          const el35 = textElement("span", "effort-picker-tick", l.etichetta);
+          el35.style.left = `${i2 / (livelli.length - 1) * 100}%`;
+          labelsRow.appendChild(el35);
+          return el35;
         });
         wrap.append(head, range, labelsRow);
         let indice2 = livelli.findIndex((l) => l.valore === valoreIniziale);
@@ -77351,7 +77544,7 @@ ${nota?.contenuto || ""}`.trim(), t("app.notes.copied")),
         function aggiorna() {
           range.value = String(indice2);
           selected.textContent = toccato ? livelli[indice2].etichetta : t("app.common.automatic");
-          labelEls.forEach((el34, i2) => el34.classList.toggle("effort-picker-tick-selected", i2 === indice2));
+          labelEls.forEach((el35, i2) => el35.classList.toggle("effort-picker-tick-selected", i2 === indice2));
         }
         aggiorna();
         range.addEventListener("input", () => {
@@ -81637,7 +81830,22 @@ ${nota?.contenuto || ""}`.trim(), t("app.notes.copied")),
         if (fine <= stato2.mostrato) return;
         stato2.mostrato = fine;
         renderizzaMarkdownIncrementale(corpo, stato2.render, testo2.slice(0, fine));
+        seguiCodaRagionamentoVivo(card, corpo);
         if (fine < testo2.length) chiediDisegnoRagionamento(card);
+      }
+      const RAGIONAMENTO_RIAGGANCIO_PX = 24;
+      const seguitoRagionamento = /* @__PURE__ */ new WeakMap();
+      function seguiCodaRagionamentoVivo(card, corpo) {
+        let stato2 = seguitoRagionamento.get(corpo);
+        if (card.dataset.ragionamento !== "vivo" && !stato2) return;
+        if (!stato2) {
+          stato2 = { segue: true };
+          seguitoRagionamento.set(corpo, stato2);
+          corpo.addEventListener("scroll", () => {
+            stato2.segue = corpo.scrollHeight - corpo.scrollTop - corpo.clientHeight < RAGIONAMENTO_RIAGGANCIO_PX;
+          }, { passive: true });
+        }
+        if (stato2.segue) corpo.scrollTop = corpo.scrollHeight;
       }
       function chiediDisegnoRagionamento(card) {
         if (!card) return;
@@ -82465,6 +82673,7 @@ ${nota?.contenuto || ""}`.trim(), t("app.notes.copied")),
           return giaViva;
         }
         if (eCartaAutomazione(azione) && !figlia) return appendCartaAutomazione(requestId, azione);
+        if (eCartaFornitori(azione) && !figlia) return appendCartaAutomazione(requestId, azione, CARTA_FORNITORI);
         const bersaglio = azione?.percorso || azione?.comando || azione?.question || azione?.title || (azione?.tipo === CHIAVE_COORDINAZIONE ? azione?.modello : "") || "";
         const badge6 = azione?.tipo === "scrivi" ? t("app.approval.badgeWrite") : azione?.tipo === "file_edit" ? t("app.approval.badgeEdit") : azione?.tipo === "leggi" ? t("app.approval.badgeRead") : azione?.tipo === "elenca" ? t("app.approval.badgeOpenFolder") : azione?.tipo === "shell" || azione?.tipo === "prova" ? t("app.approval.badgeRun") : azione?.tipo === "research_start" ? t("app.approval.badgeSearch") : azione?.tipo === CHIAVE_COORDINAZIONE ? t("app.approval.badgeStartAgent") : t("app.approval.badgePermission");
         const politicaNota = typeof figlia?.politica?.permessi === "string" && figlia.politica.permessi;
@@ -82571,21 +82780,23 @@ ${nota?.contenuto || ""}`.trim(), t("app.notes.copied")),
         scorriAllaBollaAppesa(article);
         return article;
       }
-      function appendCartaAutomazione(requestId, azione) {
-        const testi = testiCartaAutomazione(azione);
-        const modificabile = cartaModificabile(azione);
+      const CARTA_AUTOMAZIONI = Object.freeze({ testi: testiCartaAutomazione, modificabile: cartaModificabile, blocco: creaBloccoCartaAutomazione, dato: "cartaAutomazione" });
+      const CARTA_FORNITORI = Object.freeze({ testi: testiCartaFornitori, modificabile: () => false, blocco: creaBloccoCartaFornitori, dato: "cartaFornitori" });
+      function appendCartaAutomazione(requestId, azione, adattatore = CARTA_AUTOMAZIONI) {
+        const testi = adattatore.testi(azione);
+        const modificabile = adattatore.modificabile(azione);
         const scheda = creaApprovazione({
           badge: testi.badge,
           bersaglio: testi.bersaglio,
           perche: testi.perche,
           motivo: testi.motivo,
-          nota: modificabile ? t("sezioni.automations.v2.card.editNote") : ""
+          nota: modificabile ? t("sezioni.automations.v2.card.editNote") : testi.nota ?? ""
         });
         const article = scheda.scheda;
         article.classList.add("real-approval-card");
         article.dataset.requestId = requestId;
-        article.dataset.cartaAutomazione = azione.tipo;
-        scheda.perche.after(creaBloccoCartaAutomazione(document, azione));
+        article.dataset[adattatore.dato] = azione.tipo;
+        scheda.perche.after(adattatore.blocco(document, azione));
         const { unaVolta: approvaBtn, sessione: modificaBtn, nega: annullaBtn } = scheda.pulsanti;
         approvaBtn.textContent = t("sezioni.automations.v2.card.approve");
         modificaBtn.textContent = t("sezioni.automations.v2.card.edit");
@@ -82960,8 +83171,13 @@ ${nota?.contenuto || ""}`.trim(), t("app.notes.copied")),
         try {
           const webgl = new window.WebglAddon.WebglAddon(true);
           webgl.onContextLoss(() => {
-            webgl.dispose();
-            record2.webgl = null;
+            if (record2.webgl === webgl) spegniWebglTerminale(record2);
+            else {
+              try {
+                webgl.dispose();
+              } catch {
+              }
+            }
             t2.enforcementColore = t("app.terminal.domWebglLost");
             renderizzaSchedeTerminale();
           });
@@ -82979,6 +83195,22 @@ ${nota?.contenuto || ""}`.trim(), t("app.notes.copied")),
         } catch {
         }
         record2.webgl = null;
+        rinfrescaWebglFratelli(record2);
+      }
+      function rinfrescaWebglFratelli(escluso) {
+        const vivi = [...statoTerminale().schede.values()].filter((r) => r !== escluso && r.webgl && r.term);
+        for (const r of vivi) {
+          try {
+            r.webgl.clearTextureAtlas();
+          } catch {
+          }
+        }
+        for (const r of vivi) {
+          try {
+            r.term.refresh(0, r.term.rows - 1);
+          } catch {
+          }
+        }
       }
       function collegaWsScheda(record2) {
         if (record2.ws && (record2.ws.readyState === WebSocket.OPEN || record2.ws.readyState === WebSocket.CONNECTING)) return;
@@ -83042,14 +83274,15 @@ ${nota?.contenuto || ""}`.trim(), t("app.notes.copied")),
         for (const altra of t2.schede.values()) {
           if (altra === record2) continue;
           if (altra.mount) altra.mount.hidden = true;
-          spegniWebglTerminale(altra);
         }
         if (record2.mount) record2.mount.hidden = false;
+        const conWebglGia = Boolean(record2.webgl);
         if (record2.origine === "agente") {
           if (terminaleAschermo() && montaSchedaAgente(record2)) {
             accendiWebglTerminale(record2);
             requestAnimationFrame(() => {
               record2.fit?.fit();
+              if (conWebglGia) record2.term?.refresh(0, record2.term.rows - 1);
               if (cambiaScheda || !eraGiaMontata) record2.term?.focus();
             });
           }
@@ -83062,6 +83295,7 @@ ${nota?.contenuto || ""}`.trim(), t("app.notes.copied")),
           requestAnimationFrame(() => {
             record2.fit?.fit();
             inviaResizeTerminale(record2);
+            if (conWebglGia) record2.term?.refresh(0, record2.term.rows - 1);
             if (cambiaScheda || !eraGiaMontata) record2.term?.focus();
           });
         }
@@ -84451,8 +84685,8 @@ ${f}`;
         const nuovi = voci.filter((f) => f.nuovo).length;
         const modificati = voci.length - nuovi;
         const impostaTesto = (id4, testo2) => {
-          const el34 = $3(`#${id4}`);
-          if (el34) el34.textContent = testo2;
+          const el35 = $3(`#${id4}`);
+          if (el35) el35.textContent = testo2;
         };
         impostaTesto("reviewSummaryNuovi", String(nuovi));
         impostaTesto("reviewSummaryModificati", String(modificati));
@@ -86553,10 +86787,10 @@ ${testo2}` : testo2;
       }
       async function aggiornaSchedaCapability() {
         const scrivi2 = (chiave, testo2, titolo2 = "") => {
-          const el34 = $3(`[data-capability-row="${chiave}"]`);
-          if (!el34) return;
-          el34.textContent = testo2;
-          el34.title = titolo2;
+          const el35 = $3(`[data-capability-row="${chiave}"]`);
+          if (!el35) return;
+          el35.textContent = testo2;
+          el35.title = titolo2;
         };
         aggiornaRigaBrowserCapability();
         const sessione = state.realSession.id;
@@ -86591,16 +86825,16 @@ ${testo2}` : testo2;
         }
       }
       function aggiornaRigaBrowserCapability() {
-        const el34 = $3('[data-capability-row="browser"]');
-        if (!el34) return;
+        const el35 = $3('[data-capability-row="browser"]');
+        if (!el35) return;
         const pagine = state.realSession.browserPagine?.length ?? 0;
         if (!state.realSession.id) {
-          el34.textContent = t("app.common.notObserved");
-          el34.title = t("app.browser.pagesNoSession");
+          el35.textContent = t("app.common.notObserved");
+          el35.title = t("app.browser.pagesNoSession");
           return;
         }
-        el34.textContent = pagine === 0 ? t("app.browser.pagesNone") : tn("app.browser.pagesReadOne", "app.browser.pagesReadMany", pagine);
-        el34.title = t("app.browser.pagesHint");
+        el35.textContent = pagine === 0 ? t("app.browser.pagesNone") : tn("app.browser.pagesReadOne", "app.browser.pagesReadMany", pagine);
+        el35.title = t("app.browser.pagesHint");
       }
       function aggiornaUsageSessione() {
         const chat = sommaUsage(state.realSession.usageEsecuzioniPrecedenti, state.realSession.usage);
@@ -86695,6 +86929,10 @@ ${testo2}` : testo2;
         if (evento.type === "CUSTOM" && evento.name === "talos.fine-rigiocata") void aggiornaAvvisoSogliaContesto({ forza: true });
         if (evento.type === "CUSTOM" && evento.name === "talos.fine-rigiocata") {
           state.realSession.inRigiocata = false;
+          if (state.realSession.preferenzeDaSalvareAlConfine) {
+            state.realSession.preferenzeDaSalvareAlConfine = false;
+            salvaPreferenzeChatDesktop();
+          }
           disegnaFasciaPianoRichiesto();
           state.realSession.deferHistoricalRendering = false;
           accendiRagionamentiApertiDopoLaStoria();
@@ -86924,7 +87162,8 @@ ${testo2}` : testo2;
             const modoDelGiro = evento.contesto?.modalitaOperativa;
             if (["normale", "piano", "workflow"].includes(modoDelGiro)) {
               state.modalitaOperativa = normalizzaModoDiLavoro(modoDelGiro);
-              salvaPreferenzeChatDesktop();
+              if (state.realSession.inRigiocata) state.realSession.preferenzeDaSalvareAlConfine = true;
+              else salvaPreferenzeChatDesktop();
               registraGiroPerFasciaModo(state.realSession.id, modoDelGiro, { dalVivo: !state.realSession.inRigiocata });
             }
             if (!state.realSession.inRigiocata) {
@@ -87966,10 +88205,7 @@ ${testo2}` : testo2;
         const prompt = Number(u?.prompt_tokens);
         if (!Number.isFinite(prompt) || prompt <= 0) return;
         if (typeof valore?.esito === "string" && valore.esito !== "completato") return;
-        const uscita = Number.isFinite(Number(u?.completion_tokens)) && Number(u.completion_tokens) > 0 ? Number(u.completion_tokens) : 0;
-        const pensiero = Number(u?.completion_tokens_details?.reasoning_tokens);
-        const completion = Number.isFinite(pensiero) && pensiero > 0 && pensiero <= uscita ? uscita - pensiero : uscita;
-        state.realSession.ultimaRichiesta = { prompt_tokens: prompt, completion_tokens: completion };
+        state.realSession.ultimaRichiesta = { prompt_tokens: prompt, completion_tokens: 0 };
         const id4 = state.realSession.id;
         const salvata = id4 ? compattazioneLegacy.ultimaMisura.get(id4) : null;
         if (salvata) compattazioneLegacy.ultimaMisura.set(id4, { ...salvata, tokenMisurati: prompt });
@@ -89059,7 +89295,7 @@ ${testo2}` : testo2;
         return new Date(t2).toLocaleTimeString(localeUI35(), { hour: "2-digit", minute: "2-digit" });
       }
       const contatoriLuoghi = { sessione: void 0, quando: 0 };
-      async function aggiornaContatoriLuoghi(numeroSessioni) {
+      async function aggiornaContatoriLuoghi(numeroSessioni, { forza = false } = {}) {
         const radice2 = $3("#sessionsPanel");
         if (!radice2) return;
         aggiornaConteggiNav(radice2, { board: numeroSessioni });
@@ -89073,13 +89309,15 @@ ${testo2}` : testo2;
         };
         const id4 = state.realSession.id || null;
         const stessa = id4 === contatoriLuoghi.sessione && Date.now() - contatoriLuoghi.quando < 15e3;
-        if (stessa) return;
+        if (stessa && !forza) return;
         contatoriLuoghi.sessione = id4;
         contatoriLuoghi.quando = Date.now();
         const [capability, automazioni, progetti] = await Promise.all([conta2("/api/v1/tools", "attrezzi"), conta2("/api/v1/automations", "items"), conta2("/api/v1/projects", "items")]);
         aggiornaConteggiNav(radice2, { capability, automazioni, progetti });
         if (!id4) {
-          aggiornaConteggiNav(radice2, { libreria: null, memoria: null, attivita: null, note: null, ricerca: null, officina: null });
+          const [memoria, attivita, note] = await Promise.all([conta2("/api/v1/me/memory", "memorie"), conta2("/api/v1/me/tasks", "attivita"), conta2("/api/v1/me/notes", "note")]);
+          if (state.realSession.id) return;
+          aggiornaConteggiNav(radice2, { libreria: null, memoria, attivita, note, ricerca: null, officina: null });
           return;
         }
         const liste = [["libreria", "library", "voci"], ["memoria", "memory", "memorie"], ["attivita", "tasks", "attivita"], ["note", "notes", "note"], ["ricerca", "research", "ricerche"], ["officina", "tool-forge", "strumenti"]];
@@ -89107,7 +89345,32 @@ ${testo2}` : testo2;
         const s = state.sessionSelection.available?.get?.(id4);
         return s ? s.nome || s.taskDelega || nomeLeggibileSessione(s.taskId) : null;
       }
-      async function aggiornaElencoSessioniReali() {
+      let improntaBarraSessioni = "";
+      const RITMO_ELENCO_VIVO_MS = 2e3;
+      const RITMO_ELENCO_FERMO_MS = 15e3;
+      let elencoTimer = 0;
+      let elencoProssimoAlle = 0;
+      let elencoAttivo = false;
+      const ritmoElencoMs = () => [...state.sessionSelection.available?.values?.() ?? []].some((sessione) => sessione && statoNotificaSessione(sessione) === "in-corso") ? RITMO_ELENCO_VIVO_MS : RITMO_ELENCO_FERMO_MS;
+      function programmaGiroElenco(attesaMs = ritmoElencoMs()) {
+        if (!elencoAttivo || workspaceDisposed) return;
+        window.clearTimeout(elencoTimer);
+        elencoProssimoAlle = Date.now() + attesaMs;
+        elencoTimer = window.setTimeout(async () => {
+          if (document.visibilityState === "visible") {
+            try {
+              await aggiornaElencoSessioniReali({ soloSeCambia: true });
+            } catch {
+            }
+          }
+          programmaGiroElenco();
+        }, attesaMs);
+      }
+      function accorciaGiroElenco() {
+        const ritmo = ritmoElencoMs();
+        if (elencoAttivo && elencoProssimoAlle - Date.now() > ritmo) programmaGiroElenco(ritmo);
+      }
+      async function aggiornaElencoSessioniReali({ soloSeCambia = false } = {}) {
         const contenitore = contenitoreSessioniReali();
         let elenco3;
         try {
@@ -89137,6 +89400,7 @@ ${testo2}` : testo2;
           void caricaFigliSessione();
         }
         state.sessionSelection.available = new Map(elenco3.map((sessione) => [sessione.sessionId, sessione]));
+        accorciaGiroElenco();
         const radici = sessioniRadice(elenco3);
         const radiciIds = new Set(radici.map((s) => s.sessionId));
         void aggiornaContatoriLuoghi(elenco3.length);
@@ -89154,6 +89418,9 @@ ${testo2}` : testo2;
           aggiornaSottotitoloSessione();
           return;
         }
+        const impronta = JSON.stringify([elenco3, state.realSession.id, state.sessionSelection.active ? [...state.sessionSelection.selected] : null, pendente.length]);
+        if (soloSeCambia && impronta === improntaBarraSessioni) return;
+        improntaBarraSessioni = impronta;
         const conteggio3 = $3("#sessionList .talos-sidebar__block-head .talos-nav-item__count");
         if (conteggio3) conteggio3.textContent = String(radici.length);
         const pezzi = [...pendente];
@@ -89202,8 +89469,8 @@ ${testo2}` : testo2;
           }
           pezzi.push(riga2);
         }
-        const righe = pezzi.flatMap((el34) => el34.classList.contains("talos-session-item") ? [el34] : [...el34.querySelectorAll(".talos-session-item")]);
-        const fermata = righe.find((el34) => el34.getAttribute("aria-current") === "true") || righe[0];
+        const righe = pezzi.flatMap((el35) => el35.classList.contains("talos-session-item") ? [el35] : [...el35.querySelectorAll(".talos-session-item")]);
+        const fermata = righe.find((el35) => el35.getAttribute("aria-current") === "true") || righe[0];
         const fermataRiga = (riga2, attiva) => {
           riga2.tabIndex = attiva ? 0 : -1;
           const menu = riga2.parentElement?.querySelector?.(":scope > .td-session-menu");
@@ -91196,15 +91463,15 @@ ${testo2}`;
             $3("#miglioraPromptBtn")?.setAttribute("aria-expanded", "false");
           }
         });
-        const el34 = miglioraPrompt.elemento;
-        el34.id = "miglioraPromptPannello";
-        el34.style.position = "absolute";
-        el34.style.left = "0";
-        el34.style.bottom = "calc(100% + var(--talos-space-sm))";
-        el34.style.maxWidth = "100%";
-        el34.style.zIndex = "var(--talos-z-menu)";
-        el34.style.boxShadow = "var(--talos-shadow-floating)";
-        $3("#composerForm")?.append(el34);
+        const el35 = miglioraPrompt.elemento;
+        el35.id = "miglioraPromptPannello";
+        el35.style.position = "absolute";
+        el35.style.left = "0";
+        el35.style.bottom = "calc(100% + var(--talos-space-sm))";
+        el35.style.maxWidth = "100%";
+        el35.style.zIndex = "var(--talos-z-menu)";
+        el35.style.boxShadow = "var(--talos-shadow-floating)";
+        $3("#composerForm")?.append(el35);
         return miglioraPrompt;
       }
       $3("#miglioraPromptBtn")?.addEventListener("click", (evento) => {
@@ -91434,9 +91701,10 @@ ${testo2}`;
         apriPopoverNotifiche(event.currentTarget);
       });
       const notificheTimer = window.setInterval(() => {
-        if (document.visibilityState === "visible") void aggiornaElencoSessioniReali();
         if (!embeddedDemoOnly()) void aggiornaDaGuardareAutomazioni();
       }, 15e3);
+      elencoAttivo = true;
+      programmaGiroElenco();
       void aggiornaSchedaCapability();
       $$("[data-file-entry]").forEach((button2) => button2.addEventListener("click", () => {
         $$("[data-file-entry]").forEach((entry) => entry.classList.toggle("active", entry === button2));
@@ -91902,6 +92170,7 @@ ${testo2}`;
         contextMonitor?.stop();
         contextMonitor = null;
         window.clearInterval(notificheTimer);
+        window.clearTimeout(elencoTimer);
         document.querySelector(".notifications-menu")?.remove();
         cancelMotionAnimations();
         nascondiAttesaRisposta();
@@ -92812,15 +93081,15 @@ function perId2(doc, id4) {
     return null;
   }
 }
-function giaInMovimento(el34) {
+function giaInMovimento(el35) {
   try {
-    return typeof el34.getAnimations === "function" && el34.getAnimations().length > 0;
+    return typeof el35.getAnimations === "function" && el35.getAnimations().length > 0;
   } catch {
     return false;
   }
 }
-function visibile(el34) {
-  return Boolean(el34) && !el34.hidden && el34.offsetParent !== null;
+function visibile(el35) {
+  return Boolean(el35) && !el35.hidden && el35.offsetParent !== null;
 }
 function montaAnimazioniMockup(doc = globalThis.document) {
   if (!doc?.addEventListener) return () => {
@@ -92962,18 +93231,18 @@ function mountCalmControls(root2 = globalThis.document, { scope = null } = {}) {
   let serial = 0, openRecord = null, scheduled = false, disposed = false, positionFrame = 0;
   const sources = 'select:not([multiple]),input[type="checkbox"],input[type="range"]';
   const node2 = (tag2, cls) => {
-    const el34 = doc.createElement(tag2);
-    if (cls) el34.className = cls;
-    return el34;
+    const el35 = doc.createElement(tag2);
+    if (cls) el35.className = cls;
+    return el35;
   };
-  const attr = (el34, key, value) => {
+  const attr = (el35, key, value) => {
     const text3 = String(value);
-    if (el34.getAttribute(key) !== text3) el34.setAttribute(key, text3);
+    if (el35.getAttribute(key) !== text3) el35.setAttribute(key, text3);
   };
-  const text2 = (el34, value) => {
-    if (el34.textContent !== value) el34.textContent = value;
+  const text2 = (el35, value) => {
+    if (el35.textContent !== value) el35.textContent = value;
   };
-  const listen = (el34, event, fn2, extra = {}) => el34.addEventListener(event, fn2, { signal, ...extra });
+  const listen = (el35, event, fn2, extra = {}) => el35.addEventListener(event, fn2, { signal, ...extra });
   const eligible = (source) => !scope || Boolean(source.closest(scope));
   const hidden = (source) => source.hidden || source.style.display === "none" || source.style.visibility === "hidden";
   let live = null;
@@ -93244,7 +93513,7 @@ function mountCalmControls(root2 = globalThis.document, { scope = null } = {}) {
     control.id = id4;
     wrap.append(control);
     const r = { source, control, wrap, kind, restore: [], popup: null, items: [], drag: null, listeners: new win.AbortController(), invalid: false };
-    const on2 = (el34, event, fn2, extra = {}) => el34.addEventListener(event, fn2, { signal: r.listeners.signal, ...extra });
+    const on2 = (el35, event, fn2, extra = {}) => el35.addEventListener(event, fn2, { signal: r.listeners.signal, ...extra });
     records.set(source, r);
     const tab = source.getAttribute("tabindex"), aria = source.getAttribute("aria-hidden");
     source.dataset.calmSource = "";
@@ -93435,25 +93704,50 @@ function mountCalmControls(root2 = globalThis.document, { scope = null } = {}) {
   };
   listen(win, "resize", reposition);
   listen(doc, "scroll", reposition, { capture: true, passive: true });
-  function relevant(m) {
+  const SORGENTI_O_MARCATE = `${sources},[data-calm-source]`;
+  const ATTRIBUTI_DI_STATO = /* @__PURE__ */ new Set(["hidden", "disabled", "inert"]);
+  const nellaUiCalm = (target) => Boolean(target?.closest("[data-calm-ui],[data-calm-popup]"));
+  const portaControlli = (n) => n.nodeType === 1 && (n.matches(SORGENTI_O_MARCATE) || n.querySelector(SORGENTI_O_MARCATE) !== null);
+  const portaUnAmbito = (n) => n.nodeType === 1 && Boolean(scope) && (n.matches(scope) || n.querySelector(scope) !== null);
+  function relevant(m, lotto) {
     const target = m.target.nodeType === 1 ? m.target : m.target.parentElement;
-    if (target?.closest("[data-calm-ui],[data-calm-popup]")) return false;
-    const inScope = !scope || target?.closest(scope);
     if (m.type === "attributes") {
-      if (inScope && (records.has(target) || target?.matches("option,optgroup,label"))) return true;
-      return ["hidden", "disabled", "inert"].includes(m.attributeName) && [...records.keys()].some((s) => target?.contains(s));
+      if (!target) return false;
+      const diControllo = records.has(target) || target.matches("option,optgroup,label");
+      const diStato = ATTRIBUTI_DI_STATO.has(m.attributeName);
+      if (!diControllo && !diStato) return false;
+      if (nellaUiCalm(target)) return false;
+      if (diControllo && (!scope || target.closest(scope))) return true;
+      if (!diStato) return false;
+      for (const s of records.keys()) if (target.contains(s)) return true;
+      return false;
     }
-    if (inScope && target?.closest("label,select,option,optgroup")) return true;
-    if (m.type === "childList") {
-      const conta2 = (n) => n.nodeType === 1 && (n.matches(sources) || n.querySelector(sources) || n.matches("[data-calm-source]") || n.querySelector("[data-calm-source]"));
-      const portaUnAmbito = (n) => n.nodeType === 1 && Boolean(scope) && (n.matches(scope) || Boolean(n.querySelector(scope)));
-      const staccatoUnControllo = () => m.removedNodes.length > 0 && [...records.keys()].some((s) => !s.isConnected);
-      return [...m.addedNodes].some((n) => inScope ? conta2(n) : portaUnAmbito(n)) || staccatoUnControllo();
+    const nelloScope = !scope || Boolean(target?.closest(scope));
+    if (nelloScope && target?.closest("label,select,option,optgroup")) return !nellaUiCalm(target);
+    if (m.type !== "childList") return false;
+    let conta2 = false;
+    for (const n of m.addedNodes) if (nelloScope ? portaControlli(n) : portaUnAmbito(n)) {
+      conta2 = true;
+      break;
     }
-    return false;
+    if (!conta2 && m.removedNodes.length > 0) {
+      if (lotto.staccato === void 0) {
+        lotto.staccato = false;
+        for (const s of records.keys()) if (!s.isConnected) {
+          lotto.staccato = true;
+          break;
+        }
+      }
+      conta2 = lotto.staccato;
+    }
+    return conta2 && !nellaUiCalm(target);
   }
   const observer = new win.MutationObserver((mutations) => {
-    if (mutations.some(relevant)) schedule2();
+    const lotto = {};
+    for (const m of mutations) if (relevant(m, lotto)) {
+      schedule2();
+      return;
+    }
   });
   observer.observe(root2.documentElement || root2, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["disabled", "hidden", "selected", "checked", "value", "min", "max", "step", "label", "lang", "style", "data-theme", "data-talos-theme", "data-talos-color-mode", "aria-label", "aria-labelledby", "aria-describedby", "aria-invalid", "aria-required", "required", "inert", "readonly"] });
   const api = { refresh, dispose() {
@@ -93490,15 +93784,15 @@ var frammenti_default = '<!-- Pannello impostazioni + Model Lab del monolite: tu
 var VISTA_PER_SCHERMATA = SCREEN_BY_VIEW;
 var VISTA_PER_VAIA = VIEW_BY_DESTINATION;
 function uno(root2, selettore2) {
-  const el34 = root2.querySelector(selettore2);
-  if (!el34) throw new Error(`bridge: missing in the mockup «${selettore2}»`);
-  return el34;
+  const el35 = root2.querySelector(selettore2);
+  if (!el35) throw new Error(`bridge: missing in the mockup «${selettore2}»`);
+  return el35;
 }
-function battezza(el34, { id: id4, classi = [], dati = {} }) {
-  if (id4) el34.id = id4;
-  for (const c of classi) el34.classList.add(c);
-  for (const [k, v] of Object.entries(dati)) el34.setAttribute(`data-${k}`, v);
-  return el34;
+function battezza(el35, { id: id4, classi = [], dati = {} }) {
+  if (id4) el35.id = id4;
+  for (const c of classi) el35.classList.add(c);
+  for (const [k, v] of Object.entries(dati)) el35.setAttribute(`data-${k}`, v);
+  return el35;
 }
 function montaPonteLegacy(documentObj = document) {
   const radice2 = documentObj.querySelector(".talos-shell");

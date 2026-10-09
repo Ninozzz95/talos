@@ -46,6 +46,13 @@ async function apri(page) {
     if (m !== 'GET' && m !== 'HEAD') { nonGet.push(`${m} ${new URL(route.request().url()).pathname}`); return route.abort(); }
     return route.continue();
   });
+  /* ⛔ 09/10/2026 (bugfixer): le misure sono quelle dell'Atlas, che ha UNA densità — la comoda. Dal 29/09 (0.1.19, 14086c7b4) la
+     densità di serie è «compatta», e lì il piccolo misura 28,84 (interlinea 14,85 contro 15): la prova lo leggeva come 29 mancato.
+     Si misura il mockup nella sua densità; lo scarto in compatta è registrato a parte, non nascosto qui. */
+  await page.addInitScript(() => {
+    if (window.top !== window) return;
+    try { localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({ version: 1, appearance: { uiDensity: 'comoda' } })); } catch { /* finestra privata */ }
+  });
   await page.goto('/');
   await expect(page.locator('.talos-nav-item[data-vaia="chat"]').first()).toBeVisible();
   return nonGet;

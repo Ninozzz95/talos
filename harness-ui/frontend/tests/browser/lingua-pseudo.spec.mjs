@@ -64,7 +64,14 @@ async function apriInPseudo(page) {
   await page.waitForFunction(() => window.__talosHarnessUiRuntime);
   await expect(page.locator('html')).toHaveAttribute('lang', 'qps');
   const elenco = await (await page.request.get('/api/v1/sessions')).json();
-  const dellaPersona = [...new Set((elenco?.data?.items ?? []).flatMap((s) => [s.nome, s.progetto, s.modello, s.modelId, s.taskId]).filter((v) => typeof v === 'string' && v))];
+  /* 09/10/2026 (bugfixer): anche i PROGETTI sono della persona, e la vista Progetti li legge da `/api/v1/projects`, non dalle
+     sessioni. Su un server di prova senza sessioni il progetto di serie porta il nome della cartella (`AVM-integrazione-r4`,
+     o quello del worktree): la prova lo contava come testo sfuggito, e il suo esito dipendeva dal nome della cartella. */
+  const progetti = await (await page.request.get('/api/v1/projects')).json();
+  const dellaPersona = [...new Set([
+    ...(elenco?.data?.items ?? []).flatMap((s) => [s.nome, s.progetto, s.modello, s.modelId, s.taskId]),
+    ...(progetti?.data?.items ?? []).map((p) => p?.nome),
+  ].filter((v) => typeof v === 'string' && v))];
   return { conti, errori, dellaPersona };
 }
 

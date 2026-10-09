@@ -29,6 +29,14 @@ import { expect, test } from '@playwright/test';
 
 test.use({ locale: 'it-IT' });
 
+/* ⛔ 08/10/2026 (bugfixer) — questi gesti erano rossi da soli: «creazione della sessione di prova» → 500 CONFIG_INVALID, «The
+   OpenRouter key is missing». Dal 23/09 (ef3b3859b) il server di prova usa una custodia in MEMORIA, vuota a ogni avvio, e queste
+   prove contavano su una chiave salvata da un'ALTRA prova girata prima nello stesso server: verdi o rosse secondo l'ordine.
+   Playwright, «Best Practices» (playwright.dev/docs/best-practices, letta l'08/10/2026): «Each test should be completely isolated
+   from another test and should run independently with its own … data». ⇒ Come la sorella `terminale-una-scheda-sola` (BC-62),
+   ogni prova salva da sé la chiave finta; e contro un server esterno (il 4174) non gira, perché lì la chiave è quella vera. */
+test.skip(Boolean(process.env.TALOS_HARNESS_UI_BASE_URL?.trim()), 'salva una chiave finta: gira solo sul server di prova con la custodia in memoria');
+
 /** I nomi delle linguette vere del Terminale, senza il «+ Nuovo». */
 const linguette = (page) => page.evaluate(() => [...document.querySelectorAll('.talos-terminal__tab[role="tab"][data-terminale-id]')]
   .map((b) => b.innerText.replace(/\s+/g, ' ').trim()));
@@ -52,6 +60,8 @@ async function apriTerminaleConSchede(page, request, baseURL, etichetta, quante 
   await page.addInitScript(() => {
     if (window.top !== window) return; // lo script gira in OGNI cornice, anche sandboxata
   });
+  const chiave = await request.post(new URL('/api/v1/providers/openrouter/key', baseURL).href, { data: { key: 'sk-bc63-fixture' } });
+  expect(chiave.ok(), 'configurazione provider fittizia del banco BC-63').toBe(true);
   const cartella = mkdtempSync(join(tmpdir(), `bc63-${etichetta}-`));
   const r = await request.post(new URL('/api/v1/sessions/custom', baseURL).href, {
     data: { cartellaLibera: cartella, consegna: `prova BC-63 ${etichetta}: non fare nulla`, modello: 'z-ai/glm-5.3-flash' },

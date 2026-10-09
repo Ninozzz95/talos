@@ -18,6 +18,8 @@
  */
 import { expect, test } from '@playwright/test';
 
+import { attendiFineStoria, flussoConConfine } from './aiuto-confine.mjs';
+
 const FIGLIE = [
   /* In corso: `conclusa: false` ⇒ `statoDelega` = 'in-corso', che è il filtro «Attivi». */
   { sessionId: 'bdg-a', task: 'Compito: leggi il registro', taskCorto: 'leggi il registro', conclusa: false, interrotta: false, avviataAlle: new Date().toISOString(), modello: 'z-ai/glm-5.3-flash', permessi: 'read-only', collisioni: [], esitoDelega: null, attivita: { file: [], fileTagliati: 0, attrezzoCorrente: 'leggi', chiamate: 1, passi: [], passiTagliati: 0 } },
@@ -59,7 +61,8 @@ async function scena(page, { tema = 'dark', larghezza = 1440, altezza = 900 } = 
     if (window.top !== window) return;
     try { localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({ version: 1, appearance: { colorMode, uiLanguage: 'it' } })); } catch { /* finestra privata */ }
   }, { colorMode: tema });
-  await page.route('**/api/v1/sessions/bdg-*/events*', (r) => r.fulfill({ contentType: 'text/event-stream', body: '' }));
+  // ⛔ 08/10/2026: il flusso finto porta il confine fra storia e presente (aiuto-confine.mjs)
+  await page.route('**/api/v1/sessions/bdg-*/events*', flussoConConfine);
   await page.route('**/api/v1/sessions/bdg-uno/children', (r) => r.fulfill({ contentType: 'application/json', body: JSON.stringify({ ok: true, data: { figli: FIGLIE } }) }));
   await page.goto('/');
   await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 15000 });
@@ -67,7 +70,11 @@ async function scena(page, { tema = 'dark', larghezza = 1440, altezza = 900 } = 
   await page.evaluate(() => {
     const r = window.__talosHarnessUiRuntime;
     r.passaASessione('bdg-uno', 'workspace', 'BDG', 'qwen/qwen3.8-flash', { conclusa: false, modello: 'qwen/qwen3.8-flash' });
-    const g = r.realSessionState.generation;
+  });
+  await attendiFineStoria(page);
+  await page.evaluate(() => {
+    const r = window.__talosHarnessUiRuntime;
+    const g = r.realSessionState.generation; // il giro arriva DAL VIVO, dopo il confine
     r.handleRealEvent({ type: 'RunStarted', _sequenza: 9701, input: { consegna: 'Dividi il lavoro' }, contesto: { cartella: 'C:\\progetti\\talos-prova', modello: 'glm-5.3-flash' } }, g);
     r.handleRealEvent({ type: 'ToolCallStart', toolCallId: 'bdg-d1', toolCallName: 'delega_sottotask', _sequenza: 9702 }, g);
     r.handleRealEvent({ type: 'ToolCallResult', toolCallId: 'bdg-d1', content: 'ok', _sequenza: 9703 }, g);

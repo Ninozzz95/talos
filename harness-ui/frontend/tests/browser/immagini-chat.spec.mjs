@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { PNG } from 'pngjs';
+import { attendiFineStoria, flussoConConfine } from './aiuto-confine.mjs';
 
 const png = new PNG({ width: 16, height: 16 }); png.data.fill(255);
 const bytes = PNG.sync.write(png);
@@ -7,6 +8,7 @@ const image = { id: 'e'.repeat(64), tipo: 'immagine', nome: 'prova.png', mimeTyp
 const envelope = data => ({ ok: true, data });
 async function apri(page, name = 'prima', closed = true) {
   await page.evaluate(({name, closed}) => window.__talosHarnessUiRuntime.passaASessione(`image-proof-${name}`, 'workspace', name, 'google/gemini-3.8-flash', { conclusa: closed, modello: 'google/gemini-3.8-flash' }), { name, closed });
+  await attendiFineStoria(page); // ⛔ 08/10/2026: la storia finisce al confine (aiuto-confine.mjs); gli eventi dopo arrivano dal vivo
 }
 async function events(page, events) { await page.evaluate(events => { const r = window.__talosHarnessUiRuntime; for (const event of events) r.handleRealEvent(event, r.realSessionState.generation); }, events); }
 async function attach(page) {
@@ -16,7 +18,7 @@ async function attach(page) {
   await (await chooser).setFiles({ name: 'prova.png', mimeType: 'image/png', buffer: bytes });
 }
 test.beforeEach(async ({ page }) => {
-  await page.route('**/api/v1/sessions/image-proof-*/events', r => r.fulfill({ contentType: 'text/event-stream', body: '' }));
+  await page.route('**/api/v1/sessions/image-proof-*/events', flussoConConfine);
   await page.route('**/api/v1/chat-images', r => r.fulfill({ json: envelope(image) }));
   await page.route('**/api/v1/chat-images/' + image.id, r => r.fulfill({ contentType: 'image/png', body: bytes }));
   await page.goto('/');
@@ -34,7 +36,9 @@ test('IMAGE-08 seguito mostra la foto fuori dalla bolla, apre il dialogo e ritor
   await page.getByRole('textbox', {name:'Messaggio', exact:true}).press('Enter');
   const preview = page.locator('#conversation .talos-image-card');
   await expect(preview).toBeVisible();
-  expect(submitted.immagini).toEqual([{id:image.id}]);
+  /* ⛔ 08/10/2026 (bugfixer): l'invio salva prima le impostazioni della sessione (POST …/settings) e POI chiede il giro (…/resume);
+     l'anteprima compare prima di entrambe. Misurato: anteprima a +0 ms, resume a +10 ms ⇒ la richiesta si ASPETTA, non si legge. */
+  await expect.poll(() => submitted?.immagini, { message: 'il giro chiesto porta la foto' }).toEqual([{id:image.id}]);
   expect(await preview.evaluate(el => !el.closest('.message-bubble'))).toBe(true);
   await preview.click();
   await expect(page.getByRole('dialog', {name:'Immagine: prova.png'})).toBeVisible();

@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { attendiFineStoria, flussoConConfine } from './aiuto-confine.mjs';
 import { chiudiToastAperti } from './aiuto-toast.mjs';
 
 /*
@@ -45,14 +46,20 @@ async function scena(page, { larghezza, altezza, tema }) {
     try { localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({ version: 1, appearance: { colorMode }, chat: { model: 'qwen/qwen3.8-flash' } })); }
     catch { /* finestra privata: la app parte lo stesso */ }
   }, { colorMode: tema });
-  await page.route('**/api/v1/sessions/toast-*/events*', (r) => r.fulfill({ contentType: 'text/event-stream', body: '' }));
+  /* ⛔ 08/10/2026 (bugfixer) — il flusso finto porta il CONFINE fra storia e presente (aiuto-confine.mjs). Col corpo vuoto la
+     chat restava `is-restoring`, la rotella teneva il fondo e la striscia di stato non compariva mai (26 rossi su 26 da solo). */
+  await page.route('**/api/v1/sessions/toast-*/events*', flussoConConfine);
   await page.goto('/');
   await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 8000 });
   await page.waitForFunction(() => window.__talosHarnessUiRuntime);
   await page.evaluate(() => {
     const r = window.__talosHarnessUiRuntime;
     r.passaASessione('toast-barra', 'workspace', 'Toast', 'qwen/qwen3.8-flash', { conclusa: false, modello: 'qwen/qwen3.8-flash' });
-    const g = r.realSessionState.generation;
+  });
+  await attendiFineStoria(page);
+  await page.evaluate(() => {
+    const r = window.__talosHarnessUiRuntime;
+    const g = r.realSessionState.generation; // da qui il giro arriva DAL VIVO, dopo il confine: resta in corso (niente RunFinished)
     r.handleRealEvent({ type: 'RunStarted', _sequenza: 10, input: { consegna: 'Scrivi un file' }, contesto: { cartella: 'C:\\progetti\\AVM', modello: 'glm-5.3-flash' } }, g);
     r.handleRealEvent({ type: 'StateDelta', _sequenza: 11, delta: [{ op: 'add', path: '/file/src/uno.mjs', value: 'a\nb\n' }] }, g);
     r.handleRealEvent({ type: 'TextMessageStart', messageId: 'm1' }, g);

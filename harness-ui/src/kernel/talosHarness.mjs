@@ -3775,6 +3775,40 @@ const ATTREZZI_ESTESI = [
         description: 'Stop the run of an automation that is going right now. The automation stays on for its next runs.',
         input_schema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
     },
+    /*
+     * ⭐ 0.1.25 — LA SECONDA PORTA dei fornitori a valle esclusi su OpenRouter (owner 09/10/2026; la 0.1.24 aveva solo le
+     *   Impostazioni e «Escludi» sotto la risposta). Elencare è libero; escludere e riammettere passano da una CARTA (decisione
+     *   dell'owner): cambiano l'instradamento di tutte le sessioni. Il kernel delega a `onFornitoriFn(nome, argomenti, {fase})`
+     *   (`fornitori-per-il-modello.mjs`): senza, non si offrono. Hermes non ha un attrezzo del modello per questo
+     *   (`providers_ignored` solo da config/CLI, `hermes_cli/cli_commands_mixin.py:208`, clone 65ad529).
+     */
+    {
+        name: 'provider_exclusions_list',
+        description: 'List the OpenRouter providers that requests skip: the ones the person excluded for every model, and the ones '
+            + 'excluded by default for a model (with the reason, and whether the person allowed them again). Read-only.',
+        input_schema: { type: 'object', properties: {}, required: [] },
+    },
+    {
+        name: 'provider_exclude',
+        description: 'Make OpenRouter skip a provider from the next request on. Use it when the person asks, or when a provider keeps '
+            + 'failing for this model (empty answers, tools never called) and the person agrees. The person approves it on a card. '
+            + 'Without "model" it is excluded for every model; with "model", a provider excluded by default for that model and later '
+            + 'allowed again goes back to excluded. Call provider_exclusions_list first.',
+        input_schema: { type: 'object', properties: {
+            provider: { type: 'string', description: 'the provider short name OpenRouter uses, like deepinfra; a display name works only with "model"' },
+            model: { type: 'string', description: 'the OpenRouter model id, like z-ai/glm-5.3-flash' },
+        }, required: ['provider'] },
+    },
+    {
+        name: 'provider_allow',
+        description: 'Let OpenRouter use an excluded provider again, from the next request on. The person approves it on a card. '
+            + 'It removes the provider from the person\'s list, or, for a provider excluded by default for a model, allows it again '
+            + 'for that model. Call provider_exclusions_list first.',
+        input_schema: { type: 'object', properties: {
+            provider: { type: 'string', description: 'the provider short name, like open-inference' },
+            model: { type: 'string', description: 'the model it is excluded by default for, when more than one' },
+        }, required: ['provider'] },
+    },
 ]
 /** ⭐ Stesso motivo dell'export sopra: la parte opzionale della superficie, per l'impronta. */
 /** 27/09/2026, decisione owner (capacità delle sezioni): gli attrezzi che passano da `onLetturaSezione`. */
@@ -3786,6 +3820,9 @@ export const ATTREZZI_WORKFLOW = new Set(['workflow_status', 'workflow_output', 
 /** Automazioni a due porte (owner 08/10/2026 notte): gli attrezzi delle automazioni, che passano da `onAutomazioneFn`. */
 export const ATTREZZI_AUTOMAZIONI = new Set(['automation_list', 'automation_runs', 'automation_create', 'automation_update',
     'automation_pause', 'automation_resume', 'automation_run', 'automation_stop'])
+
+/** 0.1.25 (owner 09/10/2026): gli attrezzi dei fornitori a valle esclusi, che passano da `onFornitoriFn`. */
+export const ATTREZZI_FORNITORI = new Set(['provider_exclusions_list', 'provider_exclude', 'provider_allow'])
 
 export const ATTREZZI_ESTESI_OPENAI = ATTREZZI_ESTESI.map((a) => ({
     type: 'function',
@@ -10557,6 +10594,11 @@ export async function talosLavora({
      */
     onAutomazioneFn,
     /*
+     * ⭐ 0.1.25 (owner 09/10/2026) — `onFornitoriFn(nome, argomenti, {fase, toolCallId})`: il canale di `ATTREZZI_FORNITORI`, con
+     *   le stesse due fasi delle automazioni (`anteprima` ⇒ carta o rifiuto; `esegui` ⇒ testo). Assente ⇒ non si offrono.
+     */
+    onFornitoriFn,
+    /*
      * ⛔⛔ Rilievo 3 (piano §1.7, 28/09) — `onRichiestaPianoFn() => {ok, motivo?}` è il canale
      *   dell'attrezzo `request_plan_mode`: ACCODA il cambio di modo (lo applica il registro a
      *   fine giro, mai durante). Assente ⇒ l'attrezzo non si offre.
@@ -11360,7 +11402,7 @@ export async function talosLavora({
     const needsRoleFilter = agentRole === 'child' || (strumentiEstesi ?? []).some((name) =>
         ['ask_parent', 'answer_parent_question', 'ask_child', 'answer_child_question', 'list_children', 'stop_child', 'workflow_plan_propose', 'present_plan', 'request_plan_mode'].includes(name)
         // F-012 (§1.5): i tre dei run hanno filtri loro (root, runtime presente) — quando chiesti, si filtra
-        || ATTREZZI_WORKFLOW.has(name) || name === 'process_output' || ATTREZZI_AUTOMAZIONI.has(name))
+        || ATTREZZI_WORKFLOW.has(name) || name === 'process_output' || ATTREZZI_AUTOMAZIONI.has(name) || ATTREZZI_FORNITORI.has(name))
     const filterBaseTools = (a, negati = negatiDalLivello) => {
         const name = a.function.name
         if (negati.has(name)) return false
@@ -11383,6 +11425,8 @@ export async function talosLavora({
         if (ATTREZZI_WORKFLOW.has(name) && (agentRole === 'child' || typeof onWorkflowFn !== 'function')) return false
         /* Automazioni a due porte (08/10/2026): come i run dei Workflow — al root, e solo se l'ospite può rispondere */
         if (ATTREZZI_AUTOMAZIONI.has(name) && (agentRole === 'child' || typeof onAutomazioneFn !== 'function')) return false
+        /* 0.1.25: i fornitori esclusi, come le automazioni — al root, e solo se l'ospite può rispondere */
+        if (ATTREZZI_FORNITORI.has(name) && (agentRole === 'child' || typeof onFornitoriFn !== 'function')) return false
         /* ⛔ Rilievo 3 (piano §1.7): il modo Piano lo può chiedere SOLO il root in Normale, col
            canale presente — in Piano l'attrezzo non esiste, ai figli nemmeno. */
         if (name === 'request_plan_mode' && (agentRole === 'child' || modalitaOperativa === 'piano' || typeof onRichiestaPianoFn !== 'function')) return false
@@ -11466,6 +11510,8 @@ export async function talosLavora({
         'workflow_status', 'workflow_output', 'process_output',
         // Automazioni a due porte (08/10/2026): del Piano entrano solo le due letture
         'automation_list', 'automation_runs',
+        // 0.1.25: dei fornitori esclusi, del Piano entra solo l'elenco
+        'provider_exclusions_list',
         // K3 (03/10): guardare i propri figli e fermarne uno non tocca il disco (desktop, revisione della proposta)
         'list_children', 'stop_child',
         // D1 «Come Claude» (24/09/2026): rispondere a una figlia viva non è esecutivo; delegare e chiederle no.
@@ -14479,18 +14525,22 @@ export async function talosLavora({
                  *   l'ospite la chiede, poi l'esecuzione. Un rifiuto è `REFUSED. <motivo>`, come per la delega. I resoconti dei
                  *   giri (`automation_runs`) li ha scritti un'altra sessione: stanno dentro il confine dei dati.
                  */
-                else if (ATTREZZI_AUTOMAZIONI.has(nome)) {
-                    if (typeof onAutomazioneFn !== 'function') {
+                /* 0.1.25 (owner 09/10/2026): i fornitori esclusi passano dalla STESSA strada delle automazioni (anteprima, carta, esegui),
+                   col loro ospite `onFornitoriFn`. */
+                else if (ATTREZZI_AUTOMAZIONI.has(nome) || ATTREZZI_FORNITORI.has(nome)) {
+                    const fornitori = ATTREZZI_FORNITORI.has(nome)
+                    const ospiteFn = fornitori ? onFornitoriFn : onAutomazioneFn
+                    if (typeof ospiteFn !== 'function') {
                         erroreTool = true
                         esito = `${nome} is not available in this session.`
                     }
                     else {
                         try {
-                            const anteprima = await onAutomazioneFn(nome, argomenti ?? {}, { fase: 'anteprima', toolCallId: c.id })
+                            const anteprima = await ospiteFn(nome, argomenti ?? {}, { fase: 'anteprima', toolCallId: c.id })
                             let via = Boolean(anteprima?.ok)
                             if (!via) {
                                 erroreTool = true
-                                esito = `REFUSED. ${anteprima?.messaggio ?? 'this automation request is not valid.'}`
+                                esito = `REFUSED. ${anteprima?.messaggio ?? (fornitori ? 'this provider request is not valid.' : 'this automation request is not valid.')}`
                             }
                             else if (anteprima.carta) {
                                 const verifica = await verificaAzioneAutomazione({ ...(anteprima.azione ?? {}), tipo: nome, toolCallId: c.id },
@@ -14502,14 +14552,14 @@ export async function talosLavora({
                                 }
                             }
                             if (via) {
-                                const fatto = await onAutomazioneFn(nome, argomenti ?? {}, { fase: 'esegui', toolCallId: c.id })
+                                const fatto = await ospiteFn(nome, argomenti ?? {}, { fase: 'esegui', toolCallId: c.id })
                                 if (fatto?.ok) {
                                     esito = uscitaUtile(String(fatto.testo ?? ''), 16_000, 0.25)
                                     if (nome === 'automation_runs') esito = avvolgiEsterno('automation_runs')(esito)
                                 }
                                 else {
                                     erroreTool = true
-                                    esito = `REFUSED. ${fatto?.messaggio ?? 'the automation action did not happen.'}`
+                                    esito = `REFUSED. ${fatto?.messaggio ?? (fornitori ? 'the provider change did not happen.' : 'the automation action did not happen.')}`
                                 }
                             }
                         }

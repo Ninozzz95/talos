@@ -11,8 +11,11 @@ const localeUI = () => (linguaCorrenteDiT() === 'en' ? 'en-US' : 'it-IT');
  *   è ancora quello di prima, e il file lo tiene in un posto solo.
  */
 import { glifoFornitore, marchioDiFornitore } from './loghi-fornitori.js';
-/** 12/09 (review P-K): il badge dell'indirizzo. Senza un predefinito (Azure, Vertex, Bedrock) non si dice «predefinito» di un campo vuoto. */
-export function etichettaIndirizzo(row={}){if(!row.supportsEndpoint)return null;if(row.endpointConfigured)return t('modelli.provider.customEndpoint');return row.endpoint?t('modelli.provider.defaultEndpoint'):t('modelli.provider.missingEndpoint');}
+import { nomeModelloUmano } from './chat-foot.js'; // 0.1.25: mai l'id grezzo del modello a schermo
+/** 12/09 (review P-K): il badge dell'indirizzo. Senza un predefinito (Azure, Vertex, Bedrock) non si dice «predefinito» di un campo vuoto.
+ *  08/10 (bugfixer): «personalizzato» solo se il valore è DIVERSO dal predefinito (`endpointPredefinito`, dal server): il modulo salva
+ *  sempre il campo già riempito, e OpenRouter diceva «Indirizzo personalizzato» con https://openrouter.ai/api/v1. */
+export function etichettaIndirizzo(row={}){if(!row.supportsEndpoint)return null;if(row.endpointConfigured&&row.endpointPredefinito!==true)return t('modelli.provider.customEndpoint');return row.endpoint?t('modelli.provider.defaultEndpoint'):t('modelli.provider.missingEndpoint');}
 export function statoProvider(row={},prova=null){
  const esito=prova?.esito,labels={'in-corso':t('modelli.provider.testing'),'non-autorizzato':t('modelli.provider.credentialRejected'),irraggiungibile:t('modelli.provider.unreachable'),'non-provabile':t('modelli.provider.needsConfiguration'),errore:t('modelli.provider.testFailed')};
  const conteggio=Number.isInteger(prova?.modelli)&&prova.modelli>=0;
@@ -261,20 +264,64 @@ function campoEsclusi(row){
  /* Invio con qualcosa scritto aggiunge e NON salva (si ferma qui: la modale salva sull'Invio); a campo vuoto sale e salva. */
  input.addEventListener('keydown',(e)=>{if(e.key==='Enter'&&!e.isComposing&&input.value.trim()){e.preventDefault();e.stopPropagation();prendiDalCampo();}});
  input.addEventListener('input',()=>{if(!errore.hidden){errore.hidden=true;input.removeAttribute('aria-invalid');}});
- wrap.append(titolo,nota,elenco,vuoto,riga,errore);
- disegna();
- bozzeEsclusi.set(wrap,{prendiDalCampo,bozza:()=>[...bozza],cambiati:()=>bozza.length!==iniziali.length||bozza.some((s,i)=>s!==iniziali[i])});
+ /* ⭐ 0.1.25 (owner 09/10/2026, «visibile e togliibile») — gli esclusi DI SERIE (`esclusi-di-serie.mjs` sul server): stanno sotto la
+    lista della persona, con la stessa pastiglia e la stessa ×; tolti diventano una riga attenuata con «Escludi di nuovo». Anche
+    loro in BOZZA: li scrive il «Salva» della modale (un Salva solo), insieme alla lista, in una richiesta (`salvaEsclusioniFornitori`). */
+ const vociSerie=Array.isArray(row.esclusiDiSerie)?row.esclusiDiSerie.filter(v=>v&&typeof v.slug==='string'&&typeof v.modello==='string'):[];
+ const chiaveSerie=(v)=>`${v.modello}#${v.slug}`;
+ const serieIniziale=new Map(vociSerie.map(v=>[chiaveSerie(v),v.attivo!==false]));
+ const serieBozza=new Map(serieIniziale);
+ /* Foto del 09/10 (chiaro e scuro): sotto la lista della persona la nota sembrava il suggerimento del campo di sotto, e
+    «Escludi di nuovo» andava a capo da solo. ⇒ un titoletto suo («Esclusi di serie», lo stesso stile di «Fornitori esclusi»),
+    frasi corte sulla stessa riga della pastiglia, il modello col nome umano, e uno stacco prima del campo. */
+ const titoloSerie=el('span','talos-muted',t('modelli.provider.defaultExcludedTitle'));titoloSerie.id='esclusi-di-serie-titolo-'+row.id;
+ const serie=el('ul','talos-stack');serie.dataset.providerEsclusiDiSerie=row.id;serie.setAttribute('aria-labelledby',titoloSerie.id);
+ Object.assign(serie.style,{margin:'0 0 8px',padding:'0',listStyle:'none',gap:'6px'});
+ const disegnaSerie=()=>{
+  serie.replaceChildren(...vociSerie.map((v)=>{
+   const attivo=serieBozza.get(chiaveSerie(v));
+   const modello=nomeModelloUmano(v.modello)||v.modello;
+   const li=el('li','talos-cluster');Object.assign(li.style,{padding:'0',borderTop:'0',gap:'8px',flexWrap:'wrap'});li.dataset.esclusoDiSerie=chiaveSerie(v);li.dataset.attivo=String(attivo);
+   const nota=el('span','talos-muted',t(attivo?'modelli.provider.defaultExcludedNote':'modelli.provider.defaultAllowedNote',{name:v.slug,model:modello}));
+   if(attivo){
+    const chip=el('button','talos-button talos-button--secondary talos-button--sm',v.slug);chip.type='button';chip.dataset.providerEsclusoDiSerie=chiaveSerie(v);
+    chip.setAttribute('aria-label',t('modelli.provider.allowDefaultExcludedAgain',{name:v.slug,model:modello}));chip.append(iconaAzione('chiudi','14px'));
+    chip.addEventListener('click',()=>{serieBozza.set(chiaveSerie(v),false);disegnaSerie();serie.querySelector(`[data-provider-rimetti-di-serie="${CSS.escape(chiaveSerie(v))}"]`)?.focus({preventScroll:true});});
+    li.append(chip,nota);
+   }else{
+    const rimetti=el('button','talos-button talos-button--secondary talos-button--sm',t('modelli.provider.excludeAgainAction'));rimetti.type='button';rimetti.dataset.providerRimettiDiSerie=chiaveSerie(v);
+    rimetti.setAttribute('aria-label',t('modelli.provider.excludeDefaultAgain',{name:v.slug,model:modello}));
+    rimetti.addEventListener('click',()=>{serieBozza.set(chiaveSerie(v),true);disegnaSerie();serie.querySelector(`[data-provider-escluso-di-serie="${CSS.escape(chiaveSerie(v))}"]`)?.focus({preventScroll:true});});
+    li.append(nota,rimetti);
+   }
+   return li;
+  }));
+  serie.hidden=vociSerie.length===0;titoloSerie.hidden=serie.hidden;
+ };
+ wrap.append(titolo,nota,elenco,vuoto,titoloSerie,serie,riga,errore);
+ disegna();disegnaSerie();
+ bozzeEsclusi.set(wrap,{prendiDalCampo,bozza:()=>[...bozza],cambiati:()=>bozza.length!==iniziali.length||bozza.some((s,i)=>s!==iniziali[i]),
+  diSerieCambiati:()=>vociSerie.filter(v=>serieBozza.get(chiaveSerie(v))!==serieIniziale.get(chiaveSerie(v))).map(v=>({modello:v.modello,slug:v.slug,attivo:serieBozza.get(chiaveSerie(v))}))});
  return wrap;
 }
 /** Scrive l'elenco INTERO degli esclusi (`POST /api/v1/providers/openrouter/esclusi`), stesso envelope di `salvaCollegamentoProvider`. */
-export async function salvaEsclusiFornitori(esclusi,{fetchImpl=globalThis.fetch,baseUrl=globalThis.window?.__talosHarnessApiBase||''}={}){
+export async function salvaEsclusiFornitori(esclusi,opzioni={}){
+ return (await salvaEsclusioniFornitori({esclusi,diSerie:[]},opzioni)).esclusi;
+}
+/**
+ * 0.1.25 — la lista della persona (se cambiata, altrimenti `null`) E le voci di serie cambiate in UNA richiesta: il server le
+ * scrive in una volta sola (`impostaEsclusioni`), o tutte o nessuna. Prima il «Salva» faceva una richiesta per la lista e una per
+ * ogni voce: una che falliva a metà lasciava salvate le precedenti (seguito della review del bugfixer, 09/10/2026).
+ */
+export async function salvaEsclusioniFornitori({esclusi=null,diSerie=[]},{fetchImpl=globalThis.fetch,baseUrl=globalThis.window?.__talosHarnessApiBase||''}={}){
+ const corpo={...(Array.isArray(esclusi)?{esclusi}:{}),...(diSerie.length?{diSerie:diSerie.map(({modello,slug,attivo})=>({modello,slug,attivo}))}:{})};
  let risposta;
  try{risposta=await fetchImpl(`${baseUrl}/api/v1/providers/openrouter/esclusi`,{
-  method:'POST',credentials:'same-origin',headers:{Accept:'application/json','Content-Type':'application/json'},body:JSON.stringify({esclusi})});}
+  method:'POST',credentials:'same-origin',headers:{Accept:'application/json','Content-Type':'application/json'},body:JSON.stringify(corpo)});}
  catch{throw new Error(t('modelli.provider.saveServerUnavailable'));}
  let esito;try{esito=await risposta.json();}catch{throw new Error(t('modelli.provider.saveInvalidResponse'));}
  if(!risposta.ok||esito?.ok!==true||!Array.isArray(esito.data?.esclusi))throw new Error(t('modelli.provider.saveCheckFields'));
- return esito.data.esclusi;
+ return {esclusi:esito.data.esclusi,esclusiDiSerie:Array.isArray(esito.data.esclusiDiSerie)?esito.data.esclusiDiSerie:[]};
 }
 function aggiungiCampiAgente(body,row){
  const a=row.agente||{};
@@ -476,7 +523,8 @@ function apriConfigurazioneProvider(card,row,{onSalvaConfigurazione=null,onConfi
    const esclusi=bozzeEsclusi.get(corpo.querySelector('[data-provider-esclusi]'));
    if(esclusi&&!esclusi.prendiDalCampo())return;
    const esclusiNuovi=esclusi?.cambiati()?esclusi.bozza():null;
-   if(!chiave&&!collegamento&&!configurazionePropria&&!esclusiNuovi){avvisa(t('modelli.provider.nothingToSave'),false);return;}
+   const diSerieNuovi=esclusi?.diSerieCambiati?.()??[]; // 0.1.25: le voci di serie tolte o rimesse in bozza
+   if(!chiave&&!collegamento&&!configurazionePropria&&!esclusiNuovi&&!diSerieNuovi.length){avvisa(t('modelli.provider.nothingToSave'),false);return;}
    const controlli=[...dialogo.querySelectorAll('input,textarea,button')],prima=controlli.map(c=>c.disabled);
    dialogo.dataset.salvataggio='in-corso';card.dataset.salvataggioCollegamento='in-corso';dialogo.setAttribute('aria-busy','true');controlli.forEach(c=>{c.disabled=true;});primaria.textContent=t('modelli.provider.saving');
    const salvato=[];
@@ -489,8 +537,9 @@ function apriConfigurazioneProvider(card,row,{onSalvaConfigurazione=null,onConfi
     };
     if(chiave){await chiama({chiave},'chiave');salvato.push('chiave');campoChiave.value='';}
     if(collegamento){await chiama({collegamento},'collegamento');salvato.push('collegamento');}
-    if(esclusiNuovi){
-     try{await salvaEsclusiFornitori(esclusiNuovi);}catch(e){throw Object.assign(e,{fase:'collegamento'});}
+    /* La lista e le voci di serie in UNA richiesta e una scrittura: o tutte o nessuna (non più una richiesta per voce). */
+    if(esclusiNuovi||diSerieNuovi.length){
+     try{await salvaEsclusioniFornitori({esclusi:esclusiNuovi,diSerie:diSerieNuovi});}catch(e){throw Object.assign(e,{fase:'collegamento'});}
      if(!salvato.includes('collegamento'))salvato.push('collegamento');
     }
     if(configurazionePropria){
@@ -881,7 +930,10 @@ export function creaProviderCard(row,{aperta=false,prova=null,occupato=false,onM
   */
  /* Decisione 14: chi esclude un fornitore dal «⋯» di una risposta deve ritrovare lo stato SULLA CARD, non solo aprendo «Configura».
     Solo se ce ne sono: una riga «0 fornitori» sarebbe rumore. */
- const esclusiDellaCard=row.id==='openrouter'&&Array.isArray(row.esclusi)&&row.esclusi.length?tn('modelli.provider.excludedCountOne','modelli.provider.excludedCountMany',row.esclusi.length):null;
+ /* 0.1.25: contano anche gli esclusi DI SERIE ancora attivi — OpenRouter salta anche quelli (per il loro modello) */
+ const contatiEsclusi=row.id==='openrouter'?new Set([...(Array.isArray(row.esclusi)?row.esclusi:[]),
+  ...(Array.isArray(row.esclusiDiSerie)?row.esclusiDiSerie.filter(v=>v&&v.attivo!==false).map(v=>v.slug):[])]).size:0;
+ const esclusiDellaCard=contatiEsclusi?tn('modelli.provider.excludedCountOne','modelli.provider.excludedCountMany',contatiEsclusi):null;
  for(const [k,v]of [[t('modelli.provider.credential'),d.chiave],[t('modelli.provider.configuration'),etichettaIndirizzo(row)],[t('modelli.provider.excludedProviders'),esclusiDellaCard],[t('modelli.provider.lastTest'),d.prova]])
   if(v)  {const riga=el('div','talos-kv');riga.dataset.c='KeyValue';riga.append(el('span','talos-kv__k',k),el('span','talos-kv__v',v));fatti.append(riga);}
  card.append(fatti);
@@ -984,7 +1036,8 @@ export function creaProviderCard(row,{aperta=false,prova=null,occupato=false,onM
  const test=button('test',esterno?t('modelli.provider.testConnection'):t('modelli.provider.verifyAccess'));
  const vociMenu=[];
  if(d.tempo)vociMenu.push({chiave:'save-runtime',etichetta:row.supportsEndpoint||esterno?t('modelli.provider.saveConnection'):t('modelli.provider.saveTimeout'),icona:'i-clock',elemento:aggiungiNascosto(button('save-runtime',row.supportsEndpoint||esterno?t('modelli.provider.saveConnection'):t('modelli.provider.saveTimeout')))});
- if(row.supportsEndpoint&&row.endpointConfigured)vociMenu.push({chiave:'reset-runtime',etichetta:t('modelli.provider.resetEndpoint'),icona:'i-history',elemento:aggiungiNascosto(button('reset-runtime',t('modelli.provider.resetEndpoint')))});
+ // «Ripristina indirizzo» solo quando c'è qualcosa da ripristinare: valore diverso dal predefinito (egui `reset_button`, Zed #40135)
+ if(row.supportsEndpoint&&row.endpointConfigured&&row.endpointPredefinito!==true)vociMenu.push({chiave:'reset-runtime',etichetta:t('modelli.provider.resetEndpoint'),icona:'i-history',elemento:aggiungiNascosto(button('reset-runtime',t('modelli.provider.resetEndpoint')))});
  if(row.keyConfigured&&!poolCollegato)vociMenu.push({chiave:'remove-key',etichetta:pool.length>1?t('modelli.provider.removeAllKeys'):t('modelli.provider.removeKey'),icona:'i-trash',pericolo:true,separaPrima:true,elemento:aggiungiNascosto(button('remove-key',pool.length>1?t('modelli.provider.removeAllKeys'):t('modelli.provider.removeKey'),'ghost talos-button--danger'))});
  if(configurazionePropria){
   const salvaRuntime=vociMenu.find(v=>v.chiave==='save-runtime').elemento;

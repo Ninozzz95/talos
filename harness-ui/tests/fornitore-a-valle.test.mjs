@@ -181,10 +181,14 @@ test('FAV-07 — le rotte: elenco intero e «dalla risposta»; solo dalla finest
   assert.equal((await post('/api/v1/providers/openrouter/esclusi', { esclusi: ['a b'] })).status, 422);
   assert.equal((await post('/api/v1/providers/openrouter/esclusi', { lista: [] })).status, 400);
   // al contrario: senza la finestra (un curl da un giro, una pagina estranea) niente si scrive
-  for (const intestazioni of [{}, { origin: 'http://evil.example' }]) {
+  // 0.1.25: una pagina estranea, o un altro server locale su un'ALTRA porta, la ferma prima la guardia di tutto il server;
+  // quella delle impostazioni resta provata da un curl senza gettone e dalla finestra esatta con Sec-Fetch-Site cross-site
+  const altraPorta = `http://127.0.0.1:${Number(new URL(base).port) === 65535 ? 65534 : Number(new URL(base).port) + 1}`;
+  for (const [intestazioni, codice] of [[{}, 'PROVIDER_SETTINGS_ORIGIN_FORBIDDEN'], [{ origin: base, 'sec-fetch-site': 'cross-site' }, 'PROVIDER_SETTINGS_ORIGIN_FORBIDDEN'],
+    [{ origin: altraPorta, 'sec-fetch-site': 'same-site' }, 'ORIGIN_FORBIDDEN'], [{ origin: 'http://evil.example' }, 'ORIGIN_FORBIDDEN']]) {
     const no = await post('/api/v1/providers/openrouter/esclusi', { esclusi: [] }, intestazioni);
-    assert.equal(no.status, 403);
-    assert.equal(no.corpo.error.code, 'PROVIDER_SETTINGS_ORIGIN_FORBIDDEN');
+    assert.equal(no.status, 403, JSON.stringify(intestazioni));
+    assert.equal(no.corpo.error.code, codice, JSON.stringify(intestazioni));
   }
   assert.deepEqual(providerStore.getRuntime('openrouter').esclusi, ['chutes', 'deepinfra']);
   // l'inventario delle rotte le conosce: un metodo sbagliato è 405 (non 404), come vuole il GUARDIANO

@@ -49,6 +49,7 @@ import { CARTELLA_MEMORIA, MemoryStoreError, aggiornaMemoria, creaMemoria, elimi
    (`research-store.mjs`): scriverne una seconda qui vorrebbe dire due difese che divergono
    proprio sul confine che conta. Qui serve per rispondere 400 invece di far lanciare il magazzino. */
 import { idRicercaValido } from './research-store.mjs';
+import { hostAmmesso, origineDellaFinestra, rifiutoScritturaDaAltroSito } from './guardia-origine.mjs'; // 0.1.25
 /* ⭐⭐⭐⭐ 12/09, owner: «la ricerca approfondita deve avere una suite di esportazioni COMPLETA».
    ⛔ Il modulo è UNO e non conosce HTTP: qui si importa solo la porta (`costruisciEsportazione`) e
    l'elenco dei formati, che serve a scrivere il motivo di un 400 senza ricopiarlo. Nessun formato,
@@ -247,6 +248,7 @@ const API_ERROR_CODES = new Set([
   'AUTH_REQUIRED',
   'CHAT_FILE_ORIGIN_FORBIDDEN',
   'PAGE_ORIGIN_FORBIDDEN',
+  'HOST_FORBIDDEN', 'ORIGIN_FORBIDDEN', // 0.1.25: la guardia dell'Host e delle scritture di tutto il server (guardia-origine.mjs)
   /* ⭐⭐⭐ 05/9, W1-01 — schede terminale per sessione (src/terminal-registry.mjs). Il tetto NON è burocrazia: su Windows ogni PTY porta con sé un processo conhost (node-pty#471). */
   'TERMINAL_LIMIT_REACHED', 'TERMINAL_STORE_UNAVAILABLE',
   'BROWSER_PROXY_SOLO_LOCALE', 'BROWSER_PROXY_NON_HTML', 'BROWSER_PROXY_TROPPO_GRANDE', 'BROWSER_PROXY_IRRAGGIUNGIBILE', // Browser con annotazione 06/9
@@ -619,6 +621,8 @@ const STATUS_BY_CODE = Object.freeze({
   AUTH_REQUIRED: 401,
   CHAT_FILE_ORIGIN_FORBIDDEN: 403,
   PAGE_ORIGIN_FORBIDDEN: 403,
+  HOST_FORBIDDEN: 400, // come Hermes (`host_header_middleware`)
+  ORIGIN_FORBIDDEN: 403,
   RUNTIME_NOT_AVAILABLE: 503,
   RUNTIME_UNREACHABLE: 503,
   RUNTIME_OPERATION_UNSUPPORTED: 409,
@@ -703,6 +707,8 @@ export const MESSAGE_BY_CODE = Object.freeze({
   AUTH_REQUIRED: 'This server only accepts the TALOS window that started it',
   CHAT_FILE_ORIGIN_FORBIDDEN: 'Upload the file from this session’s TALOS window',
   PAGE_ORIGIN_FORBIDDEN: 'Open the page from this session’s TALOS window',
+  HOST_FORBIDDEN: 'TALOS answers only at its own local address (127.0.0.1 or localhost)',
+  ORIGIN_FORBIDDEN: 'Changes can be made only from the TALOS window',
   TERMINAL_LIMIT_REACHED: 'You already have the maximum number of open terminals for this session: close one and try again',
   TERMINAL_STORE_UNAVAILABLE: 'Terminals are not available on this server',
   BROWSER_PROXY_SOLO_LOCALE: 'The annotation proxy only works for a dev server on your computer',
@@ -1744,6 +1750,8 @@ const ROTTE_API = Object.freeze([
   // decisione 14 (08/10/2026 sera): i fornitori a valle esclusi su OpenRouter — l'elenco intero, e «Escludi» dal piede della risposta
   { schema: '/api/v1/providers/openrouter/esclusi', metodi: ['POST'] },
   { schema: '/api/v1/providers/openrouter/esclusi/dalla-risposta', metodi: ['POST'] },
+  // 0.1.25 (owner 09/10/2026): togliere o rimettere UNA voce degli esclusi di serie (`esclusi-di-serie.mjs`)
+  { schema: '/api/v1/providers/openrouter/esclusi/di-serie', metodi: ['POST'] },
   { schema: '/api/v1/models', metodi: ['GET'] },
   { schema: '/api/v1/model-lab/capacity', metodi: ['GET'] },
   { schema: '/api/v1/tools', metodi: ['GET'] },
@@ -1853,6 +1861,11 @@ const ROTTE_API = Object.freeze([
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/tasks\/([^/]+)\/stato$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/memory$/, metodi: ['GET', 'POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/memory\/(?!batch$)([^/]+)$/, metodi: ['GET', 'PATCH', 'DELETE'] },
+  /* 08/10/2026 notte (owner) — le stesse voci della PERSONA senza una sessione aperta (vedi `ROTTA_ARCHIVIO_PERSONALE`). */
+  { schema: /^\/api\/v1\/me\/(notes|tasks|memory)$/, metodi: ['GET', 'POST'] },
+  { schema: /^\/api\/v1\/me\/(notes|tasks|memory)\/(?!batch$)([^/]+)$/, metodi: ['GET', 'PATCH', 'DELETE'] },
+  { schema: /^\/api\/v1\/me\/tasks\/([^/]+)\/stato$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/me\/(notes|tasks|memory)\/batch$/, metodi: ['POST'] },
   /* 17/09 — un messaggio si toglie dalla conversazione: una lapide nel registro, non una riscrittura. */
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/messages\/([^/]+)$/, metodi: ['DELETE'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/research$/, metodi: ['GET'] },
@@ -3214,6 +3227,17 @@ export function createHttpApp({
    * ⛔ Una sequenza percent non valida non nomina nessuna sessione e nessuna voce: è un 404, non
    * un errore del server — stessa scelta, e stesso commento, delle rotte della Libreria.
    */
+  /*
+   * ⭐ Owner, 08/10/2026 notte: Note, Attività e Memoria sono della PERSONA (gli archivi sono già globali) ⇒ le stesse porte anche
+   *   SENZA una sessione: `/api/v1/me/<risorsa>[/<id>]`. È la forma «personale» delle API Google (`users/me`): nel nome di una
+   *   risorsa il genitore è il PROPRIETARIO (AIP-122, google.aip.dev/122, letta l'08/10/2026), e qui non è la sessione.
+   *   `/api/v1/tasks` era già preso dall'elenco dei compiti del banco. Con la sessione nel percorso si verifica ancora che esista
+   *   (la CLI e il mobile usano quella forma); con `me` no.
+   * ⛔ Due regex LETTERALI accanto a `.exec(url.pathname)` e non una sola con un'alternativa: il GUARDIANO
+   *   (tests/http-inventario-rotte.test.mjs) legge le rotte della catena proprio così, e una costante le nasconderebbe.
+   *   `conOSenzaSessione` rende uguali i gruppi: [intero, sessionId | undefined, ...resto].
+   */
+  const conOSenzaSessione = (conSessione, personale) => conSessione ?? (personale ? [personale[0], undefined, ...personale.slice(1)] : null);
   function nomiDellaRichiesta(res, method, clock, ...pezzi) {
     try {
       return pezzi.map((pezzo) => decodeURIComponent(pezzo));
@@ -3232,8 +3256,8 @@ export function createHttpApp({
      * Desktop (Chrome che carica la pagina DA questo stesso server) non ne
      * ha bisogno: stessa origine, `Origin` assente o già coincidente,
      * questa intestazione non cambia nulla. Mobile (`app.js` montato dentro
-     * il documento TALOS, origine Capacitor — `http://localhost` su
-     * Android) è cross-origin per davvero: senza questa intestazione il
+     * il documento TALOS, origine Capacitor — `https://localhost` su
+     * Android, androidScheme 'https') è cross-origin per davvero: senza questa intestazione il
      * browser bloccherebbe la LETTURA della risposta anche col tunnel
      * `adb reverse` attivo, per `fetch` e per `EventSource` allo stesso
      * modo. Riflette `Origin` invece di un `*` fisso o di indovinare lo
@@ -3242,10 +3266,30 @@ export function createHttpApp({
      * l'origine non lo allarga — chi non può già raggiungere `127.0.0.1:4174`
      * non può nemmeno mandare la richiesta che leggerebbe questa intestazione.
      */
+    /*
+     * ⭐ 0.1.25 — LA GUARDIA DELL'HOST, su OGNI richiesta (owner 09/10/2026, contro il DNS rebinding: un sito risolto a 127.0.0.1
+     *   diventa «stessa origine» e porta il SUO nome nell'Host). Solo i nomi di loopback, la porta non si confronta: come Hermes
+     *   (`host_header_middleware`, web_server.py:620-640, 400). Vedi `guardia-origine.mjs`.
+     */
+    if (!hostAmmesso(req.headers.host)) {
+      sendJson(res, 400, errorEnvelope('HOST_FORBIDDEN', clock), method);
+      return;
+    }
+    /*
+     * ⛔ 0.1.25 (owner 08/10/2026 notte, «una guardia unica su ogni scrittura») — prima qui si rifletteva QUALSIASI `Origin`
+     *   («il perimetro resta il loopback»): ma una pagina web aperta nel browser della persona è GIÀ sul loopback, e leggeva le
+     *   risposte. Ora solo l'origine della FINESTRA (`origineDellaFinestra`: loopback con la porta dell'Host, o il WebView del
+     *   telefono senza porta). ⛔ Non ogni porta di loopback come Hermes (`allow_origin_regex`, web_server.py:437-445): lui regge
+     *   perché tutto /api/ vuole il suo gettone; qui il 4174 non ne ha (review del bugfixer, 09/10). Un'altra origine non riceve
+     *   l'intestazione: il browser non le dà la risposta.
+     */
     const requestOrigin = req.headers.origin;
-    if (requestOrigin) {
-      res.setHeader('Access-Control-Allow-Origin', requestOrigin);
-      res.setHeader('Vary', 'Origin');
+    const origineAmmessa = Boolean(requestOrigin) && origineDellaFinestra(requestOrigin, req.headers.host);
+    if (requestOrigin) res.setHeader('Vary', 'Origin'); // la risposta cambia con l'Origin anche quando la si NEGA
+    if (origineAmmessa) res.setHeader('Access-Control-Allow-Origin', requestOrigin);
+    if (method === 'OPTIONS' && requestOrigin && !origineAmmessa) {
+      sendJson(res, 403, errorEnvelope('ORIGIN_FORBIDDEN', clock), method);
+      return;
     }
     if (method === 'OPTIONS') {
       const bersaglioPreflight = req.url ?? '';
@@ -3260,7 +3304,8 @@ export function createHttpApp({
        *   verbo e lo stesso identico buco, trovato leggendo qui. Lasciarla fuori avrebbe voluto
        *   dire dichiarare il vero per tre risorse su quattro.
        */
-      const vocePreflight = /^\/api\/v1\/sessions\/[^/]+\/(?:library|notes|tasks|memory)\/[^/?]+(?:[/?]|$)/u.test(bersaglioPreflight);
+      const vocePreflight = /^\/api\/v1\/sessions\/[^/]+\/(?:library|notes|tasks|memory)\/[^/?]+(?:[/?]|$)/u.test(bersaglioPreflight)
+        || /^\/api\/v1\/me\/(?:notes|tasks|memory)\/[^/?]+(?:[/?]|$)/u.test(bersaglioPreflight); // 08/10: le stesse voci senza sessione
       const scritturaEstesa = contextPreflight || vocePreflight;
       res.writeHead(204, {
         'Access-Control-Allow-Methods': scritturaEstesa ? 'GET, HEAD, POST, PATCH, DELETE' : 'GET, HEAD, POST',
@@ -3268,6 +3313,16 @@ export function createHttpApp({
         'Access-Control-Max-Age': '600',
       });
       res.end();
+      return;
+    }
+    /*
+     * ⭐ 0.1.25 — OGNI SCRITTURA da un altro sito si rifiuta qui, prima di ogni rotta (Fetch Metadata Resource Isolation Policy,
+     *   OWASP CSRF Prevention Cheat Sheet). Le guardie per funzione (`rifiutoOrigineApprovazione`: approvazioni, piano, Workflow,
+     *   fornitori, automazioni) restano: sono più strette (stessa porta, gettone per i programmi).
+     */
+    const rifiutoScrittura = rifiutoScritturaDaAltroSito(req);
+    if (rifiutoScrittura) {
+      sendJson(res, 403, errorEnvelope('ORIGIN_FORBIDDEN', clock), method);
       return;
     }
 
@@ -4480,10 +4535,10 @@ export function createHttpApp({
    * rollback globale. L'ordine del `for...of` è anche l'ordine della risposta.
    */
   const batchEliminaMatch = method === 'POST' && sessionRegistry
-    ? /^\/api\/v1\/sessions\/([^/]+)\/([^/]+)\/batch$/.exec(url.pathname)
+    ? conOSenzaSessione(/^\/api\/v1\/sessions\/([^/]+)\/([^/]+)\/batch$/.exec(url.pathname), /^\/api\/v1\/me\/(notes|tasks|memory)\/batch$/.exec(url.pathname)) // 08/10: anche senza sessione, solo le tre della persona
     : null;
   if (batchEliminaMatch) {
-    const nomi = nomiDellaRichiesta(res, method, clock, batchEliminaMatch[1], batchEliminaMatch[2]);
+    const nomi = nomiDellaRichiesta(res, method, clock, batchEliminaMatch[1] ?? '', batchEliminaMatch[2]);
     if (!nomi) return;
     const [sessionId, risorsa] = nomi;
     try {
@@ -4493,7 +4548,7 @@ export function createHttpApp({
         errore.code = 'QUERY_INVALID';
         throw errore;
       }
-      if (typeof sessionRegistry.esiste !== 'function' || !sessionRegistry.esiste(sessionId)) {
+      if (batchEliminaMatch[1] !== undefined && (typeof sessionRegistry.esiste !== 'function' || !sessionRegistry.esiste(sessionId))) {
         sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
         return;
       }
@@ -4711,24 +4766,25 @@ export function createHttpApp({
      *   quello del modello: due comportamenti diversi sullo stesso file.
      */
     const voceCreaMatch = method === 'POST' && sessionRegistry
-      ? /^\/api\/v1\/sessions\/([^/]+)\/(notes|tasks|memory)$/.exec(url.pathname)
+      ? conOSenzaSessione(/^\/api\/v1\/sessions\/([^/]+)\/(notes|tasks|memory)$/.exec(url.pathname), /^\/api\/v1\/me\/(notes|tasks|memory)$/.exec(url.pathname))
       : null;
     if (voceCreaMatch) {
-      const nomi = nomiDellaRichiesta(res, method, clock, voceCreaMatch[1]);
+      const nomi = nomiDellaRichiesta(res, method, clock, voceCreaMatch[1] ?? '');
       if (!nomi) return;
       const [sessionId] = nomi;
+      const personale = voceCreaMatch[1] === undefined;
       const risorsa = voceCreaMatch[2];
       const magazzino = magazziniDellaPersona[risorsa];
       try {
         requireNoQuery(url);
-        if (typeof sessionRegistry.esiste !== 'function' || !sessionRegistry.esiste(sessionId)) {
+        if (!personale && (typeof sessionRegistry.esiste !== 'function' || !sessionRegistry.esiste(sessionId))) {
           sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
           return;
         }
         const corpo = magazzino.corpo(await leggiCorpoJson(req, magazzino.tettoCorpo), { creazione: true });
         const { voce, duplicato } = await magazzino.crea(corpo);
         if (req.aborted || res.destroyed) return;
-        const indirizzo = `/api/v1/sessions/${encodeURIComponent(sessionId)}/${risorsa}/${encodeURIComponent(voce.id)}`;
+        const indirizzo = `${personale ? '/api/v1/me' : `/api/v1/sessions/${encodeURIComponent(sessionId)}`}/${risorsa}/${encodeURIComponent(voce.id)}`;
         /* ⛔ `duplicato` esce SOLO dove esiste davvero (la Memoria): un `duplicato:false` finto su
            note e attività sarebbe una promessa di deduplicazione che quei due magazzini non fanno. */
         sendJson(
@@ -4746,16 +4802,16 @@ export function createHttpApp({
     }
 
     const voceLeggiMatch = method === 'GET' && sessionRegistry
-      ? /^\/api\/v1\/sessions\/([^/]+)\/(notes|tasks|memory)\/([^/]+)$/.exec(url.pathname)
+      ? conOSenzaSessione(/^\/api\/v1\/sessions\/([^/]+)\/(notes|tasks|memory)\/([^/]+)$/.exec(url.pathname), /^\/api\/v1\/me\/(notes|tasks|memory)\/([^/]+)$/.exec(url.pathname))
       : null;
     if (voceLeggiMatch) {
-      const nomi = nomiDellaRichiesta(res, method, clock, voceLeggiMatch[1], voceLeggiMatch[3]);
+      const nomi = nomiDellaRichiesta(res, method, clock, voceLeggiMatch[1] ?? '', voceLeggiMatch[3]);
       if (!nomi) return;
       const [sessionId, voceId] = nomi;
       const magazzino = magazziniDellaPersona[voceLeggiMatch[2]];
       try {
         requireNoQuery(url);
-        if (typeof sessionRegistry.esiste !== 'function' || !sessionRegistry.esiste(sessionId)) {
+        if (voceLeggiMatch[1] !== undefined && (typeof sessionRegistry.esiste !== 'function' || !sessionRegistry.esiste(sessionId))) {
           sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
           return;
         }
@@ -4776,16 +4832,16 @@ export function createHttpApp({
     }
 
     const voceModificaMatch = method === 'PATCH' && sessionRegistry
-      ? /^\/api\/v1\/sessions\/([^/]+)\/(notes|tasks|memory)\/([^/]+)$/.exec(url.pathname)
+      ? conOSenzaSessione(/^\/api\/v1\/sessions\/([^/]+)\/(notes|tasks|memory)\/([^/]+)$/.exec(url.pathname), /^\/api\/v1\/me\/(notes|tasks|memory)\/([^/]+)$/.exec(url.pathname))
       : null;
     if (voceModificaMatch) {
-      const nomi = nomiDellaRichiesta(res, method, clock, voceModificaMatch[1], voceModificaMatch[3]);
+      const nomi = nomiDellaRichiesta(res, method, clock, voceModificaMatch[1] ?? '', voceModificaMatch[3]);
       if (!nomi) return;
       const [sessionId, voceId] = nomi;
       const magazzino = magazziniDellaPersona[voceModificaMatch[2]];
       try {
         requireNoQuery(url);
-        if (typeof sessionRegistry.esiste !== 'function' || !sessionRegistry.esiste(sessionId)) {
+        if (voceModificaMatch[1] !== undefined && (typeof sessionRegistry.esiste !== 'function' || !sessionRegistry.esiste(sessionId))) {
           sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
           return;
         }
@@ -4804,16 +4860,16 @@ export function createHttpApp({
     }
 
     const voceEliminaMatch = method === 'DELETE' && sessionRegistry
-      ? /^\/api\/v1\/sessions\/([^/]+)\/(notes|tasks|memory)\/([^/]+)$/.exec(url.pathname)
+      ? conOSenzaSessione(/^\/api\/v1\/sessions\/([^/]+)\/(notes|tasks|memory)\/([^/]+)$/.exec(url.pathname), /^\/api\/v1\/me\/(notes|tasks|memory)\/([^/]+)$/.exec(url.pathname))
       : null;
     if (voceEliminaMatch) {
-      const nomi = nomiDellaRichiesta(res, method, clock, voceEliminaMatch[1], voceEliminaMatch[3]);
+      const nomi = nomiDellaRichiesta(res, method, clock, voceEliminaMatch[1] ?? '', voceEliminaMatch[3]);
       if (!nomi) return;
       const [sessionId, voceId] = nomi;
       const magazzino = magazziniDellaPersona[voceEliminaMatch[2]];
       try {
         requireNoQuery(url);
-        if (typeof sessionRegistry.esiste !== 'function' || !sessionRegistry.esiste(sessionId)) {
+        if (voceEliminaMatch[1] !== undefined && (typeof sessionRegistry.esiste !== 'function' || !sessionRegistry.esiste(sessionId))) {
           sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
           return;
         }
@@ -4883,15 +4939,15 @@ export function createHttpApp({
     }
 
     const attivitaStatoMatch = method === 'POST' && sessionRegistry
-      ? /^\/api\/v1\/sessions\/([^/]+)\/tasks\/([^/]+)\/stato$/.exec(url.pathname)
+      ? conOSenzaSessione(/^\/api\/v1\/sessions\/([^/]+)\/tasks\/([^/]+)\/stato$/.exec(url.pathname), /^\/api\/v1\/me\/tasks\/([^/]+)\/stato$/.exec(url.pathname)) // 08/10: anche senza sessione
       : null;
     if (attivitaStatoMatch) {
-      const nomi = nomiDellaRichiesta(res, method, clock, attivitaStatoMatch[1], attivitaStatoMatch[2]);
+      const nomi = nomiDellaRichiesta(res, method, clock, attivitaStatoMatch[1] ?? '', attivitaStatoMatch[2]);
       if (!nomi) return;
       const [sessionId, voceId] = nomi;
       try {
         requireNoQuery(url);
-        if (typeof sessionRegistry.esiste !== 'function' || !sessionRegistry.esiste(sessionId)) {
+        if (attivitaStatoMatch[1] !== undefined && (typeof sessionRegistry.esiste !== 'function' || !sessionRegistry.esiste(sessionId))) {
           sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
           return;
         }
@@ -5364,8 +5420,10 @@ export function createHttpApp({
      *   `/esclusi {esclusi:[slug…]}` scrive l'elenco INTERO (le impostazioni); `/esclusi/dalla-risposta {fornitore, modello}`
      *   trova lo slug del nome che una risposta ha dichiarato (`openrouter-fornitori.mjs`) e lo aggiunge (il menu della risposta,
      *   dopo la conferma). Cambiano dove va ogni richiesta futura: solo dalla finestra di TALOS (la guardia della casa).
+     * ⭐ 0.1.25 (owner 09/10/2026, «visibile e togliibile»): `/esclusi/di-serie {modello, slug, attivo}` toglie o rimette UNA voce
+     *   degli esclusi di serie (`esclusi-di-serie.mjs`); risponde con l'elenco delle voci di serie e il loro stato.
      */
-    const escludiMatch = method === 'POST' && /^\/api\/v1\/providers\/openrouter\/esclusi(\/dalla-risposta)?$/u.exec(url.pathname);
+    const escludiMatch = method === 'POST' && /^\/api\/v1\/providers\/openrouter\/esclusi(\/dalla-risposta|\/di-serie)?$/u.exec(url.pathname);
     if (escludiMatch) {
       try {
         requireNoQuery(url);
@@ -5379,7 +5437,14 @@ export function createHttpApp({
         const corpo = await leggiCorpoJson(req, 16 * 1024);
         const chiavi = Object.keys(corpo ?? {});
         let data;
-        if (escludiMatch[1]) {
+        if (escludiMatch[1] === '/di-serie') {
+          if (chiavi.length !== 3 || !['modello', 'slug', 'attivo'].every((k) => chiavi.includes(k))
+            || typeof corpo.modello !== 'string' || typeof corpo.slug !== 'string' || typeof corpo.attivo !== 'boolean') {
+            throw Object.assign(new Error('Invalid body: expected {"modello", "slug", "attivo": true|false}'), { code: 'QUERY_INVALID' });
+          }
+          providerStore.impostaDiSerie('openrouter', corpo.modello, corpo.slug, corpo.attivo);
+          data = { esclusiDiSerie: providerStore.listPublic().find((p) => p.id === 'openrouter').esclusiDiSerie };
+        } else if (escludiMatch[1]) {
           if (chiavi.length !== 2 || !chiavi.includes('fornitore') || !chiavi.includes('modello')
             || typeof corpo.fornitore !== 'string' || typeof corpo.modello !== 'string') {
             throw Object.assign(new Error('Invalid body: expected {"fornitore", "modello"}'), { code: 'QUERY_INVALID' });
@@ -5389,10 +5454,21 @@ export function createHttpApp({
           const runtime = providerStore.impostaEsclusi('openrouter', prima.includes(slug) ? prima : [...prima, slug]);
           data = { slug, giaEscluso: prima.includes(slug), esclusi: runtime.esclusi };
         } else {
-          if (chiavi.length !== 1 || chiavi[0] !== 'esclusi' || !Array.isArray(corpo.esclusi)) {
-            throw Object.assign(new Error('Invalid body: expected {"esclusi": [slug, …]}'), { code: 'QUERY_INVALID' });
+          /* 0.1.25, seguito della review di FORNITORI-ATOMICI (bugfixer 09/10): il «Salva» della modale porta la lista E le voci
+             di serie cambiate in UNA richiesta, scritte in UNA volta (`impostaEsclusioni`): o tutto o niente. `{esclusi}` da solo
+             resta com'era. */
+          const voceValida = (v) => v && typeof v === 'object' && !Array.isArray(v) && Object.keys(v).length === 3
+            && typeof v.modello === 'string' && typeof v.slug === 'string' && typeof v.attivo === 'boolean';
+          if (chiavi.length === 0 || chiavi.some((k) => k !== 'esclusi' && k !== 'diSerie')
+            || (chiavi.includes('esclusi') && !Array.isArray(corpo.esclusi))
+            || (chiavi.includes('diSerie') && (!Array.isArray(corpo.diSerie) || corpo.diSerie.length > 64 || !corpo.diSerie.every(voceValida)))) {
+            throw Object.assign(new Error('Invalid body: expected {"esclusi": [slug, …], "diSerie": [{"modello", "slug", "attivo"}, …]}, at least one'), { code: 'QUERY_INVALID' });
           }
-          data = { esclusi: providerStore.impostaEsclusi('openrouter', corpo.esclusi).esclusi };
+          const runtime = providerStore.impostaEsclusioni('openrouter', {
+            ...(chiavi.includes('esclusi') ? { esclusi: corpo.esclusi } : {}),
+            diSerie: (corpo.diSerie ?? []).map(({ modello, slug, attivo }) => ({ modello, slug, attivo })),
+          });
+          data = { esclusi: runtime.esclusi, esclusiDiSerie: providerStore.listPublic().find((p) => p.id === 'openrouter').esclusiDiSerie };
         }
         if (req.aborted || res.destroyed) return;
         sendJson(res, 200, successEnvelope(data, clock), method);
@@ -7849,6 +7925,8 @@ export function createHttpApp({
         const tasksMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/tasks$/.exec(url.pathname);
         // ⭐⭐⭐ FASE N, sesto sistema (30/8) — il Capability hub elenca le memorie dell'owner (GLOBALI, come note/attività) — stesso principio esatto di tasksMatch appena sopra.
         const memoryMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/memory$/.exec(url.pathname);
+        // ⭐ 08/10/2026 notte (owner): gli stessi tre elenchi della PERSONA senza una sessione aperta — `elenca*Personali`, la stessa lettura delle tre righe sopra.
+        const archivioPersonaleMatch = sessionRegistry && /^\/api\/v1\/me\/(notes|tasks|memory)$/.exec(url.pathname);
         // ⭐⭐⭐ FASE N, ottavo sistema (30/8) — il Capability hub elenca le ricerche approfondite DEL PROGETTO di questa sessione (PER-PROGETTO, come Libreria — mai globale come notesMatch/tasksMatch/memoryMatch sopra).
         const researchMatch = sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/research$/.exec(url.pathname);
         // ⭐⭐⭐⭐ FASE N, nono e ultimo sistema (30/8) — il Capability hub elenca i tool forgiati installati (GLOBALI, come notesMatch/tasksMatch/memoryMatch sopra) — stesso principio esatto.
@@ -8237,6 +8315,12 @@ export function createHttpApp({
             throw erroreDelRegistro(esito);
           }
           data = { voci: esito.voci, errore: esito.errore };
+        } else if (archivioPersonaleMatch) {
+          requireNoQuery(url);
+          const [lettura, campo] = { notes: ['elencaNotePersonali', 'note'], tasks: ['elencaAttivitaPersonali', 'attivita'], memory: ['elencaMemoriePersonali', 'memorie'] }[archivioPersonaleMatch[1]];
+          if (typeof sessionRegistry[lettura] !== 'function') { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+          const esito = await sessionRegistry[lettura]();
+          data = { [campo]: esito[campo], errore: esito.errore };
         } else if (notesMatch) {
           requireNoQuery(url);
           let sessionId;

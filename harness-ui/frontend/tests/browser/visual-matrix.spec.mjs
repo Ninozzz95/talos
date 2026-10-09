@@ -212,8 +212,13 @@ async function applyScenario(page, kind) {
      *   `tool-running`  → testa «Lettura di 1 file…», `aria-expanded` da `false` a `true` dopo il
      *                     clic, corpo non più `hidden` e visibile, 1 riga dentro;
      *   `tool-complete` → testa «5 file letti», stessa transizione, 5 righe dentro.
+     * ⛔ 09/10/2026 (bugfixer) — dal segmento compatto R4 (`attivita-segmento.js`, `data-c="ActivitySegment"`) le teste sono
+     *   DUE: quella del segmento, visibile, e quella del gruppo adottato, nascosta di proposito (le sue righe le mostra il
+     *   segmento). `.talos-activity__head` da solo trovava 2 nodi ⇒ «strict mode violation». Si clicca la testa che la
+     *   persona VEDE: quella del segmento quando c'è (`tool-complete`), quella del gruppo quando il segmento non c'è ancora
+     *   (`tool-running`, un attrezzo solo: misurato, nessun `ActivitySegment` nel DOM).
      */
-    await page.locator('.talos-activity__head').click();
+    await page.locator('.talos-activity__head').filter({ visible: true }).click();
   } else if (kind === 'waiting-loader') {
     await page.route('**/api/v1/sessions', async (route) => {
       if (route.request().method() !== 'POST') { await route.continue(); return; }
@@ -241,7 +246,17 @@ async function applyScenario(page, kind) {
      * visibile, animazione `talos-orb-spin` in corso; con `prefers-reduced-motion: reduce` nessuna animazione
      * (la CSS rispetta la preferenza) — quindi la metrica più sotto può ancora smentire.
      */
-    await expect(page.locator('.talos-waiting [data-testid="talos-assistant-orb"]')).toBeVisible();
+    /* ⛔ 09/10/2026 (bugfixer) — dal 24/09 (owner, con la foto del 4174: DUE anelli uno sopra l'altro) l'orb vive in UN posto
+       solo, la testata del messaggio (`conversazione.js`, `creaAttesa`); nella bolla resta la riga «cosa fa, da quanto». Si
+       pretende l'orb nel messaggio che aspetta, visibile, al lavoro, e UNO solo: così la prova sorveglia anche il ritorno del
+       doppione. Il suo identificatore è `talos-message-orb` (`creaMessaggioTalos`); `talos-assistant-orb` era quello della
+       bolla, e nel DOM non ce n'è più nessuno (misurato il 09/10 mentre la sessione aspetta). */
+    const messaggioInAttesa = page.locator('#conversation .talos-message:has(.talos-waiting)').last();
+    const orbDelMessaggio = messaggioInAttesa.locator('.talos-message__head [data-testid="talos-message-orb"]');
+    await expect(orbDelMessaggio).toBeVisible();
+    await expect(orbDelMessaggio).toHaveCount(1);
+    await expect(orbDelMessaggio).toHaveClass(/\bworking\b/u);
+    await expect(messaggioInAttesa.locator('.talos-orb')).toHaveCount(1);
   } else if (kind === 'composer-standard') {
     await vaiA('chat');
     await injectConversation(page, 'active');

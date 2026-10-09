@@ -80,7 +80,10 @@ const MOCKUP = {
  */
 const SEZIONI = [
   { id: 'appearance', carte: { min: 5, forma: 'piatto' }, righe: { min: 22, controllate: true }, kv: { min: 0 } },
-  { id: 'chat', carte: { min: 2, forma: 'carta' }, righe: { min: 6, controllate: true }, kv: { min: 6 } },
+  /* ⛔ 09/10/2026 (bugfixer): kv da 6 a 5 — la sesta era «Forma del composer», e l'IMPOSTAZIONE è stata tolta del tutto il 23/09
+     (3b7809221: `composerShape` fissato a 'standard', controllo e riga del riepilogo rimossi). Le 5 di oggi: testo, stile dei
+     messaggi, animazione, tutta larghezza, mostra ragionamento (`renderSettingsRiepiloghi`, app.js). */
+  { id: 'chat', carte: { min: 2, forma: 'carta' }, righe: { min: 6, controllate: true }, kv: { min: 5 } },
   { id: 'tools', carte: { min: 2, forma: 'carta' }, nidificate: 1, righe: { controllate: false }, kv: { min: 3 } },
   { id: 'memoria', carte: { min: 1, forma: 'carta' }, nidificate: 1, righe: { controllate: false }, kv: { min: 0 } },
   { id: 'privacy', carte: { min: 2, forma: 'carta' }, righe: { controllate: false }, kv: { min: 3 } },
@@ -93,7 +96,10 @@ const SEZIONI = [
   { id: 'account', carte: { min: 1, forma: 'carta' }, righe: { controllate: false }, kv: { min: 0 } },
 ];
 
-const impostazioni = (colorMode) => ({ version: 1, appearance: { uiLanguage: 'it', colorMode }, chat: {}, workspaces: {} });
+/* ⛔ 09/10/2026 (bugfixer): il vestito del mockup è misurato in densità COMODA (righe 21/21). Dal 29/09 (0.1.19, 14086c7b4) la
+   densità di serie è «compatta», e `[data-density=compact] #schermoImpostazioni[data-settings-ui=v3] .talos-setting` porta le righe
+   a 15/15: la prova lo leggeva come vestito sbagliato. Si misura il mockup nella sua densità. */
+const impostazioni = (colorMode) => ({ version: 1, appearance: { uiLanguage: 'it', colorMode, uiDensity: 'comoda' }, chat: {}, workspaces: {} });
 
 /** Ogni richiesta non-GET viene ABORTITA e registrata: `tentate` è mutato dal processo Node. */
 async function bloccaNonGET(page, tentate) {

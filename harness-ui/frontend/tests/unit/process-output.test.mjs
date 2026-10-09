@@ -61,3 +61,9 @@ test('OUTPUT20-RAW-EXACT: downloading a UTF8-adjusted page excludes bytes from t
   assert.match(c.rawUrl({offset:0,limit:4093}),/limit=4093&format=raw$/);
   for(const limit of [0,-1,4097,0.5,NaN])assert.throws(()=>c.rawUrl({limit}));
 });
+
+test('OUTPUT20-SOTTOFONDO: la terminazione «background» passa nella ricevuta normalizzata, un valore inventato no', () => {
+  assert.equal(api.normalizzaRicevutaOutput({...receipt, termination: 'background'}).termination, 'background');
+  assert.equal('termination' in api.normalizzaRicevutaOutput({...receipt, termination: 'qualunque'}), false);
+  assert.equal('termination' in api.normalizzaRicevutaOutput(receipt), false);
+});

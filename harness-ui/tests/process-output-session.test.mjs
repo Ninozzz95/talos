@@ -65,3 +65,52 @@ test('OUTPUT14-EXIT: no-tests semantic status does not rewrite the actual proces
   const result = await api.runWithProcessOutput(b.scope, async opts => ({...await execute(opts), codice: 127, actualExitCode: 0}));
   assert.equal(result.codice, 127); assert.equal(result.processOutput.exitCode, 0);
 });
+
+/*
+ * ⭐ Owner, 08/10/2026 notte («"In sottofondo", con quanto è salvato»): un comando SFONDATO (dal tempo, dalla riga, o partito in
+ *   sfondo) non ha fallito la conservazione. Misurato sulla 4176 prima della cura: 7 byte salvati e confermati, ricevuta «failed /
+ *   OUTPUT_CAPTURE_NOT_CONFIRMED», e il modello leggeva «retention failed… the command already ran» accanto a «keeps running in
+ *   the background». Ora: ricevuta conclusa con terminazione 'background' e i byte fino a lì; la nota dice che il comando gira.
+ */
+const metaCattura = {schema: 'talos.process-output-metadata.v1', controlFooter: null};
+const sfondato = (pezzi, meta) => async ({onBytes}) => {
+  for (const p of pezzi) await onBytes({stream: 'stdout', bytes: Buffer.from(p), ...(meta === undefined ? {} : {metadata: meta})});
+  return {codice: null, messoInSfondo: true, testo: 'IN BACKGROUND: moved to the background instead of being killed.'};
+};
+for (const [nome, pezzi, meta] of [['CON-METADATI', ['inizio\n'], metaCattura], ['SENZA-METADATI', ['inizio\n'], undefined], ['VUOTO', [], undefined]]) {
+  test(`OUTPUT14-BACKGROUND-${nome}: un comando passato in sottofondo chiude la ricevuta coi byte fino a lì, mai «failed»`, async t => {
+    const b = await bank(t);
+    const result = await api.runWithProcessOutput(b.scope, sfondato(pezzi, meta));
+    const attesi = pezzi.join('').length;
+    assert.equal(result.processOutput.state, 'complete');
+    assert.equal(result.processOutput.termination, 'background');
+    assert.equal(result.processOutput.exitCode, null);
+    assert.equal(result.processOutput.storedBytes, attesi);
+    assert.equal(result.outputStorageFailed, false);
+    assert.match(result.testo, new RegExp(`still running in the background: ${attesi} bytes retained up to that point`));
+    assert.doesNotMatch(result.testo, /retention failed|already ran/);
+    assert.match(result.testo, /IN BACKGROUND/, 'il testo del kernel resta, sotto la nota');
+    if (attesi) assert.equal(Buffer.from((await b.store.readPage({sessionId: 'session14', outputId: result.processOutput.outputId, stream: 'stdout'})).bytes).toString(), pezzi.join(''));
+  });
+}
+/* Review del collega, 08/10: sottofondo DOPO il tetto di conservazione (1024 byte, 3×1000 scritti) — la ricevuta resta «limited»
+   con terminazione 'background', non diventa «failed», e la nota dice che il limite è stato raggiunto. */
+test('OUTPUT14-BACKGROUND-LIMITED: sottofondo dopo il tetto resta «limited» + background, 1024 di 3000, mai «failed»', async t => {
+  const b = await bank(t, 1024);
+  const result = await api.runWithProcessOutput(b.scope, sfondato(['a'.repeat(1000), 'b'.repeat(1000), 'c'.repeat(1000)], metaCattura));
+  assert.equal(result.processOutput.state, 'limited');
+  assert.equal(result.processOutput.termination, 'background');
+  assert.equal(result.processOutput.storedBytes, 1024);
+  assert.equal(result.outputStorageFailed, false);
+  assert.match(result.testo, /still running in the background: 1024 bytes retained up to that point/);
+  assert.match(result.testo, /the retention limit was reached/);
+  assert.doesNotMatch(result.testo, /retention failed|already ran/);
+});
+test('OUTPUT14-BACKGROUND-FINISH-FALLITO AL CONTRARIO: se l\'archivio non chiude, l\'avviso di conservazione fallita resta', async t => {
+  const b = await bank(t);
+  const store = {...b.store, finish: async () => {throw Object.assign(Error('private path'), {code: 'OUTPUT_STORE_IO'});}};
+  const result = await api.runWithProcessOutput({...b.scope, store}, sfondato(['inizio\n'], metaCattura));
+  assert.equal(result.outputStorageFailed, true);
+  assert.match(result.testo, /retention failed \(OUTPUT_STORE_IO\)/);
+  assert.doesNotMatch(result.testo, /private path/);
+});

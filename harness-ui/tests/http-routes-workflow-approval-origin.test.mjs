@@ -57,8 +57,10 @@ async function setup(t, { token = null } = {}) {
 test('WF-APPROVAL-ORIGIN-HOST-REBINDING: a foreign Host with a matching Origin cannot approve', async (t) => {
   const { port, post } = await setup(t);
   const out = await post({ Host: `attacker.example:${port}`, Origin: `http://attacker.example:${port}`, 'Sec-Fetch-Site': 'same-origin' });
-  assert.equal(out.status, 403, `approval from Host attacker.example answered ${out.status}`);
-  assert.equal(out.body.error.code, 'WORKFLOW_APPROVAL_ORIGIN_FORBIDDEN');
+  /* 0.1.25 (owner 09/10/2026): the server-wide Host guard (guardia-origine.mjs) now stops a foreign Host before any route —
+     400 HOST_FORBIDDEN, earlier and for every route. The approval guard below stays as the second line. */
+  assert.equal(out.status, 400, `approval from Host attacker.example answered ${out.status}`);
+  assert.equal(out.body.error.code, 'HOST_FORBIDDEN');
 });
 
 test('WF-APPROVAL-ORIGIN-HALF: a foreign Origin is refused even when Sec-Fetch-Site says same-origin', async (t) => {

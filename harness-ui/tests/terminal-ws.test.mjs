@@ -82,6 +82,19 @@ test('⛔⛔ AL CONTRARIO — un pathname diverso da /api/v1/terminal/ws distrug
   assert.equal(registro.chiamate.apri.length, 0);
 });
 
+test('⛔⛔⛔ 0.1.25 — un Host estraneo (DNS rebinding) è 400 prima di tutto, nessuna PTY; localhost con qualunque porta passa', () => {
+  const registro = registroFinto();
+  const gestore = creaGestoreTerminaleWs({ registro, originiConsentite: null, risolviScheda: schedaFinta() }, { WebSocketServer: wssFinta() });
+  const estraneo = socketFinto();
+  gestore.gestisciUpgrade({ url: '/api/v1/terminal/ws?id=s1', headers: { host: 'evil.example:4174' } }, estraneo, Buffer.alloc(0));
+  assert.equal(estraneo.distrutto, true);
+  assert.ok(estraneo.scritture.some((s) => String(s).includes('400')));
+  assert.equal(registro.chiamate.apri.length, 0);
+  const locale = socketFinto();
+  gestore.gestisciUpgrade({ url: '/api/v1/terminal/ws?id=s1', headers: { host: 'localhost:9999' } }, locale, Buffer.alloc(0));
+  assert.equal(locale.distrutto, false);
+});
+
 test('⛔⛔ AL CONTRARIO — nessun id in query: socket distrutto', () => {
   const registro = registroFinto();
   const gestore = creaGestoreTerminaleWs({ registro, originiConsentite: ORIGINE_OK, risolviScheda: schedaFinta() }, { WebSocketServer: wssFinta() });

@@ -262,9 +262,23 @@ test('SV-INDIRIZZI: le cinque porte sono quelle del contratto, e nessun adattato
   assert.deepEqual(chiamate.at(-1), ['POST', '/api/v1/sessions/s/tasks/t1/stato', { stato: 'done' }]);
 });
 
-test('SV-NIENTE-PROMESSE: senza sessione o senza rete il servizio NON esiste', () => {
+/* Owner 08/10/2026 notte: senza sessione il servizio ESISTE sulle porte personali `/api/v1/me/…` (prima tornava null e la
+   pagina diceva «nessuna nota» con note salvate). Resta vero che senza rete, o con una rete a metà, non esiste. */
+test('SV-SENZA-SESSIONE: senza sessione le porte sono quelle personali /api/v1/me/…, stato e blocco compresi', async () => {
+  const { chiamate, rete } = reteFinta();
+  const s = servizioVoci({ schema: SCHEMI.note, sessionId: '', rete });
+  await s.crea({ titolo: 'T', contenuto: 'C' });
+  await s.elimina('n1');
+  await s.eliminaInBlocco(['n1']);
+  const t = servizioVoci({ schema: SCHEMI.tasks, sessionId: null, rete });
+  await t.cambiaStato('t1', 'done');
+  assert.deepEqual(chiamate.map((c) => `${c[0]} ${c[1]}`), [
+    'POST /api/v1/me/notes', 'DELETE /api/v1/me/notes/n1', 'POST /api/v1/me/notes/batch', 'POST /api/v1/me/tasks/t1/stato',
+  ]);
+});
+
+test('SV-NIENTE-PROMESSE: senza rete, o con una rete a metà, il servizio NON esiste', () => {
   const { rete } = reteFinta();
-  assert.equal(servizioVoci({ schema: SCHEMI.note, sessionId: '', rete }), null);
   assert.equal(servizioVoci({ schema: SCHEMI.note, sessionId: 's', rete: null }), null);
   assert.equal(servizioVoci({ schema: SCHEMI.note, sessionId: 's', rete: { post: () => {} } }), null, 'una rete a metà non basta');
   assert.notEqual(servizioVoci({ schema: SCHEMI.note, sessionId: 's', rete }), null);

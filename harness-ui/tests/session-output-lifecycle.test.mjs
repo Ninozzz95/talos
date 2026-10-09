@@ -140,7 +140,10 @@ test('SESSION18-HTTP: authenticated deletion exposes pending cleanup without pat
   const url = `${base}/api/v1/sessions/${f.id.sessionId}/delete`;
   try {
     assert.equal((await fetch(url, {method: 'POST'})).status, 401);
-    assert.equal((await fetch(url, {method: 'POST', headers: {Origin: 'https://foreign.invalid'}})).status, 401);
+    // 0.1.25: a foreign Origin is refused by the server-wide guard before the token check (403 ORIGIN_FORBIDDEN, not 401)
+    const foreign = await fetch(url, {method: 'POST', headers: {Origin: 'https://foreign.invalid'}});
+    assert.equal(foreign.status, 403);
+    assert.equal((await foreign.json()).error.code, 'ORIGIN_FORBIDDEN');
     assert.equal(existsSync(f.journal), true);
     db.exec("CREATE TRIGGER deny18 BEFORE DELETE ON output_captures BEGIN SELECT RAISE(ABORT,'private/path'); END;");
     const response = await fetch(url, {method: 'POST', headers: {Cookie: 'talos_token=fixture18', Origin: base, 'Content-Type': 'application/json'}, body: '{}'});

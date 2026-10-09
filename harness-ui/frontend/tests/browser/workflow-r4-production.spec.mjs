@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { attendiFineStoria, flussoConConfine } from './aiuto-confine.mjs';
 import { chiudiToastAperti } from './aiuto-toast.mjs';
 
 test('R4-RETURN-ASK-GATE-TRANSITION: pending Ask protects controls, resolution restores the transparent overlay', async ({ page }) => {
@@ -302,9 +303,8 @@ test('R4-RAIL-5000-BOUNDED: 200 logical agents remain reachable with bounded row
     sessionId: `r4-large-${index}`, padreId: 'r4-large-root',
     taskCorto: `Agente ${index + 1}`, conclusa: true,
   }));
-  await page.route('**/api/v1/sessions/r4-large-root/events*', (route) => route.fulfill({
-    contentType: 'text/event-stream', body: '',
-  }));
+  // ⛔ 08/10/2026: il flusso finto porta il confine fra storia e presente (aiuto-confine.mjs): senza, la barra restava da disegnare
+  await page.route('**/api/v1/sessions/r4-large-root/events*', flussoConConfine);
   await page.route('**/api/v1/sessions/r4-large-root/children', (route) => route.fulfill({
     json: { ok: true, data: { figli: children } },
   }));
@@ -317,6 +317,7 @@ test('R4-RAIL-5000-BOUNDED: 200 logical agents remain reachable with bounded row
   await page.evaluate(() => window.__talosHarnessUiRuntime.passaASessione(
     'r4-large-root', 'workspace', 'Grafo grande', 'z-ai/glm-5.3-flash', { conclusa: false },
   ));
+  await attendiFineStoria(page);
   await page.locator('#railTabs [data-rail="agenti"]').click();
   const rows = page.locator('#railAgenti [data-c="AgentRow"]');
   await expect(rows.first()).toBeVisible();
@@ -344,9 +345,8 @@ test('R4-GRAPH-5000-BOUNDED: five thousand logical sessions do not mount five th
     sessionId: `r4-scale-${index}`, padreId: 'r4-scale-root',
     taskCorto: `Agente ${index + 1}`, conclusa: index % 5 !== 0,
   }));
-  await page.route('**/api/v1/sessions/r4-scale-root/events*', (route) => route.fulfill({
-    contentType: 'text/event-stream', body: '',
-  }));
+  // ⛔ 08/10/2026: il flusso finto porta il confine fra storia e presente (aiuto-confine.mjs): senza, la barra restava da disegnare
+  await page.route('**/api/v1/sessions/r4-scale-root/events*', flussoConConfine);
   await page.route('**/api/v1/sessions/r4-scale-root/children', (route) => route.fulfill({
     json: { ok: true, data: { figli: children } },
   }));
@@ -366,6 +366,7 @@ test('R4-GRAPH-5000-BOUNDED: five thousand logical sessions do not mount five th
   await page.evaluate(() => window.__talosHarnessUiRuntime.passaASessione(
     'r4-scale-root', 'workspace', 'Grafo scala', 'z-ai/glm-5.3-flash', { conclusa: false },
   ));
+  await attendiFineStoria(page);
   await page.locator('#railTabs [data-rail="agenti"]').click();
   const rows = page.locator('#railAgenti [data-c="AgentRow"]');
   await expect(rows).toHaveCount(25, { timeout: 30_000 });
@@ -404,8 +405,10 @@ test('R4-GRAPH-5000-BOUNDED: five thousand logical sessions do not mount five th
  *   quattro cifre. Si prova nelle DUE lingue, così una cura a 'it-IT' fisso resta rossa in inglese.
  */
 for (const [lingua, attesi] of [
-  ['it', { rail: '4.999 di 4.999 agenti · tutti i livelli', pagina: '1–25 di 4.999', grafo: '5.000 sessioni', gruppo: 'Conclusi · 3.999', righe: '1–12 di 3.999' }],
-  ['en', { rail: '4,999 di 4,999 agenti · tutti i livelli', pagina: '1–25 di 4,999', grafo: '5,000 sessioni', gruppo: 'Conclusi · 3,999', righe: '1–12 di 3,999' }],
+  /* ⛔ 09/10/2026 (bugfixer): dal 03/10 (fase della lingua) anche le PAROLE seguono la lingua, non solo i numeri — l'atteso inglese
+     era rimasto «4,999 di 4,999 agenti». Frasi misurate sul prodotto il 09/10 (agents.countAllLevels, family.done, …). */
+  ['it', { rail: '4.999 di 4.999 agenti · tutti i livelli', pagina: '1–25 di 4.999', grafo: '5.000 sessioni', gruppo: 'Conclusi · 3.999', righe: '1–12 di 3.999', diagramma: 'Apri visuale diagramma' }],
+  ['en', { rail: '4,999 of 4,999 agents · all levels', pagina: '1–25 of 4,999', grafo: '5,000 sessions', gruppo: 'Done · 3,999', righe: '1–12 of 3,999', diagramma: 'Open diagram view' }],
 ]) {
   test(`R4-COUNT-LOCALE-5000: rail and graph group thousands in the active language (${lingua})`, async ({ page }) => {
     test.setTimeout(120_000);
@@ -419,9 +422,8 @@ for (const [lingua, attesi] of [
         version: 1, appearance: { colorMode: 'light', uiLanguage },
       }));
     }, lingua);
-    await page.route('**/api/v1/sessions/r4-count-root/events*', (route) => route.fulfill({
-      contentType: 'text/event-stream', body: '',
-    }));
+    // ⛔ 08/10/2026: il flusso finto porta il confine fra storia e presente (aiuto-confine.mjs): senza, la barra restava da disegnare
+    await page.route('**/api/v1/sessions/r4-count-root/events*', flussoConConfine);
     await page.route('**/api/v1/sessions/r4-count-root/children', (route) => route.fulfill({
       json: { ok: true, data: { figli: children } },
     }));
@@ -435,10 +437,11 @@ for (const [lingua, attesi] of [
     await page.evaluate(() => window.__talosHarnessUiRuntime.passaASessione(
       'r4-count-root', 'workspace', 'Conteggi', 'z-ai/glm-5.3-flash', { conclusa: false },
     ));
+    await attendiFineStoria(page);
     await page.locator('#railTabs [data-rail="agenti"]').click();
     await expect(page.locator('#railAgenti [role="status"]')).toHaveText(attesi.rail, { timeout: 30_000 });
     await expect(page.locator('#railAgenti .talos-agenti-pagine')).toContainText(attesi.pagina);
-    await page.locator('#railAgenti').getByRole('button', { name: 'Apri visuale diagramma' }).click();
+    await page.locator('#railAgenti').getByRole('button', { name: attesi.diagramma }).click();
     const graph = page.locator('#schermoChat > [data-c="GrafoAgenti"]');
     await expect(graph).toHaveAttribute('data-density', 'aggregate', { timeout: 30_000 });
     await expect(graph).toContainText(attesi.grafo);

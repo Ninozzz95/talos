@@ -151,7 +151,9 @@ test.describe('R4 segmento compatto — prodotto', () => {
   });
 
   test('ATTIVITA-D4-D13 — scheda da 32 px con testa a 30, voci da 28 px normale e 24 compatta, icone da 16', async ({ page }) => {
-    await apri(page);
+    /* ⛔ 09/10/2026 (bugfixer): dal 29/09 (0.1.19, 14086c7b4) la densità di SERIE è «compatta», e la prova partiva già compatta
+       misurando 24 dove pretendeva il 28 «normale». Le due misure del mockup restano: si parte esplicitamente da «comoda». */
+    await apri(page, { densita: 'comoda' });
     await scena(page, 'breve', 'd4');
     const seg = page.locator(SEG);
     const misure = await seg.evaluate((s) => ({

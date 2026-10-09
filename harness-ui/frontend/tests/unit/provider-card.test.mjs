@@ -10,3 +10,11 @@ test('BADGE-INDIRIZZO — vuoto ⇒ «Indirizzo da impostare»; con un predefini
   assert.equal(etichettaIndirizzo({ supportsEndpoint: true, endpoint: 'https://mia.openai.azure.com/openai/v1', endpointConfigured: true }), 'Indirizzo personalizzato');
   assert.equal(etichettaIndirizzo({ supportsEndpoint: false }), null);
 });
+
+// 08/10 (bugfixer, foto del collega sul 4174): OpenRouter salvato con l'indirizzo DI SERIE diceva «Indirizzo personalizzato».
+test('BADGE-INDIRIZZO-SERIE — salvato ma uguale al predefinito ⇒ «Indirizzo predefinito»; AL CONTRARIO, diverso ⇒ «personalizzato»', () => {
+  assert.equal(etichettaIndirizzo({ supportsEndpoint: true, endpoint: 'https://openrouter.ai/api/v1', endpointConfigured: true, endpointPredefinito: true }), 'Indirizzo predefinito');
+  assert.equal(etichettaIndirizzo({ supportsEndpoint: true, endpoint: 'https://proxy.esempio.test/v1', endpointConfigured: true, endpointPredefinito: false }), 'Indirizzo personalizzato');
+  // un server di prima (senza il campo) resta com'era
+  assert.equal(etichettaIndirizzo({ supportsEndpoint: true, endpoint: 'https://proxy.esempio.test/v1', endpointConfigured: true }), 'Indirizzo personalizzato');
+});

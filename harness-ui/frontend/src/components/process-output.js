@@ -15,7 +15,8 @@ export function normalizzaRicevutaOutput(value, expected = {}) {
       || !['sessionId', 'runId', 'toolCallId'].every(k => id(value[k]))
       || !/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/iu.test(value.outputId)
       || ['sessionId', 'runId', 'toolCallId', 'outputId'].some(k => expected[k] !== undefined && value[k] !== expected[k])) return null;
-  return Object.freeze(Object.fromEntries(['schema', 'sessionId', 'runId', 'toolCallId', 'outputId', 'state'].map(k => [k, value[k]])));
+  /* 08/10/2026: la terminazione 'background' (comando passato in sottofondo, ancora vivo) cambia la frase dello stato. */
+  return Object.freeze({...Object.fromEntries(['schema', 'sessionId', 'runId', 'toolCallId', 'outputId', 'state'].map(k => [k, value[k]])), ...(value.termination === 'background' ? {termination: 'background'} : {})});
 }
 
 export function creaClientOutput({receipt, fetchFn = globalThis.fetch, API = p => p} = {}) {
@@ -60,7 +61,11 @@ const CHIAVI_STATO = {
   failed: 'processi.output.stateFailed',
   interrupted: 'processi.output.stateInterrupted',
 };
-const stateLabel = (stato) => tr(CHIAVI_STATO[stato]);
+/* 08/10/2026 (review del collega): la ricevuta in sottofondo è una FOTOGRAFIA del passaggio di mano, quindi non dice «ancora in
+   corso» (diventa falso quando il comando finisce o lo fermi dai Processi: lo stato vivo sta nella scheda Processi); e se il
+   limite di conservazione era già stato raggiunto, lo dice, come fa la nota per il modello. */
+const CHIAVI_SFONDO = {complete: 'processi.output.stateBackground', limited: 'processi.output.stateBackgroundLimited'};
+const stateLabel = (stato, terminazione) => tr(terminazione === 'background' && CHIAVI_SFONDO[stato] ? CHIAVI_SFONDO[stato] : CHIAVI_STATO[stato]);
 
 /** One retained page per reader. Session disposal and disclosure closure invalidate late responses. */
 export function creaLettoreOutput({receipt, API, fetchFn, signal, document: doc = globalThis.document} = {}) {
@@ -77,7 +82,7 @@ export function creaLettoreOutput({receipt, API, fetchFn, signal, document: doc 
   label.append(select);
   const button = text => {const n = el('button', text, 'talos-button talos-button--secondary'); n.type = 'button'; return n;};
   const refresh = button(tr('processi.output.refresh')), first = button(tr('processi.output.firstPage')), next = button(tr('processi.output.nextPage'));
-  const status = el('p', stateLabel(current.state), 'talos-process-output__status');
+  const status = el('p', stateLabel(current.state, current.termination), 'talos-process-output__status');
   status.setAttribute('role', 'status'); status.setAttribute('aria-live', 'polite');
   const range = el('p', '', 'talos-process-output__range');
   const pre = el('pre'), code = el('code'); pre.append(code); pre.tabIndex = 0; pre.setAttribute('aria-label', tr('processi.output.pageContentLabel'));
@@ -100,7 +105,7 @@ export function creaLettoreOutput({receipt, API, fetchFn, signal, document: doc 
       const p = await client.leggi({stream: select.value, offset: at, signal: controller.signal});
       if (closed || version !== epoch || signal?.aborted) return;
       page = p;
-      status.textContent = stateLabel(p.state);
+      status.textContent = stateLabel(p.state, current.termination);
       /* ⛔ 02/10/2026, owner («parole comprensibili al posto della frase tecnica»): diceva «La separazione dei dati di controllo
          non è confermata». Vuol dire che il segno con cui TALOS riconosce la fine del comando (`controlFooter`,
          `process-output-access.mjs` `visibleEnd`) non è stato trovato e tolto: potrebbe stare in fondo all'output. Su un
@@ -130,7 +135,7 @@ export function creaLettoreOutput({receipt, API, fetchFn, signal, document: doc 
   return {
     element: root,
     monta(detail) {if (!closed && detail?.parentNode && detail.nextSibling !== root) detail.after(root);},
-    aggiorna(value) {const nextReceipt = normalizzaRicevutaOutput(value, current); if (!nextReceipt) return false; current = nextReceipt; if (!pending) status.textContent = stateLabel(current.state); return true;},
+    aggiorna(value) {const nextReceipt = normalizzaRicevutaOutput(value, current); if (!nextReceipt) return false; current = nextReceipt; if (!pending) status.textContent = stateLabel(current.state, current.termination); return true;},
     dispose,
   };
 }

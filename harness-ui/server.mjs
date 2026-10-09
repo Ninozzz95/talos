@@ -1,5 +1,5 @@
 import './src/difesa-ricerca-programmi.mjs'; // ⛔ PER PRIMO: su Windows un `git.exe` dentro il workspace non deve battere il git vero (misura e fonti nel file)
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { randomBytes } from 'node:crypto'; // F3 (24/09): il gettone dello spegnimento gentile
 import { createServer } from 'node:http';
 import { createLocalResumeDiagnostics } from './src/local-resume-diagnostics.mjs';
@@ -72,6 +72,9 @@ import { createLocalRuntimeProbe } from './src/local-runtime-probe.mjs';
 import { readGgufHeader } from './src/gguf-header.mjs';
 import { join, parse, isAbsolute } from 'node:path';
 import { CARTELLA_PROGETTI, creaCartellaDatiProgetto } from './src/cartella-dati-progetto.mjs'; // PO-26 (24/09): Libreria e Ricerca fuori dal progetto
+import { creaInstradamentoDiSerie } from './src/esclusi-di-serie.mjs'; // 0.1.25: i fornitori a valle esclusi di serie, per modello
+import { creaOspiteFornitori } from './src/fornitori-per-il-modello.mjs'; // 0.1.25: la seconda porta dei fornitori esclusi
+import { slugDelFornitore } from './src/openrouter-fornitori.mjs';
 
 /** ⛔ Stessi tre nomi loopback validati in config.mjs (`LOOPBACK_HOSTS`, non esportato — costante minuscola e stabile, duplicarla qui è più semplice che aggiungere un export per tre stringhe). Un browser può presentarsi con uno qualunque dei tre alias anche se il server è bindato su un altro. */
 const ALIAS_LOOPBACK = ['127.0.0.1', '::1', 'localhost'];
@@ -299,6 +302,8 @@ async function startServer() {
     resolveImagesFn: messages => chatImageStore.resolveMessages(messages),
     modulePath: config.ownerRuntimeModule,
     openRouterRuntimeFn: () => providerStore.getRuntime('openrouter'),
+    // 0.1.25 (owner 08-09/10/2026): glm-5.3-flash esclude OpenInference di serie, togliibile nelle Impostazioni
+    openRouterRoutingFn: creaInstradamentoDiSerie(() => providerStore.getRuntime('openrouter')),
     destinazioneModelloDeps,
     modelCapabilityFn: readModelCapabilities,
   });
@@ -772,6 +777,9 @@ async function startServer() {
   sessionRegistry.collegaAutomazioni(creaOspiteAutomazioni({
     store: automationStore, scheduler: automationScheduler, verificaCartellaFn: validaCartellaLibera,
   }));
+  /* ⭐ 0.1.25 (owner 09/10/2026) — la seconda porta dei fornitori esclusi: elencare libero, escludere e riammettere con la carta.
+     Come le automazioni, il registro offre gli attrezzi `provider_*` solo da qui in poi; la CLI non lo chiama. */
+  sessionRegistry.collegaFornitori(creaOspiteFornitori({ providerStore, slugDelFornitoreFn: (q) => slugDelFornitore(q) }));
   /*
    * ⭐⭐⭐ 27/8 — owner: "un picker per il modello, dropdown stilizzato
    * (l'abbiamo già fatto nel mobile)". Il catalogo VERO di OpenRouter
@@ -1092,6 +1100,7 @@ async function startServer() {
   const shutdown = async () => {
     if (shutdownStarted) return;
     shutdownStarted = true;
+    togliGettoneSpegnimento();
     clearInterval(reaperTerminali);
     /*
      * ⛔⛔ 05/9, W1-01 — le chiavi si fotografano PRIMA di iterare: ora le
@@ -1152,12 +1161,35 @@ async function startServer() {
    *   presenta a `POST /api/v1/admin/shutdown` PRIMA di qualunque `Stop-Process -Force`.
    */
   let gettoneSpegnimento = null;
+  const fileGettoneSpegnimento = join(config.cartellaStore, `.spegnimento-gettone-${portaAscolto}`);
+  /* ⭐ 09/10/2026 (bugfixer, seguito suggerito dalla review di «talos desktop») — allo spegnimento gentile il server TOGLIE il suo
+     file, come Jupyter Server toglie il suo `jpserver-<pid>.json` (`ServerApp.remove_server_info_file`, «removes the …json file
+     created for this server, and ignores the error raised when the file has already been removed»; letto il 09/10/2026): con
+     un file per porta, l'app installata che si chiude non lascia gettoni morti a ogni porta usata. Solo se il file porta ANCORA
+     il nostro gettone (un altro server sulla stessa porta, dopo di noi, avrebbe il suo). Uno stop brusco lo lascia, e il
+     prossimo avvio sulla stessa porta lo riscrive. */
+  const togliGettoneSpegnimento = () => {
+    if (!gettoneSpegnimento) return;
+    try {
+      if (readFileSync(fileGettoneSpegnimento, 'utf8') === gettoneSpegnimento) unlinkSync(fileGettoneSpegnimento);
+    } catch (errore) {
+      if (errore?.code !== 'ENOENT') console.error('[spegnimento] gettone non tolto:', errore instanceof Error ? errore.message : errore);
+    }
+  };
   try {
     gettoneSpegnimento = randomBytes(32).toString('hex');
     /* Nella cartella dei journal (`config.cartellaStore`, gitignorata, dell'utente): mai accanto a `server.mjs` nel repo —
        la prima stesura ci lasciava un file non tracciato quando una prova avviava il server (misurato: `?? .spegnimento-gettone`). */
+    /* ⛔⛔ 09/10/2026 (bugfixer) — UN FILE PER PORTA. Dal 07/10 (decisione owner) il 4174 e l'app installata scrivono nella
+       STESSA cartella (`%APPDATA%\TALOS\sessions`), e col nome unico vinceva l'ultimo server partito: dopo un avvio dell'app,
+       `aggiorna-4174.ps1` presentava al 4174 il gettone dell'app ⇒ 401 ⇒ `-Force`, cioè proprio lo stop brusco che la
+       decisione 8 voleva evitare. Visto dal vivo il 09/10 alle 00:22 («(401) Non autorizzato: passo al -Force») e riprodotto
+       con due server sulla stessa cartella (tests/server-spegnimento-con-flussi-aperti.test.mjs). È la forma di Jupyter Server,
+       che con più istanze nella stessa cartella di runtime scrive un file per istanza (`jpserver-<pid>.json`, con porta e
+       token; jupyter-server.readthedocs.io «Security», letta il 09/10/2026). Qui la chiave è la PORTA: lo script la conosce, e
+       il file lasciato da un server morto si riscrive al prossimo avvio sulla stessa porta. */
     mkdirSync(config.cartellaStore, { recursive: true });
-    writeFileSync(join(config.cartellaStore, '.spegnimento-gettone'), gettoneSpegnimento, { encoding: 'utf8', mode: 0o600 });
+    writeFileSync(fileGettoneSpegnimento, gettoneSpegnimento, { encoding: 'utf8', mode: 0o600 });
   } catch (errore) {
     gettoneSpegnimento = null;
     console.error('[spegnimento] gettone non scritto (la rotta di spegnimento resta spenta):', errore instanceof Error ? errore.message : errore);

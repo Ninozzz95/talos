@@ -75,3 +75,40 @@ test('LETTORE-OUTPUT-STILE: dentro la chat le righe di stato sono piccole e atte
   assert.equal(m.esiti.tolto.testo, 'Registrazione conclusa.');
   for (const e of Object.values(m.esiti)) assert.doesNotMatch(e.testo, /dati di controllo/u);
 });
+
+/* Owner 08/10/2026 notte: un comando passato in sottofondo ha la ricevuta conclusa con terminazione 'background'. La riga di
+   stato non deve dire «Registrazione conclusa» (il comando gira ancora): dice che è in sottofondo e che il resto va nel suo file. */
+test('LETTORE-OUTPUT-SOTTOFONDO: la ricevuta di un comando in sottofondo dice «in sottofondo», prima e dopo la lettura', async (t) => {
+  const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
+  t.after(() => page.close());
+  await page.route('**/*', (route) => route.abort());
+  await page.setContent('<!doctype html><html lang="it"><head><meta charset="utf-8"></head><body><div id="r"></div></body></html>');
+  await page.addScriptTag({ content: `${pacchetto}\nwindow.__po = { creaLettoreOutput: __poModulo.creaLettoreOutput };` });
+  await page.waitForFunction(() => window.__po);
+  const testi = await page.evaluate(async ([ricevuta, p]) => {
+    const fuori = {};
+    for (const [nome, r] of [['sfondo', { ...ricevuta, termination: 'background' }], ['sfondoLimite', { ...ricevuta, state: 'limited', termination: 'background' }], ['normale', ricevuta], ['limite', { ...ricevuta, state: 'limited' }]]) {
+      /* la pagina vera porta lo stato della registrazione: «limited» per una ricevuta col tetto raggiunto */
+      const dati = { ...p, state: r.state };
+      const lettore = window.__po.creaLettoreOutput({ receipt: r, API: (x) => `http://127.0.0.1:9${x}`, fetchFn: async () => ({ ok: true, json: async () => ({ ok: true, data: dati }) }) });
+      document.getElementById('r').append(lettore.element);
+      const stato = lettore.element.querySelector('.talos-process-output__status');
+      const prima = stato.textContent;
+      lettore.element.open = true;
+      await new Promise((ok) => setTimeout(ok, 50));
+      fuori[nome] = { prima, dopo: stato.textContent };
+    }
+    return fuori;
+  }, [RICEVUTA, CASI.vuoto]);
+  /* Review del collega, 08/10: la frase è una FOTOGRAFIA del passaggio di mano — mai «ancora in corso», che diventa falso quando il
+     comando finisce o lo fermi; lo stato vivo sta nella scheda Processi. E col tetto già raggiunto lo dice. */
+  const atteso = 'Passato in sottofondo: questo è ciò che aveva scritto fino a lì. Il resto va nel suo file di output; nella scheda Processi vedi se è ancora in corso.';
+  const attesoLimite = 'Passato in sottofondo dopo aver raggiunto il limite di conservazione: una parte di ciò che aveva scritto fino a lì non è stata conservata. Il resto va nel suo file di output; nella scheda Processi vedi se è ancora in corso.';
+  assert.equal(testi.sfondo.prima, atteso);
+  assert.equal(testi.sfondo.dopo, atteso);
+  assert.equal(testi.sfondoLimite.prima, attesoLimite);
+  assert.equal(testi.sfondoLimite.dopo, attesoLimite);
+  for (const e of [testi.sfondo, testi.sfondoLimite]) assert.doesNotMatch(e.prima, /ancora in corso:/u, 'mai «ancora in corso» come fatto');
+  assert.equal(testi.normale.prima, 'Registrazione conclusa.', 'AL CONTRARIO: senza la terminazione la frase è quella di sempre');
+  assert.equal(testi.limite.prima, 'Limite di conservazione raggiunto: una parte dell’output non è stata conservata.', 'AL CONTRARIO: limited senza sottofondo resta com’era');
+});

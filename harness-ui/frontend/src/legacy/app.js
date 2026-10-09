@@ -35,6 +35,7 @@ import { aggiornaPaginaAutomazioni, apriAutomazioneNelPannello } from '../compon
 import { vociMenuAutomazione, parolaEsitoGiro } from '../components/automazioni-v2.js'; // automazioni a due porte (owner 08/10/2026 notte)
 import { creaFoglioAutomazione } from '../components/automazione-foglio.js';
 import { eCartaAutomazione, cartaModificabile, testiCartaAutomazione, creaBloccoCartaAutomazione } from '../components/automazione-carta.js';
+import { eCartaFornitori, testiCartaFornitori, creaBloccoCartaFornitori } from '../components/fornitori-carta.js'; // 0.1.25
 import { creaForgeRow, aggiornaPaginaOfficina } from '../components/officina.js'; // 05/9 Fase 2: Officina
 import { creaReportRow } from '../components/ricerca.js'; // 05/9 Fase 2: Ricerca (riga del foglio laterale)
 import { creaLibraryRow } from '../components/libreria.js'; // 05/9 Fase 2: Libreria (riga del foglio laterale)
@@ -408,6 +409,7 @@ import { aggiornaWorkspaceFooter, fornitoreDelModello, testiPiede as testiPiedeW
       /** ⭐⭐⭐ 27/8, R1 — messageId(ragionamento) -> {summaryText, detail, grezzo}, la bolla collassabile che ospita il ragionamento in streaming (riusa la stessa forma di appendToolNote, non un componente nuovo). Il testo grezzo si accumula qui per lo stesso motivo di testoGrezzoMessaggi: renderizzaMarkdownSemplice lavora sul totale, non sul delta. */
       ragionamentoBubble: new Map(),
       inRigiocata: false, // ⭐ 13/09 notte: vero fra l'apertura del flusso e `talos.fine-rigiocata`
+      preferenzeDaSalvareAlConfine: false, // B3 09/10: un giro della storia ha cambiato il modo; si salva al confine, una volta
       ragionamentiInCorso: null, // ⭐ 13/09 notte: { sessionId, inizi } — l'inizio vero dei ragionamenti aperti, dal registro
       /** ⛔⛔⛔ 27/8, owner: "ricevo risposte duplicate" — ogni evento.`_sequenza` (assegnato dal server, vedi session-registry.mjs broadcast()) entra qui la PRIMA volta che passa da handleRealEvent; una riconnessione (EventSource nativo dopo una caduta, o runDirectShell che ne apre una fresca) rimanda l'intero buffer da capo, e questo Set lo riconosce e lo scarta invece di duplicare bubble/testo. Sopravvive a un `continua:true` (stessa sessione, nuovo giro) — si azzera SOLO per una sessione davvero diversa. */
       sequenzeViste: new Set(),
@@ -1136,6 +1138,7 @@ import { aggiornaWorkspaceFooter, fornitoreDelModello, testiPiede as testiPiedeW
     let ultimoGestoRuota = 0;
     let frameRiarmoRuota = null;
     let riarmoDaGesto = null;
+    let ultimoTopVistoAlloScroll = scroller.scrollTop; // aggiornato da ogni `scroll`: la posizione PRIMA del prossimo gesto
     let toccoConversazione = null;
     fermaRiarmoRuotaConversazione = (preservaTocco = false) => {
       ultimoGestoRuota += 1;
@@ -1193,7 +1196,14 @@ import { aggiornaWorkspaceFooter, fornitoreDelModello, testiPiede as testiPiedeW
         // Riattacca solo dopo un gesto umano verso il basso e quando il
         // contenuto e davvero tornato in vista, non durante il wheel stesso.
         const generation = state.realSession.generation;
-        riarmoDaGesto = { generation, gesto, top: scroller.scrollTop };
+        /* ⛔⛔ 09/10/2026 (bugfixer, misurato su SCROLL-P0-07, regressione mia di A1 650f74fc8) — la BASE del gesto è l'ultima
+           posizione vista da uno `scroll`, non `scrollTop` adesso. Questo gestore è PASSIVO, e con un listener passivo «the
+           browser can start the default action immediately, without waiting for the listener to finish» (MDN, addEventListener,
+           «Improving scroll performance using passive listeners», letto il 09/10/2026): uno scorrimento istantaneo (rotella
+           grande, movimento ridotto, scorrimento sul compositore) è GIÀ applicato quando arriviamo qui. Misurato: base 7714 =
+           posizione d'arrivo; poi `scroll` e `scrollend` chiedevano `scrollTop > base` (7714 > 7714, falso) e il seguito non si
+           riagganciava mai, col fondo in vista. La posizione dell'ultimo `scroll` è quella PRIMA del gesto. */
+        riarmoDaGesto = { generation, gesto, top: Math.min(scroller.scrollTop, ultimoTopVistoAlloScroll) };
         const frame = window.requestAnimationFrame(() => {
           if (frameRiarmoRuota === frame) frameRiarmoRuota = null;
           // Un'altra chat o un gesto successivo possiedono ormai il follow.
@@ -1302,6 +1312,7 @@ import { aggiornaWorkspaceFooter, fornitoreDelModello, testiPiede as testiPiedeW
     let revisioneVistaAlloScroll = revisioneLayoutConversazione;
     let altezzaVistaAlloScroll = scroller.scrollHeight;
     scroller.addEventListener('scroll', () => {
+      ultimoTopVistoAlloScroll = scroller.scrollTop; // la base del prossimo gesto (vedi `registraGestoScorrimento`)
       fondoInVistaRicordato = null;
       // A1: la decisione «layout o persona» si prende sui fatti dall'ultimo scroll visto, poi il riferimento si aggiorna
       const diLayout = scrollDiLayout(revisioneVistaAlloScroll, altezzaVistaAlloScroll, scroller);
@@ -2244,20 +2255,23 @@ import { aggiornaWorkspaceFooter, fornitoreDelModello, testiPiede as testiPiedeW
     }
   }
 
+  /*
+   * ⭐ Owner, 08/10/2026 notte («elenco vero, e si scrivono»): Note, Attività e Memoria sono della PERSONA (archivi globali).
+   *   Con una sessione aperta si legge dalla sua rotta di sempre; senza, dalla rotta personale `/api/v1/me/<risorsa>` — lo
+   *   stesso archivio. Prima, senza sessione, le tre pagine dicevano «nessuna nota» / zero con elementi salvati.
+   */
+  function indirizzoArchivioPersonale(risorsa, sessionId = state.realSession.id) {
+    return sessionId ? `/api/v1/sessions/${encodeURIComponent(sessionId)}/${risorsa}` : `/api/v1/me/${risorsa}`;
+  }
+
   async function caricaPaginaNote() {
     const schermo = $('#schermoNote');
     if (!schermo) return;
     const id = state.realSession.id;
     const stato = $('[data-note-stato]', schermo);
-    if (!id) {
-      noteCaricate = [];
-      montaNote(schermo, [], { cerca: '' });
-      if (stato) stato.textContent = tr('app.notes.openSessionHint');
-      return;
-    }
     if (stato) stato.textContent = tr('app.notes.reading');
     try {
-      const dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(id)}/notes`);
+      const dati = await apiGet(indirizzoArchivioPersonale('notes', id));
       noteCaricate = Array.isArray(dati?.note) ? dati.note : [];
     } catch (errore) {
       noteCaricate = [];
@@ -2289,7 +2303,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       onMenu: apriMenuAzioniLibreria,
       onCambiata: () => {
         void caricaPaginaNote();
-        void aggiornaContatoriLuoghi(state.sessionSelection.available?.size ?? 0);
+        void aggiornaContatoriLuoghi(state.sessionSelection.available?.size ?? 0, { forza: true });
       },
       copia: (testo) => copyText(testo, tr('app.notes.copied')),
       rendiMarkdown: renderizzaMarkdownSemplice,
@@ -6263,7 +6277,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
            */
           onCambiata: () => {
             caricaPannelloLibreria({ pagina: true });
-            void aggiornaContatoriLuoghi(state.sessionSelection.available?.size ?? 0);
+            void aggiornaContatoriLuoghi(state.sessionSelection.available?.size ?? 0, { forza: true });
           },
           onMenu: apriMenuAzioniLibreria,
           /* ⭐ BC-38 (12/09) — «da quale sessione»: il nome VIVO, non quello congelato nel meta.
@@ -6314,14 +6328,10 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
   async function caricaPannelloNote() {
     const mount = $('#notesListMount', sheetBody);
     if (!mount) return; // il foglio "capabilities" non è (più) quello aperto
-    if (!state.realSession.id) {
-      mount.replaceChildren(textElement('p', 'board-empty', tr('app.board.notes.noSession')));
-      return;
-    }
     mount.replaceChildren(textElement('p', 'board-empty', tr('app.board.notes.loading')));
     let dati;
     try {
-      dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/notes`);
+      dati = await apiGet(indirizzoArchivioPersonale('notes'));
     } catch (error) {
       mount.replaceChildren(textElement('p', 'board-empty', tr('app.board.notes.unavailable', { motivo: error.message })));
       return;
@@ -6381,7 +6391,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
           onMenu: apriMenuAzioniLibreria,
           onCambiata: () => {
             caricaPannelloAttivita({ pagina: true });
-            void aggiornaContatoriLuoghi(state.sessionSelection.available?.size ?? 0);
+            void aggiornaContatoriLuoghi(state.sessionSelection.available?.size ?? 0, { forza: true });
           },
           copia: (testo) => copyText(testo, tr('app.board.tasks.copied')),
         });
@@ -6392,10 +6402,9 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       }
     }
     if (embeddedDemoOnly()) { mostra([], { errore: tr('app.board.noBackend') }); return; }
-    if (!sessionId) { mostra([], { errore: tr('app.board.tasks.openSession') }); return; }
     mostra([], { caricamento: true });
     try {
-      const dati = await apiGet('/api/v1/sessions/' + encodeURIComponent(sessionId) + '/tasks');
+      const dati = await apiGet(indirizzoArchivioPersonale('tasks', sessionId));
       if (!attuale()) return;
       if (dati.errore) { mostra([], { errore: tr('app.board.tasks.unavailableWith', { motivo: dati.errore }) }); return; }
       if (!Array.isArray(dati.attivita) || dati.attivita.some(m => !m || typeof m !== 'object' || Array.isArray(m))) throw new Error(tr('app.board.tasks.invalidList'));
@@ -6432,7 +6441,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
           onMenu: apriMenuAzioniLibreria,
           onCambiata: () => {
             caricaPannelloMemoria({ pagina: true });
-            void aggiornaContatoriLuoghi(state.sessionSelection.available?.size ?? 0);
+            void aggiornaContatoriLuoghi(state.sessionSelection.available?.size ?? 0, { forza: true });
           },
           copia: (testo) => copyText(testo, tr('app.board.memory.copied')),
         });
@@ -6443,10 +6452,9 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       }
     }
     if (embeddedDemoOnly()) { mostra([], { errore: tr('app.board.noBackend') }); return; }
-    if (!sessionId) { mostra([], { errore: tr('app.board.memory.openSession') }); return; }
     mostra([], { caricamento: true });
     try {
-      const dati = await apiGet('/api/v1/sessions/' + encodeURIComponent(sessionId) + '/memory');
+      const dati = await apiGet(indirizzoArchivioPersonale('memory', sessionId));
       if (!attuale()) return;
       if (dati.errore) { mostra([], { errore: tr('app.board.memory.unavailableWith', { motivo: dati.errore }) }); return; }
       if (!Array.isArray(dati.memorie) || dati.memorie.some(m => !m || typeof m !== 'object' || Array.isArray(m))) throw new Error(tr('app.board.memory.invalidList'));
@@ -13320,7 +13328,37 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     if (fine <= stato.mostrato) return;
     stato.mostrato = fine;
     renderizzaMarkdownIncrementale(corpo, stato.render, testo.slice(0, fine));
+    seguiCodaRagionamentoVivo(card, corpo);
     if (fine < testo.length) chiediDisegnoRagionamento(card);
+  }
+
+  /*
+   * ⛔⛔ 09/10/2026 (bugfixer, misurato) — IL RIQUADRO DEL RAGIONAMENTO APERTO NON SEGUIVA LA SUA CODA. Il corpo è un
+   *   `.talos-tool-row__body` (index.css:841: `max-height:240px; overflow:auto`) e mentre il modello ragiona cresceva SOTTO il
+   *   bordo: dopo 28.497 caratteri `scrollTop` era ancora 0 su 25.018 px — chi l'aveva aperto per seguirlo vedeva le prime righe.
+   *   `scrollStreamingOutput` muove lo scorrevole della PAGINA, mai questo.
+   * ⭐ Forma di Hermes (`apps/desktop/src/components/assistant-ui/thread/message-parts.tsx:240-283`, clone 2026-10-07): il
+   *   riquadro del ragionamento DAL VIVO («preview», `max-h-40`) segue i token nuovi «until the user scrolls up to read earlier
+   *   reasoning»; `following` si ricalcola a ogni scroll con una soglia di 24 px (`PREVIEW_RELOCK_THRESHOLD_PX`, :166), e si
+   *   scrive `scrollTop = scrollHeight` solo quando il contenuto è CRESCIUTO. Qui la crescita è il pezzo appena montato.
+   * ⛔ Solo dal VIVO (`data-ragionamento="vivo"`): un ragionamento finito che si apre si legge dall'inizio, come in Hermes
+   *   (`isPreview` falso ⇒ niente seguito).
+   */
+  const RAGIONAMENTO_RIAGGANCIO_PX = 24;
+  const seguitoRagionamento = new WeakMap(); // corpo → { segue }
+  function seguiCodaRagionamentoVivo(card, corpo) {
+    let stato = seguitoRagionamento.get(corpo);
+    /* Chi seguiva dal vivo continua fino all'ultimo pezzo: `ReasoningMessageEnd` toglie «vivo» SUBITO (`chiudiRagionamento`),
+       mentre gli ultimi pezzi si montano ai fotogrammi dopo — senza questo il riquadro si fermava a un pezzo dalla fine. */
+    if (card.dataset.ragionamento !== 'vivo' && !stato) return;
+    if (!stato) {
+      stato = { segue: true };
+      seguitoRagionamento.set(corpo, stato);
+      corpo.addEventListener('scroll', () => {
+        stato.segue = corpo.scrollHeight - corpo.scrollTop - corpo.clientHeight < RAGIONAMENTO_RIAGGANCIO_PX;
+      }, { passive: true });
+    }
+    if (stato.segue) corpo.scrollTop = corpo.scrollHeight;
   }
 
   /** Un pezzo per fotogramma, mai due prenotazioni per la stessa scheda. */
@@ -14551,6 +14589,8 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     /* Automazioni a due porte (08/10/2026): la carta della bozza, con Approva · Modifica · Annulla. Le figlie non hanno gli
        attrezzi delle automazioni (il kernel non li offre a chi è delegato), quindi qui arriva solo la sessione stessa. */
     if (eCartaAutomazione(azione) && !figlia) return appendCartaAutomazione(requestId, azione);
+    /* 0.1.25 (owner 09/10/2026): escludere o riammettere un fornitore a valle — la stessa carta, Approva · Annulla */
+    if (eCartaFornitori(azione) && !figlia) return appendCartaAutomazione(requestId, azione, CARTA_FORNITORI);
     /*
      * 05/9 Fase 2: Conversazione — la scheda di approvazione del mockup: cosa
      * chiede (badge), il bersaglio, il perche', e tre risposte. «Per questa
@@ -14741,16 +14781,20 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
    *   la risposta al modello dice che l'ha fatto lei — `automazioneModificata`), Annulla (un no).
    * ⛔ Nessun «sempre» da scrivere: queste carte chiedono per costruzione, ogni volta (decisione dell'owner).
    */
-  function appendCartaAutomazione(requestId, azione) {
-    const testi = testiCartaAutomazione(azione);
-    const modificabile = cartaModificabile(azione);
+  /* 0.1.25 — l'adattatore della carta: le automazioni (di serie) o i fornitori esclusi. Stessa carta, stesso esito scritto solo
+     da `ApprovalResolved`; cambiano parole, blocco e se c'è «Modifica» (i fornitori non hanno una bozza da correggere). */
+  const CARTA_AUTOMAZIONI = Object.freeze({ testi: testiCartaAutomazione, modificabile: cartaModificabile, blocco: creaBloccoCartaAutomazione, dato: 'cartaAutomazione' });
+  const CARTA_FORNITORI = Object.freeze({ testi: testiCartaFornitori, modificabile: () => false, blocco: creaBloccoCartaFornitori, dato: 'cartaFornitori' });
+  function appendCartaAutomazione(requestId, azione, adattatore = CARTA_AUTOMAZIONI) {
+    const testi = adattatore.testi(azione);
+    const modificabile = adattatore.modificabile(azione);
     const scheda = creaApprovazione({ badge: testi.badge, bersaglio: testi.bersaglio, perche: testi.perche, motivo: testi.motivo,
-      nota: modificabile ? tr('sezioni.automations.v2.card.editNote') : '' });
+      nota: modificabile ? tr('sezioni.automations.v2.card.editNote') : (testi.nota ?? '') });
     const article = scheda.scheda;
     article.classList.add('real-approval-card');
     article.dataset.requestId = requestId;
-    article.dataset.cartaAutomazione = azione.tipo;
-    scheda.perche.after(creaBloccoCartaAutomazione(document, azione));
+    article.dataset[adattatore.dato] = azione.tipo;
+    scheda.perche.after(adattatore.blocco(document, azione));
     const { unaVolta: approvaBtn, sessione: modificaBtn, nega: annullaBtn } = scheda.pulsanti;
     approvaBtn.textContent = tr('sezioni.automations.v2.card.approve');
     modificaBtn.textContent = tr('sezioni.automations.v2.card.edit');
@@ -15146,7 +15190,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
   /*
    * ⛔⛔⛔ 28/8 — xterm.js v6 (core) ha SOLO il renderer DOM, che colora con uno <style> dinamico
    * scartato dalla CSP (`style-src 'self'`): `@xterm/addon-webgl` dipinge pixel GPU veri. E i
-   * contesti WebGL per pagina sono contati (xterm.js #4379): uno solo, sulla scheda attiva.
+   * contesti WebGL per pagina sono contati (xterm.js #4379): uno per scheda montata, al più nove (A7, sotto).
    * `preserveDrawingBuffer:true` — altrimenti ogni lettura dei pixel (screenshot, verifica) vede un canvas vuoto.
    */
   function accendiWebglTerminale(record) {
@@ -15155,7 +15199,14 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     if (!window.WebglAddon) { t.enforcementColore = tr('app.terminal.domNoWebgl'); return; }
     try {
       const webgl = new window.WebglAddon.WebglAddon(true);
-      webgl.onContextLoss(() => { webgl.dispose(); record.webgl = null; t.enforcementColore = tr('app.terminal.domWebglLost'); renderizzaSchedeTerminale(); });
+      /* A7 (review del collega, 08/10): la perdita del contesto passa da `spegniWebglTerminale`, così anche qui i fratelli vivi
+         ripuliscono l'atlante condiviso prima di ridisegnarsi (xtermjs#6055). Un addon già sostituito si spegne e basta. */
+      webgl.onContextLoss(() => {
+        if (record.webgl === webgl) spegniWebglTerminale(record);
+        else { try { webgl.dispose(); } catch { /* già perso */ } }
+        t.enforcementColore = tr('app.terminal.domWebglLost');
+        renderizzaSchedeTerminale();
+      });
       record.term.loadAddon(webgl);
       record.webgl = webgl;
       t.enforcementColore = 'webgl';
@@ -15168,6 +15219,34 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     if (!record.webgl) return;
     try { record.webgl.dispose(); } catch { /* già perso */ }
     record.webgl = null;
+    rinfrescaWebglFratelli(record);
+  }
+
+  /*
+   * ⛔⛔ A7 (bugfixer, 08/10/2026) — IL CAMBIO DI SCHEDA DEL TERMINALE BLOCCAVA LA PAGINA PER SECONDI. Owner: «in app desktop con
+   *   moltissime schede aperte». Misurato sulla 4176 con 8 schede piene (~5000 righe): ogni passaggio fra schede 1-4,5 s di
+   *   compito lungo (clic p50 4,7 s); SENZA GPU lo stesso giro è istantaneo (34 ms) ⇒ il costo è il WebGL spento sulle altre e
+   *   ricreato da zero sulla nuova a OGNI cambio. Hermes lo carica una volta al montaggio e lo tiene
+   *   (apps/desktop/src/app/right-sidebar/terminal/use-agent-terminal.ts:151-166).
+   * ⇒ Il WebGL resta acceso su ogni scheda montata, come VS Code (xtermTerminal.ts, `_enableWebglRenderer`/
+   *   `_disposeOfWebglRenderer`, letto l'08/10/2026), che lo spegne solo sulla perdita del contesto. Misurato: 8 shell piene,
+   *   clic p50 32 ms (prima 4,7-7,6 s), 0 compiti lunghi, eco p50 5 ms.
+   * ⛔ Perché NON si spegne il WebGL di una scheda nascosta, nemmeno «le meno usate»: xterm torna al renderer DOM e ridisegna
+   *   DA NASCOSTA (profilo: compito «idle» di RenderService → DomRenderer.handleResize → renderRows → WidthCache._measure); con
+   *   display:none ogni misura di larghezza vale 0, non entra in cache e si ripete riga per riga con un ricalcolo della pagina:
+   *   ~2 s a ogni spegnimento (tetto a 6 con 8 schede: ancora p50 1,8 s a cambio). Smontare per INTERO costa poco invece
+   *   (`term.dispose()` cancella quel compito): cambio di sessione con 8 schede accese 64 ms.
+   * ⇒ Nessun tetto serve: i contesti WebGL per pagina sono contati (xterm.js #4379; Chromium ne tiene 16) e qui sono al più
+   *   8 shell (`SCHEDE_MASSIME_TERMINALE`) + 1 scheda agente (una per sessione, BUG-23); al cambio di sessione si smontano tutte
+   *   (`scollegaTerminaleReale`), e il terminale è l'unico a usare WebGL in questa pagina.
+   * ⛔ addon-webgl 0.19.0 (la nostra, la stessa di Hermes): i terminali condividono l'atlante dei caratteri, e smontarne uno può
+   *   lasciare agli altri glifi sbagliati finché non si ridisegnano (Hermes, terminals.ts:11-27; upstream xtermjs/xterm.js#6055).
+   *   Come Hermes, dopo uno spegnimento: PRIMA si ripulisce l'atlante di tutti i fratelli vivi, POI si ridisegnano.
+   */
+  function rinfrescaWebglFratelli(escluso) {
+    const vivi = [...statoTerminale().schede.values()].filter((r) => r !== escluso && r.webgl && r.term);
+    for (const r of vivi) { try { r.webgl.clearTextureAtlas(); } catch { /* contesto perso: ci pensa onContextLoss */ } }
+    for (const r of vivi) { try { r.term.refresh(0, r.term.rows - 1); } catch { /* smontata nel frattempo */ } }
   }
 
   function collegaWsScheda(record) {
@@ -15241,16 +15320,17 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     ricordaAttivaTerminale(t.sessioneId, id);
     for (const altra of t.schede.values()) {
       if (altra === record) continue;
-      if (altra.mount) altra.mount.hidden = true;
-      spegniWebglTerminale(altra);
+      if (altra.mount) altra.mount.hidden = true; // A7: il suo WebGL resta acceso (vedi `rinfrescaWebglFratelli`, sopra)
     }
     if (record.mount) record.mount.hidden = false;
+    const conWebglGia = Boolean(record.webgl);
     /* ⭐ PO-10 passo 2 — una scheda agente non ha PTY né WebSocket: si monta una xterm in sola lettura e ci si scrive il
        testo dei comandi del giro. Il fuoco ci va solo se la persona l'ha SCELTA (stessa regola delle shell, qui sotto). */
     if (record.origine === 'agente') {
       if (terminaleAschermo() && montaSchedaAgente(record)) {
         accendiWebglTerminale(record);
-        requestAnimationFrame(() => { record.fit?.fit(); if (cambiaScheda || !eraGiaMontata) record.term?.focus(); });
+        // tornata visibile col suo WebGL già acceso: un ridisegno, perché da nascosta la tela non si è aggiornata
+        requestAnimationFrame(() => { record.fit?.fit(); if (conWebglGia) record.term?.refresh(0, record.term.rows - 1); if (cambiaScheda || !eraGiaMontata) record.term?.focus(); });
       }
       renderizzaSchedeTerminale();
       return;
@@ -15269,7 +15349,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     if (terminaleAschermo() && montaSchedaTerminale(record)) {
       accendiWebglTerminale(record);
       collegaWsScheda(record);
-      requestAnimationFrame(() => { record.fit?.fit(); inviaResizeTerminale(record); if (cambiaScheda || !eraGiaMontata) record.term?.focus(); });
+      requestAnimationFrame(() => { record.fit?.fit(); inviaResizeTerminale(record); if (conWebglGia) record.term?.refresh(0, record.term.rows - 1); if (cambiaScheda || !eraGiaMontata) record.term?.focus(); });
     }
     renderizzaSchedeTerminale();
   }
@@ -19941,6 +20021,8 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
      */
     if (evento.type === 'CUSTOM' && evento.name === 'talos.fine-rigiocata') {
       state.realSession.inRigiocata = false;
+      // B3 (09/10/2026): il modo dell'ULTIMO giro rigiocato si salva qui, una volta sola (vedi il `RunStarted` della storia)
+      if (state.realSession.preferenzeDaSalvareAlConfine) { state.realSession.preferenzeDaSalvareAlConfine = false; salvaPreferenzeChatDesktop(); }
       disegnaFasciaPianoRichiesto();
       /*
        * ⛔ 14/09, giro vero della coda (due finestre): aperta una sessione CONCLUSA, `deferHistoricalRendering` restava vero per
@@ -20311,7 +20393,14 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
         const modoDelGiro = evento.contesto?.modalitaOperativa;
         if (['normale', 'piano', 'workflow'].includes(modoDelGiro)) {
           state.modalitaOperativa = normalizzaModoDiLavoro(modoDelGiro);
-          salvaPreferenzeChatDesktop();
+          /* ⛔ B3 (09/10/2026, profilo dell'apertura di una chat da 1000 giri): in RIGIOCATA il salvataggio si fa UNA volta, al
+             confine (`talos.fine-rigiocata`, qui sotto) — prima si riscriveva tutto il JSON delle preferenze in localStorage a
+             OGNI giro della storia (1000 `setItem` sincroni, ~90 ms con `salvaImpostazioniDesktop`), e contava solo l'ultimo.
+             In memoria il modo si aggiorna come prima; il valore salvato alla fine è lo stesso. localStorage è sincrono: si
+             tiene lo stato in memoria e si salva nei momenti giusti (soldevelo «77% faster logins»; itch.io, letti il
+             09/10/2026). Dal vivo nulla cambia: il giro si salva subito. */
+          if (state.realSession.inRigiocata) state.realSession.preferenzeDaSalvareAlConfine = true;
+          else salvaPreferenzeChatDesktop();
           registraGiroPerFasciaModo(state.realSession.id, modoDelGiro, { dalVivo: !state.realSession.inRigiocata });
         }
         /*
@@ -22119,12 +22208,13 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     const prompt = Number(u?.prompt_tokens);
     if (!Number.isFinite(prompt) || prompt <= 0) return;
     if (typeof valore?.esito === 'string' && valore.esito !== 'completato') return;
-    /* La risposta entra nel contesto della richiesta dopo, il ragionamento no (il kernel non lo rimanda): come l'ancora
-       del kernel (`prompt_tokens` + ciò che si aggiunge dopo) e il `totalTokens` di Pi, senza contare due volte il pensiero. */
-    const uscita = Number.isFinite(Number(u?.completion_tokens)) && Number(u.completion_tokens) > 0 ? Number(u.completion_tokens) : 0;
-    const pensiero = Number(u?.completion_tokens_details?.reasoning_tokens);
-    const completion = Number.isFinite(pensiero) && pensiero > 0 && pensiero <= uscita ? uscita - pensiero : uscita;
-    state.realSession.ultimaRichiesta = { prompt_tokens: prompt, completion_tokens: completion };
+    /* ⛔⛔ 09/10/2026, decisione dell'owner («B come hermes») — la misura del contesto è il SOLO `prompt_tokens` dell'ultima
+       chiamata, la risposta non si somma. Fino a oggi la colonna e il Context Manager sommavano la risposta (meno il
+       ragionamento, regola del 26/09) mentre l'avviso di soglia, dal 30/09 (e5b271ebb), leggeva solo il prompt: due numeri
+       per lo stesso contesto. Hermes misura l'occupazione con `last_prompt_tokens` (`agent/context_breakdown.py:132`,
+       «used = max(0, getattr(compressor, "last_prompt_tokens", 0) or 0)», clone 65ad529). `completion_tokens: 0` tiene la forma
+       di `usage` che colonna e Context Manager leggono (`inspector.js`, `contesto.js`): sommano, e la somma è il prompt. */
+    state.realSession.ultimaRichiesta = { prompt_tokens: prompt, completion_tokens: 0 };
     const id = state.realSession.id;
     const salvata = id ? compattazioneLegacy.ultimaMisura.get(id) : null;
     if (salvata) compattazioneLegacy.ultimaMisura.set(id, { ...salvata, tokenMisurati: prompt });
@@ -23606,7 +23696,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
    * o sono passati 15 s: la sidebar si ridisegna spesso, sei fetch a giro no.
    */
   const contatoriLuoghi = { sessione: undefined, quando: 0 };
-  async function aggiornaContatoriLuoghi(numeroSessioni) {
+  async function aggiornaContatoriLuoghi(numeroSessioni, { forza = false } = {}) {
     const radice = $('#sessionsPanel');
     if (!radice) return;
     aggiornaConteggiNav(radice, { board: numeroSessioni });
@@ -23620,7 +23710,10 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     };
     const id = state.realSession.id || null;
     const stessa = id === contatoriLuoghi.sessione && Date.now() - contatoriLuoghi.quando < 15_000;
-    if (stessa) return;
+    /* forza: dopo una scrittura della persona (crea, modifica, elimina) il conteggio è cambiato DI SICURO — la finestra di 15 s
+       serve contro le letture ripetute del giro periodico, non contro un fatto nuovo (08/10/2026: «2 note» nella pagina,
+       «Note 1» nella barra subito dopo una creazione). */
+    if (stessa && !forza) return;
     contatoriLuoghi.sessione = id;
     contatoriLuoghi.quando = Date.now();
     /*
@@ -23632,7 +23725,11 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     const [capability, automazioni, progetti] = await Promise.all([conta('/api/v1/tools', 'attrezzi'), conta('/api/v1/automations', 'items'), conta('/api/v1/projects', 'items')]);
     aggiornaConteggiNav(radice, { capability, automazioni, progetti });
     if (!id) {
-      aggiornaConteggiNav(radice, { libreria: null, memoria: null, attivita: null, note: null, ricerca: null, officina: null });
+      /* senza sessione: Libreria, Ricerca e Officina sono del progetto e non si contano; Note, Attività e Memoria sono della
+         persona e si contano dalle rotte personali (owner 08/10 notte). */
+      const [memoria, attivita, note] = await Promise.all([conta('/api/v1/me/memory', 'memorie'), conta('/api/v1/me/tasks', 'attivita'), conta('/api/v1/me/notes', 'note')]);
+      if (state.realSession.id) return; // una sessione si è aperta mentre le fetch erano in volo
+      aggiornaConteggiNav(radice, { libreria: null, memoria, attivita, note, ricerca: null, officina: null });
       return;
     }
     const liste = [['libreria', 'library', 'voci'], ['memoria', 'memory', 'memorie'], ['attivita', 'tasks', 'attivita'], ['note', 'notes', 'note'], ['ricerca', 'research', 'ricerche'], ['officina', 'tool-forge', 'strumenti']];
@@ -23691,7 +23788,31 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     const s = state.sessionSelection.available?.get?.(id);
     return s ? (s.nome || s.taskDelega || nomeLeggibileSessione(s.taskId)) : null;
   }
-  async function aggiornaElencoSessioniReali() {
+  /* Taccuino (08/10/2026): l'impronta di ciò che la barra disegna; il giro del TEMPORIZZATORE non ridisegna se non è cambiata.
+     Misurato: con 1000 sessioni il ridisegno intero è un compito da 200-300 ms, e il ritmo vivo (2 s) lo ripeterebbe a vuoto. */
+  let improntaBarraSessioni = '';
+  const RITMO_ELENCO_VIVO_MS = 2_000;
+  const RITMO_ELENCO_FERMO_MS = 15_000;
+  let elencoTimer = 0;
+  let elencoProssimoAlle = 0;
+  let elencoAttivo = false;
+  const ritmoElencoMs = () => ([...(state.sessionSelection.available?.values?.() ?? [])].some((sessione) => sessione && statoNotificaSessione(sessione) === 'in-corso')
+    ? RITMO_ELENCO_VIVO_MS : RITMO_ELENCO_FERMO_MS);
+  function programmaGiroElenco(attesaMs = ritmoElencoMs()) {
+    if (!elencoAttivo || workspaceDisposed) return;
+    window.clearTimeout(elencoTimer);
+    elencoProssimoAlle = Date.now() + attesaMs;
+    elencoTimer = window.setTimeout(async () => {
+      if (document.visibilityState === 'visible') { try { await aggiornaElencoSessioniReali({ soloSeCambia: true }); } catch { /* il giro dopo riprova */ } }
+      programmaGiroElenco();
+    }, attesaMs);
+  }
+  /* una sessione appena partita (da qui o da fuori) accorcia l'attesa in corso: senza, il primo giro veloce arrivava dopo 15 s */
+  function accorciaGiroElenco() {
+    const ritmo = ritmoElencoMs();
+    if (elencoAttivo && elencoProssimoAlle - Date.now() > ritmo) programmaGiroElenco(ritmo);
+  }
+  async function aggiornaElencoSessioniReali({ soloSeCambia = false } = {}) {
     const contenitore = contenitoreSessioniReali();
     let elenco;
     try {
@@ -23758,6 +23879,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       void caricaFigliSessione();
     }
     state.sessionSelection.available = new Map(elenco.map((sessione) => [sessione.sessionId, sessione]));
+    accorciaGiroElenco();
     const radici = sessioniRadice(elenco);
     const radiciIds = new Set(radici.map(s => s.sessionId));
     void aggiornaContatoriLuoghi(elenco.length); // 05/9 Fase 2: NavItem
@@ -23783,6 +23905,10 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
      * la selezione multipla, il menu con il tasto destro. Il titolo «Sessioni
      * reali» non c'è più: la testata del mockup («Sessioni · N») dice il conteggio.
      */
+    // Tutto ciò da cui dipende il disegno qui sotto: l'elenco, la sessione corrente, la selezione, le righe pendenti.
+    const impronta = JSON.stringify([elenco, state.realSession.id, state.sessionSelection.active ? [...state.sessionSelection.selected] : null, pendente.length]);
+    if (soloSeCambia && impronta === improntaBarraSessioni) return;
+    improntaBarraSessioni = impronta;
     const conteggio = $('#sessionList .talos-sidebar__block-head .talos-nav-item__count');
     if (conteggio) conteggio.textContent = String(radici.length);
     const pezzi = [...pendente];
@@ -26812,7 +26938,19 @@ ${testo}`;
   });
   /* «Da guardare» si rilegge anche a finestra nascosta: la notifica di sistema di un giro serve proprio quando non si guarda
      (automazioni a due porte, punto 10). È una GET locale da pochi byte. */
-  const notificheTimer = window.setInterval(() => { if (document.visibilityState === 'visible') void aggiornaElencoSessioniReali(); if (!embeddedDemoOnly()) void aggiornaDaGuardareAutomazioni(); }, 15_000);
+  const notificheTimer = window.setInterval(() => { if (!embeddedDemoOnly()) void aggiornaDaGuardareAutomazioni(); }, 15_000);
+  /*
+   * ⛔ Taccuino (08/10/2026) — LA BARRA DICE «IN CORSO» FINO A 15 s DOPO LA FINE. Misurato sulla 4176 con una sessione NON aperta:
+   *   compariva nella barra 12 s dopo l'avvio e diventava «conclusa» al giro successivo dell'elenco, che passava ogni 15 s
+   *   (la sessione aperta no: lì l'evento terminale aggiorna subito). Hermes interroga lo stato delle sessioni vive ogni 1,5 s
+   *   («A 15s cadence made that healthy transition look finished long enough to be alarming»,
+   *   apps/desktop/src/app/contrib/hooks/use-background-sync.ts:659-665). ⇒ Ritmo ADATTIVO: 2 s finché nell'elenco c'è una
+   *   sessione in corso (la stessa regola della riga, `statoNotificaSessione`), 15 s come prima quando è tutto fermo, e una sessione
+   *   appena partita accorcia l'attesa in corso (`accorciaGiroElenco`). Il giro del temporizzatore NON ridisegna se l'elenco non è
+   *   cambiato (1000 sessioni = 200-300 ms a ogni ridisegno, misurato). A finestra nascosta niente.
+   */
+  elencoAttivo = true;
+  programmaGiroElenco();
 
   /*
    * ⛔⛔ Trovato dalla QA visiva di O-01, secondo giro: con lo store VUOTO le
@@ -27429,6 +27567,7 @@ ${testo}`;
     contextCompactor?.destroy(); contextCompactor = null;
     contextMonitor?.stop(); contextMonitor = null;
     window.clearInterval(notificheTimer);
+    window.clearTimeout(elencoTimer);
     document.querySelector('.notifications-menu')?.remove();
     cancelMotionAnimations();
     nascondiAttesaRisposta();

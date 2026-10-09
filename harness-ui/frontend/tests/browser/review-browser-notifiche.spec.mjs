@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
 
+import { attendiFineStoria, flussoConConfine } from './aiuto-confine.mjs';
+
 /*
  * ⭐⭐⭐ 02/09 — review complessiva, ordine owner: "non togliere il mockup ma
  * agganciarlo e renderlo veramente funzionale". Review center, Browser e
@@ -32,8 +34,9 @@ test.use({ locale: 'it-IT' });
  *   nessun numero di giro, e si torna a controllare il vuoto anche DOPO essere stati pieni.
  */
 test('REVIEW-REAL-41 — la Review parte vuota e onesta, si riempie dallo StateDelta reale e torna vuota', async ({ page }) => {
-  await page.route('**/api/v1/sessions/review-real/events*', async (route) => route.fulfill({ status: 200, contentType: 'text/event-stream', body: '' }));
-  await page.route('**/api/v1/sessions/review-vuota/events*', async (route) => route.fulfill({ status: 200, contentType: 'text/event-stream', body: '' }));
+  // ⛔ 08/10/2026: il flusso finto porta il confine fra storia e presente (aiuto-confine.mjs: senza, la Revisione restava da disegnare)
+  await page.route('**/api/v1/sessions/review-real/events*', flussoConConfine);
+  await page.route('**/api/v1/sessions/review-vuota/events*', flussoConConfine);
   await page.goto('/');
   await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 8000 });
   await page.waitForFunction(() => window.__talosHarnessUiRuntime);
@@ -84,7 +87,11 @@ test('REVIEW-REAL-41 — la Review parte vuota e onesta, si riempie dallo StateD
   await page.evaluate(async () => {
     const runtime = window.__talosHarnessUiRuntime;
     runtime.passaASessione('review-real', 'workspace', 'Review reale', 'qwen/qwen3.8-flash', { conclusa: false, modello: 'qwen/qwen3.8-flash' });
-    const generation = runtime.realSessionState.generation;
+  });
+  await attendiFineStoria(page);
+  await page.evaluate(async () => {
+    const runtime = window.__talosHarnessUiRuntime;
+    const generation = runtime.realSessionState.generation; // la scrittura arriva DAL VIVO, dopo il confine
     runtime.handleRealEvent({ type: 'StateDelta', delta: [{ op: 'replace', path: '/file/src/conto.js', value: 'const a = 2;\nconst b = 3;\n', prima: 'const a = 1;\nconst b = 3;\n' }], _sequenza: 41001 }, generation);
     runtime.executeCommand('review');
     await new Promise((resolve) => requestAnimationFrame(resolve));
@@ -104,6 +111,10 @@ test('REVIEW-REAL-41 — la Review parte vuota e onesta, si riempie dallo StateD
   await page.evaluate(async () => {
     const runtime = window.__talosHarnessUiRuntime;
     runtime.passaASessione('review-vuota', 'workspace', 'Senza scritture', 'qwen/qwen3.8-flash', { conclusa: true, modello: 'qwen/qwen3.8-flash' });
+  });
+  await attendiFineStoria(page); // il vuoto si guarda a storia FINITA: sotto il velo «vuoto» non diceva niente
+  await page.evaluate(async () => {
+    const runtime = window.__talosHarnessUiRuntime;
     runtime.executeCommand('review');
     await new Promise((resolve) => requestAnimationFrame(resolve));
   });

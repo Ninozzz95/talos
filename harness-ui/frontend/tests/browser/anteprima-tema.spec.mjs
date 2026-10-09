@@ -125,7 +125,11 @@ const SENTIERO_MODULO = '/__at/anteprima-tema.js';
 /** La preferenza della app: senza, la pagina parte in INGLESE. Con, parte in italiano. */
 const IMPOSTAZIONI = (lingua, modoColore = 'dark') => JSON.stringify({
   version: 1,
-  appearance: { uiLanguage: lingua, colorMode: modoColore },
+  /* ⛔ 09/10/2026 (bugfixer): le misure (MOCKUP) sono prese il 18/09, col testo della chat di allora: `xcompact`, 0,875rem. La
+     0.1.19 (14086c7b4, 29/09) ha portato il valore di serie a `balanced` (1,0625rem) e la risposta d'esempio, che SEGUE il testo
+     della chat (`font-size: var(--talos-chat-font-size)`, interlinea 1,9), misurava 32,3 px invece di 26,6. Si fissa la scala del
+     mockup; che l'anteprima segua la scelta della persona resta vero, ed è proprio ciò che la differenza ha mostrato. */
+  appearance: { uiLanguage: lingua, colorMode: modoColore, chatFontScale: 'xcompact' },
   chat: {},
   workspaces: {},
 });

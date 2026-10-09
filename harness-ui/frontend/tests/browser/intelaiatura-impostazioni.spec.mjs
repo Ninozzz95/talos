@@ -52,9 +52,13 @@ async function apriImpostazioni(page, sezione = 'appearance') {
   await expect(page.locator('#schermoImpostazioni')).toBeVisible({ timeout: 10_000 });
 }
 
+/* ⛔ 09/10/2026 (bugfixer): dalla fase della lingua il nome della landmark segue la lingua (`impostazioni.view.breadcrumbLabel`:
+   «Percorso» in italiano, «Breadcrumb» in inglese) e la suite è fissata all'italiano (playwright.config.mjs, `locale`). */
+const BRICIOLE = '#schermoImpostazioni nav[aria-label="Percorso"]';
+
 test('INTELAIATURA-01 · il breadcrumb esiste, è una landmark con nome, e dice dove sei', async ({ page }) => {
   await apriImpostazioni(page, 'appearance');
-  const briciole = page.locator('#schermoImpostazioni nav[aria-label="Breadcrumb"]');
+  const briciole = page.locator(BRICIOLE);
   await expect(briciole).toHaveCount(1);
   // L'ordine è significativo ⇒ lista ORDINATA, e `role="list"` tiene il ruolo
   // che `list-style:none` toglie su alcuni motori.
@@ -109,7 +113,7 @@ test('INTELAIATURA-03 · le cinque misure della voce, come le ha il mockup', asy
 
 test('INTELAIATURA-04 · il separatore sta nel CSS, non nel DOM', async ({ page }) => {
   await apriImpostazioni(page, 'appearance');
-  const briciole = page.locator('#schermoImpostazioni nav[aria-label="Breadcrumb"]');
+  const briciole = page.locator(BRICIOLE);
   // Uno screen reader non deve annunciare il separatore: la landmark lo dice già.
   expect(await briciole.locator('ol').innerText()).not.toContain('›');
   const separatore = await briciole.locator('li').nth(1).evaluate((el) => getComputedStyle(el, '::before').content);
@@ -297,6 +301,13 @@ test('INTELAIATURA-08 · la palette cerca sull’indice vero e porta alla riga',
   await page.locator('#schermoImpostazioni [data-settings-open-search]').click();
   const palette = page.locator('dialog.settings-palette');
   await expect(palette).toBeVisible();
+  /* 09/10/2026 (bugfixer, foto del 4174): a campo vuoto niente «0 risultati» e niente «Nessuna impostazione trovata» — non
+     si è ancora cercato niente (come Hermes, che dice «nessun risultato» solo con una ricerca in corso). */
+  await expect(palette.locator('.settings-palette__count')).toHaveText('');
+  await expect(palette.locator('.settings-palette__empty')).toBeHidden();
+  await page.locator('#settingsPaletteQuery').fill('parola-che-non-esiste-xyz');
+  await expect(palette.locator('.settings-palette__count')).toHaveText('0 risultati');
+  await expect(palette.locator('.settings-palette__empty'), 'AL CONTRARIO: con una ricerca vera, il vuoto si dice').toBeVisible();
   await page.locator('#settingsPaletteQuery').fill('elastica');
   // Lo stesso indice della ricerca in pagina: 40 controlli + le 10 sezioni.
   await expect(palette.locator('.settings-palette__count')).toHaveText('1 risultato');
@@ -330,7 +341,7 @@ test('INTELAIATURA-09 · Ctrl K ha un ambito: le impostazioni qui, i comandi fuo
 
 test('INTELAIATURA-05 · cercando, il breadcrumb sparisce come la testata', async ({ page }) => {
   await apriImpostazioni(page, 'appearance');
-  const briciole = page.locator('#schermoImpostazioni nav[aria-label="Breadcrumb"]');
+  const briciole = page.locator(BRICIOLE);
   await expect(briciole).toBeVisible();
   await page.locator('#settingsSearch').fill('elastica');
   // La ricerca sostituisce la vista: se il breadcrumb restasse direbbe una

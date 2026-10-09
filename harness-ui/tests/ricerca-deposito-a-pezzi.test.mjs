@@ -345,6 +345,13 @@ test('BC49: inventario e campi TALOS-BANCO invariati, eccetto le esenzioni dichi
       automation_run: [['contesto', 'id'], ['id']],
       automation_stop: [['id'], ['id']],
     };
+    /* ⭐ 0.1.25 (owner 09/10/2026): tre attrezzi estesi NUOVI dei fornitori esclusi (la seconda porta della decisione 14). Come
+     * le automazioni: nomi, campi e obbligatori fissati qui PRIMA di toglierli dal censimento storico; le due impronte restano. */
+    Object.assign(attrezziAutomazioni, {
+      provider_exclusions_list: [[], []],
+      provider_exclude: [['model', 'provider'], ['provider']],
+      provider_allow: [['model', 'provider'], ['provider']],
+    });
     for (const [nome, [campi, obbligatori]] of Object.entries(attrezziAutomazioni)) {
       const tool = attrezzi.map((entry) => entry.function ?? entry).find((entry) => entry.name === nome);
       if (attrezzi === ATTREZZI_OPENAI) assert.equal(tool, undefined, `${nome} non deve entrare nel banco base`);

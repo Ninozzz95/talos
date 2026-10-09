@@ -2246,8 +2246,10 @@ test('TOOL-LIFECYCLE-SAME-ROW-01 — start, argomenti ed esito aggiornano la ste
   });
   expect(result).toEqual({
     sameNode: true,
-    start: { state: 'running', busy: 'true', text: 'Lettura file…' },
-    during: 'Lettura di src/app.js…',
+    /* ⛔ 08/10/2026 (bugfixer): la prova gira in inglese (describe «in inglese», en-US) e la fase della lingua ha portato anche
+       queste due frasi nel dizionario (`toolLine.readingFile`, app.js:2253): l'atteso italiano era rimasto a metà della migrazione. */
+    start: { state: 'running', busy: 'true', text: 'Reading file…' },
+    during: 'Reading src/app.js…',
     end: { state: 'complete', busy: 'false', text: '1 file read' /* 26/09: parole delle specie, tradotte (la prova gira in inglese) */ },
   });
 });
@@ -3050,9 +3052,15 @@ async function ripresaChatLunga(page, full = false) {
       { type: 'RunStarted', input: { consegna: 'Descrivi il progetto' } },
       { type: 'TextMessageContent', messageId: 'geometry', delta: Array.from({length:60}, (_,i) => `Paragrafo ${i+1}: ${'Il testo deve avere una misura leggibile. '.repeat(12)}\n\n`).join('') },
       { type: 'TextMessageEnd', messageId: 'geometry' }, { type: 'RunFinished' },
+      /* ⛔ 08/10/2026 (bugfixer) — il CONFINE che il server manda a ogni flusso dopo la storia (http-app.mjs, subito dopo
+         `fineReplay()`). Dal 07/10 (013a30c2b, A1) il velo della cronologia si toglie SOLO lì: senza questo evento la chat
+         restava `is-restoring` (visibility:hidden) e otto prove di questo file erano rosse su «toBeVisible». La sessione
+         vera lo manda sempre; è la stessa forma di `a12-dialogo-agenti.spec.mjs`. */
+      { type: 'CUSTOM', name: 'talos.fine-rigiocata', value: null },
     ]) r.handleRealEvent(event, r.realSessionState.generation);
   });
   await expect(page.locator('#conversation .is-streaming')).toHaveCount(0);
+  await expect(page.locator('#conversation')).not.toHaveClass(/\bis-restoring\b/, { timeout: 5000 });
 }
 test('RIPRESA-CHAT-768 — misura predefinita e tutta larghezza dal controllo reale', async ({ page }) => {
   await ripresaChatLunga(page);
@@ -3115,14 +3123,18 @@ test('RIPRESA-ASPETTO-RESET — reset completo visuale, altre preferenze conserv
   await page.addInitScript(() => {
     if (sessionStorage.getItem('ripresaResetSeed')) return;
     sessionStorage.setItem('ripresaResetSeed','1');
-    localStorage.setItem('talos.harness.desktop.settings.v1',JSON.stringify({version:1,appearance:{chatFullWidth:true,colorMode:'light',uiDensity:'compatta',backgroundMotion:true,backgroundMotionVersione:2},chat:{mostraRagionamento:false},workspaces:{prova:{expandedPaths:['src'],filter:'test'}}}));
+    localStorage.setItem('talos.harness.desktop.settings.v1',JSON.stringify({version:1,appearance:{chatFullWidth:true,colorMode:'light',uiDensity:'comoda',backgroundMotion:true,backgroundMotionVersione:2},chat:{mostraRagionamento:false},workspaces:{prova:{expandedPaths:['src'],filter:'test'}}}));
     localStorage.setItem('talos-harness-composer-size-v1',JSON.stringify({width:500,height:250}));
   });
   await apriChat(page);
   await page.locator('[data-vaia="impostazioni"]').click();
   await page.locator('#setting-tab-appearance').click();
-  await expect(page.locator('html')).toHaveAttribute('data-density','compact');
-  await expect(page.locator('html')).toHaveAttribute('data-densita','compatta');
+  /* ⛔ 08/10/2026 (bugfixer) — dal 29/09 (0.1.19, 14086c7b4: workspace-preferences.ts `density: 'compact'` di serie) la densità
+     di serie è «compatta». Il seme diceva «compatta», cioè il valore di SERIE: il ripristino non poteva mostrare nessun cambio, e
+     la prova pretendeva ancora la vecchia serie («comoda») dopo il ripristino ⇒ rossa da allora. Ora si semina il valore che NON
+     è di serie e si prova il ritorno a quello di serie, prima e dopo il ricaricamento. */
+  await expect(page.locator('html')).toHaveAttribute('data-density','comfortable');
+  await expect(page.locator('html')).not.toHaveAttribute('data-densita', /.*/u); // app.js:18271: «comoda» toglie l'attributo, solo «compatta» lo scrive
   await expect(page.locator('html')).toHaveClass(/chat-full-width/);
   await expect(page.locator('html')).toHaveAttribute('data-talos-color-mode','light');
   const reset=page.getByRole('button',{name:/^(Ripristina tutto l’aspetto|Reset all appearance)$/});
@@ -3130,12 +3142,12 @@ test('RIPRESA-ASPETTO-RESET — reset completo visuale, altre preferenze conserv
   await expect(page.locator('html')).not.toHaveClass(/chat-full-width/);
   const saved=await page.evaluate(()=>({doc:JSON.parse(localStorage.getItem('talos.harness.desktop.settings.v1')),size:localStorage.getItem('talos-harness-composer-size-v1')}));
   expect(saved.doc.appearance).toEqual({}); expect(saved.doc.chat.mostraRagionamento, 'A14: il reset dell\'aspetto ha toccato «Mostra ragionamento» (seme false, di serie true)').toBe(false); expect(saved.doc.workspaces.prova).toEqual({expandedPaths:['src'],filter:'test'}); expect(saved.size).toBeNull();
-  await expect(page.locator('html')).not.toHaveAttribute('data-density','compact');
-  await expect(page.locator('html')).not.toHaveAttribute('data-densita','compatta');
+  await expect(page.locator('html')).toHaveAttribute('data-density','compact');
+  await expect(page.locator('html')).toHaveAttribute('data-densita','compatta');
   await expect(page.locator('html')).toHaveAttribute('data-talos-color-mode','system');
   await page.reload(); await expect(page.locator('html')).not.toHaveClass(/chat-full-width/);
-  await expect(page.locator('html')).not.toHaveAttribute('data-density','compact');
-  await expect(page.locator('html')).not.toHaveAttribute('data-densita','compatta');
+  await expect(page.locator('html')).toHaveAttribute('data-density','compact');
+  await expect(page.locator('html')).toHaveAttribute('data-densita','compatta');
 });
 
 

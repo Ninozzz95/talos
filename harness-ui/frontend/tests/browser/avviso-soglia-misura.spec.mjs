@@ -36,7 +36,7 @@ const SCENE = {
   somma: numera(giro('ciao', [...Array.from({ length: 17 }, (_, i) => [10_000 + i * 1_280, 1_100]), [52_947, 647]], 'Fatto il giro lungo.', 1)),
   /* Sopra l'80%: l'ultima chiamata è 185.000 + 1.000. Poi la compattazione manuale riuscita. */
   compattata: numera([...giro('ciao', [[120_000, 500], [185_000, 1_000]], 'Fatto il giro pieno.', 1), compattazione(FINE_MANUALE)]),
-  /* Come sopra, poi un giro nuovo la cui chiamata RIMISURA: 170.000 + 1.000 ⇒ l'avviso torna, col numero nuovo. */
+  /* Come sopra, poi un giro nuovo la cui chiamata RIMISURA: prompt 170.000 (la risposta da 1.000 non conta, owner 09/10) ⇒ l'avviso torna, col numero nuovo. */
   rimisurata: numera([...giro('ciao', [[185_000, 1_000]], 'Fatto il giro pieno.', 1), compattazione(FINE_MANUALE), ...giro('continua', [[170_000, 1_000]], 'Fatto il giro dopo.', 2)]),
   /* Una compattazione riuscita che non dice il «dopo»: la misura è sconosciuta, niente avviso. */
   senzaDopo: numera([...giro('ciao', [[185_000, 1_000]], 'Fatto il giro pieno.', 1), compattazione({ fase: 'fine', compattato: true, motivo: 'manuale', annullabile: false, at: '2026-09-26T12:00:00.000Z' })]),
@@ -79,7 +79,10 @@ test.describe('Avviso di soglia e colonna del contesto — la misura è l\'ultim
     await expect(avviso(page)).toBeHidden();
     await page.locator('#railTabs [data-rail="contesto"]').click();
     const conversazione = page.locator('#railContesto .talos-kv__k').filter({ hasText: 'Conversazione' }).locator('..').locator('.talos-kv__v');
-    await expect(conversazione).toContainText('53,6k');
+    /* 09/10/2026, owner («B come hermes»): la colonna misura il SOLO prompt dell'ultima chiamata (52.947), la risposta (647) non si
+       somma più — prima diceva «53,6k» mentre l'avviso leggeva il prompt: due numeri per lo stesso contesto. */
+    await expect(conversazione).toContainText('52,9k');
+    await expect(conversazione).not.toContainText('53,6k');
     await expect(conversazione).not.toContainText('399');
     expect(c.nonGet).toBe(0);
   });
@@ -97,7 +100,7 @@ test.describe('Avviso di soglia e colonna del contesto — la misura è l\'ultim
   test('CTX-NOTICE-REMEASURE-03 — la chiamata dopo la compattazione RIMISURA: l\'avviso torna col numero nuovo', async ({ page }) => {
     const c = await apri(page, 'rimisurata');
     await expect(avviso(page)).toBeVisible();
-    await expect(avviso(page)).toContainText('171.000');
+    await expect(avviso(page)).toContainText('170.000');
     expect(c.nonGet).toBe(0);
   });
 

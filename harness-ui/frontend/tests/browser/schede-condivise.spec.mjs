@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { attendiFineStoria, flussoConConfine } from './aiuto-confine.mjs';
 import { mkdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
@@ -64,10 +65,11 @@ async function apriApp(page, { tema = 'dark', larghezza = 1440, altezza = 900 } 
  * nessuna scrittura a mano nel DOM, così ciò che si misura è il codice del prodotto.
  */
 async function apriRevisioneCon(page, percorsi) {
-  await page.route('**/api/v1/sessions/bc63/events*', (route) => route.fulfill({ status: 200, contentType: 'text/event-stream', body: '' }));
+  await page.route('**/api/v1/sessions/bc63/events*', flussoConConfine);
+  await page.evaluate(() => window.__talosHarnessUiRuntime.passaASessione('bc63', 'workspace', 'BC-63 schede', 'qwen/qwen3.8-flash', { conclusa: false, modello: 'qwen/qwen3.8-flash' }));
+  await attendiFineStoria(page); // ⛔ 08/10/2026: la storia finisce al confine (aiuto-confine.mjs); la scena arriva dal vivo
   await page.evaluate(async (elenco) => {
     const runtime = window.__talosHarnessUiRuntime;
-    runtime.passaASessione('bc63', 'workspace', 'BC-63 schede', 'qwen/qwen3.8-flash', { conclusa: false, modello: 'qwen/qwen3.8-flash' });
     const generation = runtime.realSessionState.generation;
     elenco.forEach((percorso, i) => {
       const prima = `riga uno\nriga due\nriga tre\n`;
