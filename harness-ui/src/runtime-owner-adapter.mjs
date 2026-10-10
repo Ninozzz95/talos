@@ -17,6 +17,7 @@ import { parseRuntimeOwnerSnapshot } from './runtime-owner-contract.mjs';
 import { risolviDestinazioneModello, separaFonteModello, FONTI_MODELLO, validaFallbackProviders } from './model-destination.mjs';
 import { REGISTRO_FORNITORI, ID_MOTORI_LOCALI_OPENAI, idPerWire } from './provider-registry.mjs';
 import { classificaErroreDiCorsa } from './research-orchestrator.mjs';
+import { creaRilevatoreZai } from './zai-indirizzo.mjs';
 import { leggiAttesaRichiestaDalFornitore, leggiAttesaResetDalCorpo, erroreEsitoProviderIncerto, consumoPubblico, marcaRifiutoProvider } from './provider-retry.mjs';
 import { normalizzaUsage, scontoDaCache } from './usage-cache.mjs'; // 12/09, P-B: i nomi della cache sono uno per fornitore, il lettore uno solo
 import { nativeProviderResponse, stripNativeMetadata } from './native-provider-adapter.mjs';
@@ -31,6 +32,7 @@ import { collegaSezioniAiContextHooks } from './context-provider-adapter.mjs';
 // ⭐ 06/10/2026 — la ricarica della memoria post-compact (opzione A + C-b, ricerca 5×5×5×5 §6.4): la
 // compattazione LOCALE riceve lo stesso punto di aggancio del kernel, con lo stesso blocco di fatti.
 import { PREFISSO_SINTESI_RECINTATA, costruisciBloccoFatti } from './kernel/ricarica-post-compact.mjs';
+import { conUtentiUniti } from './kernel/utenti-uniti.mjs'; // riga del bugfixer 10/10: due `user` di fila, solo verso un motore locale
 // P0 · punto 7 (16/09): il failsafe di inattività e il dispatcher stanno in una porta sola.
 import {
   SilenzioDelFornitoreError,
@@ -50,7 +52,8 @@ const RICHIESTA_DI_RIASSUNTO = [
   '(commit, push, publish, delete) must be named VERBATIM with its identifier — the full commit hash.',
 ].join('\n');
 const GIRI_PRIMA_DI_COMPATTARE = 12;
-const OPENROUTER_IDLE_MS_PREDEFINITO = 60_000;
+/* OWN-01 (09/10/2026, owner «10 minuti»): il tempo alla prima risposta di riserva è lo stesso predefinito dell'archivio (600 s). */
+const OPENROUTER_IDLE_MS_PREDEFINITO = 600_000;
 const SSE_BUFFER_MASSIMO = 1_048_576;
 const SCHEMA_DESCRIZIONE_COMANDO = Object.freeze({
   type: 'string',
@@ -455,6 +458,36 @@ export function normalizzaReasoningPerModello(reasoning, capability) {
   }
   if (regole.mandatory === true && !('effort' in result) && !('enabled' in result)) result.enabled = true;
   return result;
+}
+
+/**
+ * ⛔ A9, seguito OpenRouter (09/10/2026) — la mappa A9 (`filoRagionamentoDiretti`) copre solo le sessioni dirette, e l'owner
+ * usa `z-ai/glm-5.3-flash` via OpenRouter: lì la pillola mostrava «Spento» e «Molto alto» mentre sul filo partivano «low» e
+ * «max». Qui la stessa mappa per ogni voce del catalogo con un oggetto `reasoning`, calcolata con
+ * `normalizzaReasoningPerModello`: lo STESSO clamp che il fetch OpenRouter applica prima della rete, con la voce del catalogo
+ * dallo STESSO id esatto (`modelCapabilityFn(body.model)`, server.mjs `readModelCapabilities`). Mai una seconda copia delle regole.
+ * Misurato sul catalogo vivo del 4174 (469 modelli, 336 col ragionamento): glm-5.3-flash none→low, xhigh→max;
+ * gpt-5-nano none→minimal, xhigh/max→high; claude-opus-5 identità.
+ * Forma: `{ 'z-ai/glm-5.3-flash': { none: 'low', …, xhigh: 'max' }, … }`; `null` = nessun livello sul filo (decide il
+ * fornitore). OpenRouter, «Reasoning tokens» (letta il 09/10/2026): `supported_efforts` null = ogni livello accettato.
+ */
+export function filoRagionamentoCatalogo(modelli) {
+  const mappa = {};
+  for (const voce of Array.isArray(modelli) ? modelli : []) {
+    if (typeof voce?.id !== 'string' || !voce.id || !capabilityReasoning(voce)) continue;
+    const perLivello = {};
+    for (const chiesto of SCALA_RAGIONAMENTO) {
+      const filo = normalizzaReasoningPerModello({ effort: chiesto }, voce);
+      perLivello[chiesto] = typeof filo?.effort === 'string' ? filo.effort : null;
+    }
+    /* Owner 09/10/2026 («Automatico + riga»): e SENZA una scelta che cosa parte. Un modello col ragionamento obbligatorio riceve il
+       predefinito del catalogo (glm-5.3-flash: «max», il più caro) mentre la pillola diceva «Automatico» con la tacca «Alto» accesa.
+       Lo stesso clamp, con `null` come fa il kernel quando la sessione non ha scelto. `null` = non parte niente (decide il fornitore). */
+    const senzaScelta = normalizzaReasoningPerModello(null, voce);
+    perLivello.auto = typeof senzaScelta?.effort === 'string' ? senzaScelta.effort : null;
+    mappa[voce.id] = Object.freeze(perLivello);
+  }
+  return mappa;
 }
 
 function rispostaErrore(status, error) {
@@ -888,6 +921,10 @@ function creaFetchInstradata(fetchDiRete = fetch, { risolvi = risolviDestinazion
      * `tools`, la risposta è un 400. Manca uno dei tre ⇒ la riga qui sotto è quella di sempre.
      */
     const motoreLocale = FONTI_DI_MOTORE_LOCALE.has(destinazione.fonte);
+    /* Riga del bugfixer (10/10/2026): i template jinja dei motori locali (`llama-server --jinja`: Mistral, Gemma) alzano
+       «Conversation roles must alternate» davanti a due `user` di fila (l'avviso C06 prima del messaggio della persona, o due
+       messaggi in coda dopo un risultato). Qui, e solo qui, si uniscono — come Hermes; la storia resta com'è (`utenti-uniti.mjs`). */
+    if (motoreLocale && Array.isArray(adattata.corpo?.messages)) adattata.corpo = { ...adattata.corpo, messages: conUtentiUniti(adattata.corpo.messages) };
     const portavaAttrezzi = Array.isArray(adattata.corpo?.tools) && adattata.corpo.tools.length > 0;
     const corpoSenzaAttrezzi = () => {
       const { tools: _tools, tool_choice: _toolChoice, ...resto } = adattata.corpo;
@@ -1196,13 +1233,16 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
     throw new OwnerRuntimeUnavailableError('To continue with another provider, access, chat notices and usage recording are needed.', 'PROVIDER_FALLBACK_NOT_CONNECTED');
   }
   let effettivo = null, indice = -1, occupato = false;
+  // Owner 09/10/2026: l'indirizzo di Z.AI (piano GLM o saldo) per chiave, uno per fetch come la memoria degli attrezzi.
+  const rilevatoreZai = typeof providerStore?.indirizzoRilevato === 'function'
+    ? creaRilevatoreZai({ providerStore, fetchFn: fetchDiRete, onAvviso }) : null;
 
   async function invia(url, opzioni = {}, contesto = {}) {
     let corpo;
     try { corpo = typeof opzioni.body === 'string' ? JSON.parse(opzioni.body) : null; } catch { /* altre fetch intatte */ }
     if (!corpo || typeof corpo.model !== 'string' || !String(url).includes('/chat/completions')) return fetchDiRete(url, opzioni);
     opzioni.signal?.throwIfAborted();
-    const { fonte } = separaFonteModello(corpo.model);
+    const { fonte, modelloRemoto } = separaFonteModello(corpo.model);
     const record = REGISTRO_FORNITORI[fonte];
     const scelta = record.credenziale ? providerStore?.scegliChiave(fonte) : null;
     if (providerStore && !scelta && record.chiaveObbligatoria) {
@@ -1286,6 +1326,9 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
       }
     };
     const rete = async (target, init) => {
+      /* Owner 09/10/2026 («deve essere dinamica»): Z.AI fattura il piano GLM solo su un suo indirizzo. Senza un indirizzo scelto
+         dalla persona, la richiesta va a quello rilevato per questa chiave, piano per primo (zai-indirizzo.mjs). */
+      if (rilevatoreZai && fonte === 'zai' && scelta) target = await rilevatoreZai.indirizzoPer(target, scelta, modelloRemoto);
       try {
         /*
          * ⛔⛔⛔ P0 · punto 7 (16/09/2026) — QUI C'ERA UNA DEADLINE TOTALE, ED È STATA TOLTA.
@@ -1315,6 +1358,12 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
         const classificazione = fonte === 'openrouter' && response.status === 402
           ? classificaLimiteOpenRouter(testo)
           : (fonte === 'openrouter' && response.status === 404 && classificaTuttiEsclusiOpenRouter(testo)) || classificaGuasto({ message: testo }, response.status);
+        /* Owner 09/10/2026 («Riprova sull'altro e lo dice»): «credito finito» da Z.AI ⇒ una sonda sola senza l'indirizzo appena
+           rifiutato; se un altro risponde la stessa richiesta riparte lì (non è un ritento: il primo invio è stato rifiutato). */
+        if (rilevatoreZai && fonte === 'zai' && scelta && classificazione.classe === 'credito' && !contesto.zaiCambiato) {
+          const altrove = await rilevatoreZai.dopoCredito(target, scelta, modelloRemoto);
+          if (altrove) { contesto.zaiCambiato = true; return rete(altrove, init); }
+        }
         // BUG-25: gli header dicono per primi; solo se tacciono, le grammatiche di reset nel corpo (parity Hermes).
         await segnala(classificazione, response.headers, response.status, leggiAttesaResetDalCorpo(testo));
         return new Response(JSON.stringify({ error: { message: contesto.errore.message } }), { status: response.status, headers: { 'Content-Type': 'application/json', ...contesto.headersRitenta } });
@@ -1783,6 +1832,15 @@ export function createOwnerRuntimeAdapter({
             const plugins = (Array.isArray(body.plugins) ? body.plugins : []).filter(plugin => plugin?.id !== 'context-compression');
             init = { ...init, body: JSON.stringify({ ...body, plugins: [...plugins, { id: 'context-compression', enabled: false }] }) };
           }
+        }
+        /* C1 (owner 10/10/2026, scheda Contesto): chi lancia il giro può ricevere il corpo che parte DAVVERO verso il fornitore —
+           dopo le normalizzazioni qui sopra, prima della risoluzione delle immagini (che resterebbero byte enormi). Facoltativo:
+           senza `onRichiestaSpedita` nulla cambia; un suo errore non ferma mai la richiesta. */
+        if (typeof input?.onRichiestaSpedita === 'function' && String(url).includes('/chat/completions') && typeof init.body === 'string') {
+          try {
+            const spedito = JSON.parse(init.body);
+            if (Array.isArray(spedito?.messages)) input.onRichiestaSpedita({ messages: spedito.messages, tools: Array.isArray(spedito.tools) ? spedito.tools : [], model: spedito.model ?? null });
+          } catch { /* la cattura è per guardare: non cambia mai la richiesta */ }
         }
         if (!resolveImagesFn || !String(url).includes('/chat/completions') || typeof init.body !== 'string') return successiva(url, init);
         let body;

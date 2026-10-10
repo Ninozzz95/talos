@@ -5492,7 +5492,9 @@ test('REGISTRY-RESTORE-LATEST-HISTORY-18 — dopo più turni il riavvio eredita 
   }
 });
 
-test('⭐⭐ J — ripristina() conserva il verdetto fallito di una delega di modifica senza artefatto', async () => {
+/* C3 tappa 4 (owner 09/10, «fatti strutturati + nota»): prima il verdetto ripristinato era «fallito». Ora una delega di
+   modifica senza artefatto è conclusa con la NOTA «nessuna modifica fatta», e la nota sopravvive al riavvio. */
+test('⭐⭐ J C3-RESTORE-NOTE — ripristina() rebuilds a write delegation with no artifact as concluded, with its «no change made» note', async () => {
   const cartellaStore = cartellaStoreVera();
   try {
     const adesso = new Date().toISOString();
@@ -5507,8 +5509,35 @@ test('⭐⭐ J — ripristina() conserva il verdetto fallito di una delega di mo
     await registro.ripristina();
     const figli = registro.elencaFigli('padre-j');
     assert.equal(figli.ok, true);
-    assert.equal(figli.figli[0].esitoDelega, 'fallito');
+    assert.deepEqual([figli.figli[0].esitoDelega, figli.figli[0].notaDelega, figli.figli[0].verdettoDelega], ['concluso', 'nessuna-modifica', 'euristico']);
     assert.deepEqual(figli.figli[0].evidenzaDelega, { scritture: 0, artefatti: 0, toolCalls: 1, toolCallsOk: 1, toolCallsFalliti: 0, verificabile: true });
+  } finally {
+    await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
+  }
+});
+
+test('⭐⭐ J C3-RESTORE-PAUSA — after a restart a paused child is still «in-pausa», and Resume accepts it; a real RunError stays «fallito»', async () => {
+  const cartellaStore = cartellaStoreVera();
+  try {
+    const adesso = new Date().toISOString();
+    const base = { taskId: 'task-vero', cartella: '/tmp/x', comandoProva: 'npm test', forkDa: null, avviataAlle: adesso, modello: 'm', modelloPlanner: null, reasoning: null, mobile: false, permessi: 'Workspace write', permessiPerAttrezzo: null, profonditaDelega: 0 };
+    registraRigaSync({ cartellaStore, sessionId: 'padre-p', record: { tipo: 'intestazione', sessionId: 'padre-p', ...base, task: { id: 'task-vero', consegna: 'c' }, padreId: null } });
+    registraRigaSync({ cartellaStore, sessionId: 'padre-p', record: { type: 'RunFinished', outcome: { type: 'success' }, _sequenza: 1 } });
+    for (const [id, errore] of [['figlio-pausa', { message: '⏸ paused on request: before round 2.', code: 'in-pausa' }], ['figlio-errore', { message: 'The provider refused the request.', code: 'PROVIDER_REQUEST_ERROR' }]]) {
+      registraRigaSync({ cartellaStore, sessionId: id, record: { tipo: 'intestazione', sessionId: id, ...base, taskId: 'delega:padre-p', task: { consegna: 'Leggi i file e riassumili.' }, padreId: 'padre-p', profonditaDelega: 1 } });
+      registraRigaSync({ cartellaStore, sessionId: id, record: { type: 'RunStarted', threadId: 't', runId: 'r', _sequenza: 1 } });
+      registraRigaSync({ cartellaStore, sessionId: id, record: { type: 'RunError', ...errore, _sequenza: 2 } });
+    }
+
+    const registro = createSessionRegistry({ modello: 'm', chiave: 'k', cartellaStore });
+    await registro.ripristina();
+    const figli = registro.elencaFigli('padre-p').figli;
+    const pausa = figli.find((f) => f.sessionId === 'figlio-pausa');
+    const errore = figli.find((f) => f.sessionId === 'figlio-errore');
+    assert.deepEqual([pausa.esitoDelega, pausa.motivoChiusura], ['in-pausa', 'in-pausa']);
+    assert.equal(errore.esitoDelega, 'fallito', 'the other way: a real error is still a failure');
+    assert.deepEqual(registro.riprendiDelega('figlio-pausa', 'retry'), { esito: 'rifiutato', motivo: 'the sub-agent did not fail' }, 'a paused child is not a failed one');
+    assert.notEqual(registro.riprendiDelega('figlio-pausa', 'resume').motivo, 'the sub-agent is not paused', 'Resume is not refused for being «not paused»');
   } finally {
     await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
   }
@@ -7722,6 +7751,8 @@ test('⭐⭐⭐ metricheDaEventi — il MOTIVO DI CHIUSURA è normalizzato, e il
   assert.deepEqual(conFinale({ type: 'RunFinished', threadId: 't', runId: 'r', outcome: { type: 'success' } }), { motivo: 'fine-lavoro', codice: null, motivoAssente: null });
   assert.deepEqual(conFinale({ type: 'RunError', message: 'giri finiti', code: 'giri-esauriti' }), { motivo: 'giri-finiti', codice: 'giri-esauriti', motivoAssente: null });
   assert.deepEqual(conFinale({ type: 'RunError', message: 'fermato', code: 'fermato' }), { motivo: 'fermata', codice: 'fermato', motivoAssente: null });
+  // C3 tappa 4 (review Y-4B-1 del bugfixer): la pausa di una delega non è un «errore», come per `motivoChiusuraDaEventi`
+  assert.deepEqual(conFinale({ type: 'RunError', message: '⏸ paused on request: before round 2.', code: 'in-pausa' }), { motivo: 'in-pausa', codice: 'in-pausa', motivoAssente: null });
   assert.deepEqual(conFinale({ type: 'RunError', message: 'boom', code: 'internal-error' }), { motivo: 'errore', codice: 'internal-error', motivoAssente: null });
 });
 

@@ -42,7 +42,7 @@ for (const [name, args] of [['scrivi', {percorso: 'a.txt', contenuto: 'x'}], ['s
 
 test('G02-3 the barrier sees the same tool call id', async (t) => {
   const root = workspace(t), seen = [];
-  await talosLavora({cartella: root, task: {consegna: 't'}, modello: 'x', chiave: 'y', livelloAccesso: 'completo', _giriMassimiInterno: 3,
+  await talosLavora({cartella: root, task: {consegna: 't'}, modello: 'x', chiave: 'y', livelloAccesso: 'scrittura-progetto', _giriMassimiInterno: 3,
     messaggiIniziali: [{role: 'system', content: 't'}, {role: 'user', content: 't'}],
     fetchDiRete: network(call('call_w', 'scrivi', {percorso: 'b.txt', contenuto: 'x'}), DONE), primaDiMutazioneFn: async (a) => seen.push(a.toolCallId)});
   assert.deepEqual(seen, ['call_w']);

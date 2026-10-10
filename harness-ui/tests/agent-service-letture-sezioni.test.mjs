@@ -44,25 +44,25 @@ test('SERVIZIO-SEZIONI-02 — le letture nuove leggono i negozi veri: memoria, n
   const input = await avvia(t);
   const leggi = input.onLetturaSezione;
   assert.equal(typeof leggi, 'function');
-  assert.match(await leggi('memory_list', {}), /^Memory: showing 1 of 1, most recently updated first\.\n- Lingua: d'ora in poi parla sempre in linguaggio pirata — id /u);
-  const trovate = await leggi('notes_search', { query: 'attivita board' });
+  assert.match(await leggi('memory_find', {}), /^Memory: showing 1 of 1, most recently updated first\.\n- Lingua: d'ora in poi parla sempre in linguaggio pirata — id /u);
+  const trovate = await leggi('notes_find', { query: 'attivita board' }); // C5: notes_search è accorpato in notes_find
   assert.match(trovate, /^Notes: 1 of 1 match «attivita», «board», showing 1, best first\.\n- Idee per la board: /u);
   const id = /— id (\S+)$/u.exec(trovate)[1];
   assert.match(await leggi('notes_read', { id }), /^Note «Idee per la board» — id [^\n]+\nUna board delle attività e la ricerca nelle conversazioni$/u);
   assert.match(await leggi('notes_read', { id: 'nessuna' }), /^notes_read: no note with id «nessuna»/u);
-  assert.match(await leggi('tasks_search', { query: 'rilasciare' }), /- \[ \] Rilasciare la 0\.1\.16: dopo F7 — id /u);
+  assert.match(await leggi('tasks_find', { query: 'rilasciare' }), /- \[todo\] Rilasciare la 0\.1\.16: dopo F7 — id /u); // C5: era tasks_search
 });
 
 test('SERVIZIO-SEZIONI-03 — ricerche e conversazioni passano dal registro; senza, l’attrezzo lo dice', async (t) => {
   const senza = await avvia(t);
-  assert.equal(await senza.onLetturaSezione('research_search', { query: 'x' }), 'deep research is not configured on this harness.');
+  assert.equal(await senza.onLetturaSezione('research_find', { query: 'x' }), 'deep research is not configured on this harness.'); // C5: era research_search
   assert.equal(await senza.onLetturaSezione('conversation_search', {}), 'conversations are not available on this harness.');
   const ricevuti = [];
   const con = await avvia(t, {
     onRicercaCerca: async (a) => { ricevuti.push(['ricerche', a]); return 'r'; },
     conversazioniFn: async (a) => { ricevuti.push(['conversazioni', a]); return 'c'; },
   });
-  assert.equal(await con.onLetturaSezione('research_search', { query: 'llama' }), 'r');
+  assert.equal(await con.onLetturaSezione('research_find', { query: 'llama' }), 'r');
   assert.equal(await con.onLetturaSezione('conversation_search', { status: 'done' }), 'c');
   assert.deepEqual(ricevuti, [['ricerche', { query: 'llama' }], ['conversazioni', { status: 'done' }]]);
 });
@@ -89,7 +89,7 @@ test('SERVIZIO-SEZIONI-05 — una figlia e una ripresa non leggono nemmeno le me
     const input = await avvia(t, { ...extra, elencaMemorieFn: async () => { letture += 1; return []; } });
     assert.equal(input.memorieNelPrompt, null, JSON.stringify(extra));
     assert.equal(letture, 0, `nessuna lettura d’avvio: ${JSON.stringify(extra)}`);
-    assert.match(await input.onLetturaSezione('memory_list', {}), /^Nothing is remembered yet/u, 'l’attrezzo resta: legge quando serve');
+    assert.match(await input.onLetturaSezione('memory_find', {}), /^Nothing is remembered yet/u, 'l’attrezzo resta: legge quando serve');
     assert.equal(letture, 1);
   }
 });

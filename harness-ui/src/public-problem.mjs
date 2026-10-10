@@ -14,6 +14,8 @@ export const MESSAGES = Object.freeze({
   WORKFLOW_APPROVAL_ORIGIN_FORBIDDEN: { title: 'Workflow approval blocked', explanation: 'The request comes from a window other than TALOS.', action: 'Go back to the proposal open in TALOS and confirm from there.' },
   // F3-51c (25/09/2026): Avvia e i controlli del run (Pausa, Riprendi, Annulla, Riprova).
   WORKFLOW_RUNTIME_NOT_READY: { title: 'Start not available yet', explanation: 'The Workflow engine is not ready on this server: nothing was started or changed.', action: 'Open Doctor to see what is missing, then try again.' },
+  // C3 tappa 4 (09/10/2026): Pausa / Riprendi / Riprova di una delega quando lo stato non lo ammette (http-app, /delegation/…)
+  DELEGATION_STATE_CONFLICT: { title: 'Not possible for this agent now', explanation: 'The agent is not in the right state: only a running agent can be paused, only a paused one resumed, only a failed or stopped one retried. Nothing was changed.', action: 'Look at its state in the Agents tab and choose among the actions it offers now.' },
   WORKFLOW_RUN_STATE_CONFLICT: { title: 'Command not applicable now', explanation: 'The Workflow is not in the right state for this command: nothing was changed.', action: 'Reload the Workflow and choose among the commands available right now.' },
   WORKFLOW_DEFINITION_NOT_APPROVED: { title: 'Workflow not approved', explanation: 'Only the approved version of a Workflow can be started.', action: 'Read the proposal and approve it, then start it.' },
   WORKFLOW_START_UNSUPPORTED: { title: 'Workflow cannot start here', explanation: 'Some steps cannot be run on this server yet, or would write to the project: nothing was started.', action: 'Ask for a proposal with read-only steps only.' },
@@ -51,6 +53,9 @@ export const MESSAGES = Object.freeze({
    *   una porta chiusa senza indicazione di dove sia quella aperta e il modo migliore per bloccare
    *   una persona su una schermata.
    */
+  /* affitto fra processi (10/10/2026): la sessione è di un altro processo di TALOS vivo, o è cambiata lì dopo che è stata letta qui */
+  SESSION_LEASED: { title: 'Open in another TALOS window', explanation: 'This chat is running in another TALOS process on this computer, and only one can write to it at a time.', action: 'Continue it there, or wait until it finishes and try again.' },
+  SESSION_CHANGED_ELSEWHERE: { title: 'Changed in another TALOS window', explanation: 'Another TALOS process wrote to this chat after it was loaded here.', action: 'Open the chat again: it reloads with everything written there.' },
   SESSION_NOT_READY: { title: 'Session not ready', explanation: 'This session cannot accept the requested action in its current state.', action: 'If it was interrupted by a restart, start a new session: the conversation stays readable here.' },
   SESSION_STORE_WRITE_FAILED: { title: 'History save failed', explanation: 'The summary was not confirmed because the new history was not saved. The original messages remain available.', action: 'Try compacting again. If the problem persists, use the diagnostic reference in Doctor.' },
   /*
@@ -77,6 +82,7 @@ export const MESSAGES = Object.freeze({
   ELICITATION_NOT_PENDING: { title: 'Request already closed', explanation: 'The server no longer waits for this answer: it was given from another window, or the session stopped.', action: 'Look at the card in the chat: it says how it ended.' },
   ELICITATION_ANSWER_INVALID: { title: 'Invalid answer', explanation: 'What you wrote does not match what the server asked.', action: 'Check the fields of the card and send again.' },
   PROCESS_NOT_RUNNING: { title: 'Command already finished', explanation: 'This command is no longer running: it finished on its own, or someone already stopped it.', action: 'Look at the row in the Processes tab: it says how it ended.' },
+  PROCESS_STILL_RUNNING: { title: 'Command still running', explanation: 'Only a finished command can be removed from the list.', action: 'Stop it first, then remove it.' },
   RESEARCH_RECHECK_UNAVAILABLE: { title: 'Source check not possible', explanation: 'To recheck the sources a report with the cited passages is needed, and this research has none.', action: 'New researches have it: this one can be redone, or left as it is.' },
   RESEARCH_INVALID: { title: 'Invalid request', explanation: 'The research identifier does not have an allowed form.', action: 'Open the research from the list instead of typing the address by hand.' },
   INTERNAL_ERROR: { title: 'Operation failed', explanation: 'An unexpected problem occurred during the operation.', action: 'Open Doctor, copy the reference and try again.' },

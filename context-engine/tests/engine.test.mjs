@@ -272,11 +272,11 @@ test('CTX-MEASURE-OVERFLOW: a measurement that does not fit is still recorded �
   await assert.rejects(manual.engine.prepareForRequest({ sessionId: 'chat', sessionModel: small }), { code: 'CTX_CONTEXT_OVERFLOW' });
   const manualState = await manual.engine.getContextState({ sessionId: 'chat' });
   assert.ok(manualState.measurement && manualState.measurement.tokens.inputTokens > 4096, 'la misura che ha causato il rifiuto è quella che l’utente deve vedere');
-  // automazione accesa: la compattazione tentata NON riduce un solo messaggio enorme, il rifiuto è
-  // CTX_NO_REDUCTION — e la misura che l'ha fatta scattare deve restare comunque
+  // automazione accesa: un solo messaggio enorme non entra nemmeno riassunto. C1 (09/10, «Tutti e due»): un riassunto che riduce
+  // si pubblica, quindi il rifiuto è l'overflow di sempre — e la misura che l'ha fatta scattare deve restare comunque
   const auto = await fixture(t);
   await auto.engine.appendOriginal({ sessionId: 'chat', record: big });
-  await assert.rejects(auto.engine.prepareForRequest({ sessionId: 'chat', sessionModel: small }), { code: 'CTX_NO_REDUCTION' });
+  await assert.rejects(auto.engine.prepareForRequest({ sessionId: 'chat', sessionModel: small }), { code: 'CTX_CONTEXT_OVERFLOW' });
   const autoState = await auto.engine.getContextState({ sessionId: 'chat' });
   assert.ok(autoState.measurement && autoState.measurement.tokens.inputTokens > 4096, 'anche quando l’automazione fallisce, la prima misura è un fatto e resta');
 });

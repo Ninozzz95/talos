@@ -47,7 +47,7 @@ test('OUTPUT11-KERNEL-UNICODE: the real shell tool bounds its live deltas withou
   try {
     await talosLavora({cartella: root, task: {consegna: 'Esegui la verifica richiesta.'}, modello: 'fixture/preview', chiave: 'fixture',
       messaggiIniziali: [{role: 'system', content: 'Verifica.'}, {role: 'user', content: 'Esegui la verifica richiesta.'}],
-      livelloAccesso: 'completo', _giriMassimiInterno: 3, ambienteComandiFn: () => ({dove: 'windows', revisione: 0}),
+      livelloAccesso: 'scrittura-progetto', _giriMassimiInterno: 3, ambienteComandiFn: () => ({dove: 'windows', revisione: 0}),
       fetchDiRete: async (_url, init) => {
         requests.push(JSON.parse(init.body));
         const message = requests.length === 1

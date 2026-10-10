@@ -15,7 +15,21 @@ import { CAMPI_TETTI } from './workflow-proposal-card.js';
 
 const cifra = (n) => new Intl.NumberFormat(linguaCorrenteDiT() === 'en' ? 'en-US' : 'it-IT', { useGrouping: 'always' }).format(n);
 const somma = (panoramica, stati) => (panoramica?.groups ?? []).reduce((tot, g) => tot + stati.reduce((s, st) => s + (g.counts?.[st] ?? 0), 0), 0);
-const RUN_FINITI = new Set(['succeeded', 'failed', 'cancelled']);
+const RUN_FINITI = new Set(['succeeded', 'succeeded_with_set_aside', 'failed', 'cancelled']);
+
+/*
+ * ⭐ C3 (09/10/2026, «talos desktop») — le azioni della PERSONA su un passo fallito: Segna come fatto · Metti da parte · Rifai con
+ *   un altro modello (decisione owner 07/10, come Hermes). Si offrono solo quando il server le accetterebbe: passo `failed`, run in
+ *   corsa o in «Serve attenzione», nessun annullamento chiesto (`workflow-orchestrator.mjs` `resolveFailedStep`).
+ */
+export const AZIONI_SUL_PASSO = Object.freeze(['mark-done', 'set-aside', 'retry-other-model']);
+export function passoRisolvibile(panoramica, statoDelPasso) {
+  if (!panoramica?.runId || panoramica.cancelRequested === true) return false;
+  if (statoDelPasso === 'failed') return ['running', 'needs_attention'].includes(panoramica.status);
+  /* C3 tappa 2a: un passo INCERTO si decide quando il run chiede attenzione (il sistema ha rinunciato a riconciliarlo). Se il
+     server non lo aspetta ancora, il comando torna 409 e lo si dice: è il server a sapere il motivo esatto. */
+  return statoDelPasso === 'uncertain' && panoramica.status === 'needs_attention';
+}
 
 /** Le azioni offerte in questo stato: una principale (o nessuna), le altre per il «…», e una nota quando si aspetta. */
 export function azioniDelRun(panoramica) {
@@ -30,6 +44,11 @@ export function azioniDelRun(panoramica) {
   }
   if (panoramica.status === 'running') return { principale: { azione: 'pause', etichetta: t('chat.run.pause') }, menu: [...(riprova ? [riprova] : []), annulla], nota: null };
   if (panoramica.status === 'paused') return { principale: { azione: 'resume', etichetta: t('chat.run.resume') }, menu: [annulla], nota: null };
+  /* C3 tappa 3 (09/10/2026, owner «quanto serve per finire»): se il run aspetta per il budget, la prima azione è «Alza il tetto
+     e riprendi» (la cifra la dice la conferma, dall'anteprima del server); Riprova, se ci sono passi falliti, va nel «…». */
+  if (panoramica.status === 'needs_attention' && (panoramica.attentionReasons ?? []).includes('budget_overrun')) {
+    return { principale: { azione: 'raise-ceiling', etichetta: t('chat.run.raiseCeiling') }, menu: [...(riprova ? [riprova] : []), annulla], nota: null };
+  }
   if (panoramica.status === 'needs_attention') return { principale: riprova, menu: [annulla], nota: null };
   return { principale: null, menu: [annulla], nota: null }; // «created»: solo Annulla
 }
@@ -71,6 +90,7 @@ export const TESTO_RIUSCITO = Object.freeze({
   get resume() { return t('chat.run.ack.resumed'); },
   get cancel() { return t('chat.run.ack.cancelRequested'); },
   get retry() { return t('chat.run.ack.retryStarted'); },
+  get 'raise-ceiling'() { return t('chat.run.ack.ceilingRaised'); },
 });
 export const testoAmbiguo = (azione) => (azione === 'retry'
   ? t('chat.run.unclear.retry')
@@ -85,7 +105,15 @@ export const testoAmbiguo = (azione) => (azione === 'retry'
  *   nativo (regola dell'owner 13/09), col modello WAI-ARIA «Radio Group»: un solo punto di tabulazione, le frecce spostano e
  *   scelgono. La scelta si scrive in `scelte.valore`; senza una scelta il pulsante di conferma resta spento.
  */
-export function apriConfermaRun(doc, { sopra, titolo, testo, righe = [], scelte = null, conferma, pericolo = false, opener = null, gestore = null } = {}) {
+/*
+ * ⭐ C3 (09/10/2026) — due aggiunte facoltative, per le azioni sul passo:
+ *   - `campo`, `{ etichetta, segnaposto, massimo, valore }`: un'area di testo (la `talos-textarea` del sistema). Il pulsante di
+ *     conferma resta spento finché il testo è vuoto o fatto di soli spazi — «Segna come fatto» vuole un riassunto, come
+ *     `complete_task` di Hermes (`kanban_db.py:2731`). Il testo si scrive in `campo.valore`.
+ *   - `scelte.altro`, `{ testo, monta(contenitore, alScelto) }`: un'ultima voce («Altro modello…») che, scelta, monta sotto il
+ *     selettore della chat; quando lì si sceglie, quel valore diventa la scelta (decisione owner 09/10: lista corta + selettore).
+ */
+export function apriConfermaRun(doc, { sopra, titolo, testo, righe = [], scelte = null, campo = null, conferma, pericolo = false, opener = null, gestore = null } = {}) {
   return new Promise((risolvi) => {
     const el = (tag, classe, t) => { const n = doc.createElement(tag); if (classe) n.className = classe; if (t != null) n.textContent = t; return n; };
     const id = `conferma-run-${Math.random().toString(36).slice(2, 9)}`;
@@ -108,28 +136,57 @@ export function apriConfermaRun(doc, { sopra, titolo, testo, righe = [], scelte 
     const piede = el('div', 'talos-dialog__footer');
     const no = el('button', 'talos-button talos-button--secondary', t('chat.run.confirm.notNow')); no.type = 'button';
     const si = el('button', `talos-button ${pericolo ? 'talos-button--secondary talos-button--danger' : 'talos-button--primary'}`, conferma); si.type = 'button';
-    if (scelte && Array.isArray(scelte.voci) && scelte.voci.length) {
+    // il pulsante di conferma si accende quando OGNI richiesta della finestra è soddisfatta: la scelta, e il testo non vuoto
+    // una scelta CHIESTA e senza voci non si può soddisfare: il pulsante resta spento (review del bugfixer, osservazione)
+    const richieste = { scelta: !scelte, testo: true };
+    const aggiornaConferma = () => { si.disabled = !(richieste.scelta && richieste.testo); };
+    const conAltro = Boolean(scelte?.altro && typeof scelte.altro.monta === 'function');
+    if (scelte && Array.isArray(scelte.voci) && (scelte.voci.length || conAltro)) {
       const gruppo = el('div', 'talos-wfg-conferma__scelte');
       gruppo.setAttribute('role', 'radiogroup');
       if (scelte.etichetta) gruppo.setAttribute('aria-label', scelte.etichetta);
-      const opzioni = scelte.voci.map((voce) => {
+      const opzione = (valore, testo, dettaglio) => {
         const b = el('button', 'talos-wfg-conferma__scelta');
         b.type = 'button';
         b.setAttribute('role', 'radio');
-        b.dataset.valore = voce.valore;
-        b.append(el('span', 'talos-wfg-conferma__scelta-nome', voce.testo ?? voce.valore));
-        if (voce.dettaglio) b.append(el('span', 'talos-wfg-conferma__scelta-dettaglio', voce.dettaglio));
+        b.dataset.valore = valore;
+        b.append(el('span', 'talos-wfg-conferma__scelta-nome', testo ?? valore));
+        if (dettaglio) b.append(el('span', 'talos-wfg-conferma__scelta-dettaglio', dettaglio));
         return b;
-      });
+      };
+      const opzioni = scelte.voci.map((voce) => opzione(voce.valore, voce.testo, voce.dettaglio));
+      // C3: «Altro modello…» è una voce del gruppo; il suo valore vero arriva dal selettore montato sotto
+      const ALTRO = '\u0000altro';
+      let valoreAltro = null;
+      const voceAltro = conAltro ? opzione(ALTRO, scelte.altro.testo) : null;
+      const montaggioAltro = conAltro ? el('div', 'talos-wfg-conferma__altro') : null;
+      if (montaggioAltro) montaggioAltro.hidden = true;
+      if (voceAltro) opzioni.push(voceAltro);
+      let altroMontato = false;
       const segna = (valore) => {
-        scelte.valore = valore;
+        const suAltro = valore === ALTRO;
+        scelte.valore = suAltro ? valoreAltro : valore;
         const scelto = opzioni.find((b) => b.dataset.valore === valore) ?? null;
         opzioni.forEach((b, i) => {
           b.setAttribute('aria-checked', String(b === scelto));
           // un solo punto di tabulazione: quello scelto, o il primo se non c'è ancora una scelta
           b.tabIndex = (scelto ? b === scelto : i === 0) ? 0 : -1;
         });
-        si.disabled = !scelto;
+        if (montaggioAltro) {
+          montaggioAltro.hidden = !suAltro;
+          if (suAltro && !altroMontato) {
+            altroMontato = true;
+            scelte.altro.monta(montaggioAltro, (id) => {
+              if (typeof id !== 'string' || !id.trim()) return;
+              valoreAltro = id;
+              voceAltro.querySelector('.talos-wfg-conferma__scelta-dettaglio')?.remove();
+              voceAltro.append(el('span', 'talos-wfg-conferma__scelta-dettaglio', id));
+              segna(ALTRO);
+            });
+          }
+        }
+        richieste.scelta = Boolean(scelte.valore);
+        aggiornaConferma();
       };
       opzioni.forEach((b, i) => {
         b.addEventListener('click', () => segna(b.dataset.valore));
@@ -144,7 +201,23 @@ export function apriConfermaRun(doc, { sopra, titolo, testo, righe = [], scelte 
       });
       gruppo.append(...opzioni);
       corpo.append(gruppo);
+      if (montaggioAltro) corpo.append(montaggioAltro);
       segna(scelte.voci.some((v) => v.valore === scelte.valore) ? scelte.valore : null);
+    }
+    let areaCampo = null;
+    if (campo) {
+      const contenitore = el('label', 'talos-field--stack talos-wfg-conferma__campo');
+      const area = el('textarea', 'talos-textarea');
+      area.id = `${id}-campo`;
+      if (campo.segnaposto) area.placeholder = campo.segnaposto;
+      if (Number.isSafeInteger(campo.massimo)) area.maxLength = campo.massimo;
+      area.value = campo.valore ?? '';
+      const leggi = () => { campo.valore = area.value; richieste.testo = area.value.trim().length > 0; aggiornaConferma(); };
+      area.addEventListener('input', leggi);
+      areaCampo = area;
+      contenitore.append(el('span', 'talos-field__label', campo.etichetta), area);
+      corpo.append(contenitore);
+      leggi();
     }
     piede.append(el('span', 'talos-grow'), no, si);
     scatola.append(testa, corpo, piede); dialogo.append(scatola);
@@ -156,8 +229,10 @@ export function apriConfermaRun(doc, { sopra, titolo, testo, righe = [], scelte 
     dialogo.addEventListener('close', () => { manager?.deactivate(dialogo); dialogo.remove(); if (!manager) opener?.focus?.(); risolvi(esito); }, { once: true });
     doc.body.append(dialogo);
     dialogo.showModal();
-    // il fuoco parte da «Non ora»: con un'azione che non si disfa, Invio a vuoto non deve confermare (NN/g)
-    if (manager) manager.activate(dialogo, { opener, initialFocus: no, requestClose: () => dialogo.close() });
-    else no.focus();
+    // il fuoco parte da «Non ora»: con un'azione che non si disfa, Invio a vuoto non deve confermare (NN/g). Con un campo da
+    // scrivere (C3, «Segna come fatto») parte dal campo: è la prima cosa da fare, e Invio lì va a capo, non conferma.
+    const primo = areaCampo ?? no;
+    if (manager) manager.activate(dialogo, { opener, initialFocus: primo, requestClose: () => dialogo.close() });
+    else primo.focus();
   });
 }

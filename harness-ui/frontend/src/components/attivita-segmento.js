@@ -175,6 +175,7 @@ export function riassuntoVoci(voci) {
   let inCorso = null;
   let interrotti = 0;
   let nonEseguiti = 0;
+  let attrezziInCorso = 0;
   for (const v of voci || []) {
     if (!v) continue;
     if (v.tipo === 'reasoning') {
@@ -183,7 +184,7 @@ export function riassuntoVoci(voci) {
       if (Number.isFinite(v.durataMs)) durata += v.durataMs; else durateNote = false;
       continue;
     }
-    if (v.stato === 'in-corso') { inCorso = v; continue; }
+    if (v.stato === 'in-corso') { inCorso = v; attrezziInCorso += 1; continue; }
     if (v.stato === 'interrotto') { interrotti += 1; continue; } // 26/09: né riuscita né fallita — il giro si è fermato prima dell'esito
     if (v.stato === 'non-eseguito') { nonEseguiti += 1; continue; } // owner 03/10/2026: una prova non eseguita, né riuscita né fallita
     if (v.stato === 'corretta') continue; // 27/09, decisione 47: la domanda respinta non è stata posta; la riga discreta basta
@@ -201,6 +202,18 @@ export function riassuntoVoci(voci) {
     /* La somma si scrive solo se TUTTE le durate sono note e arriva almeno al secondo: sotto, «(0 s)» sarebbe esatto e
        inutile — la stessa regola di «Ha ragionato poco» (`ragionamento.js`, `etichettaRagionamento`). */
     parti.push(durateNote && durata >= 1000 ? `${parola} (${formattaDurataRagionamento(durata / 1000)})` : parola);
+  }
+  /*
+   * ⛔ Owner 10/10/2026 (AskUserQuestion, «· 2 in corso»): con due comandi IN PARALLELO la carta diceva «Esegue npm test… · 2
+   *   comandi» su quattro — la frase viva ne racconta UNO, i conteggi solo i finiti, e l'altro in corso spariva (nota di «talos
+   *   desktop», scena di c1-scheda-processi). Hermes li conta tutti nella loro categoria (`run-summary.ts:160-171`, `:197-226`,
+   *   clone 2026-10-07); da noi i conteggi sono dei FINITI, quindi i vivi hanno la loro parte, come «interrotta» qui sotto.
+   *   Si scrive solo quando la frase viva non basta: più di un attrezzo in corso, o uno mentre la frase racconta un ragionamento.
+   *   Il numero è di TUTTI gli attrezzi in corso, quello raccontato compreso.
+   */
+  if (attrezziInCorso > (inCorso?.tipo === 'reasoning' ? 0 : 1)) {
+    const parola = tn('chat.activity.runningOne', 'chat.activity.runningMany', attrezziInCorso);
+    parti.push(parola); partiBrevi.push(parola);
   }
   /* 26/09, difetto (2): una chiamata rimasta senza esito quando il giro si è fermato si dice «interrotta» — né riuscita
      né fallita. Hermes fa lo stesso (`app/session/hooks/use-prompt-actions/rewind.ts:422-445`, clone 65ad529). */
@@ -221,22 +234,31 @@ export function creaRegolaAdesso({ orologio = () => performance.now() } = {}) {
   let mostrato = '';
   let mostratoAlle = 0;
   let idMostrato = null;
-  const mostra = (testo, id, ora) => { if (testo !== mostrato) { mostrato = testo; mostratoAlle = ora; } idMostrato = id; return mostrato; };
+  /* TACCUINO-2 (09/10/2026, review di «talos desktop»): la frase mostrata è la descrizione di un comando scritta dal modello? */
+  let mostratoDalModello = false;
+  const mostra = (testo, id, ora, dalModello = false) => {
+    if (testo !== mostrato) { mostrato = testo; mostratoAlle = ora; }
+    idMostrato = id;
+    mostratoDalModello = dalModello;
+    return mostrato;
+  };
   return {
     prossimo({ vivo, inCorso }) {
       const ora = orologio();
-      if (!vivo) { mostrato = ''; idMostrato = null; return ''; }
+      if (!vivo) { mostrato = ''; idMostrato = null; mostratoDalModello = false; return ''; }
       if (inCorso) {
         const testo = fraseAdesso(inCorso);
         const id = inCorso.id ?? inCorso;
-        if (id === idMostrato && inCorso.tipo !== 'reasoning') return mostra(testo, id, ora);
-        if (idMostrato === null || ora - mostratoAlle >= PERMANENZA_MINIMA_AZIONE_MS) return mostra(testo, id, ora);
+        const dalModello = inCorso.nome === 'shell' && Boolean(inCorso.argomenti?.descrizione); // come `fraseAdesso`
+        if (id === idMostrato && inCorso.tipo !== 'reasoning') return mostra(testo, id, ora, dalModello);
+        if (idMostrato === null || ora - mostratoAlle >= PERMANENZA_MINIMA_AZIONE_MS) return mostra(testo, id, ora, dalModello);
         return mostrato;
       }
       if (!mostrato || (idMostrato !== null && ora - mostratoAlle >= PAUSA_PROSSIMO_PASSO_MS)) return mostra(t('chat.activity.preparingNextStep'), null, ora);
       return mostrato;
     },
     get testo() { return mostrato; },
+    get dalModello() { return mostratoDalModello; },
   };
 }
 
@@ -603,6 +625,7 @@ class VistaSegmento {
     if (vivo) { const p = el('span', 'talos-dot talos-dot--live'); p.setAttribute('aria-hidden', 'true'); this.statoEl.append(p); }
 
     this.adessoMostrato = this.regolaAdesso.prossimo({ vivo, inCorso: r.inCorso });
+    this.adessoDalModello = this.regolaAdesso.dalModello === true;
     this.scriviConteggi(false);
     const bersagli = r.bersagli.join(', ');
     if (this.bersagliEl.textContent !== bersagli) this.bersagliEl.textContent = bersagli;
@@ -665,14 +688,21 @@ class VistaSegmento {
     if (!r) return;
     const parti = breve ? r.partiBrevi : r.parti;
     const adesso = this.adessoMostrato || '';
-    const firma = `${breve ? 'b' : 'i'}|${adesso}|${parti.join('·')}`;
+    const firma = `${breve ? 'b' : 'i'}|${this.adessoDalModello ? 'm' : ''}|${adesso}|${parti.join('·')}`;
     if (this.summaryText.dataset.firma === firma) return;
     this.summaryText.dataset.firma = firma;
     this.summaryText.replaceChildren();
-    if (adesso) this.summaryText.append(el('span', 'talos-activity__adesso', adesso), parti.length ? ' · ' : '');
-    this.summaryText.append(parti.join(' · ') || (this.vivo ? '' : t('chat.activity.agentActivity')));
+    /* ⛔ TACCUINO (09/10/2026, bugfixer): un attrezzo senza parole sue entra nella riga col suo nome umano, minuscolo apposta
+       (va a metà frase): «scrittura di una nota» apriva la riga del gruppo, mentre l'Indice diceva «2 · Scrittura di una nota»
+       (misurato sulla 4176). La prima parola visibile della riga va con la maiuscola, come la testa del giro (app.js, `parti[0]`). */
+    /* ⛔ TACCUINO-2 (09/10/2026, review di «talos desktop»): la descrizione di un comando è scritta dal MODELLO e può
+       cominciare col nome del comando («npm test …»): la maiuscola la falsificava («Npm test…»). Resta com'è. */
+    const comeInizio = (testo) => (testo ? testo.charAt(0).toLocaleUpperCase() + testo.slice(1) : testo);
+    if (adesso) this.summaryText.append(el('span', 'talos-activity__adesso', this.adessoDalModello ? adesso : comeInizio(adesso)), parti.length ? ' · ' : '');
+    const conteggi = parti.join(' · ');
+    this.summaryText.append((adesso ? conteggi : comeInizio(conteggi)) || (this.vivo ? '' : t('chat.activity.agentActivity')));
     this.summaryText.dataset.forma = breve ? 'breve' : 'intera';
-    this.summaryText.title = breve ? r.parti.join(' · ') : '';
+    this.summaryText.title = breve ? comeInizio(r.parti.join(' · ')) : '';
   }
 
   /*

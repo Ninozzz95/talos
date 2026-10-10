@@ -218,6 +218,11 @@ export async function avviaTrasmissione(cdp, sessionId, opzioni = {}, onFrame = 
    * fotogrammi, e uno perso è un fotogramma non confermato. */
   await cdp.invia('Page.enable', {}, sessionId);
   const sgancia = cdp.su('Page.screencastFrame', gestore);
+  /* ⛔ C36 (bugfixer, 10/10/2026, riprodotto sulla 4176: 0 pagine su 10 con un fotogramma): il Chrome di oggi RIFIUTA un secondo
+   *   `startScreencast` sulla stessa scheda — «Screencast is already active (code -32000)» — e quell'errore arrivava nel flusso,
+   *   dove la vista lo dice «Il browser non risponde». Uno screencast lasciato acceso (un'apertura, un seguito di prima, un
+   *   ridimensionamento) si ferma prima: `fermaTrasmissione` non lancia, e su una scheda senza screencast non fa niente. */
+  await fermaTrasmissione(cdp, sessionId);
   await cdp.invia('Page.startScreencast', {
     format: 'jpeg',
     quality: scelte.qualita,
@@ -408,7 +413,7 @@ export async function mandaRotella(cdp, sessionId, { x, y, dx = 0, dy = 0, modif
  * «torna com'eri»: si chiama `clearDeviceMetricsOverride`, che è la stessa cosa
  * detta senza ambiguità.
  */
-export async function ridimensiona(cdp, sessionId, { larghezza, altezza, scala = 1 } = {}) {
+export async function ridimensiona(cdp, sessionId, { larghezza, altezza, scala = 1, sveglia = false, trasmissione = null } = {}) {
   const l = Math.round(numeroFinito(larghezza, 0));
   const a = Math.round(numeroFinito(altezza, 0));
   if (l <= 0 && a <= 0) {
@@ -427,17 +432,29 @@ export async function ridimensiona(cdp, sessionId, { larghezza, altezza, scala =
    *   FERMA non ridisegna, e lo schermo resta quello di prima, con la forma vecchia. Visto in una
    *   foto: dopo il ridimensionamento la pagina restava 926×448 dentro un riquadro più alto, con
    *   una banda nera sotto che spariva solo appena si scorreva.
-   * ⇒ Si ri-chiede lo screencast con gli stessi parametri: `Page.startScreencast` e' idempotente e
-   *   il primo fotogramma dopo la chiamata e' completo, quindi arriva subito la forma nuova.
-   *   L'ascolto e' gia' registrato altrove: qui non si tocca, si sveglia soltanto.
+   * ⇒ Si ri-chiede lo screencast: il primo fotogramma dopo la chiamata e' completo, quindi arriva
+   *   subito la forma nuova. L'ascolto e' gia' registrato altrove: qui non si tocca, si sveglia soltanto.
+   * ⛔⛔ C36 (bugfixer, 10/10/2026): `startScreencast` NON è idempotente nel Chrome di oggi — un secondo avvio risponde
+   *   «Screencast is already active (code -32000)». Qui il risveglio falliva in silenzio (il `catch`), e all'apertura di una
+   *   scheda nuova, quando NESSUNO ancora seguiva, avviava uno screencast che faceva fallire il seguito vero: 0 pagine su 10.
+   *   ⇒ Si sveglia solo se qualcuno segue (`sveglia`, lo dice chi conosce la scheda), e fermando prima di riavviare.
    */
+  if (!sveglia) return { azzerato: false, larghezza: misura.width, altezza: misura.height, scala: misura.deviceScaleFactor };
+  /*
+   * C36, nota della review della sessione desktop (10/10/2026): il risveglio ripartiva con la qualità e i tetti PREDEFINITI, non con
+   *   quelli di chi segue — e dopo C36 ogni ridimensionamento passa di qui. Si riparte con le SCELTE del seguito (`trasmissione`, le
+   *   `opzioni` che `avviaTrasmissione` restituisce), come fa DevTools che rilancia lo screencast coi parametri salvati
+   *   (`ScreenCaptureModel`); senza, quelle predefinite (`opzioniTrasmissione({})`, le stesse di un seguito senza opzioni).
+   */
+  const scelte = trasmissione && typeof trasmissione === 'object' ? trasmissione : opzioniTrasmissione({});
+  await fermaTrasmissione(cdp, sessionId);
   try {
     await cdp.invia('Page.startScreencast', {
       format: 'jpeg',
-      quality: QUALITA_PREDEFINITA,
-      maxWidth: LARGHEZZA_MASSIMA,
-      maxHeight: ALTEZZA_MASSIMA,
-      everyNthFrame: 1,
+      quality: scelte.qualita,
+      maxWidth: scelte.larghezzaMax,
+      maxHeight: scelte.altezzaMax,
+      everyNthFrame: scelte.ogniNFrame,
       maxFramesInFlight: FOTOGRAMMI_IN_VOLO,
     }, sessionId);
   } catch { /* la scheda puo' essere chiusa fra le due chiamate: il ridimensionamento resta valido */ }

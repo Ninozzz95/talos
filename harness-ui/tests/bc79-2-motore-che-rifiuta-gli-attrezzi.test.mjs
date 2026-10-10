@@ -318,6 +318,10 @@ test('⛔⛔⛔⛔ BC79-04 — una sessione CLOUD che prende 400 NON si riprova 
 });
 
 test('⛔⛔ BC79-05 — i codici del ritento, contati sul motore: 401 e 400 un tentativo, 429 e 503 quattro', async (t) => {
+  /* 09/10/2026: il budget di serie è 1 + 10 come Claude Code (ritenti-429-come-claude-code.test.mjs); qui si contano i CODICI col motore
+     vero e le attese vere, quindi 3 ritentativi come quelli per cui il test è nato. */
+  const primaRitenti = process.env.TALOS_MAX_RETRIES; process.env.TALOS_MAX_RETRIES = '3';
+  t.after(() => { if (primaRitenti === undefined) delete process.env.TALOS_MAX_RETRIES; else process.env.TALOS_MAX_RETRIES = primaRitenti; });
   const cartella = cartellaDiProva(t, 'ritento');
   const registro = registroComeIlServer({ porta: 0, cartella });
   spegniTutteAllaFine(t, registro);

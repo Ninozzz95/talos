@@ -17,6 +17,9 @@
  */
 import { separaFonteModello } from '../model-destination.mjs';
 import { REGISTRO_FORNITORI } from '../provider-registry.mjs';
+import { riservaDelPasso } from './budget.mjs';
+import { chiusuraConPassiMessiDaParte, passoConModelloScelto } from './run.mjs';
+import { STATI_FINALI_DEL_RUN } from './stati-finali.mjs';
 import { listRunIds } from './store.mjs';
 
 /** Le classi di `activity_failed.errorClass` che hanno un motivo di ritentativo in `RETRY_REASONS` (contract.mjs:17). */
@@ -70,7 +73,7 @@ export function decidiDopoFallimento({ step, fallito, oraIso, casuale = Math.ran
 /** Owner 25/09/2026: «4 insieme» — tetto duro globale, per fornitore e per modello. */
 export const TETTO_PASSI_INSIEME = 4;
 
-const RUN_FINITI = new Set(['succeeded', 'failed', 'cancelled']);
+const RUN_FINITI = new Set(STATI_FINALI_DEL_RUN);
 
 /*
  * La CAPACITÀ ADATTIVA: sotto il tetto duro, un limite per coppia fornitore/modello che si dimezza a un 429 (minimo 1) e sale
@@ -118,7 +121,6 @@ export function createCapacitaAdattiva({ tetto = TETTO_PASSI_INSIEME, successiPe
 }
 
 const STATI_SODDISFATTI = new Set(['succeeded', 'skipped']);
-const DIMENSIONI_DELLA_RISERVA = ['promptTokens', 'completionTokens', 'wallMs', 'agentSeconds', 'toolCalls', 'modelRequests'];
 
 /** Un fornitore che non è «collegato» gira su questa macchina (Ollama, LM Studio, llama-server, agente esterno): uno solo. */
 function eseguitoQui(provider) {
@@ -138,13 +140,9 @@ export function modelloDelPasso(step, definitionRecord) {
   return definitionRecord?.proposal?.sessionModel ?? null;
 }
 
-/** Owner 25/09 «budget pieno a ogni tentativo»: ogni tentativo riserva il budget del passo (con zeri, il consumo vero è un overrun). */
-export function riservaDelPasso(step, definition) {
-  const riserva = {};
-  for (const chiave of DIMENSIONI_DELLA_RISERVA) riserva[chiave] = step.budget?.[chiave] ?? definition.budgets?.[chiave] ?? 0;
-  riserva.knownCostUsd = step.budget?.knownCostUsd ?? null;
-  return riserva;
-}
+/* Owner 25/09 «budget pieno a ogni tentativo»: la riserva del passo vive in `budget.mjs` dal 09/10 (C3 tappa 3, la usa anche
+   `aumentoPerFinire`); riesportata qui per chi la importava da questo modulo. */
+export { riservaDelPasso };
 
 /**
  * Lo SCHEDULER: porta ogni run da `prepared` alla fine, sveglia per sveglia. Un giro di un run fa, in ordine:
@@ -221,6 +219,13 @@ export function createWorkflowScheduler({
     // i posti si rilasciano in OGNI stato non finale: è così che una pausa o un annullamento si drenano
     await rilasciaPosti(runId, s, run);
     run = await orchestrator.readRun({ runId });
+    /* C3 tappa 2a: un passo incerto DECISO dalla persona compie la sua azione appena il suo posto è rilasciato (anche dopo
+       un'interruzione fra la decisione e l'azione: la decisione, con l'azione, è nel giornale) */
+    if ([...run.state.nodes.values()].some((node) => node.state === 'reconciling'
+      && run.state.activities.get(node.activeActivityExecutionId)?.reconcileOutcome === 'person_resolved')) {
+      await orchestrator.completaAzioniDellaPersona({ runId });
+      run = await orchestrator.readRun({ runId });
+    }
     // F3-51a (owner 25/09, «Annulla: si fermano subito»): l'annullamento chiesto passa davanti a tutto
     if (run.state.run.cancelRequested) { await annulla(runId, s, run); return; }
     if (run.state.run.status === 'running' && await riconciliaIncerti(runId, s, run)) {
@@ -252,10 +257,19 @@ export function createWorkflowScheduler({
     // in pausa o «Serve attenzione»: chi riparte dopo una ripresa ha diritto a un'altra prova (vedi `guasti`, sotto)
     if (run.state.run.status !== 'running' || !run.state.run.schedulingEnabled) { s.guasti.clear(); return; }
 
+    /*
+     * ⛔ C3 tappa 3 (09/10/2026, owner «Sì, dentro la tappa 3») — un passo pronto che non entra nel tetto del RUN veniva saltato in
+     *   silenzio e il run restava «In corso» per sempre. Ora, se a passi FERMI (niente in volo: un passo che gira può ancora
+     *   liberare riserva saldando sotto la sua) nessun passo pronto è entrato per il tetto del run, si scrive
+     *   `budget_overrun_observed` con la fonte `admission` ⇒ «Serve attenzione», e la persona alza il tetto («quanto serve per
+     *   finire»). Il tetto del PASSO no: alzare quello del run non lo cambierebbe, resta un errore detto.
+     */
+    let fermoPerIlTetto = null;
     for (const nodeId of run.state.indexes.readyQueue) {
       if (fermo) return;
       if (s.inVolo.has(nodeId) || s.guasti.has(nodeId)) continue;
-      const step = run.definition.nodes.find((node) => node.id === nodeId);
+      // C3: il modello scelto dalla persona per i tentativi nuovi di questo passo, se c'è (la stessa regola dell'activity runner)
+      const step = passoConModelloScelto(run.definition.nodes.find((node) => node.id === nodeId), run.state.nodes.get(nodeId));
       const model = modelloDelPasso(step, run.definitionRecord);
       if (!model) { onErrore(Object.assign(new Error('the step has no model'), { code: 'WORKFLOW_STEP_MODEL_MISSING' }), { runId, nodeId }); continue; }
       const { fonte: provider } = separaFonteModello(model);
@@ -269,6 +283,7 @@ export function createWorkflowScheduler({
       } catch (errore) {
         // la capacità GLOBALE finita ferma il giro; quella di un fornitore, di un modello o dei processi locali no
         if (errore?.code === 'WORKFLOW_CAPACITY_EXCEEDED') { if (/^globalAgents\b/u.test(errore.message)) break; continue; }
+        if (errore?.code === 'WORKFLOW_BUDGET_EXCEEDED' && errore.scope === 'run') { fermoPerIlTetto ??= { nodeId, errore }; continue; }
         if (errore?.code === 'WORKFLOW_BUDGET_EXCEEDED' || errore?.code === 'WORKFLOW_ADMISSION_NODE_NOT_READY') { onErrore(errore, { runId, nodeId }); continue; }
         throw errore;
       }
@@ -283,10 +298,15 @@ export function createWorkflowScheduler({
         (errore) => dopoIlPasso({ runId, s, nodeId, claimId: ammesso.claimId, provider, model, errore }),
       );
     }
+    if (fermoPerIlTetto && s.inVolo.size === 0 && !fermo) {
+      await orchestrator.segnalaTettoRaggiunto({ runId, nodeId: fermoPerIlTetto.nodeId, dimension: fermoPerIlTetto.errore.dimension });
+      return;
+    }
 
     run = await orchestrator.readRun({ runId });
+    // C3: anche quando ogni passo è soddisfatto o MESSO DA PARTE dalla persona (`completeRun` sceglie quale fine scrivere)
     if (s.inVolo.size === 0 && run.state.run.status === 'running'
-      && [...run.state.nodes.values()].every((node) => STATI_SODDISFATTI.has(node.state))
+      && ([...run.state.nodes.values()].every((node) => STATI_SODDISFATTI.has(node.state)) || chiusuraConPassiMessiDaParte(run.state).pronto)
       && ![...run.state.capacityClaims.values()].some((claim) => claim.state === 'active')) {
       await orchestrator.completeRun({ runId });
     }
@@ -299,6 +319,20 @@ export function createWorkflowScheduler({
    */
   async function rilasciaPosti(runId, s, run) {
     for (const claim of run.state.capacityClaims.values()) {
+      /* C3 tappa 5 (review Y1 del bugfixer): un posto RILASCIATO con la riserva ancora aperta e il tentativo chiuso è lo stato
+         lasciato da un saldo fallito (prima di `failed_before_session`): `releaseAdmission`, idempotente, ora lo completa. Qui
+         ripara i run già bloccati all'avvio e a ogni giro, così si sblocca anche «Riprova», non solo le azioni sul passo. */
+      if (claim.state === 'released' && !s.inVolo.has(claim.nodeId) && run.state.budget.reservations.has(claim.budgetReservationId)
+        && ['completed', 'failed', 'reconciled'].includes(run.state.activities.get(claim.activityExecutionId)?.state)) {
+        try { await orchestrator.releaseAdmission({ runId, claimId: claim.claimId }); }
+        catch (errore) {
+          // un saldo che ancora non si può fare resta com'era (il passo lo dice); lo si dice UNA volta, non a ogni giro
+          if (errore?.name !== 'WorkflowBudgetError') throw errore;
+          if (!s.saldiImpossibili) s.saldiImpossibili = new Set();
+          if (!s.saldiImpossibili.has(claim.claimId)) { s.saldiImpossibili.add(claim.claimId); onErrore(errore, { runId, nodeId: claim.nodeId }); }
+        }
+        continue;
+      }
       if (claim.state !== 'active' || s.inVolo.has(claim.nodeId)) continue;
       const activity = run.state.activities.get(claim.activityExecutionId);
       if (!activity || ['completed', 'failed', 'reconciled'].includes(activity.state)) {

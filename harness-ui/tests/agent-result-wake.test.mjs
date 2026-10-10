@@ -7,6 +7,23 @@ import { createSessionRegistry } from '../src/session-registry.mjs';
 import { attendiScritture, registraRigaSync } from '../src/session-store.mjs';
 import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
+/*
+ * Riga del bugfixer (10/10/2026): un risveglio passa da un timer di 25 ms più le scritture su disco, e sotto carico 70 ms fissi
+ *   non bastavano — F-010-RESTART-AFTER-ADMISSION rosso 2 volte su ~11 corse della suite vicina, verde da solo. Dove si aspetta che
+ *   qualcosa SUCCEDA si aspetta la condizione (con un tetto); dove si prova che NIENTE succede resta l'attesa fissa: una condizione
+ *   lì passerebbe subito, a vuoto.
+ * ⛔ Review del desktop: dopo la condizione resta la pausa di prima (70 ms) — la condizione dà la stabilità, la pausa tiene
+ *   l'altra metà della guardia, «UN risveglio solo»: un doppione che arriva un tick dopo la terza corsa la farebbe diventare 4.
+ */
+async function finche(condizione, { tetto = 3_000, passo = 10 } = {}) {
+  const fine = Date.now() + tetto;
+  while (!condizione()) {
+    if (Date.now() > fine) return false;
+    await new Promise((r) => setTimeout(r, passo));
+  }
+  return true;
+}
+
 function runtimeControllabile() {
   const runs = [];
   return {
@@ -74,7 +91,8 @@ test('F-010-LIVE-PARENT: a child result waits for the parent to settle before wa
     assert.equal(registry.statoCoda(sessionId).voci.length, 1);
     runtime.fine(0);
     await registry.attendiAssestamento(sessionId);
-    await new Promise((r) => setTimeout(r, 70));
+    await finche(() => runtime.runs.length >= 3);
+    await new Promise((r) => setTimeout(r, 70)); // review: un risveglio DOPPIO, un tick dopo, si vedrebbe ancora
     assert.equal(runtime.runs.length, 3);
     runtime.fine(2);
     await registry.attendiAssestamento(sessionId);
@@ -125,7 +143,8 @@ test('F-010-STOP-PARENT (K2, 03/10): a stop does not pause a child result; the p
     runtime.fine(1);
     assert.equal(registry.ferma(sessionId), true);
     assert.equal(registry.statoCoda(sessionId).inPausa, false);
-    await new Promise((r) => setTimeout(r, 70));
+    await finche(() => runtime.runs.length >= 3);
+    await new Promise((r) => setTimeout(r, 70)); // review: un risveglio DOPPIO, un tick dopo, si vedrebbe ancora
     assert.equal(runtime.runs.length, 3, 'the parent wakes with the child result');
     assert.equal(runtime.runs[2].input.task.origine, 'delega');
     runtime.fine(2);
@@ -273,7 +292,8 @@ test('F-010-RESTART-AFTER-ADMISSION: checkpoint IDs prevent a second delivery af
     runtime.fine(0);
     await registry.attendiAssestamento(sessionId);
     runtime.fine(1);
-    await new Promise((r) => setTimeout(r, 70));
+    await finche(() => runtime.runs.length >= 3);
+    await new Promise((r) => setTimeout(r, 70)); // review: un risveglio DOPPIO, un tick dopo, si vedrebbe ancora
     assert.equal(runtime.runs.length, 3);
     await attendiScritture({ cartellaStore });
     const restored = createSessionRegistry(options);

@@ -1,6 +1,16 @@
 const SATISFIED_NODE_STATES = new Set(['succeeded', 'skipped']);
 const NON_BLOCKING_EDGE_TYPES = new Set(['retry', 'fallback']);
 
+/*
+ * C3 (09/10/2026) — un passo SALTATO perché aspettava un passo messo da parte dalla persona (`dependency_set_aside`) NON libera i
+ *   suoi dipendenti: la catena sotto un passo messo da parte non parte (decisione owner del 07/10). I saltati di sempre
+ *   (`condition_false`, …) restano soddisfatti come prima. Si salta la catena in ordine topologico (il riduttore vuole un
+ *   predecessore già fermo), quindi un saltato in testa non deve rendere pronto il passo sotto.
+ */
+function soddisfatto(nodeRun) {
+  return SATISFIED_NODE_STATES.has(nodeRun?.state) && !(nodeRun.state === 'skipped' && nodeRun.terminalReason === 'dependency_set_aside');
+}
+
 function dependencyEdges(definition) {
   return definition.edges.filter((edge) => !NON_BLOCKING_EDGE_TYPES.has(edge.type));
 }
@@ -46,7 +56,7 @@ export function buildWorkflowIndexes(definition, state = {}) {
   for (const node of definition.nodes) {
     const remaining = (incomingByNode.get(node.id) ?? [])
       .filter((edge) => !NON_BLOCKING_EDGE_TYPES.has(edge.type))
-      .filter((edge) => !SATISFIED_NODE_STATES.has(nodeRuns.get(edge.from)?.state))
+      .filter((edge) => !soddisfatto(nodeRuns.get(edge.from)))
       .length;
     remainingDeps.set(node.id, remaining);
   }
@@ -112,7 +122,7 @@ function applicaDeltaIndici(next, prima, nextState, event) {
       next.nodesByState.get(before.state)?.delete(nodeId);
       if (!next.nodesByState.has(after.state)) next.nodesByState.set(after.state, new Set());
       next.nodesByState.get(after.state).add(nodeId);
-      if (!SATISFIED_NODE_STATES.has(before.state) && SATISFIED_NODE_STATES.has(after.state)) {
+      if (!SATISFIED_NODE_STATES.has(before.state) && soddisfatto(after)) {
         for (const edge of next.outgoingByNode.get(nodeId) ?? []) {
           if (NON_BLOCKING_EDGE_TYPES.has(edge.type)) continue;
           next.remainingDeps.set(edge.to, Math.max(0, (next.remainingDeps.get(edge.to) ?? 0) - 1));

@@ -68,8 +68,8 @@ export function runRedirectRequested({ redirectId, testo }) {
     return { type: 'RunRedirectRequested', redirectId, testo }
 }
 
-export function runRedirectApplied({ redirectId, testo, immagini = [] }) {
-    return { type: 'RunRedirectApplied', redirectId, testo, ...(immagini.length ? { immagini } : {}) }
+export function runRedirectApplied({ redirectId, testo, immagini = [], bolla = null }) {
+    return { type: 'RunRedirectApplied', redirectId, testo, ...(immagini.length ? { immagini } : {}), ...(bolla ? { bolla } : {}) } // C09: la copia per lo schermo
 }
 
 export function runRedirectCancelled({ redirectId }) {

@@ -130,7 +130,7 @@ test('A6B-06: il kernel — lo sfondato resta registrato fermabile fino alla sua
   await talosLavora({
     cartella, task: { consegna: 'lancia' }, modello: 'f', chiave: 'k', giriMassimi: 3, livelloAccesso: 'accesso-pieno', fetchDiRete,
     chiediApprovazioneFn: async () => true,
-    eseguiComandoSandboxatoFn: async () => ({ codice: null, messoInSfondo: true, daSfondo: 'richiesta', testo: 'IN BACKGROUND', parziale: '', uscita }),
+    eseguiComandoSandboxatoFn: async () => ({ codice: null, messoInSfondo: true, daSfondo: 'richiesta', testo: 'IN BACKGROUND', parziale: '', uscita, fileSfondo: '/tmp/bg1.log' }),
     registraComandoFermabile: ({ toolCallId }) => { registrati.add(toolCallId); return () => registrati.delete(toolCallId); },
     segnalaUscitaSfondo: (u) => { segnalati.push(u); throw new Error('il segnalatore lancia'); },
   });
@@ -139,6 +139,8 @@ test('A6B-06: il kernel — lo sfondato resta registrato fermabile fino alla sua
   await new Promise((r) => setTimeout(r, 20));
   assert.equal(registrati.has('bg1'), false, 'uscito davvero, la riga non è più fermabile');
   assert.deepEqual(segnalati.map((u) => [u.toolCallId, u.codice]), [['bg1', 0]]);
+  /* C06 (10/10/2026): il kernel passa anche il comando e il file dell'uscita, per la nota al modello */
+  assert.deepEqual(segnalati.map((u) => [u.comando, u.file]), [['npm run dev', '/tmp/bg1.log']]);
   assert.deepEqual(rifiuti, [], 'l\'eccezione del segnalatore non è un rifiuto senza gestore');
 });
 
@@ -159,7 +161,7 @@ test('A6B-07: il `!` della persona — sfondato resta fermabile fino all\'uscita
   const eventi = [];
   await eseguiComandoDiretto({
     cartella: mkdtempSync(join(tmpdir(), 'a6b-persona-')), comando: 'npm run dev', onEvento: (e) => eventi.push(e),
-    eseguiComandoSandboxatoFn: async () => ({ codice: null, messoInSfondo: true, daSfondo: 'persona', testo: 'IN BACKGROUND', parziale: '', uscita }),
+    eseguiComandoSandboxatoFn: async () => ({ codice: null, messoInSfondo: true, daSfondo: 'persona', testo: 'IN BACKGROUND', parziale: '', uscita, fileSfondo: '/tmp/persona.log' }),
     registraComandoFermabile: ({ toolCallId }) => { registrati.add(toolCallId); return () => registrati.delete(toolCallId); },
     segnalaUscitaSfondo: (u) => { segnalati.push(u); throw new Error('il segnalatore lancia'); },
   });
@@ -170,5 +172,7 @@ test('A6B-07: il `!` della persona — sfondato resta fermabile fino all\'uscita
   await new Promise((r) => setTimeout(r, 20));
   assert.equal(registrati.has(toolCallId), false, 'uscito davvero, la riga non è più fermabile');
   assert.deepEqual(segnalati.map((u) => [u.toolCallId, u.codice]), [[toolCallId, 0]]);
+  /* C06 (owner 10/10/2026, «Sì, anche i miei»): anche il «!» passa comando e file, per la nota al modello */
+  assert.deepEqual(segnalati.map((u) => [u.comando, u.file, u.dellaPersona]), [['npm run dev', '/tmp/persona.log', true]]);
   assert.deepEqual(rifiuti, [], 'l\'eccezione del segnalatore non è un rifiuto senza gestore');
 });

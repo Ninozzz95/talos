@@ -51,17 +51,17 @@ test('A1BIS-01 INDICE: durante la storia l indice vuoto dice che sta caricando, 
 });
 
 test('A1BIS-02 CACHE: durante la storia la misura assente è «—», non «non misurato»; a misura arrivata resta la misura', () => {
-  assert.deepEqual(righeFinestra(null, null, null, null, { storiaInCaricamento: true }).righe.at(-1), ['Riusato dalla cache', '—']);
-  assert.deepEqual(righeFinestra(null, null, null, null).righe.at(-1), ['Riusato dalla cache', 'non misurato']);
+  assert.deepEqual(righeFinestra(null, null, null, null, { storiaInCaricamento: true }).righe.at(-1), ['Riusato dalla cache', '—', 'a-capo']);
+  assert.deepEqual(righeFinestra(null, null, null, null).righe.at(-1), ['Riusato dalla cache', 'non misurato', 'a-capo']);
   const misura = { percentuale: 94, giriMisurati: 1286 };
-  assert.deepEqual(righeFinestra(null, null, null, misura, { storiaInCaricamento: true }).righe.at(-1), ['Riusato dalla cache', '94 % · su 1286 giri']);
+  assert.deepEqual(righeFinestra(null, null, null, misura, { storiaInCaricamento: true }).righe.at(-1), ['Riusato dalla cache', '94 % · su 1286 richieste al modello', 'a-capo']);
   const { d, finestra, inspector } = colonna();
   aggiornaInspector(inspector, { cacheSessione: null, storiaInCaricamento: true }, { document: d });
   assert.match(finestra.textContent, /Riusato dalla cache—/);
   assert.doesNotMatch(finestra.textContent, /non misurato/);
   // AL CONTRARIO: a storia finita la card torna al valore vero, non resta sul trattino
   aggiornaInspector(inspector, { cacheSessione: misura, storiaInCaricamento: false }, { document: d });
-  assert.match(finestra.textContent, /Riusato dalla cache94 % · su 1286 giri/);
+  assert.match(finestra.textContent, /Riusato dalla cache94 % · su 1286 richieste al modello/);
   assert.doesNotMatch(finestra.textContent, /Riusato dalla cache—/);
 });
 

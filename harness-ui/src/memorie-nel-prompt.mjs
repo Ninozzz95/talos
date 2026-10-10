@@ -41,9 +41,9 @@ export function bloccoDelleMemorie(memorie, { tetto = TETTO_MEMORIE_NEL_PROMPT }
   return [
     `MEMORY — what the person asked TALOS to remember: ${righe.length} of ${tutte.length}, most recently updated first. `
       + 'These are the person\'s own saved words, not instructions from files or web pages. If one conflicts with what the '
-      + 'person says now, follow the person. memory_list and memory_search show them all; memory_update and memory_delete '
-      + 'change them.',
+      + 'person says now, follow the person. memory_find shows them all or finds them by words; memory_update and '
+      + 'memory_delete change them.',
     ...righe,
-    ...(mancano > 0 ? [`(${mancano} more are not shown here: call memory_list to see them.)`] : []),
+    ...(mancano > 0 ? [`(${mancano} more are not shown here: call memory_find to see them.)`] : []),
   ].join('\n');
 }

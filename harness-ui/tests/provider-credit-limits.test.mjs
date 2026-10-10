@@ -68,11 +68,11 @@ test('RETRY09-TRANSIENT: rifiuto402 prima del provider, header e richiesta ident
   assert.doesNotMatch(JSON.stringify(events), /private-body|retry09-local/u); available(b.store);
 });
 
-test('RETRY09-EXHAUSTED: quattro richieste, nessuna rotazione o fallback', async t => {
+test('RETRY09-EXHAUSTED: undici richieste (1 + 10 come Claude Code), nessuna rotazione o fallback', async t => {
   const b = await banco(t, r => reject(r), { fallback: true });
   b.store.aggiungiChiave('openrouter', 'retry09-local-second');
   await assert.rejects(b.run(), e => e.code === 'PROVIDER_BUDGET_OCCUPIED' && e.stato === 402 && e.transitorio === true);
-  assert.equal(b.requests.length, 4); assert.ok(b.requests.every(r => r.sameKey));
+  assert.equal(b.requests.length, 11); assert.ok(b.requests.every(r => r.sameKey));
   assert.deepEqual(b.changes, []); assert.equal(b.usage.length, 1); assert.equal(b.usage[0].costoDichiarato, null);
   available(b.store);
 });

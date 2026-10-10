@@ -112,6 +112,19 @@ test('B2-04 (WSL vero): nella casa Linux i collegamenti si seguono, elenca e cer
     assert.match(esiti[4], new RegExp(`^INVALID\\. "${p.cartella.split('\\').join('\\\\')}" is not a subfolder of this workspace`), 'un assoluto si rifiuta come su Windows (T-13), con le parole del modello')
 })
 
+test('C5-ELENCA-CASA (WSL vero): depth, limit e cursor arrivano alla casa Linux, che pagina con la stessa funzione', vero, async (t) => {
+    const p = preparazione(t)
+    for (const nome of ['a.txt', 'b.txt']) writeFileSync(join(p.cartella, nome), 'x\n')
+    mkdirSync(join(p.cartella, 'sotto', 'giu'), { recursive: true })
+    writeFileSync(join(p.cartella, 'sotto', 'giu', 'fondo.txt'), 'x\n')
+    const { esiti } = await giro(p, [['elenca', {}], ['elenca', { depth: 2 }], ['elenca', { limit: 1 }], ['elenca', { cursor: 'rotto' }]])
+    assert.doesNotMatch(esiti[0], /fondo\.txt/, 'depth 1: the grandchild folder is named, not opened')
+    assert.match(esiti[1], /sotto\/giu\/fondo\.txt/, 'depth reaches the house')
+    assert.match(esiti[2], /^the workspace root: showing 1 of 3 entries \(depth 1\), sorted by path\./, 'limit reaches the house')
+    assert.match(esiti[2], /continue with cursor=\S+$/m, 'the cursor line (the page budget follows it)')
+    assert.match(esiti[3], /This cursor is not valid/, 'cursor reaches the house')
+})
+
 test('B2-07 (WSL vero): attraverso un collegamento Linux si legge E si sostituisce — disco e istantanea sono quelli della casa', vero, async (t) => {
     const p = preparazione(t)
     writeFileSync(join(p.cartella, 'vero.txt'), 'prima\n')
@@ -174,4 +187,18 @@ test('B2-06 (WSL vero): la scelta «Windows» spegne la casa Linux per quel giro
     assert.match(esiti[1], /su windows/)
     assert.match(descrizioni[0], /Windows host \(cmd\.exe\)/)
     assert.equal(p.sessione.prendi.length, 1)
+})
+
+/* C25 (owner 10/10/2026, «Tutte e due»): nella casa Linux l'impronta dei byte la calcola il servente (`impronta`), e al lato Windows
+   arrivano 64 caratteri. Se il servente non avesse l'operazione, `chiamaCasa` fallirebbe e il registro resterebbe SENZA impronta —
+   in silenzio: questa prova lo vede. */
+test('C25-07 (WSL vero): una lettura completa nella casa Linux lascia l impronta sha256 dei byte, calcolata di là', vero, async (t) => {
+    const p = preparazione(t)
+    writeFileSync(join(p.cartella, 'nota.txt'), 'riga uno\nriga due\n')
+    const { creaRegistroLetture } = await import('../src/letture-prima-di-sovrascrivere.mjs')
+    const { createHash } = await import('node:crypto')
+    const registroLetture = creaRegistroLetture()
+    await giro(p, [['leggi', { percorso: 'nota.txt' }]], { registroLetture })
+    const impronte = [...registroLetture.values()].map((v) => v.impronta)
+    assert.deepEqual(impronte, [createHash('sha256').update('riga uno\nriga due\n').digest('hex')])
 })

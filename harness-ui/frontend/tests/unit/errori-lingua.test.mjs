@@ -79,8 +79,8 @@ test('ERRORI-LINGUA-03 — la lingua si legge AL MOMENTO della chiamata: cambiar
     const italiano = spiegaErrore('x', 'giri-esauriti');
     impostaLingua('en');
     const inglese = spiegaErrore('x', 'giri-esauriti');
-    assert.equal(italiano.cosa, 'Il giro ha finito i passi che aveva a disposizione senza chiudere il compito.');
-    assert.equal(inglese.cosa, 'The turn used up the steps it had without finishing the task.');
+    assert.equal(italiano.cosa, 'L’invio ha usato tutte le richieste al modello che aveva, senza chiudere il compito.');
+    assert.equal(inglese.cosa, 'This message used up the model requests it had, without finishing the task.');
     assert.equal(erroreInUnaRiga('x', 'giri-esauriti'), inglese.cosa);
     assert.deepEqual(inglese.rimedi, ['The next message continues the same task in the same session.', 'Press “New” to start a separate task, with its own cap.']);
     // pseudo-lingua del cancello: ciò che passa dal dizionario esce marcato, ciò che è dato grezzo (il testo del server) no

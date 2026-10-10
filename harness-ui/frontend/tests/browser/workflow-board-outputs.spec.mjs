@@ -37,7 +37,8 @@ test('WF-BOARD-OUTPUTS-BROWSER: full text, raw bytes and results beyond the firs
   const panel = graph.getByRole('complementary', { name: 'Risultati del passo' });
   await expect(panel.locator('.talos-wfg__output')).toHaveCount(20);
   await panel.locator('.talos-wfg__output').first().getByRole('button', { name: 'Mostra tutto' }).click();
-  await expect.poll(() => requested).toEqual([`http://127.0.0.1:4176${base}/output?resultId=result-1`]);
+  // l'origine è quella della pagina (la porta del server di prova cambia fra le sessioni: 4176, 4177), mai scritta a mano
+  await expect.poll(() => requested).toEqual([new URL(`${base}/output?resultId=result-1`, page.url()).href]);
   await expect(panel.locator('.talos-wfg__output-full').first()).toHaveText('Contenuto integrale di result-1');
   await expect(panel.locator('.talos-wfg__output').first().locator('.talos-wfg__output-preview')).toHaveCount(0);
   const raw = panel.locator('.talos-wfg__output').nth(1).getByRole('link', { name: 'Scarica' });

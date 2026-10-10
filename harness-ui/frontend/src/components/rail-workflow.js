@@ -63,9 +63,15 @@ export function vociAttenzione(panoramica) {
   const decisioni = contaFiltro(panoramica, 'decisioni');
   const errori = contaFiltro(panoramica, 'errori');
   const voci = [];
+  /* ⛔ Lotto del diagramma (09/10/2026; visto dal bugfixer nelle foto della tappa 3 C3): un run fermo al tetto del budget
+     («Serve attenzione», motivo `budget_overrun`) non ha passi falliti, e la scheda diceva solo «0 errori · Nessun errore attivo»
+     — chi la guardava non vedeva PERCHÉ era fermo. Il motivo arriva dalla panoramica (`attentionReasons`, read-model, tappa 3);
+     la voce porta al diagramma, dove c'è «Alza il tetto e riprendi». */
+  const tetto = panoramica?.status === 'needs_attention' && (panoramica.attentionReasons ?? []).includes('budget_overrun');
+  if (tetto) voci.push({ chiave: 'tetto', tono: 'avviso', icona: 'i-alert', titolo: tr('agenti.rail.ceilingReached'), sotto: tr('agenti.rail.ceilingSub') });
   if (decisioni > 0) voci.push({ chiave: 'decisioni', tono: 'avviso', icona: 'i-alert', titolo: plurale(decisioni, 'agenti.rail.decisionOne', 'agenti.rail.decisionMany'), sotto: tr('agenti.rail.decisionSub') });
   voci.push({ chiave: 'errori', tono: 'errore', icona: 'i-x', titolo: plurale(errori, 'agenti.rail.errorOne', 'agenti.rail.errorMany'), sotto: errori > 0 ? tr('agenti.rail.errorSubAction') : tr('agenti.rail.errorSubNone') });
-  return { voci, daVedere: decisioni + errori };
+  return { voci, daVedere: decisioni + errori + (tetto ? 1 : 0) };
 }
 
 /** I passi che lavorano adesso: il numero sulla scheda «Agenti», come `contaAgentiAttivi` per le deleghe classiche. */
@@ -77,10 +83,10 @@ export function contaAttivi(panoramica) {
  * Monta il rail dentro `contenitore`. `visibile()` dice se il pannello si vede (solo allora si leggono le pagine e si
  * disegna); `onApri({ gruppo, passo })` apre il diagramma su quel gruppo o quel passo (`null`: il diagramma e basta);
  * `onConteggio(n)` riceve i passi
- * attivi a ogni lettura della panoramica.
+ * attivi a ogni lettura della panoramica; `onStato(status)` lo stato del run quando cambia fra due letture.
  */
 export function montaRailWorkflow(contenitore, {
-  client, sorgente, onApri, onConteggio, visibile = () => true, adesso = () => Date.now(),
+  client, sorgente, onApri, onConteggio, onStato, visibile = () => true, adesso = () => Date.now(),
   pianifica = (f) => (globalThis.requestAnimationFrame ?? setTimeout)(f),
 } = {}) {
   const d = contenitore.ownerDocument;
@@ -94,7 +100,7 @@ export function montaRailWorkflow(contenitore, {
   const bottone = (classe, testo) => { const b = el('button', classe, testo); b.type = 'button'; return b; };
   const nuovaLista = () => ({ righe: [], visti: new Set(), cursore: { fase: 0, offset: 0 }, finite: false });
   const stato = { panoramica: null, lista: nuovaLista(), modo: null, filtro: null, query: '', errore: null, carica: true, evidenza: null };
-  let morto = false, seguendo = false, chiudiFlusso = () => {}, rilettura = null, ultimaRilettura = 0, generazione = 0, visto = null, ultimoConteggio = null;
+  let morto = false, seguendo = false, chiudiFlusso = () => {}, rilettura = null, ultimaRilettura = 0, generazione = 0, visto = null, ultimoConteggio = null, ultimoStato;
 
   /* ——— struttura fissa ——— */
   const root = el('section', 'talos-wfr'); root.dataset.c = 'WorkflowRail'; root.setAttribute('aria-label', tr('agenti.rail.regionLabel'));
@@ -161,6 +167,10 @@ export function montaRailWorkflow(contenitore, {
       if (morto || mia !== generazione) return;
       stato.panoramica = data;
       avvisaConteggio();
+      /* 09/10/2026 (bugfixer): lo stato del run è cambiato fra due letture ⇒ chi mostra lo stesso run altrove (la «Cronologia
+         automazioni» accanto) si rilegge. Non alla prima lettura: lì è appena stato montato anche lui. */
+      if (ultimoStato !== undefined && data.status !== ultimoStato) onStato?.(data.status);
+      ultimoStato = data.status;
       if (!stato.modo) stato.modo = data.total <= SOGLIA_AGENTI ? 'agenti' : 'gruppi';
       if (!conElenco) return;
       if (stato.modo === 'agenti') {
@@ -208,7 +218,7 @@ export function montaRailWorkflow(contenitore, {
       attenzione.replaceChildren(...voci.map((v) => {
         const li = el('li');
         const b = bottone('talos-wfr__voce-attenzione'); b.dataset.chiave = v.chiave;
-        b.addEventListener('click', () => scegliFiltro(b.dataset.chiave));
+        b.addEventListener('click', () => (b.dataset.chiave === 'tetto' ? onApri?.(null) : scegliFiltro(b.dataset.chiave))); // il tetto non è un filtro: si alza nel diagramma
         li.append(b); voceAttenzione.set(v.chiave, b); return li;
       }));
     }

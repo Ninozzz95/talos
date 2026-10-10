@@ -86,5 +86,23 @@ for (const tema of ['dark', 'light']) {
       });
       expect(fondo, `il fondo del blocco codice era ${fondo}`).toBe(atteso);
     });
+
+    /* ⛔ TACCUINO (09/10/2026, bugfixer): fra la domanda e il codice c'era una striscia di fondo vuoto di 10 px, in TUTTE le carte —
+       `.talos-message p{margin-bottom:10px}` sulla domanda (un <p>) più il `margin-top:8px` del codice, collassati. Il codice è una
+       riga della carta: sotto la domanda si attacca, e fra le due resta UNA linea sola (quella della domanda). */
+    test(`PO27-COD-03 (${tema}, ${viewport.nome}) — il codice si attacca alla domanda: niente striscia vuota, una linea sola`, async ({ page }) => {
+      await apriApp(page, { tema, ...viewport });
+      await unaScheda(page);
+      const m = await page.evaluate(() => {
+        const perche = document.querySelector('#conversation [data-c="ApprovalCard"] .talos-approval__why');
+        const codice = document.querySelector('#conversation [data-c="ApprovalCard"] .talos-approval__codice');
+        return { fine: perche.getBoundingClientRect().bottom, inizio: codice.getBoundingClientRect().top,
+          lineaPerche: getComputedStyle(perche).borderBottomWidth, lineaCodice: getComputedStyle(codice).borderTopWidth,
+          dentroUnMessaggio: Boolean(perche.closest('.talos-message')) };
+      });
+      expect(m.dentroUnMessaggio, 'la carta vera sta dentro un messaggio: è lì che nasceva il margine').toBe(true);
+      expect(Math.abs(m.inizio - m.fine), `fra la domanda (fine ${m.fine}) e il codice (inizio ${m.inizio})`).toBeLessThan(0.5);
+      expect([m.lineaPerche, m.lineaCodice], 'una linea sola fra le due righe').toEqual(['1px', '0px']);
+    });
   }
 }

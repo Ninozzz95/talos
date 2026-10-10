@@ -38,13 +38,16 @@ test('F027-CONVERSAZIONI: il risultato di conversation_search sta dentro il conf
 });
 
 test('F027-RAPPORTI: anche la ricerca nei rapporti di ricerca sta dentro il confine', async (t) => {
-  const esito = await sezione(t, 'research_search', async () => 'Rapporto «Harness 2026»: estratto…');
-  assert.match(esito, /^<<<TALOS_DATA id=[0-9a-f]{12} from="research_search">>>\n/u);
+  // C5: era research_search. Dentro il confine SOLO le voci (titoli venuti dal web); la testata è di TALOS e resta fuori.
+  const esito = await sezione(t, 'research_find', async () => 'Deep research: showing 1 of 1, most recently started first.\n- Rapporto «Harness 2026» — done — 2026-10-01 — id r1');
+  assert.match(esito, /^Deep research: showing 1 of 1, most recently started first\.\n<<<TALOS_DATA id=[0-9a-f]{12} from="research_find">>>\n- Rapporto «Harness 2026»/u);
+  // al contrario: una frase sola di TALOS (nessuna voce) non ha niente di esterno da avvolgere
+  assert.equal(await sezione(t, 'research_find', async () => 'No deep research has been run on this project yet.'), 'No deep research has been run on this project yet.');
 });
 
 test('F027-SEZIONI-CONTRARIO: note e memoria restano come sono, e un guasto della sezione è di TALOS', async (t) => {
   assert.equal(await sezione(t, 'notes_read', async () => 'La mia nota.'), 'La mia nota.');
-  assert.equal(await sezione(t, 'memory_list', async () => '1. preferisce il tema scuro'), '1. preferisce il tema scuro');
+  assert.equal(await sezione(t, 'memory_find', async () => '1. preferisce il tema scuro'), '1. preferisce il tema scuro'); // C5: era memory_list
   assert.equal(await sezione(t, 'conversation_search', async () => { throw new Error('registro irraggiungibile'); }),
     'conversation_search failed: registro irraggiungibile');
 });

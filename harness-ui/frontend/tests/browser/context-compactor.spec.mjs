@@ -80,6 +80,8 @@ test('CTX-UI-DESKTOP-ROUNDTRIP pulsante, SQLite e replay della chat vera', async
   expect(inference, 'aprire la modale non avvia inferenze').toEqual([]);
   const noOp = page.waitForResponse(response => response.url().endsWith('/context/jobs') && response.request().method() === 'POST');
   await page.locator('[data-context-start]').click();
+  // C1 (owner 10/10/2026, «Pulsante in panoramica, con conferma»): col motore «Compatta ora…» chiede conferma come nel legacy
+  await page.locator('[data-context-conferma-si]').click();
   expect(await (await noOp).json()).toMatchObject({ error: { code: 'CTX_NOTHING_TO_COMPACT' } });
   await expect(page.locator('[data-context-status]')).toHaveAttribute('role', 'status');
   await expect(page.locator('[data-context-status]')).toContainText('ultimo scambio');
@@ -117,11 +119,12 @@ test('CTX-UI-DESKTOP-ROUNDTRIP pulsante, SQLite e replay della chat vera', async
     //   conteggio reale) deve comparire nella modale con l'ORA della misura, al posto di «Non disponibile».
     await store.recordMeasurement({ sessionId, revision: snapshot.revision, measuredAt: '2026-09-09T08:05:00.000Z', measurement: { schema: 'talos.context.tokens.v1', inputTokens: 3200, windowTokens: 16384, responseReserve: 2048, method: 'runtime', exact: true, requestHash: 'ui-fixture-measure', provider: 'openrouter', model } });
     await store.claimContextJob({ sessionId, job: activeJob });
-    await page.getByRole('button', { name: 'Aggiorna', exact: true }).click();
+    // C1 (owner 10/10/2026): niente più «Aggiorna» — la finestra aperta si rilegge da sola (ogni 4 s, 1,2 s con un lavoro)
     await expect(page.locator('[data-context-progress]')).toContainText('1 di 3');
     await expect(page.locator('[data-context-measurement]'), 'CTX-UI-MEASURE').toContainText('misurata alle');
     await expect(page.locator('[data-context-measurement]')).not.toContainText('Non disponibile');
-    await expect(page.locator('[data-context-input]')).not.toContainText('Non disponibile');
+    // C1 (10/10/2026): i tre numeri sciolti sono diventati la testata della panoramica, sul limite che agisce
+    await expect(page.locator('[data-context-headline]')).toContainText('3,2k di ');
     for (const [width, height] of [[1920, 1080], [2560, 1440], [3840, 2160]]) {
       await page.setViewportSize({ width, height });
       await page.screenshot({ path: join(photos, `desktop-measure-${width}x${height}.png`) });
@@ -161,7 +164,9 @@ test('CTX-UI-DESKTOP-ROUNDTRIP pulsante, SQLite e replay della chat vera', async
     await page.locator('#railTabs [data-rail="contesto"]').click();
     const finestra = page.locator('#railContesto');
     await expect(finestra).toBeVisible();
-    await expect(finestra.locator('.talos-kv__k').filter({ hasText: 'Conversazione' }).locator('..').locator('.talos-kv__v'), 'CTX-UI-USAGE-CLOSED-RELOAD').toContainText('2k');
+    /* C1 (10/10/2026): con una misura del motore la colonna parla del limite che agisce, e la riga si chiama «In uso (misurato)»
+       (prima, senza limite noto, «Conversazione»): si cerca l'una o l'altra, la regola resta — dopo il riavvio il consumo c'è. */
+    await expect(finestra.locator('.talos-kv__k').filter({ hasText: /^(Conversazione|In uso \(misurato\))$/ }).locator('..').locator('.talos-kv__v'), 'CTX-UI-USAGE-CLOSED-RELOAD').toContainText('2k');
     await expect(finestra.locator('.talos-kv__k').filter({ hasText: 'Riusato dalla cache' }).locator('..').locator('.talos-kv__v')).toHaveText('non misurato');
     await expect(finestra.locator('[data-c="TurnIndex"]')).not.toContainText('Nessun giro ancora');
   };
@@ -172,7 +177,8 @@ test('CTX-UI-DESKTOP-ROUNDTRIP pulsante, SQLite e replay della chat vera', async
   }
   await page.setViewportSize({ width: 1920, height: 1080 });
   await page.locator('#conversation').getByRole('button', { name: 'Vedi contesto' }).click();
-  await page.getByText('Fonti', { exact: true }).click();
+  // C1 (10/10/2026): «Fonti» non è più un triangolino: sta nella scheda Versioni, sotto le versioni
+  await page.locator('[data-context-tab="versioni"]').click();
   await page.getByRole('button', { name: 'Apri fonte', exact: true }).click();
   await expect(page.locator('[data-context-source-text]')).toContainText('Avevamo scelto SQLite, solo locale.');
   await page.keyboard.press('Escape');

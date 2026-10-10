@@ -45,6 +45,8 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { setTimeout as attendiMs } from 'node:timers/promises';
 
+import { creaAffittiArchivio, fraseDetentore } from './session-lease.mjs';
+
 export class SessionStoreError extends Error {
   constructor(message, code = 'SESSION_STORE_FAILED', dettaglio = null) {
     super(message);
@@ -59,6 +61,81 @@ const ESTENSIONE = '.jsonl';
 function percorsoDi(cartellaStore, sessionId) {
   // ⛔ sessionId è sempre un randomUUID() generato da questo stesso processo (mai testo esterno) — nessuna sanificazione di percorso richiesta, a differenza di un nome file scelto dal modello (vedi library-store.mjs).
   return join(cartellaStore, `${sessionId}${ESTENSIONE}`);
+}
+
+/*
+ * ⭐⭐⭐ 10/10/2026 — L'AFFITTO FRA PROCESSI (owner 09/10: «Affitto come Hermes»; il perché e Hermes letto nel codice stanno in
+ *   `session-lease.mjs`). Uno per archivio e per processo: lo accende chi apre l'archivio da server vero (`attivaAffittiArchivio`,
+ *   dal registro con `affittoFraProcessi`); senza, ogni funzione qui sotto si comporta come prima (i test con cartelle
+ *   temporanee non lo vedono). Con l'affitto acceso:
+ *   · ogni SCRITTURA in un giornale prende l'affitto della sua sessione: tenuto da un altro processo vivo ⇒ `SESSION_LEASED`
+ *     (frase inglese che dice chi: etichetta, pid, da quando — CLI 10/10); giornale cambiato da quando questo processo l'ha
+ *     letto ⇒ `SESSION_CHANGED_ELSEWHERE`, finché il registro non lo rilegge (owner 10/10: «Ricaricarla da sola»);
+ *   · la RIPARAZIONE della coda si fa solo con l'affitto in mano: una coda a metà di un altro processo vivo è la sua scrittura in
+ *     corso, non un crash, e non si tocca (né si «avvelena» il percorso: le scritture le ferma già l'affitto).
+ *   ⛔ Se il meccanismo stesso fallisce (cartella illeggibile, errore inatteso) la SCRITTURA passa, come Hermes
+ *     (`cli.py:933-935`: «Failed to claim active session slot» → `return True`): la chat non si blocca per l'affitto. La
+ *     RIPARAZIONE invece no: senza affitto non si ripara mai.
+ */
+const affittiPerArchivio = new Map();
+let uscitaAffittiRegistrata = false;
+
+export function attivaAffittiArchivio(cartellaStore, opzioni = {}) {
+  const chiave = resolve(cartellaStore);
+  const esistente = affittiPerArchivio.get(chiave);
+  if (esistente) return esistente;
+  const affitti = creaAffittiArchivio({ ...opzioni, cartellaStore, percorsoGiornale: (sessionId) => percorsoDi(cartellaStore, sessionId) });
+  // con scritture in coda l'affitto non si rilascia: la coda è attività di questo processo
+  affitti.aggiungiInUso((sessionId) => codeDiScrittura.has(percorsoDi(cartellaStore, sessionId)));
+  affittiPerArchivio.set(chiave, affitti);
+  if (!uscitaAffittiRegistrata) {
+    uscitaAffittiRegistrata = true;
+    process.once('exit', () => { for (const a of affittiPerArchivio.values()) { try { a.chiudi(); } catch { /* si esce comunque */ } } });
+  }
+  return affitti;
+}
+
+export function affittiDellArchivio(cartellaStore) {
+  if (typeof cartellaStore !== 'string' || !cartellaStore) return null;
+  return affittiPerArchivio.get(resolve(cartellaStore)) ?? null;
+}
+
+/** Spegne l'affitto di un archivio (rilascia tutto). Per i test e per chi chiude l'archivio. */
+export function disattivaAffittiArchivio(cartellaStore) {
+  const chiave = resolve(cartellaStore);
+  const affitti = affittiPerArchivio.get(chiave);
+  if (!affitti) return false;
+  affittiPerArchivio.delete(chiave);
+  affitti.chiudi();
+  return true;
+}
+
+function erroreAffittata(sessionId, detentore) {
+  const pubblico = { pid: detentore?.pid ?? null, etichetta: detentore?.etichetta ?? null, presoIl: detentore?.presoIl ?? null };
+  const errore = new SessionStoreError(fraseDetentore(sessionId, detentore), 'SESSION_LEASED', { chiave: 'server.sessionStore.leased', params: { sessionId, ...pubblico } });
+  errore.detentore = pubblico;
+  return errore;
+}
+
+function garantisciAffittoPerScrittura(cartellaStore, sessionId) {
+  const affitti = affittiDellArchivio(cartellaStore);
+  if (!affitti) return;
+  let esito;
+  try { esito = affitti.prendi(sessionId); }
+  catch { return; } // come Hermes: il meccanismo che fallisce non blocca la scrittura (vedi sopra)
+  if (!esito.preso) throw erroreAffittata(sessionId, esito.detentore);
+  if (affitti.daRicaricare(sessionId)) {
+    throw new SessionStoreError(`Session ${sessionId} was changed by another TALOS process since it was loaded here: it must be reloaded before writing.`, 'SESSION_CHANGED_ELSEWHERE', { chiave: 'server.sessionStore.changedElsewhere', params: { sessionId } });
+  }
+  affitti.tocca(sessionId);
+}
+
+/* Riparare: SOLO con l'affitto in mano (mai «come Hermes» qui: la riparazione riscrive il giornale). */
+function puoRiparare(cartellaStore, sessionId) {
+  const affitti = affittiDellArchivio(cartellaStore);
+  if (!affitti) return true;
+  try { return affitti.prendi(sessionId).preso === true; }
+  catch { return false; }
 }
 
 /*
@@ -233,6 +310,7 @@ export async function registraRiga({ cartellaStore, sessionId, record, durable =
   const riga = `${JSON.stringify(record)}\n`;
   const precedente = codeDiScrittura.get(percorso) ?? Promise.resolve();
   const corrente = precedente.catch(() => {}).then(async () => {
+    garantisciAffittoPerScrittura(cartellaStore, sessionId);
     await mkdirFn(cartellaStore, { recursive: true });
     verificaCodaAppendibile(percorso);
     const prima = dimensioneOZero(percorso);
@@ -283,6 +361,7 @@ export function registraRigaSync({ cartellaStore, sessionId, record }, deps = {}
   // 24/09/2026 — con politica 'busy' una coda in volo è un rifiuto pulito, PRIMA di guardare il disco
   // (l'ultimo byte di un append a metà non dice niente sulla coda: dice solo che è a metà).
   rifiutaSeCodaInVolo(percorso);
+  garantisciAffittoPerScrittura(cartellaStore, sessionId);
   mkdirSyncFn(cartellaStore, { recursive: true });
   verificaCodaAppendibile(percorso);
   const prima = dimensioneOZero(percorso);
@@ -419,6 +498,7 @@ export function registraIntestazioneSync({ cartellaStore, sessionId, record }, d
   const finale = percorsoDi(cartellaStore, sessionId);
   const staging = join(cartellaStore, `.${sessionId}.${randomUUID()}.pending`);
   const attesi = Buffer.from(`${JSON.stringify(record)}\n`, 'utf8');
+  garantisciAffittoPerScrittura(cartellaStore, sessionId);
   let conservaStaging = false;
   let stagingRimosso = false;
 
@@ -573,6 +653,7 @@ export function registraRigaConfermata({ cartellaStore, sessionId, record, puoAc
   const truncateSyncFn = deps.truncateSyncFn ?? truncateSync;
   const precedente = codeDiScrittura.get(percorso) ?? Promise.resolve();
   const corrente = precedente.catch(() => {}).then(() => {
+    garantisciAffittoPerScrittura(cartellaStore, sessionId);
     rifiutaCodaIncerta(percorso);
     if (typeof puoAccodareFn === 'function' && !puoAccodareFn()) {
       throw new SessionStoreError("The state changed before the record was written.", 'SESSION_STORE_PRECONDITION_FAILED');
@@ -713,12 +794,20 @@ export async function esisteSessionePersistita({ cartellaStore, sessionId }, dep
  * cancellato, o mai persistito perché senza `cartellaStore`), non un
  * errore: stesso principio di `leggiRegistro` sopra.
  */
+function liberaAffittoDiUnaEliminata(cartellaStore, sessionId) {
+  const affitti = affittiDellArchivio(cartellaStore);
+  if (!affitti) return;
+  affitti.rilascia(sessionId, { dimensione: 0 });
+  affitti.dimentica(sessionId);
+}
+
 export async function eliminaSessionePersistita({ cartellaStore, sessionId }, deps = {}) {
   const unlinkFn = deps.unlinkFn ?? fsp.unlink;
   const rmFn = deps.rmFn ?? fsp.rm;
   const percorso = percorsoDi(cartellaStore, sessionId);
   const precedente = codeDiScrittura.get(percorso) ?? Promise.resolve();
   const corrente = precedente.catch(() => {}).then(async () => {
+    garantisciAffittoPerScrittura(cartellaStore, sessionId); // eliminare è la scrittura più grande: mai sotto un altro processo
     try {
       /*
        * Le pagine web salvate della sessione (owner 01/10/2026, «per sessione, come Claude Code») se ne vanno con lei, e
@@ -729,9 +818,10 @@ export async function eliminaSessionePersistita({ cartellaStore, sessionId }, de
       await rmFn(cartellaPagineWebDi(cartellaStore, sessionId), { recursive: true, force: true, maxRetries: 3 });
       await unlinkFn(percorso);
     } catch (errore) {
-      if (errore?.code === 'ENOENT') return;
+      if (errore?.code === 'ENOENT') { liberaAffittoDiUnaEliminata(cartellaStore, sessionId); return; }
       throw new SessionStoreError(`Cannot delete session ${sessionId}: ${errore.message}`, 'SESSION_STORE_DELETE_FAILED');
     }
+    liberaAffittoDiUnaEliminata(cartellaStore, sessionId);
   });
   codeDiScrittura.set(percorso, corrente);
   corrente.catch(() => {}).finally(() => {
@@ -904,7 +994,13 @@ async function riparaCodaSpezzataInterna(percorso, deps = {}) {
 export function riparaCodaSpezzata({ percorso, cartellaStore, sessionId }, deps = {}) {
   const bersaglio = percorso ?? percorsoDi(cartellaStore, sessionId);
   const precedente = codeDiScrittura.get(bersaglio) ?? Promise.resolve();
-  const corrente = precedente.catch(() => {}).then(() => riparaCodaSpezzataInterna(bersaglio, deps));
+  const corrente = precedente.catch(() => {}).then(() => {
+    if (cartellaStore && sessionId && !puoRiparare(cartellaStore, sessionId)) {
+      const affitti = affittiDellArchivio(cartellaStore);
+      throw erroreAffittata(sessionId, affitti?.detentoreAltrui(sessionId) ?? null);
+    }
+    return riparaCodaSpezzataInterna(bersaglio, deps);
+  });
   codeDiScrittura.set(bersaglio, corrente);
   corrente.catch(() => {}).finally(() => {
     if (codeDiScrittura.get(bersaglio) === corrente) codeDiScrittura.delete(bersaglio);
@@ -955,7 +1051,7 @@ function inCodaDelPercorso(percorso, lavoro) {
   return corrente;
 }
 
-async function leggiAStreamInterna(percorso, sessionId, perRiga, deps = {}) {
+async function leggiAStreamInterna(percorso, sessionId, perRiga, deps = {}, cartellaStore = null) {
   const createReadStreamFn = deps.createReadStreamFn ?? createReadStream;
   const erroreDiLettura = (errore) => new SessionStoreError(`Cannot read session ${sessionId}: ${errore?.message ?? String(errore)}`, 'SESSION_STORE_READ_FAILED', { chiave: 'server.sessionStore.readFailed', params: { sessionId, detail: errore?.message ?? String(errore) } });
   let dimensione;
@@ -1007,6 +1103,13 @@ async function leggiAStreamInterna(percorso, sessionId, perRiga, deps = {}) {
 
   let riparazione = null;
   const codaIncerta = !terminato || (rottaPendente && !fermata);
+  /*
+   * Affitto (10/10/2026): una coda a metà mentre un ALTRO processo vivo tiene l'affitto è la sua scrittura in corso. Non si
+   *   ripara e non si avvelena il percorso: si dice (`codaAltrui`) e la si lascia a lui. I record consegnati sono quelli interi.
+   */
+  if (codaIncerta && cartellaStore && !puoRiparare(cartellaStore, sessionId)) {
+    return { record: letti, byte: dimensione, riparazione: null, interrotta: Boolean(fermata?.interrotta), codaAltrui: true };
+  }
   if (codaIncerta) {
     percorsiConCodaIncerta.add(percorso);
     // Siamo già dentro la coda di questo percorso: la riparazione va chiamata INTERNA, mai l'esportata
@@ -1034,7 +1137,7 @@ export function leggiRegistroAStream({ cartellaStore, sessionId, perRiga }, deps
     throw new SessionStoreError("leggiRegistroAStream requires perRiga(record, { indice, byte }).", 'SESSION_STORE_BAD_ARGUMENT');
   }
   const percorso = percorsoDi(cartellaStore, sessionId);
-  return inCodaDelPercorso(percorso, () => leggiAStreamInterna(percorso, sessionId, perRiga, deps));
+  return inCodaDelPercorso(percorso, () => leggiAStreamInterna(percorso, sessionId, perRiga, deps, cartellaStore));
 }
 
 /**
@@ -1115,7 +1218,7 @@ export function leggiRegistro({ cartellaStore, sessionId }, deps = {}) {
   const percorso = percorsoDi(cartellaStore, sessionId);
   return inCodaDelPercorso(percorso, async () => {
     const record = [];
-    const esito = await leggiAStreamInterna(percorso, sessionId, (r) => { record.push(r); }, deps);
+    const esito = await leggiAStreamInterna(percorso, sessionId, (r) => { record.push(r); }, deps, cartellaStore);
     if (esito === null) return null;
     if (esito.riparazione) {
       Object.defineProperty(record, 'riparazione', { value: esito.riparazione, enumerable: false, configurable: true, writable: true });

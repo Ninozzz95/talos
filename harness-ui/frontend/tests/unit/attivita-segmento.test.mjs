@@ -97,6 +97,26 @@ test('ATTIVITA-D1-03 — il riassunto: parti intere e brevi, ragionamenti in cod
   for (const p of [...r.parti, ...r.partiBrevi]) assert.doesNotMatch(p, /…$/);
 });
 
+/*
+ * Owner 10/10/2026 («· 2 in corso»): quattro comandi, due IN PARALLELO, uno finito e uno sfondato. La carta diceva «2 comandi» e
+ * il secondo in corso spariva (nota di «talos desktop»). I conteggi restano dei finiti; i vivi si contano a parte, tutti.
+ */
+test('ATTIVITA-PARALLELO-01 — two commands running at once: the finished are counted, and «2 in corso» says the running ones, the narrated one included', () => {
+  const shell = (comando, stato) => attrezzo('shell', { comando }, stato);
+  const quattro = riassuntoVoci([shell('npm run dev', 'riuscito'), shell('npm test', 'riuscito'), shell('npm run lint', 'in-corso'), shell('npm run build', 'in-corso')]);
+  assert.deepEqual(quattro.parti, ['2 comandi', '2 in corso']);
+  assert.deepEqual(quattro.partiBrevi, ['2 comandi', '2 in corso']);
+  assert.equal(quattro.inCorso.argomenti.comando, 'npm run build', 'the narrated one is still the last running');
+  /* AL CONTRARIO: uno solo in corso lo racconta già la frase viva — la riga resta quella di prima */
+  const uno = riassuntoVoci([shell('npm test', 'riuscito'), shell('npm run build', 'in-corso')]);
+  assert.deepEqual(uno.parti, ['1 comando']);
+  /* la frase viva racconta un ragionamento: l'attrezzo in corso non lo dice nessuno, quindi si conta */
+  const sotto = riassuntoVoci([shell('npm run build', 'in-corso'), ragionamento('**Aspetto il build**', null, 'in-corso')]);
+  assert.deepEqual(sotto.parti, ['1 in corso']);
+  /* nessun attrezzo in corso: niente parte nuova, anche con un ragionamento vivo */
+  assert.deepEqual(riassuntoVoci([shell('npm test', 'riuscito'), ragionamento('…', null, 'in-corso')]).parti, ['1 comando']);
+});
+
 test('ATTIVITA-D3-01 — un fallimento si conta rosso e PER SPECIE, e non finisce fra i riusciti', () => {
   const r = riassuntoVoci([
     attrezzo('cerca', { testo: 'formattaConteggioAttivita' }),

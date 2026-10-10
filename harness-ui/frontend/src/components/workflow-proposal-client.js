@@ -87,12 +87,31 @@ export function creaClientProposta({ fetchFn = globalThis.fetch, API = (p) => p,
     if (!dati?.error?.code && risposta.status >= 500) return { ambiguo: true };
     return { ok: false, code: dati?.error?.code ?? null, status: risposta.status };
   };
-  /** Approva: `commandId` nuovo per ogni gesto; esito ambiguo ⇒ si rilegge, e se risulta approvato è riuscito. */
+  /*
+   * ⛔ C11 (coda Codex, A-WF-APPROVAL-ATTRIBUTION riprodotto il 07/10; bugfixer 10/10/2026): la rilettura dopo un esito ambiguo
+   *   leggeva la revisione PIÙ RECENTE (`leggi` segue le versioni) e dichiarava riuscito qualunque «approved» — anche la versione
+   *   2 approvata da altri mentre il gesto chiedeva la 1 con l'hash A. E `rivedi` prendeva qualunque versione maggiore per la
+   *   propria. Come `avvia` qui sotto («un run della stessa versione non prova QUESTO comando»): si rilegge la versione ESATTA.
+   *   La prova dell'approvazione è QUESTA versione, con QUESTO hash, approvata col `commandId` di QUESTO gesto: la vista lo
+   *   porta (`proposalReview` → `approval`, `planning-control.mjs:161`; `APPROVAL_FIELDS` in `store.mjs:32-35` lo richiede).
+   *   ⛔ Review della sessione desktop (Y1): approvata con lo stesso hash ma da un ALTRO comando (un'altra finestra, l'avvio da
+   *   solo) è vero che la versione è approvata, ma non è merito di questo clic ⇒ `daAltroComando: true`, che nessuno attribuisce
+   *   alla persona. Per la revisione: la versione N+1 coi tetti chiesti (il server la deriva dal contenuto, non c'è `commandId`).
+   */
+  const leggiVersione = async (workflowId, version) => {
+    try {
+      const r = await leggiJson(`/api/v1/workflows/${encodeURIComponent(workflowId)}/versions/${version}`);
+      return r.status === 200 && r.corpo?.data ? r.corpo.data : null;
+    } catch { return null; }
+  };
+  /** Approva: `commandId` nuovo per ogni gesto; esito ambiguo ⇒ si rilegge QUESTA versione: riuscito se è approvata con QUESTO hash e QUESTO `commandId`. */
   async function approva({ workflowId, version, definitionHash }) {
-    const esito = await comando(`/api/v1/workflows/${encodeURIComponent(workflowId)}/versions/${version}/approve`, { commandId: uuid(), definitionHash });
+    const commandId = uuid();
+    const esito = await comando(`/api/v1/workflows/${encodeURIComponent(workflowId)}/versions/${version}/approve`, { commandId, definitionHash });
     if (!esito.ambiguo) return esito;
-    const dopo = await leggi({ workflowId, version }).catch(() => null);
-    return dopo?.revisione?.status === 'approved' ? { ok: true, riletto: true } : { ok: false, ambiguo: true };
+    const questa = await leggiVersione(workflowId, version);
+    if (questa?.version !== version || questa.definitionHash !== definitionHash || questa.status !== 'approved') return { ok: false, ambiguo: true };
+    return questa.approval?.commandId === commandId ? { ok: true, riletto: true } : { ok: true, riletto: true, daAltroComando: true };
   }
   /** Avvia: stessa regola; esito ambiguo ⇒ si rileggono i run di questa versione. */
   async function avvia({ workflowId, version, definitionHash }) {
@@ -104,7 +123,8 @@ export function creaClientProposta({ fetchFn = globalThis.fetch, API = (p) => p,
   }
   /**
    * F3-33b: «Modifica» i tetti ⇒ la versione N+1. Nessun `commandId`: la versione nasce dal contenuto, quindi lo stesso gesto
-   * ripetuto ritrova la stessa versione (server). Esito ambiguo ⇒ si rilegge: se esiste una versione dopo questa, è riuscito.
+   * ripetuto ritrova la stessa versione (server). Esito ambiguo ⇒ si rilegge la versione N+1 ESATTA: è riuscito solo se porta
+   * i tetti chiesti (C11: prima bastava una versione qualunque dopo questa, anche nata da un'altra modifica).
    */
   async function rivedi({ workflowId, version, definitionHash, budgets }) {
     let risposta;
@@ -115,8 +135,10 @@ export function creaClientProposta({ fetchFn = globalThis.fetch, API = (p) => p,
     const dati = risposta ? await risposta.json().catch(() => null) : null;
     if (risposta?.ok) return { ok: true, dati: dati?.data ?? null };
     if (risposta && (dati?.error?.code || risposta.status < 500)) return { ok: false, code: dati?.error?.code ?? null, status: risposta.status };
-    const dopo = await leggi({ workflowId, version }).catch(() => null);
-    return dopo?.revisione?.version > version ? { ok: true, riletto: true } : { ok: false, ambiguo: true };
+    const dopo = await leggiVersione(workflowId, version + 1);
+    const tettiChiesti = dopo?.version === version + 1 && dopo.budgets && typeof budgets === 'object' && budgets !== null
+      && Object.keys(budgets).length > 0 && Object.entries(budgets).every(([chiave, valore]) => dopo.budgets[chiave] === valore);
+    return tettiChiesti ? { ok: true, riletto: true } : { ok: false, ambiguo: true };
   }
   return Object.freeze({ leggi, approva, avvia, rivedi });
 }

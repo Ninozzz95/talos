@@ -2046,9 +2046,9 @@ export function creaResearchOrchestrator({
 
   function mettiInPausa({ id }) {
     const voce = sessioni.get(id);
-    if (!voce) return { ok: false, esito: 'There is no research with that id. Call research_list to see the current ones.' };
+    if (!voce) return { ok: false, esito: 'There is no research with that id. Call research_find to see the current ones.' };
     if (voce.conclusa) {
-      return { ok: false, esito: 'That research is not running: it may already be paused, cancelled or done. Call research_list to see how it stands.' };
+      return { ok: false, esito: 'That research is not running: it may already be paused, cancelled or done. Call research_find to see how it stands.' };
     }
     voce._ricercaTerminataRichiesta = 'paused';
     voce.controller.abort();
@@ -2064,7 +2064,7 @@ export function creaResearchOrchestrator({
 
   function annulla({ id }) {
     const voce = sessioni.get(id);
-    if (!voce) return { ok: false, esito: 'There is no research with that id. Call research_list to see the current ones.' };
+    if (!voce) return { ok: false, esito: 'There is no research with that id. Call research_find to see the current ones.' };
     if (voce.conclusa) {
       // ⭐ una ricerca già ferma (in pausa, o già conclusa) si annulla lo stesso: cambia solo la metadata (terminata:'cancelled'), nessun abort da fare — mai un rifiuto per un caso che mobile stesso permette (research_cancel su una "paused"/"unfinished").
       return Promise.resolve().then(() => cartellaDatiDiVoceFn(voce))
@@ -2127,7 +2127,7 @@ export function creaResearchOrchestrator({
 
   async function riprendi({ id, automatica = null }) {
     const voce = sessioni.get(id);
-    if (!voce) return { ok: false, esito: 'There is no research with that id. Call research_list to see the current ones.' };
+    if (!voce) return { ok: false, esito: 'There is no research with that id. Call research_find to see the current ones.' };
     const cartella = await cartellaDatiDiVoceFn(voce);
     /* ⛔ `auto` e `causa` solo quando la ripresa è davvero automatica: una riga che dicesse `auto:false` su ogni ripresa a mano sarebbe rumore, e il cancello della ripresa automatica legge proprio `auto === true`. */
     const rigaDiRipresa = automatica ? { kind: 'run_resumed', auto: true, causa: automatica } : { kind: 'run_resumed' };
@@ -2276,7 +2276,7 @@ export function creaResearchOrchestrator({
 
   async function rinomina({ cartella, id, title }) {
     const aggiornata = await aggiornaRicercaFn({ cartella, id, titolo: title });
-    if (!aggiornata) return { ok: false, esito: 'There is no research with that id. Call research_list to see the current ones.' };
+    if (!aggiornata) return { ok: false, esito: 'There is no research with that id. Call research_find to see the current ones.' };
     // ⭐ L4 — `run_renamed` è uno degli undici eventi: un giro rigiocato deve riprendere anche il suo nome, non solo il suo stato.
     await registra(cartella, id, { kind: 'run_renamed', title: title ?? null });
     return {

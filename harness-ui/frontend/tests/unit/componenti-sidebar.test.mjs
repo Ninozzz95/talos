@@ -97,7 +97,7 @@ test('statoSessione: l\'ordine degli stati — attesa prima di vivo, interrotta 
   assert.equal(statoSessione({ conclusa: false }).classe, 'vivo');
   assert.equal(statoSessione({ conclusa: true, interrotta: true, ultimoEsito: 'successo' }).classe, 'interrotto');
   assert.equal(statoSessione({ conclusa: true, ultimoEsito: 'errore' }).testo, 'errore');
-  assert.equal(statoSessione({ conclusa: true, ultimoEsito: 'errore', motivoChiusura: 'giri-finiti' }).testo, 'giri finiti');
+  assert.equal(statoSessione({ conclusa: true, ultimoEsito: 'errore', motivoChiusura: 'giri-finiti' }).testo, 'tetto di richieste raggiunto');
   assert.equal(statoSessione({ conclusa: true, ultimoEsito: 'successo' }).tono, 'success');
 });
 

@@ -251,7 +251,7 @@ test('⭐⭐⭐⭐ PARITÀ — ciò che scrive la persona lo vede l’attrezzo d
   const memoriaLetta = (await (await fetch(`${base}${perSessione(`/memory/${memoriaDelModello.id}`)}`)).json()).data.memoria;
   assert.equal(memoriaLetta.origine, 'modello');
 
-  // 5) e una attività creata dalla persona è nell'elenco che legge l'attrezzo `tasks_list`.
+  // 5) e una attività creata dalla persona è nell'elenco che legge l'attrezzo `tasks_find` (C5: era `tasks_list`).
   await scrivi(base, perSessione('/tasks'), 'POST', { titolo: 'Dalla persona' });
   const attivitaDelModelloElenco = await elencaAttivita({ cartella: cartellaAttivita });
   assert.deepEqual(attivitaDelModelloElenco.map((a) => a.origine).sort(), ['modello', 'persona']);

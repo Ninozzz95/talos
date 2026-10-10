@@ -29,7 +29,7 @@ function rigaFinta({ stato = 'vivo', tono = 'live', testo = 'in corso · glm-5.3
     };
     return nodo;
   };
-  const doc = { createElement: (tag) => ({ tag, textContent: '', ownerDocument: doc, figliArray: [], append() {} }) };
+  const doc = { createElement: (tag) => ({ tag, textContent: '', ownerDocument: doc, figliArray: [], dataset: {}, append() {} }) }; // `dataset` c'è in ogni elemento vero
   const pallino = crea(`talos-dot talos-dot--sm${tono ? ` talos-dot--${tono}` : ''}`, '');
   const testoStato = crea('talos-session-item__state', testo);
   const aside = crea('talos-session-item__aside', '');
@@ -47,17 +47,17 @@ function rigaFinta({ stato = 'vivo', tono = 'live', testo = 'in corso · glm-5.3
 }
 
 test('N1: lo stato e i giri cambiano sul posto, e la funzione dice che ha fatto qualcosa', () => {
-  const riga = rigaFinta({ stato: 'attesa', tono: 'warning', testo: 'aspetta te · glm-5.3-flash', giri: '2 giri' });
+  const riga = rigaFinta({ stato: 'attesa', tono: 'warning', testo: 'aspetta te · glm-5.3-flash', giri: '2 richieste al modello' });
   const cambiato = aggiornaSessionItem(riga, { stato: { classe: 'vivo', testo: 'in corso', tono: 'live' }, giri: 5 });
   assert.equal(cambiato, true);
   assert.equal(riga.dataset.sessionState, 'vivo');
   assert.equal(riga.pezzi.pallino.className, 'talos-dot talos-dot--sm talos-dot--live');
   assert.equal(riga.pezzi.testoStato.textContent, 'in corso · glm-5.3-flash', 'il modello resta: chi chiama non lo passa, e cancellarlo sarebbe una perdita');
-  assert.equal(riga.pezzi.aside.lastElementChild.textContent, '5 giri');
+  assert.equal(riga.pezzi.aside.lastElementChild.textContent, '5 richieste al modello');
 });
 
 test('N1, AL CONTRARIO: se niente è cambiato non si tocca il DOM', () => {
-  const riga = rigaFinta({ stato: 'vivo', tono: 'live', testo: 'in corso · glm-5.3-flash', giri: '3 giri' });
+  const riga = rigaFinta({ stato: 'vivo', tono: 'live', testo: 'in corso · glm-5.3-flash', giri: '3 richieste al modello' });
   const cambiato = aggiornaSessionItem(riga, { stato: { classe: 'vivo', testo: 'in corso', tono: 'live' }, giri: 3 });
   assert.equal(cambiato, false, '⛔ riscrivere lo stesso testo cancella la selezione di chi sta leggendo');
 });
@@ -65,7 +65,7 @@ test('N1, AL CONTRARIO: se niente è cambiato non si tocca il DOM', () => {
 test('N1: il singolare si flette — «1 giro», non «1 giri»', () => {
   const riga = rigaFinta({ giri: null });
   aggiornaSessionItem(riga, { giri: 1 });
-  assert.equal(riga.pezzi.aside.lastElementChild.textContent, '1 giro');
+  assert.equal(riga.pezzi.aside.lastElementChild.textContent, '1 richiesta al modello');
 });
 
 /*
@@ -76,15 +76,31 @@ test('N1, AL CONTRARIO: su una riga senza giri il conteggio si AGGIUNGE, non cop
   const riga = rigaFinta({ giri: null, ora: '08:37' });
   aggiornaSessionItem(riga, { giri: 4 });
   const dentro = riga.pezzi.aside.figliArray.map((f) => f.textContent);
-  assert.deepEqual(dentro, ['08:37', '4 giri'], '⛔ se l’ora sparisce, questa prova ha fatto il suo lavoro');
+  assert.deepEqual(dentro, ['08:37', '4 richieste al modello'], '⛔ se l’ora sparisce, questa prova ha fatto il suo lavoro');
+});
+
+/*
+ * ⛔ TACCUINO (09/10/2026, bugfixer): il conteggio si riconosceva dalla PAROLA, e quando è diventato «richieste al modello» ogni
+ *   aggiornamento ne aggiungeva uno NUOVO accanto al vecchio. Ora lo ritrova il segno `data-conteggio` messo da chi lo crea: anche
+ *   con una parola che il ripiego non conosce (un'altra lingua, una parola futura), il conteggio è uno solo.
+ */
+test('TACCUINO-CONTEGGIO — il conteggio si ritrova dal suo segno, non dalla parola: niente doppioni', () => {
+  const riga = rigaFinta({ giri: null });
+  aggiornaSessionItem(riga, { giri: 2 });
+  const creato = riga.pezzi.aside.lastElementChild;
+  assert.equal(creato.dataset?.conteggio, '', 'chi crea il conteggio lo segna');
+  creato.textContent = '2 ⟦parola che nessuno conosce⟧';
+  aggiornaSessionItem(riga, { giri: 3 });
+  assert.equal(riga.pezzi.aside.figliArray.length, 2, 'l’ora e UN conteggio');
+  assert.equal(riga.pezzi.aside.lastElementChild.textContent, '3 richieste al modello');
 });
 
 test('N1, AL CONTRARIO: senza stato si aggiornano solo i giri — è il caso di una sessione che aspetta te', () => {
-  const riga = rigaFinta({ stato: 'attesa', tono: 'warning', testo: 'aspetta te · glm-5.3-flash', giri: '2 giri' });
+  const riga = rigaFinta({ stato: 'attesa', tono: 'warning', testo: 'aspetta te · glm-5.3-flash', giri: '2 richieste al modello' });
   aggiornaSessionItem(riga, { giri: 3 });
   assert.equal(riga.dataset.sessionState, 'attesa', '⛔ dire «in corso» a chi aspetta te è il difetto curato il 04/09');
   assert.equal(riga.pezzi.testoStato.textContent, 'aspetta te · glm-5.3-flash');
-  assert.equal(riga.pezzi.aside.lastElementChild.textContent, '3 giri');
+  assert.equal(riga.pezzi.aside.lastElementChild.textContent, '3 richieste al modello');
 });
 
 test('N1, AL CONTRARIO: un conteggio assente o zero non scrive «0 giri»', () => {

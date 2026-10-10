@@ -7,6 +7,7 @@ import {
   esitoDelegaDaRisultato,
   LIMITE_FIGLI_CONCORRENTI,
   LIMITE_PROFONDITA_DELEGA,
+  verdettoDelegaDaEventi,
 } from '../src/subagent-orchestrator.mjs';
 
 /*
@@ -330,7 +331,10 @@ test('⭐⭐⭐ delegaSottoTask: avvio riuscito — torna AVVIATO subito e il te
   await new Promise((r) => setImmediate(r));
   assert.equal(terminali.length, 1);
   assert.equal(terminali[0].childId, 'figlio-vero');
-  assert.deepEqual(terminali[0].risultato, { riassunto: 'fatto per davvero', esito: 'concluso' });
+  // C3 tappa 4 (owner 09/10): modalità «modifica» e nessuna scrittura ⇒ concluso, con la nota detta al padre
+  assert.deepEqual(terminali[0].risultato, { riassunto: 'fatto per davvero', esito: 'concluso', verdetto: 'strutturato', nota: 'nessuna-modifica',
+    motivo: 'Note: the sub-agent could change files but made no change. Check whether a change was needed.' });
+  assert.equal(sessioni.get('figlio-vero').notaDelega, 'nessuna-modifica', 'the note stays on the child, for the interface');
 });
 
 test('⛔⛔ AL CONTRARIO — la Promise di delega NON resta pending fino alla figlia: la madre può proseguire mentre il figlio è vivo', async () => {
@@ -369,7 +373,8 @@ test('⛔⛔⛔ AL CONTRARIO — avviaESeguiFn che rifiuta SUBITO (es. chiave AP
  */
 test('esitoDelegaDaRisultato: ok:true → concluso, riassunto = esito.detto VERO', () => {
   const r = esitoDelegaDaRisultato({ ok: true, esito: { detto: 'ho finito il lavoro', comeFinita: 'concluso' } });
-  assert.deepEqual(r, { riassunto: 'ho finito il lavoro', esito: 'concluso' });
+  // C3 tappa 4: senza contratto della delega il verdetto dichiara che viene dal ripiego dei giornali vecchi
+  assert.deepEqual(r, { riassunto: 'ho finito il lavoro', esito: 'concluso', verdetto: 'euristico' });
 });
 
 test('esitoDelegaDaRisultato: ok:true ma detto vuoto/assente → riassunto onesto, mai una stringa vuota silenziosa', () => {
@@ -414,7 +419,9 @@ test('⭐⭐ J — una StateDelta /file/ è evidenza sufficiente per mantenere c
   assert.equal(r.esito, 'concluso');
 });
 
-test('⛔ J — una tool-call riuscita senza file non basta quando il task chiede una modifica', () => {
+/* C3 tappa 4 (owner 09/10, «fatti strutturati + nota»): prima era «fallito». Una modifica chiesta e non fatta resta conclusa,
+   e il padre lo legge nella nota — come Hermes, che giudica dai fatti e non dal compito. */
+test('⛔ J (C3 stage 4) — a successful tool call with no file, on a task that asks a change: concluded, with the «no change made» note', () => {
   const r = esitoDelegaDaRisultato(
     { ok: true, esito: { detto: 'Ho aggiunto il test.', comeFinita: 'concluso' } },
     [
@@ -423,8 +430,8 @@ test('⛔ J — una tool-call riuscita senza file non basta quando il task chied
     ],
     { task: 'Aggiungi un test al file test/gioco.test.mjs e verifica la suite.' },
   );
-  assert.equal(r.esito, 'fallito');
-  assert.match(r.motivo, /writes or artifacts/i);
+  assert.deepEqual([r.esito, r.nota], ['concluso', 'nessuna-modifica']);
+  assert.match(r.motivo, /could change files but made no change/u);
 });
 
 test('⭐⭐ J — il callback associa e consegna il verdetto anche se arriva prima che avviaESeguiFn restituisca il sessionId', async () => {
@@ -464,10 +471,11 @@ test('⭐⭐ J — il ripristino da eventi distingue RunFinished senza prova ope
     { type: 'StateDelta', delta: [{ op: 'replace', path: '/file/src/modulo.js', value: 'ok' }] },
     { type: 'RunFinished', outcome: { type: 'success' } },
   ]), 'concluso');
-  assert.equal(esitoDelegaDaEventi([
+  // C3 tappa 4: la modifica chiesta e non fatta è la NOTA, ricostruita anche al ripristino
+  assert.deepEqual(verdettoDelegaDaEventi([
     { type: 'ToolCallResult', content: 'Saved the note «controllo completato».' },
     { type: 'RunFinished', outcome: { type: 'success' } },
-  ], { task: { consegna: 'Modifica il file test/gioco.test.mjs aggiungendo un test.' } }), 'fallito');
+  ], { task: { consegna: 'Modifica il file test/gioco.test.mjs aggiungendo un test.' } }), { esito: 'concluso', nota: 'nessuna-modifica', verdetto: 'euristico' });
   assert.equal(esitoDelegaDaEventi([{ type: 'RunError', code: 'internal-error', message: 'no' }]), 'fallito');
 });
 

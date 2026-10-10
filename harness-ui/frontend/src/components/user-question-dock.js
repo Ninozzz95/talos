@@ -33,6 +33,17 @@ import { t, tn } from './lingua.js';
  */
 const ID_ANNUNCIO = 'talosAnnuncioDomanda';
 let prossimoIdOpzione = 0;
+/*
+ * C10 (10/10/2026, bugfixer) — OGNI SCHEDA HA I SUOI GRUPPI DI RADIO. Il nome era `question-<id>`, e l'id lo sceglie il modello
+ *   («scelta», «approccio»): due schede aperte insieme (C2-Q, due figlie che chiedono nella conversazione del padre) con lo stesso
+ *   id facevano UN gruppo solo, e scegliere nella seconda toglieva la scelta dalla prima — a schermo sparita, nella bozza ancora lì.
+ *   Misurato nel browser vero (sonda C10, Chromium): dopo «A» nella prima e «B» nella seconda, la prima aveva A:false.
+ * Fonte (consultata il 10/10/2026): HTML Standard, «radio button group» — stesso proprietario di form (o nessuno), stesso
+ *   albero, stesso `name` (WHATWG r7412, https://lists.whatwg.org/pipermail/commit-watchers-whatwg.org/2012/014275.html; W3C bug
+ *   16400). Hermes non ha il problema perché ogni blocco domanda tiene il suo stato (`apps/desktop/src/components/assistant-ui/
+ *   clarify/core/choice-row.tsx:77-91`, pulsanti `aria-pressed`). ⇒ Qui: il nome porta un numero della scheda.
+ */
+let prossimoIdScheda = 0;
 
 function testoAnnuncio(questions) {
   const testi = questions.map((entry) => String(entry?.question || '').trim()).filter(Boolean);
@@ -172,6 +183,7 @@ export function mountUserQuestionDock({ root, composer, question, onSubmit, annu
   actions.append(backButton, skipButton, editButton, confirmSkipButton, nextButton, reviewButton, sendButton);
   card.append(head, answerPane, reviewPane, receiptPane, notice, actions);
   const fields = [];
+  const gruppo = 'question-' + (++prossimoIdScheda) + '-';
   let stage = 'answer';
   let corrente = 0;
   let busy = false;
@@ -289,7 +301,7 @@ export function mountUserQuestionDock({ root, composer, question, onSubmit, annu
         const label = make('label', 'sheet-toggle-row');
         const input = make('input');
         input.type = field.multi ? 'checkbox' : 'radio';
-        input.name = 'question-' + id;
+        input.name = gruppo + id;
         input.value = String(option.label || '');
         /* ⛔ 23/09/2026, riparazione D7 — «StabilePer tutti»: etichetta e descrizione erano due inline
            attaccati, a schermo e nel nome accessibile. Ora il nome è la sola etichetta e la descrizione

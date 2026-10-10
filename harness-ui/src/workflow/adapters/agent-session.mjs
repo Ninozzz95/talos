@@ -20,6 +20,14 @@ import { separaFonteModello } from '../../model-destination.mjs';
  */
 export const AGENT_SESSION_ADAPTER_ID = 'talos.agent-session.v1';
 const SUMMARY_MAX = 4_096;
+/**
+ * C3 tappa 2b — la frase di verifica di «Riprendi verificando» (contratto §2: per il modello, in inglese). Il tentativo prima
+ * può aver già fatto il lavoro: prima si controlla, poi si finisce solo ciò che manca.
+ */
+export const FRASE_DI_VERIFICA = 'A previous attempt at this step may already have done the work, or part of it, before it was stopped. '
+  + 'Check first whether the effect is already there. If it is, report what you found and stop. If it is not, finish the task.';
+/** C3 tappa 2a: quanto si aspetta che una sessione fermata (non di questo processo) risulti chiusa nel registro. */
+const ATTESA_CHIUSURA_MS = 15_000;
 
 function sha256(text) {
   return `sha256:${createHash('sha256').update(text, 'utf8').digest('hex')}`;
@@ -131,8 +139,23 @@ export function createAgentSessionAdapter({ sessions, nowMsFn = () => Date.now()
     const modelloChiesto = step.modelPolicy?.mode === 'explicit' ? step.modelPolicy.model : (ctx.run?.sessionModel ?? null);
     const consegna = consegnaDelPasso(step, ctx.predecessors, { runId: ctx.run?.runId ?? null }); // F-014 (§1.6): la FRASE del moncone nomina il run
     const inizio = nowMsFn();
-    const avvio = sessions.avviaSessioneDiPasso({ legame: legameDa(ctx), rootSessionId: ctx.run?.rootSessionId ?? null,
-      consegna, titolo: step.label, modello: modelloChiesto });
+    /*
+     * ⭐ C3 tappa 2b (09/10/2026, contratto §2-bis punto 2, decisione owner 09/10 sera) — «Riprendi verificando»: il tentativo
+     *   riprende la sessione del tentativo deciso dalla persona con un MESSAGGIO NUOVO, la frase di verifica (il modello ha la storia
+     *   di prima). Se quella sessione non c'è più (eliminata), una sessione nuova con la stessa frase davanti al compito: la
+     *   verifica resta, si perde solo la storia — e si dice nella consegna.
+     */
+    const sessioneDaRiprendere = ctx.ripresa?.activityExecutionId && typeof sessions.riprendiSessioneDiPasso === 'function'
+      ? sessions.trovaSessioneDiPasso({ activityExecutionId: ctx.ripresa.activityExecutionId }) : null;
+    const ripresa = sessioneDaRiprendere
+      ? await sessions.riprendiSessioneDiPasso({ sessionId: sessioneDaRiprendere, legame: legameDa(ctx), consegna: FRASE_DI_VERIFICA })
+      : null;
+    /* ⛔ Y-2b-1 (review del bugfixer, 09/10): se la sessione di prima rifiuta la ripresa, la verifica si fa lo stesso in una
+       sessione NUOVA con la frase davanti (il registro ha già rimesso quella di prima al suo tentativo) — mai un fallimento
+       interno non ritentabile per un rifiuto che dice soltanto «non adesso». */
+    const avvio = ripresa && !ripresa.erroreAvvio ? ripresa
+      : sessions.avviaSessioneDiPasso({ legame: legameDa(ctx), rootSessionId: ctx.run?.rootSessionId ?? null,
+        consegna: ctx.ripresa ? `${FRASE_DI_VERIFICA}\n\n${consegna}` : consegna, titolo: step.label, modello: modelloChiesto });
     if (!avvio || avvio.erroreAvvio) {
       return fallito(avvio?.code === 'WORKFLOW_ROOT_SESSION_NOT_FOUND' || avvio?.code === 'QUERY_INVALID' ? 'validation' : 'internal');
     }
@@ -206,6 +229,23 @@ export function createAgentSessionAdapter({ sessions, nowMsFn = () => Date.now()
     if (!sessionId) return { outcome: 'cancelled', evidenceResultIds: [] };
     sessions.ferma(sessionId);
     if (vivo) await vivo.fine.catch(() => {});
+    else {
+      /*
+       * C3 tappa 2a (09/10/2026, contratto §2-bis): una sessione che non gira QUI (il tentativo è incerto) si ferma e si ASPETTA
+       *   chiusa, così niente di quel tentativo scrive dopo la decisione della persona. Il registro dice «in-corso» finché vive;
+       *   se non si chiude entro il tempo, l'esito è «unknown» e chi chiede non decide sopra una sessione viva.
+       * ⛔ Y-v2-1 (review del bugfixer, 09/10): «chiusa» solo con un esito LETTO e diverso da `in-corso`. Una lettura che lancia
+       *   (EBUSY) o un registro illeggibile (`null`, `session-registry.mjs` `leggiEsitoSessioneDiPasso`) sono «non so»: si
+       *   continua ad aspettare fino al limite. La sessione esiste di sicuro: `trovaSessioneDiPasso` l'ha appena trovata.
+       */
+      const limite = nowMsFn() + ATTESA_CHIUSURA_MS;
+      for (;;) {
+        const esito = await sessions.leggiEsitoSessioneDiPasso({ sessionId }).catch(() => null);
+        if (esito && esito.esito !== 'in-corso') break;
+        if (nowMsFn() > limite) return { outcome: 'unknown', evidenceResultIds: [] };
+        await new Promise((fatto) => setTimeout(fatto, 100));
+      }
+    }
     return { outcome: 'cancelled', evidenceResultIds: [] };
   }
 

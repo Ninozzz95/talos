@@ -1049,16 +1049,24 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
     const dove = el(doc, 'span', 'talos-github-riga__cartella', voce.da ? `${cartellaDi(voce.percorso)} ← ${voce.da}`.replace(/^ ← /u, '← ') : cartellaDi(voce.percorso));
     apri.append(segno, nome, dove);
     apri.setAttribute('aria-label', `${voce.percorso}, ${parola}`);
+    /* C34 (review del desktop, R1): la scheda ora si ridisegna da sola mentre il modello scrive; senza una chiave il fuoco della
+       tastiera tornava a <body> a ogni ridisegno. La chiave è riga + gruppo + controllo: la stessa riga ritrova il suo controllo. */
+    apri.dataset.fuoco = `riga:${gruppo}:${voce.percorso}:apri`;
     apri.title = `${voce.percorso} · ${parola}`;
     if (!voce.cartella) apri.addEventListener('click', () => apriDiff(voce.percorso, gruppo === 'preparati' ? 'preparato' : 'lavoro'));
     else apri.disabled = true;
     riga.append(apri);
     const principale = azionePrincipale(gruppo);
-    if (principale) riga.append(bottoneTesto(doc, principale.etichetta, () => principale.fai(voce)));
+    if (principale) {
+      const azione = bottoneTesto(doc, principale.etichetta, () => principale.fai(voce));
+      azione.dataset.fuoco = `riga:${gruppo}:${voce.percorso}:azione`;
+      riga.append(azione);
+    }
     const voci = vociMenuRiga(voce, gruppo);
     if (voci.length) {
       const altro = bottoneIcona(doc, 'i-more', t("github.common.moreActionsOn", { name: nomeDi(voce.percorso) }), (e) => menu(voci, { ancoraEl: e.currentTarget, focusElement: e.currentTarget }));
       altro.setAttribute('aria-haspopup', 'menu');
+      altro.dataset.fuoco = `riga:${gruppo}:${voce.percorso}:altro`;
       riga.append(altro);
       riga.addEventListener('contextmenu', (e) => { e.preventDefault(); menu(voci, { x: e.clientX, y: e.clientY, focusElement: altro }); });
     }
@@ -1130,6 +1138,7 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
       const voci = [{ etichetta: t("github.stash.drop.action"), icona: 'i-trash', pericoloso: true, azione: () => { void scarta(v); } }];
       const altro = bottoneIcona(doc, 'i-more', t("github.stash.row.moreActions"), (e) => menu(voci, { ancoraEl: e.currentTarget, focusElement: e.currentTarget, etichetta: t("github.stash.row.actions") }));
       altro.setAttribute('aria-haspopup', 'menu');
+      altro.dataset.fuoco = `accantonato:${v.commit}:altro`; // C34 R1: il fuoco sopravvive al ridisegno automatico
       riga.append(altro);
       riga.addEventListener('contextmenu', (e) => { e.preventDefault(); menu(voci, { x: e.clientX, y: e.clientY, focusElement: altro, etichetta: t("github.stash.row.actions") }); });
       lista.append(riga);

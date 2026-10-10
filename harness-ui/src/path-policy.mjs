@@ -170,7 +170,14 @@ export const PERCORSI_SEGRETI = Object.freeze({
   //   Le due liste dicono due cose diverse sullo stesso file, e vanno tenute entrambe.
   // ⛔ 08/10/2026 (F-S-001, «come Hermes»): `.envrc` — il file di direnv, che esporta variabili d'ambiente e quindi segreti;
   //   Hermes lo blocca in lettura con le varianti di `.env` (`agent/file_safety.py:332-334`, clone 65ad529). Qui mancava.
-  nomiFile: Object.freeze(['.netrc', '_netrc', '.npmrc', '.pypirc', '.pgpass', '.git-credentials', '.provider-runtime.json', '.envrc']),
+  /* ⛔ 09/10/2026 (stress test della 0.5.0; owner «Insieme stretto (Consigliata)»): `secrets.json` usciva nella ricerca e si leggeva
+     senza domanda. Nessun concorrente ha una lista generale (Hermes protegge solo i suoi file, `agent/file_safety.py`; Claude Code
+     propone `Read(./secrets/**)` e `Read(./config/credentials.json)` come regole da scrivere, docs «Settings»): qui l'insieme
+     stretto e NOMI ESATTI — `secrets.*` nei quattro formati di configurazione, `.secrets`, `credentials.json` (il segreto OAuth
+     di Google) — più le chiavi di account di servizio (`SERVICE_ACCOUNT` qui sotto). `secrets.example.json` e `secret_manager.py`
+     restano pubblici. */
+  nomiFile: Object.freeze(['.netrc', '_netrc', '.npmrc', '.pypirc', '.pgpass', '.git-credentials', '.provider-runtime.json', '.envrc',
+    'secrets.json', 'secrets.yaml', 'secrets.yml', 'secrets.toml', '.secrets', 'credentials.json']),
   prefissiNome: Object.freeze(['id_rsa', 'id_ed25519', 'id_ecdsa', 'id_dsa']),
   estensioni: Object.freeze(['.pem', '.key', '.p12', '.pfx', '.jks', '.keystore', '.ppk']),
   esenzioni: Object.freeze(['.pub', '.example', '.sample', '.template', '.dist']),
@@ -228,8 +235,12 @@ function eNomeSegreto(base) {
   if (PERCORSI_SEGRETI.nomiFile.includes(b)) return true;
   if (PERCORSI_SEGRETI.prefissiNome.some((p) => b.startsWith(p))) return true;
   if (PERCORSI_SEGRETI.estensioni.some((e) => b.endsWith(e))) return true;
+  if (SERVICE_ACCOUNT.test(b)) return true;
   return false;
 }
+/* La chiave JSON di un account di servizio (Google Cloud la scarica come `<progetto>-<id>.json`, e la si rinomina quasi sempre
+   `service-account*.json`): un nome che dice «service account» e finisce in `.json`. */
+const SERVICE_ACCOUNT = /service[-_]?account[^/]*\.json$/u;
 
 /** Un solo pezzo di testo (un percorso, o un token di un comando): appartiene alla classe dichiarata? */
 function classeDelPezzo(pezzo, home) {

@@ -527,6 +527,8 @@ test.describe('la scheda Provider — il vestito del mockup sul contenuto vero',
     await card.locator('[data-provider-modale-salva]').click();
     await expect.poll(() => salvataggi.length).toBe(1);
     expect(salvataggi[0].corpo.endpoint).toBe('https://esempio.test/v1');
+    // OWN-01 (09/10/2026): cambiato solo l'indirizzo, il tempo alla prima risposta NON parte (il predefinito del server resta suo)
+    expect(Object.hasOwn(salvataggi[0].corpo, 'timeoutSeconds'), JSON.stringify(salvataggi[0].corpo)).toBe(false);
     /* Owner 01/10/2026: dopo «Salva» la modale si CHIUDE e il successo si annuncia (prima restava aperta, senza un esito visibile). */
     await expect(card.locator(':scope > .talos-provider__modale'), 'dopo «Salva» la modale deve chiudersi').toHaveCount(0);
     await expect(page.locator('#regioneToast, #toastRegion').first(), 'il successo si annuncia').toContainText('Configurazione salvata');
@@ -551,6 +553,13 @@ test.describe('la scheda Provider — il vestito del mockup sul contenuto vero',
     await expect(card.locator('.talos-provider__fatti')).toContainText('Indirizzo personalizzato');
     if (await card.locator(':scope > .talos-provider__modale').count()) await card.locator('[data-provider-modale-annulla]').click();
     await expect(card.locator(':scope > .talos-provider__modale')).toHaveCount(0);
+
+    /* OWN-01: la voce «Salva collegamento» del menu ⋯ passa da app.js (`save-runtime`), un'altra strada dalla modale: tempo non
+       toccato ⇒ non parte nemmeno da lì. Il pulsante nascosto è quello che la voce del menu clicca (`aziona`). Prima della sonda:
+       dopo «Verifica accesso» il fornitore resta occupato per un attimo, e app.js ignora il clic. */
+    await page.locator('[data-provider-id="openai"] [data-provider-action="save-runtime"]').evaluate((b) => b.click());
+    await expect.poll(() => salvataggi.length).toBe(3);
+    expect(Object.hasOwn(salvataggi[2].corpo, 'timeoutSeconds'), JSON.stringify(salvataggi[2].corpo)).toBe(false);
 
     /* E la sonda: `data-provider-action="test"` è il nome che la regia riconosce. */
     const verifica = page.locator('#modelLabCard [data-model-lab-panel="providers"] [data-provider-id="openai"] .talos-provider__azioni [data-provider-action="test"]');

@@ -441,6 +441,11 @@ export const REGISTRO_FORNITORI = congela({
       // 12/09/2026 — https://platform.claude.com/docs/en/models/overview
       congela({ id: 'claude-sonnet-5', nome: 'Claude Sonnet 5', toolCalling: true,
         fonte: 'https://platform.claude.com/docs/en/models/overview', data: '2026-09-12' }),
+      /* 09/10/2026 — uscito il 07/10: 1M di contesto, 128K di uscita, ragionamento adattivo, tutti e cinque i livelli
+         (low/medium/high/xhigh/max), «medium» predefinito (docs effort, «Recommended effort levels for Claude Haiku 5.5»).
+         I livelli li dice la lista viva del fornitore (`capabilities.effort`); qui la riga per chi è senza rete. */
+      congela({ id: 'claude-haiku-5-5', nome: 'Claude Haiku 5.5', toolCalling: true,
+        fonte: 'https://platform.claude.com/docs/en/models/haiku-5-5/overview', data: '2026-10-09' }),
     ]),
     // 12/09/2026 — Haiku: 1/5 USD per milione ingresso/uscita, minimo tra i modelli correnti della fonte.
     modelloAusiliario: 'claude-haiku-4-5-20251001',

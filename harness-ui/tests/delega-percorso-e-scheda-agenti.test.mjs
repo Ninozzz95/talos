@@ -313,7 +313,8 @@ test('⭐⭐⭐ TRE DELEGHE SU TRE riescono dopo un tentativo storto, e la sched
     assert.equal(new Set(ricevute.map((ricevuta) => ricevuta.childId)).size, 3,
       'le tre ricevute devono riferirsi a tre figlie distinte');
 
-    for (const figlia of finto.avvii.slice(1)) figlia.concludi({ ok: true });
+    // C3 tappa 4 (09/10/2026): come la sessione vera, un giro concluso porta il suo testo; senza riassunto la delega non è finita
+    for (const figlia of finto.avvii.slice(1)) figlia.concludi({ ok: true, esito: { detto: 'Parte scritta.', comeFinita: 'concluso' } });
     await new Promise((resolve) => setImmediate(resolve));
 
     const figli = registro.elencaFigli(madreId).figli;

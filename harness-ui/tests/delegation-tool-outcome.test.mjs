@@ -47,9 +47,21 @@ test('DELEGHE01-EXIT: numeric process result is evidence; payload and numeric st
 test('DELEGHE01-LEGACY: old events and missing write evidence keep their protection', () => {
   assert.equal(esitoDelegaDaEventi([{ type: 'ToolCallResult', content: 'error: ENOENT' }, finale]), 'fallito');
   assert.equal(esitoDelegaDaEventi([{ type: 'ToolCallResult', content: 'contenuto letto' }, finale]), 'concluso');
-  assert.equal(esitoDelegaDaRisultato(risultato, [{ type: 'ToolCallResult', isError: false, content: 'ok' }],
-    { task: 'Aggiungi un test al file test/gioco.test.mjs e verifica la suite.' }).esito, 'fallito');
+  // C3 tappa 4 (owner 09/10, «fatti strutturati + nota»): la modifica chiesta e non fatta è una NOTA, non un fallimento
+  const senzaModifica = esitoDelegaDaRisultato(risultato, [{ type: 'ToolCallResult', isError: false, content: 'ok' }],
+    { task: 'Aggiungi un test al file test/gioco.test.mjs e verifica la suite.' });
+  assert.deepEqual([senzaModifica.esito, senzaModifica.nota, senzaModifica.verdetto], ['concluso', 'nessuna-modifica', 'euristico']);
   assert.equal(esitoDelegaDaEventi([{ type: 'ToolCallResult', isError: false, content: 'ok' }, { type: 'RunError', code: 'fermato' }]), 'fallito');
+});
+
+/* C3 tappa 4 — review del bugfixer su 0b3923e86 (mutante «verdetto sempre strutturato» sopravvissuto): con il contratto della
+   delega e risultati tipizzati il verdetto è «strutturato»; basta UN risultato di attrezzo senza `isError`/`exitCode` (lo
+   decide la regex) perché il verdetto dica «euristico». */
+test('C3-VERDETTO-EURISTICO: one untyped tool result makes the verdict «euristico», even with a declared contract', () => {
+  const task = { consegna: 'Read a.txt.', contrattoDelega: { schema: 'talos.delegation.v1', modalita: 'lettura' } };
+  assert.equal(esitoDelegaDaRisultato(risultato, [{ type: 'ToolCallResult', isError: false, content: 'ok' }], { task }).verdetto, 'strutturato');
+  assert.equal(esitoDelegaDaRisultato(risultato, [{ type: 'ToolCallResult', exitCode: 0, content: 'ok' }], { task }).verdetto, 'strutturato');
+  assert.equal(esitoDelegaDaRisultato(risultato, [{ type: 'ToolCallResult', isError: false, content: 'ok' }, { type: 'ToolCallResult', content: 'contenuto letto' }], { task }).verdetto, 'euristico');
 });
 
 test('DELEGHE01-CONFLICT: an explicit failure cannot be overridden by contradictory success metadata', () => {

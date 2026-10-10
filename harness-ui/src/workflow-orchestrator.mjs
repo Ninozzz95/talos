@@ -7,15 +7,20 @@ import {
   WorkflowAdmissionError, assertCapacityAvailable, validateCapacityPolicy,
 } from './workflow/admission.mjs';
 import {
+  aumentoPerFinire,
   releaseBudget as makeBudgetRelease,
   reserveBudget as makeBudgetReservation,
+  riservaDelPasso,
   settleBudget as makeBudgetSettlement,
   settleBudgetFromActivity as makeDurableBudgetSettlement,
+  WorkflowBudgetError,
+  fallitoSenzaConsumoDichiarato,
 } from './workflow/budget.mjs';
 import { putResultBytes } from './workflow/result-store.mjs';
 import { azioniConsentiteDelRun, codaDelRifiuto, motiviDiAttenzioneDelRun, passiFallitiDelRun, rifiutoDelControllo } from './workflow/azioni-del-run.mjs';
-import { runControlCommandHash } from './workflow/run-control.mjs';
-import { aumentoDelTettoPerRiprova, workflowStateProjection } from './workflow/run.mjs';
+import { isValidPersonSummary, isValidStepModelId } from './workflow/contract.mjs';
+import { raiseCeilingCommandHash, resolveNodeCommandHash, runControlCommandHash } from './workflow/run-control.mjs';import { STATI_FINALI_DEL_PASSO, STATI_FINALI_DEL_RUN } from './workflow/stati-finali.mjs';
+import { aumentoDelTettoPerRiprova, chiusuraConPassiMessiDaParte, workflowStateProjection } from './workflow/run.mjs';
 import { decidiDopoFallimento } from './workflow/scheduler.mjs';
 import {
   appendEvent, listActiveCapacityClaims, listRunIds, lookupCommandReceipt, readDefinition, readRunState,
@@ -27,7 +32,10 @@ const RESULT_KINDS = new Set(['json', 'text', 'artifact', 'commit', 'test-report
 const RESULT_TRUST = new Set(['untrusted', 'validated', 'deterministic-evidence']);
 const RESULT_SENSITIVITY = new Set(['public', 'workspace', 'secret-adjacent']);
 const SHA256 = /^sha256:[0-9a-f]{64}$/u;
-const TERMINAL_NODE_STATES_ORCH = new Set(['succeeded', 'failed', 'cancelled', 'skipped', 'superseded']);
+const TERMINAL_NODE_STATES_ORCH = new Set(STATI_FINALI_DEL_PASSO);
+const NON_BLOCKING_EDGES_ORCH = new Set(['retry', 'fallback']);
+// C3 tappa 2b: `resume-verify` («Riprendi verificando») vale SOLO per un passo incerto: un passo fallito non ha niente da verificare
+const AZIONI_SUL_PASSO = new Set(['mark-done', 'set-aside', 'retry-other-model', 'resume-verify']);
 
 export class WorkflowOrchestratorError extends Error {
   constructor(message, code = 'WORKFLOW_ORCHESTRATOR_INVALID', cause) {
@@ -336,6 +344,8 @@ export function createWorkflowOrchestrator({
     recoveryError = null;
     try {
       await activityRunner.recover({ runIds: recoveryRunIds, signal });
+      // C3: un'azione della persona interrotta a metà (fatto decisivo scritto, salti o ripresa no) si completa al riavvio
+      for (const runId of recoveryRunIds) await enqueue(operationQueues, runId, () => chiudiDopoLAzione(runId));
       runtimeState = 'ready';
       return status();
     } catch (error) {
@@ -397,7 +407,7 @@ export function createWorkflowOrchestrator({
    *   regola sola per il rifiuto e per ciò che si dice valido. Il rifiuto porta `allowedActions` e `attentionReasons`
    *   (additivi) e li nomina nel testo, così chi riceve il no sa che cosa può fare adesso e perché il run aspetta.
    */
-  const RUN_TERMINALI = new Set(['succeeded', 'failed', 'cancelled']);
+  const RUN_TERMINALI = new Set(STATI_FINALI_DEL_RUN);
   const rifiutoConAzioni = (motivo, state) => Object.assign(
     orchestratorError(`${motivo}. Nothing was changed.${codaDelRifiuto(state)}`, 'WORKFLOW_RUN_STATE_CONFLICT'),
     { allowedActions: azioniConsentiteDelRun(state), attentionReasons: motiviDiAttenzioneDelRun(state?.run), refusalReason: motivo });
@@ -488,6 +498,355 @@ export function createWorkflowOrchestrator({
     return Object.freeze({ runId: input.runId, nodeIds, ceilingRaise: aumentoDelTettoPerRiprova(current.state.definition, nodeIds) });
   }
 
+  /*
+   * ⭐ C3, tappa 1 (09/10/2026, «talos desktop») — LE AZIONI DELLA PERSONA SU UN PASSO FALLITO (decisione owner del 07/10, «come
+   *   Hermes»; contratto `C3-CONTRATTO-WORKFLOW-E-DELEGHE-2026-10-07.md` §2-bis):
+   *   - `mark-done` «Segna come fatto»: il riassunto della persona diventa il risultato del passo (`result_recorded`, testo,
+   *     `trust:'validated'`, nessun modello) e i dipendenti lo leggono. Come Hermes `complete_task` (`kanban_db.py:2731`), un
+   *     riassunto vuoto o di soli spazi si rifiuta: una chiusura vuole un'evidenza;
+   *   - `set-aside` «Metti da parte»: `node_set_aside`, poi ogni dipendente ancora fermo `node_skipped` `dependency_set_aside`, in
+   *     ordine topologico. ⛔ Al contrario di Hermes (`archived` libera i figli): qui i figli NON partono, decisione owner;
+   *   - `retry-other-model` «Rifai con un altro modello»: il Riprova di QUEL passo, con il fatto v2 `resume: { mode:'fresh',
+   *     modelPolicy }` (Hermes `reassign_task`, «the "this profile's model is broken" path», `kanban_db.py:2602`).
+   *   Comando durevole e idempotente come gli altri (`resolve-node`): il fatto DECISIVO porta la terna ed è la ricevuta; lo stesso id
+   *   con un altro contenuto è un conflitto; un rifiuto non scrive niente. Solo la PERSONA: `workflow_control` del modello non
+   *   arriva qui (contratto §2). Se dopo l'azione non resta nessun passo fallito né altri motivi, il run riparte da sé.
+   */
+  function ultimoTentativoChiuso(state, nodeId) {
+    const nodeRun = state.nodes.get(nodeId);
+    const activity = [...state.activities.values()].find((candidate) => candidate.nodeId === nodeId && candidate.attempt === nodeRun.attempt);
+    const claim = activity ? [...state.capacityClaims.values()].find((candidate) => candidate.activityExecutionId === activity.activityExecutionId) : null;
+    if (!activity || !['failed', 'reconciled'].includes(activity.state) || claim?.state === 'active'
+      || (claim && state.budget.reservations.has(claim.budgetReservationId))) return null;
+    return { nodeRun, activity, claim, budgetReservationId: claim?.budgetReservationId ?? null };
+  }
+
+  /** I dipendenti (transitivi) di `nodeId` ancora fermi, genitori prima dei figli: l'ordine che il riduttore vuole. */
+  function dipendentiDaSaltare(state, nodeId) {
+    const figli = new Map(state.definition.nodes.map((node) => [node.id, []]));
+    for (const edge of state.definition.edges) if (!NON_BLOCKING_EDGES_ORCH.has(edge.type)) figli.get(edge.from)?.push(edge.to);
+    const postOrdine = [];
+    const visti = new Set([nodeId]);
+    const visita = (id) => {
+      for (const figlio of [...(figli.get(id) ?? [])].sort()) {
+        if (visti.has(figlio)) continue;
+        visti.add(figlio);
+        visita(figlio);
+        postOrdine.push(figlio);
+      }
+    };
+    visita(nodeId);
+    return postOrdine.reverse().filter((id) => ['pending', 'blocked', 'ready'].includes(state.nodes.get(id)?.state));
+  }
+
+  /*
+   * ⭐ C3 — i fatti di un'azione della persona su un passo il cui ultimo tentativo è CHIUSO (posto rilasciato, riserva chiusa): dal
+   *   passo fallito (tappa 1, col comando) o dal passo incerto che la persona ha deciso (tappa 2a, senza comando: la ricevuta è
+   *   `uncertain_resolved`). Una funzione sola, così le due strade scrivono gli stessi fatti.
+   */
+  async function compiAzione(runId, nodeId, chiuso, { action, summary = null, model = null }, command = null) {
+    const conComando = command ? { command } : {};
+    const at = nowFn();
+    if (action === 'mark-done') {
+      const { activity } = chiuso;
+      const ref = await publishResult({ runId,
+        identity: { nodeId, activityExecutionId: activity.activityExecutionId, attempt: activity.attempt,
+          leaseId: activity.leaseId, leaseEpoch: activity.leaseEpoch },
+        draft: { kind: 'text', contentType: 'text/plain; charset=utf-8', bytes: Buffer.from(summary, 'utf8'),
+          summary: summary.slice(0, 4_096), trust: 'validated', sensitivity: 'workspace', eligibleForIntegration: false,
+          provenance: { workspaceBaselineHash: null, inputHash: `sha256:${createHash('sha256').update(summary, 'utf8').digest('hex')}`,
+            model: null, provider: null, toolVersions: {} } } });
+      await appendFact(runId, { type: 'node_succeeded', nodeId, payload: { resultIds: [ref.id], by: 'person', summary }, ...conComando });
+    } else if (action === 'set-aside') {
+      await appendFact(runId, { type: 'node_set_aside', nodeId, payload: { reason: 'user' }, ...conComando });
+    } else {
+      const { activity, budgetReservationId } = chiuso;
+      await appendFact(runId, {
+        type: 'retry_scheduled', nodeId,
+        payload: {
+          schema: 'talos.workflow-retry-fact.v2', runId, nodeId, activityExecutionId: activity.activityExecutionId,
+          attempt: activity.attempt, reasonClass: 'user_retry', backoffMs: 0, jitterMs: 0, retryAt: at, budgetReservationId,
+          resume: action === 'resume-verify' ? { mode: 'verify', modelPolicy: null }
+            : { mode: 'fresh', modelPolicy: { mode: 'explicit', model, reasoning: null } },
+        },
+        ...conComando,
+      });
+      await appendFact(runId, {
+        type: 'timer_scheduled', nodeId,
+        payload: { schema: 'talos.workflow-timer-fact.v1', timerId: requireUuid(idFn(), 'timerId'), runId, nodeId, kind: 'retry',
+          fireAt: at, causationId: `${activity.activityExecutionId}:${activity.attempt}`, scheduledAt: at },
+      });
+    }
+  }
+
+  /** C3 tappa 2a — i passi «in verifica» il cui tentativo incerto la persona ha deciso e la cui azione non è ancora compiuta. */
+  function passiDecisiInSospeso(state) {
+    return [...state.nodes.values()].filter((node) => node.state === 'reconciling'
+      && state.activities.get(node.activeActivityExecutionId)?.reconcileOutcome === 'person_resolved')
+      .map((node) => node.nodeId).sort();
+  }
+
+  /*
+   * ⭐ C3 — ciò che segue il fatto decisivo di un'azione della persona, IDEMPOTENTE: (0) l'azione decisa su un passo INCERTO, appena
+   *   il suo posto e la sua riserva sono chiusi (tappa 2a; finché non lo sono si aspetta il rilascio, dello scheduler o del comando);
+   *   (1) ogni passo che aspetta (anche da lontano) un passo messo da parte e non è ancora fermo si salta (`dependency_set_aside`,
+   *   genitori prima); (2) se l'attenzione era solo per passi falliti — o non resta nessun motivo — e non ne resta nessuno, e nessuna
+   *   azione è in sospeso, il run riparte. Senza niente da fare non scrive niente.
+   *   ⛔ Review avversaria 09/10: col salto scritto SOLO dopo `node_set_aside`, un'interruzione fra i due lasciava il run fermo per
+   *   sempre — la ripetizione dello stesso comando trovava la ricevuta e rispondeva «già fatto». Ora la chiamano il comando, la sua
+   *   ripetizione, lo scheduler (dopo i rilasci) e il recupero d'avvio. Va chiamata DENTRO la coda delle operazioni del run.
+   */
+  async function chiudiDopoLAzione(runId) {
+    let current = await load(runId);
+    if (STATI_FINALI_DEL_RUN.includes(current.state.run.status)) return;
+    for (const nodeId of passiDecisiInSospeso(current.state)) {
+      const chiuso = ultimoTentativoChiuso(current.state, nodeId);
+      if (!chiuso) continue;
+      await compiAzione(runId, nodeId, chiuso, chiuso.activity.personAction);
+      current = await load(runId);
+    }
+    const messiDaParte = [...current.state.nodes.values()].filter((node) => node.state === 'set_aside').map((node) => node.nodeId).sort();
+    for (const nodeId of messiDaParte) {
+      const daSaltare = dipendentiDaSaltare(current.state, nodeId);
+      for (const dipendente of daSaltare) {
+        await appendFact(runId, { type: 'node_skipped', nodeId: dipendente, payload: { reason: 'dependency_set_aside' } });
+      }
+      if (daSaltare.length) current = await load(runId);
+    }
+    const motivi = motiviDiAttenzioneDelRun(current.state.run);
+    if (current.state.run.status === 'needs_attention' && motivi.every((motivo) => motivo === 'node_failed')
+      && passiFallitiDelRun(current.state).length === 0 && passiDecisiInSospeso(current.state).length === 0) {
+      await appendFact(runId, { type: 'run_resumed', payload: { reason: 'user' } });
+    }
+  }
+
+  /** C3 tappa 2a — per lo scheduler: completa le azioni della persona appena i rilasci lo permettono. */
+  async function completaAzioniDellaPersona(input = {}) {
+    assertReady();
+    exactKeys(input, ['runId'], [], 'Person actions completion');
+    const runId = requireRunId(input.runId);
+    return enqueue(operationQueues, runId, () => chiudiDopoLAzione(runId));
+  }
+
+  /*
+   * ⭐ C3 tappa 3 (09/10/2026, owner: «quanto serve per finire», «il blocco muto dentro la tappa 3») — IL TETTO DEL RUN.
+   *   - `segnalaTettoRaggiunto` (lo scheduler, a passi fermi): un passo pronto non entra nel tetto del run ⇒
+   *     `budget_overrun_observed` con la fonte `admission`, e il run va in «Serve attenzione» invece di restare «In corso» per
+   *     sempre. Si riverifica qui, nella coda del run: se adesso il passo entra (o il run non è più in corsa) non si scrive niente.
+   *   - `ceilingPreview`: la cifra che il pulsante dice PRIMA (`aumentoPerFinire`, la stessa funzione del fatto).
+   *   - `raiseCeiling`: comando durevole e idempotente come gli altri; il contenuto è la cifra detta, e se non è più quella di
+   *     adesso si rifiuta senza scrivere (la persona deve vedere la cifra che approva). Poi `chiudiDopoLAzione`: se non resta
+   *     nessun motivo d'attenzione il run riparte da sé.
+   *   ⛔ Solo la persona: il modello non ha questa azione (contratto §2).
+   */
+  async function segnalaTettoRaggiunto(input = {}) {
+    assertReady();
+    exactKeys(input, ['runId', 'nodeId', 'dimension'], [], 'Ceiling reached');
+    const runId = requireRunId(input.runId);
+    return enqueue(operationQueues, runId, async () => {
+      const current = await load(runId);
+      const { run } = current.state;
+      if (run.status !== 'running' || run.cancelRequested || run.pauseRequested || run.needsAttentionReasons.includes('budget_overrun')
+        || current.state.nodes.get(input.nodeId)?.state !== 'ready') return Object.freeze({ runId, signalled: false });
+      const definition = current.state.definition;
+      const step = definition.nodes.find((node) => node.id === input.nodeId);
+      const riserva = riservaDelPasso(step, definition);
+      const aperte = [...current.state.budget.reservations.values()];
+      const observed = {};
+      const dimensions = [];
+      for (const key of Object.keys(current.state.budget.spent)) {
+        observed[key] = current.state.budget.spent[key] + aperte.reduce((somma, r) => somma + (r.reserved[key] ?? 0), 0) + (riserva[key] ?? 0);
+        const tetto = definition.budgets?.[key];
+        if (tetto !== null && tetto !== undefined && observed[key] > tetto + (current.state.budget.ceilingRaise?.[key] ?? 0)) dimensions.push(key);
+      }
+      if (dimensions.length === 0) return Object.freeze({ runId, signalled: false });
+      await appendFact(runId, { type: 'budget_overrun_observed', nodeId: input.nodeId,
+        payload: { reservationId: null, source: 'admission', dimensions, observed } });
+      return Object.freeze({ runId, signalled: true, dimensions });
+    });
+  }
+
+  async function ceilingPreview(input = {}) {
+    exactKeys(input, ['runId'], [], 'Ceiling preview');
+    const current = await load(requireRunId(input.runId));
+    const { amount, nodeIds } = aumentoPerFinire(current.state);
+    return Object.freeze({ runId: input.runId, waiting: current.state.run.status === 'needs_attention'
+      && current.state.run.needsAttentionReasons.includes('budget_overrun'), amount, nodeIds });
+  }
+
+  async function raiseCeiling(input = {}) {
+    assertReady();
+    exactKeys(input, ['runId', 'commandId', 'amount'], [], 'Ceiling raise');
+    const runId = requireRunId(input.runId);
+    if (typeof input.commandId !== 'string' || !UUID_V4.test(input.commandId)) throw orchestratorError('commandId must be a v4 UUID', 'QUERY_INVALID');
+    const chiavi = ['promptTokens', 'completionTokens', 'wallMs', 'agentSeconds', 'toolCalls', 'modelRequests', 'knownCostUsd'];
+    if (!plainObject(input.amount) || Object.keys(input.amount).length !== chiavi.length
+      || chiavi.some((key) => typeof input.amount[key] !== 'number' || !Number.isFinite(input.amount[key]) || input.amount[key] < 0
+        || (key !== 'knownCostUsd' && !Number.isSafeInteger(input.amount[key])))) {
+      throw orchestratorError('amount must have every budget dimension as a nonnegative number', 'QUERY_INVALID');
+    }
+    const amount = Object.fromEntries(chiavi.map((key) => [key, input.amount[key]]));
+    return enqueue(operationQueues, runId, async () => {
+      const current = await load(runId);
+      const nato = current.events[0];
+      const commandPayloadHash = raiseCeilingCommandHash({ workflowId: nato.payload.workflowId, version: nato.payload.definitionVersion, runId, amount });
+      const esito = (stato, receipt, deduplicated) => Object.freeze({ runId, status: stato.state.run.status, amount, receipt, deduplicated });
+      const prior = await lookupCommandReceipt(store, { commandId: input.commandId });
+      if (prior) {
+        if (prior.commandType !== 'raise-ceiling' || prior.payloadHash !== commandPayloadHash) {
+          throw orchestratorError('commandId is already bound to a different Workflow command', 'WORKFLOW_COMMAND_CONFLICT');
+        }
+        await chiudiDopoLAzione(runId);
+        return esito(await load(runId), prior, true);
+      }
+      const { run } = current.state;
+      if (run.cancelRequested || RUN_TERMINALI.has(run.status) || run.status !== 'needs_attention' || !run.needsAttentionReasons.includes('budget_overrun')) {
+        throw rifiutoConAzioni('the run is not waiting for a higher budget ceiling', current.state);
+      }
+      const adesso = aumentoPerFinire(current.state).amount;
+      if (chiavi.some((key) => adesso[key] !== amount[key])) {
+        throw Object.assign(rifiutoConAzioni('the amount needed has changed since it was shown: look at it again', current.state), { ceilingRaise: adesso });
+      }
+      await appendFact(runId, { type: 'budget_ceiling_raised', payload: { reason: 'user', amount },
+        command: { commandId: input.commandId, commandType: 'raise-ceiling', commandPayloadHash } });
+      await chiudiDopoLAzione(runId);
+      const receipt = await lookupCommandReceipt(store, { commandId: input.commandId });
+      if (!receipt || receipt.runId !== runId || receipt.commandType !== 'raise-ceiling') {
+        throw orchestratorError('the ceiling command was not durably visible after write', 'WORKFLOW_STORE_NEEDS_ATTENTION');
+      }
+      return esito(await load(runId), receipt, false);
+    });
+  }
+
+  async function resolveFailedStep(input = {}) {
+    assertReady();
+    exactKeys(input, ['runId', 'nodeId', 'action', 'commandId'], ['summary', 'model'], 'Step resolution');
+    const runId = requireRunId(input.runId);
+    if (typeof input.nodeId !== 'string' || input.nodeId.length === 0) throw orchestratorError('nodeId is required', 'QUERY_INVALID');
+    if (!AZIONI_SUL_PASSO.has(input.action)) throw orchestratorError('step action is invalid', 'QUERY_INVALID');
+    if (typeof input.commandId !== 'string' || !UUID_V4.test(input.commandId)) throw orchestratorError('commandId must be a v4 UUID', 'QUERY_INVALID');
+    const summary = input.action === 'mark-done' ? input.summary : null;
+    const model = input.action === 'retry-other-model' ? input.model : null;
+    if (input.action === 'mark-done' && !isValidPersonSummary(summary)) {
+      throw orchestratorError('a step marked done needs a summary of what was done (not empty)', 'QUERY_INVALID');
+    }
+    if (input.action === 'retry-other-model' && !isValidStepModelId(model)) throw orchestratorError('a valid model is required', 'QUERY_INVALID');
+    if ((input.action !== 'mark-done' && Object.hasOwn(input, 'summary')) || (input.action !== 'retry-other-model' && Object.hasOwn(input, 'model'))) {
+      throw orchestratorError(`"${input.action}" takes no ${Object.hasOwn(input, 'summary') ? 'summary' : 'model'}`, 'QUERY_INVALID');
+    }
+    const azione = { action: input.action, ...(summary !== null ? { summary } : {}), ...(model !== null ? { model } : {}) };
+    let commandPayloadHash = null;
+    const esito = (current, receipt, deduplicated) => Object.freeze({ runId, nodeId: input.nodeId, action: input.action,
+      status: current.state.run.status, receipt, deduplicated });
+    /** La ripetizione PRIMA di ogni controllo di stato: finisce ciò che il primo invio può aver lasciato a metà. */
+    const ripetizione = async () => {
+      const prior = await lookupCommandReceipt(store, { commandId: input.commandId });
+      if (!prior) return null;
+      if (prior.commandType !== 'resolve-node' || prior.payloadHash !== commandPayloadHash) {
+        throw orchestratorError('commandId is already bound to a different Workflow command', 'WORKFLOW_COMMAND_CONFLICT');
+      }
+      await chiudiDopoLAzione(runId);
+      return esito(await load(runId), prior, true);
+    };
+    const statoAmmesso = (current) => {
+      const rifiuto = rifiutoDelControllo('retry', current.state.run); // stessa regola del Riprova: run in corsa o in attenzione
+      if (rifiuto) throw rifiutoConAzioni(rifiuto, current.state);
+      if (!current.state.nodes.has(input.nodeId)) throw orchestratorError(`unknown step "${input.nodeId}"`, 'QUERY_INVALID');
+    };
+    /** Un passo incerto si decide solo quando il sistema ha rinunciato a riconciliarlo (il motivo d'attenzione c'è). */
+    const incertoDaDecidere = (current) => {
+      const node = current.state.nodes.get(input.nodeId);
+      if (node?.state !== 'uncertain' || !node.activeActivityExecutionId) return null;
+      const motivo = `activity_uncertain:${node.activeActivityExecutionId}`;
+      return motiviDiAttenzioneDelRun(current.state.run).includes(motivo) ? node.activeActivityExecutionId : null;
+    };
+
+    /* 0. C3 tappa 5 (09/10/2026, prova dal vivo) — RIPARAZIONE: un passo fallito il cui ultimo tentativo ha lo slot rilasciato ma la
+       riserva ancora APERTA (il saldo era fallito: tentativo morto prima della sessione, prima di `failed_before_session`) restava
+       «still being settled» per sempre. `releaseAdmission` è idempotente e adesso sa rilasciarla: si completa qui, fuori dalla
+       coda come al passo 4. Solo gli errori di BUDGET lasciano la strada di sempre (il rifiuto qui sotto); il resto si rilancia. */
+    {
+      const prima = await load(runId);
+      const nodo = prima.state.nodes.get(input.nodeId);
+      const tentativo = nodo?.state === 'failed'
+        ? [...prima.state.activities.values()].find((candidate) => candidate.nodeId === input.nodeId && candidate.attempt === nodo.attempt) : null;
+      const posto = tentativo ? [...prima.state.capacityClaims.values()].find((candidate) => candidate.activityExecutionId === tentativo.activityExecutionId) : null;
+      if (posto?.state === 'released' && prima.state.budget.reservations.has(posto.budgetReservationId)) {
+        try { await releaseAdmission({ runId, claimId: posto.claimId }); } catch (errore) { if (!(errore instanceof WorkflowBudgetError)) throw errore; }
+      }
+    }
+    // 1. nella coda del run: ripetizione, passo FALLITO (tappa 1, tutto qui), oppure la strada del passo INCERTO
+    const primo = await enqueue(operationQueues, runId, async () => {
+      const current = await load(runId);
+      const nato = current.events[0];
+      commandPayloadHash = resolveNodeCommandHash({ workflowId: nato.payload.workflowId, version: nato.payload.definitionVersion, runId,
+        nodeId: input.nodeId, action: input.action, summary, model });
+      const ripetuto = await ripetizione();
+      if (ripetuto) return { fatto: ripetuto };
+      statoAmmesso(current);
+      const node = current.state.nodes.get(input.nodeId);
+      if (node.state === 'failed') {
+        if (input.action === 'resume-verify') {
+          throw rifiutoConAzioni(`the step "${input.nodeId}" failed: there is nothing to verify, redo it or mark it done`, current.state);
+        }
+        const chiuso = ultimoTentativoChiuso(current.state, input.nodeId);
+        if (!chiuso) throw rifiutoConAzioni(`the failed step "${input.nodeId}" is still being settled: try again in a moment`, current.state);
+        await compiAzione(runId, input.nodeId, chiuso, azione, { commandId: input.commandId, commandType: 'resolve-node', commandPayloadHash });
+        await chiudiDopoLAzione(runId);
+        const receipt = await lookupCommandReceipt(store, { commandId: input.commandId });
+        if (!receipt || receipt.runId !== runId || receipt.commandType !== 'resolve-node') {
+          throw orchestratorError('the step command was not durably visible after write', 'WORKFLOW_STORE_NEEDS_ATTENTION');
+        }
+        return { fatto: esito(await load(runId), receipt, false) };
+      }
+      const incerto = incertoDaDecidere(current);
+      if (!incerto) {
+        throw rifiutoConAzioni(`the step "${input.nodeId}" has not failed and is not waiting for your decision (it is ${node.state})`, current.state);
+      }
+      return { incerto };
+    });
+    if (primo.fatto) return primo.fatto;
+
+    // 2. fuori dalla coda: la sessione del tentativo incerto si ferma e si aspetta chiusa (contratto §2-bis)
+    await activityRunner.fermaPerLaPersona({ runId, activityExecutionId: primo.incerto });
+
+    // 3. nella coda: la decisione durevole, che è la ricevuta (lo stato si ricontrolla: nel frattempo può essere cambiato)
+    const deciso = await enqueue(operationQueues, runId, async () => {
+      const ripetuto = await ripetizione();
+      if (ripetuto) return { fatto: ripetuto };
+      const current = await load(runId);
+      statoAmmesso(current);
+      if (incertoDaDecidere(current) !== primo.incerto) {
+        throw rifiutoConAzioni(`the step "${input.nodeId}" changed while its session was stopping: look at it again`, current.state);
+      }
+      const activity = current.state.activities.get(primo.incerto);
+      await appendFact(runId, {
+        type: 'uncertain_resolved', nodeId: input.nodeId, activityExecutionId: activity.activityExecutionId, attempt: activity.attempt,
+        leaseId: activity.leaseId, leaseEpoch: activity.leaseEpoch, payload: { reason: 'user', ...azione },
+        command: { commandId: input.commandId, commandType: 'resolve-node', commandPayloadHash },
+      });
+      return {};
+    });
+    if (deciso.fatto) return deciso.fatto;
+
+    // 4. posto e riserva, con la stessa via dello scheduler (sotto il lucchetto delle ammissioni)
+    const dopoLaDecisione = await load(runId);
+    const claim = [...dopoLaDecisione.state.capacityClaims.values()].find((candidate) => candidate.activityExecutionId === primo.incerto);
+    if (claim && (claim.state === 'active' || dopoLaDecisione.state.budget.reservations.has(claim.budgetReservationId))) {
+      await releaseAdmission({ runId, claimId: claim.claimId });
+    }
+
+    // 5. nella coda: l'azione scelta, i salti, la ripresa
+    return enqueue(operationQueues, runId, async () => {
+      await chiudiDopoLAzione(runId);
+      const receipt = await lookupCommandReceipt(store, { commandId: input.commandId });
+      if (!receipt || receipt.runId !== runId || receipt.commandType !== 'resolve-node') {
+        throw orchestratorError('the step command was not durably visible after write', 'WORKFLOW_STORE_NEEDS_ATTENTION');
+      }
+      return esito(await load(runId), receipt, false);
+    });
+  }
+
   /** F3-51a — la pausa CHIESTA diventa «in pausa» quando nessun effetto è più in corso e nessun posto è occupato. */
   async function completePause(input = {}) {
     assertReady();
@@ -546,7 +905,25 @@ export function createWorkflowOrchestrator({
       // i risultati finali sono quelli dei passi da cui nessuno dipende (le foglie del grafo); nessuna integrazione per i passi
       // in sola lettura (catalogo, `run_succeeded`: `{ finalResultIds, integrationCommit }`)
       const conSeguito = new Set(current.state.definition.edges.map((edge) => edge.from));
-      const finalResultIds = [...new Set([...current.state.nodes.values()]
+      const nodi = [...current.state.nodes.values()];
+      /*
+       * C3 (09/10/2026) — «fatto, con passi messi da parte»: ogni passo è finito o messo da parte dalla persona (con la catena
+       *   che lo aspettava saltata). I risultati che restano sono quelli dei passi FINITI che nessun altro passo finito ha letto:
+       *   le foglie, più chi stava sopra un passo saltato. Il fatto nomina gli uni e gli altri, come la carta del riepilogo.
+       *   `pronto` vuole almeno un passo messo da parte: un run senza resta sulla strada di sempre.
+       */
+      const chiusura = chiusuraConPassiMessiDaParte(current.state);
+      if (chiusura.pronto) {
+        const finiti = new Set(nodi.filter((node) => node.state === 'succeeded').map((node) => node.nodeId));
+        const lettoDaUnFinito = new Set(current.state.definition.edges
+          .filter((edge) => !NON_BLOCKING_EDGES_ORCH.has(edge.type) && finiti.has(edge.to)).map((edge) => edge.from));
+        const finalResultIds = [...new Set(nodi.filter((node) => finiti.has(node.nodeId) && !lettoDaUnFinito.has(node.nodeId))
+          .flatMap((node) => node.resultRefIds))].sort();
+        await appendFact(runId, { type: 'run_succeeded_with_set_aside',
+          payload: { finalResultIds, setAsideNodeIds: chiusura.setAsideNodeIds, skippedNodeIds: chiusura.skippedNodeIds } });
+        return Object.freeze({ runId, completed: true, status: 'succeeded_with_set_aside', finalResultIds });
+      }
+      const finalResultIds = [...new Set(nodi
         .filter((node) => !conSeguito.has(node.nodeId)).flatMap((node) => node.resultRefIds))].sort();
       await appendFact(runId, { type: 'run_succeeded', payload: { finalResultIds, integrationCommit: null } });
       return Object.freeze({ runId, completed: true, status: 'succeeded', finalResultIds });
@@ -742,18 +1119,30 @@ export function createWorkflowOrchestrator({
        *   capacity_released: se la prova manca non si scrive niente.
        */
       const notPerformed = activity?.state === 'reconciled' && activity.reconcileOutcome === 'proved_not_performed';
+      // C3 tappa 2a (decisione owner 09/10): un tentativo incerto DECISO dalla persona si rilascia senza saldo, consumo sconosciuto
+      const decisoDallaPersona = activity?.state === 'reconciled' && activity.reconcileOutcome === 'person_resolved';
+      /* C3 tappa 5 (09/10/2026, prova dal vivo con glm-5.3-flash): un tentativo FALLITO prima che la sua sessione esistesse (la
+         chiave del fornitore mancava all'avvio) non ha consumo né ricevuta: il saldo qui sotto lanciava, la riserva restava
+         aperta e il passo «still being settled» per sempre — «Segna come fatto», «Metti da parte», «Rifai» rifiutati. Si
+         rilascia con la prova nel giornale (budget.mjs `failed_before_session`), come `spawn_failed` di Hermes. */
+      const fallitoPrimaDellaSessione = activity?.state === 'failed'
+        && current.state.definition?.nodes?.find((node) => node.id === claim.nodeId)?.kind === 'agent'
+        && !current.events.some((event) => event.type === 'agent_session_created' && event.activityExecutionId === claim.activityExecutionId)
+        && current.events.some((event) => event.activityExecutionId === claim.activityExecutionId && fallitoSenzaConsumoDichiarato(event));
+      const motivoDelRilascio = decisoDallaPersona ? 'person_resolved' : fallitoPrimaDellaSessione ? 'failed_before_session' : 'reconciled_not_performed';
+      const senzaSaldo = notPerformed || decisoDallaPersona || fallitoPrimaDellaSessione;
       let notPerformedRelease = null;
-      if (notPerformed && current.state.budget.reservations.has(claim.budgetReservationId)) {
+      if (senzaSaldo && current.state.budget.reservations.has(claim.budgetReservationId)) {
         notPerformedRelease = makeBudgetRelease({
           state: current.state, events: current.events,
-          reservationId: claim.budgetReservationId, reason: 'reconciled_not_performed',
+          reservationId: claim.budgetReservationId, reason: motivoDelRilascio,
         });
       }
       if (claim.state === 'active') {
         if (activity && !['completed', 'failed', 'reconciled'].includes(activity.state)) {
           throw orchestratorError('activity effect is not durably terminal', 'WORKFLOW_ADMISSION_EFFECT_UNCERTAIN');
         }
-        if (activity?.state === 'reconciled' && activity.receiptRef === null && !notPerformed) {
+        if (activity?.state === 'reconciled' && activity.receiptRef === null && !notPerformed && !decisoDallaPersona) {
           throw orchestratorError('reconciled activity has no terminal receipt proof', 'WORKFLOW_ADMISSION_EFFECT_UNCERTAIN');
         }
         await appendFact(runId, {
@@ -763,10 +1152,10 @@ export function createWorkflowOrchestrator({
         current = await load(runId);
       }
       if (current.state.budget.reservations.has(claim.budgetReservationId)) {
-        const fact = notPerformed
+        const fact = senzaSaldo
           ? (notPerformedRelease ?? makeBudgetRelease({
             state: current.state, events: current.events,
-            reservationId: claim.budgetReservationId, reason: 'reconciled_not_performed',
+            reservationId: claim.budgetReservationId, reason: motivoDelRilascio,
           }))
           : activity
           ? makeDurableBudgetSettlement({
@@ -931,6 +1320,11 @@ export function createWorkflowOrchestrator({
     completeRun,
     requestRunControl,
     retryPreview,
+    resolveFailedStep,
+    completaAzioniDellaPersona,
+    segnalaTettoRaggiunto,
+    ceilingPreview,
+    raiseCeiling,
     completePause,
     finishCancel,
     decideAfterFailure,

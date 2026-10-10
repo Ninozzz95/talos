@@ -75,7 +75,10 @@ async function engineFixture(t, settings = { auto: true, triggerRatio: 0.5, targ
   return { engine, append, calls };
 }
 const readCall = k => ({ role: 'assistant', content: null, tool_calls: [{ id: `c${k}`, type: 'function', function: { name: 'leggi', arguments: JSON.stringify({ percorso: `f${k}.txt` }) } }] });
-const readResult = k => ({ role: 'tool', tool_call_id: `c${k}`, content: `file ${k}: ` + 'riga di contenuto '.repeat(400) });
+/* C1 (09/10/2026, «Tutti e due»): sotto pressione le regole del livello 1 accorciano le uscite grandi recenti PRIMA del riassunto.
+   Queste prove sono sul RIASSUNTO dentro un giro: le uscite sono parti di testo (`[{type:'text'}]`), che l'accorciamento sotto
+   pressione non tocca — così il percorso provato resta quello del riassunto. */
+const readResult = k => ({ role: 'tool', tool_call_id: `c${k}`, content: [{ type: 'text', text: `file ${k}: ` + 'riga di contenuto '.repeat(400) }] });
 
 test('IN-TURN through the engine: a first turn past the limit asks for a summary and ends below it, the task verbatim', async t => {
   const { engine, append, calls } = await engineFixture(t);
@@ -87,7 +90,7 @@ test('IN-TURN through the engine: a first turn past the limit asks for a summary
   const roles = prepared.messages.map(m => m.role);
   assert.equal(prepared.messages[0].content, 'Sei un assistente.');
   assert.deepEqual(prepared.messages[1], { role: 'user', content: TASK }, 'the person\'s message of the turn, verbatim, before the summary');
-  assert.equal(JSON.parse(prepared.messages[2].content).kind, 'talos-context-memory', 'then the summary');
+  assert.equal(JSON.parse(prepared.messages[2].content.split('\n')[0]).kind, 'talos-context-memory', 'then the summary');
   assert.deepEqual(roles.slice(3), ['assistant', 'tool'], 'then the latest exchange, whole');
   assert.equal(prepared.messages.at(-1).tool_call_id, 'c10');
   const limit = modelProfile.windowTokens - modelProfile.responseReserve;
@@ -105,7 +108,7 @@ test('IN-TURN: a summary that ends at a turn boundary pins nothing: the next tur
   assert.equal((await engine.waitForCompaction({ sessionId: 'turn', jobId: job.id })).state, 'committed');
   const prepared = await engine.prepareForRequest({ sessionId: 'turn', sessionModel: modelProfile });
   assert.deepEqual(prepared.messages.map(m => m.role), ['system', 'user', 'user']);
-  assert.equal(JSON.parse(prepared.messages[1].content).kind, 'talos-context-memory');
+  assert.equal(JSON.parse(prepared.messages[1].content.split('\n')[0]).kind, 'talos-context-memory');
   assert.deepEqual(prepared.messages[2], { role: 'user', content: 'Ora il secondo.' });
   assert.equal(prepared.messages.filter(m => m.content === TASK).length, 0, 'the summarised turn\'s message is not brought back');
 });

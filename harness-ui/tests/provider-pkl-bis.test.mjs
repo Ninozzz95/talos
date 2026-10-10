@@ -96,10 +96,11 @@ test('PKLB-INVALID-02: agente respinto per percorsi, shell, valori ambiente e se
   assert.throws(() => store.setRuntime('azure', { endpoint: endpoint('azure'), agente: f.agente }), { code: 'PROVIDER_RUNTIME_INVALID' });
 });
 
-test('PKLB-REG-TIMEOUT: un salvataggio legacy senza timeout mantiene il default precedente di 60 secondi', () => {
+test('PKLB-REG-TIMEOUT: un salvataggio senza timeout tiene il tempo di prima (OWN-01, review del desktop 09/10/2026)', () => {
   const store = createProviderCredentialStore({ env: {} });
   store.setRuntime('openai', { endpoint: 'https://esempio.test/v1', timeoutSeconds: 120 });
-  assert.equal(store.setRuntime('openai', { endpoint: 'https://esempio.test/v1' }).timeoutSeconds, 60);
+  assert.equal(store.setRuntime('openai', { endpoint: 'https://esempio.test/v1' }).timeoutSeconds, 120);
+  assert.equal(createProviderCredentialStore({ env: {} }).setRuntime('openai', { endpoint: 'https://esempio.test/v1' }).timeoutSeconds, 600, 'senza un prima: il predefinito');
 });
 
 test('PKLB-REG-CUSTODIA: una chiave custodita non entra negli argomenti dell’agente', t => {

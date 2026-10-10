@@ -25,6 +25,8 @@
 
 import { nomeUmanoAttrezzo } from './nomi-attrezzi.js';
 import { testoRiusoCache } from './consumo-sessione.js';
+// C1 (owner 10/10/2026): la scheda Contesto sul limite che agisce, con la ripartizione della richiesta vera
+import { limiteCheAgisce, percheDelLimite, ripartizioneSulLimite, compattazioniDellaConversazione, cosaHaTenuto, CHIAVI_CATEGORIA } from './contesto-scheda.js';
 /* ⛔ 16/09, P0-E punto 9: la riga di comando si LEGGE (parser vendorizzato dietro un adattatore
    nostro), non si stampa come stringa troncata. Vedi `components/comando-shell.js`. */
 import { ICONA_FAMIGLIA, analizzaComando, disegnaComando, iconaComando, NOME_FAMIGLIA } from './comando-shell.js';
@@ -89,8 +91,62 @@ export function righeFinestra(usage = null, finestra = null, ripartizione = null
   // Quota dell'intera sessione: non è un'altra parte dell'occupazione della finestra.
   /* ⛔ A1-bis (07/10/2026): durante la storia la misura non è ancora arrivata — «non misurato» sarebbe un'affermazione falsa
      su una sessione che la misura ce l'ha (foto del ritorno a 4 s: «non misurato», poi «94 % · su 1286 giri»). */
-  righe.push([tr('processi.inspector.windowCache'), storiaInCaricamento && !cacheSessione ? '—' : testoRiusoCache(cacheSessione)]);
-  return { titoloDestra: finestra ? kilo(finestra) : tr('processi.inspector.windowUndeclared'), righe };
+  /* ⛔ TACCUINO-2 (09/10/2026, foto del 4174 dopo il lotto taccuino): «85 % · su 11 richieste al modello» è più lungo di «su 11
+     giri», e il valore non va mai a capo (`.talos-kv__v{flex:none; nowrap}`): l'etichetta restava «Rius…». Qui va a capo il
+     VALORE e l'etichetta resta intera (`talos-kv__v--a-capo`, index.css). */
+  righe.push([tr('processi.inspector.windowCache'), storiaInCaricamento && !cacheSessione ? '—' : testoRiusoCache(cacheSessione), 'a-capo']);
+  return { titoloDestra: finestra ? kilo(finestra) : tr('processi.inspector.windowUndeclared'), righe, anteprima: `${usati === null ? '—' : kilo(usati)}${finestra ? ` / ${kilo(finestra)}` : ''}` };
+}
+
+/**
+ * C1 (owner 10/10/2026, «il limite che agisce, col perché»): la finestra misurata sul limite su cui la conversazione si compatta
+ * DAVVERO (`contesto-scheda.js::limiteCheAgisce`), le categorie della richiesta spedita come stime («~»), la misura del fornitore,
+ * lo spazio prima della compattazione, e la frase del perché. `null` se nessuna sorgente ha detto il limite: chi chiama torna
+ * a `righeFinestra`.
+ */
+export function righeFinestraSulLimite({ usage = null, ripartizione = null, limite = null, cacheSessione = null, storiaInCaricamento = false } = {}) {
+  if (!limite) return null;
+  const usati = Number.isFinite(usage?.prompt_tokens) ? usage.prompt_tokens : null;
+  const r = ripartizioneSulLimite({ ripartizione, usati, limite });
+  // la «~» la disegna la classe delle stime (`.talos-measure--estimate::before`, index.css): nel testo usciva doppia, «~~4,2k»
+  const righe = r.voci.map((v) => [tr(CHIAVI_CATEGORIA[v.id]), `${kilo(v.tokens)}${v.percentuale === null ? '' : ` · ${percento(v.tokens, limite.soglia)}`}`, 'stima']);
+  righe.push([tr('processi.inspector.windowInUse'), r.usati === null ? '—' : `${kilo(r.usati)} · ${percento(r.usati, limite.soglia)}`]);
+  righe.push([tr('processi.inspector.windowBeforeCompaction'), r.restanti === null ? '—' : r.oltre ? tr('processi.inspector.windowOver', { n: kilo(-r.restanti) }) : kilo(r.restanti)]);
+  righe.push([tr('processi.inspector.windowCache'), storiaInCaricamento && !cacheSessione ? '—' : testoRiusoCache(cacheSessione), 'a-capo']);
+  const p = percheDelLimite(limite);
+  /* ⛔ 10/10 sera, visto sul 4174 dopo un riavvio: il limite di RIPIEGO del server (fonte `fallback`) era scritto come quello vero.
+     Si dichiara con «~», il segno che la scheda usa già per le stime; la riga del perché lo dice «non verificato». */
+  const segno = limite.fonte === 'fallback' ? '~' : '';
+  return {
+    titoloDestra: `${segno}${kilo(limite.soglia)}`,
+    righe,
+    fette: r.voci.filter((v) => v.percentuale !== null).map((v) => ({ id: v.id, percentuale: v.percentuale })),
+    perche: p ? tr(p.chiave, { soglia: kilo(p.soglia), finestra: p.finestra === null ? '—' : kilo(p.finestra) }) : '',
+    // la card compressa (C1, 10/10): misurato su limite; la percentuale la dice la barra, che da compressa resta (foto: «98k · …» tagliato)
+    anteprima: `${r.usati === null ? '—' : kilo(r.usati)} / ${segno}${kilo(limite.soglia)}`,
+  };
+}
+
+const dataEOraBreve = (iso) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? '—' : new Intl.DateTimeFormat(localeOra(), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(d); };
+
+/** C1 (10/10/2026): le righe della card «Compattazioni» — quante, l'ultima, i token, il livello 1 di QUESTA richiesta, cosa ha tenuto. */
+export function righeCompattazioni({ motore = null, legacy = null, recordLegacy = null, level1 = null, richiestaVista = false } = {}) {
+  const c = compattazioniDellaConversazione({ motore, legacy });
+  const tenuto = cosaHaTenuto({ activeVersion: motore?.activeVersion ?? null, facts: motore?.facts ?? [], recordLegacy });
+  const righe = [];
+  if (!c || c.numero === 0) righe.push([tr('processi.inspector.compactionsNone'), '—']);
+  else {
+    righe.push([tr('processi.inspector.compactionsCount'), String(c.numero)]);
+    righe.push([tr('processi.inspector.compactionsLast'), c.ultimaAl ? dataEOraBreve(c.ultimaAl) : '—']);
+    righe.push([tr('processi.inspector.compactionsAfter'), c.tokenDopo === null ? '—' : c.tokenPrima === null ? kilo(c.tokenDopo) : `${kilo(c.tokenPrima)} → ${kilo(c.tokenDopo)}`]);
+    const richieste = tenuto.richieste;
+    righe.push([tr('processi.inspector.keptRequests'), richieste ? tr('processi.inspector.keptRequestsCount', { kept: richieste.kept.length, total: richieste.total }) : tenuto.riassunto ? tr('processi.inspector.keptRequestsInSummary') : '—', 'a-capo']);
+    if (tenuto.fonte === 'motore') righe.push([tr('processi.inspector.keptFacts'), String(tenuto.fatti.length)]);
+    righe.push([tr('processi.inspector.keptIndex'), tenuto.indice ? tr('processi.inspector.keptYes') : '—']);
+  }
+  const l1 = level1 && Number.isSafeInteger(level1.cleared) && Number.isSafeInteger(level1.shortened) ? level1 : null;
+  righe.push([tr('processi.inspector.compactionsThisRequest'), l1 ? tr('processi.inspector.level1Text', { cleared: l1.cleared, shortened: l1.shortened }) : richiestaVista ? tr('processi.inspector.level1None') : '—', 'a-capo']);
+  return righe;
 }
 
 /*
@@ -557,41 +613,164 @@ const FERMABILE = new Set(['in-corso', 'in-attesa']);
  * non esistono nei dati o non sono loro stessi scelti — un bottone sempre a zero è rumore.
  */
 const STATI_RARI_FILTRO = new Set(['in-coda', 'in-avvio', 'in-consenso', 'in-sfondo', 'annullato', 'ucciso', 'non-eseguito', 'interrotto']);
-function bottoneFerma(d, riga, scheda, idRiga) {
-  const b = el(d, 'button', 'talos-button talos-button--ghost talos-button--sm talos-process__ferma');
+
+/*
+ * ⛔ TACCUINO (09/10/2026, bugfixer; owner «un lotto dopo le patch») — LA RIGA DEI FILTRI ANDAVA A CAPO DA SOLA. Con
+ *   `flex-wrap:wrap` in una colonna di ~307 px l'ultimo filtro finiva solo sulla seconda riga (misurato sulla 4176, scheda
+ *   Agenti: «Tutti … Terminati» a y=180, «Interrotti» a y=210), e in inglese le etichette sono più lunghe.
+ *   ⭐ Letto nel codice di Hermes (clone 2026-10-07): le strisce orizzontali stanno su UNA riga che scorre, con la barra
+ *   nascosta e lo scorrimento contenuto (`components/ui/pane-tab.tsx:248-275`, «hidden scrollbars, contained overscroll»), e il
+ *   bordo dove c'è contenuto tagliato SFUMA, solo lì (`components/ui/fade-scroll.tsx`, `edgeMask`: «a list that fits must not
+ *   be dimmed at all», anche sull'asse x). La forma si porta; qui senza React: un attributo che il CSS legge.
+ *   ⭐ In più di Hermes: la rotella verticale sopra la riga la fa scorrere finché c'è qualcosa da mostrare, poi lascia passare
+ *   (con un mouse senza rotella orizzontale il filtro nascosto non si raggiungerebbe se non da tastiera). Ricerca 09/10/2026:
+ *   un ascoltatore `wheel` non passivo fa aspettare il thread principale prima di scorrere (developer.chrome.com/blog/
+ *   scrolling-intervention-2) e convertire la rotella è «scrolljacking», accettabile solo con un segnale chiaro; i sistemi di
+ *   design del 2026 lo fanno proprio così, con la sfumatura sul lato dove c'è altro (Exxat DS «Horizontal scroll controls»,
+ *   shadcn «scroll-fade»). ⇒ L'ascoltatore sta SOLO su questa riga (26 px), e lascia passare ai due capi.
+ *   ⛔ Con un DOM senza finestra (le prove unitarie) non fa niente: la riga resta quella di prima.
+ */
+function strisciaScorrevole(riga) {
+  const vista = riga?.ownerDocument?.defaultView;
+  if (!vista || typeof vista.ResizeObserver !== 'function' || typeof riga.addEventListener !== 'function' || !riga.dataset) return riga;
+  const misura = () => {
+    const prima = riga.scrollLeft > 1;
+    const dopo = riga.scrollLeft + riga.clientWidth < riga.scrollWidth - 1;
+    const taglio = prima && dopo ? 'entrambi' : prima ? 'prima' : dopo ? 'dopo' : 'nessuno';
+    if (riga.dataset.taglio !== taglio) riga.dataset.taglio = taglio;
+  };
+  riga.addEventListener('scroll', misura, { passive: true });
+  riga.addEventListener('wheel', (evento) => {
+    if (evento.ctrlKey || Math.abs(evento.deltaY) <= Math.abs(evento.deltaX)) return;
+    const massimo = riga.scrollWidth - riga.clientWidth;
+    if (massimo <= 1) return;
+    if ((evento.deltaY > 0 && riga.scrollLeft >= massimo - 1) || (evento.deltaY < 0 && riga.scrollLeft <= 1)) return;
+    evento.preventDefault();
+    riga.scrollLeft += evento.deltaMode === 1 ? evento.deltaY * 16 : evento.deltaY;
+  }, { passive: false });
+  /* un filtro raro che compare o sparisce (`hidden`) cambia la larghezza del contenuto, non quella della riga: si osservano
+     anche i bottoni, che passano da 0 alla loro misura */
+  const osservatore = new vista.ResizeObserver(misura);
+  osservatore.observe(riga);
+  for (const figlio of riga.children) osservatore.observe(figlio);
+  misura();
+  return riga;
+}
+/*
+ * ⭐ C1 (owner 10/10/2026) — LE AZIONI DELLA RIGA IN UN MENU «⋯», PIÙ IL TASTO DESTRO. Fino a oggi erano due icone affiancate
+ *   (lo Stop del 02/10 e lo «Sfondo» di BUG-14), e «Togli» non c'era. Con tre azioni vale la regola dell'owner del 10/09 («usa i
+ *   tre puntini + dropdown… e anche azioni tasto destro mouse»): un pulsante solo, lo stesso `#i-more` delle deleghe, e la STESSA
+ *   lista dal tasto destro.
+ * ⛔ Le voci nascono al CLIC, come in `menuDellaDelega` (`legacy/app.js`): fra il disegno e il clic la riga può essere finita, e
+ *   un menu che offre «Ferma» su un comando concluso è un pulsante che mente.
+ * ⛔ Il menu lo apre chi disegna (`azioni.apriMenu`, il menu condiviso dell'app: una tastiera sola per tutti i menu). Gli avvisi
+ *   e i tempi restano QUI, nella riga, come prima: «Fermo il comando…», «Non si è fermato: riprova lo Stop.».
+ * ⭐ Novità rispetto al 02/10: si ferma anche un comando IN SFONDO. Il server lo tiene fermabile finché vive (A6-bis R2,
+ *   `talosHarness.mjs`: «uno SFONDATO resta fermabile finché vive»), e la riga lo diceva vivo senza offrire un modo per fermarlo.
+ */
+const FERMABILE_O_SFONDO = new Set([...FERMABILE, 'in-sfondo']);
+/* «Togli» solo su una riga FINITA: la stessa regola del server (`togliProcesso`, 409 `PROCESS_STILL_RUNNING` se è viva). */
+const TOGLIBILE = new Set(['riuscito', 'fallito', 'annullato', 'ucciso', 'non-eseguito', 'interrotto', 'perso']);
+
+/** Le voci che la riga può offrire ADESSO, dal suo stato e da ciò che chi disegna sa fare. */
+function vociDellaRiga(riga, scheda) {
+  const stato = riga.card.dataset.stato;
+  const a = scheda.azioni || {};
+  const voci = [];
+  if (FERMABILE.has(stato) && typeof a.sfonda === 'function') {
+    voci.push({ chiave: 'sfonda', etichetta: tr('processi.process.background'), icona: 'i-sfondo', aziona: () => richiestaDellaRiga(riga, scheda, 'sfonda') });
+  }
+  if (FERMABILE_O_SFONDO.has(stato) && typeof a.ferma === 'function') {
+    voci.push({ chiave: 'ferma', etichetta: tr('processi.process.stop'), icona: 'i-stop', pericolo: true, separaPrima: true, aziona: () => richiestaDellaRiga(riga, scheda, 'ferma') });
+  }
+  if (TOGLIBILE.has(stato) && typeof a.togli === 'function') {
+    voci.push({ chiave: 'togli', etichetta: tr('processi.process.remove'), icona: 'i-x', aziona: () => richiestaDellaRiga(riga, scheda, 'togli') });
+  }
+  return voci;
+}
+
+/** Apre il menu della riga; `false` se non c'è niente da offrire (allora il tasto destro resta quello del sistema). */
+function apriMenuRiga(riga, scheda, punto) {
+  if (riga.inCorso || typeof scheda.azioni?.apriMenu !== 'function') return false;
+  const voci = vociDellaRiga(riga, scheda);
+  if (!voci.length) return false;
+  scheda.azioni.apriMenu(voci, punto);
+  return true;
+}
+
+/** Il «⋯» c'è solo se la riga ha almeno un'azione; è spento mentre una richiesta viaggia (un secondo gesto non riparte). */
+function statoBottoneAzioni(riga, scheda) {
+  const possibili = typeof scheda.azioni?.apriMenu === 'function' && vociDellaRiga(riga, scheda).length > 0;
+  if (riga.azioni.hidden !== !possibili) riga.azioni.hidden = !possibili;
+  const spento = Boolean(riga.inCorso);
+  if (riga.azioni.disabled !== spento) riga.azioni.disabled = spento;
+}
+
+function bottoneAzioniRiga(d, riga, scheda) {
+  /* Le classi del «…» delle deleghe (`bottoneAzioni`, più sotto): lo stesso mattone, non un secondo linguaggio. */
+  const b = el(d, 'button', 'talos-button talos-button--ghost talos-button--sm talos-process__azioni');
   b.type = 'button';
   b.hidden = true;
-  b.setAttribute('aria-label', tr('processi.process.stop'));
-  b.title = tr('processi.process.stop');
+  b.dataset.azione = 'menu';
+  b.setAttribute('aria-haspopup', 'menu');
+  b.setAttribute('aria-label', tr('processi.process.actions'));
+  b.title = tr('processi.process.actions');
   const svg = d.createElementNS(SVG_NS_INSPECTOR, 'svg');
   svg.setAttribute('class', 'i i--sm');
   svg.setAttribute('aria-hidden', 'true');
   const use = d.createElementNS(SVG_NS_INSPECTOR, 'use');
-  use.setAttribute('href', '#i-stop');
+  use.setAttribute('href', '#i-more');
   svg.append(use);
   b.append(svg);
-  b.addEventListener('click', async (evento) => {
+  b.addEventListener('click', (evento) => {
     evento.preventDefault?.();
-    evento.stopPropagation?.(); // la card intera seleziona: fermare non è selezionare
-    const ferma = scheda.azioni?.ferma;
-    if (typeof ferma !== 'function' || b.disabled) return;
-    b.disabled = true;
-    avvisoFermata(riga, tr('processi.process.stopping'));
-    let esito;
-    try { esito = await ferma(idRiga); } catch (errore) { esito = { ok: false, messaggio: errore?.message }; }
-    if (esito?.ok === false) {
-      b.disabled = false;
-      avvisoFermata(riga, tr('processi.process.notStopped', { motivo: esito.messaggio || tr('processi.process.tryAgain') }));
-      return;
-    }
-    clearTimeout(riga.timerFermata);
-    riga.timerFermata = setTimeout(() => {
-      if (!FERMABILE.has(riga.card.dataset.stato)) return;
-      b.disabled = false;
-      avvisoFermata(riga, tr('processi.process.didNotStop'));
-    }, ATTESA_FERMATA_MS);
+    evento.stopPropagation?.(); // la card intera seleziona: aprire il menu non è selezionare
+    /* ⛔ Solo `ancora`: il menu si apre ATTACCATO al bottone — chi arriva da tastiera non ha un puntatore. */
+    apriMenuRiga(riga, scheda, { ancora: b });
   });
   return b;
+}
+
+/*
+ * Una richiesta della riga — Ferma, Sfondo o Togli — con lo stesso andamento di prima (Stop del 02/10, BUG-14): l'avviso dice
+ *   che è partita; se il server dice no, lo dice con le sue parole e si può riprovare; se è partita ma l'esito vero non arriva
+ *   entro `ATTESA_FERMATA_MS`, lo dice e si può riprovare (come Hermes, che toglie la riga solo a uccisione confermata,
+ *   `apps/desktop/src/store/composer-status.ts:458-462`). L'esito vero lo porta l'evento del server (`aggiornaRiga`).
+ */
+const TESTI_RICHIESTA = Object.freeze({
+  ferma: { parte: 'processi.process.stopping', no: 'processi.process.notStopped', muto: 'processi.process.didNotStop' },
+  sfonda: { parte: 'processi.process.backgrounding', no: 'processi.process.notBackgrounded', muto: 'processi.process.didNotBackground' },
+  togli: { parte: 'processi.process.removing', no: 'processi.process.notRemoved', muto: 'processi.process.didNotRemove' },
+});
+async function richiestaDellaRiga(riga, scheda, azione) {
+  const fn = scheda.azioni?.[azione];
+  if (typeof fn !== 'function' || riga.inCorso) return;
+  const testi = TESTI_RICHIESTA[azione];
+  riga.inCorso = azione;
+  statoBottoneAzioni(riga, scheda);
+  avvisoFermata(riga, tr(testi.parte));
+  let esito;
+  try { esito = await fn(riga.id); } catch (errore) { esito = { ok: false, messaggio: errore?.message }; }
+  if (riga.inCorso !== azione) return; // l'esito vero è già arrivato mentre la richiesta viaggiava
+  if (esito?.ok === false) {
+    riga.inCorso = null;
+    statoBottoneAzioni(riga, scheda);
+    avvisoFermata(riga, tr(testi.no, { motivo: esito.messaggio || tr('processi.process.tryAgain') }));
+    return;
+  }
+  clearTimeout(riga.timerFermata);
+  riga.timerFermata = setTimeout(() => {
+    if (riga.inCorso !== azione) return;
+    riga.inCorso = null;
+    statoBottoneAzioni(riga, scheda);
+    avvisoFermata(riga, tr(testi.muto));
+  }, ATTESA_FERMATA_MS);
+}
+/** La richiesta in volo è conclusa da questo stato? Ferma: non più vivo. Sfondo: non più in primo piano. Togli: la riga sparisce. */
+function richiestaConclusa(azione, stato) {
+  if (azione === 'ferma') return !FERMABILE_O_SFONDO.has(stato);
+  if (azione === 'sfonda') return !FERMABILE.has(stato);
+  return false;
 }
 function avvisoFermata(riga, testo) {
   riga.avvisoFerma.textContent = testo || '';
@@ -599,62 +778,36 @@ function avvisoFermata(riga, testo) {
 }
 
 /*
- * ⛔ BUG-14 (05/10/2026) — «Sfondo» per riga: la terza strada del comando lungo (owner: «MAI kill»). Stessa forma del
- *   bottone Ferma — stessa posizione, stesso avviso di riga (`avvisoFerma`, che è lo stato della riga, non dello stop) —
- *   ma il gesto è l'OPPOSTO dolce: non ferma niente, stacca la cattura e il processo vive col suo file di output.
- *   Compare dove compare Ferma («in corso» e «in attesa») e solo se chi disegna sa sfondare; quando l'esito «IN
- *   BACKGROUND» arriva, la riga passa a «in sfondo» e il pulsante si toglie da solo (non è più fermabile).
+ * ⭐ C1 (owner 10/10/2026: «CPU e memoria per processo, misurate da noi, solo a scheda aperta») — il testo della misura in riga.
+ *   Solo per una riga VIVA (in primo piano o in sfondo); «CPU —» quando la misura c'è ma questo comando non l'ha avuta (appena
+ *   partito, o un esecutore che non dice dove gira; un trattino da solo, visto nella foto, non diceva di cosa); niente del tutto quando nessuno ha misurato (scheda appena aperta, server
+ *   che non ha la rotta). La CPU manca al primo campione: lì si dice solo la memoria, mai uno zero inventato.
  */
-function bottoneSfonda(d, riga, scheda, idRiga) {
-  const b = el(d, 'button', 'talos-button talos-button--ghost talos-button--sm talos-process__sfonda');
-  b.type = 'button';
-  b.hidden = true;
-  b.setAttribute('aria-label', tr('processi.process.background'));
-  b.title = tr('processi.process.background');
-  const svg = d.createElementNS(SVG_NS_INSPECTOR, 'svg');
-  svg.setAttribute('class', 'i i--sm');
-  svg.setAttribute('aria-hidden', 'true');
-  const use = d.createElementNS(SVG_NS_INSPECTOR, 'use');
-  use.setAttribute('href', '#i-sfondo');
-  svg.append(use);
-  b.append(svg);
-  b.addEventListener('click', async (evento) => {
-    evento.preventDefault?.();
-    evento.stopPropagation?.(); // la card intera seleziona: sfondare non è selezionare
-    const sfonda = scheda.azioni?.sfonda;
-    if (typeof sfonda !== 'function' || b.disabled) return;
-    b.disabled = true;
-    avvisoFermata(riga, tr('processi.process.backgrounding'));
-    let esito;
-    try { esito = await sfonda(idRiga); } catch (errore) { esito = { ok: false, messaggio: errore?.message }; }
-    if (esito?.ok === false) {
-      b.disabled = false;
-      avvisoFermata(riga, tr('processi.process.notBackgrounded', { motivo: esito.messaggio || tr('processi.process.tryAgain') }));
-      return;
-    }
-    /* Il processo è vivo ma fuori cattura: se l'esito «in sfondo» non arriva entro la soglia, la riga lo dice e il
-       pulsante torna — la persona può riprovare, come per lo Stop. ⛔ Non è un fallimento del kernel: è un avviso. */
-    clearTimeout(riga.timerFermata);
-    riga.timerFermata = setTimeout(() => {
-      if (!FERMABILE.has(riga.card.dataset.stato)) return;
-      b.disabled = false;
-      avvisoFermata(riga, tr('processi.process.didNotBackground'));
-    }, ATTESA_FERMATA_MS);
-  });
-  return b;
+function testoRisorse(p, risorse) {
+  if (!(risorse instanceof Map) || !FERMABILE_O_SFONDO.has(p.stato)) return '';
+  const m = risorse.get(String(p.id ?? ''));
+  if (!m || !Number.isFinite(m.memoriaByte)) return tr('processi.process.resourcesNone');
+  const memoria = memoriaLeggibile(m.memoriaByte);
+  return Number.isFinite(m.cpuPercento) ? tr('processi.process.resources', { cpu: percentoCpu(m.cpuPercento), memoria }) : memoria;
 }
-
-/* Il pulsante «Sfondo» di UNA riga, creato SOLO quando quella riga lo può usare: chi non può sfondare
-   (e nella lista storica è quasi tutta) non paga i tre nodi. La posizione è un patto (mettiSfonda):
-   prima dello Stop, che resta l'ultimo gesto della testa. È lo stesso rimedio pigro del «Mostra
-   tutto» (bottoneDi/CONFIG_TAGLIO): un nodo nascosto che non serve è un nodo in più a ogni riga. */
-function inserisciSfonda(d, riga, scheda, idRiga) {
-  if (!riga.sfonda) {
-    const b = bottoneSfonda(d, riga, scheda, idRiga);
-    riga.mettiSfonda(b);
-    riga.sfonda = b;
+/** Lo span di CPU e memoria della riga, creato la prima volta che serve (in fondo alla `meta`: il CSS lo manda a capo). */
+function risorseDellaRiga(d, riga) {
+  if (!riga.risorseEl) {
+    const nodo = el(d, 'span', 'talos-mono talos-measure talos-process__risorse');
+    nodo.title = tr('processi.process.resourcesTitle');
+    riga.meta.append(nodo);
+    riga.risorseEl = nodo;
   }
-  return riga.sfonda;
+  return riga.risorseEl;
+}
+function percentoCpu(n) {
+  try { return formatoNumeri({ style: 'percent', maximumFractionDigits: n < 10 ? 1 : 0 }).format(n / 100); } catch { return `${n}%`; }
+}
+/* In MB da 1.048.576 byte, come Gestione attività; oltre il GB, un decimale. */
+function memoriaLeggibile(byte) {
+  const mb = byte / 1_048_576;
+  const cifre = (v, decimali) => { try { return formatoNumeri({ maximumFractionDigits: decimali }).format(v); } catch { return String(Math.round(v)); } };
+  return mb >= 1024 ? `${cifre(mb / 1024, 1)} GB` : `${cifre(mb, mb < 10 ? 1 : 0)} MB`;
 }
 
 /*
@@ -795,14 +948,11 @@ function creaRiga(d, p, scheda, contenitore) {
   const dettaglio = el(d, 'div', 'talos-process__dettaglio');
   dettaglio.id = `processo-dettaglio-${String(p.id ?? '')}`;
   dettaglio.hidden = true;
-  const riga = { card, cmd, titolo, statoEl: null, statoTesto: null, statoUse: null, chiEl: null, oraEl: null, misuraEl: null, stallo: null, dettaglio, icona, mostrato: null, aperto: false, dettaglioSporco: true, righeDettaglio: p.dettaglio };
+  const riga = { id: String(p.id ?? ''), card, cmd, titolo, statoEl: null, statoTesto: null, statoUse: null, chiEl: null, oraEl: null, misuraEl: null, risorseEl: null, stallo: null, dettaglio, icona, mostrato: null, aperto: false, dettaglioSporco: true, righeDettaglio: p.dettaglio, inCorso: null };
   const apri = bottoneApri(d, card, riga, String(p.id ?? ''));
-  const ferma = bottoneFerma(d, riga, scheda, String(p.id ?? '')); // Stop per riga: prima del «⌄», che resta l'ultimo
-  /* BUG-14 «Sfondo» per riga: il pulsante NON nasce qui. Lo crea `inserisciSfonda` al primo bisogno
-     (stato fermabile + chi disegna sa sfondare) e si mette PRIMA dello Stop, che resta l'ultimo gesto.
-     ⛔ PROC-UNA-RIGA: la prova conta i nodi creati a ogni passata — le righe che non sfonderanno mai
-     (la maggior parte di una lista storica) non devono pagare i tre nodi button+svg+use. */
-  testa.append(icona, testo, ferma, apri);
+  /* C1 (10/10/2026): il «⋯» con Ferma, Sfondo e Togli, prima del «⌄», che resta l'ultimo. Sostituisce i due pulsanti affiancati. */
+  const azioni = bottoneAzioniRiga(d, riga, scheda);
+  testa.append(icona, testo, azioni, apri);
 
   const meta = el(d, 'div', 'talos-process__meta');
   const statoEl = el(d, 'span', 'talos-badge talos-badge--sm talos-process__stato');
@@ -819,6 +969,8 @@ function creaRiga(d, p, scheda, contenitore) {
      dettaglio. Sta accanto a «chi» e va a capo con lui quando la colonna si stringe. */
   const oraEl = el(d, 'span', 'talos-mono talos-process__ora');
   const misuraEl = el(d, 'span', 'talos-mono talos-measure talos-process__misura');
+  /* C1 (10/10/2026): CPU e memoria del comando vivo NON nascono qui — `risorseDellaRiga` le crea al primo bisogno. Il tetto dei
+     nodi della scheda (P0E-PROCESSI: 40 righe sotto i 1200 nodi) le contava su ogni riga, e quasi tutte sono finite. */
   meta.append(statoEl, chiEl, oraEl, el(d, 'span', 'talos-grow'), misuraEl);
 
   const stallo = el(d, 'div', 'talos-process__stall');
@@ -841,13 +993,14 @@ function creaRiga(d, p, scheda, contenitore) {
     evento.preventDefault?.();
     card.lancia ? card.lancia('click') : card.click?.();
   });
-
-  Object.assign(riga, {
-    statoEl, statoTesto, statoUse, chiEl, oraEl, misuraEl, stallo, ferma, sfonda: null, avvisoFerma, timerFermata: null,
-    /* La posizione del «Sfondo» è un patto: prima dello Stop, che resta l'ultimo gesto della testa.
-       Passa da qui (non da `parentNode`) perché il DOM finto dei test implementa insertBefore, non parentNode. */
-    mettiSfonda: (b) => testa.insertBefore(b, ferma),
+  /* C1: il tasto destro apre la STESSA lista del «⋯». Dal tasto «Menu» della tastiera il browser manda un `contextmenu` senza
+     coordinate (0,0): lì il menu si attacca al «⋯», non all'angolo della finestra. */
+  card.addEventListener('contextmenu', (evento) => {
+    const daTastiera = !evento.clientX && !evento.clientY;
+    if (apriMenuRiga(riga, scheda, daTastiera ? { ancora: azioni } : { x: evento.clientX, y: evento.clientY })) evento.preventDefault?.();
   });
+
+  Object.assign(riga, { statoEl, statoTesto, statoUse, chiEl, oraEl, misuraEl, meta, stallo, azioni, avvisoFerma, timerFermata: null });
   aggiornaRiga(d, riga, p, scheda);
   void contenitore;
   return riga;
@@ -857,21 +1010,16 @@ function aggiornaRiga(d, riga, p, scheda) {
   const m = riga.mostrato;
   riga.card.dataset.stato = p.stato;
   riga.card.dataset.famiglia = p.famiglia;
-  /* Stop per riga e «Sfondo» per riga (BUG-14): solo mentre gira, e solo se chi disegna sa fare quel gesto. Quando il
-     comando finisce — o passa «in sfondo» — l'avviso se ne va e i pulsanti si tolgono. */
-  const fermabile = FERMABILE.has(p.stato) && typeof scheda.azioni?.ferma === 'function';
-  riga.ferma.hidden = !fermabile;
-  const sfondabile = FERMABILE.has(p.stato) && typeof scheda.azioni?.sfonda === 'function';
-  /* ⛔ PROC-UNA-RIGA: il pulsante nasce SOLO al primo bisogno (inserisciSfonda) — chi non può sfondare
-     non ha il nodo finché non gli serve; chi lo era e non lo è più lo nasconde senza cancellarlo. */
-  if (sfondabile) inserisciSfonda(d, riga, scheda, String(p.id ?? '')).hidden = false;
-  else if (riga.sfonda) riga.sfonda.hidden = true;
-  if (!fermabile && (riga.ferma.disabled || !riga.avvisoFerma.hidden)) {
+  /* C1 (10/10/2026): l'esito vero chiude la richiesta in volo (Ferma, Sfondo) e porta via il suo avviso; un comando che finisce
+     da solo porta via l'avviso di una richiesta non riuscita. Poi il «⋯» si rilegge: c'è solo se resta un'azione possibile. */
+  if (riga.inCorso && richiestaConclusa(riga.inCorso, p.stato)) {
     clearTimeout(riga.timerFermata);
-    riga.ferma.disabled = false;
+    riga.inCorso = null;
+    avvisoFermata(riga, '');
+  } else if (!riga.inCorso && m && m.stato !== p.stato && !FERMABILE_O_SFONDO.has(p.stato) && !riga.avvisoFerma.hidden) {
     avvisoFermata(riga, '');
   }
-  if (!sfondabile && riga.sfonda?.disabled) riga.sfonda.disabled = false;
+  statoBottoneAzioni(riga, scheda);
   riga.card.dataset.selezionato = scheda.selezionato === p.id ? 'si' : 'no';
   /* ⛔ IL TITOLO, che è la descrizione scritta dal modello (BLOCCO 4, vedi `creaRiga`). Si riscrive
      solo se è cambiata, come tutto il resto di questa riga. */
@@ -922,6 +1070,12 @@ function aggiornaRiga(d, riga, p, scheda) {
   if (!m || m.chi !== p.chi) riga.chiEl.textContent = p.chi;
   if (!m || m.quando !== p.quando) riga.oraEl.textContent = p.quando === '\u2014' ? '' : p.quando;
   if (!m || m.misura !== p.misura) riga.misuraEl.textContent = p.misura;
+  const risorse = testoRisorse(p, scheda.risorse);
+  if ((!m || m.risorse !== risorse) && (risorse || riga.risorseEl)) {
+    const nodo = risorseDellaRiga(d, riga);
+    nodo.textContent = risorse;
+    nodo.hidden = !risorse;
+  }
   if (!m || m.fermo !== p.fermo) {
     riga.stallo.textContent = p.fermo || '';
     riga.stallo.hidden = !p.fermo;
@@ -934,7 +1088,7 @@ function aggiornaRiga(d, riga, p, scheda) {
     if (riga.aperto) { riempiCard(d, riga.dettaglio, p.dettaglio, { classiValore: CLASSI_DETTAGLIO_PROCESSO }); riga.dettaglioSporco = false; }
     else riga.dettaglioSporco = true;
   }
-  riga.mostrato = { comando: p.comando, stato: p.stato, etichetta: p.etichetta, chi: p.chi, quando: p.quando, misura: p.misura, fermo: p.fermo, chiaveDettaglio, descrizione };
+  riga.mostrato = { comando: p.comando, stato: p.stato, etichetta: p.etichetta, chi: p.chi, quando: p.quando, misura: p.misura, risorse, fermo: p.fermo, chiaveDettaglio, descrizione };
 }
 
 /**
@@ -951,6 +1105,8 @@ export function disegnaProcessi(d, contenitore, lista, opzioni = {}) {
   /* Stop per riga: `{ ferma(toolCallId) → {ok, messaggio?} }` da chi disegna; i ridisegni interni (filtro, «carica altri») non
      la passano e si tiene l'ultima. */
   if (opzioni.azioni) scheda.azioni = opzioni.azioni;
+  /* C1 (10/10/2026): CPU e memoria misurate (`toolCallId → misura`), da chi disegna; i ridisegni interni non le passano. */
+  if ('risorse' in opzioni) scheda.risorse = opzioni.risorse instanceof Map ? opzioni.risorse : null;
   /*
    * ⛔⛔ IL PRIMO TENTATIVO ERA PIÙ LENTO DEL DIFETTO, e l'ho visto solo perché il banco misura
    *   DUE cose e non una. Preparando tutti i processi (`datiProcesso`, che parsa la riga di comando)
@@ -1000,6 +1156,7 @@ export function disegnaProcessi(d, contenitore, lista, opzioni = {}) {
       });
       stati.append(b);
     }
+    strisciaScorrevole(stati);
     scheda.statiEl = stati;
     contenitore.insertBefore(box, contenitore.firstChild || null);
     contenitore.insertBefore(stati, box.nextSibling || null);
@@ -1014,10 +1171,32 @@ export function disegnaProcessi(d, contenitore, lista, opzioni = {}) {
   }
 
   if (!scheda.zona) {
+    /*
+     * ⭐ C1 (owner 10/10/2026) — «Ferma tutti» e la sezione «In sfondo». Il primo è un pulsante quieto in testa all'elenco, solo
+     *   quando c'è più di un comando vivo da fermare (con uno solo è il suo «⋯»), e chiede conferma: ferma lavoro vero. La
+     *   sezione tiene insieme i comandi che vivono oltre il loro giro, così non si perdono fra i finiti; sotto, gli altri.
+     */
+    const barra = el(d, 'div', 'talos-process-barra');
+    barra.hidden = true;
+    const fermaTutti = el(d, 'button', 'talos-button talos-button--ghost talos-button--sm talos-process-ferma-tutti', tr('processi.process.stopAll'));
+    fermaTutti.type = 'button';
+    fermaTutti.addEventListener('click', (evento) => { evento.preventDefault?.(); chiediFermaTutti(scheda); });
+    barra.append(fermaTutti);
+    const sezioneSfondo = el(d, 'section', 'talos-process-sezione');
+    sezioneSfondo.hidden = true;
+    const titoloSfondo = el(d, 'h3', 'talos-agenti-titolo talos-process-sezione__titolo', tr('processi.process.backgroundSection'));
+    titoloSfondo.id = 'talos-process-sezione-sfondo';
+    const listaSfondo = el(d, 'div', 'talos-process-lista');
+    listaSfondo.setAttribute('role', 'list');
+    listaSfondo.setAttribute('aria-labelledby', titoloSfondo.id);
+    sezioneSfondo.append(titoloSfondo, listaSfondo);
+    const titoloAltri = el(d, 'h3', 'talos-agenti-titolo talos-process-sezione__titolo', tr('processi.process.otherSection'));
+    titoloAltri.hidden = true;
     scheda.zona = el(d, 'div', 'talos-process-lista');
     scheda.zona.setAttribute('role', 'list');
     scheda.zona.setAttribute('aria-label', tr('processi.process.listLabel'));
-    contenitore.append(scheda.zona);
+    contenitore.append(barra, sezioneSfondo, titoloAltri, scheda.zona);
+    Object.assign(scheda, { barra, fermaTutti, sezioneSfondo, listaSfondo, titoloAltri });
   }
 
   const cerca = scheda.filtro.trim().toLowerCase();
@@ -1032,19 +1211,33 @@ export function disegnaProcessi(d, contenitore, lista, opzioni = {}) {
       b.hidden = STATI_RARI_FILTRO.has(b.dataset.stato) && voluto !== b.dataset.stato && !grezzi.some((p) => statoProcesso(p) === b.dataset.stato);
     }
   }
-  /* ⛔ `datiProcesso` — e con lui il parse della riga di comando — gira SOLO su ciò che si vede. */
-  const visibili = filtrati.slice(0, scheda.mostrati).map((p) => datiProcesso(p));
+  /* ⛔ `datiProcesso` — e con lui il parse della riga di comando — gira SOLO su ciò che si vede.
+     C1: i comandi in sfondo stanno nella loro sezione, tutti (sono pochi e vivi); il tetto «carica altri» vale per gli altri. */
+  const sfondati = filtrati.filter((p) => statoProcesso(p) === 'in-sfondo');
+  const altriProcessi = filtrati.filter((p) => statoProcesso(p) !== 'in-sfondo');
+  const visibiliSfondo = sfondati.map((p) => datiProcesso(p));
+  const visibiliAltri = altriProcessi.slice(0, scheda.mostrati).map((p) => datiProcesso(p));
+  const visibili = [...visibiliSfondo, ...visibiliAltri];
 
   const visti = new Set();
-  for (let i = 0; i < visibili.length; i += 1) {
-    const p = visibili[i];
-    visti.add(p.id);
-    let riga = scheda.righe.get(p.id);
-    if (!riga) { riga = creaRiga(d, p, scheda, contenitore); scheda.righe.set(p.id, riga); }
-    else aggiornaRiga(d, riga, p, scheda);
-    const attuale = scheda.zona.children[i];
-    if (attuale !== riga.card) scheda.zona.insertBefore(riga.card, attuale || null);
-  }
+  const posa = (elenco, zona) => {
+    for (let i = 0; i < elenco.length; i += 1) {
+      const p = elenco[i];
+      visti.add(p.id);
+      let riga = scheda.righe.get(p.id);
+      if (!riga) { riga = creaRiga(d, p, scheda, contenitore); scheda.righe.set(p.id, riga); }
+      else aggiornaRiga(d, riga, p, scheda);
+      const attuale = zona.children[i];
+      if (attuale !== riga.card) zona.insertBefore(riga.card, attuale || null);
+    }
+  };
+  posa(visibiliSfondo, scheda.listaSfondo);
+  posa(visibiliAltri, scheda.zona);
+  scheda.sezioneSfondo.hidden = visibiliSfondo.length === 0;
+  scheda.titoloAltri.hidden = visibiliSfondo.length === 0 || visibiliAltri.length === 0;
+  /* «Ferma tutti»: sui comandi vivi di TUTTA la scheda (non solo quelli filtrati), e solo se sono più di uno. */
+  const fermabiliTutti = grezzi.filter((p) => FERMABILE_O_SFONDO.has(statoProcesso(p))).length;
+  scheda.barra.hidden = !(fermabiliTutti > 1 && typeof scheda.azioni?.ferma === 'function' && typeof scheda.azioni?.conferma === 'function');
   /* ⛔ Le righe che non ci sono più (filtrate, oltre il tetto, o di un'altra sessione) si TOLGONO:
      tenerle nella mappa le farebbe riapparire al primo aggiornamento, fuori posto. */
   for (const [id, riga] of [...scheda.righe]) {
@@ -1054,7 +1247,7 @@ export function disegnaProcessi(d, contenitore, lista, opzioni = {}) {
   }
 
   /* «Carica altri»: solo quando c'è davvero altro, e dice QUANTO. */
-  const restano = filtrati.length - visibili.length;
+  const restano = altriProcessi.length - visibiliAltri.length;
   if (restano > 0) {
     if (!scheda.altri) {
       const b = el(d, 'button', 'talos-button talos-button--secondary talos-button--block talos-process-altri');
@@ -1069,7 +1262,7 @@ export function disegnaProcessi(d, contenitore, lista, opzioni = {}) {
       scheda.altri = b;
       contenitore.append(b);
     }
-    scheda.altri.textContent = tr('processi.process.loadMore', { visibili: visibili.length, totale: filtrati.length });
+    scheda.altri.textContent = tr('processi.process.loadMore', { visibili: visibiliAltri.length, totale: altriProcessi.length });
   } else if (scheda.altri) {
     scheda.altri.remove();
     scheda.altri = null;
@@ -1107,6 +1300,30 @@ export function disegnaProcessi(d, contenitore, lista, opzioni = {}) {
   }
 
   return { mostrati: visibili.length, totale: grezzi.length };
+}
+
+/*
+ * C1 (owner 10/10/2026): «Ferma tutti» con conferma. I comandi si contano ADESSO (alla conferma, non al clic): fra la domanda e
+ *   il sì qualcuno può essere finito. Ogni riga visibile mostra il suo avviso come se la si fermasse dal suo «⋯»; le altre si
+ *   fermano lo stesso. Il giro continua, come per lo Stop di una riga.
+ */
+function chiediFermaTutti(scheda) {
+  const vivi = () => (scheda.ultima || []).filter((p) => FERMABILE_O_SFONDO.has(statoProcesso(p)));
+  const n = vivi().length;
+  if (n < 1 || typeof scheda.azioni?.conferma !== 'function') return;
+  scheda.azioni.conferma({
+    titolo: tr('processi.process.stopAllTitle'),
+    domanda: tn('processi.process.stopAllQuestionOne', 'processi.process.stopAllQuestionMany', n),
+    conseguenza: tr('processi.process.stopAllConsequence'),
+    etichettaConferma: tr('processi.process.stopAll'),
+    onConferma: () => {
+      for (const p of vivi()) {
+        const riga = scheda.righe.get(p.id);
+        if (riga) void richiestaDellaRiga(riga, scheda, 'ferma');
+        else void Promise.resolve().then(() => scheda.azioni?.ferma?.(p.id)).catch(() => {});
+      }
+    },
+  });
 }
 
 /**
@@ -1244,16 +1461,17 @@ export function disegnaAgenti(d, contenitore, agenti, azioni = {}) {
         }
         for (const b of filtro.children) {
           b.setAttribute('aria-pressed', String(b.dataset.stato === s.valore));
-          b.hidden = ['ignoto', 'interrotta'].includes(b.dataset.stato) && s.valore !== b.dataset.stato && !s.dati.some(a => statoDelega(a) === b.dataset.stato);
+          b.hidden = ['ignoto', 'interrotta', 'in-pausa'].includes(b.dataset.stato) && s.valore !== b.dataset.stato && !s.dati.some(a => statoDelega(a) === b.dataset.stato);
         }
         pagine.hidden = filtrati.length <= 25;
         pagina.textContent = tr('agenti.delegations.pageRange', { da: conteggioAgenti(filtrati.length ? inizio + 1 : 0), a: conteggioAgenti(Math.min(inizio + 25, filtrati.length)), totale: conteggioAgenti(filtrati.length) });
         precedente.disabled = s.pagina === 0; successiva.disabled = s.pagina >= paginaMassima;
       };
-      for (const [valore, testo] of [['tutti', 'processi.agents.filterAll'], ['in-corso', 'processi.agents.filterActive'], ['attesa', 'processi.agents.filterWaiting'], ['fallita', 'processi.agents.filterErrors'], ['conclusa', 'processi.agents.filterFinished'], ['interrotta', 'processi.agents.filterStopped'], ['ignoto', 'processi.agents.filterUnavailable']]) {
+      for (const [valore, testo] of [['tutti', 'processi.agents.filterAll'], ['in-corso', 'processi.agents.filterActive'], ['attesa', 'processi.agents.filterWaiting'], ['fallita', 'processi.agents.filterErrors'], ['conclusa', 'processi.agents.filterFinished'], ['interrotta', 'processi.agents.filterStopped'], ['in-pausa', 'processi.agents.filterPaused'], ['ignoto', 'processi.agents.filterUnavailable']]) {
         const b = el(d, 'button', '', tr(testo)); b.type = 'button'; b.dataset.stato = valore;
         b.addEventListener('click', () => { s.valore = valore; s.pagina = 0; disegna(); }); filtro.append(b);
       }
+      strisciaScorrevole(filtro);
       s.disegna = disegna; cerca.addEventListener('input', () => { s.pagina = 0; disegna(); });
       precedente.addEventListener('click', () => { s.pagina--; disegna(); precedente.focus(); });
       successiva.addEventListener('click', () => { s.pagina++; disegna(); successiva.focus(); });
@@ -1322,7 +1540,7 @@ export function disegnaAgenti(d, contenitore, agenti, azioni = {}) {
     /* ⛔ 09/09: `taskCorto` prima di `task` — la consegna intera comincia col preambolo del kernel,
        uguale per ogni figlia, e a 52 caratteri due deleghe diverse diventano la stessa riga (visto
        nella foto della scheda «Agenti» del giro D2). Il ripiego su `task` regge le figlie vecchie. */
-    head.append(el(d, 'b', '', tronca(a.taskCorto || a.task || tr('agenti.agent.noTaskRecorded'), 52)), el(d, 'span', `talos-badge talos-badge--sm${statoDelega(a) === 'fallita' ? ' talos-badge--danger' : statoDelega(a) === 'conclusa' ? ' talos-badge--success' : ''}`, etichettaDelega(a)));
+    head.append(el(d, 'b', '', tronca(a.taskCorto || a.task || tr('agenti.agent.noTaskRecorded'), 52)), el(d, 'span', `talos-badge talos-badge--sm${statoDelega(a) === 'fallita' ? ' talos-badge--danger' : statoDelega(a) === 'conclusa' ? ' talos-badge--success' : ['in-pausa', 'interrotta'].includes(statoDelega(a)) ? ' talos-badge--warning' : ''}`, etichettaDelega(a)));
     /*
      * ⛔⛔ 10/09, owner, regola generale e non un caso: «non mettere i pulsanti uno accanto
      *   all'altro, usa i tre puntini + dropdown… e anche azioni tasto destro mouse, ragiona sempre
@@ -1469,11 +1687,13 @@ export function schedaAgentiDaRileggere({ elenco = [], sessioneCorrente = null, 
 // ⛔ 06/9, T05-D3: «interrotta» PRIMA di «in corso» — un figlio che nessuno sta più eseguendo non è vivo.
 function statoDelega(a) {
   if (a?.interrotta === true || a?.motivoChiusura === 'fermata') return 'interrotta';
+  // C3 tappa 4: in pausa non è né un errore né una fine (chiude con un RunError «in-pausa»): uno stato suo
+  if (a?.esitoDelega === 'in-pausa' || a?.motivoChiusura === 'in-pausa') return 'in-pausa';
   if (a?.conclusa === true) return ['errore', 'error', 'fallito', 'failed', 'rifiutato'].includes(a.ultimoEsito || a.esitoDelega) ? 'fallita' : 'conclusa';
   if (a?.approvalPendingCount > 0 || a?.inAttesaApprovazione > 0 || a?.inAttesaApprovazione === true) return 'attesa';
   return a?.conclusa === false ? 'in-corso' : 'ignoto';
 }
-function etichettaDelega(a) { return tr({ interrotta: 'processi.agents.stateStopped', 'in-corso': 'processi.agents.stateRunning', fallita: 'processi.agents.stateFailed', conclusa: 'processi.agents.stateDone', attesa: 'processi.agents.stateWaiting', ignoto: 'agenti.delegations.statusUnavailable' }[statoDelega(a)]); }
+function etichettaDelega(a) { return tr({ 'in-pausa': 'processi.agents.statePaused', interrotta: 'processi.agents.stateStopped', 'in-corso': 'processi.agents.stateRunning', fallita: 'processi.agents.stateFailed', conclusa: 'processi.agents.stateDone', attesa: 'processi.agents.stateWaiting', ignoto: 'agenti.delegations.statusUnavailable' }[statoDelega(a)]); }
 
 /*
  * ⛔⛔ I DUE NUMERI DELLE SCHEDE — owner, 20/09/2026: «badge counter in tempo reale in sidebar
@@ -1554,6 +1774,37 @@ const CLASSI_DETTAGLIO_PROCESSO = (r) => (r[2] === 'lungo' ? 'talos-kv__v--lungo
  *   disegno intero che un ordine sbagliato.
  */
 const RIGHE_DELLA_CARD = new WeakMap(); // card → [{ acapo, riga, firma }], nell'ordine in cui stanno nella card
+
+/** C1 (10/10/2026): i dettagli minimi della card COMPRESSA, nella sua testata (owner: «compresse di default con dettagli minimi»). */
+function scriviAnteprima(card, testo) {
+  const n = card?.querySelector('[data-anteprima]');
+  if (n && n.textContent !== testo) n.textContent = testo;
+}
+
+/** C1 (10/10/2026): l'anteprima della card «Compattazioni»: quante, e quando l'ultima. */
+export function anteprimaCompattazioni({ motore = null, legacy = null } = {}) {
+  const c = compattazioniDellaConversazione({ motore, legacy });
+  // come le righe (`righeCompattazioni`): nessuna sorgente detta = nessuna compattazione vista, non «—» (foto della card scorsa)
+  if (!c || c.numero === 0) return tr('processi.inspector.compactionsNonePreview');
+  return c.ultimaAl ? `${c.numero} · ${dataEOraBreve(c.ultimaAl)}` : String(c.numero);
+}
+
+/** C1 (10/10/2026): la barra delle categorie (la stessa `.talos-contesto` delle Impostazioni) e la frase del perché, in fondo. */
+function disegnaBarraEPerche(d, card, f) {
+  if (!card) return;
+  const barra = card.querySelector('#contestoSchedaBarra');
+  const fette = Array.isArray(f?.fette) ? f.fette : [];
+  if (barra) {
+    barra.hidden = fette.length === 0;
+    barra.replaceChildren(...fette.map((v) => { const s = d.createElement('span'); s.className = `talos-contesto__fetta talos-contesto__fetta--${v.id}`; s.dataset.fetta = v.id; s.style.width = `${Math.max(0, Math.min(100, v.percentuale))}%`; return s; }));
+    if (f?.perche) barra.setAttribute('aria-label', f.perche); else barra.removeAttribute('aria-label');
+  }
+  let perche = card.querySelector('[data-contesto-perche]');
+  if (!f?.perche) { perche?.remove(); return; }
+  if (!perche) { perche = d.createElement('p'); perche.className = 'talos-inspector__hint'; perche.dataset.contestoPerche = ''; }
+  perche.textContent = f.perche;
+  card.append(perche); // sempre in fondo: le righe di `riempiCard` si accodano
+}
 
 function riempiCard(d, card, righe, { classiValore = () => '' } = {}) {
   if (!card) return;
@@ -1666,15 +1917,27 @@ export function aggiornaInspector(inspector, dati = {}, { document: d = globalTh
     const cards = inspector.querySelectorAll('#railContesto [data-c="InspectorCard"], #railContesto [data-c="TurnIndex"]');
     const [ambiente, finestra, indice] = cards;
     riempiCard(d, ambiente, righeAmbiente(dati.contesto));
-    const f = righeFinestra(dati.usage, dati.finestra, dati.ripartizione, dati.cacheSessione, { storiaInCaricamento: dati.storiaInCaricamento === true });
-    if (finestra) { const testa = finestra.querySelector('.talos-inspector-card__head span'); if (testa) testa.textContent = f.titoloDestra; }
-    riempiCard(d, finestra, f.righe, { classiValore: (r) => (r[2] === 'stima' ? 'talos-measure--estimate' : '') });
+    scriviAnteprima(ambiente, dati.contesto?.branch || ''); // senza ramo niente: un «—» accanto all'icona sembrava un difetto (foto)
+    /* C1 (owner 10/10/2026): sul limite che AGISCE quando una sorgente l'ha detto (budget del motore o politica del legacy), con le
+       categorie della richiesta vera; altrimenti la forma di prima, che non promette un limite che non conosce. */
+    const sc = dati.schedaContesto ?? null;
+    const limite = limiteCheAgisce({ budget: sc?.budget ?? null, politica: sc?.politica ?? null });
+    const f = righeFinestraSulLimite({ usage: dati.usage, ripartizione: sc?.ripartizione ?? null, limite, cacheSessione: dati.cacheSessione, storiaInCaricamento: dati.storiaInCaricamento === true })
+      ?? righeFinestra(dati.usage, dati.finestra, dati.ripartizione, dati.cacheSessione, { storiaInCaricamento: dati.storiaInCaricamento === true });
+    if (finestra) { const testa = finestra.querySelector('.talos-inspector-card__head > span'); if (testa) testa.textContent = f.titoloDestra; }
+    scriviAnteprima(finestra, f.anteprima ?? '—');
+    riempiCard(d, finestra, f.righe, { classiValore: (r) => (r[2] === 'stima' ? 'talos-measure--estimate' : r[2] === 'a-capo' ? 'talos-kv__v--a-capo' : '') });
+    disegnaBarraEPerche(d, finestra, f);
+    const compattazioni = inspector.querySelector('#contestoCompattazioni');
+    scriviAnteprima(compattazioni, anteprimaCompattazioni({ motore: sc?.motore ?? null, legacy: sc?.legacy ?? null }));
+    if (compattazioni) riempiCard(d, compattazioni, righeCompattazioni({ motore: sc?.motore ?? null, legacy: sc?.legacy ?? null, recordLegacy: sc?.recordLegacy ?? null, level1: sc?.level1 ?? null, richiestaVista: Boolean(sc?.ripartizione) }), { classiValore: (r) => (r[2] === 'a-capo' ? 'talos-kv__v--a-capo' : '') });
     const giri = righeGiri(dati.giri);
     /* ⛔ A1-bis (07/10/2026): durante la storia l'indice è vuoto perché i giri NON SONO ANCORA ARRIVATI, non perché non ce
        ne sono — «Nessun giro ancora» su una sessione da 1363 giri era una frase falsa a schermo per ~14 s. Si dice la
        stessa cosa del velo della chat, con la stessa chiave. */
     const indiceVuoto = dati.storiaInCaricamento === true ? tr('app.sessions.openingHistory') : tr('processi.inspector.turnsNone');
     riempiCard(d, indice, giri.length ? giri : [[indiceVuoto, '—']], { classiValore: (r) => (r[2] === 'accent' ? 'talos-kv__v--accent' : '') });
+    scriviAnteprima(indice, giri.length ? tn('processi.inspector.turnsPreviewOne', 'processi.inspector.turnsPreviewMany', giri.length) : dati.storiaInCaricamento === true ? '…' : '—');
   }
   if (!schedaDaSaltare(inspector, inspector.querySelector('#railFile'), 'file')) {
     const fileCard = inspector.querySelector('#railFile [data-c="InspectorCard"]');
@@ -1700,7 +1963,7 @@ export function aggiornaInspector(inspector, dati = {}, { document: d = globalTh
    *   inserisce le righe nuove, aggiorna in loco quelle che cambiano e toglie quelle sparite.
    *   Selezione, filtro, dettaglio aperto e scorrimento sopravvivono a un evento nuovo.
    */
-  if (processi) disegnaProcessi(d, processi, Array.isArray(dati.processi) ? dati.processi : [], dati.azioniProcessi ? { azioni: dati.azioniProcessi } : {});
+  if (processi) disegnaProcessi(d, processi, Array.isArray(dati.processi) ? dati.processi : [], { ...(dati.azioniProcessi ? { azioni: dati.azioniProcessi } : {}), risorse: dati.risorseProcessi ?? null });
 }
 
 /** I processi dagli eventi degli attrezzi del monolite (`eventiAttrezzi`), con i tempi misurati alla ricezione. */
@@ -1764,6 +2027,9 @@ export function processiDagliEventi(eventi = [], { adesso = Date.now(), nomiComa
      contesto). Il giornale conserva quell'ordine. Un'uscita per una riga non ancora chiusa si TIENE qui e si applica quando il
      suo risultato la porta in sfondo; un risultato in primo piano la ignora (il suo esito è già quello vero). */
   const usciteAnticipate = new Map();
+  /* C1 (owner 10/10/2026, «Sì, resta tolta»): i comandi tolti dalla scheda (`talos.processo-tolto`, durevole). La riga resta nei
+     dati con `tolto: true` — la scheda Processi la salta (`legacy/app.js`), le schede «Agente» del terminale no: lì è l'output. */
+  const tolti = new Set();
   /* ⛔ Taccuino (08/10/2026): la DURATA di uno sfondato è quella del processo, dall'avvio all'uscita vera (Hermes: `started_at` e
      `exited_at`, `tools/process_registry.py:533-536`). Quella del risultato «in sfondo» (0,2 s, misurato sulla 4176 per un
      comando di 8 s) è il tempo della CHIAMATA fino allo sfondamento: detta come durata, era falsa. Un orologio che va indietro
@@ -1797,6 +2063,10 @@ export function processiDagliEventi(eventi = [], { adesso = Date.now(), nomiComa
      *   «in sfondo» restava viva per sempre e il numero sulla scheda la contava; ora si chiude col SUO evento, come dice la nota
      *   A6 più sotto. Solo una riga ancora «in sfondo»: un esito già detto non si riscrive.
      */
+    if (e.type === 'ProcessoTolto') {
+      if (typeof e.toolCallId === 'string') tolti.add(e.toolCallId);
+      continue;
+    }
     if (e.type === 'ProcessoSfondoFinito') {
       const p = avviati.get(e.toolCallId);
       if (p?.stato === 'in-sfondo') chiudiSfondo(p, e);
@@ -1949,5 +2219,6 @@ export function processiDagliEventi(eventi = [], { adesso = Date.now(), nomiComa
      */
     if (p.stato === 'in-corso' && p.fermoDaMs >= SOGLIA_ATTESA_MS) p.stato = 'in-attesa';
   }
+  for (const p of lista) if (tolti.has(p.id)) p.tolto = true;
   return lista.reverse();
 }

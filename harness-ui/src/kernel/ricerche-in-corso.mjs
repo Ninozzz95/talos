@@ -38,6 +38,8 @@ export function creaRegistroRicerche({
         massimoInCorso,
         conservaDopoMs,
         puoAvviare: () => inCorso().length < massimoInCorso,
+        /** Quante ricerche sono vive adesso (affitto fra processi, 10/10/2026: una sessione che cerca è in uso). */
+        quanteInCorso: () => inCorso().length,
         /** Registra una ricerca viva; torna il suo riferimento («r1», «r2»…, unico nella sessione). */
         registra(voce) {
             const id = `r${++progressivo}`

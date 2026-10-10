@@ -550,7 +550,9 @@ jobs:
 
       - id: cancelli
         name: server, kernel, frontend e guscio Electron reale
-        timeout-minutes: 15
+        # 10/10/2026 (0.1.26): 0.1.25 qui 10 min 10 s; nel CI della PR #55 il solo server 9 min 14 s e il frontend 2 min 49 s,
+        # e R04-TAG-COMMIT ora può aspettare fino a 2 min per la copia del repo. 15 min non lasciavano margine dopo il tag.
+        timeout-minutes: 25
         run: |
           node --test harness-ui/tests/*.test.mjs
           if ($LASTEXITCODE -ne 0) { throw 'Test server falliti.' }

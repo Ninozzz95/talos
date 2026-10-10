@@ -20,8 +20,9 @@
  */
 import { readRunState, watchRun } from './store.mjs';
 import { projectWorkflowRunUpdate } from './read-model.mjs';
+import { STATI_FINALI_DEL_RUN } from './stati-finali.mjs';
 
-const RUN_TERMINALI = new Set(['succeeded', 'failed', 'cancelled']);
+const RUN_TERMINALI = new Set(STATI_FINALI_DEL_RUN);
 export const RUN_STREAM_HEARTBEAT_MS = 15_000;
 
 /**

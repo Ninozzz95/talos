@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { parseContextSettings, ContextEngineError } from '../../context-engine/src/contracts.mjs';
 import { importLegacySession } from '../../context-engine/src/node/legacy-import.mjs';
+import { computeContextBudget } from '../../context-engine/src/compaction-planner.mjs';
 
 const fail = (code, message) => { throw new ContextEngineError(message, code); };
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -9,7 +10,28 @@ const validId = value => typeof value === 'string' && value.length > 0 && value.
 
 /** Desktop ownership and transport adaptation; archive paths and model credentials
  * never originate in the HTTP request. Every durable mutation has a receipt. */
-export function createDesktopContextService({ engine, store, loadLegacy, resolveSessionModel, isSessionEnabled, readSession, onEvent, runInference, registraAncora, clock = () => new Date().toISOString() }) {
+/** C1 (10/10/2026): la risposta per una conversazione che NON usa il motore (legacy o nata prima). Col motore di serie non è più
+ *  «trial»: è il caso normale di ogni conversazione vecchia. Esportata perché le prove la usano invece di copiarla. */
+export const MOTORE_SPENTO_PER_LA_CONVERSAZIONE = 'The context engine is not active for this conversation.';
+
+/** C1 (10/10/2026): il budget del motore per l'ultima misura, nella forma che la scheda Contesto e l'avviso leggono; `null` se non
+ *  c'è una misura o il profilo non è valido (mai un numero inventato).
+ *  ⛔ Review del bugfixer (10/10, punto 1): la misura porta la finestra del modello di QUANDO è stata presa. Dopo un cambio di modello
+ *  il motore, alla richiesta dopo, misura col profilo NUOVO: se `profilo` (quello attuale della conversazione) è di un altro modello,
+ *  finestra e riserva si prendono da lui, e i token restano quelli misurati. Stesso modello, o nessun profilo verificato: la misura. */
+export function budgetDellaMisura(snapshot, profilo = null) {
+  const misura = snapshot?.measurement?.tokens;
+  if (!misura) return null;
+  const altroModello = profilo && Number.isSafeInteger(profilo.windowTokens) && Number.isSafeInteger(profilo.responseReserve)
+    && (profilo.model !== misura.model || profilo.provider !== misura.provider);
+  const tokens = altroModello ? { ...misura, provider: profilo.provider, model: profilo.model, windowTokens: profilo.windowTokens, responseReserve: profilo.responseReserve } : misura;
+  try {
+    const b = computeContextBudget({ ...tokens, settings: snapshot.settings ?? {} });
+    return { windowTokens: b.windowTokens, inputLimit: b.inputLimit, triggerTokens: b.triggerTokens, inputTokens: b.inputTokens, method: b.method };
+  } catch { return null; }
+}
+
+export function createDesktopContextService({ engine, store, loadLegacy, selectLegacyCheckpoint = null, resolveSessionModel, isSessionEnabled, readSession, onEvent, onPrepared, runInference, registraAncora, clock = () => new Date().toISOString() }) {
   if (!engine || !store || typeof readSession !== 'function' || typeof resolveSessionModel !== 'function' || typeof isSessionEnabled !== 'function') fail('CTX_PORT_MISSING', 'Incomplete desktop context services.');
   const queues = new Map();
   const deliveries = new Map();
@@ -33,11 +55,21 @@ export function createDesktopContextService({ engine, store, loadLegacy, resolve
   async function ensure(sessionId) {
     if (closed) fail('CTX_SERVICE_CLOSED', 'The context service is closed.');
     if (!validId(sessionId) || !await readSession(sessionId)) fail('CTX_SESSION_NOT_FOUND', 'Conversation not found.');
-    if (!await isSessionEnabled(sessionId)) fail('CTX_NOT_ENABLED', 'The context engine is not active for this trial conversation.');
+    if (!await isSessionEnabled(sessionId)) fail('CTX_NOT_ENABLED', MOTORE_SPENTO_PER_LA_CONVERSAZIONE);
     let snapshot = await store.readContextSnapshot({ sessionId });
     if (!snapshot) {
       const jsonl = await loadLegacy?.({ sessionId });
-      snapshot = jsonl ? await importLegacySession({ sessionId, jsonl, settings: parseContextSettings({}), metadata: {} }, { store }) : await store.initSession({ sessionId, settings: parseContextSettings({}) });
+      /* C1, prova dal vivo del motore di serie (09/10/2026 sera, 4177): una conversazione NUOVA ha già il giornale (intestazione,
+         RunStarted) ma non ancora una storia, e l'import la prendeva per un giornale rotto (CTX_LEGACY_NO_CHECKPOINT al primo giro,
+         CTX_HISTORY_DIVERGED da lì in poi). Senza checkpoint non c'è niente da importare: l'archivio nasce vuoto e si riempie dai
+         messaggi originali del kernel (`syncOriginals`), come per una conversazione senza giornale. Ogni altro errore dell'import
+         resta un errore. */
+      try {
+        snapshot = jsonl ? await importLegacySession({ sessionId, jsonl, settings: parseContextSettings({}), metadata: {}, selectCheckpoint: selectLegacyCheckpoint }, { store }) : null;
+      } catch (error) {
+        if (error?.code !== 'CTX_LEGACY_NO_CHECKPOINT') throw error;
+      }
+      snapshot ??= await store.initSession({ sessionId, settings: parseContextSettings({}) });
     } else if (!recuperate.has(sessionId) && typeof engine.recoverInterruptedJobs === 'function') {
       /*
        * 24/09/2026 — F4, CTX-RESTART-ACTIVE-JOB-RECOVERY: al primo tocco della sessione in questo processo un job
@@ -132,7 +164,15 @@ export function createDesktopContextService({ engine, store, loadLegacy, resolve
       let snapshot = await serial(sessionId, () => ensure(sessionId));
       path = path.replace(/\/$/u, '') || '/';
       if (method === 'GET') {
-        if (path === '/') { await deliver(sessionId); return { ...snapshot, usage: await store.readUsage({ sessionId }), semanticStatus: 'not-qualified' }; }
+        /* C1 (owner 10/10/2026, «il limite che agisce, un numero solo»): per una conversazione col motore la soglia vera è il BUDGET
+           del motore (finestra del profilo, riserva, margine, `triggerRatio`), non la politica del legacy. Lo si calcola qui, con
+           la stessa funzione che il motore usa per decidere (`computeContextBudget`), dall'ultima misura; senza misura, `null`. */
+        if (path === '/') {
+          await deliver(sessionId);
+          let profilo = null;
+          if (snapshot.measurement?.tokens) { try { profilo = await modelFor(sessionId); } catch { /* senza un profilo verificato vale la misura */ } }
+          return { ...snapshot, usage: await store.readUsage({ sessionId }), semanticStatus: 'not-qualified', budget: budgetDellaMisura(snapshot, profilo) };
+        }
         if (path === '/versions') return { versions: await engine.listContextVersions({ sessionId }) };
         if (path === '/facts') return { facts: snapshot.facts };
         if (path === '/export') return engine.exportContext({ sessionId });
@@ -247,6 +287,9 @@ export function createDesktopContextService({ engine, store, loadLegacy, resolve
         throw error;
       }
       if (Array.isArray(result?.messages)) ultimeProiezioni.set(sessionId, result.messages);
+      /* C1 (owner 10/10/2026, «Sì, come campi»): quante uscite le regole hanno tolto o accorciato in QUESTA richiesta, e su quale
+         versione, per la scheda Contesto. Facoltativo; un suo errore non tocca mai la richiesta. */
+      if (typeof onPrepared === 'function') { try { onPrepared({ sessionId, level1: result?.level1 ?? null, versionId: result?.versionId ?? null }); } catch { /* solo per guardare */ } }
       await deliver(sessionId);
       return result;
     },

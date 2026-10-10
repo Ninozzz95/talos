@@ -23,6 +23,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { azioniConsentiteDelRun, motiviDiAttenzioneDelRun } from './azioni-del-run.mjs';
+import { STATI_FINALI_DEL_PASSO, STATI_FINALI_DEL_RUN } from './stati-finali.mjs';
 import { listRunSummariesForSession, readRunState } from './store.mjs';
 import { readResultBytes } from './result-store.mjs';
 import { decodeWorkflowResultText, selectWorkflowResult } from './output-access.mjs';
@@ -33,16 +34,17 @@ const AZIONI_DEL_MODELLO = Object.freeze(['pause', 'resume', 'cancel']);
 /* La costante dell'anteprima vive nel read-model, accanto a PLANNED_TASK_PREVIEW_MAX («stessa
    regola», piano §1.6); qui si RIESPORTA perché è il canale del modello a dichiararla. */
 export { NODE_OUTPUT_PREVIEW_MAX } from './read-model.mjs';
+import { NODE_OUTPUT_PREVIEW_MAX } from './read-model.mjs';
 
 /** Il tetto di caratteri che `workflow_output` mostra per pagina (default 4.000: la stessa taglia
  *  che il kernel usa per le uscite degli attrezzi; massimo 16.000, il tetto delle letture di sezione). */
 export const OUTPUT_PAGINA_DEFAULT = 4_000;
 export const OUTPUT_PAGINA_MAX = 16_000;
 
-const TERMINALI = new Set(['succeeded', 'failed', 'cancelled', 'skipped', 'superseded']);
+const TERMINALI = new Set(STATI_FINALI_DEL_PASSO);
 /* L'ordine dei conteggi è la lettura del piano («passi ok/ko»): prima chi è riuscito, poi chi è
    fallito, poi tutto il resto — chi legge decide in una riga se il run cammina o zoppica. */
-const STATI_ORDINE = ['succeeded', 'failed', 'uncertain', 'waiting_human', 'reconciling', 'leased', 'running', 'pending', 'blocked', 'ready', 'retry_wait', 'cancelled', 'skipped', 'superseded'];
+const STATI_ORDINE = ['succeeded', 'failed', 'uncertain', 'waiting_human', 'reconciling', 'leased', 'running', 'pending', 'blocked', 'ready', 'retry_wait', 'cancelled', 'skipped', 'superseded', 'set_aside'];
 
 function righeConteggi(nodes) {
     const conteggi = new Map();
@@ -71,7 +73,14 @@ function secondiFra(dopo, prima) {
    quanto non succede niente, all'ora di QUESTA chiamata, come Hermes (`tools/process_registry.py:1950`, `uptime_seconds =
    time.time() - started_at`). Mai un «tempo attivo»: le pause non hanno un fatto che le misuri, e sommarle sarebbe inventare.
    La UI non passa di qui: là il tempo lo calcola chi guarda (D27, `read-model.mjs`). Prove: RUN-DURATION-01..03. */
-const RUN_CONCLUSI = new Set(['succeeded', 'failed', 'cancelled']);
+const RUN_CONCLUSI = new Set(STATI_FINALI_DEL_RUN);
+
+/* C3 (09/10/2026): le azioni della PERSONA su un passo fallito, dette al modello perché le proponga a chi gli parla — ma non sono
+   del suo attrezzo (`workflow_control` ha pause/resume/cancel): decisione owner, contratto C3 §2. */
+const AZIONI_DELLA_PERSONA = 'the person can retry the failed steps from the Workflow panel, or, on one failed step, mark it done'
+  + ' (with a summary of what was done), set it aside (the steps waiting for it will not start) or redo it with another model';
+// C3 tappa 3 (09/10/2026): il tetto del run lo alza solo la PERSONA, dal pannello, con la cifra detta prima
+const TETTO_DELLA_PERSONA = 'the run has reached its budget ceiling: only the person can raise it, from the Workflow panel, and the run then goes on';
 
 function rigaDelTempo(run, avvio, fine, adesso) {
     if (RUN_CONCLUSI.has(run.status)) {
@@ -102,7 +111,8 @@ export function dettaglioRunPerIlModello(input, { adesso = new Date().toISOStrin
     const azioni = ammesse.filter((a) => AZIONI_DEL_MODELLO.includes(a));
     const motivi = motiviDiAttenzioneDelRun(run);
     righe.push(`allowed actions now: ${azioni.length > 0 ? azioni.join(', ') : 'none'}`
-      + (ammesse.includes('retry') ? '; the person can retry the failed steps from the Workflow panel' : '')
+      + (ammesse.includes('retry') ? `; ${AZIONI_DELLA_PERSONA}` : '')
+      + (motivi.includes('budget_overrun') ? `; ${TETTO_DELLA_PERSONA}` : '')
       + (motivi.length > 0 ? `; needs attention because: ${motivi.join(', ')}` : ''));
     const avvio = events[0]?.at ?? null;
     const fine = events.at(-1)?.at ?? null;
@@ -130,6 +140,48 @@ export function dettaglioRunPerIlModello(input, { adesso = new Date().toISOStrin
         }
     }
     return righe.join('\n');
+}
+
+/*
+ * ⭐ C3b (owner 09/10/2026 sera, «Risvegliare il padre a fine run» e «anche a Serve attenzione») — L'ESITO che sveglia il padre:
+ *   i fatti pubblici del run (come `dettaglioRunPerIlModello`: mai `instructions` né `workspacePolicy`) e, per ogni passo che ha
+ *   pubblicato un risultato, il suo `summary` registrato (≤4.096 caratteri per contratto), tagliato a NODE_OUTPUT_PREVIEW_MAX con
+ *   il taglio DICHIARATO nella nota. Il testo lo avvolge `testoDellEsitoWorkflow` (confine dei dati): qui solo i campi.
+ * ⛔ La nota NON invita a chiedere `workflow_status`: l'esito È lo stato. Hermes, nel messaggio di risveglio: il risultato
+ *   «re-enters the conversation as a new message» e «Do not poll» (`tools/delegate_tool_dispatch.py:325-327`).
+ */
+export const PASSI_NELL_ESITO_MAX = 50;
+export function esitoDelRunPerIlPadre(input) {
+    const state = input?.state ?? {};
+    const run = state.run ?? {};
+    const runId = run.runId ?? '(unknown run)';
+    const nodes = state.nodes instanceof Map ? [...state.nodes.values()] : [];
+    const refs = state.resultRefs instanceof Map ? state.resultRefs : new Map();
+    const etichetta = (nodeId) => state.definition?.nodes?.find((n) => n.id === nodeId)?.label ?? nodeId;
+    let tagliati = 0;
+    const passi = nodes.slice(0, PASSI_NELL_ESITO_MAX).map((node) => {
+        const ref = (node.resultRefIds ?? []).map((id) => refs.get(id)).find(Boolean);
+        const caratteri = typeof ref?.summary === 'string' ? Array.from(ref.summary) : [];
+        if (caratteri.length > NODE_OUTPUT_PREVIEW_MAX) tagliati += 1;
+        const riassunto = caratteri.length > NODE_OUTPUT_PREVIEW_MAX
+            ? `${caratteri.slice(0, NODE_OUTPUT_PREVIEW_MAX - 1).join('').trimEnd()}…` : caratteri.join('');
+        return { nodeId: node.nodeId, etichetta: etichetta(node.nodeId), stato: node.state ?? 'pending', ...(riassunto ? { riassunto } : {}) };
+    });
+    const motivi = motiviDiAttenzioneDelRun(run);
+    const frasi = [];
+    if (run.status === 'needs_attention') {
+        frasi.push('The run is waiting for the person (it needs attention).');
+        if (azioniConsentiteDelRun(state).includes('retry')) frasi.push(`${AZIONI_DELLA_PERSONA[0].toUpperCase()}${AZIONI_DELLA_PERSONA.slice(1)}.`);
+        if (motivi.includes('budget_overrun')) frasi.push(`${TETTO_DELLA_PERSONA[0].toUpperCase()}${TETTO_DELLA_PERSONA.slice(1)}.`);
+    } else {
+        frasi.push(`The run is over (${run.status ?? 'unknown'}).`);
+    }
+    frasi.push(`Each step shows at most ${NODE_OUTPUT_PREVIEW_MAX} characters of its output`
+        + (tagliati > 0 ? ` (${tagliati} cut here)` : '')
+        + `: read a full output with workflow_output(${JSON.stringify(runId)}, nodeId).`);
+    if (nodes.length > PASSI_NELL_ESITO_MAX) frasi.push(`Only the first ${PASSI_NELL_ESITO_MAX} steps of ${nodes.length} are listed here.`);
+    frasi.push('Tell the person the outcome in a few lines.');
+    return { runId, titolo: String(state.definition?.title ?? ''), stato: run.status ?? 'unknown', motiviAttenzione: motivi, passi, nota: frasi.join(' ') };
 }
 
 /**
@@ -160,9 +212,12 @@ export function letturaOutputPerIlModello({ runId, nodeId, sha256, bytes, testo,
     if (da >= caratteri.length) {
         return `${testa}\n\n(the offset is at or past the end: nothing more to show)`;
     }
-    const pagina = caratteri.slice(da, da + tetto).join('');
-    const restanti = caratteri.length - da - pagina.length;
-    return `${testa}\n\n${pagina}${restanti > 0 ? `\n\n… and ${restanti} more characters` : ''}`;
+    /* C12 (coda Codex, bugfixer 10/10/2026): il resto si conta nella STESSA unità del taglio, i punti di codice. Prima sottraeva
+       `pagina.length` della stringa unita, cioè unità UTF-16 (un'emoji vale 2): con «😀😀😀» e limit 2 il resto veniva −1 e il
+       modello credeva di aver letto tutto. Come Codex (`utils/string/src/truncate.rs:43,86-117`, `chars()` per totale e tolto). */
+    const fetta = caratteri.slice(da, da + tetto);
+    const restanti = caratteri.length - da - fetta.length;
+    return `${testa}\n\n${fetta.join('')}${restanti > 0 ? `\n\n… and ${restanti} more characters` : ''}`;
 }
 
 /* ─────────────────── la fabbrica impura: la catena server → registro → kernel ─────────────────── */
@@ -265,7 +320,8 @@ export function creaOnWorkflowFn({ store, runtimeFn } = {}) {
                 const usabili = errore.allowedActions.filter((a) => AZIONI_DEL_MODELLO.includes(a));
                 const motivi = Array.isArray(errore.attentionReasons) ? errore.attentionReasons : [];
                 return `${motivo}. Nothing was changed. You can use now: ${usabili.length > 0 ? usabili.join(', ') : 'nothing'}.`
-                    + (errore.allowedActions.includes('retry') ? ' The person can also retry the failed steps from the Workflow panel.' : '')
+                    + (errore.allowedActions.includes('retry') ? ` Also, ${AZIONI_DELLA_PERSONA}.` : '')
+                    + (motivi.includes('budget_overrun') ? ` Also, ${TETTO_DELLA_PERSONA}.` : '')
                     + (motivi.length > 0 ? ` The run needs attention because: ${motivi.join(', ')}.` : '');
             }
             runtime.scheduler.sveglia(runId);

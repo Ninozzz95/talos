@@ -94,3 +94,24 @@ test('RIGHE-CONCLUSE — un attrezzo senza frase sua, a giro concluso, non ha i 
   expect(testi.filter((t) => /…$/u.test(t.trim()))).toEqual([]);
   expect(scritture).toEqual([]);
 });
+
+/* ⛔ TACCUINO (09/10/2026, bugfixer): i nomi umani degli attrezzi sono minuscoli apposta (entrano a metà frase), e il ripiego li
+ * metteva così com'erano nel TITOLO della riga: in chat «risposta a un sotto-agente», nell'Indice «3 · Risposta a un sotto-agente»
+ * (misurato sulla 4176). Le due forme del ripiego: la riga in corso e quella conclusa. */
+test('RIGHE-MAIUSCOLA — il titolo della riga di un attrezzo senza frase sua comincia con la maiuscola, in corso e concluso', async ({ page }) => {
+  const { scritture } = await apri(page, 'conv-righe-maiuscola', [ALTRA]);
+  await evento(page, { type: 'ToolCallStart', toolCallId: 'm1', toolCallName: 'memory_delete', _sequenza: 10 });
+  await evento(page, { type: 'ToolCallArgs', toolCallId: 'm1', delta: JSON.stringify({ id: 'm1' }), _sequenza: 11 });
+  await evento(page, { type: 'ToolCallStart', toolCallId: 'm2', toolCallName: 'answer_child_question', _sequenza: 12 });
+  await evento(page, { type: 'ToolCallArgs', toolCallId: 'm2', delta: JSON.stringify({ requestId: 'r1', answer: 'README' }), _sequenza: 13 });
+  const leggi = async () => (await page.locator('#conversation .talos-tool-row .tool-note-summary-text').allTextContents()).map((t) => t.trim());
+  const inCorso = await leggi();
+  await evento(page, { type: 'ToolCallResult', toolCallId: 'm1', content: 'Memory m1 deleted.', _sequenza: 14 });
+  await evento(page, { type: 'ToolCallResult', toolCallId: 'm2', content: 'Answer delivered.', _sequenza: 15 });
+  const conclusi = await leggi();
+  for (const [quando, testi] of [['in corso', inCorso], ['concluso', conclusi]]) {
+    expect(testi.length, `${quando}: due righe ${JSON.stringify(testi)}`).toBe(2);
+    expect(testi.filter((t) => t[0] !== t[0].toLocaleUpperCase('it-IT')), `${quando}: ${JSON.stringify(testi)}`).toEqual([]);
+  }
+  expect(scritture).toEqual([]);
+});

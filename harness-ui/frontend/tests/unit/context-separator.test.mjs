@@ -43,3 +43,25 @@ test('CTX-UI-COOLING-ROW: a paused automatic compaction is one row per failed jo
   assert.equal(container.children[2].children[0].textContent, 'Contesto compattato');
   assert.equal(creaSeparatoreContesto({ ...cooling, jobId: undefined }, { document }), null, 'a pause without its job has no identity');
 });
+/*
+ * B1 parte 3, review della sessione desktop (10/10/2026): un separatore STACCATO con un turno vecchio (finestra della rigiocata)
+ * si aggiorna dov'è attraverso `staccato(chiave)`, e non rinasce in fondo alla colonna. AL CONTRARIO: senza `staccato`, o per
+ * una sessione diversa, nasce come prima.
+ */
+test('B1-SEP-STACCATO: the engine separator detached with an old turn is found through staccato, not duplicated', () => {
+  const event = { id: 'e1', sessionId: 's', versionId: 'v1', kind: 'context.committed', createdAt: '2026-09-09T00:00:00Z' };
+  const prima = node();
+  const [staccatoNodo] = aggiornaSeparatoreContesto(prima, [event], { sessionId: 's', document });
+  const colonna = node(); // la colonna dopo lo smontaggio: il separatore non c'è più
+  const chiavi = [];
+  const trovati = aggiornaSeparatoreContesto(colonna, [event], { sessionId: 's', document, staccato: (k) => { chiavi.push(k); return staccatoNodo; } });
+  assert.equal(colonna.children.length, 0, 'not appended again');
+  assert.deepEqual(trovati, [staccatoNodo]);
+  assert.deepEqual(chiavi, [staccatoNodo.dataset.contextSeparator], 'asked by its own key');
+  // al contrario: senza staccato nasce in colonna; uno staccato di un'altra sessione non si prende
+  aggiornaSeparatoreContesto(colonna, [event], { sessionId: 's', document });
+  assert.equal(colonna.children.length, 1);
+  const altra = node();
+  aggiornaSeparatoreContesto(altra, [event], { sessionId: 's', document, staccato: () => ({ ...staccatoNodo, dataset: { ...staccatoNodo.dataset, contextSession: 'x' } }) });
+  assert.equal(altra.children.length, 1, 'a detached row of another session is not reused');
+});

@@ -135,6 +135,17 @@ function validateModelId(value, path) {
   return value;
 }
 
+/** C3 (09/10/2026): vero se `value` è un modello che un passo può usare (la stessa regola della Definition, `modelPolicy.model`). */
+export function isValidStepModelId(value) {
+  try { validateModelId(value, 'model'); return true; } catch { return false; }
+}
+
+/** C3: il riassunto con cui la persona segna fatto un passo. Come Hermes `complete_task`: non vuoto, non di soli spazi. */
+export const RIASSUNTO_DELLA_PERSONA_MAX = 4_000;
+export function isValidPersonSummary(value) {
+  return typeof value === 'string' && value.trim().length > 0 && value.length <= RIASSUNTO_DELLA_PERSONA_MAX;
+}
+
 function validateBudget(value, { node = false, path = 'budget' } = {}) {
   exactKeys(value, node ? [...BUDGET_FIELDS, 'attempts'] : BUDGET_FIELDS, [], path);
   for (const key of BUDGET_FIELDS) {
@@ -684,11 +695,18 @@ export function validateWorkflowGraphPatch(value, context = {}) {
 export const WORKFLOW_EVENT_TYPES = Object.freeze([
   'run_created', 'run_started', 'run_pause_requested', 'run_paused', 'run_resumed',
   'run_cancel_requested', 'run_cancelled', 'run_succeeded', 'run_failed',
+  // C3 (09/10/2026): un run con passi messi da parte dalla persona finisce così (decisione owner del 07/10)
+  'run_succeeded_with_set_aside',
   'graph_patch_applied',
   'node_started', 'node_succeeded', 'node_failed', 'node_cancelled', 'node_skipped', 'node_recovered',
+  'node_set_aside',
   'activity_scheduled', 'activity_started', 'activity_uncertain', 'activity_reconciled', 'activity_completed', 'activity_failed',
+  // C3 tappa 2a (09/10/2026): la persona decide di un tentativo INCERTO (nessuna prova possibile: la decisione è sua)
+  'uncertain_resolved',
   'capacity_claimed', 'capacity_released',
   'budget_reserved', 'budget_settled', 'budget_released', 'budget_overrun_observed',
+  // C3 tappa 3 (09/10/2026, owner «quanto serve per finire»): la persona alza il tetto del run della cifra detta prima
+  'budget_ceiling_raised',
   'provider_limit_changed', 'circuit_opened', 'circuit_half_open', 'circuit_closed',
   'retry_scheduled', 'timer_scheduled', 'timer_fired',
   'agent_session_created', 'agent_session_finished', 'agent_steer_requested',
@@ -703,16 +721,21 @@ const EVENT_TYPES = new Set(WORKFLOW_EVENT_TYPES);
 const COMMAND_TYPES = new Set([
   'approve-definition', 'start-run', 'pause-run', 'resume-run', 'cancel-run',
   'retry-node', 'steer-node', 'set-node-priority', 'graph-patch', 'answer-human-gate',
+  // C3: le azioni della PERSONA su un passo (segna come fatto, metti da parte, rifai con un altro modello)
+  'resolve-node',
+  // C3 tappa 3: «Alza il tetto e riprendi», solo la persona
+  'raise-ceiling',
 ]);
-const NODE_EVENT_TYPES = new Set(['node_started', 'node_succeeded', 'node_failed', 'node_cancelled', 'node_skipped', 'node_recovered']);
+const NODE_EVENT_TYPES = new Set(['node_started', 'node_succeeded', 'node_failed', 'node_cancelled', 'node_skipped', 'node_recovered', 'node_set_aside']);
 const ACTIVITY_EVENT_TYPES = new Set([
   'activity_scheduled', 'activity_started', 'activity_uncertain', 'activity_reconciled',
-  'activity_completed', 'activity_failed', 'stale_activity_completion_observed',
+  'activity_completed', 'activity_failed', 'stale_activity_completion_observed', 'uncertain_resolved',
   'capacity_claimed', 'capacity_released',
 ]);
 const RUN_EVENT_TYPES = new Set([
   'run_created', 'run_started', 'run_pause_requested', 'run_paused', 'run_resumed',
-  'run_cancel_requested', 'run_cancelled', 'run_succeeded', 'run_failed',
+  'run_cancel_requested', 'run_cancelled', 'run_succeeded', 'run_failed', 'run_succeeded_with_set_aside',
+  'budget_ceiling_raised',
 ]);
 const ENVELOPE_KEYS = Object.freeze([
   'schema', 'eventSchemaVersion', 'engineSchemaVersion', 'eventId', 'runId', 'seq',
@@ -809,8 +832,28 @@ function validateCapacityClaim(value) {
 }
 
 function validateRetryFact(value) {
-  exactPayload(value, ['schema', 'runId', 'nodeId', 'activityExecutionId', 'attempt', 'reasonClass', 'backoffMs', 'jitterMs', 'retryAt', 'budgetReservationId'], [], 'retry_scheduled');
-  if (value.schema !== 'talos.workflow-retry-fact.v1') eventInvalid('retry_scheduled payload schema is invalid');
+  const chiavi = ['schema', 'runId', 'nodeId', 'activityExecutionId', 'attempt', 'reasonClass', 'backoffMs', 'jitterMs', 'retryAt', 'budgetReservationId'];
+  /*
+   * C3 (09/10/2026, contratto §2-bis punto 2) — la v2 aggiunge `resume`, COME riprende il passo: `fresh` = sessione nuova con il
+   *   modello scelto dalla persona («Rifai con un altro modello», Hermes `reassign_task`). La v1 resta valida così com'è: i giornali
+   *   di sempre non cambiano. Solo un ritentativo umano porta `resume`.
+   */
+  if (value?.schema === 'talos.workflow-retry-fact.v2') {
+    exactPayload(value, [...chiavi, 'resume'], [], 'retry_scheduled');
+    if (value.reasonClass !== 'user_retry') eventInvalid('only a user retry says how the step resumes');
+    exactKeys(value.resume, ['mode', 'modelPolicy'], [], 'retry_scheduled payload.resume');
+    eventEnum(value.resume.mode, ['fresh', 'verify'], 'retry_scheduled payload.resume.mode');
+    // C3 tappa 2b: `verify` riprende la STESSA sessione (il modello resta quello del passo); `fresh` nomina il modello nuovo
+    if (value.resume.mode === 'verify') {
+      if (value.resume.modelPolicy !== null) eventInvalid('a verify resume keeps the step model');
+    } else {
+      try { validateModelPolicy(value.resume.modelPolicy, 'retry_scheduled payload.resume.modelPolicy'); } catch (error) { eventInvalid(error.message); }
+      if (value.resume.modelPolicy.mode !== 'explicit') eventInvalid('a fresh resume names the model explicitly');
+    }
+  } else {
+    exactPayload(value, chiavi, [], 'retry_scheduled');
+    if (value.schema !== 'talos.workflow-retry-fact.v1') eventInvalid('retry_scheduled payload schema is invalid');
+  }
   eventId(value.runId, 'retry_scheduled payload.runId', { uuid: true });
   if (!ID.test(value.nodeId)) eventInvalid('retry_scheduled payload.nodeId is invalid');
   eventId(value.activityExecutionId, 'retry_scheduled payload.activityExecutionId', { uuid: true });
@@ -956,6 +999,12 @@ function validateEventPayload(event) {
   else if (['run_cancel_requested', 'run_cancelled'].includes(type)) { exactPayload(payload, ['reason'], [], type); eventEnum(payload.reason, ['user', 'parent_cancelled', 'policy', 'superseded'], `${type} payload.reason`); }
   else if (type === 'run_succeeded') {
     exactPayload(payload, ['finalResultIds', 'integrationCommit'], [], type); eventStringArray(payload.finalResultIds, `${type} payload.finalResultIds`); if (payload.integrationCommit !== null) stringBound(payload.integrationCommit, 1, 256, `${type} payload.integrationCommit`);
+  } else if (type === 'run_succeeded_with_set_aside') {
+    // C3: «Concluso, con passi messi da parte» (owner 07/10) — i risultati riusciti restano, il riepilogo nomina i passi messi da
+    // parte e quelli che non sono partiti per colpa loro
+    exactPayload(payload, ['finalResultIds', 'setAsideNodeIds', 'skippedNodeIds'], [], type);
+    for (const key of ['finalResultIds', 'setAsideNodeIds', 'skippedNodeIds']) eventStringArray(payload[key], `${type} payload.${key}`);
+    if (payload.setAsideNodeIds.length === 0) eventInvalid(`${type} needs at least one step set aside`);
   } else if (type === 'run_failed') {
     exactPayload(payload, ['errorClass', 'evidenceResultIds'], [], type); stringBound(payload.errorClass, 1, 128, `${type} payload.errorClass`); eventStringArray(payload.evidenceResultIds, `${type} payload.evidenceResultIds`);
   } else if (type === 'graph_patch_applied') {
@@ -967,10 +1016,19 @@ function validateEventPayload(event) {
     if (canonicalHash(payload.operations) !== payload.operationsHash) eventInvalid(`${type} payload operationsHash does not match operations`);
     if (payload.expectedGraphVersion !== payload.previousGraphVersion || payload.newGraphVersion !== payload.previousGraphVersion + 1 || event.graphVersion !== payload.newGraphVersion) eventInvalid(`${type} graph versions are inconsistent`);
   } else if (type === 'node_started') { exactPayload(payload, ['trigger'], [], type); eventEnum(payload.trigger, ['activity', 'deterministic', 'human_resolved', 'recovered'], `${type} payload.trigger`); }
-  else if (type === 'node_succeeded') { exactPayload(payload, ['resultIds'], [], type); eventStringArray(payload.resultIds, `${type} payload.resultIds`); }
+  else if (type === 'node_succeeded') {
+    exactPayload(payload, ['resultIds'], ['by', 'summary'], type); eventStringArray(payload.resultIds, `${type} payload.resultIds`);
+    // C3 «Segna come fatto»: SOLO la persona, con un riassunto vero (Hermes `complete_task`, `kanban_db.py:2731`: niente evidenza vuota)
+    if (Object.hasOwn(payload, 'by') || Object.hasOwn(payload, 'summary')) {
+      if (payload.by !== 'person') eventInvalid(`${type} payload.by must be person`);
+      if (!isValidPersonSummary(payload.summary)) eventInvalid(`${type} payload.summary must be a non-empty summary`);
+      if (payload.resultIds.length === 0) eventInvalid(`${type} by a person carries the summary as its result`);
+    }
+  }
+  else if (type === 'node_set_aside') { exactPayload(payload, ['reason'], [], type); eventEnum(payload.reason, ['user'], `${type} payload.reason`); }
   else if (type === 'node_failed') { exactPayload(payload, ['errorClass', 'evidenceResultIds'], [], type); stringBound(payload.errorClass, 1, 128, `${type} payload.errorClass`); eventStringArray(payload.evidenceResultIds, `${type} payload.evidenceResultIds`); }
   else if (type === 'node_cancelled') { exactPayload(payload, ['reason'], [], type); eventEnum(payload.reason, ['user', 'parent_cancelled', 'graph_patch', 'run_cancelled', 'policy'], `${type} payload.reason`); }
-  else if (type === 'node_skipped') { exactPayload(payload, ['reason'], [], type); eventEnum(payload.reason, ['condition_false', 'branch_not_selected', 'acceptance_already_satisfied'], `${type} payload.reason`); }
+  else if (type === 'node_skipped') { exactPayload(payload, ['reason'], [], type); eventEnum(payload.reason, ['condition_false', 'branch_not_selected', 'acceptance_already_satisfied', 'dependency_set_aside'], `${type} payload.reason`); }
   else if (type === 'node_recovered') { exactPayload(payload, ['from', 'evidenceResultIds'], [], type); eventEnum(payload.from, ['running', 'uncertain', 'retry_wait', 'waiting_human'], `${type} payload.from`); eventStringArray(payload.evidenceResultIds, `${type} payload.evidenceResultIds`); }
   else if (type === 'activity_scheduled') {
     exactPayload(payload, ['activityKind', 'effectClass', 'retryMode', 'idempotencyKey', 'resourceClass', 'budgetReservationId', 'deadlineAt'], [], type);
@@ -1018,9 +1076,25 @@ function validateEventPayload(event) {
   else if (type === 'capacity_claimed') validateCapacityClaim(payload);
   else if (type === 'capacity_released') { exactPayload(payload, ['claimId', 'reason'], [], type); eventId(payload.claimId, `${type} payload.claimId`, { uuid: true }); eventEnum(payload.reason, ['never_scheduled', 'activity_terminal'], `${type} payload.reason`); }
   else if (type === 'budget_reserved') validateBudgetReservation(payload);
+  // C3 tappa 3: l'aumento è per ogni voce del budget, quello calcolato da `aumentoPerFinire` e detto prima sul pulsante
+  else if (type === 'budget_ceiling_raised') { exactPayload(payload, ['reason', 'amount'], [], type); eventEnum(payload.reason, ['user'], `${type} payload.reason`); validateMeasuredBudget(payload.amount, `${type} payload.amount`); if (payload.amount.knownCostUsd === null) eventInvalid(`${type} payload.amount.knownCostUsd must be a number`); }
   else if (type === 'budget_settled') { exactPayload(payload, ['reservationId', 'actual', 'overrunDimensions'], [], type); eventId(payload.reservationId, `${type} payload.reservationId`, { uuid: true }); validateMeasuredBudget(payload.actual, `${type} payload.actual`); eventStringArray(payload.overrunDimensions, `${type} payload.overrunDimensions`, EVENT_BUDGET_DIMENSIONS.length); for (const dimension of payload.overrunDimensions) if (!EVENT_BUDGET_DIMENSIONS.includes(dimension)) eventInvalid(`${type} payload contains unknown budget dimension`); }
-  else if (type === 'budget_released') { exactPayload(payload, ['reservationId', 'reason'], [], type); eventId(payload.reservationId, `${type} payload.reservationId`, { uuid: true }); eventEnum(payload.reason, ['not_started', 'cancelled_before_effect', 'fallback_transfer', 'reconciled_not_performed'], `${type} payload.reason`); }
-  else if (type === 'budget_overrun_observed') { exactPayload(payload, ['reservationId', 'source', 'dimensions', 'observed'], [], type); eventId(payload.reservationId, `${type} payload.reservationId`, { uuid: true, nullable: true }); eventEnum(payload.source, ['provider_receipt', 'process_receipt', 'tool_receipt', 'reconciliation'], `${type} payload.source`); eventStringArray(payload.dimensions, `${type} payload.dimensions`, EVENT_BUDGET_DIMENSIONS.length); if (payload.dimensions.length < 1 || payload.dimensions.some((dimension) => !EVENT_BUDGET_DIMENSIONS.includes(dimension))) eventInvalid(`${type} payload dimensions are invalid`); validateMeasuredBudget(payload.observed, `${type} payload.observed`); }
+  else if (type === 'budget_released') { exactPayload(payload, ['reservationId', 'reason'], [], type); eventId(payload.reservationId, `${type} payload.reservationId`, { uuid: true }); eventEnum(payload.reason, ['not_started', 'cancelled_before_effect', 'fallback_transfer', 'reconciled_not_performed', 'person_resolved', 'failed_before_session'], `${type} payload.reason`); }
+  /*
+   * C3 tappa 2a (09/10/2026, contratto §2-bis punto 1) — la persona decide di un tentativo INCERTO e dice che cosa farne: l'attività
+   *   diventa `reconciled` con esito `person_resolved` (nessuna ricevuta, consumo sconosciuto) e l'azione scelta si compie dopo il
+   *   rilascio del posto. L'azione sta NEL fatto, così una ripetizione o un riavvio sanno come finire il lavoro.
+   */
+  else if (type === 'uncertain_resolved') {
+    exactPayload(payload, ['reason', 'action'], ['summary', 'model'], type);
+    eventEnum(payload.reason, ['user'], `${type} payload.reason`);
+    eventEnum(payload.action, ['mark-done', 'set-aside', 'retry-other-model', 'resume-verify'], `${type} payload.action`);
+    if ((payload.action === 'mark-done') !== Object.hasOwn(payload, 'summary')) eventInvalid(`${type} carries a summary only to mark the step done`);
+    if ((payload.action === 'retry-other-model') !== Object.hasOwn(payload, 'model')) eventInvalid(`${type} carries a model only to redo the step`);
+    if (payload.action === 'mark-done' && !isValidPersonSummary(payload.summary)) eventInvalid(`${type} payload.summary must be a non-empty summary`);
+    if (payload.action === 'retry-other-model' && !isValidStepModelId(payload.model)) eventInvalid(`${type} payload.model is invalid`);
+  }
+  else if (type === 'budget_overrun_observed') { exactPayload(payload, ['reservationId', 'source', 'dimensions', 'observed'], [], type); eventId(payload.reservationId, `${type} payload.reservationId`, { uuid: true, nullable: true }); eventEnum(payload.source, ['provider_receipt', 'process_receipt', 'tool_receipt', 'reconciliation', 'admission'], `${type} payload.source`); eventStringArray(payload.dimensions, `${type} payload.dimensions`, EVENT_BUDGET_DIMENSIONS.length); if (payload.dimensions.length < 1 || payload.dimensions.some((dimension) => !EVENT_BUDGET_DIMENSIONS.includes(dimension))) eventInvalid(`${type} payload dimensions are invalid`); validateMeasuredBudget(payload.observed, `${type} payload.observed`); }
   else if (type === 'provider_limit_changed') { exactPayload(payload, ['provider', 'model', 'previousLimit', 'newLimit', 'reason'], [], type); if (!Object.hasOwn(REGISTRO_FORNITORI, payload.provider)) eventInvalid(`${type} payload.provider is invalid`); validateModelId(payload.model, `${type} payload.model`); safeInteger(payload.previousLimit, 0, 100_000, `${type} payload.previousLimit`); safeInteger(payload.newLimit, 0, 100_000, `${type} payload.newLimit`); eventEnum(payload.reason, ['success', 'queue_delay', 'rate_limit', 'latency', 'manual_policy'], `${type} payload.reason`); }
   else if (type === 'circuit_opened') { exactPayload(payload, ['provider', 'model', 'reasonClass', 'reopenAt'], [], type); if (!Object.hasOwn(REGISTRO_FORNITORI, payload.provider)) eventInvalid(`${type} payload.provider is invalid`); if (payload.model !== null) validateModelId(payload.model, `${type} payload.model`); eventEnum(payload.reasonClass, ['rate_limit', 'transient_network', 'provider_5xx', 'quota_hard', 'auth'], `${type} payload.reasonClass`); if (payload.reopenAt !== null) validIso(payload.reopenAt, `${type} payload.reopenAt`); }
   else if (type === 'circuit_half_open') { exactPayload(payload, ['provider', 'model', 'probePermits'], [], type); if (!Object.hasOwn(REGISTRO_FORNITORI, payload.provider)) eventInvalid(`${type} payload.provider is invalid`); if (payload.model !== null) validateModelId(payload.model, `${type} payload.model`); safeInteger(payload.probePermits, 1, 100_000, `${type} payload.probePermits`); }
@@ -1057,9 +1131,11 @@ function expectedCommandTypes(type) {
   if (type === 'run_resumed') return ['resume-run'];
   if (type === 'run_cancel_requested') return ['cancel-run'];
   if (type === 'graph_patch_applied') return ['graph-patch', 'set-node-priority'];
-  if (type === 'retry_scheduled') return ['retry-node'];
+  if (type === 'retry_scheduled') return ['retry-node', 'resolve-node'];
+  if (type === 'node_succeeded' || type === 'node_set_aside' || type === 'uncertain_resolved') return ['resolve-node'];
   if (type === 'agent_steer_requested') return ['steer-node'];
   if (type === 'human_resolved') return ['answer-human-gate'];
+  if (type === 'budget_ceiling_raised') return ['raise-ceiling'];
   return [];
 }
 
@@ -1086,7 +1162,11 @@ export function validateWorkflowEvent(value) {
   const expected = expectedCommandTypes(value.type);
   if (commandFull && !expected.includes(value.commandType)) eventInvalid(`workflow event commandType ${value.commandType} is invalid for ${value.type}`);
   if (value.type === 'run_created' && !commandFull) eventInvalid('run_created must carry the accepted start-run command');
+  if (value.type === 'uncertain_resolved' && !commandFull) eventInvalid('uncertain_resolved must carry the person\'s resolve-node command');
+  if (value.type === 'budget_ceiling_raised' && !commandFull) eventInvalid('budget_ceiling_raised must carry the person\'s raise-ceiling command');
   if (value.commandType === 'retry-node' && value.payload?.reasonClass !== 'user_retry') eventInvalid('a retry-node command is a user retry');
+  if (value.commandType === 'resolve-node' && value.type === 'retry_scheduled' && value.payload?.reasonClass !== 'user_retry') eventInvalid('a resolve-node retry is a user retry');
+  if (value.commandType === 'resolve-node' && value.type === 'node_succeeded' && value.payload?.by !== 'person') eventInvalid('a resolve-node success is marked by the person');
 
   const activityNull = value.activityExecutionId === null && value.attempt === null && value.leaseId === null && value.leaseEpoch === null;
   const activityFull = EVENT_UUID.test(value.activityExecutionId)

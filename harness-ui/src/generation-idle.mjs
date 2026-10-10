@@ -76,6 +76,26 @@ export const INATTIVITA_GENERAZIONE_MS_MINIMA = 60_000;
 /** Il nome della variabile, in un posto solo: lo cita il README e lo leggono i test. */
 export const VARIABILE_INATTIVITA_GENERAZIONE = 'TALOS_GENERATION_IDLE_MS';
 
+/*
+ * ⛔ F-ENG-4 (stress test della 0.5.0, 08/10/2026, sessione b7fb2459; decisione owner 09/10 «5 minuti, poi ritenta»). Il
+ * failsafe qui sopra conta OGNI byte, commenti SSE compresi: è giusto per dire «il canale è morto», ma non vede un fornitore
+ * vivo che non manda più NIENTE di utile. Misurato: 53 caratteri, poi 20 minuti di soli segnali di vita, poi 32.000 token
+ * fatturati. Il secondo guardiano conta solo i DATI (testo, ragionamento, chiamate, la fine della risposta) e parte solo dopo
+ * il primo dato: prima, un prefill lungo su CPU tace per minuti ed è sano (llama.cpp#22997), e lì restano le guardie di sopra.
+ * Cinque minuti come Codex (`stream_idle_timeout_ms` 300000) e OpenCode (`chunkTimeout` 300000); Hermes usa 120 s
+ * (`HERMES_STREAM_READ_TIMEOUT`). Lo zero lo spegne; un valore illeggibile torna al predefinito.
+ */
+export const INATTIVITA_DATI_MS_PREDEFINITA = 300_000;
+export const VARIABILE_INATTIVITA_DATI = 'TALOS_STREAM_IDLE_MS';
+/** @returns {number} millisecondi; `0` significa nessuna sorveglianza dei dati */
+export function leggiInattivitaDatiMs(env = process.env) {
+  const grezzo = env?.[VARIABILE_INATTIVITA_DATI];
+  if (grezzo === undefined || grezzo === null || String(grezzo).trim() === '') return INATTIVITA_DATI_MS_PREDEFINITA;
+  const valore = Number(grezzo);
+  if (!Number.isFinite(valore) || valore < 0) return INATTIVITA_DATI_MS_PREDEFINITA;
+  return Math.round(valore);
+}
+
 /**
  * Il silenzio del fornitore: nessun byte E nessun commento SSE per tutto il limite.
  *

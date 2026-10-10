@@ -1,6 +1,9 @@
 import { ContextEngineError, ContextEventV1, ContextJobV1, ContextVersionV1, TokenMeasurementV1, parseContextRecord, parseContextSettings } from './contracts.mjs';
 import { computeContextBudget, planCompaction, selectClosedPrefix } from './compaction-planner.mjs';
-import { buildSummaryRequest, validateSummary, composeActiveContext } from './summary.mjs';
+import { clearOldToolOutputs, shortenRecentLargeOutputs, DEFAULT_CLEARED_POINTER } from './tool-output-clearing.mjs';
+/** Review Y2 (10/10): la quota dura del giro in sospeso, come Hermes `TAIL_MAX_CONTEXT_FRACTION = 0.20` (`context_compressor.py:949`). */
+const PENDING_ROUND_WINDOW_SHARE = 0.20;
+import { buildSummaryRequest, validateSummary, composeActiveContext, personRequestBudget, personRequestsKept } from './summary.mjs';
 import { chunkContextRecords, rankContextSources, selectContextEvidence } from './retrieval.mjs';
 
 const terminal = new Set(['committed', 'cancelled', 'failed']);
@@ -99,7 +102,7 @@ function ricitaSugliOriginali(summary, records) {
 
 /** The injected store owns durability; this controller owns candidate validity.
  * Inference never receives a context which failed its final measurement. */
-export function createContextEngine({ store, model, tokenCounter, retrieval, embedding, toolCatalog, assets, usagePolicy, clock = () => new Date().toISOString(), idFactory = () => crypto.randomUUID() }) {
+export function createContextEngine({ store, model, tokenCounter, retrieval, embedding, toolCatalog, assets, usagePolicy, recoveryHint = null, anchorIndex = null, isPersonRequest = null, clearedToolPointer = DEFAULT_CLEARED_POINTER, clock = () => new Date().toISOString(), idFactory = () => crypto.randomUUID() }) {
   if (!store || !model?.resolveModel || !model?.summarize || !tokenCounter?.countPreparedContext) fail('CTX_PORT_MISSING', 'Archivio, modello e contatore sono necessari.');
   const running = new Map();
   const key = (sessionId, jobId) => JSON.stringify([sessionId, jobId]);
@@ -125,17 +128,51 @@ export function createContextEngine({ store, model, tokenCounter, retrieval, emb
     return measurement;
   };
   const budgetFor = (measurement, settings) => computeContextBudget({ ...measurement, settings });
-  function compiled(snapshot, records, { summary = snapshot.activeVersion?.summary, coveredThrough = snapshot.activeVersion?.coveredThrough ?? 0, evidence = [], targetModel } = {}) {
+  /* C1 (09/10/2026, banco A/B + Hermes «anchor index»): l'indice meccanico della parte riassunta — percorsi, impronte, errori —
+     calcolato dalla funzione di chi crea il motore sui messaggi COPERTI; il prefisso coperto è immutabile, quindi si ricorda per
+     (sessione, punto coperto, numero dei messaggi). Un errore dell'indice non ferma mai la richiesta: niente indice. */
+  const anchorsMemo = new Map();
+  /* Review del bugfixer su 59cdfdcba (Y1): un messaggio `user` non è sempre della persona — chi crea il motore dice quali lo
+     sono (il desktop esclude le buste dei sotto-agenti, dei Workflow e del dialogo fra agenti). Un predicato che lancia vale
+     «non della persona»: nel registro entra solo ciò che è certamente suo. */
+  const personRequest = message => { if (typeof isPersonRequest !== 'function') return true; try { return isPersonRequest(message) === true; } catch { return false; } };
+  const anchorsFor = (snapshot, records, coveredThrough) => {
+    if (typeof anchorIndex !== 'function' || !coveredThrough) return null;
+    const covered = records.filter(r => r.sequence <= coveredThrough && !['system', 'developer'].includes(r.message.role)).map(r => r.message);
+    const key = `${snapshot.sessionId}:${coveredThrough}:${covered.length}`;
+    if (!anchorsMemo.has(key)) {
+      let text = null;
+      try { const out = anchorIndex(covered); text = typeof out === 'string' && out.trim() ? out : null; } catch { text = null; }
+      if (anchorsMemo.size > 64) anchorsMemo.clear();
+      anchorsMemo.set(key, text);
+    }
+    return anchorsMemo.get(key);
+  };
+  function compiled(snapshot, records, { summary = snapshot.activeVersion?.summary, coveredThrough = snapshot.activeVersion?.coveredThrough ?? 0, evidence = [], targetModel, clear = null, retained = null } = {}) {
     const systemMessages = records.filter(r => ['system', 'developer'].includes(r.message.role)).map(r => r.message);
-    const tailMessages = records.filter(r => r.sequence > coveredThrough && !['system', 'developer'].includes(r.message.role)).map(r => r.message);
+    const verbatimTail = records.filter(r => r.sequence > coveredThrough && !['system', 'developer'].includes(r.message.role)).map(r => r.message);
+    // C1 level 1: `clear` = a `{ cleared }` box; the old tool outputs of the verbatim part are cleared BEFORE the provider shapes it
+    const lighter = clear ? clearOldToolOutputs(verbatimTail, { pointer: clearedToolPointer }) : null;
+    if (clear) clear.cleared = lighter.cleared;
+    // C1 (09/10, «Tutti e due»): `clear.pressure` = anche le uscite grandi recenti, inizio e fine più un rimando (l'ultima intera)
+    const pressed = clear?.pressure ? shortenRecentLargeOutputs(lighter.messages, { pointer: clearedToolPointer, removeChars: clear.removeChars, spareLimitChars: clear.spareLimitChars }) : null;
+    if (pressed) clear.shortened = pressed.shortened;
+    const tailMessages = pressed ? pressed.messages : lighter ? lighter.messages : verbatimTail;
     /* G02 (01/10): a summary that ends INSIDE a turn (compaction-planner.mjs, a long first turn) covers that turn's person's
        message too; it is shown verbatim before the summary, like Hermes protect_first_n, so the task is never paraphrased. */
     const pinnedMessages = summary && tailMessages.length && tailMessages[0].role !== 'user'
       ? records.filter(r => r.sequence <= coveredThrough && r.message.role === 'user').slice(-1).map(r => r.message)
       : [];
+    /* C1 (10/10): le parti del registro e dell'indice, calcolate UNA volta: vanno nel testo e, se chi chiama dà la scatola
+       `retained`, nei campi della versione (`personRequestsKept` è la stessa lista che `personRequestRegister` scrive). */
+    const memoryParts = summary ? { recoveryHint, anchors: anchorsFor(snapshot, records, coveredThrough), personRequests: records.filter(r => r.sequence <= coveredThrough && r.message.role === 'user' && !pinnedMessages.includes(r.message) && personRequest(r.message)).map(r => plainText(r.message.content)), personRequestsBudget: personRequestBudget(targetModel?.windowTokens) } : null;
+    if (retained && memoryParts) {
+      retained.personRequests = personRequestsKept(memoryParts.personRequests, { budget: memoryParts.personRequestsBudget });
+      retained.anchorIndex = typeof memoryParts.anchors === 'string' && memoryParts.anchors.trim() ? memoryParts.anchors : null;
+    }
     const messages = !summary && !snapshot.facts.some(f => f.status !== 'removed') && !evidence.length
       ? structuredClone([...systemMessages, ...tailMessages])
-      : composeActiveContext({ systemMessages, pinnedMessages, summary: summary ?? null, facts: snapshot.facts, tailMessages, evidence });
+      : composeActiveContext({ systemMessages, pinnedMessages, summary: summary ?? null, facts: snapshot.facts, tailMessages, evidence, ...(summary ? memoryParts : {}) });
     if (!model.prepareContext || !targetModel) return messages;
     const prepared = model.prepareContext({ messages, model: targetModel, reset: Boolean(summary) });
     if (!Array.isArray(prepared?.messages)) fail('CTX_PROVIDER_CONTEXT_INVALID', 'Il modello non ha preparato un contesto valido.');
@@ -205,8 +242,10 @@ export function createContextEngine({ store, model, tokenCounter, retrieval, emb
         };
         try { return await once(false); }
         catch (error) {
-          if (error?.code !== 'CTX_TRUNCATED_SUMMARY') throw error;
-          return once(true);
+          if (error?.code === 'CTX_TRUNCATED_SUMMARY') return once(true);
+          // C1 (09/10/2026): il formato sbagliato si riprova UNA volta, con l'istruzione sul formato (mai la stessa richiesta)
+          if (error?.code === 'CTX_INVALID_SUMMARY') return once('format');
+          throw error;
         }
       };
       const summaries = [];
@@ -215,7 +254,7 @@ export function createContextEngine({ store, model, tokenCounter, retrieval, emb
         const fingerprint = await hash({ segment, profile, focus: snapshot.settings.focus });
         const prior = job.completedSegments.find(entry => entry.fingerprint === fingerprint);
         if (prior) { summaries.push(validateSummary({ text: JSON.stringify(prior.summary), finishReason: 'stop' }, { records })); continue; }
-        const build = compact => buildSummaryRequest({ segment, focus: snapshot.settings.focus, maxOutputTokens: profile.responseReserve, compact });
+        const build = mode => buildSummaryRequest({ segment, focus: snapshot.settings.focus, maxOutputTokens: profile.responseReserve, compact: mode === true, formatRetry: mode === 'format' });
         const request = build(false);
         const measured = await measure(request.messages, [], profile, signal);
         if (!budgetFor(measured, snapshot.settings).fits) {
@@ -237,7 +276,7 @@ export function createContextEngine({ store, model, tokenCounter, retrieval, emb
         for (let index = 0; index < level.length; index += 2) {
           if (index + 1 === level.length) { next.push(level[index]); continue; }
           const pair = level.slice(index, index + 2);
-          const merged = await invoke(compact => buildSummaryRequest({ summaries: pair, focus: snapshot.settings.focus, maxOutputTokens: profile.responseReserve, compact }), records, `merge-${depth}-${index}`);
+          const merged = await invoke(mode => buildSummaryRequest({ summaries: pair, focus: snapshot.settings.focus, maxOutputTokens: profile.responseReserve, compact: mode === true, formatRetry: mode === 'format' }), records, `merge-${depth}-${index}`);
           if (JSON.stringify(merged).length >= JSON.stringify(pair).length) fail('CTX_NO_REDUCTION', 'La fusione non libera spazio.');
           next.push(merged);
         }
@@ -254,11 +293,15 @@ export function createContextEngine({ store, model, tokenCounter, retrieval, emb
       const active = compiled(latest, all, { summary, coveredThrough: job.coveredThrough, targetModel: sessionModel });
       const before = await measure(compiled(latest, all, { targetModel: sessionModel }), tools, sessionModel, signal);
       const measurement = await measure(active, tools, sessionModel, signal);
-      const budget = budgetFor(measurement, latest.settings);
-      if (!budget.fits || measurement.inputTokens >= before.inputTokens) fail('CTX_NO_REDUCTION', 'La sintesi non libera spazio sufficiente. La versione precedente rimane valida.');
+      /* C1 (owner 09/10/2026 sera, «Tutti e due»): un riassunto che RIDUCE si pubblica sempre, anche se non basta per un contesto
+         cresciuto mentre lavorava (dal vivo: partito al giro 3 per il giro 1, buttato al giro 4) — chi chiede ne fa partire un
+         secondo fino ad adesso (`prepareForRequest`). Si rifiuta solo un riassunto che non riduce niente. */
+      if (measurement.inputTokens >= before.inputTokens) fail('CTX_NO_REDUCTION', 'La sintesi non libera spazio sufficiente. La versione precedente rimane valida.');
       job = await save(job, { state: 'ready', progress: { ...job.progress, phase: 'ready' } });
       await assertCurrent(job, signal);
-      const version = ContextVersionV1.parse({ schema: 'talos.context.version.v1', id: idFactory(), sessionId: job.sessionId, coveredThrough: job.coveredThrough, sourceIds: prefix.map(r => r.id), sourceHash: await hash(prefix.map(({ id, sha256 }) => ({ id, sha256 }))), summary, activeMessages: compiled(latest, prefix, { summary, coveredThrough: job.coveredThrough, targetModel: sessionModel }), model: job.model, measurement, createdAt: clock() });
+      const retained = {};
+      const activeMessages = compiled(latest, prefix, { summary, coveredThrough: job.coveredThrough, targetModel: sessionModel, retained });
+      const version = ContextVersionV1.parse({ schema: 'talos.context.version.v1', id: idFactory(), sessionId: job.sessionId, coveredThrough: job.coveredThrough, sourceIds: prefix.map(r => r.id), sourceHash: await hash(prefix.map(({ id, sha256 }) => ({ id, sha256 }))), summary, activeMessages, model: job.model, measurement, createdAt: clock(), ...(retained.personRequests ? { retained: { personRequests: retained.personRequests, anchorIndex: retained.anchorIndex ?? null } } : {}) });
       signal?.throwIfAborted();
       await store.commitContextVersion({ sessionId: job.sessionId, expectedRevision: latest.revision, expectedStateRevision: latest.stateRevision, jobId: job.id, version });
       return store.readContextJob({ sessionId: job.sessionId, jobId: job.id });
@@ -316,7 +359,7 @@ export function createContextEngine({ store, model, tokenCounter, retrieval, emb
       for (const id of parsed.assetRefs) if (!await store.readBlob({ sessionId, id })) fail('CTX_ASSET_MISSING', 'Conservare l’allegato prima di archiviare il messaggio.');
       return store.appendOriginalBatch({ sessionId, records: [parsed] });
     },
-    async startCompaction({ sessionId, idempotencyKey, sessionModel, kind = 'compact', tools = [], signal, projection, withinTurn = false }) {
+    async startCompaction({ sessionId, idempotencyKey, sessionModel, kind = 'compact', tools = [], signal, projection, withinTurn = false, retainRecentTurns }) {
       signal?.throwIfAborted();
       const snapshot = await recoverInterrupted(sessionId, await state(sessionId));
       const existing = snapshot.jobs.find(job => job.idempotencyKey === idempotencyKey);
@@ -326,7 +369,8 @@ export function createContextEngine({ store, model, tokenCounter, retrieval, emb
         return existing;
       }
       const records = await originals(sessionId);
-      const selection = selectClosedPrefix(records, { retainRecentTurns: snapshot.settings.retainRecentTurns, force: true, withinTurn });
+      // C1 (09/10): il secondo riassunto «fino ad adesso» tiene intero solo il giro corrente (`retainRecentTurns: 1`, vedi prepareForRequest)
+      const selection = selectClosedPrefix(records, { retainRecentTurns: Number.isSafeInteger(retainRecentTurns) ? Math.min(retainRecentTurns, snapshot.settings.retainRecentTurns) : snapshot.settings.retainRecentTurns, force: true, withinTurn });
       if (selection.pendingCalls.length) fail('CTX_PENDING_TOOLS', 'Attendere i risultati degli strumenti.');
       if (!selection.prefix.length) fail('CTX_NOTHING_TO_COMPACT', 'Non ci sono scambi precedenti da compattare mantenendo intero l’ultimo scambio. Nessun messaggio è stato modificato.');
       const profile = await model.resolveModel({ sessionModel, settings: snapshot.settings });
@@ -371,8 +415,53 @@ export function createContextEngine({ store, model, tokenCounter, retrieval, emb
       const records = await originals(sessionId);
       if (messages && JSON.stringify(messages) !== JSON.stringify(records.map(r => r.message))) fail('CTX_UNARCHIVED_CONTEXT', 'Archiviare i nuovi messaggi prima di preparare la richiesta.');
       checkProjection(records, projection);
-      let prepared = compiled(snapshot, overlay(records, projection), { targetModel: sessionModel });
-      let measurement = await measure(prepared, tools, sessionModel, signal);
+      /* C1, livello 1 (owner 09/10/2026 sera, «prima le regole, poi il riassunto»): over the trigger, the old tool outputs
+         become signature + pointer (`tool-output-clearing.mjs`) and are measured again; the summary (level 2) starts only
+         if that is not enough. No model call; the cut moves by whole blocks, so the prompt cache breaks only there. */
+      let toolOutputsCleared = 0;
+      let level1 = null; // C1 (10/10): quante uscite le regole hanno tolto e quante accorciate in QUESTA richiesta (la scheda Contesto)
+      /* Y1 (review del bugfixer, 09/10): l'àncora del contatore si registra coi messaggi SPEDITI, cioè i leggeri — contare la
+         storia piena a ogni richiesta voleva dire un conteggio vero (HTTP per anthropic/openai/gemini) su una storia che cresce
+         senza limite, e un suo errore faceva cadere una richiesta che leggera entrava. Quindi: una stima locale decide se
+         serve alleggerire (byte/3,5, la stessa euristica del contatore, col margine largo dell'euristica); sopra la soglia la
+         piena si STIMA dalla misura leggera più i byte tolti, mai si conta; sotto, si misura la piena come sempre. */
+      const bytes = messages => new TextEncoder().encode(JSON.stringify(messages)).length;
+      const project = async (current, list) => {
+        const full = compiled(current, list, { targetModel: sessionModel });
+        const measureFull = async () => ({ prepared: full, measurement: await measure(full, tools, sessionModel, signal), cleared: 0 });
+        if (!current.settings.auto) return measureFull();
+        const fullBytes = bytes(full); // una volta sola: su una storia da decine di MB pesa (nota del bugfixer, 09/10)
+        const quick = budgetFor({ windowTokens: sessionModel.windowTokens, responseReserve: sessionModel.responseReserve, method: 'heuristic', inputTokens: Math.ceil(fullBytes / 3.5) }, current.settings);
+        if (!quick.shouldPrepare) return measureFull();
+        const box = { cleared: 0 };
+        const light = compiled(current, list, { targetModel: sessionModel, clear: box });
+        let lighter = box.cleared ? { prepared: light, measurement: await measure(light, tools, sessionModel, signal), cleared: box.cleared, level1: { cleared: box.cleared, shortened: 0 } } : null;
+        /* C1 (owner 09/10/2026 sera, «Tutti e due»): se le regole non bastano (o non toccano niente), SOTTO PRESSIONE si accorciano
+           anche le uscite grandi della parte recente — inizio e fine più un rimando, l'ultima intera — prima del riassunto. */
+        if (!lighter || budgetFor(lighter.measurement, current.settings).shouldPrepare) {
+          /* Review Y2 (10/10): quanto togliere per tornare sotto la soglia (dalla misura leggera, o dalla stima della piena) e la
+             quota dura del giro in sospeso, il 20% della finestra come Hermes — tutto in caratteri, con l'euristica byte/3,5. */
+          const sopra = budgetFor(lighter ? lighter.measurement : { windowTokens: sessionModel.windowTokens, responseReserve: sessionModel.responseReserve, method: 'heuristic', inputTokens: Math.ceil(fullBytes / 3.5) }, current.settings);
+          const pressure = { cleared: 0, shortened: 0, pressure: true, removeChars: Math.max(0, Math.ceil((sopra.inputTokens - sopra.triggerTokens + 1) * 3.5)), spareLimitChars: Math.floor(sessionModel.windowTokens * PENDING_ROUND_WINDOW_SHARE * 3.5) };
+          const pressed = compiled(current, list, { targetModel: sessionModel, clear: pressure });
+          if (pressure.cleared + pressure.shortened > 0) {
+            const pressedMeasurement = await measure(pressed, tools, sessionModel, signal);
+            if (!lighter || pressedMeasurement.inputTokens < lighter.measurement.inputTokens) lighter = { prepared: pressed, measurement: pressedMeasurement, cleared: pressure.cleared + pressure.shortened, level1: { cleared: pressure.cleared, shortened: pressure.shortened } };
+          }
+        }
+        if (!lighter) return measureFull();
+        const lightMeasurement = lighter.measurement;
+        const fullEstimate = lightMeasurement.inputTokens + Math.ceil(Math.max(0, fullBytes - bytes(lighter.prepared)) / 3.5);
+        if (budgetFor({ ...lightMeasurement, inputTokens: fullEstimate }, current.settings).shouldPrepare) return lighter;
+        // the estimate says the full history is under the trigger: measure it, and never lose the request on its count
+        try {
+          const exact = await measureFull();
+          return budgetFor(exact.measurement, current.settings).shouldPrepare ? lighter : exact;
+        } catch (error) { if (signal?.aborted) throw error; return lighter; }
+      };
+      let { prepared, measurement, cleared: firstCleared, level1: firstLevel1 } = await project(snapshot, overlay(records, projection));
+      toolOutputsCleared = firstCleared;
+      level1 = firstLevel1 ?? null;
       /* 09/09 — si salva SUBITO, prima di qualunque automazione: se la compattazione automatica fallisce
          (CTX_NO_REDUCTION su un solo messaggio enorme, per esempio) la misura che ha fatto scattare tutto
          è comunque un fatto vero, ed è quello che la modale deve poter mostrare. */
@@ -396,9 +485,25 @@ export function createContextEngine({ store, model, tokenCounter, retrieval, emb
           const result = await api.waitForCompaction({ sessionId, jobId: job.id });
           if (result.state !== 'committed') fail(result.error?.code ?? 'CTX_COMPACTION_REQUIRED', result.error?.message ?? 'Il contesto richiede una compattazione completata.');
           snapshot = await state(sessionId);
-          prepared = compiled(snapshot, overlay(await originals(sessionId), projection), { targetModel: sessionModel });
-          measurement = await measure(prepared, tools, sessionModel, signal);
+          ({ prepared, measurement, cleared: toolOutputsCleared, level1 = null } = await project(snapshot, overlay(await originals(sessionId), projection)));
           await record(measurement); // dopo una compattazione riuscita la misura nuova sostituisce quella vecchia
+          /* C1 (owner 09/10/2026 sera, «Tutti e due»): se il riassunto pubblicato non basta (copriva fin dove era la storia quando è
+             partito), ne parte SUBITO un secondo fino ad adesso — al massimo uno in più; se anche quello non basta, il rifiuto è
+             l'overflow di sempre, qui sotto. */
+          if (!budgetFor(measurement, snapshot.settings).fits) {
+            let ancora = null;
+            try { ancora = await api.startCompaction({ sessionId, idempotencyKey: `auto-${snapshot.revision}-${await hash(identity(sessionModel))}-more`, sessionModel, tools, signal, projection, withinTurn: true, retainRecentTurns: 1 }); }
+            catch (error) { if (error.code !== 'CTX_NOTHING_TO_COMPACT') throw error; }
+            if (ancora) {
+              const secondo = await api.waitForCompaction({ sessionId, jobId: ancora.id });
+              if (secondo.state === 'committed') {
+                job = secondo;
+                snapshot = await state(sessionId);
+                ({ prepared, measurement, cleared: toolOutputsCleared, level1 = null } = await project(snapshot, overlay(await originals(sessionId), projection)));
+                await record(measurement);
+              }
+            }
+          }
         }
       }
       if (!budgetFor(measurement, snapshot.settings).fits) {
@@ -406,7 +511,7 @@ export function createContextEngine({ store, model, tokenCounter, retrieval, emb
         if (compactionCooling) fail('CTX_CONTEXT_OVERFLOW', `Il contesto supera la finestra e la compattazione automatica è in pausa ancora per circa ${Math.max(1, Math.ceil((Date.parse(compactionCooling.retryAfter) - Date.parse(clock())) / 60_000))} min dopo un riassunto non riuscito (${compactionCooling.code}). Usa «Compatta» per riprovare subito, o modifica le informazioni protette.`);
         fail('CTX_CONTEXT_OVERFLOW', 'Il contesto supera la finestra. Compattare o modificare le informazioni protette.');
       }
-      return { messages: prepared, measurement, versionId: snapshot.activeVersion?.id ?? null, ...(job ? { job } : {}), ...(compactionCooling ? { compactionCooling } : {}), waiting: false };
+      return { messages: prepared, measurement, versionId: snapshot.activeVersion?.id ?? null, ...(toolOutputsCleared ? { toolOutputsCleared } : {}), ...(level1 ? { level1 } : {}), ...(job ? { job } : {}), ...(compactionCooling ? { compactionCooling } : {}), waiting: false };
     },
     getContextState: async ({ sessionId }) => recoverInterrupted(sessionId, await state(sessionId)),
     async updateContextSettings({ sessionId, patch, expectedRevision }) {

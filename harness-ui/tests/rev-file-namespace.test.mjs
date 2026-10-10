@@ -120,7 +120,13 @@ for (const type of ['RELATIVE', 'DRIVE']) {
 test('NAMESPACE35-BATCH — ambiguous prefix read cannot speculate while valid sibling still runs', windows, async t => {
   const r = await run(t, f => [{name: 'leggi', args: {path: f.ambiguous}}, {name: 'leggi', args: {percorso: 'shadow.txt'}}]);
   refused(r);
-  assert.equal(r.io.filter(e => e.name === 'open').length, 1, 'only the explicit relative read opens the file');
+  /* C25 (10/10/2026): a full read now also opens the file once more for its sha256 fingerprint. The two paths resolve to the SAME
+     file, so the guarantee is measured by difference: the batch opens exactly as often as the valid read ALONE — any speculative
+     open of the ambiguous path would add one. */
+  const solo = await run(t, () => [{name: 'leggi', args: {percorso: 'shadow.txt'}}]);
+  const apertureDellaSola = solo.io.filter(e => e.name === 'open').length;
+  assert.ok(apertureDellaSola >= 1, 'premise: the valid read alone opens the file');
+  assert.equal(r.io.filter(e => e.name === 'open').length, apertureDellaSola, 'only the explicit relative read opens the file');
   const valid = r.events.find(e => e.tipo === 'tool-esito' && e.toolCallId === 'ns-1');
   assert.equal(valid.isError, false); assert.match(valid.content, /NAMESPACE35_SHADOW_ORIGINAL/);
 });

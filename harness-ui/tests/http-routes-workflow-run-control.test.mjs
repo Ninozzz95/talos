@@ -51,6 +51,8 @@ function adattatoreFinto() {
       const ricevuta = `finto:${ctx.nodeId}:${n}`;
       if (fermati.has(ctx.activityExecutionId)) return { status: 'failed', errorClass: 'cancelled', retryable: false, evidenceResultIds: [], receiptRef: ricevuta, actualUsage: CONSUMO };
       if ((esiti.get(ctx.nodeId) ?? [])[n - 1] === 'auth') return { status: 'failed', errorClass: 'auth', retryable: false, evidenceResultIds: [], receiptRef: ricevuta, actualUsage: CONSUMO };
+      // C3 tappa 3: un tentativo che spende molto più della sua riserva (sforamento)
+      if ((esiti.get(ctx.nodeId) ?? [])[n - 1] === 'sfora') return { status: 'completed', receiptRef: ricevuta, results: [], actualUsage: { ...CONSUMO, promptTokens: 1_300_000 } };
       return { status: 'completed', receiptRef: ricevuta, results: [], actualUsage: CONSUMO };
     },
     async reconcile() { return { outcome: 'proved_not_performed', receiptRef: null, resultIds: [], actualUsage: null }; },
@@ -204,5 +206,80 @@ test('WF-HTTP-RETRY: the preview says which steps and how much the ceiling rises
   assert.equal(finale.budget.ceilingRaise.promptTokens, dati.ceilingRaise.promptTokens, 'exactly what the preview said');
   assert.deepEqual([b.finto.tentativi.get('uno'), b.finto.tentativi.get('dopo')], [2, 1]);
   assert.equal((await b.controllo(runId, 'retry')).status, 409, 'nothing left to retry');
+  assert.deepEqual(b.errori, []);
+});
+
+test('C3-HTTP-STEP: the person\'s actions on ONE failed step — exact body per action, owner session only, foreign windows 403, «Metti da parte» ends the run', async (t) => {
+  const b = await banco(t);
+  await b.approva();
+  b.finto.esiti.set('uno', ['auth']);
+  const runId = (await (await b.avvia()).json()).data.runId;
+  assert.ok(await aspettaChe(async () => (await b.stato(runId)).run.status === 'needs_attention'));
+  const passo = (azione, corpo, sessione = sessionId, headers) =>
+    b.post(`/api/v1/sessions/${sessione}/workflows/${runId}/steps/uno/${azione}`, corpo, headers);
+
+  assert.equal((await passo('set-aside', { commandId: randomUUID() }, altraSessione)).status, 404, 'another session cannot command it');
+  assert.equal((await passo('set-aside', { commandId: randomUUID(), summary: 'x' })).status, 400, 'set-aside takes no summary');
+  assert.equal((await passo('mark-done', { commandId: randomUUID() })).status, 400, 'mark-done needs its summary');
+  assert.equal((await passo('mark-done', { commandId: randomUUID(), summary: '   ' })).status, 400, 'a blank summary is refused (Hermes)');
+  assert.equal((await passo('retry-other-model', { commandId: randomUUID() })).status, 400, 'the other model is required');
+  const straniera = await passo('set-aside', { commandId: randomUUID() }, sessionId, { Origin: b.base, 'Sec-Fetch-Site': 'cross-site' });
+  assert.equal(straniera.status, 403);
+  assert.equal((await straniera.json()).error.code, 'WORKFLOW_COMMAND_ORIGIN_FORBIDDEN');
+  assert.equal((await b.post(`/api/v1/sessions/${sessionId}/workflows/${runId}/steps/dopo/set-aside`, { commandId: randomUUID() })).status, 409,
+    'only a failed step');
+  assert.equal((await b.stato(runId)).nodes.get('uno').state, 'failed', 'refusals changed nothing');
+
+  const comando = randomUUID();
+  const messo = await passo('set-aside', { commandId: comando });
+  assert.equal(messo.status, 202);
+  assert.equal((await messo.json()).data.action, 'set-aside');
+  const ripetuto = await passo('set-aside', { commandId: comando });
+  assert.equal(ripetuto.headers.get('idempotency-replayed'), 'true');
+  assert.ok(await aspettaChe(async () => (await b.stato(runId)).run.status === 'succeeded_with_set_aside'), 'the run ends, with the step set aside');
+  assert.equal(b.finto.tentativi.get('dopo'), undefined, '«dopo» waited for it and never started');
+  assert.equal((await b.get(`/api/v1/sessions/${sessionId}/workflows?stato=succeeded_with_set_aside`)).status, 200, 'the list filters by the new state');
+  assert.deepEqual(b.errori, []);
+});
+
+test('C3-HTTP-CEILING: the ceiling preview says the amount, «Alza il tetto» takes exactly that amount, and the run goes on', async (t) => {
+  const b = await banco(t);
+  await b.approva();
+  b.finto.esiti.set('uno', ['sfora']);
+  const runId = (await (await b.avvia()).json()).data.runId;
+  assert.ok(await aspettaChe(async () => (await b.stato(runId)).run.status === 'needs_attention'), 'the overrun asks for attention');
+  // la panoramica dice PERCHÉ il run aspetta: il diagramma offre «Alza il tetto» solo per il budget
+  const panoramica = async () => (await (await b.get(`/api/v1/sessions/${sessionId}/workflows/${runId}/graph`)).json()).data;
+  assert.deepEqual((await panoramica()).attentionReasons, ['budget_overrun']);
+  const anteprima = await b.get(`/api/v1/sessions/${sessionId}/workflows/${runId}/ceiling-preview`);
+  assert.equal(anteprima.status, 200);
+  const dati = (await anteprima.json()).data;
+  assert.equal(dati.schema, 'talos.workflow-ceiling-preview.v1');
+  assert.equal(dati.waiting, true);
+  assert.deepEqual(dati.nodeIds, ['dopo']);
+  assert.ok(dati.amount.promptTokens > 0, 'the amount is said before');
+  assert.equal((await b.get(`/api/v1/sessions/${altraSessione}/workflows/${runId}/ceiling-preview`)).status, 404);
+
+  const alza = (corpo, sessione = sessionId, headers) => b.post(`/api/v1/sessions/${sessione}/workflows/${runId}/raise-ceiling`, corpo, headers);
+  assert.equal((await alza({ commandId: randomUUID() })).status, 400, 'the amount is required');
+  assert.equal((await alza({ commandId: randomUUID(), amount: dati.amount, extra: 1 })).status, 400, 'exact body');
+  assert.equal((await alza({ commandId: randomUUID(), amount: { ...dati.amount, promptTokens: -1 } })).status, 400, 'no negative amount');
+  assert.equal((await alza({ commandId: randomUUID(), amount: dati.amount }, altraSessione)).status, 404, 'another session cannot command it');
+  const straniera = await alza({ commandId: randomUUID(), amount: dati.amount }, sessionId, { Origin: b.base, 'Sec-Fetch-Site': 'cross-site' });
+  assert.equal(straniera.status, 403);
+  const diversa = await alza({ commandId: randomUUID(), amount: { ...dati.amount, promptTokens: dati.amount.promptTokens + 1 } });
+  assert.equal(diversa.status, 409, 'not the amount said');
+  assert.equal((await diversa.json()).error.code, 'WORKFLOW_RUN_STATE_CONFLICT');
+  assert.equal(b.finto.tentativi.get('dopo'), undefined, 'refusals changed nothing');
+
+  const comando = randomUUID();
+  const alzato = await alza({ commandId: comando, amount: dati.amount });
+  assert.equal(alzato.status, 202);
+  assert.deepEqual((await alzato.json()).data.amount, dati.amount);
+  assert.equal((await alza({ commandId: comando, amount: dati.amount })).headers.get('idempotency-replayed'), 'true');
+  assert.ok(await aspettaChe(async () => (await b.stato(runId)).run.status === 'succeeded'), 'the run goes on and ends');
+  assert.equal((await b.stato(runId)).budget.ceilingRaise.promptTokens, dati.amount.promptTokens);
+  assert.equal(Object.hasOwn(await panoramica(), 'attentionReasons'), false, 'no reason, no field (the overviews of every other run do not change)');
+  assert.equal((await alza({ commandId: randomUUID(), amount: dati.amount })).status, 409, 'an ended run');
   assert.deepEqual(b.errori, []);
 });

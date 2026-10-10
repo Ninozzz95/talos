@@ -145,13 +145,16 @@ test('R4-WF-APPROVE-EXACT-HASH: one commandId per gesture; an ambiguous outcome 
   assert.deepEqual(f.chiamate.map((c) => c.metodo), ['POST']);
   assert.equal(f.chiamate[0].corpo.definitionHash, HASH);
   // la rete cade: si rilegge, ed era arrivato
-  // F3-33b: la rilettura parte dall'elenco delle versioni del workflow (proposte della sessione), poi revisione e run
-  f = fetchFinto([new Error('rete'), { status: 200, body: { data: { items: [] } } }, { status: 200, body: { data: revisione({ status: 'approved' }) } }, { status: 200, body: { data: { items: [] } } }]);
+  // C11 (10/10/2026): la rilettura è UNA GET della versione ESATTA del gesto (non l'ultima del workflow)
+  // C11, review Y1: e con il commandId di QUESTO gesto (il secondo dell'uuid finto), che la vista porta in `approval`
+  f = fetchFinto([new Error('rete'), { status: 200, body: { data: revisione({ status: 'approved', approval: { commandId: '00000000-0000-4000-8000-000000000002' } }) } }]);
   esito = await creaClientProposta({ fetchFn: f.fn, sessionId: 's', uuid }).approva({ ...RICEVUTA });
-  assert.deepEqual([esito.ok, esito.riletto], [true, true]);
-  assert.deepEqual(f.chiamate.map((c) => c.metodo), ['POST', 'GET', 'GET', 'GET'], 'no second POST');
+  assert.deepEqual([esito.ok, esito.riletto, esito.daAltroComando], [true, true, undefined]);
+  assert.equal(f.chiamate[0].corpo.commandId, '00000000-0000-4000-8000-000000000002');
+  assert.deepEqual(f.chiamate.map((c) => c.metodo), ['POST', 'GET'], 'no second POST');
+  assert.match(f.chiamate[1].url, /\/versions\/1$/u, 'the version of the gesture, not the latest');
   // la rete cade e non era arrivato: si dice, non si ripete da soli
-  f = fetchFinto([new Error('rete'), { status: 200, body: { data: { items: [] } } }, { status: 200, body: { data: revisione() } }, { status: 200, body: { data: { items: [] } } }]);
+  f = fetchFinto([new Error('rete'), { status: 200, body: { data: revisione() } }]);
   esito = await creaClientProposta({ fetchFn: f.fn, sessionId: 's', uuid }).approva({ ...RICEVUTA });
   assert.deepEqual([esito.ok, esito.ambiguo], [false, true]);
   assert.equal(f.chiamate.filter((c) => c.metodo === 'POST').length, 1, 'exactly one POST for one gesture');
@@ -182,4 +185,64 @@ test('WF-PROPOSAL-CLIENT-READ: the run of THIS version is found among the sessio
   assert.equal(letto.run.runId, 'mio');
   const assente = await creaClientProposta({ fetchFn: fetchFinto([{ status: 200, body: { data: { items: [] } } }, { status: 404, body: null }]).fn, sessionId: 's' }).leggi(RICEVUTA);
   assert.deepEqual(assente, { nonDisponibile: true });
+});
+
+/* C3b (owner 09/10/2026 sera): un Workflow avviato DA SOLO (Coordinazione accesa) — la ricevuta porta il run, la carta lo dice e
+   offre Pausa (o Riprendi) e Annulla; al contrario, un run avviato dalla persona resta com'era (nessun comando), e a run finito
+   non c'è niente da fermare. */
+test('C3B-CARD: a Workflow started on its own says so and offers Pause/Resume and Cancel; a run started by the person does not', () => {
+  const RUN = '2f0c8a3e-4b1d-4c55-9a77-0d3f5a6b7c8d';
+  assert.deepEqual(leggiRicevutaProposta({ ...RICEVUTA, startedOnItsOwn: { runId: RUN, steps: 3 } }),
+    { workflowId: RICEVUTA.workflowId, version: 1, definitionHash: HASH, avviatoDaSolo: RUN });
+  assert.equal(leggiRicevutaProposta({ ...RICEVUTA, startedOnItsOwn: { runId: 'nope' } }).avviatoDaSolo, undefined, 'a malformed run id is ignored');
+  const document = fakeDocument();
+  const card = creaCardProposta({ document, ricevuta: leggiRicevutaProposta(RICEVUTA) });
+  const comandi = [];
+  const onComandoRun = (azione) => comandi.push(azione);
+  const vista = (status) => ({ document, revisione: revisione({ status: 'approved' }), run: { runId: RUN, status, createdAt: '2026-10-09T15:00:00.000Z' }, avviatoDaSolo: true, onComandoRun });
+  disegnaCardProposta(card, vista('running'));
+  assert.match(card.textContent, /Avviato da solo alle \d{2}:\d{2} \(Coordinazione accesa\)\./u);
+  assert.deepEqual(bottoni(card).map((b) => b.dataset.azione), ['pausa', 'annulla-run']);
+  for (const b of bottoni(card)) for (const fn of b.listeners.click ?? []) fn();
+  assert.deepEqual(comandi, ['pause', 'cancel']);
+  disegnaCardProposta(card, vista('paused'));
+  assert.deepEqual(bottoni(card).map((b) => b.dataset.azione), ['riprendi', 'annulla-run']);
+  disegnaCardProposta(card, vista('succeeded'));
+  assert.deepEqual(bottoni(card), [], 'a finished run has nothing to stop');
+  disegnaCardProposta(card, { ...vista('running'), avviatoDaSolo: false });
+  assert.deepEqual(bottoni(card), [], 'started by the person: the card is as before');
+  assert.match(card.textContent, /Avviato alle \d{2}:\d{2}\./u);
+});
+
+/*
+ * C11 (coda Codex, A-WF-APPROVAL-ATTRIBUTION; bugfixer 10/10/2026): dopo una POST «approva» di cui si perde la risposta, la
+ * rilettura deve attribuire SOLO lo stato che il gesto chiedeva — QUESTA versione, con QUESTO hash, approvata. Prima leggeva la
+ * revisione più recente e prendeva per sua la versione 2 approvata da altri.
+ */
+test('C11-01: approve, lost answer, the server has version 2 approved — the gesture on version 1 stays ambiguous', async () => {
+  const HASH_B = `sha256:${'b'.repeat(64)}`;
+  const f = fetchFinto([new Error('rete'), { status: 200, body: { data: revisione({ version: 1, status: 'proposed' }) } },
+    { status: 200, body: { data: revisione({ version: 2, definitionHash: HASH_B, status: 'approved' }) } }]);
+  const esito = await creaClientProposta({ fetchFn: f.fn, sessionId: 's', uuid: () => 'c11' }).approva({ ...RICEVUTA });
+  assert.deepEqual([esito.ok, esito.ambiguo], [false, true], 'version 2 approved is not proof of approving version 1');
+  assert.equal(f.chiamate.filter((c) => c.metodo === 'POST').length, 1);
+  assert.match(f.chiamate[1].url, /\/versions\/1$/u);
+});
+
+test('C11-03: approve, lost answer, version 1 approved with THIS hash but by ANOTHER command — approved, not credited to this gesture', async () => {
+  const f = fetchFinto([new Error('rete'), { status: 200, body: { data: revisione({ status: 'approved',
+    approval: { commandId: '11111111-1111-4111-8111-111111111111' } }) } }]);
+  const esito = await creaClientProposta({ fetchFn: f.fn, sessionId: 's', uuid: () => '22222222-2222-4222-8222-222222222222' }).approva({ ...RICEVUTA });
+  assert.deepEqual([esito.ok, esito.riletto, esito.daAltroComando], [true, true, true], 'another window or the automatic start approved it');
+  assert.equal(f.chiamate.filter((c) => c.metodo === 'POST').length, 1, 'no second POST');
+  // senza `approval` nella vista (una vista vecchia) il gesto non si attribuisce nemmeno lui
+  const g = fetchFinto([new Error('rete'), { status: 200, body: { data: revisione({ status: 'approved' }) } }]);
+  const senza = await creaClientProposta({ fetchFn: g.fn, sessionId: 's', uuid: () => '22222222-2222-4222-8222-222222222222' }).approva({ ...RICEVUTA });
+  assert.equal(senza.daAltroComando, true);
+});
+
+test('C11-02: approve, lost answer, version 1 approved but with ANOTHER hash — ambiguous, not success', async () => {
+  const f = fetchFinto([new Error('rete'), { status: 200, body: { data: revisione({ status: 'approved', definitionHash: `sha256:${'c'.repeat(64)}` }) } }]);
+  const esito = await creaClientProposta({ fetchFn: f.fn, sessionId: 's', uuid: () => 'c11' }).approva({ ...RICEVUTA });
+  assert.deepEqual([esito.ok, esito.ambiguo], [false, true]);
 });

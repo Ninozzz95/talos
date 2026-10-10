@@ -39,6 +39,7 @@ import { ID_DESTINAZIONE_CHAT, ID_NATIVI_SDK, REGISTRO_FORNITORI, idPerWire } fr
 // P-K
 import { destinazioneCloud } from './provider-auth-cloud.mjs';
 // P-K — fine
+import { OpenAiCompatibleRuntimeError, preparaRichiestaCompatibile } from './openai-compatible-runtime.mjs'; // A9: il livello del filo lo misura il traduttore stesso
 
 export class ModelDestinationError extends Error {
   constructor(message, code = 'MODEL_DESTINATION_INVALID') {
@@ -108,6 +109,49 @@ export function livelliRagionamentoDiretti() {
       if (Array.isArray(livelli) && livelli.length && typeof m?.id === 'string') perModello[m.id] = Object.freeze([...livelli]);
     }
     if (Object.keys(perModello).length) mappa[fonte] = Object.freeze(perModello);
+  }
+  return mappa;
+}
+
+/* Un id che nessun registro conosce: la voce `'*'` si misura come la vede il traduttore per un modello senza voce propria. */
+const ID_SENZA_VOCE = '\u0000senza-voce';
+const LIVELLI_DA_MISURARE = Object.freeze(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']);
+
+/**
+ * ⛔ A9 (owner 09/10/2026, «la pillola mostra il livello INVIATO al fornitore») — per ogni modello di
+ * `livelliRagionamentoDiretti()`, che cosa arriva DAVVERO sul filo per ogni livello chiesto: lo dice il
+ * traduttore stesso (`preparaRichiestaCompatibile`, lo stesso che il ponte chiama prima della rete), mai
+ * una seconda copia delle regole. Misurato il 09/10 su r4: «xhigh» su glm-5.3-flash parte «max» (alias)
+ * mentre la pillola mostrava «Alto»; «Spento» parte «low» (il modello non si spegne); un modello Z.AI senza
+ * voce propria non riceve nessun livello mentre la pillola ne offriva tre. Forma:
+ * `{ zai: { 'glm-5.3-flash': { none: 'low', xhigh: 'max', … }, '*': { high: null, … } }, … }` — `null` =
+ * nessun livello inviato (decide il fornitore). Come Hermes, che calcola sul server il livello del filo e
+ * lo dà alla pillola (`tui_gateway/server.py:2381-2387`, `reasoning_effort_wire`). Servita accanto a
+ * `livelliDiretti` su `/api/v1/models`.
+ */
+export function filoRagionamentoDiretti() {
+  const mappa = {};
+  for (const [fonte, perModello] of Object.entries(livelliRagionamentoDiretti())) {
+    const filo = {};
+    for (const modello of Object.keys(perModello)) {
+      const perLivello = {};
+      for (const chiesto of LIVELLI_DA_MISURARE) {
+        let corpo;
+        try {
+          ({ corpo } = preparaRichiestaCompatibile(fonte, { model: modello === '*' ? ID_SENZA_VOCE : modello, messages: [], reasoning: { effort: chiesto } }));
+        } catch (errore) {
+          /* il traduttore RIFIUTA questo livello: nessuna promessa. ⛔ Solo il suo rifiuto (review A9 del desktop, «il catch giusto
+             nasconde il bug sbagliato»): un altro errore è un guasto vero, e trasformarlo in «Automatico» su ogni pillola lo
+             nasconderebbe. */
+          if (errore instanceof OpenAiCompatibleRuntimeError) continue;
+          throw errore;
+        }
+        const effort = corpo?.reasoning_effort ?? corpo?.reasoning?.effort;
+        perLivello[chiesto] = typeof effort === 'string' ? effort : corpo?.thinking?.type === 'disabled' ? 'none' : null;
+      }
+      filo[modello] = Object.freeze(perLivello);
+    }
+    mappa[fonte] = Object.freeze(filo);
   }
   return mappa;
 }

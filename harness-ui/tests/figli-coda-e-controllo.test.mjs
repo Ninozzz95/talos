@@ -19,7 +19,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createSessionRegistry } from '../src/session-registry.mjs'
 import { attendiScritture } from '../src/session-store.mjs'
-import { talosLavora } from '../src/kernel/talosHarness.mjs'
+import { talosLavora, migraPermessiPerAttrezzo } from '../src/kernel/talosHarness.mjs'
 import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs'
 
 function runtimeControllabile() {
@@ -168,15 +168,15 @@ test('K3: list_children dice per ogni figlio diretto stato, compito e se il risu
     runtime.fine(2)
     await new Promise((r) => setTimeout(r, 20))
     const elenco = await runtime.runs[0].input.listChildrenFn({})
-    assert.equal(elenco.children.length, 2)
-    const lavora = elenco.children.find((c) => c.task === 'figlia che lavora')
-    const finita = elenco.children.find((c) => c.task === 'figlia che finisce')
+    assert.equal(elenco.items.length, 2)
+    const lavora = elenco.items.find((c) => c.task === 'figlia che lavora')
+    const finita = elenco.items.find((c) => c.task === 'figlia che finisce')
     assert.equal(lavora.state, 'running')
     assert.equal(lavora.result, 'none')
     assert.equal(finita.state, 'finished')
     assert.equal(finita.result, 'waiting', 'il padre è ancora nel suo giro: il risultato aspetta in coda')
     assert.equal(typeof lavora.childId, 'string')
-    assert.equal(elenco.queuePaused, false)
+    assert.equal(elenco.queue_paused, undefined, 'C5: the busta says queue_paused only when the queue is really stopped')
     runtime.fine(0)
     runtime.fine(1)
 })
@@ -185,7 +185,7 @@ test('K3: stop_child ferma un figlio diretto che lavora e dice lo stato di prima
     const { registry, runtime, sessionId } = await scena(t)
     await runtime.runs[0].input.onDelega('figlia', '/tmp/uno')
     const elenco = await runtime.runs[0].input.listChildrenFn({})
-    const childId = elenco.children[0].childId
+    const childId = elenco.items[0].childId
     const fermata = await runtime.runs[0].input.stopChildFn({ childId })
     assert.deepEqual({ childId: fermata.childId, previous: fermata.previous, stopped: fermata.stopped }, { childId, previous: 'running', stopped: true })
     assert.equal(runtime.runs[1].input.segnaleStop.aborted, true, 'il giro del figlio è davvero fermato')
@@ -203,7 +203,7 @@ test('K3: un figlio fermato dal modello (stop_child) NON riparte quando il nipot
     assert.equal((await runtime.runs[0].input.onDelega('figlio', '/tmp/uno')).esito, 'avviato')
     const nipote = await runtime.runs[1].input.onDelega('nipote', '/tmp/due')
     assert.equal(nipote.esito, 'avviato', JSON.stringify(nipote))
-    const childId = (await runtime.runs[0].input.listChildrenFn({})).children[0].childId
+    const childId = (await runtime.runs[0].input.listChildrenFn({})).items[0].childId
     const fermata = await runtime.runs[0].input.stopChildFn({ childId })
     assert.equal(fermata.stopped, true)
     assert.equal(runtime.runs[2].input.segnaleStop.aborted, true, 'anche il nipote è fermato')
@@ -216,7 +216,7 @@ test('K3: un figlio fermato dal modello (stop_child) NON riparte quando il nipot
     runtime.fine(0)
 })
 
-/* Il cablaggio nel kernel: offerti, eseguiti, e il permesso dell'attrezzo vale per stop_child. */
+/* Il cablaggio nel kernel: offerti, eseguiti, e il permesso dell'attrezzo vale per azione (C5: child_control). */
 function reteDiRisposte(...risposte) {
     const chiamate = []
     return {
@@ -239,7 +239,7 @@ async function giroKernel(t, nome, argomenti, extra = {}) {
     const chiamati = []
     await talosLavora({
         cartella, task: { consegna: 'controlla i figli' }, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch,
-        strumentiEstesi: ['list_children', 'stop_child', 'ask_child'],
+        strumentiEstesi: ['list_children', 'child_control', 'ask_child'], // C5: era stop_child
         listChildrenFn: async (a) => { chiamati.push(['list', a]); return { children: [{ childId: 'c1', state: 'running' }], queuePaused: false } },
         stopChildFn: async (a) => { chiamati.push(['stop', a]); return { childId: a.childId, previous: 'running', stopped: true } },
         ...extra,
@@ -249,33 +249,106 @@ async function giroKernel(t, nome, argomenti, extra = {}) {
     return { offerti, esito, chiamati }
 }
 
-test('K3: il kernel offre list_children e stop_child e li esegue', async (t) => {
+/* C5 (owner 10/10/2026; contratto §2 e §7): `stop_child`, `pause_child` e `resume_child` sono UN attrezzo, `child_control` con
+   `action`. Le regole di K3 e della C3 tappa 4 restano azione per azione: il permesso per azione (`child_control:stop`, con ripiego
+   sulla chiave di prima, vince la più stretta), la carta col tipo di sempre, e in Piano niente ripresa. */
+test('K3: il kernel offre list_children e child_control e li esegue (stop)', async (t) => {
     const lista = await giroKernel(t, 'list_children', {})
-    assert.ok(lista.offerti.includes('list_children') && lista.offerti.includes('stop_child'), lista.offerti.join(','))
+    assert.ok(lista.offerti.includes('list_children') && lista.offerti.includes('child_control'), lista.offerti.join(','))
+    assert.equal(lista.offerti.includes('stop_child'), false, 'the old name is no longer offered')
     assert.match(lista.esito, /"childId":"c1"/u)
-    const stop = await giroKernel(t, 'stop_child', { childId: 'c1' })
+    const stop = await giroKernel(t, 'child_control', { childId: 'c1', action: 'stop' })
     assert.deepEqual(stop.chiamati, [['stop', { childId: 'c1' }]])
     assert.match(stop.esito, /"stopped":true/u)
 })
 
-test('K3: in Piano list_children e stop_child restano (non toccano il disco); ask_child no', async (t) => {
+test('K3: in Piano list_children e child_control restano (stop e pausa non toccano il disco); ask_child no', async (t) => {
     const lista = await giroKernel(t, 'list_children', {}, { modalitaOperativa: 'piano' })
-    assert.ok(lista.offerti.includes('list_children') && lista.offerti.includes('stop_child'), lista.offerti.join(','))
+    assert.ok(lista.offerti.includes('list_children') && lista.offerti.includes('child_control'), lista.offerti.join(','))
     assert.equal(lista.offerti.includes('ask_child'), false)
     assert.match(lista.esito, /"childId":"c1"/u)
+    const stopInPiano = await giroKernel(t, 'child_control', { childId: 'c1', action: 'stop' }, { modalitaOperativa: 'piano' })
+    assert.match(stopInPiano.esito, /"stopped":true/u)
 })
 
-test('K3: stop_child rispetta il permesso dell\'attrezzo — «nega» rifiuta senza fermare niente', async (t) => {
-    const stop = await giroKernel(t, 'stop_child', { childId: 'c1' }, { permessiPerAttrezzo: { stop_child: 'nega' } })
-    assert.match(stop.esito, /^REFUSED\./u)
-    assert.deepEqual(stop.chiamati, [])
+test('K3: child_control stop rispetta il permesso — «nega» sulla chiave nuova O su quella di prima rifiuta senza fermare niente', async (t) => {
+    for (const permessiPerAttrezzo of [{ 'child_control:stop': 'nega' }, { stop_child: 'nega' }, { 'child_control:stop': 'sempre', stop_child: 'nega' }]) {
+        const stop = await giroKernel(t, 'child_control', { childId: 'c1', action: 'stop' }, { permessiPerAttrezzo })
+        assert.match(stop.esito, /^REFUSED\. the action "stop" of child_control is turned off/u, JSON.stringify(permessiPerAttrezzo))
+        assert.deepEqual(stop.chiamati, [])
+    }
+    // al contrario: il «nega» di UN'azione non tocca le altre
+    const pausa = await giroKernel(t, 'child_control', { childId: 'c1', action: 'pause' },
+        { ...CONTROLLI_PAUSA, permessiPerAttrezzo: { 'child_control:stop': 'nega' } })
+    assert.match(pausa.esito, /"paused":true/u)
 })
 
-test('K3: senza il canale (nessun registro) i due attrezzi non si offrono', async (t) => {
+test('K3: senza nessun canale (nessun registro) i due attrezzi non si offrono', async (t) => {
     const cartella = mkdtempSync(join(tmpdir(), 'talos-figli-kernel-'))
     t.after(() => rimuoviCartellaDiProva(cartella))
     const rete = reteDiRisposte(CONCLUSO)
-    await talosLavora({ cartella, task: { consegna: 'x' }, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: ['list_children', 'stop_child'] })
+    await talosLavora({ cartella, task: { consegna: 'x' }, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: ['list_children', 'child_control'] })
     const offerti = (rete.chiamate[0]?.corpo.tools ?? []).map((x) => x.function?.name)
-    assert.equal(offerti.includes('list_children') || offerti.includes('stop_child'), false)
+    assert.equal(offerti.includes('list_children') || offerti.includes('child_control'), false)
+})
+
+/* C3 tappa 4 (owner 09/10): le due porte — il modello ha gli stessi controlli della persona sulle sue figlie. In Piano la pausa sì
+   (non tocca il disco), la ripresa no (riparte un lavoro). C5: le tre azioni in `child_control`. */
+const CONTROLLI_PAUSA = {
+    pauseChildFn: async (a) => ({ childId: a.childId, previous: 'running', paused: true }),
+    resumeChildFn: async (a) => ({ childId: a.childId, previous: 'paused', resumed: true }),
+}
+test('C3-K3-PAUSA: child_control pauses and resumes; in Plan the resume is refused and never reaches the registry', async (t) => {
+    const estesi = { strumentiEstesi: ['list_children', 'child_control'], ...CONTROLLI_PAUSA }
+    const pausa = await giroKernel(t, 'child_control', { childId: 'c1', action: 'pause' }, estesi)
+    assert.match(pausa.esito, /"paused":true/u)
+    const ripresa = await giroKernel(t, 'child_control', { childId: 'c1', action: 'resume' }, estesi)
+    assert.match(ripresa.esito, /"resumed":true/u)
+    let riprese = 0
+    const inPiano = await giroKernel(t, 'child_control', { childId: 'c1', action: 'resume' },
+        { ...estesi, resumeChildFn: async () => { riprese += 1; return { resumed: true } }, modalitaOperativa: 'piano' })
+    assert.match(inPiano.esito, /^REFUSED\. In Plan mode a child can be stopped or paused, not resumed/u)
+    assert.equal(riprese, 0, 'resuming restarts work: not in Plan')
+    const pausaInPiano = await giroKernel(t, 'child_control', { childId: 'c1', action: 'pause' }, { ...estesi, modalitaOperativa: 'piano' })
+    assert.match(pausaInPiano.esito, /"paused":true/u, 'pausing does not touch the disk')
+})
+
+test('C3-K3-PAUSA (the other way): «deny» refuses with nothing paused; a missing channel or a wrong action is said', async (t) => {
+    let chiamate = 0
+    const contato = { pauseChildFn: async () => { chiamate += 1; return { paused: true } }, resumeChildFn: CONTROLLI_PAUSA.resumeChildFn }
+    const negata = await giroKernel(t, 'child_control', { childId: 'c1', action: 'pause' },
+        { strumentiEstesi: ['child_control'], ...contato, permessiPerAttrezzo: { pause_child: 'nega' } })
+    assert.match(negata.esito, /^REFUSED\. the action "pause" of child_control is turned off/u)
+    assert.equal(chiamate, 0)
+    const senzaCanale = await giroKernel(t, 'child_control', { childId: 'c1', action: 'resume' }, { strumentiEstesi: ['child_control'] })
+    assert.match(senzaCanale.esito, /^REFUSED\. child_control resume requires a parent channel\./u)
+    const sbagliata = await giroKernel(t, 'child_control', { childId: 'c1', action: 'kill' })
+    assert.match(sbagliata.esito, /^REFUSED\. child_control needs action "stop", "pause" or "resume" \(got "kill"\)/u)
+    assert.deepEqual(sbagliata.chiamati, [])
+})
+
+test('C5: a model calling stop_child (from history) gets the new name and how to call it, and nothing runs', async (t) => {
+    const vecchio = await giroKernel(t, 'stop_child', { childId: 'c1' })
+    assert.equal(vecchio.esito, 'stop_child was replaced by child_control. Call child_control with arguments like {"childId": "…", "action": "stop"}. Nothing was done.')
+    assert.deepEqual(vecchio.chiamati, [])
+})
+
+test('C5: saved choices on the old names move to the per-ACTION keys, and a «nega» is never lost', () => {
+    assert.deepEqual(migraPermessiPerAttrezzo({ stop_child: 'nega', pause_child: 'chiedi', resume_child: 'sempre', shell: 'chiedi' }),
+        { shell: 'chiedi', 'child_control:stop': 'nega', 'child_control:pause': 'chiedi', 'child_control:resume': 'sempre' })
+    // al contrario: una scelta già sulla chiave nuova vince la migrazione
+    assert.deepEqual(migraPermessiPerAttrezzo({ stop_child: 'nega', 'child_control:stop': 'sempre' }), { 'child_control:stop': 'sempre' })
+})
+
+test('C5: «chiedi» on an action shows the approval card with its usual type (pause_child), and a «no» pauses nothing', async (t) => {
+    const carte = []
+    let pause = 0
+    const r = await giroKernel(t, 'child_control', { childId: 'c1', action: 'pause' }, {
+        pauseChildFn: async () => { pause += 1; return { paused: true } },
+        permessiPerAttrezzo: { 'child_control:pause': 'chiedi' },
+        chiediApprovazioneFn: async (azione) => { carte.push(azione.tipo); return { consentito: false, motivo: 'the person said no.' } },
+    })
+    assert.deepEqual(carte, ['pause_child'], 'the card keeps the type the interface already knows')
+    assert.equal(pause, 0)
+    assert.match(r.esito, /^REFUSED\./u)
 })

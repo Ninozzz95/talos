@@ -92,6 +92,72 @@ test('WF-RUN-COMMAND-CLIENT: one POST with a fresh commandId; an ambiguous outco
   await assert.rejects(creaClientGrafo({ sessionId: S, fetchFn: ok.fetchFn }).comando(RUN, 'delete'), /invalid run command/u); // 03/10/2026: errore di contratto, in inglese
 });
 
+test('C3-STEP-ACTION-CLIENT: one POST to the step route with only its own field; an ambiguous outcome re-reads the step, never a second POST', async () => {
+  const { passoRisolvibile } = await import('../../src/components/controlli-run.js');
+  const ok = server([risposta(202, { ok: true, data: { runId: 'r1', nodeId: 'uno', action: 'mark-done', status: 'running' } })]);
+  const client = (s) => creaClientGrafo({ sessionId: S, fetchFn: s.fetchFn });
+  assert.equal((await client(ok).azioneSulPasso(RUN, 'uno', 'mark-done', { summary: 'Fatto a mano', model: 'ignorato', uuid: () => 'id-1' })).ok, true);
+  assert.deepEqual([ok.chiamate[0].url, ok.chiamate[0].metodo, ok.chiamate[0].corpo],
+    [`/api/v1/sessions/${S}/workflows/r1/steps/uno/mark-done`, 'POST', { commandId: 'id-1', summary: 'Fatto a mano' }], 'mark-done carries the summary, never a model');
+  const aParte = server([risposta(202, { ok: true, data: {} })]);
+  await client(aParte).azioneSulPasso(RUN, 'a b', 'set-aside', { summary: 'no', uuid: () => 'id-2' });
+  assert.deepEqual([aParte.chiamate[0].url, aParte.chiamate[0].corpo], [`/api/v1/sessions/${S}/workflows/r1/steps/a%20b/set-aside`, { commandId: 'id-2' }]);
+  const rifiuto = server([risposta(409, { ok: false, error: { code: 'WORKFLOW_RUN_STATE_CONFLICT' } })]);
+  assert.deepEqual(await client(rifiuto).azioneSulPasso(RUN, 'uno', 'retry-other-model', { model: 'm/x', uuid: () => 'id-3' }),
+    { ok: false, code: 'WORKFLOW_RUN_STATE_CONFLICT', status: 409 });
+  // la rete cade: si rilegge il passo (versione + run), e «segnato come fatto dalla persona» prova il gesto
+  const caduta = server([new Error('rete'), risposta(200, { ok: true, data: { nodeId: 'uno' } }),
+    risposta(200, { ok: true, data: { nodeId: 'uno', state: 'succeeded', resolution: 'marked-done' } })]);
+  assert.deepEqual(await client(caduta).azioneSulPasso(RUN, 'uno', 'mark-done', { summary: 'x', uuid: () => 'id-4' }), { ok: true, riletto: true, dati: null });
+  assert.deepEqual(caduta.chiamate.map((c) => c.metodo), ['POST', 'GET', 'GET'], 'never a second POST');
+  // un passo finito da solo NON prova «segnato come fatto»: resta ambiguo
+  const finito = server([risposta(502, null), risposta(200, { ok: true, data: {} }), risposta(200, { ok: true, data: { state: 'succeeded' } })]);
+  assert.deepEqual(await client(finito).azioneSulPasso(RUN, 'uno', 'mark-done', { summary: 'x', uuid: () => 'id-5' }), { ok: false, ambiguo: true });
+  await assert.rejects(client(ok).azioneSulPasso(RUN, 'uno', 'delete'), /invalid step action/u);
+  await assert.rejects(client(ok).azioneSulPasso({ tipo: 'piano', workflowId: 'w1', version: 1 }, 'uno', 'set-aside'), /invalid step action/u);
+  // offerte solo quando il server le accetterebbe
+  assert.equal(passoRisolvibile({ runId: 'r1', status: 'needs_attention' }, 'failed'), true);
+  assert.equal(passoRisolvibile({ runId: 'r1', status: 'running' }, 'failed'), true);
+  assert.equal(passoRisolvibile({ runId: 'r1', status: 'running', cancelRequested: true }, 'failed'), false, 'a run being cancelled');
+  assert.equal(passoRisolvibile({ runId: 'r1', status: 'paused' }, 'failed'), false, 'a paused run (same rule as Retry)');
+  assert.equal(passoRisolvibile({ runId: 'r1', status: 'running' }, 'succeeded'), false, 'only a failed step');
+  assert.equal(passoRisolvibile({ runId: null, status: 'planned' }, 'failed'), false, 'a plan has no run');
+  // C3 tappa 2a: un passo incerto si decide solo quando il run chiede attenzione
+  assert.equal(passoRisolvibile({ runId: 'r1', status: 'needs_attention' }, 'uncertain'), true);
+  assert.equal(passoRisolvibile({ runId: 'r1', status: 'running' }, 'uncertain'), false, 'still being reconciled by the system');
+  assert.equal(passoRisolvibile({ runId: 'r1', status: 'needs_attention', cancelRequested: true }, 'uncertain'), false);
+});
+
+test('C3-CEILING-CLIENT: «Alza il tetto e riprendi» is first only when the run waits for its budget; the command carries the amount said', async () => {
+  const sforato = pan('needs_attention', { succeeded: 2, ready: 1 }, { attentionReasons: ['budget_overrun'] });
+  assert.deepEqual(vedi(azioniDelRun(sforato)), ['raise-ceiling:Alza il tetto e riprendi', ['cancel'], null]);
+  assert.deepEqual(vedi(azioniDelRun({ ...sforato, groups: [{ phaseId: 'f', counts: { failed: 1 } }] })),
+    ['raise-ceiling:Alza il tetto e riprendi', ['retry', 'cancel'], null], 'with a failed step too, Retry goes in the «…»');
+  assert.deepEqual(vedi(azioniDelRun(pan('needs_attention', { failed: 1 }, { attentionReasons: ['node_failed'] }))), ['retry:Riprova 1 passo', ['cancel'], null],
+    'another reason: no raise');
+  assert.deepEqual(vedi(azioniDelRun({ ...sforato, cancelRequested: true })).slice(0, 2), [null, []], 'not while cancelling');
+
+  const IMPORTO = { promptTokens: 100, completionTokens: 0, wallMs: 0, agentSeconds: 0, toolCalls: 0, modelRequests: 0, knownCostUsd: 0 };
+  const anteprima = server([risposta(200, { ok: true, data: { schema: 'talos.workflow-ceiling-preview.v1', runId: 'r1', waiting: true, amount: IMPORTO, nodeIds: ['c'] } })]);
+  const letta = await creaClientGrafo({ sessionId: S, fetchFn: anteprima.fetchFn }).anteprimaTetto(RUN);
+  assert.deepEqual([anteprima.chiamate[0].url, anteprima.chiamate[0].metodo, letta.amount], [`/api/v1/sessions/${S}/workflows/r1/ceiling-preview`, 'GET', IMPORTO]);
+  const ok = server([risposta(202, { ok: true, data: { runId: 'r1', status: 'running', amount: IMPORTO } })]);
+  await creaClientGrafo({ sessionId: S, fetchFn: ok.fetchFn }).comando(RUN, 'raise-ceiling', { uuid: () => 'id-9', amount: IMPORTO });
+  assert.deepEqual([ok.chiamate[0].url, ok.chiamate[0].corpo], [`/api/v1/sessions/${S}/workflows/r1/raise-ceiling`, { commandId: 'id-9', amount: IMPORTO }]);
+  const pausa = server([risposta(202, { ok: true, data: {} })]);
+  await creaClientGrafo({ sessionId: S, fetchFn: pausa.fetchFn }).comando(RUN, 'pause', { uuid: () => 'id-8', amount: IMPORTO });
+  assert.deepEqual(pausa.chiamate[0].corpo, { commandId: 'id-8' }, 'only the raise carries an amount');
+  // la rete cade: il gesto è riuscito se il run non aspetta più per il budget, altrimenti resta «non si sa»
+  const caduta = (dopo) => server([new Error('rete'), risposta(200, { ok: true, data: { runId: 'r1', groups: [], ...dopo } })]);
+  const alzato = await creaClientGrafo({ sessionId: S, fetchFn: caduta({ status: 'running' }).fetchFn }).comando(RUN, 'raise-ceiling', { uuid: () => 'a', amount: IMPORTO });
+  assert.equal(alzato.ok, true);
+  const ancora = await creaClientGrafo({ sessionId: S, fetchFn: caduta({ status: 'needs_attention', attentionReasons: ['budget_overrun'] }).fetchFn })
+    .comando(RUN, 'raise-ceiling', { uuid: () => 'b', amount: IMPORTO });
+  assert.deepEqual(ancora, { ok: false, ambiguo: true });
+  const annullato = await creaClientGrafo({ sessionId: S, fetchFn: caduta({ status: 'cancelled' }).fetchFn }).comando(RUN, 'raise-ceiling', { uuid: () => 'c', amount: IMPORTO });
+  assert.deepEqual(annullato, { ok: false, ambiguo: true }, 'a cancelled run is not a raised ceiling');
+});
+
 test('WF-RUN-RETRY-PREVIEW: the preview is read before the confirmation', async () => {
   const s = server([risposta(200, { ok: true, data: { schema: 'talos.workflow-retry-preview.v1', runId: 'r1', nodeIds: ['a', 'b'], ceilingRaise: { modelRequests: 8 } } })]);
   const anteprima = await creaClientGrafo({ sessionId: S, fetchFn: s.fetchFn }).anteprimaRiprova(RUN);

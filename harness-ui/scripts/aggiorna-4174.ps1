@@ -29,9 +29,17 @@
 #    `POST /api/v1/admin/shutdown` col gettone che il server scrive in `.spegnimento-gettone` nella cartella
 #    dei journal (`config.cartellaStore`, `server.mjs`), che chiude il registro (fence + flush) e poi il server; si aspetta fino a 10 s che
 #    il processo esca; `-Force` SOLO dopo — la stessa finestra di Hermes (`run.py:5180`, «Up to 10s for
-#    SIGTERM, then SIGKILL»). Senza gettone (server vecchio, file assente) si dice e si passa al `-Force`.
+#    SIGTERM, then SIGKILL»). Senza gettone (server vecchio, file assente) si dice e si passa al `-Force` (così fino alla C04
+#    del 10/10/2026, qui sotto: oggi il `-Force` non c'è più).
+# ⛔⛔⛔ C04 (coda Codex, A-4174-KILL; owner 10/10/2026 «Fermarsi e dirlo») — NIENTE PIÙ `-Force`, in nessun caso. Il 4174 è il
+#    server dell'owner e il suo archivio è condiviso con l'app installata: un `TerminateProcess` a metà scrittura rovina un
+#    giornale, e la regola di sempre è «mai uccidere un processo senza risalirne la catena». Se lo stop gentile non è possibile
+#    (gettone assente o vuoto) lo script si ferma PRIMA di costruire; se il server non esce entro l'attesa, si ferma e lo dice:
+#    pid, catena dei genitori, da quando gira, e il comando per fermarlo a mano. Non riavvia niente e non termina niente: decide
+#    l'owner. E `public/` si tocca solo a server USCITO (owner 10/10, «copia dopo lo stop»): build → stop → consegna → avvio,
+#    così uno stop fallito lascia il 4174 coerente, server e frontend dello stesso codice.
 # ⛔ `-WhatIf` (SupportsShouldProcess, Microsoft Learn «Everything you wanted to know about ShouldProcess»,
-#    letta il 24/09/2026): ogni passo che cambia qualcosa — build e consegna, POST di spegnimento, `-Force`,
+#    letta il 24/09/2026): ogni passo che cambia qualcosa — build e consegna, POST di spegnimento,
 #    avvio — passa da `ShouldProcess`; a secco si stampa e basta, e il 4174 vivo non viene toccato.
 #
 # ⛔ `TALOS_OWNER_RUNTIME_MODULE` deve esserci o il kernel non è caricato e **ogni giro reale
@@ -70,21 +78,72 @@ if (-not (Test-Path $fileGettone)) {
   }
 }
 
-# ── 1) costruisci e consegna ────────────────────────────────────────────────────────────────────
-if ($PSCmdlet.ShouldProcess($frontend, 'npm run build e consegna in public/')) {
+# C04: la catena dei genitori di un processo (pid, nome, avvio), per dire all'owner CHI non si è fermato. Solo lettura.
+function Get-CatenaDeiGenitori([int]$id) {
+  $anelli = @(); $visti = @{}
+  while ($id -gt 0 -and -not $visti.ContainsKey($id) -and $anelli.Count -lt 8) {
+    $visti[$id] = $true
+    $w = Get-CimInstance Win32_Process -Filter ("ProcessId={0}" -f $id) -ErrorAction SilentlyContinue
+    if ($null -eq $w) { $anelli += ("pid={0} (non piu' vivo)" -f $id); break }
+    $anelli += ("pid={0} {1} avviato {2}" -f $w.ProcessId, $w.Name, $w.CreationDate)
+    $id = [int]$w.ParentProcessId
+  }
+  return ($anelli -join ' <- ')
+}
+function Stop-SenzaTerminare($processo, [string]$motivo) {
+  Write-Output ("  ⛔ {0}" -f $motivo)
+  Write-Output ("  catena: {0}" -f (Get-CatenaDeiGenitori $processo.Id))
+  Write-Output ("  per fermarlo a mano, se lo decidi tu: Stop-Process -Id {0}" -f $processo.Id)
+  throw ("la {0} resta occupata da pid={1}: nessun processo e' stato terminato e niente e' stato riavviato (C04)" -f $Porta, $processo.Id)
+}
+
+# C04, review della sessione desktop (10/10/2026): il gettone si legge in UN posto solo, per il passo 0 e per il passo 2. Prima il
+#   passo 0 guardava solo che il file esistesse: un gettone VUOTO lo superava, la build partiva, e lo script si fermava al passo 2.
+function Get-GettoneDiSpegnimento {
+  if (-not (Test-Path $fileGettone)) { return @{ gettone = $null; motivo = ("nessun gettone di spegnimento in {0} (server vecchio o cartella dati diversa)" -f $fileGettone) } }
+  $letto = Get-Content -Path $fileGettone -Raw -ErrorAction SilentlyContinue
+  $letto = if ($null -ne $letto) { $letto.Trim() } else { '' }
+  if (-not $letto) { return @{ gettone = $null; motivo = ("il gettone di spegnimento in {0} e' vuoto" -f $fileGettone) } }
+  return @{ gettone = $letto; motivo = $null }
+}
+
+# C04, nota della review della sessione desktop (10/10/2026): se la copia in public/ si ferma a meta', il server vecchio e' gia'
+#   uscito e public/ e' parziale. Prima si vedeva solo l'errore grezzo di PowerShell; ora si dice cosa e' successo e cosa fare.
+#   ⛔ `-ErrorAction Stop` sul comando: Copy-Item da' errori NON terminanti, che un `catch` non vede (doc Microsoft
+#   «about_Error_Handling», letta il 10/10/2026). E si rilancia: il passo 3 non deve partire su un public/ a meta'.
+function Copy-ConsegnaInPublic([string]$Da, [string]$A) {
+  try { Copy-Item -Path $Da -Destination $A -Recurse -Force -ErrorAction Stop }
+  catch {
+    throw ("la consegna in public/ si e' fermata a meta' ({0}): il server vecchio e' gia' uscito, public/ puo' essere parziale e niente e' stato riavviato. Rilancia lo script: ricostruisce e riconsegna tutto (C04)" -f $_.Exception.Message)
+  }
+}
+
+# ── 0) C04: lo stop gentile è possibile? Si chiede PRIMA di costruire ────────────────────────────────────────────────────────────
+$inAscoltoAllInizio = @(Get-NetTCPConnection -LocalPort $Porta -State Listen -ErrorAction SilentlyContinue)
+$gettoneAllInizio = Get-GettoneDiSpegnimento
+if ($inAscoltoAllInizio.Count -gt 0 -and -not $gettoneAllInizio.gettone) {
+  $primo = Get-Process -Id $inAscoltoAllInizio[0].OwningProcess -ErrorAction SilentlyContinue
+  $motivo = ("{0}: chi ascolta sulla {1} non si puo' fermare in modo gentile" -f $gettoneAllInizio.motivo, $Porta)
+  if ($WhatIfPreference) { Write-Output ("a secco: {0}; lo script si fermerebbe qui" -f $motivo) }
+  elseif ($null -ne $primo) { Stop-SenzaTerminare $primo $motivo }
+}
+
+# ── 1) costruisci (la consegna in public/ viene DOPO lo stop, al passo 2-bis) ─────────────────────────────────────────────────────
+# ⛔ C04, owner 10/10/2026 («Sì, copia dopo lo stop»): la build resta prima (la porta resta spenta lo stesso tempo), ma `public/` si
+#    tocca solo a server uscito. Uno stop che fallisce lascia così il 4174 COERENTE: server e frontend dello stesso codice.
+$costruito = $false
+if ($PSCmdlet.ShouldProcess($frontend, 'npm run build')) {
   Write-Output 'costruisco il frontend…'
   Push-Location $frontend
   try {
     & npm run build
-    if ($LASTEXITCODE -ne 0) { throw 'la build è fallita: non consegno niente' }
+    if ($LASTEXITCODE -ne 0) { throw 'la build è fallita: non fermo e non consegno niente' }
   }
   finally { Pop-Location }
-
-  Write-Output 'consegno in public/…'
-  Copy-Item -Path (Join-Path $frontend 'dist\*') -Destination (Join-Path $harness 'public') -Recurse -Force
+  $costruito = $true
 }
 
-# ── 2) ferma chi ascolta sulla porta: prima gentile, poi -Force ─────────────────────────────────
+# ── 2) ferma chi ascolta sulla porta: SOLO in modo gentile (C04: se non basta, ci si ferma e lo si dice) ──────────────────────
 $inAscolto = @()
 foreach ($c in (Get-NetTCPConnection -LocalPort $Porta -State Listen -ErrorAction SilentlyContinue)) {
   $p = Get-Process -Id $c.OwningProcess -ErrorAction SilentlyContinue
@@ -93,39 +152,38 @@ foreach ($c in (Get-NetTCPConnection -LocalPort $Porta -State Listen -ErrorActio
 foreach ($p in $inAscolto) {
   Write-Output ("in ascolto: {0} pid={1} (avviato {2})" -f $p.ProcessName, $p.Id, $p.StartTime)
   $gentile = $false
-  if (Test-Path $fileGettone) {
-    $gettone = (Get-Content -Path $fileGettone -Raw -ErrorAction SilentlyContinue).Trim()
-    if ($gettone -and $PSCmdlet.ShouldProcess(("pid={0}" -f $p.Id), ("POST http://127.0.0.1:{0}/api/v1/admin/shutdown col gettone (stop gentile)" -f $Porta))) {
-      try {
-        $r = Invoke-WebRequest -Uri ("http://127.0.0.1:{0}/api/v1/admin/shutdown" -f $Porta) -Method Post -Headers @{ 'x-talos-shutdown-token' = $gettone } -UseBasicParsing -TimeoutSec 5
-        if ($r.StatusCode -eq 202) { $gentile = $true; Write-Output '  stop gentile accettato: aspetto che il processo esca…' }
-        else { Write-Output ("  la rotta di spegnimento ha risposto {0}: passo al -Force" -f $r.StatusCode) }
-      } catch {
-        Write-Output ("  la rotta di spegnimento non ha risposto ({0}): passo al -Force" -f $_.Exception.Message)
-      }
-    }
-  } else {
-    Write-Output ("  nessun gettone in {0} (server vecchio o cartella dati diversa): passo al -Force" -f $fileGettone)
-  }
-  if ($gentile) {
-    # ⛔ Fino a $AttesaUscitaSecondi: il registro svuota la coda (tetto interno 10 s) e poi il server chiude da solo.
-    if (-not $p.WaitForExit($AttesaUscitaSecondi * 1000)) {
-      Write-Output ("  ⛔ non è uscito entro {0} s: -Force" -f $AttesaUscitaSecondi)
-    } else {
-      Write-Output ("  uscito in modo pulito (pid={0})" -f $p.Id)
+  $letto = Get-GettoneDiSpegnimento
+  $motivo = $letto.motivo
+  if ($letto.gettone -and $PSCmdlet.ShouldProcess(("pid={0}" -f $p.Id), ("POST http://127.0.0.1:{0}/api/v1/admin/shutdown col gettone (stop gentile)" -f $Porta))) {
+    try {
+      $r = Invoke-WebRequest -Uri ("http://127.0.0.1:{0}/api/v1/admin/shutdown" -f $Porta) -Method Post -Headers @{ 'x-talos-shutdown-token' = $letto.gettone } -UseBasicParsing -TimeoutSec 5
+      if ($r.StatusCode -eq 202) { $gentile = $true; Write-Output '  stop gentile accettato: aspetto che il processo esca…' }
+      else { $motivo = ("la rotta di spegnimento ha risposto {0}" -f $r.StatusCode) }
+    } catch {
+      $motivo = ("la rotta di spegnimento non ha risposto ({0})" -f $_.Exception.Message)
     }
   }
-  if (-not $p.HasExited -and $PSCmdlet.ShouldProcess(("pid={0}" -f $p.Id), 'Stop-Process -Force')) {
-    Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+  if ($WhatIfPreference) { continue }
+  if (-not $gentile) { Stop-SenzaTerminare $p $motivo }
+  # ⛔ Fino a $AttesaUscitaSecondi: il registro svuota la coda (tetto interno 10 s) e poi il server chiude da solo.
+  if (-not $p.WaitForExit($AttesaUscitaSecondi * 1000)) {
+    Stop-SenzaTerminare $p ("stop gentile accettato, ma non e' uscito entro {0} s (public/ non e' stato toccato)" -f $AttesaUscitaSecondi)
   }
+  Write-Output ("  uscito in modo pulito (pid={0})" -f $p.Id)
 }
-if ($WhatIfPreference) { Write-Output 'a secco (-WhatIf): niente fermato, niente costruito, niente avviato.'; exit 0 }
+if ($WhatIfPreference) { Write-Output 'a secco (-WhatIf): niente fermato, niente costruito, niente consegnato, niente avviato.'; exit 0 }
 for ($i = 0; $i -lt 40; $i++) {
   Start-Sleep -Milliseconds 250
   if (-not (Get-NetTCPConnection -LocalPort $Porta -State Listen -ErrorAction SilentlyContinue)) { break }
 }
 if (Get-NetTCPConnection -LocalPort $Porta -State Listen -ErrorAction SilentlyContinue) {
-  throw ("la {0} è ancora occupata dopo 10 secondi: non riavvio alla cieca" -f $Porta)
+  throw ("la {0} è ancora occupata dopo 10 secondi: non consegno e non riavvio alla cieca (public/ non e' stato toccato)" -f $Porta)
+}
+
+# ── 2-bis) consegna in public/: ora che il server vecchio è uscito ────────────────────────────────────────────────────────────────
+if ($costruito) {
+  Write-Output 'consegno in public/…'
+  Copy-ConsegnaInPublic -Da (Join-Path $frontend 'dist\*') -A (Join-Path $harness 'public')
 }
 
 # ── 3) avvia ────────────────────────────────────────────────────────────────────────────────────

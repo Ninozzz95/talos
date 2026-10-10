@@ -33,7 +33,7 @@ async function agent(command, cwd, dove = 'windows') {
   const requests = [], events = [];
   await talosLavora({cartella: cwd, task: {consegna: 'Verifica il comando.'}, modello: 'fixture/native-shell', chiave: 'fixture',
     messaggiIniziali: [{role: 'system', content: 'Verifica.'}, {role: 'user', content: 'Verifica il comando.'}],
-    livelloAccesso: 'completo', _giriMassimiInterno: 3, ambienteComandiFn: () => ({dove, revisione: 0}),
+    livelloAccesso: 'scrittura-progetto', _giriMassimiInterno: 3, ambienteComandiFn: () => ({dove, revisione: 0}),
     fetchDiRete: async (_url, init) => {
       requests.push(JSON.parse(init.body));
       const message = requests.length === 1

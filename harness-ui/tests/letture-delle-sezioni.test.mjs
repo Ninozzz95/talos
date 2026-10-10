@@ -5,7 +5,7 @@
  */
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { cercaAttivita, cercaNote, cercaRicerche, elencoMemorie, leggiNotaIntera } from '../src/letture-delle-sezioni.mjs';
+import { trovaAttivita, trovaNote, trovaRicerche, elencoMemorie, leggiNotaIntera } from '../src/letture-delle-sezioni.mjs';
 
 const MEMORIE = [
   { id: 'm1', titolo: 'Preferenze risposta', contenuto: 'Risposte brevi, in italiano' },
@@ -32,10 +32,10 @@ test('SEZIONI-01 — memory_list: tutte, con il testo fino a 500 caratteri; vuot
 });
 
 test('SEZIONI-02 — notes_search per parole (accenti compresi), «*» = tutte; senza risultati dice quante e come vederle', () => {
-  assert.match(cercaNote(NOTE, { query: 'attivita board' }), /^Notes: 1 of 2 match «attivita», «board», showing 1, best first\.\n- Idee per TALOS: /u);
-  assert.match(cercaNote(NOTE, { query: '*' }), /^Notes: showing 2 of 2, most recently updated first\./u);
-  assert.equal(cercaNote(NOTE, { query: 'zanzibar' }), 'No note contains «zanzibar». There are 2 notes in all: notes_list shows them, or search with other words.');
-  assert.equal(cercaNote([], { query: 'x' }), 'There are no notes.');
+  assert.match(trovaNote(NOTE, { query: 'attivita board' }), /^Notes: 1 of 2 match «attivita», «board», showing 1, best first\.\n- Idee per TALOS: /u);
+  assert.match(trovaNote(NOTE, { query: '*' }), /^Notes: showing 2 of 2, most recently updated first\./u);
+  assert.equal(trovaNote(NOTE, { query: 'zanzibar' }), 'No note contains «zanzibar». There are 2 notes in all: notes_find without query lists them, or search with other words.');
+  assert.equal(trovaNote([], { query: 'x' }), 'There are no notes.');
 });
 
 test('SEZIONI-03 — notes_read: intera; oltre il tetto a pezzi con «from»; un id sbagliato si dice', () => {
@@ -50,9 +50,9 @@ test('SEZIONI-03 — notes_read: intera; oltre il tetto a pezzi con «from»; un
   assert.match(leggiNotaIntera(null, { id: 'nx' }), /^notes_read: no note with id «nx»/u);
 });
 
-test('SEZIONI-04 — tasks_search e research_search per parole, col filtro di stato delle attività', () => {
-  assert.match(cercaAttivita(ATTIVITA, { query: 'rilasciare' }), /- \[ \] Rilasciare la 0\.1\.16 \(high\): dopo F7 — id t1/u);
-  assert.match(cercaAttivita(ATTIVITA, { query: 'caffe', status: 'open' }), /^No task contains «caffe»\. There is 1 task in all: tasks_list shows it/u);
-  assert.match(cercaAttivita(ATTIVITA, { query: '*', status: 'done' }), /- \[x\] Comprare il caffè — id t2/u);
-  assert.match(cercaRicerche(RICERCHE, { query: 'llama' }), /- Motori locali per LLM — done — 2026-09-20 — id r1/u, 'trovata dalla domanda');
+test('SEZIONI-04 — tasks_find (C5: era tasks_search) e research_find (C5: era research_search) per parole, col filtro di stato delle attività', () => {
+  assert.match(trovaAttivita(ATTIVITA, { query: 'rilasciare' }), /- \[open\] Rilasciare la 0\.1\.16 \(high\): dopo F7 — id t1/u);
+  assert.match(trovaAttivita(ATTIVITA, { query: 'caffe', status: 'open' }), /^No task contains «caffe»\. There is 1 task \(status=open\) in all: tasks_find without query lists it/u);
+  assert.match(trovaAttivita(ATTIVITA, { query: '*', status: 'done' }), /- \[done\] Comprare il caffè — id t2/u);
+  assert.match(trovaRicerche(RICERCHE, { query: 'llama' }), /- Motori locali per LLM — done — 2026-09-20 — id r1/u, 'trovata dalla domanda');
 });

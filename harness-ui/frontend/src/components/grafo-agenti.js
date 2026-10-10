@@ -6,12 +6,13 @@ import { ICONA_TONO } from './grafo/comuni.js';
 
 const idValido = v => typeof v === 'string' && v.length > 0 && v.length <= 2048;
 /* I testi degli stati sono CHIAVI del dizionario: si risolvono quando si disegna (`tr(stati[id])`), mai al caricamento del modulo. */
-const stati = { all: 'agenti.delegations.statusAll', active: 'agenti.delegations.filterActive', waiting: 'agenti.delegations.filterWaiting', done: 'agenti.delegations.filterDone', interrupted: 'agenti.delegations.filterStopped', error: 'agenti.delegations.filterFailed', unknown: 'agenti.delegations.statusUnavailable' };
+const stati = { all: 'agenti.delegations.statusAll', active: 'agenti.delegations.filterActive', waiting: 'agenti.delegations.filterWaiting', done: 'agenti.delegations.filterDone', interrupted: 'agenti.delegations.filterStopped', paused: 'agenti.delegations.filterPaused', error: 'agenti.delegations.filterFailed', unknown: 'agenti.delegations.statusUnavailable' };
 /* il tono di ogni stato, nella scala del Workflow (`grafo/comuni.js`, ICONA_TONO) */
-const TONO_STATO = { active: 'corso', waiting: 'avviso', done: 'ok', error: 'errore', interrupted: 'attesa', unknown: 'neutro' };
-const etichetta = { active: 'agenti.delegations.stateActive', waiting: 'agenti.delegations.stateWaiting', done: 'agenti.delegations.stateDone', interrupted: 'agenti.delegations.stateStopped', error: 'agenti.delegations.stateError', unknown: 'agenti.delegations.statusUnavailable' };
+const TONO_STATO = { active: 'corso', waiting: 'avviso', done: 'ok', error: 'errore', interrupted: 'attesa', paused: 'attesa', unknown: 'neutro' };
+const etichetta = { active: 'agenti.delegations.stateActive', waiting: 'agenti.delegations.stateWaiting', done: 'agenti.delegations.stateDone', interrupted: 'agenti.delegations.stateStopped', paused: 'agenti.delegations.statePaused', error: 'agenti.delegations.stateError', unknown: 'agenti.delegations.statusUnavailable' };
 function stato(a) {
   if (a.interrotta === true || a.motivoChiusura === 'fermata') return 'interrupted';
+  if (a.esitoDelega === 'in-pausa' || a.motivoChiusura === 'in-pausa') return 'paused'; // C3 tappa 4
   if (a.conclusa === true) return ['errore', 'error', 'fallito', 'failed', 'rifiutato'].includes(a.ultimoEsito || a.esitoDelega) ? 'error' : 'done';
   if (a.approvalPendingCount > 0 || a.inAttesaApprovazione > 0 || a.inAttesaApprovazione === true) return 'waiting';
   return a.conclusa === false ? 'active' : 'unknown';
@@ -144,7 +145,11 @@ export function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onL
     stato: Object.hasOwn(stati, salvato.stato) ? salvato.stato : 'all', collassati: Array.isArray(salvato.collassati) ? salvato.collassati.filter(idValido).slice(0, 1000) : [],
     selezionato: idValido(salvato.selezionato) ? salvato.selezionato : null, isolato: null };
   let corrente = dati, disegno, zoom = 1, x = 0, y = 0, primo = true, segui = false, morto = false;
-  let vistaToccata = false, gruppoAperto = null, paginaGruppo = 0;
+  /* ⛔ Difetto 2 del diagramma (09/10/2026, bugfixer; visto dal collega nella foto 07, riprodotto sulla 4176): la scheda principale
+     tagliata in alto. `lettura()` ancora la vista in alto (y = 16) ma la segna «toccata»; poco dopo la tela si accorcia (compare il
+     pannello sotto, misurato: −92 px) e l'osservatore teneva il CENTRO come dopo un gesto della persona ⇒ y = 16 − 46 = −30. Finché
+     la persona non tocca la vista, un ridimensionamento rifà la lettura (`vistaInLettura`). */
+  let vistaToccata = false, vistaInLettura = false, gruppoAperto = null, paginaGruppo = 0;
   const el = (tag, classe, testo) => { const n = d.createElement(tag); if (classe) n.className = classe; if (testo != null) n.textContent = testo; return n; };
   const bottone = (testo, azione, aria) => { const b = el('button', 'talos-button talos-button--ghost talos-button--sm', testo); b.type = 'button'; if (aria) b.setAttribute('aria-label', aria); b.addEventListener('click', azione); return b; };
   /*
@@ -285,12 +290,12 @@ export function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onL
   const mini = d.createElementNS('http://www.w3.org/2000/svg', 'svg'); mini.classList.add('talos-grafo__mini'); mini.setAttribute('role', 'button'); mini.setAttribute('aria-label', tr('agenti.delegations.overviewLabel')); mini.setAttribute('preserveAspectRatio', 'none');
   mini.tabIndex = 0; mini.setAttribute('aria-description', tr('agenti.delegations.overviewHint')); canvas.append(mini);
   mini.addEventListener('pointerdown', e => e.stopPropagation());
-  mini.addEventListener('click', e => { const r = mini.getBoundingClientRect(); if (!disegno) return; vistaToccata = true; x = canvas.clientWidth/2 - (e.clientX-r.left)/r.width*disegno.width*zoom; y = canvas.clientHeight/2 - (e.clientY-r.top)/r.height*disegno.height*zoom; trasforma({ anima: true }); });
+  mini.addEventListener('click', e => { const r = mini.getBoundingClientRect(); if (!disegno) return; vistaToccata = true; vistaInLettura = false; x = canvas.clientWidth/2 - (e.clientX-r.left)/r.width*disegno.width*zoom; y = canvas.clientHeight/2 - (e.clientY-r.top)/r.height*disegno.height*zoom; trasforma({ anima: true }); });
   mini.addEventListener('keydown', e => {
     if (!disegno) return;
-    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); x = canvas.clientWidth/2 - disegno.width*zoom/2; y = canvas.clientHeight/2 - disegno.height*zoom/2; trasforma({ anima: true }); }
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); vistaToccata = true; vistaInLettura = false; x = canvas.clientWidth/2 - disegno.width*zoom/2; y = canvas.clientHeight/2 - disegno.height*zoom/2; trasforma({ anima: true }); }
     const delta = { ArrowLeft: [40,0], ArrowRight: [-40,0], ArrowUp: [0,40], ArrowDown: [0,-40] }[e.key];
-    if (delta) { e.preventDefault(); vistaToccata = true; x += delta[0]; y += delta[1]; trasforma(); }
+    if (delta) { e.preventDefault(); vistaToccata = true; vistaInLettura = false; x += delta[0]; y += delta[1]; trasforma(); }
   });
 
   /* la riproduzione, nella forma di quella del Workflow (`grafo-workflow.js:187-207`): ▶, eventi, velocità, cursore, testo, «Torna al vivo» */
@@ -456,11 +461,11 @@ export function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onL
     canvas.style.setProperty('--gv-k', String(zoom)); canvas.style.setProperty('--gv-x', `${x}px`); canvas.style.setProperty('--gv-y', `${y}px`);
     aggiornaMini();
   }
-  function scala(nuovo) { vistaToccata = true; const precedente = zoom; zoom = Math.max(.15, Math.min(2, nuovo)); const cx = canvas.clientWidth / 2, cy = canvas.clientHeight / 2; x = cx - (cx - x) * zoom / precedente; y = cy - (cy - y) * zoom / precedente; trasforma({ anima: true }); }
-  function adatta() { if (!disegno?.nodi.length || !canvas.clientWidth || !canvas.clientHeight) return; vistaToccata = false; zoom = Math.max(.15, Math.min(1, (canvas.clientWidth - 32) / disegno.width, (canvas.clientHeight - 32) / disegno.height)); x = (canvas.clientWidth - disegno.width * zoom) / 2; y = 16; trasforma({ anima: !primo }); }
+  function scala(nuovo) { vistaToccata = true; vistaInLettura = false; const precedente = zoom; zoom = Math.max(.15, Math.min(2, nuovo)); const cx = canvas.clientWidth / 2, cy = canvas.clientHeight / 2; x = cx - (cx - x) * zoom / precedente; y = cy - (cy - y) * zoom / precedente; trasforma({ anima: true }); }
+  function adatta() { if (!disegno?.nodi.length || !canvas.clientWidth || !canvas.clientHeight) return; vistaToccata = false; vistaInLettura = false; zoom = Math.max(.15, Math.min(1, (canvas.clientWidth - 32) / disegno.width, (canvas.clientHeight - 32) / disegno.height)); x = (canvas.clientWidth - disegno.width * zoom) / 2; y = 16; trasforma({ anima: !primo }); }
   function lettura() {
     if (!disegno?.nodi.length || !canvas.clientWidth || !canvas.clientHeight) return;
-    vistaToccata = true;
+    vistaToccata = true; vistaInLettura = true; // la vista l'ha messa il programma: un ridimensionamento la rifà (vedi l'osservatore)
     zoom = Math.max(.8, Math.min(1, (canvas.clientWidth - 32) / disegno.width, (canvas.clientHeight - 32) / disegno.height));
     const id = opzioni.selezionato || corrente.corrente.sessionId;
     centra(disegno.nodi.some(n => n.id === id) ? id : disegno.nodi[0].id);
@@ -526,7 +531,8 @@ export function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onL
     if (ora) parti.push(el('p', 'talos-wfg__compito-resto', ora));
     detCompito.replaceChildren(...parti);
   }
-  function centraAttivo() { const n = disegno?.nodi.find(n => n.stato === 'active' && n.id !== corrente.corrente.sessionId); if (n) centra(n.id); }
+  // «Segui attivo» porta la vista su un nodo: non è più la vista di lettura, e un ridimensionamento non deve rifarla (vedi focusin)
+  function centraAttivo() { const n = disegno?.nodi.find(n => n.stato === 'active' && n.id !== corrente.corrente.sessionId); if (n) { vistaInLettura = false; centra(n.id); } }
   function seleziona(id, centraNodo = true) { opzioni.selezionato = id; dettaglioAperto = true; for (const n of mondo.querySelectorAll('[data-nodo-id]')) n.dataset.selezionato = String(n.dataset.nodoId === id); salva(); disegnaComandi(); disegnaDettaglio(); if (centraNodo) centra(id); }
   const nodiDom = new Map(), archiDom = new Map();
   const svg = d.createElementNS('http://www.w3.org/2000/svg', 'svg'); svg.setAttribute('aria-hidden', 'true'); mondo.append(svg);
@@ -694,9 +700,13 @@ export function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onL
       b.title = b.textContent; return b;
     }));
     if (!passi.length) elencoRecenti.append(el('p', '', tr('agenti.delegations.noTimedActivity')));
-    avviso.textContent = corrente.errore ? tr('agenti.delegations.staleDataRetry', { errore: corrente.errore }) : [tr('agenti.delegations.visibleNodes', { nodi: disegno.nodi.length, archi: disegno.archi.length }), corrente.aggiornato ? tr('agenti.delegations.readAt', { ora: oraCompleta(corrente.aggiornato) }) : ''].filter(Boolean).join(' · ');
+    avviso.textContent = corrente.errore ? tr('agenti.delegations.staleDataRetry', { errore: corrente.errore }) : [tn('agenti.delegations.visibleNodesOne', 'agenti.delegations.visibleNodesMany', disegno.nodi.length), tn('agenti.delegations.recordedLinksOne', 'agenti.delegations.recordedLinksMany', disegno.archi.length), /* «1 nodi visibili» (09/10, sonda della 4176): un plurale per numero */ corrente.aggiornato ? tr('agenti.delegations.readAt', { ora: oraCompleta(corrente.aggiornato) }) : ''].filter(Boolean).join(' · ');
     aggiornaTimeline(); aggiornaMini(); disegnaDettaglio();
-    salva(); if (primo && canvas.clientWidth && canvas.clientHeight) { primo = false; if ((root.clientWidth || canvas.clientWidth) < 600) adatta(); else lettura(); } // la colonna, non la tela coi suoi margini (misurato il 02/10: tela 586 in una colonna di 634) else if (segui) centraAttivo();
+    // la colonna, non la tela coi suoi margini (misurato il 02/10: tela 586 in una colonna di 634)
+    /* 09/10/2026 notte (bugfixer, owner «sì, in questo lotto»): `else if (segui) centraAttivo();` stava DENTRO il commento qui sopra,
+       sulla stessa riga, dal 19/09 (725d66cd5): «Segui attivo» centrava solo al clic e poi non seguiva più nessun aggiornamento. */
+    salva(); if (primo && canvas.clientWidth && canvas.clientHeight) { primo = false; if ((root.clientWidth || canvas.clientWidth) < 600) adatta(); else lettura(); }
+    else if (segui) centraAttivo();
   }
   let focusDaPuntatore = false;
   canvas.addEventListener('pointerdown', () => { focusDaPuntatore = true; }, true);
@@ -705,13 +715,16 @@ export function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onL
   canvas.addEventListener('keydown', () => { focusDaPuntatore = false; }, true);
   canvas.addEventListener('focusin', e => {
     const nodo = e.target.closest('[data-nodo-id]');
-    if (nodo && !focusDaPuntatore) { canvas.scrollTop = 0; canvas.scrollLeft = 0; centra(nodo.dataset.nodoId); }
+    /* RIPRESA-GRAFO-DENSITA (bugfixer, 09/10/2026 notte, regressione mia di c82341a4a): il fuoco da tastiera porta in vista il suo
+       nodo, quindi la vista non è più quella di lettura. Senza spegnerla, al primo ridimensionamento l'osservatore rifaceva
+       `lettura()` e il nodo appena raggiunto usciva dalla tela. Non dentro `centra()`: la chiama anche `lettura()`. */
+    if (nodo && !focusDaPuntatore) { canvas.scrollTop = 0; canvas.scrollLeft = 0; vistaInLettura = false; centra(nodo.dataset.nodoId); }
   });
   let trascina = null;
   canvas.addEventListener('pointerdown', e => { if (e.button !== 0 || e.target.closest('button,input,select,article')) return; trascina = { id: e.pointerId, x: e.clientX, y: e.clientY, ox: x, oy: y }; canvas.setPointerCapture(e.pointerId); });
-  canvas.addEventListener('pointermove', e => { if (!trascina || e.pointerId !== trascina.id) return; vistaToccata = true; x = trascina.ox + e.clientX - trascina.x; y = trascina.oy + e.clientY - trascina.y; trasforma(); });
+  canvas.addEventListener('pointermove', e => { if (!trascina || e.pointerId !== trascina.id) return; vistaToccata = true; vistaInLettura = false; x = trascina.ox + e.clientX - trascina.x; y = trascina.oy + e.clientY - trascina.y; trasforma(); });
   const fine = () => { trascina = null; }; canvas.addEventListener('pointerup', fine); canvas.addEventListener('pointercancel', fine); canvas.addEventListener('lostpointercapture', fine);
-  canvas.addEventListener('keydown', e => { if (e.target !== canvas) return; const m = { ArrowLeft: [40, 0], ArrowRight: [-40, 0], ArrowUp: [0, 40], ArrowDown: [0, -40] }[e.key]; if (m) { e.preventDefault(); vistaToccata = true; x += m[0]; y += m[1]; trasforma(); } });
+  canvas.addEventListener('keydown', e => { if (e.target !== canvas) return; const m = { ArrowLeft: [40, 0], ArrowRight: [-40, 0], ArrowUp: [0, 40], ArrowDown: [0, -40] }[e.key]; if (m) { e.preventDefault(); vistaToccata = true; vistaInLettura = false; x += m[0]; y += m[1]; trasforma(); } });
   let dimensioniCanvas = { width: canvas.clientWidth, height: canvas.clientHeight };
   const osservatore = new ResizeObserver(() => {
     if (morto || !canvas.clientWidth || !canvas.clientHeight) return;
@@ -719,7 +732,8 @@ export function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onL
     dimensioniCanvas = { width: canvas.clientWidth, height: canvas.clientHeight };
     if (primo) { ridisegna(); return; }
     if (!prima.width || !prima.height) { adatta(); return; }
-    if (opzioni.selezionato) centra(opzioni.selezionato);
+    if (vistaInLettura) lettura();
+    else if (opzioni.selezionato) centra(opzioni.selezionato);
     else if (!vistaToccata) adatta();
     else { x += (dimensioniCanvas.width - prima.width) / 2; y += (dimensioniCanvas.height - prima.height) / 2; trasforma(); }
   }); osservatore.observe(canvas);

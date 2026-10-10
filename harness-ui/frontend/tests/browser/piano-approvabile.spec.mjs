@@ -75,7 +75,7 @@ test('R4-PLAN-APPROVE-LIVE: le quattro scelte sulla scheda; «accettando le modi
   await expect(card.locator('.talos-plan-artifact__choice')).toHaveCount(0);
   await expect(card.locator('.talos-plan-artifact__receipt')).toContainText('scrive nel progetto senza chiedere');
   await expect(card.locator('.talos-plan-artifact__receipt')).toContainText('Impronta 777777777777');
-  await expect(chip).toContainText('Scrive nel progetto');
+  await expect(chip).toContainText('Senza chiedere: file, comandi, documenti'); // C1 (owner 10/10): il chip dice cosa passa da solo
   expect(scritture).toEqual([]);
 });
 

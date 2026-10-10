@@ -40,6 +40,7 @@ const CLASSE_B = new Map([
   ['tests/context-embedding-runtime.test.mjs', 'il runtime degli embedding lancia un processo figlio (`runtime.close()`)'],
   ['tests/context-engine-server.test.mjs', 'il servizio del contesto e un processo figlio con un socket (`stop()`)'],
   ['tests/context-runtime.test.mjs', 'runtime desktop vivi, chiusi uno per uno nel teardown'],
+  ['tests/c1-import-giornale-nuovo.test.mjs', 'C1: runtime desktop col suo SQLite, chiuso (`runtime.close()`) prima della rimozione, come context-runtime'],
   ['tests/git-service.test.mjs', '`execFileSync(git)` gira col cwd DENTRO la cartella: un git rimasto vivo la tiene'],
   ['tests/git-service-remoto.test.mjs', 'F6-2: fetch/pull/push del servizio (asincroni, con Ferma e tempo massimo) girano col cwd DENTRO la cartella: un git rimasto vivo la tiene'],
   ['tests/harness-receipt-keypair.test.mjs', '`spawnSync` di uno script che scrive il .env dentro la cartella'],

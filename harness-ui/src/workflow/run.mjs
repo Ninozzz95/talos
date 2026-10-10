@@ -5,10 +5,55 @@ import {
   validateWorkflowGraphPatch,
 } from './contract.mjs';
 import { applyIndexDelta, applyIndexDeltaInPlace, buildWorkflowIndexes } from './indexes.mjs';
+import { STATI_FINALI_DEL_PASSO, STATI_FINALI_DEL_RUN } from './stati-finali.mjs';
 
-const TERMINAL_RUN_STATES = new Set(['succeeded', 'failed', 'cancelled']);
-const TERMINAL_NODE_STATES = new Set(['succeeded', 'failed', 'cancelled', 'skipped', 'superseded']);
+const TERMINAL_RUN_STATES = new Set(STATI_FINALI_DEL_RUN);
+/*
+ * C3 (09/10/2026) — `set_aside`: la persona ha messo da parte un passo fallito. È TERMINALE ma NON soddisfatto: i passi che lo
+ *   aspettano non partono (decisione owner del 07/10). ⛔ Hermes fa il contrario: `archived` libera i figli
+ *   (`hermes_cli/kanban_db.py:2198-2205`, `_parents_satisfied`). Divergenza voluta e dichiarata.
+ */
+const TERMINAL_NODE_STATES = new Set(STATI_FINALI_DEL_PASSO);
 const SATISFIED_NODE_STATES = new Set(['succeeded', 'skipped']);
+const NON_BLOCKING_EDGE_TYPES_RUN = new Set(['retry', 'fallback']);
+
+/** I passi da cui `nodeId` dipende direttamente (gli archi che bloccano, come `indexes.mjs`). */
+function predecessoriDiretti(definition, nodeId) {
+  return definition.edges.filter((edge) => edge.to === nodeId && !NON_BLOCKING_EDGE_TYPES_RUN.has(edge.type)).map((edge) => edge.from);
+}
+/** C3 tappa 2a — un passo «in verifica» il cui tentativo incerto la persona ha deciso (`uncertain_resolved`). */
+const decisoDallaPersona = (state, node) => node?.state === 'reconciling'
+  && state.activities.get(node.activeActivityExecutionId)?.reconcileOutcome === 'person_resolved';
+/** Un passo che non parte per colpa di uno messo da parte: `set_aside`, o saltato per lo stesso motivo. */
+const fermoPerMessoDaParte = (node) => node?.state === 'set_aside' || (node?.state === 'skipped' && node.terminalReason === 'dependency_set_aside');
+
+/**
+ * C3 «Rifai con un altro modello»: il passo approvato col modello scelto dalla PERSONA per i suoi tentativi nuovi, se c'è
+ * (`modelOverride`, scritto dal fatto di ritentativo v2). Una regola sola per chi sceglie il fornitore del posto (scheduler) e per
+ * chi avvia la sessione (activity runner): due copie direbbero due modelli diversi per lo stesso tentativo.
+ */
+export function passoConModelloScelto(step, nodeRun) {
+  if (!step || !nodeRun?.modelOverride) return step;
+  return { ...step, modelPolicy: clone(nodeRun.modelOverride) };
+}
+
+/**
+ * C3 tappa 2b — il tentativo `attempt` del passo riprende la sessione di un tentativo precedente? Solo il PRIMO tentativo dopo
+ * «Riprendi verificando» (`attemptBase + 1`): un ritentativo automatico successivo parte in una sessione nuova, come sempre.
+ */
+export function ripresaDaVerificare(nodeRun, attempt) {
+  if (!nodeRun?.resumeVerifyFrom || attempt !== (nodeRun.attemptBase ?? 0) + 1) return null;
+  return { activityExecutionId: nodeRun.resumeVerifyFrom };
+}
+
+/** C3 — le condizioni del run «concluso, con passi messi da parte», le stesse per il riduttore e per chi scrive il fatto. */
+export function chiusuraConPassiMessiDaParte(state) {
+  const nodi = [...state.nodes.values()];
+  const setAside = nodi.filter((node) => node.state === 'set_aside').map((node) => node.nodeId).sort();
+  const pronto = setAside.length > 0 && nodi.every((node) => SATISFIED_NODE_STATES.has(node.state) || node.state === 'set_aside');
+  const skipped = nodi.filter((node) => node.state === 'skipped' && node.terminalReason === 'dependency_set_aside').map((node) => node.nodeId).sort();
+  return { pronto, setAsideNodeIds: setAside, skippedNodeIds: skipped };
+}
 const RUN_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 const SPENT_ZERO = Object.freeze({
   promptTokens: 0,
@@ -297,6 +342,15 @@ function applyEvent(next, event) {
     assertTransition(![...next.capacityClaims.values()].some((claim) => claim.state === 'active'), 'run_succeeded requires all capacity claims released');
     next.run.status = 'succeeded';
     next.run.schedulingEnabled = false;
+  } else if (event.type === 'run_succeeded_with_set_aside') {
+    const chiusura = chiusuraConPassiMessiDaParte(next);
+    assertTransition(next.run.status === 'running' && chiusura.pronto, 'run_succeeded_with_set_aside requires every step satisfied or set aside, and one set aside');
+    assertTransition(![...next.capacityClaims.values()].some((claim) => claim.state === 'active'), 'run_succeeded_with_set_aside requires all capacity claims released');
+    assertTransition(JSON.stringify(event.payload.setAsideNodeIds) === JSON.stringify(chiusura.setAsideNodeIds)
+      && JSON.stringify(event.payload.skippedNodeIds) === JSON.stringify(chiusura.skippedNodeIds),
+    'run_succeeded_with_set_aside must name exactly the steps set aside and those that did not start because of them');
+    next.run.status = 'succeeded_with_set_aside';
+    next.run.schedulingEnabled = false;
   } else if (event.type === 'run_failed') {
     assertTransition(next.run.status !== null && !TERMINAL_RUN_STATES.has(next.run.status), 'run_failed requires a non-terminal run');
     assertTransition(![...next.capacityClaims.values()].some((claim) => claim.state === 'active'), 'run_failed requires all capacity claims released');
@@ -307,12 +361,34 @@ function applyEvent(next, event) {
     const node = next.nodes.get(event.nodeId);
     assertTransition(node && ['ready', 'leased', 'retry_wait', 'waiting_human', 'reconciling'].includes(node.state), 'node_started transition is invalid');
     updateNodeState(next, event.nodeId, 'running');
+  } else if (event.type === 'node_set_aside' || (event.type === 'node_succeeded' && event.payload.by === 'person')) {
+    /*
+     * C3 (09/10/2026, contratto §2-bis punti 3-4) — le azioni della PERSONA su un passo fallito: «Segna come fatto» (il suo
+     *   riassunto è il risultato del passo) e «Metti da parte». Riaprono un passo `failed`, terminale per tutto il resto, come
+     *   il Riprova umano: run in corsa o in «Serve attenzione», non annullato, ultimo tentativo col posto rilasciato.
+     */
+    const node = next.nodes.get(event.nodeId);
+    const target = event.type === 'node_set_aside' ? 'set_aside' : 'succeeded';
+    if (node?.state === target) return;
+    assertTransition(node?.state === 'failed' || decisoDallaPersona(next, node),
+      `${event.type} by the person requires a failed step, or an uncertain one the person has decided`);
+    assertTransition(!next.run.cancelRequested && ['running', 'needs_attention'].includes(next.run.status),
+      `${event.type} by the person requires a running run or one that needs attention`);
+    assertTransition(![...next.capacityClaims.values()].some((claim) => claim.state === 'active' && claim.nodeId === event.nodeId),
+      `${event.type} by the person requires the last attempt to be released`);
+    if (target === 'succeeded') node.resultRefIds = [...new Set([...node.resultRefIds, ...event.payload.resultIds])].sort();
+    updateNodeState(next, event.nodeId, target, target === 'succeeded' ? 'person' : 'user');
   } else if (['node_succeeded', 'node_failed', 'node_cancelled', 'node_skipped'].includes(event.type)) {
     const target = event.type.slice('node_'.length);
     const node = next.nodes.get(event.nodeId);
     if (node?.state === target) return;
     assertTransition(node && !TERMINAL_NODE_STATES.has(node.state), `${event.type} requires a non-terminal node`);
     if (event.type === 'node_skipped') assertTransition(['pending', 'blocked', 'ready'].includes(node.state), 'node_skipped transition is invalid');
+    // C3: «non parte per colpa di un passo messo da parte» vale solo se un predecessore diretto lo è davvero
+    if (event.type === 'node_skipped' && event.payload.reason === 'dependency_set_aside') {
+      assertTransition(predecessoriDiretti(next.definition, event.nodeId).some((id) => fermoPerMessoDaParte(next.nodes.get(id))),
+        'dependency_set_aside requires a step it depends on to be set aside');
+    }
     const results = event.payload.resultIds ?? event.payload.evidenceResultIds ?? [];
     node.resultRefIds = [...new Set([...node.resultRefIds, ...results])].sort();
     updateNodeState(next, event.nodeId, target, event.payload.reason ?? event.payload.errorClass ?? null);
@@ -356,7 +432,9 @@ function applyEvent(next, event) {
         // becomes reconciled; retry policy may schedule a new attempt»; budget.mjs releaseBudget
         // 'reconciled_not_performed' la accetta come unica prova). Senza questa riga lo slot
         // globale restava occupato per sempre quando l'adapter non ha una ricevuta da dare.
-        || activity.reconcileOutcome === 'proved_not_performed'),
+        || activity.reconcileOutcome === 'proved_not_performed'
+        // C3 tappa 2a: la decisione durevole della persona su un tentativo incerto (`uncertain_resolved`)
+        || activity.reconcileOutcome === 'person_resolved'),
     'capacity release requires a terminal Activity or proved reconciliation');
     claim.state = 'released';
     claim.releasedAt = event.at;
@@ -412,6 +490,25 @@ function applyEvent(next, event) {
     if (event.payload.outcome === 'still_unknown') addAttention(next, `activity_uncertain:${event.activityExecutionId}`);
     else { activity.state = 'reconciled'; current.state = 'reconciling'; activity.resultIds = clone(event.payload.resultIds); activity.receiptRef = event.payload.receiptRef; activity.reconcileOutcome = event.payload.outcome; }
     if (event.eventSchemaVersion === 2) activity.actualUsage = clone(event.payload.actualUsage);
+  } else if (event.type === 'uncertain_resolved') {
+    /*
+     * C3 tappa 2a (09/10/2026, contratto §2-bis punto 1, decisione owner 09/10) — la persona decide di un tentativo INCERTO.
+     *   Non è una prova dell'effetto: l'attività diventa `reconciled` con esito `person_resolved`, senza ricevuta e con consumo
+     *   SCONOSCIUTO (il budget si rilascia, non si salda: `audit.unknownUsageAttempts` lo conta). Il passo va «in verifica»
+     *   finché il posto non è rilasciato; poi l'azione scelta (scritta qui) si compie coi fatti della tappa 1.
+     */
+    const { activity, current } = activityForEvent(next, event);
+    if (activity.state === 'reconciled' && activity.reconcileOutcome === 'person_resolved') return;
+    assertTransition(activity.state === 'uncertain' && current.state === 'uncertain', 'uncertain_resolved requires the uncertain attempt of the step');
+    assertTransition(!next.run.cancelRequested && ['running', 'needs_attention'].includes(next.run.status),
+      'uncertain_resolved requires a running run or one that needs attention');
+    activity.state = 'reconciled'; activity.reconcileOutcome = 'person_resolved'; activity.receiptRef = null;
+    activity.resultIds = []; activity.actualUsage = null;
+    const { reason: _motivo, ...azione } = event.payload;
+    activity.personAction = clone(azione);
+    current.state = 'reconciling';
+    next.run.needsAttentionReasons = next.run.needsAttentionReasons.filter((motivo) => motivo !== `activity_uncertain:${event.activityExecutionId}`);
+    next.audit.unknownUsageAttempts = (next.audit.unknownUsageAttempts ?? 0) + 1;
   } else if (['activity_completed', 'activity_failed'].includes(event.type)) {
     const { activity } = activityForEvent(next, event);
     if (activity.state === (event.type === 'activity_completed' ? 'completed' : 'failed')) return;
@@ -461,7 +558,19 @@ function applyEvent(next, event) {
       'budget_released cannot close an active capacity claim');
     next.budget.reservations.delete(event.payload.reservationId);
   } else if (event.type === 'budget_overrun_observed') addAttention(next, 'budget_overrun');
-  else if (event.type === 'retry_scheduled') {
+  else if (event.type === 'budget_ceiling_raised') {
+    /*
+     * ⭐ C3 tappa 3 (09/10/2026, owner «quanto serve per finire») — la persona alza il tetto del run: solo su un run in «Serve
+     *   attenzione» per il budget, non annullato. L'aumento si somma a `ceilingRaise` (lo stesso campo del Riprova, F3-51b: il
+     *   tetto letto da `reserveBudget` è uno solo) e il motivo `budget_overrun` è risolto. Se restano altri motivi il run resta
+     *   in attenzione; `run_resumed`, quando non ne resta nessuno, lo scrive l'orchestratore.
+     */
+    assertTransition(next.run.status === 'needs_attention' && !next.run.cancelRequested
+      && next.run.needsAttentionReasons.includes('budget_overrun'), 'budget_ceiling_raised requires a run that needs attention for its budget');
+    next.budget.ceilingRaise = Object.fromEntries(Object.keys(SPENT_ZERO).map((key) =>
+      [key, (next.budget.ceilingRaise?.[key] ?? 0) + event.payload.amount[key]]));
+    next.run.needsAttentionReasons = next.run.needsAttentionReasons.filter((reason) => reason !== 'budget_overrun');
+  } else if (event.type === 'retry_scheduled') {
     /*
      * ⭐ F3-41a (25/09/2026) — un ritentativo si decide DOPO il tentativo che ha fallito e dopo il suo saldo (catalogo §19:
      *   «activity_completed|failed|uncertain → budget_settled|released → node terminal/retry fact»): il tentativo è quello
@@ -481,7 +590,7 @@ function applyEvent(next, event) {
      */
     const umano = payload.reasonClass === 'user_retry';
     if (umano) {
-      assertTransition(node?.state === 'failed', 'a user retry reopens a failed node');
+      assertTransition(node?.state === 'failed' || decisoDallaPersona(next, node), 'a user retry reopens a failed node, or an uncertain one the person has decided');
       assertTransition(!next.run.cancelRequested && ['running', 'needs_attention'].includes(next.run.status),
         'a user retry requires a running run or one that needs attention');
       assertTransition(activity && activity.nodeId === payload.nodeId && activity.attempt === payload.attempt
@@ -505,6 +614,11 @@ function applyEvent(next, event) {
     if (umano) {
       node.terminalReason = null;
       node.attemptBase = payload.attempt;
+      // C3 «Rifai con un altro modello»: il modello scelto dalla persona vale per i tentativi nuovi di QUESTO passo. Il campo
+      // compare solo quando si usa: le impronte degli stati di sempre non cambiano.
+      if (payload.resume?.mode === 'fresh') node.modelOverride = clone(payload.resume.modelPolicy);
+      // C3 tappa 2b «Riprendi verificando»: il tentativo nuovo riprende la sessione del tentativo DECISO (solo il primo dopo questo fatto)
+      if (payload.resume?.mode === 'verify') node.resumeVerifyFrom = payload.activityExecutionId;
       const aumento = aumentoDelTettoPerRiprova(next.definition, [payload.nodeId]);
       next.budget.ceilingRaise = Object.fromEntries(Object.keys(SPENT_ZERO).map((key) =>
         [key, (next.budget.ceilingRaise?.[key] ?? 0) + (aumento[key] ?? 0)]));
