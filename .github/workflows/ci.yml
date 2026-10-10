@@ -158,7 +158,7 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6
 
       # ⛔ MISURATO il 2026-08-16 sul manifesto di `ubuntu-latest`: ha 27.3, 28.2
       # e 29.0 — la nostra NON c'è. Il pin in `app/build.gradle` non si tocca per
