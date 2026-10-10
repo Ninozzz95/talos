@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { REGISTRO_FORNITORI } from '../src/provider-registry.mjs';
 import { aliasGrafiaRagionamento, livelloRagionamentoMinimo, livelloRagionamentoPiuVicino, preparaRichiestaCompatibile } from '../src/openai-compatible-runtime.mjs';
-import { livelliRagionamentoDiretti } from '../src/model-destination.mjs';
+import { filoRagionamentoDiretti, livelliRagionamentoDiretti } from '../src/model-destination.mjs';
+import { filoRagionamentoCatalogo, normalizzaReasoningPerModello } from '../src/runtime-owner-adapter.mjs';
 
 /* ⛔ STORIA. BUG-7 (04/10/2026, owner): il livello di ragionamento chiesto dall'interfaccia si
    ADATTA al modello (clamp al più vicino, allora «sopra prima») e l'avviso si dice una volta a
@@ -159,4 +160,86 @@ test('BUG18-LIV-12 — il record z.ai dichiara low/high/max con fonte e data (BU
   assert.deepEqual(REGISTRO_FORNITORI.zai.ragionamento.livelli, ['low', 'high', 'max']);
   assert.equal(REGISTRO_FORNITORI.zai.ragionamento.fonte, 'https://docs.z.ai/api-reference/llm/chat-completion');
   assert.equal(REGISTRO_FORNITORI.zai.ragionamento.data, '2026-10-05');
+});
+
+/* A9 (owner 09/10/2026, «la pillola mostra il livello INVIATO al fornitore»): che cosa arriva DAVVERO sul filo, livello per livello,
+   misurato dal traduttore stesso. I tre casi trovati il 09/10 su r4, più la proprietà che la pillola usa. */
+test('A9-FILO-01 — il filo di glm-5.3-flash: «xhigh» parte «max», «Off» parte «low», «medium» parte «low»', () => {
+  const filo = filoRagionamentoDiretti();
+  assert.deepEqual(filo.zai['glm-5.3-flash'], { none: 'low', minimal: 'low', low: 'low', medium: 'low', high: 'high', xhigh: 'max', max: 'max' });
+  assert.equal(filo.xai['grok-4.3'].none, 'none', 'AL CONTRARIO: un modello che si spegne riceve davvero «none»');
+  assert.equal(filo.openrouter, undefined, 'per OpenRouter la fonte resta il catalogo');
+});
+
+test('A9-FILO-02 — un modello Z.AI senza voce propria non riceve NESSUN livello: la voce «*» è tutta null', () => {
+  const filo = filoRagionamentoDiretti();
+  assert.deepEqual(new Set(Object.values(filo.zai['*'])), new Set([null]));
+  assert.deepEqual(Object.keys(filo.zai['*']).sort(), ['high', 'low', 'max', 'medium', 'minimal', 'none', 'xhigh']);
+});
+
+test('A9-FILO-03 — per ogni modello con voce propria, i livelli che la pillola offre partono così come sono', () => {
+  const livelli = livelliRagionamentoDiretti();
+  const filo = filoRagionamentoDiretti();
+  for (const [fonte, perModello] of Object.entries(livelli)) {
+    for (const [modello, elenco] of Object.entries(perModello)) {
+      if (modello === '*') continue;
+      for (const livello of elenco) assert.equal(filo[fonte][modello][livello], livello, `${fonte}:${modello} ${livello}`);
+    }
+  }
+});
+
+test('A9-FILO-04 — la mappa è quella del traduttore: ricalcolata a mano su un caso, coincide', () => {
+  const { corpo } = preparaRichiestaCompatibile('groq', { model: 'openai/gpt-oss-20b', messages: [], reasoning: { effort: 'xhigh' } });
+  assert.equal(corpo.reasoning_effort, 'high');
+  assert.equal(filoRagionamentoDiretti().groq['openai/gpt-oss-20b'].xhigh, 'high');
+});
+
+/* ⛔ A9, seguito OpenRouter (09/10/2026): l'owner usa `z-ai/glm-5.3-flash` VIA OPENROUTER, e la mappa A9 copriva solo le sessioni
+   dirette. Voci copiate dal catalogo vivo del 4174 (`GET /api/v1/models`, 09/10/2026). */
+const VOCI_CATALOGO = Object.freeze([
+  { id: 'z-ai/glm-5.3-flash', reasoning: { supportedEfforts: ['max', 'high', 'low'], defaultEffort: 'max', defaultEnabled: true, mandatory: true } },
+  { id: 'openai/gpt-5-nano', reasoning: { supportedEfforts: ['high', 'medium', 'low', 'minimal'], defaultEffort: 'medium', defaultEnabled: null, mandatory: true } },
+  { id: 'anthropic/claude-opus-5', reasoning: { supportedEfforts: ['max', 'xhigh', 'high', 'medium', 'low'], defaultEffort: 'high', defaultEnabled: true, mandatory: false } },
+  { id: 'deepseek/deepseek-chat' },
+]);
+
+test('A9-OR-01 — il filo OpenRouter di glm-5.3-flash: «Off» e «medium» partono «low», «xhigh» parte «max»', () => {
+  const filo = filoRagionamentoCatalogo(VOCI_CATALOGO);
+  assert.deepEqual(filo['z-ai/glm-5.3-flash'], { none: 'low', minimal: 'low', low: 'low', medium: 'low', high: 'high', xhigh: 'max', max: 'max', auto: 'max' });
+  assert.deepEqual(filo['openai/gpt-5-nano'], { none: 'minimal', minimal: 'minimal', low: 'low', medium: 'medium', high: 'high', xhigh: 'high', max: 'high', auto: 'medium' });
+});
+
+test('A9-OR-02 — AL CONTRARIO: un modello che si spegne riceve «none», e una voce senza `reasoning` non ha mappa', () => {
+  const filo = filoRagionamentoCatalogo(VOCI_CATALOGO);
+  assert.equal(filo['anthropic/claude-opus-5'].none, 'none');
+  assert.equal(filo['anthropic/claude-opus-5'].xhigh, 'xhigh');
+  assert.equal(Object.hasOwn(filo, 'deepseek/deepseek-chat'), false);
+  assert.deepEqual(filoRagionamentoCatalogo(undefined), {});
+});
+
+test('A9-OR-03 — la mappa è il clamp del fetch OpenRouter: ricalcolata livello per livello, coincide', () => {
+  const filo = filoRagionamentoCatalogo(VOCI_CATALOGO);
+  for (const voce of VOCI_CATALOGO.filter((v) => v.reasoning)) {
+    for (const livello of ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']) {
+      const atteso = normalizzaReasoningPerModello({ effort: livello }, voce)?.effort ?? null;
+      assert.equal(filo[voce.id][livello], atteso, `${voce.id} ${livello}`);
+    }
+  }
+});
+
+test('A9-OR-04 — obbligatorio e senza elenco (OpenRouter: `supported_efforts` null = ogni livello accettato): «Off» non ha livello, null = decide il fornitore', () => {
+  const filo = filoRagionamentoCatalogo([{ id: 'x/obbligato', reasoning: { mandatory: true, supportedEfforts: null } }]);
+  assert.equal(filo['x/obbligato'].none, null);
+  assert.equal(filo['x/obbligato'].high, 'high', 'AL CONTRARIO: un livello vero passa com’è');
+});
+
+/* Owner 09/10/2026 («Automatico + riga»): la mappa dice anche che cosa parte SENZA una scelta. */
+test('A9-OR-AUTO — senza scelta: il predefinito di un modello obbligatorio parte (glm «max», nano «medium»); AL CONTRARIO un modello che si spegne non riceve niente', () => {
+  const filo = filoRagionamentoCatalogo(VOCI_CATALOGO);
+  assert.equal(filo['z-ai/glm-5.3-flash'].auto, 'max');
+  assert.equal(filo['openai/gpt-5-nano'].auto, 'medium');
+  assert.equal(filo['anthropic/claude-opus-5'].auto, null);
+  for (const voce of VOCI_CATALOGO.filter((v) => v.reasoning)) {
+    assert.equal(filo[voce.id].auto, normalizzaReasoningPerModello(null, voce)?.effort ?? null, `${voce.id}: lo stesso clamp`);
+  }
 });

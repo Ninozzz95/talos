@@ -587,6 +587,25 @@ const REGOLE = [
   },
   {
     /*
+     * C3 tappa 4 (09/10/2026, review Y-4B-2 del bugfixer) — una delega IN PAUSA chiude il giro con «⏸ paused on request: …» e
+     *   `code: 'in-pausa'` (talosHarness.mjs, `puntoDiPausa`): la carta diceva «TALOS · errore» in rosso. Non è un guasto né una
+     *   fine: è una pausa chiesta (dalla persona o dal padre), e si riprende dal menu della delega. Prima della regola del fermo,
+     *   che non la conosce.
+     */
+    id: 'in-pausa',
+    famiglia: 'in-pausa',
+    riconosce: (t, codice) => codice === 'in-pausa' || /paused on request|in pausa su richiesta/u.test(t),
+    spiega: (testo) => {
+      const punto = /(?:paused on request|in pausa su richiesta):\s*(.+?)\s*\.?\s*$/u.exec(String(testo ?? '').split('\n')[0])?.[1] ?? null;
+      return {
+        cosa: t('errori.turno.inPausa.cosa'),
+        perche: punto ? t('errori.turno.inPausa.perchePunto', { punto: puntoNellaLingua(punto) }) : t('errori.turno.inPausa.perche'),
+        rimedi: [t('errori.turno.inPausa.rimedio1')],
+      };
+    },
+  },
+  {
+    /*
      * ⛔⛔ 06/9, prova T05-D2: premi «Ferma», ed esce una carta ROSSA con «[internal-error] This
      * operation was aborted». Fermare un giro non è un guasto: è una cosa che hai chiesto tu, e
      * l'unica notizia è che è successa. La carta resta (serve a dire che il giro è finito lì), ma
@@ -922,6 +941,8 @@ const VESTIZIONI = {
   'limite-fornitore': { badge: 'errori.turno.vestizione.limiteFornitore.badge', titolo: 'errori.turno.vestizione.limiteFornitore.titolo', tono: 'warning' },
   'esito-fornitore-incerto': { badge: 'errori.turno.vestizione.esitoIncerto.badge', titolo: 'errori.turno.vestizione.esitoIncerto.titolo', tono: 'warning' },
   fermato: { badge: 'errori.turno.vestizione.fermato.badge', titolo: 'errori.turno.vestizione.fermato.titolo', tono: 'accent' },
+  // C3 tappa 4: la pausa di una delega, ambra come «In pausa» nell'elenco e nel dettaglio dell'agente
+  'in-pausa': { badge: 'errori.turno.vestizione.inPausa.badge', titolo: 'errori.turno.vestizione.inPausa.titolo', tono: 'warning' },
   /*
    * ⛔ 13/09 — un cambio di direzione non è un guasto E non è nemmeno una notizia: il giro riparte
    * da solo, e la persona lo vede ripartire. `silenziosa` dice a chi disegna che questa nota non

@@ -665,11 +665,24 @@ function evidenziaConPrism(testo, chiave) {
 
 const copiaDiSerie = (testo) => globalThis.navigator?.clipboard?.writeText?.(testo) ?? Promise.resolve();
 
-/** Scrive nel `<code>` senza perdere il punto in cui la persona stava leggendo. */
+/*
+ * ⭐ B1 (bugfixer, 09/10/2026 sera) — L'EVIDENZIAZIONE SI RINVIA FINCHÉ IL BLOCCO NON SI VEDE. Profilo CPU del ritorno su una chat
+ *   di 300 giri con codice (banco «PESANTE», 4176): ~480 ms su ~1,8 s erano Prism + `innerHTML` di blocchi che la finestra della
+ *   rigiocata stacca subito dopo (8 turni montati su 300). Hermes fa lo stesso: il blocco nasce in testo, l'evidenziazione arriva
+ *   dopo e solo per ciò che è montato (`apps/desktop/src/components/chat/shiki-block.tsx:8-26, 128-160`).
+ * ⇒ Con `opzioni.rinvia()` vero (la chat lo passa durante la rigiocata) un blocco chiuso si scrive in TESTO e resta «in attesa»
+ *   (`data-evidenziazione`); `evidenziaInAttesa(radice)` lo colora quando è davvero in pagina: alla fine della rigiocata per i
+ *   turni montati, al «Mostra precedenti» per quelli che tornano. Il testo e la copia non cambiano mai: cambia solo QUANDO si colora.
+ */
 function scriviCodice(parti, testo, chiuso) {
   const { pre, code, chiave, evidenzia } = parti;
   const scorrimento = pre.scrollLeft;
-  const evidenziato = chiuso && chiave ? evidenzia(testo, chiave) : null;
+  const rinvia = Boolean(chiuso && chiave && parti.rinvia?.());
+  if (parti.blocco) {
+    if (rinvia) parti.blocco.dataset.evidenziazione = 'in-attesa';
+    else delete parti.blocco.dataset.evidenziazione;
+  }
+  const evidenziato = chiuso && chiave && !rinvia ? evidenzia(testo, chiave) : null;
   if (evidenziato === null || evidenziato === undefined) {
     code.textContent = testo;
     // ⛔ Niente `language-*` se non stiamo evidenziando davvero: la classe è una dichiarazione, e
@@ -721,6 +734,8 @@ export function creaBloccoCodice({ testo = '', linguaggio = '', chiuso = true } 
     copia: opzioni.copia || copiaDiSerie,
     testo: String(testo ?? ''),
     chiuso: Boolean(chiuso),
+    blocco,
+    rinvia: typeof opzioni.rinvia === 'function' ? opzioni.rinvia : null, // B1: vedi `scriviCodice`
   };
   PARTI_DEL_BLOCCO.set(blocco, parti);
 
@@ -740,6 +755,26 @@ export function creaBloccoCodice({ testo = '', linguaggio = '', chiuso = true } 
   scriviCodice(parti, parti.testo, parti.chiuso);
   blocco.append(intestazione, pre);
   return blocco;
+}
+
+/**
+ * B1 — colora i blocchi rimasti «in attesa» dentro `radice` (vedi `scriviCodice`). Chi la chiama sa che la radice è in pagina:
+ * la colonna alla fine della rigiocata, la pagina che «Mostra precedenti» rimonta. Un blocco il cui `rinvia()` è ancora vero
+ * resta in attesa: la rigiocata non è finita.
+ * @returns {number} quanti blocchi ha colorato
+ */
+export function evidenziaInAttesa(radice) {
+  if (!radice?.querySelectorAll) return 0;
+  let colorati = 0;
+  const blocchi = [...(radice.matches?.('.code-block[data-evidenziazione="in-attesa"]') ? [radice] : []), ...radice.querySelectorAll('.code-block[data-evidenziazione="in-attesa"]')];
+  for (const blocco of blocchi) {
+    if (blocco?.dataset?.evidenziazione !== 'in-attesa') continue; // un blocco già colorato non si ricolora
+    const parti = PARTI_DEL_BLOCCO.get(blocco);
+    if (!parti) { delete blocco.dataset.evidenziazione; continue; }
+    scriviCodice(parti, parti.testo, parti.chiuso);
+    if (blocco.dataset.evidenziazione !== 'in-attesa') colorati += 1;
+  }
+  return colorati;
 }
 
 /**

@@ -103,8 +103,35 @@ export function creaGestoreBrowserVivo({
     return null;
   }
 
+  /*
+   * ⛔ C1b (10/10/2026). Il Chromium pilotato può andarsene senza dircelo (un crash, la persona che ne chiude la finestra):
+   *   `finestra` restava in piedi con la connessione chiusa, e ogni apertura dopo falliva finché il server non ripartiva.
+   *   Prima di riusarlo si guarda se è vivo, come fa Hermes (`tools/browser_tool_session.py:366-380`, letto il 10/10/2026).
+   */
+  function finestraMorta(f) {
+    const processo = f.browser?.processo;
+    return f.cdp?.chiuso === true || (processo != null && (processo.exitCode != null || processo.signalCode != null));
+  }
+
+  /** Il browser è morto: anche le sue schede lo sono. Si dimenticano tutte e si chiude quel che resta (nessuno zombie). */
+  async function scartaFinestraMorta() {
+    const f = finestra;
+    finestra = null;
+    for (const scheda of schede.values()) {
+      if (scheda.staccaErrori) { try { scheda.staccaErrori(); } catch { /* già staccati */ } }
+      scheda.ferma = null; // chi la seguiva lo scopre dalla sua funzione di stop, che ormai non tocca niente
+    }
+    schede.clear();
+    try { f.staccaMorte?.(); } catch { /* idem */ }
+    try { f.staccaNavigazione?.(); } catch { /* idem */ }
+    try { f.staccaDentroDocumento?.(); } catch { /* idem */ }
+    try { f.cdp.chiudi(); } catch { /* il socket è già andato */ }
+    try { await f.browser.chiudi(); } catch { /* il processo è già andato */ }
+  }
+
   async function assicuraFinestra() {
-    if (finestra) return finestra;
+    if (finestra && !finestraMorta(finestra)) return finestra;
+    if (finestra) await scartaFinestraMorta();
     const trovato = trovaFn();
     if (!trovato) {
       throw errorePagina('BROWSER_VIVO_ASSENTE',
@@ -236,16 +263,33 @@ export function creaGestoreBrowserVivo({
        *   prima — visto nello screenshot. Chi guarda deve poter fidarsi di quella barra: dire dove
        *   sei è metà del mestiere di un browser.
        */
-      const trasmissione = await avviaTrasmissione(finestra.cdp, scheda.cdpSessionId, opzioni, (frame) => {
+      const finestraDelSeguito = finestra;
+      const trasmissione = await avviaTrasmissione(finestraDelSeguito.cdp, scheda.cdpSessionId, opzioni, (frame) => {
         tocca(scheda); // chi guarda sta usando la pagina: non è inattiva
         onFrame({ ...frame, url: scheda.url });
       });
-      scheda.ferma = async () => {
+      scheda.sceltaTrasmissione = trasmissione.opzioni; // C36: il risveglio al ridimensionamento riparte con queste
+      /*
+       * ⛔ C1b (10/10/2026, misurato dalla UI sulla 4177: il server moriva alla sesta apertura). Chi tiene questa funzione la chiama
+       *   quando la SUA risposta si chiude, e quel momento non lo decide nessuno: può arrivare dopo che la scheda è stata chiusa
+       *   (e l'ultima ha portato via il browser: `finestra` è null) o dopo che un seguito nuovo l'ha sostituita. Prima leggeva
+       *   `finestra.cdp` a quel momento e lanciava; il rifiuto non lo raccoglieva nessuno e Node 24 chiude il processo.
+       *   ⇒ si ferma UNA volta; tocca il flusso solo se è ancora il suo (come la sessione di Hermes, che si ricicla solo se è ancora
+       *   quella registrata: `tools/browser_tool_session.py:885-903`); parla col browser con cui è nata, e solo se c'è ancora.
+       */
+      let fermato = false;
+      const ferma = async () => {
+        if (fermato) return;
+        fermato = true;
+        try { trasmissione.sgancia(); } catch { /* l'ascoltatore può essere già andato col client */ }
+        if (scheda.ferma !== ferma) return; // un seguito nuovo, o la morte della scheda, l'ha già sostituito: il flusso non è più suo
         scheda.ferma = null;
-        trasmissione.sgancia();
-        await fermaTrasmissione(finestra.cdp, scheda.cdpSessionId).catch(() => {});
+        scheda.sceltaTrasmissione = null;
+        if (finestra !== finestraDelSeguito) return; // il browser con cui è nato non c'è più: non c'è niente da fermare
+        await fermaTrasmissione(finestraDelSeguito.cdp, scheda.cdpSessionId).catch(() => {});
       };
-      return scheda.ferma;
+      scheda.ferma = ferma;
+      return ferma;
     },
 
     /** Un gesto della persona: clic, tasto o rotella, già in coordinate della PAGINA. */
@@ -273,7 +317,8 @@ export function creaGestoreBrowserVivo({
     async misura(sessionId, { larghezza, altezza } = {}) {
       const scheda = schedaDi(sessionId);
       tocca(scheda);
-      const esito = await ridimensiona(finestra.cdp, scheda.cdpSessionId, { larghezza, altezza });
+      // C36: il flusso si sveglia solo se qualcuno lo segue (`scheda.ferma` esiste finché c'è un seguito); senza, niente screencast
+      const esito = await ridimensiona(finestra.cdp, scheda.cdpSessionId, { larghezza, altezza, sveglia: typeof scheda.ferma === 'function', trasmissione: scheda.sceltaTrasmissione ?? null });
       return { larghezza: esito?.larghezza ?? null, altezza: esito?.altezza ?? null, url: scheda.url };
     },
 

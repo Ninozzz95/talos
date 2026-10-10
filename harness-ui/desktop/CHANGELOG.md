@@ -6,12 +6,61 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
 
 ## Unreleased
 
+## desktop-v0.1.26 — 2026-10-10
+
+A regular release: installs of 0.1.21 and later receive it automatically. It makes long conversations hold up, with a context
+engine on by default for new chats and a redesigned Context tab. Workflows and delegated agents can now start, pause and
+recover on their own. The live browser is reliable, and the model gets sharper tools for lists and searches.
+
+### Added
+- New conversations use the context engine by default: rules first, then a summary that keeps your own requests word for
+  word. A switch in Settings turns it off; older conversations keep their previous behaviour.
+- The Context tab shows the limit that actually applies, the last request broken down by category, and the compactions.
+  Its cards are collapsed by default.
+- The Context Manager is redone: an overview on the limit that acts, then one tab at a time. «Compact now…» asks first.
+- The Processes tab shows the CPU and memory of running commands, on Windows and in WSL. Its actions sit in a «⋯» menu
+  and on right click: Remove, Stop all, and a background section.
+- The composer's permission chip says what passes without asking («Plan: read only» in Plan mode).
+- With Coordination on, a proposed Workflow starts on its own, and its outcome wakes the conversation. A failed or
+  uncertain step can be marked done, set aside, redone with another model, or resumed after checking first. At the run
+  ceiling, «Raise the ceiling and resume» continues it.
+- Delegated agents can be paused, resumed and retried, by you or by the model. A paused agent is still paused after a
+  restart, and its result is judged from what it did, not from the words of its task.
+- When a background command ends, the model is told and the conversation resumes by itself.
+- A loop guard: a repeated identical call becomes a note, and at the fifth you are asked.
+- The model's tools for lists and searches come in pages with a cursor and answer in plain text lines.
+  - Notes, tasks, memory, research and the Library each have one «find» tool.
+  - Agents, automations and research each have one control tool.
+  - Listing a big folder now comes in pages instead of being cut in the middle.
+  - Hooks also see the tool the model called.
+- A chat open in another live TALOS window is read-only here, and one continued elsewhere reloads by itself.
+
+### Changed
+- Provider errors 429 and 5xx are retried 10 times, waiting from 0.5 s and doubling up to 32 s.
+  `TALOS_MAX_RETRIES` is capped at 15.
+- A permission change made while the model works applies from its next tool call, and the model is told.
+- Permission levels have one grammar: an unknown word is refused, and anything unreadable counts as read-only.
+- The desktop runs the kernel of the TALOS CLI 0.5.2.
+- The source control tab is called Git, and refreshes by itself when files change.
+
+### Fixed
+- The live browser no longer stops the server, survives a crashed Chromium, shows the page, and reopens a paused tab by
+  itself.
+- After a reload, your message keeps its own bubble and attachment chips, and the session title comes from your sentence.
+  The chip words follow the interface language.
+- A file that changed, or can no longer be read, since the model read it is not overwritten after your approval.
+- A context limit not yet known is marked «~» and refreshed by itself, without a reload.
+- A paused agent is shown as paused everywhere, never as a red error. A parent ends its turn instead of waiting for its
+  children.
+- The activity row counts the tools running in parallel.
+- A backslash escape shows the character, not the backslash.
+- Each question card keeps its own choices.
+
 ## desktop-v0.1.25 — 2026-10-09
 
-The first regular release after the 0.1.24 beta: installs of 0.1.21 and later receive it automatically (automatic updates
-started with 0.1.21; the 0.1.22 and 0.1.24 betas were skipped by the updater on purpose). It hardens the local server
-against other web pages and other local servers, lets you and the model decide which OpenRouter providers serve a model,
-and makes long sessions, the sidebar and the terminal faster.
+A regular release: installs of 0.1.21 and later receive it automatically (automatic updates started with 0.1.21). It
+hardens the local server against other web pages and other local servers, lets you and the model decide which
+OpenRouter providers serve a model, and makes long sessions, the sidebar and the terminal faster.
 
 ### Added
 - OpenRouter: some providers are excluded by default for a model when they are known not to work with it (today:
@@ -43,9 +92,9 @@ and makes long sessions, the sidebar and the terminal faster.
 - An underscore inside a word is no longer emphasis.
 - The search palette no longer says "0 results" before anything is typed.
 
-## desktop-v0.1.24 — 2026-10-08 (beta)
+## desktop-v0.1.24 — 2026-10-08
 
-A beta: installs of 0.1.22 do not receive it automatically. It carries everything listed under 0.1.23 below (never
+Published as a beta, then made a regular release: installs of 0.1.21 and later receive it automatically. It carries everything listed under 0.1.23 below (never
 published) and adds a large round on agents, automations and safety: agents now work strictly inside your permissions,
 automations can be created from any chat, and search never shows the contents of secret files.
 

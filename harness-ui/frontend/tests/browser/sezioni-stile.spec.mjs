@@ -377,10 +377,10 @@ test('SEZIONI-STILE-02 · Costi — le pastiglie del mockup e le due tabelle coi
   await expect(page.locator('#costiRiepilogo .talos-badge')).toHaveCount(5);
   await expect(page.locator('#costiRiepilogo .talos-badge')).toHaveText([
     '3 sessioni',
-    '6 giri',
+    '6 richieste al modello',
     '8,5 k token',
     '1 k in cache',
-    '2 giri fermati senza token',
+    '2 richieste al modello fermate senza token',
   ]);
   await expect(page.locator('#costiRiepilogo [data-cache-sessione]')).toContainText('Riusato dalla cache · non misurato');
 

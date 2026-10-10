@@ -16,17 +16,19 @@ const routes=[
   ['tasks_create','onAttivitaCrea'],['tasks_complete','onAttivitaCompleta'],
   ['tasks_update','onAttivitaAggiorna'],['tasks_delete','onAttivitaElimina'],
   ['memory_write','onMemoriaScrivi'],['memory_update','onMemoriaAggiorna'],['memory_delete','onMemoriaElimina'],
-  ['research_start','onRicercaAvvia'],['research_rename','onRicercaRinomina'],['research_pause','onRicercaPausa'],
-  ['research_resume','onRicercaRiprendi'],['research_cancel','onRicercaAnnulla'],['research_delete','onRicercaElimina'],
+  ['research_start','onRicercaAvvia'],['research_rename','onRicercaRinomina'],
+  // C5 (10/10/2026): pause/resume/cancel arrivano da research_control con `action`; la ricevuta resta quella dell'azione
+  ['research_control','onRicercaPausa',{action:'pause'}],['research_control','onRicercaRiprendi',{action:'resume'}],
+  ['research_control','onRicercaAnnulla',{action:'cancel'}],['research_delete','onRicercaElimina'],
   ['tool_create','onForgeCrea'],
 ];
 const keys=generaChiaviFirmaRicevute();
 
-async function run(t, calls, callbacks, options={}){
+async function run(t, calls, callbacks, options={}, args={}){
   const root=mkdtempSync(join(tmpdir(),'talos-receipt25-'));
   t.after(()=>rimuoviCartellaDiProva(root));
   const events=[],sent=[];let turn=0;
-  const tool_calls=calls.map((name,i)=>({id:`call-${i}`,type:'function',function:{name,arguments:'{}'}}));
+  const tool_calls=calls.map((name,i)=>({id:`call-${i}`,type:'function',function:{name,arguments:JSON.stringify(args)}}));
   await talosLavora({
     cartella:root,task:{consegna:'Verify the requested tool result.'},modello:'fixture',chiave:'fixture',
     livelloAccesso:'accesso-pieno',strumentiEstesi:calls,firma:keys,chiediApprovazioneFn:async()=>true,...callbacks,...options,
@@ -51,37 +53,38 @@ function check(result,id,status,isError){
   return receipts[0].ricevuta;
 }
 
-for(const[name,callback]of routes){
-  test(`RECEIPT25-${name}-FALSE: boolean failure cannot sign success`,async t=>{
+for(const[name,callback,args={}]of routes){
+  const label=args.action?`${name}-${args.action}`:name;
+  test(`RECEIPT25-${label}-FALSE: boolean failure cannot sign success`,async t=>{
     let calls=0;const text='The operation did not save its result.';
-    const r=await run(t,[name],{[callback]:async()=>{calls++;return{ok:false,esito:text};}});
+    const r=await run(t,[name],{[callback]:async()=>{calls++;return{ok:false,esito:text};}},{},args);
     const receipt=check(r,'call-0','failed',true);assert.equal(calls,1);
     assert.equal(receipt.error,text);
   });
-  test(`RECEIPT25-${name}-THROW: callback exception is a failed attempt without retry`,async t=>{
-    let calls=0;const r=await run(t,[name],{[callback]:async()=>{calls++;throw Error('store unavailable');}});
+  test(`RECEIPT25-${label}-THROW: callback exception is a failed attempt without retry`,async t=>{
+    let calls=0;const r=await run(t,[name],{[callback]:async()=>{calls++;throw Error('store unavailable');}},{},args);
     check(r,'call-0','failed',true);assert.equal(calls,1);
     assert.match(r.sent[1].messages.find(m=>m.tool_call_id==='call-0').content,/store unavailable/);
   });
-  test(`RECEIPT25-${name}-MISSING: unavailable channel does not sign success`,async t=>{
-    const r=await run(t,[name],{});check(r,'call-0','failed',true);
+  test(`RECEIPT25-${label}-MISSING: unavailable channel does not sign success`,async t=>{
+    const r=await run(t,[name],{},{},args);check(r,'call-0','failed',true);
     assert.match(r.sent[1].messages.find(m=>m.tool_call_id==='call-0').content,/not configured/);
   });
-  test(`RECEIPT25-${name}-INVALID: absent or nonboolean ok never confirms execution`,async t=>{
+  test(`RECEIPT25-${label}-INVALID: absent or nonboolean ok never confirms execution`,async t=>{
     for(const value of [null,undefined,{},[],{ok:'true',esito:'created'},{ok:1,esito:'created'}]){
-      let calls=0;const r=await run(t,[name],{[callback]:async()=>{calls++;return value;}});
+      let calls=0;const r=await run(t,[name],{[callback]:async()=>{calls++;return value;}},{},args);
       check(r,'call-0','failed',true);assert.equal(calls,1);
       assert.match(r.sent[1].messages.find(m=>m.tool_call_id==='call-0').content,/TOOL_RESULT_INVALID/);
     }
   });
-  test(`RECEIPT25-${name}-SUCCESS: typed success survives error words in the payload`,async t=>{
+  test(`RECEIPT25-${label}-SUCCESS: typed success survives error words in the payload`,async t=>{
     const text='Saved diagnostic: error ENOENT, failed assertions are quoted data.';
-    let calls=0;const r=await run(t,[name],{[callback]:async()=>{calls++;return{ok:true,esito:text};}});
+    let calls=0;const r=await run(t,[name],{[callback]:async()=>{calls++;return{ok:true,esito:text};}},{},args);
     check(r,'call-0','succeeded',false);assert.equal(calls,1);
     assert.equal(r.sent[1].messages.find(m=>m.tool_call_id==='call-0').content,text);
   });
-  test(`RECEIPT25-${name}-DENIED: policy has precedence and never invokes the callback`,async t=>{
-    let calls=0;const r=await run(t,[name],{[callback]:async()=>{calls++;return{ok:true,esito:'created'};}},{livelloAccesso:'lettura'});
+  test(`RECEIPT25-${label}-DENIED: policy has precedence and never invokes the callback`,async t=>{
+    let calls=0;const r=await run(t,[name],{[callback]:async()=>{calls++;return{ok:true,esito:'created'};}},{livelloAccesso:'lettura'},args);
     check(r,'call-0','denied',true);assert.equal(calls,0);
   });
 }

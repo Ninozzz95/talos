@@ -22,7 +22,7 @@
 import ELK from 'elkjs/lib/elk-api.js';
 
 import { nomeUmanoAttrezzo } from './nomi-attrezzi.js';
-import { apriConfermaRun, azioniDelRun, conseguenzeAnnulla, righeAumento, testoAmbiguo, testoErroreRun, TESTO_RIUSCITO } from './controlli-run.js'; // F3-52
+import { apriConfermaRun, azioniDelRun, conseguenzeAnnulla, passoRisolvibile, righeAumento, testoAmbiguo, testoErroreRun, TESTO_RIUSCITO } from './controlli-run.js'; // F3-52, C3
 import {
   durataDelPasso, formattaDurata, ICONA_TONO, iconaDelPasso, livelloPer, maiuscola, modelloDelPasso, PAGINA_ELENCO, percentualeFase,
   statoDelRun, statoPasso, TONO_RUN,
@@ -51,6 +51,7 @@ const CHIAVI_STATO_RUN = Object.freeze({
   created: 'agenti.workflow.runState.created', running: 'agenti.workflow.runState.running', paused: 'agenti.workflow.runState.paused', needs_attention: 'agenti.workflow.runState.needsAttention',
   succeeded: 'agenti.workflow.runState.succeeded', failed: 'agenti.workflow.runState.failed', cancelled: 'agenti.workflow.runState.cancelled', planned: 'agenti.workflow.runState.planned',
   proposed: 'agenti.workflow.runState.proposed', approved: 'agenti.workflow.runState.approved', pausing: 'agenti.workflow.runState.pausing', cancelling: 'agenti.workflow.runState.cancelling',
+  succeeded_with_set_aside: 'agenti.workflow.runState.succeededWithSetAside',
 });
 const parolaDelRun = (grezzo) => (CHIAVI_STATO_RUN[grezzo] ? tr(CHIAVI_STATO_RUN[grezzo]) : grezzo);
 /* «3 agenti» / «3 agents»: il numero col raggruppamento della lingua, la parola dal dizionario. */
@@ -75,6 +76,8 @@ export function montaGrafoWorkflow(host, {
   iniziale = null, onSelezione = null,
   // F3-52: il gestore degli overlay della app (fuoco e uscita della conferma) e, per le prove, chi genera i commandId
   gestoreOverlay = () => null, uuid = null,
+  // C3 (09/10/2026): monta il selettore dei modelli della chat in un contenitore; `alScelto(id)` alla scelta (decisione owner 09/10)
+  montaSelettoreModello = null,
   // refactor dei grafi: il motore di disposizione (nelle prove unitarie, `elk.bundled.js`, senza worker)
   creaElk = () => new ELK({ workerUrl: operaio() }),
 } = {}) {
@@ -238,6 +241,17 @@ export function montaGrafoWorkflow(host, {
     vociAgente.append(b);
     return b;
   };
+  /* ⭐ C3 (09/10/2026) — le azioni della PERSONA su un passo fallito, nel menu ⋯ e col tasto destro sulla card (decisione owner
+     09/10: più di due azioni ⇒ menu). Visibili solo quando il server le accetterebbe (`passoRisolvibile`). */
+  const vociSulPasso = [
+    ['mark-done', tr('agenti.workflow.step.markDone')],
+    ['set-aside', tr('agenti.workflow.step.setAside')],
+    ['retry-other-model', tr('agenti.workflow.step.otherModel')],
+    // C3 tappa 2b: solo su un passo INCERTO (vedi la visibilità in `disegnaDettaglio`)
+    ['resume-verify', tr('agenti.workflow.step.resumeVerify')],
+  ].map(([azione, testo]) => { const b = voceAgente(testo, () => { void eseguiSulPasso(azione); }); b.dataset.azionePasso = azione; return b; });
+  const separatorePasso = el('div', 'talos-wfg__menu-separatore'); separatorePasso.setAttribute('role', 'separator');
+  vociAgente.append(separatorePasso);
   const apriConversazione = voceAgente(tr('agenti.workflow.openConversation'), () => {
     const riga = { ...(fonte.riga(stato.selezionato) ?? {}), ...(stato.dettaglio ?? {}) };
     if (riga.stepSessionId) onApriSessione?.(riga.stepSessionId, riga);
@@ -643,6 +657,15 @@ export function montaGrafoWorkflow(host, {
       focus.append(b);
     }
     testi.append(focus);
+    // C3: un passo fallito dice dove sono le azioni; uno chiuso dalla persona dice come
+    const risolvibile = run && stato.t === null && passoRisolvibile(fonte.panoramica, st);
+    for (const b of vociSulPasso) b.hidden = !risolvibile || (b.dataset.azionePasso === 'resume-verify' && st !== 'uncertain');
+    separatorePasso.hidden = !risolvibile;
+    const notaPersona = risolvibile ? tr(st === 'uncertain' ? 'agenti.workflow.step.uncertainHint' : 'agenti.workflow.step.failedHint')
+      : riga.resolution === 'marked-done' ? tr('agenti.workflow.step.markedDoneByYou')
+        : riga.resolution === 'set-aside' ? tr('agenti.workflow.step.setAsideByYou')
+          : riga.resolution === 'skipped-after-set-aside' ? tr('agenti.workflow.step.skippedAfterSetAside') : null;
+    if (notaPersona) { const nota = el('p', 'talos-wfg__passo-nota', notaPersona); nota.dataset.nota = risolvibile ? 'azioni' : 'persona'; testi.append(nota); }
     // ⛔ niente anteprima del compito qui: il compito sta nella colonna «Task corrente» (foto sul 4174, 25/09: era scritto due volte)
     detChi.replaceChildren(segno, testi);
 
@@ -1048,11 +1071,34 @@ export function montaGrafoWorkflow(host, {
       const testo = `${tn('agenti.workflow.retryIntroOne', 'agenti.workflow.retryIntroMany', n, { n: cifraLingua(n) })} ${righe.length ? tr('agenti.workflow.ceilingRises') : tr('agenti.workflow.ceilingSame')}`;
       if (!(await conferma({ titolo: tn('agenti.workflow.retryTitleOne', 'agenti.workflow.retryTitleMany', n, { n: cifraLingua(n) }), testo, righe, conferma: tr('agenti.workflow.retryConfirm') })) || morto) return;
     }
+    /*
+     * ⭐ C3 tappa 3 (09/10/2026, owner «quanto serve per finire») — «Alza il tetto e riprendi»: prima la CIFRA (anteprima del
+     *   server, `aumentoPerFinire`), voce per voce, poi la conferma; il comando porta quella cifra, e se intanto è cambiata il
+     *   server la rifiuta e lo si dice. Se il tetto di adesso basta già, la conferma lo dice e il run riprende senza alzarlo.
+     */
+    let opzioniComando = uuid ? { uuid } : {};
+    if (azione === 'raise-ceiling') {
+      stato.inVolo = azione; disegnaRun();
+      const anteprima = await client.anteprimaTetto(sorgente).catch(() => null);
+      stato.inVolo = null; disegnaRun();
+      if (morto) return;
+      if (!anteprima?.amount) { dillo(tr('agenti.workflow.ceilingUnknown'), true); return; }
+      const righe = righeAumento(anteprima.amount);
+      const n = anteprima.nodeIds?.length ?? 0;
+      const rimasti = tn('agenti.workflow.ceilingLeftOne', 'agenti.workflow.ceilingLeftMany', n, { n: cifraLingua(n) });
+      // la stima PRIMA, così «il tetto sale di:» sta subito sopra le cifre
+      const testo = `${tr('agenti.workflow.ceilingReached')} ${righe.length ? `${tr('agenti.workflow.ceilingEstimate')} ${rimasti}` : tr('agenti.workflow.ceilingEnough')}`;
+      if (!(await conferma({ titolo: tr(righe.length ? 'agenti.workflow.ceilingTitle' : 'agenti.workflow.ceilingTitleSame'), testo, righe,
+        conferma: tr(righe.length ? 'agenti.workflow.ceilingConfirm' : 'agenti.workflow.ceilingConfirmSame') })) || morto) return;
+      opzioniComando = { ...opzioniComando, amount: anteprima.amount };
+    }
     stato.inVolo = azione; disegnaRun();
-    const esito = await client.comando(sorgente, azione, uuid ? { uuid } : {});
+    const esito = await client.comando(sorgente, azione, opzioniComando);
     if (morto) return;
     stato.inVolo = null;
     if (esito.ok) dillo(TESTO_RIUSCITO[azione], false);
+    // la cifra non è più quella detta (il run ha speso nel frattempo): si riapre per vedere quella nuova
+    else if (azione === 'raise-ceiling' && esito.code === 'WORKFLOW_RUN_STATE_CONFLICT') dillo(tr('agenti.workflow.ceilingChanged'), true);
     else dillo(esito.ambiguo ? testoAmbiguo(azione) : testoErroreRun(esito.code), true);
     // lo stato vero lo ridice il server, subito (e poi il flusso)
     ultimaRilettura = 0; programmaRilettura();
@@ -1060,6 +1106,73 @@ export function montaGrafoWorkflow(host, {
     const fuoco = !principaleRun.hidden ? principaleRun : !menuRun.hidden ? altroRun : torna;
     fuoco.focus?.();
   }
+  /*
+   * ⭐ C3 (09/10/2026) — un'azione della persona sul passo selezionato. La conferma dice che cosa succede ai passi che lo
+   *   aspettano; «Segna come fatto» chiede il riassunto (vuoto = pulsante spento, come Hermes), «Rifai con un altro modello» la
+   *   lista corta dei modelli già in uso più «Altro modello…» col selettore della chat (decisione owner 09/10).
+   */
+  function modelliGiaInUso(nodeId) {
+    const delPasso = modelloDelPasso({ ...(fonte.riga(nodeId) ?? {}), ...(stato.dettaglio?.nodeId === nodeId ? stato.dettaglio : {}) }, sessione.modello);
+    const voci = new Map();
+    if (sessione.modello && sessione.modello !== delPasso) voci.set(sessione.modello, tr('agenti.workflow.step.usedInSession'));
+    for (const r of fonte.righeCaricate()) {
+      const m = modelloDelPasso(r, null);
+      if (m && m !== delPasso && !voci.has(m)) voci.set(m, tr('agenti.workflow.step.usedInRun'));
+    }
+    return [...voci].map(([valore, dettaglio]) => ({ valore, testo: valore, dettaglio }));
+  }
+  async function eseguiSulPasso(azione) {
+    const nodeId = stato.selezionato;
+    if (!nodeId || stato.inVolo || !run || morto || !passoRisolvibile(fonte.panoramica, statoDi(nodeId))) return;
+    const label = fonte.riga(nodeId)?.label ?? stato.dettaglio?.label ?? nodeId;
+    const base = { sopra: tr('agenti.workflow.confirmAbove'), opener: menuAgente, gestore: gestoreOverlay?.() ?? null };
+    const opzioni = {};
+    if (azione === 'mark-done') {
+      const campo = { etichetta: tr('agenti.workflow.step.summaryLabel'), segnaposto: tr('agenti.workflow.step.summaryPlaceholder'), massimo: 4_000, valore: '' };
+      if (!(await apriConfermaRun(d, { ...base, titolo: tr('agenti.workflow.step.markDoneTitle', { label }), testo: tr('agenti.workflow.step.markDoneText'),
+        campo, conferma: tr('agenti.workflow.step.markDoneConfirm') })) || morto) return;
+      opzioni.summary = campo.valore.trim();
+    } else if (azione === 'resume-verify') {
+      if (!(await apriConfermaRun(d, { ...base, titolo: tr('agenti.workflow.step.resumeVerifyTitle', { label }), testo: tr('agenti.workflow.step.resumeVerifyText'),
+        conferma: tr('agenti.workflow.step.resumeVerifyConfirm') })) || morto) return;
+    } else if (azione === 'set-aside') {
+      if (!(await apriConfermaRun(d, { ...base, titolo: tr('agenti.workflow.step.setAsideTitle', { label }), testo: tr('agenti.workflow.step.setAsideText'),
+        conferma: tr('agenti.workflow.step.setAsideConfirm'), pericolo: true })) || morto) return;
+    } else {
+      // review del bugfixer (osservazione): senza modelli già in uso e senza selettore la conferma sarebbe vuota e il pulsante acceso
+      if (!modelliGiaInUso(nodeId).length && typeof montaSelettoreModello !== 'function') { dillo(tr('agenti.workflow.step.noOtherModel'), true); return; }
+      const scelte = { etichetta: tr('agenti.workflow.step.modelsLabel'), voci: modelliGiaInUso(nodeId), valore: null,
+        ...(typeof montaSelettoreModello === 'function' ? { altro: { testo: tr('agenti.workflow.step.anotherModel'), monta: montaSelettoreModello } } : {}) };
+      if (!(await apriConfermaRun(d, { ...base, titolo: tr('agenti.workflow.step.otherModelTitle', { label }), testo: tr('agenti.workflow.step.otherModelText'),
+        scelte, conferma: tr('agenti.workflow.step.otherModelConfirm') })) || morto || !scelte.valore) return;
+      opzioni.model = scelte.valore;
+    }
+    stato.inVolo = azione; disegnaRun();
+    const esito = await client.azioneSulPasso(sorgente, nodeId, azione, { ...opzioni, ...(uuid ? { uuid } : {}) });
+    if (morto) return;
+    stato.inVolo = null;
+    if (esito.ok) {
+      dillo(azione === 'mark-done' ? tr('agenti.workflow.step.ackMarkedDone') : azione === 'set-aside' ? tr('agenti.workflow.step.ackSetAside')
+        : azione === 'resume-verify' ? tr('agenti.workflow.step.ackResumeVerify')
+        : tr('agenti.workflow.step.ackOtherModel', { model: opzioni.model }), false);
+    } else {
+      dillo(esito.ambiguo ? (['retry-other-model', 'resume-verify'].includes(azione) ? tr('agenti.workflow.step.unclearOtherModel') : testoAmbiguo(azione)) : testoErroreRun(esito.code), true);
+    }
+    ultimaRilettura = 0; programmaRilettura();
+    disegnaRun();
+    void apriDettaglio(nodeId, { silenzioso: true });
+    menuAgente.focus?.();
+  }
+  // il tasto destro su una card FALLITA apre le sue azioni (regola owner 10/09: il menu ⋯ e il tasto destro sono lo stesso menu)
+  tela.elemento.addEventListener('contextmenu', (evento) => {
+    const carta = evento.target.closest?.('[data-nodo-id]');
+    const nodeId = carta?.dataset.nodoId;
+    if (!nodeId || !run || stato.t !== null || !passoRisolvibile(fonte.panoramica, statoDi(nodeId))) return;
+    evento.preventDefault();
+    if (stato.selezionato !== nodeId) seleziona(nodeId, { muovi: false });
+    disegnaDettaglio();
+    apriMenu(menuAgente, vociAgente);
+  });
   principaleRun.addEventListener('click', () => { void esegui(principaleRun.dataset.azione, principaleRun); });
   altroRun.addEventListener('click', () => (vociRun.hidden ? apriMenuRun() : chiudiMenu(altroRun, vociRun)));
   // il tasto destro sul gruppo dei comandi e sulla card della sessione principale apre lo stesso menu (regola owner 10/09)
@@ -1075,16 +1188,55 @@ export function montaGrafoWorkflow(host, {
   /* ——— menu ——— */
   function apriMenu(bottoneMenu, menu) {
     menu.hidden = false; bottoneMenu.setAttribute('aria-expanded', 'true');
-    (menu.querySelector('[aria-checked="true"]:not(:disabled)') ?? menu.querySelector('button:not(:disabled)'))?.focus();
+    if (menu === vociAgente) {
+      ancoraAlPulsante(bottoneMenu, menu);
+      /* review del bugfixer (09/10, Y3, misurato dal vivo): in posizione fissa il menu restava dov'era quando la finestra cambiava
+         misura o un antenato scorreva — 220/301 px lontano dal suo pulsante. Come un menu contestuale: si chiude. */
+      sganciaMenuFisso();
+      const ascolto = new AbortController();
+      sganciaMenuFisso = () => ascolto.abort();
+      /* Lo scorrimento di un antenato del pulsante (o della pagina) RIANCORA il menu, non lo chiude: il pannello del dettaglio
+         scorre anche da solo quando il suo contenuto arriva dopo l'apertura, e chiudere lì chiudeva il menu sotto il dito (suite
+         intera del 09/10, sotto carico). Gli altri scorrimenti (la tela) non lo toccano. Il cambio di misura della finestra lo chiude. */
+      const segui = (evento) => {
+        const chi = evento.target;
+        if (chi === d || chi === d.documentElement || (typeof chi?.contains === 'function' && chi.contains(bottoneMenu))) ancoraAlPulsante(bottoneMenu, menu);
+      };
+      finestra?.addEventListener('resize', () => chiudiMenu(bottoneMenu, menu), { signal: ascolto.signal });
+      d.addEventListener('scroll', segui, { capture: true, passive: true, signal: ascolto.signal });
+    }
+    // C3: il menu del passo ha voci NASCOSTE (le azioni sul passo fallito); il fuoco va alla prima voce che si vede, o un Esc
+    // finirebbe alla pagina (e apre «Fermo il giro?»: misurato nella prova C3-STEP-ACTIONS-UI). Senza far scorrere il pannello.
+    (menu.querySelector('[aria-checked="true"]:not(:disabled):not([hidden])') ?? menu.querySelector('button:not(:disabled):not([hidden])'))?.focus({ preventScroll: true });
   }
+  /*
+   * C3 (09/10/2026, foto a 1920×1080): il menu del dettaglio sta dentro un pannello con `overflow: auto` in fondo allo schermo; con
+   *   le azioni sul passo fallito è lungo sei righe e veniva TAGLIATO dal bordo. Si ancora al pulsante in posizione fissa (fuori dal
+   *   ritaglio del pannello), allineato al suo bordo destro, e si apre verso l'alto quando sotto non c'è posto.
+   */
+  function ancoraAlPulsante(bottone, menu) {
+    const r = bottone.getBoundingClientRect();
+    // prima la posizione fissa, POI le misure: da fisso il menu non va più a capo e cambia larghezza (foto del 09/10: sbordava)
+    menu.style.position = 'fixed';
+    menu.style.insetInlineEnd = 'auto';
+    menu.style.left = '0px'; menu.style.top = '0px';
+    const alto = menu.offsetHeight;
+    const largo = menu.offsetWidth;
+    const altezzaFinestra = finestra?.innerHeight ?? d.documentElement.clientHeight;
+    const sotto = altezzaFinestra - r.bottom - 8;
+    menu.style.left = `${Math.max(8, r.right - largo)}px`;
+    menu.style.top = `${sotto >= alto + 6 || r.top < alto + 14 ? r.bottom + 6 : r.top - alto - 6}px`;
+  }
+  let sganciaMenuFisso = () => {};
   function chiudiMenu(bottoneMenu, menu, { fuoco = false } = {}) {
     if (menu.hidden) return;
+    if (menu === vociAgente) { sganciaMenuFisso(); sganciaMenuFisso = () => {}; }
     menu.hidden = true; bottoneMenu.setAttribute('aria-expanded', 'false');
     if (fuoco) bottoneMenu.focus();
   }
   function tastiMenu(evento) {
     const menu = evento.target.closest('[role="menu"]'); if (!menu) return;
-    const voci = [...menu.querySelectorAll('button:not(:disabled)')];
+    const voci = [...menu.querySelectorAll('button:not(:disabled):not([hidden])')];
     const i = voci.indexOf(evento.target);
     const bottoneMenu = menu.previousElementSibling;
     if (evento.key === 'ArrowDown') { evento.preventDefault(); voci[(i + 1) % voci.length]?.focus(); }
@@ -1139,6 +1291,7 @@ export function montaGrafoWorkflow(host, {
       for (const aperta of d.querySelectorAll?.('dialog.talos-wfg-conferma[open]') ?? []) aperta.close();
       tela.distruggi(); tempo.distruggi();
       pannelloRisultati.distruggi();
+      sganciaMenuFisso(); // C3: gli ascolti del menu fisso del dettaglio, se era aperto
       try { elk.terminateWorker?.(); } catch { /* nessun worker */ }
       root.remove();
     },

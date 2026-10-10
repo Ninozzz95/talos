@@ -11,7 +11,7 @@
  */
 export const VUOTO_MINIMO_MS = 3 * 60_000;
 export const VUOTO_COMPRESSO_MS = 90_000;
-export const TERMINALI = new Set(['succeeded', 'failed', 'cancelled', 'skipped', 'superseded']);
+export const TERMINALI = new Set(['succeeded', 'failed', 'cancelled', 'skipped', 'superseded', 'set_aside']);
 export const ATTENZIONE = new Set(['failed', 'uncertain', 'reconciling']);
 /* un TENTATIVO è il tratto in cui il passo lavora: dall'avvio dell'attività (`running`) finché non ne esce; `uncertain` e
    `reconciling` sono ancora quel tentativo (il suo esito si sta accertando), `leased` è l'istante prima dell'avvio */

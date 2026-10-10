@@ -21,6 +21,7 @@ import {
   upgradeEvent,
 } from './migrations.mjs';
 import { workflowApply, workflowReplay, workflowReplayWithHistory, workflowStateChanges, workflowStateHash } from './run.mjs';
+import { FATTI_DI_FINE_DEL_RUN, STATI_FINALI_DEL_PASSO, STATI_FINALI_DEL_RUN } from './stati-finali.mjs';
 import { acquireStoreOwner, releaseStoreOwner } from './store-owner.mjs';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
@@ -593,6 +594,29 @@ function notifyWatchers(store, runId, seq) {
   if (!watchers?.size) return;
   for (const onAppend of [...watchers]) queueMicrotask(() => onAppend(seq));
 }
+
+/*
+ * ⭐ C3b (owner 09/10/2026 sera, «Risvegliare il padre a fine run») — chi guarda i CAMBI DI STATO di OGNI run del registro (il
+ *   risveglio del padre, `esito-al-padre.mjs`). Come `watchRun`: avvisato dopo il `sync` e la cache, in una microtask, con i
+ *   soli numeri (runId, seq, stato nuovo e vecchio) — chi vuole il resto rilegge. Solo quando `run.status` CAMBIA davvero: un
+ *   fatto che lascia lo stato com'è non avvisa nessuno. Mai dal rigioco all'avvio: un riavvio non ripete un cambio già detto.
+ */
+const STATUS_WATCHERS = new WeakMap();
+
+export function watchRunStatusChanges(store, { onChange } = {}) {
+  assertReadable(store);
+  if (typeof onChange !== 'function') throw storeError('Workflow status watcher requires onChange', 'WORKFLOW_INVALID_INPUT');
+  if (!STATUS_WATCHERS.has(store)) STATUS_WATCHERS.set(store, new Set());
+  const watchers = STATUS_WATCHERS.get(store);
+  watchers.add(onChange);
+  return () => { watchers.delete(onChange); };
+}
+
+function notifyStatusWatchers(store, change) {
+  const watchers = STATUS_WATCHERS.get(store);
+  if (!watchers?.size) return;
+  for (const onChange of [...watchers]) queueMicrotask(() => onChange({ ...change }));
+}
 /*
  * ⭐ F3-21 (25/09/2026) — l'elenco delle proposte di una sessione viene dallo Store (fonte unica: nessuna copia nel journal della
  *   sessione) attraverso un INDICE in memoria per `initiatingSessionId`. Si costruisce dalla scansione d'avvio, che legge già
@@ -824,6 +848,9 @@ async function appendEventInternal(store, event) {
       events: cache.events ? [...cache.events, structuredClone(upgraded)] : null, history: cache.history ?? null });
     indexActiveClaims(store, runId, nextState);
     notifyWatchers(store, runId, upgraded.seq);
+    if (cache.state.run.status !== nextState.run.status) {
+      notifyStatusWatchers(store, { runId, seq: upgraded.seq, status: nextState.run.status, previousStatus: cache.state.run.status });
+    }
     return structuredClone(upgraded);
   } catch (error) {
     RUN_CACHES.get(store).delete(runId);
@@ -1110,14 +1137,14 @@ export async function appendEvent(store, { event } = {}) {
  * ⛔ Nella coda del run, così nessuna scrittura in volo lo ripopola; la cartella si RINOMINA prima nella cartella temporanea del
  *   registro (un lettore vede il run intero o non lo vede, mai a metà) e solo dopo si rimuove.
  */
-const STATI_FINALI_DEL_RUN = new Set(['succeeded', 'failed', 'cancelled']);
+const STATI_FINALI_DEL_RUN_SET = new Set(STATI_FINALI_DEL_RUN);
 export async function removeRun(store, { runId } = {}) {
   assertWritable(store);
   requireRunId(runId);
   return enqueueRun(store, runId, async () => {
     const cache = await verifiedRunCache(store, runId);
     const stato = cache.state.run?.status ?? null;
-    if (!STATI_FINALI_DEL_RUN.has(stato)) {
+    if (!STATI_FINALI_DEL_RUN_SET.has(stato)) {
       throw storeError(`Workflow run ${runId} is not finished (${stato ?? 'unknown'}): cancel it before removing it`, 'WORKFLOW_RUN_NOT_FINISHED');
     }
     const cartellaTemporanea = join(store.root, 'temp');
@@ -1271,13 +1298,13 @@ export async function listRunSummariesForSession(store, { rootSessionId } = {}) 
         throw storeError('Workflow run does not match its verified Definition', 'WORKFLOW_STORE_CORRUPT');
       }
       const startedAt = events.find((event) => event.type === 'run_started')?.at ?? null;
-      const finishedAt = events.find((event) => ['run_succeeded', 'run_failed', 'run_cancelled'].includes(event.type))?.at ?? null;
+      const finishedAt = events.find((event) => FATTI_DI_FINE_DEL_RUN.includes(event.type))?.at ?? null;
       const startMs = startedAt === null ? NaN : Date.parse(startedAt);
       const finishMs = finishedAt === null ? NaN : Date.parse(finishedAt);
       const durationMs = Number.isFinite(startMs) && Number.isFinite(finishMs) && finishMs >= startMs
         ? finishMs - startMs : null;
       const nodeStates = [...state.nodes.values()].map((node) => node.state);
-      const terminal = new Set(['succeeded', 'failed', 'cancelled', 'skipped', 'superseded']);
+      const terminal = new Set(STATI_FINALI_DEL_PASSO);
       const active = new Set(['leased', 'running', 'retry_wait', 'waiting_human', 'reconciling']);
       const models = new Set(events.filter((event) => event.type === 'agent_session_created')
         .map((event) => event.payload?.model).filter((model) => typeof model === 'string' && model));

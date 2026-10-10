@@ -1,4 +1,6 @@
-import { livelliRagionamentoDiretti, validaFallbackProviders } from './model-destination.mjs';
+import { filoRagionamentoDiretti, livelliRagionamentoDiretti, validaFallbackProviders } from './model-destination.mjs';
+import { filoRagionamentoCatalogo } from './runtime-owner-adapter.mjs'; // A9 seguito OpenRouter (09/10/2026): il filo delle voci del catalogo, dal clamp vero
+import { creaCampionatoreRisorse } from './risorse-processi.mjs'; // C1 (10/10/2026): CPU e memoria dei comandi vivi
 import { pipeline } from 'node:stream/promises';
 import { prepareProcessOutputDownload } from './process-output-download.mjs';
 import { chiediMiglioramentoAlProvider } from './prompt-enhancer-provider.mjs';
@@ -10,6 +12,7 @@ import { readResultBytes } from './workflow/result-store.mjs'; // F-014 (§1.6):
 import { decodeWorkflowResultText, selectWorkflowResult } from './workflow/output-access.mjs';
 import { runStreamCursor, serveWorkflowRunStream } from './workflow/run-stream.mjs';
 import { startWorkflowRun } from './workflow/run-control.mjs';
+import { STATI_FINALI_DEL_RUN, runFinito } from './workflow/stati-finali.mjs';
 import { projectWorkflowOverview, projectWorkflowGroupPage, projectWorkflowNodeDetail, projectWorkflowEdgePage, projectWorkflowStateHistory, STATE_HISTORY_PAGE_MAX,
   projectWorkflowLineage, LINEAGE_DIRECTIONS, LINEAGE_PAGE_MAX } from './workflow/read-model.mjs';
 import { approveWorkflowProposal, listWorkflowProposals, readPlannedWorkflowGraph,
@@ -24,6 +27,15 @@ import { proxyPagina } from './browser-proxy.mjs';
 import { leggiPaginaPerLaVista } from './agent-service.mjs';
 import { ritrattoCartella } from './workspace-info.mjs'; // 06/9 F9/F10/F19-F21: cosa c'e' dentro la cartella, PRIMA di darla a un agente // 06/9: gli occhi del modello sulla pagina dove navighi TU // 06/9: il proxy locale per annotare gli elementi
 import { modelloRichiestaValido, permessiPerAttrezzoRichiestaValido, permessiRichiestaValido, reasoningRichiestaValido } from './config.mjs';
+import { bollaValida } from './bolla-della-persona.mjs';
+
+/** C09 (owner 10/10/2026): la copia per lo schermo viaggia accanto al messaggio e si stacca prima dei validatori dei corpi, che
+ *  rifiutano le chiavi sconosciute. Facoltativa: chi non la manda (la CLI, i client vecchi) non vede cambiare niente. */
+function separaBolla(corpo) {
+  if (!corpo || typeof corpo !== 'object' || Array.isArray(corpo) || !Object.hasOwn(corpo, 'bolla')) return { corpo, bolla: null };
+  const { bolla, ...resto } = corpo;
+  return { corpo: resto, bolla: bollaValida(bolla) };
+}
 import { ID_CATALOGO_IN_UI, REGISTRO_FORNITORI } from './provider-registry.mjs'; // 12/09, P-A: le rotte del catalogo per fornitore si costruiscono dal registro, non da una terna ricopiata due volte
 import { cartelleFrequenti as cartelleFrequentiReale } from './frequent-dirs.mjs';
 import { CustomTaskError, validaCartellaLibera } from './custom-task.mjs'; // automazioni a due porte (08/10/2026): la cartella si verifica alla creazione
@@ -193,6 +205,7 @@ const API_ERROR_CODES = new Set([
   'RESEARCH_CONFLICT',
   'RESEARCH_RECHECK_UNAVAILABLE',
   'PROCESS_NOT_RUNNING', // Stop per riga (owner 02/10/2026): il comando ha già finito
+  'PROCESS_STILL_RUNNING', // C1 «Togli» (owner 10/10/2026): una riga viva non si toglie, si ferma prima
   'ELICITATION_NOT_PENDING', 'ELICITATION_ANSWER_INVALID', // richieste dei server MCP (02/10/2026)
 
   'LIBRARY_NOT_FOUND',
@@ -209,6 +222,8 @@ const API_ERROR_CODES = new Set([
   'PLUGIN_INVALID',
   /* ⭐ 30/8, QA visiva (Task 14) — DELETE su una sessione ancora viva (né conclusa né interrotta): un controller attivo potrebbe star lavorando davvero. */
   'SESSION_STILL_RUNNING',
+  /* ⭐ 10/10/2026 — l'affitto fra processi: la sessione la tiene un altro processo di TALOS vivo, o è cambiata lì (409). */
+  'SESSION_LEASED', 'SESSION_CHANGED_ELSEWHERE',
   /* Owner 26/09/2026: una conversazione con un Workflow ancora in corso non si elimina (i run si eliminano con lei, solo finiti). */
   'WORKFLOW_RUN_NOT_FINISHED',
   /* ⭐ 07/9, O-49 — la risposta a una richiesta di consenso che nel frattempo non è più in attesa. */
@@ -244,6 +259,7 @@ const API_ERROR_CODES = new Set([
   // ⭐ 04/9, R-03 — fonte della ricerca web (search-source-store.mjs, duckduckgo-search.mjs).
   'SEARCH_SOURCE_INVALID', 'SEARCH_KEY_REQUIRED', 'SEARCH_KEY_INVALID', 'SEARCH_ENDPOINT_INVALID', 'SEARCH_STORE_UNAVAILABLE', 'SEARCH_NOT_READY', 'SEARCH_BLOCKED', 'SEARCH_UNREACHABLE', 'SEARCH_FAILED',
   'WSL_STORE_UNAVAILABLE', // F009 (01/10/2026): la preferenza dell'utente di WSL
+  'CONTEXT_SETTINGS_UNAVAILABLE', // C1 (09/10/2026): l'interruttore del motore del contesto
   // ⭐ 04/9, W1-10 — token di loopback della shell Electron: /api/* senza il cookie talos_token.
   'AUTH_REQUIRED',
   'CHAT_FILE_ORIGIN_FORBIDDEN',
@@ -539,6 +555,7 @@ const STATUS_BY_CODE = Object.freeze({
   RESEARCH_CONFLICT: 409,
   RESEARCH_RECHECK_UNAVAILABLE: 409,
   PROCESS_NOT_RUNNING: 409,
+  PROCESS_STILL_RUNNING: 409,
   ELICITATION_NOT_PENDING: 409,
   ELICITATION_ANSWER_INVALID: 400,
   /** ⭐ 10/9 — 404 come FILE_NOT_FOUND, ma DISTINTO da NOT_FOUND: «la sessione non c'è» e «la voce non c'è» sono due assenze diverse, e una risposta che non le distingue manda a cercare nel posto sbagliato. */
@@ -561,6 +578,8 @@ const STATUS_BY_CODE = Object.freeze({
   /** ⭐ 30/8 — stesso status di SESSION_NOT_READY: la richiesta è legittima ma lo stato attuale (ancora in corso) la blocca. */
   SESSION_STILL_RUNNING: 409,
   WORKFLOW_RUN_NOT_FINISHED: 409,
+  SESSION_LEASED: 409, // affitto fra processi (10/10/2026): non è colpa di chi chiama, è lo stato dell'archivio
+  SESSION_CHANGED_ELSEWHERE: 409,
   /**
    * ⛔⛔⛔ 07/9, O-49 — era QUERY_INVALID (400), e l’owner leggeva a schermo
    * «Risposta non riuscita · Invalid query» premendo Approva su una scheda del permesso.
@@ -614,6 +633,7 @@ const STATUS_BY_CODE = Object.freeze({
   SEARCH_ENDPOINT_INVALID: 422,
   SEARCH_STORE_UNAVAILABLE: 503,
   WSL_STORE_UNAVAILABLE: 503,
+  CONTEXT_SETTINGS_UNAVAILABLE: 503,
   SEARCH_NOT_READY: 409,
   SEARCH_BLOCKED: 502,
   SEARCH_UNREACHABLE: 502,
@@ -700,6 +720,7 @@ export const MESSAGE_BY_CODE = Object.freeze({
   SEARCH_ENDPOINT_INVALID: 'Invalid source address',
   SEARCH_STORE_UNAVAILABLE: 'Search keychain not available',
   WSL_STORE_UNAVAILABLE: 'WSL preferences not available',
+  CONTEXT_SETTINGS_UNAVAILABLE: 'Context engine settings not available',
   SEARCH_NOT_READY: 'The search source is not ready',
   SEARCH_BLOCKED: 'The search source rejected the request',
   SEARCH_UNREACHABLE: 'The search source is unreachable',
@@ -836,6 +857,7 @@ export const MESSAGE_BY_CODE = Object.freeze({
   RESEARCH_CONFLICT: 'This research is not in the right state for this action',
   RESEARCH_RECHECK_UNAVAILABLE: 'This research cannot be rechecked yet',
   PROCESS_NOT_RUNNING: 'This command is no longer running',
+  PROCESS_STILL_RUNNING: 'This command is still running: stop it first',
   ELICITATION_NOT_PENDING: 'This request no longer waits for an answer',
   ELICITATION_ANSWER_INVALID: 'The answer does not match what the server asked',
   LIBRARY_NOT_FOUND: 'This Library file no longer exists',
@@ -848,6 +870,8 @@ export const MESSAGE_BY_CODE = Object.freeze({
   MCP_INVALID: 'Invalid MCP server configuration',
   PLUGIN_INVALID: 'Invalid plugin configuration',
   SESSION_STILL_RUNNING: 'Session still running — stop it before deleting it',
+  SESSION_LEASED: 'This chat is open in another TALOS window',
+  SESSION_CHANGED_ELSEWHERE: 'This chat was changed in another TALOS window: open it again',
   WORKFLOW_RUN_NOT_FINISHED: 'A Workflow in this conversation is still running — cancel it before deleting it',
   BROWSER_VIVO_NON_CONFIGURATO: 'The driven browser is not set up on this TALOS',
   BROWSER_VIVO_ASSENTE: 'I cannot find a Chromium browser on this computer: TALOS uses one that is already installed, Chrome or Edge',
@@ -1700,14 +1724,21 @@ const ROTTE_API = Object.freeze([
   { schema: '/api/v1/admin/shutdown', metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/compaction\/([^/]+)\/undo$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/compaction-policy$/, metodi: ['GET'] },
+  /* C1 (10/10/2026): l'ultima richiesta spedita al modello, per la scheda Contesto (prompt di sistema e messaggi grezzi). Sola lettura. */
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/last-request$/, metodi: ['GET'] },
+  /* C1 (10/10/2026): l'ultima compattazione legacy di una conversazione (record pubblico, riassunto compreso). Sola lettura. */
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/compaction-state$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/workflows\/([^/]+)\/versions\/([^/]+)$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/workflows\/([^/]+)\/versions\/([^/]+)\/approve$/, metodi: ['POST'] },
   /* F3-33b (25/09/2026): «Modifica» i tetti, una versione nuova da riapprovare. */
   { schema: /^\/api\/v1\/workflows\/([^/]+)\/versions\/([^/]+)\/revise$/, metodi: ['POST'] },
   /* F3-51c (25/09/2026): Avvia, i controlli del run e l'anteprima di «Riprova». */
   { schema: /^\/api\/v1\/workflows\/([^/]+)\/versions\/([^/]+)\/start$/, metodi: ['POST'] },
-  { schema: /^\/api\/v1\/sessions\/([^/]+)\/workflows\/([^/]+)\/(pause|resume|cancel|retry)$/, metodi: ['POST'] },
-  { schema: /^\/api\/v1\/sessions\/([^/]+)\/workflows\/([^/]+)\/retry-preview$/, metodi: ['GET'] },
+  /* C3 tappa 3 (09/10/2026): «Alza il tetto e riprendi» e la sua anteprima (la cifra detta prima). */
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/workflows\/([^/]+)\/(pause|resume|cancel|retry|raise-ceiling)$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/workflows\/([^/]+)\/(retry-preview|ceiling-preview)$/, metodi: ['GET'] },
+  /* C3 (09/10/2026): le azioni della persona su UN passo fallito. */
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/workflows\/([^/]+)\/steps\/([^/]+)\/(mark-done|set-aside|retry-other-model|resume-verify)$/, metodi: ['POST'] },
   /* F3-51d (25/09/2026): il flusso dal vivo di un run (SSE col cursore sulla sequenza del registro). */
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/workflows\/([^/]+)\/events$/, metodi: ['GET'] },
   /* F3-21 (25/09/2026): il grafo PIANIFICATO di una proposta e l'elenco delle proposte di una sessione, in sola lettura. */
@@ -1775,6 +1806,7 @@ const ROTTE_API = Object.freeze([
   { schema: '/api/v1/browser/vivo/stato', metodi: ['GET'] },
   { schema: '/api/v1/search-source', metodi: ['GET'] },
   { schema: '/api/v1/wsl', metodi: ['GET', 'POST'] }, // F009 (01/10/2026): i fatti di WSL e la preferenza dell'utente normale
+  { schema: '/api/v1/context-settings', metodi: ['GET', 'POST'] }, // C1 (09/10/2026): l'interruttore del motore del contesto
   { schema: '/api/v1/sessions', metodi: ['GET', 'POST'] },
   { schema: '/api/v1/assistenza', metodi: ['POST'] },
   { schema: '/api/v1/automations', metodi: ['GET', 'POST'] },
@@ -1801,6 +1833,8 @@ const ROTTE_API = Object.freeze([
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/tools$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/mcp$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/processes$/, metodi: ['GET'] },
+  /* C1 (owner 10/10/2026): CPU e memoria dei comandi vivi, misurate solo quando la scheda le chiede. Sola lettura. */
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/processes\/resources$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/metrics$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/git\/status$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/git\/branch$/, metodi: ['GET'] },
@@ -1925,7 +1959,11 @@ const ROTTE_API = Object.freeze([
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/tree\/copy$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/tree\/create$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/stop$/, metodi: ['POST'] },
+  /* C3 tappa 4 (09/10/2026): pausa, ripresa e riprova di una delega, dalla persona */
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/delegation\/(pause|resume|retry)$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/processes\/([^/]+)\/stop$/, metodi: ['POST'] },
+  /* C1 (owner 10/10/2026): «Togli» una riga FINITA della scheda Processi, e resta tolta. */
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/processes\/([^/]+)\/remove$/, metodi: ['POST'] },
   /* ⛔ BUG-14 (05/10/2026): la gemella dello Stop — SFONDA il comando senza ucciderlo (la riga va «in sfondo»).
      Senza la SUA riga qui, la rotta esisteva per il 200 e per il 409 ma una GET cadeva sul 404 invece del 405
      con l'Allow vero: la presidia SFONDO-02 di tests/rev-stop-per-riga.test.mjs. */
@@ -3033,6 +3071,8 @@ export function createHttpApp({
   searchSourceStore = null, provaRicercaWebFn = null,
   // F009 (owner 01/10/2026) — l'utente di WSL: i fatti (GET) e la preferenza «usa un utente normale» (POST).
   preferenzeWslStore = null,
+  // C1 (owner 09/10/2026 sera): «Motore del contesto» in Impostazioni → Contesto (`impostazioni-contesto.mjs`).
+  impostazioniContesto = null,
   cartellaAssistenza = CARTELLA_ASSISTENZA_PREDEFINITA, cercaAssistenzaFn = cercaAssistenza,
   // ⭐ 04/9, W1-10 — token di loopback (config.token): quando c'è, /api/* vuole il cookie talos_token; `GET /?token=<t>` lo imposta e rimanda a `/`.
   token = null,
@@ -3140,7 +3180,11 @@ export function createHttpApp({
    *   in nessuna risposta e in nessun messaggio d'errore (vedi `messaggioSenzaChiave`).
    */
   fetchMiglioraPromptFn = globalThis.fetch,
+  /* C1 (owner 10/10/2026): il campionatore di CPU e memoria della scheda Processi (`risorse-processi.mjs`). Iniettabile per le prove;
+     di serie nasce alla prima richiesta e si spegne da solo dopo 30 s senza. */
+  campionatoreRisorse: campionatoreRisorseIniettato = null,
 }) {
+  let campionatoreRisorse = campionatoreRisorseIniettato;
   /** Il lettore del corpo con il tetto di QUESTA app: le rotte che vogliono un tetto più stretto lo passano come secondo argomento. */
   const leggiCorpoJson = (req, limiteByte = limiteCorpoByte) => leggiCorpoJsonCon(req, limiteByte);
 
@@ -3400,6 +3444,43 @@ export function createHttpApp({
     }
 
     /*
+     * ⭐⭐⭐ 10/10/2026 — L'AFFITTO FRA PROCESSI, alla porta (owner 09/10: «Affitto come Hermes»; 10/10: «Ricaricarla da sola»).
+     *   Il 4174 e l'app installata usano lo stesso archivio: prima di OGNI richiesta su una sessione la si allinea
+     *   (`sessionRegistry.allineaSessione`, il perché in `session-lease.mjs`):
+     *   · una richiesta che SCRIVE (ogni verbo che non sia GET/HEAD) su una sessione tenuta da un altro processo vivo ⇒ 409
+     *     `SESSION_LEASED`, coi `params` di chi la tiene; se un altro processo l'ha continuata e qui è ferma, prima si ricarica;
+     *   · l'apertura (GET della sessione e del suo flusso di eventi) rilegge dal disco una sessione cambiata altrove, così chi la
+     *     apre vede ciò che è stato scritto lì. Le altre letture non toccano niente.
+     *   Un solo punto per tutte le rotte, come la guardia dell'Host qui sopra: una rotta nuova non può dimenticarlo.
+     */
+    // ⛔ non una regex di rotta: il GUARDIANO dell'inventario (404 contro 405) le legge tutte come rotte, e questa è un cancello
+    const PREFISSO_SESSIONI = '/api/v1/sessions/';
+    const partiDiSessione = sessionRegistry && typeof sessionRegistry.allineaSessione === 'function' && url.pathname.startsWith(PREFISSO_SESSIONI)
+      ? url.pathname.slice(PREFISSO_SESSIONI.length).split('/') : null;
+    const rottaDiSessione = partiDiSessione && partiDiSessione[0]
+      ? [null, partiDiSessione[0], partiDiSessione.length > 1 ? `/${partiDiSessione.slice(1).join('/')}` : undefined] : null;
+    if (rottaDiSessione && rottaDiSessione[1] !== 'custom') {
+      let idAllineato = null;
+      try { idAllineato = decodeURIComponent(rottaDiSessione[1]); } catch { /* la rotta stessa risponde 404 */ }
+      // il fork LEGGE la sessione d'origine e ne scrive una nuova: si può fare anche da una sessione tenuta altrove
+      const scrive = method !== 'GET' && method !== 'HEAD' && rottaDiSessione[2] !== '/fork';
+      const apre = !scrive && (rottaDiSessione[2] === undefined || rottaDiSessione[2] === '/events');
+      if (idAllineato && (scrive || apre)) {
+        let allineamento = null;
+        try { allineamento = await sessionRegistry.allineaSessione(idAllineato, { scrivere: scrive }); }
+        catch (errore) { console.error(`[affitto] session ${idAllineato} not aligned:`, errore instanceof Error ? errore.message : errore); }
+        if (scrive && allineamento?.stato === 'altrove') {
+          const errore = Object.assign(new Error(allineamento.messaggio ?? 'This chat is open in another TALOS window'), {
+            code: 'SESSION_LEASED',
+            params: Object.fromEntries(Object.entries({ sessionId: idAllineato, ...(allineamento.detentore ?? {}) }).filter(([, v]) => v !== null && v !== undefined)),
+          });
+          sendJson(res, 409, errorEnvelope('SESSION_LEASED', clock, { errore }), method);
+          return;
+        }
+      }
+    }
+
+    /*
      * ⭐ F3-21 (25/09/2026) — la proposta si VEDE. La revisione è limitata (niente Core: `proposalReview`), e i passi si
      *   leggono dal grafo PIANIFICATO con le stesse forme del grafo di un run — panoramica, archi (≤100), pagina di fase (≤50),
      *   dettaglio del passo. Tutto in sola lettura, con ETag e 304; fuori proprietario (sessione che non esiste più) è 404,
@@ -3583,8 +3664,18 @@ export function createHttpApp({
      */
     const workflowStartPath = method === 'POST' && /^\/api\/v1\/workflows\/([^/]+)\/versions\/([^/]+)\/start$/.exec(url.pathname);
     const workflowControlPath = method === 'POST'
-      && /^\/api\/v1\/sessions\/([^/]+)\/workflows\/([^/]+)\/(pause|resume|cancel|retry)$/.exec(url.pathname);
-    if (workflowStartPath || workflowControlPath) {
+      && /^\/api\/v1\/sessions\/([^/]+)\/workflows\/([^/]+)\/(pause|resume|cancel|retry|raise-ceiling)$/.exec(url.pathname);
+    /*
+     * ⭐ C3 (09/10/2026, «talos desktop») — le azioni della PERSONA su un passo fallito (decisione owner 07/10, come Hermes):
+     *   Segna come fatto (con il riassunto di ciò che è stato fatto), Metti da parte, Rifai con un altro modello. Stesse difese e
+     *   stessa risposta dei controlli del run; il comando è `resolve-node` in `workflow-orchestrator.mjs` `resolveFailedStep`.
+     *   ⛔ Solo la persona: `workflow_control` del modello non ha queste azioni (contratto C3 §2).
+     */
+    const workflowStepPath = method === 'POST'
+      && /^\/api\/v1\/sessions\/([^/]+)\/workflows\/([^/]+)\/steps\/([^/]+)\/(mark-done|set-aside|retry-other-model|resume-verify)$/.exec(url.pathname);
+    const CHIAVI_DELL_AZIONE = { 'mark-done': ['commandId', 'summary'], 'set-aside': ['commandId'], 'retry-other-model': ['commandId', 'model'],
+      'resume-verify': ['commandId'] }; // C3 tappa 2b: «Riprendi verificando», solo su un passo incerto
+    if (workflowStartPath || workflowControlPath || workflowStepPath) {
       try {
         requireNoQuery(url);
         const contentType = typeof req.headers['content-type'] === 'string'
@@ -3598,8 +3689,12 @@ export function createHttpApp({
         }
         if (!workflowStore) { sendJson(res, 503, errorEnvelope('WORKFLOW_STORE_UNAVAILABLE', clock), method); return; }
         if (!workflowRuntime) { sendJson(res, 503, errorEnvelope('WORKFLOW_RUNTIME_NOT_READY', clock), method); return; }
-        const chiavi = workflowStartPath ? ['commandId', 'definitionHash'] : ['commandId'];
-        const body = await leggiCorpoJsonCon(req, Math.min(limiteCorpoByte, 4_096));
+        const chiavi = workflowStartPath ? ['commandId', 'definitionHash']
+          : workflowStepPath ? CHIAVI_DELL_AZIONE[workflowStepPath[4]]
+            // C3 tappa 3: «Alza il tetto» porta la cifra detta sul pulsante (il motore la confronta con quella di adesso)
+            : workflowControlPath[3] === 'raise-ceiling' ? ['commandId', 'amount'] : ['commandId'];
+        // il riassunto di «Segna come fatto» arriva a 4.000 caratteri (fino a 4 byte l'uno in UTF-8, più l'involucro JSON)
+        const body = await leggiCorpoJsonCon(req, Math.min(limiteCorpoByte, workflowStepPath ? 20_480 : 4_096));
         if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).length !== chiavi.length
           || !chiavi.every((chiave) => Object.hasOwn(body, chiave))) {
           throw Object.assign(new Error('Workflow command body is invalid'), { code: 'QUERY_INVALID' });
@@ -3615,9 +3710,12 @@ export function createHttpApp({
           data = await startWorkflowRun(workflowStore, { workflowId, version, definitionHash: body.definitionHash, commandId: body.commandId },
             { sessionExistsFn, supportedNodeKinds: ['agent'] });
         } else {
-          let sessionId, runId;
-          try { sessionId = decodeURIComponent(workflowControlPath[1]); runId = decodeURIComponent(workflowControlPath[2]); }
-          catch { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+          const percorso = workflowControlPath || workflowStepPath;
+          let sessionId, runId, nodeId;
+          try {
+            sessionId = decodeURIComponent(percorso[1]); runId = decodeURIComponent(percorso[2]);
+            if (workflowStepPath) nodeId = decodeURIComponent(workflowStepPath[3]);
+          } catch { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
           // di chi è il run: la sessione esiste e il run è suo — altrimenti 404, come le letture del grafo
           if (!sessionExistsFn(sessionId)) { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
           let run;
@@ -3631,7 +3729,11 @@ export function createHttpApp({
           if (run.events[0]?.type !== 'run_created' || run.events[0].payload.rootSessionId !== sessionId) {
             sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return;
           }
-          data = await workflowRuntime.orchestrator.requestRunControl({ runId, action: workflowControlPath[3], commandId: body.commandId });
+          data = workflowStepPath
+            ? await workflowRuntime.orchestrator.resolveFailedStep({ runId, nodeId, action: workflowStepPath[4], ...body })
+            : workflowControlPath[3] === 'raise-ceiling'
+              ? await workflowRuntime.orchestrator.raiseCeiling({ runId, commandId: body.commandId, amount: body.amount })
+              : await workflowRuntime.orchestrator.requestRunControl({ runId, action: workflowControlPath[3], commandId: body.commandId });
         }
         // lo scheduler lavora DOPO la risposta: il comando è già durevole
         workflowRuntime.scheduler.sveglia(data.runId);
@@ -3647,7 +3749,7 @@ export function createHttpApp({
 
     // F3-51c: che cosa farebbe «Riprova» adesso e di quanto alzerebbe il tetto — il pulsante lo dice PRIMA (owner 25/09).
     const workflowRetryPreviewPath = (method === 'GET' || method === 'HEAD')
-      && /^\/api\/v1\/sessions\/([^/]+)\/workflows\/([^/]+)\/retry-preview$/.exec(url.pathname);
+      && /^\/api\/v1\/sessions\/([^/]+)\/workflows\/([^/]+)\/(retry-preview|ceiling-preview)$/.exec(url.pathname);
     if (workflowRetryPreviewPath) {
       try {
         requireNoQuery(url);
@@ -3668,8 +3770,10 @@ export function createHttpApp({
         if (run.events[0]?.type !== 'run_created' || run.events[0].payload.rootSessionId !== sessionId) {
           sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return;
         }
-        const anteprima = await workflowRuntime.orchestrator.retryPreview({ runId });
-        sendJson(res, 200, successEnvelope({ schema: 'talos.workflow-retry-preview.v1', ...anteprima }, clock), method,
+        // C3 tappa 3: la stessa rotta per l'anteprima di «Alza il tetto» (`aumentoPerFinire`, la cifra che il fatto applicherà)
+        const delTetto = workflowRetryPreviewPath[3] === 'ceiling-preview';
+        const anteprima = delTetto ? await workflowRuntime.orchestrator.ceilingPreview({ runId }) : await workflowRuntime.orchestrator.retryPreview({ runId });
+        sendJson(res, 200, successEnvelope({ schema: delTetto ? 'talos.workflow-ceiling-preview.v1' : 'talos.workflow-retry-preview.v1', ...anteprima }, clock), method,
           { 'Cache-Control': 'private, no-cache' });
       } catch (error) {
         const normalized = normalizeError(error);
@@ -3797,7 +3901,7 @@ export function createHttpApp({
         if (!runId) {
           const { offset, limit } = pageQuery(['offset', 'limit', 'stato', 'q']);
           const stato = url.searchParams.get('stato');
-          const allowedStatuses = new Set(['created', 'running', 'paused', 'needs_attention', 'succeeded', 'failed', 'cancelled']);
+          const allowedStatuses = new Set(['created', 'running', 'paused', 'needs_attention', ...STATI_FINALI_DEL_RUN]);
           if (stato !== null && !allowedStatuses.has(stato)) {
             throw Object.assign(new Error('Invalid Workflow status'), { code: 'QUERY_INVALID' });
           }
@@ -5401,6 +5505,25 @@ export function createHttpApp({
       return;
     }
 
+    /*
+     * C1 (owner 09/10/2026 sera) — «Motore del contesto»: 'engine' (di serie) o 'legacy' per le conversazioni NUOVE. Stessa
+     * disciplina della preferenza di WSL: corpo col SOLO campo atteso, errori con codice dichiarato, risposta con lo stato.
+     */
+    if (method === 'POST' && url.pathname === '/api/v1/context-settings') {
+      try {
+        requireNoQuery(url);
+        if (!impostazioniContesto) { const error = new Error('Context settings not configured'); error.code = 'CONTEXT_SETTINGS_UNAVAILABLE'; throw error; }
+        const body = await leggiCorpoJson(req, 4 * 1024);
+        const keys = Object.keys(body || {});
+        if (keys.length !== 1 || !['engine', 'legacy'].includes(body.motore)) { const error = new Error('Invalid body'); error.code = 'QUERY_INVALID'; throw error; }
+        sendJson(res, 200, successEnvelope(await impostazioniContesto.scrivi({ motore: body.motore }), clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
     const providerTestMatch = /^\/api\/v1\/providers\/([^/]+)\/test$/.exec(url.pathname);
     if (method === 'POST' && providerTestMatch) {
       try {
@@ -5537,7 +5660,8 @@ export function createHttpApp({
               || keys.some(key => !ammessi.includes(key))
               || (agente ? !Object.hasOwn(body, 'agente') : cloud
                 ? (Object.hasOwn(body, 'endpoint') && typeof body.endpoint !== 'string')
-                : typeof body.endpoint !== 'string' || !Object.hasOwn(body, 'timeoutSeconds'))) {
+                /* OWN-01 (09/10/2026): il tempo è facoltativo anche qui — assente, l'archivio tiene quello di prima */
+                : typeof body.endpoint !== 'string')) {
               const error = new Error('Invalid runtime body'); error.code = 'QUERY_INVALID'; throw error;
             }
             data = providerStore.setRuntime(provider, body);
@@ -5993,10 +6117,11 @@ export function createHttpApp({
     if (method === 'POST' && sessionRegistry && url.pathname === '/api/v1/sessions/custom') {
       try {
         requireNoQuery(url);
-        const corpo = await leggiCorpoJson(req);
+        const { corpo, bolla } = separaBolla(await leggiCorpoJson(req));
         const { body: senzaImmagini, immagini } = await imageInput(corpo);
         const richiesta = requireCustomTaskBody(senzaImmagini);
         if (immagini.length) richiesta.immagini = immagini;
+        if (bolla) richiesta.bolla = bolla;
         const esito = sessionRegistry.avviaLibero(richiesta, origineDellaRichiesta(req));
         if ('erroreAvvio' in esito) {
           throw erroreDelRegistro(esito);
@@ -6255,7 +6380,7 @@ export function createHttpApp({
          */
         const puoAvereWorkflow = workflowStore && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(sessionId);
         const runDellaSessione = puoAvereWorkflow ? await listRunSummariesForSession(workflowStore, { rootSessionId: sessionId }) : [];
-        const inCorso = runDellaSessione.filter((r) => !['succeeded', 'failed', 'cancelled'].includes(r.status));
+        const inCorso = runDellaSessione.filter((r) => !runFinito(r.status));
         if (inCorso.length > 0) {
           const errore = new Error(`${inCorso.length} Workflow(s) still running`);
           errore.code = 'WORKFLOW_RUN_NOT_FINISHED';
@@ -6495,6 +6620,67 @@ export function createHttpApp({
     }
 
     /*
+     * ⭐ C1 (owner 10/10/2026, «CPU e memoria per processo, misurate da noi, solo a scheda aperta») — le risorse dei comandi VIVI di
+     *   una sessione. La scheda Processi la chiede ogni 5 s solo mentre è aperta e ha righe vive; il campionatore (un PowerShell
+     *   persistente su Windows, uno `sh` per distro in WSL, /proc su Linux: `risorse-processi.mjs`) si accende alla prima richiesta e si spegne da solo dopo 30 s
+     *   senza. Sola lettura. ⇒ `{ metodo, misuratoAlle, processi: [{ toolCallId, cpuPercento|null, memoriaByte|null, processi|null }] }`.
+     */
+    const risorseProcessiMatch = method === 'GET' && sessionRegistry && typeof sessionRegistry.pidDeiComandi === 'function'
+      && /^\/api\/v1\/sessions\/([^/]+)\/processes\/resources$/.exec(url.pathname);
+    if (risorseProcessiMatch) {
+      try {
+        requireNoQuery(url);
+        let sessionId;
+        try { sessionId = decodeURIComponent(risorseProcessiMatch[1]); }
+        catch { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+        const elenco = sessionRegistry.pidDeiComandi(sessionId);
+        if (elenco === null) { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+        campionatoreRisorse ??= creaCampionatoreRisorse();
+        const { metodo, perPid, perMarcatore } = await campionatoreRisorse.misura({
+          pid: elenco.map((v) => v.pid).filter((p) => p !== null),
+          wsl: elenco.map((v) => v.wsl).filter((w) => w !== null),
+        });
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 200, successEnvelope({
+          metodo, misuratoAlle: clock().toISOString(),
+          processi: elenco.map(({ toolCallId, pid, wsl }) => {
+            const m = wsl ? perMarcatore?.get(`${wsl.distro}:${wsl.marcatore}`) ?? null : pid === null ? null : perPid?.get(pid) ?? null;
+            return { toolCallId, cpuPercento: m?.cpuPercento ?? null, memoriaByte: m?.memoriaByte ?? null, processi: m?.processi ?? null };
+          }),
+        }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
+    /*
+     * ⭐ C1 (owner 10/10/2026: «Togli», e «Sì, resta tolta») — toglie dalla scheda Processi una riga FINITA (`togliProcesso`, evento
+     *   durevole). 200 se tolta (anche se lo era già), 404 se la sessione o il comando non ci sono, 409 `PROCESS_STILL_RUNNING` se è
+     *   ancora viva. Nessun corpo: il comando lo dice l'indirizzo.
+     */
+    const togliProcessoMatch = method === 'POST' && sessionRegistry && typeof sessionRegistry.togliProcesso === 'function'
+      && /^\/api\/v1\/sessions\/([^/]+)\/processes\/([^/]+)\/remove$/.exec(url.pathname);
+    if (togliProcessoMatch) {
+      try {
+        requireNoQuery(url);
+        let sessionId, toolCallId;
+        try { sessionId = decodeURIComponent(togliProcessoMatch[1]); toolCallId = decodeURIComponent(togliProcessoMatch[2]); }
+        catch { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+        const esito = sessionRegistry.togliProcesso(sessionId, toolCallId);
+        if (esito === 'in-corso') { sendJson(res, 409, errorEnvelope('PROCESS_STILL_RUNNING', clock), method); return; }
+        if (esito !== 'tolto') { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 200, successEnvelope({ removed: true }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
+    /*
      * ⛔ Stop per riga (owner 02/10/2026): ferma UN comando della scheda «Processi»; il giro continua. 200 se il segnale è
      *   partito (la riga si chiude col suo esito, «fermato su richiesta»), 404 se la sessione non c'è, 409 se il comando non è
      *   più in corso. Nessun corpo: il comando lo dice l'indirizzo.
@@ -6594,6 +6780,43 @@ export function createHttpApp({
       return;
     }
 
+    /*
+     * ⭐ C3 tappa 4 (owner 09/10/2026, ciclo di vita comune) — PAUSA, RIPRENDI e RIPROVA di una delega, dalla persona (le stesse
+     *   azioni che il padre ha con `pause_child`/`resume_child`; Riprova solo della persona, come nel Workflow). Pausa: l'attrezzo in
+     *   volo finisce, poi la figlia si ferma con la storia salva. Riprendi/Riprova: un messaggio nuovo nella STESSA figlia, e il
+     *   risultato torna al padre come sempre. Corpo vuoto (`{}`); 409 `DELEGATION_STATE_CONFLICT` quando lo stato non lo ammette.
+     */
+    const delegaMatch = method === 'POST' && sessionRegistry
+      && /^\/api\/v1\/sessions\/([^/]+)\/delegation\/(pause|resume|retry)$/.exec(url.pathname);
+    if (delegaMatch) {
+      try {
+        requireNoQuery(url);
+        let childId;
+        try { childId = decodeURIComponent(delegaMatch[1]); }
+        catch { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+        const corpo = await leggiCorpoJson(req);
+        if (corpo !== undefined && corpo !== null && (typeof corpo !== 'object' || Array.isArray(corpo) || Object.keys(corpo).length > 0)) {
+          throw Object.assign(new Error('A delegation control takes no body'), { code: 'QUERY_INVALID' });
+        }
+        const azione = delegaMatch[2];
+        if (azione === 'pause') {
+          const esito = sessionRegistry.pausaDelega?.(childId);
+          if (esito === 'non-figlia' || esito === undefined) { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+          if (esito !== 'in-pausa') { sendJson(res, 409, errorEnvelope('DELEGATION_STATE_CONFLICT', clock), method); return; }
+          sendJson(res, 200, successEnvelope({ childId, paused: true }, clock), method);
+          return;
+        }
+        const esito = sessionRegistry.riprendiDelega?.(childId, azione);
+        if (!esito || esito.motivo === 'not a sub-agent') { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+        if (esito.esito !== 'ripresa') { sendJson(res, 409, errorEnvelope('DELEGATION_STATE_CONFLICT', clock), method); return; }
+        sendJson(res, 200, successEnvelope({ childId, resumed: true, action: azione }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
     const redirectMatch = method === 'POST' && sessionRegistry
       && /^\/api\/v1\/sessions\/([^/]+)\/redirect$/.exec(url.pathname);
     if (redirectMatch) {
@@ -6606,9 +6829,10 @@ export function createHttpApp({
           sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
           return;
         }
-        const { body, immagini } = await imageInput(await leggiCorpoJson(req));
+        const { corpo: corpoRedirect, bolla } = separaBolla(await leggiCorpoJson(req));
+        const { body, immagini } = await imageInput(corpoRedirect);
         const { messaggio, redirectId } = requireRedirectBody(body);
-        const esito = sessionRegistry.reindirizza(sessionId, messaggio, { ...(redirectId ? { redirectId } : {}), ...(immagini.length ? { immagini } : {}) });
+        const esito = sessionRegistry.reindirizza(sessionId, messaggio, { ...(redirectId ? { redirectId } : {}), ...(immagini.length ? { immagini } : {}), ...(bolla ? { bolla } : {}) });
         if ('erroreAvvio' in esito) {
           throw erroreDelRegistro(esito);
         }
@@ -6670,12 +6894,13 @@ export function createHttpApp({
          * campo diverso da stringa: un body malformato resta silenziosamente
          * "nessun messaggio nuovo" invece di rompere il resume classico.
          */
-        const { body, immagini } = await imageInput(await leggiCorpoJson(req));
+        const { corpo: corpoRipresa, bolla } = separaBolla(await leggiCorpoJson(req));
+        const { body, immagini } = await imageInput(corpoRipresa);
         const nuovoMessaggioUtente = requireResumeBody(body);
         if (!nuovoMessaggioUtente && immagini.length) throw Object.assign(new Error('Write a message to send the images.'), { code: 'QUERY_INVALID' });
         /* REV-SESSION-READY v2: come per il fork, la finestra di chiusura si aspetta. */
         if (sessionRegistry.staChiudendoIlGiro?.(sessionId)) await sessionRegistry.attendiFuoriDallaFinestra(sessionId);
-        const esito = sessionRegistry.resume(sessionId, nuovoMessaggioUtente, immagini);
+        const esito = sessionRegistry.resume(sessionId, nuovoMessaggioUtente, immagini, ...(bolla && nuovoMessaggioUtente ? [{ bolla }] : []));
         if ('erroreAvvio' in esito) {
           throw erroreDelRegistro(esito);
         }
@@ -6801,6 +7026,49 @@ export function createHttpApp({
         if ('erroreAvvio' in policy) { throw erroreDelRegistro(policy); }
         if (req.aborted || res.destroyed) return;
         sendJson(res, 200, successEnvelope(policy, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
+    /* C1 (owner 10/10/2026, «L'ultima richiesta, tenuta in memoria»): ciò che il modello ha ricevuto nell'ultima chiamata — prompt di
+       sistema, messaggi, attrezzi — e la sua ripartizione per categoria. In RAM sul server (`leggiUltimaRichiesta`), niente su disco,
+       niente immagini; `null` quando la conversazione non ha ancora chiamato il modello da quando il server è acceso. */
+    const ultimaRichiestaMatch = method === 'GET' && sessionRegistry && typeof sessionRegistry.leggiUltimaRichiesta === 'function'
+      && /^\/api\/v1\/sessions\/([^/]+)\/last-request$/.exec(url.pathname);
+    if (ultimaRichiestaMatch) {
+      try {
+        requireNoQuery(url);
+        let sessionId;
+        try { sessionId = decodeURIComponent(ultimaRichiestaMatch[1]); }
+        catch { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+        const ultima = sessionRegistry.leggiUltimaRichiesta(sessionId);
+        if (ultima === undefined) { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 200, successEnvelope({ ultimaRichiesta: ultima }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
+    /* C1 (owner 10/10/2026, «cosa la compattazione ha tenuto»): per una conversazione LEGACY il riassunto e l'indice stanno nel
+       record della compattazione (`statoCompattazione`, RAM del registro); la scheda Contesto li legge da qui. Sola lettura. */
+    const statoCompattazioneMatch = method === 'GET' && sessionRegistry && typeof sessionRegistry.statoCompattazione === 'function'
+      && /^\/api\/v1\/sessions\/([^/]+)\/compaction-state$/.exec(url.pathname);
+    if (statoCompattazioneMatch) {
+      try {
+        requireNoQuery(url);
+        let sessionId;
+        try { sessionId = decodeURIComponent(statoCompattazioneMatch[1]); }
+        catch { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+        const stato = sessionRegistry.statoCompattazione(sessionId);
+        if ('erroreAvvio' in stato) { throw erroreDelRegistro(stato); }
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 200, successEnvelope(stato, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
         sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
@@ -7417,13 +7685,13 @@ export function createHttpApp({
           sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
           return;
         }
-        const corpo = await leggiCorpoJson(req);
+        const { corpo, bolla } = separaBolla(await leggiCorpoJson(req));
         const { body, immagini } = await imageInput(corpo);
         const messaggio = requireQueueBody(body);
         /* REV-SESSION-READY v3 (owner 27/09, «decide all'assestamento»): nella finestra di chiusura la coda rifiuta — qui si
            aspetta che il giro sia chiuso, poi il registro decide come sempre (conclusa ⇒ «usa resume»). */
         if (sessionRegistry.staChiudendoIlGiro?.(sessionId)) await sessionRegistry.attendiFuoriDallaFinestra(sessionId);
-        const esito = sessionRegistry.accodaMessaggio(sessionId, messaggio, immagini);
+        const esito = sessionRegistry.accodaMessaggio(sessionId, messaggio, immagini, ...(bolla ? [{ bolla }] : []));
         if ('erroreAvvio' in esito) {
           throw erroreDelRegistro(esito);
         }
@@ -7550,8 +7818,15 @@ export function createHttpApp({
               flusso.close();
               return;
             }
-            // chi chiude la pagina ferma anche la trasmissione: un Chromium che dipinge per nessuno è RAM buttata
-            res.once('close', () => { void ferma?.(); });
+            /*
+             * chi chiude la pagina ferma anche la trasmissione: un Chromium che dipinge per nessuno è RAM buttata.
+             * ⛔ C1b (10/10/2026): un rifiuto qui dentro non lo raccoglie nessuno, e con Node 24 chiude il SERVER intero (misurato:
+             *   morto alla sesta apertura). Si raccoglie sempre. E se la risposta si è chiusa mentre lo schermo partiva, il suo
+             *   `close` è già passato: si ferma subito, o il flusso resta acceso per nessuno fino al seguito dopo.
+             */
+            const fermaSenzaCadere = () => { Promise.resolve().then(() => ferma?.()).catch(() => {}); };
+            if (flusso.closed) { fermaSenzaCadere(); return; }
+            res.once('close', fermaSenzaCadere);
             return;
           } else if (method === 'POST' && url.pathname === '/api/v1/browser/vivo/apri') {
             const corpo = await leggiCorpoJson(req);
@@ -7798,7 +8073,12 @@ export function createHttpApp({
            arrivano dal registro (`livelliDiretti`, vedi model-destination.livelliRagionamentoDiretti()),
            accanto al catalogo OpenRouter — il frontend fa UNA sola GET. Campo additivo: i
            consumatori esistenti del catalogo non cambiano forma. */
-        data = { ...(await catalogoModelliFn({ forzaAggiornamento })), livelliDiretti: livelliRagionamentoDiretti() };
+        /* ⛔ A9 (owner 09/10/2026): accanto ai livelli, che cosa arriva DAVVERO al fornitore per ogni livello chiesto
+           (`filoDiretti`, model-destination.filoRagionamentoDiretti()): la pillola mostra quello. Additivo come sopra. */
+        /* ⛔ A9, seguito OpenRouter (09/10/2026): lo stesso per le voci del catalogo (`filoCatalogo`, per id esatto, come il clamp
+           del fetch OpenRouter), runtime-owner-adapter.filoRagionamentoCatalogo(). Additivo come sopra. */
+        const catalogo = await catalogoModelliFn({ forzaAggiornamento });
+        data = { ...catalogo, livelliDiretti: livelliRagionamentoDiretti(), filoDiretti: filoRagionamentoDiretti(), filoCatalogo: filoRagionamentoCatalogo(catalogo?.modelli) };
       } else if (url.pathname === '/api/v1/model-lab/capacity') {
         requireNoQuery(url);
         if (!capacitaMacchinaFn) {
@@ -7823,6 +8103,11 @@ export function createHttpApp({
         requireNoQuery(url);
         if (!preferenzeWslStore) { const error = new Error('WSL preferences not configured'); error.code = 'WSL_STORE_UNAVAILABLE'; throw error; }
         data = await preferenzeWslStore.stato();
+      } else if (url.pathname === '/api/v1/context-settings') {
+        /* C1 — l'interruttore del motore del contesto (Impostazioni → Contesto). */
+        requireNoQuery(url);
+        if (!impostazioniContesto) { const error = new Error('Context settings not configured'); error.code = 'CONTEXT_SETTINGS_UNAVAILABLE'; throw error; }
+        data = await impostazioniContesto.leggi();
       } else if (url.pathname === '/api/v1/search-source') {
         requireNoQuery(url);
         if (!searchSourceStore) { const error = new Error('Search source not configured'); error.code = 'SEARCH_STORE_UNAVAILABLE'; throw error; }
@@ -8443,7 +8728,13 @@ export function createHttpApp({
           }
           data = { figli: esito.figli };
         } else if (eventsMatch) {
-          requireNoQuery(url);
+          /* B1 (owner 10/10/2026, «le ultime 3 chat pronte»): una chat tenuta pronta riapre il flusso da dove l'aveva lasciato con
+             `?after=<ultima sequenza vista>` — `EventSource` non manda `Last-Event-ID` alla PRIMA apertura. Una chiave sola, come
+             il flusso dei Workflow (`runStreamCursor`, workflow/run-stream.mjs:32-41); `Last-Event-ID` vince alla riconnessione. */
+          const chiaviEventi = [...url.searchParams.keys()];
+          // review del desktop: `after=` vuoto non è «da capo» in silenzio (`runStreamCursor` lo leggerebbe 0) — è una query sbagliata
+          if (chiaviEventi.some((chiave) => chiave !== 'after') || chiaviEventi.length > 1 || url.searchParams.get('after') === '') throw Object.assign(new Error('Session stream query'), { code: 'QUERY_INVALID' });
+          const dopoRichiesto = url.searchParams.has('after') ? runStreamCursor({ after: url.searchParams.get('after') }) : 0;
           let sessionId;
           try {
             sessionId = decodeURIComponent(eventsMatch[1]);
@@ -8472,7 +8763,7 @@ export function createHttpApp({
            * header sono partiti, quindi qui, non prima.
            */
           const ultimoVistoDalClient = Number.parseInt(req.headers['last-event-id'], 10);
-          const daSequenza = Number.isFinite(ultimoVistoDalClient) ? ultimoVistoDalClient : 0;
+          const daSequenza = Number.isFinite(ultimoVistoDalClient) ? ultimoVistoDalClient : dopoRichiesto;
           const sseSession = createSseSession({
             response: res,
             headers: SECURITY_HEADERS,

@@ -21,6 +21,7 @@
  */
 import { describe, it, after } from 'node:test';
 import assert from 'node:assert/strict';
+import { RIGA_RECUPERO } from '../src/kernel/compattazione-desktop.mjs'; // C1 (09/10): il puntatore di recupero in fondo al riassunto
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import { rimuoviCartellaDiProvaAttesa } from './aiuto/rimuovi-cartella-di-prova.mjs';
 import { tmpdir } from 'node:os';
@@ -244,7 +245,7 @@ describe('RICARICA POST-COMPACT — la cura della memoria (opzione A + C-a + C-b
         assert.equal(proiezione.length, 4, 'testa + richieste + UN messaggio user + coda: il blocco non è un messaggio in più (M3)');
         assert.deepEqual(proiezione[2], {
             role: 'user',
-            content: [MARCATORE_RIASSUNTO, PREFISSO_SINTESI_RECINTATA, RIASSUNTO_FINTO, 'INDICE MECCANICO', 'BLOCCO DI FATTI FRESCI'].join('\n\n'),
+            content: [MARCATORE_RIASSUNTO, PREFISSO_SINTESI_RECINTATA, RIASSUNTO_FINTO, 'INDICE MECCANICO', 'BLOCCO DI FATTI FRESCI', RIGA_RECUPERO].join('\n\n'),
         }, 'marcatore → recinto → riassunto → indice → blocco: tutto in UN solo messaggio, un solo cache-break');
         assert.deepEqual(proiezione[3], coda[0], 'l\'ultimo messaggio vero resta DOPO: è lui che vince');
     });
@@ -253,7 +254,7 @@ describe('RICARICA POST-COMPACT — la cura della memoria (opzione A + C-a + C-b
         const proiezione = costruisciProiezione({
             testa: [SISTEMA], richiesteLetterali: [], riassunto: RIASSUNTO_FINTO, indice: 'INDICE', coda: [],
         });
-        assert.deepEqual(proiezione[1].content, [MARCATORE_RIASSUNTO, RIASSUNTO_FINTO, 'INDICE'].join('\n\n'),
+        assert.deepEqual(proiezione[1].content, [MARCATORE_RIASSUNTO, RIASSUNTO_FINTO, 'INDICE', RIGA_RECUPERO].join('\n\n'),
             'senza bloccoFatti/recintaSintesi: nessun recinto, nessun blocco (i test CTX-PURE la fissano già)');
         const ancheSenzaRecinto = costruisciProiezione({
             testa: [], richiesteLetterali: [], riassunto: RIASSUNTO_FINTO, indice: 'INDICE', coda: [],
@@ -261,7 +262,7 @@ describe('RICARICA POST-COMPACT — la cura della memoria (opzione A + C-a + C-b
         });
         assert.equal(ancheSenzaRecinto[0].content.includes(PREFISSO_SINTESI_RECINTATA), false,
             'recintaSintesi=false: il recinto non entra anche se c\'è il blocco');
-        assert.ok(ancheSenzaRecinto[0].content.endsWith('BLOCCO'));
+        assert.ok(ancheSenzaRecinto[0].content.endsWith(`BLOCCO\n\n${RIGA_RECUPERO}`), 'il blocco, poi il puntatore di recupero (C1)');
     });
 
     it('RICARICA-CA · (c, M4) il prompt di sintesi DESKTOP porta le regole verbatim con l\'hash completo', () => {

@@ -151,3 +151,19 @@ export function erroreEsitoProviderIncertoEsaurito(causa, esitiRitentati) {
     esitiIncertiRitentati: esitiRitentati,
   });
 }
+
+/**
+ * OWN-01 (09/10/2026) — il fornitore non ha mandato nemmeno gli header, neanche dopo i reinvii automatici. Stesso codice
+ * dell'esaurito (chi lo conosce, desktop, workflow e CLI, lo tratta uguale); messaggio e CHIAVE dicono la cosa vera: non ha COMINCIATO
+ * a rispondere, non «si è interrotto». Y1 della review del desktop: il desktop mostra la chiave tradotta, e quella dell'esaurito diceva
+ * «si è interrotta… esito rimasto incerto». `server.providerOutcome.noFirstResponse` con `params.n` (forme One/Many come l'esaurito):
+ * i testi en/it li aggiunge il desktop nel suo frontend.
+ */
+export function erroreNessunaPrimaRispostaEsaurito(causa, esitiRitentati) {
+  const errore = erroreEsitoProviderIncertoEsaurito(causa, esitiRitentati);
+  errore.message = 'The provider did not start answering within the time limit, even after '
+    + `${esitiRitentati} automatic ${esitiRitentati === 1 ? 'resend' : 'resends'}. `
+    + 'The request may still have been produced and paid for: resume explicitly when you want to continue.';
+  errore.chiave = 'server.providerOutcome.noFirstResponse';
+  return errore;
+}

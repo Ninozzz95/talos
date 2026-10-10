@@ -76,6 +76,104 @@ export function etichettaPermessoConEccezioni(permesso, permessiPerAttrezzo) {
 }
 
 /*
+ * ⭐ C1 (owner 10/10/2026, AskUserQuestion «Elenco corto, come Cline») — IL CHIP DICE COSA PASSA SENZA CHIEDERE.
+ *   Prima diceva il nome della politica più il numero delle eccezioni («Scrive nel progetto · 1 eccezione»): chi lo guardava
+ *   doveva sapere che cosa la politica concede e aprire la modale per sapere quali fossero le eccezioni. Cline scrive invece
+ *   «Auto-approve:» e i nomi corti di ciò che passa da solo, «None» se niente (`apps/vscode/webview-ui/src/components/chat/
+ *   auto-approve-menu/AutoApproveBar.tsx:18-58`, clone del 23/09). Si porta la forma; i dati sono i nostri.
+ * ⛔ Il calcolo è quello del cancello, non un'opinione:
+ *   - un `sempre` per attrezzo passa (anche con «Solo lettura»: in `verificaPermessoScrittura` il suo ramo viene prima);
+ *   - `chiedi` e `nega` no;
+ *   - senza scelta decide il livello, con la stessa tabella del server (`CONCESSI_DA_SOLO`, `src/permessi-catena.mjs`):
+ *     «Accesso pieno» e «Scrive nel progetto» lasciano passare tutto, le altre niente.
+ *   I gruppi sono i sei attrezzi che hanno un permesso proprio (`ATTREZZI_CON_PERMESSO_PER_ATTREZZO`, `src/config.mjs`);
+ *   `chat-foot.test.mjs` li confronta con quell'elenco e con la tabella, così un attrezzo nuovo o un livello cambiato fanno rosso.
+ *   Un «Per questa sessione» dato da una carta è un `sempre` nella stessa mappa: entra da solo.
+ * ⛔ Un gruppo si nomina se ALMENO UNO dei suoi attrezzi passa: davanti a «comandi» a metà è più onesto dire che qualcosa passa
+ *   che tacerlo. Il dettaglio sta nel suggerimento, insieme a ciò che chiede SEMPRE comunque (i segreti, le scritture fuori dal
+ *   progetto con «Scrive nel progetto», le azioni dopo un contenuto sospetto).
+ */
+export const GRUPPI_SENZA_CHIEDERE = Object.freeze([
+  Object.freeze({ chiave: 'files', attrezzi: Object.freeze(['scrivi', 'file_edit']) }),
+  Object.freeze({ chiave: 'commands', attrezzi: Object.freeze(['shell', 'prova']) }),
+  Object.freeze({ chiave: 'documents', attrezzi: Object.freeze(['document_create', 'generate_image']) }),
+]);
+/* La politica che la persona sceglie → il livello che il kernel applica (`session-registry.mjs`, `livelloDaPermessi`). */
+export const LIVELLO_DELLA_POLITICA = Object.freeze({
+  'Read only': 'lettura', 'Workspace write': 'scrittura-progetto', 'On request': 'su-richiesta', 'Full access': 'accesso-pieno', Research: 'ricerca',
+});
+/* La copia di `CONCESSI_DA_SOLO` (`src/permessi-catena.mjs`), riga per riga: un livello senza riga non concede niente. La prova
+   CHIP-PERMESSI-06 la confronta con quella del server per ogni livello e ognuno dei sei attrezzi. */
+const TUTTI = 'tutti';
+export const CONCESSI_DAL_LIVELLO = Object.freeze({
+  'accesso-pieno': TUTTI,
+  'scrittura-progetto': TUTTI,
+  'scrittura-area': Object.freeze(new Set(['scrivi', 'file_edit'])),
+  ricerca: Object.freeze(new Set(['research_deposit'])),
+});
+
+/** Se `attrezzo` passa senza chiedere, con questo livello e questa scelta per attrezzo. */
+export function attrezzoPassaSenzaChiedere(livello, scelta, attrezzo) {
+  if (scelta === 'sempre') return true;
+  if (scelta === 'chiedi' || scelta === 'nega') return false;
+  const concessi = Object.hasOwn(CONCESSI_DAL_LIVELLO, livello ?? '') ? CONCESSI_DAL_LIVELLO[livello] : null;
+  return concessi === TUTTI || Boolean(concessi?.has(attrezzo));
+}
+
+/**
+ * Il testo del chip e il suo suggerimento.
+ * ⛔ Review YELLOW del bugfixer (10/10), decisioni dell'owner dello stesso giorno:
+ *   - in modalità PIANO il cancello nega tutto tranne leggere ed elencare, PRIMA di ogni permesso e di ogni `sempre`
+ *     (`verificaPermessoScrittura`, la sua prima riga): il chip dice «Piano: solo lettura», e il suggerimento nomina il permesso
+ *     che torna attivo all'uscita dal Piano;
+ *   - un gruppo che passa solo IN PARTE si scrive col nome della parte, «comandi (solo test)»: chi ha messo `shell: chiedi`
+ *     apposta non deve leggere «comandi» come se la sua scelta fosse ignorata.
+ * @param {{ modalitaOperativa?: string }} [opzioni]
+ * @returns {{ testo:string, suggerimento:string, gruppi:string[], parziali:string[], spenti:string[] }} chiavi, per le prove
+ */
+export function riassuntoSenzaChiedere(permesso, permessiPerAttrezzo, { modalitaOperativa = 'normale' } = {}) {
+  const livello = LIVELLO_DELLA_POLITICA[permesso];
+  const scelte = permessiPerAttrezzo && typeof permessiPerAttrezzo === 'object' ? permessiPerAttrezzo : {};
+  if (modalitaOperativa === 'piano') {
+    return {
+      testo: t('chat.foot.permission.planReadOnly'),
+      suggerimento: [t('chat.foot.permission.policyLine', { politica: etichettaPermesso(permesso) }), t('chat.foot.permission.planPaused'), t('chat.foot.permission.change')].join('\n'),
+      gruppi: [], parziali: [], spenti: [],
+    };
+  }
+  const passa = (a) => attrezzoPassaSenzaChiedere(livello, scelte[a], a);
+  const nome = (g) => {
+    const base = t(`chat.foot.permission.group.${g.chiave}`);
+    // tutto o niente: il nome semplice. «Niente» è un gruppo spento, nominato nella riga «Spenti» (review delta Y: era «comandi ()»)
+    if (g.attrezzi.every(passa) || !g.attrezzi.some(passa)) return base;
+    // in parte: si nomina la parte che passa (un attrezzo solo per gruppo, sono coppie)
+    return t('chat.foot.permission.groupPart', { gruppo: base, parte: g.attrezzi.filter(passa).map((a) => t(`chat.foot.permission.part.${a}`)).join(', ') });
+  };
+  const gruppi = livello ? GRUPPI_SENZA_CHIEDERE.filter((g) => g.attrezzi.some(passa)) : [];
+  const parziali = gruppi.filter((g) => !g.attrezzi.every(passa));
+  const spenti = GRUPPI_SENZA_CHIEDERE.filter((g) => g.attrezzi.every((a) => scelte[a] === 'nega'));
+  const tuttoPassa = GRUPPI_SENZA_CHIEDERE.every((g) => g.attrezzi.every(passa));
+  let testo;
+  if (!livello) testo = etichettaPermesso(permesso); // un valore che non conosciamo: il suo nome, non un'invenzione
+  else if (gruppi.length === 0) testo = livello === 'lettura' || livello === 'ricerca' ? etichettaPermesso(permesso) : t('chat.foot.permission.asksEverything');
+  else if (tuttoPassa && livello === 'accesso-pieno') testo = t('chat.foot.permission.withoutAskingAll');
+  else testo = t('chat.foot.permission.withoutAsking', { cosa: gruppi.map(nome).join(', ') });
+  /* Ciò che chiede comunque, anche con un `sempre`. La trifecta (review N1) scatta solo su un `sempre` e mai con Accesso pieno
+     (`trifectaForzaConferma` = override «sempre» + catena chiusa, `trifectaChiude` è falso con `accesso-pieno`). */
+  const conUnSempre = GRUPPI_SENZA_CHIEDERE.some((g) => g.attrezzi.some((a) => scelte[a] === 'sempre'));
+  const chiedeSempre = [
+    ...(livello === 'scrittura-progetto' ? ['outside'] : []),
+    ...(livello === 'scrittura-progetto' || livello === 'accesso-pieno' || conUnSempre ? ['secrets', 'suspicious'] : []),
+    ...(conUnSempre && livello !== 'accesso-pieno' ? ['trifecta'] : []),
+  ];
+  const righe = [t('chat.foot.permission.policyLine', { politica: etichettaPermesso(permesso) })];
+  if (chiedeSempre.length && gruppi.length) righe.push(t('chat.foot.permission.alwaysAsks', { cosa: chiedeSempre.map((c) => t(`chat.foot.permission.always.${c}`)).join(', ') }));
+  if (spenti.length) righe.push(t('chat.foot.permission.turnedOff', { cosa: spenti.map(nome).join(', ') }));
+  righe.push(t('chat.foot.permission.change'));
+  return { testo, suggerimento: righe.join('\n'), gruppi: gruppi.map((g) => g.chiave), parziali: parziali.map((g) => g.chiave), spenti: spenti.map((g) => g.chiave) };
+}
+
+/*
  * ⛔ 06/9, owner con lo screenshot: a schermo compariva
  * `local:bartowski-nvidia_Nemotron-Cascade-2-30B-A3B-GGUF-931b595fc71b-nvidia-Nemotron-Cascade-2-30B-A3B-Q4-0-gguf`,
  * su due righe, sia nell'intestazione del messaggio sia nella pillola del composer. La decisione H22
@@ -400,11 +498,10 @@ export function aggiornaPiedeChat(piede, dati = {}) {
   const permesso = piede.querySelector('[data-open-sheet="permissions"]');
   if (permesso) {
     const label = permesso.querySelector('.talos-chip__label');
-    if (label) label.textContent = etichettaPermessoConEccezioni(dati.permesso, dati.permessiPerAttrezzo);
-    const regole = regolePerAttrezzo(dati.permessiPerAttrezzo);
-    permesso.title = regole.length
-      ? t('chat.foot.permission.changeWithExceptions', { eccezioni: regole.map(([k, v]) => `${k} → ${v}`).join(', ') })
-      : t('chat.foot.permission.change');
+    /* C1 (owner 10/10/2026): cosa passa senza chiedere, come Cline; la politica e il resto nel suggerimento (`riassuntoSenzaChiedere`) */
+    const riassunto = riassuntoSenzaChiedere(dati.permesso, dati.permessiPerAttrezzo, { modalitaOperativa: dati.modalitaOperativa });
+    if (label) label.textContent = riassunto.testo;
+    permesso.title = riassunto.suggerimento;
     permesso.classList.remove('talos-badge--warning', 'talos-badge--danger');
     const tono = tonoPermesso(dati.permesso);
     if (tono) permesso.classList.add(`talos-badge--${tono}`);

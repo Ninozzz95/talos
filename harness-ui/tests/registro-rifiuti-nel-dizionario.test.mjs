@@ -160,6 +160,7 @@ const CODICI_DI_RIPIEGO = {
   'provider-key-missing-named': ['CONFIG_INVALID'],
   'folder-link-unavailable': ['WORKSPACE_LAUNCH_NOT_AVAILABLE', 'WORKSPACE_NOT_AVAILABLE'],
   'workflow-step-not-started': ['INTERNAL_ERROR'],
+  'workflow-step-not-resumed': ['INTERNAL_ERROR'], // C3 tappa 2b: la ripresa del passo che `resume` rifiuta senza un codice suo
   'automation-run-not-started': ['INTERNAL_ERROR'],
 };
 function rifiutiDelSorgente() {

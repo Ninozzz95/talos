@@ -108,3 +108,14 @@ test('GRAFO-NODO-COMPATTO: contatori senza elenco ⇒ numero di file nel nodo, s
   assert.equal(t.file, null, 'senza elenchi la sintesi non inventa un conteggio di file unici');
   assert.equal(t.parziale, true);
 });
+
+// C3 tappa 4 (owner 09/10): una figlia in pausa chiude il turno con un RunError «in-pausa» (`ultimoEsito:'errore'`): nel diagramma
+// è «paused», mai «error» né «done»; e al contrario una fallita vera resta «error».
+test('C3-GRAFO-PAUSA — paused is its own state, never error or done', () => {
+  const g = modelloGrafoAgenti({ corrente: { sessionId: 'p' }, figli: [
+    { sessionId: 'a', conclusa: true, ultimoEsito: 'errore', esitoDelega: 'in-pausa', motivoChiusura: 'in-pausa' },
+    { sessionId: 'b', conclusa: true, ultimoEsito: 'errore', esitoDelega: 'fallito', motivoChiusura: 'errore' },
+  ] });
+  assert.equal(g.nodi.find((n) => n.id === 'a').stato, 'paused');
+  assert.equal(g.nodi.find((n) => n.id === 'b').stato, 'error');
+});

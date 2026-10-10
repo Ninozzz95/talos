@@ -58,7 +58,7 @@ test('G02-2 the real kernel: a gated write reaches the UI with its own receipt',
   };
   const events = [];
   await avviaSessione({cartella: root, task: {consegna: 'x'}, modello: 'm', chiave: 'k', comandoProva: 'npm test', onEvento: (e) => events.push(e),
-    talosLavoraFn: (input) => talosLavora({...input, onDelta: undefined, fetchDiRete, livelloAccesso: 'completo', _giriMassimiInterno: 3})});
+    talosLavoraFn: (input) => talosLavora({...input, onDelta: undefined, fetchDiRete, livelloAccesso: 'scrittura-progetto', _giriMassimiInterno: 3})});
   const result = events.find((e) => e.type === 'ToolCallResult' && e.toolCallId === 'call_w');
   assert.ok(result, 'the write produced a ToolCallResult');
   assert.equal(result.receipt?.toolCallId, 'call_w');

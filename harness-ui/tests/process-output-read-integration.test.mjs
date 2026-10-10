@@ -78,7 +78,7 @@ test('OUTPUT15-REAL: real session/process -> reference -> tool read -> HTTP -> r
   };
   const options={cartellaStore:join(root,'sessions'),modello:'fixture',chiave:'fixture',guardaWorkspaceFn:()=>()=>{},processOutputStoreFn:()=>delayedStore??store,
     preparaEsecuzioneFn:id=>({cartella:root,task:{id,consegna:'Leggi il risultato del comando.'}}),
-    avviaSessioneFn:input=>avviaSessione({...input,cartella:root,livelloAccesso:'completo',contestoDelProgettoFn:async()=>null,leggiContestoWorkspaceFn:()=>({}),
+    avviaSessioneFn:input=>avviaSessione({...input,cartella:root,livelloAccesso: 'scrittura-progetto',contestoDelProgettoFn:async()=>null,leggiContestoWorkspaceFn:()=>({}),
       talosLavoraFn:input=>talosLavora({...input,fetchDiRete:fetchFixture,onDelta:undefined,_giriMassimiInterno:4,ambienteComandiFn:()=>({dove:'windows',revisione:0})}),
     }),
   };

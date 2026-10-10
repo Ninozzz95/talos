@@ -175,7 +175,7 @@ const VESTITO=Object.freeze({
    rilegge il filtro, e due stringhe scritte a mano in due punti sono un rinominamento mancato. */
 const FILTRO_CHIP='providerFilter';
 function vesti(nodo,stile){if(nodo)Object.assign(nodo.style,stile);return nodo;}
-function campo(label,tipo,key,row,valore=''){const wrap=el('label','talos-stack talos-provider__field');wrap.append(el('span','talos-muted',label));const input=el('input','talos-field__input');input.type=tipo;input.dataset[key]=row.id;input.autocomplete='off';input.value=valore;if(tipo==='password'){input.spellcheck=false;input.placeholder=row.keyConfigured?t('modelli.provider.pasteNewKey'):t('modelli.provider.pasteKey');}if(tipo==='number'){input.min='5';input.max='300';input.step='1';}wrap.append(input);return wrap;}
+function campo(label,tipo,key,row,valore=''){const wrap=el('label','talos-stack talos-provider__field');wrap.append(el('span','talos-muted',label));const input=el('input','talos-field__input');input.type=tipo;input.dataset[key]=row.id;input.autocomplete='off';input.value=valore;if(tipo==='password'){input.spellcheck=false;input.placeholder=row.keyConfigured?t('modelli.provider.pasteNewKey'):t('modelli.provider.pasteKey');}if(tipo==='number'){input.min='5';input.max=key==='providerTimeout'?'1800':'300';input.step='1';input.dataset.valoreIniziale=String(valore);}wrap.append(input);return wrap;}
 // P-K-bis/P-L-bis: identità esplicite e configurazione non segreta del processo.
 const CLOUD_CONFIGURABILI=new Set(['azure','vertex','bedrock']);
 function multiriga(label,key,row,valore=''){
@@ -190,7 +190,12 @@ export function leggiCollegamentoProvider(row,card){
  if(row.id==='esterno')return {agente:{comando:valore('[data-provider-comando]').trim(),
   argomenti:valore('[data-provider-argomenti]').split(/\r?\n/u).filter(v=>v!==''),cwd:valore('[data-provider-cwd]').trim(),
   variabiliAmbiente:righe('[data-provider-variabili]'),timeoutMs:Number(valore('[data-provider-tempo-agente]'))*1000}};
- return {endpoint:valore('[data-provider-endpoint]').trim(),timeoutSeconds:Number(valore('[data-provider-timeout]')||60),
+ /* OWN-01 (09/10/2026, CLI + bugfixer): il tempo alla prima risposta parte SOLO se la persona l'ha cambiato — altrimenti ogni
+    salvataggio dell'indirizzo lo marcava come scelto (`timeoutScelto`) e il predefinito del server (600 s) non poteva più
+    cambiare. Il confronto è col valore con cui il campo è nato (`data-valore-iniziale`, quello del server). */
+ const campoTempo=card.querySelector('[data-provider-timeout]');
+ const tempoCambiato=Boolean(campoTempo)&&(campoTempo.dataset?.valoreIniziale===undefined||campoTempo.value!==campoTempo.dataset.valoreIniziale); // un campo senza valore d'origine noto (non nato da `campo`) manda il tempo, come prima
+ return {endpoint:valore('[data-provider-endpoint]').trim(),...(tempoCambiato?{timeoutSeconds:Number(campoTempo.value||600)}:{}),
   ...(CLOUD_CONFIGURABILI.has(row.id)?{modelli:righe('[data-provider-modelli]').map(id=>{
    const nome=row.modelli?.find(m=>m.id===id)?.nome;return {id,...(nome?{nome}:{})};
   })}:{})};
@@ -518,7 +523,8 @@ function apriConfigurazioneProvider(card,row,{onSalvaConfigurazione=null,onConfi
    if(dialogo.dataset.salvataggio==='in-corso')return;
    const chiave=(campoChiave?.value||'').trim();
    const letto=salvaRuntime&&!configurazionePropria?leggiCollegamentoProvider(row,corpo):null;
-   const collegamento=letto&&(letto.endpoint!==(row.endpoint||'')||letto.timeoutSeconds!==Number(row.timeoutSeconds??60))?{endpoint:letto.endpoint,timeoutSeconds:letto.timeoutSeconds}:null;
+   const tempoCambiato=Boolean(letto)&&Object.hasOwn(letto,'timeoutSeconds'); // OWN-01: parte solo se cambiato (`leggiCollegamentoProvider`)
+   const collegamento=letto&&(letto.endpoint!==(row.endpoint||'')||tempoCambiato)?{endpoint:letto.endpoint,...(tempoCambiato?{timeoutSeconds:letto.timeoutSeconds}:{})}:null;
    /* Decisione 14: gli esclusi in bozza si salvano con questo stesso «Salva»; un nome scritto e non valido ferma tutto, con l'errore accanto al campo. */
    const esclusi=bozzeEsclusi.get(corpo.querySelector('[data-provider-esclusi]'));
    if(esclusi&&!esclusi.prendiDalCampo())return;
@@ -1000,7 +1006,7 @@ export function creaProviderCard(row,{aperta=false,prova=null,occupato=false,onM
  }
  if(esterno)aggiungiCampiAgente(body,row);
  // P-K — fine
- if(d.tempo&&!esterno)body.append(campo(t('modelli.provider.timeoutSeconds'),'number','providerTimeout',row,String(row.timeoutSeconds??60)));
+ if(d.tempo&&!esterno)body.append(campo(t('modelli.provider.timeoutSeconds'),'number','providerTimeout',row,String(row.timeoutSeconds??600))); // OWN-01: il server lo manda sempre; 600 è il suo predefinito
  /*
   * ⛔ Una sola azione a vista: salvare la chiave appena incollata. Le altre sono azioni su
   *   qualcosa di GIÀ configurato — si fanno una volta ogni tanto, non mentre stai configurando —

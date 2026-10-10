@@ -41,7 +41,7 @@ test('WF08-ABSOLUTE: native Windows metadata fails in Linux Git; the selected ag
   const f=fixture(t),before=f.snapshot(),metadata=readFileSync(join(f.work,'.git'),'utf8');assert.match(metadata,/gitdir: [A-Z]:\//i);
   assert.equal(f.git(['rev-parse','HEAD'],f.work),f.head);f.linux(['rev-parse','HEAD'],128);
   let calls=0;const events=[];
-  const result=await talosLavora({cartella:f.work,task:{consegna:'Leggi il commit corrente senza modificare file.'},modello:'fixture',chiave:'fixture',livelloAccesso:'completo',_giriMassimiInterno:3,
+  const result=await talosLavora({cartella:f.work,task:{consegna:'Leggi il commit corrente senza modificare file.'},modello:'fixture',chiave:'fixture',livelloAccesso: 'scrittura-progetto',_giriMassimiInterno:3,
     ambienteComandiFn:()=>({dove:'windows',revisione:0}),
     fetchDiRete:async()=>Response.json({choices:[{message:++calls===1?{role:'assistant',content:'',tool_calls:[{id:'git-head',type:'function',function:{name:'shell',arguments:JSON.stringify({comando:'git -c core.fsmonitor=false --no-optional-locks rev-parse HEAD'})}}]}:{role:'assistant',content:'Letto.'},finish_reason:calls===1?'tool_calls':'stop'}]}),
     onGiro:e=>events.push(e),

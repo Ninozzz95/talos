@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { collegaNavigazioneSpina } from '../../src/components/conversazione.js';
 import TESTI_CHAT from '../../src/i18n/testi/chat.js';
+import { bollaPerLaRigiocata } from '../../src/components/bolla-della-persona.js';
 
 /*
  * ⭐⭐ BUG-24, 06/10/2026 — IL BANCO DELLA FINESTRA DI REPLAY (Mosse 1 del dossier
@@ -158,6 +159,19 @@ function bancoFinestra({ generation = 7, inRigiocata = true, autoFollow = true, 
     revisioneLayoutConversazione: 0, // A1: smonta e aggiungi pagina la toccano in modo SINCRONO
     document: documentoFinto(),
     tr: (chiave) => `«${chiave}»`,
+    evidenziaInAttesa: (turno) => { contesto.colorati.push(turno); return 0; }, // B1: i turni che tornano si colorano
+    colorati: [],
+    aggiornaSegmentiRinviati: (turno) => { contesto.segmentiAggiornati.push(turno); }, // B1 parte 2: e i loro segmenti si riassumono
+    segmentiAggiornati: [],
+    segmentiRinviati: new Set(), // B1 parte 2: `resettaFinestraReplay` lo svuota
+    davantiAlTurno: new WeakMap(), // B1 parte 3: i separatori che stanno davanti a un turno staccato (qui la colonna finta non ne ha)
+    // review B1 parte 3: i separatori staccati per chiave (la colonna finta non ne ha: si contano solo le chiamate)
+    separatoriStaccati: () => contesto.mappaSeparatori,
+    mappaSeparatori: new Map(),
+    ricordaSeparatoriStaccati: (nodi) => { contesto.ricordati.push(nodi.length); },
+    ricordati: [],
+    dimenticaSeparatoriRimontati: (nodi) => { contesto.dimenticati.push(nodi.length); },
+    dimenticati: [],
   };
   contesto.pesoTurnoReplay = funzione('pesoTurnoReplay', contesto);
   contesto.smontaTurnoPiuVecchioReplay = funzione('smontaTurnoPiuVecchioReplay', contesto);
@@ -275,6 +289,8 @@ test('B24-03 PREPEND-ANCORATO: la pagina vecchia torna in testa, ordine preserva
     assert.deepEqual(b.colonna.children.map((t) => t.nome), ['vec1', 'vec2', 'vec3', 'vec4', 'vivo'], 'la pagina vecchia torna in TESTA alla colonna, in ordine vecchio→nuovo, sopra la coda viva');
     assert.equal(b.turniFuoriFinestra.length, 0, 'la pagina consuma il registro fino all\'ultima pagina');
     assert.equal(b.pesoFinestraReplay, 40, 'il peso della pagina rientra nell\'ammontare della finestra (40 = 4×10)');
+    assert.deepEqual(b.colorati.map((t) => t.nome), ['vec1', 'vec2', 'vec3', 'vec4'], 'B1: il codice dei turni che tornano si colora, uno per uno');
+    assert.deepEqual(b.segmentiAggiornati.map((t) => t.nome), ['vec1', 'vec2', 'vec3', 'vec4'], 'B1 parte 2: e i loro segmenti si riassumono');
     return b;
   };
   controllo(APP);
@@ -557,6 +573,7 @@ function bancoCambioSessione(b) {
     frameGrafoMadre: null, agentiInDiretta: new Map(), frameAgentiInDiretta: null, figliLettura: 0,
     figliErrore: null, figliAggiornati: null, contextCompactor: null, contextMonitor: null,
     contextChatSnapshot: null, richiestaCacheSessione: null,
+    risorseProcessi: { timer: 0, inVolo: false, letture: 2, vivi: 0, agganciato: true }, // C1 (10/10/2026): CPU e memoria, la lettura riparte al cambio
     $: (selector) => selector === '#conversation' ? b.colonna : null,
   });
   b.colonna.classList = { remove: niente };
@@ -566,7 +583,9 @@ function bancoCambioSessione(b) {
     'cancellaRenderAlberoDifferito', 'smontaStatoVuoto', 'aggiornaSpazioCodaConversazione',
     'programmaSchedeAgente', 'renderizzaBannerCoda', 'resettaSuperficiRealiDedicate',
     'disegnaFasciaPianoRichiesto', 'disegnaFasciaModoRitirato', 'programmaSchedaGithub',
-    'nascondiAvvisoPiano', 'syncRunComposerState']) b[nome] = niente;
+    'nascondiAvvisoPiano', 'syncRunComposerState',
+    'azzeraSchedaContesto', // C1 (10/10/2026): la scheda Contesto della sessione di prima si dimentica al cambio
+    'parcheggiaChatAperta']) b[nome] = niente; // B1 (10/10/2026): il parcheggio della chat lasciata ha le sue prove (chat-pronte, b1-chat-pronte)
   return funzione('nuovaGenerazioneSessione', b);
 }
 
@@ -581,6 +600,9 @@ test('B24-10 SESSIONE-VUOTA-RESET: cambio senza eventi elimina subito registro e
   assert.equal(b.ultimoTurnoVistoFinestra, null);
   assert.equal(b.registroFinestraGenerazione, 8);
   assert.equal(b.scorrevole.querySelector(':scope > .talos-mostra-precedenti'), null);
+  // C1 (10/10/2026): CPU e memoria sono dei comandi della sessione di prima — si dimenticano, e la lettura riparte da capo
+  assert.equal(b.state.realSession.risorseProcessi, null);
+  assert.equal(b.risorseProcessi.letture, 0);
   b.aggiungiPaginaPrecedenti();
   assert.equal(b.colonna.children.length, 0, 'un gesto tardivo ha rimontato la chat precedente nella sessione vuota');
 });
@@ -1092,7 +1114,11 @@ function bancoBolleRigiocate({ restoring = false, differito = false } = {}) {
     aggiornaAvvisoSogliaContesto() {}, accendiRagionamentiApertiDopoLaStoria() {},
     disegnaTestiRimastiNellaStoria: () => { counts.testiRimasti = (counts.testiRimasti ?? 0) + 1; }, // TESTO-PERSO: il testo rimasto indietro, al confine
     aggiornaRiassuntoSegmento() {}, disegnaFasciaPianoRichiesto() {},
+    // B1 (09/10/2026 sera): al confine si colora il codice dei turni montati (`evidenziaInAttesa(colonnaConversazione(ROOT()))`)
+    evidenziaInAttesa: () => { counts.colorati = (counts.colorati ?? 0) + 1; return 0; }, ROOT: () => null, colonnaConversazione: () => null,
+    aggiornaSegmentiRinviati: () => { counts.segmenti = (counts.segmenti ?? 0) + 1; }, // B1 parte 2: al confine i segmenti montati
     aggiornaInspectorDaStato: () => { counts.inspector = (counts.inspector ?? 0) + 1; }, // B1: la colonna si disegna al confine
+    caricaDatiSchedaContesto: () => { counts.schedaContesto = (counts.schedaContesto ?? 0) + 1; }, // C1 (10/10): la scheda Contesto, per chi apre dopo
     aggiornaTestataSessione: () => { counts.testata = (counts.testata ?? 0) + 1; }, // A1-bis 5: il conteggio della Review torna al confine
     aggiornaPiedeChatDaStato: () => { counts.piede = (counts.piede ?? 0) + 1; }, // A1-bis 5: e il chip «Giri»
     reviewDaDisegnareDopoLaStoria: null, renderRealReviewList() {}, renderReviewFile() {}, aggiornaSommarioReviewReale() {}, // B1: la Review rinviata al confine
@@ -1106,6 +1132,8 @@ function bancoBolleRigiocate({ restoring = false, differito = false } = {}) {
     syncRunComposerState() {}, segnaTappaLatenza() {}, mostraRisultatoDelega: () => false, mostraDialogoAgente: () => false, eDialogoAgente: () => false,
     segnaGiroNellaSpine() {}, mostraAttesaRisposta() {}, nascondiAttesaRisposta() {},
     programmaRenderAlberoReale() {}, programmaAggiornamentoElencoSessioniReali() {},
+    // C09 (10/10/2026): la bolla della persona in rigiocata, con la funzione vera (intestazione d'esempio: nessuna nelle fixture)
+    bollaRigiocata: (bolla, consegna, immagini) => bollaPerLaRigiocata({ bolla, consegna, immagini, lingue: { intestazioni: ['Attachments of this message:'], prefissiFile: ['attached file: '] } }),
   };
   for (const name of ['riarmaSeguiConversazione', 'scorriAllaBollaAppesa',
     'appendRealTaskStart', 'appendUserFollowUp', 'appendComandoDiretto', 'handleRealEvent']) {
@@ -1205,6 +1233,8 @@ test('B24-45 CONFINE-REPLAY-RIPRISTINA-DIRETTA: marker vero dedup e generazione 
   assert.equal(h.b.state.realSession.inRigiocata, false);
   assert.equal(h.b.state.realSession.deferHistoricalRendering, false);
   assert.equal(h.counts.inspector, 1, 'B1: al confine della storia la colonna rimasta sporca si disegna, una volta');
+  assert.equal(h.counts.colorati, 1, 'B1 (09/10 sera): al confine il codice dei turni montati si colora, una volta');
+  assert.equal(h.counts.segmenti, 1, 'B1 parte 2: al confine i segmenti montati si riassumono, una volta');
   assert.equal(h.counts.testata, 1, 'A1-bis 5: al confine la testata ridisegna il conteggio della Review, una volta');
   assert.equal(h.counts.piede, 1, 'A1-bis 5: e il piede il chip «Giri»');
   h.b.handleRealEvent({ ...event, testo: 'Ora vivo', _sequenza: 24 }, 7);

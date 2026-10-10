@@ -1,3 +1,5 @@
+import { passoFinito } from './stati-finali.mjs';
+
 const DIMENSIONS = Object.freeze([
   'promptTokens', 'completionTokens', 'wallMs', 'agentSeconds',
   'toolCalls', 'modelRequests', 'knownCostUsd',
@@ -6,6 +8,10 @@ const INTEGER_DIMENSIONS = DIMENSIONS.filter((key) => key !== 'knownCostUsd');
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 const RELEASE_REASONS = new Set([
   'not_started', 'cancelled_before_effect', 'fallback_transfer', 'reconciled_not_performed',
+  // C3 tappa 2 (09/10/2026, decisione owner): un tentativo INCERTO deciso dalla persona si rilascia, consumo sconosciuto
+  'person_resolved',
+  // C3 tappa 5 (09/10/2026, prova dal vivo): un tentativo fallito PRIMA che la sua sessione esistesse non ha speso niente
+  'failed_before_session',
 ]);
 
 export class WorkflowBudgetError extends Error {
@@ -16,7 +22,48 @@ export class WorkflowBudgetError extends Error {
   }
 }
 
-const fail = (message, code) => { throw new WorkflowBudgetError(message, code); };
+const fail = (message, code, dettagli = null) => { throw Object.assign(new WorkflowBudgetError(message, code), dettagli ?? {}); };
+
+/* Le voci che un tentativo riserva dal budget del passo (il costo a parte: si riserva solo se il passo lo dichiara). */
+const DIMENSIONI_DELLA_RISERVA = Object.freeze(['promptTokens', 'completionTokens', 'wallMs', 'agentSeconds', 'toolCalls', 'modelRequests']);
+
+/**
+ * Owner 25/09 «budget pieno a ogni tentativo»: ogni tentativo riserva il budget del passo (con zeri, il consumo vero è un overrun).
+ * C3 tappa 3 (09/10/2026): spostata qui da `scheduler.mjs` — la usano lo scheduler (la riserva vera) e `aumentoPerFinire` (la
+ * cifra detta prima): due copie direbbero due numeri diversi per lo stesso passo.
+ */
+export function riservaDelPasso(step, definition) {
+  const riserva = {};
+  for (const chiave of DIMENSIONI_DELLA_RISERVA) riserva[chiave] = step.budget?.[chiave] ?? definition.budgets?.[chiave] ?? 0;
+  riserva.knownCostUsd = step.budget?.knownCostUsd ?? null;
+  return riserva;
+}
+
+/**
+ * ⭐ C3 tappa 3 (09/10/2026, decisione owner: «quanto serve per finire») — di quanto il tetto del run deve crescere perché i passi
+ *   rimasti possano partire. Per ogni voce con un tetto: speso + riserve aperte + una riserva per ogni passo non finito che non
+ *   ne ha già una aperta − tetto di adesso (con gli aumenti già concessi), mai sotto zero. È una STIMA dichiarata: suppone che
+ *   ogni passo rimasto spenda la sua riserva una volta (un ritentativo automatico ne vorrebbe un'altra). Una voce senza tetto
+ *   del run non cresce. La stessa funzione dà l'anteprima sul pulsante e la cifra scritta nel fatto `budget_ceiling_raised`.
+ */
+export function aumentoPerFinire(state) {
+  const definition = state.definition;
+  const aperte = [...state.budget.reservations.values()];
+  const conRiserva = new Set(aperte.map((riserva) => riserva.nodeId));
+  const rimasti = [...state.nodes.values()].filter((node) => !passoFinito(node.state) && !conRiserva.has(node.nodeId));
+  const riserve = rimasti.map((node) => riservaDelPasso(definition.nodes.find((candidate) => candidate.id === node.nodeId) ?? {}, definition));
+  const aumento = {};
+  for (const key of DIMENSIONS) {
+    const tetto = definition.budgets?.[key];
+    if (tetto === null || tetto === undefined) { aumento[key] = 0; continue; }
+    const servono = state.budget.spent[key]
+      + aperte.reduce((somma, riserva) => somma + (riserva.reserved[key] ?? 0), 0)
+      + riserve.reduce((somma, riserva) => somma + (riserva[key] ?? 0), 0);
+    const mancano = servono - (tetto + (state.budget.ceilingRaise?.[key] ?? 0));
+    aumento[key] = mancano > 0 ? mancano : 0;
+  }
+  return { amount: aumento, nodeIds: rimasti.map((node) => node.nodeId).sort() };
+}
 
 function exactObject(value, keys, name) {
   if (value === null || typeof value !== 'object' || Array.isArray(value)
@@ -112,7 +159,8 @@ export function reserveBudget({ state, definition, events, input, at } = {}) {
     // F3-51b: il tetto del run cresce di quanto un Riprova ha concesso (fatto `retry_scheduled` `user_retry`, `run.mjs`)
     const tettoDelRun = ceiling.run + (state.budget.ceilingRaise?.[key] ?? 0);
     if (!Number.isFinite(total) || total > tettoDelRun) {
-      fail(`${key} exceeds run ceiling`, 'WORKFLOW_BUDGET_EXCEEDED');
+      // C3 tappa 3: chi riceve il no sa che è il tetto del RUN (lo alza la persona), non quello del passo
+      fail(`${key} exceeds run ceiling`, 'WORKFLOW_BUDGET_EXCEEDED', { scope: 'run', dimension: key, observed: total });
     }
   }
   return {
@@ -197,6 +245,13 @@ export function settleBudgetFromActivity({ state, events, reservationId } = {}) 
   return settleBudget({ state, reservationId, actual: terminal.payload.actualUsage });
 }
 
+/** Un `activity_failed` v2 che DICHIARA consumo e ricevuta assenti (le chiavi ci sono e valgono null). */
+export function fallitoSenzaConsumoDichiarato(event) {
+  return event?.type === 'activity_failed' && event.eventSchemaVersion === 2
+    && Object.hasOwn(event.payload ?? {}, 'actualUsage') && event.payload.actualUsage === null
+    && Object.hasOwn(event.payload ?? {}, 'receiptRef') && event.payload.receiptRef === null;
+}
+
 export function releaseBudget({ state, events, reservationId, reason } = {}) {
   uuid(reservationId, 'reservationId');
   const reservation = activeReservation(state, reservationId);
@@ -210,6 +265,27 @@ export function releaseBudget({ state, events, reservationId, reason } = {}) {
       && event.payload.outcome === 'proved_not_performed');
     if (!proved || activity?.state !== 'reconciled') {
       fail('no durable proof that the effect was not performed', 'WORKFLOW_BUDGET_EFFECT_NOT_EXCLUDED');
+    }
+  } else if (reason === 'person_resolved') {
+    // la prova è la decisione DUREVOLE della persona (`uncertain_resolved`), non un effetto escluso: i token restano sconosciuti
+    const deciso = events.some((event) => event.type === 'uncertain_resolved'
+      && event.activityExecutionId === reservation.activityExecutionId);
+    if (!deciso || activity?.state !== 'reconciled' || activity.reconcileOutcome !== 'person_resolved') {
+      fail('no durable decision of the person on this attempt', 'WORKFLOW_BUDGET_EFFECT_NOT_EXCLUDED');
+    }
+  } else if (reason === 'failed_before_session') {
+    /* la prova: il tentativo è FALLITO, la sua sessione non è mai nata (nessun `agent_session_created`) e il fallimento non
+       porta né consumo né ricevuta ⇒ nessuna richiesta è arrivata al fornitore. Hermes lo chiama `spawn_failed`. */
+    const sessione = events.some((event) => event.type === 'agent_session_created'
+      && event.activityExecutionId === reservation.activityExecutionId);
+    const fallito = events.filter((event) => event.type === 'activity_failed'
+      && event.activityExecutionId === reservation.activityExecutionId);
+    /* review Y2 del bugfixer: «nessuna sessione ⇒ nessuna richiesta al fornitore» vale per l'adattatore AGENTE, e solo su un fatto
+       v2 che DICHIARA consumo e ricevuta assenti (in v1 le chiavi mancano: `== null` le avrebbe prese per vuote) */
+    const passo = state.definition?.nodes?.find((node) => node.id === reservation.nodeId);
+    if (sessione || activity?.state !== 'failed' || fallito.length !== 1 || passo?.kind !== 'agent'
+      || !fallitoSenzaConsumoDichiarato(fallito[0])) {
+      fail('no durable proof that the attempt failed before its session', 'WORKFLOW_BUDGET_EFFECT_NOT_EXCLUDED');
     }
   } else if (activity) {
     fail('scheduled activity has no durable no-effect proof', 'WORKFLOW_BUDGET_EFFECT_NOT_EXCLUDED');

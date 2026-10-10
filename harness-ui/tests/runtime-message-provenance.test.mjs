@@ -29,7 +29,7 @@ async function run(runtime, cartella, batches, options = {}) {
   const result = await runtime({
     cartella, task: { consegna: PROMPT }, messaggiIniziali: history(PROMPT),
     modello: 'fixture/provenance', chiave: 'fixture', _giriMassimiInterno: 30,
-    livelloAccesso: 'completo', strumentiEstesi: ['file_edit'],
+    livelloAccesso: 'scrittura-progetto', strumentiEstesi: ['file_edit'],
     ...options,
     fetchDiRete: async (_url, init) => {
       const body = JSON.parse(init.body);

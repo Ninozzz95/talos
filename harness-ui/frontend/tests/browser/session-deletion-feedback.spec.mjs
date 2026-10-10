@@ -65,12 +65,15 @@ async function open(page, f, {theme = 'dark', denied = false, active = true} = {
   await page.route('**/api/v1/sessions**', async route => {
     const req = route.request(), url = new URL(req.url());
     if (url.pathname === '/api/v1/sessions' || url.pathname.startsWith(`/api/v1/sessions/${f.sessionId}/`)) {
+      /* La guardia d'origine (859f842cd) accetta una scrittura solo dalla finestra servita da QUEL server: la richiesta inoltrata
+         porta l'Origin della fixture, come se la pagina venisse da lei (la pagina vera sta sul server di prova, un'altra porta). */
+      const headers = {...req.headers(), origin: f.base};
       if (req.method() === 'POST' && url.pathname.endsWith('/delete')) {
-        const response = await route.fetch({url: f.base + url.pathname + url.search});
+        const response = await route.fetch({url: f.base + url.pathname + url.search, headers});
         f.deleteResponse = await response.json();
         return route.fulfill({response, json: f.deleteResponse});
       }
-      return route.continue({url: f.base + url.pathname + url.search});
+      return route.continue({url: f.base + url.pathname + url.search, headers});
     }
     return route.fallback();
   });

@@ -24,7 +24,9 @@
 /** Le quattro vie del «+», nell'ordine in cui si usano (B6). */
 /* 03/10/2026, seconda ondata della lingua: etichetta e aiuto si leggono dal dizionario (`chat.attachments.via.*`), nella lingua
    corrente; `id` e `icona` sono dati di logica. */
-import { t } from './lingua.js';
+import { t, linguaCorrenteDiT } from './lingua.js';
+/* Owner 03/10/2026 «ogni parola in inglese e italiano»: anche il numero del costo segue la lingua (1.3k / 1,3k). */
+const localeUI = () => (linguaCorrenteDiT() === 'en' ? 'en-US' : 'it-IT');
 const via = (id, icona) => Object.freeze(Object.defineProperties({ id, icona }, {
   etichetta: { enumerable: true, get: () => t(`chat.attachments.via.${id}.label`) },
   aiuto: { enumerable: true, get: () => t(`chat.attachments.via.${id}.help`) },
@@ -100,7 +102,8 @@ export function etichettaCosto(token) {
   const n = Number(token);
   if (!Number.isFinite(n) || n <= 0) return '';
   if (n < 1000) return `~${n} token`;
-  return `~${(n / 1000).toFixed(n < 10000 ? 1 : 0).replace('.', ',')}k token`;
+  const cifre = n < 10000 ? 1 : 0;
+  return `~${new Intl.NumberFormat(localeUI(), { minimumFractionDigits: cifre, maximumFractionDigits: cifre }).format(Number((n / 1000).toFixed(cifre)))}k token`;
 }
 
 /**
@@ -151,11 +154,13 @@ export function nomeBreveAllegato(percorso, massimo = 28) {
 
 /** Il tipo di allegato, detto come lo direbbe una persona. */
 export function generePerLoSchermo(allegato) {
-  if (!allegato) return 'allegato';
-  if (allegato.daBrowser) return 'pagina aperta';
-  if (allegato.tipo === 'immagine') return 'immagine';
-  if (allegato.tipo === 'schermata') return 'schermata';
-  return 'file';
+  /* C09 (10/10/2026, trovato rigiocando la bolla): queste parole stavano scritte in italiano qui dentro, fuori dal dizionario, e
+     restavano italiane anche con l'interfaccia in inglese. */
+  if (!allegato) return t('chat.attachments.genre.attachment');
+  if (allegato.daBrowser) return t('chat.attachments.genre.page');
+  if (allegato.tipo === 'immagine') return t('chat.attachments.genre.image');
+  if (allegato.tipo === 'schermata') return t('chat.attachments.genre.screenshot');
+  return t('chat.attachments.genre.file');
 }
 
 /**

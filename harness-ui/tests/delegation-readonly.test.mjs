@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import fsPromises from 'node:fs/promises';
 import { syncBuiltinESMExports } from 'node:module';
-import { creaSubagentOrchestrator, taskRichiedeEvidenzaScrittura, esitoDelegaDaEventi } from '../src/subagent-orchestrator.mjs';
+import { creaSubagentOrchestrator, taskRichiedeEvidenzaScrittura, esitoDelegaDaEventi, verdettoDelegaDaEventi } from '../src/subagent-orchestrator.mjs';
 import { avviaSessione } from '../src/agent-service.mjs';
 import { talosLavora } from '../src/kernel/talosHarness.mjs';
 import { createSessionRegistry } from '../src/session-registry.mjs';
@@ -27,22 +27,51 @@ test('DELEGHE02-NEGATION: historical read-only requests do not demand a write', 
   }
 });
 
-test('DELEGHE02-MIXED: a local prohibition does not erase the requested modification', () => {
+/* ⛔ C3 tappa 4 (09/10/2026, decisione owner «fatti strutturati + nota»): una modifica chiesta e non fatta NON è più un
+   fallimento. Il giornale vecchio senza contratto la riconosce ancora dal testo (ripiego `euristico`), ma solo per la NOTA
+   «nessuna modifica fatta»: l'esito resta concluso, come in Hermes (`delegate_tool_child_run.py:563-586`). */
+test('DELEGHE02-MIXED (C3 stage 4): a local prohibition does not erase the requested modification — it becomes the «no change made» note', () => {
   for (const task of ['Scrivi A senza modificare B.', 'Non modificare B. Aggiungi un test in A.',
     'Write A without modifying B.', 'Read B and update A without deleting B.']) {
     assert.equal(taskRichiedeEvidenzaScrittura(task), true, task);
-    assert.equal(esitoDelegaDaEventi(eventiLettura, { task }), 'fallito', task);
+    assert.deepEqual(verdettoDelegaDaEventi(eventiLettura, { task }), { esito: 'concluso', nota: 'nessuna-modifica', verdetto: 'euristico' }, task);
   }
-  assert.equal(esitoDelegaDaEventi(eventiLettura, { task: taskLettura }), 'concluso');
+  assert.deepEqual(verdettoDelegaDaEventi(eventiLettura, { task: taskLettura }), { esito: 'concluso', nota: null, verdetto: 'euristico' },
+    'a declared read: no note (the old RunFinished has no result, hence «euristico»)');
 });
 
-test('DELEGHE02-UNFULFILLED: read-only capability cannot turn an unperformed requested write into success', () => {
-  assert.equal(esitoDelegaDaEventi(eventiLettura, {
+test('DELEGHE02-UNFULFILLED (C3 stage 4): the text of the task no longer decides; a corrupt contract still fails', () => {
+  assert.deepEqual(verdettoDelegaDaEventi(eventiLettura, {
     task: { consegna: 'Scrivi alpha.txt.', contrattoDelega: contratto('lettura') },
-  }), 'fallito');
+  }), { esito: 'concluso', nota: null, verdetto: 'euristico' }, 'a declared read is judged by its facts, whatever the words');
   assert.equal(esitoDelegaDaEventi([{ type: 'RunFinished' }], {
     task: { consegna: 'Analizza.', contrattoDelega: { schema: 'corrupt' } },
   }), 'fallito');
+});
+
+/* ⭐ C3-07 (contratto C3 §6.7): la STESSA delega con la consegna in italiano, inglese e tedesco ha lo stesso verdetto. Prima il
+   tedesco cambiava tutto: le regex conoscevano solo «scrivi»/«write». */
+test('C3-07 SAME-VERDICT-IN-ANY-LANGUAGE: the same delegation in IT, EN and DE has the same verdict, from the structured facts', () => {
+  const finale = { type: 'RunFinished', result: { detto: 'Done.' } };
+  const lettura = [{ type: 'ToolCallResult', isError: false, content: 'ok' }, finale];
+  const scrittura = [{ type: 'StateDelta', delta: [{ op: 'add', path: '/file/src/a.js', value: 'x' }] }, { type: 'ToolCallResult', isError: false, content: 'ok' }, finale];
+  const tuttiFalliti = [{ type: 'ToolCallResult', isError: true, content: 'boom' }, finale];
+  const consegne = ['Aggiorna src/a.js con la nuova funzione.', 'Update src/a.js with the new function.', 'Aktualisiere src/a.js mit der neuen Funktion.'];
+  for (const modalita of ['modifica', 'lettura']) {
+    const verdetti = consegne.map((consegna) => {
+      const task = { consegna, contrattoDelega: contratto(modalita) };
+      return [verdettoDelegaDaEventi(lettura, { task }), verdettoDelegaDaEventi(scrittura, { task }), verdettoDelegaDaEventi(tuttiFalliti, { task })];
+    });
+    assert.deepEqual(verdetti[1], verdetti[0], `${modalita}: EN = IT`);
+    assert.deepEqual(verdetti[2], verdetti[0], `${modalita}: DE = IT`);
+    assert.equal(verdetti[0][0].verdetto, 'strutturato');
+    assert.deepEqual(verdetti[0].map((v) => [v.esito, v.nota]), modalita === 'modifica'
+      ? [['concluso', 'nessuna-modifica'], ['concluso', null], ['fallito', null]]
+      : [['concluso', null], ['concluso', null], ['fallito', null]], modalita);
+  }
+  // senza riassunto il lavoro non è finito (Hermes: «failed» senza un riassunto usabile), in qualunque lingua
+  const vuoto = [{ type: 'ToolCallResult', isError: false, content: 'ok' }, { type: 'RunFinished', result: { detto: '   ' } }];
+  for (const consegna of consegne) assert.equal(esitoDelegaDaEventi(vuoto, { task: { consegna, contrattoDelega: contratto('lettura') } }), 'fallito', consegna);
 });
 
 function orchestrator(parent = {}) {

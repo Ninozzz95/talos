@@ -65,7 +65,12 @@ const rejects = (value, pattern = /event/i) => assert.throws(
 );
 
 test('EVENT-TYPE-CLOSED-SET / EVENT-NO-NODE-READY-DURABLE / EVENT-NO-NODE-LEASED-DURABLE', () => {
-  assert.equal(WORKFLOW_EVENT_TYPES.length, 55);
+  // C3 (09/10/2026): +2, `node_set_aside` e `run_succeeded_with_set_aside` (le azioni della persona su un passo fallito);
+  // C3 tappa 2a: +1, `uncertain_resolved` (la persona decide di un passo incerto); tappa 3: +1, `budget_ceiling_raised`
+  assert.equal(WORKFLOW_EVENT_TYPES.length, 59);
+  assert.ok(WORKFLOW_EVENT_TYPES.includes('uncertain_resolved'));
+  assert.ok(WORKFLOW_EVENT_TYPES.includes('budget_ceiling_raised'));
+  assert.ok(WORKFLOW_EVENT_TYPES.includes('node_set_aside') && WORKFLOW_EVENT_TYPES.includes('run_succeeded_with_set_aside'));
   assert.equal(new Set(WORKFLOW_EVENT_TYPES).size, WORKFLOW_EVENT_TYPES.length);
   assert.equal(WORKFLOW_EVENT_TYPES.includes('node_ready'), false);
   assert.equal(WORKFLOW_EVENT_TYPES.includes('node_leased'), false);

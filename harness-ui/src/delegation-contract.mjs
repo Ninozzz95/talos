@@ -3,9 +3,9 @@
 const SCHEMA = 'talos.delegation.v1';
 const LETTURE = new Set([
   'elenca', 'cerca', 'leggi', 'naviga', 'web_search', 'time_now', 'carica_skill', 'process_output',
-  'library_list', 'library_search', 'library_read', 'library_file_origin',
-  'notes_list', 'notes_search', 'notes_read', 'tasks_list', 'tasks_search',
-  'memory_list', 'memory_search', 'research_list', 'research_read', 'research_search',
+  'library_find', 'library_read', 'library_file_origin',
+  'notes_find', 'notes_read', 'tasks_find', // C5: *_find accorpa l'elenco e la ricerca della sezione
+  'memory_find', 'research_find', 'research_read',
   'conversation_search', 'ask_parent', 'answer_parent_question',
 ]);
 

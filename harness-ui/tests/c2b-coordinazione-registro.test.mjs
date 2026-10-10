@@ -219,14 +219,14 @@ test('C2B-R-08 — il modello chiesto: solo fra i disponibili; dal locale al clo
 test('C2B-R-10 — la ricevuta dice come è partito l\'agente e su quale modello chiesto; senza segno, la frase di sempre', CON_TEMPO, async (t) => {
   const { input } = await scena(t, { extra: { coordinazione: true, modelliDisponibiliFn: async () => ['z-ai/glm-5.3-flash'] } })
   const daSolo = await input.onDelega('figlia', '/tmp/x', { avvio: 'da-solo' })
-  assert.match(daSolo.riassunto, /\. It started on its own \(Coordination is on in this conversation\)\. Keep working:/u)
+  assert.match(daSolo.riassunto, /\. It started on its own \(Coordination is on in this conversation\)\. Work on what does not depend on it\./u)
   assert.doesNotMatch(daSolo.riassunto, /It runs on/u, 'nessun modello chiesto: nessuna frase sul modello')
   const consentito = await input.onDelega('figlia', '/tmp/x', { avvio: 'consentito', modello: 'z-ai/glm-5.3-flash' })
-  assert.match(consentito.riassunto, /\. The person approved starting it\. It runs on z-ai\/glm-5\.3-flash, as the person asked\. Keep working:/u)
+  assert.match(consentito.riassunto, /\. The person approved starting it\. It runs on z-ai\/glm-5\.3-flash, as the person asked\. Work on what does not depend on it\./u)
   // AL CONTRARIO: senza `avvio` (la CLI) la ricevuta è quella di prima, parola per parola
   const { input: inputCli } = await scena(t, { extra: {} })
   const cli = await inputCli.onDelega('figlia', '/tmp/x', {})
-  assert.match(cli.riassunto, /^Sub-agent \S+ started in the background \(with the parent's permissions\)\. Keep working: the final result will be delivered separately when it is available\.$/u)
+  assert.match(cli.riassunto, /^Sub-agent \S+ started in the background \(with the parent's permissions\)\. Work on what does not depend on it\. Its result reaches you as a new message, delivered only after you END YOUR TURN: when nothing else is left, stop with a one-line status\. Do not wait with sleep and do not keep checking list_children for it\.$/u)
 })
 
 test('C2B-R-11 — HTTP: la rotta delle impostazioni accetta la chiave di Coordinazione (unione e mappa), e rifiuta un valore storto', CON_TEMPO, async (t) => {

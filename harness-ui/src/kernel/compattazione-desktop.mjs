@@ -518,6 +518,16 @@ export function creaContatoreRiassunto({ emetti, tentativo = 1, intervalloMs = I
  * blocco contiene SOLO fatti e puntatori. Senza i due parametri la proiezione resta CARATTERE PER CARATTERE
  * quella di prima (i test CTX-PURE la fissano).
  */
+/*
+ * ⭐ C1 (owner 09/10/2026 sera, il metodo approvato) — IL PUNTATORE DI RECUPERO in fondo al riassunto, come il «recovery footer» di
+ *   Hermes lean (`evals/compaction/README.md`: «the summary *plus* the session_search pointer it carries»; senza, «scores 30+ pts
+ *   lower on needle questions»). La parte riassunta resta intera nel giornale: `conversation_search` con `this_conversation` la
+ *   cerca e la rilegge, uscite degli attrezzi comprese (`conversazioni-per-il-modello.mjs`).
+ */
+export const RIGA_RECUPERO = 'Earlier parts of this conversation are summarized above and kept whole on disk. To recover an exact path, value, '
+  + 'error or tool output the summary does not carry, call conversation_search with this_conversation=true and the words to find, '
+  + 'then read around the hit with around_message.';
+
 export function costruisciProiezione({ testa = [], richiesteLetterali = [], riassunto = '', indice = '', coda = [], bloccoFatti = '', recintaSintesi = false } = {}) {
   const contenuto = [
     MARCATORE_RIASSUNTO,
@@ -525,6 +535,7 @@ export function costruisciProiezione({ testa = [], richiesteLetterali = [], rias
     String(riassunto ?? '').trim(),
     String(indice ?? '').trim(),
     String(bloccoFatti ?? '').trim(),
+    RIGA_RECUPERO,
   ].filter(Boolean).join('\n\n');
   return [...testa, ...richiesteLetterali, { role: 'user', content: contenuto }, ...coda];
 }

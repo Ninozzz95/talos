@@ -181,7 +181,7 @@ for (const tema of ['dark', 'light']) {
   test(`GITHUB-01 — la scheda dopo File: ramo, base dichiarata, i gruppi coi conteggi e le lettere (${tema})`, async ({ page }) => {
     const { contatore } = await preparaPagina(page, { tema });
     const schede = await page.locator('#railTabs [role="tab"]').allTextContents();
-    expect(schede.map((s) => s.trim()).slice(0, 3)).toEqual(['Contesto', 'File', 'GitHub']);
+    expect(schede.map((s) => s.trim()).slice(0, 3)).toEqual(['Contesto', 'File', 'Git']); // A22 (owner 09/10): la scheda si chiama Git
     await expect(page.locator('#railGithub .talos-github__testa')).toContainText('lavoro/f6');
     await expect(page.locator('#railGithub .talos-github__base')).toHaveText('Confronto con l’ultimo commit abc1234 — Primo commit');
     // F6-1 passo 3: in coda c'è «Commit recenti», chiuso e senza conteggio finché non si legge (decisione dell'owner: la storia in F6-1)
@@ -1328,4 +1328,148 @@ test('GITHUB-F62-GRAFO-09 — una risposta del diff arrivata TARDI non prende il
   await page.evaluate(() => new Promise((ok) => requestAnimationFrame(() => requestAnimationFrame(ok))));
   await expect(page.locator('.talos-github-diff .talos-github__base')).toHaveText('Confronto fra 9999999 e 2222222');
   await expect(page.locator('.talos-github-diff .talos-lettore__meta')).toContainText('2222222 · Dal remoto, il secondo');
+});
+
+/* ═══════════════════ C34 (bugfixer, 09/10/2026 sera) — la scheda Git si aggiorna da sola ═══════════════════
+ * Owner, più volte: «la scheda Git non si aggiorna da sola quando i file cambiano o si interagisce coi file». Come VS Code
+ * (`extensions/git/src/repository.ts`: `onFileChange` → `@debounce(1000)`, e lo stato si rilegge quando la finestra ha il fuoco). */
+const lettureStato = (f) => f.letture.filter((a) => a === 'status').length;
+const eventoVivo = (page, evento) => page.evaluate((e) => { const r = window.__talosHarnessUiRuntime; r.handleRealEvent(e, r.realSessionState.generation); }, evento);
+
+test('C34-01 — i file cambiati (WorkspaceChanged) rileggono la scheda Git dopo un secondo di quiete: una raffica è UNA lettura', async ({ page }) => {
+  const { f, contatore } = await preparaPagina(page);
+  await expect(page.locator('#railGithub .talos-github__testa')).toBeVisible();
+  await page.waitForTimeout(300);
+  const prima = lettureStato(f);
+  for (let i = 0; i < 5; i += 1) await eventoVivo(page, { type: 'WorkspaceChanged', percorsi: [`src/file-${i}.ts`], _sequenza: 9100 + i });
+  await page.waitForTimeout(400);
+  expect(lettureStato(f) - prima, 'prima del secondo di quiete non si rilegge niente').toBe(0);
+  await expect.poll(() => lettureStato(f) - prima, { timeout: 3000 }).toBe(1);
+  await page.waitForTimeout(1300);
+  expect(lettureStato(f) - prima, 'cinque cambiamenti di fila, una lettura sola').toBe(1);
+  expect(contatore.nonGet).toBe(0);
+});
+
+test('C34-02 — una rinomina fatta dalla scheda File segna la scheda Git: tornandoci, lo stato si rilegge', async ({ page }) => {
+  const { f } = await preparaPagina(page);
+  await expect(page.locator('#railGithub .talos-github__testa')).toBeVisible();
+  await page.route(`**/api/v1/sessions/${SESSIONE}/tree?*`, (r) => r.fulfill(busta({ voci: [{ nome: 'note.md', cartella: false }] })));
+  await page.route(`**/api/v1/sessions/${SESSIONE}/tree/rename`, (r) => r.fulfill(busta({})));
+  await page.locator('#railTabs [data-rail="file"]').click();
+  const nodo = page.locator('#alberoFile .ft-node[data-percorso="note.md"]');
+  await expect(nodo).toBeVisible();
+  const prima = lettureStato(f);
+  await nodo.locator(':scope > .ft-row').focus();
+  await page.keyboard.press('F2');
+  await nodo.locator('.ft-rename').fill('appunti.md');
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(1300);
+  await page.locator('#railTabs [data-rail="github"]').click();
+  await expect.poll(() => lettureStato(f) - prima, { timeout: 3000, message: 'la scheda Git deve rileggere lo stato dopo una rinomina' }).toBeGreaterThanOrEqual(1);
+});
+
+test('C34-03 — la finestra che torna in primo piano rilegge la scheda Git visibile (un commit fatto da un terminale non manda eventi)', async ({ page }) => {
+  const { f } = await preparaPagina(page);
+  await expect(page.locator('#railGithub .talos-github__testa')).toBeVisible();
+  await page.waitForTimeout(300);
+  const prima = lettureStato(f);
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect.poll(() => lettureStato(f) - prima, { timeout: 3000 }).toBe(1);
+});
+
+test('C34-04 — al contrario: un WorkspaceChanged della STORIA rigiocata non rilegge la scheda', async ({ page }) => {
+  // la storia di questa sessione porta tre WorkspaceChanged prima del confine: riaprirla legge lo stato una volta, come GITHUB-10
+  const SECONDA = 'scheda-github-storia';
+  const storia = [0, 1, 2].map((i) => ({ type: 'WorkspaceChanged', percorsi: [`a${i}.ts`], _sequenza: i + 1 }));
+  const corpo = `${storia.map((e) => `data: ${JSON.stringify(e)}\n\n`).join('')}${CONFINE}`;
+  const letture = { status: 0 };
+  const { f } = await preparaPagina(page);
+  await page.route(`**/api/v1/sessions/${SECONDA}/**`, async (route) => {
+    const p = new URL(route.request().url()).pathname;
+    if (p.endsWith('/events')) return route.fulfill({ contentType: 'text/event-stream', body: corpo });
+    if (p.endsWith('/git/status')) { letture.status += 1; return route.fulfill(busta(f.stato())); }
+    if (p.endsWith('/git/branch')) return route.fulfill(busta({ ramo: 'storia', staccata: false }));
+    return route.fallback();
+  });
+  await page.evaluate((id) => window.__talosHarnessUiRuntime.passaASessione(id, 'workspace', 'Storia', 'z-ai/glm-5.3-flash', { conclusa: true, modello: 'z-ai/glm-5.3-flash' }), SECONDA);
+  await page.waitForFunction(() => window.__talosHarnessUiRuntime.realSessionState.inRigiocata === false);
+  await expect(page.locator('#railGithub .talos-github__testa')).toContainText('storia');
+  await page.waitForTimeout(1500); // un rinvio di un secondo avrebbe il tempo di partire
+  expect(letture.status, 'tre WorkspaceChanged nella storia, una lettura sola').toBe(1);
+});
+
+/* C34, review del desktop (09/10/2026 notte): R1 il fuoco della tastiera, R2 il menu aperto, R3 il ritorno alla finestra. */
+const altroDi = (page, percorso, gruppo) => riga(page, percorso, gruppo).locator('[data-fuoco$=":altro"]');
+
+test('C34-05 — R1: il fuoco sul «⋯» di una riga sopravvive al ridisegno automatico; una riga sparita non lo sposta su un\'altra', async ({ page }) => {
+  const { f } = await preparaPagina(page);
+  await expect(riga(page, 'src/app.js', 'modificati')).toBeVisible();
+  await altroDi(page, 'src/app.js', 'modificati').focus();
+  const prima = lettureStato(f);
+  await eventoVivo(page, { type: 'WorkspaceChanged', percorsi: ['src/app.js'], _sequenza: 9201 });
+  await expect.poll(() => lettureStato(f) - prima, { timeout: 3000 }).toBe(1);
+  await page.waitForTimeout(200);
+  expect(await page.evaluate(() => document.activeElement?.dataset?.fuoco ?? document.activeElement?.tagName), 'il fuoco resta sul ⋯ della stessa riga').toBe('riga:modificati:src/app.js:altro');
+  // al contrario: la riga sparisce (il file è stato ripristinato fuori) — niente errori, e il fuoco non salta su un'altra riga
+  f.voci.splice(f.voci.findIndex((v) => v.percorso === 'src/app.js'), 1);
+  await eventoVivo(page, { type: 'WorkspaceChanged', percorsi: ['src/app.js'], _sequenza: 9202 });
+  await expect(riga(page, 'src/app.js', 'modificati')).toHaveCount(0, { timeout: 3000 });
+  const dopo = await page.evaluate(() => document.activeElement?.dataset?.fuoco ?? '');
+  expect(dopo.startsWith('riga:'), `il fuoco non salta su un'altra riga (${dopo})`).toBe(false);
+});
+
+test('C34-06 — R3: tornando alla finestra arrivano visibilitychange E focus, e la scheda si legge UNA volta', async ({ page }) => {
+  const { f } = await preparaPagina(page);
+  await expect(page.locator('#railGithub .talos-github__testa')).toBeVisible();
+  await page.waitForTimeout(300);
+  const prima = lettureStato(f);
+  await page.evaluate(() => { document.dispatchEvent(new Event('visibilitychange')); window.dispatchEvent(new Event('focus')); });
+  await expect.poll(() => lettureStato(f) - prima, { timeout: 3000 }).toBe(1);
+  await page.waitForTimeout(800);
+  expect(lettureStato(f) - prima, 'due eventi del ritorno, una lettura').toBe(1);
+});
+
+test('C34-07 — R2: sotto un menu «⋯» aperto la scheda non si ridisegna; chiuso il menu, si rilegge e il fuoco torna al «⋯»', async ({ page }) => {
+  const { f } = await preparaPagina(page);
+  await expect(riga(page, 'src/app.js', 'modificati')).toBeVisible();
+  await altroDi(page, 'src/app.js', 'modificati').click();
+  const menu = page.locator('.talos-menu-azioni--git');
+  await expect(menu).toBeVisible();
+  const prima = lettureStato(f);
+  await eventoVivo(page, { type: 'WorkspaceChanged', percorsi: ['src/app.js'], _sequenza: 9301 });
+  await page.waitForTimeout(1500);
+  expect(lettureStato(f) - prima, 'col menu aperto non si rilegge').toBe(0);
+  await expect(menu, 'e il menu resta lì, ancorato alla sua riga').toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(menu).toHaveCount(0);
+  await expect.poll(() => lettureStato(f) - prima, { timeout: 3000, message: 'chiuso il menu, la scheda sporca si rilegge' }).toBe(1);
+  await page.waitForTimeout(200);
+  expect(await page.evaluate(() => document.activeElement?.dataset?.fuoco ?? ''), 'il fuoco torna al ⋯ della riga').toBe('riga:modificati:src/app.js:altro');
+});
+/* ═══ REVISIONE C34 (sessione desktop, 09/10 notte): devono essere ROSSE sulla patch e VERDI dopo la cura ═══ */
+test('C34-REV-R1 — il fuoco da tastiera sul ⋯ di una riga resta su quella riga dopo un aggiornamento automatico', async ({ page }) => {
+  const { f } = await preparaPagina(page);
+  await expect(page.locator('#railGithub .talos-github__testa')).toBeVisible();
+  const altro = page.locator('#railGithub li.talos-github-riga[data-percorso="src/app.js"] button[aria-haspopup="menu"]');
+  await altro.focus();
+  await expect(altro).toBeFocused();
+  const prima = lettureStato(f);
+  await eventoVivo(page, { type: 'WorkspaceChanged', percorsi: ['src/altro.ts'], _sequenza: 9300 });
+  await expect.poll(() => lettureStato(f) - prima, { timeout: 3000 }).toBe(1);
+  await page.waitForTimeout(200);
+  const dove = await page.evaluate(() => {
+    const a = document.activeElement;
+    return { tag: a?.tagName, riga: a?.closest?.('li.talos-github-riga')?.dataset.percorso ?? null, menu: a?.getAttribute?.('aria-haspopup') ?? null };
+  });
+  expect(dove, 'il fuoco deve restare sul ⋯ di src/app.js, non finire su <body>').toEqual({ tag: 'BUTTON', riga: 'src/app.js', menu: 'menu' });
+});
+
+test('C34-REV-R3 — tornare alla finestra (visibilitychange + focus) rilegge la scheda UNA volta', async ({ page }) => {
+  const { f } = await preparaPagina(page);
+  await expect(page.locator('#railGithub .talos-github__testa')).toBeVisible();
+  await page.waitForTimeout(300);
+  const prima = lettureStato(f);
+  await page.evaluate(() => { document.dispatchEvent(new Event('visibilitychange')); window.dispatchEvent(new Event('focus')); });
+  await page.waitForTimeout(1500);
+  expect(lettureStato(f) - prima, 'un ritorno alla finestra, una lettura').toBe(1);
 });

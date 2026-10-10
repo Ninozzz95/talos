@@ -98,8 +98,15 @@
 .talos-agenti-filtri{display:flex;flex-direction:column;gap:12px;padding:4px 4px 12px;border-bottom:1px solid var(--talos-border);margin-bottom:0}
 .talos-agenti-titolo{margin:0;font-size:.8125rem;font-weight:600}
 .talos-agenti-filtri>button{justify-content:center;border:1px solid var(--talos-border);background:var(--talos-panel-soft)}
-.talos-agenti-stati{display:flex;flex-wrap:wrap;gap:4px}
-.talos-agenti-stati button{font:inherit;font-size:.6875rem;min-height:26px;padding:4px 8px;border-radius:999px;color:var(--talos-muted);border:1px solid transparent;background:transparent;cursor:pointer}
+/* ⛔ TACCUINO (09/10/2026): una riga sola che scorre, mai a capo (inspector.js, `strisciaScorrevole`, dal codice di Hermes:
+   pane-tab.tsx e fade-scroll.tsx). Il respiro sopra e sotto tiene intero l'anello del fuoco, che `overflow` taglierebbe; il
+   bordo sfuma solo dove c'è un filtro tagliato (`data-taglio`), 1.25rem come `FADE` di Hermes. */
+.talos-agenti-stati{display:flex;flex-wrap:nowrap;gap:4px;overflow-x:auto;overflow-y:hidden;overscroll-behavior-x:contain;scrollbar-width:none;padding:4px;margin:-4px}
+.talos-agenti-stati::-webkit-scrollbar{display:none}
+.talos-agenti-stati[data-taglio=dopo]{-webkit-mask-image:linear-gradient(to right,#000 calc(100% - 1.25rem),transparent);mask-image:linear-gradient(to right,#000 calc(100% - 1.25rem),transparent)}
+.talos-agenti-stati[data-taglio=prima]{-webkit-mask-image:linear-gradient(to right,transparent,#000 1.25rem);mask-image:linear-gradient(to right,transparent,#000 1.25rem)}
+.talos-agenti-stati[data-taglio=entrambi]{-webkit-mask-image:linear-gradient(to right,transparent,#000 1.25rem,#000 calc(100% - 1.25rem),transparent);mask-image:linear-gradient(to right,transparent,#000 1.25rem,#000 calc(100% - 1.25rem),transparent)}
+.talos-agenti-stati button{flex:none;white-space:nowrap;font:inherit;font-size:.6875rem;min-height:26px;padding:4px 8px;border-radius:999px;color:var(--talos-muted);border:1px solid transparent;background:transparent;cursor:pointer}
 .talos-agenti-stati button[aria-pressed=true]{border-color:var(--talos-accent-border);color:var(--talos-accent-text);background:var(--talos-accent-soft)}
 .talos-agenti-stati button:focus-visible{outline:2px solid var(--talos-accent);outline-offset:2px}
 .talos-agenti-riga.talos-card{display:grid;grid-template-columns:30px minmax(0,1fr);column-gap:10px;row-gap:5px;margin:0;padding:12px 4px;border:0;border-bottom:1px solid var(--talos-border);border-radius:0;background:transparent;min-height:90px}

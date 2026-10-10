@@ -79,3 +79,33 @@ test('T-01-06 — un U+FEFF in mezzo al file NON è un BOM e resta dov’è', as
   const letta = await leggiTestoLimitato(cartella, 'in-mezzo.txt');
   assert.equal(letta.testo, testo, 'lo stripping vale solo in testa');
 });
+
+/*
+ * C24a (coda Codex, A-READ-INTERNAL-BOM riprodotto il 07/10; bugfixer 10/10/2026): ogni riga si decodificava con un
+ * `TextDecoder` NUOVO e di serie (`ignoreBOM: false`), che toglie un U+FEFF all'inizio di OGNI decodifica: uno U+FEFF a
+ * inizio riga, dopo un a capo, spariva. Solo una riga che comincia al byte 0 può portare il BOM del file (T-01); come
+ * `leggiDentroRiga`, `ignoreBOM: inizio > 0`.
+ */
+test('C24a-01 — uno U+FEFF a inizio riga, dopo un a capo, NON è un BOM e resta', async (t) => {
+  const cartella = cartellaDiProva(t);
+  writeFileSync(join(cartella, 'interno.txt'), `${BOM}first\n${BOM}second`);
+  const letta = await leggiTestoLimitato(cartella, 'interno.txt');
+  assert.equal(letta.testo, `first\n${BOM}second`, 'via il BOM del byte 0, resta quello della riga 2');
+});
+
+test('C24a-02 — due U+FEFF in testa: si toglie solo il primo, il secondo è testo', async (t) => {
+  const cartella = cartellaDiProva(t);
+  writeFileSync(join(cartella, 'doppio.txt'), `${BOM}${BOM}x`);
+  assert.equal((await leggiTestoLimitato(cartella, 'doppio.txt')).testo, `${BOM}x`);
+  assert.equal((await leggiTestoLimitato(cartella, 'doppio.txt', { blocco: 2, campione: 2 })).testo, `${BOM}x`, 'anche a blocchi piccoli');
+});
+
+test('C24a-03 — una riga LUNGA che comincia con U+FEFF (mostrata in parte) lo tiene, e il rimando punta al byte giusto', async (t) => {
+  const cartella = cartellaDiProva(t);
+  writeFileSync(join(cartella, 'lunga.txt'), `a\n${BOM}${'b'.repeat(3000)}`);
+  const letta = await leggiTestoLimitato(cartella, 'lunga.txt');
+  const riga2 = letta.testo.split('\n')[1];
+  assert.ok(riga2.startsWith(`${BOM}b`), 'la testa mostrata comincia con lo U+FEFF');
+  const offset = Number(/byteOffset=(\d+)/u.exec(riga2)?.[1]);
+  assert.equal(offset, 2 + 3 + 1999, '«a\n» (2 byte) + U+FEFF (3) + i 1999 «b» che stanno con lui nei 2000 caratteri');
+});

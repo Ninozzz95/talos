@@ -50,11 +50,12 @@ import { createToolOutputPreview } from './tool-output-preview.mjs'
 import { captureProcessOutput, formatCapturedOutput } from './process-output-capture.mjs'
 import { createZeroTestScanner } from './zero-test-scanner.mjs'
 import { normalizzaMetadatiCattura } from '../process-output-contract.mjs'
-import { creaRegistroLetture, registraLetturaRighe, registraLetturaDentroRiga, registraScritturaPropria, motivoPerNonSovrascrivere, frasePerNonSovrascrivere } from '../letture-prima-di-sovrascrivere.mjs' // T25/B09: la lettura prima di sovrascrivere
+import { creaRegistroLetture, registraLetturaRighe, registraLetturaDentroRiga, registraScritturaPropria, motivoPerNonSovrascrivere, frasePerNonSovrascrivere, serveImpronta, haImpronta, registraImpronta } from '../letture-prima-di-sovrascrivere.mjs' // T25/B09: la lettura prima di sovrascrivere
 import { PROCESS_OUTPUT_ENCODINGS } from '../process-output-encoding.mjs' // OEM36: solo l'elenco; iconv-lite si carica lì, e solo a richiesta
 import { StringDecoder } from 'node:string_decoder'
 import { createParser } from 'eventsource-parser'
-import { leggiAttesaRichiestaDalFornitore, erroreEsitoProviderIncerto, erroreEsitoProviderIncertoEsaurito, leggiRifiutoProvider } from '../provider-retry.mjs'
+import { leggiAttesaRichiestaDalFornitore, erroreEsitoProviderIncerto, erroreEsitoProviderIncertoEsaurito, erroreNessunaPrimaRispostaEsaurito, leggiRifiutoProvider } from '../provider-retry.mjs'
+import { SilenzioDelFornitoreError, leggiInattivitaDatiMs } from '../generation-idle.mjs'
 import { PREFISSO_SINTESI_RECINTATA, costruisciBloccoFatti } from './ricarica-post-compact.mjs' // ⭐ 06/10/2026: la ricarica della memoria post-compact (opzione A + C-a + C-b, ricerca 5×5×5×5 §6.4)
 import { createHash, generateKeyPairSync, randomUUID, sign as firmaCrypto, verify as verificaCrypto } from 'node:crypto'
 import { lookup as risolviDns } from 'node:dns'
@@ -70,6 +71,7 @@ import { setTimeout as dormiConSegnale } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import { imageMessageContent } from '../chat-image-attachments.mjs'
 import { consenteAttrezzoDelega, delegaLimitata } from '../delegation-contract.mjs'
+import { codificaCursore, confrontaChiavi, decodificaCursore, testoElenco } from '../elenco-paginato.mjs' // C5: le pagine di `elenca`
 /* ⛔ P-13/BC-07: `cerca` riusa il filtro `.gitignore` e la denylist dei binari gia' provati,
  * invece di riscriverli. Due moduli nostri con due regole opposte e' esattamente il difetto
  * che la allowlist di `cerca` era. */
@@ -110,7 +112,7 @@ import { collegamentoLinuxSulPercorso, spiegazioneCollegamentoLinux, erroriDiRip
 import { worktreeDiWindowsLettoDaLinux, spiegazioneWorktreeWindows } from './worktree-windows.mjs' // F-016, owner 01-02/10/2026: worktree di Windows letto dal git di Linux
 import { formatoEstraibile, estraiTestoDocumento, ErroreEstrazione, MAX_BYTE_DOCUMENTO } from './estrai-documento.mjs' // F-001, owner 01-02/10/2026: leggi estrae il testo di docx/xlsx/pptx/pdf
 import { avvolgiDati, avvisoSospetto, scansionaIstruzioni, luogoDellaFonte, ISTRUZIONE_CONFINE_DATI, SEGNO_ISTRUZIONE_CONFINE, sospettoNeiRisultatiFigli } from './confine-dati.mjs' // F-027 / H-02 + H-03, owner 02/10/2026
-export { APERTURA_DATI, CHIUSURA_DATI, avvolgiDati, avvisoSospetto, neutralizzaDati, scansionaIstruzioni, togliConfiniDati, testoPerLoSchermo, luogoDellaFonte, ISTRUZIONE_CONFINE_DATI, SEGNO_ISTRUZIONE_CONFINE, TIPI_DI_LUOGO, INTESTAZIONE_RISULTATO_FIGLIO, testoDelRisultatoFiglio, sospettoNeiRisultatiFigli } from './confine-dati.mjs'
+export { APERTURA_DATI, CHIUSURA_DATI, avvolgiDati, avvisoSospetto, neutralizzaDati, scansionaIstruzioni, togliConfiniDati, testoPerLoSchermo, luogoDellaFonte, ISTRUZIONE_CONFINE_DATI, SEGNO_ISTRUZIONE_CONFINE, TIPI_DI_LUOGO, INTESTAZIONE_RISULTATO_FIGLIO, testoDelRisultatoFiglio, sospettoNeiRisultatiFigli, INTESTAZIONE_ESITO_WORKFLOW, testoDellEsitoWorkflow } from './confine-dati.mjs'
 import { serveLoStatoDelBersaglio, motivoPerNonScrivereTesto } from './guardia-scrittura-binari.mjs' // F-001, owner 02/10/2026: «tutta la guardia di Hermes»
 import { bloccoDelPavimento, rifiutoDelPavimento } from './pavimento-comandi.mjs' // N-02, owner 02/10/2026: il pavimento di Hermes, parti 1+2+3
 import { vistaWindows, vistaLinux } from './percorsi-casa-linux.mjs' // Fase B, owner 01/10/2026: le due viste dello stesso percorso
@@ -400,6 +402,21 @@ export function siRitenta(stato) {
  * Il banco lancia un harness per volta, ma l'harness parla con un fornitore che
  * serve tutti — vedi la campagna contaminata del 20/8.
  */
+/**
+ * I ritentativi di un 429/5xx oltre alla prima richiesta, come Claude Code (binario letto dal bugfixer del desktop, 09/10/2026):
+ * 10 di serie (`Xdr=10`); `TALOS_MAX_RETRIES` li cambia come `CLAUDE_CODE_MAX_RETRIES`, e oltre 15 si RIDUCE a 15 (`rYe=15`,
+ * `max_retries_clamp_warning`); un valore illeggibile o negativo torna a 10.
+ */
+export const RITENTATIVI_DI_SERIE = 10
+export const RITENTATIVI_MASSIMI = 15
+export function ritentativiDiSerie(env = globalThis.process?.env) { // il kernel gira anche sul telefono, dove `process` può mancare
+    const grezzo = env?.TALOS_MAX_RETRIES
+    if (grezzo === undefined || String(grezzo).trim() === '') return RITENTATIVI_DI_SERIE
+    const n = Number(grezzo)
+    if (!Number.isInteger(n) || n < 0) return RITENTATIVI_DI_SERIE
+    return Math.min(n, RITENTATIVI_MASSIMI)
+}
+
 export function attesaDelTentativo(tentativo, caso = Math.random) {
     /* ⛔ BUG-25 (06/10/2026) — TETTO 32.000 ms, verbatim di Claude Code (`qN`:
      * `Math.min(500*Math.pow(2,e-1), 32000)` + jitter): senza tetto il fornitore che limita
@@ -488,9 +505,76 @@ export const RIPETIZIONI_IDENTICHE_MASSIME = 3
  * `scratchpad/piano-bug16-auto-retry-2026-10-05.md`). La cura sta TUTTA nel catch del giro di
  * `talosLavora`: è lì che ogni guasto di trasporto con `parziale` arriva (flusso, corpo, silenzio).
  * Cap PER GIRO a 10: è il numero di Claude Code; Hermes sta a 3, gli SDK a 2 — qui vale solo per il
- * canale catastrofico (esito incerto), non per i 429/5xx che hanno il loro budget di 4.
+ * canale catastrofico (esito incerto), non per i 429/5xx che hanno il loro budget di 11 (1 + 10, come Claude Code).
  */
 export const ESITI_INCERTI_RITENTABILI_MASSIMI = 10
+
+/*
+ * ⛔ OWN-01 (stress test della 0.5.1, 09/10/2026, sessione 5a48141b; decisione owner «Riprova fino a 3 volte e lo dice»). Il ramo
+ * qui sopra esige un `parziale`, che esiste solo se lo stream era partito: quando il fornitore non manda NEMMENO gli header entro il
+ * tempo della prima risposta (`PROVIDER_FIRST_RESPONSE_TIMEOUT`, o il tetto degli header di undici) non c'era nessun reinvio, e lo
+ * stress test moriva a ogni giro lungo. È il caso più sicuro da ripetere: nessun testo, nessun attrezzo, nessun byte. Tre come
+ * l'owner ha scelto (gli SDK di OpenAI e Anthropic ne fanno 2 sui timeout, Codex 4 sulle richieste). Un socket caduto prima degli
+ * header NON entra qui: il POST può essere già stato lavorato (PROVIDER-UNKNOWN-ACCEPTED-DISCONNECT).
+ */
+export const SENZA_PRIMA_RISPOSTA_RITENTABILI_MASSIMI = 3
+const CAUSE_SENZA_PRIMA_RISPOSTA = new Set(['PROVIDER_FIRST_RESPONSE_TIMEOUT', 'UND_ERR_HEADERS_TIMEOUT'])
+
+/*
+ * ⛔ F-ENG-4 (stress test della 0.5.0, 08/10/2026, sessione b7fb2459; decisione owner 09/10 «Lo dice e continua»). Una risposta
+ * di solo testo tagliata dal tetto di uscita, o rimasta muta dopo il suo testo (PROVIDER_SILENCE), finiva come «fermato» senza
+ * un nuovo tentativo. Ora il testo arrivato resta in storia e il modello riceve una nota che dice perché e chiede di
+ * continuare senza ripetere, fino a 3 volte di fila (Hermes `agent/turn_truncation.py` `_continue_text`: 4; le note sono la
+ * stessa idea di `_LENGTH_CONTINUATION_OUTPUT_LIMIT` e `_LENGTH_CONTINUATION_NETWORK_STUB`, `agent/conversation_loop.py`).
+ * Una risposta che finisce davvero azzera il conto. Oltre il tetto il giro finisce con un esito suo, `tetto-uscita`.
+ */
+/*
+ * ⛔ GIRI IN TONDO (stress test della 0.5.0, 08/10/2026: il modello del tester ha letto AGENTS.md 130 volte in 18 minuti; owner
+ * 09/10/2026 «Avvisa, poi chiede o ferma (Consigliata)»). `RIPETIZIONI_IDENTICHE_MASSIME` vede solo la valanga DENTRO una risposta;
+ * qui si guarda fra un giro e l'altro. Una chiamata con lo stesso attrezzo, gli stessi argomenti e lo stesso risultato, senza che
+ * nel mezzo sia cambiato niente (una scrittura o un comando riusciti azzerano il conto, come i PROGRESS_RESET_TOOL_NAMES di Hermes),
+ * dalla 2ª volta arriva al modello come una NOTA invece del risultato già visto; alla 5ª si chiede alla persona se continuare, e
+ * un no — o nessuno che possa rispondere — chiude il giro col suo motivo. Hermes `agent/tool_guardrails.py` (avviso a 2, blocco a
+ * 5, risultati identici sostituiti da un rimando); OpenCode `session/processor.ts` (`DOOM_LOOP_THRESHOLD = 3`, `doom_loop: "ask"`);
+ * Codex e Claude Code non hanno una guardia così. Opzionale (`guardiaGiriInTondo`): chi non la chiede non vede cambiare niente.
+ */
+export const GIRI_IN_TONDO_AVVISO = 2
+export const GIRI_IN_TONDO_DOMANDA = 5
+const RIMANDO_SOTTO_CARATTERI = 512 // un risultato corto si ripete con la nota: rimandarlo non risparmia niente (Hermes, 512)
+function firmaChiamata(nome, argomenti) {
+    const ordina = (v) => Array.isArray(v) ? v.map(ordina) : v && typeof v === 'object' ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, ordina(v[k])])) : v
+    return `${nome}\0${JSON.stringify(ordina(argomenti ?? {}))}`
+}
+export function creaGuardiaGiriInTondo() {
+    const viste = new Map()
+    return {
+        /** @returns {number} quante volte di fila, senza cambi nel mezzo, questa chiamata ha dato questo risultato (1 = la prima) */
+        osserva({ nome, argomenti, esito, progresso }) {
+            /* il confine dei dati (F-027) ha un id nuovo a ogni chiamata: due risultati uguali si confrontano senza */
+            const firma = firmaChiamata(nome, argomenti); const testo = String(esito).replace(/(<<<(?:END_)?TALOS_DATA) id=[0-9a-f]+/gu, '$1')
+            const prima = viste.get(firma)
+            const volte = !prima || prima.testo !== testo ? 1 : prima.volte + 1
+            /* ⛔ R2 della review del desktop (09/10/2026), misurato: `viste.clear()` a OGNI azione mutante riuscita faceva
+               `leggi`+`shell ls` alternati → [1,1,1,1,1,1] e lo stesso `shell cat` sei volte → [0,0,0,0,0,0]. Hermes
+               (`agent/tool_guardrails.py:418-466`) non azzera mai le ripetizioni sul progresso e ferma anche «a model replaying a
+               successful terminal call». Restando nella decisione dell'owner («le chiamate che cambiano qualcosa azzerano»): è
+               progresso solo un'azione mutante NUOVA o col risultato DIVERSO; ripetuta identica, si conta come le altre. */
+            if (progresso && volte === 1) { viste.clear() }
+            viste.set(firma, { volte, testo })
+            return volte
+        },
+        azzera(nome, argomenti) { viste.delete(firmaChiamata(nome, argomenti)) },
+    }
+}
+export function notaGiriInTondo(nome, volte, esito) {
+    const nota = `[TALOS: this is call ${volte} of "${nome}" with the same arguments, and the result is the same as before, with nothing`
+        + ' changed in between. Use what you already have, or do something different; at the 5th the person is asked whether to go on.]'
+    return esito.length < RIMANDO_SOTTO_CARATTERI ? `${nota}\n${esito}` : nota
+}
+
+export const CONTINUAZIONI_MASSIME = 3
+export const NOTA_CONTINUA_DOPO_TETTO = '[TALOS: your previous answer was cut off by the output length limit. Continue exactly where it stopped, without repeating what you already wrote. If you were about to call a tool, call it now.]'
+export const NOTA_CONTINUA_DOPO_SILENZIO = '[TALOS: the provider went silent and your previous answer was cut off mid-stream. This is a transport interruption, not a change in your tools. Continue exactly where it stopped, without repeating what you already wrote.]'
 
 /*
  * ⛔ Tetto all'attesa AUTO-DECISA del canale incerto (lezione `Retry-After`/`x-should-retry` del
@@ -547,7 +631,10 @@ export function limitaRipetizioniIdentiche(chiamate, ripetizioniMassime = RIPETI
 /** Un valore che nessun `lettore.read()` può mai tornare: così la gara fra lettura e stop non confonde «è arrivato lo stop» con «è arrivato un pezzo». */
 const SENTINELLA_FERMATO = Symbol('fermato-su-richiesta')
 
-export async function consumaFlussoSSE(response, onDelta, { segnaleStop, ripetizioniMassime = RIPETIZIONI_IDENTICHE_MASSIME, onChiamataCompleta } = {}) {
+/** Come SENTINELLA_FERMATO: il tempo dei dati è scaduto (F-ENG-4, `leggiInattivitaDatiMs`). */
+const SENTINELLA_SILENZIO = Symbol('silenzio-dei-dati')
+
+export async function consumaFlussoSSE(response, onDelta, { segnaleStop, ripetizioniMassime = RIPETIZIONI_IDENTICHE_MASSIME, onChiamataCompleta, inattivitaDatiMs = leggiInattivitaDatiMs() } = {}) {
     /*
      * ⛔⛔ STREAM-JSON-INTERO (08/10/2026, bugfixer; trovato indagando BC76-07) — un fornitore, un proxy o un server locale che
      *   IGNORA `stream: true` e risponde con un `application/json` COMPLETO. Qui sotto non diventava nessun evento: «flusso finito
@@ -643,6 +730,24 @@ export async function consumaFlussoSSE(response, onDelta, { segnaleStop, ripetiz
             else segnaleStop.addEventListener('abort', sveglia, { once: true })
         })
         : null
+    /*
+     * ⛔ F-ENG-4 (owner 09/10/2026, «5 minuti, poi ritenta»): dopo il PRIMO dato vero (testo, ragionamento, chiamata, fine),
+     *   chi non ne manda un altro entro `inattivitaDatiMs` ha smesso di rispondere, anche se i commenti SSE dicono «vivo».
+     *   Si chiude con l'errore di silenzio di sempre (PROVIDER_SILENCE, classe rete): il giro decide se ritentare.
+     */
+    let ultimoDatoAlle = null
+    let datiVisti = 0
+    const leggiInGara = () => {
+        const corse = [lettore.read()]
+        if (abortito) corse.push(abortito)
+        let timer = null
+        if (ultimoDatoAlle !== null && Number.isFinite(inattivitaDatiMs) && inattivitaDatiMs > 0) {
+            const resta = Math.max(0, ultimoDatoAlle + inattivitaDatiMs - Date.now())
+            corse.push(new Promise((risolvi) => { timer = setTimeout(() => risolvi(SENTINELLA_SILENZIO), resta); timer.unref?.() }))
+        }
+        if (corse.length === 1) return corse[0]
+        return Promise.race(corse).finally(() => { if (timer !== null) clearTimeout(timer) })
+    }
 
     /*
      * ⛔⛔⛔ DOVE FINISCE UN PEZZO — 11/09/2026, il difetto GEMELLO della valanga,
@@ -819,7 +924,12 @@ export async function consumaFlussoSSE(response, onDelta, { segnaleStop, ripetiz
 
     try {
     for (;;) {
-        const letto = abortito ? await Promise.race([lettore.read(), abortito]) : await lettore.read()
+        const datiPrima = datiVisti
+        const letto = await leggiInGara()
+        if (letto === SENTINELLA_SILENZIO) {
+            await lettore.cancel().catch(() => { /* la connessione se ne va comunque */ })
+            throw new SilenzioDelFornitoreError(inattivitaDatiMs)
+        }
         if (letto === SENTINELLA_FERMATO) {
             await lettore.cancel().catch(() => { /* la connessione se ne va comunque: un cancel che lancia non deve coprire il motivo vero, che è lo stop */ })
             /*
@@ -854,6 +964,7 @@ export async function consumaFlussoSSE(response, onDelta, { segnaleStop, ripetiz
             if (erroreDelPacchetto && typeof erroreDelPacchetto === 'object') erroreFornitore = descriviErroreDelFornitore(erroreDelPacchetto)
             const motivoFinale = sceltaDelPacchetto?.finish_reason ?? sceltaDelPacchetto?.delta?.finish_reason
             if (typeof motivoFinale === 'string' && finishReason !== 'error') finishReason = motivoFinale
+            if (typeof motivoFinale === 'string') datiVisti += 1 // F-ENG-4: la fine della risposta è un dato
             if (typeof sceltaDelPacchetto?.native_finish_reason === 'string' && sceltaDelPacchetto.native_finish_reason) nativeFinishReason = sceltaDelPacchetto.native_finish_reason
             const delta = sceltaDelPacchetto?.delta
             if (!delta) {
@@ -874,10 +985,12 @@ export async function consumaFlussoSSE(response, onDelta, { segnaleStop, ripetiz
                  * raddoppierebbe la risposta.
                  */
                 const intero = pacchetto?.choices?.[0]?.message
-                if (intero && typeof intero === 'object') messaggioIntero = intero
+                if (intero && typeof intero === 'object') { messaggioIntero = intero; datiVisti += 1 }
                 continue
             }
             vistoUnDelta = true
+            /* F-ENG-4: un delta vuoto (solo `role`, o contenuto '') non è un dato: è un fornitore che dice «ci sono» */
+            if (delta.content || delta.reasoning_content || delta.reasoning || delta.tool_calls?.length) datiVisti += 1
             if (delta.talos_provider_state?.version === 1) providerState = delta.talos_provider_state
             if (delta.content) { content += delta.content; onDelta?.({ tipo: 'testo', delta: delta.content }) }
             const ragionamento = delta.reasoning_content ?? delta.reasoning
@@ -920,6 +1033,7 @@ export async function consumaFlussoSSE(response, onDelta, { segnaleStop, ripetiz
             }
             if (ripetizione) break
         }
+        if (datiVisti !== datiPrima) ultimoDatoAlle = Date.now()
         if (ripetizione || streamCompleted) {
             /* ⛔ Chiudere la connessione è la cura, non un dettaglio: la fonte dice che quella valanga è «bounded only by max_tokens or client timeout» — se il client non chiude, il server continua a generare copie. */
             await lettore.cancel().catch(() => { /* il flusso è comunque abbandonato: un cancel che lancia non cambia il verdetto */ })
@@ -1618,7 +1732,11 @@ export async function chiamaConRitenta(opzioni) {
 async function chiamaConRitentaBase({
     modello, chiave, messaggi, attrezzi,
     maxOutputTokens,
-    tentativiMassimi = 4,
+    /* Owner 09/10/2026, stress test della 0.5.2 («fai esattamente come fa Claude Code»): un 429 di Z.AI senza Retry-After consumava
+       i 4 tentativi in ~7 s. Claude Code fa 10 ritentativi oltre alla prima richiesta (CLAUDE_CODE_MAX_RETRIES, predefinito 10) con
+       la stessa scala di `attesaDelTentativo` (500 ms raddoppiati, tetto 32 s): ~2,7 minuti prima di arrendersi. Come la sua
+       variabile, `TALOS_MAX_RETRIES` cambia il numero di ritentativi (0 = nessuno). */
+    tentativiMassimi = 1 + ritentativiDiSerie(),
     fetchDiRete = fetch,
     /*
      * ⛔⛔⛔ L'ATTESA FRA UN RITENTA E L'ALTRO ERA L'ULTIMO «PUNTO SICURO» —
@@ -2036,11 +2154,20 @@ const ATTREZZI = [
             + 'With no arguments: the workspace root and one level below it. '
             + 'Give "percorso" to open ONE folder you saw in the project map (e.g. "src" or "src/kernel") '
             + 'and see what is inside it, one level below included. '
-            + 'The project map only shows the top levels: use this to go down, and "cerca" to find files at any depth.',
+            + 'The project map only shows the top levels: use this to go down, and "cerca" to find files at any depth. '
+            + 'A big folder comes in pages sorted by path, and the first page already reports the TOTAL: answer from it, open a '
+            + 'narrower folder, or use "cerca". Paging past the first couple of pages of one folder is REFUSED unless you set '
+            + 'browse_every_page, which you may do only when the person explicitly asked to see or act on EVERY entry.',
+        /* C5 (owner 10/10/2026 sera): `depth`, `limit`, `cursor`; il filtro per nome resta a `cerca` (niente doppioni). Vedi
+           `elencaDaCartella`. ⛔ Cambia il preambolo BASE del banco: dichiarato nel commit, il braccio A dell'A/B si rifà. */
         input_schema: {
             type: 'object',
             properties: {
                 percorso: { type: 'string', description: 'folder to open, relative to the workspace root; omit it for the root' },
+                depth: { type: 'integer', minimum: 1, maximum: 3, description: 'levels below the folder to show (default 1: the folder and one level below it)' },
+                limit: { type: 'integer', minimum: 1, maximum: 500, description: 'max entries per page; without it a big folder comes in pages of about 7,000 characters' },
+                cursor: { type: 'string', description: 'the cursor given at the end of the previous page, to continue' },
+                browse_every_page: { type: 'boolean', description: 'Set true ONLY when the person explicitly asked to see or act on EVERY entry of the folder. It unlocks further pages of the same listing, up to a hard ceiling. Never set it to look around or to count files.' },
             },
             required: [],
         },
@@ -2243,6 +2370,12 @@ const ATTREZZI = [
                     type: 'boolean',
                     description: 'true to start this command in the background right away (like Claude Code run_in_background): the tool returns immediately with the output file path; read that file later with leggi',
                 },
+                /* Owner 09/10/2026 («Segue il modo + si chiede», lane CLI): la rete per QUESTO comando, chiesta alla persona fuori da
+                   «Full access». Codex `sandbox_permissions: "require_escalated"`, Claude Code `dangerouslyDisableSandbox`: qui solo la rete. */
+                network: {
+                    type: 'boolean',
+                    description: 'true to run this command with network access, when it failed because of a blocked network (install, fetch, push…). The person is asked first; only the network is opened, the rest of the sandbox stays',
+                },
             },
             required: ['comando'],
         },
@@ -2390,6 +2523,82 @@ export const WORKFLOW_DRAFT_SCHEMA_MODELLO = {
             },
         },
     },
+}
+/*
+ * ⭐ C5 (owner 10/10/2026, brief §6; contratto `.claude/CONTRATTO-C5-ATTREZZI-BOZZA-2026-10-10.md` §1, sì della CLI §7) — i parametri
+ *   COMUNI di ogni elenco e ricerca. Descrizioni corte apposta: ogni parola qui viaggia in OGNI chiamata al modello. Il cursore è
+ *   opaco (MCP 2026-07-28); il formato «concise/detailed» viene da Anthropic, «Writing effective tools for agents» (11/09/2025).
+ */
+export const PARAMETRI_ELENCO = Object.freeze({
+    limit: { type: 'integer', minimum: 1, maximum: 100, description: 'Max items (default 20).' },
+    cursor: { type: 'string', description: 'The cursor= value from the last line of the previous call, to continue.' },
+    response_format: { type: 'string', enum: ['concise', 'detailed'], description: 'detailed adds IDs and timestamps.' },
+})
+
+/*
+ * ⭐ C5 (contratto §7, condizioni della CLI del 10/10/2026) — la mappa UNICA dei nomi accorpati, esportata perché la CLI la
+ *   IMPORTI invece di copiarla. Serve a tre cose:
+ *   1. un modello che chiama un nome vecchio (dalla storia, dalla memoria) riceve una frase che dice il nome nuovo e COME
+ *      chiamarlo, con un esempio (Anthropic, «Writing effective tools for agents»: errori azionabili con un input giusto). Non
+ *      si traduce di nascosto: un giro perso, detto onestamente;
+ *   2. le scelte di permesso salvate sui nomi vecchi si migrano senza perdere un rifiuto (`migraPermessiPerAttrezzo`);
+ *   3. la cronologia: i nomi vecchi nelle sessioni passate restano testo, e nessuno li riesegue.
+ *   `azione` c'è per gli accorpamenti dei comandi (pausa/ripresa/stop): lì il permesso è per AZIONE (`child_control:stop`).
+ */
+export const ATTREZZI_RINOMINATI = Object.freeze({
+    notes_list: Object.freeze({ nuovo: 'notes_find', esempio: '{"limit": 20}' }),
+    notes_search: Object.freeze({ nuovo: 'notes_find', esempio: '{"query": "words to find"}' }),
+    tasks_list: Object.freeze({ nuovo: 'tasks_find', esempio: '{"status": "open"}' }),
+    tasks_search: Object.freeze({ nuovo: 'tasks_find', esempio: '{"query": "words to find"}' }),
+    memory_list: Object.freeze({ nuovo: 'memory_find', esempio: '{"limit": 20}' }),
+    memory_search: Object.freeze({ nuovo: 'memory_find', esempio: '{"query": "words to find"}' }),
+    research_list: Object.freeze({ nuovo: 'research_find', esempio: '{"status": "running"}' }),
+    library_list: Object.freeze({ nuovo: 'library_find', esempio: '{"file_type": "document"}' }),
+    stop_child: Object.freeze({ nuovo: 'child_control', azione: 'stop', esempio: '{"childId": "…", "action": "stop"}' }),
+    automation_pause: Object.freeze({ nuovo: 'automation_control', azione: 'pause', esempio: '{"id": "…", "action": "pause"}' }),
+    research_pause: Object.freeze({ nuovo: 'research_control', azione: 'pause', esempio: '{"id": "…", "action": "pause"}' }),
+    research_resume: Object.freeze({ nuovo: 'research_control', azione: 'resume', esempio: '{"id": "…", "action": "resume"}' }),
+    research_cancel: Object.freeze({ nuovo: 'research_control', azione: 'cancel', esempio: '{"id": "…", "action": "cancel"}' }),
+    automation_resume: Object.freeze({ nuovo: 'automation_control', azione: 'resume', esempio: '{"id": "…", "action": "resume"}' }),
+    automation_run: Object.freeze({ nuovo: 'automation_control', azione: 'run', esempio: '{"id": "…", "action": "run"}' }),
+    automation_stop: Object.freeze({ nuovo: 'automation_control', azione: 'stop', esempio: '{"id": "…", "action": "stop"}' }),
+    pause_child: Object.freeze({ nuovo: 'child_control', azione: 'pause', esempio: '{"childId": "…", "action": "pause"}' }),
+    resume_child: Object.freeze({ nuovo: 'child_control', azione: 'resume', esempio: '{"childId": "…", "action": "resume"}' }),
+    library_search: Object.freeze({ nuovo: 'library_find', esempio: '{"query": "words to find"}' }),
+    research_search: Object.freeze({ nuovo: 'research_find', esempio: '{"query": "words to find"}' }),
+})
+
+/** C5: fra due scelte di permesso per la stessa azione (chiave nuova e chiave di prima) vince la più stretta. */
+export function sceltaPiuStretta(...scelte) {
+    const peso = { nega: 3, chiedi: 2, sempre: 1 }
+    return scelte.reduce((meglio, x) => ((peso[x] ?? 0) > (peso[meglio] ?? 0) ? x : meglio), undefined)
+}
+
+/** La frase per un nome vecchio chiamato di nuovo, o `null` se il nome non è stato accorpato. In inglese: arriva al modello. */
+export function fraseAttrezzoRinominato(nome) {
+    const r = Object.hasOwn(ATTREZZI_RINOMINATI, nome) ? ATTREZZI_RINOMINATI[nome] : null
+    if (!r) return null
+    return `${nome} was replaced by ${r.nuovo}. Call ${r.nuovo} with arguments like ${r.esempio}. Nothing was done.`
+}
+
+/**
+ * Migra le scelte di permesso salvate sui nomi vecchi. Mai perdere un rifiuto: fra due scelte che finiscono sulla stessa chiave
+ * vince la più stretta (nega > chiedi > sempre). Una chiave nuova già scelta dalla persona vince sulla migrazione.
+ * @param {Record<string,string>|null|undefined} permessi
+ */
+export function migraPermessiPerAttrezzo(permessi) {
+    if (!permessi || typeof permessi !== 'object') return permessi
+    const peso = { nega: 3, chiedi: 2, sempre: 1 }
+    const fuori = {}
+    const migrati = {}
+    for (const [nome, scelta] of Object.entries(permessi)) {
+        const r = Object.hasOwn(ATTREZZI_RINOMINATI, nome) ? ATTREZZI_RINOMINATI[nome] : null
+        if (!r) { fuori[nome] = scelta; continue }
+        const chiave = r.azione ? `${r.nuovo}:${r.azione}` : r.nuovo
+        if (!migrati[chiave] || (peso[scelta] ?? 0) > (peso[migrati[chiave]] ?? 0)) migrati[chiave] = scelta
+    }
+    for (const [chiave, scelta] of Object.entries(migrati)) if (!Object.hasOwn(fuori, chiave)) fuori[chiave] = scelta
+    return fuori
 }
 const ATTREZZI_ESTESI = [
     {
@@ -2563,7 +2772,9 @@ const ATTREZZI_ESTESI = [
             + 'yourself in one more turn. By default the child works with YOUR permissions, never more: it can '
             + 'do what you can do here. If you are read-only, the child is read-only too. Set modalita to '
             + 'lettura when the sub-task is pure analysis: the child then gets no file creation, edits, shell '
-            + 'commands, external tools or further delegation.',
+            + 'commands, external tools or further delegation. The child runs in the background: its result '
+            + 'reaches you as a new message only after you END YOUR TURN, so never wait for it with sleep or by '
+            + 'polling list_children.',
         input_schema: {
             type: 'object',
             properties: {
@@ -2613,89 +2824,43 @@ const ATTREZZI_ESTESI = [
      * non SQLCipher cross-chat. Le altre 4 (mutazioni) restano una
      * fetta successiva, non ancora aperta.
      */
+    /*
+     * ⭐ C5 (owner 10/10/2026; contratto §2 e §10): `library_list` + `library_search` → UN attrezzo, e il freno di BC-10 resta (owner
+     *   10/10 sera, «freno consapevole», `RICERCA-C5-FRENO-PAGINE-2026-10-10.md`).
+     * ⛔⛔⛔ BC-10 (13/09/2026), la lezione che questa descrizione porta: la vecchia diceva «Follow next_page_token until it is null
+     *   when asked for all files», e a un «ciao» TALOS ha sfogliato 216 file in 11 pagine. Da sola un'agente la seconda pagina non la
+     *   chiede mai (arXiv:2608.26130, «no agent-initiated requests for a second chunk»): la chiedeva perché glielo ordinavamo. Qui
+     *   non si ordina di sfogliare; si dice che il totale arriva con la prima pagina e che il flag è solo per chi ha chiesto TUTTO.
+     *   Il tetto vero non vive in questa frase: vive in `decisioneDiSfogliamento`.
+     */
     {
-        name: 'library_list',
-        /*
-         * ⛔⛔⛔ BC-10 (13/09/2026) — QUESTA DESCRIZIONE ERA LA CAUSA PRIMA, e non un dettaglio.
-         * Diceva «Follow next_page_token until it is null when asked for all files»: la guardia
-         * era quel «when asked for all», troppo debole perché un saluto non è una richiesta di
-         * elencare tutto e niente qui dentro distingueva i due casi. L'owner ha scritto «ciao» e
-         * TALOS ha sfogliato 216 file in 11 pagine, narrando ogni passo.
-         * ⭐ Che la colpa sia del CONTRATTO e non del modello lo dice la misura altrui:
-         * arXiv:2608.26130, Petrova/Mazniak/State, «Agents Don't Paginate: First-Chunk Selection
-         * for LLM Tool Responses» — abstract riletto ALLA FONTE il 13/09/2026
-         * (arxiv.org/abs/2608.26130): sui log di sessione di un middleware MCP pubblico gli autori
-         * osservano «no agent-initiated requests for a second chunk», verbatim. Cioè: da solo un
-         * agente la seconda pagina non la chiede MAI. Il nostro la chiedeva perché gliel'avevamo
-         * ordinato qui dentro.
-         * ⛔ E i numeri di quel paper NON parlano di questo: le 500 task SWE-bench Verified sono il
-         * confronto fra sei funzioni di valore, le 4.800 chiamate sono una sonda di localizzazione a
-         * turno singolo su cinque modelli, e il «nessuna richiesta del secondo pezzo» viene dai log
-         * del middleware. Sono TRE misure diverse, e appiccicare le une all'altra sarebbe la
-         * citazione gonfiata che questo file vieta altrove.
-         * ⛔ La citazione gemella sopra `messaggioArgomentiAssenti` («trova ZERO richieste del
-         * secondo pezzo») è stata riaperta alla stessa fonte lo stesso giorno ed è FEDELE: non si
-         * tocca. Ammorbidirla in «raramente» era una correzione che peggiorava la fonte.
-         * ⛔ Non si vieta di sfogliare: chi ha CHIESTO di agire su tutto deve ancora poterlo fare
-         * (è la seconda parte di BC-10, dove sfogliare era la cosa giusta) — ma lo chiede con
-         * `browse_every_page`, e si vede. Si toglie il dovere di farlo per conto proprio, e si
-         * dice che il totale è già arrivato con la prima pagina.
-         * ⛔ Il tetto vero NON vive in questa frase: vive in `decisioneDiSfogliamento`, che rifiuta
-         * la pagina di troppo. Una descrizione è un consiglio; la pagina undici la ferma il codice.
-         */
-        description: 'List, count or filter the files in this project\'s Library. Use this when '
-            + 'asked what/all files are in the Library without a keyword; use library_search only for '
-            + 'filename or content matching. The first page already reports the TOTAL, so answer '
-            + '"how many" or "what is in there" from it alone, without paging. Paging past the first '
-            + 'couple of pages of one listing is REFUSED unless you set browse_every_page, which you '
-            + 'may do only when the person explicitly asked to see or act on EVERY entry, repeating '
-            + 'the same origin and file_type filters; never page through the whole Library just to '
-            + 'look around, and never because the conversation merely mentioned files.',
+        name: 'library_find',
+        description: 'Find the files in this project\'s Library, one line each with name, type, origin and the id. Without query: '
+            + 'most recently updated first, to answer what/how many files there are. With query: by words in the name and the '
+            + 'text (the name counts more), best matches first, with an excerpt. The first page already reports the TOTAL, so '
+            + 'answer "how many" or "what is in there" from it alone. Paging past the first couple of pages of one listing is '
+            + 'REFUSED unless you set browse_every_page, which you may do only when the person explicitly asked to see or act on '
+            + 'EVERY entry; never page through the whole Library just to look around, and never because the conversation merely '
+            + 'mentioned files.',
         input_schema: {
             type: 'object',
             properties: {
-                origin: { type: 'string', enum: ['all', 'uploaded', 'generated'], description: 'Filter by how the file entered the Library. Default all.' },
-                file_type: { type: 'string', enum: ['all', 'image', 'document', 'link'], description: 'Filter images, ordinary documents, or archived web links. Default all.' },
-                page_size: { type: 'number', description: 'Maximum entries in this page (1-20, default 10).' },
-                page_token: { type: 'string', description: 'Opaque next_page_token from the preceding library_list result. Repeat the same filters.' },
-                /* ⛔ Il nome è quello di `CAMPO_SFOGLIA_TUTTO`: scritto a mano perché i tetti sono dichiarati più in basso in questo file e leggerli da qui, dentro un letterale valutato all'import, sarebbe un uso prima della dichiarazione. Una prova li tiene allineati. */
+                query: { type: 'string', description: 'Words to look for in file names and text. Omit to list.' },
+                origin: { type: 'string', enum: ['all', 'uploaded', 'generated'], description: 'How the file entered the Library. Default all.' },
+                file_type: { type: 'string', enum: ['all', 'image', 'document', 'link'], description: 'Images, ordinary documents, or archived web links. Default all.' },
+                sort: { type: 'string', enum: ['recent', 'title'], description: 'Order when listing (default recent).' },
+                ...PARAMETRI_ELENCO,
                 browse_every_page: { type: 'boolean', description: 'Set true ONLY when the person explicitly asked to see or act on EVERY entry in the Library. It unlocks further pages of the same listing, up to a hard ceiling. Never set it to look around, to count files, or because the listing looked interesting.' },
             },
         },
     },
     {
-        name: 'library_search',
-        /*
-         * ⛔ BC-10 (13/09/2026) — stesso tetto del fratello `library_list`, e per lo stesso motivo:
-         * qui il cursore si chiama `offset`, quindi anche qui ogni pagina ha argomenti DIVERSI e la
-         * guardia della valanga non la vede. Una ricerca che sfoglia all'infinito è la stessa
-         * valanga con un altro nome.
-         */
-        description: 'Search this project\'s Library files and return a bounded page of genuine matches '
-            + 'with their id, name, origin and a short excerpt. Use it before answering questions about the '
-            + 'project\'s own Library files. The first page reports the TOTAL number of matches: answer from '
-            + 'it rather than walking the results. Paging past the first couple of pages of the same search is '
-            + 'REFUSED unless you set browse_every_page, which you may do only when the person explicitly asked '
-            + 'to see or act on EVERY match; a different query counts as a new search and starts over.',
-        input_schema: {
-            type: 'object',
-            properties: {
-                query: { type: 'string', description: 'What to look for, in natural language.' },
-                limit: { type: 'number', description: 'How many matching files to return in this page (1-20, default 5).' },
-                offset: { type: 'number', description: 'Zero-based result offset. Use next_offset from the previous page.' },
-                /* ⛔ Stesso nome e stesso motivo di library_list: vedi il commento là sopra. */
-                browse_every_page: { type: 'boolean', description: 'Set true ONLY when the person explicitly asked to see or act on EVERY match. It unlocks further pages of the same search, up to a hard ceiling. Never set it to look around.' },
-            },
-            required: ['query'],
-        },
-    },
-    {
         name: 'library_read',
-        description: 'Read one Library item by its id, as returned by library_list or library_search. '
+        description: 'Read one Library item by its id, as returned by library_find. '
             + 'Documents come back as text.',
         input_schema: {
             type: 'object',
-            properties: { id: { type: 'string', description: 'The file id from library_list or library_search.' } },
+            properties: { id: { type: 'string', description: 'The file id from library_find.' } },
             required: ['id'],
         },
     },
@@ -2703,10 +2868,10 @@ const ATTREZZI_ESTESI = [
         name: 'library_file_origin',
         description: 'Report where one Library file came from: whether it was generated or brought in, '
             + 'which model made it, when. Use it when asked who or what made a file, or whether a file is '
-            + 'AI-generated. Ids come from library_list or library_search.',
+            + 'AI-generated. Ids come from library_find.',
         input_schema: {
             type: 'object',
-            properties: { id: { type: 'string', description: 'The file id from library_list or library_search.' } },
+            properties: { id: { type: 'string', description: 'The file id from library_find.' } },
             required: ['id'],
         },
     },
@@ -2721,14 +2886,14 @@ const ATTREZZI_ESTESI = [
      */
     {
         name: 'library_rename',
-        description: 'Give a Library file a different name. Get the id from library_list or library_search '
+        description: 'Give a Library file a different name. Get the id from library_find '
             + 'first — never guess it, and never pass a file name as the id. Use this when asked to rename '
             + 'something, or when a generated file kept a placeholder name. The contents do not change; only '
             + 'the name.',
         input_schema: {
             type: 'object',
             properties: {
-                id: { type: 'string', description: 'The file id from library_list or library_search.' },
+                id: { type: 'string', description: 'The file id from library_find.' },
                 name: { type: 'string', description: 'The new name, including the extension if the file has one.' },
             },
             required: ['id', 'name'],
@@ -2737,14 +2902,14 @@ const ATTREZZI_ESTESI = [
     {
         name: 'library_delete',
         description: 'Remove file(s) from the project Library. Call this ONLY when asked to delete something. '
-            + 'Get the id(s) from library_list or library_search first, and say the file\'s name(s) in your message '
+            + 'Get the id(s) from library_find first, and say the file\'s name(s) in your message '
             + 'before calling, so the user can stop you if it is the wrong one. To delete several files in one '
             + 'call, pass `ids` as an array of ids (max 100) — and repeat the FIRST of them in `id` as well. '
             + 'Never guess ids, never pass file names as ids.',
         input_schema: {
             type: 'object',
             properties: {
-                id: { type: 'string', description: 'The file id from library_list or library_search.' },
+                id: { type: 'string', description: 'The file id from library_find.' },
                 ids: { type: 'array', items: { type: 'string' },
                     description: 'Optional: several file ids to delete in one batch (max 100). When present, '
                         + 'only `ids` is processed — repeat the first of them in `id` too.' },
@@ -2822,29 +2987,21 @@ const ATTREZZI_ESTESI = [
      * non un porto. Debito dichiarato, stesso trattamento già dato a
      * A8/contentOrigin in FASE N Libreria.
      */
+    /* ⭐ C5 (owner 10/10/2026, «parametrizzare E accorpare»; contratto §2): `notes_list` + `notes_search` → UN attrezzo. Senza
+       `query` elenca (le più recenti prima), con `query` cerca per parole (le migliori prima) — come consiglia Anthropic («Writing
+       effective tools for agents», 11/09/2025: niente attrezzi sovrapposti). I nomi vecchi non si offrono più: chi li chiama riceve
+       `ATTREZZI_RINOMINATI` con il nome nuovo e un esempio. La lettura intera resta `notes_read`. */
     {
-        name: 'notes_list',
-        description: 'List the notes the user keeps, most recently updated first.',
+        name: 'notes_find',
+        description: 'Find the user\'s notes, one line each with an excerpt and the id. Without query: most recently updated '
+            + 'first. With query: by words (each word counts; accents and case do not matter), best matches first.',
         input_schema: {
             type: 'object',
             properties: {
-                limit: { type: 'number', description: 'Maximum notes to return (1-50, default 20).' },
+                query: { type: 'string', description: 'Words to look for in titles and text. Omit to list.' },
+                sort: { type: 'string', enum: ['recent', 'title'], description: 'Order when listing (default recent).' },
+                ...PARAMETRI_ELENCO,
             },
-        },
-    },
-    /* ⭐ 27/09/2026, decisione owner (`decisioni-owner-capacita-sezioni-27-09`, punto 2): cercare e leggere INTERA una nota —
-       `notes_list` ne mostra 200 caratteri. */
-    {
-        name: 'notes_search',
-        description: 'Search the user\'s notes by words (every word counts on its own; accents and case do not matter), best '
-            + 'matches first, with an excerpt and the id. An empty query or "*" returns them all.',
-        input_schema: {
-            type: 'object',
-            properties: {
-                query: { type: 'string', description: 'Words to look for in the notes\' titles and text.' },
-                limit: { type: 'number', description: 'Maximum notes to return (1-20, default 5).' },
-            },
-            required: ['query'],
         },
     },
     {
@@ -2854,7 +3011,7 @@ const ATTREZZI_ESTESI = [
         input_schema: {
             type: 'object',
             properties: {
-                id: { type: 'string', description: 'The note id, from notes_list or notes_search.' },
+                id: { type: 'string', description: 'The note id, from notes_find.' },
                 from: { type: 'number', description: 'The character to start from (default 1).' },
             },
             required: ['id'],
@@ -2877,13 +3034,13 @@ const ATTREZZI_ESTESI = [
     },
     {
         name: 'notes_update',
-        description: 'Change the title or the body of a note that already exists. Call notes_list first to get '
+        description: 'Change the title or the body of a note that already exists. Call notes_find first to get '
             + 'the note id — do not guess it from the title, because two notes can share a name. Send only the '
             + 'fields you are changing: an omitted field is left untouched, it is not cleared.',
         input_schema: {
             type: 'object',
             properties: {
-                id: { type: 'string', description: 'The note id, from notes_list.' },
+                id: { type: 'string', description: 'The note id, from notes_find.' },
                 title: { type: 'string', description: 'The new title (1-120 characters). Omit to leave the title alone.' },
                 content: { type: 'string', description: 'The new body, replacing the old one (1-8000 characters). Omit to leave the body alone.' },
             },
@@ -2893,11 +3050,11 @@ const ATTREZZI_ESTESI = [
     {
         name: 'notes_delete',
         description: 'Delete one of the user\'s notes, permanently. Call this ONLY when the user has clearly '
-            + 'asked for that note to be removed. There is no undo. Call notes_list first to get the id, and say '
+            + 'asked for that note to be removed. There is no undo. Call notes_find first to get the id, and say '
             + 'which note you are about to delete before doing it.',
         input_schema: {
             type: 'object',
-            properties: { id: { type: 'string', description: 'The note id, from notes_list.' } },
+            properties: { id: { type: 'string', description: 'The note id, from notes_find.' } },
             required: ['id'],
         },
     },
@@ -2916,30 +3073,20 @@ const ATTREZZI_ESTESI = [
      * ripartire da solo, quella è la casa giusta, non una seconda
      * qui.
      */
+    /* ⭐ C5 (owner 10/10/2026, «parametrizzare E accorpare»; contratto §2): `tasks_list` + `tasks_search` → UN attrezzo, come
+       `notes_find`. Chi chiama i nomi vecchi riceve `ATTREZZI_RINOMINATI`. */
     {
-        name: 'tasks_list',
-        description: 'List the user\'s tasks with their status and priority, most recently updated first.',
+        name: 'tasks_find',
+        description: 'Find the user\'s tasks, one line each with status, title and the id. Without query: most recently updated '
+            + 'first. With query: by words in title and detail (each word counts), best matches first.',
         input_schema: {
             type: 'object',
             properties: {
-                status: { type: 'string', enum: ['all', 'open', 'done'], description: 'Filter by completion. Default all.' },
-                limit: { type: 'number', description: 'Maximum tasks to return (1-50, default 20).' },
+                query: { type: 'string', description: 'Words to look for. Omit to list.' },
+                status: { type: 'string', enum: ['all', 'open', 'todo', 'doing', 'done'], description: 'open = todo and doing. Default all.' },
+                sort: { type: 'string', enum: ['recent', 'title'], description: 'Order when listing (default recent).' },
+                ...PARAMETRI_ELENCO,
             },
-        },
-    },
-    /* ⭐ 27/09/2026, decisione owner (`decisioni-owner-capacita-sezioni-27-09`, punto 2): cercare fra le attività. */
-    {
-        name: 'tasks_search',
-        description: 'Search the user\'s tasks by words in their title and description (every word counts on its own), best '
-            + 'matches first. An empty query or "*" returns them all.',
-        input_schema: {
-            type: 'object',
-            properties: {
-                query: { type: 'string', description: 'Words to look for.' },
-                status: { type: 'string', enum: ['all', 'open', 'done'], description: 'Filter by completion. Default all.' },
-                limit: { type: 'number', description: 'Maximum tasks to return (1-20, default 5).' },
-            },
-            required: ['query'],
         },
     },
     {
@@ -2961,12 +3108,12 @@ const ATTREZZI_ESTESI = [
     {
         name: 'tasks_complete',
         description: 'Mark one of the user\'s tasks as done, or move it back to in-progress or not-started. Call '
-            + 'tasks_list first to get the task id — do not guess it from the title. Only change a task the user '
+            + 'tasks_find first to get the task id — do not guess it from the title. Only change a task the user '
             + 'actually referred to.',
         input_schema: {
             type: 'object',
             properties: {
-                id: { type: 'string', description: 'The task id, from tasks_list.' },
+                id: { type: 'string', description: 'The task id, from tasks_find.' },
                 status: { type: 'string', enum: ['todo', 'doing', 'done'], description: 'done = finished; doing = started; todo = back to not started. Default done.' },
             },
             required: ['id'],
@@ -2975,13 +3122,13 @@ const ATTREZZI_ESTESI = [
     {
         name: 'tasks_update',
         description: 'Change the title, the detail or the priority of a task that already exists. Call '
-            + 'tasks_list first to get the task id — do not guess it from the title, because two tasks can share '
+            + 'tasks_find first to get the task id — do not guess it from the title, because two tasks can share '
             + 'a name. Do NOT use this to mark something done or started: that is tasks_complete. Send only the '
             + 'fields that change; what you omit stays as it is.',
         input_schema: {
             type: 'object',
             properties: {
-                id: { type: 'string', description: 'The task id, from tasks_list.' },
+                id: { type: 'string', description: 'The task id, from tasks_find.' },
                 title: { type: 'string', description: 'The new action to take (1-200 characters). Omit to leave the title alone.' },
                 description: { type: 'string', description: 'The new detail (max 2000 characters). Send an empty string to clear it, omit to leave it alone.' },
                 priority: { type: 'string', enum: ['low', 'normal', 'high'], description: 'Use high only when the user said it is urgent — do not infer urgency from tone.' },
@@ -2996,7 +3143,7 @@ const ATTREZZI_ESTESI = [
             + 'for the task to be removed, and say which one before doing it.',
         input_schema: {
             type: 'object',
-            properties: { id: { type: 'string', description: 'The task id, from tasks_list.' } },
+            properties: { id: { type: 'string', description: 'The task id, from tasks_find.' } },
             required: ['id'],
         },
     },
@@ -3033,28 +3180,20 @@ const ATTREZZI_ESTESI = [
      */
     /* ⭐ 27/09/2026, decisione owner (`decisioni-owner-capacita-sezioni-27-09`, punto 1): l'ELENCO della memoria. A «che memorie
        ho?» il modello non aveva nessuna strada (sessione 56066b64): memory_search cercava la frase intera. */
+    /* ⭐ C5 (owner 10/10/2026, «parametrizzare E accorpare»; contratto §2): `memory_list` + `memory_search` → UN attrezzo. */
     {
-        name: 'memory_list',
-        description: 'List everything the user has asked TALOS to remember, most recently updated first, with the full text '
-            + 'and the id. Use it when the user asks what TALOS remembers, or before updating or deleting a memory.',
+        name: 'memory_find',
+        description: 'Find what the user asked TALOS to remember, one line each with the full text and the id. Without query: '
+            + 'most recently updated first. With query: by words (each word counts), best matches first. Use it when the user '
+            + 'asks what TALOS remembers, or before updating or deleting a memory.',
         input_schema: {
             type: 'object',
             properties: {
-                limit: { type: 'number', description: 'Maximum memories to return (1-50, default 20).' },
+                query: { type: 'string', description: 'Words to look for in titles and text. Omit to list.' },
+                kind: { type: 'string', enum: ['preference', 'project_fact', 'procedure', 'policy_note'], description: 'Only memories of this kind.' },
+                sort: { type: 'string', enum: ['recent', 'title'], description: 'Order when listing (default recent).' },
+                ...PARAMETRI_ELENCO,
             },
-        },
-    },
-    {
-        name: 'memory_search',
-        description: 'Search what the user has explicitly asked TALOS to remember. Every word counts on its own (accents '
-            + 'and case do not matter); an empty query or "*" returns them all.',
-        input_schema: {
-            type: 'object',
-            properties: {
-                query: { type: 'string', description: 'Words to look for in the memories\' titles and text.' },
-                limit: { type: 'number', description: 'Maximum matches to return (1-20, default 5).' },
-            },
-            required: ['query'],
         },
     },
     {
@@ -3082,13 +3221,13 @@ const ATTREZZI_ESTESI = [
     {
         name: 'memory_update',
         description: 'Correct a memory that already exists, instead of saving a second one that says something '
-            + 'different. Get the id from memory_list or memory_search first — never guess it. Use this when the user corrects, '
+            + 'different. Get the id from memory_find first — never guess it. Use this when the user corrects, '
             + 'narrows or extends something TALOS already remembers. Send only the fields that change; what you '
             + 'leave out stays as it is.',
         input_schema: {
             type: 'object',
             properties: {
-                id: { type: 'string', description: 'The memory id, as returned by memory_search.' },
+                id: { type: 'string', description: 'The memory id, as returned by memory_find.' },
                 title: { type: 'string', description: 'A new name for the fact (1-80 characters). Leave out to keep the current one.' },
                 content: { type: 'string', description: 'The corrected fact, in full — it replaces the old text, it is not appended (1-600 characters).' },
                 kind: { type: 'string', enum: ['preference', 'project_fact', 'procedure', 'policy_note'], description: 'Only if the kind was wrong.' },
@@ -3100,10 +3239,10 @@ const ATTREZZI_ESTESI = [
         name: 'memory_delete',
         description: 'Remove one memory, so TALOS stops using it in future conversations. Call this ONLY when '
             + 'the user asks to forget something — "forget that…", "stop remembering…". Get the id from '
-            + 'memory_list or memory_search first, and say which memory you are about to remove.',
+            + 'memory_find first, and say which memory you are about to remove.',
         input_schema: {
             type: 'object',
-            properties: { id: { type: 'string', description: 'The memory id, as returned by memory_list or memory_search.' } },
+            properties: { id: { type: 'string', description: 'The memory id, as returned by memory_find.' } },
             required: ['id'],
         },
     },
@@ -3120,7 +3259,9 @@ const ATTREZZI_ESTESI = [
             + '(filter with status and folder); query = the conversations that contain those words, best first, with an '
             + 'excerpt of the best message; conversation_id = read that conversation page by page (from); conversation_id + '
             + 'around_message = the messages around one message. Results are the real messages, never a summary; the '
-            + 'current conversation is not included. Use it when the person asks about past conversations — "what did we '
+            + 'current conversation is not included, unless this_conversation is true: then query searches THIS conversation, '
+            + 'tool outputs included, and around_message or from reads it — use it after this conversation was compacted, to '
+            + 'recover an exact path, value, error or output the summary does not carry. Use it when the person asks about past conversations — "what did we '
             + 'decide about X", "what is running", "where did we leave Y". When you mention a conversation, write its link '
             + 'exactly as given: [title](talos://conversazione/<id>).',
         input_schema: {
@@ -3134,6 +3275,8 @@ const ATTREZZI_ESTESI = [
                 from: { type: 'number', description: 'Read only: the message number to start from (default 1).' },
                 around_message: { type: 'number', description: 'With conversation_id: show the messages around this message number.' },
                 window: { type: 'number', description: 'With around_message: how many messages on each side (1-20, default 5).' },
+                // C1 (09/10/2026): il recupero dentro la conversazione corrente, dopo una compattazione (come `session_search` di Hermes)
+                this_conversation: { type: 'boolean', description: 'Search (query) or read (around_message, from) THIS conversation, tool outputs included: the details an earlier compaction summarized away.' },
             },
             required: [],
         },
@@ -3170,36 +3313,26 @@ const ATTREZZI_ESTESI = [
      * (research-store.mjs, stesso principio "un solo spazio di
      * identità" già scelto per non duplicare una mappatura).
      */
+    /* ⭐ C5 (owner 10/10/2026; contratto §2 e §10): `research_list` + `research_search` → UN attrezzo. Il freno sulle pagine
+       resta (owner 10/10 sera, dopo la ricerca `RICERCA-C5-FRENO-PAGINE-2026-10-10.md`): `browse_every_page` e il conto nel kernel. */
     {
-        name: 'research_list',
-        description: 'List the deep researches run on this project, with how each one ended and how far it got. Use this whenever the user asks about their researches — what they investigated, which ones are still running, which failed. The first page reports the total: do not keep advancing the offset unless the user explicitly asked for every entry. Do NOT use library_list for that: research reports are saved as Library files, so library_list finds them mixed in with every other document and cannot say whether a research finished, was paused, or failed.',
+        name: 'research_find',
+        description: 'Find the deep researches run on this project, one line each with how it ended, the day it started and the id '
+            + 'for research_read. Without query: most recently started first; with query: by words in title and question. Use '
+            + 'it whenever the user asks about their researches. Do NOT use the Library for that: research reports are saved '
+            + 'there too, mixed with every other document, and it cannot say whether a research finished, was paused or failed. '
+            + 'The first page reports the total: do not keep paging unless the person explicitly asked for every entry.',
         input_schema: {
             type: 'object',
             properties: {
-                status: {
-                    type: 'string',
-                    enum: ['all', 'running', 'paused', 'done', 'cancelled', 'failed'],
-                    description: 'Filter by how it ended. `running` and `paused` are the ones still worth acting on. Default all.',
-                },
-                page_size: { type: 'number', description: 'Maximum entries in this page (1-20, default 10).' },
-                offset: { type: 'number', description: 'How many to skip, newest first (default 0).' },
+                query: { type: 'string', description: 'Words to look for in titles and questions. Omit to list.' },
+                status: { type: 'string', enum: ['all', 'running', 'paused', 'done', 'no_report', 'cancelled', 'failed'], description: '`running` and `paused` are the ones still worth acting on. Default all.' },
+                since: { type: 'string', description: 'Only runs started on or after this day (YYYY-MM-DD).' },
+                until: { type: 'string', description: 'Only runs started on or before this day (YYYY-MM-DD).' },
+                sort: { type: 'string', enum: ['recent', 'title'], description: 'Order when listing (default recent).' },
+                ...PARAMETRI_ELENCO,
                 browse_every_page: { type: 'boolean', description: 'Set true only when the person explicitly asked to see or act on every research entry.' },
             },
-            required: [],
-        },
-    },
-    /* ⭐ 27/09/2026, decisione owner (`decisioni-owner-capacita-sezioni-27-09`, punto 2): cercare fra le ricerche approfondite. */
-    {
-        name: 'research_search',
-        description: 'Search this project\'s deep researches by words in their title and question (every word counts on its '
-            + 'own), best matches first, with how each one ended and its id for research_read.',
-        input_schema: {
-            type: 'object',
-            properties: {
-                query: { type: 'string', description: 'Words to look for.' },
-                limit: { type: 'number', description: 'Maximum researches to return (1-20, default 5).' },
-            },
-            required: ['query'],
         },
     },
     {
@@ -3209,7 +3342,7 @@ const ATTREZZI_ESTESI = [
             + 'compare or produce a documented answer — "research this", "dig into", "write me a report on". '
             + 'For a single fact or a quick check, use web_search instead: it answers in seconds and costs '
             + 'almost nothing. This returns as soon as the research has started, not when it is finished — tell '
-            + 'the user it is running and that they can ask about it later (research_list, research_read).',
+            + 'the user it is running and that they can ask about it later (research_find, research_read).',
         input_schema: {
             type: 'object',
             properties: {
@@ -3228,7 +3361,7 @@ const ATTREZZI_ESTESI = [
         description: 'Read the report a finished deep research wrote. Use this when the user asks what a research found — do not answer from the title alone, which says what was asked and not what was learnt.',
         input_schema: {
             type: 'object',
-            properties: { id: { type: 'string', description: 'The research id, from research_list.' } },
+            properties: { id: { type: 'string', description: 'The research id, from research_find.' } },
             required: ['id'],
         },
     },
@@ -3238,45 +3371,39 @@ const ATTREZZI_ESTESI = [
         input_schema: {
             type: 'object',
             properties: {
-                id: { type: 'string', description: 'The research id, from research_list.' },
+                id: { type: 'string', description: 'The research id, from research_find.' },
                 title: { type: ['string', 'null'], description: 'The new label (1-200 characters). Send null to go back to showing the original question.' },
             },
             required: ['id', 'title'],
         },
     },
+    /*
+     * ⭐ C5 (owner 10/10/2026, «parametrizzare E accorpare»; contratto §2 e §7) — `research_pause` / `resume` / `cancel` → UN
+     *   attrezzo con `action`. All'ingresso del dispatch diventa il nome di prima (`research_<azione>`): permesso, hook, ricevuta
+     *   firmata, catena di sicurezza e Piano restano quelli di sempre, azione per azione. Un nome vecchio chiamato direttamente non
+     *   esegue niente: riceve la frase col nome nuovo.
+     */
     {
-        name: 'research_pause',
-        description: 'Stop a running research, keeping everything it has collected so far. It can be resumed later with research_resume. Use this when the user wants it to stop for now. If they want it stopped for good, use research_cancel.',
+        name: 'research_control',
+        description: 'Pause, resume or cancel one deep research. pause: it stops for now and keeps everything it collected; it can be '
+            + 'resumed later. resume: a paused research carries on from where it stopped (the ones worth resuming show as paused). '
+            + 'cancel: it stops for good; what it collected stays readable, nothing more is searched or paid for, and it cannot be '
+            + 'resumed, so prefer pause when the user only wants it to stop for now.',
         input_schema: {
             type: 'object',
-            properties: { id: { type: 'string', description: 'The research id, from research_list.' } },
-            required: ['id'],
-        },
-    },
-    {
-        name: 'research_resume',
-        description: 'Carry on a research that was paused, from where it stopped. The ones worth resuming show as paused.',
-        input_schema: {
-            type: 'object',
-            properties: { id: { type: 'string', description: 'The research id, from research_list.' } },
-            required: ['id'],
-        },
-    },
-    {
-        name: 'research_cancel',
-        description: 'Stop a research for good. What it already collected stays readable; nothing more is searched or paid for. Prefer research_pause when the user only wants it to stop for now: a cancelled research cannot be resumed.',
-        input_schema: {
-            type: 'object',
-            properties: { id: { type: 'string', description: 'The research id, from research_list.' } },
-            required: ['id'],
+            properties: {
+                id: { type: 'string', description: 'The research id, from research_find.' },
+                action: { type: 'string', enum: ['pause', 'resume', 'cancel'] },
+            },
+            required: ['id', 'action'],
         },
     },
     {
         name: 'research_delete',
-        description: 'Delete a research and the report it wrote, permanently. Say which one you are about to delete before doing it. Prefer research_cancel for one that is merely unwanted: a stopped research is still a record, a deleted one is gone along with its report.',
+        description: 'Delete a research and the report it wrote, permanently. Say which one you are about to delete before doing it. Prefer research_control with action "cancel" for one that is merely unwanted: a stopped research is still a record, a deleted one is gone along with its report.',
         input_schema: {
             type: 'object',
-            properties: { id: { type: 'string', description: 'The research id, from research_list.' } },
+            properties: { id: { type: 'string', description: 'The research id, from research_find.' } },
             required: ['id'],
         },
     },
@@ -3487,7 +3614,7 @@ const ATTREZZI_ESTESI = [
            indovinava un contratto diverso (`name`, `prompt`, `phaseId`, `next`). `core` resta accettato dall'esecuzione per le
            prove e le API interne, non si annuncia. Lo schema è una COPIA di `WORKFLOW_DRAFT_INPUT_SCHEMA`: il kernel è
            condiviso col mobile e non importa da `src/workflow/`; la prova WF-DRAFT-SCHEMA-PARITY ne controlla l'identità. */
-        description: 'Propose a workflow for the person to review: a short draft with phases and read-only steps. The server checks and compiles it; if something is wrong it answers with the reason, so you can fix the draft and call again. This does not approve or start anything. Available to the root agent.',
+        description: 'Propose a workflow: a short draft with phases and read-only steps. The server checks and compiles it; if something is wrong it answers with the reason, so you can fix the draft and call again. The person approves and starts it, unless Coordination is on in this conversation: then it starts on its own and the receipt says so. When a workflow of this conversation ends or needs attention, its outcome reaches you as a new message: after proposing or starting one, END YOUR TURN; do not poll it or wait with commands. Available to the root agent.',
         input_schema: {
             type: 'object',
             properties: { draft: WORKFLOW_DRAFT_SCHEMA_MODELLO },
@@ -3590,15 +3717,35 @@ const ATTREZZI_ESTESI = [
     },
     /* ⭐ K3 (F-013/F-014, owner 03/10 «Come Claude Code, completo»; Codex `list_agents`/`interrupt_agent`, multi_agents_spec.rs
        @c73775f): il padre vede i suoi figli e li può fermare. Prima `ask_child` era l'unico canale e diceva sempre «requested». */
+    /* ⭐ C5 (owner 10/10/2026, brief §6: «list_subagents non deve necessariamente restituire tutti gli agenti»; il suo esempio, alla
+       lettera): filtri, limite, cursore, formato. Il contratto comune è `PARAMETRI_ELENCO` (sotto) e la busta `{items, has_more,
+       next_cursor, note}` la compone l'ospite (`src/elenco-paginato.mjs`). Gli stati restano le parole di sempre. */
     {
         name: 'list_children',
-        description: 'List your direct child agents: state (running, finished, stopped, not finished, interrupted), task, seconds since their last activity, and whether their result was delivered or is still waiting in your queue. Read-only.',
-        input_schema: { type: 'object', properties: {}, required: [] },
+        description: 'List your direct child agents, one line each: task, state, result (delivered, waiting in your queue, or none yet), seconds since last activity, childId. Filter by status or Workflow run; needs_attention = waiting for a permission or an answer. A last line with cursor= means there are more. Read-only.',
+        input_schema: { type: 'object', properties: {
+            status: { type: 'string', enum: ['running', 'finished', 'stopped', 'paused', 'not finished', 'interrupted', 'needs_attention'] },
+            workflow: { type: 'string', description: 'Only the steps of this Workflow run (runId).' },
+            sort: { type: 'string', enum: ['started', 'recent'], description: 'started (default): oldest first; recent: latest activity first (a child that acts between two pages can move).' },
+            ...PARAMETRI_ELENCO,
+        }, required: [] },
     },
+    /*
+     * ⭐ C5 (owner 10/10/2026, «parametrizzare E accorpare»; contratto §2 e §7) — `stop_child` + `pause_child` + `resume_child` →
+     *   UN attrezzo con `action`. Tre cose restano com'erano: il permesso è per AZIONE (`child_control:stop`…, con ripiego sulla
+     *   chiave vecchia, la più stretta vince); la carta di approvazione tiene il suo tipo di sempre (`stop_child`…); in Piano la
+     *   ripresa resta vietata (riparte un lavoro), la pausa e lo stop no (non toccano il disco).
+     */
     {
-        name: 'stop_child',
-        description: 'Stop one direct child agent that is still running, together with its own children. Returns its previous state. Use list_children first to get the childId.',
-        input_schema: { type: 'object', properties: { childId: { type: 'string' } }, required: ['childId'] },
+        name: 'child_control',
+        description: 'Stop, pause or resume one direct child agent, together with its own children. stop: it ends now. pause: '
+            + 'the tool it is using finishes, then it waits with its conversation kept. resume: a paused child continues from where '
+            + 'it stopped and its result reaches you as usual (its own children stay paused until it resumes them). Returns the '
+            + 'previous state. Use list_children first to get the childId.',
+        input_schema: { type: 'object', properties: {
+            childId: { type: 'string' },
+            action: { type: 'string', enum: ['stop', 'pause', 'resume'] },
+        }, required: ['childId', 'action'] },
     },
     {
         name: 'answer_parent_question',
@@ -3699,8 +3846,14 @@ const ATTREZZI_ESTESI = [
     {
         name: 'automation_list',
         description: 'List the scheduled automations: id, name, schedule, whether it is on, next run, last run and how it ended, '
-            + 'and how many runs are waiting for the person to read. Read-only. Call it before changing or running one: never guess an id.',
-        input_schema: { type: 'object', properties: {}, required: [] },
+            + 'and how many runs are waiting for the person to read. Read-only. Call it before changing or running one: never guess an id. '
+            + 'Soonest next run first; filter with state or next_run_before instead of paging through all of them.',
+        /* C5 (owner 10/10/2026; contratto §2): filtri e pagine come gli altri elenchi; risponde l'ospite (`automation-per-il-modello.mjs`) */
+        input_schema: { type: 'object', properties: {
+            state: { type: 'string', enum: ['all', 'on', 'off', 'unread'], description: 'on/off, or unread: with runs waiting for the person. Default all.' },
+            next_run_before: { type: 'string', description: 'Only those whose next run is before this local time, "YYYY-MM-DD" or "YYYY-MM-DD HH:MM" (each automation\'s own time zone, as this list prints it).' },
+            ...PARAMETRI_ELENCO,
+        }, required: [] },
     },
     {
         name: 'automation_runs',
@@ -3751,29 +3904,24 @@ const ATTREZZI_ESTESI = [
             prossimoGiroAlle: { type: 'string', description: 'move only the next run, local time "YYYY-MM-DDTHH:MM" (at least 5 minutes from now)' },
         }, required: ['id'] },
     },
+    /*
+     * ⭐ C5 (owner 10/10/2026, «parametrizzare E accorpare»; contratto §2 e §7) — `automation_pause` / `resume` / `run` / `stop` → UN
+     *   attrezzo con `action`. Il kernel lo traduce nel nome di prima PRIMA di chiamare l'ospite (`automazioni-per-il-modello.mjs`),
+     *   quindi l'ospite, le carte (`automazione-carta.js` riconosce il tipo `automation_run`…) e la CLI restano identici. Le regole
+     *   di sempre restano per azione: `resume` e `run` passano dalla carta, `contesto` vale solo per `run`.
+     */
     {
-        name: 'automation_pause',
-        description: 'Turn an automation off: it stops running on its schedule until it is turned on again. A run already going finishes.',
-        input_schema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
-    },
-    {
-        name: 'automation_resume',
-        description: 'Turn an automation back on: the next run is computed from now. The person approves it on a card.',
-        input_schema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
-    },
-    {
-        name: 'automation_run',
-        description: 'Run an automation now, outside its schedule (also when it is off). The person approves it on a card. The run goes on '
-            + 'in the background: do not wait for it; its report appears in the automation\'s history. Never while a run of it is still going.',
+        name: 'automation_control',
+        description: 'Control one automation. pause: it stops running on its schedule until resumed (a run already going finishes). '
+            + 'resume: it goes back on, and the next run is computed from now. run: it runs now, outside its schedule (also when '
+            + 'paused), in the background; do not wait for it, its report appears in the automation\'s history; never while a run '
+            + 'of it is still going. stop: the run going right now stops, and the automation stays on. resume and run are approved '
+            + 'by the person on a card.',
         input_schema: { type: 'object', properties: {
             id: { type: 'string' },
-            contesto: { type: 'string', description: 'optional extra context for this run only; it reaches the run as data, not as instructions' },
-        }, required: ['id'] },
-    },
-    {
-        name: 'automation_stop',
-        description: 'Stop the run of an automation that is going right now. The automation stays on for its next runs.',
-        input_schema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+            action: { type: 'string', enum: ['pause', 'resume', 'run', 'stop'] },
+            contesto: { type: 'string', description: 'run only: optional extra context for this run; it reaches the run as data, not as instructions' },
+        }, required: ['id', 'action'] },
     },
     /*
      * ⭐ 0.1.25 — LA SECONDA PORTA dei fornitori a valle esclusi su OpenRouter (owner 09/10/2026; la 0.1.24 aveva solo le
@@ -3812,14 +3960,58 @@ const ATTREZZI_ESTESI = [
 ]
 /** ⭐ Stesso motivo dell'export sopra: la parte opzionale della superficie, per l'impronta. */
 /** 27/09/2026, decisione owner (capacità delle sezioni): gli attrezzi che passano da `onLetturaSezione`. */
-export const ATTREZZI_LETTURA_SEZIONI = new Set(['memory_list', 'notes_search', 'notes_read', 'tasks_search', 'research_search', 'conversation_search'])
+/*
+ * C16 (owner 10/10/2026) — la riga per il modello quando la persona cambia i permessi mentre lui lavora. In inglese (arriva al
+ *   modello). Il verso si legge dall'ordine dei livelli; due livelli non confrontabili danno la frase neutra.
+ */
+const NOMI_DEI_LIVELLI = Object.freeze({ lettura: 'Read only', ricerca: 'Research', 'su-richiesta': 'On request',
+    'scrittura-area': 'Area write', 'scrittura-progetto': 'Workspace write', 'accesso-pieno': 'Full access' })
+/*
+ * ⛔⛔ Riga del bugfixer (owner 10/10/2026: «kernel chiuso», poi «irrobustisci con ricerca paper docs e competitor») — UNA GRAMMATICA
+ *   SOLA PER IL LIVELLO. Prima il kernel confrontava `livelloAccesso` coi sei livelli, e ogni altro valore faceva fallire TUTTI i
+ *   confronti: una parola della pillola passata al posto del livello («On request») non faceva chiedere niente, e un refuso, `null`
+ *   o «completo» giravano senza vincoli. Il valore si LEGGE una volta, all'ingresso, in un insieme chiuso:
+ *   · un livello resta sé stesso; · una delle cinque parole della pillola diventa il SUO livello (una grammatica sola, come la
+ *     mappa `livelloDaPermessi` del registro); · ASSENTE resta assente (TALOS-BANCO e i chiamanti senza permessi, come sempre);
+ *   · tutto il resto vale «Sola lettura».
+ *   Fonti (10/10/2026): Codex, enum chiuso con `ReadOnly` di serie e una variante sconosciuta che è un errore
+ *   (`codex-rs/protocol/src/config_types.rs:104-115`); OpenCode, letterali chiusi e «ask» quando nessuna regola vale
+ *   (`packages/core/src/permission.ts:76-83`); Hermes, «Unknown strings… fall back to 'manual' instead of silently failing every
+ *   mode check» (`tools/approval_context.py:208-222`); la CSP, una direttiva illeggibile vale «la politica più sicura»; arXiv
+ *   2606.28679 (27/06/2026, «Capability Gates Are Not Authorization»): i framework non hanno «a deterministic fail-closed… gate by
+ *   default». Il registro del desktop rifiuta già le parole sconosciute alla porta (51094abca): questo è il secondo muro.
+ */
+/* Review del desktop (N1): anche «Area write», il nome che il kernel stampa per `scrittura-area` (`NOMI_DEI_LIVELLI`), si rilegge
+   nel suo livello — ogni nome che il kernel scrive deve tornare indietro uguale. */
+const LIVELLO_DELLA_PAROLA = Object.freeze({ 'Read only': 'lettura', Research: 'ricerca', 'On request': 'su-richiesta',
+    'Area write': 'scrittura-area', 'Workspace write': 'scrittura-progetto', 'Full access': 'accesso-pieno' })
+export function livelloLetto(valore) {
+    if (valore === undefined) return undefined
+    if (typeof valore === 'string' && Object.hasOwn(NOMI_DEI_LIVELLI, valore)) return valore
+    if (typeof valore === 'string' && Object.hasOwn(LIVELLO_DELLA_PAROLA, valore)) return LIVELLO_DELLA_PAROLA[valore]
+    return 'lettura'
+}
+const RANGO_DEI_LIVELLI = Object.freeze({ lettura: 0, ricerca: 1, 'su-richiesta': 2, 'scrittura-area': 3, 'scrittura-progetto': 3, 'accesso-pieno': 4 })
+export function frasePermessiCambiati(prima, dopo) {
+    const nome = (l) => (Object.hasOwn(NOMI_DEI_LIVELLI, l ?? '') ? NOMI_DEI_LIVELLI[l] : String(l ?? 'unset'))
+    const rango = (l) => (Object.hasOwn(RANGO_DEI_LIVELLI, l ?? '') ? RANGO_DEI_LIVELLI[l] : null)
+    const a = rango(prima), b = rango(dopo)
+    const verso = a !== null && b !== null && b < a
+        ? 'actions that ran without asking may now ask the person first or be refused. If one is refused, do not retry it another way: tell the person what you need.'
+        : a !== null && b !== null && b > a
+            ? 'actions that were refused or needed approval before may now be allowed, and tools that were not offered may now be available.'
+            : 'the rules for your actions changed; follow what each tool result says.'
+    return `[TALOS] The person changed this session's permissions from "${nome(prima)}" to "${nome(dopo)}" while you were working. From this call on, ${verso}`
+}
+
+export const ATTREZZI_LETTURA_SEZIONI = new Set(['library_find', 'memory_find', 'notes_find', 'notes_read', 'tasks_find', 'research_find', 'conversation_search'])
 
 /** F-012 (piano 0.1.19 §1.5, 28/09): i tre attrezzi dei run dei Workflow, che passano da `onWorkflowFn`. */
 export const ATTREZZI_WORKFLOW = new Set(['workflow_status', 'workflow_output', 'workflow_control'])
 
 /** Automazioni a due porte (owner 08/10/2026 notte): gli attrezzi delle automazioni, che passano da `onAutomazioneFn`. */
 export const ATTREZZI_AUTOMAZIONI = new Set(['automation_list', 'automation_runs', 'automation_create', 'automation_update',
-    'automation_pause', 'automation_resume', 'automation_run', 'automation_stop'])
+    'automation_control']) // C5: era automation_pause/resume/run/stop — l'ospite li riceve ancora coi nomi di prima
 
 /** 0.1.25 (owner 09/10/2026): gli attrezzi dei fornitori a valle esclusi, che passano da `onFornitoriFn`. */
 export const ATTREZZI_FORNITORI = new Set(['provider_exclusions_list', 'provider_exclude', 'provider_allow'])
@@ -3979,9 +4171,12 @@ export function formattaListaLibreria(risultato) {
  *   l'ennesimo modo di ripartire da capo cambiando una maiuscola.
  */
 export const CAMPI_CHE_IDENTIFICANO_LA_DOMANDA = Object.freeze({
-    library_list: Object.freeze({ origin: 'all', file_type: 'all' }),
-    library_search: Object.freeze({ query: '' }),
-    research_list: Object.freeze({ status: 'all' }),
+    library_find: Object.freeze({ file_type: 'all', origin: 'all', query: '', sort: 'recent' }), // C5: era library_list + library_search
+    // C5 (contratto §10): il freno resta su research_find; il cursore, il limite e il formato non cambiano la domanda
+    research_find: Object.freeze({ query: '', since: '', sort: 'recent', status: 'all', until: '' }),
+    /* C5, review del passo 13 (Y-E2): anche `elenca` pagina, quindi ha il freno. ⛔ Il percorso arriva qui GIÀ normalizzato dal
+       ramo (`percorsoDiElencaPerLaFirma`): «src\kernel», «./src/kernel/» e «src/kernel» sono la stessa cartella. */
+    elenca: Object.freeze({ depth: 1, percorso: '' }),
 })
 
 /**
@@ -3990,7 +4185,8 @@ export const CAMPI_CHE_IDENTIFICANO_LA_DOMANDA = Object.freeze({
  * Restano perché il cancello anti-deriva li usa per classificare i campi dello schema: filtro
  * dichiarato, cursore noto, o flag di sblocco — e nient'altro è ammesso senza una decisione.
  */
-export const CAMPI_DI_PAGINAZIONE = ['page_token', 'pageToken', 'cursor', 'offset', 'next_offset', 'nextOffset', 'page', 'page_size', 'pageSize', 'limit']
+export const CAMPI_DI_PAGINAZIONE = ['page_token', 'pageToken', 'cursor', 'offset', 'next_offset', 'nextOffset', 'page', 'page_size', 'pageSize', 'limit',
+    'response_format'] // C5: come mostrare una pagina non cambia la domanda
 
 /** Il campo con cui il modello chiede ESPLICITAMENTE di andare oltre il tetto. Nome nel contratto col kernel: non si traduce e non si mostra a schermo. */
 export const CAMPO_SFOGLIA_TUTTO = 'browse_every_page'
@@ -4092,12 +4288,26 @@ export function decisioneDiSfogliamento({
     const servite = stato.pagine
     const pagina = servite + 1
     const chiesto = sfogliaTuttoRichiesto(argomenti)
-    const ricerca = nome === 'research_list'
-    const nomeElenco = ricerca ? 'Deep Research listing' : 'Library listing'
+    const ricerca = nome.startsWith('research_')
+    const cartella = nome === 'elenca'
+    const nomeElenco = ricerca ? 'Deep Research listing' : cartella ? 'folder listing' : 'Library listing'
     const consiglio = ricerca
-        ? 'Answer with what you already have or narrow the listing with the status filter.'
-        : 'Answer with what you already have, narrow the listing with the origin/file_type filters, or use library_search with a keyword to find one specific file.'
+        ? 'Answer with what you already have, or narrow the listing with status, since/until or query.'
+        : cartella
+            ? 'Answer with what you already have, open a narrower folder with "percorso", or use "cerca" to find files by name or content.'
+            : 'Answer with what you already have, narrow the listing with the origin/file_type filters, or add a query to find one specific file.'
 
+    /* ⭐ C5 (contratto §10; Paperclip PR #13102, mcp-go PR #1020): un cursore già servito in questo giro è un ciclo — la
+       pagina il modello ce l'ha già. Si rifiuta PRIMA di contarla, e senza toccare il canale. */
+    const cursore = typeof argomenti?.cursor === 'string' && argomenti.cursor !== '' ? argomenti.cursor : null
+    if (cursore && (stato.cursori ?? []).includes(cursore)) {
+        return {
+            permesso: false,
+            pagina: servite,
+            messaggio: `REFUSED: this cursor was already served in this run, so you already have that page of the ${nomeElenco}.`
+                + ' Continue with the cursor= of the LAST page you received, or answer from what you have.',
+        }
+    }
     if (pagina > tettoAssoluto) {
         return {
             permesso: false,
@@ -4135,7 +4345,7 @@ export function decisioneDiSfogliamento({
         }
     }
 
-    registro.set(firma, { ...stato, pagine: pagina })
+    registro.set(firma, { ...stato, pagine: pagina, ...(cursore ? { cursori: [...(stato.cursori ?? []), cursore] } : {}) })
     if (pagina === tetto) {
         return {
             permesso: true,
@@ -4155,6 +4365,40 @@ export function decisioneDiSfogliamento({
         }
     }
     return { permesso: true, pagina, coda: '' }
+}
+
+/**
+ * ⭐ C5 (contratto §9, testo a righe) — il confine dei dati non fidati attorno alle sole VOCI di un elenco: le righe che cominciano
+ *   con «- » e stanno in fila dopo la testata. Ciò che le precede (la testata) e ciò che le segue (note, «N more… cursor=…») è testo
+ *   di TALOS e resta fuori. Senza voci (elenco vuoto, nessun risultato) non c'è niente di esterno da avvolgere. Pura: `avvolgi` è
+ *   il confine del giro (`avvolgiEsterno(nome)`), che vive dentro `talosLavora`.
+ */
+export function confineSulleVoci(testo, avvolgi) {
+    const righe = String(testo).split('\n')
+    const prima = righe.findIndex((r) => r.startsWith('- '))
+    if (prima === -1) return testo
+    let dopo = prima
+    while (dopo < righe.length && righe[dopo].startsWith('- ')) dopo += 1
+    const testa = righe.slice(0, prima).join('\n')
+    const coda = righe.slice(dopo).join('\n')
+    const dentro = avvolgi(righe.slice(prima, dopo).join('\n'))
+    return [testa, dentro, coda].filter((pezzo) => pezzo !== '').join('\n')
+}
+
+/**
+ * ⭐ C5 (owner 10/10/2026 sera, «freno consapevole»; contratto §10) — il budget si VEDE prima del muro, come il Budget Tracker
+ *   (Liu et al., Google, arXiv:2511.17006 v2 17/08/2026: a parità di accuratezza -40% di ricerche e -31% di costo). Sotto una
+ *   pagina che ha un seguito: quante pagine restano da solo; sull'ultima concessa, la riga del freno di sempre. Senza seguito,
+ *   niente: l'elenco è finito e una riga in più sarebbe rumore. Pura.
+ * @param {{ sfoglia: { pagina: number, coda: string }, haAltro: boolean, tetto?: number }} p
+ */
+export function codaDelFreno({ sfoglia, haAltro, tetto = PAGINE_SENZA_RICHIESTA }) {
+    if (!haAltro) return ''
+    if (sfoglia.pagina < tetto) {
+        const restano = tetto - sfoglia.pagina
+        return `(On your own you can read ${restano} more page${restano === 1 ? '' : 's'} of this listing; beyond that only if the person asked for every entry.)`
+    }
+    return sfoglia.coda
 }
 
 /**
@@ -4316,10 +4560,10 @@ export function formattaListaRicerche(risultato) {
  * (mai visto) da "esiste ma non c'è ancora un rapporto leggibile".
  */
 export function formattaLetturaRicerca(risultato) {
-    if (!risultato.trovata) return 'There is no research with that id. Call research_list to see the current ones.'
+    if (!risultato.trovata) return 'There is no research with that id. Call research_find to see the current ones.'
     if (risultato.contenutoRapporto !== null) return risultato.contenutoRapporto
     return `That research is "${risultato.stato}": there is no readable report for it yet. `
-        + 'It may still be running, or it may have stopped before writing one. Call research_list to see how it ended.'
+        + 'It may still be running, or it may have stopped before writing one. Call research_find to see how it ended.'
 }
 
 /*
@@ -4627,8 +4871,11 @@ const RISALITA = /(^|[\\/])\.\.([\\/]|$)/
  * @param {{elenca:(percorso?:string)=>Promise<Array<{nome:string, cartella:boolean}>>}} disco
  * @param {string} base '' = la radice del workspace
  */
-export async function elencaDaCartella(disco, base, { spiegaErrore = null } = {}) {
+export async function elencaDaCartella(disco, base, { spiegaErrore = null, profondita = 1, limite = null, cursore = null, note = [] } = {}) {
     const prefisso = base ? `${base.replace(/[\\/]+$/, '')}/` : ''
+    /* C5 (owner 10/10/2026 sera): `depth` scende di più livelli; oltre ELENCA_VOCI_MASSIME voci lette non si scende più */
+    let lette = 0
+    let fermato = false
     let voci
     try {
         voci = await disco.elenca(base)
@@ -4641,13 +4888,14 @@ export async function elencaDaCartella(disco, base, { spiegaErrore = null } = {}
             + 'Check the project map you received at the start, or use `cerca` to find where it is. '
             + 'Note: `elenca` opens FOLDERS — to read a file use `leggi`.'
     }
-    const dentro = await Promise.all(voci
-        .filter((v) => v.cartella)
-        /* ⛔ Una sottocartella illeggibile (permessi, link rotto) non fa cadere l'elenco INTERO:
-           sparisce lei, non tutto il resto. Alla radice il caso non capitava mai; aprendo una
-           cartella a scelta del modello capita. */
-        .map(async (v) => {
-            const figli = await disco.elenca(`${prefisso}${v.nome}`).then((f) => f, () => null)
+    lette += voci.length
+    /*
+     * Una sottocartella e i `livelli` sotto di lei. Con `livelli === 0` i suoi figli si nominano tutti, nell'ordine del disco, le
+     *   cartelle senza barra: è ESATTAMENTE la forma di sempre (profondità 1), confrontata byte per byte dal banco. Con `livelli > 0`
+     *   prima i suoi file, poi ogni sua cartella scesa a sua volta — come fa la radice.
+     */
+    const sotto = async (cartella, livelli) => {
+        const figli = await disco.elenca(cartella).then((f) => f, () => null)
             /*
              * ⛔⛔⛔ CLI-REQ-07, punto 2 (17/09/2026) — UNA SOTTOCARTELLA SENZA FILE NON SPARISCE.
              *   Una cartella qui si vede solo ATTRAVERSO i suoi figli, quindi una che non ne ha
@@ -4663,10 +4911,18 @@ export async function elencaDaCartella(disco, base, { spiegaErrore = null } = {}
              *   senza barra): quella forma è confrontata BYTE PER BYTE dal banco e non si tocca
              *   per coerenza estetica.
              */
-            if (figli === null) return []
-            if (figli.length === 0) return [`${prefisso}${v.nome}/`]
-            return figli.map((f) => `${prefisso}${v.nome}/${f.nome}`)
-        }))
+        if (figli === null) return []
+        if (figli.length === 0) return [`${cartella}/`]
+        lette += figli.length
+        if (livelli > 0 && lette > ELENCA_VOCI_MASSIME) fermato = true
+        if (livelli === 0 || fermato) return figli.map((f) => `${cartella}/${f.nome}`)
+        const giu = await Promise.all(figli.filter((f) => f.cartella).map((f) => sotto(`${cartella}/${f.nome}`, livelli - 1)))
+        return [...figli.filter((f) => !f.cartella).map((f) => `${cartella}/${f.nome}`), ...giu.flat()]
+    }
+    /* ⛔ Una sottocartella illeggibile (permessi, link rotto) non fa cadere l'elenco INTERO:
+       sparisce lei, non tutto il resto. Alla radice il caso non capitava mai; aprendo una
+       cartella a scelta del modello capita. */
+    const dentro = await Promise.all(voci.filter((v) => v.cartella).map((v) => sotto(`${prefisso}${v.nome}`, profondita - 1)))
     const righe = [...voci.filter((v) => !v.cartella).map((v) => `${prefisso}${v.nome}`), ...dentro.flat()]
     /*
      * ⛔⛔⛔ CLI-REQ-07, punto 1 (17/09/2026) — UNA CARTELLA VUOTA NON RISPONDE IL VUOTO.
@@ -4694,7 +4950,103 @@ export async function elencaDaCartella(disco, base, { spiegaErrore = null } = {}
         const quale = base ? `"${base}" is empty` : 'the workspace root is empty'
         return `no files and no folders. ${quale} — this is the complete listing, not a failure.`
     }
-    return righe.join('\n')
+    const intero = righe.join('\n')
+    /*
+     * ⭐⭐ C5 (owner 10/10/2026 sera, «Limite + cursore + profondità»). Fino a ELENCA_TETTO_INTERO caratteri, senza `limit` né
+     *   `cursor` e senza note, l'uscita è QUELLA DI SEMPRE, byte per byte: è il caso del banco (misurato il 10/10: `mobile` 2.193
+     *   caratteri, `mobile/src` 7.957). Oltre, il kernel la tagliava comunque nel mezzo (`uscitaUtile(…, 8_000, 0.5)` all'uscita
+     *   degli attrezzi: testa e coda, il centro perso e irrecuperabile) — `harness-ui` dava 44.658 caratteri. Lì si PAGINA:
+     *   - le voci in ordine di percorso (maiuscole a parte), perché il cursore porta una CHIAVE, non una posizione
+     *     (`elenco-paginato.mjs`): fra due pagine un file che compare o sparisce non fa saltare né ripetere niente;
+     *   - una pagina sta in ELENCA_PAGINA_CARATTERI, sotto il taglio del kernel, così la riga del cursore arriva sempre;
+     *   - la forma è quella comune (`testoElenco`): testata, «- voce», note, «N more… cursor=…». Il confine dei dati avvolge solo
+     *     le voci (`confineSulleVoci`): testata e cursore sono testo di TALOS.
+     *   Fonti (10/10/2026): Pi `packages/coding-agent/src/core/tools/ls.ts:13,23,147` (limit 500 voci + tetto in byte, «Use
+     *   limit=… for more», senza cursore); opencode `packages/opencode/src/tool/glob.ts:49` (tetto 100, nessun seguito); Hermes
+     *   `tools/file_tools.py:1299-1300` (`limit` 50 + `offset` a posizione). Il nostro +1: cursore a chiave e profondità.
+     * ⛔ Un nome con un a capo (possibile su Linux) spezzerebbe la riga e uscirebbe dal confine: nelle pagine si scrive `\n`.
+     */
+    /* ⛔ Il confine riconosce una pagina dalla sua testata (`TESTATA_PAGINA_ELENCA`): un elenco intero che COMINCIASSE con una
+       riga uguale (un file così chiamato, su Linux) farebbe uscire dal confine le righe dopo. Allora si pagina: lì ogni nome è
+       una voce «- », dentro il confine. */
+    const sembraUnaPagina = TESTATA_PAGINA_ELENCA.test(`${intero}\n`)
+    if (limite === null && !cursore && note.length === 0 && intero.length <= ELENCA_TETTO_INTERO && !sembraUnaPagina) return intero
+    const filtri = { percorso: percorsoDiElencaPerLaFirma(base), depth: profondita }
+    const chiaveDi = (r) => [r.toLowerCase(), r]
+    const ordinate = righe.map((r) => r.replace(/\r\n|\r|\n/g, '\\n')).sort((a, b) => confrontaChiavi(chiaveDi(a), chiaveDi(b)))
+    let inizio = 0
+    if (cursore) {
+        const letto = decodificaCursore(cursore, { attrezzo: 'elenca', filtri })
+        if (!letto.ok) return letto.nota
+        inizio = ordinate.findIndex((r) => confrontaChiavi(chiaveDi(r), letto.chiave) > 0)
+        if (inizio === -1) inizio = ordinate.length
+    }
+    const pagina = []
+    let usati = 0
+    for (let i = inizio; i < ordinate.length && pagina.length < (limite ?? Infinity); i += 1) {
+        const costo = ordinate[i].length + 3 // «- » e l'a capo
+        if (pagina.length > 0 && usati + costo > ELENCA_PAGINA_CARATTERI) break
+        pagina.push(ordinate[i])
+        usati += costo
+    }
+    const restanti = ordinate.length - inizio - pagina.length
+    const dove = base ? `"${base}"` : 'the workspace root'
+    return testoElenco({
+        testa: `${dove}: showing ${pagina.length} of ${ordinate.length} entries (depth ${profondita}), sorted by path`
+            + `${inizio > 0 ? `, from entry ${inizio + 1}` : ''}.`,
+        righe: pagina,
+        has_more: restanti > 0,
+        next_cursor: restanti > 0 ? codificaCursore({ attrezzo: 'elenca', chiave: chiaveDi(pagina.at(-1)), filtri }) : null,
+        restanti,
+        note: [...note, ...(fermato ? [`Stopped going down after ${ELENCA_VOCI_MASSIME} entries: open a subfolder with "percorso", or use a lower depth.`] : [])],
+        suggerimentoFiltro: 'a subfolder in "percorso"',
+    })
+}
+
+/** C5: i limiti di `elenca` (vedi `elencaDaCartella`). 8.000 = il taglio del kernel all'uscita degli attrezzi (`uscitaUtile`). */
+export const ELENCA_TETTO_INTERO = 8_000
+export const ELENCA_PAGINA_CARATTERI = 7_000
+export const ELENCA_VOCI_MASSIME = 10_000
+/** La testata di una PAGINA di `elenca` (la scrive solo `elencaDaCartella`): il confine dei dati avvolge le sole voci. */
+export const TESTATA_PAGINA_ELENCA = /^(?:"[^"\n]*"|the workspace root): showing \d+ of \d+ entries \(depth \d\), sorted by path[^\n]*\.\n/u
+const ELENCA_PROFONDITA_MASSIMA = 3
+const ELENCA_LIMITE_MASSIMO = 500
+
+/**
+ * C5: gli argomenti nuovi di `elenca`, letti senza fidarsi. Un valore sbagliato non fa fallire la chiamata: si usa il predefinito
+ *   e una nota lo dice (come `leggiValoreFiltro` per gli elenchi delle sezioni). Pura.
+ * @returns {{ profondita: number, limite: number|null, cursore: string|null, note: string[] }}
+ */
+export function parametriDiElenca(argomenti = {}) {
+    const a = argomenti && typeof argomenti === 'object' ? argomenti : {}
+    const note = []
+    let profondita = 1
+    if (a.depth !== undefined && a.depth !== null && a.depth !== '') {
+        const n = Number(a.depth)
+        if (Number.isInteger(n) && n >= 1 && n <= ELENCA_PROFONDITA_MASSIMA) profondita = n
+        else note.push(`depth ${JSON.stringify(a.depth)} must be 1, 2 or 3: 1 was used.`)
+    }
+    let limite = null
+    if (a.limit !== undefined && a.limit !== null && a.limit !== '') {
+        const n = Number(a.limit)
+        if (Number.isInteger(n) && n >= 1 && n <= ELENCA_LIMITE_MASSIMO) limite = n
+        else note.push(`limit ${JSON.stringify(a.limit)} must be a whole number from 1 to ${ELENCA_LIMITE_MASSIMO}: it was ignored.`)
+    }
+    const cursore = typeof a.cursor === 'string' && a.cursor.trim() !== '' ? a.cursor.trim() : null
+    return { profondita, limite, cursore, note }
+}
+
+/**
+ * C5, review del passo 13 (b): la cartella di un elenco detta in un modo solo, per il cursore e per il freno — barre di Windows
+ *   come «/», niente «./» davanti né «/» in coda, «.» = la radice. Solo la FORMA del nome: la cartella vera la apre `elenca`.
+ *   Senza, «src\kernel» e «src/kernel» erano due elenchi, e cambiare barra azzerava il conto delle pagine. Pura.
+ */
+export function percorsoDiElencaPerLaFirma(base) {
+    let p = String(base ?? '').trim().replace(/\\/g, '/').replace(/\/{2,}/g, '/')
+    if (/^\/+$/.test(p)) return '/'
+    while (p.startsWith('./')) p = p.slice(2)
+    p = p.replace(/\/+$/, '')
+    return p === '.' ? '' : p
 }
 
 /**
@@ -4822,8 +5174,30 @@ function chiaveDelFile(radice, percorso) {
 async function istantaneaDelFile(radice, percorso) {
     try {
         const s = await statAsync(percorsoComeDiscoNode(radice, percorso))
-        return s.isFile() ? { mtimeMs: s.mtimeMs, size: s.size } : null
+        return s.isFile() ? { mtimeMs: s.mtimeMs, size: s.size, ctimeMs: s.ctimeMs } : null // C25: anche l'ora di cambio dello stato
     } catch { return null }
+}
+/*
+ * C25 (owner 10/10/2026, «Tutte e due») — l'impronta sha256 dei byte di un file, a blocchi (memoria costante). La calcola la casa
+ *   che possiede il file (qui, o la casa Linux con l'operazione `impronta`): via WSL non viaggiano i byte, solo 64 caratteri.
+ *   `null` se non è un file leggibile.
+ */
+export async function improntaDelPercorso(assoluto) {
+    let handle
+    try { handle = await open(assoluto, 'r') } catch { return null }
+    try {
+        if (!(await handle.stat()).isFile()) return null
+        const hash = createHash('sha256')
+        const blocco = Buffer.allocUnsafe(1 << 20)
+        for (let posizione = 0; ;) {
+            const { bytesRead } = await handle.read(blocco, 0, blocco.length, posizione)
+            if (bytesRead === 0) break
+            hash.update(blocco.subarray(0, bytesRead))
+            posizione += bytesRead
+        }
+        return hash.digest('hex')
+    } catch { return null }
+    finally { await handle.close().catch(() => {}) }
 }
 /*
  * ⛔⛔ F4-01 (audit v4, owner 01/10/2026) — LA LETTURA PER MODIFICARE GUARDA I BYTE. `file_edit` leggeva con `disco.leggi`
@@ -4906,6 +5280,10 @@ const rifiutoLettura = (codice, messaggio) => Object.assign(new Error(`${codice}
 const interoDaAlmeno = (n, minimo) => Number.isSafeInteger(n) && n >= minimo
 /* Tutto si valida PRIMA di aprire il file. */
 function validaLettura({ offset, limit, format, byteOffset }) {
+    /* C1 (owner 09/10/2026 sera, «Zero = campo assente»): un modello che riempie TUTTI i campi facoltativi (gpt-5-nano, dal vivo:
+       {offset:1, limit:2000, byteOffset:0}) scrive byteOffset 0 come valore di serie, non come continuazione dentro una riga;
+       insieme a `offset` vale come non scritto. Un byteOffset diverso da 0 con offset resta rifiutato (F-026). */
+    if (byteOffset === 0 && offset !== undefined) byteOffset = undefined
     const formato = format === undefined ? 'text' : format
     if (formato !== 'text' && formato !== 'hex') throw rifiutoLettura('READ_INVALID_FORMAT', 'format must be text or hex.')
     if (formato === 'hex') {
@@ -4966,8 +5344,8 @@ function bomUtf16DaCampione(b) {
  * 3 nel testo). Ricodificare il testo mostrato darebbe un byteOffset sbagliato: difetto trovato in revisione il 30/09.
  * Un carattere astrale (due unità) si tiene intero o si lascia tutto alla pagina dopo.
  */
-function primiCaratteriEByte(dati, max) {
-    const decodificatore = new TextDecoder('utf-8')
+function primiCaratteriEByte(dati, max, { ignoreBOM = false } = {}) {
+    const decodificatore = new TextDecoder('utf-8', { ignoreBOM })
     let testo = '', byte = 0
     for (let k = 0; k < dati.length; k++) {
         const pezzo = decodificatore.decode(dati.subarray(k, k + 1), { stream: true })
@@ -4984,18 +5362,24 @@ async function leggiRighe(handle, byteSulDisco, { primaRiga, quante, esplicita }
     let byteUscita = 0, riga = 1, inizioRiga = 0, byteRiga = 0, testa = [], byteTesta = 0
     let raccolte = 0, ultimaRiga = 0, accorciate = 0, pienaDaTetto = false, prossima = null
     const righeAccorciate = [] // T25/B09: QUALI righe il modello ha visto solo in parte (la guardia di `scrivi` le vuole complete)
-    let pos = 0, primoBlocco = true, contaInterrotto = false
+    let pos = 0, primoBlocco = true, contaInterrotto = false, rigaAperta = null
     // F-025: i byte non UTF-8 delle righe MOSTRATE (dove sta il primo, quanti sono), per dirlo in testa invece di tacerlo
     const guasti = { byte: 0, sequenze: 0, primoByte: -1, valore: null, riga: null, multibyteValidi: 0 }
-    const chiudiRiga = (conAcapo) => {
+    const chiudiRiga = (conAcapo, aperta = false) => {
         if (prossima === null && riga >= primaRiga) {
             // come la lettura di sempre: byte non validi si leggono con «�» (il rigore è solo per `byteOffset`); F-025 lo dice in testa
             const dati = Buffer.concat(testa, byteTesta)
-            const testo = new TextDecoder('utf-8').decode(dati)
+            /* C24a (coda Codex, A-READ-INTERNAL-BOM, bugfixer 10/10/2026): un decoder NUOVO di serie toglie uno U+FEFF all'inizio
+               di OGNI decodifica, cioè di ogni riga — uno U+FEFF dopo un a capo spariva. Il BOM del file sta solo al byte 0 (T-01):
+               se il salto a mano qui sotto l'ha già tolto la riga 1 comincia al byte 3; se il primo blocco era troppo corto per
+               saltarlo, comincia al byte 0 e lo toglie il decoder. Come `leggiDentroRiga`: `ignoreBOM: inizio > 0`. */
+            const ignoreBOM = inizioRiga > 0
+            const testo = new TextDecoder('utf-8', { ignoreBOM }).decode(dati)
             let pezzo = testo, byteMostratiRiga = dati.length
             if (byteRiga > byteTesta || testo.length > MAX_CARATTERI_RIGA_LEGGI) {
-                const { testo: mostrato, byte: byteMostrati } = primiCaratteriEByte(dati, MAX_CARATTERI_RIGA_LEGGI)
-                pezzo = `${mostrato}[… line ${riga} continues: ${byteRiga - byteMostrati} more bytes; continue inside it with leggi byteOffset=${inizioRiga + byteMostrati}]`
+                const { testo: mostrato, byte: byteMostrati } = primiCaratteriEByte(dati, MAX_CARATTERI_RIGA_LEGGI, { ignoreBOM })
+                // C24b: una riga che si è smesso di scorrere a 64 MiB non sa dove finisce: «almeno»
+                pezzo = `${mostrato}[… line ${riga} continues: ${aperta ? 'at least ' : ''}${byteRiga - byteMostrati} more bytes; continue inside it with leggi byteOffset=${inizioRiga + byteMostrati}]`
                 byteMostratiRiga = byteMostrati
             }
             pezzo += conAcapo ? '\n' : ''
@@ -5004,7 +5388,8 @@ async function leggiRighe(handle, byteSulDisco, { primaRiga, quante, esplicita }
             else if (raccolte > 0 && byteUscita + peso > tetto) { pienaDaTetto = true; prossima = riga }
             else {
                 uscita.push(pezzo); byteUscita += peso; raccolte++; ultimaRiga = riga
-                if (pezzo !== testo + (conAcapo ? '\n' : '')) { accorciate++; righeAccorciate.push(riga) }
+                // C25: con la riga, il byte da cui riparte la parte NON vista (lo stesso `byteOffset` che il modello riceve)
+                if (pezzo !== testo + (conAcapo ? '\n' : '')) { accorciate++; righeAccorciate.push({ riga, daByte: inizioRiga + byteMostratiRiga }) }
                 const s = scansioneUtf8(dati.subarray(0, byteMostratiRiga))
                 guasti.byte += s.byte; guasti.sequenze += s.sequenze; guasti.multibyteValidi += s.multibyteValidi
                 if (s.primo !== -1 && guasti.primoByte === -1) { guasti.primoByte = inizioRiga + s.primo; guasti.valore = dati[s.primo]; guasti.riga = riga }
@@ -5055,14 +5440,22 @@ async function leggiRighe(handle, byteSulDisco, { primaRiga, quante, esplicita }
         pos += bytesRead
         // pagina già piena: si contano ancora le righe per dire il totale, ma non oltre 64 MiB
         if (prossima !== null && pos >= MAX_BYTE_CONTEGGIO_RIGHE) { contaInterrotto = true; break }
+        /* C24b (coda Codex, A-READ-SCAN-BOUND; owner 10/10/2026 «Tetto a 64 MiB»): il tetto qui sopra non vedeva la riga APERTA —
+           `prossima` nasce solo quando una riga si chiude, e una riga enorme senza a capo si scorreva tutta (96 MiB per mostrarne
+           2.000 caratteri). Una riga che si sta raccogliendo, con la testa già piena, smette di essere scorsa allo stesso tetto: si
+           chiude con «almeno N byte» e il byteOffset per proseguire; il resto del file non si legge. */
+        if (prossima === null && riga >= primaRiga && byteTesta >= BYTE_TESTA_RIGA && pos >= MAX_BYTE_CONTEGGIO_RIGHE) { rigaAperta = riga; contaInterrotto = true; break }
     }
-    if (!contaInterrotto && byteRiga > 0) chiudiRiga(false) // l'ultima riga, senza a capo
+    if (rigaAperta !== null) chiudiRiga(false, true)
+    else if (!contaInterrotto && byteRiga > 0) chiudiRiga(false) // l'ultima riga, senza a capo
+    // la riga aperta MOSTRATA (se la pagina era già piena è diventata `prossima`, e la pagina dice dove proseguire)
+    const rigaNonFinita = rigaAperta !== null && prossima === null ? rigaAperta : null
     const righeTotali = contaInterrotto ? null : riga - 1
     if (esplicita && righeTotali !== null && primaRiga > Math.max(1, righeTotali)) {
         throw rifiutoLettura('READ_OFFSET_OUT_OF_RANGE', `offset=${primaRiga} is beyond the ${righeTotali} lines of the file.`)
     }
     return { binario: false, modo: 'righe', testo: uscita.join(''), byteSulDisco, letti: pos, troncato: prossima !== null, primaRiga, ultimaRiga, righeTotali,
-        nextOffset: prossima, accorciate, righeAccorciate, pienaDaTetto, esplicita, tetto,
+        nextOffset: prossima, rigaNonFinita, accorciate, righeAccorciate, pienaDaTetto, esplicita, tetto,
         nonUtf8: guasti.byte > 0 ? { byte: guasti.byte, sequenze: guasti.sequenze, primoByte: guasti.primoByte, valore: guasti.valore, riga: guasti.riga, multibyteValidi: guasti.multibyteValidi } : null }
 }
 async function leggiDentroRiga(handle, byteSulDisco, inizio, { tetto, limite = null, campione, segnale }) {
@@ -5261,7 +5654,7 @@ export async function leggiTestoLimitato(radice, percorso, {
     const percorsoSulDisco = percorsoComeDiscoNode(radice, percorso)
     const handle = await apriFn(percorsoSulDisco, 'r')
     try {
-        const { size: byteSulDisco, mtimeMs } = await handle.stat()
+        const { size: byteSulDisco, mtimeMs, ctimeMs } = await handle.stat() // C25: anche l'ora di cambio dello stato
         if (richiesta.modo === 'hex') return await leggiEsadecimale(handle, byteSulDisco, richiesta.inizio, richiesta.limite, { blocco, segnale })
         let estrattoFallito = null
         const formato = formatoEstraibile(percorso)
@@ -5272,7 +5665,7 @@ export async function leggiTestoLimitato(radice, percorso, {
                 const base = richiesta.modo === 'byte'
                     ? await leggiDentroRiga(finto, dati.length, richiesta.inizio, { tetto, limite: richiesta.limite, campione, segnale })
                     : await leggiRighe(finto, dati.length, richiesta, { tetto, blocco, campione, segnale })
-                return { ...base, mtimeMs, estratto: { formato, byteFile: byteSulDisco, avviso: estratto.avviso } }
+                return { ...base, mtimeMs, ctimeMs, estratto: { formato, byteFile: byteSulDisco, avviso: estratto.avviso } }
             } catch (errore) {
                 if (!(errore instanceof ErroreEstrazione)) throw errore
                 estrattoFallito = { formato, motivo: errore.message }
@@ -5291,7 +5684,7 @@ export async function leggiTestoLimitato(radice, percorso, {
                 const letta = richiesta.modo === 'byte'
                     ? await leggiDentroRiga(finto, dati.length, richiesta.inizio, { tetto, limite: richiesta.limite, campione, segnale })
                     : await leggiRighe(finto, dati.length, richiesta, { tetto, blocco, campione, segnale })
-                return { ...letta, mtimeMs, decodificato: { nome: utf16.nome, bom: utf16.bom, byteFile: byteSulDisco, sostituiti: decodificato.sostituiti } }
+                return { ...letta, mtimeMs, ctimeMs, decodificato: { nome: utf16.nome, bom: utf16.bom, byteFile: byteSulDisco, sostituiti: decodificato.sostituiti } }
             } catch (errore) {
                 if (!(errore instanceof ErroreEstrazione)) throw errore
                 // non decodificabile qui: come prima della cura, un file col NUL non è testo UTF-8
@@ -5299,7 +5692,7 @@ export async function leggiTestoLimitato(radice, percorso, {
                 base = { binario: true, testo: null, byteSulDisco, letti: base.letti, troncato: false }
             }
         }
-        return { ...base, mtimeMs, ...(estrattoFallito ? { estrattoFallito } : {}), ...(decodificaFallita ? { decodificaFallita } : {}) }
+        return { ...base, mtimeMs, ctimeMs, ...(estrattoFallito ? { estrattoFallito } : {}), ...(decodificaFallita ? { decodificaFallita } : {}) }
     } finally {
         await handle.close()
     }
@@ -5377,7 +5770,9 @@ function esitoDellaLetturaDiTesto(letta, percorso, avvolgi = (testo) => testo) {
     if (!letta.esplicita && letta.nextOffset === null && letta.accorciate === 0 && !letta.nonUtf8) return avvolgi(testo)
     const totale = letta.righeTotali === null ? 'an uncounted total (file larger than 64 MiB)' : String(letta.righeTotali)
     const intervallo = letta.ultimaRiga >= letta.primaRiga ? `lines ${letta.primaRiga}-${letta.ultimaRiga} of ${totale}` : `no lines of ${totale}`
-    const seguito = letta.nextOffset === null ? 'EOF reached' : `continue with leggi offset=${letta.nextOffset}`
+    const seguito = letta.nextOffset !== null ? `continue with leggi offset=${letta.nextOffset}`
+        // C24b: la riga mostrata per ultima non è stata scorsa fino in fondo, quindi la fine del file non è stata vista
+        : letta.rigaNonFinita ? `stopped scanning line ${letta.rigaNonFinita} after 64 MiB, so the rest of the file was not read` : 'EOF reached'
     const accorciate = letta.accorciate > 0
         ? `; ${letta.accorciate} over-long line(s) shown up to ${MAX_CARATTERI_RIGA_LEGGI} characters, each ending with the byteOffset to continue inside it `
             + `(up to ${Math.round(MAX_BYTE_LEGGI / 1024)} KB per call; add limit to take less)` : ''
@@ -5982,6 +6377,39 @@ export function ambienteSenzaCredenziali() {
  * processo dentro la distro Linux può sopravvivergli — chiudere anche quello
  * vuole un segnale dentro la distro, che è un'altra riga di lavoro.
  */
+/*
+ * C1 (owner 10/10/2026, «CPU e memoria per processo, misurate da noi, solo a scheda aperta») — il PID della SHELL lanciata, detto a
+ *   chi l'ha chiesto (`onAvvio`). La misura somma l'albero dei discendenti (il comando vero è un nipote: `shell: true`). Opzionale e
+ *   additivo: chi non passa `onAvvio` non vede niente di diverso; un annuncio che lancia non tocca il comando.
+ * In WSL il PID di Windows sarebbe quello di `wsl.exe`, che non dice niente del comando: lì si annuncia `{ wsl: { distro, marcatore } }`
+ *   (owner: «Anche WSL, adesso») e lo script parte con `export TALOS_CMD_ID='<marcatore>'`, che ogni discendente eredita — la misura
+ *   somma dentro la distro i processi che lo portano. Il marcatore lo crea il kernel (un UUID senza trattini): nessun testo del
+ *   modello entra nello script.
+ */
+function annunciaAvvio(onAvvio, processoFiglio) {
+    if (typeof onAvvio !== 'function' || !Number.isSafeInteger(processoFiglio?.pid) || processoFiglio.pid <= 0) return
+    try { onAvvio(processoFiglio.pid) } catch { /* l'annuncio non deve mai disturbare il comando */ }
+}
+/** Ciò che `onAvvio` ha detto, per la registrazione del comando: `pid()` su Windows, `wsl()` in WSL. Un annuncio malformato si ignora. */
+export function registroDellAvvio() {
+    let pid = null, wsl = null
+    return {
+        annuncia: (avvio) => {
+            if (Number.isSafeInteger(avvio) && avvio > 0) pid = avvio
+            else if (typeof avvio?.wsl?.distro === 'string' && /^[A-Za-z0-9_-]{1,100}$/u.test(avvio.wsl.marcatore ?? '')) wsl = { distro: avvio.wsl.distro, marcatore: avvio.wsl.marcatore }
+        },
+        pid: () => pid,
+        wsl: () => wsl,
+    }
+}
+function marcatoreProcessiWsl(onAvvio) {
+    return typeof onAvvio === 'function' ? `t${randomUUID().replace(/-/g, '')}` : null
+}
+function annunciaAvvioWsl(onAvvio, distro, marcatore) {
+    if (!marcatore) return
+    try { onAvvio({ wsl: { distro, marcatore } }) } catch { /* l'annuncio non deve mai disturbare il comando */ }
+}
+
 export function uccidiAlberoDelProcesso(processoFiglio, { spawnFn = spawn } = {}) {
     const pid = processoFiglio?.pid
     if (!pid) return false
@@ -6559,13 +6987,13 @@ export function provaSenzaTest(codice, testo) {
     return DICHIARAZIONI_ZERO_TEST.some((r) => r.test(uscita))
 }
 
-async function eseguiProva(comando, cartella, { segnaleStop, dove = null, onBytes, wsl = null, timeoutMs = TIMEOUT_SHELL_PREDEFINITO_MS, segnaleSfondo = null, fileSfondo = null, inSfondoSubito = false } = {}) {
+async function eseguiProva(comando, cartella, { segnaleStop, dove = null, onBytes, wsl = null, timeoutMs = TIMEOUT_SHELL_PREDEFINITO_MS, segnaleSfondo = null, fileSfondo = null, inSfondoSubito = false, onAvvio = null } = {}) {
     const zeroTest = createZeroTestScanner()
     if (dove !== null || onBytes) {
         const esegui = dove === null ? eseguiSuWindows : eseguiComandoSandboxato
         const risultato = await esegui(comando, cartella, {
             dove, segnaleStop, onBytes, wsl, onPezzo: ({ testo }) => { zeroTest.append(testo) },
-            timeoutMs, segnaleSfondo, fileSfondo, inSfondoSubito,
+            timeoutMs, segnaleSfondo, fileSfondo, inSfondoSubito, onAvvio,
         })
         /* ⛔ BUG-14: un comando messo in sfondo NON ha un codice d'uscita da classificare — l'esito è già com'è. */
         if (risultato.messoInSfondo) return risultato
@@ -6584,6 +7012,7 @@ async function eseguiProva(comando, cartella, { segnaleStop, dove = null, onByte
             ? { ...esito, processoInBackground: true, testo: `${esito.testo}\n\n${NOTA_PROCESSO_IN_BACKGROUND}`.trim() }
             : esito)
         const p = spawn(comando, { cwd: cartella, shell: true, windowsHide: true, env: ambienteSenzaCredenziali() })
+        annunciaAvvio(onAvvio, p) // C1 (10/10/2026): il PID, per CPU e memoria nella scheda Processi
         // No durable sink on this legacy path. Reuse bounded preview/UTF-8
         // decoding without retaining another full copy for zero-test detection.
         const cattura = captureProcessOutput(p, {
@@ -7481,7 +7910,7 @@ export function staccaCartellaFinale(testo, marcatore = MARCATORE_CARTELLA) {
  *   poterlo scegliere, ora che «dove gira un comando» e' una decisione della sessione e non piu'
  *   una conseguenza di quale programma hai scritto.
  */
-function eseguiSuWindows(comando, cartella, { onPezzo, onBytes, tracciaCartella = false, segnaleStop, timeoutMs = TIMEOUT_SHELL_PREDEFINITO_MS, segnaleSfondo = null, fileSfondo = null, inSfondoSubito = false } = {}) {
+function eseguiSuWindows(comando, cartella, { onPezzo, onBytes, tracciaCartella = false, segnaleStop, timeoutMs = TIMEOUT_SHELL_PREDEFINITO_MS, segnaleSfondo = null, fileSfondo = null, inSfondoSubito = false, onAvvio = null } = {}) {
     if (onBytes !== undefined && typeof onBytes !== 'function') throw new TypeError('onBytes must be a function')
     return new Promise((risolvi) => {
         /* ⛔ Su Windows la shell qui e' cmd: la coda parla la sua lingua, non quella di bash. */
@@ -7491,6 +7920,7 @@ function eseguiSuWindows(comando, cartella, { onPezzo, onBytes, tracciaCartella 
         const coda = tracciaCartella ? codaCheStampaLaCartella(perWindows, marcatore) : ''
         const metadata = onBytes && normalizzaMetadatiCattura({ schema: 'talos.process-output-metadata.v1', controlFooter: tracciaCartella ? { type: 'cwd-marker-v1', stream: 'stdout', marker: marcatore, prefixBytes: perWindows ? 0 : 1 } : null })
         const p = spawn(`${comando}${coda}`, { cwd: cartella, shell: true, windowsHide: true, env: ambienteSenzaCredenziali() })
+        annunciaAvvio(onAvvio, p) // C1 (10/10/2026): il PID della shell, per CPU e memoria nella scheda Processi
         let fuori = ''
         let errori = ''
         /* ⛔ D-10C — `insieme` cresce nell'ordine in cui i dati ARRIVANO: è l'unico posto dove
@@ -7631,7 +8061,7 @@ function eseguiSuWindows(comando, cartella, { onPezzo, onBytes, tracciaCartella 
     })
 }
 
-export async function eseguiComandoSandboxato(comando, cartella, { mobile = false, onPezzo, onBytes, tracciaCartella = false, dove = null, segnaleStop, wsl = null, automaticoInLinux = false, timeoutMs = TIMEOUT_SHELL_PREDEFINITO_MS, segnaleSfondo = null, fileSfondo = null, inSfondoSubito = false } = {}) {
+export async function eseguiComandoSandboxato(comando, cartella, { mobile = false, onPezzo, onBytes, tracciaCartella = false, dove = null, segnaleStop, wsl = null, automaticoInLinux = false, timeoutMs = TIMEOUT_SHELL_PREDEFINITO_MS, segnaleSfondo = null, fileSfondo = null, inSfondoSubito = false, onAvvio = null } = {}) {
     if (onBytes !== undefined && typeof onBytes !== 'function') throw new TypeError('onBytes must be a function')
     /*
      * ⛔⛔ BC-56, 16/09/2026 — IL COMANDO VUOTO AVEVA TRE ESITI, TUTTI SBAGLIATI.
@@ -7749,11 +8179,14 @@ export async function eseguiComandoSandboxato(comando, cartella, { mobile = fals
         const percorsoWsl = convertiPercorsoWsl(cartella)
         /* ⛔ CLI-REQ-01 (2º giro): marcatore NUOVO per esecuzione anche qui — una sola fonte, `nuovoMarcatoreCartella`. */
         const marcatoreWsl = nuovoMarcatoreCartella()
+        /* C1 (10/10/2026): il marcatore dei Processi, solo se qualcuno lo chiede (`onAvvio`) — senza, lo script è quello di prima. */
+        const marcatoreProcessi = marcatoreProcessiWsl(onAvvio)
+        annunciaAvvioWsl(onAvvio, distro, marcatoreProcessi)
         // F018/T24: heredoc e commenti devono finire prima della chiusura del gruppo.
         // Il comando resta intatto; LF separa la sintassi del wrapper da quella ricevuta.
         // SHELL05: cwd e dato argv; shift lo rimuove prima del comando della persona.
         const wslRisultato = await eseguiComando(
-            'wsl.exe', argomentiWslPerScript(distro, `cd -- "$1" && {\nshift\n${comando}\n}${tracciaCartella ? codaCheStampaLaCartella(false, marcatoreWsl) : ''}`, [percorsoWsl], { utente: utenteArgv }),
+            'wsl.exe', argomentiWslPerScript(distro, `${marcatoreProcessi ? `export TALOS_CMD_ID='${marcatoreProcessi}'\n` : ''}cd -- "$1" && {\nshift\n${comando}\n}${tracciaCartella ? codaCheStampaLaCartella(false, marcatoreWsl) : ''}`, [percorsoWsl], { utente: utenteArgv }),
             /* ⛔ Il marcatore non si vede nemmeno nei pezzi che escono mentre escono (D-10B). */
             { timeoutMs: attesaMs, segnaleStop, onBytes, controlFooter: tracciaCartella ? { type: 'cwd-marker-v1', stream: 'stdout', marker: marcatoreWsl, prefixBytes: 1 } : null, onPezzo: onPezzo && ((pezzo) => onPezzo({ ...pezzo, testo: staccaCartellaFinale(pezzo.testo, marcatoreWsl).testo })), segnaleSfondo, fileSfondo, inSfondoSubito },
         )
@@ -7821,7 +8254,7 @@ export async function eseguiComandoSandboxato(comando, cartella, { mobile = fals
             cartellaFinale: cartellaFinaleValida(ripulito.cartella),
         }
     }
-    return eseguiSuWindows(comando, cartella, { onPezzo, onBytes, tracciaCartella, segnaleStop, timeoutMs: attesaMs, segnaleSfondo, fileSfondo, inSfondoSubito })
+    return eseguiSuWindows(comando, cartella, { onPezzo, onBytes, tracciaCartella, segnaleStop, timeoutMs: attesaMs, segnaleSfondo, fileSfondo, inSfondoSubito, onAvvio })
 }
 
 /**
@@ -9550,6 +9983,7 @@ export async function verificaAzioneAutomazione(azione, { chiediApprovazioneFn, 
 }
 
 export async function verificaPermessoScrittura(azione, { livelloAccesso, modalitaOperativa = 'normale', chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena = CATENA_VUOTA, segnaleStop, posizioneFn, consensiSessione, reteConsentita = false, sospetto = null, tracciaConsenso = null } = {}) {
+    livelloAccesso = livelloLetto(livelloAccesso) // una grammatica sola anche per chi chiama il cancello da fuori
     const override = permessiPerAttrezzo?.[azione.tipo]
     if (modalitaOperativa === 'piano' && azione.tipo !== 'leggi' && azione.tipo !== 'elenca') {
         return {
@@ -9696,7 +10130,13 @@ export async function verificaPermessoScrittura(azione, { livelloAccesso, modali
      *   inferiori, il cancello resta com'era.
      */
     const sospettoForzaConferma = Boolean(sospetto) && azione.tipo !== 'leggi' && azione.tipo !== 'elenca' && !(accessoPieno && azione.tipo === 'shell')
-    if (haOverride && override === 'sempre' && !trifectaChiude && !sempreDaConfermare && !segretoForzaConferma && !fuoriForzaConferma && !sospettoForzaConferma) {
+    /* R1 della review del desktop (09/10/2026): il commento della rete più sotto prometteva «nessun “sempre” per-attrezzo la concede
+       da solo», ma questo ramo usciva PRIMA di leggerla — `shell: sempre` apriva la rete senza domanda. Misurato con la prova
+       «rete R1» in tests/rete-della-shell.test.mjs. `azione.rete` arriva solo da un ospite che chiude la rete davvero. */
+    /* Taccuino del 10/10/2026: «accesso pieno» aveva due grafie — il livello ('accesso-pieno') e la parola della politica
+       ('Full access'). Dal 10/10 sera la parola si traduce all'ingresso (`livelloLetto`), quindi basta il livello. */
+    const reteForzaConferma = azione?.rete === true && !accessoPieno
+    if (haOverride && override === 'sempre' && !trifectaChiude && !sempreDaConfermare && !segretoForzaConferma && !fuoriForzaConferma && !sospettoForzaConferma && !reteForzaConferma) {
         return { consentito: true, via: 'permesso-per-attrezzo-sempre' }
     }
     if (!soloSegreto && !haOverride && livelloAccesso === 'lettura') {
@@ -9786,7 +10226,9 @@ export async function verificaPermessoScrittura(azione, { livelloAccesso, modali
      * ⛔ Il canale che manca resta un errore, non un permesso: il ramo `!chiediApprovazioneFn` qui
      * sotto continua a rifiutare chi avrebbe dovuto chiedere.
      */
-    const vaChiesto = sempreDaConfermare || (haOverride && override === 'chiedi') || trifectaForzaConferma || richiestoDalLivello || segretoForzaConferma || fuoriForzaConferma || sospettoForzaConferma
+    /* Owner 09/10/2026 (lane CLI): un comando che chiede la rete (`rete: true`) si chiede sempre, tranne in «Full access»; nessun
+       «sempre» per-attrezzo la concede da solo — la decide chi ospita (la CLI: Accesso completo sì, altrimenti la persona). */
+    const vaChiesto = sempreDaConfermare || (haOverride && override === 'chiedi') || trifectaForzaConferma || richiestoDalLivello || segretoForzaConferma || fuoriForzaConferma || sospettoForzaConferma || reteForzaConferma
     /*
      * ⛔ F15 — `segreto-forza-conferma` viene PRIMA di «trifecta» e di «per-attrezzo: chiedi»
      * nella scelta della via: quando due meccanismi avrebbero chiesto la stessa cosa, la
@@ -10372,6 +10814,10 @@ export async function talosLavora({
     /* H-04: chi chiama sa già che la suite non c'è (il desktop: package.json senza scripts.test o col segnaposto di npm init) */
     provaSenzaSuite = null,
     messaggiIniziali, onGiro, onScrittura, segnaleStop, fetchDiRete, mobile = false,
+    /* C3 tappa 4 (owner 09/10/2026, «finisce l'attrezzo, poi si ferma»): la PAUSA, distinta dallo Stop. Si guarda solo in cima al
+       giro: gli attrezzi in volo finiscono e i loro risultati entrano nella storia, il modello non riceve la richiesta dopo, e il
+       giro si chiude «in-pausa». Chi non la passa (la CLI) non vede niente di diverso. */
+    segnalePausa = null,
     /* ⛔ Stop per riga (owner 02/10/2026): `({ toolCallId, ferma }) => sgancia`. Ogni `shell` e `prova` ha il SUO segnale,
        registrato col suo `toolCallId` finché gira: fermarlo chiude quel comando (130, «fermato su richiesta») e il giro continua. */
     registraComandoFermabile = null,
@@ -10387,6 +10833,12 @@ export async function talosLavora({
      *   passa resta su `eseguiComandoSandboxato`. Stessi argomenti, dentro `captureProcessFn` quando c'è.
      */
     eseguiComandoSandboxatoFn = eseguiComandoSandboxato,
+    /*
+     * R1 della review del desktop (09/10/2026): `true` solo se l'esecutore dell'ospite CHIUDE davvero la rete dei comandi (la CLI,
+     *   sandbox verificata). Solo allora `shell` offre `network` e una richiesta di rete diventa una domanda. Assente: lo schema
+     *   non la offre e un `network: true` non cambia niente — sul desktop la rete non è chiusa, e la domanda non controllerebbe niente.
+     */
+    reteChiusaDallOspite = false,
     /*
      * G02 (dalla lane CLI, e1f7eb363): la barriera dell'ospite prima di ogni azione che MODIFICA (le chiavi di
      *   AZIONI_MOBILE_PER_ATTREZZO). La CLI ci prende il suo checkpoint del workspace in modo pigro: dopo che il
@@ -10445,6 +10897,7 @@ export async function talosLavora({
     presentaPianoFn,
     agentRole = 'root', askParentFn, answerChildQuestionFn, askChildFn, answerParentQuestionFn, onWorkflowPlanPropose,
     listChildrenFn, stopChildFn, // K3 (F-014, 03/10): elenco e stop dei figli diretti, dal registro
+    pauseChildFn, resumeChildFn, // C3 tappa 4: pausa e ripresa dei figli diretti, dal registro (facoltative: la CLI non le passa)
     /*
      * ⭐⭐⭐ P-13 (10/09) — il contesto STABILE del progetto: oggi l'elenco dei file.
      *   Opzionale come tutti gli altri: chi non lo passa (TALOS-BANCO senza la leva
@@ -10598,6 +11051,8 @@ export async function talosLavora({
      *   le stesse due fasi delle automazioni (`anteprima` ⇒ carta o rifiuto; `esegui` ⇒ testo). Assente ⇒ non si offrono.
      */
     onFornitoriFn,
+    /* Giri in tondo (owner 09/10/2026, lane CLI): la guardia fra un giro e l'altro (`creaGuardiaGiriInTondo`). Spenta di serie. */
+    guardiaGiriInTondo = false,
     /*
      * ⛔⛔ Rilievo 3 (piano §1.7, 28/09) — `onRichiestaPianoFn() => {ok, motivo?}` è il canale
      *   dell'attrezzo `request_plan_mode`: ACCODA il cambio di modo (lo applica il registro a
@@ -10930,6 +11385,7 @@ export async function talosLavora({
      */
     casaLinuxSessione = null,
 }) {
+    livelloAccesso = livelloLetto(livelloAccesso) // una grammatica sola (vedi `livelloLetto`): assente resta assente, l'illeggibile è «Sola lettura»
     if (ricercheInCorso && segnaleStop) segnaleStop.addEventListener('abort', () => ricercheInCorso.fermaTutte('fermata'), { once: true })
     const rootWslFn = rootWslDelComandoFn !== undefined ? rootWslDelComandoFn
         : eseguiComandoSandboxatoFn === eseguiComandoSandboxato ? rootWslDelComando : null
@@ -11074,7 +11530,9 @@ export async function talosLavora({
         ? chiamaCasa('leggiTestoLimitato', { cartella: casaDelGiro.radice, percorso: linuxDi(percorso), opzioni })
         : leggiTestoLimitato(cartella, percorso, { ...opzioni, segnale: segnaleStop }))
     const elencaDelGiro = (base, opzioni) => (inCasaLinux()
-        ? chiamaCasa('elenca', { radice: casaDelGiro.radice, base: base ? linuxDi(base) : base })
+        // C5: le pagine e la profondità le fa la casa con la stessa funzione; `spiegaErrore` resta di qua
+        ? chiamaCasa('elenca', { radice: casaDelGiro.radice, base: base ? linuxDi(base) : base,
+            profondita: opzioni?.profondita, limite: opzioni?.limite ?? null, cursore: opzioni?.cursore ?? null, note: opzioni?.note ?? [] })
         : elencaDaCartella(disco, base, opzioni))
     /* `dentro` passa com'è: è relativo per contratto (T-13), e un assoluto si rifiuta uguale nelle due case. */
     const cercaDelGiro = (argomenti) => (inCasaLinux()
@@ -11083,6 +11541,23 @@ export async function talosLavora({
     const istantaneaDelGiro = (percorso) => (inCasaLinux()
         ? chiamaCasa('istantanea', { percorso: percorsiPosix.resolve(casaDelGiro.radice, linuxDi(percorso)) })
         : istantaneaDelFile(cartella, percorso))
+    /* C25: l'impronta la calcola la casa che possiede il file */
+    const improntaDelGiro = (percorso) => (inCasaLinux()
+        ? chiamaCasa('impronta', { percorso: percorsiPosix.resolve(casaDelGiro.radice, linuxDi(percorso)) }).catch(() => null)
+        : improntaDelPercorso(percorsoComeDiscoNode(cartella, percorso)))
+    /* C25: quando un file diventa «letto per intero» se ne prende l'impronta — valida solo se il file è ancora quello della lettura */
+    const prendiImprontaSeServe = async (percorso, chiave) => {
+        if (!serveImpronta(registroLetture, chiave)) return
+        const impronta = await improntaDelGiro(percorso)
+        const dopo = await istantaneaDelGiro(percorso)
+        if (dopo && typeof impronta === 'string') registraImpronta(registroLetture, chiave, { ...dopo, impronta })
+    }
+    /* C25: dopo una propria scrittura l'impronta si rinnova (sostituzione intera, o un file di cui ne avevamo una) */
+    const registraScritturaConImpronta = async (percorso, dopo, intera) => {
+        const chiave = chiaveDelGiro(percorso)
+        const impronta = intera || haImpronta(registroLetture, chiave) ? await improntaDelGiro(percorso) : null
+        registraScritturaPropria(registroLetture, chiave, { ...dopo, intera, impronta: typeof impronta === 'string' ? impronta : null })
+    }
     /*
      * ⛔ F-001 (owner 02/10/2026, «tutta la guardia di Hermes»): `scrivi` e `file_edit` non mettono testo su un documento o su
      *   un binario (`guardia-scrittura-binari.mjs`). Se il file esiste lo dice la casa che scriverà (Hermes #122662: mai il
@@ -11111,8 +11586,10 @@ export async function talosLavora({
            e il SUO file di output, dentro la cartella della sessione. L'abort qui NON uccide: il gestore di sfondo
            dell'esecutore stacca la cattura, apre il file e conclude l'attesa — il processo vive. */
         const sfondo = new AbortController()
-        const sgancia = typeof registraComandoFermabile === 'function' ? registraComandoFermabile({ toolCallId, ferma: () => ferma.abort(MOTIVO_STOP_DELLA_RIGA), sfonda: () => sfondo.abort(MOTIVO_SFONDO_DELLA_RIGA) }) : null
+        const avvio = registroDellAvvio() // C1 (10/10/2026): lo dice l'esecutore appena lancia la shell (`onAvvio`)
+        const sgancia = typeof registraComandoFermabile === 'function' ? registraComandoFermabile({ toolCallId, ferma: () => ferma.abort(MOTIVO_STOP_DELLA_RIGA), sfonda: () => sfondo.abort(MOTIVO_SFONDO_DELLA_RIGA), pid: avvio.pid, wsl: avvio.wsl }) : null
         return {
+            annunciaAvvio: avvio.annuncia,
             segnale: segnaleStop ? AbortSignal.any([segnaleStop, ferma.signal]) : ferma.signal,
             sfondo: { segnale: sfondo.signal, file: percorsoFileSfondo(cartella, toolCallId) },
             sgancia: () => { if (typeof sgancia === 'function') sgancia() },
@@ -11323,7 +11800,10 @@ export async function talosLavora({
     ]
     const confineDiElenca = (esito) => {
         if (typeof esito !== 'string' || esito === '') return esito
-        return FRASI_DI_ELENCA.some((re) => re.test(esito)) && scansionaIstruzioni(esito).length === 0 ? esito : avvolgiEsterno('elenca')(esito)
+        if (FRASI_DI_ELENCA.some((re) => re.test(esito)) && scansionaIstruzioni(esito).length === 0) return esito
+        /* C5: una PAGINA di `elenca` (testata «…: showing N of M entries») avvolge solo le voci; il cursore resta fuori */
+        if (TESTATA_PAGINA_ELENCA.test(esito)) return confineSulleVoci(esito, avvolgiEsterno('elenca'))
+        return avvolgiEsterno('elenca')(esito)
     }
     /*
      * ⛔⛔ C2 R6 (08/10/2026) — `consentitoDa` si attacca QUI, in un posto solo, e solo quando il cancello NON ha chiesto niente
@@ -11396,11 +11876,17 @@ export async function talosLavora({
      * inclusa (`negati.size === 0` ⇒ nessun `.filter()`, nessuna copia).
      */
     const negatiDalLivello = attrezziNegatiDalLivello({ livelloAccesso, permessiPerAttrezzo })
-    const attrezziBaseGrezzi = strumentiEstesi?.length
+    const attrezziConRete = strumentiEstesi?.length
         ? [...ATTREZZI_OPENAI, ...ATTREZZI_ESTESI_OPENAI.filter((a) => strumentiEstesi.includes(a.function.name))]
         : ATTREZZI_OPENAI
+    /* R1 (review del desktop): senza un ospite che chiude la rete, `network` non si offre (vedi `reteChiusaDallOspite`). */
+    const attrezziBaseGrezzi = reteChiusaDallOspite === true ? attrezziConRete : attrezziConRete.map((a) => {
+        if (a.function?.name !== 'shell' || !a.function.parameters?.properties?.network) return a
+        const { network: _rete, ...proprieta } = a.function.parameters.properties
+        return { ...a, function: { ...a.function, parameters: { ...a.function.parameters, properties: proprieta } } }
+    })
     const needsRoleFilter = agentRole === 'child' || (strumentiEstesi ?? []).some((name) =>
-        ['ask_parent', 'answer_parent_question', 'ask_child', 'answer_child_question', 'list_children', 'stop_child', 'workflow_plan_propose', 'present_plan', 'request_plan_mode'].includes(name)
+        ['ask_parent', 'answer_parent_question', 'ask_child', 'answer_child_question', 'list_children', 'child_control', 'workflow_plan_propose', 'present_plan', 'request_plan_mode'].includes(name)
         // F-012 (§1.5): i tre dei run hanno filtri loro (root, runtime presente) — quando chiesti, si filtra
         || ATTREZZI_WORKFLOW.has(name) || name === 'process_output' || ATTREZZI_AUTOMAZIONI.has(name) || ATTREZZI_FORNITORI.has(name))
     const filterBaseTools = (a, negati = negatiDalLivello) => {
@@ -11415,7 +11901,9 @@ export async function talosLavora({
            non di Piano; la proposta Workflow si offre al root in entrambi i modi. */
         if (modalitaOperativa === 'piano' && name === 'ask_child') return false
         /* K3: senza il canale del registro (banco, una sessione senza figli possibili) i due attrezzi non si offrono */
-        if ((name === 'list_children' && typeof listChildrenFn !== 'function') || (name === 'stop_child' && typeof stopChildFn !== 'function')) return false
+        if (name === 'list_children' && typeof listChildrenFn !== 'function') return false
+        // C5: `child_control` si offre se c'è almeno un canale; un'azione senza il suo canale si rifiuta per nome
+        if (name === 'child_control' && ![stopChildFn, pauseChildFn, resumeChildFn].some((fn) => typeof fn === 'function')) return false
         // D1 «Come Claude» (24/09/2026): in Piano si risponde ancora alle figlie vive.
         if (modalitaOperativa === 'piano' && name === 'answer_child_question' && figliViviAllAvvio !== true) return false
         if (name === 'workflow_plan_propose' && (agentRole === 'child' || typeof onWorkflowPlanPropose !== 'function')) return false
@@ -11501,10 +11989,10 @@ export async function talosLavora({
     const ATTREZZI_PIANO = new Set([
         'elenca', 'cerca', 'leggi', 'naviga', 'web_search', 'time_now', 'ask_user_question', 'ask_parent', 'answer_parent_question', 'workflow_plan_propose',
         'present_plan', // 24/09/2026, decisione owner 36
-        'library_list', 'library_search', 'library_read', 'library_file_origin',
-        'notes_list', 'tasks_list', 'memory_search', 'research_list', 'research_read',
+        'library_find', 'library_read', 'library_file_origin', // C5: library_find accorpa elenco e ricerca
+        'notes_find', 'tasks_find', 'memory_find', 'research_find', 'research_read', // C5: *_find accorpa elenco e ricerca
         // 27/09/2026, decisione owner (capacità delle sezioni): le letture nuove
-        'memory_list', 'notes_search', 'notes_read', 'tasks_search', 'research_search', 'conversation_search',
+        'notes_read', 'conversation_search',
         // F-012 (piano 0.1.19 §1.5, 28/09): del Piano entrano SOLO le due letture dei run —
         // `workflow_control` muove un run e dalla modalità Piano non si tocca niente.
         'workflow_status', 'workflow_output', 'process_output',
@@ -11513,7 +12001,8 @@ export async function talosLavora({
         // 0.1.25: dei fornitori esclusi, del Piano entra solo l'elenco
         'provider_exclusions_list',
         // K3 (03/10): guardare i propri figli e fermarne uno non tocca il disco (desktop, revisione della proposta)
-        'list_children', 'stop_child',
+        // C5: `child_control` sta nel Piano per stop e pausa (non toccano il disco); la ripresa la rifiuta il ramo (riparte un lavoro)
+        'list_children', 'child_control',
         // D1 «Come Claude» (24/09/2026): rispondere a una figlia viva non è esecutivo; delegare e chiederle no.
         ...(figliViviAllAvvio === true ? ['answer_child_question'] : []),
     ])
@@ -11522,6 +12011,8 @@ export async function talosLavora({
     /* ⛔ 24/09/2026, decisione owner 36: il modo del giro cambia anche per il root, una volta sola: all'approvazione del piano
        («procedi…») lo stesso giro passa a Normale. `modalitaAllAvvio` resta il nome storico del modo che decide prompt e lista. */
     let modalitaAllAvvio = modalitaOperativa
+    /* C16: la riga per il modello quando la persona cambia i permessi a giro vivo (si attacca all'esito della chiamata che la vede). */
+    let notaPermessiCambiati = null
     /* ⛔ F3-10 (23/09/2026, decisione owner D01-a): `delega_sottotask` è un attrezzo di Normale, come il
        Task di Claude Code; in Piano resta fuori perché non è nell'allowlist di sola lettura.
        Il kernel distingue solo «piano» dal resto: un valore storico (`workflow`) vale come Normale, senza un ramo suo. */
@@ -11594,9 +12085,11 @@ export async function talosLavora({
         const seLocale = (percorso, leggi) => destinazioneDelGiro(percorso).then((dove) => (dove ? RETE_NON_PARTITA : leggi()))
         if (nome === 'cerca') return seLocale(String(argomenti.dentro ?? '').trim() || '.', () => cercaDelGiro(argomenti))
         if (nome === 'elenca') {
+            /* C5 (review del passo 13): una PAGINA col cursore passa dal freno prima del disco — non parte in anticipo */
+            if (typeof argomenti?.cursor === 'string' && argomenti.cursor.trim() !== '') return null
             const base = percorsoDiFile(argomenti)
             /* D2: una cartella fuori dal progetto (o un segreto) non si apre in anticipo: prima la domanda, come `leggi`. */
-            return RISALITA.test(base) || classificaPercorsoDiRete(base) || motivoDaChiedere({ tipo: 'elenca', percorso: percorsoDelGiro(base) || '.', cartella, accessoPieno: livelloAccesso === 'accesso-pieno' }) ? null : seLocale(base || '.', () => elencaDelGiro(base, { spiegaErrore: (e) => spiegaCollegamentoLinux('elenca', argomenti, e) }))
+            return RISALITA.test(base) || classificaPercorsoDiRete(base) || motivoDaChiedere({ tipo: 'elenca', percorso: percorsoDelGiro(base) || '.', cartella, accessoPieno: livelloAccesso === 'accesso-pieno' }) ? null : seLocale(base || '.', () => elencaDelGiro(base, { ...parametriDiElenca(argomenti), spiegaErrore: (e) => spiegaCollegamentoLinux('elenca', argomenti, e) }))
         }
         if (nome === 'leggi') {
             const percorso = percorsoDelGiro(percorsoDiFile(argomenti))
@@ -11780,8 +12273,16 @@ export async function talosLavora({
      *   fra un attrezzo e l'altro, e l'ultima scritta cancellerebbe la vera.
      */
     let puntoDiFermata = null
+    /** C3 tappa 4 — la pausa chiesta (`segnalePausa`): dove si è fermato il giro. `null` finché nessuno la chiede. */
+    let puntoDiPausa = null
     /** ⭐ 08/09/2026 — la valanga di chiamate identiche ha un esito SUO: né 'concluso', né 'fermato' su richiesta di una persona. Vedi comeFinita. */
     let fermatoPerRipetizione = null
+    /* F-ENG-4: continuazioni di fila (tetto di uscita o silenzio dopo il testo) e se l'ultima risposta è rimasta tagliata. */
+    let continuazioniDiFila = 0
+    let tagliataSenzaRimedio = null
+    /* Giri in tondo: la guardia del giro, e la chiamata su cui la persona (o nessuno) ha detto di fermarsi. */
+    const giriInTondo = guardiaGiriInTondo === true ? creaGuardiaGiriInTondo() : null
+    let fermatoPerGiriInTondo = null
     /*
      * ⭐⭐⭐ BC-10 (13/09/2026) — quante pagine dello STESSO elenco sono già state chieste in
      * QUESTO GIRO, e quante voci ne sono uscite.
@@ -11872,6 +12373,8 @@ export async function talosLavora({
        ogni risposta CONSEGNATA lo azzera (vedi l'onGiro 'risposta' qui sotto) — il progresso
        ricomincia il conto. */
     let esitiIncertiDelGiro = 0
+    /* OWN-01: stesso principio, budget a parte (SENZA_PRIMA_RISPOSTA_RITENTABILI_MASSIMI), azzerato dalla stessa consegna. */
+    let senzaPrimaRispostaDelGiro = 0
     for (let giro = 0; giro < giriMassimiEffettivi; giro++) {
         /*
          * ⛔ PRIMA di contare il giro come usato: un giro fermato qui non ha
@@ -11881,6 +12384,11 @@ export async function talosLavora({
         if (segnaleStop?.aborted) {
             fermatoSuRichiesta = true
             puntoDiFermata ??= `before round ${giro + 1}`
+            break
+        }
+        // C3 tappa 4: la pausa si guarda solo QUI, prima di chiedere al modello — gli attrezzi del giro prima sono già finiti
+        if (segnalePausa?.aborted) {
+            puntoDiPausa = `before round ${giro + 1}`
             break
         }
         turniUsati = giro + 1
@@ -12024,7 +12532,13 @@ export async function talosLavora({
                 /* Stallo dell'owner (07/10/2026), revisione avversariale: senza Context Engine la storia parte com'è, e una sessione avvelenata
                    dall'eco del marcatore la rimanderebbe al modello. La copia per il fornitore si ripulisce (la storia viva no). */
                 /* 08/10/2026: e una chiamata vecchia salvata con argomenti `''` parte come `{}` (la storia viva non si tocca). */
-                modello, chiave, preparedContext?.messages ?? conArgomentiVuotiComeOggetto(withoutEchoedMarker(messaggiDelGiro)), fetchDiRete,
+                /* A19 sul desktop (09/10/2026, bugfixer, banco stall-e2e sulla 4176: sessione avvelenata ROSSA). Le due pulizie valgono
+                   anche sulla lista PREPARATA dai contextHooks: l'adattatore del desktop col motore spento (`legacyMode`) prepara senza
+                   passare da `prepareProviderContext`, e qui la sua lista partiva com'era — le due porte si escludevano. Una porta
+                   sola, DOPO il motore e sempre, come Hermes (`agent/turn_request_assembly.py:152-155`, `_sanitize_api_messages`:
+                   «Runs unconditionally (not gated on context_compressor)»). Si rilegge a ogni `invoke`: l'overflow dell'adattatore
+                   rimpiazza la lista sul posto e richiama. Stessa lista se non c'è niente da togliere: sul motore già pulito non costa. */
+                modello, chiave, conArgomentiVuotiComeOggetto(withoutEchoedMarker(preparedContext?.messages ?? messaggiDelGiro)), fetchDiRete,
                 onDelta ? (e) => onDelta({ giro, ...e }) : undefined,
                 reasoning, attrezziOpenAI, signal, preparedContext?.measurement?.responseReserve,
                 onDelta ? osservaChiamataCompleta : undefined,
@@ -12073,6 +12587,15 @@ export async function talosLavora({
                 /* Niente di visibile (solo ragionamento, o una chiamata a metà già chiusa): nella storia non entra niente,
                    ma a schermo il ragionamento di questo tentativo si chiude, o resterebbe aperto per sempre. */
                 else onGiro?.({ giro, tipo: 'risposta', risposta: { role: 'assistant', content: '' } })
+            }
+            /* ⛔ F-ENG-4: il fornitore è rimasto muto DOPO aver consegnato testo, e nessun attrezzo è partito né annunciato: il testo
+               è già in storia (qui sopra), il modello riceve la nota e continua (CONTINUAZIONI_MASSIME). Senza testo decide BUG-16. */
+            if (rotta?.code === 'PROVIDER_SILENCE' && typeof parziale?.content === 'string' && parziale.content.trim()
+                && parziale.chiamateInCorso !== true && partiteNelloStream.size === 0 && continuazioniDiFila < CONTINUAZIONI_MASSIME) {
+                continuazioniDiFila += 1
+                messaggi.push({ role: 'user', content: NOTA_CONTINUA_DOPO_SILENZIO })
+                onGiro?.({ giro, tipo: 'continuazione', motivo: 'silenzio', tentativo: continuazioniDiFila, tentativiMassimi: CONTINUAZIONI_MASSIME })
+                continue
             }
             /*
              * ⛔⭐ BUG-16 (05/10/2026) — RETRY-02 si evolve: «never repeat an uncertain generation»
@@ -12137,6 +12660,33 @@ export async function talosLavora({
             if (parziale && nessunTestoConsegnato && parziale.chiamateInCorso !== true
                 && rotta.causaDiTrasporto !== 'PROVIDER_STREAM_ERROR' && partiteNelloStream.size === 0) {
                 throw erroreEsitoProviderIncertoEsaurito(rotta, esitiIncertiDelGiro)
+            }
+            /* OWN-01: nessuna prima risposta (vedi SENZA_PRIMA_RISPOSTA_RITENTABILI_MASSIMI). Stessa attesa, stesso evento visibile,
+               stesso stop del ramo BUG-16; finito il budget, l'errore dice che il fornitore non ha cominciato a rispondere. */
+            if (!parziale && rotta?.esitoIncerto === true && CAUSE_SENZA_PRIMA_RISPOSTA.has(rotta.causaDiTrasporto)
+                && partiteNelloStream.size === 0) {
+                if (senzaPrimaRispostaDelGiro >= SENZA_PRIMA_RISPOSTA_RITENTABILI_MASSIMI) {
+                    throw erroreNessunaPrimaRispostaEsaurito(rotta, senzaPrimaRispostaDelGiro)
+                }
+                senzaPrimaRispostaDelGiro += 1
+                const attesa = Math.min(attesaDelTentativo(senzaPrimaRispostaDelGiro - 1),
+                    attesaRitentaMassimaMs ?? ATTESA_INCERTA_MASSIMA_MS, ATTESA_INCERTA_MASSIMA_MS)
+                onGiro?.({ giro, tipo: 'provider-retry', fase: 'attesa', tentativo: senzaPrimaRispostaDelGiro,
+                    tentativiMassimi: SENZA_PRIMA_RISPOSTA_RITENTABILI_MASSIMI, attesaMs: attesa,
+                    retryAt: Date.now() + attesa, requestId: randomUUID(), modello,
+                    canale: 'esito-incerto',
+                    /* Y2 della review del desktop: il canale sceglie la frase del banner («si è interrotta…»), falsa qui; questo campo
+                       ADDITIVO dice la causa vera a chi lo legge (il desktop), chi non lo conosce resta com'era. */
+                    causa: 'nessuna-prima-risposta',
+                    motivo: 'il fornitore non ha cominciato a rispondere entro il tempo: nessun byte ricevuto, reinvio sicuro — la nuova richiesta può comportare un altro costo' })
+                try { await dormiConSegnale(attesa, undefined, segnaleStop ? { signal: segnaleStop } : undefined) }
+                catch (erroreAttesa) { if (!segnaleStop?.aborted) throw erroreAttesa }
+                if (segnaleStop?.aborted) {
+                    fermatoSuRichiesta = true
+                    puntoDiFermata ??= `while waiting to resend after the provider did not answer, at round ${giro + 1}`
+                    break
+                }
+                continue
             }
             throw parziale ? erroreEsitoProviderIncerto(rotta) : rotta
         }
@@ -12256,8 +12806,21 @@ export async function talosLavora({
         })
         /* ⛔⭐ BUG-16: una risposta CONSEGNATA è progresso — il budget dei reinvii sicuri ricomincia. */
         esitiIncertiDelGiro = 0
+        senzaPrimaRispostaDelGiro = 0
 
         const chiamate = risposta.tool_calls ?? []
+        /* ⛔ F-ENG-4: una risposta di solo testo tagliata dal tetto continua (CONTINUAZIONI_MASSIME di fila); una che finisce
+           davvero azzera il conto. Oltre il tetto il giro finisce con `tetto-uscita` (vedi comeFinita). */
+        tagliataSenzaRimedio = null
+        if (chiamate.length === 0 && troncataDalTetto && String(risposta.content ?? '').trim()) {
+            if (continuazioniDiFila < CONTINUAZIONI_MASSIME) {
+                continuazioniDiFila += 1
+                messaggi.push({ role: 'user', content: NOTA_CONTINUA_DOPO_TETTO })
+                onGiro?.({ giro, tipo: 'continuazione', motivo: 'tetto-uscita', tentativo: continuazioniDiFila, tentativiMassimi: CONTINUAZIONI_MASSIME })
+                continue
+            }
+            tagliataSenzaRimedio = { volte: continuazioniDiFila + 1 }
+        } else if (!troncataDalTetto) continuazioniDiFila = 0
         if (chiamate.length === 0) {
             /*
              * ⭐⭐⭐ FASE D (28/8) — qui, e SOLO qui: il modello ha appena
@@ -12331,9 +12894,45 @@ export async function talosLavora({
              * l'utente aveva già premuto «Ferma».
              */
             if (segnaleStop?.aborted) { fermatoDentroIlGiro = true; break }
-            const nome = c.function?.name
+            const nomeChiamato = c.function?.name
             let argomenti = {}
             try { argomenti = JSON.parse(c.function?.arguments || '{}') } catch { /* vuoto */ }
+            /*
+             * ⭐ C5 (owner 10/10/2026; contratto §7) — `research_control` entra nel dispatch col nome di PRIMA (`research_pause`…):
+             *   permesso, hook, ricevuta firmata, catena e Piano restano quelli di sempre. Un nome vecchio chiamato direttamente
+             *   prende un segnaposto che nessun ramo riconosce, e il ramo finale risponde col nome CHIAMATO («… was replaced by …»).
+             */
+            const azioneRicerca = nomeChiamato === 'research_control' && typeof argomenti?.action === 'string' ? argomenti.action.trim().toLowerCase() : null
+            const nome = nomeChiamato === 'research_control'
+                ? (['pause', 'resume', 'cancel'].includes(azioneRicerca) ? `research_${azioneRicerca}` : 'research_control')
+                : ['research_pause', 'research_resume', 'research_cancel'].includes(nomeChiamato) ? `${nomeChiamato}#accorpato` : nomeChiamato
+            // hook e ospite vedono gli argomenti di prima ({ id }): `action` è già nel nome
+            if (nome !== nomeChiamato && nomeChiamato === 'research_control' && argomenti && typeof argomenti === 'object') {
+                const { action: _azione, ...resto } = argomenti
+                argomenti = resto
+            }
+            /*
+             * C5, review N3 del bugfixer (10/10/2026) — i hook vedono anche il nome CHIAMATO dal modello (quello delle sue chiamate e
+             *   della storia) e, per i tre controlli accorpati, l'azione: `azione` resta quella di sempre (per le ricerche il nome di
+             *   prima, `research_pause`…), così chi la confrontava non cambia; chi guarda il nome nuovo trova `attrezzoChiamato`.
+             *   Additivo: nessun campo di prima cambia.
+             */
+            const perHook = {
+                attrezzoChiamato: nomeChiamato,
+                ...(['child_control', 'automation_control', 'research_control'].includes(nomeChiamato)
+                    ? { action: nomeChiamato === 'research_control' ? azioneRicerca
+                        : typeof argomenti?.action === 'string' ? argomenti.action.trim().toLowerCase() : null }
+                    : {}),
+            }
+            /*
+             * C5: il permesso di `research_control` è per AZIONE (`research_control:pause`…), con ripiego sulla chiave di prima
+             *   (`research_pause`…); fra le due vince la più stretta, come per `child_control`. La barriera legge la chiave di prima.
+             */
+            const permessiDellaRicerca = (azione) => {
+                const vecchio = `research_${azione}`
+                const scelta = sceltaPiuStretta(permessiPerAttrezzo?.[`research_control:${azione}`], permessiPerAttrezzo?.[vecchio])
+                return scelta === undefined ? permessiPerAttrezzo : { ...permessiPerAttrezzo, [vecchio]: scelta }
+            }
             let esito
             /*
              * ⭐⭐ OSS-1/OSS-2 (17/09/2026) — CIO' CHE SOLO IL RAMO SA, e che l'evento di esito
@@ -12368,16 +12967,28 @@ export async function talosLavora({
                 try { modalitaOperativa = modalitaOperativaCorrenteFn() === 'normale' ? 'normale' : 'piano' }
                 catch { modalitaOperativa = 'piano' }
             }
+            const livelloPrimaDellaChiamata = livelloAccesso
             if (typeof permessiCorrentiFn === 'function') {
                 try {
                     const correnti = permessiCorrentiFn()
                     if (!correnti || typeof correnti !== 'object' || typeof correnti.livelloAccesso !== 'string') throw new Error('unreadable')
-                    livelloAccesso = correnti.livelloAccesso
+                    livelloAccesso = livelloLetto(correnti.livelloAccesso)
                     permessiPerAttrezzo = correnti.permessiPerAttrezzo && typeof correnti.permessiPerAttrezzo === 'object' ? correnti.permessiPerAttrezzo : {}
                     // C2 R6: gli attrezzi che la catena lascia su «sempre» per merito di un antenato, e chi (additivo: assente = nessuno)
                     originiDeiSempre = correnti.origini && typeof correnti.origini === 'object' ? correnti.origini : {}
                 }
                 catch { livelloAccesso = 'lettura'; permessiPerAttrezzo = {}; originiDeiSempre = {} }
+            }
+            /*
+             * ⭐ C16 (owner 10/10/2026, «Subito, nei due versi», «e il modello lo sa») — il livello è cambiato a giro vivo: la lista
+             *   degli attrezzi della RADICE in Normale si ricostruisce col livello nuovo (un rialzo offre davvero ciò che prima era tolto;
+             *   un ribasso toglie ciò che non è più concesso), come all'uscita dal Piano; e il modello riceve una riga, così non insiste
+             *   su ciò che ora chiede o è negato, né si crede ancora limitato (il caso dell'11/09: «si è creduto in sola lettura per sei
+             *   giri»). Una figlia cambia solo il cancello (C2-a), ma la riga la riceve anche lei.
+             */
+            if (livelloAccesso !== livelloPrimaDellaChiamata) {
+                notaPermessiCambiati = frasePermessiCambiati(livelloPrimaDellaChiamata, livelloAccesso)
+                if (agentRole !== 'child' && modalitaOperativa === 'normale') attrezziOpenAI = attrezziDopoIlPiano(livelloAccesso)
             }
             const azioneMutantePerHook = AZIONI_MUTANTI_PER_HOOK.includes(nome)
             const bloccatoDallaDelega = !consenteAttrezzoDelega(task, nome)
@@ -12386,7 +12997,7 @@ export async function talosLavora({
             let motivoBloccoPreHook = null
             if (!bloccatoDallaDelega && !bloccatoDalPiano && !motivoBloccoNamespace && hookFn) {
                 try {
-                    const esitoPreHook = await hookFn({ tipo: 'pre_tool_call', azione: nome, argomenti, giro })
+                    const esitoPreHook = await hookFn({ tipo: 'pre_tool_call', azione: nome, argomenti, giro, ...perHook })
                     if (esitoPreHook && esitoPreHook.consentito === false && azioneMutantePerHook) {
                         motivoBloccoPreHook = esitoPreHook.motivo || 'blocked by a pre_tool_call hook.'
                     }
@@ -12461,11 +13072,53 @@ export async function talosLavora({
                         )
                         : null
                     const elencoNegato = Boolean(permessoElenca && !permessoElenca.consentito)
+                    /*
+                     * ⭐ C5, review del passo 13 (Y-E2; contratto §10) — anche le pagine di `elenca` passano dal freno, PRIMA del disco:
+                     *   due pagine da solo, oltre solo con `browse_every_page` (fino al tetto assoluto), e un cursore già servito si
+                     *   rifiuta.
+                     * ⛔⛔ Una chiamata SENZA cursore riparte da capo SOLO se la cartella è CAMBIATA (review della cura, bugfixer 10/10:
+                     *   azzerare sempre lasciava scorrere tutte le pagine alternando «senza cursore» e cursori veri). L'impronta è
+                     *   quella dell'elenco GREZZO (prima del confine, che ha un nonce nuovo a ogni giro): stessa cartella ⇒ conto e
+                     *   cursori serviti restano; un file scritto ⇒ un elenco nuovo, e pagine 1-2 tornano disponibili. Rielencare una
+                     *   cartella invariata non conta come pagina: ridà la pagina 1, che il modello ha già.
+                     */
+                    let sfogliaElenca = null
+                    let firmaElencoNuovo = null
+                    let grezzoElenca = null
+                    if (!RISALITA.test(base) && !rifiutoReteElenca && !elencoNegato) {
+                        const parametri = parametriDiElenca(argomenti)
+                        const argomentiFirma = { ...argomenti, percorso: percorsoDiElencaPerLaFirma(base), depth: parametri.profondita }
+                        if (parametri.cursore) sfogliaElenca = decisioneDiSfogliamento({ nome: 'elenca', argomenti: argomentiFirma, registro: sfogliamenti })
+                        else firmaElencoNuovo = firmaDiSfogliamento('elenca', argomentiFirma)
+                    }
                     esito = RISALITA.test(base)
                         ? `REFUSED. "" climbs out of the workspace with "..". \`elenca\` takes a path INSIDE the workspace, e.g. "src" or "src/kernel".`
                         : rifiutoReteElenca ?? (elencoNegato
                             ? `REFUSED. ${permessoElenca.motivo} The folder was not listed.`
-                            : confineDiElenca(await anticipataOppure(lettureAvviate, c, () => elencaDelGiro(base, { spiegaErrore: (e) => spiegaCollegamentoLinux('elenca', argomenti, e) }))))
+                            : sfogliaElenca && !sfogliaElenca.permesso ? sfogliaElenca.messaggio
+                            : confineDiElenca(grezzoElenca = await anticipataOppure(lettureAvviate, c, () => elencaDelGiro(base, { ...parametriDiElenca(argomenti), spiegaErrore: (e) => spiegaCollegamentoLinux('elenca', argomenti, e) }))))
+                    if (firmaElencoNuovo && typeof grezzoElenca === 'string') {
+                        const impronta = createHash('sha256').update(grezzoElenca).digest('base64url').slice(0, 16)
+                        const stato = sfogliamenti.get(firmaElencoNuovo)
+                        if (!stato || stato.impronta !== impronta) {
+                            sfogliamenti.set(firmaElencoNuovo, { pagine: 1, voci: 0, totale: null, impronta })
+                            sfogliaElenca = { permesso: true, pagina: 1, coda: '' }
+                        }
+                        else {
+                            sfogliaElenca = {
+                                permesso: true, pagina: stato.pagine,
+                                coda: stato.pagine >= PAGINE_SENZA_RICHIESTA
+                                    ? `⛔ This folder has not changed, and ${stato.pagine} pages of it were already served in this run: no further pages on your own initiative.`
+                                        + ' Answer from what you have, open a narrower folder with "percorso", or use "cerca".'
+                                    : '',
+                            }
+                        }
+                    }
+                    // la riga del freno è di TALOS: FUORI dal confine dei dati, dopo il cursore
+                    if (sfogliaElenca?.permesso && typeof esito === 'string') {
+                        const coda = codaDelFreno({ sfoglia: sfogliaElenca, haAltro: /\bor continue with cursor=\S+\s*$/mu.test(esito) })
+                        if (coda) esito = `${esito}\n${coda}`
+                    }
                     if (elencoNegato) erroreTool = true
                 }
                 else if (nome === 'cerca') {
@@ -12532,9 +13185,10 @@ export async function talosLavora({
                            sono nelle sue liste); questa riga tiene onesto il registro se un giorno le liste e i formati divergono. */
                         if (letta && !letta.binario && !letta.estratto && Number.isFinite(letta.mtimeMs)) {
                             const chiave = chiaveDelGiro(percorso)
-                            const istantanea = { mtimeMs: letta.mtimeMs, size: letta.byteSulDisco }
+                            const istantanea = { mtimeMs: letta.mtimeMs, size: letta.byteSulDisco, ctimeMs: letta.ctimeMs }
                             if (letta.modo === 'righe') registraLetturaRighe(registroLetture, chiave, { ...istantanea, primaRiga: letta.primaRiga, ultimaRiga: letta.ultimaRiga, righeTotali: letta.righeTotali, righeAccorciate: letta.righeAccorciate })
-                            else if (letta.modo === 'byte') registraLetturaDentroRiga(registroLetture, chiave, { ...istantanea, riga: letta.riga, rigaFinita: letta.rigaFinita })
+                            else if (letta.modo === 'byte') registraLetturaDentroRiga(registroLetture, chiave, { ...istantanea, riga: letta.riga, rigaFinita: letta.rigaFinita, daByte: letta.offset, aByte: letta.endOffset })
+                            await prendiImprontaSeServe(percorso, chiave)
                         }
                     }
                     esito = rifiutoRete ?? (percorso === ''
@@ -12639,6 +13293,8 @@ export async function talosLavora({
                     else if (!accoda && (rifiutoSovrascrittura = await (async () => {
                         const adesso = await istantaneaDelGiro(percorso)
                         if (!adesso) return null
+                        /* C25: con un'impronta presa alla lettura, si confrontano anche i byte (lo stesso istante non sfugge) */
+                        if (haImpronta(registroLetture, chiaveDelGiro(percorso))) adesso.impronta = await improntaDelGiro(percorso)
                         const motivo = motivoPerNonSovrascrivere(registroLetture, chiaveDelGiro(percorso), adesso)
                         return motivo ? frasePerNonSovrascrivere(mostrato(percorso), motivo, adesso.size) : null
                     })())) {
@@ -12646,6 +13302,9 @@ export async function talosLavora({
                     }
                     else {
                     const contenutoPrimaPerApprovazione = await discoAttivo().leggi(percorso).then((t) => t, () => null)
+                    /* C25, review YELLOW del desktop: i BYTE del file mostrato sulla carta (la lettura qui sopra è decodificata e due varianti
+                       di byte non validi la danno uguale). Un'aggiunta non sostituisce niente: non serve. */
+                    const improntaPrimaDellaCarta = accoda ? null : await improntaDelGiro(percorso)
                     /*
                      * ⛔⛔ BC-11 — CHI APPROVA E IL CANCELLO SEMANTICO DEVONO VEDERE IL FILE COME SARA'.
                      *
@@ -12697,8 +13356,35 @@ export async function talosLavora({
                     // fin da quando è stata scritta la prima volta.
                     let erroreScrivi = null
                     let percorsoCambiatoScrivi = false
+                    /*
+                     * ⛔ C25 (owner 10/10/2026; audit A-OVERWRITE-GAP) — fra la carta e la scrittura può passare una domanda alla persona,
+                     *   anche di minuti. `file_edit` rilegge il file dopo il sì da UTF8-07 (revisione Codex 01/10, rilievo 4); `scrivi` no, e
+                     *   sostituiva in silenzio ciò che era cambiato nel frattempo — la persona aveva approvato un diff contro un contenuto che
+                     *   non c'era più. Si confronta l'impronta dei BYTE presa prima della carta con quella di adesso: diversa (anche un file
+                     *   nato nel frattempo, o non più leggibile) ⇒ rifiuto. Un'aggiunta non sostituisce niente e passa (C25-01d).
+                     */
+                    const improntaDopoLaCarta = permesso.consentito && !accoda ? await improntaDelGiro(percorso) : null
+                    const cambiatoInAttesaScrivi = permesso.consentito && !accoda && improntaDopoLaCarta !== improntaPrimaDellaCarta
+                    /*
+                     * ⛔ C25, nota della review del desktop su 07598d97e — l'impronta che non si calcola né prima né dopo (file coi dati
+                     *   illeggibili, o una casa Linux con un servente senza `impronta`) dava `null === null`, e il controllo passava in
+                     *   silenzio: riprodotto con un'ACL che nega la lettura dei dati, la scrittura fatta durante la carta veniva coperta.
+                     *   Un file che ESISTE e i cui byte non si possono verificare non si sostituisce. Un file che non c'è passa (nuovo).
+                     */
+                    const nonVerificabileScrivi = permesso.consentito && !accoda && !cambiatoInAttesaScrivi && improntaDopoLaCarta === null
+                        && (await istantaneaDelGiro(percorso)) !== null
                     if (!permesso.consentito) {
                         esito = `REFUSED. ${permesso.motivo} Nothing was written.`
+                    }
+                    else if (nonVerificabileScrivi) {
+                        erroreScrivi = 'the file could not be read to verify it after the approval; nothing was written'
+                        esito = `REFUSED. Nothing was written: ${mostrato(percorso)} could not be verified after the approval: its bytes cannot be read, `
+                            + 'so replacing it could destroy content nobody checked. Tell the person; do not try to replace it another way.'
+                    }
+                    else if (cambiatoInAttesaScrivi) {
+                        erroreScrivi = 'the file changed while waiting for approval; nothing was written'
+                        esito = `REFUSED. Nothing was written: ${mostrato(percorso)} changed while waiting for approval, so the approved content was computed on an old version. `
+                            + 'Read the file again before writing it.'
                     }
                     else {
                         /*
@@ -12750,7 +13436,7 @@ export async function talosLavora({
                             if (verdetto.esito !== 'smentita') {
                                 const dopo = await istantaneaDelGiro(percorso)
                                 dopoSulDisco = dopo
-                                if (dopo) registraScritturaPropria(registroLetture, chiaveDelGiro(percorso), { ...dopo, intera: !accoda })
+                                if (dopo) await registraScritturaConImpronta(percorso, dopo, !accoda)
                             }
                             /*
                              * ⛔ DICHIARATO: per un'aggiunta questo e' il «dopo» RICOSTRUITO in
@@ -12817,7 +13503,7 @@ export async function talosLavora({
                             premessaAssente: premessaFuAssente,
                             postcondizione: postcondizioneScrivi,
                             error: erroreScrivi,
-                            esecuzioneFallita: percorsoCambiatoScrivi, // rilievo 1: permesso dato, scrittura non avvenuta
+                            esecuzioneFallita: percorsoCambiatoScrivi || cambiatoInAttesaScrivi || nonVerificabileScrivi, // rilievo 1 e C25: permesso dato, scrittura non avvenuta
                             firma, catena,
                         })
                         // ⭐⭐⭐ 29/8 — la catena avanza SOLO su un successo confermato,
@@ -12973,7 +13659,7 @@ export async function talosLavora({
                                         /* T25/B09: la propria modifica mirata aggiorna l'istantanea senza cambiare quanto il modello sapeva */
                                         if (verdetto.esito !== 'smentita') {
                                             const dopo = await istantaneaDelGiro(percorso)
-                                            if (dopo) registraScritturaPropria(registroLetture, chiaveDelGiro(percorso), { ...dopo, intera: false })
+                                            if (dopo) await registraScritturaConImpronta(percorso, dopo, false)
                                         }
                                         onScrittura?.(percorso, sostituzione.testo, premessa.esisteva, premessa.contenutoPrima)
                                         contenutoRealmenteScritto = sostituzione.testo
@@ -13069,6 +13755,7 @@ export async function talosLavora({
                                     segnaleSfondo: fermabile.sfondo.segnale,
                                     fileSfondo: fermabile.sfondo.file,
                                     inSfondoSubito: argomenti?.background === true,
+                                    onAvvio: fermabile.annunciaAvvio,
                                 })
                             }
                             try { p = captureProcessFn ? await captureProcessFn({ toolCallId: c.id }, esegui) : await esegui() }
@@ -13093,7 +13780,7 @@ export async function talosLavora({
                     if (Number.isSafeInteger(p?.codice)) processoPerEvento = { ...processoPerEvento, exitCode: p.codice }
                     /* ⛔ BUG-14: la riga dei Processi deve dire «in sfondo» e DOVE guarda l'output — campi additivi. */
                     if (p?.messoInSfondo) processoPerEvento = { ...processoPerEvento, inSfondo: true, ...(p.fileSfondo ? { fileSfondo: p.fileSfondo } : {}), ...(p.daSfondo ? { sfondoDa: p.daSfondo } : {}) }
-                    if (p?.messoInSfondo && p.uscita && typeof segnalaUscitaSfondo === 'function') p.uscita.then((u) => segnalaUscitaSfondo({ toolCallId: c.id, ...u })).catch(() => {}) // A6-bis (G2: anche un'eccezione del segnalatore)
+                    if (p?.messoInSfondo && p.uscita && typeof segnalaUscitaSfondo === 'function') p.uscita.then((u) => segnalaUscitaSfondo({ toolCallId: c.id, ...u, comando: comandoProva, file: p.fileSfondo ?? null })).catch(() => {}) // A6-bis (G2); C06: comando e file per la nota al modello
                     ricevutaEmessa = true
                     {
                         const ricevuta = creaRicevutaOperazione({
@@ -13130,7 +13817,7 @@ export async function talosLavora({
                     else {
                         const preferenzeWslShell = await leggiPreferenzeWsl()
                         permessoShell = await verificaPermessoConBarriera(
-                            { tipo: 'shell', toolCallId: c.id, comando: comandoDiShell(argomenti) },
+                            { tipo: 'shell', toolCallId: c.id, comando: comandoDiShell(argomenti), ...(argomenti?.network === true && reteChiusaDallOspite === true ? { rete: true } : {}) },
                             { livelloAccesso, modalitaOperativa, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
                             { conferma: (dato) => confermaRootWsl(dato, c.id, 'shell', comandoDiShell(argomenti), preferenzeWslShell) },
                         )
@@ -13170,6 +13857,9 @@ export async function talosLavora({
                                 segnaleSfondo: fermabile.sfondo.segnale,
                                 fileSfondo: fermabile.sfondo.file,
                                 inSfondoSubito: argomenti?.background === true,
+                                onAvvio: fermabile.annunciaAvvio,
+                                /* la rete per questo comando: si arriva qui solo dopo il sì (o in Full access) */
+                                ...(argomenti?.network === true && reteChiusaDallOspite === true ? { rete: true } : {}),
 
                                 onPezzo: ({ testo }) => anteprima.append(testo),
                                 })
@@ -13216,7 +13906,7 @@ export async function talosLavora({
                     if (Number.isSafeInteger(p?.codice)) processoPerEvento = { ...processoPerEvento, exitCode: p.codice }
                     /* ⛔ BUG-14: la riga dei Processi deve dire «in sfondo» e DOVE guarda l'output — campi additivi. */
                     if (p?.messoInSfondo) processoPerEvento = { ...processoPerEvento, inSfondo: true, ...(p.fileSfondo ? { fileSfondo: p.fileSfondo } : {}), ...(p.daSfondo ? { sfondoDa: p.daSfondo } : {}) }
-                    if (p?.messoInSfondo && p.uscita && typeof segnalaUscitaSfondo === 'function') p.uscita.then((u) => segnalaUscitaSfondo({ toolCallId: c.id, ...u })).catch(() => {}) // A6-bis (G2: anche un'eccezione del segnalatore)
+                    if (p?.messoInSfondo && p.uscita && typeof segnalaUscitaSfondo === 'function') p.uscita.then((u) => segnalaUscitaSfondo({ toolCallId: c.id, ...u, comando: comandoDiShell(argomenti), file: p.fileSfondo ?? null })).catch(() => {}) // A6-bis (G2); C06: comando e file per la nota al modello
                     // ⭐ FASE D — l'output di un comando shell non è "un artefatto scritto" nello stesso senso di un file: hashContenuto resta null qui, coerente con 'prova'.
                     ricevutaEmessa = true
                     {
@@ -13996,7 +14686,7 @@ export async function talosLavora({
                     erroreTool = true
                     const permesso = await verificaPermessoConBarriera(
                         { tipo: 'research_pause', toolCallId: c.id },
-                        { livelloAccesso, modalitaOperativa, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
+                        { livelloAccesso, modalitaOperativa, chiediApprovazioneFn, permessiPerAttrezzo: permessiDellaRicerca('pause'), cartella, catena, segnaleStop },
                     )
                     esitoPermessoPerRicevuta = permesso
                     if (!permesso.consentito) {
@@ -14013,7 +14703,7 @@ export async function talosLavora({
                         }
                         catch (rotto) {
                             erroreTool = true
-                            esito = `research_pause failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`
+                            esito = `${nomeChiamato} failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`
                         }
                     }
                     ricevutaEmessa = true
@@ -14031,7 +14721,7 @@ export async function talosLavora({
                     erroreTool = true
                     const permesso = await verificaPermessoConBarriera(
                         { tipo: 'research_resume', toolCallId: c.id },
-                        { livelloAccesso, modalitaOperativa, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
+                        { livelloAccesso, modalitaOperativa, chiediApprovazioneFn, permessiPerAttrezzo: permessiDellaRicerca('resume'), cartella, catena, segnaleStop },
                     )
                     esitoPermessoPerRicevuta = permesso
                     if (!permesso.consentito) {
@@ -14048,7 +14738,7 @@ export async function talosLavora({
                         }
                         catch (rotto) {
                             erroreTool = true
-                            esito = `research_resume failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`
+                            esito = `${nomeChiamato} failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`
                         }
                     }
                     ricevutaEmessa = true
@@ -14066,7 +14756,7 @@ export async function talosLavora({
                     erroreTool = true
                     const permesso = await verificaPermessoConBarriera(
                         { tipo: 'research_cancel', toolCallId: c.id },
-                        { livelloAccesso, modalitaOperativa, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
+                        { livelloAccesso, modalitaOperativa, chiediApprovazioneFn, permessiPerAttrezzo: permessiDellaRicerca('cancel'), cartella, catena, segnaleStop },
                     )
                     esitoPermessoPerRicevuta = permesso
                     if (!permesso.consentito) {
@@ -14083,7 +14773,7 @@ export async function talosLavora({
                         }
                         catch (rotto) {
                             erroreTool = true
-                            esito = `research_cancel failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`
+                            esito = `${nomeChiamato} failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`
                         }
                     }
                     ricevutaEmessa = true
@@ -14403,64 +15093,6 @@ export async function talosLavora({
                  * per la provenienza del contenuto letto — un buco già
                  * esistente per `naviga`, non introdotto qui).
                  */
-                else if (nome === 'library_list') {
-                    if (!onLibreriaLista) {
-                        esito = 'the project Library is not configured on this harness: no store was set.'
-                    }
-                    else {
-                        /*
-                         * ⛔⛔ BC-10: il tetto sulle pagine si decide PRIMA e FUORI dal `try`, per due
-                         * ragioni distinte. Prima: la pagina di troppo non deve arrivare allo store —
-                         * si risponde a parole, come per gli argomenti assenti. Seconda: se
-                         * `decisioneDiSfogliamento` lancia (registro sbagliato), quell'errore di
-                         * contratto deve uscire allo scoperto e non travestirsi da «library_list failed».
-                         */
-                        const sfoglia = decisioneDiSfogliamento({ nome, argomenti, registro: sfogliamenti })
-                        if (!sfoglia.permesso) {
-                            esito = sfoglia.messaggio
-                        }
-                        else {
-                            try {
-                                const grezzo = await onLibreriaLista(argomenti)
-                                /* ⛔ BC-10: il TOTALE dichiarato dall'elenco è il fondo vero — annotato qui, dove il risultato è ancora grezzo. */
-                                registraEsitoDiSfogliamento({ registro: sfogliamenti, nome, argomenti, risultato: grezzo })
-                                const testo = formattaListaLibreria(grezzo)
-                                esito = sfoglia.coda ? `${testo}\n\n${sfoglia.coda}` : testo
-                            }
-                            catch (rotto) {
-                                esito = `library_list failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`
-                            }
-                        }
-                    }
-                }
-                else if (nome === 'library_search') {
-                    if (!onLibreriaCerca) {
-                        esito = 'the project Library is not configured on this harness: no store was set.'
-                    }
-                    else {
-                        /* ⛔ BC-10: stesso tetto del fratello `library_list` — qui il cursore si chiama `offset`, ed è dentro CAMPI_DI_PAGINAZIONE per lo stesso motivo. Una `query` diversa è un'altra domanda e riparte da pagina 1: è nella firma. */
-                        const sfoglia = decisioneDiSfogliamento({ nome, argomenti, registro: sfogliamenti })
-                        if (!sfoglia.permesso) {
-                            esito = sfoglia.messaggio
-                        }
-                        else {
-                            try {
-                                const grezzo = await onLibreriaCerca(argomenti)
-                                /* ⛔ BC-10: come il fratello `library_list` — il totale dei risultati è il fondo vero di questa ricerca. */
-                                registraEsitoDiSfogliamento({ registro: sfogliamenti, nome, argomenti, risultato: grezzo })
-                                /* F-027: nomi ed estratti dei file dentro il confine; la riga di TALOS in testa e la coda del tetto fuori. */
-                                const formattata = formattaRicercaLibreria(grezzo)
-                                const finePrimaRiga = grezzo?.pagina?.length > 0 ? formattata.indexOf('\n\n') : -1
-                                const testo = finePrimaRiga === -1 ? formattata
-                                    : `${formattata.slice(0, finePrimaRiga + 2)}${avvolgiEsterno('library_search')(formattata.slice(finePrimaRiga + 2))}`
-                                esito = sfoglia.coda ? `${testo}\n\n${sfoglia.coda}` : testo
-                            }
-                            catch (rotto) {
-                                esito = `library_search failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`
-                            }
-                        }
-                    }
-                }
                 else if (nome === 'library_read') {
                     if (!onLibreriaLeggi) {
                         esito = 'the project Library is not configured on this harness: no store was set.'
@@ -14498,12 +15130,25 @@ export async function talosLavora({
                         esito = `${nome} is not configured on this harness: no section reader was set.`
                     }
                     else {
-                        try {
-                            esito = uscitaUtile(String(await onLetturaSezione(nome, argomenti ?? {})), 16_000, 0.25)
+                        /* ⭐ C5 (contratto §10): gli elenchi col freno passano dal conto PRIMA del canale — fuori dal `try`, così un
+                           errore di contratto non si traveste da «failed» (vedi `decisioneDiSfogliamento`). */
+                        const sfoglia = Object.hasOwn(CAMPI_CHE_IDENTIFICANO_LA_DOMANDA, nome)
+                            ? decisioneDiSfogliamento({ nome, argomenti, registro: sfogliamenti }) : null
+                        if (sfoglia && !sfoglia.permesso) esito = sfoglia.messaggio
+                        else try {
+                            const testo = String(await onLetturaSezione(nome, argomenti ?? {}))
+                            esito = uscitaUtile(testo, 16_000, 0.25)
                             /* F-027: le conversazioni passate riportano pagine, file e uscite già lette, e i rapporti di ricerca sono
                                scritti sulle pagine del web: contenuto venuto da fuori, dentro il confine. Note, attività e memoria no:
                                le scrive la persona o l'agente. Il messaggio di un guasto resta di TALOS (ramo `catch`). */
-                            if (nome === 'conversation_search' || nome === 'research_search') esito = avvolgiEsterno(nome)(esito)
+                            if (nome === 'conversation_search') esito = avvolgiEsterno(nome)(esito)
+                            /* C5: negli elenchi in testo a righe dentro il confine vanno SOLO le voci (titoli, nomi ed estratti venuti da fuori);
+                               testata, note e «N more… continue with cursor=…» sono di TALOS e restano fuori — dentro, il modello le leggerebbe
+                               come dati e potrebbe non seguire proprio la riga che gli dice come proseguire. */
+                            if (nome === 'research_find' || nome === 'library_find') esito = confineSulleVoci(esito, avvolgiEsterno(nome))
+                            // la riga del freno è di TALOS: FUORI dal confine dei dati
+                            const coda = sfoglia ? codaDelFreno({ sfoglia, haAltro: /\bor continue with cursor=\S+\s*$/mu.test(testo) }) : ''
+                            if (coda) esito = `${esito}\n${coda}`
                         }
                         catch (rotto) {
                             esito = `${nome} failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`
@@ -14530,20 +15175,29 @@ export async function talosLavora({
                 else if (ATTREZZI_AUTOMAZIONI.has(nome) || ATTREZZI_FORNITORI.has(nome)) {
                     const fornitori = ATTREZZI_FORNITORI.has(nome)
                     const ospiteFn = fornitori ? onFornitoriFn : onAutomazioneFn
-                    if (typeof ospiteFn !== 'function') {
+                    /* C5: `automation_control` arriva all'ospite col nome di prima (`automation_<azione>`), con i soli campi dell'azione */
+                    const azioneAutomazione = nome === 'automation_control' && typeof argomenti?.action === 'string' ? argomenti.action.trim().toLowerCase() : null
+                    const nomeOspite = nome === 'automation_control' ? `automation_${azioneAutomazione}` : nome
+                    const argomentiOspite = nome !== 'automation_control' ? (argomenti ?? {})
+                        : { id: argomenti?.id, ...(azioneAutomazione === 'run' && argomenti?.contesto !== undefined ? { contesto: argomenti.contesto } : {}) }
+                    if (nome === 'automation_control' && !['pause', 'resume', 'run', 'stop'].includes(azioneAutomazione)) {
+                        erroreTool = true
+                        esito = `REFUSED. automation_control needs action "pause", "resume", "run" or "stop" (got ${JSON.stringify(argomenti?.action ?? null)}). Nothing was done.`
+                    }
+                    else if (typeof ospiteFn !== 'function') {
                         erroreTool = true
                         esito = `${nome} is not available in this session.`
                     }
                     else {
                         try {
-                            const anteprima = await ospiteFn(nome, argomenti ?? {}, { fase: 'anteprima', toolCallId: c.id })
+                            const anteprima = await ospiteFn(nomeOspite, argomentiOspite, { fase: 'anteprima', toolCallId: c.id })
                             let via = Boolean(anteprima?.ok)
                             if (!via) {
                                 erroreTool = true
                                 esito = `REFUSED. ${anteprima?.messaggio ?? (fornitori ? 'this provider request is not valid.' : 'this automation request is not valid.')}`
                             }
                             else if (anteprima.carta) {
-                                const verifica = await verificaAzioneAutomazione({ ...(anteprima.azione ?? {}), tipo: nome, toolCallId: c.id },
+                                const verifica = await verificaAzioneAutomazione({ ...(anteprima.azione ?? {}), tipo: nomeOspite, toolCallId: c.id },
                                     { chiediApprovazioneFn, segnaleStop })
                                 if (!verifica.consentito) {
                                     via = false
@@ -14552,7 +15206,7 @@ export async function talosLavora({
                                 }
                             }
                             if (via) {
-                                const fatto = await ospiteFn(nome, argomenti ?? {}, { fase: 'esegui', toolCallId: c.id })
+                                const fatto = await ospiteFn(nomeOspite, argomentiOspite, { fase: 'esegui', toolCallId: c.id })
                                 if (fatto?.ok) {
                                     esito = uscitaUtile(String(fatto.testo ?? ''), 16_000, 0.25)
                                     if (nome === 'automation_runs') esito = avvolgiEsterno('automation_runs')(esito)
@@ -14611,71 +15265,12 @@ export async function talosLavora({
                         }
                     }
                 }
-                else if (nome === 'notes_list') {
-                    if (!onNoteLista) {
-                        esito = 'notes are not configured on this harness: no store was set.'
-                    }
-                    else {
-                        try {
-                            esito = formattaListaNote(await onNoteLista(argomenti))
-                        }
-                        catch (rotto) {
-                            esito = `notes_list failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`
-                        }
-                    }
-                }
-                else if (nome === 'tasks_list') {
-                    if (!onAttivitaLista) {
-                        esito = 'tasks are not configured on this harness: no store was set.'
-                    }
-                    else {
-                        try {
-                            esito = formattaListaAttivita(await onAttivitaLista(argomenti))
-                        }
-                        catch (rotto) {
-                            esito = `tasks_list failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`
-                        }
-                    }
-                }
-                else if (nome === 'memory_search') {
-                    if (!onMemoriaCerca) {
-                        esito = 'memory is not configured on this harness: no store was set.'
-                    }
-                    else {
-                        try {
-                            esito = formattaRicercaMemoria(await onMemoriaCerca(argomenti))
-                        }
-                        catch (rotto) {
-                            esito = `memory_search failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`
-                        }
-                    }
-                }
                 /*
                  * ⭐⭐⭐ FASE N, ottavo sistema (30/8) — Deep Research, i due
                  * tool di SOLA LETTURA. Stesso trattamento non censito di
                  * library_list/notes_list/tasks_list/memory_search sopra —
                  * nessun gate, nessuna ricevuta.
                  */
-                else if (nome === 'research_list') {
-                    if (!onRicercaLista) {
-                        esito = 'deep research is not configured on this harness: no research channel was set.'
-                    }
-                    else {
-                        const sfoglia = decisioneDiSfogliamento({ nome, argomenti, registro: sfogliamenti })
-                        if (!sfoglia.permesso) esito = sfoglia.messaggio
-                        else {
-                            try {
-                                const grezzo = await onRicercaLista(argomenti)
-                                registraEsitoDiSfogliamento({ registro: sfogliamenti, nome, argomenti, risultato: grezzo })
-                                const testo = formattaListaRicerche(grezzo)
-                                esito = sfoglia.coda ? `${testo}\n\n${sfoglia.coda}` : testo
-                            }
-                            catch (rotto) {
-                                esito = `research_list failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`
-                            }
-                        }
-                    }
-                }
                 else if (nome === 'research_read') {
                     if (!onRicercaLeggi) {
                         esito = 'deep research is not configured on this harness: no research channel was set.'
@@ -14799,26 +15394,50 @@ export async function talosLavora({
                 else if (nome === 'list_children') {
                     esito = !listChildrenFn
                         ? 'REFUSED. list_children requires a parent channel.'
-                        : JSON.stringify(await listChildrenFn(argomenti && typeof argomenti === 'object' ? argomenti : {}))
+                        /* C5 (owner 10/10, «Testo a righe», contratto §9): l'ospite dà il `testo`; un ospite vecchio (la CLI fino al
+                           riallineamento) dà ancora l'oggetto, che si stampa come prima */
+                        : ((elenco) => (typeof elenco?.testo === 'string' ? elenco.testo : JSON.stringify(elenco)))(await listChildrenFn(argomenti && typeof argomenti === 'object' ? argomenti : {}))
                 }
-                else if (nome === 'stop_child') {
-                    /* K3: il permesso dell'attrezzo vale («sempre» di serie; «nega» e «chiedi» della persona sì). Ferma lavoro che il
-                       modello stesso ha avviato e non tocca il disco: anche in Piano, quindi il controllo non passa dal ramo di Piano. */
-                    const override = permessiPerAttrezzo?.stop_child
-                    const permessoStop = override === 'nega'
-                        ? { consentito: false, motivo: 'the tool "stop_child" is turned off for this session (per-tool permission: deny).' }
-                        : override === 'chiedi'
-                            ? await verificaPermessoConBarriera(
-                                { tipo: 'stop_child', toolCallId: c.id, childId: String(argomenti?.childId ?? '') },
-                                { livelloAccesso, modalitaOperativa: 'normale', chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
-                            )
-                            : null
-                    esito = !stopChildFn
-                        ? 'REFUSED. stop_child requires a parent channel.'
-                        : permessoStop && !permessoStop.consentito
-                            ? `REFUSED. ${permessoStop.motivo} No agent was stopped.`
-                            : JSON.stringify(await stopChildFn(argomenti && typeof argomenti === 'object' ? argomenti : {}))
-                    if (permessoStop && !permessoStop.consentito) erroreTool = true
+                else if (nome === 'child_control') {
+                    /*
+                     * ⭐ C5 (owner 10/10/2026; contratto §7) — stop, pausa e ripresa di un figlio diretto in UN attrezzo. Le regole di
+                     *   K3 e della C3 tappa 4 restano azione per azione:
+                     *   - il permesso vale per AZIONE: `child_control:<azione>`, con ripiego sulla chiave di prima (`stop_child`…); fra
+                     *     le due vince la più stretta (nega > chiedi > sempre), così un «nega» salvato sul nome vecchio non si perde;
+                     *   - la carta tiene il tipo di sempre (`stop_child`…): l'interfaccia la mostra come prima;
+                     *   - in Piano stop e pausa sì (non toccano il disco), la ripresa no (riparte un lavoro già approvato alla delega).
+                     */
+                    const azione = typeof argomenti?.action === 'string' ? argomenti.action.trim().toLowerCase() : ''
+                    const AZIONI_FIGLIO = { stop: [stopChildFn, 'stopped'], pause: [pauseChildFn, 'paused'], resume: [resumeChildFn, 'resumed'] }
+                    const [fnControllo, participio] = Object.hasOwn(AZIONI_FIGLIO, azione) ? AZIONI_FIGLIO[azione] : [null, null]
+                    const tipoVecchio = `${azione}_child`
+                    const override = sceltaPiuStretta(permessiPerAttrezzo?.[`child_control:${azione}`], permessiPerAttrezzo?.[tipoVecchio])
+                    if (!participio) {
+                        esito = `REFUSED. child_control needs action "stop", "pause" or "resume" (got ${JSON.stringify(argomenti?.action ?? null)}). Nothing was done.`
+                        erroreTool = true
+                    }
+                    else if (modalitaOperativa === 'piano' && azione === 'resume') {
+                        esito = 'REFUSED. In Plan mode a child can be stopped or paused, not resumed: resuming restarts work. Nothing was done.'
+                        erroreTool = true
+                    }
+                    else {
+                        const permessoControllo = override === 'nega'
+                            ? { consentito: false, motivo: `the action "${azione}" of child_control is turned off for this session (per-tool permission: deny).` }
+                            : override === 'chiedi'
+                                /* la barriera rilegge la scelta da `permessiPerAttrezzo[azione.tipo]`: le si passa quella GIÀ RISOLTA sotto il
+                                   tipo della carta, o un «chiedi» salvato solo sulla chiave nuova non farebbe partire la carta */
+                                ? await verificaPermessoConBarriera(
+                                    { tipo: tipoVecchio, toolCallId: c.id, childId: String(argomenti?.childId ?? '') },
+                                    { livelloAccesso, modalitaOperativa: 'normale', chiediApprovazioneFn, permessiPerAttrezzo: { ...permessiPerAttrezzo, [tipoVecchio]: override }, cartella, catena, segnaleStop },
+                                )
+                                : null
+                        esito = !fnControllo
+                            ? `REFUSED. child_control ${azione} requires a parent channel.`
+                            : permessoControllo && !permessoControllo.consentito
+                                ? `REFUSED. ${permessoControllo.motivo} No agent was ${participio}.`
+                                : JSON.stringify(await fnControllo({ childId: argomenti?.childId }))
+                        if (permessoControllo && !permessoControllo.consentito) erroreTool = true
+                    }
                 }
                 else if (nome === 'answer_parent_question') {
                     esito = agentRole !== 'child' || !answerParentQuestionFn
@@ -15029,7 +15648,10 @@ export async function talosLavora({
                     }
                 }
                 else {
-                    esito = `unknown tool: ${nome}`
+                    // C5: un nome accorpato (dalla storia o dalla memoria del modello) dice quello nuovo e come chiamarlo
+                    esito = nome === 'research_control'
+                        ? `REFUSED. research_control needs action "pause", "resume" or "cancel" (got ${JSON.stringify(argomenti?.action ?? null)}). Nothing was done.`
+                        : fraseAttrezzoRinominato(nomeChiamato) ?? `unknown tool: ${nomeChiamato}`
                 }
             }
             catch (rotta) {
@@ -15081,7 +15703,7 @@ export async function talosLavora({
              * l'esito FINALE, mai un buco nella sequenza degli eventi.
              */
             if (hookFn) {
-                try { await hookFn({ tipo: 'post_tool_call', azione: nome, esito, giro }) }
+                try { await hookFn({ tipo: 'post_tool_call', azione: nome, esito, giro, ...perHook }) }
                 catch { /* notify-only: un ascoltatore che lancia non tocca il verdetto già deciso */ }
             }
 
@@ -15092,7 +15714,24 @@ export async function talosLavora({
             if (segnaleStop?.aborted && contieneMarcaFermatoMentreGirava(esito)) puntoDiFermata ??= `while "${nome}" was running`
             /* ⛔ 27/09/2026 (era il rattoppo T-03 del pacchetto desktop): senza motore del contesto l'uscita si taglia
                DICHIARANDO quanto manca (testa + coda, `uscitaUtile`), non con uno `slice` muto che si legge «era tutto qui». */
-            esito = conConfine(nome, esito) // F-027: il contenuto esterno nel confine, prima del taglio e dell'evento
+            /* Giri in tondo: si confronta il risultato GREZZO (il confine dei dati ha un id nuovo a ogni chiamata). Un'azione che
+               cambia qualcosa ed è riuscita è progresso; la nota è testo di TALOS, non contenuto esterno, e non va nel confine. */
+            let notaRipetizione = null
+            if (giriInTondo) {
+                const volte = giriInTondo.osserva({ nome, argomenti, esito, progresso: AZIONI_MUTANTI_PER_HOOK.includes(nome) && !erroreTool })
+                if (volte >= GIRI_IN_TONDO_AVVISO) {
+                    notaRipetizione = notaGiriInTondo(nome, volte, String(esito))
+                    if (volte >= GIRI_IN_TONDO_DOMANDA) {
+                        const verifica = await verificaAzioneAutomazione({ tipo: 'giri-in-tondo', strumento: nome, volte, toolCallId: c.id },
+                            { chiediApprovazioneFn, segnaleStop })
+                        if (verifica.consentito) giriInTondo.azzera(nome, argomenti)
+                        else fermatoPerGiriInTondo = { nome, volte, motivo: verifica.motivo ?? null }
+                    }
+                }
+            }
+            esito = notaRipetizione ?? conConfine(nome, esito) // F-027: il contenuto esterno nel confine, prima del taglio e dell'evento
+            /* C16: testo di TALOS, fuori dal confine dei dati, una volta sola */
+            if (notaPermessiCambiati) { esito = `${notaPermessiCambiati}\n\n${esito}`; notaPermessiCambiati = null }
             const contenutoTool = contextHooks ? String(esito) : uscitaUtile(String(esito), 8_000, 0.5)
             messaggi.push({
                 role: 'tool',
@@ -15105,6 +15744,19 @@ export async function talosLavora({
                chiave fantasma e romperebbe i `deepStrictEqual` gia' scritti altrove. */
             onGiro?.({ giro, tipo: 'tool-esito', toolCallId: c.id, content: contenutoTool, ...(processoPerEvento ?? {}), ...(typeof erroreTool === 'boolean' ? { isError: erroreTool } : {}),
                 ...(sospettoDellaChiamata ? { contenutoSospetto: sospettoDellaChiamata } : {}) })
+            if (fermatoPerGiriInTondo) break
+        }
+
+        /* Giri in tondo: la persona (o nessuno) ha detto di fermarsi. Le chiamate rimaste hanno comunque il loro esito: la
+           conversazione resta valida, come in ogni altro fermo. */
+        if (fermatoPerGiriInTondo) {
+            const gia = new Set(messaggi.filter((m) => m.role === 'tool').map((m) => m.tool_call_id))
+            for (const c of chiamate) {
+                if (gia.has(c.id)) continue
+                messaggi.push({ role: 'tool', tool_call_id: c.id, content: FRASE_FERMATO_NON_ESEGUITO })
+                onGiro?.({ giro, tipo: 'tool-esito', toolCallId: c.id, content: FRASE_FERMATO_NON_ESEGUITO, isError: true })
+            }
+            break
         }
 
         if (fermatoDentroIlGiro) {
@@ -15206,12 +15858,24 @@ export async function talosLavora({
             esito: 'fermato',
             detto: puntoDiFermata ? `⛔ stopped on request: ${puntoDiFermata}.` : '⛔ stopped on request.',
         }
+        /* C3 tappa 4: in pausa non è né un errore né una fine — la storia è salva e il lavoro riprende con un messaggio nuovo */
+        : puntoDiPausa
+        ? { esito: 'in-pausa', detto: `⏸ paused on request: ${puntoDiPausa}.` }
         /*
          * ⛔ Un esito SUO, e una frase che una persona capisce senza sapere
          * cos'è una tool-call: «giri esauriti» e «ha ripetuto la stessa cosa»
          * sono due guasti diversi, e leggerli uguali fa studiare il problema
          * sbagliato — la stessa lezione del 429 letto come «fallito».
          */
+        /* Giri in tondo: lo stesso esito della valanga (`ripetizione`), con la frase di QUESTO guasto. */
+        : fermatoPerGiriInTondo
+            ? {
+                esito: 'ripetizione',
+                detto: `⛔ the model called "${fermatoPerGiriInTondo.nome}" ${fermatoPerGiriInTondo.volte} times with the same arguments and got`
+                    + ' the same result each time, with nothing changed in between'
+                    + `${fermatoPerGiriInTondo.motivo ? ` (${fermatoPerGiriInTondo.motivo})` : ''}: the turn was stopped there.`
+                    + ' Tell it what to do differently, or ask for the next step.',
+            }
         : fermatoPerRipetizione
             ? {
                 esito: 'ripetizione',
@@ -15222,6 +15886,15 @@ export async function talosLavora({
                     + ' round all go through. It happens with local models when the decoder falls into repetition'
                     + ' (llama.cpp/ik_llama.cpp, a known defect): with another model, or another quantization,'
                     + ' it usually does not come back.',
+            }
+            /* ⛔ F-ENG-4: l'ultima risposta è rimasta tagliata dal tetto di uscita anche dopo le continuazioni. Il testo arrivato è
+               in storia; la frase dice il motivo vero invece di «generation stopped without an answer». */
+            : tagliataSenzaRimedio && !ultimoHaConcluso
+            ? {
+                esito: 'tetto-uscita',
+                detto: `⛔ the answer hit the output limit ${tagliataSenzaRimedio.volte} times in a row, and was continued`
+                    + ` ${tagliataSenzaRimedio.volte - 1} of them: the text that arrived is kept. Ask for a shorter answer,`
+                    + ' or raise the model\'s maxOutputTokens.',
             }
             : comeSonoFinitiIGiri({
             giroRaggiunto: turniUsati,

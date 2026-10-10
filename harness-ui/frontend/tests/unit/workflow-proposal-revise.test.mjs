@@ -133,11 +133,19 @@ test('WF-REVISE-CLIENT: the card follows the latest version; a revision is one P
   assert.equal((await creaClientProposta({ fetchFn: g.fn, sessionId: 's' }).rivedi({ ...RICEVUTA, budgets: { wallMs: 60_000 } })).ok, true);
   assert.deepEqual([g.chiamate[0].metodo, g.chiamate[0].corpo], ['POST', { definitionHash: HASH, budgets: { wallMs: 60_000 } }]);
   assert.match(g.chiamate[0].url, /\/versions\/1\/revise$/u);
-  const h = fetchFinto([new Error('rete'), { status: 200, body: { data: { items: [{ workflowId: W, version: 2, status: 'proposed', definitionHash: HASH }] } } },
-    { status: 200, body: { data: revisione({ version: 2 }) } }, vuoto, { status: 200, body: { data: revisione() } }]);
+  // C11 (10/10/2026): la rilettura è la versione N+1 ESATTA, e vale solo coi tetti chiesti
+  const h = fetchFinto([new Error('rete'), { status: 200, body: { data: revisione({ version: 2, budgets: { ...TETTI, wallMs: 60_000 } }) } }]);
   const ambiguo = await creaClientProposta({ fetchFn: h.fn, sessionId: 's' }).rivedi({ ...RICEVUTA, budgets: { wallMs: 60_000 } });
   assert.deepEqual([ambiguo.ok, ambiguo.riletto], [true, true]);
   assert.equal(h.chiamate.filter((c) => c.metodo === 'POST').length, 1, 'never a second POST on its own');
+  assert.match(h.chiamate[1].url, /\/versions\/2$/u, 'version N+1, exactly');
+  // C11, al contrario: una versione 2 nata da un'ALTRA modifica (altri tetti) non è la prova di questa
+  const altra = fetchFinto([new Error('rete'), { status: 200, body: { data: revisione({ version: 2, budgets: { ...TETTI, wallMs: 30_000 } }) } }]);
+  const daAltri = await creaClientProposta({ fetchFn: altra.fn, sessionId: 's' }).rivedi({ ...RICEVUTA, budgets: { wallMs: 60_000 } });
+  assert.deepEqual([daAltri.ok, daAltri.ambiguo], [false, true]);
+  // e se la versione 2 non c'è: ambiguo
+  const nessuna = fetchFinto([new Error('rete'), { status: 404, body: { error: { code: 'NOT_FOUND' } } }]);
+  assert.deepEqual(await creaClientProposta({ fetchFn: nessuna.fn, sessionId: 's' }).rivedi({ ...RICEVUTA, budgets: { wallMs: 60_000 } }), { ok: false, ambiguo: true });
   const k = fetchFinto([{ status: 409, body: { error: { code: 'WORKFLOW_VERSION_NOT_LATEST' } } }]);
   assert.deepEqual(await creaClientProposta({ fetchFn: k.fn, sessionId: 's' }).rivedi({ ...RICEVUTA, budgets: { wallMs: 60_000 } }),
     { ok: false, code: 'WORKFLOW_VERSION_NOT_LATEST', status: 409 });

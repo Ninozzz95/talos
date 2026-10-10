@@ -54,6 +54,40 @@ export function messaggioDaRecupero({ runId, items }) {
     + JSON.stringify(evidence) };
 }
 
+/*
+ * F-ENG-3 (stress test of 0.5.0, 08/10/2026, session e2eb11a1): a process killed in the middle of a turn left a Context Engine
+ * archive holding the turn's real exchanges (the CLI archives whole tool exchanges as they complete, P12), while the recovery
+ * above rebuilt that turn as ONE recovery message. The history then no longer extended the archive, and every later turn
+ * stopped with CTX_HISTORY_DIVERGED (context-desktop-service.mjs syncOriginals). Hermes flushes each tool result to its
+ * session DB because "tool side effects can kill/restart the process before turn-end persistence runs" (tool_executor.py
+ * `_flush_session_db_after_tool_progress`), Codex rebuilds the history from its rollout items (rollout_reconstruction.rs),
+ * OpenCode and Pi resume from the messages and parts they stored as they came: a resumed session carries the real
+ * exchanges. So, when the archive starts with the history before the recovery message and goes on with whole exchanges, the
+ * history resumes from the archive, and the recovery message keeps only what the archive does not hold (a call it never
+ * answered, the text after the last exchange). Anything else leaves the history as it was (null).
+ */
+export function storiaDaArchivioDopoInterruzione({ storia, archiviati }) {
+  if (!Array.isArray(storia) || !Array.isArray(archiviati)) return null;
+  const indice = storia.findIndex(messaggio => leggiRecuperoMessaggio(messaggio));
+  if (indice < 0 || archiviati.length <= indice) return null;
+  const uguale = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  for (let i = 0; i < indice; i++) if (!uguale(storia[i], archiviati[i])) return null;
+  const giro = archiviati.slice(indice);
+  if (giro.some(messaggio => leggiRecuperoMessaggio(messaggio))) return null;
+  /* The archive cannot be shortened: one ending on an unanswered call would leave the history unanswerable. */
+  const ultimaChiamata = giro.findLastIndex(m => m?.role === 'assistant' && Array.isArray(m.tool_calls) && m.tool_calls.length);
+  if (ultimaChiamata >= 0) {
+    const attese = new Set(giro[ultimaChiamata].tool_calls.map(c => c?.id));
+    for (const m of giro.slice(ultimaChiamata + 1)) if (m?.role === 'tool') attese.delete(m.tool_call_id);
+    if (attese.size) return null;
+  }
+  const recupero = leggiRecuperoMessaggio(storia[indice]);
+  const chiamate = new Set(giro.flatMap(m => Array.isArray(m?.tool_calls) ? m.tool_calls.map(c => c?.id) : []));
+  const testi = new Set(giro.filter(m => m?.role === 'assistant' && typeof m.content === 'string').map(m => m.content.trim()).filter(Boolean));
+  const resto = recupero.items.filter(item => item.type === 'tool' ? !chiamate.has(item.toolCallId) : !testi.has(item.text.trim()));
+  return [...archiviati, ...(resto.length ? [messaggioDaRecupero({ runId: recupero.runId, items: resto })] : []), ...storia.slice(indice + 1)];
+}
+
 /** Internal metadata is valid only when it describes the exact rendered evidence. */
 export function leggiRecuperoMessaggio(message) {
   const value = message?.talos_recovery;

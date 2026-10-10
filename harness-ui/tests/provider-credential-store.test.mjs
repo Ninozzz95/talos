@@ -82,8 +82,9 @@ test('PROVIDER-STORE-05 endpoint e timeout rispettano i limiti mobile', () => {
   assert.throws(() => normalizeProviderEndpoint('openai', 'ftp://example.test'), (error) => error instanceof ProviderCredentialError && error.code === 'PROVIDER_RUNTIME_INVALID');
   assert.throws(() => normalizeProviderEndpoint('openai', 'https://user:pass@example.test'), (error) => error instanceof ProviderCredentialError && error.code === 'PROVIDER_RUNTIME_INVALID');
   const store = createProviderCredentialStore({ env: {}, keyring: fakeKeyring() });
-  assert.deepEqual(store.setRuntime('ollama', { endpoint: 'http://127.0.0.1:11434/' }), { provider: 'ollama', endpoint: 'http://127.0.0.1:11434', endpointConfigured: true, timeoutSeconds: 60 });
-  assert.throws(() => store.setRuntime('openai', { timeoutSeconds: 301 }), (error) => error instanceof ProviderCredentialError && error.code === 'PROVIDER_RUNTIME_INVALID');
+  /* OWN-01 (owner 09/10/2026, «10 minuti»): predefinito 600 s, massimo 1800 s — vedi prima-risposta-lenta.test.mjs. */
+  assert.deepEqual(store.setRuntime('ollama', { endpoint: 'http://127.0.0.1:11434/' }), { provider: 'ollama', endpoint: 'http://127.0.0.1:11434', endpointConfigured: true, timeoutSeconds: 600 });
+  assert.throws(() => store.setRuntime('openai', { timeoutSeconds: 1801 }), (error) => error instanceof ProviderCredentialError && error.code === 'PROVIDER_RUNTIME_INVALID');
 });
 
 test('PROVIDER-STORE-06 le variabili ambiente non sono loggate e le righe pubbliche contengono solo presenza', () => {
@@ -131,7 +132,7 @@ test('PROVIDER-RUNTIME-RESTART-02 file corrotto o valori non validi sono ignorat
     version: 1,
     providers: {
       openai: { endpoint: 'file:///private', timeoutSeconds: 60 },
-      ollama: { endpoint: 'http://127.0.0.1:11434', timeoutSeconds: 999 },
+      ollama: { endpoint: 'http://127.0.0.1:11434', timeoutSeconds: 99999 }, // fuori scala (OWN-01: il massimo è 1800)
       unknown: { endpoint: 'https://example.test', timeoutSeconds: 60 },
     },
   }), 'utf8');

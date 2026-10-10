@@ -381,6 +381,8 @@ dialog.sheet-dialog .chip:hover,dialog.command-dialog .chip:hover,.ft-actions-me
 .effort-picker-tick:first-child{ transform: none; }
 .effort-picker-tick:last-child{ transform: translateX(-100%); }
 .effort-picker-tick-selected{ color: var(--accent); font-weight: 600; }
+/* A9 (09/10/2026): la riga che dice quale livello arriva davvero al fornitore, sotto le tacche. */
+.effort-picker-nota{ margin: 8px 0 0; color: var(--muted); font-size: calc(11px * var(--talos-ui-font-scale)); line-height: 1.35; }
 @media (max-width: 780px), (max-height: 540px) and (orientation: landscape){.sheet-input{ min-height: 52px; font-size: calc(16px * var(--talos-ui-font-scale)); }}
 @media (max-width: 780px), (max-height: 540px) and (orientation: landscape){.text-btn{ min-height: 44px; }}
 @media (max-width: 780px), (max-height: 540px) and (orientation: landscape){.board-heading-actions .primary-btn,.board-heading-actions .secondary-btn{ min-height: 44px; width: 100%; }}

@@ -121,3 +121,12 @@ test('CONVERSAZIONI-08 — quando: l’età come la Board e l’orario marcato U
   const board = sfogliaConversazioni([riga('x', { ultimaRispostaAlle: '2026-09-27T10:30:00.000Z' })], { adesso });
   assert.match(board, /· last activity 2 hours ago \(2026-09-27 10:30 UTC\) — id x/u);
 });
+
+// C3 tappa 4 (09/10/2026, review Y-4B-1 del bugfixer): una delega in pausa non è un «error» per il modello; al contrario un
+// errore vero resta «error» e una fermata resta «stopped by the person».
+test('C3-CONVERSAZIONE-PAUSA — a paused delegation reads «paused» to the model, not «error»', () => {
+  const base = { conclusa: true, interrotta: false, ultimoEsito: 'errore' };
+  assert.equal(statoDellaConversazione({ ...base, motivoChiusura: 'in-pausa' }), 'paused');
+  assert.equal(statoDellaConversazione({ ...base, motivoChiusura: 'errore' }), 'error');
+  assert.equal(statoDellaConversazione({ ...base, motivoChiusura: 'fermata' }), 'stopped by the person');
+});

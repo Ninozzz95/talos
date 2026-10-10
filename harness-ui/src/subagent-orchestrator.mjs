@@ -91,11 +91,19 @@ export function analizzaEvidenzaDelega(eventi) {
   };
 }
 
-function motivoEvidenzaMancante(evidenza, richiestaScrittura = false) {
-  const dettaglio = richiestaScrittura
-    ? 'the request involved a change but there are no writes or artifacts'
-    : `${evidenza.toolCallsFalliti} of ${evidenza.toolCalls} tools failed and there are no writes or artifacts`;
+function motivoEvidenzaMancante(evidenza) {
+  const dettaglio = `${evidenza.toolCallsFalliti} of ${evidenza.toolCalls} tools failed and there are no writes or artifacts`;
   return `The sub-agent declared success, but left no verifiable evidence: ${dettaglio}. The work is not considered finished.`;
+}
+
+/** C3 tappa 4 — il valore della nota «nessuna modifica fatta» (protocollo, mai a schermo: lo traduce l'interfaccia). */
+export const NOTA_NESSUNA_MODIFICA = 'nessuna-modifica';
+
+/** C3 tappa 4 — quanti risultati di attrezzi non portano un esito tipizzato (`isError`/`exitCode`): per loro decide la regex. */
+function risultatiSenzaTipo(eventi) {
+  if (!Array.isArray(eventi)) return 0;
+  return eventi.filter((evento) => evento?.type === 'ToolCallResult'
+    && typeof evento.isError !== 'boolean' && !Number.isSafeInteger(evento.exitCode)).length;
 }
 
 /**
@@ -113,23 +121,41 @@ export function esitoDelegaDaRisultato(risultato, eventi, contesto = {}) {
     return { esito: 'fallito', riassunto: null, motivo: 'The delegation contract is not valid: no capability can be assumed.' };
   }
   if (risultato?.ok) {
+    /*
+     * ⭐ C3 tappa 4 (09/10/2026, decisione owner «fatti strutturati + nota») — IL VERDETTO NON LEGGE PIÙ IL COMPITO.
+     *   Prima una delega «riuscita» diventava fallita se il TESTO del compito conteneva un verbo di modifica e la figlia non
+     *   aveva scritto: in tedesco, o con un'altra parola, lo stesso lavoro aveva un altro verdetto. Ora, come Hermes
+     *   (`tools/delegate_tool_child_run.py:563-586`: interrotta / errore / conclusa con un riassunto usabile), decidono i FATTI:
+     *   - il giro concluso dal kernel (questo ramo: `ok`);
+     *   - un riassunto non vuoto (Hermes: senza riassunto usabile è «failed»);
+     *   - attrezzi non tutti falliti senza lasciare scritture né artefatti (`isError`/`exitCode` del risultato).
+     *   La modalità DICHIARATA (`contrattoDelega.modalita`) aggiunge solo una NOTA: «modifica» senza scritture né artefatti resta
+     *   concluso, e il padre e l'interfaccia leggono «nessuna modifica fatta». ⛔ La modalità di serie è «modifica» quando il
+     *   padre può scrivere (`delegaSottoTask`): farla decidere avrebbe giudicato fallita ogni ricerca delegata.
+     *   I giornali VECCHI senza contratto (o con risultati di attrezzi senza campi tipizzati) usano ancora le regex, solo per
+     *   la nota e per gli esiti degli attrezzi: il verdetto lo dice (`verdetto:'euristico'`).
+     */
     const evidenza = analizzaEvidenzaDelega(eventi);
-    const richiestaScrittura = taskRichiedeEvidenzaScrittura(contesto.task);
-    // Se il figlio ha ricevuto una richiesta di modifica, una risposta tool
-    // riuscita non dimostra che il file sia stato scritto: serve StateDelta o
-    // ArtifactCreated. Per richieste puramente informative resta sufficiente
-    // una tool-call riuscita; una delega senza tool conserva il contratto.
-    if (evidenza && evidenza.toolCalls > 0 && ((!evidenza.verificabile) || (richiestaScrittura && evidenza.scritture === 0 && evidenza.artefatti === 0))) {
-      return {
-        riassunto: risultato.esito?.detto || '(the sub-agent left no text summary)',
-        esito: 'fallito',
-        motivo: motivoEvidenzaMancante(evidenza, richiestaScrittura),
-      };
+    const modo = modalitaDelega(contesto.task);
+    /* un giornale scritto prima che `RunFinished` portasse `result` non dice il riassunto: non è VUOTO, è non registrato, e
+       la regola del riassunto non può rovesciare il suo verdetto al ripristino */
+    const riassuntoIgnoto = contesto.riassuntoNonRegistrato === true;
+    const verdetto = modo === null || riassuntoIgnoto || risultatiSenzaTipo(eventi) > 0 ? 'euristico' : 'strutturato';
+    const detto = typeof risultato.esito?.detto === 'string' ? risultato.esito.detto.trim() : '';
+    if (!detto && !riassuntoIgnoto) {
+      return { riassunto: '(the sub-agent left no text summary)', esito: 'fallito', verdetto,
+        motivo: 'The sub-agent finished without a summary of what it did. The work is not considered finished.' };
     }
-    return {
-      riassunto: risultato.esito?.detto || '(the sub-agent left no text summary)',
-      esito: 'concluso',
-    };
+    const riassunto = detto || '(the sub-agent left no text summary)';
+    if (evidenza && evidenza.toolCalls > 0 && !evidenza.verificabile) {
+      return { riassunto, esito: 'fallito', verdetto, motivo: motivoEvidenzaMancante(evidenza) };
+    }
+    const potevaModificare = modo === 'modifica' || (modo === null && taskRichiedeEvidenzaScrittura(contesto.task));
+    if (potevaModificare && evidenza && evidenza.scritture === 0 && evidenza.artefatti === 0) {
+      return { riassunto, esito: 'concluso', verdetto, nota: NOTA_NESSUNA_MODIFICA,
+        motivo: 'Note: the sub-agent could change files but made no change. Check whether a change was needed.' };
+    }
+    return { riassunto, esito: 'concluso', verdetto };
   }
   if (risultato?.esito) {
     // giri-esauriti / fermato: la figlia ha girato, non ha chiuso il task.
@@ -144,11 +170,21 @@ export function esitoDelegaDaRisultato(risultato, eventi, contesto = {}) {
 
 /** Ricostruisce il verdetto di una figlia dopo il riavvio del server. */
 export function esitoDelegaDaEventi(eventi, contesto = {}) {
+  return verdettoDelegaDaEventi(eventi, contesto)?.esito ?? null;
+}
+
+/** C3 tappa 4 — il verdetto intero ricostruito dagli eventi (esito, nota, verdetto), come alla fine del giro. */
+export function verdettoDelegaDaEventi(eventi, contesto = {}) {
   if (!Array.isArray(eventi)) return null;
   const terminale = [...eventi].reverse().find((evento) => evento?.type === 'RunFinished' || evento?.type === 'RunError');
   if (!terminale) return null;
-  if (terminale.type === 'RunError') return 'fallito';
-  return esitoDelegaDaRisultato({ ok: true, esito: { detto: terminale.result?.detto ?? '', comeFinita: 'concluso' } }, eventi, contesto).esito;
+  /* C3 tappa 4: una figlia in pausa chiude il giro con un RunError `in-pausa` (talosHarness.mjs). Non è un fallimento: dopo un
+     riavvio deve restare «in-pausa», o Riprendi la rifiuta (`riprendiFiglia`) e il modello la legge «failed». */
+  if (terminale.type === 'RunError' && terminale.code === 'in-pausa') return { esito: 'in-pausa', nota: null, verdetto: 'strutturato' };
+  if (terminale.type === 'RunError') return { esito: 'fallito', nota: null, verdetto: 'strutturato' };
+  const esito = esitoDelegaDaRisultato({ ok: true, esito: { detto: terminale.result?.detto ?? '', comeFinita: 'concluso' } }, eventi,
+    { ...contesto, riassuntoNonRegistrato: terminale.result === undefined });
+  return { esito: esito.esito, nota: esito.nota ?? null, verdetto: esito.verdetto ?? null };
 }
 
 /*
@@ -171,6 +207,7 @@ export const TETTO_RIASSUNTO_DELEGA = 2000;
  */
 export const PREFISSI_STATO_DEL_KERNEL = Object.freeze([
   '⛔ stopped on request',                       // fermato su richiesta (con o senza il punto di fermata)
+  '⏸ paused on request',                         // C3 tappa 4: messo in pausa (la delega riprende con un messaggio nuovo)
   '⛔ turns exhausted:',                         // giri esauriti
   '⛔ generation stopped without an answer',     // generazione ferma senza risposta
   '⛔ the model asked ',                         // la stessa richiesta ripetuta nella stessa risposta
@@ -348,6 +385,9 @@ export function creaSubagentOrchestrator({
    */
   limiti = null,
   figlioDefault = null,
+  /* C3 tappa 4: `(childId, consegna, { onConclusioneFn }) => avvio` — la ripresa di una figlia con un messaggio nuovo (il registro
+     passa la sua `resume`). FACOLTATIVA: senza, «Riprendi» e «Riprova» dicono che qui non si può (la CLI non cambia). */
+  riprendiFn = null,
 }) {
   const interoPositivo = (valore, diSerie) => (Number.isSafeInteger(valore) && valore > 0 ? valore : diSerie);
   const limiteFigli = interoPositivo(limiti?.figliConcorrenti, LIMITE_FIGLI_CONCORRENTI);
@@ -418,6 +458,9 @@ export function creaSubagentOrchestrator({
            */
           interrotta: voce.interrotta === true,
           esitoDelega: voce.esitoDelega ?? null,
+          // C3 tappa 4: la nota «nessuna modifica fatta» e da dove viene il verdetto (fatti strutturati o ripiego dei giornali vecchi)
+          notaDelega: voce.notaDelega ?? null,
+          verdettoDelega: voce.verdettoDelega ?? null,
           riassuntoDelega: voce.riassuntoDelega ?? null, // 0.1.23: il resoconto della figlia, separato dal suo stato
           evidenzaDelega: voce.evidenzaDelega ?? null,
           avviataAlle: voce.avviataAlle ?? null,
@@ -606,44 +649,7 @@ export function creaSubagentOrchestrator({
           }
         }
         conclusioneGestita = true;
-        const voceFiglia = sessioni.get(figlioId);
-        const eventi = voceFiglia?.eventi;
-        const esito = esitoDelegaDaRisultato(risultatoSessione, eventi, { task: taskFiglio });
-        /* ⛔⭐ BUG-16: la consegna dichiara SEMPRE il rilancio (piano §4: «lo dice nel riassunto») e,
-           quando l'esito incerto è sopravvissuto al suo budget senza rilancio possibile, dice anche
-           perché NON si può riprovare — la madre legge `rilanciabile` dal risultato. */
-        if (rilanciDelega > 0) {
-          esito.rilanciata = rilanciDelega;
-          const nota = ' (relaunched once after an uncertain provider outcome)';
-          if (typeof esito.riassunto === 'string' && esito.riassunto) esito.riassunto += nota;
-          else if (typeof esito.motivo === 'string' && esito.motivo) esito.motivo += nota;
-        }
-        if (risultatoSessione?.codiceErrore === 'PROVIDER_OUTCOME_UNKNOWN_ESAURITO') {
-          esito.rilanciabile = false;
-          esito.motivoRilancio = rilancioFallito
-            ? `the relaunch did not start: ${rilancioFallito}`
-            : rilanciDelega > 0
-              ? 'the cap of one relaunch per child has already been used'
-              : `the delegation is not a pure read (${modalita}): a relaunch could repeat effects already produced`;
-        }
-        if (voceFiglia) {
-          voceFiglia.esitoDelega = esito.esito;
-          voceFiglia.riassuntoDelega = riassuntoDelegaDaDetto(risultatoSessione?.esito?.detto, { comeFinita: risultatoSessione?.esito?.comeFinita });
-          voceFiglia.rilanciDelega = rilanciDelega;
-          voceFiglia.evidenzaDelega = analizzaEvidenzaDelega(eventi);
-        }
-        notificaSenzaBloccare(onFiglioConclusoFn, {
-          parentId: sessionPadreId,
-          childId: figlioId,
-          risultato: esito,
-          evidenza: voceFiglia?.evidenzaDelega ?? null,
-        }, {
-          onErrore: (errore) => {
-            if (!voceFiglia) return;
-            voceFiglia.erroreConsegnaDelega = errore instanceof Error ? errore.message : String(errore);
-            voceFiglia.esitoDelega = 'fallito';
-          },
-        });
+        consegnaEsitoFiglia({ sessionPadreId, figlioId, risultatoSessione, task: taskFiglio, modalita, rilanciDelega, rilancioFallito });
       };
       /*
        * ⛔⛔⛔ 06/9, stessa misura: i figli partivano con `glm-4.7-flash` mentre la sessione madre
@@ -747,10 +753,101 @@ export function creaSubagentOrchestrator({
       resolve({
         esito: 'avviato',
         childId: figlioId,
-        riassunto: `Sub-agent ${figlioId} started in the background (${modalita === 'lettura' ? 'read-only' : 'with the parent\'s permissions'}).${comePartito}${suQualeModello} Keep working: the final result will be delivered separately when it is available.`,
+        riassunto: `Sub-agent ${figlioId} started in the background (${modalita === 'lettura' ? 'read-only' : 'with the parent\'s permissions'}).${comePartito}${suQualeModello} Work on what does not depend on it. Its result reaches you as a new message, delivered only after you END YOUR TURN: when nothing else is left, stop with a one-line status. Do not wait with sleep and do not keep checking list_children for it.`,
       });
     });
   }
 
-  return Object.freeze({ delegaSottoTask, contaFigliAttivi, elencaFigli, snapshotFiglio });
+  /*
+   * ⭐ C3 tappa 4 — LA CONSEGNA DELL'ESITO DI UNA FIGLIA AL PADRE, in un posto solo: la prima corsa, il rilancio (BUG-16), la
+   *   ripresa dopo una pausa e il «Riprova» passano tutti da qui (decisioni owner 09/10: Riprendi e Riprova sono un messaggio
+   *   nuovo nella STESSA figlia, e il padre riceve il nuovo risultato come oggi).
+   *   ⛔ Una figlia IN PAUSA non consegna niente: non è un risultato, è un lavoro fermo che riprenderà. Resta `in-pausa` finché
+   *   la persona (o il padre, `resume_child`) non la riprende.
+   */
+  function consegnaEsitoFiglia({ sessionPadreId, figlioId, risultatoSessione, task, modalita, rilanciDelega = 0, rilancioFallito = null }) {
+    const voceFiglia = sessioni.get(figlioId);
+    if (risultatoSessione?.esito?.comeFinita === 'in-pausa') {
+      if (voceFiglia) {
+        voceFiglia.esitoDelega = 'in-pausa';
+        voceFiglia.notaDelega = null;
+        voceFiglia.riassuntoDelega = riassuntoDelegaDaDetto(risultatoSessione?.esito?.detto, { comeFinita: 'in-pausa' });
+        voceFiglia.evidenzaDelega = analizzaEvidenzaDelega(voceFiglia.eventi);
+      }
+      return;
+    }
+    const eventi = voceFiglia?.eventi;
+    const esito = esitoDelegaDaRisultato(risultatoSessione, eventi, { task });
+    /* ⛔⭐ BUG-16: la consegna dichiara SEMPRE il rilancio (piano §4: «lo dice nel riassunto») e,
+       quando l'esito incerto è sopravvissuto al suo budget senza rilancio possibile, dice anche
+       perché NON si può riprovare — la madre legge `rilanciabile` dal risultato. */
+    if (rilanciDelega > 0) {
+      esito.rilanciata = rilanciDelega;
+      const nota = ' (relaunched once after an uncertain provider outcome)';
+      if (typeof esito.riassunto === 'string' && esito.riassunto) esito.riassunto += nota;
+      else if (typeof esito.motivo === 'string' && esito.motivo) esito.motivo += nota;
+    }
+    if (risultatoSessione?.codiceErrore === 'PROVIDER_OUTCOME_UNKNOWN_ESAURITO') {
+      esito.rilanciabile = false;
+      esito.motivoRilancio = rilancioFallito
+        ? `the relaunch did not start: ${rilancioFallito}`
+        : rilanciDelega > 0
+          ? 'the cap of one relaunch per child has already been used'
+          : `the delegation is not a pure read (${modalita}): a relaunch could repeat effects already produced`;
+    }
+    if (voceFiglia) {
+      voceFiglia.esitoDelega = esito.esito;
+      voceFiglia.notaDelega = esito.nota ?? null; // C3 tappa 4: «nessuna modifica fatta», mai un fallimento
+      voceFiglia.verdettoDelega = esito.verdetto ?? null;
+      voceFiglia.motivoDelega = esito.esito === 'fallito' ? (esito.motivo ?? null) : null; // C3 tappa 4: il «perché» che Riprova ripete
+      voceFiglia.riassuntoDelega = riassuntoDelegaDaDetto(risultatoSessione?.esito?.detto, { comeFinita: risultatoSessione?.esito?.comeFinita });
+      voceFiglia.rilanciDelega = rilanciDelega;
+      voceFiglia.evidenzaDelega = analizzaEvidenzaDelega(eventi);
+    }
+    notificaSenzaBloccare(onFiglioConclusoFn, {
+      parentId: sessionPadreId,
+      childId: figlioId,
+      risultato: esito,
+      evidenza: voceFiglia?.evidenzaDelega ?? null,
+    }, {
+      onErrore: (errore) => {
+        if (!voceFiglia) return;
+        voceFiglia.erroreConsegnaDelega = errore instanceof Error ? errore.message : String(errore);
+        voceFiglia.esitoDelega = 'fallito';
+      },
+    });
+  }
+
+  /*
+   * ⭐ C3 tappa 4 (owner 09/10) — «Riprendi» (una figlia in pausa) e «Riprova» (una figlia fallita): un messaggio NUOVO nella
+   *   STESSA figlia, a contesto intatto (Claude Code: un agente fermato si riprende con SendMessage). Il giro nuovo passa dalla
+   *   ripresa del registro (`riprendiFn`, che riusa modello, permessi e cartella della figlia: vale anche dopo un riavvio del
+   *   server) e il suo esito torna al padre da `consegnaEsitoFiglia`, come la prima volta.
+   *   ⇒ { esito: 'ripresa', childId } | { esito: 'rifiutato', motivo }
+   */
+  function riprendiFiglia({ childId, azione } = {}) {
+    const voce = typeof childId === 'string' ? sessioni.get(childId) : null;
+    if (!voce?.padreId) return { esito: 'rifiutato', motivo: 'not a sub-agent' };
+    if (typeof riprendiFn !== 'function') return { esito: 'rifiutato', motivo: 'resuming a sub-agent is not available here' };
+    if (voce.conclusa !== true) return { esito: 'rifiutato', motivo: 'the sub-agent is still running' };
+    if (azione === 'resume' && voce.esitoDelega !== 'in-pausa') return { esito: 'rifiutato', motivo: 'the sub-agent is not paused' };
+    if (azione === 'retry' && voce.esitoDelega !== 'fallito') return { esito: 'rifiutato', motivo: 'the sub-agent did not fail' };
+    if (azione !== 'resume' && azione !== 'retry') return { esito: 'rifiutato', motivo: 'the action must be resume or retry' };
+    const consegna = azione === 'resume'
+      ? 'You were paused by the person. Continue the task from where you stopped: the results of the tools you ran are in this conversation.'
+      : `Your previous attempt at this task did not finish: ${voce.motivoDelega ?? 'it failed'} Try again, and check first what is already done.`;
+    const sessionPadreId = voce.padreId;
+    const task = voce.task;
+    const avvio = riprendiFn(childId, consegna, {
+      onConclusioneFn: (risultatoSessione) => consegnaEsitoFiglia({ sessionPadreId, figlioId: childId, risultatoSessione, task, modalita: modalitaDelega(task) }),
+    });
+    if (!avvio || avvio.erroreAvvio) return { esito: 'rifiutato', motivo: avvio?.erroreAvvio ?? 'the sub-agent did not restart' };
+    voce.esitoDelega = null;
+    voce.notaDelega = null;
+    voce.motivoDelega = null;
+    notificaSenzaBloccare(onFiglioCreatoFn, { parentId: sessionPadreId, childId, ripresa: azione });
+    return { esito: 'ripresa', childId };
+  }
+
+  return Object.freeze({ delegaSottoTask, contaFigliAttivi, elencaFigli, snapshotFiglio, riprendiFiglia });
 }

@@ -31,7 +31,7 @@ const messaggi = [{ role: 'system', content: 'Conserva i risultati.' }, { role: 
 const chiamata = { modello: 'deepseek:deepseek-chat', chiave: 'finta-iniziale', messaggi, attrezzi: [], dormi: async () => {}, caso: () => 0 };
 const esegui = (f, extra = {}) => f.eseguiConFallback(aggiunte => chiamaConRitenta({ ...chiamata, ...extra, ...aggiunte }), { ...chiamata, ...extra });
 
-test('PH-FALLBACK-01 kernel reale: esaurisce quattro tentativi, storia intatta, avviso e consumo effettivo', async t => {
+test('PH-FALLBACK-01 kernel reale: esaurisce gli undici tentativi (1 + 10 come Claude Code), storia intatta, avviso e consumo effettivo', async t => {
   const b = await banco(t, (req,res) => { if(req.url.startsWith('/deepseek')) { res.writeHead(503); res.end('Service unavailable'); } else rispondiBene(res); });
   const f = creaFetchMultiProvider(fetch, b.opzioni);
   const risultato = await esegui(f);
@@ -44,7 +44,7 @@ test('PH-FALLBACK-01 kernel reale: esaurisce quattro tentativi, storia intatta, 
   const ultimo = b.richieste.at(-1); assert.equal(ultimo.body.model, 'glm-4.7-flash');
   assert.deepEqual(ultimo.body.messages, b.richieste[0].body.messages);
   assert.equal(JSON.stringify([b.eventi,b.consumi]).includes('finta-'), false);
-  assert.equal(b.richieste.length, 5, 'quattro richieste reali al primario prima della riserva');
+  assert.equal(b.richieste.length, 12, 'undici richieste reali al primario prima della riserva');
 });
 
 test('PH-FALLBACK-02 classe permanente: niente fallback, credenziale segnalata una volta', async t => {
@@ -189,8 +189,8 @@ test('PH-FALLBACK-13 SDK nativo: il 503 esaurisce il budget del kernel prima del
   const f=creaFetchMultiProvider(fetch,b.opzioni);let tentativi=0;
   const opzioni={...chiamata,modello:'openai:gpt-5-nano'};
   await f.eseguiConFallback(aggiunte=>chiamaConRitenta({...opzioni,...aggiunte,fetchDiRete:(...args)=>{tentativi++;return aggiunte.fetchDiRete(...args);}}),opzioni);
-  assert.equal(tentativi,5);assert.equal(b.richieste[0].url,'/openai/responses');
-  assert.equal(b.richieste.length,5,'SDK maxRetries:0: budget kernel senza tentativi locali fantasma');
+  assert.equal(tentativi,12);assert.equal(b.richieste[0].url,'/openai/responses');
+  assert.equal(b.richieste.length,12,'SDK maxRetries:0: budget kernel senza tentativi locali fantasma');
 });
 test('PH-FALLBACK-14 OpenRouter: indirizzo configurato e chiave selezionata, mai Authorization precedente',async t=>{
   const b=await banco(t,(req,res)=>{if(req.headers.authorization==='Bearer finta-router'){res.writeHead(429);res.end('rate limit');}else rispondiBene(res);},{OPENROUTER_API_KEY:'finta-router',ZAI_API_KEY:'finta-zai'});

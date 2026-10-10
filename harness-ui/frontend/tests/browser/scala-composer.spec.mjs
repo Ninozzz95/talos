@@ -111,7 +111,7 @@ test('COMPOSER-SCALE-02 — AL CONTRARIO: dove lo spazio c\'è, nessuno cede (14
   expect(c.nonGet).toBe(0);
 });
 
-test('COMPOSER-SCALE-03 — la strada AUTOMATICA: senza scrivere niente, 1280 (colonna destra aperta) cede, 1440 torna intero', async ({ page }) => {
+test('COMPOSER-SCALE-03 — la strada AUTOMATICA: senza scrivere niente, 1280 (colonna destra aperta) cede, a 1440 al più «Terminale», 1920 torna intero', async ({ page }) => {
   const c = await apri(page);
   /* A 1280 il composer è largo 530 px (misurato): con le etichette vere del prodotto qualcosa deve cedere. Nessuna scrittura
      nella barra e nessuna chiamata diretta: lavorano solo il ResizeObserver e il fotogramma di `collegaScalaComposer`. */
@@ -121,7 +121,16 @@ test('COMPOSER-SCALE-03 — la strada AUTOMATICA: senza scrivere niente, 1280 (c
   expect(stretta.composerW, 'la prova vale solo se il composer è davvero stretto').toBeLessThan(560);
   expect(stretta.terminale.ceduta, 'a composer stretto «Terminale» cede da sé').toBe(true);
   expect(stretta.permesso.tagliata || stretta.terminale.tagliata).toBe(false);
+  /* C1 (owner 10/10/2026): il permesso dice cosa passa senza chiedere («Senza chiedere: file, comandi, documenti»), più lungo di
+     «Scrive nel progetto». A 1440 con la colonna destra aperta cede per primo «Terminale», che resta riconoscibile dalla sua icona,
+     e il permesso resta intero: è l'ordine della scala, e niente si taglia. Tutto intero da 1920, la larghezza delle foto dell'owner. */
   await page.setViewportSize({ width: 1440, height: 900 });
+  await dueFotogrammi(page); await dueFotogrammi(page);
+  const media = await page.evaluate(leggiBarra);
+  expect(Number(media.scala), 'a 1440 al più cede «Terminale»').toBeLessThanOrEqual(1);
+  expect(media.permesso.ceduta, 'il permesso resta intero a 1440').toBe(false);
+  expect(media.permesso.tagliata || media.terminale.tagliata || media.modello.tagliata).toBe(false);
+  await page.setViewportSize({ width: 1920, height: 1080 });
   await dueFotogrammi(page); await dueFotogrammi(page);
   const larga = await page.evaluate(leggiBarra);
   expect(larga.scala, 'tornato largo, la scala torna a zero da sé').toBe('0');

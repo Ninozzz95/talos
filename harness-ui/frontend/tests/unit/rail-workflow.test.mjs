@@ -28,6 +28,22 @@ test('WF-RAIL-ATTENTION: decisions and errors only; queued steps are normal flow
   assert.equal(incerti.voci[0].titolo, '1.200 errori', 'a step to verify is an error to look at, and numbers are grouped');
 });
 
+/* Lotto del diagramma (09/10/2026): un run fermo al tetto del budget non ha passi falliti, e la scheda diceva solo «0 errori». */
+test('WF-RAIL-CEILING: a run stopped at its budget limit says so, and points to the diagram', () => {
+  const fermo = vociAttenzione({ status: 'needs_attention', attentionReasons: ['budget_overrun'], groups: [gruppo({ ready: 3, succeeded: 4 })] });
+  assert.deepEqual(fermo.voci.map((v) => [v.chiave, v.titolo, v.sotto, v.tono]), [
+    ['tetto', 'Tetto del budget raggiunto', 'Alzalo dal diagramma per riprendere', 'avviso'],
+    ['errori', '0 errori', 'Nessun errore attivo', 'errore'],
+  ]);
+  assert.equal(fermo.daVedere, 1);
+  // AL CONTRARIO: lo stesso motivo su un run che ha già ripreso, o un altro motivo, non accende la voce
+  for (const panoramica of [
+    { status: 'running', attentionReasons: ['budget_overrun'], groups: [gruppo({ ready: 3 })] },
+    { status: 'needs_attention', attentionReasons: ['activity_uncertain:a1'], groups: [gruppo({ uncertain: 1 })] },
+    { status: 'needs_attention', groups: [gruppo({ failed: 1 })] },
+  ]) assert.equal(vociAttenzione(panoramica).voci.some((v) => v.chiave === 'tetto'), false, JSON.stringify(panoramica));
+});
+
 test('WF-RAIL-FILTER-HEAD: how many rows to read at the head of a page sorted by state', () => {
   const g = gruppo({ failed: 2, uncertain: 1, waiting_human: 3, reconciling: 4, running: 9, pending: 50 });
   assert.equal(testaDaLeggere(g, 'errori'), 3, 'weight 0 only');
@@ -297,4 +313,31 @@ test('WF-UI-LIVE-SHARED: one stream per run for card, rail and diagram; a late s
   // un'altra sessione ha un altro flusso
   client('altra').segui(SORGENTE, {});
   assert.equal(Flusso.creati.length, 4);
+});
+
+/* 09/10/2026 (bugfixer): la «Cronologia automazioni» restava a «Richiede attenzione» col run già riuscito. Il rail, che segue il
+   run, dice quando il suo stato cambia: non alla prima lettura (la cronologia è appena montata), una volta per cambio. */
+test('WF-RAIL-ONSTATO: the rail tells when the run status changes between two reads, never on the first one', async () => {
+  const server = serverFinto([{ id: 'f1', label: 'Analisi', passi: passi('a', ['succeeded', 'failed', 'pending']) }]);
+  let stato = 'needs_attention';
+  const fetchFn = async (url, opzioni) => {
+    const r = await server.fetchFn(url, opzioni);
+    if (!url.endsWith('/graph')) return r;
+    const corpo = await r.json(); corpo.data.status = stato;
+    return { ...r, json: async () => corpo };
+  };
+  const d = fintoDocumento();
+  const client = creaClientGrafo({ sessionId: S, fetchFn, EventSourceCtor: FintoFlusso });
+  const cambi = [];
+  const rail = montaRailWorkflow(d.createElement('div'), { client, sorgente: SORGENTE, pianifica: (f) => f(), onStato: (s) => cambi.push(s) });
+  await aspetta();
+  assert.deepEqual(cambi, [], 'the first read is not a change');
+  rail.aggiorna(); await aspetta();
+  assert.deepEqual(cambi, [], 'AL CONTRARIO: the same status again is not a change');
+  stato = 'succeeded';
+  rail.aggiorna(); await aspetta();
+  assert.deepEqual(cambi, ['succeeded']);
+  rail.aggiorna(); await aspetta();
+  assert.deepEqual(cambi, ['succeeded'], 'once per change');
+  rail.distruggi?.();
 });

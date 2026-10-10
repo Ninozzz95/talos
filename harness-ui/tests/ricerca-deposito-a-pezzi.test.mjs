@@ -245,8 +245,11 @@ test('BC49: inventario e campi TALOS-BANCO invariati, eccetto le esenzioni dichi
       answer_parent_question: ['requestId', 'answer'],
       /* K3 (F-014, 03/10/2026): elenco e stop dei figli diretti, estesi e nuovi come i quattro sopra — forma fissata qui,
          poi esclusi dall'impronta STORICA, che continua a provare che nessun attrezzo precedente è cambiato. */
-      list_children: [],
-      stop_child: ['childId'],
+      /* C3 tappa 4 (owner 09/10/2026, «due attrezzi nuovi accanto» a stop_child): pausa e ripresa di un figlio diretto, estesi e
+         nuovi come stop_child — forma fissata qui, poi esclusi dall'impronta STORICA. ⛔ Il preambolo degli attrezzi ESTESI ha
+         due voci in più: una campagna del banco con le deleghe, prima e dopo il 09/10, non ha lo stesso preambolo. */
+      /* C5 (owner 10/10/2026): stop_child, pause_child e resume_child sono UN attrezzo, `child_control` con `action`. */
+      child_control: ['action', 'childId'],
     };
     for (const [name, fields] of Object.entries(dialogueTools)) {
       const tool = attrezzi.map((entry) => entry.function ?? entry).find((entry) => entry.name === name);
@@ -316,12 +319,9 @@ test('BC49: inventario e campi TALOS-BANCO invariati, eccetto le esenzioni dichi
      * lettura (elenco della memoria, cerca e leggi nelle note, cerca in attività e ricerche, Board e Conversazioni). Come gli
      * altri nuovi: nomi, campi e obbligatori fissati qui PRIMA di toglierli dal censimento storico; nessuno entra nella base. */
     const lettureSezioni = {
-      memory_list: [['limit'], []],
-      notes_search: [['limit', 'query'], ['query']],
       notes_read: [['from', 'id'], ['id']],
-      tasks_search: [['limit', 'query', 'status'], ['query']],
-      research_search: [['limit', 'query'], ['query']],
-      conversation_search: [['around_message', 'conversation_id', 'folder', 'from', 'limit', 'query', 'status', 'window'], []],
+      // C1 (owner 09/10/2026, il metodo approvato): `this_conversation` cerca e rilegge la conversazione corrente dopo una compattazione
+      conversation_search: [['around_message', 'conversation_id', 'folder', 'from', 'limit', 'query', 'status', 'this_conversation', 'window'], []],
     };
     for (const [nome, [campi, obbligatori]] of Object.entries(lettureSezioni)) {
       const tool = attrezzi.map((entry) => entry.function ?? entry).find((entry) => entry.name === nome);
@@ -336,14 +336,12 @@ test('BC49: inventario e campi TALOS-BANCO invariati, eccetto le esenzioni dichi
     /* Automazioni a due porte (owner 08/10/2026 notte): otto attrezzi estesi NUOVI. Come gli altri: nomi, campi e obbligatori
      * fissati qui PRIMA di toglierli dal censimento storico, nessuno nella base — le due impronte restano quelle di prima. */
     const attrezziAutomazioni = {
-      automation_list: [[], []],
+      automation_list: [['cursor', 'limit', 'next_run_before', 'response_format', 'state'], []], // C5: filtri e pagine
       automation_runs: [['id', 'limit'], ['id']],
       automation_create: [['cartella', 'coordinazione', 'istruzioni', 'modello', 'nome', 'permessi', 'pianificazione', 'ripeti'], ['istruzioni', 'nome', 'pianificazione']],
       automation_update: [['cartella', 'coordinazione', 'id', 'istruzioni', 'modello', 'nome', 'permessi', 'pianificazione', 'prossimoGiroAlle', 'ripeti'], ['id']],
-      automation_pause: [['id'], ['id']],
-      automation_resume: [['id'], ['id']],
-      automation_run: [['contesto', 'id'], ['id']],
-      automation_stop: [['id'], ['id']],
+      // C5 (owner 10/10/2026): pause/resume/run/stop sono UN attrezzo, `automation_control` con `action`
+      automation_control: [['action', 'contesto', 'id'], ['action', 'id']],
     };
     /* ⭐ 0.1.25 (owner 09/10/2026): tre attrezzi estesi NUOVI dei fornitori esclusi (la seconda porta della decisione 14). Come
      * le automazioni: nomi, campi e obbligatori fissati qui PRIMA di toglierli dal censimento storico; le due impronte restano. */
@@ -385,9 +383,116 @@ test('BC49: inventario e campi TALOS-BANCO invariati, eccetto le esenzioni dichi
       assert.match(processOutput.description, /Read-only; never reruns the command/);
       assert.match(processOutput.description, /BYTES; follow nextOffset/);
     }
-    const copia = structuredClone(attrezzi).filter((t) => !['process_output', 'file_edit', 'ask_user_question', 'present_plan', 'workflow_plan_propose', ...Object.keys(runTools), ...Object.keys(dialogueTools), ...Object.keys(lettureSezioni), ...Object.keys(attrezziAutomazioni)].includes((t.function ?? t).name));
+    /* ⭐ C5 (owner 10/10/2026, «parametrizzare E accorpare»; contratto `.claude/CONTRATTO-C5-ATTREZZI-BOZZA-2026-10-10.md`) —
+     * esenzione DICHIARATA come le altre, in tre parti:
+     *   1. `list_children` guadagna i parametri del contratto degli elenchi (filtri, ordine, limit, cursore, formato): si
+     *      asserisce la forma intera e resta fuori dall'impronta, come prima;
+     *   2. `notes_find` e `tasks_find` PRENDONO IL POSTO di `notes_list` e `tasks_list` (e accorpano `notes_search` e
+     *      `tasks_search`, che erano già esclusi): si asserisce la loro forma, poi nella copia si rimette AL LORO POSTO la
+     *      definizione storica, congelata qui sotto byte per byte dalla base r4 6135b4eaa;
+     *   3. le descrizioni delle scritture di note e attività dicono «from notes_find / tasks_find»: si asserisce, poi nella copia
+     *      si riporta il nome vecchio.
+     *   ⇒ L'impronta estesa resta 105dd078…: prova misurata che, oltre a questo, nessun attrezzo è cambiato di un byte.
+     *   ⛔ Il preambolo degli attrezzi ESTESI è cambiato il 10/10 (due attrezzi in meno, parametri nuovi): una campagna del banco
+     *     prima e dopo la C5 non ha lo stesso preambolo, e va detto quando le si confronta. */
+    const C5_STORICI = {
+      notes_find: {"type":"function","function":{"name":"notes_list","description":"List the notes the user keeps, most recently updated first.","parameters":{"type":"object","properties":{"limit":{"type":"number","description":"Maximum notes to return (1-50, default 20)."}}}}},
+      library_find: [{"type":"function","function":{"name":"library_list","description":"List, count or filter the files in this project's Library. Use this when asked what/all files are in the Library without a keyword; use library_search only for filename or content matching. The first page already reports the TOTAL, so answer \"how many\" or \"what is in there\" from it alone, without paging. Paging past the first couple of pages of one listing is REFUSED unless you set browse_every_page, which you may do only when the person explicitly asked to see or act on EVERY entry, repeating the same origin and file_type filters; never page through the whole Library just to look around, and never because the conversation merely mentioned files.","parameters":{"type":"object","properties":{"origin":{"type":"string","enum":["all","uploaded","generated"],"description":"Filter by how the file entered the Library. Default all."},"file_type":{"type":"string","enum":["all","image","document","link"],"description":"Filter images, ordinary documents, or archived web links. Default all."},"page_size":{"type":"number","description":"Maximum entries in this page (1-20, default 10)."},"page_token":{"type":"string","description":"Opaque next_page_token from the preceding library_list result. Repeat the same filters."},"browse_every_page":{"type":"boolean","description":"Set true ONLY when the person explicitly asked to see or act on EVERY entry in the Library. It unlocks further pages of the same listing, up to a hard ceiling. Never set it to look around, to count files, or because the listing looked interesting."}}}}}, {"type":"function","function":{"name":"library_search","description":"Search this project's Library files and return a bounded page of genuine matches with their id, name, origin and a short excerpt. Use it before answering questions about the project's own Library files. The first page reports the TOTAL number of matches: answer from it rather than walking the results. Paging past the first couple of pages of the same search is REFUSED unless you set browse_every_page, which you may do only when the person explicitly asked to see or act on EVERY match; a different query counts as a new search and starts over.","parameters":{"type":"object","properties":{"query":{"type":"string","description":"What to look for, in natural language."},"limit":{"type":"number","description":"How many matching files to return in this page (1-20, default 5)."},"offset":{"type":"number","description":"Zero-based result offset. Use next_offset from the previous page."},"browse_every_page":{"type":"boolean","description":"Set true ONLY when the person explicitly asked to see or act on EVERY match. It unlocks further pages of the same search, up to a hard ceiling. Never set it to look around."}},"required":["query"]}}}],
+      research_find: {"type":"function","function":{"name":"research_list","description":"List the deep researches run on this project, with how each one ended and how far it got. Use this whenever the user asks about their researches — what they investigated, which ones are still running, which failed. The first page reports the total: do not keep advancing the offset unless the user explicitly asked for every entry. Do NOT use library_list for that: research reports are saved as Library files, so library_list finds them mixed in with every other document and cannot say whether a research finished, was paused, or failed.","parameters":{"type":"object","properties":{"status":{"type":"string","enum":["all","running","paused","done","cancelled","failed"],"description":"Filter by how it ended. `running` and `paused` are the ones still worth acting on. Default all."},"page_size":{"type":"number","description":"Maximum entries in this page (1-20, default 10)."},"offset":{"type":"number","description":"How many to skip, newest first (default 0)."},"browse_every_page":{"type":"boolean","description":"Set true only when the person explicitly asked to see or act on every research entry."}},"required":[]}}},
+      memory_find: {"type":"function","function":{"name":"memory_search","description":"Search what the user has explicitly asked TALOS to remember. Every word counts on its own (accents and case do not matter); an empty query or \"*\" returns them all.","parameters":{"type":"object","properties":{"query":{"type":"string","description":"Words to look for in the memories' titles and text."},"limit":{"type":"number","description":"Maximum matches to return (1-20, default 5)."}},"required":["query"]}}},
+      tasks_find: {"type":"function","function":{"name":"tasks_list","description":"List the user's tasks with their status and priority, most recently updated first.","parameters":{"type":"object","properties":{"status":{"type":"string","enum":["all","open","done"],"description":"Filter by completion. Default all."},"limit":{"type":"number","description":"Maximum tasks to return (1-50, default 20)."}}}}},
+      // research_control prende il posto di TRE attrezzi storici, in fila come erano (research_pause, research_resume, research_cancel)
+      research_control: [{"type":"function","function":{"name":"research_pause","description":"Stop a running research, keeping everything it has collected so far. It can be resumed later with research_resume. Use this when the user wants it to stop for now. If they want it stopped for good, use research_cancel.","parameters":{"type":"object","properties":{"id":{"type":"string","description":"The research id, from research_list."}},"required":["id"]}}},{"type":"function","function":{"name":"research_resume","description":"Carry on a research that was paused, from where it stopped. The ones worth resuming show as paused.","parameters":{"type":"object","properties":{"id":{"type":"string","description":"The research id, from research_list."}},"required":["id"]}}},{"type":"function","function":{"name":"research_cancel","description":"Stop a research for good. What it already collected stays readable; nothing more is searched or paid for. Prefer research_pause when the user only wants it to stop for now: a cancelled research cannot be resumed.","parameters":{"type":"object","properties":{"id":{"type":"string","description":"The research id, from research_list."}},"required":["id"]}}}],
+    };
+    const C5_FORME = {
+      list_children: ['cursor', 'limit', 'response_format', 'sort', 'status', 'workflow'],
+      notes_find: ['cursor', 'limit', 'query', 'response_format', 'sort'],
+      tasks_find: ['cursor', 'limit', 'query', 'response_format', 'sort', 'status'],
+      memory_find: ['cursor', 'kind', 'limit', 'query', 'response_format', 'sort'],
+      research_find: ['browse_every_page', 'cursor', 'limit', 'query', 'response_format', 'since', 'sort', 'status', 'until'],
+      library_find: ['browse_every_page', 'cursor', 'file_type', 'limit', 'origin', 'query', 'response_format', 'sort'],
+    };
+    for (const [nome, campi] of Object.entries(C5_FORME)) {
+      const tool = attrezzi.map((entry) => entry.function ?? entry).find((entry) => entry.name === nome);
+      if (attrezzi === ATTREZZI_OPENAI) { assert.equal(tool, undefined, `${nome} non deve entrare nel banco base`); continue; }
+      assert.ok(tool, `${nome} deve essere un attrezzo esteso`);
+      const schema = tool.parameters ?? tool.input_schema;
+      assert.deepEqual(Object.keys(schema.properties).sort(), campi, nome);
+      assert.deepEqual(schema.required ?? [], [], `${nome}: nessun campo obbligatorio`);
+      assert.deepEqual(schema.properties.limit, { type: 'integer', minimum: 1, maximum: 100, description: 'Max items (default 20).' }, nome);
+      assert.deepEqual(schema.properties.response_format.enum, ['concise', 'detailed'], nome);
+    }
+    if (attrezzi !== ATTREZZI_OPENAI) {
+      const controllo = attrezzi.map((entry) => entry.function ?? entry).find((entry) => entry.name === 'research_control');
+      assert.ok(controllo, 'research_control deve essere un attrezzo esteso');
+      const schema = controllo.parameters ?? controllo.input_schema;
+      assert.deepEqual(Object.keys(schema.properties).sort(), ['action', 'id'], 'research_control');
+      assert.deepEqual(schema.properties.action.enum, ['pause', 'resume', 'cancel'], 'research_control');
+      assert.deepEqual([...schema.required].sort(), ['action', 'id'], 'research_control');
+    }
+    for (const vecchio of ['notes_list', 'notes_search', 'tasks_list', 'tasks_search', 'memory_list', 'memory_search', 'research_list', 'research_search', 'library_list', 'library_search', 'research_pause', 'research_resume', 'research_cancel']) {
+      assert.equal(attrezzi.some((t) => (t.function ?? t).name === vecchio), false, `${vecchio}: accorpato dalla C5, non si offre più`);
+    }
+    const copia = structuredClone(attrezzi).filter((t) => !['list_children', 'process_output', 'file_edit', 'ask_user_question', 'present_plan', 'workflow_plan_propose', ...Object.keys(runTools), ...Object.keys(dialogueTools), ...Object.keys(lettureSezioni), ...Object.keys(attrezziAutomazioni)].includes((t.function ?? t).name));
+    /* C5: al posto dei due attrezzi accorpati si rimette la definizione storica, e le scritture tornano a nominare il nome vecchio
+     * — DOPO aver asserito che oggi nominano quello nuovo (sopra la spiegazione intera). */
+    for (let i = 0; i < copia.length; i += 1) {
+      const nome = (copia[i].function ?? copia[i]).name;
+      if (Object.hasOwn(C5_STORICI, nome)) {
+        // library_find prende il posto di DUE attrezzi storici, in fila come erano (library_list, poi library_search)
+        const storici = [].concat(structuredClone(C5_STORICI[nome]));
+        copia.splice(i, 1, ...storici);
+        i += storici.length - 1;
+        continue;
+      }
+      if (['library_read', 'library_file_origin', 'library_rename', 'library_delete'].includes(nome)) {
+        const json = JSON.stringify(copia[i]);
+        assert.ok(json.includes('library_find') && !/library_(list|search)/u.test(json), `${nome}: deve nominare solo library_find per l'id`);
+        copia[i] = JSON.parse(json.replaceAll('library_find', 'library_list or library_search'));
+        continue;
+      }
+      const scrittura = { notes_update: 'notes', notes_delete: 'notes', tasks_complete: 'tasks', tasks_update: 'tasks', tasks_delete: 'tasks',
+        research_start: 'research', research_read: 'research', research_rename: 'research', research_delete: 'research' }[nome];
+      /* C5 memoria: le descrizioni di memory_update/memory_delete si tolgono più sotto (esenzione del 27/09); qui torna solo il
+         campo id di memory_update, che diceva «as returned by memory_search». */
+      if (nome === 'memory_update') {
+        const id = (copia[i].function ?? copia[i]).parameters.properties.id;
+        assert.equal(id.description, 'The memory id, as returned by memory_find.', 'memory_update: l\'id viene da memory_find');
+        id.description = 'The memory id, as returned by memory_search.';
+        continue;
+      }
+      if (!scrittura) continue;
+      let json = JSON.stringify(copia[i]);
+      if (nome === 'research_delete') {
+        // C5: research_cancel è accorpato in research_control; la descrizione del delete lo nomina col nome nuovo e l'azione
+        const nuovo = JSON.stringify('Prefer research_control with action "cancel"').slice(1, -1);
+        assert.ok(json.includes(nuovo), 'research_delete: deve nominare research_control con l\'azione cancel');
+        json = json.replace(nuovo, 'Prefer research_cancel');
+      }
+      assert.ok(json.includes(`${scrittura}_find`), `${nome}: deve nominare ${scrittura}_find per l'id`);
+      assert.equal(json.includes(`${scrittura}_list`), false, `${nome}: non deve più nominare ${scrittura}_list`);
+      copia[i] = JSON.parse(json.replaceAll(`${scrittura}_find`, `${scrittura}_list`));
+    }
     for (const t of copia) {
       const f = t.function ?? t;
+      /* C5 (owner 10/10/2026 sera, «Limite + cursore + profondità»), esenzione dichiarata: `elenca` guadagna `depth`, `limit`,
+       * `cursor` e una frase sulle pagine. ⛔ Cambia il preambolo BASE del banco (le campagne prima e dopo non hanno lo stesso
+       * preambolo; il braccio A dell'A/B della C5 si rifà). Prima si asserisce che cosa sono, poi si tolgono dalla copia. */
+      if (f.name === 'elenca') {
+        const schema = f.parameters ?? f.input_schema;
+        assert.deepEqual(Object.keys(schema.properties).sort(), ['browse_every_page', 'cursor', 'depth', 'limit', 'percorso']);
+        assert.equal(schema.properties.browse_every_page.type, 'boolean');
+        assert.deepEqual(schema.required, []);
+        assert.deepEqual([schema.properties.depth.type, schema.properties.depth.minimum, schema.properties.depth.maximum], ['integer', 1, 3]);
+        assert.deepEqual([schema.properties.limit.type, schema.properties.limit.minimum, schema.properties.limit.maximum], ['integer', 1, 500]);
+        assert.equal(schema.properties.cursor.type, 'string');
+        const frase = ' A big folder comes in pages sorted by path, and the first page already reports the TOTAL: answer from it, open a '
+          + 'narrower folder, or use "cerca". Paging past the first couple of pages of one folder is REFUSED unless you set '
+          + 'browse_every_page, which you may do only when the person explicitly asked to see or act on EVERY entry.';
+        assert.ok(f.description.endsWith(frase), 'elenca: the description says the pages');
+        f.description = f.description.slice(0, -frase.length);
+        for (const k of ['depth', 'limit', 'cursor', 'browse_every_page']) delete schema.properties[k];
+      }
       if (f.name === 'cerca') {
         const schema = f.parameters ?? f.input_schema;
         assert.deepEqual(Object.keys(schema.properties).sort(), ['continua', 'dentro', 'nome', 'offset', 'testo']);
@@ -432,6 +537,15 @@ test('BC49: inventario e campi TALOS-BANCO invariati, eccetto le esenzioni dichi
         assert.match(schema.properties.timeout.description, /moved to the background \(NOT killed/u, `${f.name}: la scadenza sposta in sottofondo, non uccide`);
         delete schema.properties.timeout;
         delete schema.properties.background;
+      }
+      /* Owner 09/10/2026 (lane CLI, «Segue il modo + si chiede»): `shell` guadagna `network`, booleano FACOLTATIVO (la rete per quel
+       * comando, chiesta alla persona fuori da Full access). Stessa esenzione dichiarata: si asserisce, poi si toglie; il preambolo del
+       * banco cambia di un campo, e va detto quando si confrontano campagne di prima e di dopo. */
+      if (f.name === 'shell') {
+        const schema = f.parameters ?? f.input_schema;
+        assert.equal(schema.properties.network?.type, 'boolean', 'shell: network deve essere un booleano');
+        assert.equal((schema.required ?? []).includes('network'), false, 'shell: network resta FACOLTATIVO');
+        delete schema.properties.network;
       }
       if (f.name === 'research_deposit') {
         const schema = f.parameters ?? f.input_schema;
@@ -487,7 +601,7 @@ test('BC49: inventario e campi TALOS-BANCO invariati, eccetto le esenzioni dichi
           assert.match(f.description, /empty query or "\*" returns them all/u, 'memory_search: la descrizione deve dire che vuota = tutte');
           delete schema.properties.query.description;
         }
-        else assert.match(f.description, /memory_list or memory_search/u, `${f.name}: deve nominare memory_list per l'id`);
+        else assert.match(f.description, /\bmemory_find\b/u, `${f.name}: deve nominare memory_find per l'id (C5: era memory_list o memory_search)`);
         if (f.name === 'memory_delete') delete schema.properties.id.description;
         delete f.description;
       }
@@ -506,6 +620,13 @@ test('BC49: inventario e campi TALOS-BANCO invariati, eccetto le esenzioni dichi
           type: 'string', enum: ['lettura', 'modifica'],
           description: 'Optional. Omit it to give the child your own permissions (read-only if you are read-only). lettura = read-only analysis. modifica = changes within your permissions; refused if you are read-only.',
         });
+        /* C3 (owner 09/10/2026, dopo la prova dal vivo): il padre aspettava la figlia con `sleep` nella shell. Esenzione dichiarata
+           da talos desktop: si asserisce la frase esatta («END YOUR TURN», niente sleep né list_children), poi si toglie dalla copia
+           e la catena di prima resta protetta. ⛔ Preambolo degli attrezzi ESTESI cambiato il 09/10. */
+        const attesa = ' The child runs in the background: its result reaches you as a new message only after you END YOUR TURN, '
+          + 'so never wait for it with sleep or by polling list_children.';
+        assert.ok(f.description.endsWith(attesa), 'delega_sottotask: dice al padre di chiudere il turno, non di aspettare');
+        f.description = f.description.slice(0, -attesa.length);
         // F-022 (owner 01/10/2026): il predefinito è «i permessi del padre», non più la sola lettura
         const suffix = ' By default the child works with YOUR permissions, never more: it can '
           + 'do what you can do here. If you are read-only, the child is read-only too. Set modalita to '

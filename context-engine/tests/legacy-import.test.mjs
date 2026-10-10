@@ -44,3 +44,35 @@ test('CTX-LEGACY-CORRUPTION rejects intermediate corrupt bytes without partial s
   await assert.rejects(importLegacySession({ sessionId: 'bad', jsonl: '{broken\n{"tipo":"checkpoint-ripresa","messaggi":[]}', settings }, { store }), { code: 'CTX_LEGACY_CORRUPT' });
   assert.equal(await store.readContextSnapshot({ sessionId: 'bad' }), null);
 });
+
+/* C1 (09/10/2026): the caller's reading of its own journal format (the desktop registry passes `storiaPerIlMotore`). */
+test('CTX-LEGACY-CALLER a valid caller selection is imported, and a hole it reports is disclosed in the metadata', async t => {
+  const store = createSqliteContextStore({ databasePath: ':memory:' });
+  t.after(() => store.close());
+  const records = [{ tipo: 'checkpoint', versioneGiro: 3, storia: [user('nuovo formato')] }, { tipo: 'messaggi-delta', versioneGiro: 4, da: 9, messaggi: [user('dopo il buco')] }];
+  const jsonl = records.map(r => JSON.stringify(r)).join('\n');
+  assert.equal(selectLastValidCheckpoint(records), null, 'the old rule alone finds nothing in the new format');
+  const incoerenza = { versioneGiro: 4, da: 9, lunghezza: 1, indice: 1, deltaScartati: 1 };
+  const snapshot = await importLegacySession({ sessionId: 'nuovo', jsonl, settings,
+    selectCheckpoint: (righe) => ({ messages: righe[0].storia, versioneGiro: 3, recordIndex: 0, incoerenza }) }, { store });
+  assert.deepEqual(snapshot.metadata.legacy.incoherence, incoerenza);
+  assert.equal(snapshot.metadata.legacy.versioneGiro, 3);
+  const archive = await store.exportSession({ sessionId: 'nuovo' });
+  assert.deepEqual(archive.records.map(r => r.message), [user('nuovo formato')]);
+});
+
+test('CTX-LEGACY-CALLER-FALLBACK a caller selection that is not a valid message list never hides a usable checkpoint', async t => {
+  const store = createSqliteContextStore({ databasePath: ':memory:' });
+  t.after(() => store.close());
+  const jsonl = JSON.stringify({ tipo: 'checkpoint-ripresa', versioneGiro: 4, messaggi: [user('valid checkpoint')] });
+  for (const [nome, sel] of [
+    ['unpaired tool', () => ({ messages: [{ role: 'tool', content: 'x' }], versioneGiro: 9, recordIndex: 0 })],
+    ['index out of range', () => ({ messages: [user('x')], versioneGiro: 9, recordIndex: 7 })],
+    ['null', () => null],
+  ]) {
+    const id = `fallback-${nome.replaceAll(' ', '-')}`;
+    const snapshot = await importLegacySession({ sessionId: id, jsonl, settings, selectCheckpoint: sel }, { store });
+    assert.equal(snapshot.metadata.legacy.versioneGiro, 4, nome);
+    assert.equal(snapshot.metadata.legacy.incoherence, undefined, nome);
+  }
+});

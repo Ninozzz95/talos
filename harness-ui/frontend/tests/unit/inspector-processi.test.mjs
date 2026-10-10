@@ -502,77 +502,256 @@ test('PROC-DESCRIZIONE-VUOTA: una descrizione di soli spazi si tratta come assen
 
 /* ═══════════════════════════════════ Stop per riga (owner 02/10/2026) ═══ */
 /*
- * Decisioni owner del 02/10/2026: «icona in riga, solo mentre gira», senza conferma; l'agente continua; se l'uccisione non
- * riesce la riga resta «in corso» e lo dice (come Hermes, `apps/desktop/src/store/composer-status.ts:458-462`).
+ * Decisioni owner del 02/10/2026: senza conferma; l'agente continua; se l'uccisione non riesce la riga resta «in corso» e lo dice
+ * (come Hermes, `apps/desktop/src/store/composer-status.ts:458-462`).
+ * ⭐ C1 (owner 10/10/2026): lo Stop, lo «Sfondo» e il nuovo «Togli» stanno in un menu «⋯» più il tasto destro, non più in icone
+ *   affiancate. Le prove passano dal «⋯» come la persona: aprono il menu e scelgono la voce.
  */
-const fermaDi = (card) => conClasse(card, 'talos-process__ferma')[0];
+const menuDi = (card) => conClasse(card, 'talos-process__azioni')[0];
 const avvisoDi = (card) => conClasse(card, 'talos-process__avviso-ferma')[0];
 const aspetta = () => new Promise((fatto) => setImmediate(fatto));
+/** Le azioni di chi disegna, col menu che registra cosa gli si chiede di aprire. */
+function conMenu(azioni = {}) {
+  const aperti = [];
+  return { aperti, azioni: { ...azioni, apriMenu: (voci, dove) => aperti.push({ voci, dove }) } };
+}
+/** Apre il «⋯» della riga e restituisce le voci offerte (vuoto se il menu non si è aperto). */
+function vociDi(card, aperti) {
+  const prima = aperti.length;
+  menuDi(card).lancia('click');
+  return aperti.length > prima ? aperti.at(-1).voci : [];
+}
+const voce = (card, aperti, chiave) => vociDi(card, aperti).find((v) => v.chiave === chiave);
 
-test('PROC-STOP-01: lo Stop compare solo sulle righe in corso o in attesa, e solo se chi disegna sa fermare', () => {
+test('PROC-STOP-01: lo Stop è nel «⋯» solo sulle righe in corso o in attesa, e solo se chi disegna sa fermare e aprire il menu', () => {
   const d = documentoFinto(); const rr = d.createElement('div');
-  const azioni = { ferma: async () => ({ ok: true }) };
+  const { aperti, azioni } = conMenu({ ferma: async () => ({ ok: true }) });
   const lista = [
     datiProcesso({ id: 'a', comando: 'npm test', stato: 'in-corso' }), datiProcesso({ id: 'b', comando: 'sleep 9', stato: 'in-attesa' }),
     datiProcesso({ id: 'c', comando: 'ls', stato: 'in-avvio' }), datiProcesso({ id: 'e', comando: 'pwd', stato: 'riuscito' }),
   ];
   disegnaProcessi(d, rr, lista, { azioni });
-  const per = Object.fromEntries(carte(rr).map((c) => [c.dataset.processo, fermaDi(c)]));
-  assert.equal(per.a.hidden, false); assert.equal(per.b.hidden, false);
-  assert.equal(per.c.hidden, true, '«in avvio»: il comando non esiste ancora');
-  assert.equal(per.e.hidden, true, 'una riga finita non si ferma');
-  assert.equal(per.a.getAttribute('aria-label'), 'Ferma questo comando');
-  const uso = tutti(per.a).find((n) => n.tag === 'use');
-  assert.equal(uso.getAttribute('href'), '#i-stop', 'la stessa icona dello Stop del compositore');
+  const per = Object.fromEntries(carte(rr).map((c) => [c.dataset.processo, c]));
+  assert.equal(menuDi(per.a).hidden, false); assert.equal(menuDi(per.b).hidden, false);
+  assert.equal(menuDi(per.c).hidden, true, '«in avvio»: il comando non esiste ancora');
+  assert.equal(menuDi(per.e).hidden, true, 'una riga finita non si ferma, e senza «Togli» non ha azioni');
+  assert.equal(menuDi(per.a).getAttribute('aria-label'), 'Azioni su questo comando');
+  assert.equal(menuDi(per.a).getAttribute('aria-haspopup'), 'menu');
+  assert.equal(tutti(menuDi(per.a)).find((n) => n.tag === 'use').getAttribute('href'), '#i-more', 'lo stesso «…» delle deleghe');
+  const [stop] = vociDi(per.a, aperti);
+  assert.equal(stop.chiave, 'ferma');
+  assert.equal(stop.etichetta, 'Ferma questo comando');
+  assert.equal(stop.icona, 'i-stop', 'la stessa icona dello Stop del compositore');
+  assert.equal(stop.pericolo, true);
+  assert.equal(aperti.at(-1).dove.ancora, menuDi(per.a), 'dal «⋯» il menu si attacca al bottone');
   const d2 = documentoFinto(); const r2 = d2.createElement('div');
   disegnaProcessi(d2, r2, [datiProcesso({ id: 'a', comando: 'npm test', stato: 'in-corso' })]);
-  assert.equal(fermaDi(carte(r2)[0]).hidden, true, 'senza azioni nessun pulsante che non può mantenere');
+  assert.equal(menuDi(carte(r2)[0]).hidden, true, 'senza azioni nessun pulsante che non può mantenere');
+  const d3 = documentoFinto(); const r3 = d3.createElement('div');
+  disegnaProcessi(d3, r3, [datiProcesso({ id: 'a', comando: 'npm test', stato: 'in-corso' })], { azioni: { ferma: async () => ({ ok: true }) } });
+  assert.equal(menuDi(carte(r3)[0]).hidden, true, 'chi sa fermare ma non sa aprire un menu non mostra un «⋯» muto');
 });
 
-test('PROC-STOP-02: il clic ferma QUEL comando, la riga lo dice, e l esito vero chiude la riga', async () => {
+test('PROC-STOP-02: la voce ferma QUEL comando, la riga lo dice, e l esito vero chiude la riga', async () => {
   const d = documentoFinto(); const rr = d.createElement('div');
   const chiesti = [];
-  const azioni = { ferma: async (id) => { chiesti.push(id); return { ok: true } } };
+  const { aperti, azioni } = conMenu({ ferma: async (id) => { chiesti.push(id); return { ok: true } } });
   disegnaProcessi(d, rr, [datiProcesso({ id: 'a', comando: 'npm test', stato: 'in-corso' }), datiProcesso({ id: 'b', comando: 'sleep 9', stato: 'in-corso' })], { azioni });
   const card = carte(rr).find((c) => c.dataset.processo === 'b');
-  const evento = fermaDi(card).lancia('click');
+  const evento = menuDi(card).lancia('click');
   assert.equal(evento.defaultPrevented, true);
-  assert.equal(fermaDi(card).disabled, true, 'un secondo clic non riparte');
+  aperti.at(-1).voci.find((v) => v.chiave === 'ferma').aziona();
+  assert.equal(menuDi(card).disabled, true, 'un secondo gesto non riparte');
+  assert.deepEqual(vociDi(card, aperti), [], 'e il menu non si riapre mentre la richiesta viaggia');
   assert.equal(avvisoDi(card).hidden, false);
   assert.equal(avvisoDi(card).textContent, 'Fermo il comando…');
   await aspetta();
-  assert.deepEqual(chiesti, ['b'], 'solo la riga cliccata');
+  assert.deepEqual(chiesti, ['b'], 'solo la riga scelta');
   // l'esito vero arriva dal server: la riga diventa «Annullato» e l'avviso se ne va
   disegnaProcessi(d, rr, [datiProcesso({ id: 'a', comando: 'npm test', stato: 'in-corso' }), datiProcesso({ id: 'b', comando: 'sleep 9', stato: 'annullato' })]);
-  assert.equal(fermaDi(card).hidden, true);
+  assert.equal(menuDi(card).hidden, true);
   assert.equal(avvisoDi(card).hidden, true);
-  assert.equal(fermaDi(card).disabled, false);
+  assert.equal(menuDi(card).disabled, false);
 });
 
-test('PROC-STOP-03: se la richiesta non parte la riga lo dice con le parole del server, e il pulsante torna', async () => {
+test('PROC-STOP-03: se la richiesta non parte la riga lo dice con le parole del server, e si può riprovare', async () => {
   const d = documentoFinto(); const rr = d.createElement('div');
-  const azioni = { ferma: async () => ({ ok: false, messaggio: 'Questo comando non è più in corso' }) };
+  const { aperti, azioni } = conMenu({ ferma: async () => ({ ok: false, messaggio: 'Questo comando non è più in corso' }) });
   disegnaProcessi(d, rr, [datiProcesso({ id: 'a', comando: 'npm test', stato: 'in-corso' })], { azioni });
   const card = carte(rr)[0];
-  fermaDi(card).lancia('click');
+  voce(card, aperti, 'ferma').aziona();
   await aspetta();
   assert.equal(avvisoDi(card).textContent, 'Non fermato: Questo comando non è più in corso');
-  assert.equal(fermaDi(card).disabled, false, 'si può riprovare');
-  assert.equal(fermaDi(card).hidden, false, 'la riga è ancora in corso: lo Stop resta');
+  assert.equal(menuDi(card).disabled, false, 'si può riprovare');
+  assert.equal(menuDi(card).hidden, false, 'la riga è ancora in corso: il «⋯» resta');
+  assert.ok(voce(card, aperti, 'ferma'), 'e lo Stop è ancora lì');
 });
 
-test('PROC-STOP-04: se dopo 8 s la riga è ancora in corso, dice che non si è fermato e il pulsante torna', async (t) => {
+test('PROC-STOP-04: se dopo 8 s la riga è ancora in corso, dice che non si è fermato e si può riprovare', async (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const d = documentoFinto(); const rr = d.createElement('div');
-  disegnaProcessi(d, rr, [datiProcesso({ id: 'a', comando: 'npm test', stato: 'in-corso' })], { azioni: { ferma: async () => ({ ok: true }) } });
+  const { aperti, azioni } = conMenu({ ferma: async () => ({ ok: true }) });
+  disegnaProcessi(d, rr, [datiProcesso({ id: 'a', comando: 'npm test', stato: 'in-corso' })], { azioni });
   const card = carte(rr)[0];
-  fermaDi(card).lancia('click');
+  voce(card, aperti, 'ferma').aziona();
   await aspetta();
   t.mock.timers.tick(7_999);
   assert.equal(avvisoDi(card).textContent, 'Fermo il comando…');
   t.mock.timers.tick(1);
   assert.equal(avvisoDi(card).textContent, 'Non si è fermato: riprova lo Stop.');
-  assert.equal(fermaDi(card).disabled, false);
+  assert.equal(menuDi(card).disabled, false);
+});
+
+/* ═══════════════════════ C1 (owner 10/10/2026): il «⋯», Togli, la sezione in sfondo, Ferma tutti, le misure ═══ */
+
+test('PROC-MENU-01: le voci seguono lo stato — in corso: Sfondo e Ferma; in sfondo: Ferma; finita: Togli; in consenso: niente', () => {
+  const d = documentoFinto(); const rr = d.createElement('div');
+  const { aperti, azioni } = conMenu({ ferma: async () => ({ ok: true }), sfonda: async () => ({ ok: true }), togli: async () => ({ ok: true }) });
+  disegnaProcessi(d, rr, [
+    datiProcesso({ id: 'a', comando: 'npm run dev', stato: 'in-corso' }),
+    datiProcesso({ id: 's', comando: 'npm run watch', stato: 'in-sfondo' }),
+    datiProcesso({ id: 'f', comando: 'ls', stato: 'fallito', uscita: 2 }),
+    datiProcesso({ id: 'k', comando: 'rm x', stato: 'in-consenso' }),
+  ], { azioni });
+  const per = Object.fromEntries(carte(rr).map((c) => [c.dataset.processo, c]));
+  assert.deepEqual(vociDi(per.a, aperti).map((v) => v.chiave), ['sfonda', 'ferma'], 'lo Stop, che non si rifà, sta in fondo e separato');
+  assert.equal(vociDi(per.a, aperti)[1].separaPrima, true);
+  assert.deepEqual(vociDi(per.s, aperti).map((v) => v.chiave), ['ferma'], 'un comando in sfondo si può fermare (il server lo tiene fermabile finché vive)');
+  assert.deepEqual(vociDi(per.f, aperti).map((v) => v.chiave), ['togli']);
+  assert.equal(vociDi(per.f, aperti)[0].etichetta, "Togli dall'elenco");
+  assert.equal(menuDi(per.k).hidden, true, 'aspetta il tuo consenso: niente da fare dalla riga');
+});
+
+test('PROC-TOGLI-01: «Togli» chiede quella riga, la riga lo dice; un rifiuto del server si legge con le sue parole', async () => {
+  const d = documentoFinto(); const rr = d.createElement('div');
+  const chiesti = [];
+  let risposta = { ok: true };
+  const { aperti, azioni } = conMenu({ togli: async (id) => { chiesti.push(id); return risposta; } });
+  disegnaProcessi(d, rr, [datiProcesso({ id: 'f', comando: 'ls', stato: 'riuscito' })], { azioni });
+  const card = carte(rr)[0];
+  voce(card, aperti, 'togli').aziona();
+  assert.equal(avvisoDi(card).textContent, "Lo tolgo dall'elenco…");
+  await aspetta();
+  assert.deepEqual(chiesti, ['f']);
+  const d2 = documentoFinto(); const r2 = d2.createElement('div');
+  risposta = { ok: false, messaggio: 'Questo comando è ancora in corso: fermalo prima' };
+  const m2 = conMenu({ togli: async () => risposta });
+  disegnaProcessi(d2, r2, [datiProcesso({ id: 'f', comando: 'ls', stato: 'riuscito' })], { azioni: m2.azioni });
+  const c2 = carte(r2)[0];
+  voce(c2, m2.aperti, 'togli').aziona();
+  await aspetta();
+  assert.equal(avvisoDi(c2).textContent, 'Non tolto: Questo comando è ancora in corso: fermalo prima');
+  assert.equal(menuDi(c2).disabled, false);
+  // ⛔ al contrario: un ridisegno della STESSA riga finita non si porta via il motivo (lo stato non è cambiato)
+  disegnaProcessi(d2, r2, [datiProcesso({ id: 'f', comando: 'ls', stato: 'riuscito' })]);
+  assert.equal(avvisoDi(c2).hidden, false);
+});
+
+test('PROC-MENU-02: il tasto destro apre la STESSA lista nel punto del clic; dal tasto «Menu» (0,0) si attacca al «⋯»; senza azioni resta quello del sistema', () => {
+  const d = documentoFinto(); const rr = d.createElement('div');
+  const { aperti, azioni } = conMenu({ ferma: async () => ({ ok: true }) });
+  disegnaProcessi(d, rr, [datiProcesso({ id: 'a', comando: 'npm test', stato: 'in-corso' }), datiProcesso({ id: 'e', comando: 'pwd', stato: 'riuscito' })], { azioni });
+  const per = Object.fromEntries(carte(rr).map((c) => [c.dataset.processo, c]));
+  const ev = per.a.lancia('contextmenu', { clientX: 120, clientY: 340 });
+  assert.equal(ev.defaultPrevented, true);
+  assert.deepEqual(aperti.at(-1).dove, { x: 120, y: 340 });
+  assert.deepEqual(aperti.at(-1).voci.map((v) => v.chiave), ['ferma']);
+  per.a.lancia('contextmenu', { clientX: 0, clientY: 0 });
+  assert.equal(aperti.at(-1).dove.ancora, menuDi(per.a));
+  const quanti = aperti.length;
+  const nulla = per.e.lancia('contextmenu', { clientX: 5, clientY: 5 });
+  assert.equal(nulla.defaultPrevented, false, 'una riga senza azioni non ruba il tasto destro');
+  assert.equal(aperti.length, quanti);
+});
+
+test('PROC-SFONDO-SEZIONE: i comandi in sfondo stanno nella loro sezione, sopra «Altri comandi»; senza, la sezione non c è', () => {
+  const d = documentoFinto(); const rr = d.createElement('div');
+  disegnaProcessi(d, rr, [
+    datiProcesso({ id: 'a', comando: 'ls', stato: 'riuscito' }),
+    datiProcesso({ id: 's', comando: 'npm run watch', stato: 'in-sfondo' }),
+  ]);
+  const sezione = conClasse(rr, 'talos-process-sezione')[0];
+  const [titoloSfondo, titoloAltri] = conClasse(rr, 'talos-process-sezione__titolo');
+  assert.equal(sezione.hidden, false);
+  assert.equal(titoloSfondo.textContent, 'In sfondo');
+  assert.deepEqual(carte(sezione).map((c) => c.dataset.processo), ['s']);
+  assert.equal(titoloAltri.hidden, false);
+  assert.equal(titoloAltri.textContent, 'Altri comandi');
+  const elenco = conClasse(rr, 'talos-process-lista').find((n) => n !== conClasse(sezione, 'talos-process-lista')[0]);
+  assert.deepEqual(carte(elenco).map((c) => c.dataset.processo), ['a']);
+  // lo sfondato finisce: torna fra gli altri, e la sezione se ne va
+  disegnaProcessi(d, rr, [datiProcesso({ id: 'a', comando: 'ls', stato: 'riuscito' }), datiProcesso({ id: 's', comando: 'npm run watch', stato: 'riuscito' })]);
+  assert.equal(sezione.hidden, true);
+  assert.equal(titoloAltri.hidden, true, 'senza sezione sopra, un titolo «Altri comandi» non ha senso');
+  assert.deepEqual(carte(elenco).map((c) => c.dataset.processo), ['a', 's']);
+});
+
+test('PROC-FERMA-TUTTI: c è con più di un comando vivo, chiede conferma col numero contato ADESSO, e ferma anche quelli in sfondo', async () => {
+  const d = documentoFinto(); const rr = d.createElement('div');
+  const chiesti = [];
+  const conferme = [];
+  const { azioni } = conMenu({ ferma: async (id) => { chiesti.push(id); return { ok: true }; }, conferma: (c) => conferme.push(c) });
+  const vivi = [
+    datiProcesso({ id: 'a', comando: 'npm test', stato: 'in-corso' }),
+    datiProcesso({ id: 's', comando: 'npm run watch', stato: 'in-sfondo' }),
+    datiProcesso({ id: 'e', comando: 'pwd', stato: 'riuscito' }),
+  ];
+  disegnaProcessi(d, rr, vivi, { azioni });
+  const barra = conClasse(rr, 'talos-process-barra')[0];
+  const bottone = conClasse(rr, 'talos-process-ferma-tutti')[0];
+  assert.equal(barra.hidden, false);
+  assert.equal(bottone.textContent, 'Ferma tutti');
+  bottone.lancia('click');
+  assert.equal(chiesti.length, 0, 'niente parte prima del sì');
+  assert.equal(conferme.length, 1);
+  assert.equal(conferme[0].domanda, 'Fermare i 2 comandi in corso adesso?');
+  assert.equal(conferme[0].etichettaConferma, 'Ferma tutti');
+  conferme[0].onConferma();
+  await aspetta();
+  assert.deepEqual(chiesti.sort(), ['a', 's']);
+  // ⛔ al contrario: con un solo comando vivo il pulsante non c'è (basta il «⋯» della sua riga)
+  disegnaProcessi(d, rr, [vivi[0], datiProcesso({ id: 's', comando: 'npm run watch', stato: 'riuscito' }), vivi[2]]);
+  assert.equal(barra.hidden, true);
+});
+
+test('PROC-RISORSE: CPU e memoria in riga solo per i comandi vivi; «—» se misurato ma non questo; niente se nessuno ha misurato', () => {
+  const d = documentoFinto(); const rr = d.createElement('div');
+  const lista = [
+    datiProcesso({ id: 'a', comando: 'npm test', stato: 'in-corso' }),
+    datiProcesso({ id: 'b', comando: 'npm run dev', stato: 'in-sfondo' }),
+    datiProcesso({ id: 'c', comando: 'node x', stato: 'in-corso' }),
+    datiProcesso({ id: 'n', comando: 'node y', stato: 'in-corso' }),
+    datiProcesso({ id: 'e', comando: 'pwd', stato: 'riuscito' }),
+  ];
+  disegnaProcessi(d, rr, lista);
+  const risorseDi = (id) => conClasse(carte(rr).find((c) => c.dataset.processo === id), 'talos-process__risorse')[0];
+  assert.equal(risorseDi('a'), undefined, 'nessuno ha misurato ancora: niente, nemmeno il nodo (il tetto dei nodi della scheda)');
+  const risorse = new Map([
+    ['a', { cpuPercento: 12.5, memoriaByte: 150_000_000, processi: 3 }],
+    ['b', { cpuPercento: null, memoriaByte: 1_610_612_736, processi: 1 }],
+    ['c', { cpuPercento: 4.25, memoriaByte: 5_242_880, processi: 1 }],
+    ['e', { cpuPercento: 1, memoriaByte: 1, processi: 1 }],
+  ]);
+  disegnaProcessi(d, rr, lista, { risorse });
+  assert.equal(risorseDi('a').textContent, 'CPU 13% · 143 MB');
+  assert.equal(risorseDi('b').textContent, '1,5 GB', 'al primo campione la CPU non c è: solo la memoria');
+  assert.equal(risorseDi('c').textContent, 'CPU 4,3% · 5 MB');
+  assert.equal(risorseDi('n').textContent, 'CPU \u2014', 'misurato, ma non questo comando');
+  assert.equal(risorseDi('e'), undefined, 'una riga finita non ha CPU né memoria, e non paga il nodo');
+  assert.match(risorseDi('a').title, /5 secondi/u);
+  // un ridisegno interno (il filtro) non perde le misure
+  const campo = conClasse(rr, 'talos-process-filtro__campo')[0];
+  campo.value = 'npm'; campo.lancia('input');
+  assert.equal(risorseDi('a').textContent, 'CPU 13% · 143 MB');
+});
+
+test('PROC-TOLTO: una riga tolta (`talos.processo-tolto`) esce marcata `tolto`, le altre no', () => {
+  const lista = processiDagliEventi([
+    ...START('a', 'ls'), FINE('a'),
+    ...START('b', 'pwd'), FINE('b'),
+    { type: 'ProcessoTolto', toolCallId: 'a' },
+  ], { adesso: 5_000 });
+  assert.deepEqual(lista.map((p) => [p.id, p.tolto === true]), [['b', false], ['a', true]]);
 });
 
 /* ═════════════════════════════════ Il consenso (owner 02/10/2026) ═══ */
@@ -593,9 +772,9 @@ test('PROC-CONSENSO-01: un comando che aspetta il consenso dice «Aspetta il tuo
   assert.equal(STATI_PROCESSO['in-consenso'].etichetta, 'Aspetta il tuo consenso');
   assert.equal(STATI_PROCESSO['in-consenso'].vivo, true, 'conta fra i vivi: la riga non è chiusa');
   const d = documentoFinto(); const rr = d.createElement('div');
-  disegnaProcessi(d, rr, [p], { azioni: { ferma: async () => ({ ok: true }) } });
+  disegnaProcessi(d, rr, [p], { azioni: conMenu({ ferma: async () => ({ ok: true }) }).azioni });
   const card = carte(rr)[0];
-  assert.equal(fermaDi(card).hidden, true, 'niente Stop: il comando non è ancora partito');
+  assert.equal(menuDi(card).hidden, true, 'niente Stop: il comando non è ancora partito');
   assert.ok(tutti(card).some((n) => n.textContent === 'Aspetta il tuo consenso'), 'la parola si legge in riga');
 });
 
@@ -604,8 +783,8 @@ test('PROC-CONSENSO-02: dato il consenso il comando parte, torna «In corso» e 
   const [p] = processiDagliEventi(eventi, { adesso: 1_000 + 5 * 60_000 + 1_000 });
   assert.equal(p.stato, 'in-corso', 'un consenso dato dopo cinque minuti non fa dire «In attesa» a un comando appena partito');
   const d = documentoFinto(); const rr = d.createElement('div');
-  disegnaProcessi(d, rr, [p], { azioni: { ferma: async () => ({ ok: true }) } });
-  assert.equal(fermaDi(carte(rr)[0]).hidden, false);
+  disegnaProcessi(d, rr, [p], { azioni: conMenu({ ferma: async () => ({ ok: true }) }).azioni });
+  assert.equal(menuDi(carte(rr)[0]).hidden, false);
 });
 
 test('PROC-CONSENSO-03 al contrario: consenso negato → «Non eseguito»; un consenso di un altro comando non tocca la riga', () => {

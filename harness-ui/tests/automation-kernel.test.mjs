@@ -48,7 +48,7 @@ const OSPITE = (nome, argomenti, { fase }) => {
   return { ok: true, testo: `${nome} done` }
 }
 
-test('AUTO-K-01 — si offrono SOLO con l\'ospite: tutti e otto; senza, nessuno (la CLI)', async (t) => {
+test('AUTO-K-01 — si offrono SOLO con l\'ospite: tutti e cinque (C5: pause/resume/run/stop → automation_control); senza, nessuno (la CLI)', async (t) => {
   const c = cartella(t)
   const con = await giro(c, [], { ospite: OSPITE })
   assert.deepEqual(con.offerti[0].filter((n) => n.startsWith('automation_')).sort(), [...ATTREZZI_AUTOMAZIONI].sort())
@@ -74,11 +74,32 @@ test('AUTO-K-03 — un errore dell\'anteprima torna SUBITO, senza carta; pausa s
   const sbagliata = await giro(c, [chiama('a', 'automation_create', { nome: 'sbagliata', istruzioni: 'x', pianificazione: {} })], { ospite: OSPITE, risposta: true })
   assert.equal(sbagliata.esito('a'), 'REFUSED. an automation runs at most every 5 minutes')
   assert.deepEqual(sbagliata.domande, [])
-  const pausa = await giro(c, [chiama('b', 'automation_pause', { id: 'x' })], { ospite: OSPITE, risposta: true })
+  // C5: automation_control arriva all'ospite col nome di prima, e la pausa resta senza carta
+  const pausa = await giro(c, [chiama('b', 'automation_control', { id: 'x', action: 'pause' })], { ospite: OSPITE, risposta: true })
   assert.deepEqual(pausa.domande, [])
   assert.equal(pausa.esito('b'), 'automation_pause done')
-  const senzaCanale = await giro(c, [chiama('c', 'automation_run', { id: 'x' })], { ospite: OSPITE })
+  assert.deepEqual(pausa.ospite.map(([nome, argomenti, fase]) => [nome, argomenti, fase]),
+    [['automation_pause', { id: 'x' }, 'anteprima'], ['automation_pause', { id: 'x' }, 'esegui']], 'the host sees the old name and only the action\'s fields')
+  const senzaCanale = await giro(c, [chiama('c', 'automation_control', { id: 'x', action: 'run' })], { ospite: OSPITE })
   assert.match(senzaCanale.esito('c'), /^REFUSED\. this needs the person's approval, but this session has no approval channel\./u)
+})
+
+test('AUTO-K-03b (C5) — automation_control: run porta il suo contesto e la carta col tipo di sempre; un\'azione sbagliata e il nome vecchio si dicono', async (t) => {
+  const c = cartella(t)
+  const avvia = await giro(c, [chiama('a', 'automation_control', { id: 'x', action: 'run', contesto: 'solo i file nuovi' })], { ospite: OSPITE, risposta: true })
+  assert.deepEqual(avvia.ospite[0], ['automation_run', { id: 'x', contesto: 'solo i file nuovi' }, 'anteprima'])
+  assert.equal(avvia.domande[0].tipo, 'automation_run', 'the card keeps the type the interface knows (automazione-carta.js)')
+  assert.equal(avvia.esito('a'), 'automation_run done')
+  // al contrario: il contesto non viaggia con un'azione che non lo prende
+  const ripresa = await giro(c, [chiama('b', 'automation_control', { id: 'x', action: 'resume', contesto: 'x' })], { ospite: OSPITE, risposta: true })
+  assert.deepEqual(ripresa.ospite[0], ['automation_resume', { id: 'x' }, 'anteprima'])
+  assert.equal(ripresa.domande[0].tipo, 'automation_resume')
+  const sbagliata = await giro(c, [chiama('d', 'automation_control', { id: 'x', action: 'delete' })], { ospite: OSPITE, risposta: true })
+  assert.match(sbagliata.esito('d'), /^REFUSED\. automation_control needs action "pause", "resume", "run" or "stop" \(got "delete"\)/u)
+  assert.deepEqual(sbagliata.ospite, [], 'deleting is not a model tool: nothing reaches the host')
+  const vecchio = await giro(c, [chiama('e', 'automation_run', { id: 'x' })], { ospite: OSPITE, risposta: true })
+  assert.equal(vecchio.esito('e'), 'automation_run was replaced by automation_control. Call automation_control with arguments like {"id": "…", "action": "run"}. Nothing was done.')
+  assert.deepEqual(vecchio.ospite, [])
 })
 
 test('AUTO-K-04 — in Piano solo le due letture; le figlie non li vedono', async (t) => {

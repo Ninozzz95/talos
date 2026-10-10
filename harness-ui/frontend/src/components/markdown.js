@@ -99,6 +99,9 @@ export function voceDiLista(riga) {
   };
 }
 
+/* CommonMark §2.4: dentro grassetto, corsivo e testo dei link l'escape vale ancora; negli span di codice no (lì non si chiama). */
+const senzaEscape = (testo) => String(testo).replace(/\\([!-/:-@[-`{-~])/g, '$1');
+
 /** Un elemento con del testo dentro, senza passare da innerHTML. */
 function elementoTesto(doc, tag, classe, valore) {
   const elemento = doc.createElement(tag);
@@ -177,6 +180,11 @@ export function renderizzaMarkdown(testoGrezzo, opzioni = {}) {
    *   deve essere finché non decidiamo di rendere le immagini.
    */
   const PARTI_INLINE = [
+    /* ⛔ Gli ESCAPE (09/10/2026, bugfixer; visto dal collega nella prova dal vivo: la chat mostrava `\<argomento\>`). CommonMark
+       0.31.2 §2.4 «Backslash escapes»: ogni segno di punteggiatura ASCII preceduto da `\` è il segno da solo, e non forma markup
+       (`\*non corsivo\*`). Davanti a tutto, così vince su un `*` o un `_` che comincerebbe dopo. Negli span di codice NO (stessa
+       regola): uno span che comincia prima lo consuma intero. */
+    '\\\\([!-/:-@[-`{-~])',
     ...(conConversazioni ? [String.raw`(?<!!)\[([^\]]+)\]\(talos:\/\/conversazione\/([A-Za-z0-9._-]{1,120})\)`] : []),
     ...(conLink ? [String.raw`(?<!!)\[([^\]]+)\]\(([^)\s]+)\)`] : []),
     String.raw`\*\*([^*]+)\*\*`, '`([^`]+)`', String.raw`\*([^*]+)\*`,
@@ -189,7 +197,7 @@ export function renderizzaMarkdown(testoGrezzo, opzioni = {}) {
   // Ogni alternativa accesa davanti sposta di due i gruppi che seguono: la mappa dice dove sta cosa, invece di lasciare gli
   // indici sparsi nel corpo.
   const GRUPPI = { conv: -1, convId: -1, link: -1, linkUrl: -1 };
-  let prossimoGruppo = 1;
+  let prossimoGruppo = 2; // il gruppo 1 è l'escape
   if (conConversazioni) { GRUPPI.conv = prossimoGruppo; GRUPPI.convId = prossimoGruppo + 1; prossimoGruppo += 2; }
   if (conLink) { GRUPPI.link = prossimoGruppo; GRUPPI.linkUrl = prossimoGruppo + 1; prossimoGruppo += 2; }
   Object.assign(GRUPPI, { forte: prossimoGruppo, codice: prossimoGruppo + 1, corsivoA: prossimoGruppo + 2, corsivoB: prossimoGruppo + 3 });
@@ -201,6 +209,7 @@ export function renderizzaMarkdown(testoGrezzo, opzioni = {}) {
     let match;
     while ((match = pattern.exec(segmento))) {
       if (match.index > ultimo) contenitore.appendChild(doc.createTextNode(segmento.slice(ultimo, match.index)));
+      if (match[1] !== undefined) { contenitore.appendChild(doc.createTextNode(match[1])); ultimo = pattern.lastIndex; continue; }
       const conversazione = GRUPPI.conv >= 0 ? match[GRUPPI.conv] : undefined;
       const link = GRUPPI.link >= 0 ? match[GRUPPI.link] : undefined;
       if (conversazione !== undefined) {
@@ -208,17 +217,17 @@ export function renderizzaMarkdown(testoGrezzo, opzioni = {}) {
         b.type = 'button';
         b.className = 'talos-link-conversazione';
         b.setAttribute('data-conversazione', match[GRUPPI.convId]);
-        b.textContent = conversazione;
+        b.textContent = senzaEscape(conversazione);
         contenitore.appendChild(b);
       } else if (link !== undefined) {
         const a = doc.createElement('a');
         const indirizzo = match[GRUPPI.linkUrl];
         if (urlAmmesso(indirizzo)) { a.setAttribute('href', indirizzo); a.setAttribute('target', '_blank'); a.setAttribute('rel', 'noopener noreferrer'); }
-        a.textContent = link;
+        a.textContent = senzaEscape(link);
         contenitore.appendChild(a);
-      } else if (match[GRUPPI.forte] !== undefined) contenitore.appendChild(elementoTesto(doc, 'strong', '', match[GRUPPI.forte]));
+      } else if (match[GRUPPI.forte] !== undefined) contenitore.appendChild(elementoTesto(doc, 'strong', '', senzaEscape(match[GRUPPI.forte])));
       else if (match[GRUPPI.codice] !== undefined) contenitore.appendChild(elementoTesto(doc, 'code', '', match[GRUPPI.codice]));
-      else contenitore.appendChild(elementoTesto(doc, 'em', '', match[GRUPPI.corsivoA] !== undefined ? match[GRUPPI.corsivoA] : match[GRUPPI.corsivoB]));
+      else contenitore.appendChild(elementoTesto(doc, 'em', '', senzaEscape(match[GRUPPI.corsivoA] !== undefined ? match[GRUPPI.corsivoA] : match[GRUPPI.corsivoB])));
       ultimo = pattern.lastIndex;
     }
     if (ultimo < segmento.length) contenitore.appendChild(doc.createTextNode(segmento.slice(ultimo)));

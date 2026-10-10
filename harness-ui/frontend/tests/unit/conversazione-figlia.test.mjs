@@ -307,7 +307,7 @@ test('FIGLIA-VISTA: la testata porta il COMPITO e il MODELLO — e l’id di ses
   assert.equal(vista.elemento.dataset.stato, 'in-corso');
 
   const valori = conClasse(vista.elemento, 'talos-kv__v').map((n) => n.textContent);
-  assert.deepEqual(valori, ['z-ai/glm-5.3-flash', '1 giro · 1 chiamata']);
+  assert.deepEqual(valori, ['z-ai/glm-5.3-flash', '1 richiesta al modello · 1 chiamata']);
 
   /* ⛔ Codex #23594: la loro vista dei sotto-agenti mostra l'id invece del task. Qui l'id vive nel
      dataset, e non deve comparire in NESSUN testo della vista. */
@@ -405,7 +405,7 @@ test('FIGLIA-VUOTA: zero eventi non è un pannello bianco — e prima dell’ape
   assert.equal(scheletro.hidden, true);
   assert.equal(vuoto.hidden, false);
   assert.ok(vuoto.textContent.includes('Nessun evento ancora'), vuoto.textContent);
-  assert.deepEqual(conClasse(vista.elemento, 'talos-kv__v').map((n) => n.textContent), ['—', '0 giri · 0 chiamate'], '⛔ «—» e non un modello di ripiego: non lo sappiamo ancora');
+  assert.deepEqual(conClasse(vista.elemento, 'talos-kv__v').map((n) => n.textContent), ['—', '0 richieste al modello · 0 chiamate'], '⛔ «—» e non un modello di ripiego: non lo sappiamo ancora');
 });
 
 test('FIGLIA-ERRORE: un RunError si legge, col motivo del server', () => {

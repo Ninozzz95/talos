@@ -156,7 +156,10 @@ async function padreConFiglia(opzioni = {}) {
 test('C2A-01 SCENDE COL PADRE: il padre passa a «Sola lettura» ⇒ la figlia viva scende con lui', async () => {
   const { registro, parentId, childId, inputFiglio, inputPadre } = await padreConFiglia();
   assert.equal(typeof inputFiglio.permessiCorrentiFn, 'function', 'il registro dà alla figlia i permessi della catena');
-  assert.equal(inputPadre.permessiCorrentiFn, undefined, 'la radice non ne ha: comportamento di prima');
+  /* C16 (owner 10/10/2026, «Subito, nei due versi»): anche la radice rilegge i SUOI permessi a ogni chiamata — prima non ne aveva.
+     I suoi sono i propri, non quelli di una catena. */
+  assert.equal(typeof inputPadre.permessiCorrentiFn, 'function', 'C16: anche la radice rilegge i suoi permessi');
+  assert.equal(inputPadre.permessiCorrentiFn().livelloAccesso, 'scrittura-progetto');
   assert.equal(inputFiglio.permessiCorrentiFn().livelloAccesso, 'scrittura-progetto', 'premessa: nasce col livello del padre');
   assert.deepEqual(await registro.aggiornaImpostazioni(parentId, { permessi: 'Read only' }), { ok: true });
   assert.equal(inputFiglio.permessiCorrentiFn().livelloAccesso, 'lettura', 'la figlia non resta SOPRA il padre');
@@ -184,9 +187,12 @@ test('C2A-01c NEMMENO ALZANDO TUTTI E DUE: durante il giro la figlia non sale ol
 
 test('C2A-01d UN ANTENATO CON UNA PAROLA SCONOSCIUTA: la figlia scende a lettura (un anello illeggibile non apre niente)', async () => {
   const { registro, parentId, childId, inputFiglio } = await padreConFiglia();
-  /* il registro oggi accetta una parola qualunque in `permessi` (misurato: {ok:true} per «Boh»): l anello va letto chiuso */
-  assert.deepEqual(await registro.aggiornaImpostazioni(parentId, { permessi: 'Boh' }), { ok: true });
-  assert.equal(inputFiglio.permessiCorrentiFn().livelloAccesso, 'lettura');
+  /* owner 10/10 «Porta + kernel chiuso»: la parola non entra più (prima {ok:true} per «Boh»), e la figlia resta dov'era. Un anello
+     già salvato con una parola sconosciuta si legge ancora «Sola lettura» (`livelloDiUnAnello`, lo stesso lettore della radice:
+     PORTA-03 in permessi-porta-chiusa). */
+  const prima = inputFiglio.permessiCorrentiFn().livelloAccesso;
+  assert.equal((await registro.aggiornaImpostazioni(parentId, { permessi: 'Boh' })).code, 'PERMISSIONS_INVALID');
+  assert.equal(inputFiglio.permessiCorrentiFn().livelloAccesso, prima);
   registro.ferma(childId); registro.ferma(parentId);
 });
 
@@ -221,6 +227,34 @@ test('C2A-09 PADRE «SU RICHIESTA» SENZA OVERRIDE: il «sempre» della figlia N
   assert.equal(Object.hasOwn(altra.azione, 'sempreNonBasta'), false);
   registro.rispondiApprovazione(childId, altra.requestId, false);
   await seconda;
+  registro.ferma(childId); registro.ferma(parentId);
+});
+
+/* C2-a-bis (owner 09/10/2026, «togliere il pulsante lì»): riprodotto sulla 4176 — «Per questa sessione» su `notes_create` approvava
+   solo QUELLA richiesta, la seconda nota chiedeva di nuovo. Un attrezzo fuori da `ATTREZZI_CON_PERMESSO_PER_ATTREZZO` non può
+   prendere un «sempre» (la rotta lo rifiuta): la domanda lo dice, nella radice come nella figlia. */
+test('C2A-BIS-01 ATTREZZO SENZA PERMESSO PROPRIO: la domanda dice che il «sempre» non basta, nella radice e nella figlia', async (t) => {
+  const { registro, parentId, childId, inputFiglio, inputPadre } = await padreConFiglia({ permessiScelto: 'On request' });
+  assert.equal(ATTREZZI_CON_PERMESSO_PER_ATTREZZO.has('notes_create'), false, 'premessa: la nota non ha un permesso per-attrezzo');
+  const chiedi = async (sessionId, input, azione) => {
+    const visti = [];
+    const disiscrivi = registro.iscriviti(sessionId, (e) => visti.push(e));
+    t.after(() => disiscrivi?.());
+    const domanda = input.chiediApprovazioneFn(azione);
+    await new Promise((r) => setTimeout(r, 10));
+    const richiesta = visti.findLast((e) => e.type === 'ApprovalRequested'); // l'iscrizione rigioca la storia: l'ultima è questa
+    assert.ok(richiesta, `la domanda di ${azione.tipo} arriva`);
+    registro.rispondiApprovazione(sessionId, richiesta.requestId, false);
+    await domanda;
+    return richiesta.azione;
+  };
+  const nota = { tipo: 'notes_create', titolo: 'Prova', contenuto: 'x' };
+  assert.equal((await chiedi(parentId, inputPadre, nota)).sempreNonBasta, true, 'radice');
+  assert.equal((await chiedi(childId, inputFiglio, nota)).sempreNonBasta, true, 'figlia');
+  // AL CONTRARIO: nella radice un attrezzo con permesso proprio tiene «Per questa sessione» (la domanda non porta il campo)
+  const scrivi = await chiedi(parentId, inputPadre, { tipo: 'scrivi', percorso: '/tmp/x/a.txt' });
+  assert.equal(Object.hasOwn(scrivi, 'sempreNonBasta'), false);
+  assert.equal(Object.hasOwn(nota, 'sempreNonBasta'), false, 'una copia: l\'oggetto del kernel non si tocca');
   registro.ferma(childId); registro.ferma(parentId);
 });
 

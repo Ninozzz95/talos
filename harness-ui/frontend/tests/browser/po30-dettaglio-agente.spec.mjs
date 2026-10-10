@@ -188,6 +188,63 @@ test('PO30-AGENTE-01 — si apre sulla Panoramica: compito intero, fatti veri in
   await expect(d.getByText(/dimostrativ|demo|fixture/i), 'niente stati «demo» nel prodotto').toHaveCount(0);
 });
 
+/* ⛔ TACCUINO (09/10/2026, bugfixer) — la riga VERA di `…/children` di una figlia fermata con `POST …/stop` (misurata sulla 4176):
+   `interrotta:false`, `esitoDelega:'fallito'`, `motivoChiusura:'fermata'`. Il dettaglio diceva «Non riuscito» in rosso, l'elenco
+   «Interrotta». */
+const FERMATA = { ...FIGLIE[1], sessionId: 'po30d-figlia-f', taskCorto: 'crea il file', task: 'Compito: crea il file', esitoDelega: 'fallito', riassuntoDelega: null,
+  ultimoEsito: 'errore', motivoChiusura: 'fermata' };
+const IGNOTA = { ...FIGLIE[1], sessionId: 'po30d-figlia-i', taskCorto: 'stato perso', task: 'Compito: stato perso', conclusa: undefined, esitoDelega: null };
+
+test('TACCUINO-AGENTE-FERMATO — una figlia fermata dalla persona: «Interrotto» nel dettaglio come nell’elenco, mai «Non riuscito»', async ({ page }) => {
+  await scena(page, { figlie: [FERMATA] });
+  await expect(page.locator('#railAgenti [data-c="AgentRow"]').first()).toContainText('Interrotta');
+  await apri(page);
+  const stato = dettaglio(page).locator('.talos-agente__chi [role="status"]');
+  await expect(stato).toHaveText('Interrotto');
+  await expect(stato).not.toHaveClass(/talos-badge--danger/);
+});
+
+/* ⛔ TACCUINO (09/10/2026, bugfixer) — la riga dei filtri andava a capo da sola: «Tutti … Terminati» a y=180 e «Interrotti» a y=210
+   (misurato sulla 4176, colonna di ~307 px). Ora una riga sola che scorre, col bordo che sfuma solo dove c'è un filtro tagliato
+   (Hermes `pane-tab.tsx`/`fade-scroll.tsx`), e la rotella verticale la fa scorrere finché c'è qualcosa da mostrare. */
+test('TACCUINO-FILTRI — i filtri degli agenti stanno su UNA riga anche stretti e coi filtri rari; se non ci stanno scorrono e lo dicono', async ({ page }) => {
+  await scena(page, { larghezza: 1024, altezza: 800, figlie: [...FIGLIE, FERMATA, IGNOTA] });
+  const riga = page.locator('#railAgenti .talos-agenti-stati');
+  await expect(riga.locator('button[data-stato="interrotta"]'), 'la premessa: il filtro raro c’è').toBeVisible();
+  const m = await riga.evaluate((r) => ({ cime: [...new Set([...r.querySelectorAll('button')].filter((b) => !b.hidden).map((b) => b.offsetTop))],
+    client: r.clientWidth, scroll: r.scrollWidth, taglio: r.dataset.taglio }));
+  expect(m.cime, `una riga sola: cime dei bottoni ${JSON.stringify(m.cime)}`).toHaveLength(1);
+  if (m.scroll <= m.client + 1) {
+    expect(m.taglio, 'ci sta: nessun bordo sfuma («a list that fits must not be dimmed at all»)').toBe('nessuno');
+    /* il caso che deve scorrere si prova SEMPRE, non solo quando la colonna è stretta per caso: si stringe la riga */
+    await riga.evaluate((r) => { r.style.width = '160px'; r.style.flex = 'none'; });
+  }
+  await expect.poll(() => riga.evaluate((r) => r.scrollWidth > r.clientWidth + 1), { message: 'la premessa: la riga trabocca' }).toBe(true);
+  await expect.poll(() => riga.evaluate((r) => r.dataset.taglio), { message: 'trabocca: sfuma il lato destro, solo quello' }).toBe('dopo');
+  expect(await riga.evaluate((r) => [...new Set([...r.querySelectorAll('button')].filter((b) => !b.hidden).map((b) => b.offsetTop))].length), 'stretta, ancora una riga sola').toBe(1);
+  const box = await riga.boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.wheel(0, 400);
+  await expect.poll(() => riga.evaluate((r) => r.scrollLeft), { message: 'la rotella verticale fa scorrere la riga' }).toBeGreaterThan(0);
+  await expect.poll(() => riga.evaluate((r) => r.dataset.taglio)).toMatch(/^(prima|entrambi)$/u);
+});
+
+/* C3 tappa 4 (owner 09/10, «fatti strutturati + nota»): una figlia che poteva modificare e non ha scritto niente resta
+   «Conclusa», e la scheda lo dice con la nota; una figlia senza nota non la mostra. */
+test('C3-AGENTE-NOTA — «no change made» is said on a concluded agent, never as a failure', async ({ page }) => {
+  const figlie = [FIGLIE[0], { ...FIGLIE[1], notaDelega: 'nessuna-modifica', verdettoDelega: 'strutturato' }];
+  await scena(page, { figlie });
+  await page.locator('#railAgenti [data-c="AgentRow"]').filter({ hasText: 'controlla i test' }).click();
+  const d = dettaglio(page);
+  await expect(d.locator('.talos-agente__chi [role="status"]')).toHaveText('Concluso');
+  await expect(d.locator('[data-nota-delega="nessuna-modifica"]')).toHaveText('Nessuna modifica fatta: questo agente poteva modificare i file ma non ne ha scritto nessuno. Controlla se una modifica serviva.');
+  // al contrario: la figlia senza nota non la mostra (scena di nuovo: col dettaglio aperto l'elenco è coperto)
+  await scena(page, { figlie });
+  await page.locator('#railAgenti [data-c="AgentRow"]').filter({ hasText: 'leggi il registro' }).click();
+  await expect(dettaglio(page).locator('.talos-agente__nome')).toHaveText('leggi il registro e correggi la guardia');
+  await expect(dettaglio(page).locator('[data-nota-delega]')).toHaveCount(0);
+});
+
 test('PO30-AGENTE-02 — un file coinvolto porta AL FILE: scheda File scelta, riga selezionata', async ({ page }) => {
   await scena(page);
   await apri(page);
@@ -505,6 +562,38 @@ test('RIPRESA-GRAFO-DENSITA — quattordici nodi leggibili, panoramica e ritorno
 });
 
 
+/* 09/10/2026 notte (bugfixer, regressione mia di c82341a4a): «Segui attivo» porta la vista sull'agente al lavoro, quindi non è più la
+   vista di lettura; senza spegnerla, al primo ridimensionamento l'osservatore rifaceva `lettura()` e l'agente usciva dalla tela. */
+test('RIPRESA-GRAFO-SEGUI — «Segui attivo» dopo la lettura: l’agente al lavoro resta nella tela anche quando la finestra cambia',async({page})=>{
+ const figli=Array.from({length:13},(_,i)=>({...FIGLIE[0],sessionId:`po30d-segui-${i}`,taskCorto:`Agente ${i}`,conclusa:i!==12}));
+ await scena(page,{figlie:figli});await page.locator('#railAgenti').getByRole('button',{name:'Apri visuale diagramma'}).click();
+ const g=page.locator('[data-c="GrafoAgenti"]');await expect(g.locator('[data-nodo-id]')).toHaveCount(14);
+ await g.getByRole('button',{name:'Zoom di lettura',exact:true}).click();
+ const segui=g.locator('[aria-pressed]').filter({has:page.locator('use[href="#i-robot"]')}).first();await segui.click();await expect(segui).toHaveAttribute('aria-pressed','true');
+ const nodo=g.locator('[data-nodo-id="po30d-segui-12"]');
+ const dentro=()=>nodo.evaluate(n=>{const r=n.getBoundingClientRect(),c=n.closest('.talos-grafo__canvas').getBoundingClientRect();return r.left>=c.left&&r.right<=c.right&&r.top>=c.top&&r.bottom<=c.bottom});
+ await expect.poll(dentro).toBe(true);
+ await page.setViewportSize({width:1024,height:800});
+ await expect.poll(dentro).toBe(true);
+});
+
+/* 09/10/2026 notte (bugfixer, owner «sì, in questo lotto»): `else if (segui) centraAttivo();` stava dentro un commento dal 19/09, e
+   «Segui attivo» centrava solo al clic. Qui un aggiornamento in cui lavora un ALTRO agente deve portare la vista su di lui. */
+test('RIPRESA-GRAFO-SEGUI-AGGIORNA — con «Segui attivo» acceso, un aggiornamento porta la vista sull’agente che lavora adesso',async({page})=>{
+ const conAttivo=(attivo)=>Array.from({length:13},(_,i)=>({...FIGLIE[0],sessionId:`po30d-segue-${i}`,taskCorto:`Agente ${i}`,conclusa:i!==attivo}));
+ await scena(page,{figlie:conAttivo(12)});await page.locator('#railAgenti').getByRole('button',{name:'Apri visuale diagramma'}).click();
+ const g=page.locator('[data-c="GrafoAgenti"]');await expect(g.locator('[data-nodo-id]')).toHaveCount(14);
+ await g.getByRole('button',{name:'Zoom di lettura',exact:true}).click();
+ const segui=g.locator('[aria-pressed]').filter({has:page.locator('use[href="#i-robot"]')}).first();await segui.click();await expect(segui).toHaveAttribute('aria-pressed','true');
+ const dentro=(id)=>g.locator(`[data-nodo-id="${id}"]`).evaluate(n=>{const r=n.getBoundingClientRect(),c=n.closest('.talos-grafo__canvas').getBoundingClientRect();return r.left>=c.left&&r.right<=c.right&&r.top>=c.top&&r.bottom<=c.bottom});
+ await expect.poll(()=>dentro('po30d-segue-12')).toBe(true);
+ expect(await dentro('po30d-segue-0'),'la premessa: l’altro agente sta fuori dalla tela').toBe(false);
+ // adesso lavora l'agente 0: un aggiornamento dei figli
+ await page.route('**/api/v1/sessions/po30d-uno/children',(r)=>r.fulfill({contentType:'application/json',body:JSON.stringify({ok:true,data:{figli:conAttivo(0)}})}));
+ await g.getByRole('button',{name:'Altri comandi del diagramma'}).click();await g.getByRole('menuitem',{name:'Aggiorna',exact:true}).click();
+ await expect.poll(()=>dentro('po30d-segue-0'),{timeout:10_000}).toBe(true);
+});
+
 test('RIPRESA-AGENTI-STATO-IGNOTO — dati incompleti non diventano agenti attivi',async({page})=>{
  const {conclusa,...ignoto}=FIGLIE[0];await scena(page,{figlie:[ignoto]});const rail=page.locator('#railAgenti');
  await expect(rail.locator('[data-c="AgentRow"]')).toHaveAttribute('data-stato','ignoto');
@@ -588,4 +677,44 @@ test('RIPRESA-GRAFO-GRAMMATICA — dettaglio, menu da tastiera, lente, stato e v
  // la velocità della riproduzione: un gruppo di scelte, una sola accesa
  const vel=g.getByRole('radiogroup',{name:'Velocità riproduzione'});await vel.getByRole('radio',{name:'4×'}).click();
  await expect(vel.getByRole('radio',{checked:true})).toHaveCount(1);await expect(vel.getByRole('radio',{name:'4×'})).toHaveAttribute('aria-checked','true');
+});
+
+test('RIPRESA-GRAFO-MADRE-INTERROTTA — un giro rimasto a metà per la morte del processo: il nodo radice dice «Interrotto» come la barra laterale', async ({ page }) => {
+  // ⛔ 09/10/2026 sera (bugfixer, visto sul 4174 e riprodotto sulla 4176 uccidendo il server a metà giro): la barra laterale
+  //   diceva «interrotta» e il nodo radice «Concluso», perché l'ultimo evento rigiocato era un RunStarted senza fine.
+  const SID = 'po30d-interrotta';
+  const voce = { sessionId: SID, taskId: 'workspace', nome: 'Giro a metà', conclusa: false, interrotta: true, ultimoEsito: null, motivoChiusura: null, modello: 'qwen/qwen3.8-flash', avviataAlle: new Date(Date.now() - 5 * 60_000).toISOString() };
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.route(/\/api\/v1\/sessions(\?.*)?$/u, async (route) => {
+    if (route.request().method() !== 'GET') return route.fallback();
+    const r = await route.fetch(); const j = await r.json().catch(() => null);
+    const items = [voce, ...((j?.data?.items) ?? []).filter((s) => s.sessionId !== SID)];
+    return route.fulfill({ response: r, json: { ...(j ?? { ok: true }), data: { ...(j?.data ?? {}), items } } });
+  });
+  await page.route(`**/api/v1/sessions/${SID}/events*`, () => { /* aperto e muto */ });
+  await page.route(`**/api/v1/sessions/${SID}/children`, (r) => r.fulfill({ contentType: 'application/json', body: JSON.stringify({ ok: true, data: { figli: [] } }) }));
+  await page.goto('/');
+  await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 8000 });
+  await page.waitForFunction(() => window.__talosHarnessUiRuntime);
+  await expect(page.locator(`[data-real-session-id="${SID}"]`).first(), 'la premessa: la barra laterale dice «interrotta»').toContainText('interrotta');
+  await page.evaluate((v) => {
+    const r = window.__talosHarnessUiRuntime;
+    r.passaASessione(v.sessionId, v.taskId, v.nome, v.modello, v);
+    const g = r.realSessionState.generation;
+    // la storia rigiocata: il giro è partito, e la sua fine non arriverà mai (il processo che l'avrebbe mandata è morto)
+    r.handleRealEvent({ type: 'RunStarted', _sequenza: 9401, input: { consegna: 'Un giro lento' } }, g);
+    r.handleRealEvent({ type: 'CUSTOM', name: 'talos.fine-rigiocata', value: null }, g);
+  }, voce);
+  if (!(await page.locator('#railTabs [data-rail="agenti"]').isVisible())) await page.locator('.talos-screen:not([hidden]) [data-azione="dettagli"]').first().click();
+  await page.locator('#railTabs [data-rail="agenti"]').click();
+  await page.locator('#railAgenti').getByRole('button', { name: 'Apri visuale diagramma' }).click();
+  const nodo = page.locator(`[data-nodo-id="${SID}"]`).first();
+  await expect(nodo).toHaveAttribute('data-stato', 'interrupted');
+  await expect(nodo).toContainText('Interrotto');
+  await expect(nodo).not.toContainText('Concluso');
+  // al contrario: un giro che riparte davvero torna vivo (`interrotta` non vince su un giro in corso)
+  await page.evaluate(() => { const r = window.__talosHarnessUiRuntime; r.handleRealEvent({ type: 'RunStarted', _sequenza: 9402, input: { consegna: 'Riprendi' } }, r.realSessionState.generation); });
+  await expect(nodo).toHaveAttribute('data-stato', 'active');
+  await page.evaluate(() => { const r = window.__talosHarnessUiRuntime; r.handleRealEvent({ type: 'RunFinished', _sequenza: 9403 }, r.realSessionState.generation); });
+  await expect(nodo).toHaveAttribute('data-stato', 'done');
 });

@@ -21,6 +21,7 @@ import { Cron } from 'croner';
 import { AutomationStoreError } from './automation-store.mjs';
 import { PianificazioneNonValida, fusoValido, soloCampiDelTipo } from './automation-pianificazione.mjs';
 import { oltreLaChat, percorsoRisolto, scansionaIstruzioni } from './automation-sicurezza.mjs';
+import { confrontaChiavi, leggiParametriElenco, leggiValoreFiltro, paginaDa, testoElenco } from './elenco-paginato.mjs'; // C5: automation_list
 
 /* un percorso assoluto si risolve; un valore che non lo è (relativo, non stringa) passa com'è e lo rifiuta la validazione */
 const risolvi = (percorso) => percorsoRisolto(percorso) ?? percorso;
@@ -123,19 +124,63 @@ export function creaOspiteAutomazioni({ store, scheduler, verificaCartellaFn = (
       return data.toISOString();
     }
 
-    async function lista() {
-      const voci = (await store.elenca()).filter((v) => v.versione === 2);
-      if (!voci.length) return { ok: true, testo: 'There are no automations yet.' };
+    /*
+     * ⭐ C5 (owner 10/10/2026; contratto §2, la riga `automation_list`): filtri e pagine come ogni altro elenco del modello
+     *   (`elenco-paginato.mjs`, cursore a chiave). `state` = on / off / unread (giri che aspettano la persona); `next_run_before`
+     *   = il prossimo giro prima di quell'ora LOCALE, nella forma che questo elenco stampa («YYYY-MM-DD» o «YYYY-MM-DD HH:MM»,
+     *   nel fuso di ciascuna automazione). Prima chi ha un prossimo giro, il più vicino in testa; poi le altre per nome.
+     * ⛔ «concise» tiene ciò che serve per agire (id, nome, acceso, quando gira, il prossimo giro, l'ultimo esito, i non letti);
+     *   «detailed» aggiunge cartella, modello, permessi e Coordinazione.
+     */
+    async function lista(argomenti = {}) {
+      const tutte = (await store.elenca()).filter((v) => v.versione === 2);
+      if (!tutte.length) return { ok: true, testo: 'There are no automations yet.' };
+      const parametri = leggiParametriElenco(argomenti);
+      const note = [...parametri.note];
+      const stato = leggiValoreFiltro(argomenti?.state, { nome: 'state', validi: ['all', 'on', 'off', 'unread'] });
+      if (stato.nota) note.push(stato.nota);
+      let prima = null;
+      if (argomenti?.next_run_before !== undefined && argomenti?.next_run_before !== null && argomenti?.next_run_before !== '') {
+        const letto = /^(\d{4}-\d{2}-\d{2})(?:[ T](\d{2}:\d{2}))?$/u.exec(String(argomenti.next_run_before).trim());
+        /* review del passo 15 (N1): una data o un'ora impossibile (2026-13-45, 99:99, 30 febbraio) si dice, non si confronta */
+        const iso = letto ? `${letto[1]}T${letto[2] ?? '00:00'}` : null;
+        const vera = iso && !Number.isNaN(Date.parse(`${iso}:00Z`)) && new Date(`${iso}:00Z`).toISOString().slice(0, 16) === iso;
+        if (vera) prima = `${letto[1]} ${letto[2] ?? '00:00'}`;
+        else note.push(`next_run_before "${argomenti.next_run_before}" is not "YYYY-MM-DD" or "YYYY-MM-DD HH:MM": it was ignored.`);
+      }
       const daLeggere = await store.daGuardare();
+      const nonLettiDi = (id) => daLeggere.filter((g) => g.automazioneId === id).length;
+      const filtrate = tutte.filter((v) => {
+        if (stato.valore === 'on' && !v.attiva) return false;
+        if (stato.valore === 'off' && v.attiva) return false;
+        if (stato.valore === 'unread' && nonLettiDi(v.id) === 0) return false;
+        if (prima) {
+          const locale = v.attiva && v.prossimaEsecuzione ? oraLocale(v.prossimaEsecuzione, v.fusoOrario) : null;
+          if (!locale || !(locale < prima)) return false;
+        }
+        return true;
+      });
+      const prossimoMs = (v) => (v.attiva && v.prossimaEsecuzione ? new Date(v.prossimaEsecuzione).getTime() : NaN);
+      const chiaveDi = (v) => (Number.isFinite(prossimoMs(v)) ? [0, prossimoMs(v), v.id] : [1, String(v.nome ?? '').toLowerCase(), v.id]);
+      filtrate.sort((a, b) => confrontaChiavi(chiaveDi(a), chiaveDi(b)));
+      const filtri = { state: stato.valore && stato.valore !== 'all' ? stato.valore : null, next_run_before: prima };
+      const pagina = paginaDa(filtrate, { attrezzo: 'automation_list', filtri, chiaveDi, limite: parametri.limite, cursore: parametri.cursore });
+      if (!pagina.ok) return { ok: true, testo: pagina.nota };
+      const dettagliato = parametri.formato === 'detailed';
       const righe = [];
-      for (const v of voci) {
+      for (const v of pagina.pagina) {
         const [ultimo] = await store.giri(v.id, { limite: 1 });
-        const nonLetti = daLeggere.filter((g) => g.automazioneId === v.id).length;
-        righe.push(`- ${v.id} · "${v.nome}" · ${v.attiva ? 'on' : 'off'} · runs ${descriviPianificazione(v.pianificazione)} · ${prossimoInParole(v)}`
-          + ` · folder ${v.cartella}${v.modello ? ` · model ${v.modello}` : ''} · ${v.permessi}${v.coordinazione ? ' · Coordination on' : ''}`
+        const nonLetti = nonLettiDi(v.id);
+        righe.push(`${v.id} · "${v.nome}" · ${v.attiva ? 'on' : 'off'} · runs ${descriviPianificazione(v.pianificazione)} · ${prossimoInParole(v)}`
+          + (dettagliato ? ` · folder ${v.cartella}${v.modello ? ` · model ${v.modello}` : ''} · ${v.permessi}${v.coordinazione ? ' · Coordination on' : ''}` : '')
           + `${ultimo ? ` · last run ${ultimo.esito}${ultimo.motivo ? ` (${ultimo.motivo})` : ''}` : ' · never run'}${nonLetti ? ` · ${nonLetti} unread` : ''}`);
       }
-      return { ok: true, testo: `${voci.length} automation${voci.length === 1 ? '' : 's'}:\n${righe.join('\n')}` };
+      const filtrato = [filtri.state && `state=${filtri.state}`, prima && `next_run_before=${prima}`].filter(Boolean).join(', ');
+      const testa = filtrate.length === 0
+        ? `No automations match ${filtrato}.`
+        : `Automations: showing ${righe.length} of ${filtrate.length}${filtrato ? ` (${filtrato})` : ''}, soonest next run first.`;
+      return { ok: true, testo: testoElenco({ testa, righe, has_more: pagina.has_more, next_cursor: pagina.next_cursor, restanti: pagina.restanti,
+        note, suggerimentoFiltro: 'state=on or next_run_before' }) };
     }
 
     async function storico({ id, limit }) {
@@ -178,7 +223,7 @@ export function creaOspiteAutomazioni({ store, scheduler, verificaCartellaFn = (
 
     return async function onAutomazioneFn(nome, argomenti = {}, { fase = 'esegui' } = {}) {
       try {
-        if (nome === 'automation_list') return fase === 'anteprima' ? { ok: true, carta: false } : lista();
+        if (nome === 'automation_list') return fase === 'anteprima' ? { ok: true, carta: false } : lista(argomenti);
         if (nome === 'automation_runs') return fase === 'anteprima' ? { ok: true, carta: false } : storico(argomenti);
 
         /*
@@ -260,7 +305,7 @@ export function creaOspiteAutomazioni({ store, scheduler, verificaCartellaFn = (
           const esito = await scheduler.eseguiOra(voce.id, { contesto });
           if (!esito?.ok) {
             return rifiuto(esito?.code === 'AUTOMATION_RUN_IN_PROGRESS'
-              ? `a run of "${voce.nome}" is still going: wait for it, or stop it with automation_stop.`
+              ? `a run of "${voce.nome}" is still going: wait for it, or stop it with automation_control (action "stop").`
               : `the run of "${voce.nome}" did not start: ${esito?.erroreAvvio ?? esito?.code ?? 'unknown reason'}.`);
           }
           return { ok: true, testo: `A run of "${voce.nome}" started in the background. Do not wait for it: its report will appear in the automation's history (automation_runs).` };

@@ -24,7 +24,7 @@ async function fixture(t, extra = {}) {
   const options = {
     cartellaStore, modello: 'fixture', chiave: 'fixture', guardaWorkspaceFn: () => () => {}, processOutputStoreFn: () => store,
     preparaEsecuzioneFn: id => ({cartella: root, task: {id, consegna: 'Esegui la verifica locale.'}, comandoProva: command}),
-    avviaSessioneFn: input => avviaSessione({...input, cartella: root, livelloAccesso: 'completo',
+    avviaSessioneFn: input => avviaSessione({...input, cartella: root, livelloAccesso: 'scrittura-progetto',
       contestoDelProgettoFn: async () => null, leggiContestoWorkspaceFn: () => ({}),
       talosLavoraFn: kernelInput => {
         let calls = 0;

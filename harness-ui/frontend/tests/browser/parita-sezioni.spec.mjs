@@ -81,6 +81,9 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
+/** Le righe a schermo che il contratto delle preferenze NON elenca, per nome (PARITA-03, PARITA-07). */
+const FUORI_CONTRATTO = ['workspaceRestore', 'motoreContesto'];
+
 test('PARITA-01 · i cinque gruppi del mockup, nell’ordine del mockup, con i suoi titoli', async ({ page }) => {
   await apriAspetto(page);
   const gruppi = page.locator('#setting-panel-appearance > [data-settings-group]');
@@ -147,9 +150,11 @@ test('PARITA-03 · la pastiglia dice i controlli del contratto e i 14 temi, e so
    *   contratto, più una riga che il contratto NON elenca. Quale sia, lo dice il DOM.
    */
   const righe = await page.evaluate(() => [...document.querySelectorAll('#schermoImpostazioni [data-setting-row]')].map((r) => r.dataset.settingRow));
-  expect(righe.length).toBe(CAMPI_IMPOSTAZIONI.length + 1);
+  /* C1 (10/10/2026): «Motore del contesto» (Memoria e contesto) è un'impostazione del SERVER (`/api/v1/context-settings`), non una
+     preferenza locale: fuori dal contratto `CAMPI_IMPOSTAZIONI`, che lega ogni riga a `values[field.chiave]`, come `workspaceRestore`. */
+  expect(righe.length).toBe(CAMPI_IMPOSTAZIONI.length + FUORI_CONTRATTO.length);
   const contratto = new Set(CAMPI_IMPOSTAZIONI.map((campo) => campo.id));
-  expect(righe.filter((id) => !contratto.has(id))).toEqual(['workspaceRestore']);
+  expect(righe.filter((id) => !contratto.has(id)).sort()).toEqual([...FUORI_CONTRATTO].sort());
   // E la metà «temi» ha una sorgente sua: le opzioni del select del tema, che sono 14.
   await expect(page.locator('[data-setting-row="themePresetSelect"] select option')).toHaveCount(TEMI.length);
 });
@@ -271,7 +276,7 @@ test('PARITA-07 · niente si perde: le righe sono ESATTAMENTE quelle di prima', 
   }
   // Lo schermo INTERO: i 40 controlli del contratto più la riga fuori contratto, tutti vivi, senza doppioni.
   const schermo = await page.evaluate(() => [...document.querySelectorAll('#schermoImpostazioni [data-setting-row]')].map((r) => r.dataset.settingRow));
-  expect(schermo.length).toBe(CAMPI_IMPOSTAZIONI.length + 1);
+  expect(schermo.length).toBe(CAMPI_IMPOSTAZIONI.length + FUORI_CONTRATTO.length);
   expect(new Set(schermo).size).toBe(schermo.length);
   // Il gruppo «Spazio di lettura» non duplica il suo controllo (sarebbero due posti che scrivono
   // lo stesso dato): lo NOMINA, e apre la porta dove il controllo vive davvero.

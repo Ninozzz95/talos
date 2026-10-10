@@ -53,7 +53,12 @@ test('B1-04 FINESTRA: i turni si contano sui figli DIRETTI, non con una ricerca 
 
 test('B1-05 VELO: OGNI sessione aperta da passaASessione si apre col velo — conclusa, interrotta e IN CORSO (A1-R3)', () => {
   const passa = corpo(APP, '  function passaASessione(');
-  assert.match(passa, /state\.realSession\.deferHistoricalRendering = true;/);
+  /* B1 «chat pronte» (owner 10/10/2026): il velo resta per OGNI sessione aperta, tranne una chat TENUTA PRONTA (la sua vista torna
+     com'era, niente da rigiocare). ⇒ Il rinvio è `!pronta`, e `pronta` viene SOLO dal registro delle chat pronte con la firma
+     della vista: mai da conclusa/interrotta, che è ciò che A1-R3 vieta (asserzioni sotto). */
+  assert.match(passa, /state\.realSession\.deferHistoricalRendering = !pronta;/);
+  assert.match(passa, /const pronta = presa && presa\.firma === firmaVistaChat\(\) \? presa : null;/);
+  assert.match(passa, /const presa = forza \? \(registroChatPronte\(\)\.dimentica\(sessionId\), null\) : registroChatPronte\(\)\.prendi\(sessionId\);/);
   // ⛔ al contrario: legare il rinvio allo stato della sessione lasciava SENZA velo, e con l'ora del ridisegno, una sessione
   //   riaperta mentre lavora (A1-R3 / B-ORA-FALSA, riprodotto sul 4176: 0 campioni col velo su 40, «00:00» su un messaggio delle 23:59)
   assert.doesNotMatch(passa, /deferHistoricalRendering = impostazioniSessione\?\./, 'il rinvio non dipende da conclusa/interrotta');

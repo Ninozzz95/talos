@@ -1089,7 +1089,9 @@ test('OPEN-WITH-TALOS-BROWSER-01 — il fragment apre la scelta esplicita senza 
   await expect(page.locator('#inspector-files .file-tree')).toContainText('Progetto Ω');
   await expect(page.locator('#inspector-files .file-tree')).toContainText('I file appariranno appena inizi la sessione.');
   await expect(page.locator('#inspector-files .file-tree')).not.toContainText('Nessuna cartella ancora scelta');
-  await expect(page.locator('[data-open-sheet="permissions"] span')).toHaveText('Scrive nel progetto');
+  /* C1 (owner 10/10/2026): il chip dice cosa passa senza chiedere; la politica sta nel suggerimento */
+  await expect(page.locator('[data-open-sheet="permissions"] span')).toHaveText('Senza chiedere: file, comandi, documenti');
+  await expect(page.locator('[data-c="Chip"][data-open-sheet="permissions"]')).toHaveAttribute('title', /^Permesso: Scrive nel progetto/u);
   await expect.poll(() => new URL(page.url()).hash).toBe('');
   await testInfo.attach('open-with-talos-1440x900.png', {
     body: await page.screenshot({ fullPage: true }), contentType: 'image/png',
@@ -1232,6 +1234,92 @@ test('SESSION-MODEL-CHANGE-RELOAD-02 — la pillola cambia solo dopo il salvatag
   // VELO-SPEC-2: il foglio si fotografa sopra la chat vera, non sopra una chat sotto il velo (`visibility:hidden`)
   await expect(page.locator('#conversation')).not.toHaveClass(/\bis-restoring\b/);
   await page.screenshot({ path: resolve(visualDir, 'model-switch-reasoning-1440x900.png'), fullPage: true });
+});
+
+/*
+ * ⛔ C05 / A-REASONING-UI-FLOOR (owner 10/10/2026, «minimo supportato con spiegazione»). Stessa scena di RELOAD-02, ma il catalogo
+ *   porta la mappa del filo del server (`filoCatalogo`, A9 seguito OpenRouter), come il server vero: «Off» su un modello a
+ *   ragionamento OBBLIGATORIO non si riscrive più nel predefinito «Medio» (che partiva davvero, più caro). La scelta resta «none»,
+ *   il server la porta al minimo «low», e la pillola lo dice. AL CONTRARIO: RELOAD-02 qui sopra, senza mappa, resta com'era.
+ */
+/* La scena di C05: una sessione su glm-4.7-flash con lo sforzo dato, il cambio a gemini-3.7-flash (ragionamento OBBLIGATORIO, con la
+   mappa del filo del server), e il foglio riaperto dopo il salvataggio. Torna le PATCH viste. */
+async function scenaC05(page, { sessionId, effortIniziale, filoGemini }) {
+  const sessione = {
+    sessionId, taskId: 'libero:default', nome: 'Cambio modello C05',
+    avviataAlle: '2026-09-01T07:00:00.000Z', conclusa: true,
+    modello: 'z-ai/glm-4.7-flash', modelId: 'z-ai/glm-4.7-flash', provider: 'cloud',
+    reasoning: effortIniziale == null ? null : { effort: effortIniziale },
+  };
+  const aggiornamenti = [];
+  await page.route('**/api/v1/sessions', async (route) => route.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify({ ok: true, data: { items: [sessione] }, meta: { schema: 'talos.harness-ui.api.v1' } }),
+  }));
+  await page.route(`**/api/v1/sessions/${sessionId}/events`, async (route) => route.fulfill({
+    status: 200, contentType: 'text/event-stream',
+    body: `retry: 3600000\ndata: ${JSON.stringify({ type: 'CUSTOM', name: 'talos.fine-rigiocata', value: null })}\n\n`,
+  }));
+  await page.route('**/api/v1/models', async (route) => route.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify({ ok: true, data: { modelli: [
+      { id: 'z-ai/glm-4.7-flash', provider: 'z-ai', nome: 'Z.AI: GLM 4.7 Flash', reasoning: { supportedEfforts: [], defaultEffort: null, defaultEnabled: false, mandatory: false } },
+      { id: 'google/gemini-3.7-flash', provider: 'google', nome: 'Google: Gemini 3.7 Flash', reasoning: { supportedEfforts: ['low', 'medium', 'high'], defaultEffort: 'medium', defaultEnabled: true, mandatory: true } },
+    ], filoCatalogo: { 'google/gemini-3.7-flash': filoGemini }, daCache: true }, meta: { schema: 'talos.harness-ui.api.v1' } }),
+  }));
+  await page.route(`**/api/v1/sessions/${sessionId}/settings`, async (route) => {
+    const patch = route.request().postDataJSON();
+    aggiornamenti.push(patch);
+    Object.assign(sessione, patch);
+    sessione.modelId = patch.modello;
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data: { updated: true } }) });
+  });
+  await apriChat(page);
+  await page.locator(`[data-real-session-id="${sessionId}"]`).click();
+  const pillola = page.locator('[data-open-sheet="model"] .talos-chip__label').first();
+  await expect(pillola).toHaveText('glm-4.7-flash');
+  await page.locator('[data-open-sheet="model"]').click();
+  await page.locator('.talos-dialog input.sheet-input').fill('gemini-3.7-flash');
+  await page.getByRole('option').filter({ hasText: 'google/gemini-3.7-flash' }).click();
+  await expect.poll(() => aggiornamenti.length).toBe(1);
+  await expect(pillola).toHaveText('gemini-3.7-flash');
+  await page.locator('[data-open-sheet="model"]').click();
+  return aggiornamenti;
+}
+/* la forma di runtime-owner-adapter.filoRagionamentoCatalogo per questa voce: none → il minimo, mai più su; senza scelta, il predefinito */
+const FILO_GEMINI = { none: 'low', minimal: 'low', low: 'low', medium: 'medium', high: 'high', xhigh: 'high', max: 'high', auto: 'medium' };
+
+/*
+ * ⛔ C05 / A-REASONING-UI-FLOOR (owner 10/10/2026, «minimo supportato con spiegazione»). Stessa scena di RELOAD-02, ma il catalogo
+ *   porta la mappa del filo del server (`filoCatalogo`, A9 seguito OpenRouter), come il server vero: «Off» su un modello a
+ *   ragionamento OBBLIGATORIO non si riscrive più nel predefinito «Medio» (che partiva davvero, più caro). La scelta resta «none»,
+ *   il server la porta al minimo «low», e la pillola lo dice. AL CONTRARIO: RELOAD-02 qui sopra, senza mappa, resta com'era.
+ */
+test('C05-SFORZO-CAMBIO-MODELLO-01 — switching to a mandatory-reasoning model keeps «Off»: the server sends the minimum, and the pill says so', async ({ page }) => {
+  const aggiornamenti = await scenaC05(page, { sessionId: 'session-c05', effortIniziale: 'none', filoGemini: FILO_GEMINI });
+  expect(aggiornamenti).toEqual([{ modello: 'google/gemini-3.7-flash', reasoning: { effort: 'none' } }]);
+  /* il cursore sta dove arriva il filo, e la riga dice la scelta e ciò che parte */
+  await expect(page.locator('.effort-picker-selected')).toHaveText('Basso');
+  await expect(page.locator('.effort-picker-nota')).toHaveText('Hai scelto «Off»: questo modello riceve «Basso».');
+});
+
+/* Review C05 del desktop (Ma): «Automatico» (nessuna scelta) resta tale — mai riscritto nel predefinito del modello, che su
+   glm-5.3-flash è «Max». Il filo è lo stesso (il server manda il predefinito), ma la pillola deve dire «Automatico» e la riga. */
+test('C05-SFORZO-CAMBIO-MODELLO-02 — «Automatico» stays «Automatico» on a mandatory model: no effort is written, and the line says what is sent', async ({ page }) => {
+  const aggiornamenti = await scenaC05(page, { sessionId: 'session-c05-auto', effortIniziale: null, filoGemini: FILO_GEMINI });
+  expect(aggiornamenti).toEqual([{ modello: 'google/gemini-3.7-flash', reasoning: null }]);
+  await expect(page.locator('.effort-picker-selected')).toHaveText('Automatico');
+  await expect(page.locator('.effort-picker-nota')).toHaveText('Senza una scelta questo modello riceve «Medio».');
+});
+
+/* Review C05 del desktop (Mb): una scelta che la mappa del modello nuovo NON elenca non si tiene alla cieca — la riga A9 non
+   saprebbe spiegarla. Resta la regola di prima: su un modello obbligatorio che non la supporta, il predefinito. */
+test('C05-SFORZO-CAMBIO-MODELLO-03 — a pick the new model’s map does not list falls back to the old rule (the default), never kept unexplained', async ({ page }) => {
+  const { xhigh, ...senzaXhigh } = FILO_GEMINI;
+  void xhigh;
+  const aggiornamenti = await scenaC05(page, { sessionId: 'session-c05-fuori', effortIniziale: 'xhigh', filoGemini: senzaXhigh });
+  expect(aggiornamenti).toEqual([{ modello: 'google/gemini-3.7-flash', reasoning: { effort: 'medium' } }]);
+  await expect(page.locator('.effort-picker-selected')).toHaveText('Medio');
 });
 
 test('SESSION-MODEL-UPDATE-FAIL-01 — un server incompatibile non produce una pillola falsa', async ({ page }) => {

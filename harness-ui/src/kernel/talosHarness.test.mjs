@@ -4822,7 +4822,7 @@ describe('talosLavora - Libreria (FASE N, dispatch verso library-store.mjs)', ()
 
     const TASK = { consegna: 'un compito qualunque, per la prova' }
     const CONCLUSO_SUBITO = { role: 'assistant', content: 'fatto, nessun attrezzo serve', tool_calls: [] }
-    const QUATTRO_TOOL = ['library_list', 'library_search', 'library_read', 'library_file_origin']
+    const QUATTRO_TOOL = ['library_find', 'library_read', 'library_file_origin'] // C5: library_list + library_search → library_find
     const LISTA_OK = { pagina: [{ id: 'lib-1', nome: 'a.md', fileType: 'document', origine: 'uploaded', aggiornatoIl: '2026-08-29T10:00:00.000Z' }], totale: 1, vistiPrima: 0, vistiDopo: 1, nextPageToken: null }
     const RICERCA_OK = { pagina: [{ id: 'lib-1', nome: 'a.md', origine: 'uploaded', testoEstratto: 'trovato' }], totale: 1, nextOffset: null }
     const LETTURA_OK = { nome: 'a.md', mediaType: 'text/markdown', origine: 'uploaded', testo: 'contenuto vero' }
@@ -4832,14 +4832,14 @@ describe('talosLavora - Libreria (FASE N, dispatch verso library-store.mjs)', ()
         return { role: 'assistant', content: null, tool_calls: [{ id: 'call_1', function: { name: nome, arguments: JSON.stringify(argomenti) } }] }
     }
 
-    it('i 4 tool sono offerti al modello SOLO se nominati in strumentiEstesi, avvolti nello schema OpenAI', async () => {
+    it('i 3 tool sono offerti al modello SOLO se nominati in strumentiEstesi, avvolti nello schema OpenAI', async () => {
         const cartella = cartellaVuota(it)
         const rete = reteDiRisposte(CONCLUSO_SUBITO)
         const esito = await talosLavora({ cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: QUATTRO_TOOL })
         assert.equal(esito.comeFinita, 'concluso')
         const nomi = rete.chiamate[0].corpo.tools.map((t) => t.function.name)
         for (const nome of QUATTRO_TOOL) assert.ok(nomi.includes(nome), `${nome} deve comparire fra i tool offerti`)
-        assert.equal(rete.chiamate[0].corpo.tools.length, 7 + 4)
+        assert.equal(rete.chiamate[0].corpo.tools.length, 7 + 3)
     })
 
     it('AL CONTRARIO - PARITA: senza strumentiEstesi, 7 attrezzi, zero riferimenti Libreria', async () => {
@@ -4852,8 +4852,6 @@ describe('talosLavora - Libreria (FASE N, dispatch verso library-store.mjs)', ()
     })
 
     for (const [nome, callbackKey, risultato, atteso] of [
-        ['library_list', 'onLibreriaLista', LISTA_OK, /Library list: showing 1-1 of 1/],
-        ['library_search', 'onLibreriaCerca', RICERCA_OK, /Library search: 1 of 1 matches/],
         ['library_read', 'onLibreriaLeggi', LETTURA_OK, /name: a\.md[\s\S]*contenuto vero/],
         ['library_file_origin', 'onLibreriaOrigine', ORIGINE_OK, /name: a\.md/],
     ]) {
@@ -4893,6 +4891,65 @@ describe('talosLavora - Libreria (FASE N, dispatch verso library-store.mjs)', ()
             assert.match(messaggioTool.content, new RegExp(`^${nome} failed: disco pieno$`))
         })
     }
+})
+
+describe('C5 (owner 10/10/2026) — library_find: elenco e ricerca della Libreria in un attrezzo, dal lettore delle sezioni', () => {
+    function cartellaVuota(t) {
+        const radice = mkdtempSync(join(tmpdir(), 'talos-harness-library-find-'))
+        t.after(() => rmSync(radice, { recursive: true, force: true }))
+        return radice
+    }
+    function reteDiRisposte(...risposte) {
+        const chiamate = []
+        return {
+            chiamate,
+            fetch: async (url, opzioni) => {
+                const indice = chiamate.length
+                chiamate.push({ url, opzioni, corpo: JSON.parse(opzioni.body) })
+                const scelta = risposte[Math.min(indice, risposte.length - 1)]
+                return { ok: true, status: 200, json: async () => ({ choices: [{ message: scelta }], usage: { prompt_tokens: 10, completion_tokens: 5 } }), text: async () => '' }
+            },
+        }
+    }
+    const TASK = { consegna: 'un compito qualunque, per la prova' }
+    const FINE = { role: 'assistant', content: 'fatto', tool_calls: [] }
+    const chiama = (nome, argomenti) => ({ role: 'assistant', content: null, tool_calls: [{ id: 'call_1', function: { name: nome, arguments: JSON.stringify(argomenti) } }] })
+
+    it('library_find SENZA lettore delle sezioni: messaggio onesto, mai un tentativo silenzioso', async () => {
+        const rete = reteDiRisposte(chiama('library_find', {}), FINE)
+        await talosLavora({ cartella: cartellaVuota(it), task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: ['library_find'] })
+        assert.match(rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool').content, /not configured/)
+    })
+
+    it('library_find CON il lettore: argomenti VERI intatti, nomi ed estratti DENTRO il confine, la testata di TALOS fuori', async () => {
+        const rete = reteDiRisposte(chiama('library_find', { query: 'fattura', origin: 'uploaded' }), FINE)
+        const ricevuti = []
+        await talosLavora({
+            cartella: cartellaVuota(it), task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: ['library_find'],
+            onLetturaSezione: async (nome, argomenti) => { ricevuti.push([nome, argomenti]); return 'Library: 1 of 1 (origin=uploaded) match «fattura», showing 1, best first.\n- a.pdf — document — uploaded: fattura di ottobre — id lib-1' },
+        })
+        assert.deepEqual(ricevuti, [['library_find', { query: 'fattura', origin: 'uploaded' }]])
+        assert.match(rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool').content,
+            /^Library: 1 of 1 \(origin=uploaded\) match «fattura», showing 1, best first\.\n<<<TALOS_DATA id=[0-9a-f]{12} from="library_find">>>\n- a\.pdf — document — uploaded: fattura di ottobre — id lib-1\n<<<END_TALOS_DATA/u)
+    })
+
+    it('AL CONTRARIO - library_find: un lettore che LANCIA produce un "failed:" onesto; i nomi vecchi dicono quello nuovo', async () => {
+        const rete = reteDiRisposte(chiama('library_find', {}), FINE)
+        await talosLavora({
+            cartella: cartellaVuota(it), task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: ['library_find'],
+            onLetturaSezione: async () => { throw new Error('disco pieno') },
+        })
+        assert.match(rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool').content, /^library_find failed: disco pieno$/)
+        const vecchio = reteDiRisposte(chiama('library_list', { origin: 'all' }), FINE)
+        const toccati = []
+        await talosLavora({
+            cartella: cartellaVuota(it), task: TASK, modello: 'x', chiave: 'y', fetchDiRete: vecchio.fetch, strumentiEstesi: ['library_find'],
+            onLetturaSezione: async (n) => { toccati.push(n); return 'mai' }, onLibreriaLista: async () => { toccati.push('onLibreriaLista'); return {} },
+        })
+        assert.equal(vecchio.chiamate[1].corpo.messages.find((m) => m.role === 'tool').content,
+            'library_list was replaced by library_find. Call library_find with arguments like {"file_type": "document"}. Nothing was done.')
+        assert.deepEqual(toccati, [])
+    })
 })
 
 describe('formattaListaLibreria/formattaRicercaLibreria/formattaLetturaLibreria/formattaOrigineLibreria - pure, traducono i dati grezzi di library-store.mjs nel testo che il modello legge', () => {
@@ -5272,7 +5329,7 @@ describe('talosLavora - Notes (FASE N, quarto sistema, dispatch verso notes-stor
 
     const TASK = { consegna: 'un compito qualunque, per la prova' }
     const CONCLUSO_SUBITO = { role: 'assistant', content: 'fatto, nessun attrezzo serve', tool_calls: [] }
-    const QUATTRO_TOOL = ['notes_list', 'notes_create', 'notes_update', 'notes_delete']
+    const QUATTRO_TOOL = ['notes_find', 'notes_create', 'notes_update', 'notes_delete'] // C5: notes_list + notes_search → notes_find
 
     function chiamataTool(nome, argomenti) {
         return { role: 'assistant', content: null, tool_calls: [{ id: 'call_1', function: { name: nome, arguments: JSON.stringify(argomenti) } }] }
@@ -5297,40 +5354,57 @@ describe('talosLavora - Notes (FASE N, quarto sistema, dispatch verso notes-stor
         assert.ok(!rete.chiamate[0].corpo.tools.some((t) => QUATTRO_TOOL.includes(t.function.name)))
     })
 
-    it('notes_list SENZA onNoteLista: messaggio onesto, mai un tentativo silenzioso', async () => {
+    /* C5 (owner 10/10/2026): `notes_find` accorpa `notes_list` e `notes_search` e passa dal lettore delle sezioni, come le altre letture. */
+    it('notes_find SENZA lettore delle sezioni: messaggio onesto, mai un tentativo silenzioso', async () => {
         const cartella = cartellaVuota(it)
-        const rete = reteDiRisposte(chiamataTool('notes_list', {}), CONCLUSO_SUBITO)
-        const esito = await talosLavora({ cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: ['notes_list'] })
+        const rete = reteDiRisposte(chiamataTool('notes_find', {}), CONCLUSO_SUBITO)
+        const esito = await talosLavora({ cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: ['notes_find'] })
         assert.equal(esito.comeFinita, 'concluso')
         const messaggioTool = rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool')
         assert.match(messaggioTool.content, /not configured/)
     })
 
-    it('notes_list CON onNoteLista: argomenti VERI arrivano intatti, il risultato passa per formattaListaNote', async () => {
+    it('notes_find CON il lettore: argomenti VERI arrivano intatti, il testo passa com\'è', async () => {
         const cartella = cartellaVuota(it)
-        const rete = reteDiRisposte(chiamataTool('notes_list', { limit: 5 }), CONCLUSO_SUBITO)
+        const rete = reteDiRisposte(chiamataTool('notes_find', { limit: 5, query: 'cancello' }), CONCLUSO_SUBITO)
         const ricevuti = []
         const esito = await talosLavora({
-            cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: ['notes_list'],
-            onNoteLista: async (spec) => { ricevuti.push(spec); return { note: [{ id: 'nota-1', titolo: 'Codice cancello', contenuto: '4471' }], totale: 1 } },
+            cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: ['notes_find'],
+            onLetturaSezione: async (nome, argomenti) => { ricevuti.push([nome, argomenti]); return 'Notes: 1 of 1 match «cancello», showing 1, best first.\n- Codice cancello: 4471 — id nota-1' },
         })
         assert.equal(esito.comeFinita, 'concluso')
-        assert.deepEqual(ricevuti, [{ limit: 5 }])
+        assert.deepEqual(ricevuti, [['notes_find', { limit: 5, query: 'cancello' }]])
         const messaggioTool = rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool')
-        assert.match(messaggioTool.content, /Notes: showing 1 of 1/)
         assert.match(messaggioTool.content, /Codice cancello: 4471 — id nota-1/)
     })
 
-    it('AL CONTRARIO - notes_list: un onNoteLista che LANCIA produce un "failed:" onesto', async () => {
+    it('AL CONTRARIO - notes_find: un lettore che LANCIA produce un "failed:" onesto', async () => {
         const cartella = cartellaVuota(it)
-        const rete = reteDiRisposte(chiamataTool('notes_list', {}), CONCLUSO_SUBITO)
+        const rete = reteDiRisposte(chiamataTool('notes_find', {}), CONCLUSO_SUBITO)
         const esito = await talosLavora({
-            cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: ['notes_list'],
-            onNoteLista: async () => { throw new Error('archivio corrotto') },
+            cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: ['notes_find'],
+            onLetturaSezione: async () => { throw new Error('archivio corrotto') },
         })
         assert.equal(esito.comeFinita, 'concluso')
         const messaggioTool = rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool')
-        assert.match(messaggioTool.content, /^notes_list failed: archivio corrotto$/)
+        assert.match(messaggioTool.content, /^notes_find failed: archivio corrotto$/)
+    })
+
+    it('C5: un modello che chiama ancora notes_list (dalla storia) riceve il nome nuovo e come chiamarlo, e non si esegue niente', async () => {
+        const cartella = cartellaVuota(it)
+        const rete = reteDiRisposte(chiamataTool('notes_list', { limit: 5 }), CONCLUSO_SUBITO)
+        const letture = []
+        const esito = await talosLavora({
+            cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: ['notes_find'],
+            onLetturaSezione: async (nome) => { letture.push(nome); return 'mai' },
+            onNoteLista: async () => { letture.push('onNoteLista'); return { note: [], totale: 0 } },
+        })
+        assert.equal(esito.comeFinita, 'concluso')
+        const messaggioTool = rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool')
+        assert.equal(messaggioTool.content, 'notes_list was replaced by notes_find. Call notes_find with arguments like {"limit": 20}. Nothing was done.')
+        assert.deepEqual(letture, [], 'not silently translated: nothing ran')
+        // e lo schema offerto non lo contiene più
+        assert.ok(!rete.chiamate[0].corpo.tools.some((t) => ['notes_list', 'notes_search'].includes(t.function.name)))
     })
 
     for (const [nome, callbackKey, argomenti, esitoOk] of [
@@ -5466,7 +5540,7 @@ describe('talosLavora - Tasks (FASE N, quinto sistema, dispatch verso tasks-stor
 
     const TASK = { consegna: 'un compito qualunque, per la prova' }
     const CONCLUSO_SUBITO = { role: 'assistant', content: 'fatto, nessun attrezzo serve', tool_calls: [] }
-    const CINQUE_TOOL = ['tasks_list', 'tasks_create', 'tasks_complete', 'tasks_update', 'tasks_delete']
+    const CINQUE_TOOL = ['tasks_find', 'tasks_create', 'tasks_complete', 'tasks_update', 'tasks_delete'] // C5: tasks_list + tasks_search → tasks_find
 
     function chiamataTool(nome, argomenti) {
         return { role: 'assistant', content: null, tool_calls: [{ id: 'call_1', function: { name: nome, arguments: JSON.stringify(argomenti) } }] }
@@ -5491,40 +5565,56 @@ describe('talosLavora - Tasks (FASE N, quinto sistema, dispatch verso tasks-stor
         assert.ok(!rete.chiamate[0].corpo.tools.some((t) => CINQUE_TOOL.includes(t.function.name)))
     })
 
-    it('tasks_list SENZA onAttivitaLista: messaggio onesto, mai un tentativo silenzioso', async () => {
+    /* C5 (owner 10/10/2026): `tasks_find` accorpa `tasks_list` e `tasks_search` e passa dal lettore delle sezioni, come le note. */
+    it('tasks_find SENZA lettore delle sezioni: messaggio onesto, mai un tentativo silenzioso', async () => {
         const cartella = cartellaVuota(it)
-        const rete = reteDiRisposte(chiamataTool('tasks_list', {}), CONCLUSO_SUBITO)
-        const esito = await talosLavora({ cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: ['tasks_list'] })
+        const rete = reteDiRisposte(chiamataTool('tasks_find', {}), CONCLUSO_SUBITO)
+        const esito = await talosLavora({ cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: ['tasks_find'] })
         assert.equal(esito.comeFinita, 'concluso')
         const messaggioTool = rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool')
         assert.match(messaggioTool.content, /not configured/)
     })
 
-    it('tasks_list CON onAttivitaLista: argomenti VERI arrivano intatti, il risultato passa per formattaListaAttivita', async () => {
+    it('tasks_find CON il lettore: argomenti VERI arrivano intatti, il testo passa com\'è', async () => {
         const cartella = cartellaVuota(it)
-        const rete = reteDiRisposte(chiamataTool('tasks_list', { status: 'open', limit: 5 }), CONCLUSO_SUBITO)
+        const rete = reteDiRisposte(chiamataTool('tasks_find', { status: 'open', limit: 5 }), CONCLUSO_SUBITO)
         const ricevuti = []
         const esito = await talosLavora({
-            cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: ['tasks_list'],
-            onAttivitaLista: async (spec) => { ricevuti.push(spec); return { attivita: [{ id: 'task-1', titolo: 'Chiama idraulico', stato: 'todo', priorita: 'normal', descrizione: null }], totale: 1 } },
+            cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: ['tasks_find'],
+            onLetturaSezione: async (nome, argomenti) => { ricevuti.push([nome, argomenti]); return 'Tasks: showing 1 of 1 (status=open), most recently updated first.\n- [todo] Chiama idraulico — id task-1' },
         })
         assert.equal(esito.comeFinita, 'concluso')
-        assert.deepEqual(ricevuti, [{ status: 'open', limit: 5 }])
+        assert.deepEqual(ricevuti, [['tasks_find', { status: 'open', limit: 5 }]])
         const messaggioTool = rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool')
-        assert.match(messaggioTool.content, /Tasks: showing 1 of 1/)
-        assert.match(messaggioTool.content, /- \[todo\] Chiama idraulico \(normal\) — id task-1/)
+        assert.match(messaggioTool.content, /- \[todo\] Chiama idraulico — id task-1/)
     })
 
-    it('AL CONTRARIO - tasks_list: un onAttivitaLista che LANCIA produce un "failed:" onesto', async () => {
+    it('AL CONTRARIO - tasks_find: un lettore che LANCIA produce un "failed:" onesto', async () => {
         const cartella = cartellaVuota(it)
-        const rete = reteDiRisposte(chiamataTool('tasks_list', {}), CONCLUSO_SUBITO)
+        const rete = reteDiRisposte(chiamataTool('tasks_find', {}), CONCLUSO_SUBITO)
         const esito = await talosLavora({
-            cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: ['tasks_list'],
-            onAttivitaLista: async () => { throw new Error('archivio corrotto') },
+            cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: ['tasks_find'],
+            onLetturaSezione: async () => { throw new Error('archivio corrotto') },
         })
         assert.equal(esito.comeFinita, 'concluso')
         const messaggioTool = rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool')
-        assert.match(messaggioTool.content, /^tasks_list failed: archivio corrotto$/)
+        assert.match(messaggioTool.content, /^tasks_find failed: archivio corrotto$/)
+    })
+
+    it('C5: un modello che chiama ancora tasks_list (dalla storia) riceve il nome nuovo e come chiamarlo, e non si esegue niente', async () => {
+        const cartella = cartellaVuota(it)
+        const rete = reteDiRisposte(chiamataTool('tasks_list', { status: 'open' }), CONCLUSO_SUBITO)
+        const letture = []
+        const esito = await talosLavora({
+            cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: ['tasks_find'],
+            onLetturaSezione: async (nome) => { letture.push(nome); return 'mai' },
+            onAttivitaLista: async () => { letture.push('onAttivitaLista'); return { attivita: [], totale: 0 } },
+        })
+        assert.equal(esito.comeFinita, 'concluso')
+        const messaggioTool = rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool')
+        assert.equal(messaggioTool.content, 'tasks_list was replaced by tasks_find. Call tasks_find with arguments like {"status": "open"}. Nothing was done.')
+        assert.deepEqual(letture, [], 'not silently translated: nothing ran')
+        assert.ok(!rete.chiamate[0].corpo.tools.some((t) => ['tasks_list', 'tasks_search'].includes(t.function.name)))
     })
 
     for (const [nome, callbackKey, argomenti, esitoOk] of [
@@ -5656,7 +5746,7 @@ describe('talosLavora - Memory (FASE N, sesto sistema, dispatch verso memory-sto
 
     const TASK = { consegna: 'un compito qualunque, per la prova' }
     const CONCLUSO_SUBITO = { role: 'assistant', content: 'fatto, nessun attrezzo serve', tool_calls: [] }
-    const QUATTRO_TOOL = ['memory_search', 'memory_write', 'memory_update', 'memory_delete']
+    const QUATTRO_TOOL = ['memory_find', 'memory_write', 'memory_update', 'memory_delete'] // C5: memory_list + memory_search → memory_find
 
     function chiamataTool(nome, argomenti) {
         return { role: 'assistant', content: null, tool_calls: [{ id: 'call_1', function: { name: nome, arguments: JSON.stringify(argomenti) } }] }
@@ -5681,40 +5771,55 @@ describe('talosLavora - Memory (FASE N, sesto sistema, dispatch verso memory-sto
         assert.ok(!rete.chiamate[0].corpo.tools.some((t) => QUATTRO_TOOL.includes(t.function.name)))
     })
 
-    it('memory_search SENZA onMemoriaCerca: messaggio onesto, mai un tentativo silenzioso', async () => {
+    /* C5 (owner 10/10/2026): `memory_find` accorpa `memory_list` e `memory_search` e passa dal lettore delle sezioni. */
+    it('memory_find SENZA lettore delle sezioni: messaggio onesto, mai un tentativo silenzioso', async () => {
         const cartella = cartellaVuota(it)
-        const rete = reteDiRisposte(chiamataTool('memory_search', { query: 'x' }), CONCLUSO_SUBITO)
-        const esito = await talosLavora({ cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: ['memory_search'] })
+        const rete = reteDiRisposte(chiamataTool('memory_find', { query: 'x' }), CONCLUSO_SUBITO)
+        const esito = await talosLavora({ cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: ['memory_find'] })
         assert.equal(esito.comeFinita, 'concluso')
         const messaggioTool = rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool')
         assert.match(messaggioTool.content, /not configured/)
     })
 
-    it('memory_search CON onMemoriaCerca: argomenti VERI arrivano intatti, il risultato passa per formattaRicercaMemoria', async () => {
+    it('memory_find CON il lettore: argomenti VERI arrivano intatti, il testo passa com\'è', async () => {
         const cartella = cartellaVuota(it)
-        const rete = reteDiRisposte(chiamataTool('memory_search', { query: 'risposte brevi', limit: 3 }), CONCLUSO_SUBITO)
+        const rete = reteDiRisposte(chiamataTool('memory_find', { query: 'risposte brevi', limit: 3 }), CONCLUSO_SUBITO)
         const ricevuti = []
         const esito = await talosLavora({
-            cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: ['memory_search'],
-            onMemoriaCerca: async (spec) => { ricevuti.push(spec); return { memorie: [{ id: 'mem-1', titolo: 'Preferenze risposta', contenuto: 'Risposte brevi' }], totale: 1 } },
+            cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: ['memory_find'],
+            onLetturaSezione: async (nome, argomenti) => { ricevuti.push([nome, argomenti]); return 'Memory: 1 of 1 match «risposte», «brevi», showing 1, best first.\n- Preferenze risposta: Risposte brevi — id mem-1' },
         })
         assert.equal(esito.comeFinita, 'concluso')
-        assert.deepEqual(ricevuti, [{ query: 'risposte brevi', limit: 3 }])
+        assert.deepEqual(ricevuti, [['memory_find', { query: 'risposte brevi', limit: 3 }]])
         const messaggioTool = rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool')
-        assert.match(messaggioTool.content, /Memory: showing 1 of 1 matches/)
         assert.match(messaggioTool.content, /- Preferenze risposta: Risposte brevi — id mem-1/)
     })
 
-    it('AL CONTRARIO - memory_search: un onMemoriaCerca che LANCIA produce un "failed:" onesto', async () => {
+    it('AL CONTRARIO - memory_find: un lettore che LANCIA produce un "failed:" onesto', async () => {
         const cartella = cartellaVuota(it)
-        const rete = reteDiRisposte(chiamataTool('memory_search', { query: 'x' }), CONCLUSO_SUBITO)
+        const rete = reteDiRisposte(chiamataTool('memory_find', { query: 'x' }), CONCLUSO_SUBITO)
         const esito = await talosLavora({
-            cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: ['memory_search'],
-            onMemoriaCerca: async () => { throw new Error('archivio corrotto') },
+            cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: ['memory_find'],
+            onLetturaSezione: async () => { throw new Error('archivio corrotto') },
         })
         assert.equal(esito.comeFinita, 'concluso')
         const messaggioTool = rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool')
-        assert.match(messaggioTool.content, /^memory_search failed: archivio corrotto$/)
+        assert.match(messaggioTool.content, /^memory_find failed: archivio corrotto$/)
+    })
+
+    it('C5: un modello che chiama ancora memory_search (dalla storia) riceve il nome nuovo, e non si esegue niente', async () => {
+        const cartella = cartellaVuota(it)
+        const rete = reteDiRisposte(chiamataTool('memory_search', { query: 'x' }), CONCLUSO_SUBITO)
+        const letture = []
+        const esito = await talosLavora({
+            cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: ['memory_find'],
+            onLetturaSezione: async (nome) => { letture.push(nome); return 'mai' },
+            onMemoriaCerca: async () => { letture.push('onMemoriaCerca'); return { memorie: [], totale: 0 } },
+        })
+        assert.equal(esito.comeFinita, 'concluso')
+        const messaggioTool = rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool')
+        assert.equal(messaggioTool.content, 'memory_search was replaced by memory_find. Call memory_find with arguments like {"query": "words to find"}. Nothing was done.')
+        assert.deepEqual(letture, [], 'not silently translated: nothing ran')
     })
 
     for (const [nome, callbackKey, argomenti, esitoOk] of [
@@ -5846,20 +5951,21 @@ describe('talosLavora - Deep Research (FASE N, ottavo sistema, "fetta onesta")',
 
     const TASK = { consegna: 'un compito qualunque, per la prova' }
     const CONCLUSO_SUBITO = { role: 'assistant', content: 'fatto, nessun attrezzo serve', tool_calls: [] }
-    const OTTO_TOOL = ['research_list', 'research_start', 'research_read', 'research_rename', 'research_pause', 'research_resume', 'research_cancel', 'research_delete']
+    // C5 (10/10/2026): research_pause/resume/cancel → research_control con `action`
+    const OTTO_TOOL = ['research_find', 'research_start', 'research_read', 'research_rename', 'research_control', 'research_delete']
 
     function chiamataTool(nome, argomenti) {
         return { role: 'assistant', content: null, tool_calls: [{ id: 'call_1', function: { name: nome, arguments: JSON.stringify(argomenti) } }] }
     }
 
-    it('gli 8 tool sono offerti al modello SOLO se nominati in strumentiEstesi', async () => {
+    it('i 6 tool sono offerti al modello SOLO se nominati in strumentiEstesi', async () => {
         const cartella = cartellaVuota(it)
         const rete = reteDiRisposte(CONCLUSO_SUBITO)
         const esito = await talosLavora({ cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: OTTO_TOOL })
         assert.equal(esito.comeFinita, 'concluso')
         const nomi = rete.chiamate[0].corpo.tools.map((t) => t.function.name)
         for (const nome of OTTO_TOOL) assert.ok(nomi.includes(nome), `${nome} deve comparire fra i tool offerti`)
-        assert.equal(rete.chiamate[0].corpo.tools.length, 7 + 8)
+        assert.equal(rete.chiamate[0].corpo.tools.length, 7 + 6)
     })
 
     it('⛔⛔⛔ AL CONTRARIO — PARITÀ: senza strumentiEstesi, 7 attrezzi, zero riferimenti a Research', async () => {
@@ -5871,64 +5977,115 @@ describe('talosLavora - Deep Research (FASE N, ottavo sistema, "fetta onesta")',
         assert.ok(!rete.chiamate[0].corpo.tools.some((t) => OTTO_TOOL.includes(t.function.name)))
     })
 
-    it('research_list SENZA onRicercaLista: messaggio onesto, mai un tentativo silenzioso', async () => {
+    /* C5 (owner 10/10/2026): `research_find` accorpa `research_list` e `research_search` e passa dal lettore delle sezioni; il freno
+       sulle pagine resta nel kernel (contratto §10, «freno consapevole»). */
+    const paginaDiRicerche = (n, altre) => `Deep research: showing 1 of ${altre + 1}, most recently started first.\n- Ricerca ${n} — done — 2026-09-15 — id r-${n}`
+        + (altre > 0 ? `\n${altre} more. Narrow with query=…, or continue with cursor=c${n}` : '')
+
+    it('research_find SENZA lettore delle sezioni: messaggio onesto, mai un tentativo silenzioso', async () => {
         const cartella = cartellaVuota(it)
-        const rete = reteDiRisposte(chiamataTool('research_list', {}), CONCLUSO_SUBITO)
-        const esito = await talosLavora({ cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: ['research_list'] })
+        const rete = reteDiRisposte(chiamataTool('research_find', {}), CONCLUSO_SUBITO)
+        const esito = await talosLavora({ cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: ['research_find'] })
         assert.equal(esito.comeFinita, 'concluso')
         const messaggioTool = rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool')
         assert.match(messaggioTool.content, /not configured/)
     })
 
-    it('research_list CON onRicercaLista: argomenti VERI arrivano intatti, il risultato passa per formattaListaRicerche', async () => {
+    it('research_find CON il lettore: argomenti VERI arrivano intatti, il testo passa nel confine, e il budget si VEDE', async () => {
         const cartella = cartellaVuota(it)
-        const rete = reteDiRisposte(chiamataTool('research_list', { status: 'done', page_size: 5 }), CONCLUSO_SUBITO)
+        const rete = reteDiRisposte(chiamataTool('research_find', { status: 'done', limit: 5 }), CONCLUSO_SUBITO)
         const ricevuti = []
         const esito = await talosLavora({
-            cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: ['research_list'],
-            onRicercaLista: async (spec) => { ricevuti.push(spec); return { ricerche: [{ id: 'sess-1', titolo: 'Il caching di OpenRouter', stato: 'done', avviataAlle: '2026-08-30T10:00:00.000Z' }], totale: 1 } },
+            cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: ['research_find'],
+            onLetturaSezione: async (nome, argomenti) => { ricevuti.push([nome, argomenti]); return paginaDiRicerche(1, 30) },
         })
         assert.equal(esito.comeFinita, 'concluso')
-        assert.deepEqual(ricevuti, [{ status: 'done', page_size: 5 }])
-        const messaggioTool = rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool')
-        assert.match(messaggioTool.content, /Research: showing 1 of 1\./)
-        assert.match(messaggioTool.content, /Il caching di OpenRouter — done — 2026-08-30 — id sess-1/)
+        assert.deepEqual(ricevuti, [['research_find', { status: 'done', limit: 5 }]])
+        const contenuto = rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool').content
+        // C5: dentro il confine SOLO le voci; testata, «N more… cursor=» e la riga del budget sono di TALOS e restano fuori
+        assert.match(contenuto, /^Deep research: showing 1 of 31, most recently started first\.\n<<<TALOS_DATA id=[0-9a-f]{12} from="research_find">>>\n- Ricerca 1 — done — 2026-09-15 — id r-1\n<<<END_TALOS_DATA/u)
+        assert.match(contenuto, /<<<END_TALOS_DATA[^\n]*\n30 more\. Narrow with query=…, or continue with cursor=c1\n\(On your own you can read 1 more page of this listing; beyond that only if the person asked for every entry\.\)$/u)
     })
 
-    it('AL CONTRARIO - research_list: un onRicercaLista che LANCIA produce un "failed:" onesto', async () => {
+    it('AL CONTRARIO - research_find: un lettore che LANCIA produce un "failed:" onesto, e un elenco finito non porta la riga del budget', async () => {
         const cartella = cartellaVuota(it)
-        const rete = reteDiRisposte(chiamataTool('research_list', {}), CONCLUSO_SUBITO)
+        const rete = reteDiRisposte(chiamataTool('research_find', {}), CONCLUSO_SUBITO)
         const esito = await talosLavora({
-            cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: ['research_list'],
-            onRicercaLista: async () => { throw new Error('giornale corrotto') },
+            cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: ['research_find'],
+            onLetturaSezione: async () => { throw new Error('giornale corrotto') },
         })
         assert.equal(esito.comeFinita, 'concluso')
-        const messaggioTool = rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool')
-        assert.match(messaggioTool.content, /^research_list failed: giornale corrotto$/)
+        assert.match(rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool').content, /^research_find failed: giornale corrotto$/)
+        const finito = reteDiRisposte(chiamataTool('research_find', {}), CONCLUSO_SUBITO)
+        await talosLavora({
+            cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: finito.fetch, strumentiEstesi: ['research_find'],
+            onLetturaSezione: async () => paginaDiRicerche(1, 0),
+        })
+        assert.doesNotMatch(finito.chiamate[1].corpo.messages.find((m) => m.role === 'tool').content, /On your own|page 1 of/u)
     })
 
-    it('FASE3-RESEARCH-PAGINATION-GUARD — la terza pagina spontanea non raggiunge il canale ricerca', async () => {
+    it('FASE3-RESEARCH-PAGINATION-GUARD (C5: sul cursore) — la terza pagina spontanea non raggiunge il canale ricerca', async () => {
         const cartella = cartellaVuota(it)
         const rete = reteDiRisposte(
-            chiamataTool('research_list', { status: 'all', offset: 0 }),
-            chiamataTool('research_list', { status: 'all', offset: 10 }),
-            chiamataTool('research_list', { status: 'all', offset: 20 }),
+            chiamataTool('research_find', { status: 'all' }),
+            chiamataTool('research_find', { status: 'all', cursor: 'c1' }),
+            chiamataTool('research_find', { status: 'all', cursor: 'c2' }),
             CONCLUSO_SUBITO,
         )
         const ricevuti = []
         const esito = await talosLavora({
-            cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: ['research_list'],
-            onRicercaLista: async (argomenti) => {
-                ricevuti.push(argomenti)
-                return { ricerche: [{ id: `r-${ricevuti.length}`, titolo: 'Ricerca', stato: 'done', avviataAlle: '2026-09-15T00:00:00Z' }], totale: 40 }
-            },
+            cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: ['research_find'],
+            onLetturaSezione: async (_nome, argomenti) => { ricevuti.push(argomenti); return paginaDiRicerche(ricevuti.length, 40 - ricevuti.length) },
         })
         assert.equal(esito.comeFinita, 'concluso')
-        assert.equal(ricevuti.length, 2, 'la terza pagina viene rifiutata prima dello store')
+        assert.equal(ricevuti.length, 2, 'la terza pagina viene rifiutata prima del canale')
         const messaggi = esito.messaggiFinali.filter((m) => m.role === 'tool')
+        assert.match(messaggi[0].content, /On your own you can read 1 more page/)
         assert.match(messaggi[1].content, /page 2 of 2/i)
         assert.match(messaggi[2].content, /^REFUSED/)
         assert.match(messaggi[2].content, /browse_every_page/)
+    })
+
+    it('C5 FRENO — un cursore già servito è un ciclo: rifiutato senza toccare il canale e senza contare una pagina', async () => {
+        const cartella = cartellaVuota(it)
+        const rete = reteDiRisposte(
+            chiamataTool('research_find', {}),
+            chiamataTool('research_find', { cursor: 'c1' }),
+            chiamataTool('research_find', { cursor: 'c1' }),
+            CONCLUSO_SUBITO,
+        )
+        const ricevuti = []
+        const esito = await talosLavora({
+            cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: ['research_find'],
+            onLetturaSezione: async (_nome, argomenti) => { ricevuti.push(argomenti); return paginaDiRicerche(ricevuti.length, 40 - ricevuti.length) },
+        })
+        assert.equal(esito.comeFinita, 'concluso')
+        assert.equal(ricevuti.length, 2)
+        const terzo = esito.messaggiFinali.filter((m) => m.role === 'tool')[2].content
+        assert.match(terzo, /^REFUSED: this cursor was already served in this run/)
+        // al contrario: il flag non apre un ciclo
+        const conFlag = reteDiRisposte(chiamataTool('research_find', {}), chiamataTool('research_find', { cursor: 'c1' }),
+            chiamataTool('research_find', { cursor: 'c1', browse_every_page: true }), CONCLUSO_SUBITO)
+        const visti = []
+        await talosLavora({
+            cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: conFlag.fetch, strumentiEstesi: ['research_find'],
+            onLetturaSezione: async (_nome, argomenti) => { visti.push(argomenti); return paginaDiRicerche(visti.length, 40 - visti.length) },
+        })
+        assert.equal(visti.length, 2, 'browse_every_page does not unlock a cursor already served')
+    })
+
+    it('C5: un modello che chiama ancora research_list (dalla storia) riceve il nome nuovo, e non si esegue niente', async () => {
+        const cartella = cartellaVuota(it)
+        const rete = reteDiRisposte(chiamataTool('research_list', { status: 'running' }), CONCLUSO_SUBITO)
+        const letture = []
+        await talosLavora({
+            cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: ['research_find'],
+            onLetturaSezione: async (nome) => { letture.push(nome); return 'mai' },
+            onRicercaLista: async () => { letture.push('onRicercaLista'); return { ricerche: [], totale: 0 } },
+        })
+        assert.equal(rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool').content,
+            'research_list was replaced by research_find. Call research_find with arguments like {"status": "running"}. Nothing was done.')
+        assert.deepEqual(letture, [])
     })
 
     it('research_read SENZA onRicercaLeggi: messaggio onesto, mai un tentativo silenzioso', async () => {
@@ -5990,12 +6147,13 @@ describe('talosLavora - Deep Research (FASE N, ottavo sistema, "fetta onesta")',
         assert.match(messaggioTool.content, /^research_read failed: libreria irraggiungibile$/)
     })
 
-    for (const [nome, callbackKey, argomenti, esitoOk] of [
+    for (const [nome, callbackKey, argomenti, esitoOk, arguments5] of [
         ['research_start', 'onRicercaAvvia', { question: 'Come funziona il caching di OpenRouter?', depth: 'deep' }, 'Started the research «Come funziona il caching di OpenRouter?» (id sess-99). It runs in the background.'],
         ['research_rename', 'onRicercaRinomina', { id: 'sess-1', title: 'Nuovo titolo' }, 'Renamed that research to «Nuovo titolo».'],
-        ['research_pause', 'onRicercaPausa', { id: 'sess-1' }, 'That research is paused. Everything it collected is kept, and it can be resumed.'],
-        ['research_resume', 'onRicercaRiprendi', { id: 'sess-1' }, 'That research is running again, from where it had stopped.'],
-        ['research_cancel', 'onRicercaAnnulla', { id: 'sess-1' }, 'That research is stopped for good. What it collected is still readable.'],
+        // C5: l'ospite riceve i soli campi dell'azione ({ id }), come prima dell'accorpamento
+        ['research_control', 'onRicercaPausa', { id: 'sess-1', action: 'pause' }, 'That research is paused. Everything it collected is kept, and it can be resumed.', { id: 'sess-1' }],
+        ['research_control', 'onRicercaRiprendi', { id: 'sess-1', action: 'resume' }, 'That research is running again, from where it had stopped.', { id: 'sess-1' }],
+        ['research_control', 'onRicercaAnnulla', { id: 'sess-1', action: 'cancel' }, 'That research is stopped for good. What it collected is still readable.', { id: 'sess-1' }],
         ['research_delete', 'onRicercaElimina', { id: 'sess-1' }, 'That research and its report have been deleted.'],
     ]) {
         it(`${nome} SENZA ${callbackKey}: messaggio onesto, mai un tentativo silenzioso`, async () => {
@@ -6016,7 +6174,7 @@ describe('talosLavora - Deep Research (FASE N, ottavo sistema, "fetta onesta")',
                 [callbackKey]: async (spec) => { ricevuti.push(spec); return { ok: true, esito: esitoOk } },
             })
             assert.equal(esito.comeFinita, 'concluso')
-            assert.deepEqual(ricevuti, [argomenti])
+            assert.deepEqual(ricevuti, [arguments5 ?? argomenti])
             const messaggioTool = rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool')
             assert.equal(messaggioTool.content, esitoOk)
         })
@@ -6038,11 +6196,11 @@ describe('talosLavora - Deep Research (FASE N, ottavo sistema, "fetta onesta")',
             const rete = reteDiRisposte(chiamataTool(nome, argomenti), CONCLUSO_SUBITO)
             const esito = await talosLavora({
                 cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: [nome],
-                [callbackKey]: async () => ({ ok: false, esito: 'There is no research with that id. Call research_list to see the current ones.' }),
+                [callbackKey]: async () => ({ ok: false, esito: 'There is no research with that id. Call research_find to see the current ones.' }),
             })
             assert.equal(esito.comeFinita, 'concluso')
             const messaggioTool = rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool')
-            assert.equal(messaggioTool.content, 'There is no research with that id. Call research_list to see the current ones.')
+            assert.equal(messaggioTool.content, 'There is no research with that id. Call research_find to see the current ones.')
         })
 
         it(`⛔⛔⛔ AL CONTRARIO — livelloAccesso:'lettura' rifiuta ${nome} — REFUSED, ${callbackKey} MAI chiamata`, async () => {
@@ -6060,13 +6218,67 @@ describe('talosLavora - Deep Research (FASE N, ottavo sistema, "fetta onesta")',
         })
     }
 
+    it('C5 research_control: un nome vecchio chiamato direttamente non esegue niente e nomina quello nuovo', async () => {
+        const cartella = cartellaVuota(it)
+        const rete = reteDiRisposte(chiamataTool('research_pause', { id: 'sess-1' }), CONCLUSO_SUBITO)
+        let chiamata = false
+        const esito = await talosLavora({
+            cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: ['research_control'],
+            onRicercaPausa: async () => { chiamata = true; return { ok: true, esito: 'x' } },
+        })
+        assert.equal(esito.comeFinita, 'concluso')
+        assert.equal(chiamata, false)
+        const messaggioTool = rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool')
+        assert.equal(messaggioTool.content, 'research_pause was replaced by research_control. Call research_control with arguments like {"id": "…", "action": "pause"}. Nothing was done.')
+    })
+
+    it('C5 research_control: un\'azione che non esiste (anche «delete») non raggiunge nessun ospite', async () => {
+        for (const action of ['delete', 'Stop', undefined]) {
+            const cartella = cartellaVuota(it)
+            const rete = reteDiRisposte(chiamataTool('research_control', { id: 'sess-1', ...(action ? { action } : {}) }), CONCLUSO_SUBITO)
+            const chiamate = []
+            const traccia = (n) => async () => { chiamate.push(n); return { ok: true, esito: 'x' } }
+            const esito = await talosLavora({
+                cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: ['research_control', 'research_delete'],
+                onRicercaPausa: traccia('pausa'), onRicercaRiprendi: traccia('riprendi'), onRicercaAnnulla: traccia('annulla'), onRicercaElimina: traccia('elimina'),
+            })
+            assert.equal(esito.comeFinita, 'concluso')
+            assert.deepEqual(chiamate, [], String(action))
+            const messaggioTool = rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool')
+            assert.match(messaggioTool.content, /^REFUSED\. research_control needs action "pause", "resume" or "cancel"/, String(action))
+        }
+    })
+
+    it('C5 research_control: il permesso è per AZIONE, con ripiego sulla chiave di prima; vince la scelta più stretta', async () => {
+        for (const [permessiPerAttrezzo, rifiutato] of [
+            [{ 'research_control:pause': 'nega' }, true],
+            [{ research_pause: 'nega' }, true],
+            [{ 'research_control:pause': 'sempre', research_pause: 'nega' }, true],
+            [{ 'research_control:resume': 'nega' }, false],
+            [{ 'research_control:pause': 'sempre' }, false],
+        ]) {
+            const cartella = cartellaVuota(it)
+            const rete = reteDiRisposte(chiamataTool('research_control', { id: 'sess-1', action: 'pause' }), CONCLUSO_SUBITO)
+            let chiamata = false
+            const esito = await talosLavora({
+                cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: ['research_control'], permessiPerAttrezzo,
+                onRicercaPausa: async () => { chiamata = true; return { ok: true, esito: 'paused' } },
+            })
+            assert.equal(esito.comeFinita, 'concluso')
+            assert.equal(chiamata, !rifiutato, JSON.stringify(permessiPerAttrezzo))
+            const messaggioTool = rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool')
+            if (rifiutato) assert.match(messaggioTool.content, /^REFUSED\./, JSON.stringify(permessiPerAttrezzo))
+            else assert.equal(messaggioTool.content, 'paused', JSON.stringify(permessiPerAttrezzo))
+        }
+    })
+
     it('⛔⛔⛔ AL CONTRARIO — PARITÀ: senza strumentiEstesi, zero riferimenti alle 6 mutazioni Research', async () => {
         const cartella = cartellaVuota(it)
         const rete = reteDiRisposte(CONCLUSO_SUBITO)
         const esito = await talosLavora({ cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch })
         assert.equal(esito.comeFinita, 'concluso')
         assert.equal(rete.chiamate[0].corpo.tools.length, 7)
-        assert.ok(!rete.chiamate[0].corpo.tools.some((t) => ['research_start', 'research_rename', 'research_pause', 'research_resume', 'research_cancel', 'research_delete'].includes(t.function.name)))
+        assert.ok(!rete.chiamate[0].corpo.tools.some((t) => ['research_start', 'research_rename', 'research_control', 'research_pause', 'research_resume', 'research_cancel', 'research_delete'].includes(t.function.name)))
     })
 })
 
@@ -6100,7 +6312,7 @@ describe('formattaListaRicerche - pura (FASE N, ottavo sistema)', () => {
 
 describe('formattaLetturaRicerca - pura (FASE N, ottavo sistema)', () => {
     it('id inesistente: "no research with that id", mai un\'invenzione', () => {
-        assert.match(formattaLetturaRicerca({ trovata: false }), /^There is no research with that id\. Call research_list/)
+        assert.match(formattaLetturaRicerca({ trovata: false }), /^There is no research with that id\. Call research_find/)
     })
 
     it('rapporto pronto: il testo del rapporto torna VERBATIM, nessuna intestazione aggiunta', () => {
@@ -6980,34 +7192,30 @@ describe('⛔⛔⛔ BC-10 — un saluto NON sfoglia tutta la Libreria: il tetto 
 
     const TASK_SALUTO = { consegna: 'ciao' }
     const CONCLUSO = { role: 'assistant', content: 'ciao a te', tool_calls: [] }
-    /* Una pagina come quella vera dell'owner: 216 file in Libreria, e un token che invita alla prossima. */
-    const paginaLibreria = (n) => ({
-        pagina: [{ id: `lib-${n}`, nome: `file-${n}.md`, fileType: 'document', origine: 'uploaded', aggiornatoIl: '2026-09-13T10:00:00.000Z' }],
-        totale: 216,
-        vistiPrima: n - 1,
-        vistiDopo: n,
-        nextPageToken: `p${n + 1}`,
-    })
+    /* Una pagina come quella vera dell'owner: 216 file in Libreria, e un cursore che invita alla prossima.
+       C5 (10/10/2026): `library_find` dal lettore delle sezioni, in testo a righe; il cursore sostituisce `page_token`. */
+    const paginaLibreria = (n) => `Library: showing 1 of 216, most recently updated first.\n- file-${n}.md — document — uploaded — id lib-${n}\n`
+        + `${216 - n} more. Narrow with query=…, or continue with cursor=p${n + 1}`
     const LETTURA_OK = { nome: 'a.md', mediaType: 'text/markdown', origine: 'uploaded', testo: 'contenuto vero' }
     /* Gli argomenti fabbricati apposta: undici chiamate in cui CAMBIA SOLO il cursore. */
-    const UNDICI_PAGINE = Array.from({ length: 11 }, (_, i) => ({ origin: 'all', file_type: 'all', page_token: `p${i + 1}` }))
+    const UNDICI_PAGINE = Array.from({ length: 11 }, (_, i) => ({ origin: 'all', file_type: 'all', cursor: `p${i + 1}` }))
 
     it('⛔ la guardia della valanga è CIECA su una paginazione, per costruzione — misurato su 11 chiamate fabbricate', () => {
         /* La firma della valanga è «nome + argomenti grezzi»: undici cursori diversi = undici firme diverse. */
-        const firmeValanga = new Set(UNDICI_PAGINE.map((a) => `library_list ${JSON.stringify(a)}`))
+        const firmeValanga = new Set(UNDICI_PAGINE.map((a) => `library_find ${JSON.stringify(a)}`))
         assert.equal(firmeValanga.size, 11, 'per la guardia della valanga sono undici richieste distinte')
         /* La firma dello sfogliamento toglie il cursore: una sola domanda, ripetuta undici volte. */
-        const firmeSfogliamento = new Set(UNDICI_PAGINE.map((a) => firmaDiSfogliamento('library_list', a)))
+        const firmeSfogliamento = new Set(UNDICI_PAGINE.map((a) => firmaDiSfogliamento('library_find', a)))
         assert.equal(firmeSfogliamento.size, 1, 'undici pagine dello stesso elenco sono UNA firma sola')
 
         /* ⛔ VERSO CHE DEVE FALLIRE (1): la guardia VERA della valanga, messa davanti a queste undici, non ferma niente. */
-        const fabbricate = UNDICI_PAGINE.map((a, i) => ({ id: `c${i}`, function: { name: 'library_list', arguments: JSON.stringify(a) } }))
+        const fabbricate = UNDICI_PAGINE.map((a, i) => ({ id: `c${i}`, function: { name: 'library_find', arguments: JSON.stringify(a) } }))
         const controValanga = limitaRipetizioniIdentiche(fabbricate, 3)
         assert.equal(controValanga.ripetizione, null, 'nessuna ripetizione vista: è il buco che BC-10 chiude')
         assert.equal(controValanga.toolCalls.length, 11, 'le passa tutte e undici')
 
         /* ⛔ VERSO CHE DEVE FALLIRE (2): e quel `null` non è perché la funzione è inerte — con gli argomenti IDENTICI morde al terzo colpo. */
-        const identiche = Array.from({ length: 11 }, (_, i) => ({ id: `c${i}`, function: { name: 'library_list', arguments: '{"origin":"all"}' } }))
+        const identiche = Array.from({ length: 11 }, (_, i) => ({ id: `c${i}`, function: { name: 'library_find', arguments: '{"origin":"all"}' } }))
         const controIdentiche = limitaRipetizioniIdentiche(identiche, 3)
         assert.equal(controIdentiche.toolCalls.length, 2, 'la guardia della valanga funziona: taglia alla terza copia identica')
         assert.ok(controIdentiche.ripetizione, 'e lo dichiara')
@@ -7016,7 +7224,7 @@ describe('⛔⛔⛔ BC-10 — un saluto NON sfoglia tutta la Libreria: il tetto 
     it('⛔⛔ decisioneDiSfogliamento: due pagine, poi RIFIUTO — e la pagina rifiutata non consuma il tetto', () => {
         const registro = new Map()
         const decide = (token, extra = {}) => decisioneDiSfogliamento({
-            nome: 'library_list', argomenti: { origin: 'all', page_token: token, ...extra }, registro,
+            nome: 'library_find', argomenti: { origin: 'all', cursor: token, ...extra }, registro,
         })
 
         const prima = decide('p1')
@@ -7032,45 +7240,45 @@ describe('⛔⛔⛔ BC-10 — un saluto NON sfoglia tutta la Libreria: il tetto 
         assert.equal(terza.permesso, false, 'la terza pagina si FERMA: è questo che un avviso non faceva')
         assert.match(terza.messaggio, /^REFUSED/)
         assert.match(terza.messaggio, /browse_every_page/, 'e dice come chiedere davvero le altre pagine')
-        assert.match(terza.messaggio, /library_search/, 'e la via più economica per trovare UN file')
+        assert.match(terza.messaggio, /add a query/, 'e la via più economica per trovare UN file')
 
         /* Rifiutata due volte di fila resta ferma al conto di prima: i rifiuti non si accumulano contro chi poi chiede bene. */
         assert.equal(decide('p4').permesso, false)
-        assert.equal(registro.get(firmaDiSfogliamento('library_list', { origin: 'all' })).pagine, 2, 'contate solo le pagine SERVITE')
+        assert.equal(registro.get(firmaDiSfogliamento('library_find', { origin: 'all' })).pagine, 2, 'contate solo le pagine SERVITE')
 
         /* ⛔ VERSO CHE DEVE FALLIRE (1): com era stamattina — contare e basta. Con il tetto tolto, le undici passano TUTTE. */
         const senzaTetto = new Map()
         const permesse = UNDICI_PAGINE.filter((argomenti) => decisioneDiSfogliamento({
-            nome: 'library_list', argomenti, registro: senzaTetto, tetto: Infinity, tettoAssoluto: Infinity,
+            nome: 'library_find', argomenti, registro: senzaTetto, tetto: Infinity, tettoAssoluto: Infinity,
         }).permesso).length
         assert.equal(permesse, 11, 'senza tetto la valanga dell owner si ripete identica: la prova sopra misura il TETTO, non una frase')
 
         /* ⛔ VERSO CHE DEVE FALLIRE (2): un aggancio sbagliato LANCIA, non ricade in silenzio su «permesso». */
-        assert.throws(() => decisioneDiSfogliamento({ nome: 'library_list', argomenti: { origin: 'all' } }), TypeError)
-        assert.throws(() => decisioneDiSfogliamento({ nome: 'library_list', argomenti: {}, registro: {} }), TypeError)
+        assert.throws(() => decisioneDiSfogliamento({ nome: 'library_find', argomenti: { origin: 'all' } }), TypeError)
+        assert.throws(() => decisioneDiSfogliamento({ nome: 'library_find', argomenti: {}, registro: {} }), TypeError)
 
         /* Un filtro diverso è un ALTRA domanda e riparte da capo: il tetto non deve punire chi cambia ricerca. */
-        const altroFiltro = decisioneDiSfogliamento({ nome: 'library_list', argomenti: { origin: 'generated' }, registro })
+        const altroFiltro = decisioneDiSfogliamento({ nome: 'library_find', argomenti: { origin: 'generated' }, registro })
         assert.equal(altroFiltro.permesso, true)
         assert.equal(altroFiltro.pagina, 1)
     })
 
     it('⛔⛔⛔ IL GIRO VERO: «ciao» e otto tentativi di pagina — lo store ne vede DUE, le altre sei tornano REFUSED', async () => {
         const cartella = cartellaVuota(it)
-        const tentativi = Array.from({ length: 8 }, (_, i) => chiamataTool('library_list', { origin: 'all', file_type: 'all', page_token: `p${i + 1}` }))
+        const tentativi = Array.from({ length: 8 }, (_, i) => chiamataTool('library_find', { origin: 'all', file_type: 'all', cursor: `p${i + 1}` }))
         const rete = reteDiRisposte(...tentativi, CONCLUSO)
         const viste = []
         const esito = await talosLavora({
             cartella, task: TASK_SALUTO, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch,
-            strumentiEstesi: ['library_list'],
-            onLibreriaLista: async (a) => { viste.push(a); return paginaLibreria(viste.length) },
+            strumentiEstesi: ['library_find'],
+            onLetturaSezione: async (_nome, a) => { viste.push(a); return paginaLibreria(viste.length) },
         })
 
         assert.equal(esito.comeFinita, 'concluso')
         assert.equal(viste.length, PAGINE_SENZA_RICHIESTA, `la Libreria è stata sfogliata ${PAGINE_SENZA_RICHIESTA} volte, non otto`)
         const messaggiTool = esito.messaggiFinali.filter((m) => m.role === 'tool')
         assert.equal(messaggiTool.length, 8, 'ogni chiamata annunciata ha comunque il suo esito: nessun tool_use orfano')
-        assert.match(messaggiTool[0].content, /Library list: showing 1-1 of 216/)
+        assert.match(messaggiTool[0].content, /Library: showing 1 of 216/)
         assert.equal(messaggiTool[0].content.includes('REFUSED'), false, 'la prima pagina si serve sempre')
         assert.match(messaggiTool[1].content, /page 2 of 2/)
         for (let i = 2; i < 8; i += 1) {
@@ -7096,22 +7304,22 @@ describe('⛔⛔⛔ BC-10 — un saluto NON sfoglia tutta la Libreria: il tetto 
     it('⭐ IL GIRO VERO: chi CHIEDE davvero tutte le pagine le ottiene — ma solo con il flag a true', async () => {
         const cartella = cartellaVuota(it)
         const rete = reteDiRisposte(
-            chiamataTool('library_list', { origin: 'all', page_token: 'p1' }),
-            chiamataTool('library_list', { origin: 'all', page_token: 'p2' }),
-            chiamataTool('library_list', { origin: 'all', page_token: 'p3' }),
-            chiamataTool('library_list', { origin: 'all', page_token: 'p3', browse_every_page: true }),
+            chiamataTool('library_find', { origin: 'all', cursor: 'p1' }),
+            chiamataTool('library_find', { origin: 'all', cursor: 'p2' }),
+            chiamataTool('library_find', { origin: 'all', cursor: 'p3' }),
+            chiamataTool('library_find', { origin: 'all', cursor: 'p3', browse_every_page: true }),
             CONCLUSO,
         )
         const viste = []
         const esito = await talosLavora({
             cartella, task: { consegna: 'elencami TUTTI i file della libreria, uno per uno' }, modello: 'x', chiave: 'y',
-            fetchDiRete: rete.fetch, strumentiEstesi: ['library_list'],
-            onLibreriaLista: async (a) => { viste.push(a); return paginaLibreria(viste.length) },
+            fetchDiRete: rete.fetch, strumentiEstesi: ['library_find'],
+            onLetturaSezione: async (_nome, a) => { viste.push(a); return paginaLibreria(viste.length) },
         })
 
         assert.equal(esito.comeFinita, 'concluso')
         assert.equal(viste.length, 3, 'la terza pagina, CHIESTA esplicitamente, viene servita')
-        assert.equal(viste[2][CAMPO_SFOGLIA_TUTTO], true, 'il flag arriva allo store verbatim: non lo tocchiamo')
+        assert.equal(viste[2][CAMPO_SFOGLIA_TUTTO], true, 'il flag arriva al lettore verbatim: non lo tocchiamo')
         const messaggiTool = esito.messaggiFinali.filter((m) => m.role === 'tool')
         assert.match(messaggiTool[2].content, /^REFUSED/, 'il tentativo senza flag resta rifiutato')
         assert.match(messaggiTool[3].content, new RegExp(`Page 3 of at most ${PAGINE_MASSIME_PER_ELENCO}`), 'e quella col flag dice a che punto è del fondo')
@@ -7119,17 +7327,17 @@ describe('⛔⛔⛔ BC-10 — un saluto NON sfoglia tutta la Libreria: il tetto 
         /* ⛔ VERSO CHE DEVE FALLIRE: il flag si controlla per VERITÀ, non per presenza — «false» e «no» non aprono niente. */
         const cartellaFinta = cartellaVuota(it)
         const reteFinta = reteDiRisposte(
-            chiamataTool('library_list', { origin: 'all', page_token: 'p1' }),
-            chiamataTool('library_list', { origin: 'all', page_token: 'p2' }),
-            chiamataTool('library_list', { origin: 'all', page_token: 'p3', browse_every_page: false }),
-            chiamataTool('library_list', { origin: 'all', page_token: 'p4', browse_every_page: 'no' }),
+            chiamataTool('library_find', { origin: 'all', cursor: 'p1' }),
+            chiamataTool('library_find', { origin: 'all', cursor: 'p2' }),
+            chiamataTool('library_find', { origin: 'all', cursor: 'p3', browse_every_page: false }),
+            chiamataTool('library_find', { origin: 'all', cursor: 'p4', browse_every_page: 'no' }),
             CONCLUSO,
         )
         const visteFinte = []
         await talosLavora({
             cartella: cartellaFinta, task: TASK_SALUTO, modello: 'x', chiave: 'y',
-            fetchDiRete: reteFinta.fetch, strumentiEstesi: ['library_list'],
-            onLibreriaLista: async (a) => { visteFinte.push(a); return paginaLibreria(visteFinte.length) },
+            fetchDiRete: reteFinta.fetch, strumentiEstesi: ['library_find'],
+            onLetturaSezione: async (_nome, a) => { visteFinte.push(a); return paginaLibreria(visteFinte.length) },
         })
         assert.equal(visteFinte.length, 2, 'un flag spento o storto non sblocca niente')
         assert.equal(sfogliaTuttoRichiesto({ browse_every_page: 'true' }), true, 'la stringa "true" di un modello che manda JSON storto vale')
@@ -7138,27 +7346,27 @@ describe('⛔⛔⛔ BC-10 — un saluto NON sfoglia tutta la Libreria: il tetto 
         assert.equal(sfogliaTuttoRichiesto(null), false)
     })
 
-    it('⛔⛔ IL GIRO VERO, library_search: stesso tetto del fratello — e una QUERY diversa riparte da pagina 1', async () => {
+    it('⛔⛔ IL GIRO VERO, library_find con query (era library_search): stesso tetto — e una QUERY diversa riparte da pagina 1', async () => {
         /*
          * ⛔ Questa prova esiste perché il punto di chiamata di `library_search` è stato cambiato
-         * come quello di `library_list`, e senza una prova sua sarebbe potuto restare rotto senza
+         * come quello di `library_find`, e senza una prova sua sarebbe potuto restare rotto senza
          * che niente diventasse rosso: la guardia che tutti credono ci sia.
          */
         const cartella = cartellaVuota(it)
         const rete = reteDiRisposte(
-            chiamataTool('library_search', { query: 'fatture', offset: 0 }),
-            chiamataTool('library_search', { query: 'fatture', offset: 5 }),
-            chiamataTool('library_search', { query: 'fatture', offset: 10 }),
-            chiamataTool('library_search', { query: 'contratti', offset: 0 }),
+            chiamataTool('library_find', { query: 'fatture' }),
+            chiamataTool('library_find', { query: 'fatture', cursor: 'q5' }),
+            chiamataTool('library_find', { query: 'fatture', cursor: 'q10' }),
+            chiamataTool('library_find', { query: 'contratti' }),
             CONCLUSO,
         )
         const cercate = []
         const esito = await talosLavora({
             cartella, task: TASK_SALUTO, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch,
-            strumentiEstesi: ['library_search'],
-            onLibreriaCerca: async (a) => {
+            strumentiEstesi: ['library_find'],
+            onLetturaSezione: async (_nome, a) => {
                 cercate.push(a)
-                return { pagina: [{ id: 'lib-1', nome: 'a.md', origine: 'uploaded', testoEstratto: 'trovato' }], totale: 216, nextOffset: 5 }
+                return `Library: 216 of 216 match «${a.query}», showing 1, best first.\n- a.md — document — uploaded: trovato — id lib-1\n215 more. Narrow with more words in query, or continue with cursor=q${cercate.length * 5}`
             },
         })
 
@@ -7172,7 +7380,7 @@ describe('⛔⛔⛔ BC-10 — un saluto NON sfoglia tutta la Libreria: il tetto 
     it('⛔ il fondo assoluto regge ANCHE col flag acceso: esaurite le pagine del conto, basta', () => {
         const registro = new Map()
         const conFlag = (n) => decisioneDiSfogliamento({
-            nome: 'library_list', argomenti: { origin: 'all', page_token: `p${n}`, [CAMPO_SFOGLIA_TUTTO]: true }, registro,
+            nome: 'library_find', argomenti: { origin: 'all', cursor: `p${n}`, [CAMPO_SFOGLIA_TUTTO]: true }, registro,
         })
         for (let n = 1; n <= PAGINE_MASSIME_PER_ELENCO; n += 1) {
             assert.equal(conFlag(n).permesso, true, `la pagina ${n} è dentro il fondo`)
@@ -7185,10 +7393,10 @@ describe('⛔⛔⛔ BC-10 — un saluto NON sfoglia tutta la Libreria: il tetto 
         /* ⛔ VERSO CHE DEVE FALLIRE: alzando il fondo, la stessa pagina passa ⇒ la prova misura il NUMERO, non una frase che c è sempre. */
         const registroLargo = new Map()
         for (let n = 1; n <= PAGINE_MASSIME_PER_ELENCO; n += 1) {
-            decisioneDiSfogliamento({ nome: 'library_list', argomenti: { origin: 'all', page_token: `p${n}`, [CAMPO_SFOGLIA_TUTTO]: true }, registro: registroLargo, tettoAssoluto: PAGINE_MASSIME_PER_ELENCO + 1 })
+            decisioneDiSfogliamento({ nome: 'library_find', argomenti: { origin: 'all', cursor: `p${n}`, [CAMPO_SFOGLIA_TUTTO]: true }, registro: registroLargo, tettoAssoluto: PAGINE_MASSIME_PER_ELENCO + 1 })
         }
         const conFondoPiuAlto = decisioneDiSfogliamento({
-            nome: 'library_list', argomenti: { origin: 'all', page_token: 'p13', [CAMPO_SFOGLIA_TUTTO]: true },
+            nome: 'library_find', argomenti: { origin: 'all', cursor: 'p13', [CAMPO_SFOGLIA_TUTTO]: true },
             registro: registroLargo, tettoAssoluto: PAGINE_MASSIME_PER_ELENCO + 1,
         })
         assert.equal(conFondoPiuAlto.permesso, true)
@@ -7196,14 +7404,12 @@ describe('⛔⛔⛔ BC-10 — un saluto NON sfoglia tutta la Libreria: il tetto 
 
     it('⛔⛔ la DESCRIZIONE non ordina più di seguire il segnalibro fino in fondo, e il nome del flag combacia con la costante', () => {
         const perNome = (nome) => ATTREZZI_ESTESI_OPENAI.find((a) => a.function.name === nome).function
-        const lista = perNome('library_list')
-        const ricerca = perNome('library_search')
+        const lista = perNome('library_find') // C5: library_list + library_search → library_find
 
         const ORDINE_VECCHIO = /Follow next_page_token until it is null/i
         assert.equal(ORDINE_VECCHIO.test(lista.description), false, 'era questa frase a far nascere il comportamento')
         assert.match(lista.description, /REFUSED/, 'la descrizione dice che il tetto esiste')
         assert.match(lista.description, /browse_every_page/)
-        assert.match(ricerca.description, /browse_every_page/, 'anche la ricerca pagina, e ha lo stesso tetto')
 
         /* ⛔ VERSO CHE DEVE FALLIRE: la stessa regex sulla descrizione VECCHIA la trova ⇒ il controllo qui sopra morde davvero. */
         const DESCRIZIONE_VECCHIA = 'List, browse, count or filter every file in this project\'s Library. '
@@ -7211,7 +7417,7 @@ describe('⛔⛔⛔ BC-10 — un saluto NON sfoglia tutta la Libreria: il tetto 
         assert.equal(ORDINE_VECCHIO.test(DESCRIZIONE_VECCHIA), true, 'se questa fosse falsa, il controllo sopra non guarderebbe niente')
 
         /* Il nome del campo è scritto a mano nello schema (i tetti sono dichiarati più in basso nel file): qui si prova che non è andato alla deriva. */
-        for (const attrezzo of [lista, ricerca]) {
+        for (const attrezzo of [lista]) {
             assert.ok(
                 Object.prototype.hasOwnProperty.call(attrezzo.parameters.properties, CAMPO_SFOGLIA_TUTTO),
                 `${attrezzo.name}: lo schema deve esporre proprio "${CAMPO_SFOGLIA_TUTTO}", altrimenti il modello non ha nessun modo di chiedere le altre pagine`,
@@ -7228,16 +7434,16 @@ describe('⛔⛔⛔ BC-10 — un saluto NON sfoglia tutta la Libreria: il tetto 
 
     it('⛔⛔⛔ DIFETTO 1: variare page_size (o limit) NON azzera più il conteggio — il varco, misurato e richiuso', () => {
         /* Le stesse undici pagine dell'incidente, con un `page_size` diverso a ogni colpo: e` il varco che il revisore ha trovato. */
-        const conPageSize = UNDICI_PAGINE.map((a, i) => ({ ...a, page_size: (i % 20) + 1 }))
+        const conPageSize = UNDICI_PAGINE.map((a, i) => ({ ...a, limit: (i % 20) + 1 })) // C5: page_size è diventato limit
         const registro = new Map()
-        const permesse = conPageSize.filter((argomenti) => decisioneDiSfogliamento({ nome: 'library_list', argomenti, registro }).permesso).length
+        const permesse = conPageSize.filter((argomenti) => decisioneDiSfogliamento({ nome: 'library_find', argomenti, registro }).permesso).length
         assert.equal(permesse, PAGINE_SENZA_RICHIESTA, `undici pagine con page_size sempre diverso: ne passano ${PAGINE_SENZA_RICHIESTA}, non undici`)
-        assert.equal(new Set(conPageSize.map((a) => firmaDiSfogliamento('library_list', a))).size, 1, 'e sono UNA domanda sola')
+        assert.equal(new Set(conPageSize.map((a) => firmaDiSfogliamento('library_find', a))).size, 1, 'e sono UNA domanda sola')
 
         /* Il fratello: `limit` su library_search. */
-        const conLimit = Array.from({ length: 11 }, (_, i) => ({ query: 'fatture', offset: i * 5, limit: (i % 20) + 1 }))
+        const conLimit = Array.from({ length: 11 }, (_, i) => ({ query: 'fatture', cursor: `q${i}`, limit: (i % 20) + 1 }))
         const registroRicerca = new Map()
-        const cercate = conLimit.filter((argomenti) => decisioneDiSfogliamento({ nome: 'library_search', argomenti, registro: registroRicerca }).permesso).length
+        const cercate = conLimit.filter((argomenti) => decisioneDiSfogliamento({ nome: 'library_find', argomenti, registro: registroRicerca }).permesso).length
         assert.equal(cercate, PAGINE_SENZA_RICHIESTA, 'undici ricerche con limit sempre diverso: ne passano due')
 
         /*
@@ -7245,32 +7451,32 @@ describe('⛔⛔⛔ BC-10 — un saluto NON sfoglia tutta la Libreria: il tetto 
          * quale. Se questa riga non fosse rossa col vecchio codice, la prova sopra non misurerebbe
          * la cura ma solo se stessa.
          */
-        const CURSORI_DI_ALLORA = ['page_token', 'pageToken', 'cursor', 'offset', 'next_offset', 'nextOffset', 'page']
+        const CURSORI_DI_ALLORA = ['page_token', 'pageToken', 'cursor', 'offset', 'next_offset', 'nextOffset', 'page'] // `limit` NON c'era: è il varco
         const firmaPerEsclusione = (nome, argomenti) => `${nome}\x00${Object.entries(argomenti)
             .filter(([campo]) => !CURSORI_DI_ALLORA.includes(campo) && campo !== CAMPO_SFOGLIA_TUTTO)
             .map(([campo, valore]) => `${campo}=${JSON.stringify(valore)}`).sort().join('\x1f')}`
-        assert.equal(new Set(conPageSize.map((a) => firmaPerEsclusione('library_list', a))).size, 11,
+        assert.equal(new Set(conPageSize.map((a) => firmaPerEsclusione('library_find', a))).size, 11,
             'com era stamattina: undici firme distinte, cio\u00e8 nessun tetto')
     })
 
     it('⛔⛔ DIFETTO 1, il varco che nessuno aveva nominato: un filtro ASSENTE e il suo DEFAULT sono la stessa domanda', () => {
         assert.equal(
-            firmaDiSfogliamento('library_list', {}),
-            firmaDiSfogliamento('library_list', { origin: 'all', file_type: 'all' }),
+            firmaDiSfogliamento('library_find', {}),
+            firmaDiSfogliamento('library_find', { origin: 'all', file_type: 'all' }),
             'lo schema dichiara "all" come default: ometterlo non è un altra domanda',
         )
         /* Prima della cura questo alternarsi RADDOPPIAVA il conto: due firme, due pagine ciascuna. */
-        const alternate = Array.from({ length: 11 }, (_, i) => (i % 2 ? { page_token: `p${i}` } : { origin: 'all', page_token: `p${i}` }))
+        const alternate = Array.from({ length: 11 }, (_, i) => (i % 2 ? { cursor: `p${i}` } : { origin: 'all', cursor: `p${i}` }))
         const registro = new Map()
-        const permesse = alternate.filter((argomenti) => decisioneDiSfogliamento({ nome: 'library_list', argomenti, registro }).permesso).length
+        const permesse = alternate.filter((argomenti) => decisioneDiSfogliamento({ nome: 'library_find', argomenti, registro }).permesso).length
         assert.equal(permesse, PAGINE_SENZA_RICHIESTA, 'alternare assente e default non raddoppia più il conto')
 
         /* Spazi e maiuscole: la stessa ricerca scritta in due modi resta una ricerca. */
-        assert.equal(firmaDiSfogliamento('library_search', { query: ' Fatture ' }), firmaDiSfogliamento('library_search', { query: 'fatture' }))
+        assert.equal(firmaDiSfogliamento('library_find', { query: ' Fatture ' }), firmaDiSfogliamento('library_find', { query: 'fatture' }))
 
         /* ⛔ VERSO CHE DEVE FALLIRE: una domanda DAVVERO diversa deve restare diversa, o il tetto punirebbe chi cambia ricerca. */
-        assert.notEqual(firmaDiSfogliamento('library_list', { origin: 'generated' }), firmaDiSfogliamento('library_list', {}))
-        assert.notEqual(firmaDiSfogliamento('library_search', { query: 'contratti' }), firmaDiSfogliamento('library_search', { query: 'fatture' }))
+        assert.notEqual(firmaDiSfogliamento('library_find', { origin: 'generated' }), firmaDiSfogliamento('library_find', {}))
+        assert.notEqual(firmaDiSfogliamento('library_find', { query: 'contratti' }), firmaDiSfogliamento('library_find', { query: 'fatture' }))
     })
 
     it('⛔⛔ il cancello anti-deriva: nessun campo degli schemi VERI resta fuori dalla classificazione', () => {
@@ -7281,19 +7487,20 @@ describe('⛔⛔⛔ BC-10 — un saluto NON sfoglia tutta la Libreria: il tetto 
             && campo !== CAMPO_SFOGLIA_TUTTO
         ))
         let guardati = 0
-        for (const nome of ['library_list', 'library_search', 'research_list']) {
+        for (const nome of ['library_find', 'research_find']) { // C5: library_find e research_find, gli elenchi col freno
             const campi = Object.keys(ATTREZZI_ESTESI_OPENAI.find((a) => a.function.name === nome).function.parameters.properties)
             guardati += campi.length
             assert.deepEqual(nonClassificati(nome, campi), [],
                 `${nome}: un campo dello schema non classificato finirebbe fuori dalla firma, ed è esattamente come page_size aggirava il tetto`)
         }
-        assert.equal(guardati, 13, 'la misura guarda 5 campi library_list, 4 library_search e 4 research_list')
+        assert.equal(guardati, 17, 'la misura guarda 8 campi library_find e 9 research_find')
 
         /* ⛔ VERSO CHE DEVE FALLIRE: un filtro nuovo non dichiarato viene visto da questo cancello. */
-        assert.deepEqual(nonClassificati('library_list', ['origin', 'page_size', CAMPO_SFOGLIA_TUTTO, 'tag']), ['tag'])
+        assert.deepEqual(nonClassificati('library_find', ['origin', 'limit', CAMPO_SFOGLIA_TUTTO, 'tag']), ['tag'])
         /* E il flag non è un filtro: se lo fosse, accenderlo cambierebbe la firma e azzererebbe il conto. */
-        assert.equal(Object.prototype.hasOwnProperty.call(CAMPI_CHE_IDENTIFICANO_LA_DOMANDA.library_list, CAMPO_SFOGLIA_TUTTO), false)
-        assert.equal(firmaDiSfogliamento('research_list', {}), firmaDiSfogliamento('research_list', { status: 'all' }))
+        assert.equal(Object.prototype.hasOwnProperty.call(CAMPI_CHE_IDENTIFICANO_LA_DOMANDA.library_find, CAMPO_SFOGLIA_TUTTO), false)
+        assert.equal(firmaDiSfogliamento('research_find', {}), firmaDiSfogliamento('research_find', { status: 'all', cursor: 'x', response_format: 'detailed' }))
+        assert.notEqual(firmaDiSfogliamento('research_find', {}), firmaDiSfogliamento('research_find', { query: 'llama' }), 'a query is another question')
         /* Un attrezzo DAVVERO non dichiarato lancia, invece di firmare al buio. */
         assert.throws(() => firmaDiSfogliamento('notes_list', {}), TypeError)
     })
@@ -7311,10 +7518,10 @@ describe('⛔⛔⛔ BC-10 — un saluto NON sfoglia tutta la Libreria: il tetto 
     })
 
     it('⛔⛔⛔ DIFETTO 3, il fondo VERO: servite tutte le voci che l elenco DICHIARA, la pagina dopo è rifiutata', () => {
-        const argomenti = (n) => ({ origin: 'all', page_token: `p${n}`, [CAMPO_SFOGLIA_TUTTO]: true })
+        const argomenti = (n) => ({ origin: 'all', cursor: `p${n}`, [CAMPO_SFOGLIA_TUTTO]: true })
         const servi = (registro, n, risultato) => {
-            const decisione = decisioneDiSfogliamento({ nome: 'library_list', argomenti: argomenti(n), registro })
-            if (decisione.permesso) registraEsitoDiSfogliamento({ registro, nome: 'library_list', argomenti: argomenti(n), risultato })
+            const decisione = decisioneDiSfogliamento({ nome: 'library_find', argomenti: argomenti(n), registro })
+            if (decisione.permesso) registraEsitoDiSfogliamento({ registro, nome: 'library_find', argomenti: argomenti(n), risultato })
             return decisione
         }
         const registro = new Map()
@@ -7338,16 +7545,16 @@ describe('⛔⛔⛔ BC-10 — un saluto NON sfoglia tutta la Libreria: il tetto 
 
         /* Una firma mai permessa non si annota dal nulla. */
         const registroVuoto = new Map()
-        registraEsitoDiSfogliamento({ registro: registroVuoto, nome: 'library_list', argomenti: argomenti(1), risultato: { pagina: [{ id: 'a' }], totale: 1 } })
+        registraEsitoDiSfogliamento({ registro: registroVuoto, nome: 'library_find', argomenti: argomenti(1), risultato: { pagina: [{ id: 'a' }], totale: 1 } })
         assert.equal(registroVuoto.size, 0)
-        assert.throws(() => registraEsitoDiSfogliamento({ registro: {}, nome: 'library_list', argomenti: {}, risultato: {} }), TypeError)
+        assert.throws(() => registraEsitoDiSfogliamento({ registro: {}, nome: 'library_find', argomenti: {}, risultato: {} }), TypeError)
     })
 
     it('⛔⛔ DIFETTO 2: il messaggio dice l ambito che MISURA — il registro muore col giro, e il giro dopo riparte da zero', async () => {
         /* Il testo non promette più una sessione intera. */
         const registro = new Map()
         const conFlag = (n) => decisioneDiSfogliamento({
-            nome: 'library_list', argomenti: { origin: 'all', page_token: `p${n}`, [CAMPO_SFOGLIA_TUTTO]: true }, registro, tettoAssoluto: 1,
+            nome: 'library_find', argomenti: { origin: 'all', cursor: `p${n}`, [CAMPO_SFOGLIA_TUTTO]: true }, registro, tettoAssoluto: 1,
         })
         conFlag(1)
         const oltre = conFlag(2)
@@ -7363,15 +7570,15 @@ describe('⛔⛔⛔ BC-10 — un saluto NON sfoglia tutta la Libreria: il tetto 
         const viste = []
         const unGiro = async () => {
             const rete = reteDiRisposte(
-                chiamataTool('library_list', { origin: 'all', page_token: 'p1' }),
-                chiamataTool('library_list', { origin: 'all', page_token: 'p2' }),
-                chiamataTool('library_list', { origin: 'all', page_token: 'p3' }),
+                chiamataTool('library_find', { origin: 'all', cursor: 'p1' }),
+                chiamataTool('library_find', { origin: 'all', cursor: 'p2' }),
+                chiamataTool('library_find', { origin: 'all', cursor: 'p3' }),
                 CONCLUSO,
             )
             return talosLavora({
                 cartella: cartellaVuota(it), task: TASK_SALUTO, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch,
-                strumentiEstesi: ['library_list'],
-                onLibreriaLista: async (a) => { viste.push(a); return paginaLibreria(viste.length) },
+                strumentiEstesi: ['library_find'],
+                onLetturaSezione: async (_nome, a) => { viste.push(a); return paginaLibreria(viste.length) },
             })
         }
         await unGiro()
@@ -7380,57 +7587,46 @@ describe('⛔⛔⛔ BC-10 — un saluto NON sfoglia tutta la Libreria: il tetto 
         assert.equal(viste.length, PAGINE_SENZA_RICHIESTA * 2, 'secondo giro: altre due — il registro NON attraversa i giri, ed è il rischio residuo dichiarato')
     })
 
-    it('⛔⛔⛔ IL GIRO VERO: il TOTALE dichiarato dallo store arriva davvero al tetto — sui DUE punti di chiamata', async () => {
+    it('⛔⛔⛔ C5, IL FONDO SUL CURSORE: un elenco finito non dà cursore, un cursore già servito è rifiutato, e ripetere la pagina 1 si vede', async () => {
         /*
-         * ⛔ Questa prova esiste perché senza di lei mancava proprio la guardia che tutti avrebbero
-         * creduto ci fosse: le prove del fondo-vero chiamavano `registraEsitoDiSfogliamento` a mano,
-         * quindi togliere l'aggancio dai punti di chiamata di `talosLavora` sarebbe rimasto VERDE.
-         * Qui il totale deve attraversare il kernel per conto suo.
+         * ⛔ Prima della C5 il fondo vero era il TOTALE dichiarato dallo store, annotato dal giro (`registraEsitoDiSfogliamento`).
+         *   Con `library_find` il lettore risponde in testo, e il fondo è il cursore stesso: l'ultima pagina NON porta un cursore,
+         *   un cursore già servito è un ciclo e si rifiuta, e ripetere identica la pagina 1 lo vede la guardia dei giri in tondo
+         *   (misurato con la sonda del 10/10: la seconda chiamata identica porta la nota). Questa prova tiene ferme le tre cose.
          */
-        const cartella = cartellaVuota(it)
+        const libreriaDiDue = (a) => (a.cursor === 'c1'
+            ? 'Library: showing 1 of 2, most recently updated first.\n- b.md — document — uploaded — id lib-2'
+            : 'Library: showing 1 of 2, most recently updated first.\n- a.md — document — uploaded — id lib-1\n1 more. Narrow with query=…, or continue with cursor=c1')
         const rete = reteDiRisposte(
-            chiamataTool('library_list', { origin: 'all', page_token: 'p1' }),
-            chiamataTool('library_list', { origin: 'all', page_token: 'p2' }),
-            chiamataTool('library_list', { origin: 'all', page_token: 'p3' }),
+            chiamataTool('library_find', { limit: 1 }),
+            chiamataTool('library_find', { limit: 1, cursor: 'c1' }),
+            chiamataTool('library_find', { limit: 1, cursor: 'c1', browse_every_page: true }),
             CONCLUSO,
         )
         const viste = []
         const esito = await talosLavora({
-            cartella, task: TASK_SALUTO, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch,
-            strumentiEstesi: ['library_list'],
-            /* Una Libreria di DUE voci: alla seconda pagina l'elenco è finito per il DATO, non per il nostro tetto. */
-            onLibreriaLista: async (a) => {
-                viste.push(a)
-                return { pagina: [{ id: `lib-${viste.length}`, nome: 'a.md', fileType: 'document', origine: 'uploaded', aggiornatoIl: '2026-09-13T10:00:00.000Z' }], totale: 2, vistiPrima: viste.length - 1, vistiDopo: viste.length, nextPageToken: 'p9' }
-            },
+            cartella: cartellaVuota(it), task: TASK_SALUTO, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch,
+            strumentiEstesi: ['library_find'], guardiaGiriInTondo: true,
+            onLetturaSezione: async (_nome, a) => { viste.push(a); return libreriaDiDue(a) },
         })
         assert.equal(esito.comeFinita, 'concluso')
-        assert.equal(viste.length, 2, 'servite le due voci che esistono')
+        assert.equal(viste.length, 2, 'servite le due voci che esistono, e basta')
         const messaggiTool = esito.messaggiFinali.filter((m) => m.role === 'tool')
-        assert.match(messaggiTool[2].content, /^REFUSED/)
-        assert.match(messaggiTool[2].content, /all 2 entries/,
-            'il rifiuto cita il TOTALE arrivato dallo store: se l aggancio non ci fosse, qui si leggerebbe il tetto generico')
+        assert.doesNotMatch(messaggiTool[1].content, /cursor=|On your own|page 2 of 2/, 'l ultima pagina non porta un cursore né la riga del freno')
+        assert.match(messaggiTool[2].content, /^REFUSED: this cursor was already served in this run/, 'e il flag non apre un ciclo')
 
-        /* Il fratello `library_search`, stesso aggancio, stesso verso. */
-        const cartellaRicerca = cartellaVuota(it)
-        const reteRicerca = reteDiRisposte(
-            chiamataTool('library_search', { query: 'fatture', offset: 0 }),
-            chiamataTool('library_search', { query: 'fatture', offset: 5 }),
-            CONCLUSO,
-        )
-        const cercate = []
-        const esitoRicerca = await talosLavora({
-            cartella: cartellaRicerca, task: TASK_SALUTO, modello: 'x', chiave: 'y', fetchDiRete: reteRicerca.fetch,
-            strumentiEstesi: ['library_search'],
-            onLibreriaCerca: async (a) => {
-                cercate.push(a)
-                return { pagina: [{ id: 'lib-1', nome: 'a.md', origine: 'uploaded', testoEstratto: 'trovato' }], totale: 1, nextOffset: 5 }
-            },
+        /* ⛔ VERSO CHE DEVE FALLIRE: senza il rifiuto del ciclo lo stesso cursore arriverebbe al lettore — qui si prova che il canale
+           l'avrebbe servito, cioè che il «2» sopra lo decide il rifiuto e non un lettore che smette da solo. */
+        assert.equal(libreriaDiDue({ cursor: 'c1' }).includes('b.md'), true)
+
+        /* E la pagina 1 ripetuta identica: la seconda volta porta la nota dei giri in tondo. */
+        const ripetuta = reteDiRisposte(chiamataTool('library_find', {}), chiamataTool('library_find', {}), CONCLUSO)
+        const esitoRipetuto = await talosLavora({
+            cartella: cartellaVuota(it), task: TASK_SALUTO, modello: 'x', chiave: 'y', fetchDiRete: ripetuta.fetch,
+            strumentiEstesi: ['library_find'], guardiaGiriInTondo: true,
+            onLetturaSezione: async () => 'Library: showing 1 of 1, most recently updated first.\n- a.md — document — uploaded — id lib-1',
         })
-        assert.equal(esitoRicerca.comeFinita, 'concluso')
-        assert.equal(cercate.length, 1, 'un solo risultato esiste: la seconda pagina non si chiede allo store')
-        const messaggiRicerca = esitoRicerca.messaggiFinali.filter((m) => m.role === 'tool')
-        assert.match(messaggiRicerca[1].content, /all 1 entry\b/, 'una voce sola si dice al singolare: è testo che legge il modello')
+        assert.match(esitoRipetuto.messaggiFinali.filter((m) => m.role === 'tool')[1].content, /this is call 2 of "library_find"/)
     })
 })
 

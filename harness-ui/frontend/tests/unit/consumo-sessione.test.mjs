@@ -12,8 +12,8 @@ test('GIRI-FERMATI (14/09, giro vero: 7 invii, 6 fermati, «1 giro») — un con
   const tot = riepilogoConsumo([sessione]);
   assert.equal(tot.giri, 7);
   assert.equal(tot.giriFermati, 6, 'e i Costi dichiarano quanti giri i token non contano');
-  assert.match(spiegaGiriFermati(6), /^6 giri fermati prima che il fornitore dichiarasse il consumo/);
-  assert.equal(spiegaGiriFermati(1).startsWith('1 giro fermato'), true);
+  assert.match(spiegaGiriFermati(6), /^6 richieste al modello fermate prima che il fornitore dichiarasse il consumo/);
+  assert.equal(spiegaGiriFermati(1).startsWith('1 richiesta al modello fermata'), true);
   assert.deepEqual(giriDellaSessione({ ...sessione, giriFermati: 0 }), { giri: 1, fermati: 0 }, 'AL CONTRARIO: senza fermati è il conto di prima');
   assert.deepEqual(giriDellaSessione({ giriFermati: 2 }), { giri: 2, fermati: 2 }, 'tutti fermati: i giri ci sono anche senza nessuna misura');
   assert.deepEqual(giriDellaSessione({}), { giri: null, fermati: 0 }, 'niente misura e niente fermati: nessun numero inventato');
@@ -38,7 +38,7 @@ test('CTX-USAGE-CACHE-UNKNOWN summary cache not reported does not dilute the mea
   const total = { ...chat, prompt_tokens: 1900, completion_tokens: 100, compattazione, prompt_tokens_con_cache: 100 };
   const shown = testiUsage(chat, { usageSessione: total });
   assert.equal(shown.cache, 'cache 40%');
-  assert.match(shown.tokenGiri, /2,0k token · 1 giro/);
+  assert.match(shown.tokenGiri, /2,0k token · 1 richiesta al modello/);
 });
 
 const INVII = [
@@ -92,7 +92,7 @@ test('CB-04 BARRA: token e cache vengono dalla SESSIONE, il tetto dei giri dall�
 
 test('⛔ AL CONTRARIO — senza totale di sessione la barra si comporta come prima (una sessione con un invio solo)', () => {
   const u = testiUsage(INVII[0], { tettoGiri: 24 });
-  assert.match(u.tokenGiri, /7,7k token · 1 giro su 24/);
+  assert.match(u.tokenGiri, /7,7k token · 1 richiesta al modello su 24/);
   assert.equal(u.cache, 'cache 99%');
   assert.equal(testiUsage(null, {}).tokenGiri, '', 'niente dati, niente numero: mai uno zero al posto di un fatto');
 });

@@ -28,7 +28,7 @@ function provider(command, seen) {
 }
 const base = f => ({cartella: f.root, task: {consegna: 'Esegui.'}, modello: 'fixture', chiave: 'fixture',
   messaggiIniziali: [{role: 'system', content: 'Esegui.'}, {role: 'user', content: 'Esegui.'}],
-  ambienteComandiFn: () => ({dove: 'windows', revisione: 0}), livelloAccesso: 'completo', _giriMassimiInterno: 3});
+  ambienteComandiFn: () => ({dove: 'windows', revisione: 0}), livelloAccesso: 'scrittura-progetto', _giriMassimiInterno: 3});
 
 for (const withCapture of [false, true]) test(`G02-1 BROKER${withCapture ? ' inside capture' : ''}: the model's shell runs through the injected executor, never on the host`, async t => {
   const f = fixture(t), seen = [], events = [], calls = [];

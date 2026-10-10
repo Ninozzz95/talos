@@ -543,7 +543,8 @@ export function creaClientCdp(socket, { attesaMs = ATTESA_CDP_MS } = {}) {
     try { socket.close?.(); } catch { /* un socket già morto non si richiude */ }
   }
 
-  return { invia, su, chiudi: chiudiClient };
+  // C1b: chi tiene il client deve poter sapere che il browser se n'è andato, per non riusare una connessione morta
+  return { invia, su, chiudi: chiudiClient, get chiuso() { return chiuso; } };
 }
 
 /**
