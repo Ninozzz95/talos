@@ -14,8 +14,10 @@
  *   un vocabolario solo.
  */
 
+import { STATI_FINALI_DEL_RUN } from './stati-finali.mjs';
+
 export const AZIONI_DEL_RUN = Object.freeze(['pause', 'resume', 'cancel', 'retry']);
-const RUN_TERMINALI = new Set(['succeeded', 'failed', 'cancelled']);
+const RUN_TERMINALI = new Set(STATI_FINALI_DEL_RUN);
 
 /** Il motivo per cui `action` non vale ora su `run`, in inglese per il modello; `null` se vale (stessa regola di prima). */
 export function rifiutoDelControllo(action, run) {

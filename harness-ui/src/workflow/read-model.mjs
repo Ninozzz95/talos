@@ -1,6 +1,8 @@
 // Public, bounded read model. Never serialize a Definition, reducer state, or journal directly.
+import { STATI_FINALI_DEL_PASSO } from './stati-finali.mjs';
+
 const SCHEMA = 'talos.workflow-graph-view.v2';
-const TERMINAL = new Set(['succeeded', 'failed', 'cancelled', 'skipped', 'superseded']);
+const TERMINAL = new Set(STATI_FINALI_DEL_PASSO);
 const ATTENTION = new Set(['failed', 'uncertain', 'reconciling']);
 
 function pushReady(heap, value, compare) {
@@ -204,6 +206,9 @@ function base(state) {
        rifiuterebbe (`WORKFLOW_RUN_STATE_CONFLICT`, «the run is already pausing»). Solo nelle viste di un run. */
     pauseRequested: state.run.pauseRequested === true,
     cancelRequested: state.run.cancelRequested === true,
+    /* C3 tappa 3 (09/10/2026): PERCHÉ il run aspetta (i codici del riduttore), così il diagramma offre «Alza il tetto e
+       riprendi» solo per `budget_overrun`. Solo quando ce n'è uno: le panoramiche dei run di sempre non cambiano (ETag). */
+    ...(state.run.needsAttentionReasons?.length ? { attentionReasons: [...new Set(state.run.needsAttentionReasons)].sort() } : {}),
   };
 }
 
@@ -238,6 +243,18 @@ export function projectWorkflowOverview(input) {
 /* F3-42 (25/09/2026): la riga di un passo di un RUN porta anche i fatti derivati (D27) — inizio, fine, durata, sessione e
    modello effettivo — perché le card del diagramma li mostrano per ogni passo (mockup 14 e 200). `derivati` è l'indice di
    `indiceDerivati` sui passi della pagina; il grafo pianificato non ne ha (nessun fatto è ancora accaduto). */
+/*
+ * C3 (09/10/2026): come si è chiuso un passo per mano della PERSONA, perché la card lo dica — «segnato come fatto da te» non è
+ *   «finito», «messo da parte» non è «fallito», e un passo saltato perché ne aspettava uno messo da parte non è un «saltato»
+ *   qualunque. Il campo c'è SOLO in quei tre casi: le righe di sempre restano byte per byte uguali (ETag).
+ */
+function risoluzioneDellaPersona(nodeState) {
+  if (nodeState?.state === 'succeeded' && nodeState.terminalReason === 'person') return { resolution: 'marked-done' };
+  if (nodeState?.state === 'set_aside') return { resolution: 'set-aside' };
+  if (nodeState?.state === 'skipped' && nodeState.terminalReason === 'dependency_set_aside') return { resolution: 'skipped-after-set-aside' };
+  return {};
+}
+
 function safeRow(node, state, events, derivati = null) {
   const dependencies = state.definition.edges.filter((edge) => edge.to === node.id && edge.type !== 'retry').length;
   const children = state.definition.edges.filter((edge) => edge.from === node.id && edge.type === 'spawn').length;
@@ -254,6 +271,7 @@ function safeRow(node, state, events, derivati = null) {
     dependencyCount: dependencies,
     childCount: children,
     attentionCount: ATTENTION.has(nodeState?.state) ? 1 : 0,
+    ...risoluzioneDellaPersona(nodeState),
     ...(state.planned || !derivati ? {} : derivati(node.id)),
   };
 }
@@ -268,7 +286,7 @@ export const WORKFLOW_GROUP_SORTS = Object.freeze(['stato']);
 const PESO_DELLO_STATO = Object.freeze({
   // F3-52: `blocked` (aspetta un passo precedente, `run.mjs:134`) pesa come `pending`; prima finiva in fondo, dopo i conclusi
   failed: 0, uncertain: 0, waiting_human: 1, reconciling: 1, leased: 2, running: 2, pending: 3, blocked: 3, ready: 3, retry_wait: 3,
-  cancelled: 4, skipped: 4, superseded: 4, planned: 4, succeeded: 5,
+  cancelled: 4, skipped: 4, superseded: 4, set_aside: 4, planned: 4, succeeded: 5,
 });
 
 export function projectWorkflowGroupPage(input, { phaseId, offset = 0, limit = 50, sort = null } = {}) {

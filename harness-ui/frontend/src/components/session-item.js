@@ -37,6 +37,7 @@ export const SEGNALE_NOVITA_MS = 60_000;
 const TONI = Object.freeze({
   attesa: 'warning',
   vivo: 'live',
+  'in-pausa': 'warning', // C3 tappa 4: ambra, come «In pausa» nell'elenco degli agenti
   errore: 'danger',
   successo: 'success',
   // interrotta / ignoto / pendente: pallino senza tono, come «interrotta» nel mockup.
@@ -57,6 +58,7 @@ const ETICHETTE = Object.freeze({
    * voluto): e un terzo esito. Qui si chiama «fermata».
    */
   fermata: 'processi.session.stateStopped',
+  'in-pausa': 'processi.session.statePaused',
   successo: 'processi.session.stateDone',
   ignoto: 'processi.session.stateDoneNoOutcome',
   pendente: 'processi.session.statePending',
@@ -93,6 +95,8 @@ export function statoSessione(sessione) {
   else if (!sessione.conclusa) classe = 'vivo';
   // ⛔ il motivo VINCE sull'esito: «fermata» e «giri finiti» sono chiusure previste, non guasti.
   else if (sessione.ultimoEsito === 'errore' && sessione.motivoChiusura === 'fermata') classe = 'fermata';
+  // C3 tappa 4 (review Y-4B-1): una delega in pausa chiude con un RunError «in-pausa» — né guasto né fine
+  else if (sessione.ultimoEsito === 'errore' && sessione.motivoChiusura === 'in-pausa') classe = 'in-pausa';
   else if (sessione.ultimoEsito === 'errore') classe = 'errore';
   else if (sessione.ultimoEsito === 'successo') classe = 'successo';
   else classe = 'ignoto';
@@ -115,6 +119,7 @@ export function statoSessione(sessione) {
   else if (classe === 'attesa' && sessione.inAttesaPiano) aiuto = tr('processi.session.helpPlan');
   else if (classe === 'attesa' && sessione.inAttesaRichiestaMcp) aiuto = tr('processi.session.helpMcp');
   else if (classe === 'fermata') aiuto = tr('processi.session.helpStopped');
+  else if (classe === 'in-pausa') aiuto = tr('processi.session.helpPaused');
   return { classe, testo, tono: TONI[classe] ?? null, aiuto };
 }
 
@@ -423,6 +428,40 @@ export function ordinaSessioniAdAlbero(elenco) {
   });
 }
 
+/*
+ * \u26d4 TACCUINO (09/10/2026, owner dopo la ricerca `RICERCA-COLONNA-SESSIONI-CONTEGGIO-2026-10-09.md`) \u2014 IL CONTEGGIO \u00c8
+ *   ICONA + NUMERO. Con \u00abrichieste al modello\u00bb la colonna stretta riduceva i titoli a \u00abCO\u2026\u00bb (misurato sulla 4176).
+ *   Nessuno degli otto concorrenti letti mette una parola lunga accanto al titolo: Goose icona + numero
+ *   (`SessionListView.tsx:748-753`), Pi il numero nudo (`session-selector.ts:472-475`), Hermes a una riga, OpenCode, Codex e Zed
+ *   niente. La frase intera resta nel suggerimento e per i lettori di schermo (`.sr-only`); icona e numero sono `aria-hidden`.
+ *   Il segno `data-conteggio` dice a `aggiornaSessionItem` dov'\u00e8; `data-giri` quale numero porta (\u00abse niente \u00e8 cambiato
+ *   non si tocca il DOM\u00bb). Un DOM senza `createElementNS` (le prove unitarie) riceve il solo testo.
+ */
+const SVG_NS_CONTEGGIO = 'http://www.w3.org/2000/svg';
+function scriviConteggio(nodo, giri, spiegazione) {
+  const frase = tn('processi.session.turnOne', 'processi.session.turnMany', giri);
+  const precedente = typeof nodo.title === 'string' && nodo.title.includes('\n') ? nodo.title.split('\n').slice(1).join('\n') : null;
+  const motivo = spiegazione === undefined ? precedente : spiegazione;
+  const titolo = motivo ? `${frase}\n${motivo}` : frase;
+  const stesso = nodo.dataset ? nodo.dataset.giri === String(giri) : nodo.textContent === frase; // senza dataset (DOM finto): il testo
+  if (stesso && (nodo.title === undefined || nodo.title === titolo)) return false;
+  const doc = nodo.ownerDocument;
+  if (doc && typeof doc.createElementNS === 'function' && typeof nodo.replaceChildren === 'function') {
+    const svg = doc.createElementNS(SVG_NS_CONTEGGIO, 'svg');
+    svg.setAttribute('class', 'i i--xs');
+    svg.setAttribute('aria-hidden', 'true');
+    const use = doc.createElementNS(SVG_NS_CONTEGGIO, 'use');
+    use.setAttribute('href', '#i-sparkles');
+    svg.append(use);
+    const numero = el(doc, 'span', 'talos-session-item__conto', String(giri));
+    numero.setAttribute('aria-hidden', 'true');
+    nodo.replaceChildren(svg, numero, el(doc, 'span', 'sr-only', frase));
+  } else nodo.textContent = frase;
+  nodo.title = titolo;
+  if (nodo.dataset) { nodo.dataset.conteggio = ''; nodo.dataset.giri = String(giri); }
+  return true;
+}
+
 /**
  * N1 \u2014 aggiorna una riga GI\u00c0 disegnata, senza ricostruirla.
  *
@@ -464,16 +503,20 @@ export function aggiornaSessionItem(riga, dati = {}) {
   if (Number.isFinite(dati.giri) && dati.giri > 0) {
     const aside = riga.querySelector('.talos-session-item__aside');
     if (aside) {
-      const frase = tn('processi.session.turnOne', 'processi.session.turnMany', dati.giri);
-      /* L'ultimo figlio dell'aside \u00e8 il conteggio, quando c'\u00e8: si riconosce dalla parola, non dalla
-         posizione \u2014 una riga senza giri ha l\u00ec solo l'ora, e sovrascriverla direbbe l'ora sbagliata. */
+      /* L'ultimo figlio dell'aside \u00e8 il conteggio, quando c'\u00e8: si riconosce dal suo segno, non dalla
+         posizione \u2014 una riga senza giri ha l\u00ec solo l'ora, e sovrascriverla direbbe l'ora sbagliata.
+         \u26d4 TACCUINO (09/10/2026): si riconosceva dalla PAROLA (`giro|giri|turns`), e quando il conteggio \u00e8 diventato
+         \u00abrichieste al modello\u00bb (owner 09/10) la parola non c'era pi\u00f9: a ogni aggiornamento un conteggio NUOVO accanto
+         al vecchio (preso dalla prova N1 \u00abse niente \u00e8 cambiato non si tocca il DOM\u00bb). Ora il segno `data-conteggio`, messo
+         da chi lo crea (qui e in `creaSessionItem`); la parola resta come ripiego per le righe disegnate prima, in tutte e due
+         le forme e le due lingue. */
       const ultimo = aside.lastElementChild;
-      const eIlConteggio = ultimo && /\b(?:gir[oi]|turns?)\b/.test(ultimo.textContent || '');
+      const eIlConteggio = ultimo && (ultimo.dataset?.conteggio !== undefined || /\b(?:gir[oi]|turns?|richiest[ae]|requests?)\b/.test(ultimo.textContent || ''));
       if (eIlConteggio) {
-        if (ultimo.textContent !== frase) { ultimo.textContent = frase; cambiato = true; }
+        if (scriviConteggio(ultimo, dati.giri)) cambiato = true;
       } else {
         const nuovo = riga.ownerDocument.createElement('span');
-        nuovo.textContent = frase;
+        scriviConteggio(nuovo, dati.giri, null);
         aside.append(nuovo);
         cambiato = true;
       }
@@ -533,8 +576,8 @@ export function creaSessionItem(sessione, opzioni = {}) {
      */
     const { giri, fermati } = giriDellaSessione(sessione);
     if (giri !== null && giri > 0) {
-      const conto = el(documentObj, 'span', null, tn('processi.session.turnOne', 'processi.session.turnMany', giri));
-      if (fermati > 0) conto.title = spiegaGiriFermati(fermati);
+      const conto = el(documentObj, 'span');
+      scriviConteggio(conto, giri, fermati > 0 ? spiegaGiriFermati(fermati) : null); // icona + numero, la frase nel suggerimento (TACCUINO 09/10)
       aside.append(conto);
     }
   }

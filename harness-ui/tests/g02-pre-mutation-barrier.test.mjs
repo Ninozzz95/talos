@@ -34,7 +34,7 @@ function network(...replies) {
 const DONE = {role: 'assistant', content: 'done'};
 const call = (name, args) => ({role: 'assistant', content: '', tool_calls: [{id: `call_${name}`, type: 'function', function: {name, arguments: JSON.stringify(args)}}]});
 const base = (root, net, extra = {}) => ({cartella: root, task: {consegna: 'test'}, modello: 'x', chiave: 'y', fetchDiRete: net.fetch,
-  messaggiIniziali: [{role: 'system', content: 'test'}, {role: 'user', content: 'test'}], livelloAccesso: 'completo', _giriMassimiInterno: 3, ...extra});
+  messaggiIniziali: [{role: 'system', content: 'test'}, {role: 'user', content: 'test'}], livelloAccesso: 'scrittura-progetto', _giriMassimiInterno: 3, ...extra});
 
 test('G02-9 a text-only turn never calls the barrier', async (t) => {
   const root = workspace(t), net = network(DONE), actions = [];

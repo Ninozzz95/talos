@@ -30,7 +30,7 @@ import { createToolOutputPreview } from './kernel/tool-output-preview.mjs';
 import { NOME_EVENTO_PROGRESSO_COMPATTAZIONE, creaContatoreRiassunto } from './kernel/compattazione-desktop.mjs'; // lane CLI, 03/10/2026: compaction.progress
 import { delegaLimitata } from './delegation-contract.mjs';
 import { join as joinPercorso, relative as percorsoRelativo, sep as separatorePercorso } from 'node:path';
-import { percorsoFileSfondo } from './kernel/talosHarness.mjs'; // BUG-14: il file di output dei comandi in sfondo (solo il percorso, nessun ciclo)
+import { percorsoFileSfondo, registroDellAvvio } from './kernel/talosHarness.mjs'; // BUG-14: il file di output dei comandi in sfondo (solo il percorso, nessun ciclo); C1: ciò che l'esecutore dice al lancio
 
 import { createOwnerRuntimeAdapter } from './runtime-owner-adapter.mjs';
 import { salvaArtefatto as salvaArtefattoReale } from './artifact-store.mjs';
@@ -84,7 +84,7 @@ import {
   leggiMemoria as leggiMemoriaReale,
 } from './memory-store.mjs';
 // 27/09/2026, decisione owner (`decisioni-owner-capacita-sezioni-27-09`): le letture delle sezioni e le memorie nel prompt.
-import { cercaAttivita, cercaNote, elencoMemorie, leggiNotaIntera } from './letture-delle-sezioni.mjs';
+import { trovaAttivita, trovaNote, trovaMemorie, trovaLibreria, leggiNotaIntera } from './letture-delle-sezioni.mjs';
 import { bloccoDelleMemorie } from './memorie-nel-prompt.mjs';
 import {
   elencaToolForgiati as elencaToolForgiatiReale,
@@ -285,6 +285,9 @@ export async function avviaSessione({
    */
   cartellaDatiProgettoFn = null,
   onEvento, segnaleStop, messaggiIniziali, reasoning, contextHooks, onStoriaIniziale, ricostruisciContestoIniziale = false, mobile = false,
+  /* C3 tappa 4 (owner 09/10): la PAUSA di una delega — l'attrezzo in volo finisce, il giro dopo non parte. Passata al motore
+     solo se c'è (la CLI non la passa e non vede niente di diverso). */
+  segnalePausa = null,
   /* Stop per riga (owner 02/10/2026): `({ toolCallId, ferma }) => sgancia`, passata così com'è al motore. */
   registraComandoFermabile = null,
   /* A6-bis (08/10/2026): `({ toolCallId, codice, segnale }) => void`, l'uscita vera di un comando già sfondato; passata al motore. */
@@ -388,6 +391,7 @@ export async function avviaSessione({
   // 24/09/2026, decisioni owner 36-39: il canale della scelta sul piano, inoltrato SENZA logica come `chiediDomandaFn`.
   presentaPianoFn,
   agentRole, askParentFn, answerChildQuestionFn, askChildFn, answerParentQuestionFn, onWorkflowPlanPropose, listChildrenFn, stopChildFn,
+  pauseChildFn = null, resumeChildFn = null, // C3 tappa 4: pausa e ripresa dei figli, inoltrate al motore
   // D1 «Come Claude» (24/09/2026): inoltrati SENZA logica, come gli altri: il modo del padre letto a ogni chiamata e le figlie vive all'avvio.
   modalitaOperativaCorrenteFn, figliViviAllAvvio,
   permessiCorrentiFn, // C2-a (07/10/2026): i permessi della catena letti a ogni chiamata, inoltrati senza logica come il modo
@@ -1186,6 +1190,10 @@ export async function avviaSessione({
            mostrare, ma porta il suo canale e il suo motivo onesto — senza questi la validazione del
            frontend buttava l'evento e l'attesa restava muta (fino a ~4 minuti senza banner). */
         ...(evento.canale === 'esito-incerto' ? { canale: evento.canale, motivo: evento.motivo } : {}),
+        /* OWN-01 (09/10/2026, bugfixer, nel port del kernel CLI 0.5.2): il kernel dice anche la CAUSA (`nessuna-prima-risposta`:
+           il fornitore non ha mandato nemmeno gli header). Senza questa riga il campo si perdeva qui, e il banner diceva «si è
+           interrotta» per una risposta mai cominciata. Solo il valore conosciuto, solo sul canale incerto. */
+        ...(evento.canale === 'esito-incerto' && evento.causa === 'nessuna-prima-risposta' ? { causa: evento.causa } : {}),
       } });
     }
     /* Decisione 14 (owner 08/10/2026 sera): chi ha servito il giro. Un evento persistito, così la testata della risposta lo dice
@@ -1775,7 +1783,7 @@ export async function avviaSessione({
   const onLibreriaRinomina = async (argomenti) => {
     const risultato = await rinominaVoceFn({ cartella: await cartellaDatiDelProgetto(), id: argomenti?.id ?? '', nome: argomenti?.name ?? '' });
     if (!risultato) {
-      return { ok: false, esito: `No Library file has the id "${argomenti?.id}". Use library_list or library_search to find it.` };
+      return { ok: false, esito: `No Library file has the id "${argomenti?.id}". Use library_find to find it.` };
     }
     return { ok: true, esito: `Renamed «${risultato.nomePrima}» to «${risultato.nomeDopo}».` };
   };
@@ -2003,7 +2011,7 @@ export async function avviaSessione({
       return { ok: true, esito: `Updated the note «${aggiornata.titolo}».` };
     } catch (errore) {
       if (errore?.code === 'NOTE_NOT_FOUND') {
-        return { ok: false, esito: 'There is no note with that id. Call notes_list to see the current ones.' };
+        return { ok: false, esito: 'There is no note with that id. Call notes_find to see the current ones.' };
       }
       return { ok: false, esito: errore instanceof Error ? errore.message : String(errore) };
     }
@@ -2051,7 +2059,7 @@ export async function avviaSessione({
       return { ok: true, esito: stato === 'done' ? `Marked «${aggiornata.titolo}» as done.` : `Moved «${aggiornata.titolo}» to ${stato}.` };
     } catch (errore) {
       if (errore?.code === 'TASK_NOT_FOUND') {
-        return { ok: false, esito: 'There is no task with that id. Call tasks_list to see the current ones.' };
+        return { ok: false, esito: 'There is no task with that id. Call tasks_find to see the current ones.' };
       }
       return { ok: false, esito: errore instanceof Error ? errore.message : String(errore) };
     }
@@ -2067,7 +2075,7 @@ export async function avviaSessione({
       return { ok: true, esito: `Updated the task «${aggiornata.titolo}».` };
     } catch (errore) {
       if (errore?.code === 'TASK_NOT_FOUND') {
-        return { ok: false, esito: 'There is no task with that id. Call tasks_list to see the current ones.' };
+        return { ok: false, esito: 'There is no task with that id. Call tasks_find to see the current ones.' };
       }
       return { ok: false, esito: errore instanceof Error ? errore.message : String(errore) };
     }
@@ -2102,14 +2110,24 @@ export async function avviaSessione({
    */
   const onLetturaSezione = async (nome, argomenti = {}) => {
     switch (nome) {
-      case 'memory_list': return elencoMemorie(await elencaMemorieFn({ cartella: cartellaMemoria }), argomenti);
-      case 'notes_search': return cercaNote(await elencaNoteFn({ cartella: cartellaNote }), argomenti);
+      // C5 (owner 10/10): memory_list + memory_search → memory_find, come note e attività
+      case 'memory_find': return trovaMemorie(await elencaMemorieFn({ cartella: cartellaMemoria }), argomenti);
+      // C5 (owner 10/10): notes_list + notes_search → notes_find, un elenco o una ricerca col contratto comune degli elenchi
+      case 'notes_find': return trovaNote(await elencaNoteFn({ cartella: cartellaNote }), argomenti);
       case 'notes_read': {
         const id = String(argomenti?.id ?? '');
         return leggiNotaIntera(id ? await leggiNotaFn({ cartella: cartellaNote, id }) : null, { ...argomenti, id });
       }
-      case 'tasks_search': return cercaAttivita(await elencaAttivitaFn({ cartella: cartellaAttivita }), argomenti);
-      case 'research_search':
+      // C5 (owner 10/10): tasks_list + tasks_search → tasks_find, come le note
+      case 'tasks_find': return trovaAttivita(await elencaAttivitaFn({ cartella: cartellaAttivita }), argomenti);
+      // C5 (owner 10/10): library_list + library_search → library_find. Il testo estratto (pesante) si legge solo per una query.
+      case 'library_find': {
+        const cartella = await cartellaDatiDelProgetto();
+        const query = typeof argomenti?.query === 'string' ? argomenti.query.trim() : '';
+        const voci = query && query !== '*' ? await elencaVociConTestoFn({ cartella }) : await elencaVociFn({ cartella });
+        return trovaLibreria(voci, argomenti);
+      }
+      case 'research_find': // C5 (owner 10/10): research_list + research_search → research_find
         return typeof onRicercaCerca === 'function' ? onRicercaCerca(argomenti) : 'deep research is not configured on this harness.';
       case 'conversation_search':
         return typeof conversazioniFn === 'function' ? conversazioniFn(argomenti) : 'conversations are not available on this harness.';
@@ -2146,7 +2164,7 @@ export async function avviaSessione({
       return { ok: true, esito: `Memory «${aggiornata.titolo}» updated.` };
     } catch (errore) {
       if (errore?.code === 'MEMORY_NOT_FOUND') {
-        return { ok: false, esito: `No memory has the id "${argomenti?.id}". Use memory_search to find the right one.` };
+        return { ok: false, esito: `No memory has the id "${argomenti?.id}". Use memory_find to find the right one.` };
       }
       return { ok: false, esito: errore instanceof Error ? errore.message : String(errore) };
     }
@@ -2165,6 +2183,7 @@ export async function avviaSessione({
   try {
     const esito = await talosLavoraFn({
       cartella, task, modello, chiave, comandoProva, segnaleStop, messaggiIniziali, mobile,
+      ...(segnalePausa ? { segnalePausa } : {}), // C3 tappa 4: la pausa di una delega
       finestraToken, /* ⛔ BUG-5 (05/10/2026): inoltrata al kernel — la soglia diventa 0,75 della finestra VERA del modello */
       ...(typeof registraComandoFermabile === 'function' ? { registraComandoFermabile } : {}),
       ...(typeof segnalaUscitaSfondo === 'function' ? { segnalaUscitaSfondo } : {}),
@@ -2234,9 +2253,13 @@ export async function avviaSessione({
       // («raccolta viva»). Assenti ⇒ il kernel si comporta esattamente come ieri.
       cacheWeb, onPaginaLetta,
       livelloAccesso, modalitaOperativa, chiediApprovazioneFn, chiediDomandaFn, figliaChiedeAllaPersona, presentaPianoFn,
-      agentRole, askParentFn, answerChildQuestionFn, askChildFn, answerParentQuestionFn, onWorkflowPlanPropose, listChildrenFn, stopChildFn,
+      agentRole, askParentFn, answerChildQuestionFn, askChildFn, answerParentQuestionFn, onWorkflowPlanPropose, listChildrenFn, stopChildFn, pauseChildFn, resumeChildFn,
       modalitaOperativaCorrenteFn, figliViviAllAvvio, permessiCorrentiFn,
       hookFn: hookFnConPlugin, permessiPerAttrezzo, onDelega, coordinazioneFn, codaMessaggiFn,
+      /* A13 (owner 10/10/2026, «Sì, come nella CLI»): i GIRI IN TONDO anche sul desktop — la stessa chiamata con lo stesso risultato
+         dalla 2ª volta arriva al modello come una nota, alla 5ª si chiede alla persona (carta «giri-in-tondo», session-registry);
+         senza nessuno che risponda il giro si ferma col suo motivo. Visto dal vivo: gpt-5-nano, 82 `leggi` identiche di fila. */
+      guardiaGiriInTondo: true,
       firma, toolMcp, chiamaToolMcpFn, skillsDisponibili, caricaSkillFn, toolPlugin, eseguiToolPluginFn,
       onLibreriaLista, onLibreriaCerca, onLibreriaLeggi, onLibreriaOrigine,
       onLibreriaRinomina, onLibreriaElimina, onLibreriaEsporta, onLibreriaPolitica,
@@ -2515,8 +2538,9 @@ export async function eseguiComandoDiretto({
   const fermaQuesto = new AbortController();
   const sfondoQuesto = new AbortController();
   const sfondoFile = percorsoFileSfondo(cartella, toolCallId);
+  const avvio = registroDellAvvio(); // C1 (10/10/2026): lo dice l'esecutore appena lancia la shell, per CPU e memoria nei Processi
   const sgancia = typeof registraComandoFermabile === 'function'
-    ? registraComandoFermabile({ toolCallId, ferma: () => fermaQuesto.abort('stop-della-riga'), sfonda: () => sfondoQuesto.abort('sfondo-della-riga') }) // = MOTIVO_STOP_DELLA_RIGA / MOTIVO_SFONDO_DELLA_RIGA del kernel
+    ? registraComandoFermabile({ toolCallId, ferma: () => fermaQuesto.abort('stop-della-riga'), sfonda: () => sfondoQuesto.abort('sfondo-della-riga'), pid: avvio.pid, wsl: avvio.wsl }) // = MOTIVO_STOP_DELLA_RIGA / MOTIVO_SFONDO_DELLA_RIGA del kernel
     : null;
   const execute = ({onBytes} = {}) => eseguiComandoSandboxatoFn(comando, cartella, {
     mobile,
@@ -2531,6 +2555,7 @@ export async function eseguiComandoDiretto({
     /* ⛔ BUG-3/BUG-14: anche un `!` della persona sfonda al tempo (non muore più) e può essere sfondato dalla sua riga. */
     segnaleSfondo: sfondoQuesto.signal,
     fileSfondo: sfondoFile,
+    onAvvio: avvio.annuncia,
     onPezzo: ({ testo }) => anteprima.append(testo),
   });
   let risultato;
@@ -2543,7 +2568,7 @@ export async function eseguiComandoDiretto({
   if (typeof sgancia === 'function' && risultato?.messoInSfondo && risultato.uscita) risultato.uscita.finally(() => sgancia()).catch(() => {});
   anteprima.flush(); // Anche l'ultimo pezzo ammesso deve essere consegnato.
   if (risultato?.messoInSfondo && risultato.uscita && typeof segnalaUscitaSfondo === 'function') {
-    risultato.uscita.then((u) => segnalaUscitaSfondo({ toolCallId, ...u })).catch(() => {}); // A6-bis (G2: anche un'eccezione del segnalatore)
+    risultato.uscita.then((u) => segnalaUscitaSfondo({ toolCallId, ...u, comando, file: risultato.fileSfondo ?? null, dellaPersona: true })).catch(() => {}); // A6-bis (G2); C06: comando e file per la nota al modello
   }
   /* ⛔ BLOCCO 6 (B3) — era `[sandbox: ${risultato.enforcement}]`, cioè `[sandbox: none]`: un valore
      che non dice a chi legge che il comando è partito con gli stessi privilegi di TALOS. Qui il

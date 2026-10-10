@@ -23,7 +23,7 @@ async function run(cartella,{dove='windows',callback,command='echo SHELL07',tool
   const requests=[],events=[];
   const result=await runtime({cartella,task:{consegna:'Verifica il comando richiesto.'},modello:'fixture/environment',chiave:'fixture',
     messaggiIniziali:[{role:'system',content:'Verifica.'},{role:'user',content:'Verifica il comando richiesto.'}],
-    livelloAccesso:'completo',_giriMassimiInterno:3,comandoProva:command,
+    livelloAccesso: 'scrittura-progetto',_giriMassimiInterno:3,comandoProva:command,
     ambienteComandiFn:callback??(()=>({dove,revisione:0})),...options,
     fetchDiRete:async(_url,init)=>{requests.push(JSON.parse(init.body));await beforeReply?.(requests.length);
       const message=requests.length===1?{role:'assistant',content:'',tool_calls:[call(tool,{comando:command})]}:{role:'assistant',content:'Verificato.'};
@@ -75,7 +75,7 @@ test('SHELL07-CHANGE: a command prepared before an environment change is never e
 test('SHELL07-APPROVAL: selection is rechecked after approval',async t=>{
   const root=fixture(t);let revision=0,approvals=0;
   const r=await run(root,{callback:()=>({dove:'windows',revisione:revision}),command:'echo forbidden > forbidden.txt',
-    livelloAccesso:'workspace',permessiPerAttrezzo:{shell:'chiedi'},chiediApprovazioneFn:async()=>{approvals++;revision++;return true;}});
+    livelloAccesso: 'scrittura-progetto',permessiPerAttrezzo:{shell:'chiedi'},chiediApprovazioneFn:async()=>{approvals++;revision++;return true;}});
   assert.equal(approvals,1);assert.equal(existsSync(join(root,'forbidden.txt')),false);assert.match(r.output.content,/COMMAND_ENVIRONMENT_CHANGED/);
 });
 for(const [id,value,extra] of [['INVALID',{dove:'unknown',revisione:0},{}],['REVISION',{dove:null,revisione:-1},{}],['MOBILE',{dove:'windows',revisione:0},{mobile:true}]]){

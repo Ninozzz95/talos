@@ -170,8 +170,13 @@ test('R04-TAG-COMMIT — il ramo CI conserva il commit esatto del tag', { skip: 
   const passoTag = passo('commit_tag');
   const dir = mkdtempSync(join(tmpdir(), 'talos-r04-tag-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
+  /* ⛔ 10/10/2026, PR pubblica #55 (desktop 0.1.26): rosso per TEMPO, non per la logica — `spawnSync git ETIMEDOUT` sul
+     `fetch --depth=1` dell'intero repo dentro la cartella temporanea, sul runner `windows-latest`, prima di arrivare al passo
+     provato. Il limite copre una copia del repo grande quanto il repo, non il passo `commit_tag`: 120 s invece di 20, le
+     asserzioni restano le stesse. Stesso precedente di R04-SMOKE-LIMITI (01/10). Owner: «Alzo il limite, poi tag». */
+  const LIMITE_MS = 120_000;
   const git = args => {
-    const r = spawnSync('git', args, { cwd: dir, encoding: 'utf8', windowsHide: true, timeout: 20000 });
+    const r = spawnSync('git', args, { cwd: dir, encoding: 'utf8', windowsHide: true, timeout: LIMITE_MS });
     assert.equal(r.status, 0, r.error?.message || r.stderr);
     return r.stdout.trim();
   };
@@ -180,7 +185,7 @@ test('R04-TAG-COMMIT — il ramo CI conserva il commit esatto del tag', { skip: 
   git(['checkout', '--quiet', '--detach', 'FETCH_HEAD']);
   git(['tag', 'desktop-v0.1.0']);
   const prima = git(['rev-parse', 'HEAD']);
-  const r = spawnSync('pwsh.exe', ['-NoProfile', '-Command', passoTag.run], { cwd: dir, env: { ...process.env, GITHUB_REF_NAME: 'desktop-v0.1.0' }, encoding: 'utf8', windowsHide: true, timeout: 20000 });
+  const r = spawnSync('pwsh.exe', ['-NoProfile', '-Command', passoTag.run], { cwd: dir, env: { ...process.env, GITHUB_REF_NAME: 'desktop-v0.1.0' }, encoding: 'utf8', windowsHide: true, timeout: LIMITE_MS });
   assert.equal(r.status, 0, r.error?.message || r.stdout + r.stderr);
   assert.equal(git(['rev-parse', 'HEAD']), prima);
   assert.equal(git(['branch', '--show-current']), 'ci-desktop-release');

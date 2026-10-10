@@ -213,7 +213,7 @@ for (const tema of ['dark', 'light']) {
       /* 2. ⛔ E IL NUMERO NON MANGIA L'ETICHETTA: dentro la scheda si legge la parola E il numero. */
       // 26/09/2026 — F6-1 (decisioni dell'owner su F6): la quinta scheda «GitHub», subito dopo File. Ci stanno tutte e cinque grazie
       // al margine di 6 px delle schede (owner, stesso giorno, seconda risposta coi numeri giusti: «margine 6 px + scorrimento»).
-      expect(m.schede.map((s) => s.testo)).toEqual(['Contesto', 'File', 'GitHub', 'Agenti 2', 'Processi 1']);
+      expect(m.schede.map((s) => s.testo)).toEqual(['Contesto', 'File', 'Git', 'Agenti 2', 'Processi 1']);
     });
   }
 }

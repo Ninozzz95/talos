@@ -67,7 +67,8 @@ const RISERVE_PUBBLICHE = {
   openai: { 'gpt-5-nano': true, 'gpt-5-mini': true },
   deepseek: { 'deepseek-flash': true, 'deepseek-v4-pro': true },
   zai: { 'glm-4.7-flash': true, 'glm-4.7': true },
-  anthropic: { 'claude-haiku-4-5-20251001': true, 'claude-sonnet-5': true },
+  /* claude-haiku-5-5: models.dev api.json read 09/10/2026 (TALOS cache), tool_call true, release_date 2026-10-07. */
+  anthropic: { 'claude-haiku-4-5-20251001': true, 'claude-sonnet-5': true, 'claude-haiku-5-5': true },
   google: { 'gemini-2.5-flash-lite': true, 'gemini-3.1-flash-lite': true },
   openrouter: { 'liquid/lfm-2.5-2.6b:free': true, 'openai/gpt-5-nano': true },
 };
@@ -100,7 +101,7 @@ test('PF-PAR-01 — riserve non vuote per ogni chat remota; locali e download di
         assert.ok(Object.isFrozen(m));
         assert.equal(m.toolCalling, true);
         assert.match(m.fonte, /^https:\/\//u);
-        assert.equal(m.data, '2026-09-12');
+        assert.equal(m.data, m.id === 'claude-haiku-5-5' ? '2026-10-09' : '2026-09-12');
       }
     } else {
       assert.equal(r.modelliDiRiserva, null, r.id);

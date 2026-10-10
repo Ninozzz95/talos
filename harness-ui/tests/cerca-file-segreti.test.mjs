@@ -23,8 +23,10 @@ import { rimuoviCartellaDiProva, rimuoviCartellaDiProvaAttesa } from './aiuto/ri
 
 const childProcess = createRequire(import.meta.url)('node:child_process')
 const C = 'CANARINOFS001'
-const SEGRETI = ['.env', '.env.local', 'config/.env', 'id_ed25519', 'deploy/key.pem', '.envrc', '.ssh/config', 'Prod.ENV']
-const PUBBLICI = ['normale.txt', 'src/app.js', '.env.example', 'id_ed25519.pub']
+/* Owner 09/10/2026 («Insieme stretto»), stress test 0.5.0: `secrets.json` era visibile alla ricerca; ora con i suoi pari stretti. */
+const SEGRETI = ['.env', '.env.local', 'config/.env', 'id_ed25519', 'deploy/key.pem', '.envrc', '.ssh/config', 'Prod.ENV',
+    'config/secrets.json', 'secrets.yaml', 'secrets.yml', 'secrets.toml', '.secrets', 'credentials.json', 'keys/gcp-service-account-prod.json', 'service_account.json']
+const PUBBLICI = ['normale.txt', 'src/app.js', '.env.example', 'id_ed25519.pub', 'secret_manager.py', 'secrets.example.json', 'secrets.json.example']
 
 function progetto(t) {
     const radice = mkdtempSync(join(tmpdir(), 'talos-cerca-segreti-'))

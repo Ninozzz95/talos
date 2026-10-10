@@ -63,6 +63,33 @@ export function runControlCommandHash({ commandType, workflowId, version, runId 
   });
 }
 
+/**
+ * C3 (09/10/2026) — la stessa proiezione per `resolve-node`, l'azione della persona su UN passo: il bersaglio è il passo, il
+ * contenuto è l'azione con i suoi parametri (il riassunto di «Segna come fatto», il modello di «Rifai con un altro modello»).
+ * Lo stesso id con un altro riassunto è un altro comando: conflitto, non ripetizione.
+ */
+export function resolveNodeCommandHash({ workflowId, version, runId, nodeId, action, summary = null, model = null } = {}) {
+  return canonicalHash({
+    schema: 'talos.workflow-command-dedupe.v1',
+    commandType: 'resolve-node',
+    target: { workflowId, definitionVersion: version, runId, nodeId, requestId: null },
+    payload: { action, summary, model },
+  });
+}
+
+/**
+ * C3 tappa 3 (09/10/2026) — `raise-ceiling`: il contenuto è la cifra DETTA sul pulsante. Lo stesso id con un'altra cifra è un altro
+ * comando (conflitto), e una cifra che non è più quella di adesso si rifiuta prima di scrivere (la confronta l'orchestratore).
+ */
+export function raiseCeilingCommandHash({ workflowId, version, runId, amount } = {}) {
+  return canonicalHash({
+    schema: 'talos.workflow-command-dedupe.v1',
+    commandType: 'raise-ceiling',
+    target: { workflowId, definitionVersion: version, runId, nodeId: null, requestId: null },
+    payload: { amount },
+  });
+}
+
 function refuseUnrunnable(core, supportedNodeKinds) {
   // ⛔ Dopo la ripetizione, mai prima: un comando già accettato risponde col suo run anche se oggi gli adattatori mancano.
   if (supportedNodeKinds.length === 0) fail('No Workflow step adapter is available on this server. Nothing was started.', 'WORKFLOW_START_UNSUPPORTED');

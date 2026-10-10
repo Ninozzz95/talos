@@ -68,3 +68,43 @@ test('RIPRESA-CODA-RISULTATO — schema valido, sorgente e testo ostile restano 
  assert.deepEqual(m.descriviRisultatoDelega(testo,'a'),{titolo:'Test',testo:'<script>mai()</script>',errore:false});
  assert.equal(m.descriviRisultatoDelega(testo,'b'),null);assert.equal(m.descriviRisultatoDelega('rotto','a'),null);
 });
+
+/* ⛔ TACCUINO (09/10/2026, bugfixer): la figlia fermata consegna la frase del kernel, in inglese; la nota «sotto-agente non
+   concluso» la mostrava così anche in italiano (misurato sulla 4176). Si scrive dal dizionario, col punto tradotto. */
+test('TACCUINO-FERMATA — la fermata di una figlia si legge nella lingua dell’interfaccia, il resto passa com’è', async () => {
+  const { impostaLingua } = await import('../../src/components/lingua.js');
+  const m = await import('../../src/components/coda-messaggi.js');
+  const contratto = (risultatoNonFidato) => 'Avviso\n' + JSON.stringify({ schema: 'talos.subagent-result.v1', childId: 'f', stato: 'non concluso', compito: 'Crea il file', risultatoNonFidato });
+  try {
+    impostaLingua('it');
+    assert.equal(m.descriviRisultatoDelega(contratto('⛔ stopped on request: while the model was answering, at round 1.'), 'f').testo,
+      '⛔ Fermata su richiesta: mentre il modello stava rispondendo, al giro 1.');
+    assert.equal(m.fermataNellaLingua('⛔ stopped on request.'), '⛔ Fermata su richiesta.');
+    assert.equal(m.fermataNellaLingua('⛔ stopped on request: a point nobody declared.\nseconda riga'), '⛔ Fermata su richiesta: a point nobody declared.\nseconda riga',
+      'un punto che il dizionario non conosce passa com’è, la riga dopo resta');
+    impostaLingua('en');
+    assert.equal(m.fermataNellaLingua('⛔ stopped on request: while the model was answering, at round 3.'), '⛔ Stopped on request: while the model was answering, at round 3.');
+    impostaLingua('it');
+    assert.equal(m.fermataNellaLingua('Il file non esiste.'), 'Il file non esiste.', 'un altro errore non si tocca');
+    const concluso = 'Avviso\n' + JSON.stringify({ schema: 'talos.subagent-result.v1', childId: 'f', stato: 'concluso', compito: 'X', risultatoNonFidato: '⛔ stopped on request.' });
+    assert.equal(m.descriviRisultatoDelega(concluso, 'f').testo, '⛔ stopped on request.', 'un risultato CONCLUSO è testo del modello: non si riscrive');
+  } finally { impostaLingua('it'); }
+});
+
+// C3 tappa 4 (09/10/2026): la frase di PAUSA del kernel («⏸ paused on request: before round 3.») nella lingua dell'interfaccia,
+// col punto tradotto dalla stessa tabella; al contrario, una frase di fermata resta di fermata e un testo qualunque non si tocca.
+test('C3-PAUSA-NELLA-LINGUA — the kernel pause sentence is written in the interface language', async () => {
+  const { impostaLingua } = await import('../../src/components/lingua.js');
+  const m = await import('../../src/components/coda-messaggi.js');
+  try {
+    impostaLingua('en');
+    assert.equal(m.fermataNellaLingua('⏸ paused on request: before round 3.'), '⏸ Paused on request: before round 3.');
+    impostaLingua('it');
+    const it = m.fermataNellaLingua('⏸ paused on request: before round 3.');
+    assert.match(it, /^⏸ In pausa su richiesta: /u);
+    assert.doesNotMatch(it, /paused|before round/u, 'no English left on screen');
+    assert.equal(m.fermataNellaLingua('⏸ paused on request.'), '⏸ In pausa su richiesta.');
+    assert.match(m.fermataNellaLingua('⛔ stopped on request.'), /^⛔ Fermata su richiesta\.$/u, 'a stop stays a stop');
+    assert.equal(m.fermataNellaLingua('Ho messo in pausa il lavoro.'), 'Ho messo in pausa il lavoro.', 'free text is untouched');
+  } finally { impostaLingua('it'); }
+});

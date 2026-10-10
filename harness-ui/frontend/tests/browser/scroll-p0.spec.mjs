@@ -304,6 +304,35 @@ test('SCROLL-P0-07 — chi si stacca riaccende l’ancoraggio nativo; chi torna 
   expect(await leggi(), 'tornata in fondo, si segue di nuovo e l’ancoraggio si spegne').toEqual({ segue: 'si', ancora: 'none' });
 });
 
+test('SCROLL-P0-07b AL CONTRARIO — un gesto in giù che non sposta niente, poi la conversazione si ACCORCIA: il clamp del browser non riaggancia (review di «talos desktop»)', async ({ page }) => {
+  /* La base del gesto (RIARMO-DOPO-GESTO, 09/10/2026) è l'ultima posizione vista da uno `scroll`. Se non si aggiornasse più, resterebbe
+     quella iniziale, bassa, e uno scroll che NON è della persona (il clamp quando il contenuto si accorcia) la supererebbe: il seguito si
+     riaggancerebbe mentre la persona sta leggendo. */
+  await apri(page, 'ancora-clamp');
+  await riempi(page);
+  const leggi = () => page.evaluate(() => document.querySelector('#schermoChat .talos-conversation').dataset.segue);
+  await vaiAMetaEOsserva(page);
+  expect(await leggi(), 'PRECONDIZIONE: staccata a metà').toBe('no');
+  const prima = await page.evaluate(async () => {
+    const sc = document.querySelector('#schermoChat .talos-conversation');
+    const fotogramma = () => new Promise((ok) => requestAnimationFrame(ok));
+    // un gesto in giù che NON sposta lo scroll: una rotella sintetica (non fidata, il browser non scorre) arriva al gestore
+    sc.dispatchEvent(new WheelEvent('wheel', { deltaY: 40, bubbles: true, cancelable: true }));
+    await fotogramma(); await fotogramma();
+    const top = sc.scrollTop;
+    // il contenuto si accorcia SOTTO la vista: via gli ultimi giri ⇒ il browser riporta scrollTop al nuovo massimo (un clamp)
+    const colonna = document.querySelector('#conversation');
+    const pezzi = () => [...colonna.querySelectorAll('p, li, pre, h1, h2, h3, table')];
+    for (let n = pezzi(); n.length > 1 && sc.scrollHeight - sc.clientHeight > top - 50; n = pezzi()) n.at(-1).remove();
+    await fotogramma(); await fotogramma(); await fotogramma();
+    return { top, dopo: sc.scrollTop, fondoInVista: sc.scrollHeight - sc.scrollTop - sc.clientHeight <= parseFloat(getComputedStyle(colonna).paddingBottom) + 4 };
+  });
+  expect(prima.dopo, 'PRECONDIZIONE: il browser ha davvero spostato lo scroll (clamp)').toBeLessThan(prima.top);
+  expect(prima.dopo, 'PRECONDIZIONE: il clamp atterra SOPRA lo zero, dove una base vecchia (0) verrebbe superata').toBeGreaterThan(100);
+  expect(prima.fondoInVista, 'PRECONDIZIONE: dopo il clamp il fondo è in vista, quindi un riaggancio SAREBBE possibile').toBe(true);
+  expect(await leggi(), 'AL CONTRARIO: il clamp non è un gesto della persona, il seguito resta spento').toBe('no');
+});
+
 test('SCROLL-P0-08 — se cresce qualcosa SOPRA la risposta che scorre, il fondo resta in vista (ri-ancoraggio)', async ({ page }) => {
   await apri(page, 'cresce-sopra');
   await riempi(page);

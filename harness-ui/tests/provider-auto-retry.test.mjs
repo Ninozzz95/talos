@@ -70,10 +70,10 @@ test('PROVIDER-503-RETRY-AFTER: header conservato attraverso adapter e kernel', 
   assert.equal(b.requests.length, 2);
 });
 
-test('PROVIDER-503-EXHAUSTED: quattro richieste reali prima della panchina', async t => {
+test('PROVIDER-503-EXHAUSTED: undici richieste reali prima della panchina', async t => {
   const b = await banco(t, res => failure(res));
   await assert.rejects(b.run(), e => e.stato === 503);
-  assert.equal(b.requests.length, 4);
+  assert.equal(b.requests.length, 11); /* 09/10/2026, owner «come Claude Code»: 1 + 10 tentativi (ritenti-429-come-claude-code.test.mjs) */
   assert.equal(b.store.elencaPool('openrouter')[0].causa, 'guasto-fornitore');
 });
 
@@ -118,10 +118,10 @@ test('PROVIDER-429-SINGLE-KEY: dopo Retry-After la stessa chiave raggiunge davve
   assert.equal(b.requests.length, 2);
   assert.equal(b.store.elencaPool('openrouter')[0].inPanchinaFino, null);
 });
-test('PROVIDER-429-EXHAUSTED: quattro rifiuti reali, non tre risposte locali inventate', async t => {
+test('PROVIDER-429-EXHAUSTED: undici rifiuti reali, non risposte locali inventate', async t => {
   const b = await banco(t, res => failure(res, 429));
   await assert.rejects(b.run(), e => e.classe === 'traffico');
-  assert.equal(b.requests.length, 4);
+  assert.equal(b.requests.length, 11); /* 09/10/2026, owner «come Claude Code»: 1 + 10 tentativi (ritenti-429-come-claude-code.test.mjs) */
   assert.equal(b.store.elencaPool('openrouter')[0].causa, 'traffico');
 });
 test('PROVIDER-429-STOP: stop durante attesa impedisce invio successivo', async t => {

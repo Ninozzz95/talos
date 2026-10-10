@@ -49,7 +49,8 @@ test('STREAM-AVVIO: Page.enable e l\'ascolto vengono PRIMA di startScreencast, e
   };
   const trasmissione = await avviaTrasmissione(cdp, 'SESSIONE-1', { qualita: 400, larghezzaMax: 99_999, ogniNFrame: 0, fotogrammiAlSecondo: 1_000 }, () => {});
 
-  assert.deepEqual(cdp.invii.map((i) => i.metodo), ['Page.enable', 'Page.startScreencast']);
+  // C36 (10/10/2026): fra l'ascolto e l'avvio si ferma uno screencast rimasto acceso (Chrome rifiuta un secondo avvio)
+  assert.deepEqual(cdp.invii.map((i) => i.metodo), ['Page.enable', 'Page.stopScreencast', 'Page.startScreencast']);
   assert.equal(ascoltatoriAllAvvio, 1, 'un fotogramma fra enable e startScreencast si perderebbe: l\'ascolto va registrato prima');
   const avvio = cdp.di('Page.startScreencast')[0];
   assert.equal(avvio.sessione, 'SESSIONE-1');
@@ -136,7 +137,9 @@ test('STREAM-FERMA: stopScreencast, e una scheda già morta non fa lanciare ness
   const cdp = cdpFinto();
   const trasmissione = await avviaTrasmissione(cdp, 'S', { orologio: () => 0 }, () => {});
   assert.deepEqual(await trasmissione.ferma(), { fermata: true, motivo: null });
-  assert.equal(cdp.di('Page.stopScreencast').length, 1);
+  // C36: uno stop c'è già all'avvio (si ferma ciò che fosse rimasto acceso); `ferma` ne aggiunge UNO, l'ultimo comando
+  assert.equal(cdp.di('Page.stopScreencast').length, 2);
+  assert.equal(cdp.invii.at(-1).metodo, 'Page.stopScreencast');
   // AL CONTRARIO: il client lancia, e la risposta è un esito, non un'eccezione
   const rotto = cdpFinto({ rompiSu: (m) => m === 'Page.stopScreencast' });
   const esito = await fermaTrasmissione(rotto, 'S');
@@ -268,7 +271,8 @@ test('STREAM-ROTELLA: mouseWheel coi delta nel punto del puntatore', async () =>
 
 test('STREAM-RIDIMENSIONA: la misura si impone dentro i tetti, e zero per zero la TOGLIE', async () => {
   const cdp = cdpFinto();
-  const esito = await ridimensiona(cdp, 'S', { larghezza: 1024, altezza: 768, scala: 2 });
+  // C36 (10/10/2026): il risveglio si chiede — lo fa la sessione viva solo quando qualcuno segue (vedi C36-02/03)
+  const esito = await ridimensiona(cdp, 'S', { larghezza: 1024, altezza: 768, scala: 2, sveglia: true });
   assert.deepEqual(cdp.di('Emulation.setDeviceMetricsOverride')[0].parametri, { width: 1024, height: 768, deviceScaleFactor: 2, mobile: false });
   assert.equal(esito.azzerato, false);
   /* ⛔ 08/9, visto in una foto: cambiare il viewport non basta. Una pagina FERMA non ridisegna, e
@@ -297,4 +301,73 @@ test('STREAM-SGANCIO: anche con un client che non restituisce niente da `su`, lo
   await cdp.emetti('Page.screencastFrame', fotogramma(2), 'S');
   assert.equal(consegnati, 1, 'il client continua a chiamare: la guardia deve stare anche dentro il gestore');
   assert.deepEqual(cdp.di('Page.screencastFrameAck').map((i) => i.parametri.sessionId), [1]);
+});
+
+/*
+ * C36 (coda Codex; bugfixer 10/10/2026, riprodotto dal vivo sulla 4176: 0 pagine su 10 con un fotogramma). Il Chrome di oggi
+ * RIFIUTA un secondo `Page.startScreencast` senza `stopScreencast` in mezzo: «Screencast is already active (code -32000)». Il
+ * commento del 08/09 lo dava per idempotente. `ridimensiona` lo avviava all'apertura di una scheda nuova, prima di chiunque lo
+ * seguisse, e il `startScreencast` di `avviaTrasmissione` falliva: l'errore arrivava nel flusso e la vista diceva «non risponde».
+ * Il finto qui sotto si comporta come il Chrome vero.
+ */
+function cdpComeChrome() {
+  const cdp = cdpFinto();
+  const attivi = new Set();
+  const originale = cdp.invia.bind(cdp);
+  cdp.invia = async (metodo, parametri, sessione) => {
+    const esito = await originale(metodo, parametri, sessione);
+    if (metodo === 'Page.startScreencast') {
+      if (attivi.has(sessione)) throw new Error('Screencast is already active (code -32000)');
+      attivi.add(sessione);
+    }
+    if (metodo === 'Page.stopScreencast') attivi.delete(sessione);
+    return esito;
+  };
+  cdp.attivi = attivi;
+  return cdp;
+}
+
+test('C36-01: il flusso parte anche se uno screencast è già attivo sulla scheda (lo ferma prima, l\'ascolto resta registrato prima)', async () => {
+  const cdp = cdpComeChrome();
+  await cdp.invia('Page.startScreencast', {}, 'S'); // uno screencast lasciato acceso (un'apertura, un seguito di prima)
+  let ascoltatoriAllAvvio = -1;
+  const invia = cdp.invia;
+  cdp.invia = async (metodo, parametri, sessione) => {
+    if (metodo === 'Page.startScreencast') ascoltatoriAllAvvio = cdp.ascoltatori('Page.screencastFrame');
+    return invia(metodo, parametri, sessione);
+  };
+  await avviaTrasmissione(cdp, 'S', {}, () => {});
+  assert.deepEqual(cdp.invii.slice(1).map((i) => i.metodo), ['Page.enable', 'Page.stopScreencast', 'Page.startScreencast']);
+  assert.equal(ascoltatoriAllAvvio, 1, 'l\'ascolto c\'è già quando il flusso riparte');
+  assert.ok(cdp.attivi.has('S'));
+});
+
+test('C36-02: aprire una scheda nuova NON avvia lo screencast (nessuno lo segue ancora); il flusso poi parte al primo colpo', async () => {
+  const cdp = cdpComeChrome();
+  await ridimensiona(cdp, 'S', { larghezza: 1200, altezza: 800 });
+  assert.equal(cdp.di('Page.startScreencast').length, 0, 'senza chi segue, niente screencast');
+  await avviaTrasmissione(cdp, 'S', {}, () => {});
+  assert.equal(cdp.di('Page.startScreencast').length, 1);
+});
+
+test('C36-03: con qualcuno che segue, il ridimensionamento SVEGLIA il flusso: lo ferma e lo riavvia (un fotogramma nuovo con la forma nuova)', async () => {
+  const cdp = cdpComeChrome();
+  await avviaTrasmissione(cdp, 'S', {}, () => {});
+  await ridimensiona(cdp, 'S', { larghezza: 1024, altezza: 700, sveglia: true });
+  const dopo = cdp.invii.slice(cdp.invii.findIndex((i) => i.metodo === 'Emulation.setDeviceMetricsOverride')).map((i) => i.metodo);
+  assert.deepEqual(dopo, ['Emulation.setDeviceMetricsOverride', 'Page.stopScreencast', 'Page.startScreencast']);
+  assert.ok(cdp.attivi.has('S'), 'il flusso è vivo dopo il risveglio');
+});
+
+/* C36, nota della review (10/10/2026): con `trasmissione` il risveglio usa quelle scelte; senza, le stesse di un seguito senza opzioni. */
+test('C36-04: ridimensiona wakes the stream with the given choices, or with the defaults of opzioniTrasmissione({})', async () => {
+  const cdp = cdpComeChrome();
+  const scelte = opzioniTrasmissione({ qualita: 40, larghezzaMax: 640, altezzaMax: 480, ogniNFrame: 3 });
+  await ridimensiona(cdp, 'S', { larghezza: 900, altezza: 600, sveglia: true, trasmissione: scelte });
+  const p = cdp.di('Page.startScreencast').at(-1).parametri;
+  assert.deepEqual([p.quality, p.maxWidth, p.maxHeight, p.everyNthFrame], [40, 640, 480, 3]);
+  const base = opzioniTrasmissione({});
+  await ridimensiona(cdp, 'S', { larghezza: 800, altezza: 600, sveglia: true });
+  const q = cdp.di('Page.startScreencast').at(-1).parametri;
+  assert.deepEqual([q.quality, q.maxWidth, q.maxHeight, q.everyNthFrame], [base.qualita, base.larghezzaMax, base.altezzaMax, base.ogniNFrame]);
 });

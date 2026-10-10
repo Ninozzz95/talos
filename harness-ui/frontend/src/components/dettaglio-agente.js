@@ -14,6 +14,7 @@
  */
 import { nomeUmanoAttrezzo } from './nomi-attrezzi.js';
 import { renderizzaMarkdown } from './markdown.js';
+import { fermataNellaLingua } from './coda-messaggi.js';
 import { linguaCorrenteDiT, t as tr, tn } from './lingua.js';
 
 /* Le sezioni e i permessi sono CHIAVI del dizionario: il testo si risolve quando si disegna, non al caricamento del modulo. */
@@ -22,7 +23,12 @@ export const CHIAVI_PERMESSI = Object.freeze({ 'read-only': 'agenti.agent.permis
 
 /** Lo stato in parole, dalla sola verità che abbiamo: conclusa, interrotta, esito della delega. */
 export function statoAgente(figlia = {}) {
-  if (figlia.interrotta === true) return { testo: tr('agenti.agent.statusStopped'), tono: 'warning' };
+  /* ⛔ TACCUINO (09/10/2026, bugfixer): una figlia fermata dalla persona arriva da `…/children` con `interrotta:false`,
+     `esitoDelega:'fallito'` e `motivoChiusura:'fermata'` (misurato sulla 4176): qui diventava «Non riuscito», mentre l'elenco
+     degli agenti (inspector.js:1471) e il diagramma (grafo-agenti.js:14) la dicono «Interrotta» con la stessa regola. */
+  if (figlia.interrotta === true || figlia.motivoChiusura === 'fermata') return { testo: tr('agenti.agent.statusStopped'), tono: 'warning' };
+  // C3 tappa 4: in pausa non è né un errore né una fine — riprende dal menu della delega
+  if (figlia.esitoDelega === 'in-pausa' || figlia.motivoChiusura === 'in-pausa') return { testo: tr('agenti.agent.statusPaused'), tono: 'warning' };
   if (figlia.conclusa !== true) return { testo: tr('agenti.agent.statusRunning'), tono: 'accent' };
   if (figlia.esitoDelega && /fall|error|rifiut/i.test(String(figlia.esitoDelega))) return { testo: tr('agenti.agent.statusFailed'), tono: 'danger' };
   return { testo: tr('agenti.agent.statusDone'), tono: 'success' };
@@ -171,6 +177,13 @@ export function creaDettaglioAgente(figlia, { document: documento, sezione: sezi
     if (collisioni.length > 0) {
       pezzi.push(el(d, 'div', 'talos-callout talos-agente__avviso', tn('agenti.agent.collisionOne', 'agenti.agent.collisionMany', collisioni.length, { elenco: collisioni.map((c) => c.percorso).join(', ') })));
     }
+    /* C3 tappa 4 (owner 09/10, «fatti strutturati + nota»): la figlia poteva modificare e non ha scritto niente. L'esito resta
+       «Concluso» (in testata); qui lo si dice, perché la persona controlli se una modifica serviva. */
+    if (dati.notaDelega === 'nessuna-modifica') {
+      const nota = el(d, 'div', 'talos-callout talos-agente__avviso', tr('agenti.agent.noChangeMade'));
+      nota.dataset.notaDelega = dati.notaDelega;
+      pezzi.push(nota);
+    }
     /* Un'azione si disegna solo se chi monta il dettaglio la sa fare: un pulsante che non fa niente è un pulsante che mente. */
     if (typeof azioni.apriSessione === 'function') {
       const apri = el(d, 'button', 'talos-button talos-button--secondary talos-button--sm', tr('agenti.agent.openAsSession'));
@@ -189,7 +202,7 @@ export function creaDettaglioAgente(figlia, { document: documento, sezione: sezi
        server); lo stato sta già in testata. Senza resoconto la sezione non c'è: meglio niente che uno stato travestito. */
     if (typeof dati.riassuntoDelega === 'string' && dati.riassuntoDelega.trim()) {
       const sintesi = el(d, 'div', 'talos-agente__compito');
-      sintesi.append(el(d, 'b', 'talos-agente__etichetta', tr('agenti.agent.reported')), renderizzaMarkdown(dati.riassuntoDelega, { document: d, linkMarkdown: true }));
+      sintesi.append(el(d, 'b', 'talos-agente__etichetta', tr('agenti.agent.reported')), renderizzaMarkdown(fermataNellaLingua(dati.riassuntoDelega), { document: d, linkMarkdown: true }));
       pezzi.push(sintesi);
     }
     p.replaceChildren(...pezzi);

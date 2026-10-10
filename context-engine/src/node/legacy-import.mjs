@@ -51,7 +51,23 @@ export function selectLastValidCheckpoint(records) {
 
 /** Import once through the same atomic archive boundary as normal exports.
  * jsonl is captured bytes/text, never a path; no legacy source is rewritten. */
-export async function importLegacySession({ sessionId, jsonl, settings, metadata = {} }, { store }) {
+/* C1 (09/10/2026): the caller's own reading of its journal format. The desktop registry has written `checkpoint` +
+ * `messaggi-delta` since 24/09, with rewinds and holes; its rules live in one place (`storiaPerIlMotore`), so the caller
+ * passes them in instead of this module growing a second copy — the importer stays format-agnostic, like Hermes picking a
+ * parser per source (`hermes_cli/foreign_sessions.py:183`). A selection that is absent or not a valid message list falls back
+ * to the rule above: a bad reading must never hide a usable checkpoint. */
+function callerCheckpoint(selectCheckpoint, records) {
+  if (typeof selectCheckpoint !== 'function') return null;
+  const chosen = selectCheckpoint(records);
+  if (!object(chosen) || !validMessages(chosen.messages)) return null;
+  const versioneGiro = chosen.versioneGiro ?? 0;
+  if (!Number.isSafeInteger(versioneGiro) || versioneGiro < 0) return null;
+  if (!Number.isSafeInteger(chosen.recordIndex) || chosen.recordIndex < 0 || chosen.recordIndex >= records.length) return null;
+  const incoherence = object(chosen.incoerenza) && validJson(chosen.incoerenza) ? JSON.parse(JSON.stringify(chosen.incoerenza)) : null;
+  return { messages: JSON.parse(JSON.stringify(chosen.messages)), versioneGiro, recordIndex: chosen.recordIndex, ...(incoherence ? { incoherence } : {}) };
+}
+
+export async function importLegacySession({ sessionId, jsonl, settings, metadata = {}, selectCheckpoint = null }, { store }) {
   if (typeof jsonl !== 'string' && !(jsonl instanceof Uint8Array)) throw new ContextStoreError('Legacy JSONL must be captured text or bytes', 'CTX_LEGACY_CORRUPT');
   const bytes = typeof jsonl === 'string' ? Buffer.from(jsonl, 'utf8') : Buffer.from(jsonl);
   let text;
@@ -70,7 +86,7 @@ export async function importLegacySession({ sessionId, jsonl, settings, metadata
       throw new ContextStoreError(`Legacy JSONL has a corrupt intermediate record at line ${index + 1}`, 'CTX_LEGACY_CORRUPT', { cause });
     }
   }
-  const checkpoint = selectLastValidCheckpoint(records);
+  const checkpoint = callerCheckpoint(selectCheckpoint, records) ?? selectLastValidCheckpoint(records);
   if (!checkpoint) throw new ContextStoreError('Legacy JSONL contains no valid message checkpoint', 'CTX_LEGACY_NO_CHECKPOINT');
   const sourceSha256 = hash(bytes);
   const sourceBlobId = `legacy-jsonl:${sourceSha256}`;
@@ -83,7 +99,7 @@ export async function importLegacySession({ sessionId, jsonl, settings, metadata
   }));
   const session = {
     schema: 'talos.context.snapshot.v1', sessionId, revision: originals.length ? 1 : 0, stateRevision: 0, headSequence: originals.length, settings,
-    metadata: { ...metadata, legacy: { sourceBlobId, sourceSha256, corruptTail, versioneGiro: checkpoint.versioneGiro, recordIndex: checkpoint.recordIndex, records: originals.map((record, messageIndex) => ({ recordId: record.id, messageIndex })) } },
+    metadata: { ...metadata, legacy: { sourceBlobId, sourceSha256, corruptTail, versioneGiro: checkpoint.versioneGiro, recordIndex: checkpoint.recordIndex, ...(checkpoint.incoherence ? { incoherence: checkpoint.incoherence } : {}), records: originals.map((record, messageIndex) => ({ recordId: record.id, messageIndex })) } },
     activeVersion: null, facts: [], jobs: [],
   };
   const payload = { schema: 'talos.context.archive.v1', session, records: originals, versions: [], facts: [], jobs: [], usage: [], blobs: [{ id: sourceBlobId, sha256: sourceSha256, mimeType: 'application/x-ndjson', base64: bytes.toString('base64') }] };

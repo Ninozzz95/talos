@@ -333,3 +333,26 @@ test('WF-UI-SEARCH-ESC: Esc stays in the search field — it clears, then closes
   await expect(page.getByText('Fermo il giro?').filter({ visible: true })).toHaveCount(0);
   expect(scritture).toEqual([]);
 });
+
+test('WF-UI-SESSION-CARD-ONE-LINE: a long model name stays inside the principal session card, whole in its title', async ({ page }) => {
+  // ⛔ 09/10/2026, foto dell'owner (app installata, «Sessione principale · xiaomi/mimo-v2.6-flash»): la carta è alta 96 px per
+  //   la disposizione e la riga del modello andava a capo, uscendo SOTTO il bordo (misurato: 66→102 px).
+  const modello = 'xiaomi/mimo-v2.6-flash';
+  const scena = costruisciScena(5, { sessionId: 'wf-ui-carta-modello' });
+  const { scritture } = await instradaScena(page, scena);
+  const grafo = await apriDiagrammaDellaScena(page, scena, { modello });
+  const carta = grafo.locator('.gv-sessione');
+  const riga = carta.locator('.talos-wfg__passo-modello');
+  await expect(riga).toHaveText(`Sessione principale · ${modello}`);
+  await expect(riga).toHaveAttribute('title', `Sessione principale · ${modello}`);
+  // nello spazio della carta (offset*, non la scala della tela): ogni riga sta dentro il bordo, e il modello è UNA riga
+  const misura = await carta.evaluate((c) => [...c.querySelectorAll('span')].map((s) => {
+    let top = 0; for (let n = s; n && n !== c; n = n.offsetParent) top += n.offsetTop;
+    return { cls: s.className, basso: top + s.offsetHeight, alto: s.offsetHeight };
+  }).concat([{ cls: 'carta', basso: c.offsetHeight }]));
+  const altezza = misura.at(-1).basso;
+  expect(misura.filter((m) => m.basso > altezza), 'righe che escono dalla carta').toEqual([]);
+  const rigaModello = misura.find((m) => m.cls === 'talos-wfg__passo-modello');
+  expect(rigaModello.alto, 'la riga del modello è una sola').toBeLessThan(24);
+  expect(scritture).toEqual([]);
+});

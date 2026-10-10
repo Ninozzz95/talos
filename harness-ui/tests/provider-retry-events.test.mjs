@@ -30,7 +30,7 @@ test('RETRY06-EVENTS: attesa prima del sonno, invio prima del fetch, fine una so
   assert.equal(result.tentativi, 2);
   assert.deepEqual(b.events.map(e => e.fase), ['attesa', 'invio', 'fine']);
   assert.equal(b.events[0].tentativo, 2);
-  assert.equal(b.events[0].tentativiMassimi, 4);
+  assert.equal(b.events[0].tentativiMassimi, 11); /* 09/10/2026, owner «come Claude Code»: 1 + 10 tentativi (ritenti-429-come-claude-code.test.mjs) */
   assert.equal(b.events[0].httpStatus, 503);
   assert.equal(b.events[0].attesaMs, 2000);
   assert.ok(b.events[0].retryAt >= before + 2000 && b.events[0].retryAt <= Date.now() + 2000);
@@ -39,11 +39,11 @@ test('RETRY06-EVENTS: attesa prima del sonno, invio prima del fetch, fine una so
   assert.doesNotMatch(JSON.stringify(b.events), /test-secret|private-provider-body/u);
 });
 
-test('RETRY06-EXHAUSTED: tre attese, quattro richieste e un solo fine', async () => {
+test('RETRY06-EXHAUSTED: dieci attese, undici richieste e un solo fine', async () => {
   const b = banco([503]);
   await assert.rejects(b.run(), e => e.stato === 503);
-  assert.equal(b.requests.length, 4);
-  assert.deepEqual(b.events.filter(e => e.fase === 'attesa').map(e => e.tentativo), [2, 3, 4]);
+  assert.equal(b.requests.length, 11); /* 09/10/2026, owner «come Claude Code»: 1 + 10 tentativi (ritenti-429-come-claude-code.test.mjs) */
+  assert.deepEqual(b.events.filter(e => e.fase === 'attesa').map(e => e.tentativo), [2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
   assert.equal(b.events.filter(e => e.fase === 'fine').length, 1);
 });
 

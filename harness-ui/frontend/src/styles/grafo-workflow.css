@@ -332,6 +332,12 @@ dialog.talos-wfg-conferma::backdrop { background: var(--talos-overlay); }
 .talos-wfg-conferma__scelta:focus-visible { outline: var(--talos-focus-width) solid var(--talos-accent); outline-offset: 1px; }
 .talos-wfg-conferma__scelta-nome { font-weight: 600; }
 .talos-wfg-conferma__scelta-dettaglio { grid-column: 2; font-size: .75rem; color: var(--talos-muted); overflow-wrap: anywhere; }
+/* C3 (09/10/2026): il riassunto di «Segna come fatto» e il selettore di «Altro modello…» dentro la conferma; la riga del passo fallito */
+.talos-wfg-conferma__campo { margin: 14px 0 0; }
+.talos-wfg-conferma__campo .talos-textarea { min-height: 96px; resize: vertical; }
+.talos-wfg-conferma__altro { margin: 8px 0 0; max-height: min(45vh, 22rem); overflow: auto; }
+.talos-wfg__passo-nota { margin: 6px 0 0; font-size: .75rem; color: var(--talos-muted); text-wrap: pretty; }
+.talos-wfg__passo-nota[data-nota="azioni"] { color: var(--talos-text); }
 .talos-wfg__outputs { display: grid; gap: 8px; list-style: none; padding: 0; margin: 0; min-width: 0; }
 .talos-wfg__output { min-width: 0; padding: 7px; border: 1px solid var(--talos-border); border-radius: 6px; }
 .talos-wfg__output-meta { font-size: .75rem; color: var(--talos-muted); overflow-wrap: anywhere; }

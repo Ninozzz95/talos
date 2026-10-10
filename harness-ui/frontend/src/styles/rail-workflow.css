@@ -64,6 +64,11 @@
 
 /* «Richiede attenzione»: card calde, icona in un tondo (mockup 14/200/5.000) */
 .talos-wfr__attenzione, .talos-wfr__elenco { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; min-width: 0; }
+/* 09/10/2026 (bugfixer): in una griglia un `li` ha `min-width: auto` = il min-content della riga, e un nome in `nowrap` lo rende
+   lungo quanto il nome: la colonna usciva dal rail, lo stato finiva fuori e il rail scorreva di lato (prova dal vivo del desktop,
+   «Confronta i due elenchi e dichiara il massimo»). Con 0 la riga si stringe e il nome si accorcia coi puntini (CSS-Tricks
+   «Preventing a Grid Blowout», letta il 09/10/2026). */
+.talos-wfr__attenzione > li, .talos-wfr__elenco > li { min-width: 0; }
 .talos-wfr__voce-attenzione {
   display: flex; align-items: center; gap: 12px; width: 100%; min-width: 0; padding: 10px 12px; box-sizing: border-box; text-align: start;
   border: 1px solid color-mix(in srgb, var(--talos-warning) 30%, var(--talos-border)); border-radius: var(--talos-radius-card);

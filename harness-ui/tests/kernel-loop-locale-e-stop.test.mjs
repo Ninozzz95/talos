@@ -356,7 +356,7 @@ describe('BC-02 — lo STOP deve essere immediato, non «al prossimo punto sicur
             const t0 = Date.now()
             let tentativi = 0
             const errore = await chiamaConRitenta({
-                modello: 'x', chiave: 'y', messaggi: [], caso: () => 0,
+                modello: 'x', chiave: 'y', messaggi: [], caso: () => 0, tentativiMassimi: 4, // il budget di serie è 11 dal 09/10 (come Claude Code): qui si prova lo stop, non il conto
                 fetchDiRete: async () => { tentativi += 1; return new Response('429', { status: 429 }) },
             }).then(() => null, (e) => e)
             assert.equal(tentativi, 4)
@@ -369,7 +369,7 @@ describe('BC-02 — lo STOP deve essere immediato, non «al prossimo punto sicur
             const t0 = Date.now()
             let tentativi = 0
             await chiamaConRitenta({
-                modello: 'x', chiave: 'y', messaggi: [], segnaleStop: ac.signal, caso: () => 0,
+                modello: 'x', chiave: 'y', messaggi: [], segnaleStop: ac.signal, caso: () => 0, tentativiMassimi: 4, // vedi sopra
                 fetchDiRete: async () => { tentativi += 1; return new Response('429', { status: 429 }) },
             }).then(() => null, () => null)
             assert.equal(tentativi, 4)
@@ -380,7 +380,7 @@ describe('BC-02 — lo STOP deve essere immediato, non «al prossimo punto sicur
             const attese = []
             let tentativi = 0
             await chiamaConRitenta({
-                modello: 'x', chiave: 'y', messaggi: [], caso: () => 0,
+                modello: 'x', chiave: 'y', messaggi: [], caso: () => 0, tentativiMassimi: 4, // vedi sopra
                 dormi: (ms) => { attese.push(ms); return Promise.resolve() },
                 fetchDiRete: async () => { tentativi += 1; return new Response('429', { status: 429 }) },
             }).then(() => null, () => null)

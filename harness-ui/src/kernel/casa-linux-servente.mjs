@@ -30,15 +30,18 @@ const ricerche = creaRegistroRicerche();
 const OPERAZIONI = Object.freeze({
   ping: async () => ({ node: process.version, pid: process.pid, utente: userInfo().username, uid: process.getuid?.() ?? null }),
   leggiTestoLimitato: ({ cartella, percorso, opzioni = {} }, segnale) => kernel.leggiTestoLimitato(cartella, percorso, { ...opzioni, segnale }),
-  elenca: ({ radice, base }) => kernel.elencaDaCartella(kernel.discoNode({ radice }), base),
+  elenca: ({ radice, base, profondita, limite = null, cursore = null, note = [] }) => kernel.elencaDaCartella(kernel.discoNode({ radice }), base,
+    { ...(Number.isInteger(profondita) ? { profondita } : {}), limite, cursore, note }), // C5: depth/limit/cursor
   cerca: ({ radice, argomenti, tempoRgMs }, segnale) => kernel.cercaNelProgetto(kernel.discoNode({ radice }), argomenti,
     { radice, segnale, ricerche, ...(Number.isFinite(tempoRgMs) ? { tempoRgMs } : {}) }),
   discoLeggi: ({ radice, percorso }) => kernel.discoNode({ radice }).leggi(percorso),
   discoScrivi: ({ radice, percorso, testo, modalita }) => kernel.discoNode({ radice }).scrivi(percorso, testo, modalita),
   discoElenca: ({ radice, cartella }) => kernel.discoNode({ radice }).elenca(cartella),
   istantanea: async ({ percorso }) => {
-    try { const s = await stat(percorso); return s.isFile() ? { mtimeMs: s.mtimeMs, size: s.size } : null; } catch { return null; }
+    try { const s = await stat(percorso); return s.isFile() ? { mtimeMs: s.mtimeMs, size: s.size, ctimeMs: s.ctimeMs } : null; } catch { return null; }
   },
+  /* C25: l'impronta sha256 dei byte, calcolata QUI dentro Linux — al lato Windows arrivano 64 caratteri, non il file */
+  impronta: ({ percorso }) => kernel.improntaDelPercorso(percorso),
   pezzoConSeparatore: ({ percorso, pezzo }) => pezzoConSeparatore(percorso, pezzo),
   /* F4-03: dove finisce davvero una scrittura, coi collegamenti di Linux (il permesso resta deciso dal lato Windows). */
   posizioneNelProgetto: ({ cartella, percorso }) => kernel.posizioneNelProgetto(cartella, percorso),

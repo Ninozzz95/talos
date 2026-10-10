@@ -85,7 +85,7 @@ test('F026-SCANSIONE-FINITA: per contare il resto della riga ci si ferma all\'a 
 
 test('F026-LIMIT-INVALIDO: fuori da 4..100 KB, o insieme a offset, si rifiuta prima di aprire il file', async () => {
   const apriFn = async () => { throw new Error('non doveva aprire'); };
-  for (const args of [{byteOffset: 0, limit: 3}, {byteOffset: 0, limit: MAX_BYTE_LEGGI + 1}, {byteOffset: 0, limit: '5'}, {byteOffset: 0, limit: 5, offset: 1}]) {
+  for (const args of [{byteOffset: 0, limit: 3}, {byteOffset: 0, limit: MAX_BYTE_LEGGI + 1}, {byteOffset: 0, limit: '5'}, {byteOffset: 4, limit: 5, offset: 1}]) { // C1 (09/10): con offset, byteOffset 0 vale assente (F026-ZERO-ASSENTE)
     await assert.rejects(leggiTestoLimitato('x', 'x', {...args, apriFn}), (e) => e.code === 'READ_INVALID_RANGE', JSON.stringify(args));
   }
 });
@@ -94,4 +94,18 @@ test('F026-SCHEMA: la descrizione dell\'attrezzo dice al modello che limit vale 
   const leggiSchema = ATTREZZI_OPENAI.find((a) => a.function.name === 'leggi').function;
   assert.match(leggiSchema.parameters.properties.limit.description, /With byteOffset: bytes to read inside the line, 4\.\.102400/u);
   assert.match(leggiSchema.parameters.properties.byteOffset.description, /Not with offset or hex/u);
+});
+
+/*
+ * C1, prova dal vivo del motore di serie (09/10/2026 sera, 4177): dopo il cambio a openai/gpt-5-nano il modello chiamava
+ * `leggi` riempiendo TUTTI i campi facoltativi — {offset:1, limit:2000, byteOffset:0, format:'text'} — e la regola qui sopra
+ * lo rifiutava; ha ripetuto la stessa chiamata 82 volte senza chiudere il giro. Owner, 09/10 sera, «Zero = campo assente»:
+ * `byteOffset: 0` scritto INSIEME a `offset` è il valore di serie riempito dal modello, non una continuazione dentro una riga.
+ */
+test('F026-ZERO-ASSENTE: byteOffset 0 together with offset reads lines; a non-zero byteOffset with offset is still refused', async (t) => {
+  const root = fixture(t, Array.from({ length: 30 }, (_, i) => `riga ${i + 1}`).join('\n'));
+  const esito = await leggi(root, { offset: 5, limit: 3, byteOffset: 0, format: 'text' });
+  assert.match(esito, /riga 5\nriga 6\nriga 7/u);
+  assert.equal(/riga 8\b/u.test(esito), false, 'limit is still lines');
+  await assert.rejects(leggiTestoLimitato(root, 'file.txt', { offset: 5, byteOffset: 1 }), (e) => e.code === 'READ_INVALID_RANGE');
 });

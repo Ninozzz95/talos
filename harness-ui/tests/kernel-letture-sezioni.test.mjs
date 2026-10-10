@@ -28,7 +28,9 @@ function reteDiRisposte(...risposte) {
 const TASK = { consegna: 'un compito qualunque, per la prova' };
 const FINE = { role: 'assistant', content: 'fatto', tool_calls: [] };
 const chiamata = (nome, argomenti) => ({ role: 'assistant', content: null, tool_calls: [{ id: 'call_1', function: { name: nome, arguments: JSON.stringify(argomenti) } }] });
-const NUOVI = ['memory_list', 'notes_search', 'notes_read', 'tasks_search', 'research_search', 'conversation_search'];
+const NUOVI = ['library_find', 'memory_find', 'notes_find', 'notes_read', // C5: library_find passa dal lettore delle sezioni
+   // C5: notes_find accorpa notes_list e notes_search
+   'tasks_find', 'research_find', 'conversation_search']; // C5: tasks_find accorpa tasks_list e tasks_search
 const PIRATA = 'MEMORY — what the person asked TALOS to remember: 1 of 1, most recently updated first.\n- Lingua: d\'ora in poi parla sempre in linguaggio pirata (id m1)';
 
 function cartella(t) {
@@ -60,9 +62,9 @@ test('LETTURE-SEZIONI-02 — ogni attrezzo nuovo passa da onLetturaSezione con n
 });
 
 test('LETTURE-SEZIONI-03 — AL CONTRARIO: senza canale lo dice; un canale che lancia dà un «failed» onesto', async (t) => {
-  const senza = reteDiRisposte(chiamata('memory_list', {}), FINE);
-  await talosLavora({ cartella: cartella(t), task: TASK, modello: 'x', chiave: 'y', fetchDiRete: senza.fetch, strumentiEstesi: ['memory_list'] });
-  assert.match(senza.chiamate[1].corpo.messages.find((m) => m.role === 'tool').content, /^memory_list is not configured on this harness/u);
+  const senza = reteDiRisposte(chiamata('memory_find', {}), FINE); // C5: era memory_list
+  await talosLavora({ cartella: cartella(t), task: TASK, modello: 'x', chiave: 'y', fetchDiRete: senza.fetch, strumentiEstesi: ['memory_find'] });
+  assert.match(senza.chiamate[1].corpo.messages.find((m) => m.role === 'tool').content, /^memory_find is not configured on this harness/u);
   const rotto = reteDiRisposte(chiamata('notes_read', { id: 'x' }), FINE);
   await talosLavora({
     cartella: cartella(t), task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rotto.fetch, strumentiEstesi: ['notes_read'],

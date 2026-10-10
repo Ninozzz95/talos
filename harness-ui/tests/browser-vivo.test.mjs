@@ -486,3 +486,15 @@ test('⛔⛔ D1 — l\'ambiente del browser viene dalla FONTE UNICA, iniettabile
   const condivisa = ambienteSenzaVariabiliDelServer({ TALOS_HARNESS_UI_TOKEN: 'a'.repeat(64), MIA: 'resta' });
   assert.deepEqual(condivisa, { MIA: 'resta' });
 });
+
+// C1b (10/10/2026): il gestore della sessione viva legge `chiuso` per non riusare un browser che se n'è andato
+test('C1B-CDP-01: the client says when the browser connection closed, and only then', () => {
+  const socket = socketFinto();
+  const cdp = creaClientCdp(socket, { attesaMs: 500 });
+  assert.equal(cdp.chiuso, false, 'a live connection is not closed');
+  socket.emit('close');
+  assert.equal(cdp.chiuso, true, 'the socket closed: the client says so');
+  const altro = creaClientCdp(socketFinto(), { attesaMs: 500 });
+  altro.chiudi();
+  assert.equal(altro.chiuso, true, 'closed by us: same answer');
+});

@@ -43,7 +43,7 @@ for (const tool of ['shell', 'prova']) test(`OUTPUT14-KERNEL-${tool}: an approve
   const events = [];
   await talosLavora({cartella: f.root, task: {consegna: 'Esegui la verifica.'}, modello: 'fixture', chiave: 'fixture', comandoProva: f.command,
     messaggiIniziali: [{role: 'system', content: 'Verifica.'}, {role: 'user', content: 'Esegui.'}],
-    ambienteComandiFn: () => ({dove: 'windows', revisione: 0}), livelloAccesso: 'completo', _giriMassimiInterno: 3,
+    ambienteComandiFn: () => ({dove: 'windows', revisione: 0}), livelloAccesso: 'scrittura-progetto', _giriMassimiInterno: 3,
     fetchDiRete: provider(f.command, tool), onGiro: e => events.push(e),
     captureProcessFn: async ({toolCallId}, execute) => {captured++; assert.equal(toolCallId, 'tool14'); return execute({onBytes: ({bytes: b}) => {bytes += b.length;}});},
   });
@@ -66,7 +66,7 @@ test('OUTPUT14-ENVIRONMENT-FENCE: a change while output admission waits cannot e
   const f = fixture(t), events = []; let revision = 0, bytes = 0;
   await talosLavora({cartella: f.root, task: {consegna: 'Verifica.'}, modello: 'fixture', chiave: 'fixture',
     messaggiIniziali: [{role: 'system', content: 'Verifica.'}, {role: 'user', content: 'Esegui.'}],
-    ambienteComandiFn: () => ({dove: 'windows', revisione: revision}), livelloAccesso: 'completo', _giriMassimiInterno: 3,
+    ambienteComandiFn: () => ({dove: 'windows', revisione: revision}), livelloAccesso: 'scrittura-progetto', _giriMassimiInterno: 3,
     fetchDiRete: provider(f.command), onGiro: e => events.push(e),
     captureProcessFn: async (_id, execute) => {revision++; return execute({onBytes: ({bytes: b}) => {bytes += b.length;}});},
   });
@@ -79,7 +79,7 @@ test('OUTPUT14-REGISTRY: real registry, service, kernel and process persist exac
   const options = {
     cartellaStore, modello: 'fixture', chiave: 'fixture', guardaWorkspaceFn: () => () => {}, processOutputStoreFn: () => store,
     preparaEsecuzioneFn: id => ({cartella: f.root, task: {id, consegna: 'Esegui la verifica richiesta.'}, comandoProva: f.command}),
-    avviaSessioneFn: input => avviaSessione({...input, cartella: f.root, livelloAccesso: 'completo',
+    avviaSessioneFn: input => avviaSessione({...input, cartella: f.root, livelloAccesso: 'scrittura-progetto',
       contestoDelProgettoFn: async () => null, leggiContestoWorkspaceFn: () => ({}),
       talosLavoraFn: kernelInput => talosLavora({...kernelInput, fetchDiRete: provider(f.command), onDelta: undefined, _giriMassimiInterno: 3,
         ambienteComandiFn: () => ({dove: 'windows', revisione: 0})}),
@@ -133,7 +133,7 @@ test('OUTPUT14-KERNEL-RETENTION-ERROR: real command success remains exit zero bu
   try {
     await talosLavora({cartella: f.root, task: {consegna: 'Esegui.'}, modello: 'fixture', chiave: 'fixture',
       messaggiIniziali: [{role: 'system', content: 'Verifica.'}, {role: 'user', content: 'Esegui.'}],
-      ambienteComandiFn: () => ({dove: 'windows', revisione: 0}), livelloAccesso: 'completo', _giriMassimiInterno: 3,
+      ambienteComandiFn: () => ({dove: 'windows', revisione: 0}), livelloAccesso: 'scrittura-progetto', _giriMassimiInterno: 3,
       fetchDiRete: provider(f.command), onGiro: e => events.push(e),
       captureProcessFn: (id, execute) => {captures++; return runWithProcessOutput({
         store: {...store, finish: async () => {throw Object.assign(Error('private path'), {code: 'OUTPUT_STORE_IO'});}},

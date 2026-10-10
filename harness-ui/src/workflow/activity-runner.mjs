@@ -1,4 +1,5 @@
 import { validateMeasuredUsage } from './budget.mjs';
+import { passoConModelloScelto, ripresaDaVerificare } from './run.mjs';
 
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 const ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u;
@@ -548,7 +549,7 @@ export function createActivityRunner({
      */
     const contestoPasso = Object.freeze({
       outcomeSchemaVersion: v2 ? 2 : 1,
-      step: Object.freeze(structuredClone(node)),
+      step: Object.freeze(structuredClone(passoConModelloScelto(node, nodeRun))), // C3: il modello scelto dalla persona, se c'è
       run: Object.freeze({
         runId: snapshot.state.run?.runId ?? null, // F-014 (§1.6): la FRASE dello snapshot nomina il run
         rootSessionId: snapshot.events?.[0]?.payload?.rootSessionId ?? null,
@@ -556,6 +557,8 @@ export function createActivityRunner({
         sessionModel: snapshot.definitionRecord?.proposal?.sessionModel ?? null,
       }),
       predecessors: predecessorResults(snapshot, nodeId),
+      // C3 tappa 2b «Riprendi verificando»: da quale tentativo riprendere la sessione (solo il primo tentativo dopo la decisione)
+      ...(ripresaDaVerificare(nodeRun, identity.attempt) ? { ripresa: Object.freeze(ripresaDaVerificare(nodeRun, identity.attempt)) } : {}),
     });
     const fattoProgrammato = {
       type: 'activity_scheduled',
@@ -836,5 +839,30 @@ export function createActivityRunner({
     }
   }
 
-  return Object.freeze({ status, recover, execute, cancel, reconcile });
+  /*
+   * ⭐ C3 tappa 2a (09/10/2026, contratto §2-bis) — prima che la persona decida di un passo INCERTO, la sua sessione si ferma (se è
+   *   ancora viva) e si aspetta chiusa: dopo, niente di quel tentativo può ancora scrivere. Non scrive fatti: il fatto della
+   *   decisione è `uncertain_resolved`, dell'orchestratore. Un tentativo che gira ancora QUI non è incerto: si rifiuta.
+   */
+  async function fermaPerLaPersona({ runId, activityExecutionId } = {}) {
+    assertReady();
+    requireRunId(runId);
+    requireUuid(activityExecutionId, 'activityExecutionId');
+    if (active.has(`${runId}/${activityExecutionId}`)) {
+      throw activityError('the attempt is still running here: it is not uncertain', 'WORKFLOW_ACTIVITY_STATE_INVALID');
+    }
+    const snapshot = await journal.load(runId);
+    const context = operationalContext(snapshot, activityExecutionId);
+    if (context.activity.state !== 'uncertain') throw activityError('only an uncertain attempt is stopped for the person', 'WORKFLOW_ACTIVITY_STATE_INVALID');
+    const adapter = adapterFor(registry, context.scheduled.activityKind, context.adapterId);
+    let esito;
+    try { esito = await adapter.cancel(Object.freeze({ runId, ...context.identity, reason: 'person_resolved', signal: undefined })); }
+    catch { esito = { outcome: 'unknown' }; }
+    if (esito?.outcome !== 'cancelled') {
+      throw activityError('the session of the uncertain attempt did not stop: try again in a moment', 'WORKFLOW_ACTIVITY_STILL_RUNNING');
+    }
+    return Object.freeze({ ...context.identity });
+  }
+
+  return Object.freeze({ status, recover, execute, cancel, reconcile, fermaPerLaPersona });
 }

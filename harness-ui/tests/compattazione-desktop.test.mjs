@@ -4,6 +4,7 @@
  */
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { RIGA_RECUPERO } from '../src/kernel/compattazione-desktop.mjs'; // C1 (09/10): il puntatore di recupero in fondo al riassunto
 
 import {
   CARATTERI_MINIMI_RIDUCIBILI, ESITO_DOPPIONE, MARCATORE_ACCORCIATO,
@@ -265,7 +266,7 @@ test('CTX-PURE-PROJECTION-AND-RECORD — proiezione = testa + richieste letteral
   assert.equal(proiezione[1].role, 'system');
   assert.equal(proiezione[2].content, 'richiesta 2');
   const marcato = proiezione.find((m) => typeof m.content === 'string' && m.content.startsWith(MARCATORE_RIASSUNTO));
-  assert.match(marcato.content, /RIASSUNTO\n\nINDICE$/);
+  assert.ok(marcato.content.endsWith(`RIASSUNTO\n\nINDICE\n\n${RIGA_RECUPERO}`), 'riassunto, indice, poi il puntatore di recupero (C1)');
   assert.equal(proiezione.length, 2 + parti.richiesteLetterali.length + 1 + parti.coda.length);
   const record = creaRecord({ coveredThrough: grezza.length, riassunto: proiezione, tokenPrima: 9_000, tokenDopo: 3_000, misura: 'fornitore', at: '2026-09-24T10:00:00.000Z', modello: 'm', indice: { percorsi: ['a'] } });
   assert.equal(record.schema, SCHEMA_RECORD_COMPATTAZIONE);

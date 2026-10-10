@@ -119,13 +119,18 @@ for (const modo of ['dark', 'light']) {
       const { riga, voce } = await prepara(page, `lista-giri-${modo}`, { fermata: true });
       Object.assign(riga, { usageSessione: { prompt_tokens: 9488, completion_tokens: 8008, cached_tokens: 0, giri: 1, esecuzioni: 1 }, giriFermati: 6 });
       await page.evaluate(() => window.__talosHarnessUiRuntime.aggiornaElencoSessioniReali());
-      const conto = voce.locator('.talos-session-item__aside span', { hasText: /\bgir[oi]$/ });
-      await expect(conto).toHaveText('7 giri');
-      await expect(conto).toHaveAttribute('title', /6 giri fermati prima che il fornitore dichiarasse il consumo/);
+      // TACCUINO (09/10/2026): il conteggio si trova dal suo segno, non dalla parola (che è cambiata: «richieste al modello»)
+      const conto = voce.locator('.talos-session-item__aside [data-conteggio]');
+      // TACCUINO (owner 09/10, dopo la ricerca): a schermo icona + numero, la frase intera per i lettori di schermo e nel suggerimento
+      await expect(conto.locator('.talos-session-item__conto')).toHaveText('7');
+      await expect(conto.locator('.sr-only')).toHaveText('7 richieste al modello');
+      await expect(conto).toHaveAttribute('title', /^7 richieste al modello\n6 richieste al modello fermate prima che il fornitore dichiarasse il consumo/);
       Object.assign(riga, { giriFermati: 0 });
       await page.evaluate(() => window.__talosHarnessUiRuntime.aggiornaElencoSessioniReali());
-      await expect(conto, 'AL CONTRARIO: senza fermati la riga è quella di prima').toHaveText('1 giro');
-      await expect(conto).not.toHaveAttribute('title', /.+/);
+      await expect(conto.locator('.talos-session-item__conto'), 'AL CONTRARIO: senza fermati la riga è quella di prima').toHaveText('1');
+      await expect(conto).toHaveAttribute('title', '1 richiesta al modello');
+      // la colonna non mangia il titolo: il conteggio è stretto come «5 giri» di prima (misurato: la frase lunga lo portava a «CO…»)
+      expect((await conto.boundingBox()).width, 'il conteggio occupa poco').toBeLessThan(40);
     });
 
     test(`ELENCO-STOP-06 — un seguito mandato da UN’ALTRA finestra porta ora e permesso anche qui (${modo})`, async ({ page }) => {

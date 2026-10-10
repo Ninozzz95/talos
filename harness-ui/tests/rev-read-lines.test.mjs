@@ -114,7 +114,7 @@ test('INVALID: combinazioni senza senso rifiutate PRIMA di aprire il file', asyn
   const root = fixture(t, 'a\n');
   let aperture = 0;
   const apriFn = async () => { aperture++; throw new Error('non doveva aprire'); };
-  for (const argomenti of [{byteOffset: 0, offset: 2}, {byteOffset: 0, format: 'hex'}, {limit: 0}, {byteOffset: -1}, {offset: 1.5}]) {
+  for (const argomenti of [{byteOffset: 3, offset: 2} /* C1 09/10: byteOffset 0 con offset vale assente (F026-ZERO-ASSENTE) */, {byteOffset: 0, format: 'hex'}, {limit: 0}, {byteOffset: -1}, {offset: 1.5}]) {
     await assert.rejects(leggiTestoLimitato(root, 'file.txt', {...argomenti, apriFn}), (e) => /^READ_INVALID_/u.test(e.code), JSON.stringify(argomenti));
   }
   assert.equal(aperture, 0);

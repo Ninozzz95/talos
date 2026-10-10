@@ -893,3 +893,49 @@ test('P0-B — le foto dei sei stati, nei DUE temi e nelle DUE lingue', async ({
   }
   info.annotations.push({ type: 'foto', description: 'artifacts/p0-B/ — otto foto: stato e pagina, chiaro e scuro, italiano e inglese' });
 });
+
+/*
+ * C1b (owner 10/10/2026, AskUserQuestion «Si riapre da sola»). La pagina pilotata è una alla volta: aprendone una seconda, la
+ * prima va in pausa e il pannello dice «si riapre quando ci torni». Misurato sulla 4177: tornandoci restava ferma 25 s, finché
+ * non si premeva «Riprova». Ora tornare sulla scheda la riapre all'indirizzo dov'era — e un secondo clic, mentre si riapre, non
+ * ne lancia un'altra.
+ */
+test('C1B-RITORNO — returning to a paused live tab reopens it where it was, once', async ({ page }) => {
+  // il server risponde in 400 ms: abbastanza perché un secondo clic arrivi MENTRE la riapertura è in corso
+  await apparecchia(page, async (url) => { await new Promise((r) => setTimeout(r, 400)); return rispostaCornice(url, { incorniciabile: false, titolo: url }); });
+  const aperture = [];
+  // dopo `apparecchia`: in Playwright vince la rotta registrata per ultima. Il browser pilotato resta finto, mai uno vero.
+  const flussiAppesi = [];
+  await page.route('**/api/v1/browser/vivo/**', async (rotta) => {
+    const percorso = new URL(rotta.request().url()).pathname;
+    if (percorso.endsWith('/schermo')) { flussiAppesi.push(rotta); return; } // uno schermo vivo che non ha ancora fotogrammi
+    if (percorso.endsWith('/apri')) {
+      const corpo = rotta.request().postDataJSON() || {};
+      aperture.push(corpo.url);
+      await rotta.fulfill(busta({ ok: true, stato: 200, url: corpo.url, canale: 'chrome', isolata: true, annotabile: false }));
+      return;
+    }
+    await rotta.fulfill(busta({ chiusa: true }));
+  });
+  await apriLaApp(page);
+  await page.evaluate(() => window.__talosHarnessUiRuntime.executeCommand('browser'));
+  const apri = async (url) => { await page.locator('#urlBrowser').fill(url); await page.locator('#urlBrowser').press('Enter'); };
+  const contaDi = (url) => aperture.filter((u) => u === url).length;
+
+  await apri('https://viva-a.test/');
+  await expect.poll(() => contaDi('https://viva-a.test/')).toBe(1);
+  await apri('https://viva-b.test/');
+  await expect.poll(() => contaDi('https://viva-b.test/')).toBe(1);
+
+  const schedaA = page.locator('#browserSchede [data-browser-tab]').filter({ hasText: 'viva-a' }).first();
+  await schedaA.click();
+  await schedaA.click(); // impazienza: mentre si riapre, un altro clic
+  await expect.poll(() => contaDi('https://viva-a.test/'), { message: 'returning reopens the paused page' }).toBe(2);
+  await page.waitForTimeout(1000);
+  expect(contaDi('https://viva-a.test/'), 'a second click while it reopens does not open it again').toBe(2);
+  // al contrario: tornare su una scheda che NON è in pausa (quella viva adesso) non riapre niente
+  const prima = aperture.length;
+  await schedaA.click();
+  await page.waitForTimeout(500);
+  expect(aperture.length, 'the live tab is not reopened').toBe(prima);
+});

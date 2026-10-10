@@ -161,6 +161,43 @@ PASSI_NARRATI.forEach(([frase, nome, argomenti, esito], i) => {
 EVENTI_NARRATI.push(...testo('n-mf', 'Il renderer è in `legacy/app.js` e i suoi confini sono quelli del ticket.'), { type: 'RunFinished', outcome: { type: 'success' } });
 
 SCENE_ATTIVITA.narrata = Object.freeze({ titolo: 'Giro narrato passo per passo', ragionamentiMs: DURATE_NARRATE, eventi: numera(EVENTI_NARRATI) });
+/* TACCUINO (09/10/2026, bugfixer): un attrezzo SENZA parole sue (notes_create) che apre la riga del segmento — il suo nome umano è
+   minuscolo apposta e la riga diceva «scrittura di una nota». Solo per le prove: non è in `ORDINE_SCENE_ATTIVITA`. */
+SCENE_ATTIVITA.nota = Object.freeze({
+  titolo: 'Due note salvate',
+  ragionamentiMs: {},
+  eventi: numera([
+    avvio('Salva due note per me.'),
+    ...attrezzo('o-t1', 'notes_create', { title: 'Prima nota', content: 'Testo.' }, 'Note n1 saved.'),
+    ...attrezzo('o-t2', 'notes_create', { title: 'Seconda nota', content: 'Testo.' }, 'Note n2 saved.'),
+    ...testo('o-m1', 'Ho salvato le due note.'),
+    { type: 'RunFinished', outcome: { type: 'success' } },
+  ]),
+});
+/* TACCUINO-2 (09/10/2026, review di «talos desktop»): un comando IN CORSO la cui descrizione, scritta dal modello, comincia col
+   nome del comando in minuscolo. La frase viva la mostra com'è: «Npm test…» la falsificava. Solo per le prove. */
+SCENE_ATTIVITA.comando = Object.freeze({
+  titolo: 'Un comando in corso',
+  ragionamentiMs: {},
+  vivo: true,
+  eventi: numera([
+    avvio('Lancia i test.'),
+    ...attrezzo('k-t1', 'leggi', { percorso: 'package.json' }, '{ "scripts": { "test": "node --test" } }'),
+    ...attrezzo('k-t2', 'shell', { comando: 'npm test', descrizione: 'npm test sul frontend' }),
+  ]),
+});
+/* TACCUINO-2, AL CONTRARIO: una nota IN CORSO — la frase viva è nostra («scrittura di una nota…», minuscola apposta perché va a
+   metà frase) e in testa alla riga prende la maiuscola. Solo per le prove. */
+SCENE_ATTIVITA.notaInCorso = Object.freeze({
+  titolo: 'Una nota in corso',
+  ragionamentiMs: {},
+  vivo: true,
+  eventi: numera([
+    avvio('Salva una nota.'),
+    ...attrezzo('q-t0', 'leggi', { percorso: 'appunti.md' }, 'Appunti di ieri.'), // due voci: una voce sola resta nuda, senza testa
+    ...attrezzo('q-t1', 'notes_create', { title: 'Prima nota', content: 'Testo.' }),
+  ]),
+});
 Object.freeze(SCENE_ATTIVITA);
 
 export const ORDINE_SCENE_ATTIVITA = Object.freeze(['breve', 'lungo', 'vivo', 'errore', 'narrata']);

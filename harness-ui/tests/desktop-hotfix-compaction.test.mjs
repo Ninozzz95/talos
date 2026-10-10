@@ -272,7 +272,10 @@ test('CTX-HOTFIX-TRIAL-RAW-PREPARE — il trial riceve `messages` corretto e `or
 test('CTX-HOTFIX-RECORD-EMITTED-AND-REPLAYABLE — record `talos.compattazione.v1` sugli eventi e sul risultato; applicaRecord rifà la proiezione', async (t) => {
   conTetto(t, 8_000);
   const cartella = cartellaDiProva(t);
-  const fornitore = fintoFornitore({ chiamateTool: 7 });
+  /* C1 (09/10/2026): con 7 letture la proiezione dopo la compattazione finiva a meno di 80 token dalla soglia, e la riga di
+     recupero (`RIGA_RECUPERO`, ~80 token, voluta) la riportava sopra all'ultima lettura: una seconda compattazione vera, non
+     un difetto del record. Con 6 la prova resta quella di prima: UNA compattazione alla soglia, record emesso e rigiocabile. */
+  const fornitore = fintoFornitore({ chiamateTool: 6 });
   const { esito, eventi } = await giro(t, { cartella, fornitore });
   const inizi = eventi.filter((e) => e.tipo === 'compattazione-inizio');
   const fini = eventi.filter((e) => e.tipo === 'compattazione-fine' && e.compattato);

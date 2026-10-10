@@ -112,6 +112,60 @@ test('WF-AGENT-CANCEL: a live step is stopped and awaited; nothing running is al
   assert.deepEqual(await createAgentSessionAdapter({ sessions: ponteFinto() }).cancel({ ...IDENTITA }), { outcome: 'cancelled', evidenceResultIds: [] });
 });
 
+/* Y-2b-1 (review del bugfixer, 09/10/2026): la sessione di prima RIFIUTA la ripresa ⇒ la verifica si fa in una sessione nuova,
+   con la frase davanti al compito — mai un fallimento interno. */
+test('C3-ADAPTER-RESUME-REFUSED: a refused resume falls back to a new session that starts with the verification sentence', async () => {
+  const ponte = { ...ponteFinto({ trovata: 'sess-vecchia', esito: Promise.resolve(ESITO_OK) }),
+    async riprendiSessioneDiPasso() { return { erroreAvvio: 'The session is closing its turn', code: 'SESSION_NOT_READY' }; } };
+  const esito = await createAgentSessionAdapter({ sessions: ponte }).execute(ctx({ ripresa: { activityExecutionId: '44444444-4444-4444-8444-444444444444' } }));
+  assert.equal(esito.status, 'completed');
+  assert.equal(ponte.chiamate.avvia.length, 1, 'a new session');
+  assert.match(ponte.chiamate.avvia[0].consegna, /^A previous attempt at this step may already have done the work/u, 'with the verification sentence first');
+  assert.match(ponte.chiamate.avvia[0].consegna, /Leggi note\.md\./u, 'then the task');
+});
+
+/*
+ * C3 Y-v2-1 e Y-v2-2 (review del bugfixer, 09/10/2026): la sessione di un tentativo INCERTO non gira qui; `cancel` la ferma e
+ * aspetta che il registro la dica chiusa. «Chiusa» vale solo con un esito letto e diverso da `in-corso`: una lettura che lancia
+ * (EBUSY) o un registro illeggibile (`null`) sono «non so», e restano «non so» fino al limite ⇒ `unknown`.
+ */
+test('C3-ADAPTER-CANCEL-WAIT: a session that is not live here is cancelled only once the registry reads it closed; unreadable means unknown', async () => {
+  const UNICO = '22222222-2222-4222-8222-222222222222';
+  // un orologio che avanza di 6 s a ogni lettura: il limite di 15 s passa alla terza
+  const orologio = () => { let t = 1_000_000; return () => (t += 6_000); };
+  const ponteConLetture = (letture) => {
+    const lette = [];
+    return { lette, ponte: { ...ponteFinto({ trovata: 'sess-incerta' }),
+      async leggiEsitoSessioneDiPasso({ sessionId }) {
+        lette.push(sessionId);
+        const prossima = letture.length > 1 ? letture.shift() : letture[0];
+        if (prossima instanceof Error) throw prossima;
+        return prossima;
+      } } };
+  };
+  const inCorso = { esito: 'in-corso', sequenzaTerminale: null };
+
+  // sempre viva ⇒ unknown, dopo averla fermata e letta più volte
+  const viva = ponteConLetture([inCorso]);
+  assert.deepEqual(await createAgentSessionAdapter({ sessions: viva.ponte, nowMsFn: orologio() }).cancel({ ...IDENTITA, activityExecutionId: UNICO }),
+    { outcome: 'unknown', evidenceResultIds: [] });
+  assert.deepEqual(viva.ponte.chiamate.ferma, ['sess-incerta']);
+  assert.ok(viva.lette.length >= 2, 'it kept reading while the session was alive');
+
+  // si chiude alla terza lettura ⇒ cancelled solo allora (orologio fermo: il limite non c'entra)
+  const chiusa = ponteConLetture([inCorso, inCorso, { esito: 'cancelled', sequenzaTerminale: 4 }]);
+  assert.deepEqual(await createAgentSessionAdapter({ sessions: chiusa.ponte, nowMsFn: () => 5 }).cancel({ ...IDENTITA, activityExecutionId: UNICO }),
+    { outcome: 'cancelled', evidenceResultIds: [] });
+  assert.equal(chiusa.lette.length, 3, 'cancelled only after the registry read it closed');
+
+  // una lettura che lancia, o un registro illeggibile, non sono «chiusa»
+  for (const letture of [[Object.assign(new Error('EBUSY: resource busy or locked'), { code: 'EBUSY' })], [null]]) {
+    const ignota = ponteConLetture(letture);
+    assert.deepEqual(await createAgentSessionAdapter({ sessions: ignota.ponte, nowMsFn: orologio() }).cancel({ ...IDENTITA, activityExecutionId: UNICO }),
+      { outcome: 'unknown', evidenceResultIds: [] }, `an unreadable registry (${letture[0] === null ? 'null' : 'EBUSY'}) is not a closed session`);
+  }
+});
+
 test('WF-AGENT-CONSEGNA: predecessors come as snapshots, truncation and omissions are said, failed steps say so', () => {
   const testo = consegnaDelPasso(PASSO, { omitted: 3, items: [
     { nodeId: 'a', label: 'Passo A', state: 'succeeded', completedAt: '2026-09-25T08:00:00.000Z', results: [{ summary: 'Risposta A', bytes: 9_000, truncated: true }] },

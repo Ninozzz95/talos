@@ -260,3 +260,73 @@ describe('VELOCITÀ — una lettura parte appena la sua chiamata è completa nel
     assert.match(risultati[3].content, /nuovo/u, 'anche la seconda')
   })
 })
+
+/*
+ * C20 (coda Codex, owner 10/10/2026), audit delle partenze anticipate: lo Stop della persona le ferma. Senza questi controlli, dopo
+ *   «Ferma» partirebbero lo stesso letture, pagine e ricerche web (che il fornitore fa pagare) per una risposta che nessuno
+ *   userà più: il ciclo esce allo Stop, ma una lettura già partita va avanti. Due porte, due prove: la chiamata che si completa
+ *   nello stream DOPO lo Stop, e quella che il ciclo farebbe partire a flusso chiuso.
+ */
+describe('C20 — dopo lo Stop non parte niente in anticipo', () => {
+  const ricercaContata = (richieste) => ({
+    strumentiEstesi: ['web_search'], ricercaWeb: { provider: 'tavily', apiKey: 'k' },
+    richiediRicercaFn: async (_url, opzioni) => {
+      richieste.push(opzioni.corpo.query)
+      return { stato: 200, corpo: JSON.stringify({ results: [] }) }
+    },
+  })
+  const ricerca = (index, query) => ({ choices: [{ delta: { tool_calls: [{ index, id: `call_${index}`, function: { name: 'web_search', arguments: JSON.stringify({ query }) } }] } }] })
+
+  it('C20-STOP-01 nello stream: una chiamata che si completa DOPO lo Stop non fa partire la sua ricerca', async (t) => {
+    const dir = cartella(t, 'stop-stream')
+    const richieste = []
+    const stop = new AbortController()
+    let n = 0
+    await talosLavora({
+      cartella: dir, task: { consegna: 'cerca' }, modello: 'x', chiave: 'y', onDelta: () => {}, segnaleStop: stop.signal,
+      ...ricercaContata(richieste),
+      fetchDiRete: async () => (n++ === 0
+        ? sse([
+          ricerca(0, 'uno'),
+          ricerca(1, 'due'), // l'inizio della seconda completa la prima: la prima parte
+          async () => { await dormi(50); stop.abort() },
+          ricerca(2, 'tre'), // l'inizio della terza completa la seconda, ma dopo lo Stop
+          async () => { await dormi(50) },
+        ])
+        : finale()),
+    }).catch(() => {})
+    await dormi(100)
+    assert.deepEqual(richieste, ['uno'], 'solo quella partita prima dello Stop')
+  })
+
+  /* ⛔ Lo Stop DOPO lo stream: la risposta è arrivata intera, e fra la sua fine e la partenza anticipata del ciclo ci sono gli
+     `await` del motore del contesto (`captureProviderResponse`, `capture({ reason: 'response' })`). Uno Stop che cade lì è il
+     caso che il controllo del ciclo ferma. Con `naviga`, che non guarda lo Stop da sé prima di aprire (la ricerca web sì):
+     senza il controllo, l'ultima pagina si aprirebbe dopo «Ferma» (misurato col mutante B5). */
+  it('C20-STOP-02 a flusso chiuso: uno Stop durante il salvataggio della risposta non fa aprire le pagine rimaste', async (t) => {
+    const dir = cartella(t, 'stop-ciclo')
+    const aperte = []
+    const stop = new AbortController()
+    let n = 0
+    const naviga = (index, url) => ({ choices: [{ delta: { tool_calls: [{ index, id: `call_${index}`, function: { name: 'naviga', arguments: JSON.stringify({ url }) } }] } }] })
+    await talosLavora({
+      cartella: dir, task: { consegna: 'apri' }, modello: 'x', chiave: 'y', onDelta: () => {}, segnaleStop: stop.signal,
+      cacheWeb: {
+        around: async (descrittore) => {
+          aperte.push(descrittore.url)
+          return { value: { stato: 200, url: descrittore.url, corpo: `pagina ${descrittore.url}` }, fromCache: true }
+        },
+      },
+      /* `prepare` serve: senza, il giro muore subito («contextHooks.prepare is not a function») e la prova passerebbe a vuoto */
+      contextHooks: { prepare: async ({ messages }) => ({ messages }), capture: async ({ reason }) => { if (reason === 'response') stop.abort() } },
+      fetchDiRete: async () => (n++ === 0
+        ? sse([
+          naviga(0, 'https://a.example/'),
+          naviga(1, 'https://b.example/'), // la prima parte nello stream; l'ultima, a flusso chiuso, la farebbe partire il ciclo
+        ])
+        : finale()),
+    }).catch(() => {})
+    await dormi(100)
+    assert.deepEqual(aperte, ['https://a.example/'], 'la prima si è aperta nello stream (il giro è andato davvero); l\'ultima, che il ciclo farebbe partire insieme, no')
+  })
+})

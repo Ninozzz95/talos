@@ -48,7 +48,7 @@ export const SCENE = Object.freeze({
   ],
 });
 
-const TERMINALI = new Set(['succeeded', 'failed', 'cancelled', 'skipped', 'superseded']);
+const TERMINALI = new Set(['succeeded', 'failed', 'cancelled', 'skipped', 'superseded', 'set_aside']);
 const ATTENZIONE = new Set(['failed', 'uncertain', 'reconciling']);
 
 export function costruisciScena(count, { sessionId, runId = `run-${count}`, workflowId = `wf-${count}` } = {}) {
@@ -188,7 +188,7 @@ export async function instradaScena(page, scena, { frame = null, vuota = false, 
     const url = new URL(req.url());
     const p = url.pathname;
     const controllo = conComandi && req.method() === 'POST'
-      && new RegExp(`^/api/v1/sessions/${S}/workflows/${scena.runId}/(pause|resume|cancel|retry)$`, 'u').exec(p);
+      && new RegExp(`^/api/v1/sessions/${S}/workflows/${scena.runId}/(pause|resume|cancel|retry|raise-ceiling)$`, 'u').exec(p);
     if (controllo) {
       const azione = controllo[1];
       comandi.push({ azione, corpo: JSON.parse(req.postData() ?? 'null') });
@@ -196,13 +196,37 @@ export async function instradaScena(page, scena, { frame = null, vuota = false, 
       if (azione === 'pause') pan.pauseRequested = true;
       if (azione === 'resume') { pan.status = 'running'; pan.pauseRequested = false; }
       if (azione === 'cancel') pan.cancelRequested = true;
+      // C3 tappa 3: il tetto alzato toglie il motivo «budget» e, se non ne restano, il run riparte
+      if (azione === 'raise-ceiling') {
+        const resto = (pan.attentionReasons ?? []).filter((motivo) => motivo !== 'budget_overrun');
+        if (resto.length) pan.attentionReasons = resto; else { delete pan.attentionReasons; pan.status = 'running'; }
+      }
       if (azione === 'retry') {
         for (const elenco of [...scena.righe.values(), scena.tutte]) for (const [i, r] of elenco.entries()) if (r.state === 'failed') elenco[i] = { ...r, state: 'ready' };
         ricontaGruppi();
       }
       return json(route, { runId: scena.runId, action: azione, status: pan.status, deduplicated: false }, 202);
     }
+    // C3 (09/10/2026): le azioni della persona su un passo fallito, come `resolveFailedStep` — cambiano la riga come i fatti
+    const sulPasso = conComandi && req.method() === 'POST'
+      && new RegExp(`^/api/v1/sessions/${S}/workflows/${scena.runId}/steps/([^/]+)/(mark-done|set-aside|retry-other-model|resume-verify)$`, 'u').exec(p);
+    if (sulPasso) {
+      const nodeId = decodeURIComponent(sulPasso[1]);
+      const azione = sulPasso[2];
+      comandi.push({ azione, nodeId, corpo: JSON.parse(req.postData() ?? 'null') });
+      const nuova = azione === 'mark-done' ? { state: 'succeeded', resolution: 'marked-done' }
+        : azione === 'set-aside' ? { state: 'set_aside', resolution: 'set-aside' } : { state: 'ready' };
+      for (const elenco of [...scena.righe.values(), scena.tutte]) for (const [i, r] of elenco.entries()) if (r.nodeId === nodeId) elenco[i] = { ...r, ...nuova };
+      ricontaGruppi();
+      return json(route, { runId: scena.runId, nodeId, action: azione, status: scena.panoramica.status, deduplicated: false }, 202);
+    }
     if (!['GET', 'HEAD'].includes(req.method())) { scritture.push(`${req.method()} ${req.url()}`); return route.abort(); }
+    // C3 tappa 3: l'anteprima del tetto («quanto serve per finire»), la cifra che il comando deve portare
+    if (conComandi && p === `/api/v1/sessions/${S}/workflows/${scena.runId}/ceiling-preview`) {
+      const nodeIds = scena.tutte.filter((r) => ['ready', 'pending', 'blocked'].includes(r.state)).map((r) => r.nodeId);
+      return json(route, { schema: 'talos.workflow-ceiling-preview.v1', runId: scena.runId, waiting: true, nodeIds,
+        amount: scena.aumentoDelTetto ?? { promptTokens: 120_000, completionTokens: 0, wallMs: 0, agentSeconds: 0, toolCalls: 0, modelRequests: 4, knownCostUsd: 0 } });
+    }
     if (conComandi && p === `/api/v1/sessions/${S}/workflows/${scena.runId}/retry-preview`) {
       const nodeIds = scena.tutte.filter((r) => r.state === 'failed').map((r) => r.nodeId);
       return json(route, { schema: 'talos.workflow-retry-preview.v1', runId: scena.runId, nodeIds,
@@ -295,13 +319,15 @@ export async function instradaScena(page, scena, { frame = null, vuota = false, 
 }
 
 /** Porta la app sulla sessione della scena e apre la scheda Agenti della colonna di destra. */
-export async function apriRailDellaScena(page, scena) {
+// `modello`: solo per chi lo chiede arriva fino alla carta della sessione principale (senza, come sempre: la carta dice
+// «Sessione principale» e basta)
+export async function apriRailDellaScena(page, scena, { modello = null } = {}) {
   await page.goto('/');
   await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 15_000 }).catch(() => {});
   await page.waitForFunction(() => window.__talosHarnessUiRuntime);
-  await page.evaluate((id) => {
-    window.__talosHarnessUiRuntime.passaASessione(id, 'workspace', 'W1-02 registro processi', 'z-ai/glm-5.3-flash', { conclusa: false });
-  }, scena.sessionId);
+  await page.evaluate(([id, m]) => {
+    window.__talosHarnessUiRuntime.passaASessione(id, 'workspace', 'W1-02 registro processi', m ?? 'z-ai/glm-5.3-flash', m ? { conclusa: false, modello: m } : { conclusa: false });
+  }, [scena.sessionId, modello]);
   await attendiFineStoria(page);
   if (!(await page.locator('#railTabs [data-rail="agenti"]').isVisible())) await page.locator('#schermoChat [data-azione="dettagli"]').click();
   await page.locator('#railTabs [data-rail="agenti"]').click();
@@ -312,8 +338,8 @@ export async function apriRailDellaScena(page, scena) {
  * Apre il diagramma dalla sua porta vera nel rail Agenti: con un workflow è il rail v2 («Apri diagramma», F3-50, decisione
  * owner 19), senza è il rail classico («Apri visuale diagramma»).
  */
-export async function apriDiagrammaDellaScena(page, scena, { vuota = false } = {}) {
-  const rail = await apriRailDellaScena(page, scena);
+export async function apriDiagrammaDellaScena(page, scena, { vuota = false, modello } = {}) {
+  const rail = await apriRailDellaScena(page, scena, modello ? { modello } : {});
   if (vuota) await rail.getByRole('button', { name: 'Apri visuale diagramma' }).click();
   else await rail.locator('[data-c="WorkflowRail"]').getByRole('button', { name: 'Apri diagramma', exact: true }).click();
   const grafo = page.locator('#schermoChat > [data-c="GrafoAgenti"]');

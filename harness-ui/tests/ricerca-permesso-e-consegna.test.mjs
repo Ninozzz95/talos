@@ -223,7 +223,7 @@ test('§6.4 — sotto `ricerca` il modello non riceve scrivi/shell/document_crea
     assert.equal(negati.has(nome), true, `${nome} non deve essere offerto a una ricerca`);
   }
   for (const nome of ['elenca', 'cerca', 'leggi', 'naviga', 'web_search', 'time_now',
-    'library_list', 'library_read', 'research_list', 'research_read', 'research_deposit']) {
+    'library_find', 'library_read', 'research_find', 'research_read', 'research_deposit']) { // C5: era research_list
     assert.equal(negati.has(nome), false, `${nome} serve a una ricerca e deve restare offerto`);
   }
 });

@@ -1,5 +1,8 @@
 import { readFileSync } from 'node:fs';
+import { mkdir } from 'node:fs/promises';
 import { createRequire } from 'node:module';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { test, expect } from '@playwright/test';
 
@@ -18,13 +21,15 @@ const require = createRequire(import.meta.url);
 const AXE = readFileSync(require.resolve('axe-core/axe.min.js'), 'utf8');
 const CONFINE = { type: 'CUSTOM', name: 'talos.fine-rigiocata', value: null };
 const SEG = '#conversation .talos-activity--segment';
+/* TACCUINO-2: le foto «dopo» della riga della cache, come le altre prove con foto (pillola-sforzo). */
+const FOTO_TACCUINO2 = path.resolve(fileURLToPath(new URL('../../artifacts/taccuino-2/', import.meta.url)));
 
 async function dueFotogrammi(page) {
   await page.evaluate(() => new Promise((ok) => requestAnimationFrame(() => requestAnimationFrame(ok))));
 }
 
 /** Apre la app col tema chiesto e installa le rotte finte delle scene; torna il contatore dei non-GET. */
-async function apri(page, { tema = 'dark', densita = null } = {}) {
+async function apri(page, { tema = 'dark', densita = null, cache = null } = {}) {
   await page.emulateMedia({ colorScheme: tema, reducedMotion: 'reduce' });
   await page.addInitScript(({ colorMode, densita }) => {
     localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({ version: 1, appearance: { colorMode, uiLanguage: 'it', ...(densita ? { uiDensity: densita } : {}) } }));
@@ -37,7 +42,7 @@ async function apri(page, { tema = 'dark', densita = null } = {}) {
     if (m) {
       const scena = SCENE_ATTIVITA[m[1]];
       if (m[2] === 'metrics') {
-        return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ ok: true, data: { registrato: true, cacheSessione: null, ragionamentiMs: scena.ragionamentiMs }, meta: { schema: 'talos.harness-ui.api.v1' } }) });
+        return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ ok: true, data: { registrato: true, cacheSessione: cache, ragionamentiMs: scena.ragionamentiMs }, meta: { schema: 'talos.harness-ui.api.v1' } }) });
       }
       const storia = scena.vivo ? [CONFINE] : [...scena.eventi, CONFINE];
       return route.fulfill({ contentType: 'text/event-stream', body: `retry: 3600000\n${storia.map((e) => `data: ${JSON.stringify(e)}\n\n`).join('')}` });
@@ -94,6 +99,58 @@ test.describe('R4 segmento compatto — prodotto', () => {
       const visibili = await page.locator(`${SEG} .talos-activity:not(.talos-activity--segment):not(.real-reasoning-note) > .talos-activity__head`)
         .evaluateAll((teste) => teste.filter((t) => !t.hidden && t.getBoundingClientRect().height > 0).map((t) => t.textContent.trim()));
       expect(visibili).toEqual([]);
+      expect(c.nonGet, 'nessuna scrittura verso il server').toBe(0);
+    });
+  }
+
+  /* TACCUINO (09/10/2026, bugfixer): un attrezzo senza parole sue apre la riga col suo nome umano, minuscolo apposta (va a metà
+     frase). La riga del segmento diceva «scrittura di una nota ×2», l'Indice «Scrittura di una nota» (misurato sulla 4176). */
+  test('ATTIVITA-MAIUSCOLA — la riga del segmento comincia con la maiuscola anche quando la apre un attrezzo senza parole sue', async ({ page }) => {
+    const c = await apri(page);
+    await scena(page, 'nota', 'maiuscola');
+    const conteggi = (await page.locator(`${SEG} .talos-activity__conteggi`).first().textContent()).trim();
+    expect(conteggi.toLowerCase(), 'la premessa: la riga la apre la scrittura di una nota').toMatch(/^scrittura di una nota/u);
+    expect(conteggi[0], `la riga: «${conteggi}»`).toBe(conteggi[0].toLocaleUpperCase('it-IT'));
+    expect(c.nonGet, 'nessuna scrittura verso il server').toBe(0);
+  });
+
+  test('ATTIVITA-MAIUSCOLA-02 — la descrizione di un comando scritta dal modello resta com’è: «npm test…», mai «Npm test…»', async ({ page }) => {
+    const c = await apri(page);
+    await scena(page, 'comando', 'minuscola');
+    const adesso = page.locator(`${SEG} .talos-activity__adesso`).first();
+    await expect(adesso, 'la premessa: la frase viva è la descrizione del comando in corso').toHaveText(/^npm test sul frontend…$/iu);
+    expect(await adesso.textContent()).toBe('npm test sul frontend…');
+    expect(c.nonGet, 'nessuna scrittura verso il server').toBe(0);
+  });
+
+  test('ATTIVITA-MAIUSCOLA-03 — AL CONTRARIO: una frase viva NOSTRA in minuscolo («scrittura di una nota…») prende la maiuscola in testa', async ({ page }) => {
+    const c = await apri(page);
+    await scena(page, 'notaInCorso', 'viva');
+    const adesso = page.locator(`${SEG} .talos-activity__adesso`).first();
+    await expect(adesso, 'la premessa: la frase viva è quella della nota in corso').toHaveText(/^scrittura di una nota/iu);
+    const testo = await adesso.textContent();
+    expect(testo[0], `la frase: «${testo}»`).toBe(testo[0].toLocaleUpperCase('it-IT'));
+    expect(c.nonGet, 'nessuna scrittura verso il server').toBe(0);
+  });
+
+  /* TACCUINO-2 (09/10/2026, foto del 4174 dopo il lotto taccuino): «85 % · su 11 richieste al modello» lasciava l'etichetta a «Rius…». */
+  for (const [larghezza, tema] of [[1920, 'light'], [1920, 'dark'], [1440, 'light']]) {
+    test(`TACCUINO-CACHE-${larghezza}-${tema} — «Riusato dalla cache» resta intera accanto a un valore lungo, che va a capo lui`, async ({ page }) => {
+      await page.setViewportSize({ width: larghezza, height: larghezza === 1920 ? 1080 : 900 });
+      const c = await apri(page, { tema, cache: { percentuale: 85, giriMisurati: 1286 } });
+      await scena(page, 'breve', `cache${larghezza}`);
+      const riga = page.locator('#railContesto .talos-kv').filter({ has: page.locator('.talos-kv__k', { hasText: 'Riusato dalla cache' }) });
+      await expect(riga.locator('.talos-kv__v'), 'la premessa: il valore lungo').toHaveText('85 % · su 1286 richieste al modello');
+      const misure = await riga.evaluate((n) => {
+        const k = n.querySelector('.talos-kv__k'); const v = n.querySelector('.talos-kv__v');
+        return { kTagliata: k.scrollWidth > k.clientWidth + 1, vFuori: v.scrollWidth > v.clientWidth + 1, rigaFuori: n.scrollWidth > n.clientWidth + 1 };
+      });
+      expect(misure, JSON.stringify(misure)).toEqual({ kTagliata: false, vFuori: false, rigaFuori: false });
+      // AL CONTRARIO: le altre righe della card non cambiano forma (il valore resta su una riga)
+      const conversazione = page.locator('#railContesto .talos-kv').filter({ has: page.locator('.talos-kv__k', { hasText: 'Conversazione' }) }).locator('.talos-kv__v');
+      await expect(conversazione).toHaveCSS('white-space', 'nowrap');
+      await mkdir(FOTO_TACCUINO2, { recursive: true });
+      await page.screenshot({ path: path.join(FOTO_TACCUINO2, `cache-${larghezza}-${tema}.png`) });
       expect(c.nonGet, 'nessuna scrittura verso il server').toBe(0);
     });
   }
@@ -294,6 +351,32 @@ test.describe('R4 segmento compatto — prodotto', () => {
     const chiaviDopo = await page.evaluate(() => Object.keys(localStorage).concat(Object.keys(sessionStorage)));
     expect(chiaviDopo.filter((k) => /attivit|segment|disclosure/i.test(k))).toEqual([]);
     expect(chiaviDopo.length).toBe(chiaviPrima.length);
+  });
+
+  /*
+   * Owner 10/10/2026 («· 2 in corso»): con comandi IN PARALLELO la riga ne nascondeva uno (nota di «talos desktop»: quattro
+   *   comandi, «· 2 comandi»). Qui, sulla scena viva (una ricerca ancora in corso), arrivano due comandi che restano aperti:
+   *   la riga conta TUTTI gli attrezzi in corso. AL CONTRARIO: chiusi i due comandi resta solo la ricerca, che la frase viva
+   *   racconta già, e la parte sparisce.
+   */
+  test('ATTIVITA-PARALLELO-02 — commands running in parallel are all counted on the row, and the part goes away when only the narrated one is left', async ({ page }) => {
+    const contatore = await apri(page);
+    await scena(page, 'vivo', 'par');
+    const manda = (eventi) => page.evaluate((lista) => { const r = window.__talosHarnessUiRuntime; for (const e of lista) r.handleRealEvent(e, r.realSessionState.generation); }, eventi);
+    const comando = (id, cmd, seq) => [
+      { type: 'ToolCallStart', toolCallId: id, toolCallName: 'shell', _sequenza: seq },
+      { type: 'ToolCallArgs', toolCallId: id, delta: JSON.stringify({ comando: cmd }), _sequenza: seq + 1 },
+    ];
+    await manda([...comando('par-1', 'npm run lint', 900), ...comando('par-2', 'npm run build', 902)]);
+    const conteggi = page.locator(`${SEG} .talos-activity__conteggi`).first();
+    await expect(conteggi).toContainText('3 in corso'); // la ricerca della scena + i due comandi
+    await manda([
+      { type: 'ToolCallResult', toolCallId: 'par-1', content: 'exit 0', _sequenza: 904 },
+      { type: 'ToolCallResult', toolCallId: 'par-2', content: 'exit 0', _sequenza: 905 },
+    ]);
+    await expect(conteggi).toContainText('2 comandi');
+    await expect(conteggi).not.toContainText('in corso');
+    expect(contatore.nonGet).toBe(0);
   });
 
   test('ATTIVITA-D11-D12 — dal vivo: verbo al presente in testa, testa sempre a 30 px, mai «concluso» fra due chiamate, tempo misurato', async ({ page }) => {

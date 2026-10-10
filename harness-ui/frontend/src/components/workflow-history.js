@@ -5,6 +5,7 @@ const STATUS = Object.freeze({
   created: 'agenti.history.status.created', running: 'agenti.history.status.running', paused: 'agenti.history.status.paused',
   needs_attention: 'agenti.history.status.needsAttention', succeeded: 'agenti.history.status.succeeded',
   failed: 'agenti.history.status.failed', cancelled: 'agenti.history.status.cancelled',
+  succeeded_with_set_aside: 'agenti.history.status.succeededWithSetAside',
 });
 const localeUI = () => (linguaCorrenteDiT() === 'en' ? 'en-US' : 'it-IT');
 

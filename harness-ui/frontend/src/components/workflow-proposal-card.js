@@ -24,7 +24,9 @@ export function leggiRicevutaProposta(contenuto) {
   if (valore.schema !== RICEVUTA_PROPOSTA) return typeof valore.schema === 'string' && /workflow-proposal-receipt/u.test(valore.schema) ? { nonSupportata: true } : null;
   if (typeof valore.workflowId !== 'string' || !ID.test(valore.workflowId) || !Number.isSafeInteger(valore.version) || valore.version < 1
     || typeof valore.definitionHash !== 'string' || !IMPRONTA.test(valore.definitionHash)) return null;
-  return { workflowId: valore.workflowId, version: valore.version, definitionHash: valore.definitionHash };
+  /* C3b (owner 09/10/2026): con la Coordinazione accesa il server l'ha approvato e avviato da solo, e la ricevuta lo dice */
+  const avviatoDaSolo = typeof valore.startedOnItsOwn?.runId === 'string' && ID.test(valore.startedOnItsOwn.runId) ? valore.startedOnItsOwn.runId : null;
+  return { workflowId: valore.workflowId, version: valore.version, definitionHash: valore.definitionHash, ...(avviatoDaSolo ? { avviatoDaSolo } : {}) };
 }
 
 const TESTI_AVVISI = Object.freeze({
@@ -38,6 +40,7 @@ const STATI_RUN = Object.freeze({
   paused: { chiave: 'in-pausa', get etichetta() { return t('chat.workflow.state.paused'); } },
   needs_attention: { chiave: 'attenzione', get etichetta() { return t('chat.workflow.state.needsAttention'); } },
   succeeded: { chiave: 'riuscito', get etichetta() { return t('chat.workflow.state.succeeded'); } },
+  succeeded_with_set_aside: { chiave: 'riuscito-con-messi-da-parte', get etichetta() { return t('chat.workflow.state.succeededWithSetAside'); } },
   failed: { chiave: 'non-riuscito', get etichetta() { return t('chat.common.failed'); } },
   cancelled: { chiave: 'annullato', get etichetta() { return t('chat.common.cancelled'); } },
 });
@@ -145,7 +148,7 @@ export function disegnaCardProposta(section, {
   document = globalThis.document, revisione = null, run = null, nonDisponibile = false, carica = false,
   inVolo = null, errore = null, onApprova = null, onAvvia = null, onApriDiagramma = null,
   precedente = null, avviabilePrima = null, bozzaTetti = null, onModifica = null, onSalvaTetti = null, onAnnullaModifica = null,
-  onAvviaPrima = null,
+  onAvviaPrima = null, avviatoDaSolo = false, onComandoRun = null,
 } = {}) {
   const make = (tag, className, text) => {
     const node = document.createElement(tag);
@@ -314,8 +317,26 @@ export function disegnaCardProposta(section, {
       azioni.append(make('p', 'talos-workflow-proposal__hint', t('chat.workflow.actions.approvedLine', { approvazione: quando ? t('chat.workflow.actions.approvedAt', { ora: quando }) : t('chat.workflow.actions.approvedNoTime'), lettura: soloLettura })));
     } else {
       const quando = ora(run?.createdAt);
+      /* C3b (owner 09/10/2026): un run avviato DA SOLO lo dice, e la carta porta i comandi per fermarlo senza aprire il diagramma */
+      const avvio = avviatoDaSolo
+        ? (quando ? t('chat.workflow.actions.startedOnItsOwnAt', { ora: quando }) : t('chat.workflow.actions.startedOnItsOwn'))
+        : (quando ? t('chat.workflow.actions.startedAt', { ora: quando }) : t('chat.workflow.actions.startedNoTime'));
       azioni.append(make('p', 'talos-workflow-proposal__hint',
-        t('chat.workflow.actions.startedLine', { avvio: quando ? t('chat.workflow.actions.startedAt', { ora: quando }) : t('chat.workflow.actions.startedNoTime'), run: run?.runId ? t('chat.workflow.actions.runId', { id: run.runId }) : '' })));
+        t('chat.workflow.actions.startedLine', { avvio, run: run?.runId ? t('chat.workflow.actions.runId', { id: run.runId }) : '' })));
+      if (avviatoDaSolo && typeof onComandoRun === 'function' && run && !['succeeded', 'succeeded_with_set_aside', 'failed', 'cancelled'].includes(run.status)) {
+        if (run.status === 'running' || run.status === 'created') {
+          const pausa = bottone(t('chat.run.pause'), 'talos-button--ghost', 'pausa', Boolean(inVolo));
+          pausa.addEventListener?.('click', () => onComandoRun('pause', pausa));
+          azioni.append(pausa);
+        } else if (run.status === 'paused') {
+          const riprendi = bottone(t('chat.run.resume'), 'talos-button--ghost', 'riprendi', Boolean(inVolo));
+          riprendi.addEventListener?.('click', () => onComandoRun('resume', riprendi));
+          azioni.append(riprendi);
+        }
+        const annulla = bottone(t('chat.run.cancel'), 'talos-button--ghost', 'annulla-run', Boolean(inVolo));
+        annulla.addEventListener?.('click', () => onComandoRun('cancel', annulla));
+        azioni.append(annulla);
+      }
     }
     // F3-42 (25/09/2026), D20: dalla card si apre il diagramma di QUESTO workflow — pianificato prima dell'avvio, il run dopo
     if (typeof onApriDiagramma === 'function' && !inModifica) {

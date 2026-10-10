@@ -17,6 +17,7 @@ import { normalizzaRuntimeCloud } from './provider-auth-cloud.mjs';
 // P-K-bis/P-L-bis: preferenze pubbliche, separate dall'universo del portachiavi.
 import { validaRuntimeAgenteEsterno } from './acp-agent.mjs';
 import { ESCLUSI_DI_SERIE, chiaveDiSerie, modelloBase, normalizzaTolti, vociDiSerie } from './esclusi-di-serie.mjs';
+import { indirizzoZaiNoto } from './zai-indirizzo.mjs';
 
 /*
  * ⛔⛔ 12/09 — P-A: QUESTE DUE COSTANTI ERANO IL PRIMO DEI TREDICI ELENCHI PARALLELI.
@@ -71,10 +72,25 @@ const KEYRING_SERVICE = 'talos-harness-provider';
  * ⛔ Per questo i tre numeri qui sotto restano identici: 5 s è ancora un minimo sensato per «non
  *   risponde proprio», e 300 s un massimo generoso. È la SEMANTICA a essere cambiata, non la scala
  *   — e cambiare anche la scala renderebbe impossibile capire quale delle due ha causato cosa.
+ *
+ * ⛔⛔ OWN-01 (09/10/2026, stress test della 0.5.1; owner «10 minuti (Consigliata)») — LA SCALA CAMBIA ORA, per una misura. Su una
+ *   conversazione lunga Z.AI (piano GLM) manda gli header dopo PIÙ di un minuto: ogni giro moriva a 60 s esatti, senza un byte.
+ *   Predefinito 600 s come gli SDK di OpenAI e Anthropic (`DEFAULT_TIMEOUT` 10 min) e Claude Code; OpenCode `headerTimeout` 300 s;
+ *   Hermes `HERMES_API_TIMEOUT` 1800 s, che diventa il massimo.
+ * ⛔ E il «non si migrano» qui sopra aveva una premessa falsa, misurata sul file dell'owner: il 60 su disco NON era una scelta.
+ *   `setRuntime` senza `timeoutSeconds`, `impostaIndirizzoRilevato` e gli altri scrittori riempivano il predefinito e lo
+ *   salvavano. Da ora una scelta della persona porta `timeoutScelto: true`; un 60 senza quella marca è il vecchio predefinito
+ *   e vale il nuovo. Un valore diverso da 60 senza marca resta: era per forza una scelta. Il file non si riscrive in silenzio.
  */
-const DEFAULT_TIMEOUT_SECONDS = 60;
+const DEFAULT_TIMEOUT_SECONDS = 600;
+const VECCHIO_PREDEFINITO_SECONDI = 60;
 const MIN_TIMEOUT_SECONDS = 5;
-const MAX_TIMEOUT_SECONDS = 300;
+const MAX_TIMEOUT_SECONDS = 1800;
+/** Il tempo letto dal disco: un 60 non scelto è il vecchio predefinito (vedi OWN-01 qui sopra). */
+function tempoDalDisco(row) {
+  const salvato = row.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS;
+  return row.timeoutScelto !== true && salvato === VECCHIO_PREDEFINITO_SECONDI ? DEFAULT_TIMEOUT_SECONDS : normalizeTimeout(salvato);
+}
 const MAX_KEY_LENGTH = 4096;
 const POOL_SERVICE = 'talos-harness-provider-pool';
 const POOL_INDEX_SERVICE = 'talos-harness-provider-pool-index';
@@ -298,11 +314,14 @@ function readRuntimePreferences(runtimeFile, runtimes, logger, env, segreti) {
     const row = parsed.providers[provider];
     if (!isRecord(row)) continue;
     try {
-      const timeout = normalizeTimeout(row.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS);
-      const extra = { ...(Object.hasOwn(row, 'modelli') ? { modelli: normalizzaModelli(provider, row.modelli, segreti) } : {}),
+      const timeout = tempoDalDisco(row);
+      const extra = { ...(row.timeoutScelto === true ? { timeoutScelto: true } : {}),
+        ...(Object.hasOwn(row, 'modelli') ? { modelli: normalizzaModelli(provider, row.modelli, segreti) } : {}),
         ...(Object.hasOwn(row, 'esclusi') ? ((e) => (e?.length ? { esclusi: e } : {}))(esclusiDalDisco(provider, row.esclusi, (m) => noSecretLogger(logger, m))) : {}),
         // 0.1.25 (owner 09/10): le voci DI SERIE che la persona ha tolto; dal disco tollerante, come gli esclusi
-        ...(provider === 'openrouter' && Object.hasOwn(row, 'esclusiDiSerieTolti') ? ((v) => (v.length ? { esclusiDiSerieTolti: v } : {}))(normalizzaTolti(row.esclusiDiSerieTolti)) : {}) };
+        ...(provider === 'openrouter' && Object.hasOwn(row, 'esclusiDiSerieTolti') ? ((v) => (v.length ? { esclusiDiSerieTolti: v } : {}))(normalizzaTolti(row.esclusiDiSerieTolti)) : {}),
+        // Owner 09/10/2026: l'indirizzo di Z.AI rilevato per una chiave (zai-indirizzo.mjs); dal disco solo uno dei quattro noti
+        ...(provider === 'zai' && rilevatoValido(row.rilevato) ? { rilevato: { endpoint: row.rilevato.endpoint, impronta: row.rilevato.impronta } } : {}) };
       if (!definition.supportsEndpoint || row.endpointConfigured === false) {
         runtimes.set(provider, { endpoint: null, endpointConfigured: false, timeoutSeconds: timeout, ...extra });
         continue;
@@ -313,6 +332,11 @@ function readRuntimePreferences(runtimeFile, runtimes, logger, env, segreti) {
       noSecretLogger(logger, `Provider ${provider} preference ignored: invalid value`);
     }
   }
+}
+
+function rilevatoValido(value) {
+  return isRecord(value) && Object.keys(value).every((k) => k === 'endpoint' || k === 'impronta')
+    && indirizzoZaiNoto(value.endpoint) !== null && typeof value.impronta === 'string' && /^[0-9a-f]{16}$/u.test(value.impronta);
 }
 
 function writeRuntimePreferences(runtimeFile, runtimes) {
@@ -326,9 +350,11 @@ function writeRuntimePreferences(runtimeFile, runtimes) {
       endpoint: definition.supportsEndpoint && value.endpointConfigured ? value.endpoint : null,
       endpointConfigured: definition.supportsEndpoint && value.endpointConfigured === true,
       timeoutSeconds: value.timeoutSeconds,
+      ...(value.timeoutScelto === true ? { timeoutScelto: true } : {}),
       ...(value.modelli ? { modelli: value.modelli } : {}),
       ...(value.esclusi ? { esclusi: value.esclusi } : {}),
       ...(value.esclusiDiSerieTolti?.length ? { esclusiDiSerieTolti: value.esclusiDiSerieTolti } : {}),
+      ...(value.rilevato ? { rilevato: value.rilevato } : {}),
     };
   }
   const temporary = `${runtimeFile}.tmp`;
@@ -556,8 +582,25 @@ export function createProviderCredentialStore({ env = process.env, keyring = nul
     const cloud = REGISTRO_FORNITORI[provider].cloud && endpoint ? normalizzaRuntimeCloud(provider, { endpoint }) : null;
     return { provider, endpoint, endpointConfigured: saved?.endpointConfigured === true, timeoutSeconds: saved?.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS, ...(cloud ?? {}),
       ...(REGISTRO_FORNITORI[provider].cloud ? { modelli: structuredClone(saved?.modelli ?? []) } : {}),
-      ...(provider === 'openrouter' ? { esclusi: [...(saved?.esclusi ?? [])], esclusiDiSerieTolti: [...(saved?.esclusiDiSerieTolti ?? [])] } : {}) }; // decisione 14 + 0.1.25
+      ...(provider === 'openrouter' ? { esclusi: [...(saved?.esclusi ?? [])], esclusiDiSerieTolti: [...(saved?.esclusiDiSerieTolti ?? [])] } : {}), // decisione 14 + 0.1.25
+      ...(provider === 'zai' && saved?.rilevato && saved.endpointConfigured !== true ? { endpointRilevato: saved.rilevato.endpoint } : {}) }; // owner 09/10
     // P-K — fine
+  }
+  /** Owner 09/10/2026: l'indirizzo di Z.AI rilevato per una chiave (prefisso dell'impronta), o `null`. */
+  function indirizzoRilevato(provider) {
+    const r = runtimes.get(provider)?.rilevato;
+    return r ? { endpoint: r.endpoint, impronta: r.impronta } : null;
+  }
+  /** Lo ricorda (scrittura atomica col ritorno indietro); non tocca indirizzo, tempo né altro della riga. */
+  function impostaIndirizzoRilevato(provider, endpoint, impronta) {
+    requireProvider(provider);
+    if (provider !== 'zai' || !rilevatoValido({ endpoint, impronta })) throw new ProviderCredentialError('PROVIDER_RUNTIME_INVALID');
+    const previous = runtimes.get(provider);
+    const base = previous ?? { endpoint: null, endpointConfigured: false, timeoutSeconds: DEFAULT_TIMEOUT_SECONDS };
+    runtimes.set(provider, { ...base, rilevato: { endpoint, impronta } });
+    try { writeRuntimePreferences(runtimeFile, runtimes); }
+    catch (error) { if (previous) runtimes.set(provider, previous); else runtimes.delete(provider); throw error; }
+    return indirizzoRilevato(provider);
   }
   /**
    * 0.1.25 (owner 09/10/2026: «visibile e togliibile») — toglie (`attivo:false`) o rimette (`attivo:true`) UNA voce degli esclusi
@@ -635,17 +678,24 @@ export function createProviderCredentialStore({ env = process.env, keyring = nul
       catch (error) { if (previous) runtimes.set(provider, previous); else runtimes.delete(provider); throw error; }
       return getRuntime(provider);
     }
-    const { endpoint, timeoutSeconds = (REGISTRO_FORNITORI[provider]?.cloud ? runtimes.get(provider)?.timeoutSeconds : null) ?? DEFAULT_TIMEOUT_SECONDS } = value;
+    /* OWN-01, review del desktop (09/10/2026): senza `timeoutSeconds` restano il tempo e la marca di prima per OGNI fornitore
+       (prima solo i cloud; un non-cloud tornava al predefinito e chi aveva scelto 120 s lo perdeva cambiando l'indirizzo). */
+    const { endpoint, timeoutSeconds = runtimes.get(provider)?.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS } = value;
     const definition = requireProvider(provider);
     const timeout = normalizeTimeout(timeoutSeconds);
     const previous = runtimes.get(provider);
-    const extra = { ...(Object.hasOwn(value, 'modelli') ? { modelli: normalizzaModelli(provider, value.modelli, segretiRuntime()) }
+    /* OWN-01: la marca della scelta. Passato ⇒ scelto; non passato ⇒ quella di prima. */
+    const scelto = Object.hasOwn(value, 'timeoutSeconds') || previous?.timeoutScelto === true;
+    const extra = { ...(scelto ? { timeoutScelto: true } : {}),
+      ...(Object.hasOwn(value, 'modelli') ? { modelli: normalizzaModelli(provider, value.modelli, segretiRuntime()) }
       : previous?.modelli ? { modelli: previous.modelli } : {}),
       ...(previous?.esclusi ? { esclusi: previous.esclusi } : {}), // decisione 14: si cambiano solo con `impostaEsclusi`
-      ...(previous?.esclusiDiSerieTolti ? { esclusiDiSerieTolti: previous.esclusiDiSerieTolti } : {}) }; // 0.1.25: solo con `impostaDiSerie`
+      ...(previous?.esclusiDiSerieTolti ? { esclusiDiSerieTolti: previous.esclusiDiSerieTolti } : {}), // 0.1.25: solo con `impostaDiSerie`
+      ...(previous?.rilevato ? { rilevato: previous.rilevato } : {}) }; // owner 09/10: solo con `impostaIndirizzoRilevato`
     if (!definition.supportsEndpoint) {
       if (!definition.supportsTimeout) throw new ProviderCredentialError('PROVIDER_RUNTIME_INVALID');
-      runtimes.set(provider, { endpoint: null, endpointConfigured: false, timeoutSeconds: timeout, ...(previous?.esclusi ? { esclusi: previous.esclusi } : {}),
+      runtimes.set(provider, { endpoint: null, endpointConfigured: false, timeoutSeconds: timeout, ...(scelto ? { timeoutScelto: true } : {}),
+        ...(previous?.esclusi ? { esclusi: previous.esclusi } : {}),
         ...(previous?.esclusiDiSerieTolti ? { esclusiDiSerieTolti: previous.esclusiDiSerieTolti } : {}) });
       try { writeRuntimePreferences(runtimeFile, runtimes); }
       catch (error) { if (previous) runtimes.set(provider, previous); else runtimes.delete(provider); throw error; }
@@ -713,6 +763,6 @@ export function createProviderCredentialStore({ env = process.env, keyring = nul
       agente: getRuntime('esterno').agente });
   }
 
-  return Object.freeze({ getKey, getKeySync: getKey, hasKey, setKey, clearKey, loadFromKeyring, getRuntime, setRuntime, impostaEsclusi, impostaDiSerie, impostaEsclusioni, resetEndpoint, listPublic,
+  return Object.freeze({ getKey, getKeySync: getKey, hasKey, setKey, clearKey, loadFromKeyring, getRuntime, indirizzoRilevato, impostaIndirizzoRilevato, setRuntime, impostaEsclusi, impostaDiSerie, impostaEsclusioni, resetEndpoint, listPublic,
     aggiungiChiave, rimuoviChiave, elencaPool, scegliChiave, mettiInPanchina, esportaPool, tracciaInCustodia });
 }

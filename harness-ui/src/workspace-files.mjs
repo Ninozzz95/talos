@@ -399,9 +399,17 @@ export async function creaFileWorkspace({ cartella, nome, bytes, modalita = 'nuo
      */
     const stat = await (deps.statFn ?? fsp.stat)(destinazione);
     if (!stat.isFile()) throw new WorkspaceFileError('A folder with this name already exists: you cannot append to it', 'NOT_A_FILE');
-    if (stat.size + dimensione > DIMENSIONE_MASSIMA_CREAZIONE) {
+    /* C25 (owner 10/10/2026; audit A-APPEND-SIZE-BOUND): il separatore si decide PRIMA del tetto e si conta — prima il controllo
+       guardava il solo pezzo, e il `\n` aggiunto dopo portava il file un byte oltre il limite dichiarato. */
+    const daScrivere = typeof bytes === 'string'
+      ? await pezzoConSeparatore(destinazione, bytes)
+      : { pezzo: bytes, separatore: false };
+    const dimensioneEffettiva = typeof daScrivere.pezzo === 'string'
+      ? Buffer.byteLength(daScrivere.pezzo, 'utf8')
+      : daScrivere.pezzo.byteLength;
+    if (stat.size + dimensioneEffettiva > DIMENSIONE_MASSIMA_CREAZIONE) {
       throw new WorkspaceFileError(
-        `The file would reach ${Math.round((stat.size + dimensione) / 1024 / 1024)} MB, over the limit of `
+        `The file would reach ${Math.round((stat.size + dimensioneEffettiva) / 1024 / 1024)} MB, over the limit of `
         + `${DIMENSIONE_MASSIMA_CREAZIONE / 1024 / 1024} MB.`,
         'CONTENT_TOO_LARGE',
       );
@@ -414,13 +422,7 @@ export async function creaFileWorkspace({ cartella, nome, bytes, modalita = 'nuo
     //    con l'attrezzo `scrivi` del kernel: questo file resta fuori dal kernel, importa il modulo
     //    e non il kernel intero). Solo testo: su byte BINARI un `0x0A` in mezzo non separerebbe
     //    righe, le corromperebbe. Sempre UNA sola append: `appendFile('\n' + pezzo)`.
-    const daScrivere = typeof bytes === 'string'
-      ? await pezzoConSeparatore(destinazione, bytes)
-      : { pezzo: bytes, separatore: false };
     await (deps.appendFileFn ?? fsp.appendFile)(destinazione, daScrivere.pezzo);
-    const dimensioneEffettiva = typeof daScrivere.pezzo === 'string'
-      ? Buffer.byteLength(daScrivere.pezzo, 'utf8')
-      : daScrivere.pezzo.byteLength;
     return { percorso: percorsoRelativo, assoluto: destinazione, accodato: true, byteTotali: stat.size + dimensioneEffettiva };
   }
   await (deps.writeFileFn ?? fsp.writeFile)(destinazione, bytes);

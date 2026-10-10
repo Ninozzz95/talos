@@ -37,6 +37,8 @@ export function statoDellaConversazione(riga) {
   if (riga.interrotta) return 'interrupted';
   if (!riga.conclusa) return 'running';
   if (riga.ultimoEsito === 'errore' && riga.motivoChiusura === 'fermata') return 'stopped by the person';
+  // C3 tappa 4: una delega in pausa (RunError «in-pausa») non è un errore; si riprende con resume_child
+  if (riga.ultimoEsito === 'errore' && riga.motivoChiusura === 'in-pausa') return 'paused';
   if (riga.ultimoEsito === 'errore') return 'error';
   if (riga.ultimoEsito === 'successo') return 'done';
   return 'unknown';
@@ -87,7 +89,10 @@ function giriDellaRiga(r) {
  * (`TextMessage*` per `messageId`) e una riga per ogni attrezzo concluso. Il ragionamento resta fuori. Numerati da 1.
  * @returns {{n:number, ruolo:'person'|'model'|'tool', testo:string}[]}
  */
-export function messaggiDaEventi(eventi) {
+/* C1 (09/10/2026): `completo` per il RECUPERO dentro la conversazione corrente — l'uscita di un attrezzo intera (gli «aghi»: un
+   percorso, un'impronta, un errore stanno quasi sempre lì) e gli argomenti fino a 2.000 caratteri; i tetti si applicano poi a
+   ciò che si mostra. Per le ALTRE conversazioni resta l'anteprima di 200 caratteri di sempre. */
+export function messaggiDaEventi(eventi, { completo = false } = {}) {
   const messaggi = [];
   const testi = new Map();
   const attrezzi = new Map();
@@ -121,7 +126,9 @@ export function messaggiDaEventi(eventi) {
         attrezzi.delete(e.toolCallId);
         /* F-027: i 200 caratteri sono del CONTENUTO, non della riga d'apertura del confine; il risultato intero di
            `conversation_search` torna al modello dentro un confine suo (`talosHarness.mjs`, ramo delle sezioni). */
-        messaggi.push({ ruolo: 'tool', testo: `${a.nome} ${taglia(unaRiga(a.argomenti), 160)} → ${taglia(unaRiga(testoPerLoSchermo(e.content)), 200)}` });
+        messaggi.push({ ruolo: 'tool', testo: completo
+          ? `${a.nome} ${taglia(unaRiga(a.argomenti), 2_000)} → ${String(testoPerLoSchermo(e.content) ?? '')}`
+          : `${a.nome} ${taglia(unaRiga(a.argomenti), 160)} → ${taglia(unaRiga(testoPerLoSchermo(e.content)), 200)}` });
         break;
       }
       default:
@@ -194,7 +201,31 @@ function estratto(testo, parole) {
  * ×1 (ogni parola una volta); l'estratto è il messaggio che ne contiene di più. Automazioni in coda.
  * @param {{riga:object, eventi:object[]}[]} voci
  */
-export function cercaConversazioni(voci, { query, limit, correnteId = null, adesso = Date.now() } = {}) {
+/*
+ * ⭐ C1, metodo approvato dall'owner il 09/10/2026 sera — IL RECUPERO dentro QUESTA conversazione (`this_conversation: true`).
+ *   Dopo una compattazione il riassunto perde gli «aghi»; il modello li ritrova cercando la conversazione stessa, uscite degli
+ *   attrezzi comprese. Hermes lo misura come il pezzo che vale di più: «lean + recovery» 68,3% contro 40,0% a libro chiuso
+ *   (`evals/compaction/results/SCORECARD-2026-08-15.md`, clone `65ad529`). Là la parte archiviata sta nella sessione madre
+ *   (la compattazione apre una figlia); qui resta nella stessa conversazione, quindi la forma è un parametro.
+ */
+function cercaInQuestaConversazione(voce, { query, limit }) {
+  const parole = paroleDellaRicerca(query);
+  if (!voce || !parole.length) return 'conversation_search: with this_conversation, give the words to find (query), or read around a message with around_message.';
+  const limite = intero(limit, LIMITI_CONVERSAZIONI.cercaPredefinito, 1, LIMITI_CONVERSAZIONI.cercaMassimo);
+  const messaggi = messaggiDaEventi(voce.eventi, { completo: true });
+  const colpiti = messaggi.map((m) => ({ m, punti: punteggioPerParole({ corpo: m.testo }, parole) })).filter((c) => c.punti > 0)
+    .sort((a, b) => b.punti - a.punti || b.m.n - a.m.n);
+  if (!colpiti.length) {
+    return `In this conversation no message contains ${parole.map((p) => `«${p}»`).join(', ')}. Try other or fewer words `
+      + '(an exact path, value or error string works best), or read a stretch with around_message.';
+  }
+  return [`In this conversation ${colpiti.length} messages contain these words, showing ${Math.min(limite, colpiti.length)}, best first.`,
+    ...colpiti.slice(0, limite).map((c) => `message #${c.m.n} (${c.m.ruolo}): ${estratto(c.m.testo, parole)}`),
+    'Read the whole message and its neighbours with this_conversation=true and around_message=<number>.'].join('\n');
+}
+
+export function cercaConversazioni(voci, { query, limit, correnteId = null, adesso = Date.now(), this_conversation: questa = false } = {}) {
+  if (questa === true) return cercaInQuestaConversazione(voci.find((v) => v.riga.sessionId === correnteId) ?? null, { query, limit });
   if (chiedeTutto(query)) return null; // chi chiama passa a SFOGLIA
   const limite = intero(limit, LIMITI_CONVERSAZIONI.cercaPredefinito, 1, LIMITI_CONVERSAZIONI.cercaMassimo);
   const parole = paroleDellaRicerca(query);
@@ -237,10 +268,12 @@ export function cercaConversazioni(voci, { query, limit, correnteId = null, ades
  * LEGGI e SCORRI. Una pagina da `from` fino al tetto di caratteri, oppure la finestra intorno a `around_message`.
  * @param {{riga:object, eventi:object[]}|null} voce
  */
-export function leggiConversazione(voce, { conversation_id: id, from, around_message: attorno, window: finestra, correnteId = null } = {}) {
-  if (!voce || voce.riga.padreId) return `conversation_search: no conversation with id «${id}». Browse without arguments to see the ids.`;
-  if (voce.riga.sessionId === correnteId) return 'conversation_search: that is the current conversation — it is already in front of you.';
-  const messaggi = messaggiDaEventi(voce.eventi);
+export function leggiConversazione(voce, { conversation_id: id, from, around_message: attorno, window: finestra, correnteId = null, this_conversation: questa = false } = {}) {
+  // C1: con `this_conversation` si legge la conversazione corrente (anche una figlia: è la sua), con le uscite intere
+  const corrente = questa === true && voce?.riga.sessionId === correnteId;
+  if (!voce || (voce.riga.padreId && !corrente)) return `conversation_search: no conversation with id «${id}». Browse without arguments to see the ids.`;
+  if (voce.riga.sessionId === correnteId && !corrente) return 'conversation_search: that is the current conversation — it is already in front of you.';
+  const messaggi = messaggiDaEventi(voce.eventi, { completo: corrente });
   const r = voce.riga;
   const testa = `Conversation [${titoloDi(r)}](${link(r.sessionId)}) — ${statoDellaConversazione(r)}`
     + `${r.modello ? ` · model ${r.modello}` : ''} · ${messaggi.length} messages.`;

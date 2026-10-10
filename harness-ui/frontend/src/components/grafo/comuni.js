@@ -37,13 +37,15 @@ export const STATI_PASSO = Object.freeze({
   cancelled: passo('cancelled', 'neutro'),
   skipped: passo('skipped', 'neutro'),
   superseded: passo('superseded', 'neutro'),
+  // C3 (09/10/2026): messo da parte dalla persona — fermo per sempre, non riuscito e non fallito
+  set_aside: passo('setAside', 'neutro'),
 });
 export const statoPasso = (stato) => STATI_PASSO[stato] ?? passo('unknown', 'neutro');
 
 /* 03/10/2026: la parola dello stato del run dal dizionario (`agenti.workflow.runState.*`, le chiavi di `grafo-workflow.js`). */
 const CHIAVI_RUN = Object.freeze({
   created: 'created', running: 'running', paused: 'paused', needs_attention: 'needsAttention', succeeded: 'succeeded', failed: 'failed',
-  cancelled: 'cancelled', planned: 'planned', proposed: 'proposed', approved: 'approved',
+  succeeded_with_set_aside: 'succeededWithSetAside', cancelled: 'cancelled', planned: 'planned', proposed: 'proposed', approved: 'approved',
   // F3-52: chiesti e non ancora compiuti (i passi in corso stanno finendo o si stanno fermando)
   pausing: 'pausing', cancelling: 'cancelling',
 });
@@ -57,13 +59,13 @@ export const STATI_RUN = Object.freeze(Object.defineProperties({}, Object.fromEn
 export function statoDelRun(panoramica, { tipo = 'run', revisione = null } = {}) {
   if (tipo !== 'run') return revisione?.status === 'approved' ? 'approved' : 'proposed';
   const p = panoramica ?? {};
-  if (['succeeded', 'failed', 'cancelled'].includes(p.status)) return p.status;
+  if (['succeeded', 'succeeded_with_set_aside', 'failed', 'cancelled'].includes(p.status)) return p.status;
   if (p.cancelRequested === true) return 'cancelling';
   if (p.status === 'running' && p.pauseRequested === true) return 'pausing';
   return p.status;
 }
 export const TONO_RUN = { running: 'corso', created: 'corso', paused: 'attesa', needs_attention: 'errore', succeeded: 'ok', failed: 'errore', cancelled: 'neutro',
-  pausing: 'attesa', cancelling: 'neutro' };
+  succeeded_with_set_aside: 'ok', pausing: 'attesa', cancelling: 'neutro' };
 export const ICONA_TONO = { ok: 'i-check', corso: 'i-play', attesa: 'i-clock', avviso: 'i-user', errore: 'i-x', neutro: null };
 
 /* D29: le famiglie dei conteggi di una fase. «Errori» sta a parte, come vuole la decisione. */
@@ -72,7 +74,7 @@ export const FAMIGLIE = Object.freeze([
   ['inCorso', 'In esecuzione', ['leased', 'running'], 'corso'],
   ['inAttesa', 'In attesa', ['pending', 'blocked', 'ready', 'retry_wait', 'waiting_human', 'reconciling', 'planned'], 'attesa'],
   ['errori', 'Errori', ['failed', 'uncertain'], 'errore'],
-  ['annullati', 'Annullati', ['cancelled', 'superseded'], 'neutro'],
+  ['annullati', 'Annullati', ['cancelled', 'superseded', 'set_aside'], 'neutro'],
 ]);
 export function conteggiFase(counts = {}) {
   const esito = {};
@@ -89,7 +91,7 @@ export function percentualeFase(gruppo) {
  * Per un passo di cui si conosce lo stato di PRIMA (è fra le righe caricate) il conteggio della sua fase si sposta subito, come
  * la sua card; gli altri li porta la rilettura, che resta la fonte di verità e sovrascrive tutto.
  */
-export const STATI_TERMINALI = new Set(['succeeded', 'failed', 'cancelled', 'skipped', 'superseded']);
+export const STATI_TERMINALI = new Set(['succeeded', 'failed', 'cancelled', 'skipped', 'superseded', 'set_aside']);
 export function spostaConteggi(gruppi = [], cambi = []) {
   for (const { phaseId, da, a } of cambi) {
     if (!da || !a || da === a) continue;

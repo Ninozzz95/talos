@@ -209,19 +209,36 @@ test('WF-FAILURE-LIKE-HERMES: a failed step lets the independent branch finish, 
 });
 
 test('WF-WAIT-ON-PROGRESS: on a disk as slow as the CI runner the children still start, and the wait does not give up while the journal grows', async (t) => {
-  /* 30 ms prima e dopo ogni scrittura: ~16 scritture ≈ 1 s per far partire i figli, contro un budget di 300 ms SENZA scritture. */
-  const b = await banco(t, { draft: bozza(['uno', 'due']), ritardoScrittureMs: 30 });
+  /*
+   * ⛔ 09/10/2026 (sessione desktop, dopo la 0.1.25) — con 30 ms per scrittura e un budget di 300 ms SENZA progresso, il test è
+   *   caduto 2 volte su 2 nei `gates` della push sulla main pubblica (0.1.24 run 37847765696, 0.1.25 run 37906688867: «waited
+   *   1819 ms» e «waited 1079 ms»), mai sulle PR né nel job della release con lo stesso commit, e 0 volte su 30 qui (10 in
+   *   parallelo). Su quel runner un buco di 300 ms fra due fatti del giornale capita: era il BANCO a cedere, non lo scheduler.
+   * ⇒ Il budget sale a 1.000 ms e le scritture rallentano a 100 ms prima e dopo (~16 scritture ≈ 3 s): il disco resta più lento
+   *   del budget, quindi la prova dice ancora la stessa cosa. E se cade, il messaggio porta gli istanti in cui il progresso è
+   *   cambiato e il buco più lungo, così la prossima volta si vede DOVE (il registro della CI non lo diceva).
+   */
+  const BUDGET_MS = 1_000;
+  const b = await banco(t, { draft: bozza(['uno', 'due']), ritardoScrittureMs: 100 });
   await b.orchestrator.recover();
   await b.scheduler.avvia();
-  assert.ok(await b.aspetta(() => b.giri.quanti === 2, 300));
+  assert.ok(await b.aspetta(() => b.giri.quanti === 2, BUDGET_MS));
   const inizio = Date.now();
+  const tappe = [];
+  const progressoTracciato = async () => {
+    const valore = `${(await readEvents(b.store, { runId: b.runId })).length}/${b.giri.quanti}`;
+    if (tappe.at(-1)?.valore !== valore) tappe.push({ ms: Date.now() - inizio, valore });
+    return valore;
+  };
+  const bucoPiuLungo = () => tappe.reduce((max, tappa, i) => Math.max(max, i ? tappa.ms - tappe[i - 1].ms : tappa.ms), 0);
   b.giri.rispondi(b.giri.indice('Prepara'));
-  assert.ok(await b.aspetta(() => b.giri.quanti === 4, 300), `the two children start (waited ${Date.now() - inizio} ms while the journal grew)`);
-  assert.ok(Date.now() - inizio > 300, 'the disk really was slower than the budget: otherwise this proves nothing');
+  assert.ok(await aspettaChe(() => b.giri.quanti === 4, BUDGET_MS, progressoTracciato),
+    `the two children start (waited ${Date.now() - inizio} ms; longest gap ${bucoPiuLungo()} ms; progress ${JSON.stringify(tappe)})`);
+  assert.ok(Date.now() - inizio > BUDGET_MS, `the disk really was slower than the budget: otherwise this proves nothing (${Date.now() - inizio} ms)`);
   /* Al contrario: un run FERMO (i figli aspettano la loro risposta, nessuno scrive) cade dopo il budget, non al tetto. */
   const fermo = Date.now();
-  assert.equal(await b.aspetta(() => false, 300), false);
-  assert.ok(Date.now() - fermo < 2_000, `a stalled run gives up after its budget (took ${Date.now() - fermo} ms)`);
+  assert.equal(await b.aspetta(() => false, BUDGET_MS), false);
+  assert.ok(Date.now() - fermo < 3 * BUDGET_MS, `a stalled run gives up after its budget (took ${Date.now() - fermo} ms)`);
 });
 
 test('WF-FAILURE-WAITS-FOR-RETRY: a failure does not ask for attention while another branch waits for its retry with no slot held', async (t) => {

@@ -55,9 +55,9 @@ test('G02-10 an optional host cap stops at once on a longer requested wait, and 
 });
 
 test('G02-10 the final error carries the last requested wait; without one it has none', async () => {
-  const exhausted = await run({'retry-after': '1'}, {}, {failures: 9});
+  const exhausted = await run({'retry-after': '1'}, {}, {failures: 99}); /* 09/10/2026, owner «come Claude Code»: 1 + 10 tentativi (ritenti-429-come-claude-code.test.mjs) */
   assert.equal(exhausted.error?.retryAfterMs, 1000);
-  const plain = await run({}, {}, {failures: 9});
+  const plain = await run({}, {}, {failures: 99});
   assert.equal('retryAfterMs' in plain.error, false);
 });
 

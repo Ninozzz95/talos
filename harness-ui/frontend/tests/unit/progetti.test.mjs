@@ -40,7 +40,7 @@ test('somma giri e token del progetto — il nostro +1 su Hermes, che mostra sol
   assert.equal(p.quante, 2);
   assert.equal(p.giri, 5);
   assert.equal(p.token, 1800);
-  assert.match(frasiProgetto(p), /2 sessioni · 5 giri · 1,8k token/u);
+  assert.match(frasiProgetto(p), /2 sessioni · 5 richieste al modello · 1,8k token/u);
 });
 
 test('⛔ un progetto senza sessioni lo dice, e non mostra uno zero che sembra una misura', () => {

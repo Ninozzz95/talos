@@ -35,7 +35,13 @@ export function creaSeparatoreContesto(event, { document: doc = globalThis.docum
   return row;
 }
 
-export function aggiornaSeparatoreContesto(container, events = [], { sessionId, ...options } = {}) {
+/*
+ * B1 parte 3, review della sessione desktop (10/10/2026): nelle chat lunghe la finestra della rigiocata STACCA i turni vecchi, e
+ * con loro i separatori che li precedono o che stanno dentro. Un evento successivo della stessa compattazione (l'annullo, la
+ * fine) non trovava il separatore nella colonna e ne creava un DOPPIONE in fondo. `staccato(chiave)` (lo passa `app.js`) dà il
+ * separatore staccato: si aggiorna sul posto e torna da solo col suo turno, senza essere riappeso.
+ */
+export function aggiornaSeparatoreContesto(container, events = [], { sessionId, staccato = null, ...options } = {}) {
   if (!container || !sessionId) return [];
   const current = new Map();
   for (const node of container.querySelectorAll('[data-context-separator]')) {
@@ -47,6 +53,7 @@ export function aggiornaSeparatoreContesto(container, events = [], { sessionId, 
     if (event.sessionId !== sessionId) continue;
     const key = identity(event); if (!key) continue;
     let node = current.get(key);
+    if (!node && typeof staccato === 'function') { const altrove = staccato(key); if (altrove?.dataset.contextSession === sessionId) { node = altrove; current.set(key, node); } }
     if (!node) { node = creaSeparatoreContesto(event, options); container.append(node); current.set(key, node); }
     if (!nodes.includes(node)) nodes.push(node);
   }
@@ -69,7 +76,7 @@ export function aggiornaSeparatoreContesto(container, events = [], { sessionId, 
  */
 const chiaveLegacy = (sessionId, at) => JSON.stringify(['legacy', sessionId, at]);
 
-export function aggiornaSeparatoreLegacy(container, voce, { sessionId, document: doc = container?.ownerDocument ?? globalThis.document, onMenu, testo, inserisci = null } = {}) {
+export function aggiornaSeparatoreLegacy(container, voce, { sessionId, document: doc = container?.ownerDocument ?? globalThis.document, onMenu, testo, inserisci = null, staccato = null } = {}) {
   if (!container || !sessionId || !voce) return null;
   const at = typeof voce.at === 'string' && voce.at ? voce.at : null;
   const chiave = at ? chiaveLegacy(sessionId, at) : null;
@@ -80,6 +87,8 @@ export function aggiornaSeparatoreLegacy(container, voce, { sessionId, document:
     if (nodo.dataset.contextSession !== sessionId) { nodo.remove(); continue; }
     if (chiave && nodo.dataset.compattazioneRiga === chiave) row = nodo;
   }
+  // B1 parte 3 (vedi sopra `aggiornaSeparatoreContesto`): la riga staccata con un turno vecchio si aggiorna dov'è, senza doppione
+  if (!row && chiave && typeof staccato === 'function') { const altrove = staccato(chiave); if (altrove?.dataset.contextSession === sessionId) row = altrove; }
   // la riga provvisoria della rotta manuale si completa con il primo record che arriva
   const provvisorie = () => [...container.querySelectorAll('[data-compattazione-riga][data-compattazione-provvisoria]')].filter((n) => n.dataset.contextSession === sessionId);
   if (!row && at) row = provvisorie().at(-1) ?? null;

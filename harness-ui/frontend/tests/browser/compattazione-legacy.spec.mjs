@@ -3,6 +3,8 @@ import { mkdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PNG } from 'pngjs';
+import { bustaContesto } from '../../../src/http-app.mjs';
+import { MOTORE_SPENTO_PER_LA_CONVERSAZIONE } from '../../../src/context-desktop-service.mjs';
 
 /*
  * ⭐ F5 (onda 2 della fase F2), 24/09/2026 — LA COMPATTAZIONE CHE SI VEDE E SI PUÒ FARE SUL LEGACY.
@@ -56,6 +58,14 @@ const RIPARATO_FALLITO = { type: 'CUSTOM', name: 'talos.journal-riparato', _sequ
 
 async function apri(page, id, eventi, { conclusa = false } = {}) {
   await page.route(`**/api/v1/sessions/${id}/events`, (route) => route.fulfill({ contentType: 'text/event-stream', body: sse([...eventi, CONFINE]) }));
+  /* C1 (10/10/2026): col motore di serie il server ha SEMPRE il servizio del contesto, e una sessione che non conosce (questa è
+     una fixture) riceve 404. Una conversazione legacy VERA riceve 503 `CTX_NOT_ENABLED` (`context-desktop-service.mjs`): la
+     fixture riceve quella, costruita dalla funzione del server (`bustaContesto`) col messaggio del servizio, non a mano. */
+  const legacyVera = (route) => (route.request().method() === 'GET'
+    ? route.fulfill({ status: 503, json: bustaContesto('CTX_NOT_ENABLED', MOTORE_SPENTO_PER_LA_CONVERSAZIONE, () => new Date().toISOString()) })
+    : route.fallback());
+  await page.route(`**/api/v1/sessions/${id}/context`, legacyVera);
+  await page.route(`**/api/v1/sessions/${id}/context/*`, legacyVera);
   if (!page.url().startsWith('http')) {
     await page.goto('/');
     await page.waitForFunction(() => window.__talosHarnessUiRuntime);
@@ -120,10 +130,13 @@ test('CTX-UI-WINDOW-ALWAYS-OPENS — col trial spento il bottone apre la finestr
   await page.locator('#compactSessionBtn').click();
   await expect(finestra, 'il bottone apre la finestra').toBeVisible();
   await expect(finestra).toHaveAttribute('data-context-modo', 'legacy');
-  await expect(finestra.locator('[data-context-status]')).toContainText('compattare la conversazione a mano');
-  await expect(finestra.locator('[data-context-measurement]'), 'gli stessi numeri dell’avviso (solo prompt_tokens dell’ultima richiesta)').toContainText('52.000 / 200.000 token');
-  await expect(finestra.locator('[data-context-measurement]')).toContainText('compattazione automatica oltre 150.000');
-  await expect(finestra.locator('[data-context-meter]')).toBeVisible();
+  /* C1 (owner 10/10/2026, Context Manager rifatto): la frase lunga del «modo semplice» è diventata la riga sopra le schede, e le
+     schede del motore non ci sono; i numeri dell'avviso sono nella testata, sul limite che agisce, e la barra ha la tacca. */
+  await expect(finestra.locator('[data-context-legacy-note]')).toBeVisible();
+  await expect(finestra.locator('[data-context-tab]:not([hidden])')).toHaveCount(2);
+  await expect(finestra.locator('[data-context-headline]'), 'gli stessi numeri dell’avviso (solo prompt_tokens dell’ultima richiesta)').toHaveText('52k di 150k · 34,7%');
+  await expect(finestra.locator('[data-context-measurement]')).toContainText('150k');
+  await expect(finestra.locator('[data-context-gauge]')).toBeVisible();
   await expect(barra(page), 'aprire la finestra non compatta').toHaveCount(0);
   expect(chiamate, 'aprire la finestra: zero POST').toEqual([]);
   // verso contrario: «Compatta ora» chiede, «Annulla» non fa niente
@@ -156,7 +169,8 @@ test('CTX-UI-WINDOW-ALWAYS-OPENS — col trial spento il bottone apre la finestr
   await page.evaluate(() => window.__talosHarnessUiRuntime.executeCommand('compact'));
   await expect(finestra).toBeVisible();
   await expect(finestra.locator('[data-context-conferma-legacy]'), 'riaperta, la conferma di prima non c’è più').toHaveCount(0);
-  await expect(finestra.locator('[data-context-job]'), 'riaperta, l’esito di prima non si spaccia per attuale').toHaveText('Nessuna compattazione in corso.');
+  // C1 (10/10/2026): a riposo la riga del lavoro non c'è (owner: «non troppo affollata»); l'esito di prima non si spaccia per attuale
+  await expect(finestra.locator('[data-context-job]'), 'riaperta, l’esito di prima non si spaccia per attuale').toBeHidden();
   expect(chiamate).toHaveLength(1);
   await page.keyboard.press('Escape');
 });
@@ -170,8 +184,11 @@ test('CTX-UI-METER-IN-PALETTE — il misuratore della finestra si riempie con l�
   await policyFixture(page, '**/api/v1/sessions/cl-misuratore/compaction-policy');
   await apri(page, 'cl-misuratore', pieno, { conclusa: true });
   await page.locator('#compactSessionBtn').click();
-  const meter = page.locator('#veloContesto [data-context-meter]');
+  // C1 (10/10/2026): il misuratore nativo è diventato la barra della panoramica; la regola resta: colori del tema, mai il verde di serie
+  const meter = page.locator('#veloContesto [data-context-gauge]');
   await expect(meter).toBeVisible();
+  // la finestra entra con un'animazione: il pixel si legge a movimento finito (prima si leggeva l'accento mescolato allo sfondo)
+  await page.evaluate(() => Promise.race([Promise.all(document.getAnimations().map((x) => x.finished.catch(() => null))), new Promise((ok) => setTimeout(ok, 3000))]));
   /* ⛔ 24/09 notte: con Forge (tema di serie) l'accento calcolato arriva come `color(srgb 0.4388 0.3176 0.1451)`, non `rgb(…)`:
      la prima versione leggeva le cifre e dava «0,438824,0». Si leggono le due forme. */
   const accento = await page.evaluate(() => {

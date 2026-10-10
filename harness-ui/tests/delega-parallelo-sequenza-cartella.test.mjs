@@ -80,7 +80,9 @@ function modelloFinto() {
          *   nata rossa proprio li'. Il difetto era nel finto, non nel prodotto: un fake che non
          *   imita il vero misura il fake.
          */
-        concludi: (risultato = { ok: true }) => {
+        /* C3 tappa 4 (09/10/2026): come la sessione vera, un giro concluso porta il suo testo (`esito.detto`); senza riassunto
+           una delega non è finita (decisione owner «fatti strutturati», come Hermes). */
+        concludi: (risultato = { ok: true, esito: { detto: 'Parte fatta.', comeFinita: 'concluso' } }) => {
           input.onEvento({ type: 'RunFinished', threadId: mio, runId: `r${indice}`, outcome: { type: 'success' } });
           concludi(risultato);
         },
@@ -146,8 +148,8 @@ test('TRE PROVE — 1/3 · DUE DELEGHE IN PARALLELO: partono entrambe, e nella c
     assert.notEqual(primaAvviata.childId, secondaAvviata.childId, 'le due ricevute devono identificare figlie distinte');
 
     // Il terminale viaggia separato dalla ricevuta: concluse al contrario, non si scambiano.
-    figliaB.concludi({ ok: true });
-    figliaA.concludi({ ok: true });
+    figliaB.concludi();
+    figliaA.concludi();
     await new Promise((resolve) => setImmediate(resolve));
     const concluse = registro.elencaFigli(madreId).figli;
     assert.deepEqual(new Set(concluse.map((figlia) => figlia.sessionId)), new Set([primaAvviata.childId, secondaAvviata.childId]));
@@ -168,7 +170,7 @@ test('TRE PROVE — 2/3 · DUE DELEGHE UNA DOPO L\'ALTRA: la seconda parte a pri
     const prima = await madre.onDelega('scrivi la PARTE 1');
     assert.equal(prima.esito, 'avviato');
     assert.ok(prima.childId);
-    finto.avvii[1].concludi({ ok: true });
+    finto.avvii[1].concludi();
     await new Promise((resolve) => setImmediate(resolve));
     const primaConclusa = registro.elencaFigli(madreId).figli.find((figlia) => figlia.sessionId === prima.childId);
     assert.equal(primaConclusa?.esitoDelega, 'concluso', 'la ricevuta avviato non sostituisce il terminale della prima figlia');
@@ -181,7 +183,7 @@ test('TRE PROVE — 2/3 · DUE DELEGHE UNA DOPO L\'ALTRA: la seconda parte a pri
     assert.equal(finto.avvii.length, 3, 'dopo una delega conclusa la successiva non riparte');
     assert.equal(finto.avvii[2].cartella, cartellaMadre,
       'la seconda figlia deve stare dove sta la prima: la stessa cartella della madre');
-    finto.avvii[2].concludi({ ok: true });
+    finto.avvii[2].concludi();
     await new Promise((resolve) => setImmediate(resolve));
     const secondaConclusa = registro.elencaFigli(madreId).figli.find((figlia) => figlia.sessionId === seconda.childId);
     assert.equal(secondaConclusa?.esitoDelega, 'concluso', 'anche la seconda figlia deve pubblicare il terminale reale');

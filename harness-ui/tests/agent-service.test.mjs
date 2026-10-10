@@ -856,7 +856,10 @@ test('eseguiComandoDiretto passa {mobile:true} a eseguiComandoSandboxatoFn quand
      persona prima non aveva NESSUN segnale di arresto. Dev'essere un segnale vero e, alla partenza, non ancora fermato. */
   /* ⛔ 05/10/2026 (residuo BUG-14 D4): `segnaleSfondo` + `fileSfondo` — il canale di sfondo per riga (commit
      3ec7cafea) passa DUE opzioni in più all'esecutore: il segnale «sfonda» della riga e il file di cattura. */
-  assert.deepEqual(Object.keys(opzioniCatturate).sort(), ['dove', 'fileSfondo', 'mobile', 'onPezzo', 'segnaleSfondo', 'segnaleStop', 'tracciaCartella']);
+  /* ⛔ 10/10/2026 (C1, owner «CPU e memoria per processo, misurate da noi»): `onAvvio` — l'esecutore dice il PID (Windows) o
+     distro e marcatore (WSL) appena lancia il comando, e la riga dei Processi li usa per misurarlo. */
+  assert.deepEqual(Object.keys(opzioniCatturate).sort(), ['dove', 'fileSfondo', 'mobile', 'onAvvio', 'onPezzo', 'segnaleSfondo', 'segnaleStop', 'tracciaCartella']);
+  assert.equal(typeof opzioniCatturate.onAvvio, 'function');
   assert.ok(opzioniCatturate.segnaleStop instanceof AbortSignal);
   assert.equal(opzioniCatturate.segnaleStop.aborted, false);
   assert.ok(opzioniCatturate.segnaleSfondo instanceof AbortSignal, 'il segnale di sfondo della riga è un AbortSignal vero');
@@ -886,7 +889,10 @@ test('⛔ AL CONTRARIO: senza mobile, eseguiComandoSandboxatoFn riceve {mobile:f
      persona prima non aveva NESSUN segnale di arresto. Dev'essere un segnale vero e, alla partenza, non ancora fermato. */
   /* ⛔ 05/10/2026 (residuo BUG-14 D4): `segnaleSfondo` + `fileSfondo` — il canale di sfondo per riga (commit
      3ec7cafea) passa DUE opzioni in più all'esecutore: il segnale «sfonda» della riga e il file di cattura. */
-  assert.deepEqual(Object.keys(opzioniCatturate).sort(), ['dove', 'fileSfondo', 'mobile', 'onPezzo', 'segnaleSfondo', 'segnaleStop', 'tracciaCartella']);
+  /* ⛔ 10/10/2026 (C1, owner «CPU e memoria per processo, misurate da noi»): `onAvvio` — l'esecutore dice il PID (Windows) o
+     distro e marcatore (WSL) appena lancia il comando, e la riga dei Processi li usa per misurarlo. */
+  assert.deepEqual(Object.keys(opzioniCatturate).sort(), ['dove', 'fileSfondo', 'mobile', 'onAvvio', 'onPezzo', 'segnaleSfondo', 'segnaleStop', 'tracciaCartella']);
+  assert.equal(typeof opzioniCatturate.onAvvio, 'function');
   assert.ok(opzioniCatturate.segnaleStop instanceof AbortSignal);
   assert.equal(opzioniCatturate.segnaleStop.aborted, false);
   assert.ok(opzioniCatturate.segnaleSfondo instanceof AbortSignal, 'il segnale di sfondo della riga è un AbortSignal vero');
@@ -1975,6 +1981,22 @@ test('⭐⭐⭐ onLibreriaCerca: legge elencaVociConTestoFn (non elencaVociFn), 
   assert.equal(risultato.pagina[0].id, 'lib-1');
 });
 
+/* C5 (owner 10/10/2026): library_find passa dal lettore delle sezioni. Il testo estratto (pesante) si legge SOLO per una query. */
+test('⭐⭐ C5 library_find: senza query bastano i metadati, con una query si legge il testo estratto', async () => {
+  let catturato;
+  const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
+  const letture = [];
+  const voce = { id: 'lib-1', nome: 'fattura.md', origine: 'uploaded', fileType: 'document', aggiornatoIl: '2026-10-10T10:00:00.000Z' };
+  const elencaVociFn = async (a) => { letture.push(['metadati', a.cartella]); return [voce]; };
+  const elencaVociConTestoFn = async (a) => { letture.push(['testo', a.cartella]); return [{ ...voce, testoEstratto: 'contenuto vero' }]; };
+  await avviaSessione({ cartella: '/tmp/progetto-vero', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, elencaVociFn, elencaVociConTestoFn });
+
+  assert.match(await catturato.onLetturaSezione('library_find', {}), /^Library: showing 1 of 1, most recently updated first\.\n- fattura\.md — document — uploaded — id lib-1$/u);
+  assert.match(await catturato.onLetturaSezione('library_find', { query: 'vero' }), /- fattura\.md — document — uploaded: contenuto vero — id lib-1/u);
+  assert.match(await catturato.onLetturaSezione('library_find', { query: '*' }), /^Library: showing 1 of 1/u, '«*» is a listing, not a search');
+  assert.deepEqual(letture, [['metadati', '/tmp/progetto-vero'], ['testo', '/tmp/progetto-vero'], ['metadati', '/tmp/progetto-vero']]);
+});
+
 test('⭐⭐⭐ onLibreriaLeggi: id del modello passato a leggiVoceFn con la cartella VERA', async () => {
   let catturato;
   const talosLavoraFn = talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { catturato = input; } });
@@ -2118,7 +2140,7 @@ test('⭐⭐ onNoteAggiorna: un id inesistente (NOTE_NOT_FOUND) diventa il messa
 
   const risultato = await catturato.onNoteAggiorna({ id: 'mai-esistita', title: 'x' });
   assert.equal(risultato.ok, false);
-  assert.equal(risultato.esito, 'There is no note with that id. Call notes_list to see the current ones.');
+  assert.equal(risultato.esito, 'There is no note with that id. Call notes_find to see the current ones.');
 });
 
 test('⭐⭐⭐ onNoteElimina: una nota che esisteva davvero dice "deleted", una già assente dice "nothing to delete" — due messaggi diversi per due stati diversi', async () => {
@@ -2230,7 +2252,7 @@ test('⭐⭐ onAttivitaCompleta: un id inesistente (TASK_NOT_FOUND) diventa il m
 
   const risultato = await catturato.onAttivitaCompleta({ id: 'mai-esistita' });
   assert.equal(risultato.ok, false);
-  assert.equal(risultato.esito, 'There is no task with that id. Call tasks_list to see the current ones.');
+  assert.equal(risultato.esito, 'There is no task with that id. Call tasks_find to see the current ones.');
 });
 
 test('⛔⛔ AL CONTRARIO — onAttivitaAggiorna: né title né description né priority passati è un rifiuto onesto (indica tasks_complete), aggiornaAttivitaFn MAI chiamata', async () => {

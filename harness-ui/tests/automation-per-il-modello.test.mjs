@@ -101,7 +101,8 @@ test('OSPITE-04 — non si indovina un id; nessun attrezzo elimina; elenco e sto
   await store.apriGiro(id, { runId: 'g', previstaAlle: null, sessionId: 's' })
   await store.chiudiGiro(id, 'g', { esito: 'finita', riassunto: 'Due pacchetti vecchi.', daGuardare: true })
   const elenco = (await ospite('automation_list', {}, { fase: 'esegui' })).testo
-  assert.match(elenco, new RegExp(`^1 automation:\\n- ${id} · "Dipendenze" · on · runs every day at 09:00`, 'u'))
+  // C5: la testata comune degli elenchi (`testoElenco`)
+  assert.match(elenco, new RegExp(`^Automations: showing 1 of 1, soonest next run first\\.\\n- ${id} · "Dipendenze" · on · runs every day at 09:00`, 'u'))
   assert.match(elenco, /last run finita · 1 unread$/u)
   assert.match((await ospite('automation_runs', { id }, { fase: 'esegui' })).testo, /· finita\n {2}Due pacchetti vecchi\.$/u)
 })
@@ -139,6 +140,40 @@ test('OSPITE-05 — un GIRO di automazione (D5): legge, cambia SOLO sé stesso e
   for (const nome of ['automation_create', 'automation_pause', 'automation_resume', 'automation_run', 'automation_stop']) {
     assert.equal((await delGiro(nome, { ...CREA, id: mia.id }, { fase: 'anteprima' })).ok, false, nome)
   }
+})
+
+test('C5-AUTO-LIST — soonest next run first; state, next_run_before, limit + cursor; a wrong value is said, never obeyed', async (t) => {
+  const { ospite, store } = scena(t)
+  await ospite('automation_create', CREA, { fase: 'esegui' }) // ogni giorno alle 09:00
+  await ospite('automation_create', { ...CREA, nome: 'Backup', pianificazione: { tipo: 'giornaliera', ora: '07:00' } }, { fase: 'esegui' })
+  await ospite('automation_create', { ...CREA, nome: 'Vecchia', pianificazione: { tipo: 'giornaliera', ora: '06:00' } }, { fase: 'esegui' })
+  const vecchia = (await store.elenca()).find((v) => v.nome === 'Vecchia')
+  await ospite('automation_pause', { id: vecchia.id }, { fase: 'esegui' })
+  const nomi = (testo) => [...testo.matchAll(/^- \S+ · "([^"]+)"/gmu)].map((m) => m[1])
+  const lista = async (a) => (await ospite('automation_list', a, { fase: 'esegui' })).testo
+  const tutte = await lista({})
+  assert.match(tutte, /^Automations: showing 3 of 3, soonest next run first\./u)
+  assert.deepEqual(nomi(tutte), ['Backup', 'Dipendenze', 'Vecchia'], 'with a next run first, the soonest on top; the one that is off last')
+  assert.doesNotMatch(tutte, /· folder /u, 'concise leaves the folder out')
+  assert.match(await lista({ response_format: 'detailed' }), /· folder /u)
+  assert.deepEqual(nomi(await lista({ state: 'off' })), ['Vecchia'])
+  assert.deepEqual(nomi(await lista({ state: 'ON' })), ['Backup', 'Dipendenze'], 'case does not matter')
+  // il prossimo giro di Backup (07:00) è prima delle 08:00 del giorno dopo, quello di Dipendenze (09:00) no; la spenta non ha un prossimo
+  const giorno = /next run (\d{4}-\d{2}-\d{2}) 07:00/u.exec(tutte)[1]
+  assert.deepEqual(nomi(await lista({ next_run_before: `${giorno} 08:00` })), ['Backup'])
+  const prima = await lista({ limit: 1 })
+  assert.deepEqual(nomi(prima), ['Backup'])
+  const cursore = /continue with cursor=(\S+)$/u.exec(prima)[1]
+  assert.deepEqual(nomi(await lista({ limit: 1, cursor: cursore })), ['Dipendenze'])
+  assert.match(await lista({ limit: 1, cursor: cursore, state: 'on' }), /The filters changed/u)
+  // al contrario: un valore sbagliato non svuota l'elenco in silenzio, lo dice
+  const strano = await lista({ state: 'sleeping', next_run_before: 'domani' })
+  assert.deepEqual(nomi(strano), ['Backup', 'Dipendenze', 'Vecchia'])
+  assert.match(strano, /state "sleeping" is unknown and was ignored\. Valid: all, on, off, unread\./u)
+  assert.match(strano, /next_run_before "domani" is not "YYYY-MM-DD" or "YYYY-MM-DD HH:MM": it was ignored\./u)
+  // review del passo 15 (N1): una data impossibile si dice, non si confronta
+  assert.match(await lista({ next_run_before: '2026-13-45 99:99' }), /next_run_before "2026-13-45 99:99" is not/u)
+  assert.match(await lista({ next_run_before: '2026-02-30' }), /next_run_before "2026-02-30" is not/u)
 })
 
 test('OSPITE-06 — parole e ore per il modello', () => {

@@ -259,9 +259,12 @@ export function creaTela(host, opzioni) {
     pill.append(el('span', null, st.parola));
     riga.append(pill);
     if (sessione.durata) riga.append(el('span', 'talos-wfg__passo-durata', sessione.durata));
-    corpo.append(el('span', 'talos-wfg__coordinatore-nome', sessione.titolo));
+    // nome e modello stanno su una riga sola (la carta ha l'altezza fissa della disposizione, vedi grafo-tela.css): il testo
+    // intero resta nel `title`, come le carte dei passi tengono il loro nel dettaglio
+    const nome = el('span', 'talos-wfg__coordinatore-nome', sessione.titolo); nome.title = sessione.titolo;
+    corpo.append(nome);
     corpo.append(riga);
-    if (sessione.sotto) corpo.append(el('span', 'talos-wfg__passo-modello', sessione.sotto));
+    if (sessione.sotto) { const sotto = el('span', 'talos-wfg__passo-modello', sessione.sotto); sotto.title = sessione.sotto; corpo.append(sotto); }
     cartaSessione.append(ic, corpo);
     cartaSessione.setAttribute('aria-label', tr('agenti.graph.mainSession', { titolo: sessione.titolo }));
   }

@@ -33,7 +33,7 @@ try {
   await talosLavora({
     cartella: directory, task: {consegna: 'Esegui la prova locale.'}, modello: 'fixture', chiave: 'fixture',
     comandoProva: mode === 'wsl' ? 'node producer.cjs' : `"${process.execPath}" "${producer}"`,
-    segnaleStop: abort.signal, livelloAccesso: 'completo', _giriMassimiInterno: 3,
+    segnaleStop: abort.signal, livelloAccesso: 'scrittura-progetto', _giriMassimiInterno: 3,
     messaggiIniziali: [{role: 'system', content: 'Misura locale.'}, {role: 'user', content: 'Esegui.'}],
     fetchDiRete: async () => {
       const message = calls++ === 0

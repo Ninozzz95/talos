@@ -97,8 +97,20 @@ test('MS-02: cambiato solo l indirizzo: parte il collegamento, non una chiave vu
   await modale.locator('[data-provider-endpoint]').fill('https://proxy.esempio.test/v1');
   await modale.getByRole('button', { name: 'Salva', exact: true }).click();
   await page.waitForFunction(() => !document.querySelector('dialog[data-provider-modale][open]'));
-  assert.deepEqual(await page.evaluate(() => window.chiamate), [{ provider: 'openrouter', chiave: '', pool: true, collegamento: { endpoint: 'https://proxy.esempio.test/v1', timeoutSeconds: 60 } }]);
+  /* OWN-01 (09/10/2026, port del kernel CLI 0.5.2): il tempo alla prima risposta parte SOLO se la persona l'ha cambiato — prima
+     ogni salvataggio dell'indirizzo lo marcava come scelto, e il predefinito del server (600 s) non poteva più cambiare. */
+  assert.deepEqual(await page.evaluate(() => window.chiamate), [{ provider: 'openrouter', chiave: '', pool: true, collegamento: { endpoint: 'https://proxy.esempio.test/v1' } }]);
   assert.deepEqual(await page.evaluate(() => window.salvate.map((s) => s.salvato)), [['collegamento']]);
+});
+
+test('MS-02b: OWN-01 — cambiato il tempo alla prima risposta, parte anche lui (fino a 1800 s)', async (t) => {
+  const { page, modale } = await pagina(t);
+  const tempo = modale.locator('[data-provider-timeout]');
+  assert.equal(await tempo.getAttribute('max'), '1800');
+  await tempo.fill('900');
+  await modale.getByRole('button', { name: 'Salva', exact: true }).click();
+  await page.waitForFunction(() => !document.querySelector('dialog[data-provider-modale][open]'));
+  assert.deepEqual(await page.evaluate(() => window.chiamate), [{ provider: 'openrouter', chiave: '', pool: true, collegamento: { endpoint: 'https://openrouter.ai/api/v1', timeoutSeconds: 900 } }]);
 });
 
 test('MS-03: se la chiave non si salva la modale RESTA, l errore è rosso e non sparisce da solo', async (t) => {

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { creaBloccoCodice, aggiornaBloccoCodice, etichettaLinguaggio, chiaveLinguaggio } from '../../src/components/conversazione.js';
+import { creaBloccoCodice, aggiornaBloccoCodice, etichettaLinguaggio, chiaveLinguaggio, evidenziaInAttesa } from '../../src/components/conversazione.js';
 
 /*
  * 09/09/2026 — l'owner con lo screenshot: «i blocchi di codice appaiono frammentati in strisce
@@ -240,4 +240,41 @@ test('CODICE-AL-CONTRARIO: il testo del modello resta testo, mai markup eseguito
   const code = blocco.trovaTag('code');
   assert.equal(code.textContent, veleno);
   assert.equal(code.innerHTML, '', 'senza grammatica non si passa MAI da innerHTML');
+});
+
+test('CODICE-RINVIO: in rigiocata il blocco nasce in testo e si colora solo quando è montato; senza rinvio, come sempre', () => {
+  /*
+   * B1 (bugfixer, 09/10/2026 sera): il profilo del ritorno su una chat di 300 giri dava ~480 ms a Prism + `innerHTML` di blocchi
+   * che la finestra della rigiocata stacca subito. Come Hermes (`shiki-block.tsx:8-26`): testo subito, colore quando si vede.
+   */
+  let evidenziato = 0;
+  let inRigiocata = true;
+  const copiati = [];
+  const evidenzia = (testo) => { evidenziato += 1; return `<span class="token">${testo}</span>`; };
+  const blocco = creaBloccoCodice(
+    { testo: CODICE, linguaggio: 'js', chiuso: true },
+    { document: documentoFinto(), evidenzia, rinvia: () => inRigiocata, copia: (t) => { copiati.push(t); return Promise.resolve(); } },
+  );
+  const code = blocco.trovaTag('code');
+  assert.equal(evidenziato, 0, 'in rigiocata non si colora niente');
+  assert.equal(blocco.dataset.evidenziazione, 'in-attesa');
+  assert.equal(code.textContent, CODICE, 'il testo si legge già, intero');
+  assert.equal(code.className, '', 'nessuna classe language-* finché non è colorato davvero');
+  blocco.trova('code-block-copy').lancia('click');
+  assert.deepEqual(copiati, [CODICE], 'la copia funziona anche in attesa');
+  const radice = { querySelectorAll: () => [blocco] };
+  assert.equal(evidenziaInAttesa(radice), 0, 'finché la rigiocata non è finita resta in attesa');
+  assert.equal(blocco.dataset.evidenziazione, 'in-attesa');
+  inRigiocata = false;
+  assert.equal(evidenziaInAttesa(radice), 1);
+  assert.equal(evidenziato, 1);
+  assert.equal(code.className, 'language-javascript');
+  assert.equal(blocco.dataset.evidenziazione, undefined, 'colorato: non è più in attesa');
+  assert.equal(evidenziaInAttesa(radice), 0, 'e non si ricolora una seconda volta');
+  // al contrario: senza `rinvia` (o con rinvia falso) il blocco si colora subito, come prima di B1
+  let subito = 0;
+  const vivo = creaBloccoCodice({ testo: CODICE, linguaggio: 'js', chiuso: true }, { document: documentoFinto(), evidenzia: (t) => { subito += 1; return t; } });
+  assert.equal(subito, 1);
+  assert.equal(vivo.dataset.evidenziazione, undefined);
+  assert.equal(vivo.trovaTag('code').className, 'language-javascript');
 });

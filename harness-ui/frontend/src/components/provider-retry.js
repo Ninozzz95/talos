@@ -25,7 +25,10 @@ function valoreRetry(evento) {
     canale: incerto ? 'esito-incerto' : 'http',
     retryAt: v.fase === 'attesa' ? v.retryAt : null,
     ...(v.httpStatus === 402 ? { motivo: v.motivo } : {}),
-    ...(incerto && typeof v.motivo === 'string' ? { motivo: v.motivo } : {}) };
+    ...(incerto && typeof v.motivo === 'string' ? { motivo: v.motivo } : {}),
+    /* OWN-01 (CLI, 09/10/2026; nomi concordati col bugfixer): il fornitore non ha mandato NEMMENO gli header. Campo additivo: il
+       canale resta «esito-incerto», ma la frase non è più «si è interrotta» — non era mai cominciata. */
+    ...(incerto && v.causa === 'nessuna-prima-risposta' ? { causa: v.causa } : {}) };
 }
 
 /** Proiezione del journal: nessuna richiesta o decisione di ritentare nel client. */
@@ -55,7 +58,7 @@ export function testoRetry(retry, ora = Date.now(), en) {
   const numero = voce('attempt', { attempt: retry.tentativo, max: retry.tentativiMassimi });
   /* R1 (BUG-16): il canale «esito-incerto» dice il SUO motivo, senza «stato null» — non c'è nessuno status HTTP da citare. */
   const incerto = retry.canale === 'esito-incerto';
-  const motivo = incerto ? voce('reason.outcomeUnknown')
+  const motivo = incerto ? voce(retry.causa === 'nessuna-prima-risposta' ? 'reason.noFirstResponse' : 'reason.outcomeUnknown')
     : retry.httpStatus === 402 && retry.motivo === 'budget-occupato' ? voce('reason.budgetBusy')
       : retry.httpStatus === 429 ? voce('reason.rateLimited')
         : retry.httpStatus === 408 ? voce('reason.timeout') : voce('reason.unavailable');

@@ -15,6 +15,8 @@ import { createProcessOutputStore } from './src/process-output-store.mjs';
 import { impostaPoliticaScritturaSync, modalitaPubblicazioneIntestazione } from './src/session-store.mjs'; // F3 (24/09): il writer sincrono rispetta la coda; 24/09: la modalità dell'intestazione per il Doctor
 import { createWorkflowStore } from './src/workflow/store.mjs';
 import { proposeWorkflowFromTool } from './src/workflow/planning-control.mjs';
+import { creaAvvioDaSolo } from './src/workflow/avvio-da-solo.mjs';
+import { creaRisveglioDaiWorkflow } from './src/workflow/esito-al-padre.mjs'; // C3b: l'esito di un run sveglia il padre
 import { createWorkflowOrchestrator } from './src/workflow-orchestrator.mjs';
 import { createAgentSessionAdapter } from './src/workflow/adapters/agent-session.mjs';
 import { createCapacitaAdattiva, createWorkflowScheduler } from './src/workflow/scheduler.mjs';
@@ -56,7 +58,8 @@ import { createGeneratedImageStore } from './src/generated-image-store.mjs';
 import { createOwnerRuntimeAdapter, creaFetchMultiProvider } from './src/runtime-owner-adapter.mjs';
 /* ⛔ CLI-REQ-05: «di CHI è questo modello, e ha una chiave utilizzabile ADESSO» — la regola e le sue prove stanno lì. */
 import { creaProntoFn } from './src/sessione-pronta.mjs';
-import { createDesktopContextRuntime, resolveDesktopContextProfile } from './src/context-runtime.mjs';
+import { createDesktopContextRuntime, resolveDesktopContextProfile, resolveDesktopDefaultProfile } from './src/context-runtime.mjs';
+import { createImpostazioniContesto, giroUsaIlMotore } from './src/impostazioni-contesto.mjs';
 import { createContextTokenCounter, buildPreparedDesktopContextRequest } from './src/context-token-counters.mjs';
 import { createChatImageStore } from './src/chat-image-attachments.mjs';
 import { avviaSessione } from './src/agent-service.mjs';
@@ -552,17 +555,31 @@ async function startServer() {
     cartellaAttivita: percorsoDatiDesktop('.tasks-store/'),
     cartellaMemoria: percorsoDatiDesktop('.memory-store/'),
   });
+  /* C1 (owner 09/10/2026 sera, «Motore col metodo» di serie, «solo le nuove», interruttore in Impostazioni → Contesto): la scelta
+     sta sul server accanto al database del contesto, si legge alla NASCITA di ogni conversazione e si timbra su di lei. Senza
+     cartella delle sessioni non c'è archivio del contesto: il motore resta spento (la prova `TALOS_CONTEXT_TRIAL` resta com'era). */
+  const impostazioniContesto = config.cartellaStore
+    ? createImpostazioniContesto({ file: join(config.cartellaStore, 'context', 'impostazioni-contesto.json') })
+    : null;
+  const motoreContestoAttivo = Boolean(config.contextTrial || impostazioniContesto);
   const sessionRegistry = resumeDiagnostics.wrapRegistry(createSessionRegistry(resumeDiagnostics.registryOptions({
     processOutputStoreFn,
     cartellaDatiProgettoFn: cartellaDatiProgetto,
     finestraTokenFn: finestraDallaRoute,
-    contextHooksFn: config.contextTrial ? input => contextRuntime.service.createKernelHooks(input) : undefined,
-    contextCompactFn: config.contextTrial ? input => contextRuntime.service.compact(input) : undefined,
+    ...(impostazioniContesto ? { motoreContestoPerNuoveFn: () => impostazioniContesto.motorePerUnaConversazioneNuova() } : {}),
+    contextHooksFn: motoreContestoAttivo ? input => contextRuntime?.service.createKernelHooks(input) : undefined,
+    // C1 review Y1: lo stesso criterio di `politicaAbilitazione`/`enabledSessionIds` qui sotto, ma sincrono, PRIMA dei ganci
+    giroUsaIlMotoreFn: giroUsaIlMotore({ trialSessionIds: config.contextTrial?.sessionIds ?? null }),
+    contextCompactFn: motoreContestoAttivo ? input => contextRuntime?.service.compact(input) : undefined,
     /* F3-11c (24/09 notte), decisione owner 42: un passo della bozza può chiedere un altro modello solo fra i disponibili
        (il catalogo che serve `/api/v1/models`); se il catalogo non risponde, l'elenco resta ignoto e il compilatore lo dice. */
     workflowPlanProposeFn: workflowStore ? input => proposeWorkflowFromTool(workflowStore, input, {
       availableModelIdsFn: async () => ((await modelCatalog.ottieni())?.modelli ?? []).map((m) => m?.id).filter((id) => typeof id === 'string'),
     }) : null,
+    /* ⭐ C3b (owner 09/10/2026 sera): con la Coordinazione accesa il Workflow proposto parte da solo — approva e avvia con la stessa
+       porta della persona, poi sveglia lo scheduler. Il runtime si legge all'uso (nasce sotto, come `workflowPerIlModelloFn`). */
+    workflowAvvioDaSoloFn: workflowStore ? creaAvvioDaSolo({ store: workflowStore, runtimeFn: () => workflowRuntime,
+      sessionExistsFn: (id) => Boolean(sessionRegistry?.leggiSessioneContesto?.(id)) }) : null,
     /*
      * ⛔⛔ F-012 (piano 0.1.19 §1.5, 28/09) — il canale dei TRE attrezzi dei run (`workflow_status`/
      * `workflow_output`/`workflow_control`), l'unico pezzo che il modello mancava. La fabbrica è
@@ -654,6 +671,13 @@ async function startServer() {
      * ricerca sui tre concorrenti che fanno la stessa cosa.
      */
     cartellaStore: config.cartellaStore,
+    /*
+     * ⭐ 10/10/2026 — l'affitto fra processi sull'archivio (owner 09/10: «Affitto come Hermes»): il 4174 e l'app installata usano lo
+     *   stesso `%APPDATA%\TALOS\sessions`. L'etichetta è ciò che l'ALTRO processo dirà alla persona («aperta in …»).
+     */
+    affittoFraProcessi: config.cartellaStore
+      ? { etichetta: process.env.TALOS_DESKTOP_DATA_DIR ? 'the TALOS desktop app' : `the TALOS server on port ${config.port}` }
+      : null,
     // R-02: nel prodotto installato i negozi vivono nella cartella dati del guscio (TALOS_DESKTOP_DATA_DIR); da sorgente restano accanto a server.mjs, come i default del registro.
     cartellaTrustHook: percorsoDatiDesktop('.hooks-trust/'),
     cartellaTrustMcp: percorsoDatiDesktop('.mcp-trust/'),
@@ -688,6 +712,11 @@ async function startServer() {
    */
   let workflowRuntime = null;
   if (workflowStore) {
+    /* C3b (owner 09/10/2026 sera): quando un run finisce o entra in «Serve attenzione» la sessione che lo ha avviato riparte con
+       l'esito, come coi risultati delle figlie. PRIMA del recupero: un run che il recupero porta in «Serve attenzione» è un
+       cambio vero, e il padre lo deve sapere. */
+    creaRisveglioDaiWorkflow({ store: workflowStore, accodaFn: (esito) => sessionRegistry.accodaEsitoWorkflow(esito),
+      onErrore: (errore, dove) => console.error(`[workflow] the outcome of run ${dove?.runId} did not reach its session: ${errore?.code ?? errore?.message ?? errore}`) });
     const capacita = createCapacitaAdattiva();
     const orchestrator = createWorkflowOrchestrator({ store: workflowStore, capacityFn: () => capacita.politica(),
       adapters: new Map([['agent-session', createAgentSessionAdapter({ sessions: sessionRegistry })]]) });
@@ -708,7 +737,7 @@ async function startServer() {
     (progetti) => { if (progetti > 0) console.log(`[dati-progetto] ${progetti} progetti controllati`); },
     (errore) => console.warn(`[dati-progetto] passata iniziale non riuscita: ${errore?.message ?? errore}`),
   );
-  if (config.contextTrial) {
+  if (motoreContestoAttivo) {
     const localCounterBase = 'http://talos-context-runtime.invalid/v1';
     const readLocalRuntime = async () => {
       const before = supervisoreLocale?.status();
@@ -737,15 +766,28 @@ async function startServer() {
         return fetch(url, options);
       },
     });
-    contextRuntime = await createDesktopContextRuntime({
+    const creaRuntimeContesto = () => createDesktopContextRuntime({
       sessionDirectory: config.cartellaStore,
-      enabledSessionIds: config.contextTrial.sessionIds,
+      ...(config.contextTrial
+        ? { enabledSessionIds: config.contextTrial.sessionIds }
+        // C1: di serie, il motore vale per le conversazioni NATE col timbro «engine» (`session-registry.mjs`, motoreContesto)
+        : { politicaAbilitazione: ({ session }) => session?.motoreContesto === 'engine' }),
       readSession: sessionId => sessionRegistry.leggiSessioneContesto(sessionId),
-      resolveModelProfile: selected => resolveDesktopContextProfile({ profiles: config.contextTrial.models, ...selected, readLocalRuntime }),
+      resolveModelProfile: selected => (config.contextTrial
+        ? resolveDesktopContextProfile({ profiles: config.contextTrial.models, ...selected, readLocalRuntime })
+        : resolveDesktopDefaultProfile({ ...selected, finestraFn: finestraDallaRoute, readLocalRuntime })),
       tokenCounter,
       callModel: request => ownerRuntime.callContextModel(request),
       onEvent: input => sessionRegistry.pubblicaEventoContesto(input),
+      onPrepared: input => sessionRegistry.annotaPreparazioneContesto(input), // C1 (10/10): i conteggi del livello 1 per la scheda Contesto
     });
+    if (config.contextTrial) contextRuntime = await creaRuntimeContesto();
+    else {
+      /* C1: di serie un archivio del contesto che non si apre NON ferma l'app — il motore si spegne, lo dice, e le
+         conversazioni (anche quelle timbrate «engine») vanno col legacy: i ganci senza runtime rispondono «non mio». */
+      try { contextRuntime = await creaRuntimeContesto(); }
+      catch (errore) { contextRuntime = null; console.error(`[context] engine OFF for this run, conversations use the legacy compaction: ${errore?.code ?? errore?.message ?? errore}`); }
+    }
   }
   const workspaceBrowser = createWorkspaceBrowser({
     rootDir: parse(process.cwd()).root,
@@ -910,6 +952,7 @@ async function startServer() {
      */
     custodisciChiaveOpenRouter: async (chiave) => { providerStore.setKey('openrouter', chiave); },
     contextService: contextRuntime?.service,
+    impostazioniContesto, // C1: «Motore del contesto» in Impostazioni → Contesto
     // ⭐ 10/09: le favicon delle fonti, prese dal server una volta sola e tenute qui accanto alle sessioni.
     cartellaFavicon: percorsoDatiDesktop('.favicon-cache/'),
     /*

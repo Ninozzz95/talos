@@ -69,7 +69,7 @@ test('READ22-INVALID: malformed offset/limit/byteOffset are rejected before open
   const apriFn=async()=>{opened++;throw Error('must not open');};
   for(const args of [{offset:null},{offset:-1},{offset:0.5},{offset:'0'},{offset:Infinity},{limit:0},{limit:'4'},{limit:NaN},
     /* F-026 (owner 02/10/2026): con byteOffset `limit` sono byte, 4..102400 — fuori da lì si rifiuta come prima */
-    {byteOffset:-1},{byteOffset:'3'},{byteOffset:0,offset:1},{byteOffset:0,limit:3},{byteOffset:0,limit:102401},{format:'hex',limit:3},{format:'hex',limit:4097},{format:'hex',byteOffset:0}]){
+    {byteOffset:-1},{byteOffset:'3'},{byteOffset:4,offset:1}, /* C1 09/10: byteOffset 0 con offset vale assente (F026-ZERO-ASSENTE) */{byteOffset:0,limit:3},{byteOffset:0,limit:102401},{format:'hex',limit:3},{format:'hex',limit:4097},{format:'hex',byteOffset:0}]){
     await assert.rejects(leggiTestoLimitato('unused','unused',{...args,apriFn}),(e)=>e.code==='READ_INVALID_RANGE',JSON.stringify(args));
   }
   assert.equal(opened,0);

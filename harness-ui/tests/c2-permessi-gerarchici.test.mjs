@@ -405,17 +405,19 @@ test('C2-07d FOTOGRAFIA: il padre cambia DOPO la domanda — la domanda non si r
   await domanda
 })
 
-test('C2-07e PERMESSI ILLEGGIBILI: la carta non nomina una politica che il cancello non sta usando (permessi: null)', async (t) => {
+test('C2-07e PERMESSI ILLEGGIBILI: una parola inventata non avvia una sessione, quindi nessuna carta la nomina', async (t) => {
   /* review del bugfixer (08/10/2026): un `permessi` che non è una delle cinque parole l'incontro lo legge «Sola lettura», ma
      il kernel di una radice lo tratta diversamente — un perché che può essere falso non si mostra. */
-  const { registry, runtime, sessionId } = await scena(t, { permessi: 'Permesso inventato' })
-  const domanda = runtime.runs[0].input.chiediApprovazioneFn({ tipo: 'shell', comando: 'npm test' })
-  await new Promise((r) => setTimeout(r, 10))
-  const pendente = registry.domandaInAttesa(sessionId)
-  assert.ok(pendente?.politica, 'premessa: la politica c\'è')
-  assert.equal(pendente.politica.permessi, null, 'nessuna parola del contratto per permessi illeggibili')
-  registry.rispondiApprovazione(sessionId, pendente.requestId, false)
-  await domanda
+  /* owner 10/10 «Porta + kernel chiuso»: una parola inventata non avvia più una sessione, quindi nessuna carta può nominarla; una
+     già salvata si legge «Sola lettura» (PORTA-03 in permessi-porta-chiusa). */
+  const cartellaStore = mkdtempSync(join(tmpdir(), 'talos-c2-'))
+  const runtime = runtimeControllabile()
+  const registry = createSessionRegistry({ cartellaStore, avviaSessioneFn: runtime.avviaSessioneFn,
+    preparaEsecuzioneFn: () => ({ cartella: '/tmp/x', comandoProva: 'npm test', task: { id: 'task', consegna: 'delega un lavoro' } }),
+    modello: 'm', chiave: 'k', cartellaEsisteFn: () => true })
+  t.after(async () => { await registry.chiudi?.(); rimuoviCartellaDiProva(cartellaStore) })
+  assert.equal(registry.avvia('task', { permessiScelto: 'Permesso inventato', modalitaOperativaScelta: 'normale' }).code, 'PERMISSIONS_INVALID')
+  assert.equal(runtime.runs.length, 0)
 })
 
 test('C2-07b AL CONTRARIO: col padre non toccato la politica della catena è quella di sempre; una radice non ne ha bisogno', async (t) => {

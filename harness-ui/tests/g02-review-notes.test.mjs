@@ -41,7 +41,7 @@ test('G02 review 2: an overwrite refused by the read-before-overwrite guard neve
     : {role: 'assistant', content: 'done'};
     return Response.json({choices: [{message, finish_reason: message.tool_calls ? 'tool_calls' : 'stop'}]});};
   const barrier = [], events = [];
-  await talosLavora({cartella: root, task: {consegna: 't'}, modello: 'x', chiave: 'y', livelloAccesso: 'completo', _giriMassimiInterno: 3,
+  await talosLavora({cartella: root, task: {consegna: 't'}, modello: 'x', chiave: 'y', livelloAccesso: 'scrittura-progetto', _giriMassimiInterno: 3,
     messaggiIniziali: [{role: 'system', content: 't'}, {role: 'user', content: 't'}], fetchDiRete: net, onGiro: (e) => events.push(e),
     primaDiMutazioneFn: async (a) => barrier.push(a.tipo)});
   assert.equal(readFileSync(join(root, 'kept.txt'), 'utf8'), 'content the model never read\n', 'not replaced');

@@ -119,3 +119,68 @@ test('WF-RAIL-UI-ATTENTION: decisions and errors filter the list from the head o
   await expect(rail.locator('.talos-wfr__testa--elenco')).toContainText('Agenti della sessione');
   expect(scritture).toEqual([]);
 });
+
+/* 09/10/2026 (bugfixer; visto dal desktop nella prova dal vivo della C3 tappa 5, foto scura a 1920×1080): un passo dal nome
+   lungo («Confronta i due elenchi e dichiara il massimo») spingeva la riga oltre il rail. Lo stato a destra («Concluso») usciva
+   e il rail, più largo del suo contenitore, scorreva di lato: le prime lettere dei titoli tagliate. In una griglia un `li` ha
+   `min-width: auto`, cioè il min-content della riga, e un testo in `nowrap` lo rende lungo quanto il nome (CSS-Tricks
+   «Preventing a Grid Blowout»; makandra «How to prevent a 1fr grid column overflow», lette il 09/10/2026). */
+const NOME_LUNGO = 'Confronta i due elenchi e dichiara il massimo valore trovato nei sei documenti della cartella';
+function rinomina(scena, nodeId, label) {
+  for (const elenco of [...scena.righe.values(), scena.tutte]) {
+    const i = elenco.findIndex((r) => r.nodeId === nodeId);
+    if (i >= 0) elenco[i] = { ...elenco[i], label };
+  }
+  return scena;
+}
+
+test('WF-RAIL-NOME-LUNGO: un nome lungo si accorcia coi puntini, lo stato resta dentro e il rail non scorre di lato', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  const scena = rinomina(costruisciScena(14, { sessionId: 'wf-rail-lungo' }), 'implementazione-0003', `Agente 99 - ${NOME_LUNGO}`);
+  const { scritture } = await instradaScena(page, scena);
+  await apriRailDellaScena(page, scena);
+  const rail = railV2(page);
+  const riga = rail.locator('.talos-wfr__agente', { hasText: 'Agente 99' });
+  await expect(riga).toBeVisible();
+  const misura = () => riga.evaluate((b) => {
+    const contenitore = b.closest('#railAgenti');
+    const r = contenitore.getBoundingClientRect(), s = b.querySelector('.talos-wfr__stato').getBoundingClientRect();
+    const nome = b.querySelector('.talos-wfr__nome');
+    return { trabocca: contenitore.scrollWidth - contenitore.clientWidth, scorso: contenitore.scrollLeft,
+      statoFuori: Math.round(s.right - r.right), nomeAccorciato: nome.scrollWidth > nome.clientWidth };
+  });
+  const prima = await misura();
+  expect(prima.trabocca, `il rail non è più largo di sé: ${JSON.stringify(prima)}`).toBeLessThanOrEqual(0);
+  expect(prima.statoFuori, 'lo stato resta dentro il rail').toBeLessThanOrEqual(0);
+  expect(prima.nomeAccorciato, 'il nome si accorcia coi puntini').toBe(true);
+  // il clic (fuoco e selezione dal diagramma) non sposta il rail di lato
+  await riga.click();
+  await expect(rail.locator('.talos-wfr__agente[aria-current="true"]')).toContainText('Agente 99');
+  expect((await misura()).scorso).toBe(0);
+  expect(scritture).toEqual([]);
+});
+
+/* 09/10/2026 (bugfixer; stessa prova del desktop): la «Cronologia automazioni» diceva «Richiede attenzione · 2/3 passi» col run
+   già «Riuscito · 3 di 3» nella testata. Si rileggeva solo quando il rail si rimontava; adesso anche quando lo stato del run,
+   che il rail segue già, cambia. */
+test('WF-HISTORY-SEGUE-IL-RUN: quando lo stato del run cambia, la cronologia delle automazioni si rilegge', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  const scena = costruisciScena(14, { sessionId: 'wf-history-segue' });
+  const frame = { lastSeq: (scena.panoramica.lastSeq ?? 0) + 1, nodes: [] };
+  const { scritture, rilasciaFrame } = await instradaScena(page, scena, { frame, frameAMano: true });
+  let statoCronologia = 'running';
+  await page.route(`**/api/v1/sessions/${scena.sessionId}/workflows?*`, (route) => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ ok: true, data: {
+    items: [{ runId: scena.runId, workflowId: scena.workflowId, version: 1, status: statoCronologia, title: 'Run di prova',
+      createdAt: '2026-10-09T15:00:00.000Z', steps: { total: 14, terminal: statoCronologia === 'succeeded' ? 14 : 6 }, model: 'z-ai/glm-5.3-flash' }],
+    total: 1, nextOffset: null } }) }));
+  await apriRailDellaScena(page, scena);
+  const history = page.locator('#railAgenti .talos-wfh');
+  await expect(history.locator('.talos-wfh__open')).toHaveCount(1);
+  await expect(history).toContainText('6/14');
+  // il server finisce il run: la panoramica riletta dice «succeeded», e la cronologia lo deve dire anche lei
+  scena.panoramica.status = 'succeeded';
+  statoCronologia = 'succeeded';
+  rilasciaFrame();
+  await expect(history).toContainText('14/14', { timeout: 15_000 });
+  expect(scritture).toEqual([]);
+});

@@ -253,19 +253,23 @@ export function creaClientGrafo({ fetchFn = globalThis.fetch, API = (p) => p, se
    *   `draft-ietf-httpapi-idempotency-key-header`). Per Riprova la rilettura non può provare l'esito (i falliti ripartono e
    *   possono rifallire): resta «non si sa», detto.
    */
-  const COMANDI_RUN = Object.freeze(['pause', 'resume', 'cancel', 'retry']);
+  const COMANDI_RUN = Object.freeze(['pause', 'resume', 'cancel', 'retry', 'raise-ceiling']);
   const riuscitoDaStato = Object.freeze({
     pause: (p) => p.status === 'paused' || p.pauseRequested === true,
     resume: (p) => p.status === 'running' && p.pauseRequested !== true,
     cancel: (p) => p.status === 'cancelled' || p.cancelRequested === true,
     retry: () => false,
+    // C3 tappa 3: il tetto è alzato quando il run non aspetta più per il budget (gli altri motivi, se ci sono, restano)
+    'raise-ceiling': (p) => ['running', 'needs_attention'].includes(p.status) && !(p.attentionReasons ?? []).includes('budget_overrun'),
   });
-  async function comando(s, azione, { uuid = () => globalThis.crypto.randomUUID() } = {}) {
+  async function comando(s, azione, { uuid = () => globalThis.crypto.randomUUID(), amount } = {}) {
     if (s?.tipo !== 'run' || !COMANDI_RUN.includes(azione)) throw new Error('invalid run command');
+    // C3 tappa 3: «Alza il tetto» porta la cifra DETTA sulla conferma; il server la rifiuta se non è più quella di adesso
+    const richiesta = { commandId: uuid(), ...(azione === 'raise-ceiling' ? { amount } : {}) };
     let risposta = null;
     try {
       risposta = await fetchFn(API(`${delRun(s)}/${azione}`), {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ commandId: uuid() }),
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(richiesta),
       });
     } catch { risposta = null; }
     const corpo = risposta ? await risposta.json().catch(() => null) : null;
@@ -279,6 +283,39 @@ export function creaClientGrafo({ fetchFn = globalThis.fetch, API = (p) => p, se
     if (s?.tipo !== 'run') throw new Error('preview only for a run');
     return (await leggi(`${delRun(s)}/retry-preview`)).data;
   }
+  /** C3 tappa 3 — di quanto «Alza il tetto» alzerebbe il tetto adesso («quanto serve per finire»): la cifra che il comando porta. */
+  async function anteprimaTetto(s) {
+    if (s?.tipo !== 'run') throw new Error('preview only for a run');
+    return (await leggi(`${delRun(s)}/ceiling-preview`)).data;
+  }
 
-  return Object.freeze({ sorgente, revisione, panoramica, gruppo, passo, output, outputRawUrl, segui, evidenze, comando, anteprimaRiprova, archi, storia, discendenza });
+  /*
+   * ⭐ C3 (09/10/2026) — le azioni della PERSONA su un passo fallito (rotta `…/steps/:nodeId/:azione`). Stessa regola di
+   *   `comando`: un `commandId` per gesto, e un esito ambiguo si chiarisce RILEGGENDO il passo, mai con un secondo POST. Per
+   *   «Rifai con un altro modello» la rilettura non prova niente (il passo riparte e può rifallire): resta «non si sa», detto.
+   */
+  const AZIONI_PASSO = Object.freeze(['mark-done', 'set-aside', 'retry-other-model', 'resume-verify']);
+  const passoRiuscitoDaStato = Object.freeze({
+    'mark-done': (r) => r?.state === 'succeeded' && r?.resolution === 'marked-done',
+    'set-aside': (r) => r?.state === 'set_aside',
+    'retry-other-model': () => false,
+    'resume-verify': () => false, // C3 2b: il passo riparte e può rifallire: la rilettura non prova niente
+  });
+  async function azioneSulPasso(s, nodeId, azione, { summary, model, uuid = () => globalThis.crypto.randomUUID() } = {}) {
+    if (s?.tipo !== 'run' || typeof nodeId !== 'string' || !nodeId || !AZIONI_PASSO.includes(azione)) throw new Error('invalid step action');
+    const corpo = { commandId: uuid(), ...(azione === 'mark-done' ? { summary } : {}), ...(azione === 'retry-other-model' ? { model } : {}) };
+    let risposta = null;
+    try {
+      risposta = await fetchFn(API(`${delRun(s)}/steps/${enc(nodeId)}/${azione}`), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo),
+      });
+    } catch { risposta = null; }
+    const letto = risposta ? await risposta.json().catch(() => null) : null;
+    if (risposta?.ok && letto?.ok) return { ok: true, dati: letto.data ?? null };
+    if (risposta && (letto?.error?.code || risposta.status < 500)) return { ok: false, code: letto?.error?.code ?? null, status: risposta.status };
+    const dopo = await passo(s, nodeId).catch(() => null);
+    return passoRiuscitoDaStato[azione](dopo) ? { ok: true, riletto: true, dati: null } : { ok: false, ambiguo: true };
+  }
+
+  return Object.freeze({ sorgente, revisione, panoramica, gruppo, passo, output, outputRawUrl, segui, evidenze, comando, anteprimaRiprova, anteprimaTetto, azioneSulPasso, archi, storia, discendenza });
 }

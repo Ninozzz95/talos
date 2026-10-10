@@ -91,3 +91,30 @@ test('ECO-S4 l\'eco solo nello stato nativo conta come eco anche per il percorso
   assert.equal(JSON.stringify(pronti).includes('Historical tool calls'), false);
   assert.equal(JSON.stringify(messaggi).includes('Historical tool calls'), true, 'l\'originale non si tocca');
 });
+
+/*
+ * A19 sul desktop (09/10/2026, bugfixer; banco stall-e2e della CLI adattato al server 4176, sessione avvelenata: ROSSO). Il desktop
+ * passa SEMPRE i `contextHooks` del suo adattatore (`talosHarness.desktop-hotfix.mjs`), e col motore spento (`legacyMode`) la sua
+ * `prepare` restituisce i messaggi di `maybeCompactLegacy`, che non passano da `prepareProviderContext`. Il kernel, visto che
+ * `preparedContext.messages` c'è, saltava `withoutEchoedMarker`: le due porte della cura si escludevano a vicenda, e sul desktop
+ * non scattava nessuna delle due. Qui la porta che mancava: dei `contextHooks` che preparano senza ripulire.
+ */
+test('ECO-S5 con dei contextHooks che non ripuliscono (il motore spento del desktop) la richiesta non porta l\'eco, e la storia resta intatta', async (t) => {
+  const cartella = mkdtempSync(join(tmpdir(), 'talos-eco-'));
+  t.after(() => rimuoviCartellaDiProva(cartella));
+  const fornitore = fornitoreCheRegistra();
+  const messaggiIniziali = iniziali(true);
+  const prima = structuredClone(messaggiIniziali);
+  const preparate = [];
+  const contextHooks = { prepare: async ({ messages }) => { const lista = [...messages]; preparate.push(lista); return { messages: lista }; } };
+
+  await talosLavora({ cartella, task: { consegna: 'continua' }, modello: 'z-ai/glm-5.3-flash', chiave: 'k', messaggiIniziali, contextHooks, fetchDiRete: fornitore.fetchDiRete });
+
+  assert.ok(preparate.length > 0, 'la premessa: i contextHooks hanno preparato la richiesta');
+  assert.ok(fornitore.corpi.length > 0);
+  for (const [indice, corpo] of fornitore.corpi.entries()) {
+    assert.equal(JSON.stringify(corpo.messages).includes('Historical tool calls'), false, `richiesta ${indice + 1}: l'eco è ancora nella richiesta al fornitore`);
+  }
+  assert.ok(JSON.stringify(preparate[0]).includes('Historical tool calls'), 'la lista dei contextHooks non si tocca: si ripulisce la copia che parte');
+  assert.deepEqual(messaggiIniziali, prima, 'la storia viva non si tocca');
+});

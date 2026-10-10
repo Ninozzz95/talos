@@ -1,6 +1,9 @@
 import { preparaMisuraDialogo, collegaRidimensionamentoDialoghi } from './dialoghi.js';
 import { t, linguaCorrenteDiT, EVENTO_LINGUA } from './lingua.js';
 import { TESTI } from '../i18n/testi/index.js';
+// C1 (owner 10/10/2026): la panoramica e le schede usano gli stessi dati e le stesse finestre della scheda Contesto della colonna
+import { limiteCheAgisce, percheDelLimite, misuraDellaPanoramica, compattazioniDellaConversazione, cosaHaTenuto, CHIAVI_CATEGORIA } from './contesto-scheda.js';
+import { nodiRichiestaInviata, nodiCosaHaTenuto } from './contesto-finestre.js';
 
 const ACTIVE = new Set(['queued', 'preparing', 'summarizing', 'validating', 'ready', 'paused']);
 const JOB_LABELS = { get queued() { return t('chat.context.job.queued'); }, get preparing() { return t('chat.context.job.preparing'); }, get summarizing() { return t('chat.context.job.compacting'); }, get validating() { return t('chat.context.job.validating'); }, get ready() { return t('chat.context.job.publishing'); }, get committed() { return t('chat.context.job.updated'); }, get paused() { return t('chat.context.job.paused'); }, get cancelled() { return t('chat.context.job.cancelled'); }, get failed() { return t('chat.context.job.failed'); } };
@@ -69,7 +72,7 @@ const MOUNTED = new WeakMap();
  *   compatta(sessionId) → Promise<{ stato: 'riassunta'|'invariata'|'errore'|'in-corso', messaggio? }> }.
  */
 /** Mount the canonical #veloContesto markup. Transport, session and snapshots are injected. */
-export function montaContextCompactor(root, { client, sessionId, state = null, document: doc = root?.ownerDocument ?? globalThis.document, onState, onClose, modalManager = null, translate = translateDefault, legacy = null } = {}) {
+export function montaContextCompactor(root, { client, sessionId, state = null, document: doc = root?.ownerDocument ?? globalThis.document, onState, onClose, modalManager = null, translate = translateDefault, legacy = null, scheda = null, richiesta = null, esporta = null } = {}) {
   if (MOUNTED.has(root)) return MOUNTED.get(root);
   if (!root?.querySelector('[data-context-body]') || !client) throw new TypeError('ContextCompactor richiede markup canonico e client.');
   const win = doc.defaultView ?? globalThis.window;
@@ -82,6 +85,11 @@ export function montaContextCompactor(root, { client, sessionId, state = null, d
   const inertBefore = new Map();
   // modo semplice (trial spento, host con `legacy`): misura dell'ultima richiesta, conferma aperta, esito dell'ultima compattazione
   let modoLegacy = false, confermaLegacy = false, esitoLegacy = null, misuraLegacy = null;
+  // C1 (10/10): la scheda aperta, e le chiavi che evitano di ridisegnare ciò che non è cambiato
+  let schedaAttiva = 'tenuto', tenutoKey = '', richiestaLetta = 0;
+  const SCHEDE_DEL_MOTORE = new Set(['fatti', 'versioni', 'impostazioni']);
+  // lo stesso formato della colonna (inspector.js): un numero solo in tutta l'app, anche nell'arrotondamento
+  const kilo = (n) => { if (n === null || n === undefined) return '—'; const v = Number(n); if (!Number.isFinite(v)) return '—'; const f = new Intl.NumberFormat(linguaCorrenteDiT() === 'en' ? 'en-US' : 'it-IT', { maximumFractionDigits: 1 }); return v >= 1000 ? `${f.format(v / 1000)}k` : String(Math.round(v)); };
   const num = value => number(value) ? new Intl.NumberFormat(linguaCorrenteDiT() === 'en' ? 'en-US' : 'it-IT').format(value) : t('chat.common.notAvailable');
   function element(tag, text, className) { const node = doc.createElement(tag); if (text != null) node.textContent = text; if (className) node.className = className; return node; }
   function button(text, action) { const node = element('button', text, 'talos-button talos-button--ghost talos-button--sm'); node.type = 'button'; node.dataset.contextMutation = ''; node.disabled = busy || !snapshot; node.addEventListener('click', action); return node; }
@@ -93,7 +101,7 @@ export function montaContextCompactor(root, { client, sessionId, state = null, d
     const s = snapshot?.settings;
     q('model-mode').value = s?.model?.mode ?? 'follow-session';
     q('provider').value = s?.model?.provider ?? ''; q('model').value = s?.model?.model ?? '';
-    q('trigger').value = String((s?.triggerRatio ?? .75) * 100); q('target').value = String((s?.targetRatio ?? .55) * 100);
+    q('trigger').value = String(Math.round((s?.triggerRatio ?? .75) * 100)); q('target').value = String(Math.round((s?.targetRatio ?? .55) * 100)); // 0.55*100 = 55.00000000000001 (foto C1, 10/10)
     q('recent').value = String(s?.retainRecentTurns ?? 2); q('focus').value = s?.focus ?? '';
     q('semantic').checked = s?.semanticSearch !== false; q('native').checked = s?.nativeMode === 'qualified';
     q('explicit-model').hidden = q('model-mode').value !== 'explicit';
@@ -158,10 +166,10 @@ export function montaContextCompactor(root, { client, sessionId, state = null, d
     const view = descriviContextCompactor(snapshot); const m = view.measurement;
     for (const node of root.querySelectorAll('[data-context-label]')) node.textContent = translate(node.dataset.contextLabel);
     if (!busy) q('auto').checked = view.auto;
-    q('meter').hidden = !m.known; if (m.known) { q('meter').value = Math.min(m.inputTokens, m.windowTokens); q('meter').max = m.windowTokens; q('meter').setAttribute('aria-valuetext', `${num(m.inputTokens)} / ${num(m.windowTokens)}`); }
-    q('measurement').textContent = m.known ? t('chat.context.measure.tokensWithMethod', { token: num(m.inputTokens), finestra: num(m.windowTokens), metodo: m.methodLabel }) : t('chat.context.measure.unavailable');
-    q('input').textContent = num(m.inputTokens); q('window').textContent = num(m.windowTokens); q('reserve').textContent = num(m.responseReserve);
+    if (!modoLegacy) renderPanoramica({ usati: m.known ? m.inputTokens : null, limite: limiteCheAgisce({ budget: snapshot?.budget ?? null, politica: scheda?.()?.politica ?? null }), metodo: m.known ? m.methodLabel : null });
     q('job').textContent = view.jobLabel;
+    // C1 (owner 10/10, «non troppo affollata»): la riga del lavoro c'è solo quando ha qualcosa da dire, non «nessuna compattazione» fisso
+    q('job').hidden = !(ACTIVE.has(view.job?.state) || view.job?.state === 'failed');
     const p = view.job?.progress; q('progress').textContent = number(p?.completed) && number(p?.total) && p.total > 0 && p.completed <= p.total ? t('chat.context.progress.completedOf', { n: num(p.completed), totale: num(p.total) }) : '';
     const progress = q('progress-bar');
     progress.hidden = !ACTIVE.has(view.job?.state);
@@ -181,7 +189,9 @@ export function montaContextCompactor(root, { client, sessionId, state = null, d
     q('native-help').hidden = snapshot?.capabilities?.nativeCompaction === true;
     root.setAttribute('aria-busy', String(busy));
     root.querySelector('[data-context-close]').setAttribute('aria-label', t('chat.common.close'));
-    if (modoLegacy) renderLegacy(); else { delete root.dataset.contextModo; root.querySelector('[data-context-conferma-legacy]')?.remove(); }
+    if (modoLegacy) renderLegacy(); else delete root.dataset.contextModo;
+    renderConferma();
+    renderSchede(); renderTenuto();
     // `doc.activeElement === focused`: se il render ha già spostato il fuoco (la conferma lo porta su «Sì, compatta»), non si ruba
     if (opened && focused?.disabled && root.contains(focused) && doc.activeElement === focused) q('title').focus({ preventScroll: true });
   }
@@ -192,15 +202,11 @@ export function montaContextCompactor(root, { client, sessionId, state = null, d
     const m = misuraLegacy;
     const input = number(m?.inputTokens) && m.inputTokens > 0 ? m.inputTokens : null;
     const finestra = number(m?.windowTokens) && m.windowTokens > 0 ? m.windowTokens : null;
-    const known = input != null && finestra != null;
-    q('meter').hidden = !known;
-    if (known) { q('meter').max = finestra; q('meter').value = Math.min(input, finestra); q('meter').setAttribute('aria-valuetext', `${num(input)} / ${num(finestra)}`); }
-    const soglia = number(m?.soglia) && m.soglia > 0 ? ` · ${t('chat.context.measure.autoAbove')} ${num(m.soglia)}` : '';
-    q('measurement').textContent = input == null ? t('chat.context.measure.unavailable')
-      : t('chat.context.measure.tokensLegacy', { token: known ? `${num(input)} / ${num(finestra)}` : num(input), misura: t('chat.context.measure.lastRequest'), soglia });
-    q('input').textContent = num(input); q('window').textContent = num(finestra);
+    const soglia = number(m?.soglia) && m.soglia > 0 ? m.soglia : null;
+    renderPanoramica({ usati: input, limite: soglia ? { soglia, finestra: finestra && finestra >= soglia ? finestra : null, fonte: m?.fonte ?? null } : null, metodo: input == null ? null : t('chat.context.measure.lastRequest') });
     const inCorso = Boolean(legacy?.inCorso?.(sessionId));
     const errore = !inCorso && esitoLegacy?.stato === 'errore';
+    q('job').hidden = !inCorso && !esitoLegacy;
     q('job').textContent = inCorso ? t('chat.context.summarizing')
       : esitoLegacy?.stato === 'riassunta' ? t('chat.context.legacy.summarizedWithUpdate')
         : esitoLegacy?.stato === 'invariata' ? t('chat.context.legacy.unchanged')
@@ -209,20 +215,101 @@ export function montaContextCompactor(root, { client, sessionId, state = null, d
     const bar = q('progress-bar'); bar.hidden = !inCorso; bar.removeAttribute('value'); bar.setAttribute('aria-label', t('chat.context.summaryInProgress'));
     q('job-error').hidden = !errore; q('job-error').textContent = errore ? (esitoLegacy.messaggio || t('chat.common.operationFailed')) : '';
     q('start').disabled = busy || inCorso || confermaLegacy || !sessionId;
+  }
+  /* C1 (owner 10/10/2026, «Pulsante in panoramica, con conferma»): «Compatta ora…» chiede conferma in linea in TUTTI E DUE i modi —
+     prima solo il legacy la chiedeva, il motore partiva al clic. Un'azione che riassume la conversazione non parte da un clic solo. */
+  function renderConferma() {
+    const inCorso = modoLegacy ? Boolean(legacy?.inCorso?.(sessionId)) : ACTIVE.has(descriviContextCompactor(snapshot).job?.state);
+    if (confermaLegacy) q('start').disabled = true;
     let blocco = root.querySelector('[data-context-conferma-legacy]');
     if (!confermaLegacy || inCorso) { blocco?.remove(); return; }
     if (blocco) return;
     blocco = element('div', null, 'talos-context__conflict'); blocco.dataset.contextConfermaLegacy = '';
     blocco.setAttribute('role', 'group'); blocco.setAttribute('aria-label', t('chat.context.compactNow'));
-    const testo = element('p', t('chat.context.legacy.confirm'));
+    const testo = element('p', modoLegacy ? t('chat.context.legacy.confirm') : t('chat.context.overview.confirm'));
     const azioni = element('div', null, 'talos-context__actions');
     const si = element('button', t('chat.context.legacy.confirmYes'), 'talos-button talos-button--primary'); si.type = 'button'; si.dataset.contextConfermaSi = '';
     const no = element('button', t('chat.common.cancel'), 'talos-button talos-button--ghost'); no.type = 'button'; no.dataset.contextConfermaNo = '';
-    si.addEventListener('click', () => { void confermaCompattazioneLegacy(); });
+    si.addEventListener('click', () => {
+      if (modoLegacy) { void confermaCompattazioneLegacy(); return; }
+      confermaLegacy = false; mutate(() => client.startCompaction(requestOptions({ kind: 'compact' })));
+    });
     no.addEventListener('click', () => { confermaLegacy = false; render(); q('start').focus({ preventScroll: true }); });
     azioni.append(si, no); blocco.append(testo, azioni);
-    q('start').parentElement.after(blocco);
+    q('overview').querySelector('.talos-cm__testa').after(blocco);
     si.focus({ preventScroll: true });
+  }
+  /* ⭐ C1 — LA PANORAMICA: il numero sul limite che agisce, il perché, la barra sulla scala della finestra (categorie · liberi · tacca ·
+     riservati), la legenda, le compattazioni. Gli stessi dati della scheda Contesto della colonna: un numero solo in tutta l'app. */
+  function renderPanoramica({ usati = null, limite = null, metodo = null } = {}) {
+    const dati = scheda?.() ?? null;
+    const p = misuraDellaPanoramica({ usati, limite, ripartizione: dati?.ripartizione ?? null });
+    const testa = q('headline');
+    if (p && p.percentualeDelLimite !== null) testa.textContent = t('chat.context.overview.headline', { usati: `${p.stimato ? '~' : ''}${kilo(p.occupati)}`, limite: kilo(limite.soglia), percento: new Intl.NumberFormat(linguaCorrenteDiT() === 'en' ? 'en-US' : 'it-IT', { maximumFractionDigits: 1 }).format(p.percentualeDelLimite) });
+    else if (number(usati) && usati > 0) testa.textContent = t('chat.context.overview.headlineNoLimit', { usati: kilo(usati) });
+    else testa.textContent = t('chat.context.overview.headlineUnknown');
+    testa.toggleAttribute('data-oltre', Boolean(p?.oltre));
+    const perche = percheDelLimite(limite);
+    const frase = perche ? t(perche.chiave, { soglia: kilo(perche.soglia), finestra: perche.finestra === null ? '—' : kilo(perche.finestra) }) : '';
+    const conMaiuscola = (x) => (x ? `${x.charAt(0).toLocaleUpperCase()}${x.slice(1)}${/[.!?]$/.test(x) ? '' : '.'}` : '');
+    q('measurement').textContent = [frase, conMaiuscola(metodo)].filter(Boolean).join(' ') || t('chat.context.measure.unavailable');
+    const barra = q('gauge');
+    barra.hidden = !p;
+    barra.toggleAttribute('data-oltre', Boolean(p?.oltre));
+    const legenda = q('legend');
+    if (!p) { barra.replaceChildren(); legenda.replaceChildren(); barra.removeAttribute('aria-label'); }
+    else {
+      const pezzi = p.segmenti.map((s) => { const n = element('span', null, `talos-contesto__fetta talos-contesto__fetta--${s.id}`); n.style.width = `${s.pct}%`; n.dataset.fetta = s.id; return n; });
+      // senza la richiesta vera non ci sono categorie: l'occupato è UN pezzo, con l'accento del tema (CTX-UI-METER-IN-PALETTE)
+      if (!p.segmenti.length && p.pctUsati > 0) { const n = element('span', null, 'talos-cm__occupato'); n.style.width = `${p.pctUsati}%`; pezzi.push(n); }
+      if (p.pctLiberi > 0) { const n = element('span', null, 'talos-cm__libero'); n.style.width = `${p.pctLiberi}%`; pezzi.push(n); }
+      if (p.pctRiservatiVisibili > 0) { const n = element('span', null, 'talos-cm__riservato'); n.style.width = `${p.pctRiservatiVisibili}%`; n.title = t('chat.context.overview.reservedHint'); pezzi.push(n); }
+      if (p.tacca !== null) { const n = element('span', null, 'talos-cm__tacca'); n.style.left = `${p.tacca}%`; n.setAttribute('aria-hidden', 'true'); pezzi.push(n); }
+      barra.replaceChildren(...pezzi);
+      barra.setAttribute('aria-label', t('chat.context.overview.bar', { usati: `${p.stimato ? '~' : ''}${kilo(p.occupati)}`, limite: kilo(limite.soglia), liberi: p.liberi === null ? '—' : kilo(p.liberi), riservati: p.riservati === null ? '—' : kilo(p.riservati) }));
+      const voce = (classe, nome, valore, titolo = null) => { const li = element('li'); const c = element('span', null, `talos-cm__campione ${classe}`); c.setAttribute('aria-hidden', 'true'); li.append(c, element('span', nome), element('b', valore)); if (titolo) li.title = titolo; return li; };
+      legenda.replaceChildren(
+        ...p.segmenti.map((s) => voce(`talos-contesto__fetta--${s.id}`, t(CHIAVI_CATEGORIA[s.id]), `~${kilo(s.tokens)}`)),
+        ...(p.liberi !== null ? [voce('talos-cm__libero', p.oltre ? t('chat.context.overview.over', { n: kilo(p.occupati - limite.soglia) }) : t('chat.context.overview.free'), p.oltre ? '' : kilo(p.liberi))] : []),
+        ...(p.riservati !== null ? [voce('talos-cm__riservato', t('chat.context.overview.reserved'), kilo(p.riservati), t('chat.context.overview.reservedHint'))] : []),
+      );
+    }
+    const c = compattazioniDellaConversazione({ motore: dati?.motore ?? (modoLegacy ? null : snapshot ? { jobs: snapshot.jobs, activeVersion: snapshot.activeVersion } : null), legacy: dati?.legacy ?? null });
+    q('compactions').textContent = !c || c.numero === 0 ? t('processi.inspector.compactionsNone')
+      : [String(c.numero), c.ultimaAl ? new Date(c.ultimaAl).toLocaleString(linguaCorrenteDiT() === 'en' ? 'en-GB' : 'it-IT', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : null,
+        // i token solo come «prima → dopo»: un «21k» da solo non dice cosa sia (foto C1, 10/10)
+        c.tokenDopo !== null && c.tokenPrima !== null ? `${kilo(c.tokenPrima)} → ${kilo(c.tokenDopo)}` : null].filter(Boolean).join(' · ');
+  }
+  /* C1 — LE SCHEDE: una alla volta (APG «Tabs», attivazione automatica con le frecce). Nel legacy quelle del motore non ci sono, e una
+     riga lo dice; se la scheda aperta sparisce si torna alla prima. */
+  function renderSchede() {
+    const schede = [...root.querySelectorAll('[data-context-tab]')];
+    for (const s of schede) s.hidden = modoLegacy && SCHEDE_DEL_MOTORE.has(s.dataset.contextTab);
+    if (schede.find((s) => s.dataset.contextTab === schedaAttiva)?.hidden) schedaAttiva = 'tenuto';
+    for (const s of schede) { const attiva = s.dataset.contextTab === schedaAttiva; s.setAttribute('aria-selected', String(attiva)); s.tabIndex = attiva ? 0 : -1; }
+    for (const pannello of root.querySelectorAll('[data-context-panel]')) pannello.hidden = pannello.dataset.contextPanel !== schedaAttiva;
+    q('legacy-note').hidden = !modoLegacy;
+  }
+  function apriScheda(chiave, { fuoco = false } = {}) {
+    schedaAttiva = chiave; renderSchede();
+    if (fuoco) root.querySelector(`[data-context-tab="${chiave}"]`)?.focus();
+    if (chiave === 'richiesta') void caricaRichiesta();
+  }
+  function renderTenuto() {
+    const dati = scheda?.() ?? null;
+    const tenuto = cosaHaTenuto({ activeVersion: modoLegacy ? null : snapshot?.activeVersion ?? null, facts: modoLegacy ? [] : snapshot?.facts ?? [], recordLegacy: dati?.recordLegacy ?? null });
+    const key = JSON.stringify([tenuto, linguaCorrenteDiT()]); if (key === tenutoKey) return; tenutoKey = key;
+    q('kept').replaceChildren(...nodiCosaHaTenuto(doc, tenuto));
+  }
+  async function caricaRichiesta() {
+    if (typeof richiesta !== 'function' || !sessionId) { q('request').replaceChildren(...nodiRichiestaInviata(doc, null)); return; }
+    const io = ++richiestaLetta, current = epoch;
+    q('request').replaceChildren(element('p', t('chat.context.loading'), 'talos-muted'));
+    let ultima = null, errore = false;
+    try { ultima = await richiesta(sessionId); } catch { errore = true; }
+    if (io !== richiestaLetta || current !== epoch || destroyed) return;
+    q('request').replaceChildren(...(errore ? [element('p', t('processi.inspector.sentRequestFailed'), 'talos-muted')]
+      : nodiRichiestaInviata(doc, ultima, { ora: (iso) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString(linguaCorrenteDiT() === 'en' ? 'en-GB' : 'it-IT'); } })));
   }
   async function aggiornaMisuraLegacy(current) {
     let misura = null;
@@ -243,7 +330,9 @@ export function montaContextCompactor(root, { client, sessionId, state = null, d
     esitoLegacy = esito?.stato === 'in-corso' ? null : (esito ?? null);
     render(); void aggiornaMisuraLegacy(current);
   }
-  function schedule() { clearTimeout(timer); if (opened && !destroyed && ACTIVE.has(descriviContextCompactor(snapshot).job?.state)) timer = setTimeout(() => refresh(), 1200); }
+  /* C1 (owner 10/10/2026, «via Aggiorna, si aggiorna da sola»): aperta, la finestra si rilegge in silenzio — ogni 1,2 s con un lavoro in
+     corso, ogni 4 s altrimenti (un fatto o una versione cambiati da un altro processo arrivano senza un pulsante). */
+  function schedule() { clearTimeout(timer); if (opened && !destroyed && available && !modoLegacy) timer = setTimeout(() => refresh({ quiet: true }), ACTIVE.has(descriviContextCompactor(snapshot).job?.state) ? 1200 : 4000); }
   async function refresh({ quiet = false } = {}) {
     if (destroyed || busy) return null;
     if (!sessionId) { available = false; render(); say(t('chat.context.openConversationFirst')); return null; }
@@ -253,16 +342,21 @@ export function montaContextCompactor(root, { client, sessionId, state = null, d
       const [next, history] = await Promise.all([client.getContextState(requestOptions()), client.listContextVersions(requestOptions())]);
       if (current !== epoch || ticket !== sequence || destroyed) return null;
       if (next?.sessionId !== sessionId || !Array.isArray(history?.versions)) throw new Error('CTX_INVALID_RESPONSE');
-      snapshot = structuredClone(next); available = true; modoLegacy = false; confermaLegacy = false; esitoLegacy = null; versions = history.versions.filter(v => v.sessionId === sessionId); render();
+      q('retry').hidden = true;
+      /* Review del bugfixer (Y1, misurato): la rilettura ogni 4 s azzerava la conferma aperta di «Compatta ora…» — spariva da sola.
+         Si azzera solo passando dal modo legacy al motore (lì la conferma era di un'altra cosa). */
+      if (modoLegacy) { confermaLegacy = false; esitoLegacy = null; }
+      snapshot = structuredClone(next); available = true; modoLegacy = false; versions = history.versions.filter(v => v.sessionId === sessionId); render();
       if (!quiet) say(''); onState?.(structuredClone(snapshot)); schedule(); return snapshot;
     } catch (error) {
       if (current !== epoch || ticket !== sequence || destroyed || error.name === 'AbortError') return null;
       if (error.code === 'CTX_NOT_ENABLED' && legacy) {
-        available = false; modoLegacy = true; render(); clearTimeout(timer);
-        say(t('chat.context.legacy.simpleMode'));
+        available = false; modoLegacy = true; q('retry').hidden = true; render(); clearTimeout(timer);
+        say(''); // C1 (10/10): lo dice la riga sopra le schede, una volta sola
         void aggiornaMisuraLegacy(current); return null;
       }
-      modoLegacy = false; available = false; render(); say(error.code === 'CTX_NOT_ENABLED' ? t('chat.context.notEnabled') : t('chat.context.unavailable'), error.code !== 'CTX_NOT_ENABLED'); clearTimeout(timer); return null;
+      modoLegacy = false; available = false; render(); say(error.code === 'CTX_NOT_ENABLED' ? t('chat.context.notEnabled') : t('chat.context.unavailable'), error.code !== 'CTX_NOT_ENABLED');
+      q('retry').hidden = error.code === 'CTX_NOT_ENABLED'; clearTimeout(timer); return null;
     }
   }
   async function mutate(action, success) {
@@ -281,14 +375,25 @@ export function montaContextCompactor(root, { client, sessionId, state = null, d
         else say(t('chat.context.operationFailedRefresh'), true);
       }
       render();
+      schedule(); // review del bugfixer (Y2, misurato): `mutate` ferma il timer, e un rifiuto lo lasciava fermo per sempre
     }
   }
   listen(q('auto'), 'change', () => { const auto = q('auto').checked; mutate(() => client.updateContextSettings(requestOptions({ patch: { auto } }))); });
-  listen(q('refresh'), 'click', () => refresh());
   listen(q('start'), 'click', () => {
-    if (modoLegacy) { if (!legacy?.inCorso?.(sessionId)) { confermaLegacy = true; esitoLegacy = null; render(); } return; }
-    mutate(() => client.startCompaction(requestOptions({ kind: 'compact' })));
+    if (modoLegacy ? legacy?.inCorso?.(sessionId) : ACTIVE.has(descriviContextCompactor(snapshot).job?.state)) return;
+    confermaLegacy = true; esitoLegacy = null; render();
   });
+  listen(q('tabs'), 'click', (event) => { const s = event.target.closest('[data-context-tab]'); if (s && !s.hidden) apriScheda(s.dataset.contextTab); });
+  listen(q('tabs'), 'keydown', (event) => {
+    const visibili = [...root.querySelectorAll('[data-context-tab]')].filter((s) => !s.hidden);
+    const i = visibili.findIndex((s) => s.dataset.contextTab === schedaAttiva);
+    const prossima = event.key === 'ArrowRight' ? visibili[(i + 1) % visibili.length] : event.key === 'ArrowLeft' ? visibili[(i - 1 + visibili.length) % visibili.length]
+      : event.key === 'Home' ? visibili[0] : event.key === 'End' ? visibili.at(-1) : null;
+    if (!prossima) return;
+    event.preventDefault(); apriScheda(prossima.dataset.contextTab, { fuoco: true });
+  });
+  listen(q('export'), 'click', () => { esporta?.(); });
+  listen(q('retry'), 'click', () => { q('retry').hidden = true; void refresh(); });
   listen(q('regenerate'), 'click', () => mutate(() => client.startCompaction(requestOptions({ kind: 'regenerate' }))));
   listen(q('cancel'), 'click', () => mutate(() => client.cancelCompaction(requestOptions({ jobId: descriviContextCompactor(snapshot).job.id }))));
   listen(q('resume'), 'click', () => mutate(() => client.resumeCompaction(requestOptions({ jobId: descriviContextCompactor(snapshot).job.id }))));
@@ -324,18 +429,19 @@ export function montaContextCompactor(root, { client, sessionId, state = null, d
     if (modalManager) modalManager.activate(root, { content: root.querySelector('[role=dialog]') || root, opener: trigger, initialFocus: q('title'), requestClose: close });
     else q('title').focus();
     refresh();
+    if (schedaAttiva === 'richiesta') void caricaRichiesta();
   }
   listen(root, 'click', event => { if (event.target === root || event.target.closest('[data-context-close]')) close(); });
   listen(doc, 'keydown', event => {
     if (!opened || destroyed || modalManager) return;
     if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(); }
     if (event.key !== 'Tab') return;
-    const items = [...root.querySelectorAll('button,input,textarea,select,summary,[tabindex="0"]')].filter(node => !node.disabled && !node.closest('[hidden]') && node.getClientRects().length);
+    const items = [...root.querySelectorAll('button,input,textarea,select,[tabindex="0"]')].filter(node => !node.disabled && !node.closest('[hidden]') && node.getClientRects().length);
     const first = items[0], last = items.at(-1);
     if (event.shiftKey && (doc.activeElement === first || doc.activeElement === q('title'))) { event.preventDefault(); last?.focus(); }
     else if (!event.shiftKey && doc.activeElement === last) { event.preventDefault(); first?.focus(); }
   });
-  const languageChange = () => { factsKey = versionsKey = sourcesKey = ''; render(); };
+  const languageChange = () => { factsKey = versionsKey = sourcesKey = tenutoKey = ''; render(); if (schedaAttiva === 'richiesta') void caricaRichiesta(); };
   listen(win, EVENTO_LINGUA, languageChange);
   const api = {
     refresh, open, close,
@@ -345,7 +451,7 @@ export function montaContextCompactor(root, { client, sessionId, state = null, d
     setSession(nextSession, nextState = null) {
       ++epoch; ++sequence; requestController?.abort(); clearTimeout(timer); requestController = new AbortController(); busy = false; sessionId = nextSession;
       modoLegacy = false; confermaLegacy = false; esitoLegacy = null; misuraLegacy = null;
-      snapshot = nextState?.sessionId === sessionId ? structuredClone(nextState) : null; available = Boolean(snapshot); versions = []; settingsDirty = false; factsKey = versionsKey = sourcesKey = ''; resetEditor(); q('source-detail').hidden = true; q('source-text').textContent = ''; say(''); render();
+      snapshot = nextState?.sessionId === sessionId ? structuredClone(nextState) : null; available = Boolean(snapshot); versions = []; settingsDirty = false; factsKey = versionsKey = sourcesKey = tenutoKey = ''; ++richiestaLetta; resetEditor(); q('source-detail').hidden = true; q('source-text').textContent = ''; say(''); render();
       if (opened) return refresh();
     },
     destroy() { close(); destroyed = true; ++epoch; requestController?.abort(); clearTimeout(timer); removers.forEach(remove => remove()); MOUNTED.delete(root); },

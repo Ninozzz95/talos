@@ -23,7 +23,7 @@ const CHIAVE_PAROLA_PASSO = Object.freeze({
   leased: 'agenti.stepState.starting', running: 'agenti.stepState.running', retry_wait: 'agenti.stepState.retryWait',
   waiting_human: 'agenti.stepState.waitingForYou', reconciling: 'agenti.stepState.verifying', uncertain: 'agenti.stepState.toVerify',
   succeeded: 'agenti.stepState.done', failed: 'agenti.stepState.failed', cancelled: 'agenti.stepState.cancelled',
-  skipped: 'agenti.stepState.skipped', superseded: 'agenti.stepState.superseded',
+  skipped: 'agenti.stepState.skipped', superseded: 'agenti.stepState.superseded', set_aside: 'agenti.stepState.setAside',
 });
 /** Lo stato di un passo IN PAROLE, nella lingua corrente (le stesse parole di `STATI_PASSO`, che restano la fonte dei toni). */
 export const parolaDelPasso = (stato) => tr(CHIAVE_PAROLA_PASSO[stato] ?? 'agenti.stepState.unknown');
