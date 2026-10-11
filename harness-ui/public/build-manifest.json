@@ -8,8 +8,8 @@
   "files": [
     {
       "path": "app.js",
-      "bytes": 5213803,
-      "sha256": "b0e3b3e27fdc4e7ddf71e438264c652eccf8a652be50da25bd303aa8053a7324"
+      "bytes": 5219308,
+      "sha256": "10210e6251ba2b09c9488d9531bf263a1d47384a8231d5ddbedc3aae3d1c4204"
     },
     {
       "path": "asset-manifest.json",
@@ -78,8 +78,8 @@
     },
     {
       "path": "lettore-foglio.js",
-      "bytes": 1738082,
-      "sha256": "0b29286cfda573b795721a72f344472ff998da95286bd388842ffd10dbef3884"
+      "bytes": 1742350,
+      "sha256": "f409450694959bbdcb79fb2103b2fd2acbbf1878a5f455043e007712fd508d7b"
     },
     {
       "path": "lettore-ospite-documento.js",
@@ -88,8 +88,8 @@
     },
     {
       "path": "lettore-ospite-presentazione.js",
-      "bytes": 4369194,
-      "sha256": "927bb087b077ecf0d1919029c2e0abc2a70db95d654b8f4a3f181a09bb647e81"
+      "bytes": 4373462,
+      "sha256": "f5c1abab80d616ab189aa49b411981268c926fab5f02a26a9b08024ecd0c96da"
     },
     {
       "path": "styles.css",

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { generateKeyPairSync } from 'node:crypto';
 import { firmaManifesto, sha512Base64 } from '../firma-aggiornamenti.mjs';
 import {
-  INTERVALLO_MS, RITARDO_PRIMO_CONTROLLO_MS, confrontaVersioni, creaAggiornatore, leggiManifestoVerificato, sceltaRelease,
+  INTERVALLO_MS, RITARDO_PRIMO_CONTROLLO_MS, confrontaVersioni, creaAggiornatore, AVVISO_PRIMA_DELL_INSTALLAZIONE_MS, leggiManifestoVerificato, sceltaRelease,
 } from '../aggiornamenti.mjs';
 
 /*
@@ -246,12 +246,21 @@ test('AGG-INTERRUTTORE-01: spento ⇒ nessun controllo da solo, «Controlla ora�
 });
 
 test('AGG-RIAVVIA-01: «Riavvia ora» installa solo un aggiornamento scaricato e verificato', async () => {
-  const { a, updater } = aggiornatore();
+  const { a, t, updater } = aggiornatore();
   assert.equal(a.riavviaOra(), false);
   assert.deepEqual(updater.installati, []);
+  assert.equal(t.attivi().filter((x) => x.ms === AVVISO_PRIMA_DELL_INSTALLAZIONE_MS).length, 0, 'senza aggiornamento pronto niente da pianificare');
   await a.controlla({ manuale: true });
   assert.equal(a.riavviaOra(), true);
-  assert.deepEqual(updater.installati, [[true, true]]);
+  /* owner 11/10/2026 («sembrava disinstallata»): prima la banda lo dice, poi l'installer VISIBILE (false) che riapre TALOS (true) */
+  assert.equal(a.stato().installazione, true, 'la banda sa che sta per partire l’installazione');
+  assert.deepEqual(updater.installati, [], 'non subito: prima si legge l’avviso');
+  const avviso = t.attivi().filter((x) => x.ms === AVVISO_PRIMA_DELL_INSTALLAZIONE_MS);
+  assert.equal(avviso.length, 1);
+  assert.equal(a.riavviaOra(), true, 'un secondo clic risponde sì…');
+  assert.equal(t.attivi().filter((x) => x.ms === AVVISO_PRIMA_DELL_INSTALLAZIONE_MS).length, 1, '…ma non pianifica un secondo installer');
+  avviso[0].fn();
+  assert.deepEqual(updater.installati, [[false, true]], 'installer visibile, e TALOS si riapre da solo');
 });
 
 test('AGG-ROBUSTO-01: impostazioni che non si salvano e notifiche che lanciano non fermano l aggiornatore', async () => {

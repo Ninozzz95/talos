@@ -57,3 +57,17 @@ test('AGG-FRASI-05: «Riavvia ora» conta i giri aperti dall elenco del server; 
   assert.equal(fraseConfermaRiavvio(3), '3 sessioni stanno lavorando: riavviare le interrompe.');
   assert.match(fraseConfermaRiavvio(null), /^Non riesco a sapere/);
 });
+
+test('AGG-FRASI-05 (owner 11/10/2026, «sembrava disinstallata»): partito «Riavvia ora», la banda dice che TALOS si chiude, si vede l’installazione e si riapre da solo', async () => {
+  const { impostaLingua } = await import('../../src/components/lingua.js');
+  const inCorso = { pronto: { versione: '0.1.28' }, automatici: true, installazione: true };
+  try {
+    impostaLingua('it');
+    assert.equal(fraseBanda(inCorso), 'Installo TALOS 0.1.28: TALOS si chiude, l’installazione mostra la sua barra e TALOS si riapre da solo.');
+    assert.equal(fraseStato({ ...inCorso, attivo: true, stato: 'fermo' }), fraseBanda(inCorso), 'la scheda delle Impostazioni dice lo stesso');
+    impostaLingua('en');
+    assert.equal(fraseBanda(inCorso), 'Installing TALOS 0.1.28: TALOS closes, the installer shows its progress, and TALOS reopens by itself.');
+    // al contrario: senza la partenza la frase resta quella di sempre
+    assert.equal(fraseBanda({ ...inCorso, installazione: false }), 'TALOS 0.1.28 is ready. It installs when you close the app.');
+  } finally { impostaLingua('it'); }
+});

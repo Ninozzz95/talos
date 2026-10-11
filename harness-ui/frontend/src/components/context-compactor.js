@@ -43,7 +43,7 @@ export function descriviContextCompactor(state) {
   const jobs = Array.isArray(state?.jobs) ? state.jobs : [];
   const job = jobs.find(j => ACTIVE.has(j.state)) ?? [...jobs].sort((a, b) => String(b.updatedAt ?? b.createdAt).localeCompare(String(a.updatedAt ?? a.createdAt)))[0] ?? null;
   return {
-    measurement: { known, inputTokens: number(m?.inputTokens) ? m.inputTokens : null, windowTokens: number(m?.windowTokens) ? m.windowTokens : null, responseReserve: number(m?.responseReserve) ? m.responseReserve : null,
+    measurement: { known, method: typeof m?.method === 'string' ? m.method : null, inputTokens: number(m?.inputTokens) ? m.inputTokens : null, windowTokens: number(m?.windowTokens) ? m.windowTokens : null, responseReserve: number(m?.responseReserve) ? m.responseReserve : null,
       ratio: known ? m.inputTokens / m.windowTokens : null, exact, current, measuredAt: meta?.measuredAt ?? null,
       methodLabel: `${method}${known && m?.method !== 'heuristic' ? ` (${exact ? t('chat.context.measure.exact') : t('chat.context.measure.estimate')})` : ''}${oraMisura ? ` · ${t('chat.context.measure.measuredAt')} ${oraMisura}` : ''}${known && dichiaraFreschezza && !current ? ` · ${t('chat.context.measure.stale')}` : ''}` },
     job, jobLabel: job ? JOB_LABELS[job.state] ?? t('chat.common.notAvailable') : t('chat.context.noCompaction'),

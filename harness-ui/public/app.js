@@ -6911,6 +6911,7 @@ var init_processi = __esm({
         "inspector.catMcp": "Attrezzi MCP",
         "inspector.catConversation": "Conversazione",
         "inspector.windowInUse": "In uso (misurato)",
+        "inspector.windowInUseEstimate": "In uso (stimato)",
         "inspector.windowBeforeCompaction": "Prima della compattazione",
         "inspector.windowOver": "oltre di {n}",
         "inspector.compactionsCount": "Compattazioni",
@@ -7201,6 +7202,7 @@ var init_processi = __esm({
         "inspector.catMcp": "MCP tools",
         "inspector.catConversation": "Conversation",
         "inspector.windowInUse": "In use (measured)",
+        "inspector.windowInUseEstimate": "In use (estimate)",
         "inspector.windowBeforeCompaction": "Before compaction",
         "inspector.windowOver": "over by {n}",
         "inspector.compactionsCount": "Compactions",
@@ -11968,6 +11970,7 @@ var init_varie = __esm({
         "updates.restart.manyRunning": "{n} sessioni stanno lavorando: riavviare le interrompe.",
         "updates.restart.confirmTitle": "Riavviare TALOS adesso?",
         "updates.restart.confirm": "Riavvia lo stesso",
+        "updates.band.installing": "Installo TALOS {version}: TALOS si chiude, l’installazione mostra la sua barra e TALOS si riapre da solo.",
         "updates.band.whatsNew": "Novità",
         "updates.restartNow": "Riavvia ora",
         "updates.band.hide": "Nascondi fino al prossimo avvio",
@@ -12914,6 +12917,7 @@ var init_varie = __esm({
         "updates.restart.manyRunning": "{n} sessions are working: restarting will interrupt them.",
         "updates.restart.confirmTitle": "Restart TALOS now?",
         "updates.restart.confirm": "Restart anyway",
+        "updates.band.installing": "Installing TALOS {version}: TALOS closes, the installer shows its progress, and TALOS reopens by itself.",
         "updates.band.whatsNew": "What’s new",
         "updates.restartNow": "Restart now",
         "updates.band.hide": "Hide until next launch",
@@ -20295,6 +20299,20 @@ var init_server = __esm({
   "src/i18n/testi/server.js"() {
     server_default = {
       it: {
+        "approval.outsideProject.verified": "Vuole scrivere fuori dalla cartella della sessione, in {cartella}. Con «Scrive nel progetto» qui serve il tuo sì.",
+        "approval.outsideProject.unverified": "Non è stato possibile verificare dove finisce «{percorso}»: potrebbe essere fuori dalla cartella della sessione. Con «Scrive nel progetto» qui serve il tuo sì.",
+        "approval.wslRoot.user": "Questo comando gira in {linux} come {utente}, e con i permessi di questa sessione nessuno lo approva: può cambiare tutto il sistema Linux e scrivere sui dischi di Windows. Se lo confermi, vale per tutta la sessione.",
+        "approval.wslRoot.unverifiedUser": "Questo comando gira in {linux} senza che nessuno lo approvi, e non è stato possibile verificare con che utente: potrebbe essere root, cioè cambiare tutto il sistema Linux e scrivere sui dischi di Windows. Se lo confermi, vale per tutta la sessione.",
+        "approval.network.sessionFolder": "La cartella della sessione sta su un computer di rete ({ospite}): aprire i suoi file manda a quel computer le credenziali di Windows. Se lo consenti, vale per tutta la sessione.",
+        "approval.network.link": "Vuole {cosa} attraverso un collegamento ({collegamento}) che porta a un computer di rete ({ospite}): solo aprirlo manda a quel computer le credenziali di Windows. Serve il tuo sì.",
+        "approval.network.listFolder": "Vuole vedere i file di una cartella su un computer di rete ({ospite}): solo aprirla manda a quel computer le credenziali di Windows. Serve il tuo sì.",
+        "approval.network.open": "Vuole {cosa} su un computer di rete ({ospite}): solo aprirlo manda a quel computer le credenziali di Windows. Serve il tuo sì.",
+        "approval.network.action.read": "leggere un file",
+        "approval.network.action.write": "scrivere un file",
+        "approval.network.action.edit": "modificare un file",
+        "approval.network.action.list": "vedere i file di una cartella",
+        "approval.network.action.search": "cercare nei file di una cartella",
+        "approval.network.action.open": "aprire un file",
         "compatibleNotice.temperatureIgnored": "{provider}: la temperatura è gestita dal modello; il valore richiesto non viene inviato.",
         "providerOutcome.silence": "La risposta del fornitore si è interrotta per silenzio prolungato e l’esito della richiesta è incerto. Riprendi esplicitamente quando vuoi continuare: una nuova richiesta può comportare un altro costo.",
         "providerOutcome.interrupted": "La risposta del fornitore si è interrotta e l’esito della richiesta è incerto. Riprendi esplicitamente quando vuoi continuare: una nuova richiesta può comportare un altro costo.",
@@ -20537,6 +20555,20 @@ var init_server = __esm({
         "workspaceSearch.moreResults": "ci sono più risultati di quanti se ne mostrano"
       },
       en: {
+        "approval.outsideProject.verified": "It wants to write outside the session folder, in {cartella}. With «Writes to the project» this needs your yes.",
+        "approval.outsideProject.unverified": "It could not be verified where «{percorso}» ends up: it may be outside the session folder. With «Writes to the project» this needs your yes.",
+        "approval.wslRoot.user": "This command runs in {linux} as {utente}, and with this session's permissions nobody approves it: it can change the whole Linux system and write to the Windows disks. If you confirm it, it applies to the whole session.",
+        "approval.wslRoot.unverifiedUser": "This command runs in {linux} without anyone approving it, and the user could not be verified: it could be root, that is change the whole Linux system and write to the Windows disks. If you confirm it, it applies to the whole session.",
+        "approval.network.sessionFolder": "The session folder is on a network computer ({ospite}): opening its files sends your Windows credentials to that computer. If you allow it, it applies to the whole session.",
+        "approval.network.link": "It wants to {cosa} through a link ({collegamento}) that leads to a network computer ({ospite}): just opening it sends your Windows credentials to that computer. It needs your yes.",
+        "approval.network.listFolder": "It wants to see the files of a folder on a network computer ({ospite}): just opening it sends your Windows credentials to that computer. It needs your yes.",
+        "approval.network.open": "It wants to {cosa} on a network computer ({ospite}): just opening it sends your Windows credentials to that computer. It needs your yes.",
+        "approval.network.action.read": "read a file",
+        "approval.network.action.write": "write a file",
+        "approval.network.action.edit": "edit a file",
+        "approval.network.action.list": "see the files of a folder",
+        "approval.network.action.search": "search the files of a folder",
+        "approval.network.action.open": "open a file",
         "compatibleNotice.temperatureIgnored": "{provider}: temperature is managed by the model; the requested value is not sent.",
         "providerOutcome.silence": "The provider response was interrupted by prolonged silence and the outcome of the request is uncertain. Resume explicitly when you want to continue: a new request may incur another cost.",
         "providerOutcome.interrupted": "The provider response was interrupted and the outcome of the request is uncertain. Resume explicitly when you want to continue: a new request may incur another cost.",
@@ -25087,7 +25119,9 @@ function misuraDellaPanoramica({ usati = null, limite = null, ripartizione = nul
        sommava più del 100% e i riservati venivano tagliati. Nella barra si vede ciò che resta della finestra; la legenda li dice interi. */
     pctRiservatiVisibili: riservati === null ? 0 : pct(Math.max(0, finestra - Math.max(soglia, occupati ?? 0))),
     tacca: finestra ? pct(soglia) : null,
-    percentualeDelLimite: occupati === null ? null : Math.round(occupati / soglia * 1e3) / 10
+    /* owner 11/10/2026 («Troncare in tutti e due»): la stessa regola della scheda Contesto (`inspector.js` `percento`), che tronca
+       perché le sue parti e «Libera» sommino 100 — prima qui si arrotondava, e la stessa misura era «10,9%» qui e «10,8%» là. */
+    percentualeDelLimite: occupati === null ? null : Math.floor(occupati / soglia * 1e3) / 10
   };
 }
 function compattazioniDellaConversazione({ motore = null, legacy = null } = {}) {
@@ -25921,7 +25955,8 @@ function righeFinestraSulLimite({ usage = null, ripartizione = null, limite = nu
   const usati = Number.isFinite(usage?.prompt_tokens) ? usage.prompt_tokens : null;
   const r = ripartizioneSulLimite({ ripartizione, usati, limite });
   const righe = r.voci.map((v) => [t(CHIAVI_CATEGORIA[v.id]), `${kilo(v.tokens)}${v.percentuale === null ? "" : ` · ${percento(v.tokens, limite.soglia)}`}`, "stima"]);
-  righe.push([t("processi.inspector.windowInUse"), r.usati === null ? "—" : `${kilo(r.usati)} · ${percento(r.usati, limite.soglia)}`]);
+  const stimato = usage?.stimato === true;
+  righe.push([t(stimato ? "processi.inspector.windowInUseEstimate" : "processi.inspector.windowInUse"), r.usati === null ? "—" : `${kilo(r.usati)} · ${percento(r.usati, limite.soglia)}`, ...stimato ? ["stima"] : []]);
   righe.push([t("processi.inspector.windowBeforeCompaction"), r.restanti === null ? "—" : r.oltre ? t("processi.inspector.windowOver", { n: kilo(-r.restanti) }) : kilo(r.restanti)]);
   righe.push([t("processi.inspector.windowCache"), storiaInCaricamento && !cacheSessione ? "—" : testoRiusoCache(cacheSessione), "a-capo"]);
   const p = percheDelLimite(limite);
@@ -25932,7 +25967,7 @@ function righeFinestraSulLimite({ usage = null, ripartizione = null, limite = nu
     fette: r.voci.filter((v) => v.percentuale !== null).map((v) => ({ id: v.id, percentuale: v.percentuale })),
     perche: p ? t(p.chiave, { soglia: kilo(p.soglia), finestra: p.finestra === null ? "—" : kilo(p.finestra) }) : "",
     // la card compressa (C1, 10/10): misurato su limite; la percentuale la dice la barra, che da compressa resta (foto: «98k · …» tagliato)
-    anteprima: `${r.usati === null ? "—" : kilo(r.usati)} / ${segno}${kilo(limite.soglia)}`
+    anteprima: `${r.usati === null ? "—" : `${stimato ? "~" : ""}${kilo(r.usati)}`} / ${segno}${kilo(limite.soglia)}`
   };
 }
 function righeCompattazioni({ motore = null, legacy = null, recordLegacy = null, level1 = null, richiestaVista = false } = {}) {
@@ -60179,6 +60214,7 @@ function descriviContextCompactor(state) {
   return {
     measurement: {
       known,
+      method: typeof m?.method === "string" ? m.method : null,
       inputTokens: number(m?.inputTokens) ? m.inputTokens : null,
       windowTokens: number(m?.windowTokens) ? m.windowTokens : null,
       responseReserve: number(m?.responseReserve) ? m.responseReserve : null,
@@ -61067,7 +61103,9 @@ function finestraDiContesto({ misura = null, revisione = null, finestraCatalogo 
         // ⛔ `completion_tokens: 0` non è un dato mancante travestito da zero: `inputTokens`
         //    È GIÀ tutto ciò che occupa la finestra alla prossima richiesta (la risposta del
         //    turno precedente compresa). Sommarci il completion la conterebbe due volte.
-        usage: { prompt_tokens: m.inputTokens, completion_tokens: 0 },
+        /* owner 11/10/2026 («stimato» con la «~»): «misurato» solo se il numero viene dal fornitore o dal motore locale; la stima
+           euristica del motore si dice stima, come fa già il Context Manager (`methodLabel`) */
+        usage: { prompt_tokens: m.inputTokens, completion_tokens: 0, stimato: !["provider", "runtime"].includes(m.method) },
         finestra: m.windowTokens,
         // ⛔ niente ripartizione attrezzi/istruzioni/memoria sopra una misura del motore:
         //    quei token sono GIÀ dentro `inputTokens`, e disegnarli a parte li conta due volte.
@@ -84749,9 +84787,13 @@ ${nota?.contenuto || ""}`.trim(), t("app.notes.copied")),
         if (azione?.contenutoSospetto) frasiVere.push(domandaContenutoSospetto(azione.contenutoSospetto));
         const fraseDelSegreto = azione?.segreto ? testoDelCampo(azione.segreto, "frase") : null;
         if (typeof fraseDelSegreto === "string" && fraseDelSegreto.trim()) frasiVere.push(fraseDelSegreto.trim());
-        if (typeof azione?.wslRoot?.frase === "string" && azione.wslRoot.frase.trim()) frasiVere.push(azione.wslRoot.frase.trim());
-        if (typeof azione?.fuoriDalProgetto?.frase === "string" && azione.fuoriDalProgetto.frase.trim()) frasiVere.push(azione.fuoriDalProgetto.frase.trim());
-        if (typeof azione?.percorsoDiRete?.frase === "string" && azione.percorsoDiRete.frase.trim()) frasiVere.push(azione.percorsoDiRete.frase.trim());
+        const fraseDiCampo = (oggetto4) => {
+          const f = oggetto4 ? testoDelCampo(oggetto4, "frase") : null;
+          return typeof f === "string" && f.trim() ? f.trim() : null;
+        };
+        if (fraseDiCampo(azione?.wslRoot)) frasiVere.push(fraseDiCampo(azione.wslRoot));
+        if (fraseDiCampo(azione?.fuoriDalProgetto)) frasiVere.push(fraseDiCampo(azione.fuoriDalProgetto));
+        if (fraseDiCampo(azione?.percorsoDiRete)) frasiVere.push(fraseDiCampo(azione.percorsoDiRete));
         const trifecta = typeof azione?.trifecta === "string" ? azione.trifecta.trim() : azione?.trifecta === true ? t("app.approval.trifecta") : "";
         if (trifecta) frasiVere.push(trifecta);
         if (frasiVere.length) return frasiVere.join(" ");
@@ -96599,6 +96641,7 @@ function quandoLeggibile(iso, adesso = /* @__PURE__ */ new Date()) {
 function fraseBanda(stato2) {
   const v = stato2?.pronto?.versione;
   if (!v) return null;
+  if (stato2.installazione) return t("varie.updates.band.installing", { version: v });
   return stato2.automatici !== false ? t("varie.updates.band.readyInstallOnClose", { version: v }) : t("varie.updates.band.readyRestart", { version: v });
 }
 function fraseStato(stato2, adesso = /* @__PURE__ */ new Date()) {

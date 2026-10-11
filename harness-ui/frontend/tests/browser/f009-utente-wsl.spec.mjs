@@ -29,13 +29,13 @@ async function guardia(page) {
   return fermate;
 }
 
-async function apriApp(page, tema = 'dark') {
+async function apriApp(page, tema = 'dark', uiLanguage = undefined) {
   await page.setViewportSize({ width: 1920, height: 1080 });
-  await page.addInitScript(({ colorMode }) => {
+  await page.addInitScript(({ colorMode, uiLanguage }) => {
     if (window.top !== window) return;
-    try { localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({ version: 1, appearance: { colorMode, uiFontScale: 'default' }, chat: { model: 'qwen/qwen3.8-flash' } })); }
+    try { localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({ version: 1, appearance: { colorMode, uiFontScale: 'default', ...(uiLanguage ? { uiLanguage } : {}) }, chat: { model: 'qwen/qwen3.8-flash' } })); }
     catch { /* finestra privata */ }
-  }, { colorMode: tema });
+  }, { colorMode: tema, uiLanguage });
   await page.route('**/api/v1/sessions/f009-*/events*', () => { /* VELO-SPEC (08/10/2026): aperto e muto — un corpo che si chiude fa riaprire lo stream, e ogni onopen rimette la chat nella storia */ });
   await page.goto('/');
   await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 8000 }).catch(() => {});
@@ -184,3 +184,31 @@ test('F009-UI-06: l esito di un comando dice «in Linux (WSL) come root»', asyn
   }, ETICHETTA_ROOT);
   await expect(page.locator('#conversation')).toContainText('in Linux (WSL) come root, non su Windows');
 });
+
+/* K4b (11/10/2026, visto sul server di prova della 0.1.26: la carta inglese diceva «Questo comando gira in Linux…») — il kernel manda
+   la frase inglese con chiave e valori; la carta la dice nella lingua dell'interfaccia. */
+for (const [lingua, attesa] of [
+  ['en', "This command runs in Linux (WSL, Ubuntu) as root, and with this session's permissions nobody approves it: it can change the whole Linux system and write to the Windows disks. If you confirm it, it applies to the whole session."],
+  ['it', 'Questo comando gira in Linux (WSL, Ubuntu) come root, e con i permessi di questa sessione nessuno lo approva: può cambiare tutto il sistema Linux e scrivere sui dischi di Windows. Se lo confermi, vale per tutta la sessione.'],
+]) {
+  test(`F009-UI-08 (${lingua}): la ragione della carta di root si dice nella lingua dell'interfaccia, dalla chiave del kernel`, async ({ page }) => {
+    const fermate = await guardia(page);
+    await apriApp(page, 'dark', lingua);
+    await page.evaluate(() => {
+      const runtime = window.__talosHarnessUiRuntime;
+      runtime.passaASessione('f009-k4b', 'workspace', 'F009 K4b', 'qwen/qwen3.8-flash', { conclusa: false, modello: 'qwen/qwen3.8-flash' });
+      runtime.handleRealEvent({ type: 'CUSTOM', name: 'talos.fine-rigiocata', value: null }, runtime.realSessionState.generation);
+      const generazione = runtime.realSessionState.generation;
+      runtime.handleRealEvent({ type: 'RunStarted', input: { consegna: 'List the files' }, contesto: { cartella: 'C:\\progetti\\AVM', modello: 'qwen/qwen3.8-flash' }, _sequenza: 1 }, generazione);
+      // l'evento com'è col kernel nuovo: frase inglese (riserva), chiave e valori
+      runtime.handleRealEvent({ type: 'ApprovalRequested', requestId: 'f009-k4b-1', azione: { tipo: 'shell', toolCallId: 'c1', comando: 'ls -la', wslRoot: { distro: 'Ubuntu', utente: 'root',
+        frase: "This command runs in Linux (WSL, Ubuntu) as root, and with this session's permissions nobody approves it: it can change the whole Linux system and write to the Windows disks. If you confirm it, it applies to the whole session.",
+        fraseChiave: 'server.approval.wslRoot.user', fraseParams: { linux: 'Linux (WSL, Ubuntu)', utente: 'root' } } }, _sequenza: 2 }, generazione);
+    });
+    const scheda = page.locator('#conversation [data-c="ApprovalCard"]').first();
+    await expect(scheda).toBeVisible();
+    await expect(scheda).toContainText(attesa);
+    await expect(scheda).not.toContainText(lingua === 'en' ? 'Questo comando' : 'This command runs');
+    expect(fermate).toEqual([]);
+  });
+}

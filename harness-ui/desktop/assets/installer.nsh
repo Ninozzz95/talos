@@ -17,6 +17,9 @@
 !define MUI_FINISHPAGE_RUN_TEXT "Avvia TALOS"
 
 !macro customWelcomePage
+  ; Owner 11/10/2026: da aggiornamento («Riavvia ora», installer visibile) il benvenuto non serve, si va dritti alla barra
+  ; (la licenza e la cartella le salta già electron-builder con la stessa macro, assistedInstaller.nsh).
+  !insertmacro skipPageIfUpdated
   !define MUI_WELCOMEPAGE_TITLE "Installa TALOS"
   !define MUI_WELCOMEPAGE_TEXT "TALOS si installa solo per il tuo account: non servono permessi di amministratore, e ci vogliono pochi secondi.$\r$\n$\r$\nAl primo avvio ti accoglie la app stessa.$\r$\n$\r$\nPremi Avanti per continuare."
   !insertmacro MUI_PAGE_WELCOME
@@ -37,6 +40,32 @@
 !macro customPageAfterChangeDir
   !define MUI_PAGE_HEADER_TEXT "Installazione di TALOS"
   !define MUI_PAGE_HEADER_SUBTEXT "Prepariamo il tuo spazio di lavoro."
+!macroend
+
+; Owner 11/10/2026: da aggiornamento la pagina finale non aspetta un clic. TALOS si riapre da solo e l'installer si chiude.
+; Dalla prima installazione resta com'era: «Avvia TALOS» e Fine. La forma è quella del finale di electron-builder
+; (assistedInstaller.nsh, `StartApp` con `--updated`), che si rifà qui perché `customFinishPage` lo sostituisce intero. Il template
+; riapre l'app da solo SOLO in silenzio (installSection.nsh:105-109): con l'installer visibile senza questa pagina non si
+; riaprirebbe niente.
+!macro customFinishPage
+  Function TalosAvvia
+    ${if} ${isUpdated}
+      StrCpy $1 "--updated"
+    ${else}
+      StrCpy $1 ""
+    ${endif}
+    ${StdUtils.ExecShellAsUser} $0 "$launchLink" "open" "$1"
+  FunctionEnd
+  Function TalosFineSeAggiorna
+    ${if} ${isUpdated}
+      Call TalosAvvia
+      Abort
+    ${endif}
+  FunctionEnd
+  !define MUI_FINISHPAGE_RUN
+  !define MUI_FINISHPAGE_RUN_FUNCTION "TalosAvvia"
+  !define MUI_PAGE_CUSTOMFUNCTION_PRE TalosFineSeAggiorna
+  !insertmacro MUI_PAGE_FINISH
 !macroend
 
 !macro customHeader

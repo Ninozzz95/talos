@@ -6,6 +6,24 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
 
 ## Unreleased
 
+## desktop-v0.1.28 — 2026-10-11
+
+A regular release about updating TALOS itself: installs of 0.1.21 and later receive it automatically.
+
+This update, coming from 0.1.27 or earlier, still installs without a window: after «Restart now» TALOS is gone for a few
+minutes and then reopens by itself. From 0.1.28 on you see it happen.
+
+### Changed
+- «Restart now» shows the installer with its progress bar, skips the pages you do not need when updating, and reopens
+  TALOS by itself at the end. Before it closes, TALOS says what is about to happen.
+- The app installs 57% fewer files (9,251 → 3,963), so installing and updating have much less to write.
+
+### Fixed
+- With the interface in English, three approval cards showed their reason in Italian: running as root in WSL, writing
+  outside the session folder, and opening a folder on a network computer. They now follow the language you chose.
+- The Context tab and the Context Manager show the same percentage for the same measure, and a count that is an estimate
+  is called an estimate, with «~».
+
 ## desktop-v0.1.27 — 2026-10-11
 
 A regular, small release: installs of 0.1.21 and later receive it automatically. It fixes a Stop that did not hold.

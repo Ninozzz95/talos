@@ -26,6 +26,8 @@ import { validaFonteDiProva } from '../fonte-aggiornamenti.mjs';
 const desktop = dirname(dirname(fileURLToPath(import.meta.url)));
 export const VERSIONE_X = '0.0.1';
 export const VERSIONE_X1 = '0.0.2';
+/** 11/10/2026: la terza build, per «Riavvia ora» (installer visibile che riapre TALOS da solo). */
+export const VERSIONE_X2 = '0.0.3';
 export const REPO_DI_PROVA = 'prova/talos';
 export const PORTA_DI_PROVA = 47311;
 const attendi = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -38,11 +40,15 @@ export function chiaviDiProva() {
   return { giusta: crea(), sbagliata: crea() };
 }
 
-/** Il server che fa la parte di GitHub. `modo()` dice quale firma servire: 'manomessa' (chiave sbagliata) o 'buona'. */
-export function serverDiProva({ cartellaFeed, firme, modo, porta = PORTA_DI_PROVA }) {
+/** Il server che fa la parte di GitHub. `modo()` dice quale firma servire: 'manomessa' (chiave sbagliata) o 'buona'.
+ *  `servita()` (11/10/2026, la prova di «Riavvia ora») dice quale release pubblicare: `{ versione, cartellaFeed, firme }`; senza,
+ *  è la 0.0.2 di sempre. */
+export function serverDiProva({ cartellaFeed, firme, modo, porta = PORTA_DI_PROVA, servita = null }) {
   const richieste = [];
-  const tag = `desktop-v${VERSIONE_X1}`;
+  const release = () => servita?.() ?? { versione: VERSIONE_X1, cartellaFeed, firme };
   const server = createServer((req, res) => {
+    const { versione, cartellaFeed, firme } = release();
+    const tag = `desktop-v${versione}`;
     const url = new URL(req.url, `http://127.0.0.1:${porta}`);
     richieste.push(url.pathname);
     if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405).end(); return; }
@@ -92,6 +98,15 @@ const versioneInstallata = (cartella) => {
   try { return JSON.parse(readFileSync(join(cartella, 'resources', 'app', 'package.json'), 'utf8')).version; } catch { return null; }
 };
 
+/** I TALOS.exe vivi lanciati da `exe` (solo quella cartella), con l'ora di nascita in ms. */
+function processiTalos(exe) {
+  const comando = `Get-CimInstance Win32_Process -Filter "Name='TALOS.exe'" | Where-Object { $_.ExecutablePath -eq '${exe.replace(/'/g, "''")}' } | `
+    + 'ForEach-Object { "$($_.ProcessId) $([DateTimeOffset]::new($_.CreationDate).ToUnixTimeMilliseconds())" }';
+  const esito = spawnSync('powershell', ['-NoProfile', '-Command', comando], { encoding: 'utf8', windowsHide: true });
+  return String(esito.stdout ?? '').split(/\r?\n/).map((r) => r.trim().split(' ')).filter((p) => p.length === 2)
+    .map(([pid, creato]) => ({ pid: Number(pid), creato: Number(creato) })).filter((p) => Number.isSafeInteger(p.pid) && Number.isFinite(p.creato));
+}
+
 async function aspetta(condizione, ms, errore) {
   const fine = Date.now() + ms;
   for (;;) {
@@ -133,8 +148,13 @@ export async function provaAggiornamentoVero({ rapporto = join(desktop, '.prove'
     const manifesto = readFileSync(join(x1.uscita, NOME_MANIFESTO));
     assert.equal(leggiManifesto(manifesto.toString('utf8')).version, VERSIONE_X1, 'latest.yml della build di prova dice 0.0.2');
     const firme = { buona: firmaManifesto(manifesto, chiavi.giusta.privata), manomessa: firmaManifesto(manifesto, chiavi.sbagliata.privata) };
+    const x2 = costruisci(VERSIONE_X2, fileFonte);
+    const manifesto2 = readFileSync(join(x2.uscita, NOME_MANIFESTO));
+    assert.equal(leggiManifesto(manifesto2.toString('utf8')).version, VERSIONE_X2, 'latest.yml della terza build dice 0.0.3');
+    const firme2 = { buona: firmaManifesto(manifesto2, chiavi.giusta.privata), manomessa: firmaManifesto(manifesto2, chiavi.sbagliata.privata) };
     let modo = 'manomessa';
-    server = serverDiProva({ cartellaFeed: x1.uscita, firme, modo: () => modo });
+    let servita = null; // finché è null il server pubblica la 0.0.2
+    server = serverDiProva({ cartellaFeed: x1.uscita, firme, modo: () => modo, servita: () => servita });
     await server.avvia();
 
     eseguiInstaller(x.installer, ['/S']);
@@ -178,6 +198,32 @@ export async function provaAggiornamentoVero({ rapporto = join(desktop, '.prove'
       misure.versioneDopo = await app.evaluate(({ app: a }) => a.getVersion());
       await app.close();
       assert.equal(misure.versioneDopo, VERSIONE_X1);
+    }
+
+    /*
+     * ⭐ Owner 11/10/2026 («appena ho premuto riavvia si è disinstallata la app»): «Riavvia ora» lancia l'installer VISIBILE, che da
+     *   aggiornamento salta benvenuto e pagina finale e riapre TALOS da solo. La prova clicca il pulsante vero della banda e non
+     *   tocca l'installer: se una pagina restasse ad aspettare un clic, TALOS non si riaprirebbe e la prova scadrebbe.
+     */
+    servita = { versione: VERSIONE_X2, cartellaFeed: x2.uscita, firme: firme2 };
+    server.richieste.length = 0;
+    {
+      const { app, pagina, stato } = await avviaApp(exe, dati);
+      const pronto = await aspetta(async () => { const s = await stato(); return s?.pronto?.versione === VERSIONE_X2 ? s.pronto : null; }, 300_000, 'La 0.0.3 non è arrivata a «pronto».');
+      misure.riavviaOra = { pronto };
+      const inizio = Date.now();
+      const chiusa = new Promise((ok) => app.process().once('exit', ok));
+      await pagina.locator('.talos-banda-aggiornamento button').filter({ hasText: /^(Riavvia ora|Restart now)$/ }).click();
+      await aspetta(async () => /si riapre da solo|reopens by itself/.test(await pagina.locator('.talos-banda-aggiornamento').innerText().catch(() => '')) || null,
+        10_000, 'La banda non ha detto che TALOS si chiude e si riapre da solo.').catch((e) => { misure.riavviaOra.avviso = e.message; });
+      await Promise.race([chiusa, attendi(60_000).then(() => { throw Error('Dopo «Riavvia ora» TALOS non si è chiuso.'); })]);
+      misure.riavviaOra.chiusaMs = Date.now() - inizio;
+      await aspetta(() => versioneInstallata(cartellaInstallazione) === VERSIONE_X2, 300_000, 'Dopo «Riavvia ora» la versione installata non è passata a 0.0.3.');
+      const riaperto = await aspetta(() => processiTalos(exe).find((p) => p.creato >= inizio) ?? null, 180_000,
+        'Dopo «Riavvia ora» TALOS non si è riaperto da solo: una pagina dell’installer aspetta un clic?');
+      misure.riavviaOra.riapertoMs = riaperto.creato - inizio;
+      for (const p of processiTalos(exe)) spawnSync('taskkill', ['/PID', String(p.pid), '/T', '/F'], { windowsHide: true });
+      await aspetta(() => processiTalos(exe).length === 0 || null, 60_000, 'L’istanza riaperta non si è chiusa.');
     }
     misure.completato = true;
   } catch (errore) {
