@@ -246,3 +246,28 @@ test('C11-02: approve, lost answer, version 1 approved but with ANOTHER hash —
   const esito = await creaClientProposta({ fetchFn: f.fn, sessionId: 's', uuid: () => 'c11' }).approva({ ...RICEVUTA });
   assert.deepEqual([esito.ok, esito.ambiguo], [false, true]);
 });
+
+/*
+ * Owner 10/10/2026 («Sola lettura dall'altro archivio»): un Workflow dell'archivio di un'altra finestra TALOS (il server lo marca
+ * `soloLettura`) si guarda e basta — niente Modifica, Approva, Avvia né comandi del run; resta il diagramma, e una riga dice dove.
+ */
+test('WF-PROPOSAL-ALTRA-FINESTRA: in sola lettura nessun comando in nessuno stato, il diagramma resta e la riga dice dove', () => {
+  const document = fakeDocument();
+  const card = creaCardProposta({ document, ricevuta: leggiRicevutaProposta(RICEVUTA) });
+  const tutto = { onApprova: () => {}, onAvvia: () => {}, onModifica: () => {}, onApriDiagramma: () => {}, onComandoRun: () => {}, onAvviaPrima: () => {} };
+  const RUN = '2f0c8a3e-4b1d-4c55-9a77-0d3f5a6b7c8d';
+  for (const [nome, vista] of [
+    ['da approvare', { revisione: revisione({ soloLettura: true }) }],
+    ['approvato', { revisione: revisione({ status: 'approved', soloLettura: true }) }],
+    ['avviato da solo', { revisione: revisione({ status: 'approved', soloLettura: true }), run: { runId: RUN, status: 'running', soloLettura: true }, avviatoDaSolo: true }],
+    ['run dell\'altra finestra con revisione propria', { revisione: revisione({ status: 'approved' }), run: { runId: RUN, status: 'running', soloLettura: true }, avviatoDaSolo: true }],
+  ]) {
+    disegnaCardProposta(card, { document, ...tutto, ...vista });
+    assert.deepEqual(bottoni(card).map((b) => b.dataset.azione), ['diagramma'], nome);
+    assert.match(card.textContent, /Gestito da un’altra finestra di TALOS/u, nome);
+  }
+  // AL CONTRARIO: la stessa carta senza il segno ha i suoi comandi di sempre
+  disegnaCardProposta(card, { document, ...tutto, revisione: revisione() });
+  assert.deepEqual(bottoni(card).map((b) => b.dataset.azione), ['modifica-tetti', 'approva', 'diagramma']);
+  assert.doesNotMatch(card.textContent, /altra finestra/u);
+});

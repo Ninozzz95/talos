@@ -6,6 +6,18 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
 
 ## Unreleased
 
+## desktop-v0.1.27 — 2026-10-11
+
+A regular, small release: installs of 0.1.21 and later receive it automatically. It fixes a Stop that did not hold.
+
+### Fixed
+- Stop in the chat now holds when the turn had left a command running in the background. The Stop ends that command
+  too, and its end no longer starts a new turn by itself: the model reads that you stopped it with your next message.
+  A command started by an earlier turn keeps running, and when it ends the conversation resumes as before.
+- A background command you stop from the Processes tab reads «Cancelled», not «Failed · exit 1».
+- The turn index in the Context tab names turns and your messages apart («2 turns · 2 messages»), instead of adding them up.
+- The diagram of a Workflow started in another TALOS window opens read-only, instead of failing to load.
+
 ## desktop-v0.1.26 — 2026-10-10
 
 A regular release: installs of 0.1.21 and later receive it automatically. It makes long conversations hold up, with a context

@@ -170,3 +170,69 @@ test('C06-FERMATO-PRIMO-PIANO: a foreground command stopped by the person leaves
     await registry.attendiAssestamento(sessionId);
   } finally { await registry.chiudi?.(); }
 }));
+
+/*
+ * ⛔ C06 (b) (10/10/2026, trovato sul server di prova della 0.1.26, misurato due volte: Stop → `talos.processo-sfondo` → RunStarted) —
+ *   lo Stop della CHAT uccide anche i comandi che il SUO giro aveva messo in sottofondo (il loro segnale è «Stop del giro OPPURE Stop
+ *   della riga», talosHarness.mjs `segnaleDelComando`), e la loro uscita svegliava la chat: un giro a pagamento subito dopo il «basta».
+ *   Come Hermes (`tools/process_registry.py:2613-2617`, `kill_started_since`: l'uscita dei processi uccisi da un giro abbandonato è
+ *   consumata, «so an abandoned turn can't enqueue a follow-up reviving work the timeout deliberately stopped»): sono fermati dalla
+ *   persona, come col «Ferma» dei Processi.
+ */
+/** Il kernel: un comando del giro messo in sottofondo muore con lo Stop del giro O col suo «Ferma», e l'uscita arriva dopo. */
+function sfondatoDelGiro(input, { toolCallId = 'call_dev', comando = 'npm run dev', codice = null, segnale = 'SIGTERM' } = {}) {
+  let morto = false;
+  const muori = () => { if (morto) return; morto = true; setTimeout(() => input.segnalaUscitaSfondo({ toolCallId, codice, segnale, comando }), 10); };
+  input.segnaleStop?.addEventListener('abort', muori, { once: true });
+  input.registraComandoFermabile({ toolCallId, ferma: muori });
+}
+/** Lo Stop come lo chiude il kernel vero: RunError, e il giro esce «fermato». */
+function fermato(runs, i) {
+  runs[i].input.onEvento({ type: 'RunError', threadId: `t${i}`, runId: `r${i}`, message: '⛔ stopped on request' });
+  runs[i].resolve({ ok: false, esito: { detto: '', comeFinita: 'fermato', messaggiFinali: [...(runs[i].input.messaggiIniziali ?? [{ role: 'user', content: 'avvia' }])] } });
+}
+
+test('C06-STOP-CHAT: the chat Stop kills the turn\'s background command, and its exit does not start a paid turn; the note rides on the next message', () => conStore(async (cartellaStore) => {
+  const runs = [];
+  const registry = crea(cartellaStore, runs);
+  try {
+    const { sessionId } = registry.avvia('task');
+    assert.ok(runs[0].input.segnaleStop, 'premise: the kernel gets the turn\'s stop signal');
+    sfondatoDelGiro(runs[0].input);
+    assert.equal(registry.ferma(sessionId), true, 'the person presses Stop in the chat');
+    fermato(runs, 0);
+    await registry.attendiAssestamento(sessionId);
+    await pausa(200);
+    assert.equal(runs.length, 1, 'no turn starts by itself after the person said stop');
+    assert.deepEqual(registry.statoCoda(sessionId).voci, [], 'nothing in the queue that wakes');
+    registry.resume(sessionId, 'e adesso?');
+    assert.equal(runs.length, 2);
+    assert.deepEqual(runs[1].input.messaggiIniziali.at(-2), { role: 'user', content: NOTA, talosOrigin: 'background-notice' }, 'attributed to the person');
+    fine(runs, 1);
+    await registry.attendiAssestamento(sessionId);
+  } finally { await registry.chiudi?.(); }
+}));
+
+test('C06-STOP-CHAT-AL-CONTRARIO: a background command of an EARLIER turn is not killed by this Stop, and its own exit still wakes the chat', () => conStore(async (cartellaStore) => {
+  const runs = [];
+  const registry = crea(cartellaStore, runs);
+  try {
+    const { sessionId } = registry.avvia('task');
+    sfondatoDelGiro(runs[0].input, { toolCallId: 'call_vecchio', comando: 'npm run dev' });
+    fine(runs, 0);
+    await registry.attendiAssestamento(sessionId);
+    registry.resume(sessionId, 'controlla i test');
+    assert.equal(runs.length, 2);
+    assert.equal(registry.ferma(sessionId), true);
+    fermato(runs, 1);
+    await registry.attendiAssestamento(sessionId);
+    await pausa(100);
+    assert.equal(runs.length, 2, 'the Stop itself starts nothing');
+    runs[0].input.segnalaUscitaSfondo({ toolCallId: 'call_vecchio', codice: 1, segnale: null, comando: 'npm run dev' }); // morto da solo, dopo
+    await pausa(200);
+    assert.equal(runs.length, 3, 'an exit this Stop did not cause wakes the chat, as C06 and K2 decide');
+    assert.equal(runs[2].input.messaggiIniziali.at(-1).content, 'The background command `npm run dev` failed (exit code 1).');
+    fine(runs, 2);
+    await registry.attendiAssestamento(sessionId);
+  } finally { await registry.chiudi?.(); }
+}));

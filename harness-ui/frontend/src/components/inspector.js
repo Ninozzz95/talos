@@ -233,6 +233,22 @@ export function righeGiri(giri = []) {
 }
 
 /** Le righe di «File toccati». `file` = [{ path, aggiunte, rimozioni }]. */
+/**
+ * L'anteprima della card «Indice dei giri» (owner 10/10/2026: «2 giri · 2 messaggi»). L'indice ha due tipi di righe — i giri di
+ * TALOS e i messaggi della persona (`tu`) — e prima il numero li sommava sotto un nome solo: «4 giri» per 2 messaggi, mentre
+ * l'elenco delle sessioni e il piede contano i giri del modello. Ogni grandezza col suo nome; quella che manca non si scrive.
+ * @param {Array<{tu?: boolean}>} giri le voci dell'indice (non le righe già formattate)
+ * @returns {string} '' se non c'è niente da contare
+ */
+export function anteprimaIndiceGiri(giri = []) {
+  const messaggi = giri.filter((g) => g?.tu === true).length;
+  const diTalos = giri.length - messaggi;
+  return [
+    diTalos ? tn('processi.inspector.turnsPreviewOne', 'processi.inspector.turnsPreviewMany', diTalos) : '',
+    messaggi ? tn('processi.inspector.turnsPreviewMessagesOne', 'processi.inspector.turnsPreviewMessagesMany', messaggi) : '',
+  ].filter(Boolean).join(' · ');
+}
+
 export function righeFile(file = []) {
   return file.map((f) => [f.path, `+${f.aggiunte ?? 0}${f.rimozioni ? ` −${f.rimozioni}` : ''}`]);
 }
@@ -1937,7 +1953,7 @@ export function aggiornaInspector(inspector, dati = {}, { document: d = globalTh
        stessa cosa del velo della chat, con la stessa chiave. */
     const indiceVuoto = dati.storiaInCaricamento === true ? tr('app.sessions.openingHistory') : tr('processi.inspector.turnsNone');
     riempiCard(d, indice, giri.length ? giri : [[indiceVuoto, '—']], { classiValore: (r) => (r[2] === 'accent' ? 'talos-kv__v--accent' : '') });
-    scriviAnteprima(indice, giri.length ? tn('processi.inspector.turnsPreviewOne', 'processi.inspector.turnsPreviewMany', giri.length) : dati.storiaInCaricamento === true ? '…' : '—');
+    scriviAnteprima(indice, giri.length ? anteprimaIndiceGiri(dati.giri) : dati.storiaInCaricamento === true ? '…' : '—');
   }
   if (!schedaDaSaltare(inspector, inspector.querySelector('#railFile'), 'file')) {
     const fileCard = inspector.querySelector('#railFile [data-c="InspectorCard"]');
@@ -2034,9 +2050,21 @@ export function processiDagliEventi(eventi = [], { adesso = Date.now(), nomiComa
      `exited_at`, `tools/process_registry.py:533-536`). Quella del risultato «in sfondo» (0,2 s, misurato sulla 4176 per un
      comando di 8 s) è il tempo della CHIAMATA fino allo sfondamento: detta come durata, era falsa. Un orologio che va indietro
      (avvio dopo la fine) non dà una durata. */
+  /* ⛔ C06 (bugfixer, 10/10/2026, prova dal vivo sul 4174) — uno sfondato FERMATO DALLA PERSONA dalla scheda Processi usciva
+     «Non riuscito · uscita 1»: su Windows la chiusura forzata dell'albero dà codice 1 (Chromium `base/process/kill.h`, letto il
+     10/10/2026: «exit code used by the Windows task manager when it kills a process»), e il codice vinceva. Come Hermes
+     (`tools/process_registry.py:636-644`, `mark_exited`: «A kill that raced the observer already recorded its own exit_code/reason;
+     never overwrite it»), l'arresto della persona vince sul codice osservato: «Annullato» come il primo piano fermato (130/143),
+     e nessun codice, perché quello di una chiusura forzata dice la piattaforma, non il comando. Claude Code ha lo stesso difetto
+     aperto (issue 20192 e 62297, un kill voluto riportato «failed»). */
   const chiudiSfondo = (p, e) => {
-    p.stato = e.esito === 'riuscito' ? 'riuscito' : e.esito === 'fallito' ? 'fallito' : 'ucciso';
-    p.uscita = Number.isSafeInteger(e.codice) ? e.codice : null;
+    if (e.fermatoDallaPersona === true) {
+      p.stato = 'annullato';
+      p.uscita = null;
+    } else {
+      p.stato = e.esito === 'riuscito' ? 'riuscito' : e.esito === 'fallito' ? 'fallito' : 'ucciso';
+      p.uscita = Number.isSafeInteger(e.codice) ? e.codice : null;
+    }
     p.durataSfondoMs = Number.isFinite(e.finitoAlle) && Number.isFinite(p.avviatoA) && e.finitoAlle >= p.avviatoA ? e.finitoAlle - p.avviatoA : null;
     p.durataMs = p.durataSfondoMs;
   };

@@ -13,7 +13,7 @@ import { createHttpApp } from './src/http-app.mjs';
 import { createSessionRegistry } from './src/session-registry.mjs';
 import { createProcessOutputStore } from './src/process-output-store.mjs';
 import { impostaPoliticaScritturaSync, modalitaPubblicazioneIntestazione } from './src/session-store.mjs'; // F3 (24/09): il writer sincrono rispetta la coda; 24/09: la modalità dell'intestazione per il Doctor
-import { createWorkflowStore } from './src/workflow/store.mjs';
+import { apriArchivioInSolaLettura, createWorkflowStore } from './src/workflow/store.mjs';
 import { proposeWorkflowFromTool } from './src/workflow/planning-control.mjs';
 import { creaAvvioDaSolo } from './src/workflow/avvio-da-solo.mjs';
 import { creaRisveglioDaiWorkflow } from './src/workflow/esito-al-padre.mjs'; // C3b: l'esito di un run sveglia il padre
@@ -517,6 +517,20 @@ async function startServer() {
       console.error('Workflow Store non disponibile:', error?.code ?? 'WORKFLOW_STORE_UNAVAILABLE');
     }
   }
+  /* Owner 10/10/2026 («Sola lettura dall'altro archivio») — i Workflow delle sessioni condivise con un altro processo TALOS (il 4174
+     e l'app installata): si leggono dal suo archivio, senza diventarne proprietari e senza scriverci. Mai il proprio, e mai se
+     il proprio non c'è. */
+  let workflowStoreAltro = null;
+  if (workflowStore && config.workflowAltroArchivio) {
+    try {
+      const candidato = await apriArchivioInSolaLettura({ workflowDataRoot: config.workflowAltroArchivio,
+        resultLimits: { maxItemBytes: 1_048_576, maxRunBytes: 67_108_864 } });
+      if (candidato.root === workflowStore.root) { await candidato.close(); console.warn('[workflow] l\'altro archivio è questo stesso: ignorato'); }
+      else workflowStoreAltro = candidato;
+    } catch (error) {
+      console.warn(`[workflow] altro archivio non leggibile (${error?.code ?? 'WORKFLOW_STORE_UNAVAILABLE'}): i suoi Workflow non si vedranno`);
+    }
+  }
   /* Il catalogo indica il modello; solo il minimo degli endpoint verificati
    * limita in modo conservativo una route OpenRouter dinamica. La prima lettura
    * resta sincrona e prudenziale mentre la verifica parte in background. */
@@ -967,6 +981,7 @@ async function startServer() {
     staticHandler: createStaticHandler(config.publicDir),
     sessionRegistry,
     workflowStore,
+    workflowStoreAltro, // owner 10/10/2026: l'archivio di un altro processo TALOS, solo da leggere (null ⇒ nessuno)
     workflowRuntime, // F3-51c (25/09/2026): Avvia e i controlli del run; null ⇒ «non disponibile»
     terminalRegistry: registroSchedeTerminale, // ⭐ 05/9, W1-01
     /*
@@ -1159,6 +1174,7 @@ async function startServer() {
         // F3-41b: lo scheduler si ferma PRIMA che il registro si chiuda (un passo che finisce dopo non scrive più niente)
         ...(workflowRuntime ? [{ stop: () => workflowRuntime.scheduler.ferma() }] : []),
         ...(workflowStore ? [{ close: () => workflowStore.close() }] : []),
+        ...(workflowStoreAltro ? [{ close: () => workflowStoreAltro.close() }] : []),
         ...(contextRuntime ? [{ close: () => contextRuntime.close() }] : []),
         ...Object.values(localRuntimes).map((runtime) => ({ close: () => typeof runtime?.unload === 'function' ? runtime.unload() : undefined })),
       ],

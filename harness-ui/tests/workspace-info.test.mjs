@@ -14,11 +14,11 @@ test('RITRATTO-RADICE: un disco, una home, una scrivania sono radici; un progett
   assert.equal(eUnaRadice('/'), true);
   assert.equal(eUnaRadice('C:\\Users\\esempio'), true);
   assert.equal(eUnaRadice('C:\\Users\\esempio\\Desktop'), true);
-  assert.equal(eUnaRadice('/home/antonino'), true);
+  assert.equal(eUnaRadice('/home/persona'), true);
   assert.equal(eUnaRadice('C:\\Users\\esempio\\Documenti'), true);
   // AL CONTRARIO: un progetto vero non è una radice, e non deve essere avvisato per niente
   assert.equal(eUnaRadice('C:\\Users\\esempio\\Desktop\\projects\\AVM-harness-desktop'), false);
-  assert.equal(eUnaRadice('/home/antonino/progetti/app'), false);
+  assert.equal(eUnaRadice('/home/persona/progetti/app'), false);
   assert.equal(eUnaRadice(''), false);
   assert.equal(eUnaRadice(null), false);
 });

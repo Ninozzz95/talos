@@ -195,7 +195,8 @@ test.describe('C1 — la scheda Contesto', () => {
     await expect(card('finestra').locator('#contestoSchedaBarra')).toBeVisible(); // la barra è il dettaglio minimo della Finestra
     await expect(card('finestra').locator('#contestoAltro')).toBeVisible(); // le azioni restano fuori dal pulsante
     await expect(card('compattazioni').locator('[data-anteprima]')).toHaveText(/^1 · /);
-    await expect(card('giri').locator('[data-anteprima]')).toHaveText('3 giri');
+    // owner 10/10/2026: le due grandezze col loro nome (prima «3 giri» sommava i giri di TALOS e il messaggio della persona)
+    await expect(card('giri').locator('[data-anteprima]')).toHaveText('2 giri · 1 messaggio');
     // si apre: le righe compaiono, l'anteprima sparisce (lo dicono le righe)
     await card('finestra').locator('.talos-inspector-card__comprimi').click();
     await expect(card('finestra')).not.toHaveAttribute('data-compressa', '');

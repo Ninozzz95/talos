@@ -5,8 +5,8 @@ import { compileWorkflowDraft } from './draft-compiler.mjs';
 import { compileWorkflowProposal } from './plan-compiler.mjs';
 import { LINEAGE_DIRECTIONS, LINEAGE_PAGE_MAX, projectPlannedWorkflowEdgePage, projectPlannedWorkflowGroupPage,
   projectPlannedWorkflowLineage, projectPlannedWorkflowNodeDetail, projectPlannedWorkflowOverview } from './read-model.mjs';
-import { approveDefinition, listDefinitionsForSession, listRunSummariesForSession, lookupCommandReceipt, readDefinition,
-  readDefinitionApproval, readDefinitionForView, withGlobalAdmission } from './store.mjs';
+import { aggiornaIndiceInSolaLettura, approveDefinition, listDefinitionsForSession, listRunSummariesForSession, lookupCommandReceipt,
+  ordinaPerCreazione, readDefinition, readDefinitionApproval, readDefinitionForView, withGlobalAdmission } from './store.mjs';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
@@ -183,13 +183,21 @@ function pageBounds({ offset, limit }, maxLimit) {
 }
 
 /** The proposals a session made, from the Store index: newest first, at most 50 per page, never a Core. */
-export async function listWorkflowProposals(store, input, { sessionExistsFn } = {}) {
+export async function listWorkflowProposals(store, input, { sessionExistsFn, storeAltro = null } = {}) {
   exact(input, ['sessionId', 'offset', 'limit']);
   pageBounds(input, 50);
   if (typeof sessionExistsFn !== 'function' || !(await sessionExistsFn(input.sessionId))) {
     fail('Workflow proposal was not found', 'WORKFLOW_PROPOSAL_NOT_FOUND');
   }
-  const items = listDefinitionsForSession(store, { sessionId: input.sessionId });
+  /* Owner 10/10/2026 («Sola lettura dall'altro archivio»): le proposte di una sessione condivisa fatte da un altro processo
+     TALOS stanno nel SUO archivio; si mostrano accanto alle proprie, marcate `soloLettura`, rilette dal disco a ogni elenco. */
+  let altre = [];
+  if (storeAltro?.soloLettura === true) {
+    await aggiornaIndiceInSolaLettura(storeAltro);
+    altre = listDefinitionsForSession(storeAltro, { sessionId: input.sessionId }).map((voce) => ({ ...voce, soloLettura: true }));
+  }
+  const proprie = listDefinitionsForSession(store, { sessionId: input.sessionId });
+  const items = altre.length === 0 ? proprie : ordinaPerCreazione([...proprie, ...altre]);
   return {
     schema: 'talos.workflow-proposal-list.v1',
     sessionId: input.sessionId,

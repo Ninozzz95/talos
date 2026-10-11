@@ -300,6 +300,8 @@ function runRoot(store, runId) {
 
 function assertWritable(store) {
   if (!store || store.closed || store.state === 'closed') throw storeError('Workflow store is closed', 'WORKFLOW_STORE_CLOSED');
+  // owner 10/10/2026: l'archivio di un ALTRO processo si legge soltanto (`apriArchivioInSolaLettura`)
+  if (store.soloLettura === true) throw storeError('Workflow store is open read-only: another process owns it', 'WORKFLOW_STORE_READ_ONLY');
   if (store.state !== 'ready' || store.owner?.released) {
     throw storeError('Workflow store requires recovery attention before mutation', 'WORKFLOW_STORE_NEEDS_ATTENTION');
   }
@@ -437,10 +439,13 @@ async function readJournal(store, runId, { repairTail = false } = {}) {
       try {
         const tail = new TextDecoder('utf-8', { fatal: true }).decode(tailBytes);
         JSON.parse(tail);
-        throw storeError('Valid but unterminated Workflow journal record is ambiguous', 'WORKFLOW_JOURNAL_CORRUPT');
+        /* owner 10/10/2026 — in sola lettura il proprietario è VIVO in un altro processo: una riga valida senza il suo a-capo è
+           un'aggiunta a metà (record e a-capo nello stesso `write`, ma letti fra due momenti), non un'ambiguità da dire. Si
+           ignora, come una coda tronca, e torna alla lettura dopo; ripararla tocca solo al proprietario. */
+        if (store.soloLettura !== true) throw storeError('Valid but unterminated Workflow journal record is ambiguous', 'WORKFLOW_JOURNAL_CORRUPT');
       } catch (error) {
         if (error instanceof WorkflowStoreError) throw error;
-        if (repairTail) await truncateAndSync(path, lastNewline + 1);
+        if (repairTail && store.soloLettura !== true) await truncateAndSync(path, lastNewline + 1);
       }
       completeBytes = bytes.subarray(0, lastNewline + 1);
     }
@@ -759,7 +764,7 @@ async function readVerifiedJournal(store, runId, options, { conStoria = false } 
     if (JOURNAL_INTEGRITY_CODES.has(error?.code)) {
       RUN_CACHES.get(store)?.delete(runId);
       ACTIVE_CLAIMS.get(store)?.delete(runId);
-      store.state = 'needs_attention';
+      if (store.soloLettura !== true) store.state = 'needs_attention'; // in sola lettura un run illeggibile non ferma gli altri
     }
     throw error;
   }
@@ -1018,6 +1023,131 @@ export async function createWorkflowStore({
   }
 }
 
+/*
+ * ⭐ Owner 10/10/2026 («Sola lettura dall'altro archivio») — L'ARCHIVIO DI UN ALTRO PROCESSO, SOLO DA LEGGERE.
+ *   Il 4174 condivide le SESSIONI con l'app installata (decisione del 07/10), ma ogni processo ha il suo archivio dei Workflow con
+ *   un proprietario solo (`store-owner.mjs`): una chat dell'app aperta sul 4174 diceva «Workflow non disponibile». Qui si apre
+ *   l'archivio dell'altro come fa Hermes per il database di un altro profilo (`hermes_state.py:721-726`, `SessionDB(read_only=True)`:
+ *   «no schema init, NO write lock … the DB must exist»): niente proprietario, niente scansione d'avvio (ripara code e scrive
+ *   marcatori), niente cartelle create. Ogni scrittura è rifiutata (`assertWritable`), una riga ancora in scrittura in coda al
+ *   giornale si ignora (`readJournal`), e l'indice delle proposte si rilegge dal disco a ogni elenco (`aggiornaIndiceInSolaLettura`).
+ */
+export async function apriArchivioInSolaLettura({ workflowDataRoot, resultLimits } = {}, deps = {}) {
+  if (typeof workflowDataRoot !== 'string' || !isAbsolute(workflowDataRoot)) {
+    throw storeError('Workflow data root must be absolute', 'WORKFLOW_STORE_LOCATION_INVALID');
+  }
+  let root;
+  try {
+    root = await realpath(resolve(workflowDataRoot));
+    if (!(await stat(root)).isDirectory()) throw new Error('not a directory');
+  } catch (error) {
+    throw storeError(`Read-only Workflow store is unavailable: ${error.message}`, 'WORKFLOW_STORE_UNAVAILABLE', error);
+  }
+  const store = {
+    root, owner: null, soloLettura: true, resultLimits: validateResultLimits(resultLimits), state: 'ready', diagnostics: [],
+    quarantinedRuns: [], quarantineMarked: new Set(), closed: false, runQueues: new Map(), failpoint: undefined,
+    upgradeEventFn: deps.upgradeEventFn ?? upgradeEvent,
+    upgradeDefinitionFn: deps.upgradeDefinitionFn ?? upgradeDefinition,
+    upgradeCheckpointFn: deps.upgradeCheckpointFn ?? upgradeCheckpoint,
+    definizioniLette: new Map(), // `workflowId\0version` → record verificato: una Definition nasce una volta e non cambia
+  };
+  RUN_CACHES.set(store, new Map());
+  RUN_WATCHERS.set(store, new Map());
+  ACTIVE_CLAIMS.set(store, new Map());
+  ADMISSION_QUEUES.set(store, Promise.resolve());
+  DEFINITION_INDEXES.set(store, new Map());
+  DEFINITION_VIEW_CACHES.set(store, new Map());
+  /* Chi GUARDA un run dell'altro processo (il flusso dal vivo): qui nessun append avvisa, perché a scrivere è l'altro. Solo per i
+     run guardati, una fotografia leggera dei segmenti (nome, dimensione, data) ogni `ogniMs`; se cambia, chi guarda riceve il
+     numero dell'ultimo fatto e rilegge col suo cursore, come per i run propri (`notifyWatchers`). */
+  const fotografie = new Map();
+  let inCorso = false;
+  const sorveglia = async () => {
+    if (inCorso || store.closed) return;
+    inCorso = true;
+    try {
+      for (const runId of [...(RUN_WATCHERS.get(store)?.keys() ?? [])]) {
+        const foto = await fotografiaDelGiornale(store, runId);
+        if (foto === null || fotografie.get(runId) === foto) continue;
+        const primaVolta = !fotografie.has(runId);
+        fotografie.set(runId, foto);
+        if (primaVolta) continue; // la prima fotografia è il punto di partenza: chi guarda ha appena letto
+        try {
+          const { events } = await readRunState(store, { runId });
+          notifyWatchers(store, runId, events.length);
+        } catch { /* a metà scrittura o rovinato: si riprova al giro dopo */ fotografie.delete(runId); }
+      }
+      for (const runId of [...fotografie.keys()]) if (!RUN_WATCHERS.get(store)?.has(runId)) fotografie.delete(runId);
+    } finally { inCorso = false; }
+  };
+  const timer = setInterval(() => { void sorveglia(); }, deps.ogniMs ?? 1_500);
+  timer.unref?.();
+  store.sorvegliaOra = sorveglia; // per le prove: un giro senza aspettare il timer
+  store.close = async () => {
+    clearInterval(timer);
+    store.closed = true;
+    store.state = 'closed';
+    for (const mappa of [RUN_CACHES, RUN_WATCHERS, ACTIVE_CLAIMS, ADMISSION_QUEUES, DEFINITION_INDEXES, DEFINITION_VIEW_CACHES]) mappa.delete(store);
+  };
+  return store;
+}
+
+async function fotografiaDelGiornale(store, runId) {
+  const cartella = join(runRoot(store, runId), 'journal');
+  let voci;
+  try { voci = await readdir(cartella, { withFileTypes: true }); } catch { return null; }
+  const parti = [];
+  for (const voce of voci.filter((v) => v.isFile() && SEGMENT.test(v.name)).sort((a, b) => a.name.localeCompare(b.name, 'en'))) {
+    try { const s = await stat(join(cartella, voce.name)); parti.push(`${voce.name}:${s.size}:${s.mtimeMs}`); } catch { return null; }
+  }
+  return parti.join('|');
+}
+
+/**
+ * L'indice delle proposte e i run messi da parte di un archivio in sola lettura, riletti dal disco: l'altro processo crea
+ * proposte, le approva e mette da parte run mentre questo guarda. Le Definition già lette restano in memoria (nascono una volta);
+ * l'approvazione si riguarda ogni volta. Una voce illeggibile si salta: ripararla tocca al proprietario.
+ * Costo (N1 della review, 10/10/2026): si chiama solo dall'elenco delle proposte di una sessione, una volta per richiesta; per
+ * ogni versione sono due `readdir` condivisi e una `stat` dell'approvazione, più la lettura verificata della Definition la PRIMA
+ * volta soltanto. Cresce con le versioni dell'altro archivio (oggi 1): se diventano migliaia, la cache va per data della cartella.
+ */
+export async function aggiornaIndiceInSolaLettura(store) {
+  assertReadable(store);
+  if (store.soloLettura !== true) return;
+  const indice = new Map();
+  let workflowIds = [];
+  try { workflowIds = await readdir(join(store.root, 'definitions'), { withFileTypes: true }); } catch { /* archivio ancora vuoto */ }
+  const precedente = DEFINITION_INDEXES.get(store);
+  DEFINITION_INDEXES.set(store, indice);
+  try {
+    for (const voce of workflowIds) {
+      if (!voce.isDirectory() || !UUID.test(voce.name)) continue;
+      let versioni = [];
+      try { versioni = await readdir(join(store.root, 'definitions', voce.name), { withFileTypes: true }); } catch { continue; }
+      for (const v of versioni) {
+        const version = Number(v.name);
+        if (!v.isDirectory() || !Number.isSafeInteger(version) || version < 1 || String(version) !== v.name) continue;
+        const chiave = `${voce.name}\u0000${version}`;
+        try {
+          let record = store.definizioniLette.get(chiave);
+          if (!record) { record = await readDefinition(store, { workflowId: voce.name, version }); store.definizioniLette.set(chiave, record); }
+          let approvata = false;
+          if (await pathExists(approvalPath(store, voce.name, version))) {
+            approvata = (await readApproval(store, voce.name, version)).definitionHash === record.definitionHash;
+          }
+          indexDefinition(store, record, approvata);
+        } catch { /* una proposta a metà o rovinata: la ripara il proprietario */ }
+      }
+    }
+  } catch (error) {
+    DEFINITION_INDEXES.set(store, precedente ?? new Map());
+    throw error;
+  }
+  let runs = [];
+  try { runs = await readdir(join(store.root, 'runs'), { withFileTypes: true }); } catch { /* nessun run */ }
+  store.quarantineMarked = new Set(runs.filter((e) => e.isFile()).map((e) => RUN_QUARANTINE_MARKER.exec(e.name)?.[1]).filter(Boolean));
+}
+
 export async function createDefinition(store, { record } = {}) {
   assertWritable(store);
   const upgraded = store.upgradeDefinitionFn(record);
@@ -1273,6 +1403,13 @@ export async function listRunsForSession(store, { rootSessionId } = {}) {
   return (await listRunSummariesForSession(store, { rootSessionId })).map(({ runId }) => runId);
 }
 
+/** Owner 10/10/2026: due elenchi (questo archivio e quello in sola lettura) in uno, il più recente prima, come ciascuno. */
+export function ordinaPerCreazione(voci) {
+  return [...voci].sort((a, b) => comparableUtcTimestamp(b.createdAt).localeCompare(comparableUtcTimestamp(a.createdAt), 'en')
+    || String(a.workflowId ?? '').localeCompare(String(b.workflowId ?? ''), 'en') || (b.version ?? 0) - (a.version ?? 0)
+    || String(a.runId ?? '').localeCompare(String(b.runId ?? ''), 'en'));
+}
+
 function comparableUtcTimestamp(at) {
   const [seconds, fraction = ''] = at.slice(0, -1).split('.');
   return `${seconds}.${fraction.padEnd(64, '0')}`;
@@ -1288,7 +1425,12 @@ export async function listRunSummariesForSession(store, { rootSessionId } = {}) 
   const definitions = new Map();
   for (const entry of entries) {
     if (!entry.isDirectory() || !UUID_V4.test(entry.name) || store.quarantineMarked?.has(entry.name)) continue;
-    const { state, events } = await readRunState(store, { runId: entry.name });
+    let letto;
+    try { letto = await readRunState(store, { runId: entry.name }); } catch (error) {
+      if (store.soloLettura === true) continue; // owner 10/10: un run dell'altro processo a metà o rovinato non nasconde gli altri
+      throw error;
+    }
+    const { state, events } = letto;
     if (events[0]?.type === 'run_created' && events[0].payload.rootSessionId === rootSessionId) {
       const { workflowId, definitionVersion: version, definitionHash } = events[0].payload;
       const key = `${workflowId}:${version}`;

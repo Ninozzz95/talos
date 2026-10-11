@@ -1020,8 +1020,12 @@ export function montaGrafoWorkflow(host, {
   let esitoChiave = null;
   const chiaveRun = () => { const p = fonte.panoramica; return p ? `${p.status}|${p.pauseRequested === true}|${p.cancelRequested === true}` : ''; };
   function disegnaRun() {
-    const { principale, menu } = run ? azioniDelRun(fonte.panoramica) : { principale: null, menu: [] };
+    const { principale, menu, nota = null } = run ? azioniDelRun(fonte.panoramica) : { principale: null, menu: [] };
     menuRunVoci = menu;
+    /* owner 10/10/2026: un run di un'altra finestra TALOS non ha comandi qui; la riga sotto la testata dice dove si comandano */
+    const altraFinestra = run && fonte.panoramica?.soloLettura === true;
+    if (altraFinestra && nota) { esitoRun.hidden = false; esitoRun.textContent = nota; esitoRun.setAttribute('role', 'status'); esitoRun.dataset.tono = 'nota'; }
+    else if (esitoRun.dataset.tono === 'nota') { esitoRun.hidden = true; esitoRun.textContent = ''; delete esitoRun.dataset.tono; }
     comandiRun.hidden = !principale && !menu.length;
     principaleRun.hidden = !principale;
     if (principale) { principaleRun.textContent = principale.etichetta; principaleRun.dataset.azione = principale.azione; }

@@ -326,12 +326,14 @@ export function modelloDellaFiglia(padre) {
  *   che NON uccide: stacca la cattura, apre il file di output e conclude l'attesa, e il processo vive. Prima di oggi
  *   l'adapter lo scartava e il pulsante «Sfondo» non aveva nessuno da chiamare.
  */
-export function registraComandoFermabileIn(voce) {
+export function registraComandoFermabileIn(voce, { segnaleDelGiro = null } = {}) {
   return ({ toolCallId, ferma, sfonda, pid, wsl }) => {
     voce.comandiFermabili ??= new Map();
     // C1 (10/10/2026): `pid` e `wsl` sono LETTURE (`() => number|null`, `() => {distro, marcatore}|null`): l'esecutore li conosce solo
     //   quando lancia il comando; assenti = null
-    voce.comandiFermabili.set(toolCallId, { ferma, sfonda: typeof sfonda === 'function' ? sfonda : null, pid: typeof pid === 'function' ? pid : () => null, wsl: typeof wsl === 'function' ? wsl : () => null });
+    voce.comandiFermabili.set(toolCallId, { ferma, sfonda: typeof sfonda === 'function' ? sfonda : null, pid: typeof pid === 'function' ? pid : () => null, wsl: typeof wsl === 'function' ? wsl : () => null,
+      // C06 (b): il segnale del giro che lo ha lanciato — lo Stop di QUEL giro lo uccide (talosHarness.mjs `segnaleDelComando`)
+      segnaleDelGiro });
     return () => { if (voce.comandiFermabili?.get(toolCallId)?.ferma === ferma) voce.comandiFermabili.delete(toolCallId); };
   };
 }
@@ -1620,21 +1622,37 @@ export function processiDaEventi(eventi, { istanti = null, adesso = null } = {})
   const leggiIstante = creaLettoreIstanti(istanti);
   const adessoNoto = Number.isFinite(adesso);
   const { chiamate } = chiamateDaEventi(eventi);
+  /* ⛔ C06 (bugfixer, 10/10/2026, prova dal vivo sul 4174) — l'uscita VERA di uno sfondato (`talos.processo-sfondo`, A6-bis) non
+     arrivava a questa proiezione: 42 s dopo lo Stop della persona la riga diceva ancora «in-sfondo» e `inCorsoDaMs` cresceva. La
+     prima uscita chiude la riga (come la colonna del frontend: un esito detto non si riscrive); fermata dalla persona è
+     «annullato» senza codice, perché su Windows la chiusura forzata dà 1 (Hermes `mark_exited`: il kill non si sovrascrive). */
+  const usciteSfondo = new Map();
+  for (const e of eventi) {
+    if (e?.type !== 'CUSTOM' || e.name !== 'talos.processo-sfondo' || typeof e.value?.toolCallId !== 'string') continue;
+    if (!usciteSfondo.has(e.value.toolCallId)) usciteSfondo.set(e.value.toolCallId, { ...e.value, sequenza: Number.isFinite(e._sequenza) ? e._sequenza : null });
+  }
 
   const processi = chiamate
     .filter((chiamata) => ATTREZZI_CHE_LANCIANO_PROCESSI.includes(chiamata.nome))
     .map((chiamata) => {
-      const { esito, codiceUscita, sandbox, fileSfondo = null, sfondoDa = null } = esitoDelProcesso(chiamata);
+      const letto = esitoDelProcesso(chiamata);
+      const uscitaSfondo = letto.esito === 'in-sfondo' ? usciteSfondo.get(chiamata.toolCallId) ?? null : null;
+      const dallaPersona = uscitaSfondo?.fermatoDallaPersona === true;
+      const { esito, codiceUscita, sandbox, fileSfondo = null, sfondoDa = null } = uscitaSfondo
+        ? { ...letto, esito: dallaPersona ? 'annullato' : 'concluso', codiceUscita: !dallaPersona && Number.isSafeInteger(uscitaSfondo.codice) ? uscitaSfondo.codice : null }
+        : letto;
       const { comando, motivo: motivoComandoAssente } = comandoDellaChiamata(chiamata);
       const inizioMs = chiamata.sequenzaInizio === null ? null : leggiIstante(chiamata.sequenzaInizio);
-      const fineMs = chiamata.sequenzaFine === null ? null : leggiIstante(chiamata.sequenzaFine);
+      const fineMs = uscitaSfondo
+        ? (uscitaSfondo.sequenza === null ? null : leggiIstante(uscitaSfondo.sequenza)) ?? (Number.isFinite(Date.parse(uscitaSfondo.finitoAlle ?? '')) ? Date.parse(uscitaSfondo.finitoAlle) : null)
+        : chiamata.sequenzaFine === null ? null : leggiIstante(chiamata.sequenzaFine);
 
       let durataMs = null;
       let motivoTempoAssente = null;
       /* ⛔ BUG-14: anche «in-sfondo» è un processo VIVO — conta il tempo da quando è partito, come «in-corso». */
       const vivo = esito === 'in-corso' || esito === 'in-sfondo';
       if (inizioMs === null) motivoTempoAssente = MOTIVO_SENZA_ISTANTI;
-      else if (fineMs !== null) durataMs = fineMs - inizioMs;
+      else if (fineMs !== null && (uscitaSfondo === null || fineMs >= inizioMs)) durataMs = fineMs - inizioMs; // C06: mai negativa
       else motivoTempoAssente = vivo ? MOTIVO_ANCORA_IN_CORSO : MOTIVO_FINE_NON_OSSERVATA;
 
       return {
@@ -6950,7 +6968,7 @@ export function createSessionRegistry({
       modalitaOperativa: voce.modalitaOperativa ?? 'normale',
       segnaleStop: controller.signal,
       segnalePausa: controllerPausa.signal, // C3 tappa 4: la pausa di una delega (l'attrezzo in volo finisce, poi si ferma)
-      registraComandoFermabile: registraComandoFermabileIn(voce), // Stop per riga (owner 02/10/2026)
+      registraComandoFermabile: registraComandoFermabileIn(voce, { segnaleDelGiro: controller.signal }), // Stop per riga (owner 02/10/2026)
       segnalaUscitaSfondo: segnalaUscitaSfondoIn(voce), // A6-bis: l'uscita vera di un comando già sfondato
       mobile: voce.mobile,
       ambienteComandiFn: () => {
@@ -11638,6 +11656,19 @@ export function createSessionRegistry({
       cancelAgentDialogueForSession(sessionId, 'run-cancelled');
       /* K2 (F-020): uno Stop della persona ammette il risveglio coi risultati dei figli a fine giro (vedi `esitoPerRisveglioFiglie`) */
       voce.fermataDallaPersona = daChi === 'persona';
+      /*
+       * ⛔ C06 (b) (10/10/2026, misurato sul server di prova della 0.1.26: Stop → uscita in sottofondo → giro a pagamento) — lo Stop
+       *   del giro uccide anche i comandi che QUESTO giro aveva messo in sottofondo: sono fermati dalla persona come col «Ferma» dei
+       *   Processi, e la loro uscita resta una nota per il prossimo messaggio, mai un risveglio. Come Hermes (`tools/process_registry.py:
+       *   2613-2617`, `kill_started_since`: «an abandoned turn can't enqueue a follow-up reviving work [...] deliberately stopped»).
+       *   ⛔ Solo quelli del giro fermato (stesso segnale): un comando di un giro precedente non muore con questo Stop, e la sua
+       *   uscita sveglia la chat come decidono C06 e K2. Il segno va PRIMA dell'abort (un'uscita sincrona lo troverebbe già).
+       */
+      if (daChi === 'persona') {
+        for (const [toolCallId, ingresso] of voce.comandiFermabili ?? []) {
+          if (ingresso?.segnaleDelGiro && ingresso.segnaleDelGiro === voce.controller.signal) (voce.fermatiDallaPersona ??= new Set()).add(toolCallId);
+        }
+      }
       voce.controller.abort();
       /* ⭐ 14/09 — Hermes, `haltRun`: uno stop esplicito non deve scivolare nel prossimo messaggio in coda. La coda resta a
          vista, IN PAUSA, finché la persona non la invia, la toglie o accoda altro.

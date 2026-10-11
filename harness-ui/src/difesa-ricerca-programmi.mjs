@@ -5,7 +5,7 @@
  * `whoami.exe` — messo in una cartella temporanea, e `spawnSync('git', [], { cwd: <quella cartella> })`
  * lanciato da un processo Node nato SENZA la variabile qui sotto:
  *
- *     genitore SENZA la variabile            → "desktop-…\antonino"   (ha girato il FINTO)
+ *     genitore SENZA la variabile            → "desktop-…\<utente>"   (ha girato il FINTO)
  *     genitore CON la variabile = 1          → "usage: git [-v | --version] …"   (il git vero)
  *     genitore senza, che se la imposta da sé → "usage: git …"          (il git vero)
  *

@@ -133,3 +133,21 @@ test('CB-03: il titolo si ferma a cinque parole e non spezza il testo a metà ca
   assert.equal(titoloRispostaDaTurno(turnoFinto({ risposta: 'uno due tre quattro cinque sei sette' })), 'uno due tre quattro cinque');
   assert.equal(titoloRispostaDaTurno(turnoFinto({ risposta: 'a\n\n  b\tc' })), 'a b c', 'gli a capo del markdown non diventano parole vuote');
 });
+
+test('INDICE-GIRI-CONTO (owner 10/10/2026): the preview names both quantities — «2 giri · 2 messaggi», never the sum as «4 giri»', async () => {
+  const { anteprimaIndiceGiri } = await import('../../src/components/inspector.js');
+  const { impostaLingua } = await import('../../src/components/lingua.js');
+  const voci = [{ numero: 1, tu: true }, { numero: 2, attrezzi: 1 }, { numero: 3, tu: true }, { numero: 4, attrezzi: 0 }];
+  try {
+    impostaLingua('it');
+    assert.equal(anteprimaIndiceGiri(voci), '2 giri · 2 messaggi');
+    assert.equal(anteprimaIndiceGiri([{ numero: 1, tu: true }, { numero: 2 }]), '1 giro · 1 messaggio', 'the singular of each');
+    // al contrario: la grandezza che manca non si scrive, e niente voci è niente testo
+    assert.equal(anteprimaIndiceGiri([{ numero: 1 }, { numero: 2 }, { numero: 3 }]), '3 giri');
+    assert.equal(anteprimaIndiceGiri([{ numero: 1, tu: true }]), '1 messaggio');
+    assert.equal(anteprimaIndiceGiri([]), '');
+    assert.equal(anteprimaIndiceGiri([{ numero: 1, tu: 'true' }]), '1 giro', 'only the true boolean marks a message of the person');
+    impostaLingua('en');
+    assert.equal(anteprimaIndiceGiri(voci), '2 turns · 2 messages');
+  } finally { impostaLingua('it'); }
+});

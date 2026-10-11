@@ -4554,6 +4554,7 @@ var init_chat = __esm({
         "workflow.actions.approvedLine": "{approvazione}{lettura}",
         "workflow.actions.approvedAt": "Approvato alle {ora}.",
         "workflow.actions.approvedNoTime": "Approvato.",
+        "workflow.actions.otherWindow": "Gestito da un’altra finestra di TALOS: aprilo lì per approvarlo, avviarlo o cambiarlo.",
         "workflow.actions.startedLine": "{avvio}{run}",
         "workflow.actions.startedAt": "Avviato alle {ora}.",
         "workflow.actions.startedNoTime": "Avviato.",
@@ -4886,6 +4887,7 @@ var init_chat = __esm({
         "run.retryMany": "Riprova {n} passi",
         "run.note.cancelling": "Annullamento in corso: i passi in corso si stanno fermando.",
         "run.note.pausing": "Pausa chiesta: i passi in corso finiscono, nessuno nuovo parte.",
+        "run.otherWindow": "In corso in un’altra finestra di TALOS: mettilo in pausa, annullalo o riprovalo lì.",
         "run.confirm.runningOne": "Il passo in corso si ferma subito.",
         "run.confirm.runningMany": "I {n} passi in corso si fermano subito.",
         "run.confirm.pendingOne": "Il passo non ancora partito non partirà.",
@@ -5309,6 +5311,7 @@ var init_chat = __esm({
         "workflow.actions.approvedLine": "{approvazione}{lettura}",
         "workflow.actions.approvedAt": "Approved at {ora}.",
         "workflow.actions.approvedNoTime": "Approved.",
+        "workflow.actions.otherWindow": "Managed in another TALOS window: open it there to approve, start or change it.",
         "workflow.actions.startedLine": "{avvio}{run}",
         "workflow.actions.startedAt": "Started at {ora}.",
         "workflow.actions.startedNoTime": "Started.",
@@ -5641,6 +5644,7 @@ var init_chat = __esm({
         "run.retryMany": "Retry {n} steps",
         "run.note.cancelling": "Cancellation in progress: running steps are stopping.",
         "run.note.pausing": "Pause requested: running steps finish, no new steps start.",
+        "run.otherWindow": "Running in another TALOS window: pause, cancel or retry it there.",
         "run.confirm.runningOne": "The running step stops immediately.",
         "run.confirm.runningMany": "The {n} running steps stop immediately.",
         "run.confirm.pendingOne": "The step that has not started will not start.",
@@ -6940,6 +6944,8 @@ var init_processi = __esm({
         "inspector.compactionsNonePreview": "nessuna",
         "inspector.turnsPreviewOne": "{n} giro",
         "inspector.turnsPreviewMany": "{n} giri",
+        "inspector.turnsPreviewMessagesOne": "{n} messaggio",
+        "inspector.turnsPreviewMessagesMany": "{n} messaggi",
         "inspector.windowUndeclared": "finestra non dichiarata",
         "inspector.turnYourMessage": "tuo messaggio",
         "inspector.turnNoContact": "senza contatto",
@@ -7228,6 +7234,8 @@ var init_processi = __esm({
         "inspector.compactionsNonePreview": "none",
         "inspector.turnsPreviewOne": "{n} turn",
         "inspector.turnsPreviewMany": "{n} turns",
+        "inspector.turnsPreviewMessagesOne": "{n} message",
+        "inspector.turnsPreviewMessagesMany": "{n} messages",
         "inspector.windowUndeclared": "window not declared",
         "inspector.turnYourMessage": "your message",
         "inspector.turnNoContact": "no contact",
@@ -25964,6 +25972,14 @@ function righeGiri(giri = []) {
     return [`${g.numero} · ${titolo2}`, misura, g.senzaContatto ? "warning" : g.inCorso ? "accent" : ""];
   });
 }
+function anteprimaIndiceGiri(giri = []) {
+  const messaggi = giri.filter((g) => g?.tu === true).length;
+  const diTalos = giri.length - messaggi;
+  return [
+    diTalos ? tn("processi.inspector.turnsPreviewOne", "processi.inspector.turnsPreviewMany", diTalos) : "",
+    messaggi ? tn("processi.inspector.turnsPreviewMessagesOne", "processi.inspector.turnsPreviewMessagesMany", messaggi) : ""
+  ].filter(Boolean).join(" · ");
+}
 function righeFile(file = []) {
   return file.map((f) => [f.path, `+${f.aggiunte ?? 0}${f.rimozioni ? ` −${f.rimozioni}` : ""}`]);
 }
@@ -26991,7 +27007,7 @@ function aggiornaInspector(inspector, dati = {}, { document: d = globalThis.docu
     const giri = righeGiri(dati.giri);
     const indiceVuoto = dati.storiaInCaricamento === true ? t("app.sessions.openingHistory") : t("processi.inspector.turnsNone");
     riempiCard(d, indice2, giri.length ? giri : [[indiceVuoto, "—"]], { classiValore: (r) => r[2] === "accent" ? "talos-kv__v--accent" : "" });
-    scriviAnteprima(indice2, giri.length ? tn("processi.inspector.turnsPreviewOne", "processi.inspector.turnsPreviewMany", giri.length) : dati.storiaInCaricamento === true ? "…" : "—");
+    scriviAnteprima(indice2, giri.length ? anteprimaIndiceGiri(dati.giri) : dati.storiaInCaricamento === true ? "…" : "—");
   }
   if (!schedaDaSaltare(inspector, inspector.querySelector("#railFile"), "file")) {
     const fileCard = inspector.querySelector('#railFile [data-c="InspectorCard"]');
@@ -27032,8 +27048,13 @@ function processiDagliEventi(eventi2 = [], { adesso = Date.now(), nomiComando = 
   const usciteAnticipate = /* @__PURE__ */ new Map();
   const tolti = /* @__PURE__ */ new Set();
   const chiudiSfondo = (p, e) => {
-    p.stato = e.esito === "riuscito" ? "riuscito" : e.esito === "fallito" ? "fallito" : "ucciso";
-    p.uscita = Number.isSafeInteger(e.codice) ? e.codice : null;
+    if (e.fermatoDallaPersona === true) {
+      p.stato = "annullato";
+      p.uscita = null;
+    } else {
+      p.stato = e.esito === "riuscito" ? "riuscito" : e.esito === "fallito" ? "fallito" : "ucciso";
+      p.uscita = Number.isSafeInteger(e.codice) ? e.codice : null;
+    }
     p.durataSfondoMs = Number.isFinite(e.finitoAlle) && Number.isFinite(p.avviatoA) && e.finitoAlle >= p.avviatoA ? e.finitoAlle - p.avviatoA : null;
     p.durataMs = p.durataSfondoMs;
   };
@@ -47112,7 +47133,8 @@ function disegnaCardProposta(section, {
       fasi.append(voce2);
     }
     corpo.append(fasi);
-    const modificabile = (stato2.chiave === "da-approvare" || stato2.chiave === "approvato") && !run;
+    const altraFinestra = revisione.soloLettura === true || run?.soloLettura === true;
+    const modificabile = (stato2.chiave === "da-approvare" || stato2.chiave === "approvato") && !run && !altraFinestra;
     const inModifica = modificabile && bozzaTetti && typeof bozzaTetti === "object";
     const testaTetti = make("div", "talos-workflow-proposal__limits-head");
     testaTetti.append(make("span", "talos-workflow-proposal__limits-title", t("chat.workflow.limits.title")));
@@ -47227,7 +47249,9 @@ function disegnaCardProposta(section, {
       b.disabled = Boolean(spento);
       return b;
     };
-    if (inModifica) {
+    if (altraFinestra) {
+      azioni.append(make("p", "talos-workflow-proposal__hint", t("chat.workflow.actions.otherWindow")));
+    } else if (inModifica) {
       const prossima = (revisione.version ?? 1) + 1;
       salva = bottone8(inVolo === "salva" ? t("chat.workflow.actions.saving") : t("chat.workflow.actions.saveAsVersion", { n: prossima }), "talos-button--primary", "salva-tetti", true);
       salva.addEventListener?.("click", () => {
@@ -47387,12 +47411,14 @@ var init_workflow_proposal_card = __esm({
 // src/components/controlli-run.js
 function passoRisolvibile(panoramica, statoDelPasso) {
   if (!panoramica?.runId || panoramica.cancelRequested === true) return false;
+  if (panoramica.soloLettura === true) return false;
   if (statoDelPasso === "failed") return ["running", "needs_attention"].includes(panoramica.status);
   return statoDelPasso === "uncertain" && panoramica.status === "needs_attention";
 }
 function azioniDelRun(panoramica) {
   const vuoto = { principale: null, menu: [], nota: null };
   if (!panoramica?.runId || RUN_FINITI.has(panoramica.status)) return vuoto;
+  if (panoramica.soloLettura === true) return { ...vuoto, nota: t("chat.run.otherWindow") };
   const falliti = somma(panoramica, ["failed"]);
   const annulla = { azione: "cancel", etichetta: t("chat.run.cancel"), pericolo: true };
   const riprova = falliti > 0 ? { azione: "retry", etichetta: tn("chat.run.retryOne", "chat.run.retryMany", falliti, { n: cifra2(falliti) }), falliti } : null;
@@ -54370,8 +54396,19 @@ function montaGrafoWorkflow(host, {
     return p ? `${p.status}|${p.pauseRequested === true}|${p.cancelRequested === true}` : "";
   };
   function disegnaRun() {
-    const { principale, menu } = run ? azioniDelRun(fonte.panoramica) : { principale: null, menu: [] };
+    const { principale, menu, nota = null } = run ? azioniDelRun(fonte.panoramica) : { principale: null, menu: [] };
     menuRunVoci = menu;
+    const altraFinestra = run && fonte.panoramica?.soloLettura === true;
+    if (altraFinestra && nota) {
+      esitoRun.hidden = false;
+      esitoRun.textContent = nota;
+      esitoRun.setAttribute("role", "status");
+      esitoRun.dataset.tono = "nota";
+    } else if (esitoRun.dataset.tono === "nota") {
+      esitoRun.hidden = true;
+      esitoRun.textContent = "";
+      delete esitoRun.dataset.tono;
+    }
     comandiRun.hidden = !principale && !menu.length;
     principaleRun.hidden = !principale;
     if (principale) {
@@ -89319,7 +89356,16 @@ ${testo2}` : testo2;
         else if (evento.type === "ApprovalRequested" && typeof evento.azione?.toolCallId === "string") state.realSession.eventiAttrezzi.push({ type: "ApprovalRequested", requestId: evento.requestId, toolCallId: evento.azione.toolCallId });
         else if (evento.type === "ApprovalResolved") state.realSession.eventiAttrezzi.push({ type: "ApprovalResolved", requestId: evento.requestId, ricevutoA: Date.now() });
         else if (evento.type === "CUSTOM" && evento.name === "talos.processo-sfondo" && typeof evento.value?.toolCallId === "string") {
-          state.realSession.eventiAttrezzi.push({ type: "ProcessoSfondoFinito", ...Number.isFinite(evento._sequenza) ? { _sequenza: evento._sequenza } : {}, toolCallId: evento.value.toolCallId, esito: evento.value.esito, codice: evento.value.codice, finitoAlle: Date.parse(evento.value.finitoAlle ?? "") });
+          state.realSession.eventiAttrezzi.push({
+            type: "ProcessoSfondoFinito",
+            ...Number.isFinite(evento._sequenza) ? { _sequenza: evento._sequenza } : {},
+            toolCallId: evento.value.toolCallId,
+            esito: evento.value.esito,
+            codice: evento.value.codice,
+            finitoAlle: Date.parse(evento.value.finitoAlle ?? ""),
+            // NaN se manca: nessuna durata inventata
+            ...evento.value.fermatoDallaPersona === true ? { fermatoDallaPersona: true } : {}
+          });
           aggiornaInspectorDaStato();
           if (evento.value.fermatoDallaPersona === true) mostraFermatoDallaPersona(evento.value);
         } else if (evento.type === "CUSTOM" && evento.name === "talos.processo-tolto" && typeof evento.value?.toolCallId === "string") {

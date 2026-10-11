@@ -246,6 +246,19 @@ else {
   $env:TALOS_HARNESS_UI_WORKFLOW_DIR = Join-Path (Join-Path $env:LOCALAPPDATA 'TALOS-integrazione-r4') 'workflows'
   Write-Output ("registro Workflow: {0}" -f $env:TALOS_HARNESS_UI_WORKFLOW_DIR)
 }
+# ⭐ 10/10/2026, decisione owner «Sola lettura dall'altro archivio» — il 4174 condivide le SESSIONI con l'app installata (07/10),
+#   ma i Workflow di quelle chat stanno nell'archivio dell'app, che ha un proprietario solo (`store-owner.mjs`): una chat dell'app
+#   aperta qui diceva «Workflow non disponibile». Il server lo legge e basta (`apriArchivioInSolaLettura`). Solo quando le sessioni
+#   sono davvero quelle dell'app e la cartella esiste; una scelta esplicita dell'owner vince.
+if (-not $env:TALOS_HARNESS_UI_WORKFLOW_ALTRO_DIR -and $env:APPDATA -and $env:TALOS_HARNESS_UI_SESSIONS_DIR) {
+  $sessioniApp = Join-Path (Join-Path $env:APPDATA 'TALOS') 'sessions'
+  $workflowApp = Join-Path (Join-Path $env:APPDATA 'TALOS') 'workflows'
+  $stesseSessioni = [IO.Path]::GetFullPath($env:TALOS_HARNESS_UI_SESSIONS_DIR).TrimEnd('\') -ieq [IO.Path]::GetFullPath($sessioniApp).TrimEnd('\')
+  if ($stesseSessioni -and (Test-Path -LiteralPath $workflowApp -PathType Container)) {
+    $env:TALOS_HARNESS_UI_WORKFLOW_ALTRO_DIR = $workflowApp
+    Write-Output ("Workflow dell'app, in sola lettura: {0}" -f $workflowApp)
+  }
+}
 # ⛔⛔⛔ F-ENV-12 (04/10/2026) — LA PORTA SI IMPONE ANCHE AL FIGLIO.
 # L'app TALOS installata vive con `TALOS_HARNESS_UI_PORT` impostato nel proprio ambiente (es. 62337): se la
 # consegna parte da quell'ambiente, il figlio eredita la variabile, legge la porta dell'app INVECE di `-Porta`,
