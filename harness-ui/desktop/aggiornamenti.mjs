@@ -97,6 +97,17 @@ export async function sha512DelFile(percorso) {
  * L'aggiornatore. Tutto ciò che tocca il mondo arriva da fuori (`updater` = l'autoUpdater di electron-updater, `fetch`,
  * `impostazioni`, il tempo): le prove lo esercitano senza Electron e senza rete.
  */
+/*
+ * ⛔⛔ Owner 11/10/2026: «appena ho premuto riavvia si è disinstallata la app e quella nuova non è stata installata». Misurato sul suo
+ *   PC: l'installer della 0.1.27 è partito alle 09:01:06 e ha riaperto TALOS alle 09:06:00. L'aggiornamento era RIUSCITO, ma
+ *   `quitAndInstall(true, true)` lo lanciava in SILENZIO: cinque minuti senza app e senza una finestra.
+ * ⇒ Come Goose (`ui/desktop/src/utils/autoUpdater.ts:307`, `autoUpdater.quitAndInstall(false, true)`): l'installer si vede, con
+ *   la sua barra. Da aggiornamento salta il benvenuto, la licenza e la cartella, e alla fine riapre TALOS da solo
+ *   (`assets/installer.nsh`, `customWelcomePage` e `customFinishPage`). Prima di chiudersi l'app lo scrive nella banda e aspetta
+ *   un attimo, perché si legga. L'installazione alla CHIUSURA dell'app resta silenziosa: lì nessuno sta aspettando.
+ */
+export const AVVISO_PRIMA_DELL_INSTALLAZIONE_MS = 1500;
+
 export function creaAggiornatore({
   updater, fetch, chiavePubblica, versioneAttuale, impostazioni, repo = REPO_PREDEFINITO, fonte = FONTE_GITHUB, // fonte: `fonte-aggiornamenti.mjs`
   pianifica = setTimeout, annulla = clearTimeout, ora = () => new Date(), registra = () => {}, notifica = () => {},
@@ -118,7 +129,7 @@ export function creaAggiornatore({
   const salvate = impostazioni.leggi() ?? {};
   const stato = {
     stato: 'fermo', versioneAttuale, automatici: salvate.automatici !== false,
-    ultimoControllo: salvate.ultimoControllo ?? null, pronto: null, errore: null,
+    ultimoControllo: salvate.ultimoControllo ?? null, pronto: null, errore: null, installazione: false,
   };
   let timer = null;
   let inCorso = null;
@@ -194,7 +205,10 @@ export function creaAggiornatore({
     /** Installa SUBITO l'aggiornamento già scaricato e verificato; senza, non fa niente. */
     riavviaOra() {
       if (!stato.pronto) return false;
-      updater.quitAndInstall(true, true);
+      if (stato.installazione) return true; // un secondo clic non lancia un secondo installer
+      stato.installazione = true;
+      annuncia(); // la banda dice che TALOS si chiude, che si vedrà l'installazione e che si riaprirà da solo
+      pianifica(() => updater.quitAndInstall(false, true), AVVISO_PRIMA_DELL_INSTALLAZIONE_MS);
       return true;
     },
     stato: pubblico,

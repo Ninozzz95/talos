@@ -40,6 +40,8 @@ export function quandoLeggibile(iso, adesso = new Date()) {
 export function fraseBanda(stato) {
   const v = stato?.pronto?.versione;
   if (!v) return null;
+  // owner 11/10/2026: «Riavvia ora» è partito — prima di chiudersi la app lo dice
+  if (stato.installazione) return t("varie.updates.band.installing", { version: v });
   return stato.automatici !== false
     ? t("varie.updates.band.readyInstallOnClose", { version: v })
     : t("varie.updates.band.readyRestart", { version: v });

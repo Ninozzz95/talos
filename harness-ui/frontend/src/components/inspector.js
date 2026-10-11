@@ -110,7 +110,8 @@ export function righeFinestraSulLimite({ usage = null, ripartizione = null, limi
   const r = ripartizioneSulLimite({ ripartizione, usati, limite });
   // la «~» la disegna la classe delle stime (`.talos-measure--estimate::before`, index.css): nel testo usciva doppia, «~~4,2k»
   const righe = r.voci.map((v) => [tr(CHIAVI_CATEGORIA[v.id]), `${kilo(v.tokens)}${v.percentuale === null ? '' : ` · ${percento(v.tokens, limite.soglia)}`}`, 'stima']);
-  righe.push([tr('processi.inspector.windowInUse'), r.usati === null ? '—' : `${kilo(r.usati)} · ${percento(r.usati, limite.soglia)}`]);
+  const stimato = usage?.stimato === true; // owner 11/10/2026: la stima euristica del motore non si chiama «misurato»
+  righe.push([tr(stimato ? 'processi.inspector.windowInUseEstimate' : 'processi.inspector.windowInUse'), r.usati === null ? '—' : `${kilo(r.usati)} · ${percento(r.usati, limite.soglia)}`, ...(stimato ? ['stima'] : [])]);
   righe.push([tr('processi.inspector.windowBeforeCompaction'), r.restanti === null ? '—' : r.oltre ? tr('processi.inspector.windowOver', { n: kilo(-r.restanti) }) : kilo(r.restanti)]);
   righe.push([tr('processi.inspector.windowCache'), storiaInCaricamento && !cacheSessione ? '—' : testoRiusoCache(cacheSessione), 'a-capo']);
   const p = percheDelLimite(limite);
@@ -123,7 +124,7 @@ export function righeFinestraSulLimite({ usage = null, ripartizione = null, limi
     fette: r.voci.filter((v) => v.percentuale !== null).map((v) => ({ id: v.id, percentuale: v.percentuale })),
     perche: p ? tr(p.chiave, { soglia: kilo(p.soglia), finestra: p.finestra === null ? '—' : kilo(p.finestra) }) : '',
     // la card compressa (C1, 10/10): misurato su limite; la percentuale la dice la barra, che da compressa resta (foto: «98k · …» tagliato)
-    anteprima: `${r.usati === null ? '—' : kilo(r.usati)} / ${segno}${kilo(limite.soglia)}`,
+    anteprima: `${r.usati === null ? '—' : `${stimato ? '~' : ''}${kilo(r.usati)}`} / ${segno}${kilo(limite.soglia)}`,
   };
 }
 

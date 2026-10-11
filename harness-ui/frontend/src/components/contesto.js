@@ -275,7 +275,9 @@ export function finestraDiContesto({ misura = null, revisione = null, finestraCa
         // ⛔ `completion_tokens: 0` non è un dato mancante travestito da zero: `inputTokens`
         //    È GIÀ tutto ciò che occupa la finestra alla prossima richiesta (la risposta del
         //    turno precedente compresa). Sommarci il completion la conterebbe due volte.
-        usage: { prompt_tokens: m.inputTokens, completion_tokens: 0 },
+        /* owner 11/10/2026 («stimato» con la «~»): «misurato» solo se il numero viene dal fornitore o dal motore locale; la stima
+           euristica del motore si dice stima, come fa già il Context Manager (`methodLabel`) */
+        usage: { prompt_tokens: m.inputTokens, completion_tokens: 0, stimato: !['provider', 'runtime'].includes(m.method) },
         finestra: m.windowTokens,
         // ⛔ niente ripartizione attrezzi/istruzioni/memoria sopra una misura del motore:
         //    quei token sono GIÀ dentro `inputTokens`, e disegnarli a parte li conta due volte.

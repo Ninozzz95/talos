@@ -65,6 +65,70 @@ export async function inventario(dir) {
 }
 
 /*
+ * ⛔⛔ Owner 11/10/2026 («Pochi file + scarico a blocchi»): l'aggiornamento 0.1.26 → 0.1.27 è durato 5 minuti sul suo PC, con 9.251 file
+ *   installati, 7.374 in `resources/harness-ui/node_modules`. Il server sta negli `extraResources`, e lì electron-builder NON applica
+ *   le esclusioni che usa per le dipendenze dell'app (app-builder-lib 26.16.1, `out/util/NodeModuleCopyHelper.js:12-40`: CHANGELOG,
+ *   README, test, examples, .bin…; `out/fileMatcher.js:16-21`: i nomi di controllo versione e `.d.ts`). Qui si applicano le stesse,
+ *   più ciò che a runtime non si carica mai: mappe, sorgenti TypeScript, e i binari nativi di altre piattaforme (il pacchetto è
+ *   Windows x64). Misurati nella 0.1.27 installata: 1.746 tipi, 1.933 sorgenti .ts, 486 mappe, 209 documenti, 16 binari (30 MB).
+ * ⛔ Licenze e avvisi restano SEMPRE (LICENSE, LICENCE, NOTICE, COPYING, AUTHORS, PATENTS): «licenze originali conservate nei
+ *   rispettivi node_modules». E nessun file dentro `package.json`, `.node`, `.wasm` si tocca.
+ */
+const RESTANO_SEMPRE = /^(licen[cs]e|notice|copying|authors|patents|third[-_]party)/i;
+const NOMI_DA_TOGLIERE = new Set(['.git', '.hg', '.svn', '.github', '.circleci', '.husky', '.idea', '.vs', '.nyc_output', '.DS_Store',
+  'thumbs.db', '.gitignore', '.gitkeep', '.gitattributes', '.npmignore', '.travis.yml', 'appveyor.yml', 'circle.yml', '.flowconfig',
+  '.jshintrc', '.eslintrc', '.editorconfig', '.prettierrc', 'yarn.lock', 'pnpm-lock.yaml', 'bun.lock', 'bun.lockb', 'npm-debug.log',
+  'karma.conf.js', '.coveralls.yml', 'binding.gyp', 'node_gyp_bins']);
+/** Cartelle che si tolgono solo in CIMA a un pacchetto (come electron-builder): più in basso un `test` può essere codice. */
+const CARTELLE_DA_TOGLIERE_IN_CIMA = new Set(['test', 'tests', '__tests__', 'powered-test', 'example', 'examples', 'docs', 'doc', 'benchmark', 'benchmarks']);
+const SI_TOGLIE_IL_FILE = (nome) => !RESTANO_SEMPRE.test(nome) && (
+  /\.d\.[cm]?ts$/i.test(nome) || /\.map$/i.test(nome)
+  || /\.[cm]?tsx?$/i.test(nome)
+  || /^(readme|changelog|changes|history)(\.(md|markdown|txt))?$/i.test(nome) || /\.(md|markdown)$/i.test(nome));
+/** I binari nativi di piattaforme che il pacchetto Windows x64 non usa mai (`prebuilds/<piattaforma>-<arch>`). */
+const PREBUILD_DI_ALTRI = /^(darwin|linux|freebsd|openbsd|android|sunos|aix)-|^win32-(arm64|ia32)$/i;
+
+export async function sfoltisciDipendenze(nodeModules) {
+  const tolti = { file: 0, byte: 0 };
+  const misura = async (percorso) => {
+    const s = await stat(percorso);
+    if (!s.isDirectory()) return { file: 1, byte: s.size };
+    let file = 0, byte = 0;
+    for (const voce of await readdir(percorso)) { const m = await misura(join(percorso, voce)); file += m.file; byte += m.byte; }
+    return { file, byte };
+  };
+  const togli = async (percorso) => { const m = await misura(percorso); tolti.file += m.file; tolti.byte += m.byte; await rm(percorso, { recursive: true, force: true }); };
+  const visita = async (cartella, inCimaAUnPacchetto) => {
+    for (const voce of await readdir(cartella, { withFileTypes: true })) {
+      const percorso = join(cartella, voce.name);
+      if (voce.isSymbolicLink()) continue; // un collegamento non si segue e non si tocca
+      if (voce.isDirectory()) {
+        if (voce.name === 'node_modules') { await visitaPacchetti(percorso); continue; }
+        if (NOMI_DA_TOGLIERE.has(voce.name) || (inCimaAUnPacchetto && CARTELLE_DA_TOGLIERE_IN_CIMA.has(voce.name.toLowerCase()))) { await togli(percorso); continue; }
+        if (cartella.endsWith(`${sep}prebuilds`) && PREBUILD_DI_ALTRI.test(voce.name)) { await togli(percorso); continue; }
+        await visita(percorso, false);
+        continue;
+      }
+      if (NOMI_DA_TOGLIERE.has(voce.name) || SI_TOGLIE_IL_FILE(voce.name)) await togli(percorso);
+    }
+  };
+  const visitaPacchetti = async (cartella) => {
+    for (const voce of await readdir(cartella, { withFileTypes: true })) {
+      const percorso = join(cartella, voce.name);
+      if (voce.isSymbolicLink() || !voce.isDirectory()) continue;
+      if (voce.name === '.bin') { await togli(percorso); continue; }
+      /* ⛔ `typescript` non si sfoltisce MAI: il kernel legge a runtime i suoi `lib/*.d.ts` per il cancello semantico
+         (`leggiLibreriaStandardTs`, talosHarness.mjs). Trovato dalla prova del kernel sulle dipendenze sfoltite (11/10/2026). */
+      if (voce.name === 'typescript') continue;
+      if (voce.name.startsWith('@')) { for (const s of await readdir(percorso, { withFileTypes: true })) if (s.isDirectory() && !s.isSymbolicLink()) await visita(join(percorso, s.name), true); continue; }
+      await visita(percorso, true);
+    }
+  };
+  if (existsSync(nodeModules)) await visitaPacchetti(nodeModules);
+  return tolti;
+}
+
+/*
  * ⛔ F-001 (owner 02/10/2026: «sfoltire a ~5 MB») — `leggi` estrae il testo dei PDF con `pdfjs-dist`, che porta 35 MB (viewer,
  *   build moderna, mappe, sandbox, tipi) e una dipendenza OPZIONALE nativa, `@napi-rs/canvas` (37 MB), che serve a DISEGNARE le
  *   pagine e non a estrarne il testo. Si tiene solo ciò che usa `src/kernel/estrai-documento.mjs`: la build legacy ridotta, il
@@ -193,7 +257,10 @@ export async function preparaPacchetto() {
   await copiaAssistenza({ sorgente: join(root, '../..', 'docs/assistenza'), destinazione: join(staging, 'docs/assistenza') });
   await dipendenzeProduzione(backend);
   await sfoltisciPdfjs(join(backend, 'node_modules')); // F-001: ~5 MB invece di ~72 (owner 02/10)
+  const sfoltiti = await sfoltisciDipendenze(join(backend, 'node_modules')); // owner 11/10: meno file, aggiornamento più veloce
   await dipendenzeProduzione(contesto);
+  const sfoltitiContesto = await sfoltisciDipendenze(join(contesto, 'node_modules'));
+  console.log(`Dipendenze sfoltite: ${sfoltiti.file + sfoltitiContesto.file} file, ${Math.round((sfoltiti.byte + sfoltitiContesto.byte) / 1048576)} MB.`);
   // Segnaposto VCS ignorato anche da electron-builder: non è un file di runtime.
   await rm(join(backend, 'node_modules/undici/lib/llhttp/.gitkeep'), { force: true });
   // npm crea .bin per i comandi delle dipendenze: i .cmd/.ps1 sono file normali Windows.

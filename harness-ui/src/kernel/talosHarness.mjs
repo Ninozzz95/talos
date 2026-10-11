@@ -6542,6 +6542,36 @@ export function normalizzaTimeoutShell(v) {
     return Math.min(Math.max(Math.round(n), TIMEOUT_SHELL_MINIMO_MS), TIMEOUT_SHELL_MASSIMO_MS)
 }
 
+/*
+ * ⛔ K4b (11/10/2026, owner 03/10: «ogni parola in inglese e italiano») — le frasi delle carte di permesso nate nel kernel (root in
+ *   WSL, scrittura fuori dalla cartella della sessione, computer di rete) erano ITALIANE e arrivavano così anche a un'interfaccia in
+ *   inglese. Come `path-policy.mjs` (`frasePerLaPersona`): il kernel manda la frase INGLESE (riserva per chi non ha il dizionario: la
+ *   CLI, il flusso JSON), la chiave letterale e i valori; l'interfaccia la dice con `testoDelCampo`. Un valore `<nome>Chiave` è a sua
+ *   volta una chiave del dizionario (l'azione di `cosa`). L'italiano del dizionario è la frase di prima, parola per parola.
+ */
+export const FRASI_DI_PERMESSO = Object.freeze({
+    'server.approval.outsideProject.verified': 'It wants to write outside the session folder, in {cartella}. With «Writes to the project» this needs your yes.',
+    'server.approval.outsideProject.unverified': 'It could not be verified where «{percorso}» ends up: it may be outside the session folder. With «Writes to the project» this needs your yes.',
+    'server.approval.wslRoot.user': "This command runs in {linux} as {utente}, and with this session's permissions nobody approves it: it can change the whole Linux system and write to the Windows disks. If you confirm it, it applies to the whole session.",
+    'server.approval.wslRoot.unverifiedUser': 'This command runs in {linux} without anyone approving it, and the user could not be verified: it could be root, that is change the whole Linux system and write to the Windows disks. If you confirm it, it applies to the whole session.',
+    'server.approval.network.sessionFolder': "The session folder is on a network computer ({ospite}): opening its files sends your Windows credentials to that computer. If you allow it, it applies to the whole session.",
+    'server.approval.network.link': 'It wants to {cosa} through a link ({collegamento}) that leads to a network computer ({ospite}): just opening it sends your Windows credentials to that computer. It needs your yes.',
+    'server.approval.network.listFolder': 'It wants to see the files of a folder on a network computer ({ospite}): just opening it sends your Windows credentials to that computer. It needs your yes.',
+    'server.approval.network.open': 'It wants to {cosa} on a network computer ({ospite}): just opening it sends your Windows credentials to that computer. It needs your yes.',
+    'server.approval.network.action.read': 'read a file',
+    'server.approval.network.action.write': 'write a file',
+    'server.approval.network.action.edit': 'edit a file',
+    'server.approval.network.action.list': 'see the files of a folder',
+    'server.approval.network.action.search': 'search the files of a folder',
+    'server.approval.network.action.open': 'open a file',
+})
+
+/** `{ frase, fraseChiave, fraseParams }` di una carta di permesso. ⛔ Sostituzione con FUNZIONE: un percorso con `$&` resta com'è. */
+export function fraseDiPermesso(chiave, params) {
+    const frase = FRASI_DI_PERMESSO[chiave].replace(/\{(\w+)\}/g, (tutto, nome) => (params[nome] === undefined ? tutto : String(params[nome])))
+    return { frase, fraseChiave: chiave, fraseParams: params }
+}
+
 /** La frase del tempo scaduto con i SECONDI veri: col timeout per-chiamata «120» non è più sempre vero.
  *  ⛔ A 120 s torna la costante ESATTA di sempre: `k3-lingua-kernel` la conta una volta, e le storie
  *  salvate la riconoscono; il template qui sotto NON la contiene (e non deve contenerla). */
@@ -9875,11 +9905,11 @@ async function scritturaFuoriDalProgetto(azione, { cartella, posizioneFn, consen
     return verificato
         ? {
             verificato: true, cartella: posizione.cartella, chiave: chiaveConsensoCartella(posizione.spazio, posizione.cartella),
-            frase: `Vuole scrivere fuori dalla cartella della sessione, in ${posizione.cartella}. Con «Scrive nel progetto» qui serve il tuo sì.`,
+            ...fraseDiPermesso('server.approval.outsideProject.verified', { cartella: posizione.cartella }),
         }
         : {
             verificato: false, cartella: null,
-            frase: `Non è stato possibile verificare dove finisce «${azione.percorso}»: potrebbe essere fuori dalla cartella della sessione. Con «Scrive nel progetto» qui serve il tuo sì.`,
+            ...fraseDiPermesso('server.approval.outsideProject.unverified', { percorso: azione.percorso }),
         }
 }
 
@@ -11442,9 +11472,9 @@ export async function talosLavora({
         catch { root = { distro: null, utente: null } }
         if (!root) return null
         const nellaDistro = `Linux (WSL${root.distro ? `, ${root.distro}` : ''})`
-        const frase = root.utente
-            ? `Questo comando gira in ${nellaDistro} come ${root.utente}, e con i permessi di questa sessione nessuno lo approva: può cambiare tutto il sistema Linux e scrivere sui dischi di Windows. Se lo confermi, vale per tutta la sessione.`
-            : `Questo comando gira in ${nellaDistro} senza che nessuno lo approvi, e non è stato possibile verificare con che utente: potrebbe essere root, cioè cambiare tutto il sistema Linux e scrivere sui dischi di Windows. Se lo confermi, vale per tutta la sessione.`
+        const laFrase = root.utente
+            ? fraseDiPermesso('server.approval.wslRoot.user', { linux: nellaDistro, utente: root.utente })
+            : fraseDiPermesso('server.approval.wslRoot.unverifiedUser', { linux: nellaDistro })
         const motivo = `the command would run in WSL as ${root.utente ?? 'an unverified user (possibly root)'} without anyone approving it, which needs the person's confirmation once per session`
         if (typeof chiediApprovazioneFn !== 'function') return { consentito: false, via: 'wsl-root', motivo: `${motivo}, but this session has no approval channel.` }
         const FERMATO = Symbol('fermato-mentre-chiedevo')
@@ -11456,7 +11486,7 @@ export async function talosLavora({
             : null
         let approvato = false
         try {
-            const domanda = chiediApprovazioneFn({ tipo, toolCallId, comando, wslRoot: { distro: root.distro, utente: root.utente, frase } })
+            const domanda = chiediApprovazioneFn({ tipo, toolCallId, comando, wslRoot: { distro: root.distro, utente: root.utente, ...laFrase } })
             approvato = gara ? await Promise.race([domanda, gara]) : await domanda
         }
         catch { approvato = false }
@@ -11658,7 +11688,8 @@ export async function talosLavora({
        C2 R6 (08/10/2026): una Map con la stessa vita del Set di prima (il giro), niente di nuovo che cresce. Il valore dice CHI
        ha dato il sì: l'antenato più vicino col sì «cartella di rete per la sessione», oppure `null` (sì proprio, o dato adesso). */
     const reteConsentitaPerChiamata = new Map()
-    const COSA_VUOLE = { leggi: 'leggere un file', scrivi: 'scrivere un file', file_edit: 'modificare un file', elenca: 'vedere i file di una cartella', cerca: 'cercare nei file di una cartella' }
+    /* K4b (11/10/2026): l'azione si dice con la SUA chiave (`cosaChiave`), così entra nella frase nella lingua dell'interfaccia */
+    const COSA_VUOLE = { leggi: 'read', scrivi: 'write', file_edit: 'edit', elenca: 'list', cerca: 'search' }
     const controllaPercorsoDiRete = async (tipo, percorso, toolCallId) => {
         const dove = await destinazioneDelGiro(percorso)
         if (!dove) return null
@@ -11679,21 +11710,22 @@ export async function talosLavora({
         if (typeof chiediApprovazioneFn !== 'function') {
             return `REFUSED. Nothing was ${verbo}: "${percorso}" ${dove.via === 'collegamento' ? `goes through a link (${dove.collegamento}) to` : 'is on'} a network share (${ospite}); opening it sends the user’s Windows credentials to that computer, and this session has no one to confirm it.`
         }
-        const cosa = COSA_VUOLE[tipo] ?? 'aprire un file'
-        const frase = perLaSessione
-            ? `La cartella della sessione sta su un computer di rete (${ospite}): aprire i suoi file manda a quel computer le credenziali di Windows. Se lo consenti, vale per tutta la sessione.`
+        const cosaChiave = `server.approval.network.action.${COSA_VUOLE[tipo] ?? 'open'}`
+        const cosa = { cosa: FRASI_DI_PERMESSO[cosaChiave], cosaChiave }
+        const laFrase = perLaSessione
+            ? fraseDiPermesso('server.approval.network.sessionFolder', { ospite })
             : dove.via === 'collegamento'
-                ? `Vuole ${cosa} attraverso un collegamento (${dove.collegamento}) che porta a un computer di rete (${ospite}): solo aprirlo manda a quel computer le credenziali di Windows. Serve il tuo sì.`
+                ? fraseDiPermesso('server.approval.network.link', { ...cosa, collegamento: dove.collegamento, ospite })
                 : tipo === 'elenca'
-                    ? `Vuole vedere i file di una cartella su un computer di rete (${ospite}): solo aprirla manda a quel computer le credenziali di Windows. Serve il tuo sì.`
-                    : `Vuole ${cosa} su un computer di rete (${ospite}): solo aprirlo manda a quel computer le credenziali di Windows. Serve il tuo sì.`
+                    ? fraseDiPermesso('server.approval.network.listFolder', { ospite })
+                    : fraseDiPermesso('server.approval.network.open', { ...cosa, ospite })
         const FERMATO = Symbol('fermato-mentre-chiedevo')
         const gara = segnaleStop
             ? new Promise((risolvi) => { if (segnaleStop.aborted) risolvi(FERMATO); else segnaleStop.addEventListener('abort', () => risolvi(FERMATO), { once: true }) })
             : null
         let approvato = false
         try {
-            const domanda = chiediApprovazioneFn({ tipo, toolCallId, percorso, percorsoDiRete: { ospite, frase, via: dove.via, ...(perLaSessione ? { ambito: 'sessione' } : {}) } })
+            const domanda = chiediApprovazioneFn({ tipo, toolCallId, percorso, percorsoDiRete: { ospite, ...laFrase, via: dove.via, ...(perLaSessione ? { ambito: 'sessione' } : {}) } })
             approvato = gara ? await Promise.race([domanda, gara]) : await domanda
         }
         catch { approvato = false }

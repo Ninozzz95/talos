@@ -125,7 +125,9 @@ test('RETE-03: una condivisione di rete CHIEDE prima di essere toccata — anche
     for (const d of domande) {
       assert.ok(d.percorsoDiRete, 'la domanda dice che è un percorso di rete');
       assert.match(d.percorsoDiRete.frase, /nessuno\.invalid/);
-      assert.match(d.percorsoDiRete.frase, /rete/);
+      assert.match(d.percorsoDiRete.frase, /network computer/); // K4b (11/10/2026): inglese, con la chiave e i valori
+      assert.equal(d.percorsoDiRete.fraseChiave, 'server.approval.network.open');
+      assert.equal(d.percorsoDiRete.fraseParams.ospite, 'nessuno.invalid');
     }
     for (const id of ['l', 's', 'e']) assert.match(esito(id), /^REFUSED\./, id);
   }
@@ -175,7 +177,8 @@ test('RETE-06: elenca — un prefisso NT si rifiuta, una condivisione chiede pri
   ], { livelloAccesso: 'accesso-pieno' });
   assert.match(esito('n'), /^REFUSED\..*NT\/device namespace prefix/s);
   assert.deepEqual(domande.map((d) => d.tipo), ['elenca', 'elenca']);
-  assert.match(domande[0].percorsoDiRete.frase, /cartella su un computer di rete \(nessuno-rete06\.invalid\)/);
+  assert.match(domande[0].percorsoDiRete.frase, /files of a folder on a network computer \(nessuno-rete06\.invalid\)/);
+  assert.equal(domande[0].percorsoDiRete.fraseChiave, 'server.approval.network.listFolder');
   assert.match(esito('r'), /^REFUSED\. Nothing was listed: the person did not allow/);
   assert.deepEqual(toccati, [], 'nessun contatto senza il sì');
 });
@@ -237,7 +240,8 @@ test('RETE-09: con la cartella della sessione su una condivisione si chiede UNA 
   ], { livelloAccesso: 'accesso-pieno', consensiSessione: {} });
   assert.deepEqual(domande.map((d) => [d.tipo, d.percorsoDiRete?.via, d.percorsoDiRete?.ambito]),
     [['leggi', 'cartella', 'sessione'], ['elenca', 'cartella', 'sessione'], ['cerca', 'cartella', 'sessione'], ['scrivi', 'cartella', 'sessione']]);
-  assert.match(domande[0].percorsoDiRete.frase, /cartella della sessione sta su un computer di rete \(nessuno-rete09\.invalid\).*tutta la sessione/s);
+  assert.match(domande[0].percorsoDiRete.frase, /session folder is on a network computer \(nessuno-rete09\.invalid\).*whole session/s);
+  assert.deepEqual([domande[0].percorsoDiRete.fraseChiave, domande[0].percorsoDiRete.fraseParams], ['server.approval.network.sessionFolder', { ospite: 'nessuno-rete09.invalid' }]);
   for (const id of ['l', 'e', 'c', 's']) assert.match(esito(id), /^REFUSED\./, id);
   assert.deepEqual(toccati, [], 'nessun contatto prima del sì');
   const consensi = {};
@@ -263,7 +267,9 @@ test('RETE-10: un collegamento locale verso una condivisione chiede PRIMA di ess
   ], { livelloAccesso: 'accesso-pieno' });
   assert.deepEqual(domande.map((d) => [d.tipo, d.percorsoDiRete?.via]),
     [['leggi', 'collegamento'], ['leggi', 'collegamento'], ['scrivi', 'collegamento'], ['file_edit', 'collegamento'], ['elenca', 'collegamento'], ['cerca', 'collegamento']]);
-  assert.match(domande[0].percorsoDiRete.frase, /attraverso un collegamento .*rete10-link.* computer di rete \(nessuno-rete10\.invalid\)/s);
+  assert.match(domande[0].percorsoDiRete.frase, /read a file through a link .*rete10-link.* network computer \(nessuno-rete10\.invalid\)/s);
+  assert.equal(domande[0].percorsoDiRete.fraseChiave, 'server.approval.network.link');
+  assert.equal(domande[2].percorsoDiRete.fraseParams.cosaChiave, 'server.approval.network.action.write', 'the action has its own key');
   for (const id of ['l', 'l2', 's', 'e', 'el', 'ce']) assert.match(esito(id), /^REFUSED\./, id);
   assert.deepEqual(osservati, [], 'oltre a lstat e readlink, nessuno ha aperto il collegamento (nemmeno la lettura anticipata)');
 });

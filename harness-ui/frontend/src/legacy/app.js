@@ -14715,11 +14715,13 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     const fraseDelSegreto = azione?.segreto ? testoDelCampo(azione.segreto, 'frase') : null;
     if (typeof fraseDelSegreto === 'string' && fraseDelSegreto.trim()) frasiVere.push(fraseDelSegreto.trim());
     /* F009 (owner 01/10/2026) — la conferma di root in WSL quando nessuno è interpellato: la frase la scrive il kernel (`confermaRootWsl`). */
-    if (typeof azione?.wslRoot?.frase === 'string' && azione.wslRoot.frase.trim()) frasiVere.push(azione.wslRoot.frase.trim());
+    /* K4b (11/10/2026): queste tre frasi arrivano inglesi con chiave e valori, e si dicono nella lingua dell'interfaccia (un evento vecchio, italiano e senza chiave, com'è) */
+    const fraseDiCampo = (oggetto) => { const f = oggetto ? testoDelCampo(oggetto, 'frase') : null; return typeof f === 'string' && f.trim() ? f.trim() : null; };
+    if (fraseDiCampo(azione?.wslRoot)) frasiVere.push(fraseDiCampo(azione.wslRoot));
     /* F4-03 (owner 01/10/2026 sera) — la scrittura fuori dalla cartella della sessione con «Scrive nel progetto»: la frase la scrive il kernel. */
-    if (typeof azione?.fuoriDalProgetto?.frase === 'string' && azione.fuoriDalProgetto.frase.trim()) frasiVere.push(azione.fuoriDalProgetto.frase.trim());
+    if (fraseDiCampo(azione?.fuoriDalProgetto)) frasiVere.push(fraseDiCampo(azione.fuoriDalProgetto));
     /* 01/10/2026 notte (owner: «chiedo per \\server») — un percorso su un computer di rete: la frase la scrive il kernel (`controllaPercorsoDiRete`). */
-    if (typeof azione?.percorsoDiRete?.frase === 'string' && azione.percorsoDiRete.frase.trim()) frasiVere.push(azione.percorsoDiRete.frase.trim());
+    if (fraseDiCampo(azione?.percorsoDiRete)) frasiVere.push(fraseDiCampo(azione.percorsoDiRete));
     /* ⛔ Se si chiude anche la trifecta sono DUE fatti, non uno: si mostrano tutti e due — una lista
        di motivi si giudica da ciò che manca, e tacere il secondo sarebbe rassicurare a metà. */
     const trifecta = typeof azione?.trifecta === 'string' ? azione.trifecta.trim() : (azione?.trifecta === true ? tr('app.approval.trifecta') : '');

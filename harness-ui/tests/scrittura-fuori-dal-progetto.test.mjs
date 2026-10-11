@@ -61,7 +61,9 @@ test('FUORI-01: con «Scrive nel progetto» una scrittura fuori (assoluta o con 
   for (const d of domande) {
     assert.equal(d.tipo, 'scrivi');
     assert.ok(d.fuoriDalProgetto, 'la domanda porta il fatto: è fuori dal progetto');
-    assert.match(d.fuoriDalProgetto.frase, /fuori dalla cartella della sessione/);
+    assert.match(d.fuoriDalProgetto.frase, /outside the session folder/); // K4b (11/10/2026): inglese + chiave + valori
+    assert.equal(d.fuoriDalProgetto.fraseChiave, 'server.approval.outsideProject.verified');
+    assert.equal(d.fuoriDalProgetto.fraseParams.cartella, d.fuoriDalProgetto.cartella);
     assert.equal(typeof d.fuoriDalProgetto.chiave, 'string');
   }
   assert.equal(existsSync(assoluto), false);
@@ -216,7 +218,8 @@ test('FUORI-10: un percorso che non si riesce a verificare CHIEDE, senza cartell
     assert.equal(domande.length, 1);
     assert.equal(domande[0].fuoriDalProgetto.verificato, false);
     assert.equal(domande[0].fuoriDalProgetto.chiave, undefined, 'niente da consentire per la sessione');
-    assert.match(domande[0].fuoriDalProgetto.frase, /Non è stato possibile verificare/);
+    assert.match(domande[0].fuoriDalProgetto.frase, /could not be verified/);
+    assert.equal(domande[0].fuoriDalProgetto.fraseChiave, 'server.approval.outsideProject.unverified');
   }
 });
 

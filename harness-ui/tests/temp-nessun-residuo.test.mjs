@@ -105,7 +105,14 @@ async function corriNellaTempPrivata(t, file, cwd) {
 async function pretendiNessunResiduo(nome, { sandbox, testo }) {
   const eseguiti = Number(/ℹ tests (\d+)/.exec(testo)?.[1] ?? 0);
   assert.ok(eseguiti > 0, `il figlio non ha eseguito nessun test di ${nome}: la prova starebbe misurando il vuoto`);
-  assert.match(testo, /ℹ fail 0/, `${nome} ha test rossi nel figlio: si misura solo un file verde`);
+  /* 11/10/2026: rosso sulla main pubblica dopo la 0.1.27 (e sulla PR #55 della 0.1.26) senza dire QUALE prova del figlio era caduta:
+     `assert.match` stampava l'uscita intera come `actual`, e il registro della CI la tronca all'inizio, cioè sui verdi. Il messaggio
+     porta la sezione «failing tests» del figlio, che nomina la prova e il suo errore. */
+  if (!/ℹ fail 0/.test(testo)) {
+    const inizio = testo.lastIndexOf('✖ failing tests:');
+    const rossi = inizio >= 0 ? testo.slice(inizio, inizio + 4000) : testo.split(/\r?\n/).filter((riga) => riga.includes('✖')).slice(0, 20).join('\n');
+    assert.fail(`${nome} ha test rossi nel figlio: si misura solo un file verde.\n${rossi}`);
+  }
   const residui = (await readdir(sandbox)).filter((n) => !NON_NOSTRE.has(n));
   assert.deepEqual(residui, [], `${nome} lascia ${residui.length} cartelle nella TEMP: ${residui.join(', ')}`);
   const risorte = testo.split(/\r?\n/).filter((riga) => riga.includes('CartellaDiProvaRisorta'));

@@ -349,7 +349,7 @@ test.describe('C1 — la scheda Contesto', () => {
   test('C1-CM-01 motore — panoramica sul limite che agisce, riservati a parte, cinque schede, «Compatta ora…» chiede conferma', async ({ page }) => {
     const c = await apri(page, 'motore');
     await apriCm(page);
-    await expect(cm(page).locator('[data-context-headline]')).toHaveText('98k di 130,2k · 75,3%');
+    await expect(cm(page).locator('[data-context-headline]')).toHaveText('98k di 130,2k · 75,2%'); // owner 11/10/2026: troncata come nella scheda (75,27%)
     await expect(cm(page).locator('[data-context-measurement]')).toContainText('motore del contesto');
     const barra = cm(page).locator('[data-context-gauge]');
     await expect(barra).toBeVisible();
@@ -414,7 +414,7 @@ test.describe('C1 — la scheda Contesto', () => {
     await expect(cm(page).locator('[data-context-status]')).toHaveText('Non è stato possibile leggere il contesto.');
     await expect(cm(page).locator('[data-context-retry]')).toBeVisible();
     await cm(page).locator('[data-context-retry]').click();
-    await expect(cm(page).locator('[data-context-headline]')).toHaveText('98k di 130,2k · 75,3%');
+    await expect(cm(page).locator('[data-context-headline]')).toHaveText('98k di 130,2k · 75,2%');
     await expect(cm(page).locator('[data-context-retry]')).toBeHidden();
   });
 

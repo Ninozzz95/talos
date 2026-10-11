@@ -98,7 +98,9 @@ export function misuraDellaPanoramica({ usati = null, limite = null, ripartizion
        sommava più del 100% e i riservati venivano tagliati. Nella barra si vede ciò che resta della finestra; la legenda li dice interi. */
     pctRiservatiVisibili: riservati === null ? 0 : pct(Math.max(0, finestra - Math.max(soglia, occupati ?? 0))),
     tacca: finestra ? pct(soglia) : null,
-    percentualeDelLimite: occupati === null ? null : Math.round((occupati / soglia) * 1000) / 10,
+    /* owner 11/10/2026 («Troncare in tutti e due»): la stessa regola della scheda Contesto (`inspector.js` `percento`), che tronca
+       perché le sue parti e «Libera» sommino 100 — prima qui si arrotondava, e la stessa misura era «10,9%» qui e «10,8%» là. */
+    percentualeDelLimite: occupati === null ? null : Math.floor((occupati / soglia) * 1000) / 10,
   };
 }
 

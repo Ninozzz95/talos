@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { copiaAssistenza, fileProduzione, verificaImpronta, inventario } from '../scripts/prepara-pacchetto.mjs';
+import { copiaAssistenza, fileProduzione, verificaImpronta, inventario, sfoltisciDipendenze } from '../scripts/prepara-pacchetto.mjs';
 
 test('R02-INTEGRITA — impronta alterata blocca il pacchetto', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'talos-r02-hash-'));
@@ -113,4 +113,26 @@ test('R02-PDFJS — PDF.js sfoltito a ~5 MB, il canvas nativo fuori, keyring den
     assert.equal((await pagina.getTextContent()).items.map(i => i.str).join(''), 'Testo dal pacchetto, perché');
   } finally { await compito.destroy(); }
   await assert.rejects(sfoltisciPdfjs(join(tmpdir(), 'talos-r02-niente-', 'node_modules')), /pdfjs-dist assente/, 'senza PDF.js il pacchetto si ferma');
+});
+
+test('R02-SFOLTISCI (owner 11/10/2026, aggiornamento lento): via ciò che a runtime non si carica, restano codice, licenze e il binario Windows x64', async () => {
+  const nm = mkdtempSync(join(tmpdir(), 'talos-r02-sfoltisci-'));
+  const scrivi = (relativo, testo = 'x') => { const p = join(nm, ...relativo.split('/')); mkdirSync(join(p, '..'), { recursive: true }); writeFileSync(p, testo); };
+  const via = ['pkg/README.md', 'pkg/CHANGELOG.md', 'pkg/index.d.ts', 'pkg/index.d.mts', 'pkg/index.js.map', 'pkg/src/a.ts', 'pkg/src/b.mts',
+    'pkg/test/a.js', 'pkg/examples/e.js', 'pkg/docs/guida.md', 'pkg/.github/w.yml', 'pkg/.npmignore', '.bin/cmd', 'pkg/prebuilds/darwin-x64/pty.node',
+    'pkg/prebuilds/linux-x64/pty.node', 'pkg/prebuilds/win32-arm64/pty.node', '@scope/p/readme.md', '@scope/p/types.d.ts',
+    'pkg/node_modules/dentro/README.md'];
+  const restano = ['pkg/index.js', 'pkg/package.json', 'pkg/LICENSE', 'pkg/LICENSE.md', 'pkg/NOTICE.md', 'pkg/third-party-notices.txt',
+    'pkg/lib/test/codice.js', 'pkg/lib/index.mjs', 'pkg/prebuilds/win32-x64/pty.node', 'pkg/build/Release/a.node', 'pkg/a.wasm',
+    '@scope/p/index.cjs', '@scope/p/LICENSE', 'pkg/node_modules/dentro/index.js',
+    // il kernel legge a runtime la libreria standard di TypeScript (cancello semantico): quel pacchetto non si tocca
+    'typescript/lib/lib.es5.d.ts', 'typescript/README.md'];
+  for (const f of [...via, ...restano]) scrivi(f);
+  const tolti = await sfoltisciDipendenze(nm);
+  const { existsSync } = await import('node:fs');
+  for (const f of via) assert.equal(existsSync(join(nm, ...f.split('/'))), false, `doveva sparire: ${f}`);
+  for (const f of restano) assert.equal(existsSync(join(nm, ...f.split('/'))), true, `doveva restare: ${f}`);
+  assert.equal(tolti.file, via.length, 'il conto dei file tolti è esatto');
+  // al contrario: una cartella che non c'è non è un errore, e niente da togliere fa zero
+  assert.deepEqual(await sfoltisciDipendenze(join(nm, 'non-esiste')), { file: 0, byte: 0 });
 });
