@@ -20638,7 +20638,8 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     /* ⛔ A6-bis (bugfixer, 08/10/2026): l'uscita VERA di un comando già sfondato (registro, `talos.processo-sfondo`) — arriva anche a
        giro finito, quindi la colonna si ridisegna qui: nessun altro evento la toccherebbe. Solo i campi che servono alla riga. */
     else if (evento.type === 'CUSTOM' && evento.name === 'talos.processo-sfondo' && typeof evento.value?.toolCallId === 'string') {
-      state.realSession.eventiAttrezzi.push({ type: 'ProcessoSfondoFinito', ...(Number.isFinite(evento._sequenza) ? { _sequenza: evento._sequenza } : {}), toolCallId: evento.value.toolCallId, esito: evento.value.esito, codice: evento.value.codice, finitoAlle: Date.parse(evento.value.finitoAlle ?? '') }); // NaN se manca: nessuna durata inventata
+      state.realSession.eventiAttrezzi.push({ type: 'ProcessoSfondoFinito', ...(Number.isFinite(evento._sequenza) ? { _sequenza: evento._sequenza } : {}), toolCallId: evento.value.toolCallId, esito: evento.value.esito, codice: evento.value.codice, finitoAlle: Date.parse(evento.value.finitoAlle ?? ''), // NaN se manca: nessuna durata inventata
+        ...(evento.value.fermatoDallaPersona === true ? { fermatoDallaPersona: true } : {}) }); // C06: l'arresto della persona vince sul codice (10/10)
       aggiornaInspectorDaStato();
       if (evento.value.fermatoDallaPersona === true) mostraFermatoDallaPersona(evento.value); // C06 (a)
     }

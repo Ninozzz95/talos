@@ -97,3 +97,25 @@ test('A6B-UI-06: durata — nessuna mentre è in sfondo, quella vera all\'uscita
   const senzaOra = processiDagliEventi([avvio('d', 1), argomenti('d', 2), risultato('d', 3), uscita('d', 4, NaN)], { adesso: 10_000 });
   assert.equal(senzaOra[0].durataMs, null, 'un evento vecchio senza l\'ora di fine: nessuna durata inventata');
 });
+
+/*
+ * ⛔ C06 (bugfixer, 10/10/2026, prova dal vivo sul 4174 con glm-5.3-flash) — uno sfondato FERMATO DALLA PERSONA usciva «Non
+ *   riuscito · uscita 1»: su Windows la chiusura forzata dell'albero dà 1, e il codice vinceva. Come Hermes (`mark_exited`: il kill
+ *   non si sovrascrive), l'arresto della persona vince: «Annullato», nessun codice. Al contrario la stessa uscita senza la persona.
+ */
+test('C06-UI-01: fermato dalla persona ⇒ «annullato» senza codice, in tutti e due gli ordini; il numero torna a zero', () => {
+  const fermato = (id, sequenza) => ({ ...finito(id, 'fallito', 1, sequenza), fermatoDallaPersona: true });
+  const processi = processiDagliEventi([...sfondato('a', 3), fermato('a', 4)], { adesso: 3000 });
+  assert.deepEqual([processi[0].stato, processi[0].uscita], ['annullato', null]);
+  assert.equal(contaProcessiAttivi(processi), 0);
+  const [avvio, argomenti, risultato] = sfondato('b', 11).map((e, i) => (i === 2 ? e : { ...e, _sequenza: e._sequenza - 1 }));
+  const invertito = processiDagliEventi([avvio, argomenti, fermato('b', 10), risultato], { adesso: 3000 });
+  assert.deepEqual([invertito[0].stato, invertito[0].uscita], ['annullato', null], 'anche quando l\'uscita arriva prima del risultato «in sfondo»');
+});
+
+test('C06-UI-02: AL CONTRARIO — la stessa uscita 1 senza la persona resta «fallito» col suo codice', () => {
+  const processi = processiDagliEventi([...sfondato('a', 3), finito('a', 'fallito', 1, 4)], { adesso: 3000 });
+  assert.deepEqual([processi[0].stato, processi[0].uscita], ['fallito', 1]);
+  const nonVero = processiDagliEventi([...sfondato('a', 3), { ...finito('a', 'fallito', 1, 4), fermatoDallaPersona: 'true' }], { adesso: 3000 });
+  assert.equal(nonVero[0].stato, 'fallito', 'solo il booleano vero conta');
+});

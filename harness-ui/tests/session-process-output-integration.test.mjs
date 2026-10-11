@@ -100,7 +100,8 @@ test('OUTPUT14-REGISTRY: real registry, service, kernel and process persist exac
     assert.ok(!readFileSync(journal, 'utf8').includes(f.output), 'raw output must not inflate the session journal');
     await registry.doveGiranoIComandi(sessionId, 'windows');
     assert.equal(registry.shell(sessionId, f.command).ok, true);
-    await t.waitFor(() => assert.ok(readFileSync(journal, 'utf8').includes('ComandoUtenteFinito')));
+    // 10/10/2026: il limite di serie di waitFor è 1 s; sul runner carico della release il comando finiva dopo
+    await t.waitFor(() => assert.ok(readFileSync(journal, 'utf8').includes('ComandoUtenteFinito')), { timeout: 15_000 });
     await registry.chiudi();
     const direct = rows().filter(r => r.type === 'CUSTOM' && r.name === 'talos.process-output').at(-1).value;
     assert.equal(direct.state, 'complete');

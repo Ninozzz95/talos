@@ -525,6 +525,13 @@ function parseContextTrial(env) {
   return Object.freeze(trial);
 }
 
+function parseWorkflowAltroArchivio(env) {
+  const valore = env.TALOS_HARNESS_UI_WORKFLOW_ALTRO_DIR;
+  if (valore === undefined || valore === null || valore === '') return null;
+  if (typeof valore !== 'string' || !isAbsolute(valore.trim())) fail('TALOS_HARNESS_UI_WORKFLOW_ALTRO_DIR must be an absolute folder');
+  return resolve(valore.trim());
+}
+
 function parseWorkflowDataRoot(env) {
   const explicit = env.TALOS_HARNESS_UI_WORKFLOW_DIR;
   if (explicit !== undefined && explicit !== null && explicit !== '') {
@@ -621,6 +628,9 @@ export function loadConfig(
     hfToken: typeof env.HF_TOKEN === 'string' && env.HF_TOKEN.trim() ? env.HF_TOKEN.trim() : undefined,
     cartellaStore: parseCartellaStore(env.TALOS_HARNESS_UI_SESSIONS_DIR, moduleUrl),
     workflowDataRoot: parseWorkflowDataRoot(env),
+    /* Owner 10/10/2026 («Sola lettura dall'altro archivio»): l'archivio dei Workflow di un ALTRO processo TALOS che condivide le
+       sessioni con questo (il 4174 e l'app installata). Solo da leggere; vuoto ⇒ nessuno. */
+    workflowAltroArchivio: parseWorkflowAltroArchivio(env),
     modelsDevUrl: parseModelsDevUrl(env.TALOS_HARNESS_UI_MODELS_DEV_URL),
     llamaServerPath: parseLlamaServerPath(env.TALOS_LLAMA_SERVER_PATH, moduleUrl, sondaMotore),
     llamaServerFallbackPath: typeof env.TALOS_LLAMA_SERVER_FALLBACK_PATH === 'string' && env.TALOS_LLAMA_SERVER_FALLBACK_PATH.trim()

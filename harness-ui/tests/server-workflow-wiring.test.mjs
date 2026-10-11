@@ -277,7 +277,11 @@ test('WF-SESSION-DRAFT-PROPOSE: il modello propone una bozza, il server vero la 
     const offerto = calls[0].tools.find((tool) => tool.function?.name === 'workflow_plan_propose').function.parameters;
     assert.deepEqual(offerto.required, ['draft']);
     // il modello ha ricevuto la ricevuta, non un errore
-    const risposta = calls.at(-1).messages.find((m) => m.role === 'tool' && m.tool_call_id === toolCallId)?.content ?? '';
+    // 10/10/2026: la proposta è pubblicata PRIMA che il giro richiami il modello con l'esito; letta subito, sul runner
+    // carico della release l'ultima chiamata era ancora la prima e la risposta risultava vuota. Si aspetta quella chiamata.
+    const conLEsito = (call) => call.messages?.some((m) => m.role === 'tool' && m.tool_call_id === toolCallId);
+    for (let attempt = 0; attempt < 100 && !calls.some(conLEsito); attempt += 1) await delay(100);
+    const risposta = (calls.findLast(conLEsito) ?? calls.at(-1)).messages.find((m) => m.role === 'tool' && m.tool_call_id === toolCallId)?.content ?? '';
     assert.match(risposta, /"status":"proposed"/);
     assert.deepEqual((await (await fetch(`${server.base}/api/v1/sessions/${sessionId}/workflows`)).json()).data.items, [], 'nessun run parte dalla proposta');
   } finally {

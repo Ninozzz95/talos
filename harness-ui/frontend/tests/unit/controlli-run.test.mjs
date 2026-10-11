@@ -176,3 +176,17 @@ test('WF-RUN-STATE-WORD: a requested pause or cancel is «in progress» only whi
   assert.equal(statoDelRun(null, { tipo: 'piano', revisione: { status: 'approved' } }), 'approved');
   assert.equal(statoDelRun(null, { tipo: 'piano' }), 'proposed');
 });
+
+/* Owner 10/10/2026: il run di un'altra finestra TALOS (panoramica `soloLettura`) non offre comandi né azioni sul passo; la nota dice dove. */
+test('WF-RUN-ALTRA-FINESTRA: nessun comando e nessuna azione sul passo in sola lettura; al contrario lo stesso run li ha', async () => {
+  const { passoRisolvibile } = await import('../../src/components/controlli-run.js');
+  for (const status of ['running', 'paused', 'needs_attention', 'created']) {
+    const { principale, menu, nota } = azioniDelRun(pan(status, { failed: 1 }, { soloLettura: true }));
+    assert.deepEqual([principale, menu], [null, []], status);
+    assert.match(nota, /altra finestra di TALOS/u, status);
+    assert.ok(azioniDelRun(pan(status, { failed: 1 })).menu.length > 0, `${status}: senza il segno i comandi ci sono`);
+  }
+  assert.equal(passoRisolvibile(pan('needs_attention', {}, { soloLettura: true }), 'failed'), false);
+  assert.equal(passoRisolvibile(pan('needs_attention'), 'failed'), true);
+  assert.deepEqual(azioniDelRun(pan('succeeded', {}, { soloLettura: true })).nota, null, 'un run finito non ha niente da dire');
+});

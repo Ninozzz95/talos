@@ -337,7 +337,7 @@ test('ELENCO-TESTO-09: l\'intestazione dice il nome della cartella, mai il perco
     fileEsclusi: 12,
   });
   assert.match(testo, /"harness-ui"/);
-  assert.equal(testo.includes('Antonino'), false, 'un percorso assoluto porta il nome della persona dentro il prompt');
+  assert.equal(testo.includes('esempio'), false, 'un percorso assoluto porta il nome della persona dentro il prompt');
   assert.equal(testo.includes('C:\\'), false);
   assert.match(testo, /12 files do not appear/);
   assert.match(testo, /^Files of "harness-ui" — 2 paths/m);

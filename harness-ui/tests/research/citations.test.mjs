@@ -78,10 +78,10 @@ test('CITAZ-06 ⛔ NON esce niente della persona né della ricerca', () => {
     publishedAt: null,
     accessedAt: '2026-08-20',
     // Campi che il chiamante potrebbe passare per sbaglio: si ignorano.
-    query: 'quanto guadagna Antonino',
+    query: 'quanto guadagna Mario',
     researchId: 'ric-9',
   }]);
-  assert.ok(!testo.includes('Antonino'));
+  assert.ok(!testo.includes('Mario'));
   assert.ok(!testo.includes('ric-9'));
 });
 

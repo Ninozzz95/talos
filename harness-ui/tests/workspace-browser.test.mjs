@@ -11,7 +11,7 @@ async function fixture(t) {
   // 13/09: sui runner GitHub `tmpdir()` è nella forma corta 8.3 (`RUNNER~1`); il browser dei
   // workspace risponde coi percorsi veri, quindi la radice della prova si risolve subito.
   const root = await realpath(await mkdtemp(join(tmpdir(), 'talos-workspace-browser-')));
-  const project = join(root, 'Users', 'Antonino', 'AVM');
+  const project = join(root, 'Users', 'persona', 'AVM');
   await mkdir(project, { recursive: true });
   await mkdir(join(root, 'Windows'));
   await writeFile(join(root, 'leggimi.txt'), 'non deve entrare nel chooser');

@@ -195,7 +195,10 @@ export function disegnaCardProposta(section, {
     corpo.append(fasi);
     /* F3-33b: i tetti hanno una testata con «Modifica» (solo prima dell'avvio, decisione owner) e, in modifica, diventano
        campi in loco; su una versione nata da una modifica ogni tetto cambiato dice il valore di prima (D19 a). */
-    const modificabile = (stato.chiave === 'da-approvare' || stato.chiave === 'approvato') && !run;
+    /* Owner 10/10/2026 («Sola lettura dall'altro archivio»): un Workflow dell'archivio di un'altra finestra TALOS si guarda e
+       basta — niente Modifica, Approva, Avvia né comandi del run; una riga dice dove si gestisce. Il diagramma resta. */
+    const altraFinestra = revisione.soloLettura === true || run?.soloLettura === true;
+    const modificabile = (stato.chiave === 'da-approvare' || stato.chiave === 'approvato') && !run && !altraFinestra;
     const inModifica = modificabile && bozzaTetti && typeof bozzaTetti === 'object';
     const testaTetti = make('div', 'talos-workflow-proposal__limits-head');
     testaTetti.append(make('span', 'talos-workflow-proposal__limits-title', t('chat.workflow.limits.title')));
@@ -282,7 +285,9 @@ export function disegnaCardProposta(section, {
       b.disabled = Boolean(spento);
       return b;
     };
-    if (inModifica) {
+    if (altraFinestra) {
+      azioni.append(make('p', 'talos-workflow-proposal__hint', t('chat.workflow.actions.otherWindow')));
+    } else if (inModifica) {
       const prossima = (revisione.version ?? 1) + 1;
       salva = bottone(inVolo === 'salva' ? t('chat.workflow.actions.saving') : t('chat.workflow.actions.saveAsVersion', { n: prossima }), 'talos-button--primary', 'salva-tetti', true);
       salva.addEventListener?.('click', () => { if (esitoBozza?.valida && !esitoBozza.vuota) onSalvaTetti?.(esitoBozza.cambiati); });

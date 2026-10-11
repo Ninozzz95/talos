@@ -45,3 +45,20 @@ test('AGGIORNA-4174-WORKFLOW-DIR-VERSO-CONTRARIO: a folder inside the worktree W
   const dentroIlWorktree = join(progetto.percorso, '.dati-4174', 'workflows');
   assert.ok(dentroIlWorktree.toLowerCase().startsWith(progetto.percorso.toLowerCase()), 'the default project contains the whole worktree');
 });
+
+// 10/10/2026, decisione owner «Sola lettura dall'altro archivio»: il lanciatore indica al server l'archivio Workflow dell'app,
+// SOLO quando le sessioni sono quelle dell'app e la cartella esiste; una scelta esplicita vince; e prima di Start-Process.
+test('AGGIORNA-4174-WORKFLOW-ALTRO: the app Workflow store is passed read-only only when the sessions are the app ones', () => {
+  const blocco = lanciatore.slice(lanciatore.indexOf('if (-not $env:TALOS_HARNESS_UI_WORKFLOW_ALTRO_DIR'));
+  assert.ok(blocco.length > 0 && lanciatore.indexOf('if (-not $env:TALOS_HARNESS_UI_WORKFLOW_ALTRO_DIR') > -1, 'the block exists');
+  assert.match(blocco, /\$workflowApp = Join-Path \(Join-Path \$env:APPDATA 'TALOS'\) 'workflows'/u);
+  assert.match(blocco, /\$stesseSessioni = .*TALOS_HARNESS_UI_SESSIONS_DIR.*-ieq.*\$sessioniApp/u);
+  assert.match(blocco, /if \(\$stesseSessioni -and \(Test-Path -LiteralPath \$workflowApp -PathType Container\)\)/u);
+  assert.ok(lanciatore.indexOf('$env:TALOS_HARNESS_UI_WORKFLOW_ALTRO_DIR = $workflowApp') < lanciatore.indexOf('Start-Process'), 'set before the child starts');
+  const altro = join(process.env.APPDATA ?? join('C:', 'Users', 'prova', 'AppData', 'Roaming'), 'TALOS', 'workflows');
+  const config = loadConfig({ TALOS_HARNESS_UI_WORKFLOW_ALTRO_DIR: altro, TALOS_HARNESS_UI_KEYRING: 'memoria' },
+    new URL('../server.mjs', import.meta.url), { sondaMotore: () => ({ status: 1, stdout: '', stderr: '' }) });
+  assert.equal(config.workflowAltroArchivio, altro);
+  assert.throws(() => loadConfig({ TALOS_HARNESS_UI_WORKFLOW_ALTRO_DIR: join('relativa', 'workflows'), TALOS_HARNESS_UI_KEYRING: 'memoria' },
+    new URL('../server.mjs', import.meta.url), { sondaMotore: () => ({ status: 1, stdout: '', stderr: '' }) }), /must be an absolute folder/u);
+});

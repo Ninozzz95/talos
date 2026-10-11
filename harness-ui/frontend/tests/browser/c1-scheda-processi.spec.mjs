@@ -193,6 +193,29 @@ test.describe('C1 — la scheda Processi', () => {
     await expect.poll(() => conto.risorse, { timeout: 3_000 }).toBeGreaterThan(ferme);
   });
 
+  /*
+   * C06 (bugfixer, 10/10/2026, prova dal vivo sul 4174 con glm-5.3-flash) — uno sfondato fermato dalla persona usciva «Non riuscito ·
+   *   uscita 1» (su Windows la chiusura forzata dà 1). L'evento entra dalla porta degli eventi veri, quindi passa anche dalla
+   *   traduzione di `legacy/app.js`, che prima perdeva `fermatoDallaPersona`.
+   */
+  for (const tema of ['light', 'dark']) {
+    test(`C06-PROC-FERMATO ${tema} — uno sfondato fermato dalla persona è «Annullato», senza codice`, async ({ page }, info) => {
+      const conto = await apri(page, { tema });
+      await evento(page, { type: 'CUSTOM', name: 'talos.processo-sfondo', value: { toolCallId: 'p-dev', esito: 'fallito', codice: 1, segnale: null, finitoAlle: '2026-10-10T10:00:05.000Z', fermatoDallaPersona: true, comando: 'npm run dev' } });
+      await expect(riga(page, 'p-dev').locator('.talos-process__stato')).toHaveText('Annullato');
+      await expect(riga(page, 'p-dev')).not.toContainText('uscita 1');
+      expect(conto.altreScritture).toEqual([]);
+      await page.screenshot({ path: `${process.env.TALOS_FOTO_DIR || info.outputPath('')}/C06-PROC-FERMATO-${tema}.png` });
+    });
+  }
+
+  test('C06-PROC-FERMATO-AL-CONTRARIO — la stessa uscita 1 senza la persona resta «Non riuscito · uscita 1»', async ({ page }) => {
+    await apri(page);
+    await evento(page, { type: 'CUSTOM', name: 'talos.processo-sfondo', value: { toolCallId: 'p-dev', esito: 'fallito', codice: 1, segnale: null, finitoAlle: '2026-10-10T10:00:05.000Z' } });
+    await expect(riga(page, 'p-dev').locator('.talos-process__stato')).toHaveText('Non riuscito');
+    await expect(riga(page, 'p-dev')).toContainText('uscita 1');
+  });
+
   for (const tema of ['light', 'dark']) {
     test(`C1-PROC-FOTO ${tema} — la scheda col menu aperto e la conferma di «Ferma tutti», 1920×1080`, async ({ page }, info) => {
       await apri(page, { tema });

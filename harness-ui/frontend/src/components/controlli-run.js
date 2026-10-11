@@ -25,6 +25,7 @@ const RUN_FINITI = new Set(['succeeded', 'succeeded_with_set_aside', 'failed', '
 export const AZIONI_SUL_PASSO = Object.freeze(['mark-done', 'set-aside', 'retry-other-model']);
 export function passoRisolvibile(panoramica, statoDelPasso) {
   if (!panoramica?.runId || panoramica.cancelRequested === true) return false;
+  if (panoramica.soloLettura === true) return false; // owner 10/10/2026: il run di un'altra finestra TALOS si guarda e basta
   if (statoDelPasso === 'failed') return ['running', 'needs_attention'].includes(panoramica.status);
   /* C3 tappa 2a: un passo INCERTO si decide quando il run chiede attenzione (il sistema ha rinunciato a riconciliarlo). Se il
      server non lo aspetta ancora, il comando torna 409 e lo si dice: è il server a sapere il motivo esatto. */
@@ -35,6 +36,9 @@ export function passoRisolvibile(panoramica, statoDelPasso) {
 export function azioniDelRun(panoramica) {
   const vuoto = { principale: null, menu: [], nota: null };
   if (!panoramica?.runId || RUN_FINITI.has(panoramica.status)) return vuoto;
+  /* Owner 10/10/2026 («Sola lettura dall'altro archivio»): un run dell'archivio di un'altra finestra TALOS non si comanda da
+     qui (il server rifiuterebbe comunque: lì il run non esiste); la nota dice dove si comanda. */
+  if (panoramica.soloLettura === true) return { ...vuoto, nota: t('chat.run.otherWindow') };
   const falliti = somma(panoramica, ['failed']);
   const annulla = { azione: 'cancel', etichetta: t('chat.run.cancel'), pericolo: true };
   const riprova = falliti > 0 ? { azione: 'retry', etichetta: tn('chat.run.retryOne', 'chat.run.retryMany', falliti, { n: cifra(falliti) }), falliti } : null;

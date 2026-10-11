@@ -144,7 +144,7 @@ test('R04-PORTABILITA — un solo segreto (la firma degli aggiornamenti, solo ne
   assert.equal(passo('asset').env.TALOS_UPDATE_SIGN_KEY, '${{ secrets.TALOS_UPDATE_SIGN_KEY }}');
   for (const p of passi.filter(p => p.run)) assert.doesNotMatch(p.run, /secrets\./);
   const text = JSON.stringify({ ...desktop, steps: desktop.steps.map(p => (p.id === 'asset' ? { ...p, env: undefined } : p)) });
-  assert.doesNotMatch(text, /secrets\.|AVM-harness-desktop|Antonino|4174|azure.*sign|attest-build-provenance/i);
+  assert.doesNotMatch(text, /secrets\.|AVM-harness-desktop|[\\/]Users[\\/]|\/home\/|4174|azure.*sign|attest-build-provenance/i);
   assert.equal(passo('release').env.GH_TOKEN, '${{ github.token }}');
   assert.equal(passo('release').env.GH_REPO, '${{ github.repository }}');
   for (const p of passi.filter(p => p.run)) assert.doesNotMatch(p.run, /\$\{\{\s*github\./);

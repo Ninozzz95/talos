@@ -7,7 +7,7 @@ import { chiediMiglioramentoAlProvider } from './prompt-enhancer-provider.mjs';
 import { comprimiDiffPerMessaggio, promptMessaggioCommit, pulisciMessaggioGenerato } from './messaggio-commit.mjs'; // F6-1 ✨, 26/09
 import { CARTELLA_ASSISTENZA_PREDEFINITA, MAX_DOMANDA_ASSISTENZA, cercaAssistenza } from './assistenza.mjs';
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'; // 08/9, BH-06: il nonce CSP del documento, nuovo a ogni risposta; F3 (24/09): il gettone di spegnimento a tempo costante
-import { listRunSummariesForSession, readRunHistory, readRunState, removeRun } from './workflow/store.mjs';
+import { listRunSummariesForSession, ordinaPerCreazione, readRunHistory, readRunState, removeRun } from './workflow/store.mjs';
 import { readResultBytes } from './workflow/result-store.mjs'; // F-014 (§1.6): l'output integrale di un passo, verificato
 import { decodeWorkflowResultText, selectWorkflowResult } from './workflow/output-access.mjs';
 import { runStreamCursor, serveWorkflowRunStream } from './workflow/run-stream.mjs';
@@ -1561,6 +1561,28 @@ function sendWorkflowView(req, res, method, data, clock) {
   sendJson(res, 200, successEnvelope(data, clock), method, headers);
 }
 
+/*
+ * Owner 10/10/2026 («Sola lettura dall'altro archivio») — una lettura di Workflow cerca prima nel PROPRIO archivio e, solo se lì
+ *   la proposta o il run non c'è, in quello di un altro processo TALOS che condivide le sessioni (`apriArchivioInSolaLettura`).
+ *   Ogni altro errore resta quello del proprio archivio: il ripiego non copre un guasto. Ciò che arriva dall'altro esce marcato
+ *   `soloLettura: true`, e ogni scrittura resta sul proprio archivio, dove quel Workflow non esiste: approvare, avviare o
+ *   modificare un Workflow dell'altro risponde «non trovato», qualunque cosa mostri un client.
+ */
+const NON_IN_QUESTO_ARCHIVIO = new Set(['WORKFLOW_PROPOSAL_NOT_FOUND', 'WORKFLOW_RUN_NOT_FOUND', 'WORKFLOW_DEFINITION_NOT_FOUND']);
+
+async function dalPrimoArchivioCheLoHa(archivi, leggi) {
+  for (let i = 0; i < archivi.length; i += 1) {
+    try { return { data: await leggi(archivi[i]), archivio: archivi[i] }; } catch (error) {
+      if (i === archivi.length - 1 || !NON_IN_QUESTO_ARCHIVIO.has(error?.code)) throw error;
+    }
+  }
+  throw Object.assign(new Error('Workflow store is unavailable'), { code: 'WORKFLOW_STORE_UNAVAILABLE' });
+}
+
+function marcaSoloLettura(data, archivio) {
+  return archivio?.soloLettura === true && data && typeof data === 'object' ? { ...data, soloLettura: true } : data;
+}
+
 function sendWorkflowViewError(res, method, error, clock) {
   const code = ['WORKFLOW_GROUP_NOT_FOUND', 'WORKFLOW_NODE_NOT_FOUND'].includes(error?.code) ? 'NOT_FOUND' : normalizeError(error).code;
   sendJson(res, STATUS_BY_CODE[code] ?? 500, errorEnvelope(code, clock, { errore: error }), method);
@@ -3060,6 +3082,7 @@ export function createHttpApp({
   /** ⛔ 16/09 — il tetto sul corpo delle richieste: 10 MiB di serie, vedi `MAX_REQUEST_BODY_BYTES`. Iniettabile per i test. */
   limiteCorpoByte = MAX_REQUEST_BODY_BYTES,
   staticHandler, sessionRegistry = null, workflowStore = null, contextService = null, listaTaskDisponibili = () => [],
+  workflowStoreAltro = null, // owner 10/10/2026: l'archivio Workflow di un altro processo TALOS, solo da leggere
   // F3-51c (25/09/2026): orchestratore e scheduler dei Workflow — senza, Avvia e i controlli rispondono «non disponibile» (D22)
   workflowRuntime = null,
   // F5 File reader (26/09/2026): i lasciapassare delle pagine HTML rese (`pagine-lasciapassare.mjs`); iniettabile per i test
@@ -3502,21 +3525,22 @@ export function createHttpApp({
         if (version === null) { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
         const owner = { sessionExistsFn: (id) => Boolean(sessionRegistry?.leggiSessioneContesto?.(id)) };
         const identity = { workflowId, version };
-        let data;
-        if (resource === null) { requireNoQuery(url); data = await readWorkflowProposal(workflowStore, identity, owner); }
-        else if (resource === 'graph') { requireNoQuery(url); data = await readPlannedWorkflowGraph(workflowStore, { ...identity, view: 'overview' }, owner); }
-        else if (resource === 'edges') {
-          data = await readPlannedWorkflowGraph(workflowStore, { ...identity, view: 'edges', ...workflowEdgeQuery(url) }, owner);
-        } else if (resource === 'lineage') {
-          data = await readPlannedWorkflowGraph(workflowStore, { ...identity, view: 'lineage', nodeId: lineageNodeId, ...workflowLineageQuery(url) }, owner);
-        } else if (resource.startsWith('groups/')) {
-          data = await readPlannedWorkflowGraph(workflowStore, { ...identity, view: 'group', phaseId: resource.slice('groups/'.length),
-            ...workflowGroupQuery(url) }, owner);
-        } else {
+        const leggiVista = async (archivio) => {
+          if (resource === null) { requireNoQuery(url); return readWorkflowProposal(archivio, identity, owner); }
+          if (resource === 'graph') { requireNoQuery(url); return readPlannedWorkflowGraph(archivio, { ...identity, view: 'overview' }, owner); }
+          if (resource === 'edges') return readPlannedWorkflowGraph(archivio, { ...identity, view: 'edges', ...workflowEdgeQuery(url) }, owner);
+          if (resource === 'lineage') {
+            return readPlannedWorkflowGraph(archivio, { ...identity, view: 'lineage', nodeId: lineageNodeId, ...workflowLineageQuery(url) }, owner);
+          }
+          if (resource.startsWith('groups/')) {
+            return readPlannedWorkflowGraph(archivio, { ...identity, view: 'group', phaseId: resource.slice('groups/'.length),
+              ...workflowGroupQuery(url) }, owner);
+          }
           requireNoQuery(url);
-          data = await readPlannedWorkflowGraph(workflowStore, { ...identity, view: 'node', nodeId: resource.slice('nodes/'.length) }, owner);
-        }
-        sendWorkflowView(req, res, method, data, clock);
+          return readPlannedWorkflowGraph(archivio, { ...identity, view: 'node', nodeId: resource.slice('nodes/'.length) }, owner);
+        };
+        const { data, archivio } = await dalPrimoArchivioCheLoHa([workflowStore, workflowStoreAltro].filter(Boolean), leggiVista);
+        sendWorkflowView(req, res, method, marcaSoloLettura(data, archivio), clock);
       } catch (error) {
         sendWorkflowViewError(res, method, error, clock);
       }
@@ -3534,7 +3558,7 @@ export function createHttpApp({
         if (!sessionRegistry?.leggiSessioneContesto?.(sessionId)) { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
         if (!workflowStore) { sendJson(res, 503, errorEnvelope('WORKFLOW_STORE_UNAVAILABLE', clock), method); return; }
         const data = await listWorkflowProposals(workflowStore, { sessionId, ...workflowPageQuery(url, ['offset', 'limit'], 50) },
-          { sessionExistsFn: (id) => Boolean(sessionRegistry?.leggiSessioneContesto?.(id)) });
+          { sessionExistsFn: (id) => Boolean(sessionRegistry?.leggiSessioneContesto?.(id)), storeAltro: workflowStoreAltro });
         sendWorkflowView(req, res, method, data, clock);
       } catch (error) {
         sendWorkflowViewError(res, method, error, clock);
@@ -3798,8 +3822,12 @@ export function createHttpApp({
         const afterSeq = runStreamCursor({ lastEventId: req.headers['last-event-id'], after: url.searchParams.get('after') });
         if (!sessionRegistry?.leggiSessioneContesto?.(sessionId)) { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
         if (!workflowStore) { sendJson(res, 503, errorEnvelope('WORKFLOW_STORE_UNAVAILABLE', clock), method); return; }
-        let run;
-        try { run = await readRunState(workflowStore, { runId }); }
+        let run, archivioDelFlusso;
+        try {
+          // owner 10/10/2026: un run dell'altro processo TALOS si segue dal SUO archivio (la sorveglianza in sola lettura avvisa)
+          ({ data: run, archivio: archivioDelFlusso } = await dalPrimoArchivioCheLoHa([workflowStore, workflowStoreAltro].filter(Boolean),
+            (archivio) => readRunState(archivio, { runId })));
+        }
         catch (error) {
           if (error?.code === 'WORKFLOW_RUN_NOT_FOUND' || error?.code === 'WORKFLOW_RUN_ID_INVALID' || error instanceof RangeError) {
             sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return;
@@ -3814,7 +3842,7 @@ export function createHttpApp({
           res.writeHead(200, { ...SECURITY_HEADERS, 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-store' });
           res.end(); return;
         }
-        await serveWorkflowRunStream({ res, store: workflowStore, runId, afterSeq, headers: SECURITY_HEADERS,
+        await serveWorkflowRunStream({ res, store: archivioDelFlusso, runId, afterSeq, headers: SECURITY_HEADERS,
           heartbeatMs: INTERVALLO_BATTITO_SSE_MS, setIntervalFn: impostaIntervalloFn, clearIntervalFn: cancellaIntervalloFn,
           onError: (errore) => console.error('[workflow-stream]', errore?.code ?? '', errore instanceof Error ? errore.message : errore) });
       } catch (error) {
@@ -3910,7 +3938,12 @@ export function createHttpApp({
           if (rawQuery !== null && (!query || rawQuery.length > 256 || /[\u0000-\u001f\u007f]/u.test(rawQuery))) {
             throw Object.assign(new Error('Invalid Workflow search'), { code: 'QUERY_INVALID' });
           }
-          const runs = await listRunSummariesForSession(workflowStore, { rootSessionId: sessionId });
+          const proprie = await listRunSummariesForSession(workflowStore, { rootSessionId: sessionId });
+          // owner 10/10/2026: i run di un altro processo TALOS su questa sessione condivisa, solo da leggere
+          const altre = workflowStoreAltro
+            ? (await listRunSummariesForSession(workflowStoreAltro, { rootSessionId: sessionId })).map((run) => ({ ...run, soloLettura: true }))
+            : [];
+          const runs = altre.length === 0 ? proprie : ordinaPerCreazione([...proprie, ...altre]);
           const filtered = runs.filter((run) => (stato === null || run.status === stato)
             && (query === null || run.title.toLocaleLowerCase('it').includes(query) || run.runId.toLowerCase().includes(query)));
           sendJson(res, 200, successEnvelope({ schema: 'talos.workflow-run-list.v1', sessionId,
@@ -3966,7 +3999,8 @@ export function createHttpApp({
           : history ? pageQuery(['offset', 'limit'], STATE_HISTORY_PAGE_MAX) : lineage ? workflowLineageQuery(url)
             : output ? numeriOutput : nodeDetail ? { offset: 0, limit: 50 } : (requireNoQuery(url), { offset: 0, limit: 50 });
         // la storia degli stati (decisione owner 29) viene dalla sua lettura: stessa verifica, senza ricopiare il giornale
-        const input = history ? await readRunHistory(workflowStore, { runId }) : await readRunState(workflowStore, { runId });
+        const { data: input, archivio: archivioDelRun } = await dalPrimoArchivioCheLoHa([workflowStore, workflowStoreAltro].filter(Boolean),
+          (archivio) => (history ? readRunHistory(archivio, { runId }) : readRunState(archivio, { runId })));
         if (input.events[0]?.type !== 'run_created' || input.events[0].payload.rootSessionId !== sessionId) {
           sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return;
         }
@@ -3984,7 +4018,7 @@ export function createHttpApp({
               total: selected.results.length, results: selected.results };
           } else {
             const ref = selected.ref;
-            const bytes = await readResultBytes({ workflowDataRoot: workflowStore.root, sha256: ref.sha256, maxBytes: workflowStore.resultLimits.maxItemBytes });
+            const bytes = await readResultBytes({ workflowDataRoot: archivioDelRun.root, sha256: ref.sha256, maxBytes: archivioDelRun.resultLimits.maxItemBytes });
             if (numeriOutput.format === 'raw') {
               const nomi = nomiPerContentDisposition(`workflow-${nodeId}-${ref.id}.bin`);
               res.writeHead(200, { ...SECURITY_HEADERS, 'Content-Type': 'application/octet-stream',
@@ -4013,7 +4047,7 @@ export function createHttpApp({
         else if (group) data = projectWorkflowGroupPage(input, { phaseId: resource.slice('groups/'.length), offset, limit, sort });
         else if (nodeDetail) data = projectWorkflowNodeDetail(input, { nodeId: resource.slice('nodes/'.length), outputOffset });
         else { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
-        const value = { ok: true, data, meta: { schema: API_SCHEMA, generatedAt: history ? input.lastAt : input.events.at(-1).at } };
+        const value = { ok: true, data: marcaSoloLettura(data, archivioDelRun), meta: { schema: API_SCHEMA, generatedAt: history ? input.lastAt : input.events.at(-1).at } };
         const etag = `"sha256:${createHash('sha256').update(JSON.stringify(value)).digest('hex')}"`;
         const headers = { ETag: etag, 'Cache-Control': 'private, no-cache' };
         if (ifNoneMatchMatches(req, etag)) {
