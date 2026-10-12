@@ -61,9 +61,16 @@ function endpointIdentity(root) {
   };
 }
 
+/*
+ * 11/10/2026 notte — ANDROID come LINUX: spazio astratto. Sul Pad (Android 16, utente shell) un socket in un FILE dà EACCES al
+ * `listen`, l'astratto funziona (misura della sessione mobile col server r4 in una cartella di prova). Android è un kernel Linux, e lo
+ * spazio astratto è suo (man 7 unix). Senza file da togliere, anche lo «stale» non serve: chi ascolta muore e il nome sparisce.
+ */
+export const conSpazioAstratto = (platform) => platform === 'linux' || platform === 'android';
+
 function endpointFor(root, endpointKey, platform) {
   if (platform === 'win32') return `\\\\.\\pipe\\talos-workflow-store-${endpointKey}`;
-  if (platform === 'linux') return `\0talos-workflow-store-${endpointKey}`;
+  if (conSpazioAstratto(platform)) return `\0talos-workflow-store-${endpointKey}`;
   return join(root, '.store-owner.sock');
 }
 
@@ -199,7 +206,7 @@ async function bindEndpoint({ root, endpoint, platform, server, failpoint }) {
     return;
   } catch (error) {
     if (error?.code !== 'EADDRINUSE' && error?.code !== 'EACCES') throw error;
-    if (platform === 'win32' || platform === 'linux') {
+    if (platform === 'win32' || conSpazioAstratto(platform)) {
       throw ownerError('Workflow store is already owned by another process', 'WORKFLOW_STORE_OWNED', error);
     }
     await failpoint?.('store.owner.unix_before_stale_probe');
@@ -309,7 +316,7 @@ export async function releaseStoreOwner(owner) {
     persistenceError = error;
   } finally {
     try { await closeServer(owner.server); } finally {
-      if (owner.record.platform !== 'win32' && owner.record.platform !== 'linux') {
+      if (owner.record.platform !== 'win32' && !conSpazioAstratto(owner.record.platform)) {
         try {
           const stat = await lstat(owner.endpoint);
           if (stat.isSocket() && owner.endpoint === join(owner.root, '.store-owner.sock')) await unlink(owner.endpoint);

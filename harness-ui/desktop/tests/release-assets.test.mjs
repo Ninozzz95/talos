@@ -50,9 +50,11 @@ async function conChangelog(distDir, testo = CHANGELOG) {
   return percorso;
 }
 
+const MAPPA = Buffer.from('mappa dei blocchi di fixture');
+
 test('R04-VERSIONE — nomi R-02 e rifiuto tag/versione o repository malformati', async () => {
   assert.deepEqual(nomiArtefatti('0.1.0'), { exe: 'TALOS-Setup-0.1.0.exe', zip: 'TALOS-0.1.0-win.zip', sha: 'SHA256SUMS.txt', note: 'NOTE-RELEASE.md',
-    manifesto: 'latest.yml', firma: 'latest.yml.sig' });
+    manifesto: 'latest.yml', firma: 'latest.yml.sig', mappa: 'TALOS-Setup-0.1.0.exe.blockmap' });
   assert.throws(() => nomiArtefatti('../x'), /Versione/);
   await assert.rejects(preparaRelease({ versione: '0.1.0', tag: 'desktop-v0.2.0', repository: 'owner/progetto' }), /tag/);
   await assert.rejects(preparaRelease({ versione: '0.1.0', tag: 'desktop-v0.1.0', repository: 'x\ncomando' }), /Repository/);
@@ -76,6 +78,7 @@ test('R04-SHA — hash reali, note in inglese col changelog dentro, e nessun art
   const zip = Buffer.from('zip di fixture, non distribuibile');
   const sha = b => createHash('sha256').update(b).digest('hex');
   await writeFile(join(distDir, 'TALOS-Setup-0.1.0.exe'), exe);
+  await writeFile(join(distDir, 'TALOS-Setup-0.1.0.exe.blockmap'), MAPPA);
   await writeFile(join(distDir, 'latest.yml'), manifestoDi(exe));
   const changelogPath = await conChangelog(distDir);
   const args = { distDir, versione: '0.1.0', tag: 'desktop-v0.1.0', repository: 'owner/progetto', smoke: { completato: true, installerSha256: sha(exe) }, changelogPath, ...CHIAVI };
@@ -83,11 +86,17 @@ test('R04-SHA — hash reali, note in inglese col changelog dentro, e nessun art
   await writeFile(join(distDir, 'TALOS-0.1.0-win.zip'), zip);
   await assert.rejects(preparaRelease({ ...args, smoke: { completato: false } }), /Smoke/);
   await assert.rejects(preparaRelease({ ...args, smoke: { completato: true, installerSha256: '0'.repeat(64) } }), /installer/);
+  // Scarico a blocchi (11/10/2026): senza la mappa dei blocchi, o con una mappa vuota, la release non esce.
+  await rm(join(distDir, 'TALOS-Setup-0.1.0.exe.blockmap'));
+  await assert.rejects(preparaRelease(args), /ENOENT.*blockmap/s);
+  await writeFile(join(distDir, 'TALOS-Setup-0.1.0.exe.blockmap'), Buffer.alloc(0));
+  await assert.rejects(preparaRelease(args), /Artefatto vuoto: TALOS-Setup-0\.1\.0\.exe\.blockmap/);
+  await writeFile(join(distDir, 'TALOS-Setup-0.1.0.exe.blockmap'), MAPPA);
   const risultato = await preparaRelease(args);
-  assert.equal(risultato.artefatti.length, 4);
+  assert.equal(risultato.artefatti.length, 5);
   const manifesto = await readFile(join(distDir, 'latest.yml'));
   const firma = await readFile(join(distDir, 'latest.yml.sig'));
-  assert.equal(await readFile(join(distDir, 'SHA256SUMS.txt'), 'utf8'), `${sha(exe)}  TALOS-Setup-0.1.0.exe\n${sha(zip)}  TALOS-0.1.0-win.zip\n${sha(manifesto)}  latest.yml\n${sha(firma)}  latest.yml.sig\n`);
+  assert.equal(await readFile(join(distDir, 'SHA256SUMS.txt'), 'utf8'), `${sha(exe)}  TALOS-Setup-0.1.0.exe\n${sha(zip)}  TALOS-0.1.0-win.zip\n${sha(manifesto)}  latest.yml\n${sha(firma)}  latest.yml.sig\n${sha(MAPPA)}  TALOS-Setup-0.1.0.exe.blockmap\n`);
   assert.equal(verificaFirmaManifesto(manifesto, firma.toString('utf8'), CHIAVI.chiavePubblicaApp), true, 'la firma pubblicata si verifica con la chiave dell app');
   const note = await readFile(join(distDir, 'NOTE-RELEASE.md'), 'utf8');
   for (const testo of ['Windows 10 1809', 'x64', 'SmartScreen', 'More info', 'Run anyway', 'GGUF', 'telemetry', '## Automatic updates', 'Ed25519', 'latest.yml.sig', 'every 4 hours', sha(exe), sha(zip), 'Get-FileHash', 'gh attestation verify', '--repo owner/progetto']) assert.ok(note.includes(testo), testo);
@@ -109,6 +118,7 @@ test('R04-CHANGELOG-CANCELLO — senza sezione (o senza file) non si pubblica: i
   const zip = Buffer.from('zip di fixture');
   const sha = b => createHash('sha256').update(b).digest('hex');
   await writeFile(join(distDir, 'TALOS-Setup-0.1.0.exe'), exe);
+  await writeFile(join(distDir, 'TALOS-Setup-0.1.0.exe.blockmap'), MAPPA);
   await writeFile(join(distDir, 'TALOS-0.1.0-win.zip'), zip);
   const base = { distDir, versione: '0.1.0', tag: 'desktop-v0.1.0', repository: 'owner/progetto', smoke: { completato: true, installerSha256: sha(exe) } };
 
@@ -131,6 +141,7 @@ test('R04-NON-CANDIDATA — un tag finale non si presenta come «release candida
   t.after(() => rm(distDir, { recursive: true, force: true }));
   const exe = Buffer.from('installer di fixture');
   await writeFile(join(distDir, 'TALOS-Setup-0.1.0.exe'), exe);
+  await writeFile(join(distDir, 'TALOS-Setup-0.1.0.exe.blockmap'), MAPPA);
   await writeFile(join(distDir, 'TALOS-0.1.0-win.zip'), Buffer.from('zip di fixture'));
   await writeFile(join(distDir, 'latest.yml'), manifestoDi(exe));
   const base = { distDir, versione: '0.1.0', tag: 'desktop-v0.1.0', repository: 'owner/progetto', smoke: { completato: true, installerSha256: createHash('sha256').update(exe).digest('hex') }, ...CHIAVI };
@@ -141,7 +152,7 @@ test('R04-NON-CANDIDATA — un tag finale non si presenta come «release candida
   // Al contrario: la parola «candidate» da sola, o una sezione normale, passano.
   const sana = await conChangelog(distDir, '## desktop-v0.1.0 — 2026-10-01\n\nThe candidate list of models is read from the provider.\n\n### Fixed\n- una cura\n');
   const risultato = await preparaRelease({ ...base, changelogPath: sana });
-  assert.equal(risultato.artefatti.length, 4);
+  assert.equal(risultato.artefatti.length, 5);
 });
 
 test('R04-FIRMA — senza la chiave, con una chiave non gemella, o con un latest.yml che non descrive l installer: non si pubblica', async t => {
@@ -149,6 +160,7 @@ test('R04-FIRMA — senza la chiave, con una chiave non gemella, o con un latest
   t.after(() => rm(distDir, { recursive: true, force: true }));
   const exe = Buffer.from('installer di fixture per la firma');
   await writeFile(join(distDir, 'TALOS-Setup-0.1.0.exe'), exe);
+  await writeFile(join(distDir, 'TALOS-Setup-0.1.0.exe.blockmap'), MAPPA);
   await writeFile(join(distDir, 'TALOS-0.1.0-win.zip'), Buffer.from('zip'));
   const changelogPath = await conChangelog(distDir);
   const base = { distDir, versione: '0.1.0', tag: 'desktop-v0.1.0', repository: 'owner/progetto', smoke: { completato: true, installerSha256: createHash('sha256').update(exe).digest('hex') }, changelogPath, ...CHIAVI };

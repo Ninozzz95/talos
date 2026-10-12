@@ -180,14 +180,35 @@ export function urlIngresso(base, token) {
  *   Senza `base` un ritorno non si può verificare: resta chiuso.
  */
 const RITORNO_OPENROUTER = /^\/api\/v1\/auth\/openrouter\/ritorno(?:\/[^/]+)?$/u;
+const RITORNO_CHATGPT = /^http:\/\/127\.0\.0\.1:(?:[1-9]\d{0,4})\/auth\/callback$/u;
 export function apribileNelBrowserDelSistema(indirizzo, { base = null } = {}) {
   let u;
   try { u = new URL(String(indirizzo ?? '')); } catch { return false; }
-  if (u.protocol !== 'https:' || u.port || u.username || u.password) return false;
-  if (u.hostname === 'github.com') return true;
-  if (u.hostname !== 'openrouter.ai' || u.pathname !== '/auth') return false;
+  /*
+   * ⭐ 11/10/2026, decisione owner («Clic + conferma del sito») — I LINK DELLA CHAT ESCONO DI QUI. Fino a oggi passavano solo
+   *   GitHub e le pagine d'accesso; ora l'interfaccia rende cliccabili i link delle risposte, mostra il SITO e chiede prima di
+   *   aprire (`frontend/src/components/conferma-link.js`). ⇒ Passa ogni indirizzo `https` senza credenziali; `http`, gli schemi non
+   *   web e gli indirizzi con `utente:password@` no. Come Hermes (`apps/desktop/electron/external-open.ts`: una porta sola, schemi web).
+   * ⛔ Restano STRETTE, qui sotto, le pagine che CONSEGNANO una chiave a chi sta nel parametro di ritorno: lì la conferma col sito
+   *   non basta (il sito è quello giusto, è il ritorno a essere di un altro), e la regola resta quella di prima.
+   */
+  if (u.protocol !== 'https:' || u.username || u.password || !u.hostname) return false;
+  /* 11/10/2026 — «Continue with ChatGPT»: la pagina d'accesso. Il ritorno dev'essere quello che il nostro server ascolta:
+     `http://127.0.0.1:<porta>/auth/callback`, uno solo (developers.openai.com/siwc/token-sharing-open-source/sign-in: «Don't
+     substitute localhost»). Un link scritto da un modello con un altro ritorno resta chiuso: consegnerebbe il codice a chi non è
+     TALOS. Di `auth.openai.com` non passa nient'altro. */
+  if (u.hostname === 'auth.openai.com') {
+    if (u.pathname !== '/api/accounts/authorize') return false;
+    const ritorniOpenAi = u.searchParams.getAll('redirect_uri');
+    return ritorniOpenAi.length === 1 && RITORNO_CHATGPT.test(ritorniOpenAi[0]);
+  }
+  /* OpenRouter: le sue pagine normali si aprono; ma un `callback_url` vale SOLO sulla pagina d'accesso vera (`openrouter.ai/auth`) e
+     solo se è il nostro. Su un sottodominio o su un altro percorso resta chiuso: un reindirizzamento verso `/auth` si porterebbe
+     dietro il ritorno di un estraneo. */
+  const diOpenRouter = u.hostname === 'openrouter.ai' || u.hostname.endsWith('.openrouter.ai');
   const ritorni = u.searchParams.getAll('callback_url');
-  if (ritorni.length === 0) return true;
+  if (!diOpenRouter || ritorni.length === 0) return true;
+  if (u.hostname !== 'openrouter.ai' || u.pathname !== '/auth') return false;
   if (ritorni.length > 1 || typeof base !== 'string' || base === '') return false;
   let r;
   try { r = new URL(ritorni[0]); } catch { return false; }

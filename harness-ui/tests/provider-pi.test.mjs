@@ -37,7 +37,7 @@ async function ascolta(t, handler) {
 }
 
 test('PI-01 — ventitré record, tre contratti internazionali completi, chiavi e modelli distinti', () => {
-  assert.equal(ID_FORNITORI.length, 29 /* 12/09, review: P-J zai-anthropic, minimax-anthropic; P-K azure, bedrock, vertex; P-L esterno */);
+  assert.equal(ID_FORNITORI.length, 30 /* 12/09, review: P-J zai-anthropic, minimax-anthropic; P-K azure, bedrock, vertex; P-L esterno; 11/10/2026: chatgpt (piano) */);
   for (const [id, [nome, base, variabile, catalogo, ausiliario]] of Object.entries(ATTESI)) {
     const r = REGISTRO_FORNITORI[id];
     assert.ok(r, id);

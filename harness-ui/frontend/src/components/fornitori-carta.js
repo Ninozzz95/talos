@@ -9,7 +9,7 @@
 import { t as traduci } from './lingua.js';
 import { nomeModelloUmano } from './chat-foot.js'; // mai l'id grezzo del modello a schermo
 
-export const ATTREZZI_FORNITORI_CON_CARTA = Object.freeze(['provider_exclude', 'provider_allow']);
+export const ATTREZZI_FORNITORI_CON_CARTA = Object.freeze(['provider_exclude', 'provider_allow', 'chatgpt_account']);
 export const eCartaFornitori = (azione) => ATTREZZI_FORNITORI_CON_CARTA.includes(azione?.tipo);
 
 function el(doc, tag, classe, testo) { const n = doc.createElement(tag); if (classe) n.className = classe; if (testo !== undefined) n.textContent = testo; return n; }
@@ -21,6 +21,10 @@ const cambiDi = (azione) => (Array.isArray(azione?.cambi) ? azione.cambi.filter(
 const nomeModello = (id) => nomeModelloUmano(id) || id || '';
 
 export function testiCartaFornitori(azione) {
+  // 11/10/2026: scollegare ChatGPT dalla chat (`chatgpt_account`, action disconnect)
+  if (azione?.tipo === 'chatgpt_account') {
+    return { badge: traduci('varie.providerCard.chatgptBadge'), bersaglio: azione.email || 'ChatGPT', perche: traduci('varie.providerCard.chatgptDisconnect'), motivo: '', nota: '' };
+  }
   const slug = typeof azione?.fornitore === 'string' ? azione.fornitore : '';
   const cambi = cambiDi(azione);
   const persona = cambi.some((c) => c.campo === 'persona');
@@ -46,6 +50,10 @@ export function creaBloccoCartaFornitori(doc, azione) {
      come dato: quello è della carta, e un selettore troverebbe due elementi (lo stesso avviso di automazione-carta.js). */
   const blocco = el(doc, 'div', 'talos-approval__automazione');
   blocco.dataset.dettaglioFornitori = azione?.tipo ?? '';
+  if (azione?.tipo === 'chatgpt_account') {
+    blocco.append(kv(doc, traduci('varie.providerCard.before'), traduci('varie.providerCard.chatgptNow')), kv(doc, traduci('varie.providerCard.after'), traduci('varie.providerCard.chatgptAfter')));
+    return blocco;
+  }
   const nessuno = traduci('varie.providerCard.none');
   const stato = (attivo) => traduci(attivo ? 'varie.providerCard.excludedByDefault' : 'varie.providerCard.allowedAgain');
   for (const c of cambiDi(azione)) {

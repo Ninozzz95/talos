@@ -284,7 +284,11 @@ test('PJ-15 — errori HTTP durante stream: stessa panchina P-H e nessuna chiave
   const b = await banco(t, (_r, res) => json(res, { type: 'error', error: { type: 'api_error', message: `HTTP ${status} finta-minimax finta-zai-anthropic` } }, status));
   for (const p of Object.keys(ATTESI)) for (const [s, classe] of [[429, 'traffico'], [401, 'credenziale'], [503, 'guasto-fornitore']]) {
     status = s; b.store.setKey(p, `finta-${p}`);
-    await assert.rejects(() => b.invia(p, { stream: true }, { providerStore: b.store }).then(r => r.text()), e => !String(e).includes('finta-'));
+    /* F-H-002 (12/10/2026): un errore HTTP del fornitore prima del primo token ora torna col SUO stato (prima: 200 e flusso che falliva).
+       Restano le due promesse di questa prova: la stessa panchina P-H e nessuna chiave nella risposta. */
+    const r = await b.invia(p, { stream: true }, { providerStore: b.store });
+    assert.equal(r.status, s, `${p} ${s}`);
+    assert.equal((await r.text()).includes('finta-'), false);
     assert.equal(b.store.elencaPool(p)[0].causa, classe);
   }
 });

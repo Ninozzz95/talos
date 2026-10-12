@@ -118,16 +118,23 @@ test('CONTESA-01 il conto e la parola', async (t) => {
   });
 
   await t.test('la parola lo dice, e dice anche PERCHÉ', () => {
-    const parola = talosResearchSupportLabel(
-      checks({ claimSupported: 'contested', opposing: [CONTRARIA] }),
-    );
+    /* K4b (07/10/2026): le parole dei documenti escono nella lingua chiesta, inglese di serie (la sorgente). Questa prova era
+       rimasta all'italiano di prima ed era rossa da allora: ora guarda TUTTE E DUE le lingue. */
+    const contesa = checks({ claimSupported: 'contested', opposing: [CONTRARIA] });
+    const parola = talosResearchSupportLabel(contesa, 'it');
     assert.match(parola, /contesa/i);
     assert.match(parola, /non concordano|contrari/i);
+    const word = talosResearchSupportLabel(contesa);
+    assert.match(word, /contested/i);
+    assert.match(word, /disagree/i);
   });
 
   await t.test('le altre parole non cambiano', () => {
-    assert.equal(talosResearchSupportLabel(checks({ claimSupported: 'yes' })), 'sostenuta dalla fonte');
-    assert.equal(talosResearchSupportLabel(checks({ claimSupported: 'partial' })), 'sostenuta solo in parte');
-    assert.equal(talosResearchSupportLabel(checks({ claimSupported: 'no' })), 'NON sostenuta dalla fonte');
+    assert.equal(talosResearchSupportLabel(checks({ claimSupported: 'yes' }), 'it'), 'sostenuta dalla fonte');
+    assert.equal(talosResearchSupportLabel(checks({ claimSupported: 'partial' }), 'it'), 'sostenuta solo in parte');
+    assert.equal(talosResearchSupportLabel(checks({ claimSupported: 'no' }), 'it'), 'NON sostenuta dalla fonte');
+    assert.equal(talosResearchSupportLabel(checks({ claimSupported: 'yes' })), 'supported by source');
+    assert.equal(talosResearchSupportLabel(checks({ claimSupported: 'partial' })), 'partially supported');
+    assert.equal(talosResearchSupportLabel(checks({ claimSupported: 'no' })), 'NOT supported by source');
   });
 });

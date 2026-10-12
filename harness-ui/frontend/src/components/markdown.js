@@ -40,6 +40,7 @@
  */
 
 import { nodiDaHtml, urlAmmesso } from './html-fidato.js';
+import { fineDellIndirizzo, leggiLinkEsterno } from './link-esterni.js';
 
 /*
  * ⛔ QUANTO HTML VIENE DA UNA RIGA. Serve a sapere dove un blocco HTML FINISCE: nel README di un
@@ -169,6 +170,18 @@ export function renderizzaMarkdown(testoGrezzo, opzioni = {}) {
    */
   const conConversazioni = opzioni.linkConversazione === true;
   /*
+   * ⭐ 11/10/2026, decisione owner («Clic + conferma del sito») — I LINK WEB IN CHAT, che dal 18/09 erano spenti di proposito.
+   *   Owner, dal vivo: «i link non vengono evidenziati automaticamente per andarci con click» (a schermo restava
+   *   `[Leggi la ricetta](https://…)`). Si accende con `opzioni.linkWeb` (la chat): `[testo](url)` E gli indirizzi scritti nudi
+   *   diventano `<a class="talos-link-esterno" data-link-esterno="…">`. Chi li disegna NON li apre: il clic lo prende la chat, che
+   *   mostra il sito e chiede conferma (`link-esterni.js`, `apriLinkEsterno` in app.js).
+   * ⛔ Solo indirizzi web letti da `leggiLinkEsterno` (http/https, senza credenziali): ogni altro schema resta testo senza indirizzo.
+   * ⛔ L'INDIRIZZO NUDO finisce dove finirebbe per una persona: la punteggiatura in coda e una parentesi che non ha aperto lui
+   *   restano testo (GFM 0.29 §6.9 «Extended autolink path validation», letta l'11/10/2026: «Trailing punctuation… will not be
+   *   considered part of the autolink»; una `)` conta solo se le parentesi dentro l'indirizzo sono bilanciate).
+   */
+  const conLinkWeb = opzioni.linkWeb === true;
+  /*
    * ⛔ `(?<!!)` NON È UN DETTAGLIO: SENZA, IL LINK MANGIA LE IMMAGINI. Trovato il 18/09/2026 da
    *   questa stessa review, sulla prova della scheda del modello: il README scrive
    *   `![licenza](https://example.invalid/licenza.png)`, e il pattern del link ci trovava dentro
@@ -186,7 +199,8 @@ export function renderizzaMarkdown(testoGrezzo, opzioni = {}) {
        regola): uno span che comincia prima lo consuma intero. */
     '\\\\([!-/:-@[-`{-~])',
     ...(conConversazioni ? [String.raw`(?<!!)\[([^\]]+)\]\(talos:\/\/conversazione\/([A-Za-z0-9._-]{1,120})\)`] : []),
-    ...(conLink ? [String.raw`(?<!!)\[([^\]]+)\]\(([^)\s]+)\)`] : []),
+    ...(conLink || conLinkWeb ? [String.raw`(?<!!)\[([^\]]+)\]\(([^)\s]+)\)`] : []),
+    ...(conLinkWeb ? [String.raw`(https?:\/\/[^\s<>\u0060]+)`] : []),
     String.raw`\*\*([^*]+)\*\*`, '`([^`]+)`', String.raw`\*([^*]+)\*`,
     /* `_x_`: mai DENTRO una parola (CommonMark 0.31.2 §6.2, regole 2 e 4, esempio 374: «Intraword emphasis is disallowed for
        `_`», letta l'08/10/2026). Prima `call_shell_1.log` usciva «call*shell*1.log». Non aperto dopo una lettera/cifra/`_`, non
@@ -196,10 +210,19 @@ export function renderizzaMarkdown(testoGrezzo, opzioni = {}) {
   const PATTERN_INLINE = new RegExp(PARTI_INLINE.join('|'), 'gu'); // `u`: le classi \p{L}/\p{N} delle lettere di ogni lingua
   // Ogni alternativa accesa davanti sposta di due i gruppi che seguono: la mappa dice dove sta cosa, invece di lasciare gli
   // indici sparsi nel corpo.
-  const GRUPPI = { conv: -1, convId: -1, link: -1, linkUrl: -1 };
+  const GRUPPI = { conv: -1, convId: -1, link: -1, linkUrl: -1, nudo: -1 };
   let prossimoGruppo = 2; // il gruppo 1 è l'escape
   if (conConversazioni) { GRUPPI.conv = prossimoGruppo; GRUPPI.convId = prossimoGruppo + 1; prossimoGruppo += 2; }
-  if (conLink) { GRUPPI.link = prossimoGruppo; GRUPPI.linkUrl = prossimoGruppo + 1; prossimoGruppo += 2; }
+  if (conLink || conLinkWeb) { GRUPPI.link = prossimoGruppo; GRUPPI.linkUrl = prossimoGruppo + 1; prossimoGruppo += 2; }
+  if (conLinkWeb) { GRUPPI.nudo = prossimoGruppo; prossimoGruppo += 1; }
+  /* Un link web della chat: classe e dato per il clic con conferma; fuori dalla chat (`linkMarkdown`) resta il link di prima. */
+  const ancoraWeb = (indirizzo, testoDelLink) => {
+    const a = doc.createElement('a');
+    const letto = leggiLinkEsterno(indirizzo);
+    if (letto) { a.className = 'talos-link-esterno'; a.setAttribute('href', letto.indirizzo === indirizzo ? indirizzo : letto.indirizzo); a.setAttribute('data-link-esterno', a.getAttribute('href')); a.setAttribute('rel', 'noopener noreferrer'); }
+    a.textContent = testoDelLink;
+    return a;
+  };
   Object.assign(GRUPPI, { forte: prossimoGruppo, codice: prossimoGruppo + 1, corsivoA: prossimoGruppo + 2, corsivoB: prossimoGruppo + 3 });
   function applicaInline(contenitore, segmento) {
     // grassetto **x**, corsivo *x*/_x_, codice inline `x`, ed eventualmente link [x](y) — un solo
@@ -212,6 +235,7 @@ export function renderizzaMarkdown(testoGrezzo, opzioni = {}) {
       if (match[1] !== undefined) { contenitore.appendChild(doc.createTextNode(match[1])); ultimo = pattern.lastIndex; continue; }
       const conversazione = GRUPPI.conv >= 0 ? match[GRUPPI.conv] : undefined;
       const link = GRUPPI.link >= 0 ? match[GRUPPI.link] : undefined;
+      const nudo = GRUPPI.nudo >= 0 ? match[GRUPPI.nudo] : undefined;
       if (conversazione !== undefined) {
         const b = doc.createElement('button');
         b.type = 'button';
@@ -219,6 +243,15 @@ export function renderizzaMarkdown(testoGrezzo, opzioni = {}) {
         b.setAttribute('data-conversazione', match[GRUPPI.convId]);
         b.textContent = senzaEscape(conversazione);
         contenitore.appendChild(b);
+      } else if (nudo !== undefined) {
+        const fine = fineDellIndirizzo(nudo);
+        const indirizzo = nudo.slice(0, fine);
+        if (leggiLinkEsterno(indirizzo)) contenitore.appendChild(ancoraWeb(indirizzo, indirizzo));
+        else contenitore.appendChild(doc.createTextNode(indirizzo));
+        ultimo = match.index + fine; pattern.lastIndex = ultimo; // la coda (punteggiatura, parentesi) torna al testo
+        continue;
+      } else if (link !== undefined && conLinkWeb) {
+        contenitore.appendChild(ancoraWeb(match[GRUPPI.linkUrl], senzaEscape(link)));
       } else if (link !== undefined) {
         const a = doc.createElement('a');
         const indirizzo = match[GRUPPI.linkUrl];

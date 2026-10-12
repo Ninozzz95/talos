@@ -93,6 +93,7 @@ export function creaAffittiArchivio({
   processoVivo = processoVivoPredefinito,
   impostaIntervallo = setInterval,
   cancellaIntervallo = clearInterval,
+  collegaSync = linkSync, // iniettabile: le prove simulano un file system che rifiuta i collegamenti (Android, exFAT)
 } = {}) {
   if (typeof cartellaStore !== 'string' || !cartellaStore) throw new TypeError('creaAffittiArchivio requires cartellaStore.');
   if (typeof percorsoGiornale !== 'function') throw new TypeError('creaAffittiArchivio requires percorsoGiornale(sessionId).');
@@ -141,8 +142,25 @@ export function creaAffittiArchivio({
     const preso = leggiDetentore(via);
     const stesso = preso && preso.istanza === giudicato.istanza && preso.mtimeMs === giudicato.mtimeMs;
     if (!stesso && preso && !scaduto(preso)) {
-      try { linkSync(via, file); } catch { /* il posto è già occupato da un terzo: resta suo */ }
-      try { unlinkSync(via); } catch { /* nome unico, nessuno lo legge */ }
+      /*
+       * 12/10/2026 — su Android (utente shell) e su exFAT `link` è RIFIUTATO (EACCES/EPERM…), non «posto occupato»: il catch di prima
+       * lo inghiottiva e la riga dopo cancellava `via`, cioè l'affitto VIVO del terzo (misurato dalla sessione mobile sul Pad, AFF-06).
+       * Ora: posto occupato (EEXIST) ⇒ è del terzo, `via` si toglie; collegamento rifiutato ⇒ i byte tornano al loro posto con una
+       * creazione ESCLUSIVA (`wx`: mai sopra un affitto altrui); se nemmeno quella riesce, `via` resta dov'è invece di sparire.
+       */
+      let rimesso = false;
+      try { collegaSync(via, file); rimesso = true; }
+      catch (errore) {
+        if (errore?.code === 'EEXIST') rimesso = true; // il posto è già occupato da un terzo: resta suo
+        else {
+          try {
+            const fd = openSync(file, 'wx');
+            try { writeSync(fd, readFileSync(via)); } finally { closeSync(fd); }
+            rimesso = true;
+          } catch (copia) { if (copia?.code === 'EEXIST') rimesso = true; }
+        }
+      }
+      if (rimesso) { try { unlinkSync(via); } catch { /* nome unico, nessuno lo legge */ } }
       return false;
     }
     try { unlinkSync(via); } catch { /* nome unico, nessuno lo legge */ }

@@ -9,7 +9,6 @@ import { decideStartup, shouldCommitStartup } from '../app/startup-policy.ts';
 import { risolviSezioneImpostazioni } from '../features/settings/schema.ts'; // 23/09/2026: gli indirizzi ritirati delle Impostazioni («providers» → Laboratorio modelli → Provider)
 import { VIEW_BY_DESTINATION, DESTINATION_BY_VIEW } from '../domain/navigation.ts';
 import { ultimoSegmento as ultimoSegmentoWorkspace } from '../domain/workspace-path.ts';
-import {creaSceltaFallback} from '../components/fonti-modelli.js';
 import { AZIONE_ACCODA, AZIONE_BIVIO, AZIONE_COMANDO, ORIGINE_COMPOSER_DURANTE_ASK, ORIGINE_SCELTA_ESPLICITA, SELETTORE_SCELTA_PREDEFINITA, creaCronologiaComposer, decidiInvio, mostraPulsanteReindirizzo, reindirizzoConsentito } from './invio-durante-il-giro.js'; // Corsia 1 (13/09): il bivio accoda/reindirizza, e la freccia su
 import { colonnaConversazione, scorrevoleConversazione } from '../bridge/conversazione-dom.js';
 import { montaProviderRetry } from '../components/provider-retry.js';
@@ -17,7 +16,10 @@ import {aggiornaProviderList,montaProviderPanel} from '../components/provider-ca
 import { POLITICHE, nomeUmanoPolitica, descrizionePolitica, notaPolitica, valoriPolitiche } from '../components/politiche.js';
 import { CHIAVE_COORDINAZIONE, TETTO_AVVII_DA_SOLO, coordinazioneAccesaNellaCatena, mappaPerUnaSessioneNuova } from '../components/coordinazione.js'; // C2b (owner 08/10/2026)
 import { testiUtenteWsl, testiDoveGiranoIComandi } from '../components/utente-wsl.js'; // F009 (owner 01/10/2026): con che utente girano i comandi Linux; fase B: la casa Linux
-import { PROVIDER_DIRETTI, eFonteDiretta, fontiDelSelettore, modelliDellaFonte, fraseVuotoDiretto, senzaChiave, aggiornaTestoModelloSelettore } from '../components/fonti-modelli.js'; // BC-12 (11/09): «Diretti» si spezza in una scheda per fornitore // P-C (12/09): un motore locale non ha chiave da collegare
+import { montaPastigliaPiano, mostraBenvenutoPiano } from '../components/piano-chatgpt.js'; // 11/10/2026: il piano ChatGPT nel composer
+import { montaClicSuiLink } from '../components/conferma-link.js'; // 11/10/2026: i link della chat, col clic che chiede conferma
+import { sitiFidatiDellApp } from '../components/link-esterni.js';
+import { PROVIDER_DIRETTI, eFonteDiretta, fontiDelSelettore, modelliDellaFonte, fraseVuotoDiretto, senzaChiave, fornitoriConCatalogo, aggiornaTestoModelloSelettore } from '../components/fonti-modelli.js'; // BC-12 (11/09): «Diretti» si spezza in una scheda per fornitore // P-C (12/09): un motore locale non ha chiave da collegare
 import { statoAvvioSessione } from '../components/avvio-sessione.js'; // BC-14 (11/09): «Avvia» non mente più sul perché è fermo
 import { nomeLeggibileSessione, identitaSessione, aggiornaSessionItem } from '../components/session-item.js'; // N1 (10/09): la riga della sessione viva cambia sul posto · BC-36/37 (12/09): nome e permesso da UNA fonte sola
 import { collegaScia, aggiornaTutteLeScie } from '../components/range-scia.js';
@@ -538,6 +540,7 @@ import { aggiornaWorkspaceFooter, fornitoreDelModello, testiPiede as testiPiedeW
   const appShell = $('#app');
   const views = $$('.view-pane');
   const chatConversation = scorrevoleConversazione(colonnaConversazione(ROOT()));
+  let pastigliaPiano = null; // 11/10/2026: la pastiglia «ChatGPT plan» del composer, montata con la barra (vedi `collegaScalaComposer`)
   const providerRetryUi = montaProviderRetry({ contenitore: () => $('#conversation'), onShow: () => nascondiAttesaRisposta() });
   const mobileViewButtons = $$('[data-mobile-view]');
   const modeTabs = $$('.mode-tab');
@@ -2914,6 +2917,10 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
   window.addEventListener('resize', programmaMisuraPila, { passive: true });
   /* 26/09, difetto (3): a 1024 le etichette del composer si tagliavano coi puntini — la scala ora si sceglie misurando. */
   collegaScalaComposer(composerForm?.querySelector('.talos-composer__bar'), { win: window });
+  /* 11/10/2026 — «Using ChatGPT plan» accanto al selettore (linee guida OpenAI; owner: solo la pastiglia compatta). Lo stato del
+     piano si legge all'avvio e dopo ogni accesso o scollegamento (`rileggiStatoDelPiano`); il modello lo dice il piede. */
+  pastigliaPiano = montaPastigliaPiano({ pastiglia: composerForm?.querySelector('[data-piano-chatgpt]'), leggiStato: () => apiGet('/api/v1/auth/chatgpt/stato') });
+  rileggiStatoDelPiano();
   if (typeof ResizeObserver === 'function') {
     const osservaPiede = new ResizeObserver(programmaMisuraPila);
     for (const piede of $$('.talos-chat-foot')) osservaPiede.observe(piede);
@@ -2982,6 +2989,20 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
    *   come la barra laterale (stessa chiamata di `passaASessione` delle notifiche). Delegato sul documento: i messaggi
    *   nascono dopo. Se la conversazione non c'è più, lo dice invece di aprire il vuoto.
    */
+  /*
+   * ⭐ 11/10/2026, decisione owner («Clic + conferma del sito») — i link web della chat (`markdown.js` con `linkWeb`, e gli indirizzi
+   *   nei messaggi della persona, `conversazione.js`). Il link NON si apre da solo: il clic mostra il sito e chiede
+   *   (`conferma-link.js`); un sito già fidato si apre subito. Anche il clic col tasto centrale e Ctrl+clic passano di qui
+   *   (`auxclick`, solo il tasto centrale: il destro resta al menu): altrimenti il browser aprirebbe il link saltando la domanda. Delegato sul documento: i messaggi nascono dopo.
+   * ⛔ Solo dentro la conversazione: i link di una scheda modello (`linkMarkdown`) restano com'erano.
+   */
+  montaClicSuiLink({
+    documento: document,
+    dentro: '#conversation',
+    fidati: sitiFidatiDellApp(),
+    apri: (indirizzo) => { window.open(indirizzo, '_blank', 'noopener,noreferrer'); },
+    copia: (indirizzo) => { void navigator.clipboard?.writeText(indirizzo).then(() => toast(tr('chat.link.copied'))).catch(() => {}); },
+  });
   document.addEventListener('click', (evento) => {
     const bottone = evento.target instanceof Element ? evento.target.closest('.talos-link-conversazione[data-conversazione]') : null;
     if (!bottone) return;
@@ -3119,7 +3140,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
    * mostra anche la conferma in pagina, cosa che il componente da solo non conosce).
    */
   function renderizzaMarkdownSemplice(testoGrezzo, { bloccoCodice = costruisciBloccoCodice } = {}) {
-    return renderizzaMarkdown(testoGrezzo, { document, bloccoCodice, linkConversazione: true }); // 27/09: il link a un'altra conversazione
+    return renderizzaMarkdown(testoGrezzo, { document, bloccoCodice, linkConversazione: true, linkWeb: true }); // 27/09: il link a un'altra conversazione · 11/10: i link web, col clic che chiede conferma
   }
 
   /**
@@ -3642,6 +3663,11 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     try {
       const data = await apiGet('/api/v1/providers');
       state.modelLab.providers = Array.isArray(data?.items) ? data.items : [];
+      /* 11/10/2026 — lo stato dell'accesso con ChatGPT va sulla scheda OpenAI. Un server senza portachiavi risponde 503: allora
+         la scheda non mostra il blocco, invece di un pulsante che apre un flusso che non può finire. */
+      const chatgpt = await apiGet('/api/v1/auth/chatgpt/stato').catch(() => null);
+      const openai = state.modelLab.providers.find((r) => r.id === 'openai');
+      if (openai && chatgpt && typeof chatgpt.collegato === 'boolean') openai.chatgpt = chatgpt;
     } catch (error) {
       state.modelLab.providerError = error;
       state.modelLab.providers = [];
@@ -3741,6 +3767,67 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     const passato = Date.now() - ultimaRigaViva;
     if (passato >= RITMO_RIGA_VIVA_MS) { scriviRigaSessioneViva(); return; }
     rigaVivaProgrammata = window.setTimeout(scriviRigaSessioneViva, RITMO_RIGA_VIVA_MS - passato);
+  }
+
+  /*
+   * 11/10/2026 — «Continue with ChatGPT». Stessa forma di `avviaAccessoProvider` (la finestra si apre DENTRO il clic; nell'app
+   * desktop l'indirizzo va al browser del computer, `desktop/runtime.mjs`), ma l'esito sta nella scheda OpenAI e lo dice
+   * `GET /api/v1/auth/chatgpt/stato` (`ultimoEsito`), non una chiave salvata.
+   */
+  /* 11/10/2026 — i livelli di ragionamento dei modelli del piano arrivano col catalogo (`/api/v1/models`, `livelliDiretti.chatgpt`):
+     dopo un accesso o uno scollegamento si rilegge, o la pillola resterebbe coi dati di prima (tutti i livelli, o quelli di un piano
+     che non c'è più). Un guasto qui non tocca niente: resta il catalogo che c'era. */
+  function rileggiCatalogoModelliDopoIlPiano() {
+    void apiGet('/api/v1/models').then((c) => { if (c?.modelli) { state.modelLab.catalogoModelli = c; aggiornaInspectorDaStato(); } }).catch(() => {});
+    rileggiStatoDelPiano();
+  }
+  /* 11/10/2026 — la pastiglia «ChatGPT plan» del composer segue lo stato del piano: all'avvio e dopo ogni accesso o scollegamento.
+     Un guasto (server senza portachiavi: 503) la lascia com'era, cioè nascosta finché non si sa. */
+  function rileggiStatoDelPiano() {
+    void apiGet('/api/v1/auth/chatgpt/stato').then((stato) => { if (stato && typeof stato.collegato === 'boolean') pastigliaPiano?.aggiorna({ stato }); }).catch(() => {});
+  }
+  async function avviaAccessoChatgpt({ consenso = false } = {}) {
+    const scheda = () => $('#providerList')?.querySelector('[data-provider-id="openai"]');
+    const finestra = window.open('', '_blank');
+    if (finestra) { try { finestra.opener = null; } catch { /* alcuni browser lo vietano */ } }
+    try {
+      const risposta = await apiPost('/api/v1/auth/chatgpt/inizia', consenso ? { consenso: true } : {});
+      const indirizzo = risposta?.indirizzo;
+      if (typeof indirizzo !== 'string' || !indirizzo) throw new Error(tr('app.providers.noSignInAddress'));
+      if (finestra) finestra.location.href = indirizzo;
+      else if (navigator.windowControlsOverlay?.visible === true) window.open(indirizzo, '_blank', 'noopener,noreferrer');
+      else { mostraLinkAccesso(scheda(), indirizzo); }
+      if (finestra || navigator.windowControlsOverlay?.visible === true) mostraEsitoProvider(scheda(), tr('app.providers.chatgptOpened'));
+      const alRitorno = async () => {
+        window.removeEventListener('focus', alRitorno);
+        await caricaProviderModelLab();
+        rileggiCatalogoModelliDopoIlPiano();
+        const stato = state.modelLab.providers?.find((r) => r.id === 'openai')?.chatgpt;
+        const esito = stato?.ultimoEsito;
+        if (stato?.collegato && stato.pianoAbilitato) {
+          mostraEsitoProvider(scheda(), tr('app.providers.chatgptDone'));
+          mostraBenvenutoPiano(stato); // linee guida OpenAI: «You’re using your ChatGPT plan», solo la prima volta per account
+        }
+        else if (stato?.collegato) mostraEsitoProvider(scheda(), tr('app.providers.chatgptNotEnabled'), true);
+        else if (esito && esito.ok === false) mostraEsitoProvider(scheda(), testoErroreServer({ code: esito.codice }).message || tr('app.providers.chatgptFailed'), true);
+      };
+      window.addEventListener('focus', alRitorno);
+    } catch (errore) {
+      try { finestra?.close(); } catch { /* già chiusa */ }
+      mostraEsitoProvider(scheda(), errore.message || tr('app.providers.signInFailed'), true);
+    }
+  }
+
+  async function scollegaChatgpt() {
+    const scheda = () => $('#providerList')?.querySelector('[data-provider-id="openai"]');
+    try {
+      const esito = await apiPost('/api/v1/auth/chatgpt/esci', {});
+      await caricaProviderModelLab();
+      rileggiCatalogoModelliDopoIlPiano();
+      mostraEsitoProvider(scheda(), tr(esito?.revocaConfermata ? 'app.providers.chatgptDisconnected' : 'app.providers.chatgptDisconnectedLocal'), !esito?.revocaConfermata);
+    } catch (errore) {
+      mostraEsitoProvider(scheda(), errore.message || tr('app.providers.saveFailed'), true);
+    }
   }
 
   async function avviaAccessoProvider(provider) {
@@ -3874,6 +3961,9 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     state.modelLab.providerOccupati??=new Set();if(state.modelLab.providerOccupati.has(provider))return;
     if(action==='test'){await provaProviderModelLab(provider);return;}
     if(action==='oauth-start'){await avviaAccessoProvider(provider);return;}
+    if(action==='chatgpt-start'||action==='chatgpt-enable'){await avviaAccessoChatgpt({consenso:action==='chatgpt-enable'});return;}
+    if(action==='chatgpt-usage'){const r=state.modelLab.providers?.find(x=>x.id==='openai');window.open(r?.chatgpt?.consumi||'https://chatgpt.com/settings/usage','_blank','noopener,noreferrer');return;}
+    if(action==='chatgpt-signout'){await scollegaChatgpt();return;}
     const key=card.querySelector('[data-provider-key]')?.value||'',endpoint=card.querySelector('[data-provider-endpoint]')?.value||'';
     /* OWN-01 (09/10/2026): il tempo parte solo se la persona l'ha cambiato (vedi `leggiCollegamentoProvider`, provider-card.js). */
     const campoTempo=card.querySelector('[data-provider-timeout]');
@@ -5235,6 +5325,39 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
    *   Decisions»: «If users overlook a link, you can move it or make it more prominent rather than
    *   duplicate it».
    */
+  /*
+   * 11/10/2026 — «Continue with ChatGPT» a due porte: il modello dice lo stato con `chatgpt_account`, e sotto la sua riga c'è il
+   *   pulsante che porta alla scheda OpenAI del Laboratorio (l'accesso lo fa la persona, nel browser di OpenAI: un modello non lo
+   *   apre). La scheda si apre già distesa sul blocco ChatGPT. Una volta per chiamata, anche alla rigiocata.
+   */
+  function montaAperturaChatgpt(evento) {
+    const gia = [...document.querySelectorAll('#conversation [data-c="ChatgptOpen"]')].some((nodo) => nodo.dataset.toolCallId === evento.toolCallId);
+    if (gia) return;
+    const blocco = document.createElement('div');
+    blocco.dataset.c = 'ChatgptOpen';
+    blocco.dataset.toolCallId = evento.toolCallId;
+    blocco.className = 'talos-chatgpt-apri';
+    const bottone = document.createElement('button');
+    bottone.type = 'button';
+    bottone.className = 'talos-button talos-button--secondary talos-button--sm';
+    bottone.textContent = tr('app.toolLine.openChatgptSignIn');
+    bottone.addEventListener('click', () => {
+      apriProviderDelLaboratorio();
+      /* ⛔ owner 11/10/2026: la card è un riassunto, l'accesso sta nella MODALE di «Configure» (`apriConfigurazioneProvider`,
+         provider-card.js). Mai `providerAperti`: è la vecchia apertura in linea, che allunga tutta la griglia. La card arriva
+         quando la lista dei fornitori è caricata: si aspetta lei (al massimo 3 s), poi si preme il suo «Configure» vero. */
+      let tentativi = 0;
+      const apriLaModale = () => {
+        const scheda = document.querySelector('#providerList [data-provider-id="openai"]');
+        const configura = scheda?.querySelector('[data-provider-toggle="openai"]');
+        if (configura) { if (!scheda.querySelector(':scope > .talos-provider__modale')) configura.click(); return; }
+        if ((tentativi += 1) < 30) setTimeout(apriLaModale, 100);
+      };
+      requestAnimationFrame(apriLaModale);
+    });
+    blocco.append(bottone);
+    nellaChat(blocco);
+  }
   function apriProviderDelLaboratorio() {
     setView('settings', { dallInizio: true });
     setSettingsSection('models');
@@ -7563,7 +7686,9 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
         /* ⛔ 12/09, P-C: «ha la chiave» non e piu la sola condizione per avere un catalogo. LM
            Studio gira su questo computer e non ne chiede nessuna: con il filtro di prima la sua
            scheda sarebbe rimasta vuota per sempre, cioe il difetto che P-C esiste per togliere. */
-        const conChiave = new Set(elenco.filter((p) => p.keyConfigured || senzaChiave(p.id)).map((p) => p.id));
+        /* 11/10/2026: il piano ChatGPT non sta fra le chiavi; il suo stato si legge a parte (un guasto qui non porta giù gli altri) */
+        const pianoChatgpt = await apiGet('/api/v1/auth/chatgpt/stato').catch(() => null);
+        const conChiave = fornitoriConCatalogo(elenco, { pianoChatgpt });
         const perFornitore = {};
         await Promise.all(PROVIDER_DIRETTI.map(async ({ id, etichetta }) => {
           if (!conChiave.has(id)) { perFornitore[id] = null; return; } // niente chiave ≠ zero modelli
@@ -9095,7 +9220,6 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
         });
         reasoningRow.append(reasoningLabel, reasoningToggle);
         mount.replaceChildren(picker.elemento, effortPicker.elemento, reasoningRow);
-        montaFallbackIn(mount,state.fallbackProviders||[],scegliFallbackCorrente);
         aggiornaVisibilitaRagionamento();
         /* ⛔ BUG-7 (04/10/2026, owner): al momento dell'apertura il catalogo può non essere
            ancora in memoria (misurato: foglio del modello sulla sessione dell'owner con
@@ -10300,7 +10424,6 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     });
     riga.append(etichetta, interruttore);
     mount.replaceChildren(picker.elemento, effortPicker.elemento, riga);
-    montaFallbackIn(mount,state.fallbackProviders||[],scegliFallbackCorrente);
   }
 
   /**
@@ -10699,6 +10822,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     // ⛔ 06/9, CB-04: la barra promette il consumo della CONVERSAZIONE; il tetto dei giri parla dell'invio in corso.
     const usageSessione = state.realSession.id ? state.realSession.usageSessione : null;
     const testiTema = aggiornaPiedeChatDaStato.tema?.() || '';
+    pastigliaPiano?.aggiorna({ modelloId: state.model || state.realSession.currentRunModel || null });
     aggiornaPiedeChat(piede, {
       attivo,
       cosa,
@@ -11745,6 +11869,8 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       ripartizione: finestra.perInspector.ripartizione,
       schedaContesto: datiSchedaContesto(), // C1 (owner 10/10/2026): il limite che agisce, la richiesta vera, le compattazioni
       giri: giriPerInspector(),
+      /* 11/10/2026 (owner): «Questo invio, N di tetto», che era la pillola dei giri del composer (stessa fonte del piede) */
+      invio: state.realSession.id ? { giri: Number.isFinite(Number(state.realSession.usage?.giri)) ? Number(state.realSession.usage.giri) : null, tetto: state.realSession.tettoGiriDichiarato } : null,
       file,
       /* ⛔ Si calcolano UNA VOLTA: servono alla colonna E al numero sulla sua scheda (sotto). */
       processi,
@@ -19199,7 +19325,15 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
      * resta visibile ma inaccessibile.
      */
     const veloAperto = [...document.querySelectorAll('.overlay-layer')].filter((v) => !v.hidden).at(-1) || null;
-    (veloAperto || document.body).appendChild(menu);
+    /*
+     * ⛔ 11/10/2026 (owner, dal vivo: «il pulsante ⋯ fa apparire il dropdown SOTTO la modale Configure OpenAI») — un `<dialog>`
+     *   aperto con `showModal()` sta nel TOP LAYER del browser: niente di ciò che sta fuori può passargli davanti, qualunque
+     *   z-index abbia (HTML Standard, «top layer»; MDN `<dialog>`, riletti l'11/10/2026), e il resto della pagina è inerte. È la
+     *   stessa malattia del velo qui sopra, col contenitore nativo: se l'àncora sta in un dialogo aperto, il menu nasce LÌ dentro.
+     *   Vale per ogni «⋯» della modale dei fornitori (il piano ChatGPT, le azioni di una chiave), non solo per quello segnalato.
+     */
+    const dialogoDellAncora = posizionamento.ancoraEl?.closest?.('dialog[open]') || null;
+    (dialogoDellAncora || veloAperto || document.body).appendChild(menu);
 
     if (posizionamento.ancoraEl) {
       const rect = posizionamento.ancoraEl.getBoundingClientRect();
@@ -19214,6 +19348,22 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       menu.style.top = altezza > sotto && sopra > sotto
         ? `${Math.max(8, rect.top - 4 - altezza)}px`
         : `${rect.bottom + 4}px`;
+      /* Dentro un dialogo il «fixed» può avere il dialogo come riferimento (basta un `transform`, anche di un'animazione): si
+         MISURA dove il menu è finito e si corregge dello scarto, invece di fidarsi delle coordinate della finestra. */
+      if (dialogoDellAncora) {
+        /* Un menu più largo del suo pulsante, allineato a destra, esce dal bordo sinistro della modale (visto in foto l'11/10:
+           partiva 33 px fuori). Se succede, si allinea al bordo SINISTRO del pulsante — sempre dentro la finestra. */
+        const telaio = dialogoDellAncora.getBoundingClientRect();
+        const larghezza = menu.getBoundingClientRect().width;
+        if (rect.right - larghezza < telaio.left + 8) {
+          const sinistra = Math.min(rect.left, window.innerWidth - 8 - larghezza);
+          menu.style.right = `${Math.max(8, window.innerWidth - (sinistra + larghezza))}px`;
+        }
+        const voluto = { alto: parseFloat(menu.style.top), destra: window.innerWidth - parseFloat(menu.style.right) };
+        const finito = menu.getBoundingClientRect();
+        if (Math.abs(finito.top - voluto.alto) > 0.5) menu.style.top = `${voluto.alto + (voluto.alto - finito.top)}px`;
+        if (Math.abs(finito.right - voluto.destra) > 0.5) menu.style.right = `${parseFloat(menu.style.right) + (finito.right - voluto.destra)}px`;
+      }
     } else {
       /* Il tasto destro: il menu nasce nel punto del clic, ma mai fuori dallo schermo — misurato DOPO
          l'append, quando le sue dimensioni vere esistono. */
@@ -21356,6 +21506,11 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
         }
         // F3-33a (25/09/2026): la proposta di workflow riuscita diventa una card nel transcript (decisione owner D20)
         if (info?.nome === 'workflow_plan_propose' && !fallito) montaCardProposta(evento);
+        /* 11/10/2026 (owner: «dice lo stato e apre la schermata»): lo stato dell'accesso ChatGPT porta la porta della schermata. */
+        if (info?.nome === 'chatgpt_account' && !fallito && info.argomentiParsati?.action === 'status') montaAperturaChatgpt(evento);
+        /* 11/10/2026 notte, trovato dal vivo: scollegato dalla chat, la pastiglia «ChatGPT plan» restava nel composer. Lo stato del
+           piano si rilegge quando il modello lo scollega, come dopo uno scollegamento dalla modale. */
+        if (info?.nome === 'chatgpt_account' && !fallito && info.argomentiParsati?.action === 'disconnect') rileggiStatoDelPiano();
         if (info?.detail) {
           /*
            * ⛔⛔ L'ETICHETTA «Esito:» NON SI DISEGNA PIÙ — nemmeno per un comando dell'AGENTE.
@@ -23281,7 +23436,6 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
   }
 
   function applicaImpostazioniSessione(sessione, sessionId = sessione?.sessionId ?? null) {
-    state.fallbackProviders=structuredClone(sessione?.fallbackProviders||[]);
     const reasoning = sessione?.reasoning && typeof sessione.reasoning === 'object' ? sessione.reasoning : null;
     state.model = normalizzaModelloSessione(sessione);
     state.effort = typeof reasoning?.effort === 'string' ? reasoning.effort : null;
@@ -25015,20 +25169,10 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
    *   e l'albero resta sotto, aperto, per cambiare idea. (Regola dell'owner del 04/09: si
    *   rispetta il sistema di design che il progetto ha gia'.)
    */
-  function montaFallbackIn(mount, valore, onChange) {
-    const posto=textElement('div','talos-stack',tr('app.modelPicker.fallbacksLoading'));mount.append(posto);
-    apiGet('/api/v1/providers').then(dati=>{
-      if(posto.isConnected)posto.replaceChildren(creaSceltaFallback({fornitori:dati.items||[],valore,usaAttrezzi:true,onChange}));
-    }).catch(()=>{if(posto.isConnected)posto.textContent=tr('app.modelPicker.fallbacksUnavailable');});
-  }
-  async function scegliFallbackCorrente(valore) {
-    await sincronizzaImpostazioniSessione({fallbackProviders:valore});
-    state.fallbackProviders=valore;
-    if(state.pendingCustomSession)state.pendingCustomSession.fallbackProviders=valore;
-  }
+  /* 11/10/2026 (owner, «inutile»): qui c'erano `montaFallbackIn` e `scegliFallbackCorrente`, la scelta delle riserve nel selettore del
+     modello e nella finestra della nuova sessione. La funzione è tolta; il registro le tiene sempre vuote. */
 
   function creaWorkspaceChooser({ launch = null } = {}) {
-    let fallbackProviders=[];
     const form = document.createElement('form');
     form.className = 'workspace-chooser';
     form.id = 'workspaceChooser';
@@ -25266,7 +25410,6 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
        anche qui vinceva lo stile in linea (1-0-0-0) e il foglio era inerte. */
     permissionSection.append(permissionGrid, policyGate);
     right.append(rightHead, modelSection, reasoningSection, plannerSection, permissionSection);
-    montaFallbackIn(right,[],valore=>{fallbackProviders=valore;});
 
     const columns = document.createElement('div');
     columns.className = 'workspace-chooser-columns';
@@ -25408,10 +25551,21 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
        *   `aria-describedby` gli lega addosso — così lo screen reader la legge insieme al nome.
        */
       submit.removeAttribute('aria-disabled');
-      submit.setAttribute('aria-describedby', 'workspaceChooserSubmitNote');
+      /*
+       * ⛔ 11/10/2026 (owner, dalla foto: la stessa frase due volte a 100 px di distanza) — UNA FRASE, UN POSTO.
+       *   Prima il «motivo» andava sempre in tutti e due i posti. Ma dice due cose diverse a seconda dello stato:
+       *   · si può partire ⇒ spiega il PERMESSO scelto: sta sotto le carte dei permessi, e basta;
+       *   · non si può ancora ⇒ dice che cosa MANCA: sta accanto al pulsante, e basta.
+       *   Il pulsante resta descritto dalla frase che c'è in quel momento (`aria-describedby`): chi non vede sente la stessa cosa.
+       *   La nota del piede si svuota ma non si nasconde: tiene il suo posto, i pulsanti non si spostano.
+       */
+      const pronto = decisione.puoAvviare === true;
       footerNote.id = 'workspaceChooserSubmitNote';
-      footerNote.textContent = decisione.motivo;
-      policyGate.textContent = decisione.motivo;
+      policyGate.id = 'workspaceChooserPolicyGate';
+      footerNote.textContent = pronto ? '' : decisione.motivo;
+      policyGate.textContent = pronto ? decisione.motivo : '';
+      policyGate.hidden = !pronto;
+      submit.setAttribute('aria-describedby', pronto ? 'workspaceChooserPolicyGate' : 'workspaceChooserSubmitNote');
       local.rimedioSu = decisione.rimedioSu;
       local.puoAvviare = decisione.puoAvviare;
       const toolsDisabled = local.busy || local.creatingFolder || !local.current;
@@ -25742,7 +25896,6 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
         modello: model,
         effort,
         modelloPlanner: planner,
-        fallbackProviders,
         permessi: local.permission,
         permessiPerAttrezzo: mappaPerUnaSessioneNuova(state.permessiPerAttrezzo), // C2b: spenta di serie
       };
@@ -26018,10 +26171,9 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     conversation.closest('.talos-conversation')?.classList.remove('talos-conversation--empty');
   }
 
-  function avviaSessionePendente({ cartellaId, cartellaLibera, workspaceLaunchId, nomeCartella, modello, effort, modelloPlanner, permessi, permessiPerAttrezzo, modalitaOperativa = state.modalitaOperativa, fallbackProviders=[] }) {
+  function avviaSessionePendente({ cartellaId, cartellaLibera, workspaceLaunchId, nomeCartella, modello, effort, modelloPlanner, permessi, permessiPerAttrezzo, modalitaOperativa = state.modalitaOperativa }) {
     nuovaGenerazioneSessione();
-    state.pendingCustomSession = { cartellaId, cartellaLibera, workspaceLaunchId, nomeCartella, modello, effort, modelloPlanner, permessi, permessiPerAttrezzo, modalitaOperativa, fallbackProviders };
-    state.fallbackProviders=fallbackProviders;
+    state.pendingCustomSession = { cartellaId, cartellaLibera, workspaceLaunchId, nomeCartella, modello, effort, modelloPlanner, permessi, permessiPerAttrezzo, modalitaOperativa };
     state.realSession.previewProjectId = cartellaId || null;
     state.realSession.previewWorkspaceName = nomeCartella;
     state.realSession.treeWorkspaceKey = cartellaId
@@ -26077,7 +26229,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     return String(testo || '').replace(/\s+/g, ' ').trim().slice(0, 80);
   }
 
-  async function startCustomSession({ cartellaId, cartellaLibera, workspaceLaunchId, nomeCartella, consegna, comandoProva, modello, effort, modelloPlanner, permessi, permessiPerAttrezzo, modalitaOperativa = state.modalitaOperativa, immagini = [], fallbackProviders=state.fallbackProviders||[], bolla = null }) {
+  async function startCustomSession({ cartellaId, cartellaLibera, workspaceLaunchId, nomeCartella, consegna, comandoProva, modello, effort, modelloPlanner, permessi, permessiPerAttrezzo, modalitaOperativa = state.modalitaOperativa, immagini = [], bolla = null }) {
     iniziaMisuraLatenza('primo-messaggio-della-sessione');
     const generation = nuovaGenerazioneSessione();
     const taskSintetico = { id: `libero:${nomeCartella}`, consegna, immagini };
@@ -26149,7 +26301,6 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
         corpo.permessiPerAttrezzo = permessiPerAttrezzoEffettivi;
       }
       segnaTappaLatenza('postInviata');
-      if(fallbackProviders.length)corpo.fallbackProviders=fallbackProviders;
       if (client === 'desktop') corpo.linguaInterfaccia = linguaInterfacciaPerIlServer(); // K3b: il primo giro la sa già
       const data = await apiPost('/api/v1/sessions/custom', corpo);
       segnaTappaLatenza('postRisposta');

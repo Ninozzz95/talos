@@ -135,14 +135,14 @@ test('R02-MOTORE — Vulkan verificato, ripiego CPU e override esplicito', async
   assert.equal(scegliMotoreLocale({ percorsi: {}, env: {} }), undefined);
 });
 
-test('F63-APRI-FUORI: solo https://github.com/… va nel browser del sistema; al contrario ogni altra cosa resta chiusa', async () => {
+test('F63-APRI-FUORI: https://github.com/… va nel browser del sistema; al contrario ciò che non è un indirizzo https pulito resta chiuso', async () => {
   const { apribileNelBrowserDelSistema } = await import('../runtime.mjs');
   for (const si of ['https://github.com/talos-private/agent-virtual-machine/pull/13', 'https://github.com/x/y/actions/runs/1/job/2', 'https://github.com/login/device']) {
     assert.equal(apribileNelBrowserDelSistema(si), true, si);
   }
   for (const no of [
-    'http://github.com/x/y/pull/1', 'https://github.com.evil.example/x', 'https://evil.example/github.com/x', 'https://gist.github.com/x',
-    'https://user:pass@github.com/x', 'https://github.com:8443/x', 'file:///C:/Windows/System32/calc.exe', 'javascript:alert(1)',
+    'http://github.com/x/y/pull/1',
+    'https://user:pass@github.com/x', 'file:///C:/Windows/System32/calc.exe', 'javascript:alert(1)',
     'ms-settings:privacy', 'C:\\Windows\\System32\\calc.exe', '', null, 'non un indirizzo',
   ]) {
     assert.equal(apribileNelBrowserDelSistema(no), false, String(no));
@@ -158,7 +158,7 @@ test('F63-APRI-FUORI: solo https://github.com/… va nel browser del sistema; al
  *   scambierebbe per una chiave a spese della persona. ⇒ Fuori solo senza ritorno (codice a schermo: lo vede solo la persona)
  *   o col ritorno sul server locale di QUESTA app (`base`), sulla rotta `/api/v1/auth/openrouter/ritorno`.
  */
-test('OPENROUTER-ACCESSO: la pagina d accesso di OpenRouter va nel browser del sistema; nient altro di openrouter.ai', async () => {
+test('OPENROUTER-ACCESSO: la pagina d accesso di OpenRouter va nel browser del sistema solo col NOSTRO ritorno; un ritorno altrui resta chiuso ovunque su openrouter.ai', async () => {
   const { apribileNelBrowserDelSistema } = await import('../runtime.mjs');
   const base = 'http://127.0.0.1:61234';
   const ritorno = (r) => `https://openrouter.ai/auth?callback_url=${encodeURIComponent(r)}&code_challenge=SFIDA&code_challenge_method=S256`;
@@ -170,9 +170,11 @@ test('OPENROUTER-ACCESSO: la pagina d accesso di OpenRouter va nel browser del s
     assert.equal(apribileNelBrowserDelSistema(si, { base }), true, si);
   }
   for (const no of [
-    'https://openrouter.ai/', 'https://openrouter.ai/settings/keys', 'https://openrouter.ai/auth/altro', 'https://openrouter.ai/authx',
-    'http://openrouter.ai/auth', 'https://openrouter.ai:8443/auth', 'https://u:p@openrouter.ai/auth', 'https://www.openrouter.ai/auth',
-    'https://openrouter.ai.evil.example/auth', 'https://evil.example/openrouter.ai/auth', 'https://evil.example/auth?openrouter.ai',
+    'http://openrouter.ai/auth', 'https://u:p@openrouter.ai/auth',
+    // 11/10/2026: un ritorno (`callback_url`) su un sottodominio o su un altro percorso di OpenRouter — potrebbe reindirizzare alla pagina vera
+    `https://www.openrouter.ai/auth?callback_url=${encodeURIComponent(`${base}/api/v1/auth/openrouter/ritorno/ABC`)}`,
+    `https://openrouter.ai/auth/altro?callback_url=${encodeURIComponent(`${base}/api/v1/auth/openrouter/ritorno/ABC`)}`,
+    `https://openrouter.ai/docs?callback_url=${encodeURIComponent('https://evil.example/x')}`,
     // il ritorno non è il nostro
     ritorno('https://evil.example/api/v1/auth/openrouter/ritorno/ABC'),
     ritorno('http://127.0.0.1:61235/api/v1/auth/openrouter/ritorno/ABC'),
@@ -205,4 +207,41 @@ test('F5-NAV-CORNICE: una cornice di pagina resa naviga solo dentro il suo lasci
   assert.equal(navigazioneCorniceConsentita(base, 'https://sito.example/', 'https://altro.example/'), true);
   assert.equal(navigazioneCorniceConsentita(base, 'about:blank', pagina), true, 'la prima navigazione della cornice verso la pagina');
   assert.equal(navigazioneCorniceConsentita(base, '', 'https://x.example/'), true);
+});
+
+test('CHATGPT-APRI-FUORI (11/10/2026): the ChatGPT sign-in and the usage page go to the system browser; any other return or page stays closed', async () => {
+  const { apribileNelBrowserDelSistema } = await import('../runtime.mjs');
+  const accesso = (ritorno, extra = '') => `https://auth.openai.com/api/accounts/authorize?client_id=dynamic_agent_client&redirect_uri=${encodeURIComponent(ritorno)}&state=s${extra}`;
+  for (const si of [accesso('http://127.0.0.1:55296/auth/callback'), accesso('http://127.0.0.1:1/auth/callback'), 'https://chatgpt.com/settings/usage']) {
+    assert.equal(apribileNelBrowserDelSistema(si), true, si);
+  }
+  for (const no of [
+    accesso('http://localhost:55296/auth/callback'), accesso('http://127.0.0.1:55296/callback'), accesso('https://evil.example/auth/callback'),
+    accesso('http://127.0.0.1/auth/callback'), accesso('http://127.0.0.1:55296/auth/callback?x=1'), accesso('http://127.0.0.1:0/auth/callback'),
+    accesso('http://127.0.0.1:55296/auth/callback', `&redirect_uri=${encodeURIComponent('http://127.0.0.1:1/auth/callback')}`),
+    'https://auth.openai.com/api/accounts/authorize?client_id=x', 'https://auth.openai.com/log-in', 'https://auth.openai.com/', 'http://chatgpt.com/settings/usage',
+  ]) {
+    assert.equal(apribileNelBrowserDelSistema(no), false, String(no));
+  }
+});
+
+/*
+ * 11/10/2026 — I LINK DELLA CHAT (decisione owner «Clic + conferma del sito»). Fino a oggi il guscio lasciava uscire solo GitHub e le
+ * pagine d'accesso; ora un link della chat si apre nel browser del sistema DOPO che l'interfaccia ha mostrato il sito e chiesto
+ * (`frontend/src/components/conferma-link.js`). ⇒ Qui passa ogni indirizzo `https` pulito; restano chiuse le pagine che CONSEGNANO
+ * una chiave attraverso un parametro (le prove OPENROUTER-ACCESSO e CHATGPT-APRI-FUORI qui sopra) e tutto ciò che non è web.
+ * Come Hermes, che manda fuori da una porta sola gli indirizzi web (`apps/desktop/electron/external-open.ts`).
+ */
+test('LINK-APRI-FUORI: un indirizzo https qualunque va nel browser del sistema; http, credenziali e schemi non web no', async () => {
+  const { apribileNelBrowserDelSistema } = await import('../runtime.mjs');
+  for (const si of [
+    'https://www.olivemagazine.com/recipes/collection/best-ever-pork-recipes/', 'https://it.wikipedia.org/wiki/Gyros_(piatto)',
+    'https://example.com:8443/x?y=1#z', 'https://gist.github.com/x', 'https://openrouter.ai/docs', 'https://openrouter.ai/settings/keys',
+    'https://chatgpt.com/', 'https://platform.openai.com/docs', 'https://xn--pple-43d.com/login',
+  ]) assert.equal(apribileNelBrowserDelSistema(si), true, si);
+  for (const no of [
+    'http://example.com/', 'https://utente:segreto@example.com/', 'https://google.com@evil.example/x', 'ftp://example.com/x',
+    'file:///C:/Windows/System32/calc.exe', 'javascript:alert(1)', 'ms-settings:privacy', 'talos://conversazione/abc', 'data:text/html,x',
+    'https://', '', null, undefined, 42, 'non un indirizzo',
+  ]) assert.equal(apribileNelBrowserDelSistema(no), false, String(no));
 });

@@ -128,7 +128,7 @@ test('R04-ASSET — installer R-02, ZIP completo, SHA e note esplicite', () => {
   assert.match(passo('smoke').run, /scripts\/ci-smoke\.ps1/);
   const upload = passi.find(p => p.id === 'upload');
   assert.deepEqual(upload.with.path.trim().split(/\r?\n/), ['${{ steps.asset.outputs.exe }}', '${{ steps.asset.outputs.zip }}', '${{ steps.asset.outputs.sha }}',
-    '${{ steps.asset.outputs.manifesto }}', '${{ steps.asset.outputs.firma }}']);
+    '${{ steps.asset.outputs.manifesto }}', '${{ steps.asset.outputs.firma }}', '${{ steps.asset.outputs.mappa }}']);
   assert.equal(upload.with['if-no-files-found'], 'error');
   assert.equal(upload.with['compression-level'], 0);
   assert.match(passo('release').run, /gh release create/);

@@ -21,6 +21,7 @@ import { montaPonteLegacy } from './bridge/legacy-dom.js';
 import { montaBarraFinestra } from './components/barra-finestra.js';
 import { montaAggiornamenti } from './components/aggiornamenti.js';
 import { montaMotoreContesto } from './components/motore-contesto.js';
+import { montaSitiFidati } from './components/siti-fidati.js';
 import { confermaModale } from './components/modale-td.js';
 
 montaPonteLegacy(document);
@@ -34,6 +35,8 @@ await import('./legacy/app.js');
 montaAggiornamenti({ conferma: confermaModale }); // «Riavvia ora» chiede se una sessione sta lavorando
 /* C1 (owner 09/10/2026 sera): «Motore del contesto» nel pannello «Memoria e contesto», che esiste solo dopo il monolite. */
 montaMotoreContesto();
+/* 11/10/2026 (owner: link cliccabili con conferma del sito): i siti che si aprono senza chiedere, in «Sicurezza e privacy». */
+montaSitiFidati();
 
 /*
  * 14/09/2026 — Desktop 0.1.7: il trasporto consegna i delta in tempo reale, ma le modalita

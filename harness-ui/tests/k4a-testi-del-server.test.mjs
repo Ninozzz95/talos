@@ -118,9 +118,11 @@ test('K4A-S05 — fornitori: le tre note delle schede cloud e i quattro nomi con
   }
   assert.equal(it('server.provider.cloudNote.azure'), 'Scegli il nome della distribuzione presente nella tua risorsa. Un modello nel catalogo non è una distribuzione.');
   const nomi = Object.values(REGISTRO_FORNITORI).filter((r) => r.etichettaChiave);
-  assert.deepEqual(nomi.map((r) => r.id).sort(), ['esterno', 'local', 'minimax-anthropic', 'zai-anthropic']);
-  /* l'etichetta che il registro porta ancora è quella italiana di prima: la voce italiana la dice uguale */
-  for (const r of nomi) assert.equal(it(r.etichettaChiave), r.etichetta, r.id);
+  assert.deepEqual(nomi.map((r) => r.id).sort(), ['chatgpt', 'esterno', 'local', 'minimax-anthropic', 'zai-anthropic']);
+  /* l'etichetta che il registro porta ancora è quella italiana di prima: la voce italiana la dice uguale.
+     11/10/2026: «ChatGPT plan» nasce in inglese (regola «inglese prima»): per lei è la voce INGLESE a essere uguale al registro. */
+  for (const r of nomi) assert.equal((r.id === 'chatgpt' ? en : it)(r.etichettaChiave), r.etichetta, r.id);
+  assert.equal(it('server.provider.label.chatgptPlan'), 'Piano ChatGPT');
 });
 
 /* La sonda, guidata con una rete finta: ogni `motivo` inglese è la voce inglese coi suoi valori. */

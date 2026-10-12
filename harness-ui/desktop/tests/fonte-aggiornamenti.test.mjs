@@ -85,3 +85,34 @@ test('FONTE-05: il server della prova risponde come GitHub — elenco delle rele
   assert.equal((await fetch(`${cartella}/..%5C..%5Csegreto.txt`)).status, 400, 'niente fuori dalla cartella del feed');
   assert.equal((await fetch(`${base}/altro`)).status, 404);
 });
+
+test('FONTE-06 (11/10/2026, block download): the test server answers one range with 206 like GitHub, a multi-range request with the whole file, keeps the block maps of older releases, and counts the bytes it sends', async (t) => {
+  const { mkdtempSync, writeFileSync, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const feed = mkdtempSync(join(tmpdir(), 'feed-')); const vecchia = mkdtempSync(join(tmpdir(), 'feed-vecchia-'));
+  t.after(() => { rmSync(feed, { recursive: true, force: true }); rmSync(vecchia, { recursive: true, force: true }); });
+  writeFileSync(join(feed, 'TALOS-Setup-0.0.2.exe'), '0123456789');
+  writeFileSync(join(vecchia, 'TALOS-Setup-0.0.1.exe.blockmap'), 'MAPPA-VECCHIA');
+  writeFileSync(join(vecchia, 'TALOS-Setup-0.0.1.exe'), 'INSTALLER-VECCHIO');
+  const s = serverDiProva({ cartellaFeed: feed, firme: { buona: 'B', manomessa: 'M' }, modo: () => 'buona', porta: 0, archivio: { '0.0.1': vecchia } });
+  const porta = await s.avvia();
+  t.after(() => s.ferma());
+  const base = `http://127.0.0.1:${porta}/${REPO_DI_PROVA}/releases/download`;
+  const exe = `${base}/desktop-v${VERSIONE_X1}/TALOS-Setup-0.0.2.exe`;
+  const uno = await fetch(exe, { headers: { range: 'bytes=2-5' } });
+  assert.equal(uno.status, 206);
+  assert.equal(uno.headers.get('content-range'), 'bytes 2-5/10');
+  assert.equal(await uno.text(), '2345');
+  const coda = await fetch(exe, { headers: { range: 'bytes=8-' } });
+  assert.equal(coda.status, 206);
+  assert.equal(await coda.text(), '89');
+  assert.equal((await fetch(exe, { headers: { range: 'bytes=20-30' } })).status, 416);
+  const piu = await fetch(exe, { headers: { range: 'bytes=0-1, 4-5' } });
+  assert.equal(piu.status, 200, 'more than one range is not served as ranges');
+  assert.equal(await piu.text(), '0123456789');
+  assert.equal(s.byteServiti.get('TALOS-Setup-0.0.2.exe'), 4 + 2 + 10);
+  // an older release: only its block map, nothing else
+  assert.equal(await (await fetch(`${base}/desktop-v0.0.1/TALOS-Setup-0.0.1.exe.blockmap`)).text(), 'MAPPA-VECCHIA');
+  assert.equal((await fetch(`${base}/desktop-v0.0.1/TALOS-Setup-0.0.1.exe`)).status, 404);
+  assert.equal((await fetch(`${base}/desktop-v0.0.9/TALOS-Setup-0.0.9.exe.blockmap`)).status, 404);
+});

@@ -44,7 +44,7 @@ async function ascolta(t, handler) {
 }
 
 test('PG-01 — undici percorsi chat P-G, ventinove record unici dopo P-I, P-J, P-K e P-L, e tutte le proiezioni coerenti', () => {
-  assert.equal(ID_FORNITORI.length, 29, 'Hugging Face riusa il record; P-I: Kimi, MiniMax, Qwen; P-J: zai-anthropic, minimax-anthropic; P-K: azure, bedrock, vertex; P-L: esterno');
+  assert.equal(ID_FORNITORI.length, 30, 'Hugging Face riusa il record; P-I: Kimi, MiniMax, Qwen; P-J: zai-anthropic, minimax-anthropic; P-K: azure, bedrock, vertex; P-L: esterno; 11/10/2026: chatgpt (piano)');
   // P-L · le nuove lane possono aggiungere record: restano obbligatori tutti i venti originali.
   const originali = ['openai', 'deepseek', 'zai', 'anthropic', 'gemini', 'openrouter', 'ollama', 'lmstudio', 'local', ...Object.keys(ATTESI)];
   assert.equal(new Set(originali).size, 20, 'Hugging Face riusa il record esistente');

@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { copiaAssistenza, fileProduzione, verificaImpronta, inventario, sfoltisciDipendenze } from '../scripts/prepara-pacchetto.mjs';
+import { copiaAssistenza, fileProduzione, verificaImpronta, inventario, sfoltisciDipendenze, copiaLibreriaTypescript } from '../scripts/prepara-pacchetto.mjs';
 
 test('R02-INTEGRITA — impronta alterata blocca il pacchetto', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'talos-r02-hash-'));
@@ -135,4 +135,25 @@ test('R02-SFOLTISCI (owner 11/10/2026, aggiornamento lento): via ciò che a runt
   assert.equal(tolti.file, via.length, 'il conto dei file tolti è esatto');
   // al contrario: una cartella che non c'è non è un errore, e niente da togliere fa zero
   assert.deepEqual(await sfoltisciDipendenze(join(nm, 'non-esiste')), { file: 0, byte: 0 });
+});
+
+test('R02-LIB-TS (11/10/2026): the package carries the TypeScript standard library the semantic gate reads, with its licence, and nothing else of the compiler', async () => {
+  const { existsSync, readdirSync } = await import('node:fs');
+  const base = mkdtempSync(join(tmpdir(), 'talos-r02-lib-ts-'));
+  const sorgente = join(base, 'sorgente'); const destinazione = join(base, 'pacchetto', 'node_modules', 'typescript');
+  const scrivi = (relativo, testo = 'x') => { const p = join(sorgente, ...relativo.split('/')); mkdirSync(join(p, '..'), { recursive: true }); writeFileSync(p, testo); };
+  for (const f of ['package.json', 'LICENSE.txt', 'ThirdPartyNoticeText.txt', 'README.md', 'bin/tsc', 'lib/lib.d.ts', 'lib/lib.es5.d.ts', 'lib/lib.dom.d.ts',
+    'lib/typescript.js', 'lib/typescript.d.ts', 'lib/tsserver.js', 'lib/it/diagnosticMessages.generated.json']) scrivi(f, f);
+  const copiati = await copiaLibreriaTypescript({ sorgente, destinazione });
+  assert.equal(copiati, 3, 'three lib.*.d.ts files');
+  assert.deepEqual(readdirSync(join(destinazione, 'lib')).sort(), ['lib.d.ts', 'lib.dom.d.ts', 'lib.es5.d.ts']);
+  assert.deepEqual(readdirSync(destinazione).sort(), ['LICENSE.txt', 'ThirdPartyNoticeText.txt', 'lib', 'package.json']);
+  assert.equal(readFileSync(join(destinazione, 'lib', 'lib.es5.d.ts'), 'utf8'), 'lib/lib.es5.d.ts');
+  assert.equal(existsSync(join(destinazione, 'lib', 'typescript.js')), false, 'the compiler itself stays out');
+  // the other way round: a source without the library must stop the build, not ship a gate that is silently off
+  await assert.rejects(() => copiaLibreriaTypescript({ sorgente: join(base, 'non-esiste'), destinazione: join(base, 'altro') }), /TypeScript/);
+  const senzaEs5 = join(base, 'senza-es5'); mkdirSync(join(senzaEs5, 'lib'), { recursive: true });
+  for (const f of ['package.json', 'LICENSE.txt', 'ThirdPartyNoticeText.txt']) writeFileSync(join(senzaEs5, f), 'x');
+  writeFileSync(join(senzaEs5, 'lib', 'lib.dom.d.ts'), 'x');
+  await assert.rejects(() => copiaLibreriaTypescript({ sorgente: senzaEs5, destinazione: join(base, 'altro2') }), /lib\.es5\.d\.ts/);
 });

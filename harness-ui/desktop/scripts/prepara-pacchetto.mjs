@@ -88,6 +88,25 @@ const SI_TOGLIE_IL_FILE = (nome) => !RESTANO_SEMPRE.test(nome) && (
 /** I binari nativi di piattaforme che il pacchetto Windows x64 non usa mai (`prebuilds/<piattaforma>-<arch>`). */
 const PREBUILD_DI_ALTRI = /^(darwin|linux|freebsd|openbsd|android|sunos|aix)-|^win32-(arm64|ia32)$/i;
 
+/**
+ * La libreria standard di TypeScript nel pacchetto (11/10/2026). Il cancello semantico del kernel legge `lib.*.d.ts` da
+ * `node_modules/typescript/lib` (`leggiLibreriaStandardTs`, talosHarness.mjs), ma `typescript` è una dipendenza di sviluppo e
+ * `npm ci --omit=dev` non la installa: misurato sull'app 0.1.27 installata e sul pacchetto 0.1.28, `lib.es5.d.ts` tornava
+ * `null` e il cancello sui `.ts` lavorava senza i tipi base, in silenzio. Si portano solo i `lib*.d.ts` (3,3 MB, non i 23 del
+ * compilatore), con `package.json` (lo cerca il ripiego `require.resolve`) e licenza e note di terzi (Apache-2.0).
+ * ⛔ Se la sorgente non c'è la costruzione si FERMA: un pacchetto senza libreria è un cancello spento che nessuno vede.
+ */
+export async function copiaLibreriaTypescript({ sorgente, destinazione }) {
+  const lib = join(sorgente, 'lib');
+  if (!existsSync(lib)) throw new Error(`Libreria standard di TypeScript assente: ${lib}`);
+  const nomi = (await readdir(lib)).filter((nome) => /^lib(\..+)?\.d\.ts$/.test(nome));
+  if (!nomi.includes('lib.es5.d.ts')) throw new Error(`Libreria standard di TypeScript incompleta: manca lib.es5.d.ts in ${lib}`);
+  await mkdir(join(destinazione, 'lib'), { recursive: true });
+  for (const nome of ['package.json', 'LICENSE.txt', 'ThirdPartyNoticeText.txt']) await copyFile(join(sorgente, nome), join(destinazione, nome));
+  for (const nome of nomi) await copyFile(join(lib, nome), join(destinazione, 'lib', nome));
+  return nomi.length;
+}
+
 export async function sfoltisciDipendenze(nodeModules) {
   const tolti = { file: 0, byte: 0 };
   const misura = async (percorso) => {
@@ -258,6 +277,9 @@ export async function preparaPacchetto() {
   await dipendenzeProduzione(backend);
   await sfoltisciPdfjs(join(backend, 'node_modules')); // F-001: ~5 MB invece di ~72 (owner 02/10)
   const sfoltiti = await sfoltisciDipendenze(join(backend, 'node_modules')); // owner 11/10: meno file, aggiornamento più veloce
+  // dopo lo sfoltimento: quei `.d.ts` sono dati che il kernel legge, non dichiarazioni da buttare
+  const libTs = await copiaLibreriaTypescript({ sorgente: join(root, '..', 'node_modules', 'typescript'), destinazione: join(backend, 'node_modules', 'typescript') });
+  console.log(`Libreria standard di TypeScript: ${libTs} file.`);
   await dipendenzeProduzione(contesto);
   const sfoltitiContesto = await sfoltisciDipendenze(join(contesto, 'node_modules'));
   console.log(`Dipendenze sfoltite: ${sfoltiti.file + sfoltitiContesto.file} file, ${Math.round((sfoltiti.byte + sfoltitiContesto.byte) / 1048576)} MB.`);

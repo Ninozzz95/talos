@@ -232,3 +232,19 @@ test('CHIP-PERMESSI-10 (review delta Y): a turned-off group is named plainly in 
   assert.match(documenti, /Spenti: documenti(\n|$)/u);
   assert.doesNotMatch(documenti, /\(\)/u);
 });
+
+/* 11/10/2026 — visto in foto al primo giro vero col piano ChatGPT: «chatgpt:gpt-5.6-luna» in testata, nella pillola e nella riga
+   della sessione. Il prefisso `fornitore:` è instradamento, non il nome del modello (regola: mai l'id grezzo a schermo). Valeva per
+   OGNI fornitore diretto, non solo per il piano. */
+test('NOME-MODELLO-PREFISSO: il prefisso di un fornitore diretto non arriva a schermo; un due punti che non è un fornitore resta', async () => {
+  const { nomeModello } = await import('../../src/components/session-item.js');
+  for (const leggi of [nomeModelloUmano, nomeModello]) {
+    assert.equal(leggi('chatgpt:gpt-5.6-luna'), 'gpt-5.6-luna');
+    assert.equal(leggi('deepseek:deepseek-chat'), 'deepseek-chat');
+    assert.equal(leggi('openai:gpt-6-sol'), 'gpt-6-sol');
+    assert.equal(leggi('z-ai/glm-5.3-flash'), 'glm-5.3-flash', 'OpenRouter come prima');
+    assert.equal(leggi('meta-llama/llama-4-scout:free'), 'llama-4-scout:free', 'la variante di OpenRouter non è un fornitore');
+    assert.equal(leggi('zai-anthropic:glm-5.3'), 'glm-5.3', 'anche un fornitore col trattino');
+    assert.equal(leggi('qualcosa:'), 'qualcosa:', 'un prefisso senza niente dopo non si svuota');
+  }
+});

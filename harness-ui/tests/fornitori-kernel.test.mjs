@@ -49,11 +49,11 @@ const OSPITE = (nome, argomenti, { fase }) => {
 test('FORN-K-01 — si offrono SOLO con l\'ospite: tutti e tre; senza, nessuno (la CLI); a una figlia no', async (t) => {
   const c = cartella(t)
   const con = await giro(c, [], { ospite: OSPITE })
-  assert.deepEqual(con.offerti[0].filter((n) => n.startsWith('provider_')).sort(), [...ATTREZZI_FORNITORI].sort())
+  assert.deepEqual(con.offerti[0].filter((n) => ATTREZZI_FORNITORI.has(n)).sort(), [...ATTREZZI_FORNITORI].sort())
   const senza = await giro(c, [])
-  assert.deepEqual(senza.offerti[0].filter((n) => n.startsWith('provider_')), [])
+  assert.deepEqual(senza.offerti[0].filter((n) => ATTREZZI_FORNITORI.has(n)), [])
   const figlia = await giro(c, [], { ospite: OSPITE, extra: { agentRole: 'child' } })
-  assert.deepEqual(figlia.offerti[0].filter((n) => n.startsWith('provider_')), [])
+  assert.deepEqual(figlia.offerti[0].filter((n) => ATTREZZI_FORNITORI.has(n)), [])
 })
 
 test('FORN-K-02 — escludere: anteprima, carta col prima → dopo, sì ⇒ esegue; no ⇒ REFUSED col motivo e niente esecuzione', async (t) => {
@@ -76,5 +76,24 @@ test('FORN-K-03 — l\'elenco non chiede la carta; un errore dell\'anteprima tor
   assert.equal(sbagliato.esito('b'), 'REFUSED. "boh!" is not a provider short name')
   assert.deepEqual(sbagliato.domande, [])
   const piano = await giro(c, [], { ospite: OSPITE, extra: { modalitaOperativa: 'piano' } })
-  assert.deepEqual(piano.offerti[0].filter((n) => n.startsWith('provider_')), ['provider_exclusions_list'])
+  assert.deepEqual(piano.offerti[0].filter((n) => ATTREZZI_FORNITORI.has(n)), ['provider_exclusions_list'])
+})
+
+test('FORN-K-05 — chatgpt_account (11/10/2026): passa dall\'ospite; scollegare chiede la carta col nome dell\'attrezzo; a una figlia no', async (t) => {
+  const c = cartella(t)
+  const estesi = { strumentiEstesi: ['chatgpt_account'] } // nominato a mano: la prova non deve dipendere dall'insieme che verifica
+  const ospite = (nome, argomenti, { fase }) => fase === 'anteprima'
+    ? (argomenti.action === 'disconnect' ? { ok: true, carta: true, azione: { fornitore: 'chatgpt', email: 'nino@example.com' } } : { ok: true, carta: false })
+    : { ok: true, testo: `${nome} ${argomenti.action} ok` }
+  const stato = await giro(c, [chiama('a', 'chatgpt_account', { action: 'status' })], { ospite, risposta: true, extra: estesi })
+  assert.ok(stato.offerti[0].includes('chatgpt_account'))
+  assert.equal(stato.esito('a'), 'chatgpt_account status ok')
+  assert.deepEqual(stato.domande, [])
+  const esci = await giro(c, [chiama('b', 'chatgpt_account', { action: 'disconnect' })], { ospite, risposta: true, extra: estesi })
+  assert.deepEqual(esci.domande, [{ fornitore: 'chatgpt', email: 'nino@example.com', tipo: 'chatgpt_account', toolCallId: 'b' }])
+  assert.equal(esci.esito('b'), 'chatgpt_account disconnect ok')
+  const figlia = await giro(c, [], { ospite, extra: { ...estesi, agentRole: 'child' } })
+  assert.equal(figlia.offerti[0].includes('chatgpt_account'), false)
+  const senzaOspite = await giro(c, [], { extra: estesi })
+  assert.equal(senzaOspite.offerti[0].includes('chatgpt_account'), false, 'la CLI, senza ospite, non lo vede')
 })

@@ -186,6 +186,7 @@ export default {
 
     // ── Fornitori: i nomi con una parola italiana, lo stato di esecuzione, e le note delle schede cloud
     'provider.label.externalAgent': 'Agente esterno',
+    'provider.label.chatgptPlan': 'Piano ChatGPT',
     'provider.label.zaiAnthropic': 'Z.AI (porta Anthropic)',
     'provider.label.minimaxAnthropic': 'MiniMax (porta Anthropic)',
     'provider.label.localEngine': 'Motore locale (llama.cpp)',
@@ -446,6 +447,7 @@ export default {
 
     // ── Providers: names with an Italian word, the execution state, and the cloud card notes
     'provider.label.externalAgent': 'External agent',
+    'provider.label.chatgptPlan': 'ChatGPT plan',
     'provider.label.zaiAnthropic': 'Z.AI (Anthropic port)',
     'provider.label.minimaxAnthropic': 'MiniMax (Anthropic port)',
     'provider.label.localEngine': 'Local engine (llama.cpp)',

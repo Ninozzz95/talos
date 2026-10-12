@@ -188,7 +188,15 @@ export function riassuntoSenzaChiedere(permesso, permessiPerAttrezzo, { modalita
 export function nomeModelloUmano(id) {
   if (typeof id !== 'string' || !id.trim()) return '';
   const grezzo = id.trim();
-  if (!/^local:/i.test(grezzo)) return grezzo.replace(/^~/u, '').split('/').pop();
+  if (!/^local:/i.test(grezzo)) {
+    /* 11/10/2026 — il prefisso `fornitore:` (chatgpt:, deepseek:, openai:…) è instradamento, non il nome del modello: via.
+       La regola è di FORMA, come `separaFonteModello` sul server: un fornitore è un nome semplice PRIMA dei due punti, senza barre.
+       Un id di OpenRouter ha sempre una barra prima di ogni due punti (`meta-llama/llama-4:free`): quello resta com'è.
+       ⛔ Niente elenco dei fornitori qui: importarlo da `fonti-modelli.js` tirava dentro il catalogo intero (e un modulo TypeScript)
+       in ogni pezzo che usa questa funzione — quattro prove della scheda dei fornitori sono diventate rosse per questo. */
+    const senzaFonte = grezzo.replace(/^[a-z][a-z0-9-]*:(?=.)/u, '');
+    return senzaFonte.replace(/^~/u, '').split('/').pop();
+  }
   let resto = grezzo.replace(/^local:/i, '').replace(/[-_.]gguf$/i, '');
   const quant = /[-_](IQ\d\w*|Q\d(?:[-_]\d)?(?:[-_][A-Z]+)*)(?=[-_]|$)/i.exec(resto);
   const parametri = /(?:^|[-_])(\d+(?:[.,]\d+)?B)(?:[-_]A(\d+(?:[.,]\d+)?B))?(?=[-_]|$)/i.exec(resto);
@@ -508,31 +516,8 @@ export function aggiornaPiedeChat(piede, dati = {}) {
   }
   // giri e costo
   const u = testiUsage(dati.usage, { tettoGiri: dati.tettoGiri, usageSessione: dati.usageSessione });
-  const giriChip = piede.querySelector('[data-runtime-giri]');
-  if (giriChip) {
-    /*
-     * ⛔ 06/9 — decisione B12: il contatore dei giri «compare dal 50% del tetto, in grigio, e si
-     * accende avvicinandosi». Prima compariva sempre: con 9 giri su 24 (il 37%) diceva un numero
-     * che non chiedeva niente a nessuno. Sotto la soglia si tace; da lì in su è quieto fino
-     * all'80%, poi diventa un avviso.
-     */
-    const stato = statoGiri(u.giri, dati.tettoGiri);
-    /* ⛔ A1-bis 5 (07/10/2026): durante la storia il numero è quello di un invio INTERMEDIO del replay (misurato: «Giri 107»
-       durante, «Giri 29» a fine storia su DESKTOP OLD): un numero che a fine storia non è vero. Si tace finché la storia non
-       finisce, come l'indice dei giri della colonna (A1-bis 1). */
-    giriChip.hidden = stato === null || dati.storiaInCaricamento === true;
-    giriChip.classList.toggle('talos-badge--warning', stato === 'vicino');
-    const n = giriChip.querySelector('.talos-mono');
-    if (n && u.giri !== null) n.textContent = Number.isFinite(Number(dati.tettoGiri)) && Number(dati.tettoGiri) > 0 ? `${u.giri}/${dati.tettoGiri}` : String(u.giri);
-    /*
-     * ⛔ 06/9, CB-13 — nella stessa barra ci sono due numeri che si chiamano entrambi «giri»:
-     *    questo è dell'INVIO in corso (è quello che può finire contro il tetto), quello accanto
-     *    ai token è di TUTTA la conversazione. Chi guarda deve poterlo sapere senza indovinare.
-     */
-    giriChip.title = Number.isFinite(Number(dati.tettoGiri)) && Number(dati.tettoGiri) > 0
-      ? t('chat.foot.turnsHintWithLimit', { n: dati.tettoGiri })
-      : t('chat.foot.turnsHint');
-  }
+  /* 11/10/2026 (owner): la pillola dei giri («Invio N») non sta più nel composer. Il dato dell'invio contro il suo tetto, con la
+     stessa regola di tono (`statoGiri`, decisione B12), sta nella scheda Contesto: `inspector.js`, `rigaDellInvio`. */
   const costoChip = piede.querySelector('[data-runtime-costo]');
   if (costoChip) {
     costoChip.hidden = !dati.costo;

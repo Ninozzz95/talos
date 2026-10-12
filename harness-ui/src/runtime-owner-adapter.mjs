@@ -21,6 +21,7 @@ import { creaRilevatoreZai } from './zai-indirizzo.mjs';
 import { leggiAttesaRichiestaDalFornitore, leggiAttesaResetDalCorpo, erroreEsitoProviderIncerto, consumoPubblico, marcaRifiutoProvider } from './provider-retry.mjs';
 import { normalizzaUsage, scontoDaCache } from './usage-cache.mjs'; // 12/09, P-B: i nomi della cache sono uno per fornitore, il lettore uno solo
 import { nativeProviderResponse, stripNativeMetadata } from './native-provider-adapter.mjs';
+import { attesaDelLimiteDelPiano, conPrimoPezzo, creaFetchDelPiano, erroreDelPiano } from './chatgpt-richiesta.mjs';
 import { preparaRichiestaCompatibile, OpenAiCompatibleRuntimeError, aliasGrafiaRagionamento, livelloRagionamentoMinimo, livelloRagionamentoPiuVicino } from './openai-compatible-runtime.mjs'; // P-D (12/09): Z.AI accetta solo alcuni livelli di ragionamento — BUG-18 gen.2: alias, minimo e clamp in UNA scala condivisa (D5)
 import { opzioniRagionamentoPerSintesi } from './context-token-counters.mjs'; // F3 (24/09): le stesse opzioni del corpo contato, fuori OpenRouter
 // P-L · ponte locale senza listener, sessione esterna posseduta dalla Response.
@@ -883,7 +884,19 @@ function creaFetchInstradata(fetchDiRete = fetch, { risolvi = risolviDestinazion
     // P-L · il corpo del kernel incontra ACP solo qui; stop e chiusura seguono la risposta.
     if (destinazione.esterno) return rispostaAgenteAcp({ runtime: destinazione.runtime, body: corpo, signal: opzioni.signal, onAvviso });
     // P-L · fine instradamento agente esterno.
-    if (destinazione.native) return sorveglia(await nativeProviderResponse({ provider: destinazione.fonte, model: destinazione.modelloRemoto, apiKey: destinazione.apiKey, baseURL: destinazione.baseURL, body: corpo, fetchFn: fetchDiRete, signal: opzioni.signal }));
+    if (destinazione.native) {
+      /* 11/10/2026, «Continue with ChatGPT» — il token del piano si prende ADESSO (si rinnova da solo se sta per scadere) e la
+         richiesta passa dal filtro che la rende conforme alle regole del piano (`chatgpt-richiesta.mjs`). Senza il canale del
+         token non si spedisce niente: mai un ripiego sulla chiave API, che è un'altra strada di pagamento. */
+      let apiKeyNativa = destinazione.apiKey;
+      let fetchNativa = fetchDiRete;
+      if (destinazione.tokenDelPiano) {
+        if (typeof dipendenze?.leggiTokenDelPiano !== 'function') throw Object.assign(new Error('No ChatGPT account is connected.'), { code: 'CHATGPT_NON_COLLEGATO' });
+        apiKeyNativa = await dipendenze.leggiTokenDelPiano(destinazione.fonte);
+        fetchNativa = creaFetchDelPiano(fetchDiRete);
+      }
+      return sorveglia(await nativeProviderResponse({ provider: destinazione.fonte, model: destinazione.modelloRemoto, apiKey: apiKeyNativa, baseURL: destinazione.baseURL, body: corpo, fetchFn: fetchNativa, signal: opzioni.signal }));
+    }
     if (corpo.messages?.some(m => m.talos_provider_state)) {
       corpo = { ...corpo, messages: stripNativeMetadata(corpo.messages) };
       opzioni = { ...opzioni, body: JSON.stringify(corpo) };
@@ -1244,6 +1257,24 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
     opzioni.signal?.throwIfAborted();
     const { fonte, modelloRemoto } = separaFonteModello(corpo.model);
     const record = REGISTRO_FORNITORI[fonte];
+    /* 11/10/2026, «Continue with ChatGPT» — un fornitore con accesso dall'account non passa dalla macchina delle chiavi (pool,
+       panchine, rotazione, ripieghi): non ha chiavi, e la sua strada di pagamento non si cambia mai da soli. Va diritto
+       all'instradamento, e i suoi guasti tornano col codice del piano (`erroreDelPiano`) invece che riclassificati. */
+    if (record?.auth?.tipo === 'oauth-pkce') {
+      try { return await conPrimoPezzo(await creaFetchInstradata(fetchDiRete, { risolvi, dipendenze, onAvviso, inattivitaGenerazioneMs, sorvegliaCorpo, memoriaAttrezzi })(url, opzioni)); }
+      catch (guasto) {
+        const errore = erroreDelPiano(guasto);
+        /* Il limite d'uso: il kernel aspetta e rifà la STESSA richiesta (come Claude Code), mostrando quando; «Ferma» annulla. */
+        if (errore.code === 'CHATGPT_LIMITE_DEL_PIANO') {
+          const attesa = attesaDelLimiteDelPiano(errore.intestazioni);
+          if (attesa !== null) {
+            return marcaRifiutoProvider(new Response(JSON.stringify({ error: { code: errore.codiceOpenAi ?? 'subscription_sharing_usage_limit_exceeded', message: errore.message } }),
+              { status: 429, headers: { 'Content-Type': 'application/json', 'Retry-After-Ms': String(Math.round(attesa)), 'Retry-After': String(Math.ceil(attesa / 1000)) } }), 'limite-del-piano');
+          }
+        }
+        throw errore;
+      }
+    }
     const scelta = record.credenziale ? providerStore?.scegliChiave(fonte) : null;
     if (providerStore && !scelta && record.chiaveObbligatoria) {
       /*
@@ -1474,6 +1505,13 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
            *   (aden-hive/hive #4391, OpenHands/software-agent-sdk #4867, DataQ #1849/#1853).
            */
           if (error?.code === 'PROVIDER_KEY_MISSING') throw error;
+          /* 11/10/2026, «Continue with ChatGPT» — i guasti del piano (accesso mancante o scaduto, piano non abilitato, limite
+             d'uso, richiesta non ammessa) hanno già il loro codice e la loro frase (`erroreDelPiano`). Non si riclassificano e,
+             soprattutto, non si cerca un fornitore di riserva: «Do not silently switch billing paths on failure»
+             (developers.openai.com/siwc/token-sharing-open-source/errors-and-recovery, riletta l'11/10/2026). */
+          if (typeof error?.code === 'string' && error.code.startsWith('CHATGPT_')) throw error;
+          // tentativi del limite finiti: il giro si ferma col codice del piano, non con un «troppo traffico» generico
+          if (REGISTRO_FORNITORI[destinazione.provider]?.auth?.tipo === 'oauth-pkce') throw erroreDelPiano(error);
           /* ⛔ BC-79.2 — e nemmeno il rifiuto di un motore locale: non è transitorio, non è colpa di
              una chiave, e un fornitore di riserva non c'entra niente con un GGUF che sta in casa. */
           if (error?.code === 'LOCAL_ENGINE_REJECTED_REQUEST') throw error;
@@ -1534,6 +1572,11 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
         const usage = consumoPubblico(risultato?.usage);
         const costoDichiarato = typeof usage?.cost === 'number' && Number.isFinite(usage.cost) && usage.cost >= 0 ? usage.cost : null;
         if (typeof onConsumoFornitore === 'function') await onConsumoFornitore({ tipo: 'consumo-fornitore', ...destinazione, usage, costoDichiarato, esito: 'completato' });
+        /* 11/10/2026 — il conteggio nostro del piano ChatGPT (`chatgpt-uso.mjs`): una riga per richiesta COMPLETATA col piano, coi
+           soli token. Mai il token d'accesso, mai il testo. Un guasto del registro non tocca la risposta già arrivata. */
+        if (REGISTRO_FORNITORI[destinazione.provider]?.auth?.tipo === 'oauth-pkce' && typeof dipendenze?.registraUsoDelPiano === 'function') {
+          try { await dipendenze.registraUsoDelPiano({ esito: 'completato', usage }); } catch { /* il conteggio è un di più */ }
+        }
         return { ...risultato, usage, fornitoreEffettivo: destinazione.provider, modelloEffettivo: destinazione.model };
       }
     } finally { occupato = false; }

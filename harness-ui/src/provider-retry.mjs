@@ -8,7 +8,9 @@ export function marcaRifiutoProvider(risposta, motivo) {
    * come 402 — il marker non può legarsi al solo 402. Il motivo è messo SOLO dall'adapter quando
    * il fornitore dichiara una scadenza: senza dichiarazione nessun marker, nessun retry a vuoto.
    */
-  if ((risposta?.status === 402 && motivo === 'budget-occupato') || motivo === 'credito') {
+  /* 11/10/2026 — `limite-del-piano`: il limite d'uso del piano ChatGPT (429 `subscription_sharing_usage_limit_exceeded`). Come Claude
+     Code, il giro aspetta e riparte da solo dalla stessa richiesta (`chatgpt-richiesta.mjs`, `attesaDelLimiteDelPiano`). */
+  if ((risposta?.status === 402 && motivo === 'budget-occupato') || motivo === 'credito' || (risposta?.status === 429 && motivo === 'limite-del-piano')) {
     Object.defineProperty(risposta, RIFIUTO_PROVIDER, { value: Object.freeze({
       schema: 'talos.provider-rejection.v1', motivo,
     }) });
@@ -20,6 +22,7 @@ export function leggiRifiutoProvider(risposta) {
   const rifiuto = risposta?.[RIFIUTO_PROVIDER];
   if (rifiuto?.schema !== 'talos.provider-rejection.v1') return null;
   if (rifiuto.motivo === 'credito') return rifiuto;
+  if (rifiuto.motivo === 'limite-del-piano') return risposta?.status === 429 ? rifiuto : null;
   return risposta?.status === 402 && rifiuto.motivo === 'budget-occupato' ? rifiuto : null;
 }
 

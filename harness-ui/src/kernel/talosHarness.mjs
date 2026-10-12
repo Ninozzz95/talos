@@ -3957,6 +3957,20 @@ const ATTREZZI_ESTESI = [
             model: { type: 'string', description: 'the model it is excluded by default for, when more than one' },
         }, required: ['provider'] },
     },
+    /*
+     * 11/10/2026 — «Continue with ChatGPT» a due porte (regola features-startable-from-chat; decisione owner 11/10: «dice lo stato e
+     *   apre la schermata; scollega con carta»). L'ACCESSO non è un attrezzo: è un consenso della persona nel browser di OpenAI, e un
+     *   modello che apre pagine d'accesso è una superficie da non offrire. Stesso canale degli esclusi (`onFornitoriFn`), solo al root.
+     */
+    {
+        name: 'chatgpt_account',
+        description: 'The ChatGPT sign-in: TALOS can use the person\'s ChatGPT Plus or Pro plan to pay for requests. Call it with action '
+            + '"status" whenever the person asks about ChatGPT, their ChatGPT subscription or plan, or signing in with ChatGPT. "status" says whether an account '
+            + 'is connected and whether plan use is enabled; signing in is done by the person, from Settings, Model laboratory, Provider, OpenAI, '
+            + '"Continue with ChatGPT" (offer to open it: the interface shows a button). action "disconnect" signs the account out; the '
+            + 'person approves it on a card.',
+        input_schema: { type: 'object', properties: { action: { type: 'string', enum: ['status', 'disconnect'] } }, required: ['action'] },
+    },
 ]
 /** ⭐ Stesso motivo dell'export sopra: la parte opzionale della superficie, per l'impronta. */
 /** 27/09/2026, decisione owner (capacità delle sezioni): gli attrezzi che passano da `onLetturaSezione`. */
@@ -4014,7 +4028,7 @@ export const ATTREZZI_AUTOMAZIONI = new Set(['automation_list', 'automation_runs
     'automation_control']) // C5: era automation_pause/resume/run/stop — l'ospite li riceve ancora coi nomi di prima
 
 /** 0.1.25 (owner 09/10/2026): gli attrezzi dei fornitori a valle esclusi, che passano da `onFornitoriFn`. */
-export const ATTREZZI_FORNITORI = new Set(['provider_exclusions_list', 'provider_exclude', 'provider_allow'])
+export const ATTREZZI_FORNITORI = new Set(['provider_exclusions_list', 'provider_exclude', 'provider_allow', 'chatgpt_account'])
 
 export const ATTREZZI_ESTESI_OPENAI = ATTREZZI_ESTESI.map((a) => ({
     type: 'function',
@@ -6332,6 +6346,16 @@ export function eUnaCredenziale(chiave) {
     return FORMA_DI_CREDENZIALE.test(k)
 }
 
+/*
+ * 11/10/2026 notte — LA SHELL DEI COMANDI, DETTA. `shell: true` vuol dire `/bin/sh` su Unix (doc Node v24, child_process: «Uses
+ * '/bin/sh' on Unix, and process.env.ComSpec on Windows»), che su Android non esiste: il Node del Pad (build di Termux) cercava la sh
+ * di Termux e falliva con ENOENT, e ogni comando del modello moriva (misura della sessione mobile col server r4 sul Pad). Su Android
+ * la shell di sistema è `/system/bin/sh`. Altrove nulla cambia: `true`, cioè la scelta di Node di sempre.
+ */
+export function shellDeiComandi(piattaforma = process.platform) {
+    return piattaforma === 'android' ? '/system/bin/sh' : true
+}
+
 export function ambienteSenzaCredenziali() {
     const ambiente = {}
     for (const [chiave, valore] of Object.entries(process.env)) {
@@ -7041,7 +7065,7 @@ async function eseguiProva(comando, cartella, { segnaleStop, dove = null, onByte
         const risolvi = (esito) => risolviGrezzo(inBackgroundProva
             ? { ...esito, processoInBackground: true, testo: `${esito.testo}\n\n${NOTA_PROCESSO_IN_BACKGROUND}`.trim() }
             : esito)
-        const p = spawn(comando, { cwd: cartella, shell: true, windowsHide: true, env: ambienteSenzaCredenziali() })
+        const p = spawn(comando, { cwd: cartella, shell: shellDeiComandi(), windowsHide: true, env: ambienteSenzaCredenziali() })
         annunciaAvvio(onAvvio, p) // C1 (10/10/2026): il PID, per CPU e memoria nella scheda Processi
         // No durable sink on this legacy path. Reuse bounded preview/UTF-8
         // decoding without retaining another full copy for zero-test detection.
@@ -7949,7 +7973,7 @@ function eseguiSuWindows(comando, cartella, { onPezzo, onBytes, tracciaCartella 
         const marcatore = nuovoMarcatoreCartella()
         const coda = tracciaCartella ? codaCheStampaLaCartella(perWindows, marcatore) : ''
         const metadata = onBytes && normalizzaMetadatiCattura({ schema: 'talos.process-output-metadata.v1', controlFooter: tracciaCartella ? { type: 'cwd-marker-v1', stream: 'stdout', marker: marcatore, prefixBytes: perWindows ? 0 : 1 } : null })
-        const p = spawn(`${comando}${coda}`, { cwd: cartella, shell: true, windowsHide: true, env: ambienteSenzaCredenziali() })
+        const p = spawn(`${comando}${coda}`, { cwd: cartella, shell: shellDeiComandi(), windowsHide: true, env: ambienteSenzaCredenziali() })
         annunciaAvvio(onAvvio, p) // C1 (10/10/2026): il PID della shell, per CPU e memoria nella scheda Processi
         let fuori = ''
         let errori = ''

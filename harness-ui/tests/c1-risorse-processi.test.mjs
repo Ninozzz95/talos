@@ -129,8 +129,10 @@ test('C1-RIS-06 — a reader that never answers is switched off and the sample s
 });
 
 test('C1-RIS-04 — Windows, for real: the persistent PowerShell measures a busy child; then it switches itself off', { skip: process.platform !== 'win32' }, async () => {
-  const occupato = spawn(process.execPath, ['-e', 'const f=Date.now()+20000; let x=0; while(Date.now()<f){x++}'], { windowsHide: true });
-  const c = creaCampionatoreRisorse({ spentoDopoMs: 60_000 });
+  const occupato = spawn(process.execPath, ['-e', 'const f=Date.now()+60000; let x=0; while(Date.now()<f){x++}'], { windowsHide: true });
+  // 11/10/2026, PR #58: on a loaded CI runner the cold start of PowerShell + CIM took more than the product's 8 s cap, the
+  // first sample came back empty (the designed «—») and this test, which is about the real measure, turned red.
+  const c = creaCampionatoreRisorse({ spentoDopoMs: 60_000, attesaMassimaMs: 45_000 });
   try {
     assert.equal(c.metodo, 'cim');
     const prima = await c.misura({ pid: [occupato.pid] });
@@ -158,7 +160,9 @@ const distroVera = (() => {
 test('C1-RIS-07 — WSL, for real: a marked busy command inside the distro is found and uses CPU; an unmarked one is not counted', { skip: distroVera ? false : 'no WSL distro', timeout: 60_000 }, async () => {
   const marcatore = `tprova${process.pid}`;
   const occupato = spawn('wsl.exe', ['-d', distroVera, '--exec', 'bash', '-lc', `export TALOS_CMD_ID='${marcatore}'\nsh -c 'end=$(($(date +%s)+15)); while [ $(date +%s) -lt $end ]; do :; done' & sleep 15`], { windowsHide: true });
-  const c = creaCampionatoreRisorse({ spentoDopoMs: 60_000 });
+  // 11/10/2026, PR #58: on a loaded CI runner the cold start of PowerShell + CIM took more than the product's 8 s cap, the
+  // first sample came back empty (the designed «—») and this test, which is about the real measure, turned red.
+  const c = creaCampionatoreRisorse({ spentoDopoMs: 60_000, attesaMassimaMs: 45_000 });
   try {
     await new Promise((r) => setTimeout(r, 1_500));
     const richiesta = { wsl: [{ distro: distroVera, marcatore }] };

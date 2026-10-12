@@ -215,3 +215,102 @@ test('MS-08: un fornitore con configurazione propria (Azure) salva il collegamen
   await page.waitForFunction(() => !document.querySelector('dialog[data-provider-modale][open]'));
   assert.deepEqual(await page.evaluate(() => window.salvate.map((s) => s.salvato)), [['collegamento']]);
 });
+
+/* 11/10/2026 — la scelta dell'accesso di OpenAI in testa alla modale (mockup approvato dall'owner): due carte (Codex
+   `onboarding/auth.rs:487-518`, Hermes `connections-registry.tsx:697-770`), sotto solo la strada scelta, il piede che segue. */
+const OPENAI = { id: 'openai', label: 'OpenAI', requiresKey: true, keyConfigured: false, supportsEndpoint: true, endpoint: 'https://api.openai.com/v1',
+  endpointConfigured: false, timeoutSeconds: 600, origineChiave: null,
+  chatgpt: { collegato: false, email: null, pianoAbilitato: false, accessoInCorso: false, consumi: 'https://chatgpt.com/settings/usage' } };
+const leggiScelta = (page) => page.evaluate(() => {
+  const d = document.querySelector('dialog[data-provider-modale="openai"][open]');
+  const tab = (id) => d.querySelector(`[role="tab"][data-metodo="${id}"]`);
+  return {
+    schede: [...d.querySelectorAll('[role="tablist"] [role="tab"]')].map((s) => `${s.dataset.metodo}:${s.getAttribute('aria-selected')}`),
+    stati: [...d.querySelectorAll('[data-metodo-stato]')].map((s) => s.textContent.trim()),
+    pannelloPiano: !d.querySelector(`#${tab('chatgpt').getAttribute('aria-controls')}`).hidden,
+    pannelloChiave: !d.querySelector(`#${tab('chiave').getAttribute('aria-controls')}`).hidden,
+    salvaVisibile: !d.querySelector('[data-provider-modale-salva]').hidden,
+    annulla: d.querySelector('[data-provider-modale-annulla]').textContent,
+    fuoco: document.activeElement?.dataset?.metodo ?? null,
+  };
+});
+
+test('MS-20: OpenAI senza piano né chiave — si apre sul piano ChatGPT: «Continua con ChatGPT», niente «Salva», «Chiudi»', async (t) => {
+  const { page, modale } = await pagina(t, { row: OPENAI });
+  assert.deepEqual(await leggiScelta(page), { schede: ['chatgpt:true', 'chiave:false'], stati: ['Non collegato', 'Nessuna chiave'],
+    pannelloPiano: true, pannelloChiave: false, salvaVisibile: false, annulla: 'Chiudi', fuoco: 'chatgpt' });
+  assert.equal(await modale.getByRole('button', { name: 'Continua con ChatGPT' }).isVisible(), true);
+  assert.equal(await modale.locator('[data-provider-key]').isVisible(), false, 'la chiave sta nel suo pannello, nascosta');
+});
+
+test('MS-21: con una chiave salvata e senza piano si apre sulla chiave, col «Salva»; da collegato sul piano, con l email', async (t) => {
+  const conChiave = await pagina(t, { row: { ...OPENAI, keyConfigured: true, origineChiave: 'custodia' } });
+  const s = await leggiScelta(conChiave.page);
+  assert.deepEqual([s.schede, s.stati, s.salvaVisibile, s.annulla], [['chatgpt:false', 'chiave:true'], ['Non collegato', 'Chiave salvata'], true, 'Annulla']);
+  const collegato = await pagina(t, { row: { ...OPENAI, chatgpt: { ...OPENAI.chatgpt, collegato: true, email: 'nino@example.com', pianoAbilitato: true } } });
+  const c = await leggiScelta(collegato.page);
+  assert.deepEqual([c.schede, c.stati], [['chatgpt:true', 'chiave:false'], ['Collegato', 'Nessuna chiave']]);
+  assert.equal(await collegato.modale.locator('.talos-provider__piano-chi strong').textContent(), 'nino@example.com');
+});
+
+test('MS-22: frecce, Home e Fine cambiano scheda col fuoco; il piede segue', async (t) => {
+  const { page } = await pagina(t, { row: OPENAI });
+  await page.keyboard.press('ArrowRight');
+  let s = await leggiScelta(page);
+  assert.deepEqual([s.schede, s.fuoco, s.pannelloChiave, s.salvaVisibile, s.annulla], [['chatgpt:false', 'chiave:true'], 'chiave', true, true, 'Annulla']);
+  await page.keyboard.press('ArrowRight'); // si gira in tondo
+  assert.equal((await leggiScelta(page)).fuoco, 'chatgpt');
+  await page.keyboard.press('End');
+  assert.equal((await leggiScelta(page)).fuoco, 'chiave');
+  await page.keyboard.press('Home');
+  s = await leggiScelta(page);
+  assert.deepEqual([s.fuoco, s.pannelloPiano, s.salvaVisibile, s.annulla], ['chatgpt', true, false, 'Chiudi']);
+});
+
+test('MS-23: chiusa la modale il blocco del piano torna nella card; riaperta, la scelta di prima resta', async (t) => {
+  const { page, modale } = await pagina(t, { row: OPENAI });
+  await modale.locator('[role="tab"][data-metodo="chiave"]').click();
+  await page.keyboard.press('Escape');
+  // l'evento `close` arriva DOPO che `open` è sparito: si aspetta il fatto (il blocco nella card), non l'attributo
+  await page.waitForFunction(() => !document.querySelector('dialog[data-provider-modale]') && Boolean(document.querySelector('#card .talos-provider__body [data-chatgpt]')), null, { timeout: 5000 });
+  await page.locator('[data-provider-toggle]').click();
+  assert.deepEqual((await leggiScelta(page)).schede, ['chatgpt:false', 'chiave:true']);
+});
+
+test('MS-24 AL CONTRARIO: un fornitore senza piano (OpenRouter, o OpenAI senza lo stato del piano) non ha le carte', async (t) => {
+  const { modale } = await pagina(t);
+  assert.equal(await modale.locator('[role="tablist"]').count(), 0);
+  const { modale: senzaStato } = await pagina(t, { row: { ...OPENAI, chatgpt: undefined } });
+  assert.equal(await senzaStato.locator('[role="tablist"]').count(), 0);
+  assert.equal(await senzaStato.getByRole('button', { name: 'Salva', exact: true }).isVisible(), true);
+});
+
+/* 11/10/2026 — il conteggio NOSTRO di ciò che TALOS ha mandato col piano (decisione owner: «Link + conteggio nostro, barra con Codex
+   dopo»). Due righe etichetta/valore (i `talos-kv` della card) e una nota che dice che cosa NON è: il contatore di OpenAI. */
+const COLLEGATO = { ...OPENAI.chatgpt, collegato: true, email: 'nino@example.com', pianoAbilitato: true };
+const leggiUso = (page) => page.evaluate(() => {
+  const blocco = document.querySelector('dialog[open] [data-chatgpt-uso]');
+  return blocco ? { righe: [...blocco.querySelectorAll('.talos-kv')].map((r) => `${r.querySelector('.talos-kv__k').textContent} | ${r.querySelector('.talos-kv__v').textContent}`),
+    nota: blocco.querySelector('[data-chatgpt-uso-nota]')?.textContent ?? null } : null;
+});
+
+test('MS-25: da collegato la modale dice quanto TALOS ha mandato col piano nelle ultime 5 ore e negli ultimi 7 giorni, e che cosa il numero NON è', async (t) => {
+  const { page } = await pagina(t, { row: { ...OPENAI, chatgpt: { ...COLLEGATO,
+    usoTalos: { cinqueOre: { richieste: 1, token: 900, senzaMisura: 0 }, setteGiorni: { richieste: 132, token: 1_250_000, senzaMisura: 2 } } } } });
+  const uso = await leggiUso(page);
+  assert.deepEqual(uso.righe, ['Ultime 5 ore | 1 richiesta, 900 token', 'Ultimi 7 giorni | 132 richieste, 1,3 M token (2 senza misura)']);
+  assert.match(uso.nota, /Contato da TALOS su questo computer/u);
+  assert.match(uso.nota, /non è incluso/u);
+});
+
+test('MS-26 AL CONTRARIO: nessuna richiesta si legge «Nessuna richiesta» (mai «0 token»); senza il conteggio, o da scollegato, il blocco non c è', async (t) => {
+  const vuoto = { cinqueOre: { richieste: 0, token: 0, senzaMisura: 0 }, setteGiorni: { richieste: 0, token: 0, senzaMisura: 0 } };
+  const zero = await pagina(t, { row: { ...OPENAI, chatgpt: { ...COLLEGATO, usoTalos: vuoto } } });
+  assert.deepEqual((await leggiUso(zero.page)).righe, ['Ultime 5 ore | Nessuna richiesta', 'Ultimi 7 giorni | Nessuna richiesta']);
+  const senza = await pagina(t, { row: { ...OPENAI, chatgpt: COLLEGATO } });
+  assert.equal(await leggiUso(senza.page), null);
+  const scollegato = await pagina(t, { row: { ...OPENAI, chatgpt: { ...OPENAI.chatgpt, usoTalos: vuoto } } });
+  assert.equal(await leggiUso(scollegato.page), null);
+  const storto = await pagina(t, { row: { ...OPENAI, chatgpt: { ...COLLEGATO, usoTalos: { cinqueOre: { richieste: 'tante' } } } } });
+  assert.equal(await leggiUso(storto.page), null, 'un conteggio di forma sbagliata non diventa un numero a schermo');
+});

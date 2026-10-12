@@ -78,8 +78,8 @@ test('R01-GUSCIO — finestra reale, cookie, Terminale, temi, riavvio, vassoio, 
     } finally { await altro.dispose(); }
     /* ⛔ 01/10/2026, owner: «la app desktop non apre il browser per accedere a openrouter». Nella finestra VERA: un
        `window.open` della pagina d'accesso arriva a `shell.openExternal` anche dopo un'attesa (cioè senza il gesto della
-       persona: il frontend lo chiama dopo la risposta del server); al contrario la finestra vuota e un'altra pagina di
-       openrouter.ai restano negate e non escono. Il browser del sistema si intercetta, come sopra. */
+       persona: il frontend lo chiama dopo la risposta del server); al contrario la finestra vuota e la pagina
+       d'accesso con un ritorno estraneo restano negate e non escono. Il browser del sistema si intercetta, come sopra. */
     await electronApp.evaluate(({ shell }) => {
       globalThis.orAperti = [];
       globalThis.orOriginale = shell.openExternal;
@@ -103,10 +103,14 @@ test('R01-GUSCIO — finestra reale, cookie, Terminale, temi, riavvio, vassoio, 
     assert.deepEqual(ritorni, { vuota: null, altra: null, estraneo: null, accesso: null, nostro: null }, 'nessuna finestra nuova dentro la app');
     const aperti = await finche(async () => {
       const visti = await electronApp.evaluate(() => globalThis.orAperti);
-      return visti.length >= 2 ? visti : null;
+      return visti.length >= 3 ? visti : null;
     }, 5000).catch(() => []);
     await attendi(300);
-    assert.deepEqual(await electronApp.evaluate(() => globalThis.orAperti), [accessoOpenRouter, accessoNostro], `aperti fuori: ${JSON.stringify(aperti)}`);
+    /* 11/10/2026, decisione owner «Clic + conferma del sito» (`efba058c1`, `apribileNelBrowserDelSistema`): una pagina https NORMALE
+       (`openrouter.ai/settings/keys`) ora esce nel browser — la conferma col sito la chiede l'interfaccia prima di aprirla. Restano
+       negate la finestra vuota e la pagina che CONCEDE una chiave con un ritorno estraneo. Questa prova era rimasta al contratto di
+       prima ed è diventata rossa sui cancelli della 0.1.29. */
+    assert.deepEqual(await electronApp.evaluate(() => globalThis.orAperti), ['https://openrouter.ai/settings/keys', accessoOpenRouter, accessoNostro], `aperti fuori: ${JSON.stringify(aperti)}`);
     await electronApp.evaluate(({ shell }) => { shell.openExternal = globalThis.orOriginale; });
     // La UI esistente offre un terminale standalone senza chiamare alcun modello.
     const controlli = []; let uscitaPty = '';

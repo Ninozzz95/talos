@@ -151,6 +151,52 @@ test('AFF-06: taking over a stale lease does not steal one that another process 
   assert.deepEqual(readdirSync(join(store, CARTELLA_AFFITTI)), ['s1.json']);
 });
 
+/* AFF-06b (12/10/2026) — LA STESSA CONTESA DOVE I COLLEGAMENTI SONO VIETATI. Misurato dalla sessione mobile sul Pad (Android, utente
+   shell): `linkSync` → EACCES, il catch lo inghiottiva e poi `unlinkSync(via)` cancellava l'affitto VIVO del terzo processo. Ora, se il
+   collegamento è rifiutato, i byte tornano al loro posto con una creazione ESCLUSIVA (mai sopra un affitto altrui). */
+test('AFF-06b: with hard links refused (Android), taking over a refreshed lease still puts the live holder back, never deletes it', (t) => {
+  const store = cartellaTemp(t);
+  affittoAltrui(store, 's1', { pid: 424242 });
+  let primaVolta = true;
+  const processoVivo = (pid) => {
+    if (pid === 424242 && primaVolta) {
+      primaVolta = false;
+      writeFileSync(fileAffitto(store, 's1'), JSON.stringify({ istanza: 'terzo', pid: process.pid, host: hostname(), presoIl: 'ora', etichetta: 'third' }));
+      return false;
+    }
+    return pid !== 424242;
+  };
+  const collegaSync = () => { throw Object.assign(new Error('link denied'), { code: 'EACCES' }); };
+  const { a } = affittiDiProva(store, { processoVivo, adesso: () => Date.now(), collegaSync });
+  const esito = a.prendi('s1');
+  assert.equal(esito.preso, false, 'the third process keeps it');
+  assert.equal(JSON.parse(readFileSync(fileAffitto(store, 's1'), 'utf8')).istanza, 'terzo', 'its lease is back in place, not deleted');
+  assert.deepEqual(readdirSync(join(store, CARTELLA_AFFITTI)), ['s1.json']);
+});
+
+test('AFF-06c: with hard links refused, putting the lease back never overwrites a fourth process that took the place meanwhile', (t) => {
+  const store = cartellaTemp(t);
+  affittoAltrui(store, 's1', { pid: 424242 });
+  let primaVolta = true;
+  const processoVivo = (pid) => {
+    if (pid === 424242 && primaVolta) {
+      primaVolta = false;
+      writeFileSync(fileAffitto(store, 's1'), JSON.stringify({ istanza: 'terzo', pid: process.pid, host: hostname(), presoIl: 'ora', etichetta: 'third' }));
+      return false;
+    }
+    return pid !== 424242;
+  };
+  // il collegamento è rifiutato, e nel frattempo un QUARTO processo ha preso il posto vuoto
+  const collegaSync = (_via, file) => {
+    writeFileSync(file, JSON.stringify({ istanza: 'quarto', pid: process.pid, host: hostname(), presoIl: 'ora', etichetta: 'fourth' }));
+    throw Object.assign(new Error('link denied'), { code: 'EACCES' });
+  };
+  const { a } = affittiDiProva(store, { processoVivo, adesso: () => Date.now(), collegaSync });
+  assert.equal(a.prendi('s1').preso, false);
+  assert.equal(JSON.parse(readFileSync(fileAffitto(store, 's1'), 'utf8')).istanza, 'quarto', 'the fourth keeps its lease: exclusive creation, never an overwrite');
+  assert.deepEqual(readdirSync(join(store, CARTELLA_AFFITTI)), ['s1.json']);
+});
+
 // ─────────────────────────────── lo store con un altro detentore ───────────────────────────────
 
 function storeConAffitto(t) {

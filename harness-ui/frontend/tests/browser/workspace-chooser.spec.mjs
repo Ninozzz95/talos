@@ -103,6 +103,10 @@ test('WORKSPACE-CHOOSER-INVERSE-19 — cartella arbitraria non eleva da sola i p
   await expect(page.locator('[data-workspace-permission="Workspace write"]')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('[data-workspace-permission="Full access"]')).toHaveAttribute('aria-pressed', 'false');
   await expect(page.locator('[data-workspace-policy-gate]')).toContainText('Non è fra i progetti già autorizzati');
+  /* 11/10/2026 (owner, dalla foto): una frase, un posto. Quando si può partire la spiegazione del permesso sta SOLO sotto le carte
+     dei permessi; la nota del piede è vuota, e il pulsante è descritto dalla nota che c'è. */
+  await expect(page.locator('#workspaceChooserSubmitNote')).toHaveText('');
+  await expect(page.locator('#workspaceChooserSubmit')).toHaveAttribute('aria-describedby', 'workspaceChooserPolicyGate');
   /* L'elevazione la fa solo la persona, con un gesto — e il cancello cambia testo con lei. */
   await page.locator('[data-workspace-permission="Full access"]').click();
   await expect(page.locator('[data-workspace-permission="Full access"]')).toHaveAttribute('aria-pressed', 'true');
@@ -294,6 +298,9 @@ test('WORKSPACE-CHOOSER-ERROR-15 — un errore resta naturale e offre ripresa e 
   await expect(page.locator('#workspaceChooserSubmit')).toBeEnabled();
   await expect(page.locator('#workspaceChooserSubmit')).toHaveText('Scegli una cartella');
   await expect(page.locator('#workspaceChooserSubmitNote')).toHaveText('Scegli la cartella su cui vuoi lavorare.');
+  // AL CONTRARIO (11/10/2026): quando NON si può partire la frase sta solo accanto al pulsante, e sotto i permessi non c'è niente
+  await expect(page.locator('[data-workspace-policy-gate]')).toBeHidden();
+  await expect(page.locator('#workspaceChooserSubmit')).toHaveAttribute('aria-describedby', 'workspaceChooserSubmitNote');
 });
 
 test('WORKSPACE-CHOOSER-DIALOG-09 — 1280 e 1024 restano contenuti nel viewport senza overflow pagina', async ({ page }) => {

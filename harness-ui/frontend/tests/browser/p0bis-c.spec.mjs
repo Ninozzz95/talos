@@ -94,9 +94,9 @@ for (const modo of ['dark', 'light']) {
      *   modello o si legge (≥ 5 caratteri) o non c'è — mai una o due lettere.
      */
     const STATI_PILLOLE = [
-      { nome: 'stato realistico', giri: '10', costo: '$0,08' },
-      { nome: 'al tetto', giri: '128/128', costo: '$1,23' },
-      { nome: 'quattro cifre e spesa lunga', giri: '1024/1024', costo: '$12.345,67' },
+      { nome: 'stato realistico', costo: '$0,08' },
+      { nome: 'spesa media', costo: '$1,23' },
+      { nome: 'spesa lunga', costo: '$12.345,67' },
     ];
     /** Quanti caratteri ci stanno in una larghezza, col font vero della barra: una soglia si misura. */
     const CARATTERI_MINIMI_MODELLO = 5;
@@ -110,12 +110,13 @@ for (const modo of ['dark', 'light']) {
           /* ⛔ `#composerForm`, non `.talos-composer`: di composer nel documento ce ne sono DUE
              (due schermi), e misurare «il primo che trovo» misura un elemento a caso.
              ⛔ Si scrive DOVE SCRIVE IL PRODOTTO — gli stessi nodi che riempie `chat-foot.js`. */
-          const m = await page.evaluate(({ giri, costo }) => {
+          const m = await page.evaluate(({ costo }) => {
             const composer = document.querySelector('#composerForm');
-            const pg = composer.querySelector('[data-runtime-giri]');
+            /* 11/10/2026 (owner): la pillola dei giri è uscita dal composer; l'altra pillola che si accende in un giro vero è
+               quella del piano ChatGPT (`data-piano-chatgpt`). Si prova il carico di oggi: spesa + piano accese insieme. */
+            const pp = composer.querySelector('[data-piano-chatgpt]');
             const pc = composer.querySelector('[data-runtime-costo]');
-            pg.hidden = false; pc.hidden = false;
-            pg.querySelector('.talos-mono').textContent = giri;
+            pp.hidden = false; pc.hidden = false;
             pc.querySelector('.talos-mono').textContent = costo;
             /* il nome del modello è quello vero del giro: il più lungo che la barra incontra davvero */
             composer.querySelector('[data-open-sheet="model"] .talos-chip__label').textContent = 'glm-5.3-flash';
@@ -141,12 +142,11 @@ for (const modo of ['dark', 'light']) {
             return {
               composerW: Math.round(composer.getBoundingClientRect().width),
               barraW: Math.round(barra.getBoundingClientRect().width),
-              giri: misuraDi('[data-runtime-giri]'),
               costo: misuraDi('[data-runtime-costo]'),
               nomeModello: visibile(composer.querySelector('[data-open-sheet="model"] .talos-chip__label')),
               nomePermesso: visibile(composer.querySelector('[data-open-sheet="permissions"] .talos-chip__label')),
               nomeTerminale: visibile(composer.querySelector('#pillTerminale .talos-chip__label')),
-              nomeGiri: visibile(composer.querySelector('[data-runtime-giri] .talos-chip__label')),
+              nomePiano: visibile(composer.querySelector('[data-piano-chatgpt] .talos-chip__label')),
               nomeCosto: visibile(composer.querySelector('[data-runtime-costo] .talos-chip__label')),
               barraSfonda: barra.scrollWidth > barra.clientWidth + 1,
               /* ⛔ Un nome nascosto deve restare un nome per chi non vede: si controlla il nome
@@ -170,8 +170,6 @@ for (const modo of ['dark', 'light']) {
 
           const dove = `${caso.nome} a ${larghezza}px (${modo})`;
           /* 1. I NUMERI NON SI TOCCANO MAI — nessuno dei due. */
-          expect(m.giri.scroll, `${dove}: i giri sono tagliati (${m.giri.scroll} > ${m.giri.client})`).toBeLessThanOrEqual(m.giri.client);
-          expect(m.giri.testo).toBe(caso.giri);
           expect(m.costo.scroll, `${dove}: la spesa è tagliata (${m.costo.scroll} > ${m.costo.client})`).toBeLessThanOrEqual(m.costo.client);
           expect(m.costo.testo).toBe(caso.costo);
 
@@ -180,7 +178,7 @@ for (const modo of ['dark', 'light']) {
           expect(m.barraSfonda, `${dove}: la barra del composer sfonda in larghezza`).toBe(false);
 
           /* 3. I NOMI CEDONO INTERI, MAI A UNA LETTERA. Il nome del modello o si legge o non c'è. */
-          for (const [chi, n] of [['modello', m.nomeModello], ['permesso', m.nomePermesso], ['terminale', m.nomeTerminale], ['Giri', m.nomeGiri], ['Sessione', m.nomeCosto]]) {
+          for (const [chi, n] of [['modello', m.nomeModello], ['permesso', m.nomePermesso], ['terminale', m.nomeTerminale], ['piano', m.nomePiano], ['Sessione', m.nomeCosto]]) {
             if (!n || n.assente) continue;
             /* ⛔ Una parola CORTA ma intera non è una parola tagliata. La prima stesura di questa
                riga pretendeva cinque caratteri da chiunque e bocciava «Giri», che di caratteri ne
@@ -517,7 +515,7 @@ for (const modo of ['dark', 'light']) {
      *   `hidden` finché un costo non c'è (`costoChip.hidden = !dati.costo`), ed è lo stato in cui si
      *   trova ogni sessione appena comincia — cioè quello che l'owner vede più spesso.
      */
-    async function statoBarra(page, { giri, costo, conSpesa, pienaLarghezza = false }) {
+    async function statoBarra(page, { piano = true, costo, conSpesa, pienaLarghezza = false }) {
       /*
        * ⛔ 26/09 — LA PROVA CORREVA CONTRO IL PRODOTTO. Misurato con una sonda (subito e dopo due fotogrammi, sequenza
        *   di D2 (c)): dopo un `setViewportSize` il piede della chat si ridisegna e rimette `hidden` alla pillola della
@@ -527,13 +525,12 @@ for (const modo of ['dark', 'light']) {
        *   si lascia finire il ridisegno del ridimensionamento, poi stato e misura nella STESSA battuta.
        */
       await page.evaluate(() => new Promise((ok) => requestAnimationFrame(() => requestAnimationFrame(ok))));
-      return page.evaluate(({ g, c, conSpesa: cs, piena }) => {
+      return page.evaluate(({ conPiano, c, conSpesa: cs, piena }) => {
         document.documentElement.classList.toggle('chat-full-width', Boolean(piena));
         const composer = document.querySelector('#composerForm');
-        const pg = composer.querySelector('[data-runtime-giri]');
+        const pp = composer.querySelector('[data-piano-chatgpt]'); // 11/10/2026: al posto della pillola dei giri, uscita dal composer
         const pc = composer.querySelector('[data-runtime-costo]');
-        pg.hidden = false;
-        pg.querySelector('.talos-mono').textContent = g;
+        pp.hidden = !conPiano;
         pc.hidden = !cs;
         if (cs) pc.querySelector('.talos-mono').textContent = c;
         composer.querySelector('[data-open-sheet="model"] .talos-chip__label').textContent = 'glm-5.3-flash';
@@ -554,44 +551,46 @@ for (const modo of ['dark', 'light']) {
         const numero = (sel) => { const n = composer.querySelector(`${sel} .talos-mono`); return { scroll: n.scrollWidth, client: n.clientWidth, testo: n.textContent }; };
         return {
           composerW: Math.round(composer.getBoundingClientRect().width),
-          giri: numero('[data-runtime-giri]'),
           costoVisibile: !composer.querySelector('[data-runtime-costo]').hidden,
           costo: composer.querySelector('[data-runtime-costo]').hidden ? null : numero('[data-runtime-costo]'),
           modello: leggi('[data-open-sheet="model"] .talos-chip__label'),
           permesso: leggi('[data-open-sheet="permissions"] .talos-chip__label'),
           terminale: leggi('#pillTerminale .talos-chip__label'),
-          parolaGiri: leggi('[data-runtime-giri] .talos-chip__label'),
+          parolaPiano: leggi('[data-piano-chatgpt] .talos-chip__label'),
           barraSfonda: barra.scrollWidth > barra.clientWidth + 1,
           vuotoADestra: Math.round(composer.querySelector('.talos-composer__mic').getBoundingClientRect().left - composer.querySelector('#pillTerminale').getBoundingClientRect().right),
         };
-      }, { g: giri, c: costo, conSpesa, piena: pienaLarghezza });
+      }, { conPiano: piano, c: costo, conSpesa, piena: pienaLarghezza });
     }
 
-    test(`D2 (a) — con la SOLA pillola dei giri le etichette non cedono: a 1440 tutte intere (${modo})`, async ({ page }, info) => {
+    test(`D2 (a) — con la SOLA pastiglia del piano, a 1440 cede al più «Terminale»: permesso, modello e piano interi (${modo})`, async ({ page }, info) => {
       /*
        * ⛔ IL DIFETTO, dal giro vero: a 1440 con «Giri 1» e nessuna spesa, il permesso era ridotto
        *   allo scudo e «Terminale» all'icona, con ~250 px VUOTI fra l'icona e il microfono. Cioè
        *   l'interfaccia era SOTTO quella del giorno prima per pagare un caso che non c'era.
        */
       await page.setViewportSize({ width: 1440, height: 900 });
-      const m = await statoBarra(page, { giri: '1', costo: '$0,00', conSpesa: false });
+      const m = await statoBarra(page, { piano: true, costo: '$0,00', conSpesa: false });
       misura(`d2a.1440.${modo}`, m);
 
       expect(m.costoVisibile, 'la prova deve girare proprio nello stato senza spesa').toBe(false);
       expect(m.permesso.ceduta, 'a 1440 senza spesa il permesso non ha ragione di cedere').toBe(false);
-      expect(m.terminale.ceduta, 'a 1440 senza spesa «Terminale» non ha ragione di cedere').toBe(false);
+      /* 11/10/2026: con la pastiglia del piano (~109 px, più larga della vecchia «Invio 1») la barra a 1440 chiede ~694 px su 660
+         (misurato): «Terminale» cede all'icona, ed è la scala giusta — il permesso e il modello restano interi, niente si taglia.
+         Il verso «quando lo spazio c'è nessuno cede» è in COMPOSER-SCALE-02 (barra senza pastiglia) e in D2 (c). */
+      expect(m.terminale.ceduta || m.terminale.intero, `«Terminale» tagliato: ${m.terminale.larghezza}px su ${m.terminale.scroll}`).toBe(true);
       expect(m.permesso.intero, `«Scrive nel progetto»: ${m.permesso.larghezza}px su ${m.permesso.scroll}`).toBe(true);
-      expect(m.terminale.intero, `«Terminale»: ${m.terminale.larghezza}px su ${m.terminale.scroll}`).toBe(true);
       expect(m.modello.intero, `«glm-5.3-flash»: ${m.modello.larghezza}px su ${m.modello.scroll}`).toBe(true);
+      expect(m.parolaPiano.intero, `«Piano ChatGPT»: ${m.parolaPiano.larghezza}px su ${m.parolaPiano.scroll}`).toBe(true);
       expect(m.barraSfonda).toBe(false);
       await info.attach(`d2a-solo-giri-1440-${modo}.png`, { body: await foto(page, `d2a-solo-giri-1440-${modo}.png`, '#composerForm'), contentType: 'image/png' });
     });
 
-    test(`D2 (a) — con la sola pillola dei giri, a 1024 nessuna etichetta tagliata: cede ciò che serve, nell'ordine (${modo})`, async ({ page }, info) => {
+    test(`D2 (a) — con la sola pastiglia del piano, a 1024 nessuna etichetta tagliata: cede ciò che serve, nell'ordine (${modo})`, async ({ page }, info) => {
       await page.setViewportSize({ width: 1024, height: 800 });
-      const m = await statoBarra(page, { giri: '128/128', costo: '$0,00', conSpesa: false });
+      const m = await statoBarra(page, { piano: true, costo: '$0,00', conSpesa: false });
       misura(`d2a.1024.${modo}`, m);
-      expect(m.giri.scroll).toBeLessThanOrEqual(m.giri.client);
+      expect(m.parolaPiano.ceduta || m.parolaPiano.intero, `«Piano ChatGPT» tagliato: ${m.parolaPiano.larghezza}px su ${m.parolaPiano.scroll}`).toBe(true);
       expect(m.barraSfonda).toBe(false);
       /* ⛔ CONTRATTO CAMBIATO il 26/09 (difetto (3), foto di Ask e del Piano): qui si asseriva «senza spesa NESSUNO deve
          cedere, nemmeno a 1024», e a 1024 la barra tagliava tre etichette coi puntini («Termin…»). La regola del 17/09
@@ -622,7 +621,7 @@ for (const modo of ['dark', 'light']) {
       for (const larghezza of [1440, 1920, 2560]) {
         for (const piena of [false, true]) {
           await page.setViewportSize({ width: larghezza, height: 900 });
-          const m = await statoBarra(page, { giri: '128/128', costo: '$12.345,67', conSpesa: true, pienaLarghezza: piena });
+          const m = await statoBarra(page, { piano: true, costo: '$12.345,67', conSpesa: true, pienaLarghezza: piena });
           misurate.push({ larghezza, piena, composerW: m.composerW, permessoCeduta: m.permesso.ceduta, terminaleCeduta: m.terminale.ceduta, barraSfonda: m.barraSfonda, modelloIntero: m.modello.intero });
         }
       }
@@ -650,7 +649,7 @@ for (const modo of ['dark', 'light']) {
       misura(`d2c.casiSopraSoglia.${modo}`, sopraSoglia);
 
       await page.setViewportSize({ width: 1440, height: 900 });
-      await statoBarra(page, { giri: '128/128', costo: '$12.345,67', conSpesa: true, pienaLarghezza: true });
+      await statoBarra(page, { piano: true, costo: '$12.345,67', conSpesa: true, pienaLarghezza: true });
       await info.attach(`d2c-piena-larghezza-1440-${modo}.png`, { body: await foto(page, `d2c-piena-larghezza-1440-${modo}.png`, '#composerForm'), contentType: 'image/png' });
       await page.evaluate(() => document.documentElement.classList.remove('chat-full-width'));
     });

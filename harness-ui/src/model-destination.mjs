@@ -241,6 +241,16 @@ export function risolviDestinazioneModello(modello, { leggiChiave, leggiRuntime,
     return { fonte, modelloRemoto, locale: true, percorso: REGISTRO_FORNITORI[fonte].endpoint.chat };
   }
 
+  /*
+   * 11/10/2026, «Continue with ChatGPT» — un fornitore con accesso dall'account non ha una chiave nel portachiavi delle chiavi
+   * né un indirizzo scelto dalla persona: l'indirizzo è quello del registro e la credenziale è un token che SCADE e si rinnova,
+   * quindi non si può leggere qui (questa funzione è sincrona). Si dice solo che serve: lo prende chi spedisce
+   * (`runtime-owner-adapter.mjs`), un attimo prima dell'invio.
+   */
+  if (REGISTRO_FORNITORI[fonte].auth?.tipo === 'oauth-pkce') {
+    return { fonte, modelloRemoto, native: true, baseURL: REGISTRO_FORNITORI[fonte].baseUrl, apiKey: null, tokenDelPiano: true };
+  }
+
   const runtime = leggiRuntime(fonte) || {};
   const record = REGISTRO_FORNITORI[fonte];
   const base = typeof runtime.endpoint === 'string' && runtime.endpoint.trim() !== '' ? runtime.endpoint.replace(/\/+$/u, '') : null;

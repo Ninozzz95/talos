@@ -8,7 +8,7 @@ import { NOME_FIRMA, NOME_MANIFESTO, chiavePubblicaDa, firmaManifesto, leggiMani
 export function nomiArtefatti(versione) {
   if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?$/.test(versione)) throw Error('Versione desktop non valida.');
   return { exe: `TALOS-Setup-${versione}.exe`, zip: `TALOS-${versione}-win.zip`, sha: 'SHA256SUMS.txt', note: 'NOTE-RELEASE.md',
-    manifesto: NOME_MANIFESTO, firma: NOME_FIRMA };
+    manifesto: NOME_MANIFESTO, firma: NOME_FIRMA, mappa: `TALOS-Setup-${versione}.exe.blockmap` };
 }
 
 /*
@@ -97,8 +97,11 @@ export async function preparaRelease({ versione, tag, repository, distDir, smoke
   const firma = firmaManifesto(testoManifesto, chiavePrivata);
   if (!verificaFirmaManifesto(testoManifesto, firma, chiavePubblicaApp)) throw Error('La firma appena fatta non si verifica con la chiave dell’app.');
   await writeFile(join(distDir, nomi.firma), `${firma}\n`, 'utf8');
-  for (const nome of [nomi.manifesto, nomi.firma]) {
+  /* La mappa dei blocchi (owner 11/10/2026, scarico a blocchi): l'aggiornatore la cerca accanto all'installer, in QUESTA release
+     e in quella installata. Se manca, o e' vuota, la release non esce: tutti scaricherebbero l'installer intero, in silenzio. */
+  for (const nome of [nomi.manifesto, nomi.firma, nomi.mappa]) {
     const dati = await readFile(join(distDir, nome));
+    if (dati.length === 0) throw Error(`Artefatto vuoto: ${nome}`);
     artefatti.push({ nome, path: resolve(distDir, nome), bytes: dati.length, sha256: createHash('sha256').update(dati).digest('hex') });
   }
   const somme = artefatti.map(a => `${a.sha256}  ${a.nome}\n`).join('');

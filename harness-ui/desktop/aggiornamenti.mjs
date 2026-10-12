@@ -145,7 +145,10 @@ export function creaAggiornatore({
     const base = `${fonte.download}/${repo}/releases/download/${release.tag}`;
     const manifesto = await leggiManifestoVerificato({ fetch, base, versione: release.versione, chiavePubblica });
     stato.stato = 'scaricamento'; annuncia();
-    updater.setFeedURL({ provider: 'generic', url: base });
+    /* Scarico a blocchi (owner 11/10/2026). Un intervallo per richiesta: col provider `generic` electron-updater chiederebbe PIU'
+       intervalli in una volta (`providerFactory.js:53`), e il suo stesso provider GitHub li spegne (`GitHubProvider.js:16`)
+       perche' GitHub non li serve: lo scarico a blocchi fallirebbe e ricadrebbe ogni volta su quello intero. */
+    updater.setFeedURL({ provider: 'generic', url: base, useMultipleRangeRequest: false });
     const risultato = await updater.checkForUpdates();
     // `null` = aggiornatore spento (app non impacchettata); `isUpdateAvailable: false` = per lui non c'è niente: `downloadUpdate`
     // fallirebbe («Please check update first»), e una versione diversa vuol dire un manifesto diverso da quello verificato.

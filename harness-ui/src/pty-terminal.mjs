@@ -23,7 +23,7 @@
  * mano al proprietario della macchina, "non ha limiti" per richiesta
  * esplicita.
  */
-import { spawn as spawnPty } from 'node-pty';
+import { createRequire } from 'node:module';
 import { existsSync } from 'node:fs';
 
 import { ambienteSenzaVariabiliDelServer } from './ambiente-solo-server.mjs';
@@ -167,6 +167,24 @@ export function decodificaFrame(dati) {
  * i suoi ascoltatori: due schede della stessa sessione **non condividono
  * I/O**, ed è il criterio della riga (provato in `pty-terminal.test.mjs`).
  */
+/*
+ * 11/10/2026 notte — `node-pty` SI CARICA SOLO QUANDO SI APRE UN TERMINALE. È un modulo nativo senza build per android-arm64:
+ * importato in cima a questo file faceva morire l'intero server all'avvio sul Pad (misura della sessione mobile, server r4 in una
+ * cartella di prova). Il Terminale è una funzione; il server è tutto il resto. ⇒ `require` sincrono al primo `apri` (`apri` è
+ * sincrona), memorizzato; se il modulo non c'è, il Terminale risponde TERMINAL_UNAVAILABLE e il server vive.
+ */
+const richiedi = createRequire(import.meta.url);
+let nodePty = null;
+function spawnPty(comando, argomenti, opzioni) {
+  // ⛔ CLI-REQ-04: mai l'ambiente intero del server — chi chiama deve dichiararlo (`apri` passa `ambienteFn()`).
+  if (!opzioni?.env) throw Object.assign(new Error('The terminal needs a declared environment.'), { code: 'TERMINAL_UNAVAILABLE' });
+  if (!nodePty) {
+    try { nodePty = richiedi('node-pty'); }
+    catch (causa) { throw Object.assign(new Error('The terminal is not available on this system.', { cause: causa }), { code: 'TERMINAL_UNAVAILABLE' }); }
+  }
+  return nodePty.spawn(comando, argomenti, { ...opzioni, env: opzioni.env });
+}
+
 export function creaRegistroTerminali(deps = {}) {
   const spawnPtyFn = deps.spawnPtyFn ?? spawnPty;
   const sceltaShellFn = deps.sceltaShellFn ?? sceltaShell;

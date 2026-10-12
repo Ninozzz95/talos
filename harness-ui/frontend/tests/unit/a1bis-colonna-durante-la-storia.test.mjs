@@ -73,22 +73,22 @@ test('A1BIS-03 APP: la colonna riceve lo stato della storia dalla sessione vera'
 
 /* ── A1-bis 5 (07/10/2026): i conteggi FUORI dal velo non mostrano numeri intermedi durante la storia ── */
 
-function piedeConChip() {
-  const numero = { textContent: '' };
-  const chip = { hidden: false, title: '', classList: { toggle() {} }, querySelector: (s) => (s === '.talos-mono' ? numero : null) };
-  const piede = { ownerDocument: null, querySelector: (s) => (s === '[data-runtime-giri]' ? chip : null), querySelectorAll: () => [] };
-  return { piede, chip, numero };
-}
+/* 11/10/2026 (owner): la pillola dei giri ha lasciato il composer; il numero dell'invio sta nell'Indice dei giri della scheda Contesto.
+   La regola resta la stessa: durante la storia il numero di un invio INTERMEDIO non va a schermo. */
+test('A1BIS-04 GIRI: durante la storia la riga «Questo invio» tace anche sopra la soglia; a storia finita torna', () => {
+  const { d, indice, inspector } = colonna();
+  const giri = [{ numero: 1, token: 900 }];
+  aggiornaInspector(inspector, { giri, invio: { giri: 107, tetto: 120 }, storiaInCaricamento: true }, { document: d });
+  assert.doesNotMatch(indice.textContent, /Questo invio/, 'il 107 di un invio intermedio non va a schermo');
+  // AL CONTRARIO: storia finita, stesso numero ⇒ la riga si vede, col tetto
+  aggiornaInspector(inspector, { giri, invio: { giri: 107, tetto: 120 }, storiaInCaricamento: false }, { document: d });
+  assert.match(indice.textContent, /Questo invio107 di 120 richieste/);
+});
 
-test('A1BIS-04 GIRI: durante la storia il chip tace anche con un numero sopra la soglia; a storia finita torna', () => {
-  const { piede, chip, numero } = piedeConChip();
-  const usage = { giri: 107 };
-  aggiornaPiedeChat(piede, { usage, tettoGiri: 120, storiaInCaricamento: true });
-  assert.equal(chip.hidden, true, 'il 107 di un invio intermedio non va a schermo');
-  // AL CONTRARIO: storia finita, stesso numero ⇒ il chip si vede
-  aggiornaPiedeChat(piede, { usage, tettoGiri: 120, storiaInCaricamento: false });
-  assert.equal(chip.hidden, false);
-  assert.equal(numero.textContent, '107/120');
+test('A1BIS-04-bis PIEDE: il piede non cerca più la pillola dei giri (e non si rompe se manca)', () => {
+  const piede = { ownerDocument: null, querySelector: () => null, querySelectorAll: () => [] };
+  assert.doesNotThrow(() => aggiornaPiedeChat(piede, { usage: { giri: 107 }, tettoGiri: 120, storiaInCaricamento: false }));
+  assert.equal(readFileSync(new URL('../../src/components/chat-foot.js', import.meta.url), 'utf8').includes("'[data-runtime-giri]'"), false);
 });
 
 test('A1BIS-05 REVIEW: durante la storia la testata riceve null (nessun numero), e il confine la ridisegna', () => {

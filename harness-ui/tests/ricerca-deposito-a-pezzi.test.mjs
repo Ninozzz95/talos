@@ -349,6 +349,7 @@ test('BC49: inventario e campi TALOS-BANCO invariati, eccetto le esenzioni dichi
       provider_exclusions_list: [[], []],
       provider_exclude: [['model', 'provider'], ['provider']],
       provider_allow: [['model', 'provider'], ['provider']],
+      chatgpt_account: [['action'], ['action']], // 11/10/2026: lo stato e lo scollegamento dell'accesso col piano ChatGPT
     });
     for (const [nome, [campi, obbligatori]] of Object.entries(attrezziAutomazioni)) {
       const tool = attrezzi.map((entry) => entry.function ?? entry).find((entry) => entry.name === nome);

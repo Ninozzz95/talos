@@ -147,9 +147,9 @@ test('CONTESTO-PROMESSA: quello che la sezione promette e non misura lo DICHIARA
 test('C10-DESCRIZIONI: 72 attrezzi storici e lettura output, in italiano senza markdown a schermo', async () => {
   const m = await import('../../src/components/nomi-attrezzi.js');
   const ids = Object.keys(m.DESCRIZIONI_ATTREZZI);
-  assert.equal(ids.filter(id => id !== 'process_output').length, 85); // C5 10/10: + research_control · + notes_find, tasks_find, memory_find, research_find, library_find, child_control, automation_control (i due vecchi restano per la storia) · 03/10/2026: + list_children, stop_child (F-020/F-014) · 08/10: + 8 automation_* · 0.1.25: + 3 provider_* · 09/10 C3 tappa 4: + pause_child, resume_child
+  assert.equal(ids.filter(id => id !== 'process_output').length, 86); // 11/10/2026: + chatgpt_account · C5 10/10: + research_control · + notes_find, tasks_find, memory_find, research_find, library_find, child_control, automation_control (i due vecchi restano per la storia) · 03/10/2026: + list_children, stop_child (F-020/F-014) · 08/10: + 8 automation_* · 0.1.25: + 3 provider_* · 09/10 C3 tappa 4: + pause_child, resume_child
   for (const nuovo of ['list_children', 'stop_child', 'pause_child', 'resume_child', 'automation_list', 'automation_runs', 'automation_create', 'automation_update', 'automation_pause', 'automation_resume', 'automation_run', 'automation_stop',
-    'provider_exclusions_list', 'provider_exclude', 'provider_allow']) {
+    'provider_exclusions_list', 'provider_exclude', 'provider_allow', 'chatgpt_account']) {
     assert.ok(ids.includes(nuovo), `manca la descrizione di ${nuovo}`);
     assert.ok(m.NOMI_UMANI_ATTREZZI[nuovo], `manca il nome umano di ${nuovo}`);
     assert.ok(!/_/u.test(m.nomeLeggibileAttrezzo(nuovo)), `nome tecnico a schermo per ${nuovo}`);
