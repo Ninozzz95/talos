@@ -5437,10 +5437,17 @@ export function createSessionRegistry({
   /* ⛔ R2 (nota 2 del bugfixer): due deleghe dello stesso giro, in parallelo, leggevano lo stesso conto prima che l'una o
      l'altra figlia esistesse, e il tetto si superava di uno. Qui il controllo e la prenotazione stanno nello STESSO passo
      sincrono, prima di qualunque `await` di `onDelega`: chi arriva secondo vede il posto già preso. `null` = tetto pieno. */
+  /* Owner 12/10/2026, «FULL ACCESS PER LEGGE NON DEVE CHIEDERE NESSUN PERMESSO»: TUTTA la catena (la sessione e ogni antenato) in
+     Accesso pieno. Una figlia non sta mai sopra il padre: il padre abbassato fa tornare carte e tetto anche per lei. */
+  function catenaInAccessoPieno(voce) {
+    const anelli = anelliDellaCatena(voce);
+    return anelli.length > 0 && anelli.every((anello) => anello.livello === 'accesso-pieno');
+  }
   function prenotaAvvioDaSolo(voce) {
     const radice = radiceDi(voce);
     const gia = avviiDaSoloNellAlbero(radice);
-    if (gia >= TETTO_AVVII_DA_SOLO) return null;
+    // owner 12/10, terza tornata: in Accesso pieno nessun limite agli avvii; il conto resta (la scheda Agenti lo mostra)
+    if (gia >= TETTO_AVVII_DA_SOLO && !catenaInAccessoPieno(voce)) return null;
     radice.avviiDaSoloTotali = gia + 1;
     return radice;
   }
@@ -5450,7 +5457,7 @@ export function createSessionRegistry({
     if (!Number.isSafeInteger(passi) || passi < 1) return null;
     const radice = radiceDi(voce);
     const gia = avviiDaSoloNellAlbero(radice);
-    if (gia + passi > TETTO_AVVII_DA_SOLO) return null;
+    if (gia + passi > TETTO_AVVII_DA_SOLO && !catenaInAccessoPieno(voce)) return null;
     radice.avviiDaSoloTotali = gia + passi;
     return radice;
   }
@@ -5490,7 +5497,9 @@ export function createSessionRegistry({
     };
   }
   function coordinazioneDellaVoce(voce) {
-    return modoCoordinazione(anelliDellaCatena(voce).map((anello) => anello.scelte), { avviiDaSolo: avviiDaSoloNellAlbero(radiceDi(voce)) });
+    /* Owner 12/10/2026: in Accesso pieno nessuna carta d'avvio. Conta TUTTA la catena (`catenaInAccessoPieno`). */
+    return modoCoordinazione(anelliDellaCatena(voce).map((anello) => anello.scelte), {
+      avviiDaSolo: avviiDaSoloNellAlbero(radiceDi(voce)), accessoPieno: catenaInAccessoPieno(voce) });
   }
   /**
    * C2b — il modello che la persona ha chiesto per una figlia (owner, seconda tornata): solo fra quelli che questa app sa usare

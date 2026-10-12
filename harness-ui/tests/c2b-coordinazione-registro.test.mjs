@@ -267,3 +267,54 @@ test('C2B-R-09 — dal motore locale al cloud: senza consenso no, col consenso s
   const si = await conConsenso.input.onDelega('figlia', '/tmp/x', { modello: 'z-ai/glm-5.3-flash' })
   assert.equal(si?.esito, 'avviato', JSON.stringify(si))
 })
+
+test('C2B-R-14 — owner 12/10: una sessione in Full access avvia gli agenti senza carta; in Workspace write chiede ancora', CON_TEMPO, async (t) => {
+  const pieno = await scena(t, { avvio: { permessiScelto: 'Full access' } })
+  assert.deepEqual(await pieno.input.coordinazioneFn(), { modo: 'sempre' }, 'Full access, Coordinazione mai toccata: niente carta')
+  await pieno.registry.aggiornaImpostazioni(pieno.sessionId, { unisciPermessiPerAttrezzo: { delega_sottotask: 'nega' }, rispettaNega: true })
+  assert.deepEqual(await pieno.input.coordinazioneFn(), { modo: 'nega' }, 'un «nega» scelto dalla persona resta')
+  const scrittura = await scena(t)
+  assert.deepEqual(await scrittura.input.coordinazioneFn(), SPENTA, 'Workspace write: la carta come prima')
+})
+
+test('C2B-R-15 — AL CONTRARIO: conta TUTTA la catena — il padre che scende da Full access fa tornare la carta anche alla figlia', CON_TEMPO, async (t) => {
+  const { registry, runtime, sessionId, input } = await scena(t, { avvio: { permessiScelto: 'Full access' } })
+  await input.onDelega('figlia: lavora', '/tmp/x', { avvio: 'da-solo' })
+  const figlia = runtime.runs[1].input
+  assert.deepEqual(await figlia.coordinazioneFn(), { modo: 'sempre' }, 'padre e figlia in Full access: niente carta')
+  await registry.aggiornaImpostazioni(sessionId, { permessi: 'Workspace write' })
+  assert.deepEqual(await input.coordinazioneFn(), SPENTA, 'il padre non è più in Full access')
+  assert.deepEqual(await figlia.coordinazioneFn(), SPENTA, 'la figlia non sta mai sopra il padre')
+})
+
+test('C2B-R-16 — owner 12/10, terza tornata: in Full access NESSUN limite — il ventunesimo e il trentesimo partono da soli, e il conto resta', CON_TEMPO, async (t) => {
+  const { registry, runtime, input } = await scena(t, { avvio: { permessiScelto: 'Full access' } })
+  for (let i = 0; i < 30; i += 1) {
+    assert.deepEqual(await input.coordinazioneFn(), { modo: 'sempre' }, `avvio ${i + 1}`)
+    const esito = await input.onDelega(`figlia ${i}`, '/tmp/x', { avvio: 'da-solo' })
+    assert.equal(esito?.esito, 'avviato', `avvio ${i + 1}: ${JSON.stringify(esito)}`)
+    runtime.fine(runtime.runs.length - 1)
+  }
+  assert.equal(registry.elenca().filter((s) => s.avvioDelega === 'da-solo').length, 30, 'contati tutti: la scheda Agenti li mostra')
+})
+
+test('C2B-R-17 — AL CONTRARIO: il padre che scende da Full access fa tornare il tetto (il conto fatto in Full access vale)', CON_TEMPO, async (t) => {
+  const { registry, runtime, sessionId, input } = await scena(t, { avvio: { permessiScelto: 'Full access' } })
+  for (let i = 0; i < 20; i += 1) { await input.onDelega(`figlia ${i}`, '/tmp/x', { avvio: 'da-solo' }); runtime.fine(runtime.runs.length - 1) }
+  await registry.aggiornaImpostazioni(sessionId, { permessi: 'Workspace write' })
+  await accendi(registry, sessionId)
+  assert.deepEqual(await input.coordinazioneFn(), { modo: 'chiedi', motivo: 'tetto' }, 'fuori dal Full access i 20 già fatti contano')
+  const esito = await input.onDelega('la ventunesima', '/tmp/x', { avvio: 'da-solo' })
+  assert.notEqual(esito?.esito, 'avviato', `fuori dal Full access il tetto ferma la ventunesima: ${JSON.stringify(esito)}`)
+})
+
+test('C2B-R-18 — AL CONTRARIO: gli avvii fatti in Full access contano come TOTALE anche dopo aver eliminato le figlie e abbassato il permesso', CON_TEMPO, async (t) => {
+  const { registry, runtime, sessionId, input } = await scena(t, { avvio: { permessiScelto: 'Full access' } })
+  for (let i = 0; i < 20; i += 1) { await input.onDelega(`figlia ${i}`, '/tmp/x', { avvio: 'da-solo' }); runtime.fine(runtime.runs.length - 1) }
+  const figlie = registry.elenca().filter((s) => s.avvioDelega === 'da-solo').map((s) => s.sessionId)
+  for (const id of figlie) await registry.attendiAssestamento?.(id)
+  for (const id of figlie.slice(0, 5)) assert.equal((await registry.elimina(id))?.ok, true, `elimina ${id}`)
+  await registry.aggiornaImpostazioni(sessionId, { permessi: 'Workspace write' })
+  await accendi(registry, sessionId)
+  assert.deepEqual(await input.coordinazioneFn(), { modo: 'chiedi', motivo: 'tetto' }, '15 figlie restano, ma i 20 avvii fatti in Full access contano')
+})

@@ -112,9 +112,16 @@ test('LS-08: DA CAPO A FONDO nel kernel — `leggi` attraverso la giunzione port
       onGiro: (e) => { if (e.tipo === 'tool-esito') esiti.push(togliConfiniDati(String(e.content))); },
       chiediApprovazioneFn: async (a) => { chieste.push(a); return false; },
     });
-    assert.equal(chieste.length, 1, `livello ${livelloAccesso ?? 'progetto'}: una carta sola, per il file dietro la giunzione`);
-    assert.match(JSON.stringify(chieste[0]), /\.aws/u, 'la carta nomina il file vero');
-    assert.equal(esiti.some((x) => x.includes('CANARINO')), false, 'detto no, il contenuto non arriva al modello');
+    if (livelloAccesso === 'accesso-pieno') {
+      /* Owner 12/10/2026, «FULL ACCESS PER LEGGE NON DEVE CHIEDERE NESSUN PERMESSO»: in Accesso pieno nessuna carta, nemmeno dietro
+         una giunzione verso un segreto. Prima qui si chiedeva anche in Accesso pieno. */
+      assert.equal(chieste.length, 0, 'accesso pieno: nessuna carta');
+      assert.equal(esiti.some((x) => x.includes('CANARINO')), true, 'accesso pieno: il file si legge');
+    } else {
+      assert.equal(chieste.length, 1, `livello ${livelloAccesso ?? 'progetto'}: una carta sola, per il file dietro la giunzione`);
+      assert.match(JSON.stringify(chieste[0]), /\.aws/u, 'la carta nomina il file vero');
+      assert.equal(esiti.some((x) => x.includes('CANARINO')), false, 'detto no, il contenuto non arriva al modello');
+    }
     assert.equal(esiti.some((x) => x.includes('niente')), true, 'AL CONTRARIO: il file normale dietro l altra giunzione si legge senza carta');
   }
 });

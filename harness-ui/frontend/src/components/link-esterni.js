@@ -36,22 +36,59 @@ export function depositoDelBrowser() {
   try { return globalThis.localStorage ?? null; } catch { return null; }
 }
 
+/*
+ * DOVE SI APRE UN LINK — owner 12/10/2026: TALOS ha la sua scheda Browser, quindi un link della chat si apre lì (`talos`) o nel
+ * browser predefinito del computer (`sistema`), a scelta. Stato dell'arte letto il 12/10/2026: Hermes apre sempre fuori
+ * (`apps/desktop/electron/external-open.ts`); VS Code 1.109 ha un browser integrato e lo decide con un'impostazione
+ * (`workbench.browser.openLocalhostLinks`, solo per i link locali). Qui la scelta si fa nel momento in cui si vede il sito, e si ricorda.
+ * ⛔ `sistema` è il valore di serie OVUNQUE: un dato assente, rotto o sconosciuto non porta mai una pagina dentro l'app da solo.
+ */
+export const DESTINAZIONI_DEI_LINK = Object.freeze(['talos', 'sistema']);
+const destinazioneValida = (d) => (d === 'talos' ? 'talos' : 'sistema');
+const CHIAVE_DESTINAZIONE_DEI_FIDATI = 'talos.harness.desktop.link-fidati-destinazione.v1';
+const CHIAVE_DESTINAZIONE = 'talos.harness.desktop.link-destinazione.v1';
+
 export function creaSitiFidati({ deposito = depositoDelBrowser() } = {}) {
   let siti = new Set();
   try {
     const letto = JSON.parse(deposito?.getItem(CHIAVE_SITI_FIDATI) ?? '[]');
     if (Array.isArray(letto)) siti = new Set(letto.map(normale).filter((s) => NOME_DI_SITO.test(s)));
   } catch { /* assente, negato o rotto: nessun sito fidato */ }
+  /* L'elenco dei fidati resta nella sua chiave del 11/10, com'era (una versione precedente lo legge ancora). Accanto, in una chiave
+     sua, solo i siti che si aprono in TALOS: chi non c'è si apre nel browser del sistema, com'è sempre stato. */
+  let inTalos = new Set();
+  try {
+    const letto = JSON.parse(deposito?.getItem(CHIAVE_DESTINAZIONE_DEI_FIDATI) ?? '[]');
+    if (Array.isArray(letto)) inTalos = new Set(letto.map(normale).filter((s) => siti.has(s)));
+  } catch { /* assente, negato o rotto: tutti nel browser del sistema */ }
   const ascoltatori = new Set();
   const salva = () => {
-    try { deposito?.setItem(CHIAVE_SITI_FIDATI, JSON.stringify([...siti].sort())); } catch { /* resta per questa finestra */ }
+    try {
+      deposito?.setItem(CHIAVE_SITI_FIDATI, JSON.stringify([...siti].sort()));
+      deposito?.setItem(CHIAVE_DESTINAZIONE_DEI_FIDATI, JSON.stringify([...inTalos].sort()));
+    } catch { /* resta per questa finestra */ }
     for (const fn of ascoltatori) { try { fn(); } catch { /* chi ascolta non ferma chi salva */ } }
+  };
+  const scrivi = (s, destinazione) => {
+    const prima = inTalos.has(s);
+    if (destinazioneValida(destinazione) === 'talos') inTalos.add(s); else inTalos.delete(s);
+    return prima !== inTalos.has(s);
   };
   return Object.freeze({
     elenco: () => [...siti].sort(),
     fidato: (sito) => siti.has(normale(sito)),
-    aggiungi(sito) { const s = normale(sito); if (NOME_DI_SITO.test(s) && !siti.has(s)) { siti.add(s); salva(); } },
-    togli(sito) { if (siti.delete(normale(sito))) salva(); },
+    /** Dove si apre un sito fidato; `null` se il sito non è fidato. */
+    destinazione: (sito) => { const s = normale(sito); return siti.has(s) ? (inTalos.has(s) ? 'talos' : 'sistema') : null; },
+    aggiungi(sito, destinazione = 'sistema') {
+      const s = normale(sito);
+      if (!NOME_DI_SITO.test(s)) return;
+      const nuovo = !siti.has(s);
+      siti.add(s);
+      if (scrivi(s, destinazione) || nuovo) salva();
+    },
+    /** Cambia dove si apre un sito già fidato; su un sito non fidato non fa niente. */
+    imposta(sito, destinazione) { const s = normale(sito); if (siti.has(s) && scrivi(s, destinazione)) salva(); },
+    togli(sito) { const s = normale(sito); if (siti.delete(s)) { inTalos.delete(s); salva(); } },
     /** Avvisa a ogni cambio dell'elenco (le Impostazioni si ridisegnano). */
     ascolta(fn) { ascoltatori.add(fn); return () => ascoltatori.delete(fn); },
   });
@@ -60,6 +97,65 @@ export function creaSitiFidati({ deposito = depositoDelBrowser() } = {}) {
 /** L'elenco dell'app: UNA istanza, così la chat che aggiunge e le Impostazioni che tolgono vedono lo stesso elenco. */
 let dellApp = null;
 export function sitiFidatiDellApp() { dellApp ??= creaSitiFidati(); return dellApp; }
+
+/**
+ * La destinazione dei link che NON sono di un sito fidato (owner 12/10/2026):
+ *  - `ultima()`: quella usata l'ultima volta — è il pulsante in evidenza nella domanda;
+ *  - `fissa()`: `null` finché la persona sceglie ogni volta; `talos` o `sistema` dopo «Non chiedermi più dove» — la domanda sul SITO
+ *    resta, ma con un pulsante solo. Si cambia dalle Impostazioni → Link dalla chat.
+ */
+export function creaDestinazioneDeiLink({ deposito = depositoDelBrowser() } = {}) {
+  let ultima = 'sistema';
+  let fissa = null;
+  try {
+    const letto = JSON.parse(deposito?.getItem(CHIAVE_DESTINAZIONE) ?? 'null');
+    if (letto && typeof letto === 'object') {
+      ultima = destinazioneValida(letto.ultima);
+      fissa = DESTINAZIONI_DEI_LINK.includes(letto.fissa) ? letto.fissa : null;
+    }
+  } catch { /* assente, negato o rotto: si chiede, col browser del sistema in evidenza */ }
+  const ascoltatori = new Set();
+  const salva = () => {
+    try { deposito?.setItem(CHIAVE_DESTINAZIONE, JSON.stringify({ ultima, fissa })); } catch { /* resta per questa finestra */ }
+    for (const fn of ascoltatori) { try { fn(); } catch { /* chi ascolta non ferma chi salva */ } }
+  };
+  return Object.freeze({
+    ultima: () => ultima,
+    fissa: () => fissa,
+    ricorda(destinazione) { const d = destinazioneValida(destinazione); if (d !== ultima) { ultima = d; salva(); } },
+    /** `null` = chiedi ogni volta. Un valore sconosciuto vale `null`: non si fissa niente per sbaglio. */
+    fissaSu(destinazione) {
+      const d = DESTINAZIONI_DEI_LINK.includes(destinazione) ? destinazione : null;
+      if (d === fissa) return;
+      fissa = d;
+      if (d) ultima = d;
+      salva();
+    },
+    ascolta(fn) { ascoltatori.add(fn); return () => ascoltatori.delete(fn); },
+  });
+}
+
+let destinazioneDellApp = null;
+export function destinazioneDeiLinkDellApp() { destinazioneDellApp ??= creaDestinazioneDeiLink(); return destinazioneDellApp; }
+
+/*
+ * LE PAGINE CHE SI APRONO SOLO NEL BROWSER DEL SISTEMA — owner 12/10/2026: «le pagine che concedono chiavi o gestiscono l'account
+ * restano sempre nel sistema». La scheda Browser di TALOS è una pagina che il modello può leggere e guidare: lì non si scrive una
+ * password e non si mostra una chiave. E nel browser del sistema la persona ha già il suo accesso fatto.
+ *  - ogni sito il cui nome comincia per `auth.`, `login.`, `accounts.`, `account.`, `signin.`, `sso.`, `id.` (pagine d'accesso);
+ *  - le pagine di chiavi, impostazioni e fatturazione dei fornitori di modelli e di GitHub.
+ * Si giudica il SITO e il PERCORSO, mai il testo del link. Un indirizzo che non si legge non è «solo nel sistema»: non si apre affatto.
+ */
+const ACCESSO = /^(?:auth|login|accounts?|signin|sso|id)\./u;
+const PERCORSI_DELICATI = /^\/(?:[^/]+\/)*(?:settings|account|billing|api-?keys?|keys?|tokens?|credentials?|login|signin|sign-in|auth|oauth|authorize)(?:\/|$)/iu;
+const FORNITORI = /(?:^|\.)(?:openrouter\.ai|openai\.com|chatgpt\.com|anthropic\.com|claude\.ai|claude\.com|z\.ai|bigmodel\.cn|deepseek\.com|mistral\.ai|x\.ai|groq\.com|google\.com|github\.com|huggingface\.co)$/u;
+export function paginaSoloNelSistema(indirizzo) {
+  const letto = leggiLinkEsterno(indirizzo);
+  if (!letto) return false;
+  const u = new URL(letto.indirizzo);
+  if (ACCESSO.test(u.hostname)) return true;
+  return FORNITORI.test(u.hostname) && (PERCORSI_DELICATI.test(u.pathname) || /^#\/?(?:settings|account)/iu.test(u.hash));
+}
 
 /*
  * DOVE FINISCE UN INDIRIZZO SCRITTO NUDO — una regola sola, per le risposte (`markdown.js`) e per i messaggi della persona

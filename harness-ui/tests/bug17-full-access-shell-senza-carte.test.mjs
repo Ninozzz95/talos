@@ -128,19 +128,47 @@ test('B17-UNIT-02: accesso pieno + shell + contenuto sospetto — nessuna domand
     assert.equal(esito.via, 'nessun-vincolo')
 })
 
-test('B17-UNIT-03: contropelo — una SCRITTURA con contenuto sospetto chiede ANCORA anche in accesso pieno', async () => {
+/*
+ * ⛔⛔ Owner 12/10/2026, «FULL ACCESS PER LEGGE NON DEVE CHIEDERE NESSUN PERMESSO» — il perimetro di BUG-17 (solo la shell) si
+ *   allarga a TUTTO l'Accesso pieno: anche una lettura o un elenco su un segreto (owner: «File segreti» fra quelle da togliere) e
+ *   una scrittura dopo un contenuto sospetto (F-027). Stesso confine di Claude Code `bypassPermissions` e Hermes «yolo»: nessuna
+ *   domanda; restano le scelte ESPLICITE della persona (un «chiedi» o un «nega» per attrezzo). Queste due prove prima fissavano il
+ *   contrario («chiede ANCORA»).
+ */
+test('B17-UNIT-03: accesso pieno — una SCRITTURA dopo un contenuto sospetto non chiede più (owner 12/10)', async () => {
     const esito = await verificaPermessoScrittura(
         { tipo: 'scrivi', percorso: 'nota.txt' },
         { livelloAccesso: 'accesso-pieno', sospetto: { motivi: ['istruzione-per-un-ia'], fonte: 'pagina-web' } },
     )
-    assert.equal(esito.consentito, false)
-    assert.equal(esito.via, 'contenuto-sospetto')
+    assert.equal(esito.consentito, true)
+    assert.equal(esito.via, 'nessun-vincolo')
 })
 
-test('B17-UNIT-04: contropelo — una LETTURA su un segreto chiede ANCORA anche in accesso pieno', async () => {
-    const esito = await verificaPermessoScrittura({ tipo: 'leggi', percorso: '.env' }, { livelloAccesso: 'accesso-pieno' })
-    assert.equal(esito.consentito, false)
-    assert.equal(esito.via, 'segreto-forza-conferma')
+test('B17-UNIT-04: accesso pieno — una LETTURA o un ELENCO su un segreto non chiedono più (owner 12/10)', async () => {
+    for (const azione of [{ tipo: 'leggi', percorso: '.env' }, { tipo: 'leggi', percorso: '~/.ssh/id_rsa' }, { tipo: 'elenca', percorso: '~/.ssh' }]) {
+        const esito = await verificaPermessoScrittura(azione, { livelloAccesso: 'accesso-pieno' })
+        assert.equal(esito.consentito, true, JSON.stringify(azione))
+        assert.equal(esito.via, 'nessun-vincolo', JSON.stringify(azione))
+    }
+})
+
+test('B17-UNIT-06: contropelo — sotto l\'Accesso pieno il segreto e il contenuto sospetto chiedono come prima', async () => {
+    for (const livelloAccesso of [undefined, 'scrittura-progetto', 'su-richiesta']) {
+        const lettura = await verificaPermessoScrittura({ tipo: 'leggi', percorso: '.env' }, { livelloAccesso })
+        assert.equal(lettura.via, 'segreto-forza-conferma', `${livelloAccesso}: lettura di un segreto`)
+    }
+    // il livello di serie (nessun livello al kernel): senza cartella «Scrive nel progetto» chiederebbe prima per «fuori dal progetto»
+    const scrittura = await verificaPermessoScrittura({ tipo: 'scrivi', percorso: 'nota.txt' },
+        { permessiPerAttrezzo: { scrivi: 'sempre' }, sospetto: { motivi: ['istruzione-per-un-ia'], fonte: 'pagina-web' } })
+    assert.equal(scrittura.via, 'contenuto-sospetto', 'scrittura dopo un contenuto sospetto')
+})
+
+test('B17-UNIT-07: contropelo — in accesso pieno le scelte ESPLICITE della persona restano sovrane («chiedi» e «nega» per attrezzo)', async () => {
+    const chiede = await verificaPermessoScrittura({ tipo: 'leggi', percorso: '.env' }, { livelloAccesso: 'accesso-pieno', permessiPerAttrezzo: { leggi: 'chiedi' } })
+    assert.equal(chiede.consentito, false, 'il «chiedi» scelto dalla persona fa la sua domanda')
+    const nega = await verificaPermessoScrittura({ tipo: 'leggi', percorso: '.env' }, { livelloAccesso: 'accesso-pieno', permessiPerAttrezzo: { leggi: 'nega' } })
+    assert.equal(nega.consentito, false)
+    assert.equal(nega.via, 'permesso-per-attrezzo-nega')
 })
 
 test('B17-UNIT-05: contropelo — «Scrive nel progetto» + shell + segreto chiede come prima (F15 resta in piedi)', async () => {

@@ -422,6 +422,8 @@ function wrapContextHooks(original, {
   let fallimentiRiassuntoConsecutivi = 0;
   /* La richiesta che `prepare` ha appena preparato: l'array (mutabile in posto), il grezzo e gli effimeri. */
   let richiestaCorrente = null;
+  /* Owner 12/10/2026: il ripiego dal motore del contesto si DICE una volta per turno, non a ogni richiesta. */
+  let ripiegoDetto = false;
   const reasoningRiassunto = compattazione.reasoningPerRiassunto(reasoning);
 
   const legacyMode = original === undefined || original === null;
@@ -685,11 +687,29 @@ function wrapContextHooks(original, {
       // ambiguous raw tool result cannot be summarized into a false statement.
       const inputMessages = correggiMessaggiDesktop(grezzi, { cartella });
       let prepared;
+      let ripiego = false;
       if (legacyMode) prepared = { messages: await maybeCompactLegacy(inputMessages, requestIndex) };
-      else prepared = await original.prepare({ ...payload, messages: inputMessages, originali: grezzi });
+      else {
+        try { prepared = await original.prepare({ ...payload, messages: inputMessages, originali: grezzi }); }
+        catch (errore) {
+          /* ⛔⛔ Owner 12/10/2026, «errori di compattazione non devono bloccare il flusso chat… è una regressione grave»: dal vivo
+             `CTX_HISTORY_DIVERGED` fermava OGNI giro dal settimo in poi, anche un «ciao». Il motore del contesto è un servizio di
+             SUPPORTO del giro: se fallisce, la richiesta parte lo stesso dalla compattazione semplice (quella col motore spento,
+             che regge anche il contesto troppo grande, sotto in `infer`), e la chat lo dice una volta con una riga che non ferma
+             niente. Uno Stop della persona invece resta uno Stop. L'archivio del motore non si tocca qui: la causa della
+             divergenza si cura a parte (R-05). */
+          if (segnaleStop?.aborted || payload?.signal?.aborted || errore?.name === 'AbortError') throw errore;
+          ripiego = true;
+          if (!ripiegoDetto) {
+            ripiegoDetto = true;
+            emitOnGiro?.({ giro: requestIndex, tipo: 'compattazione-fine', compattato: false, motivo: 'ripiego', codice: errore?.code ?? null });
+          }
+          prepared = { messages: await maybeCompactLegacy(inputMessages, requestIndex) };
+        }
+      }
       const proiettati = correggiMessaggiDesktop(prepared?.messages ?? inputMessages, { cartella });
       const messages = compattazione.riattaccaEffimeri(proiettati, effimeri);
-      if (legacyMode) richiestaCorrente = { array: messages, grezzi: inputMessages, effimeri, requestIndex, lunghezzaProiezione: proiettati.length };
+      richiestaCorrente = legacyMode || ripiego ? { array: messages, grezzi: inputMessages, effimeri, requestIndex, lunghezzaProiezione: proiettati.length } : null;
       return { ...(prepared && typeof prepared === 'object' ? prepared : {}), messages };
     },
     async captureProviderResponse(payload) {
@@ -699,8 +719,7 @@ function wrapContextHooks(original, {
     },
     get compactions() { return compactions; },
   };
-  if (legacyMode) {
-    hooks.infer = async ({ signal } = {}, invoke) => {
+  const inferLegacy = async ({ signal } = {}, invoke) => {
       try {
         const esito = await invoke(signal);
         aggiornaAncora(esito?.usage);
@@ -730,8 +749,15 @@ function wrapContextHooks(original, {
           throw secondo;
         }
       }
-    };
-  } else if (typeof original?.infer === 'function') hooks.infer = (...args) => original.infer(...args);
+  };
+  if (legacyMode) hooks.infer = inferLegacy;
+  else {
+    /* Owner 12/10/2026 (ripiego qui sopra): una richiesta preparata dalla compattazione semplice perché il motore è caduto ha anche
+       la sua rete per il contesto troppo grande. Col motore sano `richiestaCorrente` è null e tutto va come prima. */
+    const inferMotore = typeof original?.infer === 'function' ? (...args) => original.infer(...args) : null;
+    hooks.infer = (opzioni = {}, invoke) => (richiestaCorrente ? inferLegacy(opzioni, invoke)
+      : inferMotore ? inferMotore(opzioni, invoke) : invoke(opzioni.signal));
+  }
   return hooks;
 }
 

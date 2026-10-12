@@ -1763,6 +1763,17 @@ button.talos-turn-spine__tick:focus-visible {
   color: var(--talos-text);
   cursor: pointer;
 }
+.talos-link-conferma__sotto {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+}
+.talos-siti-fidati__dove {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
 .talos-link-conferma__avviso {
   margin-top: 14px;
   padding-left: 10px;

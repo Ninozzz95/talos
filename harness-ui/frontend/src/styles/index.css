@@ -761,6 +761,9 @@ button.talos-turn-spine__tick:focus-visible{outline:var(--talos-focus-width) sol
 .talos-link-conferma__sito{font-size:16px; color:var(--talos-text); overflow-wrap:anywhere}
 .talos-link-conferma__indirizzo{margin:6px 0 0; padding:9px 11px; border:1px solid var(--talos-border); border-radius:8px; overflow-wrap:anywhere; max-height:8.5em; overflow-y:auto}
 .talos-link-conferma__fidati{display:flex; align-items:center; gap:10px; margin-top:16px; font-size:13px; color:var(--talos-text); cursor:pointer}
+/* 12/10/2026, due porte: la riga piccola sotto la frase dell'interruttore, e le scelte delle Impostazioni (pulsanti del prodotto in fila) */
+.talos-link-conferma__sotto{display:block; margin-top:2px; font-size:12px}
+.talos-siti-fidati__dove{display:flex; flex-wrap:wrap; gap:6px; justify-content:flex-end}
 /* l'avviso «non cifrato»: il testo resta nel colore del testo (il giallo d'avviso come TESTO scende sotto 4,5 sui fondi chiari);
    il segnale è il filetto, e la frase lo dice a parole (WCAG 2.2, 1.4.1 e 1.4.3) */
 .talos-link-conferma__avviso{margin-top:14px; padding-left:10px; border-left:3px solid var(--talos-warning); color:var(--talos-text)}

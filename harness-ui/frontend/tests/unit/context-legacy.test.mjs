@@ -105,3 +105,16 @@ test('CTX-UI-LEGACY-ROW-TEXT: la riga dice i numeri quando li ha, e non li inven
   impostaLingua('it');
   assert.equal(motivoUmano('sconosciuto-xyz'), 'sconosciuto-xyz', 'un motivo non tradotto si riporta com’è, non si nasconde');
 });
+
+test('CTX-RIPIEGO-RIGA — owner 12/10: la riga del ripiego dice che la chat è andata avanti, nelle due lingue; l\'evento si legge come «non riuscita»', () => {
+  const evento = interpretaEventoCompattazione({ type: 'CUSTOM', name: 'talos.compattazione', value: { fase: 'fine', giro: 7, compattato: false, motivo: 'ripiego' } });
+  assert.equal(evento?.tipo, 'fine');
+  assert.equal(evento?.compattato, false);
+  assert.equal(evento?.motivo, 'ripiego');
+  impostaLingua('it');
+  assert.match(testoRigaCompattazione({ stato: 'non-riuscita', motivo: 'ripiego' }), /il motore del contesto non ha risposto, quindi la chat è andata avanti/u);
+  impostaLingua('en');
+  assert.match(testoRigaCompattazione({ stato: 'non-riuscita', motivo: 'ripiego' }), /the context engine did not respond, so the chat went on/u);
+  assert.notEqual(motivoUmano('ripiego'), 'ripiego', 'mai il codice grezzo a schermo');
+  impostaLingua('it');
+});

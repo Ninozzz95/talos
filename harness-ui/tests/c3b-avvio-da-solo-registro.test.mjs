@@ -21,7 +21,7 @@ const CON_TEMPO = { timeout: 30_000 }
 const ricevuta = () => ({ schema: 'talos.workflow-proposal-receipt.v1', workflowId: randomUUID(), version: 1,
   definitionHash: `sha256:${'a'.repeat(64)}`, status: 'proposed', preflight: { errors: [], warnings: [] } })
 
-async function scena(t, { passi = 3, modalita = 'normale', coordinazione = true, fallisceDopo = false, lanciaDopo = false, erroriPreflight = [] } = {}) {
+async function scena(t, { passi = 3, modalita = 'normale', coordinazione = true, fallisceDopo = false, lanciaDopo = false, erroriPreflight = [], permessi = 'Workspace write' } = {}) {
   const cartellaStore = mkdtempSync(join(tmpdir(), 'talos-c3b-reg-'))
   const runs = []
   const avvii = []
@@ -47,7 +47,7 @@ async function scena(t, { passi = 3, modalita = 'normale', coordinazione = true,
     try { await attendiScritture({ cartellaStore }) } catch { /* pulizia comunque */ }
     rimuoviCartellaDiProva(cartellaStore)
   })
-  const { sessionId } = registry.avvia('task', { permessiScelto: 'Workspace write', modalitaOperativaScelta: modalita })
+  const { sessionId } = registry.avvia('task', { permessiScelto: permessi, modalitaOperativaScelta: modalita })
   const input = runs[0].input
   const proponi = () => input.onWorkflowPlanPropose({ draft: { title: 'x' }, toolCallId: `call_${randomUUID()}` })
   const accendi = () => registry.aggiornaImpostazioni(sessionId, { unisciPermessiPerAttrezzo: { delega_sottotask: 'sempre' }, rispettaNega: true })
@@ -133,4 +133,14 @@ test('C3B-R-07 — una proposta che il controllo preliminare boccia non parte da
   const esito = await s.proponi()
   assert.deepEqual(s.avvii, [])
   assert.equal(esito.startedOnItsOwn, undefined)
+})
+
+test('C3B-R-09 — owner 12/10: in Full access nessun limite — Workflow da 20 passi ciascuno partono da soli anche oltre i 20 dell\'albero', CON_TEMPO, async (t) => {
+  const s = await scena(t, { passi: 20, permessi: 'Full access' })
+  for (let i = 0; i < 3; i += 1) assert.ok((await s.proponi()).startedOnItsOwn, `workflow ${i + 1}: ${(i + 1) * 20} passi, nessun tetto in Full access`)
+  assert.deepEqual(await s.input.coordinazioneFn(), { modo: 'sempre' })
+  const fuori = await scena(t, { passi: 20 })
+  await fuori.accendi()
+  assert.ok((await fuori.proponi()).startedOnItsOwn)
+  assert.equal((await fuori.proponi()).startedOnItsOwn, undefined, 'fuori dal Full access il tetto vale come prima')
 })
