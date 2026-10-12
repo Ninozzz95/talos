@@ -4,7 +4,6 @@ import { copiaDellaRichiesta, ripartizioneDellaRichiesta } from './richiesta-del
 import { creaRegistroLetture } from './letture-prima-di-sovrascrivere.mjs'; // T25/B09
 import { delegaLimitata } from './delegation-contract.mjs';
 import { attivitaDellaVoce, contatoriAttivitaDellaVoce } from './attivita-figlia.mjs';
-import { validaFallbackProviders } from './model-destination.mjs';
 import { ContrattoDomandaUtenteError, ESITO_DOMANDA_SENZA_INTERFACCIA, ESITO_DOMANDA_SOSTITUITA, validaDomandeUtente, validaRispostaDomanda } from './user-question-contract.mjs';
 import { ContrattoPianoError, PERMESSI_DOPO_IL_PIANO, esitoPianoPerIlModello, improntaPiano, validaDecisionePiano, validaPiano } from './plan-contract.mjs';
 
@@ -446,7 +445,7 @@ const ATTREZZI_NEGATI_AI_PASSI = new Set([
   // Automazioni a due porte (08/10/2026): un passo non tocca le automazioni (difesa in profondità: il registro già non le offre)
   'automation_list', 'automation_runs', 'automation_create', 'automation_update', 'automation_control', // C5: pause/resume/run/stop → automation_control
   // 0.1.25: un passo non tocca i fornitori esclusi (difesa in profondità: il registro già non li offre)
-  'provider_exclusions_list', 'provider_exclude', 'provider_allow',
+  'provider_exclusions_list', 'provider_exclude', 'provider_allow', 'chatgpt_account', // 11/10/2026: l'accesso col piano ChatGPT
 ]);
 const UUID_LEGAME = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 const NODO_LEGAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u;
@@ -2419,7 +2418,7 @@ export const STRUMENTI_ESTESI_PREDEFINITI = Object.freeze([
   // Automazioni a due porte (owner 08/10/2026 notte): il kernel li offre solo al root e solo con `onAutomazioneFn` (il desktop).
   'automation_list', 'automation_runs', 'automation_create', 'automation_update', 'automation_control', // C5: pause/resume/run/stop → automation_control
   // 0.1.25 (owner 09/10/2026): i fornitori esclusi — il kernel li offre solo al root e solo con `onFornitoriFn` (il desktop)
-  'provider_exclusions_list', 'provider_exclude', 'provider_allow',
+  'provider_exclusions_list', 'provider_exclude', 'provider_allow', 'chatgpt_account', // 11/10/2026: l'accesso col piano ChatGPT
   'research_find', 'research_start', 'research_read', 'research_rename', // C5: research_list + research_search → research_find
   'research_control', 'research_delete', // C5: research_pause/resume/cancel → research_control
   /*
@@ -6362,7 +6361,9 @@ export function createSessionRegistry({
       modalitaOperativa: modalitaOperativaEffettiva,
       doveGiranoIComandi: origineComandi?.doveGiranoIComandi ?? null,
       comandiNellaConversazione: origineComandi?.comandiNellaConversazione === true,
-      fallbackProviders: validaFallbackProviders(fallbackProviders ?? voceEsistente?.fallbackProviders ?? [], { usaAttrezzi: true }),
+      /* owner 11/10/2026: la funzione delle riserve («se non risponde, continua con…») è tolta. Il campo resta nel formato (la CLI e i
+         client vecchi lo mandano, i file vecchi lo hanno) ma il registro lo tiene SEMPRE vuoto: il giro non cambia mai fornitore da sé. */
+      fallbackProviders: [],
       linguaInterfaccia: linguaInterfaccia ?? null, // K3b: una ripresa riusa `voceEsistente` intera, e con lei la lingua
       permessiPerAttrezzo: permessiPerAttrezzoEffettivi,
       origineSempre: origineSempreValida(origineSempreRichiesta, permessiPerAttrezzoEffettivi), // C2 R6-bis
@@ -7811,7 +7812,7 @@ export function createSessionRegistry({
      *   in Piano riceve le loro domande e risponde (`figliViviAllAvvio` al kernel).
      */
     const prossimo = {
-      fallbackProviders: validaFallbackProviders(patch.fallbackProviders ?? voce.fallbackProviders ?? [], { usaAttrezzi: true }),
+      fallbackProviders: [], // owner 11/10/2026: riserve tolte, il campo resta vuoto (vedi la creazione della voce)
       modello: Object.hasOwn(patch, 'modello') ? patch.modello : voce.modello,
       modelloPlanner: Object.hasOwn(patch, 'modelloPlanner') ? patch.modelloPlanner : voce.modelloPlanner,
       reasoning: Object.hasOwn(patch, 'reasoning') ? patch.reasoning : voce.reasoning,
@@ -8491,7 +8492,7 @@ export function createSessionRegistry({
           motoreContesto: intestazione.motoreContesto === 'engine' || intestazione.motoreContesto === 'legacy' ? intestazione.motoreContesto : null, // C1
           messaggiPendente: storiaPendenteRipristinata,
           modello: impostazioni.modello, modelloPlanner: impostazioni.modelloPlanner, reasoning: impostazioni.reasoning,
-          fallbackProviders: validaFallbackProviders(impostazioni.fallbackProviders ?? [], { usaAttrezzi: true }),
+          fallbackProviders: [], // owner 11/10/2026: le riserve salvate nelle sessioni vecchie si ignorano
           // Sessioni nate PRIMA della riga nome-sessione (o mai rinominate): per un compito libero il client ha sempre usato il primo messaggio come titolo (titoloDalPrimoMessaggio, 80 caratteri) — stesso valore, ricavato dall'intestazione invece che perso. Un task del corpus resta col suo taskId, come prima.
           nome: nomeRecord?.nome ?? nomeDerivatoDalCompito(intestazione.taskId, intestazione.task), // 26/09: la stessa regola del vivo
           /* ⛔ F3-10 (23/09/2026) — «upcast on read»: la riga storica `workflow` si LEGGE come Normale, il file

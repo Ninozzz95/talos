@@ -149,7 +149,7 @@ export function oraCompatta(iso, adesso = new Date()) {
 export function nomeModello(modello) {
   if (typeof modello !== 'string' || modello.trim() === '') return null;
   if (/^local:/i.test(modello.trim())) return nomeModelloUmano(modello) || modello.replace(/^local:/i, '');
-  return modello.split('/').pop();
+  return nomeModelloUmano(modello); // una regola sola: anche il prefisso `fornitore:` se ne va (11/10/2026)
 }
 
 function el(documentObj, tag, className, testo) {

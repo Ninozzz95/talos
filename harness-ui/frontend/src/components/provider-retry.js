@@ -1,6 +1,9 @@
 import { TESTI } from '../i18n/testi/index.js';
 import { linguaCorrenteDiT, t, interpola } from './lingua.js';
 
+/** La pagina dei consumi del piano ChatGPT: il link fisso delle linee guida di OpenAI («Manage usage»). Una sola copia, qui. */
+export const PAGINA_CONSUMI_CHATGPT = 'https://chatgpt.com/settings/usage';
+
 function valoreRetry(evento) {
   if (evento?.type !== 'CUSTOM' || evento.name !== 'talos.provider-retry') return null;
   const v = evento.value;
@@ -16,7 +19,8 @@ function valoreRetry(evento) {
     || !Number.isSafeInteger(v.tentativiMassimi) || v.tentativiMassimi < v.tentativo
     || (incerto
       ? (v.httpStatus !== undefined && v.httpStatus !== null) || (v.motivo !== undefined && typeof v.motivo !== 'string')
-      : (!Number.isInteger(v.httpStatus) || !((v.httpStatus === 402 && v.motivo === 'budget-occupato')
+      : (!Number.isInteger(v.httpStatus) || (v.motivo !== undefined && !((v.httpStatus === 402 && v.motivo === 'budget-occupato') || (v.httpStatus === 429 && v.motivo === 'limite-del-piano')))
+        || !((v.httpStatus === 402 && v.motivo === 'budget-occupato')
         || v.httpStatus === 408 || v.httpStatus === 429 || (v.httpStatus >= 500 && v.httpStatus <= 599))))
     || !Number.isFinite(v.attesaMs) || v.attesaMs < 0 || v.attesaMs > 2_147_483_647
     || (v.fase === 'attesa' && (!Number.isSafeInteger(v.retryAt) || v.retryAt < 1))) return null;
@@ -25,6 +29,7 @@ function valoreRetry(evento) {
     canale: incerto ? 'esito-incerto' : 'http',
     retryAt: v.fase === 'attesa' ? v.retryAt : null,
     ...(v.httpStatus === 402 ? { motivo: v.motivo } : {}),
+    ...(v.httpStatus === 429 && v.motivo === 'limite-del-piano' ? { motivo: v.motivo } : {}),
     ...(incerto && typeof v.motivo === 'string' ? { motivo: v.motivo } : {}),
     /* OWN-01 (CLI, 09/10/2026; nomi concordati col bugfixer): il fornitore non ha mandato NEMMENO gli header. Campo additivo: il
        canale resta «esito-incerto», ma la frase non è più «si è interrotta» — non era mai cominciata. */
@@ -63,6 +68,19 @@ export function testoRetry(retry, ora = Date.now(), en) {
       : retry.httpStatus === 429 ? voce('reason.rateLimited')
         : retry.httpStatus === 408 ? voce('reason.timeout') : voce('reason.unavailable');
   const secondi = Math.max(0, Math.ceil((retry.retryAt - ora) / 1000));
+  /* 11/10/2026 — il limite d'uso del piano ChatGPT, con le parole di Claude Code: «Usage limit reached · continuing automatically
+     at …». L'attesa dura mezz'ora o più: si dice l'ORA, non i secondi; «Ferma» annulla. */
+  if (retry.motivo === 'limite-del-piano' && retry.httpStatus === 429) {
+    const ore = new Date(retry.retryAt ?? ora).toLocaleTimeString(en === undefined ? undefined : en ? 'en-GB' : 'it-IT', { hour: '2-digit', minute: '2-digit' });
+    return {
+      titolo: voce('planLimit.title'),
+      /* linee guida OpenAI per «Sign in with ChatGPT» (ui-ux-guidelines, lette l'11/10/2026): «Usage limit reached» / «Review your
+         plan or this app's limit in ChatGPT settings.», e «Make Manage usage the primary action» (`azione`, sotto) */
+      motivo: retry.fase === 'attesa' ? `${voce('planLimit.review')} ${voce('planLimit.continuesAt', { time: ore, attempt: retry.tentativo - 1, max: retry.tentativiMassimi - 1 })}` : voce('planLimit.retrying'),
+      azione: { testo: voce('planLimit.manageUsage'), indirizzo: PAGINA_CONSUMI_CHATGPT },
+      tempo: retry.fase !== 'attesa' ? voce('inProgress') : secondi > 0 ? voce('planLimit.stopToCancel') : voce('waitingConfirmation'),
+    };
+  }
   return {
     titolo: retry.fase === 'attesa' ? voce('scheduled') : numero,
     motivo: `${incerto ? motivo : voce('reason.withStatus', { reason: motivo, status: retry.httpStatus })}${retry.fase === 'attesa' ? ` ${numero}.` : ''}`,
@@ -94,13 +112,29 @@ export function montaProviderRetry({ contenitore, onShow = () => {}, document: d
       statoEl.append(titolo, motivo);
       const tempo = doc.createElement('span'); tempo.className = 'talos-provider-retry__tempo';
       tempo.setAttribute('role', 'timer'); tempo.setAttribute('aria-live', 'off');
-      nodo.append(statoEl, tempo); parent.append(nodo);
+      const destra = doc.createElement('div'); destra.className = 'talos-provider-retry__destra';
+      destra.append(tempo);
+      nodo.append(statoEl, destra); parent.append(nodo);
     }
     nodo.dataset.fase = stato.retry.fase;
     const testi = testoRetry(stato.retry, Date.now()); // la lingua corrente, pseudo-lingua compresa
     for (const nome of ['titolo', 'motivo', 'tempo']) {
       const el = nodo.querySelector(`.talos-provider-retry__${nome}`);
       if (el.textContent !== testi[nome]) el.textContent = testi[nome];
+    }
+    /* 11/10/2026 — l'azione della carta (oggi solo il limite del piano ChatGPT: «Manage usage», azione primaria). È un LINK con la
+       veste del pulsante: porta a una pagina, non fa niente qui. */
+    let azione = nodo.querySelector('[data-provider-retry-azione]');
+    if (!testi.azione) azione?.remove();
+    else {
+      if (!azione) {
+        azione = doc.createElement('a');
+        azione.className = 'talos-button talos-button--primary talos-button--sm';
+        azione.dataset.providerRetryAzione = ''; azione.target = '_blank'; azione.rel = 'noopener noreferrer';
+        nodo.querySelector('.talos-provider-retry__destra')?.append(azione);
+      }
+      if (azione.textContent !== testi.azione.testo) azione.textContent = testi.azione.testo;
+      if (azione.getAttribute('href') !== testi.azione.indirizzo) azione.setAttribute('href', testi.azione.indirizzo);
     }
     const conta = stato.retry.fase === 'attesa' && stato.retry.retryAt > Date.now();
     if (conta && timer === null) timer = setInterval(disegna, 1000);

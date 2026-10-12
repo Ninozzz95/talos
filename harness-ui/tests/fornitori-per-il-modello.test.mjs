@@ -159,3 +159,58 @@ test('FORN-08 AL CONTRARIO — lista piena (30): il rifiuto arriva all\'anteprim
   assert.equal(anteprima.ok, false)
   assert.match(anteprima.messaggio, /the list of excluded providers is full \(30\)/u)
 })
+
+/* 11/10/2026 — `chatgpt_account`, la seconda porta dell'accesso col piano ChatGPT (decisione owner: «dice lo stato e apre la
+   schermata; scollega con carta»). L'accesso è finto: conta le uscite, non tocca il portachiavi né la rete. */
+function accessoFinto(stato) {
+  const uscite = []
+  return { uscite, stato: () => ({ ...stato }), async esci() { uscite.push(1); stato.collegato = false; return { revocaConfermata: true } } }
+}
+function scenaChatgpt(t, accessoChatgpt) {
+  const dir = mkdtempSync(join(tmpdir(), 'talos-ospite-chatgpt-'))
+  t.after(() => rimuoviCartellaDiProva(dir))
+  const providerStore = createProviderCredentialStore({ env: {}, runtimeFile: join(dir, 'providers.json') })
+  const fabbrica = creaOspiteFornitori({ providerStore, accessoChatgpt })
+  return { ospite: fabbrica({}), delGiro: fabbrica({ automazioneDelGiro: 'auto-1' }) }
+}
+
+test('FORN-11 — chatgpt_account status: libero, senza carta; dice collegato/email/piano e non porta mai un token', async (t) => {
+  const accesso = accessoFinto({ collegato: true, email: 'nino@example.com', pianoAbilitato: true, consumi: 'https://chatgpt.com/settings/usage', token: 'segreto-xyz' })
+  const { ospite } = scenaChatgpt(t, accesso)
+  assert.deepEqual(await ospite('chatgpt_account', { action: 'status' }, { fase: 'anteprima' }), { ok: true, carta: false })
+  const { testo } = await ospite('chatgpt_account', { action: 'status' }, { fase: 'esegui' })
+  assert.match(testo, /is connected \(nino@example\.com\) and its plan pays requests/u)
+  assert.doesNotMatch(testo, /segreto-xyz/u)
+  const scollegato = scenaChatgpt(t, accessoFinto({ collegato: false }))
+  assert.match((await scollegato.ospite('chatgpt_account', { action: 'status' }, { fase: 'esegui' })).testo, /No ChatGPT account is connected/u)
+  const senzaPiano = scenaChatgpt(t, accessoFinto({ collegato: true, email: null, pianoAbilitato: false }))
+  assert.match((await senzaPiano.ospite('chatgpt_account', { action: 'status' }, { fase: 'esegui' })).testo, /plan use was not granted/u)
+  const senzaAccesso = scenaChatgpt(t, null)
+  assert.match((await senzaAccesso.ospite('chatgpt_account', { action: 'status' }, { fase: 'esegui' })).testo, /cannot be connected on this computer/u)
+})
+
+test('FORN-12 — chatgpt_account disconnect: l\'anteprima chiede la carta con l\'email e NON esce; esegui esce una volta', async (t) => {
+  const accesso = accessoFinto({ collegato: true, email: 'nino@example.com', pianoAbilitato: true })
+  const { ospite } = scenaChatgpt(t, accesso)
+  const anteprima = await ospite('chatgpt_account', { action: 'disconnect' }, { fase: 'anteprima' })
+  assert.deepEqual(anteprima, { ok: true, carta: true, azione: { fornitore: 'chatgpt', email: 'nino@example.com' } })
+  assert.equal(accesso.uscite.length, 0, 'l\'anteprima non scollega')
+  const fatto = await ospite('chatgpt_account', { action: 'disconnect' }, { fase: 'esegui' })
+  assert.match(fatto.testo, /ChatGPT is disconnected/u)
+  assert.equal(accesso.uscite.length, 1)
+})
+
+test('FORN-13 AL CONTRARIO — chatgpt_account: azione sbagliata rifiutata; un giro d\'automazione non scollega; scollegato = niente carta', async (t) => {
+  const accesso = accessoFinto({ collegato: true, email: 'nino@example.com', pianoAbilitato: true })
+  const { ospite, delGiro } = scenaChatgpt(t, accesso)
+  const sbagliata = await ospite('chatgpt_account', { action: 'login' }, { fase: 'anteprima' })
+  assert.equal(sbagliata.ok, false)
+  assert.match(sbagliata.messaggio, /needs action "status" or "disconnect"/u)
+  const automazione = await delGiro('chatgpt_account', { action: 'disconnect' }, { fase: 'anteprima' })
+  assert.equal(automazione.ok, false)
+  assert.match(automazione.messaggio, /automation run cannot disconnect ChatGPT/u)
+  assert.equal(accesso.uscite.length, 0)
+  const vuoto = scenaChatgpt(t, accessoFinto({ collegato: false }))
+  assert.deepEqual(await vuoto.ospite('chatgpt_account', { action: 'disconnect' }, { fase: 'anteprima' }), { ok: true, carta: false })
+  assert.match((await vuoto.ospite('chatgpt_account', { action: 'disconnect' }, { fase: 'esegui' })).testo, /Nothing to do/u)
+})

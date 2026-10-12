@@ -166,7 +166,12 @@ test('NAV-SAVE-08: un collegamento fisico dentro la cartella delle pagine verso 
     mkdirSync(join(radice, '.ssh-finto'))
     writeFileSync(segreto, 'SEGRETO\n')
     const dentro = join(pagine, 'esempio.test-0123456789.txt')
-    linkSync(segreto, dentro)
+    /* 12/10/2026: dove il sistema rifiuta i collegamenti fisici (Android, utente shell: EACCES, misura del mobile) il caso che questa
+       prova vuole costruire non può esistere: si salta dicendolo, invece di cadere su un errore che non riguarda il prodotto. */
+    try { linkSync(segreto, dentro) } catch (errore) {
+        if (['EACCES', 'EPERM', 'ENOTSUP', 'EOPNOTSUPP', 'ENOSYS', 'EXDEV', 'EISDIR'].includes(errore?.code)) { t.skip(`hard links refused here (${errore.code})`); return }
+        throw errore
+    }
     const { esiti, chieste } = await giro({ workspace, pagine, corpo: PAGINA_A_RIGHE, prossima: (n) => (n === 0 ? ['leggi', { percorso: dentro }] : null) })
     assert.equal(chieste.length, 1, 'un file con due nomi non è una pagina salvata da TALOS')
     assert.doesNotMatch(esiti[0], /SEGRETO/u)

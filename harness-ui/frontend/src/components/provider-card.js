@@ -11,6 +11,7 @@ const localeUI = () => (linguaCorrenteDiT() === 'en' ? 'en-US' : 'it-IT');
  *   è ancora quello di prima, e il file lo tiene in un posto solo.
  */
 import { glifoFornitore, marchioDiFornitore } from './loghi-fornitori.js';
+import { compatto } from './costi-consumo.js'; // 11/10/2026: i token del piano ChatGPT si scrivono come nei Costi (una regola sola)
 import { nomeModelloUmano } from './chat-foot.js'; // 0.1.25: mai l'id grezzo del modello a schermo
 /** 12/09 (review P-K): il badge dell'indirizzo. Senza un predefinito (Azure, Vertex, Bedrock) non si dice «predefinito» di un campo vuoto.
  *  08/10 (bugfixer): «personalizzato» solo se il valore è DIVERSO dal predefinito (`endpointPredefinito`, dal server): il modulo salva
@@ -33,7 +34,9 @@ export function etichettaOrigineChiave(row={}){
  if(row.id==='esterno')return row.agente?t('modelli.provider.agentConfigured'):t('modelli.provider.agentNeedsConfiguration');
  if(row.origineChiave==='ambiente')return t('modelli.provider.environmentKey');
  if(row.origineChiave==='accesso')return t('modelli.provider.signedIn');
- if(row.keyConfigured===true)return t('modelli.provider.keySaved');
+ /* 11/10/2026: con la chiave salvata vince la chiave (è la strada scelta per prima); senza, il piano ChatGPT collegato è la credenziale. */
+ if(row.keyConfigured===true)return row.chatgpt?.collegato?t('modelli.provider.keyAndChatgpt'):t('modelli.provider.keySaved');
+ if(row.chatgpt?.collegato)return row.chatgpt.pianoAbilitato?t('modelli.provider.chatgptCredential'):t('modelli.provider.chatgptCredentialOff');
  return row.requiresKey===true?t('modelli.provider.keyMissing'):t('modelli.provider.optionalKey');
 }
 export function statoChiavePool(chiave={}){
@@ -461,6 +464,69 @@ function iconaAzione(nome,lato='16px'){
  *     finché non lo chiudi tu. Il pulsante interno che salvava la sola chiave, qui dentro, si nasconde: due
  *     pulsanti che salvano cose diverse sono esattamente come si è persa la chiave.
  */
+/*
+ * 11/10/2026 — LA SCELTA DELL'ACCESSO DI OPENAI, in testa alla modale (mockup approvato dall'owner lo stesso giorno, dopo «la card è
+ *   solo un riassunto, il sign in avviene dentro la modale… ux friendly»). Due strade di pagamento, due carte: il piano ChatGPT e la
+ *   chiave API; sotto si vede SOLO la strada scelta. Stato dell'arte letto nel codice: Codex (`tui/src/onboarding/auth.rs:487-518`,
+ *   «Sign in with ChatGPT · Usage included with Plus, Pro…» / «Provide your own API key · Pay for what you use») e Hermes
+ *   (`apps/desktop/src/app/settings/connections-registry.tsx:697-770`: prima il modo d'accesso, poi solo i suoi campi).
+ * ⛔ Pezzi esistenti, nessuna veste nuova: le carte sono le ChoiceCards della fonte di ricerca (`.talos-choice-grid`/`.talos-choice`),
+ *   la pastiglia è quella della card col suo punto. Semantica APG «Tabs», non «Radio»: le due strade possono essere ATTIVE insieme
+ *   (piano collegato E chiave salvata), quindi la carta sceglie che cosa si GUARDA, non un valore. Frecce, Home e Fine si muovono.
+ * ⛔ Sul piano ChatGPT non c'è niente da salvare: il «Salva» del piede si nasconde e «Annulla» diventa «Chiudi».
+ * ⛔ La scelta resta ferma quando la lista si ridisegna con la modale aperta (dopo l'accesso, `aggiornaProviderList` la riapre):
+ *   senza memoria, chi stava guardando la chiave si ritroverebbe sul piano.
+ */
+const SCELTA_ACCESSO=new Map();
+function montaSceltaAccesso({row,telaio,corpo,avviso,dialogo,annulla,primaria}){
+ const stato=row.chatgpt||{};
+ const sezione=corpo.querySelector('[data-chatgpt]');
+ const doveStavaSezione=sezione?{genitore:sezione.parentElement,dopo:sezione.nextSibling}:null;
+ const pannelli={chatgpt:el('div','talos-provider__metodo'),chiave:el('div','talos-provider__metodo')};
+ const griglia=el('div','talos-choice-grid talos-provider__metodi');griglia.setAttribute('role','tablist');
+ griglia.setAttribute('aria-label',t('modelli.provider.methodsLabel'));
+ const voci=[
+  {id:'chatgpt',titolo:t('modelli.provider.methodChatgpt'),frase:t('modelli.provider.methodChatgptNote'),
+   stato:!stato.collegato?t('modelli.provider.methodNotConnected'):stato.pianoAbilitato?t('modelli.provider.methodConnected'):t('modelli.provider.methodPlanOff'),
+   tono:!stato.collegato?null:stato.pianoAbilitato?'success':'warning'},
+  {id:'chiave',titolo:t('modelli.provider.methodKey'),frase:t('modelli.provider.methodKeyNote'),
+   stato:row.keyConfigured?t('modelli.provider.methodKeySaved'):t('modelli.provider.methodNoKey'),tono:row.keyConfigured?'success':null},
+ ];
+ const schede=[];
+ const scegli=(id,{fuoco=false}={})=>{
+  SCELTA_ACCESSO.set(row.id,id);
+  for(const s of schede){const su=s.dataset.metodo===id;s.setAttribute('aria-selected',String(su));s.setAttribute('aria-checked',String(su));s.tabIndex=su?0:-1;if(su&&fuoco)s.focus();}
+  for(const [k,p] of Object.entries(pannelli))p.hidden=k!==id;
+  if(primaria)primaria.hidden=id==='chatgpt';
+  annulla.textContent=id==='chatgpt'?t('modelli.provider.close'):t('modelli.provider.cancel');
+ };
+ for(const v of voci){
+  const scheda=el('button','talos-choice');scheda.type='button';scheda.setAttribute('role','tab');scheda.dataset.metodo=v.id;
+  scheda.id=`metodo-${row.id}-${v.id}`;pannelli[v.id].id=`pannello-${row.id}-${v.id}`;
+  scheda.setAttribute('aria-controls',pannelli[v.id].id);pannelli[v.id].setAttribute('role','tabpanel');pannelli[v.id].setAttribute('aria-labelledby',scheda.id);
+  const pastiglia=el('span','talos-badge talos-badge--sm'+(v.tono?' talos-badge--'+v.tono:''));pastiglia.dataset.metodoStato='';
+  const punto=el('span','talos-dot'+(v.tono?' talos-dot--'+v.tono:''));punto.setAttribute('aria-hidden','true');vesti(punto,VESTITO.punto);
+  pastiglia.append(punto,el('span','',v.stato));vesti(pastiglia,VESTITO.pastiglia);
+  scheda.append(el('span','talos-choice__title',v.titolo),el('span','talos-choice__corpo',v.frase),pastiglia);
+  scheda.addEventListener('click',()=>scegli(v.id));
+  schede.push(scheda);griglia.append(scheda);
+ }
+ griglia.addEventListener('keydown',(e)=>{
+  const i=schede.indexOf(e.target);if(i<0)return;
+  const prossima={ArrowRight:i+1,ArrowDown:i+1,ArrowLeft:i-1,ArrowUp:i-1,Home:0,End:schede.length-1}[e.key];
+  if(prossima===undefined)return;
+  e.preventDefault();scegli(schede[(prossima+schede.length)%schede.length].dataset.metodo,{fuoco:true});
+ });
+ if(sezione)pannelli.chatgpt.append(sezione);
+ pannelli.chiave.append(avviso,corpo);
+ telaio.append(griglia,pannelli.chatgpt,pannelli.chiave);
+ scegli(SCELTA_ACCESSO.get(row.id)??(stato.collegato?'chatgpt':row.keyConfigured?'chiave':'chatgpt'));
+ /* Il blocco del piano torna nel corpo quando la modale si chiude (l'ascoltatore di `apriConfigurazioneProvider`, registrato
+    prima, ha già riportato il corpo nella card). */
+ dialogo.addEventListener('close',()=>{
+  if(sezione&&doveStavaSezione?.genitore)doveStavaSezione.genitore.insertBefore(sezione,doveStavaSezione.dopo?.isConnected&&doveStavaSezione.dopo.parentElement===doveStavaSezione.genitore?doveStavaSezione.dopo:null);
+ });
+}
 function apriConfigurazioneProvider(card,row,{onSalvaConfigurazione=null,onConfigurazioneSalvata=null}={}){
  if(!card||card.querySelector(':scope > .talos-provider__modale'))return null;
  const doc=card.ownerDocument||globalThis.document;
@@ -486,7 +552,8 @@ function apriConfigurazioneProvider(card,row,{onSalvaConfigurazione=null,onConfi
   *   è dichiarata: il pannello la tiene in testa alla lista perché con 28 card la frase in fondo
   *   sarebbe a una schermata e mezza da chi la cerca (vedi `curaDoppiaTestata`).
   */
- {const avviso=creaAvvisoChiavi();avviso.dataset.providerModaleAvviso='';telaio.append(avviso);}
+ const avviso=creaAvvisoChiavi();avviso.dataset.providerModaleAvviso='';telaio.append(avviso);
+ let primariaModale=null; // il «Salva» del piede, se c'è: la scelta dell'accesso di OpenAI lo nasconde sul piano ChatGPT
  const piede=el('footer','talos-provider__modale-piede');vesti(piede,VESTITO.modale.piede);
  const annulla=el('button','talos-button talos-button--secondary',t('modelli.provider.cancel'));annulla.type='button';annulla.dataset.providerModaleAnnulla='';
  vesti(annulla,VESTITO.modale.pulsante);
@@ -505,7 +572,7 @@ function apriConfigurazioneProvider(card,row,{onSalvaConfigurazione=null,onConfi
  const configurazionePropria=row.id==='esterno'||CLOUD_CONFIGURABILI.has(row.id);
  if(salvaRuntime||campoChiave){
   const primaria=el('button','talos-button talos-button--primary talos-button--sm',t('modelli.provider.save'));
-  primaria.type='button';primaria.dataset.providerModaleSalva='';
+  primaria.type='button';primaria.dataset.providerModaleSalva='';primariaModale=primaria;
   vesti(primaria,VESTITO.modale.pulsante);
   /* I doppioni spariscono finché la modale è aperta, e tornano alla chiusura (la card in linea li usa ancora): il pulsante
      interno che salvava la sola chiave, il «⋯» la cui unica voce è «Salva collegamento», e la riga che resta senza niente. */
@@ -597,7 +664,8 @@ function apriConfigurazioneProvider(card,row,{onSalvaConfigurazione=null,onConfi
    */
   if(configura?.isConnected)configura.focus({preventScroll:true});
  });
- telaio.append(corpo);
+ if(row.id==='openai'&&row.chatgpt)montaSceltaAccesso({row,telaio,corpo,avviso,dialogo,annulla,primaria:primariaModale});
+ else telaio.append(corpo);
  /* Il corpo, dentro la modale, perde il suo padding e il suo filetto: quelli sono della card
     aperta in linea, e qui li porta il telaio (`2px 26px 24px`, dal mockup). */
  corpo.hidden=false;
@@ -614,7 +682,7 @@ function apriConfigurazioneProvider(card,row,{onSalvaConfigurazione=null,onConfi
   * 19/09/2026). E si mette A MANO, come fa il prodotto nel cercatore delle Impostazioni, perché
   * `autofocus` non è affidabile su tutti i browser desktop.
   */
- const primo=telaio.querySelector('input:not([type=hidden]),textarea,select,button')||annulla;
+ const primo=telaio.querySelector('[role="tab"][aria-selected="true"]')||telaio.querySelector('input:not([type=hidden]),textarea,select,button')||annulla;
  primo.focus?.({preventScroll:true});
  return dialogo;
 }
@@ -835,6 +903,65 @@ function aggiungiCampiCloud(body,row){
 }
 // P-K — fine
 
+/*
+ * 11/10/2026 — «Continue with ChatGPT» DENTRO la scheda OpenAI (owner: «ChatGPT è OpenAI… un'unica modale, come OAuth e chiave
+ *   di OpenRouter»). Stessi pezzi dell'accesso di OpenRouter (`talos-provider__accesso`: pulsante e nota sulla stessa riga). Le
+ *   due strade di pagamento restano due: il piano qui, la chiave nel suo campo. `stato` arriva da `GET /api/v1/auth/chatgpt/stato`.
+ * ⛔ Testi dalle linee guida di OpenAI (developers.openai.com/siwc/ui-ux-guidelines): «Continue with ChatGPT», «Using ChatGPT
+ *   plan», «Manage usage» → chatgpt.com/settings/usage. Scollegare è un'azione rara e distruttiva: sta nel menu «⋯».
+ */
+/*
+ * 11/10/2026 — IL CONTEGGIO NOSTRO (decisione owner: «Link + conteggio nostro, barra con Codex dopo»). Il servizio non dice né quanto
+ *   resta né quando il limite si azzera su questa strada (PIANO-OAUTH §10-§11): si mostra SOLO ciò che questo TALOS ha mandato col
+ *   piano, nelle due finestre con cui Codex ragiona (5 ore e 7 giorni), e la nota dice che cosa il numero NON è. I numeri veri di
+ *   OpenAI restano dietro «Manage usage», il pulsante subito sotto.
+ * ⛔ Le righe sono i `talos-kv` della card (etichetta a sinistra, valore a destra): nessuna veste nuova. Zero richieste si legge
+ *   «Nessuna richiesta», mai «0 token»; un conteggio di forma sbagliata non diventa un numero a schermo (niente blocco).
+ */
+export function bloccoUsoDelPiano(uso){
+ const finestre=[['cinqueOre','modelli.provider.chatgptUsageLast5h'],['setteGiorni','modelli.provider.chatgptUsageLast7d']];
+ const intero=(v)=>Number.isInteger(v)&&v>=0;
+ if(!uso||!finestre.every(([k])=>intero(uso[k]?.richieste)&&intero(uso[k]?.token)&&intero(uso[k]?.senzaMisura)))return null;
+ const blocco=el('div','talos-provider__piano-uso');blocco.dataset.chatgptUso='';
+ for(const [k,etichetta] of finestre){
+  const v=uso[k];
+  const quanto=v.richieste===0?t('modelli.provider.chatgptUsageNone')
+   :tn('modelli.provider.chatgptUsageValueOne','modelli.provider.chatgptUsageValueMany',v.richieste,{n:new Intl.NumberFormat(linguaCorrenteDiT()).format(v.richieste),tokens:compatto(v.token)});
+  const valore=v.richieste>0&&v.senzaMisura>0?t('modelli.provider.chatgptUsageUnmeasured',{value:quanto,n:v.senzaMisura}):quanto;
+  const r=el('div','talos-kv');r.dataset.c='KeyValue';r.append(el('span','talos-kv__k',t(etichetta)),el('span','talos-kv__v',valore));blocco.append(r);
+ }
+ const nota=el('p','talos-muted',t('modelli.provider.chatgptUsageNote'));nota.dataset.chatgptUsoNota='';blocco.append(nota);
+ return blocco;
+}
+function sezionePianoChatgpt(stato={},{onMenu=null}={}){
+ /* Mockup approvato dall'owner l'11/10/2026 (pannello «ChatGPT plan» della modale): pulsante e nota IMPILATI, non affiancati; da
+    collegato prima CHI (l'email, in evidenza), poi chi paga, poi le azioni in una riga. */
+ const riga=el('div','talos-provider__piano');riga.dataset.chatgpt=stato.collegato?(stato.pianoAbilitato?'piano':'senza-piano'):'scollegato';
+ if(!stato.collegato){
+  const entra=button('chatgpt-start',t('modelli.provider.chatgptContinue'),'primary');entra.classList.add('talos-provider__accedi');
+  if(stato.accessoInCorso)entra.disabled=true;
+  riga.append(entra,el('p','talos-muted',t('modelli.provider.chatgptNote')));return riga;
+ }
+ const chi=el('div','talos-provider__piano-chi');
+ chi.append(el('strong','',stato.email||t('modelli.provider.chatgptUsingNoEmail')),
+  el('p','talos-muted',stato.pianoAbilitato?t('modelli.provider.chatgptPaidBy'):t('modelli.provider.chatgptPlanOff')));
+ riga.append(chi);
+ {const uso=bloccoUsoDelPiano(stato.usoTalos);if(uso)riga.append(uso);}
+ const azioni=el('div','talos-cluster');azioni.style.alignItems='center';
+ if(!stato.pianoAbilitato){const abilita=button('chatgpt-enable',t('modelli.provider.chatgptEnable'),'primary');abilita.classList.add('talos-provider__accedi');azioni.append(abilita);}
+ azioni.append(button('chatgpt-usage',t('modelli.provider.chatgptUsage'),'secondary'));
+ const esci=button('chatgpt-signout',t('modelli.provider.chatgptDisconnect'),'ghost');
+ if(typeof onMenu==='function'){
+  esci.hidden=true;
+  const menu=el('button','talos-button talos-button--secondary talos-button--sm talos-provider__piano-menu','⋯');menu.type='button';
+  menu.setAttribute('aria-label',t('modelli.provider.chatgptActions'));menu.setAttribute('aria-haspopup','menu');
+  menu.addEventListener('click',()=>onMenu([{chiave:'scollega-chatgpt',etichetta:t('modelli.provider.chatgptDisconnect'),pericolo:true,aziona:()=>esci.click()}],{ancora:menu}));
+  azioni.append(menu);
+ }
+ azioni.append(esci);riga.append(azioni);
+ return riga;
+}
+
 export function creaProviderCard(row,{aperta=false,prova=null,occupato=false,onMenu=null,onAzionePool=null,onSalvaConfigurazione=null,onConfigurazioneSalvata=null}={}){
  const esterno=row.id==='esterno',configurazionePropria=esterno||CLOUD_CONFIGURABILI.has(row.id);
  /*
@@ -983,6 +1110,7 @@ export function creaProviderCard(row,{aperta=false,prova=null,occupato=false,onM
   body.append(elenco);
  }
  const campoChiave=campo(poolCollegato?t('modelli.provider.addKey'):row.keyConfigured?t('modelli.provider.replaceKey'):row.requiresKey?t('modelli.provider.accessKey'):t('modelli.provider.optionalAccessKey'),'password','providerKey',row);
+ if(row.id==='openai'&&row.chatgpt)body.append(sezionePianoChatgpt(row.chatgpt,{onMenu})); // 11/10/2026: il piano ChatGPT, sopra la chiave
  if(conAccesso){
   const accedi=button('oauth-start',row.origineChiave==='accesso'?t('modelli.provider.signInAgain'):t('modelli.provider.signInWith', { name: nomeDelFornitore(row) }),'primary');
   accedi.classList.add('talos-provider__accedi');

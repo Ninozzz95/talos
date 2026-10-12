@@ -6,6 +6,40 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
 
 ## Unreleased
 
+## desktop-v0.1.29 — 2026-10-12
+
+A regular release: installs of 0.1.21 and later receive it automatically. It brings your ChatGPT plan into TALOS.
+
+### Added
+- «Continue with ChatGPT»: sign in with your ChatGPT account in Providers → OpenAI → Configure, next to the API key, and the
+  models of your ChatGPT plan appear in the model selector. Requests on those models use your plan instead of a key. The
+  sign-in happens in your browser; the tokens stay in the system keyring and are renewed by themselves.
+- When a plan model is in use, a small «ChatGPT plan» badge sits in the composer. Click it to see who is signed in, the usage
+  TALOS counted in the last 5 hours and 7 days, and «Manage usage», which opens your ChatGPT usage settings.
+- At the plan usage limit the turn waits and continues on its own, with a card that says so and «Manage usage» as its first
+  action.
+- The model can tell you whether ChatGPT is connected and, after your confirmation in the chat, disconnect it.
+- Links in the model's answers can be clicked: TALOS shows the full site and asks before opening it in your browser, with
+  «Trust this site» for the ones you open often.
+- Updates download only the parts of the installer that changed, instead of the whole installer.
+
+### Changed
+- The «Send N» counter left the composer: how many requests this send has used, against its limit, is now the first row of
+  the turn index in the Context tab, and it turns amber near the limit.
+- The fallback providers («if it does not respond, continue with…») are gone. A chat stays on the model you chose; old
+  sessions that had fallbacks open and continue without them.
+
+### Fixed
+- In the new-session dialog the «Show reasoning» switch no longer spills out of its row, and the sentence under the button is
+  shown once.
+- After disconnecting ChatGPT from the chat, the turn ends with a clear card instead of an untranslated error, and the badge
+  leaves the composer.
+- With a native provider (OpenAI, Anthropic and Anthropic-compatible ones) a rate limit or an error before the first word now
+  arrives with its real status and «Retry-After», so TALOS waits the time the provider asks.
+- A command that names a secret file through a Windows path (`type .\.e*v`) asks for your confirmation like any other
+  spelling, while `echo *` no longer asks without a reason.
+- The installed app ships the TypeScript library the code check reads.
+
 ## desktop-v0.1.28 — 2026-10-11
 
 A regular release about updating TALOS itself: installs of 0.1.21 and later receive it automatically.

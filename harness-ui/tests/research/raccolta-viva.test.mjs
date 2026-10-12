@@ -240,7 +240,8 @@ test('⛔⛔⛔ L9, IL TETTO CHE VINCE È QUELLO DEL KERNEL — la finestra sta 
   assert.ok(rigaDiTesta.length + finestra.length < TETTO_DEL_KERNEL,
     '⛔ e ci sta DENTRO anche con la riga di testa che `naviga` mette davanti: il margine è parte del numero, non una speranza');
   assert.ok(finestra.includes('CHIUSURA'), '⛔ la coda arriva DAVVERO: è la metà che il taglio di sempre non porta mai');
-  assert.match(finestra, /Il testo intero è in fonti\/[0-9a-f]{64}\.txt/,
+  // il marcatore lo legge il MODELLO: dal 03/10/2026 è in inglese (`page-budget.mjs`), e questa prova era rimasta all'italiano
+  assert.match(finestra, /The full text is in fonti\/[0-9a-f]{64}\.txt/,
     '⛔ e il marcatore dice DOVE sta il resto, col percorso vero: «chi non ha un deposito non passa niente e il marcatore tace invece di promettere un percorso»');
   assert.ok(finestra.length > 4_000, 'resta comunque più largo dei 4.000 caratteri di oggi: si stringe per passare, non si rinuncia');
 });

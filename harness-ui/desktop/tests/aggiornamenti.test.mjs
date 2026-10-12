@@ -135,7 +135,7 @@ test('AGG-FLUSSO-01: percorso felice — release desktop, manifesto verificato, 
   assert.equal(updater.autoDownload, false, 'mai scaricare prima della verifica');
   assert.equal(updater.autoInstallOnAppQuit, false, 'mai installare prima del secondo controllo');
   const stato = await a.controlla({ manuale: true });
-  assert.deepEqual(updater.feed, { provider: 'generic', url: BASE });
+  assert.deepEqual(updater.feed, { provider: 'generic', url: BASE, useMultipleRangeRequest: false });
   assert.equal(updater.scaricati, 1);
   assert.equal(updater.autoInstallOnAppQuit, true);
   assert.equal(stato.stato, 'pronto');
@@ -298,6 +298,6 @@ test('AGG-FONTE-01: con la fonte di prova (passo 4) l aggiornatore chiede l elen
   });
   const stato = await a.controlla({ manuale: true });
   assert.equal(stato.stato, 'pronto');
-  assert.deepEqual(updater.feed, { provider: 'generic', url: `${LOCALE}/prova/talos/releases/download/desktop-v0.1.21` });
+  assert.deepEqual(updater.feed, { provider: 'generic', url: `${LOCALE}/prova/talos/releases/download/desktop-v0.1.21`, useMultipleRangeRequest: false });
   assert.ok(chiamate.every((u) => u.startsWith(LOCALE)), `nessuna chiamata fuori dalla fonte: ${chiamate.join(', ')}`);
 });

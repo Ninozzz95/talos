@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 import {
   acquireStoreOwner,
+  conSpazioAstratto,
   proveStoreOwnerLiveness,
   readStoreOwner,
   releaseStoreOwner,
@@ -180,18 +181,23 @@ if (process.argv[2] === '--owner-child') {
     const root = tempRoot('talos-sensitive-root-name-');
     const owner = await acquireStoreOwner({ workflowDataRoot: root });
     t.after(async () => { await releaseStoreOwner(owner); rimuoviCartellaDiProva(root); });
-    assert.equal(owner.endpoint.includes(root), process.platform !== 'win32' && process.platform !== 'linux');
+    // 12/10/2026: la stessa regola del sorgente (`conSpazioAstratto`): su Android questa riga diceva il falso (misura del mobile, K0)
+    assert.equal(owner.endpoint.includes(root), process.platform !== 'win32' && !conSpazioAstratto(process.platform));
     assert.match(owner.record.endpointKey, /^[0-9a-f]{40}$/u);
   });
 
   test('M091_STOREOWNER_UNIX_STALE_CLEANUP_DELETES_NONSOCKET — non-socket endpoint is never removed', {
-    skip: process.platform === 'win32' || process.platform === 'linux' ? 'filesystem Unix socket contract runs on macOS/other Unix CI' : false,
+    /* 12/10/2026: su Android la prova NON si saltava (conosceva solo `linux`): l'acquisto riusciva sullo spazio astratto, la prova
+       falliva, il proprietario restava in ascolto e la corsa intera di `node --test` non finiva più (misura del mobile, K0). Si salta
+       con la stessa regola del sorgente, e un proprietario ottenuto per sbaglio si rilascia comunque. */
+    skip: process.platform === 'win32' || conSpazioAstratto(process.platform) ? 'filesystem Unix socket contract runs on macOS/other Unix CI' : false,
   }, async (t) => {
     const root = tempRoot();
-    t.after(() => rimuoviCartellaDiProva(root));
+    let preso = null;
+    t.after(async () => { if (preso) await releaseStoreOwner(preso); rimuoviCartellaDiProva(root); });
     writeFileSync(join(root, '.store-owner.sock'), 'not a socket', 'utf8');
     await assert.rejects(
-      () => acquireStoreOwner({ workflowDataRoot: root }),
+      async () => { preso = await acquireStoreOwner({ workflowDataRoot: root }); },
       (error) => error?.code === 'WORKFLOW_STORE_OWNED' || error?.code === 'WORKFLOW_STORE_NEEDS_ATTENTION',
     );
     assert.equal(existsSync(join(root, '.store-owner.sock')), true);

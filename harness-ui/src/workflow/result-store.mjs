@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdir, open, readFile, realpath, stat, link, unlink } from 'node:fs/promises';
+import { mkdir, open, readFile, realpath, stat, unlink } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import { pubblicaUnaVolta } from './pubblica-una-volta.mjs';
 
 const SHA256 = /^sha256:([0-9a-f]{64})$/u;
 
@@ -128,11 +129,9 @@ export async function putResultBytes({ workflowDataRoot, bytes, maxBytes } = {})
     await handle.sync();
     await handle.close();
     handle = null;
-    try {
-      // A hard link publishes the already-flushed inode without an overwrite race.
-      await link(temporary, finalPath);
-    } catch (error) {
-      if (error?.code !== 'EEXIST') throw error;
+    // A hard link publishes the already-flushed inode without an overwrite race; where links are refused (Android, exFAT) the
+    // final name is created exclusively and read back (pubblica-una-volta.mjs, 11/10/2026).
+    if (await pubblicaUnaVolta({ temporary, path: finalPath, bytes: immutableBytes }) === 'esisteva') {
       await readVerified({ root, hex, maxBytes: limit });
     }
   } catch (error) {

@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto';
 import {
-  link,
   lstat,
   mkdir,
   open,
@@ -23,6 +22,7 @@ import {
 import { workflowApply, workflowReplay, workflowReplayWithHistory, workflowStateChanges, workflowStateHash } from './run.mjs';
 import { FATTI_DI_FINE_DEL_RUN, STATI_FINALI_DEL_PASSO, STATI_FINALI_DEL_RUN } from './stati-finali.mjs';
 import { acquireStoreOwner, releaseStoreOwner } from './store-owner.mjs';
+import { pubblicaUnaVolta } from './pubblica-una-volta.mjs'; // 11/10/2026: con un ripiego dove i link sono vietati (Android, exFAT)
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
@@ -213,12 +213,9 @@ async function publishCreateOnce(root, path, bytes, conflictCode) {
   const temporary = `${path}.tmp-${process.pid}-${randomUUID()}`;
   try {
     await writeTemporary(temporary, bytes);
-    try {
-      await link(temporary, path);
-    } catch (error) {
-      if (error?.code !== 'EEXIST') throw error;
+    if (await pubblicaUnaVolta({ temporary, path, bytes }) === 'esisteva') {
       const existing = await readFile(path);
-      if (!existing.equals(bytes)) throw storeError(`Immutable Workflow record already exists at ${path}`, conflictCode, error);
+      if (!existing.equals(bytes)) throw storeError(`Immutable Workflow record already exists at ${path}`, conflictCode);
     }
   } finally {
     try { await unlink(temporary); } catch {}

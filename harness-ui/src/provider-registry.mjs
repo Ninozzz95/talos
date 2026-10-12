@@ -163,6 +163,54 @@ export const REGISTRO_FORNITORI = congela({
     esecuzione: 'collegato',
   }),
 
+  /*
+   * ── ChatGPT (piano) — «Continue with ChatGPT» (D9, owner 10-11/10/2026) ─────────────────────────────
+   * Lo stesso trasporto di OpenAI (`POST /v1/responses` con Bearer), ma chi paga è il PIANO ChatGPT della persona e non una
+   * chiave: per questo è una riga a sé. A schermo vive DENTRO la scheda «OpenAI» (owner 11/10: «ChatGPT è OpenAI… un'unica
+   * modale, come OAuth e chiave di OpenRouter»); qui restano due righe perché modelli, opzioni ammesse ed errori sono diversi e
+   * la strada di pagamento non si cambia mai da soli.
+   * Fonti rilette l'11/10/2026: developers.openai.com/siwc/token-sharing-open-source/{sign-in,models-and-inference,
+   * preview-limitations,errors-and-recovery}. Provato dal vivo lo stesso giorno (PIANO-OAUTH-CHATGPT-2026-10-11.md §10).
+   * L'elenco dei modelli è quello di `GET /v1/models` dell'account (`visibility == "list"`), riletto al cambio di account.
+   * ⛔ Nessuna chiave nel portachiavi delle chiavi: i token stanno in `chatgpt-custodia.mjs`.
+   */
+  chatgpt: congela({
+    id: 'chatgpt',
+    /* Nessun modello di riserva: quali modelli ci sono lo dice l'account (`GET /v1/models`), come una distribuzione cloud la
+       dice il collegamento dell'owner. Un elenco scritto a mano mostrerebbe modelli che quel piano può non avere. */
+    modelliDiRiserva: null,
+    // Nessun modello ausiliario: titoli e riassunti non devono consumare il piano della persona senza che lo veda.
+    modelloAusiliario: null, modelsDevId: null,
+    etichetta: 'ChatGPT plan', etichettaChiave: 'server.provider.label.chatgptPlan',
+    descrizione: 'OpenAI models paid by the ChatGPT plan of the signed-in person.',
+    paginaChiavi: null,
+    wire: 'openai-responses',
+    baseUrl: 'https://api.openai.com/v1',
+    indirizzoModificabile: false,
+    envIndirizzo: congela([]),
+    auth: congela({ tipo: 'oauth-pkce', header: 'Authorization', nomeVariabile: congela([]) }),
+    chiaveObbligatoria: false,
+    formaIdModello: 'nome',
+    oauth: congela({ flusso: 'chatgpt-piano', consumi: 'https://chatgpt.com/settings/usage' }),
+    endpoint: congela({ chat: '/responses', modelli: '/models' }),
+    streaming: 'osservato',
+    toolCalling: 'osservato',
+    cache: congela({
+      marcatore: null,
+      letturaUsage: congela(['input_tokens_details.cached_tokens', 'prompt_tokens_details.cached_tokens']),
+      scritturaUsage: congela(['input_tokens_details.cache_write_tokens', 'input_tokens_details.cache_creation_tokens']),
+      inclusiNelTotale: true,
+      scontoDichiarato: null,
+    }),
+    catalogo: congela({ fonte: 'account', forma: 'chatgpt-modelli', percorso: '/models', inUI: true }),
+    prezzi: congela({ fonte: 'nessuna' }),
+    limiti: congela({ timeoutPredefinitoSecondi: 60, tempoMassimoModificabile: true }),
+    sonda: congela({ attiva: false }),
+    destinazioneChat: true,
+    credenziale: false,
+    esecuzione: 'collegato',
+  }),
+
   // ── DeepSeek — la cache che già paghiamo (vedi usage-cache.mjs) ─────────────────────────────
   deepseek: congela({
     id: 'deepseek',

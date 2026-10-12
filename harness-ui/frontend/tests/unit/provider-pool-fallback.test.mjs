@@ -9,8 +9,11 @@ test('PH-UI-01 stato umano, scadenza dichiarata e nessuna chiave nel testo', () 
   assert.equal(testo.includes('finta-da-non-mostrare'), false);
   assert.equal(card.statoChiavePool({stato:'disponibile'}), 'Disponibile');
 });
-test('PH-UI-02 solo modelli con chiave e attrezzi dichiarati', () => {
-  const rows = [{ id:'deepseek', label:'DeepSeek', keyConfigured:true, modelliDiRiserva:[{id:'deepseek-chat',nome:'DeepSeek Chat',toolCalling:true},{id:'ignoto',nome:'Ignoto'}] }, { id:'zai',keyConfigured:false,modelliDiRiserva:[{id:'glm',toolCalling:true}] }];
-  assert.deepEqual(fonti.opzioniFallback(rows, {usaAttrezzi:true}).map(x=>x.model), ['deepseek-chat']);
-  assert.equal(fonti.opzioniFallback(rows, {usaAttrezzi:false}).length, 2);
+/* 11/10/2026 (owner, «inutile»): la scelta delle riserve («se non risponde, continua con…») è tolta dall'interfaccia. */
+test('PH-UI-02 la scelta delle riserve non c è più: né il componente né il suo posto nel selettore e nella nuova sessione', async () => {
+  assert.equal('creaSceltaFallback' in fonti, false);
+  assert.equal('opzioniFallback' in fonti, false);
+  const { readFileSync } = await import('node:fs');
+  const app = readFileSync(new URL('../../src/legacy/app.js', import.meta.url), 'utf8');
+  assert.equal(/montaFallbackIn\(|fallbackProviders/u.test(app), false);
 });

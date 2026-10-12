@@ -88,3 +88,27 @@ test('RETRY06-UI-INCERTO-SCHEMA: senza canale, con stato o col primo tentativo f
   }
   assert.ok(riduciRetry(s, wait({ ...base, httpStatus: null }, 2)).retry, 'null = assente: i journal pre-R1 restano leggibili in replay');
 });
+
+test('RETRY-PIANO (11/10/2026): the ChatGPT plan usage limit says when it continues by itself, in both languages; other reasons on a 429 stay out', () => {
+  const s = riduciRetry(null, start);
+  const alle = new Date(2026, 9, 11, 14, 30).getTime();
+  const piano = riduciRetry(s, wait({ httpStatus: 429, motivo: 'limite-del-piano', retryAt: alle, attesaMs: 1_800_000, tentativo: 2, tentativiMassimi: 11 })).retry;
+  assert.equal(piano?.motivo, 'limite-del-piano');
+  const en = testoRetry(piano, alle - 1_800_000, true);
+  // the words of OpenAI's guidelines (siwc/ui-ux-guidelines, read 11/10/2026), then when it continues by itself
+  assert.equal(en.titolo, 'Usage limit reached');
+  assert.match(en.motivo, /^Review your plan or this app’s limit in ChatGPT settings\. Continuing automatically at 14:30 \(attempt 1 of 10\)\.$/u);
+  assert.deepEqual(en.azione, { testo: 'Manage usage', indirizzo: 'https://chatgpt.com/settings/usage' }, '«Make Manage usage the primary action»');
+  assert.equal(en.tempo, 'Press Stop to stop waiting');
+  const it = testoRetry(piano, alle - 1_800_000, false);
+  assert.equal(it.titolo, 'Limite d’uso raggiunto');
+  assert.match(it.motivo, /^Controlla il tuo piano o il limite di questa app nelle impostazioni di ChatGPT\. Riprende da solo alle 14:30 \(tentativo 1 di 10\)\.$/u);
+  assert.equal(it.azione.testo, 'Gestisci l’utilizzo');
+  // the other way round: an unknown reason on a 429, or the plan reason on another status, is not shown
+  assert.equal(riduciRetry(s, wait({ httpStatus: 429, motivo: 'inventato' })).retry, null);
+  assert.equal(riduciRetry(s, wait({ httpStatus: 503, motivo: 'limite-del-piano' })).retry, null);
+  // a plain 429 still shows the ordinary rate-limit sentence
+  const comune = testoRetry(riduciRetry(s, wait({ httpStatus: 429 })).retry, 28_100, true);
+  assert.doesNotMatch(comune.titolo, /usage limit/iu);
+  assert.equal(comune.azione, undefined, 'only the plan limit offers «Manage usage»');
+});

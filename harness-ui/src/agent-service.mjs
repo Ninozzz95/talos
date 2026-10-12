@@ -1186,6 +1186,7 @@ export async function avviaSessione({
         modello: evento.modello, tentativo: evento.tentativo, tentativiMassimi: evento.tentativiMassimi,
         httpStatus: evento.httpStatus, attesaMs: evento.attesaMs, retryAt: evento.retryAt,
         ...(evento.httpStatus === 402 && evento.motivo === 'budget-occupato' ? { motivo: evento.motivo } : {}),
+        ...(evento.httpStatus === 429 && evento.motivo === 'limite-del-piano' ? { motivo: evento.motivo } : {}), // 11/10/2026: il piano ChatGPT
         /* R1 della review avversariale BUG-16: il canale «esito incerto» non ha uno HTTP status da
            mostrare, ma porta il suo canale e il suo motivo onesto — senza questi la validazione del
            frontend buttava l'evento e l'attesa restava muta (fino a ~4 minuti senza banner). */

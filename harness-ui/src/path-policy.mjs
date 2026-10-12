@@ -414,14 +414,21 @@ function espansione(t, i) {
  * Una graffa `{a,b}` e un gruppo extglob `@(a|b)` restano UNA parola. Ogni parola porta `chiamata`: subito dopo c'è `(` e finisce con una lettera, come
  * `s.key()` (un metodo, non un file: ticket C-005). Dichiarato: non è un parser di shell; i corpi di heredoc si tolgono prima.
  */
-function paroleDellaShell(testo) {
+function paroleDellaShell(testo, { barraDiWindows = false } = {}) {
   const t = String(testo ?? '');
   const parole = [];
   let corrente = '';
   let graffe = 0;
   let tonde = 0;
+  /* F-P-004c (12/10/2026): ogni parola porta anche il COMANDO del suo segmento (la prima parola dopo `;`, `&`, `|`, `(`, `)` o a capo),
+     così chi la giudica sa se quel comando legge i file o stampa soltanto i suoi argomenti. */
+  let comando = null;
   const chiudi = (separatore) => {
-    if (corrente !== '') parole.push({ testo: corrente, chiamata: separatore === '(' && /[A-Za-z0-9_]$/u.test(corrente) });
+    if (corrente !== '') {
+      if (comando === null) comando = corrente;
+      parole.push({ testo: corrente, chiamata: separatore === '(' && /[A-Za-z0-9_]$/u.test(corrente), comando });
+    }
+    if (/[;&|()\n]/u.test(separatore)) comando = null;
     corrente = ''; graffe = 0; tonde = 0;
   };
   for (let i = 0; i < t.length; i += 1) {
@@ -433,6 +440,8 @@ function paroleDellaShell(testo) {
       continue;
     }
     if (c === '(' && /[@?*+!]$/u.test(corrente)) { tonde = 1; corrente += c; continue; }
+    /* F-P-004 (12/10/2026): nella lettura di cmd e PowerShell `\` è il separatore delle cartelle, non un escape. */
+    if (c === '\\' && barraDiWindows) { corrente += '/'; continue; }
     if (c === '\\') {
       const n = t[i + 1];
       if (n === undefined) continue;
@@ -744,6 +753,13 @@ function sostituzioniDiComando(t) {
   return dentro;
 }
 
+/** I comandi che stampano soltanto i loro argomenti, in bash, cmd e PowerShell (F-P-004c). */
+const SOLO_STAMPA = new Set(['echo', 'printf', 'write-output', 'write-host']);
+/** `C:\\x\\Echo.EXE` → `echo`: il nome del comando senza cartella, estensione e maiuscole. */
+function nomeDelComando(comando) {
+  return String(comando ?? '').split(/[\\/]/u).pop().toLowerCase().replace(/\.(?:exe|cmd|bat|com)$/u, '');
+}
+
 /** Il passo delle parole della shell: stessa risposta di `nominaUnSegreto`, o null. */
 function nominaUnSegretoPerGlob(testo, { home, cartella, elenca, puntiNascosti, orologio, bilancio: ereditato, profondita = 0 }) {
   const bilancio = ereditato ?? { cartelle: 0, nomi: 0, cache: new Map(), orologio, scadenza: orologio() + TETTI_GLOB_SEGRETI.millisecondi };
@@ -755,7 +771,15 @@ function nominaUnSegretoPerGlob(testo, { home, cartella, elenca, puntiNascosti, 
   }
   /* il jolly non si mostra a una persona: al suo posto `…` */
   const prudente = (parola) => ({ classe: 'segreto', percorso: parola.split(JOLLY).join('…') });
-  for (const { testo: parola, chiamata } of paroleDellaShell(senzaCorpiDiHeredoc(testo))) {
+  /*
+   * F-P-004 (S1, stress test della CLI 0.5.5, 12/10/2026): `type .\.e*v` e `type keys\id_*` leggevano i segreti, perché la sola lettura di bash
+   * fa di `\` un escape (`..e*v`, `keysid_*`), mentre cmd e PowerShell lo usano come separatore. Lo stesso testo si legge nelle DUE grammatiche
+   * e basta che una nomini un segreto. La seconda lettura si aggiunge solo se il testo ha una `\` (altrimenti è identica).
+   */
+  const senzaHeredoc = senzaCorpiDiHeredoc(testo);
+  const letture = paroleDellaShell(senzaHeredoc);
+  if (senzaHeredoc.includes('\\')) letture.push(...paroleDellaShell(senzaHeredoc, { barraDiWindows: true }));
+  for (const { testo: parola, chiamata, comando } of letture) {
     if (chiamata) continue;
     /* una parola che è SOLO una sostituzione (`$FILE`, `"$X"`) può valere qualunque cosa: non si chiede per lei (dichiarato), solo per quelle che
        hanno almeno due caratteri scritti di loro (`.e${X}nv`, `${X}env`) */
@@ -769,6 +793,10 @@ function nominaUnSegretoPerGlob(testo, { home, cartella, elenca, puntiNascosti, 
         if (classe) return { classe, percorso: p };
         continue;
       }
+      /* F-P-004c (S3, stress test della CLI 0.5.5, 12/10/2026): `echo import * from fs` era rifiutato perché il `*` nudo si espandeva su
+         `.env`. Un comando che STAMPA soltanto i suoi argomenti (al più i NOMI dei file, mai il contenuto) non legge niente: per lui i jolly
+         non si espandono. Un nome scritto per intero (`echo x > .env`) e i comandi dentro `$(..)` restano giudicati come prima. */
+      if (SOLO_STAMPA.has(nomeDelComando(comando))) continue;
       const trovati = candidatiDelGlob(p, { home, cartella, elenca, puntiNascosti, bilancio });
       for (const candidato of trovati.candidati) {
         const classe = classeDelPezzo(candidato, home);

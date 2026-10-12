@@ -1,4 +1,4 @@
-import { filoRagionamentoDiretti, livelliRagionamentoDiretti, validaFallbackProviders } from './model-destination.mjs';
+import { filoRagionamentoDiretti, livelliRagionamentoDiretti } from './model-destination.mjs';
 import { filoRagionamentoCatalogo } from './runtime-owner-adapter.mjs'; // A9 seguito OpenRouter (09/10/2026): il filo delle voci del catalogo, dal clamp vero
 import { creaCampionatoreRisorse } from './risorse-processi.mjs'; // C1 (10/10/2026): CPU e memoria dei comandi vivi
 import { pipeline } from 'node:stream/promises';
@@ -45,6 +45,8 @@ import { createSseSession } from './http-lifecycle.mjs';
 import { creaReplayCoalescente } from './sse-replay-coalescente.mjs'; // 11/09: il replay di una sessione lunga non si rigioca token per token — vedi la rotta /events
 import { iconaDelDominio } from './favicon-proxy.mjs'; // 10/09: le favicon delle fonti, prese dal server e mai dal browser
 import { creaRegistroAttese, ritornoDaHost, scambiaCodicePerChiave } from './openrouter-oauth.mjs'; // PO-01 10/9: i conti dell'accesso a OpenRouter, puri e provabili senza rete
+import { intestazioniDellaPagina, paginaDiRitorno } from './pagina-ritorno-accesso.mjs';
+import { PREFISSO_ROTTE as PREFISSO_ROTTE_CHATGPT, creaRotteChatgpt, ragionamentoDelPiano } from './chatgpt-rotte.mjs'; // 11/10/2026: «Continue with ChatGPT» // 11/10/2026: la pagina comune del ritorno dagli accessi
 import { slugDelFornitore } from './openrouter-fornitori.mjs'; // decisione 14 (08/10/2026): dal nome del fornitore a valle allo slug
 import { fileURLToPath } from 'node:url'; // 11/09: i tre magazzini GLOBALI stanno accanto a server.mjs, come li trova session-registry.mjs
 /*
@@ -330,6 +332,12 @@ const API_ERROR_CODES = new Set([
    */
   'OAUTH_NON_CONFIGURATO', 'OAUTH_ATTESA_IGNOTA', 'OAUTH_CODICE_MANCANTE',
   'OAUTH_SCAMBIO_RIFIUTATO', 'OAUTH_RETE', 'OAUTH_RISPOSTA_INATTESA', 'OAUTH_CUSTODIA_FALLITA',
+  /* 11/10/2026 — «Continue with ChatGPT» (`chatgpt-accesso.mjs`, `chatgpt-rotte.mjs`, `chatgpt-richiesta.mjs`): i codici dell'accesso e
+     quelli del piano durante un giro (limite d'uso, piano non ammesso, richiesta non ammessa…). Ognuno ha stato e frase qui sotto. */
+  'CHATGPT_NON_DISPONIBILE', 'CHATGPT_NON_COLLEGATO', 'CHATGPT_PIANO_NON_ABILITATO', 'CHATGPT_ACCESSO_SCADUTO',
+  'CHATGPT_ACCESSO_NON_VALIDO', 'CHATGPT_RETE', 'CHATGPT_RINNOVO_FALLITO', 'CHATGPT_ELENCO_NON_LETTO',
+  'CHATGPT_RICHIESTA_NON_VALIDA', 'CHATGPT_CUSTODIA_FALLITA', 'CHATGPT_ERRORE', 'CHATGPT_LIMITE_DEL_PIANO',
+  'CHATGPT_PIANO_NON_AMMESSO', 'CHATGPT_RICHIESTA_NON_AMMESSA', 'CHATGPT_SERVIZIO_NON_DISPONIBILE',
 ]);
 
 const STATUS_BY_CODE = Object.freeze({
@@ -701,6 +709,21 @@ const STATUS_BY_CODE = Object.freeze({
   OAUTH_RISPOSTA_INATTESA: 502,
   /** 500: qui la colpa è nostra davvero — l'accesso è riuscito e non siamo riusciti a metterlo al sicuro. */
   OAUTH_CUSTODIA_FALLITA: 500,
+  CHATGPT_NON_DISPONIBILE: 503,
+  CHATGPT_NON_COLLEGATO: 409,
+  CHATGPT_PIANO_NON_ABILITATO: 409,
+  CHATGPT_ACCESSO_SCADUTO: 401,
+  CHATGPT_ACCESSO_NON_VALIDO: 401,
+  CHATGPT_RETE: 502,
+  CHATGPT_RINNOVO_FALLITO: 502,
+  CHATGPT_ELENCO_NON_LETTO: 502,
+  CHATGPT_RICHIESTA_NON_VALIDA: 400,
+  CHATGPT_CUSTODIA_FALLITA: 500,
+  CHATGPT_ERRORE: 502,
+  CHATGPT_LIMITE_DEL_PIANO: 429,
+  CHATGPT_PIANO_NON_AMMESSO: 403,
+  CHATGPT_RICHIESTA_NON_AMMESSA: 400,
+  CHATGPT_SERVIZIO_NON_DISPONIBILE: 503,
 });
 
 export const MESSAGE_BY_CODE = Object.freeze({
@@ -917,6 +940,21 @@ export const MESSAGE_BY_CODE = Object.freeze({
   OAUTH_RETE: 'I could not reach OpenRouter: check the connection and try again',
   OAUTH_RISPOSTA_INATTESA: 'OpenRouter answered in a way I do not recognize: try again later',
   OAUTH_CUSTODIA_FALLITA: 'The connection succeeded but I could not store it safely: open Doctor',
+  CHATGPT_NON_DISPONIBILE: 'A ChatGPT account cannot be connected on this computer: the system keyring is not available',
+  CHATGPT_NON_COLLEGATO: 'No ChatGPT account is connected: use “Continue with ChatGPT” in Providers',
+  CHATGPT_PIANO_NON_ABILITATO: 'You are signed in, but using your ChatGPT plan in TALOS is not enabled: enable it from Providers, or use an API key',
+  CHATGPT_ACCESSO_SCADUTO: 'The ChatGPT sign-in has expired: sign in again with “Continue with ChatGPT”',
+  CHATGPT_ACCESSO_NON_VALIDO: 'OpenAI did not accept this ChatGPT connection: check the account, then sign in again',
+  CHATGPT_RETE: 'I could not reach OpenAI: check the connection and try again',
+  CHATGPT_RINNOVO_FALLITO: 'The ChatGPT sign-in could not be renewed right now: try again shortly',
+  CHATGPT_ELENCO_NON_LETTO: 'I could not read the models of your ChatGPT plan: try again shortly',
+  CHATGPT_RICHIESTA_NON_VALIDA: 'The ChatGPT sign-in request is not valid',
+  CHATGPT_CUSTODIA_FALLITA: 'The ChatGPT sign-in worked, but the credentials could not be stored safely: open Doctor',
+  CHATGPT_ERRORE: 'The request to the ChatGPT plan did not complete',
+  CHATGPT_LIMITE_DEL_PIANO: 'The usage limit of your ChatGPT plan was reached: check ChatGPT Settings → Usage',
+  CHATGPT_PIANO_NON_AMMESSO: 'Using a ChatGPT plan in other apps is not available for this account: ChatGPT Plus or Pro is required',
+  CHATGPT_RICHIESTA_NON_AMMESSA: 'This request uses something the ChatGPT plan does not support',
+  CHATGPT_SERVIZIO_NON_DISPONIBILE: 'ChatGPT plan usage is temporarily unavailable: try again shortly',
   RUNTIME_NOT_AVAILABLE: 'Local runtime not available',
   RUNTIME_UNREACHABLE: 'Local runtime unreachable',
   RUNTIME_OPERATION_UNSUPPORTED: 'Runtime operation not supported',
@@ -1354,13 +1392,15 @@ const PAGINA_RITORNO_OPENROUTER = Object.freeze({
     titoloKo: 'I could not connect the account',
     titoloOk: 'Account connected',
     chiudiEriprova: 'You can close this tab and try again from TALOS.',
-    ok: 'Your OpenRouter account is connected to TALOS. You can close this tab and go back to the app.',
+    okFrase: 'Your OpenRouter account is connected to TALOS.',
+    okPoi: 'You can close this tab and go back to the app.',
   }),
   it: Object.freeze({
     titoloKo: 'Non sono riuscito a collegare l’account',
     titoloOk: 'Account collegato',
     chiudiEriprova: 'Puoi chiudere questa scheda e riprovare da TALOS.',
-    ok: 'Il tuo account OpenRouter è collegato a TALOS. Puoi chiudere questa scheda e tornare all’app.',
+    okFrase: 'Il tuo account OpenRouter è collegato a TALOS.',
+    okPoi: 'Puoi chiudere questa scheda e tornare all’app.',
   }),
 });
 export const GUASTI_RITORNO_OPENROUTER_IT = Object.freeze({
@@ -1391,30 +1431,16 @@ function paginaRitornoOpenRouter(req, res, method, problema) {
   const testi = PAGINA_RITORNO_OPENROUTER[lingua];
   const titolo = problema ? testi.titoloKo : testi.titoloOk;
   const motivo = problema ? ((lingua === 'it' ? GUASTI_RITORNO_OPENROUTER_IT[problema.codice] : null) ?? problema.messaggio) : null;
-  const frase = problema
-    /* ⛔ Le frasi di MESSAGE_BY_CODE non finiscono con un punto (sono etichette): aggiungerlo qui
-       evita la riga sgrammaticata che si legge a schermo, «ricomincia da «Accedi con OpenRouter» Puoi…». */
-    ? `${/[.!?]$/u.test(motivo) ? motivo : `${motivo}.`} ${testi.chiudiEriprova}`
-    : testi.ok;
-  const html = `<!doctype html><html lang="${lingua}"><head><meta charset="utf-8">`
-    + '<meta name="viewport" content="width=device-width, initial-scale=1">'
-    + `<title>${titolo}</title>`
-    + `<style nonce="${nonce}">`
-    + ':root{color-scheme:light dark}'
-    + 'body{margin:0;min-height:100vh;display:grid;place-items:center;'
-    + 'font:16px/1.55 system-ui,-apple-system,sans-serif;background:#0f1115;color:#e8eaed}'
-    + '@media (prefers-color-scheme: light){body{background:#f6f7f9;color:#1b1d21}}'
-    + 'main{max-width:34rem;padding:2.5rem 1.5rem;text-align:center}'
-    + 'h1{font-size:1.4rem;margin:0 0 .75rem;font-weight:650}'
-    + 'p{margin:0;opacity:.82}'
-    + '</style></head><body><main>'
-    + `<h1>${titolo}</h1><p>${frase}</p>`
-    + '</main></body></html>';
-  send(res, problema ? 400 : 200, 'text/html; charset=utf-8', html, method, {
-    'Content-Security-Policy': `default-src 'none'; style-src 'nonce-${nonce}'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`,
-    'Content-Language': lingua,
-    Vary: 'Accept-Language',
+  // ⛔ Le frasi di MESSAGE_BY_CODE non finiscono con un punto (sono etichette): lo aggiunge la riga del motivo, qui sotto.
+  /* 11/10/2026, owner «sistema il logo e la schermata di callback dell'oauth»: la pagina è quella comune degli accessi
+     (`pagina-ritorno-accesso.mjs`), col segno di TALOS e i colori del tema di serie. Il motivo di un guasto e l'invito a
+     chiudere la scheda sono due righe distinte: prima stavano nella stessa frase. */
+  const html = paginaDiRitorno({
+    lingua, esito: problema ? 'fallito' : 'riuscito', titolo, nonce,
+    frase: problema ? (/[.!?]$/u.test(motivo) ? motivo : `${motivo}.`) : testi.okFrase,
+    poi: problema ? testi.chiudiEriprova : testi.okPoi,
   });
+  send(res, problema ? 400 : 200, 'text/html; charset=utf-8', html, method, intestazioniDellaPagina({ nonce, lingua }));
 }
 
 function sendJson(res, statusCode, value, method, extraHeaders) {
@@ -2034,6 +2060,11 @@ const ROTTE_API = Object.freeze([
    *   forma corta con `?state=` resta aperta come ripiego: se un giorno la documentassero non
    *   ci sarebbe niente da cambiare, e intanto è la forma che una persona incolla a mano.
    */
+  // 11/10/2026 — «Continue with ChatGPT» (`chatgpt-rotte.mjs`): stato, inizio, annullamento e uscita. Nessuna rotta consegna un token.
+  { schema: '/api/v1/auth/chatgpt/stato', metodi: ['GET'] },
+  { schema: '/api/v1/auth/chatgpt/inizia', metodi: ['POST'] },
+  { schema: '/api/v1/auth/chatgpt/annulla', metodi: ['POST'] },
+  { schema: '/api/v1/auth/chatgpt/esci', metodi: ['POST'] },
   { schema: '/api/v1/auth/openrouter/inizia', metodi: ['POST'] },
   { schema: '/api/v1/auth/openrouter/codice', metodi: ['POST'] },
   { schema: '/api/v1/auth/openrouter/ritorno', metodi: ['GET'] },
@@ -2174,9 +2205,10 @@ function leggiCorpoJsonCon(req, limiteByte) {
  * assente o `'desktop'` è il comportamento di SEMPRE, `'mobile'` è l'unico
  * valore che cambia qualcosa (vedi session-registry.avvia).
  */
-function requireFallbackProviders(value) {
-  try { return validaFallbackProviders(value, { usaAttrezzi: true }); }
-  catch (errore) { throw Object.assign(new Error(errore?.message || 'Check the providers to continue with.'), { code: Object.hasOwn(STATUS_BY_CODE, errore?.code) ? errore.code : 'QUERY_INVALID' }); }
+/* owner 11/10/2026: la funzione delle riserve è tolta. Il campo `fallbackProviders` resta ammesso nei corpi (la CLI e i client vecchi
+   lo mandano) ma non decide più niente: non si valida e non può far rifiutare una richiesta — qualunque cosa porti, si scarta. */
+function requireFallbackProviders() {
+  return [];
 }
 
 function requireTaskIdBody(body) {
@@ -3194,6 +3226,16 @@ export function createHttpApp({
   registroOAuthOpenRouter = creaRegistroAttese(),
   fetchOpenRouterFn = globalThis.fetch,
   /*
+   * 11/10/2026 — «Continue with ChatGPT». `rotteChatgpt` = `creaRotteChatgpt(...)`, `catalogoChatgpt` = `creaCatalogoChatgpt(...)`
+   * (`chatgpt-rotte.mjs`); li costruisce `server.mjs` col portachiavi del sistema. Assenti (prove, server senza portachiavi):
+   * le rotte rispondono 503 «non disponibile» e l'elenco dei modelli del piano lo dice, invece di fingere.
+   */
+  rotteChatgpt = null,
+  catalogoChatgpt = null,
+  // 11/10/2026: il token del piano e il conteggio nostro, per le chiamate al modello che NON passano dal trasporto dei giri («Migliora prompt»)
+  leggiTokenDelPianoFn = null,
+  registraUsoDelPianoFn = null,
+  /*
    * ⭐ BC-15 — la porta di rete del prompt enhancer, SEPARATA da `fetchOpenRouterFn` e da
    * `fetchFn` per la stessa ragione già scritta trenta righe più su: una prova che finge il
    * miglioramento di un prompt non deve poter cambiare, per sbaglio, il comportamento
@@ -4086,6 +4128,18 @@ export function createHttpApp({
      *   risposta, in un errore o in un log: l'unica cosa che la persona vede è lo `stato`, che
      *   è 32 byte di caso e non significa niente.
      */
+    if (url.pathname.startsWith(PREFISSO_ROTTE_CHATGPT)) {
+      try {
+        requireNoQuery(url);
+        const corpo = method === 'POST' ? await leggiCorpoJson(req, 1024) : null;
+        const rotta = rotteChatgpt ?? creaRotteChatgpt({ accesso: null });
+        const esito = await rotta({ method, percorso: url.pathname, corpo });
+        if (esito?.dati !== undefined) { sendJson(res, esito.stato, successEnvelope(esito.dati, clock), method); return; }
+        const codice = esito?.stato === 404 ? 'NOT_FOUND' : esito?.stato === 405 ? 'METHOD_NOT_ALLOWED' : esito?.errore?.code;
+        sendJson(res, esito?.stato ?? 404, errorEnvelope(API_ERROR_CODES.has(codice) ? codice : 'INTERNAL_ERROR', clock), method, esito?.allow ? { Allow: esito.allow } : undefined);
+      } catch (error) { const normalized = normalizeError(error); sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method); }
+      return;
+    }
     if (url.pathname.startsWith('/api/v1/auth/openrouter/')) {
       const ritornoOAuth = method === 'GET' && /^\/api\/v1\/auth\/openrouter\/ritorno(?:\/([^/]+))?$/u.exec(url.pathname);
       const iniziaOAuth = method === 'POST' && url.pathname === '/api/v1/auth/openrouter/inizia';
@@ -4213,7 +4267,7 @@ export function createHttpApp({
     }
 
     const nativeModelsMatch = url.pathname.match(ROTTA_MODELLI_FORNITORE);
-    if (method === 'GET' && nativeModelsMatch && (providerProbe || localRuntimes || catalogoFornitoriFn)) {
+    if (method === 'GET' && nativeModelsMatch && (providerProbe || localRuntimes || catalogoFornitoriFn || catalogoChatgpt)) {
       const fornitoreId = nativeModelsMatch[1];
       try {
         requireNoQuery(url);
@@ -4248,6 +4302,12 @@ export function createHttpApp({
             osservatoAlle: m.observedAt ?? null,
           }));
           sendJson(res, 200, successEnvelope({ provider: fornitoreId, modelli }, clock), method);
+          return;
+        }
+        /* 11/10/2026 — i modelli del piano ChatGPT li dice l'account (`catalogo.fonte: 'account'`), col token del piano. */
+        if (record?.catalogo?.fonte === 'account') {
+          if (!catalogoChatgpt) { const errore = new Error('A ChatGPT account cannot be connected on this server.'); errore.code = 'CHATGPT_NON_DISPONIBILE'; throw errore; }
+          sendJson(res, 200, successEnvelope({ provider: fornitoreId, modelli: await catalogoChatgpt.elenca() }, clock), method);
           return;
         }
         if (catalogoFornitoriFn && record?.wire !== 'acp') { // P-L-bis: catalogo dell'agente dalla sonda locale.
@@ -7236,6 +7296,8 @@ export function createHttpApp({
             messaggi,
             providerStore,
             fetchFn: fetchMiglioraPromptFn,
+            leggiTokenDelPiano: leggiTokenDelPianoFn,
+            registraUsoDelPiano: registraUsoDelPianoFn,
           });
           contenuto = risultato.contenuto;
           modelloUsato = risultato.modelloUsato;
@@ -8112,7 +8174,13 @@ export function createHttpApp({
         /* ⛔ A9, seguito OpenRouter (09/10/2026): lo stesso per le voci del catalogo (`filoCatalogo`, per id esatto, come il clamp
            del fetch OpenRouter), runtime-owner-adapter.filoRagionamentoCatalogo(). Additivo come sopra. */
         const catalogo = await catalogoModelliFn({ forzaAggiornamento });
-        data = { ...catalogo, livelliDiretti: livelliRagionamentoDiretti(), filoDiretti: filoRagionamentoDiretti(), filoCatalogo: filoRagionamentoCatalogo(catalogo?.modelli) };
+        /* 11/10/2026 — i modelli del piano ChatGPT: livelli e filo dall'elenco VERO dell'account (`ragionamentoDelPiano`), non dal
+           registro, che per il piano non ha modelli scritti. Scollegati o elenco non letto ⇒ nessuna voce: mai livelli inventati,
+           e questa rotta risponde comunque. */
+        let piano = { livelli: {}, filo: {} };
+        if (catalogoChatgpt) { try { piano = ragionamentoDelPiano(await catalogoChatgpt.elenca()); } catch { /* niente piano adesso */ } }
+        const conPiano = (mappa, voce) => (Object.keys(voce).length ? { ...mappa, chatgpt: voce } : mappa);
+        data = { ...catalogo, livelliDiretti: conPiano(livelliRagionamentoDiretti(), piano.livelli), filoDiretti: conPiano(filoRagionamentoDiretti(), piano.filo), filoCatalogo: filoRagionamentoCatalogo(catalogo?.modelli) };
       } else if (url.pathname === '/api/v1/model-lab/capacity') {
         requireNoQuery(url);
         if (!capacitaMacchinaFn) {

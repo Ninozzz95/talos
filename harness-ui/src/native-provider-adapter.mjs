@@ -109,7 +109,9 @@ export async function nativeProviderResponse({ provider, model, apiKey, baseURL,
   // P-J — INIZIO scelta del trasporto dal registro; nessun secondo client Messages.
   const record = fornitore(provider);
   const wireAnthropic = record?.wire === 'anthropic-messages';
-  const factory = wireAnthropic ? createAnthropic : { gemini: createGoogleGenerativeAI, openai: createOpenAI }[provider];
+  // 11/10/2026: il piano ChatGPT è lo stesso SDK e lo stesso wire di OpenAI; cambia chi paga (il Bearer è il token del piano).
+  const wireResponses = record?.wire === 'openai-responses';
+  const factory = wireAnthropic ? createAnthropic : wireResponses ? createOpenAI : { gemini: createGoogleGenerativeAI }[provider];
   if (!factory || !ID_NATIVI_SDK.includes(provider)) throw new Error('Native provider not recognized.');
   if (wireAnthropic && (typeof apiKey !== 'string' || !apiKey.trim())) {
     throw Object.assign(new Error(`The key for ${record.etichetta} is missing.`), { code: 'PROVIDER_KEY_MISSING' });
@@ -117,10 +119,10 @@ export async function nativeProviderResponse({ provider, model, apiKey, baseURL,
   const credenziale = wireAnthropic && record.auth.tipo === 'bearer' ? { authToken: apiKey } : { apiKey };
   const client = factory({ ...credenziale, ...(wireAnthropic ? { baseURL: baseURL || record.baseUrl } : baseURL ? { baseURL } : {}), fetch: fetchFn });
   // P-J — FINE scelta del trasporto.
-  const languageModel = provider === 'openai' ? client.responses(model) : client.chat(model);
+  const languageModel = wireResponses ? client.responses(model) : client.chat(model);
   const tools = Object.fromEntries((body.tools ?? []).map(t => [t.function.name, { description: t.function.description, inputSchema: jsonSchema(t.function.parameters) }]));
   const effort = body.reasoning_effort ?? body.reasoning?.effort;
-  const providerOptions = provider === 'openai' ? { openai: { store: false, include: ['reasoning.encrypted_content'] } }
+  const providerOptions = wireResponses ? { openai: { store: false, include: ['reasoning.encrypted_content'] } }
     : provider === 'anthropic' ? opzioniAnthropicNative(provider, model, body) : opzioniAnthropicTerzi(provider, model, body);
   /* Con le opzioni esplicite (ragionamento adattivo + livello) il livello NON passa anche dal `reasoning` comune dell'SDK, che non conosce «max». */
   const sforzoEsplicito = provider === 'anthropic' && providerOptions.anthropic?.thinking != null;
@@ -151,7 +153,30 @@ export async function nativeProviderResponse({ provider, model, apiKey, baseURL,
   const combinedSignal = signal ? AbortSignal.any([signal, abort.signal]) : abort.signal;
   const result = streamText({ ...common, abortSignal: combinedSignal, onError: () => {} });
   const encoder = new TextEncoder();
-  const iterator = result.fullStream[Symbol.asyncIterator]();
+  /*
+   * F-H-002 (stress test della CLI 0.5.3, curato il 12/10/2026) — PRIMA DI RISPONDERE SI LEGGE IL PRIMO EVENTO. Misurato: un 429 o un
+   * 400 del fornitore (OpenAI Responses, Anthropic) diventava una risposta 200 col flusso che poi falliva, e chi chiama non vedeva né
+   * lo stato né `Retry-After` (un 400 finiva fra gli «esiti incerti»). Il filo compatibile OpenAI dà lo stato vero; ora anche questo:
+   * se il primo evento è un errore HTTP del fornitore (`APICallError`, con `statusCode`), la risposta porta QUELLO stato, le sue
+   * intestazioni e il suo corpo. Gli eventi di apertura (`start`, `start-step`) non dicono niente: si saltano (il flusso li ignorerebbe comunque).
+   */
+  const grezzo = result.fullStream[Symbol.asyncIterator]();
+  const letti = [];
+  let primo = await grezzo.next();
+  while (!primo.done && (primo.value?.type === 'start' || primo.value?.type === 'start-step')) primo = await grezzo.next();
+  const erroreIniziale = !primo.done && primo.value?.type === 'error' ? primo.value.error : null;
+  if (erroreIniziale && Number.isInteger(erroreIniziale.statusCode) && erroreIniziale.statusCode >= 400) {
+    abort.abort();
+    await grezzo.return?.();
+    const intestazioni = new Headers(erroreIniziale.responseHeaders ?? {});
+    intestazioni.delete('content-length'); intestazioni.delete('content-encoding'); intestazioni.delete('transfer-encoding');
+    if (!intestazioni.has('content-type')) intestazioni.set('content-type', 'application/json');
+    const corpo = typeof erroreIniziale.responseBody === 'string' && erroreIniziale.responseBody ? erroreIniziale.responseBody
+      : JSON.stringify({ error: { message: String(erroreIniziale.message ?? 'Provider error.') } });
+    return new Response(corpo, { status: erroreIniziale.statusCode, headers: intestazioni });
+  }
+  letti.push(primo);
+  const iterator = { next: () => (letti.length ? Promise.resolve(letti.shift()) : grezzo.next()), return: (...a) => grezzo.return?.(...a) };
   const callIndices = new Map();
   let completed = false;
   let usageDelloStep; // P-J — conserva raw senza consumare due volte il flusso SDK.

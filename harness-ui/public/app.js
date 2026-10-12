@@ -1408,6 +1408,12 @@ var init_app = __esm({
         "providers.signInOpenedShort": "Accesso aperto nel browser. Torna qui quando hai finito: la chiave arriva da sola.",
         "providers.signInFailed": "Non è stato possibile aprire l’accesso.",
         "providers.signInDone": "Accesso fatto: la chiave è nel portachiavi del computer.",
+        "providers.chatgptOpened": "Accesso a ChatGPT aperto nel browser. Torna qui quando hai finito.",
+        "providers.chatgptDone": "ChatGPT collegato: TALOS può usare il tuo piano.",
+        "providers.chatgptNotEnabled": "Accesso fatto, ma l’uso del piano non è stato concesso. Usa «Abilita l’uso del piano» per riprovare.",
+        "providers.chatgptFailed": "L’accesso a ChatGPT non è andato a buon fine. Riprova da «Continua con ChatGPT».",
+        "providers.chatgptDisconnected": "ChatGPT scollegato.",
+        "providers.chatgptDisconnectedLocal": "Scollegato qui, ma OpenAI non l’ha confermato. Puoi togliere TALOS anche dalle Impostazioni di ChatGPT.",
         "providers.keySavedKeychain": "Chiave salvata nel portachiavi del computer.",
         "providers.keyRemoved": "Chiave rimossa.",
         "providers.linkSaved": "Collegamento salvato.",
@@ -1494,8 +1500,6 @@ var init_app = __esm({
         "modelPicker.catalogUnavailable": "Catalogo OpenRouter non disponibile: {motivo}",
         "modelPicker.reasoning": "Ragionamento",
         "modelPicker.reasoningLevel": "Livello di ragionamento",
-        "modelPicker.fallbacksLoading": "Leggo i fornitori con cui continuare…",
-        "modelPicker.fallbacksUnavailable": "Le riserve non sono disponibili: riapri la scelta del modello.",
         "modelPicker.choose": "Scegli il modello",
         "modelPicker.select": "Seleziona modello",
         "modelPicker.latestVersion": "ultima versione",
@@ -2040,6 +2044,7 @@ var init_app = __esm({
         "activity.diagnosticsLabel": "Diagnostica",
         // ── riga dell’attrezzo
         "toolLine.writingPath": "Scrittura di {percorso}…",
+        "toolLine.openChatgptSignIn": "Apri l'accesso a ChatGPT",
         "toolLine.writingFile": "Scrittura file…",
         "toolLine.editingPath": "Modifica di {percorso}…",
         "toolLine.editingFile": "Modifica di un file…",
@@ -2900,6 +2905,12 @@ var init_app = __esm({
         "providers.signInOpenedShort": "Sign-in opened in the browser. Come back when you’re done: the key arrives automatically.",
         "providers.signInFailed": "Could not open the sign-in.",
         "providers.signInDone": "Signed in: the key is in your computer’s keychain.",
+        "providers.chatgptOpened": "ChatGPT sign-in opened in the browser. Come back here when you’re done.",
+        "providers.chatgptDone": "ChatGPT connected: TALOS can use your plan.",
+        "providers.chatgptNotEnabled": "Signed in, but plan use was not granted. Use “Enable plan use” to try again.",
+        "providers.chatgptFailed": "The ChatGPT sign-in did not complete. Try again from “Continue with ChatGPT”.",
+        "providers.chatgptDisconnected": "ChatGPT disconnected.",
+        "providers.chatgptDisconnectedLocal": "Disconnected here, but OpenAI did not confirm it. You can also remove TALOS in ChatGPT Settings.",
         "providers.keySavedKeychain": "Key saved in your computer’s keychain.",
         "providers.keyRemoved": "Key removed.",
         "providers.linkSaved": "Connection saved.",
@@ -2986,8 +2997,6 @@ var init_app = __esm({
         "modelPicker.catalogUnavailable": "OpenRouter catalog unavailable: {motivo}",
         "modelPicker.reasoning": "Reasoning",
         "modelPicker.reasoningLevel": "Reasoning level",
-        "modelPicker.fallbacksLoading": "Reading providers to continue with…",
-        "modelPicker.fallbacksUnavailable": "Fallbacks unavailable: reopen the model selection.",
         "modelPicker.choose": "Choose the model",
         "modelPicker.select": "Select model",
         "modelPicker.latestVersion": "latest version",
@@ -3532,6 +3541,7 @@ var init_app = __esm({
         "activity.diagnosticsLabel": "Diagnostics",
         // ── riga dell’attrezzo
         "toolLine.writingPath": "Writing {percorso}…",
+        "toolLine.openChatgptSignIn": "Open ChatGPT sign-in",
         "toolLine.writingFile": "Writing file…",
         "toolLine.editingPath": "Editing {percorso}…",
         "toolLine.editingFile": "Editing a file…",
@@ -4914,6 +4924,25 @@ var init_chat = __esm({
         "toast.serverError": "Il server ha risposto con l'errore {codice}.",
         "toast.close": "Chiudi messaggio {titolo}",
         "confirm.title": "Confermi?",
+        "link.title": "Aprire questo link?",
+        "link.goesTo": "Questo link porta a",
+        "link.trust": "Apri i link verso {site} senza chiedere",
+        "link.notSecure": "Questo indirizzo non è cifrato (http), quindi TALOS non lo apre. Puoi copiarlo e aprirlo tu.",
+        "link.open": "Apri nel browser",
+        "link.copy": "Copia link",
+        "link.copied": "Link copiato",
+        "link.settingsTitle": "Link dalla chat",
+        "link.settingsDescription": "TALOS chiede prima di aprire un link di una chat. Questi siti si aprono senza chiedere: se ne aggiunge uno dalla domanda su un link.",
+        "link.settingsEmpty": "Nessun sito si apre senza chiedere.",
+        "link.settingsRemove": "Chiedi di nuovo",
+        "link.settingsRemoveNamed": "Chiedi di nuovo prima di aprire {site}",
+        "chatgptPlan.pill": "Piano ChatGPT",
+        "chatgptPlan.using": "Stai usando il piano ChatGPT",
+        "chatgptPlan.manageUsage": "Gestisci l’utilizzo",
+        "chatgptPlan.welcomeTitle": "Stai usando il tuo piano ChatGPT",
+        "chatgptPlan.welcomeBody": "L’utilizzo idoneo in questa app usa il tuo piano ChatGPT.",
+        "chatgptPlan.welcomeManage": "{link} nelle impostazioni di ChatGPT.",
+        "chatgptPlan.gotIt": "Ho capito",
         "attachments.via.workspace.label": "File del progetto",
         "attachments.via.workspace.help": "Scegli fra i file della cartella di questa sessione",
         "attachments.via.disco.label": "File dal disco",
@@ -4965,6 +4994,12 @@ var init_chat = __esm({
         "retry.reason.withStatus": "{reason} (HTTP {status}).",
         "retry.scheduled": "Nuovo tentativo programmato",
         "retry.inProgress": "Richiesta in corso",
+        "retry.planLimit.title": "Limite d’uso raggiunto",
+        "retry.planLimit.review": "Controlla il tuo piano o il limite di questa app nelle impostazioni di ChatGPT.",
+        "retry.planLimit.manageUsage": "Gestisci l’utilizzo",
+        "retry.planLimit.continuesAt": "Riprende da solo alle {time} (tentativo {attempt} di {max}).",
+        "retry.planLimit.retrying": "Riprovo adesso con il tuo piano ChatGPT.",
+        "retry.planLimit.stopToCancel": "Premi Ferma per non aspettare",
         "retry.inSeconds": "Tra {seconds} s",
         "retry.waitingConfirmation": "In attesa di conferma del server",
         "timeline.you": "Tu",
@@ -5671,6 +5706,25 @@ var init_chat = __esm({
         "toast.serverError": "The server returned error {codice}.",
         "toast.close": "Close message {titolo}",
         "confirm.title": "Confirm?",
+        "link.title": "Open this link?",
+        "link.goesTo": "This link goes to",
+        "link.trust": "Open links to {site} without asking",
+        "link.notSecure": "This address is not encrypted (http), so TALOS does not open it. You can copy it and open it yourself.",
+        "link.open": "Open in browser",
+        "link.copy": "Copy link",
+        "link.copied": "Link copied",
+        "link.settingsTitle": "Links from chat",
+        "link.settingsDescription": "TALOS asks before opening a link from a chat. These sites open without asking: you add one from the question on a link.",
+        "link.settingsEmpty": "No site opens without asking.",
+        "link.settingsRemove": "Ask again",
+        "link.settingsRemoveNamed": "Ask again before opening {site}",
+        "chatgptPlan.pill": "ChatGPT plan",
+        "chatgptPlan.using": "Using ChatGPT plan",
+        "chatgptPlan.manageUsage": "Manage usage",
+        "chatgptPlan.welcomeTitle": "You’re using your ChatGPT plan",
+        "chatgptPlan.welcomeBody": "Eligible usage in this app uses your ChatGPT plan.",
+        "chatgptPlan.welcomeManage": "{link} in your ChatGPT settings.",
+        "chatgptPlan.gotIt": "Got it",
         "attachments.via.workspace.label": "Project files",
         "attachments.via.workspace.help": "Choose among the files of this session’s folder",
         "attachments.via.disco.label": "File from disk",
@@ -5722,6 +5776,12 @@ var init_chat = __esm({
         "retry.reason.withStatus": "{reason} (HTTP {status}).",
         "retry.scheduled": "Retry scheduled",
         "retry.inProgress": "Request in progress",
+        "retry.planLimit.title": "Usage limit reached",
+        "retry.planLimit.review": "Review your plan or this app’s limit in ChatGPT settings.",
+        "retry.planLimit.manageUsage": "Manage usage",
+        "retry.planLimit.continuesAt": "Continuing automatically at {time} (attempt {attempt} of {max}).",
+        "retry.planLimit.retrying": "Trying again with your ChatGPT plan.",
+        "retry.planLimit.stopToCancel": "Press Stop to stop waiting",
         "retry.inSeconds": "In {seconds} s",
         "retry.waitingConfirmation": "Waiting for server confirmation",
         "timeline.you": "You",
@@ -6945,6 +7005,11 @@ var init_processi = __esm({
         "inspector.compactionsNonePreview": "nessuna",
         "inspector.turnsPreviewOne": "{n} giro",
         "inspector.turnsPreviewMany": "{n} giri",
+        "inspector.thisSend": "Questo invio",
+        "inspector.thisSendOfOne": "{n} di {tetto} richiesta",
+        "inspector.thisSendOfMany": "{n} di {tetto} richieste",
+        "inspector.thisSendOne": "{n} richiesta",
+        "inspector.thisSendMany": "{n} richieste",
         "inspector.turnsPreviewMessagesOne": "{n} messaggio",
         "inspector.turnsPreviewMessagesMany": "{n} messaggi",
         "inspector.windowUndeclared": "finestra non dichiarata",
@@ -7236,6 +7301,11 @@ var init_processi = __esm({
         "inspector.compactionsNonePreview": "none",
         "inspector.turnsPreviewOne": "{n} turn",
         "inspector.turnsPreviewMany": "{n} turns",
+        "inspector.thisSend": "This send",
+        "inspector.thisSendOfOne": "{n} of {tetto} request",
+        "inspector.thisSendOfMany": "{n} of {tetto} requests",
+        "inspector.thisSendOne": "{n} request",
+        "inspector.thisSendMany": "{n} requests",
         "inspector.turnsPreviewMessagesOne": "{n} message",
         "inspector.turnsPreviewMessagesMany": "{n} messages",
         "inspector.windowUndeclared": "window not declared",
@@ -7499,14 +7569,6 @@ var init_modelli = __esm({
         "extensions.oneProjectItem": "{visible} di {n} voci del progetto",
         "extensions.manyProjectItems": "{visible} di {n} voci del progetto",
         "tools.oneToken": "{n} token",
-        "sources.fallbackHeading": "Se non risponde, continua con…",
-        "sources.fallbackProviderModel": "Fornitore e modello con cui continuare",
-        "sources.none": "Nessuno",
-        "sources.add": "Aggiungi",
-        "sources.remove": "Rimuovi",
-        "sources.fallbackUnavailable": "Scelta non disponibile: rimuovila e scegline un’altra",
-        "sources.fallbackDisconnected": "La scelta non è ancora collegata a questa sessione.",
-        "sources.fallbackHelp": "Il cambio viene annunciato in chat. La conversazione continua con i fornitori scelti, nell’ordine indicato.",
         "sources.localModels": "Locali",
         "sources.unavailable": "non disponibile",
         "sources.yes": "sì",
@@ -7518,7 +7580,6 @@ var init_modelli = __esm({
         "sources.cacheAgeUnavailable": "età non disponibile",
         "sources.catalogSaveUnavailable": "Salvataggio del catalogo non disponibile",
         "sources.modelNameUnavailable": "Nome non disponibile",
-        "sources.removeChoice": "Rimuovi {name}",
         "sources.zaiAnthropicPort": "Z.AI (porta Anthropic)",
         "sources.minimaxAnthropicPort": "MiniMax (porta Anthropic)",
         "sources.externalAgent": "Agente esterno",
@@ -7723,6 +7784,36 @@ var init_modelli = __esm({
         "provider.environmentKeyPriority": "Adesso vale la chiave impostata fuori da TALOS: finché c’è, l’accesso non viene usato.",
         "provider.signInNote": "Si apre il sito del fornitore: la password non passa da TALOS, e alla fine torna una chiave.",
         "provider.pasteKeyInstead": "Oppure incolla una chiave",
+        "provider.chatgptContinue": "Continua con ChatGPT",
+        "provider.chatgptNote": "Si apre chatgpt.com nel browser per l’accesso. La password non passa da TALOS.",
+        "provider.chatgptPaidBy": "Le richieste ai modelli del piano ChatGPT le paga il tuo abbonamento.",
+        "provider.chatgptUsageLast5h": "Ultime 5 ore",
+        "provider.chatgptUsageLast7d": "Ultimi 7 giorni",
+        "provider.chatgptUsageNone": "Nessuna richiesta",
+        "provider.chatgptUsageValueOne": "{n} richiesta, {tokens} token",
+        "provider.chatgptUsageValueMany": "{n} richieste, {tokens} token",
+        "provider.chatgptUsageUnmeasured": "{value} ({n} senza misura)",
+        "provider.chatgptUsageNote": "Contato da TALOS su questo computer. L’uso da ChatGPT o da altri programmi non è incluso: i numeri di OpenAI stanno in «Gestisci l’utilizzo».",
+        "provider.methodsLabel": "Come TALOS paga i modelli OpenAI",
+        "provider.methodChatgpt": "Piano ChatGPT",
+        "provider.methodChatgptNote": "Usa il tuo abbonamento ChatGPT Plus o Pro.",
+        "provider.methodKey": "Chiave API",
+        "provider.methodKeyNote": "Paghi quello che usi, dal tuo account della piattaforma OpenAI.",
+        "provider.methodConnected": "Collegato",
+        "provider.methodNotConnected": "Non collegato",
+        "provider.methodPlanOff": "Uso del piano spento",
+        "provider.methodKeySaved": "Chiave salvata",
+        "provider.methodNoKey": "Nessuna chiave",
+        "provider.chatgptUsing": "Stai usando il tuo piano ChatGPT come {email}.",
+        "provider.chatgptUsingNoEmail": "Stai usando il tuo piano ChatGPT.",
+        "provider.chatgptPlanOff": "Accesso a ChatGPT fatto, ma l’uso del tuo piano in TALOS non è abilitato.",
+        "provider.chatgptEnable": "Abilita l’uso del piano",
+        "provider.chatgptUsage": "Gestisci l’utilizzo",
+        "provider.chatgptDisconnect": "Scollega ChatGPT",
+        "provider.chatgptActions": "Azioni del piano ChatGPT",
+        "provider.chatgptCredential": "Piano ChatGPT",
+        "provider.chatgptCredentialOff": "ChatGPT, piano non abilitato",
+        "provider.keyAndChatgpt": "Chiave salvata e piano ChatGPT",
         "provider.serviceEndpoint": "Indirizzo del servizio",
         "provider.configuredModels": "Modelli configurati (uno per riga)",
         "provider.configuredModelsNote": "Indica i nomi delle distribuzioni o dei modelli abilitati. Questa lista non verifica l’accesso né il supporto agli strumenti.",
@@ -8561,14 +8652,6 @@ var init_modelli = __esm({
         "extensions.oneProjectItem": "{visible} of {n} project item",
         "extensions.manyProjectItems": "{visible} of {n} project items",
         "tools.oneToken": "{n} token",
-        "sources.fallbackHeading": "If it doesn’t respond, continue with…",
-        "sources.fallbackProviderModel": "Provider and model to continue with",
-        "sources.none": "None",
-        "sources.add": "Add",
-        "sources.remove": "Remove",
-        "sources.fallbackUnavailable": "Choice unavailable: remove it and choose another",
-        "sources.fallbackDisconnected": "This choice is not connected to this session yet.",
-        "sources.fallbackHelp": "The switch is announced in chat. The conversation continues with the selected providers, in the order shown.",
         "sources.localModels": "Local",
         "sources.unavailable": "unavailable",
         "sources.yes": "yes",
@@ -8580,7 +8663,6 @@ var init_modelli = __esm({
         "sources.cacheAgeUnavailable": "age unavailable",
         "sources.catalogSaveUnavailable": "Catalog saving unavailable",
         "sources.modelNameUnavailable": "Name unavailable",
-        "sources.removeChoice": "Remove {name}",
         "sources.zaiAnthropicPort": "Z.AI (Anthropic port)",
         "sources.minimaxAnthropicPort": "MiniMax (Anthropic port)",
         "sources.externalAgent": "External agent",
@@ -8785,6 +8867,36 @@ var init_modelli = __esm({
         "provider.environmentKeyPriority": "The key set outside TALOS is active: while it is present, sign-in is not used.",
         "provider.signInNote": "The provider’s site opens: your password does not pass through TALOS, and a key is returned at the end.",
         "provider.pasteKeyInstead": "Or paste a key",
+        "provider.chatgptContinue": "Continue with ChatGPT",
+        "provider.chatgptNote": "Opens chatgpt.com in your browser to sign in. Your password never passes through TALOS.",
+        "provider.chatgptPaidBy": "Requests to the ChatGPT plan models are paid by your subscription.",
+        "provider.chatgptUsageLast5h": "Last 5 hours",
+        "provider.chatgptUsageLast7d": "Last 7 days",
+        "provider.chatgptUsageNone": "No requests",
+        "provider.chatgptUsageValueOne": "{n} request, {tokens} tokens",
+        "provider.chatgptUsageValueMany": "{n} requests, {tokens} tokens",
+        "provider.chatgptUsageUnmeasured": "{value} ({n} not measured)",
+        "provider.chatgptUsageNote": "Counted by TALOS on this computer. Use from ChatGPT or other apps is not included: OpenAI’s own figures are under Manage usage.",
+        "provider.methodsLabel": "How TALOS pays for OpenAI models",
+        "provider.methodChatgpt": "ChatGPT plan",
+        "provider.methodChatgptNote": "Use your ChatGPT Plus or Pro subscription.",
+        "provider.methodKey": "API key",
+        "provider.methodKeyNote": "Pay for what you use, from your OpenAI platform account.",
+        "provider.methodConnected": "Connected",
+        "provider.methodNotConnected": "Not connected",
+        "provider.methodPlanOff": "Plan use off",
+        "provider.methodKeySaved": "Key saved",
+        "provider.methodNoKey": "No key saved",
+        "provider.chatgptUsing": "Using your ChatGPT plan as {email}.",
+        "provider.chatgptUsingNoEmail": "Using your ChatGPT plan.",
+        "provider.chatgptPlanOff": "Signed in to ChatGPT, but using your plan in TALOS is not enabled.",
+        "provider.chatgptEnable": "Enable plan use",
+        "provider.chatgptUsage": "Manage usage",
+        "provider.chatgptDisconnect": "Disconnect ChatGPT",
+        "provider.chatgptActions": "ChatGPT plan actions",
+        "provider.chatgptCredential": "ChatGPT plan",
+        "provider.chatgptCredentialOff": "ChatGPT, plan not enabled",
+        "provider.keyAndChatgpt": "Saved key and ChatGPT plan",
         "provider.serviceEndpoint": "Service endpoint",
         "provider.configuredModels": "Configured models (one per line)",
         "provider.configuredModelsNote": "Enter the names of enabled deployments or models. This list does not verify access or tool support.",
@@ -12617,6 +12729,12 @@ var init_varie = __esm({
         "tools.description.providerExclude": "Fa saltare a OpenRouter un fornitore dalla prossima richiesta, dopo il tuo sì.",
         "tools.description.providerAllow": "Fa usare di nuovo a OpenRouter un fornitore escluso, dopo il tuo sì.",
         "providerCard.badge": "Fornitore OpenRouter",
+        "tools.name.chatgptAccount": "account ChatGPT",
+        "tools.description.chatgptAccount": "Dice se un account ChatGPT è collegato e, dopo il tuo sì, lo scollega.",
+        "providerCard.chatgptBadge": "Piano ChatGPT",
+        "providerCard.chatgptDisconnect": "Scollegare ChatGPT? TALOS smetterà di usare il tuo piano.",
+        "providerCard.chatgptNow": "Collegato: le richieste usano il tuo piano",
+        "providerCard.chatgptAfter": "Scollegato: i modelli del piano non rispondono più",
         "providerCard.exclude": "TALOS vuole che OpenRouter salti {name} per ogni modello.",
         "providerCard.excludeForModel": "TALOS vuole che OpenRouter salti di nuovo {name} per {model}, come fa di serie.",
         "providerCard.allow": "TALOS vuole che OpenRouter usi di nuovo {name}.",
@@ -13564,6 +13682,12 @@ var init_varie = __esm({
         "tools.description.providerExclude": "Makes OpenRouter skip a provider from the next request on, after you approve it.",
         "tools.description.providerAllow": "Lets OpenRouter use an excluded provider again, after you approve it.",
         "providerCard.badge": "OpenRouter provider",
+        "tools.name.chatgptAccount": "ChatGPT account",
+        "tools.description.chatgptAccount": "Says whether a ChatGPT account is connected and, after you approve it, disconnects it.",
+        "providerCard.chatgptBadge": "ChatGPT plan",
+        "providerCard.chatgptDisconnect": "Disconnect ChatGPT? TALOS will stop using your plan.",
+        "providerCard.chatgptNow": "Connected: requests use your plan",
+        "providerCard.chatgptAfter": "Disconnected: the plan models stop answering",
         "providerCard.exclude": "TALOS wants OpenRouter to skip {name} for every model.",
         "providerCard.excludeForModel": "TALOS wants OpenRouter to skip {name} again for {model}, as it does by default.",
         "providerCard.allow": "TALOS wants OpenRouter to use {name} again.",
@@ -14047,6 +14171,21 @@ var init_errori = __esm({
         "OAUTH_CODICE_MANCANTE.message": "Manca il codice di conferma: ricomincia da «Accedi con OpenRouter»",
         "OAUTH_SCAMBIO_RIFIUTATO.message": "OpenRouter non ha accettato questa conferma: ricomincia da «Accedi con OpenRouter»",
         "OAUTH_RETE.message": "Non sono riuscito a raggiungere OpenRouter: controlla la connessione e riprova",
+        "CHATGPT_NON_DISPONIBILE.message": "Su questo computer non si può collegare un account ChatGPT: il portachiavi del sistema non è disponibile",
+        "CHATGPT_NON_COLLEGATO.message": "Nessun account ChatGPT è collegato: usa «Continue with ChatGPT» in Fornitori",
+        "CHATGPT_PIANO_NON_ABILITATO.message": "Hai fatto l’accesso, ma l’uso del tuo piano ChatGPT in TALOS non è abilitato: abilitalo da Fornitori, oppure usa una chiave API",
+        "CHATGPT_ACCESSO_SCADUTO.message": "L’accesso con ChatGPT è scaduto: rifai l’accesso con «Continue with ChatGPT»",
+        "CHATGPT_ACCESSO_NON_VALIDO.message": "OpenAI non ha accettato questo collegamento a ChatGPT: controlla l’account, poi rifai l’accesso",
+        "CHATGPT_RETE.message": "Non sono riuscito a raggiungere OpenAI: controlla la connessione e riprova",
+        "CHATGPT_RINNOVO_FALLITO.message": "Non sono riuscito a rinnovare l’accesso con ChatGPT in questo momento: riprova fra poco",
+        "CHATGPT_ELENCO_NON_LETTO.message": "Non sono riuscito a leggere i modelli del tuo piano ChatGPT: riprova fra poco",
+        "CHATGPT_RICHIESTA_NON_VALIDA.message": "La richiesta di accesso con ChatGPT non è valida",
+        "CHATGPT_CUSTODIA_FALLITA.message": "L’accesso con ChatGPT è riuscito, ma non sono riuscito a mettere al sicuro le credenziali: apri Doctor",
+        "CHATGPT_ERRORE.message": "La richiesta al piano ChatGPT non è andata a buon fine",
+        "CHATGPT_LIMITE_DEL_PIANO.message": "Hai raggiunto il limite d’uso del tuo piano ChatGPT: controlla Impostazioni → Utilizzo su ChatGPT",
+        "CHATGPT_PIANO_NON_AMMESSO.message": "L’uso del piano ChatGPT nelle altre app non è disponibile per questo account: serve ChatGPT Plus o Pro",
+        "CHATGPT_RICHIESTA_NON_AMMESSA.message": "Questa richiesta usa qualcosa che il piano ChatGPT non permette",
+        "CHATGPT_SERVIZIO_NON_DISPONIBILE.message": "L’uso del piano ChatGPT non è disponibile in questo momento: riprova fra poco",
         "OAUTH_RISPOSTA_INATTESA.message": "OpenRouter ha risposto in un modo che non riconosco: riprova più tardi",
         "OAUTH_CUSTODIA_FALLITA.message": "Il collegamento è riuscito ma non sono riuscito a metterlo al sicuro: apri Doctor",
         "RUNTIME_NOT_AVAILABLE.message": "Runtime locale non disponibile",
@@ -14309,6 +14448,14 @@ var init_errori = __esm({
         "turno.limiteSpesaChiave.perche": "Il servizio segnala il tetto di spesa configurato per questa chiave. TALOS non l’ha sospesa né sostituita.",
         "turno.limiteSpesaChiave.rimedio1": "Controlla il limite della chiave sul sito del servizio: puoi modificarlo oppure attendere il ripristino previsto dal tuo account.",
         "turno.limiteSpesaChiave.rimedio2": "Riprendi la conversazione dopo aver verificato il limite.",
+        "turno.pianoChatgpt.cosa": "Il piano ChatGPT non ha potuto rispondere a questo giro.",
+        "turno.pianoChatgpt.perche": "Il piano ChatGPT ha restituito un errore.",
+        "turno.pianoChatgpt.rimedioCollega": "Apri Fornitori → OpenAI → Configura e rifai l’accesso con «Continue with ChatGPT».",
+        "turno.pianoChatgpt.rimedioAltroModello": "Oppure scegli un altro modello e riprendi la conversazione.",
+        "turno.pianoChatgpt.rimedioRiprova": "Riprova il giro fra un momento.",
+        "turno.pianoChatgpt.rimedioConsumi": "Controlla il tuo piano e il limite di questa app in Manage usage nelle impostazioni di ChatGPT.",
+        "turno.vestizione.pianoChatgpt.badge": "Piano ChatGPT",
+        "turno.vestizione.pianoChatgpt.titolo": "TALOS · piano ChatGPT",
         "turno.tuttiEsclusi.cosa": "Su OpenRouter non resta nessun fornitore per questo modello.",
         "turno.tuttiEsclusi.perche": "Tutti i fornitori che lo servono sono nel tuo elenco degli esclusi, quindi OpenRouter non ha mandato la richiesta a nessuno. La chiave è a posto.",
         "turno.tuttiEsclusi.rimedio1": "Apri Impostazioni → Laboratorio modelli → Provider → OpenRouter → Configura, riammetti almeno un fornitore (la × sulla sua pastiglia), poi Salva.",
@@ -14827,6 +14974,21 @@ var init_errori = __esm({
         "OAUTH_CODICE_MANCANTE.message": "The confirmation code is missing: start again from “Sign in with OpenRouter”",
         "OAUTH_SCAMBIO_RIFIUTATO.message": "OpenRouter did not accept this confirmation: start again from “Sign in with OpenRouter”",
         "OAUTH_RETE.message": "I could not reach OpenRouter: check the connection and try again",
+        "CHATGPT_NON_DISPONIBILE.message": "A ChatGPT account cannot be connected on this computer: the system keyring is not available",
+        "CHATGPT_NON_COLLEGATO.message": "No ChatGPT account is connected: use “Continue with ChatGPT” in Providers",
+        "CHATGPT_PIANO_NON_ABILITATO.message": "You are signed in, but using your ChatGPT plan in TALOS is not enabled: enable it from Providers, or use an API key",
+        "CHATGPT_ACCESSO_SCADUTO.message": "The ChatGPT sign-in has expired: sign in again with “Continue with ChatGPT”",
+        "CHATGPT_ACCESSO_NON_VALIDO.message": "OpenAI did not accept this ChatGPT connection: check the account, then sign in again",
+        "CHATGPT_RETE.message": "I could not reach OpenAI: check the connection and try again",
+        "CHATGPT_RINNOVO_FALLITO.message": "The ChatGPT sign-in could not be renewed right now: try again shortly",
+        "CHATGPT_ELENCO_NON_LETTO.message": "I could not read the models of your ChatGPT plan: try again shortly",
+        "CHATGPT_RICHIESTA_NON_VALIDA.message": "The ChatGPT sign-in request is not valid",
+        "CHATGPT_CUSTODIA_FALLITA.message": "The ChatGPT sign-in worked, but the credentials could not be stored safely: open Doctor",
+        "CHATGPT_ERRORE.message": "The request to the ChatGPT plan did not complete",
+        "CHATGPT_LIMITE_DEL_PIANO.message": "The usage limit of your ChatGPT plan was reached: check ChatGPT Settings → Usage",
+        "CHATGPT_PIANO_NON_AMMESSO.message": "Using a ChatGPT plan in other apps is not available for this account: ChatGPT Plus or Pro is required",
+        "CHATGPT_RICHIESTA_NON_AMMESSA.message": "This request uses something the ChatGPT plan does not support",
+        "CHATGPT_SERVIZIO_NON_DISPONIBILE.message": "ChatGPT plan usage is temporarily unavailable: try again shortly",
         "OAUTH_RISPOSTA_INATTESA.message": "OpenRouter answered in a way I do not recognize: try again later",
         "OAUTH_CUSTODIA_FALLITA.message": "The connection succeeded but I could not store it safely: open Doctor",
         "RUNTIME_NOT_AVAILABLE.message": "Local runtime not available",
@@ -15089,6 +15251,14 @@ var init_errori = __esm({
         "turno.limiteSpesaChiave.perche": "The service reports the spending cap set for this key. TALOS neither suspended nor replaced it.",
         "turno.limiteSpesaChiave.rimedio1": "Check the key’s limit on the service’s site: you can change it or wait for the reset provided by your account.",
         "turno.limiteSpesaChiave.rimedio2": "Resume the conversation after checking the limit.",
+        "turno.pianoChatgpt.cosa": "The ChatGPT plan could not answer this turn.",
+        "turno.pianoChatgpt.perche": "The ChatGPT plan returned an error.",
+        "turno.pianoChatgpt.rimedioCollega": "Open Providers → OpenAI → Configure and sign in again with “Continue with ChatGPT”.",
+        "turno.pianoChatgpt.rimedioAltroModello": "Or choose another model and resume the conversation.",
+        "turno.pianoChatgpt.rimedioRiprova": "Try the turn again in a moment.",
+        "turno.pianoChatgpt.rimedioConsumi": "Check your plan and this app’s limit under Manage usage in ChatGPT settings.",
+        "turno.vestizione.pianoChatgpt.badge": "ChatGPT plan",
+        "turno.vestizione.pianoChatgpt.titolo": "TALOS · ChatGPT plan",
         "turno.tuttiEsclusi.cosa": "OpenRouter has no provider left for this model.",
         "turno.tuttiEsclusi.perche": "Every provider that serves it is in your excluded list, so OpenRouter did not send the request anywhere. Your key is fine.",
         "turno.tuttiEsclusi.rimedio1": "Open Settings → Model laboratory → Provider → OpenRouter → Configure, allow at least one provider again (the × on its chip), then Save.",
@@ -20467,6 +20637,7 @@ var init_server = __esm({
         "search.label.custom": "Endpoint personalizzato",
         // ── Fornitori: i nomi con una parola italiana, lo stato di esecuzione, e le note delle schede cloud
         "provider.label.externalAgent": "Agente esterno",
+        "provider.label.chatgptPlan": "Piano ChatGPT",
         "provider.label.zaiAnthropic": "Z.AI (porta Anthropic)",
         "provider.label.minimaxAnthropic": "MiniMax (porta Anthropic)",
         "provider.label.localEngine": "Motore locale (llama.cpp)",
@@ -20723,6 +20894,7 @@ var init_server = __esm({
         "search.label.custom": "Custom endpoint",
         // ── Providers: names with an Italian word, the execution state, and the cloud card notes
         "provider.label.externalAgent": "External agent",
+        "provider.label.chatgptPlan": "ChatGPT plan",
         "provider.label.zaiAnthropic": "Z.AI (Anthropic port)",
         "provider.label.minimaxAnthropic": "MiniMax (Anthropic port)",
         "provider.label.localEngine": "Local engine (llama.cpp)",
@@ -20920,7 +21092,7 @@ function attributiDaTradurre(valore) {
   return String(valore ?? "").split(";").map((pezzo2) => /^\s*\[([a-zA-Z-]+)\]\s*(\S+)\s*$/u.exec(pezzo2)).filter(Boolean).map((m) => [m[1], m[2]]);
 }
 function primoTesto(el35) {
-  for (const nodo15 of el35.childNodes) if (nodo15.nodeType === 3 && nodo15.data.trim()) return nodo15;
+  for (const nodo17 of el35.childNodes) if (nodo17.nodeType === 3 && nodo17.data.trim()) return nodo17;
   return null;
 }
 function ancoraDelModello(el35, dove, chiave, attuale) {
@@ -21066,6 +21238,115 @@ var init_navigation = __esm({
     DESTINATION_BY_VIEW = Object.freeze(
       Object.fromEntries(Object.entries(VIEW_BY_DESTINATION).map(([destination, view]) => [view, destination]))
     );
+  }
+});
+
+// src/components/link-esterni.js
+function leggiLinkEsterno(indirizzo) {
+  if (typeof indirizzo !== "string" || !/^https?:\/\//iu.test(indirizzo.trim())) return null;
+  let u;
+  try {
+    u = new URL(indirizzo.trim());
+  } catch {
+    return null;
+  }
+  if (u.protocol !== "https:" && u.protocol !== "http:" || u.username || u.password || !u.hostname) return null;
+  return { indirizzo: u.href, sito: u.hostname, sicuro: u.protocol === "https:" };
+}
+function depositoDelBrowser() {
+  try {
+    return globalThis.localStorage ?? null;
+  } catch {
+    return null;
+  }
+}
+function creaSitiFidati({ deposito = depositoDelBrowser() } = {}) {
+  let siti = /* @__PURE__ */ new Set();
+  try {
+    const letto = JSON.parse(deposito?.getItem(CHIAVE_SITI_FIDATI) ?? "[]");
+    if (Array.isArray(letto)) siti = new Set(letto.map(normale2).filter((s) => NOME_DI_SITO.test(s)));
+  } catch {
+  }
+  const ascoltatori = /* @__PURE__ */ new Set();
+  const salva = () => {
+    try {
+      deposito?.setItem(CHIAVE_SITI_FIDATI, JSON.stringify([...siti].sort()));
+    } catch {
+    }
+    for (const fn2 of ascoltatori) {
+      try {
+        fn2();
+      } catch {
+      }
+    }
+  };
+  return Object.freeze({
+    elenco: () => [...siti].sort(),
+    fidato: (sito) => siti.has(normale2(sito)),
+    aggiungi(sito) {
+      const s = normale2(sito);
+      if (NOME_DI_SITO.test(s) && !siti.has(s)) {
+        siti.add(s);
+        salva();
+      }
+    },
+    togli(sito) {
+      if (siti.delete(normale2(sito))) salva();
+    },
+    /** Avvisa a ogni cambio dell'elenco (le Impostazioni si ridisegnano). */
+    ascolta(fn2) {
+      ascoltatori.add(fn2);
+      return () => ascoltatori.delete(fn2);
+    }
+  });
+}
+function sitiFidatiDellApp() {
+  dellApp ??= creaSitiFidati();
+  return dellApp;
+}
+function fineDellIndirizzo(grezzo) {
+  let fine = grezzo.length;
+  for (; ; ) {
+    const ultimo = grezzo[fine - 1];
+    if (fine > 0 && /[?!.,:;*_~'"]/u.test(ultimo)) {
+      fine -= 1;
+      continue;
+    }
+    if (ultimo === ")") {
+      const dentro = grezzo.slice(0, fine);
+      if ((dentro.match(/\)/gu) ?? []).length > (dentro.match(/\(/gu) ?? []).length) {
+        fine -= 1;
+        continue;
+      }
+    }
+    return fine;
+  }
+}
+function pezziConIndirizzi(testo2) {
+  const pezzi = [];
+  const stringa = String(testo2 ?? "");
+  const cerca = /https?:\/\/[^\s<>`]+/giu;
+  let ultimo = 0;
+  let m;
+  while (m = cerca.exec(stringa)) {
+    const indirizzo = m[0].slice(0, fineDellIndirizzo(m[0]));
+    const letto = leggiLinkEsterno(indirizzo);
+    if (!letto) continue;
+    if (m.index > ultimo) pezzi.push({ testo: stringa.slice(ultimo, m.index) });
+    pezzi.push({ indirizzo: letto.indirizzo, testo: indirizzo });
+    ultimo = m.index + indirizzo.length;
+    cerca.lastIndex = ultimo;
+  }
+  if (ultimo < stringa.length) pezzi.push({ testo: stringa.slice(ultimo) });
+  return pezzi;
+}
+var CHIAVE_SITI_FIDATI, NOME_DI_SITO, normale2, dellApp;
+var init_link_esterni = __esm({
+  "src/components/link-esterni.js"() {
+    CHIAVE_SITI_FIDATI = "talos.harness.desktop.link-fidati.v1";
+    NOME_DI_SITO = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/u;
+    normale2 = (sito) => typeof sito === "string" ? sito.trim().toLowerCase() : "";
+    dellApp = null;
   }
 });
 
@@ -21980,7 +22261,7 @@ function testoErroreServer(errore2) {
   }
   return fuori;
 }
-var numeroLocale, COSA_CONTESTO, ORIGINALI_INTATTI, rimediContesto, CODICE_CONTESTO, ORIGINI, FERMO_SU_RICHIESTA, PUNTI_DI_FERMATA, gbNellaLingua, REGOLE, RIFIUTI, PAROLE_DEL_NO, MESSAGGI_DEL_KERNEL, VESTIZIONI, VESTIZIONE_ERRORE, PARTI_DEL_PROBLEMA, MESSAGGI_DEL_CLIENTE, SUFFISSI_DELLE_PARTI, indiceDeiMotivi;
+var numeroLocale, COSA_CONTESTO, ORIGINALI_INTATTI, rimediContesto, CODICE_CONTESTO, ORIGINI, FERMO_SU_RICHIESTA, PUNTI_DI_FERMATA, gbNellaLingua, CHATGPT_DA_RIPROVARE, REGOLE, RIFIUTI, PAROLE_DEL_NO, MESSAGGI_DEL_KERNEL, VESTIZIONI, VESTIZIONE_ERRORE, PARTI_DEL_PROBLEMA, MESSAGGI_DEL_CLIENTE, SUFFISSI_DELLE_PARTI, indiceDeiMotivi;
 var init_errori2 = __esm({
   "src/components/errori.js"() {
     init_lingua();
@@ -22011,6 +22292,7 @@ var init_errori2 = __esm({
       const n = Number(String(s).replace(",", "."));
       return Number.isFinite(n) ? n.toLocaleString(linguaCorrenteDiT() === "it" ? "it-IT" : "en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : String(s);
     };
+    CHATGPT_DA_RIPROVARE = /* @__PURE__ */ new Set(["CHATGPT_RETE", "CHATGPT_RINNOVO_FALLITO", "CHATGPT_SERVIZIO_NON_DISPONIBILE", "CHATGPT_ERRORE"]);
     REGOLE = [
       ...[
         { codice: "PROVIDER_BUDGET_OCCUPIED", id: "budget-occupato", chiave: "budgetOccupato", rimedi: ["rimedio1"] },
@@ -22042,6 +22324,29 @@ var init_errori2 = __esm({
           rimedi: [t("errori.turno.tuttiEsclusi.rimedio1"), t("errori.turno.tuttiEsclusi.rimedio2")],
           tecnico: tecnico.includes("OPENROUTER_ALL_PROVIDERS_EXCLUDED") ? tecnico : `[OPENROUTER_ALL_PROVIDERS_EXCLUDED]${tecnico ? ` ${tecnico}` : ""}`
         })
+      },
+      /*
+       * 11/10/2026 notte — GLI ERRORI DEL PIANO CHATGPT (`CHATGPT_*`). Trovato dal vivo sul 4177: scollegato ChatGPT dalla chat, il giro
+       * ha chiesto ancora al modello del piano ed è finito con CHATGPT_NON_COLLEGATO, e la chat mostrava «non ancora tradotto» col testo
+       * grezzo. Il perché è la frase già tradotta del codice (`errori.<CODICE>.message`, la stessa delle rotte); i rimedi dipendono dal
+       * tipo: un guasto di rete si riprova, un accesso mancante si rifà, un limite si guarda in «Manage usage». E c'è sempre l'altro modello.
+       */
+      {
+        id: "piano-chatgpt",
+        famiglia: "piano-chatgpt",
+        riconosce: (_testo, code) => typeof code === "string" && code.startsWith("CHATGPT_"),
+        spiega: (tecnico, codice) => {
+          const chiave = `errori.${codice}.message`;
+          const frase = t(chiave);
+          const altroModello = t("errori.turno.pianoChatgpt.rimedioAltroModello");
+          const rimedi = CHATGPT_DA_RIPROVARE.has(codice) ? [t("errori.turno.pianoChatgpt.rimedioRiprova"), altroModello] : codice === "CHATGPT_LIMITE_DEL_PIANO" ? [t("errori.turno.pianoChatgpt.rimedioConsumi"), altroModello] : codice === "CHATGPT_RICHIESTA_NON_AMMESSA" ? [altroModello] : [t("errori.turno.pianoChatgpt.rimedioCollega"), altroModello];
+          return {
+            cosa: t("errori.turno.pianoChatgpt.cosa"),
+            perche: frase && frase !== chiave ? frase : t("errori.turno.pianoChatgpt.perche"),
+            rimedi,
+            tecnico: tecnico.includes(codice) ? tecnico : `[${codice}]${tecnico ? ` ${tecnico}` : ""}`
+          };
+        }
       },
       {
         // RETRY05: il codice del backend prevale sulle parole del messaggio.
@@ -22571,6 +22876,7 @@ var init_errori2 = __esm({
       { chiave: "errori.kernel.finestraLocale", re: /^(?:The conversation|La conversazione)(?: \((\d+) tokens?\))? (?:does not fit in the local model’s window|non entra nella finestra del modello locale)(?: \((\d+) tokens?\))?\.$/u, parametri: (m) => ({ conversazione: m[1] ? t("errori.kernel.quantiToken", { n: m[1] }) : "", finestra: m[2] ? t("errori.kernel.quantiToken", { n: m[2] }) : "" }) }
     ];
     VESTIZIONI = {
+      "piano-chatgpt": { badge: "errori.turno.vestizione.pianoChatgpt.badge", titolo: "errori.turno.vestizione.pianoChatgpt.titolo", tono: "warning" },
       "limite-fornitore": { badge: "errori.turno.vestizione.limiteFornitore.badge", titolo: "errori.turno.vestizione.limiteFornitore.titolo", tono: "warning" },
       "esito-fornitore-incerto": { badge: "errori.turno.vestizione.esitoIncerto.badge", titolo: "errori.turno.vestizione.esitoIncerto.titolo", tono: "warning" },
       fermato: { badge: "errori.turno.vestizione.fermato.badge", titolo: "errori.turno.vestizione.fermato.titolo", tono: "accent" },
@@ -23323,1298 +23629,6 @@ var init_workspace_path = __esm({
   }
 });
 
-// src/domain/catalog-engine.ts
-function voce(valore, chiave) {
-  return Object.defineProperty([valore], 1, { enumerable: true, get: () => t(chiave) });
-}
-function emptyCatalogFilters() {
-  return {
-    destination: [],
-    status: [],
-    favorite: false,
-    sizes: [],
-    minParams: "",
-    maxParams: "",
-    basis: "total",
-    minContext: "",
-    maxFile: "",
-    maxRam: "",
-    fit: [],
-    tasks: [],
-    capabilities: [],
-    formats: [],
-    quant: [],
-    authors: [],
-    providers: [],
-    licenses: [],
-    languages: [],
-    access: [],
-    arch: [],
-    maxInput: "",
-    maxOutput: "",
-    includeUnknown: false,
-    sort: "catalog"
-  };
-}
-function validateCatalogFilters(raw) {
-  const f = emptyCatalogFilters();
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return f;
-  const src = raw;
-  for (const key of CF_ARRAYS) {
-    if (!Array.isArray(src[key])) continue;
-    const allowed = key === "sizes" ? SIZE_BANDS.map((x) => x.id) : FACET_OPTIONS[key]?.map((x) => x[0]);
-    f[key] = [
-      ...new Set(
-        src[key].filter(
-          (x) => typeof x === "string" && x.length > 0 && x.length <= 100 && (!allowed || allowed.includes(x))
-        )
-      )
-    ].slice(0, 24);
-  }
-  for (const key of CF_NUMBERS) {
-    if (src[key] !== "" && src[key] !== null && src[key] !== void 0) {
-      const n = Number(src[key]);
-      if (Number.isFinite(n) && n >= 0 && n <= 1e9) f[key] = String(n);
-    }
-  }
-  f.basis = src.basis === "active" ? "active" : "total";
-  f.favorite = src.favorite === true;
-  f.includeUnknown = src.includeUnknown === true;
-  f.sort = CATALOG_SORTS.some(([v]) => v === src.sort) ? src.sort : "catalog";
-  return f;
-}
-function catalogInputErrors(raw) {
-  const f = validateCatalogFilters(raw);
-  const errors = [];
-  if (f.minParams !== "" && f.maxParams !== "" && Number(f.minParams) > Number(f.maxParams)) {
-    errors.push(t("modelli.catalog.error.minAboveMax"));
-  }
-  return errors;
-}
-function parameterValue(m, basis2 = "total") {
-  if (basis2 === "active") {
-    if (m.architecture === "moe") return cfKnown(m.activeParametersB) ? m.activeParametersB : null;
-    if (m.architecture !== "dense") return null;
-  }
-  return cfKnown(m.parametersB) ? m.parametersB : null;
-}
-function cfRange(value, min, max, unknown) {
-  if (!cfKnown(value)) return unknown;
-  return (min === "" || value >= Number(min)) && (max === "" || value <= Number(max));
-}
-function cfValues(value) {
-  if (value === null || value === void 0 || value === "") return ["unknown"];
-  return Array.isArray(value) ? value.length ? value : ["none"] : [value];
-}
-function cfAny(selected, value) {
-  return !selected.length || selected.some((x) => cfValues(value).includes(x));
-}
-function catalogArtifacts(m) {
-  if (Array.isArray(m.artifacts)) return m.artifacts;
-  return m.destination === "local" ? [
-    {
-      id: m.id + ":profile",
-      file: m.file,
-      format: m.format,
-      quantization: m.quantization,
-      size: m.size,
-      required: m.required
-    }
-  ] : [];
-}
-function matchingArtifacts(m, raw) {
-  const f = validateCatalogFilters(raw);
-  return catalogArtifacts(m).filter(
-    (a) => cfAny(f.formats, a.format) && cfAny(f.quant, a.quantization) && (f.maxFile === "" || cfRange(a.size, "", f.maxFile, f.includeUnknown)) && (f.maxRam === "" || cfRange(a.required, "", f.maxRam, f.includeUnknown)) && (!f.fit.length || f.fit.includes(cfKnown(a.required) ? a.required <= 18.6 ? "fits" : "exceeds" : "unknown"))
-  );
-}
-function modelMatchesCatalog(m, raw, { query = "", favorites = [], downloads = [] } = {}) {
-  const f = validateCatalogFilters(raw);
-  if (catalogInputErrors(f).length) return false;
-  const terms = cfNormalize(query).split(/\s+/).filter(Boolean);
-  if (!terms.every((t2) => cfNormalize(`${m.name} ${m.family} ${m.author || ""} ${m.provider} ${m.repo || ""} ${m.file || ""}`).includes(t2))) return false;
-  if (!cfAny(f.destination, m.destination) || !cfAny(f.tasks, m.tasks) || !cfAny(f.authors, m.author) || !cfAny(f.providers, m.provider) || !cfAny(f.licenses, m.license) || !cfAny(f.languages, m.languages) || !cfAny(f.access, m.access) || !cfAny(f.arch, m.architecture))
-    return false;
-  if (f.favorite && !favorites.includes(m.id)) return false;
-  if (f.status.length && !f.status.some(
-    (x) => x === "installed" ? m.installed : x === "not-installed" ? m.destination === "local" && !m.installed : x === "downloading" && downloads.some((j) => j.modelId === m.id && ["running", "paused", "error"].includes(j.status))
-  ))
-    return false;
-  if (f.capabilities.length && !f.capabilities.every((x) => Array.isArray(m.capabilities) && m.capabilities.includes(x))) return false;
-  const p = parameterValue(m, f.basis);
-  if (f.sizes.length && !f.sizes.some((id4) => {
-    const b = SIZE_BANDS.find((x) => x.id === id4);
-    const lo = b.min ?? 0;
-    const hi = b.max ?? Infinity;
-    return id4 === "unknown" ? p === null : p !== null && (p > lo || lo === 0 && p === 0) && p <= hi;
-  })) {
-    if (!(p === null && f.includeUnknown)) return false;
-  }
-  if ((f.minParams !== "" || f.maxParams !== "") && !cfRange(p, f.minParams, f.maxParams, f.includeUnknown)) return false;
-  if (f.minContext !== "" && !cfRange(m.context, f.minContext, "", f.includeUnknown)) return false;
-  const artifactFilter = f.formats.length || f.quant.length || f.maxFile !== "" || f.maxRam !== "" || f.fit.length;
-  if (artifactFilter && (m.destination !== "local" || !matchingArtifacts(m, f).length)) return false;
-  const priceFilter = f.maxInput !== "" || f.maxOutput !== "";
-  if (priceFilter && (m.destination !== "cloud" || f.maxInput !== "" && !cfRange(m.priceInput, "", f.maxInput, f.includeUnknown) || f.maxOutput !== "" && !cfRange(m.priceOutput, "", f.maxOutput, f.includeUnknown)))
-    return false;
-  return true;
-}
-function selectCatalog(models, raw, context = {}) {
-  const f = validateCatalogFilters(raw);
-  const list = models.filter((m) => modelMatchesCatalog(m, f, context));
-  const firstNumber = (m, key) => {
-    const values = matchingArtifacts(m, f).map((a) => a[key]).filter(cfKnown);
-    return values.length ? Math.min(...values) : null;
-  };
-  const sorts = {
-    "params-asc": [(m) => parameterValue(m, f.basis), 1],
-    "params-desc": [(m) => parameterValue(m, f.basis), -1],
-    "file-asc": [(m) => firstNumber(m, "size"), 1],
-    "ram-asc": [(m) => firstNumber(m, "required"), 1],
-    "context-desc": [(m) => cfKnown(m.context) ? m.context : null, -1],
-    "updated-desc": [(m) => m.updatedAt ? Date.parse(m.updatedAt) : null, -1],
-    "price-asc": [(m) => m.destination === "cloud" && cfKnown(m.priceInput) ? m.priceInput : null, 1]
-  };
-  if (f.sort === "name") return list.sort((a, b) => a.name.localeCompare(b.name, "it"));
-  const sort = sorts[f.sort];
-  if (sort) {
-    const [get3, dir] = sort;
-    return list.sort((a, b) => {
-      const av = get3(a);
-      const bv = get3(b);
-      if (av === null || !Number.isFinite(av)) return bv === null || !Number.isFinite(bv) ? 0 : 1;
-      if (bv === null || !Number.isFinite(bv)) return -1;
-      return dir * (av - bv);
-    });
-  }
-  return list;
-}
-function facetCount(models, raw, key, value, context = {}) {
-  const f = validateCatalogFilters(raw);
-  if (key === "sizes") {
-    f.minParams = "";
-    f.maxParams = "";
-  }
-  if (key === "favorite") f.favorite = true;
-  else if (key === "capabilities") f.capabilities = [.../* @__PURE__ */ new Set([...f.capabilities, value])];
-  else f[key] = Array.isArray(f[key]) ? [value] : value;
-  return selectCatalog(models, f, context).length;
-}
-function toggleCatalogFacet(raw, key, value) {
-  const f = validateCatalogFilters(raw);
-  const current = f[key];
-  if (Array.isArray(current)) f[key] = current.includes(value) ? current.filter((x) => x !== value) : [...current, value];
-  else if (typeof current === "boolean") f[key] = !current;
-  return validateCatalogFilters(f);
-}
-function activeCatalogFilters(raw) {
-  const f = validateCatalogFilters(raw);
-  const chips = [];
-  for (const [key, name] of Object.entries(CF_NAMES)) {
-    const v = f[key];
-    if (Array.isArray(v)) {
-      for (const value of v) {
-        const label = key === "sizes" ? SIZE_BANDS.find((x) => x.id === value)?.label : FACET_OPTIONS[key]?.find((x) => x[0] === value)?.[1];
-        chips.push({ key, value, label: `${name}: ${label || value}` });
-      }
-    } else if (v === true) chips.push({ key, value: true, label: t("modelli.catalog.chip.favoritesOnly") });
-    else if (typeof v !== "boolean" && v !== "") {
-      const unit = key.includes("Params") ? "B" : ["maxRam", "maxFile"].includes(key) ? " GiB" : key === "minContext" ? " token" : " $/M";
-      chips.push({ key, value: v, label: `${name}: ${v}${unit}` });
-    }
-  }
-  if (f.includeUnknown) chips.push({ key: "includeUnknown", value: true, label: t("modelli.catalog.chip.includeUnknown") });
-  if (f.basis === "active") chips.push({ key: "basis", value: "active", label: t("modelli.catalog.chip.activeParameters") });
-  return chips;
-}
-function removeCatalogFilter(raw, key, value) {
-  const f = validateCatalogFilters(raw);
-  if (key === "basis") f.basis = "total";
-  else if (Array.isArray(f[key])) f[key] = f[key].filter((x) => x !== value);
-  else if (typeof f[key] === "boolean") f[key] = false;
-  else if (key in CF_NAMES) f[key] = "";
-  return f;
-}
-var SIZE_BANDS, FACET_OPTIONS, CATALOG_SORTS, CF_ARRAYS, CF_NUMBERS, cfNormalize, cfKnown, CF_NAMES;
-var init_catalog_engine = __esm({
-  "src/domain/catalog-engine.ts"() {
-    init_lingua();
-    SIZE_BANDS = Object.freeze([
-      { id: "tiny", get label() {
-        return t("modelli.catalog.size.tiny");
-      }, min: 0, max: 3 },
-      { id: "small", get label() {
-        return t("modelli.catalog.size.small");
-      }, min: 3, max: 8 },
-      { id: "medium", get label() {
-        return t("modelli.catalog.size.medium");
-      }, min: 8, max: 14 },
-      { id: "large", get label() {
-        return t("modelli.catalog.size.large");
-      }, min: 14, max: 35 },
-      { id: "xl", get label() {
-        return t("modelli.catalog.size.xl");
-      }, min: 35, max: 70 },
-      { id: "xxl", get label() {
-        return t("modelli.catalog.size.xxl");
-      }, min: 70, max: Infinity },
-      { id: "unknown", get label() {
-        return t("modelli.catalog.size.unknown");
-      } }
-    ]);
-    FACET_OPTIONS = Object.freeze({
-      destination: [voce("local", "modelli.catalog.destination.local"), voce("cloud", "modelli.catalog.destination.cloud")],
-      status: [voce("installed", "modelli.catalog.status.installed"), voce("not-installed", "modelli.catalog.status.not_installed"), voce("downloading", "modelli.catalog.status.downloading")],
-      fit: [voce("fits", "modelli.catalog.fit.fits"), voce("exceeds", "modelli.catalog.fit.exceeds"), voce("unknown", "modelli.catalog.fit.unknown")],
-      tasks: [voce("general", "modelli.catalog.tasks.general"), voce("code", "modelli.catalog.tasks.code"), voce("write", "modelli.catalog.tasks.write"), voce("embedding", "modelli.catalog.tasks.embedding")],
-      capabilities: [
-        voce("tools", "modelli.catalog.capabilities.tools"),
-        voce("vision", "modelli.catalog.capabilities.vision"),
-        voce("reasoning", "modelli.catalog.capabilities.reasoning"),
-        voce("json", "modelli.catalog.capabilities.json"),
-        voce("audio", "modelli.catalog.capabilities.audio")
-      ],
-      formats: [voce("GGUF", "modelli.catalog.formats.GGUF"), voce("safetensors", "modelli.catalog.formats.safetensors"), voce("unknown", "modelli.catalog.formats.unknown")],
-      quant: [voce("Q4_K_M", "modelli.catalog.quant.Q4_K_M"), voce("Q5_K_M", "modelli.catalog.quant.Q5_K_M"), voce("Q8_0", "modelli.catalog.quant.Q8_0"), voce("F16", "modelli.catalog.quant.F16"), voce("unknown", "modelli.catalog.quant.unknown")],
-      languages: [voce("it", "modelli.catalog.languages.it"), voce("en", "modelli.catalog.languages.en"), voce("multi", "modelli.catalog.languages.multi"), voce("unknown", "modelli.catalog.languages.unknown")],
-      access: [
-        voce("open", "modelli.catalog.access.open"),
-        voce("approval", "modelli.catalog.access.approval"),
-        voce("account", "modelli.catalog.access.account"),
-        voce("unknown", "modelli.catalog.access.unknown")
-      ],
-      arch: [voce("dense", "modelli.catalog.arch.dense"), voce("moe", "modelli.catalog.arch.moe"), voce("unknown", "modelli.catalog.arch.unknown")]
-    });
-    CATALOG_SORTS = Object.freeze([
-      voce("catalog", "modelli.catalog.sort.catalog"),
-      voce("params-asc", "modelli.catalog.sort.params_asc"),
-      voce("params-desc", "modelli.catalog.sort.params_desc"),
-      voce("file-asc", "modelli.catalog.sort.file_asc"),
-      voce("ram-asc", "modelli.catalog.sort.ram_asc"),
-      voce("context-desc", "modelli.catalog.sort.context_desc"),
-      voce("updated-desc", "modelli.catalog.sort.updated_desc"),
-      voce("name", "modelli.catalog.sort.name"),
-      voce("price-asc", "modelli.catalog.sort.price_asc")
-    ]);
-    CF_ARRAYS = [
-      "destination",
-      "status",
-      "sizes",
-      "fit",
-      "tasks",
-      "capabilities",
-      "formats",
-      "quant",
-      "authors",
-      "providers",
-      "licenses",
-      "languages",
-      "access",
-      "arch"
-    ];
-    CF_NUMBERS = ["minParams", "maxParams", "minContext", "maxFile", "maxRam", "maxInput", "maxOutput"];
-    cfNormalize = (s) => String(s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLocaleLowerCase("it").trim();
-    cfKnown = (x) => typeof x === "number" && Number.isFinite(x) && x >= 0;
-    CF_NAMES = {
-      get destination() {
-        return t("modelli.catalog.name.destination");
-      },
-      get status() {
-        return t("modelli.catalog.name.status");
-      },
-      get favorite() {
-        return t("modelli.catalog.name.favorite");
-      },
-      get sizes() {
-        return t("modelli.catalog.name.sizes");
-      },
-      get minParams() {
-        return t("modelli.catalog.name.minParams");
-      },
-      get maxParams() {
-        return t("modelli.catalog.name.maxParams");
-      },
-      get minContext() {
-        return t("modelli.catalog.name.minContext");
-      },
-      get maxFile() {
-        return t("modelli.catalog.name.maxFile");
-      },
-      get maxRam() {
-        return t("modelli.catalog.name.maxRam");
-      },
-      get fit() {
-        return t("modelli.catalog.name.fit");
-      },
-      get tasks() {
-        return t("modelli.catalog.name.tasks");
-      },
-      get capabilities() {
-        return t("modelli.catalog.name.capabilities");
-      },
-      get formats() {
-        return t("modelli.catalog.name.formats");
-      },
-      get quant() {
-        return t("modelli.catalog.name.quant");
-      },
-      get authors() {
-        return t("modelli.catalog.name.authors");
-      },
-      get providers() {
-        return t("modelli.catalog.name.providers");
-      },
-      get licenses() {
-        return t("modelli.catalog.name.licenses");
-      },
-      get languages() {
-        return t("modelli.catalog.name.languages");
-      },
-      get access() {
-        return t("modelli.catalog.name.access");
-      },
-      get arch() {
-        return t("modelli.catalog.name.arch");
-      },
-      get maxInput() {
-        return t("modelli.catalog.name.maxInput");
-      },
-      get maxOutput() {
-        return t("modelli.catalog.name.maxOutput");
-      }
-    };
-  }
-});
-
-// src/components/catalogo-faccette.js
-function capacitaDelCatalogo(modelli, contesto2 = {}) {
-  const sa = (f) => modelli.some(f);
-  const noto = (v) => typeof v === "number" && Number.isFinite(v) && v >= 0;
-  const ordinamenti = ["catalog", "name", "context-desc", "price-asc"].filter((id4) => {
-    if (id4 === "context-desc") return sa((m) => noto(m.context));
-    if (id4 === "price-asc") return sa((m) => noto(m.priceInput));
-    return true;
-  }).map((id4) => [id4, ETICHETTE_ORDINAMENTO[id4] || (CATALOG_SORTS.find(([x]) => x === id4) || [])[1]]);
-  return {
-    ordinamenti,
-    /** I parametri che il catalogo accetta, in ordine di frequenza: è la faccetta con più valori. */
-    parametri: [...modelli.reduce((acc, m) => {
-      for (const v of m.capabilities || []) acc.set(v, (acc.get(v) || 0) + 1);
-      return acc;
-    }, /* @__PURE__ */ new Map())].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "it")).map(([v]) => v),
-    haContesto: sa((m) => noto(m.context)),
-    haPrezzo: sa((m) => noto(m.priceInput) || noto(m.priceOutput)),
-    /** Il dato manca a qualcuno? Solo allora «includi i non noti» cambia qualcosa e si offre. */
-    haBuchi: sa((m) => !noto(m.context) || !noto(m.priceInput) || !noto(m.priceOutput)),
-    contesto: contesto2
-  };
-}
-function conteggiPerFornitore(modelli, filtri, contesto2 = {}) {
-  const senza = { ...filtri, providers: [] };
-  const conteggi = /* @__PURE__ */ new Map();
-  for (const m of selectCatalog(modelli, senza, contesto2)) conteggi.set(m.provider, (conteggi.get(m.provider) || 0) + 1);
-  return conteggi;
-}
-function chip(etichetta3, valore, { premuto = false, conteggio: conteggio3 = null, disabilitato = false, titolo: titolo2 = null } = {}) {
-  const b = el("button", "talos-button talos-button--sm " + (premuto ? "talos-button--primary" : "talos-button--secondary"), etichetta3);
-  b.type = "button";
-  b.dataset.facetChip = valore;
-  b.setAttribute("aria-pressed", String(premuto));
-  if (disabilitato) b.disabled = true;
-  if (titolo2) b.title = titolo2;
-  if (conteggio3 !== null) b.append(el("span", "talos-badge talos-badge--sm", numero(conteggio3)));
-  return b;
-}
-function rigaValore(gruppo, valore, testo2, conteggio3, acceso) {
-  const riga2 = el("label", "talos-cluster");
-  riga2.dataset.facetRow = valore;
-  const casella = el("input", "talos-checkbox");
-  casella.type = "checkbox";
-  casella.value = valore;
-  casella.dataset.facetCheck = gruppo;
-  casella.checked = acceso;
-  const contato = typeof conteggio3 === "number";
-  if (contato && !conteggio3 && !acceso) {
-    casella.disabled = true;
-    riga2.dataset.facetZero = "";
-  }
-  const conto = el("small", "talos-muted", contato ? numero(conteggio3) : "—");
-  conto.setAttribute("aria-label", contato ? tn("modelli.facets.oneMatchOtherFilters", "modelli.facets.manyMatchesOtherFilters", conteggio3) : t("modelli.facets.countUnavailable"));
-  riga2.append(casella, el("span", "talos-grow", testo2), conto);
-  return riga2;
-}
-function gruppoValori(chiave, titolo2, nota) {
-  const g = el("fieldset", "talos-lab__space");
-  g.dataset.facetGroup = chiave;
-  g.append(el("legend", "talos-lab__heading", titolo2));
-  if (nota) g.append(el("p", "talos-muted", nota));
-  const righe = el("div", "talos-card talos-card--pad");
-  righe.dataset.facetRows = "";
-  righe.id = "modelLabFacetsRows-" + chiave;
-  g.append(righe);
-  const altri = el("button", "talos-button talos-button--ghost talos-button--sm", t("modelli.facets.seeMore"));
-  altri.type = "button";
-  altri.dataset.facetMore = chiave;
-  altri.hidden = true;
-  altri.setAttribute("aria-expanded", "false");
-  altri.setAttribute("aria-controls", righe.id);
-  g.append(altri);
-  return g;
-}
-function gruppoNumero(chiave, titolo2, coppie, nota) {
-  const g = el("fieldset", "talos-lab__space");
-  g.dataset.facetGroup = chiave;
-  g.append(el("legend", "talos-lab__heading", titolo2));
-  const riga2 = el("div", "talos-cluster");
-  for (const [campo3, etichetta3, unita] of coppie) {
-    const l = el("label", "talos-field talos-field--sm");
-    l.append(el("span", "talos-muted", etichetta3));
-    const i2 = el("input", "talos-field__input");
-    i2.type = "number";
-    i2.min = "0";
-    i2.step = "any";
-    i2.placeholder = t("modelli.facets.noLimit");
-    i2.dataset.facetNumber = campo3;
-    i2.setAttribute("aria-label", etichetta3);
-    l.append(i2, el("span", "talos-muted", unita));
-    riga2.append(l);
-  }
-  g.append(riga2);
-  if (nota) g.append(el("p", "talos-muted", nota));
-  return g;
-}
-function creaBarraFaccette({ onCambia, etichetta: etichetta3 = (k, v) => v } = {}) {
-  const barra = el("section", "talos-stack");
-  barra.id = "modelLabFacets";
-  barra.dataset.catalogFacets = "";
-  barra.setAttribute("aria-label", t("modelli.facets.catalogSearchFilters"));
-  const strumenti = el("div", "talos-cluster");
-  const ordina = el("label", "talos-field talos-field--sm");
-  ordina.append(el("span", "talos-muted", t("modelli.facets.sort")));
-  const selectOrdina = el("select", "talos-select talos-select--sm");
-  selectOrdina.id = "modelLabSort";
-  selectOrdina.setAttribute("aria-label", t("modelli.facets.sortModels"));
-  ordina.append(selectOrdina);
-  strumenti.append(ordina);
-  const ambito = el("div", "talos-cluster");
-  ambito.setAttribute("role", "group");
-  ambito.setAttribute("aria-label", t("modelli.facets.destinationCollection"));
-  ambito.dataset.facetScope = "";
-  strumenti.append(ambito);
-  const apri = el("button", "talos-button talos-button--secondary talos-button--sm", t("modelli.facets.allFilters"));
-  apri.type = "button";
-  apri.dataset.facetToggle = "";
-  apri.setAttribute("aria-expanded", "false");
-  apri.setAttribute("aria-controls", "modelLabFacetsAdvanced");
-  const insegna = el("span", "talos-badge talos-badge--sm", "0");
-  insegna.dataset.facetTotal = "";
-  insegna.hidden = true;
-  apri.append(insegna);
-  strumenti.append(apri);
-  barra.append(strumenti);
-  const avanzati = el("div", "talos-choice-grid");
-  avanzati.id = "modelLabFacetsAdvanced";
-  avanzati.dataset.facetAdvanced = "";
-  avanzati.hidden = true;
-  const gContesto = el("fieldset", "talos-lab__space");
-  gContesto.dataset.facetGroup = "contesto";
-  gContesto.append(el("legend", "talos-lab__heading", t("modelli.facets.minimumContext")));
-  const lContesto = el("label", "talos-field talos-field--sm");
-  lContesto.append(el("span", "talos-muted", t("modelli.facets.contextRequirement")));
-  const selContesto = el("select", "talos-select talos-select--sm");
-  selContesto.id = "modelLabMinContext";
-  selContesto.dataset.facetSelect = "minContext";
-  selContesto.setAttribute("aria-label", t("modelli.facets.minimumContextTokens"));
-  lContesto.append(selContesto, el("span", "talos-muted", t("modelli.facets.tokens")));
-  gContesto.append(lContesto);
-  avanzati.append(gContesto);
-  const gParametri = gruppoValori(
-    "capabilities",
-    t("modelli.facets.acceptedParameters"),
-    t("modelli.facets.acceptedParametersNote")
-  );
-  avanzati.append(gParametri);
-  const gCosto = gruppoNumero(
-    "prezzo",
-    t("modelli.facets.declaredCost"),
-    [["maxInput", t("modelli.facets.maximumInput"), "USD/M"], ["maxOutput", t("modelli.facets.maximumOutput"), "USD/M"]],
-    t("modelli.facets.costNote")
-  );
-  avanzati.append(gCosto);
-  const gNonNoti = el("fieldset", "talos-lab__space");
-  gNonNoti.dataset.facetGroup = "nonnoti";
-  gNonNoti.append(el("legend", "talos-lab__heading", t("modelli.facets.unknownData")));
-  const rigaNonNoti = el("label", "talos-cluster");
-  const casellaNonNoti = el("input", "talos-checkbox");
-  casellaNonNoti.type = "checkbox";
-  casellaNonNoti.dataset.facetBool = "includeUnknown";
-  rigaNonNoti.append(casellaNonNoti, el("span", "talos-grow", t("modelli.facets.includeUnknownModels")));
-  gNonNoti.append(rigaNonNoti, el("p", "talos-muted", t("modelli.facets.missingPriceNote")));
-  avanzati.append(gNonNoti);
-  barra.append(avanzati);
-  const attivi = el("div", "talos-cluster");
-  attivi.setAttribute("role", "group");
-  attivi.setAttribute("aria-label", t("modelli.facets.appliedFilters"));
-  attivi.dataset.facetActive = "";
-  barra.append(attivi);
-  let filtri = emptyCatalogFilters();
-  let stato2 = { modelli: [], contesto: {}, capacita: capacitaDelCatalogo([]), senzaDati: true };
-  let aperti = /* @__PURE__ */ new Set();
-  const cambia = (nuovi) => {
-    filtri = nuovi;
-    onCambia?.(nuovi);
-  };
-  apri.addEventListener("click", (evento) => {
-    evento.stopPropagation();
-    const aperto = apri.getAttribute("aria-expanded") === "true";
-    apri.setAttribute("aria-expanded", String(!aperto));
-    avanzati.hidden = aperto;
-    apri.firstChild.textContent = aperto ? t("modelli.facets.allFilters") : t("modelli.facets.fewerFilters");
-  });
-  selectOrdina.addEventListener("change", () => cambia({ ...filtri, sort: selectOrdina.value }));
-  selContesto.addEventListener("change", () => cambia({ ...filtri, minContext: selContesto.value }));
-  casellaNonNoti.addEventListener("change", () => cambia({ ...filtri, includeUnknown: casellaNonNoti.checked }));
-  ambito.addEventListener("click", (evento) => {
-    const b = evento.target.closest("[data-facet-chip]");
-    if (!b || b.disabled) return;
-    cambia({ ...filtri, destination: b.dataset.facetChip === "all" ? [] : [b.dataset.facetChip] });
-  });
-  gParametri.addEventListener("click", (evento) => {
-    if (evento.target.closest("[data-facet-more]")) {
-      evento.stopPropagation();
-      aperti.has("capabilities") ? aperti.delete("capabilities") : aperti.add("capabilities");
-      aggiorna();
-    }
-  });
-  gParametri.addEventListener("change", (evento) => {
-    const c = evento.target.closest("[data-facet-check]");
-    if (c) cambia(toggleCatalogFacet(filtri, "capabilities", c.value));
-  });
-  gCosto.addEventListener("input", (evento) => {
-    const i2 = evento.target.closest("[data-facet-number]");
-    if (!i2) return;
-    cambia({ ...filtri, [i2.dataset.facetNumber]: i2.value === "" ? "" : String(Math.max(0, Number(i2.value) || 0)) });
-  });
-  attivi.addEventListener("click", (evento) => {
-    const b = evento.target.closest("[data-facet-remove]");
-    if (!b) return;
-    const dopo = b.dataset.facetRemove === "__azzera" ? emptyCatalogFilters() : removeCatalogFilter(filtri, b.dataset.facetKey, b.dataset.facetValue || void 0);
-    cambia(dopo);
-    const restanti = attivi.querySelectorAll("[data-facet-remove]");
-    (restanti[0] || document.querySelector("#modelLabSearch"))?.focus();
-  });
-  function aggiorna(nuovoStato) {
-    if (nuovoStato) stato2 = nuovoStato;
-    const { modelli, contesto: contesto2, capacita } = stato2;
-    if (stato2.filtri) filtri = stato2.filtri;
-    const senzaDati = stato2.senzaDati === true;
-    const conta2 = (chiave, valore) => senzaDati ? null : facetCount(modelli, filtri, chiave, valore, contesto2);
-    const ordinaSelezionata = filtri.sort || "catalog";
-    if (selectOrdina.dataset.firma !== JSON.stringify(capacita.ordinamenti)) {
-      selectOrdina.dataset.firma = JSON.stringify(capacita.ordinamenti);
-      selectOrdina.replaceChildren(...capacita.ordinamenti.map(([id4, testo2]) => new Option(testo2, id4, false, id4 === ordinaSelezionata)));
-    }
-    selectOrdina.value = ordinaSelezionata;
-    ambito.replaceChildren();
-    const totale2 = senzaDati ? null : selectCatalog(modelli, { ...filtri, destination: [] }, contesto2).length;
-    ambito.append(chip(t("modelli.facets.all"), "all", { premuto: !filtri.destination.length, conteggio: totale2 }));
-    for (const [valore, testo2] of FACET_OPTIONS.destination) {
-      const n = conta2("destination", valore);
-      const spento = n === 0 && !filtri.destination.includes(valore);
-      ambito.append(chip(etichettaFaccettaTradotta("destination", valore, testo2), valore, {
-        premuto: filtri.destination.includes(valore),
-        conteggio: n,
-        disabilitato: spento,
-        titolo: spento ? t("modelli.facets.noModels") : null
-      }));
-    }
-    const contestoMostrato = capacita.haContesto || filtri.minContext !== "";
-    gContesto.hidden = !contestoMostrato;
-    if (contestoMostrato) {
-      selContesto.replaceChildren();
-      selContesto.append(new Option(t("modelli.facets.any"), "", false, filtri.minContext === ""));
-      for (const s of SOGLIE_CONTESTO) {
-        const n = conta2("minContext", String(s));
-        selContesto.append(new Option(n === null ? numero(s) : `${numero(s)} (${numero(n)})`, String(s), false, filtri.minContext === String(s)));
-        selContesto.lastChild.disabled = n === 0 && filtri.minContext !== String(s);
-      }
-      selContesto.value = filtri.minContext;
-      if (selContesto.selectedIndex < 0) selContesto.selectedIndex = 0;
-    }
-    gParametri.hidden = !capacita.parametri.length;
-    if (!gParametri.hidden) {
-      const gruppi = capacita.parametri.filter((v) => filtri.capabilities.includes(v) || aperti.has("capabilities"));
-      const visibili = capacita.parametri.slice(0, VOCI_VISIBILI);
-      const daMostrare = [.../* @__PURE__ */ new Set([...gruppi, ...visibili])];
-      const righe = gParametri.querySelector("[data-facet-rows]");
-      righe.replaceChildren(...daMostrare.map((v) => rigaValore("capabilities", v, etichetta3("capabilities", v), conta2("capabilities", v), filtri.capabilities.includes(v))));
-      const altri = gParametri.querySelector("[data-facet-more]");
-      const resto = capacita.parametri.length - daMostrare.length;
-      const apertoOra = aperti.has("capabilities");
-      altri.hidden = !resto && !apertoOra;
-      altri.setAttribute("aria-expanded", String(apertoOra));
-      if (!altri.hidden) {
-        altri.textContent = apertoOra ? t("modelli.facets.fewerParameters") : tn("modelli.facets.oneMoreParameter", "modelli.facets.manyMoreParameters", resto, { n: numero(resto) });
-        altri.setAttribute("aria-label", apertoOra ? t("modelli.facets.closeParameters") : tn("modelli.facets.showOneMoreParameter", "modelli.facets.showManyMoreParameters", resto, { n: numero(resto) }));
-      }
-    }
-    gCosto.hidden = !capacita.haPrezzo;
-    if (!gCosto.hidden) for (const [campo3] of [["maxInput"], ["maxOutput"]]) {
-      const i2 = gCosto.querySelector('[data-facet-number="' + campo3 + '"]');
-      if (i2 && document.activeElement !== i2) i2.value = filtri[campo3];
-    }
-    gNonNoti.hidden = !capacita.haBuchi;
-    if (!gNonNoti.hidden) casellaNonNoti.checked = filtri.includeUnknown;
-    const chips = activeCatalogFilters(filtri);
-    const ricerca = attivi.closest("#modelLabCatalogPanel")?.querySelector('input[type="search"]')?.value?.trim() || "";
-    attivi.replaceChildren();
-    if (ricerca) attivi.append(chipRicerca(ricerca));
-    for (const c of chips) attivi.append(chipFiltro2(c));
-    if (chips.length || ricerca) {
-      const azzera = el("button", "talos-button talos-button--ghost talos-button--sm", t("modelli.facets.resetAll"));
-      azzera.type = "button";
-      azzera.dataset.facetRemove = "__azzera";
-      attivi.append(azzera);
-    }
-    attivi.hidden = !attivi.children.length;
-    insegna.textContent = String(chips.length);
-    insegna.hidden = !chips.length;
-    const avanzatiOffribili = capacita.parametri.length > 0 || capacita.haContesto || capacita.haPrezzo || capacita.haBuchi || filtri.minContext !== "";
-    apri.hidden = !avanzatiOffribili;
-    if (!avanzatiOffribili) {
-      avanzati.hidden = true;
-      apri.setAttribute("aria-expanded", "false");
-      apri.firstChild.textContent = t("modelli.facets.allFilters");
-    }
-    barra.dataset.facetDati = senzaDati ? "non-misurati" : "misurati";
-  }
-  function chipFiltro2(c) {
-    const b = el("button", "talos-button talos-button--secondary talos-button--sm", etichettaChip(c));
-    b.type = "button";
-    b.dataset.facetRemove = "";
-    b.dataset.facetKey = c.key;
-    if (typeof c.value === "string") b.dataset.facetValue = c.value;
-    b.setAttribute("aria-label", t("modelli.facets.removeFilter", { filter: etichettaChip(c) }));
-    return b;
-  }
-  function chipRicerca(q2) {
-    const b = el("button", "talos-button talos-button--secondary talos-button--sm", t("modelli.facets.searchValue", { query: q2 }));
-    b.type = "button";
-    b.dataset.facetRemoveSearch = "";
-    b.setAttribute("aria-label", t("modelli.facets.removeSearch", { query: q2 }));
-    b.addEventListener("click", () => {
-      const campo3 = barra.closest("#modelLabCatalogPanel")?.querySelector('input[type="search"]');
-      if (!campo3) return;
-      campo3.value = "";
-      campo3.dispatchEvent(new Event("input", { bubbles: true }));
-      campo3.focus();
-    });
-    return b;
-  }
-  barra.aggiorna = aggiorna;
-  return barra;
-}
-function aggiornaBarraFaccette(barra, stato2) {
-  barra.aggiorna(stato2);
-}
-function etichettaFaccettaTradotta(group, value, fallback = value) {
-  const key = CHIAVI_FACCETTE[group]?.[value];
-  return key ? t(key) : fallback;
-}
-function etichettaChip(chip3) {
-  if (chip3.key === "includeUnknown") return t("modelli.facets.active.includeUnknown");
-  const key = CHIAVI_CHIP[chip3.key];
-  return key ? t(key, { value: etichettaFaccettaTradotta(chip3.key, chip3.value) }) : chip3.label;
-}
-var localeUI, VOCI_VISIBILI, SOGLIE_CONTESTO, ETICHETTE_ORDINAMENTO, el, numero, CHIAVI_FACCETTE, CHIAVI_CHIP;
-var init_catalogo_faccette = __esm({
-  "src/components/catalogo-faccette.js"() {
-    init_lingua();
-    init_catalog_engine();
-    localeUI = () => linguaCorrenteDiT() === "en" ? "en-US" : "it-IT";
-    VOCI_VISIBILI = 8;
-    SOGLIE_CONTESTO = Object.freeze([8192, 16384, 32768, 65536, 131072, 262144]);
-    ETICHETTE_ORDINAMENTO = Object.freeze({
-      get catalog() {
-        return t("modelli.facets.catalogOrder");
-      },
-      get name() {
-        return t("modelli.facets.nameAscending");
-      },
-      get "context-desc"() {
-        return t("modelli.facets.largestContext");
-      },
-      get "price-asc"() {
-        return t("modelli.facets.inputPriceAscending");
-      }
-    });
-    el = (tag2, cls, txt) => {
-      const n = document.createElement(tag2);
-      if (cls) n.className = cls;
-      if (txt != null) n.textContent = String(txt);
-      return n;
-    };
-    numero = (n) => new Intl.NumberFormat(localeUI()).format(n);
-    CHIAVI_FACCETTE = { "destination": { "local": "modelli.facets.localModels", "cloud": "modelli.facets.cloudModels" }, "capabilities": { "tools": "modelli.facets.functionCalling", "vision": "modelli.facets.imageInput", "reasoning": "modelli.facets.reasoning", "json": "modelli.facets.jsonOutput", "audio": "modelli.facets.audio" } };
-    CHIAVI_CHIP = { "destination": "modelli.facets.active.destination", "capabilities": "modelli.facets.active.capabilities", "providers": "modelli.facets.active.provider", "minContext": "modelli.facets.active.minimumContext", "maxInput": "modelli.facets.active.maximumInput", "maxOutput": "modelli.facets.active.maximumOutput" };
-  }
-});
-
-// src/components/catalogo-modelli.js
-function normalizzaCatalogoModelli(d) {
-  if (!oggetto(d) || !Array.isArray(d.modelli) || typeof d.daCache !== "boolean" || typeof d.aggiornatoAlle !== "string" || Number.isNaN(Date.parse(d.aggiornatoAlle)) || !d.modelli.every((m) => oggetto(m) && typeof m.id === "string" && m.id && typeof m.nome === "string" && typeof m.provider === "string" && ["inputModalities", "outputModalities", "supportedParameters"].every((k) => Array.isArray(m[k]) && m[k].every((v) => typeof v === "string")))) throw Error(t("modelli.catalog.invalidResponse"));
-  return d;
-}
-function prezzoPerMilione(value) {
-  if (value == null || typeof value === "boolean" || typeof value === "object" || String(value).trim() === "") return t("modelli.catalog.notDeclared");
-  const n = Number(value);
-  return Number.isFinite(n) && n >= 0 ? new Intl.NumberFormat(localeUI2(), { maximumFractionDigits: 6 }).format(n * 1e6) + " USD" : t("modelli.catalog.notDeclared");
-}
-function filtraModelli(modelli, query = "", provider = "all") {
-  const q2 = String(query).trim().toLocaleLowerCase("it");
-  return modelli.filter((m) => (provider === "all" || m.provider === provider) && (!q2 || [m.nome, m.id, m.provider].some((v) => String(v || "").toLocaleLowerCase("it").includes(q2))));
-}
-function el2(tag2, cls, txt) {
-  const n = document.createElement(tag2);
-  if (cls) n.className = cls;
-  if (txt != null) n.textContent = String(txt);
-  return n;
-}
-function kv(k, v, id4) {
-  const row = el2("div", "talos-kv"), val = el2("span", "talos-kv__v", v);
-  if (id4) val.id = id4;
-  row.append(el2("span", "talos-kv__k", k), val);
-  return row;
-}
-function contesto(n) {
-  return Number.isFinite(n) && n > 0 ? tn("modelli.catalog.oneContextToken", "modelli.catalog.manyContextTokens", n, { n: new Intl.NumberFormat(localeUI2()).format(n) }) : t("modelli.catalog.notDeclared");
-}
-function numeroOsservato(v) {
-  if (v == null || typeof v === "boolean" || typeof v === "object" || String(v).trim() === "") return null;
-  const n = Number(v);
-  return Number.isFinite(n) && n >= 0 ? n : null;
-}
-function capacitaOsservate(m) {
-  const dove = { supportedParameters: new Set(m.supportedParameters || []), inputModalities: new Set(m.inputModalities || []), modalities: /* @__PURE__ */ new Set([...m.inputModalities || [], ...m.outputModalities || []]) };
-  return CAPACITA_OSSERVATE.filter(([, campo3, valore]) => dove[campo3].has(valore)).map(([id4]) => id4);
-}
-function modelloCatalogo(m) {
-  const c = numeroOsservato(m.contextLength);
-  return {
-    id: m.id,
-    name: m.nome,
-    provider: m.provider,
-    family: "",
-    author: null,
-    repo: null,
-    file: null,
-    destination: "cloud",
-    context: c && c > 0 ? c : null,
-    priceInput: inMilioniDiToken(numeroOsservato(m.prezzoPrompt)),
-    priceOutput: inMilioniDiToken(numeroOsservato(m.prezzoCompletion)),
-    capabilities: capacitaOsservate(m),
-    tasks: [],
-    languages: [],
-    license: null,
-    access: null,
-    parametersB: null,
-    architecture: null,
-    updatedAt: null,
-    installed: false,
-    quantization: null,
-    format: null
-  };
-}
-function creaRigaCatalogo(m, { selezionato = false, seleziona } = {}) {
-  const b = el2("button", "talos-list-row");
-  b.type = "button";
-  b.dataset.c = "ListRow";
-  b.dataset.catalog = m.id;
-  b.dataset.provider = m.provider;
-  b.setAttribute("aria-pressed", String(selezionato));
-  const icon = el2("span", "talos-list-row__icon");
-  icon.innerHTML = '<svg class="i" aria-hidden="true"><use href="#i-globe"></use></svg>';
-  const text2 = el2("span", "talos-list-row__text");
-  text2.append(el2("span", "talos-list-row__title", m.nome), el2("span", "talos-list-row__sub", m.provider + " · " + contesto(m.contextLength)));
-  b.append(icon, text2);
-  b.addEventListener("click", () => seleziona?.(m));
-  return b;
-}
-function aggiornaDettaglioCatalogo(mount, m, { fornitori } = {}) {
-  mount.replaceChildren();
-  if (!m) {
-    mount.append(el2("p", "talos-muted", t("modelli.catalog.selectModel")));
-    return;
-  }
-  const nome = el2("h3", "", m.nome);
-  nome.id = "catalogoNome";
-  const id4 = el2("code", "talos-mono", m.id);
-  id4.id = "catalogoId";
-  const desc = el2("p", "talos-detail__desc", m.description || t("modelli.catalog.noDescription"));
-  desc.id = "catalogoDescrizione";
-  mount.append(nome, id4, desc, kv(t("modelli.catalog.provider"), m.provider, "catalogoProvider"), kv(t("modelli.catalog.input"), elenco2(m.inputModalities), "catalogoIngresso"), kv(t("modelli.catalog.response"), elenco2(m.outputModalities), "catalogoUscita"), kv(t("modelli.catalog.supportedParameters"), elenco2(m.supportedParameters), "catalogoParametri"), kv(t("modelli.catalog.context"), contesto(m.contextLength), "catalogoContesto"));
-  const alias = el2("p", "talos-muted", t("modelli.catalog.aliasNote"));
-  alias.id = "catalogoAlias";
-  alias.hidden = !m.alias;
-  mount.append(alias, el2("hr", "talos-lab__rule"), el2("h3", "", t("modelli.catalog.costPerMillion")), kv(t("modelli.catalog.incoming"), prezzoPerMilione(m.prezzoPrompt), "catalogoPrezzoInput"), kv(t("modelli.catalog.outgoing"), prezzoPerMilione(m.prezzoCompletion), "catalogoPrezzoOutput"), el2("p", "talos-muted", t("modelli.catalog.pricesNote")));
-  const raw = el2("details", "talos-lab__space");
-  raw.append(el2("summary", "", t("modelli.catalog.originalTokenPrices")));
-  raw.append(kv(t("modelli.catalog.input"), m.prezzoPrompt ?? t("modelli.catalog.notDeclared"), "catalogoPrezzoInputRaw"), kv(t("modelli.catalog.output"), m.prezzoCompletion ?? t("modelli.catalog.notDeclared"), "catalogoPrezzoOutputRaw"));
-  mount.append(raw);
-  const stato2 = el2("p", "talos-muted", t("modelli.catalog.credentialsNote"));
-  stato2.id = "catalogoStato";
-  mount.append(stato2);
-  const use = el2("button", "talos-button talos-button--primary talos-button--block", t("modelli.catalog.useInSession"));
-  use.id = "catalogoAzione";
-  use.type = "button";
-  use.dataset.richiede = "fase3";
-  use.hidden = true;
-  mount.append(use);
-  const access = el2("button", "talos-button talos-button--ghost talos-button--sm", t("modelli.catalog.providersAndAccess"));
-  access.type = "button";
-  access.dataset.c = "Button";
-  access.addEventListener("click", (event) => {
-    if (fornitori) {
-      event.stopPropagation();
-      fornitori();
-    }
-  });
-  mount.append(access);
-}
-function barraDelPannello(panel) {
-  const esistente = panel.querySelector("#modelLabFacets");
-  if (esistente && esistente.aggiorna) return esistente;
-  const barra = creaBarraFaccette({ etichetta: etichettaFaccetta, onCambia: (nuovi) => {
-    panel.__catalogoFiltri = { ...nuovi, providers: [] };
-    const sel = panel.querySelector("#modelLabProviderFilter"), voluto = (nuovi.providers || [])[0] || "all";
-    if (sel && sel.value !== voluto) {
-      sel.value = voluto;
-      sel.dispatchEvent(new Event("change", { bubbles: true }));
-    }
-    const ultimo = panel.__catalogoUltimo;
-    if (ultimo) {
-      const provider = sel && sel.value ? sel.value : "all";
-      aggiornaCatalogoModelli(panel, ultimo.dati, { ...ultimo.opzioni || {}, provider });
-    }
-  } });
-  const dove = panel.querySelector(".talos-toolbar, .model-lab-filters");
-  if (dove) dove.after(barra);
-  else panel.prepend(barra);
-  return barra;
-}
-function scriviConteggiFornitori(panel, conteggi, totale2, { senzaDati = false } = {}) {
-  for (const o of panel.querySelectorAll("#modelLabProviderFilter option")) {
-    o.dataset.etichetta ??= o.textContent;
-    if (senzaDati) {
-      o.textContent = o.dataset.etichetta;
-      continue;
-    }
-    const n = o.value === "all" ? totale2 : conteggi.get(o.value);
-    o.textContent = n === void 0 ? o.dataset.etichetta : o.dataset.etichetta + " (" + new Intl.NumberFormat(localeUI2()).format(n) + ")";
-  }
-}
-function portaDelCatalogo(originale) {
-  const d = originale.ownerDocument;
-  if (!d || d.querySelector("#modelLabCatalogDoor")) return null;
-  const pannello = d.querySelector("#modelLabProvidersPanel");
-  const azioni = pannello?.querySelector(".provider-heading-actions") || pannello?.querySelector(".model-lab-panel-heading");
-  if (!azioni) return null;
-  const porta = d.createElement("button");
-  porta.type = "button";
-  porta.id = "modelLabCatalogDoor";
-  porta.className = "talos-button talos-button--secondary talos-button--sm";
-  porta.textContent = t("modelli.catalog.providerCatalog");
-  porta.setAttribute("aria-controls", "modelLabCatalogPanel");
-  porta.addEventListener("click", () => {
-    d.querySelector('[data-lab-comandi] [data-model-lab-tab="catalog"]')?.click();
-  });
-  azioni.append(porta);
-  return porta;
-}
-function aggiornaCatalogoModelli(panel, dati, opzioni = {}) {
-  const { query = "", provider = "all", selezionato = null, limite = 120, caricamento = false, errore: errore2 = "", seleziona, altri, fornitori } = opzioni;
-  const list = panel.querySelector("[data-catalog-list]"), detail = panel.querySelector("[data-catalog-detail]"), count2 = panel.querySelector("[data-catalog-count]"), more = panel.querySelector("[data-catalog-more]"), vuoto = panel.querySelector("#vuotoCatalogo"), refresh = panel.querySelector("[data-catalog-refresh]");
-  if (!list || !detail) return null;
-  const attivo = document.activeElement, focusId = list.contains(attivo) ? attivo.dataset.catalog : null, scroll = list.scrollTop;
-  const tutti = dati ? normalizzaCatalogoModelli(dati).modelli : [];
-  const riferimenti = /* @__PURE__ */ new Map(), adattati = tutti.map((m) => {
-    const a = modelloCatalogo(m);
-    riferimenti.set(a, m);
-    return a;
-  });
-  const ammessi = new Set(filtraModelli(tutti, query, "all"));
-  const base = adattati.filter((m) => ammessi.has(riferimenti.get(m)));
-  const barra = barraDelPannello(panel);
-  const filtri = { ...panel.__catalogoFiltri || emptyCatalogFilters(), providers: provider === "all" ? [] : [provider] };
-  const senzaDati = !dati;
-  if (barra) {
-    aggiornaBarraFaccette(barra, { modelli: base, contesto: {}, capacita: capacitaDelCatalogo(adattati), filtri, senzaDati });
-    scriviConteggiFornitori(panel, conteggiPerFornitore(base, filtri), tutti.length, { senzaDati });
-  }
-  const visibili = dati ? selectCatalog(base, filtri).map((m) => riferimenti.get(m)).filter(Boolean) : [];
-  const selected = visibili.find((m) => m.id === selezionato?.id) || visibili[0] || null;
-  list.replaceChildren();
-  if (vuoto) vuoto.hidden = true;
-  more.hidden = true;
-  refresh.disabled = caricamento;
-  panel.setAttribute("aria-busy", String(caricamento));
-  if (errore2) {
-    const p = el2("p", "talos-card talos-card--pad", errore2);
-    p.setAttribute("role", "alert");
-    list.append(p);
-    count2.textContent = t("modelli.catalog.unavailable");
-    aggiornaDettaglioCatalogo(detail, null);
-    return null;
-  }
-  panel.__catalogoUltimo = { dati, opzioni };
-  count2.setAttribute("aria-live", "polite");
-  count2.setAttribute("role", "status");
-  count2.textContent = caricamento ? t("modelli.catalog.refreshing") : dati ? dati.daCache ? tn("modelli.catalog.oneCachedModelCount", "modelli.catalog.manyCachedModelCount", dati.modelli.length, { n: visibili.length, total: dati.modelli.length, time: new Date(dati.aggiornatoAlle).toLocaleString(localeUI2(), { timeZone: "Europe/Rome" }) }) : tn("modelli.catalog.oneModelCount", "modelli.catalog.manyModelCount", dati.modelli.length, { n: visibili.length, total: dati.modelli.length, time: new Date(dati.aggiornatoAlle).toLocaleString(localeUI2(), { timeZone: "Europe/Rome" }) }) : t("modelli.catalog.notLoaded");
-  if (!dati) {
-    list.append(el2("p", "talos-card--pad talos-muted", caricamento ? t("modelli.catalog.loading") : t("modelli.catalog.openToLoad")));
-  } else if (!visibili.length) {
-    const p = el2("p", "talos-card--pad talos-muted", dati.modelli.length ? t("modelli.catalog.noMatches") : t("modelli.catalog.empty"));
-    list.append(p);
-  } else for (const m of visibili.slice(0, limite)) list.append(creaRigaCatalogo(m, { selezionato: m.id === selected?.id, seleziona }));
-  more.hidden = visibili.length <= limite;
-  more.onclick = () => altri?.();
-  aggiornaDettaglioCatalogo(detail, selected, { fornitori });
-  list.scrollTop = scroll;
-  if (focusId && document.activeElement === document.body && !panel.hidden) {
-    const nuovo = [...list.querySelectorAll("[data-catalog]")].find((b) => b.dataset.catalog === focusId);
-    nuovo?.focus({ preventScroll: true });
-  }
-  return selected;
-}
-function montaCatalogoModelli(originale, canonico) {
-  if (!originale || !canonico || originale.dataset.catalogMounted) return;
-  originale.replaceChildren(...canonico.children);
-  originale.dataset.catalogMounted = "true";
-  originale.dataset.catalogPanel = "";
-  const ids = { cercaCatalogo: "modelLabSearch", filtroFornitore: "modelLabProviderFilter", listaCatalogo: "modelLabCatalogList" };
-  for (const [prima, dopo] of Object.entries(ids)) {
-    const n = originale.querySelector("#" + prima);
-    if (!n) continue;
-    for (const label of originale.querySelectorAll('label[for="' + prima + '"]')) label.htmlFor = dopo;
-    n.id = dopo;
-  }
-  const dettaglio = originale.querySelector("[data-catalog-detail]");
-  if (dettaglio) dettaglio.id = "modelLabModelDetail";
-  const conteggio3 = originale.querySelector("[data-catalog-count]");
-  if (conteggio3) conteggio3.id = "modelLabCatalogCount";
-  const aggiorna = originale.querySelector("[data-catalog-refresh]");
-  if (aggiorna) aggiorna.id = "modelLabRefreshButton";
-  originale.querySelector("#modelLabProviderFilter")?.replaceChildren(new Option(t("modelli.catalog.allProviders"), "all"));
-  const listaCatalogo = originale.querySelector("[data-catalog-list]") || originale.querySelector("#modelLabCatalogList");
-  if (listaCatalogo) listaCatalogo.replaceChildren();
-  const dettaglioCatalogo = originale.querySelector("[data-catalog-detail]") || originale.querySelector("#modelLabModelDetail");
-  if (dettaglioCatalogo) aggiornaDettaglioCatalogo(dettaglioCatalogo, null);
-  portaDelCatalogo(originale);
-}
-function etichettaFaccettaTradotta2(group, value, fallback = value) {
-  const key = CHIAVI_FACCETTE2[group]?.[value];
-  return key ? t(key) : fallback;
-}
-var localeUI2, oggetto, PAROLE, elenco2, inMilioniDiToken, CAPACITA_OSSERVATE, etichettaFaccetta, CHIAVI_FACCETTE2;
-var init_catalogo_modelli = __esm({
-  "src/components/catalogo-modelli.js"() {
-    init_lingua();
-    init_catalog_engine();
-    init_catalogo_faccette();
-    localeUI2 = () => linguaCorrenteDiT() === "en" ? "en-US" : "it-IT";
-    oggetto = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
-    PAROLE = { get text() {
-      return t("modelli.catalog.text");
-    }, get image() {
-      return t("modelli.catalog.images");
-    }, get audio() {
-      return t("modelli.catalog.audio");
-    }, get video() {
-      return t("modelli.catalog.video");
-    }, get file() {
-      return t("modelli.catalog.file");
-    }, get tools() {
-      return t("modelli.catalog.tools");
-    }, get tool_choice() {
-      return t("modelli.catalog.toolChoice");
-    }, get temperature() {
-      return t("modelli.catalog.creativity");
-    }, get top_p() {
-      return t("modelli.catalog.variety");
-    }, get max_tokens() {
-      return t("modelli.catalog.responseLimit");
-    }, get response_format() {
-      return t("modelli.catalog.responseFormat");
-    }, get reasoning() {
-      return t("modelli.catalog.reasoning");
-    }, get include_reasoning() {
-      return t("modelli.catalog.showReasoning");
-    } };
-    elenco2 = (v) => v?.length ? v.map((x) => PAROLE[x] || x).join(", ") : t("modelli.catalog.notDeclared");
-    inMilioniDiToken = (n) => n === null ? null : Number((n * 1e6).toFixed(6));
-    CAPACITA_OSSERVATE = [["tools", "supportedParameters", "tools"], ["vision", "inputModalities", "image"], ["reasoning", "supportedParameters", "reasoning"], ["json", "supportedParameters", "response_format"], ["audio", "modalities", "audio"]];
-    etichettaFaccetta = (chiave, valore) => etichettaFaccettaTradotta2(chiave, valore, FACET_OPTIONS[chiave]?.find(([v]) => v === valore)?.[1] || PAROLE[valore] || valore);
-    CHIAVI_FACCETTE2 = { "destination": { "local": "modelli.facets.localModels", "cloud": "modelli.facets.cloudModels" }, "capabilities": { "tools": "modelli.facets.functionCalling", "vision": "modelli.facets.imageInput", "reasoning": "modelli.facets.reasoning", "json": "modelli.facets.jsonOutput", "audio": "modelli.facets.audio" } };
-  }
-});
-
-// src/components/fonti-modelli.js
-function portaInVistaFonteSelettore(evento) {
-  const scheda = evento.target;
-  if (!scheda?.matches?.('.model-picker-source[role="tab"]') || !scheda.parentElement?.matches('.model-picker-sources[role="tablist"]')) return;
-  scheda.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "instant", container: "nearest" });
-}
-function opzioniFallback(fornitori = [], { usaAttrezzi = true } = {}) {
-  return fornitori.filter((p) => p.keyConfigured === true).flatMap((p) => (p.modelliDiRiserva || []).filter((m) => !usaAttrezzi || m.toolCalling === true).map((m) => ({ provider: p.id, model: m.id, etichetta: `${p.label || p.id} · ${m.nome || m.id}` })));
-}
-function creaSceltaFallback({ fornitori = [], valore = [], usaAttrezzi = true, onChange = null } = {}) {
-  const wrap = document.createElement("div");
-  wrap.className = "talos-stack talos-scelta-riserve";
-  wrap.setAttribute("role", "group");
-  wrap.setAttribute("aria-label", t("modelli.sources.fallbackHeading"));
-  Object.assign(wrap.style, { minWidth: "0", margin: "16px 0 0", gap: "8px" });
-  const etichetta3 = document.createElement("span");
-  etichetta3.className = "sheet-label";
-  etichetta3.textContent = t("modelli.sources.fallbackHeading");
-  wrap.append(etichetta3);
-  const selezione = valore.map(({ provider, model }) => ({ provider, model }));
-  const scelte = opzioniFallback(fornitori, { usaAttrezzi });
-  const lista = document.createElement("ol");
-  lista.className = "talos-stack";
-  const select = document.createElement("select");
-  select.className = "talos-field__input";
-  select.setAttribute("aria-label", t("modelli.sources.fallbackProviderModel"));
-  Object.assign(select.style, { flex: "1", minWidth: "0" });
-  select.disabled = typeof onChange !== "function";
-  const vuota2 = document.createElement("option");
-  vuota2.value = "";
-  vuota2.textContent = t("modelli.sources.none");
-  select.append(vuota2);
-  for (const [i2, o] of scelte.entries()) {
-    const option = document.createElement("option");
-    option.value = String(i2);
-    option.textContent = o.etichetta;
-    select.append(option);
-  }
-  const aggiungi = document.createElement("button");
-  aggiungi.type = "button";
-  aggiungi.className = "talos-button talos-button--secondary talos-button--sm";
-  aggiungi.textContent = t("modelli.sources.add");
-  const notifica = () => onChange?.(selezione.map((v) => ({ ...v })));
-  function disegna2() {
-    lista.hidden = selezione.length === 0;
-    lista.replaceChildren(...selezione.map((v, i2) => {
-      const li = document.createElement("li");
-      li.className = "talos-cluster";
-      const label = document.createElement("span");
-      label.textContent = scelte.find((o) => o.provider === v.provider && o.model === v.model)?.etichetta || t("modelli.sources.fallbackUnavailable");
-      const rimuovi2 = document.createElement("button");
-      rimuovi2.type = "button";
-      rimuovi2.className = "talos-button talos-button--ghost talos-button--sm";
-      rimuovi2.textContent = t("modelli.sources.remove");
-      rimuovi2.setAttribute("aria-label", t("modelli.sources.removeChoice", { name: label.textContent }));
-      rimuovi2.disabled = typeof onChange !== "function";
-      rimuovi2.addEventListener("click", () => {
-        selezione.splice(i2, 1);
-        notifica();
-        disegna2();
-        select.focus();
-      });
-      li.append(label, rimuovi2);
-      return li;
-    }));
-    for (const [i2, option] of [...select.options].slice(1).entries()) option.disabled = selezione.some((v) => v.provider === scelte[i2].provider && v.model === scelte[i2].model);
-    aggiungi.disabled = typeof onChange !== "function" || !scelte.length || select.value === "" || selezione.length >= 8;
-  }
-  select.addEventListener("change", disegna2);
-  aggiungi.addEventListener("click", () => {
-    const scelta = scelte[Number(select.value)];
-    if (!scelta || select.value === "" || selezione.length >= 8 || selezione.some((v) => v.provider === scelta.provider && v.model === scelta.model)) return;
-    selezione.push({ provider: scelta.provider, model: scelta.model });
-    select.value = "";
-    notifica();
-    disegna2();
-    select.focus();
-  });
-  const nota = document.createElement("small");
-  nota.className = "workspace-chooser-help talos-muted";
-  nota.textContent = typeof onChange !== "function" ? t("modelli.sources.fallbackDisconnected") : t("modelli.sources.fallbackHelp");
-  const azioni = document.createElement("div");
-  azioni.className = "talos-cluster";
-  azioni.append(select, aggiungi);
-  wrap.append(lista, azioni, nota);
-  disegna2();
-  return wrap;
-}
-function senzaChiave(fonte) {
-  return PROVIDER_DIRETTI.some((p) => p.id === fonte && p.senzaChiave === true);
-}
-function nomeFornitore(id4) {
-  const chiave = String(id4 ?? "").trim().toLowerCase();
-  if (chiave === "") return null;
-  if (Object.hasOwn(NOMI_FUORI_DAI_DIRETTI, chiave)) return NOMI_FUORI_DAI_DIRETTI[chiave];
-  const cercato = PONTE_CATALOGO[chiave] || chiave;
-  return PROVIDER_DIRETTI.find((p) => p.id === cercato)?.etichetta ?? null;
-}
-function eFonteDiretta(fonte) {
-  return ID_DIRETTI.has(String(fonte || ""));
-}
-function fontiDelSelettore({ openrouter = null, locali = null, diretti = null } = {}) {
-  const etichetta3 = (nome, modelli) => modelli?.some((m) => m.catalogo?.fonte === "riserva") ? t("modelli.sources.reserveList", { name: nome }) : nome;
-  const fonti = [
-    { id: "openrouter", etichetta: etichetta3("OpenRouter", openrouter), conto: contaOppureNull(openrouter), collegato: true },
-    { id: "locali", etichetta: t("modelli.sources.localModels"), conto: contaOppureNull(locali), collegato: true }
-  ];
-  for (const provider of PROVIDER_DIRETTI) {
-    const elenco3 = diretti ? diretti[provider.id] : null;
-    if (provider.id === "esterno" && !elenco3?.some((m) => m.id === "esterno:predefinito")) continue;
-    if (provider.soloSeCollegato && !Array.isArray(elenco3)) continue;
-    fonti.push({
-      id: provider.id,
-      etichetta: etichetta3(provider.etichetta, elenco3),
-      conto: contaOppureNull(elenco3),
-      // `collegato` è falso solo quando SAPPIAMO che la chiave manca: prima di leggere non si accusa.
-      collegato: !diretti || Array.isArray(elenco3)
-    });
-  }
-  return fonti;
-}
-function modelliDellaFonte(fonte, { openrouter = null, locali = null, diretti = null } = {}) {
-  if (fonte === "openrouter") return openrouter;
-  if (fonte === "locali") return locali;
-  if (!eFonteDiretta(fonte)) return null;
-  if (!diretti) return null;
-  const elenco3 = diretti[fonte];
-  return Array.isArray(elenco3) ? elenco3 : null;
-}
-function fraseVuotoDiretto(fonte, { diretti = null, errori = {} } = {}) {
-  const etichetta3 = PROVIDER_DIRETTI.find((p) => p.id === fonte)?.etichetta || fonte;
-  if (errori && errori[fonte]) return t("modelli.sources.catalogUnavailable", { provider: etichetta3, error: errori[fonte] });
-  if (fonte === "esterno") return t("modelli.sources.configureExternalAgent");
-  if (!diretti) return t("modelli.sources.readingCatalog", { provider: etichetta3 });
-  if (!Array.isArray(diretti[fonte])) {
-    return senzaChiave(fonte) ? t("modelli.sources.startLocalProvider", { provider: etichetta3 }) : t("modelli.sources.connectProviderKey", { provider: etichetta3 });
-  }
-  return t("modelli.sources.noProviderModels", { provider: etichetta3 });
-}
-function contaOppureNull(elenco3) {
-  return Array.isArray(elenco3) ? elenco3.length : null;
-}
-function descrizioneModelloSelettore(modello = {}) {
-  const numero12 = new Intl.NumberFormat(localeUI3(), { maximumFractionDigits: 0, useGrouping: true });
-  const prezzo = (valore) => {
-    const testo2 = prezzoPerMilione(valore);
-    const dichiarato = valore != null && typeof valore !== "boolean" && typeof valore !== "object" && String(valore).trim() !== "" && Number.isFinite(Number(valore)) && Number(valore) >= 0;
-    return dichiarato ? t("modelli.sources.pricePerMillion", { price: testo2 }) : t("modelli.sources.unavailable");
-  };
-  const capacita = (valore) => valore === true ? t("modelli.sources.yes") : valore === false ? t("modelli.sources.no") : t("modelli.sources.unavailable");
-  const dettagli2 = [
-    t("modelli.sources.context", { value: Number.isFinite(modello.contextLength) && modello.contextLength > 0 ? tn("modelli.sources.contextOneToken", "modelli.sources.contextTokens", modello.contextLength, { n: numero12.format(modello.contextLength) }) : t("modelli.sources.unavailable") }),
-    t("modelli.sources.input", { value: prezzo(modello.prezzoPrompt) }),
-    t("modelli.sources.output", { value: prezzo(modello.prezzoCompletion) }),
-    t("modelli.sources.cacheRead", { value: prezzo(modello.prezzoCacheRead) }),
-    t("modelli.sources.cacheWrite", { value: prezzo(modello.prezzoCacheWrite) }),
-    t("modelli.sources.tools", { value: capacita(modello.capacita?.toolCall) }),
-    t("modelli.sources.reasoning", { value: capacita(modello.capacita?.reasoning) })
-  ];
-  if (modello.alias) dettagli2.unshift(t("modelli.sources.latestVersion"));
-  if (modello.prezziPerMilione?.tiers?.length || modello.prezziPerMilione?.context_over_200k) dettagli2.push(t("modelli.sources.contextPricing"));
-  if (modello.catalogo?.fonte === "riserva") {
-    const data2 = modello.catalogo.dataRiserva;
-    const parti = typeof data2 === "string" && /^(\d{4})-(\d{2})-(\d{2})$/u.exec(data2);
-    dettagli2.unshift(t("modelli.sources.reserveCatalog", { date: parti ? t("modelli.sources.reserveDate", { date: `${parti[3]}/${parti[2]}/${parti[1]}` }) : "" }));
-    if (modello.catalogo.avvisi?.some((a) => a.codice === "CATALOG_CACHE_CORRUPT")) dettagli2.push(t("modelli.sources.corruptCacheRejected"));
-    return dettagli2.join(" · ");
-  }
-  const data = modello.catalogo?.aggiornatoAlle;
-  dettagli2.push(typeof data === "string" && Number.isFinite(Date.parse(data)) ? t("modelli.sources.catalogDataDate", { date: new Intl.DateTimeFormat(localeUI3(), { timeZone: "Europe/Rome" }).format(new Date(data)) }) : t("modelli.sources.catalogDateUnavailable"));
-  if (modello.catalogo?.fallbackRete) {
-    const etaMs = modello.catalogo.etaCacheMs;
-    dettagli2.push(t("modelli.sources.savedCopy", { age: Number.isFinite(etaMs) && etaMs >= 0 ? tn("modelli.sources.cacheAgeOneSecond", "modelli.sources.cacheAge", Math.floor(etaMs / 1e3), { n: numero12.format(Math.floor(etaMs / 1e3)) }) : t("modelli.sources.cacheAgeUnavailable") }));
-  }
-  if (modello.catalogo?.avvisi?.some((a) => a.codice === "CATALOG_CACHE_CORRUPT")) dettagli2.push(t("modelli.sources.corruptCacheRejected"));
-  if (modello.catalogo?.avvisi?.some((a) => a.codice === "CATALOG_CACHE_WRITE_FAILED")) dettagli2.push(t("modelli.sources.catalogSaveUnavailable"));
-  return dettagli2.join(" · ");
-}
-function aggiornaTestoModelloSelettore(contenitore, modello) {
-  const nome = contenitore.ownerDocument.createElement("strong");
-  nome.textContent = modello.nome || t("modelli.sources.modelNameUnavailable");
-  const dettagli2 = contenitore.ownerDocument.createElement("small");
-  dettagli2.textContent = descrizioneModelloSelettore(modello);
-  contenitore.replaceChildren(nome, dettagli2);
-}
-var localeUI3, PROVIDER_DIRETTI, NOMI_FUORI_DAI_DIRETTI, PONTE_CATALOGO, ID_DIRETTI;
-var init_fonti_modelli = __esm({
-  "src/components/fonti-modelli.js"() {
-    init_lingua();
-    init_catalogo_modelli();
-    localeUI3 = () => linguaCorrenteDiT() === "en" ? "en-US" : "it-IT";
-    if (typeof document !== "undefined") document.addEventListener("focusin", portaInVistaFonteSelettore);
-    PROVIDER_DIRETTI = Object.freeze([
-      Object.freeze({ id: "anthropic", etichetta: "Anthropic" }),
-      Object.freeze({ id: "gemini", etichetta: "Gemini" }),
-      Object.freeze({ id: "openai", etichetta: "OpenAI" }),
-      Object.freeze({ id: "lmstudio", etichetta: "LM Studio", senzaChiave: true }),
-      Object.freeze({ id: "zai", etichetta: "Z.AI", soloSeCollegato: true }),
-      Object.freeze({ id: "deepseek", etichetta: "DeepSeek", soloSeCollegato: true }),
-      Object.freeze({ id: "groq", etichetta: "Groq", soloSeCollegato: true }),
-      Object.freeze({ id: "cerebras", etichetta: "Cerebras", soloSeCollegato: true }),
-      Object.freeze({ id: "mistral", etichetta: "Mistral", soloSeCollegato: true }),
-      Object.freeze({ id: "together", etichetta: "Together", soloSeCollegato: true }),
-      Object.freeze({ id: "fireworks", etichetta: "Fireworks", soloSeCollegato: true }),
-      Object.freeze({ id: "deepinfra", etichetta: "DeepInfra", soloSeCollegato: true }),
-      Object.freeze({ id: "novita", etichetta: "Novita", soloSeCollegato: true }),
-      Object.freeze({ id: "nebius", etichetta: "Nebius", soloSeCollegato: true }),
-      Object.freeze({ id: "xai", etichetta: "xAI", soloSeCollegato: true }),
-      Object.freeze({ id: "ollama-cloud", etichetta: "Ollama Cloud", soloSeCollegato: true }),
-      Object.freeze({ id: "huggingface", etichetta: "Hugging Face", soloSeCollegato: true }),
-      Object.freeze({ id: "kimi", etichetta: "Kimi", soloSeCollegato: true }),
-      Object.freeze({ id: "minimax", etichetta: "MiniMax", soloSeCollegato: true }),
-      Object.freeze({ id: "qwen", etichetta: "Qwen", soloSeCollegato: true }),
-      // P-J — porte distinte, nomi umani; nessuna disponibilità senza collegamento.
-      Object.freeze({ id: "zai-anthropic", get etichetta() {
-        return t("modelli.sources.zaiAnthropicPort");
-      }, soloSeCollegato: true }),
-      Object.freeze({ id: "minimax-anthropic", get etichetta() {
-        return t("modelli.sources.minimaxAnthropicPort");
-      }, soloSeCollegato: true }),
-      // P-K — inizio
-      Object.freeze({ id: "azure", etichetta: "Azure AI Foundry", soloSeCollegato: true }),
-      Object.freeze({ id: "bedrock", etichetta: "Amazon Bedrock", soloSeCollegato: true }),
-      Object.freeze({ id: "vertex", etichetta: "Google Vertex AI", soloSeCollegato: true }),
-      // P-K — fine
-      Object.freeze({ id: "esterno", get etichetta() {
-        return t("modelli.sources.externalAgent");
-      }, senzaChiave: true, soloSeCollegato: true })
-      // P-L-bis
-    ]);
-    NOMI_FUORI_DAI_DIRETTI = Object.freeze({
-      openrouter: "OpenRouter",
-      ollama: "Ollama",
-      /* ⛔ «locale» resta «locale», la parola che il piede scrive dal 05/09 ed è documentata in testa a
-         `workspace-footer.js`. Non è un fornitore: è «gira su questo computer». Cambiarla qui sarebbe
-         un ritocco di copia che nessuno ha chiesto, dentro un giro che cura tutt'altro. */
-      get local() {
-        return t("modelli.sources.local");
-      },
-      get locale() {
-        return t("modelli.sources.local");
-      },
-      get locali() {
-        return t("modelli.sources.local");
-      }
-    });
-    PONTE_CATALOGO = Object.freeze({
-      "z-ai": "zai",
-      "x-ai": "xai",
-      google: "gemini",
-      moonshotai: "kimi",
-      mistralai: "mistral"
-    });
-    ID_DIRETTI = new Set(PROVIDER_DIRETTI.map((p) => p.id));
-  }
-});
-
 // src/legacy/invio-durante-il-giro.js
 function decidiInvio({ testo: testo2 = "", giroAttivo = false, conCtrl = false } = {}) {
   const pulito = String(testo2 ?? "");
@@ -24824,6 +23838,7 @@ var init_nomi_attrezzi = __esm({
       provider_exclusions_list: "varie.tools.name.providerExclusionsList",
       provider_exclude: "varie.tools.name.providerExclude",
       provider_allow: "varie.tools.name.providerAllow",
+      chatgpt_account: "varie.tools.name.chatgptAccount",
       ask_parent: "varie.tools.name.askParent",
       answer_parent_question: "varie.tools.name.answerParentQuestion",
       ask_child: "varie.tools.name.askChild",
@@ -24948,6 +23963,7 @@ var init_nomi_attrezzi = __esm({
       provider_exclusions_list: "varie.tools.description.providerExclusionsList",
       provider_exclude: "varie.tools.description.providerExclude",
       provider_allow: "varie.tools.description.providerAllow",
+      chatgpt_account: "varie.tools.description.chatgptAccount",
       ask_parent: "varie.tools.description.askParent",
       answer_parent_question: "varie.tools.description.answerParentQuestion",
       ask_child: "varie.tools.description.askChild",
@@ -25013,8 +24029,8 @@ function sommaUsage(a, b) {
   if (!a || typeof a !== "object") return b && typeof b === "object" ? { ...b } : null;
   if (!b || typeof b !== "object") return { ...a };
   const somma3 = (chiave) => {
-    const x = numero2(a[chiave]);
-    const y = numero2(b[chiave]);
+    const x = numero(a[chiave]);
+    const y = numero(b[chiave]);
     if (x === null && y === null) return null;
     return (x ?? 0) + (y ?? 0);
   };
@@ -25024,7 +24040,7 @@ function sommaUsage(a, b) {
     if (valore === null) delete risultato[chiave];
     else risultato[chiave] = valore;
   }
-  if (numero2(b.tokens_per_second) === null && numero2(a.tokens_per_second) !== null) risultato.tokens_per_second = a.tokens_per_second;
+  if (numero(b.tokens_per_second) === null && numero(a.tokens_per_second) !== null) risultato.tokens_per_second = a.tokens_per_second;
   return risultato;
 }
 function usageDellaSessione(sessione) {
@@ -25051,15 +24067,15 @@ function testoRiusoCache(misura) {
   const p = misura?.percentuale;
   const giri = misura?.giriMisurati;
   if (!Number.isFinite(p) || p < 0 || p > 100 || !Number.isSafeInteger(giri) || giri <= 0) return t("varie.usage.notMeasured");
-  const numero12 = new Intl.NumberFormat(localeUI4(), { maximumFractionDigits: 0 });
+  const numero12 = new Intl.NumberFormat(localeUI(), { maximumFractionDigits: 0 });
   return tn("varie.usage.cacheReuseOne", "varie.usage.cacheReuseMany", giri, { percent: numero12.format(p), n: numero12.format(giri) });
 }
-var localeUI4, numero2;
+var localeUI, numero;
 var init_consumo_sessione = __esm({
   "src/components/consumo-sessione.js"() {
     init_lingua();
-    localeUI4 = () => linguaCorrenteDiT() === "en" ? "en-US" : "it-IT";
-    numero2 = (valore) => Number.isFinite(Number(valore)) ? Number(valore) : null;
+    localeUI = () => linguaCorrenteDiT() === "en" ? "en-US" : "it-IT";
+    numero = (valore) => Number.isFinite(Number(valore)) ? Number(valore) : null;
   }
 });
 
@@ -25903,13 +24919,336 @@ var init_comando_shell = __esm({
   }
 });
 
+// src/components/coordinazione.js
+function coordinazioneAccesaNellaCatena(sceltePerAnello) {
+  const anelli = Array.isArray(sceltePerAnello) ? sceltePerAnello : [];
+  if (anelli.length === 0) return false;
+  const scelte = anelli.map((m) => eMappa(m) && Object.hasOwn(m, CHIAVE_COORDINAZIONE) ? m[CHIAVE_COORDINAZIONE] : void 0);
+  if (scelte.some((s) => s !== void 0 && s !== "sempre")) return false;
+  return scelte[scelte.length - 1] === "sempre";
+}
+function mappaPerUnaSessioneNuova(mappa) {
+  if (!eMappa(mappa)) return {};
+  const { [CHIAVE_COORDINAZIONE]: _tolta, ...resto } = mappa;
+  return resto;
+}
+var CHIAVE_COORDINAZIONE, TETTO_AVVII_DA_SOLO, eMappa;
+var init_coordinazione = __esm({
+  "src/components/coordinazione.js"() {
+    CHIAVE_COORDINAZIONE = "delega_sottotask";
+    TETTO_AVVII_DA_SOLO = 20;
+    eMappa = (mappa) => Boolean(mappa) && typeof mappa === "object" && !Array.isArray(mappa);
+  }
+});
+
+// src/components/politiche.js
+function politica(valore) {
+  return PER_VALORE.get(String(valore || "").trim()) || null;
+}
+function nomeUmanoPolitica(valore) {
+  return politica(valore)?.nome || String(valore || "");
+}
+function descrizionePolitica(valore) {
+  return politica(valore)?.descrizione || "";
+}
+function notaPolitica(valore) {
+  return politica(valore)?.nota || "";
+}
+function valoriPolitiche() {
+  return POLITICHE.map((p) => p.valore);
+}
+var politicaDa, POLITICHE, PER_VALORE;
+var init_politiche = __esm({
+  "src/components/politiche.js"() {
+    init_lingua();
+    politicaDa = (valore, chiave, rischio) => Object.freeze(Object.defineProperties({ valore, rischio }, {
+      nome: { enumerable: true, get: () => t(`chat.foot.permission.${chiave}`) },
+      descrizione: { enumerable: true, get: () => t(`varie.policy.${chiave}.description`) },
+      nota: { enumerable: true, get: () => t(`varie.policy.${chiave}.note`) }
+    }));
+    POLITICHE = Object.freeze([
+      politicaDa("Read only", "readOnly", "basso"),
+      politicaDa("Workspace write", "workspaceWrite", "medio"),
+      politicaDa("On request", "onRequest", "medio"),
+      politicaDa("Full access", "fullAccess", "massimo")
+    ]);
+    PER_VALORE = new Map(POLITICHE.map((p) => [p.valore, p]));
+  }
+});
+
+// src/components/chat-foot.js
+function etichettaPermesso(permesso) {
+  if (NOME_PERMESSO[permesso]) return NOME_PERMESSO[permesso];
+  if (Object.hasOwn(CHIAVI_PERMESSO_NON_SCEGLIBILI, permesso)) return t(CHIAVI_PERMESSO_NON_SCEGLIBILI[permesso]);
+  return typeof permesso === "string" && permesso.trim() ? permesso : t("chat.foot.permission.notSelected");
+}
+function attrezzoPassaSenzaChiedere(livello, scelta, attrezzo) {
+  if (scelta === "sempre") return true;
+  if (scelta === "chiedi" || scelta === "nega") return false;
+  const concessi = Object.hasOwn(CONCESSI_DAL_LIVELLO, livello ?? "") ? CONCESSI_DAL_LIVELLO[livello] : null;
+  return concessi === TUTTI || Boolean(concessi?.has(attrezzo));
+}
+function riassuntoSenzaChiedere(permesso, permessiPerAttrezzo, { modalitaOperativa = "normale" } = {}) {
+  const livello = LIVELLO_DELLA_POLITICA[permesso];
+  const scelte = permessiPerAttrezzo && typeof permessiPerAttrezzo === "object" ? permessiPerAttrezzo : {};
+  if (modalitaOperativa === "piano") {
+    return {
+      testo: t("chat.foot.permission.planReadOnly"),
+      suggerimento: [t("chat.foot.permission.policyLine", { politica: etichettaPermesso(permesso) }), t("chat.foot.permission.planPaused"), t("chat.foot.permission.change")].join("\n"),
+      gruppi: [],
+      parziali: [],
+      spenti: []
+    };
+  }
+  const passa = (a) => attrezzoPassaSenzaChiedere(livello, scelte[a], a);
+  const nome = (g) => {
+    const base = t(`chat.foot.permission.group.${g.chiave}`);
+    if (g.attrezzi.every(passa) || !g.attrezzi.some(passa)) return base;
+    return t("chat.foot.permission.groupPart", { gruppo: base, parte: g.attrezzi.filter(passa).map((a) => t(`chat.foot.permission.part.${a}`)).join(", ") });
+  };
+  const gruppi = livello ? GRUPPI_SENZA_CHIEDERE.filter((g) => g.attrezzi.some(passa)) : [];
+  const parziali = gruppi.filter((g) => !g.attrezzi.every(passa));
+  const spenti = GRUPPI_SENZA_CHIEDERE.filter((g) => g.attrezzi.every((a) => scelte[a] === "nega"));
+  const tuttoPassa = GRUPPI_SENZA_CHIEDERE.every((g) => g.attrezzi.every(passa));
+  let testo2;
+  if (!livello) testo2 = etichettaPermesso(permesso);
+  else if (gruppi.length === 0) testo2 = livello === "lettura" || livello === "ricerca" ? etichettaPermesso(permesso) : t("chat.foot.permission.asksEverything");
+  else if (tuttoPassa && livello === "accesso-pieno") testo2 = t("chat.foot.permission.withoutAskingAll");
+  else testo2 = t("chat.foot.permission.withoutAsking", { cosa: gruppi.map(nome).join(", ") });
+  const conUnSempre = GRUPPI_SENZA_CHIEDERE.some((g) => g.attrezzi.some((a) => scelte[a] === "sempre"));
+  const chiedeSempre = [
+    ...livello === "scrittura-progetto" ? ["outside"] : [],
+    ...livello === "scrittura-progetto" || livello === "accesso-pieno" || conUnSempre ? ["secrets", "suspicious"] : [],
+    ...conUnSempre && livello !== "accesso-pieno" ? ["trifecta"] : []
+  ];
+  const righe = [t("chat.foot.permission.policyLine", { politica: etichettaPermesso(permesso) })];
+  if (chiedeSempre.length && gruppi.length) righe.push(t("chat.foot.permission.alwaysAsks", { cosa: chiedeSempre.map((c) => t(`chat.foot.permission.always.${c}`)).join(", ") }));
+  if (spenti.length) righe.push(t("chat.foot.permission.turnedOff", { cosa: spenti.map(nome).join(", ") }));
+  righe.push(t("chat.foot.permission.change"));
+  return { testo: testo2, suggerimento: righe.join("\n"), gruppi: gruppi.map((g) => g.chiave), parziali: parziali.map((g) => g.chiave), spenti: spenti.map((g) => g.chiave) };
+}
+function nomeModelloUmano(id4) {
+  if (typeof id4 !== "string" || !id4.trim()) return "";
+  const grezzo = id4.trim();
+  if (!/^local:/i.test(grezzo)) {
+    const senzaFonte = grezzo.replace(/^[a-z][a-z0-9-]*:(?=.)/u, "");
+    return senzaFonte.replace(/^~/u, "").split("/").pop();
+  }
+  let resto = grezzo.replace(/^local:/i, "").replace(/[-_.]gguf$/i, "");
+  const quant = /[-_](IQ\d\w*|Q\d(?:[-_]\d)?(?:[-_][A-Z]+)*)(?=[-_]|$)/i.exec(resto);
+  const parametri = /(?:^|[-_])(\d+(?:[.,]\d+)?B)(?:[-_]A(\d+(?:[.,]\d+)?B))?(?=[-_]|$)/i.exec(resto);
+  let nome = resto;
+  if (parametri) nome = resto.slice(0, parametri.index);
+  nome = nome.replace(/[-_](GGUF|MLX|AWQ|GPTQ)$/i, "");
+  const pezzi = nome.split(/[-_]/).filter(Boolean);
+  if (pezzi.length > 1) pezzi.shift();
+  const pulito = pezzi.join(" ").replace(/\s+/g, " ").trim();
+  const parti = [pulito || resto];
+  if (parametri) parti.push(parametri[2] ? t("chat.foot.activeOf", { totali: parametri[1], attivi: parametri[2].replace(/^A/i, "") }) : parametri[1]);
+  if (quant) parti.push(quant[1].toUpperCase().replace(/-/g, "_"));
+  return parti.filter(Boolean).join(" · ");
+}
+function fondoInVista({ scrollHeight = 0, scrollTop = 0, clientHeight = 0, coda: coda2 = 0, soglia = 4 } = {}) {
+  if (Number(scrollHeight) <= Number(clientHeight)) return true;
+  const distanza = Number(scrollHeight) - Number(scrollTop) - Number(clientHeight);
+  if (!Number.isFinite(distanza)) return true;
+  return distanza <= Math.max(0, Number(coda2) || 0) + soglia;
+}
+function dettaglioUtile(cosa, dettaglio) {
+  const pulisci = (t2) => String(t2 ?? "").replace(/[…\.]+$/u, "").trim().toLowerCase();
+  const a = pulisci(cosa);
+  const b = pulisci(dettaglio);
+  if (!b || !a) return String(dettaglio ?? "").trim();
+  if (a === b || a.startsWith(b) || b.startsWith(a)) return "";
+  return String(dettaglio).trim();
+}
+function tonoPermesso(permesso) {
+  if (permesso === "Full access") return "danger";
+  if (permesso === "Workspace write") return "warning";
+  return null;
+}
+function kilo(n) {
+  const v = Number(n) || 0;
+  if (v < 1e3) return String(Math.round(v));
+  return `${conSeparatoreDecimale((v / 1e3).toFixed(1))}k`;
+}
+function testoVelocitaLocale(modelloId, velocita) {
+  const id4 = String(modelloId || "");
+  if (!/^local:/i.test(id4)) return "";
+  return String(velocita || "").trim();
+}
+function testiUsage(usage, { tettoGiri = null, usageSessione = null } = {}) {
+  const sessione = usageSessione && typeof usageSessione === "object" ? usageSessione : usage;
+  if ((!usage || typeof usage !== "object") && (!sessione || typeof sessione !== "object")) return { tokenGiri: "", cache: "", giri: null, velocita: "" };
+  const prompt = Number(sessione?.prompt_tokens ?? 0) || 0;
+  const completion = Number(sessione?.completion_tokens ?? 0) || 0;
+  const cache = Number(sessione?.cached_tokens ?? 0) || 0;
+  const baseCache = Number.isFinite(sessione?.prompt_tokens_con_cache) ? sessione.prompt_tokens_con_cache : prompt;
+  const giriSessione = Number.isFinite(Number(sessione?.giri)) ? Number(sessione.giri) : null;
+  const giri = Number.isFinite(Number(usage?.giri)) ? Number(usage.giri) : null;
+  const totale2 = prompt + completion;
+  const parti = [];
+  if (totale2 > 0) parti.push(`${kilo(totale2)} token`);
+  if (giriSessione !== null) parti.push(tn("chat.foot.turnsOne", "chat.foot.turnsMany", giriSessione, { tetto: Number.isFinite(tettoGiri) && tettoGiri > 0 && sessione === usage ? t("chat.foot.turnsOf", { tetto: tettoGiri }) : "" }));
+  const throughput = Number(usage?.tokens_per_second ?? usage?.tokensPerSecond ?? sessione?.tokens_per_second ?? sessione?.tokensPerSecond);
+  return {
+    tokenGiri: parti.join(" · "),
+    cache: cache > 0 && baseCache > 0 ? `cache ${Math.round(cache / baseCache * 100)}%` : "",
+    giri,
+    velocita: Number.isFinite(throughput) && throughput > 0 ? `${Math.round(throughput)} token/s` : ""
+  };
+}
+function testoLatenza(ms2) {
+  if (!Number.isFinite(ms2) || ms2 <= 0) return "";
+  return ms2 >= 1e3 ? t("chat.foot.firstTokenSeconds", { tempo: conSeparatoreDecimale((ms2 / 1e3).toFixed(1)) }) : t("chat.foot.firstTokenMillis", { tempo: Math.round(ms2) });
+}
+function scrivi(el35, testo2) {
+  if (!el35) return;
+  const t2 = testo2 || "";
+  if (el35.textContent !== t2) el35.textContent = t2;
+  el35.hidden = t2 === "";
+}
+function statoGiri(giri, tettoGiri) {
+  if (!Number.isFinite(Number(giri))) return null;
+  const n = Number(giri);
+  const tetto = Number(tettoGiri);
+  if (!Number.isFinite(tetto) || tetto <= 0) return n > 0 ? "quieto" : null;
+  const quota = n / tetto;
+  if (quota < 0.5) return null;
+  return quota >= 0.8 ? "vicino" : "quieto";
+}
+function inoltraRotellaConversazione(evento, piede) {
+  if (evento.ctrlKey) return;
+  const scroller = piede.closest?.("#schermoChat")?.querySelector(".talos-conversation");
+  if (!scroller) return;
+  let delta = Number(evento.deltaY) || 0;
+  if (evento.deltaMode === 1) {
+    delta *= 16;
+  } else if (evento.deltaMode === 2) {
+    delta *= scroller.clientHeight;
+  }
+  if (!delta) return;
+  const prima = scroller.scrollTop;
+  scroller.scrollTop = prima + delta;
+  if (scroller.scrollTop === prima) return;
+  if (evento.cancelable) evento.preventDefault();
+}
+function aggiornaPiedeChat(piede, dati = {}) {
+  if (!piede) return;
+  const documentObj = piede.ownerDocument;
+  const tornaInFondo = piede.querySelector("#chatTornaInFondo");
+  if (tornaInFondo) {
+    tornaInFondo.hidden = dati.inFondo !== false;
+    if (!tornaInFondo.dataset.portaInFondo) {
+      tornaInFondo.dataset.portaInFondo = "1";
+      tornaInFondo.addEventListener("click", () => {
+        tornaInFondo.dispatchEvent(new CustomEvent("talos-vai-in-fondo", { bubbles: true }));
+      });
+      tornaInFondo.addEventListener("wheel", (evento) => inoltraRotellaConversazione(evento, piede), { passive: false });
+    }
+  }
+  const striscia = piede.querySelector(".talos-status-strip");
+  if (striscia) {
+    const contattoPerso = dati.attivo === true && dati.contatto === "perso";
+    striscia.hidden = !dati.attivo || dati.inFondo === true && !contattoPerso;
+    striscia.classList.toggle("talos-status-strip--senza-contatto", contattoPerso);
+    if (!striscia.dataset.portaInFondo) {
+      striscia.dataset.portaInFondo = "1";
+      striscia.style.cursor = "pointer";
+      striscia.setAttribute("title", t("chat.foot.status.returnToWriting"));
+      striscia.addEventListener("click", (evento) => {
+        if (evento.target.closest("button")) return;
+        striscia.dispatchEvent(new CustomEvent("talos-vai-in-fondo", { bubbles: true }));
+      });
+    }
+    const cosa = striscia.querySelector("[data-run-what]");
+    if (cosa) {
+      cosa.replaceChildren();
+      cosa.append(documentObj.createTextNode(contattoPerso ? t("chat.foot.status.connectionLost") : dati.cosa || t("chat.foot.status.working")));
+      if (dati.dettaglio && !contattoPerso) {
+        cosa.append(documentObj.createTextNode(" · "));
+        const mono = documentObj.createElement("span");
+        mono.className = "talos-mono talos-measure";
+        mono.textContent = dati.dettaglio;
+        cosa.append(mono);
+      }
+    }
+    const meta2 = striscia.querySelector("[data-run-meta]");
+    const pezzi = [];
+    if (Number.isFinite(dati.giro)) pezzi.push(t("chat.foot.status.turn", { n: dati.giro }));
+    if (Number.isFinite(dati.secondi)) pezzi.push(`${Math.max(0, Math.round(dati.secondi))} s`);
+    scrivi(meta2, contattoPerso ? t("chat.foot.status.unknownRunning") : pezzi.join(" · "));
+    const ferma = striscia.querySelector(".stop-run");
+    if (ferma) {
+      ferma.disabled = contattoPerso;
+      ferma.title = contattoPerso ? t("chat.foot.status.stopUnreachable") : "";
+    }
+  }
+  const modello = piede.querySelector('[data-open-sheet="model"] .talos-chip__label');
+  if (modello) modello.textContent = dati.modello || t("chat.foot.model.choose");
+  const pillolaModello = piede.querySelector('[data-open-sheet="model"]');
+  if (pillolaModello) pillolaModello.title = dati.modelloId ? t("chat.foot.model.changeNamed", { modello: dati.modelloId }) : t("chat.foot.model.change");
+  const permesso = piede.querySelector('[data-open-sheet="permissions"]');
+  if (permesso) {
+    const label = permesso.querySelector(".talos-chip__label");
+    const riassunto = riassuntoSenzaChiedere(dati.permesso, dati.permessiPerAttrezzo, { modalitaOperativa: dati.modalitaOperativa });
+    if (label) label.textContent = riassunto.testo;
+    permesso.title = riassunto.suggerimento;
+    permesso.classList.remove("talos-badge--warning", "talos-badge--danger");
+    const tono = tonoPermesso(dati.permesso);
+    if (tono) permesso.classList.add(`talos-badge--${tono}`);
+  }
+  const u = testiUsage(dati.usage, { tettoGiri: dati.tettoGiri, usageSessione: dati.usageSessione });
+  const costoChip = piede.querySelector("[data-runtime-costo]");
+  if (costoChip) {
+    costoChip.hidden = !dati.costo;
+    const n = costoChip.querySelector(".talos-mono");
+    if (n && dati.costo) n.textContent = dati.costo;
+  }
+  scrivi(piede.querySelector('[data-statusbar="tema"]'), testoVelocitaLocale(dati.modelloId, u.velocita));
+  scrivi(piede.querySelector("[data-runtime-usage]"), u.tokenGiri);
+  scrivi(piede.querySelector("[data-runtime-cache]"), u.cache);
+  scrivi(piede.querySelector("[data-runtime-latenza]"), testoLatenza(dati.latenzaMs) || u.velocita);
+}
+var conSeparatoreDecimale, CHIAVI_PERMESSO, NOME_PERMESSO, CHIAVI_PERMESSO_NON_SCEGLIBILI, GRUPPI_SENZA_CHIEDERE, LIVELLO_DELLA_POLITICA, TUTTI, CONCESSI_DAL_LIVELLO;
+var init_chat_foot = __esm({
+  "src/components/chat-foot.js"() {
+    init_lingua();
+    init_coordinazione();
+    init_politiche();
+    conSeparatoreDecimale = (testo2) => linguaCorrenteDiT() === "en" ? testo2 : testo2.replace(".", ",");
+    CHIAVI_PERMESSO = { "Read only": "chat.foot.permission.readOnly", "Workspace write": "chat.foot.permission.workspaceWrite", "On request": "chat.foot.permission.onRequest", "Full access": "chat.foot.permission.fullAccess" };
+    NOME_PERMESSO = Object.freeze(Object.defineProperties({}, Object.fromEntries(POLITICHE.map((p) => [p.valore, { enumerable: true, get: () => t(CHIAVI_PERMESSO[p.valore]) }]))));
+    CHIAVI_PERMESSO_NON_SCEGLIBILI = Object.freeze({ Research: "chat.foot.permission.research" });
+    GRUPPI_SENZA_CHIEDERE = Object.freeze([
+      Object.freeze({ chiave: "files", attrezzi: Object.freeze(["scrivi", "file_edit"]) }),
+      Object.freeze({ chiave: "commands", attrezzi: Object.freeze(["shell", "prova"]) }),
+      Object.freeze({ chiave: "documents", attrezzi: Object.freeze(["document_create", "generate_image"]) })
+    ]);
+    LIVELLO_DELLA_POLITICA = Object.freeze({
+      "Read only": "lettura",
+      "Workspace write": "scrittura-progetto",
+      "On request": "su-richiesta",
+      "Full access": "accesso-pieno",
+      Research: "ricerca"
+    });
+    TUTTI = "tutti";
+    CONCESSI_DAL_LIVELLO = Object.freeze({
+      "accesso-pieno": TUTTI,
+      "scrittura-progetto": TUTTI,
+      "scrittura-area": Object.freeze(/* @__PURE__ */ new Set(["scrivi", "file_edit"])),
+      ricerca: Object.freeze(/* @__PURE__ */ new Set(["research_deposit"]))
+    });
+  }
+});
+
 // src/components/inspector.js
 function formatoNumeri(opzioni) {
   const chiave = `${localeNumeri()}|${JSON.stringify(opzioni)}`;
   if (!FORMATI_NUMERI.has(chiave)) FORMATI_NUMERI.set(chiave, new Intl.NumberFormat(localeNumeri(), opzioni));
   return FORMATI_NUMERI.get(chiave);
 }
-function kilo(n) {
+function kilo2(n) {
   const v = Number(n);
   if (!Number.isFinite(v) || v < 0) return "—";
   return `${num.format(v / 1e3)}k`;
@@ -25939,35 +25278,35 @@ function righeFinestra(usage = null, finestra = null, ripartizione = null, cache
     occupati += token;
     const p = finestra ? percento(token, finestra) : null;
     if (p) percentoOccupato += Number(p.replace("%", "").replace(",", "."));
-    righe.push([etichetta3, `${kilo(token)}${p ? ` · ${p}` : ""}`, classe]);
+    righe.push([etichetta3, `${kilo2(token)}${p ? ` · ${p}` : ""}`, classe]);
   };
   for (const [chiave, etichetta3] of [["attrezzi", "processi.inspector.windowTools"], ["istruzioni", "processi.inspector.windowInstructions"], ["memoria", "processi.inspector.windowMemory"]]) {
     if (Number.isFinite(r[chiave])) aggiungi(t(etichetta3), r[chiave], "stima");
   }
   if (usati === null) righe.push([t("processi.inspector.windowConversation"), "—"]);
   else aggiungi(t("processi.inspector.windowConversation"), usati, "");
-  righe.push([t("processi.inspector.windowFree"), finestra && usati !== null ? `${kilo(Math.max(0, finestra - occupati))} · ${numPercento.format(Math.max(0, Math.round((100 - percentoOccupato) * 10) / 10))}%` : "—"]);
+  righe.push([t("processi.inspector.windowFree"), finestra && usati !== null ? `${kilo2(Math.max(0, finestra - occupati))} · ${numPercento.format(Math.max(0, Math.round((100 - percentoOccupato) * 10) / 10))}%` : "—"]);
   righe.push([t("processi.inspector.windowCache"), storiaInCaricamento && !cacheSessione ? "—" : testoRiusoCache(cacheSessione), "a-capo"]);
-  return { titoloDestra: finestra ? kilo(finestra) : t("processi.inspector.windowUndeclared"), righe, anteprima: `${usati === null ? "—" : kilo(usati)}${finestra ? ` / ${kilo(finestra)}` : ""}` };
+  return { titoloDestra: finestra ? kilo2(finestra) : t("processi.inspector.windowUndeclared"), righe, anteprima: `${usati === null ? "—" : kilo2(usati)}${finestra ? ` / ${kilo2(finestra)}` : ""}` };
 }
 function righeFinestraSulLimite({ usage = null, ripartizione = null, limite = null, cacheSessione = null, storiaInCaricamento = false } = {}) {
   if (!limite) return null;
   const usati = Number.isFinite(usage?.prompt_tokens) ? usage.prompt_tokens : null;
   const r = ripartizioneSulLimite({ ripartizione, usati, limite });
-  const righe = r.voci.map((v) => [t(CHIAVI_CATEGORIA[v.id]), `${kilo(v.tokens)}${v.percentuale === null ? "" : ` · ${percento(v.tokens, limite.soglia)}`}`, "stima"]);
+  const righe = r.voci.map((v) => [t(CHIAVI_CATEGORIA[v.id]), `${kilo2(v.tokens)}${v.percentuale === null ? "" : ` · ${percento(v.tokens, limite.soglia)}`}`, "stima"]);
   const stimato = usage?.stimato === true;
-  righe.push([t(stimato ? "processi.inspector.windowInUseEstimate" : "processi.inspector.windowInUse"), r.usati === null ? "—" : `${kilo(r.usati)} · ${percento(r.usati, limite.soglia)}`, ...stimato ? ["stima"] : []]);
-  righe.push([t("processi.inspector.windowBeforeCompaction"), r.restanti === null ? "—" : r.oltre ? t("processi.inspector.windowOver", { n: kilo(-r.restanti) }) : kilo(r.restanti)]);
+  righe.push([t(stimato ? "processi.inspector.windowInUseEstimate" : "processi.inspector.windowInUse"), r.usati === null ? "—" : `${kilo2(r.usati)} · ${percento(r.usati, limite.soglia)}`, ...stimato ? ["stima"] : []]);
+  righe.push([t("processi.inspector.windowBeforeCompaction"), r.restanti === null ? "—" : r.oltre ? t("processi.inspector.windowOver", { n: kilo2(-r.restanti) }) : kilo2(r.restanti)]);
   righe.push([t("processi.inspector.windowCache"), storiaInCaricamento && !cacheSessione ? "—" : testoRiusoCache(cacheSessione), "a-capo"]);
   const p = percheDelLimite(limite);
   const segno = limite.fonte === "fallback" ? "~" : "";
   return {
-    titoloDestra: `${segno}${kilo(limite.soglia)}`,
+    titoloDestra: `${segno}${kilo2(limite.soglia)}`,
     righe,
     fette: r.voci.filter((v) => v.percentuale !== null).map((v) => ({ id: v.id, percentuale: v.percentuale })),
-    perche: p ? t(p.chiave, { soglia: kilo(p.soglia), finestra: p.finestra === null ? "—" : kilo(p.finestra) }) : "",
+    perche: p ? t(p.chiave, { soglia: kilo2(p.soglia), finestra: p.finestra === null ? "—" : kilo2(p.finestra) }) : "",
     // la card compressa (C1, 10/10): misurato su limite; la percentuale la dice la barra, che da compressa resta (foto: «98k · …» tagliato)
-    anteprima: `${r.usati === null ? "—" : `${stimato ? "~" : ""}${kilo(r.usati)}`} / ${segno}${kilo(limite.soglia)}`
+    anteprima: `${r.usati === null ? "—" : `${stimato ? "~" : ""}${kilo2(r.usati)}`} / ${segno}${kilo2(limite.soglia)}`
   };
 }
 function righeCompattazioni({ motore = null, legacy = null, recordLegacy = null, level1 = null, richiestaVista = false } = {}) {
@@ -25978,7 +25317,7 @@ function righeCompattazioni({ motore = null, legacy = null, recordLegacy = null,
   else {
     righe.push([t("processi.inspector.compactionsCount"), String(c.numero)]);
     righe.push([t("processi.inspector.compactionsLast"), c.ultimaAl ? dataEOraBreve(c.ultimaAl) : "—"]);
-    righe.push([t("processi.inspector.compactionsAfter"), c.tokenDopo === null ? "—" : c.tokenPrima === null ? kilo(c.tokenDopo) : `${kilo(c.tokenPrima)} → ${kilo(c.tokenDopo)}`]);
+    righe.push([t("processi.inspector.compactionsAfter"), c.tokenDopo === null ? "—" : c.tokenPrima === null ? kilo2(c.tokenDopo) : `${kilo2(c.tokenPrima)} → ${kilo2(c.tokenDopo)}`]);
     const richieste = tenuto.richieste;
     righe.push([t("processi.inspector.keptRequests"), richieste ? t("processi.inspector.keptRequestsCount", { kept: richieste.kept.length, total: richieste.total }) : tenuto.riassunto ? t("processi.inspector.keptRequestsInSummary") : "—", "a-capo"]);
     if (tenuto.fonte === "motore") righe.push([t("processi.inspector.keptFacts"), String(tenuto.fatti.length)]);
@@ -25989,20 +25328,20 @@ function righeCompattazioni({ motore = null, legacy = null, recordLegacy = null,
   return righe;
 }
 function titoloRispostaDaTurno(turno, parole = 5) {
-  const nodo15 = turno && typeof turno.querySelector === "function" ? turno.querySelector(SELETTORE_RISPOSTA_TURNO) : null;
-  const testo2 = typeof nodo15?.textContent === "string" ? nodo15.textContent.trim() : "";
+  const nodo17 = turno && typeof turno.querySelector === "function" ? turno.querySelector(SELETTORE_RISPOSTA_TURNO) : null;
+  const testo2 = typeof nodo17?.textContent === "string" ? nodo17.textContent.trim() : "";
   if (!testo2) return "";
   return testo2.split(/\s+/).slice(0, parole).join(" ");
 }
 function titoloMessaggioUtente(turno, parole = 5) {
-  const nodo15 = turno && typeof turno.querySelector === "function" ? turno.querySelector(SELETTORE_TESTO_UTENTE) : null;
-  const testo2 = typeof nodo15?.textContent === "string" ? nodo15.textContent.trim() : "";
+  const nodo17 = turno && typeof turno.querySelector === "function" ? turno.querySelector(SELETTORE_TESTO_UTENTE) : null;
+  const testo2 = typeof nodo17?.textContent === "string" ? nodo17.textContent.trim() : "";
   if (!testo2) return "";
   return testo2.split(/\s+/).slice(0, parole).join(" ");
 }
 function righeGiri(giri = []) {
   return giri.map((g) => {
-    const misura = g.tu ? t("processi.inspector.turnYourMessage") : g.senzaContatto ? t("processi.inspector.turnNoContact") : g.inCorso ? t("processi.inspector.turnRunning") : Number.isFinite(g.token) ? kilo(g.token) : Number.isFinite(g.attrezzi) ? tn("processi.inspector.turnToolsOne", "processi.inspector.turnToolsMany", g.attrezzi) : "—";
+    const misura = g.tu ? t("processi.inspector.turnYourMessage") : g.senzaContatto ? t("processi.inspector.turnNoContact") : g.inCorso ? t("processi.inspector.turnRunning") : Number.isFinite(g.token) ? kilo2(g.token) : Number.isFinite(g.attrezzi) ? tn("processi.inspector.turnToolsOne", "processi.inspector.turnToolsMany", g.attrezzi) : "—";
     const titolo2 = g.titolo || (g.tu ? t("processi.inspector.turnMessage") : t("processi.inspector.turnTurn"));
     return [`${g.numero} · ${titolo2}`, misura, g.senzaContatto ? "warning" : g.inCorso ? "accent" : ""];
   });
@@ -26014,6 +25353,13 @@ function anteprimaIndiceGiri(giri = []) {
     diTalos ? tn("processi.inspector.turnsPreviewOne", "processi.inspector.turnsPreviewMany", diTalos) : "",
     messaggi ? tn("processi.inspector.turnsPreviewMessagesOne", "processi.inspector.turnsPreviewMessagesMany", messaggi) : ""
   ].filter(Boolean).join(" · ");
+}
+function rigaDellInvio({ giri = null, tetto = null } = {}) {
+  const n = giri === null || giri === void 0 ? NaN : Number(giri);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  const conTetto = Number.isFinite(Number(tetto)) && Number(tetto) > 0;
+  const valore = conTetto ? tn("processi.inspector.thisSendOfOne", "processi.inspector.thisSendOfMany", Number(tetto), { n, tetto: Number(tetto) }) : tn("processi.inspector.thisSendOne", "processi.inspector.thisSendMany", n);
+  return [t("processi.inspector.thisSend"), valore, statoGiri(n, tetto) === "vicino" ? "invio-vicino" : ""];
 }
 function righeFile(file = []) {
   return file.map((f) => [f.path, `+${f.aggiunte ?? 0}${f.rimozioni ? ` −${f.rimozioni}` : ""}`]);
@@ -26100,7 +25446,7 @@ function schedaDi(contenitore) {
   return contenitore.__processi;
 }
 function bottoneApri(d, card, riga2, idRiga) {
-  const b = el3(d, "button", "talos-button talos-button--ghost talos-button--sm talos-process__apri");
+  const b = el(d, "button", "talos-button talos-button--ghost talos-button--sm talos-process__apri");
   b.type = "button";
   b.setAttribute("aria-expanded", "false");
   b.setAttribute("aria-controls", `processo-dettaglio-${idRiga}`);
@@ -26183,7 +25529,7 @@ function statoBottoneAzioni(riga2, scheda) {
   if (riga2.azioni.disabled !== spento) riga2.azioni.disabled = spento;
 }
 function bottoneAzioniRiga(d, riga2, scheda) {
-  const b = el3(d, "button", "talos-button talos-button--ghost talos-button--sm talos-process__azioni");
+  const b = el(d, "button", "talos-button talos-button--ghost talos-button--sm talos-process__azioni");
   b.type = "button";
   b.hidden = true;
   b.dataset.azione = "menu";
@@ -26250,10 +25596,10 @@ function testoRisorse(p, risorse) {
 }
 function risorseDellaRiga(d, riga2) {
   if (!riga2.risorseEl) {
-    const nodo15 = el3(d, "span", "talos-mono talos-measure talos-process__risorse");
-    nodo15.title = t("processi.process.resourcesTitle");
-    riga2.meta.append(nodo15);
-    riga2.risorseEl = nodo15;
+    const nodo17 = el(d, "span", "talos-mono talos-measure talos-process__risorse");
+    nodo17.title = t("processi.process.resourcesTitle");
+    riga2.meta.append(nodo17);
+    riga2.risorseEl = nodo17;
   }
   return riga2.risorseEl;
 }
@@ -26275,14 +25621,14 @@ function memoriaLeggibile(byte3) {
   };
   return mb >= 1024 ? `${cifre(mb / 1024, 1)} GB` : `${cifre(mb, mb < 10 ? 1 : 0)} MB`;
 }
-function tagliatoDalTetto(nodo15) {
-  const s = nodo15?.scrollHeight;
-  const c = nodo15?.clientHeight;
+function tagliatoDalTetto(nodo17) {
+  const s = nodo17?.scrollHeight;
+  const c = nodo17?.clientHeight;
   if (!Number.isFinite(s) || !Number.isFinite(c)) return false;
   return s - c > 1;
 }
-function bottoneDi(nodo15) {
-  const cfg = nodo15 && CONFIG_TAGLIO.get(nodo15);
+function bottoneDi(nodo17) {
+  const cfg = nodo17 && CONFIG_TAGLIO.get(nodo17);
   if (!cfg) return null;
   if (!cfg.pulsante) {
     cfg.pulsante = bottoneMostraTutto(cfg.d, cfg.suClic);
@@ -26290,39 +25636,39 @@ function bottoneDi(nodo15) {
   }
   return cfg.pulsante;
 }
-function statoPulsanteMostra(nodo15, pulsante) {
+function statoPulsanteMostra(nodo17, pulsante) {
   if (!pulsante) return;
-  const aperto = nodo15?.dataset?.aperto === "si";
+  const aperto = nodo17?.dataset?.aperto === "si";
   const testo2 = t(aperto ? "app.common.showLess" : "app.common.showAll");
   if (pulsante.textContent !== testo2) pulsante.textContent = testo2;
   const espanso = aperto ? "true" : "false";
   if (pulsante.getAttribute?.("aria-expanded") !== espanso) pulsante.setAttribute("aria-expanded", espanso);
 }
-function aggiornaPulsanteMostra(nodo15) {
-  const cfg = nodo15 && CONFIG_TAGLIO.get(nodo15);
+function aggiornaPulsanteMostra(nodo17) {
+  const cfg = nodo17 && CONFIG_TAGLIO.get(nodo17);
   if (!cfg) return;
-  if (nodo15?.dataset?.aperto === "si") {
+  if (nodo17?.dataset?.aperto === "si") {
     if (cfg.pulsante) cfg.pulsante.hidden = false;
-    statoPulsanteMostra(nodo15, cfg.pulsante);
+    statoPulsanteMostra(nodo17, cfg.pulsante);
     return;
   }
-  if (tagliatoDalTetto(nodo15)) {
-    bottoneDi(nodo15);
+  if (tagliatoDalTetto(nodo17)) {
+    bottoneDi(nodo17);
     if (cfg.pulsante) cfg.pulsante.hidden = false;
   } else if (cfg.pulsante) cfg.pulsante.hidden = true;
-  statoPulsanteMostra(nodo15, cfg.pulsante);
+  statoPulsanteMostra(nodo17, cfg.pulsante);
 }
-function registraTaglio(nodo15, d, padre, suClic) {
-  if (!nodo15) return;
-  CONFIG_TAGLIO.set(nodo15, { d, padre, suClic, pulsante: null });
+function registraTaglio(nodo17, d, padre, suClic) {
+  if (!nodo17) return;
+  CONFIG_TAGLIO.set(nodo17, { d, padre, suClic, pulsante: null });
   if (typeof ResizeObserver !== "function") return;
   if (!osservatoreTaglio) osservatoreTaglio = new ResizeObserver((voci) => {
     for (const v of voci) aggiornaPulsanteMostra(v.target);
   });
-  osservatoreTaglio.observe(nodo15);
+  osservatoreTaglio.observe(nodo17);
 }
 function bottoneMostraTutto(d, suClic) {
-  const b = el3(d, "button", "talos-button talos-button--ghost talos-button--sm talos-process__mostra-tutto");
+  const b = el(d, "button", "talos-button talos-button--ghost talos-button--sm talos-process__mostra-tutto");
   b.type = "button";
   b.textContent = t("app.common.showAll");
   b.hidden = true;
@@ -26334,18 +25680,18 @@ function bottoneMostraTutto(d, suClic) {
   return b;
 }
 function creaRiga(d, p, scheda, contenitore) {
-  const card = el3(d, "div", "talos-card talos-process");
+  const card = el(d, "div", "talos-card talos-process");
   card.dataset.c = "ProcessRow";
   card.dataset.processo = String(p.id ?? "");
   card.tabIndex = 0;
   card.setAttribute("role", "listitem");
-  const testa = el3(d, "div", "talos-process__testa");
+  const testa = el(d, "div", "talos-process__testa");
   const icona16 = iconaComando(d, p.famiglia);
-  const cmd = el3(d, "div", "talos-process__cmd");
+  const cmd = el(d, "div", "talos-process__cmd");
   cmd.setAttribute("role", "text");
-  const titolo2 = el3(d, "div", "talos-process__titolo");
+  const titolo2 = el(d, "div", "talos-process__titolo");
   titolo2.hidden = true;
-  const testo2 = el3(d, "div", "talos-process__testo");
+  const testo2 = el(d, "div", "talos-process__testo");
   testo2.append(titolo2, cmd);
   cmd.classList.add("talos-process__cmd--troncato");
   cmd.dataset.aperto = "no";
@@ -26353,29 +25699,29 @@ function creaRiga(d, p, scheda, contenitore) {
     cmd.dataset.aperto = cmd.dataset.aperto === "si" ? "no" : "si";
     aggiornaPulsanteMostra(cmd);
   });
-  const dettaglio = el3(d, "div", "talos-process__dettaglio");
+  const dettaglio = el(d, "div", "talos-process__dettaglio");
   dettaglio.id = `processo-dettaglio-${String(p.id ?? "")}`;
   dettaglio.hidden = true;
   const riga2 = { id: String(p.id ?? ""), card, cmd, titolo: titolo2, statoEl: null, statoTesto: null, statoUse: null, chiEl: null, oraEl: null, misuraEl: null, risorseEl: null, stallo: null, dettaglio, icona: icona16, mostrato: null, aperto: false, dettaglioSporco: true, righeDettaglio: p.dettaglio, inCorso: null };
   const apri = bottoneApri(d, card, riga2, String(p.id ?? ""));
   const azioni = bottoneAzioniRiga(d, riga2, scheda);
   testa.append(icona16, testo2, azioni, apri);
-  const meta2 = el3(d, "div", "talos-process__meta");
-  const statoEl = el3(d, "span", "talos-badge talos-badge--sm talos-process__stato");
+  const meta2 = el(d, "div", "talos-process__meta");
+  const statoEl = el(d, "span", "talos-badge talos-badge--sm talos-process__stato");
   const statoIcona = d.createElementNS(SVG_NS_INSPECTOR, "svg");
   statoIcona.setAttribute("class", "i i--xs");
   statoIcona.setAttribute("aria-hidden", "true");
   const statoUse = d.createElementNS(SVG_NS_INSPECTOR, "use");
   statoIcona.append(statoUse);
-  const statoTesto = el3(d, "span", "talos-process__stato-testo");
+  const statoTesto = el(d, "span", "talos-process__stato-testo");
   statoEl.append(statoIcona, statoTesto);
-  const chiEl = el3(d, "span", "talos-process__chi");
-  const oraEl = el3(d, "span", "talos-mono talos-process__ora");
-  const misuraEl = el3(d, "span", "talos-mono talos-measure talos-process__misura");
-  meta2.append(statoEl, chiEl, oraEl, el3(d, "span", "talos-grow"), misuraEl);
-  const stallo = el3(d, "div", "talos-process__stall");
+  const chiEl = el(d, "span", "talos-process__chi");
+  const oraEl = el(d, "span", "talos-mono talos-process__ora");
+  const misuraEl = el(d, "span", "talos-mono talos-measure talos-process__misura");
+  meta2.append(statoEl, chiEl, oraEl, el(d, "span", "talos-grow"), misuraEl);
+  const stallo = el(d, "div", "talos-process__stall");
   stallo.hidden = true;
-  const avvisoFerma = el3(d, "div", "talos-process__avviso-ferma");
+  const avvisoFerma = el(d, "div", "talos-process__avviso-ferma");
   avvisoFerma.setAttribute("role", "status");
   avvisoFerma.hidden = true;
   card.append(testa, meta2, stallo, avvisoFerma, dettaglio);
@@ -26434,9 +25780,9 @@ function aggiornaRiga(d, riga2, p, scheda) {
   if (!m || m.misura !== p.misura) riga2.misuraEl.textContent = p.misura;
   const risorse = testoRisorse(p, scheda.risorse);
   if ((!m || m.risorse !== risorse) && (risorse || riga2.risorseEl)) {
-    const nodo15 = risorseDellaRiga(d, riga2);
-    nodo15.textContent = risorse;
-    nodo15.hidden = !risorse;
+    const nodo17 = risorseDellaRiga(d, riga2);
+    nodo17.textContent = risorse;
+    nodo17.hidden = !risorse;
   }
   if (!m || m.fermo !== p.fermo) {
     riga2.stallo.textContent = p.fermo || "";
@@ -26460,8 +25806,8 @@ function disegnaProcessi(d, contenitore, lista, opzioni = {}) {
   const grezzi = (Array.isArray(lista) ? lista : []).filter(Boolean);
   scheda.ultima = grezzi;
   if (grezzi.length && !scheda.filtroEl) {
-    const box = el3(d, "div", "talos-field talos-field--sm talos-process-filtro");
-    const campo3 = el3(d, "input", "talos-field__input talos-process-filtro__campo");
+    const box = el(d, "div", "talos-field talos-field--sm talos-process-filtro");
+    const campo3 = el(d, "input", "talos-field__input talos-process-filtro__campo");
     campo3.type = "search";
     campo3.setAttribute("aria-label", t("processi.process.filterLabel"));
     campo3.setAttribute("placeholder", t("processi.process.filterPlaceholder"));
@@ -26473,14 +25819,14 @@ function disegnaProcessi(d, contenitore, lista, opzioni = {}) {
     box.append(campo3);
     scheda.filtroEl = box;
     scheda.campo = campo3;
-    const stati2 = el3(d, "div", "talos-agenti-stati");
+    const stati2 = el(d, "div", "talos-agenti-stati");
     stati2.setAttribute("role", "group");
     stati2.setAttribute("aria-label", t("processi.process.statusFilterLabel"));
     for (const [valore, etichetta3] of [
       ["tutti", t("processi.agents.filterAll")],
       ...["in-coda", "in-avvio", "in-corso", "in-attesa", "in-consenso", "in-sfondo", "riuscito", "fallito", "annullato", "ucciso", "non-eseguito", "interrotto"].map((s) => [s, STATI_PROCESSO[s].etichetta])
     ]) {
-      const b = el3(d, "button", "", etichetta3);
+      const b = el(d, "button", "", etichetta3);
       b.type = "button";
       b.dataset.stato = valore;
       b.addEventListener("click", () => {
@@ -26503,26 +25849,26 @@ function disegnaProcessi(d, contenitore, lista, opzioni = {}) {
     scheda.stato = "tutti";
   }
   if (!scheda.zona) {
-    const barra = el3(d, "div", "talos-process-barra");
+    const barra = el(d, "div", "talos-process-barra");
     barra.hidden = true;
-    const fermaTutti = el3(d, "button", "talos-button talos-button--ghost talos-button--sm talos-process-ferma-tutti", t("processi.process.stopAll"));
+    const fermaTutti = el(d, "button", "talos-button talos-button--ghost talos-button--sm talos-process-ferma-tutti", t("processi.process.stopAll"));
     fermaTutti.type = "button";
     fermaTutti.addEventListener("click", (evento) => {
       evento.preventDefault?.();
       chiediFermaTutti(scheda);
     });
     barra.append(fermaTutti);
-    const sezioneSfondo = el3(d, "section", "talos-process-sezione");
+    const sezioneSfondo = el(d, "section", "talos-process-sezione");
     sezioneSfondo.hidden = true;
-    const titoloSfondo = el3(d, "h3", "talos-agenti-titolo talos-process-sezione__titolo", t("processi.process.backgroundSection"));
+    const titoloSfondo = el(d, "h3", "talos-agenti-titolo talos-process-sezione__titolo", t("processi.process.backgroundSection"));
     titoloSfondo.id = "talos-process-sezione-sfondo";
-    const listaSfondo = el3(d, "div", "talos-process-lista");
+    const listaSfondo = el(d, "div", "talos-process-lista");
     listaSfondo.setAttribute("role", "list");
     listaSfondo.setAttribute("aria-labelledby", titoloSfondo.id);
     sezioneSfondo.append(titoloSfondo, listaSfondo);
-    const titoloAltri = el3(d, "h3", "talos-agenti-titolo talos-process-sezione__titolo", t("processi.process.otherSection"));
+    const titoloAltri = el(d, "h3", "talos-agenti-titolo talos-process-sezione__titolo", t("processi.process.otherSection"));
     titoloAltri.hidden = true;
-    scheda.zona = el3(d, "div", "talos-process-lista");
+    scheda.zona = el(d, "div", "talos-process-lista");
     scheda.zona.setAttribute("role", "list");
     scheda.zona.setAttribute("aria-label", t("processi.process.listLabel"));
     contenitore.append(barra, sezioneSfondo, titoloAltri, scheda.zona);
@@ -26570,7 +25916,7 @@ function disegnaProcessi(d, contenitore, lista, opzioni = {}) {
   const restano = altriProcessi.length - visibiliAltri.length;
   if (restano > 0) {
     if (!scheda.altri) {
-      const b = el3(d, "button", "talos-button talos-button--secondary talos-button--block talos-process-altri");
+      const b = el(d, "button", "talos-button talos-button--secondary talos-button--block talos-process-altri");
       b.type = "button";
       b.addEventListener("click", () => {
         scheda.mostrati += TETTO_PROCESSI;
@@ -26586,7 +25932,7 @@ function disegnaProcessi(d, contenitore, lista, opzioni = {}) {
     scheda.altri = null;
   }
   if (!scheda.annuncio) {
-    const a = el3(d, "p", "talos-process-annuncio");
+    const a = el(d, "p", "talos-process-annuncio");
     a.setAttribute("role", "status");
     scheda.annuncio = a;
     contenitore.append(a);
@@ -26594,11 +25940,11 @@ function disegnaProcessi(d, contenitore, lista, opzioni = {}) {
   const serveVuoto = filtrati.length === 0;
   const tutti = grezzi;
   if (serveVuoto && !scheda.vuoto) {
-    const vuoto = el3(d, "div", "talos-card talos-inspector-card");
+    const vuoto = el(d, "div", "talos-card talos-inspector-card");
     vuoto.dataset.c = "EmptyState";
-    const head = el3(d, "div", "talos-inspector-card__head");
-    head.appendChild(el3(d, "b", "", t("processi.process.title")));
-    vuoto.append(head, el3(d, "p", "talos-inspector__hint", fraseVuota(tutti.length)));
+    const head = el(d, "div", "talos-inspector-card__head");
+    head.appendChild(el(d, "b", "", t("processi.process.title")));
+    vuoto.append(head, el(d, "p", "talos-inspector__hint", fraseVuota(tutti.length)));
     scheda.vuoto = vuoto;
     contenitore.append(vuoto);
   } else if (serveVuoto && scheda.vuoto) {
@@ -26637,15 +25983,15 @@ function testoFiltrabile(p) {
 function fraseVuota(quanti) {
   return quanti ? t("processi.process.emptyNoMatch") : t("processi.process.emptyNone");
 }
-function el3(d, tag2, classe, testo2) {
+function el(d, tag2, classe, testo2) {
   const n = d.createElement(tag2);
   if (classe) n.className = classe;
   if (testo2 != null) n.textContent = testo2;
   return n;
 }
-function kv2(d, k, v, classeV = "") {
-  const r = el3(d, "div", "talos-kv");
-  r.append(el3(d, "span", "talos-kv__k", k), el3(d, "span", `talos-kv__v${classeV ? ` ${classeV}` : ""}`, v));
+function kv(d, k, v, classeV = "") {
+  const r = el(d, "div", "talos-kv");
+  r.append(el(d, "span", "talos-kv__k", k), el(d, "span", `talos-kv__v${classeV ? ` ${classeV}` : ""}`, v));
   return r;
 }
 function conteggioAgenti(n) {
@@ -26673,7 +26019,7 @@ function chevron(d) {
 }
 function bottoneAzioni(d, a, azioni) {
   const nome = a.taskCorto || a.task || t("processi.agents.noTaskShort");
-  const b = el3(d, "button", "talos-button talos-button--ghost talos-button--sm");
+  const b = el(d, "button", "talos-button talos-button--ghost talos-button--sm");
   b.type = "button";
   b.dataset.azione = "menu";
   b.setAttribute("aria-haspopup", "menu");
@@ -26697,27 +26043,27 @@ function disegnaAgenti(d, contenitore, agenti, azioni = {}) {
   if (typeof azioni.onGrafo === "function") {
     let s = filtriAgenti.get(contenitore);
     if (!s || s.sessionId !== azioni.sessionId || s.righe.parentNode !== contenitore) {
-      const barra = el3(d, "div", "talos-agenti-filtri");
-      const grafo = el3(d, "button", "talos-button talos-button--ghost talos-button--sm", t("processi.agents.openDiagram"));
+      const barra = el(d, "div", "talos-agenti-filtri");
+      const grafo = el(d, "button", "talos-button talos-button--ghost talos-button--sm", t("processi.agents.openDiagram"));
       grafo.type = "button";
-      const cerca = el3(d, "input");
+      const cerca = el(d, "input");
       cerca.type = "search";
       cerca.setAttribute("aria-label", t("processi.agents.searchLabel"));
       cerca.placeholder = t("processi.agents.searchPlaceholder");
-      const titolo2 = el3(d, "h3", "talos-agenti-titolo", t("agenti.rail.agentsTitle"));
-      const filtro = el3(d, "div", "talos-agenti-stati");
+      const titolo2 = el(d, "h3", "talos-agenti-titolo", t("agenti.rail.agentsTitle"));
+      const filtro = el(d, "div", "talos-agenti-stati");
       filtro.setAttribute("role", "group");
       filtro.setAttribute("aria-label", t("processi.agents.statusFilterLabel"));
-      const conto = el3(d, "span");
+      const conto = el(d, "span");
       conto.setAttribute("role", "status");
-      const righe = el3(d, "div", "talos-agenti-elenco");
-      const pagine = el3(d, "nav", "talos-agenti-pagine");
+      const righe = el(d, "div", "talos-agenti-elenco");
+      const pagine = el(d, "nav", "talos-agenti-pagine");
       pagine.setAttribute("aria-label", t("processi.agents.pagesLabel"));
-      const precedente = el3(d, "button", "talos-button talos-button--ghost talos-button--sm", t("agenti.delegations.previous"));
+      const precedente = el(d, "button", "talos-button talos-button--ghost talos-button--sm", t("agenti.delegations.previous"));
       precedente.type = "button";
       precedente.setAttribute("aria-label", t("processi.agents.previousPage"));
-      const pagina = el3(d, "span", "talos-mono");
-      const successiva = el3(d, "button", "talos-button talos-button--ghost talos-button--sm", t("agenti.delegations.next"));
+      const pagina = el(d, "span", "talos-mono");
+      const successiva = el(d, "button", "talos-button talos-button--ghost talos-button--sm", t("agenti.delegations.next"));
       successiva.type = "button";
       successiva.setAttribute("aria-label", t("processi.agents.nextPage"));
       pagine.append(precedente, pagina, successiva);
@@ -26735,7 +26081,7 @@ function disegnaAgenti(d, contenitore, agenti, azioni = {}) {
         const attivo = d.activeElement, rigaAttiva = s.righe.contains(attivo) ? attivo.closest("[data-sessione-figlia]") : null;
         const idAttivo = rigaAttiva?.dataset.sessioneFiglia, menuAttivo = attivo?.getAttribute("aria-haspopup") === "menu";
         disegnaAgenti(d, s.righe, filtrati.slice(inizio, inizio + 25), { onApri: s.azioni.onApri, onMenu: s.azioni.onMenu, compatta: true });
-        if (s.dati.length && !filtrati.length) s.righe.replaceChildren(el3(d, "p", "talos-inspector__hint", t("agenti.delegations.noAgentForFilters")));
+        if (s.dati.length && !filtrati.length) s.righe.replaceChildren(el(d, "p", "talos-inspector__hint", t("agenti.delegations.noAgentForFilters")));
         if (idAttivo) {
           const riga2 = [...s.righe.querySelectorAll("[data-sessione-figlia]")].find((n) => n.dataset.sessioneFiglia === idAttivo);
           (menuAttivo ? riga2?.querySelector('[aria-haspopup="menu"]') || s.cerca : riga2 || s.cerca).focus({ preventScroll: true });
@@ -26750,7 +26096,7 @@ function disegnaAgenti(d, contenitore, agenti, azioni = {}) {
         successiva.disabled = s.pagina >= paginaMassima;
       };
       for (const [valore, testo2] of [["tutti", "processi.agents.filterAll"], ["in-corso", "processi.agents.filterActive"], ["attesa", "processi.agents.filterWaiting"], ["fallita", "processi.agents.filterErrors"], ["conclusa", "processi.agents.filterFinished"], ["interrotta", "processi.agents.filterStopped"], ["in-pausa", "processi.agents.filterPaused"], ["ignoto", "processi.agents.filterUnavailable"]]) {
-        const b = el3(d, "button", "", t(testo2));
+        const b = el(d, "button", "", t(testo2));
         b.type = "button";
         b.dataset.stato = valore;
         b.addEventListener("click", () => {
@@ -26787,16 +26133,16 @@ function disegnaAgenti(d, contenitore, agenti, azioni = {}) {
   const lista = Array.isArray(agenti) ? agenti : [];
   contenitore.replaceChildren();
   if (!lista.length) {
-    const vuoto = el3(d, "div", "talos-card talos-inspector-card");
+    const vuoto = el(d, "div", "talos-card talos-inspector-card");
     vuoto.dataset.c = "EmptyState";
-    const head = el3(d, "div", "talos-inspector-card__head");
-    head.appendChild(el3(d, "b", "", t("processi.agents.emptyTitle")));
-    vuoto.append(head, el3(d, "p", "talos-inspector__hint", t("processi.agents.emptyText")));
+    const head = el(d, "div", "talos-inspector-card__head");
+    head.appendChild(el(d, "b", "", t("processi.agents.emptyTitle")));
+    vuoto.append(head, el(d, "p", "talos-inspector__hint", t("processi.agents.emptyText")));
     contenitore.appendChild(vuoto);
     return 0;
   }
   for (const a of lista) {
-    const card = el3(d, "div", "talos-card talos-inspector-card");
+    const card = el(d, "div", "talos-card talos-inspector-card");
     card.dataset.c = "AgentRow";
     if (azioni.compatta) card.classList.add("talos-agenti-riga");
     card.dataset.stato = statoDelega(a);
@@ -26822,13 +26168,13 @@ function disegnaAgenti(d, contenitore, agenti, azioni = {}) {
         });
       }
     }
-    const head = el3(d, "div", "talos-inspector-card__head");
-    head.append(el3(d, "b", "", tronca(a.taskCorto || a.task || t("agenti.agent.noTaskRecorded"), 52)), el3(d, "span", `talos-badge talos-badge--sm${statoDelega(a) === "fallita" ? " talos-badge--danger" : statoDelega(a) === "conclusa" ? " talos-badge--success" : ["in-pausa", "interrotta"].includes(statoDelega(a)) ? " talos-badge--warning" : ""}`, etichettaDelega(a)));
+    const head = el(d, "div", "talos-inspector-card__head");
+    head.append(el(d, "b", "", tronca(a.taskCorto || a.task || t("agenti.agent.noTaskRecorded"), 52)), el(d, "span", `talos-badge talos-badge--sm${statoDelega(a) === "fallita" ? " talos-badge--danger" : statoDelega(a) === "conclusa" ? " talos-badge--success" : ["in-pausa", "interrotta"].includes(statoDelega(a)) ? " talos-badge--warning" : ""}`, etichettaDelega(a)));
     if (typeof azioni.onMenu === "function" && a.sessionId) head.append(bottoneAzioni(d, a, azioni));
     if (apribile) head.append(chevron(d));
     card.append(head);
     if (azioni.compatta) {
-      const icona16 = el3(d, "span", "talos-agenti-icona");
+      const icona16 = el(d, "span", "talos-agenti-icona");
       icona16.setAttribute("aria-hidden", "true");
       const svg2 = d.createElementNS("http://www.w3.org/2000/svg", "svg"), use = d.createElementNS("http://www.w3.org/2000/svg", "use");
       svg2.setAttribute("class", "i");
@@ -26837,11 +26183,11 @@ function disegnaAgenti(d, contenitore, agenti, azioni = {}) {
       icona16.append(svg2);
       card.prepend(icona16);
       const descrizione = a.task || a.modello;
-      if (descrizione) card.append(el3(d, "p", "talos-agenti-compito", descrizione));
-      const meta2 = el3(d, "div", "talos-agenti-meta");
-      if (a.attivita?.attrezzoCorrente) meta2.append(el3(d, "span", "", nomeUmanoAttrezzo(a.attivita.attrezzoCorrente)));
-      if (a.avviataAlle) meta2.append(el3(d, "span", "", t("processi.agents.startedAt", { ora: oraBreve(a.avviataAlle) })));
-      if (Number.isSafeInteger(a.numeroFigli)) meta2.append(el3(d, "span", "", tn("processi.agents.childOne", "processi.agents.childMany", a.numeroFigli)));
+      if (descrizione) card.append(el(d, "p", "talos-agenti-compito", descrizione));
+      const meta2 = el(d, "div", "talos-agenti-meta");
+      if (a.attivita?.attrezzoCorrente) meta2.append(el(d, "span", "", nomeUmanoAttrezzo(a.attivita.attrezzoCorrente)));
+      if (a.avviataAlle) meta2.append(el(d, "span", "", t("processi.agents.startedAt", { ora: oraBreve(a.avviataAlle) })));
+      if (Number.isSafeInteger(a.numeroFigli)) meta2.append(el(d, "span", "", tn("processi.agents.childOne", "processi.agents.childMany", a.numeroFigli)));
       if (meta2.childNodes.length) card.append(meta2);
     }
     const ev = a.evidenzaDelega && typeof a.evidenzaDelega === "object" ? a.evidenzaDelega : null;
@@ -26849,13 +26195,13 @@ function disegnaAgenti(d, contenitore, agenti, azioni = {}) {
     if (a.avviataAlle && !azioni.compatta) righe.push([t("processi.agents.rowStarted"), oraBreve(a.avviataAlle)]);
     if (ev) righe.push([t("processi.agents.rowDone"), `${tn("processi.agents.callsOne", "processi.agents.callsMany", Number(ev.toolCalls || 0), { n: conteggioIntero(Number(ev.toolCalls || 0)) })} · ${tn("processi.agents.writesOne", "processi.agents.writesMany", Number(ev.scritture || 0), { n: conteggioIntero(Number(ev.scritture || 0)) })}`]);
     for (const [k, v] of righe) {
-      const kv7 = el3(d, "div", "talos-kv");
-      kv7.append(el3(d, "span", "talos-kv__k", k), el3(d, "span", "talos-kv__v talos-mono", v));
+      const kv7 = el(d, "div", "talos-kv");
+      kv7.append(el(d, "span", "talos-kv__k", k), el(d, "span", "talos-kv__v talos-mono", v));
       card.append(kv7);
     }
     const collisioni = Array.isArray(a.collisioni) ? a.collisioni : [];
     if (collisioni.length) {
-      const nota = el3(d, "p", "talos-inspector__hint talos-inspector__hint--danger");
+      const nota = el(d, "p", "talos-inspector__hint talos-inspector__hint--danger");
       const file = [...new Set(collisioni.map((c) => c.percorso))];
       nota.textContent = file.length === 1 ? t("processi.agents.collisionOne", { file: file[0] }) : t("processi.agents.collisionMany", { file: file.join(", ") });
       card.append(nota);
@@ -26967,7 +26313,7 @@ function riempiCard(d, card, righe, { classiValore = () => "" } = {}) {
       nuove.push(vecchia);
       continue;
     }
-    const rigaKv = kv2(d, r[0], r[1], classe);
+    const rigaKv = kv(d, r[0], r[1], classe);
     if (vecchia) {
       vecchia.riga.replaceWith(rigaKv);
       nuove.push({ acapo: vecchia.acapo, riga: rigaKv, firma });
@@ -27041,8 +26387,11 @@ function aggiornaInspector(inspector, dati = {}, { document: d = globalThis.docu
     if (compattazioni) riempiCard(d, compattazioni, righeCompattazioni({ motore: sc?.motore ?? null, legacy: sc?.legacy ?? null, recordLegacy: sc?.recordLegacy ?? null, level1: sc?.level1 ?? null, richiestaVista: Boolean(sc?.ripartizione) }), { classiValore: (r) => r[2] === "a-capo" ? "talos-kv__v--a-capo" : "" });
     const giri = righeGiri(dati.giri);
     const indiceVuoto = dati.storiaInCaricamento === true ? t("app.sessions.openingHistory") : t("processi.inspector.turnsNone");
-    riempiCard(d, indice2, giri.length ? giri : [[indiceVuoto, "—"]], { classiValore: (r) => r[2] === "accent" ? "talos-kv__v--accent" : "" });
-    scriviAnteprima(indice2, giri.length ? anteprimaIndiceGiri(dati.giri) : dati.storiaInCaricamento === true ? "…" : "—");
+    const invio = dati.storiaInCaricamento === true ? null : rigaDellInvio(dati.invio ?? {});
+    const righeIndice = giri.length ? giri : [[indiceVuoto, "—"]];
+    riempiCard(d, indice2, invio ? [invio, ...righeIndice] : righeIndice, { classiValore: (r) => r[2] === "accent" ? "talos-kv__v--accent" : r[2] === "invio-vicino" ? "talos-kv__v--avviso" : "" });
+    const anteprima4 = giri.length ? anteprimaIndiceGiri(dati.giri) : dati.storiaInCaricamento === true ? "…" : "—";
+    scriviAnteprima(indice2, invio?.[2] === "invio-vicino" ? `${invio[0]} ${invio[1]} · ${anteprima4}` : anteprima4);
   }
   if (!schedaDaSaltare(inspector, inspector.querySelector("#railFile"), "file")) {
     const fileCard = inspector.querySelector('#railFile [data-c="InspectorCard"]');
@@ -27212,6 +26561,7 @@ var init_inspector = __esm({
     init_contesto_scheda();
     init_comando_shell();
     init_lingua();
+    init_chat_foot();
     localeNumeri = () => linguaCorrenteDiT() === "en" ? "en-US" : "it-IT";
     localeOra = () => linguaCorrenteDiT() === "en" ? "en-GB" : "it-IT";
     FORMATI_NUMERI = /* @__PURE__ */ new Map();
@@ -27646,7 +26996,7 @@ function valoreRetry(evento) {
   const v = evento.value;
   const id4 = (x) => typeof x === "string" && x.length > 0 && x.length <= 256;
   const incerto = v.canale === "esito-incerto";
-  if (!v || v.schema !== "talos.provider-retry.v1" || ![v.runId, v.threadId, v.requestId].every(id4) || !["attesa", "invio", "fine"].includes(v.fase) || !Number.isSafeInteger(v.tentativo) || v.tentativo < (incerto ? 1 : 2) || !Number.isSafeInteger(v.tentativiMassimi) || v.tentativiMassimi < v.tentativo || (incerto ? v.httpStatus !== void 0 && v.httpStatus !== null || v.motivo !== void 0 && typeof v.motivo !== "string" : !Number.isInteger(v.httpStatus) || !(v.httpStatus === 402 && v.motivo === "budget-occupato" || v.httpStatus === 408 || v.httpStatus === 429 || v.httpStatus >= 500 && v.httpStatus <= 599)) || !Number.isFinite(v.attesaMs) || v.attesaMs < 0 || v.attesaMs > 2147483647 || v.fase === "attesa" && (!Number.isSafeInteger(v.retryAt) || v.retryAt < 1)) return null;
+  if (!v || v.schema !== "talos.provider-retry.v1" || ![v.runId, v.threadId, v.requestId].every(id4) || !["attesa", "invio", "fine"].includes(v.fase) || !Number.isSafeInteger(v.tentativo) || v.tentativo < (incerto ? 1 : 2) || !Number.isSafeInteger(v.tentativiMassimi) || v.tentativiMassimi < v.tentativo || (incerto ? v.httpStatus !== void 0 && v.httpStatus !== null || v.motivo !== void 0 && typeof v.motivo !== "string" : !Number.isInteger(v.httpStatus) || v.motivo !== void 0 && !(v.httpStatus === 402 && v.motivo === "budget-occupato" || v.httpStatus === 429 && v.motivo === "limite-del-piano") || !(v.httpStatus === 402 && v.motivo === "budget-occupato" || v.httpStatus === 408 || v.httpStatus === 429 || v.httpStatus >= 500 && v.httpStatus <= 599)) || !Number.isFinite(v.attesaMs) || v.attesaMs < 0 || v.attesaMs > 2147483647 || v.fase === "attesa" && (!Number.isSafeInteger(v.retryAt) || v.retryAt < 1)) return null;
   return {
     requestId: v.requestId,
     runId: v.runId,
@@ -27658,6 +27008,7 @@ function valoreRetry(evento) {
     canale: incerto ? "esito-incerto" : "http",
     retryAt: v.fase === "attesa" ? v.retryAt : null,
     ...v.httpStatus === 402 ? { motivo: v.motivo } : {},
+    ...v.httpStatus === 429 && v.motivo === "limite-del-piano" ? { motivo: v.motivo } : {},
     ...incerto && typeof v.motivo === "string" ? { motivo: v.motivo } : {},
     /* OWN-01 (CLI, 09/10/2026; nomi concordati col bugfixer): il fornitore non ha mandato NEMMENO gli header. Campo additivo: il
        canale resta «esito-incerto», ma la frase non è più «si è interrotta» — non era mai cominciata. */
@@ -27685,6 +27036,17 @@ function testoRetry(retry, ora4 = Date.now(), en2) {
   const incerto = retry.canale === "esito-incerto";
   const motivo = incerto ? voce2(retry.causa === "nessuna-prima-risposta" ? "reason.noFirstResponse" : "reason.outcomeUnknown") : retry.httpStatus === 402 && retry.motivo === "budget-occupato" ? voce2("reason.budgetBusy") : retry.httpStatus === 429 ? voce2("reason.rateLimited") : retry.httpStatus === 408 ? voce2("reason.timeout") : voce2("reason.unavailable");
   const secondi = Math.max(0, Math.ceil((retry.retryAt - ora4) / 1e3));
+  if (retry.motivo === "limite-del-piano" && retry.httpStatus === 429) {
+    const ore = new Date(retry.retryAt ?? ora4).toLocaleTimeString(en2 === void 0 ? void 0 : en2 ? "en-GB" : "it-IT", { hour: "2-digit", minute: "2-digit" });
+    return {
+      titolo: voce2("planLimit.title"),
+      /* linee guida OpenAI per «Sign in with ChatGPT» (ui-ux-guidelines, lette l'11/10/2026): «Usage limit reached» / «Review your
+         plan or this app's limit in ChatGPT settings.», e «Make Manage usage the primary action» (`azione`, sotto) */
+      motivo: retry.fase === "attesa" ? `${voce2("planLimit.review")} ${voce2("planLimit.continuesAt", { time: ore, attempt: retry.tentativo - 1, max: retry.tentativiMassimi - 1 })}` : voce2("planLimit.retrying"),
+      azione: { testo: voce2("planLimit.manageUsage"), indirizzo: PAGINA_CONSUMI_CHATGPT },
+      tempo: retry.fase !== "attesa" ? voce2("inProgress") : secondi > 0 ? voce2("planLimit.stopToCancel") : voce2("waitingConfirmation")
+    };
+  }
   return {
     titolo: retry.fase === "attesa" ? voce2("scheduled") : numero12,
     motivo: `${incerto ? motivo : voce2("reason.withStatus", { reason: motivo, status: retry.httpStatus })}${retry.fase === "attesa" ? ` ${numero12}.` : ""}`,
@@ -27693,14 +27055,14 @@ function testoRetry(retry, ora4 = Date.now(), en2) {
 }
 function montaProviderRetry({ contenitore, onShow = () => {
 }, document: doc = globalThis.document } = {}) {
-  let stato2 = null, replay = true, vivo = false, nodo15 = null, timer2 = null;
+  let stato2 = null, replay = true, vivo = false, nodo17 = null, timer2 = null;
   const nascondi = () => {
     if (timer2 !== null) {
       clearInterval(timer2);
       timer2 = null;
     }
-    nodo15?.remove();
-    nodo15 = null;
+    nodo17?.remove();
+    nodo17 = null;
   };
   const disegna2 = () => {
     const parent = contenitore?.();
@@ -27708,12 +27070,12 @@ function montaProviderRetry({ contenitore, onShow = () => {
       nascondi();
       return;
     }
-    if (!nodo15?.isConnected) {
+    if (!nodo17?.isConnected) {
       nascondi();
       onShow();
-      nodo15 = doc.createElement("aside");
-      nodo15.className = "talos-provider-retry";
-      nodo15.dataset.providerRetry = "";
+      nodo17 = doc.createElement("aside");
+      nodo17.className = "talos-provider-retry";
+      nodo17.dataset.providerRetry = "";
       const statoEl = doc.createElement("div");
       statoEl.setAttribute("role", "status");
       statoEl.setAttribute("aria-atomic", "true");
@@ -27726,14 +27088,31 @@ function montaProviderRetry({ contenitore, onShow = () => {
       tempo2.className = "talos-provider-retry__tempo";
       tempo2.setAttribute("role", "timer");
       tempo2.setAttribute("aria-live", "off");
-      nodo15.append(statoEl, tempo2);
-      parent.append(nodo15);
+      const destra = doc.createElement("div");
+      destra.className = "talos-provider-retry__destra";
+      destra.append(tempo2);
+      nodo17.append(statoEl, destra);
+      parent.append(nodo17);
     }
-    nodo15.dataset.fase = stato2.retry.fase;
+    nodo17.dataset.fase = stato2.retry.fase;
     const testi = testoRetry(stato2.retry, Date.now());
     for (const nome of ["titolo", "motivo", "tempo"]) {
-      const el35 = nodo15.querySelector(`.talos-provider-retry__${nome}`);
+      const el35 = nodo17.querySelector(`.talos-provider-retry__${nome}`);
       if (el35.textContent !== testi[nome]) el35.textContent = testi[nome];
+    }
+    let azione = nodo17.querySelector("[data-provider-retry-azione]");
+    if (!testi.azione) azione?.remove();
+    else {
+      if (!azione) {
+        azione = doc.createElement("a");
+        azione.className = "talos-button talos-button--primary talos-button--sm";
+        azione.dataset.providerRetryAzione = "";
+        azione.target = "_blank";
+        azione.rel = "noopener noreferrer";
+        nodo17.querySelector(".talos-provider-retry__destra")?.append(azione);
+      }
+      if (azione.textContent !== testi.azione.testo) azione.textContent = testi.azione.testo;
+      if (azione.getAttribute("href") !== testi.azione.indirizzo) azione.setAttribute("href", testi.azione.indirizzo);
     }
     const conta2 = stato2.retry.fase === "attesa" && stato2.retry.retryAt > Date.now();
     if (conta2 && timer2 === null) timer2 = setInterval(disegna2, 1e3);
@@ -27764,10 +27143,12 @@ function montaProviderRetry({ contenitore, onShow = () => {
     }
   };
 }
+var PAGINA_CONSUMI_CHATGPT;
 var init_provider_retry = __esm({
   "src/components/provider-retry.js"() {
     init_testi();
     init_lingua();
+    PAGINA_CONSUMI_CHATGPT = "https://chatgpt.com/settings/usage";
   }
 });
 
@@ -27840,31 +27221,31 @@ function monogrammaFornitore(row = {}) {
 }
 function svg(doc, contenuto) {
   const NS = "http://www.w3.org/2000/svg";
-  const nodo15 = doc.createElementNS(NS, "svg");
-  nodo15.setAttribute("viewBox", "0 0 24 24");
-  nodo15.setAttribute("aria-hidden", "true");
-  nodo15.setAttribute("focusable", "false");
-  Object.assign(nodo15.style, { width: LATO, height: LATO, fill: "currentColor", flex: "none" });
-  nodo15.append(contenuto);
-  return nodo15;
+  const nodo17 = doc.createElementNS(NS, "svg");
+  nodo17.setAttribute("viewBox", "0 0 24 24");
+  nodo17.setAttribute("aria-hidden", "true");
+  nodo17.setAttribute("focusable", "false");
+  Object.assign(nodo17.style, { width: LATO, height: LATO, fill: "currentColor", flex: "none" });
+  nodo17.append(contenuto);
+  return nodo17;
 }
 function glifoFornitore(row = {}, { document: doc = globalThis.document } = {}) {
   const marchio = marchioDiFornitore(row);
   if (marchio) {
     const traccia = doc.createElementNS("http://www.w3.org/2000/svg", "path");
     traccia.setAttribute("d", marchio.d);
-    const nodo16 = svg(doc, traccia);
-    nodo16.dataset.marchio = marchio.chiave;
-    return { nodo: nodo16, marchio };
+    const nodo18 = svg(doc, traccia);
+    nodo18.dataset.marchio = marchio.chiave;
+    return { nodo: nodo18, marchio };
   }
   const monogramma = monogrammaFornitore(row);
-  const nodo15 = doc.createElement("span");
-  nodo15.className = "talos-provider__monogramma";
-  nodo15.textContent = monogramma;
-  nodo15.setAttribute("aria-hidden", "true");
-  nodo15.dataset.glifo = "monogramma";
-  nodo15.dataset.monogramma = monogramma;
-  Object.assign(nodo15.style, {
+  const nodo17 = doc.createElement("span");
+  nodo17.className = "talos-provider__monogramma";
+  nodo17.textContent = monogramma;
+  nodo17.setAttribute("aria-hidden", "true");
+  nodo17.dataset.glifo = "monogramma";
+  nodo17.dataset.monogramma = monogramma;
+  Object.assign(nodo17.style, {
     display: "grid",
     placeItems: "center",
     flex: "none",
@@ -27889,7 +27270,7 @@ function glifoFornitore(row = {}, { document: doc = globalThis.document } = {}) 
     /* Due lettere vanno più piccole, o sfondano il cerchio da 22. */
     fontSize: monogramma.length > 1 ? "9px" : "11px"
   });
-  return { nodo: nodo15, marchio: null, monogramma };
+  return { nodo: nodo17, marchio: null, monogramma };
 }
 var LATO, MARCHI, CONDIVISI, SENZA_MARCHIO, MONOGRAMMI;
 var init_loghi_fornitori = __esm({
@@ -28016,332 +27397,466 @@ var init_loghi_fornitori = __esm({
   }
 });
 
-// src/components/coordinazione.js
-function coordinazioneAccesaNellaCatena(sceltePerAnello) {
-  const anelli = Array.isArray(sceltePerAnello) ? sceltePerAnello : [];
-  if (anelli.length === 0) return false;
-  const scelte = anelli.map((m) => eMappa(m) && Object.hasOwn(m, CHIAVE_COORDINAZIONE) ? m[CHIAVE_COORDINAZIONE] : void 0);
-  if (scelte.some((s) => s !== void 0 && s !== "sempre")) return false;
-  return scelte[scelte.length - 1] === "sempre";
+// src/components/session-item.js
+function statoSessione(sessione) {
+  let classe;
+  if (sessione.inAttesaApprovazione || sessione.inAttesaDomanda || sessione.inAttesaPiano || sessione.inAttesaRichiestaMcp || sessione.inAttesaDiscendente) classe = "attesa";
+  else if (sessione.interrotta) classe = "interrotto";
+  else if (!sessione.conclusa) classe = "vivo";
+  else if (sessione.ultimoEsito === "errore" && sessione.motivoChiusura === "fermata") classe = "fermata";
+  else if (sessione.ultimoEsito === "errore" && sessione.motivoChiusura === "in-pausa") classe = "in-pausa";
+  else if (sessione.ultimoEsito === "errore") classe = "errore";
+  else if (sessione.ultimoEsito === "successo") classe = "successo";
+  else classe = "ignoto";
+  const testo2 = classe === "errore" && sessione.motivoChiusura === "giri-finiti" ? t("processi.session.stateTurnLimit") : t(ETICHETTE[classe]);
+  let aiuto = null;
+  if (classe === "interrotto") aiuto = t("processi.session.helpInterrupted");
+  else if (classe === "attesa" && sessione.inAttesaDomanda) aiuto = t("processi.session.helpQuestion");
+  else if (classe === "attesa" && sessione.inAttesaPiano) aiuto = t("processi.session.helpPlan");
+  else if (classe === "attesa" && sessione.inAttesaRichiestaMcp) aiuto = t("processi.session.helpMcp");
+  else if (classe === "fermata") aiuto = t("processi.session.helpStopped");
+  else if (classe === "in-pausa") aiuto = t("processi.session.helpPaused");
+  return { classe, testo: testo2, tono: TONI2[classe] ?? null, aiuto };
 }
-function mappaPerUnaSessioneNuova(mappa) {
-  if (!eMappa(mappa)) return {};
-  const { [CHIAVE_COORDINAZIONE]: _tolta, ...resto } = mappa;
-  return resto;
+function oraCompatta(iso, adesso = /* @__PURE__ */ new Date()) {
+  const data = new Date(iso);
+  if (Number.isNaN(data.getTime())) return "";
+  const giorno = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const differenza = Math.round((giorno(adesso) - giorno(data)) / 864e5);
+  const inglese2 = linguaCorrenteDiT() === "en";
+  if (differenza <= 0) return data.toLocaleTimeString(inglese2 ? "en-GB" : "it-IT", { hour: "2-digit", minute: "2-digit" });
+  if (differenza === 1) return t("processi.session.yesterday");
+  if (differenza < 7) return t("processi.session.daysShort", { n: differenza });
+  return inglese2 ? data.toLocaleDateString("en-US", { month: "short", day: "numeric" }) : data.toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit" });
 }
-var CHIAVE_COORDINAZIONE, TETTO_AVVII_DA_SOLO, eMappa;
-var init_coordinazione = __esm({
-  "src/components/coordinazione.js"() {
-    CHIAVE_COORDINAZIONE = "delega_sottotask";
-    TETTO_AVVII_DA_SOLO = 20;
-    eMappa = (mappa) => Boolean(mappa) && typeof mappa === "object" && !Array.isArray(mappa);
+function nomeModello(modello) {
+  if (typeof modello !== "string" || modello.trim() === "") return null;
+  if (/^local:/i.test(modello.trim())) return nomeModelloUmano(modello) || modello.replace(/^local:/i, "");
+  return nomeModelloUmano(modello);
+}
+function el2(documentObj, tag2, className, testo2) {
+  const nodo17 = documentObj.createElement(tag2);
+  if (className) nodo17.className = className;
+  if (testo2 !== void 0 && testo2 !== null) nodo17.textContent = String(testo2);
+  return nodo17;
+}
+function nomeLeggibileSessione(taskId) {
+  const grezzo = String(taskId || "").trim();
+  if (!grezzo) return t("processi.session.untitled");
+  if (grezzo.startsWith("libero:")) {
+    const dove = grezzo.slice("libero:".length).trim();
+    if (!dove || dove === "default") return t("processi.session.freeTask");
+    if (dove === "full-access" || dove === "workspace-launch") return t("processi.session.freeTaskChosenByHand");
+    return t("processi.session.freeTaskIn", { dove });
   }
-});
-
-// src/components/politiche.js
-function politica(valore) {
-  return PER_VALORE.get(String(valore || "").trim()) || null;
+  if (grezzo.startsWith("delega:")) return t("processi.session.subAgent");
+  return grezzo;
 }
-function nomeUmanoPolitica(valore) {
-  return politica(valore)?.nome || String(valore || "");
-}
-function descrizionePolitica(valore) {
-  return politica(valore)?.descrizione || "";
-}
-function notaPolitica(valore) {
-  return politica(valore)?.nota || "";
-}
-function valoriPolitiche() {
-  return POLITICHE.map((p) => p.valore);
-}
-var politicaDa, POLITICHE, PER_VALORE;
-var init_politiche = __esm({
-  "src/components/politiche.js"() {
-    init_lingua();
-    politicaDa = (valore, chiave, rischio) => Object.freeze(Object.defineProperties({ valore, rischio }, {
-      nome: { enumerable: true, get: () => t(`chat.foot.permission.${chiave}`) },
-      descrizione: { enumerable: true, get: () => t(`varie.policy.${chiave}.description`) },
-      nota: { enumerable: true, get: () => t(`varie.policy.${chiave}.note`) }
-    }));
-    POLITICHE = Object.freeze([
-      politicaDa("Read only", "readOnly", "basso"),
-      politicaDa("Workspace write", "workspaceWrite", "medio"),
-      politicaDa("On request", "onRequest", "medio"),
-      politicaDa("Full access", "fullAccess", "massimo")
-    ]);
-    PER_VALORE = new Map(POLITICHE.map((p) => [p.valore, p]));
-  }
-});
-
-// src/components/chat-foot.js
-function etichettaPermesso(permesso) {
-  if (NOME_PERMESSO[permesso]) return NOME_PERMESSO[permesso];
-  if (Object.hasOwn(CHIAVI_PERMESSO_NON_SCEGLIBILI, permesso)) return t(CHIAVI_PERMESSO_NON_SCEGLIBILI[permesso]);
-  return typeof permesso === "string" && permesso.trim() ? permesso : t("chat.foot.permission.notSelected");
-}
-function attrezzoPassaSenzaChiedere(livello, scelta, attrezzo) {
-  if (scelta === "sempre") return true;
-  if (scelta === "chiedi" || scelta === "nega") return false;
-  const concessi = Object.hasOwn(CONCESSI_DAL_LIVELLO, livello ?? "") ? CONCESSI_DAL_LIVELLO[livello] : null;
-  return concessi === TUTTI || Boolean(concessi?.has(attrezzo));
-}
-function riassuntoSenzaChiedere(permesso, permessiPerAttrezzo, { modalitaOperativa = "normale" } = {}) {
-  const livello = LIVELLO_DELLA_POLITICA[permesso];
-  const scelte = permessiPerAttrezzo && typeof permessiPerAttrezzo === "object" ? permessiPerAttrezzo : {};
-  if (modalitaOperativa === "piano") {
-    return {
-      testo: t("chat.foot.permission.planReadOnly"),
-      suggerimento: [t("chat.foot.permission.policyLine", { politica: etichettaPermesso(permesso) }), t("chat.foot.permission.planPaused"), t("chat.foot.permission.change")].join("\n"),
-      gruppi: [],
-      parziali: [],
-      spenti: []
-    };
-  }
-  const passa = (a) => attrezzoPassaSenzaChiedere(livello, scelte[a], a);
-  const nome = (g) => {
-    const base = t(`chat.foot.permission.group.${g.chiave}`);
-    if (g.attrezzi.every(passa) || !g.attrezzi.some(passa)) return base;
-    return t("chat.foot.permission.groupPart", { gruppo: base, parte: g.attrezzi.filter(passa).map((a) => t(`chat.foot.permission.part.${a}`)).join(", ") });
-  };
-  const gruppi = livello ? GRUPPI_SENZA_CHIEDERE.filter((g) => g.attrezzi.some(passa)) : [];
-  const parziali = gruppi.filter((g) => !g.attrezzi.every(passa));
-  const spenti = GRUPPI_SENZA_CHIEDERE.filter((g) => g.attrezzi.every((a) => scelte[a] === "nega"));
-  const tuttoPassa = GRUPPI_SENZA_CHIEDERE.every((g) => g.attrezzi.every(passa));
-  let testo2;
-  if (!livello) testo2 = etichettaPermesso(permesso);
-  else if (gruppi.length === 0) testo2 = livello === "lettura" || livello === "ricerca" ? etichettaPermesso(permesso) : t("chat.foot.permission.asksEverything");
-  else if (tuttoPassa && livello === "accesso-pieno") testo2 = t("chat.foot.permission.withoutAskingAll");
-  else testo2 = t("chat.foot.permission.withoutAsking", { cosa: gruppi.map(nome).join(", ") });
-  const conUnSempre = GRUPPI_SENZA_CHIEDERE.some((g) => g.attrezzi.some((a) => scelte[a] === "sempre"));
-  const chiedeSempre = [
-    ...livello === "scrittura-progetto" ? ["outside"] : [],
-    ...livello === "scrittura-progetto" || livello === "accesso-pieno" || conUnSempre ? ["secrets", "suspicious"] : [],
-    ...conUnSempre && livello !== "accesso-pieno" ? ["trifecta"] : []
-  ];
-  const righe = [t("chat.foot.permission.policyLine", { politica: etichettaPermesso(permesso) })];
-  if (chiedeSempre.length && gruppi.length) righe.push(t("chat.foot.permission.alwaysAsks", { cosa: chiedeSempre.map((c) => t(`chat.foot.permission.always.${c}`)).join(", ") }));
-  if (spenti.length) righe.push(t("chat.foot.permission.turnedOff", { cosa: spenti.map(nome).join(", ") }));
-  righe.push(t("chat.foot.permission.change"));
-  return { testo: testo2, suggerimento: righe.join("\n"), gruppi: gruppi.map((g) => g.chiave), parziali: parziali.map((g) => g.chiave), spenti: spenti.map((g) => g.chiave) };
-}
-function nomeModelloUmano(id4) {
-  if (typeof id4 !== "string" || !id4.trim()) return "";
-  const grezzo = id4.trim();
-  if (!/^local:/i.test(grezzo)) return grezzo.replace(/^~/u, "").split("/").pop();
-  let resto = grezzo.replace(/^local:/i, "").replace(/[-_.]gguf$/i, "");
-  const quant = /[-_](IQ\d\w*|Q\d(?:[-_]\d)?(?:[-_][A-Z]+)*)(?=[-_]|$)/i.exec(resto);
-  const parametri = /(?:^|[-_])(\d+(?:[.,]\d+)?B)(?:[-_]A(\d+(?:[.,]\d+)?B))?(?=[-_]|$)/i.exec(resto);
-  let nome = resto;
-  if (parametri) nome = resto.slice(0, parametri.index);
-  nome = nome.replace(/[-_](GGUF|MLX|AWQ|GPTQ)$/i, "");
-  const pezzi = nome.split(/[-_]/).filter(Boolean);
-  if (pezzi.length > 1) pezzi.shift();
-  const pulito = pezzi.join(" ").replace(/\s+/g, " ").trim();
-  const parti = [pulito || resto];
-  if (parametri) parti.push(parametri[2] ? t("chat.foot.activeOf", { totali: parametri[1], attivi: parametri[2].replace(/^A/i, "") }) : parametri[1]);
-  if (quant) parti.push(quant[1].toUpperCase().replace(/-/g, "_"));
-  return parti.filter(Boolean).join(" · ");
-}
-function fondoInVista({ scrollHeight = 0, scrollTop = 0, clientHeight = 0, coda: coda2 = 0, soglia = 4 } = {}) {
-  if (Number(scrollHeight) <= Number(clientHeight)) return true;
-  const distanza = Number(scrollHeight) - Number(scrollTop) - Number(clientHeight);
-  if (!Number.isFinite(distanza)) return true;
-  return distanza <= Math.max(0, Number(coda2) || 0) + soglia;
-}
-function dettaglioUtile(cosa, dettaglio) {
-  const pulisci = (t2) => String(t2 ?? "").replace(/[…\.]+$/u, "").trim().toLowerCase();
-  const a = pulisci(cosa);
-  const b = pulisci(dettaglio);
-  if (!b || !a) return String(dettaglio ?? "").trim();
-  if (a === b || a.startsWith(b) || b.startsWith(a)) return "";
-  return String(dettaglio).trim();
-}
-function tonoPermesso(permesso) {
-  if (permesso === "Full access") return "danger";
-  if (permesso === "Workspace write") return "warning";
-  return null;
-}
-function kilo2(n) {
-  const v = Number(n) || 0;
-  if (v < 1e3) return String(Math.round(v));
-  return `${conSeparatoreDecimale((v / 1e3).toFixed(1))}k`;
-}
-function testoVelocitaLocale(modelloId, velocita) {
-  const id4 = String(modelloId || "");
-  if (!/^local:/i.test(id4)) return "";
-  return String(velocita || "").trim();
-}
-function testiUsage(usage, { tettoGiri = null, usageSessione = null } = {}) {
-  const sessione = usageSessione && typeof usageSessione === "object" ? usageSessione : usage;
-  if ((!usage || typeof usage !== "object") && (!sessione || typeof sessione !== "object")) return { tokenGiri: "", cache: "", giri: null, velocita: "" };
-  const prompt = Number(sessione?.prompt_tokens ?? 0) || 0;
-  const completion = Number(sessione?.completion_tokens ?? 0) || 0;
-  const cache = Number(sessione?.cached_tokens ?? 0) || 0;
-  const baseCache = Number.isFinite(sessione?.prompt_tokens_con_cache) ? sessione.prompt_tokens_con_cache : prompt;
-  const giriSessione = Number.isFinite(Number(sessione?.giri)) ? Number(sessione.giri) : null;
-  const giri = Number.isFinite(Number(usage?.giri)) ? Number(usage.giri) : null;
-  const totale2 = prompt + completion;
-  const parti = [];
-  if (totale2 > 0) parti.push(`${kilo2(totale2)} token`);
-  if (giriSessione !== null) parti.push(tn("chat.foot.turnsOne", "chat.foot.turnsMany", giriSessione, { tetto: Number.isFinite(tettoGiri) && tettoGiri > 0 && sessione === usage ? t("chat.foot.turnsOf", { tetto: tettoGiri }) : "" }));
-  const throughput = Number(usage?.tokens_per_second ?? usage?.tokensPerSecond ?? sessione?.tokens_per_second ?? sessione?.tokensPerSecond);
+function identitaSessione({ nome = null, impostazioni = null, dallElenco = null, taskId = null } = {}) {
+  const pulito = (v) => typeof v === "string" && v.trim() !== "" ? v.trim() : null;
+  const contratto = impostazioni || dallElenco || null;
+  const esplicito = pulito(nome);
+  if (esplicito) return { nome: esplicito, fonte: "esplicito", contratto };
+  const salvato = pulito(impostazioni?.nome) || pulito(dallElenco?.nome);
+  if (salvato) return { nome: salvato, fonte: "nome-salvato", contratto };
+  const delega = pulito(impostazioni?.taskDelega) || pulito(dallElenco?.taskDelega);
+  if (delega) return { nome: delega, fonte: "compito-delega", contratto };
   return {
-    tokenGiri: parti.join(" · "),
-    cache: cache > 0 && baseCache > 0 ? `cache ${Math.round(cache / baseCache * 100)}%` : "",
-    giri,
-    velocita: Number.isFinite(throughput) && throughput > 0 ? `${Math.round(throughput)} token/s` : ""
+    nome: nomeLeggibileSessione(pulito(taskId) || pulito(impostazioni?.taskId) || pulito(dallElenco?.taskId)),
+    fonte: "ripiego",
+    contratto
   };
 }
-function testoLatenza(ms2) {
-  if (!Number.isFinite(ms2) || ms2 <= 0) return "";
-  return ms2 >= 1e3 ? t("chat.foot.firstTokenSeconds", { tempo: conSeparatoreDecimale((ms2 / 1e3).toFixed(1)) }) : t("chat.foot.firstTokenMillis", { tempo: Math.round(ms2) });
-}
-function scrivi(el35, testo2) {
-  if (!el35) return;
-  const t2 = testo2 || "";
-  if (el35.textContent !== t2) el35.textContent = t2;
-  el35.hidden = t2 === "";
-}
-function statoGiri(giri, tettoGiri) {
-  if (!Number.isFinite(Number(giri))) return null;
-  const n = Number(giri);
-  const tetto = Number(tettoGiri);
-  if (!Number.isFinite(tetto) || tetto <= 0) return n > 0 ? "quieto" : null;
-  const quota = n / tetto;
-  if (quota < 0.5) return null;
-  return quota >= 0.8 ? "vicino" : "quieto";
-}
-function inoltraRotellaConversazione(evento, piede) {
-  if (evento.ctrlKey) return;
-  const scroller = piede.closest?.("#schermoChat")?.querySelector(".talos-conversation");
-  if (!scroller) return;
-  let delta = Number(evento.deltaY) || 0;
-  if (evento.deltaMode === 1) {
-    delta *= 16;
-  } else if (evento.deltaMode === 2) {
-    delta *= scroller.clientHeight;
+function prefissoComuneDiParole(nomi2) {
+  const righe = (Array.isArray(nomi2) ? nomi2 : []).map((n) => String(n ?? ""));
+  if (righe.length < 2 || righe.some((n) => !n)) return "";
+  let comune = righe[0];
+  for (const n of righe.slice(1)) {
+    let i2 = 0;
+    while (i2 < comune.length && i2 < n.length && comune[i2] === n[i2]) i2 += 1;
+    comune = comune.slice(0, i2);
+    if (!comune) return "";
   }
-  if (!delta) return;
-  const prima = scroller.scrollTop;
-  scroller.scrollTop = prima + delta;
-  if (scroller.scrollTop === prima) return;
-  if (evento.cancelable) evento.preventDefault();
+  const ultimoSpazio = comune.lastIndexOf(" ");
+  return ultimoSpazio > 0 ? comune.slice(0, ultimoSpazio + 1) : "";
 }
-function aggiornaPiedeChat(piede, dati = {}) {
-  if (!piede) return;
-  const documentObj = piede.ownerDocument;
-  const tornaInFondo = piede.querySelector("#chatTornaInFondo");
-  if (tornaInFondo) {
-    tornaInFondo.hidden = dati.inFondo !== false;
-    if (!tornaInFondo.dataset.portaInFondo) {
-      tornaInFondo.dataset.portaInFondo = "1";
-      tornaInFondo.addEventListener("click", () => {
-        tornaInFondo.dispatchEvent(new CustomEvent("talos-vai-in-fondo", { bubbles: true }));
-      });
-      tornaInFondo.addEventListener("wheel", (evento) => inoltraRotellaConversazione(evento, piede), { passive: false });
-    }
+function nomiDistintiFraSorelle(nomi2, { minimoPrefisso = 12, minimoResto = 6 } = {}) {
+  const righe = (Array.isArray(nomi2) ? nomi2 : []).map((n) => String(n ?? ""));
+  const comune = prefissoComuneDiParole(righe);
+  if (comune.trim().length < minimoPrefisso) return righe;
+  const tagliati = righe.map((n) => n.slice(comune.length).trim());
+  if (tagliati.some((n) => n.length < minimoResto)) return righe;
+  return tagliati.map((n) => `…${n}`);
+}
+function ordinaSessioniAdAlbero(elenco3) {
+  const righe = Array.isArray(elenco3) ? elenco3.filter(Boolean) : [];
+  const presenti = new Set(righe.map((s) => s.sessionId));
+  const figliePer = /* @__PURE__ */ new Map();
+  for (const s of righe) {
+    const padre = s.padreId && presenti.has(s.padreId) ? s.padreId : null;
+    if (!padre) continue;
+    if (!figliePer.has(padre)) figliePer.set(padre, []);
+    figliePer.get(padre).push(s);
   }
-  const striscia = piede.querySelector(".talos-status-strip");
-  if (striscia) {
-    const contattoPerso = dati.attivo === true && dati.contatto === "perso";
-    striscia.hidden = !dati.attivo || dati.inFondo === true && !contattoPerso;
-    striscia.classList.toggle("talos-status-strip--senza-contatto", contattoPerso);
-    if (!striscia.dataset.portaInFondo) {
-      striscia.dataset.portaInFondo = "1";
-      striscia.style.cursor = "pointer";
-      striscia.setAttribute("title", t("chat.foot.status.returnToWriting"));
-      striscia.addEventListener("click", (evento) => {
-        if (evento.target.closest("button")) return;
-        striscia.dispatchEvent(new CustomEvent("talos-vai-in-fondo", { bubbles: true }));
-      });
+  for (const gruppo of figliePer.values()) {
+    gruppo.sort((a, b) => String(a.avviataAlle ?? "").localeCompare(String(b.avviataAlle ?? "")));
+  }
+  const distintivoPer = /* @__PURE__ */ new Map();
+  for (const gruppo of figliePer.values()) {
+    const nomi2 = nomiDistintiFraSorelle(gruppo.map((f) => f.taskDelega ?? ""));
+    gruppo.forEach((f, i2) => {
+      if (nomi2[i2] && nomi2[i2] !== f.taskDelega) distintivoPer.set(f.sessionId, nomi2[i2]);
+    });
+  }
+  const fatte = /* @__PURE__ */ new Set();
+  const fuori = [];
+  const scendi = (sessione, profondita) => {
+    if (fatte.has(sessione.sessionId)) return;
+    fatte.add(sessione.sessionId);
+    fuori.push({ sessione, profondita });
+    for (const figlia of figliePer.get(sessione.sessionId) ?? []) scendi(figlia, profondita + 1);
+  };
+  const vivaPer = /* @__PURE__ */ new Map();
+  const discendenzaViva = (sessione, visti = /* @__PURE__ */ new Set()) => {
+    if (visti.has(sessione.sessionId)) return false;
+    visti.add(sessione.sessionId);
+    const classe = statoSessione(sessione).classe;
+    if (classe === "vivo" || classe === "attesa") return true;
+    return (figliePer.get(sessione.sessionId) ?? []).some((f) => discendenzaViva(f, visti));
+  };
+  const parlatoPer = /* @__PURE__ */ new Map();
+  const ultimaVoceDellAlbero = (sessione, visti = /* @__PURE__ */ new Set()) => {
+    if (visti.has(sessione.sessionId)) return "";
+    visti.add(sessione.sessionId);
+    const mia = String(sessione.ultimaRispostaAlle ?? "");
+    const figlie = (figliePer.get(sessione.sessionId) ?? []).map((f) => ultimaVoceDellAlbero(f, visti));
+    return [mia, ...figlie].sort().at(-1) ?? "";
+  };
+  const radici = righe.filter((s) => !(s.padreId && presenti.has(s.padreId)));
+  for (const r of radici) {
+    vivaPer.set(r.sessionId, discendenzaViva(r));
+    parlatoPer.set(r.sessionId, ultimaVoceDellAlbero(r));
+  }
+  const ordinate = [...radici].sort((a, b) => {
+    const viva = Number(vivaPer.get(b.sessionId)) - Number(vivaPer.get(a.sessionId));
+    if (viva !== 0) return viva;
+    if (!vivaPer.get(a.sessionId)) return 0;
+    return String(parlatoPer.get(b.sessionId) ?? "").localeCompare(String(parlatoPer.get(a.sessionId) ?? ""));
+  });
+  for (const s of ordinate) scendi(s, 0);
+  for (const s of righe) if (!fatte.has(s.sessionId)) fuori.push({ sessione: s, profondita: 0 });
+  return fuori.map((v, i2) => {
+    const dopo = fuori.slice(i2 + 1).find((altra) => altra.profondita <= v.profondita);
+    return { ...v, ultima: !dopo || dopo.profondita < v.profondita, nomeDistintivo: distintivoPer.get(v.sessione.sessionId) ?? null };
+  });
+}
+function scriviConteggio(nodo17, giri, spiegazione) {
+  const frase = tn("processi.session.turnOne", "processi.session.turnMany", giri);
+  const precedente = typeof nodo17.title === "string" && nodo17.title.includes("\n") ? nodo17.title.split("\n").slice(1).join("\n") : null;
+  const motivo = spiegazione === void 0 ? precedente : spiegazione;
+  const titolo2 = motivo ? `${frase}
+${motivo}` : frase;
+  const stesso = nodo17.dataset ? nodo17.dataset.giri === String(giri) : nodo17.textContent === frase;
+  if (stesso && (nodo17.title === void 0 || nodo17.title === titolo2)) return false;
+  const doc = nodo17.ownerDocument;
+  if (doc && typeof doc.createElementNS === "function" && typeof nodo17.replaceChildren === "function") {
+    const svg2 = doc.createElementNS(SVG_NS_CONTEGGIO, "svg");
+    svg2.setAttribute("class", "i i--xs");
+    svg2.setAttribute("aria-hidden", "true");
+    const use = doc.createElementNS(SVG_NS_CONTEGGIO, "use");
+    use.setAttribute("href", "#i-sparkles");
+    svg2.append(use);
+    const numero12 = el2(doc, "span", "talos-session-item__conto", String(giri));
+    numero12.setAttribute("aria-hidden", "true");
+    nodo17.replaceChildren(svg2, numero12, el2(doc, "span", "sr-only", frase));
+  } else nodo17.textContent = frase;
+  nodo17.title = titolo2;
+  if (nodo17.dataset) {
+    nodo17.dataset.conteggio = "";
+    nodo17.dataset.giri = String(giri);
+  }
+  return true;
+}
+function aggiornaSessionItem(riga2, dati = {}) {
+  if (!riga2 || typeof riga2.querySelector !== "function") return false;
+  let cambiato = false;
+  const stato2 = dati.stato;
+  if (stato2 && typeof stato2.classe === "string") {
+    if (riga2.dataset.sessionState !== stato2.classe) {
+      riga2.dataset.sessionState = stato2.classe;
+      cambiato = true;
     }
-    const cosa = striscia.querySelector("[data-run-what]");
-    if (cosa) {
-      cosa.replaceChildren();
-      cosa.append(documentObj.createTextNode(contattoPerso ? t("chat.foot.status.connectionLost") : dati.cosa || t("chat.foot.status.working")));
-      if (dati.dettaglio && !contattoPerso) {
-        cosa.append(documentObj.createTextNode(" · "));
-        const mono = documentObj.createElement("span");
-        mono.className = "talos-mono talos-measure";
-        mono.textContent = dati.dettaglio;
-        cosa.append(mono);
+    const pallino = riga2.querySelector(".talos-dot");
+    if (pallino) {
+      const classe = `talos-dot talos-dot--sm${stato2.tono ? ` talos-dot--${stato2.tono}` : ""}`;
+      if (pallino.className !== classe) {
+        pallino.className = classe;
+        cambiato = true;
       }
     }
-    const meta2 = striscia.querySelector("[data-run-meta]");
-    const pezzi = [];
-    if (Number.isFinite(dati.giro)) pezzi.push(t("chat.foot.status.turn", { n: dati.giro }));
-    if (Number.isFinite(dati.secondi)) pezzi.push(`${Math.max(0, Math.round(dati.secondi))} s`);
-    scrivi(meta2, contattoPerso ? t("chat.foot.status.unknownRunning") : pezzi.join(" · "));
-    const ferma = striscia.querySelector(".stop-run");
-    if (ferma) {
-      ferma.disabled = contattoPerso;
-      ferma.title = contattoPerso ? t("chat.foot.status.stopUnreachable") : "";
+    const testo2 = riga2.querySelector(".talos-session-item__state");
+    if (testo2) {
+      const modello = dati.modello === void 0 ? testo2.textContent.includes(" · ") ? testo2.textContent.split(" · ").slice(1).join(" · ") : null : dati.modello;
+      const frase = modello ? `${stato2.testo} · ${modello}` : stato2.testo;
+      if (testo2.textContent !== frase) {
+        testo2.textContent = frase;
+        cambiato = true;
+      }
     }
   }
-  const modello = piede.querySelector('[data-open-sheet="model"] .talos-chip__label');
-  if (modello) modello.textContent = dati.modello || t("chat.foot.model.choose");
-  const pillolaModello = piede.querySelector('[data-open-sheet="model"]');
-  if (pillolaModello) pillolaModello.title = dati.modelloId ? t("chat.foot.model.changeNamed", { modello: dati.modelloId }) : t("chat.foot.model.change");
-  const permesso = piede.querySelector('[data-open-sheet="permissions"]');
-  if (permesso) {
-    const label = permesso.querySelector(".talos-chip__label");
-    const riassunto = riassuntoSenzaChiedere(dati.permesso, dati.permessiPerAttrezzo, { modalitaOperativa: dati.modalitaOperativa });
-    if (label) label.textContent = riassunto.testo;
-    permesso.title = riassunto.suggerimento;
-    permesso.classList.remove("talos-badge--warning", "talos-badge--danger");
-    const tono = tonoPermesso(dati.permesso);
-    if (tono) permesso.classList.add(`talos-badge--${tono}`);
+  if (Number.isFinite(dati.giri) && dati.giri > 0) {
+    const aside = riga2.querySelector(".talos-session-item__aside");
+    if (aside) {
+      const ultimo = aside.lastElementChild;
+      const eIlConteggio = ultimo && (ultimo.dataset?.conteggio !== void 0 || /\b(?:gir[oi]|turns?|richiest[ae]|requests?)\b/.test(ultimo.textContent || ""));
+      if (eIlConteggio) {
+        if (scriviConteggio(ultimo, dati.giri)) cambiato = true;
+      } else {
+        const nuovo = riga2.ownerDocument.createElement("span");
+        scriviConteggio(nuovo, dati.giri, null);
+        aside.append(nuovo);
+        cambiato = true;
+      }
+    }
   }
-  const u = testiUsage(dati.usage, { tettoGiri: dati.tettoGiri, usageSessione: dati.usageSessione });
-  const giriChip = piede.querySelector("[data-runtime-giri]");
-  if (giriChip) {
-    const stato2 = statoGiri(u.giri, dati.tettoGiri);
-    giriChip.hidden = stato2 === null || dati.storiaInCaricamento === true;
-    giriChip.classList.toggle("talos-badge--warning", stato2 === "vicino");
-    const n = giriChip.querySelector(".talos-mono");
-    if (n && u.giri !== null) n.textContent = Number.isFinite(Number(dati.tettoGiri)) && Number(dati.tettoGiri) > 0 ? `${u.giri}/${dati.tettoGiri}` : String(u.giri);
-    giriChip.title = Number.isFinite(Number(dati.tettoGiri)) && Number(dati.tettoGiri) > 0 ? t("chat.foot.turnsHintWithLimit", { n: dati.tettoGiri }) : t("chat.foot.turnsHint");
-  }
-  const costoChip = piede.querySelector("[data-runtime-costo]");
-  if (costoChip) {
-    costoChip.hidden = !dati.costo;
-    const n = costoChip.querySelector(".talos-mono");
-    if (n && dati.costo) n.textContent = dati.costo;
-  }
-  scrivi(piede.querySelector('[data-statusbar="tema"]'), testoVelocitaLocale(dati.modelloId, u.velocita));
-  scrivi(piede.querySelector("[data-runtime-usage]"), u.tokenGiri);
-  scrivi(piede.querySelector("[data-runtime-cache]"), u.cache);
-  scrivi(piede.querySelector("[data-runtime-latenza]"), testoLatenza(dati.latenzaMs) || u.velocita);
+  return cambiato;
 }
-var conSeparatoreDecimale, CHIAVI_PERMESSO, NOME_PERMESSO, CHIAVI_PERMESSO_NON_SCEGLIBILI, GRUPPI_SENZA_CHIEDERE, LIVELLO_DELLA_POLITICA, TUTTI, CONCESSI_DAL_LIVELLO;
-var init_chat_foot = __esm({
-  "src/components/chat-foot.js"() {
+function creaSessionItem(sessione, opzioni = {}) {
+  const documentObj = opzioni.document || globalThis.document;
+  const riga2 = el2(documentObj, "button", "talos-session-item");
+  riga2.type = "button";
+  riga2.setAttribute("data-c", "SessionItem");
+  if (opzioni.corrente) riga2.setAttribute("aria-current", "true");
+  if (sessione.sessionId) riga2.dataset.realSessionId = sessione.sessionId;
+  const quando = Date.parse(sessione.ultimaRispostaAlle ?? "");
+  const adessoMs = (opzioni.adesso instanceof Date ? opzioni.adesso : /* @__PURE__ */ new Date()).getTime();
+  if (Number.isFinite(quando) && !opzioni.corrente && adessoMs - quando <= SEGNALE_NOVITA_MS) {
+    riga2.dataset.novita = "si";
+  }
+  const etichetta3 = opzioni.pendente ? t("processi.session.newInFolder", { cartella: sessione.nomeCartella || "" }) : `${sessione.nome || opzioni.nomeDistintivo || sessione.taskDelega || nomeLeggibileSessione(sessione.taskId)}${sessione.forkDa ? ` · ${t("processi.session.branch")}` : ""}`;
+  const stato2 = opzioni.pendente ? { classe: "pendente", testo: t(ETICHETTE.pendente), tono: null } : statoSessione(sessione);
+  riga2.dataset.sessionState = stato2.classe;
+  if (stato2.aiuto) riga2.title = stato2.aiuto;
+  const testo2 = el2(documentObj, "span");
+  const titolo2 = el2(documentObj, "span", "talos-session-item__title", etichetta3);
+  const sotto = el2(documentObj, "span", "talos-session-item__sub");
+  const pallino = el2(documentObj, "span", `talos-dot talos-dot--sm${stato2.tono ? ` talos-dot--${stato2.tono}` : ""}`);
+  const modello = opzioni.pendente ? null : nomeModello(sessione.modello);
+  sotto.append(pallino, el2(documentObj, "span", "talos-session-item__state", modello ? `${stato2.testo} · ${modello}` : stato2.testo));
+  testo2.append(titolo2, sotto);
+  const aside = el2(documentObj, "span", "talos-session-item__aside");
+  if (!opzioni.pendente) {
+    aside.append(el2(documentObj, "span", null, oraCompatta(sessione.avviataAlle, opzioni.adesso)));
+    const { giri, fermati } = giriDellaSessione(sessione);
+    if (giri !== null && giri > 0) {
+      const conto = el2(documentObj, "span");
+      scriviConteggio(conto, giri, fermati > 0 ? spiegaGiriFermati(fermati) : null);
+      aside.append(conto);
+    }
+  }
+  if (opzioni.selezione?.attiva) {
+    const casella = el2(documentObj, "input", "talos-checkbox");
+    casella.type = "checkbox";
+    casella.checked = Boolean(opzioni.selezione.selezionata);
+    casella.dataset.sessionSelect = sessione.sessionId || "";
+    casella.setAttribute("aria-label", t("processi.session.select", { nome: etichetta3 }));
+    casella.addEventListener("click", (event) => event.stopPropagation());
+    casella.addEventListener("change", () => opzioni.selezione.onToggle?.(casella.checked));
+    riga2.append(casella);
+    riga2.classList.add("is-selection-mode");
+    if (casella.checked) riga2.classList.add("is-selected");
+  }
+  riga2.append(testo2, aside);
+  if (typeof opzioni.onApri === "function") riga2.addEventListener("click", opzioni.onApri);
+  if (typeof opzioni.onMenu === "function") {
+    riga2.addEventListener("contextmenu", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      opzioni.onMenu(event);
+    });
+  }
+  return riga2;
+}
+function sessioniRadice(elenco3) {
+  return (Array.isArray(elenco3) ? elenco3 : []).filter((s) => s && !s.padreId && !(Number(s.profonditaDelega) > 0));
+}
+var SEGNALE_NOVITA_MS, TONI2, ETICHETTE, SVG_NS_CONTEGGIO;
+var init_session_item = __esm({
+  "src/components/session-item.js"() {
+    init_consumo_sessione();
+    init_chat_foot();
     init_lingua();
-    init_coordinazione();
-    init_politiche();
-    conSeparatoreDecimale = (testo2) => linguaCorrenteDiT() === "en" ? testo2 : testo2.replace(".", ",");
-    CHIAVI_PERMESSO = { "Read only": "chat.foot.permission.readOnly", "Workspace write": "chat.foot.permission.workspaceWrite", "On request": "chat.foot.permission.onRequest", "Full access": "chat.foot.permission.fullAccess" };
-    NOME_PERMESSO = Object.freeze(Object.defineProperties({}, Object.fromEntries(POLITICHE.map((p) => [p.valore, { enumerable: true, get: () => t(CHIAVI_PERMESSO[p.valore]) }]))));
-    CHIAVI_PERMESSO_NON_SCEGLIBILI = Object.freeze({ Research: "chat.foot.permission.research" });
-    GRUPPI_SENZA_CHIEDERE = Object.freeze([
-      Object.freeze({ chiave: "files", attrezzi: Object.freeze(["scrivi", "file_edit"]) }),
-      Object.freeze({ chiave: "commands", attrezzi: Object.freeze(["shell", "prova"]) }),
-      Object.freeze({ chiave: "documents", attrezzi: Object.freeze(["document_create", "generate_image"]) })
-    ]);
-    LIVELLO_DELLA_POLITICA = Object.freeze({
-      "Read only": "lettura",
-      "Workspace write": "scrittura-progetto",
-      "On request": "su-richiesta",
-      "Full access": "accesso-pieno",
-      Research: "ricerca"
+    SEGNALE_NOVITA_MS = 6e4;
+    TONI2 = Object.freeze({
+      attesa: "warning",
+      vivo: "live",
+      "in-pausa": "warning",
+      // C3 tappa 4: ambra, come «In pausa» nell'elenco degli agenti
+      errore: "danger",
+      successo: "success"
+      // interrotta / ignoto / pendente: pallino senza tono, come «interrotta» nel mockup.
     });
-    TUTTI = "tutti";
-    CONCESSI_DAL_LIVELLO = Object.freeze({
-      "accesso-pieno": TUTTI,
-      "scrittura-progetto": TUTTI,
-      "scrittura-area": Object.freeze(/* @__PURE__ */ new Set(["scrivi", "file_edit"])),
-      ricerca: Object.freeze(/* @__PURE__ */ new Set(["research_deposit"]))
+    ETICHETTE = Object.freeze({
+      attesa: "processi.session.stateWaitingForYou",
+      vivo: "processi.session.stateRunning",
+      interrotto: "processi.session.stateInterrupted",
+      errore: "processi.session.stateError",
+      /*
+       * ⛔⛔ 07/9, misurato: premi «ferma», il giro si chiude come chiedevi, e la riga diceva
+       * **«errore»** — perche il giro finisce con un `RunError` di codice `fermato` e l'elenco
+       * conosceva solo l'esito, non il motivo. Fermare non e sbagliare, e nemmeno concludere.
+       * Ricerca 07/09/2026: un annullamento chiesto dalla persona non e ne
+       * `end_turn` (fa sembrare completamento uno stop) ne `agent_error` (fa sembrare guasto un gesto
+       * voluto): e un terzo esito. Qui si chiama «fermata».
+       */
+      fermata: "processi.session.stateStopped",
+      "in-pausa": "processi.session.statePaused",
+      successo: "processi.session.stateDone",
+      ignoto: "processi.session.stateDoneNoOutcome",
+      pendente: "processi.session.statePending"
     });
+    SVG_NS_CONTEGGIO = "http://www.w3.org/2000/svg";
+  }
+});
+
+// src/components/costi-consumo.js
+function compatto(n) {
+  const v = Number(n);
+  if (!Number.isFinite(v) || v < 0) return "—";
+  if (v >= 1e6) return `${new Intl.NumberFormat(localeUI2(), { maximumFractionDigits: 1 }).format(v / 1e6)} M`;
+  if (v >= 1e3) return `${new Intl.NumberFormat(localeUI2(), { maximumFractionDigits: 1 }).format(v / 1e3)} k`;
+  return NUM.format(v);
+}
+function giornoDi(sessione) {
+  const grezza = sessione?.avviataAlle || sessione?.avviata || sessione?.creata || sessione?.chiusa;
+  if (!grezza) return null;
+  const d = new Date(grezza);
+  if (Number.isNaN(d.getTime())) return null;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function raggruppa(sessioni, chiaveDi) {
+  const per = /* @__PURE__ */ new Map();
+  for (const s of sessioni) {
+    const k = chiaveDi(s);
+    if (k == null) continue;
+    const v = per.get(k) || { chiave: k, sessioni: 0, giri: 0, token: 0, cache: 0, tokenNoti: 0 };
+    v.sessioni += 1;
+    if (numeroValido(giriDellaSessione(s).giri)) v.giri += giriDellaSessione(s).giri;
+    const t2 = tokenDi(s);
+    if (t2 != null) {
+      v.token += t2;
+      v.tokenNoti += 1;
+    }
+    if (numeroValido(usageDellaSessione(s)?.cached_tokens)) v.cache += Number(usageDellaSessione(s).cached_tokens);
+    per.set(k, v);
+  }
+  return [...per.values()];
+}
+function consumoPerGiorno(sessioni = [], { giorni = 14 } = {}) {
+  return raggruppa(sessioni, giornoDi).sort((a, b) => b.chiave.localeCompare(a.chiave)).slice(0, giorni);
+}
+function consumoPerModello(sessioni = []) {
+  return raggruppa(sessioni, (s) => typeof s?.modello === "string" && s.modello.trim() !== "" ? s.modello : null).sort((a, b) => b.token - a.token || b.sessioni - a.sessioni);
+}
+function riepilogoConsumo(sessioni = []) {
+  const totali = { sessioni: sessioni.length, giri: 0, token: 0, cache: 0, senzaToken: 0, senzaData: 0, senzaModello: 0, giriFermati: 0 };
+  for (const s of sessioni) {
+    const { giri, fermati } = giriDellaSessione(s);
+    if (numeroValido(giri)) totali.giri += giri;
+    totali.giriFermati += fermati;
+    const t2 = tokenDi(s);
+    if (t2 == null) totali.senzaToken += 1;
+    else totali.token += t2;
+    if (numeroValido(usageDellaSessione(s)?.cached_tokens)) totali.cache += Number(usageDellaSessione(s).cached_tokens);
+    if (giornoDi(s) == null) totali.senzaData += 1;
+    if (!(typeof s?.modello === "string" && s.modello.trim() !== "")) totali.senzaModello += 1;
+  }
+  return totali;
+}
+function el3(d, tag2, classe, testo2) {
+  const n = d.createElement(tag2);
+  if (classe) n.className = classe;
+  if (testo2 != null) n.textContent = testo2;
+  return n;
+}
+function badge(d, testo2, tono) {
+  const b = el3(d, "span", `talos-badge talos-badge--sm${tono ? ` talos-badge--${tono}` : ""}`, testo2);
+  b.dataset.c = "Badge";
+  return b;
+}
+function giornoUmano(chiave, oggi = /* @__PURE__ */ new Date()) {
+  const [a, m, g] = String(chiave).split("-").map(Number);
+  if (!a || !m || !g) return String(chiave);
+  const d = new Date(a, m - 1, g);
+  const stesso = (x, y) => x.getFullYear() === y.getFullYear() && x.getMonth() === y.getMonth() && x.getDate() === y.getDate();
+  const ieri = new Date(oggi);
+  ieri.setDate(ieri.getDate() - 1);
+  if (stesso(d, oggi)) return t("varie.costs.day.today");
+  if (stesso(d, ieri)) return t("varie.costs.day.yesterday");
+  return d.toLocaleDateString(localeUI2(), { day: "numeric", month: "short" });
+}
+function riempiTabella(tabella, righe, etichettaDi, { document: d = globalThis.document } = {}) {
+  const corpo = tabella?.querySelector("tbody");
+  if (!corpo) return;
+  if (!righe.length) {
+    const tr2 = d.createElement("tr");
+    const td = el3(d, "td", "talos-muted", t("varie.costs.table.empty"));
+    td.colSpan = 5;
+    tr2.appendChild(td);
+    corpo.replaceChildren(tr2);
+    return;
+  }
+  corpo.replaceChildren(...righe.map((r) => {
+    const tr2 = d.createElement("tr");
+    tr2.appendChild(el3(d, "th", "", etichettaDi(r)));
+    tr2.firstChild.setAttribute("scope", "row");
+    for (const v of [NUM.format(r.sessioni), NUM.format(r.giri), r.tokenNoti ? compatto(r.token) : "—", r.cache ? compatto(r.cache) : "—"]) {
+      tr2.appendChild(el3(d, "td", "talos-mono", v));
+    }
+    return tr2;
+  }));
+}
+function aggiornaCosti(pannello, sessioni = [], { document: d = globalThis.document, oggi = /* @__PURE__ */ new Date(), sessioneId = null } = {}) {
+  if (!pannello) return null;
+  const tot = riepilogoConsumo(sessioni);
+  const riepilogo = pannello.querySelector("#costiRiepilogo");
+  if (riepilogo) {
+    const voci = [
+      badge(d, tn("varie.costs.badge.sessionsOne", "varie.costs.badge.sessionsMany", tot.sessioni, { n: NUM.format(tot.sessioni) }), "accent"),
+      badge(d, tn("varie.costs.badge.turnsOne", "varie.costs.badge.turnsMany", tot.giri, { n: NUM.format(tot.giri) })),
+      badge(d, t("varie.costs.badge.tokens", { n: compatto(tot.token) })),
+      badge(d, t("varie.costs.badge.inCache", { n: compatto(tot.cache) }))
+    ];
+    if (tot.senzaToken) voci.push(badge(d, t("varie.costs.badge.noTokens", { n: NUM.format(tot.senzaToken) }), "warning"));
+    if (tot.giriFermati) voci.push(badge(d, tn("varie.costs.badge.stoppedTurnsOne", "varie.costs.badge.stoppedTurnsMany", tot.giriFermati, { n: NUM.format(tot.giriFermati) }), "warning"));
+    if (tot.senzaModello) voci.push(badge(d, t("varie.costs.badge.noModel", { n: NUM.format(tot.senzaModello) }), "warning"));
+    if (tot.senzaData) voci.push(badge(d, t("varie.costs.badge.noDate", { n: NUM.format(tot.senzaData) }), "warning"));
+    const aperta2 = sessioneId ? sessioni.find((s) => s.sessionId === sessioneId) : null;
+    const cache = el3(d, "p", "talos-muted", t("varie.costs.cacheReuse", { text: testoRiusoCache(aperta2?.cacheSessione) }));
+    cache.dataset.cacheSessione = "";
+    voci.push(cache);
+    riepilogo.replaceChildren(...voci);
+  }
+  riempiTabella(pannello.querySelector("#costiPerGiorno"), consumoPerGiorno(sessioni), (r) => giornoUmano(r.chiave, oggi), { document: d });
+  riempiTabella(pannello.querySelector("#costiPerModello"), consumoPerModello(sessioni), (r) => nomeModello(r.chiave) || r.chiave, { document: d });
+  return tot;
+}
+var localeUI2, NUM, numeroValido, tokenDi;
+var init_costi_consumo = __esm({
+  "src/components/costi-consumo.js"() {
+    init_lingua();
+    init_session_item();
+    init_consumo_sessione();
+    localeUI2 = () => linguaCorrenteDiT() === "en" ? "en-US" : "it-IT";
+    NUM = { format: (n) => new Intl.NumberFormat(localeUI2()).format(n) };
+    numeroValido = (v) => Number.isFinite(Number(v)) && Number(v) >= 0;
+    tokenDi = (s) => {
+      const u = usageDellaSessione(s) || {};
+      const dentro = Number(u.prompt_tokens);
+      const fuori = Number(u.completion_tokens);
+      if (!numeroValido(dentro) && !numeroValido(fuori)) return null;
+      return (numeroValido(dentro) ? dentro : 0) + (numeroValido(fuori) ? fuori : 0);
+    };
   }
 });
 
@@ -28360,14 +27875,15 @@ function etichettaOrigineChiave(row = {}) {
   if (row.id === "esterno") return row.agente ? t("modelli.provider.agentConfigured") : t("modelli.provider.agentNeedsConfiguration");
   if (row.origineChiave === "ambiente") return t("modelli.provider.environmentKey");
   if (row.origineChiave === "accesso") return t("modelli.provider.signedIn");
-  if (row.keyConfigured === true) return t("modelli.provider.keySaved");
+  if (row.keyConfigured === true) return row.chatgpt?.collegato ? t("modelli.provider.keyAndChatgpt") : t("modelli.provider.keySaved");
+  if (row.chatgpt?.collegato) return row.chatgpt.pianoAbilitato ? t("modelli.provider.chatgptCredential") : t("modelli.provider.chatgptCredentialOff");
   return row.requiresKey === true ? t("modelli.provider.keyMissing") : t("modelli.provider.optionalKey");
 }
 function statoChiavePool(chiave = {}) {
   const cause = { traffico: t("modelli.provider.tooMuchTraffic"), credenziale: t("modelli.provider.credentialRejected"), credito: t("modelli.provider.creditUnavailable"), rete: t("modelli.provider.connectionInterrupted"), "timeout-fornitore": t("modelli.provider.timeout"), "guasto-fornitore": t("modelli.provider.serviceUnreachable"), "flusso-interrotto": t("modelli.provider.responseInterrupted") };
   if (chiave.stato !== "in-panchina") return t("modelli.provider.available");
   const data = Number.isFinite(chiave.inPanchinaFino) ? new Date(chiave.inPanchinaFino) : null;
-  const istante2 = data && !Number.isNaN(data.getTime()) ? data.toLocaleString(localeUI5(), { dateStyle: "short", timeStyle: "medium" }) : null;
+  const istante2 = data && !Number.isNaN(data.getTime()) ? data.toLocaleString(localeUI3(), { dateStyle: "short", timeStyle: "medium" }) : null;
   return t("modelli.provider.benchReason", { status: istante2 ? t("modelli.provider.benchedUntil", { time: istante2 }) : t("modelli.provider.benched"), reason: cause[chiave.causa] || t("modelli.provider.checkAccess") });
 }
 function el4(tag2, cls, txt) {
@@ -28376,9 +27892,9 @@ function el4(tag2, cls, txt) {
   if (txt != null) n.textContent = txt;
   return n;
 }
-function vesti(nodo15, stile) {
-  if (nodo15) Object.assign(nodo15.style, stile);
-  return nodo15;
+function vesti(nodo17, stile) {
+  if (nodo17) Object.assign(nodo17.style, stile);
+  return nodo17;
 }
 function campo(label, tipo, key, row, valore = "") {
   const wrap = el4("label", "talos-stack talos-provider__field");
@@ -28706,6 +28222,82 @@ function iconaAzione(nome, lato = "16px") {
   }
   return svg2;
 }
+function montaSceltaAccesso({ row, telaio, corpo, avviso, dialogo, annulla, primaria }) {
+  const stato2 = row.chatgpt || {};
+  const sezione2 = corpo.querySelector("[data-chatgpt]");
+  const doveStavaSezione = sezione2 ? { genitore: sezione2.parentElement, dopo: sezione2.nextSibling } : null;
+  const pannelli = { chatgpt: el4("div", "talos-provider__metodo"), chiave: el4("div", "talos-provider__metodo") };
+  const griglia = el4("div", "talos-choice-grid talos-provider__metodi");
+  griglia.setAttribute("role", "tablist");
+  griglia.setAttribute("aria-label", t("modelli.provider.methodsLabel"));
+  const voci = [
+    {
+      id: "chatgpt",
+      titolo: t("modelli.provider.methodChatgpt"),
+      frase: t("modelli.provider.methodChatgptNote"),
+      stato: !stato2.collegato ? t("modelli.provider.methodNotConnected") : stato2.pianoAbilitato ? t("modelli.provider.methodConnected") : t("modelli.provider.methodPlanOff"),
+      tono: !stato2.collegato ? null : stato2.pianoAbilitato ? "success" : "warning"
+    },
+    {
+      id: "chiave",
+      titolo: t("modelli.provider.methodKey"),
+      frase: t("modelli.provider.methodKeyNote"),
+      stato: row.keyConfigured ? t("modelli.provider.methodKeySaved") : t("modelli.provider.methodNoKey"),
+      tono: row.keyConfigured ? "success" : null
+    }
+  ];
+  const schede = [];
+  const scegli = (id4, { fuoco = false } = {}) => {
+    SCELTA_ACCESSO.set(row.id, id4);
+    for (const s of schede) {
+      const su = s.dataset.metodo === id4;
+      s.setAttribute("aria-selected", String(su));
+      s.setAttribute("aria-checked", String(su));
+      s.tabIndex = su ? 0 : -1;
+      if (su && fuoco) s.focus();
+    }
+    for (const [k, p] of Object.entries(pannelli)) p.hidden = k !== id4;
+    if (primaria) primaria.hidden = id4 === "chatgpt";
+    annulla.textContent = id4 === "chatgpt" ? t("modelli.provider.close") : t("modelli.provider.cancel");
+  };
+  for (const v of voci) {
+    const scheda = el4("button", "talos-choice");
+    scheda.type = "button";
+    scheda.setAttribute("role", "tab");
+    scheda.dataset.metodo = v.id;
+    scheda.id = `metodo-${row.id}-${v.id}`;
+    pannelli[v.id].id = `pannello-${row.id}-${v.id}`;
+    scheda.setAttribute("aria-controls", pannelli[v.id].id);
+    pannelli[v.id].setAttribute("role", "tabpanel");
+    pannelli[v.id].setAttribute("aria-labelledby", scheda.id);
+    const pastiglia = el4("span", "talos-badge talos-badge--sm" + (v.tono ? " talos-badge--" + v.tono : ""));
+    pastiglia.dataset.metodoStato = "";
+    const punto = el4("span", "talos-dot" + (v.tono ? " talos-dot--" + v.tono : ""));
+    punto.setAttribute("aria-hidden", "true");
+    vesti(punto, VESTITO.punto);
+    pastiglia.append(punto, el4("span", "", v.stato));
+    vesti(pastiglia, VESTITO.pastiglia);
+    scheda.append(el4("span", "talos-choice__title", v.titolo), el4("span", "talos-choice__corpo", v.frase), pastiglia);
+    scheda.addEventListener("click", () => scegli(v.id));
+    schede.push(scheda);
+    griglia.append(scheda);
+  }
+  griglia.addEventListener("keydown", (e) => {
+    const i2 = schede.indexOf(e.target);
+    if (i2 < 0) return;
+    const prossima = { ArrowRight: i2 + 1, ArrowDown: i2 + 1, ArrowLeft: i2 - 1, ArrowUp: i2 - 1, Home: 0, End: schede.length - 1 }[e.key];
+    if (prossima === void 0) return;
+    e.preventDefault();
+    scegli(schede[(prossima + schede.length) % schede.length].dataset.metodo, { fuoco: true });
+  });
+  if (sezione2) pannelli.chatgpt.append(sezione2);
+  pannelli.chiave.append(avviso, corpo);
+  telaio.append(griglia, pannelli.chatgpt, pannelli.chiave);
+  scegli(SCELTA_ACCESSO.get(row.id) ?? (stato2.collegato ? "chatgpt" : row.keyConfigured ? "chiave" : "chatgpt"));
+  dialogo.addEventListener("close", () => {
+    if (sezione2 && doveStavaSezione?.genitore) doveStavaSezione.genitore.insertBefore(sezione2, doveStavaSezione.dopo?.isConnected && doveStavaSezione.dopo.parentElement === doveStavaSezione.genitore ? doveStavaSezione.dopo : null);
+  });
+}
 function apriConfigurazioneProvider(card, row, { onSalvaConfigurazione = null, onConfigurazioneSalvata = null } = {}) {
   if (!card || card.querySelector(":scope > .talos-provider__modale")) return null;
   const doc = card.ownerDocument || globalThis.document;
@@ -28731,11 +28323,10 @@ function apriConfigurazioneProvider(card, row, { onSalvaConfigurazione = null, o
   testa.append(titolo2, chiudi);
   const telaio = el4("div", "talos-provider__modale-corpo");
   vesti(telaio, VESTITO.modale.corpo);
-  {
-    const avviso = creaAvvisoChiavi();
-    avviso.dataset.providerModaleAvviso = "";
-    telaio.append(avviso);
-  }
+  const avviso = creaAvvisoChiavi();
+  avviso.dataset.providerModaleAvviso = "";
+  telaio.append(avviso);
+  let primariaModale = null;
   const piede = el4("footer", "talos-provider__modale-piede");
   vesti(piede, VESTITO.modale.piede);
   const annulla = el4("button", "talos-button talos-button--secondary", t("modelli.provider.cancel"));
@@ -28750,6 +28341,7 @@ function apriConfigurazioneProvider(card, row, { onSalvaConfigurazione = null, o
     const primaria = el4("button", "talos-button talos-button--primary talos-button--sm", t("modelli.provider.save"));
     primaria.type = "button";
     primaria.dataset.providerModaleSalva = "";
+    primariaModale = primaria;
     vesti(primaria, VESTITO.modale.pulsante);
     const nascosti = [];
     const nascondi = (n) => {
@@ -28871,7 +28463,8 @@ function apriConfigurazioneProvider(card, row, { onSalvaConfigurazione = null, o
     aggiornaStatoConfigura(card, false);
     if (configura?.isConnected) configura.focus({ preventScroll: true });
   });
-  telaio.append(corpo);
+  if (row.id === "openai" && row.chatgpt) montaSceltaAccesso({ row, telaio, corpo, avviso, dialogo, annulla, primaria: primariaModale });
+  else telaio.append(corpo);
   corpo.hidden = false;
   Object.assign(corpo.style, { padding: "0", borderTop: "0", gridTemplateColumns: "minmax(0,1fr)" });
   dialogo.append(testa, telaio, piede);
@@ -28879,7 +28472,7 @@ function apriConfigurazioneProvider(card, row, { onSalvaConfigurazione = null, o
   if (typeof dialogo.showModal === "function") dialogo.showModal();
   else dialogo.setAttribute("open", "");
   aggiornaStatoConfigura(card, true);
-  const primo2 = telaio.querySelector("input:not([type=hidden]),textarea,select,button") || annulla;
+  const primo2 = telaio.querySelector('[role="tab"][aria-selected="true"]') || telaio.querySelector("input:not([type=hidden]),textarea,select,button") || annulla;
   primo2.focus?.({ preventScroll: true });
   return dialogo;
 }
@@ -29075,6 +28668,68 @@ function aggiungiCampiCloud(body, row) {
     }
   });
 }
+function bloccoUsoDelPiano(uso) {
+  const finestre = [["cinqueOre", "modelli.provider.chatgptUsageLast5h"], ["setteGiorni", "modelli.provider.chatgptUsageLast7d"]];
+  const intero2 = (v) => Number.isInteger(v) && v >= 0;
+  if (!uso || !finestre.every(([k]) => intero2(uso[k]?.richieste) && intero2(uso[k]?.token) && intero2(uso[k]?.senzaMisura))) return null;
+  const blocco2 = el4("div", "talos-provider__piano-uso");
+  blocco2.dataset.chatgptUso = "";
+  for (const [k, etichetta3] of finestre) {
+    const v = uso[k];
+    const quanto = v.richieste === 0 ? t("modelli.provider.chatgptUsageNone") : tn("modelli.provider.chatgptUsageValueOne", "modelli.provider.chatgptUsageValueMany", v.richieste, { n: new Intl.NumberFormat(linguaCorrenteDiT()).format(v.richieste), tokens: compatto(v.token) });
+    const valore = v.richieste > 0 && v.senzaMisura > 0 ? t("modelli.provider.chatgptUsageUnmeasured", { value: quanto, n: v.senzaMisura }) : quanto;
+    const r = el4("div", "talos-kv");
+    r.dataset.c = "KeyValue";
+    r.append(el4("span", "talos-kv__k", t(etichetta3)), el4("span", "talos-kv__v", valore));
+    blocco2.append(r);
+  }
+  const nota = el4("p", "talos-muted", t("modelli.provider.chatgptUsageNote"));
+  nota.dataset.chatgptUsoNota = "";
+  blocco2.append(nota);
+  return blocco2;
+}
+function sezionePianoChatgpt(stato2 = {}, { onMenu = null } = {}) {
+  const riga2 = el4("div", "talos-provider__piano");
+  riga2.dataset.chatgpt = stato2.collegato ? stato2.pianoAbilitato ? "piano" : "senza-piano" : "scollegato";
+  if (!stato2.collegato) {
+    const entra = button("chatgpt-start", t("modelli.provider.chatgptContinue"), "primary");
+    entra.classList.add("talos-provider__accedi");
+    if (stato2.accessoInCorso) entra.disabled = true;
+    riga2.append(entra, el4("p", "talos-muted", t("modelli.provider.chatgptNote")));
+    return riga2;
+  }
+  const chi = el4("div", "talos-provider__piano-chi");
+  chi.append(
+    el4("strong", "", stato2.email || t("modelli.provider.chatgptUsingNoEmail")),
+    el4("p", "talos-muted", stato2.pianoAbilitato ? t("modelli.provider.chatgptPaidBy") : t("modelli.provider.chatgptPlanOff"))
+  );
+  riga2.append(chi);
+  {
+    const uso = bloccoUsoDelPiano(stato2.usoTalos);
+    if (uso) riga2.append(uso);
+  }
+  const azioni = el4("div", "talos-cluster");
+  azioni.style.alignItems = "center";
+  if (!stato2.pianoAbilitato) {
+    const abilita = button("chatgpt-enable", t("modelli.provider.chatgptEnable"), "primary");
+    abilita.classList.add("talos-provider__accedi");
+    azioni.append(abilita);
+  }
+  azioni.append(button("chatgpt-usage", t("modelli.provider.chatgptUsage"), "secondary"));
+  const esci = button("chatgpt-signout", t("modelli.provider.chatgptDisconnect"), "ghost");
+  if (typeof onMenu === "function") {
+    esci.hidden = true;
+    const menu = el4("button", "talos-button talos-button--secondary talos-button--sm talos-provider__piano-menu", "⋯");
+    menu.type = "button";
+    menu.setAttribute("aria-label", t("modelli.provider.chatgptActions"));
+    menu.setAttribute("aria-haspopup", "menu");
+    menu.addEventListener("click", () => onMenu([{ chiave: "scollega-chatgpt", etichetta: t("modelli.provider.chatgptDisconnect"), pericolo: true, aziona: () => esci.click() }], { ancora: menu }));
+    azioni.append(menu);
+  }
+  azioni.append(esci);
+  riga2.append(azioni);
+  return riga2;
+}
 function creaProviderCard(row, { aperta: aperta2 = false, prova = null, occupato = false, onMenu = null, onAzionePool = null, onSalvaConfigurazione = null, onConfigurazioneSalvata = null } = {}) {
   const esterno = row.id === "esterno", configurazionePropria = esterno || CLOUD_CONFIGURABILI.has(row.id);
   const idCorpo = "provider-body-" + row.id;
@@ -29176,6 +28831,7 @@ function creaProviderCard(row, { aperta: aperta2 = false, prova = null, occupato
       body.append(elenco3);
     }
     const campoChiave = campo(poolCollegato ? t("modelli.provider.addKey") : row.keyConfigured ? t("modelli.provider.replaceKey") : row.requiresKey ? t("modelli.provider.accessKey") : t("modelli.provider.optionalAccessKey"), "password", "providerKey", row);
+    if (row.id === "openai" && row.chatgpt) body.append(sezionePianoChatgpt(row.chatgpt, { onMenu }));
     if (conAccesso) {
       const accedi = button("oauth-start", row.origineChiave === "accesso" ? t("modelli.provider.signInAgain") : t("modelli.provider.signInWith", { name: nomeDelFornitore(row) }), "primary");
       accedi.classList.add("talos-provider__accedi");
@@ -29427,14 +29083,15 @@ function curaDoppiaTestata(panel, head, title, note) {
   if (head) head.after(avviso);
   else panel.prepend(avviso);
 }
-var localeUI5, VESTITO, FILTRO_CHIP, CLOUD_CONFIGURABILI, SLUG_FORNITORE, ESCLUSI_MASSIMI, bozzeEsclusi, ICONE_AZIONE, filtroVuoto, statoLista;
+var localeUI3, VESTITO, FILTRO_CHIP, CLOUD_CONFIGURABILI, SLUG_FORNITORE, ESCLUSI_MASSIMI, bozzeEsclusi, ICONE_AZIONE, SCELTA_ACCESSO, filtroVuoto, statoLista;
 var init_provider_card = __esm({
   "src/components/provider-card.js"() {
     init_lingua();
     init_testo_server();
     init_loghi_fornitori();
+    init_costi_consumo();
     init_chat_foot();
-    localeUI5 = () => linguaCorrenteDiT() === "en" ? "en-US" : "it-IT";
+    localeUI3 = () => linguaCorrenteDiT() === "en" ? "en-US" : "it-IT";
     VESTITO = Object.freeze({
       /* ⛔ `align-items` NON si dichiara: il mockup non lo dichiara, e le sue due card — una con TRE
          fatti e una con DUE — misurano entrambe **332** di altezza. È lo `stretch` di serie della
@@ -29520,6 +29177,7 @@ var init_provider_card = __esm({
       /* La croce di chiusura della testata della modale (`.icon-button`, misurata: 18×18 dentro 36×36). */
       chiudi: [["path", "m6 6 12 12M6 18 18 6"]]
     });
+    SCELTA_ACCESSO = /* @__PURE__ */ new Map();
     filtroVuoto = () => ({ cerca: "", credenziale: [], prova: [] });
     statoLista = /* @__PURE__ */ new WeakMap();
   }
@@ -29573,6 +29231,1464 @@ function testiDoveGiranoIComandi(dati) {
 var init_utente_wsl = __esm({
   "src/components/utente-wsl.js"() {
     init_lingua();
+  }
+});
+
+// src/components/piano-chatgpt.js
+function pianoInUso(modelloId, stato2) {
+  return typeof modelloId === "string" && modelloId.startsWith("chatgpt:") && stato2?.collegato === true && stato2?.pianoAbilitato === true;
+}
+function linkConsumi(doc) {
+  const a = nodo2(doc, "a", "talos-link-esterno", t("chat.chatgptPlan.manageUsage"));
+  a.href = PAGINA_CONSUMI_CHATGPT;
+  a.target = "_blank";
+  a.rel = "noopener noreferrer";
+  a.dataset.pianoConsumi = "";
+  return a;
+}
+function montaPastigliaPiano({ pastiglia, leggiStato = null, documento: doc = pastiglia?.ownerDocument ?? globalThis.document } = {}) {
+  if (!pastiglia) return null;
+  const win = doc.defaultView ?? globalThis;
+  let stato2 = null;
+  let modello = null;
+  let pannello = null;
+  const controlla = () => pastiglia.setAttribute("aria-expanded", String(Boolean(pannello)));
+  const fuori = (e) => {
+    if (pannello && !pannello.contains(e.target) && !pastiglia.contains(e.target)) chiudi();
+  };
+  const tasto = (e) => {
+    if (pannello && e.key === "Escape") {
+      e.preventDefault();
+      chiudi({ fuoco: true });
+    }
+  };
+  function chiudi({ fuoco = false } = {}) {
+    if (!pannello) return;
+    pannello.remove();
+    pannello = null;
+    controlla();
+    doc.removeEventListener("pointerdown", fuori, true);
+    doc.removeEventListener("keydown", tasto, true);
+    win.removeEventListener("resize", chiudiSenzaFuoco);
+    if (fuoco) pastiglia.focus?.({ preventScroll: true });
+  }
+  const chiudiSenzaFuoco = () => chiudi();
+  let apertura = 0;
+  async function apri() {
+    const mia = ++apertura;
+    if (typeof leggiStato === "function") {
+      try {
+        const fresco = await leggiStato();
+        if (fresco && typeof fresco.collegato === "boolean") stato2 = fresco;
+      } catch {
+      }
+    }
+    if (mia !== apertura || pannello || !pianoInUso(modello, stato2)) {
+      if (!pianoInUso(modello, stato2)) aggiorna();
+      return;
+    }
+    const p = nodo2(doc, "div", "ft-actions-menu talos-piano-pannello");
+    p.setAttribute("role", "dialog");
+    p.dataset.pianoPannello = "";
+    const titolo2 = nodo2(doc, "strong", "talos-piano-pannello__titolo", t("chat.chatgptPlan.using"));
+    titolo2.id = "talosPianoPannelloTitolo";
+    p.setAttribute("aria-labelledby", titolo2.id);
+    p.append(titolo2);
+    if (stato2?.email) p.append(nodo2(doc, "span", "talos-muted talos-piano-pannello__chi", stato2.email));
+    const uso = bloccoUsoDelPiano(stato2?.usoTalos);
+    if (uso) p.append(uso);
+    p.append(linkConsumi(doc));
+    doc.body.append(p);
+    pannello = p;
+    controlla();
+    const composer = pastiglia.closest("form, .talos-composer") ?? pastiglia;
+    const r = pastiglia.getBoundingClientRect();
+    const c = composer.getBoundingClientRect();
+    const h = p.getBoundingClientRect();
+    p.style.left = `${Math.max(8, Math.min(r.right - h.width, win.innerWidth - h.width - 8))}px`;
+    p.style.top = `${Math.max(8, c.top - h.height - 8)}px`;
+    doc.addEventListener("pointerdown", fuori, true);
+    doc.addEventListener("keydown", tasto, true);
+    win.addEventListener("resize", chiudiSenzaFuoco);
+    p.tabIndex = -1;
+    p.focus({ preventScroll: true });
+  }
+  pastiglia.setAttribute("aria-haspopup", "dialog");
+  controlla();
+  pastiglia.addEventListener("click", () => {
+    if (pannello) {
+      apertura += 1;
+      chiudi();
+    } else void apri();
+  });
+  function aggiorna({ modelloId = modello, stato: nuovo = stato2 } = {}) {
+    modello = modelloId;
+    stato2 = nuovo;
+    const si = pianoInUso(modello, stato2);
+    pastiglia.hidden = !si;
+    if (!si) chiudi();
+  }
+  aggiorna();
+  return { aggiorna, chiudi, apri, get pannello() {
+    return pannello;
+  } };
+}
+function giaVisti(deposito) {
+  try {
+    const v = JSON.parse(deposito?.getItem(CHIAVE_BENVENUTO_PIANO) ?? "[]");
+    return Array.isArray(v) ? v.filter((x) => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+function mostraBenvenutoPiano(stato2, { deposito = depositoDelBrowser(), document: doc = globalThis.document } = {}) {
+  if (stato2?.collegato !== true || stato2?.pianoAbilitato !== true) return false;
+  const chi = typeof stato2.email === "string" && stato2.email ? stato2.email.toLowerCase() : "*";
+  const visti = giaVisti(deposito);
+  if (visti.includes(chi) || vistiInQuestaFinestra.has(chi)) return false;
+  vistiInQuestaFinestra.add(chi);
+  try {
+    deposito?.setItem(CHIAVE_BENVENUTO_PIANO, JSON.stringify([...visti, chi]));
+  } catch {
+  }
+  const uno2 = nodo2(doc, "p", "td-prose", t("chat.chatgptPlan.welcomeBody"));
+  const due2 = nodo2(doc, "p", "td-prose");
+  const [prima, dopo] = t("chat.chatgptPlan.welcomeManage").split("{link}");
+  due2.append(doc.createTextNode(prima ?? ""), linkConsumi(doc), doc.createTextNode(dopo ?? ""));
+  const piede = nodo2(doc, "div", "td-detail-footer");
+  const ok = nodo2(doc, "button", "talos-button talos-button--primary talos-button--sm", t("chat.chatgptPlan.gotIt"));
+  ok.type = "button";
+  ok.dataset.pianoBenvenutoOk = "";
+  ok.addEventListener("click", () => chiudiModale());
+  piede.append(ok);
+  const aperta2 = apriModale(t("chat.chatgptPlan.welcomeTitle"), [uno2, due2, piede], { document: doc });
+  if (aperta2?.dialogo) aperta2.dialogo.dataset.pianoBenvenuto = "";
+  return true;
+}
+var CHIAVE_BENVENUTO_PIANO, nodo2, vistiInQuestaFinestra;
+var init_piano_chatgpt = __esm({
+  "src/components/piano-chatgpt.js"() {
+    init_lingua();
+    init_modale_td();
+    init_provider_card();
+    init_provider_retry();
+    init_link_esterni();
+    CHIAVE_BENVENUTO_PIANO = "talos.harness.desktop.chatgpt-benvenuto.v1";
+    nodo2 = (doc, tag2, classe, testo2) => {
+      const n = doc.createElement(tag2);
+      if (classe) n.className = classe;
+      if (testo2 !== void 0 && testo2 !== null) n.textContent = String(testo2);
+      return n;
+    };
+    vistiInQuestaFinestra = /* @__PURE__ */ new Set();
+  }
+});
+
+// src/components/conferma-link.js
+function nodo3(doc, tag2, classe, testo2) {
+  const n = doc.createElement(tag2);
+  if (classe) n.className = classe;
+  if (testo2 !== void 0 && testo2 !== null) n.textContent = String(testo2);
+  return n;
+}
+function apriLinkEsterno(indirizzo, { fidati, apri, copia: copia3 = null, document: doc = globalThis.document } = {}) {
+  const letto = leggiLinkEsterno(indirizzo);
+  if (!letto) return "rifiutato";
+  if (letto.sicuro && fidati?.fidato(letto.sito)) {
+    apri(letto.indirizzo);
+    return "aperto";
+  }
+  const dove = nodo3(doc, "p", "td-prose talos-link-conferma__dove");
+  dove.append(doc.createTextNode(t("chat.link.goesTo")), doc.createTextNode(" "), nodo3(doc, "strong", "talos-link-conferma__sito", letto.sito));
+  const intero2 = nodo3(doc, "p", "td-subtle talos-link-conferma__indirizzo", letto.indirizzo);
+  intero2.dataset.linkIndirizzo = "";
+  const pezzi = [dove, intero2];
+  let sempre = null;
+  if (letto.sicuro) {
+    const riga2 = nodo3(doc, "label", "talos-link-conferma__fidati");
+    sempre = nodo3(doc, "input", "talos-switch");
+    sempre.type = "checkbox";
+    sempre.setAttribute("role", "switch");
+    sempre.dataset.c = "Switch";
+    sempre.dataset.linkFidati = "";
+    riga2.append(sempre, nodo3(doc, "span", null, t("chat.link.trust", { site: letto.sito })));
+    pezzi.push(riga2);
+  } else {
+    const avviso = nodo3(doc, "p", "td-subtle talos-link-conferma__avviso", t("chat.link.notSecure"));
+    avviso.setAttribute("role", "note");
+    pezzi.push(avviso);
+  }
+  const piede = nodo3(doc, "div", "td-detail-footer");
+  const annulla = nodo3(doc, "button", "talos-button talos-button--secondary talos-button--sm", t("chat.common.cancel"));
+  annulla.type = "button";
+  annulla.addEventListener("click", () => chiudiModale());
+  piede.append(annulla);
+  if (typeof copia3 === "function") {
+    const copiaLink = nodo3(doc, "button", "talos-button talos-button--ghost talos-button--sm", t("chat.link.copy"));
+    copiaLink.type = "button";
+    copiaLink.dataset.linkCopia = "";
+    copiaLink.addEventListener("click", () => {
+      chiudiModale();
+      copia3(letto.indirizzo);
+    });
+    piede.append(copiaLink);
+  }
+  if (letto.sicuro) {
+    const conferma = nodo3(doc, "button", "talos-button talos-button--primary talos-button--sm", t("chat.link.open"));
+    conferma.type = "button";
+    conferma.dataset.linkApri = "";
+    conferma.addEventListener("click", () => {
+      if (sempre?.checked) fidati?.aggiungi(letto.sito);
+      chiudiModale();
+      apri(letto.indirizzo);
+    });
+    piede.append(conferma);
+  }
+  pezzi.push(piede);
+  apriModale(t("chat.link.title"), pezzi, { document: doc });
+  annulla.focus?.({ preventScroll: true });
+  return "chiesto";
+}
+function montaClicSuiLink({ documento = globalThis.document, dentro = "#conversation", ...opzioni } = {}) {
+  const suLink = (evento) => {
+    if (evento.type === "auxclick" && evento.button !== 1) return;
+    const Elemento = documento.defaultView?.Element ?? globalThis.Element;
+    const ancora = evento.target instanceof Elemento ? evento.target.closest("a.talos-link-esterno[data-link-esterno]") : null;
+    if (!ancora || !ancora.closest(dentro)) return;
+    evento.preventDefault();
+    apriLinkEsterno(ancora.dataset.linkEsterno, { ...opzioni, document: documento });
+  };
+  documento.addEventListener("click", suLink);
+  documento.addEventListener("auxclick", suLink);
+  return () => {
+    documento.removeEventListener("click", suLink);
+    documento.removeEventListener("auxclick", suLink);
+  };
+}
+var init_conferma_link = __esm({
+  "src/components/conferma-link.js"() {
+    init_lingua();
+    init_modale_td();
+    init_link_esterni();
+  }
+});
+
+// src/domain/catalog-engine.ts
+function voce(valore, chiave) {
+  return Object.defineProperty([valore], 1, { enumerable: true, get: () => t(chiave) });
+}
+function emptyCatalogFilters() {
+  return {
+    destination: [],
+    status: [],
+    favorite: false,
+    sizes: [],
+    minParams: "",
+    maxParams: "",
+    basis: "total",
+    minContext: "",
+    maxFile: "",
+    maxRam: "",
+    fit: [],
+    tasks: [],
+    capabilities: [],
+    formats: [],
+    quant: [],
+    authors: [],
+    providers: [],
+    licenses: [],
+    languages: [],
+    access: [],
+    arch: [],
+    maxInput: "",
+    maxOutput: "",
+    includeUnknown: false,
+    sort: "catalog"
+  };
+}
+function validateCatalogFilters(raw) {
+  const f = emptyCatalogFilters();
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return f;
+  const src = raw;
+  for (const key of CF_ARRAYS) {
+    if (!Array.isArray(src[key])) continue;
+    const allowed = key === "sizes" ? SIZE_BANDS.map((x) => x.id) : FACET_OPTIONS[key]?.map((x) => x[0]);
+    f[key] = [
+      ...new Set(
+        src[key].filter(
+          (x) => typeof x === "string" && x.length > 0 && x.length <= 100 && (!allowed || allowed.includes(x))
+        )
+      )
+    ].slice(0, 24);
+  }
+  for (const key of CF_NUMBERS) {
+    if (src[key] !== "" && src[key] !== null && src[key] !== void 0) {
+      const n = Number(src[key]);
+      if (Number.isFinite(n) && n >= 0 && n <= 1e9) f[key] = String(n);
+    }
+  }
+  f.basis = src.basis === "active" ? "active" : "total";
+  f.favorite = src.favorite === true;
+  f.includeUnknown = src.includeUnknown === true;
+  f.sort = CATALOG_SORTS.some(([v]) => v === src.sort) ? src.sort : "catalog";
+  return f;
+}
+function catalogInputErrors(raw) {
+  const f = validateCatalogFilters(raw);
+  const errors = [];
+  if (f.minParams !== "" && f.maxParams !== "" && Number(f.minParams) > Number(f.maxParams)) {
+    errors.push(t("modelli.catalog.error.minAboveMax"));
+  }
+  return errors;
+}
+function parameterValue(m, basis2 = "total") {
+  if (basis2 === "active") {
+    if (m.architecture === "moe") return cfKnown(m.activeParametersB) ? m.activeParametersB : null;
+    if (m.architecture !== "dense") return null;
+  }
+  return cfKnown(m.parametersB) ? m.parametersB : null;
+}
+function cfRange(value, min, max, unknown) {
+  if (!cfKnown(value)) return unknown;
+  return (min === "" || value >= Number(min)) && (max === "" || value <= Number(max));
+}
+function cfValues(value) {
+  if (value === null || value === void 0 || value === "") return ["unknown"];
+  return Array.isArray(value) ? value.length ? value : ["none"] : [value];
+}
+function cfAny(selected, value) {
+  return !selected.length || selected.some((x) => cfValues(value).includes(x));
+}
+function catalogArtifacts(m) {
+  if (Array.isArray(m.artifacts)) return m.artifacts;
+  return m.destination === "local" ? [
+    {
+      id: m.id + ":profile",
+      file: m.file,
+      format: m.format,
+      quantization: m.quantization,
+      size: m.size,
+      required: m.required
+    }
+  ] : [];
+}
+function matchingArtifacts(m, raw) {
+  const f = validateCatalogFilters(raw);
+  return catalogArtifacts(m).filter(
+    (a) => cfAny(f.formats, a.format) && cfAny(f.quant, a.quantization) && (f.maxFile === "" || cfRange(a.size, "", f.maxFile, f.includeUnknown)) && (f.maxRam === "" || cfRange(a.required, "", f.maxRam, f.includeUnknown)) && (!f.fit.length || f.fit.includes(cfKnown(a.required) ? a.required <= 18.6 ? "fits" : "exceeds" : "unknown"))
+  );
+}
+function modelMatchesCatalog(m, raw, { query = "", favorites = [], downloads = [] } = {}) {
+  const f = validateCatalogFilters(raw);
+  if (catalogInputErrors(f).length) return false;
+  const terms = cfNormalize(query).split(/\s+/).filter(Boolean);
+  if (!terms.every((t2) => cfNormalize(`${m.name} ${m.family} ${m.author || ""} ${m.provider} ${m.repo || ""} ${m.file || ""}`).includes(t2))) return false;
+  if (!cfAny(f.destination, m.destination) || !cfAny(f.tasks, m.tasks) || !cfAny(f.authors, m.author) || !cfAny(f.providers, m.provider) || !cfAny(f.licenses, m.license) || !cfAny(f.languages, m.languages) || !cfAny(f.access, m.access) || !cfAny(f.arch, m.architecture))
+    return false;
+  if (f.favorite && !favorites.includes(m.id)) return false;
+  if (f.status.length && !f.status.some(
+    (x) => x === "installed" ? m.installed : x === "not-installed" ? m.destination === "local" && !m.installed : x === "downloading" && downloads.some((j) => j.modelId === m.id && ["running", "paused", "error"].includes(j.status))
+  ))
+    return false;
+  if (f.capabilities.length && !f.capabilities.every((x) => Array.isArray(m.capabilities) && m.capabilities.includes(x))) return false;
+  const p = parameterValue(m, f.basis);
+  if (f.sizes.length && !f.sizes.some((id4) => {
+    const b = SIZE_BANDS.find((x) => x.id === id4);
+    const lo = b.min ?? 0;
+    const hi = b.max ?? Infinity;
+    return id4 === "unknown" ? p === null : p !== null && (p > lo || lo === 0 && p === 0) && p <= hi;
+  })) {
+    if (!(p === null && f.includeUnknown)) return false;
+  }
+  if ((f.minParams !== "" || f.maxParams !== "") && !cfRange(p, f.minParams, f.maxParams, f.includeUnknown)) return false;
+  if (f.minContext !== "" && !cfRange(m.context, f.minContext, "", f.includeUnknown)) return false;
+  const artifactFilter = f.formats.length || f.quant.length || f.maxFile !== "" || f.maxRam !== "" || f.fit.length;
+  if (artifactFilter && (m.destination !== "local" || !matchingArtifacts(m, f).length)) return false;
+  const priceFilter = f.maxInput !== "" || f.maxOutput !== "";
+  if (priceFilter && (m.destination !== "cloud" || f.maxInput !== "" && !cfRange(m.priceInput, "", f.maxInput, f.includeUnknown) || f.maxOutput !== "" && !cfRange(m.priceOutput, "", f.maxOutput, f.includeUnknown)))
+    return false;
+  return true;
+}
+function selectCatalog(models, raw, context = {}) {
+  const f = validateCatalogFilters(raw);
+  const list = models.filter((m) => modelMatchesCatalog(m, f, context));
+  const firstNumber = (m, key) => {
+    const values = matchingArtifacts(m, f).map((a) => a[key]).filter(cfKnown);
+    return values.length ? Math.min(...values) : null;
+  };
+  const sorts = {
+    "params-asc": [(m) => parameterValue(m, f.basis), 1],
+    "params-desc": [(m) => parameterValue(m, f.basis), -1],
+    "file-asc": [(m) => firstNumber(m, "size"), 1],
+    "ram-asc": [(m) => firstNumber(m, "required"), 1],
+    "context-desc": [(m) => cfKnown(m.context) ? m.context : null, -1],
+    "updated-desc": [(m) => m.updatedAt ? Date.parse(m.updatedAt) : null, -1],
+    "price-asc": [(m) => m.destination === "cloud" && cfKnown(m.priceInput) ? m.priceInput : null, 1]
+  };
+  if (f.sort === "name") return list.sort((a, b) => a.name.localeCompare(b.name, "it"));
+  const sort = sorts[f.sort];
+  if (sort) {
+    const [get3, dir] = sort;
+    return list.sort((a, b) => {
+      const av = get3(a);
+      const bv = get3(b);
+      if (av === null || !Number.isFinite(av)) return bv === null || !Number.isFinite(bv) ? 0 : 1;
+      if (bv === null || !Number.isFinite(bv)) return -1;
+      return dir * (av - bv);
+    });
+  }
+  return list;
+}
+function facetCount(models, raw, key, value, context = {}) {
+  const f = validateCatalogFilters(raw);
+  if (key === "sizes") {
+    f.minParams = "";
+    f.maxParams = "";
+  }
+  if (key === "favorite") f.favorite = true;
+  else if (key === "capabilities") f.capabilities = [.../* @__PURE__ */ new Set([...f.capabilities, value])];
+  else f[key] = Array.isArray(f[key]) ? [value] : value;
+  return selectCatalog(models, f, context).length;
+}
+function toggleCatalogFacet(raw, key, value) {
+  const f = validateCatalogFilters(raw);
+  const current = f[key];
+  if (Array.isArray(current)) f[key] = current.includes(value) ? current.filter((x) => x !== value) : [...current, value];
+  else if (typeof current === "boolean") f[key] = !current;
+  return validateCatalogFilters(f);
+}
+function activeCatalogFilters(raw) {
+  const f = validateCatalogFilters(raw);
+  const chips = [];
+  for (const [key, name] of Object.entries(CF_NAMES)) {
+    const v = f[key];
+    if (Array.isArray(v)) {
+      for (const value of v) {
+        const label = key === "sizes" ? SIZE_BANDS.find((x) => x.id === value)?.label : FACET_OPTIONS[key]?.find((x) => x[0] === value)?.[1];
+        chips.push({ key, value, label: `${name}: ${label || value}` });
+      }
+    } else if (v === true) chips.push({ key, value: true, label: t("modelli.catalog.chip.favoritesOnly") });
+    else if (typeof v !== "boolean" && v !== "") {
+      const unit = key.includes("Params") ? "B" : ["maxRam", "maxFile"].includes(key) ? " GiB" : key === "minContext" ? " token" : " $/M";
+      chips.push({ key, value: v, label: `${name}: ${v}${unit}` });
+    }
+  }
+  if (f.includeUnknown) chips.push({ key: "includeUnknown", value: true, label: t("modelli.catalog.chip.includeUnknown") });
+  if (f.basis === "active") chips.push({ key: "basis", value: "active", label: t("modelli.catalog.chip.activeParameters") });
+  return chips;
+}
+function removeCatalogFilter(raw, key, value) {
+  const f = validateCatalogFilters(raw);
+  if (key === "basis") f.basis = "total";
+  else if (Array.isArray(f[key])) f[key] = f[key].filter((x) => x !== value);
+  else if (typeof f[key] === "boolean") f[key] = false;
+  else if (key in CF_NAMES) f[key] = "";
+  return f;
+}
+var SIZE_BANDS, FACET_OPTIONS, CATALOG_SORTS, CF_ARRAYS, CF_NUMBERS, cfNormalize, cfKnown, CF_NAMES;
+var init_catalog_engine = __esm({
+  "src/domain/catalog-engine.ts"() {
+    init_lingua();
+    SIZE_BANDS = Object.freeze([
+      { id: "tiny", get label() {
+        return t("modelli.catalog.size.tiny");
+      }, min: 0, max: 3 },
+      { id: "small", get label() {
+        return t("modelli.catalog.size.small");
+      }, min: 3, max: 8 },
+      { id: "medium", get label() {
+        return t("modelli.catalog.size.medium");
+      }, min: 8, max: 14 },
+      { id: "large", get label() {
+        return t("modelli.catalog.size.large");
+      }, min: 14, max: 35 },
+      { id: "xl", get label() {
+        return t("modelli.catalog.size.xl");
+      }, min: 35, max: 70 },
+      { id: "xxl", get label() {
+        return t("modelli.catalog.size.xxl");
+      }, min: 70, max: Infinity },
+      { id: "unknown", get label() {
+        return t("modelli.catalog.size.unknown");
+      } }
+    ]);
+    FACET_OPTIONS = Object.freeze({
+      destination: [voce("local", "modelli.catalog.destination.local"), voce("cloud", "modelli.catalog.destination.cloud")],
+      status: [voce("installed", "modelli.catalog.status.installed"), voce("not-installed", "modelli.catalog.status.not_installed"), voce("downloading", "modelli.catalog.status.downloading")],
+      fit: [voce("fits", "modelli.catalog.fit.fits"), voce("exceeds", "modelli.catalog.fit.exceeds"), voce("unknown", "modelli.catalog.fit.unknown")],
+      tasks: [voce("general", "modelli.catalog.tasks.general"), voce("code", "modelli.catalog.tasks.code"), voce("write", "modelli.catalog.tasks.write"), voce("embedding", "modelli.catalog.tasks.embedding")],
+      capabilities: [
+        voce("tools", "modelli.catalog.capabilities.tools"),
+        voce("vision", "modelli.catalog.capabilities.vision"),
+        voce("reasoning", "modelli.catalog.capabilities.reasoning"),
+        voce("json", "modelli.catalog.capabilities.json"),
+        voce("audio", "modelli.catalog.capabilities.audio")
+      ],
+      formats: [voce("GGUF", "modelli.catalog.formats.GGUF"), voce("safetensors", "modelli.catalog.formats.safetensors"), voce("unknown", "modelli.catalog.formats.unknown")],
+      quant: [voce("Q4_K_M", "modelli.catalog.quant.Q4_K_M"), voce("Q5_K_M", "modelli.catalog.quant.Q5_K_M"), voce("Q8_0", "modelli.catalog.quant.Q8_0"), voce("F16", "modelli.catalog.quant.F16"), voce("unknown", "modelli.catalog.quant.unknown")],
+      languages: [voce("it", "modelli.catalog.languages.it"), voce("en", "modelli.catalog.languages.en"), voce("multi", "modelli.catalog.languages.multi"), voce("unknown", "modelli.catalog.languages.unknown")],
+      access: [
+        voce("open", "modelli.catalog.access.open"),
+        voce("approval", "modelli.catalog.access.approval"),
+        voce("account", "modelli.catalog.access.account"),
+        voce("unknown", "modelli.catalog.access.unknown")
+      ],
+      arch: [voce("dense", "modelli.catalog.arch.dense"), voce("moe", "modelli.catalog.arch.moe"), voce("unknown", "modelli.catalog.arch.unknown")]
+    });
+    CATALOG_SORTS = Object.freeze([
+      voce("catalog", "modelli.catalog.sort.catalog"),
+      voce("params-asc", "modelli.catalog.sort.params_asc"),
+      voce("params-desc", "modelli.catalog.sort.params_desc"),
+      voce("file-asc", "modelli.catalog.sort.file_asc"),
+      voce("ram-asc", "modelli.catalog.sort.ram_asc"),
+      voce("context-desc", "modelli.catalog.sort.context_desc"),
+      voce("updated-desc", "modelli.catalog.sort.updated_desc"),
+      voce("name", "modelli.catalog.sort.name"),
+      voce("price-asc", "modelli.catalog.sort.price_asc")
+    ]);
+    CF_ARRAYS = [
+      "destination",
+      "status",
+      "sizes",
+      "fit",
+      "tasks",
+      "capabilities",
+      "formats",
+      "quant",
+      "authors",
+      "providers",
+      "licenses",
+      "languages",
+      "access",
+      "arch"
+    ];
+    CF_NUMBERS = ["minParams", "maxParams", "minContext", "maxFile", "maxRam", "maxInput", "maxOutput"];
+    cfNormalize = (s) => String(s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLocaleLowerCase("it").trim();
+    cfKnown = (x) => typeof x === "number" && Number.isFinite(x) && x >= 0;
+    CF_NAMES = {
+      get destination() {
+        return t("modelli.catalog.name.destination");
+      },
+      get status() {
+        return t("modelli.catalog.name.status");
+      },
+      get favorite() {
+        return t("modelli.catalog.name.favorite");
+      },
+      get sizes() {
+        return t("modelli.catalog.name.sizes");
+      },
+      get minParams() {
+        return t("modelli.catalog.name.minParams");
+      },
+      get maxParams() {
+        return t("modelli.catalog.name.maxParams");
+      },
+      get minContext() {
+        return t("modelli.catalog.name.minContext");
+      },
+      get maxFile() {
+        return t("modelli.catalog.name.maxFile");
+      },
+      get maxRam() {
+        return t("modelli.catalog.name.maxRam");
+      },
+      get fit() {
+        return t("modelli.catalog.name.fit");
+      },
+      get tasks() {
+        return t("modelli.catalog.name.tasks");
+      },
+      get capabilities() {
+        return t("modelli.catalog.name.capabilities");
+      },
+      get formats() {
+        return t("modelli.catalog.name.formats");
+      },
+      get quant() {
+        return t("modelli.catalog.name.quant");
+      },
+      get authors() {
+        return t("modelli.catalog.name.authors");
+      },
+      get providers() {
+        return t("modelli.catalog.name.providers");
+      },
+      get licenses() {
+        return t("modelli.catalog.name.licenses");
+      },
+      get languages() {
+        return t("modelli.catalog.name.languages");
+      },
+      get access() {
+        return t("modelli.catalog.name.access");
+      },
+      get arch() {
+        return t("modelli.catalog.name.arch");
+      },
+      get maxInput() {
+        return t("modelli.catalog.name.maxInput");
+      },
+      get maxOutput() {
+        return t("modelli.catalog.name.maxOutput");
+      }
+    };
+  }
+});
+
+// src/components/catalogo-faccette.js
+function capacitaDelCatalogo(modelli, contesto2 = {}) {
+  const sa = (f) => modelli.some(f);
+  const noto = (v) => typeof v === "number" && Number.isFinite(v) && v >= 0;
+  const ordinamenti = ["catalog", "name", "context-desc", "price-asc"].filter((id4) => {
+    if (id4 === "context-desc") return sa((m) => noto(m.context));
+    if (id4 === "price-asc") return sa((m) => noto(m.priceInput));
+    return true;
+  }).map((id4) => [id4, ETICHETTE_ORDINAMENTO[id4] || (CATALOG_SORTS.find(([x]) => x === id4) || [])[1]]);
+  return {
+    ordinamenti,
+    /** I parametri che il catalogo accetta, in ordine di frequenza: è la faccetta con più valori. */
+    parametri: [...modelli.reduce((acc, m) => {
+      for (const v of m.capabilities || []) acc.set(v, (acc.get(v) || 0) + 1);
+      return acc;
+    }, /* @__PURE__ */ new Map())].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "it")).map(([v]) => v),
+    haContesto: sa((m) => noto(m.context)),
+    haPrezzo: sa((m) => noto(m.priceInput) || noto(m.priceOutput)),
+    /** Il dato manca a qualcuno? Solo allora «includi i non noti» cambia qualcosa e si offre. */
+    haBuchi: sa((m) => !noto(m.context) || !noto(m.priceInput) || !noto(m.priceOutput)),
+    contesto: contesto2
+  };
+}
+function conteggiPerFornitore(modelli, filtri, contesto2 = {}) {
+  const senza = { ...filtri, providers: [] };
+  const conteggi = /* @__PURE__ */ new Map();
+  for (const m of selectCatalog(modelli, senza, contesto2)) conteggi.set(m.provider, (conteggi.get(m.provider) || 0) + 1);
+  return conteggi;
+}
+function chip(etichetta3, valore, { premuto = false, conteggio: conteggio3 = null, disabilitato = false, titolo: titolo2 = null } = {}) {
+  const b = el5("button", "talos-button talos-button--sm " + (premuto ? "talos-button--primary" : "talos-button--secondary"), etichetta3);
+  b.type = "button";
+  b.dataset.facetChip = valore;
+  b.setAttribute("aria-pressed", String(premuto));
+  if (disabilitato) b.disabled = true;
+  if (titolo2) b.title = titolo2;
+  if (conteggio3 !== null) b.append(el5("span", "talos-badge talos-badge--sm", numero2(conteggio3)));
+  return b;
+}
+function rigaValore(gruppo, valore, testo2, conteggio3, acceso) {
+  const riga2 = el5("label", "talos-cluster");
+  riga2.dataset.facetRow = valore;
+  const casella = el5("input", "talos-checkbox");
+  casella.type = "checkbox";
+  casella.value = valore;
+  casella.dataset.facetCheck = gruppo;
+  casella.checked = acceso;
+  const contato = typeof conteggio3 === "number";
+  if (contato && !conteggio3 && !acceso) {
+    casella.disabled = true;
+    riga2.dataset.facetZero = "";
+  }
+  const conto = el5("small", "talos-muted", contato ? numero2(conteggio3) : "—");
+  conto.setAttribute("aria-label", contato ? tn("modelli.facets.oneMatchOtherFilters", "modelli.facets.manyMatchesOtherFilters", conteggio3) : t("modelli.facets.countUnavailable"));
+  riga2.append(casella, el5("span", "talos-grow", testo2), conto);
+  return riga2;
+}
+function gruppoValori(chiave, titolo2, nota) {
+  const g = el5("fieldset", "talos-lab__space");
+  g.dataset.facetGroup = chiave;
+  g.append(el5("legend", "talos-lab__heading", titolo2));
+  if (nota) g.append(el5("p", "talos-muted", nota));
+  const righe = el5("div", "talos-card talos-card--pad");
+  righe.dataset.facetRows = "";
+  righe.id = "modelLabFacetsRows-" + chiave;
+  g.append(righe);
+  const altri = el5("button", "talos-button talos-button--ghost talos-button--sm", t("modelli.facets.seeMore"));
+  altri.type = "button";
+  altri.dataset.facetMore = chiave;
+  altri.hidden = true;
+  altri.setAttribute("aria-expanded", "false");
+  altri.setAttribute("aria-controls", righe.id);
+  g.append(altri);
+  return g;
+}
+function gruppoNumero(chiave, titolo2, coppie, nota) {
+  const g = el5("fieldset", "talos-lab__space");
+  g.dataset.facetGroup = chiave;
+  g.append(el5("legend", "talos-lab__heading", titolo2));
+  const riga2 = el5("div", "talos-cluster");
+  for (const [campo3, etichetta3, unita] of coppie) {
+    const l = el5("label", "talos-field talos-field--sm");
+    l.append(el5("span", "talos-muted", etichetta3));
+    const i2 = el5("input", "talos-field__input");
+    i2.type = "number";
+    i2.min = "0";
+    i2.step = "any";
+    i2.placeholder = t("modelli.facets.noLimit");
+    i2.dataset.facetNumber = campo3;
+    i2.setAttribute("aria-label", etichetta3);
+    l.append(i2, el5("span", "talos-muted", unita));
+    riga2.append(l);
+  }
+  g.append(riga2);
+  if (nota) g.append(el5("p", "talos-muted", nota));
+  return g;
+}
+function creaBarraFaccette({ onCambia, etichetta: etichetta3 = (k, v) => v } = {}) {
+  const barra = el5("section", "talos-stack");
+  barra.id = "modelLabFacets";
+  barra.dataset.catalogFacets = "";
+  barra.setAttribute("aria-label", t("modelli.facets.catalogSearchFilters"));
+  const strumenti = el5("div", "talos-cluster");
+  const ordina = el5("label", "talos-field talos-field--sm");
+  ordina.append(el5("span", "talos-muted", t("modelli.facets.sort")));
+  const selectOrdina = el5("select", "talos-select talos-select--sm");
+  selectOrdina.id = "modelLabSort";
+  selectOrdina.setAttribute("aria-label", t("modelli.facets.sortModels"));
+  ordina.append(selectOrdina);
+  strumenti.append(ordina);
+  const ambito = el5("div", "talos-cluster");
+  ambito.setAttribute("role", "group");
+  ambito.setAttribute("aria-label", t("modelli.facets.destinationCollection"));
+  ambito.dataset.facetScope = "";
+  strumenti.append(ambito);
+  const apri = el5("button", "talos-button talos-button--secondary talos-button--sm", t("modelli.facets.allFilters"));
+  apri.type = "button";
+  apri.dataset.facetToggle = "";
+  apri.setAttribute("aria-expanded", "false");
+  apri.setAttribute("aria-controls", "modelLabFacetsAdvanced");
+  const insegna = el5("span", "talos-badge talos-badge--sm", "0");
+  insegna.dataset.facetTotal = "";
+  insegna.hidden = true;
+  apri.append(insegna);
+  strumenti.append(apri);
+  barra.append(strumenti);
+  const avanzati = el5("div", "talos-choice-grid");
+  avanzati.id = "modelLabFacetsAdvanced";
+  avanzati.dataset.facetAdvanced = "";
+  avanzati.hidden = true;
+  const gContesto = el5("fieldset", "talos-lab__space");
+  gContesto.dataset.facetGroup = "contesto";
+  gContesto.append(el5("legend", "talos-lab__heading", t("modelli.facets.minimumContext")));
+  const lContesto = el5("label", "talos-field talos-field--sm");
+  lContesto.append(el5("span", "talos-muted", t("modelli.facets.contextRequirement")));
+  const selContesto = el5("select", "talos-select talos-select--sm");
+  selContesto.id = "modelLabMinContext";
+  selContesto.dataset.facetSelect = "minContext";
+  selContesto.setAttribute("aria-label", t("modelli.facets.minimumContextTokens"));
+  lContesto.append(selContesto, el5("span", "talos-muted", t("modelli.facets.tokens")));
+  gContesto.append(lContesto);
+  avanzati.append(gContesto);
+  const gParametri = gruppoValori(
+    "capabilities",
+    t("modelli.facets.acceptedParameters"),
+    t("modelli.facets.acceptedParametersNote")
+  );
+  avanzati.append(gParametri);
+  const gCosto = gruppoNumero(
+    "prezzo",
+    t("modelli.facets.declaredCost"),
+    [["maxInput", t("modelli.facets.maximumInput"), "USD/M"], ["maxOutput", t("modelli.facets.maximumOutput"), "USD/M"]],
+    t("modelli.facets.costNote")
+  );
+  avanzati.append(gCosto);
+  const gNonNoti = el5("fieldset", "talos-lab__space");
+  gNonNoti.dataset.facetGroup = "nonnoti";
+  gNonNoti.append(el5("legend", "talos-lab__heading", t("modelli.facets.unknownData")));
+  const rigaNonNoti = el5("label", "talos-cluster");
+  const casellaNonNoti = el5("input", "talos-checkbox");
+  casellaNonNoti.type = "checkbox";
+  casellaNonNoti.dataset.facetBool = "includeUnknown";
+  rigaNonNoti.append(casellaNonNoti, el5("span", "talos-grow", t("modelli.facets.includeUnknownModels")));
+  gNonNoti.append(rigaNonNoti, el5("p", "talos-muted", t("modelli.facets.missingPriceNote")));
+  avanzati.append(gNonNoti);
+  barra.append(avanzati);
+  const attivi = el5("div", "talos-cluster");
+  attivi.setAttribute("role", "group");
+  attivi.setAttribute("aria-label", t("modelli.facets.appliedFilters"));
+  attivi.dataset.facetActive = "";
+  barra.append(attivi);
+  let filtri = emptyCatalogFilters();
+  let stato2 = { modelli: [], contesto: {}, capacita: capacitaDelCatalogo([]), senzaDati: true };
+  let aperti = /* @__PURE__ */ new Set();
+  const cambia = (nuovi) => {
+    filtri = nuovi;
+    onCambia?.(nuovi);
+  };
+  apri.addEventListener("click", (evento) => {
+    evento.stopPropagation();
+    const aperto = apri.getAttribute("aria-expanded") === "true";
+    apri.setAttribute("aria-expanded", String(!aperto));
+    avanzati.hidden = aperto;
+    apri.firstChild.textContent = aperto ? t("modelli.facets.allFilters") : t("modelli.facets.fewerFilters");
+  });
+  selectOrdina.addEventListener("change", () => cambia({ ...filtri, sort: selectOrdina.value }));
+  selContesto.addEventListener("change", () => cambia({ ...filtri, minContext: selContesto.value }));
+  casellaNonNoti.addEventListener("change", () => cambia({ ...filtri, includeUnknown: casellaNonNoti.checked }));
+  ambito.addEventListener("click", (evento) => {
+    const b = evento.target.closest("[data-facet-chip]");
+    if (!b || b.disabled) return;
+    cambia({ ...filtri, destination: b.dataset.facetChip === "all" ? [] : [b.dataset.facetChip] });
+  });
+  gParametri.addEventListener("click", (evento) => {
+    if (evento.target.closest("[data-facet-more]")) {
+      evento.stopPropagation();
+      aperti.has("capabilities") ? aperti.delete("capabilities") : aperti.add("capabilities");
+      aggiorna();
+    }
+  });
+  gParametri.addEventListener("change", (evento) => {
+    const c = evento.target.closest("[data-facet-check]");
+    if (c) cambia(toggleCatalogFacet(filtri, "capabilities", c.value));
+  });
+  gCosto.addEventListener("input", (evento) => {
+    const i2 = evento.target.closest("[data-facet-number]");
+    if (!i2) return;
+    cambia({ ...filtri, [i2.dataset.facetNumber]: i2.value === "" ? "" : String(Math.max(0, Number(i2.value) || 0)) });
+  });
+  attivi.addEventListener("click", (evento) => {
+    const b = evento.target.closest("[data-facet-remove]");
+    if (!b) return;
+    const dopo = b.dataset.facetRemove === "__azzera" ? emptyCatalogFilters() : removeCatalogFilter(filtri, b.dataset.facetKey, b.dataset.facetValue || void 0);
+    cambia(dopo);
+    const restanti = attivi.querySelectorAll("[data-facet-remove]");
+    (restanti[0] || document.querySelector("#modelLabSearch"))?.focus();
+  });
+  function aggiorna(nuovoStato) {
+    if (nuovoStato) stato2 = nuovoStato;
+    const { modelli, contesto: contesto2, capacita } = stato2;
+    if (stato2.filtri) filtri = stato2.filtri;
+    const senzaDati = stato2.senzaDati === true;
+    const conta2 = (chiave, valore) => senzaDati ? null : facetCount(modelli, filtri, chiave, valore, contesto2);
+    const ordinaSelezionata = filtri.sort || "catalog";
+    if (selectOrdina.dataset.firma !== JSON.stringify(capacita.ordinamenti)) {
+      selectOrdina.dataset.firma = JSON.stringify(capacita.ordinamenti);
+      selectOrdina.replaceChildren(...capacita.ordinamenti.map(([id4, testo2]) => new Option(testo2, id4, false, id4 === ordinaSelezionata)));
+    }
+    selectOrdina.value = ordinaSelezionata;
+    ambito.replaceChildren();
+    const totale2 = senzaDati ? null : selectCatalog(modelli, { ...filtri, destination: [] }, contesto2).length;
+    ambito.append(chip(t("modelli.facets.all"), "all", { premuto: !filtri.destination.length, conteggio: totale2 }));
+    for (const [valore, testo2] of FACET_OPTIONS.destination) {
+      const n = conta2("destination", valore);
+      const spento = n === 0 && !filtri.destination.includes(valore);
+      ambito.append(chip(etichettaFaccettaTradotta("destination", valore, testo2), valore, {
+        premuto: filtri.destination.includes(valore),
+        conteggio: n,
+        disabilitato: spento,
+        titolo: spento ? t("modelli.facets.noModels") : null
+      }));
+    }
+    const contestoMostrato = capacita.haContesto || filtri.minContext !== "";
+    gContesto.hidden = !contestoMostrato;
+    if (contestoMostrato) {
+      selContesto.replaceChildren();
+      selContesto.append(new Option(t("modelli.facets.any"), "", false, filtri.minContext === ""));
+      for (const s of SOGLIE_CONTESTO) {
+        const n = conta2("minContext", String(s));
+        selContesto.append(new Option(n === null ? numero2(s) : `${numero2(s)} (${numero2(n)})`, String(s), false, filtri.minContext === String(s)));
+        selContesto.lastChild.disabled = n === 0 && filtri.minContext !== String(s);
+      }
+      selContesto.value = filtri.minContext;
+      if (selContesto.selectedIndex < 0) selContesto.selectedIndex = 0;
+    }
+    gParametri.hidden = !capacita.parametri.length;
+    if (!gParametri.hidden) {
+      const gruppi = capacita.parametri.filter((v) => filtri.capabilities.includes(v) || aperti.has("capabilities"));
+      const visibili = capacita.parametri.slice(0, VOCI_VISIBILI);
+      const daMostrare = [.../* @__PURE__ */ new Set([...gruppi, ...visibili])];
+      const righe = gParametri.querySelector("[data-facet-rows]");
+      righe.replaceChildren(...daMostrare.map((v) => rigaValore("capabilities", v, etichetta3("capabilities", v), conta2("capabilities", v), filtri.capabilities.includes(v))));
+      const altri = gParametri.querySelector("[data-facet-more]");
+      const resto = capacita.parametri.length - daMostrare.length;
+      const apertoOra = aperti.has("capabilities");
+      altri.hidden = !resto && !apertoOra;
+      altri.setAttribute("aria-expanded", String(apertoOra));
+      if (!altri.hidden) {
+        altri.textContent = apertoOra ? t("modelli.facets.fewerParameters") : tn("modelli.facets.oneMoreParameter", "modelli.facets.manyMoreParameters", resto, { n: numero2(resto) });
+        altri.setAttribute("aria-label", apertoOra ? t("modelli.facets.closeParameters") : tn("modelli.facets.showOneMoreParameter", "modelli.facets.showManyMoreParameters", resto, { n: numero2(resto) }));
+      }
+    }
+    gCosto.hidden = !capacita.haPrezzo;
+    if (!gCosto.hidden) for (const [campo3] of [["maxInput"], ["maxOutput"]]) {
+      const i2 = gCosto.querySelector('[data-facet-number="' + campo3 + '"]');
+      if (i2 && document.activeElement !== i2) i2.value = filtri[campo3];
+    }
+    gNonNoti.hidden = !capacita.haBuchi;
+    if (!gNonNoti.hidden) casellaNonNoti.checked = filtri.includeUnknown;
+    const chips = activeCatalogFilters(filtri);
+    const ricerca = attivi.closest("#modelLabCatalogPanel")?.querySelector('input[type="search"]')?.value?.trim() || "";
+    attivi.replaceChildren();
+    if (ricerca) attivi.append(chipRicerca(ricerca));
+    for (const c of chips) attivi.append(chipFiltro2(c));
+    if (chips.length || ricerca) {
+      const azzera = el5("button", "talos-button talos-button--ghost talos-button--sm", t("modelli.facets.resetAll"));
+      azzera.type = "button";
+      azzera.dataset.facetRemove = "__azzera";
+      attivi.append(azzera);
+    }
+    attivi.hidden = !attivi.children.length;
+    insegna.textContent = String(chips.length);
+    insegna.hidden = !chips.length;
+    const avanzatiOffribili = capacita.parametri.length > 0 || capacita.haContesto || capacita.haPrezzo || capacita.haBuchi || filtri.minContext !== "";
+    apri.hidden = !avanzatiOffribili;
+    if (!avanzatiOffribili) {
+      avanzati.hidden = true;
+      apri.setAttribute("aria-expanded", "false");
+      apri.firstChild.textContent = t("modelli.facets.allFilters");
+    }
+    barra.dataset.facetDati = senzaDati ? "non-misurati" : "misurati";
+  }
+  function chipFiltro2(c) {
+    const b = el5("button", "talos-button talos-button--secondary talos-button--sm", etichettaChip(c));
+    b.type = "button";
+    b.dataset.facetRemove = "";
+    b.dataset.facetKey = c.key;
+    if (typeof c.value === "string") b.dataset.facetValue = c.value;
+    b.setAttribute("aria-label", t("modelli.facets.removeFilter", { filter: etichettaChip(c) }));
+    return b;
+  }
+  function chipRicerca(q2) {
+    const b = el5("button", "talos-button talos-button--secondary talos-button--sm", t("modelli.facets.searchValue", { query: q2 }));
+    b.type = "button";
+    b.dataset.facetRemoveSearch = "";
+    b.setAttribute("aria-label", t("modelli.facets.removeSearch", { query: q2 }));
+    b.addEventListener("click", () => {
+      const campo3 = barra.closest("#modelLabCatalogPanel")?.querySelector('input[type="search"]');
+      if (!campo3) return;
+      campo3.value = "";
+      campo3.dispatchEvent(new Event("input", { bubbles: true }));
+      campo3.focus();
+    });
+    return b;
+  }
+  barra.aggiorna = aggiorna;
+  return barra;
+}
+function aggiornaBarraFaccette(barra, stato2) {
+  barra.aggiorna(stato2);
+}
+function etichettaFaccettaTradotta(group, value, fallback = value) {
+  const key = CHIAVI_FACCETTE[group]?.[value];
+  return key ? t(key) : fallback;
+}
+function etichettaChip(chip3) {
+  if (chip3.key === "includeUnknown") return t("modelli.facets.active.includeUnknown");
+  const key = CHIAVI_CHIP[chip3.key];
+  return key ? t(key, { value: etichettaFaccettaTradotta(chip3.key, chip3.value) }) : chip3.label;
+}
+var localeUI4, VOCI_VISIBILI, SOGLIE_CONTESTO, ETICHETTE_ORDINAMENTO, el5, numero2, CHIAVI_FACCETTE, CHIAVI_CHIP;
+var init_catalogo_faccette = __esm({
+  "src/components/catalogo-faccette.js"() {
+    init_lingua();
+    init_catalog_engine();
+    localeUI4 = () => linguaCorrenteDiT() === "en" ? "en-US" : "it-IT";
+    VOCI_VISIBILI = 8;
+    SOGLIE_CONTESTO = Object.freeze([8192, 16384, 32768, 65536, 131072, 262144]);
+    ETICHETTE_ORDINAMENTO = Object.freeze({
+      get catalog() {
+        return t("modelli.facets.catalogOrder");
+      },
+      get name() {
+        return t("modelli.facets.nameAscending");
+      },
+      get "context-desc"() {
+        return t("modelli.facets.largestContext");
+      },
+      get "price-asc"() {
+        return t("modelli.facets.inputPriceAscending");
+      }
+    });
+    el5 = (tag2, cls, txt) => {
+      const n = document.createElement(tag2);
+      if (cls) n.className = cls;
+      if (txt != null) n.textContent = String(txt);
+      return n;
+    };
+    numero2 = (n) => new Intl.NumberFormat(localeUI4()).format(n);
+    CHIAVI_FACCETTE = { "destination": { "local": "modelli.facets.localModels", "cloud": "modelli.facets.cloudModels" }, "capabilities": { "tools": "modelli.facets.functionCalling", "vision": "modelli.facets.imageInput", "reasoning": "modelli.facets.reasoning", "json": "modelli.facets.jsonOutput", "audio": "modelli.facets.audio" } };
+    CHIAVI_CHIP = { "destination": "modelli.facets.active.destination", "capabilities": "modelli.facets.active.capabilities", "providers": "modelli.facets.active.provider", "minContext": "modelli.facets.active.minimumContext", "maxInput": "modelli.facets.active.maximumInput", "maxOutput": "modelli.facets.active.maximumOutput" };
+  }
+});
+
+// src/components/catalogo-modelli.js
+function normalizzaCatalogoModelli(d) {
+  if (!oggetto(d) || !Array.isArray(d.modelli) || typeof d.daCache !== "boolean" || typeof d.aggiornatoAlle !== "string" || Number.isNaN(Date.parse(d.aggiornatoAlle)) || !d.modelli.every((m) => oggetto(m) && typeof m.id === "string" && m.id && typeof m.nome === "string" && typeof m.provider === "string" && ["inputModalities", "outputModalities", "supportedParameters"].every((k) => Array.isArray(m[k]) && m[k].every((v) => typeof v === "string")))) throw Error(t("modelli.catalog.invalidResponse"));
+  return d;
+}
+function prezzoPerMilione(value) {
+  if (value == null || typeof value === "boolean" || typeof value === "object" || String(value).trim() === "") return t("modelli.catalog.notDeclared");
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 0 ? new Intl.NumberFormat(localeUI5(), { maximumFractionDigits: 6 }).format(n * 1e6) + " USD" : t("modelli.catalog.notDeclared");
+}
+function filtraModelli(modelli, query = "", provider = "all") {
+  const q2 = String(query).trim().toLocaleLowerCase("it");
+  return modelli.filter((m) => (provider === "all" || m.provider === provider) && (!q2 || [m.nome, m.id, m.provider].some((v) => String(v || "").toLocaleLowerCase("it").includes(q2))));
+}
+function el6(tag2, cls, txt) {
+  const n = document.createElement(tag2);
+  if (cls) n.className = cls;
+  if (txt != null) n.textContent = String(txt);
+  return n;
+}
+function kv2(k, v, id4) {
+  const row = el6("div", "talos-kv"), val = el6("span", "talos-kv__v", v);
+  if (id4) val.id = id4;
+  row.append(el6("span", "talos-kv__k", k), val);
+  return row;
+}
+function contesto(n) {
+  return Number.isFinite(n) && n > 0 ? tn("modelli.catalog.oneContextToken", "modelli.catalog.manyContextTokens", n, { n: new Intl.NumberFormat(localeUI5()).format(n) }) : t("modelli.catalog.notDeclared");
+}
+function numeroOsservato(v) {
+  if (v == null || typeof v === "boolean" || typeof v === "object" || String(v).trim() === "") return null;
+  const n = Number(v);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
+function capacitaOsservate(m) {
+  const dove = { supportedParameters: new Set(m.supportedParameters || []), inputModalities: new Set(m.inputModalities || []), modalities: /* @__PURE__ */ new Set([...m.inputModalities || [], ...m.outputModalities || []]) };
+  return CAPACITA_OSSERVATE.filter(([, campo3, valore]) => dove[campo3].has(valore)).map(([id4]) => id4);
+}
+function modelloCatalogo(m) {
+  const c = numeroOsservato(m.contextLength);
+  return {
+    id: m.id,
+    name: m.nome,
+    provider: m.provider,
+    family: "",
+    author: null,
+    repo: null,
+    file: null,
+    destination: "cloud",
+    context: c && c > 0 ? c : null,
+    priceInput: inMilioniDiToken(numeroOsservato(m.prezzoPrompt)),
+    priceOutput: inMilioniDiToken(numeroOsservato(m.prezzoCompletion)),
+    capabilities: capacitaOsservate(m),
+    tasks: [],
+    languages: [],
+    license: null,
+    access: null,
+    parametersB: null,
+    architecture: null,
+    updatedAt: null,
+    installed: false,
+    quantization: null,
+    format: null
+  };
+}
+function creaRigaCatalogo(m, { selezionato = false, seleziona } = {}) {
+  const b = el6("button", "talos-list-row");
+  b.type = "button";
+  b.dataset.c = "ListRow";
+  b.dataset.catalog = m.id;
+  b.dataset.provider = m.provider;
+  b.setAttribute("aria-pressed", String(selezionato));
+  const icon = el6("span", "talos-list-row__icon");
+  icon.innerHTML = '<svg class="i" aria-hidden="true"><use href="#i-globe"></use></svg>';
+  const text2 = el6("span", "talos-list-row__text");
+  text2.append(el6("span", "talos-list-row__title", m.nome), el6("span", "talos-list-row__sub", m.provider + " · " + contesto(m.contextLength)));
+  b.append(icon, text2);
+  b.addEventListener("click", () => seleziona?.(m));
+  return b;
+}
+function aggiornaDettaglioCatalogo(mount, m, { fornitori } = {}) {
+  mount.replaceChildren();
+  if (!m) {
+    mount.append(el6("p", "talos-muted", t("modelli.catalog.selectModel")));
+    return;
+  }
+  const nome = el6("h3", "", m.nome);
+  nome.id = "catalogoNome";
+  const id4 = el6("code", "talos-mono", m.id);
+  id4.id = "catalogoId";
+  const desc = el6("p", "talos-detail__desc", m.description || t("modelli.catalog.noDescription"));
+  desc.id = "catalogoDescrizione";
+  mount.append(nome, id4, desc, kv2(t("modelli.catalog.provider"), m.provider, "catalogoProvider"), kv2(t("modelli.catalog.input"), elenco2(m.inputModalities), "catalogoIngresso"), kv2(t("modelli.catalog.response"), elenco2(m.outputModalities), "catalogoUscita"), kv2(t("modelli.catalog.supportedParameters"), elenco2(m.supportedParameters), "catalogoParametri"), kv2(t("modelli.catalog.context"), contesto(m.contextLength), "catalogoContesto"));
+  const alias = el6("p", "talos-muted", t("modelli.catalog.aliasNote"));
+  alias.id = "catalogoAlias";
+  alias.hidden = !m.alias;
+  mount.append(alias, el6("hr", "talos-lab__rule"), el6("h3", "", t("modelli.catalog.costPerMillion")), kv2(t("modelli.catalog.incoming"), prezzoPerMilione(m.prezzoPrompt), "catalogoPrezzoInput"), kv2(t("modelli.catalog.outgoing"), prezzoPerMilione(m.prezzoCompletion), "catalogoPrezzoOutput"), el6("p", "talos-muted", t("modelli.catalog.pricesNote")));
+  const raw = el6("details", "talos-lab__space");
+  raw.append(el6("summary", "", t("modelli.catalog.originalTokenPrices")));
+  raw.append(kv2(t("modelli.catalog.input"), m.prezzoPrompt ?? t("modelli.catalog.notDeclared"), "catalogoPrezzoInputRaw"), kv2(t("modelli.catalog.output"), m.prezzoCompletion ?? t("modelli.catalog.notDeclared"), "catalogoPrezzoOutputRaw"));
+  mount.append(raw);
+  const stato2 = el6("p", "talos-muted", t("modelli.catalog.credentialsNote"));
+  stato2.id = "catalogoStato";
+  mount.append(stato2);
+  const use = el6("button", "talos-button talos-button--primary talos-button--block", t("modelli.catalog.useInSession"));
+  use.id = "catalogoAzione";
+  use.type = "button";
+  use.dataset.richiede = "fase3";
+  use.hidden = true;
+  mount.append(use);
+  const access = el6("button", "talos-button talos-button--ghost talos-button--sm", t("modelli.catalog.providersAndAccess"));
+  access.type = "button";
+  access.dataset.c = "Button";
+  access.addEventListener("click", (event) => {
+    if (fornitori) {
+      event.stopPropagation();
+      fornitori();
+    }
+  });
+  mount.append(access);
+}
+function barraDelPannello(panel) {
+  const esistente = panel.querySelector("#modelLabFacets");
+  if (esistente && esistente.aggiorna) return esistente;
+  const barra = creaBarraFaccette({ etichetta: etichettaFaccetta, onCambia: (nuovi) => {
+    panel.__catalogoFiltri = { ...nuovi, providers: [] };
+    const sel = panel.querySelector("#modelLabProviderFilter"), voluto = (nuovi.providers || [])[0] || "all";
+    if (sel && sel.value !== voluto) {
+      sel.value = voluto;
+      sel.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    const ultimo = panel.__catalogoUltimo;
+    if (ultimo) {
+      const provider = sel && sel.value ? sel.value : "all";
+      aggiornaCatalogoModelli(panel, ultimo.dati, { ...ultimo.opzioni || {}, provider });
+    }
+  } });
+  const dove = panel.querySelector(".talos-toolbar, .model-lab-filters");
+  if (dove) dove.after(barra);
+  else panel.prepend(barra);
+  return barra;
+}
+function scriviConteggiFornitori(panel, conteggi, totale2, { senzaDati = false } = {}) {
+  for (const o of panel.querySelectorAll("#modelLabProviderFilter option")) {
+    o.dataset.etichetta ??= o.textContent;
+    if (senzaDati) {
+      o.textContent = o.dataset.etichetta;
+      continue;
+    }
+    const n = o.value === "all" ? totale2 : conteggi.get(o.value);
+    o.textContent = n === void 0 ? o.dataset.etichetta : o.dataset.etichetta + " (" + new Intl.NumberFormat(localeUI5()).format(n) + ")";
+  }
+}
+function portaDelCatalogo(originale) {
+  const d = originale.ownerDocument;
+  if (!d || d.querySelector("#modelLabCatalogDoor")) return null;
+  const pannello = d.querySelector("#modelLabProvidersPanel");
+  const azioni = pannello?.querySelector(".provider-heading-actions") || pannello?.querySelector(".model-lab-panel-heading");
+  if (!azioni) return null;
+  const porta = d.createElement("button");
+  porta.type = "button";
+  porta.id = "modelLabCatalogDoor";
+  porta.className = "talos-button talos-button--secondary talos-button--sm";
+  porta.textContent = t("modelli.catalog.providerCatalog");
+  porta.setAttribute("aria-controls", "modelLabCatalogPanel");
+  porta.addEventListener("click", () => {
+    d.querySelector('[data-lab-comandi] [data-model-lab-tab="catalog"]')?.click();
+  });
+  azioni.append(porta);
+  return porta;
+}
+function aggiornaCatalogoModelli(panel, dati, opzioni = {}) {
+  const { query = "", provider = "all", selezionato = null, limite = 120, caricamento = false, errore: errore2 = "", seleziona, altri, fornitori } = opzioni;
+  const list = panel.querySelector("[data-catalog-list]"), detail = panel.querySelector("[data-catalog-detail]"), count2 = panel.querySelector("[data-catalog-count]"), more = panel.querySelector("[data-catalog-more]"), vuoto = panel.querySelector("#vuotoCatalogo"), refresh = panel.querySelector("[data-catalog-refresh]");
+  if (!list || !detail) return null;
+  const attivo = document.activeElement, focusId = list.contains(attivo) ? attivo.dataset.catalog : null, scroll = list.scrollTop;
+  const tutti = dati ? normalizzaCatalogoModelli(dati).modelli : [];
+  const riferimenti = /* @__PURE__ */ new Map(), adattati = tutti.map((m) => {
+    const a = modelloCatalogo(m);
+    riferimenti.set(a, m);
+    return a;
+  });
+  const ammessi = new Set(filtraModelli(tutti, query, "all"));
+  const base = adattati.filter((m) => ammessi.has(riferimenti.get(m)));
+  const barra = barraDelPannello(panel);
+  const filtri = { ...panel.__catalogoFiltri || emptyCatalogFilters(), providers: provider === "all" ? [] : [provider] };
+  const senzaDati = !dati;
+  if (barra) {
+    aggiornaBarraFaccette(barra, { modelli: base, contesto: {}, capacita: capacitaDelCatalogo(adattati), filtri, senzaDati });
+    scriviConteggiFornitori(panel, conteggiPerFornitore(base, filtri), tutti.length, { senzaDati });
+  }
+  const visibili = dati ? selectCatalog(base, filtri).map((m) => riferimenti.get(m)).filter(Boolean) : [];
+  const selected = visibili.find((m) => m.id === selezionato?.id) || visibili[0] || null;
+  list.replaceChildren();
+  if (vuoto) vuoto.hidden = true;
+  more.hidden = true;
+  refresh.disabled = caricamento;
+  panel.setAttribute("aria-busy", String(caricamento));
+  if (errore2) {
+    const p = el6("p", "talos-card talos-card--pad", errore2);
+    p.setAttribute("role", "alert");
+    list.append(p);
+    count2.textContent = t("modelli.catalog.unavailable");
+    aggiornaDettaglioCatalogo(detail, null);
+    return null;
+  }
+  panel.__catalogoUltimo = { dati, opzioni };
+  count2.setAttribute("aria-live", "polite");
+  count2.setAttribute("role", "status");
+  count2.textContent = caricamento ? t("modelli.catalog.refreshing") : dati ? dati.daCache ? tn("modelli.catalog.oneCachedModelCount", "modelli.catalog.manyCachedModelCount", dati.modelli.length, { n: visibili.length, total: dati.modelli.length, time: new Date(dati.aggiornatoAlle).toLocaleString(localeUI5(), { timeZone: "Europe/Rome" }) }) : tn("modelli.catalog.oneModelCount", "modelli.catalog.manyModelCount", dati.modelli.length, { n: visibili.length, total: dati.modelli.length, time: new Date(dati.aggiornatoAlle).toLocaleString(localeUI5(), { timeZone: "Europe/Rome" }) }) : t("modelli.catalog.notLoaded");
+  if (!dati) {
+    list.append(el6("p", "talos-card--pad talos-muted", caricamento ? t("modelli.catalog.loading") : t("modelli.catalog.openToLoad")));
+  } else if (!visibili.length) {
+    const p = el6("p", "talos-card--pad talos-muted", dati.modelli.length ? t("modelli.catalog.noMatches") : t("modelli.catalog.empty"));
+    list.append(p);
+  } else for (const m of visibili.slice(0, limite)) list.append(creaRigaCatalogo(m, { selezionato: m.id === selected?.id, seleziona }));
+  more.hidden = visibili.length <= limite;
+  more.onclick = () => altri?.();
+  aggiornaDettaglioCatalogo(detail, selected, { fornitori });
+  list.scrollTop = scroll;
+  if (focusId && document.activeElement === document.body && !panel.hidden) {
+    const nuovo = [...list.querySelectorAll("[data-catalog]")].find((b) => b.dataset.catalog === focusId);
+    nuovo?.focus({ preventScroll: true });
+  }
+  return selected;
+}
+function montaCatalogoModelli(originale, canonico) {
+  if (!originale || !canonico || originale.dataset.catalogMounted) return;
+  originale.replaceChildren(...canonico.children);
+  originale.dataset.catalogMounted = "true";
+  originale.dataset.catalogPanel = "";
+  const ids = { cercaCatalogo: "modelLabSearch", filtroFornitore: "modelLabProviderFilter", listaCatalogo: "modelLabCatalogList" };
+  for (const [prima, dopo] of Object.entries(ids)) {
+    const n = originale.querySelector("#" + prima);
+    if (!n) continue;
+    for (const label of originale.querySelectorAll('label[for="' + prima + '"]')) label.htmlFor = dopo;
+    n.id = dopo;
+  }
+  const dettaglio = originale.querySelector("[data-catalog-detail]");
+  if (dettaglio) dettaglio.id = "modelLabModelDetail";
+  const conteggio3 = originale.querySelector("[data-catalog-count]");
+  if (conteggio3) conteggio3.id = "modelLabCatalogCount";
+  const aggiorna = originale.querySelector("[data-catalog-refresh]");
+  if (aggiorna) aggiorna.id = "modelLabRefreshButton";
+  originale.querySelector("#modelLabProviderFilter")?.replaceChildren(new Option(t("modelli.catalog.allProviders"), "all"));
+  const listaCatalogo = originale.querySelector("[data-catalog-list]") || originale.querySelector("#modelLabCatalogList");
+  if (listaCatalogo) listaCatalogo.replaceChildren();
+  const dettaglioCatalogo = originale.querySelector("[data-catalog-detail]") || originale.querySelector("#modelLabModelDetail");
+  if (dettaglioCatalogo) aggiornaDettaglioCatalogo(dettaglioCatalogo, null);
+  portaDelCatalogo(originale);
+}
+function etichettaFaccettaTradotta2(group, value, fallback = value) {
+  const key = CHIAVI_FACCETTE2[group]?.[value];
+  return key ? t(key) : fallback;
+}
+var localeUI5, oggetto, PAROLE, elenco2, inMilioniDiToken, CAPACITA_OSSERVATE, etichettaFaccetta, CHIAVI_FACCETTE2;
+var init_catalogo_modelli = __esm({
+  "src/components/catalogo-modelli.js"() {
+    init_lingua();
+    init_catalog_engine();
+    init_catalogo_faccette();
+    localeUI5 = () => linguaCorrenteDiT() === "en" ? "en-US" : "it-IT";
+    oggetto = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+    PAROLE = { get text() {
+      return t("modelli.catalog.text");
+    }, get image() {
+      return t("modelli.catalog.images");
+    }, get audio() {
+      return t("modelli.catalog.audio");
+    }, get video() {
+      return t("modelli.catalog.video");
+    }, get file() {
+      return t("modelli.catalog.file");
+    }, get tools() {
+      return t("modelli.catalog.tools");
+    }, get tool_choice() {
+      return t("modelli.catalog.toolChoice");
+    }, get temperature() {
+      return t("modelli.catalog.creativity");
+    }, get top_p() {
+      return t("modelli.catalog.variety");
+    }, get max_tokens() {
+      return t("modelli.catalog.responseLimit");
+    }, get response_format() {
+      return t("modelli.catalog.responseFormat");
+    }, get reasoning() {
+      return t("modelli.catalog.reasoning");
+    }, get include_reasoning() {
+      return t("modelli.catalog.showReasoning");
+    } };
+    elenco2 = (v) => v?.length ? v.map((x) => PAROLE[x] || x).join(", ") : t("modelli.catalog.notDeclared");
+    inMilioniDiToken = (n) => n === null ? null : Number((n * 1e6).toFixed(6));
+    CAPACITA_OSSERVATE = [["tools", "supportedParameters", "tools"], ["vision", "inputModalities", "image"], ["reasoning", "supportedParameters", "reasoning"], ["json", "supportedParameters", "response_format"], ["audio", "modalities", "audio"]];
+    etichettaFaccetta = (chiave, valore) => etichettaFaccettaTradotta2(chiave, valore, FACET_OPTIONS[chiave]?.find(([v]) => v === valore)?.[1] || PAROLE[valore] || valore);
+    CHIAVI_FACCETTE2 = { "destination": { "local": "modelli.facets.localModels", "cloud": "modelli.facets.cloudModels" }, "capabilities": { "tools": "modelli.facets.functionCalling", "vision": "modelli.facets.imageInput", "reasoning": "modelli.facets.reasoning", "json": "modelli.facets.jsonOutput", "audio": "modelli.facets.audio" } };
+  }
+});
+
+// src/components/fonti-modelli.js
+function portaInVistaFonteSelettore(evento) {
+  const scheda = evento.target;
+  if (!scheda?.matches?.('.model-picker-source[role="tab"]') || !scheda.parentElement?.matches('.model-picker-sources[role="tablist"]')) return;
+  scheda.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "instant", container: "nearest" });
+}
+function senzaChiave(fonte) {
+  return PROVIDER_DIRETTI.some((p) => p.id === fonte && p.senzaChiave === true);
+}
+function fornitoriConCatalogo(elenco3 = [], { pianoChatgpt = null } = {}) {
+  const ids = new Set((Array.isArray(elenco3) ? elenco3 : []).filter((p) => p?.keyConfigured || senzaChiave(p?.id)).map((p) => p.id));
+  if (pianoChatgpt?.collegato === true && pianoChatgpt.pianoAbilitato === true) ids.add("chatgpt");
+  else ids.delete("chatgpt");
+  return ids;
+}
+function nomeFornitore(id4) {
+  const chiave = String(id4 ?? "").trim().toLowerCase();
+  if (chiave === "") return null;
+  if (Object.hasOwn(NOMI_FUORI_DAI_DIRETTI, chiave)) return NOMI_FUORI_DAI_DIRETTI[chiave];
+  const cercato = PONTE_CATALOGO[chiave] || chiave;
+  return PROVIDER_DIRETTI.find((p) => p.id === cercato)?.etichetta ?? null;
+}
+function eFonteDiretta(fonte) {
+  return ID_DIRETTI.has(String(fonte || ""));
+}
+function fontiDelSelettore({ openrouter = null, locali = null, diretti = null } = {}) {
+  const etichetta3 = (nome, modelli) => modelli?.some((m) => m.catalogo?.fonte === "riserva") ? t("modelli.sources.reserveList", { name: nome }) : nome;
+  const fonti = [
+    { id: "openrouter", etichetta: etichetta3("OpenRouter", openrouter), conto: contaOppureNull(openrouter), collegato: true },
+    { id: "locali", etichetta: t("modelli.sources.localModels"), conto: contaOppureNull(locali), collegato: true }
+  ];
+  for (const provider of PROVIDER_DIRETTI) {
+    const elenco3 = diretti ? diretti[provider.id] : null;
+    if (provider.id === "esterno" && !elenco3?.some((m) => m.id === "esterno:predefinito")) continue;
+    if (provider.soloSeCollegato && !Array.isArray(elenco3)) continue;
+    fonti.push({
+      id: provider.id,
+      etichetta: etichetta3(provider.etichetta, elenco3),
+      conto: contaOppureNull(elenco3),
+      // `collegato` è falso solo quando SAPPIAMO che la chiave manca: prima di leggere non si accusa.
+      collegato: !diretti || Array.isArray(elenco3)
+    });
+  }
+  return fonti;
+}
+function modelliDellaFonte(fonte, { openrouter = null, locali = null, diretti = null } = {}) {
+  if (fonte === "openrouter") return openrouter;
+  if (fonte === "locali") return locali;
+  if (!eFonteDiretta(fonte)) return null;
+  if (!diretti) return null;
+  const elenco3 = diretti[fonte];
+  return Array.isArray(elenco3) ? elenco3 : null;
+}
+function fraseVuotoDiretto(fonte, { diretti = null, errori = {} } = {}) {
+  const etichetta3 = PROVIDER_DIRETTI.find((p) => p.id === fonte)?.etichetta || fonte;
+  if (errori && errori[fonte]) return t("modelli.sources.catalogUnavailable", { provider: etichetta3, error: errori[fonte] });
+  if (fonte === "esterno") return t("modelli.sources.configureExternalAgent");
+  if (!diretti) return t("modelli.sources.readingCatalog", { provider: etichetta3 });
+  if (!Array.isArray(diretti[fonte])) {
+    return senzaChiave(fonte) ? t("modelli.sources.startLocalProvider", { provider: etichetta3 }) : t("modelli.sources.connectProviderKey", { provider: etichetta3 });
+  }
+  return t("modelli.sources.noProviderModels", { provider: etichetta3 });
+}
+function contaOppureNull(elenco3) {
+  return Array.isArray(elenco3) ? elenco3.length : null;
+}
+function descrizioneModelloSelettore(modello = {}) {
+  const numero12 = new Intl.NumberFormat(localeUI6(), { maximumFractionDigits: 0, useGrouping: true });
+  const prezzo = (valore) => {
+    const testo2 = prezzoPerMilione(valore);
+    const dichiarato = valore != null && typeof valore !== "boolean" && typeof valore !== "object" && String(valore).trim() !== "" && Number.isFinite(Number(valore)) && Number(valore) >= 0;
+    return dichiarato ? t("modelli.sources.pricePerMillion", { price: testo2 }) : t("modelli.sources.unavailable");
+  };
+  const capacita = (valore) => valore === true ? t("modelli.sources.yes") : valore === false ? t("modelli.sources.no") : t("modelli.sources.unavailable");
+  const dettagli2 = [
+    t("modelli.sources.context", { value: Number.isFinite(modello.contextLength) && modello.contextLength > 0 ? tn("modelli.sources.contextOneToken", "modelli.sources.contextTokens", modello.contextLength, { n: numero12.format(modello.contextLength) }) : t("modelli.sources.unavailable") }),
+    t("modelli.sources.input", { value: prezzo(modello.prezzoPrompt) }),
+    t("modelli.sources.output", { value: prezzo(modello.prezzoCompletion) }),
+    t("modelli.sources.cacheRead", { value: prezzo(modello.prezzoCacheRead) }),
+    t("modelli.sources.cacheWrite", { value: prezzo(modello.prezzoCacheWrite) }),
+    t("modelli.sources.tools", { value: capacita(modello.capacita?.toolCall) }),
+    t("modelli.sources.reasoning", { value: capacita(modello.capacita?.reasoning) })
+  ];
+  if (modello.alias) dettagli2.unshift(t("modelli.sources.latestVersion"));
+  if (modello.prezziPerMilione?.tiers?.length || modello.prezziPerMilione?.context_over_200k) dettagli2.push(t("modelli.sources.contextPricing"));
+  if (modello.catalogo?.fonte === "riserva") {
+    const data2 = modello.catalogo.dataRiserva;
+    const parti = typeof data2 === "string" && /^(\d{4})-(\d{2})-(\d{2})$/u.exec(data2);
+    dettagli2.unshift(t("modelli.sources.reserveCatalog", { date: parti ? t("modelli.sources.reserveDate", { date: `${parti[3]}/${parti[2]}/${parti[1]}` }) : "" }));
+    if (modello.catalogo.avvisi?.some((a) => a.codice === "CATALOG_CACHE_CORRUPT")) dettagli2.push(t("modelli.sources.corruptCacheRejected"));
+    return dettagli2.join(" · ");
+  }
+  const data = modello.catalogo?.aggiornatoAlle;
+  dettagli2.push(typeof data === "string" && Number.isFinite(Date.parse(data)) ? t("modelli.sources.catalogDataDate", { date: new Intl.DateTimeFormat(localeUI6(), { timeZone: "Europe/Rome" }).format(new Date(data)) }) : t("modelli.sources.catalogDateUnavailable"));
+  if (modello.catalogo?.fallbackRete) {
+    const etaMs = modello.catalogo.etaCacheMs;
+    dettagli2.push(t("modelli.sources.savedCopy", { age: Number.isFinite(etaMs) && etaMs >= 0 ? tn("modelli.sources.cacheAgeOneSecond", "modelli.sources.cacheAge", Math.floor(etaMs / 1e3), { n: numero12.format(Math.floor(etaMs / 1e3)) }) : t("modelli.sources.cacheAgeUnavailable") }));
+  }
+  if (modello.catalogo?.avvisi?.some((a) => a.codice === "CATALOG_CACHE_CORRUPT")) dettagli2.push(t("modelli.sources.corruptCacheRejected"));
+  if (modello.catalogo?.avvisi?.some((a) => a.codice === "CATALOG_CACHE_WRITE_FAILED")) dettagli2.push(t("modelli.sources.catalogSaveUnavailable"));
+  return dettagli2.join(" · ");
+}
+function aggiornaTestoModelloSelettore(contenitore, modello) {
+  const nome = contenitore.ownerDocument.createElement("strong");
+  nome.textContent = modello.nome || t("modelli.sources.modelNameUnavailable");
+  const dettagli2 = contenitore.ownerDocument.createElement("small");
+  dettagli2.textContent = descrizioneModelloSelettore(modello);
+  contenitore.replaceChildren(nome, dettagli2);
+}
+var localeUI6, PROVIDER_DIRETTI, NOMI_FUORI_DAI_DIRETTI, PONTE_CATALOGO, ID_DIRETTI;
+var init_fonti_modelli = __esm({
+  "src/components/fonti-modelli.js"() {
+    init_lingua();
+    init_catalogo_modelli();
+    localeUI6 = () => linguaCorrenteDiT() === "en" ? "en-US" : "it-IT";
+    if (typeof document !== "undefined") document.addEventListener("focusin", portaInVistaFonteSelettore);
+    PROVIDER_DIRETTI = Object.freeze([
+      Object.freeze({ id: "anthropic", etichetta: "Anthropic" }),
+      Object.freeze({ id: "gemini", etichetta: "Gemini" }),
+      Object.freeze({ id: "openai", etichetta: "OpenAI" }),
+      Object.freeze({ id: "lmstudio", etichetta: "LM Studio", senzaChiave: true }),
+      Object.freeze({ id: "zai", etichetta: "Z.AI", soloSeCollegato: true }),
+      Object.freeze({ id: "deepseek", etichetta: "DeepSeek", soloSeCollegato: true }),
+      // 11/10/2026, «Continue with ChatGPT»: i modelli pagati dal piano stanno in un gruppo loro, mai mescolati a quelli della chiave.
+      // Sta dopo i sei storici: il loro ordine è presidiato (BC50-01); il posto accanto a «OpenAI» si decide col ridisegno della modale.
+      Object.freeze({ id: "chatgpt", etichetta: "ChatGPT plan", senzaChiave: true, soloSeCollegato: true }),
+      Object.freeze({ id: "groq", etichetta: "Groq", soloSeCollegato: true }),
+      Object.freeze({ id: "cerebras", etichetta: "Cerebras", soloSeCollegato: true }),
+      Object.freeze({ id: "mistral", etichetta: "Mistral", soloSeCollegato: true }),
+      Object.freeze({ id: "together", etichetta: "Together", soloSeCollegato: true }),
+      Object.freeze({ id: "fireworks", etichetta: "Fireworks", soloSeCollegato: true }),
+      Object.freeze({ id: "deepinfra", etichetta: "DeepInfra", soloSeCollegato: true }),
+      Object.freeze({ id: "novita", etichetta: "Novita", soloSeCollegato: true }),
+      Object.freeze({ id: "nebius", etichetta: "Nebius", soloSeCollegato: true }),
+      Object.freeze({ id: "xai", etichetta: "xAI", soloSeCollegato: true }),
+      Object.freeze({ id: "ollama-cloud", etichetta: "Ollama Cloud", soloSeCollegato: true }),
+      Object.freeze({ id: "huggingface", etichetta: "Hugging Face", soloSeCollegato: true }),
+      Object.freeze({ id: "kimi", etichetta: "Kimi", soloSeCollegato: true }),
+      Object.freeze({ id: "minimax", etichetta: "MiniMax", soloSeCollegato: true }),
+      Object.freeze({ id: "qwen", etichetta: "Qwen", soloSeCollegato: true }),
+      // P-J — porte distinte, nomi umani; nessuna disponibilità senza collegamento.
+      Object.freeze({ id: "zai-anthropic", get etichetta() {
+        return t("modelli.sources.zaiAnthropicPort");
+      }, soloSeCollegato: true }),
+      Object.freeze({ id: "minimax-anthropic", get etichetta() {
+        return t("modelli.sources.minimaxAnthropicPort");
+      }, soloSeCollegato: true }),
+      // P-K — inizio
+      Object.freeze({ id: "azure", etichetta: "Azure AI Foundry", soloSeCollegato: true }),
+      Object.freeze({ id: "bedrock", etichetta: "Amazon Bedrock", soloSeCollegato: true }),
+      Object.freeze({ id: "vertex", etichetta: "Google Vertex AI", soloSeCollegato: true }),
+      // P-K — fine
+      Object.freeze({ id: "esterno", get etichetta() {
+        return t("modelli.sources.externalAgent");
+      }, senzaChiave: true, soloSeCollegato: true })
+      // P-L-bis
+    ]);
+    NOMI_FUORI_DAI_DIRETTI = Object.freeze({
+      openrouter: "OpenRouter",
+      ollama: "Ollama",
+      /* ⛔ «locale» resta «locale», la parola che il piede scrive dal 05/09 ed è documentata in testa a
+         `workspace-footer.js`. Non è un fornitore: è «gira su questo computer». Cambiarla qui sarebbe
+         un ritocco di copia che nessuno ha chiesto, dentro un giro che cura tutt'altro. */
+      get local() {
+        return t("modelli.sources.local");
+      },
+      get locale() {
+        return t("modelli.sources.local");
+      },
+      get locali() {
+        return t("modelli.sources.local");
+      }
+    });
+    PONTE_CATALOGO = Object.freeze({
+      "z-ai": "zai",
+      "x-ai": "xai",
+      google: "gemini",
+      moonshotai: "kimi",
+      mistralai: "mistral"
+    });
+    ID_DIRETTI = new Set(PROVIDER_DIRETTI.map((p) => p.id));
   }
 });
 
@@ -29643,328 +30759,6 @@ var init_avvio_sessione = __esm({
   }
 });
 
-// src/components/session-item.js
-function statoSessione(sessione) {
-  let classe;
-  if (sessione.inAttesaApprovazione || sessione.inAttesaDomanda || sessione.inAttesaPiano || sessione.inAttesaRichiestaMcp || sessione.inAttesaDiscendente) classe = "attesa";
-  else if (sessione.interrotta) classe = "interrotto";
-  else if (!sessione.conclusa) classe = "vivo";
-  else if (sessione.ultimoEsito === "errore" && sessione.motivoChiusura === "fermata") classe = "fermata";
-  else if (sessione.ultimoEsito === "errore" && sessione.motivoChiusura === "in-pausa") classe = "in-pausa";
-  else if (sessione.ultimoEsito === "errore") classe = "errore";
-  else if (sessione.ultimoEsito === "successo") classe = "successo";
-  else classe = "ignoto";
-  const testo2 = classe === "errore" && sessione.motivoChiusura === "giri-finiti" ? t("processi.session.stateTurnLimit") : t(ETICHETTE[classe]);
-  let aiuto = null;
-  if (classe === "interrotto") aiuto = t("processi.session.helpInterrupted");
-  else if (classe === "attesa" && sessione.inAttesaDomanda) aiuto = t("processi.session.helpQuestion");
-  else if (classe === "attesa" && sessione.inAttesaPiano) aiuto = t("processi.session.helpPlan");
-  else if (classe === "attesa" && sessione.inAttesaRichiestaMcp) aiuto = t("processi.session.helpMcp");
-  else if (classe === "fermata") aiuto = t("processi.session.helpStopped");
-  else if (classe === "in-pausa") aiuto = t("processi.session.helpPaused");
-  return { classe, testo: testo2, tono: TONI2[classe] ?? null, aiuto };
-}
-function oraCompatta(iso, adesso = /* @__PURE__ */ new Date()) {
-  const data = new Date(iso);
-  if (Number.isNaN(data.getTime())) return "";
-  const giorno = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  const differenza = Math.round((giorno(adesso) - giorno(data)) / 864e5);
-  const inglese2 = linguaCorrenteDiT() === "en";
-  if (differenza <= 0) return data.toLocaleTimeString(inglese2 ? "en-GB" : "it-IT", { hour: "2-digit", minute: "2-digit" });
-  if (differenza === 1) return t("processi.session.yesterday");
-  if (differenza < 7) return t("processi.session.daysShort", { n: differenza });
-  return inglese2 ? data.toLocaleDateString("en-US", { month: "short", day: "numeric" }) : data.toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit" });
-}
-function nomeModello(modello) {
-  if (typeof modello !== "string" || modello.trim() === "") return null;
-  if (/^local:/i.test(modello.trim())) return nomeModelloUmano(modello) || modello.replace(/^local:/i, "");
-  return modello.split("/").pop();
-}
-function el5(documentObj, tag2, className, testo2) {
-  const nodo15 = documentObj.createElement(tag2);
-  if (className) nodo15.className = className;
-  if (testo2 !== void 0 && testo2 !== null) nodo15.textContent = String(testo2);
-  return nodo15;
-}
-function nomeLeggibileSessione(taskId) {
-  const grezzo = String(taskId || "").trim();
-  if (!grezzo) return t("processi.session.untitled");
-  if (grezzo.startsWith("libero:")) {
-    const dove = grezzo.slice("libero:".length).trim();
-    if (!dove || dove === "default") return t("processi.session.freeTask");
-    if (dove === "full-access" || dove === "workspace-launch") return t("processi.session.freeTaskChosenByHand");
-    return t("processi.session.freeTaskIn", { dove });
-  }
-  if (grezzo.startsWith("delega:")) return t("processi.session.subAgent");
-  return grezzo;
-}
-function identitaSessione({ nome = null, impostazioni = null, dallElenco = null, taskId = null } = {}) {
-  const pulito = (v) => typeof v === "string" && v.trim() !== "" ? v.trim() : null;
-  const contratto = impostazioni || dallElenco || null;
-  const esplicito = pulito(nome);
-  if (esplicito) return { nome: esplicito, fonte: "esplicito", contratto };
-  const salvato = pulito(impostazioni?.nome) || pulito(dallElenco?.nome);
-  if (salvato) return { nome: salvato, fonte: "nome-salvato", contratto };
-  const delega = pulito(impostazioni?.taskDelega) || pulito(dallElenco?.taskDelega);
-  if (delega) return { nome: delega, fonte: "compito-delega", contratto };
-  return {
-    nome: nomeLeggibileSessione(pulito(taskId) || pulito(impostazioni?.taskId) || pulito(dallElenco?.taskId)),
-    fonte: "ripiego",
-    contratto
-  };
-}
-function prefissoComuneDiParole(nomi2) {
-  const righe = (Array.isArray(nomi2) ? nomi2 : []).map((n) => String(n ?? ""));
-  if (righe.length < 2 || righe.some((n) => !n)) return "";
-  let comune = righe[0];
-  for (const n of righe.slice(1)) {
-    let i2 = 0;
-    while (i2 < comune.length && i2 < n.length && comune[i2] === n[i2]) i2 += 1;
-    comune = comune.slice(0, i2);
-    if (!comune) return "";
-  }
-  const ultimoSpazio = comune.lastIndexOf(" ");
-  return ultimoSpazio > 0 ? comune.slice(0, ultimoSpazio + 1) : "";
-}
-function nomiDistintiFraSorelle(nomi2, { minimoPrefisso = 12, minimoResto = 6 } = {}) {
-  const righe = (Array.isArray(nomi2) ? nomi2 : []).map((n) => String(n ?? ""));
-  const comune = prefissoComuneDiParole(righe);
-  if (comune.trim().length < minimoPrefisso) return righe;
-  const tagliati = righe.map((n) => n.slice(comune.length).trim());
-  if (tagliati.some((n) => n.length < minimoResto)) return righe;
-  return tagliati.map((n) => `…${n}`);
-}
-function ordinaSessioniAdAlbero(elenco3) {
-  const righe = Array.isArray(elenco3) ? elenco3.filter(Boolean) : [];
-  const presenti = new Set(righe.map((s) => s.sessionId));
-  const figliePer = /* @__PURE__ */ new Map();
-  for (const s of righe) {
-    const padre = s.padreId && presenti.has(s.padreId) ? s.padreId : null;
-    if (!padre) continue;
-    if (!figliePer.has(padre)) figliePer.set(padre, []);
-    figliePer.get(padre).push(s);
-  }
-  for (const gruppo of figliePer.values()) {
-    gruppo.sort((a, b) => String(a.avviataAlle ?? "").localeCompare(String(b.avviataAlle ?? "")));
-  }
-  const distintivoPer = /* @__PURE__ */ new Map();
-  for (const gruppo of figliePer.values()) {
-    const nomi2 = nomiDistintiFraSorelle(gruppo.map((f) => f.taskDelega ?? ""));
-    gruppo.forEach((f, i2) => {
-      if (nomi2[i2] && nomi2[i2] !== f.taskDelega) distintivoPer.set(f.sessionId, nomi2[i2]);
-    });
-  }
-  const fatte = /* @__PURE__ */ new Set();
-  const fuori = [];
-  const scendi = (sessione, profondita) => {
-    if (fatte.has(sessione.sessionId)) return;
-    fatte.add(sessione.sessionId);
-    fuori.push({ sessione, profondita });
-    for (const figlia of figliePer.get(sessione.sessionId) ?? []) scendi(figlia, profondita + 1);
-  };
-  const vivaPer = /* @__PURE__ */ new Map();
-  const discendenzaViva = (sessione, visti = /* @__PURE__ */ new Set()) => {
-    if (visti.has(sessione.sessionId)) return false;
-    visti.add(sessione.sessionId);
-    const classe = statoSessione(sessione).classe;
-    if (classe === "vivo" || classe === "attesa") return true;
-    return (figliePer.get(sessione.sessionId) ?? []).some((f) => discendenzaViva(f, visti));
-  };
-  const parlatoPer = /* @__PURE__ */ new Map();
-  const ultimaVoceDellAlbero = (sessione, visti = /* @__PURE__ */ new Set()) => {
-    if (visti.has(sessione.sessionId)) return "";
-    visti.add(sessione.sessionId);
-    const mia = String(sessione.ultimaRispostaAlle ?? "");
-    const figlie = (figliePer.get(sessione.sessionId) ?? []).map((f) => ultimaVoceDellAlbero(f, visti));
-    return [mia, ...figlie].sort().at(-1) ?? "";
-  };
-  const radici = righe.filter((s) => !(s.padreId && presenti.has(s.padreId)));
-  for (const r of radici) {
-    vivaPer.set(r.sessionId, discendenzaViva(r));
-    parlatoPer.set(r.sessionId, ultimaVoceDellAlbero(r));
-  }
-  const ordinate = [...radici].sort((a, b) => {
-    const viva = Number(vivaPer.get(b.sessionId)) - Number(vivaPer.get(a.sessionId));
-    if (viva !== 0) return viva;
-    if (!vivaPer.get(a.sessionId)) return 0;
-    return String(parlatoPer.get(b.sessionId) ?? "").localeCompare(String(parlatoPer.get(a.sessionId) ?? ""));
-  });
-  for (const s of ordinate) scendi(s, 0);
-  for (const s of righe) if (!fatte.has(s.sessionId)) fuori.push({ sessione: s, profondita: 0 });
-  return fuori.map((v, i2) => {
-    const dopo = fuori.slice(i2 + 1).find((altra) => altra.profondita <= v.profondita);
-    return { ...v, ultima: !dopo || dopo.profondita < v.profondita, nomeDistintivo: distintivoPer.get(v.sessione.sessionId) ?? null };
-  });
-}
-function scriviConteggio(nodo15, giri, spiegazione) {
-  const frase = tn("processi.session.turnOne", "processi.session.turnMany", giri);
-  const precedente = typeof nodo15.title === "string" && nodo15.title.includes("\n") ? nodo15.title.split("\n").slice(1).join("\n") : null;
-  const motivo = spiegazione === void 0 ? precedente : spiegazione;
-  const titolo2 = motivo ? `${frase}
-${motivo}` : frase;
-  const stesso = nodo15.dataset ? nodo15.dataset.giri === String(giri) : nodo15.textContent === frase;
-  if (stesso && (nodo15.title === void 0 || nodo15.title === titolo2)) return false;
-  const doc = nodo15.ownerDocument;
-  if (doc && typeof doc.createElementNS === "function" && typeof nodo15.replaceChildren === "function") {
-    const svg2 = doc.createElementNS(SVG_NS_CONTEGGIO, "svg");
-    svg2.setAttribute("class", "i i--xs");
-    svg2.setAttribute("aria-hidden", "true");
-    const use = doc.createElementNS(SVG_NS_CONTEGGIO, "use");
-    use.setAttribute("href", "#i-sparkles");
-    svg2.append(use);
-    const numero12 = el5(doc, "span", "talos-session-item__conto", String(giri));
-    numero12.setAttribute("aria-hidden", "true");
-    nodo15.replaceChildren(svg2, numero12, el5(doc, "span", "sr-only", frase));
-  } else nodo15.textContent = frase;
-  nodo15.title = titolo2;
-  if (nodo15.dataset) {
-    nodo15.dataset.conteggio = "";
-    nodo15.dataset.giri = String(giri);
-  }
-  return true;
-}
-function aggiornaSessionItem(riga2, dati = {}) {
-  if (!riga2 || typeof riga2.querySelector !== "function") return false;
-  let cambiato = false;
-  const stato2 = dati.stato;
-  if (stato2 && typeof stato2.classe === "string") {
-    if (riga2.dataset.sessionState !== stato2.classe) {
-      riga2.dataset.sessionState = stato2.classe;
-      cambiato = true;
-    }
-    const pallino = riga2.querySelector(".talos-dot");
-    if (pallino) {
-      const classe = `talos-dot talos-dot--sm${stato2.tono ? ` talos-dot--${stato2.tono}` : ""}`;
-      if (pallino.className !== classe) {
-        pallino.className = classe;
-        cambiato = true;
-      }
-    }
-    const testo2 = riga2.querySelector(".talos-session-item__state");
-    if (testo2) {
-      const modello = dati.modello === void 0 ? testo2.textContent.includes(" · ") ? testo2.textContent.split(" · ").slice(1).join(" · ") : null : dati.modello;
-      const frase = modello ? `${stato2.testo} · ${modello}` : stato2.testo;
-      if (testo2.textContent !== frase) {
-        testo2.textContent = frase;
-        cambiato = true;
-      }
-    }
-  }
-  if (Number.isFinite(dati.giri) && dati.giri > 0) {
-    const aside = riga2.querySelector(".talos-session-item__aside");
-    if (aside) {
-      const ultimo = aside.lastElementChild;
-      const eIlConteggio = ultimo && (ultimo.dataset?.conteggio !== void 0 || /\b(?:gir[oi]|turns?|richiest[ae]|requests?)\b/.test(ultimo.textContent || ""));
-      if (eIlConteggio) {
-        if (scriviConteggio(ultimo, dati.giri)) cambiato = true;
-      } else {
-        const nuovo = riga2.ownerDocument.createElement("span");
-        scriviConteggio(nuovo, dati.giri, null);
-        aside.append(nuovo);
-        cambiato = true;
-      }
-    }
-  }
-  return cambiato;
-}
-function creaSessionItem(sessione, opzioni = {}) {
-  const documentObj = opzioni.document || globalThis.document;
-  const riga2 = el5(documentObj, "button", "talos-session-item");
-  riga2.type = "button";
-  riga2.setAttribute("data-c", "SessionItem");
-  if (opzioni.corrente) riga2.setAttribute("aria-current", "true");
-  if (sessione.sessionId) riga2.dataset.realSessionId = sessione.sessionId;
-  const quando = Date.parse(sessione.ultimaRispostaAlle ?? "");
-  const adessoMs = (opzioni.adesso instanceof Date ? opzioni.adesso : /* @__PURE__ */ new Date()).getTime();
-  if (Number.isFinite(quando) && !opzioni.corrente && adessoMs - quando <= SEGNALE_NOVITA_MS) {
-    riga2.dataset.novita = "si";
-  }
-  const etichetta3 = opzioni.pendente ? t("processi.session.newInFolder", { cartella: sessione.nomeCartella || "" }) : `${sessione.nome || opzioni.nomeDistintivo || sessione.taskDelega || nomeLeggibileSessione(sessione.taskId)}${sessione.forkDa ? ` · ${t("processi.session.branch")}` : ""}`;
-  const stato2 = opzioni.pendente ? { classe: "pendente", testo: t(ETICHETTE.pendente), tono: null } : statoSessione(sessione);
-  riga2.dataset.sessionState = stato2.classe;
-  if (stato2.aiuto) riga2.title = stato2.aiuto;
-  const testo2 = el5(documentObj, "span");
-  const titolo2 = el5(documentObj, "span", "talos-session-item__title", etichetta3);
-  const sotto = el5(documentObj, "span", "talos-session-item__sub");
-  const pallino = el5(documentObj, "span", `talos-dot talos-dot--sm${stato2.tono ? ` talos-dot--${stato2.tono}` : ""}`);
-  const modello = opzioni.pendente ? null : nomeModello(sessione.modello);
-  sotto.append(pallino, el5(documentObj, "span", "talos-session-item__state", modello ? `${stato2.testo} · ${modello}` : stato2.testo));
-  testo2.append(titolo2, sotto);
-  const aside = el5(documentObj, "span", "talos-session-item__aside");
-  if (!opzioni.pendente) {
-    aside.append(el5(documentObj, "span", null, oraCompatta(sessione.avviataAlle, opzioni.adesso)));
-    const { giri, fermati } = giriDellaSessione(sessione);
-    if (giri !== null && giri > 0) {
-      const conto = el5(documentObj, "span");
-      scriviConteggio(conto, giri, fermati > 0 ? spiegaGiriFermati(fermati) : null);
-      aside.append(conto);
-    }
-  }
-  if (opzioni.selezione?.attiva) {
-    const casella = el5(documentObj, "input", "talos-checkbox");
-    casella.type = "checkbox";
-    casella.checked = Boolean(opzioni.selezione.selezionata);
-    casella.dataset.sessionSelect = sessione.sessionId || "";
-    casella.setAttribute("aria-label", t("processi.session.select", { nome: etichetta3 }));
-    casella.addEventListener("click", (event) => event.stopPropagation());
-    casella.addEventListener("change", () => opzioni.selezione.onToggle?.(casella.checked));
-    riga2.append(casella);
-    riga2.classList.add("is-selection-mode");
-    if (casella.checked) riga2.classList.add("is-selected");
-  }
-  riga2.append(testo2, aside);
-  if (typeof opzioni.onApri === "function") riga2.addEventListener("click", opzioni.onApri);
-  if (typeof opzioni.onMenu === "function") {
-    riga2.addEventListener("contextmenu", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      opzioni.onMenu(event);
-    });
-  }
-  return riga2;
-}
-function sessioniRadice(elenco3) {
-  return (Array.isArray(elenco3) ? elenco3 : []).filter((s) => s && !s.padreId && !(Number(s.profonditaDelega) > 0));
-}
-var SEGNALE_NOVITA_MS, TONI2, ETICHETTE, SVG_NS_CONTEGGIO;
-var init_session_item = __esm({
-  "src/components/session-item.js"() {
-    init_consumo_sessione();
-    init_chat_foot();
-    init_lingua();
-    SEGNALE_NOVITA_MS = 6e4;
-    TONI2 = Object.freeze({
-      attesa: "warning",
-      vivo: "live",
-      "in-pausa": "warning",
-      // C3 tappa 4: ambra, come «In pausa» nell'elenco degli agenti
-      errore: "danger",
-      successo: "success"
-      // interrotta / ignoto / pendente: pallino senza tono, come «interrotta» nel mockup.
-    });
-    ETICHETTE = Object.freeze({
-      attesa: "processi.session.stateWaitingForYou",
-      vivo: "processi.session.stateRunning",
-      interrotto: "processi.session.stateInterrupted",
-      errore: "processi.session.stateError",
-      /*
-       * ⛔⛔ 07/9, misurato: premi «ferma», il giro si chiude come chiedevi, e la riga diceva
-       * **«errore»** — perche il giro finisce con un `RunError` di codice `fermato` e l'elenco
-       * conosceva solo l'esito, non il motivo. Fermare non e sbagliare, e nemmeno concludere.
-       * Ricerca 07/09/2026: un annullamento chiesto dalla persona non e ne
-       * `end_turn` (fa sembrare completamento uno stop) ne `agent_error` (fa sembrare guasto un gesto
-       * voluto): e un terzo esito. Qui si chiama «fermata».
-       */
-      fermata: "processi.session.stateStopped",
-      "in-pausa": "processi.session.statePaused",
-      successo: "processi.session.stateDone",
-      ignoto: "processi.session.stateDoneNoOutcome",
-      pendente: "processi.session.statePending"
-    });
-    SVG_NS_CONTEGGIO = "http://www.w3.org/2000/svg";
-  }
-});
-
 // src/components/range-scia.js
 function percentualeRange(valore, min = 0, max = 100) {
   const v = Number(valore);
@@ -30023,53 +30817,53 @@ function datiRuntimeModello(r = {}) {
   const pronto = r.runtimeState === "ready";
   const avvisoMotore = !m ? "" : m.ripiego && pronto ? t("modelli.runtime.cpuFallback") : m.ripiego && r.runtimeState === "failed" ? t("modelli.runtime.cpuFallbackFailed") : m.proposta?.a === "cpu" ? t("modelli.runtime.cpuProposal") : "";
   const riprovaGrafica = Boolean(m?.ripiego && pronto);
-  return { nome: nomi[r.runtimeId] || r.runtimeId || t("modelli.runtime.unknownEngine"), stato: stato2, tono: raggiunto && (!locale || r.runtimeState === "ready") && !errore2 ? "success" : "warning", motore, avvisoMotore, riprovaGrafica, modelli: !raggiunto ? t("modelli.runtime.availabilityUnverified") : r.modelsError ? t("modelli.runtime.modelsReadFailed") : models.length ? tn("modelli.runtime.oneModelAvailable", "modelli.runtime.manyModelsAvailable", models.length) : t("modelli.runtime.noModels"), nomi: raggiunto && !r.modelsError ? models.map((m2) => m2.name || m2.id).filter(Boolean) : [], caricamento: raggiunto && r.runtimeId === "llama.cpp" ? r.runtimeState === "ready" ? t("modelli.runtime.modelLoaded") : ["stopped", "unavailable"].includes(r.runtimeState) ? t("modelli.runtime.noModelLoaded") : t("modelli.runtime.notDetected") : t("modelli.runtime.notDetected"), indirizzo: r.baseUrl || t("modelli.runtime.addressNotExposed"), data: typeof r.observedAt === "string" && !Number.isNaN(Date.parse(r.observedAt)) ? new Date(r.observedAt).toLocaleString(localeUI6(), { timeZone: "Europe/Rome" }) : t("modelli.runtime.dateNotDetected"), errore: errore2 };
+  return { nome: nomi[r.runtimeId] || r.runtimeId || t("modelli.runtime.unknownEngine"), stato: stato2, tono: raggiunto && (!locale || r.runtimeState === "ready") && !errore2 ? "success" : "warning", motore, avvisoMotore, riprovaGrafica, modelli: !raggiunto ? t("modelli.runtime.availabilityUnverified") : r.modelsError ? t("modelli.runtime.modelsReadFailed") : models.length ? tn("modelli.runtime.oneModelAvailable", "modelli.runtime.manyModelsAvailable", models.length) : t("modelli.runtime.noModels"), nomi: raggiunto && !r.modelsError ? models.map((m2) => m2.name || m2.id).filter(Boolean) : [], caricamento: raggiunto && r.runtimeId === "llama.cpp" ? r.runtimeState === "ready" ? t("modelli.runtime.modelLoaded") : ["stopped", "unavailable"].includes(r.runtimeState) ? t("modelli.runtime.noModelLoaded") : t("modelli.runtime.notDetected") : t("modelli.runtime.notDetected"), indirizzo: r.baseUrl || t("modelli.runtime.addressNotExposed"), data: typeof r.observedAt === "string" && !Number.isNaN(Date.parse(r.observedAt)) ? new Date(r.observedAt).toLocaleString(localeUI7(), { timeZone: "Europe/Rome" }) : t("modelli.runtime.dateNotDetected"), errore: errore2 };
 }
-function el6(tag2, cls, txt) {
+function el7(tag2, cls, txt) {
   const n = document.createElement(tag2);
   if (cls) n.className = cls;
   if (txt != null) n.textContent = txt;
   return n;
 }
 function creaRuntimeModello(runtime) {
-  const d = datiRuntimeModello(runtime), card = el6("article", "talos-card talos-card--pad talos-runtime-card");
+  const d = datiRuntimeModello(runtime), card = el7("article", "talos-card talos-card--pad talos-runtime-card");
   card.dataset.c = "RuntimeCard";
   card.dataset.runtimeId = runtime.runtimeId || "";
   card.dataset.runtimeState = runtime.state || "unknown";
-  const head = el6("div", "talos-cluster"), name = el6("h3", "talos-lab__heading", d.nome);
+  const head = el7("div", "talos-cluster"), name = el7("h3", "talos-lab__heading", d.nome);
   name.dataset.runtimeName = "";
-  const badge6 = el6("span", "talos-badge talos-badge--sm talos-badge--" + d.tono, d.stato);
+  const badge6 = el7("span", "talos-badge talos-badge--sm talos-badge--" + d.tono, d.stato);
   badge6.dataset.c = "Badge";
   head.append(name, badge6);
   card.append(head);
-  const status = el6("p", "talos-muted", d.modelli);
+  const status = el7("p", "talos-muted", d.modelli);
   status.dataset.runtimeModels = "";
   card.append(status);
   if (d.nomi.length) {
-    const list = el6("ul", "talos-runtime-card__models");
-    for (const name2 of d.nomi) list.append(el6("li", "", name2));
+    const list = el7("ul", "talos-runtime-card__models");
+    for (const name2 of d.nomi) list.append(el7("li", "", name2));
     card.append(list);
   }
   for (const [label, value, key] of [[t("modelli.runtime.loadingLabel"), d.caricamento, "loaded"], [t("modelli.runtime.addressLabel"), d.indirizzo, "address"], [t("modelli.runtime.checkLabel"), d.data, "date"]]) {
-    const row = el6("div", "talos-kv"), v = el6("span", "talos-kv__v", value);
+    const row = el7("div", "talos-kv"), v = el7("span", "talos-kv__v", value);
     v.dataset.runtimeValue = key;
-    row.append(el6("span", "talos-kv__k", label), v);
+    row.append(el7("span", "talos-kv__k", label), v);
     card.append(row);
   }
   if (d.motore) {
-    const row = el6("div", "talos-kv"), v = el6("span", "talos-kv__v", d.motore.replace(t("modelli.runtime.enginePrefix"), ""));
+    const row = el7("div", "talos-kv"), v = el7("span", "talos-kv__v", d.motore.replace(t("modelli.runtime.enginePrefix"), ""));
     v.dataset.runtimeValue = "engine";
-    row.append(el6("span", "talos-kv__k", t("modelli.runtime.localEngineLabel")), v);
+    row.append(el7("span", "talos-kv__k", t("modelli.runtime.localEngineLabel")), v);
     card.append(row);
   }
   if (d.avvisoMotore) {
-    const avviso = el6("p", "talos-muted talos-runtime-card__avviso", d.avvisoMotore);
+    const avviso = el7("p", "talos-muted talos-runtime-card__avviso", d.avvisoMotore);
     avviso.setAttribute("role", "status");
     avviso.dataset.runtimeEngineNotice = "";
     card.append(avviso);
   }
   if (d.riprovaGrafica) {
-    const riprova = el6("button", "talos-button talos-button--secondary talos-button--sm", t("modelli.runtime.retryGpu"));
+    const riprova = el7("button", "talos-button talos-button--secondary talos-button--sm", t("modelli.runtime.retryGpu"));
     riprova.type = "button";
     riprova.dataset.c = "Button";
     riprova.dataset.runtimeRetryGpu = "";
@@ -30080,7 +30874,7 @@ function creaRuntimeModello(runtime) {
     card.append(riprova);
   }
   if (d.errore) {
-    const error = el6("p", "talos-muted talos-runtime-card__error", t("modelli.runtime.errorDetail", { detail: dettaglioRuntime(d.errore) }));
+    const error = el7("p", "talos-muted talos-runtime-card__error", t("modelli.runtime.errorDetail", { detail: dettaglioRuntime(d.errore) }));
     error.dataset.runtimeError = "";
     error.title = d.errore;
     card.append(error);
@@ -30092,7 +30886,7 @@ function aggiornaElencoRuntime(list, runtimes = [], { caricamento = false, error
   list.className = "talos-runtime-list";
   list.setAttribute("aria-busy", String(caricamento));
   if (caricamento || errore2 || !runtimes.length) {
-    const empty3 = el6("p", "talos-muted", caricamento ? t("modelli.runtime.checkingEngines") : errore2 ? t("modelli.runtime.readFailed", { error: errore2.message || errore2 }) : t("modelli.runtime.noConfiguredEngines"));
+    const empty3 = el7("p", "talos-muted", caricamento ? t("modelli.runtime.checkingEngines") : errore2 ? t("modelli.runtime.readFailed", { error: errore2.message || errore2 }) : t("modelli.runtime.noConfiguredEngines"));
     empty3.dataset.c = "EmptyState";
     if (errore2) empty3.setAttribute("role", "alert");
     list.replaceChildren(empty3);
@@ -30126,11 +30920,11 @@ function montaPannelloRuntime(gate) {
   const backend = gate.querySelector("#modelLabRuntimeSelect")?.closest("label")?.querySelector("span");
   if (backend) backend.textContent = t("modelli.runtime.engineLabel");
 }
-var localeUI6, nomi, DETTAGLI_RUNTIME, codiceNudo;
+var localeUI7, nomi, DETTAGLI_RUNTIME, codiceNudo;
 var init_runtime_modelli = __esm({
   "src/components/runtime-modelli.js"() {
     init_lingua();
-    localeUI6 = () => linguaCorrenteDiT() === "en" ? "en-US" : "it-IT";
+    localeUI7 = () => linguaCorrenteDiT() === "en" ? "en-US" : "it-IT";
     nomi = { ollama: "Ollama", lmstudio: "LM Studio", "llama.cpp": "llama.cpp" };
     DETTAGLI_RUNTIME = {
       get RUNTIME_UNREACHABLE() {
@@ -30153,7 +30947,7 @@ function datiMemoria(capacita, runtimes = [], { erroreRuntime = "" } = {}) {
   const c = normalizzaCapacita(capacita), ll = runtimes.find((r) => r.runtimeId === "llama.cpp");
   return { totale: c.memory.totalBytes, libera: c.memory.freeBytes, usata: c.memory.totalBytes - c.memory.freeBytes, percentuale: (1 - c.memory.freeBytes / c.memory.totalBytes) * 100, discoDisponibile: c.storage.availableBytes, discoRiserva: c.storage.reserveBytes, discoAllocabile: c.storage.allocatableBytes, caricato: erroreRuntime ? null : ll?.runtimeState === "ready" };
 }
-function el7(tag2, cls, txt) {
+function el8(tag2, cls, txt) {
   const n = document.createElement(tag2);
   if (cls) n.className = cls;
   if (txt != null) n.textContent = txt;
@@ -30178,11 +30972,11 @@ function freschezzaMisura(measuredAt, adesso = Date.now()) {
   return adesso - istante2 < TENUTA_MISURA_MS ? "fresca" : "vecchia";
 }
 function aggiornaBadgeEta(card) {
-  const nodo15 = card.querySelector("[data-memory-date]");
-  if (!nodo15 || card.dataset.memoryData !== "misurata") return;
+  const nodo17 = card.querySelector("[data-memory-date]");
+  if (!nodo17 || card.dataset.memoryData !== "misurata") return;
   const età = etaMisura(card.dataset.memoryMisuratoIl);
   if (età === null) return;
-  nodo15.textContent = t("modelli.memory.measuredAtAge", { time: new Date(card.dataset.memoryMisuratoIl).toLocaleTimeString(localeUI7(), { timeZone: "Europe/Rome" }), age: età });
+  nodo17.textContent = t("modelli.memory.measuredAtAge", { time: new Date(card.dataset.memoryMisuratoIl).toLocaleTimeString(localeUI8(), { timeZone: "Europe/Rome" }), age: età });
 }
 function accendiBattito() {
   if (battito !== null) return;
@@ -30204,33 +30998,33 @@ function accendiBattito() {
   }, RITMO_ETA_MS);
 }
 function creaMisuraMemoria(dati = {}) {
-  const card = el7("section", "talos-card talos-card--pad system-card");
+  const card = el8("section", "talos-card talos-card--pad system-card");
   card.dataset.c = "MemoryMeter";
   card.dataset.memoryMeter = "";
   card.dataset.sistemaCard = "memoria";
-  const head = el7("div", "section-heading talos-cluster");
-  head.append(el7("h3", "talos-lab__heading", t("modelli.memory.heading")));
-  const date = el7("span", "talos-badge talos-badge--sm");
+  const head = el8("div", "section-heading talos-cluster");
+  head.append(el8("h3", "talos-lab__heading", t("modelli.memory.heading")));
+  const date = el8("span", "talos-badge talos-badge--sm");
   date.dataset.memoryDate = "";
   date.dataset.c = "Badge";
   head.append(date);
   card.append(head);
-  const errore2 = el7("p", "talos-muted");
+  const errore2 = el8("p", "talos-muted");
   errore2.dataset.memoryError = "";
   errore2.setAttribute("role", "alert");
   errore2.hidden = true;
   card.append(errore2);
-  const eroe = el7("p", "system-value");
-  const valoreEroe = el7("span", "", null);
+  const eroe = el8("p", "system-value");
+  const valoreEroe = el8("span", "", null);
   valoreEroe.dataset.memoryValue = EROE;
-  const numeroEroe = el7("span", "", null);
+  const numeroEroe = el8("span", "", null);
   numeroEroe.dataset.memoryHero = "";
-  const unita = el7("small", "", null);
+  const unita = el8("small", "", null);
   unita.dataset.memoryUnit = "";
   valoreEroe.append(numeroEroe, unita);
   eroe.append(valoreEroe);
   card.append(eroe);
-  const meter = el7("meter", "talos-lab__meter budget-track large-track");
+  const meter = el8("meter", "talos-lab__meter budget-track large-track");
   meter.id = "memoriaModello";
   meter.min = 0;
   meter.max = 100;
@@ -30239,26 +31033,26 @@ function creaMisuraMemoria(dati = {}) {
   meter.optimum = 0;
   meter.dataset.memoryBar = "";
   card.append(meter);
-  const label = el7("p", "talos-muted");
+  const label = el8("p", "talos-muted");
   label.dataset.memoryLabel = "";
   card.append(label);
-  const fatti = el7("dl", "model-facts");
+  const fatti = el8("dl", "model-facts");
   for (const [key, title] of CAMPI()) {
     if (key === EROE) continue;
-    if (key === "discoDisponibile") fatti.append(el7("hr", "talos-lab__rule"));
-    const row = el7("div", "talos-kv");
-    const value = el7("dd", "talos-kv__v");
+    if (key === "discoDisponibile") fatti.append(el8("hr", "talos-lab__rule"));
+    const row = el8("div", "talos-kv");
+    const value = el8("dd", "talos-kv__v");
     value.dataset.memoryValue = key;
-    row.append(el7("dt", "talos-kv__k", title), value);
+    row.append(el8("dt", "talos-kv__k", title), value);
     fatti.append(row);
   }
   card.append(fatti);
-  const tenuta = el7("p", "talos-muted talos-lab__space");
+  const tenuta = el8("p", "talos-muted talos-lab__space");
   tenuta.dataset.memoryTenuta = "";
   card.append(tenuta);
-  const actions = el7("div", "talos-cluster talos-lab__space");
+  const actions = el8("div", "talos-cluster talos-lab__space");
   for (const [key, title] of [["refresh", t("modelli.memory.remeasure")], ["unload", t("modelli.memory.unloadModel")]]) {
-    const b = el7("button", "talos-button talos-button--secondary talos-button--sm", title);
+    const b = el8("button", "talos-button talos-button--secondary talos-button--sm", title);
     b.type = "button";
     b.dataset.c = "Button";
     b.dataset.memoryAction = key;
@@ -30267,10 +31061,10 @@ function creaMisuraMemoria(dati = {}) {
     actions.append(b);
   }
   card.append(actions);
-  const detail = el7("p", "talos-muted talos-lab__space");
+  const detail = el8("p", "talos-muted talos-lab__space");
   detail.dataset.memoryDetail = "";
   card.append(detail);
-  card.append(el7("p", "talos-muted inline-notice", t("modelli.memory.notice")));
+  card.append(el8("p", "talos-muted inline-notice", t("modelli.memory.notice")));
   aggiornaMisuraMemoria(card, dati);
   return card;
 }
@@ -30297,7 +31091,7 @@ function aggiornaMisuraMemoria(card, stato2 = {}) {
   const badge6 = card.querySelector("[data-memory-date]");
   if (badge6) {
     const età = d ? etaMisura(capacita.measuredAt) : null;
-    badge6.textContent = caricamento ? t("modelli.memory.measuring") : errore2 ? t("modelli.memory.measurementUnavailable") : caricamentoRuntime && !capacita ? t("modelli.memory.measuring") : d ? t("modelli.memory.measuredAt", { time: new Date(capacita.measuredAt).toLocaleTimeString(localeUI7(), { timeZone: "Europe/Rome" }), age: età ? " · " + età : "" }) : t("modelli.memory.notYetMeasured");
+    badge6.textContent = caricamento ? t("modelli.memory.measuring") : errore2 ? t("modelli.memory.measurementUnavailable") : caricamentoRuntime && !capacita ? t("modelli.memory.measuring") : d ? t("modelli.memory.measuredAt", { time: new Date(capacita.measuredAt).toLocaleTimeString(localeUI8(), { timeZone: "Europe/Rome" }), age: età ? " · " + età : "" }) : t("modelli.memory.notYetMeasured");
     badge6.className = "talos-badge talos-badge--sm" + (errore2 ? " talos-badge--danger" : freschezza === "assente" ? "" : freschezza === "vecchia" ? " talos-badge--warning" : " talos-badge--success");
   }
   set3("[data-memory-hero]", d ? giga(d[EROE]) : t("modelli.memory.notMeasured"));
@@ -30309,7 +31103,7 @@ function aggiornaMisuraMemoria(card, stato2 = {}) {
   const pressione = d?.percentuale >= 90 ? "critico" : d?.percentuale >= 75 ? "alto" : "normale";
   card.dataset.memoryLevel = pressione;
   const avviso = pressione === "critico" ? t("modelli.memory.ramAlmostExhausted") : pressione === "alto" ? t("modelli.memory.highRamUsage") : "";
-  const label = d ? t("modelli.memory.usage", { used: byte(d.usata), total: byte(d.totale), percent: new Intl.NumberFormat(localeUI7(), { maximumFractionDigits: 1 }).format(d.percentuale), notice: avviso }) : t("modelli.memory.memoryNotMeasured");
+  const label = d ? t("modelli.memory.usage", { used: byte(d.usata), total: byte(d.totale), percent: new Intl.NumberFormat(localeUI8(), { maximumFractionDigits: 1 }).format(d.percentuale), notice: avviso }) : t("modelli.memory.memoryNotMeasured");
   set3("[data-memory-label]", label);
   const meter = card.querySelector("[data-memory-bar]");
   if (meter) {
@@ -30319,7 +31113,7 @@ function aggiornaMisuraMemoria(card, stato2 = {}) {
   }
   const caricato = !erroreRuntime && runtimeVerificato && !caricamentoRuntime && runtimes.some((r) => r.runtimeId === "llama.cpp" && r.runtimeState === "ready");
   set3("[data-memory-tenuta]", caricamentoRuntime || !runtimeVerificato ? t("modelli.memory.checkingModel") : erroreRuntime ? t("modelli.memory.modelStateUnverified", { error: erroreRuntime }) : caricato ? t("modelli.memory.modelLoaded") : t("modelli.memory.noModelLoaded"));
-  set3("[data-memory-detail]", capacita && !errore2 ? [capacita.platform, capacita.arch, new Date(capacita.measuredAt).toLocaleString(localeUI7(), { timeZone: "Europe/Rome" })].filter(Boolean).join(" · ") : t("modelli.memory.retryMeasurement"));
+  set3("[data-memory-detail]", capacita && !errore2 ? [capacita.platform, capacita.arch, new Date(capacita.measuredAt).toLocaleString(localeUI8(), { timeZone: "Europe/Rome" })].filter(Boolean).join(" · ") : t("modelli.memory.retryMeasurement"));
   const refresh = card.querySelector("[data-memory-action=refresh]");
   if (refresh) refresh.disabled = caricamento || caricamentoRuntime || scaricamento;
   const scarica = card.querySelector("[data-memory-action=unload]");
@@ -30401,14 +31195,14 @@ function vesteCardRuntime(originale) {
   if (layout) layout.dataset.sistemaSchede = "v1";
   gate.dataset.sistemaCard = "runtime";
 }
-var localeUI7, numero3, byte, giga, TENUTA_MISURA_MS, RITMO_ETA_MS, SOGLIA_ADESSO_S, CARD_VIVE, battito, CAMPI, EROE, sposta, primo;
+var localeUI8, numero3, byte, giga, TENUTA_MISURA_MS, RITMO_ETA_MS, SOGLIA_ADESSO_S, CARD_VIVE, battito, CAMPI, EROE, sposta, primo;
 var init_misura_memoria = __esm({
   "src/components/misura-memoria.js"() {
     init_lingua();
-    localeUI7 = () => linguaCorrenteDiT() === "en" ? "en-US" : "it-IT";
+    localeUI8 = () => linguaCorrenteDiT() === "en" ? "en-US" : "it-IT";
     numero3 = (n) => Number.isFinite(n) && n >= 0;
-    byte = (n) => new Intl.NumberFormat(localeUI7(), { maximumFractionDigits: 1 }).format(n / 1024 ** 3) + " GiB";
-    giga = (n) => new Intl.NumberFormat(localeUI7(), { maximumFractionDigits: 1 }).format(n / 1024 ** 3);
+    byte = (n) => new Intl.NumberFormat(localeUI8(), { maximumFractionDigits: 1 }).format(n / 1024 ** 3) + " GiB";
+    giga = (n) => new Intl.NumberFormat(localeUI8(), { maximumFractionDigits: 1 }).format(n / 1024 ** 3);
     TENUTA_MISURA_MS = 6e4;
     RITMO_ETA_MS = 1e3;
     SOGLIA_ADESSO_S = 5;
@@ -30422,15 +31216,15 @@ var init_misura_memoria = __esm({
       ["discoAllocabile", t("modelli.memory.diskAllocatable"), "machineAllocatableMetric"]
     ];
     EROE = "libera";
-    sposta = (genitore, nodo15) => {
+    sposta = (genitore, nodo17) => {
       try {
         if (typeof genitore.moveBefore === "function") {
-          genitore.moveBefore(nodo15, null);
+          genitore.moveBefore(nodo17, null);
           return;
         }
       } catch {
       }
-      genitore.append(nodo15);
+      genitore.append(nodo17);
     };
     primo = (radici, ...selettori) => {
       for (const selettore2 of selettori) for (const radice2 of radici) {
@@ -30529,36 +31323,36 @@ function normalizzaProvaRicerca(r) {
   if (!oggetto2(r) || typeof r.fonte !== "string" || !r.fonte.trim() || !Number.isInteger(r.risultati) || r.risultati < 0 || !Array.isArray(r.titoli) || !r.titoli.every((t2) => typeof t2 === "string")) throw Error(t("sezioni.searchSource.error.invalidTest"));
   return { fonte: r.fonte, risultati: r.risultati, titoli: [...r.titoli] };
 }
-function nodo2(tag2, classe, testo2) {
+function nodo4(tag2, classe, testo2) {
   const e = document.createElement(tag2);
   if (classe) e.className = classe;
   if (testo2 != null) e.textContent = testo2;
   return e;
 }
 function bottone2(testo2, azione, fn2) {
-  const e = nodo2("button", "talos-button talos-button--secondary", testo2);
+  const e = nodo4("button", "talos-button talos-button--secondary", testo2);
   e.type = "button";
   e.dataset.searchAction = azione;
   e.addEventListener("click", () => fn2?.());
   return e;
 }
 function creaScelteFonte(dati, { scegli } = {}) {
-  const stato2 = normalizzaFonteRicerca(dati), gruppo = nodo2("div", "talos-choice-grid");
+  const stato2 = normalizzaFonteRicerca(dati), gruppo = nodo4("div", "talos-choice-grid");
   gruppo.dataset.c = "ChoiceCards";
   gruppo.setAttribute("role", "radiogroup");
   gruppo.setAttribute("aria-label", t("sezioni.searchSource.groupLabel"));
   const fonti = [...stato2.fonti, { id: "off", label: t("sezioni.searchSource.noSearch"), nota: NOTE.off }];
   for (const fonte of fonti) {
-    const b = nodo2("button", "talos-choice");
+    const b = nodo4("button", "talos-choice");
     b.type = "button";
     b.dataset.searchSource = fonte.id;
     b.setAttribute("role", "radio");
     b.setAttribute("aria-checked", String(stato2.source === fonte.id));
     b.tabIndex = stato2.source === fonte.id ? 0 : -1;
-    const title = nodo2("span", "talos-choice__title", fonte.label);
+    const title = nodo4("span", "talos-choice__title", fonte.label);
     title.id = "fonte-label-" + fonte.id;
     b.setAttribute("aria-labelledby", title.id);
-    b.append(title, nodo2("span", "talos-muted", fonte.id === "off" ? t("sezioni.searchSource.choice.off") : fonte.needsKey ? fonte.keyConfigured ? t("sezioni.searchSource.choice.keyPresent") : t("sezioni.searchSource.choice.keyNeeded") : fonte.needsEndpoint ? t("sezioni.searchSource.choice.endpointNeeded") : t("sezioni.searchSource.choice.keyless")));
+    b.append(title, nodo4("span", "talos-muted", fonte.id === "off" ? t("sezioni.searchSource.choice.off") : fonte.needsKey ? fonte.keyConfigured ? t("sezioni.searchSource.choice.keyPresent") : t("sezioni.searchSource.choice.keyNeeded") : fonte.needsEndpoint ? t("sezioni.searchSource.choice.endpointNeeded") : t("sezioni.searchSource.choice.keyless")));
     b.addEventListener("click", () => {
       if (fonte.id !== stato2.source) scegli?.(fonte.id);
     });
@@ -30575,14 +31369,14 @@ function creaScelteFonte(dati, { scegli } = {}) {
   return gruppo;
 }
 function aggiornaFonteRicerca(mount, dati, { scegli, salvaChiave, rimuoviChiave, salvaIndirizzo, prova, ricarica, feedback = "", query = "TALOS local-first coding agent", esito } = {}) {
-  const s = normalizzaFonteRicerca(dati), d = nodo2("div", "talos-settings__section");
+  const s = normalizzaFonteRicerca(dati), d = nodo4("div", "talos-settings__section");
   d.dataset.searchDetails = "";
   const scelta = s.scelta;
-  d.append(nodo2("p", "talos-muted", NOTE[s.source]));
+  d.append(nodo4("p", "talos-muted", NOTE[s.source]));
   const campo3 = (titolo2, type, value, id4) => {
-    const label = nodo2("label", "talos-field");
-    label.append(nodo2("span", "talos-setting__label", titolo2));
-    const input = nodo2("input", "talos-field__input");
+    const label = nodo4("label", "talos-field");
+    label.append(nodo4("span", "talos-setting__label", titolo2));
+    const input = nodo4("input", "talos-field__input");
     input.type = type;
     input.value = value;
     input.autocomplete = "off";
@@ -30598,7 +31392,7 @@ function aggiornaFonteRicerca(mount, dati, { scegli, salvaChiave, rimuoviChiave,
     key.dataset.searchKeyInput = scelta.id;
     key.maxLength = 4096;
     key.placeholder = scelta.keyConfigured ? t("sezioni.searchSource.key.replace") : scelta.id === "custom" ? t("sezioni.searchSource.key.optional") : t("sezioni.searchSource.key.paste");
-    const a = nodo2("div", "talos-settings__actions"), save = bottone2(t("sezioni.searchSource.key.save"), "save-key", () => {
+    const a = nodo4("div", "talos-settings__actions"), save = bottone2(t("sezioni.searchSource.key.save"), "save-key", () => {
       if (!key.value.trim()) {
         key.setCustomValidity(t("sezioni.searchSource.key.required"));
         key.reportValidity();
@@ -30615,7 +31409,7 @@ function aggiornaFonteRicerca(mount, dati, { scegli, salvaChiave, rimuoviChiave,
     });
     a.append(save);
     if (LINKS[scelta.id]) {
-      const link = nodo2("a", "talos-button talos-button--secondary", t("sezioni.searchSource.key.get", { source: scelta.label }));
+      const link = nodo4("a", "talos-button talos-button--secondary", t("sezioni.searchSource.key.get", { source: scelta.label }));
       link.href = LINKS[scelta.id];
       link.target = "_blank";
       link.rel = "noopener noreferrer";
@@ -30648,11 +31442,11 @@ function aggiornaFonteRicerca(mount, dati, { scegli, salvaChiave, rimuoviChiave,
         salva.click();
       }
     });
-    const a = nodo2("div", "talos-settings__actions");
+    const a = nodo4("div", "talos-settings__actions");
     a.append(salva);
     d.append(a);
   }
-  const readiness = nodo2("p", "talos-muted", esito ? t("sezioni.searchSource.status.answered") : s.messaggio);
+  const readiness = nodo4("p", "talos-muted", esito ? t("sezioni.searchSource.status.answered") : s.messaggio);
   readiness.dataset.searchReadiness = s.readiness;
   d.append(readiness);
   const q2 = campo3(t("sezioni.searchSource.test.queryLabel"), "text", query, "fonte-query");
@@ -30675,26 +31469,26 @@ function aggiornaFonteRicerca(mount, dati, { scegli, salvaChiave, rimuoviChiave,
       test.click();
     }
   });
-  const azioni = nodo2("div", "talos-settings__actions");
+  const azioni = nodo4("div", "talos-settings__actions");
   azioni.append(test, bottone2(t("sezioni.searchSource.test.reload"), "reload", ricarica));
   d.append(azioni);
-  const stato2 = nodo2("p", "talos-muted", feedback);
+  const stato2 = nodo4("p", "talos-muted", feedback);
   stato2.dataset.searchFeedback = "";
   stato2.setAttribute("role", "status");
   stato2.hidden = !feedback;
-  const errore2 = nodo2("p", "talos-muted");
+  const errore2 = nodo4("p", "talos-muted");
   errore2.dataset.searchError = "";
   errore2.setAttribute("role", "alert");
   errore2.hidden = true;
-  const risultato = nodo2("div", "talos-settings__section");
+  const risultato = nodo4("div", "talos-settings__section");
   risultato.dataset.searchResult = "";
   risultato.hidden = !esito;
   if (esito) {
     const e = normalizzaProvaRicerca(esito);
-    risultato.append(nodo2("h4", "", tn("sezioni.searchSource.result.headingOne", "sezioni.searchSource.result.headingMany", e.risultati, { source: e.fonte })));
-    const ul = nodo2("ul", "");
-    for (const t2 of e.titoli) ul.append(nodo2("li", "", t2));
-    risultato.append(ul, nodo2("p", "talos-muted", t("sezioni.searchSource.result.note")));
+    risultato.append(nodo4("h4", "", tn("sezioni.searchSource.result.headingOne", "sezioni.searchSource.result.headingMany", e.risultati, { source: e.fonte })));
+    const ul = nodo4("ul", "");
+    for (const t2 of e.titoli) ul.append(nodo4("li", "", t2));
+    risultato.append(ul, nodo4("p", "talos-muted", t("sezioni.searchSource.result.note")));
   }
   mount.replaceChildren(creaScelteFonte(dati, { scegli }), d, stato2, errore2, risultato);
 }
@@ -32821,7 +33615,7 @@ function creaAnteprimaScena(contenitore, { document: doc = globalThis.document, 
     }
   };
 }
-function nodo3(doc, tag2, classe, testo2) {
+function nodo5(doc, tag2, classe, testo2) {
   const el35 = doc.createElement(tag2);
   if (classe) el35.className = classe;
   if (testo2 !== void 0 && testo2 !== null) el35.textContent = String(testo2);
@@ -32837,22 +33631,22 @@ function icona2(doc, nome) {
   return svg2;
 }
 function miniConversazione(doc) {
-  const scena = nodo3(doc, "div", "td-mini");
+  const scena = nodo5(doc, "div", "td-mini");
   scena.setAttribute("inert", "");
   scena.setAttribute("aria-hidden", "true");
-  const risposta = nodo3(doc, "div", "td-mini-riga");
-  risposta.append(nodo3(doc, "span", "td-mini-avatar"));
-  const bollaRisposta = nodo3(doc, "div", "td-mini-bolla td-mini-bolla--assistente");
+  const risposta = nodo5(doc, "div", "td-mini-riga");
+  risposta.append(nodo5(doc, "span", "td-mini-avatar"));
+  const bollaRisposta = nodo5(doc, "div", "td-mini-bolla td-mini-bolla--assistente");
   bollaRisposta.append(
-    nodo3(doc, "span", "td-mini-linea", t("varie.themeStudio.mini.reply")),
-    nodo3(doc, "span", "td-mini-linea td-mini-linea--corta")
+    nodo5(doc, "span", "td-mini-linea", t("varie.themeStudio.mini.reply")),
+    nodo5(doc, "span", "td-mini-linea td-mini-linea--corta")
   );
   risposta.append(bollaRisposta);
-  const domanda = nodo3(doc, "div", "td-mini-riga td-mini-riga--utente");
-  domanda.append(nodo3(doc, "div", "td-mini-bolla td-mini-bolla--utente", t("varie.themeStudio.mini.question")));
-  const composer = nodo3(doc, "div", "td-mini-composer");
-  composer.append(nodo3(doc, "span", "td-mini-placeholder", t("varie.themeStudio.mini.placeholder")));
-  const invio = nodo3(doc, "span", "td-mini-invio");
+  const domanda = nodo5(doc, "div", "td-mini-riga td-mini-riga--utente");
+  domanda.append(nodo5(doc, "div", "td-mini-bolla td-mini-bolla--utente", t("varie.themeStudio.mini.question")));
+  const composer = nodo5(doc, "div", "td-mini-composer");
+  composer.append(nodo5(doc, "span", "td-mini-placeholder", t("varie.themeStudio.mini.placeholder")));
+  const invio = nodo5(doc, "span", "td-mini-invio");
   invio.append(icona2(doc, "send"));
   composer.append(invio);
   scena.append(risposta, domanda, composer);
@@ -32863,31 +33657,31 @@ function apriStudioTemi({ document: doc = globalThis.document } = {}) {
   const semi = leggiSemiTemi(doc);
   let { tema: scelto, modo } = aspettoCorrente(doc);
   if (!temi.some((t2) => t2.id === scelto)) scelto = temi.some((t2) => t2.id === "forge") ? "forge" : temi[0]?.id || "forge";
-  const studio = nodo3(doc, "div", "td-theme-studio");
-  const elenco3 = nodo3(doc, "div", "td-theme-list");
+  const studio = nodo5(doc, "div", "td-theme-studio");
+  const elenco3 = nodo5(doc, "div", "td-theme-list");
   elenco3.setAttribute("role", "radiogroup");
   elenco3.setAttribute("aria-label", t("varie.themeStudio.themeListLabel"));
-  const destra = nodo3(doc, "div", "td-theme-display");
-  const testa = nodo3(doc, "div", "td-theme-testa");
-  const titolo2 = nodo3(doc, "h3", "", "");
-  const descrizione = nodo3(doc, "p", "", "");
+  const destra = nodo5(doc, "div", "td-theme-display");
+  const testa = nodo5(doc, "div", "td-theme-testa");
+  const titolo2 = nodo5(doc, "h3", "", "");
+  const descrizione = nodo5(doc, "p", "", "");
   testa.append(titolo2, descrizione);
-  const anteprima4 = nodo3(doc, "div", "td-theme-preview");
+  const anteprima4 = nodo5(doc, "div", "td-theme-preview");
   const mini = miniConversazione(doc);
-  const didascalia = nodo3(doc, "div", "td-preview-caption");
-  const didascaliaScena = nodo3(doc, "span", "", "");
-  const didascaliaStato = nodo3(doc, "span", "", "");
+  const didascalia = nodo5(doc, "div", "td-preview-caption");
+  const didascaliaScena = nodo5(doc, "span", "", "");
+  const didascaliaStato = nodo5(doc, "span", "", "");
   didascalia.append(didascaliaScena, didascaliaStato);
   anteprima4.append(mini, didascalia);
-  const mensola = nodo3(doc, "div", "td-theme-mensola");
+  const mensola = nodo5(doc, "div", "td-theme-mensola");
   mensola.append(anteprima4);
-  const controlli = nodo3(doc, "div", "td-theme-controls");
-  const segmento = nodo3(doc, "div", "td-segment");
+  const controlli = nodo5(doc, "div", "td-theme-controls");
+  const segmento = nodo5(doc, "div", "td-segment");
   segmento.setAttribute("role", "group");
   segmento.setAttribute("aria-label", t("varie.themeStudio.modeGroupLabel"));
   const MODI = [["system", t("varie.themeStudio.mode.system")], ["light", t("varie.themeStudio.mode.light")], ["dark", t("varie.themeStudio.mode.dark")]];
   const bottoniModo = MODI.map(([valore, nome]) => {
-    const b = nodo3(doc, "button", "", nome);
+    const b = nodo5(doc, "button", "", nome);
     b.type = "button";
     b.dataset.modo = valore;
     b.addEventListener("click", () => {
@@ -32898,7 +33692,7 @@ function apriStudioTemi({ document: doc = globalThis.document } = {}) {
     segmento.append(b);
     return b;
   });
-  const pausa = nodo3(doc, "button", "td-studio-button", t("varie.themeStudio.stopPreview"));
+  const pausa = nodo5(doc, "button", "td-studio-button", t("varie.themeStudio.stopPreview"));
   pausa.type = "button";
   pausa.addEventListener("click", () => {
     vista?.alterna();
@@ -32911,9 +33705,9 @@ function apriStudioTemi({ document: doc = globalThis.document } = {}) {
   function rigaControllo(id4, { compatta = false } = {}) {
     const campo3 = campoDi(id4);
     if (!campo3) return null;
-    const riga2 = nodo3(doc, "div", compatta ? "td-studio-riga td-studio-riga--compatta" : "td-studio-riga");
+    const riga2 = nodo5(doc, "div", compatta ? "td-studio-riga td-studio-riga--compatta" : "td-studio-riga");
     riga2.dataset.studioControllo = id4;
-    const etichetta3 = nodo3(doc, "label", "td-studio-etichetta", titoloStudio(id4));
+    const etichetta3 = nodo5(doc, "label", "td-studio-etichetta", titoloStudio(id4));
     const idLocale = `td-studio-${id4}`;
     etichetta3.htmlFor = idLocale;
     riga2.append(etichetta3);
@@ -32934,7 +33728,7 @@ function apriStudioTemi({ document: doc = globalThis.document } = {}) {
       select.id = idLocale;
       select.className = "talos-select";
       for (const [valore, nome] of campo3.opzioni || []) {
-        const op = nodo3(doc, "option", "", nome);
+        const op = nodo5(doc, "option", "", nome);
         op.value = valore;
         select.append(op);
       }
@@ -32945,7 +33739,7 @@ function apriStudioTemi({ document: doc = globalThis.document } = {}) {
       riga2.append(select);
       selettori.push({ id: id4, elemento: select });
     } else {
-      const contenitore = nodo3(doc, "div", "td-studio-cursore");
+      const contenitore = nodo5(doc, "div", "td-studio-cursore");
       const cursore = doc.createElement("input");
       cursore.type = "range";
       cursore.id = idLocale;
@@ -32967,9 +33761,9 @@ function apriStudioTemi({ document: doc = globalThis.document } = {}) {
     return riga2;
   }
   function gruppo(titoloGruppo, ids, { compatta = false } = {}) {
-    const sezione2 = nodo3(doc, "section", "td-studio-gruppo");
-    sezione2.append(nodo3(doc, "h4", "", titoloGruppo));
-    const righe = nodo3(doc, "div", compatta ? "td-studio-righe td-studio-righe--due" : "td-studio-righe");
+    const sezione2 = nodo5(doc, "section", "td-studio-gruppo");
+    sezione2.append(nodo5(doc, "h4", "", titoloGruppo));
+    const righe = nodo5(doc, "div", compatta ? "td-studio-righe td-studio-righe--due" : "td-studio-righe");
     for (const id4 of ids) {
       const riga2 = rigaControllo(id4, { compatta });
       if (riga2) righe.append(riga2);
@@ -32979,7 +33773,7 @@ function apriStudioTemi({ document: doc = globalThis.document } = {}) {
   }
   const gruppoSfondo = gruppo(t("varie.themeStudio.group.background"), ["backgroundMotionToggle", "sceneOverrideSelect", "motionModeSelect", "motionQualitySelect"], { compatta: true });
   const gruppoCursori = gruppo(t("varie.themeStudio.group.sliders"), CURSORI_SCENA, { compatta: true });
-  const ripristina = nodo3(doc, "button", "td-studio-button", t("varie.themeStudio.resetMotion"));
+  const ripristina = nodo5(doc, "button", "td-studio-button", t("varie.themeStudio.resetMotion"));
   ripristina.type = "button";
   ripristina.addEventListener("click", () => {
     const vero = doc.getElementById("resetMotionButton");
@@ -32990,21 +33784,21 @@ function apriStudioTemi({ document: doc = globalThis.document } = {}) {
     }
   });
   gruppoCursori.append(ripristina);
-  const dettagli2 = nodo3(doc, "div", "td-theme-details");
+  const dettagli2 = nodo5(doc, "div", "td-theme-details");
   const datiTema = [t("varie.themeStudio.detail.material"), t("varie.themeStudio.detail.accent"), t("varie.themeStudio.detail.cardRadius")].map((nome) => {
-    const box = nodo3(doc, "div");
-    box.append(nodo3(doc, "span", "", nome));
-    const valore = nodo3(doc, "strong", "", "—");
+    const box = nodo5(doc, "div");
+    box.append(nodo5(doc, "span", "", nome));
+    const valore = nodo5(doc, "strong", "", "—");
     box.append(valore);
     dettagli2.append(box);
     return valore;
   });
-  const nota = nodo3(doc, "p", "td-theme-note", t("varie.themeStudio.note.scene"));
-  const approfondimento = nodo3(doc, "details", "td-theme-note");
-  approfondimento.append(nodo3(doc, "summary", "", t("varie.themeStudio.about.title")));
-  approfondimento.append(nodo3(doc, "p", "", t("varie.themeStudio.about.text")));
-  const azioni = nodo3(doc, "div", "td-theme-actions");
-  const vaiAImpostazioni = nodo3(doc, "button", "td-studio-button", t("varie.themeStudio.allAppearanceSettings"));
+  const nota = nodo5(doc, "p", "td-theme-note", t("varie.themeStudio.note.scene"));
+  const approfondimento = nodo5(doc, "details", "td-theme-note");
+  approfondimento.append(nodo5(doc, "summary", "", t("varie.themeStudio.about.title")));
+  approfondimento.append(nodo5(doc, "p", "", t("varie.themeStudio.about.text")));
+  const azioni = nodo5(doc, "div", "td-theme-actions");
+  const vaiAImpostazioni = nodo5(doc, "button", "td-studio-button", t("varie.themeStudio.allAppearanceSettings"));
   vaiAImpostazioni.type = "button";
   vaiAImpostazioni.addEventListener("click", () => {
     chiudiModale();
@@ -33014,17 +33808,17 @@ function apriStudioTemi({ document: doc = globalThis.document } = {}) {
   destra.append(testa, mensola, controlli, gruppoSfondo, gruppoCursori, dettagli2, nota, approfondimento, azioni);
   studio.append(elenco3, destra);
   const scelte = temi.map(({ id: id4, nome }) => {
-    const b = nodo3(doc, "button", "td-theme-choice");
+    const b = nodo5(doc, "button", "td-theme-choice");
     b.type = "button";
     b.setAttribute("role", "radio");
     b.dataset.tema = id4;
-    const pallino = nodo3(doc, "span", "td-palette-dot");
+    const pallino = nodo5(doc, "span", "td-palette-dot");
     pallino.setAttribute("aria-hidden", "true");
     const seme = semi.get(id4);
     if (seme?.accento) pallino.style.setProperty("--preview-accent", seme.accento);
     const fondo = fondoDelTema(seme, temaChiaro(seme) ? "light" : "dark");
     if (fondo) pallino.style.setProperty("--preview-bg", fondo);
-    const segno = nodo3(doc, "span", "td-theme-segno", "");
+    const segno = nodo5(doc, "span", "td-theme-segno", "");
     b.append(pallino, doc.createTextNode(nome), segno);
     b.addEventListener("click", () => {
       scelto = id4;
@@ -33153,14 +33947,14 @@ function montaScorciatoiaTemi(schermo, { document: doc = globalThis.document } =
     riga2.before(esistente);
     return esistente;
   }
-  const scheda = nodo3(doc, "section", "td-studio-rimando");
+  const scheda = nodo5(doc, "section", "td-studio-rimando");
   scheda.dataset.tdStudioTemi = "";
-  const copia3 = nodo3(doc, "div", "td-studio-rimando__copia");
-  copia3.append(nodo3(doc, "h3", "", t("varie.themeStudio.modalTitle")));
-  copia3.append(nodo3(doc, "p", "", t("varie.themeStudio.referral.text", { n: nomiTemi().length })));
+  const copia3 = nodo5(doc, "div", "td-studio-rimando__copia");
+  copia3.append(nodo5(doc, "h3", "", t("varie.themeStudio.modalTitle")));
+  copia3.append(nodo5(doc, "p", "", t("varie.themeStudio.referral.text", { n: nomiTemi().length })));
   const nomi2 = CONTROLLI_MIGRATI.map((id4) => titoloStudio(id4)).filter(Boolean);
-  copia3.append(nodo3(doc, "p", "td-studio-rimando__elenco", t("varie.themeStudio.referral.inside", { names: elenco(nomi2) })));
-  const apri = nodo3(doc, "button", "td-studio-button primary", t("varie.themeStudio.referral.open"));
+  copia3.append(nodo5(doc, "p", "td-studio-rimando__elenco", t("varie.themeStudio.referral.inside", { names: elenco(nomi2) })));
+  const apri = nodo5(doc, "button", "td-studio-button primary", t("varie.themeStudio.referral.open"));
   apri.type = "button";
   apri.prepend(icona2(doc, "image"));
   apri.addEventListener("click", () => apriStudioTemi({ document: doc }));
@@ -33482,7 +34276,7 @@ function scenaDellAspetto(doc = globalThis.document, disponibili = /* @__PURE__ 
   const { tema } = aspettoCorrente(doc);
   return scenaPerAspetto({ tema, scena: valoreAspetto("sceneOverrideSelect", doc) || "follow-theme" }, disponibili);
 }
-function nodo4(doc, tag2, classe, testo2) {
+function nodo6(doc, tag2, classe, testo2) {
   const el35 = doc.createElement(tag2);
   if (classe) el35.className = classe;
   if (testo2 !== void 0 && testo2 !== null) el35.textContent = String(testo2);
@@ -33504,38 +34298,38 @@ function montaAnteprimaTema(contenitore, {
   if (!contenitore || !doc?.createElement) return null;
   PROPRIETARI.get(contenitore)?.ferma();
   const testi = testiAnteprima(lingua || linguaDellaRadice(doc));
-  const colonna = nodo4(doc, "aside", "appearance-preview");
+  const colonna = nodo6(doc, "aside", "appearance-preview");
   colonna.setAttribute("aria-label", t(testi.etichetta));
-  const occhiello = nodo4(doc, "div", "eyebrow", t(testi.occhiello));
-  const finestra = nodo4(doc, "div", "preview-window theme-live-preview");
-  const chrome = nodo4(doc, "div", "preview-chrome");
-  const marchio = nodo4(doc, "small", "", testi.marchio);
-  chrome.append(nodo4(doc, "span"), nodo4(doc, "span"), nodo4(doc, "span"), marchio);
-  const corpo = nodo4(doc, "div", "preview-body");
+  const occhiello = nodo6(doc, "div", "eyebrow", t(testi.occhiello));
+  const finestra = nodo6(doc, "div", "preview-window theme-live-preview");
+  const chrome = nodo6(doc, "div", "preview-chrome");
+  const marchio = nodo6(doc, "small", "", testi.marchio);
+  chrome.append(nodo6(doc, "span"), nodo6(doc, "span"), nodo6(doc, "span"), marchio);
+  const corpo = nodo6(doc, "div", "preview-body");
   corpo.setAttribute("inert", "");
   corpo.setAttribute("aria-hidden", "true");
-  const data = nodo4(doc, "div", "preview-date", testi.data);
-  const titolo2 = nodo4(doc, "h3", "", testi.titolo);
-  const sottotitolo = nodo4(doc, "p", "", testi.sottotitolo);
-  const domanda = nodo4(doc, "div", "preview-message", testi.messaggio);
-  const risposta = nodo4(doc, "div", "preview-answer");
+  const data = nodo6(doc, "div", "preview-date", testi.data);
+  const titolo2 = nodo6(doc, "h3", "", testi.titolo);
+  const sottotitolo = nodo6(doc, "p", "", testi.sottotitolo);
+  const domanda = nodo6(doc, "div", "preview-message", testi.messaggio);
+  const risposta = nodo6(doc, "div", "preview-answer");
   const rispostaPrima = doc.createTextNode(testi.risposta[0]);
   const rispostaDopo = doc.createTextNode(testi.risposta[1]);
   risposta.append(rispostaPrima, doc.createElement("br"), rispostaDopo);
-  const composer = nodo4(doc, "div", "preview-composer");
-  const invito = nodo4(doc, "span", "preview-testo", testi.composer);
+  const composer = nodo6(doc, "div", "preview-composer");
+  const invito = nodo6(doc, "span", "preview-testo", testi.composer);
   composer.append(
-    nodo4(doc, "span", "preview-plus", "+"),
+    nodo6(doc, "span", "preview-plus", "+"),
     invito,
     icona3(doc, "send", "i i--sm")
   );
   corpo.append(data, titolo2, sottotitolo, domanda, risposta, composer);
-  const didascalia = nodo4(doc, "div", "scene-caption");
+  const didascalia = nodo6(doc, "div", "scene-caption");
   finestra.append(chrome, corpo, didascalia);
-  const nota = nodo4(doc, "div", "preview-note");
+  const nota = nodo6(doc, "div", "preview-note");
   const notaTesto = doc.createTextNode(t(testi.nota));
   nota.append(icona3(doc, "check", "i i--xs"), notaTesto);
-  const comando = nodo4(doc, "button", "preview-stop");
+  const comando = nodo6(doc, "button", "preview-stop");
   comando.type = "button";
   comando.setAttribute("aria-pressed", "false");
   const comandoTesto = doc.createTextNode("");
@@ -34305,8 +35099,8 @@ function createSettingsView(screen, options) {
       ["[data-settings-add-hf-go]", "addModelHfGo"]
     ];
     for (const [selettore2, chiave] of testiModale) {
-      const nodo15 = q2(selettore2);
-      if (nodo15) nodo15.textContent = tx(chiave);
+      const nodo17 = q2(selettore2);
+      if (nodo17) nodo17.textContent = tx(chiave);
     }
     const chiudiModale2 = modale?.querySelector("[data-settings-add-close]");
     if (chiudiModale2) {
@@ -34755,7 +35549,7 @@ function contaGravitaDoctor(voci) {
   for (const v of voci) n[v.gravita]++;
   return n;
 }
-function nodo5(doc, tag2, classe, valore) {
+function nodo7(doc, tag2, classe, valore) {
   const e = doc.createElement(tag2);
   if (classe) e.className = classe;
   if (valore !== void 0) e.textContent = valore;
@@ -34763,14 +35557,14 @@ function nodo5(doc, tag2, classe, valore) {
 }
 function creaCheckCard(voce2, opzioni = {}) {
   const d = opzioni.document || globalThis.document;
-  const card = nodo5(d, "div", "talos-card talos-check-card" + (voce2.gravita === "success" ? "" : " talos-check-card--" + voce2.gravita));
+  const card = nodo7(d, "div", "talos-card talos-check-card" + (voce2.gravita === "success" ? "" : " talos-check-card--" + voce2.gravita));
   card.dataset.c = "CheckCard";
   card.dataset.doctorId = voce2.id;
-  const stripe = nodo5(d, "span", "talos-check-card__stripe");
+  const stripe = nodo7(d, "span", "talos-check-card__stripe");
   stripe.setAttribute("aria-hidden", "true");
-  const body = nodo5(d, "div", "talos-check-card__body");
-  const title = nodo5(d, "div", "talos-check-card__title", GRAVITA[voce2.gravita]() + " · " + voce2.titolo);
-  body.append(title, ...voce2.righe.map((r) => nodo5(d, "p", "", r)));
+  const body = nodo7(d, "div", "talos-check-card__body");
+  const title = nodo7(d, "div", "talos-check-card__title", GRAVITA[voce2.gravita]() + " · " + voce2.titolo);
+  body.append(title, ...voce2.righe.map((r) => nodo7(d, "p", "", r)));
   card.append(stripe, body);
   return card;
 }
@@ -34791,7 +35585,7 @@ function aggiornaDoctor(s, risultato, opzioni = {}) {
   q2("[data-doctor-refresh]").disabled = loading;
   q2("[data-doctor-refresh]").textContent = loading ? t("varie.doctor.refresh.checking") : t("varie.doctor.refresh.checkAgain");
   q2("[data-doctor-export]").disabled = !risultato || loading;
-  q2("[data-doctor-tempo]").textContent = opzioni.ricevutoAlle ? t("varie.doctor.time.received", { when: new Intl.DateTimeFormat(localeUI8(), { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Rome" }).format(new Date(opzioni.ricevutoAlle)) }) : t("varie.doctor.time.notRun");
+  q2("[data-doctor-tempo]").textContent = opzioni.ricevutoAlle ? t("varie.doctor.time.received", { when: new Intl.DateTimeFormat(localeUI9(), { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Rome" }).format(new Date(opzioni.ricevutoAlle)) }) : t("varie.doctor.time.notRun");
   q2("[data-doctor-esito]").textContent = loading ? t("varie.doctor.summary.checking") : risultato ? ((p) => errore2 ? t("varie.doctor.summary.resultKept", p) : t("varie.doctor.summary.result", p))({ count: tn("varie.doctor.checks.one", "varie.doctor.checks.many", voci.length), review: n.warning + n.danger }) : t("varie.doctor.summary.noResults");
   q2("[data-doctor-errore]").textContent = errore2;
   q2("[data-doctor-errore]").hidden = !errore2;
@@ -34801,12 +35595,12 @@ function aggiornaDoctor(s, risultato, opzioni = {}) {
   lista.setAttribute("aria-busy", String(loading));
   lista.replaceChildren(...voci.map((v) => creaCheckCard(v, { document: s.ownerDocument })));
 }
-var localeUI8, GRAVITA, ORDINE, oggetto3, testo, schermi;
+var localeUI9, GRAVITA, ORDINE, oggetto3, testo, schermi;
 var init_doctor = __esm({
   "src/components/doctor.js"() {
     init_lingua();
     init_testo_server();
-    localeUI8 = () => linguaCorrenteDiT() === "en" ? "en-US" : "it-IT";
+    localeUI9 = () => linguaCorrenteDiT() === "en" ? "en-US" : "it-IT";
     GRAVITA = { danger: () => t("varie.doctor.severity.danger"), warning: () => t("varie.doctor.severity.warning"), info: () => t("varie.doctor.severity.info"), success: () => t("varie.doctor.severity.ok") };
     ORDINE = { danger: 0, warning: 1, info: 2, success: 3 };
     oggetto3 = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
@@ -34834,22 +35628,22 @@ function filtraEstensioni(tipo, voci, query = "") {
   return voci.filter((v) => !q2 || JSON.stringify(datiEstensione(tipo, v)).toLocaleLowerCase("it").includes(q2));
 }
 function creaExtensionRow(tipo, v, { document: doc = globalThis.document, selezionata = false, onSeleziona } = {}) {
-  const d = datiEstensione(tipo, v), r = el8(doc, "button", "talos-list-row");
+  const d = datiEstensione(tipo, v), r = el9(doc, "button", "talos-list-row");
   r.type = "button";
   r.dataset.extId = d.id;
   r.setAttribute("role", "option");
   r.setAttribute("aria-selected", String(selezionata));
   r.tabIndex = selezionata ? 0 : -1;
-  const i2 = el8(doc, "span", "talos-list-row__icon"), svg2 = doc.createElementNS("http://www.w3.org/2000/svg", "svg"), u = doc.createElementNS("http://www.w3.org/2000/svg", "use");
+  const i2 = el9(doc, "span", "talos-list-row__icon"), svg2 = doc.createElementNS("http://www.w3.org/2000/svg", "svg"), u = doc.createElementNS("http://www.w3.org/2000/svg", "use");
   svg2.setAttribute("class", "i");
   svg2.setAttribute("aria-hidden", "true");
   u.setAttribute("href", tipo === "mcp" ? "#i-globe" : "#i-bolt");
   svg2.append(u);
   i2.append(svg2);
-  const testo2 = el8(doc, "span", "talos-list-row__text");
-  testo2.append(el8(doc, "span", "talos-list-row__title", d.titolo), el8(doc, "span", "talos-list-row__sub", d.descrizione));
-  const a = el8(doc, "span", "talos-list-row__aside");
-  a.append(el8(doc, "span", "talos-badge" + (d.fidabile ? " talos-badge--warning" : ""), d.stato));
+  const testo2 = el9(doc, "span", "talos-list-row__text");
+  testo2.append(el9(doc, "span", "talos-list-row__title", d.titolo), el9(doc, "span", "talos-list-row__sub", d.descrizione));
+  const a = el9(doc, "span", "talos-list-row__aside");
+  a.append(el9(doc, "span", "talos-badge" + (d.fidabile ? " talos-badge--warning" : ""), d.stato));
   r.append(i2, testo2, a);
   r.addEventListener("click", () => onSeleziona?.(d.id));
   return r;
@@ -34908,14 +35702,14 @@ function render(panel, p) {
     });
     return r;
   }));
-  if (!voci.length) lista.append(el8(doc, "p", "talos-list-row talos-muted", o.errore ? t("modelli.extensions.inventoryUnavailable") : o.caricamento ? t("modelli.common.loading") : p.voci.length ? t("modelli.extensions.noMatches") : t("modelli.extensions.noItems")));
+  if (!voci.length) lista.append(el9(doc, "p", "talos-list-row talos-muted", o.errore ? t("modelli.extensions.inventoryUnavailable") : o.caricamento ? t("modelli.common.loading") : p.voci.length ? t("modelli.extensions.noMatches") : t("modelli.extensions.noItems")));
   if (focus) [...lista.children].find((n) => n.dataset.extId === focus)?.focus({ preventScroll: true });
   const nodoFalliti = panel.querySelector("[data-ext-falliti]");
   if (nodoFalliti) {
     const falliti = Array.isArray(o.falliti) ? o.falliti : [];
     nodoFalliti.replaceChildren(...falliti.map((f) => {
-      const li = el8(doc, "li", "talos-trust-fallito");
-      li.append(el8(doc, "b", "", f.nome || f.id || t("modelli.extensions.unnamedPackage")), el8(doc, "span", "talos-muted", testoDelCampo(f, "frase") || t("modelli.extensions.noFailureReason")));
+      const li = el9(doc, "li", "talos-trust-fallito");
+      li.append(el9(doc, "b", "", f.nome || f.id || t("modelli.extensions.unnamedPackage")), el9(doc, "span", "talos-muted", testoDelCampo(f, "frase") || t("modelli.extensions.noFailureReason")));
       return li;
     }));
     const blocco2 = panel.querySelector("[data-ext-falliti-blocco]");
@@ -34930,14 +35724,14 @@ function render(panel, p) {
   detail.querySelector("[data-ext-stato]").textContent = d.stato;
   detail.querySelector("[data-ext-origine]").textContent = d.origine;
   detail.querySelector("[data-ext-meta]").replaceChildren(...d.righe.map(([k, v2]) => {
-    const r = el8(doc, "div", "talos-kv");
-    r.append(el8(doc, "span", "talos-kv__k", k), el8(doc, "span", "talos-kv__v", v2));
+    const r = el9(doc, "div", "talos-kv");
+    r.append(el9(doc, "span", "talos-kv__k", k), el9(doc, "span", "talos-kv__v", v2));
     return r;
   }));
   const avvisi = detail.querySelector("[data-ext-warnings]");
   avvisi.hidden = !d.avvisi.length;
-  avvisi.replaceChildren(...d.avvisi.map((a) => el8(doc, "p", "talos-detail__desc", a.origine + ": " + a.avviso)));
-  if (d.avvisi.length) avvisi.append(el8(doc, "p", "talos-muted", t("modelli.extensions.scanWarning")));
+  avvisi.replaceChildren(...d.avvisi.map((a) => el9(doc, "p", "talos-detail__desc", a.origine + ": " + a.avviso)));
+  if (d.avvisi.length) avvisi.append(el9(doc, "p", "talos-muted", t("modelli.extensions.scanWarning")));
   const nodoFrase = detail.querySelector("[data-ext-frase]");
   if (nodoFrase) {
     nodoFrase.hidden = !d.frase;
@@ -34987,7 +35781,7 @@ function collegaSchedeCapability(schermo, onSezione) {
     });
   }
 }
-var EVENTI, ORIGINI2, el8, eventi, PANELS, SCHEDE;
+var EVENTI, ORIGINI2, el9, eventi, PANELS, SCHEDE;
 var init_estensioni = __esm({
   "src/components/estensioni.js"() {
     init_lingua();
@@ -35002,7 +35796,7 @@ var init_estensioni = __esm({
       return t("modelli.extensions.sessionEnd");
     } };
     ORIGINI2 = { skills: ".harness-ui-skills/", mcp: ".harness-ui-mcp.json", plugins: ".harness-ui-plugins/", hooks: ".harness-ui-hooks.json" };
-    el8 = (doc, tag2, classe, testo2) => {
+    el9 = (doc, tag2, classe, testo2) => {
       const n = doc.createElement(tag2);
       if (classe) n.className = classe;
       if (testo2 !== void 0) n.textContent = testo2;
@@ -35025,7 +35819,7 @@ function filtraAttrezzi(attrezzi, { query = "", filtro = "tutti" } = {}) {
   const q2 = String(query).trim().toLocaleLowerCase("it");
   return attrezzi.filter((a) => (filtro === "tutti" || (filtro === "permessi" ? a.permessoConfigurabile === true : filtro === "dipendenze" ? a.dipendenza && a.dipendenza.stato !== "pronta" : false)) && (!q2 || corrispondeARicerca(a.nome, q2) || String(a.descrizione || "").toLocaleLowerCase("it").includes(q2)));
 }
-function el9(doc, tag2, classe, testo2) {
+function el10(doc, tag2, classe, testo2) {
   const n = doc.createElement(tag2);
   if (classe) n.className = classe;
   if (testo2 !== void 0) n.textContent = testo2;
@@ -35035,10 +35829,10 @@ function titolo(a) {
   return nomeUmanoAttrezzo(a.nome) || t("modelli.tools.unnamed");
 }
 function stima(a) {
-  return Number.isFinite(a.tokenSchemaStimati) && a.tokenSchemaStimati >= 0 ? tn("modelli.tools.oneToken", "modelli.tools.tokens", a.tokenSchemaStimati, { n: a.tokenSchemaStimati.toLocaleString(localeUI9()) }) : t("modelli.tools.estimateUnavailable");
+  return Number.isFinite(a.tokenSchemaStimati) && a.tokenSchemaStimati >= 0 ? tn("modelli.tools.oneToken", "modelli.tools.tokens", a.tokenSchemaStimati, { n: a.tokenSchemaStimati.toLocaleString(localeUI10()) }) : t("modelli.tools.estimateUnavailable");
 }
 function icona4(doc, a) {
-  const c = el9(doc, "span", "talos-list-row__icon"), s = doc.createElementNS("http://www.w3.org/2000/svg", "svg"), u = doc.createElementNS("http://www.w3.org/2000/svg", "use");
+  const c = el10(doc, "span", "talos-list-row__icon"), s = doc.createElementNS("http://www.w3.org/2000/svg", "svg"), u = doc.createElementNS("http://www.w3.org/2000/svg", "use");
   s.setAttribute("class", "i");
   s.setAttribute("aria-hidden", "true");
   u.setAttribute("href", "#" + ({ shell: "i-terminal", cerca: "i-search", leggi: "i-eye", scrivi: "i-code", web_search: "i-globe", document_create: "i-files" }[a.nome] || "i-code"));
@@ -35047,7 +35841,7 @@ function icona4(doc, a) {
   return c;
 }
 function creaToolListRow(a, { document: doc = globalThis.document, selezionata = false, selezionabile = true, onSeleziona, uso = null } = {}) {
-  const r = el9(doc, selezionabile ? "button" : "div", "talos-list-row");
+  const r = el10(doc, selezionabile ? "button" : "div", "talos-list-row");
   r.dataset.toolName = a.nome;
   if (selezionabile) {
     r.type = "button";
@@ -35057,19 +35851,19 @@ function creaToolListRow(a, { document: doc = globalThis.document, selezionata =
     r.tabIndex = selezionata ? 0 : -1;
     r.addEventListener("click", () => onSeleziona?.(a.nome));
   } else r.setAttribute("role", "group");
-  const testo2 = el9(doc, "span", "talos-list-row__text");
-  testo2.append(el9(doc, "span", "talos-list-row__title", titolo(a)), el9(doc, "span", "talos-list-row__sub", descrizioneAttrezzo(a.nome) || a.descrizione || t("modelli.tools.descriptionUnavailable")));
-  if (a.dipendenza) testo2.append(el9(doc, "span", "talos-list-row__sub", testoDelCampo(a.dipendenza, "dettaglio") || t("modelli.tools.dependencyUnobserved")));
-  const aside = el9(doc, "span", "talos-list-row__aside");
-  aside.append(el9(doc, "span", Number.isFinite(a.tokenSchemaStimati) && a.tokenSchemaStimati >= 0 ? "talos-mono talos-measure--estimate" : "talos-muted", stima(a)), el9(doc, "span", "talos-badge" + (a.permesso === "chiedi" ? " talos-badge--warning" : ""), permessoAttrezzo(a)));
-  if (uso?.chiamate > 0) aside.append(el9(doc, "span", "talos-muted", tn("modelli.tools.oneCall", "modelli.tools.manyCalls", uso.chiamate) + (uso.ripetute > 0 ? tn("modelli.tools.oneRepeat", "modelli.tools.manyRepeats", uso.ripetute) : "")));
+  const testo2 = el10(doc, "span", "talos-list-row__text");
+  testo2.append(el10(doc, "span", "talos-list-row__title", titolo(a)), el10(doc, "span", "talos-list-row__sub", descrizioneAttrezzo(a.nome) || a.descrizione || t("modelli.tools.descriptionUnavailable")));
+  if (a.dipendenza) testo2.append(el10(doc, "span", "talos-list-row__sub", testoDelCampo(a.dipendenza, "dettaglio") || t("modelli.tools.dependencyUnobserved")));
+  const aside = el10(doc, "span", "talos-list-row__aside");
+  aside.append(el10(doc, "span", Number.isFinite(a.tokenSchemaStimati) && a.tokenSchemaStimati >= 0 ? "talos-mono talos-measure--estimate" : "talos-muted", stima(a)), el10(doc, "span", "talos-badge" + (a.permesso === "chiedi" ? " talos-badge--warning" : ""), permessoAttrezzo(a)));
+  if (uso?.chiamate > 0) aside.append(el10(doc, "span", "talos-muted", tn("modelli.tools.oneCall", "modelli.tools.manyCalls", uso.chiamate) + (uso.ripetute > 0 ? tn("modelli.tools.oneRepeat", "modelli.tools.manyRepeats", uso.ripetute) : "")));
   r.append(icona4(doc, a), testo2, aside);
   return r;
 }
 function scriviDescrizioni(d, a) {
   const nostra = descrizioneAttrezzo(a.nome), doc = d.ownerDocument;
-  const nodo15 = d.querySelector("[data-cap-descrizione]");
-  nodo15.textContent = nostra || a.descrizione || t("modelli.tools.descriptionUnavailable");
+  const nodo17 = d.querySelector("[data-cap-descrizione]");
+  nodo17.textContent = nostra || a.descrizione || t("modelli.tools.descriptionUnavailable");
   const grezzo = d.querySelector("[data-cap-descrizione-kernel]");
   if (!grezzo) return;
   grezzo.hidden = !nostra || !a.descrizione;
@@ -35121,12 +35915,12 @@ function render2(schermo, p) {
   const { attrezzi, opzioni: o } = p, doc = schermo.ownerDocument, visibili = filtraAttrezzi(attrezzi, p), uso = new Map((o.uso?.perAttrezzo || []).map((a2) => [a2.nome, a2]));
   if (!o.caricamento && !visibili.some((a2) => a2.nome === p.scelto)) p.scelto = visibili[0]?.nome || null;
   const resumo = schermo.querySelector("[data-cap-esito]");
-  resumo.textContent = o.errore || (o.caricamento ? t("modelli.tools.loading") : tn("modelli.tools.oneOffered", "modelli.tools.manyOffered", attrezzi.length, { visible: visibili.length, n: attrezzi.length.toLocaleString(localeUI9()) }));
+  resumo.textContent = o.errore || (o.caricamento ? t("modelli.tools.loading") : tn("modelli.tools.oneOffered", "modelli.tools.manyOffered", attrezzi.length, { visible: visibili.length, n: attrezzi.length.toLocaleString(localeUI10()) }));
   resumo.setAttribute("role", o.errore ? "alert" : "status");
   schermo.querySelector("[data-cap-count]").textContent = o.errore || o.caricamento ? "—" : attrezzi.length;
   const sum = stimaSchemaAttrezzi(attrezzi);
-  const quota = Number.isFinite(o.finestraContesto) && o.finestraContesto > 0 ? t("modelli.tools.contextShare", { percent: new Intl.NumberFormat(localeUI9(), { maximumFractionDigits: 1 }).format(sum.totale / o.finestraContesto * 100), window: o.finestraContesto.toLocaleString(localeUI9()) }) : "";
-  schermo.querySelector("[data-cap-token]").textContent = o.errore || o.caricamento ? t("modelli.tools.schemaUnobserved") : !attrezzi.length ? t("modelli.tools.noSchema") : sum.mancanti ? t("modelli.tools.partialEstimate", { tokens: sum.totale.toLocaleString(localeUI9()), missing: sum.mancanti, quota }) : t("modelli.tools.schemaEstimate", { tokens: sum.totale.toLocaleString(localeUI9()), quota });
+  const quota = Number.isFinite(o.finestraContesto) && o.finestraContesto > 0 ? t("modelli.tools.contextShare", { percent: new Intl.NumberFormat(localeUI10(), { maximumFractionDigits: 1 }).format(sum.totale / o.finestraContesto * 100), window: o.finestraContesto.toLocaleString(localeUI10()) }) : "";
+  schermo.querySelector("[data-cap-token]").textContent = o.errore || o.caricamento ? t("modelli.tools.schemaUnobserved") : !attrezzi.length ? t("modelli.tools.noSchema") : sum.mancanti ? t("modelli.tools.partialEstimate", { tokens: sum.totale.toLocaleString(localeUI10()), missing: sum.mancanti, quota }) : t("modelli.tools.schemaEstimate", { tokens: sum.totale.toLocaleString(localeUI10()), quota });
   schermo.querySelector("[data-cap-ambito]").textContent = o.ambito ? t("modelli.tools.sessionPermissions") : t("modelli.tools.noSessionPermissions");
   schermo.querySelector("[data-cap-uso]").textContent = o.ambito ? o.uso?.registrato ? t("modelli.tools.recordedUsage", { calls: o.uso.chiamate, repeats: o.uso.ripetute }) : t("modelli.tools.sessionUsageUnrecorded") : t("modelli.tools.noSessionUsage");
   const err = schermo.querySelector("[data-cap-errore-azione]");
@@ -35155,7 +35949,7 @@ function render2(schermo, p) {
     });
     return r;
   }));
-  if (!visibili.length) lista.append(el9(doc, "p", "talos-list-row talos-muted", o.errore ? t("modelli.tools.catalogUnavailable") : o.caricamento ? t("modelli.common.loading") : attrezzi.length ? t("modelli.tools.noMatches") : t("modelli.tools.noneOffered")));
+  if (!visibili.length) lista.append(el10(doc, "p", "talos-list-row talos-muted", o.errore ? t("modelli.tools.catalogUnavailable") : o.caricamento ? t("modelli.common.loading") : attrezzi.length ? t("modelli.tools.noMatches") : t("modelli.tools.noneOffered")));
   if (focus) [...lista.querySelectorAll("[data-tool-name]")].find((n) => n.dataset.toolName === focus)?.focus({ preventScroll: true });
   const a = visibili.find((a2) => a2.nome === p.scelto), d = schermo.querySelector("[data-cap-dettaglio]");
   d.hidden = !a;
@@ -35186,9 +35980,9 @@ function rigaUscitaComandi(d, a, o, doc) {
     return;
   }
   if (!riga2) {
-    riga2 = el9(doc, "div", "");
+    riga2 = el10(doc, "div", "");
     riga2.setAttribute("data-cap-uscita-riga", "");
-    const etichetta3 = el9(doc, "label", "talos-stack", t("modelli.command.reader"));
+    const etichetta3 = el10(doc, "label", "talos-stack", t("modelli.command.reader"));
     const menu2 = doc.createElement("select");
     menu2.className = "talos-select";
     menu2.setAttribute("data-cap-uscita", "");
@@ -35204,7 +35998,7 @@ function rigaUscitaComandi(d, a, o, doc) {
       PAGINE.get(d.closest("#schermoCapability"))?.opzioni?.onUscitaComandi?.(menu2.value === "si");
     });
     etichetta3.append(menu2);
-    const spiega = el9(doc, "p", "talos-muted", "");
+    const spiega = el10(doc, "p", "talos-muted", "");
     spiega.setAttribute("data-cap-uscita-spiega", "");
     riga2.append(etichetta3, spiega);
     d.append(riga2);
@@ -35216,13 +36010,13 @@ function rigaUscitaComandi(d, a, o, doc) {
   menu.disabled = Boolean(o.caricamento || o.salvataggio) || !o.ambito;
   riga2.querySelector("[data-cap-uscita-spiega]").textContent = !o.ambito ? t("modelli.command.openSession") : acceso ? t("modelli.command.shared") : t("modelli.command.private");
 }
-var localeUI9, PERMESSI, PAGINE;
+var localeUI10, PERMESSI, PAGINE;
 var init_capability = __esm({
   "src/components/capability.js"() {
     init_lingua();
     init_nomi_attrezzi();
     init_testo_server();
-    localeUI9 = () => linguaCorrenteDiT() === "en" ? "en-US" : "it-IT";
+    localeUI10 = () => linguaCorrenteDiT() === "en" ? "en-US" : "it-IT";
     PERMESSI = { get ""() {
       return t("modelli.permission.inherit");
     }, get sempre() {
@@ -35244,7 +36038,7 @@ function statoAutomazione(attiva) {
 }
 function dataCompleta(valore) {
   const d = typeof valore === "string" ? new Date(valore) : null;
-  return d && Number.isFinite(d.getTime()) ? d.toLocaleString(localeUI10()) : t("sezioni.common.dateNotRecorded");
+  return d && Number.isFinite(d.getTime()) ? d.toLocaleString(localeUI11()) : t("sezioni.common.dateNotRecorded");
 }
 function testiAutomazione(a, adesso = /* @__PURE__ */ new Date()) {
   const oggi = new Date(adesso).toISOString().slice(0, 10), limite = intero(a.limiteAlGiorno) && a.limiteAlGiorno > 0 ? a.limiteAlGiorno : null;
@@ -35262,48 +36056,48 @@ function testiAutomazione(a, adesso = /* @__PURE__ */ new Date()) {
     modello: typeof a.modello === "string" && a.modello.trim() ? nomeModelloUmano(a.modello) || a.modello : t("sezioni.automations.modelServerDefault")
   };
 }
-function el10(doc, tag2, classe, testo2) {
+function el11(doc, tag2, classe, testo2) {
   const n = doc.createElement(tag2);
   if (classe) n.className = classe;
   if (testo2 !== void 0) n.textContent = testo2;
   return n;
 }
 function kv3(doc, k, v) {
-  const n = el10(doc, "div", "talos-kv");
-  n.append(el10(doc, "span", "talos-kv__k", k), el10(doc, "span", "talos-kv__v", v));
+  const n = el11(doc, "div", "talos-kv");
+  n.append(el11(doc, "span", "talos-kv__k", k), el11(doc, "span", "talos-kv__v", v));
   return n;
 }
 function rigaCoordinazione(doc, a, nome, { salvataggio, onCoordinazione }) {
-  const accesa = a.coordinazione === true, riga2 = el10(doc, "div", "talos-kv talos-automation__coord");
+  const accesa = a.coordinazione === true, riga2 = el11(doc, "div", "talos-kv talos-automation__coord");
   riga2.dataset.autoCoordinazioneRiga = "";
-  const valore = el10(doc, "span", "talos-kv__v talos-automation__coord-valore"), parola3 = el10(doc, "span", void 0, t(accesa ? "sezioni.automations.row.coordinationOn" : "sezioni.automations.row.coordinationOff"));
+  const valore = el11(doc, "span", "talos-kv__v talos-automation__coord-valore"), parola3 = el11(doc, "span", void 0, t(accesa ? "sezioni.automations.row.coordinationOn" : "sezioni.automations.row.coordinationOff"));
   parola3.dataset.autoCoordinazioneStato = "";
-  const interruttore = el10(doc, "button", "talos-switch");
+  const interruttore = el11(doc, "button", "talos-switch");
   interruttore.type = "button";
   interruttore.dataset.autoCoordinazione = "";
   interruttore.setAttribute("role", "switch");
   interruttore.setAttribute("aria-checked", String(accesa));
   interruttore.setAttribute("aria-label", t("sezioni.automations.row.coordinationLabel", { name: nome }));
   interruttore.disabled = salvataggio;
-  interruttore.append(el10(doc, "span", "talos-switch__thumb"));
+  interruttore.append(el11(doc, "span", "talos-switch__thumb"));
   interruttore.addEventListener("click", () => onCoordinazione?.(a, !accesa));
   valore.append(parola3, interruttore);
-  riga2.append(el10(doc, "span", "talos-kv__k", t("sezioni.automations.row.coordination")), valore);
-  const nota = el10(doc, "p", "talos-muted talos-automation__coord-nota", t("sezioni.automations.row.coordinationHint", { n: TETTO_AVVII_DA_SOLO }));
+  riga2.append(el11(doc, "span", "talos-kv__k", t("sezioni.automations.row.coordination")), valore);
+  const nota = el11(doc, "p", "talos-muted talos-automation__coord-nota", t("sezioni.automations.row.coordinationHint", { n: TETTO_AVVII_DA_SOLO }));
   return [riga2, nota];
 }
 function creaAutomationRow(a, { document: doc = globalThis.document, adesso = /* @__PURE__ */ new Date(), salvataggio = false, salvataggioId = null, aperta: aperta2 = false, onDettagli, onToggle, onElimina, onCoordinazione } = {}) {
-  const t2 = testiAutomazione(a, adesso), stato2 = statoAutomazione(a.attiva), riga2 = el10(doc, "article", "talos-card talos-automation");
+  const t2 = testiAutomazione(a, adesso), stato2 = statoAutomazione(a.attiva), riga2 = el11(doc, "article", "talos-card talos-automation");
   riga2.dataset.c = "AutomationRow";
   riga2.dataset.automazioneId = a.id;
   riga2.setAttribute("role", "listitem");
-  const testa = el10(doc, "div", "talos-automation__head");
-  testa.append(el10(doc, "span", "talos-dot" + (stato2.tono ? " talos-dot--" + stato2.tono : ""), void 0), el10(doc, "span", "talos-automation__name talos-grow", t2.nome), el10(doc, "span", "talos-badge talos-badge--sm", t2.intervallo), el10(doc, "span", "talos-badge" + (stato2.tono ? " talos-badge--" + stato2.tono : "") + " talos-badge--sm", stato2.testo));
-  const vecchio = el10(doc, "span", "talos-badge talos-badge--sm", t("sezioni.automations.v2.row.legacy"));
+  const testa = el11(doc, "div", "talos-automation__head");
+  testa.append(el11(doc, "span", "talos-dot" + (stato2.tono ? " talos-dot--" + stato2.tono : ""), void 0), el11(doc, "span", "talos-automation__name talos-grow", t2.nome), el11(doc, "span", "talos-badge talos-badge--sm", t2.intervallo), el11(doc, "span", "talos-badge" + (stato2.tono ? " talos-badge--" + stato2.tono : "") + " talos-badge--sm", stato2.testo));
+  const vecchio = el11(doc, "span", "talos-badge talos-badge--sm", t("sezioni.automations.v2.row.legacy"));
   vecchio.dataset.autoLegacy = "";
   vecchio.title = t("sezioni.automations.v2.row.legacyHint");
   testa.append(vecchio);
-  const toggle = el10(doc, "button", stato2.prossimo === null ? "talos-button talos-button--secondary talos-button--sm" : "talos-switch");
+  const toggle = el11(doc, "button", stato2.prossimo === null ? "talos-button talos-button--secondary talos-button--sm" : "talos-switch");
   toggle.type = "button";
   toggle.dataset.autoToggle = "";
   toggle.disabled = salvataggio || stato2.prossimo === null;
@@ -35311,18 +36105,18 @@ function creaAutomationRow(a, { document: doc = globalThis.document, adesso = /*
     toggle.setAttribute("role", "switch");
     toggle.setAttribute("aria-checked", String(a.attiva));
     toggle.setAttribute("aria-label", t("sezioni.automations.row.toggleLabel", { name: t2.nome }));
-    toggle.append(el10(doc, "span", "talos-switch__thumb"));
+    toggle.append(el11(doc, "span", "talos-switch__thumb"));
   } else toggle.textContent = t("sezioni.automations.status.needsChecking");
   toggle.addEventListener("click", () => onToggle?.(a, stato2.prossimo));
   testa.append(toggle);
-  const righe = el10(doc, "div", "talos-automation__runs");
+  const righe = el11(doc, "div", "talos-automation__runs");
   righe.append(kv3(doc, t("sezioni.automations.row.nextRun"), t2.prossima), kv3(doc, t("sezioni.automations.row.runsToday"), t2.conteggio));
-  const piede = el10(doc, "div", "talos-automation__head");
-  const dettagli2 = el10(doc, "button", "talos-button talos-button--ghost talos-button--sm", t("sezioni.common.details"));
+  const piede = el11(doc, "div", "talos-automation__head");
+  const dettagli2 = el11(doc, "button", "talos-button talos-button--ghost talos-button--sm", t("sezioni.common.details"));
   dettagli2.type = "button";
   dettagli2.dataset.autoDetails = "";
   dettagli2.setAttribute("aria-expanded", String(aperta2));
-  const pannello = el10(doc, "div", "talos-automation__runs");
+  const pannello = el11(doc, "div", "talos-automation__runs");
   pannello.dataset.autoDettaglio = "";
   pannello.hidden = !aperta2;
   pannello.append(kv3(doc, t("sezioni.automations.row.model"), t2.modello), ...rigaCoordinazione(doc, a, t2.nome, { salvataggio, onCoordinazione }), kv3(doc, t("sezioni.automations.row.lastRun"), t2.ultima), kv3(doc, t("sezioni.automations.row.created"), t2.creata), kv3(doc, t("sezioni.automations.row.task"), t2.task));
@@ -35331,13 +36125,13 @@ function creaAutomationRow(a, { document: doc = globalThis.document, adesso = /*
     dettagli2.setAttribute("aria-expanded", String(!pannello.hidden));
     onDettagli?.(a, !pannello.hidden);
   });
-  piede.append(dettagli2, el10(doc, "span", "talos-grow"));
+  piede.append(dettagli2, el11(doc, "span", "talos-grow"));
   if (salvataggio && salvataggioId === a.id) {
-    const attesa = el10(doc, "span", "talos-muted", t("sezioni.common.saving"));
+    const attesa = el11(doc, "span", "talos-muted", t("sezioni.common.saving"));
     attesa.setAttribute("role", "status");
     piede.append(attesa);
   }
-  const elimina = el10(doc, "button", "talos-button talos-button--ghost talos-button--sm", t("sezioni.common.delete"));
+  const elimina = el11(doc, "button", "talos-button talos-button--ghost talos-button--sm", t("sezioni.common.delete"));
   elimina.type = "button";
   elimina.dataset.autoElimina = "";
   elimina.setAttribute("aria-label", t("sezioni.automations.row.deleteLabel", { name: t2.nome }));
@@ -35347,13 +36141,13 @@ function creaAutomationRow(a, { document: doc = globalThis.document, adesso = /*
   riga2.append(testa, righe, piede, pannello);
   return riga2;
 }
-var localeUI10, intero;
+var localeUI11, intero;
 var init_automazioni = __esm({
   "src/components/automazioni.js"() {
     init_lingua();
     init_chat_foot();
     init_coordinazione();
-    localeUI10 = () => linguaCorrenteDiT() === "en" ? "en-US" : "it-IT";
+    localeUI11 = () => linguaCorrenteDiT() === "en" ? "en-US" : "it-IT";
     intero = (n) => Number.isInteger(n) && n >= 0;
   }
 });
@@ -35463,7 +36257,7 @@ function perId(radice2, selettore2, campo3, valore) {
   const cercato = String(valore ?? "");
   return [...radice2.querySelectorAll(selettore2)].find((el35) => el35.dataset[campo3] === cercato) || null;
 }
-function nodo6(doc, tag2, classe, testo2) {
+function nodo8(doc, tag2, classe, testo2) {
   const el35 = doc.createElement(tag2);
   if (classe) el35.className = classe;
   if (testo2 !== void 0 && testo2 !== null) el35.textContent = String(testo2);
@@ -35479,7 +36273,7 @@ function icona5(doc, nome, classe = "i") {
   return svg2;
 }
 function etichetta(doc, testo2, tono = "") {
-  const el35 = nodo6(doc, "span", "td-tag", testo2);
+  const el35 = nodo8(doc, "span", "td-tag", testo2);
   if (tono) el35.dataset.tone = tono;
   return el35;
 }
@@ -35539,83 +36333,83 @@ function costruisciScheletro(schermo, doc, stato2) {
   const config = stato2.config;
   const pagina = schermo.querySelector(".talos-page");
   const testa = pagina?.querySelector(".talos-page__head");
-  const sezione2 = nodo6(doc, "div", "td-section td-scope");
+  const sezione2 = nodo8(doc, "div", "td-section td-scope");
   sezione2.dataset.section = config.chiave;
-  const spazio = nodo6(doc, "div", "td-workspace");
+  const spazio = nodo8(doc, "div", "td-workspace");
   spazio.dataset.detail = "false";
   spazio.dataset.expanded = "false";
   spazio.style.setProperty("--td-larghezza-dettaglio", `${stato2.larghezza}px`);
-  const master = nodo6(doc, "div", "td-master");
-  const intro = nodo6(doc, "div", "td-intro");
-  const marchio = nodo6(doc, "span", "td-intro-mark");
+  const master = nodo8(doc, "div", "td-master");
+  const intro = nodo8(doc, "div", "td-intro");
+  const marchio = nodo8(doc, "span", "td-intro-mark");
   marchio.append(icona5(doc, config.icona));
-  const testi = nodo6(doc, "div");
-  const h2 = testa?.querySelector("h2") || nodo6(doc, "h2", "", config.titolo || "");
-  const spiegazione = testa?.querySelector('p:not([role="status"]):not([data-note-stato]):not([data-progetti-stato])') || nodo6(doc, "p", "", config.spiegazione || "");
-  const statoRiga = testa?.querySelector('[role="status"], [data-note-stato], [data-progetti-stato], [data-task-esito], [data-library-esito], [data-research-esito], [data-memory-stato]') || nodo6(doc, "p", "talos-page__note", "");
+  const testi = nodo8(doc, "div");
+  const h2 = testa?.querySelector("h2") || nodo8(doc, "h2", "", config.titolo || "");
+  const spiegazione = testa?.querySelector('p:not([role="status"]):not([data-note-stato]):not([data-progetti-stato])') || nodo8(doc, "p", "", config.spiegazione || "");
+  const statoRiga = testa?.querySelector('[role="status"], [data-note-stato], [data-progetti-stato], [data-task-esito], [data-library-esito], [data-research-esito], [data-memory-stato]') || nodo8(doc, "p", "talos-page__note", "");
   if (!statoRiga.getAttribute("role")) statoRiga.setAttribute("role", "status");
   testi.append(h2, spiegazione, statoRiga);
   intro.append(marchio, testi);
-  const barra = nodo6(doc, "div", "td-toolbar");
-  const campo3 = nodo6(doc, "div", "talos-field talos-field--sm td-search");
+  const barra = nodo8(doc, "div", "td-toolbar");
+  const campo3 = nodo8(doc, "div", "talos-field talos-field--sm td-search");
   campo3.append(icona5(doc, "search", "i talos-field__icon"));
-  const cerca = nodo6(doc, "input", "talos-field__input");
+  const cerca = nodo8(doc, "input", "talos-field__input");
   cerca.type = "search";
   cerca.autocomplete = "off";
   cerca.placeholder = t("sezioni.list.searchPlaceholder");
   cerca.setAttribute("aria-label", t("sezioni.list.searchLabel", { name: config.nome }));
   cerca.value = stato2.query;
   campo3.append(cerca);
-  const cresci = nodo6(doc, "span", "talos-grow");
-  const ordine = nodo6(doc, "select", "td-select");
+  const cresci = nodo8(doc, "span", "talos-grow");
+  const ordine = nodo8(doc, "select", "td-select");
   ordine.setAttribute("aria-label", t("sezioni.list.sortLabel", { name: config.nome }));
   for (const [valore, testoOpzione] of [["nuovo", t("sezioni.list.sortRecent")], ["titolo", t("sezioni.list.sortTitle")]]) {
-    const op = nodo6(doc, "option", "", testoOpzione);
+    const op = nodo8(doc, "option", "", testoOpzione);
     op.value = valore;
     ordine.append(op);
   }
   ordine.value = stato2.ordine;
-  const segmento = nodo6(doc, "div", "td-segment");
+  const segmento = nodo8(doc, "div", "td-segment");
   segmento.setAttribute("role", "group");
   segmento.setAttribute("aria-label", t("sezioni.list.viewLabel", { name: config.nome }));
   for (const [vista, nomeIcona, nome] of [["elenco", "list", t("sezioni.list.viewList")], ["schede", "grid", t("sezioni.list.viewCards")]]) {
-    const b = nodo6(doc, "button");
+    const b = nodo8(doc, "button");
     b.type = "button";
     b.dataset.vista = vista;
     b.setAttribute("aria-label", nome);
     b.append(icona5(doc, nomeIcona));
     segmento.append(b);
   }
-  const aggiorna = nodo6(doc, "button", "talos-button talos-button--secondary talos-button--sm", t("sezioni.common.refresh"));
+  const aggiorna = nodo8(doc, "button", "talos-button talos-button--secondary talos-button--sm", t("sezioni.common.refresh"));
   aggiorna.type = "button";
   aggiorna.dataset.aggiorna = "";
-  const tendinaFiltri = config.filtriATendina ? nodo6(doc, "select", "td-select") : null;
+  const tendinaFiltri = config.filtriATendina ? nodo8(doc, "select", "td-select") : null;
   if (tendinaFiltri) {
     tendinaFiltri.dataset.filtri = "";
     tendinaFiltri.setAttribute("aria-label", t("sezioni.list.filtersLabel", { name: config.nome }));
   }
   barra.append(campo3, ...tendinaFiltri ? [tendinaFiltri] : [], cresci, ordine, segmento, aggiorna);
   if (config.filtriATendina) barra.dataset.calmControls = "";
-  const blocco2 = nodo6(doc, "div", "td-bulk");
-  const etichettaTutte = nodo6(doc, "label", "td-bulk-select");
-  const selezionaTutte = nodo6(doc, "input");
+  const blocco2 = nodo8(doc, "div", "td-bulk");
+  const etichettaTutte = nodo8(doc, "label", "td-bulk-select");
+  const selezionaTutte = nodo8(doc, "input");
   selezionaTutte.type = "checkbox";
   selezionaTutte.dataset.selezionaVisibili = "";
-  const testoTutte = nodo6(doc, "span", "", t("sezioni.list.selectVisible"));
+  const testoTutte = nodo8(doc, "span", "", t("sezioni.list.selectVisible"));
   etichettaTutte.append(selezionaTutte, testoTutte);
-  const conteggioBlocco = nodo6(doc, "span", "td-bulk-count", t("sezioni.list.selection.initial"));
-  const eliminaBlocco = nodo6(doc, "button", "talos-button talos-button--danger talos-button--sm", t("sezioni.list.bulk.deleteSelected"));
+  const conteggioBlocco = nodo8(doc, "span", "td-bulk-count", t("sezioni.list.selection.initial"));
+  const eliminaBlocco = nodo8(doc, "button", "talos-button talos-button--danger talos-button--sm", t("sezioni.list.bulk.deleteSelected"));
   eliminaBlocco.type = "button";
   eliminaBlocco.dataset.eliminaSelezionati = "";
-  const esitoBlocco = nodo6(doc, "span", "td-bulk-status");
+  const esitoBlocco = nodo8(doc, "span", "td-bulk-status");
   esitoBlocco.setAttribute("role", "status");
   blocco2.append(etichettaTutte, conteggioBlocco, eliminaBlocco, esitoBlocco);
-  const filtri = nodo6(doc, "div", "td-filters");
+  const filtri = nodo8(doc, "div", "td-filters");
   filtri.setAttribute("role", "group");
   filtri.setAttribute("aria-label", t("sezioni.list.filtersLabel", { name: config.nome }));
-  const risultati = nodo6(doc, "div", "td-results");
+  const risultati = nodo8(doc, "div", "td-results");
   master.append(intro, barra, blocco2, filtri, risultati);
-  const divisorio = nodo6(doc, "button", "td-divider");
+  const divisorio = nodo8(doc, "button", "td-divider");
   divisorio.type = "button";
   divisorio.hidden = true;
   divisorio.setAttribute("role", "separator");
@@ -35624,7 +36418,7 @@ function costruisciScheletro(schermo, doc, stato2) {
   divisorio.setAttribute("aria-valuemin", String(LARGHEZZA_MINIMA));
   divisorio.setAttribute("aria-valuemax", String(LARGHEZZA_MASSIMA));
   divisorio.setAttribute("aria-valuenow", String(stato2.larghezza));
-  const dettaglio = nodo6(doc, "aside", "td-detail");
+  const dettaglio = nodo8(doc, "aside", "td-detail");
   dettaglio.hidden = true;
   dettaglio.setAttribute("aria-label", t("sezioni.list.detailLabel", { name: config.nome }));
   spazio.append(master, divisorio, dettaglio);
@@ -35890,7 +36684,7 @@ function disegnaCrudo(schermo, doc, stato2) {
   if (tendinaFiltri) {
     tendinaFiltri.hidden = config.filtri.length <= 1;
     tendinaFiltri.replaceChildren(...config.filtri.map((f, i2) => {
-      const op = nodo6(doc, "option", "", `${f.etichetta} (${conteggi[i2]})`);
+      const op = nodo8(doc, "option", "", `${f.etichetta} (${conteggi[i2]})`);
       op.value = f.id;
       return op;
     }));
@@ -35898,11 +36692,11 @@ function disegnaCrudo(schermo, doc, stato2) {
   }
   const fuocoFiltro = doc.activeElement?.dataset?.filtro;
   barraFiltri.replaceChildren(...config.filtri.map((f, i2) => {
-    const b = nodo6(doc, "button", "td-filter", f.etichetta);
+    const b = nodo8(doc, "button", "td-filter", f.etichetta);
     b.type = "button";
     b.dataset.filtro = f.id;
     b.setAttribute("aria-pressed", String(stato2.filtro === f.id));
-    b.append(nodo6(doc, "small", "", String(conteggi[i2])));
+    b.append(nodo8(doc, "small", "", String(conteggi[i2])));
     return b;
   }));
   if (fuocoFiltro) perId(barraFiltri, ".td-filter", "filtro", fuocoFiltro)?.focus({ preventScroll: true });
@@ -35911,7 +36705,7 @@ function disegnaCrudo(schermo, doc, stato2) {
   if (!visibili.length) {
     risultati.replaceChildren(disegnaVuoto(doc, stato2, tutte.length));
   } else {
-    const contenitore = nodo6(doc, "div", stato2.vista === "elenco" ? "td-list" : "td-grid");
+    const contenitore = nodo8(doc, "div", stato2.vista === "elenco" ? "td-list" : "td-grid");
     for (const voce2 of visibili) contenitore.append(disegnaScheda(doc, stato2, voce2));
     risultati.replaceChildren(contenitore);
   }
@@ -35930,14 +36724,14 @@ function disegnaCrudo(schermo, doc, stato2) {
 function disegnaVuoto(doc, stato2, quanteInTutto) {
   const config = stato2.config;
   const filtrando = Boolean(stato2.query) || stato2.filtro !== (config.filtri?.[0]?.id || "tutte");
-  const box = nodo6(doc, "div", "td-empty");
-  const arte = nodo6(doc, "div", "td-empty-art");
+  const box = nodo8(doc, "div", "td-empty");
+  const arte = nodo8(doc, "div", "td-empty-art");
   arte.append(disegnoVuoto(doc, config.icona));
-  const titolo2 = nodo6(doc, "h3", "", filtrando ? t("sezioni.list.empty.noResults") : config.vuoto?.titolo || t("sezioni.list.empty.nothingHere"));
-  const testo2 = nodo6(doc, "p", "", filtrando ? t("sezioni.list.empty.tryAgain") : config.stato?.errore || config.vuoto?.testo || "");
+  const titolo2 = nodo8(doc, "h3", "", filtrando ? t("sezioni.list.empty.noResults") : config.vuoto?.titolo || t("sezioni.list.empty.nothingHere"));
+  const testo2 = nodo8(doc, "p", "", filtrando ? t("sezioni.list.empty.tryAgain") : config.stato?.errore || config.vuoto?.testo || "");
   box.append(arte, titolo2, testo2);
   if (filtrando) {
-    const pulisci = nodo6(doc, "button", "talos-button talos-button--secondary talos-button--sm", t("sezioni.list.empty.clearFilters"));
+    const pulisci = nodo8(doc, "button", "talos-button talos-button--secondary talos-button--sm", t("sezioni.list.empty.clearFilters"));
     pulisci.type = "button";
     pulisci.addEventListener("click", () => {
       stato2.query = "";
@@ -35955,20 +36749,20 @@ function disegnaVuoto(doc, stato2, quanteInTutto) {
 function disegnaScheda(doc, stato2, voce2) {
   const config = stato2.config;
   const id4 = String(config.idDi(voce2) ?? "");
-  const scheda = nodo6(doc, "article", `td-card ${config.famiglia || ""}`.trim());
+  const scheda = nodo8(doc, "article", `td-card ${config.famiglia || ""}`.trim());
   scheda.dataset.item = id4;
   scheda.dataset.selected = String(String(stato2.selezione) === id4);
   scheda.dataset.batchSelected = String(stato2.selezionateInBlocco.has(id4));
   const pezzi = config.scheda(voce2, { doc, icona: (n, c) => icona5(doc, n, c), etichetta: (t2, tono) => etichetta(doc, t2, tono), vista: stato2.vista }) || {};
   if (pezzi.dati) for (const [k, v] of Object.entries(pezzi.dati)) scheda.dataset[k] = String(v);
-  const apri = nodo6(doc, "button", "td-card-open");
+  const apri = nodo8(doc, "button", "td-card-open");
   apri.type = "button";
   const titolo2 = String(config.titoloDi(voce2) ?? "");
   apri.setAttribute("aria-label", t("sezioni.common.openName", { name: titolo2 }));
-  const alto = nodo6(doc, "div", "td-card-top");
+  const alto = nodo8(doc, "div", "td-card-top");
   alto.append(...[pezzi.alto].flat().filter(Boolean));
-  const h3 = nodo6(doc, "h3", "", titolo2);
-  const basso = nodo6(doc, "div", "td-card-bottom");
+  const h3 = nodo8(doc, "h3", "", titolo2);
+  const basso = nodo8(doc, "div", "td-card-bottom");
   basso.append(...[pezzi.basso].flat().filter(Boolean));
   apri.append(alto, h3, ...[pezzi.corpo].flat().filter(Boolean), basso);
   apri.addEventListener("click", () => {
@@ -35984,7 +36778,7 @@ function disegnaScheda(doc, stato2, voce2) {
   });
   if (typeof config.eliminaInBlocco === "function" && !voce2?.__bozza && id4) {
     scheda.dataset.batchCapable = "true";
-    const scegli = nodo6(doc, "input", "td-card-select");
+    const scegli = nodo8(doc, "input", "td-card-select");
     scegli.type = "checkbox";
     scegli.checked = stato2.selezionateInBlocco.has(id4);
     scegli.disabled = stato2.batchInCorso;
@@ -36003,9 +36797,9 @@ function disegnaScheda(doc, stato2, voce2) {
 function disegnaDettaglio(schermo, doc, stato2, voce2) {
   const config = stato2.config;
   const { dettaglio } = stato2.nodi;
-  const testa = nodo6(doc, "div", "td-detail-head");
-  testa.append(nodo6(doc, "span", "td-subtle", t("sezioni.list.detailCrumb", { name: config.nome })));
-  const espandi = nodo6(doc, "button", "talos-button talos-button--secondary talos-icon-button");
+  const testa = nodo8(doc, "div", "td-detail-head");
+  testa.append(nodo8(doc, "span", "td-subtle", t("sezioni.list.detailCrumb", { name: config.nome })));
+  const espandi = nodo8(doc, "button", "talos-button talos-button--secondary talos-icon-button");
   espandi.type = "button";
   espandi.setAttribute("aria-label", stato2.espanso ? t("sezioni.list.detail.showBeside") : t("sezioni.list.detail.expand"));
   espandi.setAttribute("aria-pressed", String(stato2.espanso));
@@ -36014,7 +36808,7 @@ function disegnaDettaglio(schermo, doc, stato2, voce2) {
     stato2.espanso = !stato2.espanso;
     disegna(schermo, doc, stato2);
   });
-  const chiudi = nodo6(doc, "button", "talos-button talos-button--secondary talos-icon-button");
+  const chiudi = nodo8(doc, "button", "talos-button talos-button--secondary talos-icon-button");
   chiudi.type = "button";
   chiudi.setAttribute("aria-label", t("sezioni.list.detail.close"));
   chiudi.append(icona5(doc, "x"));
@@ -36034,12 +36828,12 @@ function disegnaDettaglio(schermo, doc, stato2, voce2) {
     );
   });
   testa.append(espandi, chiudi);
-  const corpo = nodo6(doc, "div", "td-detail-body");
+  const corpo = nodo8(doc, "div", "td-detail-body");
   corpo.append(...[config.dettaglio(voce2, { doc, icona: (n, c) => icona5(doc, n, c), etichetta: (t2, tono) => etichetta(doc, t2, tono) })].flat().filter(Boolean));
-  const piede = nodo6(doc, "div", "td-detail-footer");
+  const piede = nodo8(doc, "div", "td-detail-footer");
   const azioni = config.azioniDettaglio ? [config.azioniDettaglio(voce2, { doc })].flat().filter(Boolean) : [];
   piede.append(...azioni);
-  if (config.notaPiede) piede.append(nodo6(doc, "span", "td-save-status", config.notaPiede(voce2)));
+  if (config.notaPiede) piede.append(nodo8(doc, "span", "td-save-status", config.notaPiede(voce2)));
   dettaglio.replaceChildren(testa, corpo, ...azioni.length || config.notaPiede ? [piede] : []);
 }
 var CHIAVE_PREFERENZE, LARGHEZZA_MINIMA, LARGHEZZA_MASSIMA, LARGHEZZA_NORMALE, PASSO_DIVISORIO, STATI, LEVA_SUPERFICI;
@@ -36059,7 +36853,7 @@ var init_sezione_elenco_dettaglio = __esm({
 });
 
 // src/components/automazioni-v2.js
-function el11(doc, tag2, classe, testo2) {
+function el12(doc, tag2, classe, testo2) {
   const n = doc.createElement(tag2);
   if (classe) n.className = classe;
   if (testo2 !== void 0) n.textContent = testo2;
@@ -36090,7 +36884,7 @@ function parolePianificazione(p) {
 function dataBreve(valore) {
   const d = typeof valore === "string" ? new Date(valore) : null;
   if (!d || !Number.isFinite(d.getTime())) return t("sezioni.common.dateNotRecorded");
-  return d.toLocaleString(localeUI11(), { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  return d.toLocaleString(localeUI12(), { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 }
 function parolaEsitoGiro(giro) {
   const esito = t(`sezioni.automations.v2.run.${giro?.esito ?? "partita"}`);
@@ -36136,40 +36930,40 @@ function vociMenuAutomazione(a, { onEsegui, onFerma, onModifica, onToggle, onApr
   return voci;
 }
 function creaBloccoProposta(doc, proposta) {
-  const blocco2 = el11(doc, "div", "talos-automation__proposta");
+  const blocco2 = el12(doc, "div", "talos-automation__proposta");
   blocco2.dataset.autoProposta = proposta.stato;
-  blocco2.append(el11(doc, "p", "talos-automation__proposta-perche", t("sezioni.automations.v2.proposal.why")));
+  blocco2.append(el12(doc, "p", "talos-automation__proposta-perche", t("sezioni.automations.v2.proposal.why")));
   if (Array.isArray(proposta.minacce) && proposta.minacce.length) {
-    const r = el11(doc, "div", "talos-callout talos-callout--pericolo talos-approval__avvisi");
+    const r = el12(doc, "div", "talos-callout talos-callout--pericolo talos-approval__avvisi");
     r.setAttribute("role", "alert");
-    const corpo = el11(doc, "div", "talos-approval__avvisi-corpo");
-    const lista = el11(doc, "ul", "talos-approval__avvisi-lista");
-    for (const codice of proposta.minacce) lista.append(el11(doc, "li", "", minacciaInParole(codice)));
-    corpo.append(el11(doc, "b", "", t("sezioni.automations.v2.card.threatsTitle")), lista);
+    const corpo = el12(doc, "div", "talos-approval__avvisi-corpo");
+    const lista = el12(doc, "ul", "talos-approval__avvisi-lista");
+    for (const codice of proposta.minacce) lista.append(el12(doc, "li", "", minacciaInParole(codice)));
+    corpo.append(el12(doc, "b", "", t("sezioni.automations.v2.card.threatsTitle")), lista);
     r.append(corpo);
     blocco2.append(r);
   }
   for (const [chiave, testo2] of [["now", proposta.prima], ["proposed", proposta.dopo]]) {
-    const parte = el11(doc, "div", "talos-approval__automazione-istruzioni");
+    const parte = el12(doc, "div", "talos-approval__automazione-istruzioni");
     parte.dataset.autoPropostaParte = chiave;
-    parte.append(el11(doc, "span", "talos-kv__k", t(`sezioni.automations.v2.proposal.${chiave}`)), el11(doc, "p", "talos-automation__istruzioni-testo", testo2 ?? ""));
+    parte.append(el12(doc, "span", "talos-kv__k", t(`sezioni.automations.v2.proposal.${chiave}`)), el12(doc, "p", "talos-automation__istruzioni-testo", testo2 ?? ""));
     blocco2.append(parte);
   }
   return blocco2;
 }
 function creaRigaGiro(giro, { document: doc = globalThis.document, onApri, onLetto, onProposta, onMenuGiro } = {}) {
-  const riga2 = el11(doc, "div", "talos-automation__giro");
+  const riga2 = el12(doc, "div", "talos-automation__giro");
   riga2.dataset.autoGiro = giro.runId;
   riga2.dataset.esito = giro.esito ?? "partita";
-  const testa = el11(doc, "div", "talos-automation__giro-testa");
+  const testa = el12(doc, "div", "talos-automation__giro-testa");
   const tono = giro.esito === "fallita" ? " talos-badge--danger" : giro.esito === "finita" ? " talos-badge--success" : giro.esito === "saltata" ? " talos-badge--warning" : "";
   const quando = giro.esito === "saltata" ? giro.previstaAlle ?? giro.saltataAlle : giro.partitaAlle ?? giro.previstaAlle;
-  testa.append(el11(doc, "span", "talos-muted", dataBreve(quando)), el11(doc, "span", `talos-badge talos-badge--sm${tono}`, parolaEsitoGiro(giro)));
-  if (giro.manuale) testa.append(el11(doc, "span", "talos-badge talos-badge--sm", t("sezioni.automations.v2.runs.byHand")));
-  if (giro.ritardo === "recupero") testa.append(el11(doc, "span", "talos-badge talos-badge--sm", t("sezioni.automations.v2.runs.catchUp")));
+  testa.append(el12(doc, "span", "talos-muted", dataBreve(quando)), el12(doc, "span", `talos-badge talos-badge--sm${tono}`, parolaEsitoGiro(giro)));
+  if (giro.manuale) testa.append(el12(doc, "span", "talos-badge talos-badge--sm", t("sezioni.automations.v2.runs.byHand")));
+  if (giro.ritardo === "recupero") testa.append(el12(doc, "span", "talos-badge talos-badge--sm", t("sezioni.automations.v2.runs.catchUp")));
   for (const [campo3, chiave] of [["istruzioni", "changedInstructions"], ["prossimaEsecuzione", "changedNext"]]) {
     if (!giro.cambi?.includes(campo3)) continue;
-    const segno = el11(doc, "span", "talos-badge talos-badge--warning talos-badge--sm", t(`sezioni.automations.v2.runs.${chiave}`));
+    const segno = el12(doc, "span", "talos-badge talos-badge--warning talos-badge--sm", t(`sezioni.automations.v2.runs.${chiave}`));
     segno.dataset.autoGiroCambio = campo3;
     testa.append(segno);
   }
@@ -36177,15 +36971,15 @@ function creaRigaGiro(giro, { document: doc = globalThis.document, onApri, onLet
   const inAttesa = proposta?.stato === "in-attesa";
   if (proposta) {
     const [tonoProposta, parola3] = inAttesa ? [" talos-badge--warning", "title"] : proposta.stato === "approvata" ? [" talos-badge--success", "approved"] : ["", "discarded"];
-    const segno = el11(doc, "span", `talos-badge talos-badge--sm${tonoProposta}`, t(`sezioni.automations.v2.proposal.${parola3}`));
+    const segno = el12(doc, "span", `talos-badge talos-badge--sm${tonoProposta}`, t(`sezioni.automations.v2.proposal.${parola3}`));
     segno.dataset.autoGiroProposta = proposta.stato;
     testa.append(segno);
   }
-  if (giro.daGuardare && !giro.letta) testa.append(el11(doc, "span", "talos-badge talos-badge--accent talos-badge--sm", t("sezioni.automations.v2.runs.new")));
-  const azioni = el11(doc, "div", "talos-automation__giro-azioni");
+  if (giro.daGuardare && !giro.letta) testa.append(el12(doc, "span", "talos-badge talos-badge--accent talos-badge--sm", t("sezioni.automations.v2.runs.new")));
+  const azioni = el12(doc, "div", "talos-automation__giro-azioni");
   if (inAttesa && onProposta) {
     for (const [decisione, chiave, classe] of [["approva", "approve", "talos-button--primary"], ["scarta", "discard", "talos-button--ghost"]]) {
-      const b = el11(doc, "button", `talos-button ${classe} talos-button--sm`, t(`sezioni.automations.v2.proposal.${chiave}`));
+      const b = el12(doc, "button", `talos-button ${classe} talos-button--sm`, t(`sezioni.automations.v2.proposal.${chiave}`));
       b.type = "button";
       b.dataset.autoPropostaDecidi = decisione;
       b.addEventListener("click", () => onProposta(giro, decisione));
@@ -36197,7 +36991,7 @@ function creaRigaGiro(giro, { document: doc = globalThis.document, onApri, onLet
     if (inAttesa && onProposta && onMenuGiro) {
       vociMenu.push({ chiave: "apri", etichetta: t("sezioni.automations.v2.runs.open"), icona: "i-doc", aziona: () => onApri(giro) });
     } else {
-      const apri = el11(doc, "button", "talos-button talos-button--ghost talos-button--sm", t("sezioni.automations.v2.runs.open"));
+      const apri = el12(doc, "button", "talos-button talos-button--ghost talos-button--sm", t("sezioni.automations.v2.runs.open"));
       apri.type = "button";
       apri.dataset.autoGiroApri = "";
       apri.addEventListener("click", () => onApri(giro));
@@ -36205,7 +36999,7 @@ function creaRigaGiro(giro, { document: doc = globalThis.document, onApri, onLet
     }
   }
   if (vociMenu.length) {
-    const piu = el11(doc, "button", "td-card-azioni");
+    const piu = el12(doc, "button", "td-card-azioni");
     piu.type = "button";
     piu.dataset.autoGiroMenu = "";
     piu.setAttribute("aria-haspopup", "menu");
@@ -36229,7 +37023,7 @@ function creaRigaGiro(giro, { document: doc = globalThis.document, onApri, onLet
     });
   }
   if (giro.daGuardare && !giro.letta && onLetto && !inAttesa) {
-    const letto = el11(doc, "button", "talos-button talos-button--ghost talos-button--sm", t("sezioni.automations.v2.runs.markRead"));
+    const letto = el12(doc, "button", "talos-button talos-button--ghost talos-button--sm", t("sezioni.automations.v2.runs.markRead"));
     letto.type = "button";
     letto.dataset.autoGiroLetto = "";
     letto.addEventListener("click", () => onLetto(giro));
@@ -36238,7 +37032,7 @@ function creaRigaGiro(giro, { document: doc = globalThis.document, onApri, onLet
   riga2.append(testa);
   const corpo = giro.riassunto ?? giro.dettaglio ?? (giro.esito === "finita" && !giro.daGuardare ? t("sezioni.automations.v2.runs.silent") : null);
   if (corpo) {
-    const testo2 = el11(doc, "p", "talos-automation__giro-testo", corpo.length > RIASSUNTO_IN_RIGA ? `${corpo.slice(0, RIASSUNTO_IN_RIGA).trimEnd()}…` : corpo);
+    const testo2 = el12(doc, "p", "talos-automation__giro-testo", corpo.length > RIASSUNTO_IN_RIGA ? `${corpo.slice(0, RIASSUNTO_IN_RIGA).trimEnd()}…` : corpo);
     if (corpo.length > RIASSUNTO_IN_RIGA) {
       testo2.tabIndex = 0;
       testo2.dataset.autoGiroAccorciato = "";
@@ -36262,12 +37056,12 @@ function creaRigaGiro(giro, { document: doc = globalThis.document, onApri, onLet
   if (azioni.children.length) riga2.append(azioni);
   return riga2;
 }
-var localeUI11, RIASSUNTO_IN_RIGA, segmentoDelCodice, minacciaInParole;
+var localeUI12, RIASSUNTO_IN_RIGA, segmentoDelCodice, minacciaInParole;
 var init_automazioni_v2 = __esm({
   "src/components/automazioni-v2.js"() {
     init_lingua();
     init_chat_foot();
-    localeUI11 = () => linguaCorrenteDiT() === "en" ? "en-US" : "it-IT";
+    localeUI12 = () => linguaCorrenteDiT() === "en" ? "en-US" : "it-IT";
     RIASSUNTO_IN_RIGA = 280;
     segmentoDelCodice = (codice) => String(codice ?? "").replace(/-([a-z])/gu, (_, c) => c.toUpperCase());
     minacciaInParole = (codice) => t(`sezioni.automations.v2.card.threat.${segmentoDelCodice(codice)}`);
@@ -36275,22 +37069,22 @@ var init_automazioni_v2 = __esm({
 });
 
 // src/components/automazioni-sezione.js
-function nodo7(doc, tag2, classe, testo2) {
+function nodo9(doc, tag2, classe, testo2) {
   const el35 = doc.createElement(tag2);
   if (classe) el35.className = classe;
   if (testo2 !== void 0 && testo2 !== null) el35.textContent = String(testo2);
   return el35;
 }
 function bottone3(doc, testo2, { variante = "secondary", esegui, disabilitato = false } = {}) {
-  const b = nodo7(doc, "button", `talos-button talos-button--${variante} talos-button--sm`, testo2);
+  const b = nodo9(doc, "button", `talos-button talos-button--${variante} talos-button--sm`, testo2);
   b.type = "button";
   b.disabled = disabilitato;
   if (esegui) b.addEventListener("click", esegui);
   return b;
 }
 function kv4(doc, k, v) {
-  const n = nodo7(doc, "div", "talos-kv");
-  n.append(nodo7(doc, "span", "talos-kv__k", k), nodo7(doc, "span", "talos-kv__v", v));
+  const n = nodo9(doc, "div", "talos-kv");
+  n.append(nodo9(doc, "span", "talos-kv__k", k), nodo9(doc, "span", "talos-kv__v", v));
   return n;
 }
 function anteprima2(testo2, quanti = 160) {
@@ -36298,7 +37092,7 @@ function anteprima2(testo2, quanti = 160) {
   return t2.length > quanti ? `${t2.slice(0, quanti).trimEnd()}…` : t2;
 }
 function bottoneMenu(doc, titolo2, apri) {
-  const b = nodo7(doc, "button", "td-card-azioni");
+  const b = nodo9(doc, "button", "td-card-azioni");
   b.type = "button";
   b.setAttribute("aria-haspopup", "menu");
   b.setAttribute("aria-label", t("sezioni.automations.v2.menu.label", { name: titolo2 }));
@@ -36377,8 +37171,8 @@ function aggiornaPaginaAutomazioni(schermo, elenco3, opzioni = {}) {
       return {
         dati: { versione: v2 ? "2" : "1" },
         alto,
-        corpo: [nodo7(d, "p", "td-excerpt", v2 ? anteprima2(a.istruzioni) : t("sezioni.automations.v2.row.legacyHint"))],
-        basso: v2 ? [nodo7(d, "span", "", t2.quando)] : [nodo7(d, "span", "", testiAutomazione(a).intervallo ?? "")],
+        corpo: [nodo9(d, "p", "td-excerpt", v2 ? anteprima2(a.istruzioni) : t("sezioni.automations.v2.row.legacyHint"))],
+        basso: v2 ? [nodo9(d, "span", "", t2.quando)] : [nodo9(d, "span", "", testiAutomazione(a).intervallo ?? "")],
         adorno: bottoneMenu(d, nomeDi2(a), (dove) => opzioni.onMenu?.(a, dove))
       };
     },
@@ -36386,14 +37180,14 @@ function aggiornaPaginaAutomazioni(schermo, elenco3, opzioni = {}) {
       const s = statoDi(a);
       if (a?.versione !== 2) {
         const t1 = testiAutomazione(a);
-        const meta1 = nodo7(d, "div", "td-detail-meta");
+        const meta1 = nodo9(d, "div", "td-detail-meta");
         meta1.append(etichetta3(s.testo, s.tono), etichetta3(t("sezioni.automations.v2.row.legacy"), ""));
         return [
           meta1,
-          nodo7(d, "h2", "", t1.nome),
+          nodo9(d, "h2", "", t1.nome),
           kv4(d, t("sezioni.automations.row.nextRun"), t1.prossima),
           kv4(d, t("sezioni.automations.row.lastRun"), t1.ultima),
-          nodo7(d, "p", "td-subtle", t("sezioni.automations.v2.section.legacyNote")),
+          nodo9(d, "p", "td-subtle", t("sezioni.automations.v2.section.legacyNote")),
           kv4(d, t("sezioni.automations.row.task"), a?.taskId ?? ""),
           kv4(d, t("sezioni.automations.row.model"), t1.modello ?? ""),
           ...rigaCoordinazione(d, a, t1.nome, { salvataggio, onCoordinazione: opzioni.onCoordinazione })
@@ -36402,16 +37196,16 @@ function aggiornaPaginaAutomazioni(schermo, elenco3, opzioni = {}) {
       const t2 = testiAutomazioneV2(a);
       const giri = opzioni.giri?.get?.(a.id) ?? null;
       if (!giri) queueMicrotask(() => opzioni.onCaricaGiri?.(a));
-      const meta2 = nodo7(d, "div", "td-detail-meta");
-      meta2.append(etichetta3(s.testo, s.tono), nodo7(d, "span", "", t2.origine), nodo7(d, "span", "", dataBreve(a.creataAlle)));
-      const storico = nodo7(d, "div", "talos-automation__storico");
+      const meta2 = nodo9(d, "div", "td-detail-meta");
+      meta2.append(etichetta3(s.testo, s.tono), nodo9(d, "span", "", t2.origine), nodo9(d, "span", "", dataBreve(a.creataAlle)));
+      const storico = nodo9(d, "div", "talos-automation__storico");
       storico.dataset.autoStorico = "";
-      if (!giri || giri.stato === "caricamento") storico.append(nodo7(d, "p", "td-subtle", t("sezioni.automations.v2.row.historyLoading")));
+      if (!giri || giri.stato === "caricamento") storico.append(nodo9(d, "p", "td-subtle", t("sezioni.automations.v2.row.historyLoading")));
       else if (giri.stato === "errore") {
-        const e = nodo7(d, "p", "td-subtle", t("sezioni.automations.v2.row.historyFailed", { reason: giri.errore }));
+        const e = nodo9(d, "p", "td-subtle", t("sezioni.automations.v2.row.historyFailed", { reason: giri.errore }));
         e.setAttribute("role", "alert");
         storico.append(e);
-      } else if (!giri.items?.length) storico.append(nodo7(d, "p", "td-subtle", t("sezioni.automations.v2.row.historyEmpty")));
+      } else if (!giri.items?.length) storico.append(nodo9(d, "p", "td-subtle", t("sezioni.automations.v2.row.historyEmpty")));
       else for (const giro of giri.items) storico.append(creaRigaGiro(giro, {
         document: d,
         onApri: opzioni.onApriGiro && ((g) => opzioni.onApriGiro(a, g)),
@@ -36421,25 +37215,25 @@ function aggiornaPaginaAutomazioni(schermo, elenco3, opzioni = {}) {
       }));
       return [
         meta2,
-        nodo7(d, "h2", "", t2.nome),
-        nodo7(d, "h3", "", t("sezioni.automations.v2.section.detail.when")),
+        nodo9(d, "h2", "", t2.nome),
+        nodo9(d, "h3", "", t("sezioni.automations.v2.section.detail.when")),
         // righe chiave/valore come «Dove e come»: una frase coi punti si leggeva male (foto 08/10)
         kv4(d, t("sezioni.automations.v2.section.detail.schedule"), t2.quando),
         // «Orario»: non ripete il titolo «Quando»
         kv4(d, t("sezioni.automations.v2.row.next"), t2.prossimo),
         kv4(d, t("sezioni.automations.v2.row.last"), t2.ultimo),
-        nodo7(d, "h3", "", t("sezioni.automations.v2.row.instructions")),
-        nodo7(d, "div", "td-prose", a.istruzioni ?? ""),
-        nodo7(d, "h3", "", t("sezioni.automations.v2.section.detail.where")),
+        nodo9(d, "h3", "", t("sezioni.automations.v2.row.instructions")),
+        nodo9(d, "div", "td-prose", a.istruzioni ?? ""),
+        nodo9(d, "h3", "", t("sezioni.automations.v2.section.detail.where")),
         kv4(d, t("sezioni.automations.v2.row.folder"), a.cartella ?? ""),
         kv4(d, t("sezioni.automations.row.model"), t2.modello),
         kv4(d, t("sezioni.automations.v2.row.permissions"), t2.permessi),
         kv4(d, t("sezioni.automations.v2.row.repeat"), t2.ripeti),
         ...rigaCoordinazione(d, a, t2.nome, { salvataggio, onCoordinazione: opzioni.onCoordinazione }),
-        nodo7(d, "h3", "", t("sezioni.automations.v2.section.detail.runs")),
+        nodo9(d, "h3", "", t("sezioni.automations.v2.section.detail.runs")),
         storico,
         // la regola dei giri persi e di «Da guardare» (era sotto l'elenco vecchio): accanto allo storico, dove serve
-        nodo7(d, "p", "td-subtle", t("modello.automations.v2Scope"))
+        nodo9(d, "p", "td-subtle", t("modello.automations.v2Scope"))
       ];
     },
     azioniDettaglio: (a, { doc: d }) => {
@@ -36482,7 +37276,7 @@ function collocaNuova(schermo) {
     if (master.getClientRects().length === 0 && topbar) {
       let strumenti = topbar.querySelector(".td-tools");
       if (!strumenti) {
-        strumenti = nodo7(schermo.ownerDocument, "div", "td-tools");
+        strumenti = nodo9(schermo.ownerDocument, "div", "td-tools");
         topbar.append(strumenti);
       }
       if (b.parentNode !== strumenti) strumenti.append(b);
@@ -36524,22 +37318,22 @@ var init_automazioni_sezione = __esm({
 });
 
 // src/components/automazione-foglio.js
-function el12(doc, tag2, classe, testo2) {
+function el13(doc, tag2, classe, testo2) {
   const n = doc.createElement(tag2);
   if (classe) n.className = classe;
   if (testo2 !== void 0) n.textContent = testo2;
   return n;
 }
 function campo2(doc, etichetta3, controllo, { id: id4 } = {}) {
-  const blocco2 = el12(doc, "label", "talos-automazione-campo");
+  const blocco2 = el13(doc, "label", "talos-automazione-campo");
   if (id4) controllo.id = id4;
-  blocco2.append(el12(doc, "span", "sheet-label", etichetta3), controllo);
+  blocco2.append(el13(doc, "span", "sheet-label", etichetta3), controllo);
   return blocco2;
 }
 function selettore(doc, voci, valore, { dataset } = {}) {
-  const s = el12(doc, "select", "sheet-input");
+  const s = el13(doc, "select", "sheet-input");
   for (const [v, testo2] of voci) {
-    const o = el12(doc, "option", void 0, testo2);
+    const o = el13(doc, "option", void 0, testo2);
     o.value = String(v);
     s.append(o);
   }
@@ -36553,19 +37347,19 @@ function frammentiDiDefault(adesso = /* @__PURE__ */ new Date()) {
   return { data: `${d.getFullYear()}-${due(d.getMonth() + 1)}-${due(d.getDate())}`, ora: d.getHours(), minuto: 0 };
 }
 function creaFoglioAutomazione(doc, { modo = "crea", bozza = {}, cartelle = [], modelloEtichetta = null, adesso = /* @__PURE__ */ new Date(), onSalva } = {}) {
-  const form = el12(doc, "form", "sheet-section talos-automazione-foglio");
+  const form = el13(doc, "form", "sheet-section talos-automazione-foglio");
   form.dataset.c = "AutomationSheet";
   form.noValidate = true;
   const p = bozza.pianificazione ?? { tipo: "giornaliera", ora: "09:00" };
   const def = frammentiDiDefault(adesso);
-  const nome = el12(doc, "input", "sheet-input");
+  const nome = el13(doc, "input", "sheet-input");
   nome.type = "text";
   nome.maxLength = 80;
   nome.required = true;
   nome.placeholder = t("sezioni.automations.v2.sheet.namePlaceholder");
   nome.value = bozza.nome ?? "";
   nome.dataset.autoFoglioNome = "";
-  const istruzioni = el12(doc, "textarea", "sheet-input talos-automazione-istruzioni");
+  const istruzioni = el13(doc, "textarea", "sheet-input talos-automazione-istruzioni");
   istruzioni.rows = 6;
   istruzioni.maxLength = 2e4;
   istruzioni.required = true;
@@ -36588,7 +37382,7 @@ function creaFoglioAutomazione(doc, { modo = "crea", bozza = {}, cartelle = [], 
     Number.isInteger(p.minuti) ? p.minuti : 30,
     { dataset: "autoFoglioOgni" }
   );
-  const data = el12(doc, "input", "sheet-input");
+  const data = el13(doc, "input", "sheet-input");
   data.type = "date";
   data.dataset.autoFoglioData = "";
   data.value = p.tipo === "una-volta" && typeof p.quando === "string" ? p.quando.slice(0, 10) : def.data;
@@ -36596,12 +37390,12 @@ function creaFoglioAutomazione(doc, { modo = "crea", bozza = {}, cartelle = [], 
     ora4.value = String(Number(p.quando.slice(11, 13)));
     minuto.value = String(Number(p.quando.slice(14, 16)));
   }
-  const espressione = el12(doc, "input", "sheet-input");
+  const espressione = el13(doc, "input", "sheet-input");
   espressione.type = "text";
   espressione.value = p.espressione ?? "";
   espressione.dataset.autoFoglioCron = "";
   espressione.spellcheck = false;
-  const riga2 = el12(doc, "div", "talos-automazione-orario");
+  const riga2 = el13(doc, "div", "talos-automazione-orario");
   const blocchi = {
     ora: campo2(doc, t("sezioni.automations.v2.sheet.hour"), ora4),
     minuto: campo2(doc, t("sezioni.automations.v2.sheet.minute"), minuto),
@@ -36628,15 +37422,15 @@ function creaFoglioAutomazione(doc, { modo = "crea", bozza = {}, cartelle = [], 
   };
   tipo.addEventListener("change", aggiornaOrario);
   aggiornaOrario();
-  const cartella = el12(doc, "input", "sheet-input");
+  const cartella = el13(doc, "input", "sheet-input");
   cartella.type = "text";
   cartella.spellcheck = false;
   cartella.required = true;
   cartella.value = bozza.cartella ?? cartelle[0] ?? "";
   cartella.dataset.autoFoglioCartella = "";
-  const suggerite = el12(doc, "div", "talos-automazione-cartelle");
+  const suggerite = el13(doc, "div", "talos-automazione-cartelle");
   for (const c of cartelle.filter((x) => x && x !== cartella.value).slice(0, 4)) {
-    const b = el12(doc, "button", "talos-button talos-button--secondary talos-button--sm", c);
+    const b = el13(doc, "button", "talos-button talos-button--secondary talos-button--sm", c);
     b.type = "button";
     b.dataset.autoFoglioCartellaSuggerita = "";
     b.addEventListener("click", () => {
@@ -36652,38 +37446,38 @@ function creaFoglioAutomazione(doc, { modo = "crea", bozza = {}, cartelle = [], 
     bozza.ripeti ?? "",
     { dataset: "autoFoglioRipeti" }
   );
-  const rigaCoordinazione2 = el12(doc, "label", "sheet-toggle-row");
-  const testiCoordinazione = el12(doc, "span");
-  testiCoordinazione.append(el12(doc, "strong", "", t("app.automations.coordination")), el12(doc, "small", "", t("app.automations.coordinationHint", { n: TETTO_AVVII_DA_SOLO })));
-  const coordinazione = el12(doc, "input", "talos-switch");
+  const rigaCoordinazione2 = el13(doc, "label", "sheet-toggle-row");
+  const testiCoordinazione = el13(doc, "span");
+  testiCoordinazione.append(el13(doc, "strong", "", t("app.automations.coordination")), el13(doc, "small", "", t("app.automations.coordinationHint", { n: TETTO_AVVII_DA_SOLO })));
+  const coordinazione = el13(doc, "input", "talos-switch");
   coordinazione.type = "checkbox";
   coordinazione.setAttribute("role", "switch");
   coordinazione.checked = bozza.coordinazione === true;
   coordinazione.dataset.nuovaAutomazioneCoordinazione = "";
   rigaCoordinazione2.append(testiCoordinazione, coordinazione);
-  const errore2 = el12(doc, "p", "sheet-hint talos-automazione-errore");
+  const errore2 = el13(doc, "p", "sheet-hint talos-automazione-errore");
   errore2.setAttribute("role", "alert");
   errore2.hidden = true;
   errore2.dataset.autoFoglioErrore = "";
-  const invia = el12(doc, "button", "primary-btn compact full", t(modo === "crea" ? "sezioni.automations.v2.sheet.create" : "sezioni.automations.v2.sheet.save"));
+  const invia = el13(doc, "button", "primary-btn compact full", t(modo === "crea" ? "sezioni.automations.v2.sheet.create" : "sezioni.automations.v2.sheet.save"));
   invia.type = "submit";
   invia.dataset.autoFoglioInvia = "";
   form.append(
     campo2(doc, t("sezioni.automations.v2.sheet.name"), nome),
     campo2(doc, t("sezioni.automations.v2.sheet.instructions"), istruzioni),
-    el12(doc, "small", "sheet-hint", t("sezioni.automations.v2.sheet.instructionsHint")),
+    el13(doc, "small", "sheet-hint", t("sezioni.automations.v2.sheet.instructionsHint")),
     campo2(doc, t("sezioni.automations.v2.sheet.when"), tipo),
     riga2,
-    el12(doc, "small", "sheet-hint", t("sezioni.automations.v2.sheet.whenHint")),
+    el13(doc, "small", "sheet-hint", t("sezioni.automations.v2.sheet.whenHint")),
     campo2(doc, t("sezioni.automations.v2.sheet.folder"), cartella),
     suggerite,
-    el12(doc, "small", "sheet-hint", t("sezioni.automations.v2.sheet.folderHint")),
+    el13(doc, "small", "sheet-hint", t("sezioni.automations.v2.sheet.folderHint")),
     campo2(doc, t("sezioni.automations.v2.sheet.permissions"), permessi),
     campo2(doc, t("sezioni.automations.v2.sheet.repeat"), ripeti),
     rigaCoordinazione2,
     /* ⛔ In creazione la frase è quella decisa dall'owner il 24/09 («come il mobile»): il modello è quello scelto nella chat, o il
        predefinito del server detto a parole. In modifica è il modello dell'automazione, che resta il suo. */
-    el12(doc, "small", "sheet-hint", modo === "crea" ? `${modelloEtichetta ? t("app.automations.selectedModel", { modello: modelloEtichetta }) : t("app.automations.serverDefaultModel")} ${t("sezioni.automations.v2.sheet.startsOn")}` : modelloEtichetta ? t("sezioni.automations.v2.sheet.model", { model: modelloEtichetta }) : t("sezioni.automations.v2.sheet.modelDefault")),
+    el13(doc, "small", "sheet-hint", modo === "crea" ? `${modelloEtichetta ? t("app.automations.selectedModel", { modello: modelloEtichetta }) : t("app.automations.serverDefaultModel")} ${t("sezioni.automations.v2.sheet.startsOn")}` : modelloEtichetta ? t("sezioni.automations.v2.sheet.model", { model: modelloEtichetta }) : t("sezioni.automations.v2.sheet.modelDefault")),
     errore2,
     invia
   );
@@ -36751,15 +37545,15 @@ var init_automazione_foglio = __esm({
 });
 
 // src/components/automazione-carta.js
-function el13(doc, tag2, classe, testo2) {
+function el14(doc, tag2, classe, testo2) {
   const n = doc.createElement(tag2);
   if (classe) n.className = classe;
   if (testo2 !== void 0) n.textContent = testo2;
   return n;
 }
 function kv5(doc, k, v) {
-  const n = el13(doc, "div", "talos-kv");
-  n.append(el13(doc, "span", "talos-kv__k", k), el13(doc, "span", "talos-kv__v", v));
+  const n = el14(doc, "div", "talos-kv");
+  n.append(el14(doc, "span", "talos-kv__k", k), el14(doc, "span", "talos-kv__v", v));
   return n;
 }
 function valoreInParole(campo3, valore) {
@@ -36805,25 +37599,25 @@ function creaAvvisi(doc, avvisi) {
   const oltre = unisciCartella(Array.isArray(avvisi?.oltre) ? avvisi.oltre : []);
   const minacce = Array.isArray(avvisi?.minacce) ? avvisi.minacce : [];
   if (minacce.length) {
-    const r = el13(doc, "div", "talos-callout talos-callout--pericolo talos-approval__avvisi");
+    const r = el14(doc, "div", "talos-callout talos-callout--pericolo talos-approval__avvisi");
     r.dataset.avvisiAutomazione = "minacce";
     r.setAttribute("role", "alert");
-    const corpo = el13(doc, "div", "talos-approval__avvisi-corpo");
-    corpo.append(el13(doc, "b", "", t("sezioni.automations.v2.card.threatsTitle")));
-    const lista = el13(doc, "ul", "talos-approval__avvisi-lista");
-    for (const codice of minacce) lista.append(el13(doc, "li", "", minacciaInParole(codice)));
+    const corpo = el14(doc, "div", "talos-approval__avvisi-corpo");
+    corpo.append(el14(doc, "b", "", t("sezioni.automations.v2.card.threatsTitle")));
+    const lista = el14(doc, "ul", "talos-approval__avvisi-lista");
+    for (const codice of minacce) lista.append(el14(doc, "li", "", minacciaInParole(codice)));
     corpo.append(lista);
     r.append(corpo);
     fuori.push(r);
   }
   if (oltre.length) {
-    const r = el13(doc, "div", "talos-callout talos-approval__avvisi");
+    const r = el14(doc, "div", "talos-callout talos-approval__avvisi");
     r.dataset.avvisiAutomazione = "oltre";
-    const corpo = el13(doc, "div", "talos-approval__avvisi-corpo");
-    corpo.append(el13(doc, "b", "", t("sezioni.automations.v2.card.beyondTitle")));
-    const lista = el13(doc, "ul", "talos-approval__avvisi-lista");
+    const corpo = el14(doc, "div", "talos-approval__avvisi-corpo");
+    corpo.append(el14(doc, "b", "", t("sezioni.automations.v2.card.beyondTitle")));
+    const lista = el14(doc, "ul", "talos-approval__avvisi-lista");
     for (const avviso of oltre) {
-      const li = el13(doc, "li", "", avvisoInParole(avviso));
+      const li = el14(doc, "li", "", avvisoInParole(avviso));
       li.dataset.avviso = avviso.codice;
       lista.append(li);
     }
@@ -36834,14 +37628,14 @@ function creaAvvisi(doc, avvisi) {
   return fuori;
 }
 function creaBloccoCartaAutomazione(doc, azione) {
-  const blocco2 = el13(doc, "div", "talos-approval__automazione");
+  const blocco2 = el14(doc, "div", "talos-approval__automazione");
   blocco2.dataset.bozzaAutomazione = azione?.tipo ?? "";
   blocco2.append(...creaAvvisi(doc, azione?.avvisi));
   if (azione?.tipo === "automation_create") {
     const b = azione.bozza ?? {};
     blocco2.append(kv5(doc, t(ETICHETTE2.pianificazione), valoreInParole("pianificazione", b.pianificazione)));
-    const testo2 = el13(doc, "div", "talos-approval__automazione-istruzioni");
-    testo2.append(el13(doc, "span", "talos-kv__k", t(ETICHETTE2.istruzioni)), el13(doc, "p", "talos-automation__istruzioni-testo", b.istruzioni ?? ""));
+    const testo2 = el14(doc, "div", "talos-approval__automazione-istruzioni");
+    testo2.append(el14(doc, "span", "talos-kv__k", t(ETICHETTE2.istruzioni)), el14(doc, "p", "talos-automation__istruzioni-testo", b.istruzioni ?? ""));
     blocco2.append(testo2);
     for (const campo3 of ["cartella", "modello", "permessi", "coordinazione", "ripeti", "prossimaEsecuzione"]) {
       if (campo3 === "prossimaEsecuzione" && b.pianificazione?.tipo === "manuale") continue;
@@ -36853,8 +37647,8 @@ function creaBloccoCartaAutomazione(doc, azione) {
     for (const campo3 of Object.keys(ETICHETTE2)) {
       if (!(campo3 in dopo)) continue;
       if (campo3 === "istruzioni") {
-        const testo2 = el13(doc, "div", "talos-approval__automazione-istruzioni");
-        testo2.append(el13(doc, "span", "talos-kv__k", t(ETICHETTE2.istruzioni)), el13(doc, "p", "talos-automation__istruzioni-testo", dopo.istruzioni ?? ""));
+        const testo2 = el14(doc, "div", "talos-approval__automazione-istruzioni");
+        testo2.append(el14(doc, "span", "talos-kv__k", t(ETICHETTE2.istruzioni)), el14(doc, "p", "talos-automation__istruzioni-testo", dopo.istruzioni ?? ""));
         blocco2.append(testo2);
         continue;
       }
@@ -36866,8 +37660,8 @@ function creaBloccoCartaAutomazione(doc, azione) {
     const a = azione.automazione ?? {};
     for (const campo3 of ["cartella", "modello", "permessi", "coordinazione"]) blocco2.append(kv5(doc, t(ETICHETTE2[campo3]), valoreInParole(campo3, a[campo3])));
     if (typeof azione.contesto === "string" && azione.contesto) {
-      const testo2 = el13(doc, "div", "talos-approval__automazione-istruzioni");
-      testo2.append(el13(doc, "span", "talos-kv__k", t("sezioni.automations.v2.card.context")), el13(doc, "p", "talos-automation__istruzioni-testo", azione.contesto));
+      const testo2 = el14(doc, "div", "talos-approval__automazione-istruzioni");
+      testo2.append(el14(doc, "span", "talos-kv__k", t("sezioni.automations.v2.card.context")), el14(doc, "p", "talos-automation__istruzioni-testo", azione.contesto));
       blocco2.append(testo2);
     }
   }
@@ -36898,18 +37692,21 @@ var init_automazione_carta = __esm({
 });
 
 // src/components/fornitori-carta.js
-function el14(doc, tag2, classe, testo2) {
+function el15(doc, tag2, classe, testo2) {
   const n = doc.createElement(tag2);
   if (classe) n.className = classe;
   if (testo2 !== void 0) n.textContent = testo2;
   return n;
 }
 function kv6(doc, k, v) {
-  const n = el14(doc, "div", "talos-kv");
-  n.append(el14(doc, "span", "talos-kv__k", k), el14(doc, "span", "talos-kv__v", v));
+  const n = el15(doc, "div", "talos-kv");
+  n.append(el15(doc, "span", "talos-kv__k", k), el15(doc, "span", "talos-kv__v", v));
   return n;
 }
 function testiCartaFornitori(azione) {
+  if (azione?.tipo === "chatgpt_account") {
+    return { badge: t("varie.providerCard.chatgptBadge"), bersaglio: azione.email || "ChatGPT", perche: t("varie.providerCard.chatgptDisconnect"), motivo: "", nota: "" };
+  }
   const slug2 = typeof azione?.fornitore === "string" ? azione.fornitore : "";
   const cambi = cambiDi(azione);
   const persona = cambi.some((c) => c.campo === "persona");
@@ -36926,8 +37723,12 @@ function testiCartaFornitori(azione) {
   };
 }
 function creaBloccoCartaFornitori(doc, azione) {
-  const blocco2 = el14(doc, "div", "talos-approval__automazione");
+  const blocco2 = el15(doc, "div", "talos-approval__automazione");
   blocco2.dataset.dettaglioFornitori = azione?.tipo ?? "";
+  if (azione?.tipo === "chatgpt_account") {
+    blocco2.append(kv6(doc, t("varie.providerCard.before"), t("varie.providerCard.chatgptNow")), kv6(doc, t("varie.providerCard.after"), t("varie.providerCard.chatgptAfter")));
+    return blocco2;
+  }
   const nessuno = t("varie.providerCard.none");
   const stato2 = (attivo) => t(attivo ? "varie.providerCard.excludedByDefault" : "varie.providerCard.allowedAgain");
   for (const c of cambiDi(azione)) {
@@ -36946,7 +37747,7 @@ var init_fornitori_carta = __esm({
   "src/components/fornitori-carta.js"() {
     init_lingua();
     init_chat_foot();
-    ATTREZZI_FORNITORI_CON_CARTA = Object.freeze(["provider_exclude", "provider_allow"]);
+    ATTREZZI_FORNITORI_CON_CARTA = Object.freeze(["provider_exclude", "provider_allow", "chatgpt_account"]);
     eCartaFornitori = (azione) => ATTREZZI_FORNITORI_CON_CARTA.includes(azione?.tipo);
     cambiDi = (azione) => Array.isArray(azione?.cambi) ? azione.cambi.filter((c) => c && (c.campo === "persona" || c.campo === "di-serie")) : [];
     nomeModello2 = (id4) => nomeModelloUmano(id4) || id4 || "";
@@ -36966,20 +37767,20 @@ function capacitaToolForgiato(capacita) {
 }
 function testiToolForgiato(strumento) {
   const s = strumento || {}, data = typeof s.installatoAlle === "string" ? new Date(s.installatoAlle) : null;
-  return { titolo: typeof s.titolo === "string" && s.titolo.trim() ? s.titolo : t("modelli.forge.untitled"), descrizione: typeof s.descrizione === "string" && s.descrizione.trim() ? s.descrizione : t("modelli.tools.descriptionUnavailable"), installato: data && Number.isFinite(data.getTime()) ? data.toLocaleString(localeUI12()) : t("modelli.forge.dateUnrecorded"), rischio: ["R1", "R2", "R3"].includes(s.rischio) ? s.rischio : t("modelli.forge.riskUnrecorded") };
+  return { titolo: typeof s.titolo === "string" && s.titolo.trim() ? s.titolo : t("modelli.forge.untitled"), descrizione: typeof s.descrizione === "string" && s.descrizione.trim() ? s.descrizione : t("modelli.tools.descriptionUnavailable"), installato: data && Number.isFinite(data.getTime()) ? data.toLocaleString(localeUI13()) : t("modelli.forge.dateUnrecorded"), rischio: ["R1", "R2", "R3"].includes(s.rischio) ? s.rischio : t("modelli.forge.riskUnrecorded") };
 }
 function filtraOfficina(strumenti, { query = "", stato: stato2 = "tutti" } = {}) {
   const q2 = String(query).trim().toLocaleLowerCase("it");
   return strumenti.filter((s) => (stato2 === "tutti" || (stato2 === "abilitati" ? s.abilitato === true : s.abilitato === false)) && (!q2 || [s.id, testiToolForgiato(s).titolo, testiToolForgiato(s).descrizione, ...Array.isArray(s.capacita) ? s.capacita : [], ...capacitaToolForgiato(s.capacita)].join(" ").toLocaleLowerCase("it").includes(q2)));
 }
-function el15(doc, tag2, classe, testo2) {
+function el16(doc, tag2, classe, testo2) {
   const n = doc.createElement(tag2);
   if (classe) n.className = classe;
   if (testo2 !== void 0) n.textContent = testo2;
   return n;
 }
 function icona6(doc) {
-  const contenitore = el15(doc, "span", "talos-list-row__icon"), svg2 = doc.createElementNS("http://www.w3.org/2000/svg", "svg"), use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
+  const contenitore = el16(doc, "span", "talos-list-row__icon"), svg2 = doc.createElementNS("http://www.w3.org/2000/svg", "svg"), use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
   svg2.setAttribute("class", "i");
   svg2.setAttribute("aria-hidden", "true");
   use.setAttribute("href", "#i-code");
@@ -36988,7 +37789,7 @@ function icona6(doc) {
   return contenitore;
 }
 function creaForgeRow(strumento, { document: doc = globalThis.document, selezionabile = true, selezionata = false, onSeleziona, onAbilita, salvataggio = false, salvataggioId = null } = {}) {
-  const dati = testiToolForgiato(strumento), stato2 = statoToolForgiato(strumento.abilitato), riga2 = el15(doc, selezionabile ? "button" : "div", "talos-list-row");
+  const dati = testiToolForgiato(strumento), stato2 = statoToolForgiato(strumento.abilitato), riga2 = el16(doc, selezionabile ? "button" : "div", "talos-list-row");
   riga2.dataset.forgeId = strumento.id;
   if (selezionabile) {
     riga2.type = "button";
@@ -36998,12 +37799,12 @@ function creaForgeRow(strumento, { document: doc = globalThis.document, selezion
     riga2.tabIndex = selezionata ? 0 : -1;
     riga2.addEventListener("click", () => onSeleziona?.(strumento.id));
   } else riga2.setAttribute("role", "group");
-  const testo2 = el15(doc, "span", "talos-list-row__text");
-  testo2.append(el15(doc, "span", "talos-list-row__title", dati.titolo), el15(doc, "span", "talos-list-row__sub", dati.descrizione), el15(doc, "span", "talos-list-row__sub", capacitaToolForgiato(strumento.capacita).join(" · ")));
-  const aside = el15(doc, "span", "talos-list-row__aside");
-  aside.append(el15(doc, "span", "talos-badge" + (stato2.tono ? " talos-badge--" + stato2.tono : "") + " talos-badge--sm", stato2.testo));
+  const testo2 = el16(doc, "span", "talos-list-row__text");
+  testo2.append(el16(doc, "span", "talos-list-row__title", dati.titolo), el16(doc, "span", "talos-list-row__sub", dati.descrizione), el16(doc, "span", "talos-list-row__sub", capacitaToolForgiato(strumento.capacita).join(" · ")));
+  const aside = el16(doc, "span", "talos-list-row__aside");
+  aside.append(el16(doc, "span", "talos-badge" + (stato2.tono ? " talos-badge--" + stato2.tono : "") + " talos-badge--sm", stato2.testo));
   if (!selezionabile) {
-    const bottone8 = el15(doc, "button", "talos-button talos-button--secondary talos-button--sm", salvataggio && salvataggioId === strumento.id ? t("modelli.common.saving") : stato2.azione);
+    const bottone8 = el16(doc, "button", "talos-button talos-button--secondary talos-button--sm", salvataggio && salvataggioId === strumento.id ? t("modelli.common.saving") : stato2.azione);
     bottone8.type = "button";
     bottone8.disabled = salvataggio || stato2.prossimo === null;
     bottone8.setAttribute("aria-label", t("modelli.forge.actionTitle", { action: stato2.azione, title: dati.titolo }));
@@ -37051,10 +37852,10 @@ function aggiornaPaginaOfficina(schermo, strumenti, opzioni = {}) {
 function renderOfficina(schermo, pagina) {
   const { strumenti, opzioni } = pagina, doc = schermo.ownerDocument, visibili = filtraOfficina(strumenti, pagina), abilitati = strumenti.filter((s) => s.abilitato === true).length;
   if (!opzioni.caricamento && !visibili.some((s) => s.id === pagina.scelto)) pagina.scelto = visibili[0]?.id || null;
-  const riepilogo = tn("modelli.forge.oneTool", "modelli.forge.manyTools", strumenti.length, { n: strumenti.length.toLocaleString(localeUI12()) }) + " · " + tn("modelli.forge.oneEnabled", "modelli.forge.manyEnabled", abilitati);
+  const riepilogo = tn("modelli.forge.oneTool", "modelli.forge.manyTools", strumenti.length, { n: strumenti.length.toLocaleString(localeUI13()) }) + " · " + tn("modelli.forge.oneEnabled", "modelli.forge.manyEnabled", abilitati);
   schermo.querySelector(".talos-topbar__path").textContent = opzioni.errore ? t("modelli.forge.unavailable") : opzioni.caricamento ? t("modelli.forge.loading") : riepilogo;
   const esito = schermo.querySelector("[data-forge-esito]");
-  esito.textContent = opzioni.errore || (opzioni.caricamento ? t("modelli.forge.loading") : visibili.length === strumenti.length ? riepilogo : tn("modelli.forge.oneFilteredTool", "modelli.forge.manyFilteredTools", strumenti.length, { visible: visibili.length, n: strumenti.length.toLocaleString(localeUI12()) }));
+  esito.textContent = opzioni.errore || (opzioni.caricamento ? t("modelli.forge.loading") : visibili.length === strumenti.length ? riepilogo : tn("modelli.forge.oneFilteredTool", "modelli.forge.manyFilteredTools", strumenti.length, { visible: visibili.length, n: strumenti.length.toLocaleString(localeUI13()) }));
   esito.setAttribute("role", opzioni.errore ? "alert" : "status");
   schermo.querySelector("[data-forge-refresh]").disabled = Boolean(opzioni.caricamento || opzioni.salvataggio);
   const erroreAzione = schermo.querySelector("[data-forge-errore-azione]");
@@ -37083,7 +37884,7 @@ function renderOfficina(schermo, pagina) {
     });
     return riga2;
   }));
-  if (!visibili.length) lista.append(el15(doc, "p", "talos-list-row talos-muted", opzioni.errore || (opzioni.caricamento ? t("modelli.forge.loading") : strumenti.length ? t("modelli.tools.noMatches") : t("modelli.forge.noTools"))));
+  if (!visibili.length) lista.append(el16(doc, "p", "talos-list-row talos-muted", opzioni.errore || (opzioni.caricamento ? t("modelli.forge.loading") : strumenti.length ? t("modelli.tools.noMatches") : t("modelli.forge.noTools"))));
   if (focusId) [...lista.querySelectorAll("[data-forge-id]")].find((r) => r.dataset.forgeId === focusId)?.focus({ preventScroll: true });
   const scelto = visibili.find((s) => s.id === pagina.scelto), dettaglio = schermo.querySelector("[data-forge-dettaglio]");
   dettaglio.hidden = !scelto;
@@ -37102,12 +37903,12 @@ function renderOfficina(schermo, pagina) {
   bottone8.disabled = Boolean(opzioni.salvataggio) || stato2.prossimo === null;
   bottone8.setAttribute("aria-label", t("modelli.forge.actionTitle", { action: stato2.azione, title: dati.titolo }));
 }
-var localeUI12, ALIAS, PAGINE2;
+var localeUI13, ALIAS, PAGINE2;
 var init_officina = __esm({
   "src/components/officina.js"() {
     init_lingua();
     init_nomi_attrezzi();
-    localeUI12 = () => linguaCorrenteDiT() === "en" ? "en-US" : "it-IT";
+    localeUI13 = () => linguaCorrenteDiT() === "en" ? "en-US" : "it-IT";
     ALIAS = /* @__PURE__ */ new Map([["tasks.list", "tasks_list"], ["tasks.create", "tasks_create"], ["tasks.setStatus", "tasks_update"], ["notes.list", "notes_list"], ["notes.create", "notes_create"], ["notes.update", "notes_update"], ["memory.search", "memory_search"], ["memory.create", "memory_write"]]);
     PAGINE2 = /* @__PURE__ */ new WeakMap();
   }
@@ -37200,7 +38001,7 @@ function paroleErroreRicerca(codice, azione) {
 function dataOra(iso) {
   const d = iso ? new Date(iso) : null;
   if (!d || !Number.isFinite(d.getTime())) return null;
-  return d.toLocaleString(localeUI13(), { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  return d.toLocaleString(localeUI14(), { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 function articoloData(iso) {
   const d = iso ? new Date(iso) : null;
@@ -37450,7 +38251,7 @@ function frasiRiverifica(riverifica) {
   const testa = tn("sezioni.research.recheck.headOne", "sezioni.research.recheck.headMany", fonti);
   return pezzi.length ? `${testa}: ${pezzi.join(" · ")}` : testa;
 }
-function nodo8(doc, tag2, classe, testo2) {
+function nodo10(doc, tag2, classe, testo2) {
   const el35 = doc.createElement(tag2);
   if (classe) el35.className = classe;
   if (testo2 !== void 0 && testo2 !== null) el35.textContent = String(testo2);
@@ -37466,12 +38267,12 @@ function iconaSvg(doc, nome) {
   return svg2;
 }
 function tag(doc, testo2, tono) {
-  const el35 = nodo8(doc, "span", "td-tag", testo2);
+  const el35 = nodo10(doc, "span", "td-tag", testo2);
   if (tono) el35.dataset.tone = tono;
   return el35;
 }
 function prosaInNodi(doc, prosa, rendiMarkdown, titoloGiaDetto = "") {
-  const contenitore = nodo8(doc, "div", "td-prosa-rapporto");
+  const contenitore = nodo10(doc, "div", "td-prosa-rapporto");
   if (typeof rendiMarkdown === "function") {
     const reso = rendiMarkdown(String(prosa ?? ""));
     if (reso) {
@@ -37482,27 +38283,27 @@ function prosaInNodi(doc, prosa, rendiMarkdown, titoloGiaDetto = "") {
   let paragrafo2 = [];
   const chiudi = () => {
     if (!paragrafo2.length) return;
-    contenitore.append(nodo8(doc, "p", "td-prose", paragrafo2.join(" ")));
+    contenitore.append(nodo10(doc, "p", "td-prose", paragrafo2.join(" ")));
     paragrafo2 = [];
   };
-  const normale2 = (t2) => String(t2 ?? "").replace(/\s+/g, " ").trim().toLocaleLowerCase("it");
+  const normale3 = (t2) => String(t2 ?? "").replace(/\s+/g, " ").trim().toLocaleLowerCase("it");
   let primoTitolo = true;
   for (const riga2 of String(prosa ?? "").split("\n")) {
     const titolo2 = /^(#{1,6})\s+(.*)$/.exec(riga2);
     if (titolo2) {
       chiudi();
-      if (primoTitolo && titoloGiaDetto && normale2(titolo2[2]) === normale2(titoloGiaDetto)) {
+      if (primoTitolo && titoloGiaDetto && normale3(titolo2[2]) === normale3(titoloGiaDetto)) {
         primoTitolo = false;
         continue;
       }
       primoTitolo = false;
       const livello = Math.min(titolo2[1].length + 1, 4);
-      contenitore.append(nodo8(doc, `h${livello}`, "", titolo2[2]));
+      contenitore.append(nodo10(doc, `h${livello}`, "", titolo2[2]));
       continue;
     }
     if (/^>\s?/.test(riga2)) {
       chiudi();
-      contenitore.append(nodo8(doc, "blockquote", "td-passaggio", riga2.replace(/^>\s?/, "")));
+      contenitore.append(nodo10(doc, "blockquote", "td-passaggio", riga2.replace(/^>\s?/, "")));
       continue;
     }
     if (!riga2.trim()) {
@@ -37515,25 +38316,25 @@ function prosaInNodi(doc, prosa, rendiMarkdown, titoloGiaDetto = "") {
   return contenitore;
 }
 function barraBilancio(doc, bilancio) {
-  const blocco2 = nodo8(doc, "div", "td-bilancio");
-  const barra = nodo8(doc, "div", "td-bilancio-barra");
+  const blocco2 = nodo10(doc, "div", "td-bilancio");
+  const barra = nodo10(doc, "div", "td-bilancio-barra");
   barra.setAttribute("role", "img");
   barra.setAttribute("aria-label", t("sezioni.research.tally.ariaLabel", { summary: frasiBilancio(bilancio) }));
   for (const pezzo2 of PEZZI_BILANCIO) {
     const quante = bilancio[pezzo2.chiave] || 0;
     if (!quante) continue;
-    const fetta = nodo8(doc, "i");
+    const fetta = nodo10(doc, "i");
     fetta.dataset.tone = pezzo2.tono;
     fetta.style.flexGrow = String(quante);
     barra.append(fetta);
   }
   blocco2.append(barra);
-  const voci = nodo8(doc, "div", "td-bilancio-voci");
+  const voci = nodo10(doc, "div", "td-bilancio-voci");
   for (const pezzo2 of PEZZI_BILANCIO) {
     const quante = bilancio[pezzo2.chiave] || 0;
     if (!quante) continue;
-    const voce2 = nodo8(doc, "span");
-    const pallino = nodo8(doc, "i");
+    const voce2 = nodo10(doc, "span");
+    const pallino = nodo10(doc, "i");
     pallino.dataset.tone = pezzo2.tono;
     voce2.append(pallino, doc.createTextNode(`${quante} ${parolaDelPezzo(pezzo2, quante)}`));
     voci.append(voce2);
@@ -37547,87 +38348,87 @@ function vistaRapporto(doc, voce2, lettura, ctx, dettaglio) {
   const deposito = testoDepositato(voce2, lettura, dettaglio);
   if (!haRapportoLeggibile(voce2)) {
     const respinto = deposito.genere === "respinto";
-    pezzi.push(nodo8(doc, "p", "td-prose", respinto ? t("sezioni.research.report.rejected") : conclusaDavvero(voce2?.stato) ? t("sezioni.research.report.concludedNoReport") : t("sezioni.research.report.noReport")));
-    if (conclusaDavvero(voce2?.stato)) pezzi.push(nodo8(doc, "p", "td-subtle", frasi.spiegazione));
+    pezzi.push(nodo10(doc, "p", "td-prose", respinto ? t("sezioni.research.report.rejected") : conclusaDavvero(voce2?.stato) ? t("sezioni.research.report.concludedNoReport") : t("sezioni.research.report.noReport")));
+    if (conclusaDavvero(voce2?.stato)) pezzi.push(nodo10(doc, "p", "td-subtle", frasi.spiegazione));
     if (frasi.haRapporto || deposito.genere === "respinto") {
-      pezzi.push(nodo8(doc, "h3", "", t("sezioni.research.report.filedHeading")));
-      pezzi.push(nodo8(doc, "p", "td-subtle", frasi.haRapporto ? t("sezioni.research.report.filedFromLibrary") : t("sezioni.research.report.filedText")));
+      pezzi.push(nodo10(doc, "h3", "", t("sezioni.research.report.filedHeading")));
+      pezzi.push(nodo10(doc, "p", "td-subtle", frasi.haRapporto ? t("sezioni.research.report.filedFromLibrary") : t("sezioni.research.report.filedText")));
       if (deposito.genere === "respinto") {
-        pezzi.push(nodo8(doc, "blockquote", "td-allegato", deposito.testo));
+        pezzi.push(nodo10(doc, "blockquote", "td-allegato", deposito.testo));
       } else if (lettura?.stato === "pronto") {
-        pezzi.push(nodo8(doc, "p", "td-subtle", t("sezioni.research.report.filedEmpty")));
+        pezzi.push(nodo10(doc, "p", "td-subtle", t("sezioni.research.report.filedEmpty")));
       } else if (lettura?.stato === "errore") {
-        const p = nodo8(doc, "p", "td-subtle", t("sezioni.research.report.filedOpenFailed", { reason: lettura.errore }));
+        const p = nodo10(doc, "p", "td-subtle", t("sezioni.research.report.filedOpenFailed", { reason: lettura.errore }));
         p.setAttribute("role", "alert");
         pezzi.push(p);
       } else if (!ctx?.puoLeggere) {
-        pezzi.push(nodo8(doc, "p", "td-subtle", t("sezioni.research.report.inLibrary")));
+        pezzi.push(nodo10(doc, "p", "td-subtle", t("sezioni.research.report.inLibrary")));
       } else {
-        pezzi.push(nodo8(doc, "p", "td-subtle", t("sezioni.research.report.readingFiled")));
+        pezzi.push(nodo10(doc, "p", "td-subtle", t("sezioni.research.report.readingFiled")));
       }
     }
-    if (voce2?.ultimoMessaggio) pezzi.push(nodo8(doc, "p", "td-subtle", t("sezioni.research.report.lastMessageNote")));
+    if (voce2?.ultimoMessaggio) pezzi.push(nodo10(doc, "p", "td-subtle", t("sezioni.research.report.lastMessageNote")));
     return pezzi;
   }
   if (!lettura && !ctx?.puoLeggere) {
-    pezzi.push(nodo8(doc, "p", "td-prose", t("sezioni.research.report.inLibraryNotice")));
-    pezzi.push(nodo8(doc, "p", "td-subtle", t("sezioni.research.report.notOpenableHere")));
+    pezzi.push(nodo10(doc, "p", "td-prose", t("sezioni.research.report.inLibraryNotice")));
+    pezzi.push(nodo10(doc, "p", "td-subtle", t("sezioni.research.report.notOpenableHere")));
     return pezzi;
   }
   if (!lettura || lettura.stato === "caricando") {
-    pezzi.push(nodo8(doc, "p", "td-prose", t("sezioni.research.report.reading")));
+    pezzi.push(nodo10(doc, "p", "td-prose", t("sezioni.research.report.reading")));
     return pezzi;
   }
   if (lettura.stato === "errore") {
-    const p = nodo8(doc, "p", "td-prose", t("sezioni.research.report.openFailed", { reason: lettura.errore }));
+    const p = nodo10(doc, "p", "td-prose", t("sezioni.research.report.openFailed", { reason: lettura.errore }));
     p.setAttribute("role", "alert");
-    pezzi.push(p, nodo8(doc, "p", "td-subtle", t("sezioni.research.report.livesInLibrary")));
+    pezzi.push(p, nodo10(doc, "p", "td-subtle", t("sezioni.research.report.livesInLibrary")));
     return pezzi;
   }
   if (!lettura.record) {
-    pezzi.push(nodo8(doc, "p", "td-subtle", PERCHE_SENZA_RECORD.get(lettura.perche) || t("sezioni.research.noRecord.fallback")));
+    pezzi.push(nodo10(doc, "p", "td-subtle", PERCHE_SENZA_RECORD.get(lettura.perche) || t("sezioni.research.noRecord.fallback")));
   }
   const testo2 = lettura.record?.summary?.trim() ? lettura.record.summary : lettura.prosa;
   if (testo2) pezzi.push(prosaInNodi(doc, testo2, ctx?.rendiMarkdown, frasi.domanda));
-  else pezzi.push(nodo8(doc, "p", "td-prose", t("sezioni.research.noRecord.empty")));
+  else pezzi.push(nodo10(doc, "p", "td-prose", t("sezioni.research.noRecord.empty")));
   return pezzi;
 }
 function vistaAffermazioni(doc, voce2, lettura) {
   if (!lettura?.record) {
     return [
-      nodo8(doc, "p", "td-prose", t("sezioni.research.claims.intro")),
-      nodo8(doc, "p", "td-subtle", lettura?.record === null && lettura?.perche ? PERCHE_SENZA_RECORD.get(lettura.perche) || "" : t("sezioni.research.claims.noneYet"))
+      nodo10(doc, "p", "td-prose", t("sezioni.research.claims.intro")),
+      nodo10(doc, "p", "td-subtle", lettura?.record === null && lettura?.perche ? PERCHE_SENZA_RECORD.get(lettura.perche) || "" : t("sezioni.research.claims.noneYet"))
     ];
   }
   const { claims = [], sources = [] } = lettura.record;
-  if (!claims.length) return [nodo8(doc, "p", "td-prose", t("sezioni.research.claims.none"))];
+  if (!claims.length) return [nodo10(doc, "p", "td-prose", t("sezioni.research.claims.none"))];
   return claims.map((entrata, indice2) => {
     const verdetto = verdettoInParole(entrata?.checks);
-    const blocco2 = nodo8(doc, "article", "td-affermazione");
-    const testa = nodo8(doc, "div", "td-affermazione-testa");
-    testa.append(nodo8(doc, "span", "td-affermazione-numero", String(indice2 + 1)), tag(doc, verdetto.parola, verdetto.tono));
-    blocco2.append(testa, nodo8(doc, "p", "td-affermazione-testo", entrata?.text || t("sezioni.research.claims.noText")));
-    if (entrata?.checks?.supportReason) blocco2.append(nodo8(doc, "p", "td-subtle", testoDelCampo(entrata.checks, "supportReason")));
-    if (entrata?.passage) blocco2.append(nodo8(doc, "blockquote", "td-passaggio", entrata.passage));
-    else blocco2.append(nodo8(doc, "p", "td-subtle", t("sezioni.research.claims.passageMissing")));
+    const blocco2 = nodo10(doc, "article", "td-affermazione");
+    const testa = nodo10(doc, "div", "td-affermazione-testa");
+    testa.append(nodo10(doc, "span", "td-affermazione-numero", String(indice2 + 1)), tag(doc, verdetto.parola, verdetto.tono));
+    blocco2.append(testa, nodo10(doc, "p", "td-affermazione-testo", entrata?.text || t("sezioni.research.claims.noText")));
+    if (entrata?.checks?.supportReason) blocco2.append(nodo10(doc, "p", "td-subtle", testoDelCampo(entrata.checks, "supportReason")));
+    if (entrata?.passage) blocco2.append(nodo10(doc, "blockquote", "td-passaggio", entrata.passage));
+    else blocco2.append(nodo10(doc, "p", "td-subtle", t("sezioni.research.claims.passageMissing")));
     const fonte = sources[(entrata?.sourceIndex ?? 0) - 1];
-    const piede = nodo8(doc, "div", "td-affermazione-piede");
+    const piede = nodo10(doc, "div", "td-affermazione-piede");
     if (fonte) {
-      const link = nodo8(doc, "a", "", fonte.title || fonte.url);
+      const link = nodo10(doc, "a", "", fonte.title || fonte.url);
       link.href = fonte.url || "#";
       link.target = "_blank";
       link.rel = "noreferrer noopener";
-      piede.append(link, nodo8(doc, "span", "td-subtle", comeOttenuta(fonte.obtained)));
+      piede.append(link, nodo10(doc, "span", "td-subtle", comeOttenuta(fonte.obtained)));
     } else {
-      piede.append(nodo8(doc, "span", "td-subtle", t("sezioni.research.claims.sourceNeverGathered")));
+      piede.append(nodo10(doc, "span", "td-subtle", t("sezioni.research.claims.sourceNeverGathered")));
     }
-    if (entrata?.checks?.judge) piede.append(nodo8(doc, "span", "td-subtle", t("sezioni.research.claims.judgedBy", { judge: entrata.checks.judge })));
+    if (entrata?.checks?.judge) piede.append(nodo10(doc, "span", "td-subtle", t("sezioni.research.claims.judgedBy", { judge: entrata.checks.judge })));
     blocco2.append(piede);
     for (const contraria of Array.isArray(entrata?.checks?.opposing) ? entrata.checks.opposing : []) {
-      const box = nodo8(doc, "div", "td-contraria");
-      box.append(nodo8(doc, "span", "td-subtle", t("sezioni.research.claims.opposing")));
-      if (contraria?.passage) box.append(nodo8(doc, "blockquote", "td-passaggio", contraria.passage));
-      const link = nodo8(doc, "a", "", contraria?.title || contraria?.url || t("sezioni.research.sources.untitled"));
+      const box = nodo10(doc, "div", "td-contraria");
+      box.append(nodo10(doc, "span", "td-subtle", t("sezioni.research.claims.opposing")));
+      if (contraria?.passage) box.append(nodo10(doc, "blockquote", "td-passaggio", contraria.passage));
+      const link = nodo10(doc, "a", "", contraria?.title || contraria?.url || t("sezioni.research.sources.untitled"));
       link.href = contraria?.url || "#";
       link.target = "_blank";
       link.rel = "noreferrer noopener";
@@ -37693,25 +38494,25 @@ function montaPannelloEsportazioni(doc, elenco3, { onScegli } = {}) {
   for (const gruppo of GRUPPI_ESPORTAZIONE) {
     const dentro = elenco3.filter((u) => u.gruppo === gruppo.id);
     if (!dentro.length) continue;
-    pezzi.push(nodo8(doc, "h3", "td-esporta-gruppo", gruppo.parola));
+    pezzi.push(nodo10(doc, "h3", "td-esporta-gruppo", gruppo.parola));
     const motiviDistinti = [...new Set(dentro.filter((u) => !u.disponibile).map((u) => u.motivo))];
     const motivoDiGruppo = motiviDistinti.length === 1 ? motiviDistinti[0] : null;
-    if (motivoDiGruppo) pezzi.push(nodo8(doc, "p", "td-esporta-motivo", motivoDiGruppo));
+    if (motivoDiGruppo) pezzi.push(nodo10(doc, "p", "td-esporta-motivo", motivoDiGruppo));
     const avvertenzeDistinte = [...new Set(dentro.filter((u) => u.disponibile).map((u) => u.avvertenza ?? null))];
     const avvertenzaDiGruppo = avvertenzeDistinte.length === 1 && avvertenzeDistinte[0] ? avvertenzeDistinte[0] : null;
     if (avvertenzaDiGruppo) {
       const tuttiSenzaVerifiche = dentro.filter((u) => u.disponibile).every((u) => u.senzaVerifiche);
-      pezzi.push(nodo8(doc, "p", "td-esporta-motivo", tuttiSenzaVerifiche ? t("sezioni.research.export.warning.groupNoVerification") : t("sezioni.research.export.warning.groupGeneric", { warning: avvertenzaDiGruppo })));
+      pezzi.push(nodo10(doc, "p", "td-esporta-motivo", tuttiSenzaVerifiche ? t("sezioni.research.export.warning.groupNoVerification") : t("sezioni.research.export.warning.groupGeneric", { warning: avvertenzaDiGruppo })));
     }
     for (const uscita of dentro) {
-      const riga2 = nodo8(doc, "button", "td-esporta-voce");
+      const riga2 = nodo10(doc, "button", "td-esporta-voce");
       riga2.type = "button";
       riga2.dataset.uscita = uscita.chiave;
       riga2.append(iconaSvg(doc, uscita.gruppo === "appunti" ? "copy" : "download"));
-      const testi = nodo8(doc, "span", "td-esporta-testi");
-      const titolo2 = nodo8(doc, "span", "td-esporta-nome", uscita.etichetta);
+      const testi = nodo10(doc, "span", "td-esporta-testi");
+      const titolo2 = nodo10(doc, "span", "td-esporta-nome", uscita.etichetta);
       if (uscita.avvertenza && !avvertenzaDiGruppo) titolo2.append(tag(doc, uscita.avvertenza, "warning"));
-      testi.append(titolo2, nodo8(doc, "span", "td-esporta-nota", uscita.disponibile || motivoDiGruppo ? uscita.spiega : uscita.motivo));
+      testi.append(titolo2, nodo10(doc, "span", "td-esporta-nota", uscita.disponibile || motivoDiGruppo ? uscita.spiega : uscita.motivo));
       riga2.append(testi);
       if (uscita.disponibile) {
         riga2.addEventListener("click", () => onScegli?.(uscita));
@@ -37741,41 +38542,41 @@ function frasePassaggi(ritrovati, persi) {
   return persiN === 1 ? t("sezioni.research.passages.someOne", { total: totale2 }) : t("sezioni.research.passages.someMany", { lost: persiN, total: totale2 });
 }
 function montaEsitoRiverifica(doc, stato2) {
-  const blocco2 = nodo8(doc, "div", "td-riverifica");
+  const blocco2 = nodo10(doc, "div", "td-riverifica");
   if (stato2?.stato === "in-corso") {
     blocco2.setAttribute("role", "status");
-    blocco2.append(nodo8(doc, "p", "td-subtle", t("sezioni.research.recheckPanel.running")));
+    blocco2.append(nodo10(doc, "p", "td-subtle", t("sezioni.research.recheckPanel.running")));
     return blocco2;
   }
   if (stato2?.stato === "errore") {
     blocco2.setAttribute("role", "alert");
-    blocco2.append(nodo8(doc, "p", "td-subtle", stato2.errore));
+    blocco2.append(nodo10(doc, "p", "td-subtle", stato2.errore));
     return blocco2;
   }
   const esito = stato2?.esito;
   if (!esito) return null;
   blocco2.setAttribute("role", "status");
-  const testa = nodo8(doc, "div", "td-riverifica-testa");
-  testa.append(nodo8(doc, "strong", "", t("sezioni.research.recheckPanel.heading")));
+  const testa = nodo10(doc, "div", "td-riverifica-testa");
+  testa.append(nodo10(doc, "strong", "", t("sezioni.research.recheckPanel.heading")));
   const quando = dataOra(esito.fattaAlle);
-  if (quando) testa.append(nodo8(doc, "span", "td-subtle", t("sezioni.research.recheckPanel.checkedOn", { article: articoloData(esito.fattaAlle), when: quando })));
-  blocco2.append(testa, nodo8(doc, "p", "td-prose", frasiRiverifica(esito)));
-  if (esito.avvertenza) blocco2.append(nodo8(doc, "p", "td-subtle", testoDelCampo(esito, "avvertenza")));
-  if (esito.troncata) blocco2.append(nodo8(doc, "p", "td-subtle", t("sezioni.research.recheckPanel.truncated", { read: esito.fonti?.length ?? 0, total: esito.fontiTotali })));
+  if (quando) testa.append(nodo10(doc, "span", "td-subtle", t("sezioni.research.recheckPanel.checkedOn", { article: articoloData(esito.fattaAlle), when: quando })));
+  blocco2.append(testa, nodo10(doc, "p", "td-prose", frasiRiverifica(esito)));
+  if (esito.avvertenza) blocco2.append(nodo10(doc, "p", "td-subtle", testoDelCampo(esito, "avvertenza")));
+  if (esito.troncata) blocco2.append(nodo10(doc, "p", "td-subtle", t("sezioni.research.recheckPanel.truncated", { read: esito.fonti?.length ?? 0, total: esito.fontiTotali })));
   for (const fonte of Array.isArray(esito.fonti) ? esito.fonti : []) {
     const parole = statoFonteRiverifica(fonte?.stato);
-    const riga2 = nodo8(doc, "div", "td-riverifica-fonte");
-    const alto = nodo8(doc, "div", "td-riverifica-riga");
+    const riga2 = nodo10(doc, "div", "td-riverifica-fonte");
+    const alto = nodo10(doc, "div", "td-riverifica-riga");
     alto.append(tag(doc, parole.parola, parole.tono));
-    const link = nodo8(doc, "a", "", fonte?.titolo || fonte?.url || t("sezioni.research.sources.untitled"));
+    const link = nodo10(doc, "a", "", fonte?.titolo || fonte?.url || t("sezioni.research.sources.untitled"));
     link.href = fonte?.url || "#";
     link.target = "_blank";
     link.rel = "noreferrer noopener";
     alto.append(link);
-    riga2.append(alto, nodo8(doc, "span", "td-subtle", parole.spiega));
+    riga2.append(alto, nodo10(doc, "span", "td-subtle", parole.spiega));
     if (fonte?.stato !== "irraggiungibile") {
       const frase = frasePassaggi(fonte?.passaggiRitrovati, fonte?.passaggiPersi);
-      if (frase) riga2.append(nodo8(doc, "span", "td-subtle", frase));
+      if (frase) riga2.append(nodo10(doc, "span", "td-subtle", frase));
     }
     blocco2.append(riga2);
   }
@@ -37784,26 +38585,26 @@ function montaEsitoRiverifica(doc, stato2) {
 function vistaFonti(doc, voce2, lettura, ctx) {
   const esito = ctx?.riverifica ? montaEsitoRiverifica(doc, ctx.riverifica) : null;
   if (!lettura?.record) {
-    return [esito, nodo8(doc, "p", "td-prose", t("sezioni.research.sourcesView.intro"))];
+    return [esito, nodo10(doc, "p", "td-prose", t("sezioni.research.sourcesView.intro"))];
   }
   const fonti = Array.isArray(lettura.record.sources) ? lettura.record.sources : [];
-  if (!fonti.length) return [esito, nodo8(doc, "p", "td-prose", t("sezioni.research.sourcesView.none"))];
+  if (!fonti.length) return [esito, nodo10(doc, "p", "td-prose", t("sezioni.research.sourcesView.none"))];
   const prove = proveDistinte(fonti);
-  const pezzi = [esito, nodo8(doc, "p", "td-subtle", prove.gruppi < prove.indirizzi ? t("sezioni.research.sourcesView.sameDomain", { summary: prove.frase }) : t("sezioni.research.sourcesView.otherDomains", { summary: prove.frase }))];
+  const pezzi = [esito, nodo10(doc, "p", "td-subtle", prove.gruppi < prove.indirizzi ? t("sezioni.research.sourcesView.sameDomain", { summary: prove.frase }) : t("sezioni.research.sourcesView.otherDomains", { summary: prove.frase }))];
   for (const fonte of fonti) {
-    const riga2 = nodo8(doc, "div", "td-source");
-    const link = nodo8(doc, "a", "", fonte.title || fonte.url || t("sezioni.research.sources.untitled"));
+    const riga2 = nodo10(doc, "div", "td-source");
+    const link = nodo10(doc, "a", "", fonte.title || fonte.url || t("sezioni.research.sources.untitled"));
     link.href = fonte.url || "#";
     link.target = "_blank";
     link.rel = "noreferrer noopener";
     riga2.append(link);
-    riga2.append(nodo8(doc, "span", "", fonte.url || t("sezioni.research.sourcesView.addressNotRecorded")));
+    riga2.append(nodo10(doc, "span", "", fonte.url || t("sezioni.research.sourcesView.addressNotRecorded")));
     const dettagli2 = [
       fonte.publishedAt ? t("sezioni.research.sourcesView.declaredDate", { date: fonte.publishedAt }) : t("sezioni.research.sourcesView.dateNotDeclared"),
       comeOttenuta(fonte.obtained),
       t("sezioni.research.sourcesView.proofGroup", { group: gruppoDellaFonte(fonte) })
     ].join(" · ");
-    riga2.append(nodo8(doc, "span", "", dettagli2));
+    riga2.append(nodo10(doc, "span", "", dettagli2));
     pezzi.push(riga2);
   }
   return pezzi;
@@ -37812,7 +38613,7 @@ function frasiSpesa(spesa) {
   if (!spesa) return null;
   const pezzi = [];
   const token = Number(spesa.tokens) || 0;
-  if (token) pezzi.push(t("sezioni.research.spend.tokens", { value: token >= 1e3 ? `${new Intl.NumberFormat(localeUI13(), { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(token / 1e3)}k` : token }));
+  if (token) pezzi.push(t("sezioni.research.spend.tokens", { value: token >= 1e3 ? `${new Intl.NumberFormat(localeUI14(), { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(token / 1e3)}k` : token }));
   if (spesa.searches) pezzi.push(tn("sezioni.research.spend.searchesOne", "sezioni.research.spend.searchesMany", spesa.searches));
   if (spesa.pages) pezzi.push(tn("sezioni.research.spend.pagesOne", "sezioni.research.spend.pagesMany", spesa.pages));
   return pezzi.length ? pezzi.join(" · ") : null;
@@ -37823,33 +38624,33 @@ function vistaPiano(doc, dettaglio) {
   const passi = Array.isArray(ricerca?.passi) ? ricerca.passi : [];
   if (!piano.length && !passi.length) {
     return [
-      nodo8(doc, "p", "td-prose", ricerca ? t("sezioni.research.plan.noneDeclared") : t("sezioni.research.plan.comesWithNewEngine")),
-      nodo8(doc, "p", "td-subtle", t("sezioni.research.plan.futureNote"))
+      nodo10(doc, "p", "td-prose", ricerca ? t("sezioni.research.plan.noneDeclared") : t("sezioni.research.plan.comesWithNewEngine")),
+      nodo10(doc, "p", "td-subtle", t("sezioni.research.plan.futureNote"))
     ];
   }
   const pezzi = [];
   if (piano.length) {
-    pezzi.push(nodo8(doc, "h3", "", t("sezioni.research.plan.linesHeading")));
+    pezzi.push(nodo10(doc, "h3", "", t("sezioni.research.plan.linesHeading")));
     for (const linea of piano) {
-      const riga2 = nodo8(doc, "div", "td-source");
-      riga2.append(nodo8(doc, "strong", "", linea?.question || linea?.domanda || t("sezioni.research.plan.lineWithoutQuestion")));
+      const riga2 = nodo10(doc, "div", "td-source");
+      riga2.append(nodo10(doc, "strong", "", linea?.question || linea?.domanda || t("sezioni.research.plan.lineWithoutQuestion")));
       const previsto = frasiSpesa(linea?.estimate);
-      if (previsto) riga2.append(nodo8(doc, "span", "", t("sezioni.research.plan.expected", { estimate: previsto })));
+      if (previsto) riga2.append(nodo10(doc, "span", "", t("sezioni.research.plan.expected", { estimate: previsto })));
       pezzi.push(riga2);
     }
   }
   if (passi.length) {
-    pezzi.push(nodo8(doc, "h3", "", t("sezioni.research.plan.stepsHeading")));
+    pezzi.push(nodo10(doc, "h3", "", t("sezioni.research.plan.stepsHeading")));
     for (const passo2 of passi) {
-      const riga2 = nodo8(doc, "div", "td-source");
-      const alto = nodo8(doc, "div", "td-riverifica-riga");
+      const riga2 = nodo10(doc, "div", "td-source");
+      const alto = nodo10(doc, "div", "td-riverifica-riga");
       const esito = ESITI_PASSO.get(passo2?.state) || { parola: t("sezioni.research.stepState.unknown"), tono: "" };
       alto.append(tag(doc, esito.parola, esito.tono));
-      alto.append(nodo8(doc, "strong", "", PASSI_RICERCA.get(passo2?.kind) || t("sezioni.research.step.fallback")));
+      alto.append(nodo10(doc, "strong", "", PASSI_RICERCA.get(passo2?.kind) || t("sezioni.research.step.fallback")));
       riga2.append(alto);
       const dettagli2 = [frasiSpesa(passo2?.spend), passo2?.error ? t("sezioni.research.plan.stopped", { error: testoDelCampo(passo2, "error") }) : null].filter(Boolean);
       if (passo2?.attempts > 1) dettagli2.push(t("sezioni.research.plan.attempts", { n: passo2.attempts }));
-      if (dettagli2.length) riga2.append(nodo8(doc, "span", "", dettagli2.join(" · ")));
+      if (dettagli2.length) riga2.append(nodo10(doc, "span", "", dettagli2.join(" · ")));
       pezzi.push(riga2);
     }
   }
@@ -37859,10 +38660,10 @@ function vistaAndata(doc, voce2, ctx, dettaglio) {
   const frasi = frasiVoce(voce2);
   const ricerca = dettaglio?.stato === "pronto" ? dettaglio.ricerca : null;
   const pezzi = [];
-  const righe = nodo8(doc, "dl", "td-andata");
+  const righe = nodo10(doc, "dl", "td-andata");
   const riga2 = (etichetta3, valore) => {
     if (!valore) return;
-    righe.append(nodo8(doc, "dt", "", etichetta3), nodo8(doc, "dd", "", valore));
+    righe.append(nodo10(doc, "dt", "", etichetta3), nodo10(doc, "dd", "", valore));
   };
   riga2(t("sezioni.research.went.status"), frasi.parola);
   const avanzamento = voce2?.stato === "running" ? ricerca?.avanzamento ?? voce2?.avanzamento ?? null : null;
@@ -37887,13 +38688,13 @@ function vistaAndata(doc, voce2, ctx, dettaglio) {
   }
   pezzi.push(righe);
   if (voce2?.ultimoMessaggio) {
-    pezzi.push(nodo8(doc, "h3", "", t("sezioni.research.went.lastMessageHeading")));
-    pezzi.push(nodo8(doc, "p", "td-subtle", t("sezioni.research.went.lastMessageNote")));
-    pezzi.push(nodo8(doc, "blockquote", "td-allegato", String(voce2.ultimoMessaggio)));
+    pezzi.push(nodo10(doc, "h3", "", t("sezioni.research.went.lastMessageHeading")));
+    pezzi.push(nodo10(doc, "p", "td-subtle", t("sezioni.research.went.lastMessageNote")));
+    pezzi.push(nodo10(doc, "blockquote", "td-allegato", String(voce2.ultimoMessaggio)));
   }
   if (voce2?.padreId && typeof ctx?.onApriSessione === "function") {
-    pezzi.push(nodo8(doc, "h3", "", t("sezioni.research.went.startedFromHeading")));
-    const b = nodo8(doc, "button", "talos-button talos-button--secondary talos-button--sm", t("sezioni.research.went.openSourceConversation"));
+    pezzi.push(nodo10(doc, "h3", "", t("sezioni.research.went.startedFromHeading")));
+    const b = nodo10(doc, "button", "talos-button talos-button--secondary talos-button--sm", t("sezioni.research.went.openSourceConversation"));
     b.type = "button";
     b.addEventListener("click", () => ctx.onApriSessione({ id: voce2.padreId }));
     pezzi.push(b);
@@ -37962,12 +38763,12 @@ function montaDettaglioRicerca(voce2, ctx) {
   const dettaglio = magazzino.dettagli.get(String(voce2?.id)) || null;
   const riverifica = magazzino.riverifiche.get(String(voce2?.id)) || null;
   const pezzi = [];
-  const meta2 = nodo8(doc, "div", "td-detail-meta");
+  const meta2 = nodo10(doc, "div", "td-detail-meta");
   meta2.append(tag(doc, frasi.parola, frasi.tono));
-  if (frasi.avviata) meta2.append(nodo8(doc, "span", "", t("sezioni.research.meta.started", { article: articoloData(voce2?.avviataAlle), when: frasi.avviata })));
-  if (frasi.durata) meta2.append(nodo8(doc, "span", "", t("sezioni.research.meta.duration", { duration: frasi.durata })));
-  const strumenti = nodo8(doc, "span", "td-tools");
-  const menu = nodo8(doc, "button", "talos-button talos-button--secondary talos-icon-button");
+  if (frasi.avviata) meta2.append(nodo10(doc, "span", "", t("sezioni.research.meta.started", { article: articoloData(voce2?.avviataAlle), when: frasi.avviata })));
+  if (frasi.durata) meta2.append(nodo10(doc, "span", "", t("sezioni.research.meta.duration", { duration: frasi.durata })));
+  const strumenti = nodo10(doc, "span", "td-tools");
+  const menu = nodo10(doc, "button", "talos-button talos-button--secondary talos-icon-button");
   menu.type = "button";
   menu.setAttribute("aria-haspopup", "menu");
   menu.setAttribute("aria-label", t("sezioni.common.actionsFor", { name: frasi.domanda }));
@@ -37978,13 +38779,13 @@ function montaDettaglioRicerca(voce2, ctx) {
   });
   strumenti.append(menu);
   meta2.append(strumenti);
-  pezzi.push(meta2, nodo8(doc, "h2", "", frasi.domanda));
-  if (!conclusaDavvero(voce2?.stato)) pezzi.push(nodo8(doc, "p", "td-subtle", frasi.spiegazione));
+  pezzi.push(meta2, nodo10(doc, "h2", "", frasi.domanda));
+  if (!conclusaDavvero(voce2?.stato)) pezzi.push(nodo10(doc, "p", "td-subtle", frasi.spiegazione));
   if (lettura?.stato === "pronto" && lettura.record) {
     const bilancio = bilancioDaRecord(lettura.record);
     if (bilancio.totale) {
       pezzi.push(barraBilancio(doc, bilancio));
-      const sotto = nodo8(doc, "p", "td-subtle");
+      const sotto = nodo10(doc, "p", "td-subtle");
       const prove = proveDistinte(lettura.record.sources);
       sotto.textContent = lettura.record.judge ? t("sezioni.research.tally.verifiedBy", { judge: lettura.record.judge, summary: prove.frase }) : t("sezioni.research.tally.notRun", { summary: prove.frase });
       pezzi.push(sotto);
@@ -37993,15 +38794,15 @@ function montaDettaglioRicerca(voce2, ctx) {
   contatoreIdentificativi += 1;
   const radice2 = `td-ric-${contatoreIdentificativi}`;
   const scelta = magazzino.viste.get(String(voce2?.id)) || (haRapportoLeggibile(voce2) ? "rapporto" : "andata");
-  const lista = nodo8(doc, "div", "td-segment td-viste");
+  const lista = nodo10(doc, "div", "td-segment td-viste");
   lista.setAttribute("role", "tablist");
   lista.setAttribute("aria-label", t("sezioni.research.view.groupLabel"));
-  const pannello = nodo8(doc, "div", "td-vista");
+  const pannello = nodo10(doc, "div", "td-vista");
   pannello.setAttribute("role", "tabpanel");
   pannello.tabIndex = 0;
   pannello.id = `${radice2}-pannello`;
   const schede = VISTE.map((vista) => {
-    const b = nodo8(doc, "button", "", vista.parola);
+    const b = nodo10(doc, "button", "", vista.parola);
     b.type = "button";
     b.id = `${radice2}-${vista.id}`;
     b.dataset.vista = vista.id;
@@ -38080,13 +38881,13 @@ function scaricaTesto(doc, nome, testo2, mime = "text/markdown") {
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 5e3);
 }
-var localeUI13, STATI_RICERCA, INTERROTTA_DAL_FORNITORE, AZIONI_RICERCA, APERTURA_RECORD, CHIUSURA_RECORD, MappaTradotta, PERCHE_SENZA_RECORD, PEZZI_BILANCIO, parolaDelPezzo, SUFFISSI_DI_SECONDO_LIVELLO, MAGAZZINI, INTERVALLO_RICERCHE_VIVE, STATI_FONTE_RIVERIFICA, VISTE, FORMATI_ESPORTAZIONE, GRUPPI_ESPORTAZIONE, MOTIVI_ESPORTAZIONE, PASSI_RICERCA, ESITI_PASSO, contatoreIdentificativi;
+var localeUI14, STATI_RICERCA, INTERROTTA_DAL_FORNITORE, AZIONI_RICERCA, APERTURA_RECORD, CHIUSURA_RECORD, MappaTradotta, PERCHE_SENZA_RECORD, PEZZI_BILANCIO, parolaDelPezzo, SUFFISSI_DI_SECONDO_LIVELLO, MAGAZZINI, INTERVALLO_RICERCHE_VIVE, STATI_FONTE_RIVERIFICA, VISTE, FORMATI_ESPORTAZIONE, GRUPPI_ESPORTAZIONE, MOTIVI_ESPORTAZIONE, PASSI_RICERCA, ESITI_PASSO, contatoreIdentificativi;
 var init_ricerca_dettaglio = __esm({
   "src/components/ricerca-dettaglio.js"() {
     init_lingua();
     init_testo_server();
     init_ricerca_avanzamento();
-    localeUI13 = () => linguaCorrenteDiT() === "en" ? "en-US" : "it-IT";
+    localeUI14 = () => linguaCorrenteDiT() === "en" ? "en-US" : "it-IT";
     STATI_RICERCA = /* @__PURE__ */ new Map([
       /* ⛔ `parola` e `cosaFare` sono getter: si leggono a ogni uso, non alla creazione del modulo, così seguono il cambio di lingua. */
       ["running", { get parola() {
@@ -38411,12 +39212,12 @@ function testiRicerca(ricerca) {
   const scritta = [ricerca?.domanda, ricerca?.titolo].find((v) => typeof v === "string" && v.trim());
   const titolo2 = scritta ? scritta.trim() : t("sezioni.research.untitled");
   const data = typeof ricerca?.avviataAlle === "string" ? new Date(ricerca.avviataAlle) : null, valida2 = data && Number.isFinite(data.getTime());
-  return { titolo: titolo2, avviata: valida2 ? data.toLocaleString(localeUI14(), { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) : null, dataBreve: valida2 ? t("sezioni.research.row.started", { article: articoloData(ricerca?.avviataAlle), date: data.toLocaleDateString(localeUI14()) }) : t("sezioni.common.dateNotRecorded") };
+  return { titolo: titolo2, avviata: valida2 ? data.toLocaleString(localeUI15(), { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) : null, dataBreve: valida2 ? t("sezioni.research.row.started", { article: articoloData(ricerca?.avviataAlle), date: data.toLocaleDateString(localeUI15()) }) : t("sezioni.common.dateNotRecorded") };
 }
 function riepilogoRicerche(ricerche) {
   return tn("sezioni.research.summary.one", "sezioni.research.summary.many", ricerche.length);
 }
-function el16(doc, tag2, classe, testo2) {
+function el17(doc, tag2, classe, testo2) {
   const n = doc.createElement(tag2);
   if (classe) n.className = classe;
   if (testo2 !== void 0) n.textContent = testo2;
@@ -38424,31 +39225,31 @@ function el16(doc, tag2, classe, testo2) {
 }
 function creaReportRow(ricerca, { document: doc = globalThis.document, aperta: aperta2 = false, onEspandi, onApriRapporto } = {}) {
   const t2 = testiRicerca(ricerca), stato2 = statoRicerca(ricerca);
-  const riga2 = el16(doc, "div", "talos-list-row");
+  const riga2 = el17(doc, "div", "talos-list-row");
   riga2.dataset.c = "ReportRow";
   riga2.dataset.researchId = ricerca?.id || "";
   riga2.setAttribute("role", "listitem");
-  const icona16 = el16(doc, "span", "talos-list-row__icon"), svg2 = doc.createElementNS("http://www.w3.org/2000/svg", "svg"), use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
+  const icona16 = el17(doc, "span", "talos-list-row__icon"), svg2 = doc.createElementNS("http://www.w3.org/2000/svg", "svg"), use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
   svg2.setAttribute("class", "i");
   svg2.setAttribute("aria-hidden", "true");
   use.setAttribute("href", "#i-globe");
   svg2.append(use);
   icona16.append(svg2);
-  const testo2 = el16(doc, "span", "talos-list-row__text"), titolo2 = el16(doc, "span", "talos-list-row__title", t2.titolo), sotto = el16(doc, "span", "talos-list-row__sub");
+  const testo2 = el17(doc, "span", "talos-list-row__text"), titolo2 = el17(doc, "span", "talos-list-row__title", t2.titolo), sotto = el17(doc, "span", "talos-list-row__sub");
   titolo2.title = t2.titolo;
   testo2.append(titolo2, sotto);
   if (ricerca?.stato === "running" && ricerca?.avanzamento) {
     const av = creaAvanzamentoRicerca(doc, ricerca.avanzamento, { etichetta: t("sezioni.research.row.progressLabel", { title: t2.titolo }) });
     if (av) testo2.append(av);
   }
-  const aside = el16(doc, "span", "talos-list-row__aside");
-  aside.append(el16(doc, "span", "talos-badge" + (stato2.tono ? " talos-badge--" + stato2.tono : ""), stato2.testo));
-  const apri = el16(doc, "button", "talos-button talos-button--ghost talos-button--sm", t("sezioni.research.row.openReport"));
+  const aside = el17(doc, "span", "talos-list-row__aside");
+  aside.append(el17(doc, "span", "talos-badge" + (stato2.tono ? " talos-badge--" + stato2.tono : ""), stato2.testo));
+  const apri = el17(doc, "button", "talos-button talos-button--ghost talos-button--sm", t("sezioni.research.row.openReport"));
   apri.type = "button";
   apri.hidden = !(ricerca?.reportLibraryId && typeof onApriRapporto === "function");
   apri.setAttribute("aria-label", t("sezioni.research.row.openReportLabel", { title: t2.titolo }));
   apri.addEventListener("click", () => onApriRapporto?.(ricerca));
-  const dettagli2 = el16(doc, "button", "talos-button talos-button--ghost talos-button--sm");
+  const dettagli2 = el17(doc, "button", "talos-button talos-button--ghost talos-button--sm");
   dettagli2.type = "button";
   function mostra() {
     riga2.dataset.aperta = String(aperta2);
@@ -38467,13 +39268,13 @@ function creaReportRow(ricerca, { document: doc = globalThis.document, aperta: a
   riga2.append(icona16, testo2, aside);
   return riga2;
 }
-var localeUI14;
+var localeUI15;
 var init_ricerca = __esm({
   "src/components/ricerca.js"() {
     init_lingua();
     init_ricerca_dettaglio();
     init_ricerca_avanzamento();
-    localeUI14 = () => linguaCorrenteDiT() === "en" ? "en-US" : "it-IT";
+    localeUI15 = () => linguaCorrenteDiT() === "en" ? "en-US" : "it-IT";
   }
 });
 
@@ -38487,7 +39288,7 @@ function origineVoceLibreria(origine) {
 function testiVoceLibreria(voce2) {
   const nome = typeof voce2?.nome === "string" && voce2.nome.trim() ? voce2.nome : t("sezioni.library.unnamed");
   const data = typeof voce2?.aggiornatoIl === "string" ? new Date(voce2.aggiornatoIl) : null, valida2 = data && Number.isFinite(data.getTime());
-  return { nome, aggiornata: valida2 ? data.toLocaleString(localeUI15()) : null, dataBreve: valida2 ? t("sezioni.library.row.updatedOn", { date: data.toLocaleDateString(localeUI15()) }) : t("sezioni.common.dateNotRecorded") };
+  return { nome, aggiornata: valida2 ? data.toLocaleString(localeUI16()) : null, dataBreve: valida2 ? t("sezioni.library.row.updatedOn", { date: data.toLocaleDateString(localeUI16()) }) : t("sezioni.common.dateNotRecorded") };
 }
 function ultimaCartella(cartella) {
   const grezzo = String(cartella ?? "").trim().replace(/[\\/]+$/u, "");
@@ -38568,7 +39369,7 @@ function azioniLibreria({ sessionId, fetch: rete = globalThis.fetch } = {}) {
     apri: (id4) => manda(base(id4) + "/apri", { method: "POST" })
   };
 }
-function el17(doc, tag2, classe, testo2) {
+function el18(doc, tag2, classe, testo2) {
   const n = doc.createElement(tag2);
   if (classe) n.className = classe;
   if (testo2 !== void 0) n.textContent = testo2;
@@ -38577,25 +39378,25 @@ function el17(doc, tag2, classe, testo2) {
 function creaLibraryRow(voce2, { document: doc = globalThis.document, aperta: aperta2 = false, onEspandi, sessionId = "", azioni = null, modo = "normale", bozza = null, onModo, onCambiata, onMenu, nomeSessione, copia: copia3 } = {}) {
   const t2 = testiVoceLibreria(voce2), tipo = tipoVoceLibreria(voce2?.fileType), origine = origineVoceLibreria(voce2?.origine), id4 = voce2?.id || "";
   const prov = provenienzaVoceLibreria(voce2, { nomeSessione });
-  const riga2 = el17(doc, "div", "talos-list-row");
+  const riga2 = el18(doc, "div", "talos-list-row");
   riga2.dataset.c = "LibraryRow";
   riga2.dataset.libraryId = id4;
   riga2.setAttribute("role", "listitem");
-  const icona16 = el17(doc, "span", "talos-list-row__icon"), svg2 = doc.createElementNS("http://www.w3.org/2000/svg", "svg"), use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
+  const icona16 = el18(doc, "span", "talos-list-row__icon"), svg2 = doc.createElementNS("http://www.w3.org/2000/svg", "svg"), use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
   svg2.setAttribute("class", "i");
   svg2.setAttribute("aria-hidden", "true");
   use.setAttribute("href", "#i-" + tipo.icona);
   svg2.append(use);
   icona16.append(svg2);
-  const testo2 = el17(doc, "span", "talos-list-row__text"), titolo2 = el17(doc, "span", "talos-list-row__title", t2.nome), sotto = el17(doc, "span", "talos-list-row__sub");
-  const aside = el17(doc, "span", "talos-list-row__aside");
-  aside.append(el17(doc, "span", "talos-badge" + (voce2?.origine === "generated" ? " talos-badge--accent" : ""), origine));
+  const testo2 = el18(doc, "span", "talos-list-row__text"), titolo2 = el18(doc, "span", "talos-list-row__title", t2.nome), sotto = el18(doc, "span", "talos-list-row__sub");
+  const aside = el18(doc, "span", "talos-list-row__aside");
+  aside.append(el18(doc, "span", "talos-badge" + (voce2?.origine === "generated" ? " talos-badge--accent" : ""), origine));
   const indirizzo = indirizzoFileLibreria(sessionId, id4), servizio = azioni || azioniLibreria({ sessionId });
-  const messaggio = el17(doc, "span", "talos-list-row__messaggio");
+  const messaggio = el18(doc, "span", "talos-list-row__messaggio");
   messaggio.hidden = true;
   const bottoni = [];
   const nuovoBottone = (etichetta3, nomeAccessibile, azione, extra) => {
-    const b = el17(doc, "button", "talos-button talos-button--ghost talos-button--sm" + (extra || ""), etichetta3);
+    const b = el18(doc, "button", "talos-button talos-button--ghost talos-button--sm" + (extra || ""), etichetta3);
     b.type = "button";
     b.dataset.azione = azione;
     b.setAttribute("aria-label", nomeAccessibile);
@@ -38603,13 +39404,13 @@ function creaLibraryRow(voce2, { document: doc = globalThis.document, aperta: ap
     return b;
   };
   const nuovaAncora = (etichetta3, nomeAccessibile, azione) => {
-    const a = el17(doc, "a", "talos-button talos-button--ghost talos-button--sm", etichetta3);
+    const a = el18(doc, "a", "talos-button talos-button--ghost talos-button--sm", etichetta3);
     a.href = indirizzo;
     a.dataset.azione = azione;
     a.setAttribute("aria-label", nomeAccessibile);
     return a;
   };
-  const gruppo = el17(doc, "span", "talos-list-row__azioni");
+  const gruppo = el18(doc, "span", "talos-list-row__azioni");
   gruppo.setAttribute("role", "group");
   gruppo.setAttribute("aria-label", t("sezioni.common.actionsFor", { name: t2.nome }));
   let rinominaBtn = null, eliminaBtn = null, rivelaBtn = null;
@@ -38668,38 +39469,38 @@ function creaLibraryRow(voce2, { document: doc = globalThis.document, aperta: ap
       onMenu?.(riga2.vociMenu(), { x: e.clientX, y: e.clientY });
     });
   }
-  const forma = el17(doc, "form", "talos-list-row__rinomina");
+  const forma = el18(doc, "form", "talos-list-row__rinomina");
   forma.hidden = true;
-  const campo3 = el17(doc, "input", "talos-list-row__nome");
+  const campo3 = el18(doc, "input", "talos-list-row__nome");
   campo3.type = "text";
   campo3.value = bozza ?? t2.nome;
   campo3.maxLength = 255;
   campo3.autocomplete = "off";
   campo3.spellcheck = false;
   campo3.setAttribute("aria-label", t("sezioni.library.row.newNameLabel", { name: t2.nome }));
-  const salva = el17(doc, "button", "talos-button talos-button--primary talos-button--sm", t("sezioni.common.save"));
+  const salva = el18(doc, "button", "talos-button talos-button--primary talos-button--sm", t("sezioni.common.save"));
   salva.type = "submit";
   salva.dataset.azione = "rinomina-salva";
   salva.setAttribute("aria-label", t("sezioni.library.row.saveLabel", { name: t2.nome }));
-  const annullaRinomina = el17(doc, "button", "talos-button talos-button--ghost talos-button--sm", t("sezioni.common.cancel"));
+  const annullaRinomina = el18(doc, "button", "talos-button talos-button--ghost talos-button--sm", t("sezioni.common.cancel"));
   annullaRinomina.type = "button";
   annullaRinomina.dataset.azione = "rinomina-annulla";
   annullaRinomina.setAttribute("aria-label", t("sezioni.library.row.cancelRenameLabel", { name: t2.nome }));
   bottoni.push(salva, annullaRinomina);
   forma.append(campo3, salva, annullaRinomina);
-  const conferma = el17(doc, "span", "talos-list-row__conferma");
+  const conferma = el18(doc, "span", "talos-list-row__conferma");
   conferma.hidden = true;
-  const noElimina = el17(doc, "button", "talos-button talos-button--ghost talos-button--sm", t("sezioni.common.cancel"));
+  const noElimina = el18(doc, "button", "talos-button talos-button--ghost talos-button--sm", t("sezioni.common.cancel"));
   noElimina.type = "button";
   noElimina.dataset.azione = "elimina-annulla";
   noElimina.setAttribute("aria-label", t("sezioni.library.row.cancelDeleteLabel", { name: t2.nome }));
-  const siElimina = el17(doc, "button", "talos-button talos-button--danger talos-button--sm", t("sezioni.common.delete"));
+  const siElimina = el18(doc, "button", "talos-button talos-button--danger talos-button--sm", t("sezioni.common.delete"));
   siElimina.type = "button";
   siElimina.dataset.azione = "elimina-conferma";
   siElimina.setAttribute("aria-label", t("sezioni.library.row.confirmDeleteLabel", { name: t2.nome }));
   bottoni.push(noElimina, siElimina);
-  conferma.append(el17(doc, "span", "talos-list-row__conferma-testo", t("sezioni.library.row.confirmText")), noElimina, siElimina);
-  const dettagli2 = el17(doc, "button", "talos-button talos-button--ghost talos-button--sm");
+  conferma.append(el18(doc, "span", "talos-list-row__conferma-testo", t("sezioni.library.row.confirmText")), noElimina, siElimina);
+  const dettagli2 = el18(doc, "button", "talos-button talos-button--ghost talos-button--sm");
   dettagli2.type = "button";
   dettagli2.dataset.azione = "dettagli";
   let stato2 = servizio && id4 ? String(modo || "normale") : "normale", occupata = false, avviso = null;
@@ -38812,12 +39613,12 @@ function creaLibraryRow(voce2, { document: doc = globalThis.document, aperta: ap
   riga2.append(icona16, testo2, aside);
   return riga2;
 }
-var localeUI15, TIPI, ORIGINI3, NON_ANCORA;
+var localeUI16, TIPI, ORIGINI3, NON_ANCORA;
 var init_libreria = __esm({
   "src/components/libreria.js"() {
     init_lingua();
     init_chat_foot();
-    localeUI15 = () => linguaCorrenteDiT() === "en" ? "en-US" : "it-IT";
+    localeUI16 = () => linguaCorrenteDiT() === "en" ? "en-US" : "it-IT";
     TIPI = /* @__PURE__ */ new Map([["document", { get testo() {
       return t("sezioni.library.type.document");
     }, icona: "doc" }], ["image", { get testo() {
@@ -38840,13 +39641,13 @@ function testiAttivita(a) {
   const descrizione = typeof a?.descrizione === "string" ? a.descrizione : "";
   const compatto4 = descrizione.replace(/\s+/g, " ").trim();
   const data = typeof a?.aggiornataAlle === "string" ? new Date(a.aggiornataAlle) : null;
-  return { titolo: titolo2, descrizione, anteprima: compatto4.length > 100 ? compatto4.slice(0, 100) + "…" : compatto4, autore: t("sezioni.tasks.authorUnknown"), aggiornata: data && Number.isFinite(data.getTime()) ? data.toLocaleString(localeUI16()) : null };
+  return { titolo: titolo2, descrizione, anteprima: compatto4.length > 100 ? compatto4.slice(0, 100) + "…" : compatto4, autore: t("sezioni.tasks.authorUnknown"), aggiornata: data && Number.isFinite(data.getTime()) ? data.toLocaleString(localeUI17()) : null };
 }
 function riepilogoAttivita(attivita) {
   const aperte = attivita.filter((a) => a?.stato === "todo" || a?.stato === "doing").length, fatte = attivita.filter((a) => a?.stato === "done").length, ignote = attivita.length - aperte - fatte;
   return tn("sezioni.tasks.summary.openOne", "sezioni.tasks.summary.openMany", aperte) + " · " + tn("sezioni.tasks.summary.doneOne", "sezioni.tasks.summary.doneMany", fatte) + (ignote ? " · " + tn("sezioni.tasks.summary.unknownOne", "sezioni.tasks.summary.unknownMany", ignote) : "");
 }
-function el18(doc, tag2, classe, testo2) {
+function el19(doc, tag2, classe, testo2) {
   const n = doc.createElement(tag2);
   if (classe) n.className = classe;
   if (testo2 !== void 0) n.textContent = testo2;
@@ -38854,29 +39655,29 @@ function el18(doc, tag2, classe, testo2) {
 }
 function creaTaskRow(a, { document: doc = globalThis.document, aperta: aperta2 = false, onEspandi } = {}) {
   const t2 = testiAttivita(a), s = statoAttivita(a?.stato);
-  const riga2 = el18(doc, "div", "talos-list-row" + (a?.stato === "done" ? " talos-list-row--done" : ""));
+  const riga2 = el19(doc, "div", "talos-list-row" + (a?.stato === "done" ? " talos-list-row--done" : ""));
   riga2.dataset.c = "TaskRow";
   riga2.dataset.taskId = a?.id || "";
   riga2.setAttribute("role", "listitem");
-  const segna = el18(doc, "button", "talos-checkbox");
+  const segna = el19(doc, "button", "talos-checkbox");
   segna.type = "button";
   segna.hidden = true;
   segna.dataset.richiede = "fase3";
   segna.setAttribute("role", "checkbox");
   segna.setAttribute("aria-checked", String(a?.stato === "done"));
   segna.setAttribute("aria-label", t("sezioni.tasks.row.markDone"));
-  const icona16 = el18(doc, "span", "talos-list-row__icon"), svg2 = doc.createElementNS("http://www.w3.org/2000/svg", "svg"), use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
+  const icona16 = el19(doc, "span", "talos-list-row__icon"), svg2 = doc.createElementNS("http://www.w3.org/2000/svg", "svg"), use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
   svg2.setAttribute("class", "i");
   svg2.setAttribute("aria-hidden", "true");
   use.setAttribute("href", "#i-" + s.icona);
   svg2.append(use);
   icona16.append(svg2);
-  const testo2 = el18(doc, "span", "talos-list-row__text"), titolo2 = el18(doc, "span", "talos-list-row__title", t2.titolo), sotto = el18(doc, "span", "talos-list-row__sub");
+  const testo2 = el19(doc, "span", "talos-list-row__text"), titolo2 = el19(doc, "span", "talos-list-row__title", t2.titolo), sotto = el19(doc, "span", "talos-list-row__sub");
   titolo2.title = t2.titolo;
   testo2.append(titolo2, sotto);
-  const aside = el18(doc, "span", "talos-list-row__aside");
-  aside.append(el18(doc, "span", "talos-badge" + (s.tono ? " talos-badge--" + s.tono : ""), s.testo));
-  const leggi = el18(doc, "button", "talos-button talos-button--ghost talos-button--sm");
+  const aside = el19(doc, "span", "talos-list-row__aside");
+  aside.append(el19(doc, "span", "talos-badge" + (s.tono ? " talos-badge--" + s.tono : ""), s.testo));
+  const leggi = el19(doc, "button", "talos-button talos-button--ghost talos-button--sm");
   leggi.type = "button";
   function mostra() {
     riga2.dataset.aperta = String(aperta2);
@@ -38895,11 +39696,11 @@ function creaTaskRow(a, { document: doc = globalThis.document, aperta: aperta2 =
   riga2.append(segna, icona16, testo2, aside);
   return riga2;
 }
-var localeUI16, STATI2, PRIORITA;
+var localeUI17, STATI2, PRIORITA;
 var init_attivita = __esm({
   "src/components/attivita.js"() {
     init_lingua();
-    localeUI16 = () => linguaCorrenteDiT() === "en" ? "en-US" : "it-IT";
+    localeUI17 = () => linguaCorrenteDiT() === "en" ? "en-US" : "it-IT";
     STATI2 = /* @__PURE__ */ new Map([
       ["todo", { get testo() {
         return t("sezioni.tasks.status.todo");
@@ -38923,9 +39724,9 @@ function testiMemoria(memoria) {
   const contenuto = typeof memoria?.contenuto === "string" ? memoria.contenuto : t("sezioni.memory.contentNotRecorded");
   const compatto4 = contenuto.replace(/\s+/g, " ").trim();
   const data = typeof memoria?.aggiornataAlle === "string" ? new Date(memoria.aggiornataAlle) : null;
-  return { titolo: typeof memoria?.titolo === "string" && memoria.titolo.trim() ? memoria.titolo : t("sezioni.memory.untitled"), contenuto, anteprima: compatto4.length > 80 ? compatto4.slice(0, 80) + "…" : compatto4, aggiornata: data && Number.isFinite(data.getTime()) ? data.toLocaleString(localeUI17()) : null };
+  return { titolo: typeof memoria?.titolo === "string" && memoria.titolo.trim() ? memoria.titolo : t("sezioni.memory.untitled"), contenuto, anteprima: compatto4.length > 80 ? compatto4.slice(0, 80) + "…" : compatto4, aggiornata: data && Number.isFinite(data.getTime()) ? data.toLocaleString(localeUI18()) : null };
 }
-function el19(doc, tag2, classe, testo2) {
+function el20(doc, tag2, classe, testo2) {
   const n = doc.createElement(tag2);
   if (classe) n.className = classe;
   if (testo2 !== void 0) n.textContent = testo2;
@@ -38933,24 +39734,24 @@ function el19(doc, tag2, classe, testo2) {
 }
 function creaMemoryRow(memoria, { document: doc = globalThis.document, aperta: aperta2 = false, onEspandi } = {}) {
   const t2 = testiMemoria(memoria), g = genereMemoria(memoria?.genere);
-  const riga2 = el19(doc, "div", "talos-list-row");
+  const riga2 = el20(doc, "div", "talos-list-row");
   riga2.dataset.c = "MemoryRow";
   riga2.setAttribute("role", "listitem");
   riga2.dataset.memoryId = memoria?.id || "";
-  const icona16 = el19(doc, "span", "talos-list-row__icon"), svg2 = doc.createElementNS("http://www.w3.org/2000/svg", "svg"), use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
+  const icona16 = el20(doc, "span", "talos-list-row__icon"), svg2 = doc.createElementNS("http://www.w3.org/2000/svg", "svg"), use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
   svg2.setAttribute("class", "i");
   svg2.setAttribute("aria-hidden", "true");
   use.setAttribute("href", "#i-" + g.icona);
   svg2.append(use);
   icona16.append(svg2);
-  const testo2 = el19(doc, "span", "talos-list-row__text"), titolo2 = el19(doc, "span", "talos-list-row__title", t2.titolo), sotto = el19(doc, "span", "talos-list-row__sub");
+  const testo2 = el20(doc, "span", "talos-list-row__text"), titolo2 = el20(doc, "span", "talos-list-row__title", t2.titolo), sotto = el20(doc, "span", "talos-list-row__sub");
   titolo2.title = t2.titolo;
   testo2.append(titolo2, sotto);
-  const aside = el19(doc, "span", "talos-list-row__aside");
-  aside.append(el19(doc, "span", "talos-badge" + (g.tono ? " talos-badge--" + g.tono : ""), g.testo));
-  const leggi = el19(doc, "button", "talos-button talos-button--ghost talos-button--sm");
+  const aside = el20(doc, "span", "talos-list-row__aside");
+  aside.append(el20(doc, "span", "talos-badge" + (g.tono ? " talos-badge--" + g.tono : ""), g.testo));
+  const leggi = el20(doc, "button", "talos-button talos-button--ghost talos-button--sm");
   leggi.type = "button";
-  const correggi = el19(doc, "button", "talos-button talos-button--ghost talos-button--sm", t("sezioni.memory.row.correct"));
+  const correggi = el20(doc, "button", "talos-button talos-button--ghost talos-button--sm", t("sezioni.memory.row.correct"));
   correggi.type = "button";
   correggi.hidden = true;
   correggi.dataset.richiede = "fase3";
@@ -38971,11 +39772,11 @@ function creaMemoryRow(memoria, { document: doc = globalThis.document, aperta: a
   riga2.append(icona16, testo2, aside);
   return riga2;
 }
-var localeUI17, GENERI;
+var localeUI18, GENERI;
 var init_memoria = __esm({
   "src/components/memoria.js"() {
     init_lingua();
-    localeUI17 = () => linguaCorrenteDiT() === "en" ? "en-US" : "it-IT";
+    localeUI18 = () => linguaCorrenteDiT() === "en" ? "en-US" : "it-IT";
     GENERI = /* @__PURE__ */ new Map([
       ["preference", { get testo() {
         return t("sezioni.memory.kind.preference");
@@ -39009,18 +39810,18 @@ function quandoNota(quando, adesso = /* @__PURE__ */ new Date()) {
   if (ore < 0) return orario;
   if (ore < 24 && d.getDate() === adesso.getDate()) return t("sezioni.notes.when.today", { time: orario });
   if (ore < 48) return t("sezioni.notes.when.yesterday", { time: orario });
-  return `${d.toLocaleDateString(localeUI18(), { day: "2-digit", month: "2-digit" })} ${orario}`;
+  return `${d.toLocaleDateString(localeUI19(), { day: "2-digit", month: "2-digit" })} ${orario}`;
 }
 function sommarioNote(quante) {
   const n = Number(quante) || 0;
   if (n === 0) return t("sezioni.notes.count.none");
   return tn("sezioni.notes.count.one", "sezioni.notes.count.many", n);
 }
-var localeUI18;
+var localeUI19;
 var init_note = __esm({
   "src/components/note.js"() {
     init_lingua();
-    localeUI18 = () => linguaCorrenteDiT() === "en" ? "en-US" : "it-IT";
+    localeUI19 = () => linguaCorrenteDiT() === "en" ? "en-US" : "it-IT";
   }
 });
 
@@ -39043,10 +39844,10 @@ function serveLettura(formato) {
 function dimensioneLeggibile(byte3) {
   const n = Number(byte3);
   if (!Number.isFinite(n) || n < 0) return "";
-  if (n < 1024) return t("sezioni.library.preview.size.bytes", { value: n.toLocaleString(localeUI19()) });
+  if (n < 1024) return t("sezioni.library.preview.size.bytes", { value: n.toLocaleString(localeUI20()) });
   const kb = n / 1024;
-  if (kb < 1024) return `${kb.toLocaleString(localeUI19(), { maximumFractionDigits: 1 })} kB`;
-  return `${(kb / 1024).toLocaleString(localeUI19(), { maximumFractionDigits: 1 })} MB`;
+  if (kb < 1024) return `${kb.toLocaleString(localeUI20(), { maximumFractionDigits: 1 })} kB`;
+  return `${(kb / 1024).toLocaleString(localeUI20(), { maximumFractionDigits: 1 })} MB`;
 }
 function conteggioRighe(testo2) {
   const t2 = String(testo2 ?? "");
@@ -39107,7 +39908,7 @@ function righeCsv(testo2, separatore = ",") {
 }
 function frasiRighe(formato, testo2) {
   const righe = conteggioRighe(testo2);
-  const formatta = (n) => n.toLocaleString(localeUI19());
+  const formatta = (n) => n.toLocaleString(localeUI20());
   if (formato !== "tabella") return tn("sezioni.library.preview.lines.one", "sezioni.library.preview.lines.many", righe, { n: formatta(righe) });
   const dati = Math.max(righe - 1, 0);
   return tn("sezioni.library.preview.dataLines.one", "sezioni.library.preview.dataLines.many", dati, { n: formatta(dati) });
@@ -39123,21 +39924,21 @@ function magazzinoFileLibreria(schermo) {
   }
   return magazzino;
 }
-function nodo9(doc, tag2, classe, testo2) {
+function nodo11(doc, tag2, classe, testo2) {
   const el35 = doc.createElement(tag2);
   if (classe) el35.className = classe;
   if (testo2 !== void 0 && testo2 !== null) el35.textContent = String(testo2);
   return el35;
 }
 function bottone4(doc, testo2, esegui, variante = "secondary") {
-  const b = nodo9(doc, "button", `talos-button talos-button--${variante} talos-button--sm`, testo2);
+  const b = nodo11(doc, "button", `talos-button talos-button--${variante} talos-button--sm`, testo2);
   b.type = "button";
   b.addEventListener("click", esegui);
   return b;
 }
 function cartaEsterna(doc, frase, { voce: voce2, opzioni }) {
-  const box = nodo9(doc, "div", "td-file-esterno");
-  box.append(nodo9(doc, "p", "", frase));
+  const box = nodo11(doc, "div", "td-file-esterno");
+  box.append(nodo11(doc, "p", "", frase));
   if (typeof opzioni?.onApri === "function") {
     box.append(bottone4(doc, t("sezioni.library.preview.openWithSystem"), () => opzioni.onApri(voce2)));
   }
@@ -39148,7 +39949,7 @@ function colonneFuori(bordoDestro, destreDelleColonne) {
 }
 function fraseScorrimento(quante) {
   if (!quante) return "";
-  return quante === 1 ? t("sezioni.library.preview.scrollOneColumn") : t("sezioni.library.preview.scrollMoreColumns", { n: quante.toLocaleString(localeUI19()) });
+  return quante === 1 ? t("sezioni.library.preview.scrollOneColumn") : t("sezioni.library.preview.scrollMoreColumns", { n: quante.toLocaleString(localeUI20()) });
 }
 function collegaScorrimento(scorre, tabella, avviso) {
   if (typeof scorre?.addEventListener !== "function" || typeof scorre.getBoundingClientRect !== "function") return null;
@@ -39178,34 +39979,34 @@ function tabellaCsv(doc, testo2, { nome, magazzino, chiave, ridisegna: ridisegna
   const righe = righeCsv(testo2, separatoreDi(nome));
   const pezzi = [];
   if (!righe.length) {
-    pezzi.push(nodo9(doc, "p", "td-subtle", t("sezioni.library.preview.noRows")));
+    pezzi.push(nodo11(doc, "p", "td-subtle", t("sezioni.library.preview.noRows")));
     return pezzi;
   }
   const tutte = magazzino.tabelleAperte.has(chiave);
   const quante = tutte ? righe.length : Math.min(righe.length, RIGHE_MOSTRATE);
-  const scorre = nodo9(doc, "div", "td-file-tabella-scorre");
+  const scorre = nodo11(doc, "div", "td-file-tabella-scorre");
   scorre.tabIndex = 0;
   scorre.setAttribute("role", "region");
   scorre.setAttribute("aria-label", t("sezioni.library.preview.contentsLabel", { name: nome }));
-  const tabella = nodo9(doc, "table", "td-file-tabella");
-  const testa = nodo9(doc, "thead");
-  const rigaTesta = nodo9(doc, "tr");
+  const tabella = nodo11(doc, "table", "td-file-tabella");
+  const testa = nodo11(doc, "thead");
+  const rigaTesta = nodo11(doc, "tr");
   for (const cella of righe[0]) {
-    const th = nodo9(doc, "th", "", cella);
+    const th = nodo11(doc, "th", "", cella);
     th.scope = "col";
     rigaTesta.append(th);
   }
   testa.append(rigaTesta);
-  const corpo = nodo9(doc, "tbody");
+  const corpo = nodo11(doc, "tbody");
   for (let i2 = 1; i2 < quante; i2 += 1) {
-    const tr2 = nodo9(doc, "tr");
-    for (const cella of righe[i2]) tr2.append(nodo9(doc, "td", "", cella));
+    const tr2 = nodo11(doc, "tr");
+    for (const cella of righe[i2]) tr2.append(nodo11(doc, "td", "", cella));
     corpo.append(tr2);
   }
   tabella.append(testa, corpo);
   scorre.append(tabella);
   pezzi.push(scorre);
-  const avviso = nodo9(doc, "p", "td-file-scorri");
+  const avviso = nodo11(doc, "p", "td-file-scorri");
   avviso.hidden = true;
   avviso.setAttribute("role", "status");
   pezzi.push(avviso);
@@ -39213,7 +40014,7 @@ function tabellaCsv(doc, testo2, { nome, magazzino, chiave, ridisegna: ridisegna
   const dati = Math.max(righe.length - 1, 0);
   const mostrati = Math.max(quante - 1, 0);
   if (dati > mostrati) {
-    const apri = bottone4(doc, t("sezioni.library.preview.showAllRows", { n: dati.toLocaleString(localeUI19()) }), () => {
+    const apri = bottone4(doc, t("sezioni.library.preview.showAllRows", { n: dati.toLocaleString(localeUI20()) }), () => {
       magazzino.tabelleAperte.add(chiave);
       ridisegna2?.();
     });
@@ -39229,14 +40030,14 @@ function contenutoModoFile(doc, modo, contesto2) {
     return [cartaEsterna(doc, frase, { voce: voce2, opzioni })];
   }
   if (typeof opzioni?.leggiFile !== "function") {
-    return [nodo9(doc, "p", "td-subtle", t("sezioni.library.preview.notReadable"))];
+    return [nodo11(doc, "p", "td-subtle", t("sezioni.library.preview.notReadable"))];
   }
   if (!lettura || lettura.stato === "caricando") {
-    return [nodo9(doc, "p", "td-subtle", t("sezioni.library.preview.reading"))];
+    return [nodo11(doc, "p", "td-subtle", t("sezioni.library.preview.reading"))];
   }
   if (lettura.stato === "errore") {
-    const box = nodo9(doc, "div", "td-file-esterno");
-    const riga2 = nodo9(doc, "p", "", t("sezioni.library.preview.openFailed", { reason: lettura.errore }));
+    const box = nodo11(doc, "div", "td-file-esterno");
+    const riga2 = nodo11(doc, "p", "", t("sezioni.library.preview.openFailed", { reason: lettura.errore }));
     riga2.setAttribute("role", "alert");
     box.append(riga2);
     if (typeof opzioni?.onApri === "function") box.append(bottone4(doc, t("sezioni.library.preview.openWithSystem"), () => opzioni.onApri(voce2)));
@@ -39251,16 +40052,16 @@ function contenutoModoFile(doc, modo, contesto2) {
   } else if (modo === "anteprima" && formato === "tabella") {
     pezzi.push(...tabellaCsv(doc, mostrato, { nome, magazzino, chiave, ridisegna: ridisegna2 }));
   } else {
-    const pre = nodo9(doc, "pre", "td-code td-file-testo", mostrato);
+    const pre = nodo11(doc, "pre", "td-code td-file-testo", mostrato);
     pre.tabIndex = 0;
     pre.setAttribute("role", "region");
     pre.setAttribute("aria-label", t("sezioni.library.preview.textLabel", { name: nome }));
     pezzi.push(pre);
   }
   if (tagliato) {
-    pezzi.push(nodo9(doc, "p", "td-subtle", t("sezioni.library.preview.truncated", { shown: MASSIMO_CARATTERI.toLocaleString(localeUI19()), total: testo2.length.toLocaleString(localeUI19()) })));
+    pezzi.push(nodo11(doc, "p", "td-subtle", t("sezioni.library.preview.truncated", { shown: MASSIMO_CARATTERI.toLocaleString(localeUI20()), total: testo2.length.toLocaleString(localeUI20()) })));
   }
-  pezzi.push(nodo9(doc, "p", "td-file-misura", `${frasiRighe(formato, testo2)} · ${dimensioneLeggibile(lettura.byte)}`));
+  pezzi.push(nodo11(doc, "p", "td-file-misura", `${frasiRighe(formato, testo2)} · ${dimensioneLeggibile(lettura.byte)}`));
   return pezzi;
 }
 function montaAnteprimaFile(voce2, ctx) {
@@ -39273,10 +40074,10 @@ function montaAnteprimaFile(voce2, ctx) {
   const lettura = chiave ? magazzino.file.get(chiave) || null : null;
   const modi = modiFile(formato);
   const pezzi = [];
-  pezzi.push(nodo9(doc, "h3", "", t("sezioni.library.preview.heading")));
+  pezzi.push(nodo11(doc, "h3", "", t("sezioni.library.preview.heading")));
   contatore += 1;
   const radice2 = `td-file-${contatore}`;
-  const pannello = nodo9(doc, "div", "td-vista td-file-vista");
+  const pannello = nodo11(doc, "div", "td-vista td-file-vista");
   pannello.id = `${radice2}-pannello`;
   pannello.setAttribute("role", "tabpanel");
   pannello.tabIndex = 0;
@@ -39285,11 +40086,11 @@ function montaAnteprimaFile(voce2, ctx) {
   let schede = [];
   let lista = null;
   if (modi.length > 1) {
-    lista = nodo9(doc, "div", "td-segment td-viste td-file-modi");
+    lista = nodo11(doc, "div", "td-segment td-viste td-file-modi");
     lista.setAttribute("role", "tablist");
     lista.setAttribute("aria-label", t("sezioni.library.preview.modesLabel", { name: nome }));
     schede = modi.map((modo) => {
-      const b = nodo9(doc, "button", "", PAROLE_MODO.get(modo)());
+      const b = nodo11(doc, "button", "", PAROLE_MODO.get(modo)());
       b.type = "button";
       b.id = `${radice2}-${modo}`;
       b.dataset.modo = modo;
@@ -39359,13 +40160,13 @@ function lettoreFileLibreria(sessionId, rete = globalThis.fetch) {
     return { testo: new TextDecoder("utf-8").decode(buffer), byte: buffer.byteLength };
   };
 }
-var localeUI19, MARKDOWN, TABELLA, TESTO, PAROLE_MODO, MASSIMO_CARATTERI, MAGAZZINI2, RIGHE_MOSTRATE, contatore;
+var localeUI20, MARKDOWN, TABELLA, TESTO, PAROLE_MODO, MASSIMO_CARATTERI, MAGAZZINI2, RIGHE_MOSTRATE, contatore;
 var init_libreria_anteprima = __esm({
   "src/components/libreria-anteprima.js"() {
     init_lingua();
     init_ricerca_dettaglio();
     init_libreria();
-    localeUI19 = () => linguaCorrenteDiT() === "en" ? "en-US" : "it-IT";
+    localeUI20 = () => linguaCorrenteDiT() === "en" ? "en-US" : "it-IT";
     MARKDOWN = /* @__PURE__ */ new Set(["md", "markdown", "mdown", "mkd"]);
     TABELLA = /* @__PURE__ */ new Set(["csv", "tsv"]);
     TESTO = /* @__PURE__ */ new Set([
@@ -39516,7 +40317,7 @@ function anteprimaTipografica(testo2) {
   }
   return { titolo: titolo2, righe: quote };
 }
-function nodo10(doc, tag2, classe = "", testo2 = "") {
+function nodo12(doc, tag2, classe = "", testo2 = "") {
   const el35 = doc.createElement(tag2);
   if (classe) el35.className = classe;
   if (testo2) el35.textContent = testo2;
@@ -39533,20 +40334,20 @@ function iconaSprite2(doc, id4, classe = "i") {
 }
 function creaGlifoFormato(doc, voce2) {
   const { estensione, famiglia } = presentazioneFileLibreria(voce2?.nome, voce2?.mediaType);
-  const glifo = nodo10(doc, "span", "td-lib-glifo");
+  const glifo = nodo12(doc, "span", "td-lib-glifo");
   glifo.dataset.famiglia = famiglia;
   glifo.setAttribute("aria-hidden", "true");
-  glifo.append(iconaSprite2(doc, ICONA_DELLA_FAMIGLIA[famiglia] || "i-lib-file"), nodo10(doc, "span", "td-lib-estensione", estensione));
+  glifo.append(iconaSprite2(doc, ICONA_DELLA_FAMIGLIA[famiglia] || "i-lib-file"), nodo12(doc, "span", "td-lib-estensione", estensione));
   return glifo;
 }
 function creaRigaDettaglio(doc, voce2) {
-  const riga2 = nodo10(doc, "small", "td-lib-dettaglio");
+  const riga2 = nodo12(doc, "small", "td-lib-dettaglio");
   const pezzi = [];
-  if (voce2?.origine === "generated") pezzi.push(nodo10(doc, "span", "td-lib-generato", t("sezioni.library.origin.generated")));
-  pezzi.push(nodo10(doc, "span", "", presentazioneFileLibreria(voce2?.nome, voce2?.mediaType).estensione));
+  if (voce2?.origine === "generated") pezzi.push(nodo12(doc, "span", "td-lib-generato", t("sezioni.library.origin.generated")));
+  pezzi.push(nodo12(doc, "span", "", presentazioneFileLibreria(voce2?.nome, voce2?.mediaType).estensione));
   pezzi.forEach((pezzo2, i2) => {
     if (i2 > 0) {
-      const sep = nodo10(doc, "span", "", " · ");
+      const sep = nodo12(doc, "span", "", " · ");
       sep.setAttribute("aria-hidden", "true");
       riga2.append(sep);
     }
@@ -39673,11 +40474,11 @@ async function disegnaPrimaPagina(indirizzo, rete, larghezzaPx, importa, segnale
 function riempiAnteprima(doc, riquadro, voce2, esito) {
   if (esito?.tipo === "tipografica") {
     riquadro.dataset.art = "typographic";
-    const foglio = nodo10(doc, "span", "td-lib-mini");
+    const foglio = nodo12(doc, "span", "td-lib-mini");
     foglio.setAttribute("aria-hidden", "true");
-    foglio.append(nodo10(doc, "span", "td-lib-mini-segno"), nodo10(doc, "b", "td-lib-mini-titolo", titoloAnteprima(esito.anteprima.titolo)));
+    foglio.append(nodo12(doc, "span", "td-lib-mini-segno"), nodo12(doc, "b", "td-lib-mini-titolo", titoloAnteprima(esito.anteprima.titolo)));
     for (const quota of esito.anteprima.righe) {
-      const barra = nodo10(doc, "span", "td-lib-mini-riga");
+      const barra = nodo12(doc, "span", "td-lib-mini-riga");
       barra.style.width = `${Math.round(quota * 100)}%`;
       foglio.append(barra);
     }
@@ -39686,7 +40487,7 @@ function riempiAnteprima(doc, riquadro, voce2, esito) {
   }
   if (esito?.tipo === "immagine" && esito.src) {
     riquadro.dataset.art = "image";
-    const img = nodo10(doc, "img", "td-lib-immagine");
+    const img = nodo12(doc, "img", "td-lib-immagine");
     img.alt = "";
     img.decoding = "async";
     img.loading = "lazy";
@@ -39735,7 +40536,7 @@ function osservaQuandoEntra(doc, elemento, azione) {
   }
 }
 function creaAnteprimaScheda(doc, voce2, { sessionId = "", indirizzoFile, rete = globalThis.fetch, importa = (indirizzo) => import(indirizzo) } = {}) {
-  const riquadro = nodo10(doc, "div", "td-lib-art");
+  const riquadro = nodo12(doc, "div", "td-lib-art");
   const genere = genereAnteprimaLibreria(voce2);
   const indirizzo = typeof indirizzoFile === "function" ? indirizzoFile(sessionId, voce2?.id) : "";
   const chiave = chiaveAnteprima(sessionId, voce2);
@@ -39754,7 +40555,7 @@ function creaAnteprimaScheda(doc, voce2, { sessionId = "", indirizzoFile, rete =
     return riquadro;
   }
   riquadro.dataset.art = "loading";
-  const segnaposto = nodo10(doc, "span", "td-lib-caricamento");
+  const segnaposto = nodo12(doc, "span", "td-lib-caricamento");
   segnaposto.setAttribute("role", "status");
   segnaposto.setAttribute("aria-label", t("sezioni.library.card.loadingPreview"));
   riquadro.replaceChildren(segnaposto);
@@ -40076,16 +40877,16 @@ function frasiProgetto(progetto) {
   const pezzi = [tn("sezioni.projects.facts.sessionsOne", "sezioni.projects.facts.sessionsMany", progetto.quante)];
   if (progetto.giri > 0) pezzi.push(tn("sezioni.projects.facts.turnsOne", "sezioni.projects.facts.turnsMany", progetto.giri));
   if (progetto.token > 0) {
-    pezzi.push(progetto.token >= 1e3 ? t("sezioni.projects.facts.tokensThousands", { value: new Intl.NumberFormat(localeUI20(), { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(progetto.token / 1e3) }) : tn("sezioni.projects.facts.tokensOne", "sezioni.projects.facts.tokensMany", progetto.token));
+    pezzi.push(progetto.token >= 1e3 ? t("sezioni.projects.facts.tokensThousands", { value: new Intl.NumberFormat(localeUI21(), { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(progetto.token / 1e3) }) : tn("sezioni.projects.facts.tokensOne", "sezioni.projects.facts.tokensMany", progetto.token));
   }
   return pezzi.join(" · ");
 }
-var localeUI20, QUANTE_RECENTI;
+var localeUI21, QUANTE_RECENTI;
 var init_progetti = __esm({
   "src/components/progetti.js"() {
     init_lingua();
     init_consumo_sessione();
-    localeUI20 = () => linguaCorrenteDiT() === "en" ? "en-US" : "it-IT";
+    localeUI21 = () => linguaCorrenteDiT() === "en" ? "en-US" : "it-IT";
     QUANTE_RECENTI = 3;
   }
 });
@@ -40341,7 +41142,7 @@ function servizioVoci({ schema, sessionId, rete } = {}) {
     cambiaStato: (id4, stato2) => rete.post(`${voceUrl(id4)}/stato`, { stato: stato2 })
   };
 }
-function nodo11(doc, tag2, classe, testo2) {
+function nodo13(doc, tag2, classe, testo2) {
   const el35 = doc.createElement(tag2);
   if (classe) el35.className = classe;
   if (testo2 !== void 0 && testo2 !== null) el35.textContent = String(testo2);
@@ -40364,7 +41165,7 @@ function costruisciModulo(doc, {
 }) {
   contatore2 += 1;
   const radice2 = `td-modulo-${contatore2}`;
-  const modulo = nodo11(doc, "form", `td-modulo td-modulo--${schema.chiave}`);
+  const modulo = nodo13(doc, "form", `td-modulo td-modulo--${schema.chiave}`);
   modulo.noValidate = true;
   modulo.addEventListener("submit", (e) => {
     e.preventDefault?.();
@@ -40373,20 +41174,20 @@ function costruisciModulo(doc, {
   for (const campo3 of schema.campi) {
     const idCampo = `${radice2}-${campo3.nome}`;
     const errore2 = stato2.errori?.[campo3.nome] || "";
-    const etichetta3 = nodo11(doc, "label", "td-field-label", campo3.etichetta);
+    const etichetta3 = nodo13(doc, "label", "td-field-label", campo3.etichetta);
     etichetta3.setAttribute("for", idCampo);
     modulo.append(etichetta3);
     let controllo;
     if (campo3.tipo === "scelta") {
-      controllo = nodo11(doc, "select", "td-edit-scelta");
+      controllo = nodo13(doc, "select", "td-edit-scelta");
       for (const [valore, parola3] of campo3.scelte) {
-        const op = nodo11(doc, "option", "", parola3);
+        const op = nodo13(doc, "option", "", parola3);
         op.value = valore;
         controllo.append(op);
       }
       controllo.value = stato2.valori[campo3.nome];
     } else {
-      controllo = nodo11(doc, campo3.tipo === "riga" ? "input" : "textarea", campo3.tipo === "riga" ? "td-edit-title" : "td-edit-body");
+      controllo = nodo13(doc, campo3.tipo === "riga" ? "input" : "textarea", campo3.tipo === "riga" ? "td-edit-title" : "td-edit-body");
       if (campo3.tipo === "riga") controllo.type = "text";
       controllo.value = stato2.valori[campo3.nome];
       controllo.placeholder = campo3.invito || "";
@@ -40394,14 +41195,14 @@ function costruisciModulo(doc, {
     }
     controllo.id = idCampo;
     controllo.name = campo3.nome;
-    const sotto = nodo11(doc, "p", "td-field-sotto");
-    const messaggio = nodo11(doc, "span", "td-field-errore", errore2);
+    const sotto = nodo13(doc, "p", "td-field-sotto");
+    const messaggio = nodo13(doc, "span", "td-field-errore", errore2);
     messaggio.id = `${idCampo}-errore`;
     messaggio.hidden = !errore2;
     messaggio.setAttribute("role", "alert");
-    const conteggio3 = nodo11(doc, "span", "td-field-conta", campo3.max ? fraseConteggio(String(stato2.valori[campo3.nome] ?? "").length, campo3.max) : "");
+    const conteggio3 = nodo13(doc, "span", "td-field-conta", campo3.max ? fraseConteggio(String(stato2.valori[campo3.nome] ?? "").length, campo3.max) : "");
     conteggio3.hidden = !campo3.max || !mostraConteggio(String(stato2.valori[campo3.nome] ?? "").length, campo3.max);
-    const aiuto = campo3.aiuto ? nodo11(doc, "span", "td-field-aiuto", campo3.aiuto) : null;
+    const aiuto = campo3.aiuto ? nodo13(doc, "span", "td-field-aiuto", campo3.aiuto) : null;
     if (aiuto) aiuto.id = `${idCampo}-aiuto`;
     sotto.append(messaggio, conteggio3, ...aiuto ? [aiuto] : []);
     const descritto = [errore2 ? messaggio.id : "", aiuto ? aiuto.id : ""].filter(Boolean).join(" ");
@@ -40435,7 +41236,7 @@ function costruisciModulo(doc, {
     modulo.append(controllo, sotto);
   }
   if (stato2.erroreRete) {
-    const avviso = nodo11(doc, "p", "td-modulo-errore", stato2.erroreRete);
+    const avviso = nodo13(doc, "p", "td-modulo-errore", stato2.erroreRete);
     avviso.setAttribute("role", "alert");
     modulo.append(avviso);
   }
@@ -40452,21 +41253,21 @@ function montaTestoVoce(doc, {
 }) {
   const prosa = String(testo2 ?? "");
   if (formato !== "markdown") {
-    return [nodo11(doc, "div", "td-prose", prosa)];
+    return [nodo13(doc, "div", "td-prose", prosa)];
   }
   contatore2 += 1;
   const radice2 = `td-voce-${contatore2}`;
-  const pannello = nodo11(doc, "div", "td-vista td-voce-vista");
+  const pannello = nodo13(doc, "div", "td-vista td-voce-vista");
   pannello.id = `${radice2}-pannello`;
   pannello.setAttribute("role", "tabpanel");
   pannello.tabIndex = 0;
   const modi = ["anteprima", "testo"];
   let scelto = modi.includes(modo) ? modo : "anteprima";
-  const lista = nodo11(doc, "div", "td-segment td-viste td-voce-modi");
+  const lista = nodo13(doc, "div", "td-segment td-viste td-voce-modi");
   lista.setAttribute("role", "tablist");
   lista.setAttribute("aria-label", t("varie.voice.view.modesLabel"));
   const schede = modi.map((m) => {
-    const b = nodo11(doc, "button", "", PAROLE_MODO2.get(m)());
+    const b = nodo13(doc, "button", "", PAROLE_MODO2.get(m)());
     b.type = "button";
     b.id = `${radice2}-${m}`;
     b.dataset.modo = m;
@@ -40486,7 +41287,7 @@ function montaTestoVoce(doc, {
     pannello.setAttribute("aria-labelledby", `${radice2}-${m}`);
     if (m === "anteprima") pannello.replaceChildren(prosaInNodi(doc, prosa, rendiMarkdown, titoloGiaDetto));
     else {
-      const pre = nodo11(doc, "pre", "td-code td-voce-testo", prosa);
+      const pre = nodo13(doc, "pre", "td-code td-voce-testo", prosa);
       pre.tabIndex = 0;
       pre.setAttribute("role", "region");
       pre.setAttribute("aria-label", t("varie.voice.view.textLabel"));
@@ -40510,11 +41311,11 @@ function montaTestoVoce(doc, {
 }
 function costruisciStatoAttivita(doc, { stato: stato2, inCorso = false, onScegli = () => {
 } }) {
-  const gruppo = nodo11(doc, "div", "td-segment td-stati-attivita");
+  const gruppo = nodo13(doc, "div", "td-segment td-stati-attivita");
   gruppo.setAttribute("role", "radiogroup");
   gruppo.setAttribute("aria-label", t("varie.voice.taskStatusLabel"));
   const bottoni = STATI_ATTIVITA.map((valore) => {
-    const b = nodo11(doc, "button", "", parolaStato(valore));
+    const b = nodo13(doc, "button", "", parolaStato(valore));
     b.type = "button";
     b.dataset.stato = valore;
     b.setAttribute("role", "radio");
@@ -40570,13 +41371,13 @@ function confermaEliminazione({
     }
   });
 }
-var localeUI21, SCELTA_AUTOMATICA, SCHEMI, PAROLE_STATO, STATI_ATTIVITA, MESSAGGI_FEMMINILI, MESSAGGI_MASCHILI, numero4, contatore2, PAROLE_MODO2;
+var localeUI22, SCELTA_AUTOMATICA, SCHEMI, PAROLE_STATO, STATI_ATTIVITA, MESSAGGI_FEMMINILI, MESSAGGI_MASCHILI, numero4, contatore2, PAROLE_MODO2;
 var init_modulo_voce = __esm({
   "src/components/modulo-voce.js"() {
     init_lingua();
     init_ricerca_dettaglio();
     init_modale_td();
-    localeUI21 = () => linguaCorrenteDiT() === "en" ? "en-US" : "it-IT";
+    localeUI22 = () => linguaCorrenteDiT() === "en" ? "en-US" : "it-IT";
     SCELTA_AUTOMATICA = "auto";
     SCHEMI = Object.freeze({
       note: Object.freeze({
@@ -40790,7 +41591,7 @@ var init_modulo_voce = __esm({
       scrittaDaTe: () => t("varie.voice.msg.scrittaDaTe.m"),
       scrittaDaTalos: () => t("varie.voice.msg.scrittaDaTalos.m")
     };
-    numero4 = (n) => Number(n).toLocaleString(localeUI21());
+    numero4 = (n) => Number(n).toLocaleString(localeUI22());
     contatore2 = 0;
     PAROLE_MODO2 = /* @__PURE__ */ new Map([["anteprima", () => t("varie.voice.view.preview")], ["testo", () => t("varie.voice.view.text")]]);
   }
@@ -40805,20 +41606,20 @@ function conteggioParole(testo2) {
   return String(testo2 ?? "").split(/\s+/).filter(Boolean).length;
 }
 function contaParole(n) {
-  return tn("sezioni.notes.words.one", "sezioni.notes.words.many", n, { n: new Intl.NumberFormat(localeUI22()).format(n) });
+  return tn("sezioni.notes.words.one", "sezioni.notes.words.many", n, { n: new Intl.NumberFormat(localeUI23()).format(n) });
 }
 function notificatore(opzioni) {
   return typeof opzioni?.notifica === "function" ? opzioni.notifica : () => {
   };
 }
-function nodo12(doc, tag2, classe, testo2) {
+function nodo14(doc, tag2, classe, testo2) {
   const el35 = doc.createElement(tag2);
   if (classe) el35.className = classe;
   if (testo2 !== void 0 && testo2 !== null) el35.textContent = String(testo2);
   return el35;
 }
 function bottone5(doc, testo2, { variante = "secondary", esegui, pericolo = false } = {}) {
-  const b = nodo12(doc, "button", `talos-button talos-button--${variante} talos-button--sm${pericolo ? " talos-button--danger" : ""}`, testo2);
+  const b = nodo14(doc, "button", `talos-button talos-button--${variante} talos-button--sm${pericolo ? " talos-button--danger" : ""}`, testo2);
   b.type = "button";
   if (esegui) b.addEventListener("click", esegui);
   return b;
@@ -40837,10 +41638,10 @@ function estensioneFile(nome) {
 }
 function dataBreve2(iso) {
   const d = iso ? new Date(iso) : null;
-  return d && Number.isFinite(d.getTime()) ? d.toLocaleDateString(localeUI22()) : "";
+  return d && Number.isFinite(d.getTime()) ? d.toLocaleDateString(localeUI23()) : "";
 }
 function meta(doc, pezzi) {
-  const riga2 = nodo12(doc, "div", "td-detail-meta");
+  const riga2 = nodo14(doc, "div", "td-detail-meta");
   riga2.append(...pezzi.filter(Boolean));
   return riga2;
 }
@@ -40857,7 +41658,7 @@ function testoDi(schema, voce2) {
   return String(voce2?.[campo3.nome] ?? "");
 }
 function bottoneMenu2(doc, titolo2, apri) {
-  const b = nodo12(doc, "button", "td-card-azioni");
+  const b = nodo14(doc, "button", "td-card-azioni");
   b.type = "button";
   b.setAttribute("aria-haspopup", "menu");
   b.setAttribute("aria-label", t("sezioni.common.actionsFor", { name: titolo2 }));
@@ -40990,7 +41791,7 @@ function scrittura(schermo, { schema, lista, opzioni, ridisegna: ridisegna2 }) {
       if (elencoNascosto && topbar) {
         let strumenti = topbar.querySelector(".td-tools");
         if (!strumenti) {
-          strumenti = nodo12(doc, "div", "td-tools");
+          strumenti = nodo14(doc, "div", "td-tools");
           topbar.append(strumenti);
         }
         if (b.parentNode !== strumenti) strumenti.append(b);
@@ -41014,7 +41815,7 @@ function scrittura(schermo, { schema, lista, opzioni, ridisegna: ridisegna2 }) {
   }
   function nodiModulo(doc2) {
     const mod = m.modulo;
-    const titolo2 = nodo12(doc2, "h2", "", mod.modo === "crea" ? schema.titoloNuova : schema.titoloModifica);
+    const titolo2 = nodo14(doc2, "h2", "", mod.modo === "crea" ? schema.titoloNuova : schema.titoloModifica);
     const onCambia = contaParoleNelModulo ? () => {
       const riga2 = schermo.querySelector(".td-detail-footer > .td-save-status");
       if (riga2) riga2.textContent = notaPiede();
@@ -41144,7 +41945,7 @@ ${testoDi(schema, intera)}`);
     /** La riga «scritta da te / da TALOS», solo quando la GET della voce l'ha davvero portata. */
     origine: (v, doc2) => {
       const parola3 = parolaOrigine(voceIntera(v)?.origine, schema);
-      return parola3 ? nodo12(doc2, "span", "td-origine", parola3) : null;
+      return parola3 ? nodo14(doc2, "span", "td-origine", parola3) : null;
     },
     azioniVoce: (v, doc2) => servizio ? [
       bottone5(doc2, t("sezioni.common.edit"), { esegui: () => apriModulo("modifica", v) }),
@@ -41221,7 +42022,7 @@ ${testoDi(schema, intera)}`);
         if (!topbar) return null;
         ospite = topbar.querySelector(".td-tools");
         if (!ospite && servizio) {
-          ospite = nodo12(doc, "div", "td-tools");
+          ospite = nodo14(doc, "div", "td-tools");
           topbar.append(ospite);
         }
       }
@@ -41232,10 +42033,10 @@ ${testoDi(schema, intera)}`);
       }
       if (!ospite) return null;
       if (!b) {
-        b = nodo12(doc, "button", `talos-button talos-button--primary${nellaTesta ? " talos-button--sm" : ""}`);
+        b = nodo14(doc, "button", `talos-button talos-button--primary${nellaTesta ? " talos-button--sm" : ""}`);
         b.type = "button";
         b.dataset.nuova = "";
-        b.append(icona5(doc, "plus"), nodo12(doc, "span", "", schema.titoloNuova));
+        b.append(icona5(doc, "plus"), nodo14(doc, "span", "", schema.titoloNuova));
         b.addEventListener("click", () => m.giro.apriModulo("crea"));
         ospite.append(b);
       }
@@ -41291,18 +42092,18 @@ function montaNote(schermo, note, opzioni = {}) {
     /* ⛔ I due sommari contano l'elenco VERO: la bozza è un modulo aperto, non una nota. */
     sommarioStato: (visibili) => visibili === lista.length ? sommarioNote(lista.length) : t("sezioni.notes.filteredOfTotal", { shown: sommarioNote(visibili), total: sommarioNote(lista.length) }),
     scheda: (n, { doc, icona: ic }) => ({
-      alto: [ic("doc"), nodo12(doc, "span", "", t("sezioni.notes.card.kind"))],
-      corpo: [nodo12(doc, "p", "td-excerpt", anteprima3(n?.contenuto))],
+      alto: [ic("doc"), nodo14(doc, "span", "", t("sezioni.notes.card.kind"))],
+      corpo: [nodo14(doc, "p", "td-excerpt", anteprima3(n?.contenuto))],
       basso: [
         /* ATLAS F2 (NON DEPLOYABILE fino a review e 4174): la data col suo orologio, come il piede della card dell'Atlas
            (`source/atlas.js:36` `noteCard`: `icon('clock')` + data). Il secondo pezzo resta il dato vero di oggi (le
            parole): la «Nota locale» dell'Atlas non ha una sorgente ed è la NC-05, che decide l'owner. */
         (() => {
-          const q2 = nodo12(doc, "span", "td-card-quando");
-          q2.append(ic("clock"), nodo12(doc, "span", "", quandoNota(n?.aggiornataAlle ?? n?.creataAlle, adesso) || t("sezioni.notes.card.noDate")));
+          const q2 = nodo14(doc, "span", "td-card-quando");
+          q2.append(ic("clock"), nodo14(doc, "span", "", quandoNota(n?.aggiornataAlle ?? n?.creataAlle, adesso) || t("sezioni.notes.card.noDate")));
           return q2;
         })(),
-        nodo12(doc, "span", "", contaParole(conteggioParole(n?.contenuto)))
+        nodo14(doc, "span", "", contaParole(conteggioParole(n?.contenuto)))
       ],
       adorno: scrivi2.adorno(n, doc)
     }),
@@ -41311,8 +42112,8 @@ function montaNote(schermo, note, opzioni = {}) {
       scrivi2.chiediVoceIntera(n);
       const intera = scrivi2.voceIntera(n);
       const pezzi = [
-        meta(doc, [etichetta3(t("sezioni.notes.detail.kind")), nodo12(doc, "span", "", quandoNota(intera?.aggiornataAlle ?? intera?.creataAlle, adesso) || t("sezioni.common.dateNotRecordedLower")), scrivi2.origine(n, doc)]),
-        nodo12(doc, "h2", "", titoloNota(intera))
+        meta(doc, [etichetta3(t("sezioni.notes.detail.kind")), nodo14(doc, "span", "", quandoNota(intera?.aggiornataAlle ?? intera?.creataAlle, adesso) || t("sezioni.common.dateNotRecordedLower")), scrivi2.origine(n, doc)]),
+        nodo14(doc, "h2", "", titoloNota(intera))
       ];
       pezzi.push(...montaTestoVoce(doc, {
         testo: intera?.contenuto,
@@ -41370,15 +42171,15 @@ function aggiornaPaginaMemoria(schermo, memorie, opzioni = {}) {
     sommarioStato: (visibili) => visibili === lista.length ? contaRicordi(lista.length) : t("sezioni.common.shownOfTotal", { shown: visibili, total: contaRicordi(lista.length) }),
     scheda: (m, { doc, icona: ic, etichetta: etichetta3 }) => {
       const g = genereMemoria(m?.genere);
-      const segno = nodo12(doc, "span", "td-memory-mark");
+      const segno = nodo14(doc, "span", "td-memory-mark");
       segno.append(ic(g.icona));
       return {
         /* ⛔ Il genere si dice UNA volta: il segno col simbolo, e l'etichetta col tono. Scriverlo
            anche come testo in mezzo ai due («Regola  [Regola]») era un doppione visto nella foto. */
         alto: [segno, etichetta3(g.testo, g.tono || "accent")],
-        corpo: [nodo12(doc, "p", "td-excerpt", anteprima3(testiMemoria(m).contenuto))],
+        corpo: [nodo14(doc, "p", "td-excerpt", anteprima3(testiMemoria(m).contenuto))],
         /* Nella scheda la data e basta: l'ora intera sta nel dettaglio e qui si troncava. */
-        basso: [nodo12(doc, "span", "", dataBreve2(m?.aggiornataAlle) || t("sezioni.common.dateNotRecorded"))],
+        basso: [nodo14(doc, "span", "", dataBreve2(m?.aggiornataAlle) || t("sezioni.common.dateNotRecorded"))],
         adorno: scrivi2.adorno(m, doc)
       };
     },
@@ -41391,9 +42192,9 @@ function aggiornaPaginaMemoria(schermo, memorie, opzioni = {}) {
       return [
         /* ⛔ L'origine era un `h3 Origine` col valore grezzo (`persona`/`modello`) scritto sotto:
            un nome di campo a schermo. Adesso è una parola, accanto alla data, dove la si legge. */
-        meta(doc, [etichetta3(g.testo, g.tono || "accent"), nodo12(doc, "span", "", t2.aggiornata || t("sezioni.common.dateNotRecordedLower")), scrivi2.origine(m, doc)]),
-        nodo12(doc, "h2", "", t2.titolo),
-        nodo12(doc, "div", "td-prose", t2.contenuto)
+        meta(doc, [etichetta3(g.testo, g.tono || "accent"), nodo14(doc, "span", "", t2.aggiornata || t("sezioni.common.dateNotRecordedLower")), scrivi2.origine(m, doc)]),
+        nodo14(doc, "h2", "", t2.titolo),
+        nodo14(doc, "div", "td-prose", t2.contenuto)
       ];
     },
     azioniDettaglio: (m, { doc }) => {
@@ -41450,7 +42251,7 @@ function aggiornaPaginaAttivita(schermo, attivita, opzioni = {}) {
       const s = statoAttivita(a?.stato);
       const t2 = testiAttivita(a);
       const fatta = a?.stato === "done";
-      const segno = nodo12(doc, "button", "td-task-toggle");
+      const segno = nodo14(doc, "button", "td-task-toggle");
       segno.type = "button";
       segno.dataset.fatta = String(fatta);
       if (scrivi2.servizio && !a?.__bozza) {
@@ -41468,15 +42269,15 @@ function aggiornaPaginaAttivita(schermo, attivita, opzioni = {}) {
       }
       if (fatta) segno.append(ic("check"));
       const menu = scrivi2.adorno(a, doc);
-      const adorni = nodo12(doc, "span", "td-task-adorni");
+      const adorni = nodo14(doc, "span", "td-task-adorni");
       adorni.append(segno, ...menu ? [menu] : []);
       return {
         dati: { done: String(fatta), comandabile: String(Boolean(scrivi2.servizio)) },
-        alto: [etichetta3(s.testo, s.tono || ""), ...a?.priorita === "high" ? [nodo12(doc, "span", "td-priority", t("sezioni.tasks.card.highPriority"))] : []],
-        corpo: [nodo12(doc, "p", "td-excerpt", anteprima3(t2.descrizione, 130) || t("sezioni.tasks.row.noDescription"))],
+        alto: [etichetta3(s.testo, s.tono || ""), ...a?.priorita === "high" ? [nodo14(doc, "span", "td-priority", t("sezioni.tasks.card.highPriority"))] : []],
+        corpo: [nodo14(doc, "p", "td-excerpt", anteprima3(t2.descrizione, 130) || t("sezioni.tasks.row.noDescription"))],
         basso: [
-          nodo12(doc, "span", "", prioritaAttivita(a?.priorita)),
-          nodo12(doc, "span", "", dataBreve2(a?.aggiornataAlle) || t("sezioni.common.dateNotRecorded"))
+          nodo14(doc, "span", "", prioritaAttivita(a?.priorita)),
+          nodo14(doc, "span", "", dataBreve2(a?.aggiornataAlle) || t("sezioni.common.dateNotRecorded"))
         ],
         adorno: adorni
       };
@@ -41488,15 +42289,15 @@ function aggiornaPaginaAttivita(schermo, attivita, opzioni = {}) {
       const s = statoAttivita(intera?.stato);
       const t2 = testiAttivita(intera);
       const pezzi = [
-        meta(doc, [etichetta3(s.testo, s.tono || ""), nodo12(doc, "span", "", prioritaAttivita(intera?.priorita)), nodo12(doc, "span", "", t2.aggiornata || t("sezioni.common.dateNotRecordedLower")), scrivi2.origine(a, doc)]),
-        nodo12(doc, "h2", "", t2.titolo)
+        meta(doc, [etichetta3(s.testo, s.tono || ""), nodo14(doc, "span", "", prioritaAttivita(intera?.priorita)), nodo14(doc, "span", "", t2.aggiornata || t("sezioni.common.dateNotRecordedLower")), scrivi2.origine(a, doc)]),
+        nodo14(doc, "h2", "", t2.titolo)
       ];
       if (scrivi2.servizio) {
-        pezzi.push(nodo12(doc, "h3", "", t("sezioni.tasks.detail.status")));
+        pezzi.push(nodo14(doc, "h3", "", t("sezioni.tasks.detail.status")));
         pezzi.push(costruisciStatoAttivita(doc, { stato: intera?.stato, onScegli: (nuovo) => void scrivi2.cambiaStato(a, nuovo) }));
       }
-      pezzi.push(nodo12(doc, "h3", "", t("sezioni.tasks.detail.description")));
-      pezzi.push(nodo12(doc, "div", "td-prose", t2.descrizione || t("sezioni.tasks.row.noDescription")));
+      pezzi.push(nodo14(doc, "h3", "", t("sezioni.tasks.detail.description")));
+      pezzi.push(nodo14(doc, "div", "td-prose", t2.descrizione || t("sezioni.tasks.row.noDescription")));
       return pezzi;
     },
     azioniDettaglio: (a, { doc }) => {
@@ -41624,20 +42425,20 @@ function aggiornaPaginaLibreria(schermo, voci, opzioni = {}) {
       if (vista === "elenco") {
         const tipo = tipoVoceLibreria(v?.fileType);
         const t2 = testiVoceLibreria(v);
-        const copertina = nodo12(doc, "div", "td-file-preview");
+        const copertina = nodo14(doc, "div", "td-file-preview");
         copertina.dataset.kind = estensioneFile(t2.nome).toLowerCase();
-        copertina.append(nodo12(doc, "strong", "", estensioneFile(t2.nome)), nodo12(doc, "span", "", t2.nome));
+        copertina.append(nodo14(doc, "strong", "", estensioneFile(t2.nome)), nodo14(doc, "span", "", t2.nome));
         return {
-          alto: [icona16(tipo.icona), nodo12(doc, "span", "", tipo.testo), etichetta3(origineVoceLibreria(v?.origine), v?.origine === "generated" ? "accent" : "")],
+          alto: [icona16(tipo.icona), nodo14(doc, "span", "", tipo.testo), etichetta3(origineVoceLibreria(v?.origine), v?.origine === "generated" ? "accent" : "")],
           corpo: [copertina],
           /* ⭐ BC-38, owner: «nella card/riga SOLO la cartella» — nella riga dell'elenco vale ancora. */
           basso: [
-            nodo12(doc, "span", "", t2.dataBreve),
-            ...prov(v).cartellaBreve ? [nodo12(doc, "span", "", t("sezioni.library.row.inFolder", { folder: prov(v).cartellaBreve }))] : []
+            nodo14(doc, "span", "", t2.dataBreve),
+            ...prov(v).cartellaBreve ? [nodo14(doc, "span", "", t("sezioni.library.row.inFolder", { folder: prov(v).cartellaBreve }))] : []
           ]
         };
       }
-      const menu = nodo12(doc, "button", "td-lib-menu");
+      const menu = nodo14(doc, "button", "td-lib-menu");
       menu.type = "button";
       menu.setAttribute("aria-label", t("sezioni.common.actionsFor", { name: testiVoceLibreria(v).nome }));
       menu.setAttribute("aria-haspopup", "menu");
@@ -41646,8 +42447,8 @@ function aggiornaPaginaLibreria(schermo, voci, opzioni = {}) {
         e.stopPropagation();
         apriMenuDellaVoce(v, { ancoraEl: menu });
       });
-      const adorni = nodo12(doc, "span", "td-lib-adorni");
-      const spunta = nodo12(doc, "span", "td-lib-spunta");
+      const adorni = nodo14(doc, "span", "td-lib-adorni");
+      const spunta = nodo14(doc, "span", "td-lib-spunta");
       spunta.setAttribute("aria-hidden", "true");
       spunta.append(iconaSprite2(doc, "i-lib-check"));
       adorni.append(spunta, ...typeof opzioni.onMenu === "function" ? [menu] : []);
@@ -41666,9 +42467,9 @@ function aggiornaPaginaLibreria(schermo, voci, opzioni = {}) {
      */
     dettaglio: (v, { doc, etichetta: etichetta3 }) => {
       const t2 = testiVoceLibreria(v);
-      const testata = nodo12(doc, "header", "td-lib-testata");
-      const sinistra = nodo12(doc, "span", "td-lib-testata-nome");
-      sinistra.append(nodo12(doc, "span", "td-lib-simbolo", presentazioneFileLibreria(t2.nome, v?.mediaType).estensione), nodo12(doc, "strong", "", t2.nome));
+      const testata = nodo14(doc, "header", "td-lib-testata");
+      const sinistra = nodo14(doc, "span", "td-lib-testata-nome");
+      sinistra.append(nodo14(doc, "span", "td-lib-simbolo", presentazioneFileLibreria(t2.nome, v?.mediaType).estensione), nodo14(doc, "strong", "", t2.nome));
       testata.append(sinistra, etichetta3(origineVoceLibreria(v?.origine), v?.origine === "generated" ? "accent" : ""));
       const pezzi = [testata];
       const lettore = lettoreDellaVoce(v, doc);
@@ -41687,17 +42488,17 @@ function aggiornaPaginaLibreria(schermo, voci, opzioni = {}) {
         }));
       }
       const p = prov(v);
-      const righe = nodo12(doc, "dl", "td-lib-righe");
+      const righe = nodo14(doc, "dl", "td-lib-righe");
       const rigaKV = (etichettaTesto, valore) => {
         if (!valore) return;
-        const riga2 = nodo12(doc, "div", "td-lib-riga");
-        const dd = nodo12(doc, "dd", "");
+        const riga2 = nodo14(doc, "div", "td-lib-riga");
+        const dd = nodo14(doc, "dd", "");
         dd.append(typeof valore === "string" ? doc.createTextNode(valore) : valore);
-        riga2.append(nodo12(doc, "dt", "", etichettaTesto), dd);
+        riga2.append(nodo14(doc, "dt", "", etichettaTesto), dd);
         righe.append(riga2);
       };
       if (p.cartella) {
-        const codice = nodo12(doc, "code", "td-percorso");
+        const codice = nodo14(doc, "code", "td-percorso");
         codice.dataset.cartella = p.cartella;
         const segmenti = p.cartella.split(/(?<=[\\/])/u);
         segmenti.forEach((segmento, i2) => {
@@ -41712,7 +42513,7 @@ function aggiornaPaginaLibreria(schermo, voci, opzioni = {}) {
       if (p.sessione) {
         const nome = p.sessione.nome || nomeLeggibileSessione(p.sessione.id);
         if (typeof opzioni.onApriSessione === "function") {
-          const vai = nodo12(doc, "button", "talos-button talos-button--ghost talos-button--sm td-vai-sessione", nome);
+          const vai = nodo14(doc, "button", "talos-button talos-button--ghost talos-button--sm td-vai-sessione", nome);
           vai.type = "button";
           vai.dataset.azione = "apri-sessione";
           vai.setAttribute("aria-label", t("sezioni.library.detail.openConversationLabel", { name: nome }));
@@ -41739,7 +42540,7 @@ function aggiornaPaginaLibreria(schermo, voci, opzioni = {}) {
       const pezzi = [];
       const p = prov(v);
       if (p.percorso && typeof opzioni.copia === "function") {
-        const copia3 = nodo12(doc, "button", "talos-button talos-button--secondary talos-button--sm");
+        const copia3 = nodo14(doc, "button", "talos-button talos-button--secondary talos-button--sm");
         copia3.type = "button";
         copia3.dataset.azione = "copia-percorso-dettaglio";
         copia3.append(iconaSprite2(doc, "i-copy"), doc.createTextNode(t("sezioni.library.action.copyPath")));
@@ -41749,7 +42550,7 @@ function aggiornaPaginaLibreria(schermo, voci, opzioni = {}) {
         });
         pezzi.push(copia3);
       }
-      const ospite = nodo12(doc, "div", "td-riuso-riga");
+      const ospite = nodo14(doc, "div", "td-riuso-riga");
       const riga2 = creaLibraryRow(v, {
         document: doc,
         aperta: true,
@@ -42000,7 +42801,7 @@ function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
       return {
         alto: [icona16("globe"), etichetta3(f.parola, f.tono)],
         corpo: [
-          nodo12(doc, "p", "td-excerpt", riga2),
+          nodo14(doc, "p", "td-excerpt", riga2),
           /* 24/09/2026, decisione owner («Barra + fase e conteggi»): una ricerca in corso dice a che punto è, nella scheda
              stessa (il server manda `avanzamento` nell'elenco per le sole ricerche in corso). */
           ...r?.stato === "running" && r?.avanzamento ? [creaAvanzamentoRicerca(doc, r.avanzamento, { etichetta: t("sezioni.research.row.progressLabel", { title: f.domanda }) })].filter(Boolean) : []
@@ -42014,15 +42815,15 @@ function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
          *   una cosa che chi guarda vuole sapere.
          */
         basso: [
-          nodo12(doc, "span", "", f.avviata ? t("sezioni.research.row.started", { article: articoloData(r?.avviataAlle), date: dataBreve2(r?.avviataAlle) }) : t("sezioni.common.dateNotRecorded")),
+          nodo14(doc, "span", "", f.avviata ? t("sezioni.research.row.started", { article: articoloData(r?.avviataAlle), date: dataBreve2(r?.avviataAlle) }) : t("sezioni.common.dateNotRecorded")),
           /* ⛔ CORRETTO L'11/09: qui «Col rapporto» compariva su ogni ricerca NON conclusa che
              avesse un file in Libreria — cioè contraddiceva il timbro «Senza rapporto» due
              centimetri più in alto. Adesso a destra si scrive solo l'anomalia che il timbro non
              dice già: una conclusa che il rapporto non ce l'ha. */
-          nodo12(doc, "span", "", r?.stato === "done" && !f.haRapporto ? t("sezioni.research.card.noReport") : "")
+          nodo14(doc, "span", "", r?.stato === "done" && !f.haRapporto ? t("sezioni.research.card.noReport") : "")
         ],
         adorno: (() => {
-          const b = nodo12(doc, "button", "td-card-azioni");
+          const b = nodo14(doc, "button", "td-card-azioni");
           b.type = "button";
           b.setAttribute("aria-haspopup", "menu");
           b.setAttribute("aria-label", t("sezioni.common.actionsFor", { name: f.domanda }));
@@ -42083,28 +42884,28 @@ function montaProgetti(schermo, progetti, opzioni = {}) {
     cercaIn: (p) => `${p?.nome ?? ""} ${(p?.sessioni || []).map((s) => s?.nome ?? "").join(" ")}`,
     sommarioBarra: (n, { errore: errore2, caricamento }) => errore2 ? t("sezioni.projects.unavailable") : caricamento ? t("sezioni.projects.loading") : sommarioProgetti(n),
     scheda: (p, { doc, icona: icona16 }) => {
-      const chips = nodo12(doc, "div", "td-source-chips");
-      for (const s of ultimeSessioni(p, quanteRecenti)) chips.append(nodo12(doc, "span", "", s?.nome || s?.sessionId || t("sezioni.projects.card.sessionUntitled")));
+      const chips = nodo14(doc, "div", "td-source-chips");
+      for (const s of ultimeSessioni(p, quanteRecenti)) chips.append(nodo14(doc, "span", "", s?.nome || s?.sessionId || t("sezioni.projects.card.sessionUntitled")));
       return {
-        alto: [icona16("folder"), nodo12(doc, "span", "", t("sezioni.projects.card.workingFolder"))],
-        corpo: [nodo12(doc, "p", "td-excerpt", frasiProgetto(p)), chips],
+        alto: [icona16("folder"), nodo14(doc, "span", "", t("sezioni.projects.card.workingFolder"))],
+        corpo: [nodo14(doc, "p", "td-excerpt", frasiProgetto(p)), chips],
         /* Il conteggio sta già nel corpo (`frasiProgetto`): qui va il QUANDO, che è l'altra metà. */
-        basso: [nodo12(doc, "span", "", p?.ultimaAlle ? t("sezioni.projects.card.lastTime", { date: new Date(p.ultimaAlle).toLocaleDateString(localeUI22()) }) : t("sezioni.projects.card.neverOpened"))]
+        basso: [nodo14(doc, "span", "", p?.ultimaAlle ? t("sezioni.projects.card.lastTime", { date: new Date(p.ultimaAlle).toLocaleDateString(localeUI23()) }) : t("sezioni.projects.card.neverOpened"))]
       };
     },
     dettaglio: (p, { doc, etichetta: etichetta3 }) => {
       const pezzi = [
-        meta(doc, [etichetta3(t("sezioni.projects.detail.kind")), nodo12(doc, "span", "", frasiProgetto(p))]),
-        nodo12(doc, "h2", "", p?.nome ?? ""),
-        nodo12(doc, "h3", "", t("sezioni.projects.detail.recentSessions"))
+        meta(doc, [etichetta3(t("sezioni.projects.detail.kind")), nodo14(doc, "span", "", frasiProgetto(p))]),
+        nodo14(doc, "h2", "", p?.nome ?? ""),
+        nodo14(doc, "h3", "", t("sezioni.projects.detail.recentSessions"))
       ];
       const recenti = ultimeSessioni(p, quanteRecenti);
-      if (!recenti.length) pezzi.push(nodo12(doc, "p", "td-subtle", t("sezioni.projects.detail.noSessions")));
+      if (!recenti.length) pezzi.push(nodo14(doc, "p", "td-subtle", t("sezioni.projects.detail.noSessions")));
       for (const s of recenti) {
-        const riga2 = nodo12(doc, "div", "td-source");
+        const riga2 = nodo14(doc, "div", "td-source");
         const apri = bottone5(doc, s?.nome || s?.sessionId || t("sezioni.projects.sessionUntitled"), { variante: "ghost", esegui: () => onApriSessione?.(s) });
         riga2.append(apri);
-        if (s?.avviataAlle) riga2.append(nodo12(doc, "span", "", t("sezioni.projects.detail.startedOn", { date: new Date(s.avviataAlle).toLocaleString(localeUI22()) })));
+        if (s?.avviataAlle) riga2.append(nodo14(doc, "span", "", t("sezioni.projects.detail.startedOn", { date: new Date(s.avviataAlle).toLocaleString(localeUI23()) })));
         pezzi.push(riga2);
       }
       return pezzi;
@@ -42112,7 +42913,7 @@ function montaProgetti(schermo, progetti, opzioni = {}) {
     vuoto: { titolo: t("sezioni.projects.empty.title"), testo: t("sezioni.projects.empty.text") }
   });
 }
-var localeUI22, formattaNumero, contaRicordi, contaAttivita, contaFile, contaRicerche, contaProgetti, BOZZA, SCRITTURE, generiFiltro, ULTIMA_LIBRERIA;
+var localeUI23, formattaNumero, contaRicordi, contaAttivita, contaFile, contaRicerche, contaProgetti, BOZZA, SCRITTURE, generiFiltro, ULTIMA_LIBRERIA;
 var init_sezioni_adattatori = __esm({
   "src/components/sezioni-adattatori.js"() {
     init_lingua();
@@ -42132,8 +42933,8 @@ var init_sezioni_adattatori = __esm({
     init_toast();
     init_modulo_voce();
     init_ricerca_avanzamento();
-    localeUI22 = () => linguaCorrenteDiT() === "en" ? "en-US" : "it-IT";
-    formattaNumero = (n) => new Intl.NumberFormat(localeUI22()).format(n);
+    localeUI23 = () => linguaCorrenteDiT() === "en" ? "en-US" : "it-IT";
+    formattaNumero = (n) => new Intl.NumberFormat(localeUI23()).format(n);
     contaRicordi = (n) => tn("sezioni.memory.count.one", "sezioni.memory.count.many", n, { n: formattaNumero(n) });
     contaAttivita = (n) => tn("sezioni.tasks.count.one", "sezioni.tasks.count.many", n, { n: formattaNumero(n) });
     contaFile = (n) => tn("sezioni.library.count.one", "sezioni.library.count.many", n, { n: formattaNumero(n) });
@@ -42189,19 +42990,19 @@ function nodiDaHtml(doc, html) {
   const corpo = letto?.body;
   if (!corpo) return frammento;
   for (const figlio of corpo.childNodes) {
-    const nodo15 = converti(doc, figlio);
-    if (nodo15) frammento.appendChild(nodo15);
+    const nodo17 = converti(doc, figlio);
+    if (nodo17) frammento.appendChild(nodo17);
   }
   return frammento;
 }
-function converti(doc, nodo15) {
-  if (nodo15.nodeType === 3) return doc.createTextNode(nodo15.nodeValue || "");
-  if (nodo15.nodeType !== 1) return null;
-  const tag2 = (nodo15.tagName || "").toLowerCase();
+function converti(doc, nodo17) {
+  if (nodo17.nodeType === 3) return doc.createTextNode(nodo17.nodeValue || "");
+  if (nodo17.nodeType !== 1) return null;
+  const tag2 = (nodo17.tagName || "").toLowerCase();
   if (TAG_DA_BUTTARE_COL_CONTENUTO.has(tag2)) return null;
   if (!TAG_AMMESSI.has(tag2)) {
     const frammento = doc.createDocumentFragment();
-    for (const figlio of nodo15.childNodes) {
+    for (const figlio of nodo17.childNodes) {
       const c = converti(doc, figlio);
       if (c) frammento.appendChild(c);
     }
@@ -42209,7 +43010,7 @@ function converti(doc, nodo15) {
   }
   const elemento = doc.createElement(tag2 === "picture" ? "span" : tag2);
   const ammessi = /* @__PURE__ */ new Set([...ATTRIBUTI_AMMESSI["*"] || [], ...ATTRIBUTI_AMMESSI[tag2] || []]);
-  for (const attributo of nodo15.attributes || []) {
+  for (const attributo of nodo17.attributes || []) {
     const nome = attributo.name.toLowerCase();
     if (!ammessi.has(nome)) continue;
     if (nome.startsWith("on")) continue;
@@ -42230,7 +43031,7 @@ function converti(doc, nodo15) {
     elemento.setAttribute("target", "_blank");
     elemento.setAttribute("rel", "noopener noreferrer");
   }
-  for (const figlio of nodo15.childNodes) {
+  for (const figlio of nodo17.childNodes) {
     const c = converti(doc, figlio);
     if (c) elemento.appendChild(c);
   }
@@ -42405,6 +43206,7 @@ function renderizzaMarkdown(testoGrezzo, opzioni = {}) {
   const htmlFidato = opzioni.htmlFidato === true;
   const conLink = opzioni.linkMarkdown === true;
   const conConversazioni = opzioni.linkConversazione === true;
+  const conLinkWeb = opzioni.linkWeb === true;
   const PARTI_INLINE = [
     /* ⛔ Gli ESCAPE (09/10/2026, bugfixer; visto dal collega nella prova dal vivo: la chat mostrava `\<argomento\>`). CommonMark
        0.31.2 §2.4 «Backslash escapes»: ogni segno di punteggiatura ASCII preceduto da `\` è il segno da solo, e non forma markup
@@ -42412,7 +43214,8 @@ function renderizzaMarkdown(testoGrezzo, opzioni = {}) {
        regola): uno span che comincia prima lo consuma intero. */
     "\\\\([!-/:-@[-`{-~])",
     ...conConversazioni ? [String.raw`(?<!!)\[([^\]]+)\]\(talos:\/\/conversazione\/([A-Za-z0-9._-]{1,120})\)`] : [],
-    ...conLink ? [String.raw`(?<!!)\[([^\]]+)\]\(([^)\s]+)\)`] : [],
+    ...conLink || conLinkWeb ? [String.raw`(?<!!)\[([^\]]+)\]\(([^)\s]+)\)`] : [],
+    ...conLinkWeb ? [String.raw`(https?:\/\/[^\s<>\u0060]+)`] : [],
     String.raw`\*\*([^*]+)\*\*`,
     "`([^`]+)`",
     String.raw`\*([^*]+)\*`,
@@ -42422,18 +43225,34 @@ function renderizzaMarkdown(testoGrezzo, opzioni = {}) {
     String.raw`(?<![\p{L}\p{N}_])_(?![\s_])([^_]+)(?<!\s)_(?![\p{L}\p{N}_])`
   ];
   const PATTERN_INLINE = new RegExp(PARTI_INLINE.join("|"), "gu");
-  const GRUPPI3 = { conv: -1, convId: -1, link: -1, linkUrl: -1 };
+  const GRUPPI3 = { conv: -1, convId: -1, link: -1, linkUrl: -1, nudo: -1 };
   let prossimoGruppo = 2;
   if (conConversazioni) {
     GRUPPI3.conv = prossimoGruppo;
     GRUPPI3.convId = prossimoGruppo + 1;
     prossimoGruppo += 2;
   }
-  if (conLink) {
+  if (conLink || conLinkWeb) {
     GRUPPI3.link = prossimoGruppo;
     GRUPPI3.linkUrl = prossimoGruppo + 1;
     prossimoGruppo += 2;
   }
+  if (conLinkWeb) {
+    GRUPPI3.nudo = prossimoGruppo;
+    prossimoGruppo += 1;
+  }
+  const ancoraWeb = (indirizzo, testoDelLink) => {
+    const a = doc.createElement("a");
+    const letto = leggiLinkEsterno(indirizzo);
+    if (letto) {
+      a.className = "talos-link-esterno";
+      a.setAttribute("href", letto.indirizzo === indirizzo ? indirizzo : letto.indirizzo);
+      a.setAttribute("data-link-esterno", a.getAttribute("href"));
+      a.setAttribute("rel", "noopener noreferrer");
+    }
+    a.textContent = testoDelLink;
+    return a;
+  };
   Object.assign(GRUPPI3, { forte: prossimoGruppo, codice: prossimoGruppo + 1, corsivoA: prossimoGruppo + 2, corsivoB: prossimoGruppo + 3 });
   function applicaInline(contenitore, segmento) {
     const pattern = new RegExp(PATTERN_INLINE.source, PATTERN_INLINE.flags);
@@ -42448,6 +43267,7 @@ function renderizzaMarkdown(testoGrezzo, opzioni = {}) {
       }
       const conversazione = GRUPPI3.conv >= 0 ? match[GRUPPI3.conv] : void 0;
       const link = GRUPPI3.link >= 0 ? match[GRUPPI3.link] : void 0;
+      const nudo = GRUPPI3.nudo >= 0 ? match[GRUPPI3.nudo] : void 0;
       if (conversazione !== void 0) {
         const b = doc.createElement("button");
         b.type = "button";
@@ -42455,6 +43275,16 @@ function renderizzaMarkdown(testoGrezzo, opzioni = {}) {
         b.setAttribute("data-conversazione", match[GRUPPI3.convId]);
         b.textContent = senzaEscape(conversazione);
         contenitore.appendChild(b);
+      } else if (nudo !== void 0) {
+        const fine = fineDellIndirizzo(nudo);
+        const indirizzo = nudo.slice(0, fine);
+        if (leggiLinkEsterno(indirizzo)) contenitore.appendChild(ancoraWeb(indirizzo, indirizzo));
+        else contenitore.appendChild(doc.createTextNode(indirizzo));
+        ultimo = match.index + fine;
+        pattern.lastIndex = ultimo;
+        continue;
+      } else if (link !== void 0 && conLinkWeb) {
+        contenitore.appendChild(ancoraWeb(match[GRUPPI3.linkUrl], senzaEscape(link)));
       } else if (link !== void 0) {
         const a = doc.createElement("a");
         const indirizzo = match[GRUPPI3.linkUrl];
@@ -42667,6 +43497,7 @@ var TAG_VUOTI, VOCE_DI_LISTA, senzaEscape;
 var init_markdown = __esm({
   "src/components/markdown.js"() {
     init_html_fidato();
+    init_link_esterni();
     TAG_VUOTI = /* @__PURE__ */ new Set(["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"]);
     VOCE_DI_LISTA = /^([ \t]*)([-*+]|\d{1,9}[.)])([ \t]+)(.*)$/;
     senzaEscape = (testo2) => String(testo2).replace(/\\([!-/:-@[-`{-~])/g, "$1");
@@ -43353,7 +44184,7 @@ function oraBreve3(iso) {
   const istante2 = Date.parse(iso);
   return Number.isFinite(istante2) ? new Date(istante2).toLocaleTimeString(linguaCorrenteDiT() === "en" ? "en-GB" : "it-IT", { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "";
 }
-function el20(d, tag2, classe = "", testo2 = null) {
+function el21(d, tag2, classe = "", testo2 = null) {
   const n = d.createElement(tag2);
   if (classe) n.className = classe;
   if (testo2 !== null) n.textContent = testo2;
@@ -43372,18 +44203,18 @@ function creaDettaglioAgente(figlia, { document: documento, sezione: sezioneIniz
   const d = documento || globalThis.document;
   let dati = figlia || {};
   let sezione2 = SEZIONI_AGENTE.some(([id4]) => id4 === sezioneIniziale) ? sezioneIniziale : "panoramica";
-  const elemento = el20(d, "div", "talos-agente");
+  const elemento = el21(d, "div", "talos-agente");
   elemento.dataset.c = "DettaglioAgente";
   if (dati.sessionId) elemento.dataset.sessioneFiglia = String(dati.sessionId);
-  const cima = el20(d, "div", "talos-agente__cima");
-  const indietro = el20(d, "button", "talos-button talos-button--ghost talos-button--sm talos-agente__indietro");
+  const cima = el21(d, "div", "talos-agente__cima");
+  const indietro = el21(d, "button", "talos-button talos-button--ghost talos-button--sm talos-agente__indietro");
   indietro.type = "button";
   indietro.dataset.azione = "tutti-gli-agenti";
   indietro.append(icona7(d, "i-arrow-left"), d.createTextNode(t("agenti.agent.backToAll")));
   indietro.addEventListener("click", () => azioni.indietro?.());
   cima.appendChild(indietro);
   if (typeof azioni.apriGrafo === "function") {
-    const grafo = el20(d, "button", "talos-button talos-button--ghost talos-button--sm");
+    const grafo = el21(d, "button", "talos-button talos-button--ghost talos-button--sm");
     grafo.type = "button";
     grafo.setAttribute("aria-label", t("agenti.agent.openInDiagram"));
     grafo.title = t("agenti.agent.openInDiagram");
@@ -43391,31 +44222,31 @@ function creaDettaglioAgente(figlia, { document: documento, sezione: sezioneIniz
     grafo.addEventListener("click", () => azioni.apriGrafo(dati));
     cima.append(grafo);
   }
-  const chi = el20(d, "div", "talos-agente__chi");
-  const segno = el20(d, "span", "talos-agente__icona");
+  const chi = el21(d, "div", "talos-agente__chi");
+  const segno = el21(d, "span", "talos-agente__icona");
   segno.appendChild(icona7(d, "i-robot"));
-  const nomi2 = el20(d, "div", "talos-agente__nomi");
-  const nome = el20(d, "b", "talos-agente__nome");
-  const ruolo = el20(d, "span", "talos-agente__ruolo talos-muted");
+  const nomi2 = el21(d, "div", "talos-agente__nomi");
+  const nome = el21(d, "b", "talos-agente__nome");
+  const ruolo = el21(d, "span", "talos-agente__ruolo talos-muted");
   nomi2.append(nome, ruolo);
-  const stato2 = el20(d, "span", "talos-badge talos-badge--sm");
+  const stato2 = el21(d, "span", "talos-badge talos-badge--sm");
   stato2.setAttribute("role", "status");
   chi.append(segno, nomi2, stato2);
-  const pillole = el20(d, "div", "talos-agente__sezioni");
+  const pillole = el21(d, "div", "talos-agente__sezioni");
   pillole.setAttribute("role", "group");
   pillole.setAttribute("aria-label", t("agenti.agent.sectionsLabel"));
   const bottoni = /* @__PURE__ */ new Map();
   for (const [id4, chiave] of SEZIONI_AGENTE) {
-    const b = el20(d, "button", "talos-agente__sezione", t(chiave));
+    const b = el21(d, "button", "talos-agente__sezione", t(chiave));
     b.type = "button";
     b.dataset.sezione = id4;
     b.addEventListener("click", () => mostra(id4));
     bottoni.set(id4, b);
     pillole.appendChild(b);
   }
-  const corpo = el20(d, "div", "talos-agente__corpo");
+  const corpo = el21(d, "div", "talos-agente__corpo");
   const pannelli = new Map(SEZIONI_AGENTE.map(([id4]) => {
-    const p = el20(d, "div", "talos-agente__pannello");
+    const p = el21(d, "div", "talos-agente__pannello");
     p.dataset.pannello = id4;
     corpo.appendChild(p);
     return [id4, p];
@@ -43423,29 +44254,29 @@ function creaDettaglioAgente(figlia, { document: documento, sezione: sezioneIniz
   const slotConversazione = pannelli.get("conversazione");
   elemento.append(cima, chi, pillole, corpo);
   function collegamentoFile(voce2) {
-    const b = el20(d, "button", "talos-agente__file");
+    const b = el21(d, "button", "talos-agente__file");
     b.type = "button";
     b.dataset.percorso = voce2.percorso;
     const nomeFile2 = voce2.percorso.includes("/") ? voce2.percorso.slice(voce2.percorso.lastIndexOf("/") + 1) : voce2.percorso;
-    b.append(icona7(d, "i-file"), el20(d, "span", "talos-agente__file-nome", nomeFile2), el20(d, "span", "talos-agente__file-segno talos-muted", segnoFileAgente(voce2)));
+    b.append(icona7(d, "i-file"), el21(d, "span", "talos-agente__file-nome", nomeFile2), el21(d, "span", "talos-agente__file-segno talos-muted", segnoFileAgente(voce2)));
     b.title = t("agenti.agent.showInFilesTab", { percorso: voce2.percorso });
     b.addEventListener("click", () => azioni.apriFile?.(voce2.percorso));
     return b;
   }
   function riga2(k, v) {
-    const r = el20(d, "div", "talos-kv");
-    r.append(el20(d, "span", "talos-kv__k", k), el20(d, "span", "talos-kv__v", v));
+    const r = el21(d, "div", "talos-kv");
+    r.append(el21(d, "span", "talos-kv__k", k), el21(d, "span", "talos-kv__v", v));
     return r;
   }
   function disegnaPanoramica() {
     const p = pannelli.get("panoramica");
     const attivita = dati.attivita || {};
     const pezzi = [];
-    pezzi.push(el20(d, "p", "talos-agente__etichetta talos-muted", t("agenti.agent.task")));
-    const compito = el20(d, "div", "talos-agente__compito");
+    pezzi.push(el21(d, "p", "talos-agente__etichetta talos-muted", t("agenti.agent.task")));
+    const compito = el21(d, "div", "talos-agente__compito");
     compito.append(renderizzaMarkdown(dati.task || dati.taskCorto || t("agenti.agent.noTaskRecorded"), { document: d, linkMarkdown: true }));
     pezzi.push(compito);
-    const fatti = el20(d, "div", "talos-agente__fatti");
+    const fatti = el21(d, "div", "talos-agente__fatti");
     if (dati.modello) fatti.appendChild(riga2(t("agenti.agent.model"), String(dati.modello)));
     const avvio = dati.avvio ?? dati.avvioDelega;
     if (avvio === "da-solo" || avvio === "consentito") {
@@ -43459,33 +44290,33 @@ function creaDettaglioAgente(figlia, { document: documento, sezione: sezioneIniz
     if (fatti.childElementCount > 0) pezzi.push(fatti);
     const collisioni = Array.isArray(dati.collisioni) ? dati.collisioni : [];
     if (collisioni.length > 0) {
-      pezzi.push(el20(d, "div", "talos-callout talos-agente__avviso", tn("agenti.agent.collisionOne", "agenti.agent.collisionMany", collisioni.length, { elenco: collisioni.map((c) => c.percorso).join(", ") })));
+      pezzi.push(el21(d, "div", "talos-callout talos-agente__avviso", tn("agenti.agent.collisionOne", "agenti.agent.collisionMany", collisioni.length, { elenco: collisioni.map((c) => c.percorso).join(", ") })));
     }
     if (dati.notaDelega === "nessuna-modifica") {
-      const nota = el20(d, "div", "talos-callout talos-agente__avviso", t("agenti.agent.noChangeMade"));
+      const nota = el21(d, "div", "talos-callout talos-agente__avviso", t("agenti.agent.noChangeMade"));
       nota.dataset.notaDelega = dati.notaDelega;
       pezzi.push(nota);
     }
     if (typeof azioni.apriSessione === "function") {
-      const apri = el20(d, "button", "talos-button talos-button--secondary talos-button--sm", t("agenti.agent.openAsSession"));
+      const apri = el21(d, "button", "talos-button talos-button--secondary talos-button--sm", t("agenti.agent.openAsSession"));
       apri.type = "button";
       apri.dataset.azione = "apri-sessione";
       apri.addEventListener("click", () => azioni.apriSessione());
       pezzi.push(apri);
     }
     const file = Array.isArray(attivita.file) ? attivita.file : [];
-    pezzi.push(el20(d, "b", "talos-agente__titoletto", t("agenti.agent.filesInvolved")));
-    if (file.length === 0) pezzi.push(el20(d, "p", "talos-muted talos-agente__vuoto", dati.conclusa === true ? t("agenti.agent.noFilesDone") : t("agenti.agent.noFilesYet")));
+    pezzi.push(el21(d, "b", "talos-agente__titoletto", t("agenti.agent.filesInvolved")));
+    if (file.length === 0) pezzi.push(el21(d, "p", "talos-muted talos-agente__vuoto", dati.conclusa === true ? t("agenti.agent.noFilesDone") : t("agenti.agent.noFilesYet")));
     else pezzi.push(...file.slice(0, 5).map(collegamentoFile));
     if (file.length > 5) {
-      const altri = el20(d, "button", "talos-button talos-button--ghost talos-button--sm", t("agenti.agent.seeAllFiles", { n: file.length + (attivita.fileTagliati || 0) }));
+      const altri = el21(d, "button", "talos-button talos-button--ghost talos-button--sm", t("agenti.agent.seeAllFiles", { n: file.length + (attivita.fileTagliati || 0) }));
       altri.type = "button";
       altri.addEventListener("click", () => mostra("file"));
       pezzi.push(altri);
     }
     if (typeof dati.riassuntoDelega === "string" && dati.riassuntoDelega.trim()) {
-      const sintesi = el20(d, "div", "talos-agente__compito");
-      sintesi.append(el20(d, "b", "talos-agente__etichetta", t("agenti.agent.reported")), renderizzaMarkdown(fermataNellaLingua(dati.riassuntoDelega), { document: d, linkMarkdown: true }));
+      const sintesi = el21(d, "div", "talos-agente__compito");
+      sintesi.append(el21(d, "b", "talos-agente__etichetta", t("agenti.agent.reported")), renderizzaMarkdown(fermataNellaLingua(dati.riassuntoDelega), { document: d, linkMarkdown: true }));
       pezzi.push(sintesi);
     }
     p.replaceChildren(...pezzi);
@@ -43494,23 +44325,23 @@ function creaDettaglioAgente(figlia, { document: documento, sezione: sezioneIniz
     const p = pannelli.get("file");
     const attivita = dati.attivita || {};
     const file = Array.isArray(attivita.file) ? attivita.file : [];
-    const pezzi = [el20(d, "b", "talos-agente__titoletto", t("agenti.agent.filesReadAndEdited"))];
-    if (file.length === 0) pezzi.push(el20(d, "p", "talos-muted talos-agente__vuoto", t("agenti.agent.noFilesForNow")));
+    const pezzi = [el21(d, "b", "talos-agente__titoletto", t("agenti.agent.filesReadAndEdited"))];
+    if (file.length === 0) pezzi.push(el21(d, "p", "talos-muted talos-agente__vuoto", t("agenti.agent.noFilesForNow")));
     else pezzi.push(...file.map(collegamentoFile));
-    if (attivita.fileTagliati > 0) pezzi.push(el20(d, "p", "talos-muted talos-agente__nota", t("agenti.agent.olderFiles", { n: attivita.fileTagliati })));
+    if (attivita.fileTagliati > 0) pezzi.push(el21(d, "p", "talos-muted talos-agente__nota", t("agenti.agent.olderFiles", { n: attivita.fileTagliati })));
     p.replaceChildren(...pezzi);
   }
   function disegnaEventi() {
     const p = pannelli.get("eventi");
     const attivita = dati.attivita || {};
     const passi = (Array.isArray(attivita.passi) ? attivita.passi : []).map((passo2) => ({ passo: passo2, frase: frasePasso(passo2) })).filter((x) => x.frase);
-    const pezzi = [el20(d, "b", "talos-agente__titoletto", t("agenti.agent.whatItDid"))];
-    if (attivita.passiTagliati > 0) pezzi.push(el20(d, "p", "talos-muted talos-agente__nota", t("agenti.agent.olderSteps", { n: attivita.passiTagliati })));
-    if (passi.length === 0) pezzi.push(el20(d, "p", "talos-muted talos-agente__vuoto", t("agenti.agent.noStepsYet")));
+    const pezzi = [el21(d, "b", "talos-agente__titoletto", t("agenti.agent.whatItDid"))];
+    if (attivita.passiTagliati > 0) pezzi.push(el21(d, "p", "talos-muted talos-agente__nota", t("agenti.agent.olderSteps", { n: attivita.passiTagliati })));
+    if (passi.length === 0) pezzi.push(el21(d, "p", "talos-muted talos-agente__vuoto", t("agenti.agent.noStepsYet")));
     for (const { passo: passo2, frase } of passi) {
-      const r = el20(d, "div", "talos-agente__passo");
+      const r = el21(d, "div", "talos-agente__passo");
       r.dataset.tipo = passo2.tipo;
-      r.append(el20(d, "span", "talos-agente__ora talos-mono talos-muted", oraBreve3(passo2.quando)), el20(d, "span", "talos-agente__frase", frase));
+      r.append(el21(d, "span", "talos-agente__ora talos-mono talos-muted", oraBreve3(passo2.quando)), el21(d, "span", "talos-agente__frase", frase));
       pezzi.push(r);
     }
     p.replaceChildren(...pezzi);
@@ -46392,9 +47223,9 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
   mondo.append(vuoto);
   function disegnaAggregato(modello) {
     const perStato = /* @__PURE__ */ new Map();
-    for (const nodo15 of modello.nodi) {
-      if (!perStato.has(nodo15.stato)) perStato.set(nodo15.stato, []);
-      perStato.get(nodo15.stato).push(nodo15);
+    for (const nodo17 of modello.nodi) {
+      if (!perStato.has(nodo17.stato)) perStato.set(nodo17.stato, []);
+      perStato.get(nodo17.stato).push(nodo17);
     }
     const ordinati = Object.keys(etichetta2).filter((chiave) => perStato.has(chiave));
     if (!perStato.has(gruppoAperto)) {
@@ -46423,15 +47254,15 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
     const inizio = paginaGruppo * 12;
     const titolo2 = el35("h3", "", `${gruppoAperto in stati ? t(stati[gruppoAperto]) : t("agenti.delegations.sessionsFallback")} · ${conteggio(selezionati.length)}`);
     const elenco3 = el35("div", "talos-grafo__gruppo-elenco");
-    for (const nodo15 of selezionati.slice(inizio, inizio + 12)) {
-      const apri = bottone8(nodo15.nome, () => {
-        opzioni.selezionato = nodo15.id;
+    for (const nodo17 of selezionati.slice(inizio, inizio + 12)) {
+      const apri = bottone8(nodo17.nome, () => {
+        opzioni.selezionato = nodo17.id;
         salva();
-        onApri?.(nodo15.dati);
+        onApri?.(nodo17.dati);
       });
       apri.classList.add("talos-grafo__gruppo-riga");
-      apri.dataset.sessionId = nodo15.id;
-      apri.setAttribute("aria-label", t("agenti.delegations.openDetailOf", { nome: nodo15.nome }));
+      apri.dataset.sessionId = nodo17.id;
+      apri.setAttribute("aria-label", t("agenti.delegations.openDetailOf", { nome: nodo17.nome }));
       elenco3.append(apri);
     }
     const pagine = el35("nav", "talos-grafo__gruppo-pagine");
@@ -46468,7 +47299,7 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
       n.classList.add("talos-grafo__statistica");
       n.dataset.statistica = chiave;
       if (filtra) n.dataset.stato = filtra;
-      n.append(el35("strong", "talos-mono", numero12 == null ? "—" : compatto(numero12)), el35("span", "", testo2));
+      n.append(el35("strong", "talos-mono", numero12 == null ? "—" : compatto2(numero12)), el35("span", "", testo2));
       return n;
     };
     riepilogo.replaceChildren(
@@ -46489,7 +47320,7 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
     ].filter(Boolean).join(" · "));
     riepilogo.append(copertura);
     if (denso) {
-      for (const nodo15 of nodiDom.values()) nodo15.remove();
+      for (const nodo17 of nodiDom.values()) nodo17.remove();
       nodiDom.clear();
       for (const arco of archiDom.values()) arco.remove();
       archiDom.clear();
@@ -46548,10 +47379,10 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
     const vivi = /* @__PURE__ */ new Set();
     for (const n of disegno.nodi) {
       vivi.add(n.id);
-      let nodo15 = nodiDom.get(n.id);
-      if (!nodo15) {
-        nodo15 = el35("article", "talos-grafo__nodo");
-        nodo15.dataset.nodoId = n.id;
+      let nodo17 = nodiDom.get(n.id);
+      if (!nodo17) {
+        nodo17 = el35("article", "talos-grafo__nodo");
+        nodo17.dataset.nodoId = n.id;
         const apri = bottone8("", () => {
           const fresco = disegno.nodi.find((v) => v.id === n.id);
           if (fresco) {
@@ -46560,7 +47391,7 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
           }
         });
         apri.classList.add("talos-grafo__nome");
-        nodo15.addEventListener("click", (event) => {
+        nodo17.addEventListener("click", (event) => {
           if (event.target.closest('button,a,input,select,textarea,[role="button"]')) return;
           apri.click();
         });
@@ -46577,16 +47408,16 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
         testata.append(pallino, apri, durata2);
         rigaStato.append(badge6, misure);
         fondo.append(operazione, collassa);
-        nodo15.append(testata, meta2, rigaStato, fondo);
-        nodo15._parti = { apri, meta: meta2, operazione, misure, durata: durata2, collassa, badge: badge6, pallino };
-        nodiDom.set(n.id, nodo15);
-        mondo.append(nodo15);
+        nodo17.append(testata, meta2, rigaStato, fondo);
+        nodo17._parti = { apri, meta: meta2, operazione, misure, durata: durata2, collassa, badge: badge6, pallino };
+        nodiDom.set(n.id, nodo17);
+        mondo.append(nodo17);
       }
-      const a = attivitaNodoGrafo(n.dati, posizione == null ? Date.now() : clockReplay), ui = nodo15._parti;
-      nodo15.dataset.selezionato = String(n.id === opzioni.selezionato);
-      nodo15.dataset.stato = n.stato;
-      nodo15.dataset.operativo = String(posizione == null && Boolean(a.operazione) && !corrente.errore);
-      Object.assign(nodo15.style, { left: `${n.x - n.width / 2}px`, top: `${n.y - n.height / 2}px`, width: `${n.width}px`, height: `${n.height}px` });
+      const a = attivitaNodoGrafo(n.dati, posizione == null ? Date.now() : clockReplay), ui = nodo17._parti;
+      nodo17.dataset.selezionato = String(n.id === opzioni.selezionato);
+      nodo17.dataset.stato = n.stato;
+      nodo17.dataset.operativo = String(posizione == null && Boolean(a.operazione) && !corrente.errore);
+      Object.assign(nodo17.style, { left: `${n.x - n.width / 2}px`, top: `${n.y - n.height / 2}px`, width: `${n.width}px`, height: `${n.height}px` });
       ui.apri.textContent = n.nome;
       ui.apri.removeAttribute("title");
       ui.apri.removeAttribute("data-tip");
@@ -46604,7 +47435,7 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
       ui.misure.textContent = a.chiamate == null ? t("agenti.delegations.activityUnavailable") : [
         tn("agenti.delegations.callsOne", "agenti.delegations.callsMany", a.chiamate),
         typeof (a.file?.length ?? a.numeroFile) === "number" ? tn("agenti.delegations.filesOne", "agenti.delegations.filesMany", a.file?.length ?? a.numeroFile, { piu: a.parziale ? "+" : "" }) : t("agenti.delegations.filesMany", { n: "—", piu: a.parziale ? "+" : "" }),
-        a.token != null ? t("agenti.delegations.tokensCompact", { n: compatto(a.token) }) : ""
+        a.token != null ? t("agenti.delegations.tokensCompact", { n: compatto2(a.token) }) : ""
       ].filter(Boolean).join(" · ");
       ui.durata.textContent = a.durataMs == null ? "—" : tempo(a.durataMs);
       ui.durata.title = a.durataMs == null ? t("agenti.delegations.durationUnavailable") : a.ultimo ? t("agenti.delegations.lastActivityRecorded", { quando: new Date(a.ultimo.quando).toLocaleString(localeOra3()) }) : t("agenti.delegations.lastActivityUnavailable");
@@ -46660,12 +47491,12 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
     focusDaPuntatore = false;
   }, true);
   canvas.addEventListener("focusin", (e) => {
-    const nodo15 = e.target.closest("[data-nodo-id]");
-    if (nodo15 && !focusDaPuntatore) {
+    const nodo17 = e.target.closest("[data-nodo-id]");
+    if (nodo17 && !focusDaPuntatore) {
       canvas.scrollTop = 0;
       canvas.scrollLeft = 0;
       vistaInLettura = false;
-      centra(nodo15.dataset.nodoId);
+      centra(nodo17.dataset.nodoId);
     }
   });
   let trascina = null;
@@ -46741,7 +47572,7 @@ function montaGrafoAgenti(host, { dati, onApri, onChiudi, onAggiorna, onLeggiFil
     root2.remove();
   } };
 }
-var idValido, stati, TONO_STATO, etichetta2, contaValida, istante, conteggio, compatto, localeOra3, oraBreve4, oraCompleta, tempo, avvioDiAgente, segnoAvvio;
+var idValido, stati, TONO_STATO, etichetta2, contaValida, istante, conteggio, compatto2, localeOra3, oraBreve4, oraCompleta, tempo, avvioDiAgente, segnoAvvio;
 var init_grafo_agenti = __esm({
   "src/components/grafo-agenti.js"() {
     init_cronologia_grafo();
@@ -46762,7 +47593,7 @@ var init_grafo_agenti = __esm({
         return String(n);
       }
     };
-    compatto = (n) => {
+    compatto2 = (n) => {
       try {
         return new Intl.NumberFormat(linguaCorrenteDiT(), { notation: "compact", maximumFractionDigits: 1 }).format(n);
       } catch {
@@ -53005,10 +53836,10 @@ var init_tela = __esm({
 function montaPannelloRisultati(host, { client, sorgente, onRitorno } = {}) {
   const d = host.ownerDocument;
   const el35 = (tag2, classe, testo2) => {
-    const nodo15 = d.createElement(tag2);
-    if (classe) nodo15.className = classe;
-    if (testo2 != null) nodo15.textContent = testo2;
-    return nodo15;
+    const nodo17 = d.createElement(tag2);
+    if (classe) nodo17.className = classe;
+    if (testo2 != null) nodo17.textContent = testo2;
+    return nodo17;
   };
   const id4 = `talos-wfg-risultati-${++prossimoId}`;
   const pannello = el35("aside", "talos-wfg__result-panel");
@@ -55582,10 +56413,10 @@ var init_rail_workflow = __esm({
 
 // src/components/grafo-sorgenti.js
 function bottone6(d, testo2) {
-  const nodo15 = d.createElement("button");
-  nodo15.type = "button";
-  nodo15.textContent = testo2;
-  return nodo15;
+  const nodo17 = d.createElement("button");
+  nodo17.type = "button";
+  nodo17.textContent = testo2;
+  return nodo17;
 }
 function montaSelettoreRail(contenitore, { iniziale = "workflow", onSelezione } = {}) {
   const d = contenitore.ownerDocument;
@@ -55742,7 +56573,7 @@ function montaCronologiaWorkflow(contenitore, { fetchFn, sessionId, onApri } = {
     const state = element("span", "talos-wfh__state", t(STATUS[run.status] ?? "agenti.history.status.unknown"));
     const detail = element("span", "talos-wfh__detail");
     const facts = [run.runId];
-    if (run.createdAt) facts.push(new Date(run.createdAt).toLocaleString(localeUI23()));
+    if (run.createdAt) facts.push(new Date(run.createdAt).toLocaleString(localeUI24()));
     if (Number.isFinite(run.durationMs) && run.durationMs >= 0) facts.push(`${Math.round(run.durationMs / 1e3)} s`);
     if (Number.isSafeInteger(run.steps?.total)) facts.push(t("agenti.history.stepsProgress", { fatti: run.steps.terminal ?? 0, totale: run.steps.total }));
     if (run.model && run.model !== "unknown") facts.push(run.model === "mixed" ? t("agenti.history.mixedModels") : run.model);
@@ -55818,7 +56649,7 @@ function montaCronologiaWorkflow(contenitore, { fetchFn, sessionId, onApri } = {
     }
   };
 }
-var STATUS, localeUI23;
+var STATUS, localeUI24;
 var init_workflow_history = __esm({
   "src/components/workflow-history.js"() {
     init_lingua();
@@ -55832,7 +56663,7 @@ var init_workflow_history = __esm({
       cancelled: "agenti.history.status.cancelled",
       succeeded_with_set_aside: "agenti.history.status.succeededWithSetAside"
     });
-    localeUI23 = () => linguaCorrenteDiT() === "en" ? "en-US" : "it-IT";
+    localeUI24 = () => linguaCorrenteDiT() === "en" ? "en-US" : "it-IT";
   }
 });
 
@@ -56295,7 +57126,7 @@ function tempoBoard(iso, adesso = /* @__PURE__ */ new Date()) {
   const giorno = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
   const giorni = Math.round((giorno(adesso) - giorno(data)) / 864e5);
   if (giorni === 1) return t("sezioni.board.time.yesterday");
-  if (giorni > 1) return giorni < 7 ? t("sezioni.board.time.daysAgo", { n: giorni }) : data.toLocaleDateString(localeUI24());
+  if (giorni > 1) return giorni < 7 ? t("sezioni.board.time.daysAgo", { n: giorni }) : data.toLocaleDateString(localeUI25());
   const minuti = Math.floor(ms2 / 6e4);
   if (minuti < 1) return t("sezioni.board.time.now");
   if (minuti < 60) return t("sezioni.board.time.minutesAgo", { n: minuti });
@@ -56308,9 +57139,9 @@ function testiBoard(sessione, metriche = {}, adesso = /* @__PURE__ */ new Date()
     modello: nomeModello(sessione.modello) || "—",
     // ⛔ 14/09: i giri fermati contano come nella barra — un conto solo, `giriDellaSessione`
     giri: valido(giriDellaSessione(sessione).giri) ? String(giriDellaSessione(sessione).giri) : "—",
-    token: compatto2(totale(sessione)),
-    cache: (valido(metriche?.cache?.percentuale) ? numero6(metriche.cache.percentuale) + "%" : "—") + (valido(usageDellaSessione(sessione)?.cached_tokens) ? " · " + compatto2(usageDellaSessione(sessione).cached_tokens) : ""),
-    primo: valido(metriche?.primoToken?.ms) ? new Intl.NumberFormat(localeUI24(), { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(metriche.primoToken.ms / 1e3) + " s" : "—",
+    token: compatto3(totale(sessione)),
+    cache: (valido(metriche?.cache?.percentuale) ? numero6(metriche.cache.percentuale) + "%" : "—") + (valido(usageDellaSessione(sessione)?.cached_tokens) ? " · " + compatto3(usageDellaSessione(sessione).cached_tokens) : ""),
+    primo: valido(metriche?.primoToken?.ms) ? new Intl.NumberFormat(localeUI25(), { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(metriche.primoToken.ms / 1e3) + " s" : "—",
     chiusura: MOTIVI[metriche?.chiusura?.motivo]?.() || (metriche?.chiusura?.motivo ? t("sezioni.board.closeReason.other") : "—"),
     avviata: tempoBoard(sessione.avviataAlle, adesso)
   };
@@ -56329,48 +57160,48 @@ function selezionaSessioniBoard(sessioni, { stato: stato2 = "tutte", cartella = 
   const data = (s) => Number.isFinite(Date.parse(s.avviataAlle)) ? Date.parse(s.avviataAlle) : null;
   return dati.sort((a, b) => ordine === "nome" ? (a.nome || a.taskId || "").localeCompare(b.nome || b.taskId || "", "it", { numeric: true, sensitivity: "base" }) : ordine === "token" ? confrontoNumero(totale(a), totale(b)) : confrontoNumero(data(a), data(b), ordine === "vecchie"));
 }
-function el21(doc, tag2, classe, testo2) {
-  const nodo15 = doc.createElement(tag2);
-  if (classe) nodo15.className = classe;
-  if (testo2 !== void 0) nodo15.textContent = testo2;
-  return nodo15;
+function el22(doc, tag2, classe, testo2) {
+  const nodo17 = doc.createElement(tag2);
+  if (classe) nodo17.className = classe;
+  if (testo2 !== void 0) nodo17.textContent = testo2;
+  return nodo17;
 }
 function creaRigaBoard(sessione, { document: doc = globalThis.document, metriche = {}, adesso, onApri, onMenu } = {}) {
   const t2 = testiBoard(sessione, metriche, adesso), stato2 = statoBoard(sessione);
-  const riga2 = el21(doc, "tr");
+  const riga2 = el22(doc, "tr");
   riga2.dataset.boardSessionId = sessione.sessionId;
-  const titolo2 = el21(doc, "td", "title", void 0), apri = el21(doc, "button", "talos-board-session", t2.titolo);
+  const titolo2 = el22(doc, "td", "title", void 0), apri = el22(doc, "button", "talos-board-session", t2.titolo);
   apri.type = "button";
   apri.title = t2.titolo;
   apri.setAttribute("aria-label", t("sezioni.common.openName", { name: t2.titolo }));
   titolo2.append(apri);
   riga2.append(titolo2);
-  const cellaStato = el21(doc, "td");
-  cellaStato.append(el21(doc, "span", "talos-badge" + (stato2.tono ? " talos-badge--" + stato2.tono : "") + " talos-badge--sm", stato2.testo));
+  const cellaStato = el22(doc, "td");
+  cellaStato.append(el22(doc, "span", "talos-badge" + (stato2.tono ? " talos-badge--" + stato2.tono : "") + " talos-badge--sm", stato2.testo));
   riga2.append(cellaStato);
-  const modello = el21(doc, "td", "talos-mono talos-board-model", t2.modello);
+  const modello = el22(doc, "td", "talos-mono talos-board-model", t2.modello);
   modello.title = sessione.modello || t("sezioni.board.modelNotRecorded");
   riga2.append(modello);
   for (const campo3 of ["giri", "token", "cache", "primo"]) {
-    const cella = el21(doc, "td", "num talos-mono talos-measure", t2[campo3]);
+    const cella = el22(doc, "td", "num talos-mono talos-measure", t2[campo3]);
     const invii = esecuzioniDellaSessione(sessione);
     const daInvii = valido(invii) ? " · " + tn("sezioni.board.tooltip.sendsOne", "sezioni.board.tooltip.sendsMany", invii) : "";
-    if (campo3 === "token" && valido(totale(sessione))) cella.title = t("sezioni.board.tooltip.tokens", { count: totale(sessione).toLocaleString(localeUI24()) }) + daInvii;
+    if (campo3 === "token" && valido(totale(sessione))) cella.title = t("sezioni.board.tooltip.tokens", { count: totale(sessione).toLocaleString(localeUI25()) }) + daInvii;
     if (campo3 === "giri" && t2.giri !== "—") cella.title = t("sezioni.board.tooltip.turns") + daInvii + (giriDellaSessione(sessione).fermati ? " · " + spiegaGiriFermati(giriDellaSessione(sessione).fermati) : "");
     if (campo3 === "primo" && t2.primo === "—") cella.title = testoDelCampo(metriche?.primoToken, "motivoAssente") || t("sezioni.board.tooltip.timeNotRecorded");
     if (campo3 === "cache") {
       const cached = usageDellaSessione(sessione)?.cached_tokens;
-      cella.title = valido(cached) ? t("sezioni.board.tooltip.cache", { count: cached.toLocaleString(localeUI24()) }) + daInvii : testoDelCampo(metriche?.cache, "motivoAssente") || t("sezioni.board.tooltip.cacheNotRecorded");
+      cella.title = valido(cached) ? t("sezioni.board.tooltip.cache", { count: cached.toLocaleString(localeUI25()) }) + daInvii : testoDelCampo(metriche?.cache, "motivoAssente") || t("sezioni.board.tooltip.cacheNotRecorded");
       cella.setAttribute("aria-label", t2.cache + " · " + cella.title);
     }
     riga2.append(cella);
   }
-  riga2.append(el21(doc, "td", t2.chiusura === "—" ? "talos-muted" : null, t2.chiusura));
-  const costo2 = el21(doc, "td", "num talos-mono talos-measure--estimate");
+  riga2.append(el22(doc, "td", t2.chiusura === "—" ? "talos-muted" : null, t2.chiusura));
+  const costo2 = el22(doc, "td", "num talos-mono talos-measure--estimate");
   costo2.hidden = true;
   costo2.dataset.richiede = "fase3";
   riga2.append(costo2);
-  const data = el21(doc, "td", "talos-muted", t2.avviata);
+  const data = el22(doc, "td", "talos-muted", t2.avviata);
   data.title = sessione.avviataAlle || t("sezioni.common.dateNotRecorded");
   riga2.append(data);
   riga2.addEventListener("click", (event) => onApri?.(sessione, event));
@@ -56391,17 +57222,17 @@ function creaRigaBoard(sessione, { document: doc = globalThis.document, metriche
 }
 function creaTabellaBoard(sessioni, opzioni = {}) {
   const doc = opzioni.document || globalThis.document;
-  const card = el21(doc, "div", "talos-card talos-table-wrap");
+  const card = el22(doc, "div", "talos-card talos-table-wrap");
   card.dataset.c = "DataTable";
   card.id = "boardTabella";
   card.setAttribute("role", "tabpanel");
   card.setAttribute("aria-label", t("sezioni.board.table.filtered"));
-  const tabella = el21(doc, "table", "talos-table");
+  const tabella = el22(doc, "table", "talos-table");
   tabella.setAttribute("aria-label", t("sezioni.board.table.label"));
-  const testa = el21(doc, "thead"), riga2 = el21(doc, "tr");
+  const testa = el22(doc, "thead"), riga2 = el22(doc, "tr");
   const ordine = opzioni.ordine || "recenti";
   [t("sezioni.board.column.session"), t("sezioni.board.column.status"), t("sezioni.board.column.model"), t("sezioni.board.column.turns"), t("sezioni.board.column.tokens"), t("sezioni.board.column.cache"), t("sezioni.board.column.firstToken"), t("sezioni.board.column.closedFor"), t("sezioni.board.column.cost"), t("sezioni.board.column.started")].forEach((nome, i2) => {
-    const th = el21(doc, "th", [3, 4, 5, 6, 8].includes(i2) ? "num" : null, nome);
+    const th = el22(doc, "th", [3, 4, 5, 6, 8].includes(i2) ? "num" : null, nome);
     th.scope = "col";
     if (i2 === 8) {
       th.hidden = true;
@@ -56411,10 +57242,10 @@ function creaTabellaBoard(sessioni, opzioni = {}) {
     riga2.append(th);
   });
   testa.append(riga2);
-  const corpo = el21(doc, "tbody");
+  const corpo = el22(doc, "tbody");
   for (const sessione of sessioni) corpo.append(creaRigaBoard(sessione, { ...opzioni, metriche: opzioni.metriche?.[sessione.sessionId] }));
   if (!sessioni.length) {
-    const tr2 = el21(doc, "tr"), td = el21(doc, "td", "talos-muted", opzioni.vuoto || t("sezioni.board.noMatches"));
+    const tr2 = el22(doc, "tr"), td = el22(doc, "td", "talos-muted", opzioni.vuoto || t("sezioni.board.noMatches"));
     td.colSpan = 9;
     tr2.append(td);
     corpo.append(tr2);
@@ -56468,7 +57299,7 @@ function renderBoard(schermo, vista) {
   const alternative = [["", t("sezioni.board.folder.all")], ...percorsi.map((p) => [p, p]), ...opzioni.cartelleCaricate && sessioni.some((s) => !cartelle[s.sessionId]) ? [["@assente", t("sezioni.board.folder.unrecorded")]] : []];
   if (JSON.stringify(alternative) !== vista.alternative) {
     selettore2.replaceChildren(...alternative.map(([valore, testo2]) => {
-      const o = el21(doc, "option", null, testo2);
+      const o = el22(doc, "option", null, testo2);
       o.value = valore;
       return o;
     }));
@@ -56493,22 +57324,22 @@ function renderBoard(schermo, vista) {
   schermo.querySelector('[data-c="DataTable"]').replaceWith(tabella);
   if (attivo) [...tabella.querySelectorAll("[data-board-session-id]")].find((n) => n.dataset.boardSessionId === attivo)?.querySelector("button").focus({ preventScroll: true });
 }
-var localeUI24, numero6, conta, valido, totale, compatto2, MOTIVI, STATO, CLASSI_STATO_BOARD, VISTE3;
+var localeUI25, numero6, conta, valido, totale, compatto3, MOTIVI, STATO, CLASSI_STATO_BOARD, VISTE3;
 var init_board = __esm({
   "src/components/board.js"() {
     init_testo_server();
     init_lingua();
     init_session_item();
     init_consumo_sessione();
-    localeUI24 = () => linguaCorrenteDiT() === "en" ? "en-US" : "it-IT";
-    numero6 = (n) => new Intl.NumberFormat(localeUI24(), { maximumFractionDigits: 1 }).format(n);
-    conta = (n) => tn("sezioni.board.count.one", "sezioni.board.count.many", n, { n: new Intl.NumberFormat(localeUI24()).format(n) });
+    localeUI25 = () => linguaCorrenteDiT() === "en" ? "en-US" : "it-IT";
+    numero6 = (n) => new Intl.NumberFormat(localeUI25(), { maximumFractionDigits: 1 }).format(n);
+    conta = (n) => tn("sezioni.board.count.one", "sezioni.board.count.many", n, { n: new Intl.NumberFormat(localeUI25()).format(n) });
     valido = (n) => typeof n === "number" && Number.isFinite(n) && n >= 0;
     totale = (s) => {
       const u = usageDellaSessione(s);
       return valido(u?.prompt_tokens) && valido(u?.completion_tokens) ? u.prompt_tokens + u.completion_tokens : null;
     };
-    compatto2 = (n) => !valido(n) ? "—" : n >= 1e3 ? numero6(n / 1e3) + "k" : numero6(n);
+    compatto3 = (n) => !valido(n) ? "—" : n >= 1e3 ? numero6(n / 1e3) + "k" : numero6(n);
     MOTIVI = { "fine-lavoro": () => t("sezioni.board.closeReason.workDone"), "giri-finiti": () => t("sezioni.board.closeReason.turnsUsedUp"), fermata: () => t("sezioni.board.closeReason.stopped"), errore: () => t("sezioni.board.closeReason.error") };
     STATO = { vivo: [() => t("sezioni.board.state.running"), "accent"], attesa: [() => t("sezioni.board.state.waiting"), "warning"], successo: [() => t("sezioni.board.state.done"), "success"], errore: [() => t("sezioni.board.state.error"), "danger"], fermata: [() => t("sezioni.board.state.stopped"), null], interrotto: [() => t("sezioni.board.state.interrupted"), null], pendente: [() => t("sezioni.board.state.new"), null], ignoto: [() => t("sezioni.board.state.doneUnknownOutcome"), null] };
     CLASSI_STATO_BOARD = Object.keys(STATO);
@@ -57108,7 +57939,7 @@ function creaSchede(striscia, {
     voci.forEach((voce2, i2) => {
       contenitore.append("\n", creaLinguetta(voce2, i2));
     });
-    for (const nodo15 of coda2?.(voci) || []) contenitore.append("\n", nodo15);
+    for (const nodo17 of coda2?.(voci) || []) contenitore.append("\n", nodo17);
     contenitore.append("\n");
     if (avevaIlFuoco != null && fuocoPerduto()) bottoneDi2(avevaIlFuoco)?.focus();
     portaInVista(attiva != null ? bottoneDi2(attiva) : null);
@@ -57159,11 +57990,11 @@ var init_schede = __esm({
 });
 
 // src/components/conversazione.js
-function el22(documentObj, tag2, className, testo2) {
-  const nodo15 = documentObj.createElement(tag2);
-  if (className) nodo15.className = className;
-  if (testo2 !== void 0 && testo2 !== null) nodo15.textContent = String(testo2);
-  return nodo15;
+function el23(documentObj, tag2, className, testo2) {
+  const nodo17 = documentObj.createElement(tag2);
+  if (className) nodo17.className = className;
+  if (testo2 !== void 0 && testo2 !== null) nodo17.textContent = String(testo2);
+  return nodo17;
 }
 function simbolo(documentObj, classe, nome) {
   const svg2 = documentObj.createElementNS(SVG_NS2, "svg");
@@ -57180,9 +58011,9 @@ function oraMessaggio(quando = /* @__PURE__ */ new Date()) {
 }
 function creaTurno({ numeri = [] } = {}, opzioni = {}) {
   const documentObj = opzioni.document || globalThis.document;
-  const turno = el22(documentObj, "div", "talos-turn");
+  const turno = el23(documentObj, "div", "talos-turn");
   turno.setAttribute("data-c", "Turn");
-  const spine = el22(documentObj, "div", "talos-turn-spine");
+  const spine = el23(documentObj, "div", "talos-turn-spine");
   spine.setAttribute("data-c", "TurnSpine");
   for (const voce2 of numeri) aggiungiGiroAllaSpine(spine, voce2);
   turno.append(spine);
@@ -57191,8 +58022,8 @@ function creaTurno({ numeri = [] } = {}, opzioni = {}) {
 function aggiungiGiroAllaSpine(spine, { n, tick = 1, tono = null } = {}) {
   if (!spine) return;
   const documentObj = spine.ownerDocument;
-  spine.append(el22(documentObj, "span", "talos-turn-spine__n", n));
-  const segno = el22(documentObj, "button", `talos-turn-spine__tick${tono ? ` talos-turn-spine__tick--${tono}` : ""}`);
+  spine.append(el23(documentObj, "span", "talos-turn-spine__n", n));
+  const segno = el23(documentObj, "button", `talos-turn-spine__tick${tono ? ` talos-turn-spine__tick--${tono}` : ""}`);
   segno.type = "button";
   segno.dataset.tick = String(Math.min(5, Math.max(1, Math.trunc(tick) || 1)));
   segno.dataset.giro = String(n ?? "");
@@ -57233,9 +58064,9 @@ function collegaNavigazioneSpina(conversazione, opzioni = {}) {
       for (const t2 of spina.querySelectorAll(".talos-turn-spine__tick")) t2.classList.toggle("talos-turn-spine__tick--visibile", voce2.isIntersecting);
     }
   }, { root: scorrevole, threshold: 0.35 });
-  const eTurno = (nodo15) => nodo15 && nodo15.nodeType === 1 && nodo15.classList?.contains("talos-turn");
-  const osservaTurno = (nodo15) => {
-    if (eTurno(nodo15) && nodo15.isConnected !== false) osservatore.observe(nodo15);
+  const eTurno = (nodo17) => nodo17 && nodo17.nodeType === 1 && nodo17.classList?.contains("talos-turn");
+  const osservaTurno = (nodo17) => {
+    if (eTurno(nodo17) && nodo17.isConnected !== false) osservatore.observe(nodo17);
   };
   for (const turno of conversazione.querySelectorAll(".talos-turn")) osservatore.observe(turno);
   const suCimaRaggiunta = typeof opzioni?.suCimaRaggiunta === "function" ? opzioni.suCimaRaggiunta : null;
@@ -57264,10 +58095,10 @@ function collegaNavigazioneSpina(conversazione, opzioni = {}) {
   const guarda = (mutazioniLotto) => {
     if (!collegata) return;
     for (const mutazione of mutazioniLotto || []) {
-      for (const nodo15 of mutazione.removedNodes || []) {
-        if (eTurno(nodo15)) osservatore.unobserve(nodo15);
+      for (const nodo17 of mutazione.removedNodes || []) {
+        if (eTurno(nodo17)) osservatore.unobserve(nodo17);
       }
-      for (const nodo15 of mutazione.addedNodes || []) osservaTurno(nodo15);
+      for (const nodo17 of mutazione.addedNodes || []) osservaTurno(nodo17);
     }
     riagganciaCima();
   };
@@ -57288,31 +58119,42 @@ function impostaTonoUltimoTick(spine, tono) {
 }
 function creaMessaggioUtente({ testo: testo2 = "", ora: ora4 = "", meta: meta2 = "" } = {}, opzioni = {}) {
   const documentObj = opzioni.document || globalThis.document;
-  const messaggio = el22(documentObj, "div", "talos-message talos-message--user");
+  const messaggio = el23(documentObj, "div", "talos-message talos-message--user");
   messaggio.setAttribute("data-c", "Message");
-  const testata = el22(documentObj, "div", "talos-message__head");
-  testata.append(el22(documentObj, "span", "talos-message__who", t("chat.message.you")), el22(documentObj, "span", "talos-message__meta", [ora4, meta2].filter(Boolean).join(" · ")));
-  const corpo = el22(documentObj, "div", "talos-message__body message-bubble");
-  const p = el22(documentObj, "p", null, testo2);
+  const testata = el23(documentObj, "div", "talos-message__head");
+  testata.append(el23(documentObj, "span", "talos-message__who", t("chat.message.you")), el23(documentObj, "span", "talos-message__meta", [ora4, meta2].filter(Boolean).join(" · ")));
+  const corpo = el23(documentObj, "div", "talos-message__body message-bubble");
+  const p = el23(documentObj, "p", null);
+  for (const pezzo2 of pezziConIndirizzi(testo2)) {
+    if (!pezzo2.indirizzo) {
+      p.append(documentObj.createTextNode(pezzo2.testo));
+      continue;
+    }
+    const a = el23(documentObj, "a", "talos-link-esterno", pezzo2.testo);
+    a.setAttribute("href", pezzo2.indirizzo);
+    a.setAttribute("data-link-esterno", pezzo2.indirizzo);
+    a.setAttribute("rel", "noopener noreferrer");
+    p.append(a);
+  }
   corpo.append(p);
   messaggio.append(testata, corpo);
   return messaggio;
 }
 function creaMessaggioTalos({ modello = "", ora: ora4 = "", paragrafi = [], working = false } = {}, opzioni = {}) {
   const documentObj = opzioni.document || globalThis.document;
-  const messaggio = el22(documentObj, "div", "talos-message");
+  const messaggio = el23(documentObj, "div", "talos-message");
   messaggio.setAttribute("data-c", "Message");
-  const testata = el22(documentObj, "div", "talos-message__head");
-  const orb = el22(documentObj, "span", working ? "talos-orb working" : "talos-orb");
+  const testata = el23(documentObj, "div", "talos-message__head");
+  const orb = el23(documentObj, "span", working ? "talos-orb working" : "talos-orb");
   orb.setAttribute("aria-hidden", "true");
   orb.setAttribute("data-testid", "talos-message-orb");
-  const marchio = el22(documentObj, "span", "talos-short-logo");
-  marchio.append(el22(documentObj, "span", "talos-short-logo-mark"));
+  const marchio = el23(documentObj, "span", "talos-short-logo");
+  marchio.append(el23(documentObj, "span", "talos-short-logo-mark"));
   orb.append(marchio);
   testata.append(orb);
-  testata.append(el22(documentObj, "span", "talos-message__who talos-message__who--talos", "TALOS"), el22(documentObj, "span", "talos-message__meta", [modello, ora4].filter(Boolean).join(" · ")));
+  testata.append(el23(documentObj, "span", "talos-message__who talos-message__who--talos", "TALOS"), el23(documentObj, "span", "talos-message__meta", [modello, ora4].filter(Boolean).join(" · ")));
   messaggio.append(testata);
-  for (const testo2 of paragrafi) messaggio.append(el22(documentObj, "p", null, testo2));
+  for (const testo2 of paragrafi) messaggio.append(el23(documentObj, "p", null, testo2));
   return messaggio;
 }
 function segnaFornitoreAValle(messaggio, fornitore, opzioni = {}) {
@@ -57324,7 +58166,7 @@ function segnaFornitoreAValle(messaggio, fornitore, opzioni = {}) {
   messaggio.dataset.fornitoriAValle = nomi2.join("\n");
   let via2 = testata.querySelector(":scope > .talos-message__via");
   if (!via2) {
-    via2 = el22(documentObj, "span", "talos-message__via");
+    via2 = el23(documentObj, "span", "talos-message__via");
     testata.append(via2);
   }
   via2.textContent = t("chat.message.via", { nomi: nomi2.join(", ") });
@@ -57339,12 +58181,12 @@ function creaAzioniMessaggio({ ascolta = true } = {}, opzioni = {}) {
   const finestra = opzioni.finestra || globalThis;
   const radiceMenu = opzioni.radiceMenu || documentObj.body;
   const vociMenu = typeof opzioni.vociMenu === "function" ? opzioni.vociMenu : null;
-  const gruppo = el22(documentObj, "div", "talos-message__actions message-actions");
+  const gruppo = el23(documentObj, "div", "talos-message__actions message-actions");
   gruppo.setAttribute("role", "group");
   const etichettaGruppo = typeof opzioni.etichetta === "string" && opzioni.etichetta.trim() ? opzioni.etichetta.trim() : TESTI_MESSAGGIO.azioniRisposta;
   gruppo.setAttribute("aria-label", etichettaGruppo);
   const bottone8 = (nome, titolo2, icona16) => {
-    const b = el22(documentObj, "button", "talos-button talos-button--ghost talos-icon-button talos-button--sm");
+    const b = el23(documentObj, "button", "talos-button talos-button--ghost talos-icon-button talos-button--sm");
     b.type = "button";
     b.title = titolo2;
     b.setAttribute("aria-label", titolo2);
@@ -57462,21 +58304,21 @@ function creaFileScaricabile({ allegato, percorso, sessionId } = {}, opzioni = {
   const nome = String(allegato?.nome || percorso || "").split(/[\\/]/).pop() || "file";
   const formato = String(allegato?.formato || nome.split(".").pop() || "").toUpperCase();
   const indirizzo = opzioni.indirizzo ?? indirizzoScarico({ sessionId, percorso });
-  const scheda = el22(d, "div", "talos-file-scaricabile");
+  const scheda = el23(d, "div", "talos-file-scaricabile");
   scheda.dataset.c = "FileScaricabile";
-  const testo2 = el22(d, "div", "talos-file-scaricabile__testo");
-  testo2.append(el22(d, "span", "talos-file-scaricabile__nome", nome));
+  const testo2 = el23(d, "div", "talos-file-scaricabile__testo");
+  testo2.append(el23(d, "span", "talos-file-scaricabile__nome", nome));
   const misura = [formato, dimensioneLeggibile2(allegato?.byte)].filter(Boolean).join(" · ");
-  if (misura) testo2.append(el22(d, "span", "talos-file-scaricabile__misura", misura));
+  if (misura) testo2.append(el23(d, "span", "talos-file-scaricabile__misura", misura));
   scheda.append(testo2);
   if (indirizzo) {
-    const link = el22(d, "a", "talos-file-scaricabile__scarica", t("chat.file.download"));
+    const link = el23(d, "a", "talos-file-scaricabile__scarica", t("chat.file.download"));
     link.href = indirizzo;
     link.setAttribute("download", nome);
     link.setAttribute("aria-label", t("chat.file.downloadNamed", { nome }));
     scheda.append(link);
   } else {
-    scheda.append(el22(d, "span", "talos-file-scaricabile__assente", t("chat.file.unavailable")));
+    scheda.append(el23(d, "span", "talos-file-scaricabile__assente", t("chat.file.unavailable")));
   }
   return scheda;
 }
@@ -57524,18 +58366,18 @@ function aggiornaBottone(bottone8, chiuso) {
 function creaBloccoCodice({ testo: testo2 = "", linguaggio = "", chiuso = true } = {}, opzioni = {}) {
   const documentObj = opzioni.document || globalThis.document;
   const etichetta3 = etichettaLinguaggio(linguaggio);
-  const blocco2 = el22(documentObj, "div", "code-block");
+  const blocco2 = el23(documentObj, "div", "code-block");
   blocco2.dataset.lingua = chiaveLinguaggio(linguaggio);
-  const intestazione = el22(documentObj, "div", "code-block-head");
-  const nome = el22(documentObj, "span", "code-block-lang", etichetta3 || t("chat.code.plainText"));
-  const bottone8 = el22(documentObj, "button", "code-block-copy");
+  const intestazione = el23(documentObj, "div", "code-block-head");
+  const nome = el23(documentObj, "span", "code-block-lang", etichetta3 || t("chat.code.plainText"));
+  const bottone8 = el23(documentObj, "button", "code-block-copy");
   bottone8.type = "button";
   intestazione.append(nome, bottone8);
-  const pre = el22(documentObj, "pre");
+  const pre = el23(documentObj, "pre");
   pre.setAttribute("tabindex", "0");
   pre.setAttribute("role", "group");
   pre.setAttribute("aria-label", [t("chat.code.block"), etichetta3].filter(Boolean).join(" "));
-  const code = el22(documentObj, "code");
+  const code = el23(documentObj, "code");
   pre.append(code);
   const parti = {
     pre,
@@ -57590,19 +58432,19 @@ function iconaAttrezzo(nome) {
 }
 function creaAttivita({ riassunto = t("chat.activity.pending"), id: id4, aperto = false, tempo: tempo2 = null, token = null } = {}, opzioni = {}) {
   const documentObj = opzioni.document || globalThis.document;
-  const card = el22(documentObj, "div", "talos-card talos-activity");
+  const card = el23(documentObj, "div", "talos-card talos-activity");
   card.setAttribute("data-c", "ActivityBundle");
   const idCorpo = id4 || `attivita-${Math.random().toString(36).slice(2, 8)}`;
-  const testa = el22(documentObj, "button", "talos-activity__head");
+  const testa = el23(documentObj, "button", "talos-activity__head");
   testa.type = "button";
   testa.setAttribute("aria-expanded", String(Boolean(aperto)));
   testa.setAttribute("aria-controls", idCorpo);
   testa.append(simbolo(documentObj, "i talos-activity__chev", "i-chev"));
-  const summaryText = el22(documentObj, "span", "talos-grow tool-note-summary-text", riassunto);
+  const summaryText = el23(documentObj, "span", "talos-grow tool-note-summary-text", riassunto);
   testa.append(summaryText);
-  if (tempo2) testa.append(el22(documentObj, "span", "talos-mono talos-measure", tempo2));
-  if (token) testa.append(el22(documentObj, "span", "talos-mono talos-measure--estimate", token));
-  const contenitore = el22(documentObj, "div", "talos-activity__body tool-batch-items");
+  if (tempo2) testa.append(el23(documentObj, "span", "talos-mono talos-measure", tempo2));
+  if (token) testa.append(el23(documentObj, "span", "talos-mono talos-measure--estimate", token));
+  const contenitore = el23(documentObj, "div", "talos-activity__body tool-batch-items");
   contenitore.id = idCorpo;
   contenitore.hidden = !aperto;
   card.append(testa, contenitore);
@@ -57614,11 +58456,11 @@ function impostaDiffAttivita(testa, aggiunte, rimozioni) {
   let piu = testa.querySelector(".talos-diff-num--plus");
   let meno = testa.querySelector(".talos-diff-num--minus");
   if (!piu) {
-    piu = el22(documentObj, "span", "talos-diff-num talos-diff-num--plus");
+    piu = el23(documentObj, "span", "talos-diff-num talos-diff-num--plus");
     testa.append(piu);
   }
   if (!meno) {
-    meno = el22(documentObj, "span", "talos-diff-num talos-diff-num--minus");
+    meno = el23(documentObj, "span", "talos-diff-num talos-diff-num--minus");
     testa.append(meno);
   }
   piu.textContent = `+${aggiunte}`;
@@ -57626,13 +58468,13 @@ function impostaDiffAttivita(testa, aggiunte, rimozioni) {
 }
 function creaRigaAttrezzo({ attrezzo = "", nome = "", dettaglio = "", esito = null, conDettaglio = false, id: id4 } = {}, opzioni = {}) {
   const documentObj = opzioni.document || globalThis.document;
-  const riga2 = el22(documentObj, "div", "talos-tool-row");
+  const riga2 = el23(documentObj, "div", "talos-tool-row");
   riga2.setAttribute("data-c", "ToolRow");
-  const icona16 = el22(documentObj, "span", "talos-tool-row__icon");
+  const icona16 = el23(documentObj, "span", "talos-tool-row__icon");
   icona16.append(simbolo(documentObj, "i", iconaAttrezzo(attrezzo)));
-  const summaryText = el22(documentObj, "span", "talos-tool-row__name tool-note-summary-text", nome);
-  const dettaglioEl = el22(documentObj, "span", "talos-tool-row__detail", dettaglio);
-  const pallino = el22(documentObj, "span", "talos-dot");
+  const summaryText = el23(documentObj, "span", "talos-tool-row__name tool-note-summary-text", nome);
+  const dettaglioEl = el23(documentObj, "span", "talos-tool-row__detail", dettaglio);
+  const pallino = el23(documentObj, "span", "talos-dot");
   riga2.append(icona16, summaryText, dettaglioEl, pallino);
   impostaEsitoRiga(riga2, esito);
   let corpo = null;
@@ -57642,7 +58484,7 @@ function creaRigaAttrezzo({ attrezzo = "", nome = "", dettaglio = "", esito = nu
     riga2.tabIndex = 0;
     riga2.setAttribute("aria-expanded", "false");
     riga2.setAttribute("aria-controls", idCorpo);
-    corpo = el22(documentObj, "pre", "talos-tool-row__body tool-note-detail");
+    corpo = el23(documentObj, "pre", "talos-tool-row__body tool-note-detail");
     corpo.id = idCorpo;
     riga2.addEventListener("keydown", (event) => {
       if (event.key !== "Enter" && event.key !== " ") return;
@@ -57664,36 +58506,36 @@ function impostaEsitoRiga(riga2, esito) {
 }
 function creaNotaSistema({ tipo = "info", badge: badge6 = t("chat.note.badge"), titolo: titolo2 = "", testo: testo2 = "" } = {}, opzioni = {}) {
   const documentObj = opzioni.document || globalThis.document;
-  const nota = el22(documentObj, "div", "talos-system-note");
+  const nota = el23(documentObj, "div", "talos-system-note");
   nota.setAttribute("data-c", "SystemNote");
-  nota.append(el22(documentObj, "span", `talos-badge talos-badge--${tipo} talos-badge--sm`, badge6));
-  const corpo = el22(documentObj, "div");
-  if (titolo2) corpo.append(el22(documentObj, "div", "talos-system-note__title", titolo2));
-  corpo.append(el22(documentObj, "p", "assistant-copy", testo2));
+  nota.append(el23(documentObj, "span", `talos-badge talos-badge--${tipo} talos-badge--sm`, badge6));
+  const corpo = el23(documentObj, "div");
+  if (titolo2) corpo.append(el23(documentObj, "div", "talos-system-note__title", titolo2));
+  corpo.append(el23(documentObj, "p", "assistant-copy", testo2));
   nota.append(corpo);
   return nota;
 }
 function creaNotaErrore({ badge: badge6 = t("chat.note.errorBadge"), titolo: titolo2 = t("chat.note.errorTitle"), spiegazione = null, tono = "danger" } = {}, opzioni = {}) {
   const documentObj = opzioni.document || globalThis.document;
-  const nota = el22(documentObj, "div");
+  const nota = el23(documentObj, "div");
   nota.className = `talos-system-note talos-system-note--${tono === "danger" ? "errore" : "nota"}`;
   nota.setAttribute("data-c", "SystemNote");
   nota.setAttribute("data-tone", tono);
-  nota.append(el22(documentObj, "span", `talos-badge talos-badge--${tono} talos-badge--sm`, badge6));
-  const corpo = el22(documentObj, "div");
-  if (titolo2) corpo.append(el22(documentObj, "div", "talos-system-note__title", titolo2));
-  corpo.append(el22(documentObj, "p", "assistant-copy", spiegazione?.cosa || ""));
-  if (spiegazione?.perche) corpo.append(el22(documentObj, "p", "talos-system-note__perche", spiegazione.perche));
+  nota.append(el23(documentObj, "span", `talos-badge talos-badge--${tono} talos-badge--sm`, badge6));
+  const corpo = el23(documentObj, "div");
+  if (titolo2) corpo.append(el23(documentObj, "div", "talos-system-note__title", titolo2));
+  corpo.append(el23(documentObj, "p", "assistant-copy", spiegazione?.cosa || ""));
+  if (spiegazione?.perche) corpo.append(el23(documentObj, "p", "talos-system-note__perche", spiegazione.perche));
   if (Array.isArray(spiegazione?.rimedi) && spiegazione.rimedi.length) {
-    const lista = el22(documentObj, "ul", "talos-system-note__rimedi");
-    for (const r of spiegazione.rimedi) lista.append(el22(documentObj, "li", "", r));
+    const lista = el23(documentObj, "ul", "talos-system-note__rimedi");
+    for (const r of spiegazione.rimedi) lista.append(el23(documentObj, "li", "", r));
     corpo.append(lista);
   }
   const azioni = Array.isArray(opzioni.azioni) ? opzioni.azioni.slice(0, 2) : [];
   if (azioni.length > 0) {
-    const riga2 = el22(documentObj, "div", "talos-cluster talos-system-note__azioni");
+    const riga2 = el23(documentObj, "div", "talos-cluster talos-system-note__azioni");
     for (const [i2, [testoAzione, fai]] of azioni.entries()) {
-      const b = el22(documentObj, "button", `talos-button talos-button--${i2 === 0 ? "primary" : "secondary"} talos-button--sm`, testoAzione);
+      const b = el23(documentObj, "button", `talos-button talos-button--${i2 === 0 ? "primary" : "secondary"} talos-button--sm`, testoAzione);
       b.type = "button";
       b.dataset.notaAzione = String(i2);
       if (typeof fai === "function") b.addEventListener("click", fai);
@@ -57706,7 +58548,7 @@ function creaNotaErrore({ badge: badge6 = t("chat.note.errorBadge"), titolo: tit
     dettaglio.className = "talos-system-note__tecnico";
     const riassunto = documentObj.createElement("summary");
     riassunto.textContent = t("chat.note.serverText");
-    dettaglio.append(riassunto, el22(documentObj, "pre", "talos-system-note__grezzo", spiegazione.tecnico));
+    dettaglio.append(riassunto, el23(documentObj, "pre", "talos-system-note__grezzo", spiegazione.tecnico));
     corpo.append(dettaglio);
   }
   nota.append(corpo);
@@ -57714,40 +58556,40 @@ function creaNotaErrore({ badge: badge6 = t("chat.note.errorBadge"), titolo: tit
 }
 function creaDiff(righe = [], opzioni = {}) {
   const documentObj = opzioni.document || globalThis.document;
-  const diff = el22(documentObj, "div", "talos-diff");
+  const diff = el23(documentObj, "div", "talos-diff");
   diff.setAttribute("data-c", "DiffView");
-  for (const r of righe) diff.append(el22(documentObj, "div", `talos-diff__line talos-diff__line--${r.tipo || "ctx"}`, r.testo));
+  for (const r of righe) diff.append(el23(documentObj, "div", `talos-diff__line talos-diff__line--${r.tipo || "ctx"}`, r.testo));
   return diff;
 }
 function creaApprovazione({ badge: badge6 = t("chat.approval.requestsToWrite"), bersaglio = "", aggiunte = null, rimozioni = null, perche = "", codice = "", motivo = "", diff = null, nota = t("chat.approval.expiresAtSessionEnd"), onUnaVolta, onSessione, onNega } = {}, opzioni = {}) {
   const documentObj = opzioni.document || globalThis.document;
-  const scheda = el22(documentObj, "div", "talos-approval");
+  const scheda = el23(documentObj, "div", "talos-approval");
   scheda.setAttribute("data-c", "ApprovalCard");
-  const testa = el22(documentObj, "div", "talos-approval__head");
-  const etichetta3 = el22(documentObj, "span", "talos-badge talos-badge--accent");
+  const testa = el23(documentObj, "div", "talos-approval__head");
+  const etichetta3 = el23(documentObj, "span", "talos-badge talos-badge--accent");
   etichetta3.append(simbolo(documentObj, "i i--sm", "i-shield"), documentObj.createTextNode(badge6));
-  testa.append(etichetta3, el22(documentObj, "span", "talos-mono talos-measure talos-grow talos-truncate", bersaglio));
-  if (Number.isFinite(aggiunte)) testa.append(el22(documentObj, "span", "talos-diff-num talos-diff-num--plus", `+${aggiunte}`));
-  if (Number.isFinite(rimozioni)) testa.append(el22(documentObj, "span", "talos-diff-num talos-diff-num--minus", `−${rimozioni}`));
+  testa.append(etichetta3, el23(documentObj, "span", "talos-mono talos-measure talos-grow talos-truncate", bersaglio));
+  if (Number.isFinite(aggiunte)) testa.append(el23(documentObj, "span", "talos-diff-num talos-diff-num--plus", `+${aggiunte}`));
+  if (Number.isFinite(rimozioni)) testa.append(el23(documentObj, "span", "talos-diff-num talos-diff-num--minus", `−${rimozioni}`));
   scheda.append(testa);
-  const perchéEl = el22(documentObj, "p", "talos-approval__why assistant-copy", perche);
+  const perchéEl = el23(documentObj, "p", "talos-approval__why assistant-copy", perche);
   scheda.append(perchéEl);
   let codiceEl = null;
   if (codice) {
-    codiceEl = el22(documentObj, "pre", "talos-approval__codice", String(codice));
+    codiceEl = el23(documentObj, "pre", "talos-approval__codice", String(codice));
     codiceEl.tabIndex = 0;
     codiceEl.setAttribute("aria-label", t("chat.approval.exactCommand"));
     scheda.append(codiceEl);
   }
   let motivoEl = null;
   if (motivo) {
-    motivoEl = el22(documentObj, "p", "talos-approval__motivo", motivo);
+    motivoEl = el23(documentObj, "p", "talos-approval__motivo", motivo);
     scheda.append(motivoEl);
   }
   if (Array.isArray(diff) && diff.length > 0) scheda.append(creaDiff(diff, opzioni));
-  const piede = el22(documentObj, "div", "talos-approval__foot sheet-actions");
+  const piede = el23(documentObj, "div", "talos-approval__foot sheet-actions");
   const bottone8 = (classi, testo2, onClick) => {
-    const b = el22(documentObj, "button", classi, testo2);
+    const b = el23(documentObj, "button", classi, testo2);
     b.type = "button";
     if (typeof onClick === "function") b.addEventListener("click", onClick);
     return b;
@@ -57755,7 +58597,7 @@ function creaApprovazione({ badge: badge6 = t("chat.approval.requestsToWrite"), 
   const unaVolta = bottone8("talos-button talos-button--primary talos-button--md", t("chat.approval.allowOnce"), onUnaVolta);
   const sessione = bottone8("talos-button talos-button--secondary", t("chat.approval.forThisSession"), onSessione);
   const nega = bottone8("talos-button talos-button--ghost talos-button--danger", t("chat.approval.deny"), onNega);
-  piede.append(unaVolta, sessione, nega, el22(documentObj, "span", "talos-grow"), el22(documentObj, "span", "talos-approval__foot-note", nota));
+  piede.append(unaVolta, sessione, nega, el23(documentObj, "span", "talos-grow"), el23(documentObj, "span", "talos-approval__foot-note", nota));
   scheda.append(piede);
   return { scheda, perche: perchéEl, codice: codiceEl, motivo: motivoEl, piede, pulsanti: { unaVolta, sessione, nega } };
 }
@@ -57769,24 +58611,24 @@ function segnaEsitoApprovazione(scheda, { approvato = false, altrove = false, am
   const cartaAutomazione = Boolean(scheda.dataset?.cartaAutomazione || scheda.dataset?.cartaFornitori);
   const modificata = !approvato && motivo === "modificata-dalla-persona";
   const esito = approvato ? ambito === "cartella" ? t("chat.approval.allowedInFolder") : t("chat.common.approved") : modificata ? t("chat.approval.editedByYou") : motivo === "nessuna-interfaccia" ? t("chat.approval.deniedNoOneCanAnswer") : cartaAutomazione ? t("chat.approval.cancelled") : t("chat.approval.denied");
-  const riga2 = el22(documentObj, "p", `talos-approval__esito talos-approval__esito--${approvato || modificata ? "si" : "no"}`, t("chat.approval.outcomeWithOrigin", { esito, altrove: altrove && motivo !== "nessuna-interfaccia" ? t("chat.common.fromAnotherWindow") : "" }));
+  const riga2 = el23(documentObj, "p", `talos-approval__esito talos-approval__esito--${approvato || modificata ? "si" : "no"}`, t("chat.approval.outcomeWithOrigin", { esito, altrove: altrove && motivo !== "nessuna-interfaccia" ? t("chat.common.fromAnotherWindow") : "" }));
   riga2.setAttribute("role", "status");
   scheda.append(riga2);
   const attrezzoNonSalvato = approvato ? scheda.dataset?.sempreNonSalvato : "";
   if (attrezzoNonSalvato && !scheda.querySelector(".talos-approval__sempre-non-salvato")) {
-    scheda.append(el22(documentObj, "p", "talos-approval__motivo talos-approval__sempre-non-salvato", t("chat.approval.alwaysNotSaved", { attrezzo: attrezzoNonSalvato })));
+    scheda.append(el23(documentObj, "p", "talos-approval__motivo talos-approval__sempre-non-salvato", t("chat.approval.alwaysNotSaved", { attrezzo: attrezzoNonSalvato })));
   }
   return riga2;
 }
 function creaFileToccati(file = [], opzioni = {}) {
   const documentObj = opzioni.document || globalThis.document;
-  const card = el22(documentObj, "div", "talos-card talos-touched");
+  const card = el23(documentObj, "div", "talos-card talos-touched");
   card.setAttribute("data-c", "TouchedFiles");
-  const testa = el22(documentObj, "div", "talos-touched__head");
+  const testa = el23(documentObj, "div", "talos-touched__head");
   const quanti = tn("chat.files.changedOne", "chat.files.changedMany", file.length);
-  testa.append(el22(documentObj, "span", "talos-touched__titolo", quanti), el22(documentObj, "span", "talos-grow"));
+  testa.append(el23(documentObj, "span", "talos-touched__titolo", quanti), el23(documentObj, "span", "talos-grow"));
   if (typeof opzioni.onVediTutto === "function") {
-    const vedi = el22(documentObj, "button", "talos-button talos-button--ghost talos-button--sm", TESTI_MESSAGGIO.vediModifiche);
+    const vedi = el23(documentObj, "button", "talos-button talos-button--ghost talos-button--sm", TESTI_MESSAGGIO.vediModifiche);
     vedi.type = "button";
     vedi.dataset.touchedAction = "vedi-tutto";
     vedi.addEventListener("click", opzioni.onVediTutto);
@@ -57798,14 +58640,14 @@ function creaFileToccati(file = [], opzioni = {}) {
 }
 function rigaFileToccato({ percorso = "", etichetta: etichetta3 = "", aggiunte = 0, rimozioni = 0, onApri } = {}, opzioni = {}) {
   const documentObj = opzioni.document || globalThis.document;
-  const riga2 = el22(documentObj, "button", "talos-touched__row");
+  const riga2 = el23(documentObj, "button", "talos-touched__row");
   riga2.type = "button";
   riga2.dataset.percorso = percorso;
   riga2.title = percorso;
   riga2.append(
-    el22(documentObj, "span", "talos-touched__name talos-truncate", etichetta3 || percorso),
-    el22(documentObj, "span", "talos-diff-num talos-diff-num--plus", `+${aggiunte}`),
-    el22(documentObj, "span", "talos-diff-num talos-diff-num--minus", `−${rimozioni}`),
+    el23(documentObj, "span", "talos-touched__name talos-truncate", etichetta3 || percorso),
+    el23(documentObj, "span", "talos-diff-num talos-diff-num--plus", `+${aggiunte}`),
+    el23(documentObj, "span", "talos-diff-num talos-diff-num--minus", `−${rimozioni}`),
     simbolo(documentObj, "i i--sm talos-touched__freccia", "i-chevron-right")
   );
   if (typeof onApri === "function") riga2.addEventListener("click", onApri);
@@ -57813,12 +58655,12 @@ function rigaFileToccato({ percorso = "", etichetta: etichetta3 = "", aggiunte =
 }
 function creaArtefatto({ titolo: titolo2 = t("chat.artifact.badge"), formato = "", src = "", onApri } = {}, opzioni = {}) {
   const documentObj = opzioni.document || globalThis.document;
-  const card = el22(documentObj, "div", "talos-card talos-artifact");
+  const card = el23(documentObj, "div", "talos-card talos-artifact");
   card.setAttribute("data-c", "ArtifactCard");
-  const testa = el22(documentObj, "div", "talos-artifact__head");
-  testa.append(el22(documentObj, "span", "talos-badge talos-badge--accent talos-badge--sm", t("chat.artifact.badge")), el22(documentObj, "span", "talos-artifact__title talos-grow talos-truncate", titolo2));
-  if (formato) testa.append(el22(documentObj, "span", "talos-mono talos-muted", formato));
-  const apri = el22(documentObj, "button", "talos-button talos-button--ghost talos-button--sm", t("chat.common.open"));
+  const testa = el23(documentObj, "div", "talos-artifact__head");
+  testa.append(el23(documentObj, "span", "talos-badge talos-badge--accent talos-badge--sm", t("chat.artifact.badge")), el23(documentObj, "span", "talos-artifact__title talos-grow talos-truncate", titolo2));
+  if (formato) testa.append(el23(documentObj, "span", "talos-mono talos-muted", formato));
+  const apri = el23(documentObj, "button", "talos-button talos-button--ghost talos-button--sm", t("chat.common.open"));
   apri.type = "button";
   if (typeof onApri === "function") apri.addEventListener("click", onApri);
   testa.append(apri);
@@ -57839,13 +58681,13 @@ function creaAttesa({ etichetta: etichetta3 = t("chat.wait.thinking") } = {}, op
   } catch {
     menoMovimento = false;
   }
-  const blocco2 = el22(documentObj, "div", "talos-stack talos-waiting");
+  const blocco2 = el23(documentObj, "div", "talos-stack talos-waiting");
   blocco2.setAttribute("role", "status");
   blocco2.setAttribute("aria-live", "polite");
   blocco2.setAttribute("aria-atomic", "true");
-  const riga2 = el22(documentObj, "div", "talos-waiting__row");
-  const label = el22(documentObj, "span", "talos-waiting__label run-activity-label", etichetta3);
-  const elapsed = el22(documentObj, "span", "talos-mono talos-muted run-activity-elapsed", "0s");
+  const riga2 = el23(documentObj, "div", "talos-waiting__row");
+  const label = el23(documentObj, "span", "talos-waiting__label run-activity-label", etichetta3);
+  const elapsed = el23(documentObj, "span", "talos-mono talos-muted run-activity-elapsed", "0s");
   elapsed.setAttribute("aria-hidden", "true");
   riga2.append(label, elapsed);
   blocco2.append(riga2);
@@ -57855,34 +58697,34 @@ function creaAttesa({ etichetta: etichetta3 = t("chat.wait.thinking") } = {}, op
 function creaDiffInChat(gruppi, { percorso = "", apertoSeSotto = 40, document: doc } = {}) {
   const documentObj = doc || globalThis.document;
   if (!gruppi || !Array.isArray(gruppi.pezzi) || gruppi.pezzi.length === 0) return null;
-  const blocco2 = el22(documentObj, "div", "talos-diff-chat");
+  const blocco2 = el23(documentObj, "div", "talos-diff-chat");
   blocco2.setAttribute("data-c", "DiffInChat");
   const righeTotali = gruppi.pezzi.reduce((n, p) => n + p.righe.length, 0);
-  const dettaglio = el22(documentObj, "details", "");
+  const dettaglio = el23(documentObj, "details", "");
   if (righeTotali <= apertoSeSotto) dettaglio.open = true;
-  const riassunto = el22(documentObj, "summary", "");
+  const riassunto = el23(documentObj, "summary", "");
   const quanti = gruppi.pezzi.length;
   riassunto.textContent = quanti === 1 ? tn("chat.diff.titleOne", "chat.diff.titleMany", righeTotali, { percorso: percorso ? t("chat.diff.inFile", { percorso }) : "" }) : t("chat.diff.titleWithLocations", { percorso: percorso ? t("chat.diff.inFile", { percorso }) : "", punti: quanti, n: righeTotali });
   dettaglio.append(riassunto);
   for (const pezzo2 of gruppi.pezzi) {
-    const testa = el22(documentObj, "div", "talos-diff-chat__pezzo");
+    const testa = el23(documentObj, "div", "talos-diff-chat__pezzo");
     const dove = pezzo2.daRiga === null ? t("chat.diff.removedLines") : pezzo2.daRiga === pezzo2.aRiga ? t("chat.diff.line", { n: pezzo2.daRiga }) : t("chat.diff.lines", { da: pezzo2.daRiga, a: pezzo2.aRiga });
-    testa.append(el22(documentObj, "span", "talos-diff-chat__righe", dove));
+    testa.append(el23(documentObj, "span", "talos-diff-chat__righe", dove));
     dettaglio.append(testa);
-    const corpo = el22(documentObj, "div", "talos-diff");
+    const corpo = el23(documentObj, "div", "talos-diff");
     corpo.setAttribute("data-c", "DiffView");
     for (const r of pezzo2.righe) {
-      const riga2 = el22(documentObj, "div");
+      const riga2 = el23(documentObj, "div");
       riga2.className = `talos-diff__line talos-diff__line--${r.tipo}`;
-      riga2.append(el22(documentObj, "span", "talos-diff-chat__num", r.numero === null ? "" : String(r.numero)));
-      riga2.append(el22(documentObj, "span", "talos-diff-chat__segno", r.tipo === "add" ? "+" : r.tipo === "del" ? "−" : " "));
+      riga2.append(el23(documentObj, "span", "talos-diff-chat__num", r.numero === null ? "" : String(r.numero)));
+      riga2.append(el23(documentObj, "span", "talos-diff-chat__segno", r.tipo === "add" ? "+" : r.tipo === "del" ? "−" : " "));
       riga2.append(documentObj.createTextNode(r.testo));
       corpo.append(riga2);
     }
     dettaglio.append(corpo);
   }
   if (gruppi.tagliato) {
-    const resto = el22(documentObj, "div", "talos-diff-chat__resto");
+    const resto = el23(documentObj, "div", "talos-diff-chat__resto");
     resto.textContent = tn("chat.diff.hiddenLocationsOne", "chat.diff.hiddenLocationsMany", gruppi.pezziNascosti, {
       punti: gruppi.pezziNascosti,
       righe: tn("chat.diff.lineCountOne", "chat.diff.lineCountMany", gruppi.righeNascoste),
@@ -57900,6 +58742,7 @@ var init_conversazione = __esm({
     init_lingua();
     init_conversazione_dom();
     init_schede();
+    init_link_esterni();
     SVG_NS2 = "http://www.w3.org/2000/svg";
     ID_MENU_RISPOSTA = "menuRispostaMessaggio";
     TESTI_MESSAGGIO = Object.freeze({
@@ -58307,7 +59150,7 @@ function nomeCampanella(quante) {
   if (quante === 0) return t("sezioni.notifications.bell.none");
   return quante === 1 ? t("sezioni.notifications.bell.one") : t("sezioni.notifications.bell.many", { n: quante });
 }
-function el23(documentObj, tag2, classe, testo2) {
+function el24(documentObj, tag2, classe, testo2) {
   const n = documentObj.createElement(tag2);
   if (classe) n.className = classe;
   if (testo2 != null) n.textContent = testo2;
@@ -58329,20 +59172,20 @@ function aggiornaPannelloNotifiche(pannello, notifiche = [], { ora: ora4 = () =>
   const toolbar = pannello.querySelector(".talos-toolbar");
   const sistema = pannello.querySelector(".talos-notification-panel__sistema");
   for (const n of [...pannello.children]) if (n !== toolbar && n !== sistema) n.remove();
-  pannello.append(el23(documentObj, "p", "talos-muted", sommarioNotifiche(notifiche.length)));
+  pannello.append(el24(documentObj, "p", "talos-muted", sommarioNotifiche(notifiche.length)));
   const righe = [];
   for (const { sessione, stato: stato2 } of notifiche) {
-    const b = el23(documentObj, "button", "talos-list-row");
+    const b = el24(documentObj, "button", "talos-list-row");
     b.type = "button";
     b.dataset.c = "ListRow";
     b.dataset.notifica = stato2;
     if (sessione?.sessionId) b.dataset.sessionId = sessione.sessionId;
-    const ic = el23(documentObj, "span", "talos-list-row__icon");
+    const ic = el24(documentObj, "span", "talos-list-row__icon");
     ic.appendChild(icona8(documentObj, GLIFI_NOTIFICA[stato2] || "i-bell"));
-    const testo2 = el23(documentObj, "span", "talos-list-row__text");
+    const testo2 = el24(documentObj, "span", "talos-list-row__text");
     testo2.append(
-      el23(documentObj, "span", "talos-list-row__title", sessione?.nome || sessione?.taskId || t("sezioni.notifications.sessionFallback")),
-      el23(documentObj, "span", "talos-list-row__sub", [ETICHETTE_NOTIFICA[stato2] || stato2, ora4(sessione)].filter(Boolean).join(" · "))
+      el24(documentObj, "span", "talos-list-row__title", sessione?.nome || sessione?.taskId || t("sezioni.notifications.sessionFallback")),
+      el24(documentObj, "span", "talos-list-row__sub", [ETICHETTE_NOTIFICA[stato2] || stato2, ora4(sessione)].filter(Boolean).join(" · "))
     );
     b.append(ic, testo2);
     pannello.appendChild(b);
@@ -58350,7 +59193,7 @@ function aggiornaPannelloNotifiche(pannello, notifiche = [], { ora: ora4 = () =>
   }
   let tutte = null;
   if (notifiche.length > 0) {
-    tutte = el23(documentObj, "button", "talos-button talos-button--ghost talos-button--sm");
+    tutte = el24(documentObj, "button", "talos-button talos-button--ghost talos-button--sm");
     tutte.type = "button";
     tutte.dataset.azione = "segna-tutte";
     tutte.append(icona8(documentObj, "i-check"), documentObj.createTextNode(` ${t("sezioni.notifications.markAllSeen")}`));
@@ -58495,7 +59338,7 @@ function filtraInstallati(modelli = [], { query = "", stato: stato2 = "tutti", r
     return [m.name, m.id, m.repo].some((v) => String(v || "").toLowerCase().includes(q2));
   });
 }
-function el24(documentObj, tag2, classe, testo2) {
+function el25(documentObj, tag2, classe, testo2) {
   const n = documentObj.createElement(tag2);
   if (classe) n.className = classe;
   if (testo2 != null) n.textContent = testo2;
@@ -58510,31 +59353,31 @@ function icona9(documentObj, nome, classe = "i") {
   svg2.appendChild(use);
   return svg2;
 }
-function badge(documentObj, testo2, tono) {
-  const b = el24(documentObj, "span", `talos-badge talos-badge--sm${tono ? ` talos-badge--${tono}` : ""}`, testo2);
+function badge2(documentObj, testo2, tono) {
+  const b = el25(documentObj, "span", `talos-badge talos-badge--sm${tono ? ` talos-badge--${tono}` : ""}`, testo2);
   b.dataset.c = "Badge";
   return b;
 }
 function creaRigaInstallata(dati, { selezionato = false, seleziona, document: documentObj = globalThis.document } = {}) {
-  const b = el24(documentObj, "button", "talos-list-row");
+  const b = el25(documentObj, "button", "talos-list-row");
   b.type = "button";
   b.dataset.c = "ListRow";
   b.dataset.model = dati.id;
   b.dataset.match = dati.match;
   b.dataset.installedState = dati.stato;
   b.setAttribute("aria-pressed", String(Boolean(selezionato)));
-  const ic = el24(documentObj, "span", "talos-list-row__icon");
+  const ic = el25(documentObj, "span", "talos-list-row__icon");
   ic.appendChild(icona9(documentObj, "i-bolt"));
-  const testo2 = el24(documentObj, "span", "talos-list-row__text");
-  const sub = el24(documentObj, "span", "talos-list-row__sub", dati.sotto);
+  const testo2 = el25(documentObj, "span", "talos-list-row__text");
+  const sub = el25(documentObj, "span", "talos-list-row__sub", dati.sotto);
   if (dati.sottoDue) {
     sub.appendChild(documentObj.createElement("br"));
     sub.appendChild(documentObj.createTextNode(dati.sottoDue));
   }
-  testo2.append(el24(documentObj, "span", "talos-list-row__title", dati.nome), sub);
-  const aside = el24(documentObj, "span", "talos-list-row__aside");
-  if (dati.stato === "caricato" || dati.stato === "incompleto" || dati.stato === "guasto") aside.appendChild(badge(documentObj, dati.etichettaStato, dati.tonoStato));
-  if (dati.verdetto) aside.appendChild(badge(documentObj, dati.verdetto.etichetta, dati.verdetto.tono));
+  testo2.append(el25(documentObj, "span", "talos-list-row__title", dati.nome), sub);
+  const aside = el25(documentObj, "span", "talos-list-row__aside");
+  if (dati.stato === "caricato" || dati.stato === "incompleto" || dati.stato === "guasto") aside.appendChild(badge2(documentObj, dati.etichettaStato, dati.tonoStato));
+  if (dati.verdetto) aside.appendChild(badge2(documentObj, dati.verdetto.etichetta, dati.verdetto.tono));
   b.append(ic, testo2, aside);
   if (typeof seleziona === "function") b.addEventListener("click", () => seleziona(dati.id));
   return b;
@@ -58560,23 +59403,23 @@ function verdettoAzioneModello(esito, { azione = "elimina", nome = "" } = {}) {
   };
 }
 function creaConfermaEliminazione(dati, { inCorso = false, verdetto = null, onAnnulla, onEsegui, document: d = globalThis.document } = {}) {
-  const card = el24(d, "div", "talos-check-card talos-check-card--danger talos-lab__space");
+  const card = el25(d, "div", "talos-check-card talos-check-card--danger talos-lab__space");
   card.dataset.c = "ConfermaEliminazione";
   card.dataset.modello = dati.id;
-  card.appendChild(el24(d, "span", "talos-check-card__stripe"));
-  const corpo = el24(d, "div", "talos-check-card__body");
+  card.appendChild(el25(d, "span", "talos-check-card__stripe"));
+  const corpo = el25(d, "div", "talos-check-card__body");
   corpo.append(
-    el24(d, "b", "talos-check-card__title", t("modelli.installed.deleteQuestion", { name: dati.nome })),
-    el24(d, "p", "", t("modelli.installed.deleteExplanation", { size: dati.dimensione ? ` (${dati.dimensione})` : "" }))
+    el25(d, "b", "talos-check-card__title", t("modelli.installed.deleteQuestion", { name: dati.nome })),
+    el25(d, "p", "", t("modelli.installed.deleteExplanation", { size: dati.dimensione ? ` (${dati.dimensione})` : "" }))
   );
-  const az = el24(d, "div", "talos-check-card__actions");
-  const annulla = el24(d, "button", "talos-button talos-button--secondary talos-button--sm", t("modelli.installed.cancel"));
+  const az = el25(d, "div", "talos-check-card__actions");
+  const annulla = el25(d, "button", "talos-button talos-button--secondary talos-button--sm", t("modelli.installed.cancel"));
   annulla.type = "button";
   annulla.dataset.c = "Button";
   annulla.dataset.action = "annullaEliminaModello";
   annulla.disabled = inCorso;
   if (onAnnulla) annulla.addEventListener("click", () => onAnnulla(dati.id));
-  const esegui = el24(d, "button", "talos-button talos-button--danger talos-button--sm", inCorso ? t("modelli.installed.deleting") : t("modelli.installed.deleteFromDisk"));
+  const esegui = el25(d, "button", "talos-button talos-button--danger talos-button--sm", inCorso ? t("modelli.installed.deleting") : t("modelli.installed.deleteFromDisk"));
   esegui.type = "button";
   esegui.dataset.c = "Button";
   esegui.dataset.action = "eseguiEliminaModello";
@@ -58589,15 +59432,15 @@ function creaConfermaEliminazione(dati, { inCorso = false, verdetto = null, onAn
   return card;
 }
 function creaCampoRinomina(dati, { bozza = "", inCorso = false, errore: errore2 = null, verdetto = null, onAnnulla, onSalva, onBozza, document: d = globalThis.document } = {}) {
-  const card = el24(d, "div", "talos-check-card talos-check-card--info talos-lab__space");
+  const card = el25(d, "div", "talos-check-card talos-check-card--info talos-lab__space");
   card.dataset.c = "CampoRinomina";
   card.dataset.modello = dati.id;
-  card.appendChild(el24(d, "span", "talos-check-card__stripe"));
-  const corpo = el24(d, "div", "talos-check-card__body");
+  card.appendChild(el25(d, "span", "talos-check-card__stripe"));
+  const corpo = el25(d, "div", "talos-check-card__body");
   const idCampo = `nomeModello-${String(dati.id).replace(/[^a-z0-9_-]/giu, "-")}`;
-  const etichetta3 = el24(d, "label", "talos-stack", t("modelli.installed.displayName"));
+  const etichetta3 = el25(d, "label", "talos-stack", t("modelli.installed.displayName"));
   etichetta3.htmlFor = idCampo;
-  const campo3 = el24(d, "input", "talos-field__input");
+  const campo3 = el25(d, "input", "talos-field__input");
   campo3.type = "text";
   campo3.id = idCampo;
   campo3.value = bozza;
@@ -58606,11 +59449,11 @@ function creaCampoRinomina(dati, { bozza = "", inCorso = false, errore: errore2 
   campo3.dataset.campo = "nomeModello";
   campo3.disabled = inCorso;
   etichetta3.appendChild(campo3);
-  const aiuto = el24(d, "p", "talos-muted", t("modelli.installed.renameHelp", { n: NOME_MODELLO_MAX }));
+  const aiuto = el25(d, "p", "talos-muted", t("modelli.installed.renameHelp", { n: NOME_MODELLO_MAX }));
   aiuto.id = `${idCampo}-aiuto`;
   corpo.append(etichetta3, aiuto);
   if (errore2) {
-    const allarme = el24(d, "p", "talos-muted", errore2);
+    const allarme = el25(d, "p", "talos-muted", errore2);
     allarme.dataset.campoErrore = "";
     allarme.setAttribute("role", "alert");
     allarme.id = `${idCampo}-errore`;
@@ -58618,14 +59461,14 @@ function creaCampoRinomina(dati, { bozza = "", inCorso = false, errore: errore2 
     campo3.setAttribute("aria-describedby", `${aiuto.id} ${allarme.id}`);
     corpo.appendChild(allarme);
   } else campo3.setAttribute("aria-describedby", aiuto.id);
-  const az = el24(d, "div", "talos-check-card__actions");
-  const annulla = el24(d, "button", "talos-button talos-button--secondary talos-button--sm", t("modelli.installed.cancel"));
+  const az = el25(d, "div", "talos-check-card__actions");
+  const annulla = el25(d, "button", "talos-button talos-button--secondary talos-button--sm", t("modelli.installed.cancel"));
   annulla.type = "button";
   annulla.dataset.c = "Button";
   annulla.dataset.action = "annullaRinominaModello";
   annulla.disabled = inCorso;
   if (onAnnulla) annulla.addEventListener("click", () => onAnnulla(dati.id));
-  const salva = el24(d, "button", "talos-button talos-button--primary talos-button--sm", inCorso ? t("modelli.installed.saving") : t("modelli.installed.saveName"));
+  const salva = el25(d, "button", "talos-button talos-button--primary talos-button--sm", inCorso ? t("modelli.installed.saving") : t("modelli.installed.saveName"));
   salva.type = "button";
   salva.dataset.c = "Button";
   salva.dataset.action = "salvaNomeModello";
@@ -58648,13 +59491,13 @@ function creaCampoRinomina(dati, { bozza = "", inCorso = false, errore: errore2 
   return card;
 }
 function creaRigaEsitoModello(verdetto, { document: d = globalThis.document } = {}) {
-  const riga2 = el24(d, "p", "talos-lab__space");
+  const riga2 = el25(d, "p", "talos-lab__space");
   riga2.dataset.c = "EsitoModello";
   riga2.dataset.tono = verdetto.tono;
   riga2.setAttribute("role", "status");
   riga2.setAttribute("aria-atomic", "true");
   riga2.tabIndex = -1;
-  riga2.append(badge(d, verdetto.etichetta, verdetto.tono), d.createTextNode(` ${verdetto.testo}`));
+  riga2.append(badge2(d, verdetto.etichetta, verdetto.tono), d.createTextNode(` ${verdetto.testo}`));
   return riga2;
 }
 function aggiornaDettaglioInstallato(aside, dati, { runtime = {}, azioni = {}, nodoFit = null, document: documentObj = globalThis.document } = {}) {
@@ -58665,44 +59508,44 @@ function aggiornaDettaglioInstallato(aside, dati, { runtime = {}, azioni = {}, n
     return;
   }
   aside.hidden = false;
-  const stato2 = el24(documentObj, "span");
+  const stato2 = el25(documentObj, "span");
   stato2.id = "modelloStato";
-  stato2.appendChild(badge(documentObj, dati.caricato ? t("modelli.installed.usedInChat") : dati.etichettaStato, dati.caricato ? "accent" : dati.tonoStato));
-  const nome = el24(documentObj, "h3", "", dati.nome);
+  stato2.appendChild(badge2(documentObj, dati.caricato ? t("modelli.installed.usedInChat") : dati.etichettaStato, dati.caricato ? "accent" : dati.tonoStato));
+  const nome = el25(documentObj, "h3", "", dati.nome);
   nome.id = "modelloNome";
-  const desc = el24(documentObj, "p", "talos-detail__desc", t("modelli.installed.localModelDescription"));
+  const desc = el25(documentObj, "p", "talos-detail__desc", t("modelli.installed.localModelDescription"));
   desc.id = "modelloDescrizione";
   const kv7 = (k, v, id4) => {
-    const r = el24(documentObj, "div", "talos-kv");
-    const val = el24(documentObj, "span", "talos-kv__v");
+    const r = el25(documentObj, "div", "talos-kv");
+    const val = el25(documentObj, "span", "talos-kv__v");
     if (id4) {
-      const s = el24(documentObj, "span", "", v);
+      const s = el25(documentObj, "span", "", v);
       s.id = id4;
       val.appendChild(s);
     } else val.textContent = v;
-    r.append(el24(documentObj, "span", "talos-kv__k", k), val);
+    r.append(el25(documentObj, "span", "talos-kv__k", k), val);
     return r;
   };
-  aside.append(stato2, nome, desc, kv7(t("modelli.installed.format"), dati.formato), kv7(t("modelli.installed.diskFile"), dati.dimensione, "modelloDimensione"), kv7(t("modelli.installed.origin"), dati.origine), kv7(t("modelli.installed.license"), dati.licenza, "modelloLicenza"), el24(documentObj, "hr", "talos-lab__rule"));
-  aside.append(kv7(t("modelli.installed.estimateContext"), contestoK(runtime.contestoStimaToken || 8192) || t("modelli.installed.defaultContext")), el24(documentObj, "p", "talos-muted talos-lab__space", t("modelli.installed.estimateSettings")));
-  const stima2 = el24(documentObj, "div", "talos-lab__space");
+  aside.append(stato2, nome, desc, kv7(t("modelli.installed.format"), dati.formato), kv7(t("modelli.installed.diskFile"), dati.dimensione, "modelloDimensione"), kv7(t("modelli.installed.origin"), dati.origine), kv7(t("modelli.installed.license"), dati.licenza, "modelloLicenza"), el25(documentObj, "hr", "talos-lab__rule"));
+  aside.append(kv7(t("modelli.installed.estimateContext"), contestoK(runtime.contestoStimaToken || 8192) || t("modelli.installed.defaultContext")), el25(documentObj, "p", "talos-muted talos-lab__space", t("modelli.installed.estimateSettings")));
+  const stima2 = el25(documentObj, "div", "talos-lab__space");
   if (dati.verdetto) {
-    stima2.appendChild(badge(documentObj, dati.verdetto.etichetta, dati.verdetto.tono));
+    stima2.appendChild(badge2(documentObj, dati.verdetto.etichetta, dati.verdetto.tono));
     stima2.appendChild(documentObj.createTextNode(" "));
-    const s = el24(documentObj, "span");
+    const s = el25(documentObj, "span");
     s.id = "modelloStima";
     const richiesti = dati.verdetto.dettaglio.match(/~([\d.,]+ GB)/)?.[1];
     if (richiesti) {
-      const m = el24(documentObj, "span", "talos-measure talos-measure--estimate", richiesti);
+      const m = el25(documentObj, "span", "talos-measure talos-measure--estimate", richiesti);
       m.dataset.c = "Measure";
       s.append(m, documentObj.createTextNode(t("modelli.installed.requiredSuffix")));
     } else s.textContent = dati.verdetto.dettaglio;
     stima2.appendChild(s);
   } else {
-    stima2.appendChild(el24(documentObj, "span", "talos-muted", t("modelli.installed.notCheckedOnMachine")));
+    stima2.appendChild(el25(documentObj, "span", "talos-muted", t("modelli.installed.notCheckedOnMachine")));
   }
   aside.appendChild(stima2);
-  const azione = el24(documentObj, "button", "talos-button talos-button--secondary talos-button--block");
+  const azione = el25(documentObj, "button", "talos-button talos-button--secondary talos-button--block");
   azione.id = "azioneModello";
   azione.type = "button";
   if (dati.caricato) {
@@ -58717,14 +59560,14 @@ function aggiornaDettaglioInstallato(aside, dati, { runtime = {}, azioni = {}, n
     if (azioni.verifica) azione.addEventListener("click", () => azioni.verifica(dati.id));
   }
   aside.appendChild(azione);
-  const effetto = el24(documentObj, "p", "talos-muted talos-lab__space");
+  const effetto = el25(documentObj, "p", "talos-muted talos-lab__space");
   effetto.id = "modelloEffetto";
   effetto.textContent = dati.caricato && Number.isFinite(runtime.usatiDalModelloBytes) ? t("modelli.installed.releaseEffect", { memory: gb(runtime.usatiDalModelloBytes), size: dati.dimensione }) : t("modelli.installed.fileStays", { size: dati.dimensione });
   aside.appendChild(effetto);
   if (nodoFit) aside.appendChild(nodoFit);
-  const cluster = el24(documentObj, "div", "talos-cluster talos-lab__space");
+  const cluster = el25(documentObj, "div", "talos-cluster talos-lab__space");
   const pulsante = (testo2, classe, nome2, fn2) => {
-    const b = el24(documentObj, "button", classe, testo2);
+    const b = el25(documentObj, "button", classe, testo2);
     b.type = "button";
     b.dataset.c = "Button";
     b.dataset.azione = nome2;
@@ -58760,7 +59603,7 @@ function aggiornaInstallati(panel, modelli = [], opzioni = {}) {
   panel.setAttribute("aria-busy", String(Boolean(caricamento)));
   if (!lista) return null;
   if (errore2) {
-    lista.replaceChildren(el24(documentObj, "p", "talos-card--pad talos-muted", t("modelli.installed.modelsUnavailable", { error: errore2.message || errore2 })));
+    lista.replaceChildren(el25(documentObj, "p", "talos-card--pad talos-muted", t("modelli.installed.modelsUnavailable", { error: errore2.message || errore2 })));
     if (vuoto) vuoto.hidden = true;
     aggiornaDettaglioInstallato(dettaglio, null, { document: documentObj });
     return null;
@@ -58769,8 +59612,8 @@ function aggiornaInstallati(panel, modelli = [], opzioni = {}) {
   const scelto = visibili.find((m) => m.id === selezionato) || visibili[0] || null;
   lista.replaceChildren(...visibili.flatMap((m) => [documentObj.createTextNode("\n"), creaRigaInstallata(datiModelloInstallato(m, { runtime, fit: fit.get?.(m.id) || null }), { selezionato: scelto?.id === m.id, seleziona, document: documentObj })]), documentObj.createTextNode("\n"));
   if (visibili.length === 0) {
-    if (caricamento) lista.replaceChildren(el24(documentObj, "p", "talos-card--pad talos-muted", t("modelli.installed.readingDiskModels")));
-    else if (modelli.length === 0) lista.replaceChildren(el24(documentObj, "p", "talos-card--pad talos-muted", t("modelli.installed.noComputerModels")));
+    if (caricamento) lista.replaceChildren(el25(documentObj, "p", "talos-card--pad talos-muted", t("modelli.installed.readingDiskModels")));
+    else if (modelli.length === 0) lista.replaceChildren(el25(documentObj, "p", "talos-card--pad talos-muted", t("modelli.installed.noComputerModels")));
     if (vuoto) vuoto.hidden = !(modelli.length > 0 && !caricamento);
   } else if (vuoto) vuoto.hidden = true;
   aggiornaDettaglioInstallato(dettaglio, scelto ? datiModelloInstallato(scelto, { runtime, fit: fit.get?.(scelto.id) || null }) : null, { runtime, azioni, nodoFit: scelto && nodoFit ? nodoFit(scelto.id) : null, document: documentObj });
@@ -58804,7 +59647,7 @@ function montaInstallati(originale, canonico, { document: documentObj = globalTh
     progress.value = 0;
     progress.hidden = true;
     progress.className = "talos-lab__meter";
-    const annulla = el24(documentObj, "button", "talos-button talos-button--ghost talos-button--sm", t("modelli.installed.cancel"));
+    const annulla = el25(documentObj, "button", "talos-button talos-button--ghost talos-button--sm", t("modelli.installed.cancel"));
     annulla.type = "button";
     annulla.id = "modelLabImportCancelButton";
     annulla.hidden = true;
@@ -58812,13 +59655,13 @@ function montaInstallati(originale, canonico, { document: documentObj = globalTh
   }
   aggiornaDettaglioInstallato(originale.querySelector('[data-c="DetailPanel"]') || originale.querySelector("#dettaglioInstallato"), null, { document: documentObj });
 }
-var localeUI25, GB, numero7, STATI_INSTALLATO, NOME_MODELLO_MAX;
+var localeUI26, GB, numero7, STATI_INSTALLATO, NOME_MODELLO_MAX;
 var init_modelli_installati = __esm({
   "src/components/modelli-installati.js"() {
     init_lingua();
-    localeUI25 = () => linguaCorrenteDiT() === "en" ? "en-US" : "it-IT";
+    localeUI26 = () => linguaCorrenteDiT() === "en" ? "en-US" : "it-IT";
     GB = 1024 ** 3;
-    numero7 = { format: (valore) => new Intl.NumberFormat(localeUI25(), { maximumFractionDigits: 1 }).format(valore) };
+    numero7 = { format: (valore) => new Intl.NumberFormat(localeUI26(), { maximumFractionDigits: 1 }).format(valore) };
     STATI_INSTALLATO = Object.freeze({
       caricato: { get etichetta() {
         return t("modelli.installed.loaded");
@@ -58865,8 +59708,8 @@ function conteggio2(n) {
   const v = Number(n);
   if (!Number.isFinite(v) || v < 0) return null;
   const spazio = linguaCorrenteDiT() === "en" ? "" : " ";
-  if (v >= 1e6) return `${new Intl.NumberFormat(localeUI26(), { maximumFractionDigits: 1 }).format(v / 1e6)}${spazio}M`;
-  if (v >= 1e3) return `${new Intl.NumberFormat(localeUI26(), { maximumFractionDigits: 1 }).format(v / 1e3)}${spazio}k`;
+  if (v >= 1e6) return `${new Intl.NumberFormat(localeUI27(), { maximumFractionDigits: 1 }).format(v / 1e6)}${spazio}M`;
+  if (v >= 1e3) return `${new Intl.NumberFormat(localeUI27(), { maximumFractionDigits: 1 }).format(v / 1e3)}${spazio}k`;
   return numero8.format(v);
 }
 function gruppiVarianti(files = []) {
@@ -59076,12 +59919,12 @@ function datiRigaHf(item = {}) {
 function parametriLeggibiliHf(n) {
   if (!Number.isSafeInteger(n) || n <= 0) return null;
   const [valore, unita] = n >= 1e9 ? [n / 1e9, "B"] : n >= 1e6 ? [n / 1e6, "M"] : [n / 1e3, "K"];
-  return t("modelli.hf.parameterCount", { count: new Intl.NumberFormat(localeUI26(), { maximumFractionDigits: 1 }).format(valore), unit: unita });
+  return t("modelli.hf.parameterCount", { count: new Intl.NumberFormat(localeUI27(), { maximumFractionDigits: 1 }).format(valore), unit: unita });
 }
 function notaFaccetteHf() {
   return t("modelli.hf.filtersNote");
 }
-function el25(d, tag2, classe, testo2) {
+function el26(d, tag2, classe, testo2) {
   const n = d.createElement(tag2);
   if (classe) n.className = classe;
   if (testo2 != null) n.textContent = testo2;
@@ -59096,13 +59939,13 @@ function icona10(d, nome, classe = "i") {
   svg2.appendChild(use);
   return svg2;
 }
-function badge2(d, testo2, tono) {
-  const b = el25(d, "span", `talos-badge talos-badge--sm${tono ? ` talos-badge--${tono}` : ""}`, testo2);
+function badge3(d, testo2, tono) {
+  const b = el26(d, "span", `talos-badge talos-badge--sm${tono ? ` talos-badge--${tono}` : ""}`, testo2);
   b.dataset.c = "Badge";
   return b;
 }
 function creaRigaHf(dati, { selezionato = false, seleziona, document: d = globalThis.document } = {}) {
-  const b = el25(d, "button", "talos-list-row");
+  const b = el26(d, "button", "talos-list-row");
   b.type = "button";
   b.dataset.c = "ListRow";
   b.dataset.hf = dati.id;
@@ -59111,21 +59954,21 @@ function creaRigaHf(dati, { selezionato = false, seleziona, document: d = global
   b.setAttribute("aria-pressed", String(Boolean(selezionato)));
   const nome = String(dati.titolo || "").replace(/\s*\/\s*/u, " / ");
   b.setAttribute("aria-label", dati.capacita.misura ? t("modelli.hf.repositoryDownloadLabel", { name: nome, status: dati.stato.testo, count: dati.capacita.misura }) : t("modelli.hf.repositoryLabel", { name: nome, status: dati.stato.testo }));
-  const ic = el25(d, "span", "talos-list-row__icon");
+  const ic = el26(d, "span", "talos-list-row__icon");
   ic.dataset.c = "Glyph";
   ic.appendChild(icona10(d, "i-files"));
-  const testo2 = el25(d, "span", "talos-list-row__text");
-  const titolo2 = el25(d, "span", "talos-list-row__title", nome);
-  if (dati.badge) titolo2.appendChild(badge2(d, dati.badge.testo, dati.badge.tono));
-  const etichette = el25(d, "span", "talos-hf-etichette");
+  const testo2 = el26(d, "span", "talos-list-row__text");
+  const titolo2 = el26(d, "span", "talos-list-row__title", nome);
+  if (dati.badge) titolo2.appendChild(badge3(d, dati.badge.testo, dati.badge.tono));
+  const etichette = el26(d, "span", "talos-hf-etichette");
   etichette.dataset.c = "ModelTags";
-  for (const testoEtichetta of dati.etichette ?? []) etichette.appendChild(badge2(d, testoEtichetta));
-  const meta2 = el25(d, "span", "talos-list-row__sub", dati.riga ?? dati.sub1);
-  const stato2 = el25(d, "span", "talos-list-row__sub");
-  const rigaStato = el25(d, "span", "talos-cluster");
-  const pallino = el25(d, "span", `talos-dot talos-dot--sm talos-dot--${dati.stato.tono}`);
+  for (const testoEtichetta of dati.etichette ?? []) etichette.appendChild(badge3(d, testoEtichetta));
+  const meta2 = el26(d, "span", "talos-list-row__sub", dati.riga ?? dati.sub1);
+  const stato2 = el26(d, "span", "talos-list-row__sub");
+  const rigaStato = el26(d, "span", "talos-cluster");
+  const pallino = el26(d, "span", `talos-dot talos-dot--sm talos-dot--${dati.stato.tono}`);
   pallino.setAttribute("aria-hidden", "true");
-  rigaStato.append(pallino, el25(d, "span", "", dati.stato.nota ? `${dati.stato.testo} · ${dati.stato.nota}` : dati.stato.testo));
+  rigaStato.append(pallino, el26(d, "span", "", dati.stato.nota ? `${dati.stato.testo} · ${dati.stato.nota}` : dati.stato.testo));
   stato2.append(rigaStato);
   testo2.append(titolo2, ...etichette.children.length ? [etichette] : [], meta2, stato2);
   const chevron2 = icona10(d, "i-chevron-right", "i talos-hf-chevron");
@@ -59135,29 +59978,29 @@ function creaRigaHf(dati, { selezionato = false, seleziona, document: d = global
   return b;
 }
 function creaGruppoHf(gruppo, { document: d = globalThis.document } = {}) {
-  const testa = el25(d, "div", "talos-cluster");
+  const testa = el26(d, "div", "talos-cluster");
   testa.dataset.hfGruppo = gruppo.chiave;
-  const etichetta3 = el25(d, "span", "talos-eyebrow", gruppo.etichetta);
+  const etichetta3 = el26(d, "span", "talos-eyebrow", gruppo.etichetta);
   etichetta3.setAttribute("role", "heading");
   etichetta3.setAttribute("aria-level", "3");
-  testa.append(etichetta3, el25(d, "span", "talos-grow", ""), el25(d, "span", "talos-muted talos-mono--xs", new Intl.NumberFormat(localeUI26()).format(gruppo.righe.length)));
+  testa.append(etichetta3, el26(d, "span", "talos-grow", ""), el26(d, "span", "talos-muted talos-mono--xs", new Intl.NumberFormat(localeUI27()).format(gruppo.righe.length)));
   return testa;
 }
 function creaBarraScopertaHf(d = globalThis.document, { onCambia } = {}) {
-  const barra = el25(d, "section", "talos-stack");
+  const barra = el26(d, "section", "talos-stack");
   barra.id = "modelLabHfScoperta";
   barra.dataset.hfScoperta = "";
   barra.setAttribute("aria-label", t("modelli.hf.discoveryFilters"));
-  const ambito = el25(d, "div", "talos-cluster");
+  const ambito = el26(d, "div", "talos-cluster");
   ambito.dataset.hfAmbito = "";
-  const faccette = el25(d, "div", "talos-choice-grid");
+  const faccette = el26(d, "div", "talos-choice-grid");
   faccette.dataset.hfFaccette = "";
   const gruppi = /* @__PURE__ */ new Map();
   for (const { chiave, titolo: titolo2, forma } of FACCETTE_HF) {
     if (forma !== "select") continue;
-    const campo3 = el25(d, "label", "talos-field talos-field--sm");
-    campo3.append(el25(d, "span", "talos-muted", titolo2));
-    const sel = el25(d, "select", "talos-select talos-select--sm");
+    const campo3 = el26(d, "label", "talos-field talos-field--sm");
+    campo3.append(el26(d, "span", "talos-muted", titolo2));
+    const sel = el26(d, "select", "talos-select talos-select--sm");
     sel.dataset.hfFaccetta = chiave;
     sel.id = `modelLabHfFaccetta-${chiave}`;
     sel.setAttribute("aria-label", titolo2);
@@ -59165,16 +60008,16 @@ function creaBarraScopertaHf(d = globalThis.document, { onCambia } = {}) {
     faccette.append(campo3);
     gruppi.set(chiave, sel);
   }
-  const nota = el25(d, "p", "talos-muted", notaFaccetteHf());
-  const testa = el25(d, "div", "talos-cluster");
-  const conteggio3 = el25(d, "p", "talos-cluster");
+  const nota = el26(d, "p", "talos-muted", notaFaccetteHf());
+  const testa = el26(d, "div", "talos-cluster");
+  const conteggio3 = el26(d, "p", "talos-cluster");
   conteggio3.dataset.hfConteggio = "";
   conteggio3.setAttribute("role", "status");
   conteggio3.setAttribute("aria-live", "polite");
-  const forte = el25(d, "strong", "", "—");
-  const coda2 = el25(d, "span", "talos-muted", "");
+  const forte = el26(d, "strong", "", "—");
+  const coda2 = el26(d, "span", "talos-muted", "");
   conteggio3.append(forte, coda2);
-  const azzera = el25(d, "button", "talos-button talos-button--ghost talos-button--sm", t("modelli.hf.resetFilters"));
+  const azzera = el26(d, "button", "talos-button talos-button--ghost talos-button--sm", t("modelli.hf.resetFilters"));
   azzera.type = "button";
   azzera.dataset.hfAzzera = "";
   azzera.hidden = true;
@@ -59208,7 +60051,7 @@ function creaBarraScopertaHf(d = globalThis.document, { onCambia } = {}) {
       if (forma !== "chip") continue;
       const voci = vociFaccettaHf(risultati, chiave, filtri[chiave]);
       if (!voci.length) continue;
-      const gruppoChip = el25(d, "span", "talos-cluster");
+      const gruppoChip = el26(d, "span", "talos-cluster");
       gruppoChip.dataset.hfChipGruppo = chiave;
       gruppoChip.setAttribute("role", "group");
       gruppoChip.setAttribute("aria-label", titolo2);
@@ -59236,7 +60079,7 @@ function creaBarraScopertaHf(d = globalThis.document, { onCambia } = {}) {
         sel.replaceChildren(new Option(t("modelli.hf.any"), "", false, scelto === ""));
         for (const [valore, testo2] of voci) {
           const n = conteggi.get(valore) || 0;
-          const opzione = new Option(n ? `${testo2} (${new Intl.NumberFormat(localeUI26()).format(n)})` : testo2, valore, false, scelto === valore);
+          const opzione = new Option(n ? `${testo2} (${new Intl.NumberFormat(localeUI27()).format(n)})` : testo2, valore, false, scelto === valore);
           opzione.disabled = !n && scelto !== valore;
           sel.appendChild(opzione);
         }
@@ -59244,7 +60087,7 @@ function creaBarraScopertaHf(d = globalThis.document, { onCambia } = {}) {
         if (sel.selectedIndex < 0) sel.selectedIndex = 0;
       }
     }
-    const formatta = new Intl.NumberFormat(localeUI26());
+    const formatta = new Intl.NumberFormat(localeUI27());
     forte.textContent = tn("modelli.hf.oneModel", "modelli.hf.manyModels", visibili.length, { count: formatta.format(visibili.length) });
     coda2.textContent = stato2.altri ? t("modelli.hf.moreAvailable", { count: formatta.format(risultati.length) }) : tn("modelli.hf.oneLoaded", "modelli.hf.manyLoaded", risultati.length, { count: formatta.format(risultati.length) });
     azzera.hidden = !FACCETTE_HF.some(({ chiave }) => filtri[chiave].length);
@@ -59254,14 +60097,14 @@ function creaBarraScopertaHf(d = globalThis.document, { onCambia } = {}) {
   return barra;
 }
 function chip2(d, etichetta3, chiave, valore, { premuto = false, conteggio: conteggio3 = null, disabilitato = false, titolo: titolo2 = null } = {}) {
-  const b = el25(d, "button", `talos-button talos-button--sm ${premuto ? "talos-button--primary" : "talos-button--secondary"}`, etichetta3);
+  const b = el26(d, "button", `talos-button talos-button--sm ${premuto ? "talos-button--primary" : "talos-button--secondary"}`, etichetta3);
   b.type = "button";
   b.dataset.hfChip = chiave;
   b.dataset.hfValore = valore;
   b.setAttribute("aria-pressed", String(premuto));
   if (disabilitato) b.disabled = true;
   if (titolo2) b.title = titolo2;
-  if (conteggio3 !== null && conteggio3 !== void 0) b.append(el25(d, "span", "talos-badge talos-badge--sm", new Intl.NumberFormat(localeUI26()).format(conteggio3)));
+  if (conteggio3 !== null && conteggio3 !== void 0) b.append(el26(d, "span", "talos-badge talos-badge--sm", new Intl.NumberFormat(localeUI27()).format(conteggio3)));
   return b;
 }
 function montaSceltaFileHf(contenitore, detail, { stima: stima2 = /* @__PURE__ */ new Map(), scelta = null, azioni = {}, prefissoId = "hf", conAccesso = true, document: d = globalThis.document } = {}) {
@@ -59278,48 +60121,48 @@ function montaSceltaFileHf(contenitore, detail, { stima: stima2 = /* @__PURE__ *
   });
   const nonMisurabile = !inMisura && gruppi.length > 0 && gruppi.every((g) => stima2.get?.(g.chiave)?.state === "unknown");
   if (misurabile) {
-    const barra = el25(d, "div", "talos-hf-misura");
-    const misura = el25(d, "button", "talos-button talos-button--secondary talos-button--sm", inMisura ? t("modelli.hf.measuring") : misurato ? t("modelli.hf.remeasure") : t("modelli.hf.measure"));
+    const barra = el26(d, "div", "talos-hf-misura");
+    const misura = el26(d, "button", "talos-button talos-button--secondary talos-button--sm", inMisura ? t("modelli.hf.measuring") : misurato ? t("modelli.hf.remeasure") : t("modelli.hf.measure"));
     misura.type = "button";
     misura.dataset.c = "Button";
     misura.dataset.azione = "misura";
     misura.disabled = inMisura;
     if (azioni.misura) misura.addEventListener("click", () => azioni.misura(gruppi));
     barra.appendChild(misura);
-    if (misurato && !inMisura) barra.appendChild(el25(d, "span", "talos-muted talos-hf-misura__quando", t("modelli.hf.measuredNow")));
+    if (misurato && !inMisura) barra.appendChild(el26(d, "span", "talos-muted talos-hf-misura__quando", t("modelli.hf.measuredNow")));
     contenitore.appendChild(barra);
     if (nonMisurabile) {
-      const avviso = el25(d, "div", "talos-callout");
+      const avviso = el26(d, "div", "talos-callout");
       avviso.dataset.c = "Callout";
-      const testo2 = el25(d, "div");
-      testo2.append(el25(d, "b", "", t("modelli.hf.memoryUnavailable")), el25(d, "p", "", t("modelli.hf.memoryUnavailableNote")));
+      const testo2 = el26(d, "div");
+      testo2.append(el26(d, "b", "", t("modelli.hf.memoryUnavailable")), el26(d, "p", "", t("modelli.hf.memoryUnavailableNote")));
       avviso.appendChild(testo2);
       contenitore.appendChild(avviso);
     }
   }
-  const radio = el25(d, "div", "talos-stack");
+  const radio = el26(d, "div", "talos-stack");
   radio.id = idDi("fileChoices");
   radio.dataset.hfFileChoices = "";
   radio.setAttribute("role", "radiogroup");
   radio.setAttribute("aria-label", t("modelli.hf.filesToDownload"));
   gruppi.forEach((g, i2) => {
-    const b = el25(d, "button", "talos-choice");
+    const b = el26(d, "button", "talos-choice");
     b.type = "button";
     b.setAttribute("role", "radio");
     b.setAttribute("aria-checked", String(g === scelto));
     b.dataset.hfFile = String(i2);
     b.dataset.variante = g.chiave;
     const st2 = descriviStima(stima2.get?.(g.chiave), g.bytes);
-    const titolo2 = el25(d, "span", "talos-choice__title", g.incompleto ? t("modelli.hf.incompleteVariant", { quantization: g.quant, size: gb(g.bytes), files: g.file.length, expected: g.attesi }) : t("modelli.hf.variant", { quantization: g.quant, size: gb(g.bytes) }));
-    if (consiglio && consiglio.gruppo === g) titolo2.appendChild(badge2(d, consiglio.motivo === "convenzione" ? t("modelli.hf.usuallyRecommended") : t("modelli.hf.recommended"), "accent"));
+    const titolo2 = el26(d, "span", "talos-choice__title", g.incompleto ? t("modelli.hf.incompleteVariant", { quantization: g.quant, size: gb(g.bytes), files: g.file.length, expected: g.attesi }) : t("modelli.hf.variant", { quantization: g.quant, size: gb(g.bytes) }));
+    if (consiglio && consiglio.gruppo === g) titolo2.appendChild(badge3(d, consiglio.motivo === "convenzione" ? t("modelli.hf.usuallyRecommended") : t("modelli.hf.recommended"), "accent"));
     b.appendChild(titolo2);
     const glossa = glossaQuant(g.quant);
-    if (glossa) b.appendChild(el25(d, "span", "talos-muted talos-choice__glossa", glossa));
-    b.appendChild(el25(d, "span", "talos-muted", g.senzaHash ? t("modelli.hf.missingHash") : st2.testo));
+    if (glossa) b.appendChild(el26(d, "span", "talos-muted talos-choice__glossa", glossa));
+    b.appendChild(el26(d, "span", "talos-muted", g.senzaHash ? t("modelli.hf.missingHash") : st2.testo));
     if (azioni.scegli) b.addEventListener("click", () => azioni.scegli(g.chiave));
     radio.appendChild(b);
   });
-  if (!gruppi.length) radio.appendChild(el25(d, "p", "talos-muted", t("modelli.hf.noGgufFiles")));
+  if (!gruppi.length) radio.appendChild(el26(d, "p", "talos-muted", t("modelli.hf.noGgufFiles")));
   contenitore.appendChild(radio);
   const indiceScelto = scelto ? gruppi.indexOf(scelto) : -1;
   const nodoScelto = indiceScelto >= 0 ? radio.children[indiceScelto] : null;
@@ -59329,28 +60172,28 @@ function montaSceltaFileHf(contenitore, detail, { stima: stima2 = /* @__PURE__ *
     if (radio.clientHeight && basso > radio.clientHeight) radio.scrollTop = alto - 8;
   }
   if (misurato && !consiglio && gruppi.length) {
-    contenitore.appendChild(el25(d, "p", "talos-muted talos-hf-nessuno", t("modelli.hf.noRecommendedVariant")));
+    contenitore.appendChild(el26(d, "p", "talos-muted talos-hf-nessuno", t("modelli.hf.noRecommendedVariant")));
   }
   if (conAccesso) {
-    const callout = el25(d, "div", "talos-callout");
+    const callout = el26(d, "div", "talos-callout");
     callout.id = idDi("accesso");
     callout.dataset.c = "Callout";
     callout.hidden = !detail.gated;
-    const cb = el25(d, "div");
-    cb.append(el25(d, "b", "", t("modelli.hf.repositoryAccessRequired")), el25(d, "p", "", t("modelli.hf.requestAccessNote")));
+    const cb = el26(d, "div");
+    cb.append(el26(d, "b", "", t("modelli.hf.repositoryAccessRequired")), el26(d, "p", "", t("modelli.hf.requestAccessNote")));
     callout.appendChild(cb);
     contenitore.appendChild(callout);
   }
-  const stimaP = el25(d, "p", "talos-muted talos-lab__space");
+  const stimaP = el26(d, "p", "talos-muted talos-lab__space");
   stimaP.id = idDi("stima");
   const voce2 = scelto ? stima2.get?.(scelto.chiave) : null;
   if (scelto && voce2 && !voce2.inCorso && Number.isFinite(voce2.memory?.requiredBytes)) {
-    const m = el25(d, "span", "talos-measure talos-measure--estimate", gb(voce2.memory.requiredBytes));
+    const m = el26(d, "span", "talos-measure talos-measure--estimate", gb(voce2.memory.requiredBytes));
     m.dataset.c = "Measure";
     stimaP.append(m, d.createTextNode(Number.isFinite(voce2.memory?.availableBytes) ? t("modelli.hf.requiredWithAvailable", { size: gb(voce2.memory.availableBytes) }) : t("modelli.hf.required")));
   } else stimaP.textContent = scelto ? voce2?.inCorso ? t("modelli.hf.measuring") : t("modelli.hf.measurementNote") : "";
   contenitore.appendChild(stimaP);
-  const scarica = el25(d, "button", "talos-button talos-button--primary talos-button--block");
+  const scarica = el26(d, "button", "talos-button talos-button--primary talos-button--block");
   scarica.id = idDi("scarica");
   scarica.type = "button";
   scarica.dataset.action = "download";
@@ -59369,31 +60212,31 @@ function aggiornaDettaglioHf(aside, detail, { stima: stima2 = /* @__PURE__ */ ne
   }
   aside.hidden = false;
   const [autore, nome] = String(detail.repo || "").split("/");
-  const h = el25(d, "h3", "", (nome || detail.repo || "").replace(/-GGUF$/i, "").replace(/-/g, " "));
+  const h = el26(d, "h3", "", (nome || detail.repo || "").replace(/-GGUF$/i, "").replace(/-/g, " "));
   h.id = "hfNome";
-  const p = el25(d, "p", "talos-detail__desc", t("modelli.hf.publishedBy", { author: autore || t("modelli.hf.unknownAuthor") }));
+  const p = el26(d, "p", "talos-detail__desc", t("modelli.hf.publishedBy", { author: autore || t("modelli.hf.unknownAuthor") }));
   p.id = "hfAutore";
   const kv7 = (k, v, id4) => {
-    const r = el25(d, "div", "talos-kv");
-    const val = el25(d, "span", "talos-kv__v");
+    const r = el26(d, "div", "talos-kv");
+    const val = el26(d, "span", "talos-kv__v");
     if (id4) {
-      const s = el25(d, "span", "", v);
+      const s = el26(d, "span", "", v);
       s.id = id4;
       val.appendChild(s);
     } else val.textContent = v;
-    r.append(el25(d, "span", "talos-kv__k", k), val);
+    r.append(el26(d, "span", "talos-kv__k", k), val);
     return r;
   };
   const revisione = detail.revision ? t("modelli.hf.verifiedRevision", { revision: String(detail.revision).slice(0, 12) }) : t("modelli.hf.verifyBeforeDownload");
-  aside.append(h, p, kv7(t("modelli.hf.license"), detail.license || t("modelli.hf.notDeclared"), "hfLicenza"), kv7(t("modelli.hf.revision"), revisione), el25(d, "hr", "talos-lab__rule"));
-  const tutti = el25(d, "button", "talos-button talos-button--secondary", t("modelli.hf.allFiles"));
+  aside.append(h, p, kv7(t("modelli.hf.license"), detail.license || t("modelli.hf.notDeclared"), "hfLicenza"), kv7(t("modelli.hf.revision"), revisione), el26(d, "hr", "talos-lab__rule"));
+  const tutti = el26(d, "button", "talos-button talos-button--secondary", t("modelli.hf.allFiles"));
   tutti.id = "hfTuttiFile";
   tutti.type = "button";
   tutti.dataset.apreVelo = "veloFileModello";
   if (azioni.tuttiFile) tutti.addEventListener("click", () => azioni.tuttiFile(detail));
-  aside.append(tutti, el25(d, "h3", "", t("modelli.hf.chooseFile")));
+  aside.append(tutti, el26(d, "h3", "", t("modelli.hf.chooseFile")));
   const scelto = montaSceltaFileHf(aside, detail, { stima: stima2, scelta, azioni, prefissoId: "hf", conAccesso: true, document: d });
-  const scheda = el25(d, "button", "talos-button talos-button--ghost talos-button--sm", t("modelli.hf.readModelCard"));
+  const scheda = el26(d, "button", "talos-button talos-button--ghost talos-button--sm", t("modelli.hf.readModelCard"));
   scheda.type = "button";
   scheda.dataset.c = "Button";
   scheda.dataset.azione = "scheda";
@@ -59404,7 +60247,7 @@ function aggiornaDettaglioHf(aside, detail, { stima: stima2 = /* @__PURE__ */ ne
     azioni.scheda(detail, scheda);
   });
   aside.appendChild(scheda);
-  const cont = el25(d, "div", "talos-card talos-card--pad talos-lab__space");
+  const cont = el26(d, "div", "talos-card talos-card--pad talos-lab__space");
   cont.id = "hfScheda";
   cont.hidden = true;
   aside.appendChild(cont);
@@ -59440,16 +60283,16 @@ function aggiornaHf(panel, risultati = [], { selezionato = null, detail = null, 
   });
   barra.aggiorna({ risultati, visibili, filtri, senzaDati, altri });
   if (errore2) {
-    lista.replaceChildren(el25(d, "p", "talos-card--pad talos-muted", t("modelli.hf.searchUnavailable", { reason: errore2.message || errore2 })));
+    lista.replaceChildren(el26(d, "p", "talos-card--pad talos-muted", t("modelli.hf.searchUnavailable", { reason: errore2.message || errore2 })));
     if (vuoto) vuoto.hidden = true;
   } else if (caricamento && !risultati.length) {
-    lista.replaceChildren(el25(d, "p", "talos-card--pad talos-muted", t("modelli.hf.searching")));
+    lista.replaceChildren(el26(d, "p", "talos-card--pad talos-muted", t("modelli.hf.searching")));
     if (vuoto) vuoto.hidden = true;
   } else if (!risultati.length) {
     lista.replaceChildren();
     if (vuoto) vuoto.hidden = false;
   } else if (!visibili.length) {
-    lista.replaceChildren(el25(d, "p", "talos-card--pad talos-muted", t("modelli.hf.noMatchingRepository")));
+    lista.replaceChildren(el26(d, "p", "talos-card--pad talos-muted", t("modelli.hf.noMatchingRepository")));
     if (vuoto) vuoto.hidden = true;
   } else {
     const nodi = [];
@@ -59467,7 +60310,7 @@ function aggiornaHf(panel, risultati = [], { selezionato = null, detail = null, 
     bottoneAltri.textContent = errorePagina ? t("modelli.hf.retryLoading") : caricamento ? t("modelli.hf.loading") : t("modelli.hf.loadMoreModels");
     let messaggio = panel.querySelector("[data-hf-errore-pagina]");
     if (!messaggio) {
-      messaggio = el25(d, "p", "talos-muted");
+      messaggio = el26(d, "p", "talos-muted");
       messaggio.dataset.hfErrorePagina = "";
       messaggio.setAttribute("role", "status");
       bottoneAltri.before(messaggio);
@@ -59510,12 +60353,12 @@ function montaHf(originale, canonico) {
   const altri = originale.querySelector("#modelLabHfNextButtonControl") || originale.querySelector("#altriHf");
   if (altri) altri.hidden = true;
 }
-var localeUI26, BIT_PER_PESO, SUFFISSO, PAVIMENTO_CONSIGLIO, GLOSSE, numero8, TIPI3, CAMPI_RICERCA_HF, FACCETTE_NON_COLLEGATE, TIPI_PIPELINE, TIPO_NON_DICHIARATO, BANDE_DOWNLOAD, FACCETTE_HF, BANDE_PARAMETRI, valoreDerivatoHfValido;
+var localeUI27, BIT_PER_PESO, SUFFISSO, PAVIMENTO_CONSIGLIO, GLOSSE, numero8, TIPI3, CAMPI_RICERCA_HF, FACCETTE_NON_COLLEGATE, TIPI_PIPELINE, TIPO_NON_DICHIARATO, BANDE_DOWNLOAD, FACCETTE_HF, BANDE_PARAMETRI, valoreDerivatoHfValido;
 var init_hf_catalogo = __esm({
   "src/components/hf-catalogo.js"() {
     init_lingua();
     init_modelli_installati();
-    localeUI26 = () => linguaCorrenteDiT() === "en" ? "en-US" : "it-IT";
+    localeUI27 = () => linguaCorrenteDiT() === "en" ? "en-US" : "it-IT";
     BIT_PER_PESO = {
       F32: 32,
       F16: 16,
@@ -59561,7 +60404,7 @@ var init_hf_catalogo = __esm({
       [/^(IQ1|TQ1)/u, "modelli.hf.oneBit"],
       [/^MXFP4$/u, "modelli.hf.fourBitBlocks"]
     ];
-    numero8 = { format: (valore) => new Intl.NumberFormat(localeUI26()).format(valore) };
+    numero8 = { format: (valore) => new Intl.NumberFormat(localeUI27()).format(valore) };
     TIPI3 = { get "text-generation"() {
       return t("modelli.hf.conversationAndCode");
     }, get "text2text-generation"() {
@@ -59767,147 +60610,6 @@ var init_hf_catalogo = __esm({
       ["non-dichiarati", "modelli.hf.parametersNotDeclared", null]
     ].map(([value, key, condition]) => Object.defineProperty([value, null, condition], 1, { enumerable: true, get: () => t(key) })));
     valoreDerivatoHfValido = (valore) => typeof valore === "string" && /^[\p{L}\p{N}_.:-]{1,200}$/u.test(valore);
-  }
-});
-
-// src/components/costi-consumo.js
-function compatto3(n) {
-  const v = Number(n);
-  if (!Number.isFinite(v) || v < 0) return "—";
-  if (v >= 1e6) return `${new Intl.NumberFormat(localeUI27(), { maximumFractionDigits: 1 }).format(v / 1e6)} M`;
-  if (v >= 1e3) return `${new Intl.NumberFormat(localeUI27(), { maximumFractionDigits: 1 }).format(v / 1e3)} k`;
-  return NUM.format(v);
-}
-function giornoDi(sessione) {
-  const grezza = sessione?.avviataAlle || sessione?.avviata || sessione?.creata || sessione?.chiusa;
-  if (!grezza) return null;
-  const d = new Date(grezza);
-  if (Number.isNaN(d.getTime())) return null;
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-function raggruppa(sessioni, chiaveDi) {
-  const per = /* @__PURE__ */ new Map();
-  for (const s of sessioni) {
-    const k = chiaveDi(s);
-    if (k == null) continue;
-    const v = per.get(k) || { chiave: k, sessioni: 0, giri: 0, token: 0, cache: 0, tokenNoti: 0 };
-    v.sessioni += 1;
-    if (numeroValido(giriDellaSessione(s).giri)) v.giri += giriDellaSessione(s).giri;
-    const t2 = tokenDi(s);
-    if (t2 != null) {
-      v.token += t2;
-      v.tokenNoti += 1;
-    }
-    if (numeroValido(usageDellaSessione(s)?.cached_tokens)) v.cache += Number(usageDellaSessione(s).cached_tokens);
-    per.set(k, v);
-  }
-  return [...per.values()];
-}
-function consumoPerGiorno(sessioni = [], { giorni = 14 } = {}) {
-  return raggruppa(sessioni, giornoDi).sort((a, b) => b.chiave.localeCompare(a.chiave)).slice(0, giorni);
-}
-function consumoPerModello(sessioni = []) {
-  return raggruppa(sessioni, (s) => typeof s?.modello === "string" && s.modello.trim() !== "" ? s.modello : null).sort((a, b) => b.token - a.token || b.sessioni - a.sessioni);
-}
-function riepilogoConsumo(sessioni = []) {
-  const totali = { sessioni: sessioni.length, giri: 0, token: 0, cache: 0, senzaToken: 0, senzaData: 0, senzaModello: 0, giriFermati: 0 };
-  for (const s of sessioni) {
-    const { giri, fermati } = giriDellaSessione(s);
-    if (numeroValido(giri)) totali.giri += giri;
-    totali.giriFermati += fermati;
-    const t2 = tokenDi(s);
-    if (t2 == null) totali.senzaToken += 1;
-    else totali.token += t2;
-    if (numeroValido(usageDellaSessione(s)?.cached_tokens)) totali.cache += Number(usageDellaSessione(s).cached_tokens);
-    if (giornoDi(s) == null) totali.senzaData += 1;
-    if (!(typeof s?.modello === "string" && s.modello.trim() !== "")) totali.senzaModello += 1;
-  }
-  return totali;
-}
-function el26(d, tag2, classe, testo2) {
-  const n = d.createElement(tag2);
-  if (classe) n.className = classe;
-  if (testo2 != null) n.textContent = testo2;
-  return n;
-}
-function badge3(d, testo2, tono) {
-  const b = el26(d, "span", `talos-badge talos-badge--sm${tono ? ` talos-badge--${tono}` : ""}`, testo2);
-  b.dataset.c = "Badge";
-  return b;
-}
-function giornoUmano(chiave, oggi = /* @__PURE__ */ new Date()) {
-  const [a, m, g] = String(chiave).split("-").map(Number);
-  if (!a || !m || !g) return String(chiave);
-  const d = new Date(a, m - 1, g);
-  const stesso = (x, y) => x.getFullYear() === y.getFullYear() && x.getMonth() === y.getMonth() && x.getDate() === y.getDate();
-  const ieri = new Date(oggi);
-  ieri.setDate(ieri.getDate() - 1);
-  if (stesso(d, oggi)) return t("varie.costs.day.today");
-  if (stesso(d, ieri)) return t("varie.costs.day.yesterday");
-  return d.toLocaleDateString(localeUI27(), { day: "numeric", month: "short" });
-}
-function riempiTabella(tabella, righe, etichettaDi, { document: d = globalThis.document } = {}) {
-  const corpo = tabella?.querySelector("tbody");
-  if (!corpo) return;
-  if (!righe.length) {
-    const tr2 = d.createElement("tr");
-    const td = el26(d, "td", "talos-muted", t("varie.costs.table.empty"));
-    td.colSpan = 5;
-    tr2.appendChild(td);
-    corpo.replaceChildren(tr2);
-    return;
-  }
-  corpo.replaceChildren(...righe.map((r) => {
-    const tr2 = d.createElement("tr");
-    tr2.appendChild(el26(d, "th", "", etichettaDi(r)));
-    tr2.firstChild.setAttribute("scope", "row");
-    for (const v of [NUM.format(r.sessioni), NUM.format(r.giri), r.tokenNoti ? compatto3(r.token) : "—", r.cache ? compatto3(r.cache) : "—"]) {
-      tr2.appendChild(el26(d, "td", "talos-mono", v));
-    }
-    return tr2;
-  }));
-}
-function aggiornaCosti(pannello, sessioni = [], { document: d = globalThis.document, oggi = /* @__PURE__ */ new Date(), sessioneId = null } = {}) {
-  if (!pannello) return null;
-  const tot = riepilogoConsumo(sessioni);
-  const riepilogo = pannello.querySelector("#costiRiepilogo");
-  if (riepilogo) {
-    const voci = [
-      badge3(d, tn("varie.costs.badge.sessionsOne", "varie.costs.badge.sessionsMany", tot.sessioni, { n: NUM.format(tot.sessioni) }), "accent"),
-      badge3(d, tn("varie.costs.badge.turnsOne", "varie.costs.badge.turnsMany", tot.giri, { n: NUM.format(tot.giri) })),
-      badge3(d, t("varie.costs.badge.tokens", { n: compatto3(tot.token) })),
-      badge3(d, t("varie.costs.badge.inCache", { n: compatto3(tot.cache) }))
-    ];
-    if (tot.senzaToken) voci.push(badge3(d, t("varie.costs.badge.noTokens", { n: NUM.format(tot.senzaToken) }), "warning"));
-    if (tot.giriFermati) voci.push(badge3(d, tn("varie.costs.badge.stoppedTurnsOne", "varie.costs.badge.stoppedTurnsMany", tot.giriFermati, { n: NUM.format(tot.giriFermati) }), "warning"));
-    if (tot.senzaModello) voci.push(badge3(d, t("varie.costs.badge.noModel", { n: NUM.format(tot.senzaModello) }), "warning"));
-    if (tot.senzaData) voci.push(badge3(d, t("varie.costs.badge.noDate", { n: NUM.format(tot.senzaData) }), "warning"));
-    const aperta2 = sessioneId ? sessioni.find((s) => s.sessionId === sessioneId) : null;
-    const cache = el26(d, "p", "talos-muted", t("varie.costs.cacheReuse", { text: testoRiusoCache(aperta2?.cacheSessione) }));
-    cache.dataset.cacheSessione = "";
-    voci.push(cache);
-    riepilogo.replaceChildren(...voci);
-  }
-  riempiTabella(pannello.querySelector("#costiPerGiorno"), consumoPerGiorno(sessioni), (r) => giornoUmano(r.chiave, oggi), { document: d });
-  riempiTabella(pannello.querySelector("#costiPerModello"), consumoPerModello(sessioni), (r) => nomeModello(r.chiave) || r.chiave, { document: d });
-  return tot;
-}
-var localeUI27, NUM, numeroValido, tokenDi;
-var init_costi_consumo = __esm({
-  "src/components/costi-consumo.js"() {
-    init_lingua();
-    init_session_item();
-    init_consumo_sessione();
-    localeUI27 = () => linguaCorrenteDiT() === "en" ? "en-US" : "it-IT";
-    NUM = { format: (n) => new Intl.NumberFormat(localeUI27()).format(n) };
-    numeroValido = (v) => Number.isFinite(Number(v)) && Number(v) >= 0;
-    tokenDi = (s) => {
-      const u = usageDellaSessione(s) || {};
-      const dentro = Number(u.prompt_tokens);
-      const fuori = Number(u.completion_tokens);
-      if (!numeroValido(dentro) && !numeroValido(fuori)) return null;
-      return (numeroValido(dentro) ? dentro : 0) + (numeroValido(fuori) ? fuori : 0);
-    };
   }
 });
 
@@ -60130,18 +60832,18 @@ function testoDelMessaggio(contenuto) {
   return contenuto.map((p) => typeof p === "string" ? p : typeof p?.text === "string" ? p.text : t("processi.inspector.sentImageOmitted")).join("\n");
 }
 function nodiRichiestaInviata(doc, ultima, { ora: ora4 = (iso) => iso } = {}) {
-  if (!ultima) return [nodo13(doc, "p", "talos-muted", t("processi.inspector.sentRequestNone"))];
+  if (!ultima) return [nodo15(doc, "p", "talos-muted", t("processi.inspector.sentRequestNone"))];
   const messaggi = Array.isArray(ultima.messages) ? ultima.messages : [];
   const sistema = messaggi.filter((m) => m?.role === "system" || m?.role === "developer");
   const resto = messaggi.filter((m) => !(m?.role === "system" || m?.role === "developer"));
   const attrezzi = Array.isArray(ultima.tools) ? ultima.tools : [];
-  const meta2 = nodo13(doc, "p", "talos-muted", t("processi.inspector.sentRequestMeta", { model: ultima.model ?? "—", time: ultima.at ? ora4(ultima.at) : "—" }));
-  const elencoMessaggi = nodo13(doc, "ol", "talos-contesto-elenco");
+  const meta2 = nodo15(doc, "p", "talos-muted", t("processi.inspector.sentRequestMeta", { model: ultima.model ?? "—", time: ultima.at ? ora4(ultima.at) : "—" }));
+  const elencoMessaggi = nodo15(doc, "ol", "talos-contesto-elenco");
   for (const m of resto) {
-    const voce2 = nodo13(doc, "li", "talos-contesto-elenco__voce");
+    const voce2 = nodo15(doc, "li", "talos-contesto-elenco__voce");
     const chiamate = Array.isArray(m?.tool_calls) && m.tool_calls.length ? `
 ${m.tool_calls.map((c) => `→ ${c?.function?.name ?? "?"}(${c?.function?.arguments ?? ""})`).join("\n")}` : "";
-    voce2.append(nodo13(doc, "b", "talos-contesto-elenco__ruolo", String(m?.role ?? "?")), blocco(doc, `${testoDelMessaggio(m?.content)}${chiamate}`.replace(/^\n/, "")));
+    voce2.append(nodo15(doc, "b", "talos-contesto-elenco__ruolo", String(m?.role ?? "?")), blocco(doc, `${testoDelMessaggio(m?.content)}${chiamate}`.replace(/^\n/, "")));
     elencoMessaggi.append(voce2);
   }
   const nomi2 = attrezzi.map((a) => a?.function?.name ?? a?.name).filter((n) => typeof n === "string");
@@ -60153,45 +60855,45 @@ ${m.tool_calls.map((c) => `→ ${c?.function?.name ?? "?"}(${c?.function?.argume
   ];
 }
 function nodiCosaHaTenuto(doc, tenuto) {
-  if (!tenuto?.fonte) return [nodo13(doc, "p", "talos-muted", t("processi.inspector.keptNothing"))];
+  if (!tenuto?.fonte) return [nodo15(doc, "p", "talos-muted", t("processi.inspector.keptNothing"))];
   const parti = [];
   if (tenuto.richieste) {
-    const elenco3 = nodo13(doc, "ol", "talos-contesto-elenco");
+    const elenco3 = nodo15(doc, "ol", "talos-contesto-elenco");
     for (const r of tenuto.richieste.kept) {
-      const li = nodo13(doc, "li", "talos-contesto-elenco__voce");
+      const li = nodo15(doc, "li", "talos-contesto-elenco__voce");
       li.value = r.n;
       li.append(blocco(doc, r.text));
       elenco3.append(li);
     }
     parti.push(sezione(doc, `${t("processi.inspector.keptRequests")} · ${t("processi.inspector.keptRequestsCount", { kept: tenuto.richieste.kept.length, total: tenuto.richieste.total })}`, elenco3));
   } else if (tenuto.fonte === "motore") {
-    parti.push(nodo13(doc, "p", "talos-muted", t("processi.inspector.keptOldVersion")));
+    parti.push(nodo15(doc, "p", "talos-muted", t("processi.inspector.keptOldVersion")));
   }
   if (tenuto.fatti.length) {
-    const elenco3 = nodo13(doc, "ul", "talos-contesto-elenco");
-    for (const f of tenuto.fatti) elenco3.append(nodo13(doc, "li", "talos-contesto-elenco__voce", f));
+    const elenco3 = nodo15(doc, "ul", "talos-contesto-elenco");
+    for (const f of tenuto.fatti) elenco3.append(nodo15(doc, "li", "talos-contesto-elenco__voce", f));
     parti.push(sezione(doc, `${t("processi.inspector.keptFacts")} (${tenuto.fatti.length})`, elenco3));
   }
   if (tenuto.indice) parti.push(sezione(doc, t("processi.inspector.keptIndex"), blocco(doc, tenuto.indice)));
   if (tenuto.riassunto) parti.push(sezione(doc, t("processi.inspector.keptSummary"), blocco(doc, tenuto.riassunto)));
   return parti;
 }
-var nodo13, sezione, blocco;
+var nodo15, sezione, blocco;
 var init_contesto_finestre = __esm({
   "src/components/contesto-finestre.js"() {
     init_lingua();
-    nodo13 = (doc, tag2, classe, testo2) => {
+    nodo15 = (doc, tag2, classe, testo2) => {
       const n = doc.createElement(tag2);
       if (classe) n.className = classe;
       if (testo2 !== void 0) n.textContent = testo2;
       return n;
     };
     sezione = (doc, titolo2, ...figli) => {
-      const s = nodo13(doc, "section", "talos-contesto-sezione");
-      s.append(nodo13(doc, "h3", "talos-contesto-sezione__titolo", titolo2), ...figli.filter(Boolean));
+      const s = nodo15(doc, "section", "talos-contesto-sezione");
+      s.append(nodo15(doc, "h3", "talos-contesto-sezione__titolo", titolo2), ...figli.filter(Boolean));
       return s;
     };
-    blocco = (doc, testo2) => nodo13(doc, "pre", "talos-contesto-testo", testo2);
+    blocco = (doc, testo2) => nodo15(doc, "pre", "talos-contesto-testo", testo2);
   }
 });
 
@@ -61352,11 +62054,11 @@ function applicaFuoco(panel, stato2) {
   if (!stato2.aperto) return;
   const chiave = `${stato2.aperto.id}:${stato2.aperto.tipo}`;
   if (stato2.fuocoDato === chiave) return;
-  const nodo15 = panel.querySelector(`[data-c="${stato2.aperto.tipo === "elimina" ? "ConfermaEliminazione" : "CampoRinomina"}"]`);
-  if (!nodo15) return;
-  if (stato2.aperto.tipo === "elimina") nodo15.querySelector('[data-action="annullaEliminaModello"]')?.focus();
+  const nodo17 = panel.querySelector(`[data-c="${stato2.aperto.tipo === "elimina" ? "ConfermaEliminazione" : "CampoRinomina"}"]`);
+  if (!nodo17) return;
+  if (stato2.aperto.tipo === "elimina") nodo17.querySelector('[data-action="annullaEliminaModello"]')?.focus();
   else {
-    const campo3 = nodo15.querySelector('[data-campo="nomeModello"]');
+    const campo3 = nodo17.querySelector('[data-campo="nomeModello"]');
     campo3?.focus();
     campo3?.select?.();
   }
@@ -61681,10 +62383,10 @@ var init_download_coda = __esm({
 
 // src/components/review.js
 function el29(documentObj, tag2, className, testo2) {
-  const nodo15 = documentObj.createElement(tag2);
-  if (className) nodo15.className = className;
-  if (testo2 !== void 0 && testo2 !== null) nodo15.textContent = String(testo2);
-  return nodo15;
+  const nodo17 = documentObj.createElement(tag2);
+  if (className) nodo17.className = className;
+  if (testo2 !== void 0 && testo2 !== null) nodo17.textContent = String(testo2);
+  return nodo17;
 }
 function contaDiff(voceOCode = []) {
   if (voceOCode && !Array.isArray(voceOCode) && Number.isFinite(voceOCode.aggiunte) && Number.isFinite(voceOCode.rimozioni)) {
@@ -61715,12 +62417,12 @@ function riassuntoReviewTestata(voci = []) {
   return voci.length === 0 ? "" : riassuntoReview(voci);
 }
 function aggiornaSommarioSchedeReview(contenitore, voci = []) {
-  const nodo15 = contenitore?.querySelector("[data-review-sommario]");
-  if (!nodo15) return null;
+  const nodo17 = contenitore?.querySelector("[data-review-sommario]");
+  if (!nodo17) return null;
   const testo2 = riassuntoReviewTestata(voci);
-  nodo15.textContent = testo2;
-  nodo15.hidden = testo2 === "";
-  nodo15.title = testo2;
+  nodo17.textContent = testo2;
+  nodo17.hidden = testo2 === "";
+  nodo17.title = testo2;
   return testo2;
 }
 function sottotitoloFile(voce2 = {}) {
@@ -64430,10 +65132,10 @@ function digerisciEventoFiglia(r, e) {
   }
 }
 function el30(d, tag2, classe, testo2) {
-  const nodo15 = d.createElement(tag2);
-  if (classe) nodo15.className = classe;
-  if (testo2 !== void 0 && testo2 !== null) nodo15.textContent = String(testo2);
-  return nodo15;
+  const nodo17 = d.createElement(tag2);
+  if (classe) nodo17.className = classe;
+  if (testo2 !== void 0 && testo2 !== null) nodo17.textContent = String(testo2);
+  return nodo17;
 }
 function simbolo2(d, classe, nome) {
   const svg2 = d.createElementNS(SVG_NS3, "svg");
@@ -64508,10 +65210,10 @@ function montaConversazioneFiglia(contenitore, {
   const disegnati = /* @__PURE__ */ new Map();
   const chiaveBlocco = (b) => b.tipo === "attrezzo" ? `a:${b.id}` : b.tipo === "testo" ? `t:${b.id}` : `e:${b.id}`;
   function creaVistaTurno(turno) {
-    const nodo15 = el30(d, "div", "talos-figlia__turno");
-    if (turno.consegna) nodo15.append(creaMessaggioUtente({ testo: turno.consegna, meta: turno.meta }, { document: d }));
-    corpo.append(nodo15);
-    return { elemento: nodo15, blocchi: /* @__PURE__ */ new Map() };
+    const nodo17 = el30(d, "div", "talos-figlia__turno");
+    if (turno.consegna) nodo17.append(creaMessaggioUtente({ testo: turno.consegna, meta: turno.meta }, { document: d }));
+    corpo.append(nodo17);
+    return { elemento: nodo17, blocchi: /* @__PURE__ */ new Map() };
   }
   const recinto = (testoCodice, linguaggio, chiuso) => creaBloccoCodice({ testo: testoCodice, linguaggio, chiuso: chiuso !== false }, { document: d });
   function rendiMarkdown(contenitore2, testoGrezzo) {
@@ -64832,8 +65534,13 @@ function collegaScalaComposer(barra, { win = globalThis, contenitore = barra?.cl
 var STADIO_MASSIMO, ETICHETTE_MISURATE;
 var init_scala_composer = __esm({
   "src/components/scala-composer.js"() {
-    STADIO_MASSIMO = 2;
-    ETICHETTE_MISURATE = ['[data-open-sheet="model"] .talos-chip__label', '[data-open-sheet="permissions"] .talos-chip__label', "#pillTerminale .talos-chip__label"];
+    STADIO_MASSIMO = 3;
+    ETICHETTE_MISURATE = [
+      '[data-open-sheet="model"] .talos-chip__label',
+      '[data-open-sheet="permissions"] .talos-chip__label',
+      "#pillTerminale .talos-chip__label",
+      "[data-piano-chatgpt] .talos-chip__label"
+    ];
   }
 });
 
@@ -65142,10 +65849,10 @@ var init_risultati_ricerca = __esm({
 
 // src/components/richiesta-mcp.js
 function el31(documentObj, tag2, className, testo2) {
-  const nodo15 = documentObj.createElement(tag2);
-  if (className) nodo15.className = className;
-  if (testo2 !== void 0 && testo2 !== null) nodo15.textContent = String(testo2);
-  return nodo15;
+  const nodo17 = documentObj.createElement(tag2);
+  if (className) nodo17.className = className;
+  if (testo2 !== void 0 && testo2 !== null) nodo17.textContent = String(testo2);
+  return nodo17;
 }
 function simbolo3(documentObj, classe, nome) {
   const svg2 = documentObj.createElementNS(SVG_NS4, "svg");
@@ -65521,9 +66228,9 @@ function creaVistaViva(contenitore, { onGesto, onErrore, documento = globalThis.
   radice2.append(tela, velo, etichetta3);
   contenitore.replaceChildren(radice2);
   const ascolti = [];
-  const ascolta = (nodo15, tipo, mano, opzioni) => {
-    nodo15.addEventListener(tipo, mano, opzioni);
-    ascolti.push([nodo15, tipo, mano, opzioni]);
+  const ascolta = (nodo17, tipo, mano, opzioni) => {
+    nodo17.addEventListener(tipo, mano, opzioni);
+    ascolti.push([nodo17, tipo, mano, opzioni]);
   };
   let corrente = "apro";
   let attesa = null;
@@ -65670,7 +66377,7 @@ function creaVistaViva(contenitore, { onGesto, onErrore, documento = globalThis.
     inCoda2 = false;
     prenotato = null;
     attesa = null;
-    for (const [nodo15, tipo, mano, opzioni] of ascolti) nodo15.removeEventListener?.(tipo, mano, opzioni);
+    for (const [nodo17, tipo, mano, opzioni] of ascolti) nodo17.removeEventListener?.(tipo, mano, opzioni);
     ascolti.length = 0;
     contenitore.replaceChildren?.();
   }
@@ -65762,10 +66469,10 @@ function montaMiglioraPrompt({
   let giro = 0;
   let distrutto = false;
   const elemento = (tag2, classe, testo2) => {
-    const nodo15 = doc.createElement(tag2);
-    if (classe) nodo15.className = classe;
-    if (testo2 != null) nodo15.textContent = testo2;
-    return nodo15;
+    const nodo17 = doc.createElement(tag2);
+    if (classe) nodo17.className = classe;
+    if (testo2 != null) nodo17.textContent = testo2;
+    return nodo17;
   };
   const radice2 = elemento("section", "talos-migliora");
   radice2.dataset.miglioraPrompt = "";
@@ -66123,12 +66830,12 @@ function etichettaTasto(combo, { apple = suApple() } = {}) {
 }
 function normalizzaTastiScritti(radice2 = globalThis.document, { apple = suApple() } = {}) {
   let cambiati = 0;
-  for (const nodo15 of radice2.querySelectorAll("kbd, .talos-kbd")) {
-    const testo2 = (nodo15.textContent || "").trim();
+  for (const nodo17 of radice2.querySelectorAll("kbd, .talos-kbd")) {
+    const testo2 = (nodo17.textContent || "").trim();
     if (!/⌘|ctrl|cmd|shift/i.test(testo2)) continue;
     const nuovo = etichettaTasto(testo2, { apple });
     if (nuovo && nuovo !== testo2) {
-      nodo15.textContent = nuovo;
+      nodo17.textContent = nuovo;
       cambiati += 1;
     }
   }
@@ -66560,8 +67267,8 @@ function migraTitle(elemento) {
   }
   return elemento.getAttribute(ATTRIBUTO) || "";
 }
-function bersaglioDi(nodo15) {
-  let corrente = nodo15;
+function bersaglioDi(nodo17) {
+  let corrente = nodo17;
   while (corrente && corrente.nodeType === 1) {
     if (corrente.hasAttribute?.(ATTRIBUTO) || corrente.hasAttribute?.("title")) return corrente;
     corrente = corrente.parentElement;
@@ -67060,11 +67767,11 @@ function icona12(nome, classe = "i") {
   svg2.append(use);
   return svg2;
 }
-function nascondiTrovabile(nodo15, nascosto) {
-  if (!nodo15) return;
+function nascondiTrovabile(nodo17, nascosto) {
+  if (!nodo17) return;
   if (nascosto) {
-    if (nodo15.getAttribute("hidden") !== "until-found") nodo15.setAttribute("hidden", "until-found");
-  } else if (nodo15.hasAttribute("hidden")) nodo15.removeAttribute("hidden");
+    if (nodo17.getAttribute("hidden") !== "until-found") nodo17.setAttribute("hidden", "until-found");
+  } else if (nodo17.hasAttribute("hidden")) nodo17.removeAttribute("hidden");
 }
 function annuncia(testo2) {
   let regione = document.getElementById("talosAnnunciAttivita");
@@ -67218,17 +67925,17 @@ var init_attivita_segmento = __esm({
           const aperta2 = riga2.getAttribute("aria-expanded") === "true";
           if (!aperta2 && corpo.getAttribute("hidden") !== "until-found") corpo.setAttribute("hidden", "until-found");
           const scorrevoli = this.eRagionamento(riga2) ? [...corpo.querySelectorAll(".tool-note-detail")] : [corpo, ...corpo.querySelectorAll(":scope > pre")];
-          for (const nodo15 of scorrevoli) {
+          for (const nodo17 of scorrevoli) {
             if (aperta2) {
-              if (nodo15.tabIndex !== 0) nodo15.tabIndex = 0;
-            } else if (nodo15.hasAttribute("tabindex")) nodo15.removeAttribute("tabindex");
+              if (nodo17.tabIndex !== 0) nodo17.tabIndex = 0;
+            } else if (nodo17.hasAttribute("tabindex")) nodo17.removeAttribute("tabindex");
           }
         }
       }
       /** La ricerca ha trovato un testo dentro un dettaglio chiuso: si allinea chi lo comanda. Dalla ricerca NON si ridisegna. */
-      rivelaDallaRicerca(nodo15) {
+      rivelaDallaRicerca(nodo17) {
         for (const riga2 of this.righe()) {
-          if (this.corpoDi(riga2) === nodo15) {
+          if (this.corpoDi(riga2) === nodo17) {
             riga2.setAttribute("aria-expanded", "true");
             riga2.dispatchEvent(new CustomEvent("talos:voce-rivelata", { bubbles: true }));
             break;
@@ -67541,9 +68248,9 @@ var init_attivita_segmento = __esm({
           totale2 += 1;
           const passa = k === "tutte" || (k === "falliti" ? voce2.stato === "fallito" : k === "ragionamento" ? voce2.tipo === "reasoning" : voce2.specie === k);
           if (passa) visibili += 1;
-          for (const nodo15 of this.nodiDellaVoce(riga2)) {
-            if (passa) delete nodo15.dataset.filtrata;
-            else nodo15.dataset.filtrata = "si";
+          for (const nodo17 of this.nodiDellaVoce(riga2)) {
+            if (passa) delete nodo17.dataset.filtrata;
+            else nodo17.dataset.filtrata = "si";
           }
         }
         const filtrato = k !== "tutte";
@@ -68133,10 +68840,10 @@ function decidiLettura(dimensione) {
   return Number.isFinite(dimensione) && dimensione > TETTO_FILE ? "fuori" : "leggi";
 }
 function crea(doc, tag2, classe, testo2) {
-  const nodo15 = doc.createElement(tag2);
-  if (classe) nodo15.className = classe;
-  if (testo2 !== void 0 && testo2 !== null) nodo15.textContent = String(testo2);
-  return nodo15;
+  const nodo17 = doc.createElement(tag2);
+  if (classe) nodo17.className = classe;
+  if (testo2 !== void 0 && testo2 !== null) nodo17.textContent = String(testo2);
+  return nodo17;
 }
 function icona13(doc, id4) {
   const svg2 = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -68499,14 +69206,14 @@ function creaLettore({ doc = globalThis.document, finestra = globalThis, fonte, 
             smontaOffice();
             corpo.replaceChildren(cartaResaFallita(tipo, messaggio));
           };
-          const nodo15 = await lettoreOffice.rendi({ doc, finestra, byte: stato2.byteGrezzi, nome, tipo, onErrore });
+          const nodo17 = await lettoreOffice.rendi({ doc, finestra, byte: stato2.byteGrezzi, nome, tipo, onErrore });
           if (mio !== disegnoCorrente) {
-            nodo15?.smontaTalos?.();
+            nodo17?.smontaTalos?.();
             return;
           }
-          stato2.nodoOffice = nodo15;
+          stato2.nodoOffice = nodo17;
           pezzi.length = 0;
-          pezzi.push(nodo15);
+          pezzi.push(nodo17);
         }
       }
     } catch (errore2) {
@@ -68697,15 +69404,15 @@ function righeDelGrafo(commit, { testa = null, remoto = null, base = null } = {}
     const ingresso = (righe.at(-1)?.uscita ?? []).map(copia);
     const uscita = [];
     let primoPadre = false;
-    for (const nodo15 of ingresso) {
-      if (nodo15.id === voce2.commit) {
+    for (const nodo17 of ingresso) {
+      if (nodo17.id === voce2.commit) {
         if (!primoPadre && padri.length > 0) {
-          uscita.push({ id: padri[0], colore: colorePerRif(voce2.commit) ?? nodo15.colore });
+          uscita.push({ id: padri[0], colore: colorePerRif(voce2.commit) ?? nodo17.colore });
           primoPadre = true;
         }
         continue;
       }
-      uscita.push(copia(nodo15));
+      uscita.push(copia(nodo17));
     }
     for (let i2 = primoPadre ? 1 : 0; i2 < padri.length; i2 += 1) {
       let colore = colorePerRif(i2 === 0 ? voce2.commit : padri[i2]);
@@ -68839,7 +69546,7 @@ var init_grafo_storia = __esm({
     COLORI_ALTRI = 5;
     ID_IN_ARRIVO = "talos:in-arrivo";
     ID_IN_USCITA = "talos:in-uscita";
-    copia = (nodo15) => ({ id: nodo15.id, colore: nodo15.colore });
+    copia = (nodo17) => ({ id: nodo17.id, colore: nodo17.colore });
   }
 });
 
@@ -71122,12 +71829,12 @@ function aggiornaSeparatoreLegacy(container, voce2, { sessionId, document: doc =
   const at2 = typeof voce2.at === "string" && voce2.at ? voce2.at : null;
   const chiave = at2 ? chiaveLegacy(sessionId, at2) : null;
   let row = null;
-  for (const nodo15 of container.querySelectorAll("[data-compattazione-riga]")) {
-    if (nodo15.dataset.contextSession !== sessionId) {
-      nodo15.remove();
+  for (const nodo17 of container.querySelectorAll("[data-compattazione-riga]")) {
+    if (nodo17.dataset.contextSession !== sessionId) {
+      nodo17.remove();
       continue;
     }
-    if (chiave && nodo15.dataset.compattazioneRiga === chiave) row = nodo15;
+    if (chiave && nodo17.dataset.compattazioneRiga === chiave) row = nodo17;
   }
   if (!row && chiave && typeof staccato === "function") {
     const altrove = staccato(chiave);
@@ -71735,7 +72442,7 @@ function creaNotaJournalRiparato(info, { document: doc = globalThis.document, co
 function aggiornaNotaJournalRiparato(container, info, { inserisci = null, ...opzioni } = {}) {
   if (!container || !info) return null;
   const chiave = chiaveRiparazione(info);
-  for (const nodo15 of container.querySelectorAll("[data-journal-riparato]")) if (nodo15.dataset.journalRiparato === chiave) return nodo15;
+  for (const nodo17 of container.querySelectorAll("[data-journal-riparato]")) if (nodo17.dataset.journalRiparato === chiave) return nodo17;
   const nota = creaNotaJournalRiparato(info, opzioni);
   if (typeof inserisci === "function") inserisci(nota);
   else container.append(nota);
@@ -71810,10 +72517,10 @@ var init_compattazione_legacy = __esm({
 
 // src/components/stato-vuoto.js
 function el34(documentObj, tag2, className, testo2) {
-  const nodo15 = documentObj.createElement(tag2);
-  if (className) nodo15.className = className;
-  if (testo2 !== void 0 && testo2 !== null) nodo15.textContent = String(testo2);
-  return nodo15;
+  const nodo17 = documentObj.createElement(tag2);
+  if (className) nodo17.className = className;
+  if (testo2 !== void 0 && testo2 !== null) nodo17.textContent = String(testo2);
+  return nodo17;
 }
 function simbolo4(documentObj, classe, nome) {
   const svg2 = documentObj.createElementNS(SVG_NS6, "svg");
@@ -71940,8 +72647,8 @@ function aggiornaConteggiScheda(card, conteggi = {}) {
   return quanti;
 }
 function testoDi2(radice2, selettore2) {
-  const nodo15 = radice2?.querySelector(selettore2);
-  const testo2 = nodo15?.textContent?.trim() ?? "";
+  const nodo17 = radice2?.querySelector(selettore2);
+  const testo2 = nodo17?.textContent?.trim() ?? "";
   return testo2.length > 0 ? testo2 : null;
 }
 function gib(testo2) {
@@ -71962,9 +72669,9 @@ function aggiornaBandaLaboratorio(card) {
   const banda = card?.querySelector("[data-lab-banda]");
   if (!banda) return false;
   let scritto = false;
-  const scrivi2 = (nodo15, testo2) => {
-    if (!nodo15 || nodo15.textContent === testo2) return;
-    nodo15.textContent = testo2;
+  const scrivi2 = (nodo17, testo2) => {
+    if (!nodo17 || nodo17.textContent === testo2) return;
+    nodo17.textContent = testo2;
     scritto = true;
   };
   const nodoModello = banda.querySelector(NODO.modello);
@@ -72636,7 +73343,7 @@ function percorsoRepo(modello) {
   const revisione = String(modello?.revision ?? "").trim() || "main";
   return `/api/v1/huggingface/repo?repo=${encodeURIComponent(repo)}&revision=${encodeURIComponent(revisione)}`;
 }
-function nodo14(doc, tag2, classe, testo2) {
+function nodo16(doc, tag2, classe, testo2) {
   const n = doc.createElement(tag2);
   if (classe) n.className = classe;
   if (testo2 !== void 0 && testo2 !== null) n.textContent = String(testo2);
@@ -72648,18 +73355,18 @@ function byte2(valore) {
   return Number.isFinite(n) ? gb(n) : "—";
 }
 function paragrafo(doc, classe, testo2) {
-  return nodo14(doc, "p", classe, testo2);
+  return nodo16(doc, "p", classe, testo2);
 }
 function badge5(doc, testo2, tono) {
-  const b = nodo14(doc, "span", `talos-badge talos-badge--sm${tono ? ` talos-badge--${tono}` : ""}`, testo2);
+  const b = nodo16(doc, "span", `talos-badge talos-badge--sm${tono ? ` talos-badge--${tono}` : ""}`, testo2);
   b.dataset.c = "Badge";
   return b;
 }
 function riga(doc, etichetta3, valore, { chiave = "", tono = "" } = {}) {
-  const riga2 = nodo14(doc, "div", "talos-kv");
-  const val = nodo14(doc, "span", `talos-kv__v${tono === "accent" ? " talos-kv__v--accent" : ""}`, valore);
+  const riga2 = nodo16(doc, "div", "talos-kv");
+  const val = nodo16(doc, "span", `talos-kv__v${tono === "accent" ? " talos-kv__v--accent" : ""}`, valore);
   if (chiave) val.dataset.modelloValore = chiave;
-  riga2.append(nodo14(doc, "span", "talos-kv__k", etichetta3), val);
+  riga2.append(nodo16(doc, "span", "talos-kv__k", etichetta3), val);
   return riga2;
 }
 function rigaFatto(doc, etichetta3, fatto, opzioni) {
@@ -72671,10 +73378,10 @@ function rigaFatto(doc, etichetta3, fatto, opzioni) {
   return r;
 }
 function copia2(doc, valore, { etichetta: etichetta3 = t("modelli.detail.copy"), suggerimento = "" } = {}) {
-  const b = nodo14(doc, "button", "talos-button talos-button--ghost talos-button--sm");
+  const b = nodo16(doc, "button", "talos-button talos-button--ghost talos-button--sm");
   b.type = "button";
   b.dataset.modelloCopia = "";
-  const scritta = nodo14(doc, "span", "", etichetta3);
+  const scritta = nodo16(doc, "span", "", etichetta3);
   b.append(icona5(doc, "copy", "i i--sm"), scritta);
   if (suggerimento) {
     b.title = suggerimento;
@@ -72755,24 +73462,24 @@ function montaSchedaModello(contenitore, {
     errori: { modello: "", fit: "", capacita: "", repo: "" },
     distrutto: false
   };
-  const radice2 = nodo14(doc, "div", "model-page talos-stack");
+  const radice2 = nodo16(doc, "div", "model-page talos-stack");
   radice2.dataset.schedaModello = "";
   radice2.dataset.modelloId = String(bersaglio.id);
-  const barra = nodo14(doc, "div", "model-page-toolbar talos-toolbar");
-  const testata = nodo14(doc, "header", "model-hero");
+  const barra = nodo16(doc, "div", "model-page-toolbar talos-toolbar");
+  const testata = nodo16(doc, "header", "model-hero");
   testata.dataset.modelloTestata = "";
-  const rigaSchede = nodo14(doc, "div", "model-page-tabs talos-cluster");
-  const listaSchede = nodo14(doc, "div", "talos-tabs__list");
+  const rigaSchede = nodo16(doc, "div", "model-page-tabs talos-cluster");
+  const listaSchede = nodo16(doc, "div", "talos-tabs__list");
   listaSchede.setAttribute("role", "tablist");
   listaSchede.setAttribute("aria-label", t("modelli.detail.pageSections"));
-  const notaSchede = nodo14(doc, "span", "model-page-tab-note");
+  const notaSchede = nodo16(doc, "span", "model-page-tab-note");
   notaSchede.append(icona5(doc, "shield", "i i--xs"), doc.createTextNode(t("modelli.detail.noAutomaticStart")));
   rigaSchede.append(listaSchede, notaSchede);
-  const pannello = nodo14(doc, "section", "talos-tabs__panel");
+  const pannello = nodo16(doc, "section", "talos-tabs__panel");
   pannello.id = idPannello;
   pannello.dataset.modelloPannello = stato2.scheda;
   const chiusura = paragrafo(doc, "model-page-end talos-page__note", t("modelli.detail.pageReadEffect"));
-  const gruppoPannello = nodo14(doc, "div", "talos-tabs__panels");
+  const gruppoPannello = nodo16(doc, "div", "talos-tabs__panels");
   gruppoPannello.append(pannello);
   radice2.append(barra, testata, rigaSchede, gruppoPannello, chiusura);
   contenitore.replaceChildren(radice2);
@@ -72876,7 +73583,7 @@ function montaSchedaModello(contenitore, {
     });
   }
   function bottoneIndietro() {
-    const b = nodo14(doc, "button", "talos-button talos-button--ghost talos-button--sm");
+    const b = nodo16(doc, "button", "talos-button talos-button--ghost talos-button--sm");
     b.type = "button";
     b.dataset.modelloIndietro = "";
     b.append(icona5(doc, "arrow-left", "i i--sm"), doc.createTextNode(t("modelli.detail.allModels")));
@@ -72884,12 +73591,12 @@ function montaSchedaModello(contenitore, {
     return b;
   }
   function azioniDellaTestata() {
-    const gruppo = nodo14(doc, "div", "model-page-actions talos-cluster");
+    const gruppo = nodo16(doc, "div", "model-page-actions talos-cluster");
     gruppo.dataset.modelloAzioni = "";
     const repoDelModello = String(stato2.modello?.repo || bersaglio.repo || "");
     const hu = !repoDelModello || repoDelModello === REPO_IMPORTATO ? null : `https://huggingface.co/${repoDelModello}`;
     if (hu) {
-      const link = nodo14(doc, "a", "talos-button talos-button--secondary talos-button--sm");
+      const link = nodo16(doc, "a", "talos-button talos-button--secondary talos-button--sm");
       link.href = hu;
       link.target = "_blank";
       link.rel = "noopener noreferrer";
@@ -72902,30 +73609,30 @@ function montaSchedaModello(contenitore, {
   function disegnaBarra() {
     barra.replaceChildren();
     if (typeof indietro === "function") barra.append(bottoneIndietro());
-    const identita = nodo14(doc, "span", "toolbar-identity talos-cluster");
+    const identita = nodo16(doc, "span", "toolbar-identity talos-cluster");
     identita.dataset.modelloIdentita = "";
     const origine = origineDi(stato2.modello, bersaglio);
-    identita.append(doc.createTextNode(nomeUmano(stato2.modello, bersaglio)), nodo14(doc, "span", "", origine));
+    identita.append(doc.createTextNode(nomeUmano(stato2.modello, bersaglio)), nodo16(doc, "span", "", origine));
     identita.dataset.modelloOrigine = origine;
     barra.append(identita);
-    barra.append(nodo14(doc, "span", "talos-grow"));
+    barra.append(nodo16(doc, "span", "talos-grow"));
     barra.append(azioniDellaTestata());
   }
   function disegnaTestata() {
     testata.replaceChildren();
     const dati = stato2.modello ? datiModelloInstallato(stato2.modello, { runtime, fit: null }) : null;
-    const identita = nodo14(doc, "div", "model-hero-identity");
-    const glifo = nodo14(doc, "span", "model-glyph model-glyph--large talos-lab__banda-glifo");
+    const identita = nodo16(doc, "div", "model-hero-identity");
+    const glifo = nodo16(doc, "span", "model-glyph model-glyph--large talos-lab__banda-glifo");
     glifo.setAttribute("aria-hidden", "true");
     glifo.append(icona5(doc, "robot", "i"));
-    const testo2 = nodo14(doc, "div", "");
-    testo2.append(nodo14(doc, "div", "eyebrow talos-eyebrow", t("modelli.detail.inYourLab")));
-    const nome = nodo14(doc, "h1", "", nomeUmano(stato2.modello, bersaglio));
+    const testo2 = nodo16(doc, "div", "");
+    testo2.append(nodo16(doc, "div", "eyebrow talos-eyebrow", t("modelli.detail.inYourLab")));
+    const nome = nodo16(doc, "h1", "", nomeUmano(stato2.modello, bersaglio));
     nome.dataset.modelloNome = "";
     nome.id = `${suffisso}-titolo`;
     nome.tabIndex = -1;
     testo2.append(nome);
-    const rigaRepo = nodo14(doc, "p", "model-repository talos-muted");
+    const rigaRepo = nodo16(doc, "p", "model-repository talos-muted");
     rigaRepo.dataset.modelloRepo = "";
     const repo2 = stato2.repo;
     const pezzi = [];
@@ -72938,14 +73645,14 @@ function montaSchedaModello(contenitore, {
     if (repo2?.pipelineTag) pezzi.push(repo2.pipelineTag);
     if (Number.isFinite(repo2?.downloads)) pezzi.push(tn("modelli.detail.downloadCountOne", "modelli.detail.downloadCount", repo2.downloads, { n: numero11.format(repo2.downloads) }));
     if (Number.isFinite(repo2?.likes)) pezzi.push(tn("modelli.detail.likeCountOne", "modelli.detail.likeCount", repo2.likes, { n: numero11.format(repo2.likes) }));
-    rigaRepo.append(icona5(doc, "doc", "i i--xs"), nodo14(doc, "span", "talos-mono", pezzi.join(" · ")));
+    rigaRepo.append(icona5(doc, "doc", "i i--xs"), nodo16(doc, "span", "talos-mono", pezzi.join(" · ")));
     testo2.append(rigaRepo);
     identita.append(glifo, testo2);
     testata.append(identita);
     testata.append(paragrafo(doc, "model-hero-caption", t("modelli.detail.heroCaption")));
     if (!remoto() && stato2.modello && typeof onLiberaMemoria === "function") {
-      const comandi = nodo14(doc, "div", "talos-cluster");
-      const libera = nodo14(
+      const comandi = nodo16(doc, "div", "talos-cluster");
+      const libera = nodo16(
         doc,
         "button",
         "talos-button talos-button--secondary talos-button--sm",
@@ -72970,16 +73677,16 @@ function montaSchedaModello(contenitore, {
     testata.append(disegnaStriscia(dati));
   }
   function disegnaStriscia(dati) {
-    const striscia = nodo14(doc, "section", "model-context-strip");
+    const striscia = nodo16(doc, "section", "model-context-strip");
     striscia.dataset.modelloStriscia = "";
     striscia.setAttribute("aria-label", t("modelli.detail.modelRepositoryState"));
     const cella = (etichetta3, contenuto, { icona: nomeIcona = "" } = {}) => {
-      const c = nodo14(doc, "div", "");
+      const c = nodo16(doc, "div", "");
       if (nomeIcona) c.append(icona5(doc, nomeIcona, "i i--sm"));
-      const dentro = nodo14(doc, "span", "talos-stack");
+      const dentro = nodo16(doc, "span", "talos-stack");
       dentro.style.alignItems = "flex-start";
-      dentro.append(nodo14(doc, "small", "", etichetta3));
-      if (typeof contenuto === "string") dentro.append(nodo14(doc, "strong", "", contenuto));
+      dentro.append(nodo16(doc, "small", "", etichetta3));
+      if (typeof contenuto === "string") dentro.append(nodo16(doc, "strong", "", contenuto));
       else dentro.append(contenuto);
       c.append(dentro);
       return c;
@@ -73019,10 +73726,10 @@ function montaSchedaModello(contenitore, {
     return peso === "—" ? tn("modelli.detail.repositoryFileOne", "modelli.detail.repositoryFiles", quanti) : tn("modelli.detail.repositoryFileSizeOne", "modelli.detail.repositoryFilesSize", quanti, { size: peso });
   }
   function disegnaCard() {
-    const scatola = nodo14(doc, "section", "talos-card readme-surface");
+    const scatola = nodo16(doc, "section", "talos-card readme-surface");
     scatola.dataset.modelloCard = "";
-    const testa = nodo14(doc, "div", "readme-chrome talos-cluster");
-    testa.append(icona5(doc, "doc", "i i--sm"), nodo14(doc, "span", "talos-mono", "README.md"), nodo14(doc, "span", "talos-label", t("modelli.detail.editorialPreview")));
+    const testa = nodo16(doc, "div", "readme-chrome talos-cluster");
+    testa.append(icona5(doc, "doc", "i i--sm"), nodo16(doc, "span", "talos-mono", "README.md"), nodo16(doc, "span", "talos-label", t("modelli.detail.editorialPreview")));
     if (stato2.repo?.revision) testa.append(badge5(doc, String(stato2.repo.revision).slice(0, 12), ""));
     scatola.append(testa);
     if (stato2.caricamento.repo) return conTesta(scatola, paragrafo(doc, "talos-muted", t("modelli.detail.readingCard")));
@@ -73035,7 +73742,7 @@ function montaSchedaModello(contenitore, {
     if (stato2.errori.modello) {
       return conTesta(
         scatola,
-        nodo14(doc, "h3", "", t("modelli.detail.modelNotInstalled")),
+        nodo16(doc, "h3", "", t("modelli.detail.modelNotInstalled")),
         paragrafo(doc, "talos-muted", stato2.errori.modello)
       );
     }
@@ -73043,7 +73750,7 @@ function montaSchedaModello(contenitore, {
       if (remoto()) return conTesta(scatola, paragrafo(doc, "talos-muted", t("modelli.detail.readingCard")));
       return conTesta(
         scatola,
-        nodo14(doc, "h3", "", t("modelli.detail.noHuggingFaceCard")),
+        nodo16(doc, "h3", "", t("modelli.detail.noHuggingFaceCard")),
         paragrafo(doc, "talos-muted", t("modelli.detail.importedCardExplanation"))
       );
     }
@@ -73051,7 +73758,7 @@ function montaSchedaModello(contenitore, {
     if (!readme.trim()) {
       return conTesta(
         scatola,
-        nodo14(doc, "h3", "", t("modelli.detail.noReadme")),
+        nodo16(doc, "h3", "", t("modelli.detail.noReadme")),
         paragrafo(doc, "talos-muted", t("modelli.detail.repositoryNoCard", { repo: stato2.modello.repo }))
       );
     }
@@ -73075,12 +73782,12 @@ function montaSchedaModello(contenitore, {
     });
     const indice2 = indiceDelReadme(frammento, doc, { prefisso: `${suffisso}-readme` });
     if (indice2.length) {
-      const rigaIndice = nodo14(doc, "nav", "readme-index talos-cluster");
+      const rigaIndice = nodo16(doc, "nav", "readme-index talos-cluster");
       rigaIndice.dataset.modelloIndice = "";
       rigaIndice.setAttribute("aria-label", t("modelli.detail.cardIndex"));
-      rigaIndice.append(nodo14(doc, "span", "talos-label", t("modelli.detail.inThisCard")));
+      rigaIndice.append(nodo16(doc, "span", "talos-label", t("modelli.detail.inThisCard")));
       for (const voce2 of indice2) {
-        const b = nodo14(doc, "button", "talos-button talos-button--ghost talos-button--sm", voce2.breve);
+        const b = nodo16(doc, "button", "talos-button talos-button--ghost talos-button--sm", voce2.breve);
         b.type = "button";
         b.dataset.modelloIndiceVoce = voce2.id;
         if (voce2.breve !== voce2.testo) b.title = voce2.testo;
@@ -73094,7 +73801,7 @@ function montaSchedaModello(contenitore, {
       }
       scatola.append(rigaIndice);
     }
-    const prosa = nodo14(doc, "div", "td-prosa-rapporto readme-body");
+    const prosa = nodo16(doc, "div", "td-prosa-rapporto readme-body");
     prosa.append(frammento);
     scatola.append(prosa);
     const immagini = disegnaImmagini();
@@ -73104,13 +73811,13 @@ function montaSchedaModello(contenitore, {
   function disegnaImmagini() {
     const fuori = immaginiDellaScheda(stato2.repo?.images);
     if (!fuori.quante) return null;
-    const scatola = nodo14(doc, "section", "talos-card talos-card--pad");
+    const scatola = nodo16(doc, "section", "talos-card talos-card--pad");
     scatola.dataset.modelloImmagini = String(fuori.quante);
     scatola.dataset.modelloImmaginiConsenso = stato2.consenso ? "dato" : "negato";
-    const testa = nodo14(doc, "div", "talos-cluster");
+    const testa = nodo16(doc, "div", "talos-cluster");
     testa.append(
       icona5(doc, "image", "i i--sm"),
-      nodo14(doc, "h3", "talos-lab__heading talos-grow", t("modelli.detail.cardImages")),
+      nodo16(doc, "h3", "talos-lab__heading talos-grow", t("modelli.detail.cardImages")),
       badge5(doc, String(fuori.quante), "")
     );
     scatola.append(testa);
@@ -73121,15 +73828,15 @@ function montaSchedaModello(contenitore, {
         "talos-muted",
         tn("modelli.detail.imageConsentOne", "modelli.detail.imageConsent", fuori.quante, { host })
       ));
-      const comandi = nodo14(doc, "div", "talos-cluster");
-      const mostra = nodo14(doc, "button", "talos-button talos-button--secondary talos-button--sm", t("modelli.detail.showImages"));
+      const comandi = nodo16(doc, "div", "talos-cluster");
+      const mostra = nodo16(doc, "button", "talos-button talos-button--secondary talos-button--sm", t("modelli.detail.showImages"));
       mostra.type = "button";
       mostra.dataset.modelloImmaginiMostra = "";
       mostra.addEventListener("click", () => {
         stato2.consenso = true;
         disegnaPannello();
       });
-      const etichetta3 = nodo14(doc, "label", "talos-cluster");
+      const etichetta3 = nodo16(doc, "label", "talos-cluster");
       const casella = doc.createElement("input");
       casella.type = "checkbox";
       casella.checked = stato2.consensoPersistente;
@@ -73150,10 +73857,10 @@ function montaSchedaModello(contenitore, {
       scatola.append(comandi);
       return scatola;
     }
-    const griglia = nodo14(doc, "div", "talos-cluster");
+    const griglia = nodo16(doc, "div", "talos-cluster");
     griglia.dataset.modelloImmaginiGriglia = "";
     for (const voce2 of fuori.immagini) {
-      const figura = nodo14(doc, "figure", "");
+      const figura = nodo16(doc, "figure", "");
       figura.dataset.modelloImmagine = voce2.host;
       const img = doc.createElement("img");
       img.alt = voce2.alt;
@@ -73161,16 +73868,16 @@ function montaSchedaModello(contenitore, {
       img.setAttribute("referrerpolicy", "no-referrer");
       img.src = percorsoImmagine(voce2.url);
       img.addEventListener("error", () => {
-        const avviso = nodo14(doc, "figcaption", "talos-label", t("modelli.detail.imageUnavailable"));
+        const avviso = nodo16(doc, "figcaption", "talos-label", t("modelli.detail.imageUnavailable"));
         avviso.setAttribute("role", "status");
         figura.replaceChildren(avviso);
       });
       figura.append(img);
-      if (voce2.alt) figura.append(nodo14(doc, "figcaption", "talos-label", voce2.alt));
+      if (voce2.alt) figura.append(nodo16(doc, "figcaption", "talos-label", voce2.alt));
       griglia.append(figura);
     }
     scatola.append(griglia);
-    const nascondi = nodo14(doc, "button", "talos-button talos-button--ghost talos-button--sm", t("modelli.detail.hideImages"));
+    const nascondi = nodo16(doc, "button", "talos-button talos-button--ghost talos-button--sm", t("modelli.detail.hideImages"));
     nascondi.type = "button";
     nascondi.dataset.modelloImmaginiNascondi = "";
     nascondi.addEventListener("click", () => {
@@ -73184,7 +73891,7 @@ function montaSchedaModello(contenitore, {
     return scatola;
   }
   function conTesta(scatola, ...figli) {
-    const corpo = nodo14(doc, "div", "talos-stack");
+    const corpo = nodo16(doc, "div", "talos-stack");
     corpo.style.padding = "12px 14px";
     corpo.append(...figli);
     scatola.append(corpo);
@@ -73192,10 +73899,10 @@ function montaSchedaModello(contenitore, {
   }
   const NOTA_STIMA = () => t("modelli.detail.estimateNote");
   function disegnaSceltaFile() {
-    const sezione2 = nodo14(doc, "section", "talos-card talos-card--pad");
+    const sezione2 = nodo16(doc, "section", "talos-card talos-card--pad");
     sezione2.dataset.modelloSceltaFile = "";
-    const testa = nodo14(doc, "div", "talos-cluster");
-    testa.append(icona5(doc, "download", "i i--sm"), nodo14(doc, "h3", "talos-lab__heading talos-grow", t("modelli.detail.chooseDownloadFile")));
+    const testa = nodo16(doc, "div", "talos-cluster");
+    testa.append(icona5(doc, "download", "i i--sm"), nodo16(doc, "h3", "talos-lab__heading talos-grow", t("modelli.detail.chooseDownloadFile")));
     sezione2.append(testa, paragrafo(doc, "talos-label", NOTA_STIMA()));
     if (stato2.repo?.motoreConosce === false && stato2.repo?.architettura) {
       const avviso = paragrafo(doc, "talos-callout", t("modelli.detail.architectureUnsupported", { architecture: stato2.repo.architettura }));
@@ -73204,7 +73911,7 @@ function montaSchedaModello(contenitore, {
       avviso.setAttribute("role", "note");
       sezione2.append(avviso);
     }
-    const dove = nodo14(doc, "div", "talos-stack");
+    const dove = nodo16(doc, "div", "talos-stack");
     sezione2.append(dove);
     const scelto = montaSceltaFileHf(dove, stato2.repo, {
       stima: stato2.hf.stima,
@@ -73238,7 +73945,7 @@ function montaSchedaModello(contenitore, {
       p.setAttribute("role", "status");
       sezione2.append(p);
       if (typeof apriDownload === "function") {
-        const apri = nodo14(doc, "button", "talos-button talos-button--secondary talos-button--sm", t("modelli.detail.openDownloads"));
+        const apri = nodo16(doc, "button", "talos-button talos-button--secondary talos-button--sm", t("modelli.detail.openDownloads"));
         apri.type = "button";
         apri.addEventListener("click", apriDownload);
         sezione2.append(apri);
@@ -73287,7 +73994,7 @@ function montaSchedaModello(contenitore, {
     disegnaPannello();
   }
   function disegnaFiles() {
-    const scatola = nodo14(doc, "section", "talos-stack");
+    const scatola = nodo16(doc, "section", "talos-stack");
     scatola.dataset.modelloFiles = "";
     if (stato2.caricamento.modello || remoto() && stato2.caricamento.repo) return conParagrafo(scatola, t("modelli.detail.readingFiles"));
     if (stato2.errori.modello) return conParagrafo(scatola, stato2.errori.modello, { errore: true });
@@ -73296,8 +74003,8 @@ function montaSchedaModello(contenitore, {
     const remoti = Array.isArray(stato2.repo?.files) ? stato2.repo.files : [];
     const confronto = confrontaFile(locali, remoti);
     if (remoto() && stato2.repo) scatola.append(disegnaSceltaFile());
-    const testa = nodo14(doc, "div", "talos-cluster");
-    testa.append(nodo14(doc, "h3", "talos-lab__heading", remoto() ? t("modelli.detail.allRepositoryFiles") : t("modelli.detail.modelFiles")));
+    const testa = nodo16(doc, "div", "talos-cluster");
+    testa.append(nodo16(doc, "h3", "talos-lab__heading", remoto() ? t("modelli.detail.allRepositoryFiles") : t("modelli.detail.modelFiles")));
     if (!remoto() || locali.length) testa.append(badge5(doc, tn("modelli.detail.filesOnDiskOne", "modelli.detail.filesOnDisk", confronto.file.length), ""));
     if (Array.isArray(stato2.repo?.files)) testa.append(badge5(doc, tn("modelli.detail.filesInRepositoryOne", "modelli.detail.filesInRepository", stato2.repo.files.length), ""));
     scatola.append(testa);
@@ -73325,19 +74032,19 @@ function montaSchedaModello(contenitore, {
     }
     for (const voce2 of confronto.file) scatola.append(disegnaFile(voce2));
     if (stato2.modello?.sha256) {
-      const rigaModello = nodo14(doc, "div", "talos-cluster talos-lab__space");
+      const rigaModello = nodo16(doc, "div", "talos-cluster talos-lab__space");
       rigaModello.append(
-        nodo14(doc, "span", "talos-label", t("modelli.detail.wholeModelChecksum")),
-        nodo14(doc, "span", "talos-mono", improntaBreve(stato2.modello.sha256)),
+        nodo16(doc, "span", "talos-label", t("modelli.detail.wholeModelChecksum")),
+        nodo16(doc, "span", "talos-mono", improntaBreve(stato2.modello.sha256)),
         copia2(doc, stato2.modello.sha256, { etichetta: t("modelli.detail.copy"), suggerimento: t("modelli.detail.copyWholeModelChecksum") })
       );
       rigaModello.title = String(stato2.modello.sha256);
       scatola.append(rigaModello);
     }
     if (confronto.soloRepository.length) {
-      const dettagli2 = nodo14(doc, "details", "talos-lab__space");
+      const dettagli2 = nodo16(doc, "details", "talos-lab__space");
       dettagli2.dataset.modelloSoloRepo = "";
-      dettagli2.append(nodo14(doc, "summary", "", tn("modelli.detail.otherRepositoryFilesOne", "modelli.detail.otherRepositoryFiles", confronto.soloRepository.length)));
+      dettagli2.append(nodo16(doc, "summary", "", tn("modelli.detail.otherRepositoryFilesOne", "modelli.detail.otherRepositoryFiles", confronto.soloRepository.length)));
       for (const file of confronto.soloRepository) {
         dettagli2.append(riga(doc, String(file.path), byte2(file.sizeBytes), { chiave: "solo-repository" }));
       }
@@ -73346,28 +74053,28 @@ function montaSchedaModello(contenitore, {
     return scatola;
   }
   function disegnaFile(voce2) {
-    const file = nodo14(doc, "article", "talos-card talos-card--pad");
+    const file = nodo16(doc, "article", "talos-card talos-card--pad");
     file.dataset.modelloFile = voce2.percorso;
     const esito = ESITI_FILE[voce2.esito] || ESITI_FILE["non-confrontabile"];
-    const identita = nodo14(doc, "div", "talos-cluster");
-    identita.append(icona5(doc, "file", "i i--sm"), nodo14(doc, "h4", "talos-mono talos-grow", voce2.percorso));
+    const identita = nodo16(doc, "div", "talos-cluster");
+    identita.append(icona5(doc, "file", "i i--sm"), nodo16(doc, "h4", "talos-mono talos-grow", voce2.percorso));
     const etichettaEsito = badge5(doc, esito.etichetta, esito.tono);
     etichettaEsito.dataset.modelloEsito = voce2.esito;
     identita.append(etichettaEsito);
     const impronta = String(voce2.locale?.sha256 || "");
-    const rigaImpronta = nodo14(doc, "div", "talos-kv");
-    const valoreImpronta = nodo14(doc, "span", "talos-kv__v", impronta ? improntaBreve(impronta) : t("modelli.detail.undeclared"));
+    const rigaImpronta = nodo16(doc, "div", "talos-kv");
+    const valoreImpronta = nodo16(doc, "span", "talos-kv__v", impronta ? improntaBreve(impronta) : t("modelli.detail.undeclared"));
     valoreImpronta.dataset.modelloImpronta = "";
     if (impronta) {
       valoreImpronta.title = impronta;
-      const testaImpronta = nodo14(doc, "div", "talos-cluster");
+      const testaImpronta = nodo16(doc, "div", "talos-cluster");
       testaImpronta.append(
-        nodo14(doc, "span", "talos-kv__k", t("modelli.detail.diskChecksum")),
+        nodo16(doc, "span", "talos-kv__k", t("modelli.detail.diskChecksum")),
         copia2(doc, impronta, { etichetta: t("modelli.detail.copy"), suggerimento: t("modelli.detail.copyFullChecksum") })
       );
       rigaImpronta.append(testaImpronta, valoreImpronta);
     } else {
-      rigaImpronta.append(nodo14(doc, "span", "talos-kv__k", t("modelli.detail.diskChecksum")), valoreImpronta);
+      rigaImpronta.append(nodo16(doc, "span", "talos-kv__k", t("modelli.detail.diskChecksum")), valoreImpronta);
     }
     file.append(
       identita,
@@ -73402,11 +74109,11 @@ function montaSchedaModello(contenitore, {
     return file;
   }
   function disegnaCompatibilita() {
-    const scatola = nodo14(doc, "section", "talos-stack");
+    const scatola = nodo16(doc, "section", "talos-stack");
     scatola.dataset.modelloCompatibilita = "";
     if (remoto()) {
-      const card2 = nodo14(doc, "section", "talos-card talos-card--pad");
-      card2.append(nodo14(doc, "h3", "talos-lab__heading", t("modelli.detail.memoryAndSpace")));
+      const card2 = nodo16(doc, "section", "talos-card talos-card--pad");
+      card2.append(nodo16(doc, "h3", "talos-lab__heading", t("modelli.detail.memoryAndSpace")));
       const quanti = Array.isArray(stato2.modello?.files) ? stato2.modello.files.length : 0;
       const dichiara = quanti ? tn("modelli.detail.repositoryDeclaredFilesOne", "modelli.detail.repositoryDeclaredFiles", quanti, { total: Number.isFinite(stato2.modello?.byteTotali) ? t("modelli.detail.repositoryTotal", { size: byte2(stato2.modello.byteTotali) }) : "" }) : t("modelli.detail.noRepositoryFiles");
       card2.append(paragrafo(
@@ -73430,9 +74137,9 @@ function montaSchedaModello(contenitore, {
     }
     if (!stato2.fit) return conParagrafo(scatola, t("modelli.detail.checkNotRequested"));
     const verdetto = verdettoMemoria(stato2.fit);
-    const card = nodo14(doc, "section", "talos-card talos-card--pad");
-    const testa = nodo14(doc, "div", "talos-cluster");
-    testa.append(nodo14(doc, "h3", "talos-lab__heading", t("modelli.detail.memoryAndSpace")));
+    const card = nodo16(doc, "section", "talos-card talos-card--pad");
+    const testa = nodo16(doc, "div", "talos-cluster");
+    testa.append(nodo16(doc, "h3", "talos-lab__heading", t("modelli.detail.memoryAndSpace")));
     const etichettaVerdetto = badge5(doc, verdetto.etichetta, verdetto.tono);
     etichettaVerdetto.dataset.modelloVerdetto = verdetto.chiave;
     testa.append(etichettaVerdetto);
@@ -73442,7 +74149,7 @@ function montaSchedaModello(contenitore, {
     const liberi = stato2.fit.memory?.availableBytes;
     if (verdetto.chiave !== "ignoto" && Number.isFinite(richiesti) && Number.isFinite(liberi) && liberi > 0) {
       const percento2 = Math.min(100, Math.round(richiesti / liberi * 100));
-      const meter = nodo14(doc, "meter", "talos-lab__meter");
+      const meter = nodo16(doc, "meter", "talos-lab__meter");
       meter.dataset.modelloMeter = "";
       meter.min = 0;
       meter.max = 100;
@@ -73461,8 +74168,8 @@ function montaSchedaModello(contenitore, {
     );
     card.append(paragrafo(doc, "talos-label", t("modelli.detail.memoryDiskDifference")));
     scatola.append(card);
-    const contesto2 = nodo14(doc, "section", "talos-card talos-card--pad talos-lab__space");
-    contesto2.append(nodo14(doc, "h3", "talos-lab__heading", t("modelli.detail.contextAndCapabilities")));
+    const contesto2 = nodo16(doc, "section", "talos-card talos-card--pad talos-lab__space");
+    contesto2.append(nodo16(doc, "h3", "talos-lab__heading", t("modelli.detail.contextAndCapabilities")));
     contesto2.append(paragrafo(doc, "talos-label", t("modelli.detail.profileCheck", { profile: String(stato2.fit.profile || profilo) })));
     const ispezione = stato2.fit.inspection || {};
     const TOKEN2 = { numeri: contestoK };
@@ -73491,8 +74198,8 @@ function montaSchedaModello(contenitore, {
     return scatola;
   }
   function disegnaMacchina() {
-    const card = nodo14(doc, "section", "talos-card talos-card--pad talos-lab__space");
-    card.append(nodo14(doc, "h3", "talos-lab__heading", t("modelli.detail.thisMachine")));
+    const card = nodo16(doc, "section", "talos-card talos-card--pad talos-lab__space");
+    card.append(nodo16(doc, "h3", "talos-lab__heading", t("modelli.detail.thisMachine")));
     if (stato2.caricamento.capacita) {
       card.append(paragrafo(doc, "talos-muted", t("modelli.detail.measuring")));
       return card;
@@ -73526,7 +74233,7 @@ function montaSchedaModello(contenitore, {
     return card;
   }
   function pulsanteRicarica() {
-    const b = nodo14(doc, "button", "talos-button talos-button--ghost talos-button--sm", t("modelli.detail.retry"));
+    const b = nodo16(doc, "button", "talos-button talos-button--ghost talos-button--sm", t("modelli.detail.retry"));
     b.type = "button";
     b.dataset.modelloRicarica = "";
     b.disabled = Boolean(ricaricaInCorso);
@@ -73809,7 +74516,6 @@ var init_app2 = __esm({
     init_schema();
     init_navigation();
     init_workspace_path();
-    init_fonti_modelli();
     init_invio_durante_il_giro();
     init_conversazione_dom();
     init_provider_retry();
@@ -73817,6 +74523,9 @@ var init_app2 = __esm({
     init_politiche();
     init_coordinazione();
     init_utente_wsl();
+    init_piano_chatgpt();
+    init_conferma_link();
+    init_link_esterni();
     init_fonti_modelli();
     init_avvio_sessione();
     init_session_item();
@@ -74309,6 +75018,7 @@ var init_app2 = __esm({
       const appShell = $3("#app");
       const views2 = $$(".view-pane");
       const chatConversation = scorrevoleConversazione(colonnaConversazione(ROOT()));
+      let pastigliaPiano = null;
       const providerRetryUi = montaProviderRetry({ contenitore: () => $3("#conversation"), onShow: () => nascondiAttesaRisposta() });
       const mobileViewButtons = $$("[data-mobile-view]");
       const modeTabs = $$(".mode-tab");
@@ -74463,8 +75173,8 @@ var init_app2 = __esm({
       const motionAnimations = /* @__PURE__ */ new Set();
       let spazioCodaConversazioneUltimo = -1;
       let chiaveSpazioCodaUltimo = "";
-      function scrollerConversazione(nodo15 = colonnaConversazione(ROOT())) {
-        return scorrevoleConversazione(nodo15);
+      function scrollerConversazione(nodo17 = colonnaConversazione(ROOT())) {
+        return scorrevoleConversazione(nodo17);
       }
       function calcolaSpazioCodaConversazione(conversation, scroller) {
         const haMessaggi = !!conversation.querySelector(".message, .talos-turn");
@@ -74572,15 +75282,15 @@ var init_app2 = __esm({
         };
         function gestoAppartieneAllaConversazione(event, direzione) {
           const percorso = event.composedPath();
-          for (const nodo15 of percorso) {
-            if (nodo15 === scroller) break;
-            if (nodo15.nodeType !== 1) continue;
-            const css = window.getComputedStyle(nodo15);
+          for (const nodo17 of percorso) {
+            if (nodo17 === scroller) break;
+            if (nodo17.nodeType !== 1) continue;
+            const css = window.getComputedStyle(nodo17);
             if (!["auto", "scroll", "overlay", "hidden"].includes(css.overflowY)) continue;
             if (css.overscrollBehaviorY === "contain" || css.overscrollBehaviorY === "none") return false;
             if (css.overflowY === "hidden") continue;
-            const massimo = Math.max(0, nodo15.scrollHeight - nodo15.clientHeight);
-            if (direzione < 0 ? nodo15.scrollTop > 0 : nodo15.scrollTop < massimo) return false;
+            const massimo = Math.max(0, nodo17.scrollHeight - nodo17.clientHeight);
+            if (direzione < 0 ? nodo17.scrollTop > 0 : nodo17.scrollTop < massimo) return false;
           }
           return true;
         }
@@ -74618,11 +75328,11 @@ var init_app2 = __esm({
           }
         }
         function tastoAppartieneAllaConversazione(event) {
-          for (const nodo15 of event.composedPath()) {
-            if (nodo15 === scroller) break;
-            if (nodo15.nodeType !== 1) continue;
-            if (nodo15.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(nodo15.tagName)) return false;
-            const ruoli = (nodo15.getAttribute("role") || "").split(/\s+/);
+          for (const nodo17 of event.composedPath()) {
+            if (nodo17 === scroller) break;
+            if (nodo17.nodeType !== 1) continue;
+            if (nodo17.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(nodo17.tagName)) return false;
+            const ruoli = (nodo17.getAttribute("role") || "").split(/\s+/);
             if (ruoli.some((ruolo) => [
               "slider",
               "spinbutton",
@@ -74647,17 +75357,17 @@ var init_app2 = __esm({
               "scrollbar",
               "separator"
             ].includes(ruolo))) return false;
-            if (event.key === " " && (["BUTTON", "SUMMARY"].includes(nodo15.tagName) || nodo15.tagName === "A" && nodo15.hasAttribute("href") || ruoli.some((ruolo) => ["button", "checkbox", "switch"].includes(ruolo)))) return false;
+            if (event.key === " " && (["BUTTON", "SUMMARY"].includes(nodo17.tagName) || nodo17.tagName === "A" && nodo17.hasAttribute("href") || ruoli.some((ruolo) => ["button", "checkbox", "switch"].includes(ruolo)))) return false;
           }
           return true;
         }
         function toccoAppartieneAllaConversazione(event) {
-          for (const nodo15 of event.composedPath()) {
-            if (nodo15.nodeType !== 1) continue;
-            const azione = window.getComputedStyle(nodo15).touchAction;
+          for (const nodo17 of event.composedPath()) {
+            if (nodo17.nodeType !== 1) continue;
+            const azione = window.getComputedStyle(nodo17).touchAction;
             if (azione && azione !== "auto" && azione !== "manipulation" && !azione.split(/\s+/).some((a) => ["pan-y", "pan-up", "pan-down"].includes(a))) return false;
-            if (nodo15 === scroller) break;
-            if ((nodo15.getAttribute("role") || "").split(/\s+/).some((r) => ["slider", "scrollbar"].includes(r)) || nodo15.tagName === "INPUT" && nodo15.getAttribute("type") === "range") return false;
+            if (nodo17 === scroller) break;
+            if ((nodo17.getAttribute("role") || "").split(/\s+/).some((r) => ["slider", "scrollbar"].includes(r)) || nodo17.tagName === "INPUT" && nodo17.getAttribute("type") === "range") return false;
           }
           return true;
         }
@@ -74820,8 +75530,8 @@ var init_app2 = __esm({
         let n;
         while (n = walker.nextNode()) nodi.push(n);
         for (let i2 = nodi.length - 1; i2 >= 0 && restanti > 0; i2 -= 1) {
-          const nodo15 = nodi[i2];
-          const genitore = nodo15.parentElement;
+          const nodo17 = nodi[i2];
+          const genitore = nodo17.parentElement;
           if (!genitore) continue;
           if (genitore.classList.contains("stream-word")) {
             restanti -= 1;
@@ -74829,7 +75539,7 @@ var init_app2 = __esm({
             continue;
           }
           if (genitore.closest("pre, code, .code-block-head")) continue;
-          const pezzi = nodo15.textContent.split(/(\s+)/).filter((p) => p.length > 0);
+          const pezzi = nodo17.textContent.split(/(\s+)/).filter((p) => p.length > 0);
           if (pezzi.length === 0) continue;
           const nuovi = [];
           let testoPiano = "";
@@ -74855,7 +75565,7 @@ var init_app2 = __esm({
           if (nuovi.length === 1 && nuovi[0].nodeType === Node.TEXT_NODE) continue;
           const frag = document.createDocumentFragment();
           for (const nuovo of nuovi) frag.appendChild(nuovo);
-          nodo15.replaceWith(frag);
+          nodo17.replaceWith(frag);
         }
       }
       function renderizzaMessaggioStreamingOra(messageId) {
@@ -75476,7 +76186,7 @@ ${nota?.contenuto || ""}`.trim(), t("app.notes.copied")),
       let fuocoPrimaDelCassetto = null;
       function elementiFuoriDalCassetto() {
         const barra = $3(".talos-sidebar");
-        return [...appShell?.children || []].filter((nodo15) => nodo15 !== barra);
+        return [...appShell?.children || []].filter((nodo17) => nodo17 !== barra);
       }
       function cassettoAperto() {
         return document.documentElement.classList.contains("td-drawer-open");
@@ -75487,7 +76197,7 @@ ${nota?.contenuto || ""}`.trim(), t("app.notes.copied")),
         if (!barra) return;
         fuocoPrimaDelCassetto = ROOT().activeElement || null;
         document.documentElement.classList.add("td-drawer-open");
-        for (const nodo15 of elementiFuoriDalCassetto()) nodo15.inert = true;
+        for (const nodo17 of elementiFuoriDalCassetto()) nodo17.inert = true;
         let velo = $3(".td-scrim");
         if (!velo) {
           velo = document.createElement("button");
@@ -75507,7 +76217,7 @@ ${nota?.contenuto || ""}`.trim(), t("app.notes.copied")),
       function chiudiCassettoBarra({ restituisciFuoco = true } = {}) {
         if (!cassettoAperto()) return;
         document.documentElement.classList.remove("td-drawer-open");
-        for (const nodo15 of elementiFuoriDalCassetto()) nodo15.inert = false;
+        for (const nodo17 of elementiFuoriDalCassetto()) nodo17.inert = false;
         $3(".td-scrim")?.remove();
         $3("#apriCassettoBarra")?.setAttribute("aria-expanded", "false");
         if (restituisciFuoco) (fuocoPrimaDelCassetto?.isConnected ? fuocoPrimaDelCassetto : $3("#apriCassettoBarra"))?.focus?.({ preventScroll: true });
@@ -75783,6 +76493,8 @@ ${nota?.contenuto || ""}`.trim(), t("app.notes.copied")),
       };
       window.addEventListener("resize", programmaMisuraPila, { passive: true });
       collegaScalaComposer(composerForm?.querySelector(".talos-composer__bar"), { win: window });
+      pastigliaPiano = montaPastigliaPiano({ pastiglia: composerForm?.querySelector("[data-piano-chatgpt]"), leggiStato: () => apiGet("/api/v1/auth/chatgpt/stato") });
+      rileggiStatoDelPiano();
       if (typeof ResizeObserver === "function") {
         const osservaPiede = new ResizeObserver(programmaMisuraPila);
         for (const piede of $$(".talos-chat-foot")) osservaPiede.observe(piede);
@@ -75825,6 +76537,18 @@ ${nota?.contenuto || ""}`.trim(), t("app.notes.copied")),
       window.addEventListener("offline", () => sorveglianza.segnalaBrowser(false));
       window.addEventListener("online", () => sorveglianza.segnalaBrowser(true));
       barraStatoChat?.querySelector("[data-runtime-riprova]")?.addEventListener("click", () => sorveglianza.riprova());
+      montaClicSuiLink({
+        documento: document,
+        dentro: "#conversation",
+        fidati: sitiFidatiDellApp(),
+        apri: (indirizzo) => {
+          window.open(indirizzo, "_blank", "noopener,noreferrer");
+        },
+        copia: (indirizzo) => {
+          void navigator.clipboard?.writeText(indirizzo).then(() => toast(t("chat.link.copied"))).catch(() => {
+          });
+        }
+      });
       document.addEventListener("click", (evento) => {
         const bottone8 = evento.target instanceof Element ? evento.target.closest(".talos-link-conversazione[data-conversazione]") : null;
         if (!bottone8) return;
@@ -75880,7 +76604,7 @@ ${nota?.contenuto || ""}`.trim(), t("app.notes.copied")),
       }
       const bloccoCodiceDellaChat = (testoCodice, linguaggioDichiarato, chiuso) => costruisciBloccoCodice(testoCodice, linguaggioDichiarato, chiuso, { rinvia: () => state.realSession.inRigiocata });
       function renderizzaMarkdownSemplice(testoGrezzo, { bloccoCodice = costruisciBloccoCodice } = {}) {
-        return renderizzaMarkdown(testoGrezzo, { document, bloccoCodice, linkConversazione: true });
+        return renderizzaMarkdown(testoGrezzo, { document, bloccoCodice, linkConversazione: true, linkWeb: true });
       }
       function confineBlocchiStabili(testo2) {
         const righe = testo2.split("\n");
@@ -75904,7 +76628,7 @@ ${nota?.contenuto || ""}`.trim(), t("app.notes.copied")),
           statoRender.prefisso = stabile;
           statoRender.nodiCoda = [];
         } else {
-          for (const nodo15 of statoRender.nodiCoda) nodo15.remove();
+          for (const nodo17 of statoRender.nodiCoda) nodo17.remove();
           statoRender.nodiCoda = [];
           if (stabile.length > statoRender.prefisso.length) {
             const nuovoStabile = renderizzaMarkdownSemplice(stabile.slice(statoRender.prefisso.length), { bloccoCodice: bloccoCodiceDellaChat });
@@ -76026,8 +76750,8 @@ ${nota?.contenuto || ""}`.trim(), t("app.notes.copied")),
       }
       function aggiornaContatoreUsage() {
         if (rimandaInterfacciaAlFotogramma("contatore", aggiornaContatoreUsage)) return;
-        const nodo15 = $3("[data-usage-summary]");
-        if (nodo15) nodo15.textContent = t("app.usage.main", { consumo: formattaUsageBreve(state.realSession.usageSessione || state.realSession.usage, { live: true }) });
+        const nodo17 = $3("[data-usage-summary]");
+        if (nodo17) nodo17.textContent = t("app.usage.main", { consumo: formattaUsageBreve(state.realSession.usageSessione || state.realSession.usage, { live: true }) });
       }
       function creaRigaSessioneBoard(sessione) {
         return creaRigaBoard(sessione, {
@@ -76093,9 +76817,9 @@ ${nota?.contenuto || ""}`.trim(), t("app.notes.copied")),
         return (parole.length > 1 ? parole[0][0] + parole[1][0] : String(row.label || row.id).slice(0, 2)).toUpperCase();
       }
       function segmentoProvider(stato2, testo2) {
-        const nodo15 = textElement("span", "provider-seg", SEGNI_PROVIDER[stato2] + " " + testo2);
-        nodo15.dataset.seg = stato2;
-        return nodo15;
+        const nodo17 = textElement("span", "provider-seg", SEGNI_PROVIDER[stato2] + " " + testo2);
+        nodo17.dataset.seg = stato2;
+        return nodo17;
       }
       function renderizzaProviderModelLab() {
         const rows = Array.isArray(state.modelLab.providers) ? state.modelLab.providers : [];
@@ -76178,6 +76902,9 @@ ${nota?.contenuto || ""}`.trim(), t("app.notes.copied")),
         try {
           const data = await apiGet("/api/v1/providers");
           state.modelLab.providers = Array.isArray(data?.items) ? data.items : [];
+          const chatgpt = await apiGet("/api/v1/auth/chatgpt/stato").catch(() => null);
+          const openai = state.modelLab.providers.find((r) => r.id === "openai");
+          if (openai && chatgpt && typeof chatgpt.collegato === "boolean") openai.chatgpt = chatgpt;
         } catch (error) {
           state.modelLab.providerError = error;
           state.modelLab.providers = [];
@@ -76230,6 +76957,73 @@ ${nota?.contenuto || ""}`.trim(), t("app.notes.copied")),
           return;
         }
         rigaVivaProgrammata = window.setTimeout(scriviRigaSessioneViva, RITMO_RIGA_VIVA_MS - passato);
+      }
+      function rileggiCatalogoModelliDopoIlPiano() {
+        void apiGet("/api/v1/models").then((c) => {
+          if (c?.modelli) {
+            state.modelLab.catalogoModelli = c;
+            aggiornaInspectorDaStato();
+          }
+        }).catch(() => {
+        });
+        rileggiStatoDelPiano();
+      }
+      function rileggiStatoDelPiano() {
+        void apiGet("/api/v1/auth/chatgpt/stato").then((stato2) => {
+          if (stato2 && typeof stato2.collegato === "boolean") pastigliaPiano?.aggiorna({ stato: stato2 });
+        }).catch(() => {
+        });
+      }
+      async function avviaAccessoChatgpt({ consenso = false } = {}) {
+        const scheda = () => $3("#providerList")?.querySelector('[data-provider-id="openai"]');
+        const finestra = window.open("", "_blank");
+        if (finestra) {
+          try {
+            finestra.opener = null;
+          } catch {
+          }
+        }
+        try {
+          const risposta = await apiPost("/api/v1/auth/chatgpt/inizia", consenso ? { consenso: true } : {});
+          const indirizzo = risposta?.indirizzo;
+          if (typeof indirizzo !== "string" || !indirizzo) throw new Error(t("app.providers.noSignInAddress"));
+          if (finestra) finestra.location.href = indirizzo;
+          else if (navigator.windowControlsOverlay?.visible === true) window.open(indirizzo, "_blank", "noopener,noreferrer");
+          else {
+            mostraLinkAccesso(scheda(), indirizzo);
+          }
+          if (finestra || navigator.windowControlsOverlay?.visible === true) mostraEsitoProvider(scheda(), t("app.providers.chatgptOpened"));
+          const alRitorno = async () => {
+            window.removeEventListener("focus", alRitorno);
+            await caricaProviderModelLab();
+            rileggiCatalogoModelliDopoIlPiano();
+            const stato2 = state.modelLab.providers?.find((r) => r.id === "openai")?.chatgpt;
+            const esito = stato2?.ultimoEsito;
+            if (stato2?.collegato && stato2.pianoAbilitato) {
+              mostraEsitoProvider(scheda(), t("app.providers.chatgptDone"));
+              mostraBenvenutoPiano(stato2);
+            } else if (stato2?.collegato) mostraEsitoProvider(scheda(), t("app.providers.chatgptNotEnabled"), true);
+            else if (esito && esito.ok === false) mostraEsitoProvider(scheda(), testoErroreServer({ code: esito.codice }).message || t("app.providers.chatgptFailed"), true);
+          };
+          window.addEventListener("focus", alRitorno);
+        } catch (errore2) {
+          try {
+            finestra?.close();
+          } catch {
+          }
+          mostraEsitoProvider(scheda(), errore2.message || t("app.providers.signInFailed"), true);
+        }
+      }
+      async function scollegaChatgpt() {
+        const scheda = () => $3("#providerList")?.querySelector('[data-provider-id="openai"]');
+        try {
+          const esito = await apiPost("/api/v1/auth/chatgpt/esci", {});
+          await caricaProviderModelLab();
+          rileggiCatalogoModelliDopoIlPiano();
+          mostraEsitoProvider(scheda(), t(esito?.revocaConfermata ? "app.providers.chatgptDisconnected" : "app.providers.chatgptDisconnectedLocal"), !esito?.revocaConfermata);
+        } catch (errore2) {
+          mostraEsitoProvider(scheda(), errore2.message || t("app.providers.saveFailed"), true);
+        }
       }
       async function avviaAccessoProvider(provider) {
         const corrente = () => $3("#providerList")?.querySelector('[data-provider-id="' + provider + '"]');
@@ -76320,6 +77114,19 @@ ${nota?.contenuto || ""}`.trim(), t("app.notes.copied")),
           await avviaAccessoProvider(provider);
           return;
         }
+        if (action === "chatgpt-start" || action === "chatgpt-enable") {
+          await avviaAccessoChatgpt({ consenso: action === "chatgpt-enable" });
+          return;
+        }
+        if (action === "chatgpt-usage") {
+          const r = state.modelLab.providers?.find((x) => x.id === "openai");
+          window.open(r?.chatgpt?.consumi || "https://chatgpt.com/settings/usage", "_blank", "noopener,noreferrer");
+          return;
+        }
+        if (action === "chatgpt-signout") {
+          await scollegaChatgpt();
+          return;
+        }
         const key = card.querySelector("[data-provider-key]")?.value || "", endpoint = card.querySelector("[data-provider-endpoint]")?.value || "";
         const campoTempo = card.querySelector("[data-provider-timeout]");
         const tempoCambiato = Boolean(campoTempo) && (campoTempo.dataset?.valoreIniziale === void 0 || campoTempo.value !== campoTempo.dataset.valoreIniziale);
@@ -76404,32 +77211,32 @@ ${nota?.contenuto || ""}`.trim(), t("app.notes.copied")),
       }
       function nodoVerdettoFit(modelId) {
         const voce2 = state.modelLab.fit.get(modelId);
-        const nodo15 = document.createElement("p");
-        nodo15.className = "model-lab-fit";
-        nodo15.dataset.modelFit = modelId;
+        const nodo17 = document.createElement("p");
+        nodo17.className = "model-lab-fit";
+        nodo17.dataset.modelFit = modelId;
         if (!voce2) {
-          nodo15.hidden = true;
-          return nodo15;
+          nodo17.hidden = true;
+          return nodo17;
         }
         if (voce2.inCorso) {
-          nodo15.dataset.fitState = "attesa";
-          nodo15.textContent = t("app.modelLab.fit.checking");
-          return nodo15;
+          nodo17.dataset.fitState = "attesa";
+          nodo17.textContent = t("app.modelLab.fit.checking");
+          return nodo17;
         }
         if (voce2.errore) {
-          nodo15.dataset.fitState = "bad";
-          nodo15.textContent = t("app.modelLab.fit.checkFailedWith", { motivo: voce2.errore });
-          return nodo15;
+          nodo17.dataset.fitState = "bad";
+          nodo17.textContent = t("app.modelLab.fit.checkFailedWith", { motivo: voce2.errore });
+          return nodo17;
         }
         const { classe, testo: testo2 } = descriviFit(voce2.esito);
-        nodo15.dataset.fitState = voce2.ripiegoChat ? "warn" : classe;
+        nodo17.dataset.fitState = voce2.ripiegoChat ? "warn" : classe;
         const prefissoRipiego = voce2.ripiegoChat ? voce2.esito?.state === "unknown" ? t("app.modelLab.fit.chatOkAgentUnknown") : t("app.modelLab.fit.chatOkNotAgent") : "";
-        nodo15.textContent = voce2.ripiegoChat ? `${prefissoRipiego} — ${testo2.replace(/^[^—]*— /, "")}` : testo2;
+        nodo17.textContent = voce2.ripiegoChat ? `${prefissoRipiego} — ${testo2.replace(/^[^—]*— /, "")}` : testo2;
         const ctx = voce2.esito.context;
         if (Number.isFinite(ctx?.availableTokens) && Number.isFinite(ctx?.requestedTokens)) {
-          nodo15.append(textElement("small", "", ` ${t("app.modelLab.fit.contextTokens", { disponibili: ctx.availableTokens.toLocaleString(localeUI36()), richiesti: ctx.requestedTokens.toLocaleString(localeUI36()) })}`));
+          nodo17.append(textElement("small", "", ` ${t("app.modelLab.fit.contextTokens", { disponibili: ctx.availableTokens.toLocaleString(localeUI36()), richiesti: ctx.requestedTokens.toLocaleString(localeUI36()) })}`));
         }
-        return nodo15;
+        return nodo17;
       }
       async function verificaCompatibilitaModello(modelId) {
         state.modelLab.fit.set(modelId, { inCorso: true });
@@ -77582,6 +78389,34 @@ ${nota?.contenuto || ""}`.trim(), t("app.notes.copied")),
         if (selected === "tools") void caricaPannelloRicercaWeb();
         if (selected === "memoria") void caricaRipartizioneContesto();
         if (selected === "costi") void caricaCostiConsumo();
+      }
+      function montaAperturaChatgpt(evento) {
+        const gia = [...document.querySelectorAll('#conversation [data-c="ChatgptOpen"]')].some((nodo17) => nodo17.dataset.toolCallId === evento.toolCallId);
+        if (gia) return;
+        const blocco2 = document.createElement("div");
+        blocco2.dataset.c = "ChatgptOpen";
+        blocco2.dataset.toolCallId = evento.toolCallId;
+        blocco2.className = "talos-chatgpt-apri";
+        const bottone8 = document.createElement("button");
+        bottone8.type = "button";
+        bottone8.className = "talos-button talos-button--secondary talos-button--sm";
+        bottone8.textContent = t("app.toolLine.openChatgptSignIn");
+        bottone8.addEventListener("click", () => {
+          apriProviderDelLaboratorio();
+          let tentativi = 0;
+          const apriLaModale = () => {
+            const scheda = document.querySelector('#providerList [data-provider-id="openai"]');
+            const configura = scheda?.querySelector('[data-provider-toggle="openai"]');
+            if (configura) {
+              if (!scheda.querySelector(":scope > .talos-provider__modale")) configura.click();
+              return;
+            }
+            if ((tentativi += 1) < 30) setTimeout(apriLaModale, 100);
+          };
+          requestAnimationFrame(apriLaModale);
+        });
+        blocco2.append(bottone8);
+        nellaChat(blocco2);
       }
       function apriProviderDelLaboratorio() {
         setView("settings", { dallInizio: true });
@@ -79464,7 +80299,8 @@ ${nota?.contenuto || ""}`.trim(), t("app.notes.copied")),
           try {
             const dati = await apiGet("/api/v1/providers");
             const elenco3 = dati.items || dati.providers || [];
-            const conChiave = new Set(elenco3.filter((p) => p.keyConfigured || senzaChiave(p.id)).map((p) => p.id));
+            const pianoChatgpt = await apiGet("/api/v1/auth/chatgpt/stato").catch(() => null);
+            const conChiave = fornitoriConCatalogo(elenco3, { pianoChatgpt });
             const perFornitore = {};
             await Promise.all(PROVIDER_DIRETTI.map(async ({ id: id4, etichetta: etichetta3 }) => {
               if (!conChiave.has(id4)) {
@@ -80659,7 +81495,6 @@ ${nota?.contenuto || ""}`.trim(), t("app.notes.copied")),
             });
             reasoningRow.append(reasoningLabel, reasoningToggle);
             mount.replaceChildren(picker.elemento, effortPicker.elemento, reasoningRow);
-            montaFallbackIn(mount, state.fallbackProviders || [], scegliFallbackCorrente);
             aggiornaVisibilitaRagionamento();
             agganciaRicostruzioneEffortSuCatalogo({
               elemento: effortPicker.elemento,
@@ -81521,11 +82356,11 @@ ${nota?.contenuto || ""}`.trim(), t("app.notes.copied")),
         }
       }
       function nodoAlbero({ titolo: titolo2, sotto, token, giri, stato: stato2 = "done", qui = false, onApri = null, azione = null }) {
-        const nodo15 = document.createElement("div");
-        nodo15.className = `talos-tree__node${qui ? " talos-tree__node--current" : ""}${onApri ? " talos-tree__node--branch" : ""}`;
-        nodo15.setAttribute("role", "treeitem");
-        nodo15.setAttribute("aria-selected", String(qui));
-        nodo15.setAttribute("aria-level", onApri ? "2" : "1");
+        const nodo17 = document.createElement("div");
+        nodo17.className = `talos-tree__node${qui ? " talos-tree__node--current" : ""}${onApri ? " talos-tree__node--branch" : ""}`;
+        nodo17.setAttribute("role", "treeitem");
+        nodo17.setAttribute("aria-selected", String(qui));
+        nodo17.setAttribute("aria-level", onApri ? "2" : "1");
         const rail = document.createElement("span");
         rail.className = "talos-tree__rail";
         const dot = document.createElement("span");
@@ -81544,8 +82379,8 @@ ${nota?.contenuto || ""}`.trim(), t("app.notes.copied")),
           bottone8.addEventListener("click", onApri);
           aside.append(bottone8);
         }
-        nodo15.append(rail, dot, testo2, aside);
-        return nodo15;
+        nodo17.append(rail, dot, testo2, aside);
+        return nodo17;
       }
       function soloToken(usage) {
         if (!usage) return "";
@@ -81686,7 +82521,6 @@ ${nota?.contenuto || ""}`.trim(), t("app.notes.copied")),
         });
         riga2.append(etichetta3, interruttore);
         mount.replaceChildren(picker.elemento, effortPicker.elemento, riga2);
-        montaFallbackIn(mount, state.fallbackProviders || [], scegliFallbackCorrente);
       }
       function apriCapabilityDaFoglio() {
         dismissTransientLayers();
@@ -81954,6 +82788,7 @@ ${nota?.contenuto || ""}`.trim(), t("app.notes.copied")),
         const usage = state.realSession.id ? state.realSession.usage : null;
         const usageSessione = state.realSession.id ? state.realSession.usageSessione : null;
         const testiTema = aggiornaPiedeChatDaStato.tema?.() || "";
+        pastigliaPiano?.aggiorna({ modelloId: state.model || state.realSession.currentRunModel || null });
         aggiornaPiedeChat(piede, {
           attivo,
           cosa,
@@ -82916,6 +83751,8 @@ ${nota?.contenuto || ""}`.trim(), t("app.notes.copied")),
           schedaContesto: datiSchedaContesto(),
           // C1 (owner 10/10/2026): il limite che agisce, la richiesta vera, le compattazioni
           giri: giriPerInspector(),
+          /* 11/10/2026 (owner): «Questo invio, N di tetto», che era la pillola dei giri del composer (stessa fonte del piede) */
+          invio: state.realSession.id ? { giri: Number.isFinite(Number(state.realSession.usage?.giri)) ? Number(state.realSession.usage.giri) : null, tetto: state.realSession.tettoGiriDichiarato } : null,
           file,
           /* ⛔ Si calcolano UNA VOLTA: servono alla colonna E al numero sulla sua scheda (sotto). */
           processi,
@@ -83539,7 +84376,7 @@ ${nota?.contenuto || ""}`.trim(), t("app.notes.copied")),
         state.realSession.attesaBubble.remove();
         state.realSession.attesaBubble = null;
       }
-      async function eliminaMessaggioReale({ riferimento, nodo: nodo15, quale }) {
+      async function eliminaMessaggioReale({ riferimento, nodo: nodo17, quale }) {
         const sessionId = state.realSession.id;
         if (!sessionId) {
           toast(t("app.messages.nothingToDelete"), t("app.messages.notASessionYet"));
@@ -83552,10 +84389,10 @@ ${nota?.contenuto || ""}`.trim(), t("app.notes.copied")),
           toast(t("app.messages.notDeleted"), messaggioErroreUtente(errore2, t("app.errors.retryShortlyCapital")));
           return false;
         }
-        const turnoDaTogliere = nodo15?.closest(".talos-turn") || nodo15?.closest(".talos-message") || nodo15;
+        const turnoDaTogliere = nodo17?.closest(".talos-turn") || nodo17?.closest(".talos-message") || nodo17;
         turnoDaTogliere?.remove();
         if (quale === "risposta") {
-          for (const [id4, elemento] of state.realSession.messageElements) if (elemento === nodo15) state.realSession.messageElements.delete(id4);
+          for (const [id4, elemento] of state.realSession.messageElements) if (elemento === nodo17) state.realSession.messageElements.delete(id4);
         }
         const toltoDalModello = esito?.toltoDalModello !== false;
         if (!toltoDalModello) {
@@ -84280,7 +85117,7 @@ ${nota?.contenuto || ""}`.trim(), t("app.notes.copied")),
       function montaCardProposta(evento) {
         const ricevuta = leggiRicevutaProposta(evento.content);
         if (!ricevuta) return;
-        const giaMontata = [...document.querySelectorAll('#conversation [data-c="WorkflowProposalCard"]')].some((nodo15) => nodo15.dataset.toolCallId === evento.toolCallId);
+        const giaMontata = [...document.querySelectorAll('#conversation [data-c="WorkflowProposalCard"]')].some((nodo17) => nodo17.dataset.toolCallId === evento.toolCallId);
         if (giaMontata) return;
         const card = creaCardProposta({ document, ricevuta });
         card.dataset.toolCallId = evento.toolCallId;
@@ -86466,10 +87303,10 @@ ${testo2.slice(-(USCITA_AGENTE_MAX_CARATTERI - 4e3))}`;
             const osservati = /* @__PURE__ */ new WeakSet();
             const agganciaTutti = () => {
               if (!osservatore) return;
-              for (const nodo15 of [riquadroDaSeguire, document.querySelector("#browserVistaViva"), document.querySelector("#browserLive")]) {
-                if (nodo15 && nodo15.isConnected && !osservati.has(nodo15)) {
-                  osservati.add(nodo15);
-                  osservatore.observe(nodo15);
+              for (const nodo17 of [riquadroDaSeguire, document.querySelector("#browserVistaViva"), document.querySelector("#browserLive")]) {
+                if (nodo17 && nodo17.isConnected && !osservati.has(nodo17)) {
+                  osservati.add(nodo17);
+                  osservatore.observe(nodo17);
                 }
               }
             };
@@ -88307,7 +89144,8 @@ ${testo2}` : testo2;
           menu.appendChild(btn);
         }
         const veloAperto = [...document.querySelectorAll(".overlay-layer")].filter((v) => !v.hidden).at(-1) || null;
-        (veloAperto || document.body).appendChild(menu);
+        const dialogoDellAncora = posizionamento.ancoraEl?.closest?.("dialog[open]") || null;
+        (dialogoDellAncora || veloAperto || document.body).appendChild(menu);
         if (posizionamento.ancoraEl) {
           const rect = posizionamento.ancoraEl.getBoundingClientRect();
           menu.style.right = `${Math.max(8, window.innerWidth - rect.right)}px`;
@@ -88315,6 +89153,18 @@ ${testo2}` : testo2;
           const sotto = window.innerHeight - rect.bottom - 4 - 8;
           const sopra = rect.top - 4 - 8;
           menu.style.top = altezza > sotto && sopra > sotto ? `${Math.max(8, rect.top - 4 - altezza)}px` : `${rect.bottom + 4}px`;
+          if (dialogoDellAncora) {
+            const telaio = dialogoDellAncora.getBoundingClientRect();
+            const larghezza2 = menu.getBoundingClientRect().width;
+            if (rect.right - larghezza2 < telaio.left + 8) {
+              const sinistra = Math.min(rect.left, window.innerWidth - 8 - larghezza2);
+              menu.style.right = `${Math.max(8, window.innerWidth - (sinistra + larghezza2))}px`;
+            }
+            const voluto = { alto: parseFloat(menu.style.top), destra: window.innerWidth - parseFloat(menu.style.right) };
+            const finito = menu.getBoundingClientRect();
+            if (Math.abs(finito.top - voluto.alto) > 0.5) menu.style.top = `${voluto.alto + (voluto.alto - finito.top)}px`;
+            if (Math.abs(finito.right - voluto.destra) > 0.5) menu.style.right = `${parseFloat(menu.style.right) + (finito.right - voluto.destra)}px`;
+          }
         } else {
           const misura = menu.getBoundingClientRect();
           menu.style.left = `${Math.max(8, Math.min(posizionamento.x, window.innerWidth - misura.width - 8))}px`;
@@ -88776,7 +89626,7 @@ ${testo2}` : testo2;
         istanza.elemento.querySelector(".talos-lettore__nome")?.focus({ preventScroll: true });
       }
       async function rivelaERivelaRigaAlbero(percorsoCompleto) {
-        const trovaNodo = (percorso) => [...document.querySelectorAll("#inspector-files .ft-node")].find((nodo15) => nodo15.dataset.percorso === percorso);
+        const trovaNodo = (percorso) => [...document.querySelectorAll("#inspector-files .ft-node")].find((nodo17) => nodo17.dataset.percorso === percorso);
         const parti = String(percorsoCompleto || "").split("/").filter(Boolean);
         let percorsoPadre = "";
         for (let indice2 = 0; indice2 < Math.max(0, parti.length - 1); indice2 += 1) {
@@ -89809,6 +90659,8 @@ ${testo2}` : testo2;
               segnaConsentitoDa({ riga: info.article, corpo: info.detail, consentitoDa: evento.receipt.consentitoDa, nomeSessione: nomeVivoDellaSessione });
             }
             if (info?.nome === "workflow_plan_propose" && !fallito) montaCardProposta(evento);
+            if (info?.nome === "chatgpt_account" && !fallito && info.argomentiParsati?.action === "status") montaAperturaChatgpt(evento);
+            if (info?.nome === "chatgpt_account" && !fallito && info.argomentiParsati?.action === "disconnect") rileggiStatoDelPiano();
             if (info?.detail) {
               const rifiuto = spiegaRifiutoAttrezzo(testoEsito);
               if (rifiuto.rifiutato) {
@@ -91134,7 +91986,6 @@ ${testo2}` : testo2;
         }
       }
       function applicaImpostazioniSessione(sessione, sessionId = sessione?.sessionId ?? null) {
-        state.fallbackProviders = structuredClone(sessione?.fallbackProviders || []);
         const reasoning = sessione?.reasoning && typeof sessione.reasoning === "object" ? sessione.reasoning : null;
         state.model = normalizzaModelloSessione(sessione);
         state.effort = typeof reasoning?.effort === "string" ? reasoning.effort : null;
@@ -91309,8 +92160,8 @@ ${testo2}` : testo2;
         indicatore.append(orb, riga2);
         scorrevole.insertBefore(indicatore, conversation);
       }
-      function scriviSeCambia(nodo15, testo2) {
-        if (nodo15 && nodo15.textContent !== testo2) nodo15.textContent = testo2;
+      function scriviSeCambia(nodo17, testo2) {
+        if (nodo17 && nodo17.textContent !== testo2) nodo17.textContent = testo2;
       }
       function aggiornaTestoCaricamentoLungo(conversation, eventi2) {
         const indicatore = conversation?.parentElement?.querySelector(":scope > .talos-caricamento-cronologia");
@@ -91359,8 +92210,8 @@ ${testo2}` : testo2;
         return separatoriStaccati.mappa || (separatoriStaccati.mappa = /* @__PURE__ */ new Map());
       }
       const SELETTORE_SEPARATORE = "[data-compattazione-riga], [data-context-separator]";
-      const chiaveSeparatore = (nodo15) => nodo15.dataset.compattazioneRiga ? nodo15.dataset.compattazioneRiga : `ctx:${nodo15.dataset.contextSeparator}`;
-      const separatoriDi = (nodi) => nodi.flatMap((nodo15) => [...nodo15.matches?.(SELETTORE_SEPARATORE) ? [nodo15] : [], ...nodo15.querySelectorAll(SELETTORE_SEPARATORE)]);
+      const chiaveSeparatore = (nodo17) => nodo17.dataset.compattazioneRiga ? nodo17.dataset.compattazioneRiga : `ctx:${nodo17.dataset.contextSeparator}`;
+      const separatoriDi = (nodi) => nodi.flatMap((nodo17) => [...nodo17.matches?.(SELETTORE_SEPARATORE) ? [nodo17] : [], ...nodo17.querySelectorAll(SELETTORE_SEPARATORE)]);
       function ricordaSeparatoriStaccati(nodi) {
         for (const s of separatoriDi(nodi)) separatoriStaccati().set(chiaveSeparatore(s), s);
       }
@@ -91428,7 +92279,7 @@ ${testo2}` : testo2;
         for (const segmento of voce2.finestra.segmenti) segmentiRinviati.add(segmento);
         const separatori = separatoriStaccati();
         separatori.clear();
-        for (const [chiave, nodo15] of voce2.finestra.separatori) separatori.set(chiave, nodo15);
+        for (const [chiave, nodo17] of voce2.finestra.separatori) separatori.set(chiave, nodo17);
         pesoFinestraReplay = voce2.finestra.peso;
         ultimoTurnoVistoFinestra = voce2.finestra.ultimoTurno;
         for (const id4 of voce2.moduli.risultatiDelega) risultatiDelegaMostrati.add(id4);
@@ -91489,10 +92340,10 @@ ${testo2}` : testo2;
         const primo2 = colonna.querySelector(".talos-turn");
         if (!primo2) return 0;
         const davanti = [];
-        for (let nodo15 = colonna.firstElementChild; nodo15 && nodo15 !== primo2; nodo15 = nodo15.nextElementSibling) davanti.push(nodo15);
-        for (const nodo15 of davanti) {
-          pesoFinestraReplay -= pesoTurnoReplay(nodo15);
-          nodo15.remove();
+        for (let nodo17 = colonna.firstElementChild; nodo17 && nodo17 !== primo2; nodo17 = nodo17.nextElementSibling) davanti.push(nodo17);
+        for (const nodo17 of davanti) {
+          pesoFinestraReplay -= pesoTurnoReplay(nodo17);
+          nodo17.remove();
         }
         if (davanti.length) davantiAlTurno.set(primo2, davanti);
         ricordaSeparatoriStaccati([...davanti, primo2]);
@@ -91533,7 +92384,7 @@ ${testo2}` : testo2;
         while (turniFuoriFinestra.length > 0 && (pagina.length === 0 || pesoPagina < FINESTRA_REPLAY.pagina)) {
           const turno = turniFuoriFinestra.pop();
           pesoPagina += pesoTurnoReplay(turno);
-          for (const nodo15 of davantiAlTurno.get(turno) ?? []) pesoPagina += pesoTurnoReplay(nodo15);
+          for (const nodo17 of davantiAlTurno.get(turno) ?? []) pesoPagina += pesoTurnoReplay(nodo17);
           pagina.push(turno);
         }
         pagina.reverse();
@@ -92355,22 +93206,7 @@ ${testo2}` : testo2;
         sheetBody.replaceChildren(form);
         form.querySelector("[data-auto-foglio-nome]")?.focus();
       }
-      function montaFallbackIn(mount, valore, onChange) {
-        const posto = textElement("div", "talos-stack", t("app.modelPicker.fallbacksLoading"));
-        mount.append(posto);
-        apiGet("/api/v1/providers").then((dati) => {
-          if (posto.isConnected) posto.replaceChildren(creaSceltaFallback({ fornitori: dati.items || [], valore, usaAttrezzi: true, onChange }));
-        }).catch(() => {
-          if (posto.isConnected) posto.textContent = t("app.modelPicker.fallbacksUnavailable");
-        });
-      }
-      async function scegliFallbackCorrente(valore) {
-        await sincronizzaImpostazioniSessione({ fallbackProviders: valore });
-        state.fallbackProviders = valore;
-        if (state.pendingCustomSession) state.pendingCustomSession.fallbackProviders = valore;
-      }
       function creaWorkspaceChooser({ launch = null } = {}) {
-        let fallbackProviders = [];
         const form = document.createElement("form");
         form.className = "workspace-chooser";
         form.id = "workspaceChooser";
@@ -92565,9 +93401,6 @@ ${testo2}` : testo2;
         policyGate.setAttribute("role", "status");
         permissionSection.append(permissionGrid, policyGate);
         right.append(rightHead, modelSection, reasoningSection, plannerSection, permissionSection);
-        montaFallbackIn(right, [], (valore) => {
-          fallbackProviders = valore;
-        });
         const columns = document.createElement("div");
         columns.className = "workspace-chooser-columns";
         columns.append(left, right);
@@ -92644,10 +93477,13 @@ ${testo2}` : testo2;
           submit.disabled = decisione.disabilitato;
           submit.textContent = decisione.etichetta;
           submit.removeAttribute("aria-disabled");
-          submit.setAttribute("aria-describedby", "workspaceChooserSubmitNote");
+          const pronto = decisione.puoAvviare === true;
           footerNote.id = "workspaceChooserSubmitNote";
-          footerNote.textContent = decisione.motivo;
-          policyGate.textContent = decisione.motivo;
+          policyGate.id = "workspaceChooserPolicyGate";
+          footerNote.textContent = pronto ? "" : decisione.motivo;
+          policyGate.textContent = pronto ? decisione.motivo : "";
+          policyGate.hidden = !pronto;
+          submit.setAttribute("aria-describedby", pronto ? "workspaceChooserPolicyGate" : "workspaceChooserSubmitNote");
           local.rimedioSu = decisione.rimedioSu;
           local.puoAvviare = decisione.puoAvviare;
           const toolsDisabled = local.busy || local.creatingFolder || !local.current;
@@ -92969,7 +93805,6 @@ ${testo2}` : testo2;
             modello: model,
             effort,
             modelloPlanner: planner,
-            fallbackProviders,
             permessi: local.permission,
             permessiPerAttrezzo: mappaPerUnaSessioneNuova(state.permessiPerAttrezzo)
             // C2b: spenta di serie
@@ -93056,9 +93891,9 @@ ${testo2}` : testo2;
         }
       }
       const ultimoSegmentoPercorso = (percorso) => {
-        const normale2 = String(percorso ?? "").replace(/\//g, "\\").replace(/[\\]+$/, "").replace(/^([a-z]):$/i, (m, d) => `${d.toUpperCase()}:\\`);
-        const pezzi = normale2.split("\\").filter(Boolean);
-        const ultimo = pezzi.length ? pezzi[pezzi.length - 1] : normale2;
+        const normale3 = String(percorso ?? "").replace(/\//g, "\\").replace(/[\\]+$/, "").replace(/^([a-z]):$/i, (m, d) => `${d.toUpperCase()}:\\`);
+        const pezzi = normale3.split("\\").filter(Boolean);
+        const ultimo = pezzi.length ? pezzi[pezzi.length - 1] : normale3;
         return /^[a-z]:$/i.test(ultimo) ? `${ultimo}\\` : ultimo;
       };
       function cosaMancaPerIniziare() {
@@ -93137,10 +93972,9 @@ ${testo2}` : testo2;
         conversation.classList.remove("talos-empty");
         conversation.closest(".talos-conversation")?.classList.remove("talos-conversation--empty");
       }
-      function avviaSessionePendente({ cartellaId, cartellaLibera, workspaceLaunchId, nomeCartella: nomeCartella3, modello, effort, modelloPlanner, permessi, permessiPerAttrezzo, modalitaOperativa = state.modalitaOperativa, fallbackProviders = [] }) {
+      function avviaSessionePendente({ cartellaId, cartellaLibera, workspaceLaunchId, nomeCartella: nomeCartella3, modello, effort, modelloPlanner, permessi, permessiPerAttrezzo, modalitaOperativa = state.modalitaOperativa }) {
         nuovaGenerazioneSessione();
-        state.pendingCustomSession = { cartellaId, cartellaLibera, workspaceLaunchId, nomeCartella: nomeCartella3, modello, effort, modelloPlanner, permessi, permessiPerAttrezzo, modalitaOperativa, fallbackProviders };
-        state.fallbackProviders = fallbackProviders;
+        state.pendingCustomSession = { cartellaId, cartellaLibera, workspaceLaunchId, nomeCartella: nomeCartella3, modello, effort, modelloPlanner, permessi, permessiPerAttrezzo, modalitaOperativa };
         state.realSession.previewProjectId = cartellaId || null;
         state.realSession.previewWorkspaceName = nomeCartella3;
         state.realSession.treeWorkspaceKey = cartellaId ? `project:${cartellaId}` : workspaceLaunchId ? `launch:${workspaceLaunchId}` : `path:${cartellaLibera || nomeCartella3}`;
@@ -93171,7 +94005,7 @@ ${testo2}` : testo2;
       function titoloDalPrimoMessaggio(testo2) {
         return String(testo2 || "").replace(/\s+/g, " ").trim().slice(0, 80);
       }
-      async function startCustomSession({ cartellaId, cartellaLibera, workspaceLaunchId, nomeCartella: nomeCartella3, consegna, comandoProva, modello, effort, modelloPlanner, permessi, permessiPerAttrezzo, modalitaOperativa = state.modalitaOperativa, immagini = [], fallbackProviders = state.fallbackProviders || [], bolla = null }) {
+      async function startCustomSession({ cartellaId, cartellaLibera, workspaceLaunchId, nomeCartella: nomeCartella3, consegna, comandoProva, modello, effort, modelloPlanner, permessi, permessiPerAttrezzo, modalitaOperativa = state.modalitaOperativa, immagini = [], bolla = null }) {
         iniziaMisuraLatenza("primo-messaggio-della-sessione");
         const generation = nuovaGenerazioneSessione();
         const taskSintetico = { id: `libero:${nomeCartella3}`, consegna, immagini };
@@ -93207,7 +94041,6 @@ ${testo2}` : testo2;
             corpo.permessiPerAttrezzo = permessiPerAttrezzoEffettivi;
           }
           segnaTappaLatenza("postInviata");
-          if (fallbackProviders.length) corpo.fallbackProviders = fallbackProviders;
           if (client === "desktop") corpo.linguaInterfaccia = linguaInterfacciaPerIlServer();
           const data = await apiPost("/api/v1/sessions/custom", corpo);
           segnaTappaLatenza("postRisposta");
@@ -96520,9 +97353,9 @@ function montaPonteLegacy(documentObj = document) {
     legacyFiles.dataset.legacyId = legacyFiles.id;
     legacyFiles.removeAttribute("id");
   }
-  for (const nodo15 of legacy.querySelectorAll('[id^="fileTree"]')) {
-    nodo15.dataset.legacyId = nodo15.id;
-    nodo15.removeAttribute("id");
+  for (const nodo17 of legacy.querySelectorAll('[id^="fileTree"]')) {
+    nodo17.dataset.legacyId = nodo17.id;
+    nodo17.removeAttribute("id");
   }
   const alberoCartella = inspector.querySelector("#alberoCartella");
   if (alberoCartella) {
@@ -96929,6 +97762,70 @@ function montaMotoreContesto({ documento = globalThis.document, fetchFn = global
   } };
 }
 
+// src/components/siti-fidati.js
+init_lingua();
+init_link_esterni();
+function montaSitiFidati({ documento = globalThis.document, fidati = sitiFidatiDellApp() } = {}) {
+  if (!documento) return null;
+  let scheda = null;
+  function disegna2() {
+    const pannello = documento.getElementById("setting-panel-privacy");
+    if (!pannello) return;
+    if (!scheda || !scheda.isConnected) {
+      scheda = documento.createElement("div");
+      scheda.className = "talos-card talos-settings__section talos-siti-fidati";
+      scheda.dataset.c = "SettingsSection";
+      scheda.dataset.settingsCard = "privacy-link";
+      scheda.setAttribute("role", "group");
+      scheda.setAttribute("aria-labelledby", "settings-group-privacy-link");
+      pannello.append(scheda);
+    }
+    const testa = documento.createElement("div");
+    testa.className = "settings-group__head";
+    testa.dataset.settingsGroupHead = "";
+    const titolo2 = documento.createElement("h3");
+    titolo2.className = "settings-group__title";
+    titolo2.id = "settings-group-privacy-link";
+    titolo2.textContent = t("chat.link.settingsTitle");
+    testa.append(titolo2);
+    const descrizione = documento.createElement("p");
+    descrizione.textContent = t("chat.link.settingsDescription");
+    const righe = fidati.elenco().map((sito) => {
+      const riga2 = documento.createElement("div");
+      riga2.className = "talos-setting";
+      riga2.dataset.c = "SettingRow";
+      riga2.dataset.sitoFidato = sito;
+      const nome = documento.createElement("span");
+      nome.className = "talos-setting__label";
+      nome.textContent = sito;
+      const sinistra = documento.createElement("div");
+      sinistra.append(nome);
+      const togli = documento.createElement("button");
+      togli.type = "button";
+      togli.className = "talos-button talos-button--secondary talos-button--sm";
+      togli.textContent = t("chat.link.settingsRemove");
+      togli.setAttribute("aria-label", t("chat.link.settingsRemoveNamed", { site: sito }));
+      togli.addEventListener("click", () => fidati.togli(sito));
+      const controllo = documento.createElement("div");
+      controllo.className = "talos-setting__control";
+      controllo.append(togli);
+      riga2.append(sinistra, controllo);
+      return riga2;
+    });
+    const vuoto = documento.createElement("p");
+    vuoto.className = "talos-muted";
+    vuoto.dataset.sitiFidatiVuoto = "";
+    vuoto.textContent = t("chat.link.settingsEmpty");
+    scheda.replaceChildren(testa, descrizione, ...righe.length ? righe : [vuoto]);
+  }
+  fidati.ascolta(disegna2);
+  documento.addEventListener("click", (e) => {
+    if (e.target instanceof documento.defaultView.Element && e.target.closest('[aria-controls="setting-panel-privacy"]')) disegna2();
+  });
+  disegna2();
+  return { disegna: disegna2 };
+}
+
 // src/main.js
 init_modale_td();
 montaPonteLegacy(document);
@@ -96936,6 +97833,7 @@ montaBarraFinestra();
 await Promise.resolve().then(() => (init_app2(), app_exports));
 montaAggiornamenti({ conferma: confermaModale });
 montaMotoreContesto();
+montaSitiFidati();
 if (!window.__talosHarnessHost) {
   document.documentElement.dataset.talosStreamingAnimation = "none";
 }

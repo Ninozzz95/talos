@@ -260,6 +260,9 @@ function dettaglioMemoriaPiena(testo) {
   });
 }
 
+/** Gli errori del piano che passano da soli: si riprova il giro, non si rifà l'accesso. */
+const CHATGPT_DA_RIPROVARE = new Set(['CHATGPT_RETE', 'CHATGPT_RINNOVO_FALLITO', 'CHATGPT_SERVIZIO_NON_DISPONIBILE', 'CHATGPT_ERRORE']);
+
 /** Il codice tecnico e il messaggio grezzo, come li manda il server. */
 const REGOLE = [
   ...[
@@ -289,6 +292,31 @@ const REGOLE = [
       rimedi: [t('errori.turno.tuttiEsclusi.rimedio1'), t('errori.turno.tuttiEsclusi.rimedio2')],
       tecnico: tecnico.includes('OPENROUTER_ALL_PROVIDERS_EXCLUDED') ? tecnico : `[OPENROUTER_ALL_PROVIDERS_EXCLUDED]${tecnico ? ` ${tecnico}` : ''}`,
     }),
+  },
+  /*
+   * 11/10/2026 notte — GLI ERRORI DEL PIANO CHATGPT (`CHATGPT_*`). Trovato dal vivo sul 4177: scollegato ChatGPT dalla chat, il giro
+   * ha chiesto ancora al modello del piano ed è finito con CHATGPT_NON_COLLEGATO, e la chat mostrava «non ancora tradotto» col testo
+   * grezzo. Il perché è la frase già tradotta del codice (`errori.<CODICE>.message`, la stessa delle rotte); i rimedi dipendono dal
+   * tipo: un guasto di rete si riprova, un accesso mancante si rifà, un limite si guarda in «Manage usage». E c'è sempre l'altro modello.
+   */
+  {
+    id: 'piano-chatgpt', famiglia: 'piano-chatgpt', riconosce: (_testo, code) => typeof code === 'string' && code.startsWith('CHATGPT_'),
+    spiega: (tecnico, codice) => {
+      const chiave = `errori.${codice}.message`;
+      const frase = t(chiave);
+      // chiavi scritte per intero: la prova ERRORI-LINGUA-01 legge questo file per sapere quali voci si dicono
+      const altroModello = t('errori.turno.pianoChatgpt.rimedioAltroModello');
+      const rimedi = CHATGPT_DA_RIPROVARE.has(codice) ? [t('errori.turno.pianoChatgpt.rimedioRiprova'), altroModello]
+        : codice === 'CHATGPT_LIMITE_DEL_PIANO' ? [t('errori.turno.pianoChatgpt.rimedioConsumi'), altroModello]
+          : codice === 'CHATGPT_RICHIESTA_NON_AMMESSA' ? [altroModello]
+            : [t('errori.turno.pianoChatgpt.rimedioCollega'), altroModello];
+      return {
+        cosa: t('errori.turno.pianoChatgpt.cosa'),
+        perche: frase && frase !== chiave ? frase : t('errori.turno.pianoChatgpt.perche'),
+        rimedi,
+        tecnico: tecnico.includes(codice) ? tecnico : `[${codice}]${tecnico ? ` ${tecnico}` : ''}`,
+      };
+    },
   },
   {
     // RETRY05: il codice del backend prevale sulle parole del messaggio.
@@ -938,6 +966,7 @@ export function spiegaErrore(messaggio, codice = '', contesto = {}) {
  */
 /* `badge` e `titolo` sono CHIAVI del dizionario: `vestizioneErrore` le dice con `t()` nella lingua di quel momento. */
 const VESTIZIONI = {
+  'piano-chatgpt': { badge: 'errori.turno.vestizione.pianoChatgpt.badge', titolo: 'errori.turno.vestizione.pianoChatgpt.titolo', tono: 'warning' },
   'limite-fornitore': { badge: 'errori.turno.vestizione.limiteFornitore.badge', titolo: 'errori.turno.vestizione.limiteFornitore.titolo', tono: 'warning' },
   'esito-fornitore-incerto': { badge: 'errori.turno.vestizione.esitoIncerto.badge', titolo: 'errori.turno.vestizione.esitoIncerto.titolo', tono: 'warning' },
   fermato: { badge: 'errori.turno.vestizione.fermato.badge', titolo: 'errori.turno.vestizione.fermato.titolo', tono: 'accent' },

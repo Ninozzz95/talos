@@ -49,8 +49,7 @@ test('PH-UI-BROWSER componenti reali: menu, azioni, tastiera, desktop, mobile e 
   }};
   const script = await build({ absWorkingDir:tmpdir(), plugins:[sorgenti], stdin:{contents:`
     import {creaProviderCard} from './src/components/provider-card.js';
-    import {creaSceltaFallback} from './src/components/fonti-modelli.js';
-    window.ph={creaProviderCard,creaSceltaFallback};
+    window.ph={creaProviderCard};
   `,resolveDir:frontend,sourcefile:'ph-banco.js'},tsconfigRaw:{},bundle:true,write:false,format:'iife',logLevel:'silent' });
   const stile = await build({absWorkingDir:tmpdir(),plugins:[sorgenti],entryPoints:[resolve(frontend,'src/styles/main.css')],tsconfigRaw:{},bundle:true,write:false,external:['./fonts/*'],logLevel:'silent'});
   for(const larghezza of [1920,1440,390]){
@@ -63,7 +62,7 @@ test('PH-UI-BROWSER componenti reali: menu, azioni, tastiera, desktop, mobile e 
     await page.addStyleTag({content:stile.outputFiles[0].text});
     await page.addScriptTag({content:script.outputFiles[0].text});
     await page.evaluate(()=>{
-      window.azioni=[];window.fallback=[];
+      window.azioni=[];
       const row={id:'deepseek',label:'DeepSeek',keyConfigured:true,requiresKey:true,supportsEndpoint:true,endpoint:'https://api.deepseek.com',timeoutSeconds:60,origineChiave:'custodia',pool:[
         {impronta:'a'.repeat(64),origine:'custodia',stato:'in-panchina',causa:'traffico',inPanchinaFino:Date.parse('2026-09-12T17:00:00Z')},
         {impronta:'b'.repeat(64),origine:'custodia',stato:'disponibile'},
@@ -72,7 +71,6 @@ test('PH-UI-BROWSER componenti reali: menu, azioni, tastiera, desktop, mobile e 
         const menu=document.querySelector('#menu');menu.replaceChildren();
         for(const voce of voci){const b=document.createElement('button');b.textContent=voce.etichetta;b.type='button';b.addEventListener('click',()=>{voce.aziona();menu.replaceChildren();});menu.append(b);}
       }}));
-      document.querySelector('#scelta').append(ph.creaSceltaFallback({fornitori:[row],onChange:v=>{window.fallback=v;}}));
     });
     await page.getByRole('button',{name:'Azioni per chiave 2',exact:true}).click();
     await page.locator('#menu').getByRole('button',{name:'Rimuovi',exact:true}).click();
@@ -81,11 +79,6 @@ test('PH-UI-BROWSER componenti reali: menu, azioni, tastiera, desktop, mobile e 
     await page.getByRole('button',{name:'Aggiungi chiave',exact:true}).click();
     assert.equal(await page.locator('[data-provider-key]').inputValue(),'');
     assert.equal((await page.locator('body').innerText()).includes('finta-di-prova-browser'),false);
-    await page.getByLabel('Fornitore e modello con cui continuare').selectOption('0');
-    await page.getByRole('button',{name:'Aggiungi',exact:true}).focus();await page.keyboard.press('Enter');
-    assert.deepEqual(await page.evaluate(()=>fallback),[{provider:'deepseek',model:'deepseek-flash'}]);
-    await page.getByRole('button',{name:'Rimuovi DeepSeek · DeepSeek Flash',exact:true}).focus();await page.keyboard.press('Enter');
-    assert.deepEqual(await page.evaluate(()=>fallback),[]);
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
     assert.equal(await page.evaluate(()=>matchMedia('(prefers-reduced-motion: reduce)').matches),true);
     await mkdir(prove,{recursive:true});

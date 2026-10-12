@@ -35,6 +35,7 @@ import { scorrevoleConversazione } from '../bridge/conversazione-dom.js';
  *   distanza sarebbe stato la terza implementazione di una cosa che il progetto ha già.
  */
 import { apriMenuContestuale, creaMenuContestuale } from './schede.js';
+import { pezziConIndirizzi } from './link-esterni.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -212,7 +213,16 @@ export function creaMessaggioUtente({ testo = '', ora = '', meta = '' } = {}, op
   const testata = el(documentObj, 'div', 'talos-message__head');
   testata.append(el(documentObj, 'span', 'talos-message__who', t('chat.message.you')), el(documentObj, 'span', 'talos-message__meta', [ora, meta].filter(Boolean).join(' · ')));
   const corpo = el(documentObj, 'div', 'talos-message__body message-bubble');
-  const p = el(documentObj, 'p', null, testo);
+  /* 11/10/2026 (owner: link cliccabili, «blu per la bolla utente»): il testo della persona resta LETTERALE (niente Markdown), ma un
+     indirizzo web che ha scritto diventa un link, con la stessa conferma di quelli delle risposte (`link-esterni.js`). `textContent`
+     del paragrafo non cambia di un carattere: chi lo legge (modifica, copia, cronologia) trova ciò che c'era. */
+  const p = el(documentObj, 'p', null);
+  for (const pezzo of pezziConIndirizzi(testo)) {
+    if (!pezzo.indirizzo) { p.append(documentObj.createTextNode(pezzo.testo)); continue; }
+    const a = el(documentObj, 'a', 'talos-link-esterno', pezzo.testo);
+    a.setAttribute('href', pezzo.indirizzo); a.setAttribute('data-link-esterno', pezzo.indirizzo); a.setAttribute('rel', 'noopener noreferrer');
+    p.append(a);
+  }
   corpo.append(p);
   messaggio.append(testata, corpo);
   return messaggio;

@@ -42,9 +42,15 @@ export function chiaviDiProva() {
 
 /** Il server che fa la parte di GitHub. `modo()` dice quale firma servire: 'manomessa' (chiave sbagliata) o 'buona'.
  *  `servita()` (11/10/2026, la prova di «Riavvia ora») dice quale release pubblicare: `{ versione, cartellaFeed, firme }`; senza,
- *  è la 0.0.2 di sempre. */
-export function serverDiProva({ cartellaFeed, firme, modo, porta = PORTA_DI_PROVA, servita = null }) {
+ *  è la 0.0.2 di sempre.
+ *  ⭐ Scarico a blocchi (owner 11/10/2026): come GitHub, il server risponde 206 a UN intervallo (`Range: bytes=a-b`) e tiene le
+ *  release vecchie (`archivio`: versione → cartella), da cui l'aggiornatore prende la mappa dei blocchi di quella installata.
+ *  A una richiesta con PIÙ intervalli risponde col file intero: è il caso che `useMultipleRangeRequest: false` evita.
+ *  `byteServiti` conta i byte mandati per nome di file: è la misura che dice se lo scarico è stato davvero a blocchi. */
+export function serverDiProva({ cartellaFeed, firme, modo, porta = PORTA_DI_PROVA, servita = null, archivio = {} }) {
   const richieste = [];
+  const byteServiti = new Map();
+  const conta = (nome, n) => byteServiti.set(nome, (byteServiti.get(nome) ?? 0) + n);
   const release = () => servita?.() ?? { versione: VERSIONE_X1, cartellaFeed, firme };
   const server = createServer((req, res) => {
     const { versione, cartellaFeed, firme } = release();
@@ -58,18 +64,38 @@ export function serverDiProva({ cartellaFeed, firme, modo, porta = PORTA_DI_PROV
       return;
     }
     const prefisso = `/${REPO_DI_PROVA}/releases/download/${tag}/`;
-    if (!url.pathname.startsWith(prefisso)) { res.writeHead(404).end(); return; }
-    const nome = decodeURIComponent(url.pathname.slice(prefisso.length));
+    let cartella = cartellaFeed;
+    let nome;
+    if (url.pathname.startsWith(prefisso)) nome = decodeURIComponent(url.pathname.slice(prefisso.length));
+    else {
+      // una release vecchia: di lei serve solo la mappa dei blocchi
+      const vecchia = new RegExp(`^/${REPO_DI_PROVA}/releases/download/desktop-v(\\d+\\.\\d+\\.\\d+)/([^/]+\\.blockmap)$`, 'u').exec(url.pathname);
+      if (!vecchia || !archivio[vecchia[1]]) { res.writeHead(404).end(); return; }
+      cartella = archivio[vecchia[1]]; nome = decodeURIComponent(vecchia[2]);
+    }
     if (nome === NOME_FIRMA) { res.writeHead(200, { 'content-type': 'text/plain' }).end(`${firme[modo()]}\n`); return; }
     if (nome !== basename(nome)) { res.writeHead(400).end(); return; }
-    const file = join(cartellaFeed, nome);
+    const file = join(cartella, nome);
     if (!existsSync(file)) { res.writeHead(404).end(); return; }
-    res.writeHead(200, { 'content-type': 'application/octet-stream', 'content-length': statSync(file).size });
+    const totale = statSync(file).size;
+    const intervallo = /^bytes=(\d+)-(\d*)$/u.exec(String(req.headers.range ?? '').trim());
+    if (intervallo && req.method === 'GET') {
+      const da = Number(intervallo[1]);
+      const a = intervallo[2] === '' ? totale - 1 : Math.min(Number(intervallo[2]), totale - 1);
+      if (da > a) { res.writeHead(416, { 'content-range': `bytes */${totale}` }).end(); return; }
+      res.writeHead(206, { 'content-type': 'application/octet-stream', 'content-length': a - da + 1, 'content-range': `bytes ${da}-${a}/${totale}`, 'accept-ranges': 'bytes' });
+      conta(nome, a - da + 1);
+      createReadStream(file, { start: da, end: a }).pipe(res);
+      return;
+    }
+    res.writeHead(200, { 'content-type': 'application/octet-stream', 'content-length': totale, 'accept-ranges': 'bytes' });
     if (req.method === 'HEAD') { res.end(); return; }
+    conta(nome, totale);
     createReadStream(file).pipe(res);
   });
   return {
     richieste,
+    byteServiti,
     avvia: () => new Promise((ok, ko) => { server.once('error', ko); server.listen(porta, '127.0.0.1', () => ok(server.address().port)); }),
     ferma: () => new Promise((ok) => server.close(() => ok())),
   };
@@ -154,7 +180,9 @@ export async function provaAggiornamentoVero({ rapporto = join(desktop, '.prove'
     const firme2 = { buona: firmaManifesto(manifesto2, chiavi.giusta.privata), manomessa: firmaManifesto(manifesto2, chiavi.sbagliata.privata) };
     let modo = 'manomessa';
     let servita = null; // finché è null il server pubblica la 0.0.2
-    server = serverDiProva({ cartellaFeed: x1.uscita, firme, modo: () => modo, servita: () => servita });
+    for (const b of [x, x1, x2]) assert.ok(existsSync(`${b.installer}.blockmap`), `ogni build porta la mappa dei blocchi: ${basename(b.installer)}.blockmap`);
+    server = serverDiProva({ cartellaFeed: x1.uscita, firme, modo: () => modo, servita: () => servita,
+      archivio: { [VERSIONE_X]: x.uscita, [VERSIONE_X1]: x1.uscita } });
     await server.avvia();
 
     eseguiInstaller(x.installer, ['/S']);
@@ -211,6 +239,17 @@ export async function provaAggiornamentoVero({ rapporto = join(desktop, '.prove'
       const { app, pagina, stato } = await avviaApp(exe, dati);
       const pronto = await aspetta(async () => { const s = await stato(); return s?.pronto?.versione === VERSIONE_X2 ? s.pronto : null; }, 300_000, 'La 0.0.3 non è arrivata a «pronto».');
       misure.riavviaOra = { pronto };
+      /* ⭐ Scarico a blocchi (owner 11/10/2026): la 0.0.2 è arrivata dall'aggiornatore, quindi il suo installer è nella cache e
+       *   della 0.0.3 si scaricano solo i blocchi cambiati. Le due build differiscono per la sola versione: se l'installer
+       *   viaggia per più di metà, lo scarico a blocchi NON sta funzionando (mappa non pubblicata, intervalli rifiutati, ripiego
+       *   sullo scarico intero) e la prova lo dice qui, non un utente con la linea lenta. */
+      const nomeX2 = `TALOS-Setup-${VERSIONE_X2}.exe`;
+      const byteInstaller = statSync(x2.installer).size;
+      const serviti = server.byteServiti.get(nomeX2) ?? 0;
+      misure.scaricoABlocchi = { byteInstaller, serviti, quota: Number((serviti / byteInstaller).toFixed(4)),
+        mappe: server.richieste.filter((r) => r.endsWith('.blockmap')) };
+      assert.ok(server.richieste.some((r) => r.endsWith(`${nomeX2}.blockmap`)), 'la mappa dei blocchi della 0.0.3 è stata chiesta');
+      assert.ok(serviti > 0 && serviti < byteInstaller / 2, `scarico a blocchi: ${serviti} byte su ${byteInstaller} (atteso meno di metà)`);
       const inizio = Date.now();
       const chiusa = new Promise((ok) => app.process().once('exit', ok));
       await pagina.locator('.talos-banda-aggiornamento button').filter({ hasText: /^(Riavvia ora|Restart now)$/ }).click();

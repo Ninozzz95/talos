@@ -615,12 +615,13 @@ jobs:
             ${{ steps.asset.outputs.sha }}
             ${{ steps.asset.outputs.manifesto }}
             ${{ steps.asset.outputs.firma }}
+            ${{ steps.asset.outputs.mappa }}
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
 
       - id: release
-        name: pubblica la release con cinque asset e note scritte
+        name: pubblica la release con sei asset e note scritte
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -630,8 +631,9 @@ jobs:
           NOTE: ${{ steps.asset.outputs.note }}
           MANIFESTO: ${{ steps.asset.outputs.manifesto }}
           FIRMA: ${{ steps.asset.outputs.firma }}
+          MAPPA: ${{ steps.asset.outputs.mappa }}
         run: |
-          gh release create $env:GITHUB_REF_NAME $env:EXE $env:ZIP $env:SHA $env:MANIFESTO $env:FIRMA --verify-tag --repo $env:GH_REPO --title "TALOS Desktop $env:GITHUB_REF_NAME" --notes-file $env:NOTE
+          gh release create $env:GITHUB_REF_NAME $env:EXE $env:ZIP $env:SHA $env:MANIFESTO $env:FIRMA $env:MAPPA --verify-tag --repo $env:GH_REPO --title "TALOS Desktop $env:GITHUB_REF_NAME" --notes-file $env:NOTE
           if ($LASTEXITCODE -ne 0) { throw 'Creazione release fallita; verificare se il tag ha già una release.' }
 
       - name: conserva la prova dello smoke anche in caso di errore

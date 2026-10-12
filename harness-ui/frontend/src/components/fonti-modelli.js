@@ -79,45 +79,8 @@ function portaInVistaFonteSelettore(evento) {
 }
 if (typeof document !== 'undefined') document.addEventListener('focusin', portaInVistaFonteSelettore);
 
-/** I dati arrivano dal registro pubblico: nessuna capacità inventata dal selettore. */
-export function opzioniFallback(fornitori=[], {usaAttrezzi=true}={}) {
-  return fornitori.filter(p=>p.keyConfigured===true).flatMap(p=>(p.modelliDiRiserva||[])
-    .filter(m=>!usaAttrezzi||m.toolCalling===true)
-    .map(m=>({provider:p.id,model:m.id,etichetta:`${p.label||p.id} · ${m.nome||m.id}`})));
-}
-
-/** Scelta opzionale riusabile nella modale e nella pillola; onChange collega la sessione. */
-export function creaSceltaFallback({fornitori=[],valore=[],usaAttrezzi=true,onChange=null}={}) {
-  // 12/09, review P-H: stesso linguaggio dei gruppi «Planner opzionale» / «Accesso al workspace»
-  // (etichetta `sheet-label` + controllo + aiuto), niente fieldset con la legenda sul bordo.
-  const wrap=document.createElement('div');wrap.className='talos-stack talos-scelta-riserve';wrap.setAttribute('role','group');wrap.setAttribute('aria-label',t('modelli.sources.fallbackHeading'));Object.assign(wrap.style,{minWidth:'0',margin:'16px 0 0',gap:'8px'});
-  const etichetta=document.createElement('span');etichetta.className='sheet-label';etichetta.textContent=t('modelli.sources.fallbackHeading');wrap.append(etichetta);
-  const selezione=valore.map(({provider,model})=>({provider,model}));
-  const scelte=opzioniFallback(fornitori,{usaAttrezzi});
-  const lista=document.createElement('ol');lista.className='talos-stack';
-  const select=document.createElement('select');select.className='talos-field__input';select.setAttribute('aria-label',t('modelli.sources.fallbackProviderModel'));
-  Object.assign(select.style,{flex:'1',minWidth:'0'});select.disabled=typeof onChange!=='function';
-  const vuota=document.createElement('option');vuota.value='';vuota.textContent=t('modelli.sources.none');select.append(vuota);
-  for(const [i,o]of scelte.entries()){const option=document.createElement('option');option.value=String(i);option.textContent=o.etichetta;select.append(option);}
-  const aggiungi=document.createElement('button');aggiungi.type='button';aggiungi.className='talos-button talos-button--secondary talos-button--sm';aggiungi.textContent=t('modelli.sources.add');
-  const notifica=()=>onChange?.(selezione.map(v=>({...v})));
-  function disegna(){
-    lista.hidden=selezione.length===0;
-    lista.replaceChildren(...selezione.map((v,i)=>{
-      const li=document.createElement('li');li.className='talos-cluster';
-      const label=document.createElement('span');label.textContent=scelte.find(o=>o.provider===v.provider&&o.model===v.model)?.etichetta||t('modelli.sources.fallbackUnavailable');
-      const rimuovi=document.createElement('button');rimuovi.type='button';rimuovi.className='talos-button talos-button--ghost talos-button--sm';rimuovi.textContent=t('modelli.sources.remove');rimuovi.setAttribute('aria-label',t('modelli.sources.removeChoice', { name: label.textContent }));rimuovi.disabled=typeof onChange!=='function';
-      rimuovi.addEventListener('click',()=>{selezione.splice(i,1);notifica();disegna();select.focus();});li.append(label,rimuovi);return li;
-    }));
-    for(const [i,option]of [...select.options].slice(1).entries())option.disabled=selezione.some(v=>v.provider===scelte[i].provider&&v.model===scelte[i].model);
-    aggiungi.disabled=typeof onChange!=='function'||!scelte.length||select.value===''||selezione.length>=8;
-  }
-  select.addEventListener('change',disegna);
-  aggiungi.addEventListener('click',()=>{const scelta=scelte[Number(select.value)];if(!scelta||select.value===''||selezione.length>=8||selezione.some(v=>v.provider===scelta.provider&&v.model===scelta.model))return;selezione.push({provider:scelta.provider,model:scelta.model});select.value='';notifica();disegna();select.focus();});
-  const nota=document.createElement('small');nota.className='workspace-chooser-help talos-muted';nota.textContent=typeof onChange!=='function'?t('modelli.sources.fallbackDisconnected'):t('modelli.sources.fallbackHelp');
-  const azioni=document.createElement('div');azioni.className='talos-cluster';azioni.append(select,aggiungi);
-  wrap.append(lista,azioni,nota);disegna();return wrap;
-}
+/* 11/10/2026 (owner, «inutile»): qui c'era la scelta delle riserve («se non risponde, continua con…», `creaSceltaFallback`
+   e `opzioniFallback`). La funzione è tolta: il registro delle sessioni le tiene sempre vuote. */
 
 export const PROVIDER_DIRETTI = Object.freeze([
   Object.freeze({ id: 'anthropic', etichetta: 'Anthropic' }),
@@ -126,6 +89,9 @@ export const PROVIDER_DIRETTI = Object.freeze([
   Object.freeze({ id: 'lmstudio', etichetta: 'LM Studio', senzaChiave: true }),
   Object.freeze({ id: 'zai', etichetta: 'Z.AI', soloSeCollegato: true }),
   Object.freeze({ id: 'deepseek', etichetta: 'DeepSeek', soloSeCollegato: true }),
+  // 11/10/2026, «Continue with ChatGPT»: i modelli pagati dal piano stanno in un gruppo loro, mai mescolati a quelli della chiave.
+  // Sta dopo i sei storici: il loro ordine è presidiato (BC50-01); il posto accanto a «OpenAI» si decide col ridisegno della modale.
+  Object.freeze({ id: 'chatgpt', etichetta: 'ChatGPT plan', senzaChiave: true, soloSeCollegato: true }),
   Object.freeze({ id: 'groq', etichetta: 'Groq', soloSeCollegato: true }),
   Object.freeze({ id: 'cerebras', etichetta: 'Cerebras', soloSeCollegato: true }),
   Object.freeze({ id: 'mistral', etichetta: 'Mistral', soloSeCollegato: true }),
@@ -154,6 +120,18 @@ export const PROVIDER_DIRETTI = Object.freeze([
 /** Vero se quel fornitore si legge senza collegare nessuna chiave (i motori locali). */
 export function senzaChiave(fonte) {
   return PROVIDER_DIRETTI.some((p) => p.id === fonte && p.senzaChiave === true);
+}
+
+/*
+ * 11/10/2026 — CHI HA UN CATALOGO DA LEGGERE. Stava scritto dentro `caricaDiretti` (app.js) e guardava solo l'elenco delle chiavi
+ *   (`/api/v1/providers`): il piano ChatGPT non è una chiave, è un ACCESSO (`/api/v1/auth/chatgpt/stato`), quindi il suo gruppo non
+ *   compariva mai nel selettore, nemmeno da collegati (trovato dal vivo con l'account dell'owner).
+ * ⛔ Il piano c'è solo se l'account è collegato E l'uso del piano è abilitato: uno stato non letto vale «non c'è», mai il contrario.
+ */
+export function fornitoriConCatalogo(elenco = [], { pianoChatgpt = null } = {}) {
+  const ids = new Set((Array.isArray(elenco) ? elenco : []).filter((p) => p?.keyConfigured || senzaChiave(p?.id)).map((p) => p.id));
+  if (pianoChatgpt?.collegato === true && pianoChatgpt.pianoAbilitato === true) ids.add('chatgpt'); else ids.delete('chatgpt');
+  return ids;
 }
 
 /*

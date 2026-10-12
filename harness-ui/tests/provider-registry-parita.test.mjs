@@ -294,7 +294,8 @@ test('PAR-04 — motori locali e SDK nativi: due liste che erano scritte a mano 
   await assert.rejects(runtime.listModels('motore-finto'), { code: 'RUNTIME_INVALID' });
 
   // P-J — cinque fornitori, sempre tre SDK: entrambe le nuove porte riusano Anthropic.
-  stessiId(ID_NATIVI_SDK, ['openai', 'anthropic', 'gemini', 'zai-anthropic', 'minimax-anthropic'], 'ID_NATIVI_SDK');
+  // 11/10/2026: il piano ChatGPT riusa l'SDK di OpenAI sul wire Responses.
+  stessiId(ID_NATIVI_SDK, ['openai', 'chatgpt', 'anthropic', 'gemini', 'zai-anthropic', 'minimax-anthropic'], 'ID_NATIVI_SDK');
   await assert.rejects(
     nativeProviderResponse({ provider: 'deepseek', model: 'x', apiKey: 'k', body: { messages: [] } }),
     /Native provider not recognized/u,

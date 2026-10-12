@@ -262,6 +262,16 @@
   overflow-wrap: anywhere;
   max-width: 100%;
 }
+.talos-provider-retry {
+  max-width: min(100%, var(--talos-measure-w));
+}
+.talos-provider-retry > .talos-provider-retry__destra {
+  flex: 0 1 auto;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+}
 *::-webkit-scrollbar-thumb {
   background: var(--talos-border-strong);
   border: 2px solid transparent;
@@ -1707,6 +1717,65 @@ button.talos-turn-spine__tick:focus-visible {
 .talos-link-conversazione:hover {
   text-decoration-thickness: 2px;
 }
+.talos-link-esterno {
+  color: var(--talos-accent-text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.talos-link-esterno:hover {
+  text-decoration-thickness: 2px;
+}
+.talos-link-esterno:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+.talos-message--user .talos-link-esterno {
+  color: var(--talos-info);
+  color: color-mix(in oklab, var(--talos-info) 80%, var(--talos-text));
+}
+.talos-link-conferma__dove {
+  white-space: normal;
+  margin: 0;
+}
+.talos-link-conferma__sito {
+  font-size: 16px;
+  color: var(--talos-text);
+  overflow-wrap: anywhere;
+}
+.talos-link-conferma__indirizzo {
+  margin: 6px 0 0;
+  padding: 9px 11px;
+  border: 1px solid var(--talos-border);
+  border-radius: 8px;
+  overflow-wrap: anywhere;
+  max-height: 8.5em;
+  overflow-y: auto;
+}
+.talos-link-conferma__fidati {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+  font-size: 13px;
+  color: var(--talos-text);
+  cursor: pointer;
+}
+.talos-link-conferma__avviso {
+  margin-top: 14px;
+  padding-left: 10px;
+  border-left: 3px solid var(--talos-warning);
+  color: var(--talos-text);
+}
+#schermoImpostazioni .talos-siti-fidati {
+  margin-top: 18px;
+}
+#schermoImpostazioni .talos-siti-fidati .talos-setting > .talos-setting__control {
+  width: auto;
+  justify-content: flex-end;
+}
 .talos-tool-row[data-tool-state=corrected] .talos-dot {
   background: var(--talos-muted);
   opacity: .55;
@@ -2210,7 +2279,8 @@ button.talos-turn-spine__tick:focus-visible {
   --talos-larghezza-piede:var(--talos-testo-chat);
 }
 :root.chat-full-width .talos-message,
-:root.chat-full-width .talos-empty {
+:root.chat-full-width .talos-empty,
+:root.chat-full-width .talos-provider-retry {
   max-width: none;
 }
 :root.chat-full-width .talos-message--user .talos-message__body {
@@ -3616,10 +3686,69 @@ a.talos-button {
 .talos-composer__bar [data-open-sheet=permissions].talos-badge--lg {
   max-width: 440px;
 }
-.talos-composer__bar .talos-badge--lg[data-runtime-giri],
 .talos-composer__bar .talos-badge--lg[data-runtime-costo] {
   flex: 0 0 auto;
   max-width: none;
+}
+.talos-composer__bar .talos-piano-pastiglia {
+  flex: none;
+  margin-left: auto;
+  gap: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.talos-composer__bar .talos-piano-pastiglia .talos-dot {
+  width: 6px;
+  height: 6px;
+}
+.talos-composer__bar .talos-piano-pastiglia:not([hidden]) ~ .talos-composer__mic {
+  margin-left: 10px;
+}
+.talos-composer__bar .talos-piano-pastiglia:focus-visible {
+  outline: var(--talos-focus-width, 2px) solid var(--talos-accent);
+  outline-offset: 2px;
+}
+.talos-piano-pannello {
+  padding: 12px 14px;
+  gap: 4px;
+  min-width: 260px;
+  max-width: min(340px, calc(100vw - 16px));
+  color: var(--talos-text);
+  font-family: var(--talos-font-ui);
+}
+.talos-piano-pannello__titolo {
+  font-size: 13px;
+}
+.talos-piano-pannello__chi {
+  font-size: 12px;
+  margin-bottom: 4px;
+  overflow-wrap: anywhere;
+}
+.talos-piano-pannello .talos-provider__piano-uso {
+  font-size: 12.5px;
+}
+.talos-piano-pannello .talos-provider__piano-uso > p {
+  margin: 6px 0 0;
+  font-size: 11.5px;
+}
+.talos-piano-pannello [data-piano-consumi] {
+  align-self: flex-start;
+  margin-top: 8px;
+  font-size: 13px;
+}
+.talos-kv__v--avviso {
+  font-weight: 600;
+  color: var(--talos-text);
+}
+.talos-kv__v--avviso::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--talos-warning);
+  vertical-align: middle;
 }
 .talos-composer__bar .talos-badge--lg > .talos-measure,
 .talos-composer__bar .talos-badge--lg > .talos-measure--estimate {
@@ -3670,8 +3799,9 @@ a.talos-button {
   }
 }
 .talos-composer__bar[data-scala] #pillTerminale .talos-chip__label,
-.talos-composer__bar[data-scala="2"] [data-open-sheet=permissions] .talos-chip__label,
-.talos-composer__bar[data-scala="2"] [data-runtime-costo] .talos-chip__label {
+.talos-composer__bar:is([data-scala="2"], [data-scala="3"]) [data-open-sheet=permissions] .talos-chip__label,
+.talos-composer__bar:is([data-scala="2"], [data-scala="3"]) [data-runtime-costo] .talos-chip__label,
+.talos-composer__bar[data-scala="3"] [data-piano-chatgpt] .talos-chip__label {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -7478,6 +7608,60 @@ input[type=range]:focus-visible {
 }
 .talos-provider__field input[type=number] {
   max-width: 8rem;
+}
+.talos-provider__metodi {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0 0 18px;
+}
+.talos-provider__metodi .talos-choice {
+  cursor: pointer;
+}
+.talos-provider__metodi .talos-choice > .talos-badge {
+  margin-top: 10px;
+}
+.talos-provider__metodi .talos-choice:focus-visible {
+  outline: 2px solid var(--talos-accent);
+  outline-offset: -2px;
+}
+.talos-provider__metodo {
+  display: block;
+}
+.talos-provider__metodo[hidden] {
+  display: none;
+}
+.talos-provider__piano {
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+}
+.talos-provider__piano p {
+  margin: 0;
+  max-width: 60ch;
+  text-wrap: pretty;
+}
+.talos-provider__piano-chi {
+  display: grid;
+  gap: 2px;
+}
+.talos-provider__piano-chi strong {
+  font-size: 14px;
+  color: var(--talos-text);
+}
+.talos-provider__piano-menu {
+  min-width: 36px;
+  justify-content: center;
+}
+.talos-provider__piano-uso {
+  justify-self: stretch;
+  display: grid;
+}
+.talos-provider__piano-uso > p {
+  margin-top: 8px;
+  font-size: 12.5px;
+}
+.talos-chatgpt-apri {
+  display: flex;
+  padding: 2px 0 6px;
 }
 .talos-provider__accesso {
   grid-column: 1/-1;
@@ -11426,11 +11610,14 @@ dialog.command-dialog :host(.talos-embedded-wide-short) .mobile-nav button.activ
   color: var(--muted);
   font-size: calc(8px * var(--talos-ui-font-scale));
 }
-.workspace-chooser-inline-toggle input {
+.workspace-chooser-inline-toggle input:not(.talos-switch) {
   width: 38px;
   height: 38px;
   flex: 0 0 auto;
   accent-color: var(--accent);
+}
+.workspace-chooser-inline-toggle input.talos-switch {
+  flex: none;
 }
 .workspace-chooser-permissions {
   display: grid;

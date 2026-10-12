@@ -19,6 +19,7 @@ test('FORN-CARTA-01: solo escludere e riammettere hanno la carta; l elenco no', 
   assert.equal(eCartaFornitori({ tipo: 'provider_exclude' }), true);
   assert.equal(eCartaFornitori({ tipo: 'provider_allow' }), true);
   assert.equal(eCartaFornitori({ tipo: 'provider_exclusions_list' }), false);
+  assert.equal(eCartaFornitori({ tipo: 'chatgpt_account' }), true, '11/10/2026: scollegare ChatGPT dalla chat passa dalla carta');
   assert.equal(eCartaFornitori({ tipo: 'automation_create' }), false);
 });
 
@@ -57,4 +58,16 @@ test('FORN-CARTA-04: «Annulla» sulla carta dei fornitori si legge «Annullata�
   assert.match(segnaEsitoApprovazione(fornitori, { approvato: false }, { document: doc }).textContent, /Annullata/u);
   const qualunque = scheda({});
   assert.doesNotMatch(segnaEsitoApprovazione(qualunque, { approvato: false }, { document: doc }).textContent, /Annullata/u, 'AL CONTRARIO: una carta qualunque resta «Negato»');
+});
+
+test('FORN-CARTA-05: scollegare ChatGPT dalla chat — l account, la frase, Adesso → Dopo (11/10/2026)', () => {
+  const azione = { tipo: 'chatgpt_account', fornitore: 'chatgpt', email: 'nino@example.com' };
+  const t = testiCartaFornitori(azione);
+  assert.equal(t.bersaglio, 'nino@example.com');
+  assert.ok(t.badge && t.perche);
+  assert.equal(t.nota, '');
+  const blocco = creaBloccoCartaFornitori(docFinto(), azione);
+  assert.equal(blocco.dataset.dettaglioFornitori, 'chatgpt_account');
+  assert.equal(blocco.children.length, 2, 'Adesso e Dopo, nient altro');
+  assert.equal(testiCartaFornitori({ tipo: 'chatgpt_account', email: null }).bersaglio, 'ChatGPT', 'senza email si legge il nome del servizio');
 });

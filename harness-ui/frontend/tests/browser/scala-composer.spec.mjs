@@ -39,13 +39,13 @@ const dueFotogrammi = (page) => page.evaluate(() => new Promise((ok) => requestA
  * corso il piede si ridisegna da solo e rimette `hidden` alle pillole che non hanno dati (la corsa di D2, `p0bis-c`).
  * La strada automatica (osservatori + un fotogramma) si prova a parte, in COMPOSER-SCALE-03, senza scrivere niente.
  */
-async function misura(page, larghezza, { giri = null, spesa = false, reindirizza = false }) {
+async function misura(page, larghezza, { piano = false, spesa = false, reindirizza = false }) {
   await page.setViewportSize({ width: larghezza, height: 900 });
   await dueFotogrammi(page); // il ridimensionamento ridisegna il piede: prima si lascia finire (vedi D2 in p0bis-c)
-  return page.evaluate(({ giri, spesa, reindirizza }) => {
+  return page.evaluate(({ piano, spesa, reindirizza }) => {
     const composer = document.querySelector('#composerForm');
-    const pg = composer.querySelector('[data-runtime-giri]');
-    pg.hidden = giri === null; if (giri) pg.querySelector('.talos-mono').textContent = giri;
+    // 11/10/2026 (owner): la pillola dei giri è uscita dal composer; al suo posto può accendersi la pastiglia del piano ChatGPT
+    composer.querySelector('[data-piano-chatgpt]').hidden = !piano;
     const pc = composer.querySelector('[data-runtime-costo]');
     pc.hidden = !spesa; if (spesa) pc.querySelector('.talos-mono').textContent = '~$0,42';
     composer.querySelector('#redirectRunButton').hidden = !reindirizza;
@@ -53,7 +53,7 @@ async function misura(page, larghezza, { giri = null, spesa = false, reindirizza
     composer.querySelector('[data-open-sheet="permissions"] .talos-chip__label').textContent = 'Scrive nel progetto';
     window.__talosHarnessUiRuntime.adattaScalaComposer();
     return window.__leggiBarraScala();
-  }, { giri, spesa, reindirizza });
+  }, { piano, spesa, reindirizza });
 }
 
 /** Legge la barra com'è adesso (nella pagina). */
@@ -70,16 +70,17 @@ function leggiBarra() {
       modello: stato('[data-open-sheet="model"] .talos-chip__label'),
       permesso: stato('[data-open-sheet="permissions"] .talos-chip__label'),
       terminale: stato('#pillTerminale .talos-chip__label'),
+      piano: composer.querySelector('[data-piano-chatgpt]').hidden ? null : stato('[data-piano-chatgpt] .talos-chip__label'),
       sfonda: barra.scrollWidth > barra.clientWidth + 1,
     };
 }
 
 const COMBINAZIONI = [
-  { nome: 'niente acceso', giri: null },
-  { nome: 'Giri 1', giri: '1' },
-  { nome: 'Giri 24/24', giri: '24/24' },
-  { nome: 'Giri 24/24 + Reindirizza', giri: '24/24', reindirizza: true },
-  { nome: 'Giri 1 + spesa', giri: '1', spesa: true },
+  { nome: 'niente acceso' },
+  { nome: 'piano ChatGPT', piano: true },
+  { nome: 'Reindirizza', reindirizza: true },
+  { nome: 'piano ChatGPT + Reindirizza', piano: true, reindirizza: true },
+  { nome: 'piano ChatGPT + spesa', piano: true, spesa: true },
 ];
 
 test('COMPOSER-SCALE-01 — da 1024 a 1440, in ogni combinazione di pillole, nessuna etichetta tagliata: si cede per stadi', async ({ page }) => {
@@ -91,6 +92,9 @@ test('COMPOSER-SCALE-01 — da 1024 a 1440, in ogni combinazione di pillole, nes
       const dove = `${larghezza} px (composer ${m.composerW}) · ${combo.nome} · stadio ${m.scala}`;
       if (m.permesso.tagliata) errori.push(`${dove}: «${m.permesso.testo}» tagliata`);
       if (m.terminale.tagliata) errori.push(`${dove}: «${m.terminale.testo}» tagliata`);
+      if (m.piano?.tagliata) errori.push(`${dove}: «${m.piano.testo}» tagliata`);
+      if (m.piano?.ceduta && !m.permesso.ceduta) errori.push(`${dove}: il piano ha ceduto prima del permesso`);
+      if (m.piano?.ceduta && m.scala !== '3') errori.push(`${dove}: il piano cede solo al gradino 3, per ultimo`);
       if (m.sfonda) errori.push(`${dove}: la barra sfonda`);
       // l'ordine: il permesso cede solo dopo «Terminale»; il modello si stringe solo quando gli altri due hanno già ceduto
       if (m.permesso.ceduta && !m.terminale.ceduta) errori.push(`${dove}: il permesso ha ceduto prima di «Terminale»`);
@@ -101,9 +105,18 @@ test('COMPOSER-SCALE-01 — da 1024 a 1440, in ogni combinazione di pillole, nes
   expect(c.nonGet).toBe(0);
 });
 
-test('COMPOSER-SCALE-02 — AL CONTRARIO: dove lo spazio c\'è, nessuno cede (1440, «Giri 1», niente spesa)', async ({ page }) => {
+test('COMPOSER-SCALE-02 — AL CONTRARIO: dove lo spazio c\'è, nessuno cede (1440, niente acceso; con la pastiglia del piano al più «Terminale»)', async ({ page }) => {
   const c = await apri(page);
-  const m = await misura(page, 1440, { giri: '1' });
+  /* 11/10/2026: la pillola dei giri («Invio 1», ~70 px) è uscita; la pastiglia del piano è più larga (~109 px). Misurato a 1440 con la
+     colonna destra aperta (composer 690, barra 660): con lei la barra chiede ~694 px e il nome del modello si taglierebbe, quindi
+     «Terminale» cede all'icona — è la scala che fa il suo lavoro (stesso limite di COMPOSER-SCALE-03: «a 1440 al più Terminale»).
+     Il verso contrario si prova dove lo spazio c'è davvero: la barra senza pastiglia. */
+  const conPiano = await misura(page, 1440, { piano: true });
+  expect(Number(conPiano.scala), 'con la pastiglia del piano, a 1440 al più cede «Terminale»').toBeLessThanOrEqual(1);
+  expect(conPiano.permesso.ceduta).toBe(false);
+  expect(conPiano.piano?.tagliata).toBe(false);
+  expect(conPiano.modello.tagliata).toBe(false);
+  const m = await misura(page, 1440, {});
   expect(m.scala).toBe('0');
   expect(m.terminale.ceduta).toBe(false);
   expect(m.permesso.ceduta).toBe(false);

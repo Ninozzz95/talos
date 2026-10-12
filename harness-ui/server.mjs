@@ -60,7 +60,7 @@ import { createOwnerRuntimeAdapter, creaFetchMultiProvider } from './src/runtime
 import { creaProntoFn } from './src/sessione-pronta.mjs';
 import { createDesktopContextRuntime, resolveDesktopContextProfile, resolveDesktopDefaultProfile } from './src/context-runtime.mjs';
 import { createImpostazioniContesto, giroUsaIlMotore } from './src/impostazioni-contesto.mjs';
-import { createContextTokenCounter, buildPreparedDesktopContextRequest } from './src/context-token-counters.mjs';
+import { createContextTokenCounter, buildPreparedDesktopContextRequest, credenzialeDelContatore } from './src/context-token-counters.mjs';
 import { createChatImageStore } from './src/chat-image-attachments.mjs';
 import { avviaSessione } from './src/agent-service.mjs';
 import { RUNTIME_BOOTSTRAP_SCHEMA, RUNTIME_RESOURCE_SCHEMA } from './src/runtime-contract.mjs';
@@ -78,6 +78,10 @@ import { CARTELLA_PROGETTI, creaCartellaDatiProgetto } from './src/cartella-dati
 import { creaInstradamentoDiSerie } from './src/esclusi-di-serie.mjs'; // 0.1.25: i fornitori a valle esclusi di serie, per modello
 import { creaOspiteFornitori } from './src/fornitori-per-il-modello.mjs'; // 0.1.25: la seconda porta dei fornitori esclusi
 import { slugDelFornitore } from './src/openrouter-fornitori.mjs';
+import { creaCustodiaChatgpt } from './src/chatgpt-custodia.mjs'; // 11/10/2026: «Continue with ChatGPT»
+import { creaAccessoChatgpt } from './src/chatgpt-accesso.mjs';
+import { accessoConUso, creaRegistroUsoChatgpt } from './src/chatgpt-uso.mjs';
+import { creaCatalogoChatgpt, creaRotteChatgpt } from './src/chatgpt-rotte.mjs';
 
 /** ⛔ Stessi tre nomi loopback validati in config.mjs (`LOOPBACK_HOSTS`, non esportato — costante minuscola e stabile, duplicarla qui è più semplice che aggiungere un export per tre stringhe). Un browser può presentarsi con uno qualunque dei tre alias anche se il server è bindato su un altro. */
 const ALIAS_LOOPBACK = ['127.0.0.1', '::1', 'localhost'];
@@ -154,6 +158,16 @@ async function startServer() {
     ignoraSemiAmbiente,
   });
   providerStore.loadFromKeyring();
+  /*
+   * 11/10/2026 — «Continue with ChatGPT» (D9, parte OpenAI). Stesso portachiavi delle chiavi, servizio proprio
+   * (`chatgpt-custodia.mjs`). Senza portachiavi niente accesso: le rotte rispondono 503 invece di tenere i token altrove.
+   */
+  /* Il conteggio NOSTRO di ciò che TALOS manda col piano (decisione owner 11/10: «Link + conteggio nostro»): soli numeri, nella
+     cartella dei dati. Scollegare lo azzera, da tutte e due le porte (`accessoConUso`). */
+  const usoChatgpt = creaRegistroUsoChatgpt({ file: percorsoDatiDesktop('.chatgpt-uso.json') });
+  const accessoChatgpt = providerKeyring ? accessoConUso(creaAccessoChatgpt({ custodia: creaCustodiaChatgpt({ keyring: providerKeyring }) }), usoChatgpt) : null;
+  const catalogoChatgpt = accessoChatgpt ? creaCatalogoChatgpt({ accesso: accessoChatgpt }) : null;
+  const rotteChatgpt = creaRotteChatgpt({ accesso: accessoChatgpt, catalogo: catalogoChatgpt, uso: usoChatgpt });
 
   /*
    * ⭐⭐⭐ 04/9 — R-03, la fonte della ricerca web dalle Impostazioni (parità
@@ -273,6 +287,12 @@ async function startServer() {
     leggiChiave: (fonte) => { try { return providerStore.getKey(fonte); } catch { return null; } },
     leggiRuntime: (fonte) => { try { return providerStore.getRuntime(fonte); } catch { return {}; } },
     localePronto: () => supervisoreLocale?.status?.()?.state === 'ready',
+    // 11/10/2026: il token del piano ChatGPT, preso (e rinnovato) un attimo prima di ogni invio. Mai la chiave API al suo posto.
+    leggiTokenDelPiano: async () => {
+      if (!accessoChatgpt) throw Object.assign(new Error('A ChatGPT account cannot be connected on this computer.'), { code: 'CHATGPT_NON_DISPONIBILE' });
+      return accessoChatgpt.tokenDiAccesso();
+    },
+    registraUsoDelPiano: (voce) => usoChatgpt.registra(voce),
     /*
      * ⛔ Si passa il PONTE, non la chiave: `request()` del supervisore
      * aggiunge da sé l'`--api-key` generata all'avvio, che non deve essere
@@ -765,9 +785,7 @@ async function startServer() {
     };
     const tokenCounter = createContextTokenCounter({
       resolveProfile: async model => ({
-        ...(model.provider === 'local'
-          ? { baseURL: localCounterBase }
-          : { baseURL: providerStore.getRuntime(model.provider).endpoint, apiKey: providerStore.getKey(model.provider) }),
+        ...credenzialeDelContatore(model.provider, { leggiRuntime: (p) => providerStore.getRuntime(p), leggiChiave: (p) => providerStore.getKey(p), baseLocale: localCounterBase }),
         nativeRequestBuilder: request => buildPreparedDesktopContextRequest(request, {
           resolveImages: messages => chatImageStore.resolveMessages(messages), readModelCapabilities,
         }),
@@ -835,7 +853,7 @@ async function startServer() {
   }));
   /* ⭐ 0.1.25 (owner 09/10/2026) — la seconda porta dei fornitori esclusi: elencare libero, escludere e riammettere con la carta.
      Come le automazioni, il registro offre gli attrezzi `provider_*` solo da qui in poi; la CLI non lo chiama. */
-  sessionRegistry.collegaFornitori(creaOspiteFornitori({ providerStore, slugDelFornitoreFn: (q) => slugDelFornitore(q) }));
+  sessionRegistry.collegaFornitori(creaOspiteFornitori({ providerStore, slugDelFornitoreFn: (q) => slugDelFornitore(q), accessoChatgpt }));
   /*
    * ⭐⭐⭐ 27/8 — owner: "un picker per il modello, dropdown stilizzato
    * (l'abbiamo già fatto nel mobile)". Il catalogo VERO di OpenRouter
@@ -965,6 +983,9 @@ async function startServer() {
      *   invece di far fare tutto il giro sul sito del fornitore e buttare la chiave alla fine.
      */
     custodisciChiaveOpenRouter: async (chiave) => { providerStore.setKey('openrouter', chiave); },
+    rotteChatgpt, catalogoChatgpt,
+    leggiTokenDelPianoFn: accessoChatgpt ? () => accessoChatgpt.tokenDiAccesso() : null,
+    registraUsoDelPianoFn: (voce) => usoChatgpt.registra(voce),
     contextService: contextRuntime?.service,
     impostazioniContesto, // C1: «Motore del contesto» in Impostazioni → Contesto
     // ⭐ 10/09: le favicon delle fonti, prese dal server una volta sola e tenute qui accanto alle sessioni.

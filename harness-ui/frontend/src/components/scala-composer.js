@@ -17,10 +17,12 @@
  *   non si rifà se niente è cambiato.
  */
 
-/** Gli stadi: 0 tutto intero · 1 «Terminale» solo icona · 2 anche il permesso e «Sessione» solo icona. */
-export const STADIO_MASSIMO = 2;
+/** Gli stadi: 0 tutto intero · 1 «Terminale» solo icona · 2 anche il permesso e «Sessione» solo icona · 3 anche il piano ChatGPT
+    solo puntino (11/10/2026: cede per ultimo, è la frase che OpenAI chiede di mostrare). */
+export const STADIO_MASSIMO = 3;
 
-const ETICHETTE_MISURATE = ['[data-open-sheet="model"] .talos-chip__label', '[data-open-sheet="permissions"] .talos-chip__label', '#pillTerminale .talos-chip__label'];
+const ETICHETTE_MISURATE = ['[data-open-sheet="model"] .talos-chip__label', '[data-open-sheet="permissions"] .talos-chip__label', '#pillTerminale .talos-chip__label',
+  '[data-piano-chatgpt] .talos-chip__label']; // 11/10/2026: la pastiglia del piano ChatGPT cede per ultima, al gradino 3 (resta il puntino)
 
 /** Vero se l'etichetta si vede ma non ci sta intera. Un'etichetta ceduta (resa per la sola voce) non è tagliata. */
 export function etichettaTagliata(el, win = globalThis) {

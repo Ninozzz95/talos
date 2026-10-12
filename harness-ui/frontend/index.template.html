@@ -648,7 +648,8 @@ tests/session-registry.test.mjs:12  guardiaDiStallo(registro, SOGLIE_STALLO_PRED
                  testo non può ricevere `text-overflow`, quindi l'unico figlio ellissabile della
                  pillola era il NUMERO — ed era il numero a diventare «1…». Ora, se mai lo spazio
                  finisse, a cedere è la parola; la misura resta intera. Vedi styles/index.css. -->
-            <span class="talos-badge talos-badge--lg" data-c="Chip" data-runtime-giri><span data-t="modello.chat.turns" class="talos-chip__label">Invio</span> <span class="talos-mono talos-measure">7</span></span>
+            <!-- 11/10/2026 (owner): la pillola «Invio N» (`data-runtime-giri`) è uscita dal composer; il dato «questo invio, N di tetto»
+                 sta nella scheda Contesto, nell'Indice dei giri (`inspector.js`, `rigaDellInvio`). -->
             <button data-t-attr="[title]modello.chat.openTheTerminalBelow" type="button" class="talos-badge talos-badge--lg" data-c="Chip" id="pillTerminale" aria-expanded="false" aria-controls="pannelloTerminale" title="Apri il terminale qui sotto"><svg class="i i--sm"><use href="#i-terminal"/></svg><span data-t="modello.chat.terminal" class="talos-chip__label">Terminale</span></button>
             <!-- ⛔ BC-58, stesso difetto e stessa cura: la spesa è l'altra MISURA di questa barra.
                  ⛔ 17/09 sera: il `title` è NATO QUI. Quando la barra si stringe la parola «Sessione»
@@ -657,6 +658,10 @@ tests/session-registry.test.mjs:12  guardiaDiStallo(registro, SOGLIE_STALLO_PRED
                  aveva. Trovato guardando la mia stessa modifica, non da una prova. -->
             <span data-t-attr="[title]modello.chat.howMuchThisSession;[aria-label]modello.chat.sessionSpend" class="talos-badge talos-badge--lg" data-c="Chip" data-runtime-costo title="Quanto è costata finora questa sessione, stimato sui token contati" aria-label="Spesa della sessione"><span data-t="modello.chat.session" class="talos-chip__label">Sessione</span> <span class="talos-mono talos-measure--estimate">$0,08</span></span>
             <button data-t="modello.chat.redirect" data-t-attr="[title]modello.chat.stopAtTheNext" type="button" class="talos-button talos-button--secondary talos-button--sm" id="redirectRunButton" hidden title="Interrompi al prossimo punto sicuro e applica questa correzione">Reindirizza</button>
+            <!-- 11/10/2026, «Continue with ChatGPT» (linee guida OpenAI: «display Using ChatGPT plan near the composer or model selector»;
+                 owner: solo la pastiglia compatta). Compare solo quando il modello della chat è del piano collegato (`piano-chatgpt.js`);
+                 il clic apre il pannello con l'uso e «Manage usage». -->
+            <button data-t-attr="[aria-label]chat.chatgptPlan.using;[title]chat.chatgptPlan.using" type="button" class="talos-badge talos-badge--sm talos-piano-pastiglia" data-c="Chip" data-piano-chatgpt hidden aria-label="Stai usando il piano ChatGPT" title="Stai usando il piano ChatGPT"><span class="talos-dot talos-dot--success" aria-hidden="true"></span><span data-t="chat.chatgptPlan.pill" class="talos-chip__label">Piano ChatGPT</span></button>
             <button data-t-attr="[title]modello.chat.voice;[aria-label]modello.chat.voice" type="button" class="talos-composer__attach talos-composer__mic" data-c="IconButton" title="Voce" aria-label="Voce"><svg class="i"><use href="#i-mic"/></svg></button>
             <button data-t-attr="[title]modello.chat.send;[aria-label]modello.chat.send" class="talos-send" data-c="SendButton" title="Invia" aria-label="Invia"><svg class="i"><use href="#i-send"/></svg></button>
           </div>

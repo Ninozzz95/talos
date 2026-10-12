@@ -1,5 +1,6 @@
 import { risolviDestinazioneModello } from './model-destination.mjs';
 import { nativeProviderResponse } from './native-provider-adapter.mjs';
+import { creaFetchDelPiano, erroreDelPiano } from './chatgpt-richiesta.mjs';
 
 function erroreApi(message, code) {
   return Object.assign(new Error(message), { code });
@@ -24,7 +25,7 @@ function mappaErroreDestinazione(errore) {
  * La rotta HTTP possiede sessione e contratto API; questo modulo possiede solo
  * l'instradamento del trasporto, riusando la stessa fonte di verità della chat.
  */
-export async function chiediMiglioramentoAlProvider({ modello, messaggi, providerStore, fetchFn = globalThis.fetch } = {}) {
+export async function chiediMiglioramentoAlProvider({ modello, messaggi, providerStore, fetchFn = globalThis.fetch, leggiTokenDelPiano = null, registraUsoDelPiano = null } = {}) {
   if (typeof modello !== 'string' || modello.trim() === '') {
     throw erroreApi('This session does not declare a model.', 'SESSION_NOT_READY');
   }
@@ -57,16 +58,31 @@ export async function chiediMiglioramentoAlProvider({ modello, messaggi, provide
     max_tokens: 2048,
   };
 
+  /*
+   * 11/10/2026 — una sessione col piano ChatGPT (owner: «tutto quello che è già disponibile deve funzionare quando collegato con il
+   *   piano»). Stessa regola del trasporto dei giri (`runtime-owner-adapter.mjs`): il token del piano si prende ADESSO, la richiesta
+   *   passa dal filtro che la rende conforme (`creaFetchDelPiano`: niente `max_output_tokens`, `store:false`, `stream:true`,
+   *   istruzioni al posto dei messaggi di sistema), e senza il canale del token non parte niente — mai la chiave API al suo posto.
+   *   Gli errori del piano escono col LORO codice (`CHATGPT_…`), non come un «non ha risposto» generico.
+   */
+  let apiKeyNativa = destinazione.apiKey;
+  let fetchNativa = fetchFn;
+  if (destinazione.tokenDelPiano) {
+    if (typeof leggiTokenDelPiano !== 'function') throw erroreApi('No ChatGPT account is connected.', 'CHATGPT_NON_COLLEGATO');
+    apiKeyNativa = await leggiTokenDelPiano(destinazione.fonte);
+    fetchNativa = creaFetchDelPiano(fetchFn);
+  }
+
   let risposta;
   try {
     if (destinazione.native) {
       risposta = await nativeProviderResponse({
         provider: destinazione.fonte,
         model: destinazione.modelloRemoto,
-        apiKey: destinazione.apiKey,
+        apiKey: apiKeyNativa,
         baseURL: destinazione.baseURL,
         body,
-        fetchFn,
+        fetchFn: fetchNativa,
       });
     } else {
       risposta = await fetchFn(destinazione.url, {
@@ -75,7 +91,8 @@ export async function chiediMiglioramentoAlProvider({ modello, messaggi, provide
         body: JSON.stringify(body),
       });
     }
-  } catch {
+  } catch (guasto) {
+    if (destinazione.tokenDelPiano) throw erroreDelPiano(guasto);
     throw erroreApi('This chat\'s provider did not answer.', 'PROVIDER_RUNTIME_UNAVAILABLE');
   }
 
@@ -86,6 +103,8 @@ export async function chiediMiglioramentoAlProvider({ modello, messaggi, provide
   let letto;
   try { letto = await risposta.json(); } catch { letto = null; }
   const contenuto = typeof letto?.choices?.[0]?.message?.content === 'string' ? letto.choices[0].message.content : '';
+  // anche questa è una richiesta fatta col piano: entra nel conteggio nostro (un guasto del registro non tocca il risultato)
+  if (destinazione.tokenDelPiano && typeof registraUsoDelPiano === 'function') { try { await registraUsoDelPiano({ esito: 'completato', usage: letto?.usage ?? null }); } catch { /* è un di più */ } }
   return {
     contenuto,
     modelloUsato: modello,

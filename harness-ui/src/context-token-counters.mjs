@@ -111,6 +111,21 @@ export function conAncoraDelFornitore(counter) {
   });
 }
 
+/*
+ * 11/10/2026 — indirizzo e chiave che il contatore usa per un fornitore, presi dal negozio. Stava scritto dentro `server.mjs`
+ *   (`resolveProfile`) e chiedeva `getRuntime`/`getKey` per QUALUNQUE fornitore: per uno che non ha una chiave nel negozio
+ *   (`credenziale: false` nel registro — il piano ChatGPT, che entra con un accesso) il negozio lancia `PROVIDER_INVALID`, e il primo
+ *   giro col piano moriva prima di spedire niente. Trovato dal vivo col piano dell'owner; lo stack è nella prova
+ *   `tests/chatgpt-contatore-contesto.test.mjs`. Per quel fornitore il contatore non chiama nessun servizio (non sta fra i `defaults`):
+ *   stima, e si ancora ai `prompt_tokens` veri delle risposte (`conAncoraDelFornitore`) — quindi non gli serve nessuna credenziale.
+ * ⛔ Un nome che il registro NON conosce continua a lanciare: tacere lì nasconderebbe un modello scritto male.
+ */
+export function credenzialeDelContatore(provider, { leggiRuntime, leggiChiave, baseLocale }) {
+  if (provider === 'local') return { baseURL: baseLocale };
+  if (REGISTRO_FORNITORI[provider]?.credenziale === false) return {};
+  return { baseURL: leggiRuntime(provider).endpoint, apiKey: leggiChiave(provider) };
+}
+
 export function createContextTokenCounter({ fetchFn, resolveProfile, hashFn = text => createHash('sha256').update(text).digest('hex') } = {}) {
   if (typeof resolveProfile !== 'function' || typeof fetchFn !== 'function') fail('CTX_TOKEN_PORT_INVALID', 'Profile resolution and transport must be injected.');
   return {

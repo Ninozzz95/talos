@@ -16,7 +16,7 @@
 import { ESCLUSI_DI_SERIE, modelloBase, vociDiSerie } from './esclusi-di-serie.mjs';
 import { ESCLUSI_MASSIMI } from './provider-credential-store.mjs';
 
-export const ATTREZZI_FORNITORI_OSPITE = Object.freeze(['provider_exclusions_list', 'provider_exclude', 'provider_allow']);
+export const ATTREZZI_FORNITORI_OSPITE = Object.freeze(['provider_exclusions_list', 'provider_exclude', 'provider_allow', 'chatgpt_account']);
 const FORMA_SLUG = /^[a-z0-9][a-z0-9._-]{0,47}(?:\/[a-z0-9][a-z0-9._-]{0,47})?$/u;
 const rifiuto = (messaggio) => ({ ok: false, messaggio });
 
@@ -24,7 +24,17 @@ const rifiuto = (messaggio) => ({ ok: false, messaggio });
  * @param {{ providerStore, slugDelFornitoreFn?: ({fornitore, modello}) => Promise<string> }} servizi
  * @returns la fabbrica di `onFornitoriFn` per una sessione: `({ automazioneDelGiro })`.
  */
-export function creaOspiteFornitori({ providerStore, slugDelFornitoreFn = null }) {
+export function creaOspiteFornitori({ providerStore, slugDelFornitoreFn = null, accessoChatgpt = null }) {
+  /* 11/10/2026 — `chatgpt_account`: lo stato dell'accesso col piano ChatGPT e lo scollegamento con la carta. Mai un token nel testo. */
+  function statoChatgpt() {
+    if (!accessoChatgpt) return { ok: true, testo: 'A ChatGPT account cannot be connected on this computer: the system keyring is not available.' };
+    const s = accessoChatgpt.stato();
+    if (!s.collegato) return { ok: true, testo: 'No ChatGPT account is connected. The person signs in from Settings, Model laboratory, Provider, OpenAI, "Continue with ChatGPT" (ChatGPT Plus or Pro). The interface can open that screen.' };
+    return { ok: true, testo: s.pianoAbilitato
+      ? `A ChatGPT account is connected${s.email ? ` (${s.email})` : ''} and its plan pays requests to the ChatGPT plan models. Usage: ${s.consumi}.`
+      : `A ChatGPT account is connected${s.email ? ` (${s.email})` : ''}, but plan use was not granted: the person can enable it from Settings, Model laboratory, Provider, OpenAI.` };
+  }
+
   const leggi = () => providerStore.getRuntime('openrouter');
 
   function lista() {
@@ -112,6 +122,17 @@ export function creaOspiteFornitori({ providerStore, slugDelFornitoreFn = null }
     return async function onFornitoriFn(nome, argomenti = {}, { fase = 'esegui' } = {}) {
       try {
         if (nome === 'provider_exclusions_list') return fase === 'anteprima' ? { ok: true, carta: false } : lista();
+        if (nome === 'chatgpt_account') {
+          const azione = typeof argomenti?.action === 'string' ? argomenti.action.trim().toLowerCase() : '';
+          if (azione === 'status') return fase === 'anteprima' ? { ok: true, carta: false } : statoChatgpt();
+          if (azione !== 'disconnect') return rifiuto('chatgpt_account needs action "status" or "disconnect".');
+          if (automazioneDelGiro) return rifiuto('an automation run cannot disconnect ChatGPT: nobody could approve it.');
+          if (!accessoChatgpt || !accessoChatgpt.stato().collegato) return fase === 'anteprima' ? { ok: true, carta: false } : { ok: true, testo: 'Nothing to do: no ChatGPT account is connected.' };
+          if (fase === 'anteprima') return { ok: true, carta: true, azione: { fornitore: 'chatgpt', email: accessoChatgpt.stato().email ?? null } };
+          const { revocaConfermata } = await accessoChatgpt.esci();
+          return { ok: true, testo: revocaConfermata ? 'Done. ChatGPT is disconnected: requests no longer use the person\'s plan.'
+            : 'Disconnected in TALOS, but OpenAI did not confirm the revocation: the person can also remove TALOS in ChatGPT Settings.' };
+        }
         if (nome !== 'provider_exclude' && nome !== 'provider_allow') return rifiuto(`unknown tool ${nome}.`);
         if (automazioneDelGiro) return rifiuto('an automation run cannot change the excluded providers: nobody could approve it.');
         const p = await piano(nome, argomenti ?? {});

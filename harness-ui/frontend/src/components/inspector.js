@@ -250,6 +250,22 @@ export function anteprimaIndiceGiri(giri = []) {
   ].filter(Boolean).join(' · ');
 }
 
+/**
+ * 11/10/2026 (owner: «levare dal composer la pillola dei giri… c'è la sezione Contesto») — la riga dell'INVIO in corso, in testa
+ * all'Indice dei giri: quante richieste al modello ha fatto questo invio, contro il tetto quando il kernel l'ha dichiarato. Il tono
+ * è quello che aveva la pillola (decisione B12 del 06/09, `statoGiri`): avviso dall'80% del tetto. `null` = niente da dire.
+ * ⛔ Non è il numero della CONVERSAZIONE (l'anteprima «N giri · M messaggi»): è quello che può finire contro il tetto.
+ * @returns {[string, string, string]|null}
+ */
+export function rigaDellInvio({ giri = null, tetto = null } = {}) {
+  const n = giri === null || giri === undefined ? NaN : Number(giri);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  const conTetto = Number.isFinite(Number(tetto)) && Number(tetto) > 0;
+  // il plurale segue il TETTO, che è il numero davanti alla parola («1 di 1 richiesta», «3 di 24 richieste»)
+  const valore = conTetto ? tn('processi.inspector.thisSendOfOne', 'processi.inspector.thisSendOfMany', Number(tetto), { n, tetto: Number(tetto) }) : tn('processi.inspector.thisSendOne', 'processi.inspector.thisSendMany', n);
+  return [tr('processi.inspector.thisSend'), valore, statoGiri(n, tetto) === 'vicino' ? 'invio-vicino' : ''];
+}
+
 export function righeFile(file = []) {
   return file.map((f) => [f.path, `+${f.aggiunte ?? 0}${f.rimozioni ? ` −${f.rimozioni}` : ''}`]);
 }
@@ -1380,6 +1396,7 @@ function kv(d, k, v, classeV = '') { const r = el(d, 'div', 'talos-kv'); r.appen
    italiano (nato il 06/09 per il difetto BH-12, nove componenti che scrivevano «1 ricordi»). Qui
    si leggeva «1 scritture»: la decima occorrenza dello stesso difetto. */
 import { linguaCorrenteDiT, t as tr, tn } from './lingua.js';
+import { statoGiri } from './chat-foot.js'; // 11/10/2026: la regola di tono della pillola dei giri, che ora vive qui
 
 /*
  * ⛔ 23/09/2026 (riparazione D6 della revisione UI) — i conteggi degli agenti si scrivono col raggruppamento
@@ -1953,8 +1970,13 @@ export function aggiornaInspector(inspector, dati = {}, { document: d = globalTh
        ne sono — «Nessun giro ancora» su una sessione da 1363 giri era una frase falsa a schermo per ~14 s. Si dice la
        stessa cosa del velo della chat, con la stessa chiave. */
     const indiceVuoto = dati.storiaInCaricamento === true ? tr('app.sessions.openingHistory') : tr('processi.inspector.turnsNone');
-    riempiCard(d, indice, giri.length ? giri : [[indiceVuoto, '—']], { classiValore: (r) => (r[2] === 'accent' ? 'talos-kv__v--accent' : '') });
-    scriviAnteprima(indice, giri.length ? anteprimaIndiceGiri(dati.giri) : dati.storiaInCaricamento === true ? '…' : '—');
+    // durante la storia il numero è quello di un invio intermedio del replay (A1-bis 5): si tace, come faceva la pillola
+    const invio = dati.storiaInCaricamento === true ? null : rigaDellInvio(dati.invio ?? {});
+    const righeIndice = giri.length ? giri : [[indiceVuoto, '—']];
+    riempiCard(d, indice, invio ? [invio, ...righeIndice] : righeIndice, { classiValore: (r) => (r[2] === 'accent' ? 'talos-kv__v--accent' : r[2] === 'invio-vicino' ? 'talos-kv__v--avviso' : '') });
+    const anteprima = giri.length ? anteprimaIndiceGiri(dati.giri) : dati.storiaInCaricamento === true ? '…' : '—';
+    // la card nasce compressa: vicino al tetto l'avviso deve vedersi anche da chiusa, nella sua testata
+    scriviAnteprima(indice, invio?.[2] === 'invio-vicino' ? `${invio[0]} ${invio[1]} · ${anteprima}` : anteprima);
   }
   if (!schedaDaSaltare(inspector, inspector.querySelector('#railFile'), 'file')) {
     const fileCard = inspector.querySelector('#railFile [data-c="InspectorCard"]');
