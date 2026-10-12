@@ -33,11 +33,11 @@ test.after(() => browser?.close());
 test.before(async () => {
   const script = await build({ absWorkingDir: tmpdir(), plugins: [sorgenti], stdin: { contents: `
     import { apriLinkEsterno, montaClicSuiLink } from './src/components/conferma-link.js';
-    import { creaSitiFidati } from './src/components/link-esterni.js';
+    import { creaSitiFidati, creaDestinazioneDeiLink } from './src/components/link-esterni.js';
     import { montaSitiFidati } from './src/components/siti-fidati.js';
     import { creaMessaggioUtente } from './src/components/conversazione.js';
     import { renderizzaMarkdown } from './src/components/markdown.js';
-    window.lk = { apriLinkEsterno, montaClicSuiLink, creaSitiFidati, montaSitiFidati, creaMessaggioUtente, renderizzaMarkdown };
+    window.lk = { apriLinkEsterno, montaClicSuiLink, creaSitiFidati, creaDestinazioneDeiLink, montaSitiFidati, creaMessaggioUtente, renderizzaMarkdown };
   `, resolveDir: frontend, sourcefile: 'lk-banco.js' }, tsconfigRaw: {}, bundle: true, write: false, format: 'iife', logLevel: 'silent' });
   const stile = await build({ absWorkingDir: tmpdir(), plugins: [sorgenti], entryPoints: [resolve(frontend, 'src/styles/main.css')], tsconfigRaw: {}, bundle: true, write: false, external: ['./fonts/*'], logLevel: 'silent' });
   browser = await chromium.launch({ channel: 'chrome', headless: true });
@@ -168,8 +168,115 @@ test('LINK-CONFERMA-04: nelle Impostazioni i siti fidati si vedono e si tolgono;
   await page.evaluate(() => { window.fidati.aggiungi('example.com'); window.fidati.aggiungi('www.olivemagazine.com'); });
   assert.deepEqual(await carta.locator('[data-sito-fidato] .talos-setting__label').allInnerTexts(), ['example.com', 'www.olivemagazine.com'], 'la carta segue l elenco da sola');
   assert.equal(await carta.locator('[data-siti-fidati-vuoto]').count(), 0);
-  await carta.locator('[data-sito-fidato="example.com"] button').click();
+  await carta.locator('[data-sito-fidato="example.com"] [data-sito-togli]').click();
   assert.deepEqual(await carta.locator('[data-sito-fidato] .talos-setting__label').allInnerTexts(), ['www.olivemagazine.com']);
   assert.equal(await page.evaluate(() => clic('https://example.com/a')), 'chiesto');
   assert.equal(await carta.count(), 1, 'una carta sola, anche dopo più ridisegni');
+});
+
+/*
+ * 12/10/2026 — DUE PORTE (owner): il link si apre nella scheda Browser di TALOS o nel browser del computer. Mockup approvato in
+ * `Downloads/handoff-talos-2026-09-27/mockup-link-due-porte-2026-10-12/`. Qui «aprire» resta un contatore: `[indirizzo, destinazione]`.
+ */
+const conDuePorte = (page, { puoInTalos = true } = {}) => page.evaluate((puo) => {
+  const memoria = new Map();
+  const deposito = { getItem: (k) => memoria.get(k) ?? null, setItem: (k, v) => memoria.set(k, v) };
+  window.fidati = lk.creaSitiFidati({ deposito });
+  window.destinazioni = lk.creaDestinazioneDeiLink({ deposito });
+  window.aperti = [];
+  window.inTalos = puo;
+  window.clic = (indirizzo) => lk.apriLinkEsterno(indirizzo, { fidati: window.fidati, destinazioni: window.destinazioni, puoInTalos: () => window.inTalos,
+    apri: (u, dove) => window.aperti.push([u, dove]), copia: () => {} });
+}, puoInTalos);
+const porte = (page) => page.evaluate(() => [...document.querySelectorAll('dialog[open] [data-link-apri]')].map((b) => [b.dataset.linkApri, b.textContent.trim(), b.classList.contains('talos-button--primary')]));
+const chiusa = (page) => page.waitForFunction(() => !document.querySelector('dialog[open]'));
+
+test('LINK-PORTE-01: due pulsanti sempre nello stesso posto — in evidenza l ultimo usato, e la destinazione scelta arriva a chi apre', async (t) => {
+  const page = await pagina(t);
+  await conDuePorte(page);
+  assert.equal(await page.evaluate(() => clic('https://example.com/a')), 'chiesto');
+  assert.deepEqual(await porte(page), [['talos', 'Apri in TALOS', false], ['sistema', 'Apri nel browser', true]], 'la prima volta è in evidenza il browser del computer, com era');
+  assert.equal(await page.evaluate(() => document.activeElement?.textContent?.trim()), 'Annulla', 'il fuoco resta sulla via d uscita');
+  await page.locator('dialog[open] [data-link-apri="talos"]').click();
+  await chiusa(page);
+  assert.deepEqual(await page.evaluate(() => window.aperti), [['https://example.com/a', 'talos']]);
+  await page.evaluate(() => clic('https://altro.test/b'));
+  assert.deepEqual(await porte(page), [['talos', 'Apri in TALOS', true], ['sistema', 'Apri nel browser', false]], 'stesso ordine, cambia solo l enfasi');
+  await page.locator('dialog[open] [data-link-apri="sistema"]').click();
+  await chiusa(page);
+  assert.deepEqual(await page.evaluate(() => [window.aperti.at(-1), window.destinazioni.ultima(), window.destinazioni.fissa(), window.fidati.elenco()]),
+    [['https://altro.test/b', 'sistema'], 'sistema', null, []], 'senza spunte non si fissa niente e nessun sito diventa fidato');
+});
+
+test('LINK-PORTE-02: «Non chiedermi più dove» — da lì in poi la domanda sul sito resta, con un pulsante solo; dalle Impostazioni si torna a scegliere', async (t) => {
+  const page = await pagina(t);
+  await conDuePorte(page);
+  await page.evaluate(() => { lk.montaSitiFidati({ fidati: window.fidati, destinazioni: window.destinazioni }); });
+  await page.evaluate(() => clic('https://example.com/a'));
+  assert.match(await page.locator('dialog[open] label:has([data-link-non-chiedere])').innerText(), /Non chiedermi più dove aprire i link\s+Lo cambi quando vuoi in Impostazioni → Link dalla chat\./u);
+  await page.locator('dialog[open] [data-link-non-chiedere]').check();
+  await page.locator('dialog[open] [data-link-apri="talos"]').click();
+  await chiusa(page);
+  assert.deepEqual(await page.evaluate(() => [window.destinazioni.fissa(), window.fidati.elenco()]), ['talos', []], 'fissare DOVE non rende fidato il sito');
+  assert.equal(await page.evaluate(() => clic('https://altro.test/b')), 'chiesto', 'il sito si mostra ancora');
+  assert.deepEqual(await porte(page), [['talos', 'Apri in TALOS', true]]);
+  assert.equal(await page.locator('dialog[open] [data-link-non-chiedere]').count(), 0, 'la spunta non si offre due volte');
+  assert.equal((await page.locator('dialog[open] label:has([data-link-fidati])').innerText()).trim(), 'Apri i link verso altro.test senza chiedere', 'con una porta sola non si promette di ricordare «dove»');
+  await page.locator('dialog[open] [data-link-apri]').click();
+  await chiusa(page);
+  assert.deepEqual(await page.evaluate(() => window.aperti.at(-1)), ['https://altro.test/b', 'talos']);
+  const riga = page.locator('[data-setting-row="linkDove"]');
+  assert.deepEqual(await riga.locator('[data-link-dove]').evaluateAll((bb) => bb.map((b) => [b.textContent.trim(), b.getAttribute('aria-pressed')])),
+    [['Chiedi ogni volta', 'false'], ['In TALOS', 'true'], ['Nel tuo browser', 'false']]);
+  await riga.locator('[data-link-dove="chiedi"]').click();
+  assert.equal(await page.evaluate(() => window.destinazioni.fissa()), null);
+  assert.equal(await page.evaluate(() => document.activeElement?.dataset?.linkDove), 'chiedi', 'ridisegnando, il fuoco resta sulla scelta appena premuta');
+  await page.evaluate(() => clic('https://altro.test/c'));
+  assert.deepEqual((await porte(page)).map((p) => p[0]), ['talos', 'sistema'], 'si torna a scegliere');
+});
+
+test('LINK-PORTE-03: un sito fidato ricorda anche DOVE — si apre lì senza chiedere, e dalle Impostazioni si cambia', async (t) => {
+  const page = await pagina(t);
+  await conDuePorte(page);
+  await page.evaluate(() => { lk.montaSitiFidati({ fidati: window.fidati, destinazioni: window.destinazioni }); });
+  await page.evaluate(() => clic('https://example.com/a'));
+  assert.match(await page.locator('dialog[open] label:has([data-link-fidati])').innerText(), /Apri i link verso example\.com senza chiedere\s+Ricordo anche dove aprirli: in TALOS o nel tuo browser\./u);
+  await page.locator('dialog[open] [data-link-fidati]').check();
+  await page.locator('dialog[open] [data-link-apri="talos"]').click();
+  await chiusa(page);
+  assert.equal(await page.evaluate(() => window.fidati.destinazione('example.com')), 'talos');
+  assert.equal(await page.evaluate(() => clic('https://example.com/b')), 'aperto');
+  assert.deepEqual(await page.evaluate(() => window.aperti.at(-1)), ['https://example.com/b', 'talos']);
+  const sito = page.locator('[data-sito-fidato="example.com"]');
+  assert.deepEqual(await sito.locator('[data-link-dove]').evaluateAll((bb) => bb.map((b) => [b.textContent.trim(), b.getAttribute('aria-pressed')])), [['In TALOS', 'true'], ['Nel tuo browser', 'false']]);
+  await sito.locator('[data-link-dove="sistema"]').click();
+  assert.equal(await page.evaluate(() => clic('https://example.com/c')), 'aperto');
+  assert.deepEqual(await page.evaluate(() => window.aperti.at(-1)), ['https://example.com/c', 'sistema']);
+  await sito.locator('[data-sito-togli]').click();
+  assert.equal(await page.evaluate(() => clic('https://example.com/d')), 'chiesto', 'tolto il sito, si richiede');
+});
+
+test('LINK-PORTE-04 AL CONTRARIO: una pagina di chiavi o di account e una chat senza scheda Browser hanno la sola porta del computer, anche da sito fidato in TALOS', async (t) => {
+  const page = await pagina(t);
+  await conDuePorte(page);
+  await page.evaluate(() => { window.destinazioni.fissaSu('talos'); window.fidati.aggiungi('openrouter.ai', 'talos'); });
+  assert.equal(await page.evaluate(() => clic('https://openrouter.ai/settings/keys')), 'aperto');
+  assert.deepEqual(await page.evaluate(() => window.aperti.at(-1)), ['https://openrouter.ai/settings/keys', 'sistema'], 'fidato in TALOS, ma la pagina delle chiavi va nel browser del computer');
+  await page.evaluate(() => clic('https://auth.openai.com/log-in'));
+  assert.deepEqual(await porte(page), [['sistema', 'Apri nel browser', true]]);
+  assert.equal(await page.locator('dialog[open] [data-link-solo-sistema]').innerText(), 'Le pagine di chiavi e account si aprono sempre nel tuo browser.');
+  assert.equal(await page.locator('dialog[open] [data-link-non-chiedere]').count(), 0);
+  await page.locator('dialog[open] [data-link-apri]').click();
+  await chiusa(page);
+  assert.equal(await page.evaluate(() => window.destinazioni.fissa()), 'talos', 'una pagina delicata non tocca la scelta fatta');
+  await page.evaluate(() => { window.inTalos = false; window.fidati.aggiungi('example.com', 'talos'); });
+  assert.equal(await page.evaluate(() => clic('https://example.com/a')), 'aperto');
+  assert.deepEqual(await page.evaluate(() => window.aperti.at(-1)), ['https://example.com/a', 'sistema'], 'senza scheda Browser non si promette TALOS');
+  await page.evaluate(() => clic('https://altro.test/x'));
+  assert.deepEqual(await porte(page), [['sistema', 'Apri nel browser', true]]);
+  assert.equal(await page.locator('dialog[open] [data-link-solo-sistema]').count(), 0, 'la nota vale solo per le pagine delicate');
+  await page.locator('dialog[open] [data-link-apri]').click();
+  await chiusa(page);
+  await page.evaluate(() => clic('http://altro.test/x'));
+  assert.deepEqual(await porte(page), [], 'http resta non apribile, in nessuna delle due porte');
 });

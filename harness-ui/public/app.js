@@ -4821,6 +4821,7 @@ var init_chat = __esm({
         "context.failure.superseded": "la conversazione è andata avanti nel frattempo: il riassunto non vale più",
         "context.failure.notSaved": "il riassunto non è stato salvato su disco",
         "context.failure.interrupted": "il server si è fermato mentre riassumeva: la conversazione resta intera",
+        "context.failure.fellBack": "il motore del contesto non ha risposto, quindi la chat è andata avanti con la compattazione semplice",
         "context.row.undone": "Riassunto annullato · la conversazione intera torna al modello",
         "context.row.notSummarized": "Conversazione non riassunta",
         "context.row.summarized": "Conversazione riassunta",
@@ -4936,6 +4937,17 @@ var init_chat = __esm({
         "link.settingsEmpty": "Nessun sito si apre senza chiedere.",
         "link.settingsRemove": "Chiedi di nuovo",
         "link.settingsRemoveNamed": "Chiedi di nuovo prima di aprire {site}",
+        "link.openInTalos": "Apri in TALOS",
+        "link.trustWhere": "Ricordo anche dove aprirli: in TALOS o nel tuo browser.",
+        "link.dontAskWhere": "Non chiedermi più dove aprire i link",
+        "link.dontAskWhereHelp": "Lo cambi quando vuoi in Impostazioni → Link dalla chat.",
+        "link.onlySystem": "Le pagine di chiavi e account si aprono sempre nel tuo browser.",
+        "link.settingsWhere": "Dove aprire i link",
+        "link.settingsWhereHelp": "Vale per i siti che non sono nell’elenco qui sotto. Le pagine di chiavi e account si aprono sempre nel tuo browser.",
+        "link.whereAsk": "Chiedi ogni volta",
+        "link.whereTalos": "In TALOS",
+        "link.whereSystem": "Nel tuo browser",
+        "link.settingsSiteWhere": "Dove si apre {site}",
         "chatgptPlan.pill": "Piano ChatGPT",
         "chatgptPlan.using": "Stai usando il piano ChatGPT",
         "chatgptPlan.manageUsage": "Gestisci l’utilizzo",
@@ -5603,6 +5615,7 @@ var init_chat = __esm({
         "context.failure.superseded": "the conversation moved on in the meantime: the summary no longer applies",
         "context.failure.notSaved": "the summary was not saved to disk",
         "context.failure.interrupted": "the server stopped while summarizing: the conversation stays whole",
+        "context.failure.fellBack": "the context engine did not respond, so the chat went on with the simple compaction",
         "context.row.undone": "Summary undone · the whole conversation goes back to the model",
         "context.row.notSummarized": "Conversation not summarized",
         "context.row.summarized": "Conversation summarized",
@@ -5718,6 +5731,17 @@ var init_chat = __esm({
         "link.settingsEmpty": "No site opens without asking.",
         "link.settingsRemove": "Ask again",
         "link.settingsRemoveNamed": "Ask again before opening {site}",
+        "link.openInTalos": "Open in TALOS",
+        "link.trustWhere": "I’ll also remember where to open them: in TALOS or in your browser.",
+        "link.dontAskWhere": "Don’t ask me where to open links again",
+        "link.dontAskWhereHelp": "You can change it in Settings → Links from chat.",
+        "link.onlySystem": "Key and account pages always open in your browser.",
+        "link.settingsWhere": "Where links open",
+        "link.settingsWhereHelp": "For the sites that are not in the list below. Key and account pages always open in your browser.",
+        "link.whereAsk": "Ask every time",
+        "link.whereTalos": "In TALOS",
+        "link.whereSystem": "In your browser",
+        "link.settingsSiteWhere": "Where to open {site}",
         "chatgptPlan.pill": "ChatGPT plan",
         "chatgptPlan.using": "Using ChatGPT plan",
         "chatgptPlan.manageUsage": "Manage usage",
@@ -21267,10 +21291,17 @@ function creaSitiFidati({ deposito = depositoDelBrowser() } = {}) {
     if (Array.isArray(letto)) siti = new Set(letto.map(normale2).filter((s) => NOME_DI_SITO.test(s)));
   } catch {
   }
+  let inTalos = /* @__PURE__ */ new Set();
+  try {
+    const letto = JSON.parse(deposito?.getItem(CHIAVE_DESTINAZIONE_DEI_FIDATI) ?? "[]");
+    if (Array.isArray(letto)) inTalos = new Set(letto.map(normale2).filter((s) => siti.has(s)));
+  } catch {
+  }
   const ascoltatori = /* @__PURE__ */ new Set();
   const salva = () => {
     try {
       deposito?.setItem(CHIAVE_SITI_FIDATI, JSON.stringify([...siti].sort()));
+      deposito?.setItem(CHIAVE_DESTINAZIONE_DEI_FIDATI, JSON.stringify([...inTalos].sort()));
     } catch {
     }
     for (const fn2 of ascoltatori) {
@@ -21280,18 +21311,38 @@ function creaSitiFidati({ deposito = depositoDelBrowser() } = {}) {
       }
     }
   };
+  const scrivi2 = (s, destinazione) => {
+    const prima = inTalos.has(s);
+    if (destinazioneValida(destinazione) === "talos") inTalos.add(s);
+    else inTalos.delete(s);
+    return prima !== inTalos.has(s);
+  };
   return Object.freeze({
     elenco: () => [...siti].sort(),
     fidato: (sito) => siti.has(normale2(sito)),
-    aggiungi(sito) {
+    /** Dove si apre un sito fidato; `null` se il sito non è fidato. */
+    destinazione: (sito) => {
       const s = normale2(sito);
-      if (NOME_DI_SITO.test(s) && !siti.has(s)) {
-        siti.add(s);
-        salva();
-      }
+      return siti.has(s) ? inTalos.has(s) ? "talos" : "sistema" : null;
+    },
+    aggiungi(sito, destinazione = "sistema") {
+      const s = normale2(sito);
+      if (!NOME_DI_SITO.test(s)) return;
+      const nuovo = !siti.has(s);
+      siti.add(s);
+      if (scrivi2(s, destinazione) || nuovo) salva();
+    },
+    /** Cambia dove si apre un sito già fidato; su un sito non fidato non fa niente. */
+    imposta(sito, destinazione) {
+      const s = normale2(sito);
+      if (siti.has(s) && scrivi2(s, destinazione)) salva();
     },
     togli(sito) {
-      if (siti.delete(normale2(sito))) salva();
+      const s = normale2(sito);
+      if (siti.delete(s)) {
+        inTalos.delete(s);
+        salva();
+      }
     },
     /** Avvisa a ogni cambio dell'elenco (le Impostazioni si ridisegnano). */
     ascolta(fn2) {
@@ -21303,6 +21354,65 @@ function creaSitiFidati({ deposito = depositoDelBrowser() } = {}) {
 function sitiFidatiDellApp() {
   dellApp ??= creaSitiFidati();
   return dellApp;
+}
+function creaDestinazioneDeiLink({ deposito = depositoDelBrowser() } = {}) {
+  let ultima = "sistema";
+  let fissa = null;
+  try {
+    const letto = JSON.parse(deposito?.getItem(CHIAVE_DESTINAZIONE) ?? "null");
+    if (letto && typeof letto === "object") {
+      ultima = destinazioneValida(letto.ultima);
+      fissa = DESTINAZIONI_DEI_LINK.includes(letto.fissa) ? letto.fissa : null;
+    }
+  } catch {
+  }
+  const ascoltatori = /* @__PURE__ */ new Set();
+  const salva = () => {
+    try {
+      deposito?.setItem(CHIAVE_DESTINAZIONE, JSON.stringify({ ultima, fissa }));
+    } catch {
+    }
+    for (const fn2 of ascoltatori) {
+      try {
+        fn2();
+      } catch {
+      }
+    }
+  };
+  return Object.freeze({
+    ultima: () => ultima,
+    fissa: () => fissa,
+    ricorda(destinazione) {
+      const d = destinazioneValida(destinazione);
+      if (d !== ultima) {
+        ultima = d;
+        salva();
+      }
+    },
+    /** `null` = chiedi ogni volta. Un valore sconosciuto vale `null`: non si fissa niente per sbaglio. */
+    fissaSu(destinazione) {
+      const d = DESTINAZIONI_DEI_LINK.includes(destinazione) ? destinazione : null;
+      if (d === fissa) return;
+      fissa = d;
+      if (d) ultima = d;
+      salva();
+    },
+    ascolta(fn2) {
+      ascoltatori.add(fn2);
+      return () => ascoltatori.delete(fn2);
+    }
+  });
+}
+function destinazioneDeiLinkDellApp() {
+  destinazioneDellApp ??= creaDestinazioneDeiLink();
+  return destinazioneDellApp;
+}
+function paginaSoloNelSistema(indirizzo) {
+  const letto = leggiLinkEsterno(indirizzo);
+  if (!letto) return false;
+  const u = new URL(letto.indirizzo);
+  if (ACCESSO.test(u.hostname)) return true;
+  return FORNITORI.test(u.hostname) && (PERCORSI_DELICATI.test(u.pathname) || /^#\/?(?:settings|account)/iu.test(u.hash));
 }
 function fineDellIndirizzo(grezzo) {
   let fine = grezzo.length;
@@ -21340,13 +21450,21 @@ function pezziConIndirizzi(testo2) {
   if (ultimo < stringa.length) pezzi.push({ testo: stringa.slice(ultimo) });
   return pezzi;
 }
-var CHIAVE_SITI_FIDATI, NOME_DI_SITO, normale2, dellApp;
+var CHIAVE_SITI_FIDATI, NOME_DI_SITO, normale2, DESTINAZIONI_DEI_LINK, destinazioneValida, CHIAVE_DESTINAZIONE_DEI_FIDATI, CHIAVE_DESTINAZIONE, dellApp, destinazioneDellApp, ACCESSO, PERCORSI_DELICATI, FORNITORI;
 var init_link_esterni = __esm({
   "src/components/link-esterni.js"() {
     CHIAVE_SITI_FIDATI = "talos.harness.desktop.link-fidati.v1";
     NOME_DI_SITO = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/u;
     normale2 = (sito) => typeof sito === "string" ? sito.trim().toLowerCase() : "";
+    DESTINAZIONI_DEI_LINK = Object.freeze(["talos", "sistema"]);
+    destinazioneValida = (d) => d === "talos" ? "talos" : "sistema";
+    CHIAVE_DESTINAZIONE_DEI_FIDATI = "talos.harness.desktop.link-fidati-destinazione.v1";
+    CHIAVE_DESTINAZIONE = "talos.harness.desktop.link-destinazione.v1";
     dellApp = null;
+    destinazioneDellApp = null;
+    ACCESSO = /^(?:auth|login|accounts?|signin|sso|id)\./u;
+    PERCORSI_DELICATI = /^\/(?:[^/]+\/)*(?:settings|account|billing|api-?keys?|keys?|tokens?|credentials?|login|signin|sign-in|auth|oauth|authorize)(?:\/|$)/iu;
+    FORNITORI = /(?:^|\.)(?:openrouter\.ai|openai\.com|chatgpt\.com|anthropic\.com|claude\.ai|claude\.com|z\.ai|bigmodel\.cn|deepseek\.com|mistral\.ai|x\.ai|groq\.com|google\.com|github\.com|huggingface\.co)$/u;
   }
 });
 
@@ -29391,11 +29509,30 @@ function nodo3(doc, tag2, classe, testo2) {
   if (testo2 !== void 0 && testo2 !== null) n.textContent = String(testo2);
   return n;
 }
-function apriLinkEsterno(indirizzo, { fidati, apri, copia: copia3 = null, document: doc = globalThis.document } = {}) {
+function rigaInterruttore(doc, { dato, frase, sotto = null }) {
+  const riga2 = nodo3(doc, "label", "talos-link-conferma__fidati");
+  const interruttore = nodo3(doc, "input", "talos-switch");
+  interruttore.type = "checkbox";
+  interruttore.setAttribute("role", "switch");
+  interruttore.dataset.c = "Switch";
+  interruttore.dataset[dato] = "";
+  const testo2 = nodo3(doc, "span", null, frase);
+  if (sotto) testo2.append(nodo3(doc, "span", "td-subtle talos-link-conferma__sotto", sotto));
+  riga2.append(interruttore, testo2);
+  return { riga: riga2, interruttore };
+}
+function apriLinkEsterno(indirizzo, { fidati, destinazioni = null, puoInTalos = () => true, apri, copia: copia3 = null, document: doc = globalThis.document } = {}) {
   const letto = leggiLinkEsterno(indirizzo);
   if (!letto) return "rifiutato";
+  const delicata = paginaSoloNelSistema(letto.indirizzo);
+  let talosC = false;
+  try {
+    talosC = Boolean(destinazioni) && !delicata && puoInTalos() === true;
+  } catch {
+    talosC = false;
+  }
   if (letto.sicuro && fidati?.fidato(letto.sito)) {
-    apri(letto.indirizzo);
+    apri(letto.indirizzo, talosC && fidati.destinazione?.(letto.sito) === "talos" ? "talos" : "sistema");
     return "aperto";
   }
   const dove = nodo3(doc, "p", "td-prose talos-link-conferma__dove");
@@ -29403,16 +29540,24 @@ function apriLinkEsterno(indirizzo, { fidati, apri, copia: copia3 = null, docume
   const intero2 = nodo3(doc, "p", "td-subtle talos-link-conferma__indirizzo", letto.indirizzo);
   intero2.dataset.linkIndirizzo = "";
   const pezzi = [dove, intero2];
+  const fissa = talosC ? destinazioni.fissa() : null;
   let sempre = null;
+  let nonChiedere = null;
   if (letto.sicuro) {
-    const riga2 = nodo3(doc, "label", "talos-link-conferma__fidati");
-    sempre = nodo3(doc, "input", "talos-switch");
-    sempre.type = "checkbox";
-    sempre.setAttribute("role", "switch");
-    sempre.dataset.c = "Switch";
-    sempre.dataset.linkFidati = "";
-    riga2.append(sempre, nodo3(doc, "span", null, t("chat.link.trust", { site: letto.sito })));
-    pezzi.push(riga2);
+    const fidato = rigaInterruttore(doc, { dato: "linkFidati", frase: t("chat.link.trust", { site: letto.sito }), sotto: talosC && !fissa ? t("chat.link.trustWhere") : null });
+    sempre = fidato.interruttore;
+    pezzi.push(fidato.riga);
+    if (talosC && !fissa) {
+      const dovunque = rigaInterruttore(doc, { dato: "linkNonChiedere", frase: t("chat.link.dontAskWhere"), sotto: t("chat.link.dontAskWhereHelp") });
+      nonChiedere = dovunque.interruttore;
+      pezzi.push(dovunque.riga);
+    }
+    if (delicata && destinazioni) {
+      const nota = nodo3(doc, "p", "td-subtle talos-link-conferma__avviso", t("chat.link.onlySystem"));
+      nota.setAttribute("role", "note");
+      nota.dataset.linkSoloSistema = "";
+      pezzi.push(nota);
+    }
   } else {
     const avviso = nodo3(doc, "p", "td-subtle talos-link-conferma__avviso", t("chat.link.notSecure"));
     avviso.setAttribute("role", "note");
@@ -29434,15 +29579,24 @@ function apriLinkEsterno(indirizzo, { fidati, apri, copia: copia3 = null, docume
     piede.append(copiaLink);
   }
   if (letto.sicuro) {
-    const conferma = nodo3(doc, "button", "talos-button talos-button--primary talos-button--sm", t("chat.link.open"));
-    conferma.type = "button";
-    conferma.dataset.linkApri = "";
-    conferma.addEventListener("click", () => {
-      if (sempre?.checked) fidati?.aggiungi(letto.sito);
-      chiudiModale();
-      apri(letto.indirizzo);
-    });
-    piede.append(conferma);
+    const porte = !talosC ? ["sistema"] : fissa ? [fissa] : ["talos", "sistema"];
+    const inEvidenza = porte.length === 1 ? porte[0] : destinazioni.ultima();
+    for (const porta of porte) {
+      const primario = porta === inEvidenza;
+      const conferma = nodo3(doc, "button", `talos-button talos-button--${primario ? "primary" : "secondary"} talos-button--sm`, t(porta === "talos" ? "chat.link.openInTalos" : "chat.link.open"));
+      conferma.type = "button";
+      conferma.dataset.linkApri = porta;
+      conferma.addEventListener("click", () => {
+        if (sempre?.checked) fidati?.aggiungi(letto.sito, porta);
+        if (talosC) {
+          if (nonChiedere?.checked) destinazioni.fissaSu(porta);
+          else destinazioni.ricorda(porta);
+        }
+        chiudiModale();
+        apri(letto.indirizzo, porta);
+      });
+      piede.append(conferma);
+    }
   }
   pezzi.push(piede);
   apriModale(t("chat.link.title"), pezzi, { document: doc });
@@ -72500,7 +72654,10 @@ var init_compattazione_legacy = __esm({
       superata: "chat.context.failure.superseded",
       "non-salvata": "chat.context.failure.notSaved",
       // 24/09/2026: la chiusura che il registro scrive al ripristino per un riassunto rimasto a metà (session-registry.mjs, ripristina)
-      interrotta: "chat.context.failure.interrupted"
+      interrotta: "chat.context.failure.interrupted",
+      /* Owner 12/10/2026, «errori di compattazione non devono bloccare il flusso chat»: il motore del contesto è caduto e la richiesta
+         è partita dalla compattazione semplice (`talosHarness.desktop-hotfix.mjs`, ripiego). La riga lo dice, e non ferma niente. */
+      ripiego: "chat.context.failure.fellBack"
     });
     ICONA = (doc, nome) => {
       const svg2 = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -76541,7 +76698,23 @@ ${nota?.contenuto || ""}`.trim(), t("app.notes.copied")),
         documento: document,
         dentro: "#conversation",
         fidati: sitiFidatiDellApp(),
-        apri: (indirizzo) => {
+        /*
+         * ⭐ 12/10/2026, decisione owner («due porte») — il link si apre nella scheda Browser di TALOS o nel browser del computer.
+         *   In TALOS si passa SUBITO alla scheda Browser (owner: «passa alla scheda Browser») e la pagina nasce come scheda viva,
+         *   dalla stessa porta del campo indirizzo (`apriPaginaVivaBrowser`: stesso indirizzo, stessa scheda). Senza una sessione
+         *   aperta la scheda Browser non ha dove tenere le pagine: la domanda offre solo il browser del computer.
+         * ⛔ Se l'apertura in TALOS fallisce lo dice la scheda Browser (`avvisa`), come per il campo indirizzo: mai una promessa muta.
+         */
+        destinazioni: destinazioneDeiLinkDellApp(),
+        puoInTalos: () => Boolean(state.realSession.id),
+        apri: (indirizzo, destinazione) => {
+          if (destinazione === "talos" && state.realSession.id) {
+            setView("browser");
+            apriPaginaVivaBrowser(indirizzo).catch((errore2) => {
+              browserUi?.avvisa(messaggioErroreUtente(errore2, t("app.browser.cannotOpenAddress")));
+            });
+            return;
+          }
           window.open(indirizzo, "_blank", "noopener,noreferrer");
         },
         copia: (indirizzo) => {
@@ -97765,7 +97938,28 @@ function montaMotoreContesto({ documento = globalThis.document, fetchFn = global
 // src/components/siti-fidati.js
 init_lingua();
 init_link_esterni();
-function montaSitiFidati({ documento = globalThis.document, fidati = sitiFidatiDellApp() } = {}) {
+function filaDiScelte(documento, { nome, voci, attuale, scegli }) {
+  const fila = documento.createElement("div");
+  fila.className = "talos-siti-fidati__dove";
+  fila.setAttribute("role", "group");
+  fila.setAttribute("aria-label", nome);
+  for (const voce2 of voci) {
+    const scelta = documento.createElement("button");
+    const attiva = voce2.valore === attuale;
+    scelta.type = "button";
+    scelta.className = `talos-button talos-button--${attiva ? "primary" : "secondary"} talos-button--sm`;
+    scelta.dataset.c = "Button";
+    scelta.dataset.linkDove = String(voce2.valore);
+    scelta.setAttribute("aria-pressed", String(attiva));
+    scelta.textContent = voce2.testo;
+    scelta.addEventListener("click", () => {
+      if (!attiva) scegli(voce2.valore);
+    });
+    fila.append(scelta);
+  }
+  return fila;
+}
+function montaSitiFidati({ documento = globalThis.document, fidati = sitiFidatiDellApp(), destinazioni = destinazioneDeiLinkDellApp() } = {}) {
   if (!documento) return null;
   let scheda = null;
   function disegna2() {
@@ -97780,6 +97974,8 @@ function montaSitiFidati({ documento = globalThis.document, fidati = sitiFidatiD
       scheda.setAttribute("aria-labelledby", "settings-group-privacy-link");
       pannello.append(scheda);
     }
+    const aFuoco = documento.activeElement instanceof documento.defaultView.Element ? documento.activeElement.closest("[data-link-dove]") : null;
+    const riprendi = aFuoco && scheda.contains(aFuoco) ? { riga: { ...aFuoco.closest("[data-setting-row], [data-sito-fidato]")?.dataset }, valore: aFuoco.dataset.linkDove } : null;
     const testa = documento.createElement("div");
     testa.className = "settings-group__head";
     testa.dataset.settingsGroupHead = "";
@@ -97790,6 +97986,31 @@ function montaSitiFidati({ documento = globalThis.document, fidati = sitiFidatiD
     testa.append(titolo2);
     const descrizione = documento.createElement("p");
     descrizione.textContent = t("chat.link.settingsDescription");
+    const pezzi = [testa, descrizione];
+    if (destinazioni) {
+      const riga2 = documento.createElement("div");
+      riga2.className = "talos-setting";
+      riga2.dataset.c = "SettingRow";
+      riga2.dataset.settingRow = "linkDove";
+      const nome = documento.createElement("span");
+      nome.className = "talos-setting__label";
+      nome.textContent = t("chat.link.settingsWhere");
+      const aiuto = documento.createElement("p");
+      aiuto.className = "talos-setting__help";
+      aiuto.textContent = t("chat.link.settingsWhereHelp");
+      const sinistra = documento.createElement("div");
+      sinistra.append(nome, aiuto);
+      const controllo = documento.createElement("div");
+      controllo.className = "talos-setting__control";
+      controllo.append(filaDiScelte(documento, {
+        nome: t("chat.link.settingsWhere"),
+        voci: [{ valore: "chiedi", testo: t("chat.link.whereAsk") }, { valore: "talos", testo: t("chat.link.whereTalos") }, { valore: "sistema", testo: t("chat.link.whereSystem") }],
+        attuale: destinazioni.fissa() ?? "chiedi",
+        scegli: (valore) => destinazioni.fissaSu(valore === "chiedi" ? null : valore)
+      }));
+      riga2.append(sinistra, controllo);
+      pezzi.push(riga2);
+    }
     const righe = fidati.elenco().map((sito) => {
       const riga2 = documento.createElement("div");
       riga2.className = "talos-setting";
@@ -97804,10 +98025,19 @@ function montaSitiFidati({ documento = globalThis.document, fidati = sitiFidatiD
       togli.type = "button";
       togli.className = "talos-button talos-button--secondary talos-button--sm";
       togli.textContent = t("chat.link.settingsRemove");
+      togli.dataset.sitoTogli = "";
       togli.setAttribute("aria-label", t("chat.link.settingsRemoveNamed", { site: sito }));
       togli.addEventListener("click", () => fidati.togli(sito));
       const controllo = documento.createElement("div");
-      controllo.className = "talos-setting__control";
+      controllo.className = "talos-setting__control talos-siti-fidati__dove";
+      if (destinazioni && typeof fidati.destinazione === "function") {
+        controllo.append(filaDiScelte(documento, {
+          nome: t("chat.link.settingsSiteWhere", { site: sito }),
+          voci: [{ valore: "talos", testo: t("chat.link.whereTalos") }, { valore: "sistema", testo: t("chat.link.whereSystem") }],
+          attuale: fidati.destinazione(sito),
+          scegli: (valore) => fidati.imposta(sito, valore)
+        }));
+      }
       controllo.append(togli);
       riga2.append(sinistra, controllo);
       return riga2;
@@ -97816,9 +98046,14 @@ function montaSitiFidati({ documento = globalThis.document, fidati = sitiFidatiD
     vuoto.className = "talos-muted";
     vuoto.dataset.sitiFidatiVuoto = "";
     vuoto.textContent = t("chat.link.settingsEmpty");
-    scheda.replaceChildren(testa, descrizione, ...righe.length ? righe : [vuoto]);
+    scheda.replaceChildren(...pezzi, ...righe.length ? righe : [vuoto]);
+    if (riprendi) {
+      const stessa = [...scheda.querySelectorAll("[data-setting-row], [data-sito-fidato]")].find((r) => r.dataset.settingRow === riprendi.riga.settingRow && r.dataset.sitoFidato === riprendi.riga.sitoFidato);
+      stessa?.querySelector(`[data-link-dove="${riprendi.valore}"]`)?.focus?.({ preventScroll: true });
+    }
   }
   fidati.ascolta(disegna2);
+  destinazioni?.ascolta(disegna2);
   documento.addEventListener("click", (e) => {
     if (e.target instanceof documento.defaultView.Element && e.target.closest('[aria-controls="setting-panel-privacy"]')) disegna2();
   });

@@ -10103,7 +10103,11 @@ export async function verificaPermessoScrittura(azione, { livelloAccesso, modali
      *   com'era (P0-bis 16/09, «entrambi stretto»).
      */
     const accessoPieno = livelloAccesso === 'accesso-pieno'
-    const segretoForzaConferma = Boolean(segreto) && !segretoConsentito && !(accessoPieno && azione.tipo === 'shell')
+    /* ⛔⛔ Owner 12/10/2026, «FULL ACCESS PER LEGGE NON DEVE CHIEDERE NESSUN PERMESSO»: il perimetro di BUG-17 si allarga a tutto
+       l'Accesso pieno — anche `leggi`/`elenca` su un segreto (owner: «File segreti» fra le carte da togliere). Come Claude Code
+       `bypassPermissions` (code.claude.com/docs/en/permissions, letta il 12/10/2026) e Hermes «yolo» (`tools/approval.py:483-488`).
+       Un «chiedi» o un «nega» per attrezzo scelto dalla persona restano sovrani (più sotto). */
+    const segretoForzaConferma = Boolean(segreto) && !segretoConsentito && !accessoPieno
     /* C2 R6 (08/10/2026): il sì «questo percorso per la sessione» ha evitato una domanda vera (non con l'Accesso pieno sulla
        shell, dove il segreto non chiede comunque) ⇒ se l'ha dato un antenato, la traccia lo dice. Opzione facoltativa: chi non
        la passa (banco, CLI, mobile) non vede differenze. */
@@ -10183,7 +10187,8 @@ export async function verificaPermessoScrittura(azione, { livelloAccesso, modali
      *   «Accesso pieno», stessa ragione di F15 qui sopra. Per ogni altro attrezzo, e con permessi
      *   inferiori, il cancello resta com'era.
      */
-    const sospettoForzaConferma = Boolean(sospetto) && azione.tipo !== 'leggi' && azione.tipo !== 'elenca' && !(accessoPieno && azione.tipo === 'shell')
+    /* Owner 12/10/2026: anche F-027 esce da TUTTO l'Accesso pieno, non solo dalla shell (stessa legge del segreto, qui sopra). */
+    const sospettoForzaConferma = Boolean(sospetto) && azione.tipo !== 'leggi' && azione.tipo !== 'elenca' && !accessoPieno
     /* R1 della review del desktop (09/10/2026): il commento della rete più sotto prometteva «nessun “sempre” per-attrezzo la concede
        da solo», ma questo ramo usciva PRIMA di leggerla — `shell: sempre` apriva la rete senza domanda. Misurato con la prova
        «rete R1» in tests/rete-della-shell.test.mjs. `azione.rete` arriva solo da un ospite che chiude la rete davvero. */

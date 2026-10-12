@@ -31,8 +31,8 @@
  * tetto massimo forza comunque un invio anche durante una raffica
  * lunghissima — mai un'attesa indefinita.
  */
-import { realpathSync, watch as watchReale } from 'node:fs';
-import { dirname, isAbsolute, parse, relative, resolve, sep } from 'node:path';
+import { lstatSync, readdirSync, realpathSync, watch as watchReale } from 'node:fs';
+import { dirname, isAbsolute, parse, relative, resolve, sep, win32 } from 'node:path';
 
 const DEBOUNCE_MS = 400;
 const TETTO_MASSIMO_MS = 2_000;
@@ -72,13 +72,80 @@ function eRadiceVolume(cartella) {
  * `C:/PROGRA~1` → `C:\Program Files`). Se la forma lunga non è ottenibile
  * (cartella inesistente, come nei test con watcher finti) si osserva il
  * percorso com'è — il comportamento di sempre, non un guasto nuovo.
+ *
+ * ⛔ 12/10/2026, F-E-001 (S1, stress test della CLI 0.5.5, riprodotto nell'isolamento
+ * vero): il ripiego «si osserva il percorso com'è» ERA il caso che abortisce. Dentro un
+ * isolamento il realpath nativo è rifiutato (EPERM), oppure un precaricamento lo fa
+ * ricadere sul realpath JavaScript, che torna SENZA errore e col nome ancora corto:
+ * `C:\Users\me\DOWNLO~1\…` arrivava a fs.watch e il processo moriva con 0xC0000409.
+ * Owner 12/10 («tutte e due»): (1) ogni segmento corto si ricostruisce per IDENTITÀ del
+ * file — la voce della cartella madre con lo stesso dev+ino, una sola corrispondenza,
+ * come la CLI (cli/src/security/real-path.ts, expandShortNames, f211ea03f); (2) se un
+ * segmento corto resta non provato la cartella NON si sorveglia: niente aggiornamento
+ * automatico, nessun abort (Cline, agenda-task-manager.ts:1453-1464, resolveWatchRoot:
+ * senza la forma risolta non crea il watcher). È un passo oltre Cline, che rinuncia e basta.
+ * Vale solo su Windows: altrove `~1` è un nome qualunque e libuv non ha quel confronto.
  */
-function formaLunga(cartella) {
-  try {
-    return realpathSync.native(cartella);
-  } catch {
-    return cartella;
+const SEGMENTO_CORTO = /~\d/u;
+const SEPARATORI = /[\\/]+/u;
+
+function haUnSegmentoCorto(percorso) {
+  const { root } = win32.parse(percorso);
+  return percorso.slice(root.length).split(SEPARATORI).some((segmento) => SEGMENTO_CORTO.test(segmento));
+}
+
+const DISCO_VERO = {
+  realpathNativo: (cartella) => realpathSync.native(cartella),
+  elenca: (cartella) => readdirSync(cartella),
+  // lstat, mai stat: un collegamento alla cartella (`Programmi` → `Program Files`) seguito è lo STESSO file, e due corrispondenze non provano niente
+  identita: (percorso) => lstatSync(percorso, { bigint: true }),
+};
+
+/** Ogni segmento 8.3 sostituito dal nome lungo provato per identità; `null` se uno non si prova. */
+function espandiNomiCorti(percorso, disco) {
+  const { root } = win32.parse(percorso);
+  let corrente = root;
+  for (const segmento of percorso.slice(root.length).split(SEPARATORI).filter(Boolean)) {
+    const prossimo = win32.join(corrente, segmento);
+    if (!SEGMENTO_CORTO.test(segmento)) { corrente = prossimo; continue; }
+    let nomi;
+    let cercato;
+    try {
+      nomi = disco.elenca(corrente);
+      cercato = disco.identita(prossimo);
+    } catch {
+      return null;
+    }
+    // una voce che si chiama davvero `note~1` è già il suo nome lungo
+    if (nomi.includes(segmento)) { corrente = prossimo; continue; }
+    // ino 0 = il filesystem non dà un'identità: non è una prova
+    if (!cercato || cercato.ino === 0n) return null;
+    const uguali = nomi.filter((nome) => {
+      try {
+        const voce = disco.identita(win32.join(corrente, nome));
+        return voce.ino === cercato.ino && voce.dev === cercato.dev;
+      } catch {
+        return false;
+      }
+    });
+    if (uguali.length !== 1) return null;
+    corrente = win32.join(corrente, uguali[0]);
   }
+  return corrente;
+}
+
+/**
+ * La cartella da consegnare a fs.watch, oppure `null` quando sorvegliarla abortirebbe il processo.
+ */
+export function formaLungaPerLaSorveglianza(cartella, { piattaforma = process.platform, disco = DISCO_VERO } = {}) {
+  let risolta = cartella;
+  try {
+    risolta = disco.realpathNativo(cartella);
+  } catch {
+    risolta = cartella;
+  }
+  if (piattaforma !== 'win32' || !haUnSegmentoCorto(risolta)) return risolta;
+  return espandiNomiCorti(risolta, disco);
 }
 
 const guardati = new Map(); // cartella -> { watcher, controller, sottoscrittori: Set<fn>, timerDebounce, primoEventoRaffica, percorsiInSospeso }
@@ -97,7 +164,7 @@ function percorsoIgnorato(percorso) {
   return percorso !== '.' && IGNORATI.some((rx) => rx.test(percorso));
 }
 
-export function creaGestoreWorkspaceWatcher({ watchFn = watchReale } = {}) {
+export function creaGestoreWorkspaceWatcher({ watchFn = watchReale, piattaforma = process.platform, disco = DISCO_VERO } = {}) {
   /**
    * Sottoscrive `onCambiamento(percorsiRelativi)` ai cambiamenti REALI
    * (mai quelli della scansione iniziale — `ready` li separa) di
@@ -107,7 +174,9 @@ export function creaGestoreWorkspaceWatcher({ watchFn = watchReale } = {}) {
    * sessione che lo ha chiesto.
    */
   function guardaWorkspace(cartellaRichiesta, onCambiamento) {
-    const cartella = formaLunga(cartellaRichiesta);
+    const cartella = formaLungaPerLaSorveglianza(cartellaRichiesta, { piattaforma, disco });
+    // F-E-001: un nome corto non provato a fs.watch abortisce il processo (libuv #5010). Senza sorveglianza la sessione vive.
+    if (cartella === null) return () => {};
     /*
      * Full access può indicare una radice come `C:\\`. Anche il watcher nativo
      * ricorsivo non deve trasformare l’intero volume in una sorgente di eventi

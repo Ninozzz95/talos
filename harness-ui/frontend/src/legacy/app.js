@@ -18,7 +18,7 @@ import { CHIAVE_COORDINAZIONE, TETTO_AVVII_DA_SOLO, coordinazioneAccesaNellaCate
 import { testiUtenteWsl, testiDoveGiranoIComandi } from '../components/utente-wsl.js'; // F009 (owner 01/10/2026): con che utente girano i comandi Linux; fase B: la casa Linux
 import { montaPastigliaPiano, mostraBenvenutoPiano } from '../components/piano-chatgpt.js'; // 11/10/2026: il piano ChatGPT nel composer
 import { montaClicSuiLink } from '../components/conferma-link.js'; // 11/10/2026: i link della chat, col clic che chiede conferma
-import { sitiFidatiDellApp } from '../components/link-esterni.js';
+import { sitiFidatiDellApp, destinazioneDeiLinkDellApp } from '../components/link-esterni.js';
 import { PROVIDER_DIRETTI, eFonteDiretta, fontiDelSelettore, modelliDellaFonte, fraseVuotoDiretto, senzaChiave, fornitoriConCatalogo, aggiornaTestoModelloSelettore } from '../components/fonti-modelli.js'; // BC-12 (11/09): «Diretti» si spezza in una scheda per fornitore // P-C (12/09): un motore locale non ha chiave da collegare
 import { statoAvvioSessione } from '../components/avvio-sessione.js'; // BC-14 (11/09): «Avvia» non mente più sul perché è fermo
 import { nomeLeggibileSessione, identitaSessione, aggiornaSessionItem } from '../components/session-item.js'; // N1 (10/09): la riga della sessione viva cambia sul posto · BC-36/37 (12/09): nome e permesso da UNA fonte sola
@@ -3000,7 +3000,23 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     documento: document,
     dentro: '#conversation',
     fidati: sitiFidatiDellApp(),
-    apri: (indirizzo) => { window.open(indirizzo, '_blank', 'noopener,noreferrer'); },
+    /*
+     * ⭐ 12/10/2026, decisione owner («due porte») — il link si apre nella scheda Browser di TALOS o nel browser del computer.
+     *   In TALOS si passa SUBITO alla scheda Browser (owner: «passa alla scheda Browser») e la pagina nasce come scheda viva,
+     *   dalla stessa porta del campo indirizzo (`apriPaginaVivaBrowser`: stesso indirizzo, stessa scheda). Senza una sessione
+     *   aperta la scheda Browser non ha dove tenere le pagine: la domanda offre solo il browser del computer.
+     * ⛔ Se l'apertura in TALOS fallisce lo dice la scheda Browser (`avvisa`), come per il campo indirizzo: mai una promessa muta.
+     */
+    destinazioni: destinazioneDeiLinkDellApp(),
+    puoInTalos: () => Boolean(state.realSession.id),
+    apri: (indirizzo, destinazione) => {
+      if (destinazione === 'talos' && state.realSession.id) {
+        setView('browser');
+        apriPaginaVivaBrowser(indirizzo).catch((errore) => { browserUi?.avvisa(messaggioErroreUtente(errore, tr('app.browser.cannotOpenAddress'))); });
+        return;
+      }
+      window.open(indirizzo, '_blank', 'noopener,noreferrer');
+    },
     copia: (indirizzo) => { void navigator.clipboard?.writeText(indirizzo).then(() => toast(tr('chat.link.copied'))).catch(() => {}); },
   });
   document.addEventListener('click', (evento) => {

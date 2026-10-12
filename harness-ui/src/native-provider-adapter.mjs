@@ -120,7 +120,12 @@ export async function nativeProviderResponse({ provider, model, apiKey, baseURL,
   const client = factory({ ...credenziale, ...(wireAnthropic ? { baseURL: baseURL || record.baseUrl } : baseURL ? { baseURL } : {}), fetch: fetchFn });
   // P-J — FINE scelta del trasporto.
   const languageModel = wireResponses ? client.responses(model) : client.chat(model);
-  const tools = Object.fromEntries((body.tools ?? []).map(t => [t.function.name, { description: t.function.description, inputSchema: jsonSchema(t.function.parameters) }]));
+  /* ⛔ R-01 (12/10/2026, S1): sul filo Responses un attrezzo senza `strict` viene NORMALIZZATO in strict, dove ogni campo è
+     obbligatorio (developers.openai.com/api/docs/guides/function-calling, letta il 12/10/2026). Col piano ChatGPT il modello
+     mandava `""` in ogni campo facoltativo (trascritto dell'owner: `modello` 31 volte, `cartella` 21, `model` 18) e delega e
+     Workflow lo rifiutavano. I nostri schemi hanno campi facoltativi per contratto: si dichiarano non strict, come Codex
+     (`codex-rs/core/src/tools/handlers/multi_agents_spec.rs:92`). Gli altri fili non conoscono il campo e restano com'erano. */
+  const tools = Object.fromEntries((body.tools ?? []).map(t => [t.function.name, { description: t.function.description, inputSchema: jsonSchema(t.function.parameters), ...(wireResponses ? { strict: false } : {}) }]));
   const effort = body.reasoning_effort ?? body.reasoning?.effort;
   const providerOptions = wireResponses ? { openai: { store: false, include: ['reasoning.encrypted_content'] } }
     : provider === 'anthropic' ? opzioniAnthropicNative(provider, model, body) : opzioniAnthropicTerzi(provider, model, body);

@@ -32,16 +32,22 @@ function sceltaDellAnello(scelte) {
  * Il modo di Coordinazione per una sessione.
  * @param {Array<Record<string,string>|null|undefined>|undefined} sceltePerAnello le scelte per attrezzo dalla sessione (prima)
  *   fino alla radice (ultima)
- * @param {{ avviiDaSolo?: number, tetto?: number }} [opzioni] gli avvii da soli già fatti nell'albero
+ * @param {{ avviiDaSolo?: number, tetto?: number, accessoPieno?: boolean }} [opzioni] gli avvii da soli già fatti nell'albero;
+ *   `accessoPieno`: TUTTA la catena è in «Full access»
  * @returns {{ modo: 'sempre' } | { modo: 'chiedi', motivo: 'spenta'|'tetto' } | { modo: 'nega' }}
  */
-export function modoCoordinazione(sceltePerAnello, { avviiDaSolo = 0, tetto = TETTO_AVVII_DA_SOLO } = {}) {
+export function modoCoordinazione(sceltePerAnello, { avviiDaSolo = 0, tetto = TETTO_AVVII_DA_SOLO, accessoPieno = false } = {}) {
   const anelli = Array.isArray(sceltePerAnello) ? sceltePerAnello : [];
   const scelte = anelli.map(sceltaDellAnello);
   if (scelte.includes('nega')) return { modo: 'nega' };
   const radice = scelte.length > 0 ? scelte[scelte.length - 1] : undefined;
-  if (scelte.includes('chiedi') || radice !== 'sempre') return { modo: 'chiedi', motivo: 'spenta' };
-  if (avviiDaSolo >= tetto) return { modo: 'chiedi', motivo: 'tetto' };
+  /* ⛔⛔ Owner 12/10/2026, «FULL ACCESS PER LEGGE NON DEVE CHIEDERE NESSUN PERMESSO»: in Accesso pieno la Coordinazione spenta (o
+     lasciata a «chiedi») non fa comparire la carta d'avvio. Vale solo con `accessoPieno === true` (tutta la catena, lo calcola
+     chi chiama): un valore qualunque non accende niente. Resta solo un «nega» scelto dalla persona. Seconda tornata (owner,
+     stesso giorno): in Accesso pieno sparisce anche la carta del tetto dei 20 avvii per albero — come Claude Code
+     `bypassPermissions` e Hermes «yolo», nessuna domanda; fuori dall'Accesso pieno il tetto resta. */
+  if (accessoPieno !== true && (scelte.includes('chiedi') || radice !== 'sempre')) return { modo: 'chiedi', motivo: 'spenta' };
+  if (accessoPieno !== true && avviiDaSolo >= tetto) return { modo: 'chiedi', motivo: 'tetto' };
   return { modo: 'sempre' };
 }
 

@@ -179,7 +179,7 @@ describe('D2 — leggere ed elencare fuori dalla cartella della sessione chiede 
 
     // ─────────────────────────────── ACCESSO COMPLETO (review del 03/10/2026) ───────────────────────────────
 
-    it('⛔⛔⛔ con «Accesso completo» leggere ed elencare fuori NON chiede, anche con la cartella di sessione scelta; le credenziali sì', async (t) => {
+    it('⛔⛔⛔ con «Accesso completo» leggere ed elencare fuori NON chiede, anche con la cartella di sessione scelta, e nemmeno le credenziali (owner 12/10)', async (t) => {
         /* FULL-ACCESS-03 e B2-01 erano diventati rossi: in una sessione a cartella SCELTA l'Accesso completo non allarga la cartella
            alla radice (BC-14), quindi la sola cartella non bastava a far tacere la regola. Scrivere fuori passava, leggere fuori no. */
         const { progetto, fuori } = scena(t)
@@ -192,10 +192,14 @@ describe('D2 — leggere ed elencare fuori dalla cartella della sessione chiede 
         const lettura = await giro(progetto, 'leggi', { percorso: join(fuori, 'diario-privato.txt') }, pieno)
         assert.equal(lettura.domande.length, 0, 'con Accesso completo un file fuori si legge senza domanda')
         assert.ok(lettura.testoTool.includes('CONTENUTO-PRIVATO-FUORI'))
+        /* Owner 12/10/2026, «FULL ACCESS PER LEGGE NON DEVE CHIEDERE NESSUN PERMESSO»: prima qui una chiave privata chiedeva SEMPRE.
+           Ora in Accesso completo si legge senza domanda; fuori dall'Accesso completo chiede come prima (subito sotto). */
         const chiave = await giro(progetto, 'leggi', { percorso: join(fuori, '.ssh', 'id_ed25519') }, { ...pieno, risposta: false })
-        assert.equal(chiave.domande.length, 1, 'una chiave privata chiede SEMPRE, anche con Accesso completo')
-        assert.notEqual(chiave.domande[0].segreto?.classe, 'fuori-workspace', 'chiede perché è una credenziale, non perché è fuori')
-        assert.ok(!chiave.testoTool.includes('CHIAVE-PRIVATA'))
+        assert.equal(chiave.domande.length, 0, 'in Accesso completo nemmeno una chiave privata chiede')
+        assert.ok(chiave.testoTool.includes('CHIAVE-PRIVATA'))
+        const progettoSolo = await giro(progetto, 'leggi', { percorso: join(fuori, '.ssh', 'id_ed25519') }, { risposta: false })
+        assert.equal(progettoSolo.domande.length, 1, 'AL CONTRARIO: fuori dall\'Accesso completo la chiave privata chiede come prima')
+        assert.ok(!progettoSolo.testoTool.includes('CHIAVE-PRIVATA'))
     })
 })
 

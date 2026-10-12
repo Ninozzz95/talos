@@ -496,3 +496,88 @@ test('CTX-HOTFIX-400-NOT-OVERFLOW — un 400 senza le parole del contesto pieno 
   await assert.rejects(giro(t, { cartella, fornitore }), (e) => e.classificazione === undefined && /HTTP 400/.test(e.message));
   assert.equal(fornitore.riassuntiChiesti().length, 0);
 });
+
+/*
+ * ⛔⛔ Owner 12/10/2026, «errori di compattazione non devono bloccare il flusso chat… è una regressione grave». Dal vivo (trascritto
+ *   dell'owner, sessione 33f2c3fc) `CTX_HISTORY_DIVERGED` usciva da `prepare` del motore del contesto e fermava OGNI giro dal
+ *   settimo, anche un «ciao». Ora: se il motore fallisce la richiesta parte dalla compattazione semplice, e la chat lo dice UNA
+ *   volta con una riga che non ferma niente (`compattazione-fine`, `compattato:false`, `motivo:'ripiego'`). Uno Stop resta uno Stop.
+ */
+const divergenza = () => Object.assign(new Error('The active history differs from the archive. The originals are kept; the full version must be recovered.'), { code: 'CTX_HISTORY_DIVERGED' });
+
+test('CTX-HOTFIX-FAIL-OPEN-01 — il motore del contesto che fallisce NON ferma il giro: si va avanti, e lo si dice una volta', async (t) => {
+  const cartella = cartellaDiProva(t);
+  const fornitore = fintoFornitore({ chiamateTool: 3, attrezzo: 'elenca', argomenti: '{"percorso":"."}' });
+  let chiamate = 0;
+  const contextHooks = { async prepare() { chiamate += 1; throw divergenza(); } };
+  const { esito, eventi } = await giro(t, { cartella, fornitore, contextHooks });
+  assert.equal(esito.comeFinita, 'concluso', 'il giro arriva in fondo nonostante il motore');
+  assert.equal(chiamate, 4, 'a ogni richiesta si riprova il motore (se torna sano, si riusa)');
+  assert.equal(fornitore.corpi.filter((b) => !eRichiestaDiRiassunto(b)).length, 4, 'tutte le richieste partono');
+  const righe = eventi.filter((e) => e.tipo === 'compattazione-fine' && e.motivo === 'ripiego');
+  assert.equal(righe.length, 1, 'la riga non bloccante, una volta sola per turno');
+  assert.equal(righe[0].compattato, false);
+  assert.equal(righe[0].codice, 'CTX_HISTORY_DIVERGED');
+  assert.ok(fornitore.corpi[0].messages.some((m) => testoDi(m).includes('CONSEGNA-ORIGINALE-MARKER')), 'la storia parte intera');
+});
+
+test('CTX-HOTFIX-FAIL-OPEN-02 — AL CONTRARIO: col motore sano nessuna riga di ripiego, e uno Stop durante il motore resta uno Stop', async (t) => {
+  const cartella = cartellaDiProva(t);
+  const sano = fintoFornitore({ chiamateTool: 1, attrezzo: 'elenca', argomenti: '{"percorso":"."}' });
+  const { esito, eventi } = await giro(t, { cartella, fornitore: sano, contextHooks: { async prepare(p) { return { messages: p.messages }; } } });
+  assert.equal(esito.comeFinita, 'concluso');
+  assert.equal(eventi.filter((e) => e.motivo === 'ripiego').length, 0);
+  const stop = new AbortController();
+  const fermato = fintoFornitore({ chiamateTool: 1 });
+  const contextHooks = { async prepare() { stop.abort(); throw Object.assign(new Error('aborted'), { name: 'AbortError' }); } };
+  let errore = null; let finito = null;
+  try { finito = await giro(t, { cartella, fornitore: fermato, contextHooks, segnaleStop: stop.signal }); } catch (e) { errore = e; }
+  assert.equal(fermato.corpi.length, 0, 'dopo uno Stop non parte nessuna richiesta');
+  assert.equal((finito?.eventi ?? []).filter((e) => e.motivo === 'ripiego').length, 0, 'uno Stop non è un ripiego');
+  assert.ok(errore || finito?.esito?.comeFinita !== 'concluso', 'il giro si ferma come prima');
+});
+
+test('CTX-HOTFIX-FAIL-OPEN-03 — in ripiego anche il contesto troppo grande si riprende: compattazione e UN ritentativo', async (t) => {
+  conTetto(t, undefined);
+  const cartella = cartellaDiProva(t);
+  const overflow = () => new Response(JSON.stringify({ error: { code: 400, message: "This endpoint's maximum context length is 131072 tokens. However, you requested about 135349 tokens." } }), { status: 400, headers: { 'content-type': 'application/json' } });
+  const storia = [];
+  for (let i = 1; i <= 4; i += 1) {
+    storia.push({ role: 'assistant', content: '', tool_calls: [{ id: `old_${i}`, type: 'function', function: { name: 'leggi', arguments: '{"percorso":"grande.txt"}' } }] });
+    storia.push({ role: 'tool', tool_call_id: `old_${i}`, content: 'g'.repeat(4_000) });
+  }
+  storia.push({ role: 'assistant', content: 'Letto quattro volte.' });
+  const fornitore = fintoFornitore({ chiamateTool: 0, errorePerRichiesta: (n) => (n === 1 ? overflow() : null) });
+  const eventi = [];
+  const esito = await talosLavora({
+    cartella, task: { consegna: CONSEGNA }, modello: 'z-ai/glm-5.3-flash', chiave: 'fixture', fetchDiRete: fornitore.fetchDiRete, comandoProva: 'node -e 0',
+    messaggiIniziali: [{ role: 'system', content: 'You are a coding agent.' }, { role: 'system', content: PREAMBOLO }, { role: 'user', content: CONSEGNA }, ...storia, { role: 'user', content: 'ancora' }],
+    onGiro: (e) => eventi.push(e), contextHooks: { async prepare() { throw divergenza(); } },
+  });
+  assert.equal(esito.comeFinita, 'concluso', 'il giro arriva in fondo: il contesto pieno si è ripreso anche in ripiego');
+  assert.equal(fornitore.riassuntiChiesti().length, 1, 'un riassunto forzato, come a motore spento');
+  assert.deepEqual(eventi.filter((e) => e.tipo === 'compattazione-inizio').map((e) => e.motivo), ['overflow']);
+});
+
+test('CTX-HOTFIX-FAIL-OPEN-04 — in ripiego una storia sopra soglia si compatta DAVVERO, come a motore spento (controllo positivo prima)', async (t) => {
+  conTetto(t, 8_000);
+  const cartella = cartellaDiProva(t);
+  const storia = [{ role: 'system', content: 'You are a coding agent.' }, { role: 'user', content: CONSEGNA }];
+  for (let i = 1; i <= 14; i += 1) {
+    storia.push({ role: 'assistant', content: '', tool_calls: [{ id: `old_${i}`, type: 'function', function: { name: 'leggi', arguments: '{"percorso":"grande.txt"}' } }] });
+    storia.push({ role: 'tool', tool_call_id: `old_${i}`, content: 'g'.repeat(4_000) });
+  }
+  storia.push({ role: 'assistant', content: 'Letto quattordici volte.' }, { role: 'user', content: 'ancora' });
+  const giroCon = async (contextHooks) => {
+    const fornitore = fintoFornitore({ chiamateTool: 1 });
+    const { esito, eventi } = await giro(t, { cartella, fornitore, messaggiIniziali: storia, ...(contextHooks ? { contextHooks } : {}) });
+    return { esito, eventi, riassunti: fornitore.riassuntiChiesti().length };
+  };
+  const spento = await giroCon(null);
+  assert.ok(spento.riassunti >= 1, 'CONTROLLO: a motore spento questa storia supera la soglia e si riassume');
+  const ripiego = await giroCon({ async prepare() { throw divergenza(); } });
+  assert.equal(ripiego.esito.comeFinita, 'concluso');
+  assert.ok(ripiego.riassunti >= 1, 'in ripiego si riassume come a motore spento');
+  assert.ok(ripiego.eventi.some((e) => e.tipo === 'compattazione-fine' && e.compattato === true), 'una compattazione vera, non solo la riga');
+  assert.equal(ripiego.eventi.filter((e) => e.motivo === 'ripiego').length, 1);
+});

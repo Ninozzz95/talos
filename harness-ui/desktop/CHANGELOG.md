@@ -6,6 +6,30 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
 
 ## Unreleased
 
+## desktop-v0.1.30 — 2026-10-12
+
+A regular release: installs of 0.1.21 and later receive it automatically. Full access stops asking, sub-tasks start reliably,
+and a context failure no longer stops the chat.
+
+### Added
+- A link in the chat can open in the TALOS Browser tab or in your system browser. The confirmation shows both buttons, remembers
+  where you opened a trusted site, and with «Don't ask me where» stops asking. Pages that grant keys or sign you in always open
+  in your system browser. Settings → Trusted sites shows and changes where each site opens.
+
+### Changed
+- Full access never asks for permission. Reading a secret file such as `.env`, writing after the model read suspicious content,
+  starting a sub-agent and going past 20 sub-agents in one conversation all go ahead without a card. A per-tool «Ask» or «Deny»
+  you chose yourself still applies.
+
+### Fixed
+- If the context engine fails while preparing a request, the chat goes on with the simple compaction and says so once in the
+  turn, instead of stopping every turn with an error.
+- With a ChatGPT plan model, sub-tasks and workflow steps no longer fail because the model filled optional fields with empty
+  values.
+- A sub-task can use any model TALOS can use right now: your ChatGPT plan, providers with a key, Ollama, LM Studio and the local
+  engine, not only OpenRouter models.
+- A project opened through a Windows short path (`C:\PROGRA~1\…`) no longer stops the server when files change.
+
 ## desktop-v0.1.29 — 2026-10-12
 
 A regular release: installs of 0.1.21 and later receive it automatically. It brings your ChatGPT plan into TALOS.

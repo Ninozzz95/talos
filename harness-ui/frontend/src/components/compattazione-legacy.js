@@ -170,6 +170,9 @@ const MOTIVI = Object.freeze({
   'non-salvata': 'chat.context.failure.notSaved',
   // 24/09/2026: la chiusura che il registro scrive al ripristino per un riassunto rimasto a metà (session-registry.mjs, ripristina)
   interrotta: 'chat.context.failure.interrupted',
+  /* Owner 12/10/2026, «errori di compattazione non devono bloccare il flusso chat»: il motore del contesto è caduto e la richiesta
+     è partita dalla compattazione semplice (`talosHarness.desktop-hotfix.mjs`, ripiego). La riga lo dice, e non ferma niente. */
+  ripiego: 'chat.context.failure.fellBack',
 });
 export function motivoUmano(motivo, dettaglio = null) {
   const frase = motivo in MOTIVI ? t(MOTIVI[motivo]) : String(motivo ?? '');

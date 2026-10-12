@@ -50,7 +50,8 @@ import { fetchAllowedHfImage } from './src/hf-image-proxy.mjs';
 import { createLlamaServerSupervisor } from './src/llama-server-supervisor.mjs';
 import { motoreConosceArchitettura } from './src/motore-architetture.mjs';
 import { createLlamaServerRuntime } from './src/local-runtime-llama-server.mjs';
-import { createProviderProbe } from './src/provider-probe.mjs';
+import { createProviderProbe, CATALOGHI_DIRETTI } from './src/provider-probe.mjs';
+import { creaModelliUtilizzabili } from './src/modelli-utilizzabili.mjs';
 import { createProviderCredentialStore } from './src/provider-credential-store.mjs';
 import { leggiScopePortachiavi, avvolgiAdattatoreKeyring, creaAdattatorePortachiavi, leggiPortachiaviDiProva } from './src/adattatore-keyring.mjs';
 import { migraChiaviLegacySuDesktop } from './src/migrazione-chiavi.mjs';
@@ -223,6 +224,16 @@ async function startServer() {
   const providerProbe = createProviderProbe({
     leggiChiave: (provider) => providerStore.getKey(provider),
     leggiRuntime: (provider) => providerStore.getRuntime(provider),
+  });
+  /* R-02: i modelli che questa app sa usare ADESSO, dalle stesse fonti del selettore della chat (`src/modelli-utilizzabili.mjs`). */
+  const modelliUtilizzabili = creaModelliUtilizzabili({
+    openrouter: () => modelCatalog.ottieni(),
+    accessoChatgpt, catalogoChatgpt,
+    fornitoriDiretti: CATALOGHI_DIRETTI,
+    leggiChiave: (fornitore) => { try { return providerStore.getKey(fornitore); } catch { return null; } },
+    elencaFornitore: (fornitore) => providerProbe.elencaModelli(fornitore),
+    runtimeLocali: { get ollama() { return localRuntimes?.ollama; }, get lmstudio() { return localRuntimes?.lmstudio; } },
+    statoLocale: () => supervisoreLocale?.status?.() ?? null,
   });
   const modelCatalog = createModelCatalog();
   /* P-E (12/09, Astra): i fornitori DIRETTI prendono modelli e prezzi da models.dev (cache su disco con ETag,
@@ -608,7 +619,7 @@ async function startServer() {
     /* F3-11c (24/09 notte), decisione owner 42: un passo della bozza può chiedere un altro modello solo fra i disponibili
        (il catalogo che serve `/api/v1/models`); se il catalogo non risponde, l'elenco resta ignoto e il compilatore lo dice. */
     workflowPlanProposeFn: workflowStore ? input => proposeWorkflowFromTool(workflowStore, input, {
-      availableModelIdsFn: async () => ((await modelCatalog.ottieni())?.modelli ?? []).map((m) => m?.id).filter((id) => typeof id === 'string'),
+      availableModelIdsFn: () => modelliUtilizzabili.elenco(), // R-02: lo stesso catalogo unico della delega
     }) : null,
     /* ⭐ C3b (owner 09/10/2026 sera): con la Coordinazione accesa il Workflow proposto parte da solo — approva e avvia con la stessa
        porta della persona, poi sveglia lo scheduler. Il runtime si legge all'uso (nasce sotto, come `workflowPerIlModelloFn`). */
@@ -635,7 +646,9 @@ async function startServer() {
        avviare un agente, tetto di 20 avvii da soli per albero. Il modello chiesto per una figlia si sceglie fra lo stesso catalogo
        che i passi di Workflow usano già (F3-11c, decisione owner 42, `workflowPlanProposeFn` qui sotto). CLI e mobile no. */
     coordinazione: true,
-    modelliDisponibiliFn: async () => ((await modelCatalog.ottieni())?.modelli ?? []).map((m) => m?.id).filter((id) => typeof id === 'string'),
+    /* ⛔ R-02 (12/10/2026, owner «un catalogo unico»): prima qui c'era il SOLO catalogo di OpenRouter, e una sessione sul piano
+       ChatGPT (o su un fornitore diretto, o sul motore locale) non poteva nominare il proprio modello per una figlia. */
+    modelliDisponibiliFn: () => modelliUtilizzabili.elenco(),
     /*
      * ⛔ (16/09/2026, review — portato dal main pubblico il 18/09) — la riserva `config.chiaveApi` è la OPENROUTER_API_KEY
      *   dell'AMBIENTE: nello scope desktop NON deve raggiungere le sessioni nemmeno come riserva. Con lo scope desktop la UI

@@ -80,3 +80,26 @@ test('C2B-MODO-05 — «Per questa sessione» sulla carta: vale solo se il «sem
   assert.equal(sempreDellaFigliaVarrebbe([S(), S('nega')]), false)
   assert.equal(sempreDellaFigliaVarrebbe([S('nega')]), false, 'un «nega» della sessione stessa non si scavalca dalla carta (vince il Nega, C2-R7)')
 })
+
+/*
+ * Owner 12/10/2026: «FULL ACCESS PER LEGGE NON DEVE CHIEDERE NESSUN PERMESSO». Con `accessoPieno` (tutta la catena in Full access,
+ * lo calcola il registro) la Coordinazione spenta o a «chiedi» non fa comparire la carta d'avvio. «Nega» e il tetto restano.
+ */
+test('C2B-MODO-06 — in Accesso pieno nessuna carta d\'avvio: spenta o a «chiedi» vale come accesa', () => {
+  for (const anelli of [[S()], [S('chiedi')], [S(), S()], [S('chiedi'), S('sempre')], []]) {
+    assert.deepEqual(modoCoordinazione(anelli, { accessoPieno: true }), { modo: 'sempre' }, JSON.stringify(anelli))
+  }
+})
+
+test('C2B-MODO-07 — AL CONTRARIO: senza Accesso pieno si chiede come prima (anche al tetto); «nega» vale anche in Accesso pieno; solo `true` accende', () => {
+  assert.deepEqual(modoCoordinazione([S()]), SPENTA)
+  assert.deepEqual(modoCoordinazione([S()], { accessoPieno: false }), SPENTA)
+  for (const storto of ['true', 1, 'accesso-pieno', {}]) assert.deepEqual(modoCoordinazione([S()], { accessoPieno: storto }), SPENTA, String(storto))
+  assert.deepEqual(modoCoordinazione([S('nega')], { accessoPieno: true }), { modo: 'nega' })
+  assert.deepEqual(modoCoordinazione([S(), S('nega')], { accessoPieno: true }), { modo: 'nega' })
+  // owner 12/10, terza tornata: in Accesso pieno nessun limite agli avvii (né carta né coda); fuori il tetto chiede come prima
+  assert.deepEqual(modoCoordinazione([S()], { accessoPieno: true, avviiDaSolo: 20 }), { modo: 'sempre' })
+  assert.deepEqual(modoCoordinazione([S('sempre')], { accessoPieno: true, avviiDaSolo: 500 }), { modo: 'sempre' })
+  assert.deepEqual(modoCoordinazione([S('sempre')], { avviiDaSolo: 20 }), { modo: 'chiedi', motivo: 'tetto' })
+  for (const storto of ['true', 1]) assert.deepEqual(modoCoordinazione([S('sempre')], { accessoPieno: storto, avviiDaSolo: 20 }), { modo: 'chiedi', motivo: 'tetto' }, String(storto))
+})
