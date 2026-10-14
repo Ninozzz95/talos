@@ -606,7 +606,7 @@ jobs:
 
       - id: upload
         name: conserva gli artefatti della release
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: talos-desktop-${{ github.ref_name }}-windows-x64
           path: |
@@ -638,7 +638,7 @@ jobs:
 
       - name: conserva la prova dello smoke anche in caso di errore
         if: always()
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: talos-desktop-smoke-${{ github.run_id }}-${{ github.run_attempt }}
           path: harness-ui/desktop/.prove/R04-ci-smoke.json
