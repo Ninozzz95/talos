@@ -97,6 +97,36 @@ describe('TalosMobileProviderRuntimePanel', () => {
         expect(target.refreshProvider).toHaveBeenCalledWith('chatgpt')
     })
 
+    /**
+     * ⛔ PANEL-N15-03 — trovato dalla CI della release v0.1.41 (17/10/2026, PR #66, `mobile-model-lab-parity.e2e.spec.ts:148`): la
+     * riga del piano di PANEL-N15-01 aveva PRESO IL POSTO della riga del catalogo. Per OpenAI, e solo per OpenAI, l'intestazione
+     * non diceva più quanti modelli ci sono, né «Discovering models...», né «Discovery failed» con l'endpoint giù. Owner 17/10:
+     * «Tutte e due le righe»: la riga del piano resta e sotto torna quella del catalogo, come per gli altri fornitori.
+     */
+    it('PANEL-N15-03: l intestazione di OpenAI tiene la riga del piano E quella del catalogo (pronto, in ricerca, fallito)', async () => {
+        const c = controller()
+        c.catalogs.openai.status = 'ready'
+        c.catalogs.openai.models = [{ id: 'custom-chat' }]
+        state.controller = c
+        const wrapper = mount(TalosMobileProviderRuntimePanel)
+        await flushPromises()
+        const testata = () => wrapper.get('[data-provider="openai"] button[aria-expanded]').text()
+        expect(wrapper.get('[data-testid="talos-openai-access-line"]').text()).toBe('ChatGPT plan: not connected · API key: saved')
+        expect(testata()).toContain('1 model available')
+        c.catalogs.openai.status = 'loading'
+        await flushPromises()
+        expect(testata()).toContain('Discovering models...')
+        c.catalogs.openai.status = 'error'
+        await flushPromises()
+        expect(testata()).toContain('Discovery failed')
+        expect(testata()).toContain('ChatGPT plan: not connected · API key: saved')
+        // a riposo, sotto la riga del piano, «Not configured» ripeterebbe soltanto «API key: none»
+        c.catalogs.openai.status = 'idle'
+        await flushPromises()
+        expect(testata()).not.toContain('Not configured')
+        expect(wrapper.get('[data-provider="deepseek"] button[aria-expanded]').text()).toContain('Not configured')
+    })
+
     it('renders all six provider runtimes and keeps credentials masked', () => {
         const wrapper = mount(TalosMobileProviderRuntimePanel)
         expect(wrapper.findAll('[data-provider-runtime]')).toHaveLength(6)

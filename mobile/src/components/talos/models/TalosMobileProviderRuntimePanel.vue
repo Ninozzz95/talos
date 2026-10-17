@@ -232,7 +232,14 @@ async function resetEndpoint(provider: TalosMobileProviderId): Promise<void> {
                             key: controller.secrets.openai ? $t('chatgptPlan.keySaved') : $t('chatgptPlan.keyNone'),
                         }) }}
                     </p>
-                    <p v-else class="text-2xs text-[var(--talos-muted)]">
+                    <!-- ⛔ PANEL-N15-03 (CI della v0.1.41, owner 17/10 «Tutte e due le righe»): la riga del piano NON prende il posto
+                         di quella del catalogo, sta sopra. Sotto la riga del piano il «Not configured» a riposo ripeterebbe solo
+                         «API key: none», quindi lì si vedono soltanto i modelli trovati, la ricerca in corso o fallita. -->
+                    <p
+                        v-if="!(provider.id === 'openai' && pianoCollegato !== null && controller.catalogs[provider.id].status === 'idle')"
+                        data-testid="talos-provider-catalog-line"
+                        class="text-2xs text-[var(--talos-muted)]"
+                    >
                         <template v-if="controller.catalogs[provider.id].status === 'ready'">{{ modelCountLabel(controller.catalogs[provider.id].models.length) }}</template>
                         <template v-else-if="controller.catalogs[provider.id].status === 'loading'">{{ $t('models.discovering') }}</template>
                         <template v-else-if="controller.catalogs[provider.id].status === 'error'">{{ $t('models.discoveryFailed') }}</template>
