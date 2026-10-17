@@ -66,13 +66,47 @@ function fusoDelSistema() {
 }
 const assoluto = (percorso) => isAbsolute(percorso) || win32.isAbsolute(percorso);
 
+/*
+ * ⛔ s76 (CLI, 15/10/2026) — Windows: un handle aperto da un ALTRO processo sullo stesso negozio (un lettore, l'antivirus,
+ *   l'indicizzatore) fa fallire rename, lettura e append con EPERM/EACCES/EBUSY. Misurato con un secondo processo vero che tiene
+ *   `<id>.json` aperto senza FILE_SHARE_DELETE: il rename di `scrivi` muore in 2 ms, la fine del giro non si scrive e lo scheduler
+ *   chiude il giro come `fallita`. Si ritenta, solo su win32 e solo per quei tre codici, con un'attesa che sale di 10 ms fino a 100:
+ *   la forma di graceful-fs 4.2.11 (`polyfills.js:86-115`, «A/V software can lock the directory… Try again on failure, for up to 60
+ *   seconds»), con la finestra di 10 s che la CLI ha scelto dal suo lato. Diverso da graceful-fs su un punto: lui ritenta il rename
+ *   solo se la destinazione NON c'è (`stat` ENOENT, il caso della cartella appena creata); qui la destinazione c'è sempre (si
+ *   riscrive la voce), ed è proprio il suo handle a bloccare.
+ */
+const CODICI_TRANSITORI = new Set(['EPERM', 'EACCES', 'EBUSY']);
+const RITENTO_MS = 10_000;
+const attendiMs = (ms) => new Promise((risolvi) => { setTimeout(risolvi, ms); });
+
 export function createAutomationStore({
   cartella,
   fsAdapter = { mkdir, readFile, readdir, rm, writeFile, rename, appendFile },
   clock = () => new Date(),
+  /* s76: solo per le prove (una piattaforma diversa, un'attesa finta, una finestra corta) */
+  piattaforma = process.platform,
+  ritentoMs = RITENTO_MS,
+  attendi = attendiMs,
 } = {}) {
   if (typeof cartella !== 'string' || cartella.length === 0) {
     throw new AutomationStoreError('folder is required', 'AUTOMATION_STORE_MISCONFIGURED');
+  }
+
+  /** s76: `lavoro` ritentato su Windows finché l'errore è transitorio e la finestra non è finita; altrove una volta sola. */
+  async function conRitento(lavoro) {
+    if (piattaforma !== 'win32') return lavoro();
+    const inizio = Date.now();
+    let attesa = 0;
+    for (;;) {
+      try {
+        return await lavoro();
+      } catch (errore) {
+        if (!CODICI_TRANSITORI.has(errore?.code) || Date.now() - inizio >= ritentoMs) throw errore;
+        await attendi(attesa);
+        if (attesa < 100) attesa += 10;
+      }
+    }
   }
 
   const percorsoDi = (id) => join(cartella, `${id}.json`);
@@ -95,7 +129,7 @@ export function createAutomationStore({
     await fsAdapter.writeFile(temporaneo, JSON.stringify(voce, null, 2), 'utf8');
     if (typeof fsAdapter.rename === 'function') {
       try {
-        await fsAdapter.rename(temporaneo, percorsoDi(voce.id));
+        await conRitento(() => fsAdapter.rename(temporaneo, percorsoDi(voce.id))); // s76
       } catch (errore) {
         await fsAdapter.rm(temporaneo, { force: true }).catch(() => {});
         throw errore;
@@ -107,11 +141,26 @@ export function createAutomationStore({
     return voce;
   }
 
+  /*
+   * ⛔ s76 — IL CONTRATTO DI `leggi` (lo usano anche la CLI e lo scheduler): `null` vuol dire SOLO «la voce non c'è» (ENOENT o
+   *   ENOTDIR) o «il contenuto non è JSON» (come prima). Un errore transitorio di Windows si ritenta; se non passa, o se è un altro
+   *   errore del disco, `leggi` LANCIA `AutomationStoreError` col codice `AUTOMATION_STORE_READ_FAILED` (e `cause`). Prima rendeva
+   *   `null` per qualunque errore: un handle altrui diventava «automazione cancellata», e `chiudiGiro` usciva senza scrivere la fine.
+   */
   async function leggi(id) {
+    let testo;
     try {
-      return JSON.parse(await fsAdapter.readFile(percorsoDi(id), 'utf8'));
+      testo = await conRitento(() => fsAdapter.readFile(percorsoDi(id), 'utf8'));
+    } catch (errore) {
+      if (errore?.code === 'ENOENT' || errore?.code === 'ENOTDIR') return null;
+      const rotta = new AutomationStoreError(`automation "${id}" could not be read (${errore?.code ?? 'error'})`, 'AUTOMATION_STORE_READ_FAILED');
+      rotta.cause = errore;
+      throw rotta;
+    }
+    try {
+      return JSON.parse(testo);
     } catch {
-      return null; // ⛔ assente o corrotta a meta scrittura: mai un throw, chi chiama vede null
+      return null; // ⛔ corrotta: chi chiama vede null, come prima
     }
   }
 
@@ -382,7 +431,7 @@ export function createAutomationStore({
 
   async function aggiungiAlloStorico(id, riga) {
     await fsAdapter.mkdir(cartella, { recursive: true });
-    await fsAdapter.appendFile(storicoDi(id), `${JSON.stringify(riga)}\n`, 'utf8');
+    await conRitento(() => fsAdapter.appendFile(storicoDi(id), `${JSON.stringify(riga)}\n`, 'utf8')); // s76
   }
 
   /** v2: un giro parte. Conta, sposta il prossimo giro, si spegne a `ripeti` raggiunto (e «una volta» dopo il suo giro). */

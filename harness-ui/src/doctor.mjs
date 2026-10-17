@@ -15,6 +15,25 @@ import { rm } from 'node:fs/promises';
 
 import { createProcessPolicy } from './process-policy.mjs';
 import { cartellaScratchAttesa, radiceScratch, ripulisciScratch } from './scratch.mjs';
+import { CHIAVI_DEL_DOCTOR } from './frasi-runtime-owner.mjs';
+
+/**
+ * Lo stato del servizio agente per il Doctor (era dentro `server.mjs`, `diagnosiFn`). K4b (03/10/2026): frase inglese di riserva +
+ * chiave del dizionario (area `server`). L'errore del catalogo che il servizio agente non espone ha la SUA chiave (15/10/2026, dalla
+ * Mobile sul Pad: restava inglese sotto «Servizio agente»); gli altri messaggi d'errore passano com'erano, senza chiave.
+ * @param {{configurato:boolean, snapshot?:{status?:string}|null, taskCatalogError?:{message?:string, code?:string}|null}} input
+ * @returns {{configurato:boolean, pronto:boolean, dettaglio:string, dettaglioChiave?:string}}
+ */
+export function statoDelServizioAgente({ configurato, snapshot = null, taskCatalogError = null }) {
+  const pronto = snapshot?.status === 'available';
+  if (pronto) return { configurato: configurato === true, pronto, dettaglio: 'Agent runtime ready.', dettaglioChiave: 'server.doctor.runtime.ready' };
+  if (taskCatalogError?.message) {
+    // DOCTOR-REV-03: anche il kernel che non si carica; le frasi vengono dallo stesso modulo dell'adattatore, mai riscritte qui
+    const nota = CHIAVI_DEL_DOCTOR.find((c) => c.code === taskCatalogError.code && c.frase === taskCatalogError.message);
+    return { configurato: configurato === true, pronto, dettaglio: taskCatalogError.message, ...(nota ? { dettaglioChiave: nota.chiave } : {}) };
+  }
+  return { configurato: configurato === true, pronto, dettaglio: 'The agent runtime is not ready for all the required features.', dettaglioChiave: 'server.doctor.runtime.notReady' };
+}
 
 /*
  * ⛔⛔ K4a (03/10/2026, owner: «ogni singola parola nella app deve essere sia in inglese che in italiano») — i testi che il

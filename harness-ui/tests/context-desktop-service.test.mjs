@@ -59,6 +59,14 @@ test('CTX-DESKTOP-RAW retains full tool output with deterministic append identit
   assert.equal(records.length, 3);
   assert.equal(records.at(-1).message.content, messages.at(-1).content);
   await assert.rejects(service.syncOriginals({ sessionId: 'chat', messages: [{ role: 'user', content: 'sostituito' }] }), { code: 'CTX_HISTORY_DIVERGED' });
+  // R-05 (12/10/2026): la divergenza dice DOVE, senza contenuto. Riscritta al primo messaggio; poi più corta (coda persa).
+  const riscritta = await service.syncOriginals({ sessionId: 'chat', messages: [{ role: 'user', content: 'sostituito' }] }).catch((errore) => errore);
+  assert.deepEqual({ ...riscritta.dettaglio }, { archiviati: 3, attivi: 1, primoDiverso: 0, forma: 'riscritta', ruolo: 'user' });
+  const corta = await service.syncOriginals({ sessionId: 'chat', messages: messages.slice(0, 2) }).catch((errore) => errore);
+  assert.deepEqual({ ...corta.dettaglio }, { archiviati: 3, attivi: 2, primoDiverso: 2, forma: 'piu-corta', ruolo: null });
+  const inMezzo = await service.syncOriginals({ sessionId: 'chat', messages: [messages[0], { ...messages[1], content: 'x' }, messages[2], { role: 'user', content: 'poi' }] }).catch((errore) => errore);
+  assert.deepEqual({ ...inMezzo.dettaglio }, { archiviati: 3, attivi: 4, primoDiverso: 1, forma: 'riscritta', ruolo: 'assistant' });
+  assert.doesNotMatch(JSON.stringify(inMezzo.dettaglio), /leggi il file|VALORE/u, 'mai il contenuto dei messaggi');
 });
 test('CTX-DESKTOP-FACTS owner changes and deletion expose real persisted state', async t => {
   const { service } = await fixture(t);
@@ -145,11 +153,16 @@ test('CTX-TRIAL-CAPTURE-RAW-PREPARE-PROJECTED capture archives the raw history, 
   const versioni = await service.request({ sessionId: 'chat', method: 'GET', path: '/versions' });
   assert.equal(versioni.versions.length, 1);
   assert.ok(versioni.versions[0].summary.sources.length >= 1, 'le citazioni della versione sono verificate sugli originali');
-  // Verso contrario: originali che divergono DAVVERO dall’archivio ⇒ DIVERGED resta.
-  const divergenti = grezzo.map((m, i) => i === 0 ? { ...m, content: 'sostituito' } : m);
-  await assert.rejects(hooks.prepare({ messages: divergenti, originali: divergenti, tools: [] }), { code: 'CTX_HISTORY_DIVERGED' });
   // E una proiezione non allineata (lunghezza diversa) non entra: né archivio né richiesta.
   await assert.rejects(hooks.prepare({ messages: corretto.slice(0, 3), originali: grezzo, tools: [] }), { code: 'CTX_INVALID_INPUT' });
+  // Verso contrario: originali che divergono DAVVERO dall’archivio. Chi confronta da solo lo viene a sapere (DIVERGED resta)…
+  const divergenti = grezzo.map((m, i) => i === 3 ? { ...m, content: 'sostituito' } : m);
+  await assert.rejects(service.syncOriginals({ sessionId: 'chat', messages: divergenti }), { code: 'CTX_HISTORY_DIVERGED' });
+  // …e sulla strada del giro l'archivio si ripara da solo (owner 12/10/2026): vecchi originali da parte, richiesta che prosegue.
+  const riparata = await hooks.prepare({ messages: divergenti, originali: divergenti, tools: [] });
+  assert.equal(riparata.riallineato.primoDiverso, 3);
+  assert.deepEqual((await store.readOriginals({ sessionId: riparata.riallineato.asideId })).map(record => record.message), grezzo, 'niente perso: gli originali di prima sono da parte');
+  assert.deepEqual((await store.readOriginals({ sessionId: 'chat' })).map(record => record.message), divergenti);
 });
 
 test('CTX-TRIAL-PLAN-MODE-NO-DIVERGE two requests in a row with the same raw prefix and one more message both conclude', async t => {

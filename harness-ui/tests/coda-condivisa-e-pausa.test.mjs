@@ -134,7 +134,7 @@ test('⛔⛔ AL CONTRARIO — senza stop la coda SCORRE: il kernel la consegna, 
   t.after(() => b.pulisci());
   const { sessionId, annunci } = await avvia(b);
   b.registro.accodaMessaggio(sessionId, 'e poi i test');
-  assert.equal(b.ultimo.input.codaMessaggiFn(), 'e poi i test');
+  assert.deepEqual(b.ultimo.input.codaMessaggiFn(), { testo: 'e poi i test', dallaPersona: true }) // richiesta CLI 15/10: la voce della persona arriva col suo segno;
   assert.deepEqual(annunci.at(-1), { voci: [], inPausa: false });
   assert.deepEqual(b.registro.statoCoda(sessionId), { ok: true, voci: [], inPausa: false });
 });
@@ -214,8 +214,8 @@ test('⭐⭐ «Invia ora» a giro FERMO riprende la sessione con quel messaggio;
 
   b.registro.accodaMessaggio(sessionId, 'messaggio C');
   assert.equal(b.registro.statoCoda(sessionId).inPausa, false, 'accodare di nuovo scioglie la pausa');
-  assert.equal(b.ultimo.input.codaMessaggiFn(), 'messaggio B');
-  assert.equal(b.ultimo.input.codaMessaggiFn(), 'messaggio C');
+  assert.deepEqual(b.ultimo.input.codaMessaggiFn(), { testo: 'messaggio B', dallaPersona: true }) // richiesta CLI 15/10: la voce della persona arriva col suo segno;
+  assert.deepEqual(b.ultimo.input.codaMessaggiFn(), { testo: 'messaggio C', dallaPersona: true }) // richiesta CLI 15/10: la voce della persona arriva col suo segno;
 });
 
 test('⭐⭐ la coda sopravvive a un RIAVVIO del server, e torna in pausa: il processo che l’avrebbe consegnata non c’è più', async (t) => {

@@ -64,7 +64,8 @@ test('elencaFigli: elenco vero, ordinato per avvio, include task/conclusa/esitoD
   const orch = creaSubagentOrchestrator({ sessioni, cartellaEsisteFn: () => true, avviaESeguiFn: () => ({ sessionId: 'mai' }) });
   const figli = orch.elencaFigli('padre-1');
   assert.deepEqual(figli.map((f) => f.sessionId), ['figlio-a', 'figlio-b'], 'ordinati per avviataAlle, il più vecchio prima');
-  assert.equal(figli[0].task, 'compito A');
+  // L3-17 (16/10): `task` non si ripete quando è uguale a `taskCorto`; chi lo legge ripiega su `taskCorto`
+  assert.equal(figli[0].task ?? figli[0].taskCorto, 'compito A');
   assert.equal(figli[0].conclusa, false);
   assert.equal(figli[1].esitoDelega, 'concluso');
 });
@@ -576,7 +577,7 @@ test('elencaFigli: una figlia ripristinata dal disco (senza consegnaCorta) ricav
   const figli = creaSubagentOrchestrator({ sessioni, cartellaEsisteFn: () => true, avviaESeguiFn: () => ({ sessionId: 'mai' }) }).elencaFigli('padre-1');
   assert.equal(figli[0].taskCorto, 'conta le righe di parte1.md');
   assert.equal(figli[1].taskCorto, null, 'senza consegna il campo è null, e la scheda mostra la sua frase di ripiego');
-  assert.equal(figli[1].task, null);
+  assert.equal(figli[1].task ?? null, null); // L3-17: assente quando è uguale a `taskCorto`
 });
 
 /*

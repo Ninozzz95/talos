@@ -29,7 +29,9 @@ import { talosLavora as talosLavoraReale } from '../src/kernel/talosHarness.mjs'
 import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
 import { TaskCatalogError } from '../src/task-catalog.mjs';
 // K2 (03/10/2026): i rifiuti del registro portano `code` + `reason` + la frase INGLESE; l'italiano sta nel dizionario dell'interfaccia.
-import { TESTI as DIZIONARIO } from '../frontend/src/i18n/testi/index.js';
+// CLI tree (13/10/2026): the interface dictionaries are the desktop's and are not carried here; where they are missing only the
+// comparison with the dictionary is skipped (`assertRifiuto`), every other assertion of this file runs.
+const DIZIONARIO = await import('../frontend/src/i18n/testi/index.js').then((m) => m.TESTI, () => null);
 import { imageMessageContent } from '../src/chat-image-attachments.mjs';
 // ⭐ L4 (11/09) — lo scrittore VERO del record recintato, per le fixture di ricerca.
 import { talosResearchReportDocument } from '../src/research/report.mjs';
@@ -42,6 +44,7 @@ function assertRifiuto(esito, code, reason) {
   assert.equal(esito?.code, code, `codice di ${reason}`);
   assert.equal(esito?.reason, reason, `motivo di ${code}`);
   const chiave = `errori.${code}.${reason.replace(/-/gu, '_')}`;
+  if (!DIZIONARIO) { assert.ok(typeof esito.erroreAvvio === 'string' && esito.erroreAvvio.length > 0, `${chiave} porta la sua frase inglese`); return; }
   assert.equal(esito.erroreAvvio, DIZIONARIO.en[chiave], `l'inglese del registro è quello del dizionario (${chiave})`);
   assert.ok(typeof DIZIONARIO.it[chiave] === 'string' && DIZIONARIO.it[chiave] !== DIZIONARIO.en[chiave], `${chiave} ha il suo italiano`);
 }
@@ -2855,6 +2858,10 @@ test('⛔ albero(): un WorkspaceTreeError VERO diventa {erroreAvvio, code}, mai 
 
   const risultato = await registro.albero(sessionId, 'x');
   assert.deepEqual(risultato, { erroreAvvio: 'Invalid path', code: 'QUERY_INVALID' });
+  // 16/10/2026: costruito col MOTIVO, il rifiuto lo porta fino all'HTTP (`motivi-dei-file.mjs`)
+  const conMotivo = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    leggiAlberoWorkspaceFn: async () => { throw new WorkspaceTreeError('path-invalid'); } });
+  assert.deepEqual(await conMotivo.albero(conMotivo.avvia('task-vero').sessionId, 'x'), { erroreAvvio: 'Invalid path', code: 'QUERY_INVALID', reason: 'path-invalid' });
 
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }); // pulizia
   await new Promise((r) => setImmediate(r));
@@ -4017,7 +4024,8 @@ test('⭐⭐⭐ elencaFigli(): NOT_FOUND su una sessione inesistente, zero figli
   assert.equal(conFigli.ok, true);
   assert.equal(conFigli.figli.length, 1);
   assert.equal(conFigli.figli[0].sessionId, figlioId);
-  assert.equal(conFigli.figli[0].task, 'fai qualcosa di isolato');
+  // L3-17 (16/10): `task` non si ripete quando è uguale a `taskCorto`; chi lo legge ripiega su `taskCorto`
+  assert.equal(conFigli.figli[0].task ?? conFigli.figli[0].taskCorto, 'fai qualcosa di isolato');
   assert.equal(conFigli.figli[0].conclusa, true);
   assert.equal(conFigli.figli[0].esitoDelega, 'concluso');
 });
@@ -4054,7 +4062,7 @@ test('⭐⭐⭐⭐ FILO INTERO: accodaMessaggio() popola voce.codaMessaggi, e la
   assert.deepEqual(esito.coda.voci.map((v) => v.testo), ['e adesso aggiungi anche i test']);
   assert.equal(esito.coda.inPausa, false);
 
-  assert.equal(codaMessaggiFn(), 'e adesso aggiungi anche i test', 'la STESSA funzione passata al kernel legge il messaggio vero appena accodato');
+  assert.deepEqual(codaMessaggiFn(), { testo: 'e adesso aggiungi anche i test', dallaPersona: true }, 'la STESSA funzione passata al kernel legge il messaggio vero appena accodato');
   const evento = ricevuti.find((e) => e.type === 'QueuedMessageDelivered');
   assert.ok(evento, 'il frontend deve sapere ESATTAMENTE quando il kernel ha consumato il messaggio, non indovinarlo');
   assert.equal(evento.testo, 'e adesso aggiungi anche i test');
@@ -4321,8 +4329,8 @@ test('⭐⭐⭐ AL CONTRARIO — due accodaMessaggio in sequenza mantengono l\'O
   assert.equal(secondo.posizione, 2);
   assert.deepEqual(secondo.coda.voci.map((v) => v.testo), ['primo', 'secondo'], 'la coda annunciata ha lo stesso ordine della consegna');
 
-  assert.equal(codaMessaggiFn(), 'primo', 'il PRIMO accodato è il PRIMO consegnato — FIFO');
-  assert.equal(codaMessaggiFn(), 'secondo');
+  assert.deepEqual(codaMessaggiFn(), { testo: 'primo', dallaPersona: true }, 'il PRIMO accodato è il PRIMO consegnato — FIFO'); // richiesta CLI 15/10/2026: la voce della persona arriva al kernel col suo segno
+  assert.deepEqual(codaMessaggiFn(), { testo: 'secondo', dallaPersona: true });
   assert.equal(codaMessaggiFn(), null);
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
 });
@@ -4341,7 +4349,7 @@ test('⭐⭐ svuotaCoda: rimuove l\'ULTIMO messaggio accodato, mai il primo — 
   const tolto = registro.svuotaCoda(sessionId);
   assert.equal(tolto.rimosso, true);
   assert.deepEqual(tolto.coda.voci.map((v) => v.testo), ['primo'], 'senza id si toglie l\'ULTIMO, come prima');
-  assert.equal(codaMessaggiFn(), 'primo', 'il "secondo" è stato tolto dall\'Annulla — resta solo il primo, ancora in ordine');
+  assert.deepEqual(codaMessaggiFn(), { testo: 'primo', dallaPersona: true }, 'il "secondo" è stato tolto dall\'Annulla — resta solo il primo, ancora in ordine');
   assert.equal(codaMessaggiFn(), null);
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
 });
@@ -6130,7 +6138,7 @@ test('REGISTRY-REDIRECT-07/REPLAY-12 — reindirizza interrompe al confine sicur
 
   assert.equal(secondoGiro.chiamate, 1, 'il redirect apre un secondo giro reale, non una sola notifica UI');
   assert.deepEqual(secondoGiro.ultimoInput.messaggiIniziali, [...storiaInterrotta, { role: 'user', content: 'usa il parser tipizzato' }]);
-  assert.equal(secondoGiro.ultimoInput.codaMessaggiFn(), 'messaggio FIFO già in attesa', 'la coda preesistente sopravvive separata al redirect');
+  assert.deepEqual(secondoGiro.ultimoInput.codaMessaggiFn(), { testo: 'messaggio FIFO già in attesa', dallaPersona: true }, 'la coda preesistente sopravvive separata al redirect');
   assert.deepEqual(
     eventi.filter((evento) => evento.type.startsWith('RunRedirect')).map((evento) => evento.type),
     ['RunRedirectRequested', 'RunRedirectApplied'],
@@ -9254,13 +9262,42 @@ test('CTX-ASK-WRITE-FAIL-TYPED — se la risposta non si salva: errore tipizzato
     assert.deepEqual(modello, { status: 'cancelled', reason: 'answer-not-saved' });
     // Idempotenza: la stessa risposta ripetuta riceve l'esito della prima (qui l'errore), una diversa resta 409.
     assert.deepEqual(await registro.rispondiDomanda(sessionId, requestId, { status: 'answered', answers: { scelta: 'A' } }), ack);
-    assert.equal((await registro.rispondiDomanda(sessionId, requestId, { status: 'answered', answers: { scelta: 'B' } })).code, 'QUESTION_NOT_PENDING');
+    const diversaDopoErrore = await registro.rispondiDomanda(sessionId, requestId, { status: 'answered', answers: { scelta: 'B' } });
+    assert.equal(diversaDopoErrore.code, 'QUESTION_NOT_PENDING');
+    assert.equal(diversaDopoErrore.reason, 'question-closed', '16/10: la scrittura è fallita e la domanda si è chiusa senza risposta, non «ha già una risposta»');
     const { stati } = await statiDopoRiavvio(cartellaStore, sessionId);
     assert.equal(stati.includes('answered'), false, 'il disco non può dire «answered» dopo un errore dato al client');
     assert.equal(stati.at(-1), 'cancelled');
     finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
   } finally { console.error = errori; }
   await attendiScrittureDelNegozio(cartellaStore); // F3 (24/09): niente scritture in coda quando il gancio di file toglie la cartella
+});
+
+test('CTX-ASK-CLOSED-REASON — 16/10: il motivo dice come si è chiusa (saltata ⇒ ha già una risposta; chiusa al riavvio ⇒ chiusa senza risposta)', async () => {
+  const cartellaStore = cartellaStoreVera();
+  const { finta, registro, sessionId, alModello, requestId } = await apriDomandaAsk(cartellaStore);
+  assert.deepEqual(await registro.rispondiDomanda(sessionId, requestId, { requestId, status: 'skipped' }), { ok: true });
+  assert.equal((await alModello).status, 'skipped');
+  const dopoSaltata = await registro.rispondiDomanda(sessionId, requestId, { requestId, status: 'answered', answers: { scelta: 'A' } });
+  assert.equal(dopoSaltata.code, 'QUESTION_NOT_PENDING');
+  assert.equal(dopoSaltata.reason, 'question-already-answered', 'saltare è una risposta della persona');
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+  await attendiScrittureDelNegozio(cartellaStore);
+  const cartella2 = cartellaStoreVera();
+  const orfana = await apriDomandaAsk(cartella2);
+  const { dopo } = await statiDopoRiavvio(cartella2, orfana.sessionId);
+  const dopoRiavvio = await dopo.rispondiDomanda(orfana.sessionId, orfana.requestId, { requestId: orfana.requestId, status: 'answered', answers: { scelta: 'A' } });
+  assert.equal(dopoRiavvio.reason, 'question-closed', 'chiusa dal riavvio senza risposta');
+  // AL CONTRARIO: scaduta resta «non più in attesa» (revisione 16/10, mutante E2)
+  const cartella3 = cartellaStoreVera();
+  const scaduta = await apriDomandaAsk(cartella3);
+  assert.deepEqual(await scaduta.registro.rispondiDomanda(scaduta.sessionId, scaduta.requestId, { requestId: scaduta.requestId, status: 'expired' }), { ok: true });
+  const dopoScaduta = await scaduta.registro.rispondiDomanda(scaduta.sessionId, scaduta.requestId, { requestId: scaduta.requestId, status: 'answered', answers: { scelta: 'A' } });
+  assert.equal(dopoScaduta.reason, 'question-expired', 'scaduta, non «chiusa senza risposta»');
+  scaduta.finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+  await attendiScrittureDelNegozio(cartella3);
+  orfana.finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+  await attendiScrittureDelNegozio(cartella2);
 });
 
 test('CTX-ASK-ANSWER-IDEMPOTENT — stessa risposta ripetuta (in volo, dopo, dopo un riavvio) dà l esito della prima; una diversa è QUESTION_NOT_PENDING', async () => {
@@ -9275,18 +9312,21 @@ test('CTX-ASK-ANSWER-IDEMPOTENT — stessa risposta ripetuta (in volo, dopo, dop
   // In gara con un timer: una risposta diversa non deve agganciarsi alla promessa in volo (si bloccherebbe fino al disco).
   const diversaInVolo = await Promise.race([Promise.resolve(registro.rispondiDomanda(sessionId, requestId, diversa)), new Promise((r) => setTimeout(() => r({ code: 'SOSPESA-SULLA-PRIMA' }), 200))]);
   assert.equal(diversaInVolo.code, 'QUESTION_NOT_PENDING');
+  assert.equal(diversaInVolo.reason, 'question-already-answered', '16/10: in volo vale la risposta in memoria');
   apri();
   assert.deepEqual(await prima, { ok: true });
   assert.deepEqual(await inVolo, { ok: true });
   assert.deepEqual(await registro.rispondiDomanda(sessionId, requestId, stessa), { ok: true });
-  assert.equal((await registro.rispondiDomanda(sessionId, requestId, diversa)).code, 'QUESTION_NOT_PENDING');
-  assert.equal((await registro.rispondiDomanda(sessionId, requestId, { requestId, status: 'skipped' })).code, 'QUESTION_NOT_PENDING');
+  assert.equal((await registro.rispondiDomanda(sessionId, requestId, diversa)).reason, 'question-already-answered');
+  assert.equal((await registro.rispondiDomanda(sessionId, requestId, { requestId, status: 'skipped' })).reason, 'question-already-answered');
   assert.deepEqual(await alModello, { status: 'answered', answers: { scelta: 'A' } });
   const { dopo, stati } = await statiDopoRiavvio(cartellaStore, sessionId);
   assert.deepEqual(stati, ['answered']);
   assert.deepEqual(await dopo.rispondiDomanda(sessionId, requestId, stessa), { ok: true }, 'dopo il riavvio la ripetizione legge l esito salvato');
-  assert.equal((await dopo.rispondiDomanda(sessionId, requestId, diversa)).code, 'QUESTION_NOT_PENDING');
-  assert.equal((await dopo.rispondiDomanda(sessionId, 'mai-esistita', stessa)).code, 'QUESTION_NOT_PENDING');
+  assert.equal((await dopo.rispondiDomanda(sessionId, requestId, diversa)).reason, 'question-already-answered', 'dopo il riavvio la legge dal disco');
+  const maiEsistita = await dopo.rispondiDomanda(sessionId, 'mai-esistita', stessa);
+  assert.equal(maiEsistita.code, 'QUESTION_NOT_PENDING');
+  assert.equal(maiEsistita.reason, 'question-expired', 'AL CONTRARIO: una domanda di cui non c è traccia resta «non più in attesa»');
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
   await attendiScrittureDelNegozio(cartellaStore); // F3 (24/09): niente scritture in coda quando il gancio di file toglie la cartella
 });
@@ -10494,8 +10534,16 @@ test('REV-SESSION-READY-42 — dopo `chiudi` la storia del GIRO si salva ancora:
   }
 });
 
-test('REV-SESSION-READY-43 — giro riuscito con la scrittura della storia RIUSCITA in ritardo: l’assestamento non consegna il risultato della figlia', async () => {
+test('REV-SESSION-READY-43 — giro riuscito con la scrittura della storia RIUSCITA in ritardo: l’assestamento non consegna il risultato della figlia', async (t) => {
   /* Codex v6, punto 7: reintegrare all'assestamento solo quando la storia si salva lasciava verde la 35, che la fa fallire. */
+  /* ⛔ L3-7 (bugfixer, 15/10/2026) — «actual undefined» nel cancello della CLI sotto carico, 3 su 3 verde da sola. Causa misurata:
+     finito l'assestamento con la storia confermata, il registro arma il RISVEGLIO del padre coi risultati delle figlie (F-020,
+     `programmaRisveglioDaFiglie`: un `setTimeout` di 25 ms). La prova chiamava `resume` dopo tre giri del ciclo: se i tre giri
+     durano più di 25 ms (carico), il risveglio parte PRIMA, il giro 2 è suo e `resume` risponde `running-wait-resume`, senza
+     `sessionId`. Riprodotto mettendo 40 ms al posto dei tre giri: `actual: undefined`, sempre. Il prodotto ha ragione (il padre
+     si sveglia da sé); la prova correva contro un orologio. Ora l'orologio lo tiene lei: il `setTimeout` è finto dal risultato
+     della figlia alla ripresa, e il risveglio non può superarla. Il significato non cambia: l'assestamento non consegna, il
+     giro dopo sì. */
   const STORIA = new Set(['messaggi-delta', 'checkpoint', 'messaggi-finali']);
   const cartellaStore = mkdtempSync(join(tmpdir(), 'talos-rev-ready-v7-riuscita-'));
   const sospese = [];
@@ -10516,6 +10564,7 @@ test('REV-SESSION-READY-43 — giro riuscito con la scrittura della storia RIUSC
     finta.concludi(0, { type: 'RunFinished', runId: 'r1' }, { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaDelGiro(1) } });
     for (let i = 0; i < 3; i += 1) await unGiro();
     assert.ok(sospese.length > 0, 'la storia del giro è in scrittura');
+    t.mock.timers.enable({ apis: ['setTimeout'] }); // da qui il risveglio di 25 ms non scatta da solo (vedi sopra)
     finta.concludi(1, { type: 'RunFinished', runId: 'r2' }, { ok: true, esito: { detto: 'Modulo scritto.', comeFinita: 'concluso', messaggiFinali: [] } });
     for (let i = 0; i < 3; i += 1) await unGiro();
     occupato = false;
@@ -10525,6 +10574,7 @@ test('REV-SESSION-READY-43 — giro riuscito con la scrittura della storia RIUSC
     assert.deepEqual(consegne, [], 'l’assestamento non consegna niente, anche con la storia salvata');
     assert.equal(registro.resume(parentId, 'domanda 2').sessionId, parentId);
     assert.match(JSON.stringify(finta.run(2).input.codaMessaggiFn?.() ?? null), /Modulo scritto\./u);
+    t.mock.timers.reset(); // l'orologio torna vero: il giro 2 c'è già, un risveglio arrivato ora non trova il padre fermo
     finta.concludi(2, { type: 'RunFinished', runId: 'r3' });
     await registro.attendiAssestamento(parentId);
   } finally {

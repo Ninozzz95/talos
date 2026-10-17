@@ -19,9 +19,9 @@ import { testiUtenteWsl, testiDoveGiranoIComandi } from '../components/utente-ws
 import { montaPastigliaPiano, mostraBenvenutoPiano } from '../components/piano-chatgpt.js'; // 11/10/2026: il piano ChatGPT nel composer
 import { montaClicSuiLink } from '../components/conferma-link.js'; // 11/10/2026: i link della chat, col clic che chiede conferma
 import { sitiFidatiDellApp, destinazioneDeiLinkDellApp } from '../components/link-esterni.js';
-import { PROVIDER_DIRETTI, eFonteDiretta, fontiDelSelettore, modelliDellaFonte, fraseVuotoDiretto, senzaChiave, fornitoriConCatalogo, aggiornaTestoModelloSelettore } from '../components/fonti-modelli.js'; // BC-12 (11/09): «Diretti» si spezza in una scheda per fornitore // P-C (12/09): un motore locale non ha chiave da collegare
+import { PROVIDER_DIRETTI, eFonteDiretta, fontiDelSelettore, modelliDellaFonte, fraseVuotoDiretto, senzaChiave, fornitoriConCatalogo, aggiornaTestoModelloSelettore, nomeFornitore } from '../components/fonti-modelli.js'; // BC-12 (11/09): «Diretti» si spezza in una scheda per fornitore // P-C (12/09): un motore locale non ha chiave da collegare
 import { statoAvvioSessione } from '../components/avvio-sessione.js'; // BC-14 (11/09): «Avvia» non mente più sul perché è fermo
-import { nomeLeggibileSessione, identitaSessione, aggiornaSessionItem } from '../components/session-item.js'; // N1 (10/09): la riga della sessione viva cambia sul posto · BC-36/37 (12/09): nome e permesso da UNA fonte sola
+import { nomeLeggibileSessione, identitaSessione, aggiornaSessionItem, titoloDalPrimoMessaggio, nomeConSuffisso, limitaCampoAGrafemi } from '../components/session-item.js'; // N1 (10/09): la riga della sessione viva cambia sul posto · BC-36/37 (12/09): nome e permesso da UNA fonte sola
 import { collegaScia, aggiornaTutteLeScie } from '../components/range-scia.js';
 import {aggiornaElencoRuntime,montaPannelloRuntime} from '../components/runtime-modelli.js';
 import {normalizzaCapacita,aggiornaMisuraMemoria,montaMisuraMemoria} from '../components/misura-memoria.js';
@@ -50,9 +50,10 @@ import {
   aggiornaPaginaMemoria, montaNote, montaProgetti,
 } from '../components/sezioni-adattatori.js';
 import { creaDettaglioAgente } from '../components/dettaglio-agente.js'; // PO-30 fetta 2: il dettaglio di un agente col disegno del laboratorio
-import { montaGrafoAgenti, modelloGrafoAgenti } from '../components/grafo-agenti.js';
+import { modelloGrafoAgenti } from '../components/grafo-agenti.js';
 import { montaGrafoWorkflow } from '../components/grafo-workflow.js'; // F3-42, 25/09/2026: il diagramma del workflow (D30)
 import { creaClientGrafo } from '../components/workflow-graph-client.js';
+import { creaClientDeleghe, nomeBreve, nomeDellAgente, runDalleDeleghe } from '../components/grafo/run-dalle-deleghe.js';
 import { montaRailWorkflow } from '../components/rail-workflow.js'; // F3-50, 25/09/2026: il rail «Agenti» del workflow (D30)
 import { montaSelettoreGrafo, montaSelettoreRail } from '../components/grafo-sorgenti.js';
 import { montaCronologiaWorkflow } from '../components/workflow-history.js';
@@ -116,7 +117,7 @@ import { aggiornaPiedeChat, dettaglioUtile, etichettaPermesso, fondoInVista, nom
 import { progettiConSessioni } from '../components/progetti.js'; // 06/9: la voce «Progetti» aveva un contatore e nessuna pagina (il montaggio è in sezioni-adattatori.js)
 import { collegaTooltip } from '../components/tooltip.js'; // 06/9 O-40: i suggerimenti sono nostri, col tema e con la tastiera
 import { porteLateraliAperte } from '../components/permessi.js'; // 06/9 T03-D2: chiudere «scrivi» non chiude il terminale, e va detto
-import { provenienzaDelGiroFinito, spiegaErrore, spiegaRifiutoAttrezzo, testoErroreServer, tonoDelTick, vestizioneErrore } from '../components/errori.js'; // 09/09: badge, titolo e tono li decide la FAMIGLIA della spiegazione, non un ramo scritto qui
+import { fraseDelMotivo, provenienzaDelGiroFinito, spiegaErrore, spiegaRifiutoAttrezzo, testoErroreServer, tonoDelTick, vestizioneErrore } from '../components/errori.js'; // 09/09: badge, titolo e tono li decide la FAMIGLIA della spiegazione, non un ramo scritto qui
 import { argomentoDelRagionamento, etichettaRagionamento, formattaDurataRagionamento, argomentoPuoCambiare } from '../components/ragionamento.js'; // 13/09 sera: il ragionamento si comprime invece di sparire, e mentre ragiona dice su cosa
 import { DATI_VOCE, creaVistaSegmento } from '../components/attivita-segmento.js'; // R4 (24/09): il segmento compatto — segmento → voce → dettaglio, i dati delle voci fuori dal DOM
 import { descriviCoda, normalizzaStatoCoda, descriviRisultatoDelega, descriviEsitoWorkflow, descriviUscitaSfondo, descriviDialogoAgente, FRASE_DIALOGO_AGENTE } from '../components/coda-messaggi.js'; // 14/09: la coda è della sessione — le sue parole in un posto solo
@@ -141,12 +142,15 @@ import { aggiornaSeparatoreContesto, aggiornaSeparatoreLegacy, alternaRiassuntoL
 import { createContextClient } from '../services/context-client.js';
 import { createContextMonitor } from '../services/context-monitor.js';
 import { aggiornaAvanzamentoContesto, aggiornaAvanzamentoLegacy } from '../components/context-progress.js'; // F5, 24/09/2026: la barra anche per il legacy
+import { montaFasciaObiettivo, aggiornaFasciaObiettivo, sceltaPer as sceltaFasciaObiettivo, ricordaScelta as ricordaSceltaFasciaObiettivo, chiaveDelloStato as chiaveDelloStatoObiettivo } from '../components/obiettivo-fascia.js'; // /goal G6, 15/10/2026: la fascia dell'obiettivo
+import { creaCartaObiettivo, comandoObiettivo, suggerisciComando, stessiControlli } from '../components/obiettivo-carta.js'; // /goal G6: la carta di conferma dei controlli e `/goal`
 import { interpretaEventoCompattazione, valutaSogliaContesto, testoRigaCompattazione, testoBarraLegacy, montaAvvisoContesto, aggiornaAvvisoContesto, aggiornaNotaJournalRiparato, compattaLegacy, annullaCompattazioneLegacy } from '../components/compattazione-legacy.js'; // F5, 24/09/2026: la compattazione legacy che si vede e si può fare
 import { aggiornaDiffReview, aggiornaSommarioSchedeReview, chiaveFileReview, creaSchedeReview, etichettaFileReview, nascondiAzioniFase3, riassuntoReviewTestata as riassuntoReviewPerTestata } from '../components/review.js'; // 05/9 Fase 2: Review — elenco dei file e diff nel disegno; 17/09 BC-75: `etichettaFileReview` è la regola del nome, e non si riscrive qui del mockup; 17/09 BC-63: le linguette sono il componente condiviso col Terminale
 import { creaStatoVuoto, suggerimentiDallaCartella } from '../components/stato-vuoto.js'; // 05/9 Fase 2: EmptyState — lo stato vuoto del mockup, dai fatti della cartella
 import { montaGuscioLaboratorio } from '../components/lab-cornice-v3.js'; // 18/09 corsia 2: il guscio a quattro schede del Laboratorio modelli — monta i comandi legacy in una scheda sola
 import { montaSchedaModello, idDelDownload } from '../components/scheda-modello.js'; // 18/09 corsia 4: la pagina del modello (scheda HF, file, compatibilità) — la monta `apriPaginaModello`
 import { tieniInVistaScheda } from '../components/schede.js'; // 26/09 F6-1: la fila della colonna destra scorre, e la scheda attiva resta in vista
+import { impostaNomiNoti, scriviNomeConNumero } from '../components/nome-con-numero.js'; // 15/10/2026 (owner): il «-2» di un doppione resta in vista
 import { aggiornaTopbar, impostaConteggioScheda } from '../components/topbar.js'; // 05/9 Fase 2: Topbar — titolo, percorso e conteggi delle schede dai dati; 20/09: lo stesso scrittore di badge serve le schede della colonna destra
 import { aggiornaWorkspaceFooter, fornitoreDelModello, testiPiede as testiPiedeWorkspace } from '../components/workspace-footer.js'; // 05/9 Fase 2: WorkspaceFooter — il piede della sidebar dice cartella, tema e chi serve il modello // 05/9 Fase 2: SessionItem — la riga della sidebar è un componente del mockup // 19/09 FASE 3: `fornitoreDelModello` serve alla banda del laboratorio, che deve dire «Locale» o «Cloud»
 
@@ -335,6 +339,8 @@ import { aggiornaWorkspaceFooter, fornitoreDelModello, testiPiede as testiPiedeW
      */
     realSession: {
       id: null,
+      /** Le richieste della PERSONA in questa conversazione (`annotaRichiestaDellaPersona`): `{ id, at, testo }`, in ordine. */
+      richieste: [],
       taskId: null,
       /** Modello realmente usato dal giro corrente, letto dal RunStarted persistito. */
       currentRunModel: null,
@@ -525,6 +531,8 @@ import { aggiornaWorkspaceFooter, fornitoreDelModello, testiPiede as testiPiedeW
        */
       codaMessaggi: [],
       codaInPausa: false, // ⭐ 14/09: la dice il server (`talos.coda`), mai questa finestra da sola
+      obiettivo: null, // /goal G6: lo dice il server (`talos.obiettivo`, anche all'apertura del flusso), mai questa finestra
+      obiettivoTetti: null,
     },
   };
 
@@ -3233,6 +3241,8 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
   }
 
   /** Copy per persone: i dettagli tecnici restano nel Doctor e nel log. */
+  /* 15/10/2026 (visto dal vivo): la chiave del fornitore che manca non è «Configurazione non valida» — il server la manda col motivo
+     e il nome del fornitore, e qui la si dice nella lingua dell'interfaccia («Manca la chiave di OpenRouter…»). '' per ogni altro errore. */
   function messaggioErroreUtente(error, fallback = tr('app.errors.requestFailed')) {
     const messaggi = {
       PROJECTS_NOT_CONFIGURED: 'app.errors.projectsNotConfigured',
@@ -3244,6 +3254,12 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       INTERNAL_ERROR: 'app.errors.internalError',
       NOT_FOUND: 'app.errors.notFound',
     };
+    /* 15/10/2026 (visto dal vivo): la chiave del fornitore che manca non è «Configurazione non valida» — il server la manda col motivo
+       e il nome del fornitore, e qui la si dice nella lingua dell'interfaccia («Manca la chiave di OpenRouter…»).
+       16/10/2026 (mobile): lo stesso per ogni motivo che il server pubblica per la persona, come i rifiuti dell'albero dei file
+       (rinomina con una barra, spostamento dentro sé stesso…), che prima dicevano «Query non valida». */
+    const delMotivo = fraseDelMotivo(error);
+    if (delMotivo) return delMotivo;
     if (error?.code && messaggi[error.code]) return tr(messaggi[error.code]);
     const messaggio = typeof error?.message === 'string' ? error.message.trim() : '';
     if (messaggio && !/TALOS_[A-Z0-9_]+|child_process|writeFileSync|stack| at [A-Za-z]:\\/i.test(messaggio)) return messaggio;
@@ -5357,22 +5373,28 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     bottone.type = 'button';
     bottone.className = 'talos-button talos-button--secondary talos-button--sm';
     bottone.textContent = tr('app.toolLine.openChatgptSignIn');
-    bottone.addEventListener('click', () => {
-      apriProviderDelLaboratorio();
-      /* ⛔ owner 11/10/2026: la card è un riassunto, l'accesso sta nella MODALE di «Configure» (`apriConfigurazioneProvider`,
-         provider-card.js). Mai `providerAperti`: è la vecchia apertura in linea, che allunga tutta la griglia. La card arriva
-         quando la lista dei fornitori è caricata: si aspetta lei (al massimo 3 s), poi si preme il suo «Configure» vero. */
-      let tentativi = 0;
-      const apriLaModale = () => {
-        const scheda = document.querySelector('#providerList [data-provider-id="openai"]');
-        const configura = scheda?.querySelector('[data-provider-toggle="openai"]');
-        if (configura) { if (!scheda.querySelector(':scope > .talos-provider__modale')) configura.click(); return; }
-        if ((tentativi += 1) < 30) setTimeout(apriLaModale, 100);
-      };
-      requestAnimationFrame(apriLaModale);
-    });
+    bottone.addEventListener('click', () => { apriConfigurazioneDelFornitore('openai'); });
     blocco.append(bottone);
     nellaChat(blocco);
+  }
+  /* ⛔ owner 11/10/2026: la card è un riassunto, l'accesso sta nella MODALE di «Configure» (`apriConfigurazioneProvider`,
+     provider-card.js). Mai `providerAperti`: è la vecchia apertura in linea, che allunga tutta la griglia. La card arriva
+     quando la lista dei fornitori è caricata: si aspetta lei (al massimo 3 s), poi si preme il suo «Configure» vero.
+     14/10/2026: una funzione sola per ogni fornitore (prima viveva dentro il pulsante del piano ChatGPT); senza `id`, solo la
+     scheda Provider. */
+  function apriConfigurazioneDelFornitore(chi) {
+    apriProviderDelLaboratorio();
+    const { id: idDato = null, etichetta = null } = typeof chi === 'string' ? { id: chi } : (chi ?? {});
+    if (!idDato && !etichetta) return;
+    let tentativi = 0;
+    const apriLaModale = () => {
+      const id = idDato ?? state.modelLab.providers?.find((r) => r.label === etichetta)?.id ?? null;
+      const scheda = id ? document.querySelector(`#providerList [data-provider-id="${CSS.escape(id)}"]`) : null;
+      const configura = scheda?.querySelector(`[data-provider-toggle="${CSS.escape(id)}"]`);
+      if (configura) { if (!scheda.querySelector(':scope > .talos-provider__modale')) configura.click(); return; }
+      if ((tentativi += 1) < 30) setTimeout(apriLaModale, 100);
+    };
+    requestAnimationFrame(apriLaModale);
   }
   function apriProviderDelLaboratorio() {
     setView('settings', { dallInizio: true });
@@ -6133,13 +6155,13 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       : figlio.conclusa ? (figlio.esitoDelega === 'concluso' ? tr('app.delegations.stateDone') : figlio.esitoDelega === 'fallito' ? tr('app.delegations.stateFailed') : figlio.esitoDelega ? tr('app.delegations.stateOther', { esito: figlio.esitoDelega }) : tr('app.delegations.stateEnded'))
       : tr('app.delegations.stateRunning');
     testo.append(
-      textElement('strong', null, tronca(figlio.task || tr('app.delegations.taskUnrecorded'), 60)),
+      textElement('strong', null, tronca(nomeDellAgente(figlio) || tr('app.delegations.taskUnrecorded'), 60)), // L3-17 (NOME-REV-02)
       textElement('small', null, stato),
     );
     const statoEl = textElement('span', successo ? 'status-chip success' : fallita ? 'status-chip error' : 'status-chip', successo ? '✓' : fallita ? '!' : '●');
     riga.append(iconEl, testo, statoEl);
     riga.addEventListener('click', () => {
-      passaASessione(figlio.sessionId, figlio.sessionId, figlio.task);
+      passaASessione(figlio.sessionId, figlio.sessionId, nomeDellAgente(figlio) || figlio.sessionId);
       closeEmbeddedDialog(sheetDialog);
     });
     return riga;
@@ -8703,7 +8725,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       sessionTitle.textContent = state.session; aggiornaTestataSessione();
       $$('[data-current-session-title]').forEach((label) => { label.textContent = state.session; });
       const attiva = $('.talos-session-item[aria-current="true"] .talos-session-item__title');
-      if (attiva) attiva.textContent = state.session;
+      if (attiva) scriviNomeConNumero(attiva, state.session);
     }
     state.sessioneTarget = null;
     toast(tr('app.sessions.renamed'), doppioneEvitato ? tr('app.sessions.renamedDuplicate', { nome: nomeUnico }) : nomeUnico);
@@ -8762,6 +8784,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       const errore = $('#rinominaSessioneErrore', velo);
       if (!campo || !modulo) return;
       campo.value = state.sessioneTarget?.nome || state.session || '';
+      limitaCampoAGrafemi(campo); // REV2-06: 80 grafemi come il server, non 80 unità UTF-16
       if (errore) { errore.hidden = true; errore.textContent = ''; }
       window.setTimeout(() => { campo.focus(); campo.select(); }, 30);
       if (!modulo.dataset.collegato) {
@@ -9583,7 +9606,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       html: () => `
         <form class="sheet-section rename-form" id="renameSessionForm">
           <label class="sheet-label" for="renameSessionInput">${tr('app.sheets.rename.nameLabel')}</label>
-          <input class="sheet-input" id="renameSessionInput" value="${(state.sessioneTarget?.nome || state.session).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;')}" maxlength="80" autocomplete="off">
+          <input class="sheet-input" id="renameSessionInput" value="${(state.sessioneTarget?.nome || state.session).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;')}" maxlength="400" autocomplete="off">
           <div class="sheet-actions">
             <button type="button" class="secondary-btn" data-rename-cancel>${tr('app.common.cancel')}</button>
             <button type="submit" class="primary-btn">${tr('app.common.save')}</button>
@@ -9722,7 +9745,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
 
   function aggiornaPillolaModello() {
     const span = $('[data-open-sheet="model"] span');
-    const label = piedeDelMockup() ? (nomeModelloBreve(state.model) || tr('app.modelPicker.choose')) : (state.model || tr('app.modelPicker.select')); // 05/9 Fase 2: il chip mostra il nome breve
+    const label = piedeDelMockup() ? (nomePillolaModello(state.model) || tr('app.modelPicker.choose')) : (state.model || tr('app.modelPicker.select')); // 05/9 Fase 2: il chip mostra il nome breve
     if (span) span.textContent = label;
     const activeModel = $('#modelLabActiveModel');
     /* ⛔ 19/09 — L'ID GREZZO E CHI LO SERVE, accanto al nome: è ciò che la banda del laboratorio
@@ -10371,12 +10394,12 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     if (nodi !== $('#veloAlberoNodi', radice)) return;   // il velo è cambiato mentre la richiesta era in volo
     for (const figlio of figli) {
       nodi.append(nodoAlbero({
-        titolo: tronca(figlio.task || tr('app.delegations.taskUnrecorded'), 52),
+        titolo: tronca(nomeDellAgente(figlio) || tr('app.delegations.taskUnrecorded'), 52), // L3-17 (NOME-REV-02)
         sotto: figlio.interrotta ? tr('app.delegations.lowerStopped') : figlio.conclusa ? (figlio.esitoDelega === 'concluso' ? tr('app.delegations.lowerDone') : figlio.esitoDelega === 'fallito' ? tr('app.delegations.lowerFailed') : figlio.esitoDelega ? tr('app.delegations.lowerOther', { esito: figlio.esitoDelega }) : tr('app.delegations.lowerEnded')) : tr('app.delegations.lowerRunning'),
         token: soloToken(figlio.usageSessione),
         giri: figlio.usage?.giri,
         stato: !figlio.conclusa && !figlio.interrotta ? 'live' : 'done',
-        onApri: () => { passaASessione(figlio.sessionId, figlio.sessionId, figlio.task); chiudiVeloMockup('veloAlbero'); },
+        onApri: () => { passaASessione(figlio.sessionId, figlio.sessionId, nomeDellAgente(figlio) || figlio.sessionId); chiudiVeloMockup('veloAlbero'); },
       }));
     }
     const nota = $('#veloAlberoNota .talos-scope__text', radice);
@@ -10541,6 +10564,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     const renameForm = $('#renameSessionForm', sheetBody);
     if (renameForm) {
       const input = $('#renameSessionInput', renameForm);
+      limitaCampoAGrafemi(input); // REV2-06
       window.setTimeout(() => { input?.focus(); input?.select(); }, 30);
       $('[data-rename-cancel]', renameForm)?.addEventListener('click', () => closeEmbeddedDialog(sheetDialog));
       renameForm.addEventListener('submit', async (event) => {
@@ -10572,7 +10596,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
           sessionTitle.textContent = state.session; aggiornaTestataSessione(); // 05/9 Fase 2: Topbar
           $$('[data-current-session-title]').forEach((label) => { label.textContent = state.session; });
           const activeSession = $('.talos-session-item[aria-current="true"] .talos-session-item__title'); // 05/9 Fase 2: SessionItem
-          if (activeSession) activeSession.textContent = state.session;
+          if (activeSession) scriviNomeConNumero(activeSession, state.session);
         }
         state.sessioneTarget = null;
         closeEmbeddedDialog(sheetDialog);
@@ -10600,7 +10624,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
           toast(tr('app.files.renamed'), `${bersaglio.nome} → ${nuovoNome}`);
           await invalidaLivelloGenitoreAlbero(bersaglio.percorso);
         } catch (error) {
-          toast(tr('app.common.renameFailed'), error.message);
+          toast(tr('app.common.renameFailed'), messaggioErroreUtente(error));
         }
       });
     }
@@ -10617,7 +10641,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
           toast(tr('app.files.deleted'), bersaglio.nome);
           await invalidaLivelloGenitoreAlbero(bersaglio.percorso);
         } catch (error) {
-          toast(tr('app.common.deleteFailed'), error.message);
+          toast(tr('app.common.deleteFailed'), messaggioErroreUtente(error));
         }
       });
     }
@@ -10659,7 +10683,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
           toast(bersaglio.tipo === 'cartella' ? tr('app.files.folderCreated') : tr('app.files.fileCreated'), esito.percorso);
           await invalidaLivelloGenitoreAlbero(esito.percorso);
         } catch (error) {
-          toast(tr('app.common.createFailed'), error.message);
+          toast(tr('app.common.createFailed'), messaggioErroreUtente(error));
         }
       });
     }
@@ -10857,7 +10881,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
 
       latenzaMs: latenzaPrimoTokenMs(),
       costo: null,
-      modello: nomeModelloBreve(state.model || state.realSession.currentRunModel), // il modello del giro se non ne e' scelto uno
+      modello: nomePillolaModello(state.model || state.realSession.currentRunModel), // il modello del giro se non ne e' scelto uno; L3-10: un diretto dice da dove arriva
       permesso: state.permissions,
       tema: testiTema,
     });
@@ -10968,9 +10992,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
    * ⛔⛔ PO-08 — la conversazione di UNA figlia alla volta, nel pannello destro.
    */
   let figliaAperta = null;
-  let grafoAgenti = null;
-  let grafoTimer = null;
-  let grafoWorkflow = null; // F3-42: il diagramma v2 del workflow; uno solo fra lui e `grafoAgenti` è montato
+  let grafoWorkflow = null; // il diagramma al centro: quello del Workflow (F3-42) o, con la sorgente delle deleghe, quello degli agenti
   let aperturaDiagramma = 0; // ogni chiusura la fa scadere: un'apertura asincrona arrivata dopo non monta niente
   let diagrammaInApertura = false;
   let grafoWorkflowChiave = null; // la sorgente del diagramma aperto: un clic nel rail sullo stesso workflow non lo rimonta
@@ -11048,6 +11070,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
   function mostraRisultatoDelega(evento) {
     if (evento?.origine === 'workflow') return mostraEsitoWorkflow(evento);
     if (evento?.origine === 'sfondo') return mostraUscitaSfondo(evento); // C06
+    if (evento?.origine === 'obiettivo') return mostraNotaObiettivo(evento); // /goal G4: il ciclo che riparte, mai la persona
     if (evento?.origine !== 'delega') return false;
     if (Array.isArray(evento.risultatiDelega)) {
       for (const item of evento.risultatiDelega) {
@@ -11104,6 +11127,15 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     risultatiDelegaMostrati.add(chiave);
     const uscita = descriviUscitaSfondo({ ...valore, fermatoDallaPersona: true });
     appendRisultatoDelega({ titolo: uscita.titolo, testo: uscita.testo, errore: false }, tr('app.backgroundEnd.stoppedNotice'));
+  }
+
+  /* /goal G4 (14/10/2026): la ripresa del ciclo dell'obiettivo è un messaggio del SISTEMA. Fino all'interfaccia della G6 (mockup a
+     due varianti prima) la chat la dice con una nota sola, come l'esito di un Workflow: quante prove passano, e che TALOS continua. */
+  function mostraNotaObiettivo(evento) {
+    const r = evento?.riepilogo;
+    const totale = r && [r.verdi, r.rossi, r.nonVerificabili].every(Number.isSafeInteger) ? r.verdi + r.rossi + r.nonVerificabili : 0;
+    appendStatusNote(totale > 0 ? tr('app.goal.loopTitle', { passati: r.verdi, totale }) : tr('app.goal.loopTitleNone'), false, { meta: tr('app.goal.loopNotice') });
+    return true;
   }
 
   function mostraUscitaSfondo(evento) {
@@ -11176,7 +11208,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
   function montaSceltaSulGrafo(tipo) {
     selettoreGrafo?.distruggi(); selettoreGrafo = null;
     if (!railWorkflow) return;
-    const radice = (tipo === 'workflow' ? grafoWorkflow : grafoAgenti)?.elemento;
+    const radice = grafoWorkflow?.elemento;
     const testata = radice?.querySelector(':scope > header');
     if (testata) selettoreGrafo = montaSelettoreGrafo(testata, {
       iniziale: tipo, onSelezione: (scelto) => { ricordaTipoGrafo(state.realSession.id, scelto); void apriDiagramma({ tipo: scelto }); },
@@ -11207,12 +11239,21 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       corrente: { ...nota, ultimoEsito: esitoMadre ? (esitoMadre.type === 'RunError' ? 'errore' : esitoMadre.type === 'RunFinished' ? 'concluso' : null) : nota.ultimoEsito, interrotta: interrottaMadre, motivoChiusura: esitoMadre ? (esitoMadre.code === 'fermato' ? 'fermata' : esitoMadre.code === 'in-pausa' ? 'in-pausa' : null) : nota.motivoChiusura, attivita: { chiamate, attrezzoCorrente: operazione, passi: passiMadre }, sessionId: state.realSession.id, nome: state.session || tr('app.sessions.currentFallback'), cartella: state.realSession.cartellaAssoluta || nota.cartella, conclusa: !runRealeAttivo(), inAttesaApprovazione: state.realSession.approvazioniPendenti.size, usageSessione: state.realSession.usageSessione || nota.usageSessione },
       sessioni: [...state.sessionSelection.available.values(), ...agentiInDiretta.values()].filter(a => a?.passoWorkflow == null), figli: state.realSession.figli || [],
       errore: figliErrore, aggiornato: figliAggiornati,
+      // una richiesta senza ora (la storia non l'ha ancora detta) non divide niente: si aspetta
+      richieste: (state.realSession.richieste || []).filter((r) => Number.isFinite(r.at)),
     };
   }
   function agentiPerInspector() {
-    return modelloGrafoAgenti(datiGrafoAgenti()).nodi
+    /* 12/10/2026, owner «Una richiesta alla volta»: ogni agente porta la richiesta della persona a cui appartiene (la stessa
+       divisione del diagramma, dallo stesso adattatore), così il pannello può raggrupparli. Senza richieste note, niente gruppi. */
+    const fatti = datiGrafoAgenti();
+    const diviso = fatti.richieste.length ? runDalleDeleghe(fatti, { richieste: fatti.richieste, richiesta: 'tutte' }) : null;
+    const perId = new Map((diviso?.panoramica.richieste ?? []).map((r) => [r.id, r]));
+    const ultima = diviso?.panoramica.ultimaRichiesta ?? null;
+    const richiestaDi = (sessionId) => { const r = perId.get(diviso?.richiestaDi.get(sessionId)); return r ? { id: r.id, at: r.at, testo: r.testo, corrente: r.id === ultima } : null; };
+    return modelloGrafoAgenti(fatti).nodi
       .filter(n => n.id !== state.realSession.id && n.dati?.passoWorkflow == null)
-      .map(n => ({ ...n.dati, taskCorto: n.dati.taskCorto || n.nome, numeroFigli: n.figli }));
+      .map(n => ({ ...n.dati, taskCorto: n.dati.taskCorto || n.nome, numeroFigli: n.figli, richiesta: richiestaDi(n.id) }));
   }
   function applicaEventoAgenti(value) {
     const id = state.realSession.id, agente = value?.agent;
@@ -11324,13 +11365,13 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
           // C2-Q: la domanda della figlia alla persona, nella carta delle domande con la riga «chi chiede»
           if (state.realSession.domandeDelleFiglie.get(pendente.requestId)?.isConnected) return;
           const scheda = appendUserQuestionCard(pendente.requestId, Array.isArray(pendente.questions) ? pendente.questions : [],
-            { figlia: { sessionId: childId, chi: agente?.taskCorto ?? agentiInDiretta.get(childId)?.taskCorto ?? null } });
+            { figlia: { sessionId: childId, chi: nomeDellAgente(agente ?? agentiInDiretta.get(childId)) || null } });
           if (scheda) state.realSession.domandeDelleFiglie.set(pendente.requestId, scheda);
           segnalaRigaSessioneViva(); // C2-R7: la riga di questa sessione dice «aspetta te»
           return;
         }
         const carta = appendApprovalCard(pendente.requestId, pendente.azione,
-          { sessionId: childId, chi: agente?.taskCorto ?? agentiInDiretta.get(childId)?.taskCorto ?? null, perAttrezzo: pendente.perAttrezzo ?? null, politica: pendente.politica ?? null });
+          { sessionId: childId, chi: nomeDellAgente(agente ?? agentiInDiretta.get(childId)) || null, perAttrezzo: pendente.perAttrezzo ?? null, politica: pendente.politica ?? null });
         state.realSession.carteDelleFiglie.set(pendente.requestId, carta);
         segnalaRigaSessioneViva(); // C2-R7: la riga di questa sessione dice «aspetta te»
       } catch { /* la figlia non è leggibile adesso: il prossimo snapshot (o il rigioco del silenzio) riprova */ }
@@ -11370,12 +11411,13 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       if (aspetta && typeof agente.sessionId === 'string' && !conCarta.has(agente.sessionId)) void leggiDomandaDellaFiglia(agente.sessionId, agente);
     }
   }
-  function aggiornaGrafoAgenti() { grafoAgenti?.aggiorna(datiGrafoAgenti()); }
+  /* il diagramma delle deleghe si iscrive qui (`client.segui` in `apriDelegheSulDiagramma`): ogni fatto nuovo degli agenti lo spinge a rileggere */
+  var spintaDiagrammaDeleghe = null;
+  function aggiornaGrafoAgenti() { spintaDiagrammaDeleghe?.(); }
   function chiudiGrafoAgenti({ ricorda = false } = {}) {
+    if (agenteEvidenziato) evidenziaAgenteNelPannello(null);
     aperturaDiagramma++; diagrammaInApertura = false;
-    clearInterval(grafoTimer); grafoTimer = null;
     selettoreGrafo?.distruggi(); selettoreGrafo = null;
-    grafoAgenti?.distruggi(); grafoAgenti = null;
     grafoWorkflow?.distruggi(); grafoWorkflow = null; grafoWorkflowChiave = null;
     railWorkflow?.evidenzia(null); railWorkflow?.diagramma(false);
     $('[data-view="chat"]')?.classList.remove('talos-grafo-aperto');
@@ -11383,9 +11425,10 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
   }
   /*
    * ⭐ F3-42 (25/09/2026), decisione owner D30 — UNA vista sola: se la sessione ha un run di workflow (o una proposta) si
-   *   apre il diagramma v2 (`grafo-workflow.js`, mockup R4 14/200/5.000), altrimenti il grafo delle deleghe classiche di
-   *   sempre. Le sorgenti restano separate; la porta è la stessa («Apri visuale diagramma» nel rail, «Apri diagramma» sulla
-   *   card della proposta), e così il posto (`#schermoChat > [data-c="GrafoAgenti"]`) e il ritorno («Torna alla chat»).
+   *   apre il suo diagramma (`grafo-workflow.js`, mockup R4 14/200/5.000), altrimenti quello delle deleghe — lo STESSO
+   *   componente, con la sorgente degli agenti (`apriDelegheSulDiagramma`; la vista classica è stata tolta il 14/10/2026).
+   *   La porta è la stessa («Apri visuale diagramma» nel rail, «Apri diagramma» sulla card della proposta), e così il posto
+   *   (`#schermoChat > [data-c="GrafoAgenti"]`) e il ritorno («Torna alla chat»).
    *   `preferita` ({workflowId, version}) arriva dalla card: si apre QUEL workflow.
    */
   async function apriDiagramma({ figlia = null, preferita = null, iniziale = null, tipo = null } = {}) {
@@ -11422,8 +11465,6 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     closePanels();
     const host = $('[data-view="chat"]');
     if (!host) return;
-    clearInterval(grafoTimer); grafoTimer = null;
-    grafoAgenti?.distruggi(); grafoAgenti = null;
     selettoreGrafo?.distruggi(); selettoreGrafo = null;
     grafoWorkflow?.distruggi();
     lettoreFileLasciaLoSchermo(); // F5: il posto è uno, il lettore a schermo intero torna nel rail
@@ -11510,7 +11551,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       onSelezione: (tipo) => {
         ricordaTipoGrafo(id, tipo);
         railWorkflow?.visibilita();
-        if (grafoWorkflow || grafoAgenti) void apriDiagramma({ tipo });
+        if (grafoWorkflow) void apriDiagramma({ tipo });
       },
     });
     railWorkflowChiave = chiave;
@@ -11534,8 +11575,77 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     aggiornaInspectorDaStato();
   }
 
-  function apriGrafoAgenti(figlia = null) {
-    if (!state.realSession.id) return;
+  /*
+   * ⭐ UI deleghe (owner 12/10/2026, «il design originale deve rimanere ma essere esaltato»): le deleghe disegnate dal diagramma
+   *   del Workflow (`montaGrafoWorkflow`), attraverso l'adattatore `grafo/run-dalle-deleghe.js`. Stessa tela, stessa vista Tempo,
+   *   stessa riproduzione, stesso dettaglio. Approvata dall'owner il 12/10 sera; il 13/10: «tutto ciò che aveva la vista classica
+   *   si porta, poi la classica sparisce» — portato (ambito «cartella», «Segui», file per agente, storia del registro, «che cosa
+   *   fa adesso», attività recenti, stato vuoto, memoria alla ricarica, dati non aggiornati) e TOLTA il 14/10/2026.
+   */
+  /* Il pannello Agenti segue il diagramma: la scheda dell'agente scelto si evidenzia e scorre in vista (senza rubare il fuoco). */
+  var agenteEvidenziato = null; // var: lo legge anche il disegno del pannello, che può girare prima di questa riga (niente zona morta)
+  function evidenziaAgenteNelPannello(sessionId) {
+    agenteEvidenziato = sessionId || null;
+    for (const card of document.querySelectorAll('#railAgenti [data-sessione-figlia]')) {
+      const sua = card.dataset.sessioneFiglia === agenteEvidenziato;
+      if (sua) { card.dataset.evidenziata = 'true'; card.setAttribute('aria-current', 'true'); card.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
+      else { delete card.dataset.evidenziata; card.removeAttribute('aria-current'); }
+    }
+  }
+  /* Pannello → diagramma: a diagramma delle deleghe aperto, una scheda del pannello porta il diagramma su quell'agente. */
+  function apriAgenteDalPannello(figlia) {
+    if (grafoWorkflow && grafoWorkflowChiave === `${state.realSession.id}|deleghe` && figlia?.sessionId) {
+      void (async () => {
+        const passo = await clientDeleghe?.nodoDellaSessione(figlia.sessionId).catch(() => null);
+        if (passo && grafoWorkflow) { grafoWorkflow.vai({ passo }); return; }
+        /* RIV-T3-01 (riverifica, 14/10/2026): l'agente sta in un'altra richiesta (il pannello le divide): il diagramma guarda la
+           sua, come dal menu delle richieste. Solo se non c'è nemmeno lì si apre la sua conversazione, come prima. */
+        if (grafoWorkflow && await grafoWorkflow.vaiAllAgente?.(figlia.sessionId).catch(() => false)) return;
+        apriConversazioneFiglia(figlia);
+      })();
+      return;
+    }
+    apriConversazioneFiglia(figlia);
+  }
+  var clientDeleghe = null;
+  async function apriDelegheSulDiagramma(figlia = null) {
+    const id = state.realSession.id;
+    const mia = ++aperturaDiagramma;
+    const oraDelLotto = (ms) => (ms === null ? '' : new Date(ms).toLocaleTimeString(linguaCorrenteDiT() === 'en' ? 'en-GB' : 'it-IT', { hour: '2-digit', minute: '2-digit' }));
+    const deleghe = creaClientDeleghe({
+      leggi: async () => datiGrafoAgenti(),
+      /* la cronologia osservata e salvata dal registro (owner 13/10/2026): la stessa rotta della vista classica */
+      leggiCronologia: (query) => apiGet(`/api/v1/sessions/${encodeURIComponent(id)}/agent-timeline?${new URLSearchParams(query)}`),
+      titolo: tr('app.delegations.diagramTitle'),
+      opzioni: {
+        etichettaPrincipale: tr('app.delegations.thisConversation'), nomeSenzaTitolo: tr('agenti.delegations.untitledSession'),
+        orarioLotto: (lotto) => oraDelLotto(lotto.quando),
+        etichettaCartella: tr('agenti.workflow.scopeFolderGroup'),
+        etichettaLotto: (n, lotto) => (lotto.da === id ? tr('app.delegations.batchLabel', { n })
+          : tr('app.delegations.batchOf', { nome: lotto.padre?.taskCorto || lotto.padre?.nome || tr('agenti.delegations.untitledSession') })),
+      },
+    });
+    let sorgente = null;
+    /* anche senza agenti: lo stato vuoto lo dice il diagramma (13/10/2026) */
+    try { sorgente = await deleghe.sorgente({ ancheVuota: true }); } catch { sorgente = null; }
+    if (mia !== aperturaDiagramma || state.realSession.id !== id) return;
+    /* i fatti arrivano dalla memoria della app: qui si arriva solo se l'adattatore si è rotto. Non c'è più una vista di riserva:
+       lo si dice, e la chat resta com'è (chi non riesce a valutare non tace). */
+    if (!sorgente) { toast(tr('app.delegations.diagramUnavailable'), tr('app.delegations.diagramUnavailableBody')); return; }
+    // dal rail si arriva su un agente preciso: il diagramma si apre su di lui (selezionato, col suo dettaglio)
+    let iniziale = null;
+    if (figlia?.sessionId) {
+      let passo = await deleghe.nodoDellaSessione(figlia.sessionId).catch(() => null);
+      /* RIV-T3-01 (riverifica, 14/10/2026): un agente di una richiesta PASSATA (il pannello le divide, la persona l'ha aperta e l'ha
+         scelto) non è nell'ultima, quella di serie: si guarda la SUA richiesta. Prima il diagramma si apriva sull'ultima e
+         sceglieva un altro agente, senza dirlo. */
+      if (!passo) {
+        const richiesta = await deleghe.richiestaDellAgente?.(figlia.sessionId).catch(() => null);
+        if (richiesta != null) { deleghe.scegliRichiesta(richiesta); passo = await deleghe.nodoDellaSessione(figlia.sessionId).catch(() => null); }
+      }
+      if (passo) iniziale = { passo };
+    }
+    if (mia !== aperturaDiagramma || state.realSession.id !== id) return;
     grafoWorkflow?.distruggi(); grafoWorkflow = null; grafoWorkflowChiave = null;
     selettoreGrafo?.distruggi(); selettoreGrafo = null;
     railWorkflow?.diagramma(false);
@@ -11543,42 +11653,54 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     closePanels();
     const host = $('[data-view="chat"]');
     if (!host) return;
-    if (!grafoAgenti) {
-      lettoreFileLasciaLoSchermo(); // F5: il posto è uno, il lettore a schermo intero torna nel rail
-      host.classList.add('talos-grafo-aperto');
-      grafoAgenti = montaGrafoAgenti(host, {
-        dati: datiGrafoAgenti(),
-        onLeggiCronologia: ((id) => query => apiGet(`/api/v1/sessions/${encodeURIComponent(id)}/agent-timeline?${new URLSearchParams(query)}`))(state.realSession.id),
-        onChiudi: () => { chiudiGrafoAgenti(); $('#railAgenti button')?.focus(); },
-        onAggiorna: () => caricaFigliSessione(),
-        onLeggiFile: async (agente, percorso) => {
-          const risposta = await apiGet(`/api/v1/sessions/${encodeURIComponent(agente.sessionId)}/tree/file?percorso=${encodeURIComponent(percorso)}`);
-          return risposta.contenuto ?? risposta.testo ?? null;
-        },
-        onApri: async (voce) => {
-          const id = state.realSession.id, vista = grafoAgenti;
-          if (voce.sessionId === id) { $('#railTabs [data-rail="contesto"]')?.click(); openPanel('inspector'); return; }
-          let dati = state.realSession.figli.find(a => a.sessionId === voce.sessionId) || agentiInDiretta.get(voce.sessionId);
-          if (!dati && voce.padreId) {
-            try { dati = (await apiGet(`/api/v1/sessions/${encodeURIComponent(voce.padreId)}/children`))?.figli?.find(a => a.sessionId === voce.sessionId); }
-            catch (error) { if (state.realSession.id === id && grafoAgenti === vista) toast(tr('app.delegations.detailUnavailable'), error.message); return; }
-            if (state.realSession.id !== id || grafoAgenti !== vista) return;
-          }
-          if (!dati) { passaASessione(voce.sessionId, voce.taskId || voce.sessionId, voce.nome, voce.modello, voce); return; }
-          $('#railTabs [data-rail="agenti"]')?.click();
-          apriConversazioneFiglia(dati);
-          openPanel('inspector');
-        },
-      });
-      // Nessuna nuova connessione: la rilettura usa lo stesso contratto children dell'inspector.
-      grafoTimer = setInterval(() => { if (state.view === 'chat' && !document.hidden) void caricaFigliSessione(); }, 5000);
-    }
-    if (figlia?.sessionId) grafoAgenti.seleziona(figlia.sessionId);
-    ricordaTipoGrafo(state.realSession.id, 'deleghe'); ricordaGrafoAperto(state.realSession.id, 'deleghe');
+    lettoreFileLasciaLoSchermo();
+    host.classList.add('talos-grafo-aperto');
+    /* Dal client vero resta `evidenze` (legge gli eventi di QUALUNQUE sessione: le «Evidenze recenti» della figlia); il flusso del
+       run non esiste per le deleghe: si rilegge ogni 5 s lo stesso contratto `children` dell'inspector, come il diagramma di prima. */
+    const client = { ...creaClientGrafo({ fetchFn: (...a) => fetch(...a), API, sessionId: id }), ...deleghe,
+      segui: (_sorgente, { onUpdate } = {}) => {
+        /* gli eventi in diretta (nuove deleghe, operazione corrente, fine) arrivano da `aggiornaGrafoAgenti`; il battito resta come
+           rete per ciò che non manda eventi, e la sua rilettura arriva di nuovo da lì quando finisce */
+        const spinta = () => onUpdate?.({ resync: true });
+        spintaDiagrammaDeleghe = spinta;
+        const battito = setInterval(() => { if (state.view !== 'chat' || document.hidden) return; void caricaFigliSessione(); }, 5000);
+        return () => { clearInterval(battito); if (spintaDiagrammaDeleghe === spinta) spintaDiagrammaDeleghe = null; };
+      } };
+    const nota = state.sessionSelection.available.get(id) || {};
+    grafoWorkflow = montaGrafoWorkflow(host, {
+      client, sorgente, iniziale,
+      onSelezione: (selezione) => evidenziaAgenteNelPannello(selezione?.passo ? deleghe.sessioneDelNodo(selezione.passo) : null),
+      /* un file toccato da un agente si apre nel lettore dell'app (scheda Files del pannello di destra), accanto al diagramma:
+         le deleghe lavorano nella stessa cartella della conversazione (C2b), quindi il percorso è quello dell'albero. */
+      onApriFile: ({ percorso }) => { $('#railTabs [data-rail="file"]')?.click(); openPanel('inspector'); void apriFileAlbero(percorso, String(percorso).split(/[/\\]/u).pop()); },
+      onMenuAgente: (sessioneDelPasso, dove) => {
+        const dati = state.realSession.figli.find((a) => a.sessionId === sessioneDelPasso) || agentiInDiretta.get(sessioneDelPasso);
+        if (dati) menuDellaDelega(dati, dove);
+      },
+      gestoreOverlay: () => modalManager,
+      sessione: { id: `${id}:deleghe`, nome: state.session || nota.nome || null, modello: state.model || nota.modello || null },
+      onChiudi: () => { chiudiGrafoAgenti(); $('#railAgenti button')?.focus(); },
+      onApriSessione: (stepSessionId, riga) => {
+        if (stepSessionId === id) { $('#railTabs [data-rail="contesto"]')?.click(); openPanel('inspector'); return; }
+        const dati = state.realSession.figli.find((a) => a.sessionId === stepSessionId) || agentiInDiretta.get(stepSessionId);
+        if (!dati) { passaASessione(stepSessionId, stepSessionId, riga.label, riga.model || state.model, { conclusa: true }); return; }
+        $('#railTabs [data-rail="agenti"]')?.click();
+        apriConversazioneFiglia(dati);
+        openPanel('inspector');
+      },
+    });
+    grafoWorkflowChiave = `${id}|deleghe`;
+    clientDeleghe = deleghe;
+    if (agenteEvidenziato) evidenziaAgenteNelPannello(agenteEvidenziato);
+    ricordaTipoGrafo(id, 'deleghe'); ricordaGrafoAperto(id, 'deleghe');
     railSorgenti?.seleziona('deleghe');
     montaSceltaSulGrafo('deleghe');
-    aggiornaGrafoAgenti();
-    host.querySelector('.talos-grafo button')?.focus();
+  }
+
+  /** Apre il diagramma delle deleghe (su `figlia`, se data). Il nome è quello di sempre: lo chiamano il rail e il selettore. */
+  function apriGrafoAgenti(figlia = null) {
+    if (!state.realSession.id) return;
+    void apriDelegheSulDiagramma(figlia);
   }
 
   /** L'unico posto che sa come si ascolta una sessione figlia: il componente resta puro, e le sue
@@ -11614,8 +11736,6 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     aperta.contenitore?.remove();
     const elenco = $('#railAgenti');
     if (elenco) elenco.hidden = false;
-    // «Tutti gli agenti» riporta anche il diagramma alla panoramica completa.
-    grafoAgenti?.adatta();
     /* ⛔ `subito`: da oggi la colonna si disegna su un frame, ma qui l'elenco è appena tornato
        visibile e dev'essere aggiornato nello stesso istante in cui ricompare — un frame di elenco
        vecchio dopo un «Indietro» è esattamente lo sfarfallio che questa corsia toglie. */
@@ -11664,7 +11784,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     contenitore.appendChild(dettaglio.elemento);
     const maniglia = montaConversazioneFiglia(dettaglio.slotConversazione, {
       sessionId: figlia.sessionId,
-      nome: figlia.taskCorto || figlia.task || tr('app.delegations.noTaskRecorded'),
+      nome: nomeDellAgente(figlia) || tr('app.delegations.noTaskRecorded'), // L3-17
       apriFlusso: apriFlussoFiglia,
       onIndietro: chiudiConversazioneFiglia,
       nomeSessione: nomeVivoDellaSessione, // C2 R6: chi ha dato il permesso che ha coperto una chiamata della figlia
@@ -11699,7 +11819,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
                Riprodotto sulla 4176: l'id della sessione aperta diventava `{id, modello}`, la testata «Sessione senza nome», la
                chat ferma su «Apro la cronologia…» e «Contatto col server perso». La firma è posizionale, come per le altre
                aperture di una figlia (l'albero dei rami, `figlio.sessionId, figlio.sessionId, figlio.task`). */
-            onConferma: () => { chiudiConversazioneFiglia(); passaASessione(figlia.sessionId, figlia.sessionId, figlia.taskCorto || figlia.task || figlia.sessionId, figlia.modello || null); },
+            onConferma: () => { chiudiConversazioneFiglia(); passaASessione(figlia.sessionId, figlia.sessionId, nomeDellAgente(figlia) || figlia.sessionId, figlia.modello || null); },
           });
         },
       },
@@ -11715,7 +11835,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     const fallita = figlia?.conclusa === true && !inPausa && figlia?.esitoDelega === 'fallito';
     /* prova dal vivo (09/10): dal server vero `taskCorto` può mancare, e il compito intero allargava l'avviso oltre la finestra.
        Titolo corto; nel corpo il nome corto, tagliato come nella scheda, e che cosa succede adesso. */
-    const nomeCorto = tronca(figlia.taskCorto || figlia.task || tr('app.delegations.agentFallback'), 60);
+    const nomeCorto = tronca(nomeDellAgente(figlia) || tr('app.delegations.agentFallback'), 60);
     const controllo = async (azione, riuscito) => {
       try {
         await apiPost(`/api/v1/sessions/${encodeURIComponent(figlia.sessionId)}/delegation/${azione}`, {});
@@ -11745,7 +11865,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
             onConferma: async () => {
               try {
                 await apiPost(`/api/v1/sessions/${encodeURIComponent(figlia.sessionId)}/stop`, {});
-                toast(tr('app.delegations.stopped'), figlia.taskCorto || tr('app.delegations.stoppedBody'));
+                toast(tr('app.delegations.stopped'), nomeDellAgente(figlia) || tr('app.delegations.stoppedBody'));
                 void caricaFigliSessione();
               } catch (errore) {
                 toast(tr('app.delegations.stopFailed'), errore.message);
@@ -11900,9 +12020,10 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       agenti,
       /* PO-08: la card diventa apribile solo perché qui c'è chi ascolta — senza questa funzione
          `disegnaAgenti` la lascia statica, e non promette niente che non può mantenere. */
-      azioniAgenti: { onApri: apriConversazioneFiglia, onMenu: menuDellaDelega, onGrafo: state.realSession.id ? (figlia) => apriDiagramma({ figlia, tipo: 'deleghe' }) : null, sessionId: state.realSession.id, errore: figliErrore },
+      azioniAgenti: { onApri: apriAgenteDalPannello, onMenu: menuDellaDelega, onGrafo: state.realSession.id ? (figlia) => apriDiagramma({ figlia, tipo: 'deleghe' }) : null, sessionId: state.realSession.id, errore: figliErrore },
       agentiDelWorkflow: Boolean(railWorkflow), // F3-50: la scheda è del rail v2
     });
+    if (agenteEvidenziato) evidenziaAgenteNelPannello(agenteEvidenziato); // il pannello si ridisegna a ogni rilettura: l'evidenza resta
     /*
      * ⛔⛔ I NUMERI SULLE SCHEDE «AGENTI» E «PROCESSI» — owner, 20/09/2026.
      *
@@ -11978,9 +12099,10 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       riprendiCarteDelleFiglie(); // C2-08: una figlia che aspetta ancora ritrova la sua carta qui
     } catch (error) {
       if (state.realSession.id !== id || lettura !== figliLettura) return;
-      figliErrore = error?.message || tr('app.delegations.readFailed');
+      // T7 (terza passata): il motivo arriva dal server e va a schermo (pannello Agenti, diagramma): breve e senza caratteri che ingannano
+      figliErrore = nomeBreve(typeof error?.message === 'string' ? error.message : '') || tr('app.delegations.readFailed');
     }
-    if (!grafoAgenti && !grafoWorkflow && !diagrammaInApertura && state.view === 'chat') {
+    if (!grafoWorkflow && !diagrammaInApertura && state.view === 'chat') {
       const tipo = grafoDaRiprendere(id);
       if (tipo) void apriDiagramma({ tipo });
     }
@@ -12314,7 +12436,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     }
     const etichetta = etichettaPermessiGiro(contesto);
     const ultimaMeta = $$('#conversation .user-message .message-meta span').at(-1);
-    if (etichetta && ultimaMeta && ultimaMeta.textContent === 'Follow-up') ultimaMeta.textContent += etichetta;
+    if (etichetta && ultimaMeta && ultimaMeta.textContent === (ultimaMeta.closest('.talos-message--user')?.dataset.etichettaBase ?? 'Follow-up')) ultimaMeta.textContent += etichetta;
     if (cambi.length > 0) {
       salvaPreferenzeChatDesktop();
       // ⭐ 04/9, W1-12 — etichetta del giro corrente, non «concluso»: il giro è appena partito.
@@ -12349,6 +12471,28 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
   function nomeModelloBreve(modello) {
     // 06/9 (H22, owner): un id locale non e' un nome. La traduzione vive in un posto solo, chat-foot.js.
     return nomeModelloUmano(modello);
+  }
+  /*
+   * L3-10 — owner 13/10/2026 sera (D7, punto 7): «la pillola del modello per un fornitore DIRETTO dice anche da dove arriva»,
+   *   es. «Gemini · gemini-3.8-flash». Dall'11/10 (d40c5bf00) il nome toglie il prefisso d'instradamento, e così `google/…` di
+   *   OpenRouter e `gemini:…` diretto si leggevano uguali sulla pillola: chi paga, e con quale chiave, restava solo nel suggerimento.
+   * Stato dell'arte letto nel codice (15/10/2026): Hermes (`apps/desktop/src/app/chat/composer/model-pill.tsx:147` e `:175`,
+   *   `lib/model-status-label.ts:49`) scrive sulla pillola il solo nome e mette il fornitore nel titolo («modelTitle(provider,
+   *   model)»); opencode (`packages/app/src/components/model-tooltip.tsx`) lo dice nel suggerimento. L'owner ha scelto di più: sulla
+   *   pillola, ma SOLO per i diretti — OpenRouter resta com'è (è la strada di serie), e i locali hanno già il loro nome.
+   * ⛔ Il nome del fornitore viene dalla mappa che esiste già (`nomeFornitore`, fonti-modelli.js): un fornitore che nessuna mappa sa
+   *   nominare non diventa un id a schermo — la pillola resta col solo nome del modello.
+   * ⛔ `chatgpt:` resta senza origine: la pastiglia «ChatGPT plan» accanto la dice già (owner 11/10, «solo la pastiglia compatta»),
+   *   e scriverla due volte nella stessa barra è il doppione che quella decisione ha tolto.
+   */
+  function nomePillolaModello(modello) {
+    const nome = nomeModelloBreve(modello);
+    const fonte = /^([a-z][a-z0-9-]*):(?=.)/u.exec(String(modello ?? '').trim())?.[1];
+    /* revisione 15/10: solo i DIRETTI (`eFonteDiretta`) — `openrouter:` e `ollama:` sono prefissi che il server accetta
+       (`config.mjs:189`), e una lista di esclusioni li lasciava passare: «OpenRouter · …» era proprio il caso che la regola tiene fuori */
+    if (!nome || !fonte || !eFonteDiretta(fonte) || fonte === 'chatgpt') return nome;
+    const origine = nomeFornitore(fonte);
+    return origine ? `${origine} · ${nome}` : nome;
   }
   /** Monta un blocco nella chat: 'utente' apre un turno; tutto il resto entra nel messaggio TALOS del turno corrente. */
   function nellaChat(elemento, tipo = 'talos') {
@@ -12559,7 +12703,14 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     const testoBolla = daMostrare && typeof daMostrare.testo === 'string' ? daMostrare.testo : text;
     // 05/9 Fase 2: Conversazione — il follow-up e' un messaggio della persona nel blocco del mockup
     const ora = state.realSession.deferHistoricalRendering ? '' : oraMessaggio();
-    const messaggioUtente = creaMessaggioUtente({ testo: testoBolla, ora, meta: `Follow-up${etichettaPermessiGiro(contesto)}` });
+    /* /goal G6 (15/10/2026, visto dal vivo): il PRIMO messaggio di una chat nata ferma passa da qui (è un resume), e diceva
+       «Follow-up» senza niente prima. Se la prima bolla della conversazione non è ancora stata mostrata (`taskBubbleMostrata`, lo
+       stesso segnale con cui la rigiocata sceglie fra primo messaggio e seguito — non il DOM, che a finestra non ha le bolle vecchie),
+       l'etichetta è quella di un primo messaggio («Compito libero»); la base resta sulla bolla, per chi la completa col permesso. */
+    const etichettaBase = state.realSession.taskBubbleMostrata ? 'Follow-up' : tr('app.composer.freeTask');
+    const messaggioUtente = creaMessaggioUtente({ testo: testoBolla, ora, meta: `${etichettaBase}${etichettaPermessiGiro(contesto)}` });
+    messaggioUtente.dataset.etichettaBase = etichettaBase;
+    if (!state.realSession.taskBubbleMostrata) messaggioUtente.dataset.primoMessaggio = '1';
     messaggioUtente.dataset.oraMessaggio = ora; // ⛔ 14/09: il RunStarted completa la testata col permesso, e deve ritrovare l'ora
     const article = nellaChat(messaggioUtente, 'utente');
     const allegatiVisibili = daMostrare?.allegati?.length ? daMostrare.allegati : immagini;
@@ -12671,6 +12822,131 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
    *   dalla memoria della pagina. ⇒ Ogni finestra mostra quello che dice `talos.coda` o la risposta di una rotta della
    *   coda, e basta: nessuna copia propria da tenere allineata.
    */
+  /*
+   * ⭐ /goal G6 (owner 15/10/2026) — la fascia dell'obiettivo sopra il compositore (`components/obiettivo-fascia.js`). Lo stato lo
+   *   dice SOLO il server (`talos.obiettivo`: a ogni cambio e all'apertura del flusso); le azioni passano dalle porte dell'obiettivo
+   *   (`/goal/pausa|riprendi|verifica|togli`), e l'esito torna con lo stesso annuncio. «Riprendi» fa ripartire il ciclo dal server
+   *   (G4-REV-05), come Hermes (`session-control-goal.tsx:92-118`) e Codex alla ripresa.
+   */
+  function applicaStatoObiettivo(valore) {
+    const obiettivo = valore && typeof valore === 'object' && valore.obiettivo && typeof valore.obiettivo === 'object' ? valore.obiettivo : null;
+    state.realSession.obiettivo = obiettivo;
+    // i tetti arrivano solo all'apertura del flusso (non cambiano mentre il server vive): un annuncio senza tetti tiene gli ultimi
+    if (valore?.tetti && typeof valore.tetti === 'object') state.realSession.obiettivoTetti = valore.tetti;
+    renderizzaFasciaObiettivo();
+  }
+  function renderizzaFasciaObiettivo() {
+    const sessionId = state.realSession.id;
+    const obiettivo = sessionId ? state.realSession.obiettivo : null;
+    if (!obiettivo && !document.getElementById('fasciaObiettivo')) return; // niente da mostrare: la fascia non si monta per niente
+    const fascia = montaFasciaObiettivo({
+      document, riferimento: $('#avvisoPiano'),
+      onAzione: (chiave) => { void azioneObiettivo(chiave); },
+      onMenu: (voci, dove) => apriMenuAzioniLibreria(voci, dove?.ancora ? { ancoraEl: dove.ancora } : { x: dove?.x ?? 0, y: dove?.y ?? 0 }),
+      onCambioForma: (scelta) => { if (state.realSession.id) ricordaSceltaFasciaObiettivo(state.realSession.id, scelta); misuraPilaToast(); },
+    });
+    aggiornaFasciaObiettivo(fascia, { obiettivo, tetti: state.realSession.obiettivoTetti, scelta: sessionId ? sceltaFasciaObiettivo(sessionId) : null });
+    misuraPilaToast();
+  }
+  const menuDellaCartaObiettivo = (voci, dove) => apriMenuAzioniLibreria(voci, dove?.ancora ? { ancoraEl: dove.ancora } : { x: dove?.x ?? 0, y: dove?.y ?? 0 });
+  /*
+   * ⭐ /goal G6 — LA PORTA DELLA PERSONA: `/goal <testo>` (o «Imposta un obiettivo…» dal «+»). Owner 15/10/2026: la proposta la fa il
+   *   modello della sessione (`/goal/proposta`, G2c), la carta C1 la fa confermare, «Avvia» salva coi controlli e manda il testo come
+   *   SUO messaggio (parte subito). In una chat nuova la conversazione nasce ferma (`ferma: true`) e il primo giro lo fa «Avvia».
+   *   `/goal` da solo apre la fascia, se un obiettivo c'è (come `/goal` di Codex, che mostra l'obiettivo).
+   */
+  async function gestisciComandoObiettivo(comando) {
+    if (comando.tipo === 'mostra') {
+      const id = state.realSession.id; const ob = state.realSession.obiettivo;
+      if (id && ob) { ricordaSceltaFasciaObiettivo(id, { aperta: true, chiave: chiaveDelloStatoObiettivo(ob) }); renderizzaFasciaObiettivo(); }
+      else toast(tr('chat.goal.command.usage'));
+      return;
+    }
+    const testo = comando.testo;
+    let sessionId = state.realSession.id;
+    if (!sessionId) {
+      const p = state.pendingCustomSession;
+      if (!p) { toast(tr('app.common.noActiveSession'), tr('app.composer.noSessionBody')); return; }
+      state.pendingCustomSession = null;
+      sessionId = await startCustomSession({ cartellaId: p.cartellaId, cartellaLibera: p.cartellaLibera, workspaceLaunchId: p.workspaceLaunchId, nomeCartella: p.nomeCartella,
+        consegna: testo, modello: state.model, effort: state.effort, modelloPlanner: p.modelloPlanner,
+        permessi: state.permissions, permessiPerAttrezzo: mappaPerUnaSessioneNuova(state.permessiPerAttrezzo), ferma: true,
+        // se la chat non nasce, tornano la chat in attesa, il titolo e ciò che la persona ha scritto (`startCustomSession`, catch)
+        ripristino: { pendente: p, testo: `/goal ${testo}`, allegati: [] } });
+      if (!sessionId) return;
+      /* una chat ferma non ha ancora un `RunStarted` (che porta la cartella e accende l'albero): la cartella scelta la sappiamo già, e
+         il pannello File la mostra subito invece di «Nessuna cartella ancora scelta» (visto dal vivo, 15/10/2026) */
+      if (p.cartellaLibera) state.realSession.cartellaAssoluta = p.cartellaLibera;
+      programmaRenderAlberoReale();
+    }
+    const generazione = state.realSession.generation;
+    const inCorso = state.realSession.obiettivo; // S5: un obiettivo non finito si sostituisce, e la carta lo dice
+    const carta = creaCartaObiettivo({ testo, criteri: [], tetti: state.realSession.obiettivoTetti, inAttesa: true, fonte: 'persona',
+      ...(inCorso && inCorso.stato !== 'fatto' ? { sostituisce: String(inCorso.testo ?? '') } : {}) }, {
+      document, onMenu: menuDellaCartaObiettivo,
+      onScarta: () => carta.chiudi('scartato'),
+      onAvvia: async (criteri) => {
+        await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/goal`, { testo, ...(criteri ? { criteri } : {}) });
+        carta.chiudi(criteri ? 'avviato' : 'senza');
+        // owner 15/10: «parte subito» — il testo va come messaggio della persona; con un giro vivo lo porta la fine del giro (il ciclo)
+        if (generazione === state.realSession.generation && sessionId === state.realSession.id && !runRealeAttivo()) void resumeSession(testo);
+        return true;
+      },
+    });
+    nellaChat(carta); markMotionEnter(carta); scorriAllaBollaAppesa(carta, { azioneDellaPersona: true });
+    try {
+      const dati = await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/goal/proposta`, { testo, lingua: linguaInterfacciaPerIlServer() }); // le frasi nella lingua di chi legge
+      carta.riempi(dati?.proposta ?? { pavimento: true, criteri: [] }, state.realSession.obiettivoTetti);
+    } catch {
+      carta.riempi({ pavimento: true, criteri: [] }, state.realSession.obiettivoTetti); // senza proposta: il pavimento, detto
+    }
+  }
+  /*
+   * ⭐ /goal G6 — LA CARTA DEL MODELLO (`goal_create`, owner 15/10: sempre tranne in Accesso pieno). «Avvia» coi controlli proposti =
+   *   un sì. Se la persona li cambia (o avvia senza), l'obiettivo lo imposta LEI dalla porta HTTP, e la carta si chiude con un no che
+   *   lo dice al modello (`obiettivoModificato`: la frase la scrive il server), come «Modifica» sulle automazioni.
+   */
+  function appendCartaObiettivoDelModello(requestId, azione) {
+    const sessionId = state.realSession.id;
+    const ob = azione?.obiettivo ?? {};
+    const proposti = (Array.isArray(ob.criteri) ? ob.criteri : []).map((c) => ({ testo: c.testo, verifica: c.verifica }));
+    const rispondi = (corpo) => apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/approve`, { requestId, ...corpo });
+    const carta = creaCartaObiettivo({ testo: String(ob.testo ?? ''), criteri: proposti, tetti: state.realSession.obiettivoTetti, fonte: 'modello' }, {
+      document, onMenu: menuDellaCartaObiettivo,
+      onScarta: async () => { try { await rispondi({ approvato: false }); } catch (errore) { carta.mostraErrore(errore?.message ?? ''); } },
+      onAvvia: async (criteri) => {
+        // G6UI-REV-03: si confrontano i controlli NORMALIZZATI (`uscita: 0` del contratto = il comando senza uscita del modulo)
+        const comeProposti = criteri ? stessiControlli(criteri, proposti) : proposti.length === 0;
+        if (comeProposti) { await rispondi({ approvato: true }); return true; }
+        const dati = await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/goal`, { testo: String(ob.testo ?? ''), ...(criteri ? { criteri } : {}) });
+        carta.dataset.esitoLocale = criteri ? 'avviato' : 'senza';
+        await rispondi({ approvato: false, obiettivoModificato: dati?.obiettivo?.id });
+        return true;
+      },
+    });
+    carta.classList.add('real-approval-card');
+    carta.dataset.requestId = requestId;
+    nellaChat(carta);
+    aggiornaTickGiro({ tono: 'warning' });
+    markMotionEnter(carta);
+    scorriAllaBollaAppesa(carta);
+    return carta;
+  }
+  async function azioneObiettivo(chiave) {
+    const sessionId = state.realSession.id;
+    if (!sessionId || !['pausa', 'riprendi', 'verifica', 'togli'].includes(chiave)) return;
+    const esegui = async () => {
+      try {
+        await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/goal/${chiave}`, {});
+      } catch (errore) {
+        toast(tr('chat.goal.action.failed', { motivo: errore?.message ?? '' }));
+      }
+    };
+    if (chiave !== 'togli') { await esegui(); return; }
+    // come Hermes (`confirmClearGoal`): togliere chiede conferma, con la modale nostra
+    confermaModale({ titolo: tr('chat.goal.remove.title'), domanda: tr('chat.goal.remove.question'), conseguenza: tr('chat.goal.remove.consequence'),
+      etichettaConferma: tr('chat.goal.remove.confirm'), onConferma: esegui });
+  }
   function applicaStatoCoda(valore) {
     const { voci, inPausa } = normalizzaStatoCoda(valore);
     state.realSession.codaMessaggi = voci;
@@ -14712,7 +14988,12 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
              legacy chiama la rotta vera. */
           : spiegazione.id === 'contesto-pieno'
             ? [[tr('app.contextManager.compactNow'), () => { void compactSession(); }]]
-            : [],
+            /* 14/10/2026, owner («Sì, così»): l'indirizzo della chiave da scegliere ⇒ una porta, la modale «Configura» di QUEL
+               fornitore. Il server lo nomina (la sua etichetta): l'id si cerca nella lista dei fornitori, che dalla chat spesso
+               non è ancora caricata — per questo per nome, dentro l'attesa della lista. */
+            : spiegazione.famiglia === 'indirizzo-fornitore'
+              ? [[spiegazione.azione, () => { apriConfigurazioneDelFornitore({ etichetta: spiegazione.fornitore }); }]]
+              : [],
       })
       : creaNotaSistema({ tipo: isError ? 'danger' : 'info', badge: isError ? tr('app.notices.error') : tr('app.common.note'), titolo: etichettaMeta || (isError ? tr('app.notices.talosError') : tr('app.notices.talosDone')), testo: text });
     article.classList.add('real-session-status');
@@ -15096,6 +15377,8 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     }
     /* Automazioni a due porte (08/10/2026): la carta della bozza, con Approva · Modifica · Annulla. Le figlie non hanno gli
        attrezzi delle automazioni (il kernel non li offre a chi è delegato), quindi qui arriva solo la sessione stessa. */
+    /* /goal G6 (owner 15/10/2026): il modello crea l'obiettivo — la STESSA carta dei controlli della persona (C1, «così com'è») */
+    if (azione?.tipo === 'goal_create' && !figlia) return appendCartaObiettivoDelModello(requestId, azione);
     if (eCartaAutomazione(azione) && !figlia) return appendCartaAutomazione(requestId, azione);
     /* 0.1.25 (owner 09/10/2026): escludere o riammettere un fornitore a valle — la stessa carta, Approva · Annulla */
     if (eCartaFornitori(azione) && !figlia) return appendCartaAutomazione(requestId, azione, CARTA_FORNITORI);
@@ -15494,8 +15777,8 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
    *  · alla chiusura il fuoco passa alla vicina che prende il posto, poi alla precedente
    *    (stessa regola nota).
    *
-   * ⛔ Senza sessione resta UNA scheda sola (l'id standalone che il server accetta per
-   * compatibilità): «Nuovo» è disabilitato e lo dice.
+   * ⛔ Senza sessione resta UNA scheda sola, quella di questa finestra, creata dal server (`POST /api/v1/terminals`,
+   * 16/10/2026): «Nuovo» è disabilitato e lo dice.
    */
   function statoTerminale() {
     if (!state.terminal) {
@@ -15504,12 +15787,31 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     return state.terminal;
   }
 
-  function idStandaloneTerminale() {
+  /*
+   * ⛔ 16/10/2026, owner («Chiudila adesso», dopo la nota della sessione mobile) — il terminale SENZA sessione lo crea il SERVER
+   *   (`POST /api/v1/terminals`, l'id lo sceglie lui): un id inventato qui riceve 403. Prima si chiede quali esistono — quello già
+   *   usato da questa finestra, se c'è ancora — e dopo un riavvio del server, quando non ce n'è nessuno, se ne crea uno nuovo.
+   */
+  /* Owner 16/10/2026 sera («Ognuna la sua, come prima»): ogni FINESTRA ha il suo terminale senza sessione, ricordato per quella
+     finestra anche dopo un ricaricamento (`sessionStorage`, che è della singola scheda del browser); un'altra finestra non lo adotta. */
+  const CHIAVE_TERMINALE_STANDALONE = 'talos-terminale-standalone-v1';
+  function idStandaloneRicordato() { try { return sessionStorage.getItem(CHIAVE_TERMINALE_STANDALONE) || null; } catch { return null; } }
+  function ricordaIdStandalone(id) { try { if (id) sessionStorage.setItem(CHIAVE_TERMINALE_STANDALONE, id); else sessionStorage.removeItem(CHIAVE_TERMINALE_STANDALONE); } catch { /* solo un comodo */ } }
+  async function schedaStandaloneTerminale() {
     const t = statoTerminale();
-    if (!t.standaloneId) {
-      t.standaloneId = window.crypto?.randomUUID?.() ?? `standalone-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const mio = t.standaloneId ?? idStandaloneRicordato();
+    try {
+      const elenco = await apiGet('/api/v1/terminals');
+      const presenti = Array.isArray(elenco?.items) ? elenco.items : [];
+      const nota = mio ? presenti.find((v) => v?.terminalId === mio) : null;
+      if (nota?.terminalId) { t.standaloneId = nota.terminalId; ricordaIdStandalone(nota.terminalId); return nota; }
+      const nuova = await apiPost('/api/v1/terminals', {});
+      if (nuova?.terminalId) { t.standaloneId = nuova.terminalId; ricordaIdStandalone(nuova.terminalId); return nuova; }
+    } catch (error) {
+      // nessuna scheda, mai un id inventato; e si dice perché (revisione 16/10: prima la vista diceva solo «serve una sessione»)
+      toast(tr('app.terminal.standaloneFailed'), messaggioErroreUtente(error));
     }
-    return t.standaloneId;
+    return null;
   }
 
   /** Tema TALOS letto dai token CSS veri (mai colori scritti a mano due volte) — la scala ANSI a 16 colori è la sola parte senza un token dedicato, intonata a mano allo stesso accent/superficie. */
@@ -15909,7 +16211,9 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
         if (voci.length === 0) voci = [{ terminalId: sessioneId, cartella: '', origine: 'prima-scheda' }];
       }
     } else {
-      voci = [{ terminalId: idStandaloneTerminale(), cartella: '', origine: 'standalone' }];
+      const standalone = await schedaStandaloneTerminale();
+      if (t.sessioneId !== sessioneId) return; // nel frattempo è nata una sessione
+      voci = standalone ? [{ terminalId: standalone.terminalId, cartella: standalone.cartella || '', origine: 'standalone' }] : [];
     }
     for (const voce of voci) registraSchedaTerminale(voce);
     const ricordata = memoriaSchedeTerminale().attive?.[sessioneId];
@@ -16209,6 +16513,27 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
   }
 
   /** Punto d'ingresso unico, chiamato da setView('terminal') e da resettaSuperficiRealiDedicate() quando il tab è già aperto. */
+  /*
+   * Revisione del bugfixer (16/10, TERM-REV-01 e la sua riserva sul pannello in basso): senza sessione la scheda in memoria può non
+   *   esistere più sul server — un riavvio (l'aggiornamento del 4174 a pagina aperta) o 24 ore senza uso — e la sua WebSocket
+   *   prenderebbe 403 per sempre. Si chiede al server: se c'è ancora si riprende (`avvia`), altrimenti si toglie e se ne fa creare
+   *   una nuova. Una funzione sola per le due porte: la vista Terminale e il pannello in basso. `valido` dice se chi l'ha chiesta
+   *   è ancora lì quando la risposta arriva.
+   */
+  function riprendiTerminaleSenzaSessione(avvia, valido) {
+    const t = statoTerminale();
+    void apiGet('/api/v1/terminals').then((r) => (Array.isArray(r?.items) ? r.items : []), () => null).then((presenti) => {
+      if (!valido()) return;
+      if (presenti === null || presenti.some((v) => v?.terminalId === t.standaloneId)) { avvia(); return; }
+      scollegaTerminaleReale();
+      t.standaloneId = null;
+      ricordaIdStandalone(null);
+      t.sessioneId = null;
+      renderizzaSchedeTerminale();
+      void caricaSchedeTerminale().then(() => { if (valido()) avvia(); });
+    });
+  }
+
   function apriVistaTerminaleReale() {
     const t = statoTerminale();
     if (!$('#realTerminalMount') || !window.Terminal || !window.FitAddon) { t.enforcementColore = tr('app.terminal.noXterm'); renderizzaSchedeTerminale(); return; }
@@ -16218,7 +16543,11 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       else if (t.ordine[0]) attivaSchedaTerminale(t.ordine[0]);
       else renderizzaSchedeTerminale();
     };
-    if (t.sessioneId === sessioneId && contaShellTerminale(t) > 0) { avvia(); return; }
+    if (t.sessioneId === sessioneId && contaShellTerminale(t) > 0) {
+      if (sessioneId) { avvia(); return; }
+      riprendiTerminaleSenzaSessione(avvia, () => state.view === 'terminal' && t.sessioneId === sessioneId);
+      return;
+    }
     if (t.sessioneId !== sessioneId) scollegaTerminaleReale();
     t.sessioneId = sessioneId;
     aggiornaSchedeAgente(); // PO-10: lo scollegamento le ha tolte, si ricostruiscono dagli eventi della sessione
@@ -16583,6 +16912,16 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
           browserUi?.avvisa(messaggioErroreUtente(errore, tr('app.browser.cannotOpenAddress')));
         });
       },
+      /* 12/10/2026: una lettura dell'agente che vive nel browser pilotato riporta alla SUA scheda viva, senza ricaricarla. Vero se
+         c'era una scheda viva sullo stesso indirizzo. */
+      vaiAllaViva: (url) => {
+        const stesso = (a, b) => { try { return new URL(a).href === new URL(b).href; } catch { return a === b; } };
+        const viva = state.realSession.browserVive.find((x) => stesso(x.url, url));
+        if (!viva) return false;
+        state.realSession.browserAttiva = viva.id;
+        queueMicrotask(renderizzaBrowser);
+        return true;
+      },
       caricata: (id) => { const v = state.realSession.browserVive.find((x) => x.id === id); if (v && v.stato === 'caricamento') { v.stato = 'pronta'; renderizzaBrowser(); } },
       /*
        * ⛔ 07/9, O-42 — owner: su github.com la scheda «Pagina» mostrava il rettangolo dell'immagine
@@ -16909,8 +17248,11 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
         const dove = document.querySelector('#browserVistaViva') || document.querySelector('#browserLive');
         const r = dove ? dove.getBoundingClientRect() : null;
         // il riquadro puo' non essere ancora disegnato: allora si lascia decidere al server
+        /* 12/10/2026, owner: «la risoluzione è troppo bassa» — la pagina si rende alla densità VERA dello schermo (125-150% su
+           Windows): a 1x il fotogramma arrivava piccolo e la tela lo ingrandiva */
+        const scala = Math.min(3, Math.max(1, Number(window.devicePixelRatio) || 1));
         return r && r.width > 40 && r.height > 40
-          ? { larghezza: Math.round(r.width), altezza: Math.round(r.height) }
+          ? { larghezza: Math.round(r.width), altezza: Math.round(r.height), scala }
           : {};
       };
       const esito = await apiPost(`/api/v1/browser/vivo/apri?sessione=${encodeURIComponent(sessione)}`, { url: voce.url, ...misuraDelRiquadro() });
@@ -16939,7 +17281,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
           attesa = setTimeout(() => {
             const misura = misuraDelRiquadro();
             if (!misura.larghezza) return;
-            const firma = `${misura.larghezza}x${misura.altezza}`;
+            const firma = `${misura.larghezza}x${misura.altezza}@${misura.scala}`; // spostata su uno schermo con un'altra densità, si rimisura
             if (firma === ultima) return; // ⛔ stessa misura, nessuna chiamata: il server non è un diario
             ultima = firma;
             apiPost(`/api/v1/browser/vivo/misura?sessione=${encodeURIComponent(sessione)}`, misura).catch(() => {});
@@ -17858,7 +18200,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     return figli
       .map((figlia) => ({ figlia, voce: (figlia?.attivita?.file || []).find((x) => x.percorso === percorsoCompleto) }))
       .filter((x) => x.voce)
-      .map(({ figlia, voce }) => ({ figlia, scritto: voce.scritto === true, alLavoro: figlia.conclusa !== true && figlia.interrotta !== true, nome: figlia.taskCorto || figlia.task || tr('app.delegations.agentFallback') }));
+      .map(({ figlia, voce }) => ({ figlia, scritto: voce.scritto === true, alLavoro: figlia.conclusa !== true && figlia.interrotta !== true, nome: nomeDellAgente(figlia) || tr('app.delegations.agentFallback') }));
   }
   function scriviSegnoAgentiRiga(row, percorsoCompleto) {
     const agenti = agentiSulFile(percorsoCompleto);
@@ -19225,7 +19567,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
           state.realSession.treeCache.delete(percorsoCompleto);
           await invalidaLivelloGenitoreAlbero(percorsoSorgente);
         } catch (error) {
-          toast(tr('app.files.moveFailed'), error.message);
+          toast(tr('app.files.moveFailed'), messaggioErroreUtente(error));
         }
       });
     }
@@ -19393,6 +19735,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       menu.remove();
       document.removeEventListener('click', suClicFuori);
       document.removeEventListener('keydown', suTasto, true); // stesso `true` della registrazione, o non si stacca
+      if (ancoraDichiarata) posizionamento.ancoraEl.setAttribute('aria-expanded', 'false');
       if (restituisciFuoco) posizionamento.ancoraEl?.focus?.();
     }
     function suClicFuori(evento) {
@@ -19402,9 +19745,23 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     function suTasto(evento) {
       /* review N1 (10/10): un altro menu può toglierlo per classe (`apriMenuAzioniFile`) senza passare di qui: si stacca da solo */
       if (!menu.isConnected) { document.removeEventListener('keydown', suTasto, true); return; }
-      if (evento.key === 'Escape') { evento.preventDefault(); evento.stopPropagation(); chiudiMenuLibreria(); }
+      if (evento.key === 'Escape') { evento.preventDefault(); evento.stopPropagation(); chiudiMenuLibreria(); return; }
+      /* 13/10/2026 (K2, trovato dalla sessione desktop): `role="menu"` promette le frecce, e qui non c'erano (ci sono nel menu
+         gemello `apriMenuAzioni`, stessa grammatica: giù e su in tondo, Home, Fine). Solo quando il fuoco è DENTRO il menu:
+         aperto col mouse, le frecce restano della pagina. */
+      const voci = [...menu.querySelectorAll('[role="menuitem"]:not(:disabled)')];
+      const i = voci.indexOf(document.activeElement);
+      if (i < 0) return;
+      const j = evento.key === 'ArrowDown' ? (i + 1) % voci.length : evento.key === 'ArrowUp' ? (i - 1 + voci.length) % voci.length
+        : evento.key === 'Home' ? 0 : evento.key === 'End' ? voci.length - 1 : null;
+      if (j === null) return;
+      evento.preventDefault(); evento.stopPropagation();
+      voci[j].focus();
     }
     document.addEventListener('keydown', suTasto, true);
+    /* il pulsante che lo ha aperto dice che è aperto, se lo dichiara (`aria-expanded`): restava `false` a menu aperto */
+    const ancoraDichiarata = Boolean(posizionamento.ancoraEl?.hasAttribute?.('aria-expanded'));
+    if (ancoraDichiarata) posizionamento.ancoraEl.setAttribute('aria-expanded', 'true');
     chiudiMenuLibreriaAperto = chiudiMenuLibreria;
     /* ⛔ Al giro dopo: senza il rinvio, il clic che ha APERTO il menu lo chiuderebbe subito. (Il tasto no: lo chiude solo Esc, e Esc non lo apre mai.) */
     setTimeout(() => { if (menu.isConnected) document.addEventListener('click', suClicFuori); }, 0);
@@ -19940,7 +20297,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       toast(tr('app.common.copied'), esito.nuovoPercorso);
       await invalidaLivelloGenitoreAlbero(percorsoCompleto);
     } catch (error) {
-      toast(tr('app.common.copyFailed'), error.message);
+      toast(tr('app.common.copyFailed'), messaggioErroreUtente(error));
     }
   }
 
@@ -20149,7 +20506,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
         state.realSession.treeCache.delete('');
         await invalidaLivelloGenitoreAlbero(percorsoSorgente);
       } catch (error) {
-        toast(tr('app.files.moveFailed'), error.message);
+        toast(tr('app.files.moveFailed'), messaggioErroreUtente(error));
       }
     });
 
@@ -20575,8 +20932,39 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     return inDiretta && card?._rispostaDataQui?.(risolta) !== true;
   }
 
+  /*
+   * ⛔ Owner 12/10/2026 sera («bisogna differenziare le deleghe passate dalle deleghe nuove» ⇒ «Una richiesta alla volta»): il
+   *   diagramma e il pannello Agenti dividono le deleghe per RICHIESTA della persona, quindi serve sapere quando è partita ognuna.
+   *   Misurato sul registro del 4177: un `RunStarted` della persona non ha `input.origine`; quello di una ripartenza automatica
+   *   (il risultato di un sotto-agente che rientra) ce l'ha, e NON è una richiesta. `RunStarted` non porta l'ora: la porta
+   *   l'evento subito dopo (`StateDelta`, attrezzi), ed è quella che si prende; dal vivo, l'orologio di adesso.
+   */
+  function annotaRichiestaDellaPersona(evento) {
+    const rs = state.realSession;
+    if (!Array.isArray(rs.richieste)) rs.richieste = [];
+    if (evento.type === 'RunStarted') {
+      if (evento.input?.origine) return;
+      const id = `richiesta-${Number.isFinite(evento._sequenza) ? evento._sequenza : `n${rs.richieste.length + 1}`}`;
+      if (rs.richieste.some((r) => r.id === id)) return;
+      const dichiarata = Date.parse(evento.at ?? '');
+      rs.richieste.push({ id, at: Number.isFinite(dichiarata) ? dichiarata : (rs.inRigiocata ? null : Date.now()), testo: String(evento.input?.consegnaCorta || evento.input?.consegna || '').replace(/\s+/gu, ' ').trim().slice(0, 160) });
+      return;
+    }
+    const ultima = rs.richieste.at(-1);
+    /* ⛔ 13/10/2026, trovato col giro VERO a due richieste (sessione 91f2b6e2 sul 4177): riaprendo la conversazione il diagramma
+       metteva i 6 agenti in una richiesta sola e non mostrava il selettore. Misurato nel giornale: degli eventi della madre
+       NESSUNO porta `at` (513 su 5.594 righe, tutte `grafo-agenti`, che il flusso non rigioca), quindi in rigiocata la richiesta
+       restava senza ora e veniva scartata. L'ora c'è però sull'avvio di ogni attrezzo (`avviatoA`, orologio del SERVER, OSS-1):
+       il primo attrezzo dopo la richiesta la data. Una richiesta senza nessun attrezzo non ha delegato niente, e non serve. */
+    if (ultima && ultima.at === null) {
+      const quando = Date.parse(evento.at ?? '');
+      if (Number.isFinite(quando)) ultima.at = quando;
+      else if (evento.type === 'ToolCallStart' && Number.isFinite(evento.avviatoA)) ultima.at = evento.avviatoA;
+    }
+  }
   function handleRealEvent(evento, generation) {
     if (generation !== state.realSession.generation) return; // sessione più vecchia: scartato, non renderizzato
+    annotaRichiestaDellaPersona(evento);
     /* F-027 (owner 02/10/2026) — il confine dei dati e l'avviso in inglese sono parole per il MODELLO: da qui in giù (riga, dettaglio,
        pannello Processi, schede dell'agente) la persona vede il contenuto, e il sospetto come segno (`evento.suspicious`). */
     evento = eventoPerLoSchermo(evento);
@@ -20622,6 +21010,8 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
      *   Il riavvio a metà lo chiude il registro al ripristino (`motivo:'interrotta'`).
      */
     if (evento.type === 'RunError' || evento.type === 'RunFinished') {
+      /* 15/10/2026: il riassunto in sottofondo non ha più la barra; un giro finito in ERRORE lo spegne come spegneva lei */
+      if (evento.type === 'RunError' && state.realSession.id && compattazioneLegacy.inSottofondo.delete(state.realSession.id)) contextCompactor?.aggiornaLegacy?.();
       const colonnaBarra = colonnaConversazione(ROOT());
       const barra = colonnaBarra?.querySelector('[data-compattazione-barra]');
       if (barra && state.realSession.id && (evento.type === 'RunError' || barra.dataset.compattazioneMotivo !== 'background')) {
@@ -20680,6 +21070,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       applicaStatoCoda(evento.value);
       return;
     }
+    if (evento.type === 'CUSTOM' && evento.name === 'talos.obiettivo') { applicaStatoObiettivo(evento.value); return; } // /goal G6: stato, non storia
     if (evento.type === 'CUSTOM' && evento.name === 'talos.contesto-richiesta') { applicaRichiestaDelGiro(evento.value); return; } // C1 (10/10): effimero
     if (evento.type === 'CUSTOM' && evento.name === 'talos.context') {
       const value = evento.value;
@@ -20769,7 +21160,11 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       statoFasciaPianoRichiesto().richiesto = false;
       disegnaFasciaPianoRichiesto();
     }
-    if (grafoAgenti && ['ToolCallStart', 'ToolCallResult', 'StateDelta', 'UserQuestionRequested', 'UserQuestionResolved', 'ApprovalRequested', 'ApprovalResolved', 'RunStarted', 'RunFinished', 'RunError'].includes(evento.type) && frameGrafoMadre === null) {
+    /* ⛔ 14/10/2026 — la spinta vale per il diagramma che c'è: partiva solo con la vista classica montata (`grafoAgenti &&`), e sul
+       diagramma nuovo la scheda in cima restava su «Tra due operazioni» per tutto un attrezzo (misurato con la rilettura dei figli
+       appesa; col server vivo arrivava al battito, fino a 5 s dopo). La spinta è una rilettura dei fatti della app, al più una al
+       secondo (`programmaRilettura` del diagramma). */
+    if (spintaDiagrammaDeleghe && ['ToolCallStart', 'ToolCallResult', 'StateDelta', 'UserQuestionRequested', 'UserQuestionResolved', 'ApprovalRequested', 'ApprovalResolved', 'RunStarted', 'RunFinished', 'RunError'].includes(evento.type) && frameGrafoMadre === null) {
       frameGrafoMadre = requestAnimationFrame(() => { frameGrafoMadre = null; if (generation === state.realSession.generation) aggiornaGrafoAgenti(); });
     }
     if (evento.type === 'CUSTOM' && evento.name === 'consumo-fornitore') registraUltimaRichiesta(evento.value);
@@ -20847,6 +21242,8 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
        *   e per sapere «è partito o no» basta il fatto.
        */
       rifiutato: typeof evento.content === 'string' && /^\s*REFUSED\b/u.test(evento.content),
+      /* 12/10/2026: una copia identica scartata (`duplicate`, campo dell'evento) non è mai partita: nei Processi «Non eseguito». */
+      doppione: evento.duplicate === true,
       /* H-04 (owner 02/10/2026): una `prova` senza suite non è partita (`NOT RUN:`), e nei Processi si dice «Non eseguito». */
       senzaSuite: provaSenzaSuite(evento.content),
       /* 03/10/2026: «zero test eseguiti» è anche lui un NOT RUN, ma il comando è partito: si dice con le sue parole */
@@ -20982,7 +21379,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
          *   rigiocata, che è la stessa fonte da cui la chat ridisegna le bolle.
          */
         const domandaDelGiro = typeof evento.input?.consegna === 'string' ? evento.input.consegna : evento.input?.consegnaCorta;
-        if (evento.input?.origine !== 'delega' && evento.input?.origine !== 'workflow' && evento.input?.origine !== 'sfondo' && !eDialogoAgente(evento.input) && typeof domandaDelGiro === 'string' && domandaDelGiro.trim() !== '') {
+        if (evento.input?.origine !== 'delega' && evento.input?.origine !== 'workflow' && evento.input?.origine !== 'sfondo' && evento.input?.origine !== 'obiettivo' && !eDialogoAgente(evento.input) && typeof domandaDelGiro === 'string' && domandaDelGiro.trim() !== '') {
           state.realSession.ultimaDomanda = domandaDelGiro;
         }
         contextMonitor?.setRunning(true);
@@ -21112,9 +21509,12 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
          */
         if (mostraRisultatoDelega(evento.input) || mostraDialogoAgente(evento.input)) {
           state.realSession.followUpBubbleInAttesa = false;
-        } else if (!state.realSession.taskBubbleMostrata && evento.input) {
+        } else if (!state.realSession.taskBubbleMostrata && evento.input && !state.realSession.followUpBubbleInAttesa) {
           appendRealTaskStart(evento.input, evento.contesto, evento._sequenza, { rigiocata: state.realSession.inRigiocata });
-        } else if (state.realSession.taskBubbleMostrata && evento.input?.seguito) {
+        } else if ((state.realSession.taskBubbleMostrata && evento.input?.seguito) || state.realSession.followUpBubbleInAttesa) {
+          /* /goal G6 (15/10/2026, contato dal vivo): il primo giro di una chat nata ferma non è un `seguito`, e la sua bolla l'ha già
+             disegnata questa finestra all'invio (`followUpBubbleInAttesa`). Prima RunStarted ne aggiungeva una SECONDA con
+             appendRealTaskStart — due bolle dal vivo, una dopo il ricaricamento. La bolla in attesa si completa, mai si duplica. */
           if (state.realSession.followUpBubbleInAttesa) {
             const turnoInAttesa = state.realSession.attesaBubble?.closest('[data-turno="talos"]');
             const metaInAttesa = turnoInAttesa?.querySelector(':scope > .talos-message > .talos-message__head > .talos-message__meta');
@@ -21126,7 +21526,10 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
              */
             const domandaInAttesa = [...($('#conversation')?.querySelectorAll('.talos-message--user') || [])].at(-1);
             const metaDomanda = domandaInAttesa?.querySelector('.talos-message__meta');
-            if (metaDomanda && evento.contesto) metaDomanda.textContent = [domandaInAttesa.dataset.oraMessaggio, `Follow-up${etichettaPermessiGiro(evento.contesto)}`].filter(Boolean).join(' · ');
+            /* il primo messaggio si chiama come lo chiama la rigiocata (appendRealTaskStart): «Compito libero · <progetto>» */
+            const basePrimo = domandaInAttesa?.dataset.primoMessaggio === '1' && evento.input?.progetto ? tr('app.composer.freeTaskIn', { progetto: evento.input.progetto }) : null;
+            if (metaDomanda && (evento.contesto || basePrimo)) metaDomanda.textContent = [domandaInAttesa.dataset.oraMessaggio, `${basePrimo ?? domandaInAttesa.dataset.etichettaBase ?? 'Follow-up'}${etichettaPermessiGiro(evento.contesto)}`].filter(Boolean).join(' · ');
+            if (domandaInAttesa?.dataset.primoMessaggio === '1') state.realSession.taskBubbleMostrata = true; // la prima bolla ora c'è
             /*
              * ⛔ 17/09: la bolla ottimista è nata PRIMA che il server dicesse quale giro è. Il suo
              *   riferimento arriva adesso, con `RunStarted`: senza questa riga «Elimina» resterebbe
@@ -21489,6 +21892,10 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
         /* Owner 03/10/2026: una prova NON ESEGUITA (nessuna suite, o zero test eseguiti: `NOT RUN:`) non è né riuscita né fallita.
            Pallino d'attenzione e «non eseguito», come nei Processi; mai contata fra gli errori. */
         const provaNonEseguita = info?.nome === 'prova' && provaSenzaSuite(testoEsito);
+        /* Owner 12/10/2026 (foto: 13 letture «non riuscito»): una copia identica che il kernel ha SCARTATO non è fallita, non è
+           mai partita. Il fatto arriva nell'evento (`duplicate`), mai dedotto dal testo: riga discreta, pallino neutro, fuori
+           dal conto degli errori. Hermes le toglie in silenzio (`run_agent.py:1198-1214`); noi lo diciamo in una parola. */
+        const copiaSaltata = evento.duplicate === true;
         /*
          * ⛔⛔ PO-06 (10/09) — per un comando scritto dalla PERSONA la riga porta il VERDETTO, non
          *   il conteggio della card che la contiene. Misurato dal vivo prima della cura: si leggeva
@@ -21501,6 +21908,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
         if (info?.summaryText) {
           info.summaryText.textContent = domandaDaCorreggere
             ? tr('app.questions.corrected', { motivo: tr(domandaDaCorreggere.frase, domandaDaCorreggere.parametri) })
+            : copiaSaltata ? tr('app.activity.duplicateSkipped', { nome: nomeUmanoAttrezzo(info.nome) })
             : esitoUmano
             /* ⛔ 02/10/2026, owner («nella storia non scriverla») — riaprendo una sessione la riga diceva «… · 6 ms» per
                un comando fermato dopo secondi: era il tempo fra due eventi RIGIOCATI, e il giornale non ha una durata
@@ -21509,7 +21917,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
             : riassuntoAttrezzoConcluso(info.nome, info.argomentiParsati, testoEsito, fallito);
         }
         if (info?.article) {
-          impostaEsitoRiga(info.article, domandaDaCorreggere ? 'corretta' : fermatoApposta ? 'interrupted' : provaNonEseguita ? 'not-run' : fallito ? 'error' : 'success'); // 05/9 Fase 2: il pallino della ToolRow
+          impostaEsitoRiga(info.article, domandaDaCorreggere ? 'corretta' : copiaSaltata ? 'duplicate' : fermatoApposta ? 'interrupted' : provaNonEseguita ? 'not-run' : fallito ? 'error' : 'success'); // 05/9 Fase 2: il pallino della ToolRow
           info.article.setAttribute('aria-busy', 'false');
           if (info.dettaglio && info.argomentiParsati && !info.comandoDellaPersona) info.dettaglio.textContent = dettaglioRigaAttrezzo(info.nome, info.argomentiParsati);
         }
@@ -21745,10 +22153,10 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
           batch.inCorso[categoria] = Math.max(0, (batch.inCorso[categoria] || 0) - 1);
           if (categoria === 'altro') { // 26/09, difetto (12): per nome, come nel segmento
             contaNomeAltro(batch.nomiAltro?.inCorso, info.nome, -1);
-            if (!domandaDaCorreggere && !provaNonEseguita) contaNomeAltro(fallito ? batch.nomiAltro?.falliti : batch.nomiAltro?.riusciti, info.nome, 1);
+            if (!domandaDaCorreggere && !provaNonEseguita && !copiaSaltata) contaNomeAltro(fallito ? batch.nomiAltro?.falliti : batch.nomiAltro?.riusciti, info.nome, 1);
           }
           /* 27/09, decisione 47: la domanda respinta per la forma non è stata posta — né riuscita né fallita, non si conta */
-          if (domandaDaCorreggere || provaNonEseguita) { /* niente: né riuscita né fallita */ } else if (categoria === 'comando') {
+          if (domandaDaCorreggere || provaNonEseguita || copiaSaltata) { /* niente: né riuscita né fallita */ } else if (categoria === 'comando') {
             batch.contatori.comandi += 1;
             if (fallito) batch.contatori.comandiErrore += 1;
           } else if (fallito) {
@@ -21765,7 +22173,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
           // Una scrittura riuscita è contata soltanto dal relativo
           // StateDelta add/replace: il testo del tool non prova il disco.
           else if (categoria === 'altro') batch.contatori.altro += 1;
-          info.stato = domandaDaCorreggere ? 'corretta' : fermatoApposta ? 'interrotto' : provaNonEseguita ? 'non-eseguito' : fallito ? 'error' : 'complete';
+          info.stato = domandaDaCorreggere ? 'corretta' : copiaSaltata ? 'doppione' : fermatoApposta ? 'interrotto' : provaNonEseguita ? 'non-eseguito' : fallito ? 'error' : 'complete';
           aggiornaRiassuntoBatch(batch);
         }
         // ⭐ 3/9 — item 10: preso ORA, non dopo — fra un attimo l'entry sparisce.
@@ -22060,7 +22468,8 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
         const card = state.realSession.approvazioniPendenti.get(evento.requestId);
         if (card) {
           // 06/9: l'esito non si concatena più alla frase (si leggeva come parte del comando): riga sua, col tono.
-          segnaEsitoApprovazione(card, { approvato: Boolean(evento.approvato), altrove: rispostaDaUnAltraFinestra(card, evento), ambito: evento.ambito, motivo: evento.motivo }); // F4-03: ambito e motivo, se il server li manda; 03/10: l'evento decide un invio senza prova
+          if (card.dataset.c === 'GoalConfirmCard') { if (!card.dataset.chiusa) card.chiudi(evento.approvato ? 'avviato' : (card.dataset.esitoLocale || 'scartato')); } // /goal G6
+          else segnaEsitoApprovazione(card, { approvato: Boolean(evento.approvato), altrove: rispostaDaUnAltraFinestra(card, evento), ambito: evento.ambito, motivo: evento.motivo }); // F4-03: ambito e motivo, se il server li manda; 03/10: l'evento decide un invio senza prova
           state.realSession.approvazioniPendenti.delete(evento.requestId);
         }
         aggiornaElencoSessioniReali(); // ⛔ 04/9 — l'altro verso: risolta l'approvazione, la riga deve smettere di dire «in attesa»
@@ -22290,7 +22699,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     fermaFondoRipristino?.(); // libera il custode prima di trasferire DOM e ownership, anche su resume
     if (!continua) {outputSessionController.abort(); outputSessionController = new AbortController();}
     providerRetryUi.reset();
-    if (!continua) { risultatiDelegaMostrati.clear(); dialoghiAgenteMostrati.clear(); ultimoEventoGrafoMadre = null; if (frameGrafoMadre !== null) cancelAnimationFrame(frameGrafoMadre); frameGrafoMadre = null; agentiInDiretta.clear(); if (frameAgentiInDiretta !== null) cancelAnimationFrame(frameAgentiInDiretta); frameAgentiInDiretta = null; chiudiGrafoAgenti({ ricorda: true }); chiudiLettoreFile({ fuoco: false }); figliLettura++; figliErrore = null; figliAggiornati = null; state.realSession.figli = []; chiudiConversazioneFiglia(); }
+    if (!continua) { risultatiDelegaMostrati.clear(); dialoghiAgenteMostrati.clear(); ultimoEventoGrafoMadre = null; if (frameGrafoMadre !== null) cancelAnimationFrame(frameGrafoMadre); frameGrafoMadre = null; agentiInDiretta.clear(); if (frameAgentiInDiretta !== null) cancelAnimationFrame(frameAgentiInDiretta); frameAgentiInDiretta = null; chiudiGrafoAgenti({ ricorda: true }); chiudiLettoreFile({ fuoco: false }); figliLettura++; figliErrore = null; figliAggiornati = null; state.realSession.figli = []; state.realSession.richieste = []; chiudiConversazioneFiglia(); }
     if (!continua) { contextCompactor?.close(); contextCompactor?.setSession(null); contextMonitor?.stop(); contextChatSnapshot = null; aggiornaAvanzamentoContesto($('#conversation'), null); azzeraSchedaContesto(); }
     nascondiAttesaRisposta();
     cancellaRenderMessaggiStreaming();
@@ -22375,6 +22784,9 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       state.realSession.cartellaAssoluta = null; // Fase 3 — una sessione nuova non conosce ancora la propria radice finché RunStarted non arriva
       state.realSession.codaMessaggi = []; // FASE D — una sessione nuova non eredita la coda di quella precedente
       state.realSession.codaInPausa = false; // ⭐ 14/09 — né la sua pausa: la vera arriva col flusso degli eventi
+      state.realSession.obiettivo = null; // /goal G6 — né il suo obiettivo: arriva col flusso, subito dopo la storia
+      state.realSession.obiettivoTetti = null;
+      renderizzaFasciaObiettivo();
       state.realSession.batchAttivo = null; // 30/8 — una sessione nuova non eredita un batch di tool-call della precedente
       state.realSession.ultimoBatchChiuso = null;
       state.realSession.segmentoAttivo = null;
@@ -22439,8 +22851,8 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     } catch (error) {
       if (generation !== state.realSession.generation) return;
       nascondiAttesaRisposta();
-      appendStatusNote(tr('app.run.startFailedWith', { motivo: error.message }), true);
-      toast(tr('app.run.startFailed'), error.message);
+      appendStatusNote(tr('app.run.startFailedWith', { motivo: fraseDelMotivo(error) || error.message }), true);
+      toast(tr('app.run.startFailed'), fraseDelMotivo(error) || error.message);
       /* ⛔ 27/8, trovato dalla pipeline QA visiva: il titolo restava "ottimista" (il nome della sessione appena tentata) anche quando la POST falliva — la sessione non è mai esistita lato server (state.realSession.id resta null). */
       state.session = tr('app.sessions.none');
       $$('[data-current-session-title]').forEach((label) => { label.textContent = state.session; });
@@ -22634,7 +23046,9 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
      * evento, che l'elenco non espone — e lo si scrive così.
      */
     const voceElenco = state.sessionSelection.available.get(sessionId);
-    if (voceElenco?.conclusa) {
+    /* /goal G6 (15/10/2026, visto dal vivo): il primo messaggio di una chat nata ferma non è una RIPRESA — niente «avviata 3 s fa ·
+       riprendere costa…» (`primoMessaggioAtteso` nell'elenco) */
+    if (voceElenco?.conclusa && !voceElenco.primoMessaggioAtteso) {
       const eta = formattaEta(voceElenco.avviataAlle);
       toast(tr('app.run.resuming'), tr('app.run.resumingBody', { eta: eta ? tr('app.run.startedAgo', { eta: eta }) : tr('app.run.ageUnrecorded'), costo: stimaTokenRipresa(voceElenco.usage) }));
     }
@@ -22713,8 +23127,10 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     } catch (error) {
       if (sessionId !== state.realSession.id || generationAtSend !== state.realSession.generation) return;
       nascondiAttesaRisposta();
-      if (messaggioFollowUp) appendStatusNote(tr('app.run.sendFailedWith', { motivo: error.message }), true); // il bubble utente resta — l'ha scritto davvero, solo non e' arrivato
-      toast(messaggioFollowUp ? tr('app.run.sendFailed') : tr('app.run.resumeFailed'), error.message);
+      /* G6 (revisione del bugfixer, 15/10): il primo giro di una chat ferma passa da qui — la chiave mancante si dice per nome */
+      const motivoInvio = fraseDelMotivo(error) || error.message;
+      if (messaggioFollowUp) appendStatusNote(tr('app.run.sendFailedWith', { motivo: motivoInvio }), true); // il bubble utente resta — l'ha scritto davvero, solo non e' arrivato
+      toast(messaggioFollowUp ? tr('app.run.sendFailed') : tr('app.run.resumeFailed'), motivoInvio);
       if (sessionId === state.realSession.id && !viaCodaId) ripristinaImmagini(immagini, messaggioFollowUp); // ⭐ 14/09: un messaggio della coda resta in coda sul server, non torna nel composer
     }
   }
@@ -22828,7 +23244,14 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
    *   né record — provvisoria — e si completa quando arriva l'evento con il record (F3). Non si inventano
    *   numeri che il server non ha detto.
    */
-  const compattazioneLegacy = { inVolo: new Set(), trial: new Map(), ultimaMisura: new Map(), avvisoChiusoA: new Map() };
+  const compattazioneLegacy = { inVolo: new Set(), inSottofondo: new Set(), trial: new Map(), ultimaMisura: new Map(), avvisoChiusoA: new Map() };
+  /* ⭐ 15/10/2026 — «c'è un riassunto in corso?» ha UNA risposta: quello chiesto a mano (`inVolo`), quello del server in sottofondo
+     (`inSottofondo`: non ha più la barra, owner «solo il separatore», ma la finestra e l'avviso devono saperlo, o offrono un secondo
+     «Compatta» mentre il primo lavora) e quello che il giro aspetta (la barra a schermo). Prima la barra faceva da bandierina. */
+  function riassuntoInCorsoLegacy(sessionId) {
+    return compattazioneLegacy.inVolo.has(sessionId) || compattazioneLegacy.inSottofondo.has(sessionId)
+      || (sessionId === state.realSession.id && Boolean(colonnaConversazione(ROOT())?.querySelector('[data-compattazione-barra]')));
+  }
   /*
    * ⛔⛔ 26/09/2026 — L'OCCUPAZIONE DEL CONTESTO È L'ULTIMA CHIAMATA, NON IL GIRO. Owner, con la foto: «avviso spunta anche
    *   dopo compattazione». Misurato sul journal vero (`c15ba17c…`): l'avviso diceva 378.705 su 200.000, cioè la SOMMA dei
@@ -22917,6 +23340,25 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     if (!sessionId) { toast(tr('app.contextManager.title'), tr('app.contextManager.noConversation')); return; }
     apriDialogoContesto(sessionId);
   }
+  /*
+   * ⛔ Owner 12/10/2026 sera: «Compatta ora» dell'AVVISO di contesto quasi pieno deve partire SUBITO — «appare la modale e devo
+   *   dare un'ulteriore conferma, comportamento sbagliato». L'avviso è già la domanda («il contesto è quasi pieno, compatti?»):
+   *   il clic è la risposta. Col motore del contesto attivo si manda la STESSA richiesta della finestra (`startCompaction`), senza
+   *   aprirla; col motore spento era già così. La finestra si apre solo se la richiesta non può partire, perché lì c'è scritto il
+   *   perché. Gli altri ingressi (testata, comandi) restano com'erano: aprono la finestra (decisione del 24/09 e del 10/10).
+   */
+  async function compattaSubitoDallAvviso() {
+    const sessionId = state.realSession.id;
+    if (!sessionId) return;
+    if (!(await trialContestoAttivo(sessionId))) { await compattaConversazioneLegacy(sessionId); return; }
+    try {
+      const stato = contextChatSnapshot?.sessionId === sessionId ? contextChatSnapshot : await contextClient.getContextState({ sessionId });
+      const esito = await contextClient.startCompaction({ sessionId, expectedRevision: stato?.revision, kind: 'compact' });
+      if (sessionId === state.realSession.id) { if (esito?.state) contextMonitor?.update(esito.state); void aggiornaAvvisoSogliaContesto({ forza: true }); }
+    } catch {
+      if (sessionId === state.realSession.id) apriDialogoContesto(sessionId);
+    }
+  }
   async function compactSession() {
     const sessionId = state.realSession.id;
     if (!sessionId) { toast(tr('app.contextManager.compact'), tr('app.contextManager.compactNoConversation')); return; }
@@ -22930,8 +23372,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       // C1 (10/10): anche la FONTE della soglia, perché la panoramica dica il perché giusto (finestra, tetto, non verificata, motore)
       return numeri ? { inputTokens: numeri.tokenMisurati, windowTokens: numeri.finestra, soglia: numeri.soglia, fonte: numeri.source ?? null } : null;
     },
-    inCorso: (sessionId) => compattazioneLegacy.inVolo.has(sessionId)
-      || (sessionId === state.realSession.id && Boolean(colonnaConversazione(ROOT())?.querySelector('[data-compattazione-barra]'))),
+    inCorso: (sessionId) => riassuntoInCorsoLegacy(sessionId),
     compatta: (sessionId) => compattaConversazioneLegacy(sessionId),
   };
   /*
@@ -23021,7 +23462,11 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     if (!sessionId || !colonna) return;
     if (c.tipo === 'inizio') {
       if (c.tokenMisurati != null && c.soglia != null) compattazioneLegacy.ultimaMisura.set(sessionId, { tokenMisurati: c.tokenMisurati, soglia: c.soglia });
-      aggiornaAvanzamentoLegacy(colonna, { fase: 'inizio', motivo: c.motivo }, { sessionId, testo: testoBarraLegacy(c.motivo), inserisci: inserisciRigaCompattazione });
+      /* ⭐ 15/10/2026 (owner, «solo il separatore»): la compattazione che il server fa in sottofondo fra un giro e l'altro non ferma
+         nessuno, quindi non apre la barra «Riassumo…»: alla fine arriva il separatore, e basta. Quella che il giro aspetta (overflow,
+         emergenza, a mano) la barra la tiene, perché lì si aspetta davvero. */
+      if (c.motivo === 'background') compattazioneLegacy.inSottofondo.add(sessionId);
+      else aggiornaAvanzamentoLegacy(colonna, { fase: 'inizio', motivo: c.motivo }, { sessionId, testo: testoBarraLegacy(c.motivo), inserisci: inserisciRigaCompattazione });
       /* B1 (09/10/2026 sera, profilo del ritorno su 300 giri): in rigiocata ogni compattazione forzava l'avviso, cioè una lettura
          HTTP dei numeri a giro (286 su quella sessione); il confine `talos.fine-rigiocata` lo ricalcola già una volta, forzato. */
       void aggiornaAvvisoSogliaContesto({ forza: !state.realSession.inRigiocata });
@@ -23029,6 +23474,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       return;
     }
     if (c.tipo === 'fine') {
+      compattazioneLegacy.inSottofondo.delete(sessionId);
       aggiornaAvanzamentoLegacy(colonna, null, { sessionId });
       if (c.compattato) misuraDopoCompattazione(sessionId, c.tokenDopo); // 26/09: la misura di prima non vale più (Pi, Hermes)
       if (c.compattato) contaCompattazioneLegacy({ at: c.record?.at ?? null, tokenPrima: c.tokenPrima ?? null, tokenDopo: c.tokenDopo ?? null });
@@ -23181,7 +23627,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
   }
   async function aggiornaAvvisoSogliaContesto({ forza = false } = {}) {
     const sessionId = state.realSession.id;
-    const avviso = montaAvvisoContesto({ document, riferimento: $('#avvisoPiano'), onCompatta: () => { void compactSession(); }, onChiudi: () => {
+    const avviso = montaAvvisoContesto({ document, riferimento: $('#avvisoPiano'), onCompatta: () => { void compattaSubitoDallAvviso(); }, onChiudi: () => {
       const id = state.realSession.id; const testo = avviso.querySelector('[data-avviso-contesto-testo]')?.textContent || '';
       if (id) compattazioneLegacy.avvisoChiusoA.set(id, testo);
       aggiornaAvvisoContesto(avviso, null); misuraPilaToast();
@@ -23192,7 +23638,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     const valutazione = valutaSogliaContesto(numeri);
     const chiusa = compattazioneLegacy.avvisoChiusoA.get(sessionId) === valutazione.testo;
     // mentre un riassunto è in corso (manuale, o del server: la barra è a schermo) «Compatta ora» sarebbe una bugia — foto 2-durante
-    const inCorso = compattazioneLegacy.inVolo.has(sessionId) || Boolean(colonnaConversazione(ROOT())?.querySelector('[data-compattazione-barra]'));
+    const inCorso = riassuntoInCorsoLegacy(sessionId);
     const visibile = aggiornaAvvisoContesto(avviso, valutazione.mostra && !chiusa && !inCorso ? valutazione : null);
     if (visibile) avviso.dataset.sessionId = sessionId;
     misuraPilaToast();
@@ -23849,6 +24295,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     programmaRenderAlberoReale();
     renderizzaBrowser();
     renderizzaBannerCoda();
+    renderizzaFasciaObiettivo(); // /goal G6
     programmaSchedeAgente();
     aggiornaAvanzamentoContesto(colonna, contextChatSnapshot);
     aggiornaSpazioCodaConversazione(colonna, { colonnaCresciuta: true });
@@ -24505,11 +24952,13 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     const base = String(nome || '').trim();
     if (!base) return { nome: base, cambiato: false };
     const nomiVivi = new Set([...state.sessionSelection.available.values()]
-      // ⛔ 06/9, T05-D3: una sessione interrotta è chiusa — il suo nome può tornare libero, come quello di una conclusa.
-      .filter((s) => s.sessionId !== sessionId && !s.conclusa && !s.interrotta && s.nome)
+      // 16/10/2026 sera (owner): contano TUTTE le sessioni in elenco, al lavoro o ferme — la regola del server (`nomeUnicoInElenco`).
+      // Prima (06/9, T05-D3) una conclusa o interrotta liberava il nome, e due chat ferme restavano gemelle.
+      .filter((s) => s.sessionId !== sessionId && s.nome)
       .map((s) => s.nome));
     let candidato = base;
-    for (let n = 2; nomiVivi.has(candidato); n += 1) candidato = `${base}-${n}`;
+    // 15/10/2026 (REV-TITOLO-02/02b): il suffisso sta dentro il tetto degli 80 e va prima dei puntini
+    for (let n = 2; nomiVivi.has(candidato); n += 1) candidato = nomeConSuffisso(base, `-${n}`);
     return { nome: candidato, cambiato: candidato !== base };
   }
 
@@ -24745,6 +25194,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       void caricaFigliSessione();
     }
     state.sessionSelection.available = new Map(elenco.map((sessione) => [sessione.sessionId, sessione]));
+    impostaNomiNoti(elenco.map((sessione) => sessione.nome)); // NOME-NUMERO-REV-01: il «-2» si stacca solo se l'originale c'è
     registroChatPronte().pota(state.sessionSelection.available); // B1: una chat eliminata non resta pronta
     accorciaGiroElenco();
     const radici = sessioniRadice(elenco);
@@ -26241,11 +26691,9 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
    * numero diverso da mobile perché il vincolo reale è diverso, non
    * perché "quasi uguale basta".
    */
-  function titoloDalPrimoMessaggio(testo) {
-    return String(testo || '').replace(/\s+/g, ' ').trim().slice(0, 80);
-  }
+  // 15/10/2026: `titoloDalPrimoMessaggio` vive in `session-item.js` (taglio all'ultima parola intera, con «…»)
 
-  async function startCustomSession({ cartellaId, cartellaLibera, workspaceLaunchId, nomeCartella, consegna, comandoProva, modello, effort, modelloPlanner, permessi, permessiPerAttrezzo, modalitaOperativa = state.modalitaOperativa, immagini = [], bolla = null }) {
+  async function startCustomSession({ cartellaId, cartellaLibera, workspaceLaunchId, nomeCartella, consegna, comandoProva, modello, effort, modelloPlanner, permessi, permessiPerAttrezzo, modalitaOperativa = state.modalitaOperativa, immagini = [], bolla = null, ferma = false, ripristino = null }) {
     iniziaMisuraLatenza('primo-messaggio-della-sessione');
     const generation = nuovaGenerazioneSessione();
     const taskSintetico = { id: `libero:${nomeCartella}`, consegna, immagini };
@@ -26261,9 +26709,12 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     $$('[data-current-session-title]').forEach((label) => { label.textContent = state.session; });
     setView('chat');
     closePanels();
-    appendRealTaskStart(taskSintetico);
-    mostraAttesaRisposta();
-    toast(tr('app.run.starting'), tr('app.workspace.startingBody', { nome: nomeCartella }));
+    /* /goal G6: una chat nata FERMA non ha ancora un messaggio né un giro — niente bolla, niente attesa: arriva la carta dei controlli */
+    if (!ferma) {
+      appendRealTaskStart(taskSintetico);
+      mostraAttesaRisposta();
+      toast(tr('app.run.starting'), tr('app.workspace.startingBody', { nome: nomeCartella }), { chiave: 'avvio-chat-nuova' }); // il fallimento lo sostituisce
+    }
 
     let sessionId;
     try {
@@ -26287,6 +26738,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       if (comandoProva) corpo.comandoProva = comandoProva;
       if (immagini.length) corpo.immagini = payloadImmagini(immagini);
       if (bolla) corpo.bolla = bolla; // C09: la copia per lo schermo del primo messaggio
+      if (ferma) corpo.ferma = true; // /goal G6: la conversazione nasce senza giro
       const modelloEffettivo = modello || state.model; // ⭐ la scelta fatta nel picker della modale ha priorità
       if (modelloEffettivo) corpo.modello = modelloEffettivo;
       // ⭐ 28/8 — stesso principio del modello: la scelta esplicita dell'effort picker ha priorità, altrimenti quella già impostata sulla sessione (pillola/foglio); assente se l'owner non ha mai toccato lo slider.
@@ -26325,12 +26777,27 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     } catch (error) {
       if (generation !== state.realSession.generation) return;
       nascondiAttesaRisposta();
-      appendStatusNote(tr('app.run.startFailedWith', { motivo: error.message }), true);
-      toast(tr('app.run.startFailed'), error.message);
-      ripristinaImmagini(immagini, consegna);
+      appendStatusNote(tr('app.run.startFailedWith', { motivo: fraseDelMotivo(error) || error.message }), true);
+      toast(tr('app.run.startFailed'), fraseDelMotivo(error) || error.message, { chiave: 'avvio-chat-nuova' }); // non accanto a «Avvio in corso»
+      /* 15/10/2026 (visto dal vivo, senza chiave): la chat non è nata e il compositore era già vuoto — la persona perdeva ciò che
+         aveva scritto e gli allegati, e la chat in attesa spariva (Invio diceva «nessuna sessione»). Si rimette tutto com'era, come
+         per `/goal` (`gestisciComandoObiettivo`): il SUO testo, non la consegna con dentro gli allegati, e solo se nel frattempo
+         non ha scritto altro. Prima delle immagini, che altrimenti riempirebbero il campo con la consegna intera. */
+      if (ripristino) {
+        state.pendingCustomSession = state.pendingCustomSession ?? ripristino.pendente;
+        for (const a of ripristino.allegati ?? []) if (a?.tipo !== 'immagine' && !allegatiComposer.some(b => b.id === a.id)) aggiungiAllegato(a);
+        if (!composerInput.value.trim() && typeof ripristino.testo === 'string') { composerInput.value = ripristino.testo; autoGrowTextarea(); }
+      }
+      /* AVVIO-REV-02 (revisione del bugfixer): col ripristino il testo è quello della persona — una foto senza parole non mette nel
+         campo la consegna per il modello («Describe the attached image.») */
+      ripristinaImmagini(immagini, ripristino ? '' : consegna);
       /* ⛔ 27/8, trovato dalla pipeline QA visiva: il titolo restava "ottimista" (il nome della sessione appena tentata) anche quando la POST falliva — la sessione non è mai esistita lato server (state.realSession.id resta null). */
-      state.session = tr('app.sessions.none');
+      /* …ma se la chat in attesa è tornata (sopra), il titolo è il suo, come prima dell'invio (`avviaSessionePendente`): non
+         «Nessuna sessione» accanto a un elenco che dice «Nuova · progetto, in attesa del primo messaggio» (visto dal vivo, 15/10). */
+      const tornata = ripristino && state.pendingCustomSession;
+      state.session = tornata ? tr('app.sessions.newIn', { cartella: state.pendingCustomSession.nomeCartella }) : tr('app.sessions.none');
       $$('[data-current-session-title]').forEach((label) => { label.textContent = state.session; });
+      if (tornata) { sessionTitle.textContent = state.session; aggiornaTestataSessione(); } // AVVIO-REV-01b: anche la testata visibile
       return;
     }
     if (generation !== state.realSession.generation) return;
@@ -26358,6 +26825,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       if (titoloDisambiguato) toast(tr('app.workspace.titleDisambiguated'), tr('app.workspace.titleDisambiguatedBody', { titolo: titoloAutomatico }));
       aggiornaElencoSessioniReali();
     }).catch(() => { /* best effort, vedi sopra: resta il titolo di sempre */ });
+    return sessionId; // /goal G6: chi apre una chat ferma ci lavora subito sopra
   }
 
   /*
@@ -26481,6 +26949,15 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       b.addEventListener('click', () => { chiudiMenuAllega(); scegliAllegato(via.id); });
       menu.append(b);
     }
+    /* /goal G6 (owner 15/10/2026, «tutte e due»): «Imposta un obiettivo…» porta allo STESSO punto di `/goal` — scrive il comando nel
+       compositore e gli dà il fuoco; la persona scrive l'obiettivo e invia, e arriva la carta dei controlli */
+    const obiettivo = document.createElement('button');
+    obiettivo.type = 'button'; obiettivo.className = 'talos-menu__voce'; obiettivo.setAttribute('role', 'menuitem'); obiettivo.dataset.voceObiettivo = '';
+    const forteOb = document.createElement('strong'); forteOb.textContent = tr('chat.goal.plus.set');
+    const piccoloOb = document.createElement('small'); piccoloOb.textContent = tr('chat.goal.plus.setHelp');
+    const testoOb = document.createElement('span'); testoOb.append(forteOb, piccoloOb); obiettivo.append(testoOb);
+    obiettivo.addEventListener('click', () => { chiudiMenuAllega(); scriviComandoObiettivo(); });
+    menu.append(obiettivo);
     // B8: i tetti si leggono qui, prima di sbatterci
     const nota = document.createElement('p');
     nota.className = 'talos-menu__nota';
@@ -26495,6 +26972,68 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     menu.querySelector('button')?.focus();
   }
   function chiudiMenuAllega() { const m = $('#menuAllega'); if (m) m.hidden = true; }
+  /* /goal G6: il comando nel compositore, col cursore in fondo — quello che la persona ha già scritto resta dopo il comando */
+  function scriviComandoObiettivo() {
+    // un comando a metà («/», «/go») si sostituisce; un testo già scritto resta dopo il comando
+    const gia = suggerisciComando(composerInput.value) ? '' : composerInput.value.replace(/^\/goal\s*/u, '');
+    composerInput.value = `/goal ${gia}`;
+    composerInput.focus();
+    composerInput.setSelectionRange(composerInput.value.length, composerInput.value.length);
+    autoGrowTextarea();
+    aggiornaSuggerimentoComandi();
+  }
+  /*
+   * /goal G6 — IL SUGGERIMENTO mentre si scrive «/» (owner 15/10/2026). Un elenco di una voce sopra il compositore. Mentre è aperto il
+   *   campo porta `aria-controls`, `aria-expanded`, `aria-haspopup="listbox"` e `aria-activedescendant`, tolti alla chiusura; i tasti li
+   *   tiene il compositore (assistant-ui, «Composer Trigger Popover»; GitLab DuoChat #2832: il fuoco resta nel campo; Hermes
+   *   `SlashPopover.tsx` delega i tasti al compositore — letti il 15/10/2026). Tab o Invio completano, Esc chiude.
+   */
+  /* owner 15/10/2026, «Elenco sopra il compositore»: il «/» non apre più la palette (rubava il fuoco, e `/goal testo` non si poteva
+     scrivere) — la palette è la SECONDA voce dell'elenco, e resta su Ctrl K. */
+  const VOCI_DEL_SUGGERIMENTO = Object.freeze([
+    { id: 'suggerimentoComandiGoal', nome: 'chat.goal.command.name', aiuto: 'chat.goal.command.hint', scegli: () => scriviComandoObiettivo() },
+    { id: 'suggerimentoComandiTutti', nome: 'chat.goal.command.allCommands', aiuto: 'chat.goal.command.allCommandsHint',
+      scegli: () => { composerInput.value = ''; autoGrowTextarea(); chiudiSuggerimentoComandi(); openCommandPalette(); } },
+  ]);
+  function chiudiSuggerimentoComandi() {
+    const elenco = document.getElementById('suggerimentoComandi');
+    if (elenco && !elenco.hidden) elenco.hidden = true;
+    for (const a of ['aria-controls', 'aria-expanded', 'aria-haspopup', 'aria-activedescendant']) composerInput.removeAttribute(a);
+  }
+  function evidenziaSuggerimento(elenco, indice) {
+    const voci = [...elenco.querySelectorAll('[role="option"]')];
+    const scelta = ((indice % voci.length) + voci.length) % voci.length;
+    voci.forEach((voce, i) => voce.setAttribute('aria-selected', i === scelta ? 'true' : 'false'));
+    elenco.dataset.scelta = String(scelta);
+    composerInput.setAttribute('aria-activedescendant', voci[scelta].id);
+  }
+  function aggiornaSuggerimentoComandi() {
+    let elenco = document.getElementById('suggerimentoComandi');
+    if (!suggerisciComando(composerInput.value)) { chiudiSuggerimentoComandi(); return false; }
+    if (!elenco) {
+      elenco = document.createElement('div');
+      elenco.id = 'suggerimentoComandi'; elenco.className = 'talos-suggerimento-comandi'; elenco.setAttribute('role', 'listbox');
+      elenco.setAttribute('aria-label', tr('chat.goal.command.suggestions'));
+      for (const v of VOCI_DEL_SUGGERIMENTO) {
+        const voce = document.createElement('div');
+        voce.id = v.id; voce.className = 'talos-suggerimento-comandi__voce'; voce.setAttribute('role', 'option'); voce.setAttribute('aria-selected', 'false');
+        const nome = document.createElement('span'); nome.className = 'talos-suggerimento-comandi__nome'; nome.textContent = tr(v.nome);
+        const aiuto = document.createElement('span'); aiuto.className = 'talos-suggerimento-comandi__aiuto'; aiuto.textContent = tr(v.aiuto);
+        voce.append(nome, aiuto);
+        // il clic non deve togliere il fuoco al campo prima di scegliere
+        voce.addEventListener('mousedown', (evento) => { evento.preventDefault(); v.scegli(); });
+        elenco.append(voce);
+      }
+      composerForm.append(elenco);
+    }
+    const appenaAperto = elenco.hidden || !composerInput.hasAttribute('aria-expanded');
+    elenco.hidden = false;
+    composerInput.setAttribute('aria-controls', 'suggerimentoComandi');
+    composerInput.setAttribute('aria-expanded', 'true');
+    composerInput.setAttribute('aria-haspopup', 'listbox');
+    if (appenaAperto) evidenziaSuggerimento(elenco, 0);
+    return true;
+  }
 
   function scegliAllegato(via) {
     if (via === 'workspace') { openSheet('files', { ancoraAlComposer: true }); return; }
@@ -26611,6 +27150,13 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     const immagini = allegati.filter(a => a.tipo === 'immagine');
     const value = String(text || '').trim();
     if (!value) return false;
+    /* /goal G6 (owner 15/10/2026, «tutte e due»): `/goal <testo>` scritto nel compositore non va al modello — apre la carta dei
+       controlli (in una chat nuova, la conversazione nasce ferma). Si legge ciò che la persona ha SCRITTO (`mostra`), non il testo
+       con gli allegati: un allegato non entra in un obiettivo. ⛔ G6UI-REV-02 (revisione del bugfixer 15/10): con allegati nel
+       compositore il comando NON parte e non svuota niente (prima li buttava in silenzio): lo dice, e la persona sceglie. */
+    const comandoGoal = comandoObiettivo(mostra ?? value);
+    if (comandoGoal && allegati.length) { toast(tr('chat.goal.command.attachmentsTitle'), tr('chat.goal.command.attachments'), { chiave: 'goal-allegati' }); return false; }
+    if (comandoGoal) { ricordaTestoInviato(mostra ?? value); void gestisciComandoObiettivo(comandoGoal); return true; }
     /* ⭐ PO-21 (13/09) — ↑ ripesca cio che la PERSONA ha scritto: `mostra` e la sua frase, `value`
        e il testo arricchito con gli allegati che va al modello. */
     ricordaTestoInviato(mostra ?? value);
@@ -26734,10 +27280,12 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
        * «Full access» a schermo, cioè il nome del kernel (regola owner 04/09). Tolto: si spedisce
        * `state.permissions`, che è quello che la pillola mostra — la riga qui sotto lo fa già.
        */
+      const pendente = state.pendingCustomSession;
       state.pendingCustomSession = null;
       startCustomSession({
         cartellaId, cartellaLibera, workspaceLaunchId, nomeCartella, consegna: value, immagini,
         bolla: bollaDaInviare(mostra, value, allegati), // C09
+        ripristino: { pendente, testo: mostra ?? value, allegati: [...allegati] }, // se l'avvio fallisce, niente va perso
         modello: state.model, effort: state.effort, modelloPlanner,
         permessi: state.permissions, permessiPerAttrezzo: mappaPerUnaSessioneNuova(state.permessiPerAttrezzo), // C2b: spenta di serie
       });
@@ -27580,7 +28128,10 @@ ${testo}`;
       /* ⛔ E se le schede ci sono già, si riattiva quella corrente: il montaggio dell'xterm avviene
          in `attivaSchedaTerminale`, e senza questa riga il pannello mostrerebbe le schede con
          dentro il vuoto — che è esattamente il difetto appena corretto, in un altro punto. */
-      else if (stato?.attiva) attivaSchedaTerminale(stato.attiva);
+      else if (stato?.attiva && !state.realSession.id && stato.schede.get(stato.attiva)?.origine === 'standalone') {
+        // senza sessione: prima si chiede al server se quella scheda c'è ancora (riserva del bugfixer, 16/10)
+        riprendiTerminaleSenzaSessione(() => { const ora = statoTerminale(); const id = ora.attiva ?? ora.ordine[0]; if (id) attivaSchedaTerminale(id); }, () => !state.realSession.id);
+      } else if (stato?.attiva) attivaSchedaTerminale(stato.attiva);
       /* ⛔ Il fuoco va DENTRO il terminale: chi lo apre vuole scriverci, non cercarlo col mouse. */
       requestAnimationFrame(() => {
         const dentro = pane.querySelector('textarea, .xterm-helper-textarea');
@@ -27950,6 +28501,21 @@ ${testo}`;
    */
   collegaScia(ROOT());
 
+  /* /goal G6: il suggerimento si aggiorna a ogni lettera; Tab/Invio completano e Esc chiude PRIMA del gestore dell'invio (cattura) */
+  composerInput.addEventListener('input', () => { aggiornaSuggerimentoComandi(); });
+  composerInput.addEventListener('keydown', (evento) => {
+    const elenco = document.getElementById('suggerimentoComandi');
+    if (!elenco || elenco.hidden || evento.isComposing) return;
+    const scelta = Number(elenco.dataset.scelta) || 0;
+    if (evento.key === 'ArrowDown' || evento.key === 'ArrowUp') {
+      evento.preventDefault(); evento.stopImmediatePropagation(); evidenziaSuggerimento(elenco, scelta + (evento.key === 'ArrowDown' ? 1 : -1));
+    } else if (evento.key === 'Tab' || (evento.key === 'Enter' && !evento.shiftKey && !evento.ctrlKey && !evento.metaKey && !evento.altKey)) {
+      evento.preventDefault(); evento.stopImmediatePropagation(); VOCI_DEL_SUGGERIMENTO[scelta]?.scegli();
+    } else if (evento.key === 'Escape') {
+      evento.preventDefault(); evento.stopImmediatePropagation(); chiudiSuggerimentoComandi();
+    }
+  }, true);
+  composerInput.addEventListener('blur', () => { chiudiSuggerimentoComandi(); });
   composerInput.addEventListener('input', () => {
     autoGrowTextarea();
     syncRunComposerState();
@@ -27973,7 +28539,7 @@ ${testo}`;
      * infatti si guarda il valore del campo a ogni cambiamento, non il tasto premuto.
      */
     aggiornaModalitaShell(value);
-    if (value === '/') openCommandPalette();
+    // owner 15/10/2026: il «/» non apre più la palette — apre l'elenco dei comandi sopra il compositore (`aggiornaSuggerimentoComandi`)
     if (/@[^\s]*$/.test(value) && value.endsWith('@')) openSheet('references');
   });
   composerInput.addEventListener('keydown', (event) => {
@@ -28363,6 +28929,8 @@ ${testo}`;
   }
   window.__talosHarnessUiRuntime = {
     selectSession,
+    /* /goal G6 (15/10/2026): la chat NUOVA con la cartella già scelta, per le prove di `/goal` in una chat che nasce ferma */
+    avviaSessionePendente,
     /* B1 (10/10/2026): le chat pronte, per le prove (quali, quanti nodi, l'esito dell'ultimo parcheggio) */
     chatPronte: () => { const r = registroChatPronte(); return { ids: r.ids(), nodi: r.nodi(), ultimoEsito: r.ultimoEsito ?? null }; },
     /* 26/09: la scala del composer, adattata SUBITO — per le prove che scrivono lo stato e misurano nella stessa battuta. */

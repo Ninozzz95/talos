@@ -105,13 +105,36 @@ function snapshot(sessionId) {
     jobs: parseRows('SELECT job_json FROM compaction_jobs WHERE session_id=? ORDER BY id', 'job_json', sessionId),
   };
 }
+/*
+ * L3-3 (owner 13/10/2026, D1 + D2) — una copia messa da parte DICHIARA di chi era: `metadata.aside = { id, of, at }`, scritto da
+ * `setAsideSession`. Le copie nate prima di questa dichiarazione si riconoscono dalla forma dell'id che il servizio desktop dà
+ * loro (`<conversazione>.aside-<millisecondi>-<8 esadecimali>`, `context-desktop-service.mjs`).
+ */
+const FORMA_ID_DA_PARTE = /^(.+)\.aside-(\d+)-[0-9a-f]{8}$/u;
+function asideOwner(sessionId, row = session(sessionId, false)) {
+  if (!row) return null;
+  let metadata = null;
+  try { metadata = JSON.parse(row.metadata_json); } catch { metadata = null; }
+  const dichiarata = metadata?.aside;
+  if (dichiarata && typeof dichiarata === 'object' && dichiarata.id === sessionId && validId(dichiarata.of) && dichiarata.of !== sessionId) {
+    return { of: dichiarata.of, at: typeof dichiarata.at === 'string' ? dichiarata.at : null };
+  }
+  const forma = FORMA_ID_DA_PARTE.exec(sessionId);
+  if (!forma) return null;
+  const quando = Number(forma[2]);
+  return { of: forma[1], at: Number.isSafeInteger(quando) && quando > 0 && quando < 8.64e15 ? new Date(quando).toISOString() : null };
+}
 function archive(sessionId) {
-  const snap = snapshot(sessionId);
+  let snap = snapshot(sessionId);
   if (!snap) fail('Context session does not exist', 'CTX_SESSION_NOT_FOUND');
+  /* Una copia da parte si esporta come l'archivio DELLA CONVERSAZIONE a cui apparteneva, com'era in quel momento: gli originali,
+     le versioni e i lavori (immutabili, mai riscritti) portano già quell'id. La copia lo dichiara in `session.metadata.aside`. */
+  const daParte = asideOwner(sessionId);
+  if (daParte) snap = { ...snap, sessionId: daParte.of, metadata: { ...snap.metadata, aside: { id: sessionId, of: daParte.of, at: daParte.at } } };
   const payload = {
     schema: 'talos.context.archive.v1', session: snap, records: originals(sessionId),
     versions: methods.listContextVersions({ sessionId }), facts: snap.facts, jobs: snap.jobs,
-    usage: methods.readUsage({ sessionId }),
+    usage: daParte ? methods.readUsage({ sessionId }).map(voce => ({ ...voce, sessionId: daParte.of })) : methods.readUsage({ sessionId }),
     mutations: all('SELECT idempotency_key AS idempotencyKey, request_fingerprint AS requestFingerprint, result_json FROM context_mutations WHERE session_id=? ORDER BY idempotency_key', sessionId).map(({ result_json, ...entry }) => ({ ...entry, result: JSON.parse(result_json) })),
     blobs: all('SELECT a.id,a.sha256,a.mime_type,b.bytes FROM record_assets a JOIN content_blobs b ON b.sha256=a.sha256 WHERE a.session_id=? ORDER BY a.id', sessionId).map(row => ({ id: row.id, sha256: row.sha256, mimeType: row.mime_type, base64: Buffer.from(row.bytes).toString('base64') })),
   };
@@ -231,6 +254,91 @@ const methods = {
       }
       if (sequence !== row.head_sequence) run('UPDATE context_sessions SET head_sequence=?,revision=revision+1 WHERE session_id=?', sequence, sessionId);
       return { records: result, revision: row.revision + Number(sequence !== row.head_sequence), headSequence: sequence };
+    });
+  },
+  /*
+   * 12/10/2026, decisione dell'owner («Si ripara da solo»): quando la storia attiva non combacia più con l'archivio, gli
+   *   originali NON si buttano e NON si riscrivono: tutto ciò che dipende da loro (originali, allegati, versioni, riassunti,
+   *   lavori, indice di ricerca, misura) passa sotto un altro id — `asideId` — in una transazione sola, e la sessione vera
+   *   riparte vuota, con la revisione avanzata (chi aveva una revisione vecchia lo scopre). Restano alla sessione vera ciò che
+   *   è della PERSONA o del conto: impostazioni, informazioni protette (copiate anche di là), consumi, avvisi non consegnati,
+   *   chiavi di idempotenza.
+   * ⛔ Mai con un lavoro di compattazione in corso: sposterebbe un lavoro da sotto chi lo sta eseguendo.
+   * ⛔ Originali, allegati e versioni sono IMMUTABILI per trigger (`*_no_update`). Qui non cambia un byte del loro contenuto,
+   *   né l'impronta né la sequenza: cambia solo sotto quale id stanno. I tre trigger si sospendono e si ricreano DENTRO la
+   *   stessa transazione, col loro testo letto dal catalogo (mai riscritto a mano): o tutto, o niente, e fuori da qui la
+   *   protezione non manca mai.
+   */
+  setAsideSession({ sessionId, asideId }) {
+    id(sessionId, 'sessionId'); id(asideId, 'asideId');
+    if (asideId === sessionId) fail('The aside id must differ from the session id');
+    return tx(() => {
+      session(sessionId);
+      if (session(asideId, false)) fail('The aside session already exists', 'CTX_ASIDE_CONFLICT');
+      const attivi = parseRows('SELECT job_json FROM compaction_jobs WHERE session_id=?', 'job_json', sessionId).filter(job => !['committed', 'failed', 'cancelled', 'paused'].includes(job.state));
+      if (attivi.length) fail('A compaction job is active', 'CTX_JOB_ACTIVE');
+      db.exec('PRAGMA defer_foreign_keys=ON');
+      const guardie = all("SELECT name, sql FROM sqlite_master WHERE type='trigger' AND name IN ('originals_no_update','assets_no_update','versions_no_update')");
+      if (guardie.length !== 3 || guardie.some(g => typeof g.sql !== 'string' || !g.sql)) fail('The immutability guards are not the expected ones', 'CTX_PERSISTENCE_FAILED');
+      for (const g of guardie) db.exec(`DROP TRIGGER ${g.name}`);
+      /* L3-3: la copia dichiara di chi era e da quando (`asideOwner`): è ciò che la rende esportabile ed elencabile. */
+      run("INSERT INTO context_sessions(session_id,revision,state_revision,head_sequence,settings_json,metadata_json,active_version_id) SELECT ?,revision,state_revision,head_sequence,settings_json,json_set(metadata_json,'$.aside',json(?)),active_version_id FROM context_sessions WHERE session_id=?", asideId, JSON.stringify({ id: asideId, of: sessionId, at: new Date().toISOString() }), sessionId);
+      for (const tabella of ['original_records', 'record_assets', 'context_versions', 'summary_nodes', 'compaction_jobs', 'search_chunks', 'context_measurements']) run(`UPDATE ${tabella} SET session_id=? WHERE session_id=?`, asideId, sessionId);
+      fault('aside-after-move');
+      for (const g of guardie) db.exec(g.sql);
+      /* La sessione viva deve restare un archivio COERENTE (`verifyContextArchive` gira a ogni commit di versione): un consumo
+         legato a un lavoro segue il suo lavoro (i consumi senza lavoro restano contati qui), e un'informazione protetta resta
+         della persona ma non può più citare originali che qui non ci sono: la copia da parte conserva le sue fonti, quella viva
+         le perde. Trovato dalla prova: senza, il primo commit dopo la riparazione moriva con «Invalid usage ownership». */
+      run('UPDATE usage_records SET session_id=? WHERE session_id=? AND job_id IS NOT NULL', asideId, sessionId);
+      run('INSERT INTO protected_facts(session_id,id,fact_json) SELECT ?,id,fact_json FROM protected_facts WHERE session_id=?', asideId, sessionId);
+      run("UPDATE protected_facts SET fact_json=json_set(fact_json,'$.sources',json('[]')) WHERE session_id=?", sessionId);
+      run("UPDATE protected_facts SET fact_json=json_set(fact_json,'$.conflict.sources',json('[]')) WHERE session_id=? AND json_type(fact_json,'$.conflict') = 'object'", sessionId);
+      run('UPDATE context_sessions SET revision=revision+1, state_revision=state_revision+1, head_sequence=0, active_version_id=NULL WHERE session_id=?', sessionId);
+      return snapshot(sessionId);
+    });
+  },
+  /** L3-3: le copie da parte di UNA conversazione, dalla più vecchia alla più nuova. */
+  listAsideSessions({ sessionId }) {
+    id(sessionId, 'sessionId');
+    const prefisso = `${sessionId}.aside-`;
+    return all('SELECT session_id, head_sequence, metadata_json FROM context_sessions WHERE substr(session_id,1,?)=? ORDER BY session_id', prefisso.length, prefisso)
+      .map(row => ({ row, owner: asideOwner(row.session_id, row) }))
+      .filter(({ owner }) => owner?.of === sessionId)
+      .map(({ row, owner }) => ({ asideId: row.session_id, asideAt: owner.at, records: row.head_sequence }))
+      .sort((a, b) => String(a.asideAt ?? '').localeCompare(String(b.asideAt ?? '')) || a.asideId.localeCompare(b.asideId));
+  },
+  /*
+   * L3-3 (owner 13/10/2026, D1: «solo l'ULTIMA per conversazione») — toglie le copie da parte di `sessionId` tranne `keep`.
+   * ⛔ Cancella dati della persona, quindi: SOLO dopo aver riletto e verificato PER INTERO la copia da tenere (lo stesso
+   *   controllo dell'export: manifesto, provenienza, impronta di ogni originale); se non si rilegge non si cancella niente.
+   * ⛔ Mai la conversazione viva, mai una copia di un'altra conversazione: si toccano solo gli id che `asideOwner` attribuisce
+   *   a QUESTA. Una transazione sola: o tutte, o nessuna.
+   * ⛔ Originali e versioni non si cancellano per trigger (`*_no_delete`): come in `setAsideSession`, le due guardie si
+   *   sospendono e si ricreano DENTRO la transazione, col testo letto dal catalogo.
+   * I blob (`content_blobs`) restano: sono indirizzati per contenuto e possono servire alla conversazione viva.
+   */
+  pruneAsideSessions({ sessionId, keep }) {
+    id(sessionId, 'sessionId'); id(keep, 'keep');
+    if (keep === sessionId) fail('The copy to keep must be a copy set aside, not the live session');
+    return tx(() => {
+      session(sessionId);
+      const tenuta = session(keep, false);
+      if (!tenuta) fail(keep.startsWith(`${sessionId}.aside-`) ? 'The copy to keep does not exist' : 'The copy to keep does not belong to this session', keep.startsWith(`${sessionId}.aside-`) ? 'CTX_SESSION_NOT_FOUND' : 'CTX_INVALID_INPUT');
+      if (asideOwner(keep, tenuta)?.of !== sessionId) fail('The copy to keep does not belong to this session');
+      verifyContextArchive(archive(keep));
+      const daTogliere = methods.listAsideSessions({ sessionId }).map(copia => copia.asideId).filter(altro => altro !== keep && altro !== sessionId);
+      if (!daTogliere.length) return { kept: keep, removed: [] };
+      db.exec('PRAGMA defer_foreign_keys=ON');
+      const guardie = all("SELECT name, sql FROM sqlite_master WHERE type='trigger' AND name IN ('originals_no_delete','versions_no_delete')");
+      if (guardie.length !== 2 || guardie.some(g => typeof g.sql !== 'string' || !g.sql)) fail('The immutability guards are not the expected ones', 'CTX_PERSISTENCE_FAILED');
+      for (const g of guardie) db.exec(`DROP TRIGGER ${g.name}`);
+      for (const altro of daTogliere) {
+        for (const tabella of ['search_chunks', 'summary_nodes', 'usage_records', 'compaction_jobs', 'context_measurements', 'protected_facts', 'record_assets', 'context_outbox', 'context_mutations', 'context_versions', 'original_records', 'context_sessions']) run(`DELETE FROM ${tabella} WHERE session_id=?`, altro);
+      }
+      fault('prune-after-delete');
+      for (const g of guardie) db.exec(g.sql);
+      return { kept: keep, removed: daTogliere };
     });
   },
   readOriginals({ sessionId, afterSequence = 0, throughSequence = Number.MAX_SAFE_INTEGER, ids, limit = 1000 }) {

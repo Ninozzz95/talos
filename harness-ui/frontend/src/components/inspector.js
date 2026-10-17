@@ -1397,6 +1397,11 @@ function kv(d, k, v, classeV = '') { const r = el(d, 'div', 'talos-kv'); r.appen
    si leggeva «1 scritture»: la decima occorrenza dello stesso difetto. */
 import { linguaCorrenteDiT, t as tr, tn } from './lingua.js';
 import { statoGiri } from './chat-foot.js'; // 11/10/2026: la regola di tono della pillola dei giri, che ora vive qui
+/* 13/10/2026 (seconda passata del bugfixer): il nome di un agente è la consegna scritta dal modello. A schermo — riga, nome
+   letto, descrizione — sta senza i caratteri che ingannano, con la stessa funzione del diagramma (`grafo/run-dalle-deleghe.js`,
+   `nomeBreve`): con un U+202E il pannello diceva «Leggi fotoe exe.jpg imussair» accanto al diagramma già pulito. */
+import { senzaInganniSuPiuRighe, suUnaRiga } from './testo-a-schermo.js';
+import { nomeDellAgente, statoDelPasso, TERMINALI as PASSO_TERMINATO, ATTENZIONE as PASSO_DA_CONTROLLARE } from './grafo/run-dalle-deleghe.js'; // L3-15: lo stato di un agente si legge in un posto solo, come il diagramma
 
 /*
  * ⛔ 23/09/2026 (riparazione D6 della revisione UI) — i conteggi degli agenti si scrivono col raggruppamento
@@ -1404,7 +1409,8 @@ import { statoGiri } from './chat-foot.js'; // 11/10/2026: la regola di tono del
  *   Intl (`useGrouping: 'auto'`) in italiano stampa «5000» (preferenza della lingua per le quattro cifre);
  *   `'always'` raggruppa anche lì (MDN, Intl.NumberFormat() constructor, opzione useGrouping, consultato
  *   23/09/2026: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl/NumberFormat/NumberFormat).
- *   Stessa scelta del laboratorio approvato (`lab/workflow-spec.js`, `useGrouping:'always'`).
+ *   Stessa scelta del laboratorio approvato (`lab/workflow-spec.js`, `useGrouping:'always'`; la pagina è stata tolta il
+ *   14/10/2026 per decisione owner, la scelta resta).
  */
 function conteggioAgenti(n) {
   try { return new Intl.NumberFormat(linguaCorrenteDiT(), { useGrouping: 'always' }).format(n); } catch { return String(n); }
@@ -1428,7 +1434,7 @@ function chevron(d) {
 
 /** Il «…» della card di una delega: apre lo STESSO menu del tasto destro, ancorato al bottone. */
 function bottoneAzioni(d, a, azioni) {
-  const nome = a.taskCorto || a.task || tr('processi.agents.noTaskShort');
+  const nome = nomeDellAgente(a) || tr('processi.agents.noTaskShort'); // L3-17: il nome dell'agente, una funzione sola
   /* ⛔ Le classi sono ESATTAMENTE quelle del «…» della Libreria (`libreria.js`), non un secondo
      vestito per lo stesso oggetto: zero CSS nuovo, e se il tema cambia cambiano insieme. */
   const b = el(d, 'button', 'talos-button talos-button--ghost talos-button--sm');
@@ -1476,10 +1482,10 @@ export function disegnaAgenti(d, contenitore, agenti, azioni = {}) {
       const successiva = el(d, 'button', 'talos-button talos-button--ghost talos-button--sm', tr('agenti.delegations.next')); successiva.type = 'button'; successiva.setAttribute('aria-label', tr('processi.agents.nextPage'));
       pagine.append(precedente, pagina, successiva);
       barra.append(titolo, grafo, cerca, filtro, conto); contenitore.replaceChildren(barra, righe, pagine);
-      s = { sessionId: azioni.sessionId, cerca, filtro, valore: 'tutti', conto, righe, dati: [], azioni: {}, pagina: 0 };
+      s = { sessionId: azioni.sessionId, cerca, filtro, valore: 'tutti', conto, righe, dati: [], azioni: {}, pagina: 0, richiesteAperte: new Map() };
       const disegna = () => {
         const q = s.cerca.value.toLocaleLowerCase().trim();
-        const filtrati = s.dati.filter(a => (!q || `${a.taskCorto || ''} ${a.task || ''} ${a.modello || ''}`.toLocaleLowerCase().includes(q)) && (s.valore === 'tutti' || statoDelega(a) === s.valore));
+        const filtrati = s.dati.filter(a => (!q || `${a.nome || ''} ${a.taskCorto || ''} ${a.task || ''} ${a.modello || ''}`.toLocaleLowerCase().includes(q)) && (s.valore === 'tutti' || statoDelega(a) === s.valore));
         const paginaMassima = Math.max(0, Math.ceil(filtrati.length / 25) - 1);
         s.pagina = Math.min(s.pagina, paginaMassima);
         const inizio = s.pagina * 25;
@@ -1487,7 +1493,39 @@ export function disegnaAgenti(d, contenitore, agenti, azioni = {}) {
         if (s.conto.textContent !== testoConto) s.conto.textContent = testoConto;
         const attivo = d.activeElement, rigaAttiva = s.righe.contains(attivo) ? attivo.closest('[data-sessione-figlia]') : null;
         const idAttivo = rigaAttiva?.dataset.sessioneFiglia, menuAttivo = attivo?.getAttribute('aria-haspopup') === 'menu';
-        disegnaAgenti(d, s.righe, filtrati.slice(inizio, inizio + 25), { onApri: s.azioni.onApri, onMenu: s.azioni.onMenu, compatta: true });
+        /* ⛔ 12/10/2026, owner («bisogna differenziare le deleghe passate dalle deleghe nuove» ⇒ «Una richiesta alla volta… il
+           pannello Agenti fa lo stesso: prima la richiesta in corso, le passate chiuse sotto, ognuna col suo titolo»). Con più
+           richieste che hanno delegato l'elenco si divide in gruppi, la più recente in cima e aperta, le altre ripiegate. Una
+           ricerca o un filtro di stato apre tutto: chi cerca un agente non deve sapere in quale richiesta stava. */
+        const gruppi = new Map();
+        for (const a of filtrati) if (a.richiesta?.id) { if (!gruppi.has(a.richiesta.id)) gruppi.set(a.richiesta.id, { richiesta: a.richiesta, agenti: [] }); gruppi.get(a.richiesta.id).agenti.push(a); }
+        const tutteLeRichieste = new Set(s.dati.map(a => a.richiesta?.id).filter(Boolean));
+        if (tutteLeRichieste.size > 1 && filtrati.every(a => a.richiesta?.id)) {
+          const ordinati = [...gruppi.values()].sort((x, y) => Date.parse(y.richiesta.at) - Date.parse(x.richiesta.at));
+          const cercando = Boolean(q) || s.valore !== 'tutti';
+          const piuRecente = [...s.dati].filter(a => a.richiesta?.id).sort((x, y) => Date.parse(y.richiesta.at) - Date.parse(x.richiesta.at))[0]?.richiesta.id;
+          const aperta = (id) => cercando || (s.richiesteAperte.has(id) ? s.richiesteAperte.get(id) : id === piuRecente);
+          const inPagina = new Set(filtrati.filter(a => aperta(a.richiesta.id)).slice(inizio, inizio + 25));
+          const pezzi = [];
+          for (const g of ordinati) {
+            const { terminati: finiti, daControllare } = contoDellaRichiesta(g.agenti);
+            const titolo = g.richiesta.corrente ? tr('agenti.workflow.requestThis') : tr('agenti.workflow.requestAt', { ora: oraBreve(g.richiesta.at) });
+            const testa = el(d, 'button', 'talos-agenti-richiesta'); testa.type = 'button'; testa.dataset.richiestaId = g.richiesta.id;
+            testa.setAttribute('aria-expanded', String(aperta(g.richiesta.id))); testa.title = g.richiesta.testo || titolo;
+            testa.append(el(d, 'span', 'talos-agenti-richiesta__titolo', g.richiesta.testo ? `${titolo} · ${g.richiesta.testo}` : titolo),
+              el(d, 'span', 'talos-agenti-richiesta__conto', `${tn('agenti.graph.agentOne', 'agenti.graph.agentMany', g.agenti.length, { n: conteggioAgenti(g.agenti.length) })} · ${finiti === g.agenti.length ? tr('agenti.workflow.requestAllDone') : tr('agenti.graph.finishedOf', { fatti: finiti, totale: g.agenti.length })}${daControllare ? ` · ${tr('agenti.graph.toCheck', { n: daControllare })}` : ''}`));
+            testa.addEventListener('click', () => { s.richiesteAperte.set(g.richiesta.id, !aperta(g.richiesta.id)); s.pagina = 0; disegna(); s.righe.querySelector(`[data-richiesta-id="${g.richiesta.id}"]`)?.focus({ preventScroll: true }); });
+            const corpo = el(d, 'div', 'talos-agenti-richiesta__agenti');
+            const suoi = g.agenti.filter(a => inPagina.has(a));
+            if (suoi.length) disegnaAgenti(d, corpo, suoi, { onApri: s.azioni.onApri, onMenu: s.azioni.onMenu, compatta: true });
+            pezzi.push(testa, ...(suoi.length ? [corpo] : []));
+          }
+          s.righe.replaceChildren(...pezzi);
+          s.visibili = filtrati.filter(a => aperta(a.richiesta.id)).length;
+        } else {
+          s.visibili = filtrati.length;
+          disegnaAgenti(d, s.righe, filtrati.slice(inizio, inizio + 25), { onApri: s.azioni.onApri, onMenu: s.azioni.onMenu, compatta: true });
+        }
         if (s.dati.length && !filtrati.length) s.righe.replaceChildren(el(d, 'p', 'talos-inspector__hint', tr('agenti.delegations.noAgentForFilters')));
         if (idAttivo) {
           const riga = [...s.righe.querySelectorAll('[data-sessione-figlia]')].find(n => n.dataset.sessioneFiglia === idAttivo);
@@ -1497,9 +1535,12 @@ export function disegnaAgenti(d, contenitore, agenti, azioni = {}) {
           b.setAttribute('aria-pressed', String(b.dataset.stato === s.valore));
           b.hidden = ['ignoto', 'interrotta', 'in-pausa'].includes(b.dataset.stato) && s.valore !== b.dataset.stato && !s.dati.some(a => statoDelega(a) === b.dataset.stato);
         }
-        pagine.hidden = filtrati.length <= 25;
-        pagina.textContent = tr('agenti.delegations.pageRange', { da: conteggioAgenti(filtrati.length ? inizio + 1 : 0), a: conteggioAgenti(Math.min(inizio + 25, filtrati.length)), totale: conteggioAgenti(filtrati.length) });
-        precedente.disabled = s.pagina === 0; successiva.disabled = s.pagina >= paginaMassima;
+        // le pagine contano ciò che si VEDE: gli agenti di una richiesta ripiegata non occupano pagine
+        const visibili = s.visibili ?? filtrati.length; const ultimaPagina = Math.max(0, Math.ceil(visibili / 25) - 1);
+        if (s.pagina > ultimaPagina) { s.pagina = ultimaPagina; disegna(); return; }
+        pagine.hidden = visibili <= 25;
+        pagina.textContent = tr('agenti.delegations.pageRange', { da: conteggioAgenti(visibili ? inizio + 1 : 0), a: conteggioAgenti(Math.min(inizio + 25, visibili)), totale: conteggioAgenti(visibili) });
+        precedente.disabled = s.pagina === 0; successiva.disabled = s.pagina >= ultimaPagina;
       };
       for (const [valore, testo] of [['tutti', 'processi.agents.filterAll'], ['in-corso', 'processi.agents.filterActive'], ['attesa', 'processi.agents.filterWaiting'], ['fallita', 'processi.agents.filterErrors'], ['conclusa', 'processi.agents.filterFinished'], ['interrotta', 'processi.agents.filterStopped'], ['in-pausa', 'processi.agents.filterPaused'], ['ignoto', 'processi.agents.filterUnavailable']]) {
         const b = el(d, 'button', '', tr(testo)); b.type = 'button'; b.dataset.stato = valore;
@@ -1552,7 +1593,8 @@ export function disegnaAgenti(d, contenitore, agenti, azioni = {}) {
       card.classList.add('talos-inspector-card--apribile');
       card.setAttribute('role', 'button');
       card.tabIndex = 0;
-      card.setAttribute('aria-label', tr('processi.agents.openConversationOf', { nome: a.taskCorto || a.task || tr('processi.agents.noTaskShort') }));
+      /* L3-17 (S4, accessibilità): l'etichetta era la consegna INTERA (fino a 7.550 caratteri sul 4174), letta tutta a ogni scheda */
+      card.setAttribute('aria-label', tr('processi.agents.openConversationOf', { nome: nomeDellAgente(a) || tr('processi.agents.noTaskShort') }));
       const apri = () => azioni.onApri(a);
       card.addEventListener('click', apri);
       card.addEventListener('keydown', (evento) => {
@@ -1574,7 +1616,7 @@ export function disegnaAgenti(d, contenitore, agenti, azioni = {}) {
     /* ⛔ 09/09: `taskCorto` prima di `task` — la consegna intera comincia col preambolo del kernel,
        uguale per ogni figlia, e a 52 caratteri due deleghe diverse diventano la stessa riga (visto
        nella foto della scheda «Agenti» del giro D2). Il ripiego su `task` regge le figlie vecchie. */
-    head.append(el(d, 'b', '', tronca(a.taskCorto || a.task || tr('agenti.agent.noTaskRecorded'), 52)), el(d, 'span', `talos-badge talos-badge--sm${statoDelega(a) === 'fallita' ? ' talos-badge--danger' : statoDelega(a) === 'conclusa' ? ' talos-badge--success' : ['in-pausa', 'interrotta'].includes(statoDelega(a)) ? ' talos-badge--warning' : ''}`, etichettaDelega(a)));
+    head.append(el(d, 'b', '', tronca(nomeDellAgente(a) || tr('agenti.agent.noTaskRecorded'), 52)), el(d, 'span', `talos-badge talos-badge--sm${statoDelega(a) === 'fallita' ? ' talos-badge--danger' : statoDelega(a) === 'conclusa' ? ' talos-badge--success' : ['in-pausa', 'interrotta'].includes(statoDelega(a)) ? ' talos-badge--warning' : ''}`, etichettaDelega(a)));
     /*
      * ⛔⛔ 10/09, owner, regola generale e non un caso: «non mettere i pulsanti uno accanto
      *   all'altro, usa i tre puntini + dropdown… e anche azioni tasto destro mouse, ragiona sempre
@@ -1593,7 +1635,8 @@ export function disegnaAgenti(d, contenitore, agenti, azioni = {}) {
       const icona = el(d, 'span', 'talos-agenti-icona'); icona.setAttribute('aria-hidden', 'true');
       const svg = d.createElementNS('http://www.w3.org/2000/svg', 'svg'), use = d.createElementNS('http://www.w3.org/2000/svg', 'use');
       svg.setAttribute('class', 'i'); use.setAttribute('href', '#i-robot'); svg.append(use); icona.append(svg); card.prepend(icona);
-      const descrizione = a.task || a.modello;
+      // NOME-REV-03 (16/10): `task` manca quando è uguale a `taskCorto` (L3-17): il compito, non il modello
+      const descrizione = senzaInganniSuPiuRighe(a.task || a.taskCorto || '') || a.modello;
       if (descrizione) card.append(el(d, 'p', 'talos-agenti-compito', descrizione));
       const meta = el(d, 'div', 'talos-agenti-meta');
       if (a.attivita?.attrezzoCorrente) meta.append(el(d, 'span', '', nomeUmanoAttrezzo(a.attivita.attrezzoCorrente)));
@@ -1719,6 +1762,20 @@ export function schedaAgentiDaRileggere({ elenco = [], sessioneCorrente = null, 
 }
 
 // ⛔ 06/9, T05-D3: «interrotta» PRIMA di «in corso» — un figlio che nessuno sta più eseguendo non è vivo.
+/*
+ * L3-15 (13/10/2026, foto del 4174 sullo stesso gruppo: il pannello Agenti «5 di 6 terminati», il diagramma «6 di 6 terminati»).
+ *   Erano DUE definizioni di «terminato»: qui contava solo la riuscita (`statoDelega === 'conclusa'`, che per giunta include un
+ *   esito incerto), il diagramma conta ogni stato finale — riuscito, fallito, fermato — e lascia fuori l'incerto, che aspetta una
+ *   verifica (`run-dalle-deleghe.js`, `TERMINALI` e `ATTENZIONE`). «Terminati» è la parola del diagramma e vale lì: un agente
+ *   fallito o fermato è terminato. Ciò che il pannello voleva dire in più (non tutti sono andati bene) lo dice ora come il
+ *   diagramma: «· N da controllare».
+ * ⛔ Lo stato si legge con `statoDelPasso` del diagramma (un posto solo); i due insiemi sono quelli del diagramma, importati, e
+ *   `tests/unit/l3-15-terminati-pannello-e-diagramma.test.mjs` tiene uguali i due conti su ogni combinazione di stati.
+ */
+export function contoDellaRichiesta(agenti = []) {
+  const stati = agenti.map((a) => statoDelPasso(a));
+  return { totale: stati.length, terminati: stati.filter((s) => PASSO_TERMINATO.has(s)).length, daControllare: stati.filter((s) => PASSO_DA_CONTROLLARE.has(s)).length };
+}
 function statoDelega(a) {
   if (a?.interrotta === true || a?.motivoChiusura === 'fermata') return 'interrotta';
   // C3 tappa 4: in pausa non è né un errore né una fine (chiude con un RunError «in-pausa»): uno stato suo
@@ -2178,7 +2235,7 @@ export function processiDagliEventi(eventi = [], { adesso = Date.now(), nomiComa
       p.uscita = Number.isFinite(e.uscita) ? e.uscita : (e.errore ? 1 : 0);
       /* ⛔ 17/09 sera — il rifiuto vince sul codice di uscita: un comando negato all'approvazione
          non è mai partito, e «REFUSED» non porta nessun `exit N` da cui dedurlo. */
-      p.stato = e.rifiutato === true || e.senzaSuite === true ? 'non-eseguito' : statoDaUscita(p.uscita, Boolean(e.errore));
+      p.stato = e.rifiutato === true || e.senzaSuite === true || e.doppione === true ? 'non-eseguito' : statoDaUscita(p.uscita, Boolean(e.errore)); // 12/10/2026: una copia identica saltata non è partita
       /* ⛔ BUG-14 (05/10/2026) — lo sfondo vince sull'«uscita» che non c'è (non è uscito), ma perde contro il rifiuto:
          un comando negato dal consenso non è mai partito, quindi non può essere in sfondo. Il file e chi lo ha sfondato
          passano solo se l'evento li porta davvero (niente stringhe vuote a schermo). */

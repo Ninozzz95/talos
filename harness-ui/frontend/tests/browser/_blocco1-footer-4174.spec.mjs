@@ -106,7 +106,7 @@ test.afterAll(() => {
  *   finestra. Il numero che la dichiara è `scorrevole: false`.
  */
 for (const tema of ['dark', 'light']) {
-  test(`4174 (3840x2060, ${tema}) — la sua misura, senza filtri: il piede tocca il fondo`, async ({ page }) => {
+  test(`@sonda-4174 4174 (3840x2060, ${tema}) — la sua misura, senza filtri: il piede tocca il fondo`, async ({ page }) => {
     test.setTimeout(60000);
     await apri(page, { tema, larghezza: 3840, altezza: 2060 });
     const m = await page.evaluate(MISURA);
@@ -123,7 +123,7 @@ for (const tema of ['dark', 'light']) {
    riga della cura. Questa prova PRETENDE il difetto: se il piede restasse in fondo anche senza la
    riga, vorrebbe dire che la riga non è quella che lo tiene su — e la cura sarebbe un'altra. */
 for (const tema of ['dark', 'light']) {
-  test(`4174 (3840x2060, ${tema}) — il PRIMA: senza la riga il piede risale, e la riga è quella`, async ({ page }) => {
+  test(`@sonda-4174 4174 (3840x2060, ${tema}) — il PRIMA: senza la riga il piede risale, e la riga è quella`, async ({ page }) => {
     test.setTimeout(60000);
     await apri(page, { tema, larghezza: 3840, altezza: 2060, senzaCura: true });
     const m = await page.evaluate(MISURA);
@@ -137,7 +137,7 @@ for (const tema of ['dark', 'light']) {
 /* ⛔ Il ramo OPPOSTO, coi dati veri: quando la barra sborda, la cura non deve spostare niente — è
    il caso in cui il piede lo tiene su lo sticky, e il margine automatico vale zero. */
 for (const tema of ['dark', 'light']) {
-  test(`4174 (1440x1600, ${tema}) — con la barra che sborda il piede resta al fondo`, async ({ page }) => {
+  test(`@sonda-4174 4174 (1440x1600, ${tema}) — con la barra che sborda il piede resta al fondo`, async ({ page }) => {
     await apri(page, { tema, larghezza: 1440, altezza: 1600 });
     const m = await page.evaluate(MISURA);
     console.log(`MISURA-4174-BLOCCO1 1440x1600 ${tema} = ${JSON.stringify(m)}`);
@@ -151,7 +151,7 @@ for (const tema of ['dark', 'light']) {
    che si vede — `querySelectorAll` restituisce anche le righe nascoste, e contarle tutte faceva
    sembrare che il filtro non avesse fatto niente (misurato, non supposto). */
 for (const tema of ['dark', 'light']) {
-  test(`4174 (3840x2060, ${tema}) — con la ricerca attiva il piede resta in fondo`, async ({ page }) => {
+  test(`@sonda-4174 4174 (3840x2060, ${tema}) — con la ricerca attiva il piede resta in fondo`, async ({ page }) => {
     test.setTimeout(60000);
     await apri(page, { tema, larghezza: 3840, altezza: 2060 });
     const contaVisibili = () => page.evaluate(() => [...document.querySelectorAll('#sessionList .talos-session-item, #sessionList .td-session-row, #sessionList .real-session-item')].filter((n) => !n.hidden && n.offsetParent !== null).length);

@@ -310,6 +310,10 @@ export function createProviderProbe({ leggiChiave, leggiRuntime, fetchImpl = fet
     }
 
     const runtime = leggiRuntime(provider) || {};
+    /* ⛔ 14/10/2026, owner: la chiave va solo all'indirizzo scelto; senza una scelta nemmeno la prova la manda da qualche parte. */
+    if (runtime.endpointDaScegliere === true) {
+      return nonGiudicata({ provider, esito: 'non-provabile', ...motivoDi(`${etichetta}: choose where the key goes first, in Configure.`, 'server.probe.endpointNotChosen', nome), codice: 'PROVIDER_ENDPOINT_NOT_CHOSEN', modelli: null, millisecondi: null });
+    }
     let url;
     // P-K — la costruzione è condivisa con il trasporto, compresa l'eventuale scadenza.
     let cloud;
@@ -512,6 +516,7 @@ export function createProviderProbe({ leggiChiave, leggiRuntime, fetchImpl = fet
     }
     const key = leggiChiave(provider);
     if (!key) throw new ProviderProbeError(`Enter the ${etichetta} key in the Providers panel.`, 'PROVIDER_KEY_MISSING');
+    if (runtime?.endpointDaScegliere === true) throw new ProviderProbeError(`${etichetta}: choose where the key goes first, in Configure.`, 'PROVIDER_ENDPOINT_NOT_CHOSEN'); // owner 14/10
     // P-J — nessun catalogo remoto documentato: nessuna generazione o GET sostitutivo.
     // ⛔ CLI-REQ-06 — la condizione è «non ha un elenco», non «ha una richiesta minima»: i quattro
     //   fornitori a catalogo pubblico hanno entrambe le cose, e il loro elenco vero si chiede a loro.
@@ -578,7 +583,22 @@ export function createProviderProbe({ leggiChiave, leggiRuntime, fetchImpl = fet
       if (cursor && (cursors.has(cursor) || cursors.size >= 20)) throw new ProviderProbeError('Catalog pagination invalid.', 'CATALOG_UPSTREAM_ERROR');
       cursors.add(cursor);
     } while (cursor);
-    const modelli = rows.filter(row => provider === 'gemini' ? row.supportedGenerationMethods?.includes('generateContent') && !/(tts|image)/u.test(row.name) : provider === 'openai' ? /^(gpt-|chatgpt-|o[1-9])/u.test(row.id) && !/(audio|realtime|transcribe|tts|image|codex|instruct)/u.test(row.id) : typeof row.id === 'string').map(row => {
+    /*
+     * ⛔ 16/10/2026 (segnalato dalla CLI, stress test della 0.6.6, riprodotto sulla 0.6.6 pubblicata) — il filtro dei NOMI di OpenAI vale
+     *   solo sul catalogo di OpenAI. Con un indirizzo scelto dalla persona (LiteLLM, vLLM, LM Studio, un proxy) i nomi li decide quel
+     *   server: `/^(gpt-|chatgpt-|o[1-9])/` li buttava tutti, `/model` non li elencava e un sotto-agente su uno di loro veniva rifiutato
+     *   («is not one of the models this app can use»). Lì valgono tutti gli id, come per ogni fornitore compatibile.
+     */
+    /* Owner 16/10/2026 (FILTRO-REV-02 del bugfixer, «Nascondili anche lì»): su un indirizzo scelto dalla persona un proxy davanti a
+       OpenAI elenca anche voce, embedding, immagini e trascrizione. Lì si tolgono solo i modelli che non conversano, riconosciuti dal
+       nome; il filtro dei nomi «gpt-» resta del solo catalogo di OpenAI. Rischio accettato: un modello della persona chiamato così
+       non compare. */
+    /* 16/10 sera (bugfixer della CLI): anche moderazione e i vecchi modelli a completamento (babbage, davinci). ⛔ «instruct» NO: nasconderebbe
+       ogni modello aperto «…-Instruct» (Qwen2.5-7B-Instruct, Llama-3.1-8B-Instruct), proprio quelli che si caricano in LM Studio e vLLM. */
+    const NON_CONVERSANO_SU_UN_INDIRIZZO_SCELTO = /(tts|embedding|dall-e|gpt-image|whisper|audio|realtime|transcribe|moderation|babbage|davinci)/iu;
+    const host = (indirizzo) => new URL(indirizzo).hostname.replace(/\.$/u, ''); // «api.openai.com.» (punto finale del DNS) è lo stesso host: FILTRO-REV-01 del bugfixer
+    const catalogoUfficiale = (() => { try { return host(runtime?.endpoint || record.baseUrl) === host(record.baseUrl); } catch { return true; } })();
+    const modelli = rows.filter(row => provider === 'gemini' ? row.supportedGenerationMethods?.includes('generateContent') && !/(tts|image)/u.test(row.name) : provider === 'openai' && catalogoUfficiale ? /^(gpt-|chatgpt-|o[1-9])/u.test(row.id) && !/(audio|realtime|transcribe|tts|image|codex|instruct)/u.test(row.id) : provider === 'openai' ? typeof row.id === 'string' && !NON_CONVERSANO_SU_UN_INDIRIZZO_SCELTO.test(row.id) : typeof row.id === 'string').map(row => {
       const id = provider === 'gemini' ? row.name.replace(/^models\//u, '') : row.id;
       const noti = metadatiNoti(record, id);
       return { ...noti, id: `${provider}:${id}`, nome: row.display_name || row.displayName || noti.nome || id, provider,

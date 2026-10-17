@@ -30,7 +30,12 @@ export const ContextSourceRefV1 = z.strictObject({ recordId: id, quote: text, st
 /** 09/09 — una citazione che non si è potuta verificare non sparisce in silenzio: resta qui, con il motivo. */
 export const ContextUnverifiedSourceV1 = z.strictObject({ recordId: z.string(), quote: z.string(), reason: z.enum(['not-found', 'unknown-record', 'out-of-order']) });
 export const ContextSummaryV1 = z.strictObject({ schema: z.literal('talos.context.summary.v1'), text, goal: text, decisions: z.array(z.string()), constraints: z.array(z.string()), completed: z.array(z.string()), pending: z.array(z.string()), resources: z.array(z.string()), sources: z.array(ContextSourceRefV1), unverifiedSources: z.array(ContextUnverifiedSourceV1).optional() });
-export const TokenMeasurementV1 = z.strictObject({ schema: z.literal('talos.context.tokens.v1'), inputTokens: revision, windowTokens: z.number().int().positive(), responseReserve: revision, method: z.enum(['runtime', 'provider', 'heuristic']), exact: z.boolean(), requestHash: z.string(), provider: id, model: id, estimatedMarginTokens: revision.optional() }).refine(value => value.method !== 'heuristic' || !value.exact, 'La stima euristica non è esatta');
+export const TokenMeasurementV1 = z.strictObject({ schema: z.literal('talos.context.tokens.v1'), inputTokens: revision, windowTokens: z.number().int().positive(), responseReserve: revision, method: z.enum(['runtime', 'provider', 'heuristic']), exact: z.boolean(), requestHash: z.string(), provider: id, model: id, estimatedMarginTokens: revision.optional(),
+  /* 16/10/2026 (S2, CLI): la stima di RIPIEGO del contatore dice da quale guasto nasce (`context-token-counters.mjs`, `stimaDopoUnGuasto`).
+     Senza questo campo lo `strictObject` la rifiutava e il giro falliva: il contrario della cura. Solo un codice del contatore. */
+  fallback: z.string().regex(/^CTX_TOKEN_[A-Z_]+$/u).optional() })
+  .refine(value => value.method !== 'heuristic' || !value.exact, 'La stima euristica non è esatta')
+  .refine(value => value.fallback === undefined || value.method === 'heuristic', 'Un ripiego del contatore è sempre una stima');
 export const ContextVersionV1 = z.strictObject({ schema: z.literal('talos.context.version.v1'), id, sessionId: id, coveredThrough: revision, sourceIds: z.array(id), sourceHash: z.string().regex(/^[a-f0-9]{64}$/u), summary: ContextSummaryV1, activeMessages: z.array(message), model, measurement: TokenMeasurementV1, createdAt: date, restoredFrom: id.optional(),
   /* C1 (owner 10/10/2026): ciò che il riassunto ha TENUTO, come dati — le richieste della persona nel registro (numero e testo) e
      l'indice meccanico. Facoltativo: una versione di prima non lo ha, e la scheda lo dice. */

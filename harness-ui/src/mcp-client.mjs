@@ -19,7 +19,8 @@
  * vedi `filtraToolMcp`.
  */
 import { Client } from '@modelcontextprotocol/client'
-import { StdioClientTransport } from '@modelcontextprotocol/client/stdio'
+import { StdioClientTransport, getDefaultEnvironment } from '@modelcontextprotocol/client/stdio'
+import { VARIABILE_DIFESA_RICERCA, risolviProgrammaSenzaCartella } from './difesa-ricerca-programmi.mjs'
 
 /**
  * Apre una connessione stdio verso un server MCP e ne fa l'handshake.
@@ -53,9 +54,13 @@ export async function connettiServerMcp(config, deps = {}) {
         version: config.versione ?? '1.0.0',
     }, ...(onElicitazione ? [{ capabilities: { elicitation: { form: {}, url: {} } } }] : []))
     if (onElicitazione) client.setRequestHandler('elicitation/create', async (richiesta) => onElicitazione(richiesta?.params ?? {}))
+    /* ⛔ R1 (CLI 0.6.8, S1): il nome si risolve QUI sul solo PATH (`risolviProgrammaSenzaCartella`): cross-spawn lo cercherebbe prima
+       nella cartella corrente, dove un `node.cmd` piantato dopo la fiducia girerebbe. E il server riceve la difesa nel suo ambiente,
+       così anche i SUOI figli (un MCP git che lancia `git`) non cercano nella cartella. */
     const transport = new TransportCls({
-        command: config.comando,
+        command: risolviProgrammaSenzaCartella(config.comando),
         args: config.argomenti ?? [],
+        env: { ...getDefaultEnvironment(), [VARIABILE_DIFESA_RICERCA]: '1' },
     })
     await client.connect(transport)
     return {

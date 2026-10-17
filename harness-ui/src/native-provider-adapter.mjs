@@ -132,10 +132,34 @@ export async function nativeProviderResponse({ provider, model, apiKey, baseURL,
   /* Con le opzioni esplicite (ragionamento adattivo + livello) il livello NON passa anche dal `reasoning` comune dell'SDK, che non conosce «max». */
   const sforzoEsplicito = provider === 'anthropic' && providerOptions.anthropic?.thinking != null;
   const nativeMessages = toNativeMessages(body.messages, { provider, model });
+  /*
+   * ⛔ Cache del piano fra un giro e l'altro (CLI, 15/10/2026: 91% in cache dentro un giro, 0 fra due giri). Sul filo Responses un
+   *   messaggio di sistema arrivato DOPO la storia (l'aggiornamento del preambolo che l'agent-service APPENDE apposta per non toccare il
+   *   prefisso, `agent-service.mjs` «IL CONTESTO SI APPENDE, NON SI RISCRIVE») finiva in `instructions`, cioè IN TESTA: il prefisso
+   *   cambiava, e con lui la chiave della cache del piano e il riuso del servizio. Responses accetta i messaggi `developer` in qualunque
+   *   punto dell'`input` (l'SDK li converte al loro posto, `@ai-sdk/openai` 4.0.61 `convert-to-openai-responses-input.ts:393-420`):
+   *   in `instructions` vanno solo quelli INIZIALI, gli altri restano dove sono (`allowSystemInMessages`, AI SDK «ModelMessage»,
+   *   ai-sdk.dev/v7/docs/reference/ai-sdk-core/model-message, letto il 15/10/2026: per rigiocare storie che contengono messaggi di
+   *   sistema). ⛔ Solo su Responses: Anthropic rifiuta messaggi di sistema separati dalla conversazione, e lì resta com'era.
+   */
+  const primoNonDiSistema = nativeMessages.findIndex(m => m.role !== 'system');
+  const iniziali = primoNonDiSistema < 0 ? nativeMessages.length : primoNonDiSistema;
+  /* ⛔⛔ 17/10/2026, CLI (misurato sui giornali veri dell'owner): il PIANO ChatGPT rifiuta un `developer` dopo il messaggio della
+     persona — «did not complete» in ~10 ms, e da lì ogni giro della chat fallisce perché il developer resta nella storia (dal 16/10:
+     7 giri su 7 falliti, contro 36 riusciti dal 12/10 al 15/10, 10 dei quali con l'aggiornamento). Rigiocata offline, la richiesta
+     parte: è il servizio a rifiutarla. ⇒ Sul piano si torna al comportamento PROVATO fino al 15/10: tutti i messaggi di sistema in
+     `instructions`. Il prezzo è la cache persa nei giri dopo un aggiornamento, come prima. Le chiavi API OpenAI restano com'erano.
+     Codex fa lo stesso: registra gli aggiornamenti di contesto PRIMA degli elementi della persona (`codex-rs/core/src/codex_thread.rs:858-875`,
+     `record_context_updates_and_set_reference_context_item` poi `inject_client_response_items`, clone del 16/10), mai un developer dopo
+     l'ultimo messaggio della persona. E una chat già rotta guarisce da sola: rigiocate offline con la cura, le 4 storie rotte dell'owner
+     non hanno più un developer dopo la persona (CLI, 17/10). */
+  const sistemaAlSuoPosto = wireResponses && provider !== 'chatgpt' && nativeMessages.slice(iniziali).some(m => m.role === 'system');
   // SDK common reasoning maps support/model differences in the pinned adapters.
   const common = {
-    model: languageModel, messages: nativeMessages.filter(m => m.role !== 'system'),
-    instructions: nativeMessages.filter(m => m.role === 'system'),
+    model: languageModel,
+    ...(sistemaAlSuoPosto
+      ? { messages: nativeMessages.slice(iniziali), instructions: nativeMessages.slice(0, iniziali), allowSystemInMessages: true }
+      : { messages: nativeMessages.filter(m => m.role !== 'system'), instructions: nativeMessages.filter(m => m.role === 'system') }),
     ...(Object.keys(tools).length ? { tools } : {}),
     ...(body.tool_choice ? { toolChoice: typeof body.tool_choice === 'string' ? body.tool_choice : { type: 'tool', toolName: body.tool_choice.function.name } } : {}),
     ...(body.temperature != null ? { temperature: body.temperature } : {}),
@@ -183,6 +207,7 @@ export async function nativeProviderResponse({ provider, model, apiKey, baseURL,
   letti.push(primo);
   const iterator = { next: () => (letti.length ? Promise.resolve(letti.shift()) : grezzo.next()), return: (...a) => grezzo.return?.(...a) };
   const callIndices = new Map();
+  const conArgomenti = new Set(); // F-Y-001: gli id che hanno già ricevuto almeno un pezzo di argomenti
   let completed = false;
   let usageDelloStep; // P-J — conserva raw senza consumare due volte il flusso SDK.
   const stream = new ReadableStream({
@@ -200,8 +225,38 @@ export async function nativeProviderResponse({ provider, model, apiKey, baseURL,
             callIndices.set(part.id, callIndices.size);
             emit({ tool_calls: [{ index: callIndices.get(part.id), id: part.id, type: 'function', function: { name: part.toolName, arguments: '' } }] }); return;
           }
-          if (part.type === 'tool-input-delta') { emit({ tool_calls: [{ index: callIndices.get(part.id), function: { arguments: part.delta } }] }); return; }
-          if (part.type === 'tool-call' && part.invalid) throw part.error ?? new Error('Invalid tool arguments.');
+          if (part.type === 'tool-input-delta') {
+            if (typeof part.delta === 'string' && part.delta !== '') conArgomenti.add(part.id);
+            emit({ tool_calls: [{ index: callIndices.get(part.id), function: { arguments: part.delta } }] }); return;
+          }
+          /*
+           * ⛔ K2 (S2, stress test della CLI 0.6.7, 16/10/2026) — UNA CHIAMATA NON VALIDA NON È UNA CONNESSIONE CADUTA. Qui prima si
+           *   LANCIAVA il `tool-call` con `invalid: true` (attrezzo che non esiste, o argomenti che non sono JSON): il kernel lo leggeva
+           *   come flusso interrotto («The connection to the provider dropped…») e il giro finiva, mentre sui fili compatibili la stessa
+           *   chiamata arriva al dispatch, che la rifiuta col perché («X is not available in this session.», o gli argomenti incompleti)
+           *   e il modello si corregge. `ai` 7.0.93 (`dist/index.js:4169-4185`, `parseToolCall`) mette in `input` l'oggetto se il JSON
+           *   è valido e il testo grezzo se no ⇒ la chiamata prosegue nel ramo qui sotto come una chiamata chiusa qualsiasi. È quello
+           *   che fa opencode (`session/llm.ts:296-312`, clone 2026-09-24): nessun lancio, l'errore torna al modello come esito.
+           */
+          /*
+           * ⛔ CLI 0.6.6, F-Y-001 (bugfixer, 15/10/2026) — GLI ARGOMENTI CHE ARRIVANO SOLO A CHIAMATA CHIUSA. Sul filo Responses
+           *   `@ai-sdk/openai` (4.0.61, `dist/index.js:8600-8612` e `:8104-8125`) emette `tool-input-delta` solo per gli eventi
+           *   `response.function_call_arguments.delta`; un servizio che porta gli argomenti SOLO in `response.output_item.done` dà
+           *   `tool-input-start` e poi il `tool-call` con l'`input` intero. Prima quel `tool-call` si ignorava, e al kernel arrivava
+           *   `arguments: ''`, cioè `{}`: `chatgpt_account {"action":"status"}` rispondeva «needs action» (prova F-Y-001 in
+           *   `tests/indagine-cli-066.test.mjs`). Codex legge la voce CHIUSA (`codex-rs/codex-api/src/sse/responses.rs:358`, `:498`).
+           * ⇒ Se per quell'id non è passato nessun pezzo di argomenti, l'input intero diventa l'UNICO pezzo; se ne sono passati, niente
+           *   (mai due volte gli stessi argomenti). Una chiamata senza `tool-input-start` riceve prima la sua apertura.
+           */
+          if (part.type === 'tool-call' && typeof part.toolCallId === 'string' && !conArgomenti.has(part.toolCallId)) {
+            const intero = typeof part.input === 'string' ? part.input : part.input === undefined ? '' : JSON.stringify(part.input);
+            if (!callIndices.has(part.toolCallId)) {
+              callIndices.set(part.toolCallId, callIndices.size);
+              emit({ tool_calls: [{ index: callIndices.get(part.toolCallId), id: part.toolCallId, type: 'function', function: { name: part.toolName, arguments: '' } }] });
+            }
+            conArgomenti.add(part.toolCallId);
+            if (intero !== '') { emit({ tool_calls: [{ index: callIndices.get(part.toolCallId), function: { arguments: intero } }] }); return; }
+          }
           if (part.type === 'finish-step') usageDelloStep = part.usage; // P-J
           if (part.type === 'finish') {
             const message = responseMessage(await result.response, provider, model, part.finishReason);

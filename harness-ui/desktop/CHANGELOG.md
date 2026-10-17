@@ -6,6 +6,84 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
 
 ## Unreleased
 
+## desktop-v0.1.31 — 2026-10-16
+
+A regular release: installs of 0.1.21 and later receive it automatically. The headline is /goal: give a conversation a goal and
+TALOS keeps working, turn after turn, until the checks you confirmed pass. Delegations get their own diagram, Z.AI keys go only
+where you choose, and the app speaks your system's language.
+
+### New: /goal
+- Type `/goal` in the composer, or let the model propose one: TALOS writes the checks that prove the goal is reached, shows them
+  on a card for you to confirm, and then keeps working on its own.
+- After every turn the checks run in the session folder. A check that fails three times pauses the goal instead of looping; a
+  check that cannot be verified does not use up a try.
+- «Done» has to be earned: a judge must point to a file that is there now, and a read-only reviewer tries to prove the goal is
+  NOT complete before it is declared done. Refuted twice, the goal pauses and says why.
+- The goal strip sits above the composer and folds to one line; it opens by itself only when the goal pauses or ends. The goal
+  pauses when there is no progress, when a check cannot be verified, on an error, or when you stop it, and the reason is on the
+  strip.
+- A conversation with nobody in front of it (an automation) never gets a goal or a question about one.
+
+### Added
+- Delegations are drawn on the Workflow diagram: the agents a conversation started, live, one request at a time with the earlier
+  requests one click away; «Follow», a state filter, isolate a branch, the folder scope, the files each agent touched, and a
+  replay of what the history saved. The old list view is gone.
+- Z.AI asks where your key goes: GLM Coding Plan or pay-as-you-go balance, International or China. The key is sent only to the
+  address you chose; a chat on Z.AI without a choice stops before sending anything and opens the choice.
+- With your ChatGPT plan, TALOS reads the limits the service declares (5 hours, weekly) and waits until they reset.
+- Instant compaction: the summary of a long conversation is prepared in the background before the limit, and at the limit it
+  is swapped in at once instead of stopping the chat for minutes. A summary still being prepared does not hold back a request
+  that fits.
+- Every turn shows when it started and ended, live and in the replay.
+- Two conversations with the same automatic name get a number («-2», «-3»), and older twins are numbered on screen without
+  touching your files.
+
+### Changed
+- The app follows your system's language instead of always starting in Italian; the installer is in English, Italian on an Italian
+  system.
+- Example files (`.example`, `.sample`, `.template`) are read without asking, unless they contain something that looks like a real
+  key.
+- «Read INSTRUCTIONS.md and do it» now works: when you name a file in your own message and ask TALOS to follow it, its
+  instructions count as your request, with the same permissions. A file named by another file, a tool result or a sub-agent
+  stays data, as before.
+- A question that expires no longer stops the turn.
+- The Browser tab always opens a page as a web page, at your screen's pixel density.
+- A terminal opened outside a conversation is created by the server, one per window.
+- Writing a file that may hold keys or passwords now asks, like reading it, except in Full access; a «for this session» yes to
+  read such a file does not cover writing it. Your computer's login credentials (`~/.ssh`, `.aws`, `.netrc`, `.npmrc`…) are
+  never written, at any access level.
+
+### Fixed
+- When the provider says the conversation is too long, TALOS compacts and retries instead of failing; a «too many requests»
+  answer is treated as traffic and waited out, not as a full conversation.
+- Pressing Stop before a request leaves, or while the conversation is being prepared, ends the turn as stopped and says so.
+- A new chat that cannot start keeps your text, attachments and the pending chat.
+- An automation run that cannot be opened stops its session, and an end that could not be saved says so; automations retry when
+  Windows briefly locks their file.
+- An agent has one name everywhere; a name made only of invisible characters falls back to its task.
+- Refusals in the file tree, and the refusal of a second answer to a question, say why.
+- The model pill names the origin only for direct providers; a ChatGPT plan refusal sent inside the stream is read as the
+  plan's refusal.
+- A late system message stays in place, so the provider's prompt cache survives between turns; a settings update that changes
+  nothing writes nothing.
+- The permission line appears only in the main conversation.
+- Doctor sentences are complete in both languages.
+- Keychain faults and temporary file names in the context engine no longer collide.
+- Repeated identical tool calls no longer stop the conversation.
+- The context archive repairs itself when the history no longer matches, keeps only the last copy it set aside, and can export it.
+- «Compact now» on the nearly-full notice starts at once.
+- A passing fault of the ChatGPT plan service is retried instead of ending a sub-agent; two processes renewing the sign-in together
+  no longer throw away the good session.
+- A failed conversation no longer reads «Succeeded» on top of the diagram.
+- A question title longer than 12 characters is shortened instead of blocking the question.
+- The installed app ignores an inherited engine variable and says which engine it loaded.
+- A file name with an NTFS stream (`.env::$DATA`) no longer hides a secret from the permission check.
+- A program placed in the project folder (for example a `node.cmd`) can no longer start in place of the real one when an MCP
+  server, an external agent or a hook starts.
+- On Anthropic, Gemini and OpenAI direct, a call to a tool that does not exist is refused with the reason instead of ending the
+  turn as a dropped connection.
+- In an empty folder the model still knows the permission of the turn.
+
 ## desktop-v0.1.30 — 2026-10-12
 
 A regular release: installs of 0.1.21 and later receive it automatically. Full access stops asking, sub-tasks start reliably,

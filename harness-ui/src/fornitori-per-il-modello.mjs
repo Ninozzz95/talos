@@ -118,7 +118,9 @@ export function creaOspiteFornitori({ providerStore, slugDelFornitoreFn = null, 
     return `Done. ${frasi.join(' ')} It applies from the next request.`;
   }
 
-  return function perLaSessione({ automazioneDelGiro = null } = {}) {
+  return function perLaSessione({ automazioneDelGiro = null, soloLettura = false } = {}) {
+    /* s58 (16/10 notte): con nessuno davanti si legge e basta, come in un giro d'automazione — la carta non avrebbe nessuno a rispondere */
+    const perchéNo = automazioneDelGiro ? 'an automation run' : soloLettura ? 'a turn with nobody in front' : null;
     return async function onFornitoriFn(nome, argomenti = {}, { fase = 'esegui' } = {}) {
       try {
         if (nome === 'provider_exclusions_list') return fase === 'anteprima' ? { ok: true, carta: false } : lista();
@@ -126,7 +128,7 @@ export function creaOspiteFornitori({ providerStore, slugDelFornitoreFn = null, 
           const azione = typeof argomenti?.action === 'string' ? argomenti.action.trim().toLowerCase() : '';
           if (azione === 'status') return fase === 'anteprima' ? { ok: true, carta: false } : statoChatgpt();
           if (azione !== 'disconnect') return rifiuto('chatgpt_account needs action "status" or "disconnect".');
-          if (automazioneDelGiro) return rifiuto('an automation run cannot disconnect ChatGPT: nobody could approve it.');
+          if (perchéNo) return rifiuto(`${perchéNo} cannot disconnect ChatGPT: nobody could approve it.`);
           if (!accessoChatgpt || !accessoChatgpt.stato().collegato) return fase === 'anteprima' ? { ok: true, carta: false } : { ok: true, testo: 'Nothing to do: no ChatGPT account is connected.' };
           if (fase === 'anteprima') return { ok: true, carta: true, azione: { fornitore: 'chatgpt', email: accessoChatgpt.stato().email ?? null } };
           const { revocaConfermata } = await accessoChatgpt.esci();
@@ -134,7 +136,7 @@ export function creaOspiteFornitori({ providerStore, slugDelFornitoreFn = null, 
             : 'Disconnected in TALOS, but OpenAI did not confirm the revocation: the person can also remove TALOS in ChatGPT Settings.' };
         }
         if (nome !== 'provider_exclude' && nome !== 'provider_allow') return rifiuto(`unknown tool ${nome}.`);
-        if (automazioneDelGiro) return rifiuto('an automation run cannot change the excluded providers: nobody could approve it.');
+        if (perchéNo) return rifiuto(`${perchéNo} cannot change the excluded providers: nobody could approve it.`);
         const p = await piano(nome, argomenti ?? {});
         if (p.errore) return rifiuto(p.errore);
         if (p.gia) return fase === 'anteprima' ? { ok: true, carta: false } : { ok: true, testo: `Nothing to change: ${p.gia}` };

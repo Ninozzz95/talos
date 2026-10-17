@@ -15,7 +15,7 @@ function ok(testo, regex, messaggio) { assert.ok(regex.test(testo), messaggio ||
 
 /**
  * Estrae una funzione del monolite (IIFE senza export) e la istanzia con uno
- * `state` finto — stesso attrezzo di `aperti-minori.test.mjs`: si prova il
+ * `state` finto — stesso attrezzo di `aperti-minori-desktop.test.mjs`: si prova il
  * COMPORTAMENTO, non solo il testo.
  */
 /*

@@ -9,7 +9,7 @@
  * prototipo c'era solo il primo, ricostruito); il nome del passo dalla sua riga, che arriva con la sua pagina: finché non
  * c'è, la riga lo dice. Un passo mai partito non ha barra: il suo stato sta scritto nella riga.
  */
-import { formattaDurata, iconaDellaFase, STATI_PASSO } from './comuni.js';
+import { formattaDurata, iconaDellaFase, STATI_PASSO, STATI_TERMINALI } from './comuni.js';
 import { linguaCorrenteDiT, t as tr } from '../lingua.js';
 
 /*
@@ -25,8 +25,14 @@ const CHIAVE_PAROLA_PASSO = Object.freeze({
   succeeded: 'agenti.stepState.done', failed: 'agenti.stepState.failed', cancelled: 'agenti.stepState.cancelled',
   skipped: 'agenti.stepState.skipped', superseded: 'agenti.stepState.superseded', set_aside: 'agenti.stepState.setAside',
 });
-/** Lo stato di un passo IN PAROLE, nella lingua corrente (le stesse parole di `STATI_PASSO`, che restano la fonte dei toni). */
-export const parolaDelPasso = (stato) => tr(CHIAVE_PAROLA_PASSO[stato] ?? 'agenti.stepState.unknown');
+/* ⛔ LE DELEGHE HANNO LE LORO PAROLE (owner 14/10/2026, «Quelle delle deleghe»). Nel diagramma delle deleghe un agente al lavoro
+   diceva «In esecuzione» e uno fermato «Annullato» (le parole del Workflow), mentre il pannello Agenti accanto, il dettaglio
+   dell'agente e la barra laterale dicevano «In corso» e «Interrotto»: la stessa cosa con due nomi nello stesso schermo. Le altre
+   parole coincidevano già. Le chiavi sono quelle del dettaglio dell'agente (`agenti.agent.status*`): una fonte sola. */
+const CHIAVE_PAROLA_DELEGA = Object.freeze({ running: 'agenti.agent.statusRunning', cancelled: 'agenti.agent.statusStopped' });
+/** Lo stato di un passo IN PAROLE, nella lingua corrente (le stesse parole di `STATI_PASSO`, che restano la fonte dei toni).
+ *  `deleghe`: chi disegna le deleghe (un agente delegato non è un passo di workflow). */
+export const parolaDelPasso = (stato, { deleghe = false } = {}) => tr((deleghe ? CHIAVE_PAROLA_DELEGA[stato] : null) ?? CHIAVE_PAROLA_PASSO[stato] ?? 'agenti.stepState.unknown');
 /** Il locale dei numeri e quello degli orari (24 ore anche in inglese, come l'asse e le righe del contesto). */
 export const localeNumeri = () => (linguaCorrenteDiT() === 'en' ? 'en-US' : 'it-IT');
 export const localeOra = () => (linguaCorrenteDiT() === 'en' ? 'en-GB' : 'it-IT');
@@ -48,11 +54,11 @@ const LARGHEZZA_NOMI = 248;
 const SCORTA = 8;
 const TROPPE_RIGHE = 400;
 const tonoDi = (stato) => STATI_PASSO[stato]?.tono ?? 'neutro';
-const parolaDi = parolaDelPasso;
 const ora = (istante) => new Date(istante).toLocaleTimeString(localeOra(), { hour: '2-digit', minute: '2-digit' });
 const INTERVALLI_MIN = [1, 2, 5, 10, 15, 30, 60, 120, 240];
 
-export function creaTempo(host, { icona, onSeleziona, onZoom }) {
+export function creaTempo(host, { icona, onSeleziona, onZoom, deleghe = false }) {
+  const parolaDi = (stato) => parolaDelPasso(stato, { deleghe });
   const d = host.ownerDocument;
   const finestra = d.defaultView;
   const el = (tag, classe, testo) => { const n = d.createElement(tag); if (classe) n.className = classe; if (testo != null) n.textContent = testo; return n; };
@@ -206,18 +212,32 @@ export function creaTempo(host, { icona, onSeleziona, onZoom }) {
     n.dataset.spento = String(dati.spento(r.nodeId));
     tentativi.forEach((tt, k) => {
       const ultimo = k === tentativi.length - 1;
-      const finito = tt.a !== null && tt.a <= fine;
-      const a = finito ? tt.a : fine;
+      /* RIV-T9-01 (riverifica, 14/10/2026): l'ultimo tentativo CHIUSO di uno stato terminale è finito anche se la sua ora è un filo
+         dopo l'asse (l'orologio del server avanti): la barra diceva «→ in corso» mentre il dettaglio diceva l'ora di fine. La
+         barra resta tagliata all'asse (`barra`), il titolo dice l'ora vera. */
+      const finito = tt.a !== null && (tt.a <= fine || (ultimo && STATI_TERMINALI.has(stato)));
+      /* ⛔ Chi non lavora più (fermato, fallito) e non ha un'ora di fine — il processo è morto a metà, o la storia non l'ha — non
+         «sta ancora lavorando»: la sua barra arrivava fino all'istante di adesso («27 h 23 min») col suggerimento «→ in corso»
+         (foto del 14/10/2026). Si disegna dov'è partito, senza una durata che nessuno ha misurato. Stessa regola del dettaglio. */
+      /* T9 (terza passata, 14/10/2026): la fine «non si sa» solo se non la dice NESSUNO. Un passo appena finito ha lo stato
+         terminale (dal fotogramma) e il tentativo ancora aperto finché la storia non si rilegge: se la riga porta la sua ora di
+         fine (`finishedAt`: il fotogramma del Workflow, i fatti di una delega) la barra finisce lì — prima si riduceva a un
+         tratto senza durata per un fotogramma, o per tutto il tempo in cui la storia non rispondeva. */
+      const dichiarata = ultimo && tt.a === null && STATI_TERMINALI.has(stato) && typeof r.finishedAt === 'string' ? Date.parse(r.finishedAt) : NaN;
+      const fineDichiarata = Number.isFinite(dichiarata) ? Math.max(dichiarata, tt.da) : null;
+      const senzaFine = ultimo && tt.a === null && STATI_TERMINALI.has(stato) && fineDichiarata === null;
+      const a = finito ? tt.a : fineDichiarata !== null ? fineDichiarata : senzaFine ? tt.da : fine;
       if (!ultimo) {
         barra(n, tt.da, a, { tono: 'errore', classe: 'gv-tempo-barra--primo',
           titolo: tr('agenti.timeline.attemptFailed', { n: k + 1, da: ora(tt.da), a: finito ? ora(tt.a) : tr('agenti.timeline.stillRunning') }) });
         return;
       }
-      const durata = formattaDurata(a - tt.da);
-      const titolo = `${r.label} · ${parolaDi(stato)} · ${ora(tt.da)} → ${finito ? ora(tt.a) : tr('agenti.timeline.stillRunning')} · ${durata}`;
+      const durata = senzaFine ? null : formattaDurata(a - tt.da);
+      const titolo = senzaFine ? `${r.label} · ${parolaDi(stato)} · ${ora(tt.da)}`
+        : `${r.label} · ${parolaDi(stato)} · ${ora(tt.da)} → ${finito || fineDichiarata !== null ? ora(a) : tr('agenti.timeline.stillRunning')} · ${durata}`;
       const { b, w } = barra(n, tt.da, a, { tono, titolo, cliccabile: r.nodeId });
       b.dataset.stato = stato;
-      if (w > 64) b.append(el('span', 'gv-tempo-barra-testo', durata));
+      if (durata && w > 64) b.append(el('span', 'gv-tempo-barra-testo', durata));
     });
     if (dati.selezionato() === r.nodeId) n.dataset.scelto = 'true';
     return n;

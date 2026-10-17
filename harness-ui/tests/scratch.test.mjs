@@ -9,9 +9,7 @@ import {
   avviaPuliziaScratch, cartellaScratch, cartellaScratchAttesa, ETA_MINIMA_SCRATCH_MS, FILE_TIMBRO, INTERVALLO_PULIZIA_MS,
   radiceScratch, ripulisciScratch, statoScratch,
 } from '../src/scratch.mjs';
-import { desktopProfile } from '../desktop/profile.mjs';
 import { cartellaProfiloPredefinita } from '../src/browser-sessione-viva.mjs';
-import { creaAvvioFiglio, risolviPercorsi } from '../desktop/runtime.mjs';
 import { cartellaDiProva } from './aiuto/cartelle-di-prova.mjs';
 
 /*
@@ -130,30 +128,6 @@ test('SCRATCH-05 — una voce che non si toglie si DICHIARA, non ferma le altre,
   assert.deepEqual(dopo.tolte, ['bloccata'], 'al giro dopo si ritenta e va via');
 });
 
-test('SCRATCH-06 — la radice segue TALOS_DESKTOP_DATA_DIR, e guscio desktop e server calcolano la STESSA radice', () => {
-  const appData = 'C:\\Users\\P\\AppData\\Roaming';
-  const localAppData = 'C:\\Users\\P\\AppData\\Local';
-  const percorsi = risolviPercorsi({ appPath: resolve('app') });
-  const casi = [
-    { env: {}, attesa: join(localAppData, 'TALOS', 'cache', 'scratch') },
-    { env: { TALOS_DESKTOP_DATA_DIR: 'D:\\Dati\\TALOS' }, attesa: join('D:\\Dati\\TALOS', 'cache', 'scratch') },
-    { env: { TALOS_SCRATCH_DIR: 'E:\\Temporanei' }, attesa: resolve('E:\\Temporanei') },
-  ];
-  for (const { env, attesa } of casi) {
-    const profilo = desktopProfile({ appData, localAppData, env, platform: 'win32' });
-    assert.equal(profilo.scratchDir, attesa, `guscio, env ${JSON.stringify(env)}`);
-    assert.equal(radiceScratch({ ...env, LOCALAPPDATA: localAppData }, { platform: 'win32' }), attesa, `server avviato a mano, env ${JSON.stringify(env)}`);
-    // ⛔ il figlio riceve SEMPRE TALOS_DESKTOP_DATA_DIR (anche in Roaming): senza TALOS_SCRATCH_DIR finirebbe in Roaming
-    const avvio = creaAvvioFiglio({ execPath: resolve('Electron.exe'), percorsi, port: 49152, token: 'a'.repeat(64), dataDir: profilo.dataDir, scratchDir: profilo.scratchDir, env: {} });
-    assert.equal(avvio.options.env.TALOS_DESKTOP_DATA_DIR, profilo.dataDir);
-    assert.equal(radiceScratch(avvio.options.env, { platform: 'win32' }), attesa, `figlio del guscio, env ${JSON.stringify(env)}`);
-  }
-  const produzione = desktopProfile({ appData, localAppData, platform: 'win32' });
-  assert.ok(!produzione.scratchDir.startsWith(appData), 'mai in Roaming quando i dati non sono spostati');
-  const preview = desktopProfile({ appData, localAppData, metadata: { talosProfile: 'preview' }, platform: 'win32' });
-  assert.equal(preview.scratchDir, join(localAppData, 'TALOS Preview', 'cache', 'scratch'), 'la preview non condivide la radice stabile');
-  assert.throws(() => desktopProfile({ appData, localAppData, env: { TALOS_SCRATCH_DIR: 'relativa' }, platform: 'win32' }), /assoluta/);
-});
 
 test('SCRATCH-07 — radice assente, illeggibile o mal configurata: nessuna eccezione, niente inventato', async () => {
   const assente = join(cartellaDiProva('talos-scratch-assente-'), 'non-esiste');

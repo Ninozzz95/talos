@@ -30,17 +30,25 @@ export function creaCustodiaChatgpt({ keyring, generazione = () => Date.now().to
     throw errore('The ChatGPT sign-in needs the system keyring.', 'CHATGPT_CUSTODIA_ASSENTE');
   }
   const controlla = (voce) => { if (!VOCI.includes(voce)) throw errore('Unknown ChatGPT keyring entry.', 'CHATGPT_CUSTODIA_VOCE'); };
-  const leggiIndice = (voce) => {
+  /* `severo`: un GUASTO del portachiavi in lettura si propaga (serve a `togli`, che deve sapere quali pezzi togliere); senza,
+     resta «non c'è» come per un indice illeggibile — chi legge per USARE la sessione non ha altro da fare */
+  const leggiIndice = (voce, { severo = false } = {}) => {
+    let grezzo;
+    try { grezzo = keyring.get(SERVIZIO_CHATGPT, `${voce}:indice`); } catch (guasto) { if (severo) throw guasto; return null; }
+    if (!grezzo) return null;
     try {
-      const grezzo = keyring.get(SERVIZIO_CHATGPT, `${voce}:indice`);
-      if (!grezzo) return null;
       const indice = JSON.parse(grezzo);
       return typeof indice?.g === 'string' && Number.isInteger(indice.n) && indice.n > 0 && indice.n <= PEZZI_MASSIMI ? indice : null;
     } catch { return null; }
   };
+  /* ⛔ MOTORE-REV-01 (revisione del bugfixer, 14/10): il portachiavi di sistema NON lancia per una voce assente (misurato:
+     `deletePassword()` → false), quindi un `remove` che lancia è un guasto vero — il pezzo RESTA. Si provano tutti e si
+     restituisce quanti sono rimasti; chi deve dirlo lo dice. */
   const togliPezzi = (voce, indice) => {
-    if (!indice) return;
-    for (let i = 0; i < indice.n; i += 1) { try { keyring.remove(SERVIZIO_CHATGPT, `${voce}:${indice.g}:${i}`); } catch { /* già assente */ } }
+    if (!indice) return 0;
+    let rimasti = 0;
+    for (let i = 0; i < indice.n; i += 1) { try { keyring.remove(SERVIZIO_CHATGPT, `${voce}:${indice.g}:${i}`); } catch { rimasti += 1; } }
+    return rimasti;
   };
 
   return {
@@ -76,18 +84,25 @@ export function creaCustodiaChatgpt({ keyring, generazione = () => Date.now().to
         pezzi.forEach((pezzo, i) => keyring.set(SERVIZIO_CHATGPT, `${voce}:${nuovo.g}:${i}`, pezzo));
         keyring.set(SERVIZIO_CHATGPT, `${voce}:indice`, JSON.stringify(nuovo)); // l'interruttore
       } catch {
-        togliPezzi(voce, nuovo); // niente pezzi orfani; l'indice vecchio punta ancora ai pezzi vecchi
+        togliPezzi(voce, nuovo); // niente pezzi orfani (al meglio); l'indice vecchio punta ancora ai pezzi vecchi
         throw errore('The system keyring refused to store the ChatGPT credentials.', 'CHATGPT_CUSTODIA_FALLITA');
       }
+      /* i pezzi VECCHI dopo una scrittura riuscita: al meglio — la sessione nuova è salvata e attiva, e quelli non li legge più
+         nessuno (l'indice punta ai nuovi); dire «non salvata» sarebbe falso */
       togliPezzi(voce, prima);
     },
 
-    /** Toglie la voce. Non lancia se non c'era. */
+    /** Toglie la voce. Non lancia se non c'era; lancia `CHATGPT_USCITA_INCOMPLETA` se il portachiavi rifiuta (MOTORE-REV-01). */
     togli(voce) {
       controlla(voce);
-      const indice = leggiIndice(voce);
-      try { keyring.remove(SERVIZIO_CHATGPT, `${voce}:indice`); } catch { /* già assente */ }
-      togliPezzi(voce, indice);
+      let indice;
+      try { indice = leggiIndice(voce, { severo: true }); } catch {
+        throw errore('The system keyring could not be read to remove the ChatGPT credentials.', 'CHATGPT_USCITA_INCOMPLETA');
+      }
+      let rimasti = 0;
+      try { keyring.remove(SERVIZIO_CHATGPT, `${voce}:indice`); } catch { rimasti += 1; }
+      rimasti += togliPezzi(voce, indice);
+      if (rimasti > 0) throw errore('The system keyring refused to remove the ChatGPT credentials.', 'CHATGPT_USCITA_INCOMPLETA');
     },
   };
 }

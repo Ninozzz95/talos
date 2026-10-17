@@ -585,6 +585,7 @@ function bancoCambioSessione(b) {
     'disegnaFasciaPianoRichiesto', 'disegnaFasciaModoRitirato', 'programmaSchedaGithub',
     'nascondiAvvisoPiano', 'syncRunComposerState',
     'azzeraSchedaContesto', // C1 (10/10/2026): la scheda Contesto della sessione di prima si dimentica al cambio
+    'renderizzaFasciaObiettivo', // /goal G6 (15/10/2026): la fascia dell'obiettivo si spegne al cambio (prove in obiettivo-fascia)
     'parcheggiaChatAperta']) b[nome] = niente; // B1 (10/10/2026): il parcheggio della chat lasciata ha le sue prove (chat-pronte, b1-chat-pronte)
   return funzione('nuovaGenerazioneSessione', b);
 }
@@ -1123,7 +1124,7 @@ function bancoBolleRigiocate({ restoring = false, differito = false } = {}) {
     aggiornaPiedeChatDaStato: () => { counts.piede = (counts.piede ?? 0) + 1; }, // A1-bis 5: e il chip «Giri»
     reviewDaDisegnareDopoLaStoria: null, renderRealReviewList() {}, renderReviewFile() {}, aggiornaSommarioReviewReale() {}, // B1: la Review rinviata al confine
     statoFasciaPianoRichiesto: () => ({}),
-    grafoAgenti: null, frameGrafoMadre: null, ultimoEventoGrafoMadre: null,
+    spintaDiagrammaDeleghe: null, frameGrafoMadre: null, ultimoEventoGrafoMadre: null,
     caricaCacheSessioneDalRegistro() {}, EVENTI_DELLE_SCHEDE_AGENTE: new Set(),
     segnalaRigaSessioneViva() {}, chiudiAttrezziInterrotti: () => 0,
     chiudiBatchTool() {}, chiudiSegmentoAttivo() {}, contextMonitor: null,
@@ -1136,7 +1137,7 @@ function bancoBolleRigiocate({ restoring = false, differito = false } = {}) {
     bollaRigiocata: (bolla, consegna, immagini) => bollaPerLaRigiocata({ bolla, consegna, immagini, lingue: { intestazioni: ['Attachments of this message:'], prefissiFile: ['attached file: '] } }),
   };
   for (const name of ['riarmaSeguiConversazione', 'scorriAllaBollaAppesa',
-    'appendRealTaskStart', 'appendUserFollowUp', 'appendComandoDiretto', 'handleRealEvent']) {
+    'appendRealTaskStart', 'appendUserFollowUp', 'appendComandoDiretto', 'annotaRichiestaDellaPersona', 'handleRealEvent']) {
     b[name] = funzione(name, b);
   }
   return { b, counts, bubbles, chips, actions };

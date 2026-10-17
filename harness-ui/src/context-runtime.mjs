@@ -8,7 +8,7 @@ import { createDesktopContextService } from './context-desktop-service.mjs';
 import { conAncoraDelFornitore } from './context-token-counters.mjs';
 import { separaFonteModello } from './model-destination.mjs';
 import { storiaPerIlMotore } from './session-registry.mjs'; // C1: le regole del giornale stanno nel registro
-import { RIGA_RECUPERO, indiceMeccanico, leggiTettoEsplicito, TETTO_TOKEN_DEFAULT, FRAZIONE_FINESTRA } from './kernel/compattazione-desktop.mjs';
+import { RIGA_RECUPERO, indiceMeccanico, leggiTettoEsplicito, TETTO_TOKEN_DEFAULT, FRAZIONE_FINESTRA, eNotaDiTalos } from './kernel/compattazione-desktop.mjs';
 /*
  * C1, review del bugfixer su 59cdfdcba (Y1): le BUSTE che TALOS scrive nella conversazione come messaggi `user` — il risultato di
  * un sotto-agente (`confine-dati.mjs::testoDelRisultatoFiglio`), l'esito di un Workflow (`testoDellEsitoWorkflow`), la domanda
@@ -20,6 +20,8 @@ const SCHEMI_DELLE_BUSTE = new Set(['talos.subagent-result.v1', 'talos.workflow-
 const testoDi = (contenuto) => typeof contenuto === 'string' ? contenuto : Array.isArray(contenuto) ? contenuto.filter((p) => typeof p?.text === 'string').map((p) => p.text).join('\n') : '';
 export function eRichiestaDellaPersonaPerIlRegistro(messaggio) {
   if (messaggio?.role !== 'user') return false;
+  /* 13/10/2026 (review di 28c973bdc): nemmeno una nota del kernel (copie scartate, risposta tagliata) è una richiesta della persona */
+  if (eNotaDiTalos(messaggio)) return false;
   const seconda = testoDi(messaggio.content).split('\n')[1];
   if (!seconda?.startsWith('{')) return true;
   try { return !SCHEMI_DELLE_BUSTE.has(JSON.parse(seconda)?.schema); } catch { return true; }

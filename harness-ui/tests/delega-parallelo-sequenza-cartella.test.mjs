@@ -189,7 +189,8 @@ test('TRE PROVE — 2/3 · DUE DELEGHE UNA DOPO L\'ALTRA: la seconda parte a pri
     assert.equal(secondaConclusa?.esitoDelega, 'concluso', 'anche la seconda figlia deve pubblicare il terminale reale');
 
     const figli = registro.elencaFigli(madreId).figli;
-    assert.deepEqual(figli.map((f) => f.task), ['scrivi la PARTE 1', 'scrivi la PARTE 2'],
+    // L3-17 (16/10): `task` non si ripete quando è uguale a `taskCorto`; chi lo legge ripiega su `taskCorto`
+    assert.deepEqual(figli.map((f) => f.task ?? f.taskCorto), ['scrivi la PARTE 1', 'scrivi la PARTE 2'],
       'i due compiti si sono confusi fra loro');
   } finally {
     rimuoviCartellaDiProva(cartellaMadre);

@@ -18,7 +18,7 @@ function registroPerTest(overrides = {}) {
     cartellaDiSessione: (id) => sessioni.get(id) ?? null,
     chiudiPtyFn: (terminalId) => { ptyChiuse.push(terminalId); ptyVive.delete(terminalId); },
     statoPtyFn: (terminalId) => (ptyVive.has(terminalId) ? { viva: true } : null),
-    cartellaStandaloneLegacy: overrides.cartellaStandaloneLegacy ?? null,
+    cartellaStandalone: overrides.cartellaStandalone ?? null,
     schedeMassimePerSessione: overrides.schedeMassimePerSessione ?? SCHEDE_MASSIME_PER_SESSIONE,
     generaId: overrides.generaId ?? (() => { contatore += 1; return `term-${contatore}`; }),
     clock: () => new Date('2026-09-05T10:00:00.000Z'),
@@ -153,35 +153,60 @@ test('⛔⛔ un generaId che collide non sovrascrive MAI una scheda viva', () =>
   assert.equal(registro.elenca('sess-1').items.length, 3);
 });
 
-test('⛔⛔⛔ DEBITO DICHIARATO — la porta standalone legacy è SPENTA di default, e accesa apre solo sulla cartella nominata a costruzione', () => {
-  const spento = registroPerTest();
-  assert.equal(spento.registro.risolviPerConnessione('uuid-inventato-dal-client'), null, 'default STRETTO: un id ignoto si rifiuta');
+/*
+ * ⛔ 16/10/2026, owner («Chiudila adesso», dopo la nota della sessione mobile: un id inventato apriva una shell nella cartella del
+ *   progetto) — la porta «standalone-legacy» è chiusa. Un terminale senza sessione nasce solo da `creaStandalone` (la rotta
+ *   `POST /api/v1/terminals`), con l'id scelto dal server; un id che il server non ha creato si rifiuta SEMPRE.
+ */
+test('⛔⛔⛔ un id inventato si rifiuta SEMPRE, anche con la cartella dei terminali senza sessione impostata', () => {
+  for (const cartellaStandalone of [null, 'C:/progetto-di-default']) {
+    const { registro } = registroPerTest({ cartellaStandalone });
+    assert.equal(registro.risolviPerConnessione('uuid-inventato-dal-client'), null, String(cartellaStandalone));
+    assert.equal(registro._schede.size, 0, 'e non nasce niente');
+  }
+});
 
-  const acceso = registroPerTest({ cartellaStandaloneLegacy: 'C:/progetto-di-default' });
-  const scheda = acceso.registro.risolviPerConnessione('uuid-inventato-dal-client');
+test('⭐⭐ creaStandalone: l\'id lo sceglie il server, la cartella è quella data a costruzione, e solo quell\'id si aggancia', () => {
+  const { registro } = registroPerTest({ cartellaStandalone: 'C:/progetto-di-default' });
+  const scheda = registro.creaStandalone();
+  assert.equal(scheda.terminalId, 'term-1');
   assert.equal(scheda.cartella, 'C:/progetto-di-default');
-  assert.equal(scheda.sessionId, null, 'una scheda standalone non appartiene a nessuna sessione');
-  assert.equal(scheda.origine, 'standalone-legacy');
+  assert.equal(scheda.sessionId, null, 'una scheda senza sessione non appartiene a nessuna sessione');
+  assert.equal(scheda.origine, 'standalone');
+  assert.equal(registro.risolviPerConnessione('term-1')?.terminalId, 'term-1');
+  assert.deepEqual(registro.elencaStandalone().items.map((v) => v.terminalId), ['term-1']);
+  // AL CONTRARIO: senza la cartella non nasce niente, e lo dice
+  const senza = registroPerTest().registro;
+  assert.equal(senza.creaStandalone().code, 'TERMINAL_STORE_UNAVAILABLE');
+  assert.deepEqual(senza.elencaStandalone().items, []);
 });
 
-test('⛔⛔⛔ AL CONTRARIO — la porta legacy ha comunque un TETTO: «qualunque stringa apre una shell» non è più vero nemmeno lì', () => {
-  const { registro } = registroPerTest({ cartellaStandaloneLegacy: 'C:/progetto-di-default', schedeMassimePerSessione: 2 });
-  assert.ok(registro.risolviPerConnessione('a'));
-  assert.ok(registro.risolviPerConnessione('b'));
-  assert.equal(registro.risolviPerConnessione('c'), null, 'oltre il tetto la porta legacy si chiude');
+test('⛔⛔ i terminali senza sessione hanno un TETTO: al tetto si libera il più vecchio SENZA shell viva; se sono tutti vivi, no — e non rubano la cartella di una sessione', () => {
+  // owner 16/10 sera («ognuna la sua»): ogni finestra ha il suo, e una finestra chiusa lo lascia per 24 ore
+  const morte = registroPerTest({ cartellaStandalone: 'C:/progetto-di-default', schedeMassimePerSessione: 2 });
+  const a = morte.registro.creaStandalone().terminalId;
+  const b = morte.registro.creaStandalone().terminalId;
+  const c = morte.registro.creaStandalone();
+  assert.ok(c.terminalId, 'al tetto, con le shell chiuse, una finestra nuova ha il suo terminale');
+  assert.deepEqual(morte.registro.elencaStandalone().items.map((v) => v.terminalId).sort(), [b, c.terminalId].sort());
+  assert.deepEqual(morte.ptyChiuse, [a], 'il liberato è chiuso anche come shell');
+  // AL CONTRARIO: con le shell vive nessuno viene tolto a chi lo sta usando
+  const vive = registroPerTest({ cartellaStandalone: 'C:/progetto-di-default', schedeMassimePerSessione: 2, ptyVive: ['term-1', 'term-2'] });
+  vive.registro.creaStandalone();
+  vive.registro.creaStandalone();
+  const rifiuto = vive.registro.creaStandalone();
+  assert.equal(rifiuto.code, 'TERMINAL_LIMIT_REACHED');
+  assert.equal(rifiuto.reason, 'standalone-terminals-in-use');
+  assert.equal(vive.registro.elencaStandalone().items.length, 2);
+  for (const voce of vive.registro.elencaStandalone().items) {
+    assert.notEqual(voce.cartella, 'C:/lavoro/uno');
+    assert.notEqual(voce.cartella, 'C:/lavoro/due');
+  }
 });
 
-test('⛔⛔⛔ AL CONTRARIO — nemmeno con la porta legacy accesa una scheda standalone può rubare la cartella di una sessione', () => {
-  const { registro } = registroPerTest({ cartellaStandaloneLegacy: 'C:/progetto-di-default' });
-  const standalone = registro.risolviPerConnessione('id-che-non-e-una-sessione');
-  assert.equal(standalone.cartella, 'C:/progetto-di-default');
-  assert.notEqual(standalone.cartella, 'C:/lavoro/uno');
-  assert.notEqual(standalone.cartella, 'C:/lavoro/due');
-});
-
-test('⛔⛔ una scheda standalone non compare nell\'elenco di NESSUNA sessione', () => {
-  const { registro } = registroPerTest({ cartellaStandaloneLegacy: 'C:/progetto-di-default' });
-  registro.risolviPerConnessione('standalone-x');
+test('⛔⛔ una scheda senza sessione non compare nell\'elenco di NESSUNA sessione', () => {
+  const { registro } = registroPerTest({ cartellaStandalone: 'C:/progetto-di-default' });
+  registro.creaStandalone();
   assert.equal(registro.elenca('sess-1').items.length, 0);
   assert.equal(registro.elenca('sess-2').items.length, 0);
 });

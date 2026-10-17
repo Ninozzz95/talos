@@ -12,6 +12,7 @@ import { pathToFileURL, fileURLToPath } from 'node:url';
 import { isAbsolute } from 'node:path';
 import { statSync } from 'node:fs';
 import { createParser } from 'eventsource-parser';
+import { FRASE_CATALOGO_ASSENTE, FRASE_RUNTIME_NON_CARICATO } from './frasi-runtime-owner.mjs'; // 15/10: le frasi che il Doctor riconosce
 import { eseguiFlowForgeLocale, FORGE_PREFISSO_NOME_TOOL, validaManifestForgeLocale } from './forge-contract.mjs';
 import { parseRuntimeOwnerSnapshot } from './runtime-owner-contract.mjs';
 import { risolviDestinazioneModello, separaFonteModello, FONTI_MODELLO, validaFallbackProviders } from './model-destination.mjs';
@@ -21,7 +22,8 @@ import { creaRilevatoreZai } from './zai-indirizzo.mjs';
 import { leggiAttesaRichiestaDalFornitore, leggiAttesaResetDalCorpo, erroreEsitoProviderIncerto, consumoPubblico, marcaRifiutoProvider } from './provider-retry.mjs';
 import { normalizzaUsage, scontoDaCache } from './usage-cache.mjs'; // 12/09, P-B: i nomi della cache sono uno per fornitore, il lettore uno solo
 import { nativeProviderResponse, stripNativeMetadata } from './native-provider-adapter.mjs';
-import { attesaDelLimiteDelPiano, conPrimoPezzo, creaFetchDelPiano, erroreDelPiano } from './chatgpt-richiesta.mjs';
+import { ATTESA_LIMITE_DEL_PIANO_MASSIMA_MS, attesaDelLimiteDelPiano, conPrimoPezzo, creaFetchDelPiano, erroreDelPiano } from './chatgpt-richiesta.mjs';
+import { attesaFinoAlRipristino, leggiLimitiDelPiano, nomiVisti } from './chatgpt-limiti.mjs';
 import { preparaRichiestaCompatibile, OpenAiCompatibleRuntimeError, aliasGrafiaRagionamento, livelloRagionamentoMinimo, livelloRagionamentoPiuVicino } from './openai-compatible-runtime.mjs'; // P-D (12/09): Z.AI accetta solo alcuni livelli di ragionamento — BUG-18 gen.2: alias, minimo e clamp in UNA scala condivisa (D5)
 import { opzioniRagionamentoPerSintesi } from './context-token-counters.mjs'; // F3 (24/09): le stesse opzioni del corpo contato, fuori OpenRouter
 // P-L · ponte locale senza listener, sessione esterna posseduta dalla Response.
@@ -33,6 +35,7 @@ import { collegaSezioniAiContextHooks } from './context-provider-adapter.mjs';
 // ⭐ 06/10/2026 — la ricarica della memoria post-compact (opzione A + C-b, ricerca 5×5×5×5 §6.4): la
 // compattazione LOCALE riceve lo stesso punto di aggancio del kernel, con lo stesso blocco di fatti.
 import { PREFISSO_SINTESI_RECINTATA, costruisciBloccoFatti } from './kernel/ricarica-post-compact.mjs';
+import { classificaErroreFornitore } from './kernel/compattazione-desktop.mjs';
 import { conUtentiUniti } from './kernel/utenti-uniti.mjs'; // riga del bugfixer 10/10: due `user` di fila, solo verso un motore locale
 // P0 · punto 7 (16/09): il failsafe di inattività e il dispatcher stanno in una porta sola.
 import {
@@ -53,6 +56,12 @@ const RICHIESTA_DI_RIASSUNTO = [
   '(commit, push, publish, delete) must be named VERBATIM with its identifier — the full commit hash.',
 ].join('\n');
 const GIRI_PRIMA_DI_COMPATTARE = 12;
+/** La chiamata secondaria (il riassunto preparato in sottofondo): la richiesta e UN ritentativo (IST2-REV-02, vedi `eseguiConFallback`). */
+const TENTATIVI_DELLA_SECONDARIA = 2;
+/** IST3-REV-01 (16/10): un `Retry-After: 3600` teneva il riassunto «in volo» un'ora, e all'emergenza il giro aspettava lui. Se il
+    fornitore chiede di aspettare più di così, la secondaria smette (`chiamaConRitentaBase`, `attesaRitentaMassimaMs`): il riassunto non è
+    pronto e il giro compatta da sé quando gli serve. */
+const ATTESA_MASSIMA_DELLA_SECONDARIA_MS = 30_000;
 /* OWN-01 (09/10/2026, owner «10 minuti»): il tempo alla prima risposta di riserva è lo stesso predefinito dell'archivio (600 s). */
 const OPENROUTER_IDLE_MS_PREDEFINITO = 600_000;
 const SSE_BUFFER_MASSIMO = 1_048_576;
@@ -893,7 +902,10 @@ function creaFetchInstradata(fetchDiRete = fetch, { risolvi = risolviDestinazion
       if (destinazione.tokenDelPiano) {
         if (typeof dipendenze?.leggiTokenDelPiano !== 'function') throw Object.assign(new Error('No ChatGPT account is connected.'), { code: 'CHATGPT_NON_COLLEGATO' });
         apiKeyNativa = await dipendenze.leggiTokenDelPiano(destinazione.fonte);
-        fetchNativa = creaFetchDelPiano(fetchDiRete);
+        fetchNativa = creaFetchDelPiano(fetchDiRete, { onRisposta: (intestazioni, stato) => {
+          if (typeof dipendenze?.registraLimitiDelPiano !== 'function') return;
+          dipendenze.registraLimitiDelPiano({ limiti: leggiLimitiDelPiano(intestazioni), nomi: nomiVisti(intestazioni), stato });
+        } });
       }
       return sorveglia(await nativeProviderResponse({ provider: destinazione.fonte, model: destinazione.modelloRemoto, apiKey: apiKeyNativa, baseURL: destinazione.baseURL, body: corpo, fetchFn: fetchNativa, signal: opzioni.signal }));
     }
@@ -1086,6 +1098,7 @@ const CONDIZIONI_PRIMA_DELLA_RETE = new Set([
   'RUNTIME_PROCESS_FAILED', 'RUNTIME_OUT_OF_MEMORY', 'RUNTIME_ARCH_UNSUPPORTED', 'RUNTIME_HEALTH_TIMEOUT', 'RUNTIME_ALREADY_RUNNING', 'RUNTIME_START_CANCELLED',
   'RUNTIME_NOT_READY', 'RUNTIME_MISCONFIGURED', 'RUNTIME_INVALID',
   'PROVIDER_RUNTIME_INVALID', 'MODEL_DESTINATION_INVALID',
+  'PROVIDER_ENDPOINT_NOT_CHOSEN', // owner 14/10/2026: l'indirizzo della chiave non è ancora scelto (`model-destination.mjs`)
 ]);
 
 // OpenRouter's structured pre-provider rejection; messages and hints are untrusted prose.
@@ -1124,6 +1137,16 @@ function classificaTuttiEsclusiOpenRouter(testo) {
     : null;
 }
 
+/*
+ * Riverifica del bugfixer (16/10/2026, CP-REV-01): un 429 è un limite di traffico per definizione (RFC 6585 §4, «Too Many Requests»),
+ * anche quando dice «Too many tokens, please wait» (i token al minuto di AWS Bedrock). La tabella BC-44 guarda i segni del contesto prima
+ * di quelli del traffico e lo chiamava `contesto`, non transitorio: niente attesa, niente ritento — e da F1 la frase avrebbe detto
+ * «finestra di contesto». Qui, dove lo stato HTTP c'è, torna `traffico`.
+ */
+function limiteNonContesto(classificazione, stato) {
+  return stato === 429 && classificazione?.classe === 'contesto' ? { classe: 'traffico', transitorio: true } : classificazione;
+}
+
 function erroreFornitorePubblico(classificazione, stato = null) {
   const messaggi = {
     traffico: 'Too much traffic at the provider.', credenziale: 'Credential rejected by the provider.',
@@ -1138,6 +1161,11 @@ function erroreFornitorePubblico(classificazione, stato = null) {
     'richiesta-costosa': 'The estimated cost of the request exceeds the available budget.',
     'limite-credito': 'The service rejected the request because of an unspecified spending limit.',
     'tutti-esclusi': 'Every provider of this model is in your excluded list on OpenRouter.',
+    /* F1 della CLI (prima revisione della 0.6.8, 16/10/2026): la frase porta il marcatore `context_length_exceeded`, così chi riprova
+       dopo un «contesto pieno» (K8 del legacy, il guscio e il servizio del contesto: `classificaErroreFornitore`) lo riconosce anche
+       dietro questo adattatore, che il corpo del fornitore non lo lascia mai passare. */
+    // la classe è quella che la tabella BC-44 (`classificaErroreDiCorsa`) dava già al contesto pieno, ma senza una frase sua
+    contesto: 'The request is larger than the model context window (context_length_exceeded).',
   };
   const e = new Error(messaggi[classificazione.classe] ?? 'The provider did not accept the request.');
   return Object.assign(e, { code: 'PROVIDER_REQUEST_ERROR', stato, ...classificazione, limitatoDalFornitore: classificazione.classe === 'traffico' });
@@ -1226,6 +1254,8 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
   risolvi = risolviDestinazioneModello, dipendenze = null, onAvviso = null,
   providerStore = null, fallbackProviders = [], onCambioFornitore = null, onConsumoFornitore = null,
   modelloSessione = null,
+  /* 14/10/2026 (owner): la chiave Z.AI solo all'indirizzo scelto (`zai-indirizzo.mjs`, `soloIndirizzo`). Di serie come prima. */
+  zaiSoloIndirizzo = false,
   /* P0 · punto 7 (16/09): iniettabile perché una prova non deve aspettare mezz'ora per provarla. */
   inattivitaGenerazioneMs = null,
   /* 17/09: il guardiano del corpo, iniettabile per le prove dello strato cache (vedi `creaFetchInstradata`). */
@@ -1248,7 +1278,7 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
   let effettivo = null, indice = -1, occupato = false;
   // Owner 09/10/2026: l'indirizzo di Z.AI (piano GLM o saldo) per chiave, uno per fetch come la memoria degli attrezzi.
   const rilevatoreZai = typeof providerStore?.indirizzoRilevato === 'function'
-    ? creaRilevatoreZai({ providerStore, fetchFn: fetchDiRete, onAvviso }) : null;
+    ? creaRilevatoreZai({ providerStore, fetchFn: fetchDiRete, onAvviso, soloIndirizzo: zaiSoloIndirizzo === true }) : null;
 
   async function invia(url, opzioni = {}, contesto = {}) {
     let corpo;
@@ -1266,11 +1296,28 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
         const errore = erroreDelPiano(guasto);
         /* Il limite d'uso: il kernel aspetta e rifà la STESSA richiesta (come Claude Code), mostrando quando; «Ferma» annulla. */
         if (errore.code === 'CHATGPT_LIMITE_DEL_PIANO') {
-          const attesa = attesaDelLimiteDelPiano(errore.intestazioni);
+          /* 12/10/2026, owner «come Codex»: se il servizio dichiara QUANDO torna il limite finito, si aspetta fino a lì (oltre 24 ore il
+             giro si ferma, come prima); sennò resta il ritento ogni 30 minuti */
+          const finoAlRipristino = attesaFinoAlRipristino(leggiLimitiDelPiano(errore.intestazioni));
+          const attesa = finoAlRipristino === null ? attesaDelLimiteDelPiano(errore.intestazioni)
+            : (finoAlRipristino > ATTESA_LIMITE_DEL_PIANO_MASSIMA_MS ? null : finoAlRipristino);
           if (attesa !== null) {
             return marcaRifiutoProvider(new Response(JSON.stringify({ error: { code: errore.codiceOpenAi ?? 'subscription_sharing_usage_limit_exceeded', message: errore.message } }),
               { status: 429, headers: { 'Content-Type': 'application/json', 'Retry-After-Ms': String(Math.round(attesa)), 'Retry-After': String(Math.ceil(attesa / 1000)) } }), 'limite-del-piano');
           }
+        }
+        /* ⛔ 12/10/2026 (trascritto dell'owner, sessione ef697840): cinque sotto-agenti partiti insieme col piano, due morti alla
+           PRIMA richiesta con «ChatGPT plan usage cannot be checked right now» (`subscription_sharing_usage_unavailable`, 503).
+           La tabella degli errori li dichiara passeggeri (`transitorio: true`), ma qui si lanciava subito: un guasto lanciato non
+           passa dai ritentativi del kernel, che li fa solo su una RISPOSTA con stato. Ora un guasto passeggero del servizio (5xx, o
+           uno dei due codici «unavailable») torna come risposta col suo stato: il kernel rifà la STESSA richiesta sulla STESSA
+           strada del piano, con le sue attese (e `Retry-After` se il servizio lo dice). Nessun cambio di strada di pagamento
+           («Do not silently switch billing paths on failure»); finiti i tentativi il giro si ferma col codice del piano, più sotto.
+           Un guasto senza stato (rete caduta) resta com'era: lo tratta già la strada dell'esito incerto. */
+        if (errore.transitorio === true && Number.isInteger(errore.stato) && errore.stato >= 500) {
+          const dopo = errore.intestazioni?.['retry-after'];
+          return new Response(JSON.stringify({ error: { code: errore.codiceOpenAi ?? 'service_unavailable', message: errore.message } }),
+            { status: errore.stato, headers: { 'Content-Type': 'application/json', ...(typeof dopo === 'string' && dopo ? { 'Retry-After': dopo } : {}) } });
         }
         throw errore;
       }
@@ -1327,6 +1374,8 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
       if (fonte === 'openrouter' && stato === 402) return;
       // Nemmeno l'elenco degli esclusi della persona: la chiave è sana, e ruotarla o sospenderla non cambierebbe niente.
       if (classificazione.classe === 'tutti-esclusi') return;
+      // F1: nemmeno il contesto pieno — la chiave è sana, è la richiesta a essere troppo grande
+      if (classificazione.classe === 'contesto') return;
       /* ⛔ BUG-25 (06/10/2026) — il credito con una scadenza DICHIARATA (header o corpo) diventa un
        * rifiuto marcato che il kernel ritenta sulla STESSA chiave (parity Claude Code: header-driven,
        * attesa dichiarata vince; il marker non tocca OpenRouter-402 strutturato, RETRY09 resta fermo). */
@@ -1386,9 +1435,14 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
         // Il corpo originale non viene mai restituito al logger/kernel: può contenere la chiave.
         let testo = '';
         try { testo = await leggiDettaglioRifiuto(response, 16_385); } catch { /* lo stato resta disponibile */ }
-        const classificazione = fonte === 'openrouter' && response.status === 402
+        /* F1 della CLI (16/10/2026): un «contesto pieno» del fornitore (413, o il suo testo) usciva come «The provider did not accept
+           the request.» e nessuno lo riprovava — né K8, né il ritentativo di «Non aspettare se entra». Si riconosce QUI, dal testo che
+           solo questo adattatore vede, con lo stesso classificatore di chi riprova. */
+        const contestoPieno = classificaErroreFornitore({ message: testo, status: response.status }) === 'contesto-pieno';
+        const classificazione = contestoPieno ? { classe: 'contesto', transitorio: false }
+          : fonte === 'openrouter' && response.status === 402
           ? classificaLimiteOpenRouter(testo)
-          : (fonte === 'openrouter' && response.status === 404 && classificaTuttiEsclusiOpenRouter(testo)) || classificaGuasto({ message: testo }, response.status);
+          : (fonte === 'openrouter' && response.status === 404 && classificaTuttiEsclusiOpenRouter(testo)) || limiteNonContesto(classificaGuasto({ message: testo }, response.status), response.status);
         /* Owner 09/10/2026 («Riprova sull'altro e lo dice»): «credito finito» da Z.AI ⇒ una sonda sola senza l'indirizzo appena
            rifiutato; se un altro risponde la stessa richiesta riparte lì (non è un ritento: il primo invio è stato rifiutato). */
         if (rilevatoreZai && fonte === 'zai' && scelta && classificazione.classe === 'credito' && !contesto.zaiCambiato) {
@@ -1452,6 +1506,46 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
   fetchMultiProvider.eseguiConFallback = async (chiama, opzioni = {}) => {
     if (modelloSessione && JSON.stringify(separaFonteModello(opzioni.modello)) !== JSON.stringify(separaFonteModello(modelloSessione))) {
       return chiama({ fetchDiRete: fetchMultiProvider });
+    }
+    /*
+     * ⛔⛔ 15/10/2026 notte, giro vero sulla 4177 (glm-5.3-flash) — LA CHIAMATA SECONDARIA. La compattazione istantanea prepara il
+     *   riassunto IN SOTTOFONDO mentre il giro va avanti: è per costruzione una seconda chiamata della sessione in contemporanea, e il
+     *   guardiano qui sotto (una chiamata per volta, perché la catena dei fornitori è uno stato condiviso) la scambiava per un errore:
+     *   la richiesta del giro riceveva `PROVIDER_FALLBACK_BUSY` e il giro FALLIVA, due volte su due. Le prove con la rete finta non
+     *   lo potevano vedere: lì l'involucro non c'è.
+     * ⇒ `secondaria: true` = una richiesta a parte, come quella speculativa di Codex (`core/src/session/async_compaction.rs`, «Holds the
+     *   current speculative request»): un solo tentativo, sul fornitore ATTIVO, senza toccare la catena — niente guardiano, niente
+     *   cambio di fornitore, niente panchina. Fallisce ⇒ lancia, e chi l'ha chiesta (il riassunto in sottofondo) resta senza. Il suo
+     *   `consumo-fornitore` si deposita comunque: il costo del riassunto entra nel conto della sessione (IST-REV-01 del bugfixer).
+     */
+    /* Revisione del bugfixer, 16/10/2026 (IST2-REV-02): «un solo tentativo» qui sopra non lo era — il riassunto passava per i ritentativi
+       del giro (`ritentativiDiSerie`, 10 come Claude Code): su un 429 11 richieste e ~160 s di attese sullo STESSO fornitore limitato,
+       mentre il giro gli chiede le sue, e all'emergenza il giro aspetta proprio quella promessa. Un ritentativo basta a un guasto di
+       passaggio; oltre, il riassunto non è pronto e il giro compatta da sé quando gli serve. */
+    if (opzioni.secondaria === true) {
+      const iniziale = separaFonteModello(opzioni.modello);
+      const destinazione = effettivo ?? { provider: iniziale.fonte, model: iniziale.modelloRemoto };
+      const contesto = { guastiHttp: new Map() };
+      let risultato;
+      try {
+        risultato = await chiama({ modello: `${destinazione.provider}:${destinazione.model}`, fetchDiRete: (url, init) => invia(url, init, contesto), tentativiMassimi: TENTATIVI_DELLA_SECONDARIA, attesaRitentaMassimaMs: ATTESA_MASSIMA_DELLA_SECONDARIA_MS });
+      } catch (error) {
+        if (contesto.scelta && typeof onConsumoFornitore === 'function') {
+          const fermato = Boolean(opzioni.segnaleStop?.aborted || error?.fermatoSuRichiesta || error?.name === 'AbortError');
+          const usage = fermato ? null : consumoPubblico(error?.usage);
+          try {
+            await onConsumoFornitore({ tipo: 'consumo-fornitore', ...destinazione, usage, costoDichiarato: usage?.cost ?? null, esito: fermato ? 'fermato' : 'interrotto' });
+          } catch { /* il deposito non copre l'errore vero */ }
+        }
+        throw error;
+      }
+      const usage = consumoPubblico(risultato?.usage);
+      const costoDichiarato = typeof usage?.cost === 'number' && Number.isFinite(usage.cost) && usage.cost >= 0 ? usage.cost : null;
+      if (typeof onConsumoFornitore === 'function') await onConsumoFornitore({ tipo: 'consumo-fornitore', ...destinazione, usage, costoDichiarato, esito: 'completato' });
+      if (REGISTRO_FORNITORI[destinazione.provider]?.auth?.tipo === 'oauth-pkce' && typeof dipendenze?.registraUsoDelPiano === 'function') {
+        try { await dipendenze.registraUsoDelPiano({ esito: 'completato', usage }); } catch { /* il conteggio è un di più */ }
+      }
+      return { ...risultato, usage, fornitoreEffettivo: destinazione.provider, modelloEffettivo: destinazione.model };
     }
     if (occupato) throw new OwnerRuntimeUnavailableError('A call of this session is already in progress.', 'PROVIDER_FALLBACK_BUSY');
     occupato = true;
@@ -1521,7 +1615,9 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
           /* ⛔ 25/09/2026 sera — e nemmeno il contesto pieno del motore locale: non è transitorio, un fornitore di riserva non
              c'entra, e mascherato da «richiesta non valida» il kernel non potrebbe più comprimere (`ContestoLocalePienoError`). */
           if (error?.code === 'LOCAL_CONTEXT_EXCEEDED') throw error;
-          const classificazione = contesto.errore ?? classificaGuasto(error, error?.stato ?? error?.statusCode);
+          // riverifica del bugfixer (CP-REV-02): anche un 429 LANCIATO (gli SDK nativi) che dice «too many tokens» è traffico
+          const statoLanciato = error?.stato ?? error?.statusCode;
+          const classificazione = contesto.errore ?? limiteNonContesto(classificaGuasto(error, statoLanciato), Number(statoLanciato));
           const incerto = error?.esitoIncerto === true || contesto.errore?.esitoIncerto === true
             || contesto.rispostaAccettata || rispostaInterrotta || Boolean(error?.parziale);
           const pulito = incerto ? erroreEsitoProviderIncerto({ ...classificazione, code: error?.code, causaDiTrasporto: error?.causaDiTrasporto ?? classificazione.causaDiTrasporto, usage: error?.usage })
@@ -1676,6 +1772,8 @@ export function createOwnerRuntimeAdapter({
   resolveImagesFn = null,
   /* Instradamento per modello su OpenRouter (CLI, 08/10/2026): `(modello) => campi del provider | null`. Assente = il comportamento di sempre. */
   openRouterRoutingFn = null,
+  /* 14/10/2026 (owner): la chiave Z.AI solo all'indirizzo scelto, passato a `creaFetchMultiProvider`. Assente = come prima. */
+  zaiSoloIndirizzo = false,
 } = {}) {
   const specifier = normalizzaModuloPath(modulePath);
   let moduloPromise = null;
@@ -1684,7 +1782,7 @@ export function createOwnerRuntimeAdapter({
     if (!moduloPromise) {
       moduloPromise = Promise.resolve(importFn(specifier)).catch((error) => {
         moduloPromise = null;
-        throw new OwnerRuntimeUnavailableError('The agent runtime is not available. Check the server configuration.', 'OWNER_RUNTIME_LOAD_FAILED', { cause: error });
+        throw new OwnerRuntimeUnavailableError(FRASE_RUNTIME_NON_CARICATO, 'OWNER_RUNTIME_LOAD_FAILED', { cause: error });
       });
     }
     return moduloPromise;
@@ -1730,7 +1828,7 @@ export function createOwnerRuntimeAdapter({
       if (!specifier) return null;
       const runtime = await carica();
       if (typeof runtime.listaTaskDisponibili !== 'function' || typeof runtime.preparaEsecuzione !== 'function') {
-        throw new OwnerRuntimeUnavailableError('The agent runtime does not expose the requested task catalog.', 'OWNER_RUNTIME_CONTRACT_INVALID');
+        throw new OwnerRuntimeUnavailableError(FRASE_CATALOGO_ASSENTE, 'OWNER_RUNTIME_CONTRACT_INVALID');
       }
       return Object.freeze({
         list: () => runtime.listaTaskDisponibili(),
@@ -1841,7 +1939,7 @@ export function createOwnerRuntimeAdapter({
       const fetchInstradata = creaFetchMultiProvider(fetchResiliente, {
         /* P0 · punto 7 (16/09): il failsafe della sessione, letto una volta e passato a valle. */
         inattivitaGenerazioneMs: leggiInattivitaGenerazioneMs(),
-        dipendenze: destinazioneModelloDeps, providerStore, fallbackProviders, modelloSessione: input?.modello,
+        dipendenze: destinazioneModelloDeps, providerStore, fallbackProviders, modelloSessione: input?.modello, zaiSoloIndirizzo,
         onAvviso: input?.onAvviso, onCambioFornitore: input?.onCambioFornitore, onConsumoFornitore: input?.onConsumoFornitore,
       });
       const fetchConImmagini = async (url, init = {}, successiva = fetchInstradata) => {
@@ -1986,6 +2084,11 @@ export function createOwnerRuntimeAdapter({
         }
       }
       return richiama('eseguiComandoSandboxato', ...args);
+    },
+    /* /goal G3 (14/10/2026): le prove del contratto passano dallo STESSO cancello dei permessi dell'attrezzo shell, quello del
+       motore che gira la sessione. Un motore che non lo espone fa negare la prova («non verificabile»), mai passare. */
+    async verificaPermessoScrittura(...args) {
+      return richiama('verificaPermessoScrittura', ...args);
     },
     async eseguiFlowForge(...args) {
       if (specifier) return richiama('eseguiFlowForge', ...args);

@@ -11,12 +11,13 @@ import { creaRegistroSchedeTerminale } from '../src/terminal-registry.mjs';
 
 const SESSIONI = { 'sess-1': 'C:/lavoro/uno', 'sess-2': 'C:/lavoro/due' };
 
-async function listen(t, { token = null, senzaRegistro = false } = {}) {
+async function listen(t, { token = null, senzaRegistro = false, cartellaStandalone = null } = {}) {
   const ptyChiuse = [];
   const terminalRegistry = senzaRegistro ? null : creaRegistroSchedeTerminale({
     cartellaDiSessione: (id) => SESSIONI[id] ?? null,
     chiudiPtyFn: (terminalId) => ptyChiuse.push(terminalId),
     statoPtyFn: () => null,
+    cartellaStandalone,
   });
   const app = createHttpApp({
     staticHandler: async () => null,
@@ -172,4 +173,43 @@ test('⛔ DELETE su una rotta terminale resta 405 come ogni altro metodo non nom
   const risposta = await fetch(`${base}/api/v1/sessions/sess-1/terminals`, { method: 'DELETE' });
   assert.equal(risposta.status, 405);
   assert.equal((await risposta.json()).error.code, 'METHOD_NOT_ALLOWED');
+});
+
+/*
+ * ⛔ 16/10/2026, owner («Chiudila adesso») — i terminali SENZA sessione nascono da `POST /api/v1/terminals`, con l'id del server; un
+ *   id inventato non apre più niente (prima la porta «standalone-legacy» lo accoglieva in una cartella di ripiego).
+ */
+test('⭐⭐⭐ GET/POST /api/v1/terminals: l\'elenco parte vuoto, la POST crea una scheda con un UUID del server, e l\'elenco la mostra', async (t) => {
+  const { base, terminalRegistry } = await listen(t, { cartellaStandalone: 'C:/progetto' });
+  assert.deepEqual((await (await fetch(`${base}/api/v1/terminals`)).json()).data.items, []);
+  const creata = await fetch(`${base}/api/v1/terminals`, JSON_POST);
+  assert.equal(creata.status, 200);
+  const scheda = (await creata.json()).data;
+  assert.match(scheda.terminalId, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+  assert.equal(scheda.cartella, 'C:/progetto');
+  assert.equal(scheda.sessionId, null);
+  assert.equal(scheda.origine, 'standalone');
+  assert.deepEqual((await (await fetch(`${base}/api/v1/terminals`)).json()).data.items.map((v) => v.terminalId), [scheda.terminalId]);
+  assert.equal(terminalRegistry.risolviPerConnessione(scheda.terminalId)?.terminalId, scheda.terminalId, 'quell\'id si aggancia');
+  assert.equal(terminalRegistry.risolviPerConnessione('inventato-123'), null, 'AL CONTRARIO: uno inventato no');
+});
+
+test('⛔⛔ AL CONTRARIO — POST /api/v1/terminals con un corpo o una query è rifiutata e non nasce niente; senza cartella risponde 503', async (t) => {
+  const { base, terminalRegistry } = await listen(t, { cartellaStandalone: 'C:/progetto' });
+  const conCorpo = await fetch(`${base}/api/v1/terminals`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ terminalId: 'me-lo-scelgo-io', cartella: 'C:/Windows' }) });
+  assert.equal(conCorpo.status, 400);
+  const conQuery = await fetch(`${base}/api/v1/terminals?cartella=C:/Windows`, JSON_POST);
+  assert.equal(conQuery.status, 400);
+  assert.equal(terminalRegistry._schede.size, 0);
+  const senza = await listen(t);
+  const risposta = await fetch(`${senza.base}/api/v1/terminals`, JSON_POST);
+  assert.equal(risposta.status, 503);
+  assert.equal((await risposta.json()).error.code, 'TERMINAL_STORE_UNAVAILABLE');
+});
+
+test('⛔⛔ AL CONTRARIO — con il token del server, senza il cookie GET e POST /api/v1/terminals rispondono 401 e non nasce niente', async (t) => {
+  const { base, terminalRegistry } = await listen(t, { token: 'segreto-del-server', cartellaStandalone: 'C:/progetto' });
+  assert.equal((await fetch(`${base}/api/v1/terminals`)).status, 401);
+  assert.equal((await fetch(`${base}/api/v1/terminals`, JSON_POST)).status, 401);
+  assert.equal(terminalRegistry._schede.size, 0);
 });

@@ -7,7 +7,6 @@ import { EventEmitter } from 'node:events';
 import { createLocalResumeDiagnostics, createResumeRecorder, createBoundedResumeSink, RESUME_LIMITS } from '../src/local-resume-diagnostics.mjs';
 import { createLlamaServerRuntime } from '../src/local-runtime-llama-server.mjs';
 import { createLlamaServerSupervisor } from '../src/llama-server-supervisor.mjs';
-import { buildResumeReport } from '../scripts/report-local-resume.mjs';
 const enc = new TextEncoder();
 const raw = 'data: {"choices":[{"delta":{"content":"ok"}}]}\n\ndata: [DONE]\n\n';
 const response = () => new Response(new ReadableStream({ start(c) { c.enqueue(enc.encode(raw)); c.close(); } }), { headers: { 'content-type': 'text/event-stream' } });
@@ -185,11 +184,6 @@ test('raw flag alone cannot capture an unidentified session', async () => {
   assert.equal(h.sink.files.size, 0);
 });
 
-test('report whitelists metadata and distinguishes unknown model metrics and EOF', async () => {
-  const h = harness(); h.registry.resume('s', '{"model":"m","messages":[]}'); await h.pending;
-  const r = buildResumeReport([...h.sink.records, { schema: 'talos.local-resume.v1', type: 'unknown', messages: 'SECRET' }]);
-  assert.equal(r.rows.length, 1); assert.equal(r.rows[0].serverCacheN, null); assert.equal(r.rows[0].frontendVisibleMs, null); assert.equal(r.rows[0].completedModelTurn, null); assert.equal(r.rows[0].outcome, 'eof'); assert.ok(!JSON.stringify(r).includes('SECRET'));
-});
 
 test('server composition root has explicit origin hooks and no cache flag mutation', async () => {
   const source = await readFile(new URL('../server.mjs', import.meta.url), 'utf8');

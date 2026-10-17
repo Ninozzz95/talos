@@ -59,11 +59,20 @@ test('CTX-RUNTIME-COUNT local llama.cpp uses full chat body and runtime measurem
   assert.equal(count.method, 'runtime'); assert.equal(count.exact, true);
 });
 
-test('CTX-COUNT-FAILURE distinguishes absent endpoint from auth, network and malformed data', async () => {
-  for (const [status, payload, code] of [[401, {}, 'CTX_TOKEN_AUTH'], [429, {}, 'CTX_TOKEN_HTTP'], [200, { input_tokens: -1 }, 'CTX_TOKEN_RESPONSE_INVALID'], [200, { input_tokens: '12' }, 'CTX_TOKEN_RESPONSE_INVALID']]) {
+test('CTX-COUNT-FAILURE — a refused credential still fails; an HTTP failure or an unreadable count becomes a declared estimate, never a failed turn', async () => {
+  // 16/10/2026 (CLI, stress test 0.6.6): a 200 without a count, a 429 or a 5xx used to fail the whole turn
+  const rifiutata = createContextTokenCounter({ resolveProfile: async () => ({ baseURL: 'http://127.0.0.1:9000/v1' }), fetchFn: async () => Response.json({}, { status: 401 }) });
+  await assert.rejects(rifiutata.countPreparedContext({ messages, model: model('local') }), { code: 'CTX_TOKEN_AUTH' });
+  for (const [status, payload, code] of [[429, {}, 'CTX_TOKEN_HTTP'], [503, {}, 'CTX_TOKEN_HTTP'], [200, { input_tokens: -1 }, 'CTX_TOKEN_RESPONSE_INVALID'], [200, { input_tokens: '12' }, 'CTX_TOKEN_RESPONSE_INVALID'], [200, { object: 'response', output: [] }, 'CTX_TOKEN_RESPONSE_INVALID']]) {
     const counter = createContextTokenCounter({ resolveProfile: async () => ({ baseURL: 'http://127.0.0.1:9000/v1' }), fetchFn: async () => Response.json(payload, { status }) });
-    await assert.rejects(counter.countPreparedContext({ messages, model: model('local') }), { code });
+    const stima = await counter.countPreparedContext({ messages, model: model('local') });
+    assert.equal(stima.method, 'heuristic', `${status} ${JSON.stringify(payload)}`);
+    assert.equal(stima.exact, false);
+    assert.equal(stima.fallback, code);
+    assert.ok(Number.isSafeInteger(stima.inputTokens) && stima.inputTokens > 0);
   }
+  const nonJson = createContextTokenCounter({ resolveProfile: async () => ({ baseURL: 'http://127.0.0.1:9000/v1' }), fetchFn: async () => new Response('<html>ok</html>', { status: 200 }) });
+  assert.equal((await nonJson.countPreparedContext({ messages, model: model('local') })).fallback, 'CTX_TOKEN_RESPONSE_INVALID');
   const unavailable = createContextTokenCounter({ resolveProfile: async () => ({ baseURL: 'http://127.0.0.1:9000/v1' }), fetchFn: async () => new Response('', { status: 404 }) });
   assert.equal((await unavailable.countPreparedContext({ messages, model: model('local') })).method, 'heuristic');
 });
@@ -106,11 +115,37 @@ test('CTX-REQUEST-OPTIONS rejects auth overrides and output beyond reserved toke
   }
 });
 
-test('CTX-COUNT-NETWORK provider failures retain no response secrets and do not retry', async () => {
+test('CTX-COUNT-TIMEOUT — a counter that accepts the connection and never answers does not hold the turn: after the cap the declared estimate (bugfixer CONTA-REV-01, 16/10/2026)', async () => {
+  const appeso = (_url, { signal }) => new Promise((_, rifiuta) => { signal.addEventListener('abort', () => rifiuta(signal.reason), { once: true }); });
+  const counter = createContextTokenCounter({ resolveProfile: async () => ({ baseURL: 'http://127.0.0.1:9000/v1' }), fetchFn: appeso, tempoMassimoMs: 50 });
+  const inizio = Date.now();
+  const stima = await counter.countPreparedContext({ messages, model: model('local') });
+  assert.equal(stima.method, 'heuristic');
+  assert.equal(stima.fallback, 'CTX_TOKEN_TIMEOUT');
+  assert.ok(Date.now() - inizio < 5000, `${Date.now() - inizio} ms`);
+  // a body that never ends counts too: the cap covers the reading of the answer
+  const corpoAppeso = (_url, { signal }) => Promise.resolve(new Response(new ReadableStream({ start(c) { signal.addEventListener('abort', () => c.error(signal.reason), { once: true }); } }), { status: 200 }));
+  const lento = createContextTokenCounter({ resolveProfile: async () => ({ baseURL: 'http://127.0.0.1:9000/v1' }), fetchFn: corpoAppeso, tempoMassimoMs: 50 });
+  assert.equal((await lento.countPreparedContext({ messages, model: model('local') })).fallback, 'CTX_TOKEN_TIMEOUT');
+  // AL CONTRARIO: a Stop inside the cap still stops, it does not become an estimate
+  const stop = new AbortController();
+  const fermato = createContextTokenCounter({ resolveProfile: async () => ({ baseURL: 'http://127.0.0.1:9000/v1' }), fetchFn: (u, o) => { setTimeout(() => stop.abort(), 10); return appeso(u, o); }, tempoMassimoMs: 5000 });
+  const primaDelloStop = Date.now();
+  await assert.rejects(fermato.countPreparedContext({ messages, model: model('local'), signal: stop.signal }), { name: 'AbortError' });
+  assert.ok(Date.now() - primaDelloStop < 2000, 'the Stop reaches the request at once, not at the cap');
+});
+
+test('CTX-COUNT-NETWORK — an unreachable counter becomes a declared estimate: one call, no retry, no secret in the result; AL CONTRARIO a Stop still stops', async () => {
   let calls = 0;
   const counter = createContextTokenCounter({ resolveProfile: async () => ({ apiKey: 'injected' }), fetchFn: async () => { calls++; throw new Error('secret upstream URL'); } });
-  await assert.rejects(counter.countPreparedContext({ messages, model: model('openai') }), error => error.code === 'CTX_TOKEN_NETWORK' && !JSON.stringify(error).includes('secret') && !error.message.includes('secret'));
+  const stima = await counter.countPreparedContext({ messages, model: model('openai') });
+  assert.equal(stima.method, 'heuristic');
+  assert.equal(stima.fallback, 'CTX_TOKEN_NETWORK');
+  assert.ok(!JSON.stringify(stima).includes('secret'));
   assert.equal(calls, 1);
+  const stop = new AbortController();
+  const fermato = createContextTokenCounter({ resolveProfile: async () => ({ apiKey: 'injected' }), fetchFn: async () => { stop.abort(); throw new Error('aborted'); } });
+  await assert.rejects(fermato.countPreparedContext({ messages, model: model('openai'), signal: stop.signal }), { name: 'AbortError' });
 });
 
 /*

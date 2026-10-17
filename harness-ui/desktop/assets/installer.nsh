@@ -11,22 +11,28 @@
 ; La licenza: l'AGPL dà permessi, non è un contratto da accettare. Il pulsante è «Avanti», non «Accetto», e il testo in
 ; fondo lo dice (Modern UI 2, MUI_LICENSEPAGE_BUTTON / _TEXT_TOP / _TEXT_BOTTOM: definiti PRIMA della pagina, che electron-
 ; builder inserisce con la sua macro licensePage).
+;
+; ⛔ Owner 12/10/2026, «inglese di default e italiano solo se il sistema in cui gira è in italiano, come da regola»: NESSUN testo
+; scritto qui in una lingua sola. Ogni frase è una `$(TalosXxx)`, definita più sotto in `customHeader` per l'inglese (la sorgente)
+; e per l'italiano. La lingua la sceglie NSIS all'avvio da quella dell'interfaccia di Windows fra le lingue caricate
+; (`package.json`, `nsis.installerLanguages`: la PRIMA, l'inglese, è quella di ripiego per ogni altro sistema), senza finestra di
+; scelta (`displayLanguageSelector` resta spento). Una `$(…)` si può usare prima della sua `LangString`: Modern UI 2 fa lo stesso.
 !define MUI_LICENSEPAGE_BUTTON "$(^NextBtn)"
-!define MUI_LICENSEPAGE_TEXT_TOP "La licenza di TALOS: in testa un riassunto in italiano, sotto il testo che fa fede."
-!define MUI_LICENSEPAGE_TEXT_BOTTOM "TALOS è software libero: questa licenza ti dà dei permessi e non ti chiede di accettare niente per usarlo. Premi Avanti per continuare."
-!define MUI_FINISHPAGE_RUN_TEXT "Avvia TALOS"
+!define MUI_LICENSEPAGE_TEXT_TOP "$(TalosLicenzaSopra)"
+!define MUI_LICENSEPAGE_TEXT_BOTTOM "$(TalosLicenzaSotto)"
+!define MUI_FINISHPAGE_RUN_TEXT "$(TalosAvviaTesto)"
 
 !macro customWelcomePage
   ; Owner 11/10/2026: da aggiornamento («Riavvia ora», installer visibile) il benvenuto non serve, si va dritti alla barra
   ; (la licenza e la cartella le salta già electron-builder con la stessa macro, assistedInstaller.nsh).
   !insertmacro skipPageIfUpdated
-  !define MUI_WELCOMEPAGE_TITLE "Installa TALOS"
-  !define MUI_WELCOMEPAGE_TEXT "TALOS si installa solo per il tuo account: non servono permessi di amministratore, e ci vogliono pochi secondi.$\r$\n$\r$\nAl primo avvio ti accoglie la app stessa.$\r$\n$\r$\nPremi Avanti per continuare."
+  !define MUI_WELCOMEPAGE_TITLE "$(TalosBenvenutoTitolo)"
+  !define MUI_WELCOMEPAGE_TEXT "$(TalosBenvenutoTesto)"
   !insertmacro MUI_PAGE_WELCOME
   ; La testata della pagina DOPO, cioè la licenza (electron-builder la inserisce subito dopo con licensePage): quella di
   ; serie dice «Accordo di licenza · Leggi le condizioni dell'accordo», ma l'AGPL non è un accordo da accettare (foto 28/09).
-  !define MUI_PAGE_HEADER_TEXT "Licenza di TALOS"
-  !define MUI_PAGE_HEADER_SUBTEXT "Software libero: che cosa puoi fare e che cosa ti chiede."
+  !define MUI_PAGE_HEADER_TEXT "$(TalosLicenzaTitolo)"
+  !define MUI_PAGE_HEADER_SUBTEXT "$(TalosLicenzaSottotitolo)"
 !macroend
 
 ; Solo per l'utente corrente, sempre (per-user installs): in modalità assistita electron-builder mostrerebbe la pagina «per
@@ -38,8 +44,8 @@
 ; Il titolo della pagina d'installazione (page-specific di Modern UI 2: va definito subito prima di MUI_PAGE_INSTFILES, ed è
 ; qui che assistedInstaller.nsh inserisce customPageAfterChangeDir).
 !macro customPageAfterChangeDir
-  !define MUI_PAGE_HEADER_TEXT "Installazione di TALOS"
-  !define MUI_PAGE_HEADER_SUBTEXT "Prepariamo il tuo spazio di lavoro."
+  !define MUI_PAGE_HEADER_TEXT "$(TalosInstallazioneTitolo)"
+  !define MUI_PAGE_HEADER_SUBTEXT "$(TalosInstallazioneSottotitolo)"
 !macroend
 
 ; Owner 11/10/2026: da aggiornamento la pagina finale non aspetta un clic. TALOS si riapre da solo e l'installer si chiude.
@@ -68,8 +74,33 @@
   !insertmacro MUI_PAGE_FINISH
 !macroend
 
+; I testi, in inglese e in italiano. `customHeader` è il primo gancio DOPO `addLangs` (installer.nsi:43-47 di app-builder-lib
+; 26.16.1): solo da lì in poi esistono ${LANG_ENGLISH} e ${LANG_ITALIAN}. Stessa frase, stessi ritorni a capo, nelle due lingue.
 !macro customHeader
   BrandingText "TALOS"
+
+  LangString TalosLicenzaSopra ${LANG_ENGLISH} "The TALOS license: a short summary first, then the text that counts."
+  LangString TalosLicenzaSopra ${LANG_ITALIAN} "La licenza di TALOS: in testa un riassunto in italiano, sotto il testo che fa fede."
+  LangString TalosLicenzaSotto ${LANG_ENGLISH} "TALOS is free software: this license gives you permissions and does not ask you to accept anything to use it. Press Next to continue."
+  LangString TalosLicenzaSotto ${LANG_ITALIAN} "TALOS è software libero: questa licenza ti dà dei permessi e non ti chiede di accettare niente per usarlo. Premi Avanti per continuare."
+  LangString TalosAvviaTesto ${LANG_ENGLISH} "Launch TALOS"
+  LangString TalosAvviaTesto ${LANG_ITALIAN} "Avvia TALOS"
+  LangString TalosBenvenutoTitolo ${LANG_ENGLISH} "Install TALOS"
+  LangString TalosBenvenutoTitolo ${LANG_ITALIAN} "Installa TALOS"
+  LangString TalosBenvenutoTesto ${LANG_ENGLISH} "TALOS installs for your account only: it needs no administrator rights, and it takes a few seconds.$\r$\n$\r$\nOn first launch the app itself welcomes you.$\r$\n$\r$\nPress Next to continue."
+  LangString TalosBenvenutoTesto ${LANG_ITALIAN} "TALOS si installa solo per il tuo account: non servono permessi di amministratore, e ci vogliono pochi secondi.$\r$\n$\r$\nAl primo avvio ti accoglie la app stessa.$\r$\n$\r$\nPremi Avanti per continuare."
+  LangString TalosLicenzaTitolo ${LANG_ENGLISH} "TALOS license"
+  LangString TalosLicenzaTitolo ${LANG_ITALIAN} "Licenza di TALOS"
+  LangString TalosLicenzaSottotitolo ${LANG_ENGLISH} "Free software: what you can do and what it asks of you."
+  LangString TalosLicenzaSottotitolo ${LANG_ITALIAN} "Software libero: che cosa puoi fare e che cosa ti chiede."
+  LangString TalosInstallazioneTitolo ${LANG_ENGLISH} "Installing TALOS"
+  LangString TalosInstallazioneTitolo ${LANG_ITALIAN} "Installazione di TALOS"
+  LangString TalosInstallazioneSottotitolo ${LANG_ENGLISH} "Getting your workspace ready."
+  LangString TalosInstallazioneSottotitolo ${LANG_ITALIAN} "Prepariamo il tuo spazio di lavoro."
+  LangString TalosDomandaDati ${LANG_ENGLISH} "Also delete your user data and provider keys?$\n$\nChoosing «Yes» deletes the keys the app saved in Windows Credential Manager and the data folder %APPDATA%\TALOS (sessions, settings), with the internal browser cache in %LOCALAPPDATA%\TALOS.$\nThe libraries in your projects are never touched."
+  LangString TalosDomandaDati ${LANG_ITALIAN} "Eliminare anche i dati utente e le chiavi provider?$\n$\nScegliendo «Sì» si cancellano le chiavi registrate dall'app nel Gestione credenziali di Windows e la cartella dati %APPDATA%\TALOS (sessioni, impostazioni), con la cache del browser interno in %LOCALAPPDATA%\TALOS.$\nLe librerie nei tuoi progetti non vengono mai toccate."
+  LangString TalosPuliziaFallita ${LANG_ENGLISH} "Cleaning the user data failed (code $R9).$\n$\nYour user data and keys were NOT deleted. You can retry the uninstall or remove them by hand:$\n- Windows Credential Manager: entries «talos-harness-provider-desktop» and «talos-harness-search-desktop»$\n- folder %APPDATA%\TALOS"
+  LangString TalosPuliziaFallita ${LANG_ITALIAN} "La pulizia dei dati utente non è riuscita (codice $R9).$\n$\nI dati utente e le chiavi NON sono stati cancellati. Puoi ritentare la disinstallazione o rimuoverli a mano:$\n- Gestione credenziali di Windows: voci «talos-harness-provider-desktop» e «talos-harness-search-desktop»$\n- cartella %APPDATA%\TALOS"
 !macroend
 
 !macro customInit
@@ -120,7 +151,7 @@ Var PulisciDatiUtente
   ${If} ${Errors}
     ${GetOptions} $R0 "/S" $R1
     ${If} ${Errors}
-      MessageBox MB_YESNO|MB_DEFBUTTON2|MB_ICONQUESTION "Eliminare anche i dati utente e le chiavi provider?$\n$\nScegliendo «Sì» si cancellano le chiavi registrate dall'app nel Gestione credenziali di Windows e la cartella dati %APPDATA%\TALOS (sessioni, impostazioni), con la cache del browser interno in %LOCALAPPDATA%\TALOS.$\nLe librerie nei tuoi progetti non vengono mai toccate." IDYES pulisci_dati_si
+      MessageBox MB_YESNO|MB_DEFBUTTON2|MB_ICONQUESTION "$(TalosDomandaDati)" IDYES pulisci_dati_si
       Goto pulisci_dati_fine
       pulisci_dati_si:
       StrCpy $PulisciDatiUtente "1"
@@ -166,7 +197,7 @@ Var PulisciDatiUtente
         RMDir "$LOCALAPPDATA\${APP_FILENAME}\cache"
         RMDir "$LOCALAPPDATA\${APP_FILENAME}"
       ${Else}
-        MessageBox MB_OK|MB_ICONSTOP|MB_TOPMOST "La pulizia dei dati utente non è riuscita (codice $R9).$\n$\nI dati utente e le chiavi NON sono stati cancellati. Puoi ritentare la disinstallazione o rimuoverli a mano:$\n- Gestione credenziali di Windows: voci «talos-harness-provider-desktop» e «talos-harness-search-desktop»$\n- cartella %APPDATA%\TALOS"
+        MessageBox MB_OK|MB_ICONSTOP|MB_TOPMOST "$(TalosPuliziaFallita)"
       ${EndIf}
     ${EndIf}
   ${EndIf}

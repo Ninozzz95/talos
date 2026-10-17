@@ -16,7 +16,7 @@ import { nomeModelloUmano } from './chat-foot.js'; // 0.1.25: mai l'id grezzo de
 /** 12/09 (review P-K): il badge dell'indirizzo. Senza un predefinito (Azure, Vertex, Bedrock) non si dice «predefinito» di un campo vuoto.
  *  08/10 (bugfixer): «personalizzato» solo se il valore è DIVERSO dal predefinito (`endpointPredefinito`, dal server): il modulo salva
  *  sempre il campo già riempito, e OpenRouter diceva «Indirizzo personalizzato» con https://openrouter.ai/api/v1. */
-export function etichettaIndirizzo(row={}){if(!row.supportsEndpoint)return null;if(row.endpointConfigured&&row.endpointPredefinito!==true)return t('modelli.provider.customEndpoint');return row.endpoint?t('modelli.provider.defaultEndpoint'):t('modelli.provider.missingEndpoint');}
+export function etichettaIndirizzo(row={}){if(!row.supportsEndpoint)return null;if(row.id==='zai'){if(row.endpointDaScegliere===true)return t('modelli.provider.zai.toChoose');const scelta=sceltaZaiDa(row);if(scelta)return t(`modelli.provider.zai.label.${scelta.paghi}.${scelta.dove}`);}if(row.endpointConfigured&&row.endpointPredefinito!==true)return t('modelli.provider.customEndpoint');return row.endpoint?t('modelli.provider.defaultEndpoint'):t('modelli.provider.missingEndpoint');}
 export function statoProvider(row={},prova=null){
  const esito=prova?.esito,labels={'in-corso':t('modelli.provider.testing'),'non-autorizzato':t('modelli.provider.credentialRejected'),irraggiungibile:t('modelli.provider.unreachable'),'non-provabile':t('modelli.provider.needsConfiguration'),errore:t('modelli.provider.testFailed')};
  const conteggio=Number.isInteger(prova?.modelli)&&prova.modelli>=0;
@@ -179,6 +179,69 @@ const VESTITO=Object.freeze({
 const FILTRO_CHIP='providerFilter';
 function vesti(nodo,stile){if(nodo)Object.assign(nodo.style,stile);return nodo;}
 function campo(label,tipo,key,row,valore=''){const wrap=el('label','talos-stack talos-provider__field');wrap.append(el('span','talos-muted',label));const input=el('input','talos-field__input');input.type=tipo;input.dataset[key]=row.id;input.autocomplete='off';input.value=valore;if(tipo==='password'){input.spellcheck=false;input.placeholder=row.keyConfigured?t('modelli.provider.pasteNewKey'):t('modelli.provider.pasteKey');}if(tipo==='number'){input.min='5';input.max=key==='providerTimeout'?'1800':'300';input.step='1';input.dataset.valoreIniziale=String(valore);}wrap.append(input);return wrap;}
+/*
+ * ⛔ 14/10/2026, owner (mockup approvato: variante B, «due domande») — L'INDIRIZZO DI Z.AI SI SCEGLIE, NON SI SCRIVE.
+ *   Z.AI fattura il piano GLM Coding solo su un suo indirizzo e il saldo a consumo su un altro, Internazionale e Cina pure
+ *   (`src/zai-indirizzo.mjs::INDIRIZZI_ZAI`, docs.z.ai/devpack/tool/others). «La chiave va solo all'indirizzo scelto»: niente
+ *   sonde, niente scelta di serie per una chiave nuova. Due domande — come paghi, e dove — e una riga che dice dove andrà la
+ *   chiave; «Salva» resta spento finché le due risposte non ci sono (la modale ascolta `zai-indirizzo`).
+ * ⛔ Il valore viaggia nel campo NASCOSTO `[data-provider-endpoint]`: le due strade di salvataggio (la modale e la regia di
+ *   `legacy/app.js`, `save-runtime`) lo leggono come prima, senza sapere di Z.AI.
+ * ⛔ Un indirizzo personalizzato già salvato (non uno dei quattro) resta finché la persona non sceglie: lo si dice, non lo si
+ *   butta in silenzio.
+ * Le carte sono quelle della fonte di ricerca (`fonte-ricerca.js`: `talos-choice`, radio, frecce), niente controlli nativi.
+ */
+const INDIRIZZI_ZAI_SCELTI=Object.freeze({
+ 'piano|int':'https://api.z.ai/api/coding/paas/v4','piano|cn':'https://open.bigmodel.cn/api/coding/paas/v4',
+ 'consumo|int':'https://api.z.ai/api/paas/v4','consumo|cn':'https://open.bigmodel.cn/api/paas/v4'});
+function sceltaZaiDa(row){
+ if(!row?.endpointConfigured||row.endpointDaScegliere===true)return null;
+ const voce=Object.entries(INDIRIZZI_ZAI_SCELTI).find(([,u])=>u===row.endpoint)?.[0];
+ if(!voce)return null;const [paghi,dove]=voce.split('|');return {paghi,dove};
+}
+function sceltaIndirizzoZai(row){
+ const scelta=sceltaZaiDa(row)??{paghi:null,dove:null};
+ const personalizzato=row.endpointConfigured&&row.endpointDaScegliere!==true&&!sceltaZaiDa(row)?String(row.endpoint||''):'';
+ const radice=el('div','talos-stack');radice.dataset.zaiIndirizzo='';radice.style.gridColumn='1 / -1';radice.style.gap='12px';
+ const nascosto=el('input');nascosto.type='hidden';nascosto.dataset.providerEndpoint=row.id;
+ const nota=el('p','talos-muted');nota.dataset.zaiIndirizzoNota='';nota.style.margin='0';
+ const gruppi=[];
+ const aggiorna=()=>{
+  const completo=Boolean(scelta.paghi&&scelta.dove);
+  nascosto.value=completo?INDIRIZZI_ZAI_SCELTI[`${scelta.paghi}|${scelta.dove}`]:personalizzato;
+  for(const {chiave,pulsanti} of gruppi)for(const b of pulsanti){const si=b.dataset.valore===scelta[chiave];b.setAttribute('aria-checked',String(si));}
+  for(const {chiave,pulsanti} of gruppi){const attivo=pulsanti.find(b=>b.dataset.valore===scelta[chiave])??pulsanti[0];for(const b of pulsanti)b.tabIndex=b===attivo?0:-1;}
+  nota.textContent=completo
+   ?t(scelta.paghi==='piano'?'modelli.provider.zai.goesOnlyPlan':'modelli.provider.zai.goesOnlyBalance',{host:new URL(nascosto.value).host})
+   :personalizzato?t('modelli.provider.zai.customNow',{address:personalizzato}):t('modelli.provider.zai.answerBoth');
+  radice.dispatchEvent(new CustomEvent('zai-indirizzo',{bubbles:true}));
+ };
+ const gruppo=(chiave,etichetta,voci)=>{
+  const blocco=el('div','talos-stack talos-provider__field');
+  const titolo=el('span','talos-muted',etichetta);titolo.id=`zai-${chiave}-${row.id}`;
+  const griglia=el('div','talos-choice-grid');griglia.setAttribute('role','radiogroup');griglia.setAttribute('aria-labelledby',titolo.id);
+  griglia.style.gridTemplateColumns='repeat(2, minmax(0, 1fr))';griglia.dataset.zaiDomanda=chiave;
+  const pulsanti=voci.map(([valore,testo,sotto])=>{
+   const b=el('button','talos-choice');b.type='button';b.setAttribute('role','radio');b.dataset.valore=valore;
+   b.append(el('span','talos-choice__title',testo),el('span','talos-muted',sotto));
+   b.addEventListener('click',()=>{scelta[chiave]=valore;aggiorna();});
+   return b;
+  });
+  griglia.addEventListener('keydown',e=>{
+   if(!['ArrowRight','ArrowLeft','ArrowUp','ArrowDown','Home','End'].includes(e.key))return;
+   const i=pulsanti.indexOf(e.target.closest?.('.talos-choice'));if(i<0)return;e.preventDefault();
+   const n=e.key==='Home'?0:e.key==='End'?pulsanti.length-1:(i+(['ArrowRight','ArrowDown'].includes(e.key)?1:-1)+pulsanti.length)%pulsanti.length;
+   scelta[chiave]=pulsanti[n].dataset.valore;aggiorna();pulsanti[n].focus();
+  });
+  griglia.append(...pulsanti);blocco.append(titolo,griglia);gruppi.push({chiave,pulsanti});return blocco;
+ };
+ radice.append(
+  gruppo('paghi',t('modelli.provider.zai.howYouPay'),[['piano',t('modelli.provider.zai.plan'),t('modelli.provider.zai.planNote')],['consumo',t('modelli.provider.zai.balance'),t('modelli.provider.zai.balanceNote')]]),
+  gruppo('dove',t('modelli.provider.zai.where'),[['int',t('modelli.provider.zai.international'),'z.ai'],['cn',t('modelli.provider.zai.china'),'bigmodel.cn']]),
+  nota,nascosto);
+ aggiorna();
+ return radice;
+}
 // P-K-bis/P-L-bis: identità esplicite e configurazione non segreta del processo.
 const CLOUD_CONFIGURABILI=new Set(['azure','vertex','bedrock']);
 function multiriga(label,key,row,valore=''){
@@ -591,7 +654,8 @@ function apriConfigurazioneProvider(card,row,{onSalvaConfigurazione=null,onConfi
    const chiave=(campoChiave?.value||'').trim();
    const letto=salvaRuntime&&!configurazionePropria?leggiCollegamentoProvider(row,corpo):null;
    const tempoCambiato=Boolean(letto)&&Object.hasOwn(letto,'timeoutSeconds'); // OWN-01: parte solo se cambiato (`leggiCollegamentoProvider`)
-   const collegamento=letto&&(letto.endpoint!==(row.endpoint||'')||tempoCambiato)?{endpoint:letto.endpoint,...(tempoCambiato?{timeoutSeconds:letto.timeoutSeconds}:{})}:null;
+   /* 14/10/2026: un indirizzo Z.AI scelto si salva anche quando coincide con quello di serie — finché non è salvato non è scelto */
+   const collegamento=letto&&(letto.endpoint!==(row.endpoint||'')||tempoCambiato||(row.endpointDaScegliere===true&&Boolean(letto.endpoint)))?{endpoint:letto.endpoint,...(tempoCambiato?{timeoutSeconds:letto.timeoutSeconds}:{})}:null;
    /* Decisione 14: gli esclusi in bozza si salvano con questo stesso «Salva»; un nome scritto e non valido ferma tutto, con l'errore accanto al campo. */
    const esclusi=bozzeEsclusi.get(corpo.querySelector('[data-provider-esclusi]'));
    if(esclusi&&!esclusi.prendiDalCampo())return;
@@ -632,8 +696,11 @@ function apriConfigurazioneProvider(card,row,{onSalvaConfigurazione=null,onConfi
    onConfigurazioneSalvata?.({provider:row.id,etichetta:nomeDelFornitore(row),salvato});
   };
   primaria.addEventListener('click',salva);
+  /* 14/10/2026, owner: «Salva» spento finché l'indirizzo di Z.AI non ha le due risposte (o un indirizzo già salvato). */
+  const sceltaZai=corpo.querySelector('[data-zai-indirizzo]');
+  if(sceltaZai){const allinea=()=>{if(dialogo.dataset.salvataggio!=='in-corso')primaria.disabled=!corpo.querySelector('[data-provider-endpoint]')?.value;};allinea();sceltaZai.addEventListener('zai-indirizzo',allinea);}
   /* Invio in un campo a una riga salva, come «Salva» (Hermes, `credential-key-ui.tsx`: «Enter saves a key»). */
-  telaio.addEventListener('keydown',(e)=>{if(e.key==='Enter'&&e.target instanceof HTMLInputElement&&!e.isComposing){e.preventDefault();salva();}});
+  telaio.addEventListener('keydown',(e)=>{if(e.key==='Enter'&&e.target instanceof HTMLInputElement&&!e.isComposing){e.preventDefault();if(!primaria.disabled)salva();}});
   /* ⛔ «Annulla» E LA CROCE NON PORTANO `aria-expanded`: la regia del mockup (`app.js`, ascoltatore
      delegato sulla radice) tratta OGNI `[aria-expanded][aria-controls]` come una disclosure e la
      inverte da sé — è il difetto già misurato il 18/09 in `catalogo-faccette.js`. Questi due
@@ -1125,7 +1192,9 @@ export function creaProviderCard(row,{aperta=false,prova=null,occupato=false,onM
   const riassunto=document.createElement('summary');riassunto.textContent=t('modelli.provider.pasteKeyInstead');
   oppure.append(riassunto,campoChiave);body.append(oppure);
  }else if(!esterno)body.append(campoChiave);
- if(row.supportsEndpoint)body.append(campo(t('modelli.provider.serviceEndpoint'),'url','providerEndpoint',row,row.endpoint||''));
+ if(row.supportsEndpoint)body.append(row.id==='zai'?sceltaIndirizzoZai(row):campo(t('modelli.provider.serviceEndpoint'),'url','providerEndpoint',row,row.endpoint||'')); // 14/10: Z.AI si sceglie
+ /* Owner 14/10/2026: la porta Anthropic di Z.AI ha un indirizzo solo, quello del piano GLM Coding; sceglierla È la scelta. */
+ if(row.id==='zai-anthropic'){const nota=el('p','talos-muted',t('modelli.provider.zai.anthropicGoesToPlan'));nota.dataset.zaiAnthropicNota='';nota.style.gridColumn='1 / -1';body.append(nota);}
  // P-K — campi collegati all'input salvato dalla regia esistente.
  aggiungiCampiCloud(body,row);
  if(CLOUD_CONFIGURABILI.has(row.id)){

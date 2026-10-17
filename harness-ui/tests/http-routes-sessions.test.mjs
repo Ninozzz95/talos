@@ -1066,6 +1066,18 @@ test('⭐⭐⭐ POST /api/v1/sessions/:id/approve con {requestId, approvato} rag
   assert.deepEqual(sessionRegistry.ultimaRispostaApprovazione, { sessionId, requestId: 'richiesta-vera', approvato: true });
 });
 
+test('⭐ /goal G6 — POST .../approve con `obiettivoModificato` (la persona ha corretto i controlli del modello): solo con un no e con l’id di un obiettivo', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+  const manda = (corpo) => fetch(`${base}/api/v1/sessions/${sessionId}/approve`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) });
+  const id = 'ob-11111111-2222-4333-8444-555555555555';
+  assert.equal((await manda({ requestId: 'richiesta-vera', approvato: false, obiettivoModificato: id })).status, 200, 'la forma giusta passa (il conto delle chiavi la include)');
+  assert.equal(sessionRegistry.ultimaRispostaApprovazione.approvato, false);
+  assert.equal((await manda({ requestId: 'richiesta-vera', approvato: true, obiettivoModificato: id })).status, 400, 'AL CONTRARIO: mai con un sì');
+  assert.equal((await manda({ requestId: 'richiesta-vera', approvato: false, obiettivoModificato: 'auto-9' })).status, 400, 'AL CONTRARIO: solo l’id di un obiettivo');
+  assert.equal((await manda({ requestId: 'richiesta-vera', approvato: false, obiettivoModificato: id, automazioneModificata: 'auto-9' })).status, 400, 'AL CONTRARIO: non tutte e due');
+});
+
 /*
  * ⛔⛔⛔ 07/9, O-49 — questo test diceva 400/QUERY_INVALID, ed era esattamente la bugia che
  * l'owner leggeva a schermo: «Risposta non riuscita · Query non valida» premendo Approva su
@@ -2514,6 +2526,7 @@ function registroVeroConEventi(t, { emetti = null, clock = null, cartellaStore =
   };
   return createSessionRegistry({
     avviaSessioneFn, preparaEsecuzioneFn, guardaWorkspaceFn: () => () => {}, modello: 'm', chiave: 'k',
+    obiettiviNellaChat: true, // OB-REV-01 (15/10): come il server desktop
     ...(clock ? { clock } : {}),
     ...(cartellaStore ? { cartellaStore } : {}),
   });
@@ -2982,6 +2995,36 @@ test('⭐⭐ GET .../events: chi apre la sessione DOPO riceve la coda subito dop
   assert.deepEqual(coda.value.voci.map((v) => v.testo), ['visibile ovunque']);
   assert.equal(haId(stato.frame.find((f) => datiDelFrame(f).name === 'talos.coda')), false, '⛔ stato, non storia: niente id SSE');
   await reader.cancel();
+});
+
+test('⭐⭐ /goal G6 — GET .../events: chi apre la sessione DOPO riceve l\'obiettivo (coi tetti del ciclo) dopo la coda; senza obiettivo, «nessuno»', async (t) => {
+  const registro = registroVeroConEventi(t);
+  const { base } = await listen(t, { sessionRegistry: registro });
+  const apri = async (sessionId) => {
+    const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/events`);
+    const reader = risposta.body.getReader();
+    t.after(() => reader.cancel().catch(() => {}));
+    const stato = { grezzo: '', frame: [] };
+    await leggiFrameFinche(reader, stato, (frame) => frame.some((f) => datiDelFrame(f).name === 'talos.obiettivo'));
+    await reader.cancel();
+    return stato;
+  };
+  const { sessionId: senza } = registro.avvia('sconto-a-scaglioni');
+  await Promise.resolve();
+  const vuota = await apri(senza);
+  const nessuno = vuota.frame.map((f) => datiDelFrame(f)).find((e) => e.name === 'talos.obiettivo');
+  assert.equal(nessuno.value.obiettivo, null, 'AL CONTRARIO: «nessun obiettivo» si dice, così una finestra che ne ricordava uno lo spegne');
+  assert.deepEqual(nessuno.value.tetti, { giri: 20, token: null }, 'i tetti di serie del ciclo (ciclo.mjs)');
+
+  const { sessionId } = registro.avvia('sconto-a-scaglioni');
+  await Promise.resolve();
+  assert.equal((await registro.impostaObiettivo(sessionId, 'fai passare i test')).ok, true);
+  const stato = await apri(sessionId);
+  const nomi = stato.frame.map((f) => datiDelFrame(f)).filter((e) => e.type === 'CUSTOM').map((e) => e.name);
+  assert.ok(nomi.indexOf('talos.obiettivo') > nomi.indexOf('talos.coda'), 'l\'obiettivo arriva dopo la coda, dopo la storia');
+  const annuncio = stato.frame.map((f) => datiDelFrame(f)).find((e) => e.name === 'talos.obiettivo');
+  assert.equal(annuncio.value.obiettivo.testo, 'fai passare i test');
+  assert.equal(haId(stato.frame.find((f) => datiDelFrame(f).name === 'talos.obiettivo')), false, '⛔ stato, non storia: niente id SSE');
 });
 
 /*

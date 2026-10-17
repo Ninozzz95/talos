@@ -269,7 +269,7 @@ test('WF-UI-REPLAY: the replay rewinds to the start from the state history and c
   const rip = grafo.locator('.gv-rip');
   await expect(rip).toHaveAttribute('data-pronta', 'true');
   await expect(grafo.locator('.gv-passo[data-stato="running"]')).toHaveCount(1);
-  await grafo.getByRole('slider', { name: 'Istante del run' }).focus();
+  await grafo.getByRole('slider', { name: 'Istante dell’esecuzione' }).focus();
   await page.keyboard.press('Home'); // all'avvio del run: nessuno lavora ancora, nessuno è concluso
   await expect(rip).toHaveAttribute('data-attiva', 'true');
   await expect(grafo.locator('.gv-passo[data-stato="running"]')).toHaveCount(0);
@@ -308,13 +308,16 @@ test('WF-UI-FOCUS-PATH: focus dims everything outside the lineage the server giv
   expect(visti).toEqual([]);
 });
 
-test('WF-UI-D30-LEGACY: a session without runs or proposals keeps the classic delegation graph', async ({ page }) => {
+// 13/10/2026: «the classic delegation graph» era la vista classica; senza Workflow si apre il diagramma delle DELEGHE (quello nuovo,
+// qui nello stato vuoto: la scena non ha agenti), mai quello del Workflow
+test('WF-UI-D30-LEGACY: a session without runs or proposals opens the delegation diagram, not the workflow one', async ({ page }) => {
   const scena = costruisciScena(14, { sessionId: 'wf-ui-vuota' });
   const { scritture } = await instradaScena(page, scena, { vuota: true });
   const grafo = await apriDiagrammaDellaScena(page, scena, { vuota: true });
   await expect(page.locator('#railAgenti [data-c="WorkflowRail"]')).toHaveCount(0); // D30: niente rail v2 senza workflow
-  await expect(grafo).not.toHaveAttribute('data-sorgente', 'workflow');
-  await expect(grafo.locator('.talos-grafo__canvas')).toHaveCount(1);
+  await expect(grafo).toHaveAttribute('data-sorgente', 'deleghe');
+  await expect(grafo.locator('.gv-sessione')).toBeVisible();
+  await expect(grafo.locator('.talos-grafo__canvas')).toHaveCount(0); // non la vista classica
   expect(scritture).toEqual([]);
 });
 

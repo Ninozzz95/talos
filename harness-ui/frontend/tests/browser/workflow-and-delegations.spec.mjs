@@ -26,13 +26,15 @@ test('WF-MIXED-GRAPHS: workflow then ordinary delegation keeps both diagrams rea
   await page.getByRole('button', { name: 'Apri questo agente nel diagramma' }).click();
 
   const grafo = page.locator('#schermoChat > [data-c="GrafoAgenti"]');
-  await expect(grafo.locator(`[data-nodo-id="${FIGLIA_ID}"]`)).toHaveAttribute('data-selezionato', 'true');
+  // 12/10/2026: le deleghe stanno sul diagramma del Workflow — la scheda dell'agente porta la sua sessione ed è quella selezionata
+  await expect(grafo).toHaveAttribute('data-sorgente', 'deleghe');
+  await expect(grafo.locator(`[data-sessione="${FIGLIA_ID}"]`)).toHaveAttribute('aria-pressed', 'true');
   await grafo.getByRole('button', { name: 'Workflow', exact: true }).click();
   await expect(page.locator('#schermoChat > [data-c="GrafoAgenti"]')).toHaveAttribute('data-sorgente', 'workflow');
   await page.locator('#schermoChat > [data-c="GrafoAgenti"]').getByRole('button', { name: 'Deleghe', exact: true }).click();
-  await expect(page.locator(`#schermoChat > [data-c="GrafoAgenti"] [data-nodo-id="${FIGLIA_ID}"]`)).toBeVisible();
+  await expect(page.locator(`#schermoChat > [data-c="GrafoAgenti"] [data-sessione="${FIGLIA_ID}"]`)).toBeVisible();
   await page.reload();
-  await expect(page.locator(`#schermoChat > [data-c="GrafoAgenti"] [data-nodo-id="${FIGLIA_ID}"]`)).toBeVisible();
+  await expect(page.locator(`#schermoChat > [data-c="GrafoAgenti"] [data-sessione="${FIGLIA_ID}"]`)).toBeVisible();
   await page.locator('#railTabs [data-rail="agenti"]').click();
   await expect(page.locator('#railAgenti').getByRole('tab', { name: 'Deleghe' })).toHaveAttribute('aria-selected', 'true');
 });

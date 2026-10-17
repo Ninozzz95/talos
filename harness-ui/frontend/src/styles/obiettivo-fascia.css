@@ -1,0 +1,122 @@
+/*
+ * ⭐ /goal G6 (owner 15/10/2026) — LA FASCIA DELL'OBIETTIVO sopra il compositore (mockup `mockup-goal-2026-10-15/`, A0-A4m).
+ *
+ * È la terza sorella dell'avviso del piano (`avviso-piano.css`) e dell'avviso del contesto: porta anche la classe
+ * `talos-avviso-piano` e ne eredita raggio, fondo, bordo e la scatola dell'icona. Qui solo ciò che cambia:
+ *  · la riga MINIMA (A0): stato e conti in grassetto, il testo dell'obiettivo troncato accanto, una riga sola;
+ *  · la forma INTERA (A1-A4): sotto la riga, il testo per intero, il motivo da leggere e un controllo per riga;
+ *  · il colore dell'icona dice lo stato anche senza leggere (attivo = successo, fermo = avvertimento, raggiunto = tenue), e la
+ *    testata lo dice anche in parole: mai solo il colore. Nessun colore nuovo: i token di stato che la chat ha già.
+ */
+.talos-fascia-obiettivo:not([hidden]) {
+  display: block;
+  padding: var(--talos-space-xs) var(--talos-space-xs) var(--talos-space-xs) var(--talos-space-control);
+}
+.talos-fascia-obiettivo__riga {
+  display: flex;
+  align-items: center;
+  gap: var(--talos-space-inline);
+  min-width: 0;
+}
+.talos-fascia-obiettivo[data-stato="attivo"] .talos-avviso-piano__icona { color: var(--talos-success); }
+.talos-fascia-obiettivo[data-stato="in-pausa"] .talos-avviso-piano__icona,
+.talos-fascia-obiettivo[data-stato="bloccato"] .talos-avviso-piano__icona,
+.talos-fascia-obiettivo[data-stato="tetto"] .talos-avviso-piano__icona { color: var(--talos-warning); }
+.talos-fascia-obiettivo[data-stato="fatto"] .talos-avviso-piano__icona { color: var(--talos-muted); }
+
+/* la testata: una riga sola nella forma minima, il testo dell'obiettivo cede per primo */
+.talos-fascia-obiettivo__testata {
+  display: flex;
+  align-items: baseline;
+  gap: var(--talos-space-sm);
+  min-width: 0;
+  white-space: nowrap;
+}
+.talos-fascia-obiettivo__stato {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.talos-fascia-obiettivo__corto {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--talos-muted);
+}
+/* intera: il testo per intero sta nel corpo, la testata non lo ripete */
+.talos-fascia-obiettivo[data-forma="intera"] .talos-fascia-obiettivo__corto { display: none; }
+
+/* la freccia: verso l'alto quando si può aprire, verso il basso quando si può ridurre (come il mockup) */
+.talos-fascia-obiettivo__forma svg { transform: rotate(-90deg); transition: transform 160ms ease; }
+.talos-fascia-obiettivo[data-forma="intera"] .talos-fascia-obiettivo__forma svg { transform: rotate(90deg); }
+@media (prefers-reduced-motion: reduce) { .talos-fascia-obiettivo__forma svg { transition: none; } }
+
+.talos-fascia-obiettivo__corpo:not([hidden]) {
+  display: grid;
+  gap: var(--talos-space-sm);
+  /* allineato al testo della testata: icona (28) + il suo respiro */
+  padding: var(--talos-space-xs) var(--talos-space-sm) var(--talos-space-xs) calc(28px + var(--talos-space-inline));
+  max-height: min(40vh, 22rem);
+  overflow-y: auto;
+}
+.talos-fascia-obiettivo__obiettivo {
+  margin: 0;
+  color: var(--talos-text);
+  overflow-wrap: anywhere;
+}
+.talos-fascia-obiettivo__motivo {
+  display: grid;
+  gap: 2px;
+  padding-top: var(--talos-space-xs);
+  border-top: 1px solid var(--talos-border-subtle);
+}
+.talos-fascia-obiettivo__motivo p { margin: 0; }
+.talos-fascia-obiettivo__citazione {
+  margin: 0;
+  color: var(--talos-muted);
+  font-size: var(--talos-font-size-xs, 0.75rem);
+  overflow-wrap: anywhere;
+}
+.talos-fascia-obiettivo__chi { font-weight: 600; }
+
+.talos-fascia-obiettivo__controlli {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: var(--talos-space-xs) 0 0;
+  list-style: none;
+  border-top: 1px solid var(--talos-border-subtle);
+}
+.talos-fascia-obiettivo__controllo {
+  display: grid;
+  grid-template-columns: 8px 18px minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: var(--talos-space-sm);
+  padding: 5px 0;
+}
+.talos-fascia-obiettivo__controllo > .talos-fascia-obiettivo__perche,
+.talos-fascia-obiettivo__controllo > .talos-fascia-obiettivo__citazione { grid-column: 3 / -1; margin: 0; }
+.talos-fascia-obiettivo__pallino {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--talos-border-strong);
+}
+.talos-fascia-obiettivo__controllo[data-esito="verde"] .talos-fascia-obiettivo__pallino { background: var(--talos-success); }
+.talos-fascia-obiettivo__controllo[data-esito="rosso"] .talos-fascia-obiettivo__pallino,
+.talos-fascia-obiettivo__controllo[data-esito="non-verificabile"] .talos-fascia-obiettivo__pallino { background: var(--talos-warning); }
+.talos-fascia-obiettivo__tipo { display: inline-grid; place-items: center; color: var(--talos-muted); }
+.talos-fascia-obiettivo__ctesto { min-width: 0; overflow-wrap: anywhere; }
+.talos-fascia-obiettivo__esito {
+  color: var(--talos-muted);
+  font-size: var(--talos-font-size-xs, 0.75rem);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.talos-fascia-obiettivo__perche {
+  color: var(--talos-muted);
+  font-size: var(--talos-font-size-xs, 0.75rem);
+}
+.talos-fascia-obiettivo__pavimento { margin: 0; color: var(--talos-muted); }

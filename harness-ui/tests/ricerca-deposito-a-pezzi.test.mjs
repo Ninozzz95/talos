@@ -351,6 +351,13 @@ test('BC49: inventario e campi TALOS-BANCO invariati, eccetto le esenzioni dichi
       provider_allow: [['model', 'provider'], ['provider']],
       chatgpt_account: [['action'], ['action']], // 11/10/2026: lo stato e lo scollegamento dell'accesso col piano ChatGPT
     });
+    /* /goal G6 (owner 15/10/2026): la seconda porta dell'obiettivo, tre attrezzi estesi NUOVI fissati qui come i fornitori; le
+     * due impronte restano. */
+    Object.assign(attrezziAutomazioni, {
+      goal_status: [[], []],
+      goal_create: [['criteria', 'objective'], ['objective']],
+      goal_update: [['reason', 'status'], ['status']],
+    });
     for (const [nome, [campi, obbligatori]] of Object.entries(attrezziAutomazioni)) {
       const tool = attrezzi.map((entry) => entry.function ?? entry).find((entry) => entry.name === nome);
       if (attrezzi === ATTREZZI_OPENAI) assert.equal(tool, undefined, `${nome} non deve entrare nel banco base`);

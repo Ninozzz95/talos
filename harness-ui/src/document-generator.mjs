@@ -92,7 +92,7 @@ function verifyUtf8Text(bytes) {
     return { ok: false, detail: `not valid UTF-8: ${errore instanceof Error ? errore.message : String(errore)}` };
   }
   if (text.trim() === '') return { ok: false, detail: 'the file is empty' };
-  return { ok: true, detail: `${text.length} caratteri, ${text.split('\n').length} righe` };
+  return { ok: true, detail: `${text.length} characters, ${text.split('\n').length} lines` }; // per il modello: in inglese (owner 03/10), come le sorelle sotto
 }
 
 function escapeHtml(value) {
@@ -468,7 +468,7 @@ export async function verifyTalosDocument(document) {
       }
 
       default:
-        return { ok: false, detail: `formato sconosciuto: ${document.format}` };
+        return { ok: false, detail: `unknown format: ${document.format}` };
     }
   } catch (errore) {
     const detail = errore instanceof Error ? errore.message : String(errore);

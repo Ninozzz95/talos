@@ -122,7 +122,7 @@ test('R4-ASK-EXPIRED-DISTINCT: scaduta, interrotta e «nessuno poteva rispondere
   await apri(page, 'ask-stati');
   await evento(page, avvio);
   const casi = [
-    ['req-scaduta', { status: 'expired', da: 'sistema' }, 'Domanda scaduta: nessuna risposta in tempo, il giro si è fermato'],
+    ['req-scaduta', { status: 'expired', da: 'sistema' }, 'Domanda scaduta: nessuna risposta in tempo'],
     ['req-interrotta', { status: 'cancelled', motivo: 'interrotta', da: 'sistema' }, 'Domanda interrotta: il server si è riavviato prima della risposta'],
     ['req-nessuno', { status: 'unanswerable', motivo: 'nessuna-interfaccia', da: 'sistema' }, 'Nessuno poteva rispondere: TALOS prosegue con l’ipotesi più prudente e la dichiara'],
   ];

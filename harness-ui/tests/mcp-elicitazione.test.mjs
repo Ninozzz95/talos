@@ -13,6 +13,7 @@ import test from 'node:test';
 import { connettiServerMcp } from '../src/mcp-client.mjs';
 import { validaRichiestaElicitazione, validaRispostaElicitazione } from '../src/mcp-elicitation-contract.mjs';
 
+/* R1 (CLI 0.6.8): il comando si risolve sul PATH prima del trasporto — qui `node`, che c'è; un nome che il PATH non ha si rifiuta */
 function finto() {
   const visti = { costruttore: null, gestori: new Map() };
   class ClientFinto {
@@ -28,7 +29,7 @@ function finto() {
 test('con chi risponde il client dichiara elicitation form+url e inoltra la richiesta; senza, non dichiara nulla', async () => {
   const con = finto();
   const ricevute = [];
-  await connettiServerMcp({ comando: 'x' }, { ...con.deps, onElicitazione: async (parametri) => { ricevute.push(parametri); return { action: 'decline' }; } });
+  await connettiServerMcp({ comando: 'node' }, { ...con.deps, onElicitazione: async (parametri) => { ricevute.push(parametri); return { action: 'decline' }; } });
   assert.deepEqual(con.visti.costruttore.opzioni?.capabilities?.elicitation, { form: {}, url: {} });
   const gestore = con.visti.gestori.get('elicitation/create');
   assert.equal(typeof gestore, 'function');
@@ -36,7 +37,7 @@ test('con chi risponde il client dichiara elicitation form+url e inoltra la rich
   assert.deepEqual(esito, { action: 'decline' });
   assert.equal(ricevute[0].message, 'Title?');
   const senza = finto();
-  await connettiServerMcp({ comando: 'x' }, senza.deps);
+  await connettiServerMcp({ comando: 'node' }, senza.deps);
   assert.equal(senza.visti.costruttore.opzioni?.capabilities?.elicitation, undefined, 'Gemini #22249: mai dichiarare ciò che non si gestisce');
   assert.equal(senza.visti.gestori.has('elicitation/create'), false);
 });

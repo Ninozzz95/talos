@@ -81,13 +81,14 @@ export const ORE_PRIMA_DI_DIMENTICARE_UNA_SCHEDA = 24;
  * @param {(sessionId:string)=>string|null} deps.cartellaDiSessione  L'UNICA autorità sulla cartella. `null` ⇒ la sessione non esiste ⇒ niente terminale.
  * @param {(terminalId:string)=>void} [deps.chiudiPtyFn]  Chiude la PTY vera quando una scheda viene chiusa esplicitamente.
  * @param {(terminalId:string)=>{viva:boolean}|null} [deps.statoPtyFn]  Per dire in elenco se la shell è ancora viva, senza esporre la voce interna del registro PTY.
- * @param {string|null} [deps.cartellaStandaloneLegacy]  ⛔ DEBITO DICHIARATO, vedi `risolviPerConnessione`. `null` (default) = registro STRETTO: un id ignoto si rifiuta e basta.
+ * @param {string|null} [deps.cartellaStandalone]  La cartella dei terminali SENZA sessione, che nascono solo da `creaStandalone` (la rotta
+ *   `POST /api/v1/terminals`). `null` (default) = niente terminali senza sessione. ⛔ Dal 16/10/2026 un id ignoto si rifiuta SEMPRE.
  */
 export function creaRegistroSchedeTerminale({
   cartellaDiSessione,
   chiudiPtyFn = () => {},
   statoPtyFn = () => null,
-  cartellaStandaloneLegacy = null,
+  cartellaStandalone = null,
   schedeMassimePerSessione = SCHEDE_MASSIME_PER_SESSIONE,
   orePrimaDiDimenticare = ORE_PRIMA_DI_DIMENTICARE_UNA_SCHEDA,
   generaId = randomUUID,
@@ -218,19 +219,11 @@ export function creaRegistroSchedeTerminale({
      *     congelato, e l'autorità resta il registro delle sessioni;
      *  3. **tutto il resto** → `null`, cioè **rifiuto**. Nessuna PTY nasce.
      *
-     * ⛔ DEBITO DICHIARATO — `cartellaStandaloneLegacy`. Il monolite congelato
-     * ha una TERZA strada, misurata il 05/09 leggendo `public/app.js` (non
-     * presunta): `idTerminaleCorrente()` fa
-     * `if (state.realSession.id) return state.realSession.id;` e **altrimenti
-     * inventa un `crypto.randomUUID()` lato client** — un terminale
-     * "standalone" senza nessuna sessione, raggiungibile aprendo il tab
-     * Terminale prima di avviare qualsiasi cosa. Quel caso è esattamente ciò
-     * che il `??` di server.mjs teneva in piedi. Qui il default è `null`, cioè
-     * **rifiuto**; chi vuole tenere viva quella funzione del monolite deve
-     * passare una cartella ESPLICITA a costruzione — una riga sola, visibile,
-     * con un tetto suo — invece di una catena di `??` valutata a ogni
-     * connessione. ⛔ Si spegne rimettendo `null` in `server.mjs` il giorno in
-     * cui il frontend nuovo sostituisce il monolite.
+     * ⛔ 16/10/2026, owner («Chiudila adesso», dopo la nota della sessione mobile: un id inventato apriva una shell nella cartella del
+     *   progetto) — la TERZA strada di prima è chiusa. Il monolite inventava un `crypto.randomUUID()` lato client per il terminale
+     *   senza sessione, e qui una cartella di ripiego lo accoglieva («debito dichiarato» dal 05/09). Ora il terminale senza sessione
+     *   nasce SOLO da `creaStandalone`, con l'id scelto dal server come le schede di una sessione (OWASP WebSocket Security Cheat Sheet:
+     *   un valore che non si indovina, oltre al controllo dell'Origin; CVE-2026-59224, vedi la rotta in http-app.mjs).
      */
     risolviPerConnessione(id) {
       if (typeof id !== 'string' || id === '') return null;
@@ -245,22 +238,39 @@ export function creaRegistroSchedeTerminale({
       if (typeof cartellaSessione === 'string' && cartellaSessione !== '') {
         return registraPrimaScheda(id, cartellaSessione);
       }
-      if (typeof cartellaStandaloneLegacy === 'string' && cartellaStandaloneLegacy !== '') {
-        const standalone = [...schede.values()].filter((voce) => voce.sessionId === null);
-        /* ⛔ Tetto anche qui: senza, «qualunque stringa apre una shell» resterebbe vero per la porta legacy. */
-        if (standalone.length >= schedeMassimePerSessione) return null;
-        const voce = {
-          terminalId: id,
-          sessionId: null,
-          cartella: cartellaStandaloneLegacy,
-          creatoAlle: clock().toISOString(),
-        ultimoAggancioMs: clock().getTime(),
-          origine: 'standalone-legacy',
-        };
-        schede.set(id, voce);
-        return voce;
-      }
       return null;
+    },
+
+    /**
+     * 16/10/2026 — un terminale SENZA sessione (il Terminale aperto prima di avviare qualunque cosa). L'id lo sceglie il server; la
+     * cartella è quella data a costruzione; il tetto è lo stesso di una sessione.
+     */
+    creaStandalone() {
+      if (typeof cartellaStandalone !== 'string' || cartellaStandalone === '') {
+        return { erroreAvvio: 'Terminals without a session are not available on this server', code: 'TERMINAL_STORE_UNAVAILABLE' };
+      }
+      /* Owner 16/10 sera («ognuna la sua»): ogni finestra ha il suo, e una finestra chiusa lascia il suo per 24 ore. Al tetto si libera
+         il più vecchio senza una shell viva (nessuno lo sta guardando: non è adottare la shell di un altro); se sono tutti vivi, no. */
+      if (schedeDi(null).length >= schedeMassimePerSessione) {
+        const libero = schedeDi(null).filter((v) => statoPtyFn(v.terminalId)?.viva !== true)
+          .sort((a, b) => (a.ultimoAggancioMs ?? 0) - (b.ultimoAggancioMs ?? 0))[0];
+        if (!libero) {
+          return { erroreAvvio: 'All the terminals without a session are in use in other windows: open a session to get a terminal of its own',
+            code: 'TERMINAL_LIMIT_REACHED', reason: 'standalone-terminals-in-use' };
+        }
+        chiudiPtyFn(libero.terminalId);
+        schede.delete(libero.terminalId);
+      }
+      let terminalId = generaId();
+      while (schede.has(terminalId)) terminalId = `${terminalId}-${schede.size}`;
+      const voce = { terminalId, sessionId: null, cartella: cartellaStandalone, creatoAlle: clock().toISOString(), ultimoAggancioMs: clock().getTime(), origine: 'standalone' };
+      schede.set(terminalId, voce);
+      return pubblica(voce);
+    },
+
+    /** I terminali senza sessione che il server conosce adesso (dopo un riavvio: nessuno). */
+    elencaStandalone() {
+      return { items: schedeDi(null).map(pubblica) };
     },
 
     /**

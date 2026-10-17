@@ -14,7 +14,8 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
  * solo ospitate nello stesso file.
  */
 
-import { existsSync as esisteSync, readdirSync as elencaSync, realpathSync as realpathSyncNativa, lstatSync as lstatSyncNativa, readlinkSync as readlinkSyncNativa } from 'node:fs';
+import { existsSync as esisteSync, readdirSync as elencaSync, realpathSync as realpathSyncNativa, lstatSync as lstatSyncNativa, readlinkSync as readlinkSyncNativa, openSync as apriSync, readSync as leggiSync, closeSync as chiudiSync, fstatSync as fstatSyncNativa } from 'node:fs';
+import { formaDiSegretoNelTesto } from './forme-di-segreto.mjs';
 import { homedir } from 'node:os';
 import { basename as nomeBase, dirname as cartellaDi, parse as parsePercorso, relative as relativoA, resolve as risolvi, sep as separatore } from 'node:path';
 
@@ -218,12 +219,130 @@ function conLaHomeEspansa(grezzo, home) {
 }
 
 /** I segmenti veri di un percorso: via i vuoti, via `.` e `..` (che non sono nomi). */
+/*
+ * ⛔ K1 dello stress test della CLI 0.6.7 (16/10/2026, S1): `leggi ".env::$DATA"` leggeva il `.env` SENZA chiedere, anche in v1 —
+ *   lo stream alternato di NTFS (`nome:stream`, `::$DATA`, `:Zone.Identifier`) apre lo STESSO file, ma il nome finale non era più
+ *   `.env` e la classe del segreto non scattava. Il rifiuto degli ADS di `validateCandidate` non sta sulla strada della lettura.
+ *   ⇒ La classe si decide sul nome SENZA lo stream: ogni segmento perde ciò che segue il primo `:`, tranne la lettera di un disco
+ *   (`C:`). Vale per leggi, elenca, cerca e la shell, che passano tutti da qui: una grammatica sola.
+ */
 function segmentiDi(normalizzato) {
-  return normalizzato.split('/').filter((s) => s !== '' && s !== '.' && s !== '..');
+  return normalizzato.split('/')
+    /* ⛔ K1, revisione mia (16/10/2026): `C:.env` è un percorso RELATIVO AL DISCO (il `.env` della cartella corrente di C:) e prima
+       della cura chiedeva; tagliare tutto dopo il primo `:` lo riduceva a `C` e non chiedeva più. ⇒ Nel PRIMO segmento la lettera
+       del disco si stacca prima, e lo stream si toglie dal resto: `C:.env::$DATA` → `C:`, `.env`. */
+    .flatMap((s, i) => {
+      const disco = i === 0 ? (/^[A-Za-z]:/u.exec(s)?.[0] ?? '') : '';
+      return [disco, s.slice(disco.length).replace(/:.*$/su, '')];
+    })
+    .filter((s) => s !== '' && s !== '.' && s !== '..');
 }
 
+/*
+ * ⛔ 14/10/2026, owner (regola unica per desktop e CLI): «I file con .example, .sample o .template si leggono senza chiedere, ma se
+ *   dentro c'è qualcosa che sembra una chiave vera, TALOS chiede lo stesso.» Due parti:
+ *   1. l'esenzione di esempio vale anche IN MEZZO al nome, prima dell'estensione: `service-account.example.json` finiva in `.json`,
+ *      `SERVICE_ACCOUNT` lo prendeva e si chiedeva (il falso positivo dello stress test della CLI 0.5.x);
+ *   2. il CONTENUTO di un file esente per nome si guarda (`esempioConUnaChiave` qui sotto): una chiave vera incollata in
+ *      `.env.example` passava senza domanda.
+ *   `.pub` resta solo in fondo al nome (`id_rsa.pub.bak` non è una chiave pubblica per convenzione), e le cartelle segrete non
+ *   cambiano: lì vale solo `esenzioniOvunque`.
+ */
+const ESENZIONI_DI_ESEMPIO = Object.freeze(['.example', '.sample', '.template', '.dist']);
+/* ⛔ REV-ESEMPI-01 (revisione del bugfixer, 14/10/2026): «in mezzo al nome» esentava anche `.env.sample.production`,
+   `.env.example.local`, `server.dist.pem`, `id_rsa.template.bak`, che prima erano segreti per nome. Il segno in mezzo vale solo se
+   DOPO viene un formato di dati (`service-account.example.json`, `app.sample.yaml`): lì il file è la forma d'esempio di un file di
+   configurazione. Dopo un nome di ambiente, una chiave o un ripiego, il file resta quello che il nome dice.
+   ⛔ `env` è fra i formati di dati apposta (nota di Nino2): `prod.example.env` è la forma d'esempio di un file `.env`, quindi esente
+   per nome — ma il suo CONTENUTO si guarda come per ogni esempio, e una chiave vera dentro fa chiedere lo stesso. Non contraddice
+   la riga sopra: lì il segno sta prima di un nome di ambiente (`.env.sample.production`), qui prima del formato. */
+const FORMATI_DI_DATI = /^(?:json|jsonc|json5|ya?ml|toml|ini|cfg|conf|config|properties|xml|txt|env)$/u;
+function eEsempioPerNome(base) {
+  const b = base.toLowerCase();
+  if (ESENZIONI_DI_ESEMPIO.some((e) => b.endsWith(e))) return true;
+  const inMezzo = /\.(?:example|sample|template|dist)\.([a-z0-9]+)$/u.exec(b);
+  return inMezzo !== null && FORMATI_DI_DATI.test(inMezzo[1]);
+}
 function eEsente(base) {
-  return PERCORSI_SEGRETI.esenzioni.some((e) => base.endsWith(e));
+  return PERCORSI_SEGRETI.esenzioni.some((e) => base.endsWith(e)) || eEsempioPerNome(base);
+}
+/*
+ * ⛔ REV-ESEMPI-04: guardare solo i primi 256 KB lasciava passare una chiave scritta dopo (la lettura vera, con l'offset, la mostra).
+ *   Ora il file si guarda INTERO fino a 4 MB; un file d'esempio più grande non si può controllare a buon prezzo, e allora si chiede
+ *   (`NON_CONTROLLABILE`): un `.env.example` da 4 MB non è un esempio normale.
+ * ⛔ Riserva della stessa revisione (costo): la ricerca rileggeva lo stesso file a ogni pagina, in modo sincrono. L'esito si ricorda
+ *   per percorso, dimensione e data di modifica (un file cambiato si riguarda).
+ */
+export const CONTENUTO_MASSIMO = 4 * 1024 * 1024;
+export const NON_CONTROLLABILE = Symbol('non-controllabile');
+/* REV-ESEMPI-03: Windows PowerShell 5.1 scrive con `>` in UTF-16LE; un file letto sempre in UTF-8 non mostrava nessuna forma. */
+function testoDelFile(b) {
+  if (b.length >= 2 && b[0] === 0xFF && b[1] === 0xFE) return b.subarray(2).toString('utf16le');
+  if (b.length >= 2 && b[0] === 0xFE && b[1] === 0xFF) {
+    const copia = Buffer.from(b.subarray(2, 2 + ((b.length - 2) & ~1)));
+    return copia.swap16().toString('utf16le');
+  }
+  const campione = b.subarray(0, Math.min(b.length, 4096));
+  let zeriDispari = 0;
+  for (let i = 1; i < campione.length; i += 2) if (campione[i] === 0) zeriDispari += 1;
+  if (campione.length >= 4 && zeriDispari * 4 > campione.length) return b.toString('utf16le'); // UTF-16LE senza BOM
+  return b.toString('utf8');
+}
+/* ⛔ Revisione di Nino2 (CLI), 14/10/2026: qui si teneva il TESTO intero del file, non l'esito — con 4 MB per voce e 1.000 voci,
+   fino a ~4 GB in memoria per processo (una ricerca in un monorepo con molti `*.example.json`). Ora si ricorda solo l'esito
+   (`true`, `false`, `NON_CONTROLLABILE`), e il testo si butta appena guardato. */
+const ESITI_RICORDATI_MASSIMI = 1000;
+const esitiDegliEsempi = new Map();
+/** L'esito di un file d'esempio sul disco: `true` se dentro c'è una forma di chiave, `false` se no, `NON_CONTROLLABILE` se è troppo grande. */
+function esitoDalDisco(assoluto) {
+  const fd = apriSync(assoluto, 'r');
+  try {
+    const { size, mtimeMs } = fstatSyncNativa(fd);
+    if (size > CONTENUTO_MASSIMO) return NON_CONTROLLABILE;
+    const chiave = `${assoluto}|${size}|${mtimeMs}`;
+    if (esitiDegliEsempi.has(chiave)) return esitiDegliEsempi.get(chiave);
+    const buffer = Buffer.alloc(size);
+    let letti = 0;
+    while (letti < size) {
+      const n = leggiSync(fd, buffer, letti, size - letti, letti);
+      if (n === 0) break;
+      letti += n;
+    }
+    const esito = Boolean(formaDiSegretoNelTesto(testoDelFile(buffer.subarray(0, letti))));
+    if (esitiDegliEsempi.size >= ESITI_RICORDATI_MASSIMI) esitiDegliEsempi.delete(esitiDegliEsempi.keys().next().value);
+    esitiDegliEsempi.set(chiave, esito);
+    return esito;
+  } finally { chiudiSync(fd); }
+}
+/** Solo per le prove: che cosa tiene in memoria il ricordo degli esiti (mai testo). */
+export const __perLeProve = Object.freeze({ esitiRicordati: () => [...esitiDegliEsempi.values()], dimenticaEsiti: () => esitiDegliEsempi.clear() });
+/**
+ * Un file ESENTE PER NOME come esempio (`.env.example`, `service-account.example.json`…) che dentro ha la forma di una chiave vera
+ * (`forme-di-segreto.mjs`, le forme della CLI)? Allora è un segreto come gli altri, e lo si dice con la sua frase.
+ * ⛔ Non legge: un percorso di rete (la lettura stessa manderebbe le credenziali di Windows), un file che non c'è o non si apre, un
+ *   percorso relativo senza la cartella della sessione. In tutti questi casi resta il comportamento di prima: niente domanda.
+ * @returns {null | {classe:'segreto', percorso:string, contenuto:true}}
+ */
+function esempioConUnaChiave(pezzo, { cartella, home, leggiTesta }) {
+  const grezzo = String(pezzo ?? '').trim().replace(/^["'`]+/, '').replace(/["'`]+$/, '');
+  if (grezzo === '' || eDiRete(grezzo)) return null;
+  const normalizzato = conLaHomeEspansa(grezzo, home);
+  if (normalizzato === '' || normalizzato.includes('://') || normalizzato.startsWith('//')) return null;
+  const segmenti = segmentiDi(normalizzato);
+  if (segmenti.length === 0 || !eEsempioPerNome(segmenti[segmenti.length - 1])) return null;
+  const assolutoScritto = /^[A-Za-z]:\//u.test(normalizzato) || normalizzato.startsWith('/');
+  const conCartella = typeof cartella === 'string' && cartella !== '';
+  if (!assolutoScritto && !conCartella) return null;
+  if (conCartella && eDiRete(cartella)) return null;
+  try {
+    const assoluto = assolutoScritto ? risolvi(normalizzato) : risolvi(cartella, normalizzato);
+    // le prove passano `leggiTesta` (un testo finto); il disco passa dall'esito ricordato
+    const esito = typeof leggiTesta === 'function' ? leggiTesta(assoluto) : esitoDalDisco(assoluto);
+    const conChiave = esito === NON_CONTROLLABILE || esito === true || (typeof esito === 'string' && Boolean(formaDiSegretoNelTesto(esito)));
+    return conChiave ? { classe: 'segreto', percorso: grezzo, contenuto: true } : null;
+  } catch {
+    return null;
+  }
 }
 
 /** Il NOME finale, da solo, dice che è un segreto? (`.env`, `.env.local`, `prod.env`, `id_rsa`, `*.pem`…) */
@@ -276,8 +395,11 @@ function classeDelPezzo(pezzo, home) {
  * @param {string} percorso relativo alla radice del progetto (o assoluto)
  * @returns {boolean}
  */
-export function eUnFileSegreto(percorso, { home = homeDiSistema() } = {}) {
-  return typeof percorso === 'string' && classeDelPezzo(percorso, home) !== null;
+export function eUnFileSegreto(percorso, { home = homeDiSistema(), cartella, leggiTesta } = {}) {
+  if (typeof percorso !== 'string') return false;
+  if (classeDelPezzo(percorso, home) !== null) return true;
+  // 14/10/2026: un file d'esempio con una chiave vera dentro esce dalla ricerca come gli altri (serve la radice per leggerlo)
+  return esempioConUnaChiave(percorso, { cartella, home, ...(leggiTesta ? { leggiTesta } : {}) }) !== null;
 }
 
 /**
@@ -761,7 +883,10 @@ function nomeDelComando(comando) {
 }
 
 /** Il passo delle parole della shell: stessa risposta di `nominaUnSegreto`, o null. */
-function nominaUnSegretoPerGlob(testo, { home, cartella, elenca, puntiNascosti, orologio, bilancio: ereditato, profondita = 0 }) {
+function nominaUnSegretoPerGlob(testo, { home, cartella, elenca, puntiNascosti, orologio, bilancio: ereditato, profondita = 0, leggiTesta }) {
+  /* REV-ESEMPI-02/05 (14/10/2026): un nome espanso da un jolly (`cat *.example`) o liberato dalle virgolette (`cat "my dir/.env.example"`)
+     che è un file d'esempio si guarda anche DENTRO, come la parola scritta per intero. */
+  const esempio = (percorso) => esempioConUnaChiave(percorso, { cartella, home, ...(leggiTesta ? { leggiTesta } : {}) });
   const bilancio = ereditato ?? { cartelle: 0, nomi: 0, cache: new Map(), orologio, scadenza: orologio() + TETTI_GLOB_SEGRETI.millisecondi };
   /* v5: prima i comandi dentro le sostituzioni (al massimo quattro livelli: oltre, si chiede) */
   for (const interno of sostituzioniDiComando(senzaCorpiDiHeredoc(testo))) {
@@ -791,6 +916,8 @@ function nominaUnSegretoPerGlob(testo, { home, cartella, elenca, puntiNascosti, 
         /* v5: la parola dopo la rimozione delle virgolette (`.e""nv` = `.env`) passa dalla stessa grammatica di un nome scritto per intero */
         const classe = classeDelPezzo(p, home);
         if (classe) return { classe, percorso: p };
+        const conChiave = esempio(p);
+        if (conChiave) return conChiave;
         continue;
       }
       /* F-P-004c (S3, stress test della CLI 0.5.5, 12/10/2026): `echo import * from fs` era rifiutato perché il `*` nudo si espandeva su
@@ -801,6 +928,8 @@ function nominaUnSegretoPerGlob(testo, { home, cartella, elenca, puntiNascosti, 
       for (const candidato of trovati.candidati) {
         const classe = classeDelPezzo(candidato, home);
         if (classe) return { classe, percorso: candidato };
+        const conChiave = esempio(candidato);
+        if (conChiave) return conChiave;
       }
       if (trovati.troppe || trovati.illeggibile) return prudente(p);
     }
@@ -817,7 +946,7 @@ function nominaUnSegretoPerGlob(testo, { home, cartella, elenca, puntiNascosti, 
  * COME LA PERSONA LO VEDRÀ, non risolto: chi risponde deve riconoscere ciò che ha davanti.
  */
 export function nominaUnSegreto(testo, {
-  home = homeDiSistema(), cartella, espandi = false, elenca = elencaDalDisco, puntiNascosti = process.platform === 'win32', orologio = () => performance.now(),
+  home = homeDiSistema(), cartella, espandi = false, elenca = elencaDalDisco, puntiNascosti = process.platform === 'win32', orologio = () => performance.now(), leggiTesta,
 } = {}) {
   const intero = String(testo ?? '');
   if (intero.trim() === '') return null;
@@ -840,7 +969,7 @@ export function nominaUnSegreto(testo, {
      v5: anche se c'è un apice, una barra rovescia, un `$`, un apice inverso o `^` (cmd): la shell li toglie o li sostituisce prima di aprire il file. */
   if (espandi && /[*?[{'"\\$`^]|[@+!]\(/u.test(intero)) {
     /* Un modulo dentro un cancello di sicurezza non lancia: se il passo dei glob si rompe per un motivo che non so, CHIEDE (mai in silenzio). */
-    try { return nominaUnSegretoPerGlob(intero, { home, cartella, elenca, puntiNascosti, orologio }); } catch { return { classe: 'segreto', percorso: intero.trim().slice(0, 120) }; }
+    try { return nominaUnSegretoPerGlob(intero, { home, cartella, elenca, puntiNascosti, orologio, ...(leggiTesta ? { leggiTesta } : {}) }); } catch { return { classe: 'segreto', percorso: intero.trim().slice(0, 120) }; }
   }
   return null;
 }
@@ -1021,6 +1150,8 @@ function bersaglioSegretoDiUnCollegamento(percorso, { cartella, home, fsSync = {
 }
 
 const LETTURE = new Set(['leggi', 'elenca']);
+/* Owner 16/10/2026 sera («Chiedi, ma non in Full access»): scrivere o modificare un segreto del progetto chiede come leggerlo. */
+const SCRITTURE = new Set(['scrivi', 'file_edit']);
 
 /*
  * ⭐ K4b (03/10/2026, owner «ogni singola parola nella app deve essere sia in inglese che in italiano»): la frase per la persona
@@ -1035,19 +1166,28 @@ const CHIAVI_DELLA_FRASE = Object.freeze({
   'segreto|leggi': 'server.approval.read.secret',
   'segreto|elenca': 'server.approval.list.secret',
   'segreto|shell': 'server.approval.command.secret',
+  'segreto|scrivi': 'server.approval.write.secret',
+  'portachiavi|scrivi': 'server.approval.write.keychain',
   'fuori-workspace|leggi': 'server.approval.read.outside',
   'fuori-workspace|elenca': 'server.approval.list.outside',
   'fuori-workspace-nascosto|leggi': 'server.approval.read.hiddenOutside',
   'fuori-workspace-nascosto|elenca': 'server.approval.list.hiddenOutside',
   'fuori-workspace-nascosto|shell': 'server.approval.command.hiddenOutside',
+  // 14/10/2026: un file d'esempio che dentro ha una chiave vera (`esempioConUnaChiave`): segreto come gli altri, la frase dice perché
+  'esempio-con-chiave|leggi': 'server.approval.read.exampleWithKey',
+  'esempio-con-chiave|shell': 'server.approval.command.exampleWithKey',
 });
 const FRASI_INGLESI = Object.freeze({
   'server.approval.read.keychain': "This read opens the system keychain, where passwords are kept: do you want me to do it?",
   'server.approval.list.keychain': "This listing opens the system keychain, where passwords are kept: do you want me to do it?",
   'server.approval.command.keychain': "The command opens the system keychain, where passwords are kept: do you want me to run it?",
   'server.approval.read.secret': "This read opens a file that may contain keys or passwords ({percorso}): do you want me to do it?",
+  'server.approval.read.exampleWithKey': "This read opens an example file that holds something that looks like a real key ({percorso}): do you want me to do it?",
+  'server.approval.command.exampleWithKey': "The command touches an example file that holds something that looks like a real key ({percorso}): do you want me to run it?",
   'server.approval.list.secret': "This listing opens a file that may contain keys or passwords ({percorso}): do you want me to do it?",
   'server.approval.command.secret': "The command touches a file that may contain keys or passwords ({percorso}): do you want me to run it?",
+  'server.approval.write.secret': "This write changes a file that may contain keys or passwords ({percorso}): do you want me to do it?",
+  'server.approval.write.keychain': "This write changes the system keychain, where passwords are kept: do you want me to do it?",
   'server.approval.read.outside': "This read opens a file outside the working folder ({percorso}): do you want me to do it?",
   'server.approval.list.outside': "This listing opens a folder outside the working folder ({percorso}): do you want me to do it?",
   'server.approval.read.hiddenOutside': "This read opens a hidden folder outside the working folder ({percorso}): do you want me to do it?",
@@ -1057,8 +1197,8 @@ const FRASI_INGLESI = Object.freeze({
 
 /** La copia per la persona: lingua naturale, nessun nome tecnico, e DICE quale file. Inglese + chiave + valori (K4b). */
 function frasePerLaPersona(segnalazione, tipo) {
-  const tipoDellaFrase = tipo === 'leggi' || tipo === 'elenca' ? tipo : 'shell';
-  const fraseChiave = CHIAVI_DELLA_FRASE[`${segnalazione.classe}|${tipoDellaFrase}`];
+  const tipoDellaFrase = tipo === 'leggi' || tipo === 'elenca' ? tipo : SCRITTURE.has(tipo) ? 'scrivi' : 'shell';
+  const fraseChiave = CHIAVI_DELLA_FRASE[`${segnalazione.contenuto === true ? 'esempio-con-chiave' : segnalazione.classe}|${tipoDellaFrase}`];
   if (fraseChiave) {
     const fraseParams = { percorso: segnalazione.percorso };
     /* ⛔ sostituzione con FUNZIONE: un percorso con `$&` o `$1` non deve diventare un'altra frase (lezione del 02/09) */
@@ -1071,11 +1211,13 @@ function frasePerLaPersona(segnalazione, tipo) {
 function fraseDiRiserva(segnalazione, tipo) {
   const azione = tipo === 'leggi'
     ? { soggetto: 'This read opens', coda: 'do you want me to do it?' }
+    : SCRITTURE.has(tipo)
+      ? { soggetto: 'This write changes', coda: 'do you want me to do it?' }
     : tipo === 'elenca'
       ? { soggetto: 'This listing opens', coda: 'do you want me to do it?' }
       : { soggetto: 'The command touches', coda: 'do you want me to run it?' };
   if (segnalazione.classe === 'portachiavi') {
-    const apre = tipo === 'leggi' ? 'This read opens' : tipo === 'elenca' ? 'This listing opens' : 'The command opens';
+    const apre = tipo === 'leggi' ? 'This read opens' : tipo === 'elenca' ? 'This listing opens' : SCRITTURE.has(tipo) ? 'This write changes' : 'The command opens';
     return `${apre} the system keychain, where passwords are kept: ${azione.coda}`;
   }
   const cosa = segnalazione.classe === 'segreto'
@@ -1098,16 +1240,74 @@ function fraseDiRiserva(segnalazione, tipo) {
  *
  * @returns {null | {classe: string, percorso: string, frase: string}}
  */
-export function motivoDaChiedere({ tipo, comando, percorso, cartella, home = homeDiSistema(), accessoPieno = false, elenca, puntiNascosti, orologio, fsSync } = {}) {
+/*
+ * ⛔ Owner 16/10/2026 notte («No, separati»): il sì «Consenti questo percorso per la sessione» dato per LEGGERE un segreto non vale
+ *   per SCRIVERLO — come Claude Code, dove `Read(.env)` ed `Edit(.env)` sono regole diverse. Il registro salva la `chiaveDelConsenso`
+ *   quando c'è (la scrittura ha la sua, `scrittura:<percorso>`), il kernel la cerca allo stesso modo; una lettura resta senza chiave
+ *   e usa il percorso com'era, così i consensi già dati non cambiano significato.
+ */
+function conChiaveDelConsenso(segnalazione, scrittura) {
+  return scrittura ? { ...segnalazione, chiaveDelConsenso: `scrittura:${segnalazione.percorso}` } : segnalazione;
+}
+
+/*
+ * ⛔⛔⛔ Owner 16/10/2026 sera: le CREDENZIALI DELLA CASA non si scrivono MAI — a nessun livello d'accesso, nemmeno in Full access, e
+ *   senza domanda (una domanda insegna a dire sì). «Come Hermes»: `agent/file_safety.py:176-219` (clone hermes-agent-2026-10-07)
+ *   nega per sempre `~/.ssh/authorized_keys`, `id_rsa`, `id_ed25519`, `.netrc`, `.pgpass`, `.npmrc`, `.pypirc`, `.git-credentials`
+ *   e tutto ciò che sta sotto `.ssh`, `.aws`, `.gnupg`, `.kube`, `.docker`, `.azure`, `.config/gh`, `.config/gcloud`; e lascia
+ *   `~/.ssh/config` alla domanda (`:231-239`: niente chiavi dentro, si modifica spesso). Qui uguale: `.ssh/config` chiede come gli
+ *   altri segreti (non in Full access). `_netrc` è il nome di Windows dello stesso file.
+ * ⛔ Sul percorso REALE (un collegamento verso `~/.ssh` non lo aggira) e senza lo stream di NTFS (K1). Un percorso che non si risolve
+ *   si giudica com'è scritto: mai un'eccezione da un cancello.
+ */
+export const CREDENZIALI_DELLA_CASA = Object.freeze({
+  file: Object.freeze(['.netrc', '_netrc', '.pgpass', '.npmrc', '.pypirc', '.git-credentials']),
+  cartelle: Object.freeze(['.ssh', '.aws', '.gnupg', '.kube', '.docker', '.azure', '.config/gh', '.config/gcloud']),
+  chiedono: Object.freeze(['.ssh/config']),
+});
+
+/** La credenziale della casa che questa scrittura toccherebbe (`{ percorso }`, il percorso reale), o `null`. */
+export function scritturaDiUnaCredenziale(percorso, { cartella, home = homeDiSistema(), realpathFn = realpathSyncNativa } = {}) {
+  if (typeof percorso !== 'string' || percorso.trim() === '' || typeof home !== 'string' || home === '') return null;
+  const reale = (p) => { try { return percorsoRealeAncheSeManca(p, realpathFn); } catch { return p; } };
+  let assoluto;
+  if (isAbsolute(percorso)) assoluto = risolvi(percorso);
+  else if (typeof cartella === 'string' && cartella !== '') assoluto = risolvi(cartella, percorso);
+  else return null;
+  const relativo = relativoA(reale(risolvi(home)), reale(assoluto));
+  if (relativo === '' || relativo.startsWith('..') || isAbsolute(relativo)) return null;
+  const confronta = (x) => (process.platform === 'win32' ? x.toLowerCase() : x);
+  const segmenti = relativo.split(/[\\/]+/u).map((x) => confronta(x.replace(/:.*$/su, ''))).filter(Boolean);
+  const unito = segmenti.join('/');
+  if (CREDENZIALI_DELLA_CASA.chiedono.includes(unito)) return null;
+  if (segmenti.length === 1 && CREDENZIALI_DELLA_CASA.file.includes(segmenti[0])) return { percorso: reale(assoluto) };
+  const dentro = CREDENZIALI_DELLA_CASA.cartelle.some((c) => unito === c || unito.startsWith(`${c}/`));
+  return dentro ? { percorso: reale(assoluto) } : null;
+}
+
+export function motivoDaChiedere({ tipo, comando, percorso, cartella, home = homeDiSistema(), accessoPieno = false, elenca, puntiNascosti, orologio, fsSync, leggiTesta } = {}) {
   const lettura = LETTURE.has(tipo);
-  const testo = lettura ? percorso : comando;
+  /* Una scrittura nomina UN percorso, come una lettura: niente espansione da shell. Restano fuori, per le scritture, l'esempio con una
+     chiave dentro (scrivere non rivela il contenuto) e i due inneschi «fuori dalla cartella» (le scritture fuori hanno già il loro
+     cancello, `scritturaFuoriDalProgetto` nel kernel). */
+  const scrittura = SCRITTURE.has(tipo);
+  const perPercorso = lettura || scrittura;
+  const testo = perPercorso ? percorso : comando;
   if (typeof testo !== 'string' || testo.trim() === '') return null;
   /* `elenca`, `puntiNascosti` e `fsSync` (lstat/readlink) sono per le prove: in produzione valgono il disco vero e la regola del sistema operativo. */
-  const nominato = nominaUnSegreto(testo, { home, cartella, espandi: !lettura, ...(elenca ? { elenca } : {}), ...(puntiNascosti === undefined ? {} : { puntiNascosti }), ...(orologio ? { orologio } : {}) });
-  if (nominato) return { ...nominato, ...frasePerLaPersona(nominato, tipo) };
+  const nominato = nominaUnSegreto(testo, { home, cartella, espandi: !perPercorso, ...(elenca ? { elenca } : {}), ...(puntiNascosti === undefined ? {} : { puntiNascosti }), ...(orologio ? { orologio } : {}), ...(leggiTesta ? { leggiTesta } : {}) });
+  if (nominato) return conChiaveDelConsenso({ ...nominato, ...frasePerLaPersona(nominato, tipo) }, scrittura);
   /* LINK-SEGRETO: il nome è innocuo, il file vero dietro un collegamento no (vedi `bersaglioSegretoDiUnCollegamento`). */
-  const collegato = lettura ? bersaglioSegretoDiUnCollegamento(testo, { cartella, home, ...(fsSync ? { fsSync } : {}) }) : null;
-  if (collegato) return { ...collegato, ...frasePerLaPersona(collegato, tipo) };
+  const collegato = perPercorso ? bersaglioSegretoDiUnCollegamento(testo, { cartella, home, ...(fsSync ? { fsSync } : {}) }) : null;
+  if (collegato) return conChiaveDelConsenso({ ...collegato, ...frasePerLaPersona(collegato, tipo) }, scrittura);
+  if (scrittura) return null;
+  /* 14/10/2026: un file d'esempio nominato da una lettura o da un comando, con una chiave vera dentro (un elenco non apre i file). */
+  if (tipo !== 'elenca') {
+    for (const pezzo of lettura ? [testo] : pezziDelComando(testo)) {
+      const esempio = esempioConUnaChiave(pezzo, { cartella, home, ...(leggiTesta ? { leggiTesta } : {}) });
+      if (esempio) return { ...esempio, ...frasePerLaPersona(esempio, tipo) };
+    }
+  }
   for (const pezzo of pezziDelComando(testo)) {
     const fuori = esceDalWorkspaceVersoUnNascosto(pezzo, { cartella, home });
     if (fuori) return { ...fuori, ...frasePerLaPersona(fuori, tipo) };
