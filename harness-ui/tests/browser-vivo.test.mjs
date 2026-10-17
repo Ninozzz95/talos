@@ -130,6 +130,17 @@ test('ARGOMENTI: porta 0 e profilo nostro; e NON ci sono i flag che aprirebbero 
   assert.throws(() => argomentiChromium({}), /profile folder/i);
 });
 
+test('DENSITA-LANCIO (owner 12/10: «la risoluzione è troppo bassa»): la densità dello schermo va al lancio; a 1x nessun argomento', () => {
+  const profilo = { cartellaProfilo: 'C:\\talos\\profilo-browser' };
+  assert.ok(argomentiChromium({ ...profilo, scala: 1.5 }).includes('--force-device-scale-factor=1.5'));
+  assert.ok(argomentiChromium({ ...profilo, scala: 1.25 }).includes('--force-device-scale-factor=1.25'));
+  assert.ok(argomentiChromium({ ...profilo, scala: 9 }).includes('--force-device-scale-factor=3'), 'tetto a 3');
+  // AL CONTRARIO: a 1x (o senza dirlo, o con un valore storto) non si aggiunge niente
+  for (const scala of [1, undefined, 0.5, Number.NaN, 'x']) {
+    assert.equal(argomentiChromium({ ...profilo, scala }).some((a) => a.startsWith('--force-device-scale-factor')), false, String(scala));
+  }
+});
+
 test('RIGA: l\'indirizzo si estrae solo se è davvero un ws://', () => {
   assert.equal(
     wsUrlDaRiga('DevTools listening on ws://127.0.0.1:36775/devtools/browser/a292f96c-7332-4ce8-82a9-7411f3bd280a'),

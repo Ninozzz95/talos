@@ -249,6 +249,18 @@ export function eRichiestaDellaPersona(m) {
 }
 
 /**
+ * 13/10/2026 (bugfixer, review di 28c973bdc) — una NOTA che il kernel scrive nella storia come `user` (copie identiche
+ * scartate, risposta tagliata dal tetto, silenzio del fornitore: cominciano tutte con `[TALOS]` o `[TALOS:`) non è una
+ * richiesta della persona. Per il confine degli scambi resta un `user` (`eRichiestaDellaPersona` non cambia); qui si decide
+ * solo che cosa merita di restare ALLA LETTERA come «richiesta della persona»: con tre note in un giro le richieste vere
+ * uscivano dalle tre tenute, e al loro posto restava tre volte la stessa riga (`tests/nota-di-talos-non-e-richiesta.test.mjs`).
+ * Solo all'INIZIO esatto del testo: una persona che cita `[TALOS]` in mezzo a una frase resta una persona.
+ */
+export function eNotaDiTalos(m) {
+  return m?.role === 'user' && typeof m.content === 'string' && (m.content.startsWith('[TALOS]') || m.content.startsWith('[TALOS:'));
+}
+
+/**
  * Divide la lista in testa (tutti i `system` iniziali), mezzo (ciò che si riassume) e coda (gli ultimi
  * `scambiChiusi` scambi, alla lettera). Uno scambio comincia a un messaggio `assistant`; il taglio non cade mai
  * su un `tool`, così nessun risultato resta orfano dal suo `tool_calls` (K5 della ricognizione).
@@ -287,9 +299,11 @@ export function dividiPerCompattazione(messaggi, { richiesteUtente = RICHIESTE_U
   const mezzo = corpo.slice(0, taglio);
   const coda = corpo.slice(taglio);
 
-  const utentiInCoda = coda.filter(eRichiestaDellaPersona).length;
+  /* 13/10/2026: le note del kernel non contano fra le richieste della persona, né in coda né nel mezzo (`eNotaDiTalos`). */
+  const richiestaVera = (m) => eRichiestaDellaPersona(m) && !eNotaDiTalos(m);
+  const utentiInCoda = coda.filter(richiestaVera).length;
   const daTenere = Math.max(0, richiesteUtente - utentiInCoda);
-  const richiesteLetterali = daTenere === 0 ? [] : mezzo.filter(eRichiestaDellaPersona).slice(-daTenere);
+  const richiesteLetterali = daTenere === 0 ? [] : mezzo.filter(richiestaVera).slice(-daTenere);
   const tagliabile = mezzo.length >= 2 && mezzo.some((m) => m?.role !== 'user');
   return { testa, mezzo, coda, richiesteLetterali, tagliabile };
 }
@@ -719,6 +733,10 @@ export function applicaRecord(storiaGrezza, record) {
 export function classificaErroreFornitore(errore) {
   const stato = Number(errore?.stato ?? errore?.status ?? NaN);
   const testo = `${errore?.message ?? ''} ${errore?.code ?? ''}`;
+  /* Riverifica del bugfixer (16/10/2026, CP-REV-01): un 429 è un LIMITE di traffico, anche quando dice «Too many tokens, please wait»
+     (i token al minuto di AWS Bedrock): leggerlo come contesto pieno faceva pagare un riassunto e accorciare la conversazione invece di
+     aspettare. Vale per chiunque riprovi (K8, guscio, servizio, l'adattatore dei fornitori), che usano tutti questo classificatore. */
+  if (stato === 429) return null;
   if (stato === 413) return 'contesto-pieno';
   if (PATTERN_CONTESTO_PIENO.some((p) => p.test(testo))) return 'contesto-pieno';
   return null;

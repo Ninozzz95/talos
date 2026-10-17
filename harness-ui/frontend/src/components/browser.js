@@ -579,7 +579,7 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
   let stato = {
     schede: [], attiva: null, note: {}, richiesta: null, annotazioni: {}, annotaAttivo: false,
     modoPredefinito: modoIniziale === 'testo' ? 'testo' : 'pagina',
-    modi: {}, modiChiesti: {}, riaperte: new Set(), riposate: new Set(),
+    modi: {}, modiChiesti: {}, riaperte: new Set(), riposate: new Set(), nonCaricate: new Set(),
   };
   /** Il modo di UNA scheda: quello scelto per lei, o il predefinito — mai quello della scheda di prima. */
   const modoDi = (id) => (id && stato.modi[id]) || stato.modoPredefinito;
@@ -926,9 +926,9 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
       const idSuo = s.id;
       setTimeout(() => {
         if (!frame.isConnected || frame.dataset.caricata === 'si') return;
-        if (stato.modiChiesti[idSuo] === 'pagina') return; // chi ha chiesto la pagina non si vede rispondere col testo
-        impostaModo(idSuo, 'testo');
-        if (attiva()?.id === idSuo) mostraAvviso(t("varie.browser.refusal.notice"));
+        /* 12/10/2026, owner: «sempre di default a pagina web» — non più il testo: la lettura si segna, e `renderizza` la apre
+           nel browser pilotato come una pagina che vieta la cornice */
+        stato.nonCaricate.add(idSuo);
         renderizza();
       }, 4000);
     }
@@ -1132,11 +1132,24 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
      * ⛔ Una volta sola per scheda: `azioni.apri` fa ri-renderizzare, e senza questo freno sarebbe
      *   un anello che si richiama da solo.
      */
-    if (s && s.tipo !== 'viva' && s.id && stato.modiChiesti[s.id] === 'pagina'
-        && s.incorniciabile === false && s.url && !stato.riaperte.has(s.id)) {
+    /* ⛔ 12/10/2026, owner: «molte pagine si aprono di default a testo dell'agente, non deve succedere, sempre di default a pagina
+       web». Prima si riapriva solo chi aveva PREMUTO «Pagina»; adesso è il comportamento di serie, salvo chi ha chiesto il testo.
+       Al ritorno su quella lettura si va alla scheda viva già aperta, senza ricaricarla; il testo resta solo se il pilotato non
+       c'è riuscito (lì `corniceDellaLettura` lo dice). */
+    /* solo una lettura SANA che il sito non lascia incorniciare (o che non si carica): un sito irraggiungibile o bloccato ha il suo
+       pannello di guasto, e aprirlo nel pilotato lo trasformerebbe in un «errore» senza nome */
+    const vuoleIlPilotato = s && s.tipo !== 'viva' && s.id && s.url && /^https?:/i.test(s.url) && stato.modiChiesti[s.id] !== 'testo'
+      && statoDellaScheda(s) === 'loaded' && (s.incorniciabile === false || stato.nonCaricate.has(s.id));
+    if (vuoleIlPilotato && !stato.riaperte.has(s.id)) {
       stato.riaperte.add(s.id);
+      impostaModo(s.id, 'pagina');
       azioni.apri?.(s.url, s.id);
       return;
+    }
+    if (vuoleIlPilotato && azioni.vaiAllaViva?.(s.url)) return;
+    if (s && stato.nonCaricate.has(s.id) && stato.modiChiesti[s.id] !== 'pagina' && modoDi(s.id) === 'pagina') {
+      impostaModo(s.id, 'testo'); // il pilotato non c'è: la rete di sicurezza è il testo, detto
+      mostraAvviso(t('varie.browser.refusal.notice'));
     }
     const avvisoCornice = corniceDellaLettura(s);
     const letture = stato.schede.filter((x) => x.tipo !== 'viva').length;

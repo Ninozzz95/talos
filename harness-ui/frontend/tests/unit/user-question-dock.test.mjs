@@ -427,7 +427,7 @@ test('R4-ASK-RECEIPT-STATES: saltata, annullata per motivo, interrotta, scaduta 
     [{ status: 'cancelled', esito: { motivo: 'fermato', da: 'persona' } }, 'Domanda annullata: hai fermato il giro'],
     [{ status: 'cancelled', esito: { motivo: 'nuovo-messaggio', da: 'persona' } }, 'Domanda chiusa: hai scritto un altro messaggio'],
     [{ status: 'cancelled', esito: { motivo: 'interrotta', da: 'sistema' } }, 'Domanda interrotta: il server si è riavviato prima della risposta'],
-    [{ status: 'expired', esito: { da: 'sistema' } }, 'Domanda scaduta: nessuna risposta in tempo, il giro si è fermato'],
+    [{ status: 'expired', esito: { da: 'sistema' } }, 'Domanda scaduta: nessuna risposta in tempo'],
     [{ status: 'unanswerable', esito: { motivo: 'nessuna-interfaccia', da: 'sistema' } }, 'Nessuno poteva rispondere: TALOS prosegue con l’ipotesi più prudente e la dichiara'],
   ];
   const frasi = new Set();

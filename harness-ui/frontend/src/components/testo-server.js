@@ -8,7 +8,7 @@
  *   · la chiave c'è nel dizionario → `t(chiave, params)`, nella lingua corrente;
  *   · la chiave manca (un server più nuovo del dizionario) o non c'è → la frase del server, MAI la chiave grezza.
  *
- * ⛔ Due convenzioni, entrambe provate da `tests/k4a-testi-del-server.test.mjs`:
+ * ⛔ Due convenzioni, entrambe provate da `tests/k4a-testi-del-server-desktop.test.mjs`:
  *   · una chiave senza voce propria ma con `<chiave>One` e `<chiave>Many` è un PLURALE: si sceglie col numero `params.n`;
  *   · un parametro `<nome>Chiave` dice che il valore `<nome>` è a sua volta un testo del dizionario (il nome di una fonte di
  *     ricerca, di un fornitore): si dice nella lingua corrente prima di entrare nella frase.

@@ -6883,8 +6883,9 @@ describe('⛔⛔⛔ la valanga di chiamate identiche del motore locale — 08/09
         assert.equal(ripetizione.nome, 'elenca')
         assert.equal(ripetizione.argomenti, '{}')
         assert.equal(ripetizione.viste, RIPETIZIONI_IDENTICHE_MASSIME)
-        assert.equal(scelta.tool_calls.length, RIPETIZIONI_IDENTICHE_MASSIME - 1,
-            'le copie oltre la soglia non entrano nella conversazione: nessuna verra mai eseguita, nessuna restera orfana')
+        /* CLI 0.6.6, F-Y-004 (contratto R54, 15/10/2026): della valanga entra SOLO la prima copia — prima ne entravano due */
+        assert.equal(scelta.tool_calls.length, 1,
+            'le copie oltre la prima non entrano nella conversazione: nessuna verra mai eseguita, nessuna restera orfana')
         assert.equal(stato.annullato, true, 'la connessione col server va CHIUSA: la fonte dice che quella valanga e limitata solo dal client')
         assert.ok(stato.chiesti < 30, `letti ${stato.chiesti} pezzi su 1194: il flusso non deve essere consumato tutto`)
     })
@@ -6986,13 +6987,19 @@ describe('⛔⛔⛔ la valanga vista da talosLavora, e l argomento troncato che 
         assert.match(esito.detto, /very same thing/)
         assert.match(esito.detto, /elenca/)
         assert.match(esito.detto, /not a limit on the number of tools/)
-        assert.equal(rete.chiamate.length, 1, 'niente secondo giro: il contesto non si riempie di copie identiche')
+        /* ⛔ 12/10/2026, owner («una soluzione che non comprometta la fluidità della conversazione»): UNA risposta con copie
+           identiche non ferma più il giro (il modello lo legge e riparte); qui il modello non ne esce MAI, e il giro si ferma
+           alla terza risposta. In nessuna il contesto si riempie di copie: due eseguite per risposta, le altre mai entrate. */
+        assert.match(esito.detto, /did it again in 3 answers of this turn even after being told/)
+        assert.equal(rete.chiamate.length, 3, 'tre risposte, poi basta: non una (era uno stop secco) e non infinite')
 
         const assistente = esito.messaggiFinali.filter((m) => m.role === 'assistant' && m.tool_calls)
-        assert.equal(assistente.length, 1)
-        assert.equal(assistente[0].tool_calls.length, 2, 'due copie eseguite, le altre 48 mai entrate')
+        assert.equal(assistente.length, 3)
+        for (const a of assistente) assert.equal(a.tool_calls.length, 1, 'una copia eseguita, le altre 49 mai entrate (R54, 15/10/2026)')
         const esitiAttrezzo = esito.messaggiFinali.filter((m) => m.role === 'tool')
-        assert.equal(esitiAttrezzo.length, 2, 'una risposta per ogni chiamata annunciata: nessuna chiamata orfana')
+        assert.equal(esitiAttrezzo.length, 3, 'una risposta per ogni chiamata entrata: nessuna chiamata orfana')
+        // fra una risposta e l'altra il modello ha letto che cosa era successo (due note: alla terza il giro si ferma)
+        assert.equal(esito.messaggiFinali.filter((m) => m.role === 'user' && /^\[TALOS: this is call \d+ of "elenca" with the same arguments in your last answer/u.test(String(m.content))).length, 2) // F-Y-002: il prefisso di R54
         assert.match(esitiAttrezzo[0].content, /un-file\.txt/, 'le chiamate sopravvissute sono lavoro vero, eseguito davvero')
     })
 
@@ -7217,7 +7224,7 @@ describe('⛔⛔⛔ BC-10 — un saluto NON sfoglia tutta la Libreria: il tetto 
         /* ⛔ VERSO CHE DEVE FALLIRE (2): e quel `null` non è perché la funzione è inerte — con gli argomenti IDENTICI morde al terzo colpo. */
         const identiche = Array.from({ length: 11 }, (_, i) => ({ id: `c${i}`, function: { name: 'library_find', arguments: '{"origin":"all"}' } }))
         const controIdentiche = limitaRipetizioniIdentiche(identiche, 3)
-        assert.equal(controIdentiche.toolCalls.length, 2, 'la guardia della valanga funziona: taglia alla terza copia identica')
+        assert.equal(controIdentiche.toolCalls.length, 1, 'la guardia della valanga funziona: alla terza copia identica ne resta solo la prima (R54)')
         assert.ok(controIdentiche.ripetizione, 'e lo dichiara')
     })
 

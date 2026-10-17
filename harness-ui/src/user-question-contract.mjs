@@ -57,6 +57,31 @@ function testo(value, { nome, max }) {
   return pulito;
 }
 
+/*
+ * L3-5 (owner 13/10/2026, D5: «si accorcia a 12 e la domanda parte, mai più QUERY_INVALID per questo») — il titolo breve è
+ *   un'etichetta di presentazione, non contenuto: un modello che scrive «Authentication method» (21) si vedeva rifiutare
+ *   l'INTERA domanda e doveva rifarla. Claude Code non rifiuta (il 12 è solo nella descrizione dell'attrezzo). Il titolo è
+ *   l'unico campo che si accorcia: una domanda, un'etichetta o un'anteprima tagliate cambierebbero ciò che la persona legge.
+ * Il limite resta quello di `testo` (unità UTF-16), ma il taglio cade fra due caratteri VISIBILI (grafemi): mai mezza faccina,
+ *   mai una lettera senza il suo accento; e non lascia uno spazio in coda. La forma che torna è quella canonica: la stessa
+ *   domanda col titolo lungo o già accorciato ha la stessa impronta.
+ */
+const GRAFEMI = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+function titoloBreve(value, { nome, max }) {
+  if (typeof value !== 'string') rifiuta(`${nome} must be text`);
+  const pulito = value.trim();
+  if (!pulito) rifiuta(`${nome} cannot be empty`);
+  if (pulito.length <= max) return pulito;
+  let corto = '';
+  for (const { segment } of GRAFEMI.segment(pulito)) {
+    if (corto.length + segment.length > max) break;
+    corto += segment;
+  }
+  corto = corto.trimEnd();
+  if (!corto) rifiuta(`${nome} cannot be empty`); // un solo «carattere» più lungo del limite: non c'è niente da mostrare
+  return corto;
+}
+
 /* L'anteprima è codice o un diff: gli spazi in testa contano, quindi non si accorcia; si toglie solo l'a-capo finale. */
 function anteprima(value, nome) {
   if (typeof value !== 'string') rifiuta(`${nome} must be text`);
@@ -113,7 +138,7 @@ export function validaDomandeUtente(questions, { perche = 'facoltativo', campiIn
     if (ids.has(id)) rifiuta(`duplicate question id: ${id}`);
     ids.add(id);
     const header = question.header === undefined ? undefined
-      : testo(question.header, { nome: `questions[${indice}].header`, max: LIMITI_DOMANDA_UTENTE.titoloMax });
+      : titoloBreve(question.header, { nome: `questions[${indice}].header`, max: LIMITI_DOMANDA_UTENTE.titoloMax });
     const domanda = testo(question.question, { nome: `questions[${indice}].question`, max: LIMITI_DOMANDA_UTENTE.domandaMax });
     if (perche === 'obbligatorio' && question.why === undefined) {
       rifiuta(`questions[${indice}].why is required: a sentence saying why the answer matters`);
@@ -195,6 +220,20 @@ export const ESITO_DOMANDA_SOSTITUITA = Object.freeze({
   status: 'cancelled',
   reason: 'new-message',
   note: 'The user did not answer this question: they wrote a new message instead, which follows.',
+});
+
+/*
+ * ⛔ 14/10/2026, owner (CLI e desktop) — una domanda SCADUTA, con l'opzione dell'ospite `domandaScadutaFerma: false`, non ferma
+ *   il giro: il modello riceve questo esito e prosegue. Come per `ESITO_DOMANDA_SENZA_INTERFACCIA`, mai una risposta finta e
+ *   l'obbligo di DIRE l'ipotesi. Fonti (cloni letti il 14/10/2026): Codex `tui/src/bottom_pane/request_user_input/mod.rs`
+ *   (`submit_empty_auto_resolution`: alla scadenza si consegna una risposta vuota e il giro continua); Hermes
+ *   `gateway/run_turn_runner_clarify_delivery.py` («the user did not respond»); zcode
+ *   `core/src/tool/handlers/ask-user-question.ts` («use your best judgment … do not invent user preferences»).
+ */
+export const ESITO_DOMANDA_SCADUTA_PROSEGUE = Object.freeze({
+  status: 'expired',
+  instruction: 'The user did not answer in time. Continue with your best judgment: for each question, choose the most prudent '
+    + 'option, state that assumption explicitly in your reply so the user can correct it later, and do not invent the user\'s preferences.',
 });
 
 export function fingerprintDomanda(questions) {

@@ -918,7 +918,7 @@ export function impostaEsitoRiga(riga, esito) {
   const tono = esito === 'running' ? 'live' : esito === 'success' ? 'success' : esito === 'error' ? 'danger' : esito === 'interrupted' || esito === 'not-run' ? 'warning' : null;
   pallino.className = `talos-dot${tono ? ` talos-dot--${tono}` : ''}`;
   /* 27/09, decisione owner 47: `corretta` — il modello riformula una domanda respinta per la forma; pallino neutro, riga attenuata. */
-  riga.dataset.toolState = esito === 'running' ? 'running' : esito === 'error' ? 'error' : esito === 'success' ? 'complete' : esito === 'interrupted' ? 'interrupted' : esito === 'not-run' ? 'not-run' : esito === 'corretta' ? 'corrected' : '';
+  riga.dataset.toolState = esito === 'running' ? 'running' : esito === 'error' ? 'error' : esito === 'success' ? 'complete' : esito === 'interrupted' ? 'interrupted' : esito === 'not-run' ? 'not-run' : esito === 'corretta' ? 'corrected' : esito === 'duplicate' ? 'duplicate' : ''; // 12/10/2026: copia identica saltata, pallino neutro
   if (!riga.dataset.toolState) delete riga.dataset.toolState;
 }
 

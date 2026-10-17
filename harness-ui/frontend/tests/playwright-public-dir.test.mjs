@@ -1,3 +1,4 @@
+import { FILE_SONDE_4174 } from './browser/sonde-4174.mjs';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
@@ -22,7 +23,7 @@ function leggiConfig(extraEnv = {}, tempRoot = null) {
     if (value !== undefined) env[key] = value;
   }
   const script = `import config from ${JSON.stringify(configUrl.href)};
-process.stdout.write(JSON.stringify({ baseURL: config.use.baseURL, testIgnore: config.testIgnore, webServer: config.webServer && { publicDir: config.webServer.env.TALOS_HARNESS_UI_PUBLIC_DIR, storeDir: config.webServer.env.TALOS_HARNESS_UI_SESSIONS_DIR, dataDir: config.webServer.env.TALOS_DESKTOP_DATA_DIR, cwd: config.webServer.cwd, reuseExistingServer: config.webServer.reuseExistingServer, envKeys: Object.keys(config.webServer.env) } }));`;
+process.stdout.write(JSON.stringify({ baseURL: config.use.baseURL, testIgnore: config.testIgnore.map((x) => (x instanceof RegExp ? String(x) : x)), webServer: config.webServer && { publicDir: config.webServer.env.TALOS_HARNESS_UI_PUBLIC_DIR, storeDir: config.webServer.env.TALOS_HARNESS_UI_SESSIONS_DIR, dataDir: config.webServer.env.TALOS_DESKTOP_DATA_DIR, cwd: config.webServer.cwd, reuseExistingServer: config.webServer.reuseExistingServer, envKeys: Object.keys(config.webServer.env) } }));`;
   return spawnSync(process.execPath, ['--input-type=module', '--eval', script], {
     cwd: frontend,
     env,
@@ -83,7 +84,9 @@ test('PW-REPORT-SECRET-019 — il config serializzato non contiene credenziali e
   assert.ok(envKeys.includes('TALOS_HARNESS_UI_KEYRING'));
 });
 
-test('solo i due confronti storici e il lab legacy restano fuori dal gate browser automatico', () => {
+test('solo i due confronti storici, il lab legacy e le sonde del 4174 restano fuori dal gate browser automatico', () => {
+  /* L3-11 (15/10/2026): le sonde scritte per il 4174 (`_*-4174.spec.mjs`) sono fuori anche col baseURL esterno, e rientrano solo
+     con TALOS_SONDE_4174=1 (`tests/browser/sonde-4174.mjs`). Prima l'elenco era di tre: il quarto è dichiarato, non scivolato. */
   const child = leggiConfig({ TALOS_HARNESS_UI_BASE_URL: 'http://127.0.0.1:49999/' });
   assert.equal(child.status, 0, child.stderr);
   const config = JSON.parse(child.stdout);
@@ -91,7 +94,10 @@ test('solo i due confronti storici e il lab legacy restano fuori dal gate browse
     'lab-bootstrap.spec.mjs',
     '_confronto-exa.spec.mjs',
     '_confronto-fase1.spec.mjs',
+    String(FILE_SONDE_4174), // il contratto vive in `tests/browser/sonde-4174.mjs`
   ]);
+  const conSonde = JSON.parse(leggiConfig({ TALOS_HARNESS_UI_BASE_URL: 'http://127.0.0.1:49999/', TALOS_SONDE_4174: '1' }).stdout);
+  assert.deepEqual(conSonde.testIgnore, ['lab-bootstrap.spec.mjs', '_confronto-exa.spec.mjs', '_confronto-fase1.spec.mjs'], 'chieste apposta, le sonde rientrano');
   assert.ok(!config.testIgnore.includes('r4-approved-mockups.spec.mjs'));
 });
 

@@ -129,6 +129,7 @@ test('⭐⭐⭐ RPM-05 — la chiamata torna la frase del piano: il cambio è da
     const { esiti } = await giro(cartellaDiProva(t), [chiamata('request_plan_mode')], {
         strumentiEstesi: ['request_plan_mode'],
         onRichiestaPianoFn: async () => { viste.push(1); return { ok: true } },
+        presentaPianoFn: async () => ({}), // c'è chi approva: la promessa di present_plan è vera
     })
     assert.equal(viste.length, 1, 'il canale è stato chiamato')
     assert.equal(esiti[0], 'Plan mode requested: it will be active from the next turn. Prepare the plan; `present_plan` will be available then.',
@@ -193,4 +194,43 @@ test('⛔ RPM-09, AL CONTRARIO — chiedere due volte nello stesso giro è idemp
     const eventi = registro.esporta(sessionId).eventi.filter((e) => e?.name === 'talos.impostazioni-sessione' && e.value?.motivo === 'piano-richiesto-dal-modello')
     assert.equal(eventi.length, 1, 'una richiesta accodata una volta: un evento solo')
     finta.concludi({ type: 'RunFinished' })
+})
+
+/* CLI, decima revisione (15/10/2026): le frasi dicono solo ciò che i canali offrono. Senza chi approva (`talos -p`, una sessione
+   senza interfaccia: niente `presentaPianoFn`) il piano si scrive nella risposta — come Claude Code in `-p`, che stampa ed esce. */
+async function giroConCorpi(cartella, chiamate, opzioni = {}) {
+    let n = 0
+    const corpi = []
+    const esito = await talosLavora({
+        cartella, task: { consegna: 'pianifica' }, modello: 'x', chiave: 'y', onDelta: () => {},
+        fetchDiRete: async (indirizzo, richieste = {}) => {
+            try { corpi.push(JSON.parse(richieste.body ?? '{}')) } catch { /* corpo non leggibile */ }
+            if (n < chiamate.length) return chiamate[n++]()
+            return testoFinale()
+        },
+        ...opzioni,
+    })
+    const sistema = (corpi[0]?.messages ?? []).filter((m) => m.role === 'system').map((m) => m.content).join(' | ')
+    return { esiti: esito.messaggiFinali.filter((m) => m.role === 'tool').map((m) => m.content), sistema }
+}
+
+test('RPM-05b (CLI) — senza chi approva, request_plan_mode non promette present_plan: il piano si scrive nella risposta', async (t) => {
+    const { esiti } = await giro(cartellaDiProva(t), [chiamata('request_plan_mode')], {
+        strumentiEstesi: ['request_plan_mode'], onRichiestaPianoFn: async () => ({ ok: true }),
+    })
+    assert.equal(esiti[0], 'Plan mode requested: it will be active from the next turn. Prepare the plan; nobody can approve it in this session, so write it in your answer.')
+})
+
+test('PIANO-SENZA-CANALI (CLI) — in modo Piano senza chi approva e senza a chi chiedere: la nota non nomina ask_user_question né present_plan, e un present_plan forzato riceve la frase vera', async (t) => {
+    const { esiti, sistema } = await giroConCorpi(cartellaDiProva(t), [chiamata('present_plan', { plan: '# Piano' })], { modalitaOperativa: 'piano' })
+    assert.match(sistema, /Plan mode is on\./u, 'premise: the plan note is there')
+    assert.doesNotMatch(sistema, /use ask_user_question/u, 'no person to ask')
+    assert.doesNotMatch(sistema, /only way to get it approved/u, 'nobody approves')
+    assert.match(sistema, /write the full plan in your answer/u)
+    assert.equal(esiti[0], 'REFUSED. Nobody can approve a plan in this session: write the full plan in your answer.')
+})
+
+test('PIANO-CON-CANALI (CLI) AL CONTRARIO — con chi approva la nota resta quella di prima', async (t) => {
+    const { sistema } = await giroConCorpi(cartellaDiProva(t), [], { modalitaOperativa: 'piano', presentaPianoFn: async () => ({}), strumentiEstesi: ['present_plan'] })
+    assert.match(sistema, /call present_plan with the full plan in Markdown: it is the only way to get it approved\./u)
 })

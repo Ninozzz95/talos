@@ -159,9 +159,6 @@ export function creaSnapshot(run, { release = false } = {}) {
   const files = git('ls-files', '-z').split('\0').filter(Boolean);
   const gitlinks = new Map(git('ls-files', '--stage', '-z').split('\0').filter(row => row.startsWith('160000 ')).map(row => [row.slice(row.indexOf('\t') + 1), row.split(' ')[1]]));
   const additions = [
-    'harness-ui/frontend/src/components/cronologia-grafo.js',
-    'harness-ui/frontend/tests/unit/cronologia-grafo.test.mjs',
-    'harness-ui/frontend/tests/browser/ripresa-replay.spec.mjs',
     'harness-ui/src/agent-timeline.mjs',
     'harness-ui/tests/agent-timeline.test.mjs',
     'harness-ui/frontend/scripts/ripresa-run.mjs',

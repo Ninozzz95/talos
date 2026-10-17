@@ -66,6 +66,17 @@ test('NATIVE-UI-02 la scheda del fornitore diretto cerca e salva il modello scel
   await page.route('**/api/v1/providers', r=>r.fulfill({json:envelope({items:[{id:'gemini',label:'Gemini',keyConfigured:true}]})}));
   await page.route('**/api/v1/providers/gemini/models', r=>r.fulfill({json:envelope({provider:'gemini',modelli:[{id:'gemini:gemini-3.8-flash',nome:'Gemini Flash',provider:'gemini',contextLength:1000000}]})}));
   await page.route('**/api/v1/sessions/image-proof-prima/settings',r=>{saved=r.request().postDataJSON();return r.fulfill({json:envelope({ok:true,...saved})});});
+  /* ⛔ AGGIORNATA il 15/10/2026 (bugfixer) — il difetto era della PROVA, non del prodotto. Dall'11/10/2026 (d40c5bf00,
+     `chat-foot.js:192-198`, «il prefisso `fornitore:` è instradamento, non il nome del modello: via») la pillola dice
+     «gemini-3.8-flash» anche per il modello diretto `gemini:gemini-3.8-flash`, e l'identificatore intero sta nel suggerimento
+     (`chat-foot.js:503-505`). La prova cercava ancora un pulsante «gemini:gemini-3.8-flash»: rossa identica su 5793bd468 e su
+     2bd1b3e27. Il nome a schermo è lo STESSO prima e dopo (google/… e gemini:… finiscono tutti e due in «gemini-3.8-flash»),
+     quindi il salvataggio si prova sul suggerimento, letto PRIMA e DOPO: senza il «prima» la prova passerebbe anche senza
+     salvare niente. ⛔ Owner 13/10/2026 sera (D7, punto 7): «la pillola del modello per un fornitore DIRETTO dice anche da dove
+     arriva (es. "Gemini · gemini-3.8-flash")» — fatto in L3-10 (15/10/2026, `nomePillolaModello` in app.js): l'ultima riga ora
+     pretende il nome CON l'origine, e il «prima» (OpenRouter) resta senza. */
+  const pillola = page.locator('[data-open-sheet="model"]');
+  await expect(pillola).toHaveAttribute('title', 'Cambia modello · google/gemini-3.8-flash');
   await page.getByRole('button',{name:'gemini-3.8-flash',exact:true}).click();
   // ⛔ AGGIORNATA il 18/09/2026 — il difetto era della PROVA, non del prodotto.
   // «Diretti» non è più una scheda: l'owner l'11/09/2026 ha chiesto una tab PER FORNITORE
@@ -82,7 +93,9 @@ test('NATIVE-UI-02 la scheda del fornitore diretto cerca e salva il modello scel
   await page.getByRole('searchbox').fill('gemini');
   await page.getByRole('option',{name:/Gemini Flash gemini:gemini-3.8-flash/}).click();
   await expect.poll(()=>saved?.modello).toBe('gemini:gemini-3.8-flash');
-  await expect(page.getByRole('button',{name:'gemini:gemini-3.8-flash',exact:true})).toBeVisible();
+  await expect(pillola, 'il modello salvato è quello diretto: lo dice il suggerimento').toHaveAttribute('title', 'Cambia modello · gemini:gemini-3.8-flash');
+  await expect(page.getByRole('button',{name:'Gemini · gemini-3.8-flash',exact:true}), 'a schermo il nome del modello CON la sua origine diretta (L3-10)').toBeVisible();
+  await expect(page.getByRole('button',{name:'gemini:gemini-3.8-flash',exact:true}), 'mai il prefisso d’instradamento grezzo').toHaveCount(0);
 });
 
 test('IMAGE-11 upload in corso blocca invio e non entra nella sessione successiva', async ({page}) => {

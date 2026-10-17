@@ -93,8 +93,10 @@ test('AL CONTRARIO — il ripiego automatico scrive il MODO, mai la richiesta de
   assert.ok(ripiego, 'il ripiego deve esistere');
   assert.ok(!/modiChiesti\[[^\]]+\]\s*=/.test(ripiego[1]),
     '⛔ il ripiego automatico non deve fingere una richiesta della persona, o non scatterà mai più');
-  assert.match(senzaCommenti, /stato\.modiChiesti\[s\.id\] === 'pagina'/,
-    'una scheda che aveva chiesto Pagina su un sito non incorniciabile si riapre pilotata: la cura dell\'08/09 resta intatta');
+  // 12/10/2026, owner: «sempre di default a pagina web» — si riapre pilotata OGNI lettura che non ha chiesto il testo, non più solo
+  // chi aveva premuto «Pagina» (la cura dell'08/09 diventa il comportamento di serie)
+  assert.match(senzaCommenti, /stato\.modiChiesti\[s\.id\] !== 'testo'\s*&& statoDellaScheda\(s\) === 'loaded' && \(s\.incorniciabile === false \|\| stato\.nonCaricate\.has\(s\.id\)\)/,
+    'una lettura SANA su un sito non incorniciabile si apre nel browser pilotato, salvo chi ha chiesto il testo; un guasto ha il suo pannello');
 });
 
 /*
@@ -102,9 +104,12 @@ test('AL CONTRARIO — il ripiego automatico scrive il MODO, mai la richiesta de
  *   della scheda a cui appartiene (`idSuo`) invece di scrivere sulla variabile globale. Senza questa
  *   riga, una cornice lenta buttava in «Testo» anche le schede che stavano benissimo.
  */
-test('AL CONTRARIO — il ripiego a tempo scrive sulla SUA scheda, non su quella attiva in quel momento', () => {
-  assert.match(senzaCommenti, /const idSuo = s\.id;[\s\S]{0,400}impostaModo\(idSuo, 'testo'\)/,
+test('AL CONTRARIO — il ripiego a tempo segna la SUA scheda, non quella attiva in quel momento, e non la butta più nel testo', () => {
+  assert.match(senzaCommenti, /const idSuo = s\.id;[\s\S]{0,400}stato\.nonCaricate\.add\(idSuo\)/,
     'l’id si cattura alla creazione della cornice: quando l’attesa scade, l’attiva può essere un’altra');
+  const attesa = /const idSuo = s\.id;[\s\S]{0,600}?\}, 4000\);/.exec(senzaCommenti)?.[0] ?? '';
+  assert.ok(attesa && !/impostaModo\(idSuo, 'testo'\)/.test(attesa),
+    '12/10, owner: «sempre di default a pagina web» — l’attesa scaduta non sceglie il testo da sola');
 });
 
 test('LO STATO NASCE senza una scelta della persona: il ripiego automatico deve poter agire', () => {

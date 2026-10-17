@@ -64,7 +64,7 @@ import { createWriteStream } from 'node:fs'
 import { lstat, open, readdir, readFile, readlink, realpath, stat as statAsync } from 'node:fs/promises'
 import { request as richiestaHttp } from 'node:http'
 import { request as richiestaHttps } from 'node:https'
-import { basename, delimiter as separatoreDiPath, dirname, join, posix as percorsiPosix, resolve, sep } from 'node:path'
+import { basename, delimiter as separatoreDiPath, dirname, join, posix as percorsiPosix, relative, resolve, sep } from 'node:path'
 /* ⛔ Vedi `dormi` in `chiamaConRitenta`: l'attesa fra un ritenta e l'altro deve poter essere SVEGLIATA dallo stop, e `Promise.race` non basta — il timer perdente resta pendente. */
 import { createRequire } from 'node:module'
 import { setTimeout as dormiConSegnale } from 'node:timers/promises'
@@ -88,7 +88,7 @@ import { etichettaSandbox } from './etichetta-sandbox.mjs'
  * (solo `node:fs`/`node:os`/`node:path`) come gli altri tre import qui sopra: il kernel resta
  * trasportabile nel bundle del banco.
  */
-import { motivoDaChiedere, eUnFileSegreto } from '../path-policy.mjs'
+import { motivoDaChiedere, eUnFileSegreto, scritturaDiUnaCredenziale } from '../path-policy.mjs'
 import { withoutEchoedMarker } from '../eco-del-marcatore.mjs'
 import { ARGOMENTI_NESSUNO, argomentiVuoti, conArgomentiVuotiComeOggetto } from '../argomenti-vuoti.mjs'
 /*
@@ -111,8 +111,8 @@ import { TETTO_PAGINA_WEB, paginaTagliataPerIlModello, salvaPaginaIntera, eUnaPa
 import { collegamentoLinuxSulPercorso, spiegazioneCollegamentoLinux, erroriDiRipgrep, avvisoCollegamentiDiRipgrep } from './collegamento-linux.mjs' // 5a, owner 01/10/2026: collegamenti Linux su un disco di Windows, errore onesto
 import { worktreeDiWindowsLettoDaLinux, spiegazioneWorktreeWindows } from './worktree-windows.mjs' // F-016, owner 01-02/10/2026: worktree di Windows letto dal git di Linux
 import { formatoEstraibile, estraiTestoDocumento, ErroreEstrazione, MAX_BYTE_DOCUMENTO } from './estrai-documento.mjs' // F-001, owner 01-02/10/2026: leggi estrae il testo di docx/xlsx/pptx/pdf
-import { avvolgiDati, avvisoSospetto, scansionaIstruzioni, luogoDellaFonte, ISTRUZIONE_CONFINE_DATI, SEGNO_ISTRUZIONE_CONFINE, sospettoNeiRisultatiFigli } from './confine-dati.mjs' // F-027 / H-02 + H-03, owner 02/10/2026
-export { APERTURA_DATI, CHIUSURA_DATI, avvolgiDati, avvisoSospetto, neutralizzaDati, scansionaIstruzioni, togliConfiniDati, testoPerLoSchermo, luogoDellaFonte, ISTRUZIONE_CONFINE_DATI, SEGNO_ISTRUZIONE_CONFINE, TIPI_DI_LUOGO, INTESTAZIONE_RISULTATO_FIGLIO, testoDelRisultatoFiglio, sospettoNeiRisultatiFigli, INTESTAZIONE_ESITO_WORKFLOW, testoDellEsitoWorkflow } from './confine-dati.mjs'
+import { avvolgiDati, avvisoSospetto, scansionaIstruzioni, luogoDellaFonte, ISTRUZIONE_CONFINE_DATI, istruzioneConfineDati, SEGNO_ISTRUZIONE_CONFINE, ECCEZIONE_ADOZIONE, SEGNO_ECCEZIONE_ADOZIONE, fileNominatoDallaPersona, testoScrittoDallaPersona, sospettoNeiRisultatiFigli } from './confine-dati.mjs' // F-027 / H-02 + H-03, owner 02/10/2026
+export { APERTURA_DATI, CHIUSURA_DATI, avvolgiDati, avvisoSospetto, neutralizzaDati, scansionaIstruzioni, togliConfiniDati, testoPerLoSchermo, luogoDellaFonte, ISTRUZIONE_CONFINE_DATI, ISTRUZIONE_CONFINE_DATI_CON_ADOZIONE, istruzioneConfineDati, SEGNO_ISTRUZIONE_CONFINE, ECCEZIONE_ADOZIONE, SEGNO_ECCEZIONE_ADOZIONE, TIPI_DI_LUOGO, INTESTAZIONE_RISULTATO_FIGLIO, testoDelRisultatoFiglio, sospettoNeiRisultatiFigli, INTESTAZIONE_ESITO_WORKFLOW, testoDellEsitoWorkflow } from './confine-dati.mjs'
 import { serveLoStatoDelBersaglio, motivoPerNonScrivereTesto } from './guardia-scrittura-binari.mjs' // F-001, owner 02/10/2026: «tutta la guardia di Hermes»
 import { bloccoDelPavimento, rifiutoDelPavimento } from './pavimento-comandi.mjs' // N-02, owner 02/10/2026: il pavimento di Hermes, parti 1+2+3
 import { vistaWindows, vistaLinux } from './percorsi-casa-linux.mjs' // Fase B, owner 01/10/2026: le due viste dello stesso percorso
@@ -495,6 +495,34 @@ export function attesaDelTentativo(tentativo, caso = Math.random) {
  * uguale — resta aperto anche qui, dichiarato, non nascosto.
  */
 export const RIPETIZIONI_IDENTICHE_MASSIME = 3
+/*
+ * ⛔ 12/10/2026, owner («una soluzione che non comprometta la fluidità della conversazione, questo va al primo posto») — quante
+ *   RISPOSTE con copie identiche si tollerano nello stesso giro prima di fermarlo. Prima era una: alla terza copia identica la
+ *   risposta si chiudeva E il giro finiva con una carta d'errore, anche per un modello in cloud che aveva solo chiesto due volte
+ *   di troppo la stessa lettura. Letti nel codice il 12/10: Claude Code (eseguibile 2.1.x, nessun controllo), Codex
+ *   (`core/src/tools/parallel.rs`) e Pi (`packages/agent`) eseguono tutto; Hermes toglie le copie e continua
+ *   (`run_agent.py:1198-1214`). Nessuno ferma la conversazione.
+ * ⇒ La chiusura del flusso alla terza copia RESTA (è la cura della valanga del decoder locale: 398 copie misurate); ciò che cambia
+ *   è il dopo: le copie in più non si eseguono, il modello lo legge in una riga, e il giro CONTINUA. Si ferma solo se succede in
+ *   tre risposte dello stesso giro — lì non è una sbadataggine, è un decoder che non ne esce.
+ * ⛔ L3-4 (owner 13/10/2026, D3): le tre (o sei) risposte si contano DI FILA. Una risposta con attrezzi e senza copie azzera il
+ *   conto: in un giro lungo tre sbadataggini lontane fra loro non sono un decoder bloccato.
+ */
+export const RISPOSTE_RIPETUTE_MASSIME_NEL_GIRO = 3
+/* Con la guardia dei giri in tondo accesa (desktop, CLI) a decidere è LEI: alla 5ª esecuzione identica chiede alla persona, e un
+   sì azzera anche questo conto. Qui resta solo un tetto più alto, per le copie identiche che danno risultati DIVERSI (quelle la
+   guardia non le conta): senza, un decoder bloccato su un comando che cambia a ogni giro non finirebbe mai. */
+export const RISPOSTE_RIPETUTE_MASSIME_CON_GUARDIA = 6
+/**
+ * La riga che il modello legge dopo una risposta con copie identiche: che cosa è successo e che cosa fare adesso.
+ * ⛔ CLI 0.6.6, F-Y-002 (bugfixer, 15/10/2026; R54 della CLI): lo STESSO prefisso della nota dei giri in tondo (`notaGiriInTondo`,
+ *   «[TALOS: this is call N of "<nome>" with the same arguments…»), così il modello riconosce una sola forma per «l'hai già
+ *   chiesto». N è il numero vero di copie viste nella risposta; dopo F-Y-004 «not run» è vero: è girata solo la prima.
+ */
+export function notaCopieScartate({ nome, viste } = {}) {
+    return `[TALOS: this is call ${viste ?? 'several'} of "${nome ?? 'tool'}" with the same arguments in your last answer. Only the first copy`
+        + ' was run; the extra copies were not run, and its result is already above. Do not ask for it again; continue with the next step.]'
+}
 
 /*
  * ⛔⭐ BUG-16 (05/10/2026, owner: auto-retry NON negoziabile, anche per i sub-agenti) — IL CANALE
@@ -604,9 +632,17 @@ export const ATTESA_INCERTA_MASSIMA_MS = 60_000
  * ⛔ Scarta ANCHE i buchi di un array sparso (`undefined`): un `for (const c of
  * chiamate)` su un array con un buco tira fuori `undefined`, e la riga dopo
  * legge `c.function` — vedi la doc di `posizioneDelPezzo` sotto.
+ *
+ * ⛔ CLI 0.6.6, F-Y-004 (bugfixer, 15/10/2026; contratto R54 della CLI: «the very same tool call three or more times in ONE
+ *   response: ONE runs, the copies are discarded with a result that says why») — DELLA VALANGA GIRA SOLO LA PRIMA COPIA. Prima si
+ *   teneva tutto fino alla terza copia: con tre (o cinque) chiamate identiche ne giravano DUE (prova F-Y-004 in
+ *   `tests/indagine-cli-066.test.mjs`), e la nota diceva «the extra copies were not run». Ora, riconosciuta la valanga, si toglie
+ *   anche la seconda copia di QUELLA firma. ⛔ Due sole copie identiche girano tutte e due, come prima: R54 parla di tre o più, e
+ *   due letture uguali separate da una scrittura sono lavoro vero (la seconda vede il file nuovo: FULL-ACCESS-03, VEL-06).
+ *   Hermes toglie le copie e continua (`run_agent.py:1198-1214`, letto il 12/10).
  */
 export function limitaRipetizioniIdentiche(chiamate, ripetizioniMassime = RIPETIZIONI_IDENTICHE_MASSIME) {
-    const tenute = []
+    let tenute = []
     const conteggio = new Map()
     let ripetizione = null
     for (const c of Array.isArray(chiamate) ? chiamate : []) {
@@ -615,6 +651,8 @@ export function limitaRipetizioniIdentiche(chiamate, ripetizioniMassime = RIPETI
         const quante = (conteggio.get(firma) ?? 0) + 1
         conteggio.set(firma, quante)
         if (quante >= ripetizioniMassime) {
+            const prima = tenute.find((t) => `${t.function.name ?? ''}\x00${t.function.arguments ?? ''}` === firma)
+            tenute = tenute.filter((t) => t === prima || `${t.function.name ?? ''}\x00${t.function.arguments ?? ''}` !== firma)
             ripetizione = {
                 nome: c.function.name,
                 argomenti: c.function.arguments,
@@ -915,10 +953,12 @@ export async function consumaFlussoSSE(response, onDelta, { segnaleStop, ripetiz
      * e chi lo passa riceve un `tipo` in più — `agent-service.mjs` lo traduce
      * in un `toolCallResult`, quindi NESSUNA riga di frontend cambia.
      */
-    const annullaAnnunciate = (daIndice, motivo) => {
+    /* 12/10/2026: `causa` è un campo in più, solo quando c'è — `'copia'` per le copie identiche scartate, che chi disegna
+       non deve chiamare «fallite» (non sono mai partite). Il `motivo` resta la frase di prima, parola per parola. */
+    const annullaAnnunciate = (daIndice, motivo, causa) => {
         for (let j = daIndice; j < toolCalls.length; j += 1) {
             if (!toolCalls[j]) continue
-            onDelta?.({ tipo: 'tool-annullato', indice: j, toolCallId: toolCalls[j].id, nome: toolCalls[j].function.name, motivo })
+            onDelta?.({ tipo: 'tool-annullato', indice: j, toolCallId: toolCalls[j].id, nome: toolCalls[j].function.name, motivo: typeof motivo === 'function' ? motivo(j) : motivo, ...(causa ? { causa } : {}) })
         }
     }
 
@@ -1089,13 +1129,34 @@ export async function consumaFlussoSSE(response, onDelta, { segnaleStop, ripetiz
          * cura solida è in `subagent-orchestrator.mjs` (non tocca a questa
          * lane), ed è scritta nel rapporto.
          */
-        annullaAnnunciate(
-            ripetizione.daScartare,
-            `⛔ Discarded: the model asked ${ripetizione.viste} times in a row for the very same thing`
-            + ` ("${ripetizione.nome}" with the same arguments) and kept going — I cannot tell it from a loop.`
-            + ' This tool did not run.',
-        )
+        /*
+         * ⛔ CLI 0.6.6 (bugfixer, 15/10/2026; R54 della CLI). F-Y-004: della valanga gira SOLO la prima copia — anche la seconda,
+         *   che stava prima della soglia, si toglie (dall'ultima, così gli indici delle altre non si spostano mentre si toglie).
+         *   F-Y-002: il motivo di OGNI copia scartata comincia col prefisso della nota dei giri in tondo, col SUO numero:
+         *   «[TALOS: this is call N of "<nome>" with the same arguments…]». La partenza anticipata della seconda copia, se c'è stata,
+         *   era una lettura pura: il suo esito si butta, niente è cambiato.
+         */
+        const firmaDellaValanga = `${ripetizione.nome}\x00${ripetizione.argomenti}`
+        const ordinali = new Map()
+        let viste = 0
+        for (let j = 0; j < toolCalls.length; j += 1) {
+            if (toolCalls[j] && `${toolCalls[j].function.name}\x00${toolCalls[j].function.arguments}` === firmaDellaValanga) ordinali.set(j, ++viste)
+        }
+        const motivoDellaCopia = (j) => (ordinali.has(j)
+            ? `[TALOS: this is call ${ordinali.get(j)} of "${ripetizione.nome}" with the same arguments in this answer. Only the first copy runs.]`
+                + ` ⛔ Discarded: the model asked ${ripetizione.viste} times in a row for the very same thing and kept going — I cannot tell it`
+                + ' from a loop. This tool did not run.'
+            : `⛔ Discarded: the model asked ${ripetizione.viste} times in a row for the very same thing`
+                + ` ("${ripetizione.nome}" with the same arguments) and kept going — I cannot tell it from a loop.`
+                + ' This tool did not run.')
+        annullaAnnunciate(ripetizione.daScartare, motivoDellaCopia, 'copia')
         toolCalls.length = ripetizione.daScartare
+        const precedenti = [...ordinali.entries()].filter(([j, n]) => n >= 2 && j < toolCalls.length).map(([j]) => j).sort((a, b) => b - a)
+        for (const j of precedenti) {
+            onDelta?.({ tipo: 'tool-annullato', indice: j, toolCallId: toolCalls[j].id, nome: toolCalls[j].function.name, motivo: motivoDellaCopia(j), causa: 'copia' })
+            toolCalls.splice(j, 1)
+        }
+        ripetizione.daScartare = toolCalls.length
     }
     /*
      * ⛔ Il fotogramma «tutto in un colpo» di llama-server (vedi il ramo `if
@@ -3924,6 +3985,57 @@ const ATTREZZI_ESTESI = [
         }, required: ['id', 'action'] },
     },
     /*
+     * ⭐ /goal G6 — LA SECONDA PORTA dell'obiettivo (owner 15/10/2026; regola delle due porte). Come Codex
+     *   (`codex-rs/ext/goal/src/spec.rs:9-94`: get_goal / create_goal / update_goal), con le decisioni dell'owner: «fatto» FA SOLO
+     *   PARTIRE IL CONTROLLO (prove, giudice, revisore), la carta dei controlli sempre tranne in Accesso pieno, «bloccato» = pausa
+     *   col motivo. Il kernel delega a `onObiettivoFn(nome, argomenti, {fase})` (`src/obiettivo/per-il-modello.mjs`): senza, non
+     *   si offrono. Hermes e Claude Code non danno attrezzi al modello (solo `/goal`).
+     */
+    {
+        name: 'goal_status',
+        description: 'Get this conversation\'s goal: its text, status (and why it is paused), the turns and tokens spent, and each '
+            + 'check with its last result. Read-only.',
+        input_schema: { type: 'object', properties: {}, required: [] },
+    },
+    {
+        name: 'goal_create',
+        description: 'Set a goal for this conversation: TALOS keeps you working, turn after turn, until its checks pass. Create one '
+            + 'ONLY when the person explicitly asks for it in their own message; never infer a goal from an ordinary task. '
+            + 'Fails if an unfinished goal exists. Propose a few strong checks that TALOS runs by itself, in "criteria": '
+            + '"command" (one command run in the project folder, passes when it exits 0; one line, no pipes, no "||", ";" or "&"; only '
+            + 'commands the project really has), "file" (a fact about one file by relative path: "exists", "not_exists", "contains" or '
+            + '"not_contains", the last two with "search"), "judgement" (only for what no command or file can show). Without '
+            + 'criteria a judge weighs the whole goal text. The person confirms the checks on a card before it starts.',
+        input_schema: { type: 'object', properties: {
+            objective: { type: 'string', description: 'the goal in the person\'s words, at most 4000 characters' },
+            criteria: { type: 'array', description: 'at most 20; each one {text, type, command?, exit_code?, path?, fact?, search?}', items: {
+                type: 'object', properties: {
+                    text: { type: 'string', description: 'one short sentence the person can confirm, in the goal\'s language' },
+                    type: { type: 'string', enum: ['command', 'file', 'judgement'] },
+                    command: { type: 'string' },
+                    exit_code: { type: 'integer', description: 'expected exit code, default 0' },
+                    path: { type: 'string', description: 'relative to the project folder' },
+                    fact: { type: 'string', enum: ['exists', 'not_exists', 'contains', 'not_contains'] },
+                    search: { type: 'string', description: 'the exact text, for contains / not_contains' },
+                }, required: ['text', 'type'] } },
+        }, required: ['objective'] },
+    },
+    {
+        name: 'goal_update',
+        description: 'Update this conversation\'s active goal. "complete": you believe the goal is achieved — before calling it, turn '
+            + 'the goal into its concrete deliverables and check each one against evidence you can show (passing tests alone may not be '
+            + 'enough); TALOS then runs its checks, a judge and a separate reviewer when this turn ends, and it is done only if they '
+            + 'agree; never use it because '
+            + 'you are stopping or the budget is nearly spent. "blocked": only after the same blocking condition has repeated for at '
+            + 'least 3 goal turns in a row and you cannot progress without the person or an outside change; give the "reason" (what '
+            + 'blocks you and what the person must do); not because the work is hard, slow or uncertain. "paused": only when the person '
+            + 'asks for it in their own message. You cannot resume a goal: only the person can.',
+        input_schema: { type: 'object', properties: {
+            status: { type: 'string', enum: ['complete', 'blocked', 'paused'] },
+            reason: { type: 'string', description: 'required for "blocked"; at most 500 characters' },
+        }, required: ['status'] },
+    },
+    /*
      * ⭐ 0.1.25 — LA SECONDA PORTA dei fornitori a valle esclusi su OpenRouter (owner 09/10/2026; la 0.1.24 aveva solo le
      *   Impostazioni e «Escludi» sotto la risposta). Elencare è libero; escludere e riammettere passano da una CARTA (decisione
      *   dell'owner): cambiano l'instradamento di tutte le sessioni. Il kernel delega a `onFornitoriFn(nome, argomenti, {fase})`
@@ -4029,6 +4141,9 @@ export const ATTREZZI_AUTOMAZIONI = new Set(['automation_list', 'automation_runs
 
 /** 0.1.25 (owner 09/10/2026): gli attrezzi dei fornitori a valle esclusi, che passano da `onFornitoriFn`. */
 export const ATTREZZI_FORNITORI = new Set(['provider_exclusions_list', 'provider_exclude', 'provider_allow', 'chatgpt_account'])
+
+/** /goal G6 (owner 15/10/2026): gli attrezzi dell'obiettivo, che passano da `onObiettivoFn`. */
+export const ATTREZZI_OBIETTIVO = new Set(['goal_status', 'goal_create', 'goal_update'])
 
 export const ATTREZZI_ESTESI_OPENAI = ATTREZZI_ESTESI.map((a) => ({
     type: 'function',
@@ -4604,6 +4719,8 @@ const ISTRUZIONI = [
     '',
     ISTRUZIONE_CONFINE_DATI,
 ].join('\n')
+/* owner 14/10/2026: le stesse istruzioni con l'eccezione dei file adottati dalla persona (interruttore `fileAdottatiDallaPersona`) */
+const istruzioniDiBase = (adozione) => (adozione ? ISTRUZIONI.replace(ISTRUZIONE_CONFINE_DATI, () => istruzioneConfineDati({ adozione: true })) : ISTRUZIONI)
 
 /* ⛔ 02/10/2026 — CLI tappa 6b: la guida di una figlia che può raggiungere la persona (l'host la mostra, `domandeDeiFigli`). */
 const ISTRUZIONI_ASK_FIGLIA = 'Your parent agent delegated this task. Use ask_parent for a fact or a decision your parent can give. '
@@ -5954,9 +6071,12 @@ function intestazioneDellaRicerca(voce, file) {
  *   partita prima di questa cura) e per le tre strade: contenuto rg, nomi rg, camminata JS.
  * ⛔ La nota NON è un avviso di scansione incompleta: quelli fanno dire «+» ai conteggi, e qui il conto è esatto.
  */
-function senzaFileSegreti(percorsi) {
+/* 14/10/2026 (owner, regola unica per desktop e CLI): con la `radice` anche un file d'esempio (`.env.example`…) che dentro ha una
+   chiave vera esce dai risultati come gli altri segreti (`eUnFileSegreto` ne guarda i primi 256 KB). Senza radice, come prima. */
+function senzaFileSegreti(percorsi, radice = null) {
     const tenuti = [], omessi = []
-    for (const p of percorsi) (eUnFileSegreto(p) ? omessi : tenuti).push(p)
+    const opzioni = typeof radice === 'string' && radice !== '' ? { cartella: radice } : {}
+    for (const p of percorsi) (eUnFileSegreto(p, opzioni) ? omessi : tenuti).push(p)
     return { tenuti, omessi: omessi.length }
 }
 const notaFileSegreti = (omessi) => (omessi > 0
@@ -5968,7 +6088,7 @@ function paginaDeiNomiRg(ricerca, { chiaveNome, offset, continua = null, inCorso
     const record = ricerca.testo.split('\0')
     const incompleto = record.pop() !== ''
     const { tenuti: file, omessi } = senzaFileSegreti([...new Set(record.filter(Boolean).map(percorsoDaRg))]
-        .filter((p) => p.toLowerCase().includes(chiaveNome)).sort())
+        .filter((p) => p.toLowerCase().includes(chiaveNome)).sort(), ricerca.radice)
     const nota = notaFileSegreti(omessi)
     const testa = intestazione(file.length)
     const avvisi = avvisiDiRipgrep(ricerca)
@@ -6005,7 +6125,7 @@ function paginaDelContenutoRg(ricerca, { testo, chiaveNome, offset, continua = n
        oppure la camminata di `cercaNelProgetto` se rg non e' disponibile. I concorrenti filtrano
        allo stesso modo: Hermes `file_tools.py:1277` `file_glob`
        («Filter files by pattern in grep mode»), claude-code `glob` («maps to rg --glob»). */
-    const { tenuti: file, omessi } = senzaFileSegreti([...perFile.keys()].filter((p) => !chiaveNome || p.toLowerCase().includes(chiaveNome)).sort())
+    const { tenuti: file, omessi } = senzaFileSegreti([...perFile.keys()].filter((p) => !chiaveNome || p.toLowerCase().includes(chiaveNome)).sort(), ricerca.radice)
     const nota = notaFileSegreti(omessi) // F-S-001: le righe dei file segreti non escono (vedi `senzaFileSegreti`)
     const testa = intestazione(file.length)
     const avvisi = avvisiDiRipgrep(ricerca)
@@ -6046,6 +6166,7 @@ async function cercaNomiConRipgrep(radice, chiaveNome, dentro, segnale, offset, 
     if (ricerca === null) return null
     if (ricerca.fermato) return 'stopped: the search was interrupted.'
     if (ricerca.errore) ricerca.erroriRg = erroriDiRipgrep(ricerca.stderr, radice)
+    ricerca.radice = radice
     return paginaDeiNomiRg(ricerca, { chiaveNome, offset, ...pagineDellaRicercaViva(ricerca) })
 }
 async function cercaConRipgrep(radice, testo, chiaveNome, dentro, segnale, offset, opzioniRg = {}) {
@@ -6064,6 +6185,7 @@ async function cercaConRipgrep(radice, testo, chiaveNome, dentro, segnale, offse
     if (ricerca === null) return null
     if (ricerca.fermato) return 'stopped: the search was interrupted.'
     if (ricerca.errore) ricerca.erroriRg = erroriDiRipgrep(ricerca.stderr, radice)
+    ricerca.radice = radice
     return paginaDelContenutoRg(ricerca, { testo, chiaveNome, offset, ...pagineDellaRicercaViva(ricerca) })
 }
 /* Aspetta la fine di una ricerca viva al più `ms`, o lo Stop. */
@@ -6086,7 +6208,7 @@ async function riprendiRicerca(id, offset, { ricerche, segnale, tempoMs, radice 
     if (voce.stato === 'in-corso') await attendiAlPiu(voce.finita, tempoMs, segnale)
     if (segnale?.aborted) return 'stopped: the search was interrupted.'
     /* Il registro segna «finita» appena il processo esce; per una ricerca finita un'uscita 2 resta un errore dichiarato. */
-    const ricerca = { testo: voce.uscita(), errore: voce.stato === 'finita' && voce.codice !== 0 && voce.codice !== 1 }
+    const ricerca = { testo: voce.uscita(), errore: voce.stato === 'finita' && voce.codice !== 0 && voce.codice !== 1, radice }
     if (ricerca.errore && radice) ricerca.erroriRg = erroriDiRipgrep(voce.stderr, radice)
     const opzioni = { ...voce.parametri, offset, continua: voce.id, inCorso: voce.stato === 'in-corso', intestazione: (n) => intestazioneDellaRicerca(voce, n) }
     return voce.tipo === 'nomi' ? paginaDeiNomiRg(ricerca, opzioni) : paginaDelContenutoRg(ricerca, opzioni)
@@ -6250,7 +6372,7 @@ export async function cercaNelProgetto(disco, { testo, nome, dentro, offset = 0,
     const coda = avvisi.length > 0 ? `\n${avvisi.join('\n')}` : ''
 
     /* F-S-001: anche la camminata JS toglie i file segreti — nomi compresi, come Hermes (vedi `senzaFileSegreti`). */
-    const { tenuti: trovati, omessi } = senzaFileSegreti([...perNome, ...perTesto])
+    const { tenuti: trovati, omessi } = senzaFileSegreti([...perNome, ...perTesto], radice)
     const nota = notaFileSegreti(omessi)
     const fine = paginaDiRicercaEsaurita(trovati.length, offset, avvisi)
     if (fine) return fine + coda + nota
@@ -6434,7 +6556,144 @@ function annunciaAvvioWsl(onAvvio, distro, marcatore) {
     try { onAvvio({ wsl: { distro, marcatore } }) } catch { /* l'annuncio non deve mai disturbare il comando */ }
 }
 
-export function uccidiAlberoDelProcesso(processoFiglio, { spawnFn = spawn } = {}) {
+/*
+ * ⛔ Lane mobile, 15/10/2026 (misurato sul Pad, r4 dentro l'app Android) — FUORI DA WINDOWS LO STOP COLPIVA SOLO LA SHELL.
+ *   `spawn(..., { shell })` fa partire `sh -c '<comando>'`, e `kill('SIGTERM')` arriva a `sh`, che lo onora solo quando esce il suo
+ *   figlio: `sleep 150` è arrivato in fondo e la riga si è chiusa a 150,2 s con 143. Sonda sul Pad: SIGTERM alla shell ⇒ 30.049 ms,
+ *   al gruppo ⇒ 1.009 ms e nessun orfano. Vale per ogni POSIX (anche il Linux del desktop): la prova `q0` lo saltava per questo.
+ * ⇒ Come Hermes (`os.setsid` alla partenza, `os.killpg` per fermare: `tools/environments/local.py`) e il «kill del process group»
+ *   di POSIX (`kill(2)`: un pid negativo colpisce il gruppo): il comando parte in un gruppo suo (`detached`, che su POSIX fa
+ *   `setsid`; documentazione Node v24, `options.detached`) e lo Stop manda SIGTERM al GRUPPO, poi SIGKILL dopo la grazia.
+ * ⛔ Su Windows niente: lì `detached` apre una console nuova e l'albero lo ferma già `taskkill /T` (sotto).
+ */
+export function opzioniGruppoDelComando(piattaforma = process.platform) {
+    return piattaforma === 'win32' ? {} : { detached: true }
+}
+
+/** Quanto aspettare dopo il SIGTERM al gruppo prima del SIGKILL (Hermes e Codex danno qualche secondo per uscire puliti). */
+const GRAZIA_PRIMA_DEL_SIGKILL_MS = 2_000
+
+/*
+ * ⛔⛔ Revisione del desktop, 15/10/2026 — IL GRUPPO SUO TOGLIE IL COMANDO DAL Ctrl-C DELL'HOST. Prima, in un terminale, Ctrl-C (o
+ *   la chiusura del terminale) arrivava a tutto il gruppo in primo piano, comandi compresi. Con `setsid` il comando sta in una
+ *   sessione sua: misurato su Linux (WSL, Node 24.18), host lanciato con `setsid`, SIGINT al suo gruppo ⇒ prima della patch
+ *   `sleep 77` morto, con la patch VIVO, orfano. Hermes chiude il cerchio all'uscita (`cli.py:1467` `atexit.register(_run_cleanup)`,
+ *   che copre «normal quit, Ctrl+C and SIGTERM/SIGHUP», e `process_registry.py:2619` `kill_all`); Codex manda SIGKILL al gruppo su
+ *   Ctrl-C (`setsid()` + `killpg()`).
+ * ⇒ Qui: i gruppi dei comandi ancora vivi si ricordano; a SIGINT/SIGTERM/SIGHUP ricevono lo STESSO segnale (come quando stavano
+ *   nel gruppo del terminale), e all'uscita del processo un SIGKILL. Se nessun altro ascolta quel segnale, dopo la pulizia si
+ *   rimanda il segnale a sé, così l'uscita di serie resta quella di prima (codice 130 per Ctrl-C); se l'host ha il suo gestore (il
+ *   server col suo spegnimento) decide lui.
+ * ⛔ Revisione del bugfixer (REV-AND-02, 15/10): un gruppo NON si dimentica quando esce la sua shell — un `cmd &` resta nel gruppo, e
+ *   sulla base moriva con l'host a SIGHUP/SIGTERM. Resta ricordato finché la sonda `kill(-pgid, 0)` trova qualcuno dentro: un pgid non
+ *   si riusa finché il gruppo esiste, e un gruppo vuoto (ESRCH) si dimentica prima di ogni colpo e a ogni comando nuovo.
+ * ⛔ Owner 15/10 sera (REV-AND-04, «aspetta fino a 2 s solo se serve»): senza altri gestori, a SIGTERM/SIGHUP l'host non si rimanda
+ *   il segnale subito se un gruppo è ancora vivo — aspetta la grazia, manda SIGKILL ai gruppi, poi esce col segnale; senza niente da
+ *   fermare esce subito come prima. Su Windows niente: lì il gruppo non c'è.
+ */
+export function creaPuliziaDeiGruppi({ proc = process, piattaforma = process.platform, killFn = (pid, segnale) => proc.kill(pid, segnale), impostaTimer = setTimeout } = {}) {
+    const vivi = new Set()
+    const SEGNALI = ['SIGINT', 'SIGTERM', 'SIGHUP']
+    let installata = false
+    /* Seconda passata del bugfixer (SP-AND-01, cura applicata il 15/10): un pgid si riusa solo dopo che il gruppo si è svuotato; e mentre il nostro
+       gruppo esiste nemmeno il PID del suo capo si riusa. Quindi, uscita la nostra shell, un processo VIVO con quel numero vuol dire che
+       il numero è rinato altrove: quel gruppo non è più nostro. */
+    const shellUscite = new Set()
+    const numeroRinato = (pid) => { if (!shellUscite.has(pid)) return false; try { killFn(pid, 0); return true } catch { return false } }
+    const vuoto = (pid) => { if (numeroRinato(pid)) { shellUscite.delete(pid); return true } try { killFn(-pid, 0); return false } catch { shellUscite.delete(pid); return true } }
+    const sfoltisci = () => { for (const pid of vivi) if (vuoto(pid)) vivi.delete(pid) }
+    const colpisci = (pids, segnale) => { for (const pid of pids) { try { killFn(-pid, segnale) } catch { /* gruppo già vuoto */ } } }
+    const colpisciTutti = (segnale) => { sfoltisci(); colpisci(vivi, segnale) }
+    /* revisione 15/10: solo i gruppi vivi AL SEGNALE e ancora vivi alla scadenza — un comando partito dopo il segnale (un host che non
+       esce) non c'entra, e un gruppo svuotato nel frattempo ha liberato il suo numero */
+    const uccidiDopoLaGrazia = (alSegnale, poi = () => {}) => impostaTimer(() => { sfoltisci(); colpisci(alSegnale.filter((pid) => vivi.has(pid)), 'SIGKILL'); poi() }, GRAZIA_PRIMA_DEL_SIGKILL_MS)
+    const gestori = new Map()
+    /*
+     * ⛔ 16/10/2026, dalla CLI (prima revisione della 0.6.7, riprodotto con questa funzione su un processo finto «linux») — CHI DECIDE.
+     *   Fino a ieri «c'è un altro listener ⇒ decide l'host» contava `listenerCount(segnale) > 1`, e sbagliava in due modi:
+     *   - un host che ascolta con `once` registrato PRIMA di noi viene chiamato prima e Node lo toglie prima di chiamarlo: al nostro
+     *     turno non c'è più, e noi rimandavamo il segnale uccidendo l'host prima del suo stop ordinato;
+     *   - signal-exit (3.0.7, usato da Ink tramite restore-cursor) agisce solo se i listener del segnale sono TUTTI suoi
+     *     (`listeners.length === emitter.count`): lui aspettava noi e noi lui, e un SIGINT esterno lasciava la CLI viva.
+     * ⇒ Decide l'host solo un listener che non è nostro e non è una libreria d'uscita. I listener dell'host si leggono all'INIZIO del
+     *   segnale, da una marca messa in testa con `prependListener`: lì un `once` dell'host c'è ancora (Node lo toglie solo quando arriva
+     *   il suo turno). Una fotografia presa all'installazione sbaglierebbe al contrario: un `once` che l'host ha tolto da sé prima del
+     *   segnale direbbe «decide l'host» e nessuno farebbe uscire il processo. Quando decidiamo noi ci togliamo (marche comprese) e
+     *   rimandiamo il segnale: resta signal-exit, che trova i conti giusti, ripristina il terminale ed esce.
+     *   Limite dichiarato: un `once` che l'host mette in testa con `prependListener` DOPO di noi corre prima della marca e non si vede.
+     *   Limite dichiarato (CHI-REV-02 del bugfixer): due copie di questo modulo nello stesso processo si vedono a vicenda come «host» e
+     *   nessuna rimanda il segnale. Oggi la CLI e il desktop ne caricano una sola.
+     */
+    const eLibreriaDiUscita = (fn) => /listeners\.length\s*===\s*(?:this\.#emitter\.|emitter\.)?count\b/u.test(Function.prototype.toString.call(fn))
+    const nostri = new Set()
+    const dellHost = (fn) => typeof fn === 'function' && !nostri.has(fn) && !eLibreriaDiUscita(fn)
+    const dellHostOra = (segnale) => proc.rawListeners(segnale).map((l) => l.listener ?? l).filter(dellHost)
+    const allInizio = new Map()
+    const marche = new Map()
+    const hostDecide = (segnale) => {
+        const prima = allInizio.get(segnale) ?? []
+        allInizio.delete(segnale)
+        return prima.length > 0 || dellHostOra(segnale).length > 0
+    }
+    const installa = () => {
+        if (installata) return
+        installata = true
+        for (const segnale of SEGNALI) {
+            const marca = () => { allInizio.set(segnale, dellHostOra(segnale)) }
+            nostri.add(marca)
+            marche.set(segnale, marca)
+            proc.prependListener(segnale, marca)
+        }
+        proc.once('exit', () => colpisciTutti('SIGKILL'))
+        for (const segnale of SEGNALI) {
+            const gestore = () => {
+                colpisciTutti(segnale)
+                /* Mobile, 15/10: l'app Android ferma il server con SIGTERM e, dopo 3 s, con SIGKILL (`TalosR4Avvio.ferma()`): morto di
+                   SIGKILL l'host non arriva all'`exit`, e un comando che ignora SIGTERM resterebbe. Per una richiesta di FINE (SIGTERM,
+                   SIGHUP) i gruppi ricevono SIGKILL dopo la stessa grazia dello Stop, 2 s. Non per SIGINT: in una CLI può voler dire solo
+                   «annulla il giro», e lì basta il segnale che il terminale dava anche prima. */
+                const fine = segnale !== 'SIGINT'
+                const alSegnale = [...vivi]
+                if (hostDecide(segnale)) { // l'host gestisce il segnale da sé: decide lui se e come uscire
+                    if (fine && alSegnale.length) uccidiDopoLaGrazia(alSegnale)?.unref?.()
+                    return
+                }
+                for (const [s, g] of gestori) proc.removeListener(s, g)
+                gestori.clear()
+                for (const [s, m] of marche) proc.removeListener(s, m)
+                marche.clear()
+                const esci = () => { try { killFn(proc.pid, segnale) } catch { proc.exit(128 + ({ SIGINT: 2, SIGTERM: 15, SIGHUP: 1 })[segnale]) } }
+                // owner 15/10 sera: si aspetta (timer NON unref: è lui che tiene vivo l'host) solo se c'è ancora qualcosa da fermare
+                if (fine && alSegnale.length) {
+                    /* Seconda passata del bugfixer (SP-AND-03, cura applicata il 15/10): durante la grazia i gestori sono tolti, e un secondo segnale ucciderebbe l'host SUBITO, prima
+                       del SIGKILL ai gruppi. Chi insiste vuole fare prima: il SIGKILL parte adesso, poi si esce col segnale. */
+                    let fatto = false
+                    const insiste = () => { if (fatto) return; fatto = true; sfoltisci(); colpisci(alSegnale.filter((pid) => vivi.has(pid)), 'SIGKILL'); for (const s of SEGNALI) proc.removeListener(s, insiste); esci() }
+                    nostri.add(insiste)
+                    for (const s of SEGNALI) proc.on(s, insiste)
+                    uccidiDopoLaGrazia(alSegnale, () => { if (fatto) return; fatto = true; for (const s of SEGNALI) proc.removeListener(s, insiste); esci() })
+                }
+                else esci()
+            }
+            gestori.set(segnale, gestore)
+            nostri.add(gestore)
+            proc.on(segnale, gestore)
+        }
+    }
+    return {
+        registra(figlio) {
+            if (piattaforma === 'win32' || !figlio?.pid) return
+            sfoltisci()
+            vivi.add(figlio.pid)
+            installa()
+            figlio.once?.('exit', () => shellUscite.add(figlio.pid))
+        },
+        vivi: () => [...vivi],
+    }
+}
+const puliziaDeiGruppi = creaPuliziaDeiGruppi()
+
+export function uccidiAlberoDelProcesso(processoFiglio, { spawnFn = spawn, piattaforma = process.platform, killFn = (pid, segnale) => process.kill(pid, segnale), impostaTimer = setTimeout } = {}) {
     const pid = processoFiglio?.pid
     if (!pid) return false
     /*
@@ -6447,7 +6706,16 @@ export function uccidiAlberoDelProcesso(processoFiglio, { spawnFn = spawn } = {}
      */
     if (typeof processoFiglio.exitCode === 'number' || typeof processoFiglio.signalCode === 'string') return false
     const aMano = () => { try { processoFiglio.kill('SIGTERM') } catch { /* era già morto: va bene così */ } }
-    if (process.platform !== 'win32') { aMano(); return true }
+    if (piattaforma !== 'win32') {
+        /* Lane mobile, 15/10: il gruppo che il comando guida (`opzioniGruppoDelComando`). Un figlio lanciato senza gruppo dà ESRCH
+           (nessun gruppo con quel numero: un pgid è il pid del suo capo, e i pid non si riusano finché il gruppo esiste) ⇒ la shell,
+           come prima. Il SIGKILL dopo la grazia va al gruppo anche se la shell è già uscita: un discendente che ignora SIGTERM
+           resta nel gruppo, e un gruppo vuoto risponde ESRCH. */
+        const colpisci = (segnale) => { try { killFn(-pid, segnale); return true } catch { return false } }
+        if (!colpisci('SIGTERM')) { aMano(); return true }
+        impostaTimer(() => colpisci('SIGKILL'), GRAZIA_PRIMA_DEL_SIGKILL_MS)?.unref?.()
+        return true
+    }
     try {
         const boia = spawnFn('taskkill', ['/PID', String(pid), '/T', '/F'], { windowsHide: true })
         boia?.on?.('error', aMano) // ⛔ taskkill che non parte non deve lasciare il comando vivo: si ripiega su ciò che si può fare
@@ -7065,7 +7333,8 @@ async function eseguiProva(comando, cartella, { segnaleStop, dove = null, onByte
         const risolvi = (esito) => risolviGrezzo(inBackgroundProva
             ? { ...esito, processoInBackground: true, testo: `${esito.testo}\n\n${NOTA_PROCESSO_IN_BACKGROUND}`.trim() }
             : esito)
-        const p = spawn(comando, { cwd: cartella, shell: shellDeiComandi(), windowsHide: true, env: ambienteSenzaCredenziali() })
+        const p = spawn(comando, { cwd: cartella, shell: shellDeiComandi(), windowsHide: true, env: ambienteSenzaCredenziali(), ...opzioniGruppoDelComando() })
+        puliziaDeiGruppi.registra(p) // revisione 15/10: il gruppo si ferma anche se l'host esce (vedi creaPuliziaDeiGruppi)
         annunciaAvvio(onAvvio, p) // C1 (10/10/2026): il PID, per CPU e memoria nella scheda Processi
         // No durable sink on this legacy path. Reuse bounded preview/UTF-8
         // decoding without retaining another full copy for zero-test detection.
@@ -7212,7 +7481,8 @@ export function eseguiComando(programma, argomenti, { timeoutMs = 8_000, cwd, on
     const metadata = onBytes && normalizzaMetadatiCattura({ schema: 'talos.process-output-metadata.v1', controlFooter })
     return new Promise((risolvi) => {
         // ⛔ Stesso scrub di ambienteSenzaCredenziali() sopra — questa funzione instrada anche wsl.exe/adb col comando del modello dentro (eseguiComandoSandboxato sotto), difesa in profondità anche se WSLENV non inoltra le variabili Windows per default.
-        const p = spawn(programma, argomenti, { windowsHide: true, cwd, env: ambienteSenzaCredenziali() })
+        const p = spawn(programma, argomenti, { windowsHide: true, cwd, env: ambienteSenzaCredenziali(), ...opzioniGruppoDelComando() })
+        puliziaDeiGruppi.registra(p) // revisione 15/10: il gruppo si ferma anche se l'host esce (vedi creaPuliziaDeiGruppi)
         /*
          * ⛔⛔ D-10C (10/09) — L'ORDINE FRA I DUE FLUSSI ERA PERSO PER COSTRUZIONE.
          *
@@ -7973,7 +8243,8 @@ function eseguiSuWindows(comando, cartella, { onPezzo, onBytes, tracciaCartella 
         const marcatore = nuovoMarcatoreCartella()
         const coda = tracciaCartella ? codaCheStampaLaCartella(perWindows, marcatore) : ''
         const metadata = onBytes && normalizzaMetadatiCattura({ schema: 'talos.process-output-metadata.v1', controlFooter: tracciaCartella ? { type: 'cwd-marker-v1', stream: 'stdout', marker: marcatore, prefixBytes: perWindows ? 0 : 1 } : null })
-        const p = spawn(`${comando}${coda}`, { cwd: cartella, shell: shellDeiComandi(), windowsHide: true, env: ambienteSenzaCredenziali() })
+        const p = spawn(`${comando}${coda}`, { cwd: cartella, shell: shellDeiComandi(), windowsHide: true, env: ambienteSenzaCredenziali(), ...opzioniGruppoDelComando() })
+        puliziaDeiGruppi.registra(p) // revisione 15/10: il gruppo si ferma anche se l'host esce (vedi creaPuliziaDeiGruppi)
         annunciaAvvio(onAvvio, p) // C1 (10/10/2026): il PID della shell, per CPU e memoria nella scheda Processi
         let fuori = ''
         let errori = ''
@@ -10036,6 +10307,19 @@ export async function verificaAzioneAutomazione(azione, { chiediApprovazioneFn, 
     return { consentito: true }
 }
 
+/**
+ * Owner 16/10/2026 sera: la frase per il modello quando una scrittura toccherebbe una credenziale della casa (`scritturaDiUnaCredenziale`,
+ * path-policy.mjs), o `null`. Una sola, per il cancello dei permessi e per le catene di `scrivi`/`file_edit`, che la dicono PRIMA della
+ * guardia «leggi prima di sovrascrivere»: senza, il modello leggerebbe `authorized_keys` (una domanda alla persona) per poi sentirsi
+ * dire di no lo stesso. Dice cosa fare, non solo che non si può.
+ */
+function motivoCredenzialeDellaCasa(percorso, cartella) {
+    const credenziale = scritturaDiUnaCredenziale(percorso, { cartella })
+    return credenziale
+        ? `"${percorso}" is a login credential of this computer (${credenziale.percorso}): TALOS never writes it, at any access level. Do not try another way; tell the person what should change, and they will edit it by hand.`
+        : null
+}
+
 export async function verificaPermessoScrittura(azione, { livelloAccesso, modalitaOperativa = 'normale', chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena = CATENA_VUOTA, segnaleStop, posizioneFn, consensiSessione, reteConsentita = false, sospetto = null, tracciaConsenso = null } = {}) {
     livelloAccesso = livelloLetto(livelloAccesso) // una grammatica sola anche per chi chiama il cancello da fuori
     const override = permessiPerAttrezzo?.[azione.tipo]
@@ -10046,6 +10330,16 @@ export async function verificaPermessoScrittura(azione, { livelloAccesso, modali
             motivo: 'the session is in Plan mode: it can explore and ask for clarification, but it cannot take actions that change things or carry out the work until the mode changes.',
         }
     }
+    /*
+     * ⛔⛔⛔ Owner 16/10/2026 sera — LE CREDENZIALI DELLA CASA NON SI SCRIVONO MAI: `~/.ssh` (tranne `config`), `.aws`, `.gnupg`,
+     *   `.kube`, `.docker`, `.azure`, `.config/gh`, `.config/gcloud`, `.netrc`, `.pgpass`, `.npmrc`, `.pypirc`, `.git-credentials`.
+     *   Prima di OGNI altro ramo: nessun livello (Full access compreso), nessun «sempre» per attrezzo e nessuna risposta lo apre, e
+     *   nessuna domanda si fa (una domanda insegna a dire sì). Come Hermes, `agent/file_safety.py:176-219`. La lista sta in
+     *   `path-policy.mjs` (`CREDENZIALI_DELLA_CASA`); il modello riceve il perché e cosa fare.
+     */
+    const scrittura = azione.tipo === 'scrivi' || azione.tipo === 'file_edit'
+    const credenziale = scrittura ? motivoCredenzialeDellaCasa(azione.percorso, cartella) : null
+    if (credenziale) return { consentito: false, via: 'credenziale-della-casa', motivo: credenziale }
     const haOverride = override === 'sempre' || override === 'chiedi' || override === 'nega'
     const sempreDaConfermare = ATTREZZI_SEMPRE_DA_CONFERMARE.includes(azione.tipo)
 
@@ -10082,7 +10376,10 @@ export async function verificaPermessoScrittura(azione, { livelloAccesso, modali
     /* ⛔ D2 (owner 03/10/2026): `elenca` è una lettura come `leggi` e passa di qui alle stesse condizioni — solo quando
        `motivoDaChiedere` dice di chiedere (un segreto, o un percorso fuori dalla cartella della sessione). */
     const lettura = azione.tipo === 'leggi' || azione.tipo === 'elenca'
-    const segreto = (azione.tipo === 'shell' || lettura)
+    /* ⛔ Owner 16/10/2026 sera («Chiedi, ma non in Full access»): scrivere o modificare un segreto del progetto chiede come leggerlo.
+       Il sì «per la sessione» di una scrittura è suo (`chiaveDelConsenso`, owner 16/10 notte «No, separati»): quello della lettura
+       dello stesso file non lo copre. */
+    const segreto = (azione.tipo === 'shell' || lettura || scrittura)
         ? motivoDaChiedere({ tipo: azione.tipo, comando: azione.comando, percorso: azione.percorso, cartella, accessoPieno: livelloAccesso === 'accesso-pieno' })
         : null
     /* ⛔ 04/10/2026, BUG-A (owner: «Aggiungi Consenti per la sessione davanti ai segreti») — il sì
@@ -10092,7 +10389,8 @@ export async function verificaPermessoScrittura(azione, { livelloAccesso, modali
        con il percorso che il kernel ha messo nella domanda (stessa disciplina di `cartelleFuori`,
        F4-03): il client non dice mai il percorso. Additivo: chi non passa `consensiSessione`
        (TALOS-BANCO, CLI) non vede nessuna differenza. */
-    const segretoConsentito = Boolean(segreto && consensiSessione?.segretiConsentiti?.includes?.(segreto.percorso))
+    const chiaveDelSegreto = segreto ? (segreto.chiaveDelConsenso ?? segreto.percorso) : null
+    const segretoConsentito = Boolean(segreto && consensiSessione?.segretiConsentiti?.includes?.(chiaveDelSegreto))
     /*
      * ⛔⛔ BUG-17 (owner 05/10/2026, «in full access ogni comando terminale viene accettato in automatico
      *   senza passare dall'utente di default») — con «Accesso pieno» la SHELL non fa più NESSUNA domanda,
@@ -10112,7 +10410,7 @@ export async function verificaPermessoScrittura(azione, { livelloAccesso, modali
        shell, dove il segreto non chiede comunque) ⇒ se l'ha dato un antenato, la traccia lo dice. Opzione facoltativa: chi non
        la passa (banco, CLI, mobile) non vede differenze. */
     if (tracciaConsenso && segretoConsentito && !(accessoPieno && azione.tipo === 'shell')) {
-        tracciaConsenso.consentitoDa ??= origineDelConsenso(consensiSessione, 'segretiConsentiti', segreto.percorso, 'percorso')
+        tracciaConsenso.consentitoDa ??= origineDelConsenso(consensiSessione, 'segretiConsentiti', chiaveDelSegreto, 'percorso')
     }
     const soloSegreto = segretoForzaConferma && lettura
 
@@ -10952,8 +11250,18 @@ export async function talosLavora({
        `domandeDeiFigli`). `chiediDomandaFn` da solo non basta: chi passava già un canale a una figlia (contratto di prima)
        continua a vedere l'attrezzo tolto e il rifiuto. */
     figliaChiedeAllaPersona = false,
+    /* owner 14/10/2026 («Se lo chiedi tu, vale»): un file che la persona chiede di seguire diventa la sua richiesta. Interruttore,
+       di serie spento (la regola di prima, parola per parola); la CLI lo accende dalla 0.6.5 (confine-dati.mjs). */
+    fileAdottatiDallaPersona = false,
+    /* owner 15/10/2026 (difesa in profondità, «testo della persona dal registro»): il testo che la persona ha scritto DAVVERO in
+       questo giro, se l'ospite lo sa. Una stringa ⇒ è l'unico testo che può adottare un file ('' = nessuno); assente ⇒ come prima,
+       l'ultimo messaggio `user` senza `talosOrigin` (la CLI). */
+    testoDellaPersona,
     /* 24/09/2026, decisioni owner 36-39: il canale della scelta sul piano (il registro); assente ⇒ l'attrezzo non si offre. */
     presentaPianoFn,
+    /* OB-REV-03 (owner 15/10/2026 sera): nessuna persona davanti (`talos -p`, un'automazione). `ask_user_question` può restare offerto
+       (si chiude da solo con l'ipotesi prudente, decisione 30), ma le note non dicono più «chiedi»: il modello scrive le scelte nel piano. */
+    nessunoDavanti = false,
     agentRole = 'root', askParentFn, answerChildQuestionFn, askChildFn, answerParentQuestionFn, onWorkflowPlanPropose,
     listChildrenFn, stopChildFn, // K3 (F-014, 03/10): elenco e stop dei figli diretti, dal registro
     pauseChildFn, resumeChildFn, // C3 tappa 4: pausa e ripresa dei figli diretti, dal registro (facoltative: la CLI non le passa)
@@ -11110,6 +11418,9 @@ export async function talosLavora({
      *   le stesse due fasi delle automazioni (`anteprima` ⇒ carta o rifiuto; `esegui` ⇒ testo). Assente ⇒ non si offrono.
      */
     onFornitoriFn,
+    /* /goal G6 (owner 15/10/2026) — `onObiettivoFn(nome, argomenti, {fase, toolCallId})`: il canale di `ATTREZZI_OBIETTIVO`, con
+       le due fasi delle automazioni (`anteprima` ⇒ carta o rifiuto; `esegui` ⇒ testo). Assente ⇒ non si offrono (la CLI oggi). */
+    onObiettivoFn,
     /* Giri in tondo (owner 09/10/2026, lane CLI): la guardia fra un giro e l'altro (`creaGuardiaGiriInTondo`). Spenta di serie. */
     guardiaGiriInTondo = false,
     /*
@@ -11796,18 +12107,36 @@ export async function talosLavora({
     /* K5 (03/10/2026, review del desktop): UN solo modo di far entrare una voce della coda, usato dal blocco di fine turno e
        da quello dopo gli strumenti, così non possono divergere. Con la voce entra anche F-027: un risultato sospetto di una
        figlia accende la conferma per il resto del giro, da qualunque dei due punti arrivi. */
-    const consegnaVoceInCoda = (messaggioInCoda) => {
+    /* richiesta CLI 15/10/2026 (il limite dichiarato in ADOZIONE-REV-01): la voce può arrivare come `{ testo, dallaPersona: true }`.
+       Il segno lo mette SOLO l'ospite, sulle voci che la persona ha scritto (Invio a giro in corso); i risultati delle figlie e gli
+       avvisi non lo hanno mai. Con il segno il suo testo entra nel testo della persona del giro DA QUI IN AVANTI — come Claude Code
+       (il messaggio in coda entra come turno della persona) e Codex (`steer`: UserInput nello stesso turno). Una stringa: come prima. */
+    /* CODA-REV-01 (bugfixer, 15/10/2026): una voce `{ testo: '' }` è un oggetto, quindi «vera» — e partiva un turno della persona
+       VUOTO. Una stringa vuota non passava mai: vale lo stesso per l'oggetto (testo vuoto o di soli spazi, o un contenuto vuoto). */
+    const vocePiena = (voce) => {
+        if (voce === null || typeof voce !== 'object' || Array.isArray(voce) || !Object.hasOwn(voce, 'testo')) return voce || null
+        return testoDelMessaggio(voce.testo).trim() === '' && !(Array.isArray(voce.testo) && voce.testo.length > 0) ? null : voce
+    }
+    const consegnaVoceInCoda = (voceInCoda) => {
+        const conSegno = voceInCoda !== null && typeof voceInCoda === 'object' && !Array.isArray(voceInCoda) && Object.hasOwn(voceInCoda, 'testo')
+        const messaggioInCoda = conSegno ? voceInCoda.testo : voceInCoda
         messaggi.push({ role: 'user', content: messaggioInCoda })
         sospettoDelGiro ??= sospettoNeiRisultatiFigli(testoDelMessaggio(messaggioInCoda)) // F-027: un risultato sospetto di una figlia
+        if (conSegno && voceInCoda.dallaPersona === true && fileAdottatiDallaPersona) {
+            const scritto = testoScrittoDallaPersona(testoDelMessaggio(messaggioInCoda))
+            if (scritto.trim() !== '') testoDellaPersonaDelGiro = testoDellaPersonaDelGiro === '' ? scritto : `${testoDellaPersonaDelGiro}\n${scritto}`
+        }
     }
-    const avvolgiEsterno =(fonte, opzioniConfine = {}) => (testo) => {
+    /* `adottabile` (ADOZIONE-REV-01, 14/10/2026): solo la lettura di un file che la persona ha nominato nel suo messaggio del giro
+       riceve l'avviso che ricorda l'eccezione; ogni altra fonte (un altro file, una ricerca, MCP, plugin, deleghe) quello di sempre */
+    const avvolgiEsterno =(fonte, opzioniConfine = {}, { adottabile = false } = {}) => (testo) => {
         if (typeof testo !== 'string' || testo === '') return testo
         const avvolto = avvolgiDati(testo, { fonte, ...opzioniConfine })
         if (avvolto.sospetti.length === 0) return avvolto.testo
         const motivi = [...avvolto.sospetti].sort()
         sospettoDellaChiamata = { fonte, motivi, luogo: luogoDellaFonte(fonte) } // le parole le mette l'interfaccia, nelle due lingue
         sospettoDelGiro ??= sospettoDellaChiamata
-        return `${avvisoSospetto(avvolto.sospetti)}\n${avvolto.testo}`
+        return `${avvisoSospetto(avvolto.sospetti, { adozione: fileAdottatiDallaPersona && adottabile })}\n${avvolto.testo}`
     }
     /*
      * DOVE PASSA IL CONFINE, attrezzo per attrezzo (03/10/2026, rileggendo la prima stesura). ⛔ Un prefisso di testo NON dice chi
@@ -11949,7 +12278,7 @@ export async function talosLavora({
     const needsRoleFilter = agentRole === 'child' || (strumentiEstesi ?? []).some((name) =>
         ['ask_parent', 'answer_parent_question', 'ask_child', 'answer_child_question', 'list_children', 'child_control', 'workflow_plan_propose', 'present_plan', 'request_plan_mode'].includes(name)
         // F-012 (§1.5): i tre dei run hanno filtri loro (root, runtime presente) — quando chiesti, si filtra
-        || ATTREZZI_WORKFLOW.has(name) || name === 'process_output' || ATTREZZI_AUTOMAZIONI.has(name) || ATTREZZI_FORNITORI.has(name))
+        || ATTREZZI_WORKFLOW.has(name) || name === 'process_output' || ATTREZZI_AUTOMAZIONI.has(name) || ATTREZZI_FORNITORI.has(name) || ATTREZZI_OBIETTIVO.has(name))
     const filterBaseTools = (a, negati = negatiDalLivello) => {
         const name = a.function.name
         if (negati.has(name)) return false
@@ -11976,6 +12305,8 @@ export async function talosLavora({
         if (ATTREZZI_AUTOMAZIONI.has(name) && (agentRole === 'child' || typeof onAutomazioneFn !== 'function')) return false
         /* 0.1.25: i fornitori esclusi, come le automazioni — al root, e solo se l'ospite può rispondere */
         if (ATTREZZI_FORNITORI.has(name) && (agentRole === 'child' || typeof onFornitoriFn !== 'function')) return false
+        /* /goal G6: l'obiettivo è della conversazione principale — al root, e solo se l'ospite può rispondere */
+        if (ATTREZZI_OBIETTIVO.has(name) && (agentRole === 'child' || typeof onObiettivoFn !== 'function')) return false
         /* ⛔ Rilievo 3 (piano §1.7): il modo Piano lo può chiedere SOLO il root in Normale, col
            canale presente — in Piano l'attrezzo non esiste, ai figli nemmeno. */
         if (name === 'request_plan_mode' && (agentRole === 'child' || modalitaOperativa === 'piano' || typeof onRichiestaPianoFn !== 'function')) return false
@@ -12061,6 +12392,8 @@ export async function talosLavora({
         'automation_list', 'automation_runs',
         // 0.1.25: dei fornitori esclusi, del Piano entra solo l'elenco
         'provider_exclusions_list',
+        // /goal G6: dell'obiettivo, del Piano entra solo la lettura
+        'goal_status',
         // K3 (03/10): guardare i propri figli e fermarne uno non tocca il disco (desktop, revisione della proposta)
         // C5: `child_control` sta nel Piano per stop e pausa (non toccano il disco); la ripresa la rifiuta il ramo (riparte un lavoro)
         'list_children', 'child_control',
@@ -12183,14 +12516,17 @@ export async function talosLavora({
          *   sapere che cosa sono. Si APPENDE in coda, come l'aggiornamento del contesto del progetto: una volta, poi è nella storia.
          */
         const haLaFrase = messaggi.some((m) => m?.role === 'system' && testoDelMessaggio(m.content).includes(SEGNO_ISTRUZIONE_CONFINE))
-        if (!haLaFrase) messaggi.push({ role: 'system', content: ISTRUZIONE_CONFINE_DATI })
+        if (!haLaFrase) messaggi.push({ role: 'system', content: istruzioneConfineDati({ adozione: fileAdottatiDallaPersona }) })
+        /* owner 14/10/2026: una sessione con la frase di prima e l'interruttore acceso riceve la sola eccezione, una volta */
+        else if (fileAdottatiDallaPersona && !messaggi.some((m) => m?.role === 'system' && testoDelMessaggio(m.content).includes(SEGNO_ECCEZIONE_ADOZIONE))) messaggi.push({ role: 'system', content: ECCEZIONE_ADOZIONE })
     }
     else {
         const askOfferto = attrezziOpenAI.some((tool) => tool.function?.name === 'ask_user_question')
-        const askDisponibile = agentRole !== 'child' && askOfferto
+        // OB-REV-03 (owner 15/10 sera): con nessuno davanti la guida «the tool pauses for an answer» non è vera (vedi `nessunoDavanti`)
+        const askDisponibile = agentRole !== 'child' && askOfferto && nessunoDavanti !== true
         // CLI 6b: una figlia con il canale della persona riceve la SUA guida (ask_parent prima, la persona solo per ciò che decide lei)
         const guidaAsk = askDisponibile ? ISTRUZIONI_ASK : agentRole === 'child' && askOfferto ? ISTRUZIONI_ASK_FIGLIA : null
-        messaggi = [{ role: 'system', content: guidaAsk ? `${ISTRUZIONI}\n\n${guidaAsk}` : ISTRUZIONI }]
+        messaggi = [{ role: 'system', content: guidaAsk ? `${istruzioniDiBase(fileAdottatiDallaPersona)}\n\n${guidaAsk}` : istruzioniDiBase(fileAdottatiDallaPersona) }]
         /*
          * ⭐⭐⭐ P-13 (10/09) — QUALI FILE ESISTONO, e perché sta ESATTAMENTE qui.
          *
@@ -12250,6 +12586,23 @@ export async function talosLavora({
         } else {
             messaggi.push({ role: 'user', content: imageMessageContent(task.consegna, task.immagini) })
         }
+    }
+    /*
+     * ⛔ ADOZIONE-REV-01 (bugfixer, 14/10/2026): IL MESSAGGIO DELLA PERSONA di questo giro, l'unico che può adottare un file. È
+     *   l'ultimo messaggio `user` con cui il giro si apre, e solo se è suo: un avviso del /goal, di una delega, di un workflow o
+     *   dello sfondo porta `talosOrigin` e non adotta niente. ⛔ Limite dichiarato: un messaggio della persona entrato in coda A
+     *   GIRO IN CORSO non adotta (la coda porta anche i risultati delle figlie, e nel dubbio il file resta dato).
+     */
+    const ultimoUtente = fileAdottatiDallaPersona ? messaggi.findLast((m) => m?.role === 'user') : null
+    /* owner 15/10/2026: se l'ospite dice che cosa ha scritto la persona, vale SOLO quello, e insieme alla regola dell'origine (due
+       barriere: un'origine persa da una parte non basta a far adottare un file) — CaMeL (Debenedetti et al., 2025: il controllo
+       nasce solo dalla domanda dell'utente) e arXiv 2512.23557 (ogni ingresso porta fonte e fiducia) */
+    const testoDichiarato = typeof testoDellaPersona === 'string' ? testoDellaPersona : null
+    let testoDellaPersonaDelGiro = ultimoUtente && !ultimoUtente.talosOrigin ? testoScrittoDallaPersona(testoDichiarato ?? testoDelMessaggio(ultimoUtente.content)) : '' // S1: senza gli allegati
+    const fileAdottatoNelGiro = (scritto, percorso) => {
+        if (!fileAdottatiDallaPersona || testoDellaPersonaDelGiro === '') return false
+        const assoluto = resolve(cartella, percorso)
+        return fileNominatoDallaPersona(testoDellaPersonaDelGiro, [scritto, percorso, assoluto, relative(cartella, assoluto)])
     }
     /* ⛔ F-027, estensione: il messaggio che apre il giro può essere il risultato di una figlia (il padre risvegliato dalle
        deleghe). Se la scansione l'ha trovato sospetto, il giro chiede conferma come dopo un file sospetto. */
@@ -12338,6 +12691,8 @@ export async function talosLavora({
     let puntoDiPausa = null
     /** ⭐ 08/09/2026 — la valanga di chiamate identiche ha un esito SUO: né 'concluso', né 'fermato' su richiesta di una persona. Vedi comeFinita. */
     let fermatoPerRipetizione = null
+    /** Quante risposte di QUESTO giro sono arrivate con copie identiche (vedi `RISPOSTE_RIPETUTE_MASSIME_NEL_GIRO`). */
+    let risposteRipetuteNelGiro = 0
     /* F-ENG-4: continuazioni di fila (tetto di uscita o silenzio dopo il testo) e se l'ultima risposta è rimasta tagliata. */
     let continuazioniDiFila = 0
     let tagliataSenzaRimedio = null
@@ -12423,7 +12778,15 @@ export async function talosLavora({
      * chiamata normale (assente ⇒ stesso valore di prima).
      */
     const giriMassimiEffettivi = _giriMassimiInterno ?? GIRI_MASSIMI
-    await contextHooks?.capture?.({ messages: messaggi, reason: 'start' })
+    /* Revisione del bugfixer (16/10/2026, FERMATA-REV-02): uno Stop durante la `capture` iniziale usciva come eccezione (`AbortError`)
+       invece di finire «stopped on request»: la chiamata stava fuori dal `try`. Uno Stop si lascia al ciclo qui sotto, che lo dice
+       («before round 1»); un errore vero della capture passa com'era. */
+    try { await contextHooks?.capture?.({ messages: messaggi, reason: 'start' }) }
+    catch (errore) {
+        if (!segnaleStop?.aborted) throw errore
+        // revisione del bugfixer: uno Stop non deve NASCONDERE un errore vero della capture — lo si lascia nel registro del processo
+        if (errore?.name !== 'AbortError') console.warn(`[talos] capture iniziale fallita durante uno Stop: ${errore?.code ?? errore?.name ?? 'errore'}`)
+    }
 
     /* ⛔ 25/09/2026 notte: il `try` attorno al ciclo esiste per una cosa sola, `storiaDelGiroFallito` (vedi il `catch` in fondo). */
     try {
@@ -12558,6 +12921,10 @@ export async function talosLavora({
             const esito = avviaLettura(nome, argomentiLettura)
             if (esito) partiteNelloStream.set(indice, { firma, esito })
         }
+        /* S4 della CLI (quarta revisione della 0.6.7, 16/10/2026): un Esc mentre TALOS contava la richiesta (o aspettava il motore del
+           contesto) diceva «while the model was answering», ma il modello non era ancora stato chiamato. Il segno si accende quando
+           la richiesta parte davvero. */
+        let richiestaPartita = false
         try {
             await contextHooks?.capture?.({ messages: messaggi, reason: 'before-request' })
             /*
@@ -12572,17 +12939,24 @@ export async function talosLavora({
              *   Ricerca: `.claude/RICERCA-ASK-SESSIONI-RIPRESE-2026-09-24.md`.
              */
             const noteInCoda = []
-            if (agentRole !== 'child' && attrezziOpenAI.some((a) => a.function?.name === 'ask_user_question')
+            const chiedereServe = nessunoDavanti !== true && attrezziOpenAI.some((a) => a.function?.name === 'ask_user_question') // OB-REV-03
+            if (agentRole !== 'child' && chiedereServe
                 && !messaggi.some((m) => m?.role === 'system' && typeof m.content === 'string' && m.content.includes(ISTRUZIONI_ASK))) {
                 noteInCoda.push({ role: 'system', content: ISTRUZIONI_ASK })
             }
             if (modalitaAllAvvio === 'piano') {
                 noteInCoda.push({
                     role: 'system',
-                    content: 'Plan mode is on. Explore and clarify the problem; do not implement, do not modify files and do not carry out the work. Return a decision-complete plan. If a material decision cannot be derived from the environment, use ask_user_question.'
+                    /* CLI (decima revisione, 15/10/2026): la nota dice solo ciò che i canali offrono davvero — senza una persona davanti
+                       (`talos -p`, una sessione `senzaInterfaccia`) non c'è a chi chiedere né chi approvi, e il piano si scrive nella risposta,
+                       come fa Claude Code in modalità `-p` (stampa ed esce, senza approvazioni). */
+                    content: 'Plan mode is on. Explore and clarify the problem; do not implement, do not modify files and do not carry out the work. Return a decision-complete plan.'
+                        + (chiedereServe
+                            ? ' If a material decision cannot be derived from the environment, use ask_user_question.'
+                            : ' If a material decision cannot be derived from the environment, state it in the plan with the options and the one you assumed.')
                         + (attrezziOpenAI.some((a) => a.function?.name === 'present_plan')
                             ? ' When the plan is ready, call present_plan with the full plan in Markdown: it is the only way to get it approved.'
-                            : ''),
+                            : ' Nobody can approve a plan in this session: write the full plan in your answer.'),
                 })
             }
             const messaggiDelGiro = noteInCoda.length > 0 ? [...messaggi, ...noteInCoda] : messaggi
@@ -12607,8 +12981,12 @@ export async function talosLavora({
                 attesaRitentaMassimaMs,
             )
             const esitoChiamata = contextHooks?.infer
-                ? await contextHooks.infer({ signal: segnaleStop }, invoke)
-                : await invoke()
+                ? await contextHooks.infer({ signal: segnaleStop }, (signal) => {
+                    richiestaPartita = true
+                    // un invio rifiutato senza Stop (il «contesto pieno» che il guscio riprova) non è «il modello che risponde» (revisione 16/10)
+                    return invoke(signal).catch((errore) => { if (!segnaleStop?.aborted) richiestaPartita = false; throw errore })
+                })
+                : await (richiestaPartita = true, invoke())
             risposta = esitoChiamata.scelta
             usage = esitoChiamata.usage
             ripetizione = esitoChiamata.ripetizione ?? null
@@ -12634,7 +13012,9 @@ export async function talosLavora({
              */
             if (segnaleStop?.aborted) {
                 fermatoSuRichiesta = true
-                puntoDiFermata ??= `while the model was answering, at round ${giro + 1}`
+                puntoDiFermata ??= richiestaPartita
+                    ? `while the model was answering, at round ${giro + 1}`
+                    : `before the request was sent, at round ${giro + 1}`
                 break
             }
             // RETRY-02: retain delivered text for explicit recovery, never repeat an uncertain generation.
@@ -12891,7 +13271,7 @@ export async function talosLavora({
              */
             let messaggioInCoda = null
             try {
-                messaggioInCoda = codaMessaggiFn?.() ?? null
+                messaggioInCoda = vocePiena(codaMessaggiFn?.() ?? null)
             }
             catch {
                 // ⛔ un cancello che lancia non autorizza in silenzio: stessa disciplina di chiediApprovazioneFn/hookFn sopra. Qui "autorizzare" è "consegnare un messaggio" — un fallimento tratta la coda come vuota, il task si conclude normalmente.
@@ -12927,9 +13307,13 @@ export async function talosLavora({
         const lettureAvviate = new Map()
         const primaNonLettura = chiamate.findIndex((c) => !LETTURE_PURE.has(c.function?.name))
         const prefissoDiLettura = primaNonLettura === -1 ? chiamate : chiamate.slice(0, primaNonLettura)
+        /* F-Y-004 (15/10/2026): togliendo le copie identiche gli indici dopo una copia si spostano di uno — la lettura già partita si
+           riconosce dalla FIRMA (nome + argomenti grezzi), che dopo la cura è unica nella risposta; l'indice resta il primo tentativo */
+        const partitePerFirma = new Map([...partiteNelloStream.values()].map((p) => [p.firma, p]))
         prefissoDiLettura.forEach((c, indice) => {
-            const giaPartita = partiteNelloStream.get(indice)
-            if (giaPartita?.firma === `${c.function?.name}\x00${c.function?.arguments}`) lettureAvviate.set(c, giaPartita.esito)
+            const firma = `${c.function?.name}\x00${c.function?.arguments}`
+            const giaPartita = partiteNelloStream.get(indice)?.firma === firma ? partiteNelloStream.get(indice) : partitePerFirma.get(firma)
+            if (giaPartita?.firma === firma) lettureAvviate.set(c, giaPartita.esito)
         })
         if (prefissoDiLettura.length > 1 && !segnaleStop?.aborted) {
             let partite = partiteNelloStream.size
@@ -13256,7 +13640,7 @@ export async function talosLavora({
                         ? messaggioArgomentiAssenti('leggi', { troncati: argomentiTroncati.has(c.id) })
                         : permessoLettura && !permessoLettura.consentito
                             ? `REFUSED. ${permessoLettura.motivo} The file was not read.`
-                            : esitoDellaLettura(letta, mostrato(percorso), { avvolgi: avvolgiEsterno(`leggi ${mostrato(percorso)}`) }))
+                            : esitoDellaLettura(letta, mostrato(percorso), { avvolgi: avvolgiEsterno(`leggi ${mostrato(percorso)}`, {}, { adottabile: fileAdottatoNelGiro(percorsoDiFile(argomenti), percorso) }) }))
                     erroreTool = Boolean(rifiutoRete) || percorso === '' || Boolean(permessoLettura && !permessoLettura.consentito)
                 }
                 else if (nome === 'process_output') {
@@ -13318,6 +13702,7 @@ export async function talosLavora({
                     let rifiutoSovrascrittura = null // T25/B09
                     let rifiutoRete = null // 01/10/2026: percorsi di rete, decisi prima di qualunque contatto
                     let rifiutoBinario = null // F-001: testo su un documento o un binario
+                    let rifiutoCredenziale = null // owner 16/10/2026 sera: le credenziali della casa
                     if (percorso === '') {
                         esito = messaggioArgomentiAssenti('scrivi', { troncati })
                     }
@@ -13338,6 +13723,11 @@ export async function talosLavora({
                     }
                     else if ((rifiutoRete = await controllaPercorsoDiRete('scrivi', percorso, c.id))) {
                         esito = rifiutoRete // prima dell'istantanea di T25 qui sotto: anche un `stat` è un contatto
+                    }
+                    /* owner 16/10/2026 sera: una credenziale della casa non si scrive mai — prima della guardia T25 e di ogni domanda, ma DOPO
+                       il controllo di rete: risolvere il percorso vero (`realpath`) su una condivisione sarebbe un contatto prima del sì (RETE-05/09/10) */
+                    else if ((rifiutoCredenziale = motivoCredenzialeDellaCasa(percorso, cartella))) {
+                        esito = `REFUSED. Nothing was written: ${rifiutoCredenziale}`
                     }
                     /* F-001: anche in aggiunta (un testo in coda a un docx lo rompe come una sostituzione), e prima di T25 e del
                        permesso — come Hermes, il guasto certo prima di ogni domanda alla persona. */
@@ -13604,6 +13994,7 @@ export async function talosLavora({
                     const troncati = argomentiTroncati.has(c.id)
                     let rifiutoReteModifica = null // 01/10/2026: percorsi di rete, decisi prima di qualunque contatto
                     let rifiutoBinarioModifica = null // F-001: testo su un documento o un binario
+                    let rifiutoCredenzialeModifica = null // owner 16/10/2026 sera: le credenziali della casa
                     if (percorso === '') {
                         esito = messaggioArgomentiAssenti('file_edit', { troncati })
                     }
@@ -13615,6 +14006,10 @@ export async function talosLavora({
                     }
                     else if ((rifiutoReteModifica = await controllaPercorsoDiRete('file_edit', percorso, c.id))) {
                         esito = rifiutoReteModifica // prima della lettura qui sotto: aprire il file è già il contatto
+                    }
+                    /* owner 16/10/2026 sera: le credenziali della casa — dopo il controllo di rete, per la stessa ragione di `scrivi` */
+                    else if ((rifiutoCredenzialeModifica = motivoCredenzialeDellaCasa(percorso, cartella))) {
+                        esito = `REFUSED. Nothing was changed: ${rifiutoCredenzialeModifica}`
                     }
                     /* F-001: prima della lettura per modificare — il modello ha visto il testo ESTRATTO, e il rifiuto giusto è questo,
                        non «il file non è UTF-8» (F4-01) che lo farebbe riprovare in un altro modo. */
@@ -15233,9 +15628,10 @@ export async function talosLavora({
                  */
                 /* 0.1.25 (owner 09/10/2026): i fornitori esclusi passano dalla STESSA strada delle automazioni (anteprima, carta, esegui),
                    col loro ospite `onFornitoriFn`. */
-                else if (ATTREZZI_AUTOMAZIONI.has(nome) || ATTREZZI_FORNITORI.has(nome)) {
+                /* /goal G6: l'obiettivo passa dalla STESSA strada (anteprima, carta, esegui), col suo ospite `onObiettivoFn` */
+                else if (ATTREZZI_AUTOMAZIONI.has(nome) || ATTREZZI_FORNITORI.has(nome) || ATTREZZI_OBIETTIVO.has(nome)) {
                     const fornitori = ATTREZZI_FORNITORI.has(nome)
-                    const ospiteFn = fornitori ? onFornitoriFn : onAutomazioneFn
+                    const ospiteFn = fornitori ? onFornitoriFn : ATTREZZI_OBIETTIVO.has(nome) ? onObiettivoFn : onAutomazioneFn
                     /* C5: `automation_control` arriva all'ospite col nome di prima (`automation_<azione>`), con i soli campi dell'azione */
                     const azioneAutomazione = nome === 'automation_control' && typeof argomenti?.action === 'string' ? argomenti.action.trim().toLowerCase() : null
                     const nomeOspite = nome === 'automation_control' ? `automation_${azioneAutomazione}` : nome
@@ -15319,7 +15715,9 @@ export async function talosLavora({
                             const risposta = await onRichiestaPianoFn()
                             esito = risposta?.ok === false
                                 ? `request_plan_mode: ${risposta?.motivo ?? 'not now.'}`
-                                : 'Plan mode requested: it will be active from the next turn. Prepare the plan; `present_plan` will be available then.'
+                                : typeof presentaPianoFn === 'function'
+                                    ? 'Plan mode requested: it will be active from the next turn. Prepare the plan; `present_plan` will be available then.'
+                                    : 'Plan mode requested: it will be active from the next turn. Prepare the plan; nobody can approve it in this session, so write it in your answer.'
                         }
                         catch (rotto) {
                             esito = `request_plan_mode failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`
@@ -15404,7 +15802,10 @@ export async function talosLavora({
                      *   «continua a pianificare»: resta in Piano con la correzione. «conversazione pulita»: il lavoro va in una sessione
                      *   nuova, qui il modello chiude. Il registro riceve la storia fino a questa chiamata per la ripresa dopo un riavvio.
                      */
-                    if (agentRole === 'child' || typeof presentaPianoFn !== 'function' || modalitaOperativa !== 'piano') {
+                    if (agentRole !== 'child' && modalitaOperativa === 'piano' && typeof presentaPianoFn !== 'function') {
+                        esito = 'REFUSED. Nobody can approve a plan in this session: write the full plan in your answer.' // CLI, decima revisione
+                    }
+                    else if (agentRole === 'child' || typeof presentaPianoFn !== 'function' || modalitaOperativa !== 'piano') {
                         esito = 'REFUSED. present_plan is available only to the root agent in Plan mode.'
                     }
                     else {
@@ -15785,7 +16186,7 @@ export async function talosLavora({
                     if (volte >= GIRI_IN_TONDO_DOMANDA) {
                         const verifica = await verificaAzioneAutomazione({ tipo: 'giri-in-tondo', strumento: nome, volte, toolCallId: c.id },
                             { chiediApprovazioneFn, segnaleStop })
-                        if (verifica.consentito) giriInTondo.azzera(nome, argomenti)
+                        if (verifica.consentito) { giriInTondo.azzera(nome, argomenti); risposteRipetuteNelGiro = 0 } // la persona ha detto di continuare
                         else fermatoPerGiriInTondo = { nome, volte, motivo: verifica.motivo ?? null }
                     }
                 }
@@ -15858,8 +16259,20 @@ export async function talosLavora({
          * DIVERSE non passa mai di qui.
          */
         if (ripetizione) {
-            fermatoPerRipetizione = ripetizione
-            break
+            risposteRipetuteNelGiro += 1
+            if (risposteRipetuteNelGiro >= (giriInTondo ? RISPOSTE_RIPETUTE_MASSIME_CON_GUARDIA : RISPOSTE_RIPETUTE_MASSIME_NEL_GIRO)) {
+                fermatoPerRipetizione = { ...ripetizione, risposte: risposteRipetuteNelGiro }
+                break
+            }
+            /* 12/10/2026, owner: la conversazione non si ferma. Le copie in più non sono entrate in storia e non sono state
+               eseguite; il modello lo legge qui e riparte dal risultato che ha già. Chi guarda riceve un evento, non un errore. */
+            messaggi.push({ role: 'user', content: notaCopieScartate(ripetizione) })
+            onGiro?.({ giro, tipo: 'copie-scartate', nome: ripetizione.nome, viste: ripetizione.viste, risposte: risposteRipetuteNelGiro })
+        } else {
+            /* L3-4 (owner 13/10/2026, D3: «si contano solo le risposte ripetute DI FILA»): una risposta con attrezzi e SENZA copie
+               dice che il modello ne è uscito. Il tetto resta per chi non ne esce (un decoder bloccato le manda una dietro
+               l'altra); la guardia dei giri in tondo ha il suo conto e non passa di qui. */
+            risposteRipetuteNelGiro = 0
         }
 
         /*
@@ -15878,7 +16291,7 @@ export async function talosLavora({
             for (;;) {
                 let messaggioInCoda = null
                 try {
-                    messaggioInCoda = codaMessaggiFn?.() ?? null
+                    messaggioInCoda = vocePiena(codaMessaggiFn?.() ?? null)
                 }
                 catch {
                     messaggioInCoda = null // stessa disciplina del blocco di fine turno: una coda che lancia è vuota
@@ -15942,11 +16355,10 @@ export async function talosLavora({
                 esito: 'ripetizione',
                 detto: `⛔ the model asked ${fermatoPerRipetizione.viste} times for the very same thing`
                     + ` in the same answer ("${fermatoPerRipetizione.nome}" with the same arguments),`
-                    + ' and kept going: the answer was closed there. The first copies were run,'
-                    + ' the others were not. This is not a limit on the number of tools — DIFFERENT requests in the same'
-                    + ' round all go through. It happens with local models when the decoder falls into repetition'
-                    + ' (llama.cpp/ik_llama.cpp, a known defect): with another model, or another quantization,'
-                    + ' it usually does not come back.',
+                    + ` and did it again in ${fermatoPerRipetizione.risposte ?? RISPOSTE_RIPETUTE_MASSIME_NEL_GIRO} answers of this turn even after being told: the turn was stopped there.`
+                    + ' The first copies were run, the others were not. This is not a limit on the number of tools — DIFFERENT requests in the same'
+                    + ' round all go through. With a local model this is usually the decoder falling into repetition'
+                    + ' (llama.cpp/ik_llama.cpp, a known defect): another model, or another quantization, usually fixes it.',
             }
             /* ⛔ F-ENG-4: l'ultima risposta è rimasta tagliata dal tetto di uscita anche dopo le continuazioni. Il testo arrivato è
                in storia; la frase dice il motivo vero invece di «generation stopped without an answer». */

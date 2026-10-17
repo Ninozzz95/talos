@@ -29,12 +29,25 @@ const DOMANDE = [
   ] },
 ];
 
-test('DOMANDE-TITOLO: `header` facoltativo, ≤ 12 caratteri, conservato; troppo lungo o non testo è rifiutato', () => {
+/* L3-5 (owner 13/10/2026, D5: «si accorcia a 12 e la domanda parte, mai più QUERY_INVALID per questo»). Fino al lotto 2 questa
+   prova chiedeva il RIFIUTO di un titolo di 13 caratteri: era la regola di allora. Il resto (non testo, vuoto) resta rifiutato. */
+test('DOMANDE-TITOLO: `header` facoltativo, conservato fino a 12 caratteri; più lungo si ACCORCIA a 12 e la domanda parte; non testo o vuoto è rifiutato', () => {
   assert.equal(LIMITI_DOMANDA_UTENTE.titoloMax, 12);
   const [prima, , terza] = validaDomandeUtente(DOMANDE);
   assert.equal(prima.header, 'Fix');
   assert.equal(Object.hasOwn(terza, 'header'), false, 'assente resta assente: la UI lo ricava dall\'id');
-  assert.throws(() => validaDomandeUtente([{ ...DOMANDE[0], header: 'Thirteen char' }]), /header exceeds the limit of 12/u);
+  const accorcia = (header, opzioni) => validaDomandeUtente([{ ...DOMANDE[0], header }], opzioni)[0].header;
+  assert.equal(accorcia('Thirteen char'), 'Thirteen cha');
+  assert.equal(accorcia('Exactly 12 c'), 'Exactly 12 c', 'dodici restano dodici');
+  assert.equal(accorcia('   Authentication method   '), 'Authenticati', 'gli spazi attorno non contano');
+  assert.equal(accorcia('Metodo di    accesso'), 'Metodo di', 'il taglio non lascia uno spazio in coda');
+  assert.equal(accorcia('🙂🙂🙂🙂🙂🙂🙂🙂'), '🙂🙂🙂🙂🙂🙂', 'una faccina sono due unità: ne entrano sei intere');
+  assert.equal(accorcia('a🙂🙂🙂🙂🙂🙂🙂'), 'a🙂🙂🙂🙂🙂', 'mai mezzo carattere: la sesta faccina non entra (11 unità, non 12 con mezza faccina)');
+  assert.equal(accorcia('Authentication method', { perche: 'obbligatorio', campiInPiu: 'ignora' }), 'Authenticati', 'anche alla porta del modello');
+  /* la stessa domanda col titolo lungo o già accorciato è la STESSA domanda (stessa forma canonica ⇒ stessa impronta) */
+  assert.deepEqual(validaDomandeUtente([{ ...DOMANDE[0], header: 'Thirteen char' }]), validaDomandeUtente([{ ...DOMANDE[0], header: 'Thirteen cha' }]));
+  /* gli ALTRI limiti restano rifiuti: accorciare una domanda o un'etichetta cambierebbe ciò che la persona legge */
+  assert.throws(() => validaDomandeUtente([{ ...DOMANDE[0], question: 'x'.repeat(LIMITI_DOMANDA_UTENTE.domandaMax + 1) }]), /question exceeds the limit/u);
   assert.throws(() => validaDomandeUtente([{ ...DOMANDE[0], header: 7 }]), /header must be text/u);
   assert.throws(() => validaDomandeUtente([{ ...DOMANDE[0], header: '   ' }]), /header cannot be empty/u);
 });

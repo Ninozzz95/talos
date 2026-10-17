@@ -183,3 +183,15 @@ test('W0-01 — Doctor riporta le sessioni scartate col motivo, il conto per mot
   assert.match(pulito.sessioniPersistenza.dettaglio, /none discarded/);
   assert.deepEqual([pulito.sessioniPersistenza.dettaglioChiave, pulito.sessioniPersistenza.dettaglioParams], ['server.doctor.sessions.restoredAll', { restored: 3, total: 3 }]);
 });
+
+test('DOCTOR-RUNTIME-CHIAVI (15/10/2026, dalla Mobile) — il catalogo che il servizio agente non espone ha la sua chiave; AL CONTRARIO un altro errore passa senza chiave, e pronto/non pronto restano com erano', async () => {
+  const { statoDelServizioAgente } = await import('../src/doctor.mjs');
+  const catalogo = Object.assign(new Error('The agent runtime does not expose the requested task catalog.'), { code: 'OWNER_RUNTIME_CONTRACT_INVALID' });
+  assert.deepEqual(statoDelServizioAgente({ configurato: true, snapshot: { status: 'unavailable' }, taskCatalogError: catalogo }),
+    { configurato: true, pronto: false, dettaglio: 'The agent runtime does not expose the requested task catalog.', dettaglioChiave: 'server.doctor.runtime.noTaskCatalog' });
+  const altro = statoDelServizioAgente({ configurato: true, snapshot: null, taskCatalogError: Object.assign(new Error('Module failed to load'), { code: 'OWNER_RUNTIME_LOAD_FAILED' }) });
+  assert.equal(altro.dettaglioChiave, undefined, 'another message keeps its own words');
+  assert.equal(altro.dettaglio, 'Module failed to load');
+  assert.equal(statoDelServizioAgente({ configurato: true, snapshot: { status: 'available' }, taskCatalogError: catalogo }).dettaglioChiave, 'server.doctor.runtime.ready', 'ready wins');
+  assert.equal(statoDelServizioAgente({ configurato: false }).dettaglioChiave, 'server.doctor.runtime.notReady');
+});

@@ -28,7 +28,7 @@ const CREDITO = JSON.stringify({ error: { code: '1113', message: 'Insufficient b
 const ok = () => new Response(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'Fatto.' }, finish_reason: 'stop' }] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
 const credito = () => new Response(CREDITO, { status: 429, headers: { 'Content-Type': 'application/json' } });
 
-function banco(risposte, { runtimeFile = null, onAvviso = null } = {}) {
+function banco(risposte, { runtimeFile = null, onAvviso = null, zaiSoloIndirizzo = undefined } = {}) {
   const richieste = [];
   const rete = async (url, init = {}) => {
     const corpo = JSON.parse(String(init.body ?? '{}'));
@@ -43,7 +43,7 @@ function banco(risposte, { runtimeFile = null, onAvviso = null } = {}) {
     keyring: { get: (s, k) => custodia.get(`${s}:${k}`) ?? null, set: (s, k, v) => { custodia.set(`${s}:${k}`, v); return true; }, remove: () => true },
   });
   const avvisi = [];
-  const trasporto = creaFetchMultiProvider(rete, { providerStore: store, onAvviso: onAvviso ?? (async (a) => { avvisi.push(a.testo); }),
+  const trasporto = creaFetchMultiProvider(rete, { providerStore: store, ...(zaiSoloIndirizzo === undefined ? {} : { zaiSoloIndirizzo }), onAvviso: onAvviso ?? (async (a) => { avvisi.push(a); }),
     dipendenze: { leggiChiave: (p) => store.getKey(p), leggiRuntime: (p) => store.getRuntime(p) } });
   const opzioni = { modello: 'zai:glm-5.3-flash', chiave: 'unused', messaggi: [{ role: 'user', content: 'ciao' }], attrezzi: [],
     maxOutputTokens: 50, fetchDiRete: trasporto, dormi: async () => {}, caso: () => 0 };
@@ -82,7 +82,7 @@ test('ZAI-D3 a metà lavoro: il saldo finisce ⇒ una nuova sonda senza il saldo
   assert.ok(pianoAttivo.sonde().every((r) => r.base !== SALDO), 'la nuova sonda non riprova l\'indirizzo appena rifiutato');
   assert.equal(pianoAttivo.store.indirizzoRilevato('zai').endpoint, PIANO);
   assert.equal(pianoAttivo.avvisi.length, 1);
-  assert.match(pianoAttivo.avvisi[0], /GLM Coding Plan/u);
+  assert.match(pianoAttivo.avvisi[0].testo, /GLM Coding Plan/u);
 });
 
 test('ZAI-D4 un indirizzo scelto dalla persona vince sempre: nessuna sonda, nessun cambio', async () => {
@@ -92,6 +92,35 @@ test('ZAI-D4 un indirizzo scelto dalla persona vince sempre: nessuna sonda, ness
   assert.equal(b.sonde().length, 0);
   assert.ok(b.vere().every((r) => r.base === SALDO));
   assert.deepEqual(b.avvisi, []);
+});
+
+/* ⛔ 14/10/2026, owner (CLI e desktop): «la chiave va SOLO all'indirizzo scelto; l'altro solo se lo chiede la persona». Con
+   `zaiSoloIndirizzo: true` niente sonde e niente cambi da soli: la chiave va solo all'indirizzo in uso (scelto, o quello di
+   serie), e a un «niente credito» si DICE, con l'indirizzo, senza passare a un altro. Di serie (`false`) tutto come prima. */
+test("ZAI-D8 soloIndirizzo: nessuna sonda, la chiave va solo all'indirizzo in uso, mai in Cina", async () => {
+  const b = banco({ [PIANO]: ok, [SALDO]: ok, [PIANO_CN]: ok, [SALDO_CN]: ok }, { zaiSoloIndirizzo: true });
+  await b.chiama();
+  assert.equal(b.sonde().length, 0, 'nessuna sonda');
+  assert.deepEqual(b.vere().map((r) => r.base), [SALDO], "l'indirizzo di serie, nessun altro");
+  assert.ok(b.richieste.every((r) => r.base !== PIANO_CN && r.base !== SALDO_CN), 'la chiave non arriva mai agli indirizzi cinesi');
+  assert.equal(b.store.indirizzoRilevato('zai'), null, 'niente ricordato');
+  assert.deepEqual(b.avvisi, []);
+});
+
+test("ZAI-D9 soloIndirizzo: «niente credito» si dice con l'indirizzo, nessuna sonda e nessun cambio", async () => {
+  const b = banco({ [PIANO]: ok, [SALDO]: credito, [PIANO_CN]: ok, [SALDO_CN]: ok }, { zaiSoloIndirizzo: true });
+  b.store.setRuntime('zai', { endpoint: SALDO });
+  await assert.rejects(b.chiama(), { code: 'PROVIDER_REQUEST_ERROR' });
+  assert.equal(b.sonde().length, 0);
+  assert.ok(b.vere().every((r) => r.base === SALDO), 'mai un altro indirizzo');
+  assert.equal(b.avvisi.length, 1, 'detto una volta');
+  assert.equal(b.avvisi[0].testoChiave, 'server.runtime.notice.zaiNoCredit');
+  // 14/10 (desktop): anche la chiave dell'etichetta, perché l'interfaccia la dica nella lingua della persona
+  assert.deepEqual(b.avvisi[0].testoParams, { on: 'the pay-as-you-go balance', onChiave: 'server.zai.address.general', endpoint: SALDO });
+  assert.match(b.avvisi[0].testo, /no credit on the pay-as-you-go balance/u);
+  await assert.rejects(b.chiama(), { code: 'PROVIDER_REQUEST_ERROR' });
+  assert.equal(b.avvisi.length, 1, 'la stessa chiave sullo stesso indirizzo: detto una volta sola, non a ogni richiesta');
+  assert.equal(b.sonde().length, 0);
 });
 
 test('ZAI-D5 nessun indirizzo risponde: si resta su quello di serie e la sonda non si ripete per 5 minuti', async () => {

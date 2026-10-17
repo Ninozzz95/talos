@@ -206,6 +206,7 @@ const PUNTI_DI_FERMATA = [
   [/^while "(.+)" was running$/u, (m) => ['errori.turno.punto.inCorso', { nome: m[1] }]],
   [/^before round (\d+)$/u, (m) => ['errori.turno.punto.primaDelGiro', { n: m[1] }]],
   [/^while the model was answering, at round (\d+)$/u, (m) => ['errori.turno.punto.rispostaDelModello', { n: m[1] }]],
+  [/^before the request was sent, at round (\d+)$/u, (m) => ['errori.turno.punto.primaDellInvio', { n: m[1] }]],
   [/^while waiting to ask again after an empty answer, at round (\d+)$/u, (m) => ['errori.turno.punto.attesaDopoRispostaVuota', { n: m[1] }]],
   [/^during compaction, at round (\d+)$/u, (m) => ['errori.turno.punto.compattazione', { n: m[1] }]],
   [/^while working with the tools of round (\d+); (\d+) not run \((.+)\)$/u, (m) => ['errori.turno.punto.attrezziNonEseguiti', { n: m[1], quanti: m[2], elenco: m[3] }]],
@@ -390,6 +391,29 @@ const REGOLE = [
   },
   {
     /*
+     * ⛔ 14/10/2026, owner (mockup approvato, carta «Sì, così») — L'INDIRIZZO DELLA CHIAVE NON È ANCORA SCELTO. Non è un guasto:
+     *   è una scelta che manca, come la chiave qui sopra, e non si riprova — si sceglie. Giallo «Da scegliere», non rosso; una
+     *   sola porta, «Scegli l'indirizzo», che apre la modale «Configura» del fornitore (`legacy/app.js`). Nata per Z.AI: piano
+     *   GLM Coding e saldo a consumo, Internazionale e Cina, quattro indirizzi; la chiave va solo a quello scelto
+     *   (`model-destination.mjs`, `PROVIDER_ENDPOINT_NOT_CHOSEN`).
+     */
+    id: 'indirizzo-fornitore-da-scegliere',
+    famiglia: 'indirizzo-fornitore',
+    riconosce: (testo, codice) => codice === 'PROVIDER_ENDPOINT_NOT_CHOSEN' || /\bPROVIDER_ENDPOINT_NOT_CHOSEN\b/.test(testo) || /\bChoose where your .+ key goes\b/i.test(testo),
+    spiega: (testo) => {
+      const nome = /Choose where your\s+(.+?)\s+key goes\b/i.exec(testo)?.[1]?.trim() || null;
+      return {
+        cosa: nome ? t('errori.turno.indirizzoDaScegliere.cosa', { nome }) : t('errori.turno.indirizzoDaScegliere.cosaSenzaNome'),
+        perche: nome === 'Z.AI' ? t('errori.turno.indirizzoDaScegliere.percheZai') : t('errori.turno.indirizzoDaScegliere.perche'),
+        rimedi: [],
+        fornitore: nome,
+        azione: t('errori.turno.indirizzoDaScegliere.azione'), // l'etichetta della porta: la mette la chat (`legacy/app.js`)
+        parametriTitolo: { nome: nome ?? 'TALOS' },
+      };
+    },
+  },
+  {
+    /*
      * ⛔⛔⛔ 25/09/2026 sera — sessione dell'owner 65d5683b (un GGUF locale, «ciao»): la carta diceva «Il fornitore non ha
      *   accettato la richiesta» e nessun fornitore era stato chiamato — il server non aveva il motore llama.cpp. Curato il
      *   server (`CONDIZIONI_PRIMA_DELLA_RETE`, `src/runtime-owner-adapter.mjs`), qui arriva `LOCAL_RUNTIME_NOT_CONFIGURED`.
@@ -486,7 +510,8 @@ const REGOLE = [
   {
     id: 'contesto-pieno',
     // 25/09 sera: anche il motore locale pieno, che sale col suo codice e i numeri in italiano (runtime-owner-adapter.mjs)
-    riconosce: (t) => /exceed_context_size|exceeds the available context size|context (?:size|length) exceeded|\bLOCAL_CONTEXT_EXCEEDED\b/i.test(t),
+    // F1 della CLI (16/10/2026): anche la frase dell'adattatore dei fornitori, col marcatore `context_length_exceeded`
+    riconosce: (t) => /exceed_context_size|exceeds the available context size|context (?:size|length) exceeded|context_length_exceeded|\bLOCAL_CONTEXT_EXCEEDED\b/i.test(t),
     spiega: (testo) => {
       const numeri = /\((\d+)\s*tokens?\)[^(]*\((\d+)\s*tokens?\)/i.exec(testo) || [];
       const chiesti = Number(numeri[1]) || null;
@@ -898,6 +923,8 @@ const MESSAGGI_DEL_KERNEL = [
   { chiave: 'errori.kernel.richiestaCostosa', re: /^(?:The estimated cost of the request exceeds the available budget\.|Il costo stimato della richiesta supera il budget disponibile\.)$/u },
   { chiave: 'errori.kernel.limiteNonSpecificato', re: /^(?:The service rejected the request because of an unspecified spending limit\.|Il servizio ha rifiutato la richiesta per un limite di spesa non specificato\.)$/u },
   { chiave: 'errori.kernel.richiestaNonAccettata', re: /^(?:The provider did not accept the request\.|Il fornitore non ha accettato la richiesta\.)$/u },
+  // F1 della CLI (16/10/2026): il contesto pieno detto dall'adattatore dei fornitori (`runtime-owner-adapter.mjs`, classe `contesto`)
+  { chiave: 'errori.kernel.contestoPienoDelFornitore', re: /^(?:The request is larger than the model context window \(context_length_exceeded\)\.|La richiesta è più grande della finestra di contesto del modello \(context_length_exceeded\)\.)$/u },
   { chiave: 'errori.kernel.fallbackNonCollegato', re: /^(?:To continue with another provider, access, chat notices and usage recording are needed\.|Per continuare con un altro fornitore occorrono accessi, avvisi in chat e registrazione dei consumi\.)$/u },
   { chiave: 'errori.kernel.chiamataGiaInCorso', re: /^(?:A call of this session is already in progress\.|Una chiamata di questa sessione è già in corso\.)$/u },
   { chiave: 'errori.kernel.runtimeNonConfigurato', re: /^(?:The agent runtime is not configured for this installation\.|Il runtime agente non è configurato per questa installazione\.)$/u },
@@ -984,6 +1011,8 @@ const VESTIZIONI = {
    */
   reindirizzato: { badge: 'errori.turno.vestizione.reindirizzato.badge', titolo: 'errori.turno.vestizione.reindirizzato.titolo', tono: 'accent', silenziosa: true },
   contesto: { badge: 'errori.turno.vestizione.contesto.badge', titolo: 'errori.turno.vestizione.contesto.titolo', tono: 'warning' },
+  // 14/10/2026, owner: una scelta che manca, non un guasto — giallo, col nome del fornitore nel titolo («Z.AI · indirizzo da scegliere»)
+  'indirizzo-fornitore': { badge: 'errori.turno.vestizione.indirizzoDaScegliere.badge', titolo: 'errori.turno.vestizione.indirizzoDaScegliere.titolo', tono: 'warning' },
 };
 const VESTIZIONE_ERRORE = { badge: 'errori.turno.vestizione.errore.badge', titolo: 'errori.turno.vestizione.errore.titolo', tono: 'danger' };
 
@@ -994,7 +1023,8 @@ const VESTIZIONE_ERRORE = { badge: 'errori.turno.vestizione.errore.badge', titol
  */
 export function vestizioneErrore(spiegazione) {
   const { badge, titolo, ...resto } = VESTIZIONI[spiegazione?.famiglia] ?? VESTIZIONE_ERRORE;
-  return { badge: t(badge), titolo: t(titolo), ...resto };
+  const parametri = spiegazione?.parametriTitolo; // una famiglia può mettere un nome nel titolo (`indirizzo-fornitore`)
+  return { badge: t(badge), titolo: parametri ? t(titolo, parametri) : t(titolo), ...resto };
 }
 
 /**
@@ -1088,6 +1118,23 @@ function chiaviDeiMotivi(codice, motivo) {
  * @example
  *   const { message } = testoErroreServer(errore); // «Query non valida» / «Invalid query», secondo la lingua
  */
+/**
+ * 16/10/2026 (mobile: «Invalid query» sui rifiuti dell'albero) — la frase del MOTIVO di un rifiuto, nella lingua dell'interfaccia.
+ * Solo quando il server l'ha pubblicata per la persona: la sua `explanation` è esattamente l'inglese della voce
+ * `errori.<CODICE>.<motivo>` (`public-problem.mjs`, MOTIVI_CON_FRASE_PER_LA_PERSONA). Altrimenti '' e chi chiama fa come prima.
+ */
+export function fraseDelMotivo(errore) {
+  const problema = errore && typeof errore.problem === 'object' && errore.problem ? errore.problem : (errore || {});
+  const codice = String(problema.code ?? errore?.code ?? '');
+  const motivo = problema.reason ?? errore?.reason;
+  if (!codice || typeof motivo !== 'string' || motivo === '') return '';
+  const chiave = chiaveDelMotivo(codice, motivo);
+  if (TESTI.en[chiave] === undefined) return '';
+  const params = problema.params && typeof problema.params === 'object' ? problema.params : undefined;
+  if (interpola(TESTI.en[chiave], params) !== String(problema.explanation ?? '').trim()) return '';
+  return t(chiave, params);
+}
+
 export function testoErroreServer(errore) {
   const problema = errore && typeof errore.problem === 'object' && errore.problem ? errore.problem : (errore || {});
   const codice = String(problema.code ?? errore?.code ?? '');

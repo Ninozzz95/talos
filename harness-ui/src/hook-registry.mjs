@@ -30,6 +30,7 @@ import { promises as fsp } from 'node:fs';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { POSIZIONI_CONFIGURAZIONE, primaPerId } from './configurazione-progetto.mjs';
 import { createProcessPolicy, parseProcessCommand } from './process-policy.mjs';
+import { VARIABILE_DIFESA_RICERCA } from './difesa-ricerca-programmi.mjs';
 
 export class HookRegistryError extends Error {
   constructor(message, code = 'HOOK_INVALID') {
@@ -234,7 +235,8 @@ export async function eseguiHook({ hook, evento, cartella }, deps = {}) {
     const policy = createProcessPolicy({
       allowedExecutables: deps.allowedExecutables ?? ['node', 'node.exe', 'echo', 'echo.exe'],
       capabilities: { hook: cartella },
-      envAllowlist: ['PATH', 'Path', 'PATHEXT', 'SystemRoot', 'WINDIR', 'COMSPEC', 'TALOS_HOOK_EVENT'],
+      /* R1 (CLI 0.6.8): la difesa contro il programma piantato arriva anche all'hook e ai suoi figli (misurato: dentro valeva undefined) */
+      envAllowlist: ['PATH', 'Path', 'PATHEXT', 'SystemRoot', 'WINDIR', 'COMSPEC', 'TALOS_HOOK_EVENT', VARIABILE_DIFESA_RICERCA],
       spawnFn: deps.spawnFn,
     });
     const result = await policy.runApprovedProcess({
@@ -243,8 +245,8 @@ export async function eseguiHook({ hook, evento, cartella }, deps = {}) {
       cwd: cartella,
       capability: 'hook',
       timeoutMs: 10_000,
-      envKeys: ['PATH', 'Path', 'PATHEXT', 'SystemRoot', 'WINDIR', 'COMSPEC', 'TALOS_HOOK_EVENT'],
-      env: { TALOS_HOOK_EVENT: JSON.stringify(evento) },
+      envKeys: ['PATH', 'Path', 'PATHEXT', 'SystemRoot', 'WINDIR', 'COMSPEC', 'TALOS_HOOK_EVENT', VARIABILE_DIFESA_RICERCA],
+      env: { TALOS_HOOK_EVENT: JSON.stringify(evento), [VARIABILE_DIFESA_RICERCA]: '1' },
       captureLimitBytes: 64 * 1024,
     });
     const testoFuori = result.stdout.trim();

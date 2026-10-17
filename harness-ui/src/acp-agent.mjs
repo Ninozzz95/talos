@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { ENV_AGENTE_ESTERNO } from './config.mjs';
 import { classificaErroreDiCorsa } from './research-orchestrator.mjs';
 import { eUnaCredenziale } from './kernel/talosHarness.mjs';
+import { VARIABILE_DIFESA_RICERCA, risolviProgrammaSenzaCartella } from './difesa-ricerca-programmi.mjs';
 
 export const VERSIONE_PROTOCOLLO_ACP = 1;
 const LIMITE = 1_048_576;
@@ -140,7 +141,9 @@ export async function connettiAgenteAcp(runtime, { signal, env = process.env, on
   if (signal?.aborted) throw errore('ACP_CANCELLED');
   const ambiente = { ...getDefaultEnvironment() };
   for (const n of config.variabiliAmbiente) ambiente[n] = env[n];
-  const transport = new StdioClientTransport({ command: config.comando, args: config.argomenti,
+  ambiente[VARIABILE_DIFESA_RICERCA] = '1'; // R1 (CLI 0.6.8): i figli dell'agente non cercano i programmi nella cartella
+  /* R1: il nome sul solo PATH, mai nella cartella corrente (cross-spawn → which la guarda per prima, vedi `difesa-ricerca-programmi.mjs`) */
+  const transport = new StdioClientTransport({ command: risolviProgrammaSenzaCartella(config.comando, { env: ambiente }), args: config.argomenti,
     cwd: config.cwd, env: ambiente, stderr: 'pipe', maxBufferSize: LIMITE });
   transport.stderr.resume(); // stderr consumato senza log, anche in caso di avvio fallito.
   let sessionId, pid, nome = 'Agente esterno', sequenza = 0, guasto, chiusura, fermata, occupato = false;

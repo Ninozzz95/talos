@@ -3,7 +3,7 @@
  * manda alla persona come DATI (Doctor, fonti di ricerca, fornitori, scheda GitHub) si dicono nella lingua dell'interfaccia
  * dalla chiave stabile; senza la chiave nel dizionario si mostra la frase inglese del server, mai la chiave.
  * Il contratto lato server (la frase inglese uguale alla voce inglese, i valori nei segnaposto) è in
- * `harness-ui/tests/k4a-testi-del-server.test.mjs`.
+ * `harness-ui/tests/k4a-testi-del-server-desktop.test.mjs`.
  */
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -75,7 +75,7 @@ test('K4A-05 — il Doctor dice i dettagli del server nella lingua corrente, e s
   impostaLingua('it');
   let c = controlliDoctor(dati);
   assert.match(righeDi(c, 'labs'), /Labs accesi: a, b \(NOT_LIVE_VALIDATED finché non provati\)\./);
-  assert.match(righeDi(c, 'cartelle'), /1 cartella di progetto disponibili\./);
+  assert.match(righeDi(c, 'cartelle'), /1 cartella di progetto disponibile\./);
   assert.match(righeDi(c, 'ricerca'), /DuckDuckGo \(senza chiave\)/);
   assert.match(righeDi(c, 'ricerca'), /Pronta, senza chiave: DuckDuckGo/);
   assert.match(righeDi(c, 'sessioni'), /3 sessioni ripristinate su 5: nessuna scartata\./);

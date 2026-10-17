@@ -31,6 +31,7 @@ const flusso = (testo) => () => new Response(sse({ type: 'response.created', res
 function banco({ rispondi = flusso('Fatto.'), leggiTokenDelPiano = async () => 'TOKEN-DEL-PIANO', conCanale = true, env = {} } = {}) {
   const richieste = [];
   const usi = [];
+  const limitiVisti = [];
   const rete = async (url, opzioni = {}) => {
     richieste.push({ url: String(url), aut: new Headers(opzioni.headers).get('authorization'), corpo: typeof opzioni.body === 'string' ? JSON.parse(opzioni.body) : null });
     return rispondi(richieste.length);
@@ -39,11 +40,11 @@ function banco({ rispondi = flusso('Fatto.'), leggiTokenDelPiano = async () => '
   const store = createProviderCredentialStore({ env: { OPENAI_API_KEY: 'sk-CHIAVE-API-CHE-NON-DEVE-PAGARE', ...env },
     keyring: { get: (s, k) => custodia.get(`${s}:${k}`) ?? null, set: (s, k, v) => { custodia.set(`${s}:${k}`, v); return true; }, remove: (s, k) => { custodia.delete(`${s}:${k}`); return true; } } });
   const dipendenze = { leggiChiave: (p) => { try { return store.getKey(p); } catch { return null; } }, leggiRuntime: (p) => { try { return store.getRuntime(p); } catch { return {}; } },
-    ...(conCanale ? { leggiTokenDelPiano } : {}), registraUsoDelPiano: async (voce) => { usi.push(voce); } };
+    ...(conCanale ? { leggiTokenDelPiano } : {}), registraUsoDelPiano: async (voce) => { usi.push(voce); }, registraLimitiDelPiano: (voce) => { limitiVisti.push(voce); } };
   const trasporto = creaFetchMultiProvider(rete, { providerStore: store, dipendenze });
   const opzioni = { modello: 'chatgpt:gpt-6-sol', chiave: 'unused-local-only', messaggi: [{ role: 'system', content: 'Sei TALOS.' }, { role: 'user', content: 'Fai la verifica.' }],
     attrezzi: [], maxOutputTokens: 77, fetchDiRete: trasporto, dormi: async () => {}, caso: () => 0 };
-  return { richieste, usi, store, trasporto, opzioni, run: (extra) => chiamaConRitenta({ ...opzioni, ...extra }) };
+  return { richieste, usi, limitiVisti, store, trasporto, opzioni, run: (extra) => chiamaConRitenta({ ...opzioni, ...extra }) };
 }
 
 test('INSTRADA-01 — the destination of a plan model: OpenAI’s address, no key, and the token asked at send time', () => {
@@ -175,4 +176,84 @@ test('INSTRADA-09 — the reasoning level on the plan wire, measured through the
   }
   assert.deepEqual(sulFilo, { none: null, minimal: null, low: 'low', medium: 'medium', high: 'high', xhigh: 'xhigh', max: 'max', ultra: null });
   assert.deepEqual(Object.entries(sulFilo).filter(([, v]) => v !== null).map(([k]) => k), [...LIVELLI_INOLTRATI_DAL_PIANO], 'the list the pill uses is the measured one');
+});
+
+/*
+ * ⛔ 12/10/2026 — trascritto dell'owner (sessione ef697840): cinque sotto-agenti partiti insieme col piano, due morti alla PRIMA
+ *   richiesta con «ChatGPT plan usage cannot be checked right now». Il servizio aveva risposto 503
+ *   `subscription_sharing_usage_unavailable`, che la tabella dichiara passeggero, ma la strada del piano lo LANCIAVA: un guasto
+ *   lanciato non passa dai ritentativi del kernel. Ora torna come risposta col suo stato e la stessa richiesta riparte.
+ */
+const passeggero = (codice = 'subscription_sharing_usage_unavailable', stato = 503, extra = {}) => () => new Response(JSON.stringify({ error: { code: codice, message: 'Usage cannot be checked.' } }),
+  { status: stato, headers: { 'content-type': 'application/json', 'x-oai-request-id': 'req_passeggero', ...extra } });
+
+test('INSTRADA-10 — a passing fault of the plan service is retried on the SAME plan path with the SAME request, then the turn continues', async () => {
+  const attese = [];
+  const b = banco({ rispondi: (n) => (n <= 2 ? passeggero()() : flusso('Fatto dopo il guasto.')()) });
+  const esito = await b.run({ dormi: async (ms) => { attese.push(ms); } });
+  assert.match(JSON.stringify(esito), /Fatto dopo il guasto\./u);
+  assert.equal(b.richieste.length, 3, 'two refused tries, then the answer');
+  assert.equal(attese.length, 2, 'a wait before each new try');
+  assert.deepEqual(b.richieste[2].corpo, b.richieste[0].corpo, 'the same request, not a new message');
+  assert.deepEqual([...new Set(b.richieste.map((r) => `${r.url} ${r.aut}`))].length, 1, 'never another address, never another credential: the billing path does not change');
+  assert.equal(b.usi.length, 1, 'only the completed request counts as plan usage');
+  // the other passing code of the table, and a bare 502 of the service
+  for (const risposta of [passeggero('subscription_sharing_user_unavailable'), passeggero('bad_gateway', 502)]) {
+    const altro = banco({ rispondi: (n) => (n === 1 ? risposta() : flusso('Ripreso.')()) });
+    assert.match(JSON.stringify(await altro.run({ dormi: async () => {} })), /Ripreso\./u);
+    assert.equal(altro.richieste.length, 2);
+  }
+});
+
+test('INSTRADA-11 — THE CONTRARY: a fault that is not passing is never retried, and a passing one that never ends stops with the plan code', async () => {
+  const nonAmmesso = banco({ rispondi: () => new Response(JSON.stringify({ error: { code: 'subscription_sharing_user_not_eligible', message: 'no' } }), { status: 403, headers: { 'content-type': 'application/json' } }) });
+  await assert.rejects(nonAmmesso.run({ dormi: async () => {} }), { code: 'CHATGPT_PIANO_NON_AMMESSO' });
+  assert.equal(nonAmmesso.richieste.length, 1, 'one request: asking again cannot change the answer');
+  const sempre = banco({ rispondi: () => passeggero()() });
+  const attese = [];
+  await assert.rejects(sempre.run({ dormi: async (ms) => { attese.push(ms); } }), { code: 'CHATGPT_SERVIZIO_NON_DISPONIBILE' });
+  assert.ok(sempre.richieste.length > 1 && sempre.richieste.length <= 16, `tried again, a bounded number of times: ${sempre.richieste.length}`);
+  assert.deepEqual(sempre.usi, [], 'a refused request is not usage');
+  assert.equal(JSON.stringify(attese).includes('NaN'), false);
+});
+
+/*
+ * 12/10/2026, owner («come Codex»): il giro si era fermato per il limite OGNI 5 ORE e l'avviso non diceva quale limite né quando
+ * tornasse; l'attesa era 30 minuti fissi. Le intestazioni sono quelle che legge Codex (`codex-api/src/rate_limits.rs`).
+ */
+const tra = (minuti) => String(Math.round((Date.now() + minuti * 60_000) / 1000));
+const limitiDichiarati = (minutiAlRipristino) => ({
+  'x-codex-primary-used-percent': '100', 'x-codex-primary-window-minutes': '300', 'x-codex-primary-reset-at': tra(minutiAlRipristino),
+  'x-codex-secondary-used-percent': '20', 'x-codex-secondary-window-minutes': '10080', 'x-codex-secondary-reset-at': tra(8000),
+});
+
+test('INSTRADA-12 — the plan says WHICH limit is over and WHEN it resets: the turn waits until then, not a fixed 30 minutes', async () => {
+  const attese = [];
+  const b = banco({ rispondi: (n) => (n === 1 ? limite(limitiDichiarati(40))() : flusso('Ripreso al ripristino.')()) });
+  const esito = await b.run({ dormi: async (ms) => { attese.push(ms); } });
+  assert.match(JSON.stringify(esito), /Ripreso al ripristino\./u);
+  assert.equal(attese.length, 1);
+  assert.ok(attese[0] > 39 * 60_000 && attese[0] <= 40 * 60_000 + 1000, `waits until the declared reset, got ${attese[0]} ms`);
+  // every plan answer leaves its snapshot of the limits, on a channel that is NOT the usage count
+  assert.equal(b.limitiVisti.length, 2);
+  assert.equal(b.limitiVisti[0].stato, 429);
+  assert.equal(b.limitiVisti[0].limiti.primario.usatoPercento, 100);
+  assert.equal(b.limitiVisti[0].limiti.primario.finestraMinuti, 300);
+  assert.equal(b.limitiVisti[0].limiti.secondario.usatoPercento, 20);
+  assert.ok(b.limitiVisti[0].nomi.includes('x-codex-primary-reset-at'));
+  assert.equal(b.usi.length, 1, 'only the completed request counts as usage');
+  assert.equal(JSON.stringify(b.limitiVisti).includes('TOKEN-DEL-PIANO'), false);
+});
+
+test('INSTRADA-13 — THE CONTRARY: no limit headers, nothing is invented (30 minutes as before); a reset more than a day away stops the turn', async () => {
+  const attese = [];
+  const muto = banco({ rispondi: (n) => (n === 1 ? limite()() : flusso('Ok.')()) });
+  await muto.run({ dormi: async (ms) => { attese.push(ms); } });
+  assert.deepEqual(attese, [30 * 60_000]);
+  assert.equal(muto.limitiVisti[0].limiti, null, 'the service declared no limits: the snapshot says so');
+  assert.deepEqual(muto.limitiVisti[0].nomi, []);
+  const lontano = banco({ rispondi: limite(limitiDichiarati(25 * 60)) });
+  const altre = [];
+  await assert.rejects(lontano.run({ dormi: async (ms) => { altre.push(ms); } }), (e) => e.code === 'CHATGPT_LIMITE_DEL_PIANO');
+  assert.deepEqual(altre, [], 'no waiting more than a day inside a turn');
 });

@@ -89,9 +89,12 @@ export function creaAscoltatoreLocale() {
 export function creaAccessoChatgpt({
   custodia, fetchDiRete = globalThis.fetch, clock = () => Date.now(), creaAscoltatore = creaAscoltatoreLocale,
   random = (quanti) => randomBytes(quanti), pianifica = setTimeout, annulla = clearTimeout, tettoMs = TETTO_TENTATIVO_MS,
+  /* L3-1 (13/10/2026): `(lavoro) => lavoro()` eseguito tenendo un lucchetto FRA PROCESSI, per chi condivide la custodia con altri
+     processi (il desktop: `chatgpt-lucchetto-rinnovo.mjs`). Di serie nessun lucchetto: chi non lo passa non vede differenze. */
+  conLucchettoDiRinnovo = (lavoro) => lavoro(),
 } = {}) {
   if (!custodia) throw errore('The ChatGPT sign-in needs a custody.', 'CHATGPT_CUSTODIA_ASSENTE');
-  let tentativo = null; // { ascolto, scadenza, esito: Promise }
+  let tentativo = null; // { ascolto, scadenza, esito: Promise, dichiara: (chiusura) => void }
   let rinnovoInCorso = null;
   let scoperta = null;
 
@@ -136,15 +139,26 @@ export function creaAccessoChatgpt({
     } catch { /* il meglio che si può: la sessione qui non c'è comunque */ }
   }
 
-  function chiudiTentativo() {
+  /*
+   * 13/10/2026 (bugfixer, B1 — segnalato dalla sessione CLI): un tentativo chiuso PRIMA che il browser torni (annullato dalla
+   * persona, sostituito da un altro, chiuso dall'uscita, scaduto) lasciava `esito` appesa per sempre: `completa` aspettava solo
+   * `ascolto.ritorno`, che a porta chiusa non arriva più. Ora chi chiude DICHIARA perché (`dichiara(codice)`), e `completa`
+   * finisce con quell'esito. `senzaRitorno: true` dice che nessuno è tornato dal browser: non c'è una pagina a cui rispondere,
+   * e chi pubblica l'esito all'interfaccia (le rotte) non lo tratta come un accesso fallito.
+   */
+  function chiudiTentativo(codice = 'CHATGPT_ACCESSO_ANNULLATO') {
     if (!tentativo) return;
-    annulla(tentativo.scadenza);
-    tentativo.ascolto.chiudi();
+    const chiuso = tentativo;
+    annulla(chiuso.scadenza);
+    chiuso.ascolto.chiudi();
     tentativo = null;
+    chiuso.dichiara({ senzaRitorno: true, codice });
   }
 
-  async function completa({ ascolto, stato, nonce, verifier, ritornoUri, registrazione }) {
-    const { indirizzo, lingua } = await ascolto.ritorno;
+  async function completa({ ascolto, chiusura, stato, nonce, verifier, ritornoUri, registrazione }) {
+    const arrivato = await Promise.race([ascolto.ritorno, chiusura]);
+    if (arrivato?.senzaRitorno === true) return { ok: false, codice: arrivato.codice, codiceOpenAi: null, senzaRitorno: true };
+    const { indirizzo, lingua } = arrivato;
     const testi = TESTI_PAGINA[lingua];
     const pagina = (statoHttp, dati) => {
       const nonceStile = Buffer.from(random(16)).toString('base64');
@@ -207,10 +221,12 @@ export function creaAccessoChatgpt({
       const ritornoUri = indirizzoDiRitorno(ascolto.porta);
       const indirizzo = indirizzoDiAutorizzazione({ clientId: registrazione.clientId ?? null, idDellHost: registrazione.idDellHost, ritorno: ritornoUri, stato, nonce, challenge,
         idTokenPrecedente: sessione?.idToken ?? null, email: registrazione.email ?? null, consenso: Boolean(consenso) && Boolean(registrazione.clientId) });
-      const scadenza = pianifica(() => { if (tentativo?.ascolto === ascolto) chiudiTentativo(); }, tettoMs);
+      const scadenza = pianifica(() => { if (tentativo?.ascolto === ascolto) chiudiTentativo('CHATGPT_TENTATIVO_SCADUTO'); }, tettoMs);
       scadenza?.unref?.();
-      const esito = completa({ ascolto, stato, nonce, verifier, ritornoUri, registrazione });
-      tentativo = { ascolto, scadenza, esito };
+      let dichiara;
+      const chiusura = new Promise((risolvi) => { dichiara = risolvi; });
+      const esito = completa({ ascolto, chiusura, stato, nonce, verifier, ritornoUri, registrazione });
+      tentativo = { ascolto, scadenza, esito, dichiara };
       return { indirizzo, scadeTraMs: tettoMs, esito };
     },
 
@@ -231,16 +247,46 @@ export function creaAccessoChatgpt({
       if (!rinnovoInCorso) {
         rinnovoInCorso = (async () => {
           try {
-            const t = leggiRispostaToken(await token(corpoDelRinnovo({ clientId: s.clientId, refreshToken: s.refreshToken }), { rinnovo: true }), { ora: clock(), scopesPrecedenti: s.scopes });
-            if (custodia.leggi('sessione')?.refreshToken !== s.refreshToken) { // scollegato (o ricollegato) mentre il rinnovo era in viaggio
-              await revocaInSilenzio(t.refreshToken, s.clientId);
-              throw errore('No ChatGPT account is connected.', 'CHATGPT_NON_COLLEGATO');
-            }
-            salva('sessione', { ...s, accessToken: t.accessToken, refreshToken: t.refreshToken, idToken: t.idToken ?? s.idToken, scadeAlle: t.scadeAlle,
-              rinnovaNonPrimaDi: t.rinnovaNonPrimaDi, scopes: t.scopes });
-            return t.accessToken;
+            return await conLucchettoDiRinnovo(async () => {
+              /*
+               * L3-1 (13/10/2026) — la custodia può essere di PIÙ processi (l'app installata e un server a mano, due finestre):
+               * `rinnovoInCorso` vale per questo solo. Il refresh token ruota a ogni uso, quindi chi arriva secondo manda un token
+               * già usato e si sente dire «non vale più»: prima di questa cura TOGLIEVA la sessione appena salvata dal primo.
+               * ⇒ si RILEGGE la custodia due volte: qui (col lucchetto in mano: se un altro ha già rinnovato si usa la sua, senza
+               *   toccare la rete) e sul rifiuto (senza lucchetto, o se l'altro ha salvato mentre la nostra richiesta viaggiava).
+               *   Forma: Codex `codex-rs/login/src/auth/manager.rs:1855-1997` (ricarica e confronta prima di rinnovare).
+               */
+              const buona = (x) => Boolean(x?.refreshToken && x.accessToken && pianoAbilitato(x.scopes));
+              let base = s;
+              const adesso = custodia.leggi('sessione');
+              if (buona(adesso) && adesso.refreshToken !== s.refreshToken) {
+                if (clock() < quandoRinnovare({ scadeAlle: adesso.scadeAlle, rinnovaNonPrimaDi: adesso.rinnovaNonPrimaDi })) return adesso.accessToken;
+                base = adesso; // rinnovata da un altro ma già da rinnovare di nuovo: si parte da quella
+              }
+              try {
+                const t = leggiRispostaToken(await token(corpoDelRinnovo({ clientId: base.clientId, refreshToken: base.refreshToken }), { rinnovo: true }), { ora: clock(), scopesPrecedenti: base.scopes });
+                if (custodia.leggi('sessione')?.refreshToken !== base.refreshToken) { // scollegato (o ricollegato) mentre il rinnovo era in viaggio
+                  await revocaInSilenzio(t.refreshToken, base.clientId);
+                  throw errore('No ChatGPT account is connected.', 'CHATGPT_NON_COLLEGATO');
+                }
+                salva('sessione', { ...base, accessToken: t.accessToken, refreshToken: t.refreshToken, idToken: t.idToken ?? base.idToken, scadeAlle: t.scadeAlle,
+                  rinnovaNonPrimaDi: t.rinnovaNonPrimaDi, scopes: t.scopes });
+                return t.accessToken;
+              } catch (guasto) {
+                if (guasto?.code !== 'CHATGPT_ACCESSO_SCADUTO') throw guasto;
+                const dopo = custodia.leggi('sessione');
+                if (dopo?.refreshToken && dopo.refreshToken !== base.refreshToken) {
+                  /* rifiutato il token che abbiamo mandato NOI, ma in custodia ce n'è un altro: quella sessione non è nostra da togliere */
+                  if (buona(dopo) && clock() < dopo.scadeAlle) return dopo.accessToken;
+                  throw errore('The ChatGPT session could not be renewed.', 'CHATGPT_RINNOVO_FALLITO');
+                }
+                /* la sessione è scaduta: l'errore da dire è QUELLO (la carta «accesso scaduto», owner 13/10); se il portachiavi
+                   rifiuta anche di toglierla, resta da togliere all'uscita, che lo dirà */
+                try { custodia.togli('sessione'); } catch { /* vedi sopra */ }
+                throw guasto;
+              }
+            });
           } catch (guasto) {
-            if (guasto?.code === 'CHATGPT_ACCESSO_SCADUTO') custodia.togli('sessione');
             // un rinnovo non riuscito per rete non butta via un token che vale ancora
             if (guasto?.code !== 'CHATGPT_ACCESSO_SCADUTO' && guasto?.code !== 'CHATGPT_NON_COLLEGATO' && !forzaRinnovo && clock() < s.scadeAlle) return s.accessToken;
             throw guasto;

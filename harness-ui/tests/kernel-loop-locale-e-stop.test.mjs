@@ -27,6 +27,7 @@ import {
     limitaRipetizioniIdentiche,
     talosLavora,
     RIPETIZIONI_IDENTICHE_MASSIME,
+    RISPOSTE_RIPETUTE_MASSIME_NEL_GIRO,
 } from '../src/kernel/talosHarness.mjs'
 import { avviaSessione } from '../src/agent-service.mjs'
 import { analizzaEvidenzaDelega } from '../src/subagent-orchestrator.mjs'
@@ -56,9 +57,9 @@ describe('BC-01 — il modello locale che va in loop: 398 chiamate in un giro so
         { choices: [{ delta: { tool_calls: [{ index: i, id: `call_${i}`, function: { name: 'elenca', arguments: '{}' } }] } }] }
     ))
 
-    it('⭐⭐⭐ RIPRODUZIONE — 398 chiamate identiche in streaming: ne sopravvivono 2, non 398', async () => {
+    it('⭐⭐⭐ RIPRODUZIONE — 398 chiamate identiche in streaming: ne sopravvive 1, non 398', async () => {
         const r = await consumaFlussoSSE(fintoBackend(valangaStreaming(398)))
-        assert.equal(r.scelta.tool_calls.length, 2, 'la valanga deve fermarsi alla soglia, non arrivare intera al ciclo degli attrezzi')
+        assert.equal(r.scelta.tool_calls.length, 1, 'la valanga deve fermarsi alla soglia, non arrivare intera al ciclo degli attrezzi') /* R54 della CLI (15/10/2026): della valanga gira solo la PRIMA copia (era 2) */
         assert.equal(r.ripetizione.nome, 'elenca')
         assert.equal(r.ripetizione.viste, RIPETIZIONI_IDENTICHE_MASSIME)
     })
@@ -69,11 +70,11 @@ describe('BC-01 — il modello locale che va in loop: 398 chiamate in un giro so
             fetchDiRete: async () => Response.json({ choices: [{ message: { role: 'assistant', content: null,
                 tool_calls: Array.from({ length: 398 }, (_, i) => ({ id: `c${i}`, type: 'function', function: { name: 'elenca', arguments: '{}' } })) } }] }),
         })
-        assert.equal(r.scelta.tool_calls.length, 2, 'senza onDelta la rete di sicurezza non esisteva: 398 dentro, 398 eseguite')
+        assert.equal(r.scelta.tool_calls.length, 1, 'senza onDelta la rete di sicurezza non esisteva: 398 dentro, 398 eseguite') /* R54 della CLI (15/10/2026): della valanga gira solo la PRIMA copia (era 2) */
         assert.equal(r.ripetizione.viste, RIPETIZIONI_IDENTICHE_MASSIME)
     })
 
-    it('⭐⭐⭐ END-TO-END — talosLavora esegue 2 attrezzi su una valanga di 398, e lo DICE', async (t) => {
+    it('⭐⭐⭐ END-TO-END — talosLavora esegue 1 attrezzo su una valanga di 398, e lo DICE', async (t) => {
         const cartella = mkdtempSync(join(tmpdir(), 'bc01-e2e-'))
         t.after(() => rmSync(cartella, { recursive: true, force: true }))
         let giro = 0
@@ -86,9 +87,32 @@ describe('BC-01 — il modello locale che va in loop: 398 chiamate in un giro so
             },
         })
         const esitiAttrezzo = esito.messaggiFinali.filter((m) => m.role === 'tool')
-        assert.equal(esitiAttrezzo.length, 2, '398 chiamate dentro, 2 esiti in conversazione')
+        assert.equal(esitiAttrezzo.length, 1, '398 chiamate dentro, 1 esito in conversazione') /* R54 della CLI (15/10/2026): della valanga gira solo la PRIMA copia (era 2) */
+        /* ⛔ 12/10/2026, owner («una soluzione che non comprometta la fluidità della conversazione, questo va al primo posto»): la
+           valanga non ferma più il giro. Le copie in più non si eseguono, il modello lo legge in una riga e CONTINUA: qui alla
+           risposta dopo dice «finito», e il giro si conclude. Prima finiva `ripetizione` con una carta d'errore. */
+        assert.equal(esito.comeFinita, 'concluso', 'una risposta con copie identiche non chiude il giro: il modello riparte dal risultato che ha già')
+        assert.equal(giro, 2, 'una sola richiesta in più: quella in cui il modello risponde')
+        /* F-Y-002 (CLI 0.6.6, 15/10/2026): la nota ha il prefisso della nota dei giri in tondo, col numero vero */
+        const nota = esito.messaggiFinali.find((m) => m.role === 'user' && String(m.content).startsWith('[TALOS: this is call'))
+        assert.match(String(nota?.content), /^\[TALOS: this is call 3 of "elenca" with the same arguments/, 'il modello legge che cosa è successo')
+        assert.match(String(nota?.content), /were not run/)
+    })
+
+    it('⛔⛔⛔ AL CONTRARIO — il modello che NON ne esce: copie identiche in tre risposte dello stesso giro, e solo allora il giro si ferma e lo dice', async (t) => {
+        const cartella = mkdtempSync(join(tmpdir(), 'bc01-fermo-'))
+        t.after(() => rmSync(cartella, { recursive: true, force: true }))
+        let giro = 0
+        const esito = await talosLavora({
+            cartella, task: { consegna: 'elenca la cartella' }, modello: 'x', chiave: 'y',
+            onDelta: () => {},
+            fetchDiRete: async () => { giro += 1; return fintoBackend(valangaStreaming(398)) },
+        })
+        assert.equal(giro, RISPOSTE_RIPETUTE_MASSIME_NEL_GIRO, 'tre risposte, non una e non infinite')
         assert.equal(esito.comeFinita, 'ripetizione', 'ne "concluso" ne "giri-esauriti": la ripetizione ha un esito SUO')
         assert.match(esito.detto, /asked 3 times for the very same thing/)
+        assert.match(esito.detto, /did it again in 3 answers of this turn even after being told/)
+        assert.equal(esito.messaggiFinali.filter((m) => m.role === 'tool').length, 3, 'una copia eseguita per risposta, mai la valanga intera') /* R54 della CLI (15/10/2026): della valanga gira solo la PRIMA copia (era 2) */
     })
 
     /*
@@ -145,10 +169,10 @@ describe('BC-01 — il modello locale che va in loop: 398 chiamate in un giro so
         assert.equal(r.scelta.content, 'risposta intera')
     })
 
-    it('⭐⭐⭐ RIPRODUZIONE — «tutto in un colpo» CON la valanga dentro: 398 dentro, 2 fuori', async () => {
+    it('⭐⭐⭐ RIPRODUZIONE — «tutto in un colpo» CON la valanga dentro: 398 dentro, 1 fuori', async () => {
         const r = await consumaFlussoSSE(fintoBackend([{ choices: [{ message: { role: 'assistant', content: null,
             tool_calls: Array.from({ length: 398 }, (_, i) => ({ id: `call_${i}`, type: 'function', function: { name: 'elenca', arguments: '{}' } })) } }] }]))
-        assert.equal(r.scelta.tool_calls.length, 2)
+        assert.equal(r.scelta.tool_calls.length, 1) /* R54 della CLI (15/10/2026): della valanga gira solo la PRIMA copia (era 2) */
         assert.equal(r.ripetizione.viste, RIPETIZIONI_IDENTICHE_MASSIME)
     })
 
@@ -453,11 +477,11 @@ describe('BC-01/BC-02 — nessun indicatore resta a girare: N annunciati, N fini
         { choices: [{ delta: { tool_calls: [{ index: i, id: `c${i}`, function: { name: 'elenca', arguments: '{}' } }] } }] }
     ))
 
-    it('⭐⭐⭐ VALANGA — 4 annunciati, 2 eseguiti, 2 annullati: ZERO orfani', async () => {
+    it('⭐⭐⭐ VALANGA — 4 annunciati, 1 eseguito, 3 annullati: ZERO orfani', async () => {
         const k = await contaSulKernel(valanga(398))
         assert.equal(k.annunciati.length, 4, 'la UI viene avvisata di 4 attrezzi partiti')
-        assert.equal(k.sopravvissuti.length, 2, 'solo 2 arrivano al ciclo degli attrezzi')
-        assert.equal(k.annullati.length, 2, 'gli altri 2 devono essere CHIUSI, non spariti')
+        assert.equal(k.sopravvissuti.length, 1, 'solo 1 arriva al ciclo degli attrezzi') /* R54 della CLI (15/10/2026): della valanga gira solo la PRIMA copia (era 2) */
+        assert.equal(k.annullati.length, 3, 'gli altri 3 devono essere CHIUSI, non spariti')
         assert.deepEqual(k.orfani, [], 'un indicatore che gira per sempre dice una cosa falsa e nessuno se ne accorge')
     })
 
@@ -466,19 +490,22 @@ describe('BC-01/BC-02 — nessun indicatore resta a girare: N annunciati, N fini
         const annullo = k.delta.find((d) => d.tipo === 'tool-annullato')
         assert.match(annullo.motivo, /Discarded: the model asked 3 times in a row for the very same thing/)
         assert.match(annullo.motivo, /"elenca"/)
+        /* F-Y-002 (CLI 0.6.6, 15/10/2026): ogni copia scartata comincia col prefisso comune, col SUO numero */
+        assert.match(annullo.motivo, /^\[TALOS: this is call \d+ of "elenca" with the same arguments/)
         assert.match(annullo.motivo, /This tool did not run/)
         assert.equal(annullo.nome, 'elenca')
+        assert.equal(annullo.causa, 'copia', '12/10/2026: chi disegna la riga sa dal CAMPO che era un doppione, non dal testo')
     })
 
     it('⭐⭐⭐ VALANGA, dal kernel fino agli eventi AG-UI: ogni annullo chiude un indicatore vero', async () => {
         const k = await contaSulKernel(valanga(398))
-        /* ⛔ I 2 sopravvissuti li chiude il ciclo degli attrezzi (`tool-esito`): qui si prova che i 2 ANNULLATI arrivano allo schermo come risultato. */
+        /* ⛔ Il sopravvissuto lo chiude il ciclo degli attrezzi (`tool-esito`): qui si prova che i 3 ANNULLATI arrivano allo schermo come risultato (R54, 15/10/2026: era 2 e 2). */
         const a = await contaSuAgUi(k.delta)
         assert.equal(a.start.length, 4)
-        assert.equal(a.result.length, 2, 'i due annullati diventano ToolCallResult, l evento che il frontend gia disegna')
+        assert.equal(a.result.length, 3, 'i tre annullati diventano ToolCallResult, l evento che il frontend gia disegna')
         for (const id of a.result) assert.ok(a.start.includes(id), 'ogni risultato chiude un indicatore che era stato davvero aperto')
         const rimastiAperti = a.start.filter((id) => !a.result.includes(id))
-        assert.deepEqual(rimastiAperti, ['c0', 'c1'], 'restano aperti SOLO i due che il ciclo degli attrezzi chiudera col loro esito vero')
+        assert.deepEqual(rimastiAperti, ['c0'], 'resta aperto SOLO quello che il ciclo degli attrezzi chiudera col suo esito vero')
     })
 
     it('⭐⭐⭐ STOP a meta risposta — 2 annunciati, 2 annullati: ZERO spinner permanenti', async () => {
@@ -501,6 +528,7 @@ describe('BC-01/BC-02 — nessun indicatore resta a girare: N annunciati, N fini
         assert.deepEqual(annunciati, ['a', 'b'])
         assert.equal(annullati.length, 2, 'il giro non arriva MAI al ciclo degli attrezzi: se non li chiude questo, non li chiude nessuno')
         assert.equal(annullati[0].motivo, '⛔ Stopped on request: it could not run, the session was stopped first. This tool did not run.', 'la frase concordata con la CLI, INTERA')
+        assert.equal('causa' in annullati[0], false, 'al contrario: uno stop non è un doppione, e l evento resta identico a prima')
         const a = await contaSuAgUi(delta)
         assert.equal(a.start.length, 2)
         assert.equal(a.result.length, 2, 'N annunciati, N finiti')

@@ -504,12 +504,14 @@ test('CTX-HOTFIX-400-NOT-OVERFLOW — un 400 senza le parole del contesto pieno 
  *   volta con una riga che non ferma niente (`compattazione-fine`, `compattato:false`, `motivo:'ripiego'`). Uno Stop resta uno Stop.
  */
 const divergenza = () => Object.assign(new Error('The active history differs from the archive. The originals are kept; the full version must be recovered.'), { code: 'CTX_HISTORY_DIVERGED' });
+/* R-05: chi fallisce può dire DOVE la storia non combaciava (posizioni e ruolo); la riga lo porta, e senza non lo inventa. */
+const DOVE = Object.freeze({ archiviati: 12, attivi: 14, primoDiverso: 7, forma: 'riscritta', ruolo: 'assistant' });
 
 test('CTX-HOTFIX-FAIL-OPEN-01 — il motore del contesto che fallisce NON ferma il giro: si va avanti, e lo si dice una volta', async (t) => {
   const cartella = cartellaDiProva(t);
   const fornitore = fintoFornitore({ chiamateTool: 3, attrezzo: 'elenca', argomenti: '{"percorso":"."}' });
   let chiamate = 0;
-  const contextHooks = { async prepare() { chiamate += 1; throw divergenza(); } };
+  const contextHooks = { async prepare() { chiamate += 1; throw Object.assign(divergenza(), { dettaglio: DOVE }); } };
   const { esito, eventi } = await giro(t, { cartella, fornitore, contextHooks });
   assert.equal(esito.comeFinita, 'concluso', 'il giro arriva in fondo nonostante il motore');
   assert.equal(chiamate, 4, 'a ogni richiesta si riprova il motore (se torna sano, si riusa)');
@@ -518,6 +520,7 @@ test('CTX-HOTFIX-FAIL-OPEN-01 — il motore del contesto che fallisce NON ferma 
   assert.equal(righe.length, 1, 'la riga non bloccante, una volta sola per turno');
   assert.equal(righe[0].compattato, false);
   assert.equal(righe[0].codice, 'CTX_HISTORY_DIVERGED');
+  assert.deepEqual(righe[0].dettaglio, DOVE, 'R-05: la riga dice dove la storia non combaciava');
   assert.ok(fornitore.corpi[0].messages.some((m) => testoDi(m).includes('CONSEGNA-ORIGINALE-MARKER')), 'la storia parte intera');
 });
 
@@ -535,6 +538,26 @@ test('CTX-HOTFIX-FAIL-OPEN-02 — AL CONTRARIO: col motore sano nessuna riga di 
   assert.equal(fermato.corpi.length, 0, 'dopo uno Stop non parte nessuna richiesta');
   assert.equal((finito?.eventi ?? []).filter((e) => e.motivo === 'ripiego').length, 0, 'uno Stop non è un ripiego');
   assert.ok(errore || finito?.esito?.comeFinita !== 'concluso', 'il giro si ferma come prima');
+});
+
+/* 12/10/2026, decisione dell'owner («Si ripara da solo»): il motore ha messo da parte i vecchi originali ed è ripartito dalla
+   storia attiva. Il giro NON è in ripiego (il motore ha lavorato), e la chat lo dice con la sua riga, senza l'id di servizio. */
+test('CTX-HOTFIX-RIALLINEATO-01 — archivio riallineato dal motore: una riga col «dove», nessun ripiego; e al contrario senza riallineo nessuna riga', async (t) => {
+  const cartella = cartellaDiProva(t);
+  const fornitore = fintoFornitore({ chiamateTool: 2, attrezzo: 'elenca', argomenti: '{"percorso":"."}' });
+  let chiamate = 0;
+  const contextHooks = { async prepare(p) { chiamate += 1; return { messages: p.messages, ...(chiamate === 1 ? { riallineato: { asideId: 'chat.aside-1', ...DOVE } } : {}) }; } };
+  const { esito, eventi } = await giro(t, { cartella, fornitore, contextHooks });
+  assert.equal(esito.comeFinita, 'concluso');
+  const righe = eventi.filter((e) => e.tipo === 'compattazione-fine' && e.motivo === 'archivio-riallineato');
+  assert.equal(righe.length, 1, 'una riga, alla richiesta in cui è successo');
+  assert.equal(righe[0].compattato, false);
+  assert.equal(righe[0].codice, 'CTX_HISTORY_DIVERGED');
+  assert.deepEqual(righe[0].dettaglio, DOVE, 'posizioni e ruolo; l id di servizio non esce');
+  assert.equal(eventi.filter((e) => e.motivo === 'ripiego').length, 0, 'il motore ha lavorato: non è un ripiego');
+  const sano = fintoFornitore({ chiamateTool: 1, attrezzo: 'elenca', argomenti: '{"percorso":"."}' });
+  const altro = await giro(t, { cartella, fornitore: sano, contextHooks: { async prepare(p) { return { messages: p.messages }; } } });
+  assert.equal(altro.eventi.filter((e) => e.motivo === 'archivio-riallineato').length, 0);
 });
 
 test('CTX-HOTFIX-FAIL-OPEN-03 — in ripiego anche il contesto troppo grande si riprende: compattazione e UN ritentativo', async (t) => {

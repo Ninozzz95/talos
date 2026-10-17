@@ -1,8 +1,5 @@
 [
  "agenti.agent.seeAllFiles",
- "agenti.delegations.coverageFilesWritten",
- "agenti.delegations.coverageHead",
- "agenti.delegations.groupedSummary",
  "agenti.delegations.speedFaster",
  "agenti.delegations.tokensCompact",
  "agenti.history.stepsProgress",

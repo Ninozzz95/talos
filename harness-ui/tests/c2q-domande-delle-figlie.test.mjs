@@ -37,7 +37,7 @@ const nuovoRegistro = (cartellaStore, runtime, opzioniRegistro = {}) => createSe
   preparaEsecuzioneFn: () => ({ cartella: '/tmp/x', comandoProva: 'npm test', task: { id: 'task', consegna: 'delega un lavoro' } }),
   modello: 'm', chiave: 'k', cartellaEsisteFn: () => true, domandeDeiFigli: true, ...opzioniRegistro })
 
-async function scena(t, { opzioniRegistro = {}, senzaInterfaccia = false } = {}) {
+async function scena(t, { opzioniRegistro = {}, senzaInterfaccia = false, senzaInterfacciaNelGiro } = {}) {
   const cartellaStore = mkdtempSync(join(tmpdir(), 'talos-c2q-'))
   const runtime = runtimeControllabile()
   const registry = nuovoRegistro(cartellaStore, runtime, opzioniRegistro)
@@ -46,7 +46,7 @@ async function scena(t, { opzioniRegistro = {}, senzaInterfaccia = false } = {})
     try { await attendiScritture({ cartellaStore }) } catch { /* pulizia comunque */ }
     rimuoviCartellaDiProva(cartellaStore)
   })
-  const { sessionId } = registry.avvia('task', { permessiScelto: 'Workspace write', modalitaOperativaScelta: 'normale', ...(senzaInterfaccia ? { senzaInterfaccia: true } : {}) })
+  const { sessionId } = registry.avvia('task', { permessiScelto: 'Workspace write', modalitaOperativaScelta: 'normale', ...(senzaInterfaccia ? { senzaInterfaccia: true } : {}), ...(typeof senzaInterfacciaNelGiro === 'boolean' ? { senzaInterfacciaNelGiro } : {}) })
   const delega = await runtime.runs[0].input.onDelega('figlia: scegli il fornitore', '/tmp/x')
   const figliaId = delega?.childId ?? registry.elenca().find((s) => s.padreId === sessionId)?.sessionId
   assert.ok(figliaId, 'premessa: la figlia esiste')
@@ -197,6 +197,15 @@ test('C2Q-07 AUTOMAZIONE: la figlia di un padre senza interfaccia non aspetta ne
   assert.equal(inputFiglia.figliaChiedeAllaPersona, false, 'al modello della figlia non si offre la domanda alla persona: resta ask_parent')
   const esito = await entro(inputFiglia.chiediDomandaFn(DOMANDE, { toolCallId: 'c1', messaggi: [] }))
   assert.equal(esito.appesa, undefined, 'la figlia di un\'automazione resta appesa alla domanda')
+  assert.equal(esito.r?.status, 'unanswerable', JSON.stringify(esito))
+  assert.equal(registry.domandaInAttesa(figliaId), null)
+})
+
+/* CLI 16/10/2026 (compito 50): il padre senza nessuno davanti solo per QUESTO giro (`talos -p`, mai salvato): la figlia lo eredita. */
+test('C2Q-07-GIRO: la figlia di un padre «nessuno davanti» per giro non aspetta nessuno, e non lo salva', async (t) => {
+  const { registry, figliaId, inputFiglia } = await scena(t, { senzaInterfacciaNelGiro: true })
+  assert.equal(inputFiglia.figliaChiedeAllaPersona, false)
+  const esito = await entro(inputFiglia.chiediDomandaFn(DOMANDE, { toolCallId: 'c1', messaggi: [] }))
   assert.equal(esito.r?.status, 'unanswerable', JSON.stringify(esito))
   assert.equal(registry.domandaInAttesa(figliaId), null)
 })

@@ -56,7 +56,7 @@ export function createSqliteContextStore({ databasePath, vectorExtension = false
   };
   const store = {};
   for (const method of [
-    'initSession', 'readContextSnapshot', 'recordMeasurement', 'appendOriginalBatch', 'readOriginals',
+    'initSession', 'readContextSnapshot', 'recordMeasurement', 'appendOriginalBatch', 'setAsideSession', 'listAsideSessions', 'pruneAsideSessions', 'readOriginals',
     'updateSessionSettings', 'listContextVersions', 'commitContextVersion',
     'restoreContextVersion', 'claimContextJob', 'saveJobProgress', 'readContextJob',
     'upsertProtectedFact', 'removeProtectedFact', 'readContextOutbox', 'ackContextEvent', 'recordContextNotice',

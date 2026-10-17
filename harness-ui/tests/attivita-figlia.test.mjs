@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { riassuntoAttivitaSessione } from '../src/attivita-figlia.mjs';
+import { creaAccumulatoreAttivita, riassuntoAttivitaSessione } from '../src/attivita-figlia.mjs';
 
 const leggi = (id, percorso, { chiusa = true, pezzi = 2 } = {}) => {
   const testo = JSON.stringify({ percorso });
@@ -30,6 +30,24 @@ test('ATTIVITA-02 — l’attrezzo CORRENTE è quello senza esito; un giro chius
   assert.equal(riassuntoAttivitaSessione([...leggi('a', 'x.mjs', { chiusa: false }), { type: 'RunError', code: 'fermato' }]).attrezzoCorrente, null);
   /* Una lettura senza esito NON è una lettura avvenuta: il file non compare. */
   assert.deepEqual(riassuntoAttivitaSessione(leggi('a', 'x.mjs', { chiusa: false })).file, []);
+});
+
+test('ATTIVITA-02b — il BERSAGLIO dell’attrezzo in volo: il file dei SUOI argomenti, mai quello del passo finito prima; a metà o chiuso, non si sa', () => {
+  /* 13/10/2026: la scheda dell'agente nel diagramma dice «che cosa fa adesso». Il passo finito prima riguarda un altro file. */
+  const prima = leggi('a', 'src/vecchio.mjs');
+  const inVolo = leggi('b', '.\\src\\nuovo.mjs', { chiusa: false });
+  const r = riassuntoAttivitaSessione([...prima, ...inVolo]);
+  assert.equal(r.attrezzoCorrente, 'leggi');
+  assert.equal(r.bersaglioCorrente, 'src/nuovo.mjs', 'il file della chiamata in volo, ripulito come nei passi');
+  assert.equal(r.passi.at(-1).percorso, 'src/vecchio.mjs', 'la premessa: l’ultimo passo finito è un altro file');
+  // argomenti arrivati a metà: non si sa ancora (mai un pezzo di percorso)
+  const aMeta = [...prima, { type: 'ToolCallStart', toolCallId: 'c', toolCallName: 'leggi' }, { type: 'ToolCallArgs', toolCallId: 'c', delta: '{"percorso":"src/nu' }];
+  assert.equal(riassuntoAttivitaSessione(aMeta).bersaglioCorrente, null);
+  // un attrezzo senza percorso (un comando), nessun attrezzo in volo, un giro chiuso: null
+  const comando = [{ type: 'ToolCallStart', toolCallId: 'd', toolCallName: 'esegui' }, { type: 'ToolCallArgs', toolCallId: 'd', delta: '{"comando":"node --test"}' }];
+  assert.equal(riassuntoAttivitaSessione(comando).bersaglioCorrente, null);
+  assert.equal(riassuntoAttivitaSessione(prima).bersaglioCorrente, null);
+  assert.equal(riassuntoAttivitaSessione([...inVolo, { type: 'RunError', code: 'fermato' }]).bersaglioCorrente, null);
 });
 
 test('ATTIVITA-03 — argomenti a metà, non-JSON, percorsi vuoti o assurdi non diventano file', () => {
@@ -91,6 +109,31 @@ test('ATTIVITA-07 — i PASSI: avvio, attrezzi col loro file e l’ora, fine; co
 });
 
 /* ⭐ 02/10/2026 — l'accumulatore: la voce viva consuma solo gli eventi nuovi e deve dire esattamente ciò che direbbe il ricalcolo. */
+test('ATTIVITA-02c — revisione del bugfixer: più chiamate aperte insieme (finisce la seconda, resta la prima; finisce la prima, resta la seconda; un giro chiuso le chiude tutte), e un bersaglio che ingannerebbe non si mostra', () => {
+  const start = (id, nome = 'leggi') => ({ type: 'ToolCallStart', toolCallId: id, toolCallName: nome });
+  const args = (id, percorso) => ({ type: 'ToolCallArgs', toolCallId: id, delta: JSON.stringify({ percorso }) });
+  const fine = (id) => ({ type: 'ToolCallResult', toolCallId: id, content: 'ok' });
+  const corrente = (eventi) => { const a = creaAccumulatoreAttivita(); for (const e of eventi) a.aggiungi(e); const s = a.riassunto(); return [s.attrezzoCorrente, s.bersaglioCorrente, a.contatori().attrezzoCorrente]; };
+  const due = [start('a'), args('a', 'a.js'), start('b', 'scrivi'), args('b', 'b.js')];
+  assert.deepEqual(corrente(due), ['scrivi', 'b.js', 'scrivi'], 'l’ultima partita');
+  assert.deepEqual(corrente([...due, fine('b')]), ['leggi', 'a.js', 'leggi'], 'finita la seconda, la prima lavora ancora');
+  assert.deepEqual(corrente([...due, fine('a')]), ['scrivi', 'b.js', 'scrivi'], 'finita la prima, resta la seconda');
+  assert.deepEqual(corrente([...due, fine('b'), fine('a')]), [null, null, null]);
+  assert.deepEqual(corrente([...due, fine('a'), fine('b')]), [null, null, null]);
+  // tre aperte: finita l'ultima si ricade sulla penultima, non sulla prima
+  assert.deepEqual(corrente([...due, start('c'), args('c', 'c.js'), fine('c')]), ['scrivi', 'b.js', 'scrivi']);
+  // un secondo esito della stessa chiamata non riapre e non sposta niente
+  assert.deepEqual(corrente([...due, fine('b'), fine('b')]), ['leggi', 'a.js', 'leggi']);
+  // un giro chiuso chiude tutte le chiamate aperte: l'esito che arriva dopo non ne «ritrova» una
+  assert.deepEqual(corrente([...due, { type: 'RunFinished' }, { type: 'RunStarted' }, start('z'), fine('z')]), [null, null, null]);
+  // un bersaglio oltre il tetto non si tronca: non si mostra; e nemmeno uno con controlli o inversione della scrittura
+  assert.deepEqual(corrente([start('a'), args('a', `src/${'x'.repeat(1100)}.js`)]).slice(0, 2), ['leggi', null]);
+  assert.deepEqual(corrente([start('a'), args('a', `src/${'x'.repeat(1000)}.js`)])[1].length, 1007);
+  for (const cattivo of ['foto\u202Egpj.exe', 'a\nb.js', 'a\u0007.js', 'a\u2066b\u2069.js', 'a\u200Fb.js']) assert.deepEqual(corrente([start('a'), args('a', cattivo)]).slice(0, 2), ['leggi', null], JSON.stringify(cattivo));
+  // AL CONTRARIO: nomi strani ma onesti passano (spazi, accenti, punti, emoji, altri alfabeti)
+  for (const buono of ['Cartella mia/città più bella.md', 'src/.env.example', 'doc/日本語.txt', 'a/😀.png', 'C:/Utenti/x/file.txt']) assert.equal(corrente([start('a'), args('a', buono)])[1], buono);
+});
+
 test('ATTIVITA-ACCUMULATORE: a incremento come il ricalcolo; un array sostituito riparte da capo; i contatori tornano', async () => {
   const { attivitaDellaVoce, contatoriAttivitaDellaVoce } = await import('../src/attivita-figlia.mjs');
   const voce = { eventi: [] };

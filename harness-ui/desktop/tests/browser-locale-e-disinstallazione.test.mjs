@@ -182,6 +182,10 @@ test('DISINSTALLA-SCRATCH-02 — «Sì, elimina i dati» porta via anche la sess
   const browser = unInstall.indexOf('RMDir /r "$LOCALAPPDATA\\${APP_FILENAME}\\browser"');
   assert.ok(browser > -1, 'la sessione di Chromium in Local non viene tolta con i dati');
   assert.ok(esito > -1 && esito < browser && browser < unInstall.indexOf('${Else}', esito), 'solo nel ramo di successo');
-  assert.match(corpoMacro('customUnInit'), /%LOCALAPPDATA%\\TALOS/, 'la domanda dice anche dove sta la cache del browser');
+  // Owner 12/10/2026: la domanda è una frase per lingua (`TalosDomandaDati`, in `customHeader`), non più un testo nella macro.
+  assert.match(corpoMacro('customUnInit'), /MessageBox [^\n]*"\$\(TalosDomandaDati\)"/u, 'la domanda non usa la frase per lingua');
+  const domande = nsh.split('\n').filter((riga) => /^\s*LangString TalosDomandaDati /u.test(riga));
+  assert.equal(domande.length, 2, 'la domanda in inglese e in italiano');
+  for (const riga of domande) assert.match(riga, /%LOCALAPPDATA%\\TALOS/u, 'la domanda dice anche dove sta la cache del browser');
 });
 

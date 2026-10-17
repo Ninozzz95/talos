@@ -34,7 +34,13 @@ mkdirSync(migrazioneBrowser.cartella, { recursive: true });
 app.setPath('userData', profile.dataDir);
 app.setPath('sessionData', migrazioneBrowser.cartella);
 app.commandLine.appendSwitch('ignore-gpu-blocklist');
-app.commandLine.appendSwitch('lang', 'it');
+/*
+ * ⛔ Owner 12/10/2026, «Sì, segue il sistema»: qui c'era `appendSwitch('lang', 'it')`, dal primo guscio (12/09, prima della fase
+ *   della lingua). Forzava Chromium in italiano su OGNI Windows ⇒ `navigator.languages` era sempre `['it']` e l'interfaccia,
+ *   che senza una scelta salvata negozia da lì (`frontend/src/components/lingua.js`, `risolviLingua`), partiva in italiano anche
+ *   su un sistema inglese. Senza la forzatura Chromium prende la lingua di Windows: inglese ovunque, italiano se il sistema è
+ *   italiano (stessa regola dell'installer). NON rimetterla: lo controlla `tests/lingua-del-sistema.test.mjs`.
+ */
 /*
  * ⛔ (16/09/2026) — LA PULIZIA ALLA DISINSTALLAZIONE (bug 2, gamba 2b). L'uninstaller lancia
  * `TALOS.exe --talos-pulizia-dati` con ExecWait PRIMA di cancellare i file, SOLO se l'utente ha
@@ -243,7 +249,8 @@ function avviaGuscio() {
          (24 ore senza scritture): si ricrea prima di ogni figlio, o il nuovo handshake non avrebbe dove scriversi. */
       mkdirSync(cartellaHandshake, { recursive: true });
       const reportFile = join(cartellaHandshake, 'figlio-' + (++generazione) + '.json');
-      const avvio = creaAvvioFiglio({ execPath: process.execPath, percorsi, port, token, reportFile, dataDir, scratchDir: profile.scratchDir, motoreLocale, keyringScope: profile.keyringScope });
+      const avvio = creaAvvioFiglio({ execPath: process.execPath, percorsi, port, token, reportFile, dataDir, scratchDir: profile.scratchDir, motoreLocale, keyringScope: profile.keyringScope, installata: app.isPackaged });
+      for (const avviso of avvio.avvisi) registro.scrivi(avviso); // L3-8: una variabile del kernel ereditata e ignorata si dice
       const proc = spawn(avvio.command, avvio.args, avvio.options);
       const handle = { proc, port, reportFile, generazione, terminato: false, get exitCode() { return proc.exitCode; } };
       figli.add(handle);

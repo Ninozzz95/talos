@@ -32,14 +32,14 @@ test('WF-RUN-ACTIONS: only what the server would accept now is offered (workflow
 
 test('WF-RUN-CANCEL-CONSEQUENCES: the confirmation says what happens, from the real counts (decision 22)', () => {
   assert.equal(conseguenzeAnnulla(pan('running', { running: 2, leased: 1, pending: 10, ready: 2, succeeded: 5 })),
-    'I 3 passi in corso si fermano subito. I 12 passi non ancora partiti non partiranno. I risultati già registrati restano. Un run annullato non si riprende.');
+    'I 3 passi in corso si fermano subito. I 12 passi non ancora partiti non partiranno. I risultati già registrati restano. Un’esecuzione annullata non si riprende.');
   assert.equal(conseguenzeAnnulla(pan('paused', { running: 1, pending: 1 })),
-    'Il passo in corso si ferma subito. Il passo non ancora partito non partirà. I risultati già registrati restano. Un run annullato non si riprende.');
-  assert.equal(conseguenzeAnnulla(pan('paused', { succeeded: 3 })), 'I risultati già registrati restano. Un run annullato non si riprende.',
+    'Il passo in corso si ferma subito. Il passo non ancora partito non partirà. I risultati già registrati restano. Un’esecuzione annullata non si riprende.');
+  assert.equal(conseguenzeAnnulla(pan('paused', { succeeded: 3 })), 'I risultati già registrati restano. Un’esecuzione annullata non si riprende.',
     'nothing in progress, nothing waiting: no invented step');
   // giro vero sul 4174 (25/09): in pausa i passi che aspettano un precedente sono `blocked`, e non partiranno anche loro
   assert.equal(conseguenzeAnnulla(pan('paused', { running: 1, blocked: 2, succeeded: 1 })),
-    'Il passo in corso si ferma subito. I 2 passi non ancora partiti non partiranno. I risultati già registrati restano. Un run annullato non si riprende.');
+    'Il passo in corso si ferma subito. I 2 passi non ancora partiti non partiranno. I risultati già registrati restano. Un’esecuzione annullata non si riprende.');
 });
 
 test('WF-RUN-RETRY-RAISE: the raise is said in the words of the card limits, only what goes up (decision 23)', () => {
@@ -51,7 +51,7 @@ test('WF-RUN-RETRY-RAISE: the raise is said in the words of the card limits, onl
 });
 
 test('WF-RUN-TEXTS: errors are in words by code, and an ambiguous Retry says not to repeat blindly', () => {
-  assert.match(testoErroreRun('WORKFLOW_RUN_STATE_CONFLICT'), /cambiato nel frattempo/u);
+  assert.match(testoErroreRun('WORKFLOW_RUN_STATE_CONFLICT'), /cambiata nel frattempo/u);
   assert.equal(testoErroreRun('CODICE_IGNOTO'), 'Il comando non è riuscito. Riprova tra poco.');
   assert.match(testoAmbiguo('retry'), /prima di ripeterlo/u);
   assert.doesNotMatch(testoErroreRun('WORKFLOW_RUN_STATE_CONFLICT'), /WORKFLOW|conflict/u, 'no technical names on screen');

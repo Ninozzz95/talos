@@ -471,3 +471,15 @@ test('CONFIG-STORE-02 — TALOS_HARNESS_UI_SESSIONS_DIR sposta la cartella, riso
     rimuoviCartellaDiProva(cartella);
   }
 });
+
+test('CONFIG-GOALS (15/10/2026) — la seconda porta dell obiettivo è accesa di serie sul server; «0», «false», «off», «no» la spengono', () => {
+  assert.equal(loadConfig({}, import.meta.url).obiettiviNellaChat, true, 'the desktop interface has the strip and the card');
+  for (const spento of ['0', 'false', 'OFF', ' no ']) assert.equal(loadConfig({ TALOS_HARNESS_UI_GOALS: spento }, import.meta.url).obiettiviNellaChat, false, spento);
+  assert.equal(loadConfig({ TALOS_HARNESS_UI_GOALS: '1' }, import.meta.url).obiettiviNellaChat, true);
+});
+
+test('CONFIG-INSTANT-COMPACTION (15/10/2026) — la compattazione istantanea è accesa di serie sul server desktop; «0», «false», «off», «no» la spengono', () => {
+  assert.equal(loadConfig({}, import.meta.url).compattazioneIstantanea, true, 'owner: the minutes of compaction must not exist');
+  for (const spento of ['0', 'false', 'OFF', ' no ']) assert.equal(loadConfig({ TALOS_HARNESS_UI_INSTANT_COMPACTION: spento }, import.meta.url).compattazioneIstantanea, false, spento);
+  assert.equal(loadConfig({ TALOS_HARNESS_UI_INSTANT_COMPACTION: '1' }, import.meta.url).compattazioneIstantanea, true);
+});

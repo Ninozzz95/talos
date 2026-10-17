@@ -298,3 +298,107 @@ test('ASK-EXPIRED-STOPS-THE-TURN: una domanda scaduta si chiude dal sistema, il 
   assert.equal(giri.giro(0).input.segnaleStop.aborted, true, 'decisione owner 9: scaduta ⇒ il giro si ferma');
   giri.concludi(0);
 });
+
+/* ⛔ 14/10/2026, owner (CLI e desktop): una domanda scaduta NON ferma il giro; il modello sa che nessuno ha risposto e prosegue
+   col suo giudizio, dichiarando l'ipotesi, senza inventare preferenze. Opzione dell'ospite `domandaScadutaFerma`, di serie
+   `true` (il comportamento della decisione 9) finché l'ospite non la passa. Fonti: Codex `request_user_input/mod.rs`
+   `submit_empty_auto_resolution`; Hermes `run_turn_runner_clarify_delivery.py` («the user did not respond»); zcode
+   `ask-user-question.ts` («use your best judgment … do not invent user preferences»). */
+test('ASK-EXPIRED-GOES-ON: con domandaScadutaFerma:false la domanda scaduta si chiude dal sistema, il modello prosegue e il giro NON si ferma', async () => {
+  const giri = giriFinti();
+  const registro = createSessionRegistry({ avviaSessioneFn: giri.avviaSessioneFn, domandaScadutaFerma: false });
+  const { sessionId } = registro.avvia('task-vero');
+  const attesa = giri.giro(0).input.chiediDomandaFn(DOMANDE, { toolCallId: 'call_ask', messaggi: STORIA_ALLA_DOMANDA });
+  const requestId = registro.esporta(sessionId).eventi.find((e) => e.type === 'UserQuestionRequested').requestId;
+  assert.deepEqual(await registro.rispondiDomanda(sessionId, requestId, { requestId, status: 'expired' }), { ok: true });
+  const esito = await attesa;
+  assert.equal(esito.status, 'expired');
+  assert.match(esito.instruction, /did not answer in time/u);
+  assert.match(esito.instruction, /do not invent/u);
+  const risolta = registro.esporta(sessionId).eventi.find((e) => e.type === 'UserQuestionResolved');
+  assert.equal(risolta.status, 'expired');
+  assert.equal(risolta.da, 'sistema');
+  assert.equal(Object.hasOwn(risolta, 'instruction'), false, 'la ricevuta per lo schermo resta quella di prima');
+  assert.equal(giri.giro(0).input.segnaleStop.aborted, false, 'il giro prosegue');
+  giri.concludi(0);
+});
+
+/*
+ * «Nessuno davanti» per GIRO (CLI, 16/10/2026, compito 50): `talos -p` lo dice a ogni giro e non si salva; la TUI che riprende la
+ * stessa sessione non lo passa, e la persona davanti ha di nuovo domande, carta del piano, elicitazione e file adottati. L'opzione
+ * del giro vince su quella salvata; le riprese interne (senza opzione) tengono quella del giro prima.
+ */
+const concludiGiro = async (giri, i) => {
+  giri.concludi(i, { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: [{ role: 'system', content: 'istruzioni' }, { role: 'user', content: 'scegli la strada' }, { role: 'assistant', content: 'Fatto.' }] } });
+  for (let k = 0; k < 5; k += 1) await new Promise((r) => setImmediate(r));
+};
+
+test('NESSUNO-PER-GIRO-01: per giro senza nessuno davanti la domanda si chiude subito, e NON si salva: dopo un riavvio la ripresa ha la persona davanti', async () => {
+  const cartellaStore = cartellaDiProva('talos-nessuno-per-giro-');
+  try {
+    const prima = giriFinti();
+    const registro = createSessionRegistry({ cartellaStore, avviaSessioneFn: prima.avviaSessioneFn });
+    const { sessionId } = registro.avvia('task-vero', { senzaInterfacciaNelGiro: true });
+    const input = prima.giro(0).input;
+    assert.equal(input.nessunoDavanti, true);
+    assert.equal(input.presentaPianoFn, undefined, 'niente carta del piano');
+    assert.equal(input.onElicitazioneMcp, undefined, 'niente elicitazione MCP');
+    assert.equal((await input.chiediDomandaFn(DOMANDE, { toolCallId: 'call_ask', messaggi: STORIA_ALLA_DOMANDA })).status, 'unanswerable');
+    await concludiGiro(prima, 0);
+    await svuota(cartellaStore);
+    const dopo = giriFinti();
+    const riavviato = createSessionRegistry({ cartellaStore, avviaSessioneFn: dopo.avviaSessioneFn });
+    await riavviato.ripristina();
+    assert.equal(riavviato.resume(sessionId, 'continua').erroreAvvio, undefined);
+    const ripresa = dopo.giro(0).input;
+    assert.notEqual(ripresa.nessunoDavanti, true, 'il «nessuno davanti» del giro non era salvato');
+    assert.equal(typeof ripresa.presentaPianoFn, 'function', 'la persona davanti ha la carta del piano');
+    assert.equal(typeof ripresa.onElicitazioneMcp, 'function');
+    dopo.concludi(0);
+    await svuota(cartellaStore);
+  } finally {
+    rimuoviCartellaDiProva(cartellaStore);
+  }
+});
+
+test('NESSUNO-PER-GIRO-02: l\'opzione del giro vince su quella salvata (una sessione nata senza interfaccia ripresa con la persona davanti)', async () => {
+  const giri = giriFinti();
+  const registro = createSessionRegistry({ avviaSessioneFn: giri.avviaSessioneFn });
+  const { sessionId } = registro.avvia('task-vero', { senzaInterfaccia: true });
+  assert.equal(giri.giro(0).input.nessunoDavanti, true, 'premessa: salvata senza interfaccia');
+  await concludiGiro(giri, 0);
+  assert.equal(registro.resume(sessionId, 'continua', [], { senzaInterfacciaNelGiro: false }).erroreAvvio, undefined);
+  const input = giri.giro(1).input;
+  assert.notEqual(input.nessunoDavanti, true);
+  assert.equal(typeof input.presentaPianoFn, 'function');
+  const domanda = input.chiediDomandaFn(DOMANDE, { toolCallId: 'call_ask2', messaggi: STORIA_ALLA_DOMANDA });
+  assert.equal(registro.elenca().find((s) => s.sessionId === sessionId).inAttesaDomanda, true, 'la domanda aspetta la persona');
+  void domanda;
+});
+
+test('NESSUNO-PER-GIRO-03: una ripresa senza opzione (interna: la coda, il padre che riparte) tiene il valore del giro prima', async () => {
+  const giri = giriFinti();
+  const registro = createSessionRegistry({ avviaSessioneFn: giri.avviaSessioneFn });
+  const { sessionId } = registro.avvia('task-vero', { senzaInterfacciaNelGiro: true });
+  await concludiGiro(giri, 0);
+  assert.equal(registro.resume(sessionId, 'continua').erroreAvvio, undefined);
+  assert.equal(giri.giro(1).input.nessunoDavanti, true);
+});
+
+test('NESSUNO-PER-GIRO-04 (R2, CLI 0.6.8): `forka` porta il «nessuno davanti» del giro come `resume`; AL CONTRARIO senza opzione il fork ha la persona davanti', async () => {
+  const giri = giriFinti();
+  const registro = createSessionRegistry({ avviaSessioneFn: giri.avviaSessioneFn });
+  const { sessionId } = registro.avvia('task-vero');
+  await concludiGiro(giri, 0);
+  const forcata = registro.forka(sessionId, { senzaInterfacciaNelGiro: true });
+  assert.equal(forcata.erroreAvvio, undefined, JSON.stringify(forcata));
+  const input = giri.giro(1).input;
+  assert.equal(input.nessunoDavanti, true, '`talos -p --fork`: nessuno può rispondere');
+  assert.equal((await input.chiediDomandaFn(DOMANDE, { toolCallId: 'call_ask', messaggi: STORIA_ALLA_DOMANDA })).status, 'unanswerable', 'the question closes at once, it does not wait for RUN_TIMEOUT');
+  assert.equal(input.onElicitazioneMcp, undefined);
+  await concludiGiro(giri, 1);
+  const normale = registro.forka(sessionId);
+  assert.equal(normale.erroreAvvio, undefined, JSON.stringify(normale));
+  assert.notEqual(giri.giro(2).input.nessunoDavanti, true, 'a fork from the app has the person in front');
+  assert.equal(typeof giri.giro(2).input.onElicitazioneMcp, 'function');
+});

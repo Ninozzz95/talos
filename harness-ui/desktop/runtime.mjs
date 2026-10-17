@@ -43,12 +43,27 @@ export function scegliMotoreLocale({ percorsi, env = process.env, sonda = spawnS
 
 function portaValida(port) { return Number.isInteger(port) && port >= 1024 && port <= 65535 && port !== 4174; }
 
-export function creaAvvioFiglio({ execPath, percorsi, port, token, reportFile, dataDir, scratchDir, motoreLocale, env = process.env, keyringScope = 'desktop' }) {
+/*
+ * L3-8 (owner 13/10/2026, D7: «la ignora e lo scrive nel registro»). Chi ha lavorato da sorgente si ritrova
+ * TALOS_OWNER_RUNTIME_MODULE nella sessione di Windows; l'app installata la ereditava e caricava QUEL file (di un checkout
+ * qualunque, o il kernel di base) al posto dell'adattatore del suo pacchetto, senza dirlo. Su Windows il nome di una variabile non
+ * distingue le maiuscole, ma `creaAvvioFiglio` lavora su una copia semplice: si guardano tutte le grafie.
+ * Funzione PURA: legge, non scrive. Una frase per ogni valore ignorato che non sia già l'adattatore del pacchetto.
+ */
+const NOME_VARIABILE_KERNEL = /^TALOS_OWNER_RUNTIME_MODULE$/i;
+function avvisiKernelEreditato(env, adattatore) {
+  const stesso = (a, b) => (process.platform === 'win32' ? resolve(a).toLowerCase() === resolve(b).toLowerCase() : resolve(a) === resolve(b));
+  return Object.entries(env)
+    .filter(([nome, valore]) => NOME_VARIABILE_KERNEL.test(nome) && typeof valore === 'string' && valore.trim() !== '' && !stesso(valore.trim(), adattatore))
+    .map(([, valore]) => 'Kernel: ignorata la variabile TALOS_OWNER_RUNTIME_MODULE ereditata dal sistema (' + valore.trim() + '). L’app installata usa il suo adattatore: ' + adattatore + '.');
+}
+
+export function creaAvvioFiglio({ execPath, percorsi, port, token, reportFile, dataDir, scratchDir, motoreLocale, env = process.env, keyringScope = 'desktop', installata = false }) {
   if (!isAbsolute(execPath ?? '')) throw new Error('Percorso eseguibile assoluto richiesto.');
   if (!portaValida(port)) throw new Error('La porta del figlio non è consentita.');
   if (!/^[a-f0-9]{64}$/.test(token ?? '')) throw new Error('Credenziale locale non valida.');
   if (!['desktop', 'desktop-preview'].includes(keyringScope)) throw new Error('Scope del portachiavi Desktop non valido.');
-  const ambiente = Object.fromEntries(Object.entries(env).filter(([k, v]) => v !== undefined && !/^(NODE_OPTIONS|NODE_PATH|TALOS_PACKAGED_NODE|ELECTRON_RUN_AS_NODE|ELECTRON_ENABLE_LOGGING|ELECTRON_LOG_FILE|ELECTRON_NO_ASAR)$/i.test(k)));
+  const ambiente = Object.fromEntries(Object.entries(env).filter(([k, v]) => v !== undefined && !/^(NODE_OPTIONS|NODE_PATH|TALOS_PACKAGED_NODE|ELECTRON_RUN_AS_NODE|ELECTRON_ENABLE_LOGGING|ELECTRON_LOG_FILE|ELECTRON_NO_ASAR)$/i.test(k) && !(installata && NOME_VARIABILE_KERNEL.test(k))));
   if (motoreLocale) {
     ambiente.TALOS_LLAMA_SERVER_PATH = motoreLocale.percorso;
     if (motoreLocale.variante !== 'personalizzato') {
@@ -62,8 +77,13 @@ export function creaAvvioFiglio({ execPath, percorsi, port, token, reportFile, d
    * wins; only the desktop default changes. Mobile and TALOS-BANCO do not pass
    * through this launcher.
    */
+  const adattatore = join(percorsi.root, 'src', 'kernel', 'talosHarness.desktop-hotfix.mjs');
+  /* L3-8 (owner 13/10/2026, D7): the INSTALLED app does not let what it inherits choose the kernel — the variable is left out
+     where the child's variables are built (above), and what was ignored is said (the caller writes `avvisi` to the log).
+     From source the explicit choice stays. See `avvisiKernelEreditato`. */
+  const avvisi = installata ? avvisiKernelEreditato(env, adattatore) : [];
   if (!ambiente.TALOS_OWNER_RUNTIME_MODULE?.trim()) {
-    ambiente.TALOS_OWNER_RUNTIME_MODULE = join(percorsi.root, 'src', 'kernel', 'talosHarness.desktop-hotfix.mjs');
+    ambiente.TALOS_OWNER_RUNTIME_MODULE = adattatore;
   }
   Object.assign(ambiente, {
     ELECTRON_RUN_AS_NODE: '1', TALOS_HARNESS_UI_HOST: '127.0.0.1', TALOS_HARNESS_UI_PORT: String(port),
@@ -86,7 +106,7 @@ export function creaAvvioFiglio({ execPath, percorsi, port, token, reportFile, d
   /* Fase B: dove sono i binari per Linux del pacchetto (`cartellaCasaLinux` nel server). Dal sorgente non si passa: il server usa
      `.casa-linux/` preparata con `npm run prepara:casa-linux`, o la variabile già dichiarata dal sistema. */
   if (percorsi.casaLinux) ambiente.TALOS_CASA_LINUX = percorsi.casaLinux;
-  return { command: execPath, args: ['--import', pathToFileURL(percorsi.bootstrap).href, percorsi.server], options: {
+  return { avvisi, command: execPath, args: ['--import', pathToFileURL(percorsi.bootstrap).href, percorsi.server], options: {
     cwd: percorsi.root, env: ambiente, stdio: ['ignore', 'pipe', 'pipe', 'ipc'], windowsHide: true, shell: false,
   } };
 }

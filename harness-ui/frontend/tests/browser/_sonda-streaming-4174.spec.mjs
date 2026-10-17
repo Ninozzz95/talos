@@ -29,7 +29,7 @@ test.afterAll(() => {
   console.log('SONDA-SUL-4174: questa corsa HA SCRITTO sul server (una sessione nuova + un giro vero).');
 });
 
-test('STREAMING-VERO-4174 — fotogrammi e long task durante uno stream vero, misurati dalla console', async ({ page }) => {
+test('@sonda-4174 STREAMING-VERO-4174 — fotogrammi e long task durante uno stream vero, misurati dalla console', async ({ page }) => {
   test.setTimeout(300000);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.addInitScript(() => {

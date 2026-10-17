@@ -7,6 +7,7 @@ import {
   elencaToolMcp,
   filtraToolMcp,
 } from '../src/mcp-client.mjs';
+import { VARIABILE_DIFESA_RICERCA, risolviProgrammaSenzaCartella } from '../src/difesa-ricerca-programmi.mjs';
 
 /**
  * ⭐ Stesso principio di `pty-terminal.test.mjs`: mai un processo MCP
@@ -66,7 +67,11 @@ test('⭐⭐⭐ connettiServerMcp: costruisce Client/Transport coi parametri giu
   );
 
   assert.deepEqual(argomentiClient, { name: 'prova', version: '2.0.0' });
-  assert.deepEqual(argomentiTransport, { command: 'npx', args: ['-y', '@modelcontextprotocol/server-filesystem', '/tmp/prova'] });
+  /* R1 (CLI 0.6.8): il nome arriva al trasporto risolto sul solo PATH, e il server riceve la difesa nel suo ambiente */
+  assert.equal(argomentiTransport.command, risolviProgrammaSenzaCartella('npx'));
+  assert.match(argomentiTransport.command, /[\\/]npx(\.cmd)?$/iu);
+  assert.deepEqual(argomentiTransport.args, ['-y', '@modelcontextprotocol/server-filesystem', '/tmp/prova']);
+  assert.equal(argomentiTransport.env[VARIABILE_DIFESA_RICERCA], '1');
   assert.equal(client._chiamateConnect.length, 1);
   assert.equal(risultato.client, client);
   assert.equal(typeof risultato.chiudi, 'function');

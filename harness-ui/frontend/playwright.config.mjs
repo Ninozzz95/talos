@@ -6,6 +6,8 @@ import { fileURLToPath } from 'node:url';
 
 import { defineConfig, devices } from '@playwright/test';
 
+import { ignoraSonde4174 } from './tests/browser/sonde-4174.mjs'; // L3-11: le sonde del 4174 fuori dalla suite di serie
+
 /*
  * ⛔⛔⛔ 02/9 — PRIMA di questo blocco la suite NON era un cancello, ed è
  * stato misurato, non supposto: `baseURL` puntava al **4174 dell'owner**,
@@ -141,7 +143,10 @@ export default defineConfig({
   // I due CONFRONTO richiedono porte e mockup storici esterni alla build
   // isolata: restano leggibili/eseguibili manualmente, ma il gate R4 usa
   // il proprio test visuale deterministico sui mockup approvati.
-  testIgnore: ['lab-bootstrap.spec.mjs', '_confronto-exa.spec.mjs', '_confronto-fase1.spec.mjs'],
+  // L3-11 (D13, 13/10/2026): le sonde scritte per il 4174 restano fuori, anche con TALOS_HARNESS_UI_BASE_URL; rientrano solo con
+  // TALOS_SONDE_4174=1 (`tests/browser/sonde-4174.mjs`). `testIgnore` e non `grepInvert`: un --grep-invert da riga di comando lo
+  // sostituirebbe.
+  testIgnore: ['lab-bootstrap.spec.mjs', '_confronto-exa.spec.mjs', '_confronto-fase1.spec.mjs', ...ignoraSonde4174()],
   timeout: 30_000,
   expect: { timeout: 5_000 },
   fullyParallel: false,

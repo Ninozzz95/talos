@@ -42,7 +42,8 @@ const SCENE = {
   senzaDopo: numera([...giro('ciao', [[185_000, 1_000]], 'Fatto il giro pieno.', 1), compattazione({ fase: 'fine', compattato: true, motivo: 'manuale', annullabile: false, at: '2026-09-26T12:00:00.000Z' })]),
 };
 
-async function apri(page, chiave, { tema = 'dark' } = {}) {
+/* `rotte(req)`: una prova può rispondere lei a una richiesta (torna ciò che `route.fulfill` vuole), prima della guardia dei non-GET */
+async function apri(page, chiave, { tema = 'dark', rotte = null } = {}) {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.emulateMedia({ colorScheme: tema, reducedMotion: 'reduce' });
   await page.addInitScript((colorMode) => {
@@ -51,6 +52,8 @@ async function apri(page, chiave, { tema = 'dark' } = {}) {
   const contatore = { nonGet: 0 };
   await page.route('**/api/v1/**', async (route) => {
     const req = route.request();
+    const sua = rotte ? rotte(req) : null;
+    if (sua) return route.fulfill(sua);
     const m = new URL(req.url()).pathname.match(/\/api\/v1\/sessions\/as-(\w+)-[a-z0-9]+\/(events|metrics)$/);
     if (m) {
       if (m[2] === 'metrics') return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ ok: true, data: { registrato: true, cacheSessione: null, ragionamentiMs: {} }, meta: { schema: 'talos.harness-ui.api.v1' } }) });
@@ -92,7 +95,7 @@ test.describe('Avviso di soglia e colonna del contesto — la misura è l\'ultim
     await expect(avviso(page)).toBeHidden();
     const riga = page.locator('#conversation [data-compattazione-riga]');
     await expect(riga).toHaveCount(1);
-    await expect(riga).toContainText('186.000 → 12.000');
+    await expect(riga).toContainText('174.000 token risparmiati'); // 15/10/2026: la riga dice quanto si è risparmiato (186.000 − 12.000)
     await expect(riga.locator('[data-compattazione-menu]')).toHaveCount(0);
     expect(c.nonGet).toBe(0);
   });
@@ -108,5 +111,56 @@ test.describe('Avviso di soglia e colonna del contesto — la misura è l\'ultim
     const c = await apri(page, 'senzaDopo');
     await expect(avviso(page)).toBeHidden();
     expect(c.nonGet).toBe(0);
+  });
+
+  /*
+   * ⛔ Owner 12/10/2026 sera: «se clicco su compatta ora non parte immediatamente, invece appare la modale e devo dare un'ulteriore
+   *   conferma, comportamento sbagliato, la compattazione deve partire immediatamente». La modale usciva col motore del contesto
+   *   attivo: `compactSession()` apriva la finestra, che ha la sua conferma in linea.
+   */
+  const json = (corpo, stato = 200) => ({ status: stato, contentType: 'application/json', body: JSON.stringify(corpo) });
+  const percorso = (req) => new URL(req.url()).pathname;
+  const finestraAperta = (page) => page.locator('#veloContesto:not([hidden])');
+
+  test('CTX-NOTICE-COMPACT-NOW-05 — motore del contesto attivo: «Compatta ora» dell\'avviso manda SUBITO la richiesta, senza finestra né conferma', async ({ page }) => {
+    const mandate = [];
+    await apri(page, 'rimisurata', { rotte: (req) => {
+      const p = percorso(req);
+      if (p.endsWith('/context') && req.method() === 'GET') return json({ sessionId: 'as-rimisurata-a1', revision: 7, settings: {}, facts: [], jobs: [] });
+      if (p.endsWith('/context/jobs') && req.method() === 'POST') { mandate.push(JSON.parse(req.postData())); return json({ job: { id: 'j1', kind: 'compact', status: 'running' } }); }
+      return null;
+    } });
+    await expect(avviso(page)).toBeVisible();
+    await avviso(page).locator('[data-avviso-contesto="compatta"]').click();
+    await expect.poll(() => mandate.length).toBe(1);
+    expect(mandate[0].kind).toBe('compact');
+    expect(mandate[0].expectedRevision).toBe(7);
+    await expect(finestraAperta(page)).toHaveCount(0); // nessuna modale, nessuna seconda conferma
+    await expect(page.locator('[data-context-conferma-legacy]')).toHaveCount(0);
+  });
+
+  test('CTX-NOTICE-COMPACT-NOW-06 — motore spento: parte subito anche qui (la rotta di sempre), senza finestra', async ({ page }) => {
+    const mandate = [];
+    await apri(page, 'rimisurata', { rotte: (req) => {
+      const p = percorso(req);
+      if (p.endsWith('/context') && req.method() === 'GET') return json({ error: { code: 'CTX_NOT_ENABLED', message: 'Context engine is not enabled.' } }, 404);
+      if (p.endsWith('/compact') && req.method() === 'POST') { mandate.push(p); return json({ ok: true, data: { compattato: false } }); }
+      return null;
+    } });
+    await expect(avviso(page)).toBeVisible();
+    await avviso(page).locator('[data-avviso-contesto="compatta"]').click();
+    await expect.poll(() => mandate.length).toBe(1);
+    await expect(finestraAperta(page)).toHaveCount(0);
+  });
+
+  test('CTX-NOTICE-COMPACT-NOW-07 — AL CONTRARIO: se la richiesta non può partire, la finestra si apre e dice perché (mai un clic muto)', async ({ page }) => {
+    await apri(page, 'rimisurata', { rotte: (req) => {
+      const p = percorso(req);
+      if (p.endsWith('/context') && req.method() === 'GET') return json({ sessionId: 'as-rimisurata-a1', revision: 7, settings: {}, facts: [], jobs: [] });
+      if (p.endsWith('/context/jobs') && req.method() === 'POST') return json({ error: { code: 'CTX_NOTHING_TO_COMPACT', message: 'Nothing to compact.' } }, 409);
+      return null;
+    } });
+    await avviso(page).locator('[data-avviso-contesto="compatta"]').click();
+    await expect(finestraAperta(page)).toHaveCount(1);
   });
 });

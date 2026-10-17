@@ -11,6 +11,8 @@
 @import './fascia-modo.css'; /* F3-12, 24/09/2026: la fascia del modo Workflow tolto, sopra il composer */
 @import './avviso-piano.css'; /* D4, 24/09/2026: l'avviso «Piano aggiornato» sopra il composer */
 @import './compattazione-legacy.css'; /* F5, 24/09/2026: avviso «contesto quasi pieno», barra e riga della compattazione legacy */
+@import './obiettivo-fascia.css'; /* /goal G6, 15/10/2026: la fascia dell'obiettivo sopra il compositore */
+@import './obiettivo-carta.css'; /* /goal G6, 15/10/2026: la carta di conferma dei controlli e il suggerimento di /goal */
 @import './terminale-basso.css'; /* PO-09: il terminale in split orizzontale in basso */
 @import './sessioni-vive.css'; /* le sessioni in corso salgono in cima, e lo segnalano */
 @import './attesa-shimmer.css';

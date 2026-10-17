@@ -26,6 +26,7 @@
 import { giriDellaSessione, spiegaGiriFermati } from './consumo-sessione.js'; // 06/9 CB-04: i giri della sessione, non dell'ultimo invio
 import { nomeModelloUmano } from './chat-foot.js'; // 13/09 R-08: la targa di un GGUF locale diventa un nome
 import { linguaCorrenteDiT, t as tr, tn } from './lingua.js';
+import { scriviNomeConNumero } from './nome-con-numero.js'; // 15/10/2026 (owner): il «-2» di un doppione resta in vista
 
 /**
  * Per quanto tempo una riga dice «ha appena risposto». Un minuto: abbastanza da vederlo tornando
@@ -93,6 +94,8 @@ export function statoSessione(sessione) {
    */
   else if (sessione.interrotta) classe = 'interrotto';
   else if (!sessione.conclusa) classe = 'vivo';
+  // /goal G6 (15/10/2026): conclusa senza nessun giro — una chat nata ferma aspetta il suo primo messaggio, non ha un esito
+  else if (sessione.primoMessaggioAtteso === true) classe = 'pendente';
   // ⛔ il motivo VINCE sull'esito: «fermata» e «giri finiti» sono chiusure previste, non guasti.
   else if (sessione.ultimoEsito === 'errore' && sessione.motivoChiusura === 'fermata') classe = 'fermata';
   // C3 tappa 4 (review Y-4B-1): una delega in pausa chiude con un RunError «in-pausa» — né guasto né fine
@@ -552,13 +555,14 @@ export function creaSessionItem(sessione, opzioni = {}) {
     // ⭐ 08/09: una figlia si chiama col suo compito — un nome scelto a mano vince comunque
     // ⛔ `nomeDistintivo` prima di `taskDelega`: fra sorelle è lo stesso compito senza le parole che
     //    hanno tutte in comune — senza, a schermo due deleghe diverse sono la stessa riga troncata.
-    : `${sessione.nome || opzioni.nomeDistintivo || sessione.taskDelega || nomeLeggibileSessione(sessione.taskId)}${sessione.forkDa ? ` · ${tr('processi.session.branch')}` : ''}`;
+    : `${(nomeAutomaticoDiDelega(sessione) && opzioni.nomeDistintivo) || sessione.nome || opzioni.nomeDistintivo || sessione.taskDelega || nomeLeggibileSessione(sessione.taskId)}${sessione.forkDa ? ` · ${tr('processi.session.branch')}` : ''}`;
   const stato = opzioni.pendente ? { classe: 'pendente', testo: tr(ETICHETTE.pendente), tono: null } : statoSessione(sessione);
   riga.dataset.sessionState = stato.classe;
   if (stato.aiuto) riga.title = stato.aiuto; // il consiglio dove non ruba spazio alla riga
 
   const testo = el(documentObj, 'span');
-  const titolo = el(documentObj, 'span', 'talos-session-item__title', etichetta);
+  const titolo = el(documentObj, 'span', 'talos-session-item__title');
+  scriviNomeConNumero(titolo, etichetta, documentObj);
   const sotto = el(documentObj, 'span', 'talos-session-item__sub');
   const pallino = el(documentObj, 'span', `talos-dot talos-dot--sm${stato.tono ? ` talos-dot--${stato.tono}` : ''}`);
   const modello = opzioni.pendente ? null : nomeModello(sessione.modello);
@@ -607,4 +611,73 @@ export function creaSessionItem(sessione, opzioni = {}) {
 /** Proiezione della sidebar richiesta dall’owner: il catalogo completo resta intatto. */
 export function sessioniRadice(elenco) {
   return (Array.isArray(elenco) ? elenco : []).filter(s => s && !s.padreId && !(Number(s.profonditaDelega) > 0));
+}
+
+/*
+ * 15/10/2026 (foto del 4174 dopo la fusione del lotto 3B) — IL TITOLO AUTOMATICO SI TAGLIAVA A METÀ PAROLA.
+ *   In «Riprendi il lavoro» una sessione si chiamava «…dimmi se la mia idea e concettualmen»: il client tagliava il primo messaggio a
+ *   80 caratteri secchi, senza puntini, mentre il server ne derivava un altro con «...». E la prima cura contava i caratteri in modo
+ *   diverso dal server: un titolo con emoji che qui stava negli 80 là veniva rifiutato in silenzio (revisione del bugfixer,
+ *   REV-TITOLO-01).
+ * ⇒ È la COPIA della regola del server, `src/titolo-breve.mjs` (`titoloBreve`): si conta per grafema (`Intl.Segmenter`), si ferma
+ *   all'ultimo spazio non più indietro di metà del tetto, si toglie la punteggiatura in fondo e si chiude con «…»; `riserva` lascia
+ *   posto a un suffisso. Il pacchetto del browser non importa moduli del server: `tests/titolo-breve-parita.test.mjs` (lato server)
+ *   tiene uguali le due copie su un elenco di casi. Si cambia una, si cambia l'altra.
+ */
+const segmentatoreTitolo = typeof Intl?.Segmenter === 'function' ? new Intl.Segmenter(undefined, { granularity: 'grapheme' }) : null;
+const grafemiDelTitolo = (s) => (segmentatoreTitolo ? Array.from(segmentatoreTitolo.segment(s), (x) => x.segment) : [...s]);
+
+export function titoloDalPrimoMessaggio(testo, massimo = 80, { riserva = 0 } = {}) {
+  const pulito = String(testo ?? '').replace(/\s+/gu, ' ').trim();
+  const tetto = Math.max(2, massimo - Math.max(0, riserva));
+  const parti = grafemiDelTitolo(pulito);
+  if (parti.length <= tetto) return pulito;
+  const dentro = parti.slice(0, tetto - 1);
+  let spazio = -1;
+  for (let i = dentro.length - 1; i >= 0; i -= 1) if (/^\s+$/u.test(dentro[i])) { spazio = i; break; }
+  const taglio = (spazio >= Math.floor(tetto / 2) ? dentro.slice(0, spazio) : dentro).join('');
+  /* REV2-04 (bugfixer, 15/10): un testo di sola punteggiatura («-----», «!!!!») restava «…»: se togliere la coda lascia il
+     vuoto, si tiene il taglio secco */
+  const pulitoInFondo = taglio.replace(/[\s,.;:!?…–—-]+$/u, '');
+  return `${pulitoInFondo || dentro.join('')}…`;
+}
+
+/**
+ * Il nome di un doppione (revisione del bugfixer, REV-TITOLO-02/02b): il suffisso «-N» ha il suo posto DENTRO il tetto, e va prima
+ * dei puntini — «…della cartella-2…», mai «…della cartella…-2» né un nome di 82 grafemi che il server rifiuta.
+ */
+/**
+ * REV2-06 (bugfixer, 15/10): `maxlength="80"` conta unità UTF-16, il server conta grafemi — in un nome con emoji non si poteva
+ * scrivere nemmeno un carattere, e una frase hindi di 74 grafemi (117 unità) non entrava. Il campo prende fino a `massimo`
+ * GRAFEMI: oltre, il testo si ferma lì, come farebbe `maxlength` con l'unità giusta.
+ */
+export function limitaCampoAGrafemi(campo, massimo = 80) {
+  if (!campo || campo.dataset?.limiteGrafemi) return;
+  if (campo.dataset) campo.dataset.limiteGrafemi = String(massimo);
+  campo.addEventListener('input', () => {
+    const parti = grafemiDelTitolo(campo.value);
+    if (parti.length > massimo) campo.value = parti.slice(0, massimo).join('');
+  });
+}
+
+/**
+ * 16/10/2026 sera — dal server una delega nasce col nome corto del suo compito, col «-N» se in elenco è già preso. Quel nome è
+ * AUTOMATICO (il compito, o il compito col numero): fra sorelle il nome distintivo, che toglie le parole comuni, dice di più e vince.
+ * Un nome scelto a mano vince sempre.
+ */
+export function nomeAutomaticoDiDelega(sessione) {
+  const nome = typeof sessione?.nome === 'string' ? sessione.nome : '';
+  const compito = typeof sessione?.taskDelega === 'string' ? sessione.taskDelega : '';
+  if (!sessione?.padreId || !nome || !compito) return false;
+  if (nome === compito) return true;
+  /* NOMI2-REV-03 (bugfixer, 16/10): automatico SOLO se è esattamente il compito col suo numero, come lo fa il server — un prefisso
+     qualunque col numero («Fix-2» su «Fix the build…») è un nome scelto dalla persona, e vince. */
+  const numero = /-\d{1,4}(?=…?$)/su.exec(nome)?.[0];
+  // il server numera il nome GIÀ corto (`taskDelega`, puntini compresi): si rifà lo stesso conto sullo stesso testo
+  return Boolean(numero) && nomeConSuffisso(compito, numero) === nome;
+}
+
+export function nomeConSuffisso(base, suffisso, massimo = 80) {
+  const corto = titoloDalPrimoMessaggio(base, massimo, { riserva: [...String(suffisso)].length });
+  return corto.endsWith('…') ? `${corto.slice(0, -1)}${suffisso}…` : `${corto}${suffisso}`;
 }
