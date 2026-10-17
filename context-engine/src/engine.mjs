@@ -149,8 +149,17 @@ export function createContextEngine({ store, model, tokenCounter, retrieval, emb
     return anchorsMemo.get(key);
   };
   function compiled(snapshot, records, { summary = snapshot.activeVersion?.summary, coveredThrough = snapshot.activeVersion?.coveredThrough ?? 0, evidence = [], targetModel, clear = null, retained = null } = {}) {
-    const systemMessages = records.filter(r => ['system', 'developer'].includes(r.message.role)).map(r => r.message);
-    const verbatimTail = records.filter(r => r.sequence > coveredThrough && !['system', 'developer'].includes(r.message.role)).map(r => r.message);
+    /* ⛔ Cache del piano (CLI + desktop, 15/10/2026): in testa va solo il blocco di sistema INIZIALE (quelli prima del primo messaggio
+       non di sistema) e i system già coperti dal riassunto, che il riassunto riscrive comunque. Un system arrivato DOPO — il «Project
+       context update» dell'agent-service, la frase F-027 del kernel — resta al suo posto nella coda: prima risaliva in testa, prima
+       del primo messaggio della persona, e il prefisso (con la chiave della cache del piano) cambiava a ogni giro con la cartella
+       cambiata. Come Hermes (`context_compressor.py:4633`: si protegge solo il system iniziale); OpenAI «Prompt caching» (15/10/2026):
+       la cache vale solo per un prefisso esatto, lo stabile in testa e il variabile in fondo. */
+    const diSistema = r => ['system', 'developer'].includes(r.message.role);
+    const primoNonDiSistema = records.find(r => !diSistema(r))?.sequence ?? Infinity;
+    const inTesta = r => diSistema(r) && (r.sequence < primoNonDiSistema || r.sequence <= coveredThrough);
+    const systemMessages = records.filter(inTesta).map(r => r.message);
+    const verbatimTail = records.filter(r => r.sequence > coveredThrough && !inTesta(r)).map(r => r.message);
     // C1 level 1: `clear` = a `{ cleared }` box; the old tool outputs of the verbatim part are cleared BEFORE the provider shapes it
     const lighter = clear ? clearOldToolOutputs(verbatimTail, { pointer: clearedToolPointer }) : null;
     if (clear) clear.cleared = lighter.cleared;
@@ -410,7 +419,7 @@ export function createContextEngine({ store, model, tokenCounter, retrieval, emb
       return job;
     },
     /** `projection`: la storia corretta, allineata 1:1 ai record (vedi `checkProjection`); `messages` resta il controllo d'archivio di prima. */
-    async prepareForRequest({ sessionId, messages, projection, tools = [], sessionModel, signal }) {
+    async prepareForRequest({ sessionId, messages, projection, tools = [], sessionModel, signal, waitForInFlight = false }) {
       let snapshot = await recoverInterrupted(sessionId, await state(sessionId));
       const records = await originals(sessionId);
       if (messages && JSON.stringify(messages) !== JSON.stringify(records.map(r => r.message))) fail('CTX_UNARCHIVED_CONTEXT', 'Archiviare i nuovi messaggi prima di preparare la richiesta.');
@@ -426,6 +435,40 @@ export function createContextEngine({ store, model, tokenCounter, retrieval, emb
          serve alleggerire (byte/3,5, la stessa euristica del contatore, col margine largo dell'euristica); sopra la soglia la
          piena si STIMA dalla misura leggera più i byte tolti, mai si conta; sotto, si misura la piena come sempre. */
       const bytes = messages => new TextEncoder().encode(JSON.stringify(messages)).length;
+      /*
+       * ⛔ Owner 16/10/2026 sera («In sottofondo, con una guardia»), misurato dal vivo prima (tetto 60.000, glm-5.3-flash): in un
+       *   giro lungo — un messaggio della persona e molti attrezzi — alla soglia morbida il riassunto in sottofondo trovava «niente di
+       *   chiuso» (si tengono interi gli ultimi due giri, e il giro è uno) e il rifiuto si inghiottiva: il motore riassumeva solo
+       *   quando la richiesta non entrava più, e il giro aspettava ~17 s (tre chiamate al modello). La regola G02 del 01/10 (CLI)
+       *   vietava di riassumere il giro in corso alla soglia morbida perché un giro i cui attrezzi riempiono quasi tutta la soglia
+       *   verrebbe riassunto a ogni passo. ⇒ Alla soglia, quando non c'è niente di chiuso, il giro in corso si riassume IN SOTTOFONDO
+       *   (il giro non aspetta: lo scambio avviene alla richiesta dopo, quando il lavoro è pubblicato), ma solo se ciò che resta
+       *   dopo il riassunto sta sotto l'OBIETTIVO. Sopra l'obiettivo il riassunto non darebbe spazio, e non parte (niente riassunto
+       *   a ogni passo). Se non entra più, resta il percorso di sempre: il riassunto DENTRO il giro, atteso.
+       * ⛔ Revisione ROSSA del bugfixer (16/10, SOTT-REV-01/02): la prima guardia sottraeva i byte del prefisso, che parte dal record
+       *   0 — il prompt di sistema e il messaggio della persona, che il riassunto rimette per intero, e dopo il primo riassunto i
+       *   record già coperti, che nella misura non c'erano più: la stima andava sotto zero e partiva un riassunto a ogni passo (5 su
+       *   6). ⇒ Ciò che resta si stima sulla COMPOSIZIONE VERA dopo il riassunto (`compiled` con un riassunto segnaposto lungo metà
+       *   della riserva di risposta: sistema, messaggio della persona ripetuto, memoria e coda), a byte/3,5, più ciò che la misura
+       *   conta fuori dai messaggi (gli attrezzi): la misura di adesso meno i byte/3,5 dei messaggi che ha misurato davvero. La coda
+       *   si stima intera, senza il livello 1: se sbaglia, sbaglia verso una guardia più severa.
+       */
+      const giroInSottofondo = async ({ records: tutti, measurement: misura, prepared: misurati, budget: soglie, snapshot: stato }) => {
+        const scelta = selectClosedPrefix(tutti, { retainRecentTurns: stato.settings.retainRecentTurns, force: true, withinTurn: true });
+        if (!scelta.prefix.length || scelta.pendingCalls.length) return undefined;
+        /* Riverifica del bugfixer (16/10, SOTT-REV-03): un riassunto vero arriva fino alla riserva INTERA (`maxOutputTokens`), e con
+           soglia e obiettivo vicini lo scarto dal segnaposto faceva ripartire un riassunto a ogni passo (11 in 11). Isteresi misurata:
+           il segnaposto è lungo almeno quanto l'ULTIMO riassunto vero di questa sessione — dopo uno più lungo del previsto la stima
+           si corregge da sola, e al più se ne spreca uno. */
+        const ultimo = stato.activeVersion?.summary ? bytes(stato.activeVersion.summary) : 0;
+        const segnaposto = 'x'.repeat(Math.max(Math.ceil((sessionModel.responseReserve / 2) * 3.5), ultimo));
+        const composizione = compiled(stato, overlay(tutti, projection), { summary: segnaposto, coveredThrough: scelta.coveredThrough, targetModel: sessionModel });
+        const fuoriDaiMessaggi = Math.max(0, misura.inputTokens - Math.ceil(bytes(misurati) / 3.5));
+        const dopo = fuoriDaiMessaggi + Math.ceil(bytes(composizione) / 3.5);
+        if (dopo >= soglie.targetTokens) return undefined;
+        try { return await api.startCompaction({ sessionId, idempotencyKey: `auto-${stato.revision}-${await hash(identity(sessionModel))}-turn-bg`, sessionModel, tools, signal, projection, withinTurn: true }); }
+        catch (error) { if (error.code === 'CTX_NOTHING_TO_COMPACT' || error.code === 'CTX_PENDING_TOOLS') return undefined; throw error; }
+      };
       const project = async (current, list) => {
         const full = compiled(current, list, { targetModel: sessionModel });
         const measureFull = async () => ({ prepared: full, measurement: await measure(full, tools, sessionModel, signal), cleared: 0 });
@@ -468,9 +511,10 @@ export function createContextEngine({ store, model, tokenCounter, retrieval, emb
       const record = m => store.recordMeasurement({ sessionId, revision: snapshot.revision, measuredAt: clock(), measurement: m });
       await record(measurement);
       const budget = budgetFor(measurement, snapshot.settings);
-      let job; let compactionCooling = null;
+      let job; let compactionCooling = null; let senzaAttesa = false;
       if (snapshot.settings.auto && budget.shouldPrepare) {
         job = snapshot.jobs.find(entry => !terminal.has(entry.state));
+        const inVoloPrima = Boolean(job);
         // 25/09 — in pausa dopo un rifiuto: niente lavoro nuovo (l'avviso si riscrive con lo stesso id: copre i lavori
         // falliti prima di questa versione)
         if (!job) compactionCooling = await avvisaPausa(sessionId, snapshot.jobs);
@@ -478,9 +522,23 @@ export function createContextEngine({ store, model, tokenCounter, retrieval, emb
           /* G02: inside the current turn only when the context does not fit (compaction-planner.mjs `withinTurn`) */
           const withinTurn = !budget.fits;
           try { job = await api.startCompaction({ sessionId, idempotencyKey: `auto-${snapshot.revision}-${await hash(identity(sessionModel))}${withinTurn ? '-turn' : ''}`, sessionModel, tools, signal, projection, withinTurn }); }
-          catch (error) { if (error.code !== 'CTX_NOTHING_TO_COMPACT') throw error; }
+          catch (error) {
+            if (error.code !== 'CTX_NOTHING_TO_COMPACT') throw error;
+            if (!withinTurn) job = await giroInSottofondo({ records, measurement, prepared, budget, snapshot });
+          }
         }
-        if (!budget.fits && job) {
+        /*
+         * ⛔ Owner 16/10/2026 sera («Non aspettare se entra»), dopo la misura dal vivo (tetto 60.000, glm-5.3-flash, 12 file in
+         *   catena): il riassunto in sottofondo partiva 2-3 passi prima del limite e durava 26 s, e il giro lo aspettava lo stesso
+         *   (22 s; 20 s senza la cura). Claude Code, Codex e Hermes riassumono dentro il giro e aspettano. ⇒ Al limite, se un
+         *   riassunto è GIÀ in corso e la richiesta entra ancora nella finestra vera — finestra meno la riserva della risposta, senza
+         *   il margine di sicurezza della stima — la si manda subito: il riassunto si usa alla richiesta dopo, quando è pubblicato. Si
+         *   aspetta solo quando non entra davvero, o quando il riassunto è in pausa (va ripreso), o quando nessuno era in corso (quello
+         *   nuovo, dentro il giro, si aspetta come sempre).
+         */
+        // `waitForInFlight`: il ritentativo di chi ha mandato senza aspettare e si è visto rispondere «contesto pieno» (guscio, K8)
+        senzaAttesa = !waitForInFlight && !budget.fits && inVoloPrima && job?.state !== 'paused' && measurement.inputTokens <= budget.windowTokens - budget.responseReserve;
+        if (!budget.fits && job && !senzaAttesa) {
           if (job.state === 'paused') job = await api.resumeCompaction({ sessionId, jobId: job.id, sessionModel, tools, signal, projection });
           const result = await api.waitForCompaction({ sessionId, jobId: job.id });
           if (result.state !== 'committed') fail(result.error?.code ?? 'CTX_COMPACTION_REQUIRED', result.error?.message ?? 'Il contesto richiede una compattazione completata.');
@@ -506,12 +564,12 @@ export function createContextEngine({ store, model, tokenCounter, retrieval, emb
           }
         }
       }
-      if (!budgetFor(measurement, snapshot.settings).fits) {
+      if (!senzaAttesa && !budgetFor(measurement, snapshot.settings).fits) {
         // il tempo che RESTA, non la durata del gradino: a pausa quasi scaduta «per 15 min» mentirebbe
         if (compactionCooling) fail('CTX_CONTEXT_OVERFLOW', `Il contesto supera la finestra e la compattazione automatica è in pausa ancora per circa ${Math.max(1, Math.ceil((Date.parse(compactionCooling.retryAfter) - Date.parse(clock())) / 60_000))} min dopo un riassunto non riuscito (${compactionCooling.code}). Usa «Compatta» per riprovare subito, o modifica le informazioni protette.`);
         fail('CTX_CONTEXT_OVERFLOW', 'Il contesto supera la finestra. Compattare o modificare le informazioni protette.');
       }
-      return { messages: prepared, measurement, versionId: snapshot.activeVersion?.id ?? null, ...(toolOutputsCleared ? { toolOutputsCleared } : {}), ...(level1 ? { level1 } : {}), ...(job ? { job } : {}), ...(compactionCooling ? { compactionCooling } : {}), waiting: false };
+      return { messages: prepared, measurement, versionId: snapshot.activeVersion?.id ?? null, ...(toolOutputsCleared ? { toolOutputsCleared } : {}), ...(level1 ? { level1 } : {}), ...(job ? { job } : {}), ...(compactionCooling ? { compactionCooling } : {}), ...(senzaAttesa ? { sentWithoutWaiting: true } : {}), waiting: false };
     },
     getContextState: async ({ sessionId }) => recoverInterrupted(sessionId, await state(sessionId)),
     async updateContextSettings({ sessionId, patch, expectedRevision }) {

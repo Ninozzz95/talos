@@ -16,19 +16,19 @@ test('WF-RUN-CONTROLS-UI: Pause at once, Retry after its count, Cancel after its
   const grafo = await apriDiagrammaDellaScena(page, scena);
   const run = grafo.locator('.talos-wfg__run');
   const principale = run.locator('.talos-wfg__run-principale');
-  const altro = run.getByRole('button', { name: 'Altri comandi del run' });
-  const menu = run.getByRole('menu', { name: 'Comandi del run' });
+  const altro = run.getByRole('button', { name: 'Altri comandi dell’esecuzione' });
+  const menu = run.getByRole('menu', { name: 'Comandi dell’esecuzione' });
   const conferma = page.locator('dialog.talos-wfg-conferma');
   await expect(principale).toHaveText('Pausa');
   // «…»: Riprova, e Annulla in fondo dopo un separatore (decisione 21)
   await altro.click();
-  await expect(menu.getByRole('menuitem')).toHaveText(['Riprova 1 passo', 'Annulla il run']);
+  await expect(menu.getByRole('menuitem')).toHaveText(['Riprova 1 passo', 'Annulla l’esecuzione']);
   await expect(menu.locator('[role="separator"]')).toHaveCount(1);
   // Riprova: il conto viene dal server PRIMA, poi la conferma (decisione 23); il fuoco parte da «Non ora»
   await menu.getByRole('menuitem', { name: 'Riprova 1 passo' }).click();
   await expect(conferma).toBeVisible();
   await expect(conferma.getByRole('heading')).toHaveText('Riprovo 1 passo?');
-  await expect(conferma).toContainText('Il passo non riuscito riparte coi tentativi da capo. Il tetto del run sale di:');
+  await expect(conferma).toContainText('Il passo non riuscito riparte coi tentativi da capo. Il tetto dell’esecuzione sale di:');
   await expect(conferma.locator('.talos-wfg-conferma__riga')).toHaveText([/Tempo massimo\s*\+ 20 min/u, /Richieste al modello\s*\+ 8/u, /Token letti\s*\+ 12\.000/u, /Attrezzi usati\s*\+ 30/u]);
   await expect(conferma.getByRole('button', { name: 'Non ora' })).toBeFocused();
   await conferma.getByRole('button', { name: 'Riprova', exact: true }).click();
@@ -44,24 +44,24 @@ test('WF-RUN-CONTROLS-UI: Pause at once, Retry after its count, Cancel after its
   expect(new Set(comandi.map((c) => c.corpo.commandId)).size).toBe(2); // un commandId per gesto
   // Annulla: la conferma dice le conseguenze (decisione 22); «Non ora» ed Esc non mandano niente
   await altro.click();
-  await expect(menu.getByRole('menuitem')).toHaveText(['Annulla il run']);
-  await menu.getByRole('menuitem', { name: 'Annulla il run' }).click();
-  await expect(conferma.getByRole('heading')).toHaveText('Annullo il run?');
+  await expect(menu.getByRole('menuitem')).toHaveText(['Annulla l’esecuzione']);
+  await menu.getByRole('menuitem', { name: 'Annulla l’esecuzione' }).click();
+  await expect(conferma.getByRole('heading')).toHaveText('Annullo l’esecuzione?');
   await expect(conferma).toContainText('Il passo in corso si ferma subito.');
   await expect(conferma).toContainText('I risultati già registrati restano.');
   await conferma.getByRole('button', { name: 'Non ora' }).click();
   await expect(conferma).toHaveCount(0);
   await expect(altro).toBeFocused();
   await altro.click();
-  await menu.getByRole('menuitem', { name: 'Annulla il run' }).click();
+  await menu.getByRole('menuitem', { name: 'Annulla l’esecuzione' }).click();
   await expect(conferma).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(conferma).toHaveCount(0);
   expect(comandi.map((c) => c.azione)).toEqual(['retry', 'pause']);
   // … e poi davvero
   await altro.click();
-  await menu.getByRole('menuitem', { name: 'Annulla il run' }).click();
-  await conferma.getByRole('button', { name: 'Annulla il run' }).click();
+  await menu.getByRole('menuitem', { name: 'Annulla l’esecuzione' }).click();
+  await conferma.getByRole('button', { name: 'Annulla l’esecuzione' }).click();
   await expect(grafo.locator('.talos-wfg__stato-run')).toHaveText(/^Annullamento in corso · \d+ di \d+ terminati$/u); // refactor dei grafi: la riga di stato del prototipo dice anche i terminati
   await expect(run).toBeHidden();
   expect(comandi.map((c) => c.azione)).toEqual(['retry', 'pause', 'cancel']);
@@ -85,8 +85,8 @@ test('WF-RUN-CONTROLS-RESUME: a paused run offers Resume; the right click on the
   await expect(principale).toHaveText('Riprendi');
   await expect(grafo.locator('.talos-wfg__stato-run')).toHaveText(/^In pausa · \d+ di \d+ terminati$/u); // refactor dei grafi: la riga di stato del prototipo dice anche i terminati
   await grafo.locator('[data-coordinatore]').click({ button: 'right' });
-  const menu = grafo.getByRole('menu', { name: 'Comandi del run' });
-  await expect(menu.getByRole('menuitem')).toHaveText(['Annulla il run']);
+  const menu = grafo.getByRole('menu', { name: 'Comandi dell’esecuzione' });
+  await expect(menu.getByRole('menuitem')).toHaveText(['Annulla l’esecuzione']);
   await page.keyboard.press('Escape');
   await expect(menu).toBeHidden();
   await principale.click();
@@ -226,7 +226,7 @@ test('C3-CEILING-UI: a run waiting for its budget offers «Raise the ceiling and
   await expect(principale).toHaveText('Alza il tetto e riprendi');
   await principale.click();
   await expect(conferma.getByRole('heading')).toHaveText('Alzo il tetto e riprendo?');
-  await expect(conferma).toContainText('Il run ha raggiunto il tetto del budget.');
+  await expect(conferma).toContainText('L’esecuzione ha raggiunto il tetto del budget.');
   await expect(conferma).toContainText(/Per far partire (il passo che resta|i \d+ passi che restano), il tetto sale di:/u);
   await expect(conferma.locator('.talos-wfg-conferma__riga')).toHaveText([/Richieste al modello\s*\+ 4/u, /Token letti\s*\+ 120\.000/u]);
   await expect(conferma.getByRole('button', { name: 'Non ora' })).toBeFocused();
@@ -249,8 +249,8 @@ test('C3-CEILING-UI-ENOUGH: when the ceiling of now already fits, the confirmati
   const grafo = await apriDiagrammaDellaScena(page, scena);
   const conferma = page.locator('dialog.talos-wfg-conferma');
   await grafo.locator('.talos-wfg__run .talos-wfg__run-principale').click();
-  await expect(conferma.getByRole('heading')).toHaveText('Riprendo il run?');
-  await expect(conferma).toContainText('Il tetto di adesso basta già per i passi che restano: il run riprende senza alzarlo.');
+  await expect(conferma.getByRole('heading')).toHaveText('Riprendo l’esecuzione?');
+  await expect(conferma).toContainText('Il tetto di adesso basta già per i passi che restano: l’esecuzione riprende senza alzarlo.');
   await expect(conferma.locator('.talos-wfg-conferma__riga')).toHaveCount(0);
   await conferma.getByRole('button', { name: 'Riprendi', exact: true }).click();
   await expect.poll(() => comandi.map((c) => [c.azione, c.corpo.amount.promptTokens])).toEqual([['raise-ceiling', 0]]);

@@ -9,7 +9,7 @@
  */
 
 import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
 import { ID_CON_CREDENZIALE, REGISTRO_FORNITORI } from './provider-registry.mjs';
 // P-K
@@ -357,7 +357,10 @@ function writeRuntimePreferences(runtimeFile, runtimes) {
       ...(value.rilevato ? { rilevato: value.rilevato } : {}),
     };
   }
-  const temporary = `${runtimeFile}.tmp`;
+  /* ⛔ Segnalato da Nino2 (CLI, 14/10/2026 notte): un `.tmp` FISSO è condiviso fra processi — il 4174 e l'app sulla stessa
+     cartella dati scrivono lo stesso temporaneo, e su Windows il secondo `rename` o lo `unlink` di pulizia colpisce il file
+     dell'altro (EPERM, o le preferenze dell'altro perse). Un nome per scrittura, come `automation-store.mjs:94`. */
+  const temporary = `${runtimeFile}.${process.pid}.${randomUUID()}.tmp`;
   try {
     writeFileSync(temporary, `${JSON.stringify({ version: 1, providers }, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
     renameSync(temporary, runtimeFile);
@@ -370,7 +373,15 @@ function writeRuntimePreferences(runtimeFile, runtimes) {
 /**
  * @param {{env?:Record<string,string|undefined>, keyring?:{get:Function,set:Function,remove:Function}|null, runtimeFile?:string|null, logger?:(message:string)=>void, ignoraSemiAmbiente?:boolean}} options
  */
-export function createProviderCredentialStore({ env = process.env, keyring = null, runtimeFile = null, logger = () => {}, ora = Date.now, ignoraSemiAmbiente = false } = {}) {
+/*
+ * ⛔ 14/10/2026, owner (desktop) — `indirizzoDaScegliere`: i fornitori la cui chiave va SOLO a un indirizzo scelto dalla persona.
+ *   Finché la persona non ne sceglie uno (`endpointConfigured`), il runtime lo dice (`endpointDaScegliere: true`) e chi spedisce
+ *   o prova la chiave si ferma prima della rete (`model-destination.mjs`, `provider-probe.mjs`). Nato per Z.AI: il piano GLM e
+ *   il saldo a consumo hanno indirizzi diversi, Internazionale e Cina pure, e «la chiave va solo all'indirizzo scelto».
+ *   Di serie vuoto: chi non lo passa (la CLI) non cambia di una virgola.
+ */
+export function createProviderCredentialStore({ env = process.env, keyring = null, runtimeFile = null, logger = () => {}, ora = Date.now, ignoraSemiAmbiente = false, indirizzoDaScegliere = [] } = {}) {
+  const daScegliere = new Set(Array.isArray(indirizzoDaScegliere) ? indirizzoDaScegliere : []);
   const pools = new Map();
   const conIndice = new Set();
   /* ⛔ PO-01 — i provider la cui chiave viene dal PORTACHIAVI. Senza questo insieme l'origine si
@@ -459,23 +470,36 @@ export function createProviderCredentialStore({ env = process.env, keyring = nul
         aggiunte.push(v.impronta);
       }
       // L'indice si pubblica per ultimo. Un indice vuoto impedisce di resuscitare ambiente/legacy.
-      keyringOperation('set', `${provider}:indice`, JSON.stringify({ version: 1, chiavi: nuove.map(v => [v.impronta, v.priorita, v.inPanchinaFino, v.causa]) }), POOL_INDEX_SERVICE);
+      /* ⛔ Revisione della CLI (Nino2, 14/10/2026): `dichiarate` elenca le chiavi la cui panchina ha la scadenza DICHIARATA dal
+         fornitore. Campo in più, non una quinta colonna né una versione nuova: un lettore di prima controlla `version === 1` e
+         righe di quattro elementi e rifiuterebbe l'indice intero (il 4174 e l'app installata leggono lo stesso portachiavi). */
+      const dichiarate = nuove.filter(v => v.panchinaDichiarata === true && v.inPanchinaFino !== null).map(v => v.impronta);
+      keyringOperation('set', `${provider}:indice`, JSON.stringify({ version: 1, chiavi: nuove.map(v => [v.impronta, v.priorita, v.inPanchinaFino, v.causa]), ...(dichiarate.length ? { dichiarate } : {}) }), POOL_INDEX_SERVICE);
     } catch (error) {
       for (const id of aggiunte) { try { keyringOperation('remove', `${provider}:${id}`, null, POOL_SERVICE); } catch { noSecretLogger(logger, 'Keychain cleanup incomplete: check Doctor'); } }
       throw error;
     }
     pools.set(provider, nuove.map(v => ({ ...v, origine: 'custodia' })));
     conIndice.add(provider); daPortachiavi.add(provider);
+    /* ⛔ MOTORE-REV-02 (revisione del bugfixer, 14/10): da qui il cambio È SALVATO (l'indice nuovo è pubblicato). Ciò che segue è
+       pulizia delle copie vecchie: un suo guasto non può far dire «portachiavi non disponibile» a un cambio riuscito. Si prova
+       tutto, si scrive nel log, e si RESTITUISCE se è rimasto qualcosa: chi cancella tutto (`clearKey`, la pulizia alla
+       disinstallazione) lo deve dire, perché lì una copia rimasta nel portachiavi è proprio ciò che la persona voleva togliere. */
+    let puliziaIncompleta = false;
+    const pulisci = (operazione) => { try { operazione(); } catch { puliziaIncompleta = true; noSecretLogger(logger, 'Keychain cleanup incomplete: check Doctor'); } };
     for (const v of precedenti) if (!nuove.some(n => n.impronta === v.impronta)) {
-      keyringOperation('remove', `${provider}:${v.impronta}`, null, POOL_SERVICE);
+      pulisci(() => keyringOperation('remove', `${provider}:${v.impronta}`, null, POOL_SERVICE));
     }
     // L'account singolo resta leggibile dai consumatori legacy finché la sua
     // credenziale appartiene al pool. Una rimozione esplicita cancella entrambe le copie.
-    let legacy;
-    try { legacy = keyring.get?.(KEYRING_SERVICE, provider); } catch { throw new ProviderCredentialError('PROVIDER_STORE_UNAVAILABLE'); }
-    if (!nuove.some(v => v.chiave === legacy?.trim())) keyringOperation('remove', provider);
+    pulisci(() => {
+      const legacy = keyring.get?.(KEYRING_SERVICE, provider);
+      if (!nuove.some(v => v.chiave === legacy?.trim())) keyringOperation('remove', provider);
+    });
+    return { puliziaIncompleta };
   }
   function aggiungiChiave(provider, value, { priorita } = {}) {
+    rileggiIndice(provider);
     const attuali = righe(provider), nuova = voceChiave(value, priorita ?? Math.min(1000, Math.max(-1, ...attuali.map(v => v.priorita)) + 1));
     const esistente = attuali.find(v => v.impronta === nuova.impronta);
     if (esistente) return pubblica(esistente, attuali.indexOf(esistente));
@@ -484,12 +508,14 @@ export function createProviderCredentialStore({ env = process.env, keyring = nul
     return elencaPool(provider).find(v => v.impronta === nuova.impronta);
   }
   function rimuoviChiave(provider, impronta) {
+    rileggiIndice(provider);
     const attuali = righe(provider);
     if (!attuali.some(v => v.impronta === impronta)) throw new ProviderCredentialError('PROVIDER_KEY_NOT_FOUND');
     salvaPool(provider, attuali.filter(v => v.impronta !== impronta));
     return { provider, keyConfigured: hasKey(provider), pool: elencaPool(provider) };
   }
   function mettiInPanchina(provider, impronta, { classe, headers, resetAt } = {}) {
+    const riletto = daPortachiavi.has(provider) ? rileggiIndice(provider, { severo: false }) : true;
     const attuali = righe(provider), v = attuali.find(v => v.impronta === impronta);
     if (!v) return null; // rimossa durante una richiesta in volo
     if (!Object.hasOwn(PANCHINE_PROVIDER_MS, classe)) return pubblica(v);
@@ -509,19 +535,54 @@ export function createProviderCredentialStore({ env = process.env, keyring = nul
      */
     if (classe === 'credito' && attuali.length === 1 && dichiarata === null) return pubblica(v);
     const stima = classe === 'traffico' && attuali.length === 1 ? 60_000 : PANCHINE_PROVIDER_MS[classe];
-    const nuova = { ...v, inPanchinaFino: dichiarata ?? ora() + stima, causa: classe };
+    /* `panchinaDichiarata`: la scadenza viene dal FORNITORE (header o corpo), non da una stima. L'indice lo ricorda (`dichiarate`,
+       in `salvaPool`), così il caricamento successivo non la scambia per una panchina ereditata dal codice di prima di BUG-25. */
+    const nuova = { ...v, inPanchinaFino: dichiarata ?? ora() + stima, causa: classe, panchinaDichiarata: dichiarata !== null };
     const nuove = attuali.map(r => r === v ? nuova : r);
     // Le panchine ambientali restano in memoria: nessuna scrittura segreta non richiesta.
-    if (daPortachiavi.has(provider)) {
+    if (daPortachiavi.has(provider) && riletto) {
       try { salvaPool(provider, nuove); }
       catch { pools.set(provider, nuove); noSecretLogger(logger, `Fallback keys for ${provider} active in memory: saving not available`); }
     } else pools.set(provider, nuove);
     if (classe === 'credenziale') noSecretLogger(logger, `Credential rejected by ${PROVIDER_DEFINITIONS[provider].label}: check the sign-ins`);
     return pubblica(nuova);
   }
+  /*
+   * ⛔ Revisione della CLI (Nino2, 14/10/2026) e PORTACHIAVI-REV-03 (revisione del bugfixer, 14/10): uno store caricato PRIMA che un
+   * altro processo (il 4174 e l'app sulla stessa cartella dati) cambiasse l'indice riscriveva il pool partendo dalla sua copia
+   * vecchia: `setKey` perdeva la panchina dell'altro, `clearKey` lasciava nel portachiavi la chiave aggiunta dall'altro (fuori da
+   * ogni indice) dicendo di averle tolte tutte, `aggiungiChiave` e `rimuoviChiave` toglievano dall'indice quella dell'altro. Ogni
+   * operazione che riscrive il pool rilegge PRIMA l'indice di quel fornitore.
+   * ⛔ CREDITO-REV-01: se la rilettura non riesce per un GUASTO del portachiavi (`caricaDalPortachiavi` ha già azzerato il pool e
+   * acceso `conIndice`), si rimette lo stato di prima e — `severo` — si rifiuta senza scrivere; non severo (la panchina, nel mezzo di
+   * una richiesta) si resta sulla copia in memoria. Un indice davvero ROVINATO (schema, JSON) resta quello che era: si riscrive.
+   */
+  function rileggiIndice(provider, { severo = true } = {}) {
+    if (!keyring || typeof keyring.get !== 'function') return true;
+    const prima = { pool: pools.get(provider), conIndice: conIndice.has(provider), daPortachiavi: daPortachiavi.has(provider) };
+    try {
+      if (leggiDalPortachiavi(POOL_INDEX_SERVICE, `${provider}:indice`) != null) caricaDalPortachiavi(provider);
+    } catch (errore) {
+      if (errore?.guastoDelPortachiavi) {
+        if (prima.pool === undefined) pools.delete(provider); else pools.set(provider, prima.pool);
+        if (prima.conIndice) conIndice.add(provider); else conIndice.delete(provider);
+        if (prima.daPortachiavi) daPortachiavi.add(provider); else daPortachiavi.delete(provider);
+        if (severo) throw new ProviderCredentialError('PROVIDER_STORE_UNAVAILABLE');
+        return false;
+      }
+      noSecretLogger(logger, `Key ${provider} not readable from the keychain`);
+    }
+    return true;
+  }
   function setKey(provider, value) {
     requireProvider(provider);
     const normalized = normalizzaChiave(value);
+    /* ⛔ Revisione della CLI (Nino2, 14/10/2026): uno store che ha letto il portachiavi PRIMA che un altro processo creasse
+       l'indice (o lo cambiasse) prendeva la strada senza indice e non lo riscriveva: una panchina messa dall'altro processo
+       restava nell'indice anche dopo che la persona aveva risalvato la chiave — e, ora che la migrazione di BUG-25 non la
+       libera più a ogni caricamento, sarebbe diventata visibile. Prima di scegliere la strada si rilegge l'indice di QUESTO
+       fornitore. Un indice illeggibile lascia `conIndice` acceso: la scrittura qui sotto ne fa uno nuovo e pulito. */
+    rileggiIndice(provider);
     if (conIndice.has(provider)) {
       const attuali = righe(provider), nuova = voceChiave(normalized, attuali[0]?.priorita ?? 0);
       salvaPool(provider, [nuova, ...attuali.slice(1).filter(v => v.impronta !== nuova.impronta)]);
@@ -534,8 +595,12 @@ export function createProviderCredentialStore({ env = process.env, keyring = nul
   }
   function clearKey(provider) {
     requireProvider(provider);
-    salvaPool(provider, []);
+    rileggiIndice(provider); // PORTACHIAVI-REV-03: le chiavi aggiunte da un altro processo si tolgono anche loro
+    const { puliziaIncompleta } = salvaPool(provider, []);
     daPortachiavi.delete(provider);
+    /* la chiave non si usa più (indice vuoto pubblicato), ma una sua copia è rimasta nel portachiavi: si dice, non si tace — col
+       codice del portachiavi che ha rifiutato, già tradotto nell'interfaccia */
+    if (puliziaIncompleta) throw new ProviderCredentialError('PROVIDER_STORE_UNAVAILABLE');
     return { provider, keyConfigured: false };
   }
   function loadFromKeyring() {
@@ -543,35 +608,51 @@ export function createProviderCredentialStore({ env = process.env, keyring = nul
     let loaded = 0;
     for (const provider of PROVIDER_IDS) {
       try {
-        const indice = keyring.get(POOL_INDEX_SERVICE, `${provider}:indice`);
-        if (indice != null) {
-          // Un indice danneggiato NON autorizza la vecchia credenziale o l'ambiente.
-          pools.set(provider, []); conIndice.add(provider); daPortachiavi.add(provider);
-          const dati = JSON.parse(indice);
-          if (dati?.version !== 1 || !Array.isArray(dati.chiavi) || dati.chiavi.length > MAX_POOL_KEYS) throw new Error('schema');
-          const viste = new Set();
-          const nuove = dati.chiavi.map(r => {
-            if (!Array.isArray(r) || r.length !== 4 || !/^[a-f0-9]{64}$/u.test(r[0]) || viste.has(r[0])) throw new Error('schema');
-            viste.add(r[0]);
-            const v = voceChiave(keyring.get(POOL_SERVICE, `${provider}:${r[0]}`), r[1]);
-            if (v.impronta !== r[0] || (r[2] !== null && (!Number.isSafeInteger(r[2]) || r[2] < 0 || r[2] > 8.64e15)) || (r[3] !== null && !Object.hasOwn(PANCHINE_PROVIDER_MS, r[3]))) throw new Error('schema');
-            /* ⛔ BUG-25 — migrazione onesta (una tantum, dichiarata): una panchina-credito EREDITATA
-             * da un giro vecchio, su un pool rimasto con una chiave sola, non sopravvive
-             * all'aggiornamento: si carica DISPONIBILE. La regola nuova (sopra) non la riprenderebbe
-             * mai senza una scadenza dichiarata. L'indice NON si riscrive mai: al prossimo rifiuto
-             * la dichiarazione, se c'è, rinasce dal fornitore. */
-            const creditoEreditato = r[3] === 'credito' && dati.chiavi.length === 1
-              && r[2] !== null && r[2] > Date.now();
-            return { ...v, inPanchinaFino: creditoEreditato ? null : r[2], causa: creditoEreditato ? null : r[3] };
-          });
-          pools.set(provider, nuove); if (nuove.length) loaded += 1;
-          continue;
-        }
-        const value = keyring.get(KEYRING_SERVICE, provider);
-        if (typeof value === 'string' && value.trim() !== '' && value.length <= MAX_KEY_LENGTH) { pools.set(provider, [voceChiave(value)]); daPortachiavi.add(provider); loaded += 1; }
+        if (caricaDalPortachiavi(provider)) loaded += 1;
       } catch { noSecretLogger(logger, `Key ${provider} not readable from the keychain`); }
     }
     return { loaded, available: true };
+  }
+  /** Il pool di UN fornitore com'è nel portachiavi: `true` se ha almeno una chiave. Lancia su un indice danneggiato (dopo aver
+   *  azzerato il pool: un indice danneggiato NON autorizza la vecchia credenziale o l'ambiente). */
+  /* Una lettura del portachiavi il cui guasto si riconosce: un errore QUI è del portachiavi, non dell'indice (schema, JSON). */
+  function leggiDalPortachiavi(servizio, account) {
+    try { return keyring.get(servizio, account); } catch (errore) {
+      throw Object.assign(new Error('keychain read failed'), { guastoDelPortachiavi: true, cause: errore });
+    }
+  }
+  function caricaDalPortachiavi(provider) {
+    const indice = leggiDalPortachiavi(POOL_INDEX_SERVICE, `${provider}:indice`);
+    if (indice != null) {
+      // Un indice danneggiato NON autorizza la vecchia credenziale o l'ambiente.
+      pools.set(provider, []); conIndice.add(provider); daPortachiavi.add(provider);
+      const dati = JSON.parse(indice);
+      if (dati?.version !== 1 || !Array.isArray(dati.chiavi) || dati.chiavi.length > MAX_POOL_KEYS) throw new Error('schema');
+      const viste = new Set();
+      const dichiarate = new Set(Array.isArray(dati.dichiarate) ? dati.dichiarate.filter(x => typeof x === 'string') : []);
+      const nuove = dati.chiavi.map(r => {
+        if (!Array.isArray(r) || r.length !== 4 || !/^[a-f0-9]{64}$/u.test(r[0]) || viste.has(r[0])) throw new Error('schema');
+        viste.add(r[0]);
+        const v = voceChiave(leggiDalPortachiavi(POOL_SERVICE, `${provider}:${r[0]}`), r[1]);
+        if (v.impronta !== r[0] || (r[2] !== null && (!Number.isSafeInteger(r[2]) || r[2] < 0 || r[2] > 8.64e15)) || (r[3] !== null && !Object.hasOwn(PANCHINE_PROVIDER_MS, r[3]))) throw new Error('schema');
+        /* ⛔ BUG-25 — migrazione onesta (una tantum, dichiarata): una panchina-credito EREDITATA
+         * da un giro vecchio, su un pool rimasto con una chiave sola, non sopravvive
+         * all'aggiornamento: si carica DISPONIBILE. La regola nuova (sopra) non la riprenderebbe
+         * mai senza una scadenza dichiarata. L'indice NON si riscrive mai: al prossimo rifiuto
+         * la dichiarazione, se c'è, rinasce dal fornitore. */
+        /* ⛔ Revisione della CLI (Nino2, 14/10/2026): la migrazione girava a OGNI caricamento, non una volta: una panchina con
+           la scadenza DICHIARATA (scritta dal codice di adesso) tornava «disponibile» ogni volta che un processo ricostruiva lo
+           store, e partiva una richiesta che il fornitore rifiutava. Ora si tocca solo ciò che l'indice NON dice dichiarato. */
+        const creditoEreditato = r[3] === 'credito' && dati.chiavi.length === 1
+          && r[2] !== null && r[2] > Date.now() && !dichiarate.has(r[0]);
+        return { ...v, inPanchinaFino: creditoEreditato ? null : r[2], causa: creditoEreditato ? null : r[3], panchinaDichiarata: dichiarate.has(r[0]) && r[2] !== null };
+      });
+      pools.set(provider, nuove);
+      return nuove.length > 0;
+    }
+    const value = leggiDalPortachiavi(KEYRING_SERVICE, provider);
+    if (typeof value === 'string' && value.trim() !== '' && value.length <= MAX_KEY_LENGTH) { pools.set(provider, [voceChiave(value)]); daPortachiavi.add(provider); return true; }
+    return false;
   }
   function getRuntime(provider) {
     if (provider === 'esterno') return { provider, agente: structuredClone(runtimes.get(provider)?.agente ?? null) };
@@ -583,7 +664,8 @@ export function createProviderCredentialStore({ env = process.env, keyring = nul
     return { provider, endpoint, endpointConfigured: saved?.endpointConfigured === true, timeoutSeconds: saved?.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS, ...(cloud ?? {}),
       ...(REGISTRO_FORNITORI[provider].cloud ? { modelli: structuredClone(saved?.modelli ?? []) } : {}),
       ...(provider === 'openrouter' ? { esclusi: [...(saved?.esclusi ?? [])], esclusiDiSerieTolti: [...(saved?.esclusiDiSerieTolti ?? [])] } : {}), // decisione 14 + 0.1.25
-      ...(provider === 'zai' && saved?.rilevato && saved.endpointConfigured !== true ? { endpointRilevato: saved.rilevato.endpoint } : {}) }; // owner 09/10
+      ...(provider === 'zai' && saved?.rilevato && saved.endpointConfigured !== true ? { endpointRilevato: saved.rilevato.endpoint } : {}), // owner 09/10
+      ...(daScegliere.has(provider) && saved?.endpointConfigured !== true ? { endpointDaScegliere: true } : {}) }; // owner 14/10
     // P-K — fine
   }
   /** Owner 09/10/2026: l'indirizzo di Z.AI rilevato per una chiave (prefisso dell'impronta), o `null`. */
@@ -731,6 +813,7 @@ export function createProviderCredentialStore({ env = process.env, keyring = nul
         supportsEndpoint: definition.supportsEndpoint,
         endpoint: runtime.endpoint,
         endpointConfigured: runtime.endpointConfigured,
+        ...(runtime.endpointDaScegliere === true ? { endpointDaScegliere: true } : {}), // owner 14/10: la modale lo chiede prima di salvare
         endpointPredefinito: definition.supportsEndpoint ? eIndirizzoPredefinito(provider, runtime.endpoint) : false, // l'etichetta, vedi `eIndirizzoPredefinito`
         timeoutSeconds: runtime.timeoutSeconds,
         // P-K — schema e aiuto per i soli campi pubblici del pannello.

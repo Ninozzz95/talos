@@ -53,11 +53,14 @@ const FONTI_RICERCA = {
  */
 /* ⛔ 23/09/2026, decisione owner: «Provider e accessi» è tolta del tutto dalle Impostazioni — la sua voce (`settings-group-providers-state`, `settingsProvidersList`) esce
    dall'elenco con lei; lo stato dei fornitori vive nelle card della scheda «Provider» del laboratorio. */
+/* 13/10/2026 (bugfixer): la carta «Link dalla chat» (decisione owner 11/10 «link in chat cliccabili, con conferma del sito»,
+   `efba058c1`; la scelta «dove si aprono», owner 12/10, `756ecdedd`) è la terza carta della privacy. Gli inventari di questa spec
+   erano fermi a due carte: non è cambiata la regola, è nata una carta. */
 const SEZIONI = [
   {
     id: 'privacy',
     idAttesi: [
-      'settings-group-privacy-local', 'settings-group-privacy-transfer', 'settingsPrivacyList',
+      'settings-group-privacy-local', 'settings-group-privacy-transfer', 'settings-group-privacy-link', 'settingsPrivacyList',
       'settingsSvuotaLocali', 'settingsTrasferimento', 'settingsEsporta', 'settingsImporta',
       'settingsRipristina', 'settingsImportaFile', 'settingsTrasferimentoEsito',
     ],
@@ -109,7 +112,7 @@ test('FORME-01 · ogni carta delle tre sezioni ha la sua TESTATA, col titolo dal
   const tentate = await avvia(page);
   /* 23/09/2026, decisione owner: «Provider e accessi» è tolta del tutto dalle Impostazioni: la carta «Stato degli accessi» non esiste più. */
   const attese = {
-    privacy: ['Dati locali del browser', 'Trasferisci le preferenze'],
+    privacy: ['Dati locali del browser', 'Trasferisci le preferenze', 'Link dalla chat'],
     tools: ['Policy della sessione', 'Origine della ricerca web'],
   };
   for (const sezione of Object.keys(attese)) {
@@ -163,6 +166,12 @@ test('FORME-03 · le azioni stanno in UNA banda in fondo al pannello, non dentro
   /* 23/09/2026, decisione owner: «Provider e accessi» è tolta del tutto dalle Impostazioni. */
   for (const sezione of ['privacy', 'tools']) {
     await apriSezione(page, sezione);
+    /* ⛔ L3-14 (bugfixer, 15/10/2026): rossa nella suite intera, verde da sola. Misurato con 40 ripetizioni a 8 lavoratori: 8 rosse,
+       tutte «tools: azioni rimaste dentro le carte — atteso 1, letto 0». È la banda del modulo della fonte di ricerca, che si monta
+       DOPO la risposta di `/api/v1/search-source`: letta subito, sotto carico non c'era ancora. Lo stesso difetto della prova che
+       FORME-04 ha già curato (2cf053b2f): si aspettano gli id attesi della sezione, poi si misura. Il conteggio resta ESATTO. */
+    const attesi = SEZIONI.find((x) => x.id === sezione)?.idAttesi ?? [];
+    await page.waitForFunction(([s, ids]) => ids.every((x) => document.querySelector(`#setting-panel-${s} #${CSS.escape(x)}`)), [sezione, attesi], { timeout: 4000 }).catch(() => {});
     const forma = await page.evaluate((s) => {
       const pannello = document.getElementById(`setting-panel-${s}`);
       const bande = [...pannello.querySelectorAll(':scope > .talos-settings__actions')];
@@ -187,6 +196,10 @@ test('FORME-04 · nessun id è sparito: l\'elenco atteso è quello della pagina,
   const tentate = await avvia(page);
   for (const { id, idAttesi } of SEZIONI) {
     await apriSezione(page, id);
+    /* 13/10/2026 (bugfixer): il modulo della fonte di ricerca si monta DOPO la risposta di `/api/v1/search-source`; letta subito, una
+       volta su tre la pagina non aveva ancora i suoi sette id (misurato: 1 rossa su 3 corse). Si aspetta che gli attesi ci siano —
+       il confronto resta ESATTO: un id in più o in meno fa cadere la prova come prima. */
+    await page.waitForFunction(([s, attesi]) => attesi.every((x) => document.querySelector(`#setting-panel-${s} #${CSS.escape(x)}`)), [id, idAttesi], { timeout: 4000 }).catch(() => {});
     const presenti = await page.evaluate((s) => [...document.querySelectorAll(`#setting-panel-${s} [id]`)].map((e) => e.id).sort(), id);
     // ⛔ L'elenco atteso non è vuoto: un confronto fra due elenchi vuoti passerebbe per costruzione.
     expect(idAttesi.length, `${id}: l'inventario atteso è vuoto`).toBeGreaterThan(0);
@@ -214,9 +227,9 @@ test('FORME-06 · il RIMONTAGGIO non duplica la testata', async ({ page }) => {
     };
   });
   const prima = await forma();
-  expect(prima.testate).toBe(2);
-  expect(prima.carte).toBe(2);
-  expect(prima.titoli).toEqual(['Dati locali del browser', 'Trasferisci le preferenze']);
+  expect(prima.testate).toBe(3);
+  expect(prima.carte).toBe(3);
+  expect(prima.titoli).toEqual(['Dati locali del browser', 'Trasferisci le preferenze', 'Link dalla chat']);
   await page.locator('#settingsRipristina').click();
   await page.getByRole('button', { name: 'Ripristina', exact: true }).click();
   await page.waitForTimeout(400);
@@ -225,9 +238,9 @@ test('FORME-06 · il RIMONTAGGIO non duplica la testata', async ({ page }) => {
      chiave delle preferenze, quindi `uiLanguage` torna al predefinito dell'app — che è l'inglese.
      È il prodotto che lo fa, non la corsia: quello che si prova qui è che la testata NON si
      duplica e che gli id restano gli stessi. */
-  expect(dopo.testate, 'la testata si è duplicata al rimontaggio').toBe(2);
-  expect(dopo.carte).toBe(2);
-  expect(dopo.titoli.length).toBe(2);
+  expect(dopo.testate, 'la testata si è duplicata al rimontaggio').toBe(3);
+  expect(dopo.carte).toBe(3);
+  expect(dopo.titoli.length).toBe(3);
   expect(dopo.titoli.every((t) => t && t.length > 0)).toBe(true);
   expect(dopo.id).toEqual(prima.id);
   expect(tentate).toEqual([]);
@@ -244,12 +257,12 @@ test('FORME-05 · la copia che la testata ha spostato c\'è ancora, in italiano 
   const attesi = {
     /* 23/09/2026, decisione owner: «Provider e accessi» è tolta del tutto dalle Impostazioni: niente più «Stato degli accessi» / «Access state». */
     it: {
-      privacy: ['Dati locali del browser', 'Trasferisci le preferenze'],
+      privacy: ['Dati locali del browser', 'Trasferisci le preferenze', 'Link dalla chat'],
       tools: ['Policy della sessione', 'Origine della ricerca web'],
       costi: ['Consumo registrato'],
     },
     en: {
-      privacy: ['Local browser data', 'Transfer preferences'],
+      privacy: ['Local browser data', 'Transfer preferences', 'Links from chat'],
       tools: ['Session policy', 'Web search source'],
       costi: ['Recorded usage'],
     },

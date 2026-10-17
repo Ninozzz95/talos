@@ -4,6 +4,8 @@ import { fileURLToPath } from 'node:url';
 
 import { test, expect } from '@playwright/test';
 
+/* 14/10/2026 — la vista classica delle deleghe è stata tolta: dove una prova apre il diagramma, è quello nuovo. */
+
 /*
  * ⛔⛔ C2b «Coordinazione» (owner 08/10/2026 sera; contratto `Downloads/handoff-talos-2026-09-27/C2B-CONTRATTO-2026-10-08.md`) — a
  *   schermo:
@@ -326,11 +328,20 @@ for (const modo of ['light', 'dark']) {
       await expect(fatti).toContainText('Da solo (Coordinazione)');
       await foto(page, `c2b-segno-01-dettaglio-${modo}.png`);
       await page.locator('[data-c="DettaglioAgente"]').getByRole('button', { name: 'Apri questo agente nel diagramma' }).click();
-      const grafo = page.locator('[data-c="GrafoAgenti"]');
-      await expect(grafo.locator('[data-nodo-id="c2b-f-sola"]')).toContainText('da solo');
-      await expect(grafo.locator('[data-nodo-id="c2b-f-consentita"]')).toContainText('consentito da te');
-      await expect(grafo.locator('[data-nodo-id="c2b-f-prima"]')).not.toContainText('da solo');
-      await expect(grafo.locator('[data-nodo-id="c2b-f-prima"]')).not.toContainText('consentito da te');
+      /* nel diagramma nuovo il segno sta nel DETTAGLIO dell'agente scelto (nella classica stava sulla scheda): il diagramma si apre
+         sull'agente da cui si è partiti, col suo dettaglio */
+      const grafo = page.locator('#schermoChat > [data-c="GrafoAgenti"]');
+      await expect(grafo).toHaveAttribute('data-sorgente', 'deleghe');
+      const segno = grafo.locator('.gv-dettaglio .talos-wfg__dettaglio-testi');
+      await expect(grafo.locator('[data-sessione="c2b-f-sola"]')).toHaveAttribute('aria-pressed', 'true');
+      await expect(segno).toContainText('da solo');
+      await grafo.locator('[data-sessione="c2b-f-consentita"]').click();
+      await expect(segno).toContainText('consentito da te');
+      await expect(segno).not.toContainText('da solo');
+      await grafo.locator('[data-sessione="c2b-f-prima"]').click();
+      await expect(grafo.locator('.gv-dettaglio .talos-wfg__dettaglio-testa')).toContainText('vecchia delega');
+      await expect(segno).not.toContainText('da solo');
+      await expect(segno).not.toContainText('consentito da te');
       await foto(page, `c2b-segno-01-diagramma-${modo}.png`);
     });
   });

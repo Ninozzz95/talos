@@ -14,6 +14,7 @@ const COPPIE = [
   ['credenziale-rifiutata', 'Credential rejected by the provider.', 'Credenziale rifiutata dal fornitore.', 'PROVIDER_REQUEST_ERROR'],
   ['credenziale-rifiutata', 'Credential not accepted by the provider.', 'Credenziale non accettata dal fornitore.', ''],
   ['fornitore-rifiuto', 'The provider did not accept the request.', 'Il fornitore non ha accettato la richiesta.', 'PROVIDER_REQUEST_ERROR'],
+  ['contesto-pieno', 'The request is larger than the model context window (context_length_exceeded).', 'La richiesta è più grande della finestra di contesto del modello (context_length_exceeded).', 'PROVIDER_REQUEST_ERROR'], // 16/10/2026: F1 della CLI
   ['rete', 'Connection with the provider interrupted.', 'Connessione con il fornitore interrotta.', 'PROVIDER_REQUEST_ERROR'],
   ['rete', 'The provider is not responding.', 'Il fornitore non risponde.', 'PROVIDER_REQUEST_ERROR'],
   ['rete', 'The provider exceeded the maximum time.', 'Il fornitore ha superato il tempo massimo.', 'PROVIDER_REQUEST_ERROR'],

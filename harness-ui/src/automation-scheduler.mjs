@@ -67,6 +67,14 @@ export function createAutomationScheduler({
    * v2: fa partire un giro adesso. `{ok:false, code}` se è già in corso o l'avvio è rifiutato (scritto nello storico come
    * saltato col motivo); `{ok:true, runId, sessionId}` altrimenti.
    */
+  /* AUTO-APRI-REV-02 (revisione del bugfixer, 15/10/2026): dopo un giro che il negozio non è riuscito ad APRIRE, il tick automatico
+     aspetta prima di riprovare — 1, 5, 15 minuti, come il raffreddamento del motore del contesto (`RAFFREDDAMENTO_DOPO_RIFIUTO_MS`).
+     Senza, col posto liberato, ogni tick faceva partire una sessione nuova e la fermava: una ogni 30 s, per sempre, senza una riga
+     nello storico (il disco è quello malato). Vive in memoria: un riavvio riprova subito, una volta. «Esegui ora» non aspetta: è la
+     persona che chiede, e l'errore le arriva. */
+  const RAFFREDDAMENTO_APERTURA_MS = [60_000, 300_000, 900_000];
+  const raffreddamenti = new Map();
+
   async function avviaGiroV2(voce, { previstaAlle = null, ritardo = null, manuale = false, contesto = null } = {}) {
     if (giroVivo(voce)) return { ok: false, code: 'AUTOMATION_RUN_IN_PROGRESS' };
     inVolo.add(voce.id);
@@ -88,12 +96,33 @@ export function createAutomationScheduler({
       onEsecuzione({ automazione: voce, esito: avvio, runId: null });
       return { ok: false, code: avvio?.code ?? 'AUTOMATION_RUN_NOT_STARTED', erroreAvvio: avvio?.erroreAvvio ?? null };
     }
-    await store.apriGiro(voce.id, { runId, previstaAlle, sessionId: avvio.sessionId, ritardo, manuale });
+    /* S3 (bugfixer della CLI, 15/10/2026, verificato con una sonda EIO): la sessione è GIÀ partita. Se il negozio non riesce ad aprire
+       il giro, la catena di fine qui sotto non si attaccava mai: `inVolo` teneva l'id per sempre (ogni «Esegui ora» rispondeva
+       AUTOMATION_RUN_IN_PROGRESS a vuoto) e il modello lavorava senza che nessuno lo seguisse né lo registrasse. Si ferma la sessione,
+       si libera il posto e il guasto arriva a chi ha chiesto il giro. */
+    try {
+      await store.apriGiro(voce.id, { runId, previstaAlle, sessionId: avvio.sessionId, ritardo, manuale });
+    } catch (errore) {
+      try { sessionRegistry.ferma?.(avvio.sessionId, { daChi: 'sistema' }); } catch { /* già finita */ }
+      /* AUTO-APRI-REV-01: la `fine` della sessione fermata può rifiutarsi (il registro non rilegge il file sullo stesso disco
+         malato): senza un gestore, nel server il rifiuto orfano chiude il processo. */
+      Promise.resolve(avvio.fine).catch(() => {});
+      const tentativi = (raffreddamenti.get(voce.id)?.tentativi ?? 0) + 1;
+      raffreddamenti.set(voce.id, { tentativi, finoA: clock().getTime() + RAFFREDDAMENTO_APERTURA_MS[Math.min(tentativi, RAFFREDDAMENTO_APERTURA_MS.length) - 1] });
+      inVolo.delete(voce.id);
+      throw errore;
+    }
+    raffreddamenti.delete(voce.id);
     onEsecuzione({ automazione: voce, esito: avvio, runId });
     Promise.resolve(avvio.fine)
-      .then((r) => chiudiConEsito(voce.id, runId, r))
-      .catch((errore) => store.chiudiGiro(voce.id, runId, { esito: 'fallita', daGuardare: true, motivo: 'interrotta',
-        riassunto: errore instanceof Error ? errore.message : String(errore) }).catch(() => {}))
+      .then(
+        /* S4 (stessa revisione): se l'esito di un giro FINITO non si riesce a scrivere, il ripiego non lo spaccia per «interrotto»
+           col messaggio grezzo del disco (con un percorso) come riassunto: dice che la fine non è stata salvata. */
+        (r) => chiudiConEsito(voce.id, runId, r).catch(() => store.chiudiGiro(voce.id, runId, { esito: 'fallita', daGuardare: true,
+          motivo: 'fine-non-scritta', riassunto: null })),
+        /* AUTO-APRI-REV-03: neanche qui il messaggio grezzo (un errore del disco porta un percorso): il motivo lo dice */
+        () => store.chiudiGiro(voce.id, runId, { esito: 'fallita', daGuardare: true, motivo: 'interrotta', riassunto: null }))
+      .catch(() => {})
       .finally(() => inVolo.delete(voce.id));
     return { ok: true, runId, sessionId: avvio.sessionId };
   }
@@ -121,6 +150,7 @@ export function createAutomationScheduler({
     const prevista = new Date(voce.prossimaEsecuzione);
     if (ora < prevista) return;
     if (voce.inAttesaFinoA && ora < new Date(voce.inAttesaFinoA)) return;
+    if ((raffreddamenti.get(voce.id)?.finoA ?? 0) > ora.getTime()) return; // AUTO-APRI-REV-02
     if (giroVivo(voce)) {
       await store.saltaGiro(voce.id, { previstaAlle: voce.prossimaEsecuzione, motivo: 'precedente-in-corso' });
       return;

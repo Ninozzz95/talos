@@ -42,6 +42,7 @@ function filaDiScelte(documento, { nome, voci, attuale, scegli }) {
 export function montaSitiFidati({ documento = globalThis.document, fidati = sitiFidatiDellApp(), destinazioni = destinazioneDeiLinkDellApp() } = {}) {
   if (!documento) return null;
   let scheda = null;
+  const osservati = new WeakSet();
   function disegna() {
     const pannello = documento.getElementById('setting-panel-privacy');
     if (!pannello) return;
@@ -52,7 +53,22 @@ export function montaSitiFidati({ documento = globalThis.document, fidati = siti
       scheda.dataset.settingsCard = 'privacy-link';
       scheda.setAttribute('role', 'group');
       scheda.setAttribute('aria-labelledby', 'settings-group-privacy-link');
-      pannello.append(scheda);
+      /* 13/10/2026 (bugfixer, FORME-03 rossa): la carta nasce PRIMA della banda delle azioni del pannello. Appesa in fondo finiva
+         sotto «Esporta / Importa / Ripristina», e la banda non era più l'ultima cosa del pannello (il contratto delle forme:
+         le azioni stanno in UNA banda in fondo). */
+      pannello.insertBefore(scheda, pannello.querySelector(':scope > .talos-settings__actions'));
+    }
+    /* …e ci RESTA: la banda può nascere (o essere rimessa in fondo) dopo la carta — la vista delle Impostazioni si monta per conto
+       suo, e in una corsa su quattro la carta finiva di nuovo sotto. Ogni volta che i figli del pannello cambiano, se la carta sta
+       dopo la banda torna davanti. Un osservatore per pannello; spostare la carta lo riattiva una volta, e lì non c'è più niente da fare. */
+    const davantiAllaBanda = () => {
+      const banda = pannello.querySelector(':scope > .talos-settings__actions');
+      if (banda && scheda?.isConnected && (banda.compareDocumentPosition(scheda) & 4)) pannello.insertBefore(scheda, banda); // 4 = la carta SEGUE la banda
+    };
+    davantiAllaBanda();
+    if (!osservati.has(pannello) && typeof documento.defaultView?.MutationObserver === 'function') {
+      osservati.add(pannello);
+      new documento.defaultView.MutationObserver(davantiAllaBanda).observe(pannello, { childList: true });
     }
     /* il fuoco non si perde ridisegnando: si ritrova la stessa scelta per riga e valore */
     const aFuoco = documento.activeElement instanceof documento.defaultView.Element ? documento.activeElement.closest('[data-link-dove]') : null;
@@ -63,7 +79,11 @@ export function montaSitiFidati({ documento = globalThis.document, fidati = siti
     testa.className = 'settings-group__head'; testa.dataset.settingsGroupHead = '';
     const titolo = documento.createElement('h3');
     titolo.className = 'settings-group__title'; titolo.id = 'settings-group-privacy-link'; titolo.textContent = t('chat.link.settingsTitle');
-    testa.append(titolo);
+    /* la testata di una carta delle Impostazioni porta sempre il suo posto per il conteggio (nascosto se non c'è niente da contare),
+       come le altre (`aggiornamenti.js`): FORME-01 lo pretende per ogni carta */
+    const conteggio = documento.createElement('span');
+    conteggio.className = 'settings-group__count'; conteggio.dataset.settingsGroupCount = ''; conteggio.hidden = true;
+    testa.append(titolo, conteggio);
     const descrizione = documento.createElement('p');
     descrizione.textContent = t('chat.link.settingsDescription');
 

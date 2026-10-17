@@ -80,13 +80,6 @@ import { TESTATA } from './fixtures/testata.js';
 import { WORKSPACE } from './fixtures/workspace.js';
 /* 23/09 — R4 attività compatta: prototipo della proposta (docs/R4-ATTIVITA-COMPATTA-RICERCA-E-PROPOSTA-2026-09-23.md). */
 import { montaAttivitaCompatta } from './attivita-compatta.js';
-import {
-  montaWorkflowSpec,
-  workflowSpecInspectionSessions,
-  workflowSpecSceneFromLocation,
-  workflowSpecThemeFromLocation,
-  workflowSpecUrl,
-} from './workflow-spec.js';
 
 /*
  * IL LABORATORIO DEI COMPONENTI — la parità «a partire dai dati».
@@ -371,36 +364,9 @@ async function montaLibreriaFile({ apri = 'lib-md', modo = 'anteprima' } = {}) {
   return schermo;
 }
 
-function montaSessioniWorkflowSpec({ scena, tema }) {
-  const fissate = document.querySelector('.talos-sidebar__block:has(.talos-eyebrow[data-t="modello.sidebar.pinned"])');
-  const sessioni = document.querySelector('.talos-sidebar__sessions');
-  if (!sessioni) throw new Error('sidebar sessioni assente dal laboratorio WorkflowSpec');
-  for (const finta of document.querySelectorAll('.talos-sidebar .talos-session-item')) finta.remove();
-  if (fissate) fissate.hidden = true;
-  const adesso = new Date('2026-09-22T14:30:00+02:00');
-  for (const fixture of workflowSpecInspectionSessions()) {
-    const riga = creaSessionItem(fixture, {
-      adesso,
-      corrente: fixture.sceneId === scena,
-      onApri: () => location.assign(workflowSpecUrl({ sceneId: fixture.sceneId, theme: tema })),
-    });
-    riga.dataset.workflowReviewSession = fixture.sceneId;
-    riga.title = `Fixture di ispezione · ${fixture.nome}`;
-    sessioni.append(riga);
-  }
-  const conto = sessioni.querySelector('.talos-sidebar__block-head .talos-nav-item__count');
-  if (conto) conto.textContent = String(workflowSpecInspectionSessions().length);
-}
-
 const LABORATORI = {
   AttivitaCompatta() {
     return montaAttivitaCompatta();
-  },
-  WorkflowSpec() {
-    const scena = workflowSpecSceneFromLocation(location);
-    const tema = workflowSpecThemeFromLocation(location);
-    montaSessioniWorkflowSpec({ scena, tema });
-    return montaWorkflowSpec({ scena });
   },
  /* ⛔ 23/09/2026 — qui stava `ProviderCard`, che metteva la card nel velo «Fornitori e accessi».
     Il velo è tolto per decisione owner, e la riga di `componenti.spec.mjs` con lui (vedi lì). */

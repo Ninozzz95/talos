@@ -89,8 +89,12 @@ test('CTX-UI-LEGACY-EVENT-PARSE: le forme FUSE di F3 si leggono (at al primo liv
 });
 
 test('CTX-UI-LEGACY-ROW-TEXT: la riga dice i numeri quando li ha, e non li inventa quando non li ha', () => {
-  assert.equal(testoRigaCompattazione({ stato: 'riassunta', tokenPrima: 184_000, tokenDopo: 41_000 }), 'Conversazione riassunta · 184.000 → 41.000 token');
-  assert.equal(testoRigaCompattazione({ stato: 'riassunta', tokenPrima: null, tokenDopo: null }), 'Conversazione riassunta');
+  // 15/10/2026 (owner, «solo il separatore»): compattata e quanto si è risparmiato, come Claude Code
+  assert.equal(testoRigaCompattazione({ stato: 'riassunta', tokenPrima: 184_000, tokenDopo: 41_000 }), 'Conversazione compattata · 143.000 token risparmiati');
+  assert.equal(testoRigaCompattazione({ stato: 'riassunta', tokenPrima: 2, tokenDopo: 1 }), 'Conversazione compattata · 1 token risparmiato');
+  assert.equal(testoRigaCompattazione({ stato: 'riassunta', tokenPrima: null, tokenDopo: null }), 'Conversazione compattata');
+  // AL CONTRARIO: un riassunto che non ha tolto niente non dichiara un risparmio
+  assert.equal(testoRigaCompattazione({ stato: 'riassunta', tokenPrima: 41_000, tokenDopo: 41_000 }), 'Conversazione compattata');
   assert.equal(testoRigaCompattazione({ stato: 'annullata', tokenPrima: 184_000, tokenDopo: 41_000 }), 'Riassunto annullato · la conversazione intera torna al modello');
   assert.equal(testoRigaCompattazione({ stato: 'non-riuscita', motivo: 'vuoto' }), 'Conversazione non riassunta · il modello ha risposto vuoto');
   assert.equal(testoRigaCompattazione({ stato: 'non-riuscita' }), 'Conversazione non riassunta');
@@ -101,7 +105,7 @@ test('CTX-UI-LEGACY-ROW-TEXT: la riga dice i numeri quando li ha, e non li inven
   assert.equal(testoRigaCompattazione({ stato: 'non-riuscita', motivo: 'interrotta' }), 'Conversazione non riassunta · il server si è fermato mentre riassumeva: la conversazione resta intera');
   assert.equal(testoRigaCompattazione({ stato: 'non-riuscita', motivo: 'errore', dettaglio: 'HTTP 500 dal fornitore' }), 'Conversazione non riassunta · il fornitore ha risposto con un errore (HTTP 500 dal fornitore)');
   impostaLingua('en');
-  assert.equal(testoRigaCompattazione({ stato: 'riassunta', tokenPrima: 184_000, tokenDopo: 41_000 }), 'Conversation summarized · 184,000 → 41,000 tokens');
+  assert.equal(testoRigaCompattazione({ stato: 'riassunta', tokenPrima: 184_000, tokenDopo: 41_000 }), 'Conversation compacted · 143,000 tokens saved');
   impostaLingua('it');
   assert.equal(motivoUmano('sconosciuto-xyz'), 'sconosciuto-xyz', 'un motivo non tradotto si riporta com’è, non si nasconde');
 });
@@ -117,4 +121,17 @@ test('CTX-RIPIEGO-RIGA — owner 12/10: la riga del ripiego dice che la chat è 
   assert.match(testoRigaCompattazione({ stato: 'non-riuscita', motivo: 'ripiego' }), /the context engine did not respond, so the chat went on/u);
   assert.notEqual(motivoUmano('ripiego'), 'ripiego', 'mai il codice grezzo a schermo');
   impostaLingua('it');
+});
+
+test('CTX-RIALLINEATO-RIGA — owner 12/10 («Si ripara da solo»): archivio riallineato, una riga che non dice «non riassunta» e non mostra né codice né oggetti', () => {
+  const evento = interpretaEventoCompattazione({ type: 'CUSTOM', name: 'talos.compattazione', value: { fase: 'fine', giro: 3, compattato: false, motivo: 'archivio-riallineato', codice: 'CTX_HISTORY_DIVERGED', dettaglio: { archiviati: 12, attivi: 14, primoDiverso: 7, forma: 'riscritta', ruolo: 'assistant' } } });
+  assert.equal(evento?.motivo, 'archivio-riallineato');
+  assert.equal(evento?.dettaglio, null, 'il «dove» resta nel giornale: alla riga non arriva un oggetto');
+  impostaLingua('en');
+  const en = testoRigaCompattazione({ stato: 'non-riuscita', motivo: evento.motivo, dettaglio: evento.dettaglio });
+  assert.equal(en, 'Context archive realigned with the conversation · the earlier versions are kept aside');
+  impostaLingua('it');
+  const it = testoRigaCompattazione({ stato: 'non-riuscita', motivo: evento.motivo, dettaglio: evento.dettaglio });
+  assert.match(it, /^Archivio del contesto riallineato/u);
+  for (const testo of [en, it]) assert.doesNotMatch(testo, /non riassunta|not summarized|archivio-riallineato|CTX_|object Object/u);
 });

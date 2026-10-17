@@ -425,6 +425,24 @@ test.describe('la scheda Provider — il vestito del mockup sul contenuto vero',
     /* ── LA MODALE C'È, ed è una modale vera ─────────────────────────────────────────── */
     const modale = card.locator(':scope > .talos-provider__modale');
     await expect(modale, '«Configura» non ha aperto nessuna modale').toHaveCount(1);
+    /*
+     * ⛔ AGGIORNATA il 15/10/2026 (bugfixer) — il difetto era della PROVA, non del prodotto. Dall'11/10/2026 la modale di OpenAI
+     *   apre con la SCELTA dell'accesso (owner: «chiave e piano nella stessa modale come OpenRouter», mockup approvato prima del
+     *   codice; f886e6ab7, `provider-card.js:530-583`): su un server nuovo — piano non collegato, nessuna chiave — è scelta la
+     *   carta del piano, dove non c'è niente da salvare: il «Salva» si nasconde e «Annulla» diventa «Chiudi», e il fuoco entra
+     *   nella carta scelta (`provider-card.js:752`). La prova si aspettava ancora «Annulla» e il fuoco sulla chiave: rossa
+     *   identica su 5793bd468 e su 2bd1b3e27. Il significato resta («Configura» apre la configurazione VERA, coi campi veri):
+     *   si prova prima il verso della decisione, poi si sceglie «Chiave API» come farebbe la persona, e da lì tutto com'era.
+     */
+    const schedaPiano = modale.locator('[role="tab"][data-metodo="chatgpt"]');
+    const schedaChiave = modale.locator('[role="tab"][data-metodo="chiave"]');
+    await expect(schedaPiano, 'su un server nuovo la modale di OpenAI apre sul piano ChatGPT').toHaveAttribute('aria-selected', 'true');
+    await expect(schedaPiano, 'il fuoco entra nella carta scelta, il primo controllo utile della modale con la scelta').toBeFocused();
+    await expect(modale.locator('[data-provider-modale-annulla]'), 'sul piano non c’è niente da salvare: «Chiudi»').toHaveText('Chiudi');
+    await expect(modale.locator('[data-provider-modale-salva]'), 'e il «Salva» non si vede').toBeHidden();
+    await schedaChiave.click();
+    await expect(schedaChiave).toHaveAttribute('aria-selected', 'true');
+    await expect(modale.locator('[data-provider-modale-salva]'), 'sulla chiave il «Salva» torna').toBeVisible();
     const stato = await page.evaluate(() => {
       const d = document.querySelector('#modelLabCard [data-model-lab-panel="providers"] [data-provider-id="openai"] > .talos-provider__modale');
       const r = d.getBoundingClientRect();
@@ -455,6 +473,7 @@ test.describe('la scheda Provider — il vestito del mockup sul contenuto vero',
         primariaTipo: d.querySelector('[data-provider-modale-salva]')?.dataset.providerModaleSalva ?? null,
         fuocoDentro: d.contains(document.activeElement),
         fuocoSu: document.activeElement?.getAttribute('data-provider-key') !== null ? 'chiave' : (document.activeElement?.tagName ?? null),
+        fuocoSuMetodo: document.activeElement?.getAttribute('data-metodo') ?? null,
         larghezza: Math.round(r.width), altezza: Math.round(r.height),
         /* Il corpo NON si è spostato fuori dalla card: la regia lo cerca con
            `button.closest('[data-provider-id]')` e da lì `card.querySelector('[data-provider-key]')`. */
@@ -489,7 +508,7 @@ test.describe('la scheda Provider — il vestito del mockup sul contenuto vero',
     await expect(card.getByRole('button', { name: 'Aggiungi chiave', exact: true }), 'dentro la modale un pulsante solo salva').toBeHidden();
     /* Il fuoco entra nel primo controllo utile, non sul contenitore. */
     expect(stato.fuocoDentro, 'il fuoco è rimasto fuori dalla modale').toBe(true);
-    expect(stato.fuocoSu, 'il fuoco entra nel primo controllo UTILE').toBe('chiave');
+    expect(stato.fuocoSuMetodo, 'il fuoco resta sulla carta «Chiave API» appena scelta').toBe('chiave');
     expect(stato.larghezza, 'la larghezza del mockup').toBe(600);
     expect(stato.altezza).toBeGreaterThan(200);
 

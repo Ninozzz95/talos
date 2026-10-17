@@ -130,19 +130,28 @@ export async function disponi(elk, { panoramica, righeFase, archi }, aperti) {
     blocchi.push({ id: `${forma}:${g.phaseId}`, tipo: forma, phaseId: g.phaseId, colonna, x, y: cima, w, h });
     x += w + MISURE.corridoio;
   });
-  const larghezza = x - MISURE.corridoio + MISURE.margine;
-  const altezza = Math.max(...blocchi.map((b) => b.y + b.h)) + MISURE.margine;
+  /* SENZA GRUPPI (13/10/2026, una conversazione che non ha ancora avviato agenti): la disposizione è la sola scheda della
+     sessione coi suoi margini. Prima `Math.max()` di niente dava altezza -Infinity e la larghezza veniva negativa: «Adatta»
+     portava lo zoom al minimo e la tela fuori dalla vista. */
+  const larghezza = blocchi.length ? x - MISURE.corridoio + MISURE.margine : MISURE.sessione.w + 2 * MISURE.margine;
+  const altezza = blocchi.length ? Math.max(...blocchi.map((b) => b.y + b.h)) + MISURE.margine : MISURE.sessione.h + MISURE.margine;
   // 3. gli archi fra le fasi: fra due sottografi aperti, un arco di passo; per ogni altra coppia uno solo fra i due blocchi, contato
   const bloccoDi = new Map(blocchi.map((b) => [b.phaseId, b]));
   const corsiaAlta = cima - 22;
   const porta = (b, lato, y) => ({ x: lato === 'esce' ? b.x + b.w : b.x, y, colonna: b.colonna, corridoio: b.x + b.w + MISURE.corridoio / 2, corridoioPrima: b.x - MISURE.corridoio / 2 });
-  let k = 0;
+  /* UI deleghe (owner 12/10/2026, foto dal vivo): un passo che ne avvia molti nella fase accanto (una delega a cinque agenti)
+     disegnava cinque linee affiancate, sfalsate di 4 px l'una: un fascio. Gli archi dello stesso VENTAGLIO (stessa origine, stessa
+     fase d'arrivo) ora corrono nella stessa corsia e si sovrappongono fino al punto in cui si separano: un tronco coi suoi rami,
+     come gli archi fusi dei gruppi di Airflow (`elkGraphUtils.ts:110-130`, letto il 25/09). Ventagli diversi restano sfalsati. */
+  const corsiaDelVentaglio = new Map();
   for (const a of fra) {
     const pa = passi.get(a.fromNodeId), pb = passi.get(a.toNodeId);
     if (!pa || !pb) continue;
+    const ventaglio = `${a.fromNodeId}>${pb.phaseId}`;
+    if (!corsiaDelVentaglio.has(ventaglio)) corsiaDelVentaglio.set(ventaglio, ((corsiaDelVentaglio.size % 7) - 3) * 4);
     const da = { ...porta(bloccoDi.get(pa.phaseId), 'esce', pa.y + pa.h / 2), x: pa.x + pa.w };
     const verso = { ...porta(bloccoDi.get(pb.phaseId), 'entra', pb.y + pb.h / 2), x: pb.x };
-    archiDisegnati.push({ id: a.edgeId, da: a.fromNodeId, a: a.toNodeId, punti: instrada(da, verso, { corsiaAlta, sfalsa: ((k++ % 7) - 3) * 4 }), livello: 'passo' });
+    archiDisegnati.push({ id: a.edgeId, da: a.fromNodeId, a: a.toNodeId, punti: instrada(da, verso, { corsiaAlta, sfalsa: corsiaDelVentaglio.get(ventaglio) }), livello: 'passo', ventaglio });
   }
   for (const c of panoramica.groupConnections ?? []) {
     if (forme.get(c.fromPhaseId) === 'fase' && forme.get(c.toPhaseId) === 'fase') continue; // già disegnati passo per passo

@@ -268,7 +268,10 @@ test('P0-B-5 — PAGINA/TESTO PER SCHEDA: A pagina, B testo, C pagina, e tornand
     const suC = await vaiA(ids[2]);
     return { suC, suA: await vaiA(ids[0]), suB: await vaiA(ids[1]) };
   });
-  expect(dopoIlRipiego.suC).toBe('testo'); // il ripiego ha agito dove doveva
+  /* ⛔ 12/10/2026, owner: «sempre di default a pagina web» — il ripiego di C non è più il testo: C si apre nel browser pilotato. Ciò
+     che questa prova difende dal 16/09 resta: il ripiego di UNA scheda non tocca le altre. */
+  expect(dopoIlRipiego.suC).toBe('pagina');
+  expect(await page.evaluate(() => window.__talosHarnessUiRuntime.realSessionState.browserVive.some((v) => v.url === 'https://sito-c.test/'))).toBe(true);
   expect(dopoIlRipiego.suA).toBe('pagina'); // ⛔ e NON dove non doveva
   expect(dopoIlRipiego.suB).toBe('testo'); // B era già testo per scelta della persona: resta la sua
 });
@@ -774,7 +777,7 @@ test('P0-B-4b — LO STATO DI UNA LINGUETTA si legge senza colore: forma diversa
  *   cambia il dato che legge, e nessun rosso lo dice. ⇒ `eUnGuasto()` sta nel server accanto a
  *   `classificaGuasto`, è una sola, e questa prova la tiene ferma dal lato di chi guarda.
  */
-test('P0-B-4b — UN RIFIUTO DEL SITO non è un guasto: ripiega sul testo, non dice «non raggiunta»', async ({ page }) => {
+test('P0-B-4b — UN RIFIUTO DEL SITO non è un guasto: si apre nel browser pilotato, non dice «non raggiunta»', async ({ page }) => {
   /* Un solo apparecchiamento per i due versi: B è un RIFIUTO del sito, C è un GUASTO vero. Le
      rotte si registrano una volta sola — riscriverle a metà prova non rimuove quelle di prima, e
      una scheda già risolta non richiede niente al server (misurato: la seconda metà restava ferma
@@ -789,22 +792,26 @@ test('P0-B-4b — UN RIFIUTO DEL SITO non è un guasto: ripiega sul testo, non d
   await scegliScheda(page, ids[1]);
   await page.waitForTimeout(400);
 
-  const suB = await page.evaluate(() => {
-    const box = document.querySelector('#browserStatoScheda');
+  /* ⛔ 12/10/2026, owner: «sempre di default a pagina web» — il rifiuto della cornice non porta più al testo dell'agente: la pagina
+     si apre nel BROWSER PILOTATO (una scheda viva sullo stesso indirizzo, come quando si preme «Pagina»). Resta vero ciò che questa
+     prova difende dal 16/09: un rifiuto NON è un guasto — la lettura resta sana, nessun pannello «non raggiunta», niente «Riprova». */
+  await page.waitForFunction(() => window.__talosHarnessUiRuntime.realSessionState.browserVive.some((v) => v.url === 'https://sito-b.test/'), null, { timeout: 8000 });
+  const suB = await page.evaluate((idB) => {
+    const rs = window.__talosHarnessUiRuntime.realSessionState;
+    const viva = rs.browserVive.filter((v) => v.url === 'https://sito-b.test/');
     return {
-      statoLinguetta: document.querySelector('#browserSchede [aria-selected="true"]')?.dataset.statoScheda,
-      pannelloFermo: Boolean(box) && !box.hidden,
-      modo: [...document.querySelectorAll('#schermoBrowser [data-browser-modo]')].find((x) => x.getAttribute('aria-pressed') === 'true')?.dataset.browserModo,
-      testoVisibile: !document.querySelector('#browserPagina')?.hidden,
-      avviso: document.querySelector('#browserAvviso')?.hidden === false ? document.querySelector('#browserAvviso').textContent.trim() : '',
+      vive: viva.length,
+      attivaEViva: rs.browserAttiva === viva[0]?.id,
+      statoLetturaB: document.querySelector(`#browserSchede [data-browser-id="${idB}"]`)?.dataset.statoScheda,
     };
-  });
-  // ⛔ la riga che si romperebbe: «c'è un genere» NON vuol dire «non ci sono arrivato»
-  expect(suB.statoLinguetta, 'un sito che risponde e dice di no è una scheda SANA, ripiegata sul testo').toBe('loaded');
-  expect(suB.pannelloFermo, 'nessun pannello di guasto: non c\u2019è niente da riprovare').toBe(false);
-  expect(suB.modo, 'il ripiego automatico porta al testo dell\u2019agente').toBe('testo');
-  expect(suB.testoVisibile, 'e il testo si vede: è il motivo per cui il ripiego esiste').toBe(true);
-  expect(suB.avviso.length, 'la riga in cima spiega perché si vede il testo e non la pagina').toBeGreaterThan(10);
+  }, ids[1]);
+  expect(suB.vive, 'il rifiuto apre la pagina nel browser pilotato, una volta sola').toBe(1);
+  expect(suB.attivaEViva, 'e la persona vede la pagina, non il testo dell’agente').toBe(true);
+  expect(suB.statoLetturaB, 'un sito che risponde e dice di no resta una scheda SANA, non «non raggiunta»').toBe('loaded');
+  // tornando sulla lettura si va alla stessa scheda viva, senza aprirne un'altra
+  await scegliScheda(page, ids[1]);
+  await page.waitForTimeout(300);
+  expect(await page.evaluate(() => window.__talosHarnessUiRuntime.realSessionState.browserVive.filter((v) => v.url === 'https://sito-b.test/').length)).toBe(1);
 
   // AL CONTRARIO — un genere di GUASTO deve invece fermare la scheda e offrire «Riprova»
   await scegliScheda(page, ids[2]);

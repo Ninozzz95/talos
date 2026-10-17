@@ -112,6 +112,16 @@ test('PO-08: l\'etichetta dice SU QUALE delega si sta per agire', () => {
   assert.match(etichetta, /riepilogo\.md/, 'il compito, non «apri»: in un elenco di quattro deleghe «apri» non dice quale');
 });
 
+test('L3-17 (accessibilità): l\'etichetta di una delega con una consegna lunghissima resta corta e su una riga', () => {
+  const consegna = `Scrivi il rapporto\n${'parola '.repeat(1100)}`; // ~7.700 caratteri, come le consegne misurate sul 4174
+  const { card } = disegna([{ sessionId: 'figlia-1', taskCorto: consegna, stato: 'in_corso' }], { onApri: () => {} });
+  const etichetta = card.getAttribute('aria-label');
+  assert.ok(etichetta.length <= 220, `${etichetta.length} caratteri`);
+  assert.ok(!etichetta.includes('\n'), 'su una riga');
+  assert.ok(etichetta.includes('Scrivi il rapporto'), 'AL CONTRARIO: dice ancora quale delega');
+  assert.ok(etichetta.endsWith('…') || etichetta.includes('…'), 'e dichiara il taglio');
+});
+
 test('PO-08: Invio e Spazio aprono, gli altri tasti no', () => {
   let aperte = 0;
   const { card } = disegna([FIGLIA], { onApri: () => { aperte += 1; } });

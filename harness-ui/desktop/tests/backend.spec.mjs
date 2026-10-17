@@ -58,7 +58,18 @@ test('R01-BACKEND — Electron Node, redirect, cookie, rifiuto anonimo, PTY real
     anonimo.on('error', () => {});
   });
   assert.equal(rifiuto, 401);
-  const ws = new WebSocket(base.replace('http:', 'ws:') + '/api/v1/terminal/ws?id=r01-prova', { origin: base, headers: { cookie } });
+  /* 16/10/2026 (owner, «Chiudila adesso»): un terminale senza sessione lo crea il SERVER; un id inventato, anche col cookie, riceve 403 */
+  const inventato = new WebSocket(base.replace('http:', 'ws:') + '/api/v1/terminal/ws?id=r01-inventato', { origin: base, headers: { cookie } });
+  const rifiutoInventato = await new Promise(resolve => {
+    inventato.on('unexpected-response', (_, res) => { res.resume(); inventato.terminate(); resolve(res.statusCode); });
+    inventato.on('open', () => { inventato.terminate(); resolve('aperto'); });
+    inventato.on('error', () => {});
+  });
+  assert.equal(rifiutoInventato, 403);
+  const creato = await fetch(base + '/api/v1/terminals', { method: 'POST', headers: { cookie, origin: base, 'content-type': 'application/json' }, body: '{}' });
+  assert.equal(creato.status, 200);
+  const terminalId = (await creato.json()).data.terminalId;
+  const ws = new WebSocket(base.replace('http:', 'ws:') + '/api/v1/terminal/ws?id=' + encodeURIComponent(terminalId), { origin: base, headers: { cookie } });
   t.after(() => ws.terminate());
   let testo = ''; let uscitaPty;
   const conclusa = new Promise(resolve => {

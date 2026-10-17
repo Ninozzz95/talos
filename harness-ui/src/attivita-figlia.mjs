@@ -18,6 +18,19 @@
 export const ATTREZZI_CHE_LEGGONO = Object.freeze(['leggi']);
 export const MASSIMO_FILE_PER_FIGLIA = 60;
 export const MASSIMO_PASSI_PER_FIGLIA = 40;
+/* controlli C0 e C1, e i segni che cambiano il verso della scrittura: in un nome di file a schermo servono solo a ingannare */
+const CARATTERI_CHE_INGANNANO = /[\u0000-\u001F\u007F-\u009F\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/u;
+/*
+ * Il percorso di una chiamata COME SI MOSTRA (il bersaglio in volo e il passo finito: stessa regola, seconda passata del bugfixer).
+ * Ripulito come i file toccati; oltre il tetto NON si tronca (un percorso tagliato è un altro percorso) e con caratteri di
+ * controllo o di inversione della scrittura non si mostra (a schermo «gpj.exe» diventa «exe.jpg»): in tutti e due i casi `null`,
+ * e chi disegna dice solo l'attrezzo. Prima il bersaglio in volo lo rifiutava e un attimo dopo il passo finito lo mostrava.
+ */
+const percorsoDaMostrare = (grezzo) => {
+  if (typeof grezzo !== 'string') return null;
+  const pulito = grezzo.trim().replace(/\\/g, '/').replace(/^\.\//, '');
+  return pulito !== '' && pulito.length <= 1024 && !CARATTERI_CHE_INGANNANO.test(pulito) ? pulito : null;
+};
 
 /*
  * ⭐ 02/10/2026 — UN ACCUMULATORE, non un ricalcolo. Prima `riassuntoAttivitaSessione` rileggeva TUTTI gli eventi della sessione
@@ -34,6 +47,11 @@ export function creaAccumulatoreAttivita() {
   const chiamate = new Map(); // toolCallId -> { nome, argomenti, chiusa }
   let ordine = 0;
   let attrezzoCorrente = null;
+  /* 13/10/2026 (revisione del bugfixer, R4) — le chiamate APERTE, nell'ordine in cui sono partite. Il kernel fa partire più
+     letture insieme: con una sola variabile, avvio A, avvio B, esito B lasciava «nessun attrezzo in corso» mentre A lavorava
+     ancora, e la scheda dell'agente diceva «fra un'operazione e l'altra». La regola scritta in testa al file è «l'ultimo
+     `ToolCallStart` che non ha ancora il suo `ToolCallResult`»: all'esito della corrente si ricade sull'ultima ancora aperta. */
+  const aperte = new Set();
   /* I PASSI: la linea del tempo della sezione «Eventi» del dettaglio. Compatta — che cosa, su che file, quando — e con un tetto:
      restano gli ultimi, e `passiTagliati` dice quanti ne mancano. Niente testo del modello, niente argomenti grezzi. */
   const passi = [];
@@ -52,6 +70,7 @@ export function creaAccumulatoreAttivita() {
     if (!evento || typeof evento !== 'object') return;
     if (evento.type === 'ToolCallStart' && typeof evento.toolCallId === 'string') {
       chiamate.set(evento.toolCallId, { nome: String(evento.toolCallName ?? ''), argomenti: '', chiusa: false });
+      aperte.delete(evento.toolCallId); aperte.add(evento.toolCallId); // un id riusato torna in fondo: è l'ultima partita
       attrezzoCorrente = evento.toolCallId;
     } else if (evento.type === 'ToolCallArgs' && chiamate.has(evento.toolCallId) && typeof evento.delta === 'string') {
       const chiamata = chiamate.get(evento.toolCallId);
@@ -62,8 +81,9 @@ export function creaAccumulatoreAttivita() {
       let argomenti = null;
       try { argomenti = JSON.parse(chiamata.argomenti); } catch { argomenti = null; }
       const bersaglio = typeof argomenti?.percorso === 'string' ? argomenti.percorso : (typeof argomenti?.path === 'string' ? argomenti.path : null);
-      aggiungiPasso({ tipo: 'attrezzo', attrezzo: chiamata.nome, percorso: bersaglio ? bersaglio.trim().replace(/\\/g, '/').slice(0, 1024) : null, quando: quando(evento) });
-      if (attrezzoCorrente === evento.toolCallId) attrezzoCorrente = null;
+      aggiungiPasso({ tipo: 'attrezzo', attrezzo: chiamata.nome, percorso: percorsoDaMostrare(bersaglio), quando: quando(evento) });
+      aperte.delete(evento.toolCallId);
+      if (attrezzoCorrente === evento.toolCallId) attrezzoCorrente = [...aperte].at(-1) ?? null;
       if (ATTREZZI_CHE_LEGGONO.includes(chiamata.nome) && argomenti && typeof argomenti === 'object') tocca(argomenti.percorso ?? argomenti.path, { letto: true });
     } else if (evento.type === 'StateDelta' && Array.isArray(evento.delta)) {
       for (const operazione of evento.delta) {
@@ -74,9 +94,22 @@ export function creaAccumulatoreAttivita() {
       aggiungiPasso({ tipo: 'avvio', attrezzo: null, percorso: null, quando: quando(evento) });
     } else if (evento.type === 'RunFinished' || evento.type === 'RunError') {
       aggiungiPasso({ tipo: evento.type === 'RunError' ? 'errore' : 'fine', attrezzo: null, percorso: null, quando: quando(evento) });
-      attrezzoCorrente = null; // un giro chiuso non ha un attrezzo «in corso», nemmeno se l'esito non è mai arrivato
+      attrezzoCorrente = null; aperte.clear(); // un giro chiuso non ha un attrezzo «in corso», nemmeno se l'esito non è mai arrivato
     }
   }
+  /*
+   * 13/10/2026 (owner: nel diagramma delle deleghe ogni scheda dice «che cosa fa adesso») — il BERSAGLIO della chiamata IN VOLO:
+   *   il file su cui l'attrezzo corrente sta lavorando, letto dai suoi argomenti quando sono già arrivati interi. Serve perché
+   *   l'ultimo passo finito può riguardare un ALTRO file: dire «sta scrivendo x» guardando il passo di prima sarebbe inventare.
+   *   Argomenti a metà o non-JSON ⇒ `null` (non si sa ancora). Solo il percorso, come nei passi: mai il resto degli argomenti.
+   */
+  const bersaglioCorrente = () => {
+    if (!attrezzoCorrente) return null;
+    let argomenti = null;
+    try { argomenti = JSON.parse(chiamate.get(attrezzoCorrente)?.argomenti ?? ''); } catch { return null; }
+    const bersaglio = typeof argomenti?.percorso === 'string' ? argomenti.percorso : (typeof argomenti?.path === 'string' ? argomenti.path : null);
+    return percorsoDaMostrare(bersaglio); // stessa regola del passo finito
+  };
   function riassunto({ massimoFile = MASSIMO_FILE_PER_FIGLIA } = {}) {
     const tutti = [...file.values()].sort((a, b) => b.ultimoOrdine - a.ultimoOrdine);
     const tetto = Math.max(1, Number(massimoFile) || MASSIMO_FILE_PER_FIGLIA);
@@ -84,6 +117,7 @@ export function creaAccumulatoreAttivita() {
       file: tutti.slice(0, tetto).map(({ percorso, letto, scritto, creato }) => ({ percorso, letto, scritto, creato })),
       fileTagliati: Math.max(0, tutti.length - tetto),
       attrezzoCorrente: attrezzoCorrente ? (chiamate.get(attrezzoCorrente)?.nome || null) : null,
+      bersaglioCorrente: bersaglioCorrente(),
       chiamate: chiamate.size,
       passi: passi.slice(),
       passiTagliati: Math.max(0, passiTotali - MASSIMO_PASSI_PER_FIGLIA),

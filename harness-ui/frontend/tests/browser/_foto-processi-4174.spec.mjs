@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 /* Foto della scheda Processi sul 4174 dopo la cura del BLOCCO 4: solo la descrizione in riga. */
 test.skip(!process.env.TALOS_HARNESS_UI_BASE_URL, 'sonda dell’ambiente esterno');
 test.use({ locale: 'it-IT' });
-test('FOTO-PROCESSI-4174', async ({ page }) => {
+test('@sonda-4174 FOTO-PROCESSI-4174', async ({ page }) => {
   test.setTimeout(120000);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.addInitScript(() => { try { localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({ version: 1, appearance: { colorMode: 'dark', uiLanguage: 'it' } })); } catch {} });

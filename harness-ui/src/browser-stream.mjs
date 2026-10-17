@@ -52,7 +52,9 @@
  * fotogramma non compresso a 60 al secondo lo affogherebbe. I tetti stanno qui,
  * non nelle opzioni di chi chiama, così nessuna chiamata può alzarli.
  */
-export const QUALITA_PREDEFINITA = 60;
+/* 12/10/2026, owner: «la risoluzione della pagina è troppo bassa» — 60 lasciava gli artefatti JPEG sul testo; 80 (t3code usa 70
+   col rendering a 2x, `ServerBrowserStream.ts` DEFAULT_QUALITY) */
+export const QUALITA_PREDEFINITA = 80;
 export const QUALITA_MASSIMA = 85;
 export const QUALITA_MINIMA = 10;
 /* ⛔ 08/09/2026: questi due erano 1280 e 800, e finivano dritti in `maxWidth`/`maxHeight` di

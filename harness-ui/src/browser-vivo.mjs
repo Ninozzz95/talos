@@ -211,7 +211,14 @@ export function userAgentSenzaHeadless(agente = AGENTE_PREDEFINITO) {
 
 export const AGENTE_PREDEFINITO = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36';
 
-export function argomentiChromium({ cartellaProfilo, porta = 0 } = {}) {
+/** La densità con cui il Chromium pilotato disegna: fra 1 e 3, due decimali; `null` se è 1 (nessun argomento in più). */
+export function densitaDiLancio(scala) {
+  const n = Number(scala);
+  if (!Number.isFinite(n) || n <= 1) return null;
+  return Math.round(Math.min(3, n) * 100) / 100;
+}
+
+export function argomentiChromium({ cartellaProfilo, porta = 0, scala = 1 } = {}) {
   if (!cartellaProfilo) throw errore('BROWSER_VIVO_PROFILO_MANCANTE', 'The profile folder is required: the driven browser never uses the personal one');
   return [
     /* ⛔ Porta 0: la sceglie Chrome e la leggiamo dalla riga su stderr. Una
@@ -255,6 +262,10 @@ export function argomentiChromium({ cartellaProfilo, porta = 0 } = {}) {
        una pagina diversa: la lettura sarebbe di un'altra pagina rispetto a quella che la persona
        vede nel suo browser. Si toglie la parola, non si finge un altro browser. */
     `--user-agent=${userAgentSenzaHeadless()}`,
+    /* ⛔ 12/10/2026, owner: «la risoluzione della pagina è troppo bassa». In headless lo screencast consegna il fotogramma in DIP
+       qualunque `deviceScaleFactor` emuli la scheda (sonda del 12/10: 1246 px con 1,5 e con 2); la densità vera la decide
+       questo argomento, al lancio: 1869 px per 1246 DIP a 1,5. `metadata.deviceWidth` resta in DIP, i clic non cambiano. */
+    ...(densitaDiLancio(scala) ? [`--force-device-scale-factor=${densitaDiLancio(scala)}`] : []),
     /* Si parte da una pagina vuota: la «nuova scheda» di Chrome fa rete e
        mostra contenuti che non c'entrano niente con noi. */
     'about:blank',
@@ -278,6 +289,7 @@ export async function avviaBrowserVivo({
   creaCartella = (dove) => mkdirSync(dove, { recursive: true }),
   terminaAlbero = terminaAlberoDiSistema,
   graziaMs = GRAZIA_CHIUSURA_MS,
+  scala = 1,
 } = {}) {
   if (!percorso) throw errore('BROWSER_VIVO_SENZA_BINARIO', 'No Chromium to start: the binary path is missing');
   if (!cartellaProfilo) throw errore('BROWSER_VIVO_PROFILO_MANCANTE', 'The profile folder is required: the driven browser never uses the personal one');
@@ -289,7 +301,7 @@ export async function avviaBrowserVivo({
     throw errore('BROWSER_VIVO_PROFILO_NON_CREABILE', `Cannot create the profile folder (${cartellaProfilo})`, causa);
   }
 
-  const argomenti = argomentiChromium({ cartellaProfilo });
+  const argomenti = argomentiChromium({ cartellaProfilo, scala });
   const lancia = typeof avvia === 'function' ? avvia : avviaDiSistema;
   /* ⛔ D1: l'ambiente del browser NON è quello del server — vedi `opzioniAvvioBrowser`. */
   const opzioni = opzioniAvvioBrowser();

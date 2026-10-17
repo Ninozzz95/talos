@@ -55,7 +55,11 @@ test('R02-BACKEND-PACCHETTO — Electron distribuito, produzione, cookie, PTY e 
   const r = await (await fetch(base + '/api/v1/runtime', { headers: { cookie } })).json();
   const runtime = (r.data?.items ?? r.items).find(r => r.runtimeId === 'llama.cpp');
   assert.equal(runtime?.state, 'observed'); assert.deepEqual(runtime.models, []);
-  const ws = new WebSocket(base.replace('http:', 'ws:') + '/api/v1/terminal/ws?id=r02-pacchetto', { origin: base, headers: { cookie } });
+  // 16/10/2026: il terminale senza sessione lo crea il server (un id inventato riceve 403)
+  const creato = await fetch(base + '/api/v1/terminals', { method: 'POST', headers: { cookie, origin: base, 'content-type': 'application/json' }, body: '{}' });
+  assert.equal(creato.status, 200);
+  const terminalId = (await creato.json()).data.terminalId;
+  const ws = new WebSocket(base.replace('http:', 'ws:') + '/api/v1/terminal/ws?id=' + encodeURIComponent(terminalId), { origin: base, headers: { cookie } });
   t.after(() => ws.terminate());
   let output = ''; let codice;
   const finePty = new Promise(ok => ws.on('message', b => {

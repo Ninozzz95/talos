@@ -32,11 +32,13 @@ export const CAMPI_DELLA_CHAT = Object.freeze([
   'comandiInVolo', 'currentRunModel', 'domandeDelleFiglie', 'domandePendenti', 'durateRagionamento', 'eventiAttrezzi',
   'eventiUsageContesto', 'fileSelezionati', 'followUpBubbleInAttesa', 'messageElements', 'previewProjectId',
   'previewWorkspaceName', 'prossimoOrdineAttivita', 'ragionamentoBubble', 'redirectInvalidatedIds', 'redirectPendingId',
-  'redirectRequestInFlight', 'redirectRequestIntentId', 'renderIncrementale', 'reviewFiles', 'richiesteMcpPendenti', 'runCount',
+  'redirectRequestInFlight', 'redirectRequestIntentId', 'renderIncrementale', 'reviewFiles', 'richieste', 'richiesteMcpPendenti', 'runCount',
   'segmentoAttivo', 'sequenzeViste', 'taskBubbleMostrata', 'testoGrezzoMessaggi', 'tettoGiriDichiarato', 'treeCache', 'treeOpen',
   'treeUiRestored', 'ultimaRichiesta', 'ultimoBatchChiuso', 'usage', 'usageEsecuzioniPrecedenti', 'usageSessione', 'usciteAgente',
   // `azzeraSchedaContesto` (C1, sessione desktop): la scheda Contesto della chat
   'richiestaDelGiro', 'politicaContesto', 'compattazioniLegacy', 'recordCompattazioneLegacy',
+  // /goal G6 (15/10/2026): la fascia dell'obiettivo; il flusso lo ridice all'apertura, qui per non farla sparire e riapparire
+  'obiettivo', 'obiettivoTetti',
   /* ⛔ E quelli che il reset NON tocca ma la RIGIOCATA riscrive (il `RunStarted`, i comandi della persona, gli esiti degli attrezzi):
      senza rigiocata resterebbero ai valori della chat di prima. Trovati leggendo ogni scrittura in `app.js` (10/10/2026). */
   'contesto', 'ultimaDomanda', 'giroComandoDiretto', 'comandoDirettoDaAprire', 'ultimoBersaglioAttrezzo', 'ragionamentiInCorso',

@@ -421,10 +421,16 @@ export function creaSubagentOrchestrator({
     const voce = sessioni.get(sessionId);
     if (!voce?.padreId) return null;
     const statistiche = statisticheFiglioFn(voce) ?? {};
+    const taskCorto = voce.task?.consegnaCorta ?? (voce.task?.consegna ? compitoDaPromptDiDelega(voce.task.consegna) : null);
+    const task = voce.task?.consegna ?? null;
     return {
           sessionId,
           parentId: voce.padreId,
-          task: voce.task?.consegna ?? null,
+          /* L3-17 (owner 16/10/2026, «un nome solo ovunque»): il NOME dell'agente, quello della barra (nasce con la delega, «-N» fra
+             sorelle); null per le deleghe di prima. E `task` non si ripete quando è identico a `taskCorto`: misurato sul 4174, era un
+             terzo dei ~14 KB di ogni agente in `children` (la CLI ripiega su `taskCorto`, `agents-panel.ts:158`). */
+          nome: typeof voce.nome === 'string' && voce.nome !== '' ? voce.nome : null,
+          ...(task !== taskCorto ? { task } : {}),
           /*
            * ⛔ 09/09, visto nella FOTO della scheda «Agenti» dopo il giro vero della delega (D2): le due
            * schede si chiamavano ENTRAMBE «Sei una sessione di lavoro autonoma; non hai altro …», cioè
@@ -435,11 +441,10 @@ export function creaSubagentOrchestrator({
            * togliere informazione a un consumatore per aggiustarne un altro è esattamente il modo di
            * rifare il giro fra un mese. Il nome corto viaggia accanto.
            */
-          taskCorto: voce.task?.consegnaCorta ?? (voce.task?.consegna ? compitoDaPromptDiDelega(voce.task.consegna) : null),
+          taskCorto,
           /* C2b «Coordinazione»: come è partita — 'da-solo' | 'consentito' | null (prima di C2b, o senza Coordinazione). Il grafo e
              la scheda «Agenti» lo dicono accanto al nome, e il modello se la persona ne ha chiesto un altro. */
           avvio: voce.avvioDelega ?? null,
-          modello: voce.modello ?? null,
           /*
            * ⛔ D3 — i file che QUESTA figlia ha scritto e che anche un'altra sorella ha toccato. La
            * lista sta sulla madre (il registro la scrive mentre gli eventi passano); qui esce filtrata
@@ -724,6 +729,8 @@ export function creaSubagentOrchestrator({
            aspettavano per sempre una persona che non c'è: decisione 4 dell'owner su C2, «le automazioni senza nessuno davanti
            continuano a negare subito». Nell'intestazione: vale anche dopo un riavvio, e per le nipoti. */
         senzaInterfaccia: padre?.senzaInterfaccia === true,
+        // CLI 16/10: e se il padre ha «nessuno davanti» solo per QUESTO giro (`talos -p`), la figlia lo eredita allo stesso modo, in memoria
+        ...(typeof padre?.senzaInterfacciaNelGiro === 'boolean' ? { senzaInterfacciaNelGiro: padre.senzaInterfacciaNelGiro } : {}),
         /* ⛔ F3-10 (23/09/2026, decisione owner D05-a): la figlia nasce SEMPRE in Normale, col suo ruolo di
            figlia. Prima ereditava `padre.modalitaOperativa ?? 'workflow'`, cioè un modo che non esiste più. */
         modalitaOperativaRichiesta: 'normale',

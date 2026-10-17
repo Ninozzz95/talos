@@ -113,7 +113,13 @@ test('IN-TURN: a summary that ends at a turn boundary pins nothing: the next tur
   assert.equal(prepared.messages.filter(m => m.content === TASK).length, 0, 'the summarised turn\'s message is not brought back');
 });
 
-test('IN-TURN: past the soft trigger but within the limit, a first turn is NOT compacted (no summary at every step)', async t => {
+/*
+ * Owner 16/10/2026 sera («In sottofondo, con una guardia»), after a live measurement (cap 60,000, glm-5.3-flash): a long first turn
+ * waited ~17 s for a summary started only when the request no longer fitted. Past the soft trigger, within the limit, the current
+ * turn is now summarised IN THE BACKGROUND (the turn does not wait) — but only when what stays after the summary lands under the
+ * target; otherwise (a turn whose latest exchange fills most of the trigger) nothing starts, or it would be summarised at every step.
+ */
+test('IN-TURN: past the soft trigger but within the limit, a first turn is summarised IN THE BACKGROUND; the request is not held, the next one uses the summary', async t => {
   const { engine, append, calls } = await engineFixture(t);
   await append('s0', { role: 'system', content: 'Sei un assistente.' });
   await append('u0', { role: 'user', content: TASK });
@@ -121,8 +127,27 @@ test('IN-TURN: past the soft trigger but within the limit, a first turn is NOT c
   const prepared = await engine.prepareForRequest({ sessionId: 'turn', sessionModel: modelProfile });
   const budget = computeContextBudget({ ...modelProfile, method: prepared.measurement.method, inputTokens: prepared.measurement.inputTokens, settings: { triggerRatio: 0.5, targetRatio: 0.49 } });
   assert.ok(budget.shouldPrepare && budget.fits, `the scenario is past the soft trigger and within the limit: ${prepared.measurement.inputTokens} of ${budget.inputLimit}`);
-  /* a soft-trigger job would run in the background, unawaited: what matters is that none was started */
-  assert.deepEqual((await engine.getContextState({ sessionId: 'turn' })).jobs, [], 'no compaction job inside the turn while the context fits');
+  assert.equal(prepared.messages.filter(m => m.role === 'tool').length, 5, 'this request is sent whole: nothing waited');
+  const jobs = (await engine.getContextState({ sessionId: 'turn' })).jobs;
+  assert.equal(jobs.length, 1, 'one background job for the current turn');
+  assert.match(jobs[0].idempotencyKey, /-turn-bg$/u);
+  assert.equal((await engine.waitForCompaction({ sessionId: 'turn', jobId: jobs[0].id })).state, 'committed');
+  assert.ok(calls.length >= 1);
+  const next = await engine.prepareForRequest({ sessionId: 'turn', sessionModel: modelProfile });
+  assert.ok(next.messages.some(m => typeof m.content === 'string' && m.content.includes('talos-context-memory')), 'the next request carries the summary');
+  assert.ok(next.measurement.inputTokens < prepared.measurement.inputTokens, `smaller: ${next.measurement.inputTokens} < ${prepared.measurement.inputTokens}`);
+});
+
+test('IN-TURN guard: when the latest exchange alone keeps the turn above the target, nothing starts in the background (no summary at every step)', async t => {
+  const { engine, append, calls } = await engineFixture(t);
+  await append('s0', { role: 'system', content: 'Sei un assistente.' });
+  await append('u0', { role: 'user', content: TASK });
+  for (let k = 1; k <= 3; k++) { await append(`a${k}`, readCall(k)); await append(`t${k}`, { role: 'tool', tool_call_id: `c${k}`, content: [{ type: 'text', text: `file ${k}: breve` }] }); }
+  await append('a4', readCall(4));
+  await append('t4', { role: 'tool', tool_call_id: 'c4', content: [{ type: 'text', text: 'file 4: ' + 'riga di contenuto '.repeat(1600) }] });
+  const prepared = await engine.prepareForRequest({ sessionId: 'turn', sessionModel: modelProfile });
+  const budget = computeContextBudget({ ...modelProfile, method: prepared.measurement.method, inputTokens: prepared.measurement.inputTokens, settings: { triggerRatio: 0.5, targetRatio: 0.49 } });
+  assert.ok(budget.shouldPrepare && budget.fits, `premise: past the soft trigger, within the limit: ${prepared.measurement.inputTokens} of ${budget.inputLimit}`);
+  assert.deepEqual((await engine.getContextState({ sessionId: 'turn' })).jobs, [], 'the summary would not make room: none is started');
   assert.equal(calls.length, 0);
-  assert.equal(prepared.messages.filter(m => m.role === 'tool').length, 5, 'the turn is sent whole');
 });

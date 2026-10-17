@@ -167,3 +167,16 @@ test('R7-07 LA MADRE DICE «ASPETTA TE»: inAttesaDiscendente per una figlia e u
   await domanda
   assert.equal(riga(madreId).inAttesaDiscendente, false)
 })
+
+test('R7-04-bis (CLI, 15/10/2026, cache del piano) — «cambiare» il modello con lo STESSO modello non scrive una riga; AL CONTRARIO un modello diverso sì', async (t) => {
+  const { cartellaStore, registry, sessionId } = await scena(t)
+  await attendiScritture({ cartellaStore })
+  const modello = registry.elenca().find((s) => s.sessionId === sessionId)?.modello ?? 'm'
+  const prima = righeImpostazioni(cartellaStore, sessionId)
+  assert.deepEqual(await registry.aggiornaImpostazioni(sessionId, { modello }), { ok: true })
+  await attendiScritture({ cartellaStore })
+  assert.equal(righeImpostazioni(cartellaStore, sessionId), prima, 'the same model writes nothing (the CLI resumed with --model on every turn)')
+  assert.deepEqual(await registry.aggiornaImpostazioni(sessionId, { modello: 'altro/modello' }), { ok: true })
+  await attendiScritture({ cartellaStore })
+  assert.equal(righeImpostazioni(cartellaStore, sessionId), prima + 1, 'a different model writes its row')
+})

@@ -201,3 +201,15 @@ test('GRAFO-CLIENT: archi per fase ripetuta, storia e discendenza a pagine fino 
   assert.deepEqual(chieste.splice(0), ['/api/v1/workflows/w/versions/2/nodes/n%2F1/lineage?direction=upstream&offset=0&limit=1000']);
   assert.deepEqual((await client.storia({ tipo: 'piano' })).items, []);
 });
+
+test('GRAFO-DISPOSIZIONE-VUOTA: senza gruppi la disposizione è la sola scheda della sessione, con misure finite (13/10/2026)', async () => {
+  // una conversazione che non ha avviato agenti: prima l'altezza era -Infinity (Math.max di niente) e la larghezza negativa
+  const disp = await disponi(new ELK(), { panoramica: { groups: [], groupConnections: [] }, righeFase: new Map(), archi: [] }, new Set());
+  assert.equal(disp.blocchi.length, 0);
+  assert.equal(disp.passi.size, 0);
+  assert.ok(Number.isFinite(disp.larghezza) && disp.larghezza > 0, `larghezza ${disp.larghezza}`);
+  assert.ok(Number.isFinite(disp.altezza) && disp.altezza > 0, `altezza ${disp.altezza}`);
+  // la scheda della sessione sta DENTRO la disposizione, coi suoi margini
+  assert.ok(disp.sessione.x >= 0 && disp.sessione.x + disp.sessione.w <= disp.larghezza, 'la sessione sta nella larghezza');
+  assert.ok(disp.sessione.y >= 0 && disp.sessione.y + disp.sessione.h <= disp.altezza, 'la sessione sta nell’altezza');
+});

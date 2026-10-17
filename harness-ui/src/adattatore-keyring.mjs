@@ -19,6 +19,10 @@
  *   dev.
  */
 
+import { statSync } from 'node:fs';
+import { isAbsolute } from 'node:path';
+import { pathToFileURL } from 'node:url';
+
 /** Scope Desktop e Preview isolati; oltre all'assenza: qualunque altro valore è un errore d'avvio, non un default silenzioso. */
 export const SCOPE_DESKTOP = 'desktop';
 export const SCOPE_PREVIEW = 'desktop-preview';
@@ -61,19 +65,22 @@ export function avvolgiAdattatoreKeyring(keyring, scope) {
  * lo usava inline (server.mjs) e chi lo userà dopo (la routine di pulizia alla disinstallazione,
  * `src/pulizia-dati.mjs`) condividono QUESTA implementazione, non una copia.
  *
- * ⛔ Le tre eccezioni qui dentro sono parte del contratto, non pigrizia:
- *   - `get` fallito → null (una chiave che il portachiavi non dà non esiste);
- *   - `remove` di una credenziale ASSENTE → successo («assenza già rimossa»: senza questo,
- *     cancellare una fonte mai configurata — DuckDuckGo, o un provider pulito due volte —
- *     riporterebbe un errore falso e bloccherebbe una pulizia legittima);
- *   - solo un `set` fallito propagano: un segreto che NON entra è un guasto vero.
+ * ⛔ Il contratto, MISURATO (Windows 11, @napi-rs/keyring di r4, 14/10/2026 notte, su una voce che non esiste):
+ *   - `getPassword()` di una voce ASSENTE restituisce `null`, non lancia ⇒ `get` → null per l'assenza;
+ *   - `deletePassword()` di una voce ASSENTE restituisce `false`, non lancia ⇒ `remove` di un'assenza riesce da sé (cancellare
+ *     una fonte mai configurata — DuckDuckGo, un provider pulito due volte — non dà un errore falso);
+ *   - quindi quando lanciano è un GUASTO vero (portachiavi bloccato, accesso negato, nome oltre il limite della piattaforma:
+ *     misurato `GenericFailure`) e si PROPAGA, come `set`. Prima i due `catch` lo facevano sparire: un guasto in lettura
+ *     diventava «nessuna chiave» (segnalato da Nino2, CLI, 14/10: `system-keyring.ts` aveva la stessa forma), e un `remove`
+ *     fallito risultava riuscito mentre la chiave RESTAVA nel portachiavi. I chiamanti hanno già il loro `try/catch` e il loro
+ *     codice (`PROVIDER_STORE_UNAVAILABLE`, `SEARCH_STORE_UNAVAILABLE`, «not readable from the keychain», la pulizia li elenca).
  */
 export async function creaAdattatorePortachiaviSistema() {
   const { Entry } = await import('@napi-rs/keyring');
   return {
-    get: (servizio, account) => { try { return new Entry(servizio, account).getPassword() || null; } catch { return null; } },
+    get: (servizio, account) => new Entry(servizio, account).getPassword() || null,
     set: (servizio, account, valore) => new Entry(servizio, account).setPassword(valore),
-    remove: (servizio, account) => { try { new Entry(servizio, account).deletePassword(); } catch { /* assenza già rimossa */ } },
+    remove: (servizio, account) => { new Entry(servizio, account).deletePassword(); },
   };
 }
 
@@ -95,11 +102,87 @@ export async function creaAdattatorePortachiaviSistema() {
  */
 export const PORTACHIAVI_MEMORIA = 'memoria';
 
-export function leggiPortachiaviDiProva(env = process.env) {
+/*
+ * ⭐ 14/10/2026 (owner, alla sessione mobile: «Modulo nostro») — LA TERZA SCELTA: un portachiavi scritto da chi ospita il motore.
+ *   Sul telefono il server r4 gira come processo Node figlio dell'app, e l'archivio sicuro di Android si raggiunge solo dal lato
+ *   Kotlin: né la custodia di sistema (`@napi-rs/keyring`) né quella in memoria (persa a ogni riavvio) vanno bene. Con
+ *   `TALOS_HARNESS_UI_KEYRING=modulo:<percorso assoluto di un .mjs>` il server importa quel file e ne prende l'adattatore.
+ * ⛔ CHIUSO PER DIFETTO, come il resto della variabile: un percorso relativo, mancante, con un NUL, un file che non si importa,
+ *   un modulo senza `creaPortachiavi`, che lancia o che torna una forma sbagliata ⇒ errore d'AVVIO con un codice
+ *   (`KEYRING_MODULE_*`). Mai un ripiego sulla memoria o sul sistema: le chiavi andrebbero dove chi ospita non vuole.
+ * ⛔ Il percorso si importa come URL `file:` (`pathToFileURL`): su Windows `import('C:\\…')` è rifiutato, perché il caricatore ESM
+ *   legge `c:` come schema (nodejs/node#31710; vitejs/vite#1487, letti il 14/10/2026).
+ * Il contratto del modulo: un export CON NOME `creaPortachiavi({ env })`, chiamato UNA volta all'avvio, sincrono, che torna
+ *   `{ get(servizio, account) → string|null, set(servizio, account, valore), remove(servizio, account) }` con la semantica
+ *   dell'adattatore in memoria (remove idempotente). Sopra si applica lo stesso scope degli altri modi (`avvolgiAdattatoreKeyring`).
+ */
+export const PREFISSO_MODULO = 'modulo:';
+
+function erroreModulo(code, messaggio) {
+  return Object.assign(new Error(`TALOS_HARNESS_UI_KEYRING: ${messaggio}`), { code });
+}
+
+/**
+ * La scelta del portachiavi, STRICT: `null` = quello del sistema; `'memoria'`; `{ modulo: percorso }`. Qualunque altro valore, o un
+ * modulo che non si può nemmeno cercare, è un errore d'avvio.
+ * @returns {null | 'memoria' | { modulo: string }}
+ */
+export function leggiSceltaPortachiavi(env = process.env) {
   const valore = env.TALOS_HARNESS_UI_KEYRING;
-  if (valore === undefined || valore === '') return false;
-  if (String(valore).trim() === PORTACHIAVI_MEMORIA) return true;
-  throw new Error(`TALOS_HARNESS_UI_KEYRING="${valore}" is not valid: the variable accepts "memoria" or no value.`);
+  if (valore === undefined || valore === '') return null;
+  const scelta = String(valore).trim();
+  if (scelta === PORTACHIAVI_MEMORIA) return PORTACHIAVI_MEMORIA;
+  if (scelta.startsWith(PREFISSO_MODULO)) {
+    const percorso = scelta.slice(PREFISSO_MODULO.length);
+    if (percorso === '' || percorso.includes('\0') || !isAbsolute(percorso)) throw erroreModulo('KEYRING_MODULE_PATH_INVALID', 'the module path must be absolute.');
+    if (!/\.mjs$/iu.test(percorso)) throw erroreModulo('KEYRING_MODULE_PATH_INVALID', 'the module must be a .mjs file.');
+    let eFile = false;
+    try { eFile = statSync(percorso).isFile(); } catch { eFile = false; }
+    if (!eFile) throw erroreModulo('KEYRING_MODULE_MISSING', `no module file at ${percorso}.`);
+    return { modulo: percorso };
+  }
+  throw new Error(`TALOS_HARNESS_UI_KEYRING="${valore}" is not valid: the variable accepts "memoria", "modulo:<absolute path of a .mjs file>" or no value.`);
+}
+
+export function leggiPortachiaviDiProva(env = process.env) {
+  return leggiSceltaPortachiavi(env) === PORTACHIAVI_MEMORIA;
+}
+
+/** L'adattatore di un modulo esterno (la terza scelta): importato, chiamato una volta, controllato nella forma. */
+export async function creaAdattatorePortachiaviDaModulo(percorso, env = process.env, { segreti = Object.freeze({}) } = {}) {
+  let modulo;
+  try { modulo = await import(pathToFileURL(percorso).href); } catch (errore) {
+    throw erroreModulo('KEYRING_MODULE_LOAD_FAILED', `the module at ${percorso} cannot be loaded (${errore?.code ?? errore?.name ?? 'error'}).`);
+  }
+  if (typeof modulo.creaPortachiavi !== 'function') throw erroreModulo('KEYRING_MODULE_INVALID', 'the module does not export a function named creaPortachiavi.');
+  let adattatore;
+  // `segreti`: le voci lette dallo stdin che r4 non consuma (14/10/2026), congelate; vuote senza `TALOS_HARNESS_UI_SEGRETI_DA`
+  try { adattatore = modulo.creaPortachiavi({ env, segreti }); } catch (errore) {
+    throw erroreModulo('KEYRING_MODULE_FAILED', `creaPortachiavi threw (${errore?.code ?? errore?.name ?? 'error'}).`);
+  }
+  if (adattatore && typeof adattatore.then === 'function') throw erroreModulo('KEYRING_MODULE_INVALID', 'creaPortachiavi must return the keychain synchronously, not a promise.');
+  if (!adattatore || typeof adattatore !== 'object' || ['get', 'set', 'remove'].some((m) => typeof adattatore[m] !== 'function')) {
+    throw erroreModulo('KEYRING_MODULE_INVALID', 'creaPortachiavi must return { get, set, remove }.');
+  }
+  /* ⛔ MODULO-REV-01 (revisione del bugfixer, 14/10): metodi ASYNC passavano l'avvio, poi `get` dava sempre null (una promessa non
+     è una stringa: «nessuna chiave», in silenzio) e una scrittura rifiutata diventava un unhandledRejection. Due reti: all'avvio
+     una funzione `async` si riconosce e il server non parte; a ogni chiamata un metodo che restituisce comunque una promessa (una
+     funzione normale che ne torna una) è un guasto che si DICE — si lancia, e il rifiuto della promessa si raccoglie. */
+  const asincrono = ['get', 'set', 'remove'].find((m) => adattatore[m]?.constructor?.name === 'AsyncFunction');
+  if (asincrono) throw erroreModulo('KEYRING_MODULE_INVALID', `creaPortachiavi must return synchronous methods: ${asincrono} is async.`);
+  const sincrono = (metodo, esito) => {
+    if (esito && typeof esito.then === 'function') {
+      Promise.resolve(esito).catch(() => {}); // nessun rifiuto lasciato senza gestore
+      throw erroreModulo('KEYRING_MODULE_INVALID', `the keychain module returned a promise from ${metodo}: its methods must be synchronous.`);
+    }
+    return esito;
+  };
+  // solo i tre metodi, legati al loro oggetto; un `get` che non dà una stringa non ha una chiave
+  return {
+    get: (servizio, account) => { const v = sincrono('get', adattatore.get(servizio, account)); return typeof v === 'string' ? v : null; },
+    set: (servizio, account, valore) => { sincrono('set', adattatore.set(servizio, account, String(valore))); },
+    remove: (servizio, account) => { sincrono('remove', adattatore.remove(servizio, account)); },
+  };
 }
 
 export function creaAdattatorePortachiaviInMemoria() {
@@ -112,7 +195,10 @@ export function creaAdattatorePortachiaviInMemoria() {
   };
 }
 
-/** La fabbrica che il server usa: la custodia di prova se chiesta, altrimenti quella del sistema. */
-export async function creaAdattatorePortachiavi(env = process.env) {
-  return leggiPortachiaviDiProva(env) ? creaAdattatorePortachiaviInMemoria() : creaAdattatorePortachiaviSistema();
+/** La fabbrica che il server usa: la custodia di prova se chiesta, il modulo di chi ospita se indicato, altrimenti il sistema. */
+export async function creaAdattatorePortachiavi(env = process.env, { segreti = Object.freeze({}) } = {}) {
+  const scelta = leggiSceltaPortachiavi(env);
+  if (scelta === PORTACHIAVI_MEMORIA) return creaAdattatorePortachiaviInMemoria();
+  if (scelta?.modulo) return creaAdattatorePortachiaviDaModulo(scelta.modulo, env, { segreti });
+  return creaAdattatorePortachiaviSistema();
 }

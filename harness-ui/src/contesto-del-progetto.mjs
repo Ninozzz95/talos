@@ -247,7 +247,16 @@ async function costruisciPreambolo({ cartella, creaFiltro, permesso, modello, pi
    *   istruzioni, ciò che resta («sei in una cartella») non vale i suoi token.
    */
   const mappaHaSostanza = Boolean(mappa && (mappa.cartelle.length > 0 || mappa.fileTotali > 0));
-  if (!mappaHaSostanza && !istruzioni) return null;
+  /*
+   * ⛔ K3 (F-Y-002 dello stress test della CLI 0.6.7, S4 dopo il triage, 16/10/2026): in una cartella VUOTA il preambolo spariva
+   *   tutto, e con lui la riga «Turn permission» (invariante R84: con nessuno davanti dice che una domanda o un piano saranno
+   *   RIFIUTATI). 5 corse `-p` su 5 del tester senza quella riga, tutte in cartelle vuote; con un file solo c'era sempre.
+   * ⇒ Il resto della scheda resta spento (la regola qui sopra non cambia: non si dice «cartella vuota», che è anche ciò che si
+   *   vede quando il camminatore non legge), ma il permesso del giro è un fatto di TALOS, non del progetto: esce da solo, in una
+   *   riga col marcatore della scheda (così `preamboloVistoDa` lo riconosce). Senza permesso, niente come prima.
+   */
+  const soloPermesso = !mappaHaSostanza && !istruzioni;
+  if (soloPermesso && !permesso) return null;
 
   /*
    * BC-48 C — istruzioni e mappa precedono la scheda: un cambiamento di git non sposta
@@ -256,6 +265,7 @@ async function costruisciPreambolo({ cartella, creaFiltro, permesso, modello, pi
    * La scheda conserva un ripiego riconoscibile anche quando non si riesce a costruirla.
    */
   const pezzi = [];
+  if (soloPermesso) pezzi.push(`${INIZIO_SCHEDA}Turn permission: ${permesso}.`);
   if (istruzioni?.testo) pezzi.push(istruzioni.testo);
   /*
    * ⛔ IL TETTO DELLA MAPPA E' IN TOKEN, non in cartelle — misurato l'11/09 e non negoziabile:
@@ -266,7 +276,7 @@ async function costruisciPreambolo({ cartella, creaFiltro, permesso, modello, pi
    */
   const resaMappa = mappaHaSostanza ? mappaEntroIlTetto(mappa, { radice: cartella, tettoToken: tettoTokenMappa, confine: confineStabile('mappa') }) : null;
   if (resaMappa) pezzi.push(resaMappa.testo);
-  pezzi.push(scheda?.testo ?? `${INIZIO_SCHEDA}could not read the status of this folder; what precedes is still true.`);
+  if (!soloPermesso) pezzi.push(scheda?.testo ?? `${INIZIO_SCHEDA}could not read the status of this folder; what precedes is still true.`);
   /* Doppio a-capo fra i blocchi: sono tre cose diverse, e un modello che legge un muro di testo
      senza confini le mescola. Costa 2 byte per blocco. */
   const testo = pezzi.join('\n\n');
@@ -275,13 +285,13 @@ async function costruisciPreambolo({ cartella, creaFiltro, permesso, modello, pi
   /* F-027: il sospetto del preambolo, nella forma di `contenutoSospetto`. Chi lo consegna al modello lo passa al kernel
      (`sospettoDelContesto`) SOLO nel giro in cui il preambolo arriva davvero. */
   const sospettiMappa = resaMappa?.sospetti ?? [];
-  const motiviSospetti = [...new Set([...sospettiMappa, ...(scheda ? sospettiScheda : [])])].sort();
+  const motiviSospetti = [...new Set([...sospettiMappa, ...(scheda && !soloPermesso ? sospettiScheda : [])])].sort();
   const fonteSospetta = sospettiMappa.length ? 'mappa' : 'scheda';
   const esito = {
     testo,
     sospetto: motiviSospetti.length ? { fonte: fonteSospetta, motivi: motiviSospetti, luogo: luogoDellaFonte(fonteSospetta) } : null,
     blocchi: {
-      scheda: scheda ? { byte: Buffer.byteLength(scheda.testo, 'utf8') } : null,
+      scheda: scheda && !soloPermesso ? { byte: Buffer.byteLength(scheda.testo, 'utf8') } : null,
       istruzioni: istruzioni ? { byte: istruzioni.byte, usati: istruzioni.usati, omessi: istruzioni.omessi, tagliati: istruzioni.tagliati, indicizzati: istruzioni.indicizzati, sezioniSempre: istruzioni.sezioniSempre } : null,
       mappa: resaMappa
         ? {

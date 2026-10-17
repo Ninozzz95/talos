@@ -141,3 +141,11 @@ test('C1-GIRO-CODA-ENGINE: in the engine, a queued message after the round keeps
   assert.ok(uscite(messaggi, 'p').every((m) => m.content.length >= 2000), 'premise: each output is long enough to be shortened');
   assert.ok(uscite(preparata.messages, 'p').every(intera), 'the round the model has not read reaches it whole');
 });
+
+test('C1-GIRO-CODA-SYSTEM (15/10/2026): a late system message after the round (the context update, now kept in place) does not answer it: the round stays whole', () => {
+  const m = storia();
+  m.push({ role: 'system', content: 'Project context update: the following REPLACES the folder map.' }, { role: 'user', content: 'aggiunta in coda' });
+  const { messages } = shortenRecentLargeOutputs(m);
+  assert.ok(uscite(messages, 'p').every(intera));
+  assert.ok(uscite(messages, 'v').every((x) => !intera(x)));
+});

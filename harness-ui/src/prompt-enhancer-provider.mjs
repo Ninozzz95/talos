@@ -10,6 +10,9 @@ function mappaErroreDestinazione(errore) {
   if (errore?.code === 'PROVIDER_KEY_MISSING') {
     return erroreApi('The credential for the provider used by this chat is missing. Connect it in Settings → Providers, then try again.', 'PROVIDER_KEY_REQUIRED');
   }
+  if (errore?.code === 'PROVIDER_ENDPOINT_NOT_CHOSEN') { // owner 14/10/2026
+    return erroreApi('Choose where the key of this chat\'s provider goes, in Settings → Providers → Configure, then try again.', 'PROVIDER_ENDPOINT_NOT_CHOSEN');
+  }
   if (errore?.code === 'MODEL_DESTINATION_INVALID' || errore?.code === 'MODEL_DESTINATION_MISCONFIGURED') {
     return erroreApi('This chat\'s model has no valid destination.', 'PROVIDER_RUNTIME_UNAVAILABLE');
   }
@@ -25,7 +28,12 @@ function mappaErroreDestinazione(errore) {
  * La rotta HTTP possiede sessione e contratto API; questo modulo possiede solo
  * l'instradamento del trasporto, riusando la stessa fonte di verità della chat.
  */
-export async function chiediMiglioramentoAlProvider({ modello, messaggi, providerStore, fetchFn = globalThis.fetch, leggiTokenDelPiano = null, registraUsoDelPiano = null } = {}) {
+/*
+ * /goal G2c (14/10/2026) — `maxTokens` e `reasoning` per chi non è «migliora il prompt» (la proposta dei criteri): di serie
+ * restano 2048 e nessun ragionamento, cioè la richiesta di sempre. `reasoning` va SOLO a OpenRouter, già adattato al catalogo
+ * dal chiamante (`normalizzaReasoningPerModello`): un fornitore diretto o il piano ChatGPT non conoscono quel campo.
+ */
+export async function chiediMiglioramentoAlProvider({ modello, messaggi, providerStore, fetchFn = globalThis.fetch, leggiTokenDelPiano = null, registraUsoDelPiano = null, maxTokens = 2048, reasoning = null } = {}) {
   if (typeof modello !== 'string' || modello.trim() === '') {
     throw erroreApi('This session does not declare a model.', 'SESSION_NOT_READY');
   }
@@ -55,7 +63,8 @@ export async function chiediMiglioramentoAlProvider({ modello, messaggi, provide
     model: destinazione.modelloRemoto,
     messages: messaggi,
     stream: false,
-    max_tokens: 2048,
+    max_tokens: maxTokens,
+    ...(reasoning && destinazione.fonte === 'openrouter' ? { reasoning } : {}), // il piano ChatGPT ha fonte `chatgpt`: non lo riceve
   };
 
   /*

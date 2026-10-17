@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { FRASI_DEI_MOTIVI_DEI_FILE } from './motivi-dei-file.mjs';
 
 const diagnostics = new Map();
 export const MESSAGES = Object.freeze({
@@ -17,6 +18,13 @@ export const MESSAGES = Object.freeze({
   // C3 tappa 4 (09/10/2026): Pausa / Riprendi / Riprova di una delega quando lo stato non lo ammette (http-app, /delegation/…)
   DELEGATION_STATE_CONFLICT: { title: 'Not possible for this agent now', explanation: 'The agent is not in the right state: only a running agent can be paused, only a paused one resumed, only a failed or stopped one retried. Nothing was changed.', action: 'Look at its state in the Agents tab and choose among the actions it offers now.' },
   WORKFLOW_RUN_STATE_CONFLICT: { title: 'Command not applicable now', explanation: 'The Workflow is not in the right state for this command: nothing was changed.', action: 'Reload the Workflow and choose among the commands available right now.' },
+  // /goal G1 (14/10/2026): l'obiettivo c'è ma non è nello stato giusto per il gesto; oppure questa conversazione non può averne uno
+  GOAL_TEXT_INVALID: { title: 'Goal text not valid', explanation: 'The goal text cannot be used as it is: nothing was changed.', action: 'Write the goal again, shorter if needed, and try again.' },
+  GOAL_STATE_CONFLICT: { title: 'Command not applicable now', explanation: 'The goal is not in the right state for this command: nothing was changed.', action: 'Look at the goal as it is now and choose among the available commands.' },
+  GOAL_NOT_ALLOWED: { title: 'No goal allowed here', explanation: 'This conversation cannot have a goal.', action: 'Set the goal on the main conversation.' },
+  // /goal G2 (14/10/2026): il contratto dell'obiettivo
+  GOAL_CONTRACT_INVALID: { title: 'Criteria not valid', explanation: 'The criteria of the goal cannot be used as they are: nothing was changed.', action: 'Correct the criterion named and try again.' },
+  GOAL_CONTRACT_NEEDS_CONFIRMATION: { title: 'Confirmation needed', explanation: 'This change removes or changes criteria that were already agreed: nothing was changed.', action: 'Read what changes and confirm it.' },
   WORKFLOW_DEFINITION_NOT_APPROVED: { title: 'Workflow not approved', explanation: 'Only the approved version of a Workflow can be started.', action: 'Read the proposal and approve it, then start it.' },
   WORKFLOW_START_UNSUPPORTED: { title: 'Workflow cannot start here', explanation: 'Some steps cannot be run on this server yet, or would write to the project: nothing was started.', action: 'Ask for a proposal with read-only steps only.' },
   WORKFLOW_COMMAND_ORIGIN_FORBIDDEN: { title: 'Workflow command blocked', explanation: 'The request comes from a window other than TALOS.', action: 'Go back to the Workflow open in TALOS and try again from there.' },
@@ -57,7 +65,9 @@ export const MESSAGES = Object.freeze({
   SESSION_LEASED: { title: 'Open in another TALOS window', explanation: 'This chat is running in another TALOS process on this computer, and only one can write to it at a time.', action: 'Continue it there, or wait until it finishes and try again.' },
   SESSION_CHANGED_ELSEWHERE: { title: 'Changed in another TALOS window', explanation: 'Another TALOS process wrote to this chat after it was loaded here.', action: 'Open the chat again: it reloads with everything written there.' },
   SESSION_NOT_READY: { title: 'Session not ready', explanation: 'This session cannot accept the requested action in its current state.', action: 'If it was interrupted by a restart, start a new session: the conversation stays readable here.' },
-  SESSION_STORE_WRITE_FAILED: { title: 'History save failed', explanation: 'The summary was not confirmed because the new history was not saved. The original messages remain available.', action: 'Try compacting again. If the problem persists, use the diagnostic reference in Doctor.' },
+  /* ⛔ REV-GOAL-06 (14/10/2026): questa copia era scritta per la compattazione («Try compacting again») e la leggeva chiunque non
+     riuscisse a salvare — l'obiettivo, il fork, la coda. Ora è neutra; la frase vera del rifiuto viaggia col suo motivo (sotto). */
+  SESSION_STORE_WRITE_FAILED: { title: 'Save failed', explanation: 'The save to the disk did not succeed: nothing was changed.', action: 'Check the free space on the disk, then try again. If the problem persists, use the diagnostic reference in Doctor.' },
   /*
    * ⛔ 23/09/2026, EXFAT — il testo diceva «Controlla spazio e permessi» per OGNI guasto della
    * testata, anche su una chiavetta exFAT dove `fs.link` fallisce con EISDIR (nodejs/node#65817,
@@ -122,13 +132,33 @@ function safeDiagnosticDetail(error) {
  *   Aggiungerne uno vuol dire prendersi la responsabilita che quel testo sia leggibile e privo di
  *   dettagli interni: si guarda ogni `erroreAvvio` di quel codice prima di metterlo qui.
  */
-const MESSAGGIO_GIA_PER_LA_PERSONA = new Set(['SESSION_NOT_READY']);
+/* /goal G1 (14/10/2026): i tre codici dell'obiettivo. Ogni loro `erroreAvvio` è scritto per lo schermo e guardato uno per uno
+   (`rifiutoObiettivo` e `impostaObiettivo` in `session-registry.mjs`: otto frasi corte, nessun percorso, nessun identificatore).
+   G2: i due codici del contratto (`rifiutoContratto` e `cambioDiContratto`: venti frasi; i soli valori sono un numero di
+   posizione, un tetto e il simbolo di un operatore di shell — mai il comando né il percorso che la persona ha scritto). */
+const MESSAGGIO_GIA_PER_LA_PERSONA = new Set(['SESSION_NOT_READY', 'GOAL_TEXT_INVALID', 'GOAL_STATE_CONFLICT', 'GOAL_NOT_ALLOWED', 'GOAL_CONTRACT_INVALID', 'GOAL_CONTRACT_NEEDS_CONFIRMATION']);
+/* REV-GOAL-06: codici condivisi da più operazioni, la cui frase vera la scrive il registro insieme al MOTIVO (`goal-not-saved`,
+   `fork-not-saved`…). Senza motivo (un guasto del disco lanciato altrove) resta la copia del codice. */
+const MESSAGGIO_PER_LA_PERSONA_CON_MOTIVO = new Set(['SESSION_STORE_WRITE_FAILED']);
+/* 15/10/2026 (visto dal vivo): CONFIG_INVALID è un codice largo (un modello da scegliere, una chiave d'ambiente, un file illeggibile…),
+   ma la chiave del fornitore che manca è IL caso della persona, e la sua frase la scrive il registro col motivo e il nome del
+   fornitore. Solo questi motivi portano la frase vera; gli altri restano la copia del codice («Configurazione non pronta»). */
+/* 16/10/2026 (mobile): i rifiuti dell'albero dei file (`motivi-dei-file.mjs`) uscivano tutti come «Invalid query»; le loro frasi sono
+   scritte per lo schermo e senza percorsi (lo pretende `tests/motivi-dei-file.test.mjs`). */
+const MOTIVI_CON_FRASE_PER_LA_PERSONA = new Set(['provider-key-missing', 'provider-key-missing-named', 'standalone-terminals-in-use', ...Object.keys(FRASI_DEI_MOTIVI_DEI_FILE)]);
+/* REV2-GOAL-05 (14/10/2026): due motivi di quel codice non parlano del disco ma del RIASSUNTO che il modello ha restituito storto:
+   il loro titolo e la loro azione sono quelli della compattazione, non «Save failed · Check the free space on the disk». */
+const COPIA_PER_MOTIVO = Object.freeze({
+  'summary-invalid-result': { title: 'Compaction failed', action: 'Try compacting again. If the problem persists, use the diagnostic reference in Doctor.' },
+  'summary-invalid-history': { title: 'Compaction failed', action: 'Try compacting again. If the problem persists, use the diagnostic reference in Doctor.' },
+});
 
 /** Un testo del registro e pubblicabile solo se e corto e non porta percorsi o identificatori. */
 function messaggioPubblicabile(testo) {
   const t = String(testo || '').trim();
   if (t.length < 12 || t.length > 240) return '';
-  if (/[\/]{1}[\w.-]+[\/]|[0-9a-f]{8}-[0-9a-f]{4}/i.test(t)) return ''; // percorsi o id: restano nel log
+  /* MOTIVI-REV-02 (bugfixer, 16/10/2026): anche i percorsi di Windows («C:\Users\…», «a\b\»), non solo «/x/» */
+  if (/[\/\\][\w.-]+[\/\\]|\b[A-Za-z]:[\\/]|[0-9a-f]{8}-[0-9a-f]{4}/i.test(t)) return ''; // percorsi o id: restano nel log
   return t;
 }
 
@@ -153,9 +183,15 @@ export function toPublicProblem(error, { requestId = '', operation = '' } = {}) 
   const copy = MESSAGES[code] ?? MESSAGES.INTERNAL_ERROR;
   const doctorReference = referenceFor(code, requestId, operation);
   diagnostics.set(doctorReference, Object.freeze({ code, operation: String(operation || 'operation'), requestId: String(requestId || ''), detail: safeDiagnosticDetail(error) }));
-  const vero = MESSAGGIO_GIA_PER_LA_PERSONA.has(code) ? messaggioPubblicabile(error?.message) : '';
+  /* MOTIVI-REV-02 (bugfixer, 16/10/2026): per i motivi dei file si pubblica la frase della TABELLA, mai il `message` dell'errore — la
+     protezione non dipende più da come l'errore è stato costruito. */
+  const dellaTabella = typeof error?.reason === 'string' && Object.hasOwn(FRASI_DEI_MOTIVI_DEI_FILE, error.reason) ? FRASI_DEI_MOTIVI_DEI_FILE[error.reason] : '';
+  const vero = dellaTabella ? dellaTabella : MESSAGGIO_GIA_PER_LA_PERSONA.has(code) || (MESSAGGIO_PER_LA_PERSONA_CON_MOTIVO.has(code) && typeof error?.reason === 'string')
+    || (typeof error?.reason === 'string' && MOTIVI_CON_FRASE_PER_LA_PERSONA.has(error.reason))
+    ? messaggioPubblicabile(error?.message) : '';
   const params = paramsPubblici(error);
-  return { title: copy.title, explanation: vero || copy.explanation, action: copy.action, doctorReference, ...(params ? { params } : {}) };
+  const perMotivo = typeof error?.reason === 'string' && Object.hasOwn(COPIA_PER_MOTIVO, error.reason) ? COPIA_PER_MOTIVO[error.reason] : null;
+  return { title: perMotivo?.title ?? copy.title, explanation: vero || copy.explanation, action: perMotivo?.action ?? copy.action, doctorReference, ...(params ? { params } : {}) };
 }
 
 export function logDiagnosticProblem(error, { requestId = '', operation = '', logger = console } = {}) {

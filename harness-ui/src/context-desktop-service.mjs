@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { parseContextSettings, ContextEngineError } from '../../context-engine/src/contracts.mjs';
 import { importLegacySession } from '../../context-engine/src/node/legacy-import.mjs';
 import { computeContextBudget } from '../../context-engine/src/compaction-planner.mjs';
+import { classificaErroreFornitore } from './kernel/compattazione-desktop.mjs';
 
 const fail = (code, message) => { throw new ContextEngineError(message, code); };
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -36,6 +37,7 @@ export function createDesktopContextService({ engine, store, loadLegacy, selectL
   const queues = new Map();
   const deliveries = new Map();
   const ownedJobs = new Map();
+  const sessioniToccate = new Set(); // F2 della CLI (16/10): le conversazioni di cui `close` deve fermare i riassunti automatici
   /* 24/09 — F4: l'ultima proiezione preparata per sessione (ciò che è andato al modello) è la base
      dell'ancora del fornitore: `captureProviderResponse` la sposa con `usage.prompt_tokens`. */
   const ultimeProiezioni = new Map();
@@ -56,6 +58,7 @@ export function createDesktopContextService({ engine, store, loadLegacy, selectL
     if (closed) fail('CTX_SERVICE_CLOSED', 'The context service is closed.');
     if (!validId(sessionId) || !await readSession(sessionId)) fail('CTX_SESSION_NOT_FOUND', 'Conversation not found.');
     if (!await isSessionEnabled(sessionId)) fail('CTX_NOT_ENABLED', MOTORE_SPENTO_PER_LA_CONVERSAZIONE);
+    sessioniToccate.add(sessionId);
     let snapshot = await store.readContextSnapshot({ sessionId });
     if (!snapshot) {
       const jsonl = await loadLegacy?.({ sessionId });
@@ -122,11 +125,52 @@ export function createDesktopContextService({ engine, store, loadLegacy, selectL
       if (!await isSessionEnabled(sessionId)) return undefined;
       if (!validId(runId)) fail('CTX_INVALID_INPUT', 'Invalid turn identity.');
       await serial(sessionId, () => ensure(sessionId));
+      /*
+       * ⛔ Revisione del bugfixer di 0120d21e0 (16/10/2026, NON-ASPETTARE-REV-01) e richiesta della CLI («mettilo nel servizio, così
+       *   vale per tutti e due»): «Non aspettare se entra» (owner 16/10 sera) manda la richiesta senza il margine di sicurezza della
+       *   stima (`sentWithoutWaiting`). Se il fornitore risponde «contesto pieno», UNA volta: si rifà la preparazione chiedendo al
+       *   motore di aspettare il riassunto in volo (`waitForInFlight`), la richiesta nuova va nello STESSO array che `prepare` ha
+       *   restituito (il kernel lo rilegge a ogni invio, `talosHarness.mjs`: «l'overflow dell'adattatore rimpiazza la lista sul posto
+       *   e richiama») e si riprova, con lo stesso `signal` del giro. Come K8 del legacy. Una richiesta mandata col margine di sempre
+       *   ha un tentativo solo: riprovarla uguale darebbe lo stesso rifiuto. Il guscio desktop rifà lui la preparazione (corregge i
+       *   messaggi e riattacca gli effimeri in un array suo) e qui lo spegne con `retryContextFull: false`.
+       */
+      let mandataSenzaAttesa = null;
+      const esegui = (signal, operation) => (runInference ? runInference({ sessionId, priority: 'chat', signal }, operation) : operation(signal));
       return Object.freeze({
         capture: ({ messages }) => api.syncOriginals({ sessionId, messages }),
         /* 24/09 — F4, contratto con l'adapter (F1): `messages` = proiezione corretta, `originali` = grezzo. */
-        prepare: ({ messages, originali, tools, signal }) => api.prepare({ sessionId, messages, originali, tools, signal }),
-        infer: ({ signal }, operation) => runInference ? runInference({ sessionId, priority: 'chat', signal }, operation) : operation(signal),
+        prepare: async ({ messages, originali, tools, signal, waitForInFlight }) => {
+          const result = await api.prepare({ sessionId, messages, originali, tools, signal, waitForInFlight });
+          mandataSenzaAttesa = result?.sentWithoutWaiting === true && Array.isArray(result.messages) ? { input: { messages, originali, tools }, result } : null;
+          return result;
+        },
+        /* F6 della CLI (16/10/2026): un METODO, non una freccia — il kernel chiama `contextHooks.infer(...)` sull'oggetto dei ganci che
+           l'ospite gli ha dato, e se l'ospite ha avvolto `prepare` (la CLI: `retryStale` per una revisione stantia) il ritentativo usa
+           QUELLA (`this.prepare`), non la nostra saltandolo. Chiamata staccata dall'oggetto: la nostra. */
+        async infer({ signal, retryContextFull = true } = {}, operation) {
+          const daRiprovare = retryContextFull ? mandataSenzaAttesa : null;
+          mandataSenzaAttesa = null;
+          if (!daRiprovare) return esegui(signal, operation);
+          try { return await esegui(signal, operation); }
+          catch (errore) {
+            if (signal?.aborted || classificaErroreFornitore(errore) !== 'contesto-pieno') throw errore;
+            if (errore && typeof errore === 'object') errore.classificazione = 'contesto-pieno';
+            /* se la seconda preparazione fallisce (il riassunto aspettato muore), passa il «contesto pieno» del fornitore, classificato,
+               non l'errore del motore: è quello che è successo alla richiesta (riverifica del bugfixer, NON-ASPETTARE-REV-03) */
+            let nuova;
+            const prepara = typeof this?.prepare === 'function' ? (input) => this.prepare(input) : (input) => api.prepare({ sessionId, ...input });
+            try { nuova = await prepara({ ...daRiprovare.input, signal, waitForInFlight: true }); }
+            catch (secondo) { if (signal?.aborted || secondo?.name === 'AbortError') throw secondo; throw errore; }
+            daRiprovare.result.messages.splice(0, daRiprovare.result.messages.length, ...nuova.messages);
+            daRiprovare.result.retriedAfterContextFull = true; // per chi vuole dirlo a parole (la CLI)
+            try { return await esegui(signal, operation); }
+            catch (secondo) {
+              if (secondo && typeof secondo === 'object' && classificaErroreFornitore(secondo) === 'contesto-pieno') secondo.classificazione = 'contesto-pieno';
+              throw secondo;
+            }
+          }
+        },
         captureProviderResponse: async ({ response, giro, usage }) => {
           if (!response || typeof response !== 'object' || !Number.isSafeInteger(giro) || giro < 0) fail('CTX_INVALID_INPUT', 'The model response cannot be archived.');
           const bytes = Buffer.from(JSON.stringify({ schema: 'talos.context.provider-response.v1', runId, giro, response }), 'utf8');
@@ -176,6 +220,14 @@ export function createDesktopContextService({ engine, store, loadLegacy, selectL
         if (path === '/versions') return { versions: await engine.listContextVersions({ sessionId }) };
         if (path === '/facts') return { facts: snapshot.facts };
         if (path === '/export') return engine.exportContext({ sessionId });
+        /* L3-3 (owner 13/10/2026, D2: «esportabile»): le copie da parte di QUESTA conversazione e l'export dell'ultima. La
+           copia si sceglie dall'elenco dell'archivio, mai da un id dato da fuori. Sola lettura. */
+        if (path === '/aside') return { copies: typeof store.listAsideSessions === 'function' ? await store.listAsideSessions({ sessionId }) : [] };
+        if (path === '/aside/export') {
+          const copie = typeof store.listAsideSessions === 'function' ? await store.listAsideSessions({ sessionId }) : [];
+          if (!copie.length) fail('CTX_SESSION_NOT_FOUND', 'This conversation has no context archive set aside.');
+          return store.exportSession({ sessionId: copie.at(-1).asideId });
+        }
         let match = /^\/jobs\/([^/]+)$/u.exec(path);
         if (match) {
           const job = await store.readContextJob({ sessionId, jobId: match[1] });
@@ -251,7 +303,17 @@ export function createDesktopContextService({ engine, store, loadLegacy, selectL
         const salvate = noto && Number.isInteger(snapshot?.revision) && noto.revision === snapshot.revision ? noto.impronte : (await allRecords(sessionId)).map((record) => record.sha256);
         if (messages.length < salvate.length || salvate.some((impronta, index) => impronta !== digest(messages[index]))) {
           impronteVerificate.delete(sessionId);
-          fail('CTX_HISTORY_DIVERGED', 'The active history differs from the archive. The originals are kept; the full version must be recovered.');
+          /* R-05 (12/10/2026): la divergenza dice DOVE. Dal vivo il codice arrivava nudo e la causa non si poteva leggere dal
+             giornale: quale messaggio era cambiato, e se la storia attiva era più CORTA dell'archivio (una coda persa) o
+             RISCRITTA (un messaggio vecchio modificato). Solo posizioni, conteggi e ruolo: mai il contenuto. */
+          const primoDiverso = salvate.findIndex((impronta, index) => index >= messages.length || impronta !== digest(messages[index]));
+          const errore = new ContextEngineError('The active history differs from the archive. The originals are kept; the full version must be recovered.', 'CTX_HISTORY_DIVERGED');
+          errore.dettaglio = Object.freeze({
+            archiviati: salvate.length, attivi: messages.length, primoDiverso,
+            forma: messages.length < salvate.length && primoDiverso >= messages.length ? 'piu-corta' : 'riscritta',
+            ruolo: typeof messages[primoDiverso]?.role === 'string' ? messages[primoDiverso].role : null,
+          });
+          throw errore;
         }
         const records = messages.slice(salvate.length).map((message, offset) => ({ id: `message-${salvate.length + offset + 1}`, message, createdAt: clock(), origin: 'desktop-kernel' }));
         if (records.length) await store.appendOriginalBatch({ sessionId, records, expectedRevision: snapshot.revision });
@@ -270,15 +332,45 @@ export function createDesktopContextService({ engine, store, loadLegacy, selectL
      * Code (issue #26125, 16/02/2026: «The full transcript is preserved in transcript.jsonl on disk» mentre al
      * modello arrivano i «compacted summaries»): la trascrizione grezza e il contesto inviato sono due cose.
      */
-    async prepare({ sessionId, messages, originali, tools, signal }) {
+    async prepare({ sessionId, messages, originali, tools, signal, waitForInFlight = false }) {
       let projection;
       if (originali !== undefined) {
         if (!Array.isArray(originali) || !Array.isArray(messages) || messages.length !== originali.length || messages.some((message, index) => message?.role !== originali[index]?.role)) fail('CTX_INVALID_INPUT', 'The request projection is not aligned with the originals (different length or roles).');
         projection = messages;
       }
-      await api.syncOriginals({ sessionId, messages: originali === undefined ? messages : originali });
+      /*
+       * ⛔ 12/10/2026, decisione dell'owner («Si ripara da solo») — dal trascritto 36289618: dopo un cambio di modello la storia
+       *   attiva non combaciava più con l'archivio e il motore ricadeva sulla compattazione semplice a OGNI giro, per sempre.
+       *   Qui, e solo qui (la strada del giro): alla divergenza gli originali vecchi vanno DA PARTE sotto un altro id (niente si
+       *   perde: `setAsideSession`), l'archivio riparte dalla storia attiva e la richiesta prosegue col motore. Chi chiama lo
+       *   legge in `result.riallineato` e lo dice una volta. `syncOriginals` chiamato da solo resta severo: chi confronta
+       *   vuole sapere, non riparare. Se non si può riparare (archivio senza l'operazione, lavoro in corso) l'errore resta
+       *   quello di prima, e il giro ricade come prima.
+       */
+      let riallineato = null;
+      const daArchiviare = originali === undefined ? messages : originali;
+      try { await api.syncOriginals({ sessionId, messages: daArchiviare }); }
+      catch (errore) {
+        if (errore?.code !== 'CTX_HISTORY_DIVERGED' || typeof store.setAsideSession !== 'function') throw errore;
+        const asideId = `${sessionId}.aside-${Date.parse(clock()) || 0}-${randomUUID().slice(0, 8)}`;
+        try { await serial(sessionId, () => store.setAsideSession({ sessionId, asideId })); }
+        catch { throw errore; }
+        impronteVerificate.delete(sessionId); ultimeProiezioni.delete(sessionId);
+        await api.syncOriginals({ sessionId, messages: daArchiviare });
+        /*
+         * L3-3 (owner 13/10/2026, D1: «solo l'ULTIMA per conversazione»): ora che la copia nuova è scritta E l'archivio vivo è
+         * ripartito, le copie da parte più vecchie si tolgono. L'archivio le cancella solo dopo aver riletto e verificato per
+         * intero quella da tenere (`pruneAsideSessions`); se non ci riesce, o se l'archivio non ha l'operazione, restano tutte
+         * e il giro prosegue: una pulizia non riuscita non è un motivo per fermare la richiesta.
+         */
+        if (typeof store.pruneAsideSessions === 'function') {
+          try { await serial(sessionId, () => store.pruneAsideSessions({ sessionId, keep: asideId })); }
+          catch { /* niente è stato tolto (una transazione sola): si riprova alla prossima riparazione */ }
+        }
+        riallineato = Object.freeze({ asideId, ...(errore.dettaglio && typeof errore.dettaglio === 'object' ? errore.dettaglio : {}) });
+      }
       let result;
-      try { result = await engine.prepareForRequest({ sessionId, projection, tools, sessionModel: await modelFor(sessionId), signal }); }
+      try { result = await engine.prepareForRequest({ sessionId, projection, tools, sessionModel: await modelFor(sessionId), signal, waitForInFlight: waitForInFlight === true }); }
       catch (error) {
         /* 25/09 — l'avviso «compattazione automatica in pausa» nasce anche quando la richiesta MUORE (contesto che non entra,
            riassunto rifiutato mentre si aspettava): senza questa consegna restava nella coda fino alla richiesta dopo. Una
@@ -291,7 +383,7 @@ export function createDesktopContextService({ engine, store, loadLegacy, selectL
          versione, per la scheda Contesto. Facoltativo; un suo errore non tocca mai la richiesta. */
       if (typeof onPrepared === 'function') { try { onPrepared({ sessionId, level1: result?.level1 ?? null, versionId: result?.versionId ?? null }); } catch { /* solo per guardare */ } }
       await deliver(sessionId);
-      return result;
+      return riallineato && result && typeof result === 'object' ? { ...result, riallineato } : result;
     },
     async append({ sessionId, record }) { await serial(sessionId, () => ensure(sessionId)); return engine.appendOriginal({ sessionId, record }); },
     async close() {
@@ -305,6 +397,23 @@ export function createDesktopContextService({ engine, store, loadLegacy, selectL
         await engine.waitForCompaction(options);
       }
       ownedJobs.clear();
+      /*
+       * ⛔ F2 della CLI (prima revisione della 0.6.8, 16/10/2026, S2): si annullavano solo i lavori chiesti a mano (`/jobs`); i
+       *   riassunti AUTOMATICI — il `…-turn-bg` che parte alla fine di ogni giro lungo — continuavano mentre si chiudeva l'archivio.
+       *   `talos -p` restava vivo fino alla fine del riassunto (60 s misurati, fino al tempo massimo del riassunto con un fornitore
+       *   fermo) e poi lo buttava (`paused CTX_JOB_INTERRUPTED`, pagato e mai usato). Chi chiude ferma OGNI lavoro non concluso delle
+       *   conversazioni che ha toccato, e lo aspetta: una regola sola per tutti gli ospiti.
+       */
+      for (const sessionId of sessioniToccate) {
+        let snapshot = null;
+        try { snapshot = await store.readContextSnapshot({ sessionId }); } catch { continue; }
+        for (const job of snapshot?.jobs ?? []) {
+          if (terminal.has(job.state)) continue;
+          try { await engine.cancelCompaction({ sessionId, jobId: job.id }); await engine.waitForCompaction({ sessionId, jobId: job.id }); }
+          catch { /* un lavoro che non si lascia fermare non trattiene la chiusura */ }
+        }
+      }
+      sessioniToccate.clear();
     },
   };
   return Object.freeze(api);

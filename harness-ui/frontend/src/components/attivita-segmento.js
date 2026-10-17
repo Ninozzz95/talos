@@ -148,7 +148,7 @@ function metaEsito(voce) {
     if (e.verdetto) return e.uscita === null ? t('chat.activity.noExitCode') : `exit ${e.uscita}`;
   }
   return voce.stato === 'fallito' ? t('chat.activity.state.failed') : voce.stato === 'interrotto' ? t('chat.activity.state.interrupted')
-    : voce.stato === 'non-eseguito' ? t('chat.activity.state.notRun') : '';
+    : voce.stato === 'non-eseguito' ? t('chat.activity.state.notRun') : voce.stato === 'doppione' ? t('chat.activity.state.duplicate') : '';
 }
 
 function ordinaSpecie(mappa) {
@@ -175,6 +175,7 @@ export function riassuntoVoci(voci) {
   let inCorso = null;
   let interrotti = 0;
   let nonEseguiti = 0;
+  let doppioni = 0;
   let attrezziInCorso = 0;
   for (const v of voci || []) {
     if (!v) continue;
@@ -187,6 +188,7 @@ export function riassuntoVoci(voci) {
     if (v.stato === 'in-corso') { inCorso = v; attrezziInCorso += 1; continue; }
     if (v.stato === 'interrotto') { interrotti += 1; continue; } // 26/09: né riuscita né fallita — il giro si è fermato prima dell'esito
     if (v.stato === 'non-eseguito') { nonEseguiti += 1; continue; } // owner 03/10/2026: una prova non eseguita, né riuscita né fallita
+    if (v.stato === 'doppione') { doppioni += 1; continue; } // owner 12/10/2026: una copia identica saltata, né riuscita né fallita
     if (v.stato === 'corretta') continue; // 27/09, decisione 47: la domanda respinta non è stata posta; la riga discreta basta
     const mappa = v.stato === 'fallito' ? falliti : riusciti;
     mappa.set(v.specie, (mappa.get(v.specie) || 0) + 1);
@@ -219,6 +221,7 @@ export function riassuntoVoci(voci) {
      né fallita. Hermes fa lo stesso (`app/session/hooks/use-prompt-actions/rewind.ts:422-445`, clone 65ad529). */
   if (interrotti) { const parola = tn('chat.activity.interruptedOne', 'chat.activity.interruptedMany', interrotti); parti.push(parola); partiBrevi.push(parola); }
   if (nonEseguiti) { const parola = tn('chat.activity.notRunOne', 'chat.activity.notRunMany', nonEseguiti); parti.push(parola); partiBrevi.push(parola); }
+  if (doppioni) { const parola = tn('chat.activity.duplicateOne', 'chat.activity.duplicateMany', doppioni); parti.push(parola); partiBrevi.push(parola); }
   const erroriParti = ordinaSpecie(falliti).map((s) => fraseSpecie(s, falliti.get(s), { fallito: true }));
   const nFalliti = [...falliti.values()].reduce((a, b) => a + b, 0);
   return { parti, partiBrevi, erroriParti, nFalliti, bersagli, diff: conDiff ? { piu, meno } : null, inCorso };
@@ -276,7 +279,7 @@ export function testoDelSegmento(voci) {
     }
     const a = v.argomenti || {};
     const verbo = v.nome === 'shell' && a.descrizione ? String(a.descrizione) : verboAttrezzo(v.nome)[v.stato === 'in-corso' || v.stato === 'interrotto' ? 1 : 0]; // 26/09: interrotta = l'azione che si è fermata, non «Letto»
-    const esito = v.stato === 'fallito' ? ` (${t('chat.activity.state.failed')})` : v.stato === 'interrotto' ? ` (${t('chat.activity.state.interrupted')})` : v.stato === 'non-eseguito' ? ` (${t('chat.activity.state.notRun')})` : v.stato === 'in-corso' ? ` (${t('chat.activity.state.running')})` : v.stato === 'corretta' ? ` (${t('chat.activity.state.rejectedAndRephrased')})` : ''; // 27/09, decisione 47
+    const esito = v.stato === 'fallito' ? ` (${t('chat.activity.state.failed')})` : v.stato === 'interrotto' ? ` (${t('chat.activity.state.interrupted')})` : v.stato === 'non-eseguito' ? ` (${t('chat.activity.state.notRun')})` : v.stato === 'doppione' ? ` (${t('chat.activity.state.duplicate')})` : v.stato === 'in-corso' ? ` (${t('chat.activity.state.running')})` : v.stato === 'corretta' ? ` (${t('chat.activity.state.rejectedAndRephrased')})` : ''; // 27/09, decisione 47
     righe.push(`- ${verbo} ${bersaglioAttrezzo(v.nome, a)}${esito}`.replace(/\s+\(/, ' (').trimEnd());
   }
   return righe.join('\n');
@@ -295,7 +298,7 @@ function normalizzaVoce(elemento, dati) {
   const info = dati.info;
   /* 27/09, decisione owner 47: `corretta` — una domanda respinta per la forma e riformulata dal modello. */
   const stato = info.stato === 'running' ? 'in-corso' : info.stato === 'error' ? 'fallito' : info.stato === 'interrotto' ? 'interrotto'
-    : info.stato === 'non-eseguito' ? 'non-eseguito' : info.stato === 'corretta' ? 'corretta' : 'riuscito';
+    : info.stato === 'non-eseguito' ? 'non-eseguito' : info.stato === 'corretta' ? 'corretta' : info.stato === 'doppione' ? 'doppione' : 'riuscito';
   let diff = null;
   const badge = elemento.querySelector(':scope > .tool-note-diff');
   if (badge) {

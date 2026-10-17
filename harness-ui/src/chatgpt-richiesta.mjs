@@ -113,7 +113,32 @@ const STATO_PER_CODICE = Object.freeze({ subscription_sharing_usage_limit_exceed
  * com'è (l'elenco dei modelli è una GET). Gli errori HTTP del servizio tornano intatti: stato, corpo e request id servono a chi
  * li spiega alla persona.
  */
-export function creaFetchDelPiano(fetchDiRete = globalThis.fetch) {
+/*
+ * ⛔ CLI 0.6.6 (bugfixer, 15/10/2026) — L'AFFINITÀ DELLA CACHE SUL PIANO STA IN UN'INTESTAZIONE. Dal vivo, nel giro di una figlia
+ *   col piano: `cached_tokens` 0 su ~512 mila token d'ingresso, con la nostra `prompt_cache_key` già nel corpo e stabile nel giro.
+ *   Codex (clone `TALOS-RICERCHE/concorrenti/codex-2026-09-24`, letto il 15/10/2026):
+ *   · `codex-rs/core/src/client.rs:591-599`: «ChatGPT derives cache affinity from the Responses session-id header»;
+ *     `responses_session_id` = la chiave della cache per la radice, l'id della sessione dell'agente per un agente non radice;
+ *   · `codex-rs/core/src/client.rs:577-589`: la chiave della cache = l'override, poi `"{source}:{parent_thread_id}"`, poi l'id di
+ *     sessione — quindi anche Codex manda come `session-id` valori che non sono UUID (`guardian-v2:{thread_id}`);
+ *   · `codex-rs/codex-api/src/requests/headers.rs:5-14`: le intestazioni sono `session-id` e `thread-id`, insieme.
+ *   Qui il trasporto NON riceve l'id della sessione TALOS (una `fetch` per fornitore, condivisa): per radice e figlie vale la chiave
+ *   della cache, che è già diversa per ogni conversazione e per ogni figlia (il prefisso arriva fino al primo messaggio, cioè al
+ *   compito della figlia). Dichiarato nel rapporto `RAPPORTO-CURE-CLI-066-2026-10-15.md`.
+ * ⛔ Un'intestazione messa da chi chiama resta sua. La misura sul piano la fa la CLI col sì dell'owner: qui nessun giro col piano.
+ */
+export function intestazioniDiSessione(intestazioniDiPrima, chiave) {
+  const intestazioni = new Headers(intestazioniDiPrima ?? {});
+  if (typeof chiave === 'string' && chiave !== '') {
+    if (!intestazioni.has('session-id')) intestazioni.set('session-id', chiave);
+    if (!intestazioni.has('thread-id')) intestazioni.set('thread-id', chiave);
+  }
+  return intestazioni;
+}
+
+/* `onRisposta(intestazioni, stato)`: ogni risposta del piano, riuscita o no, passa di qui — è dove si leggono i limiti d'uso che il
+   servizio dichiara (`chatgpt-limiti.mjs`). Un ascoltatore che lancia non ferma la richiesta. */
+export function creaFetchDelPiano(fetchDiRete = globalThis.fetch, { onRisposta = null } = {}) {
   return async function fetchDelPiano(indirizzo, opzioni = {}) {
     const url = String(typeof indirizzo === 'string' || indirizzo instanceof URL ? indirizzo : indirizzo?.url ?? '');
     const metodo = String(opzioni.method ?? 'GET').toUpperCase();
@@ -121,7 +146,8 @@ export function creaFetchDelPiano(fetchDiRete = globalThis.fetch) {
     let originale;
     try { originale = JSON.parse(opzioni.body); } catch { return fetchDiRete(indirizzo, opzioni); }
     const { corpo, volevaIlFlusso } = adattaCorpoAlPiano(originale);
-    const risposta = await fetchDiRete(indirizzo, { ...opzioni, body: JSON.stringify(corpo) });
+    const risposta = await fetchDiRete(indirizzo, { ...opzioni, headers: intestazioniDiSessione(opzioni.headers, corpo.prompt_cache_key), body: JSON.stringify(corpo) });
+    if (typeof onRisposta === 'function') { try { onRisposta(risposta.headers, risposta.status); } catch { /* la lettura dei limiti è un di più */ } }
     if (volevaIlFlusso || !risposta.ok) return risposta;
     const intestazioni = new Headers(risposta.headers);
     intestazioni.set('content-type', 'application/json');
@@ -161,7 +187,14 @@ export function erroreDelPiano(guasto) {
   const stato = Number.isInteger(guasto?.statusCode) ? guasto.statusCode : Number.isInteger(guasto?.status) ? guasto.status : Number.isInteger(guasto?.stato) ? guasto.stato : null;
   let corpo = guasto?.data ?? null;
   if (!corpo && typeof guasto?.responseBody === 'string') { try { corpo = JSON.parse(guasto.responseBody); } catch { corpo = null; } }
-  const codiceOpenAi = typeof corpo?.error?.code === 'string' ? corpo.error.code : null;
+  /* L3-16 (15/10/2026, dal mobile): un rifiuto che il servizio manda DENTRO un 200, come primo evento del flusso, arriva qui col corpo
+     del FOTOGRAMMA, non con `{ error }`: `{ type: 'error', code, message }` o `{ type: 'response.failed', response: { error } }`
+     (l'SDK lo lancia prima di ogni uscita con `responseBody: JSON.stringify(frame)` e, per un codice che non conosce, stato 500:
+     `@ai-sdk/openai` `createOpenAIStreamError`/`getStatusCode`). Senza leggere quelle due forme il limite d'uso diventava un 500
+     qualunque: il kernel lo ritentava dieci volte in 2,7 minuti contro lo stesso limite, e il giro finiva con «CHATGPT_ERRORE».
+     Codex legge le stesse forme (`codex-api/src/sse/responses.rs:418-485`, `response.failed` → quota e uso, non ritentabili). */
+  const erroreDelCorpo = corpo?.error ?? corpo?.response?.error ?? (corpo?.type === 'error' ? corpo : null);
+  const codiceOpenAi = typeof erroreDelCorpo?.code === 'string' ? erroreDelCorpo.code : null;
   // su questa strada un 429 è il limite d'uso del piano (errors-and-recovery: l'unico codice 429 del piano)
   const noto = ERRORI_DEL_PIANO[codiceOpenAi] ?? (stato === 429 ? ERRORI_DEL_PIANO.subscription_sharing_usage_limit_exceeded : stato === 401 ? ERRORI_DEL_PIANO.subscription_sharing_invalid_user
     : stato === 403 ? ERRORI_DEL_PIANO.subscription_sharing_user_not_eligible
@@ -170,7 +203,7 @@ export function erroreDelPiano(guasto) {
   const idRichiesta = intestazioni ? (intestazioni['x-oai-request-id'] ?? intestazioni['x-request-id'] ?? null) : null;
   return Object.assign(new Error(noto?.messaggio ?? 'The request to the ChatGPT plan did not complete.'), {
     code: noto?.code ?? 'CHATGPT_ERRORE', transitorio: noto ? noto.transitorio : (stato === null || stato >= 500),
-    stato, codiceOpenAi, parametro: typeof corpo?.error?.param === 'string' ? corpo.error.param : null, idRichiesta, fornitore: 'chatgpt',
+    stato, codiceOpenAi, parametro: typeof erroreDelCorpo?.param === 'string' ? erroreDelCorpo.param : null, idRichiesta, fornitore: 'chatgpt',
     ...(intestazioni ? { intestazioni } : {}),
   });
 }

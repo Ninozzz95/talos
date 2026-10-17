@@ -25,12 +25,17 @@ import { isAbsolute, resolve } from 'node:path';
 
 import { isPathInside } from './path-policy.mjs';
 import { createWorkspaceDisk } from './workspace-disk.mjs';
+import { FRASI_DEI_MOTIVI_DEI_FILE } from './motivi-dei-file.mjs';
 
+/** 16/10/2026: il rifiuto porta il suo MOTIVO (`motivi-dei-file.mjs`), e la frase è quella della tabella. Un argomento che non è un
+    motivo resta la frase di prima, senza motivo (chi la costruiva così, prove comprese, non perde il messaggio). */
 export class WorkspaceTreeError extends Error {
-  constructor(message) {
-    super(message);
+  constructor(motivoOFrase) {
+    const motivo = typeof motivoOFrase === 'string' && Object.hasOwn(FRASI_DEI_MOTIVI_DEI_FILE, motivoOFrase) ? motivoOFrase : null;
+    super(motivo ? FRASI_DEI_MOTIVI_DEI_FILE[motivo] : String(motivoOFrase ?? ''));
     this.name = 'WorkspaceTreeError';
     this.code = 'QUERY_INVALID';
+    if (motivo) this.reason = motivo;
   }
 }
 
@@ -44,7 +49,7 @@ export class WorkspaceTreeError extends Error {
  */
 export async function leggiAlberoWorkspace({ cartella, percorso = '' }, { discoNodeFn } = {}) {
   if (typeof percorso !== 'string' || percorso.includes('\0') || isAbsolute(percorso)) {
-    throw new WorkspaceTreeError('Invalid path');
+    throw new WorkspaceTreeError('path-invalid');
   }
 
   let voci;
@@ -52,13 +57,14 @@ export async function leggiAlberoWorkspace({ cartella, percorso = '' }, { discoN
     const radiceReale = realpathSync(cartella);
     const candidatoReale = percorso === '' ? radiceReale : realpathSync(resolve(cartella, percorso));
     if (!isPathInside(radiceReale, candidatoReale)) {
-      throw new WorkspaceTreeError('Path outside session folder');
+      throw new WorkspaceTreeError('path-outside-session');
     }
     const disco = (discoNodeFn ?? (({ radice }) => createWorkspaceDisk({ rootDir: radice })) )({ radice: cartella });
     voci = await disco.elenca(percorso);
   } catch (errore) {
     if (errore instanceof WorkspaceTreeError) throw errore;
-    throw new WorkspaceTreeError('Path not readable');
+    // 16/10/2026 (mobile): una cartella che non c'è non è «illeggibile»: lo dice
+    throw new WorkspaceTreeError(errore?.code === 'ENOENT' ? 'folder-not-found' : 'path-not-readable');
   }
 
   return voci

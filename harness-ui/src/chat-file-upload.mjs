@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { normalizzaSottocartella, WorkspaceFileError } from './workspace-files.mjs';
+import { FRASI_DEI_MOTIVI_DEI_FILE } from './motivi-dei-file.mjs';
 import { ambienteSenzaVariabiliDelServer } from './ambiente-solo-server.mjs';
 
 export const MAX_CHAT_FILE_BYTES = 25 * 1024 * 1024;
@@ -17,15 +18,18 @@ const COSTRUISCI_HELPER = fileURLToPath(new URL('../scripts/build-chat-upload-he
 const ABORT_FRAME = 0xffffffff;
 const ERROR_CODES = new Set(['QUERY_INVALID', 'FOLDER_INVALID', 'FILE_WRITE_FAILED', 'FILE_EXISTS', 'PAYLOAD_LIMIT', 'UPLOAD_ABORTED']);
 
+/* MOTIVI-REV-03 (bugfixer, 16/10/2026): il nome di un allegato non valido usciva «Invalid query»; ora col suo motivo, come l'albero. */
+const nomeNonValido = () => new WorkspaceFileError(FRASI_DEI_MOTIVI_DEI_FILE['file-name-invalid'], 'QUERY_INVALID', { reason: 'file-name-invalid' });
+
 function checkedName(name) {
   if (typeof name !== 'string' || !name || name.length > 240 || Buffer.byteLength(name, 'utf8') > 255
     || name.includes('/') || name.includes('\\')) {
-    throw new WorkspaceFileError('Invalid file name', 'QUERY_INVALID');
+    throw nomeNonValido();
   }
   try {
     if (normalizzaSottocartella(name) !== name) throw new Error('not one file name');
   } catch {
-    throw new WorkspaceFileError('Invalid file name', 'QUERY_INVALID');
+    throw nomeNonValido();
   }
   return name;
 }

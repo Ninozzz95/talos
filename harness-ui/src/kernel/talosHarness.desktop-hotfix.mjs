@@ -18,6 +18,7 @@
  * This file is selected only by desktop launchers. Mobile keeps its own
  * runtime wiring and the canonical kernel remains the benchmark source.
  */
+import { createHash } from 'node:crypto'; // 15/10/2026: l'impronta del prefisso coperto da un riassunto preparato in anticipo
 import { lstatSync, realpathSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { isAbsolute, join, relative, resolve } from 'node:path';
@@ -396,6 +397,14 @@ function wrapContextHooks(original, {
    * LEDGER append-only, coda pendente, pericoli aperti. `cartella` (la cartella della sessione) resta la fonte
    * del `git log` locale; i file toccati vengono dall'indice meccanico di ogni compattazione. */
   fontiRicarica = null,
+  /* ⭐ 15/10/2026 — un riassunto preparato dal registro a fine del giro prima e non ancora usato (`{ record, impronta, base }`). */
+  compattazionePronta = null,
+  /* owner 15/10/2026 notte, «passa al giro dopo»: il riassunto che il giro prima stava ancora preparando (una promessa). Diventa il
+     riassunto IN VOLO di questo giro — niente secondo riassunto pagato — e, quando arriva, quello PRONTO se l'impronta regge. */
+  compattazioneInArrivo = null,
+  /* ⭐ 15/10/2026 — la compattazione istantanea è una scelta dell'OSPITE (il desktop la accende dal registro): spenta, tutto resta
+     com'era — la CLI passa da questo stesso adapter, ha le sue decisioni sulla compattazione e il suo avanzamento in streaming. */
+  istantanea = false,
 } = {}) {
   let compacted = compattazione.eRecordValido(recordIniziale) ? recordIniziale : null;
   let compactions = 0;
@@ -422,6 +431,7 @@ function wrapContextHooks(original, {
   let fallimentiRiassuntoConsecutivi = 0;
   /* La richiesta che `prepare` ha appena preparato: l'array (mutabile in posto), il grezzo e gli effimeri. */
   let richiestaCorrente = null;
+  let richiestaSenzaAttesa = null; // col motore: la richiesta mandata senza aspettare il riassunto in volo (ritentativo qui sotto)
   /* Owner 12/10/2026: il ripiego dal motore del contesto si DICE una volta per turno, non a ogni richiesta. */
   let ripiegoDetto = false;
   const reasoningRiassunto = compattazione.reasoningPerRiassunto(reasoning);
@@ -457,7 +467,9 @@ function wrapContextHooks(original, {
    */
   const progresso = (giro, valore) => { if (progressoAcceso) emitOnGiro?.({ giro, tipo: 'compattazione-progresso', ...valore }); };
 
-  const chiediRiassunto = async (messaggiRichiesta, maxOutputTokens, contatore = null) => {
+  /* `secondaria`: il riassunto preparato IN SOTTOFONDO mentre il giro va avanti è una seconda chiamata della sessione in contemporanea —
+     l'involucro dei fornitori (runtime-owner-adapter.mjs, `eseguiConFallback`) la fa senza il suo guardiano «una per volta» */
+  const chiediRiassunto = async (messaggiRichiesta, maxOutputTokens, contatore = null, { secondaria = false } = {}) => {
     const esito = await kernel.chiamaConRitenta({
       modello,
       chiave,
@@ -468,6 +480,7 @@ function wrapContextHooks(original, {
       ...(fetchDiRete ? { fetchDiRete } : {}),
       ...(segnaleStop ? { segnaleStop } : {}),
       ...(contatore ? { onDelta: contatore.onDelta, accettaVuota: true } : {}),
+      ...(secondaria ? { secondaria: true } : {}),
     });
     usageAdd(extraUsage, esito.usage);
     contatore?.chiudi(esito.usage);
@@ -478,7 +491,7 @@ function wrapContextHooks(original, {
    * Una compattazione intera: divide, chiede il riassunto (un ritentativo immediato), costruisce proiezione e
    * record. Ritorna la proiezione nuova, o `null` se non c'è niente da riassumere o il riassuntore ha fallito.
    */
-  const compattaOra = async (rawMessages, projected, { requestIndex, motivo, tokenMisurati, misura, soglia }) => {
+  const preparaCompattazione = async (rawMessages, projected, { requestIndex, motivo, tokenMisurati, misura, soglia, inSottofondo = false }) => {
     const divise = compattazione.dividiPerCompattazione(projected);
     /*
      * ⛔ Owner 26/09/2026, «Come Hermes»: la coda letterale sotto pressione si accorcia (inizio + fine degli esiti lunghi,
@@ -487,15 +500,19 @@ function wrapContextHooks(original, {
      */
     const pressione = compattazione.riduciCodaSottoPressione(divise.coda, { budgetToken: compattazione.budgetCoda(soglie.soglia) });
     const parti = { ...divise, coda: pressione.coda };
-    ultimaCodaAlMinimo = pressione.alMinimo;
-    ultimoPavimentoStimato = kernel.stimaTokenConversazione([...parti.testa, ...parti.richiesteLetterali, ...parti.coda]);
+    /* 15/10/2026: questi numeri giudicano la compattazione APPLICATA (verdetto sul numero vero): si portano nel risultato e li fissa
+       `applicaCompattazione`, così un riassunto preparato in anticipo e mai usato non sposta il giudizio di quello in uso. */
+    const pavimento = kernel.stimaTokenConversazione([...parti.testa, ...parti.richiesteLetterali, ...parti.coda]);
+    const misureDelPavimento = { codaAlMinimo: pressione.alMinimo, pavimento };
     if (!parti.tagliabile) {
       /* Niente da riassumere e la coda già dentro il suo tetto: nessun tentativo, nessun evento, nessuna chiamata. */
       if (pressione.ridotti === 0) return null;
       /* Niente da riassumere ma la coda si è accorciata: la proiezione nuova è deterministica, senza il riassuntore
        * (Hermes `_FEASIBILITY_SKIP_MIDDLE_FRACTION`, `:1124-1127`: «dropping alone suffices»). */
-      emitOnGiro?.({ giro: requestIndex, tipo: 'compattazione-inizio', tokenMisurati, soglia, motivo });
-      progresso(requestIndex, { fase: 'lettura', messaggi: projected.length, tokenPrima: tokenMisurati, motivo });
+      if (!inSottofondo) {
+        emitOnGiro?.({ giro: requestIndex, tipo: 'compattazione-inizio', tokenMisurati, soglia, motivo });
+        progresso(requestIndex, { fase: 'lettura', messaggi: projected.length, tokenPrima: tokenMisurati, motivo });
+      }
       const proiezioneSolaCoda = [...parti.testa, ...parti.mezzo, ...parti.coda];
       const recordSolaCoda = compattazione.creaRecord({
         coveredThrough: rawMessages.length,
@@ -508,22 +525,15 @@ function wrapContextHooks(original, {
         indice: compacted?.indice ?? null,
       });
       /* Nessun riassunto da contare: dalla lettura si passa alla sostituzione (le fasi vere, mai finte). */
-      progresso(requestIndex, { fase: 'sostituzione', tokenDopo: recordSolaCoda.tokenDopo ?? null, motivo });
-      compacted = recordSolaCoda;
-      ultimaProiezioneStimata = recordSolaCoda.tokenDopo ?? 0;
-      records.push(recordSolaCoda);
-      compactions += 1;
-      ancora = null;
-      attendeVerdetto = true;
-      emitOnGiro?.({ giro: requestIndex, tipo: 'compattazione-fine', compattato: true, record: recordSolaCoda, soloCoda: true });
-      return proiezioneSolaCoda;
+      return { proiezione: proiezioneSolaCoda, record: recordSolaCoda, soloCoda: true, ...misureDelPavimento, budget: null };
     }
-    emitOnGiro?.({ giro: requestIndex, tipo: 'compattazione-inizio', tokenMisurati, soglia, motivo });
-    progresso(requestIndex, { fase: 'lettura', messaggi: projected.length, tokenPrima: tokenMisurati, motivo });
+    if (!inSottofondo) {
+      emitOnGiro?.({ giro: requestIndex, tipo: 'compattazione-inizio', tokenMisurati, soglia, motivo });
+      progresso(requestIndex, { fase: 'lettura', messaggi: projected.length, tokenPrima: tokenMisurati, motivo });
+    }
     const budget = compattazione.budgetRiassunto({
       tokenDaRiassumere: kernel.stimaTokenConversazione(parti.mezzo), finestraToken: soglie.finestraToken, soglia: soglie.soglia,
     });
-    ultimoBudgetRiassunto = budget.maxOutputTokens;
     const richiesta = compattazione.costruisciRichiestaDiRiassunto({ ...parti, paroleMassime: budget.paroleMassime });
     /* ⛔ BUG-5 (05/10/2026): l'INGRESSO del riassuntore si LIMITA (testa+coda, marcatore in mezzo) — 213.785
      *   token di ingresso (sessione vera b1e7382a) erano la causa dei tre riassunti «troncato» su tre giri:
@@ -540,10 +550,10 @@ function wrapContextHooks(original, {
        *   chiede (credito, chiave o fornitore giù: un secondo giro identico non guarisce). Il contatore si
        *   conta a TENTATIVO, dentro il ciclo, così il tetto vale anche a cavallo di due compattazioni. */
       if (fallimentiRiassuntoConsecutivi >= compattazione.FALLIMENTI_RIASSUNTO_CONSECUTIVI_MASSIMI) break;
-      const contatore = progressoAcceso
+      const contatore = progressoAcceso && !inSottofondo
         ? compattazione.creaContatoreRiassunto({ emetti: (valore) => progresso(requestIndex, { ...valore, motivo }), tentativo: tentativo + 1 })
         : null;
-      try { esito = await chiediRiassunto(richiestaLimitata, budget.maxOutputTokens, contatore); }
+      try { esito = await chiediRiassunto(richiestaLimitata, budget.maxOutputTokens, contatore, { secondaria: inSottofondo }); }
       catch (errore) {
         if (segnaleStop?.aborted) throw errore;
         /* ⛔ BUG-5 (05/10/2026): l'errore NON si butta più — la sua classe va all'evento (credito? rete?
@@ -565,7 +575,7 @@ function wrapContextHooks(original, {
       /* ⛔ BUG-5 (05/10/2026): classe e contatore CONSECUTIVO sull'evento; un riassunto riuscito ha già azzerato. */
       /* `interrottaIn`: il passo dove si è fermata (lane CLI, 03/10/2026). Non `fase`: nell'evento `talos.compattazione`
          `fase` dice già inizio/fine. */
-      emitOnGiro?.({ giro: requestIndex, tipo: 'compattazione-fine', compattato: false, motivo: esito.motivo, classe: esito.classe ?? esito.motivo, fallimentiConsecutivi: fallimentiRiassuntoConsecutivi, interrottaIn: 'riassunto' });
+      emitOnGiro?.({ giro: requestIndex, tipo: inSottofondo ? 'compattazione-preparata' : 'compattazione-fine', compattato: false, motivo: esito.motivo, classe: esito.classe ?? esito.motivo, fallimentiConsecutivi: fallimentiRiassuntoConsecutivi, interrottaIn: 'riassunto' });
       return null;
     }
     const indice = compattazione.indiceMeccanico(parti.mezzo, { precedente: compacted?.indice ?? null });
@@ -603,15 +613,128 @@ function wrapContextHooks(original, {
       modello,
       indice,
     });
-    progresso(requestIndex, { fase: 'sostituzione', tokenDopo: record.tokenDopo ?? null, motivo });
+    return { proiezione, record, soloCoda: false, ...misureDelPavimento, budget: budget.maxOutputTokens };
+  };
+
+  /** Applica un riassunto (appena fatto o preparato prima): da qui il giro manda la proiezione nuova. */
+  const applicaCompattazione = (preparata, { requestIndex, motivo, istantanea = false }) => {
+    const { record } = preparata;
+    ultimaCodaAlMinimo = preparata.codaAlMinimo;
+    ultimoPavimentoStimato = preparata.pavimento;
+    if (preparata.budget) ultimoBudgetRiassunto = preparata.budget;
+    if (!istantanea) progresso(requestIndex, { fase: 'sostituzione', tokenDopo: record.tokenDopo ?? null, motivo });
     compacted = record;
     ultimaProiezioneStimata = record.tokenDopo ?? 0;
     records.push(record);
     compactions += 1;
     ancora = null;
     attendeVerdetto = true;
-    emitOnGiro?.({ giro: requestIndex, tipo: 'compattazione-fine', compattato: true, record });
-    return proiezione;
+    emitOnGiro?.({ giro: requestIndex, tipo: 'compattazione-fine', compattato: true, record, ...(preparata.soloCoda ? { soloCoda: true } : {}), ...(istantanea ? { istantanea: true, motivo } : {}) });
+    return preparata.proiezione;
+  };
+
+  /** Una compattazione intera, adesso (emergenza, overflow): prepara e applica. `null` se non c'è niente o il riassuntore ha fallito. */
+  const compattaOra = async (rawMessages, projected, opzioni) => {
+    const preparata = await preparaCompattazione(rawMessages, projected, opzioni);
+    return preparata ? applicaCompattazione(preparata, opzioni) : null;
+  };
+
+  /*
+   * ⭐⭐ 15/10/2026 — LA COMPATTAZIONE ISTANTANEA (owner: «i minuti di compattazione non devono esistere»; quattro decisioni nella
+   *   ricerca `.claude/RICERCA-COMPATTAZIONE-ISTANTANEA-2026-10-15.md` §7).
+   *
+   * Prima: alla soglia `prepare` ASPETTAVA il riassunto prima di mandare la richiesta, e dentro un giro lungo erano minuti fermi.
+   * Ora, come Codex (`core/src/session/async_compaction.rs`, «Holds the current speculative request, polled at checkpoints or awaited
+   *   when compaction is due»; soglia 65%, `config/mod.rs:225`) e Claude Code (`compact_precomputed`, all'80% della finestra):
+   *   - dall'80% della soglia (`soglie.warningTokens`, decisione dell'owner) il riassunto si PREPARA in sottofondo: uno solo per volta,
+   *     su una copia della storia, e la richiesta parte subito come prima;
+   *   - alla soglia un riassunto pronto e VALIDO si applica all'istante: il record vale per il prefisso che ha coperto
+   *     (`applicaRecord` = proiezione del record + ciò che è arrivato dopo, alla lettera), quindi basta che quel prefisso sia
+   *     intatto (impronta) e che la storia non sia stata compattata nel frattempo (`base`);
+   *   - sotto l'emergenza NON si aspetta mai: senza un riassunto pronto si va avanti col contesto com'è, e quello in preparazione
+   *     arriverà alla richiesta dopo; all'emergenza si aspetta quello in corso e, solo se non c'è o non vale, si fa come prima.
+   * ⛔ Un riassunto preparato e mai usato si paga (Codex lo dice nel suo codice: «Discarded requests still charge completed
+   *   usage»): l'owner l'ha accettato, e il banco conta quelli fatti contro quelli usati.
+   */
+  const improntaDelPrefisso = (messaggi, fino) => {
+    const h = createHash('sha256');
+    for (let i = 0; i < fino; i += 1) h.update(JSON.stringify(messaggi[i] ?? null)).update('\u0000');
+    return h.digest('hex');
+  };
+  const chiaveBase = () => (compacted ? `${compacted.at ?? ''}|${compacted.coveredThrough ?? ''}` : 'nessuna');
+  let pronta = compattazionePronta && compattazione.eRecordValido(compattazionePronta.record) && typeof compattazionePronta.impronta === 'string'
+    ? { ...compattazionePronta, proiezione: compattazionePronta.record.riassunto, soloCoda: compattazionePronta.soloCoda === true } : null;
+  let inVolo = null;
+  if (!pronta && compattazioneInArrivo && typeof compattazioneInArrivo.then === 'function') {
+    const promessa = Promise.resolve(compattazioneInArrivo)
+      .then((arrivata) => {
+        if (pronta || !arrivata || !compattazione.eRecordValido(arrivata.record) || typeof arrivata.impronta !== 'string') return null;
+        pronta = { ...arrivata, proiezione: arrivata.record.riassunto, soloCoda: arrivata.soloCoda === true };
+        return pronta;
+      })
+      .catch(() => null)
+      .finally(() => { if (inVolo?.promessa === promessa) inVolo = null; });
+    inVolo = { promessa };
+  }
+  let preparate = 0;
+  let usate = 0;
+  /* 16/10/2026 — il PERCHÉ un riassunto pronto non vale, per il giornale: il giro vero col tetto a 60.000 ha pagato due riassunti e
+     non ne ha usato nessuno, e niente diceva perché. `null` = vale. */
+  const perchéNonVale = (rawMessages) => {
+    if (!pronta) return 'none';
+    if (pronta.base !== chiaveBase()) return 'base-changed';
+    if (rawMessages.length < pronta.record.coveredThrough) return 'history-shorter';
+    if (improntaDelPrefisso(rawMessages, pronta.record.coveredThrough) !== pronta.impronta) return 'prefix-changed';
+    return null;
+  };
+  const prontaValida = (rawMessages) => perchéNonVale(rawMessages) === null;
+  let scartoDetto = null; // una riga sola per riassunto pronto: il giornale non si riempie a ogni richiesta
+  /*
+   * Lo scambio che un riassunto pronto darebbe ADESSO: la sua proiezione più ciò che è arrivato dopo, con gli esiti lunghi accorciati
+   *   come nella coda di una compattazione (`riduciCodaSottoPressione`) — misurato il 15/10 col banco della coda sotto pressione: senza,
+   *   due letture da 15.000 token arrivate dopo il riassunto tenevano la richiesta sopra la soglia, due verdetti «inefficace»
+   *   spegnevano la compattazione e la richiesta arrivava a 81.315 token con un tetto di 20.000. Il record nuovo copre la storia
+   *   INTERA di adesso (`coveredThrough` = lunghezza grezza), come un record «solo coda».
+   * ⇒ Uno scambio che non riporta sotto la soglia non si fa: il riassunto è troppo vecchio (`null`).
+   */
+  const scambioPossibile = (rawMessages, { token, misura }) => {
+    if (!prontaValida(rawMessages)) return null;
+    const coda = rawMessages.slice(pronta.record.coveredThrough);
+    const ridotta = coda.length ? compattazione.riduciCodaSottoPressione(coda, { budgetToken: compattazione.budgetCoda(soglie.soglia) }).coda : [];
+    const proiezione = [...pronta.record.riassunto, ...ridotta];
+    const tokenDopo = kernel.stimaTokenConversazione(proiezione);
+    if (tokenDopo >= soglie.soglia) { pronta.sopraSoglia = tokenDopo; return null; }
+    const record = compattazione.creaRecord({
+      coveredThrough: rawMessages.length, riassunto: proiezione, tokenPrima: token, tokenDopo, misura,
+      at: new Date().toISOString(), modello, indice: pronta.record.indice ?? null,
+    });
+    return { ...pronta, record, proiezione };
+  };
+  const usaPronta = (scambio, { requestIndex, motivo }) => {
+    pronta = null;
+    usate += 1;
+    return applicaCompattazione(scambio, { requestIndex, motivo, istantanea: true });
+  };
+  const avviaPreparazione = (rawMessages, projected, { requestIndex, tokenMisurati, misura }) => {
+    if (inVolo || segnaleStop?.aborted) return;
+    /* un riassunto pronto che riporterebbe sotto l'80% della soglia basta; uno più vecchio si rinnova */
+    const scambio = scambioPossibile(rawMessages, { token: tokenMisurati, misura });
+    if (scambio && scambio.record.tokenDopo < soglie.warningTokens) return;
+    const copia = rawMessages.slice();
+    const base = chiaveBase();
+    const impronta = improntaDelPrefisso(copia, copia.length);
+    preparate += 1;
+    emitOnGiro?.({ giro: requestIndex, tipo: 'compattazione-preparata', fase: 'inizio', motivo: 'precalcolo', tokenMisurati });
+    const promessa = preparaCompattazione(copia, projected.slice(), { requestIndex, motivo: 'precalcolo', tokenMisurati, misura, soglia: soglie.soglia, inSottofondo: true })
+      .then((preparata) => {
+        if (!preparata || base !== chiaveBase()) return null;
+        pronta = { ...preparata, impronta, base };
+        emitOnGiro?.({ giro: requestIndex, tipo: 'compattazione-preparata', fase: 'pronta', tokenPrima: preparata.record.tokenPrima ?? null, tokenDopo: preparata.record.tokenDopo ?? null });
+        return pronta;
+      })
+      .catch(() => null)
+      .finally(() => { if (inVolo?.promessa === promessa) inVolo = null; });
+    inVolo = { promessa };
   };
 
   const maybeCompactLegacy = async (rawMessages, requestIndex) => {
@@ -636,7 +759,36 @@ function wrapContextHooks(original, {
        */
       emergenzaEsaurita: tentativiFallitiNelTurno >= 2 || compattazioniInefficaci >= 2 || inefficaciTotali >= INEFFICACI_TOTALI_MASSIME,
     });
-    if (!decisione.scatta) return projected;
+    if (!istantanea) {
+      if (!decisione.scatta) return projected;
+      const subito = await compattaOra(rawMessages, projected, {
+        requestIndex, motivo: decisione.motivo, tokenMisurati: token, misura, soglia: decisione.motivo === 'emergenza' ? soglie.emergenza : soglie.soglia,
+      });
+      return subito ?? projected;
+    }
+    const tentativiEsauriti = tentativiFallitiNelTurno >= 1 || compattazioniInefficaci >= 2 || inefficaciTotali >= INEFFICACI_TOTALI_MASSIME;
+    /* ⭐ 15/10/2026: alla soglia (o all'emergenza) un riassunto pronto che riporta sotto la soglia si applica all'istante */
+    const scambio = decisione.scatta ? scambioPossibile(rawMessages, { token, misura }) : null;
+    if (scambio) return usaPronta(scambio, { requestIndex, motivo: decisione.motivo });
+    if (decisione.scatta && pronta && scartoDetto !== pronta) {
+      scartoDetto = pronta;
+      const perche = perchéNonVale(rawMessages) ?? (Number.isFinite(pronta.sopraSoglia) ? 'still-over-threshold' : 'unknown');
+      emitOnGiro?.({ giro: requestIndex, tipo: 'compattazione-preparata', fase: 'scartata', motivo: perche, tokenMisurati: token,
+        ...(Number.isFinite(pronta.sopraSoglia) ? { tokenDopo: pronta.sopraSoglia } : {}) });
+    }
+    if (!decisione.scatta || decisione.motivo === 'soglia') {
+      /* dall'80% della soglia si prepara in sottofondo; sotto l'emergenza la richiesta non aspetta mai */
+      if (token >= soglie.warningTokens && !tentativiEsauriti) avviaPreparazione(rawMessages, projected, { requestIndex, tokenMisurati: token, misura });
+      return projected;
+    }
+    /* emergenza: si aspetta il riassunto già in preparazione; se c'è e vale si usa, altrimenti si fa come prima */
+    if (inVolo) {
+      await inVolo.promessa;
+      /* IST-REV-03 (bugfixer): uno Stop arrivato mentre si aspettava non apre una compattazione nuova — restava un «inizio» senza «fine» */
+      if (segnaleStop?.aborted) return projected;
+      const arrivato = scambioPossibile(rawMessages, { token, misura });
+      if (arrivato) return usaPronta(arrivato, { requestIndex, motivo: decisione.motivo });
+    }
     const proiezione = await compattaOra(rawMessages, projected, {
       requestIndex, motivo: decisione.motivo, tokenMisurati: token, misura, soglia: decisione.motivo === 'emergenza' ? soglie.emergenza : soglie.soglia,
     });
@@ -670,19 +822,58 @@ function wrapContextHooks(original, {
     }
   };
 
+  /*
+   * ⛔ 13/10/2026 (bugfixer, review avversaria di ac8f5a362) — UN `system` IN CODA NON È PER FORZA EFFIMERO.
+   *   Il difetto, letto nel giornale della sessione 36289618 e riprodotto (`tests/archivio-coda-di-sistema.test.mjs`): quando
+   *   il preambolo del progetto cambia (modello, permesso, mappa, AGENTS.md) `agent-service.mjs` appende l'aggiornamento come
+   *   `system` IN CODA alla storia, dopo il messaggio della persona. È storia vera: il kernel la archivia con
+   *   `capture('start')`. Ma qui `staccaEffimeri` staccava OGNI `system` in coda: al motore arrivava una storia più corta
+   *   dell'archivio ⇒ `CTX_HISTORY_DIVERGED` alla richiesta 0 di quel giro (7 giri su 7 nel trascritto), e con la riparazione
+   *   automatica l'archivio intero, versioni comprese, andava da parte ogni volta.
+   * ⇒ Gli effimeri non si indovinano dalla forma: sono ciò che il kernel ha accodato DOPO l'ultima `capture` (la chiama subito
+   *   prima di `prepare`, con la storia vera: `talosHarness.mjs`, `capture({ reason: 'before-request' })` e poi
+   *   `prepare({ messages: [...messaggi, ...noteInCoda] })`). Se la coda oltre quel punto non è fatta di soli `system`, o
+   *   nessuna `capture` è arrivata (un chiamante diverso dal kernel), vale la regola di prima.
+   *   Come Hermes, che tiene fuori dalla storia salvata solo ciò che ha aggiunto lui per la singola chiamata
+   *   (docs «Prompt assembly», hermes-agent.nousresearch.com/docs/developer-guide/prompt-assembly, letto 13/10/2026).
+   */
+  let storiaCatturata = null;
+  const separaEffimeri = (messaggi) => {
+    if (!Array.isArray(messaggi) || !Number.isInteger(storiaCatturata) || storiaCatturata < 1 || storiaCatturata > messaggi.length
+      || messaggi.slice(storiaCatturata).some((m) => m?.role !== 'system')) return compattazione.staccaEffimeri(messaggi);
+    if (storiaCatturata === messaggi.length) return { messaggi, effimeri: [] };
+    return { messaggi: messaggi.slice(0, storiaCatturata), effimeri: messaggi.slice(storiaCatturata) };
+  };
+
   const hooks = {
     async capture(payload) {
+      /* 13/10/2026 (bugfixer, review di ac8f5a362): quanto è lunga la storia VERA in questo momento. `prepare` lo usa per
+         distinguere gli effimeri (accodati dal kernel alla sola richiesta) da un `system` che è storia. Vedi `separaEffimeri`. */
+      if (Array.isArray(payload?.messages)) storiaCatturata = payload.messages.length;
       // Preserve the Context Engine's raw/original archive contract. Semantic
       // corrections happen at prepare(), before anything is projected for inference.
-      if (typeof original?.capture === 'function') return original.capture(payload);
-      return undefined;
+      if (typeof original?.capture !== 'function') return undefined;
+      /*
+       * ⛔ 13/10/2026 (bugfixer, review di ac8f5a362) — `capture` FALLISCE APERTO, come `prepare` (owner 12/10/2026: «errori di
+       *   compattazione non devono bloccare il flusso chat»). Il kernel la chiama fuori da ogni suo `try` (`start`, dopo ogni
+       *   attrezzo, `finished`): una storia riscritta fra due giri lanciava `CTX_HISTORY_DIVERGED` già a `capture('start')` e il
+       *   giro moriva PRIMA di `prepare`, dove vive la riparazione dell'archivio — che così non era raggiungibile proprio nel caso
+       *   per cui è nata (riprodotto: `tests/archivio-capture-non-ferma.test.mjs`). Qui non si ripara e non si annuncia niente:
+       *   la richiesta dopo passa da `prepare`, che sincronizza di nuovo gli originali (recupera ciò che qui non è stato
+       *   scritto), ripara o ricade, e lo dice una volta. Uno Stop resta uno Stop.
+       */
+      try { return await original.capture(payload); }
+      catch (errore) {
+        if (segnaleStop?.aborted || payload?.signal?.aborted || errore?.name === 'AbortError') throw errore;
+        return undefined;
+      }
     },
     async prepare(payload) {
       telemetry.mark('provider-prepare');
       const requestIndex = providerRequests;
       providerRequests += 1;
       /* Gli effimeri (il `system` del Piano) si staccano PRIMA di tutto: né riassunto, né archivio, né ancora. */
-      const { messaggi: grezzi, effimeri } = compattazione.staccaEffimeri(payload.messages);
+      const { messaggi: grezzi, effimeri } = separaEffimeri(payload.messages);
       // Correct BEFORE any context-engine projection or legacy compaction so an
       // ambiguous raw tool result cannot be summarized into a false statement.
       const inputMessages = correggiMessaggiDesktop(grezzi, { cartella });
@@ -690,7 +881,15 @@ function wrapContextHooks(original, {
       let ripiego = false;
       if (legacyMode) prepared = { messages: await maybeCompactLegacy(inputMessages, requestIndex) };
       else {
-        try { prepared = await original.prepare({ ...payload, messages: inputMessages, originali: grezzi }); }
+        try {
+          prepared = await original.prepare({ ...payload, messages: inputMessages, originali: grezzi });
+          /* 12/10/2026, decisione dell'owner («Si ripara da solo»): l'archivio non combaciava, i vecchi originali sono stati messi
+             da parte e il motore è ripartito dalla storia attiva. La chat lo dice con una riga, che non ferma niente. */
+          if (prepared?.riallineato) {
+            const { asideId: _daParte, ...dettaglio } = prepared.riallineato;
+            emitOnGiro?.({ giro: requestIndex, tipo: 'compattazione-fine', compattato: false, motivo: 'archivio-riallineato', codice: 'CTX_HISTORY_DIVERGED', dettaglio });
+          }
+        }
         catch (errore) {
           /* ⛔⛔ Owner 12/10/2026, «errori di compattazione non devono bloccare il flusso chat… è una regressione grave»: dal vivo
              `CTX_HISTORY_DIVERGED` fermava OGNI giro dal settimo in poi, anche un «ciao». Il motore del contesto è un servizio di
@@ -702,7 +901,9 @@ function wrapContextHooks(original, {
           ripiego = true;
           if (!ripiegoDetto) {
             ripiegoDetto = true;
-            emitOnGiro?.({ giro: requestIndex, tipo: 'compattazione-fine', compattato: false, motivo: 'ripiego', codice: errore?.code ?? null });
+            emitOnGiro?.({ giro: requestIndex, tipo: 'compattazione-fine', compattato: false, motivo: 'ripiego', codice: errore?.code ?? null,
+              /* R-05: dove la storia non combaciava (posizioni e ruolo, mai contenuto), quando chi ha fallito lo sa dire. */
+              ...(errore?.dettaglio && typeof errore.dettaglio === 'object' ? { dettaglio: errore.dettaglio } : {}) });
           }
           prepared = { messages: await maybeCompactLegacy(inputMessages, requestIndex) };
         }
@@ -710,6 +911,7 @@ function wrapContextHooks(original, {
       const proiettati = correggiMessaggiDesktop(prepared?.messages ?? inputMessages, { cartella });
       const messages = compattazione.riattaccaEffimeri(proiettati, effimeri);
       richiestaCorrente = legacyMode || ripiego ? { array: messages, grezzi: inputMessages, effimeri, requestIndex, lunghezzaProiezione: proiettati.length } : null;
+      richiestaSenzaAttesa = !legacyMode && !ripiego && prepared?.sentWithoutWaiting === true ? { array: messages, payload, grezzi, inputMessages, effimeri, requestIndex } : null;
       return { ...(prepared && typeof prepared === 'object' ? prepared : {}), messages };
     },
     async captureProviderResponse(payload) {
@@ -718,6 +920,11 @@ function wrapContextHooks(original, {
       return undefined;
     },
     get compactions() { return compactions; },
+    /* ⭐ 15/10/2026: a fine giro un riassunto pronto e non usato (o quello ancora in preparazione) passa al registro, che lo ridà al
+       giro dopo: preparato e pagato una volta sola. `preparate`/`usate` per il banco (fatti contro usati). */
+    get compattazionePronta() { return pronta ? { record: pronta.record, impronta: pronta.impronta, base: pronta.base, soloCoda: pronta.soloCoda === true } : null; },
+    get compattazioneInPreparazione() { return inVolo ? inVolo.promessa.then((p) => (p ? { record: p.record, impronta: p.impronta, base: p.base, soloCoda: p.soloCoda === true } : null)) : null; },
+    get conteggioPreparazioni() { return { preparate, usate }; },
   };
   const inferLegacy = async ({ signal } = {}, invoke) => {
       try {
@@ -734,7 +941,12 @@ function wrapContextHooks(original, {
         const { array, grezzi, effimeri, requestIndex } = richiestaCorrente;
         const projected = projectLegacy(grezzi);
         const { token, misura } = compattazione.misuraOccupazione({ ancora, messaggi: projected, finestraToken: soglie.finestraToken });
-        const proiezione = await compattaOra(grezzi, projected, { requestIndex, motivo: 'overflow', tokenMisurati: token, misura, soglia: soglie.soglia });
+        /* 15/10/2026: anche qui prima il riassunto in preparazione o pronto, poi (solo se non c'è) uno nuovo */
+        if (inVolo) await inVolo.promessa;
+        const scambio = scambioPossibile(grezzi, { token, misura });
+        const proiezione = scambio
+          ? usaPronta(scambio, { requestIndex, motivo: 'overflow' })
+          : await compattaOra(grezzi, projected, { requestIndex, motivo: 'overflow', tokenMisurati: token, misura, soglia: soglie.soglia });
         if (!proiezione) throw errore;
         const nuova = compattazione.riattaccaEffimeri(correggiMessaggiDesktop(proiezione, { cartella }), effimeri);
         array.splice(0, array.length, ...nuova);
@@ -755,8 +967,59 @@ function wrapContextHooks(original, {
     /* Owner 12/10/2026 (ripiego qui sopra): una richiesta preparata dalla compattazione semplice perché il motore è caduto ha anche
        la sua rete per il contesto troppo grande. Col motore sano `richiestaCorrente` è null e tutto va come prima. */
     const inferMotore = typeof original?.infer === 'function' ? (...args) => original.infer(...args) : null;
-    hooks.infer = (opzioni = {}, invoke) => (richiestaCorrente ? inferLegacy(opzioni, invoke)
-      : inferMotore ? inferMotore(opzioni, invoke) : invoke(opzioni.signal));
+    // il ritentativo dopo «contesto pieno» lo fa il guscio (sotto), che ricostruisce l'array suo: il servizio non ne fa un secondo
+    const inferBase = (opzioni, invoke) => (inferMotore ? inferMotore({ ...opzioni, retryContextFull: false }, invoke) : invoke(opzioni.signal));
+    /*
+     * ⛔ Revisione del bugfixer di 0120d21e0 (16/10/2026, NON-ASPETTARE-REV-01): «Non aspettare se entra» (owner 16/10 sera) manda la
+     *   richiesta senza il margine di sicurezza della stima, e col motore nessuno riprovava se il fornitore rispondeva «contesto
+     *   pieno»: il giro moriva dopo un tentativo. Prima il margine copriva questa mancanza. ⇒ Come K8 (`inferLegacy`, sopra): una
+     *   volta sola, si rifà la preparazione chiedendo al motore di ASPETTARE il riassunto in volo (`waitForInFlight`), si rimette
+     *   la richiesta nello stesso array e si riprova. Un secondo «contesto pieno» passa com'è, classificato come il primo.
+     */
+    const inferSenzaAttesa = async (r, opzioni, invoke) => {
+      try { return await inferBase(opzioni, invoke); }
+      catch (errore) {
+        if (opzioni.signal?.aborted || segnaleStop?.aborted) throw errore;
+        if (compattazione.classificaErroreFornitore(errore) !== 'contesto-pieno') throw errore;
+        if (errore && typeof errore === 'object') errore.classificazione = 'contesto-pieno';
+        /* Riverifica del bugfixer (16/10, NON-ASPETTARE-REV-03): se la seconda preparazione fallisce (il riassunto aspettato muore,
+           un 429 del riassuntore) non si muore con l'errore del motore: si ripiega (owner 12/10, «errori di compattazione non
+           devono bloccare il flusso chat») e si riprova lo stesso. Uno Stop resta uno Stop.
+           ⛔ Seconda riverifica (NON-ASPETTARE-REV-06): il ripiego di `prepare` (`maybeCompactLegacy`) riassume solo oltre la soglia
+           del legacy — sul desktop il tetto di serie, 200K — e un «contesto pieno» del fornitore arriva molto prima: la richiesta
+           ripartiva IDENTICA (44.056 caratteri contro 44.056). Qui il fornitore ha già detto che non entra: come K8 (`inferLegacy`)
+           si ignora la soglia, si usa il riassunto pronto o in preparazione, o se ne forza uno per «overflow». */
+        let preparata;
+        try { preparata = await original.prepare({ ...r.payload, messages: r.inputMessages, originali: r.grezzi, waitForInFlight: true }); }
+        catch (secondo) {
+          if (segnaleStop?.aborted || opzioni.signal?.aborted || secondo?.name === 'AbortError') throw secondo;
+          if (!ripiegoDetto) {
+            ripiegoDetto = true;
+            emitOnGiro?.({ giro: r.requestIndex, tipo: 'compattazione-fine', compattato: false, motivo: 'ripiego', codice: secondo?.code ?? null });
+          }
+          const proiettata = projectLegacy(r.inputMessages);
+          const { token, misura } = compattazione.misuraOccupazione({ ancora, messaggi: proiettata, finestraToken: soglie.finestraToken });
+          if (inVolo) await inVolo.promessa;
+          const scambio = scambioPossibile(r.inputMessages, { token, misura });
+          const riassunta = scambio
+            ? usaPronta(scambio, { requestIndex: r.requestIndex, motivo: 'overflow' })
+            : await compattaOra(r.inputMessages, proiettata, { requestIndex: r.requestIndex, motivo: 'overflow', tokenMisurati: token, misura, soglia: soglie.soglia });
+          preparata = { messages: riassunta ?? proiettata };
+        }
+        const nuova = compattazione.riattaccaEffimeri(correggiMessaggiDesktop(preparata?.messages ?? r.inputMessages, { cartella }), r.effimeri);
+        r.array.splice(0, r.array.length, ...nuova);
+        try { return await inferBase(opzioni, invoke); }
+        catch (secondo) {
+          if (secondo && typeof secondo === 'object' && compattazione.classificaErroreFornitore(secondo) === 'contesto-pieno') secondo.classificazione = 'contesto-pieno';
+          throw secondo;
+        }
+      }
+    };
+    hooks.infer = (opzioni = {}, invoke) => {
+      if (richiestaCorrente) return inferLegacy(opzioni, invoke);
+      const r = richiestaSenzaAttesa; richiestaSenzaAttesa = null;
+      return r ? inferSenzaAttesa(r, opzioni, invoke) : inferBase(opzioni, invoke);
+    };
   }
   return hooks;
 }
@@ -795,6 +1058,9 @@ export async function talosLavora(input = {}) {
     records,
     progressoAcceso: input.progressoCompattazione === true,
     fontiRicarica: input.fontiRicarica ?? null,
+    compattazionePronta: input.compattazionePronta ?? null,
+    istantanea: input.compattazioneIstantanea === true,
+    compattazioneInArrivo: input.compattazioneInArrivo ?? null,
   });
   const onDelta = wrapOnDelta(input.onDelta, telemetry);
 
@@ -812,12 +1078,19 @@ export async function talosLavora(input = {}) {
     const compattazioni = Number(result?.compattazioni ?? 0) + contextHooks.compactions;
     /* Campo NUOVO, additivo: i record di questo turno (vuoto se non si è compattato). Gli altri campi non cambiano. */
     const recordDiCompattazione = [...records];
-    if (!usage) return { ...result, compattazioni, recordDiCompattazione };
+    /* 15/10/2026: campi NUOVI, additivi — il riassunto preparato e non usato, quello ancora in preparazione, e il conto */
+    const preparazione = {
+      compattazionePronta: contextHooks.compattazionePronta,
+      compattazioneInPreparazione: contextHooks.compattazioneInPreparazione,
+      preparazioniDiCompattazione: contextHooks.conteggioPreparazioni,
+    };
+    if (!usage) return { ...result, compattazioni, recordDiCompattazione, ...preparazione };
     return {
       ...result,
       usage,
       compattazioni,
       recordDiCompattazione,
+      ...preparazione,
       fuori: `${String(result?.detto ?? '').trim()}\n${JSON.stringify({ usage })}`.trim(),
     };
   } finally {

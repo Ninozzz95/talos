@@ -56,11 +56,20 @@ test('FORN-REG-01 — una chat normale riceve la porta, non come giro di automaz
   const input = runtime.runs[0].input
   assert.equal(typeof input.onFornitoriFn, 'function')
   assert.equal((await input.onFornitoriFn('provider_exclusions_list', {}, { fase: 'esegui' })).testo, 'provider_exclusions_list ok')
-  assert.deepEqual(contesti, [{ automazioneDelGiro: null }])
+  assert.deepEqual(contesti, [{ automazioneDelGiro: null, soloLettura: false }])
 })
 
 test('FORN-REG-02 AL CONTRARIO — senza collegaFornitori (la CLI) nessuna porta', CON_TEMPO, async (t) => {
   const { registry, runtime } = await scena(t, { collega: false })
   registry.avvia('task', { permessiScelto: 'Workspace write' })
   assert.equal(runtime.runs[0].input.onFornitoriFn, undefined)
+})
+
+test('FORN-REG-03 (s58, CLI 16/10 notte) — un giro con nessuno davanti riceve la porta IN SOLA LETTURA, non più niente', CON_TEMPO, async (t) => {
+  const { registry, runtime, contesti } = await scena(t)
+  registry.avvia('task', { permessiScelto: 'Workspace write', senzaInterfacciaNelGiro: true })
+  const input = runtime.runs[0].input
+  assert.equal(input.nessunoDavanti, true, 'premessa: nessuno davanti per il giro')
+  assert.equal(typeof input.onFornitoriFn, 'function', '`talos -p` legge ancora la lista')
+  assert.deepEqual(contesti, [{ automazioneDelGiro: null, soloLettura: true }])
 })

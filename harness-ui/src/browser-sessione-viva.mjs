@@ -129,7 +129,8 @@ export function creaGestoreBrowserVivo({
     try { await f.browser.chiudi(); } catch { /* il processo è già andato */ }
   }
 
-  async function assicuraFinestra() {
+  /* `scala`: la densità dello schermo di chi apre la PRIMA pagina; il Chromium la tiene finché vive (si fissa al lancio) */
+  async function assicuraFinestra({ scala = 1 } = {}) {
     if (finestra && !finestraMorta(finestra)) return finestra;
     if (finestra) await scartaFinestraMorta();
     const trovato = trovaFn();
@@ -137,7 +138,7 @@ export function creaGestoreBrowserVivo({
       throw errorePagina('BROWSER_VIVO_ASSENTE',
         'Cannot find a Chromium browser on this computer. TALOS uses an already installed one — Chrome or Edge — and does not download its own.');
     }
-    const browser = await avviaFn({ percorso: trovato.percorso, cartellaProfilo });
+    const browser = await avviaFn({ percorso: trovato.percorso, cartellaProfilo, scala });
     if (typeof connettiFn !== 'function') {
       await browser.chiudi();
       throw errorePagina('BROWSER_VIVO_SENZA_CONNESSIONE', 'There is no way to connect to the browser (connettiFn)');
@@ -204,13 +205,13 @@ export function creaGestoreBrowserVivo({
 
   const gestore = {
     /** Apre (o riusa) la scheda di questa sessione e ci porta l'indirizzo. */
-    async apri(sessionId, url, { larghezza = 1280, altezza = 800 } = {}) {
+    async apri(sessionId, url, { larghezza = 1280, altezza = 800, scala = 1 } = {}) {
       if (!sessionId) throw errorePagina('BROWSER_VIVO_SENZA_SESSIONE', 'The session the tab belongs to is required');
       await gestore.raccogliScadute();
       if (!schede.has(sessionId) && schede.size >= schedeMassime) {
         throw errorePagina('BROWSER_VIVO_TROPPE_SCHEDE', `Too many pages open at once: the maximum is ${schedeMassime}`);
       }
-      const { cdp } = await assicuraFinestra();
+      const { cdp } = await assicuraFinestra({ scala });
       let scheda = schede.get(sessionId);
       if (!scheda) {
         // vincolo 1: un contesto per sessione, così i cookie di una non finiscono nell'altra
@@ -225,7 +226,7 @@ export function creaGestoreBrowserVivo({
           url: null, ferma: null, errori: null, staccaErrori: null, toccataA: orologio(),
         };
         schede.set(sessionId, scheda);
-        await ridimensiona(cdp, scheda.cdpSessionId, { larghezza, altezza });
+        await ridimensiona(cdp, scheda.cdpSessionId, { larghezza, altezza, scala });
         /*
          * ⛔ L'overlay serve ad ANNOTARE, non a vedere: se non si installa (un frame che non c'è
          *   ancora, un mondo isolato rifiutato) la pagina deve aprirsi lo stesso, senza gli spilli.
@@ -314,11 +315,11 @@ export function creaGestoreBrowserVivo({
      *   gia' aperta. Ricaricare per un ridimensionamento perderebbe lo scorrimento, i moduli
      *   compilati a meta' e — su una pagina che l'agente sta leggendo — il lavoro fatto.
      */
-    async misura(sessionId, { larghezza, altezza } = {}) {
+    async misura(sessionId, { larghezza, altezza, scala = 1 } = {}) {
       const scheda = schedaDi(sessionId);
       tocca(scheda);
       // C36: il flusso si sveglia solo se qualcuno lo segue (`scheda.ferma` esiste finché c'è un seguito); senza, niente screencast
-      const esito = await ridimensiona(finestra.cdp, scheda.cdpSessionId, { larghezza, altezza, sveglia: typeof scheda.ferma === 'function', trasmissione: scheda.sceltaTrasmissione ?? null });
+      const esito = await ridimensiona(finestra.cdp, scheda.cdpSessionId, { larghezza, altezza, scala, sveglia: typeof scheda.ferma === 'function', trasmissione: scheda.sceltaTrasmissione ?? null });
       return { larghezza: esito?.larghezza ?? null, altezza: esito?.altezza ?? null, url: scheda.url };
     },
 

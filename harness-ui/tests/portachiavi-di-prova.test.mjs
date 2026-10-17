@@ -107,7 +107,9 @@ test('KEYRING-PROVA-04 — ogni avvio di server.mjs nelle prove usa la custodia 
   for (const p of new Set(file)) {
     const testo = readFileSync(p, 'utf8');
     if (!avvia.test(testo)) continue;
-    if (!/TALOS_HARNESS_UI_KEYRING\s*:\s*'memoria'/.test(testo)) senza.push(relative(radice, p));
+    /* 15/10/2026: anche un portachiavi a MODULO (`modulo:<file>`, scritto dalla prova nella sua cartella) è una custodia di prova:
+       non tocca il Credential Manager, ed è proprio ciò che le prove del modulo e dei segreti dallo stdin devono avviare */
+    if (!/TALOS_HARNESS_UI_KEYRING\s*:\s*(?:'memoria'|`modulo:\$\{)/.test(testo)) senza.push(relative(radice, p));
     // 24/09/2026: e la radice dei temporanei (`src/scratch.mjs`): senza, un server di prova spazza %LOCALAPPDATA%/TALOS della persona
     else if (!/TALOS_SCRATCH_DIRs*:/.test(testo)) senza.push(relative(radice, p) + ' (senza TALOS_SCRATCH_DIR)');
   }

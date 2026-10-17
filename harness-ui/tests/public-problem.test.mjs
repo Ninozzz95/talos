@@ -93,3 +93,12 @@ test('CTX-STORE-AMBIGUOUS-PUBLIC — stato incerto chiede verifica, non promette
   assert.match(it.action, /verifica|Doctor|supporto/i);
   assert.doesNotMatch(it.action, /^Riprova/i);
 });
+
+test('PROBLEMA-CHIAVE (15/10, visto dal vivo) — CONFIG_INVALID per la chiave che manca porta la frase vera e il fornitore; AL CONTRARIO un altro CONFIG_INVALID resta la copia del codice', () => {
+  const chiave = Object.assign(new Error('The OpenRouter key is missing: connect it from the provider settings.'), { code: 'CONFIG_INVALID', reason: 'provider-key-missing-named', params: { provider: 'OpenRouter' } });
+  const p = toPublicProblem(chiave);
+  assert.equal(p.explanation, 'The OpenRouter key is missing: connect it from the provider settings.');
+  assert.deepEqual(p.params, { provider: 'OpenRouter' });
+  const altro = Object.assign(new Error('API key not configured on the server (OPENROUTER_API_KEY)'), { code: 'CONFIG_INVALID', reason: 'server-api-key-missing' });
+  assert.equal(toPublicProblem(altro).explanation, 'Part of the configuration needed to complete this operation is missing.', 'un motivo tecnico non va a schermo');
+});

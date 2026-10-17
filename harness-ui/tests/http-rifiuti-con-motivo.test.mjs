@@ -13,8 +13,6 @@ import { createServer } from 'node:http';
 import test from 'node:test';
 
 import { createHttpApp } from '../src/http-app.mjs';
-import { testoErroreServer } from '../frontend/src/components/errori.js';
-import { impostaLingua } from '../frontend/src/components/lingua.js';
 
 async function ascolta(t, registro) {
   const server = createServer(createHttpApp({ staticHandler: async () => null, sessionRegistry: registro }));
@@ -39,18 +37,6 @@ test('RIFIUTI-HTTP-01 — il motivo e i valori del rifiuto arrivano nella busta,
   assert.equal(conValori.error.reason, 'hook-not-found');
 });
 
-test('RIFIUTI-HTTP-02 — SESSION_NOT_READY: la frase inglese del registro arriva come spiegazione, e l’interfaccia la dice in italiano', async (t) => {
-  const frase = 'A compaction is already in progress for this session. Wait for the result before trying again.';
-  const { stato, error } = await errore(t, { erroreAvvio: frase, code: 'SESSION_NOT_READY', reason: 'compaction-in-progress' });
-  assert.equal(stato, 409);
-  assert.equal(error.reason, 'compaction-in-progress');
-  assert.equal(error.explanation, frase, 'la frase del registro è la spiegazione');
-  impostaLingua('it');
-  assert.equal(testoErroreServer(error).explanation, 'Una compattazione è già in corso per questa sessione. Attendi il risultato prima di riprovare.');
-  impostaLingua('en');
-  assert.equal(testoErroreServer(error).explanation, frase);
-  impostaLingua('it');
-});
 
 test('RIFIUTI-HTTP-03 — AL CONTRARIO: un motivo che non è un identificatore (testo libero, percorso, maiuscole) NON esce, e senza motivo non c’è la chiave', async (t) => {
   for (const reason of ['Sessione non trovata', 'C:\\Users\\x\\file.txt', 'SESSION_NOT_FOUND', '-a', 'a--b', 'x'.repeat(81), 42]) {

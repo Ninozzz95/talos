@@ -18,6 +18,8 @@
 .gv-vista .i { width: 14px; height: 14px; }
 .gv-vista:hover { color: var(--talos-text); }
 .gv-vista[aria-checked="true"] { background: var(--talos-accent-soft); color: var(--talos-accent-text); }
+/* un'opzione che non si può scegliere (D15): si vede spenta ma resta raggiungibile, per dire perché */
+.gv-vista[aria-disabled="true"], .gv-vista[aria-disabled="true"]:hover { color: var(--talos-muted); opacity: .55; cursor: not-allowed; }
 .gv-percorso .i { width: 14px; height: 14px; }
 .gv-percorso[aria-pressed="true"] { border-color: var(--talos-accent-border); background: var(--talos-accent-soft); color: var(--talos-accent-text); }
 .gv-percento { min-width: 52px; font-variant-numeric: tabular-nums; }
@@ -74,7 +76,9 @@
   border: 1px solid var(--talos-border); border-radius: 14px;
   background: color-mix(in srgb, var(--talos-card) 38%, transparent);
 }
-.gv-testa { display: grid; gap: 8px; padding: 12px 12px 0 14px; }
+/* la colonna è 1fr: `.talos-wfg__fase` porta `justify-content: space-between`, che su una colonna automatica la stringe sul
+   contenuto — con un nome corto la freccia e la barra si fermavano a metà testata (misurato il 12/10: 209 px su 240) */
+.gv-testa { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; padding: 12px 12px 0 14px; }
 .gv-testa-riga { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .gv-testa-icona { display: inline-flex; color: var(--talos-accent); }
 .gv-testa-icona .i { width: 20px; height: 20px; stroke-width: 1.6; }
@@ -229,11 +233,54 @@
 .gv-rip-testo { flex: none; min-width: 20ch; color: var(--talos-text); font-variant-numeric: tabular-nums; }
 .gv-rip-vivo[hidden] { display: none; }
 .gv-rip-nota { flex: none; }
+.gv-rip-errore { display: inline-flex; align-items: baseline; gap: 8px; flex: none; font-size: .75rem; color: var(--talos-danger-text, var(--talos-text)); }
+.gv-rip-errore[hidden], .gv-rip-nota[hidden] { display: none; }
 .gv-rip[data-attiva="true"] .gv-rip-testo { color: var(--talos-accent-text); }
 @container talos-wfg (max-width: 900px) { .gv-rip-nota { display: none; } }
+/* una storia INCOMPLETA si dice anche a diagramma stretto (owner 13/10/2026, D9): la nota va su una riga sua sotto la barra */
+@container talos-wfg (max-width: 900px) {
+  .gv-rip[data-copertura="partial"] { flex-wrap: wrap; row-gap: 4px; }
+  .gv-rip[data-copertura="partial"] .gv-rip-nota:not([hidden]) { display: block; flex: 1 1 100%; }
+}
+/* DELEGHE, diagramma stretto (≤ 900 px: sono 1440×900 e 1024×800 col pannello di destra aperto) — misurato il 13/10/2026: con
+   ambito, richiesta e stato la barra andava su TRE righe a caso (122 px) e toglieva tela; prima erano due. Ora due righe con un
+   senso: sopra CHE COSA si guarda (ambito, richiesta, stato), sotto COME (viste, percorso, segui · cerca, zoom, adatta, gruppi).
+   Nelle scelte a segmenti resta scritta solo la voce scelta: le altre sono l'icona, col nome al passaggio del puntatore (`title`)
+   e intatto per chi usa un lettore di schermo (il testo è nascosto alla vista, non tolto). */
+@container talos-wfg (max-width: 900px) {
+  .talos-wfg[data-sorgente="deleghe"] .gv-comandi { justify-content: flex-start; }
+  .talos-wfg[data-sorgente="deleghe"] .gv-comandi-gruppo { display: contents; }
+  .talos-wfg[data-sorgente="deleghe"] .gv-comandi-gruppo > * { order: 5; }
+  .talos-wfg[data-sorgente="deleghe"] .gv-comandi-gruppo > [data-ambito] { order: 1; }
+  .talos-wfg[data-sorgente="deleghe"] .gv-comandi-gruppo > [data-richieste] { order: 2; }
+  .talos-wfg[data-sorgente="deleghe"] .gv-comandi-gruppo > [data-filtro-stato] { order: 3; }
+  /* «Attività recenti» riguarda che cosa si guarda: sta in fondo alla prima riga, a destra */
+  .talos-wfg[data-sorgente="deleghe"] .gv-comandi-gruppo > [data-attivita] { order: 3; margin-inline-start: auto; }
+  /* l'a capo fra le due righe: una riga vuota alta zero, che si mangia uno dei due spazi fra le righe */
+  .talos-wfg[data-sorgente="deleghe"] .gv-comandi::after { content: ""; order: 4; flex-basis: 100%; height: 0; margin-top: -8px; }
+  /* gli attrezzi della tela (cerca, zoom, adatta, gruppi) restano a destra */
+  .talos-wfg[data-sorgente="deleghe"] .gv-comandi-gruppo:last-child > .talos-wfg__cerca:not([hidden]),
+  .talos-wfg[data-sorgente="deleghe"] .gv-comandi-gruppo:last-child > .talos-wfg__cerca[hidden] + * { margin-inline-start: auto; }
+  .talos-wfg[data-sorgente="deleghe"] .gv-vista { position: relative; }
+  .talos-wfg[data-sorgente="deleghe"] .gv-vista[aria-checked="false"] > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .talos-wfg[data-sorgente="deleghe"] .gv-vista[aria-checked="false"] { padding: 0 8px; }
+}
+
+/* DELEGHE, la barra che NON entra in una riga anche a diagramma largo — misurato sul 4174 il 13/10/2026: a 1920×1080, in
+   italiano, guardando una richiesta PASSATA («Richiesta delle 20:24», più lunga di «Questa richiesta») gli attrezzi della tela
+   andavano a capo su una seconda riga, a sinistra. Quando succede il diagramma lo misura (`data-compatta`,
+   `grafo-workflow.js`, `sistemaBarra`) e nelle scelte a segmenti resta scritta solo la voce scelta, come a diagramma stretto:
+   la barra torna su una riga. E se un giorno andasse a capo lo stesso, gli attrezzi restano a destra. */
+.talos-wfg[data-sorgente="deleghe"] .gv-comandi > .gv-comandi-gruppo:last-child { margin-inline-start: auto; }
+.talos-wfg[data-sorgente="deleghe"] .gv-comandi[data-compatta="true"] .gv-vista { position: relative; }
+.talos-wfg[data-sorgente="deleghe"] .gv-comandi[data-compatta="true"] .gv-vista[aria-checked="false"] > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.talos-wfg[data-sorgente="deleghe"] .gv-comandi[data-compatta="true"] .gv-vista[aria-checked="false"] { padding: 0 8px; }
 
 /* ——— il dettaglio ——— */
 .gv-dettaglio { margin: 8px 24px 16px; max-height: 30vh; }
+/* i FILE toccati non alzano il dettaglio: cinque righe, poi l'elenco scorre al suo interno. Misurato sul 4174 il 13/10/2026:
+   con 70 file il dettaglio arrivava al suo tetto (30vh, 330 px) e alla tela ne restavano 430 — un agente e mezzo. */
+.gv-dettaglio .talos-wfg__dettaglio-colonna[data-file] > .talos-wfg__evidenze { max-height: 144px; overflow: auto; overscroll-behavior: contain; padding-inline-end: 4px; }
 .gv-dettaglio .talos-wfg__dettaglio-chi { padding: 14px 18px; }
 .gv-dettaglio .talos-wfg__dettaglio-colonna { padding: 14px 18px; }
 .gv-dettaglio .talos-wfg__dettaglio-testa { gap: 4px 10px; min-width: 0; }
@@ -317,3 +364,34 @@
 .gv-passo-scheletro { display: block; width: 62%; height: 10px; margin-top: 4px; border-radius: var(--talos-radius-pill); background: var(--talos-panel-soft); }
 .gv-tempo-nome--carica { color: var(--talos-muted); cursor: default; }
 .gv-rip[data-pronta="false"] .gv-rip-binario, .gv-rip[data-pronta="false"] .gv-rip-gioca { opacity: .45; pointer-events: none; }
+
+/* ——— deleghe: «che cosa fa adesso» sulla scheda e la colonna «Attività recenti» (owner 13/10/2026, mockup approvato) ——— */
+/* la riga dell'attività è quella del modello (stessa altezza della scheda): piena se l'agente lavora adesso, attenuata se è fermo */
+.gv-passo-attivita[data-vivo="true"] { color: var(--talos-text); }
+/* 14/10/2026, misurato: accanto a «Non riuscito» il nome corto del modello («glm-5.3-flash», 73 px) aveva 67 px e usciva tagliato.
+   Lo spazio a destra è quello dell'icona del ruolo (12 px dentro il contenuto) più 4: prima erano 10 di troppo. */
+.gv-passo-piede { display: flex; align-items: center; gap: 6px; min-width: 0; padding-inline-end: 16px; }
+.gv-passo-piede > .gv-passo-pill { flex: none; }
+.gv-passo-piede > .gv-passo-modello { flex: 1 1 auto; min-width: 0; padding-inline-start: 0; }
+/* il palco: la tela e, accanto, la colonna; i margini che erano dell'area passano al palco */
+.gv-palco { position: relative; display: flex; flex: 1 1 auto; min-height: 0; gap: 12px; margin: 4px 24px 0; }
+.gv-palco > .gv-area { flex: 1 1 auto; min-width: 0; margin: 0; }
+.gv-attivita { flex: none; box-sizing: border-box; width: 312px; display: grid; align-content: start; gap: 12px; padding: 14px 18px; overflow: auto; overscroll-behavior: contain; border: 1px solid var(--talos-border-subtle); border-radius: 12px; background: var(--talos-panel); }
+.gv-attivita[hidden] { display: none; }
+/* il pulsante della colonna, acceso: come «Percorso» e «Segui» (stessi colori) */
+.gv-attivita-bottone[aria-pressed="true"] { border-color: var(--talos-accent-border); background: var(--talos-accent-soft); color: var(--talos-accent-text); }
+.gv-attivita-elenco { gap: 12px; }
+/* la voce è un pulsante vero dentro la voce d'elenco: prende tutta la riga e non porta lo stile di serie del pulsante */
+.gv-attivita-riga { display: block; min-width: 0; }
+.gv-attivita-voce { grid-template-columns: 38px 14px minmax(0, 1fr); align-items: start; width: 100%; margin: 0; padding: 0; border: 0; background: none; font: inherit; font-size: .75rem; text-align: start; cursor: pointer; border-radius: 6px; }
+.gv-attivita-voce:hover .talos-wfg__evidenza-nome { text-decoration: underline; text-underline-offset: 3px; }
+.gv-attivita-voce:focus-visible { outline: 2px solid var(--talos-accent); outline-offset: 2px; }
+.gv-attivita-voce > .i { margin-top: 2px; }
+.gv-attivita-ora { font-variant-numeric: tabular-nums; }
+.gv-attivita-testi { display: grid; gap: 2px; min-width: 0; }
+.gv-attivita-testi > * { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* a diagramma stretto la colonna non toglie tela: non si apre da sola; chiesta dal pulsante, sta sopra la tela */
+@container talos-wfg (max-width: 900px) {
+  .gv-attivita:not([data-forzata="true"]) { display: none; }
+  .gv-attivita[data-forzata="true"] { position: absolute; inset-block: 0; inset-inline-end: 0; z-index: 4; max-width: calc(100% - 24px); box-shadow: 0 8px 24px color-mix(in srgb, #000 28%, transparent); }
+}

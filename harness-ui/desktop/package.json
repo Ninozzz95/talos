@@ -1,6 +1,6 @@
 {
   "name": "talos-desktop",
-  "version": "0.1.30",
+  "version": "0.1.31",
   "private": true,
   "description": "Il guscio desktop di TALOS, con il runtime Node incluso in Electron.",
   "license": "AGPL-3.0-only",
@@ -126,11 +126,10 @@
       "installerSidebar": "assets/installerSidebar.bmp",
       "uninstallerSidebar": "assets/installerSidebar.bmp",
       "installerHeader": "assets/installerHeader.bmp",
-      "license": "assets/licenza-installer.txt",
       "installerLanguages": [
+        "en_US",
         "it_IT"
       ],
-      "language": "1040",
       "include": "assets/installer.nsh",
       "deleteAppDataOnUninstall": false,
       "shortcutName": "TALOS",
