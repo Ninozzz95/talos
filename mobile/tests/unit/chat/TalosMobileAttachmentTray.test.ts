@@ -66,6 +66,26 @@ describe('TalosMobileAttachmentTray', () => {
         expect(wrapper.emitted('dismissError')).toHaveLength(1)
     })
 
+    it('K3-C Allegati A2 (Pad 16/10): the permissions line says only what the draft really has', () => {
+        const wrapper = mount(TalosMobileAttachmentTray, {
+            props: { items: [ready, { ...ready, id: 'draft-r4', vaultFileId: 'r4:abc', permissions: ['model.read'] }], busy: false, error: '' },
+        })
+        // the chat's drafts keep their line as it was
+        expect(wrapper.get('[data-attachment-id="draft-ready"]').text()).toContain('4 KB · Model read · Browser upload')
+        // an image held by the Code engine is read by the model and uploaded nowhere
+        const r4 = wrapper.get('[data-attachment-id="draft-r4"]').text()
+        expect(r4).toContain('4 KB · Model read')
+        expect(r4).not.toContain('Browser upload')
+    })
+
+    it('Pad 16/10: the Italian consent without a provider name reads as a sentence («a chi fornisce», not «a il»)', async () => {
+        const { TALOS_IT_MESSAGES } = await import('@/i18n/locales/it')
+        const chat = TALOS_IT_MESSAGES.chat as unknown as Record<string, string>
+        const frase = chat.imageConsentBody.replace('{provider}', chat.imageConsentProviderUnknown)
+        expect(frase).toContain('TALOS la invia a chi fornisce il modello scelto.')
+        expect(frase).not.toMatch(/\ba il\b/u)
+    })
+
     it('does not render an empty decorative container', () => {
         const wrapper = mount(TalosMobileAttachmentTray, {
             props: { items: [], busy: false, error: '' },

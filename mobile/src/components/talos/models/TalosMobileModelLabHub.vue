@@ -2,6 +2,7 @@
 import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, type Component } from 'vue'
 import { Boxes, ChevronRight, Cpu, KeyRound } from '@lucide/vue'
 import { useTalosI18n } from '@/i18n'
+import TalosMobilePageHeader from '@/components/talos/ui/TalosMobilePageHeader.vue'
 import { useTalosSheetTitle } from '@/lib/sheetTitle'
 import type { TalosMobileRouteName } from '@/lib/mobileRoutes'
 import { useChatController } from '@/stores/chatController'
@@ -243,10 +244,8 @@ onMounted(async () => {
 
 <template>
     <div data-testid="talos-model-lab-hub" class="flex min-w-0 flex-col gap-[var(--talos-space-section)]">
-        <header class="flex flex-col gap-[var(--talos-space-inline)]">
-            <h1 data-talos-sheet-title class="text-3xl font-semibold leading-[1.15] tracking-[-0.03em] text-[var(--talos-text)]">{{ t('models.labTitle') }}</h1>
-            <p class="text-xs leading-5 text-[var(--talos-muted)]">{{ t('models.labDescription') }}</p>
-        </header>
+        <!-- ⛔ G1 (14/10/2026): l'intestazione delle stazioni, col titolo e la riga della scheda del centro Modelli. -->
+        <TalosMobilePageHeader :title="t('models.labTitle')" :subtitle="t('models.labDescription')" />
 
         <TalosMobileDeviceCapacityCard />
 

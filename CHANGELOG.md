@@ -6,6 +6,64 @@ signed APK under [Releases](../../releases).
 
 Numbers in this file are measured on a device, not estimated.
 
+## v0.1.41
+
+Code now runs the desktop's own server and agent inside the phone, chats can use a ChatGPT plan, and dictation can
+run on the device.
+
+### Code
+
+- The Code station is now r4: the same server and agent as TALOS desktop 0.1.31, running inside the app, with no PC
+  and no USB debugging. If it cannot start on a device, the app says so and opens the classic Code instead. Sessions
+  from the classic Code are not moved: they stay reachable from that fallback.
+- The conversation works like the chat: follow-ups queue while a turn runs, Stop says it was requested, and run errors
+  are explained in words. Approval and question cards appear in the conversation, including those raised by
+  sub-sessions. There is a plan card with a Normal/Plan switch, cards for automations and provider approvals, and a
+  Coordination switch.
+- A Terminal view with a real terminal next to the Chat view, and a Review view of the files the session changed.
+- A session panel with Context, Files (browse, search by name, preview, file actions), Processes and Agents. Also a
+  Doctor, a command palette, the session tree, export and share, images and phone files as attachments, and the model
+  chosen from the chat's own profiles.
+- On tablets the left column shows your chats, like every other station, and "Code" is highlighted in the sidebar.
+- Measured on a OnePlus Pad 3: the agent's own test suite runs on the device, 805 files and 8,483 tests. The 246 that
+  fail all fail for known reasons of the phone environment (no git, npm or ripgrep; tests written for Windows), and none
+  of them is new. In a three-turn coding session the agent built a small Node service: a CSV parser that follows
+  RFC 4180, monthly budgets, an HTTP API with atomic saves and a clean shutdown. It ended with 72 passing tests, and we
+  ran them again by hand on the device.
+- Known limit: searching inside files returns file names only, because ripgrep is not on the phone yet.
+
+### ChatGPT plan
+
+- "Continue with ChatGPT" in the OpenAI provider panel: sign in with your ChatGPT plan in the browser, and the app
+  comes back by itself when you are done. The sign-in tokens are kept with a key sealed by the Android Keystore,
+  never in plain text. The plan has its own pill in the composer, with the usage measured on the phone.
+- Replies stream as they are written. Measured on the Pad, the first word arrives 3.1 to 4.0 seconds after Send; before
+  this, the whole reply appeared at once after 3.4 to 5.0 seconds.
+- When the plan reaches its usage limit, the turn waits and tries again: after the time OpenAI states, or every 30
+  minutes, up to nine times. It never switches to another provider. A card says when it will continue, with "Stop
+  waiting".
+
+### Voice
+
+- Dictation can run on the device with Parakeet: download the speech model from the voice settings, and the final text
+  is written by the phone, with no network. Live words still appear while you speak. It works in the chat, in Code and
+  in the assistant bar.
+- In the assistant bar the turn closes on silence. Measured with four spoken sentences, the request leaves about one
+  second after the last word. The first one after installing takes 2.7 seconds, while the model loads.
+
+### Fixed
+
+- In a reply, reasoning, tool rows and text now appear in the order they happened.
+- The Code composer sits at the bottom like the chat one.
+- Model variants that share a quantisation label are told apart, and a variant already on the device says so.
+- A new reply is a dot in the sidebar, so titles stay readable.
+- The local speed row survives a chat reload.
+- On tablets, New chat opens the chat only once it exists.
+- The notice for an empty answer counts tool calls, not tool names.
+- Settings, the model pages, Diagnostics, Phone control and Tool Forge have the station header. The "new" pages have
+  titles and one form, and their forms reset when you move to another page.
+- The chat underneath an open station can no longer receive input.
+
 ## v0.1.40
 
 Signing in to OpenRouter no longer fights itself.

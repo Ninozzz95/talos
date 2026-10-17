@@ -298,5 +298,26 @@ describe('TalosMobileCodaDelGiro', () => {
         // Il campo della modifica DEVE poter prendere il fuoco: lì il pointerdown resta libero.
         expect(annullato('[data-testid="talos-queue-edit-field-v1"]'), 'campo').toBe(false)
     })
-})
 
+    /* K3-C Accoda (owner 16/10): nel Codice su r4 «Modifica» riporta il testo nel compositore (r4 non ha una rotta per modificare
+       una voce; Hermes `beginQueuedEdit`). Nella chat resta la modifica in linea: è la modalità di serie. */
+    it('CODA-UI-17 con `modifica: riporta` «Modifica» non apre il campo: emette `riporta` con la voce', async () => {
+        const salvaModifica = vi.fn()
+        const view = mountStrip({ modifica: 'riporta', salvaModifica })
+        await view.get('[data-testid="talos-queue-menu-v1"]').trigger('click')
+        await flushPromises()
+        ;(document.body.querySelector('[data-testid="talos-queue-edit-v1"]') as HTMLButtonElement).click()
+        await flushPromises()
+        expect(view.emitted('riporta')).toEqual([[voci[0]]])
+        expect(view.find('[data-testid="talos-queue-edit-field-v1"]').exists()).toBe(false)
+        expect(salvaModifica).not.toHaveBeenCalled()
+    })
+
+    it('CODA-UI-18 una voce non scritta dalla persona (`modificabile: false`) ha nel menu solo «Togli»', async () => {
+        const view = mountStrip({ voci: [{ ...voci[0], modificabile: false }, voci[1]] })
+        await view.get('[data-testid="talos-queue-menu-v1"]').trigger('click')
+        await flushPromises()
+        const menu = document.body.querySelector('[data-testid="talos-row-actions-menu"]')!
+        expect([...menu.querySelectorAll('[role="menuitem"]')].map((el) => el.getAttribute('data-testid'))).toEqual(['talos-queue-remove-v1'])
+    })
+})

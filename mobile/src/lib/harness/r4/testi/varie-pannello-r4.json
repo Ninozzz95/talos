@@ -1,0 +1,61 @@
+{
+  "origine": {
+    "commit": "701c6c0d2d711879b53aa21bddad5a06d33538e7",
+    "percorso": "harness-ui/frontend/src/i18n/testi/varie.js",
+    "sha256": "457edc223f3bdc3e5e5cc4c80eb07ebc16c2555c5f4cdc1ae2b9193f49e0284b",
+    "prefisso": [
+      "usage.",
+      "review."
+    ]
+  },
+  "it": {
+    "review.removesOneSymbol": "Questa riscrittura fa sparire una funzione o classe che c'erano prima",
+    "review.removesManySymbols": "Questa riscrittura fa sparire {n} funzioni o classi che c'erano prima",
+    "review.turn": "giro {n}",
+    "review.noFilesYet": "Nessun file scritto finora.",
+    "review.receipt": "Ricevuta {receipt}",
+    "review.warning": "Attenzione",
+    "review.summary.none": "Nessuna modifica in questa sessione",
+    "review.summary.filesOne": "{n} file modificato · +{added} −{removed}",
+    "review.summary.filesMany": "{n} file modificati · +{added} −{removed}",
+    "review.subtitle.writeWithReceipt": "scrittura con ricevuta {receipt}",
+    "review.subtitle.newFile": "nuovo file",
+    "review.subtitle.modifiedFile": "file modificato",
+    "review.subtitle.symbolsGoneOne": "⚠ {n} simbolo sparito",
+    "review.subtitle.symbolsGoneMany": "⚠ {n} simboli spariti",
+    "review.menu.open": "Apri il file",
+    "review.menu.copyPath": "Copia il percorso",
+    "review.menu.copyDiff": "Copia il diff di questo file",
+    "review.menu.label": "Azioni sul file",
+    "usage.stoppedTurnsOne": "{n} richiesta al modello fermata prima che il fornitore dichiarasse il consumo: nei token non c’è.",
+    "usage.stoppedTurnsMany": "{n} richieste al modello fermate prima che il fornitore dichiarasse il consumo: nei token non ci sono.",
+    "usage.notMeasured": "non misurato",
+    "usage.cacheReuseOne": "{percent} % · su {n} richiesta al modello",
+    "usage.cacheReuseMany": "{percent} % · su {n} richieste al modello"
+  },
+  "en": {
+    "review.removesOneSymbol": "This rewrite removes a function or class that existed before",
+    "review.removesManySymbols": "This rewrite removes {n} functions or classes that existed before",
+    "review.turn": "turn {n}",
+    "review.noFilesYet": "No files written yet.",
+    "review.receipt": "Receipt {receipt}",
+    "review.warning": "Warning",
+    "review.summary.none": "No changes in this session",
+    "review.summary.filesOne": "{n} file changed · +{added} −{removed}",
+    "review.summary.filesMany": "{n} files changed · +{added} −{removed}",
+    "review.subtitle.writeWithReceipt": "write with receipt {receipt}",
+    "review.subtitle.newFile": "new file",
+    "review.subtitle.modifiedFile": "modified file",
+    "review.subtitle.symbolsGoneOne": "⚠ {n} symbol gone",
+    "review.subtitle.symbolsGoneMany": "⚠ {n} symbols gone",
+    "review.menu.open": "Open the file",
+    "review.menu.copyPath": "Copy the path",
+    "review.menu.copyDiff": "Copy this file’s diff",
+    "review.menu.label": "File actions",
+    "usage.stoppedTurnsOne": "{n} model request stopped before the provider reported its usage: it is not in the tokens.",
+    "usage.stoppedTurnsMany": "{n} model requests stopped before the provider reported their usage: they are not in the tokens.",
+    "usage.notMeasured": "not measured",
+    "usage.cacheReuseOne": "{percent} % · over {n} model request",
+    "usage.cacheReuseMany": "{percent} % · over {n} model requests"
+  }
+}

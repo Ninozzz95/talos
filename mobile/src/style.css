@@ -335,18 +335,32 @@
     text-align: left;
 }
 
+/*
+ * ⛔ Owner 15/10/2026 (dalla foto del Codice su r4): «quel color band deve andare via, deve essere trasparente, la chat si deve
+ * vedere passare dietro la banda» e «magari con una sfumatura leggera, la stessa cosa sia nella chat». Supera la regola del
+ * 12/09 (sfondo pieno dello stesso colore della chat). Il contenitore non dipinge; la sfumatura parte dallo sfondo della
+ * superficie che ospita il compositore (`--talos-sfumatura-compositore`: di serie la chat, il Codice la mette al suo foglio).
+ * Prova: tests/unit/chat/sfumaturaCompositore.test.ts.
+ */
 .talos-composer-dock {
-    /* Owner 12/09 19:35: «lo sfondo dietro il composer deve essere lo stesso colore
-       dello sfondo della chat» — niente fascia di un altro colore. */
-    background: var(--talos-background);
+    background: transparent;
 }
+
+/*
+ * Owner 15/10/2026 (confronto del bordo basso): «rimettessi il composer 16 pixel più in alto», «Chat e Codice, identici». I 16 px
+ * erano il margine in basso del foglio della stazione; ora è un rialzo solo, qui, per tutti e due. Prova: SFU-04.
+ */
+:root { --talos-compositore-rialzo: max(0.75rem, env(safe-area-inset-bottom)); }
 
 .talos-docked-composer {
     width: 100%;
     max-width: 52rem;
     margin: auto;
-    padding: var(--talos-space-inline) calc(var(--talos-space-page) * 2) max(var(--talos-space-page), env(safe-area-inset-bottom));
-    background: var(--talos-background);
+    padding: var(--talos-space-inline) calc(var(--talos-space-page) * 2) calc(max(var(--talos-space-page), env(safe-area-inset-bottom)) + var(--talos-compositore-rialzo));
+    background: linear-gradient(
+        to top,
+        color-mix(in oklab, var(--talos-sfumatura-compositore, var(--talos-background)) 80%, transparent) 0%,
+        transparent 100%);
 }
 
 .talos-calm-composer {
@@ -463,7 +477,18 @@
 /* ⛔ UNA riga, come il pavimento in resizePrompt. I due devono coincidere: se
    non coincidono vince il piu' alto, e la scatola torna alta mentre il campo e'
    vuoto. Misurato tre volte oggi, tre altezze diverse per questa stessa riga. */
-.talos-docked-composer .talos-calm-prompt { min-height: 1.75rem; }
+/* ⛔ COD-COMP-03 (owner 13/10/2026, dal Pad: «la riga testo non è allineata nel compositore come nella chat… deve essere lo
+   stesso componente»). Questa regola stava sotto `.talos-docked-composer`, un contenitore che ha solo la schermata della
+   chat: nel Codice, a fuoco, il campo tornava a 5rem (80 px) col testo in cima e «+»/Invia al centro — 28 px di scarto,
+   misurati. Il pavimento segue il COMPONENTE (`is-docked`, dalla stessa prop che usa `resizePrompt`), non chi lo ospita. */
+.talos-calm-composer.is-docked .talos-calm-prompt { min-height: 1.75rem; }
+/* COD-COMP-04 (owner 13/10/2026: «vorrei che il compositore in modalità tablet landscape sia meno largo» → 672 punti,
+   uguale in chat e nel Codice). MISURATO sul Pad prima: chat 768 px, Codice 894 px (aveva un tetto suo, 920). Un valore
+   solo, letto qui dal componente e dal contenitore del Codice (`HarnessSessionScreen.vue`). */
+@media (orientation: landscape) and (min-width: 1000px) {
+    :root { --talos-composer-max-width: 42rem; }
+}
+.talos-calm-composer.is-docked { max-width: var(--talos-composer-max-width, none); margin-inline: auto; }
 /* ⛔ «Barra su una riga a riposo, si espande quando scrivi» — e' la descrizione
    che l'impostazione mostra alla persona, e fino a oggi non era vera: il campo
    aveva 5rem di minimo (3,5 agganciato), cioe' tre righe di altezza a vuoto. */
@@ -475,7 +500,7 @@
    ⇒ A riposo la riga riempie esattamente la sua scatola (altezza = interlinea),
    cosi' centrare la scatola centra anche il glifo. */
 .talos-calm-composer.is-compact .talos-calm-prompt,
-.talos-docked-composer .talos-calm-composer.is-compact .talos-calm-prompt {
+.talos-calm-composer.is-docked.is-compact .talos-calm-prompt {
     min-height: 1.75rem;
     height: 1.75rem;
     line-height: 1.75rem;
@@ -562,7 +587,7 @@
 .talos-calm-composer .talos-send-btn:disabled { background: transparent; color: var(--talos-muted); opacity: .5; }
 
 @media (max-width: 860px) {
-    .talos-docked-composer { padding: var(--talos-space-inline) var(--talos-space-inline) max(var(--talos-space-card), env(safe-area-inset-bottom)); }
+    .talos-docked-composer { padding: var(--talos-space-inline) var(--talos-space-inline) calc(max(var(--talos-space-card), env(safe-area-inset-bottom)) + var(--talos-compositore-rialzo)); }
     .talos-calm-composer { padding: var(--talos-space-card); }
 }
 

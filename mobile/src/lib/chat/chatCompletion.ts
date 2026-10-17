@@ -124,7 +124,10 @@ export function buildChatCompletion(
         // error propagates so the store persists the honest interrupted partial
         // instead of silently re-fetching a diverging answer. A user abort never
         // falls back — that would fire a second request the user just cancelled.
-        if (stream && adapter.streamComplete) {
+        // ⛔ N15-RITARDO-01 (owner 13/10/2026: «molto delay da quando invio a quando ricevo la risposta»). MISURATO sul Pad:
+        // col piano ChatGPT il flusso dalla pagina falliva sempre dopo 1,8 s (OpenAI rifiuta le origini di pagina) e solo
+        // dopo partiva la richiesta vera. Chi dichiara che quel flusso non è raggiungibile va subito dal trasporto nativo.
+        if (stream && adapter.streamComplete && adapter.flussoNonRaggiungibileDallaPagina !== true) {
             let sawChunk = false
             try {
                 const streamed = await adapter.streamComplete(input, credential, {
@@ -164,7 +167,10 @@ export function buildChatCompletion(
                 // re-request would double the inference and the bill. Surface
                 // it honestly instead of silently re-asking.
                 const stalled = error instanceof Error && /stream stalled|first byte/.test(error.message)
-                if (sawChunk || aborted || stalled) throw error
+                // N15-FORN-06: un RIFIUTO del piano ChatGPT (limite d'uso, piano non abilitato…) non è un inciampo del
+                // trasporto. Rifare la richiesta dall'altra strada sarebbe un secondo invio contro lo stesso rifiuto.
+                const rifiutoDelPiano = (error as { provider?: unknown } | null)?.provider === 'chatgpt'
+                if (sawChunk || aborted || stalled || rifiutoDelPiano) throw error
                 // SF-MAJOR: the buffered path is a SECOND generation. Whatever
                 // reasoning the failed stream produced belongs to an answer
                 // that will never be shown, and pairing it with the new one is

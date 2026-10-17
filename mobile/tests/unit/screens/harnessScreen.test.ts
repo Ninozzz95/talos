@@ -14,7 +14,14 @@ import { flushPromises, mount } from '@vue/test-utils'
 // a plain object gives Vue nothing to track.
 const mockState = vi.hoisted(() => ({
     routerPush: vi.fn(),
-    route: { name: 'harness' as string, params: {} as Record<string, string> },
+    routerReplace: vi.fn(),
+    // K4-E: l'APK porta r4? Di serie no (come il web e le build senza archivio)
+    r4: false,
+    route: { name: 'harness' as string, params: {} as Record<string, string>, query: {} as Record<string, string> },
+}))
+vi.mock('@/lib/harness/terminalePonte', async (originale) => ({
+    ...(await originale<typeof import('@/lib/harness/terminalePonte')>()),
+    talosR4Disponibile: async () => mockState.r4,
 }))
 // `reactive()` needs the real `vue` import bound, which `vi.hoisted`'s
 // factory runs BEFORE (its whole body is relocated above every import,
@@ -23,7 +30,7 @@ const mockState = vi.hoisted(() => ({
 mockState.route = reactive(mockState.route)
 vi.mock('vue-router', () => ({
     useRoute: () => mockState.route,
-    useRouter: () => ({ push: mockState.routerPush }),
+    useRouter: () => ({ push: mockState.routerPush, replace: mockState.routerReplace }),
 }))
 
 // 28/8: real sessions, not the static five-row demo array. A fake session
@@ -86,6 +93,22 @@ async function mountScreen() {
 }
 
 describe('HarnessScreen (28/8) — real sessions, no more the five-row demo array', () => {
+    it('K4E-01 (owner 17/10 «r4 al posto, il vecchio come ripiego»): con r4 nell\'APK la voce «Codice» apre r4; col ripiego resta qui', async () => {
+        mockState.r4 = true
+        try {
+            await mountScreen()
+            await flushPromises()
+            expect(mockState.routerReplace).toHaveBeenCalledWith({ name: 'codice-r4' })
+            mockState.routerReplace.mockClear()
+            mockState.route = reactive({ name: 'harness', params: {}, query: { ripiego: '1' } })
+            await mountScreen()
+            await flushPromises()
+            expect(mockState.routerReplace).not.toHaveBeenCalled()
+        } finally {
+            mockState.r4 = false
+        }
+    })
+
     it('renders every real session listCodiceSessions returns, grouped by date', async () => {
         const w = await mountScreen()
         expect(w.findAll('[data-testid="talos-harness-row"]')).toHaveLength(2)
@@ -139,6 +162,20 @@ describe('HarnessScreen (28/8) — real sessions, no more the five-row demo arra
         expect(active.attributes('aria-current')).toBe('page')
         expect(active.attributes('data-harness-active')).toBe('true')
         expect(w.findAll('[aria-current="page"]')).toHaveLength(1)
+    })
+
+    // ⛔ owner 16/10 («levare l'icona, quella tipo provetta, non ha più senso»; scelta «Niente, come le chat»): la casella da 48 px
+    // con la provetta era uguale per ogni sessione e non diceva niente. Come le righe delle chat: titolo e stato, a tutta larghezza.
+    it('HARNESS-ROW-NO-ICON-01 la riga è il titolo e lo stato, senza la casella della provetta', async () => {
+        const w = mount(HarnessScreen, { props: { embedded: true } })
+        await flushPromises()
+        const righe = w.findAll('[role="listitem"]')
+        expect(righe).toHaveLength(2)
+        for (const riga of righe) {
+            expect(riga.find('.lucide-flask-conical').exists()).toBe(false)
+            expect(riga.find('span[aria-hidden="true"].size-12').exists()).toBe(false)
+            expect(riga.element.firstElementChild?.getAttribute('data-testid')).toBe('talos-harness-row')
+        }
     })
 
     // F6 sidebar refactor (24/8): TalosTabletSidebar.vue mounts this screen
@@ -408,6 +445,36 @@ describe('HarnessScreen (28/8) — real sessions, no more the five-row demo arra
             await flushPromises()
 
             expect(w.text()).toContain('disk full')
+            w.unmount()
+        })
+
+        /*
+         * ⛔ HARNESS-ESCAPE-01 (15/10/2026, owner «Spento solo dove serve»): `escapeParameter` è acceso su tutta l'app e un titolo
+         * con l'apostrofo arrivava come «L&apos;IVA» nell'etichetta del menu e nella conferma; un errore con una barra come
+         * `&#x2F;`. Vue protegge già testo e attributi: qui il testo libero passa da `tTesto`, che spegne l'escape per quella chiamata.
+         */
+        it('HARNESS-ESCAPE-01 titolo e dettaglio con apostrofi, virgolette, barre e «&» restano come sono', async () => {
+            const titolo = `L'IVA di "marzo" 3/4 & co <b>`
+            listCodiceSessions.mockResolvedValue([fakeSession('session-x', titolo, NOW)])
+            deleteCodiceSession.mockRejectedValue(new Error("can't remove /data/x & y"))
+            const w = await mountScreen()
+            expect(w.get('[data-testid="talos-harness-actions-session-x"]').attributes('aria-label')).toBe(`Actions for ${titolo}`)
+            await openRowMenu(w, 'session-x')
+            menuItem('talos-harness-action-delete').click()
+            await flushPromises()
+            const dialog = document.body.querySelector('[role="dialog"]')
+            expect(dialog?.textContent).toContain(`"${titolo}" will be removed from this phone.`)
+            menuItem('talos-harness-delete-confirm').click()
+            await flushPromises()
+            expect(w.text()).toContain("can't remove /data/x & y")
+            renameCodiceSession.mockRejectedValue(new Error(`l'archivio "a/b" è pieno`))
+            await openRowMenu(w, 'session-x')
+            menuItem('talos-harness-action-rename').click()
+            await flushPromises()
+            document.body.querySelector<HTMLInputElement>('[aria-label="Session name"]')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }))
+            await flushPromises()
+            expect(w.text()).toContain(`Couldn't rename the session: l'archivio "a/b" è pieno`)
+            expect(`${w.html()} ${document.body.innerHTML}`).not.toMatch(/&amp;apos;|&amp;#x2F;|&amp;quot;/u)
             w.unmount()
         })
     })

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { defineAsyncComponent, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useTalosI18n } from '@/i18n'
 import { talosTranslatableErrorMessage } from '@/i18n/uiErrors'
 import { BadgeCheck, ChevronDown, KeyRound, LogIn, RefreshCw, RotateCcw, Server, Trash2 } from '@lucide/vue'
@@ -7,6 +7,30 @@ import TalosMobileProviderIcon from '@/components/models/TalosMobileProviderIcon
 import type { TalosMobileProviderId } from '@/components/chat/mobileChatTypes'
 import { TALOS_MOBILE_PROVIDERS } from '@/lib/mobileProviders'
 import { useChatController } from '@/stores/chatController'
+
+// N15: «Continue with ChatGPT» sta nel pannello di OpenAI. A richiesta: chi non apre OpenAI non scarica niente dell'accesso.
+const TalosMobileChatgptAccesso = defineAsyncComponent(() => import('@/components/talos/models/TalosMobileChatgptAccesso.vue'))
+
+/*
+ * ⛔ PANEL-N15-01 (Pad, 13/10/2026): l'intestazione di OpenAI diceva solo «Non configurato», che parla della chiave API, anche
+ * col piano collegato. Come nel mockup approvato, la riga dice tutte e due le cose. Lo stato del piano si chiede al servizio
+ * (caricato a richiesta) all'apertura e ogni volta che il riquadro del piano dice di essere cambiato; se non si riesce a
+ * leggerlo la riga resta quella di prima, mai un «collegato» inventato.
+ */
+const pianoCollegato = ref<boolean | null>(null)
+async function rileggiPiano(): Promise<void> {
+    try { pianoCollegato.value = (await (await import('@/services/chatgptAccesso')).talosChatgpt().stato()).collegato } catch { pianoCollegato.value = null }
+}
+/**
+ * PANEL-N15-02: collegato o scollegato il piano, la chat deve saperlo subito. Per il fornitore `chatgpt` «avere la chiave» è
+ * avere l'account collegato: si rileggono le chiavi e poi l'elenco dei modelli dell'account. Solo su un cambiamento vero:
+ * aprire questa scheda non fa una chiamata a OpenAI.
+ */
+async function pianoCambiato(): Promise<void> {
+    await rileggiPiano()
+    await controller.refreshSecrets().catch(() => {})
+    await controller.refreshProvider('chatgpt').catch(() => null)
+}
 
 const controller = useChatController()
 const { t } = useTalosI18n()
@@ -133,6 +157,7 @@ async function riprendiOpenRouter(): Promise<void> {
  */
 onMounted(() => {
     void riprendiOpenRouter()
+    void rileggiPiano()
     document.addEventListener('visibilitychange', quandoTorna)
 })
 onBeforeUnmount(() => document.removeEventListener('visibilitychange', quandoTorna))
@@ -201,7 +226,13 @@ async function resetEndpoint(provider: TalosMobileProviderId): Promise<void> {
                 <TalosMobileProviderIcon :provider="provider.id" class="size-[calc(var(--talos-icon-size)*1.75)] shrink-0" />
                 <div class="min-w-0 flex-1">
                     <h5 :id="`provider-${provider.id}-title`" class="truncate text-sm font-semibold text-[var(--talos-text)]">{{ provider.label }}</h5>
-                    <p class="text-2xs text-[var(--talos-muted)]">
+                    <p v-if="provider.id === 'openai' && pianoCollegato !== null" data-testid="talos-openai-access-line" class="text-2xs text-[var(--talos-muted)]">
+                        {{ $t('chatgptPlan.accessLine', {
+                            plan: pianoCollegato ? $t('chatgptPlan.connected').toLowerCase() : $t('chatgptPlan.notConnected').toLowerCase(),
+                            key: controller.secrets.openai ? $t('chatgptPlan.keySaved') : $t('chatgptPlan.keyNone'),
+                        }) }}
+                    </p>
+                    <p v-else class="text-2xs text-[var(--talos-muted)]">
                         <template v-if="controller.catalogs[provider.id].status === 'ready'">{{ modelCountLabel(controller.catalogs[provider.id].models.length) }}</template>
                         <template v-else-if="controller.catalogs[provider.id].status === 'loading'">{{ $t('models.discovering') }}</template>
                         <template v-else-if="controller.catalogs[provider.id].status === 'error'">{{ $t('models.discoveryFailed') }}</template>
@@ -221,6 +252,7 @@ async function resetEndpoint(provider: TalosMobileProviderId): Promise<void> {
             <div v-show="isExpanded(provider.id)" :id="`provider-${provider.id}-body`" class="px-[var(--talos-space-card)] pb-[var(--talos-space-card)]">
             <!-- L'accesso viene PRIMA della casella: incollare una chiave è la
                  strada di riserva, non quella principale, per chi ce l'ha. -->
+            <TalosMobileChatgptAccesso v-if="provider.id === 'openai' && isExpanded(provider.id)" @cambiato="pianoCambiato" />
             <div v-if="oauthProviders.has(provider.id)" class="mb-[var(--talos-space-control)]">
                 <button
                     type="button"

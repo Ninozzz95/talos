@@ -42,7 +42,10 @@ export const PERCORSI_RICHIESTI_IN_MAIN = Object.freeze([
     'java/ai/talos/harness/TalosHarnessUiPlugin.kt',
     'java/ai/talos/terminal/TalosTerminalPlugin.kt',
     'assets/talos-harness-ui',
+    // `talos-exec.js`, per la strada del ponte
     'assets/talos-node-lib',
+    // K2-A (14/10/2026): Node e le sue 9 librerie, RUNPATH=$ORIGIN (`scripts/node-nativo/`)
+    'jniLibs/arm64-v8a/libtalosnode.so',
 ])
 
 /**

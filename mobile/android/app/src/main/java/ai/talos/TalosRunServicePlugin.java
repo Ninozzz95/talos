@@ -1,10 +1,5 @@
 package ai.talos;
 
-import android.app.NotificationManager;
-import android.content.Context;
-import android.content.Intent;
-import android.os.Build;
-
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
@@ -23,54 +18,32 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 @CapacitorPlugin(name = "TalosRunService")
 public class TalosRunServicePlugin extends Plugin {
 
+    /**
+     * ⛔ F4 (14/10/2026): il JavaScript è il titolare `web` del servizio (vedi `TalosRunService.TITOLARI`). I suoi custodi
+     * li conta `longRunKeeper.ts`; qui `stop` rilascia solo il suo nome, così non spegne un giro del Codice che il nativo
+     * sta ancora seguendo con l'app in secondo piano.
+     */
+    private static final String TITOLARE_WEB = "web";
+
     @PluginMethod
     public void start(PluginCall call) {
         final String title = call.getString("title", "TALOS is working");
         final String text = call.getString("text", "");
-        try {
-            final Context context = getContext();
-            final Intent intent = new Intent(context, TalosRunService.class);
-            intent.putExtra(TalosRunService.EXTRA_TITLE, title);
-            intent.putExtra(TalosRunService.EXTRA_TEXT, text);
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(intent);
-            } else {
-                context.startService(intent);
-            }
-            call.resolve(ok(true));
-        } catch (Exception failure) {
-            // Reported, never thrown: the operation continues without the
-            // keeper, exactly as it did before this existed.
-            call.resolve(ok(false));
-        }
+        // Reported, never thrown: the operation continues without the keeper, exactly as it did before this existed.
+        call.resolve(ok(TalosRunService.acquisisci(getContext(), TITOLARE_WEB, title, text)));
     }
 
-    /** Same notification, new text: progress, not a second notification. */
     @PluginMethod
     public void update(PluginCall call) {
         final String title = call.getString("title", "TALOS is working");
         final String text = call.getString("text", "");
-        try {
-            final Context context = getContext();
-            TalosRunService.ensureChannel(context);
-            final NotificationManager manager = context.getSystemService(NotificationManager.class);
-            if (manager != null) {
-                manager.notify(4711, TalosRunService.build(context, title, text));
-            }
-            call.resolve(ok(true));
-        } catch (Exception failure) {
-            call.resolve(ok(false));
-        }
+        call.resolve(ok(TalosRunService.aggiorna(getContext(), TITOLARE_WEB, title, text)));
     }
 
     @PluginMethod
     public void stop(PluginCall call) {
-        try {
-            getContext().stopService(new Intent(getContext(), TalosRunService.class));
-            call.resolve(ok(true));
-        } catch (Exception failure) {
-            call.resolve(ok(false));
-        }
+        TalosRunService.rilascia(getContext(), TITOLARE_WEB);
+        call.resolve(ok(true));
     }
 
     private JSObject ok(boolean value) {

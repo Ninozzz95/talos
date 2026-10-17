@@ -43,6 +43,18 @@ export const TALOS_MOBILE_PROVIDERS: readonly TalosMobileProviderView[] = Object
         configurable: true,
     },
     {
+        // N15 — il piano ChatGPT della persona («Continue with ChatGPT»). È un fornitore a sé, mai una strada dentro `openai`:
+        // piano e chiave API sono due pagamenti diversi. `configurable: false`: non ha una riga sua nella scheda dei
+        // fornitori (si collega dal riquadro «Piano ChatGPT» dentro OpenAI), ma il runtime lo conosce (catalogo, modelli).
+        id: 'chatgpt',
+        label: 'ChatGPT',
+        shortLabel: 'CG',
+        requiresSecret: true,
+        tone: 'green',
+        logoAlt: 'ChatGPT logo',
+        configurable: false,
+    },
+    {
         id: 'deepseek',
         label: 'DeepSeek',
         shortLabel: 'DS',

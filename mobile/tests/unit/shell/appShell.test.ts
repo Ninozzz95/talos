@@ -101,6 +101,7 @@ function makeController() {
         // The tool block: what is running, and any write waiting for an answer.
         toolActivity: ref([] as string[]),
         pendingToolAuthorizations: ref([]),
+        attesaDelPiano: ref(null),
         toolAuthorizationRecoveries: ref([]),
         toolAuthorizationPromptVisible: ref(false),
         // §1-bis: null vuol dire «niente da chiedere», lo stato normale.
@@ -363,7 +364,14 @@ describe('App shell (header/sidebar + chat base + station sheets)', () => {
         } finally { wrapper.unmount() }
     })
 
-    it('keeps global navigation and its divider beside every tablet Settings route', async () => {
+    /**
+     * ⛔ RISCRITTA il 13/10/2026 su decisione dell'owner, dal Pad: «un po' bruttina la doppia sidebar quando sei in
+     * impostazioni: possiamo fare che la sidebar di sistema si minimizza o sparisce?» → scelta: «Sparisce». Prima questa
+     * prova pretendeva la barra dell'app accanto a OGNI rotta delle Impostazioni. Ora nelle Impostazioni, sul tablet, c'è
+     * una barra sola (le categorie), e si torna all'app dal pulsante «indietro» del foglio. Fuori dalle Impostazioni la
+     * barra dell'app resta com'era.
+     */
+    it('TABLET-SETTINGS-RAIL-01: on the tablet the global sidebar disappears inside every Settings route, a back control leads out, and it returns elsewhere', async () => {
         const { useTalosTabletLayout, __resetTalosTabletLayoutForTests } = await import('@/composables/useTalosTabletLayout')
         __resetTalosTabletLayoutForTests()
         useTalosTabletLayout().isTablet.value = true
@@ -374,13 +382,64 @@ describe('App shell (header/sidebar + chat base + station sheets)', () => {
                 await router.push(destination)
                 await flushPromises()
                 await vi.waitFor(() => {
-                    expect(wrapper.find('[data-testid="talos-mobile-sidebar"]').exists()).toBe(true)
-                    expect(wrapper.find('[role="separator"]').exists()).toBe(true)
+                    expect(wrapper.find('[data-testid="talos-sheet-back"]').exists()).toBe(true)
                 })
-                const rail = wrapper.get('[data-testid="talos-mobile-sidebar"]')
-                expect(rail.find('[data-testid="talos-sidebar-settings"]').exists()).toBe(true)
-                expect((wrapper.element as HTMLElement).style.getPropertyValue('--talos-tablet-rail')).toMatch(/^[1-9]\d*px$/)
+                expect(wrapper.find('[data-testid="talos-mobile-sidebar"]').exists()).toBe(false)
+                expect(wrapper.find('[role="separator"]').exists()).toBe(false)
+                expect((wrapper.element as HTMLElement).style.getPropertyValue('--talos-tablet-rail')).toBe('0px')
             }
+            // dalla radice delle Impostazioni il pulsante riporta all'app
+            await router.push('/settings')
+            await flushPromises()
+            expect(wrapper.get('[data-testid="talos-sheet-back"]').attributes('data-back-target')).toBe('chat')
+
+            // AL CONTRARIO: fuori dalle Impostazioni la barra dell'app c'è, col suo divisore
+            await router.push('/notes')
+            await flushPromises()
+            await vi.waitFor(() => {
+                expect(wrapper.find('[data-testid="talos-mobile-sidebar"]').exists()).toBe(true)
+                expect(wrapper.find('[role="separator"]').exists()).toBe(true)
+            })
+            expect((wrapper.element as HTMLElement).style.getPropertyValue('--talos-tablet-rail')).toMatch(/^[1-9]\d*px$/)
+        } finally {
+            wrapper.unmount()
+            __resetTalosTabletLayoutForTests()
+        }
+    })
+
+    /**
+     * ⛔ N13-RECENTI-01 — MISURATO sul Pad il 12/10/2026 (OnePlus Pad 3, layout tablet, app di sviluppo): dalle
+     * Impostazioni, «Nuova chat o sessione» → «Chat» atterrava nella chat VECCHIA e il messaggio scritto finiva lì;
+     * la chat nuova non compariva in «Recenti». Dalla chat lo stesso gesto funzionava.
+     *
+     * Causa: `tabletNewChat` chiamava `sidebarNewChat()` — che crea la sessione e POI porta in chat — e subito dopo
+     * `onTabletActivated()`, che portava in chat PRIMA che la sessione nuova esistesse. È lo stesso doppione già tolto
+     * da `tabletSelect` (vedi sopra): la regola «si atterra in chat» vive dentro `sidebarNewChat`, una volta sola.
+     */
+    it('N13-RECENTI-01: sul tablet, Nuova chat da una stazione naviga solo DOPO aver creato la sessione', async () => {
+        const { useTalosTabletLayout, __resetTalosTabletLayoutForTests } = await import('@/composables/useTalosTabletLayout')
+        __resetTalosTabletLayoutForTests()
+        useTalosTabletLayout().isTablet.value = true
+        const controller = makeController()
+        let release: () => void = () => {}
+        controller.newSession = vi.fn(() => new Promise<void>((resolve) => { release = resolve }))
+        mockState.controller = controller
+        // 13/10/2026: nelle Impostazioni la barra dell'app non c'è più (TABLET-SETTINGS-RAIL-01): la stessa regola si
+        // prova da una stazione dove la barra resta, le Note.
+        const router = makeRouter('/notes')
+        const wrapper = mount(App, { global: { plugins: [router] }, attachTo: document.body })
+        try {
+            await router.isReady()
+            await flushPromises()
+            await vi.waitFor(() => expect(wrapper.find('[data-testid="talos-mobile-sidebar"]').exists()).toBe(true))
+            const rail = wrapper.findAllComponents(Sidebar).find((sidebar) => sidebar.props('fixed'))!
+            rail.vm.$emit('newChat')
+            await flushPromises()
+            expect(controller.newSession).toHaveBeenCalledTimes(1)
+            // La sessione nuova non esiste ancora: la chat che si aprirebbe adesso è quella vecchia.
+            expect(router.currentRoute.value.path).toBe('/notes')
+            release()
+            await vi.waitFor(() => expect(router.currentRoute.value.name).toBe('chat'))
         } finally {
             wrapper.unmount()
             __resetTalosTabletLayoutForTests()
@@ -456,6 +515,49 @@ describe('App shell (header/sidebar + chat base + station sheets)', () => {
                 .not.toContain('invisible')
         } finally {
             wrapper.unmount()
+        }
+    })
+
+    /*
+     * ⛔ Pad 17/10 (ledger `LEDGER-CHAT-SOTTO-LE-STAZIONI-2026-10-17.md`): sul Codice r4 la chat restava ATTIVA nello stesso rettangolo,
+     * sotto il foglio `aria-modal`; il suo compositore era il primo campo della pagina e un invio partiva dalla chat col suo modello.
+     * WAI-ARIA APG «Dialog (Modal)»: «Windows under a modal dialog are inert». La colonna della chat è `inert` finché una stazione è
+     * aperta; sul tablet la barra delle chat sta fuori dalla colonna e resta usabile.
+     */
+    it('SHELL-INERT-01 sotto una stazione la colonna della chat è inerte (compositore compreso); in chat no; la barra del tablet resta viva', async () => {
+        const colonna = (w: ReturnType<typeof mount>) => w.get('main.relative.flex-1.overflow-hidden').element.parentElement as HTMLElement
+        const router = makeRouter('/')
+        const wrapper = mount(App, { global: { plugins: [router] }, attachTo: document.body })
+        try {
+            await flushPromises()
+            expect(colonna(wrapper).hasAttribute('inert')).toBe(false)
+            for (const stazione of ['/memory', '/research']) {
+                await router.push(stazione)
+                await flushPromises()
+                await vi.waitFor(() => expect(wrapper.find('[data-testid="talos-mobile-tool-sheet"]').exists()).toBe(true))
+                expect(colonna(wrapper).hasAttribute('inert'), stazione).toBe(true)
+                const compositore = wrapper.find('main.relative.flex-1.overflow-hidden [data-testid="talos-composer-prompt"]')
+                if (compositore.exists()) expect(colonna(wrapper).contains(compositore.element), stazione).toBe(true)
+            }
+            await router.push({ name: 'chat' })
+            await flushPromises()
+            expect(colonna(wrapper).hasAttribute('inert')).toBe(false)
+        } finally {
+            wrapper.unmount()
+        }
+        const { useTalosTabletLayout, __resetTalosTabletLayoutForTests } = await import('@/composables/useTalosTabletLayout')
+        __resetTalosTabletLayoutForTests()
+        useTalosTabletLayout().isTablet.value = true
+        const tablet = makeRouter('/notes')
+        const t = mount(App, { global: { plugins: [tablet] }, attachTo: document.body })
+        try {
+            await flushPromises()
+            await vi.waitFor(() => expect(t.find('[data-testid="talos-mobile-sidebar"]').exists()).toBe(true))
+            expect(colonna(t).hasAttribute('inert')).toBe(true)
+            expect(t.get('[data-testid="talos-mobile-sidebar"]').element.closest('[inert]')).toBeNull()
+        } finally {
+            t.unmount()
+            __resetTalosTabletLayoutForTests()
         }
     })
 
@@ -907,5 +1009,21 @@ describe('il dialogo dell icona non c entra con le altre preferenze', () => {
         // esiste per notare deve ancora passare.
         expect(iconSpy.evaluate).toHaveBeenCalled()
         wrapper.unmount()
+    })
+})
+
+/**
+ * SIDEBAR-CODICE-ICONA — owner 13/10/2026, dal Pad: «la sezione Codice ha un'icona gear che non c'entra nulla. Metti icona
+ * codice». L'ingranaggio è delle Impostazioni; il foglio del Codice e il cassetto del compositore usavano già `Code2`.
+ */
+describe('la voce Codice della barra laterale', () => {
+    it('SIDEBAR-CODICE-ICONA: ha l icona del codice, la stessa del foglio, e non l ingranaggio delle Impostazioni', async () => {
+        const { readFileSync } = await import('node:fs')
+        const { resolve } = await import('node:path')
+        const radice = resolve(__dirname, '../../..')
+        const barra = readFileSync(resolve(radice, 'src/components/shell/TalosMobileSidebar.vue'), 'utf8')
+        expect(barra).toContain("key: 'navigation.harness', icon: Code2 }")
+        expect(barra).not.toMatch(/navigation\.harness', icon: Settings/)
+        expect(readFileSync(resolve(radice, 'src/App.vue'), 'utf8')).toContain('harness: Code2')
     })
 })

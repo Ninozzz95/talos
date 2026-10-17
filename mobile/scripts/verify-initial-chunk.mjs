@@ -806,7 +806,24 @@ import { resolve } from 'node:path'
  * del metadato nel controller e le due frasi (it/en).
  * ⇒ 658.800 sulla misura: 176 byte di margine.
  */
-const DEFAULT_MAXIMUM_BYTES = 658_800
+/*
+ * ⛔ JS 658.800 → 662.000, l'11/10/2026 (N13, ordine cronologico di ragionamento, righe degli attrezzi e testo; owner 11/10
+ * ~21:20 «alzarlo a 662.000», `.claude/ragionamento/LEDGER-N13-ORDINE-CRONOLOGICO-2026-10-11.md`). Misurato **660.032**
+ * con la linea del tempo del turno (`TalosMobileAttivitaDelTurno.vue`) e il modulo della sequenza (`sequenzaDelTurno.ts`)
+ * già a richiesta, e la risposta in streaming che era già un pezzo suo. All'avvio restano:
+ * - nello store, i confini a ogni giro di attrezzi e il salvataggio della sequenza;
+ * - nella lista, la scelta fra sequenza e testo;
+ * - nella mappa dei pezzi a richiesta, le voci nuove.
+ * ⇒ 662.000 sulla misura: 1.968 byte di margine.
+ */
+/*
+ * ⛔ JS 662.000 → 668.000, il 13/10/2026 (N15, «Continue with ChatGPT»: il fornitore del piano nella chat; owner 13/10 ~12:40,
+ * chiesto con AskUserQuestion, «Alza a 668.000», `.claude/ragionamento/LEDGER-N15-CONTINUE-WITH-CHATGPT-2026-10-12.md`).
+ * Misurato **661.384** prima della fetta, con tutto l'accesso già a richiesta (conti, custodia, servizio, pannello). All'avvio
+ * un fornitore deve esistere per forza: nel tipo e nell'elenco dei fornitori, nel registro degli adattatori, nell'icona e nelle
+ * tabelle per fornitore del controller. Il resto della fetta (adattatore, token, richiesta conforme) resta a richiesta.
+ */
+const DEFAULT_MAXIMUM_BYTES = 668_000
 /*
  * ⛔ CSS 220.000 → 222.000, il 2026-09-11, sezione 1 del refactor UI (U-1).
  *

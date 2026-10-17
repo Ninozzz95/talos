@@ -1,0 +1,52 @@
+{
+  "origine": {
+    "commit": "701c6c0d2d711879b53aa21bddad5a06d33538e7",
+    "percorso": "harness-ui/frontend/src/i18n/testi/chat.js",
+    "sha256": "eaaf4c713de5ca18948df455c22a29386587aa815e46576a7ed166d1afc13458",
+    "prefisso": [
+      "approval.",
+      "common.approved",
+      "common.fromAnotherWindow"
+    ]
+  },
+  "it": {
+    "common.approved": "Approvato",
+    "common.fromAnotherWindow": " da un’altra finestra",
+    "approval.requestsToWrite": "Chiede di scrivere",
+    "approval.expiresAtSessionEnd": "Scade a fine sessione",
+    "approval.exactCommand": "Il comando esatto che l’agente vuole eseguire",
+    "approval.allowOnce": "Consenti una volta",
+    "approval.forThisSession": "Per questa sessione",
+    "approval.alwaysNotSaved": "Consentito solo per questa richiesta: la regola di «{attrezzo}» è «Nega sempre», quindi «Per questa sessione» non è stato salvato.",
+    "approval.deny": "Nega",
+    "approval.allowedInFolder": "Consentito in questa cartella per la sessione",
+    "approval.inherited.badge": "Permesso ereditato",
+    "approval.inherited.named": "Consentito da un permesso dato in «{name}».",
+    "approval.inherited.unnamed": "Consentito da un permesso dato in una sessione più in alto.",
+    "approval.deniedNoOneCanAnswer": "Negato: nessuno poteva rispondere in questa sessione automatica",
+    "approval.denied": "Negato",
+    "approval.editedByYou": "Modificata e salvata da te",
+    "approval.cancelled": "Annullata",
+    "approval.outcomeWithOrigin": "{esito}{altrove}"
+  },
+  "en": {
+    "common.approved": "Approved",
+    "common.fromAnotherWindow": " from another window",
+    "approval.requestsToWrite": "Requests to write",
+    "approval.expiresAtSessionEnd": "Expires at the end of the session",
+    "approval.exactCommand": "The exact command the agent wants to run",
+    "approval.allowOnce": "Allow once",
+    "approval.forThisSession": "For this session",
+    "approval.alwaysNotSaved": "Allowed for this request only: the rule for “{attrezzo}” is “Always deny”, so “For this session” was not saved.",
+    "approval.deny": "Deny",
+    "approval.allowedInFolder": "Allowed in this folder for the session",
+    "approval.inherited.badge": "Inherited permission",
+    "approval.inherited.named": "Allowed by a permission given in “{name}”.",
+    "approval.inherited.unnamed": "Allowed by a permission given in a session above this one.",
+    "approval.deniedNoOneCanAnswer": "Denied: no one could answer in this automatic session",
+    "approval.denied": "Denied",
+    "approval.editedByYou": "Edited and saved by you",
+    "approval.cancelled": "Cancelled",
+    "approval.outcomeWithOrigin": "{esito}{altrove}"
+  }
+}

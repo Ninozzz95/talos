@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useTalosTabletLayout } from '@/composables/useTalosTabletLayout'
 import type { TalosRunCost } from '@/lib/chat/runCost'
 import type { TalosRunRecord } from '@/lib/chat/runDetails'
 import { ChevronRight, Eye, EyeOff, FileText, FlaskConical, MessageSquareText, MoreHorizontal, Presentation } from '@lucide/vue'
@@ -46,6 +47,7 @@ import { talosComposerFlags } from '@/lib/composerStyle'
 import { useTalosMobileToasts } from '@/stores/toasts'
 import { defineAsyncComponent as talosAsyncSheet } from 'vue'
 import { shareTalosMessageMarkdown } from '@/lib/chat/messageShare'
+import { TALOS_CLASSE_COLONNA_CHAT } from '@/lib/chat/colonnaChat'
 import { TALOS_TURN_UNDO_MS } from '@/stores/chat'
 const TalosMobileRunDetailsSheet = talosAsyncSheet(() => import('@/components/chat/TalosMobileRunDetailsSheet.vue'))
 import {
@@ -65,6 +67,14 @@ const TalosMobileBrowserActivity = defineAsyncComponent(
  */
 const TalosMobileCodaDellaChat = defineAsyncComponent(
     () => import('@/components/chat/TalosMobileCodaDellaChat.vue'),
+)
+/** N15 — la pastiglia «ChatGPT plan»: compare solo con un modello del piano scelto, quindi si carica a richiesta. */
+const TalosMobileChatgptPastiglia = defineAsyncComponent(
+    () => import('@/components/chat/TalosMobileChatgptPastiglia.vue'),
+)
+/** N15 — la carta del limite d'uso del piano: compare solo mentre un giro aspetta, quindi si carica a richiesta. */
+const TalosMobileChatgptLimite = defineAsyncComponent(
+    () => import('@/components/chat/TalosMobileChatgptLimite.vue'),
 )
 /** ⭐ B3 «Riprendi»: compare solo su una chat interrotta, quindi si carica a richiesta anche lui. */
 const TalosMobileRiprendiGiro = defineAsyncComponent(
@@ -206,6 +216,8 @@ const parlaSubito = () => useTalosSpeech()
 
 // F2-T5: live dictation — partials compose onto the draft captured at start.
 const dictation = useTalosMobileDictation({
+    // N12: in chat la dettatura può usare il motore locale (Parakeet), se il modello è stato scaricato.
+    motoreLocale: true,
     base: () => prompt.value,
     onTranscript: (text) => {
         voce.value?.dettatura(dictationDraftBefore.value, text)
@@ -225,6 +237,8 @@ const dictation = useTalosMobileDictation({
      * `dictationPolicy` proprio perché non possano più scostarsi.
      */
     errorMessage: (code) => t(`chat.dictationErrors.${code}`),
+    // N12: il riconoscimento sul dispositivo non ha finito; il testo che resta è quello del riconoscitore di sistema.
+    onFallback: () => toasts.push({ message: t('chat.dictationLocalFallback'), durationMs: 6000 }),
 })
 
 /**
@@ -269,7 +283,8 @@ const trascrizioneViva = computed(() => {
 
 /** ⭐ Chiude la dettatura e manda, in un gesto solo. */
 async function onSendDictation(): Promise<void> {
-    dictation.cancel()
+    // N12: col motore locale il testo GIUSTO arriva un attimo dopo lo stop (Parakeet): si aspetta quello, poi si manda.
+    await dictation.finisci()
     await nextTick()
     // ⭐ B3: mentre TALOS risponde, «invia» dalla barra di dettatura fa quello che fa l'Invio: accoda.
     if (controller.canQueue.value) {
@@ -306,6 +321,13 @@ const enhancer = computed(() => settings.state.shell?.prompt_enhancer ?? {
 })
 
 /** Solo i modelli che questo dispositivo puo' davvero chiamare. */
+/** N15 — il giro che sta per partire lo paga il piano ChatGPT della persona: il compositore lo dice con la sua pastiglia. */
+const pianoChatgptInUso = computed(() => profiles.value.some((p) => p.id === selectedModelId.value && p.provider === 'chatgpt'))
+/** N15 — il giro di QUESTA chat è fermo al limite d'uso del piano e riprenderà da solo. */
+const attesaDelPianoQui = computed(() => {
+    const attesa = controller.attesaDelPiano.value
+    return attesa && attesa.sessionId === chat.activeSession.value?.id ? attesa : null
+})
 const enhancerModels = computed(() => controller.profiles.value.map((profile) => ({
     id: profile.id,
     label: profile.display_name || profile.model,
@@ -591,6 +613,12 @@ function chipAltro(): void {
  * chat» vuota e una sessione di Codice, che le Recenti non elencano.
  */
 const RIPRESE_MASSIME = 2
+/**
+ * Owner 13/10/2026, con la foto del telefono in verticale: «Riprendi da qui ha due righe di chat. Solo per questo layout ne
+ * vorrei solo una». Sul telefono resta la più recente (le altre sono a un tocco, in «Tutte le chat»); sul tablet due.
+ */
+const RIPRESE_SUL_TELEFONO = 1
+const layoutDelTablet = useTalosTabletLayout()
 const relativeTimeLabels = computed(() => ({
     justNow: t('chat.justNow'),
     minutesAgo: (count: number) => t('chat.minutesAgo', { count }),
@@ -600,7 +628,7 @@ const relativeTimeLabels = computed(() => ({
 // B07/C07 (12/09): archiviate e sessioni Codice fuori, come nel mockup (`!archived && !temporary`).
 const chatDaRiprendere = computed(() => recentChatSessions(chat.history ?? [])
     .filter(session => session.id !== activeSessionId.value && !talosIsEphemeralSessionId(session.id))
-    .slice(0, RIPRESE_MASSIME))
+    .slice(0, layoutDelTablet.isTablet.value ? RIPRESE_MASSIME : RIPRESE_SUL_TELEFONO))
 function titoloRipresa(session: { title: string }): string {
     return talosDaIntitolare(session.title) ? t('chat.newChat') : session.title
 }
@@ -1359,9 +1387,12 @@ onBeforeUnmount(() => {
             {{ draftError || preferenceError }}
         </div>
 
+        <!-- 16/10 (Pad): `relative` fa dello scorrimento il blocco contenitore dei testi `sr-only` (assoluti) dei messaggi: senza,
+             sfuggivano al suo taglio e allungavano `main.overflow-hidden` (14.827 px con 79 messaggi), che poi un focus() o uno
+             scrollIntoView facevano scorrere con tutta la schermata. Come lo scorrimento del Codice (K3-AP3). -->
         <div
             ref="chatScroll"
-            class="flex-1 touch-pan-y overflow-y-auto overscroll-contain"
+            class="relative flex-1 touch-pan-y overflow-y-auto overscroll-contain"
             :class="settings.state.shell.immersive_header ? 'pt-[calc(3.5rem+env(safe-area-inset-top))]' : ''"
             data-testid="talos-chat-scroll"
             @scroll.passive="onChatScroll"
@@ -1374,7 +1405,7 @@ onBeforeUnmount(() => {
 
                 <div
                     v-if="chat.sessionBrowserActivities.length"
-                    class="mx-auto w-full max-w-[820px] px-3"
+                    :class="TALOS_CLASSE_COLONNA_CHAT"
                 >
                     <TalosMobileBrowserActivity
                         :activities="chat.sessionBrowserActivities"
@@ -1586,6 +1617,7 @@ onBeforeUnmount(() => {
                             v-if="codaAperta && codaAperta.voci.length > 0"
                             @rejoin="rejoinLiveEdge"
                         />
+                        <TalosMobileChatgptLimite v-if="attesaDelPianoQui" :attesa="attesaDelPianoQui" @ferma="chat.stopStreaming()" />
                         <TalosMobileComposer
                             ref="composer"
                             :prompt="prompt"
@@ -1660,7 +1692,9 @@ onBeforeUnmount(() => {
                             @replace-prompt-enhancement="replacePromptEnhancement"
                             @select-slash-command="selectSlashCommand"
                             @update-library-turn-override="libraryTurnOverride = $event"
-                        />
+                        >
+                            <TalosMobileChatgptPastiglia v-if="pianoChatgptInUso" />
+                        </TalosMobileComposer>
                         </div>
                     </div>
 
@@ -1690,7 +1724,7 @@ onBeforeUnmount(() => {
                             <MoreHorizontal class="size-4" aria-hidden="true" />{{ t('chat.promptMore') }}
                         </button>
                     </div>
-                    <!-- «Riprendi da qui» (`.resume-section`): le ultime due chat, e la via
+                    <!-- «Riprendi da qui» (`.resume-section`): le ultime due chat (una sul telefono), e la via
                          a tutte. Solo quando c'e' qualcosa da riprendere. -->
                     <section
                         v-if="!composerExpanded && chatDaRiprendere.length"

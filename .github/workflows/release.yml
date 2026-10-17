@@ -217,6 +217,24 @@ jobs:
         run: npx cap sync android
         working-directory: ${{ steps.dove.outputs.dir }}
 
+      # ⛔ K4-E (owner 17/10 «r4 al posto, il vecchio come ripiego»): il Codice dell'app è il server r4 del desktop, e si costruisce
+      # dallo STESSO commit del tag: `harness-ui`, `context-engine` e `docs/assistenza` stanno nel checkout accanto a `mobile/`, quindi
+      # il pin di r4 è quello che il desktop pubblica, senza un secondo riferimento da tenere allineato. La ricetta è quella del
+      # ledger K3 (copia dal commit → pacchetto con le dipendenze linux-arm64 e il pty compilato con l'NDK qui sopra → archivio).
+      # Senza archivio Gradle non costruisce la release (`build.gradle`, `taskGraph.whenReady`).
+      - name: il server r4 del Codice, dal commit del tag
+        id: r4
+        working-directory: ${{ steps.dove.outputs.dir }}
+        run: |
+          set -euo pipefail
+          copia="$RUNNER_TEMP/r4-copia"
+          pacchetto="$RUNNER_TEMP/r4-pacchetto"
+          archivio="$RUNNER_TEMP/r4.tar"
+          node scripts/kernel-r4/copia-r4.mjs --r4 "$GITHUB_WORKSPACE" --commit "$GITHUB_SHA" --uscita "$copia"
+          node scripts/kernel-r4/prepara-pacchetto-r4.mjs --vendor "$copia" --uscita "$pacchetto"
+          node scripts/r4-mobile/archivio-r4.mjs --pacchetto "$pacchetto" --uscita "$archivio"
+          echo "archivio=$archivio" >> "$GITHUB_OUTPUT"
+
       # La chiave esiste solo dentro il runner, e solo per il tempo del build.
       # `keystore.properties` è già ciò che il build.gradle si aspetta.
       - name: monta la chiave
@@ -290,7 +308,8 @@ jobs:
           ./gradlew assembleRelease --console=plain \
             -PtalosVersionName=${{ steps.versione.outputs.nome }} \
             -PtalosVersionCode=${{ steps.versione.outputs.codice }} \
-            -PtalosHexagonDir=${{ steps.npu.outputs.dir }}
+            -PtalosHexagonDir=${{ steps.npu.outputs.dir }} \
+            -PtalosR4Archivio=${{ steps.r4.outputs.archivio }}
 
       # ⛔ «Success» non basta: si guarda DENTRO l'APK. Un build che riesce con
       # la firma disattivata produce un artefatto che sembra buono e non lo è —
@@ -368,6 +387,13 @@ jobs:
         run: |
           node scripts/verify-release-plugin-classes.mjs \
             "$GITHUB_WORKSPACE/${{ steps.apk.outputs.nome }}"
+
+      # ⛔ K4-E: e il Codice è quello su r4, al commit del tag. Un APK senza r4 aprirebbe a tutti il Codice vecchio in silenzio.
+      - name: ⛔ r4 è nell'APK, al commit del tag
+        working-directory: ${{ steps.dove.outputs.dir }}
+        run: |
+          node scripts/r4-mobile/verifica-r4-nell-apk.mjs \
+            "$GITHUB_WORKSPACE/${{ steps.apk.outputs.nome }}" "$GITHUB_SHA"
 
       # La provenienza SLSA: lega l'artefatto al workflow, al commit e al
       # repository, con un certificato effimero su un registro di trasparenza.

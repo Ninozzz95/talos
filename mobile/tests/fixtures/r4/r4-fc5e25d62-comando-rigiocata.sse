@@ -1,0 +1,195 @@
+:ok
+
+id: 1
+data: {"type":"RunStarted","threadId":"99624e4f-afbb-4565-a854-efd34d54c6b8","runId":"0d395425-237c-480a-aa38-58eba74e6895","input":{"consegna":"Leggi NOTA.md e dimmi cosa dice","consegnaCorta":"Leggi NOTA.md e dimmi cosa dice","progetto":"progetto"},"contesto":{"progetto":"progetto","cartella":"GOLDEN\\prova\\progetto","branch":null,"worktree":null,"repoAnnidati":[],"modello":"lmstudio:finto","reasoning":null,"permessi":"Full access","modalitaOperativa":"normale"},"timestamp":1792068037430,"_sequenza":1}
+
+id: 2
+data: {"type":"ReasoningMessageStart","messageId":"3842cbe1-6eb5-4df3-82ad-e3bd4ffedaeb","role":"reasoning","_sequenza":2}
+
+id: 6
+data: {"type":"ReasoningMessageContent","messageId":"3842cbe1-6eb5-4df3-82ad-e3bd4ffedaeb","delta":"Devo leggere NOTA.md prima di rispondere.","_sequenza":6}
+
+id: 7
+data: {"type":"ToolCallStart","toolCallId":"chiamata1","toolCallName":"leggi","avviatoA":1792068037514,"_sequenza":7}
+
+id: 8
+data: {"type":"ToolCallArgs","toolCallId":"chiamata1","delta":"{\"percorso\":\"NOTA.md\"}","_sequenza":8}
+
+id: 9
+data: {"type":"CUSTOM","name":"consumo-fornitore","value":{"tipo":"consumo-fornitore","provider":"lmstudio","model":"finto","usage":{"prompt_tokens":100,"completion_tokens":20,"total_tokens":120},"costoDichiarato":null,"esito":"completato"},"_sequenza":9}
+
+id: 10
+data: {"type":"ReasoningMessageEnd","messageId":"3842cbe1-6eb5-4df3-82ad-e3bd4ffedaeb","_sequenza":10}
+
+id: 11
+data: {"type":"StateDelta","delta":[{"op":"replace","path":"/usage","value":{"prompt_tokens":100,"completion_tokens":20,"cached_tokens":0,"giri":1}}],"_sequenza":11}
+
+id: 12
+data: {"type":"ToolCallResult","messageId":"4388ac3b-4562-4e67-84cb-299388aeafe6","toolCallId":"chiamata1","content":"<<<TALOS_DATA id=621e885027b1 from=\"leggi NOTA.md\">>>\n# Nota\n\nIl modulo `slugify` va scritto entro venerdì.\n\n<<<END_TALOS_DATA id=621e885027b1>>>","role":"tool","isError":false,"_sequenza":12}
+
+id: 13
+data: {"type":"ReasoningMessageStart","messageId":"8439b053-ac22-4948-8823-a67457a1ef92","role":"reasoning","_sequenza":13}
+
+id: 17
+data: {"type":"ReasoningMessageContent","messageId":"8439b053-ac22-4948-8823-a67457a1ef92","delta":"Ho il contenuto: riassumo con un esempio.","_sequenza":17}
+
+id: 18
+data: {"type":"TextMessageStart","messageId":"1753b72f-b44e-406f-a9bf-57b245408b3e","role":"assistant","_sequenza":18}
+
+id: 29
+data: {"type":"TextMessageContent","messageId":"1753b72f-b44e-406f-a9bf-57b245408b3e","delta":"## Cosa dice la nota\n\n- Il modulo `slugify` va scritto **entro venerdì**.\n- Va provato con `node --test`.\n\n```js\nexport const slugify = (t) => t.toLowerCase()\n```\n","_sequenza":29}
+
+id: 30
+data: {"type":"CUSTOM","name":"consumo-fornitore","value":{"tipo":"consumo-fornitore","provider":"lmstudio","model":"finto","usage":{"prompt_tokens":100,"completion_tokens":20,"total_tokens":120},"costoDichiarato":null,"esito":"completato"},"_sequenza":30}
+
+id: 31
+data: {"type":"TextMessageEnd","messageId":"1753b72f-b44e-406f-a9bf-57b245408b3e","_sequenza":31}
+
+id: 32
+data: {"type":"ReasoningMessageEnd","messageId":"8439b053-ac22-4948-8823-a67457a1ef92","_sequenza":32}
+
+id: 33
+data: {"type":"StateDelta","delta":[{"op":"replace","path":"/usage","value":{"prompt_tokens":200,"completion_tokens":40,"cached_tokens":0,"giri":2}}],"_sequenza":33}
+
+id: 34
+data: {"type":"RunFinished","threadId":"99624e4f-afbb-4565-a854-efd34d54c6b8","runId":"0d395425-237c-480a-aa38-58eba74e6895","outcome":{"type":"success"},"result":{"detto":"## Cosa dice la nota\n\n- Il modulo `slugify` va scritto **entro venerdì**.\n- Va provato con `node --test`.\n\n```js\nexport const slugify = (t) => t.toLowerCase()\n```\n","compattazioni":0,"premesseNegate":0,"usage":{"prompt_tokens":200,"completion_tokens":40,"prompt_tokens_details":{"cached_tokens":0},"giri":2}},"timestamp":1792068037613,"_sequenza":34}
+
+id: 35
+data: {"type":"RunStarted","threadId":"42d9db65-4ccd-4257-84c1-ee1938a042d7","runId":"5b172321-e89b-45f1-90cf-8708cf272cbd","input":{"consegna":"Riassumi in una riga","progetto":"progetto","seguito":true},"contesto":{"progetto":"progetto","cartella":"GOLDEN\\prova\\progetto","branch":null,"worktree":null,"repoAnnidati":[],"modello":"lmstudio:finto","reasoning":null,"permessi":"Full access","modalitaOperativa":"normale"},"timestamp":1792068037925,"_sequenza":35}
+
+id: 36
+data: {"type":"TextMessageStart","messageId":"e9a82528-e2bd-4b32-9fdc-57eab4bd25ad","role":"assistant","_sequenza":36}
+
+id: 40
+data: {"type":"TextMessageContent","messageId":"e9a82528-e2bd-4b32-9fdc-57eab4bd25ad","delta":"In una riga: la nota chiede `slugify` entro **venerdì**.","_sequenza":40}
+
+id: 41
+data: {"type":"CUSTOM","name":"consumo-fornitore","value":{"tipo":"consumo-fornitore","provider":"lmstudio","model":"finto","usage":{"prompt_tokens":100,"completion_tokens":20,"total_tokens":120},"costoDichiarato":null,"esito":"completato"},"_sequenza":41}
+
+id: 42
+data: {"type":"TextMessageEnd","messageId":"e9a82528-e2bd-4b32-9fdc-57eab4bd25ad","_sequenza":42}
+
+id: 43
+data: {"type":"StateDelta","delta":[{"op":"replace","path":"/usage","value":{"prompt_tokens":100,"completion_tokens":20,"cached_tokens":0,"giri":1}}],"_sequenza":43}
+
+id: 44
+data: {"type":"RunFinished","threadId":"42d9db65-4ccd-4257-84c1-ee1938a042d7","runId":"5b172321-e89b-45f1-90cf-8708cf272cbd","outcome":{"type":"success"},"result":{"detto":"In una riga: la nota chiede `slugify` entro **venerdì**.","compattazioni":0,"premesseNegate":0,"usage":{"prompt_tokens":100,"completion_tokens":20,"prompt_tokens_details":{"cached_tokens":0},"giri":1}},"timestamp":1792068037960,"_sequenza":44}
+
+id: 45
+data: {"type":"RunStarted","threadId":"17d8c809-b8e2-43e3-9e12-74d50687c13a","runId":"cb9a0af5-4dbd-4ed8-bdee-80fe1be968bf","input":{"consegna":"Prova i comandi del progetto","progetto":"progetto","seguito":true},"contesto":{"progetto":"progetto","cartella":"GOLDEN\\prova\\progetto","branch":null,"worktree":null,"repoAnnidati":[],"modello":"lmstudio:finto","reasoning":null,"permessi":"Full access","modalitaOperativa":"normale"},"timestamp":1792068038268,"_sequenza":45}
+
+id: 46
+data: {"type":"ReasoningMessageStart","messageId":"2679eee9-0cdd-4937-b400-67c11b925ca7","role":"reasoning","_sequenza":46}
+
+id: 48
+data: {"type":"ReasoningMessageContent","messageId":"2679eee9-0cdd-4937-b400-67c11b925ca7","delta":"Lancio il comando.","_sequenza":48}
+
+id: 49
+data: {"type":"ToolCallStart","toolCallId":"comando0","toolCallName":"shell","avviatoA":1792068038286,"_sequenza":49}
+
+id: 50
+data: {"type":"ToolCallArgs","toolCallId":"comando0","delta":"{\"comando\":\"node -e \\\"setTimeout(() => {}, 20000)\\\"\",\"descrizione\":\"Aspetta venti secondi\"}","_sequenza":50}
+
+id: 51
+data: {"type":"CUSTOM","name":"consumo-fornitore","value":{"tipo":"consumo-fornitore","provider":"lmstudio","model":"finto","usage":{"prompt_tokens":100,"completion_tokens":20,"total_tokens":120},"costoDichiarato":null,"esito":"completato"},"_sequenza":51}
+
+id: 52
+data: {"type":"ReasoningMessageEnd","messageId":"2679eee9-0cdd-4937-b400-67c11b925ca7","_sequenza":52}
+
+id: 53
+data: {"type":"StateDelta","delta":[{"op":"replace","path":"/usage","value":{"prompt_tokens":100,"completion_tokens":20,"cached_tokens":0,"giri":1}}],"_sequenza":53}
+
+id: 54
+data: {"type":"CUSTOM","name":"talos.process-output","value":{"schema":"talos.process-output.v1","outputId":"a3ee3145-ef3c-45a4-b3b7-7124f272d916","sessionId":"e212b98a-9b28-4b56-8c67-12d96b66b83f","runId":"cb9a0af5-4dbd-4ed8-bdee-80fe1be968bf","toolCallId":"comando0","state":"recording","limitBytes":67108864,"nextSequence":0,"observedBytes":0,"storedBytes":0,"stdout":{"observedBytes":0,"storedBytes":0,"sha256":null},"stderr":{"observedBytes":0,"storedBytes":0,"sha256":null},"createdAt":"2026-10-15T12:40:38.329Z","finishedAt":null,"termination":null,"exitCode":null,"errorCode":null},"_sequenza":54}
+
+id: 55
+data: {"type":"CUSTOM","name":"talos.process-output","value":{"schema":"talos.process-output.v1","outputId":"a3ee3145-ef3c-45a4-b3b7-7124f272d916","sessionId":"e212b98a-9b28-4b56-8c67-12d96b66b83f","runId":"cb9a0af5-4dbd-4ed8-bdee-80fe1be968bf","toolCallId":"comando0","state":"complete","limitBytes":67108864,"nextSequence":0,"observedBytes":0,"storedBytes":0,"stdout":{"observedBytes":0,"storedBytes":0,"sha256":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},"stderr":{"observedBytes":0,"storedBytes":0,"sha256":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},"createdAt":"2026-10-15T12:40:38.329Z","finishedAt":"2026-10-15T12:40:42.567Z","termination":"cancelled","exitCode":130,"errorCode":null,"outputMetadataVersion":1,"persistence":"confirmed"},"_sequenza":55}
+
+id: 56
+data: {"type":"ToolCallResult","messageId":"777aa62b-9851-4b71-abc4-ad497fabc7e9","toolCallId":"comando0","content":"[shell output: stdout and stderr combined in arrival order; stream identity is not preserved]\nexit 130 [sandbox: wsl2 (Linux in WSL come root; nessun isolamento: /mnt/c è il disco di Windows con i diritti dell'utente Windows di TALOS, e lì i permessi Linux non valgono)]\n<<<TALOS_DATA id=a36452726575 from=\"shell\">>>\n[TALOS output reference: a3ee3145-ef3c-45a4-b3b7-7124f272d916; retained 0 of 0 bytes.] Read retained bytes with process_output({\"outputId\":\"a3ee3145-ef3c-45a4-b3b7-7124f272d916\"}); follow nextOffset, and select stderr separately.\n⛔ The person stopped this command on purpose from the Processes tab while it ran. Do not run it again unless they ask you to.\n<<<END_TALOS_DATA id=a36452726575>>>","role":"tool","isError":true,"durataMs":4261,"comando":"node -e \"setTimeout(() => {}, 20000)\"","cwd":"GOLDEN\\prova\\progetto","exitCode":130,"receipt":{"schema_version":1,"azione":"shell","percorso":null,"comando":"node -e \"setTimeout(() => {}, 20000)\"","toolCallId":"comando0","consentito":true,"via":"nessun-vincolo","motivo":null,"status":"failed","risk":"R2","trifecta":false,"action":"execute","requiredActions":["execute","outbound","write"],"hashContenuto":null,"evidence":{"exitCode":130,"sandboxEnforcement":"wsl2"},"postcondizione":"nessuna","verified":null,"error":null,"signature":null,"keyId":null},"_sequenza":56}
+
+id: 57
+data: {"type":"ReasoningMessageStart","messageId":"9a3804dd-9e9a-4725-a917-9b5d9258152d","role":"reasoning","_sequenza":57}
+
+id: 59
+data: {"type":"ReasoningMessageContent","messageId":"9a3804dd-9e9a-4725-a917-9b5d9258152d","delta":"Lancio il comando.","_sequenza":59}
+
+id: 60
+data: {"type":"ToolCallStart","toolCallId":"comando1","toolCallName":"shell","avviatoA":1792068042616,"_sequenza":60}
+
+id: 61
+data: {"type":"ToolCallArgs","toolCallId":"comando1","delta":"{\"comando\":\"node -e \\\"process.exit(2)\\\"\",\"descrizione\":\"Esce con un errore\"}","_sequenza":61}
+
+id: 62
+data: {"type":"CUSTOM","name":"consumo-fornitore","value":{"tipo":"consumo-fornitore","provider":"lmstudio","model":"finto","usage":{"prompt_tokens":100,"completion_tokens":20,"total_tokens":120},"costoDichiarato":null,"esito":"completato"},"_sequenza":62}
+
+id: 63
+data: {"type":"ReasoningMessageEnd","messageId":"9a3804dd-9e9a-4725-a917-9b5d9258152d","_sequenza":63}
+
+id: 64
+data: {"type":"StateDelta","delta":[{"op":"replace","path":"/usage","value":{"prompt_tokens":200,"completion_tokens":40,"cached_tokens":0,"giri":2}}],"_sequenza":64}
+
+id: 65
+data: {"type":"CUSTOM","name":"talos.process-output","value":{"schema":"talos.process-output.v1","outputId":"6412cbe4-7305-4660-93e2-e9a87d8492ee","sessionId":"e212b98a-9b28-4b56-8c67-12d96b66b83f","runId":"cb9a0af5-4dbd-4ed8-bdee-80fe1be968bf","toolCallId":"comando1","state":"recording","limitBytes":67108864,"nextSequence":0,"observedBytes":0,"storedBytes":0,"stdout":{"observedBytes":0,"storedBytes":0,"sha256":null},"stderr":{"observedBytes":0,"storedBytes":0,"sha256":null},"createdAt":"2026-10-15T12:40:42.643Z","finishedAt":null,"termination":null,"exitCode":null,"errorCode":null},"_sequenza":65}
+
+id: 66
+data: {"type":"CUSTOM","name":"talos.process-output","value":{"schema":"talos.process-output.v1","outputId":"6412cbe4-7305-4660-93e2-e9a87d8492ee","sessionId":"e212b98a-9b28-4b56-8c67-12d96b66b83f","runId":"cb9a0af5-4dbd-4ed8-bdee-80fe1be968bf","toolCallId":"comando1","state":"complete","limitBytes":67108864,"nextSequence":0,"observedBytes":0,"storedBytes":0,"stdout":{"observedBytes":0,"storedBytes":0,"sha256":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},"stderr":{"observedBytes":0,"storedBytes":0,"sha256":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},"createdAt":"2026-10-15T12:40:42.643Z","finishedAt":"2026-10-15T12:40:43.012Z","termination":"exited","exitCode":2,"errorCode":null,"outputMetadataVersion":1,"persistence":"confirmed"},"_sequenza":66}
+
+id: 67
+data: {"type":"ToolCallResult","messageId":"f8f2e34e-f603-4b6f-96ef-70a5ce8793a8","toolCallId":"comando1","content":"[shell output: stdout and stderr combined in arrival order; stream identity is not preserved]\nexit 2 [sandbox: wsl2 (Linux in WSL come root; nessun isolamento: /mnt/c è il disco di Windows con i diritti dell'utente Windows di TALOS, e lì i permessi Linux non valgono)]\n<<<TALOS_DATA id=e22bb5ff3c1d from=\"shell\">>>\n[TALOS output reference: 6412cbe4-7305-4660-93e2-e9a87d8492ee; retained 0 of 0 bytes.] Read retained bytes with process_output({\"outputId\":\"6412cbe4-7305-4660-93e2-e9a87d8492ee\"}); follow nextOffset, and select stderr separately.\n\n<<<END_TALOS_DATA id=e22bb5ff3c1d>>>","role":"tool","isError":true,"durataMs":381,"comando":"node -e \"process.exit(2)\"","cwd":"GOLDEN\\prova\\progetto","exitCode":2,"receipt":{"schema_version":1,"azione":"shell","percorso":null,"comando":"node -e \"process.exit(2)\"","toolCallId":"comando1","consentito":true,"via":"nessun-vincolo","motivo":null,"status":"failed","risk":"R4","trifecta":true,"action":"execute","requiredActions":["execute","outbound","write"],"hashContenuto":null,"evidence":{"exitCode":2,"sandboxEnforcement":"wsl2"},"postcondizione":"nessuna","verified":null,"error":null,"signature":null,"keyId":null},"_sequenza":67}
+
+id: 68
+data: {"type":"ReasoningMessageStart","messageId":"bc2d6377-4827-416f-b1ea-1f309104012f","role":"reasoning","_sequenza":68}
+
+id: 70
+data: {"type":"ReasoningMessageContent","messageId":"bc2d6377-4827-416f-b1ea-1f309104012f","delta":"Lancio il comando.","_sequenza":70}
+
+id: 71
+data: {"type":"ToolCallStart","toolCallId":"comando2","toolCallName":"shell","avviatoA":1792068043043,"_sequenza":71}
+
+id: 72
+data: {"type":"ToolCallArgs","toolCallId":"comando2","delta":"{\"comando\":\"node --version\",\"descrizione\":\"Mostra la versione di Node\"}","_sequenza":72}
+
+id: 73
+data: {"type":"CUSTOM","name":"consumo-fornitore","value":{"tipo":"consumo-fornitore","provider":"lmstudio","model":"finto","usage":{"prompt_tokens":100,"completion_tokens":20,"total_tokens":120},"costoDichiarato":null,"esito":"completato"},"_sequenza":73}
+
+id: 74
+data: {"type":"ReasoningMessageEnd","messageId":"bc2d6377-4827-416f-b1ea-1f309104012f","_sequenza":74}
+
+id: 75
+data: {"type":"StateDelta","delta":[{"op":"replace","path":"/usage","value":{"prompt_tokens":300,"completion_tokens":60,"cached_tokens":0,"giri":3}}],"_sequenza":75}
+
+id: 76
+data: {"type":"CUSTOM","name":"talos.process-output","value":{"schema":"talos.process-output.v1","outputId":"cc0a11b6-5456-4da7-b173-be24378d4305","sessionId":"e212b98a-9b28-4b56-8c67-12d96b66b83f","runId":"cb9a0af5-4dbd-4ed8-bdee-80fe1be968bf","toolCallId":"comando2","state":"recording","limitBytes":67108864,"nextSequence":0,"observedBytes":0,"storedBytes":0,"stdout":{"observedBytes":0,"storedBytes":0,"sha256":null},"stderr":{"observedBytes":0,"storedBytes":0,"sha256":null},"createdAt":"2026-10-15T12:40:43.069Z","finishedAt":null,"termination":null,"exitCode":null,"errorCode":null},"_sequenza":76}
+
+id: 77
+data: {"type":"CUSTOM","name":"talos.process-output","value":{"schema":"talos.process-output.v1","outputId":"cc0a11b6-5456-4da7-b173-be24378d4305","sessionId":"e212b98a-9b28-4b56-8c67-12d96b66b83f","runId":"cb9a0af5-4dbd-4ed8-bdee-80fe1be968bf","toolCallId":"comando2","state":"complete","limitBytes":67108864,"nextSequence":1,"observedBytes":9,"storedBytes":9,"stdout":{"observedBytes":9,"storedBytes":9,"sha256":"8f9258d5e9da5443c42966a661aee09292b49d1c64e718dcc5f72976500bac48"},"stderr":{"observedBytes":0,"storedBytes":0,"sha256":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},"createdAt":"2026-10-15T12:40:43.069Z","finishedAt":"2026-10-15T12:40:43.321Z","termination":"exited","exitCode":0,"errorCode":null,"outputMetadataVersion":1,"persistence":"confirmed"},"_sequenza":77}
+
+id: 78
+data: {"type":"ToolCallResult","messageId":"788de3b2-5dd8-4576-b03a-5ab937ea1c55","toolCallId":"comando2","content":"[shell output: stdout and stderr combined in arrival order; stream identity is not preserved]\nexit 0 [sandbox: wsl2 (Linux in WSL come root; nessun isolamento: /mnt/c è il disco di Windows con i diritti dell'utente Windows di TALOS, e lì i permessi Linux non valgono)]\n<<<TALOS_DATA id=a6443be0cfe2 from=\"shell\">>>\n[TALOS output reference: cc0a11b6-5456-4da7-b173-be24378d4305; retained 9 of 9 bytes.] Read retained bytes with process_output({\"outputId\":\"cc0a11b6-5456-4da7-b173-be24378d4305\"}); follow nextOffset, and select stderr separately.\nv24.18.0\n<<<END_TALOS_DATA id=a6443be0cfe2>>>","role":"tool","isError":false,"durataMs":257,"comando":"node --version","cwd":"GOLDEN\\prova\\progetto","exitCode":0,"receipt":{"schema_version":1,"azione":"shell","percorso":null,"comando":"node --version","toolCallId":"comando2","consentito":true,"via":"nessun-vincolo","motivo":null,"status":"succeeded","risk":"R4","trifecta":true,"action":"execute","requiredActions":["execute","outbound","write"],"hashContenuto":null,"evidence":{"exitCode":0,"sandboxEnforcement":"wsl2"},"postcondizione":"nessuna","verified":null,"error":null,"signature":null,"keyId":null},"_sequenza":78}
+
+id: 79
+data: {"type":"TextMessageStart","messageId":"67caf5ce-de52-4678-abce-44954a75ed37","role":"assistant","_sequenza":79}
+
+id: 81
+data: {"type":"TextMessageContent","messageId":"67caf5ce-de52-4678-abce-44954a75ed37","delta":"Ho lanciato i tre comandi.","_sequenza":81}
+
+id: 82
+data: {"type":"CUSTOM","name":"consumo-fornitore","value":{"tipo":"consumo-fornitore","provider":"lmstudio","model":"finto","usage":{"prompt_tokens":100,"completion_tokens":20,"total_tokens":120},"costoDichiarato":null,"esito":"completato"},"_sequenza":82}
+
+id: 83
+data: {"type":"TextMessageEnd","messageId":"67caf5ce-de52-4678-abce-44954a75ed37","_sequenza":83}
+
+id: 84
+data: {"type":"StateDelta","delta":[{"op":"replace","path":"/usage","value":{"prompt_tokens":400,"completion_tokens":80,"cached_tokens":0,"giri":4}}],"_sequenza":84}
+
+id: 85
+data: {"type":"RunFinished","threadId":"17d8c809-b8e2-43e3-9e12-74d50687c13a","runId":"cb9a0af5-4dbd-4ed8-bdee-80fe1be968bf","outcome":{"type":"success"},"result":{"detto":"Ho lanciato i tre comandi.","compattazioni":0,"premesseNegate":0,"usage":{"prompt_tokens":400,"completion_tokens":80,"prompt_tokens_details":{"cached_tokens":0},"giri":4}},"timestamp":1792068043361,"_sequenza":85}
+
+id: 86
+data: {"type":"CUSTOM","name":"talos.processo-tolto","value":{"toolCallId":"comando0","toltoAlle":"2026-10-15T12:40:43.364Z"},"_sequenza":86}
+
+data: {"type":"CUSTOM","name":"talos.fine-rigiocata","value":null}
+
+data: {"type":"CUSTOM","name":"talos.coda","value":{"voci":[],"inPausa":false}}
+

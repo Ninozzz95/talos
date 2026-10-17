@@ -174,6 +174,11 @@ export interface TalosMobileProviderAdapter {
      * MUST throw before delivering any chunk when the stream cannot start, so
      * the caller can transparently retry through the buffered transport.
      */
+    /**
+     * Il flusso (`streamComplete`) parte con `fetch` dalla pagina: per un fornitore che rifiuta le origini di pagina non
+     * può riuscire, e tentarlo costa solo tempo (1,8 s misurati col piano ChatGPT). Vero ⇒ si va subito a `complete`.
+     */
+    flussoNonRaggiungibileDallaPagina?: boolean
     streamComplete?(
         input: TalosMobileCompletionInput,
         credential: TalosMobileProviderCredential,

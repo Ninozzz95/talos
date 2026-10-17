@@ -1,0 +1,3 @@
+# Server-sent events end every event with a blank line, so a recorded stream ends with one too.
+# Same rule as core/tests/fixtures/providers/stream/*.sse in the root .gitattributes.
+tests/fixtures/r4/*.sse text eol=lf whitespace=-blank-at-eof

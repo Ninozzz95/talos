@@ -1,0 +1,120 @@
+{
+  "immagine1": {
+    "stato": 201,
+    "d": {
+      "ok": true,
+      "data": {
+        "id": "f96a15661978a2be826647b7c5408072b03394d6399bf8be50753464a8d3e0fa",
+        "tipo": "immagine",
+        "nome": "foto-uno.png",
+        "mimeType": "image/png",
+        "byte": 110,
+        "url": "/api/v1/chat-images/f96a15661978a2be826647b7c5408072b03394d6399bf8be50753464a8d3e0fa"
+      },
+      "meta": {
+        "schema": "talos.harness-ui.api.v1",
+        "generatedAt": "2026-10-16T19:54:04.986Z"
+      }
+    }
+  },
+  "immagine2": {
+    "stato": 201,
+    "d": {
+      "ok": true,
+      "data": {
+        "id": "a06a472515ab7b6cd11d78905d457aaf9d2f24d1e707b3e99e128ce28d562390",
+        "tipo": "immagine",
+        "nome": "foto-due.png",
+        "mimeType": "image/png",
+        "byte": 110,
+        "url": "/api/v1/chat-images/a06a472515ab7b6cd11d78905d457aaf9d2f24d1e707b3e99e128ce28d562390"
+      },
+      "meta": {
+        "schema": "talos.harness-ui.api.v1",
+        "generatedAt": "2026-10-16T19:54:05.002Z"
+      }
+    }
+  },
+  "formatoSbagliato": {
+    "stato": 400,
+    "d": {
+      "ok": false,
+      "error": {
+        "code": "QUERY_INVALID",
+        "message": "Invalid query",
+        "title": "Operation failed",
+        "explanation": "An unexpected problem occurred during the operation.",
+        "action": "Open Doctor, copy the reference and try again.",
+        "doctorReference": "doctor-3f9d08bd6dff"
+      },
+      "meta": {
+        "schema": "talos.harness-ui.api.v1",
+        "generatedAt": "2026-10-16T19:54:05.014Z"
+      }
+    }
+  },
+  "crea": {
+    "stato": 200,
+    "d": {
+      "ok": true,
+      "data": {
+        "sessionId": "33333333-3333-4333-8333-333333333333"
+      },
+      "meta": {
+        "schema": "talos.harness-ui.api.v1",
+        "generatedAt": "2026-10-16T19:54:05.050Z"
+      }
+    }
+  },
+  "giro1": true,
+  "soloImmagine": {
+    "stato": 200,
+    "d": {
+      "ok": true,
+      "data": {
+        "sessionId": "33333333-3333-4333-8333-333333333333"
+      },
+      "meta": {
+        "schema": "talos.harness-ui.api.v1",
+        "generatedAt": "2026-10-16T19:54:06.343Z"
+      }
+    }
+  },
+  "giro2": true,
+  "conBolla": {
+    "stato": 200,
+    "d": {
+      "ok": true,
+      "data": {
+        "sessionId": "33333333-3333-4333-8333-333333333333"
+      },
+      "meta": {
+        "schema": "talos.harness-ui.api.v1",
+        "generatedAt": "2026-10-16T19:54:06.619Z"
+      }
+    }
+  },
+  "giro3": true,
+  "immagineSenzaTesto": {
+    "stato": 400,
+    "d": {
+      "ok": false,
+      "error": {
+        "code": "QUERY_INVALID",
+        "message": "Invalid query",
+        "title": "Operation failed",
+        "explanation": "An unexpected problem occurred during the operation.",
+        "action": "Open Doctor, copy the reference and try again.",
+        "doctorReference": "doctor-3f9d08bd6dff"
+      },
+      "meta": {
+        "schema": "talos.harness-ui.api.v1",
+        "generatedAt": "2026-10-16T19:54:06.882Z"
+      }
+    }
+  },
+  "_origine": {
+    "r4": "2161afb32",
+    "registrata": "Pad 2ea6573c, 16/10/2026, scratchpad npty-110/registra-immagini.js, fornitore finto"
+  }
+}

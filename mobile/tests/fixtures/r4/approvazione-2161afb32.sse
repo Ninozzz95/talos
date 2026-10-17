@@ -1,0 +1,144 @@
+:ok
+
+data: {"type":"CUSTOM","name":"talos.fine-rigiocata","value":null}
+
+data: {"type":"CUSTOM","name":"talos.coda","value":{"voci":[],"inPausa":false}}
+
+data: {"type":"CUSTOM","name":"talos.obiettivo","value":{"obiettivo":null,"tetti":{"giri":20,"token":null}}}
+
+id: 1
+data: {"type":"RunStarted","threadId":"ab29ab63-e38f-4b90-8dc9-5dd5284d5c51","runId":"42221469-c7bf-4572-ae16-93e1db720e13","input":{"consegna":"Esegui i test del progetto","consegnaCorta":"Esegui i test del progetto","progetto":"workspace"},"contesto":{"progetto":"workspace","cartella":"/data/data/ai.talos.dev/files/codice/workspace","branch":null,"worktree":null,"repoAnnidati":[],"modello":"lmstudio:finto","reasoning":null,"permessi":"On request","modalitaOperativa":"normale"},"timestamp":1792151159463,"_sequenza":1}
+
+data: {"type":"CUSTOM","name":"talos.contesto-richiesta","value":{"at":"2026-10-16T11:45:59.504Z","model":"lmstudio:finto","ripartizione":{"categorie":[{"id":"system","tokens":752},{"id":"tools","tokens":18911},{"id":"conversation","tokens":8}],"stimata":true,"messaggi":3,"attrezzi":64},"level1":null,"versionId":null}}
+
+id: 2
+data: {"type":"ReasoningMessageStart","messageId":"18ec8287-20ce-4b9b-9435-9351c5bb9995","role":"reasoning","_sequenza":2}
+
+id: 3
+data: {"type":"ReasoningMessageContent","messageId":"18ec8287-20ce-4b9b-9435-9351c5bb9995","delta":"Lancio i tes","_sequenza":3}
+
+id: 4
+data: {"type":"ReasoningMessageContent","messageId":"18ec8287-20ce-4b9b-9435-9351c5bb9995","delta":"t.","_sequenza":4}
+
+id: 5
+data: {"type":"ToolCallStart","toolCallId":"test3","toolCallName":"shell","avviatoA":1792151159524,"_sequenza":5}
+
+id: 6
+data: {"type":"ToolCallArgs","toolCallId":"test3","delta":"{\"comando\":\"echo test-ok\",\"descrizione\":\"Lancia i test\"}","_sequenza":6}
+
+id: 7
+data: {"type":"CUSTOM","name":"consumo-fornitore","value":{"tipo":"consumo-fornitore","provider":"lmstudio","model":"finto","usage":{"prompt_tokens":100,"completion_tokens":20,"total_tokens":120},"costoDichiarato":null,"esito":"completato"},"_sequenza":7}
+
+id: 8
+data: {"type":"ReasoningMessageEnd","messageId":"18ec8287-20ce-4b9b-9435-9351c5bb9995","_sequenza":8}
+
+id: 9
+data: {"type":"StateDelta","delta":[{"op":"replace","path":"/usage","value":{"prompt_tokens":100,"completion_tokens":20,"cached_tokens":0,"giri":1}}],"_sequenza":9}
+
+id: 10
+data: {"type":"HookInvoked","hookId":"lint-before-write","tipo":"pre_tool_call","azione":"shell","esito":{"consentito":true},"_sequenza":10}
+
+id: 11
+data: {"type":"ApprovalRequested","requestId":"44444444-4444-4444-8444-444444444441","azione":{"tipo":"shell","toolCallId":"test3","comando":"echo test-ok"},"_sequenza":11}
+
+id: 12
+data: {"type":"ApprovalResolved","requestId":"44444444-4444-4444-8444-444444444441","approvato":true,"_sequenza":12}
+
+id: 13
+data: {"type":"CUSTOM","name":"talos.process-output","value":{"schema":"talos.process-output.v1","outputId":"7e313368-d054-456b-9af3-97de763d413f","sessionId":"33333333-3333-4333-8333-333333333333","runId":"42221469-c7bf-4572-ae16-93e1db720e13","toolCallId":"test3","state":"recording","limitBytes":67108864,"nextSequence":0,"observedBytes":0,"storedBytes":0,"stdout":{"observedBytes":0,"storedBytes":0,"sha256":null},"stderr":{"observedBytes":0,"storedBytes":0,"sha256":null},"createdAt":"2026-10-16T11:45:59.740Z","finishedAt":null,"termination":null,"exitCode":null,"errorCode":null},"_sequenza":13}
+
+data: {"type":"ToolCallOutput","toolCallId":"test3","delta":"test-ok\n"}
+
+id: 14
+data: {"type":"CUSTOM","name":"talos.process-output","value":{"schema":"talos.process-output.v1","outputId":"7e313368-d054-456b-9af3-97de763d413f","sessionId":"33333333-3333-4333-8333-333333333333","runId":"42221469-c7bf-4572-ae16-93e1db720e13","toolCallId":"test3","state":"complete","limitBytes":67108864,"nextSequence":1,"observedBytes":8,"storedBytes":8,"stdout":{"observedBytes":8,"storedBytes":8,"sha256":"d05ed3e3a98605c9346631872cbb76d74db472b66765a04b9f8c03fa72c71c04"},"stderr":{"observedBytes":0,"storedBytes":0,"sha256":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},"createdAt":"2026-10-16T11:45:59.740Z","finishedAt":"2026-10-16T11:45:59.840Z","termination":"exited","exitCode":0,"errorCode":null,"outputMetadataVersion":1,"persistence":"confirmed"},"_sequenza":14}
+
+id: 15
+data: {"type":"ToolCallResult","messageId":"bad2875d-2cad-4b0e-924a-30e3a1f651f9","toolCallId":"test3","content":"[shell output: stdout and stderr combined in arrival order; stream identity is not preserved]\nexit 0 [sandbox: none (sh di Android: eseguito direttamente sul dispositivo, stesso utente e stessi privilegi dell'app, senza isolamento)]\n<<<TALOS_DATA id=13b4985d89f0 from=\"shell\">>>\n[TALOS output reference: 7e313368-d054-456b-9af3-97de763d413f; retained 8 of 8 bytes.] Read retained bytes with process_output({\"outputId\":\"7e313368-d054-456b-9af3-97de763d413f\"}); follow nextOffset, and select stderr separately.\ntest-ok\n<<<END_TALOS_DATA id=13b4985d89f0>>>","role":"tool","isError":false,"durataMs":105,"comando":"echo test-ok","cwd":"/data/data/ai.talos.dev/files/codice/workspace","exitCode":0,"receipt":{"schema_version":1,"azione":"shell","percorso":null,"comando":"echo test-ok","toolCallId":"test3","consentito":true,"via":"livello-su-richiesta","motivo":null,"status":"succeeded","risk":"R2","trifecta":false,"action":"execute","requiredActions":["execute","outbound","write"],"hashContenuto":null,"evidence":{"exitCode":0,"sandboxEnforcement":"none"},"postcondizione":"nessuna","verified":null,"error":null,"signature":null,"keyId":null},"_sequenza":15}
+
+data: {"type":"CUSTOM","name":"talos.contesto-richiesta","value":{"at":"2026-10-16T11:45:59.855Z","model":"lmstudio:finto","ripartizione":{"categorie":[{"id":"system","tokens":752},{"id":"tools","tokens":18911},{"id":"conversation","tokens":207}],"stimata":true,"messaggi":5,"attrezzi":64},"level1":null,"versionId":null}}
+
+id: 16
+data: {"type":"TextMessageStart","messageId":"35849e99-5fb2-45da-9fdd-b908268ca334","role":"assistant","_sequenza":16}
+
+id: 17
+data: {"type":"TextMessageContent","messageId":"35849e99-5fb2-45da-9fdd-b908268ca334","delta":"Fatto: i test so","_sequenza":17}
+
+id: 18
+data: {"type":"TextMessageContent","messageId":"35849e99-5fb2-45da-9fdd-b908268ca334","delta":"no passati.","_sequenza":18}
+
+id: 19
+data: {"type":"CUSTOM","name":"consumo-fornitore","value":{"tipo":"consumo-fornitore","provider":"lmstudio","model":"finto","usage":{"prompt_tokens":100,"completion_tokens":20,"total_tokens":120},"costoDichiarato":null,"esito":"completato"},"_sequenza":19}
+
+id: 20
+data: {"type":"TextMessageEnd","messageId":"35849e99-5fb2-45da-9fdd-b908268ca334","_sequenza":20}
+
+id: 21
+data: {"type":"StateDelta","delta":[{"op":"replace","path":"/usage","value":{"prompt_tokens":200,"completion_tokens":40,"cached_tokens":0,"giri":2}}],"_sequenza":21}
+
+id: 22
+data: {"type":"RunFinished","threadId":"ab29ab63-e38f-4b90-8dc9-5dd5284d5c51","runId":"42221469-c7bf-4572-ae16-93e1db720e13","outcome":{"type":"success"},"result":{"detto":"Fatto: i test sono passati.","compattazioni":0,"premesseNegate":0,"usage":{"prompt_tokens":200,"completion_tokens":40,"prompt_tokens_details":{"cached_tokens":0},"giri":2}},"timestamp":1792151159883,"_sequenza":22}
+
+id: 23
+data: {"type":"RunStarted","threadId":"949f2180-e175-4ba9-8140-d3a05de764bc","runId":"b999b193-36d5-490c-b49e-b1b06a91e558","input":{"consegna":"Esegui i test di nuovo","progetto":"workspace","seguito":true},"contesto":{"progetto":"workspace","cartella":"/data/data/ai.talos.dev/files/codice/workspace","branch":null,"worktree":null,"repoAnnidati":[],"modello":"lmstudio:finto","reasoning":null,"permessi":"On request","modalitaOperativa":"normale"},"timestamp":1792151160811,"_sequenza":23}
+
+data: {"type":"CUSTOM","name":"talos.contesto-richiesta","value":{"at":"2026-10-16T11:46:00.856Z","model":"lmstudio:finto","ripartizione":{"categorie":[{"id":"system","tokens":752},{"id":"tools","tokens":18911},{"id":"conversation","tokens":222}],"stimata":true,"messaggi":7,"attrezzi":64},"level1":null,"versionId":null}}
+
+id: 24
+data: {"type":"ReasoningMessageStart","messageId":"d05a2176-94a4-4ac8-b457-3e74d2ffa6ec","role":"reasoning","_sequenza":24}
+
+id: 25
+data: {"type":"ReasoningMessageContent","messageId":"d05a2176-94a4-4ac8-b457-3e74d2ffa6ec","delta":"Lancio i tes","_sequenza":25}
+
+id: 26
+data: {"type":"ReasoningMessageContent","messageId":"d05a2176-94a4-4ac8-b457-3e74d2ffa6ec","delta":"t.","_sequenza":26}
+
+id: 27
+data: {"type":"ToolCallStart","toolCallId":"test7","toolCallName":"shell","avviatoA":1792151160882,"_sequenza":27}
+
+id: 28
+data: {"type":"ToolCallArgs","toolCallId":"test7","delta":"{\"comando\":\"echo test-ok\",\"descrizione\":\"Lancia i test\"}","_sequenza":28}
+
+id: 29
+data: {"type":"CUSTOM","name":"consumo-fornitore","value":{"tipo":"consumo-fornitore","provider":"lmstudio","model":"finto","usage":{"prompt_tokens":100,"completion_tokens":20,"total_tokens":120},"costoDichiarato":null,"esito":"completato"},"_sequenza":29}
+
+id: 30
+data: {"type":"ReasoningMessageEnd","messageId":"d05a2176-94a4-4ac8-b457-3e74d2ffa6ec","_sequenza":30}
+
+id: 31
+data: {"type":"StateDelta","delta":[{"op":"replace","path":"/usage","value":{"prompt_tokens":100,"completion_tokens":20,"cached_tokens":0,"giri":1}}],"_sequenza":31}
+
+id: 32
+data: {"type":"HookInvoked","hookId":"lint-before-write","tipo":"pre_tool_call","azione":"shell","esito":{"consentito":true},"_sequenza":32}
+
+id: 33
+data: {"type":"ApprovalRequested","requestId":"44444444-4444-4444-8444-444444444442","azione":{"tipo":"shell","toolCallId":"test7","comando":"echo test-ok"},"_sequenza":33}
+
+id: 34
+data: {"type":"ApprovalResolved","requestId":"44444444-4444-4444-8444-444444444442","approvato":false,"_sequenza":34}
+
+id: 35
+data: {"type":"ToolCallResult","messageId":"aab0fd76-954a-4c9a-8598-5130f887924f","toolCallId":"test7","content":"REFUSED. the owner did not approve this action. The command was not run.","role":"tool","isError":true,"receipt":{"schema_version":1,"azione":"shell","percorso":null,"comando":"echo test-ok","toolCallId":"test7","consentito":false,"via":"livello-su-richiesta","motivo":"the owner did not approve this action.","status":"denied","risk":"R2","trifecta":false,"action":"execute","requiredActions":["execute","outbound","write"],"hashContenuto":null,"evidence":null,"postcondizione":"nessuna","verified":null,"error":null,"signature":null,"keyId":null},"_sequenza":35}
+
+data: {"type":"CUSTOM","name":"talos.contesto-richiesta","value":{"at":"2026-10-16T11:46:01.116Z","model":"lmstudio:finto","ripartizione":{"categorie":[{"id":"system","tokens":752},{"id":"tools","tokens":18911},{"id":"conversation","tokens":284}],"stimata":true,"messaggi":9,"attrezzi":64},"level1":null,"versionId":null}}
+
+id: 36
+data: {"type":"TextMessageStart","messageId":"b1d5cb28-e146-45d6-b013-cef908f19084","role":"assistant","_sequenza":36}
+
+id: 37
+data: {"type":"TextMessageContent","messageId":"b1d5cb28-e146-45d6-b013-cef908f19084","delta":"Va bene: non ho ","_sequenza":37}
+
+id: 38
+data: {"type":"TextMessageContent","messageId":"b1d5cb28-e146-45d6-b013-cef908f19084","delta":"lanciato i test.","_sequenza":38}
+
+id: 39
+data: {"type":"CUSTOM","name":"consumo-fornitore","value":{"tipo":"consumo-fornitore","provider":"lmstudio","model":"finto","usage":{"prompt_tokens":100,"completion_tokens":20,"total_tokens":120},"costoDichiarato":null,"esito":"completato"},"_sequenza":39}
+
+id: 40
+data: {"type":"TextMessageEnd","messageId":"b1d5cb28-e146-45d6-b013-cef908f19084","_sequenza":40}
+
+id: 41
+data: {"type":"StateDelta","delta":[{"op":"replace","path":"/usage","value":{"prompt_tokens":200,"completion_tokens":40,"cached_tokens":0,"giri":2}}],"_sequenza":41}
+
+id: 42
+data: {"type":"RunFinished","threadId":"949f2180-e175-4ba9-8140-d3a05de764bc","runId":"b999b193-36d5-490c-b49e-b1b06a91e558","outcome":{"type":"success"},"result":{"detto":"Va bene: non ho lanciato i test.","compattazioni":0,"premesseNegate":0,"usage":{"prompt_tokens":200,"completion_tokens":40,"prompt_tokens_details":{"cached_tokens":0},"giri":2}},"timestamp":1792151161149,"_sequenza":42}
+

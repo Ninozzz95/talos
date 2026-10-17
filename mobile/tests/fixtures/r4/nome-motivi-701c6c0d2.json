@@ -1,0 +1,715 @@
+{
+  "origine": {
+    "commit": "701c6c0d2d711879b53aa21bddad5a06d33538e7",
+    "file": {
+      "grafo/run-dalle-deleghe.js": "13934287558db2085c7d4c07b9e1f624fd6a0df71405864cf683b018a58c3447",
+      "grafo-agenti.js": "edd39c9046983f3a66121e436f2375991632759f076fa224198d1bcd98d5fcb1",
+      "errori.js": "f682d8657cb968d4f31ef423e20040d1b381f074856ec84e3a3c821a578cbcbb",
+      "public-problem.mjs": "82f25c7da4725906842a3ebba60ae25546fa30786c67f30731cd5611b7e274f6",
+      "motivi-dei-file.mjs": "5075e8abd495a014ad946e4de9d0b05ce0d85e7ea3853e17e8dbe57182e094e5"
+    }
+  },
+  "costanti": {
+    "NOME_MASSIMO": 160,
+    "NOME_IN_UNA_FRASE": 60
+  },
+  "agenti": [
+    {
+      "nome": "Lettore dei test-2",
+      "taskCorto": "Leggi i test",
+      "task": "Leggi i test della cartella e dimmi quali falliscono"
+    },
+    {
+      "taskCorto": "Leggi i test",
+      "task": "Leggi i test della cartella e dimmi quali falliscono"
+    },
+    {
+      "task": "Riassumi NOTA.md in una frase"
+    },
+    {
+      "task": "Prima riga\nseconda riga\nterza"
+    },
+    {
+      "nome": "​‌‍",
+      "taskCorto": "Conta le righe"
+    },
+    {
+      "nome": "⁠﻿",
+      "task": "Controlla la data"
+    },
+    {
+      "nome": "   ",
+      "taskCorto": "\t",
+      "task": "Solo il compito"
+    },
+    {
+      "nome": "‮⁦",
+      "taskCorto": "Dopo i caratteri che ingannano"
+    },
+    {
+      "nome": "Nome con ‮riflesso",
+      "task": "x"
+    },
+    {
+      "nome": "Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla"
+    },
+    {
+      "taskCorto": "Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla"
+    },
+    {
+      "nome": 7,
+      "taskCorto": null,
+      "task": [
+        "a"
+      ]
+    },
+    {
+      "nome": "​",
+      "taskCorto": "‌",
+      "task": "‍"
+    },
+    {},
+    null
+  ],
+  "nomi": [
+    "Lettore dei test-2",
+    "Leggi i test",
+    "Riassumi NOTA.md in una frase",
+    "Prima riga seconda riga terza",
+    "Conta le righe",
+    "Controlla la data",
+    "Solo il compito",
+    "Dopo i caratteri che ingannano",
+    "Nome con riflesso",
+    "Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla…",
+    "Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla…",
+    "",
+    "",
+    "",
+    ""
+  ],
+  "nomiInUnaFrase": [
+    "Lettore dei test-2",
+    "Leggi i test",
+    "Riassumi NOTA.md in una frase",
+    "Prima riga seconda riga terza",
+    "Conta le righe",
+    "Controlla la data",
+    "Solo il compito",
+    "Dopo i caratteri che ingannano",
+    "Nome con riflesso",
+    "Controlla Controlla Controlla Controlla Controlla Controlla…",
+    "Controlla Controlla Controlla Controlla Controlla Controlla…",
+    "",
+    "",
+    "",
+    ""
+  ],
+  "brevi": [
+    "Leggi i test",
+    " spazi  in   mezzo ",
+    "Prima\nseconda",
+    "Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla",
+    "",
+    5,
+    "‮testo"
+  ],
+  "nomiBrevi": [
+    "Leggi i test",
+    "spazi in mezzo",
+    "Prima seconda",
+    "Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla…",
+    "",
+    "",
+    "testo"
+  ],
+  "nomiBrevi60": [
+    "Leggi i test",
+    "spazi in mezzo",
+    "Prima seconda",
+    "Controlla Controlla Controlla Controlla Controlla Controlla…",
+    "",
+    "",
+    "testo"
+  ],
+  "figli": [
+    {
+      "nome": "Lettore dei test-2",
+      "taskCorto": "Leggi i test",
+      "task": "Leggi i test della cartella e dimmi quali falliscono",
+      "sessionId": "figlia-0",
+      "padreId": "radice",
+      "avviataAlle": "2026-10-16T10:00:00.000Z"
+    },
+    {
+      "taskCorto": "Leggi i test",
+      "task": "Leggi i test della cartella e dimmi quali falliscono",
+      "sessionId": "figlia-1",
+      "padreId": "radice",
+      "avviataAlle": "2026-10-16T10:00:01.000Z"
+    },
+    {
+      "task": "Riassumi NOTA.md in una frase",
+      "sessionId": "figlia-2",
+      "padreId": "radice",
+      "avviataAlle": "2026-10-16T10:00:02.000Z"
+    },
+    {
+      "task": "Prima riga\nseconda riga\nterza",
+      "sessionId": "figlia-3",
+      "padreId": "radice",
+      "avviataAlle": "2026-10-16T10:00:03.000Z"
+    },
+    {
+      "nome": "​‌‍",
+      "taskCorto": "Conta le righe",
+      "sessionId": "figlia-4",
+      "padreId": "radice",
+      "avviataAlle": "2026-10-16T10:00:04.000Z"
+    },
+    {
+      "nome": "⁠﻿",
+      "task": "Controlla la data",
+      "sessionId": "figlia-5",
+      "padreId": "radice",
+      "avviataAlle": "2026-10-16T10:00:05.000Z"
+    },
+    {
+      "nome": "   ",
+      "taskCorto": "\t",
+      "task": "Solo il compito",
+      "sessionId": "figlia-6",
+      "padreId": "radice",
+      "avviataAlle": "2026-10-16T10:00:06.000Z"
+    },
+    {
+      "nome": "‮⁦",
+      "taskCorto": "Dopo i caratteri che ingannano",
+      "sessionId": "figlia-7",
+      "padreId": "radice",
+      "avviataAlle": "2026-10-16T10:00:07.000Z"
+    },
+    {
+      "nome": "Nome con ‮riflesso",
+      "task": "x",
+      "sessionId": "figlia-8",
+      "padreId": "radice",
+      "avviataAlle": "2026-10-16T10:00:08.000Z"
+    },
+    {
+      "nome": "Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla",
+      "sessionId": "figlia-9",
+      "padreId": "radice",
+      "avviataAlle": "2026-10-16T10:00:09.000Z"
+    },
+    {
+      "taskCorto": "Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla",
+      "sessionId": "figlia-10",
+      "padreId": "radice",
+      "avviataAlle": "2026-10-16T10:00:10.000Z"
+    },
+    {
+      "nome": 7,
+      "taskCorto": null,
+      "task": [
+        "a"
+      ],
+      "sessionId": "figlia-11",
+      "padreId": "radice",
+      "avviataAlle": "2026-10-16T10:00:11.000Z"
+    },
+    {
+      "nome": "​",
+      "taskCorto": "‌",
+      "task": "‍",
+      "sessionId": "figlia-12",
+      "padreId": "radice",
+      "avviataAlle": "2026-10-16T10:00:12.000Z"
+    },
+    {
+      "sessionId": "figlia-13",
+      "padreId": "radice",
+      "avviataAlle": "2026-10-16T10:00:13.000Z"
+    },
+    {
+      "sessionId": "figlia-delega",
+      "padreId": "radice",
+      "taskDelega": "Delega senza nome né compito\nseconda riga"
+    }
+  ],
+  "nodi": {
+    "it": [
+      {
+        "id": "radice",
+        "nome": "Sessione madre"
+      },
+      {
+        "id": "figlia-0",
+        "nome": "Lettore dei test-2"
+      },
+      {
+        "id": "figlia-1",
+        "nome": "Leggi i test"
+      },
+      {
+        "id": "figlia-2",
+        "nome": "Riassumi NOTA.md in una frase"
+      },
+      {
+        "id": "figlia-3",
+        "nome": "Prima riga seconda riga terza"
+      },
+      {
+        "id": "figlia-4",
+        "nome": "Conta le righe"
+      },
+      {
+        "id": "figlia-5",
+        "nome": "Controlla la data"
+      },
+      {
+        "id": "figlia-6",
+        "nome": "Solo il compito"
+      },
+      {
+        "id": "figlia-7",
+        "nome": "Dopo i caratteri che ingannano"
+      },
+      {
+        "id": "figlia-8",
+        "nome": "Nome con riflesso"
+      },
+      {
+        "id": "figlia-9",
+        "nome": "Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla…"
+      },
+      {
+        "id": "figlia-10",
+        "nome": "Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla…"
+      },
+      {
+        "id": "figlia-11",
+        "nome": "Sessione senza titolo"
+      },
+      {
+        "id": "figlia-12",
+        "nome": "Sessione senza titolo"
+      },
+      {
+        "id": "figlia-13",
+        "nome": "Sessione senza titolo"
+      },
+      {
+        "id": "figlia-delega",
+        "nome": "Delega senza nome né compito seconda riga"
+      }
+    ],
+    "en": [
+      {
+        "id": "radice",
+        "nome": "Sessione madre"
+      },
+      {
+        "id": "figlia-0",
+        "nome": "Lettore dei test-2"
+      },
+      {
+        "id": "figlia-1",
+        "nome": "Leggi i test"
+      },
+      {
+        "id": "figlia-2",
+        "nome": "Riassumi NOTA.md in una frase"
+      },
+      {
+        "id": "figlia-3",
+        "nome": "Prima riga seconda riga terza"
+      },
+      {
+        "id": "figlia-4",
+        "nome": "Conta le righe"
+      },
+      {
+        "id": "figlia-5",
+        "nome": "Controlla la data"
+      },
+      {
+        "id": "figlia-6",
+        "nome": "Solo il compito"
+      },
+      {
+        "id": "figlia-7",
+        "nome": "Dopo i caratteri che ingannano"
+      },
+      {
+        "id": "figlia-8",
+        "nome": "Nome con riflesso"
+      },
+      {
+        "id": "figlia-9",
+        "nome": "Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla…"
+      },
+      {
+        "id": "figlia-10",
+        "nome": "Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla Controlla…"
+      },
+      {
+        "id": "figlia-11",
+        "nome": "Untitled session"
+      },
+      {
+        "id": "figlia-12",
+        "nome": "Untitled session"
+      },
+      {
+        "id": "figlia-13",
+        "nome": "Untitled session"
+      },
+      {
+        "id": "figlia-delega",
+        "nome": "Delega senza nome né compito seconda riga"
+      }
+    ]
+  },
+  "buste": [
+    {
+      "code": "QUERY_INVALID",
+      "message": "Invalid query",
+      "title": "Operation failed",
+      "explanation": "Invalid path",
+      "action": "Open Doctor, copy the reference and try again.",
+      "reason": "path-invalid"
+    },
+    {
+      "code": "QUERY_INVALID",
+      "message": "Invalid query",
+      "title": "Operation failed",
+      "explanation": "Path outside the session folder",
+      "action": "Open Doctor, copy the reference and try again.",
+      "reason": "path-outside-session"
+    },
+    {
+      "code": "QUERY_INVALID",
+      "message": "Invalid query",
+      "title": "Operation failed",
+      "explanation": "Path outside the session folder, or it is the root itself",
+      "action": "Open Doctor, copy the reference and try again.",
+      "reason": "path-outside-or-root"
+    },
+    {
+      "code": "QUERY_INVALID",
+      "message": "Invalid query",
+      "title": "Operation failed",
+      "explanation": "Path not readable",
+      "action": "Open Doctor, copy the reference and try again.",
+      "reason": "path-not-readable"
+    },
+    {
+      "code": "QUERY_INVALID",
+      "message": "Invalid query",
+      "title": "Operation failed",
+      "explanation": "Folder not found",
+      "action": "Open Doctor, copy the reference and try again.",
+      "reason": "folder-not-found"
+    },
+    {
+      "code": "QUERY_INVALID",
+      "message": "Invalid query",
+      "title": "Operation failed",
+      "explanation": "Not a file — open a folder from the tree, not from here",
+      "action": "Open Doctor, copy the reference and try again.",
+      "reason": "not-a-file-preview"
+    },
+    {
+      "code": "QUERY_INVALID",
+      "message": "Invalid query",
+      "title": "Operation failed",
+      "explanation": "Not a file: a folder cannot be downloaded",
+      "action": "Open Doctor, copy the reference and try again.",
+      "reason": "not-a-file-download"
+    },
+    {
+      "code": "QUERY_INVALID",
+      "message": "Invalid query",
+      "title": "Operation failed",
+      "explanation": "Not a file: use “Show in folder”",
+      "action": "Open Doctor, copy the reference and try again.",
+      "reason": "not-a-file-reveal"
+    },
+    {
+      "code": "QUERY_INVALID",
+      "message": "Invalid query",
+      "title": "Operation failed",
+      "explanation": "Invalid new name — a file name, not a path",
+      "action": "Open Doctor, copy the reference and try again.",
+      "reason": "new-name-invalid"
+    },
+    {
+      "code": "QUERY_INVALID",
+      "message": "Invalid query",
+      "title": "Operation failed",
+      "explanation": "Invalid name — a name, not a path",
+      "action": "Open Doctor, copy the reference and try again.",
+      "reason": "name-invalid"
+    },
+    {
+      "code": "QUERY_INVALID",
+      "message": "Invalid query",
+      "title": "Operation failed",
+      "explanation": "Invalid file name — a name, not a path",
+      "action": "Open Doctor, copy the reference and try again.",
+      "reason": "file-name-invalid"
+    },
+    {
+      "code": "QUERY_INVALID",
+      "message": "Invalid query",
+      "title": "Operation failed",
+      "explanation": "Invalid mode: \"nuovo\" (rejects a name already taken) or \"accoda\" (appends at the end)",
+      "action": "Open Doctor, copy the reference and try again.",
+      "reason": "mode-invalid"
+    },
+    {
+      "code": "QUERY_INVALID",
+      "message": "Invalid query",
+      "title": "Operation failed",
+      "explanation": "Invalid type: \"file\" or \"cartella\"",
+      "action": "Open Doctor, copy the reference and try again.",
+      "reason": "type-invalid"
+    },
+    {
+      "code": "QUERY_INVALID",
+      "message": "Invalid query",
+      "title": "Operation failed",
+      "explanation": "Destination outside the session folder",
+      "action": "Open Doctor, copy the reference and try again.",
+      "reason": "destination-outside-session"
+    },
+    {
+      "code": "QUERY_INVALID",
+      "message": "Invalid query",
+      "title": "Operation failed",
+      "explanation": "Destination outside the session workspace",
+      "action": "Open Doctor, copy the reference and try again.",
+      "reason": "destination-outside-session-workspace"
+    },
+    {
+      "code": "QUERY_INVALID",
+      "message": "Invalid query",
+      "title": "Operation failed",
+      "explanation": "Destination outside the workspace folder",
+      "action": "Open Doctor, copy the reference and try again.",
+      "reason": "destination-outside-workspace"
+    },
+    {
+      "code": "QUERY_INVALID",
+      "message": "Invalid query",
+      "title": "Operation failed",
+      "explanation": "Invalid destination folder",
+      "action": "Open Doctor, copy the reference and try again.",
+      "reason": "destination-folder-invalid"
+    },
+    {
+      "code": "QUERY_INVALID",
+      "message": "Invalid query",
+      "title": "Operation failed",
+      "explanation": "The destination is not a folder",
+      "action": "Open Doctor, copy the reference and try again.",
+      "reason": "destination-not-a-folder"
+    },
+    {
+      "code": "QUERY_INVALID",
+      "message": "Invalid query",
+      "title": "Operation failed",
+      "explanation": "You cannot move an item into itself or one of its descendants",
+      "action": "Open Doctor, copy the reference and try again.",
+      "reason": "move-into-itself"
+    },
+    {
+      "code": "QUERY_INVALID",
+      "message": "Invalid query",
+      "title": "Operation failed",
+      "explanation": "Too many existing copies with this name",
+      "action": "Open Doctor, copy the reference and try again.",
+      "reason": "too-many-copies"
+    },
+    {
+      "code": "QUERY_INVALID",
+      "message": "Invalid query",
+      "title": "Operation failed",
+      "explanation": "Invalid base folder",
+      "action": "Open Doctor, copy the reference and try again.",
+      "reason": "base-folder-invalid"
+    },
+    {
+      "code": "QUERY_INVALID",
+      "message": "Invalid query",
+      "title": "Operation failed",
+      "explanation": "Base folder outside the session workspace",
+      "action": "Open Doctor, copy the reference and try again.",
+      "reason": "base-folder-outside-session"
+    },
+    {
+      "code": "QUERY_INVALID",
+      "message": "Invalid query",
+      "title": "Operation failed",
+      "explanation": "The base folder is not a folder",
+      "action": "Open Doctor, copy the reference and try again.",
+      "reason": "base-not-a-folder"
+    },
+    {
+      "code": "CONFIG_INVALID",
+      "message": "The OpenRouter key is missing: connect it from the provider settings.",
+      "title": "Configuration not ready",
+      "explanation": "The OpenRouter key is missing: connect it from the provider settings.",
+      "action": "Open Doctor and follow the checks listed, then try again.",
+      "params": {
+        "provider": "OpenRouter"
+      },
+      "reason": "provider-key-missing-named"
+    },
+    {
+      "code": "CONFIG_INVALID",
+      "message": "The provider key is missing: connect it from the provider settings.",
+      "title": "Configuration not ready",
+      "explanation": "The provider key is missing: connect it from the provider settings.",
+      "action": "Open Doctor and follow the checks listed, then try again.",
+      "reason": "provider-key-missing"
+    },
+    {
+      "code": "TERMINAL_LIMIT_REACHED",
+      "message": "All the terminals without a session are in use in other windows: open a session to get a terminal of its own",
+      "title": "Operation failed",
+      "explanation": "All the terminals without a session are in use in other windows: open a session to get a terminal of its own",
+      "action": "Open Doctor, copy the reference and try again.",
+      "reason": "standalone-terminals-in-use"
+    },
+    {
+      "code": "QUERY_INVALID",
+      "message": "Invalid query",
+      "title": "Operation failed",
+      "explanation": "An unexpected problem occurred during the operation.",
+      "action": "Open Doctor, copy the reference and try again.",
+      "reason": "something-new"
+    },
+    {
+      "code": "QUERY_INVALID",
+      "message": "Invalid query",
+      "title": "Operation failed",
+      "explanation": "An unexpected problem occurred during the operation.",
+      "action": "Open Doctor, copy the reference and try again."
+    },
+    {
+      "code": "FILE_EXISTS",
+      "message": "You cannot move an item into itself or one of its descendants",
+      "title": "Operation failed",
+      "explanation": "You cannot move an item into itself or one of its descendants",
+      "action": "Open Doctor, copy the reference and try again.",
+      "reason": "move-into-itself"
+    },
+    {
+      "code": "QUERY_INVALID",
+      "message": "Invalid query",
+      "title": "Operation failed",
+      "explanation": "Una frase diversa",
+      "action": "Open Doctor, copy the reference and try again.",
+      "reason": "move-into-itself"
+    },
+    {
+      "code": "CONFIG_INVALID",
+      "message": "The OpenRouter key is missing: connect it from the provider settings.",
+      "title": "Configuration not ready",
+      "explanation": "The OpenRouter key is missing: connect it from the provider settings.",
+      "action": "Open Doctor and follow the checks listed, then try again.",
+      "params": {
+        "provider": "Groq"
+      },
+      "reason": "provider-key-missing-named"
+    },
+    {
+      "code": "QUERY_INVALID",
+      "reason": "move-into-itself"
+    },
+    {
+      "problem": {
+        "code": "QUERY_INVALID",
+        "reason": "folder-not-found",
+        "explanation": "Folder not found"
+      }
+    },
+    null
+  ],
+  "frasi": {
+    "it": [
+      "Percorso non valido",
+      "Percorso fuori dalla cartella della sessione",
+      "Percorso fuori dalla cartella della sessione, oppure è la radice stessa",
+      "Percorso non leggibile",
+      "Cartella non trovata",
+      "Non è un file: apri una cartella dall’albero, non da qui",
+      "Non è un file: una cartella non si può scaricare",
+      "Non è un file: usa «Mostra nella cartella»",
+      "Nome nuovo non valido: serve un nome di file, non un percorso",
+      "Nome non valido: serve un nome, non un percorso",
+      "Nome del file non valido: serve un nome, non un percorso",
+      "Modalità non valida: \"nuovo\" (rifiuta un nome già preso) o \"accoda\" (aggiunge in fondo)",
+      "Tipo non valido: \"file\" o \"cartella\"",
+      "Destinazione fuori dalla cartella della sessione",
+      "Destinazione fuori dallo spazio di lavoro della sessione",
+      "Destinazione fuori dalla cartella di lavoro",
+      "Cartella di destinazione non valida",
+      "La destinazione non è una cartella",
+      "Non puoi spostare un elemento dentro sé stesso o dentro una sua sottocartella",
+      "Ci sono già troppe copie con questo nome",
+      "Cartella di partenza non valida",
+      "Cartella di partenza fuori dallo spazio di lavoro della sessione",
+      "La cartella di partenza non è una cartella",
+      "Manca la chiave di OpenRouter: collegala dalle impostazioni dei fornitori.",
+      "",
+      "Tutti i terminali senza sessione sono in uso in altre finestre: apri una sessione per avere un terminale suo",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "Cartella non trovata",
+      ""
+    ],
+    "en": [
+      "Invalid path",
+      "Path outside the session folder",
+      "Path outside the session folder, or it is the root itself",
+      "Path not readable",
+      "Folder not found",
+      "Not a file — open a folder from the tree, not from here",
+      "Not a file: a folder cannot be downloaded",
+      "Not a file: use “Show in folder”",
+      "Invalid new name — a file name, not a path",
+      "Invalid name — a name, not a path",
+      "Invalid file name — a name, not a path",
+      "Invalid mode: \"nuovo\" (rejects a name already taken) or \"accoda\" (appends at the end)",
+      "Invalid type: \"file\" or \"cartella\"",
+      "Destination outside the session folder",
+      "Destination outside the session workspace",
+      "Destination outside the workspace folder",
+      "Invalid destination folder",
+      "The destination is not a folder",
+      "You cannot move an item into itself or one of its descendants",
+      "Too many existing copies with this name",
+      "Invalid base folder",
+      "Base folder outside the session workspace",
+      "The base folder is not a folder",
+      "The OpenRouter key is missing: connect it from the provider settings.",
+      "",
+      "All the terminals without a session are in use in other windows: open a session to get a terminal of its own",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "Folder not found",
+      ""
+    ]
+  }
+}

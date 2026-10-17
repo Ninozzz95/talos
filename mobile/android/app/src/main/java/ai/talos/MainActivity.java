@@ -75,6 +75,12 @@ public class MainActivity extends BridgeActivity {
         // Il riconoscitore DI CASA: il plugin di terzi passa una lingua sola e
         // nessuna chiave di rilevamento — misurato nel suo sorgente.
         { long t = android.os.SystemClock.uptimeMillis(); registerPlugin(ai.talos.agent.TalosDictationPlugin.class); long d = android.os.SystemClock.uptimeMillis() - t; if (d > 20) Log.i("TalosAvvio", "registerPlugin class: " + d + " ms"); }
+        // N12 — il riconoscimento vocale locale (sherpa-onnx + Parakeet): `agent/TalosAsrLocalePlugin.kt`.
+        registerPlugin(ai.talos.agent.TalosAsrLocalePlugin.class);
+        // N15: il flusso nativo, per la risposta a pezzi dove la pagina non arriva (vedi TalosFlussoHttpPlugin).
+        registerPlugin(ai.talos.agent.TalosFlussoHttpPlugin.class);
+        // K3-B1: il client nativo di r4 (solo 127.0.0.1, cookie messo dal nativo): vedi terminal/TalosR4ClientePlugin.kt.
+        registerPlugin(ai.talos.terminal.TalosR4ClientePlugin.class);
         { long t = android.os.SystemClock.uptimeMillis(); registerPlugin(TalosDevicePermissionsPlugin.class); long d = android.os.SystemClock.uptimeMillis() - t; if (d > 20) Log.i("TalosAvvio", "registerPlugin class: " + d + " ms"); }
         // Owner 2026-07-28: durable, user-chosen Save-As for encrypted Library
         // files. The plugin accepts only TALOS's private export staging path.
@@ -182,6 +188,15 @@ public class MainActivity extends BridgeActivity {
                 Class.forName("ai.talos.terminal.TalosTerminalPlugin"));
         } catch (ClassNotFoundException assente) {
             // Non dovrebbe più capitare (3/9): la classe vive in `main`.
+        }
+        // SONDA di misura (13/10/2026), solo nel source set `debug`: Node dentro il processo dell'app, senza ponte.
+        // In release la classe non esiste e non si registra niente: stesso schema della bolla qui sopra.
+        try {
+            //noinspection unchecked
+            registerPlugin((Class<? extends com.getcapacitor.Plugin>)
+                Class.forName("ai.talos.agent.TalosSondaNodePlugin"));
+        } catch (ClassNotFoundException assente) {
+            // È la produzione: la sonda non esiste, e va bene così.
         }
         long tSuper = android.os.SystemClock.uptimeMillis();
         super.onCreate(savedInstanceState);

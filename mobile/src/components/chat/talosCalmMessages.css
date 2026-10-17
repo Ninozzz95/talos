@@ -22,6 +22,9 @@
 .message-actions { display: flex; gap: 0; margin-top: .25rem; }
 .message-actions.user-actions { justify-content: flex-end; }
 .advanced.reasoning { width: 100%; margin-bottom: .75rem; color: var(--talos-muted); font-size: var(--text-xs); }
+/* Owner 15/10/2026 «compattale»: dentro il giro (ragionamento → attrezzi → testo) le righe stanno vicine; il bersaglio di tocco
+   del «Ragionamento» (`min-h-touch` sul summary) resta. Prova: righeDelGiroCompatte.test.ts. */
+[data-segmento="ragionamento"].advanced.reasoning { margin-bottom: .125rem; }
 .advanced.reasoning summary { display: flex; align-items: center; gap: .5rem; cursor: pointer; border-radius: var(--talos-radius-control); }
 .advanced.reasoning summary::after { content: '›'; margin-left: auto; }
 .advanced.reasoning[open] summary::after { transform: rotate(90deg); }

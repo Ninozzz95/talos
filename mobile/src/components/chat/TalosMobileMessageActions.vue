@@ -1,18 +1,32 @@
 <script setup lang="ts">
-import { defineAsyncComponent } from 'vue'
+import { computed, defineAsyncComponent } from 'vue'
 import { Copy, Library, Pencil, RotateCcw, Square, Volume2 } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
-import type { TalosMobileMessageView } from '@/components/chat/mobileChatTypes'
+import { TALOS_AZIONI_MESSAGGIO_TUTTE, type TalosAzioneMessaggio, type TalosMobileMessageView } from '@/components/chat/mobileChatTypes'
 import { useTalosSpeech } from '@/composables/useTalosSpeech'
 
 const TalosMobileMessageOverflowMenu = defineAsyncComponent(
     () => import('@/components/chat/TalosMobileMessageOverflowMenu.vue'),
 )
 
-const props = withDefaults(defineProps<{ message: TalosMobileMessageView; canRetry?: boolean; busy?: boolean }>(), {
+const props = withDefaults(defineProps<{
+    message: TalosMobileMessageView
+    canRetry?: boolean
+    busy?: boolean
+    /** K3-B2: solo le azioni che chi monta la lista sa fare; di serie tutte (la chat). */
+    azioni?: readonly TalosAzioneMessaggio[]
+}>(), {
     canRetry: false,
     busy: false,
+    azioni: () => TALOS_AZIONI_MESSAGGIO_TUTTE,
 })
+const puo = (azione: TalosAzioneMessaggio): boolean => props.azioni.includes(azione)
+/** Il foglio «Altre azioni» solo se per questo ruolo gli resta almeno una voce (intersezione vuota con la riga, owner 13/09). */
+const VOCI_DEL_FOGLIO: Record<'user' | 'assistant', readonly TalosAzioneMessaggio[]> = {
+    user: ['invia-di-nuovo', 'riutilizza', 'elimina'],
+    assistant: ['condividi', 'dettagli', 'elimina'],
+}
+const foglioConVoci = computed(() => (VOCI_DEL_FOGLIO[props.message.role === 'user' ? 'user' : 'assistant']).some(puo))
 const emit = defineEmits<{
     copy: [message: TalosMobileMessageView]
     edit: [message: TalosMobileMessageView]
@@ -52,7 +66,7 @@ function toggleSpeak(): void {
         <Button type="button" variant="ghost" size="icon" class="min-h-touch min-w-touch" data-testid="talos-message-copy" :aria-label="$t('chat.copyMessage')" :title="$t('chat.copyMessage')" @click="emit('copy', message)">
             <Copy class="size-3.5" aria-hidden="true" />
         </Button>
-        <Button v-if="message.role === 'user'" type="button" variant="ghost" size="icon" class="min-h-touch min-w-touch" :aria-label="$t('chat.editMessage')" :title="$t('chat.editMessage')" :disabled="busy" data-testid="talos-message-edit" @click="emit('edit', message)">
+        <Button v-if="message.role === 'user' && puo('modifica')" type="button" variant="ghost" size="icon" class="min-h-touch min-w-touch" :aria-label="$t('chat.editMessage')" :title="$t('chat.editMessage')" :disabled="busy" data-testid="talos-message-edit" @click="emit('edit', message)">
             <Pencil class="size-3.5" aria-hidden="true" />
         </Button>
         <!--
@@ -90,15 +104,15 @@ function toggleSpeak(): void {
             <Square v-if="speech.speakingId.value === message.id" class="size-3.5" fill="currentColor" aria-hidden="true" />
             <Volume2 v-else class="size-3.5" aria-hidden="true" />
         </Button>
-        <Button v-if="message.role === 'assistant'" type="button" variant="ghost" size="icon" class="min-h-touch min-w-touch" data-testid="talos-message-retry" :aria-label="$t('chat.retryAssistant')" :title="$t('chat.retryResponse')" :disabled="busy || !canRetry" @click="emit('retry', message)">
+        <Button v-if="message.role === 'assistant' && puo('riprova')" type="button" variant="ghost" size="icon" class="min-h-touch min-w-touch" data-testid="talos-message-retry" :aria-label="$t('chat.retryAssistant')" :title="$t('chat.retryResponse')" :disabled="busy || !canRetry" @click="emit('retry', message)">
             <RotateCcw class="size-3.5" aria-hidden="true" />
         </Button>
         <!-- Owner 2026-07-25: the chat can't hand out download links; instead save
              the generated reply straight into the Library (origin='generated'). -->
-        <Button v-if="message.role === 'assistant'" type="button" variant="ghost" size="icon" class="min-h-touch min-w-touch" data-testid="talos-message-save" :aria-label="$t('chat.saveToLibrary')" :title="$t('chat.saveToLibrary')" @click="emit('saveToLibrary', message)">
+        <Button v-if="message.role === 'assistant' && puo('libreria')" type="button" variant="ghost" size="icon" class="min-h-touch min-w-touch" data-testid="talos-message-save" :aria-label="$t('chat.saveToLibrary')" :title="$t('chat.saveToLibrary')" @click="emit('saveToLibrary', message)">
             <Library class="size-3.5" aria-hidden="true" />
         </Button>
-        <TalosMobileMessageOverflowMenu :message="message" :busy="busy" :can-retry="canRetry"
+        <TalosMobileMessageOverflowMenu v-if="foglioConVoci" :message="message" :busy="busy" :can-retry="canRetry" :azioni="azioni"
             @reuse="emit('reuse', $event)" @resend="emit('resend', $event)"
             @share="emit('share', $event)" @details="emit('details', $event)" @delete="emit('delete', $event)" />
     </div>

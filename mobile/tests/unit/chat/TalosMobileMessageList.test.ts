@@ -78,6 +78,33 @@ afterEach(() => {
 })
 
 describe('TalosMobileMessageList', () => {
+    it('K3-C Allegati A3: a Code file chip shows its path as the title and the token estimate, never a made-up size', async () => {
+        const base = { grant_id: '', vault_file_id: '', media_type: 'application/octet-stream', size_bytes: 0, permissions: ['model.read'] as const, grant_status: 'active' as const }
+        const wrapper = mount(TalosMobileMessageList, {
+            attachTo: document.body,
+            props: {
+                sending: false,
+                messages: [{
+                    id: 'user-r4', role: 'user', content: 'Read these', state: 'persisted', created_at: '2026-10-16T12:00:00.000Z',
+                    model_profile_id: null, run_id: 'r', metadata: {},
+                    attachments: [
+                        { ...base, id: 'r4file:0:/w/allegati/NOTA.md', display_name: 'NOTA.md', percorso: '/w/allegati/NOTA.md', caratteri: 812 },
+                        { ...base, id: 'r4file:1:/w/allegati/dati.bin', display_name: 'dati.bin', percorso: '/w/allegati/dati.bin' },
+                    ],
+                }],
+            },
+        })
+        await flushPromises()
+        const testo = wrapper.get('[data-message-attachment-id="r4file:0:/w/allegati/NOTA.md"]')
+        expect(testo.text()).toContain('NOTA.md')
+        expect(testo.text()).toContain('~203 token')
+        expect(testo.attributes('title')).toBe('/w/allegati/NOTA.md')
+        const binario = wrapper.get('[data-message-attachment-id="r4file:1:/w/allegati/dati.bin"]')
+        expect(binario.text().trim()).toBe('dati.bin')
+        expect(binario.attributes('title')).toBe('/w/allegati/dati.bin')
+        expect(wrapper.text()).not.toContain('0 B')
+    })
+
     it('renders role/state/metadata and safe assistant Markdown without page overflow classes', async () => {
         const wrapper = mount(TalosMobileMessageList, {
             attachTo: document.body,

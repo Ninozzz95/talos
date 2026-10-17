@@ -14,7 +14,7 @@ import {
 } from '@/lib/tools/tracciaAzione'
 
 import { TALOS_TOOL_LABEL_KEYS, talosDynamicToolFallbackLabel, talosToolConsentCopy } from '@/lib/tools/toolLabels'
-import type { TalosMobileMessageView } from '@/components/chat/mobileChatTypes'
+import type { TalosAzioneMessaggio, TalosMobileMessageView } from '@/components/chat/mobileChatTypes'
 // La chat vuota non ha azioni per messaggio: arrivano con il primo messaggio.
 const TalosMobileMessageActions = defineAsyncComponent(() => import('./TalosMobileMessageActions.vue'))
 // CONT (25/09/2026): la riga «Si è fermata qui» e «Continua», a richiesta — una risposta tagliata è rara.
@@ -76,11 +76,17 @@ const TalosMobileLocalMetricsRow = defineAsyncComponent(
 )
 import TalosMobileStatusMessage from '@/components/chat/TalosMobileStatusMessage.vue'
 import { TALOS_METADATA_COMPATTAZIONE, TALOS_METADATA_COMPATTAZIONE_ANNULLATA } from '@/lib/chat/compattazioneChiavi'
+import { TALOS_METADATA_RISULTATO_DELEGA } from '@/lib/harness/r4/risultatoDelegaChiave'
+import { TALOS_METADATA_APPROVAZIONE } from '@/lib/harness/r4/approvazioneChiave'
+import { TALOS_METADATA_FERMATO } from '@/lib/harness/r4/fermatoChiave'
+import { TALOS_METADATA_DOMANDA } from '@/lib/harness/r4/domandaChiave'
+import { TALOS_METADATA_PIANO } from '@/lib/harness/r4/pianoChiave'
 import TalosMobileReasoningBlock from '@/components/chat/TalosMobileReasoningBlock.vue'
 import TalosMobileSourcesChip from '@/components/chat/TalosMobileSourcesChip.vue'
 import { writeTalosClipboardText } from '@/services/clipboard'
 import { talosRelativeTime } from '@/lib/relativeTime'
 import { talosChatTextSize } from '@/lib/talosChatLayout'
+import { costoDelFileR4 } from '@/lib/harness/r4/costoFileR4'
 import type { TalosChatBubbleScale } from '@/lib/talosTypes'
 
 const vMessageEntrance = useTalosMessageEntrance()
@@ -117,6 +123,8 @@ const props = defineProps<{
     diagnostica?: boolean
     /** ⭐⭐ P4-ter passo 2 — questa chat sta riassumendo adesso: in fondo, la riga «Riassumo la conversazione…» con la barra. */
     compattazioneInCorso?: boolean
+    /** K3-B2: solo le azioni del messaggio che chi monta la lista sa fare; senza, tutte (la chat). */
+    azioni?: readonly TalosAzioneMessaggio[]
 }>()
 
 const emit = defineEmits<{
@@ -169,7 +177,7 @@ function quanteInAttesa(message: TalosMobileMessageView): number {
         : 1
 }
 
-const { t } = useTalosI18n()
+const { t, locale } = useTalosI18n()
 
 /*
  * ⭐ GESTITA-01 (owner 25/09/2026, «riga compatta»): una risposta sospesa su un permesso, VUOTA e già decisa, non è più
@@ -199,6 +207,9 @@ function annullamentoDi(message: TalosMobileMessageView): string | null {
     const at = (message.metadata?.[TALOS_METADATA_COMPATTAZIONE_ANNULLATA] as { at?: unknown } | undefined)?.at
     return typeof at === 'string' && at ? at : null
 }
+/** K3-RISDEL, K3-AP1 e K3 piano: le righe che solo il Codice su r4 produce (risultato di un sotto-agente, carte d'approvazione, domande, piano). */
+const delCodiceR4 = (m: TalosMobileMessageView) => m.role === 'system' && Boolean(m.metadata?.[TALOS_METADATA_RISULTATO_DELEGA] || m.metadata?.[TALOS_METADATA_APPROVAZIONE] || m.metadata?.[TALOS_METADATA_DOMANDA] || m.metadata?.[TALOS_METADATA_FERMATO] || m.metadata?.[TALOS_METADATA_PIANO])
+const TalosCodiceR4RigaDiSistema = defineAsyncComponent(() => import('@/components/codice/TalosCodiceR4RigaDiSistema.vue'))
 // ⛔ Nel `v-memo` di ogni riga: il separatore cambia per una riga che arriva DOPO di lui.
 const compattazioniAnnullate = computed(() => new Set(props.messages.map(annullamentoDi).filter((at): at is string => at !== null)))
 const TalosMobileCompactionRow = defineAsyncComponent(() => import('@/components/chat/TalosMobileCompactionRow.vue'))
@@ -220,9 +231,15 @@ function esitiDaMostrare(message: TalosMobileMessageView, index: number): readon
 function ragionamentoDaMostrare(message: TalosMobileMessageView, index: number): string {
     const precedente = props.messages[index - 1]
     const ereditato = precedente && assorbitaDallaSeguente(index - 1) ? precedente.reasoning?.trim() ?? '' : ''
-    const proprio = message.reasoning?.trim() ?? ''
+    // ⭐ N13: con la sequenza salvata il ragionamento proprio sta al suo posto, giro per giro, dentro la linea del tempo.
+    const proprio = haSequenza(message) ? '' : message.reasoning?.trim() ?? ''
     return [ereditato, proprio].filter(Boolean).join('\n\n')
 }
+/** ⭐ N13 (owner 02/10, decisioni del 09/10): il messaggio porta la sequenza ordinata di ragionamento, attrezzi e testo. */
+function haSequenza(message: TalosMobileMessageView): boolean {
+    return message.role === 'assistant' && Array.isArray(message.metadata?.talos_sequenza)
+}
+const TalosMobileAttivitaDelTurno = defineAsyncComponent(() => import('@/components/chat/TalosMobileAttivitaDelTurno.vue'))
 function titoloStrumento(tool: string): string {
     return talosToolConsentCopy({ name: tool, title: tool, description: '' }, t).title
 }
@@ -512,7 +529,7 @@ function messageStateLabel(state: string): string {
             v-for="(message, index) in messages"
             :key="message.id"
             v-message-entrance="message.state"
-            v-memo="[message, messages[index - 1]?.role, messages[index - 1]?.authorizationOutcome, messages[index - 1]?.reasoning, messages[index + 1]?.role, sending, modelLabels, messageStyle, textScale, hasOlderMessages, pendingAuthorizationIds, diagnostica, firstMemoryDisclosureMessageId, now, compattazioniAnnullate.size]"
+            v-memo="[message, messages[index - 1]?.role, messages[index - 1]?.authorizationOutcome, messages[index - 1]?.reasoning, messages[index + 1]?.role, sending, modelLabels, messageStyle, textScale, hasOlderMessages, pendingAuthorizationIds, diagnostica, firstMemoryDisclosureMessageId, now, compattazioniAnnullate.size, azioni]"
             :data-message-id="message.id"
             :data-message-kind="message.role"
             :data-state="message.state"
@@ -533,6 +550,7 @@ function messageStateLabel(state: string): string {
                 @annulla="emit('undoCompaction', compattazioneDi(message)!.at)"
             />
             <template v-else-if="annullamentoDi(message)" />
+            <TalosCodiceR4RigaDiSistema v-else-if="delCodiceR4(message)" :message="message" />
             <TalosMobileStatusMessage v-else-if="message.role === 'system'" :message="message" />
             <template v-else>
                 <TalosMobileAssistantHeader v-if="message.role === 'assistant'">
@@ -686,7 +704,12 @@ function messageStateLabel(state: string): string {
                                 <ShieldX v-else class="size-3.5 shrink-0" aria-hidden="true" />
                                 <span class="min-w-0 truncate">{{ esito.concesso ? $t('chat.permissionGranted') : $t('chat.permissionDenied') }} {{ titoloStrumento(esito.tool) }}</span>
                             </p>
-                            <TalosMobileMessageContent :content="message.content" line-breaks />
+                            <TalosMobileAttivitaDelTurno
+                                v-if="haSequenza(message)"
+                                :salvata="message.metadata?.talos_sequenza"
+                                :testo="message.content"
+                            />
+                            <TalosMobileMessageContent v-else :content="message.content" line-breaks />
                             <button
                                 v-if="attesaViva(message)"
                                 type="button"
@@ -793,13 +816,15 @@ function messageStateLabel(state: string): string {
                             v-for="attachment in fileAttachments(message).filter(() => message.role !== 'assistant')"
                             :key="attachment.id"
                             :data-message-attachment-id="attachment.id"
-                            :title="attachment.media_type"
+                            :title="attachment.percorso ?? attachment.media_type"
                             role="listitem"
                             class="inline-flex max-w-full items-center gap-1.5 rounded-md border border-current/25 bg-black/5 px-2 py-1 text-2xs leading-4"
                         >
                             <FileText class="size-3.5 shrink-0" aria-hidden="true" />
                             <span class="max-w-[180px] truncate">{{ attachment.display_name }}</span>
-                            <span class="shrink-0 opacity-75">{{ formatBytes(attachment.size_bytes) }}</span>
+                            <!-- K3-C Allegati A3: un file del Codice su r4 non ha un peso; il costo solo se il testo è partito -->
+                            <span v-if="attachment.percorso === undefined" class="shrink-0 opacity-75">{{ formatBytes(attachment.size_bytes) }}</span>
+                            <span v-else-if="attachment.caratteri" class="shrink-0 opacity-75">{{ costoDelFileR4(attachment.caratteri, locale) }}</span>
                             <span v-if="attachment.grant_status === 'revoked'" class="shrink-0">{{ $t('chat.accessRevoked') }}</span>
                         </span>
                     </div>
@@ -817,7 +842,8 @@ function messageStateLabel(state: string): string {
                 </div>
                 <div v-if="message.role !== 'assistant' || message.id === firstMemoryDisclosureMessageId" data-testid="talos-message-meta" class="talos-message-meta mt-1 flex max-w-[92%] flex-wrap items-center justify-end gap-1.5 px-1 text-2xs text-[var(--talos-muted)]">
                     <template v-if="message.role !== 'assistant'">
-                        <span>{{ message.role === 'user' ? $t('chat.you') : 'Talos' }} · {{ relativeTime(message.created_at) }}</span>
+                        <!-- K3-B2 (Pad, 15/10): senza ora (storia rigiocata di r4) solo chi parla, mai «Tu ·» col punto appeso. -->
+                        <span>{{ message.role === 'user' ? $t('chat.you') : 'Talos' }}<template v-if="relativeTime(message.created_at)"> · {{ relativeTime(message.created_at) }}</template></span>
                         <span v-if="message.state !== 'persisted'"> · {{ messageStateLabel(message.state) }}</span>
                     </template>
                     <div
@@ -837,6 +863,7 @@ function messageStateLabel(state: string): string {
                     :message="message"
                     :busy="sending"
                     :can-retry="message.role === 'assistant' && hasPreviousUser(message.id)"
+                    :azioni="azioni"
                     @copy="copyMessage"
                     @edit="editMessage"
                     @reuse="emit('reuse', $event.id)"

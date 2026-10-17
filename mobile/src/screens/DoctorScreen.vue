@@ -5,12 +5,13 @@
  * state, speech recognizer, biometrics, share bridge, network reachability.
  */
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import TalosMobilePageHeader from '@/components/talos/ui/TalosMobilePageHeader.vue'
 import { useTalosI18n } from '@/i18n'
 import { TabsContent } from 'reka-ui'
 import TalosThemedSwitch from '@/components/talos/ui/TalosThemedSwitch.vue'
 import TalosThemedTabs from '@/components/talos/ui/TalosThemedTabs.vue'
 import {
-    Activity, ChevronDown, CircleCheck, CircleX, ClipboardCopy, Stethoscope, Timer,
+    Activity, ChevronDown, CircleCheck, CircleX, ClipboardCopy, Timer,
 } from '@lucide/vue'
 import { Capacitor } from '@capacitor/core'
 import { talosLocalEngineDoctorRows } from '@/services/localEngineDoctor'
@@ -550,11 +551,9 @@ onBeforeUnmount(() => { if (copyTimer !== null) clearTimeout(copyTimer) })
 </script>
 
 <template>
-    <div class="flex min-h-full flex-col gap-3 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3" data-testid="talos-doctor-screen">
-        <p class="flex items-center gap-2 text-xs leading-5 text-[var(--talos-muted)]">
-            <Stethoscope class="size-4 text-[var(--talos-accent)]" aria-hidden="true" />
-            {{ t('doctor.intro') }}
-        </p>
+    <div class="flex min-h-full flex-col gap-3 px-[var(--talos-space-page)] pb-[max(var(--talos-space-page),env(safe-area-inset-bottom))] pt-[var(--talos-space-section)]" data-testid="talos-doctor-screen">
+        <!-- ⛔ G1 (14/10/2026): l'intestazione delle stazioni — titolo e la riga che dice che posto è (la frase di sempre). -->
+        <TalosMobilePageHeader :title="t('navigation.doctor')" :subtitle="t('doctor.intro')" />
 
         <p v-if="scanning" role="status" class="flex items-center gap-2 py-6 text-sm text-[var(--talos-muted)]">
             <Activity class="size-4 animate-pulse text-[var(--talos-accent)]" aria-hidden="true" />

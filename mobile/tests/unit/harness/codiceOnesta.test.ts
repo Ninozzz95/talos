@@ -262,8 +262,25 @@ describe('B1 — onestà del Codice: comportamento', () => {
         rt().passaASessione('sess-1', 'libero:0', 'prova')
         rt().handleRealEvent({ type: 'RunFinished', result: { detto: 'ok', attrezziOfferti: ['elenca', 'leggi', 'naviga'] } }, rt().realSessionState.generation)
         expect(valore('Tools')).toBe('3')
-        expect(valore('Browser')).toBe('naviga')
-        expect(valore('Web search')).toBe('—')
+        // ⛔ K3-ESC (15/10/2026): la riga diceva l'id dell'attrezzo («Browser: naviga», in italiano anche con l'app in inglese).
+        // Le parole del desktop r4 (`app.capability.notOffered` @ fc5): offerto o non offerto, nella lingua dell'app.
+        expect(valore('Browser')).toBe('offered')
+        expect(valore('Web search')).toBe('not offered')
+    })
+
+    it('ONESTA-16b in italiano la scheda dice «offerta» e «non offerta», mai il nome tecnico dell’attrezzo', () => {
+        ;(window as unknown as { __talosHarnessLocale?: string }).__talosHarnessLocale = 'it'
+        try {
+            const valore = (etichetta: string) => [...document.querySelectorAll('.capability-row')]
+                .find((riga) => riga.querySelector('span')?.textContent === etichetta)?.querySelector('b')?.textContent
+            rt().passaASessione('sess-1', 'libero:0', 'prova')
+            rt().handleRealEvent({ type: 'RunFinished', result: { detto: 'ok', attrezziOfferti: ['web_search'] } }, rt().realSessionState.generation)
+            expect(valore('Web search')).toBe('offerta')
+            expect(valore('Browser')).toBe('non offerta')
+            expect([...document.querySelectorAll('[data-capability-count]')].map((e) => e.textContent).join(' ')).not.toMatch(/naviga|web_search/u)
+        } finally {
+            delete (window as unknown as { __talosHarnessLocale?: string }).__talosHarnessLocale
+        }
     })
 
     it('ONESTA-17 un controllo spento con aria-disabled si VEDE spento (foto del Pad: «Approve all» pieno e dorato)', () => {

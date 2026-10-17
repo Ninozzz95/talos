@@ -733,6 +733,28 @@ android {
              * `ADSP_LIBRARY_PATH` deve puntare (vedi il compito sotto).
              */
             jniLibs.srcDirs += ["${buildDir}/hexagon/jniLibs"]
+            /*
+             * N12 — il riconoscimento vocale locale (sherpa-onnx): libreria nativa, modello delle pause e
+             * interfaccia Kotlin ufficiale. Nemmeno questi stanno nella repo: ce li mette `preparaAsrLocale`,
+             * scaricando e verificando ogni peso e ogni impronta di `PROVENIENZA-ASR.md`.
+             */
+            jniLibs.srcDirs += ["${buildDir}/asr/jniLibs"]
+            /*
+             * «Codice in casa» (owner 13/10/2026) e K2-A (owner 14/10, «Una copia sola»): Node e le sue 9 librerie stanno
+             * SOLO in `src/main/jniLibs/arm64-v8a/` (`libtalos*.so`, RUNPATH=$ORIGIN), per l'avvio in casa e per la strada
+             * del ponte. Ritocco e impronte: `scripts/node-nativo/` e `jniLibs/PROVENIENZA-NODE.md`.
+             */
+            assets.srcDirs += ["${buildDir}/asr/assets"]
+            java.srcDirs += ["${buildDir}/asr/kotlin"]
+        }
+        /*
+         * K2-B, B4 (ledger LEDGER-K2B-R4-NELL-APP-2026-10-14.md): il server r4 entra negli asset con
+         * `-PtalosR4Archivio=<archivio .tar di archivio-r4.mjs>`; senza la proprietà la build di debug è quella di sempre.
+         * ⛔ K4-E (ledger LEDGER-K4E-R4-NELLA-RELEASE-2026-10-17.md, owner 17/10 «r4 al posto, il vecchio come ripiego»): non più solo
+         * debug, ogni variante; e la release SENZA l'archivio non si costruisce (vedi `taskGraph.whenReady` sotto `preparaR4Sviluppo`).
+         */
+        main {
+            if (project.hasProperty('talosR4Archivio')) assets.srcDirs += ["${buildDir}/r4/assets"]
         }
     }
     packagingOptions {
@@ -757,6 +779,10 @@ android {
              * `scripts/verify-npu-unmodified.mjs` lo verifica sull'APK.
              */
             keepDebugSymbols += ['**/libtalos-npu-hexagon.so', '**/libggml-htp-*.so']
+            // «Codice in casa» e K2-A: Node e le sue librerie escono byte per byte come in `scripts/node-nativo/node-nativo.json`.
+            keepDebugSymbols += ['**/libtalosnode.so', '**/libtalosz.so', '**/libtaloscares.so', '**/libtalossqlite3.so',
+                                 '**/libtaloscrypto.so', '**/libtalosssl.so', '**/libtalosicudata.so', '**/libtalosicui18n.so',
+                                 '**/libtalosicuuc.so', '**/libtaloscxx.so']
 
             /*
              * ⛔⛔ LA `libOpenCL.so` DEL TELEFONO NON SI SPEDISCE — e non è una
@@ -1467,4 +1493,159 @@ tasks.register('preparaHexagon') {
     }
 }
 
-tasks.matching { it.name == 'preBuild' }.configureEach { dependsOn 'preparaPonteAdb', 'preparaOrecchioParola', 'preparaHexagon' }
+/**
+ * N12 — il riconoscimento vocale locale: sherpa-onnx v1.13.8, variante ufficiale col runtime ONNX dentro.
+ *
+ * Stessa disciplina del ponte `adb` e della parola di attivazione: niente binari nella repo, e la verifica di peso e
+ * impronta fa parte di OGNI compilazione. La scheda leggibile, con il PERCHÉ di questa variante, è
+ * `src/main/jniLibs/PROVENIENZA-ASR.md`. Tre destinazioni perché sono tre cose diverse: una libreria nativa, un
+ * modello letto a runtime e dei sorgenti Kotlin (l'interfaccia ufficiale) da compilare con noi.
+ */
+tasks.register('preparaAsrLocale') {
+    description = 'Scarica e verifica la libreria, il modello delle pause e l interfaccia Kotlin dichiarati in PROVENIENZA-ASR.md'
+    def scheda = file('src/main/jniLibs/PROVENIENZA-ASR.md')
+    def radice = file("${buildDir}/asr")
+    def cache = new File(gradle.gradleUserHomeDir, 'talos-asr-locale')
+
+    inputs.file scheda
+    outputs.dir radice
+
+    doLast {
+        if (!scheda.exists()) {
+            throw new GradleException("Manca ${scheda}: senza la scheda di provenienza il riconoscimento vocale locale non si costruisce.")
+        }
+        def archivio = null   // [indirizzo, byte, impronta]
+        def libreria = null   // [percorso nell'archivio, byte, impronta]
+        def baseKotlin = null
+        def baseVad = null
+        def kotlin = [:]      // nome -> [byte, impronta]
+        def vad = [:]         // percorso negli assets -> [byte, impronta]
+        def indirizzoArchivio = null
+        scheda.getText('UTF-8').eachLine { riga ->
+            def r = riga.trim()
+            def a = (r =~ /^Archivio: `(\S+)`$/)
+            if (a.matches()) { indirizzoArchivio = a[0][1]; return }
+            def bk = (r =~ /^Base Kotlin: `(\S+)`$/)
+            if (bk.matches()) { baseKotlin = bk[0][1]; return }
+            def bv = (r =~ /^Base VAD: `(\S+)`$/)
+            if (bv.matches()) { baseVad = bv[0][1]; return }
+            def f = (r =~ /^\|\s*`([^`]+)`\s*\|\s*(\d+)\s*\|\s*`([0-9a-f]{64})`\s*\|$/)
+            if (!f.matches()) return
+            def nome = f[0][1]
+            def dati = [f[0][2].toLong(), f[0][3]]
+            if (nome.endsWith('.tar.bz2')) archivio = dati
+            else if (nome.startsWith('jniLibs/')) libreria = [nome] + dati
+            else if (nome.startsWith('kotlin/')) kotlin[nome.substring('kotlin/'.length())] = dati
+            else if (nome.startsWith('asr/')) vad[nome] = dati
+        }
+        if (archivio == null || libreria == null || indirizzoArchivio == null || baseKotlin == null || baseVad == null || kotlin.isEmpty() || vad.isEmpty()) {
+            throw new GradleException(
+                    "PROVENIENZA-ASR.md non ha prodotto le righe attese (archivio=${archivio != null}, libreria=${libreria != null}, " +
+                            "kotlin=${kotlin.size()}, vad=${vad.size()}). La tabella e' cambiata e questo compito non la riconosce piu'.")
+        }
+
+        /** Scarica (se serve) nella cache e verifica peso e impronta. Torna il file verificato. */
+        def verificato = { nome, indirizzo, peso, impronta ->
+            def giu = new File(cache, nome)
+            if (!giu.exists() || giu.length() != peso || improntaDi(giu.bytes) != impronta) {
+                logger.lifecycle("asr: scarico ${nome}")
+                giu.parentFile.mkdirs()
+                giu.withOutputStream { uscita -> new URL(indirizzo).withInputStream { uscita << it } }
+            }
+            if (giu.length() != peso) {
+                def trovato = giu.length()
+                giu.delete()
+                throw new GradleException("PESO DIVERSO per ${nome}.\n  atteso  ${peso} byte\n  trovato ${trovato} byte\n" +
+                        "Quasi sempre vuol dire che al posto del file e' arrivata una pagina di errore.")
+            }
+            def vera = improntaDi(giu.bytes)
+            if (vera != impronta) {
+                giu.delete()
+                throw new GradleException("IMPRONTA DIVERSA per ${nome}.\n  atteso  ${impronta}\n  trovato ${vera}\n" +
+                        "NON si aggiorna il numero senza sapere perche' il file alla fonte e' cambiato.")
+            }
+            return giu
+        }
+
+        cache.mkdirs()
+        radice.deleteDir()
+
+        // 1. La libreria nativa: dall'archivio ufficiale, UNA sola (arm64-v8a), verificata anche dopo l'estrazione.
+        def nomeLibreria = libreria[0].tokenize('/').last()
+        def estratta = new File(cache, "v1.13.8-${nomeLibreria}")
+        if (!estratta.exists() || estratta.length() != libreria[1] || improntaDi(estratta.bytes) != libreria[2]) {
+            def tar = verificato(indirizzoArchivio.tokenize('/').last(), indirizzoArchivio, archivio[0], archivio[1])
+            def trovata = tarTree(resources.bzip2(tar)).matching { include "**/${libreria[0]}" }.files
+            if (trovata.size() != 1) {
+                throw new GradleException("asr: nell'archivio ${tar.name} ci sono ${trovata.size()} file «${libreria[0]}», ne serve uno.")
+            }
+            estratta.bytes = trovata.first().bytes
+        }
+        if (estratta.length() != libreria[1] || improntaDi(estratta.bytes) != libreria[2]) {
+            def vera = improntaDi(estratta.bytes)
+            estratta.delete()
+            throw new GradleException("IMPRONTA DIVERSA per ${libreria[0]}.\n  atteso  ${libreria[2]}\n  trovato ${vera}")
+        }
+        def destLibreria = new File(radice, libreria[0])
+        destLibreria.parentFile.mkdirs()
+        destLibreria.bytes = estratta.bytes
+
+        // 2. L'interfaccia Kotlin ufficiale, invariata, nel suo pacchetto.
+        def destKotlin = new File(radice, 'kotlin/com/k2fsa/sherpa/onnx')
+        destKotlin.mkdirs()
+        kotlin.each { nome, dati ->
+            new File(destKotlin, nome).bytes = verificato("v1.13.8-${nome}", baseKotlin + nome, dati[0], dati[1]).bytes
+        }
+
+        // 3. Il modello delle pause, negli assets.
+        vad.each { percorso, dati ->
+            def nome = percorso.tokenize('/').last()
+            def dest = new File(radice, "assets/${percorso}")
+            dest.parentFile.mkdirs()
+            dest.bytes = verificato(nome, baseVad + nome, dati[0], dati[1]).bytes
+        }
+        logger.lifecycle("asr: 1 libreria, ${kotlin.size()} sorgenti Kotlin, ${vad.size()} modello delle pause, verificati contro PROVENIENZA-ASR.md")
+    }
+}
+
+/*
+ * K2-B, B4: l'archivio del server r4 (`scripts/r4-mobile/archivio-r4.mjs`) e il portachiavi del telefono
+ * (`scripts/r4-mobile/portachiavi-android.mjs`) negli asset di debug, in `talos-r4/`. Solo con -PtalosR4Archivio. Si controlla
+ * che l'archivio sia ustar e cominci col manifesto del pacchetto: un file qualunque non diventa «il server».
+ */
+tasks.register('preparaR4Sviluppo') {
+    def destinazione = file("${buildDir}/r4/assets/talos-r4")
+    def portachiavi = file('../../scripts/r4-mobile/portachiavi-android.mjs')
+    onlyIf { project.hasProperty('talosR4Archivio') }
+    doLast {
+        def archivio = file(project.property('talosR4Archivio'))
+        if (!archivio.isFile()) throw new GradleException("talosR4Archivio: archivio non trovato: ${archivio}")
+        def testa = new byte[512]
+        archivio.withInputStream { it.read(testa) }
+        def magia = new String(testa, 257, 5, 'ISO-8859-1')
+        def primo = new String(testa, 0, 27, 'ISO-8859-1')
+        if (magia != 'ustar' || primo != 'manifesto-pacchetto-r4.json') {
+            throw new GradleException("talosR4Archivio: ${archivio} non è un archivio di archivio-r4.mjs")
+        }
+        if (!portachiavi.isFile()) throw new GradleException("portachiavi del telefono non trovato: ${portachiavi}")
+        project.delete(destinazione)
+        destinazione.mkdirs()
+        project.copy { from archivio; into destinazione; rename { 'r4.tar' } }
+        project.copy { from portachiavi; into destinazione }
+        logger.lifecycle("r4: ${archivio.length()} byte di archivio e il portachiavi del telefono negli asset di debug")
+    }
+}
+tasks.matching { it.name == 'preBuild' }.configureEach { dependsOn 'preparaPonteAdb', 'preparaOrecchioParola', 'preparaHexagon', 'preparaAsrLocale', 'preparaR4Sviluppo' }
+
+/*
+ * ⛔ K4-E (owner 17/10 «r4 al posto, il vecchio come ripiego»): una release senza r4 aprirebbe a tutti il Codice vecchio in
+ * silenzio. Il ripiego è per un guasto sul telefono, non per una build sbagliata: senza l'archivio la release si ferma qui.
+ * Il workflow lo costruisce dal commit del tag (`.github/workflows/release.yml`) e dopo la firma lo verifica nell'APK
+ * (`scripts/r4-mobile/verifica-r4-nell-apk.mjs`).
+ */
+gradle.taskGraph.whenReady { grafo ->
+    def release = grafo.allTasks.any { it.project == project && it.name in ['assembleRelease', 'bundleRelease', 'packageRelease'] }
+    if (release && !project.hasProperty('talosR4Archivio')) {
+        throw new GradleException('release senza r4: passa -PtalosR4Archivio=<archivio di scripts/r4-mobile/archivio-r4.mjs> (K4-E)')
+    }
+}

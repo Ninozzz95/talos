@@ -47,6 +47,24 @@ function controller(count = 500) {
 beforeEach(() => { state.controller = controller() })
 
 describe('TalosMobileModelCatalog', () => {
+    /**
+     * CATALOGO-FILTRO-01 (13/10/2026, N15): il filtro «fornitore» offriva solo i fornitori con una riga nelle impostazioni.
+     * Il piano ChatGPT (che si collega dentro OpenAI) e il motore locale hanno modelli in elenco ma non una riga loro: i
+     * loro modelli c'erano e non si potevano filtrare. Il filtro offre ogni fornitore che ha DAVVERO modelli in elenco.
+     */
+    it('CATALOGO-FILTRO-01: il filtro offre anche i fornitori senza riga propria quando hanno modelli (piano ChatGPT, locale), e non li inventa', async () => {
+        const target = controller(4)
+        const voci = () => (wrapper.findComponent({ name: 'TalosThemedSelect' }).props('items') as Array<{ value: string }>).map((item) => item.value)
+        state.controller = target
+        const wrapper = mount(TalosMobileModelCatalog)
+        expect(voci()).not.toContain('chatgpt')
+        expect(voci()).not.toContain('local')
+        target.profiles.value = [...target.profiles.value, { ...profile(0), id: 'chatgpt:gpt-6-luna', provider: 'chatgpt', model: 'gpt-6-luna', display_name: 'GPT-6 Luna' }]
+        await wrapper.vm.$nextTick()
+        expect(voci()).toContain('chatgpt')
+        expect(voci()).toContain('openai')
+    })
+
     it('mounts forty of five hundred, advances by forty, and resets for every filter', async () => {
         const wrapper = mount(TalosMobileModelCatalog)
         expect(wrapper.findAll('[data-model-card]')).toHaveLength(40)

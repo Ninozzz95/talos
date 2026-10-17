@@ -60,6 +60,52 @@ describe('buildChatCompletion streaming routing (F2-T4)', () => {
         expect(complete).toHaveBeenCalledOnce()
     })
 
+    /**
+     * N15-FORN-06 (13/10/2026) — un RIFIUTO del piano ChatGPT (limite d'uso, piano non abilitato…) non è un inciampo del
+     * trasporto: rifare la richiesta dall'altra strada sarebbe un secondo invio contro lo stesso rifiuto. Esce com'è, e chi
+     * sta sopra decide (al limite d'uso: aspetta).
+     */
+    it('N15-FORN-06: a ChatGPT plan refusal before the first byte does NOT fall back to a second request', async () => {
+        const rifiuto = Object.assign(new Error('CHATGPT_LIMITE_DEL_PIANO'), { provider: 'chatgpt', attesaMs: 120_000 })
+        const streamComplete = vi.fn(async () => { throw rifiuto })
+        const complete = vi.fn(async () => ({ text: 'mai', model: 'gpt' }))
+        registryMock.providerAdapterFor.mockReturnValue({
+            provider: 'chatgpt', requiresSecret: true, streamComplete, complete,
+        })
+        const completion = buildChatCompletion(contextFor)
+        await expect(completion([{ role: 'user', content: 'hi' }], { onChunk: () => {} })).rejects.toBe(rifiuto)
+        expect(complete).not.toHaveBeenCalled()
+    })
+
+    /**
+     * ⛔ N15-RITARDO-01 — owner 13/10/2026, dal Pad: «c'è molto delay da quando invio la domanda a quando ricevo la
+     * risposta». MISURATO sull'app di sviluppo, cronometrando le chiamate: col piano ChatGPT ogni giro cominciava con un
+     * `fetch` in flusso dalla pagina verso `api.openai.com/v1/responses`, che dalla WebView non può riuscire (OpenAI
+     * rifiuta le origini di pagina) e falliva dopo 1,8 secondi; solo allora partiva la richiesta vera dal trasporto
+     * nativo. Un fornitore che dichiara di non essere raggiungibile in flusso dalla pagina va subito dalla strada buona.
+     */
+    it('N15-RITARDO-01: an adapter that declares its stream unreachable from the page goes straight to the native request', async () => {
+        const streamComplete = vi.fn(async () => { throw new TypeError('Failed to fetch') })
+        const complete = vi.fn(async () => ({ text: 'Un fiume è un corso d acqua.', model: 'gpt' }))
+        registryMock.providerAdapterFor.mockReturnValue({
+            provider: 'chatgpt', requiresSecret: true, streamComplete, complete, flussoNonRaggiungibileDallaPagina: true,
+        })
+        const completion = buildChatCompletion(contextFor)
+        const esito = await completion([{ role: 'user', content: 'hi' }], { onChunk: () => {} })
+        expect(esito.text).toBe('Un fiume è un corso d acqua.')
+        expect(streamComplete).not.toHaveBeenCalled()
+        expect(complete).toHaveBeenCalledTimes(1)
+        // ed è il piano ChatGPT a dichiararlo; gli altri fornitori no
+        const veri = await vi.importActual<typeof import('@/lib/chat/providers/openAiCompatibleAdapter')>('@/lib/chat/providers/openAiCompatibleAdapter')
+        expect(veri.chatgptAdapter.flussoNonRaggiungibileDallaPagina).toBe(true)
+        expect(veri.openRouterAdapter.flussoNonRaggiungibileDallaPagina).toBeUndefined()
+        // ⛔ e lo dichiara anche l'involucro del registro, che è ciò che `providerAdapterFor` consegna davvero: MISURATO sul
+        // Pad, con la dichiarazione solo nel modulo il flusso inutile partiva ancora.
+        const registro = await vi.importActual<typeof import('@/lib/chat/providerRegistry')>('@/lib/chat/providerRegistry')
+        expect(registro.TALOS_MOBILE_PROVIDER_ADAPTERS.chatgpt.flussoNonRaggiungibileDallaPagina).toBe(true)
+        expect(registro.TALOS_MOBILE_PROVIDER_ADAPTERS.openrouter.flussoNonRaggiungibileDallaPagina).toBeUndefined()
+    })
+
     it('does NOT fall back once chunks were delivered — the error propagates', async () => {
         const streamComplete = vi.fn(async (_input, _credential, handlers) => {
             handlers.onChunk('Half ')

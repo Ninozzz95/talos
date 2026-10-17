@@ -5,11 +5,12 @@ import { useTalosI18n } from '@/i18n'
 import { Check, Pencil, Play, Trash2, User, Volume2 } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import TalosThemedSelect from '@/components/talos/ui/TalosThemedSelect.vue'
+import { Capacitor } from '@capacitor/core'
 import { useSettingsStore } from '@/stores/settings'
 import { useTalosMobileToasts } from '@/stores/toasts'
 import { useTalosSpeechService, type TalosSpeechVoice } from '@/services/speech'
 import { TALOS_LINGUA_AUTOMATICA, parseTalosDictationLanguageMode } from '@/lib/dictationPolicy'
-import { talosVoceDaUsare, talosVociOfferte, type TalosVoceDispositivo } from '@/lib/voice/sceltaVoce'
+import { talosVoceDiSerie, talosVociOfferte, type TalosVoceDispositivo } from '@/lib/voice/sceltaVoce'
 import {
     talosDeletePersonalVoiceProfile,
     talosPersonalVoiceProfiles,
@@ -121,7 +122,7 @@ const selectedVoice = computed({
             const ancoraValido = personalProfiles.value.some((p) => p.id === profileId && p.compatible)
             if (ancoraValido) return `${PERSONAL_VOICE_PREFIX}${profileId}`
         }
-        return settings.state.voice.voice_uri ?? voceDiRipiego.value ?? ''
+        return voceInUso.value ?? voceDiRipiego.value ?? ''
     },
     set: (value: string) => {
         if (value.startsWith(PERSONAL_VOICE_PREFIX)) {
@@ -236,11 +237,21 @@ const dispositivo = computed<TalosVoceDispositivo[]>(() => voices.value.map((v) 
  * `selectedVoice` per la storia del difetto.
  */
 const voceDiRipiego = computed(() => (
-    talosVoceDaUsare(dispositivo.value, {
+    // ⛔ VOCE-SERIE (owner 13/10/2026): la voce di serie è la PRIMA delle offerte, la stessa regola di `voceFissa()`.
+    // Prima si calcolava rifiutando la rete: cadeva sulla voce robotica sul telefono, fuori dalle due offerte.
+    talosVoceDiSerie(dispositivo.value, {
         lingua: linguaInterfaccia.value,
-        rete: false,
+        rete: navigator.onLine !== false,
         scelta: null,
-    }).voce?.name
+    })?.name
+))
+/** La scelta salvata, se vale ancora (`talosVoceDiSerie`): una voce della stessa lingua che non è più offerta non vale. */
+const voceInUso = computed(() => (
+    talosVoceDiSerie(dispositivo.value, {
+        lingua: linguaInterfaccia.value,
+        rete: navigator.onLine !== false,
+        scelta: settings.state.voice.voice_uri ?? null,
+    })?.name
 ))
 const voiceItems = computed(() => {
     /*
@@ -283,6 +294,13 @@ const voiceItems = computed(() => {
      * (comportamento suo corretto, confermato contro Radix upstream) — il
      * difetto era qui, non lì. Stesso pattern già in uso sotto per
      * `dictationLanguageItems`, non un'invenzione nuova.
+     *
+     * ⛔ VOCE-SERIE (owner 13/10/2026: «appare una terza voce, tipo legacy,
+     * troppo robotica… togliamola definitivamente»). Quella terza voce era
+     * proprio la locale di ripiego aggiunta qui. Ora la voce in uso è sempre
+     * una delle offerte (`talosVoceDiSerie`), quindi qui in fondo resta solo
+     * una voce di un'ALTRA lingua scelta apposta da «tutte le lingue», che deve
+     * restare visibile anche a interruttore spento.
      */
     const mancante = selectedVoice.value
         && !selectedVoice.value.startsWith(PERSONAL_VOICE_PREFIX)
@@ -362,7 +380,7 @@ async function preview(): Promise<void> {
     // (che può essere la generica, o una voce diversa sia dal menù sia da
     // quella che leggerebbe un messaggio). Stesso ripiego di `selectedVoice`.
     void service.speak(t('voice.previewPhrase'), {
-        voiceURI: settings.state.voice.voice_uri ?? voceDiRipiego.value,
+        voiceURI: voceInUso.value ?? voceDiRipiego.value,
         rate: settings.state.voice.rate,
         pitch: settings.state.voice.pitch,
     })
@@ -414,6 +432,11 @@ const personalVoiceModelInstalled = ref(false)
  * importato sopra, e chi non tocca mai «Installa» non deve pagarne un
  * byte nel grafo di questo pannello.
  */
+/** N12 — «Riconoscimento vocale sul dispositivo»: si carica a richiesta, e si mostra solo dove il motore locale c'è. */
+const TalosMobileRiconoscimentoVocale = defineAsyncComponent(
+    () => import('@/components/talos/settings/TalosMobileRiconoscimentoVocale.vue'),
+)
+const riconoscimentoLocale = Capacitor.isNativePlatform() && Capacitor.isPluginAvailable('TalosAsrLocale')
 const installProgress = ref<TalosVoiceModelInstallProgress | null>(null)
 const installing = computed(() => {
     const phase = installProgress.value?.phase
@@ -528,6 +551,9 @@ function onEnrollmentCommitted(): void {
                 :aria-label="t('voice.dictationTitle')"
             />
         </div>
+
+        <!-- N12: il modello che dà alla dettatura il testo finale. Solo dove il motore locale esiste (Android, col plugin). -->
+        <TalosMobileRiconoscimentoVocale v-if="riconoscimentoLocale" />
 
         <div v-if="supported" data-testid="talos-tts-controls" class="mt-4 border-t border-[var(--talos-border)] pt-3">
             <h5 class="text-xs font-semibold text-[var(--talos-text)]">{{ t('voice.readAloudTitle') }}</h5>

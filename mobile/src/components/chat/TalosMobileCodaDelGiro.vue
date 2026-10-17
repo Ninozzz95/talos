@@ -50,12 +50,19 @@ const props = defineProps<{
     /** Risponde un'ALTRA chat: questa coda parte quando quella finisce, e «Invia ora» non può partire adesso. */
     altraChatInCorso: boolean
     salvaModifica: (id: string, testo: string) => Promise<TalosEsitoModifica>
+    /**
+     * K3-C Accoda (owner 16/10): nel Codice su r4 «Modifica» RIPORTA la voce nel compositore (r4 non ha una rotta per modificarla;
+     * Hermes `beginQueuedEdit`). Di serie la modifica in linea della chat.
+     */
+    modifica?: 'in-linea' | 'riporta'
 }>()
 
 const emit = defineEmits<{
     principale: [id: string]
     togli: [id: string]
     riprendi: []
+    /** Solo con `modifica: 'riporta'`: la voce da togliere dalla coda e rimettere nel campo. */
+    riporta: [voce: TalosCodaVoce]
 }>()
 
 defineOptions({ name: 'TalosMobileCodaDelGiro' })
@@ -110,14 +117,16 @@ function anteprima(testo: string): string {
 }
 
 function azioniDellaVoce(voce: TalosCodaVoce): TalosRowAction[] {
+    // K3-C Accoda: una voce che la persona non ha scritto (un risultato di un agente, nel Codice) non si riscrive
     return [
-        { id: 'edit', label: t('chat.queueEdit'), icon: Pencil, testId: `talos-queue-edit-${voce.id}` },
+        ...(voce.modificabile === false ? [] : [{ id: 'edit', label: t('chat.queueEdit'), icon: Pencil, testId: `talos-queue-edit-${voce.id}` }]),
         { id: 'remove', label: t('chat.queueRemove'), icon: Trash2, danger: true, testId: `talos-queue-remove-${voce.id}` },
     ]
 }
 
 function onAzioneDelMenu(voce: TalosCodaVoce, id: string): void {
-    if (id === 'edit') void apriModifica(voce)
+    if (id === 'edit' && props.modifica === 'riporta') emit('riporta', voce)
+    else if (id === 'edit') void apriModifica(voce)
     else if (id === 'remove') emit('togli', voce.id)
 }
 

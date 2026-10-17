@@ -1,0 +1,36 @@
+{
+  "origine": {
+    "commit": "701c6c0d2d711879b53aa21bddad5a06d33538e7",
+    "percorso": "harness-ui/frontend/src/i18n/testi/errori.js",
+    "sha256": "1c54a18f9f27f84ede0f86ae64f563433dd8e64f5222f9d336c30b40790fba44",
+    "prefisso": [
+      "PROCESS_NOT_RUNNING.",
+      "PROCESS_STILL_RUNNING.",
+      "NOT_FOUND.message"
+    ]
+  },
+  "it": {
+    "NOT_FOUND.message": "Risorsa non trovata",
+    "PROCESS_NOT_RUNNING.message": "Questo comando non è più in corso",
+    "PROCESS_STILL_RUNNING.message": "Questo comando è ancora in corso: fermalo prima",
+    "PROCESS_NOT_RUNNING.title": "Comando già finito",
+    "PROCESS_NOT_RUNNING.explanation": "Questo comando non è più in corso: è finito da solo, o qualcuno l’ha già fermato.",
+    "PROCESS_NOT_RUNNING.action": "Guarda la riga nella scheda Processi: dice come è finito.",
+    "PROCESS_STILL_RUNNING.title": "Comando ancora in corso",
+    "PROCESS_STILL_RUNNING.explanation": "Si può togliere dall'elenco solo un comando finito.",
+    "PROCESS_STILL_RUNNING.action": "Fermalo prima, poi toglilo.",
+    "NOT_FOUND.message_not_found": "Messaggio non trovato in questa sessione"
+  },
+  "en": {
+    "NOT_FOUND.message": "Resource not found",
+    "PROCESS_NOT_RUNNING.message": "This command is no longer running",
+    "PROCESS_STILL_RUNNING.message": "This command is still running: stop it first",
+    "PROCESS_NOT_RUNNING.title": "Command already finished",
+    "PROCESS_NOT_RUNNING.explanation": "This command is no longer running: it finished on its own, or someone already stopped it.",
+    "PROCESS_NOT_RUNNING.action": "Look at the row in the Processes tab: it says how it ended.",
+    "PROCESS_STILL_RUNNING.title": "Command still running",
+    "PROCESS_STILL_RUNNING.explanation": "Only a finished command can be removed from the list.",
+    "PROCESS_STILL_RUNNING.action": "Stop it first, then remove it.",
+    "NOT_FOUND.message_not_found": "Message not found in this session"
+  }
+}

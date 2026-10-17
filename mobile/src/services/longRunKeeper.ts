@@ -48,7 +48,15 @@ export interface TalosRunKeeper {
  * "TALOS" tells the user nothing they did not know, while one that says which
  * conversation is working tells them whether to care.
  */
+/**
+ * ⛔ KEEPER-01 (13/10/2026): il servizio in primo piano è UNO SOLO e il suo `stop` è incondizionato. Con due custodi vivi
+ * insieme (un giro e l'attesa dell'accesso a ChatGPT, o due giri) il primo che rilasciava lo spegneva anche all'altro.
+ * Qui stanno i custodi PARTITI: il servizio si ferma solo quando l'ultimo rilascia, e chi resta riprende la notifica.
+ */
+const vivi: Array<() => { title: string; text: string }> = []
+
 export function createTalosRunKeeper(title: string): TalosRunKeeper {
+    const io = () => ({ title, text: description })
     let started = false
     let released = false
     let description = ''
@@ -57,6 +65,7 @@ export function createTalosRunKeeper(title: string): TalosRunKeeper {
     function begin(): void {
         if (started || released) return
         started = true
+        vivi.push(io)
         void plugin.start({ title, text: description }).catch(() => {
             // The work continues unprotected; see the note at the top.
         })
@@ -83,7 +92,10 @@ export function createTalosRunKeeper(title: string): TalosRunKeeper {
             // Stop unconditionally, even if the start never happened or failed:
             // a notification outliving its work is the one thing worse than not
             // having one.
-            if (started) void plugin.stop().catch(() => {})
+            if (!started) return
+            vivi.splice(vivi.indexOf(io), 1)
+            const resta = vivi[vivi.length - 1]
+            void (resta ? plugin.update(resta()) : plugin.stop()).catch(() => {})
         },
     }
 }

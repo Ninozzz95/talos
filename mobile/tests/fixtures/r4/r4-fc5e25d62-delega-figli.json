@@ -1,0 +1,218 @@
+{
+  "ok": true,
+  "data": {
+    "figli": [
+      {
+        "sessionId": "7c917933-5e31-4efa-bfff-e2f7eaca0f13",
+        "parentId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+        "task": "Conta le righe di NOTA.md",
+        "taskCorto": "Conta le righe di NOTA.md",
+        "avvio": "da-solo",
+        "modello": "lmstudio:finto",
+        "collisioni": [],
+        "conclusa": true,
+        "interrotta": false,
+        "esitoDelega": "concluso",
+        "notaDelega": null,
+        "verdettoDelega": "strutturato",
+        "riassuntoDelega": "Fatto: conta le righe di nota.md.",
+        "evidenzaDelega": {
+          "scritture": 0,
+          "artefatti": 0,
+          "toolCalls": 0,
+          "toolCallsOk": 0,
+          "toolCallsFalliti": 0,
+          "verificabile": false
+        },
+        "avviataAlle": "2026-10-15T14:02:25.852Z",
+        "conclusaAlle": "2026-10-15T14:02:25.993Z",
+        "ultimaAttivitaAlle": "2026-10-15T14:02:25.993Z",
+        "approvalPendingCount": 0,
+        "questionPendingCount": 0,
+        "ultimoEsito": "successo",
+        "motivoChiusura": "fine-lavoro",
+        "usageSessione": {
+          "prompt_tokens": 100,
+          "completion_tokens": 20,
+          "cached_tokens": 0,
+          "giri": 1,
+          "esecuzioni": 1,
+          "esecuzioniConCache": 1,
+          "ultimaEsecuzione": {
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "cached_tokens": 0,
+            "giri": 1
+          }
+        },
+        "operazioneCorrente": null,
+        "erroreConsegnaDelega": null,
+        "permessi": "Read only",
+        "attivita": {
+          "file": [],
+          "fileTagliati": 0,
+          "attrezzoCorrente": null,
+          "bersaglioCorrente": null,
+          "chiamate": 0,
+          "passi": [
+            {
+              "tipo": "avvio",
+              "attrezzo": null,
+              "percorso": null,
+              "quando": "2026-10-15T14:02:25.867Z"
+            },
+            {
+              "tipo": "fine",
+              "attrezzo": null,
+              "percorso": null,
+              "quando": "2026-10-15T14:02:25.993Z"
+            }
+          ],
+          "passiTagliati": 0
+        }
+      },
+      {
+        "sessionId": "cabd4999-286a-4b99-9b14-e617e1d1cf80",
+        "parentId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+        "task": "Riassumi NOTA.md in una frase",
+        "taskCorto": "Riassumi NOTA.md in una frase",
+        "avvio": "da-solo",
+        "modello": "lmstudio:finto",
+        "collisioni": [],
+        "conclusa": true,
+        "interrotta": false,
+        "esitoDelega": "concluso",
+        "notaDelega": null,
+        "verdettoDelega": "strutturato",
+        "riassuntoDelega": "Fatto: riassumi nota.md in una frase.",
+        "evidenzaDelega": {
+          "scritture": 0,
+          "artefatti": 0,
+          "toolCalls": 0,
+          "toolCallsOk": 0,
+          "toolCallsFalliti": 0,
+          "verificabile": false
+        },
+        "avviataAlle": "2026-10-15T14:02:25.897Z",
+        "conclusaAlle": "2026-10-15T14:02:26.025Z",
+        "ultimaAttivitaAlle": "2026-10-15T14:02:26.025Z",
+        "approvalPendingCount": 0,
+        "questionPendingCount": 0,
+        "ultimoEsito": "successo",
+        "motivoChiusura": "fine-lavoro",
+        "usageSessione": {
+          "prompt_tokens": 100,
+          "completion_tokens": 20,
+          "cached_tokens": 0,
+          "giri": 1,
+          "esecuzioni": 1,
+          "esecuzioniConCache": 1,
+          "ultimaEsecuzione": {
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "cached_tokens": 0,
+            "giri": 1
+          }
+        },
+        "operazioneCorrente": null,
+        "erroreConsegnaDelega": null,
+        "permessi": "Read only",
+        "attivita": {
+          "file": [],
+          "fileTagliati": 0,
+          "attrezzoCorrente": null,
+          "bersaglioCorrente": null,
+          "chiamate": 0,
+          "passi": [
+            {
+              "tipo": "avvio",
+              "attrezzo": null,
+              "percorso": null,
+              "quando": "2026-10-15T14:02:25.913Z"
+            },
+            {
+              "tipo": "fine",
+              "attrezzo": null,
+              "percorso": null,
+              "quando": "2026-10-15T14:02:26.025Z"
+            }
+          ],
+          "passiTagliati": 0
+        }
+      },
+      {
+        "sessionId": "f60335f5-eda5-4472-9621-b9e1b9637b8c",
+        "parentId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+        "task": "Controlla la data di consegna in NOTA.md",
+        "taskCorto": "Controlla la data di consegna in NOTA.md",
+        "avvio": "da-solo",
+        "modello": "lmstudio:finto",
+        "collisioni": [],
+        "conclusa": true,
+        "interrotta": false,
+        "esitoDelega": "concluso",
+        "notaDelega": null,
+        "verdettoDelega": "strutturato",
+        "riassuntoDelega": "Fatto: controlla la data di consegna in nota.md.",
+        "evidenzaDelega": {
+          "scritture": 0,
+          "artefatti": 0,
+          "toolCalls": 0,
+          "toolCallsOk": 0,
+          "toolCallsFalliti": 0,
+          "verificabile": false
+        },
+        "avviataAlle": "2026-10-15T14:02:49.056Z",
+        "conclusaAlle": "2026-10-15T14:02:49.115Z",
+        "ultimaAttivitaAlle": "2026-10-15T14:02:49.115Z",
+        "approvalPendingCount": 0,
+        "questionPendingCount": 0,
+        "ultimoEsito": "successo",
+        "motivoChiusura": "fine-lavoro",
+        "usageSessione": {
+          "prompt_tokens": 100,
+          "completion_tokens": 20,
+          "cached_tokens": 0,
+          "giri": 1,
+          "esecuzioni": 1,
+          "esecuzioniConCache": 1,
+          "ultimaEsecuzione": {
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "cached_tokens": 0,
+            "giri": 1
+          }
+        },
+        "operazioneCorrente": null,
+        "erroreConsegnaDelega": null,
+        "permessi": "Read only",
+        "attivita": {
+          "file": [],
+          "fileTagliati": 0,
+          "attrezzoCorrente": null,
+          "bersaglioCorrente": null,
+          "chiamate": 0,
+          "passi": [
+            {
+              "tipo": "avvio",
+              "attrezzo": null,
+              "percorso": null,
+              "quando": "2026-10-15T14:02:49.068Z"
+            },
+            {
+              "tipo": "fine",
+              "attrezzo": null,
+              "percorso": null,
+              "quando": "2026-10-15T14:02:49.115Z"
+            }
+          ],
+          "passiTagliati": 0
+        }
+      }
+    ]
+  },
+  "meta": {
+    "schema": "talos.harness-ui.api.v1",
+    "generatedAt": "2026-10-15T14:02:50.699Z"
+  }
+}

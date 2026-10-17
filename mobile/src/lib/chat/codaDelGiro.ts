@@ -45,6 +45,8 @@ export interface TalosCodaVoce {
     testo: string
     /** ISO 8601, passato da fuori: la prova non dipende dall'orologio. */
     creataAlle: string
+    /** K3-C Accoda: `false` per una voce che la persona non ha scritto (nel Codice su r4: un risultato di un agente). Assente = sì. */
+    modificabile?: boolean
 }
 
 export interface TalosCodaStato {

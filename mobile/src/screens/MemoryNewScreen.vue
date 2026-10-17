@@ -48,7 +48,8 @@
  * distingue una memoria nuova dall'elenco che sta dietro». Ripeterlo darebbe
  * due titoli identici a due centimetri di distanza. Vince la regola dell'owner.
  */
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
+import TalosMobilePageHeader from '@/components/talos/ui/TalosMobilePageHeader.vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useTalosI18n } from '@/i18n'
 import { Button } from '@/components/ui/button'
@@ -119,12 +120,35 @@ const canSave = computed(() =>
     && !saving.value
     && !loading.value)
 
-onMounted(async () => {
-    if (!editing.value) return
-    loading.value = true
+/**
+ * ⛔ COD-G1-STATO-02 (Pad, 14/10/2026) — il modulo si RIEMPIE da capo a ogni rotta.
+ *
+ * `/memory/<id>/edit` e `/memory/new` hanno lo stesso componente, e vue-router
+ * riusa l'istanza quando si passa dall'una all'altra: `onMounted` non riparte
+ * (https://router.vuejs.org/guide/essentials/dynamic-matching.html, «Reacting
+ * to Params Changes»). «Nuova memoria» avrebbe mostrato la memoria appena
+ * corretta — tipo e avviso del tipo mancante compresi — col tasto acceso. Ora
+ * ogni modo parte dai valori di serie, e la modifica ricarica la memoria
+ * dell'indirizzo. Stessa cura di `NoteNewScreen.vue`.
+ *
+ * Il contatore `giro` scarta una lettura arrivata tardi: da «modifica A» a
+ * «modifica B» in fretta, la lista di A non deve sovrascrivere B.
+ */
+let giro = 0
+
+async function caricaModulo(id: string): Promise<void> {
+    const mio = ++giro
+    title.value = ''
+    content.value = ''
+    kind.value = 'preference'
+    kindWasMissing.value = false
+    error.value = null
+    loading.value = id.length > 0
+    if (!id) return
     try {
         const all = await controller.memories.list()
-        const found = all.find((entry) => entry.id === editingId.value)
+        if (mio !== giro) return
+        const found = all.find((entry) => entry.id === id)
         // Se non c'è, non si apre un modulo vuoto che al salvataggio
         // fallirebbe: si torna all'elenco, che è l'unico posto onesto.
         if (!found) {
@@ -137,10 +161,28 @@ onMounted(async () => {
         kind.value = tipo ?? 'preference'
         kindWasMissing.value = tipo === null
     } catch (cause) {
+        if (mio !== giro) return
         error.value = cause instanceof Error && cause.message ? cause.message : String(cause)
     } finally {
-        loading.value = false
+        if (mio === giro) loading.value = false
     }
+}
+
+onMounted(() => caricaModulo(editingId.value))
+
+/**
+ * La chiave è il MODO di questa pagina, e vale solo sulle sue due rotte: mentre
+ * si esce verso un'altra pagina la rotta cambia prima che il modulo sparisca, e
+ * svuotarlo lì sarebbe lavoro inutile.
+ */
+const chiaveModulo = computed(() => {
+    if (route.name === 'memory-new') return 'new'
+    if (route.name === 'memory-edit') return `edit:${editingId.value}`
+    return null
+})
+
+watch(chiaveModulo, (chiave) => {
+    if (chiave !== null) void caricaModulo(editingId.value)
 })
 
 async function submit(): Promise<void> {
@@ -212,6 +254,12 @@ const onda = useTalosTouchWave()
         :title="editing ? t('memory.editTitle') : t('memory.newMemory')"
         data-testid="talos-memory-new-screen"
     >
+        <!-- ⛔ G1 (14/10/2026, owner «Titolo + un solo riquadro»): il titolo con l'intestazione delle stazioni, nella colonna
+             del modulo. Dentro il foglio TalosMobileScreen nasconde il suo e `data-talos-sheet-title` quello del foglio. -->
+        <TalosMobilePageHeader
+            class="mx-auto w-full max-w-[46rem] pb-[var(--talos-space-section)] pt-[var(--talos-space-section)]"
+            :title="editing ? t('memory.editTitle') : t('memory.newMemory')"
+        />
         <form
             class="mx-auto flex w-full max-w-[46rem] flex-col gap-[var(--talos-space-section)] rounded-[var(--talos-radius-card)] border border-[var(--talos-border)] bg-[var(--talos-panel)]/60 p-[var(--talos-space-page)]"
             :data-editing="editing"

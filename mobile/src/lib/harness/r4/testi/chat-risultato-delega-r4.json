@@ -1,0 +1,26 @@
+{
+  "origine": {
+    "commit": "701c6c0d2d711879b53aa21bddad5a06d33538e7",
+    "percorso": "harness-ui/frontend/src/i18n/testi/chat.js",
+    "sha256": "eaaf4c713de5ca18948df455c22a29386587aa815e46576a7ed166d1afc13458",
+    "prefisso": [
+      "queue.subAgent",
+      "child.stoppedOnRequest",
+      "child.pausedOnRequest"
+    ]
+  },
+  "it": {
+    "child.stoppedOnRequest": "Fermata su richiesta.",
+    "child.stoppedOnRequestAt": "Fermata su richiesta: {punto}.",
+    "child.pausedOnRequest": "In pausa su richiesta.",
+    "child.pausedOnRequestAt": "In pausa su richiesta: {punto}.",
+    "queue.subAgent": "Sotto-agente"
+  },
+  "en": {
+    "child.stoppedOnRequest": "Stopped on request.",
+    "child.stoppedOnRequestAt": "Stopped on request: {punto}.",
+    "child.pausedOnRequest": "Paused on request.",
+    "child.pausedOnRequestAt": "Paused on request: {punto}.",
+    "queue.subAgent": "Sub-agent"
+  }
+}

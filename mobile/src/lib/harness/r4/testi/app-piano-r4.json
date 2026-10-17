@@ -1,0 +1,46 @@
+{
+  "origine": {
+    "commit": "701c6c0d2d711879b53aa21bddad5a06d33538e7",
+    "percorso": "harness-ui/frontend/src/i18n/testi/app.js",
+    "sha256": "19b9eb9d26356513c31bf08c83b6fff039cd0db16e2d8d6337613df34dca046d",
+    "prefisso": [
+      "plan.activeNextTurn",
+      "plan.updated",
+      "plan.planFirst",
+      "plan.workNormally",
+      "permissions.workModeLabel",
+      "permissions.workModeHint",
+      "permissions.workModeUpdated",
+      "permissions.modeNotApplied",
+      "permissions.modeChangeHint",
+      "permissions.policyUpdated",
+      "permissions.choiceNotApplied"
+    ]
+  },
+  "it": {
+    "permissions.choiceNotApplied": "Scelta non applicata",
+    "permissions.policyUpdated": "Permessi aggiornati",
+    "permissions.workModeLabel": "Modo di lavoro",
+    "permissions.workModeUpdated": "Modo di lavoro aggiornato",
+    "permissions.modeNotApplied": "Modalità non applicata",
+    "permissions.workModeHint": "Con Piano il modello prepara un piano e non esegue azioni.",
+    "permissions.modeChangeHint": "La modalità si cambia fra un giro e l’altro.",
+    "plan.updated": "Il piano è stato aggiornato (revisione {n}).",
+    "plan.activeNextTurn": "Piano attivo dal prossimo giro",
+    "plan.planFirst": "Prima prepara il piano",
+    "plan.workNormally": "Lavora normalmente"
+  },
+  "en": {
+    "permissions.choiceNotApplied": "Choice not applied",
+    "permissions.policyUpdated": "Permissions updated",
+    "permissions.workModeLabel": "Work mode",
+    "permissions.workModeUpdated": "Work mode updated",
+    "permissions.modeNotApplied": "Mode not applied",
+    "permissions.workModeHint": "In Plan mode the model prepares a plan and takes no actions.",
+    "permissions.modeChangeHint": "The mode can only be changed between one turn and the next.",
+    "plan.updated": "The plan has been updated (revision {n}).",
+    "plan.activeNextTurn": "Plan active from the next turn",
+    "plan.planFirst": "Plan first",
+    "plan.workNormally": "Work normally"
+  }
+}

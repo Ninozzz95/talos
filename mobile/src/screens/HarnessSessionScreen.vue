@@ -92,7 +92,7 @@ import {
 } from '@/lib/harnessUiBridge'
 import { useTalosOverlayBack } from '@/composables/useTalosOverlayBack'
 import { talosHarnessUiAvailable } from '@/services/harnessUi'
-import { avviaServerHarnessConChiaveProvider, talosTerminaleDisponibile } from '@/lib/harness/terminalePonte'
+import { avviaServerHarnessConChiaveProvider, talosCodiceInCasa, talosTerminaleDisponibile } from '@/lib/harness/terminalePonte'
 import { caricaProfiliModelloCodice } from '@/lib/harness/codiceModelProfiles'
 import { TALOS_DEFAULT_MODEL_LAB_PREFERENCES } from '@/lib/modelLabContracts'
 import { useSettingsStore } from '@/stores/settings'
@@ -119,6 +119,7 @@ import type { TalosMobileProviderModel } from '@/lib/chat/providerContracts'
 import { TALOS_PROMPT_ENHANCER_DEFAULT_DEPTH } from '@/lib/chat/promptEnhancerDepth'
 import { talosHarnessUiApiBase } from '@/lib/harness/harnessUiApiBase'
 import { apriEventiServerCodice, intestazioniServerCodice } from '@/lib/harness/harnessUiSegreto'
+import { custodeGiriCodice } from '@/lib/harness/custodeGiriCodice'
 import {
     apriArtefattoCodice, salvaArtefattoCodice, statoArtefattoCodice, type ContestoArtefattoCodice,
 } from '@/lib/harness/harnessUiArtefatti'
@@ -251,6 +252,8 @@ const codeModelProfileId = ref('')
 const codeDictationDraftBefore = ref('')
 const parlaSubito = () => useTalosSpeech()
 const codeDictation = useTalosMobileDictation({
+    // N12: come in chat, la dettatura del Codice può usare il motore locale (Parakeet).
+    motoreLocale: true,
     base: () => codePrompt.value,
     onTranscript: (text) => { updateCodePrompt(text) },
     language: () => resolveTalosDictationLanguageTag(settings.state.voice.dictation_language),
@@ -258,6 +261,8 @@ const codeDictation = useTalosMobileDictation({
     autoLanguage: () => talosRilevamentoAcceso(settings.state.voice.dictation_language),
     zittisci: () => parlaSubito().stop('il Codice apre il microfono'),
     errorMessage: (code) => t(`chat.dictationErrors.${code}`),
+    // N12: il riconoscimento sul dispositivo non ha finito; il testo che resta è quello del riconoscitore di sistema.
+    onFallback: () => toasts.push({ message: t('chat.dictationLocalFallback'), durationMs: 6000 }),
 })
 
 /** Solo il pezzo NUOVO, come in chat: la bozza è nascosta dalla barra mentre si parla. */
@@ -280,7 +285,8 @@ function discardCodeDictation(): void {
 
 /** ⭐ Chiude la dettatura e manda, in un gesto solo. */
 async function onSendCodeDictation(): Promise<void> {
-    codeDictation.cancel()
+    // N12: col motore locale il testo GIUSTO arriva un attimo dopo lo stop (Parakeet): si aspetta quello, come in chat.
+    await codeDictation.finisci()
     await nextTick()
     await submitCodePrompt()
 }
@@ -642,6 +648,17 @@ function syncComposerClearance(): void {
         '--talos-code-composer-clearance',
         `${Math.ceil(dock.getBoundingClientRect().height + navClearance + 12)}px`,
     )
+    /*
+     * ⛔ COD-AVVISO-01 (owner 13/10/2026, dal Pad): la regione degli avvisi conosceva solo l'altezza del compositore della
+     * chat, e nel Codice un avviso finiva SOPRA il testo che si stava scrivendo. Qui si dice quanto spazio occupa dal fondo
+     * il compositore del Codice quando si vede (barra di navigazione e tastiera comprese): gli avvisi gli stanno sopra.
+     */
+    const rettangolo = dock.getBoundingClientRect()
+    if (rettangolo.height > 0) {
+        document.documentElement.style.setProperty('--talos-code-composer-height', `${Math.max(0, Math.ceil(window.innerHeight - rettangolo.top))}px`)
+    } else {
+        document.documentElement.style.removeProperty('--talos-code-composer-height')
+    }
 }
 
 function syncComposerWorkspaceBounds(): void {
@@ -849,10 +866,18 @@ async function attendiServerHarnessPronto(tentativiMassimi = 15, intervalloMs = 
  * inventato, nessun interruttore che non esiste — sarebbe un'istruzione
  * falsa quanto l'errore tecnico che sostituisce.
  */
+/**
+ * ⛔ F4 (14/10/2026): il server acceso è quello dentro l'app (`dove: 'casa'`, `TalosTerminalPlugin.avviaServerHarness`)? Solo
+ * allora Node è nostro figlio e un giro lungo ha bisogno del custode; sulla strada del ponte il server non dipende dall'app.
+ */
+let serverInCasa: Promise<boolean> = Promise.resolve(false)
+
 async function avviaServerHarnessSeDisponibile(): Promise<{ ok: boolean, motivoInterno: string | null }> {
     if (!talosTerminaleDisponibile()) return { ok: false, motivoInterno: 'plugin-assente' }
     try {
-        const esito = await avviaServerHarnessConChiaveProvider()
+        const avvio = avviaServerHarnessConChiaveProvider()
+        serverInCasa = avvio.then((esito) => esito.ok && esito.dove === 'casa', () => false)
+        const esito = await avvio
         if (!esito.ok) {
             console.warn('[harness-ui] avvio server non riuscito:', esito.motivo, esito.stderr)
             return { ok: false, motivoInterno: esito.motivo || 'avvio-fallito' }
@@ -1036,8 +1061,19 @@ async function mountMockup(): Promise<void> {
         // degli eventi con la libreria `eventsource`, che manda l'intestazione. Vedi harnessUiSegreto.ts.
         ;(window as unknown as { __talosHarnessIntestazioni?: typeof intestazioniServerCodice })
             .__talosHarnessIntestazioni = (opzioni) => intestazioniServerCodice(opzioni)
+        // ⛔ F4 (14/10/2026, owner «Notifica solo mentre lavora»): lo stesso flusso dice al custode quando un giro comincia e
+        // finisce; da RunStarted a RunFinished/RunError il servizio in primo piano tiene viva l'app e il suo Node. Chiuso il
+        // flusso (uscita, cambio di sessione, app dietro) la fine la vede il nativo: vedi custodeGiriCodice.ts.
         ;(window as unknown as { __talosHarnessApriEventi?: typeof apriEventiServerCodice })
-            .__talosHarnessApriEventi = (url) => apriEventiServerCodice(url)
+            .__talosHarnessApriEventi = (url) => {
+                const flusso = apriEventiServerCodice(url)
+                custodeGiriCodice.osserva(url, flusso, {
+                    titolo: loadedSession.value?.title || t('navigation.harness'),
+                    testo: t('harness.keeperWorking'),
+                    inCasa: () => serverInCasa,
+                })
+                return flusso
+            }
         // ⛔⛔ 70-B (30/09/2026 notte, owner «Riuso della chat»): la scheda dell'artefatto apre la finestra isolata della
         // chat e salva nella Libreria con la via della chat. Vedi harnessUiArtefatti.ts.
         // ⛔ OSS-70B-1/3 (30/09/2026 notte): `salva` aggiunge la sessione aperta (id e titolo come nell'elenco) alla
@@ -1113,7 +1149,7 @@ onMounted(async () => {
      * che lista → sessione resti UN avviso solo, e `void` perché un avviso non
      * deve rallentare il montaggio di niente.
      */
-    void avvisaSePonteStaccato({ router, toasts, t, sezioneDisponibile: available })
+    void avvisaSePonteStaccato({ router, toasts, t, sezioneDisponibile: available, codiceInCasa: talosCodiceInCasa })
     void caricaModelliCodice()
     void attachKeyboardBridge()
     await resolveSession()
@@ -1158,6 +1194,8 @@ onBeforeUnmount(() => {
     void detachKeyboardBridge()
     composerLayoutObserver?.disconnect()
     composerLayoutObserver = null
+    // Fuori dal Codice il suo compositore non c'è: gli avvisi tornano a regolarsi su quello della chat.
+    document.documentElement.style.removeProperty('--talos-code-composer-height')
     teardown()
 })
 </script>
@@ -1210,7 +1248,7 @@ onBeforeUnmount(() => {
             <div
                 v-else-if="isDraft"
                 data-testid="talos-harness-session-draft-hint"
-                class="flex h-full flex-col items-center justify-center p-6 text-center"
+                class="talos-code-draft-hero flex h-full flex-col items-center justify-center p-6 text-center"
             >
                 <span
                     class="talos-short-logo talos-chat-brand-logo talos-short-logo-hero"
@@ -1219,8 +1257,8 @@ onBeforeUnmount(() => {
                     <span class="talos-short-logo-mark"></span>
                 </span>
                 <span class="talos-orbitron-brand mt-2 text-4xl font-semibold text-[var(--talos-text)] sm:text-5xl">TALOS</span>
-                <TalosWelcomeTitle />
-                <p class="mt-1 max-w-[28rem] text-xs leading-5 text-[var(--talos-muted)]">
+                <div class="talos-code-draft-words"><TalosWelcomeTitle /></div>
+                <p class="talos-code-draft-words mt-1 max-w-[28rem] text-xs leading-5 text-[var(--talos-muted)]">
                     {{ t('harness.draftHint') }}
                 </p>
             </div>
@@ -1257,6 +1295,7 @@ onBeforeUnmount(() => {
                     :model-profiles="codeModelProfiles"
                     :selected-model-profile-id="codeModelProfileId"
                     :show-executor-model="true"
+                    :docked="true"
                     :executor-model-profiles="codeModelProfiles"
                     :selected-executor-model-profile-id="codeModelloEsecutoreId"
                     :selected-effort="codeEffort"
@@ -1334,6 +1373,9 @@ onBeforeUnmount(() => {
     bottom: 0;
     left: 0;
     z-index: 40;
+    /* COD-COMP-02 (Pad, 11/10/2026): lo stesso respiro sotto del compositore della chat (`.talos-docked-composer`), barra dei
+       gesti compresa. Senza, il bordo del compositore stava sul fondo della finestra, sotto la barra dei gesti. */
+    padding-bottom: max(var(--talos-space-page), env(safe-area-inset-bottom));
     pointer-events: none;
     transition:
         opacity var(--talos-motion-duration-composer-expand, 180ms) var(--talos-motion-ease-composer-expand, ease-out),
@@ -1344,7 +1386,8 @@ onBeforeUnmount(() => {
     pointer-events: auto;
     box-sizing: border-box;
     width: calc(100% - 1.5rem);
-    max-width: 920px;
+    /* COD-COMP-04: lo stesso tetto del compositore della chat (style.css); 920px dove il tetto non è dichiarato. */
+    max-width: var(--talos-composer-max-width, 920px);
     margin-inline: auto;
 }
 
@@ -1352,18 +1395,32 @@ onBeforeUnmount(() => {
 .talos-code-dictation-error {
     box-sizing: border-box;
     width: calc(100% - 1.5rem);
-    max-width: 920px;
+    /* COD-COMP-04: lo stesso tetto del compositore della chat (style.css); 920px dove il tetto non è dichiarato. */
+    max-width: var(--talos-composer-max-width, 920px);
     margin-inline: auto;
 }
 
 @media (max-width: 780px), (max-height: 500px) {
     .talos-code-composer-dock {
         bottom: 68px;
+        padding-bottom: 0;
     }
 }
 
 :global(body.keyboard-open .talos-code-composer-dock) {
     bottom: 0;
+}
+
+/* COD-COMP-05 (visto sul Pad il 13/10/2026, dopo aver stretto il compositore): il benvenuto era centrato su TUTTA l'altezza,
+   quindi a tastiera aperta il titolo finiva dietro il compositore e ne spuntava ai lati. Si centra nello spazio SOPRA il
+   compositore (la stessa misura che il compositore pubblica per gli avvisi) e, a tastiera aperta, restano logo e nome: le
+   frasi tornano quando la tastiera si chiude. */
+.talos-code-draft-hero {
+    padding-bottom: calc(var(--talos-code-composer-height, 0px) + 1.5rem);
+    overflow: hidden;
+}
+:global(body.keyboard-open .talos-code-draft-hero .talos-code-draft-words) {
+    display: none;
 }
 
 @media (prefers-reduced-motion: reduce) {

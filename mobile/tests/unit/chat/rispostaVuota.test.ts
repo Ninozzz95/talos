@@ -45,6 +45,26 @@ describe('la bolla vuota dopo che gli strumenti sono partiti', () => {
         expect(talosStrumentiPartiti(cinqueVolteLoStesso)).toBe(1)
     })
 
+    it('⛔ N13-STR-01 (Pad, 11/10): cinque ricerche con domande DIVERSE sono cinque, non «(1)»', () => {
+        // MISURATO sul Pad l'11/10/2026 con LFM2.5: cinque `web_search` vere,
+        // ognuna con la sua domanda, e l'avviso diceva «Gli strumenti sono
+        // partiti (1)». La rete anti-ripetizione salta solo le chiamate con gli
+        // STESSI argomenti: sono quelle, e solo quelle, da non contare.
+        const cinqueRicerche = ['meteo Roma', 'meteo Milano', 'treni', 'cinema', 'farmacie'].map((q) => ({
+            call: { name: 'web_search', arguments: JSON.stringify({ query: q }) },
+        }))
+        expect(talosStrumentiPartiti(cinqueRicerche)).toBe(5)
+    })
+
+    it('N13-STR-02: la stessa chiamata scritta con spazi o chiavi in altro ordine resta UNA', () => {
+        // È la stessa chiave della rete anti-ripetizione: se il ciclo la tratta
+        // come un doppione e non la riesegue, qui non si conta due volte.
+        expect(talosStrumentiPartiti([
+            { call: { name: 'device_torch', arguments: '{"on":true,"level":2}' } },
+            { call: { name: 'device_torch', arguments: '{ "level" : 2, "on" : true }' } },
+        ])).toBe(1)
+    })
+
     it('conta gli strumenti DIVERSI, non le chiamate', () => {
         expect(talosStrumentiPartiti([
             { call: { name: 'notification_list' } },

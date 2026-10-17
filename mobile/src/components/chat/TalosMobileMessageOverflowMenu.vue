@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { CornerUpLeft, EllipsisVertical, Info, RefreshCcw, Share2, Trash2 } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import TalosMobileComposerSheet from '@/components/chat/TalosMobileComposerSheet.vue'
-import type { TalosMobileMessageView } from '@/components/chat/mobileChatTypes'
+import { TALOS_AZIONI_MESSAGGIO_TUTTE, type TalosAzioneMessaggio, type TalosMobileMessageView } from '@/components/chat/mobileChatTypes'
 
 /**
  * «Azioni messaggio» — owner 2026-09-13, decisioni prese una per una.
@@ -22,7 +22,18 @@ import type { TalosMobileMessageView } from '@/components/chat/mobileChatTypes'
  * pulsante visibile, e fuoco restituito all'apertura: la ricerca del 13/09 lo
  * chiede perche' il trascinamento da solo non e' accessibile a tutti.
  */
-defineProps<{ message: TalosMobileMessageView, busy?: boolean, canRetry?: boolean }>()
+const props = withDefaults(defineProps<{
+    message: TalosMobileMessageView
+    busy?: boolean
+    canRetry?: boolean
+    /** K3-B2: solo le voci che chi monta la lista sa fare; di serie tutte (la chat). */
+    azioni?: readonly TalosAzioneMessaggio[]
+}>(), { azioni: () => TALOS_AZIONI_MESSAGGIO_TUTTE })
+const puo = (azione: TalosAzioneMessaggio): boolean => props.azioni.includes(azione)
+/** La riga divisoria separa «Elimina» da ciò che c'è sopra: senza una delle due parti non divide niente. */
+const conVociSopra = computed(() => (props.message.role === 'user'
+    ? puo('invia-di-nuovo') || puo('riutilizza')
+    : puo('condividi') || puo('dettagli')))
 const emit = defineEmits<{
     reuse: [message: TalosMobileMessageView]
     resend: [message: TalosMobileMessageView]
@@ -64,7 +75,7 @@ function pickDelete(message: TalosMobileMessageView): void { open.value = false;
     >
         <ul class="talos-message-sheet-list" role="list">
             <template v-if="message.role === 'user'">
-                <li>
+                <li v-if="puo('invia-di-nuovo')">
                     <button
                         type="button"
                         class="talos-message-sheet-row"
@@ -77,7 +88,7 @@ function pickDelete(message: TalosMobileMessageView): void { open.value = false;
                         <span>{{ $t('chat.resendMessage') }}</span>
                     </button>
                 </li>
-                <li>
+                <li v-if="puo('riutilizza')">
                     <button
                         type="button"
                         class="talos-message-sheet-row"
@@ -91,7 +102,7 @@ function pickDelete(message: TalosMobileMessageView): void { open.value = false;
                 </li>
             </template>
             <template v-else>
-                <li>
+                <li v-if="puo('condividi')">
                     <button
                         type="button"
                         class="talos-message-sheet-row"
@@ -104,7 +115,7 @@ function pickDelete(message: TalosMobileMessageView): void { open.value = false;
                         <span>{{ $t('common.share') }}</span>
                     </button>
                 </li>
-                <li>
+                <li v-if="puo('dettagli')">
                     <button
                         type="button"
                         class="talos-message-sheet-row"
@@ -117,8 +128,8 @@ function pickDelete(message: TalosMobileMessageView): void { open.value = false;
                     </button>
                 </li>
             </template>
-            <li class="talos-message-sheet-rule" aria-hidden="true" />
-            <li>
+            <li v-if="puo('elimina') && conVociSopra" class="talos-message-sheet-rule" aria-hidden="true" />
+            <li v-if="puo('elimina')">
                 <button
                     type="button"
                     class="talos-message-sheet-row talos-message-sheet-row--danger"

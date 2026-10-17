@@ -75,3 +75,21 @@ describe('dictation engine language adapter', () => {
         expect(instances[1]?.lang).toBe(navigator.language || 'en-US')
     })
 })
+
+/**
+ * ⛔ DICT-N12-01 — regressione trovata il 13/10/2026 rileggendo la barra dell'assistente. Il motore locale (Parakeet) era
+ * messo davanti al riconoscitore di sistema per CHIUNQUE chiamasse `talosDictationEngine()`: anche la barra, che usa lo
+ * stesso composable e chiude il turno quando il riconoscitore di sistema finisce da solo. Col motore locale la cattura non
+ * finisce da sola, quindi con il modello installato la barra restava in ascolto fino al cane da guardia. Il motore locale è
+ * una scelta ESPLICITA di chi sa aspettare il testo finale (chat e Codice); chi non la fa ha il motore di sempre.
+ */
+describe('il motore locale è una scelta esplicita (N12)', () => {
+    it('DICT-N12-01: senza chiederlo il motore è quello di sistema, com era; chiedendolo ci si mette davanti il locale', () => {
+        const diSempre = talosDictationEngine()
+        expect('attendeIlFinale' in diSempre).toBe(false)
+        const colLocale = talosDictationEngine({ locale: true })
+        expect('attendeIlFinale' in colLocale).toBe(true)
+        // finché non parte una dettatura col modello pronto, anche quello resta un motore che non attende niente
+        expect(colLocale.attendeIlFinale).toBe(false)
+    })
+})

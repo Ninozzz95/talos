@@ -9,6 +9,7 @@ import {
     clampTalosTabletSidebarWidth,
     talosTabletSidebarEffectiveWidth,
     talosTabletLeavesHarnessListRoute,
+    talosTabletRailVariant,
 } from '@/lib/tabletLayout'
 import {
     parseTalosMobileSettings,
@@ -179,5 +180,16 @@ describe('settings hydrate bridge fence (R1-6)', () => {
         } finally {
             vi.useRealTimers()
         }
+    })
+})
+
+describe('colonna del tablet nel Codice r4 (K4-E, owner 17/10 «Colonna delle chat»)', () => {
+    it('K4E-COL-01 in r4 la colonna è quella delle chat, come nelle altre stazioni: le sessioni del Codice vecchio solo dal ripiego', () => {
+        // ⛔ visto sul Pad (17/10): «Codice» apriva r4 e la colonna elencava le sessioni del Codice vecchio accanto.
+        expect(talosTabletRailVariant({ stazione: 'harness', rotta: 'codice-r4', codiceVecchio: true })).toBe('chat')
+        expect(talosTabletRailVariant({ stazione: 'harness', rotta: 'harness', codiceVecchio: true })).toBe('harness')
+        expect(talosTabletRailVariant({ stazione: 'harness', rotta: 'harness-session', codiceVecchio: true })).toBe('harness')
+        expect(talosTabletRailVariant({ stazione: 'harness', rotta: 'harness-session', codiceVecchio: false })).toBe('chat')
+        expect(talosTabletRailVariant({ stazione: 'notes', rotta: 'notes', codiceVecchio: true })).toBe('chat')
     })
 })

@@ -1,0 +1,32 @@
+{
+  "origine": {
+    "commit": "701c6c0d2d711879b53aa21bddad5a06d33538e7",
+    "percorso": "harness-ui/frontend/src/i18n/testi/errori.js",
+    "sha256": "1c54a18f9f27f84ede0f86ae64f563433dd8e64f5222f9d336c30b40790fba44",
+    "prefisso": [
+      "QUESTION_NOT_PENDING.message",
+      "QUESTION_ANSWER_FORBIDDEN.message",
+      "QUESTION_ANSWER_NOT_SAVED.message",
+      "QUERY_INVALID.message",
+      "NOT_FOUND.message"
+    ]
+  },
+  "it": {
+    "QUERY_INVALID.message": "Query non valida",
+    "NOT_FOUND.message": "Risorsa non trovata",
+    "QUESTION_ANSWER_FORBIDDEN.message": "A questa domanda si risponde solo dalla sessione che l’ha fatta o da una che l’ha avviata",
+    "QUESTION_NOT_PENDING.message": "Questa domanda non è più in attesa: la sessione è andata avanti",
+    "QUESTION_ANSWER_NOT_SAVED.message": "La risposta non è stata salvata: la domanda è stata chiusa senza risposta",
+    "QUERY_INVALID.message_reference_invalid": "Riferimento del messaggio non valido",
+    "NOT_FOUND.message_not_found": "Messaggio non trovato in questa sessione"
+  },
+  "en": {
+    "QUERY_INVALID.message": "Invalid query",
+    "NOT_FOUND.message": "Resource not found",
+    "QUESTION_ANSWER_FORBIDDEN.message": "This question can be answered only from the session that asked or from one that started it",
+    "QUESTION_NOT_PENDING.message": "This question is no longer pending: the session has moved on",
+    "QUESTION_ANSWER_NOT_SAVED.message": "The answer was not saved: the question was closed without an answer",
+    "QUERY_INVALID.message_reference_invalid": "Invalid message reference",
+    "NOT_FOUND.message_not_found": "Message not found in this session"
+  }
+}

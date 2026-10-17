@@ -1,0 +1,31 @@
+{
+  "origine": {
+    "commit": "701c6c0d2d711879b53aa21bddad5a06d33538e7",
+    "percorso": "harness-ui/frontend/src/i18n/testi/modello.js",
+    "sha256": "8e11b2cf43c281fd77a35bc620ec348775935aea39fb8682736d5def14505590",
+    "prefisso": [
+      "review.review",
+      "review.copyAllDiffsTo",
+      "review.copyTheDiffs",
+      "review.changedFiles",
+      "review.noFileWrittenSo",
+      "review.whenTalosWritesOr"
+    ]
+  },
+  "it": {
+    "review.review": "Review",
+    "review.copyAllDiffsTo": "Copia tutti i diff negli appunti",
+    "review.copyTheDiffs": "Copia i diff",
+    "review.changedFiles": "File modificati",
+    "review.noFileWrittenSo": "Nessun file scritto finora",
+    "review.whenTalosWritesOr": "Quando TALOS scrive o modifica un file, qui compare la differenza, giro per giro."
+  },
+  "en": {
+    "review.review": "Review",
+    "review.copyAllDiffsTo": "Copy all diffs to the clipboard",
+    "review.copyTheDiffs": "Copy the diffs",
+    "review.changedFiles": "Changed files",
+    "review.noFileWrittenSo": "No file written so far",
+    "review.whenTalosWritesOr": "When TALOS writes or edits a file, the difference appears here, turn by turn."
+  }
+}

@@ -68,3 +68,74 @@ describe('useTalosRispostaAVoce production source route', () => {
         })
     }
 })
+
+/**
+ * ⛔ VOICE-BUFFERED — trovato dall'owner il 13/10/2026 sul Pad, nella barra dell'assistente: «la voce non parte
+ * automaticamente, parte solo quando premo il pulsante». Riprodotto e strumentato dal vivo: la domanda era «nata di voce»,
+ * ma la risposta (fornitore ChatGPT) arrivava TUTTA INSIEME, senza mai passare dal testo in arrivo — e la lettura
+ * automatica si apriva solo su quello. Una risposta arrivata intera si legge lo stesso, appena il suo messaggio esiste.
+ */
+describe('useTalosRispostaAVoce: la risposta arrivata tutta insieme', () => {
+    type Messaggio = { id: string; role: string; content?: string }
+
+    it('VOICE-BUFFERED-01: senza testo in arrivo, il messaggio nuovo dell assistente si legge per intero', async () => {
+        const streaming = ref<string | null>(null)
+        const messaggi = ref<Messaggio[]>([{ id: 'a0', role: 'assistant', content: 'Risposta vecchia.' }])
+        const voce = useTalosRispostaAVoce({ source: 'assistant', streaming: () => streaming.value, messaggi: () => messaggi.value, interfaccia: () => 'it-IT' })
+        expect(voce.catturaInvio()).toBe(true)
+
+        messaggi.value = [...messaggi.value, { id: 'u1', role: 'user', content: 'Che tempo fa?' }]
+        await nextTick()
+        expect(speech.open).not.toHaveBeenCalled()
+
+        messaggi.value = [...messaggi.value, { id: 'a1', role: 'assistant', content: 'Domani a Messina piove.' }]
+        await nextTick()
+        expect(speech.open).toHaveBeenCalledWith('voce:in-corso', 'assistant')
+        expect(speech.follow).toHaveBeenCalledWith('voce:in-corso', 'Domani a Messina piove.', true)
+        expect(speech.mark).toHaveBeenCalledWith('a1')
+        expect(speech.rename).toHaveBeenCalledWith('voce:in-corso', 'a1')
+
+        // una volta sola: un altro messaggio dopo non riapre niente
+        speech.speakingId.value = null
+        speech.open.mockClear()
+        messaggi.value = [...messaggi.value, { id: 'a2', role: 'assistant', content: 'Altro.' }]
+        await nextTick()
+        expect(speech.open).not.toHaveBeenCalled()
+    })
+
+    it('VOICE-BUFFERED-02 AL CONTRARIO: una domanda scritta non fa leggere niente, e una risposta già letta mentre arrivava non si rilegge', async () => {
+        const streaming = ref<string | null>(null)
+        const messaggi = ref<Messaggio[]>([])
+        const voce = useTalosRispostaAVoce({ source: 'chat', streaming: () => streaming.value, messaggi: () => messaggi.value, interfaccia: () => 'it-IT' })
+
+        provenance.nataDiVoce.mockReturnValue(false)
+        expect(voce.catturaInvio()).toBe(false)
+        messaggi.value = [{ id: 'a1', role: 'assistant', content: 'Scritta, non detta.' }]
+        await nextTick()
+        expect(speech.open).not.toHaveBeenCalled()
+
+        provenance.nataDiVoce.mockReturnValue(true)
+        expect(voce.catturaInvio()).toBe(true)
+        streaming.value = 'Arrivo a pezzi.'
+        await nextTick()
+        expect(speech.open).toHaveBeenCalledTimes(1)
+        messaggi.value = [...messaggi.value, { id: 'a2', role: 'assistant', content: 'Arrivo a pezzi.' }]
+        streaming.value = null
+        await nextTick()
+        expect(speech.open).toHaveBeenCalledTimes(1)
+        expect(speech.follow).not.toHaveBeenCalledWith('voce:in-corso', 'Arrivo a pezzi.', true, expect.anything())
+        expect(speech.follow.mock.calls.filter((c) => (c as unknown[])[2] === true)).toHaveLength(1)
+    })
+
+    it('VOICE-BUFFERED-03: un messaggio dell assistente ancora senza testo (sta usando un attrezzo) non chiude l attesa', async () => {
+        const messaggi = ref<Messaggio[]>([])
+        const voce = useTalosRispostaAVoce({ source: 'assistant', streaming: () => null, messaggi: () => messaggi.value, interfaccia: () => 'it-IT' })
+        expect(voce.catturaInvio()).toBe(true)
+        messaggi.value = [{ id: 'a1', role: 'assistant', content: '   ' }]
+        await nextTick()
+        expect(speech.open).not.toHaveBeenCalled()
+        messaggi.value = [...messaggi.value, { id: 'a2', role: 'assistant', content: 'Ecco la risposta.' }]
+        await nextTick()
+        expect(speech.follow).toHaveBeenCalledWith('voce:in-corso', 'Ecco la risposta.', true)
+    })
+})

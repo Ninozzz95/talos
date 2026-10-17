@@ -125,3 +125,22 @@ describe('l’immagine dice cosa è, leggendolo da sé', () => {
         expect(previewBytes).toHaveBeenCalledTimes(1)
     })
 })
+
+/*
+ * ⛔ K3-C Allegati A2 (owner 16/10 «Anteprima vera»): nel Codice su r4 le immagini della bolla stanno in r4, non nella Libreria. La
+ * schermata fornisce chi legge i byte (`TALOS_BYTE_IMMAGINE`), e l'immagine li prende da lì; senza, resta la Libreria come prima.
+ */
+describe('i byte da chi li fornisce (K3-C Allegati A2)', () => {
+    it('MIMG-R4-01 con un lettore fornito, i byte vengono da lui e la Libreria non si chiama', async () => {
+        const { mount } = await import('@vue/test-utils')
+        const { TALOS_BYTE_IMMAGINE } = await import('@/lib/chat/byteImmagine')
+        const C = (await import('@/components/chat/TalosMobileMessageImage.vue')).default
+        const lettore = vi.fn(async () => pngCon('tEXt', new Uint8Array([65])))
+        const wrapper = mount(C, { props: { fileId: 'r4:' + 'a'.repeat(64), name: 'foto.png' }, global: { provide: { [TALOS_BYTE_IMMAGINE as symbol]: lettore } } })
+        const scade = Date.now() + 2_000
+        while (Date.now() < scade && !wrapper.find('[data-testid="talos-message-image"]').exists()) { await wrapper.vm.$nextTick(); await new Promise((r) => setTimeout(r, 5)) }
+        expect(wrapper.find('[data-testid="talos-message-image"]').exists()).toBe(true)
+        expect(lettore).toHaveBeenCalledWith('r4:' + 'a'.repeat(64))
+        expect(previewBytes).not.toHaveBeenCalled()
+    })
+})

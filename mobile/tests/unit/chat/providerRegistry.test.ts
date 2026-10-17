@@ -14,9 +14,11 @@ describe('mobile provider registry', () => {
      * so the model picker, the abort signal, the persistence and the receipts
      * all work for it without knowing it is different.
      */
-    it('registers exactly the seven supported provider protocols', () => {
+    // N15 (13/10/2026): otto, col piano ChatGPT (`chatgpt`), che è un fornitore a sé e non una strada dentro `openai`.
+    it('registers exactly the eight supported provider protocols', () => {
         expect(Object.keys(TALOS_MOBILE_PROVIDER_ADAPTERS).sort()).toEqual([
             'anthropic',
+            'chatgpt',
             'deepseek',
             'gemini',
             'local',

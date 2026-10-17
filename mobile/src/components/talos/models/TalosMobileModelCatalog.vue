@@ -20,9 +20,17 @@ const providerFilter = ref('')
 const visibleLimit = ref(talosInitialModelLimit())
 const busyProfile = ref<string | null>(null)
 const error = ref('')
-const providerItems = TALOS_MOBILE_PROVIDERS
-    .filter((provider) => provider.id !== 'unknown' && provider.configurable)
-    .map((provider) => ({ value: provider.id, label: provider.label }))
+/*
+ * CATALOGO-FILTRO-01 (13/10/2026): il filtro offre i fornitori con una riga nelle impostazioni E quelli che hanno modelli in
+ * elenco senza una riga loro (il piano ChatGPT, che si collega dentro OpenAI; il motore locale). Prima i loro modelli
+ * comparivano ma non si potevano filtrare.
+ */
+const providerItems = computed(() => {
+    const conModelli = new Set(controller.profiles.value.map((profile) => profile.provider))
+    return TALOS_MOBILE_PROVIDERS
+        .filter((provider) => provider.id !== 'unknown' && (provider.configurable || conModelli.has(provider.id)))
+        .map((provider) => ({ value: provider.id, label: provider.label }))
+})
 
 const filteredProfiles = computed(() => {
     const needle = search.value.trim().toLocaleLowerCase()

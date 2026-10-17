@@ -920,7 +920,7 @@ useTalosSheetTitle(() => heading.value)
                         data-testid="talos-research-tenuta-nel-tempo"
                         class="mt-3 border-t border-[var(--talos-border)] pt-3"
                     >
-                        <p class="text-2xs font-medium uppercase tracking-wide text-[var(--talos-muted)]">{{ t('research.tenutaNelTempo') }}</p>
+                        <p class="text-2xs font-medium text-[var(--talos-muted)]">{{ t('research.tenutaNelTempo') }}</p>
                         <div
                             v-for="passo in storia"
                             :key="passo.at"
@@ -955,7 +955,7 @@ useTalosSheetTitle(() => heading.value)
                         misura di niente.
                     -->
                     <div v-if="fidelity" data-testid="talos-research-fedelta" class="mt-3 border-t border-[var(--talos-border)] pt-3">
-                        <p class="text-2xs font-medium uppercase tracking-wide text-[var(--talos-muted)]">{{ t('research.fedeltaTitolo') }}</p>
+                        <p class="text-2xs font-medium text-[var(--talos-muted)]">{{ t('research.fedeltaTitolo') }}</p>
                         <p v-if="!fidelity.verified" data-testid="talos-research-fedelta-assente" class="mt-2 text-2xs leading-5 text-[var(--talos-muted)]">
                             {{ t('research.fedeltaNonVerificata') }}
                         </p>
@@ -979,7 +979,7 @@ useTalosSheetTitle(() => heading.value)
                     Vedi la nota accanto a `registro` per il perché.
                 -->
                 <section v-if="registro.summary.total" data-testid="talos-research-registro" class="rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)] p-4">
-                    <p class="text-2xs font-medium uppercase tracking-wide text-[var(--talos-muted)]">{{ t('research.registroTitolo') }}</p>
+                    <p class="text-2xs font-medium text-[var(--talos-muted)]">{{ t('research.registroTitolo') }}</p>
                     <p data-testid="talos-research-registro-sommario" class="mt-1 text-2xs leading-5 tabular-nums text-[var(--talos-muted)]">
                         {{ t('research.registroSommario', {
                             total: registro.summary.total,
@@ -1047,7 +1047,7 @@ useTalosSheetTitle(() => heading.value)
                     the plan was agreed before any money was spent.
                 -->
                 <section v-if="!report && outline.length" data-testid="talos-research-outline" class="flex flex-col gap-2">
-                    <h2 class="text-xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">{{ t('research.expectedSections') }}</h2>
+                    <h2 class="text-xs font-semibold text-[var(--talos-muted)]">{{ t('research.expectedSections') }}</h2>
                     <div
                         v-for="(entry, index) in outline"
                         :key="entry.id"
@@ -1178,7 +1178,7 @@ useTalosSheetTitle(() => heading.value)
                         data-testid="talos-research-contesa-aperta"
                         class="rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)] p-4"
                     >
-                        <p class="text-xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">{{ t('research.contesaAperta') }}</p>
+                        <p class="text-xs font-semibold text-[var(--talos-muted)]">{{ t('research.contesaAperta') }}</p>
                         <p class="mt-2 text-sm font-medium leading-6 text-[var(--talos-text)]">{{ contesa.claim.text }}</p>
                         <p class="mt-1 text-2xs font-medium text-[var(--talos-text)]">{{ t('research.support.contested') }}</p>
                         <p v-if="contesa.claim.checks.supportReason" class="mt-2 text-2xs leading-5 text-[var(--talos-muted)]">{{ contesa.claim.checks.supportReason }}</p>
@@ -1228,7 +1228,7 @@ useTalosSheetTitle(() => heading.value)
                         data-testid="talos-research-eccede"
                         class="rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)] p-4"
                     >
-                        <p class="text-xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">{{ t('research.eccedeTitolo') }}</p>
+                        <p class="text-xs font-semibold text-[var(--talos-muted)]">{{ t('research.eccedeTitolo') }}</p>
                         <p class="mt-2 text-sm font-medium leading-6 text-[var(--talos-text)]">{{ eccede.claim.text }}</p>
                         <p class="mt-1 text-2xs font-medium text-[var(--talos-muted)]">{{ t('research.support.partial') }}</p>
                         <p class="mt-2 text-2xs leading-5 text-[var(--talos-muted)]">{{ eccede.claim.checks.supportReason }}</p>
@@ -1281,7 +1281,7 @@ useTalosSheetTitle(() => heading.value)
                          the passages on disk rather than from the web. -->
                     <div class="space-y-2 rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)] p-3">
                         <label class="block">
-                            <span class="mb-2 block text-xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">{{ t('research.followUpTitle') }}</span>
+                            <span class="mb-2 block text-xs font-semibold text-[var(--talos-muted)]">{{ t('research.followUpTitle') }}</span>
                             <input
                                 v-model="followQuestion"
                                 type="text"

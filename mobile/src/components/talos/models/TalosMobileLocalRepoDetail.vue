@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, onUnmounted, ref, watch } from 'vue'
-import { AlertTriangle, ClipboardCopy, Download, ExternalLink, Pause, Play, ShieldAlert, Trash2 } from '@lucide/vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { AlertTriangle, CheckCircle2, ClipboardCopy, Download, ExternalLink, Pause, Play, ShieldAlert, Trash2 } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import TalosModelFitBar from '@/components/talos/models/TalosModelFitBar.vue'
 import TalosModelResourceLedger from '@/components/talos/models/TalosModelResourceLedger.vue'
@@ -27,6 +27,8 @@ import { talosReadmeSummary } from '@/lib/models/readmeSummary'
 import { talosSortChipClass } from '@/lib/sortChip'
 import { writeTalosClipboardText } from '@/services/clipboard'
 import { talosDiscardModelTransfer } from '@/services/modelTransfer'
+import { talosLocalInstalledModels, type TalosLocalModelFile } from '@/services/localEngine'
+import { talosVarianteGiaSulTelefono } from '@/lib/models/installedModels'
 import {
     talosCloseModelRepo,
     talosDescribeModelRepo,
@@ -198,7 +200,11 @@ const selectedRow = computed(() => {
         const trovata = rows.value.find((row) => row.key === selectedKey.value)
         if (trovata) return trovata
     }
-    return rows.value[0] ?? null
+    // ⛔ N13-SCARICA-01 (Pad, 12/10/2026): `LFM2.5-2.6B-Q4_0.gguf` e `…-QAD-Q4_0.gguf` hanno la stessa etichetta «Q4_0»;
+    // la pagina apriva la prima, NON scaricata, e diceva «Scarica Q4_0» a download finito. Senza una scelta della
+    // persona si apre sulla variante già sul telefono, se c'è.
+    return rows.value.find((row) => talosVarianteGiaSulTelefono(installati.value, props.repoId, row.key))
+        ?? rows.value[0] ?? null
 })
 
 const selectedTransfer = computed(() => {
@@ -208,6 +214,21 @@ const selectedTransfer = computed(() => {
         && item.revision === props.revision
         && item.paths.includes(row.key)) ?? null
 })
+
+/*
+ * ⛔ N13-SCARICA-01 (Pad, 11-12/10/2026): a download finito la pagina diceva ancora «Scarica …». Si chiede al lato
+ * nativo quali file sono già sul telefono all'apertura e ogni volta che un trasferimento di questa pagina finisce.
+ * Se la lettura fallisce l'elenco resta vuoto e si torna al comportamento di prima (il pulsante), mai un falso «c'è».
+ */
+const installati = ref<readonly TalosLocalModelFile[]>([])
+async function rileggiInstallati(): Promise<void> {
+    try { installati.value = (await talosLocalInstalledModels()).models } catch { /* elenco non leggibile: resta il pulsante */ }
+}
+onMounted(() => { void rileggiInstallati() })
+watch(selectedTransfer, (ora, prima) => { if (prima && !ora) void rileggiInstallati() })
+const selectedInstalled = computed(() => (selectedRow.value
+    ? talosVarianteGiaSulTelefono(installati.value, props.repoId, selectedRow.value.key)
+    : null))
 
 function transferPercent(item: NonNullable<typeof selectedTransfer.value>): number | null {
     if (item.totalBytes <= 0) return null
@@ -701,6 +722,15 @@ async function reclaim(): Promise<void> {
                             </div>
                         </div>
                     </div>
+                    <p
+                        v-else-if="selectedInstalled"
+                        data-testid="talos-models-downloaded"
+                        role="status"
+                        class="flex min-h-touch w-full items-center justify-center gap-[calc(var(--talos-space-inline)/2)] rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] px-[var(--talos-space-control)] text-sm font-semibold text-[var(--talos-text)]"
+                    >
+                        <CheckCircle2 class="size-[var(--talos-icon-size)] shrink-0 text-[var(--talos-success,currentColor)]" aria-hidden="true" />
+                        {{ t('localModels.downloadedNamed', { label: selectedRow.set.label }) }}
+                    </p>
                     <button
                         v-else
                         type="button"

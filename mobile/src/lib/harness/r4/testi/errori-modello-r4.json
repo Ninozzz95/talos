@@ -1,0 +1,33 @@
+{
+  "origine": {
+    "commit": "701c6c0d2d711879b53aa21bddad5a06d33538e7",
+    "percorso": "harness-ui/frontend/src/i18n/testi/errori.js",
+    "sha256": "1c54a18f9f27f84ede0f86ae64f563433dd8e64f5222f9d336c30b40790fba44",
+    "prefisso": [
+      "CONFIG_INVALID.message",
+      "CONFIG_INVALID.provider_key_missing",
+      "CONFIG_INVALID.provider_unavailable",
+      "MODEL_ID_INVALID.message",
+      "REASONING_INVALID.message",
+      "PROVIDER_INVALID.message"
+    ]
+  },
+  "it": {
+    "CONFIG_INVALID.message": "Configurazione non valida",
+    "MODEL_ID_INVALID.message": "Il modello scelto ha un nome che questo server non riconosce: sceglilo di nuovo dalla pillola del modello",
+    "REASONING_INVALID.message": "Il livello di ragionamento scelto non è fra quelli ammessi: sceglilo di nuovo dalla pillola del ragionamento",
+    "PROVIDER_INVALID.message": "Provider non riconosciuto",
+    "CONFIG_INVALID.provider_unavailable": "Il fornitore di questo modello non è disponibile.",
+    "CONFIG_INVALID.provider_key_missing": "Manca la chiave: collegala dalle impostazioni dei fornitori.",
+    "CONFIG_INVALID.provider_key_missing_named": "Manca la chiave di {provider}: collegala dalle impostazioni dei fornitori."
+  },
+  "en": {
+    "CONFIG_INVALID.message": "Invalid configuration",
+    "MODEL_ID_INVALID.message": "The chosen model has a name this server does not recognize: choose it again from the model pill",
+    "REASONING_INVALID.message": "The chosen reasoning level is not among the allowed ones: choose it again from the reasoning pill",
+    "PROVIDER_INVALID.message": "Provider not recognized",
+    "CONFIG_INVALID.provider_unavailable": "The provider of this model is not available.",
+    "CONFIG_INVALID.provider_key_missing": "The key is missing: connect it from the provider settings.",
+    "CONFIG_INVALID.provider_key_missing_named": "The {provider} key is missing: connect it from the provider settings."
+  }
+}

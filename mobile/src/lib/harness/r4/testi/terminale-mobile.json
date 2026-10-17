@@ -1,0 +1,45 @@
+{
+  "origine": {
+    "nota": "K3-TERM T3 (16/10/2026): parole del Terminale del Codice mobile che il desktop non ha (la barra dei tasti sopra la tastiera, le viste). Le altre vengono dal desktop: app-terminale-r4, processi-terminale-r4, modello-viste-r4."
+  },
+  "it": {
+    "tasti.label": "Tasti del terminale",
+    "tasti.esc": "Esc",
+    "tasti.tab": "Tab",
+    "tasti.ctrl": "Ctrl",
+    "tasti.alt": "Alt",
+    "tasti.sinistra": "Freccia a sinistra",
+    "tasti.giu": "Freccia in giù",
+    "tasti.su": "Freccia in su",
+    "tasti.destra": "Freccia a destra",
+    "tasti.pipe": "Barra verticale",
+    "tasti.tilde": "Tilde",
+    "tasti.barra": "Barra",
+    "tasti.meno": "Trattino",
+    "tasti.premuto": "{tasto} resta premuto per il prossimo tasto",
+    "schede.label": "Schede del terminale",
+    "viste.label": "Viste del Codice",
+    "ricollega": "Ricollega",
+    "nonCollegato": "Il terminale non è collegato: tocca «Ricollega»."
+  },
+  "en": {
+    "tasti.label": "Terminal keys",
+    "tasti.esc": "Esc",
+    "tasti.tab": "Tab",
+    "tasti.ctrl": "Ctrl",
+    "tasti.alt": "Alt",
+    "tasti.sinistra": "Left arrow",
+    "tasti.giu": "Down arrow",
+    "tasti.su": "Up arrow",
+    "tasti.destra": "Right arrow",
+    "tasti.pipe": "Vertical bar",
+    "tasti.tilde": "Tilde",
+    "tasti.barra": "Slash",
+    "tasti.meno": "Hyphen",
+    "tasti.premuto": "{tasto} stays held for the next key",
+    "schede.label": "Terminal tabs",
+    "viste.label": "Code views",
+    "ricollega": "Reconnect",
+    "nonCollegato": "The terminal is not connected: tap “Reconnect”."
+  }
+}

@@ -604,6 +604,30 @@ describe('TalosMobileSidebar — lo stato di ogni chat (B3 / F4-B)', () => {
         __talosNovitaPerLeProve(null)
     })
 
+    /**
+     * ⛔ SIDEBAR-NOVITA-02 — MISURATO sul Pad il 12/10/2026 (barra fissa del tablet, 2 chat con risposta nuova): la
+     * pastiglia «nuova risposta» stringeva il titolo fino a «C.». Owner 12/10: curarlo. Nella barra la novità diventa un
+     * PUNTO: si vede il pallino, la parola resta per i lettori di schermo (e per `aria-describedby`).
+     */
+    it('SIDEBAR-NOVITA-02 nella barra la novità è un punto: il titolo non perde spazio, la parola resta a chi non vede', async () => {
+        const { __talosNovitaPerLeProve, talosCaricaNovita } = await import('@/stores/chatNovita')
+        __talosNovitaPerLeProve({ leggi: async () => JSON.stringify({ base: '2026-07-01T00:00:00.000Z', viste: {} }), scrivi: async () => undefined })
+        await talosCaricaNovita()
+        const conRisposta = sessions.map((sessione) => ({
+            ...sessione,
+            last_message: { role: 'assistant' as const, state: 'persisted' as const, interrupted: false, model_profile_id: null, created_at: sessione.updated_at },
+        }))
+        const wrapper = mountSidebar({ sessions: conRisposta, activeSessionId: 'chat-2' })
+        await flushPromises()
+        const riga = document.body.querySelector<HTMLElement>('[data-chat-id="chat-1"]')!
+        const novita = riga.querySelector<HTMLElement>('[data-testid="talos-chat-new"]')!
+        expect(novita.dataset.forma).toBe('punto')
+        expect(novita.querySelector('.sr-only')?.textContent?.trim()).toBe('new reply')
+        expect(riga.querySelector('.recent-row')!.getAttribute('aria-describedby')).toBe(novita.id)
+        wrapper.unmount()
+        __talosNovitaPerLeProve(null)
+    })
+
     it('SIDEBAR-STATO-02 senza statoDi nessuna etichetta: le righe restano quelle di prima', async () => {
         const wrapper = mountSidebar()
         await flushPromises()

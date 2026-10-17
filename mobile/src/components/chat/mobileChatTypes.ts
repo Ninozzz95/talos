@@ -16,6 +16,7 @@ export type TalosMobileProviderId =
     | 'ollama'
     | 'openai'
     | 'openrouter'
+    | 'chatgpt'
 
 export type TalosMobileModelStatus =
     | 'untested'
@@ -82,6 +83,14 @@ export interface TalosMobileMessageView {
     authorizationOutcome?: readonly { readonly tool: string, readonly concesso: boolean }[]
 }
 
+/**
+ * ⛔ K3-B2 (15/10/2026): le azioni del messaggio che chi monta la lista sa davvero fare. La chat le ha tutte; il Codice su r4 solo
+ * quelle che r4 regge. «Copia» e «Ascolta» non stanno qui: si fanno da sole e ci sono sempre.
+ */
+export type TalosAzioneMessaggio = 'modifica' | 'riprova' | 'libreria' | 'riutilizza' | 'invia-di-nuovo' | 'condividi' | 'dettagli' | 'elimina'
+export const TALOS_AZIONI_MESSAGGIO_TUTTE: readonly TalosAzioneMessaggio[] =
+    ['modifica', 'riprova', 'libreria', 'riutilizza', 'invia-di-nuovo', 'condividi', 'dettagli', 'elimina']
+
 export interface TalosMobileBrowserActivityView {
     id: string
     operation: string
@@ -100,5 +109,11 @@ export interface TalosMobileMessageAttachmentView {
     size_bytes: number
     permissions: readonly ('model.read' | 'browser.upload')[]
     grant_status: 'active' | 'revoked'
+    /**
+     * K3-C Allegati A3: un file del Codice su r4 (`allegati/` della cartella di lavoro). Ha il percorso al posto del Vault: il chip lo
+     * mostra nel titolo e non ha un peso; i caratteri solo se il testo è partito col messaggio (`chipAllegato` del desktop).
+     */
+    percorso?: string
+    caratteri?: number
 }
 import type { TalosMobileBrowserEvidenceEnvelope } from '@/lib/browser/browserContracts'

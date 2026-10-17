@@ -1,5 +1,6 @@
 import { TALOS_SOLLECITO_AZIONE_DICHIARATA, talosAzioneDichiarata, talosHaAgito } from '@/lib/tools/azioneDichiarata'
 import type { ChatTurn, TalosToolCall } from '@/stores/chat'
+import { chiaveDiChiamata } from '@/lib/tools/chiaveDiChiamata'
 import type {
     TalosMobileImageInputPart,
     TalosMobileInputPart,
@@ -562,40 +563,6 @@ function outcomeOf(
  * chiavi ordinate: `{"on":true}` e `{ "on" : true }` sono la stessa cosa per
  * chiunque, e devono esserlo anche qui.
  */
-function chiaveDiChiamata(call: TalosToolCall): string {
-    const canonico = (valore: unknown): unknown => {
-        if (Array.isArray(valore)) return valore.map(canonico)
-        if (valore && typeof valore === 'object') {
-            return Object.fromEntries(
-                Object.entries(valore as Record<string, unknown>)
-                    .sort(([a], [b]) => a.localeCompare(b))
-                    .map(([chiave, dentro]) => [chiave, canonico(dentro)]),
-            )
-        }
-        return valore
-    }
-    try {
-        /*
-         * ⛔ Gli argomenti arrivano come STRINGA JSON dal provider. Confrontare
-         * le stringhe cosi' come sono farebbe passare per diverse due chiamate
-         * identiche scritte con una spaziatura diversa — e i modelli locali,
-         * che rigenerano la chiamata da capo ogni volta, la spaziatura la
-         * cambiano. Si analizza e si rende in forma canonica; se non e' JSON,
-         * la stringa grezza e' comunque meglio di niente.
-         */
-        const grezzi: unknown = typeof call.arguments === 'string'
-            ? JSON.parse(call.arguments)
-            : call.arguments
-        return `${call.name} ${JSON.stringify(canonico(grezzi))}`
-    } catch {
-        if (typeof call.arguments === 'string') {
-            return `${call.name} ${call.arguments.trim()}`
-        }
-        // Argomenti non serializzabili: meglio lasciar passare che bloccare per
-        // un motivo che non c'entra.
-        return `${call.name} ${String(Math.random())}`
-    }
-}
 
 /**
  * Il preflight di TUTTO il giro, in una volta.

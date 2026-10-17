@@ -1,42 +1,15 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, defineComponent, h, nextTick, onBeforeUnmount, ref, watch } from 'vue'
-import { useTalosI18n } from '@/i18n'
+import { computed, defineAsyncComponent, defineComponent, h, inject, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import TalosMobileAssistantHeader from './TalosMobileAssistantHeader.vue'
 import './talosCalmMessages.css'
 import TalosMobileReasoningBlock from '@/components/chat/TalosMobileReasoningBlock.vue'
-import TalosMobileRunningToolRow from '@/components/chat/TalosMobileRunningToolRow.vue'
-import {
-    BookMarked,
-    Clock,
-    AudioLines,
-    Download,
-    FileText,
-    Flashlight,
-    Globe,
-    Image as ImageIcon,
-    ListTodo,
-    MapPin,
-    Mail,
-    NotebookPen,
-    Smartphone,
-    Sparkles,
-    Play,
-    Telescope,
-    Volume2,
-    Wrench,
-} from '@lucide/vue'
-import {
-    talosToolActivityLabel,
-    talosToolIconName,
-    TALOS_TOOL_LABEL_KEYS,
-    type TalosToolIconName,
-} from '@/lib/tools/toolLabels'
 import { stabilizeStreamingTalosMarkdown } from '@/lib/streamingMarkdown'
 import { createTalosFrameScheduler } from '@/lib/streamingTailScheduler'
 import { useTalosTypewriterReveal } from '@/composables/useTalosTypewriterReveal'
 import { useTalosSmoothReveal } from '@/composables/useTalosSmoothReveal'
 import { useChatController } from '@/stores/chatController'
 import { useSettingsStore } from '@/stores/settings'
+import { TALOS_SORGENTE_STREAMING, talosSorgenteStreamingDellaChat } from '@/lib/chat/sorgenteStreaming'
 
 /**
  * R1-5 — the in-flight assistant reply, isolated. This component alone
@@ -55,72 +28,35 @@ import { useSettingsStore } from '@/stores/settings'
  * letter will appear.
  */
 const controller = useChatController()
-const state = controller.chat.state
-const { t } = useTalosI18n()
+/**
+ * ⛔ K3-B2 (owner 15/10 «Stessi componenti della chat»): il giro che arriva viene dalla sorgente iniettata (il Codice su r4) o, di
+ * serie, dalla chat, con la logica di sempre (`lib/chat/sorgenteStreaming.ts`).
+ */
+const sorgente = inject(TALOS_SORGENTE_STREAMING, null) ?? talosSorgenteStreamingDellaChat(controller)
 
-const streamingText = computed(() => state.streamingText ?? '')
-// The tool block: what TALOS is doing right now, in the user's words rather
-// than the wire names. Silence while a model searches your Library looks
-// identical to a hang — and four identical rows saying `web_read` are barely
-// better, which is why the label carries the page or the query.
-const TOOL_ICONS: Record<TalosToolIconName, unknown> = {
-    library: BookMarked,
-    note: NotebookPen,
-    task: ListTodo,
-    memory: Sparkles,
-    clock: Clock,
-    web: Globe,
-    research: Telescope,
-    // Il telefono ha i suoi segni: dargli quello del web o dei modelli direbbe
-    // una cosa falsa su cosa sta succedendo.
-    phone: Smartphone,
-    place: MapPin,
-    torch: Flashlight,
-    volume: Volume2,
-    // ⛔ Play e non un altoparlante: il volume ha gia' il suo segno, e due
-    // strumenti diversi con lo stesso disegno raccontano la stessa cosa
-    // mentre ne stanno facendo due.
-    audio: Play,
-    voice: AudioLines,
-    document: FileText,
-    // ⛔ La busta e non il foglio: contare la posta non è leggere un documento,
-    // e due attrezzi con lo stesso disegno raccontano la stessa cosa mentre ne
-    // stanno facendo due.
-    mail: Mail,
-    image: ImageIcon,
-    download: Download,
-    tool: Wrench,
-}
-
-const runningTools = computed(() => controller.toolActivity.value.map((activity) => ({
-    key: `${activity.name}:${activity.detail ?? ''}`,
-    label: talosToolActivityLabel(
-        activity,
-        TALOS_TOOL_LABEL_KEYS[activity.name]
-            ? t(TALOS_TOOL_LABEL_KEYS[activity.name]!)
-            : undefined,
-    ),
-    icon: TOOL_ICONS[talosToolIconName(activity.name)],
-})))
+const streamingText = computed(() => sorgente.testo.value.slice(sorgente.confini.value.at(-1)?.testo ?? 0))
+/**
+ * ⭐⭐⭐ N13 (owner 02/10/2026, decisioni del 09/10): ragionamento, righe degli attrezzi e testo nell'ordine in cui sono successi.
+ * I giri già chiusi (confini registrati dallo store a ogni giro di attrezzi) li disegna `TalosMobileAttivitaDelTurno`, caricato a
+ * richiesta; qui restano solo la coda viva, cioè il ragionamento e il testo arrivati dopo l'ultimo giro, col loro ritmo di scrittura.
+ * Prima la riga degli attrezzi in corso stava SOPRA il ragionamento, ed era un elenco sovrascritto a ogni giro: senza storia.
+ */
+const TalosMobileAttivitaDelTurno = defineAsyncComponent(() => import('@/components/chat/TalosMobileAttivitaDelTurno.vue'))
+const confini = computed(() => sorgente.confini.value)
+const attivi = computed(() => sorgente.attivi.value)
+/** Le righe dell'ultimo giro sono «in corso» finché dopo di loro non arriva niente. */
+const codaVuota = computed(() => !/\S/.test(streamingText.value) && !haRagionamento.value)
 // Defect #5: reasoning streams on its own channel, so it can appear before the
 // first letter of the answer — which is exactly when it is most useful.
-const streamingReasoning = computed(() => state.streamingReasoning ?? '')/**
+const streamingReasoning = computed(() => sorgente.ragionamento.value.slice(sorgente.confini.value.at(-1)?.ragionamento ?? 0))
+/**
  * Stesso motivo del blocco ragionamento: al `v-if` serve sapere se c'è
  * qualcosa, non ottenere una copia ripulita della traccia intera a ogni
  * aggiornamento.
  */
 const haRagionamento = computed(() => /\S/.test(streamingReasoning.value))
-/**
- * Only while the in-flight reply belongs to the conversation on screen.
- *
- * Owner 2026-07-26: leaving a chat generating and opening a new one made a
- * message appear there by itself — the other chat's reply, rendered by a global
- * field. The answer still lands in the right conversation when it finishes;
- * what was wrong was showing it anywhere at all.
- */
-const sending = computed(() => state.sending
-    && state.streamingSessionId !== null
-    && state.streamingSessionId === controller.chat.activeSession.value?.id)
+/** Only while the in-flight reply belongs to the conversation on screen (the rule lives in the source: `sorgenteStreaming.ts`). */
+const sending = sorgente.sending
 
 /**
  * Owner 2026-07-26: a second way for the answer to arrive — "un'animazione più
@@ -486,7 +422,7 @@ onBeforeUnmount(() => {
 
 <template>
     <article
-        v-if="sending && (revealed || haRagionamento || runningTools.length)"
+        v-if="sending && (revealed || haRagionamento || confini.length || attivi.length)"
         ref="contentHost"
         data-testid="talos-mobile-streaming"
         class="chat-message assistant-message w-full max-w-full text-[var(--talos-text)]"
@@ -498,17 +434,14 @@ onBeforeUnmount(() => {
              chips, which sat next to a borderless reasoning row and looked like
              two different features. -->
         <TalosMobileAssistantHeader working />
-        <div v-if="runningTools.length" data-testid="talos-tool-activity" class="mb-0.5">
-            <TalosMobileRunningToolRow
-                v-for="entry in runningTools"
-                :key="entry.key"
-                :label="entry.label"
-            >
-                <template #icon>
-                    <component :is="entry.icon" class="size-3.5" />
-                </template>
-            </TalosMobileRunningToolRow>
-        </div>
+        <TalosMobileAttivitaDelTurno
+            v-if="confini.length || attivi.length"
+            :confini="confini"
+            :testo="sorgente.testo.value"
+            :ragionamento="sorgente.ragionamento.value"
+            :attivi="attivi"
+            :vivo="codaVuota"
+        />
         <TalosMobileReasoningBlock v-if="streamingReasoning" :reasoning="streamingReasoning" live />
         <!-- Owner 2026-07-27: "si compenetra con le parole già renderizzate".
              The entrance animation is scoped HERE, to the streaming body, and

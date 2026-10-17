@@ -1,0 +1,2204 @@
+{
+  "origine": {
+    "r4": "701c6c0d2d711879b53aa21bddad5a06d33538e7",
+    "file": "harness-ui/frontend/src/components/user-question-dock.js"
+  },
+  "casi": {
+    "it": {
+      "progresso": [
+        {
+          "insieme": "una",
+          "corrente": 0,
+          "testo": "Una decisione"
+        },
+        {
+          "insieme": "tre",
+          "corrente": 0,
+          "testo": "Domanda 1 di 3"
+        },
+        {
+          "insieme": "tre",
+          "corrente": 1,
+          "testo": "Domanda 2 di 3"
+        },
+        {
+          "insieme": "tre",
+          "corrente": 2,
+          "testo": "Domanda 3 di 3"
+        }
+      ],
+      "risposte": [
+        {
+          "insieme": "una",
+          "bozza": "vuota",
+          "risposta": {}
+        },
+        {
+          "insieme": "una",
+          "bozza": "unaSingola",
+          "risposta": {
+            "database": "SQLite"
+          }
+        },
+        {
+          "insieme": "una",
+          "bozza": "singolaAltro",
+          "risposta": {
+            "database": "MySQL"
+          }
+        },
+        {
+          "insieme": "una",
+          "bozza": "singolaSceltaEAltro",
+          "risposta": {
+            "database": "MySQL"
+          }
+        },
+        {
+          "insieme": "tre",
+          "bozza": "treComplete",
+          "risposta": {
+            "database": "PostgreSQL",
+            "funzioni": [
+              "Login",
+              "Esporta",
+              "Backup"
+            ],
+            "nome": "Atlas"
+          }
+        },
+        {
+          "insieme": "tre",
+          "bozza": "treMancaUna",
+          "risposta": {
+            "database": "SQLite",
+            "funzioni": [
+              "Ricerca"
+            ]
+          }
+        },
+        {
+          "insieme": "tre",
+          "bozza": "treMancanoDue",
+          "risposta": {
+            "funzioni": [
+              "Solo login"
+            ]
+          }
+        },
+        {
+          "insieme": "tre",
+          "bozza": "treDoppione",
+          "risposta": {
+            "database": "SQLite",
+            "funzioni": [
+              "Login",
+              "Login"
+            ],
+            "nome": "X"
+          }
+        }
+      ],
+      "scelte": [
+        {
+          "insieme": "dueSingole",
+          "bozza": "vuota",
+          "indice": 0,
+          "corrente": 0,
+          "opzione": 1,
+          "bozzaDopo": {
+            "database": {
+              "scelte": [
+                "PostgreSQL"
+              ],
+              "altro": "",
+              "testo": ""
+            },
+            "stile": {
+              "scelte": [],
+              "altro": "",
+              "testo": ""
+            }
+          },
+          "azione": "avanti",
+          "inviato": null
+        },
+        {
+          "insieme": "dueSingole",
+          "bozza": "unaSingola",
+          "indice": 1,
+          "corrente": 1,
+          "opzione": 0,
+          "bozzaDopo": {
+            "database": {
+              "scelte": [
+                "SQLite"
+              ],
+              "altro": "",
+              "testo": ""
+            },
+            "stile": {
+              "scelte": [
+                "Chiaro"
+              ],
+              "altro": "",
+              "testo": ""
+            }
+          },
+          "azione": "invia",
+          "inviato": {
+            "requestId": "q-1",
+            "status": "answered",
+            "answers": {
+              "database": "SQLite",
+              "stile": "Chiaro"
+            }
+          }
+        },
+        {
+          "insieme": "dueSingole",
+          "bozza": "vuota",
+          "indice": 1,
+          "corrente": 1,
+          "opzione": 1,
+          "bozzaDopo": {
+            "database": {
+              "scelte": [],
+              "altro": "",
+              "testo": ""
+            },
+            "stile": {
+              "scelte": [
+                "Scuro"
+              ],
+              "altro": "",
+              "testo": ""
+            }
+          },
+          "azione": null,
+          "inviato": null
+        },
+        {
+          "insieme": "tre",
+          "bozza": "vuota",
+          "indice": 0,
+          "corrente": 0,
+          "opzione": 0,
+          "bozzaDopo": {
+            "database": {
+              "scelte": [
+                "SQLite"
+              ],
+              "altro": "",
+              "testo": ""
+            },
+            "funzioni": {
+              "scelte": [],
+              "altro": "",
+              "testo": ""
+            },
+            "nome": {
+              "scelte": [],
+              "altro": "",
+              "testo": ""
+            }
+          },
+          "azione": "avanti",
+          "inviato": null
+        },
+        {
+          "insieme": "tre",
+          "bozza": "treMancaUna",
+          "indice": 1,
+          "corrente": 1,
+          "opzione": 2,
+          "bozzaDopo": {
+            "database": {
+              "scelte": [
+                "SQLite"
+              ],
+              "altro": "",
+              "testo": ""
+            },
+            "funzioni": {
+              "scelte": [
+                "Ricerca",
+                "Esporta"
+              ],
+              "altro": "",
+              "testo": ""
+            },
+            "nome": {
+              "scelte": [],
+              "altro": "",
+              "testo": ""
+            }
+          },
+          "azione": null,
+          "inviato": null
+        },
+        {
+          "insieme": "una",
+          "bozza": "singolaAltro",
+          "indice": 0,
+          "corrente": 0,
+          "opzione": 1,
+          "bozzaDopo": {
+            "database": {
+              "scelte": [
+                "PostgreSQL"
+              ],
+              "altro": "",
+              "testo": ""
+            }
+          },
+          "azione": "invia",
+          "inviato": {
+            "requestId": "q-1",
+            "status": "answered",
+            "answers": {
+              "database": "PostgreSQL"
+            }
+          }
+        },
+        {
+          "insieme": "dueSingole",
+          "bozza": "unaSingola",
+          "indice": 0,
+          "corrente": 1,
+          "opzione": 1,
+          "bozzaDopo": {
+            "database": {
+              "scelte": [
+                "PostgreSQL"
+              ],
+              "altro": "",
+              "testo": ""
+            },
+            "stile": {
+              "scelte": [],
+              "altro": "",
+              "testo": ""
+            }
+          },
+          "azione": null,
+          "inviato": null
+        }
+      ],
+      "revisioni": [
+        {
+          "bozza": "treComplete",
+          "titolo": "Rivedi le risposte",
+          "righe": [
+            {
+              "domanda": "Quale database uso?",
+              "risposta": "PostgreSQL"
+            },
+            {
+              "domanda": "Quali funzioni aggiungo?",
+              "risposta": "Login, Esporta, Backup"
+            },
+            {
+              "domanda": "Come si chiama il progetto?",
+              "risposta": "Atlas"
+            }
+          ],
+          "avviso": "Tutte le risposte sono pronte.",
+          "puoInviare": true,
+          "pulsanti": [
+            "Modifica risposte",
+            "Conferma e invia"
+          ]
+        },
+        {
+          "bozza": "treMancaUna",
+          "titolo": "Rivedi le risposte",
+          "righe": [
+            {
+              "domanda": "Quale database uso?",
+              "risposta": "SQLite"
+            },
+            {
+              "domanda": "Quali funzioni aggiungo?",
+              "risposta": "Ricerca"
+            },
+            {
+              "domanda": "Come si chiama il progetto?",
+              "risposta": "Non risposta"
+            }
+          ],
+          "avviso": "1 domanda senza risposta",
+          "puoInviare": false,
+          "pulsanti": [
+            "Modifica risposte",
+            "Conferma e invia"
+          ]
+        },
+        {
+          "bozza": "treMancanoDue",
+          "titolo": "Rivedi le risposte",
+          "righe": [
+            {
+              "domanda": "Quale database uso?",
+              "risposta": "Non risposta"
+            },
+            {
+              "domanda": "Quali funzioni aggiungo?",
+              "risposta": "Solo login"
+            },
+            {
+              "domanda": "Come si chiama il progetto?",
+              "risposta": "Non risposta"
+            }
+          ],
+          "avviso": "2 domande senza risposta",
+          "puoInviare": false,
+          "pulsanti": [
+            "Modifica risposte",
+            "Conferma e invia"
+          ]
+        },
+        {
+          "bozza": "treDoppione",
+          "titolo": "Rivedi le risposte",
+          "righe": [
+            {
+              "domanda": "Quale database uso?",
+              "risposta": "SQLite"
+            },
+            {
+              "domanda": "Quali funzioni aggiungo?",
+              "risposta": "Login, Login"
+            },
+            {
+              "domanda": "Come si chiama il progetto?",
+              "risposta": "X"
+            }
+          ],
+          "avviso": "La risposta Altro duplica una scelta selezionata.",
+          "puoInviare": false,
+          "pulsanti": [
+            "Modifica risposte",
+            "Conferma e invia"
+          ]
+        }
+      ],
+      "salta": {
+        "titolo": "Saltare tutte le domande?",
+        "avviso": "La richiesta intera verrà saltata, anche se hai già scritto risposte.",
+        "pulsanti": [
+          "Modifica risposte",
+          "Conferma salto"
+        ]
+      },
+      "esiti": [
+        {
+          "status": "answered",
+          "motivo": null,
+          "altrove": false,
+          "da": "persona",
+          "origine": null,
+          "badge": "Decisione",
+          "frase": "Risposta inviata",
+          "meta": "Chiesta alle 15:01 · hai risposto alle 15:02"
+        },
+        {
+          "status": "answered",
+          "motivo": null,
+          "altrove": false,
+          "da": "persona",
+          "origine": {
+            "modalita": "piano"
+          },
+          "badge": "Decisione",
+          "frase": "Risposta inviata",
+          "meta": "Chiesta alle 15:01 in modalità Piano · hai risposto alle 15:02"
+        },
+        {
+          "status": "answered",
+          "motivo": null,
+          "altrove": false,
+          "da": "persona",
+          "origine": {
+            "modalita": "normale"
+          },
+          "badge": "Decisione",
+          "frase": "Risposta inviata",
+          "meta": "Chiesta alle 15:01 in modalità Normale · hai risposto alle 15:02"
+        },
+        {
+          "status": "answered",
+          "motivo": null,
+          "altrove": true,
+          "da": "persona",
+          "origine": null,
+          "badge": "Decisione",
+          "frase": "Risposta inviata da un’altra finestra",
+          "meta": "Chiesta alle 15:01 · risposta da un’altra finestra alle 15:02"
+        },
+        {
+          "status": "answered",
+          "motivo": null,
+          "altrove": true,
+          "da": "persona",
+          "origine": {
+            "modalita": "piano"
+          },
+          "badge": "Decisione",
+          "frase": "Risposta inviata da un’altra finestra",
+          "meta": "Chiesta alle 15:01 in modalità Piano · risposta da un’altra finestra alle 15:02"
+        },
+        {
+          "status": "answered",
+          "motivo": null,
+          "altrove": true,
+          "da": "persona",
+          "origine": {
+            "modalita": "normale"
+          },
+          "badge": "Decisione",
+          "frase": "Risposta inviata da un’altra finestra",
+          "meta": "Chiesta alle 15:01 in modalità Normale · risposta da un’altra finestra alle 15:02"
+        },
+        {
+          "status": "skipped",
+          "motivo": null,
+          "altrove": false,
+          "da": "persona",
+          "origine": null,
+          "badge": "Decisione",
+          "frase": "Domanda saltata",
+          "meta": "Chiesta alle 15:01 · hai saltato alle 15:02"
+        },
+        {
+          "status": "skipped",
+          "motivo": null,
+          "altrove": false,
+          "da": "persona",
+          "origine": {
+            "modalita": "piano"
+          },
+          "badge": "Decisione",
+          "frase": "Domanda saltata",
+          "meta": "Chiesta alle 15:01 in modalità Piano · hai saltato alle 15:02"
+        },
+        {
+          "status": "skipped",
+          "motivo": null,
+          "altrove": false,
+          "da": "persona",
+          "origine": {
+            "modalita": "normale"
+          },
+          "badge": "Decisione",
+          "frase": "Domanda saltata",
+          "meta": "Chiesta alle 15:01 in modalità Normale · hai saltato alle 15:02"
+        },
+        {
+          "status": "skipped",
+          "motivo": null,
+          "altrove": true,
+          "da": "persona",
+          "origine": null,
+          "badge": "Decisione",
+          "frase": "Domanda saltata da un’altra finestra",
+          "meta": "Chiesta alle 15:01 · saltata da un’altra finestra alle 15:02"
+        },
+        {
+          "status": "skipped",
+          "motivo": null,
+          "altrove": true,
+          "da": "persona",
+          "origine": {
+            "modalita": "piano"
+          },
+          "badge": "Decisione",
+          "frase": "Domanda saltata da un’altra finestra",
+          "meta": "Chiesta alle 15:01 in modalità Piano · saltata da un’altra finestra alle 15:02"
+        },
+        {
+          "status": "skipped",
+          "motivo": null,
+          "altrove": true,
+          "da": "persona",
+          "origine": {
+            "modalita": "normale"
+          },
+          "badge": "Decisione",
+          "frase": "Domanda saltata da un’altra finestra",
+          "meta": "Chiesta alle 15:01 in modalità Normale · saltata da un’altra finestra alle 15:02"
+        },
+        {
+          "status": "expired",
+          "motivo": null,
+          "altrove": false,
+          "da": "sistema",
+          "origine": null,
+          "badge": "Decisione",
+          "frase": "Domanda scaduta: nessuna risposta in tempo",
+          "meta": "Chiesta alle 15:01 · chiusa dal sistema alle 15:02"
+        },
+        {
+          "status": "expired",
+          "motivo": null,
+          "altrove": false,
+          "da": "sistema",
+          "origine": {
+            "modalita": "piano"
+          },
+          "badge": "Decisione",
+          "frase": "Domanda scaduta: nessuna risposta in tempo",
+          "meta": "Chiesta alle 15:01 in modalità Piano · chiusa dal sistema alle 15:02"
+        },
+        {
+          "status": "expired",
+          "motivo": null,
+          "altrove": false,
+          "da": "sistema",
+          "origine": {
+            "modalita": "normale"
+          },
+          "badge": "Decisione",
+          "frase": "Domanda scaduta: nessuna risposta in tempo",
+          "meta": "Chiesta alle 15:01 in modalità Normale · chiusa dal sistema alle 15:02"
+        },
+        {
+          "status": "unanswerable",
+          "motivo": null,
+          "altrove": false,
+          "da": "sistema",
+          "origine": null,
+          "badge": "Decisione",
+          "frase": "Nessuno poteva rispondere: TALOS prosegue con l’ipotesi più prudente e la dichiara",
+          "meta": "Chiesta alle 15:01 · chiusa dal sistema alle 15:02"
+        },
+        {
+          "status": "unanswerable",
+          "motivo": null,
+          "altrove": false,
+          "da": "sistema",
+          "origine": {
+            "modalita": "piano"
+          },
+          "badge": "Decisione",
+          "frase": "Nessuno poteva rispondere: TALOS prosegue con l’ipotesi più prudente e la dichiara",
+          "meta": "Chiesta alle 15:01 in modalità Piano · chiusa dal sistema alle 15:02"
+        },
+        {
+          "status": "unanswerable",
+          "motivo": null,
+          "altrove": false,
+          "da": "sistema",
+          "origine": {
+            "modalita": "normale"
+          },
+          "badge": "Decisione",
+          "frase": "Nessuno poteva rispondere: TALOS prosegue con l’ipotesi più prudente e la dichiara",
+          "meta": "Chiesta alle 15:01 in modalità Normale · chiusa dal sistema alle 15:02"
+        },
+        {
+          "status": "cancelled",
+          "motivo": "fermato",
+          "altrove": false,
+          "da": "sistema",
+          "origine": null,
+          "badge": "Decisione",
+          "frase": "Domanda annullata: hai fermato il giro",
+          "meta": "Chiesta alle 15:01 · chiusa dal sistema alle 15:02"
+        },
+        {
+          "status": "cancelled",
+          "motivo": "fermato",
+          "altrove": false,
+          "da": "sistema",
+          "origine": {
+            "modalita": "piano"
+          },
+          "badge": "Decisione",
+          "frase": "Domanda annullata: hai fermato il giro",
+          "meta": "Chiesta alle 15:01 in modalità Piano · chiusa dal sistema alle 15:02"
+        },
+        {
+          "status": "cancelled",
+          "motivo": "fermato",
+          "altrove": false,
+          "da": "sistema",
+          "origine": {
+            "modalita": "normale"
+          },
+          "badge": "Decisione",
+          "frase": "Domanda annullata: hai fermato il giro",
+          "meta": "Chiesta alle 15:01 in modalità Normale · chiusa dal sistema alle 15:02"
+        },
+        {
+          "status": "cancelled",
+          "motivo": "reindirizzamento",
+          "altrove": false,
+          "da": "sistema",
+          "origine": null,
+          "badge": "Decisione",
+          "frase": "Domanda annullata: hai dato una nuova indicazione mentre aspettava",
+          "meta": "Chiesta alle 15:01 · chiusa dal sistema alle 15:02"
+        },
+        {
+          "status": "cancelled",
+          "motivo": "reindirizzamento",
+          "altrove": false,
+          "da": "sistema",
+          "origine": {
+            "modalita": "piano"
+          },
+          "badge": "Decisione",
+          "frase": "Domanda annullata: hai dato una nuova indicazione mentre aspettava",
+          "meta": "Chiesta alle 15:01 in modalità Piano · chiusa dal sistema alle 15:02"
+        },
+        {
+          "status": "cancelled",
+          "motivo": "reindirizzamento",
+          "altrove": false,
+          "da": "sistema",
+          "origine": {
+            "modalita": "normale"
+          },
+          "badge": "Decisione",
+          "frase": "Domanda annullata: hai dato una nuova indicazione mentre aspettava",
+          "meta": "Chiesta alle 15:01 in modalità Normale · chiusa dal sistema alle 15:02"
+        },
+        {
+          "status": "cancelled",
+          "motivo": "nuovo-messaggio",
+          "altrove": false,
+          "da": "persona",
+          "origine": null,
+          "badge": "Decisione",
+          "frase": "Domanda chiusa: hai scritto un altro messaggio",
+          "meta": "Chiesta alle 15:01 · chiusa alle 15:02"
+        },
+        {
+          "status": "cancelled",
+          "motivo": "nuovo-messaggio",
+          "altrove": false,
+          "da": "persona",
+          "origine": {
+            "modalita": "piano"
+          },
+          "badge": "Decisione",
+          "frase": "Domanda chiusa: hai scritto un altro messaggio",
+          "meta": "Chiesta alle 15:01 in modalità Piano · chiusa alle 15:02"
+        },
+        {
+          "status": "cancelled",
+          "motivo": "nuovo-messaggio",
+          "altrove": false,
+          "da": "persona",
+          "origine": {
+            "modalita": "normale"
+          },
+          "badge": "Decisione",
+          "frase": "Domanda chiusa: hai scritto un altro messaggio",
+          "meta": "Chiesta alle 15:01 in modalità Normale · chiusa alle 15:02"
+        },
+        {
+          "status": "cancelled",
+          "motivo": "interrotta",
+          "altrove": false,
+          "da": "sistema",
+          "origine": null,
+          "badge": "Decisione",
+          "frase": "Domanda interrotta: il server si è riavviato prima della risposta",
+          "meta": "Chiesta alle 15:01 · chiusa dal sistema alle 15:02"
+        },
+        {
+          "status": "cancelled",
+          "motivo": "interrotta",
+          "altrove": false,
+          "da": "sistema",
+          "origine": {
+            "modalita": "piano"
+          },
+          "badge": "Decisione",
+          "frase": "Domanda interrotta: il server si è riavviato prima della risposta",
+          "meta": "Chiesta alle 15:01 in modalità Piano · chiusa dal sistema alle 15:02"
+        },
+        {
+          "status": "cancelled",
+          "motivo": "interrotta",
+          "altrove": false,
+          "da": "sistema",
+          "origine": {
+            "modalita": "normale"
+          },
+          "badge": "Decisione",
+          "frase": "Domanda interrotta: il server si è riavviato prima della risposta",
+          "meta": "Chiesta alle 15:01 in modalità Normale · chiusa dal sistema alle 15:02"
+        },
+        {
+          "status": "cancelled",
+          "motivo": "non-salvata",
+          "altrove": false,
+          "da": "sistema",
+          "origine": null,
+          "badge": "Decisione",
+          "frase": "Domanda annullata: la risposta non è stata salvata",
+          "meta": "Chiesta alle 15:01 · chiusa dal sistema alle 15:02"
+        },
+        {
+          "status": "cancelled",
+          "motivo": "non-salvata",
+          "altrove": false,
+          "da": "sistema",
+          "origine": {
+            "modalita": "piano"
+          },
+          "badge": "Decisione",
+          "frase": "Domanda annullata: la risposta non è stata salvata",
+          "meta": "Chiesta alle 15:01 in modalità Piano · chiusa dal sistema alle 15:02"
+        },
+        {
+          "status": "cancelled",
+          "motivo": "non-salvata",
+          "altrove": false,
+          "da": "sistema",
+          "origine": {
+            "modalita": "normale"
+          },
+          "badge": "Decisione",
+          "frase": "Domanda annullata: la risposta non è stata salvata",
+          "meta": "Chiesta alle 15:01 in modalità Normale · chiusa dal sistema alle 15:02"
+        },
+        {
+          "status": "cancelled",
+          "motivo": null,
+          "altrove": false,
+          "da": null,
+          "origine": null,
+          "badge": "Decisione",
+          "frase": "Domanda annullata",
+          "meta": "Chiesta alle 15:01 · chiusa alle 15:02"
+        },
+        {
+          "status": "cancelled",
+          "motivo": null,
+          "altrove": false,
+          "da": null,
+          "origine": {
+            "modalita": "piano"
+          },
+          "badge": "Decisione",
+          "frase": "Domanda annullata",
+          "meta": "Chiesta alle 15:01 in modalità Piano · chiusa alle 15:02"
+        },
+        {
+          "status": "cancelled",
+          "motivo": null,
+          "altrove": false,
+          "da": null,
+          "origine": {
+            "modalita": "normale"
+          },
+          "badge": "Decisione",
+          "frase": "Domanda annullata",
+          "meta": "Chiesta alle 15:01 in modalità Normale · chiusa alle 15:02"
+        },
+        {
+          "status": "answered",
+          "motivo": null,
+          "altrove": false,
+          "da": null,
+          "origine": null,
+          "at": "non-una-data",
+          "esitoAt": null,
+          "badge": "Decisione",
+          "frase": "Risposta inviata",
+          "meta": null
+        }
+      ],
+      "ricevute": [
+        {
+          "insieme": "tre",
+          "status": "answered",
+          "answers": {
+            "database": "PostgreSQL",
+            "funzioni": [
+              "Login",
+              "Esporta",
+              "Backup"
+            ],
+            "nome": "Atlas"
+          },
+          "righe": [
+            {
+              "id": "database",
+              "domanda": "Quale database uso?",
+              "risposta": "PostgreSQL",
+              "perche": "Perché conta: decide lo schema",
+              "contoOfferte": "Opzioni offerte (2)",
+              "offerte": [
+                {
+                  "label": "SQLite",
+                  "consigliata": true,
+                  "scelta": false
+                },
+                {
+                  "label": "PostgreSQL",
+                  "consigliata": false,
+                  "scelta": true
+                }
+              ]
+            },
+            {
+              "id": "funzioni",
+              "domanda": "Quali funzioni aggiungo?",
+              "risposta": "Login, Esporta, Altro: «Backup»",
+              "perche": null,
+              "contoOfferte": "Opzioni offerte (3)",
+              "offerte": [
+                {
+                  "label": "Login",
+                  "consigliata": false,
+                  "scelta": true
+                },
+                {
+                  "label": "Ricerca",
+                  "consigliata": false,
+                  "scelta": false
+                },
+                {
+                  "label": "Esporta",
+                  "consigliata": false,
+                  "scelta": true
+                }
+              ]
+            },
+            {
+              "id": "nome",
+              "domanda": "Come si chiama il progetto?",
+              "risposta": "Atlas",
+              "perche": "Perché conta: va nel titolo",
+              "contoOfferte": null,
+              "offerte": []
+            }
+          ]
+        },
+        {
+          "insieme": "tre",
+          "status": "answered",
+          "answers": {
+            "database": "MySQL",
+            "funzioni": [
+              "Ricerca"
+            ],
+            "nome": "Atlas"
+          },
+          "righe": [
+            {
+              "id": "database",
+              "domanda": "Quale database uso?",
+              "risposta": "Altro: «MySQL»",
+              "perche": "Perché conta: decide lo schema",
+              "contoOfferte": "Opzioni offerte (2)",
+              "offerte": [
+                {
+                  "label": "SQLite",
+                  "consigliata": true,
+                  "scelta": false
+                },
+                {
+                  "label": "PostgreSQL",
+                  "consigliata": false,
+                  "scelta": false
+                }
+              ]
+            },
+            {
+              "id": "funzioni",
+              "domanda": "Quali funzioni aggiungo?",
+              "risposta": "Ricerca",
+              "perche": null,
+              "contoOfferte": "Opzioni offerte (3)",
+              "offerte": [
+                {
+                  "label": "Login",
+                  "consigliata": false,
+                  "scelta": false
+                },
+                {
+                  "label": "Ricerca",
+                  "consigliata": false,
+                  "scelta": true
+                },
+                {
+                  "label": "Esporta",
+                  "consigliata": false,
+                  "scelta": false
+                }
+              ]
+            },
+            {
+              "id": "nome",
+              "domanda": "Come si chiama il progetto?",
+              "risposta": "Atlas",
+              "perche": "Perché conta: va nel titolo",
+              "contoOfferte": null,
+              "offerte": []
+            }
+          ]
+        },
+        {
+          "insieme": "tre",
+          "status": "skipped",
+          "answers": null,
+          "righe": [
+            {
+              "id": "database",
+              "domanda": "Quale database uso?",
+              "risposta": "Nessuna risposta",
+              "perche": "Perché conta: decide lo schema",
+              "contoOfferte": "Opzioni offerte (2)",
+              "offerte": [
+                {
+                  "label": "SQLite",
+                  "consigliata": true,
+                  "scelta": false
+                },
+                {
+                  "label": "PostgreSQL",
+                  "consigliata": false,
+                  "scelta": false
+                }
+              ]
+            },
+            {
+              "id": "funzioni",
+              "domanda": "Quali funzioni aggiungo?",
+              "risposta": "Nessuna risposta",
+              "perche": null,
+              "contoOfferte": "Opzioni offerte (3)",
+              "offerte": [
+                {
+                  "label": "Login",
+                  "consigliata": false,
+                  "scelta": false
+                },
+                {
+                  "label": "Ricerca",
+                  "consigliata": false,
+                  "scelta": false
+                },
+                {
+                  "label": "Esporta",
+                  "consigliata": false,
+                  "scelta": false
+                }
+              ]
+            },
+            {
+              "id": "nome",
+              "domanda": "Come si chiama il progetto?",
+              "risposta": "Nessuna risposta",
+              "perche": "Perché conta: va nel titolo",
+              "contoOfferte": null,
+              "offerte": []
+            }
+          ]
+        },
+        {
+          "insieme": "una",
+          "status": "answered",
+          "answers": {
+            "database": "SQLite"
+          },
+          "righe": [
+            {
+              "id": "database",
+              "domanda": "Quale database uso?",
+              "risposta": "SQLite",
+              "perche": "Perché conta: decide lo schema",
+              "contoOfferte": "Opzioni offerte (2)",
+              "offerte": [
+                {
+                  "label": "SQLite",
+                  "consigliata": true,
+                  "scelta": true
+                },
+                {
+                  "label": "PostgreSQL",
+                  "consigliata": false,
+                  "scelta": false
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "errori": [
+        {
+          "stato": 409,
+          "message": "già risposta",
+          "fase": "stale",
+          "avviso": "Domanda non più attiva: già risposta. Ricarica la sessione per verificare lo stato.",
+          "bloccata": false
+        },
+        {
+          "stato": 404,
+          "message": "non trovata",
+          "fase": "stale",
+          "avviso": "Domanda non più attiva: non trovata. Ricarica la sessione per verificare lo stato.",
+          "bloccata": false
+        },
+        {
+          "stato": 410,
+          "message": "chiusa",
+          "fase": "stale",
+          "avviso": "Domanda non più attiva: chiusa. Ricarica la sessione per verificare lo stato.",
+          "bloccata": false
+        },
+        {
+          "stato": 422,
+          "message": "risposta non valida",
+          "fase": "review",
+          "avviso": "Invio non riuscito: risposta non valida. Puoi correggere e riprovare.",
+          "bloccata": false
+        },
+        {
+          "stato": 400,
+          "message": "corpo errato",
+          "fase": "review",
+          "avviso": "Invio non riuscito: corpo errato. Puoi correggere e riprovare.",
+          "bloccata": false
+        },
+        {
+          "stato": null,
+          "message": "rete caduta",
+          "fase": "review",
+          "avviso": "Esito non verificato. Ricarica la sessione prima di riprovare.",
+          "bloccata": true
+        }
+      ],
+      "pulsanti": [
+        {
+          "corrente": 0,
+          "pulsanti": [
+            "Salta",
+            "Avanti"
+          ]
+        },
+        {
+          "corrente": 1,
+          "pulsanti": [
+            "Indietro",
+            "Salta",
+            "Avanti"
+          ]
+        },
+        {
+          "corrente": 2,
+          "pulsanti": [
+            "Indietro",
+            "Salta",
+            "Rivedi risposte"
+          ]
+        }
+      ],
+      "ricevuto": "Invio ricevuto. Attendo la conferma del server…"
+    },
+    "en": {
+      "progresso": [
+        {
+          "insieme": "una",
+          "corrente": 0,
+          "testo": "One decision"
+        },
+        {
+          "insieme": "tre",
+          "corrente": 0,
+          "testo": "Question 1 of 3"
+        },
+        {
+          "insieme": "tre",
+          "corrente": 1,
+          "testo": "Question 2 of 3"
+        },
+        {
+          "insieme": "tre",
+          "corrente": 2,
+          "testo": "Question 3 of 3"
+        }
+      ],
+      "risposte": [
+        {
+          "insieme": "una",
+          "bozza": "vuota",
+          "risposta": {}
+        },
+        {
+          "insieme": "una",
+          "bozza": "unaSingola",
+          "risposta": {
+            "database": "SQLite"
+          }
+        },
+        {
+          "insieme": "una",
+          "bozza": "singolaAltro",
+          "risposta": {
+            "database": "MySQL"
+          }
+        },
+        {
+          "insieme": "una",
+          "bozza": "singolaSceltaEAltro",
+          "risposta": {
+            "database": "MySQL"
+          }
+        },
+        {
+          "insieme": "tre",
+          "bozza": "treComplete",
+          "risposta": {
+            "database": "PostgreSQL",
+            "funzioni": [
+              "Login",
+              "Esporta",
+              "Backup"
+            ],
+            "nome": "Atlas"
+          }
+        },
+        {
+          "insieme": "tre",
+          "bozza": "treMancaUna",
+          "risposta": {
+            "database": "SQLite",
+            "funzioni": [
+              "Ricerca"
+            ]
+          }
+        },
+        {
+          "insieme": "tre",
+          "bozza": "treMancanoDue",
+          "risposta": {
+            "funzioni": [
+              "Solo login"
+            ]
+          }
+        },
+        {
+          "insieme": "tre",
+          "bozza": "treDoppione",
+          "risposta": {
+            "database": "SQLite",
+            "funzioni": [
+              "Login",
+              "Login"
+            ],
+            "nome": "X"
+          }
+        }
+      ],
+      "scelte": [
+        {
+          "insieme": "dueSingole",
+          "bozza": "vuota",
+          "indice": 0,
+          "corrente": 0,
+          "opzione": 1,
+          "bozzaDopo": {
+            "database": {
+              "scelte": [
+                "PostgreSQL"
+              ],
+              "altro": "",
+              "testo": ""
+            },
+            "stile": {
+              "scelte": [],
+              "altro": "",
+              "testo": ""
+            }
+          },
+          "azione": "avanti",
+          "inviato": null
+        },
+        {
+          "insieme": "dueSingole",
+          "bozza": "unaSingola",
+          "indice": 1,
+          "corrente": 1,
+          "opzione": 0,
+          "bozzaDopo": {
+            "database": {
+              "scelte": [
+                "SQLite"
+              ],
+              "altro": "",
+              "testo": ""
+            },
+            "stile": {
+              "scelte": [
+                "Chiaro"
+              ],
+              "altro": "",
+              "testo": ""
+            }
+          },
+          "azione": "invia",
+          "inviato": {
+            "requestId": "q-1",
+            "status": "answered",
+            "answers": {
+              "database": "SQLite",
+              "stile": "Chiaro"
+            }
+          }
+        },
+        {
+          "insieme": "dueSingole",
+          "bozza": "vuota",
+          "indice": 1,
+          "corrente": 1,
+          "opzione": 1,
+          "bozzaDopo": {
+            "database": {
+              "scelte": [],
+              "altro": "",
+              "testo": ""
+            },
+            "stile": {
+              "scelte": [
+                "Scuro"
+              ],
+              "altro": "",
+              "testo": ""
+            }
+          },
+          "azione": null,
+          "inviato": null
+        },
+        {
+          "insieme": "tre",
+          "bozza": "vuota",
+          "indice": 0,
+          "corrente": 0,
+          "opzione": 0,
+          "bozzaDopo": {
+            "database": {
+              "scelte": [
+                "SQLite"
+              ],
+              "altro": "",
+              "testo": ""
+            },
+            "funzioni": {
+              "scelte": [],
+              "altro": "",
+              "testo": ""
+            },
+            "nome": {
+              "scelte": [],
+              "altro": "",
+              "testo": ""
+            }
+          },
+          "azione": "avanti",
+          "inviato": null
+        },
+        {
+          "insieme": "tre",
+          "bozza": "treMancaUna",
+          "indice": 1,
+          "corrente": 1,
+          "opzione": 2,
+          "bozzaDopo": {
+            "database": {
+              "scelte": [
+                "SQLite"
+              ],
+              "altro": "",
+              "testo": ""
+            },
+            "funzioni": {
+              "scelte": [
+                "Ricerca",
+                "Esporta"
+              ],
+              "altro": "",
+              "testo": ""
+            },
+            "nome": {
+              "scelte": [],
+              "altro": "",
+              "testo": ""
+            }
+          },
+          "azione": null,
+          "inviato": null
+        },
+        {
+          "insieme": "una",
+          "bozza": "singolaAltro",
+          "indice": 0,
+          "corrente": 0,
+          "opzione": 1,
+          "bozzaDopo": {
+            "database": {
+              "scelte": [
+                "PostgreSQL"
+              ],
+              "altro": "",
+              "testo": ""
+            }
+          },
+          "azione": "invia",
+          "inviato": {
+            "requestId": "q-1",
+            "status": "answered",
+            "answers": {
+              "database": "PostgreSQL"
+            }
+          }
+        },
+        {
+          "insieme": "dueSingole",
+          "bozza": "unaSingola",
+          "indice": 0,
+          "corrente": 1,
+          "opzione": 1,
+          "bozzaDopo": {
+            "database": {
+              "scelte": [
+                "PostgreSQL"
+              ],
+              "altro": "",
+              "testo": ""
+            },
+            "stile": {
+              "scelte": [],
+              "altro": "",
+              "testo": ""
+            }
+          },
+          "azione": null,
+          "inviato": null
+        }
+      ],
+      "revisioni": [
+        {
+          "bozza": "treComplete",
+          "titolo": "Review the answers",
+          "righe": [
+            {
+              "domanda": "Quale database uso?",
+              "risposta": "PostgreSQL"
+            },
+            {
+              "domanda": "Quali funzioni aggiungo?",
+              "risposta": "Login, Esporta, Backup"
+            },
+            {
+              "domanda": "Come si chiama il progetto?",
+              "risposta": "Atlas"
+            }
+          ],
+          "avviso": "All answers are ready.",
+          "puoInviare": true,
+          "pulsanti": [
+            "Edit answers",
+            "Confirm and send"
+          ]
+        },
+        {
+          "bozza": "treMancaUna",
+          "titolo": "Review the answers",
+          "righe": [
+            {
+              "domanda": "Quale database uso?",
+              "risposta": "SQLite"
+            },
+            {
+              "domanda": "Quali funzioni aggiungo?",
+              "risposta": "Ricerca"
+            },
+            {
+              "domanda": "Come si chiama il progetto?",
+              "risposta": "Unanswered"
+            }
+          ],
+          "avviso": "1 unanswered question",
+          "puoInviare": false,
+          "pulsanti": [
+            "Edit answers",
+            "Confirm and send"
+          ]
+        },
+        {
+          "bozza": "treMancanoDue",
+          "titolo": "Review the answers",
+          "righe": [
+            {
+              "domanda": "Quale database uso?",
+              "risposta": "Unanswered"
+            },
+            {
+              "domanda": "Quali funzioni aggiungo?",
+              "risposta": "Solo login"
+            },
+            {
+              "domanda": "Come si chiama il progetto?",
+              "risposta": "Unanswered"
+            }
+          ],
+          "avviso": "2 unanswered questions",
+          "puoInviare": false,
+          "pulsanti": [
+            "Edit answers",
+            "Confirm and send"
+          ]
+        },
+        {
+          "bozza": "treDoppione",
+          "titolo": "Review the answers",
+          "righe": [
+            {
+              "domanda": "Quale database uso?",
+              "risposta": "SQLite"
+            },
+            {
+              "domanda": "Quali funzioni aggiungo?",
+              "risposta": "Login, Login"
+            },
+            {
+              "domanda": "Come si chiama il progetto?",
+              "risposta": "X"
+            }
+          ],
+          "avviso": "The Other answer duplicates a selected option.",
+          "puoInviare": false,
+          "pulsanti": [
+            "Edit answers",
+            "Confirm and send"
+          ]
+        }
+      ],
+      "salta": {
+        "titolo": "Skip all questions?",
+        "avviso": "The entire request will be skipped, even if you have already written answers.",
+        "pulsanti": [
+          "Edit answers",
+          "Confirm skip"
+        ]
+      },
+      "esiti": [
+        {
+          "status": "answered",
+          "motivo": null,
+          "altrove": false,
+          "da": "persona",
+          "origine": null,
+          "badge": "Decision",
+          "frase": "Answer sent",
+          "meta": "Asked at 15:01 · you answered at 15:02"
+        },
+        {
+          "status": "answered",
+          "motivo": null,
+          "altrove": false,
+          "da": "persona",
+          "origine": {
+            "modalita": "piano"
+          },
+          "badge": "Decision",
+          "frase": "Answer sent",
+          "meta": "Asked at 15:01 in Plan mode · you answered at 15:02"
+        },
+        {
+          "status": "answered",
+          "motivo": null,
+          "altrove": false,
+          "da": "persona",
+          "origine": {
+            "modalita": "normale"
+          },
+          "badge": "Decision",
+          "frase": "Answer sent",
+          "meta": "Asked at 15:01 in Normal mode · you answered at 15:02"
+        },
+        {
+          "status": "answered",
+          "motivo": null,
+          "altrove": true,
+          "da": "persona",
+          "origine": null,
+          "badge": "Decision",
+          "frase": "Answer sent from another window",
+          "meta": "Asked at 15:01 · answered from another window at 15:02"
+        },
+        {
+          "status": "answered",
+          "motivo": null,
+          "altrove": true,
+          "da": "persona",
+          "origine": {
+            "modalita": "piano"
+          },
+          "badge": "Decision",
+          "frase": "Answer sent from another window",
+          "meta": "Asked at 15:01 in Plan mode · answered from another window at 15:02"
+        },
+        {
+          "status": "answered",
+          "motivo": null,
+          "altrove": true,
+          "da": "persona",
+          "origine": {
+            "modalita": "normale"
+          },
+          "badge": "Decision",
+          "frase": "Answer sent from another window",
+          "meta": "Asked at 15:01 in Normal mode · answered from another window at 15:02"
+        },
+        {
+          "status": "skipped",
+          "motivo": null,
+          "altrove": false,
+          "da": "persona",
+          "origine": null,
+          "badge": "Decision",
+          "frase": "Question skipped",
+          "meta": "Asked at 15:01 · you skipped at 15:02"
+        },
+        {
+          "status": "skipped",
+          "motivo": null,
+          "altrove": false,
+          "da": "persona",
+          "origine": {
+            "modalita": "piano"
+          },
+          "badge": "Decision",
+          "frase": "Question skipped",
+          "meta": "Asked at 15:01 in Plan mode · you skipped at 15:02"
+        },
+        {
+          "status": "skipped",
+          "motivo": null,
+          "altrove": false,
+          "da": "persona",
+          "origine": {
+            "modalita": "normale"
+          },
+          "badge": "Decision",
+          "frase": "Question skipped",
+          "meta": "Asked at 15:01 in Normal mode · you skipped at 15:02"
+        },
+        {
+          "status": "skipped",
+          "motivo": null,
+          "altrove": true,
+          "da": "persona",
+          "origine": null,
+          "badge": "Decision",
+          "frase": "Question skipped from another window",
+          "meta": "Asked at 15:01 · skipped from another window at 15:02"
+        },
+        {
+          "status": "skipped",
+          "motivo": null,
+          "altrove": true,
+          "da": "persona",
+          "origine": {
+            "modalita": "piano"
+          },
+          "badge": "Decision",
+          "frase": "Question skipped from another window",
+          "meta": "Asked at 15:01 in Plan mode · skipped from another window at 15:02"
+        },
+        {
+          "status": "skipped",
+          "motivo": null,
+          "altrove": true,
+          "da": "persona",
+          "origine": {
+            "modalita": "normale"
+          },
+          "badge": "Decision",
+          "frase": "Question skipped from another window",
+          "meta": "Asked at 15:01 in Normal mode · skipped from another window at 15:02"
+        },
+        {
+          "status": "expired",
+          "motivo": null,
+          "altrove": false,
+          "da": "sistema",
+          "origine": null,
+          "badge": "Decision",
+          "frase": "Question expired: no answer in time",
+          "meta": "Asked at 15:01 · closed by the system at 15:02"
+        },
+        {
+          "status": "expired",
+          "motivo": null,
+          "altrove": false,
+          "da": "sistema",
+          "origine": {
+            "modalita": "piano"
+          },
+          "badge": "Decision",
+          "frase": "Question expired: no answer in time",
+          "meta": "Asked at 15:01 in Plan mode · closed by the system at 15:02"
+        },
+        {
+          "status": "expired",
+          "motivo": null,
+          "altrove": false,
+          "da": "sistema",
+          "origine": {
+            "modalita": "normale"
+          },
+          "badge": "Decision",
+          "frase": "Question expired: no answer in time",
+          "meta": "Asked at 15:01 in Normal mode · closed by the system at 15:02"
+        },
+        {
+          "status": "unanswerable",
+          "motivo": null,
+          "altrove": false,
+          "da": "sistema",
+          "origine": null,
+          "badge": "Decision",
+          "frase": "No one could answer: TALOS continues with the safest assumption and states it",
+          "meta": "Asked at 15:01 · closed by the system at 15:02"
+        },
+        {
+          "status": "unanswerable",
+          "motivo": null,
+          "altrove": false,
+          "da": "sistema",
+          "origine": {
+            "modalita": "piano"
+          },
+          "badge": "Decision",
+          "frase": "No one could answer: TALOS continues with the safest assumption and states it",
+          "meta": "Asked at 15:01 in Plan mode · closed by the system at 15:02"
+        },
+        {
+          "status": "unanswerable",
+          "motivo": null,
+          "altrove": false,
+          "da": "sistema",
+          "origine": {
+            "modalita": "normale"
+          },
+          "badge": "Decision",
+          "frase": "No one could answer: TALOS continues with the safest assumption and states it",
+          "meta": "Asked at 15:01 in Normal mode · closed by the system at 15:02"
+        },
+        {
+          "status": "cancelled",
+          "motivo": "fermato",
+          "altrove": false,
+          "da": "sistema",
+          "origine": null,
+          "badge": "Decision",
+          "frase": "Question cancelled: you stopped the turn",
+          "meta": "Asked at 15:01 · closed by the system at 15:02"
+        },
+        {
+          "status": "cancelled",
+          "motivo": "fermato",
+          "altrove": false,
+          "da": "sistema",
+          "origine": {
+            "modalita": "piano"
+          },
+          "badge": "Decision",
+          "frase": "Question cancelled: you stopped the turn",
+          "meta": "Asked at 15:01 in Plan mode · closed by the system at 15:02"
+        },
+        {
+          "status": "cancelled",
+          "motivo": "fermato",
+          "altrove": false,
+          "da": "sistema",
+          "origine": {
+            "modalita": "normale"
+          },
+          "badge": "Decision",
+          "frase": "Question cancelled: you stopped the turn",
+          "meta": "Asked at 15:01 in Normal mode · closed by the system at 15:02"
+        },
+        {
+          "status": "cancelled",
+          "motivo": "reindirizzamento",
+          "altrove": false,
+          "da": "sistema",
+          "origine": null,
+          "badge": "Decision",
+          "frase": "Question cancelled: you gave a new instruction while it was waiting",
+          "meta": "Asked at 15:01 · closed by the system at 15:02"
+        },
+        {
+          "status": "cancelled",
+          "motivo": "reindirizzamento",
+          "altrove": false,
+          "da": "sistema",
+          "origine": {
+            "modalita": "piano"
+          },
+          "badge": "Decision",
+          "frase": "Question cancelled: you gave a new instruction while it was waiting",
+          "meta": "Asked at 15:01 in Plan mode · closed by the system at 15:02"
+        },
+        {
+          "status": "cancelled",
+          "motivo": "reindirizzamento",
+          "altrove": false,
+          "da": "sistema",
+          "origine": {
+            "modalita": "normale"
+          },
+          "badge": "Decision",
+          "frase": "Question cancelled: you gave a new instruction while it was waiting",
+          "meta": "Asked at 15:01 in Normal mode · closed by the system at 15:02"
+        },
+        {
+          "status": "cancelled",
+          "motivo": "nuovo-messaggio",
+          "altrove": false,
+          "da": "persona",
+          "origine": null,
+          "badge": "Decision",
+          "frase": "Question closed: you wrote another message",
+          "meta": "Asked at 15:01 · closed at 15:02"
+        },
+        {
+          "status": "cancelled",
+          "motivo": "nuovo-messaggio",
+          "altrove": false,
+          "da": "persona",
+          "origine": {
+            "modalita": "piano"
+          },
+          "badge": "Decision",
+          "frase": "Question closed: you wrote another message",
+          "meta": "Asked at 15:01 in Plan mode · closed at 15:02"
+        },
+        {
+          "status": "cancelled",
+          "motivo": "nuovo-messaggio",
+          "altrove": false,
+          "da": "persona",
+          "origine": {
+            "modalita": "normale"
+          },
+          "badge": "Decision",
+          "frase": "Question closed: you wrote another message",
+          "meta": "Asked at 15:01 in Normal mode · closed at 15:02"
+        },
+        {
+          "status": "cancelled",
+          "motivo": "interrotta",
+          "altrove": false,
+          "da": "sistema",
+          "origine": null,
+          "badge": "Decision",
+          "frase": "Question interrupted: the server restarted before the answer",
+          "meta": "Asked at 15:01 · closed by the system at 15:02"
+        },
+        {
+          "status": "cancelled",
+          "motivo": "interrotta",
+          "altrove": false,
+          "da": "sistema",
+          "origine": {
+            "modalita": "piano"
+          },
+          "badge": "Decision",
+          "frase": "Question interrupted: the server restarted before the answer",
+          "meta": "Asked at 15:01 in Plan mode · closed by the system at 15:02"
+        },
+        {
+          "status": "cancelled",
+          "motivo": "interrotta",
+          "altrove": false,
+          "da": "sistema",
+          "origine": {
+            "modalita": "normale"
+          },
+          "badge": "Decision",
+          "frase": "Question interrupted: the server restarted before the answer",
+          "meta": "Asked at 15:01 in Normal mode · closed by the system at 15:02"
+        },
+        {
+          "status": "cancelled",
+          "motivo": "non-salvata",
+          "altrove": false,
+          "da": "sistema",
+          "origine": null,
+          "badge": "Decision",
+          "frase": "Question cancelled: the answer was not saved",
+          "meta": "Asked at 15:01 · closed by the system at 15:02"
+        },
+        {
+          "status": "cancelled",
+          "motivo": "non-salvata",
+          "altrove": false,
+          "da": "sistema",
+          "origine": {
+            "modalita": "piano"
+          },
+          "badge": "Decision",
+          "frase": "Question cancelled: the answer was not saved",
+          "meta": "Asked at 15:01 in Plan mode · closed by the system at 15:02"
+        },
+        {
+          "status": "cancelled",
+          "motivo": "non-salvata",
+          "altrove": false,
+          "da": "sistema",
+          "origine": {
+            "modalita": "normale"
+          },
+          "badge": "Decision",
+          "frase": "Question cancelled: the answer was not saved",
+          "meta": "Asked at 15:01 in Normal mode · closed by the system at 15:02"
+        },
+        {
+          "status": "cancelled",
+          "motivo": null,
+          "altrove": false,
+          "da": null,
+          "origine": null,
+          "badge": "Decision",
+          "frase": "Question cancelled",
+          "meta": "Asked at 15:01 · closed at 15:02"
+        },
+        {
+          "status": "cancelled",
+          "motivo": null,
+          "altrove": false,
+          "da": null,
+          "origine": {
+            "modalita": "piano"
+          },
+          "badge": "Decision",
+          "frase": "Question cancelled",
+          "meta": "Asked at 15:01 in Plan mode · closed at 15:02"
+        },
+        {
+          "status": "cancelled",
+          "motivo": null,
+          "altrove": false,
+          "da": null,
+          "origine": {
+            "modalita": "normale"
+          },
+          "badge": "Decision",
+          "frase": "Question cancelled",
+          "meta": "Asked at 15:01 in Normal mode · closed at 15:02"
+        },
+        {
+          "status": "answered",
+          "motivo": null,
+          "altrove": false,
+          "da": null,
+          "origine": null,
+          "at": "non-una-data",
+          "esitoAt": null,
+          "badge": "Decision",
+          "frase": "Answer sent",
+          "meta": null
+        }
+      ],
+      "ricevute": [
+        {
+          "insieme": "tre",
+          "status": "answered",
+          "answers": {
+            "database": "PostgreSQL",
+            "funzioni": [
+              "Login",
+              "Esporta",
+              "Backup"
+            ],
+            "nome": "Atlas"
+          },
+          "righe": [
+            {
+              "id": "database",
+              "domanda": "Quale database uso?",
+              "risposta": "PostgreSQL",
+              "perche": "Why it matters: decide lo schema",
+              "contoOfferte": "Options offered (2)",
+              "offerte": [
+                {
+                  "label": "SQLite",
+                  "consigliata": true,
+                  "scelta": false
+                },
+                {
+                  "label": "PostgreSQL",
+                  "consigliata": false,
+                  "scelta": true
+                }
+              ]
+            },
+            {
+              "id": "funzioni",
+              "domanda": "Quali funzioni aggiungo?",
+              "risposta": "Login, Esporta, Other: “Backup”",
+              "perche": null,
+              "contoOfferte": "Options offered (3)",
+              "offerte": [
+                {
+                  "label": "Login",
+                  "consigliata": false,
+                  "scelta": true
+                },
+                {
+                  "label": "Ricerca",
+                  "consigliata": false,
+                  "scelta": false
+                },
+                {
+                  "label": "Esporta",
+                  "consigliata": false,
+                  "scelta": true
+                }
+              ]
+            },
+            {
+              "id": "nome",
+              "domanda": "Come si chiama il progetto?",
+              "risposta": "Atlas",
+              "perche": "Why it matters: va nel titolo",
+              "contoOfferte": null,
+              "offerte": []
+            }
+          ]
+        },
+        {
+          "insieme": "tre",
+          "status": "answered",
+          "answers": {
+            "database": "MySQL",
+            "funzioni": [
+              "Ricerca"
+            ],
+            "nome": "Atlas"
+          },
+          "righe": [
+            {
+              "id": "database",
+              "domanda": "Quale database uso?",
+              "risposta": "Other: “MySQL”",
+              "perche": "Why it matters: decide lo schema",
+              "contoOfferte": "Options offered (2)",
+              "offerte": [
+                {
+                  "label": "SQLite",
+                  "consigliata": true,
+                  "scelta": false
+                },
+                {
+                  "label": "PostgreSQL",
+                  "consigliata": false,
+                  "scelta": false
+                }
+              ]
+            },
+            {
+              "id": "funzioni",
+              "domanda": "Quali funzioni aggiungo?",
+              "risposta": "Ricerca",
+              "perche": null,
+              "contoOfferte": "Options offered (3)",
+              "offerte": [
+                {
+                  "label": "Login",
+                  "consigliata": false,
+                  "scelta": false
+                },
+                {
+                  "label": "Ricerca",
+                  "consigliata": false,
+                  "scelta": true
+                },
+                {
+                  "label": "Esporta",
+                  "consigliata": false,
+                  "scelta": false
+                }
+              ]
+            },
+            {
+              "id": "nome",
+              "domanda": "Come si chiama il progetto?",
+              "risposta": "Atlas",
+              "perche": "Why it matters: va nel titolo",
+              "contoOfferte": null,
+              "offerte": []
+            }
+          ]
+        },
+        {
+          "insieme": "tre",
+          "status": "skipped",
+          "answers": null,
+          "righe": [
+            {
+              "id": "database",
+              "domanda": "Quale database uso?",
+              "risposta": "No answer",
+              "perche": "Why it matters: decide lo schema",
+              "contoOfferte": "Options offered (2)",
+              "offerte": [
+                {
+                  "label": "SQLite",
+                  "consigliata": true,
+                  "scelta": false
+                },
+                {
+                  "label": "PostgreSQL",
+                  "consigliata": false,
+                  "scelta": false
+                }
+              ]
+            },
+            {
+              "id": "funzioni",
+              "domanda": "Quali funzioni aggiungo?",
+              "risposta": "No answer",
+              "perche": null,
+              "contoOfferte": "Options offered (3)",
+              "offerte": [
+                {
+                  "label": "Login",
+                  "consigliata": false,
+                  "scelta": false
+                },
+                {
+                  "label": "Ricerca",
+                  "consigliata": false,
+                  "scelta": false
+                },
+                {
+                  "label": "Esporta",
+                  "consigliata": false,
+                  "scelta": false
+                }
+              ]
+            },
+            {
+              "id": "nome",
+              "domanda": "Come si chiama il progetto?",
+              "risposta": "No answer",
+              "perche": "Why it matters: va nel titolo",
+              "contoOfferte": null,
+              "offerte": []
+            }
+          ]
+        },
+        {
+          "insieme": "una",
+          "status": "answered",
+          "answers": {
+            "database": "SQLite"
+          },
+          "righe": [
+            {
+              "id": "database",
+              "domanda": "Quale database uso?",
+              "risposta": "SQLite",
+              "perche": "Why it matters: decide lo schema",
+              "contoOfferte": "Options offered (2)",
+              "offerte": [
+                {
+                  "label": "SQLite",
+                  "consigliata": true,
+                  "scelta": true
+                },
+                {
+                  "label": "PostgreSQL",
+                  "consigliata": false,
+                  "scelta": false
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "errori": [
+        {
+          "stato": 409,
+          "message": "già risposta",
+          "fase": "stale",
+          "avviso": "Question no longer active: già risposta. Reload the session to check its status.",
+          "bloccata": false
+        },
+        {
+          "stato": 404,
+          "message": "non trovata",
+          "fase": "stale",
+          "avviso": "Question no longer active: non trovata. Reload the session to check its status.",
+          "bloccata": false
+        },
+        {
+          "stato": 410,
+          "message": "chiusa",
+          "fase": "stale",
+          "avviso": "Question no longer active: chiusa. Reload the session to check its status.",
+          "bloccata": false
+        },
+        {
+          "stato": 422,
+          "message": "risposta non valida",
+          "fase": "review",
+          "avviso": "Submission failed: risposta non valida. You can make changes and retry.",
+          "bloccata": false
+        },
+        {
+          "stato": 400,
+          "message": "corpo errato",
+          "fase": "review",
+          "avviso": "Submission failed: corpo errato. You can make changes and retry.",
+          "bloccata": false
+        },
+        {
+          "stato": null,
+          "message": "rete caduta",
+          "fase": "review",
+          "avviso": "Result unverified. Reload the session before trying again.",
+          "bloccata": true
+        }
+      ],
+      "pulsanti": [
+        {
+          "corrente": 0,
+          "pulsanti": [
+            "Skip",
+            "Next"
+          ]
+        },
+        {
+          "corrente": 1,
+          "pulsanti": [
+            "Back",
+            "Skip",
+            "Next"
+          ]
+        },
+        {
+          "corrente": 2,
+          "pulsanti": [
+            "Back",
+            "Skip",
+            "Review answers"
+          ]
+        }
+      ],
+      "ricevuto": "Submission received. Waiting for server confirmation…"
+    }
+  }
+}

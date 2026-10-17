@@ -1,0 +1,80 @@
+:ok
+
+id: 1
+data: {"type":"RunStarted","threadId":"6310f12d-d568-4849-8e8e-13e4dbf3d077","runId":"e342f5b3-9554-4398-a0d2-c01daac65961","input":{"consegna":"Leggi NOTA.md e dimmi cosa dice","consegnaCorta":"Leggi NOTA.md e dimmi cosa dice","progetto":"progetto"},"contesto":{"progetto":"progetto","cartella":"/prova\\progetto","branch":null,"worktree":null,"repoAnnidati":[],"modello":"lmstudio:finto","reasoning":null,"permessi":"Full access","modalitaOperativa":"normale"},"_sequenza":1}
+
+id: 2
+data: {"type":"ReasoningMessageStart","messageId":"2e231fda-7897-4ae3-9a90-ea49ab55a879","role":"reasoning","_sequenza":2}
+
+id: 6
+data: {"type":"ReasoningMessageContent","messageId":"2e231fda-7897-4ae3-9a90-ea49ab55a879","delta":"Devo leggere NOTA.md prima di rispondere.","_sequenza":6}
+
+id: 7
+data: {"type":"ToolCallStart","toolCallId":"chiamata1","toolCallName":"leggi","avviatoA":1792001284309,"_sequenza":7}
+
+id: 8
+data: {"type":"ToolCallArgs","toolCallId":"chiamata1","delta":"{\"percorso\":\"NOTA.md\"}","_sequenza":8}
+
+id: 9
+data: {"type":"CUSTOM","name":"consumo-fornitore","value":{"tipo":"consumo-fornitore","provider":"lmstudio","model":"finto","usage":{"prompt_tokens":100,"completion_tokens":20,"total_tokens":120},"costoDichiarato":null,"esito":"completato"},"_sequenza":9}
+
+id: 10
+data: {"type":"ReasoningMessageEnd","messageId":"2e231fda-7897-4ae3-9a90-ea49ab55a879","_sequenza":10}
+
+id: 11
+data: {"type":"StateDelta","delta":[{"op":"replace","path":"/usage","value":{"prompt_tokens":100,"completion_tokens":20,"cached_tokens":0,"giri":1}}],"_sequenza":11}
+
+id: 12
+data: {"type":"ToolCallResult","messageId":"fd1bf2b9-4b29-4b8e-b665-2488353034d6","toolCallId":"chiamata1","content":"<<<TALOS_DATA id=3bbd26e78bbd from=\"leggi NOTA.md\">>>\n# Nota\n\nIl modulo `slugify` va scritto entro venerdì.\n\n<<<END_TALOS_DATA id=3bbd26e78bbd>>>","role":"tool","isError":false,"_sequenza":12}
+
+id: 13
+data: {"type":"ReasoningMessageStart","messageId":"6b332a7e-fea3-413c-b687-f136cd50cb1e","role":"reasoning","_sequenza":13}
+
+id: 17
+data: {"type":"ReasoningMessageContent","messageId":"6b332a7e-fea3-413c-b687-f136cd50cb1e","delta":"Ho il contenuto: riassumo con un esempio.","_sequenza":17}
+
+id: 18
+data: {"type":"TextMessageStart","messageId":"32421ac5-f9e4-44db-9533-27d3cf29b906","role":"assistant","_sequenza":18}
+
+id: 29
+data: {"type":"TextMessageContent","messageId":"32421ac5-f9e4-44db-9533-27d3cf29b906","delta":"## Cosa dice la nota\n\n- Il modulo `slugify` va scritto **entro venerdì**.\n- Va provato con `node --test`.\n\n```js\nexport const slugify = (t) => t.toLowerCase()\n```\n","_sequenza":29}
+
+id: 30
+data: {"type":"CUSTOM","name":"consumo-fornitore","value":{"tipo":"consumo-fornitore","provider":"lmstudio","model":"finto","usage":{"prompt_tokens":100,"completion_tokens":20,"total_tokens":120},"costoDichiarato":null,"esito":"completato"},"_sequenza":30}
+
+id: 31
+data: {"type":"TextMessageEnd","messageId":"32421ac5-f9e4-44db-9533-27d3cf29b906","_sequenza":31}
+
+id: 32
+data: {"type":"ReasoningMessageEnd","messageId":"6b332a7e-fea3-413c-b687-f136cd50cb1e","_sequenza":32}
+
+id: 33
+data: {"type":"StateDelta","delta":[{"op":"replace","path":"/usage","value":{"prompt_tokens":200,"completion_tokens":40,"cached_tokens":0,"giri":2}}],"_sequenza":33}
+
+id: 34
+data: {"type":"RunFinished","threadId":"6310f12d-d568-4849-8e8e-13e4dbf3d077","runId":"e342f5b3-9554-4398-a0d2-c01daac65961","outcome":{"type":"success"},"result":{"detto":"## Cosa dice la nota\n\n- Il modulo `slugify` va scritto **entro venerdì**.\n- Va provato con `node --test`.\n\n```js\nexport const slugify = (t) => t.toLowerCase()\n```\n","compattazioni":0,"premesseNegate":0,"usage":{"prompt_tokens":200,"completion_tokens":40,"prompt_tokens_details":{"cached_tokens":0},"giri":2}},"_sequenza":34}
+
+id: 35
+data: {"type":"RunStarted","threadId":"879642d7-108b-4316-ba73-0519bd200628","runId":"f32770ad-4c2e-4c97-bb0d-faac08fe0bc7","input":{"consegna":"Riassumi in una riga","progetto":"progetto","seguito":true},"contesto":{"progetto":"progetto","cartella":"/prova\\progetto","branch":null,"worktree":null,"repoAnnidati":[],"modello":"lmstudio:finto","reasoning":null,"permessi":"Full access","modalitaOperativa":"normale"},"_sequenza":35}
+
+id: 36
+data: {"type":"TextMessageStart","messageId":"e97fdda8-b89d-48d7-82c6-4953f2e47525","role":"assistant","_sequenza":36}
+
+id: 40
+data: {"type":"TextMessageContent","messageId":"e97fdda8-b89d-48d7-82c6-4953f2e47525","delta":"In una riga: la nota chiede `slugify` entro **venerdì**.","_sequenza":40}
+
+id: 41
+data: {"type":"CUSTOM","name":"consumo-fornitore","value":{"tipo":"consumo-fornitore","provider":"lmstudio","model":"finto","usage":{"prompt_tokens":100,"completion_tokens":20,"total_tokens":120},"costoDichiarato":null,"esito":"completato"},"_sequenza":41}
+
+id: 42
+data: {"type":"TextMessageEnd","messageId":"e97fdda8-b89d-48d7-82c6-4953f2e47525","_sequenza":42}
+
+id: 43
+data: {"type":"StateDelta","delta":[{"op":"replace","path":"/usage","value":{"prompt_tokens":100,"completion_tokens":20,"cached_tokens":0,"giri":1}}],"_sequenza":43}
+
+id: 44
+data: {"type":"RunFinished","threadId":"879642d7-108b-4316-ba73-0519bd200628","runId":"f32770ad-4c2e-4c97-bb0d-faac08fe0bc7","outcome":{"type":"success"},"result":{"detto":"In una riga: la nota chiede `slugify` entro **venerdì**.","compattazioni":0,"premesseNegate":0,"usage":{"prompt_tokens":100,"completion_tokens":20,"prompt_tokens_details":{"cached_tokens":0},"giri":1}},"_sequenza":44}
+
+data: {"type":"CUSTOM","name":"talos.fine-rigiocata","value":null}
+
+data: {"type":"CUSTOM","name":"talos.coda","value":{"voci":[],"inPausa":false}}

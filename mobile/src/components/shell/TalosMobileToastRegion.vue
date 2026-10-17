@@ -22,7 +22,7 @@ const toasts = useTalosMobileToasts()
     <div
         data-testid="talos-mobile-toasts"
         aria-live="polite"
-        class="pointer-events-none fixed inset-x-0 bottom-[calc(var(--talos-composer-height,180px)+env(safe-area-inset-bottom)+1rem)] z-[80] flex flex-col items-center gap-2 px-4"
+        class="pointer-events-none fixed inset-x-0 bottom-[calc(max(var(--talos-composer-height,180px),var(--talos-code-composer-height,0px))+env(safe-area-inset-bottom)+1rem)] z-[80] flex flex-col items-center gap-2 px-4"
     >
         <TransitionGroup
             enter-active-class="transition duration-200 ease-out"

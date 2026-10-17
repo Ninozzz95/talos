@@ -455,6 +455,10 @@ export function talosToolsForOpenAiResponses(
         name: tool.name,
         description: tool.description,
         parameters: schemaOf(tool),
+        // ⛔ N15-FORN-05 (trappola R-01 del desktop, `LEDGER-REVISIONE-ATTREZZI-2026-10-12.md`): su Responses, senza `strict`
+        // dichiarato, ogni campo facoltativo di ogni attrezzo diventa obbligatorio e il modello manda "". Codex manda
+        // `strict:false` esplicito; qui lo stesso, per la chiave API e per il piano ChatGPT.
+        strict: false,
     }))
 }
 

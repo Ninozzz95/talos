@@ -11,6 +11,9 @@ import android.content.pm.ServiceInfo;
 import android.os.Build;
 import android.os.IBinder;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+
 import androidx.core.app.NotificationCompat;
 
 /**
@@ -36,6 +39,77 @@ public class TalosRunService extends Service {
     static final String EXTRA_TITLE = "title";
     static final String EXTRA_TEXT = "text";
     private static final int NOTIFICATION_ID = 4711;
+
+    /**
+     * ⛔ F4 (14/10/2026; ledger `LEDGER-CODICE-SENZA-PONTE-2026-10-13.md` §15) — CHI tiene acceso il servizio, per nome.
+     *
+     * Prima c'era un solo padrone, il JavaScript (`longRunKeeper.ts`, che conta i suoi custodi: KEEPER-01). Ma sul Pad la
+     * WebView in secondo piano è congelata: un giro del Codice finito con l'app sulla Home non lo vedeva nessuno, e la
+     * notifica restava accesa dopo il lavoro. Ora la fine del giro del Codice la vede il nativo
+     * (`ai.talos.terminal.TalosCodiceCustode`, titolare `codice:<sessione>`), il JavaScript è il titolare `web`, e il
+     * servizio si ferma solo quando non resta nessuno: lo `stop` del JavaScript non spegne più il giro del Codice.
+     * L'ultimo arrivato dà titolo e testo alla notifica.
+     */
+    private static final LinkedHashMap<String, String[]> TITOLARI = new LinkedHashMap<>();
+
+    public static synchronized boolean acquisisci(Context context, String titolare, String title, String text) {
+        TITOLARI.remove(titolare);
+        TITOLARI.put(titolare, new String[] { title, text });
+        try {
+            final Intent intent = new Intent(context, TalosRunService.class);
+            intent.putExtra(EXTRA_TITLE, title);
+            intent.putExtra(EXTRA_TEXT, text);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent);
+            } else {
+                context.startService(intent);
+            }
+            return true;
+        } catch (Exception failure) {
+            // Reported, never thrown: the work continues without the keeper.
+            TITOLARI.remove(titolare);
+            return false;
+        }
+    }
+
+    /** Nuove parole per un titolare che c'è già; la notifica cambia solo se è il suo turno (l'ultimo arrivato). */
+    public static synchronized boolean aggiorna(Context context, String titolare, String title, String text) {
+        if (!TITOLARI.containsKey(titolare)) return false;
+        TITOLARI.put(titolare, new String[] { title, text });
+        if (!titolare.equals(ultimo())) return true;
+        return mostra(context, title, text);
+    }
+
+    /** Il titolare se ne va. Se era l'ultimo il servizio si ferma; altrimenti la notifica torna a chi resta. */
+    public static synchronized void rilascia(Context context, String titolare) {
+        if (TITOLARI.remove(titolare) == null) return;
+        if (TITOLARI.isEmpty()) {
+            try {
+                context.stopService(new Intent(context, TalosRunService.class));
+            } catch (Exception ignored) {
+                // Nothing else to do: the service is either gone already or will go with the process.
+            }
+            return;
+        }
+        final String[] resta = TITOLARI.get(ultimo());
+        mostra(context, resta[0], resta[1]);
+    }
+
+    private static String ultimo() {
+        final ArrayList<String> nomi = new ArrayList<>(TITOLARI.keySet());
+        return nomi.isEmpty() ? null : nomi.get(nomi.size() - 1);
+    }
+
+    private static boolean mostra(Context context, String title, String text) {
+        try {
+            ensureChannel(context);
+            final NotificationManager manager = context.getSystemService(NotificationManager.class);
+            if (manager != null) manager.notify(NOTIFICATION_ID, build(context, title, text));
+            return true;
+        } catch (Exception failure) {
+            return false;
+        }
+    }
 
     @Override
     public IBinder onBind(Intent intent) {
@@ -100,6 +174,10 @@ public class TalosRunService extends Service {
     }
 
     private void stopKeeper() {
+        // Il budget è finito per tutti: nessun titolare può più dire che il lavoro è protetto.
+        synchronized (TalosRunService.class) {
+            TITOLARI.clear();
+        }
         try {
             // minSdk is 26, so the constant form is always available.
             stopForeground(STOP_FOREGROUND_REMOVE);

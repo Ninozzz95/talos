@@ -23,7 +23,7 @@ import {
 
 interface TalosComposer {
     locale: { value: string }
-    t(key: string, parameters?: TalosMessageParameters): string
+    t(key: string, parameters?: TalosMessageParameters, options?: { escapeParameter?: boolean }): string
     setLocaleMessage(locale: string, messages: TalosMessageTree): void
 }
 
@@ -121,6 +121,12 @@ export function talosCurrentLocale(): string {
 
 export interface TalosI18nAdapter {
     t(key: string, parameters?: TalosMessageParameters): string
+    /**
+     * ⛔ I18N-TESTO (15/10/2026, owner «Spento solo dove serve»): come `t`, ma i parametri restano come sono. SOLO per testo
+     * mostrato con `{{ }}` o in un attributo, che Vue protegge già: «L'IVA» non diventa «L&apos;IVA», «3/4» non diventa
+     * «3&#x2F;4». MAI dentro `v-html` (cancello `tests/unit/i18n/tTesto.test.ts`). `t` resta protetto come prima.
+     */
+    tTesto(key: string, parameters?: TalosMessageParameters): string
     locale: ComputedRef<string>
 }
 
@@ -161,6 +167,12 @@ export function useTalosI18n(): TalosI18nAdapter {
         t(key, parameters) {
             void locale.value
             if (plugin) return plugin.global.t(key, parameters)
+            return globalProperties?.$t?.(key, parameters) ?? key
+        },
+        tTesto(key, parameters) {
+            void locale.value
+            // l'opzione ufficiale di vue-i18n 11 per la singola chiamata (terzo argomento di `t`)
+            if (plugin) return plugin.global.t(key, parameters, { escapeParameter: false })
             return globalProperties?.$t?.(key, parameters) ?? key
         },
     }

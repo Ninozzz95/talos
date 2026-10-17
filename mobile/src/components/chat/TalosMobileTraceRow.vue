@@ -45,8 +45,8 @@ defineEmits<{ open: [] }>()
         :type="interactive ? 'button' : undefined"
         :data-testid="testid"
         :aria-haspopup="interactive ? 'dialog' : undefined"
-        class="group flex min-h-touch w-full items-center gap-2 rounded-lg pr-1 text-left text-[var(--talos-muted)] transition-colors duration-150"
-        :class="interactive ? 'talos-pressable hover:text-[var(--talos-text)]' : ''"
+        class="group flex w-full items-center gap-2 rounded-lg pr-1 text-left text-[var(--talos-muted)] transition-colors duration-150"
+        :class="interactive ? 'min-h-touch talos-pressable hover:text-[var(--talos-text)]' : 'min-h-7'"
         v-on="interactive ? { click: () => $emit('open') } : {}"
     >
         <span

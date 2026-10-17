@@ -89,16 +89,18 @@ export async function leggiStatoPonteCodice(): Promise<TalosStatoPonteCodice> {
 const ROTTE_CODICE = new Set(['harness', 'harness-session'])
 
 /**
- * Quanto resta a schermo. Più lungo dei 5-6 s degli altri avvisi di questa
- * schermata: qui non si legge un esito, si leggono due istruzioni — e la
- * regione ha comunque la X per chiuderlo prima.
+ * Quanto resta a schermo.
+ *
+ * ⛔ COD-AVVISO-01 (owner 13/10/2026, dal Pad: «questo alert è troppo strano e mi dà fastidio» → «Toast corto, sopra il
+ * campo»). Erano 12 s per sette righe di istruzioni, sopra il testo che si stava scrivendo. Ora è una riga con l'azione
+ * «Collega», come gli altri avvisi di questa schermata: i passaggi stanno in Controllo del telefono, a un tocco.
  */
-export const TALOS_AVVISO_PONTE_DURATA_MS = 12_000
+export const TALOS_AVVISO_PONTE_DURATA_MS = 6_000
 
 /** Ogni quanto si riguarda se il ponte è tornato su, finché l'avviso è a schermo. */
 export const TALOS_AVVISO_PONTE_RIGUARDA_MS = 3_000
 /** ⛔ Un tetto, non un battito perpetuo: la sentinella vera vive in Impostazioni. */
-export const TALOS_AVVISO_PONTE_RIGUARDI_MAX = 4
+export const TALOS_AVVISO_PONTE_RIGUARDI_MAX = 2
 
 export interface TalosAvvisoPonteToasts {
     push(toast: { message: string, action?: { label: string, run: () => void }, durationMs?: number }): number
@@ -118,13 +120,19 @@ export interface TalosAvvisoPonteOpzioni {
     sezioneDisponibile: boolean
     /** Solo per le prove: di serie è `leggiStatoPonteCodice`. */
     leggiStato?: () => Promise<TalosStatoPonteCodice>
+    /**
+     * «Codice in casa» (13/10/2026): il server del Codice può girare dentro l'app, senza ponte? MISURATO sul Pad: lì il
+     * Codice risponde e il terminale funziona coi permessi dell'app, quindi l'avviso d'ingresso direbbe il falso e non si
+     * mostra. Se la domanda non ha risposta (plugin muto) si resta sull'avviso di prima.
+     */
+    codiceInCasa?: () => Promise<boolean>
 }
 
 export interface TalosEsitoAvvisoPonte {
     mostrato: boolean
     stato: TalosStatoPonteCodice | null
     /** Perché non è stato mostrato — leggibile in un test e in una diagnosi. */
-    motivo?: 'sezione-non-disponibile' | 'gia-avvisato' | 'ponte-collegato' | 'stato-sconosciuto'
+    motivo?: 'sezione-non-disponibile' | 'gia-avvisato' | 'ponte-collegato' | 'stato-sconosciuto' | 'codice-in-casa'
 }
 
 let visitaAperta = false
@@ -192,6 +200,11 @@ export async function avvisaSePonteStaccato(
     // ⛔ Prima dell'await: la lista incorporata e la schermata instradata montano
     // nello stesso tick, e due letture in volo farebbero due avvisi.
     visitaAperta = true
+
+    // «Codice in casa»: senza ponte il Codice funziona lo stesso, e non c'è niente da avvisare all'ingresso.
+    if (opzioni.codiceInCasa && await opzioni.codiceInCasa().catch(() => false)) {
+        return { mostrato: false, stato: null, motivo: 'codice-in-casa' }
+    }
 
     const leggiStato = opzioni.leggiStato ?? leggiStatoPonteCodice
     const stato = await leggiStato()

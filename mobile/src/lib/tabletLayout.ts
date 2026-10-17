@@ -37,6 +37,19 @@ export function clampTalosTabletSidebarWidth(value: unknown): number {
     return Math.min(TALOS_TABLET_SIDEBAR_MAX, Math.max(TALOS_TABLET_SIDEBAR_MIN, Math.round(value)))
 }
 
+/**
+ * ⛔ K4-E (owner 17/10 «Colonna delle chat»): il Codice r4 (`codice-r4`) è il Codice, e le sessioni del Codice vecchio si vedono solo
+ * dal ripiego. La colonna «harness» (l'elenco di `HarnessScreen`) resta alle sole pagine del Codice vecchio; in r4 la colonna è quella
+ * delle chat, come nelle altre stazioni (le sessioni r4 stanno nel pannello della schermata).
+ */
+export function talosTabletRailVariant({ stazione, rotta, codiceVecchio }: {
+    stazione: string | null
+    rotta: string
+    codiceVecchio: boolean
+}): TalosTabletSidebarVariant {
+    return stazione === 'harness' && rotta !== 'codice-r4' && codiceVecchio ? 'harness' : 'chat'
+}
+
 export function talosTabletSidebarEffectiveWidth(
     savedWidth: unknown,
     variant: TalosTabletSidebarVariant,

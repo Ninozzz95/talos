@@ -1,0 +1,155 @@
+TAP version 13
+# Subtest: BC-57 — `prova` senza una suite da lanciare
+    # Subtest: ⭐⭐⭐ VERBALE DELLA MISURA — lo spawn grezzo su una cartella senza package.json NON da' «exit 0 vuoto»
+    ok 1 - ⭐⭐⭐ VERBALE DELLA MISURA — lo spawn grezzo su una cartella senza package.json NON da' «exit 0 vuoto»
+      ---
+      duration_ms: 13.787865
+      type: 'test'
+      ...
+    # Subtest: ⛔ CURA — niente package.json: `prova` NON lancia il comando e lo dice, con codice != 0
+    ok 2 - ⛔ CURA — niente package.json: `prova` NON lancia il comando e lo dice, con codice != 0
+      ---
+      duration_ms: 52.142136
+      type: 'test'
+      ...
+    # Subtest: ⛔ CURA — package.json senza scripts.test: stessa risposta, motivo diverso
+    ok 3 - ⛔ CURA — package.json senza scripts.test: stessa risposta, motivo diverso
+      ---
+      duration_ms: 45.766563
+      type: 'test'
+      ...
+    # Subtest: ⛔ CURA — un comando che non e' npm: si verifica che il PROGRAMMA esista
+    ok 4 - ⛔ CURA — un comando che non e' npm: si verifica che il PROGRAMMA esista
+      ---
+      duration_ms: 3.257188
+      type: 'test'
+      ...
+    # Subtest: ⭐ AL CONTRARIO — quando la suite C'E', il comando parte come sempre
+    ok 5 - ⭐ AL CONTRARIO — quando la suite C'E', il comando parte come sempre
+      ---
+      duration_ms: 85.554843
+      type: 'test'
+      ...
+    # Subtest: ⭐ AL CONTRARIO — `npm test` con package.json E scripts.test passa il cancello
+    ok 6 - ⭐ AL CONTRARIO — `npm test` con package.json E scripts.test passa il cancello
+      ---
+      duration_ms: 19.182448
+      type: 'test'
+      ...
+    # Subtest: ⛔⛔⛔ B1 — MONOREPO: da una sottocartella vuota la suite del GENITORE si esegue, non si rifiuta
+    not ok 7 - ⛔⛔⛔ B1 — MONOREPO: da una sottocartella vuota la suite del GENITORE si esegue, non si rifiuta
+      ---
+      duration_ms: 16.135157
+      type: 'test'
+      location: '/data/data/ai.talos.dev/files/kernel-r4-prova/harness-ui/tests/bc57-prova-senza-suite.test.mjs:164:5'
+      failureType: 'testCodeFailure'
+      error: |-
+        e la suite del genitore passa davvero: exit 127
+        <<<TALOS_DATA id=df1959711dc4 from="prova">>>
+        /system/bin/sh: npm: inaccessible or not found
+        <<<END_TALOS_DATA id=df1959711dc4>>>
+      code: 'ERR_ASSERTION'
+      name: 'AssertionError'
+      expected: true
+      actual: false
+      operator: '=='
+      stack: |-
+        TestContext.<anonymous> (file:///data/data/ai.talos.dev/files/kernel-r4-prova/harness-ui/tests/bc57-prova-senza-suite.test.mjs:170:16)
+        async Test.run (node:internal/test_runner/test:1332:7)
+        async Suite.processPendingSubtests (node:internal/test_runner/test:911:7)
+      ...
+    # Subtest: ⛔⛔ B1 — DESKTOP-LIKE: nessun package.json fino alla radice del disco, il rifiuto resta
+    ok 8 - ⛔⛔ B1 — DESKTOP-LIKE: nessun package.json fino alla radice del disco, il rifiuto resta
+      ---
+      duration_ms: 4.479636
+      type: 'test'
+      ...
+    # Subtest: ⛔ B1 — `--workspace`: lo script vive in un ALTRO manifesto, quindi non si giudica
+    ok 9 - ⛔ B1 — `--workspace`: lo script vive in un ALTRO manifesto, quindi non si giudica
+      ---
+      duration_ms: 44.643282
+      type: 'test'
+      ...
+    # Subtest: ⛔ B1 — `bun test` usa il runner INCORPORATO di Bun: non si pretende scripts.test
+    ok 10 - ⛔ B1 — `bun test` usa il runner INCORPORATO di Bun: non si pretende scripts.test
+      ---
+      duration_ms: 4.542605
+      type: 'test'
+      ...
+    # Subtest: ⭐ B1 — `bun run test` invece nomina uno script, e lo si pretende
+    ok 11 - ⭐ B1 — `bun run test` invece nomina uno script, e lo si pretende
+      ---
+      duration_ms: 5.676719
+      type: 'test'
+      ...
+    # Subtest: NUDGE03-NO-SUITE — una prova rifiutata resta tale, senza alterare le ricevute delle scritture
+    ok 12 - NUDGE03-NO-SUITE — una prova rifiutata resta tale, senza alterare le ricevute delle scritture
+      ---
+      duration_ms: 365.428958
+      type: 'test'
+      ...
+    1..12
+not ok 1 - BC-57 — `prova` senza una suite da lanciare
+  ---
+  duration_ms: 663.595572
+  type: 'suite'
+  location: '/data/data/ai.talos.dev/files/kernel-r4-prova/harness-ui/tests/bc57-prova-senza-suite.test.mjs:100:1'
+  failureType: 'subtestsFailed'
+  error: '1 subtest failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+# Subtest: F-017 residuo — «exit 0» con ZERO test eseguiti NON è un pass
+    # Subtest: ⭐⭐⭐ `node --test` in una cartella senza test: l'exit 0 del runner NON passa per un pass
+    ok 1 - ⭐⭐⭐ `node --test` in una cartella senza test: l'exit 0 del runner NON passa per un pass
+      ---
+      duration_ms: 155.250312
+      type: 'test'
+      ...
+    # Subtest: ⭐ AL CONTRARIO — «tests 12» con i 12 passing: un pass normale, nessuna accusa
+    ok 2 - ⭐ AL CONTRARIO — «tests 12» con i 12 passing: un pass normale, nessuna accusa
+      ---
+      duration_ms: 385.385521
+      type: 'test'
+      ...
+    # Subtest: ⛔ «0 passing» di Mocha con uscita 0 (mochajs/mocha \#4062): la CI muta diventa loud
+    not ok 3 - ⛔ «0 passing» di Mocha con uscita 0 (mochajs/mocha \#4062): la CI muta diventa loud
+      ---
+      duration_ms: 26.507812
+      type: 'test'
+      location: '/data/data/ai.talos.dev/files/kernel-r4-prova/harness-ui/tests/bc57-prova-senza-suite.test.mjs:286:5'
+      failureType: 'testCodeFailure'
+      error: |-
+        «0 passing» con exit 0 è il caso #4062: deve essere loud. Ricevuto: exit 127
+        <<<TALOS_DATA id=2674e2668ee8 from="prova">>>
+        /system/bin/sh: npm: inaccessible or not found
+        <<<END_TALOS_DATA id=2674e2668ee8>>>
+      code: 'ERR_ASSERTION'
+      name: 'AssertionError'
+      expected: true
+      actual: false
+      operator: '=='
+      stack: |-
+        TestContext.<anonymous> (file:///data/data/ai.talos.dev/files/kernel-r4-prova/harness-ui/tests/bc57-prova-senza-suite.test.mjs:289:16)
+        process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+        async Test.run (node:internal/test_runner/test:1332:7)
+        async Suite.processPendingSubtests (node:internal/test_runner/test:911:7)
+      ...
+    1..3
+not ok 2 - F-017 residuo — «exit 0» con ZERO test eseguiti NON è un pass
+  ---
+  duration_ms: 567.823437
+  type: 'suite'
+  location: '/data/data/ai.talos.dev/files/kernel-r4-prova/harness-ui/tests/bc57-prova-senza-suite.test.mjs:264:1'
+  failureType: 'subtestsFailed'
+  error: '1 subtest failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+1..2
+# tests 15
+# suites 2
+# pass 13
+# fail 2
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1582.794739

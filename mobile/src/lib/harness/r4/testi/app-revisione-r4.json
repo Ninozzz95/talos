@@ -1,0 +1,42 @@
+{
+  "origine": {
+    "commit": "701c6c0d2d711879b53aa21bddad5a06d33538e7",
+    "percorso": "harness-ui/frontend/src/i18n/testi/app.js",
+    "sha256": "19b9eb9d26356513c31bf08c83b6fff039cd0db16e2d8d6337613df34dca046d",
+    "prefisso": [
+      "review.",
+      "common.pathCopied",
+      "common.copyFailed"
+    ]
+  },
+  "it": {
+    "common.copyFailed": "Copia non riuscita",
+    "common.pathCopied": "Percorso copiato",
+    "review.noChanges": "Nessuna modifica da copiare",
+    "review.noChangesBody": "In questa sessione TALOS non ha ancora scritto file.",
+    "review.noFile": "Nessun file selezionato",
+    "review.noFileBody": "Scegli un file nella lista qui sopra.",
+    "review.openFromTree": "Il file si apre dall'albero della sessione che lo ha scritto.",
+    "review.diffCopied": "Diff di {nome} copiato",
+    "review.diffCopiedFilesOne": "Diff di {n} file copiato",
+    "review.diffCopiedFilesMany": "Diff di {n} file copiato",
+    "review.promptAboutLine": "Riguardo a `{percorso}`, alla riga «{riga}»:",
+    "review.promptAbout": "Riguardo a `{percorso}`:",
+    "review.newFileSuffix": "nuovo"
+  },
+  "en": {
+    "common.copyFailed": "Copy failed",
+    "common.pathCopied": "Path copied",
+    "review.noChanges": "No changes to copy",
+    "review.noChangesBody": "TALOS has not written any files in this session yet.",
+    "review.noFile": "No file selected",
+    "review.noFileBody": "Choose a file in the list above.",
+    "review.openFromTree": "Open the file from the tree of the session that wrote it.",
+    "review.diffCopied": "Diff of {nome} copied",
+    "review.diffCopiedFilesOne": "Diff of {n} file copied",
+    "review.diffCopiedFilesMany": "Diff of {n} files copied",
+    "review.promptAboutLine": "About `{percorso}`, at the line “{riga}”:",
+    "review.promptAbout": "About `{percorso}`:",
+    "review.newFileSuffix": "new"
+  }
+}

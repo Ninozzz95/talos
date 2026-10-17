@@ -1,0 +1,32 @@
+{
+  "origine": {
+    "commit": "701c6c0d2d711879b53aa21bddad5a06d33538e7",
+    "percorso": "harness-ui/frontend/src/i18n/testi/app.js",
+    "sha256": "19b9eb9d26356513c31bf08c83b6fff039cd0db16e2d8d6337613df34dca046d",
+    "prefisso": [
+      "delegations.result",
+      "common.showAll",
+      "common.showLess"
+    ]
+  },
+  "it": {
+    "common.showAll": "Mostra tutto",
+    "common.showLess": "Mostra meno",
+    "delegations.resultNoticeFailed": "Notifica di sistema · sotto-agente non concluso",
+    "delegations.resultNotice": "Notifica di sistema · risultato del sotto-agente",
+    "delegations.resultDeliveredNamed": "Il sotto-agente {id} ha consegnato un risultato. È disponibile nel suo dettaglio.",
+    "delegations.resultMetaFailed": "Risultato del sotto-agente · non concluso",
+    "delegations.resultMeta": "Risultato del sotto-agente",
+    "delegations.resultDelivered": "Un sotto-agente ha consegnato il risultato. È disponibile nel suo dettaglio."
+  },
+  "en": {
+    "common.showAll": "Show all",
+    "common.showLess": "Show less",
+    "delegations.resultNoticeFailed": "System notice · sub-agent did not finish",
+    "delegations.resultNotice": "System notice · sub-agent result",
+    "delegations.resultDeliveredNamed": "Sub-agent {id} delivered a result. It is available in its details.",
+    "delegations.resultMetaFailed": "Sub-agent result · did not finish",
+    "delegations.resultMeta": "Sub-agent result",
+    "delegations.resultDelivered": "A sub-agent delivered its result. It is available in its details."
+  }
+}

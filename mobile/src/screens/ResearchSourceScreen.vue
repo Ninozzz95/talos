@@ -49,7 +49,8 @@ function openClaim(at: number): void {
             </p>
 
             <template v-else>
-                <p class="text-base leading-6 text-[var(--talos-text)]">{{ source.title || source.url }}</p>
+                <!-- ⛔ G1 (14/10/2026, owner «Sì, solo etichette e titoli»): lo stesso titolo del rapporto. -->
+                <h1 data-talos-sheet-title class="talos-title pt-4 text-xl font-semibold leading-7 text-[var(--talos-text)]">{{ source.title || source.url }}</h1>
 
                 <a
                     :href="source.url"
@@ -66,13 +67,13 @@ function openClaim(at: number): void {
                      icon alone would make it look like decoration. -->
                 <dl data-testid="talos-research-depth" class="grid grid-cols-2 gap-3 rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)] p-3">
                     <div>
-                        <dt class="text-2xs uppercase tracking-wide text-[var(--talos-muted)]">{{ t('research.readingDepth') }}</dt>
+                        <dt class="text-2xs text-[var(--talos-muted)]">{{ t('research.readingDepth') }}</dt>
                         <dd class="mt-1 text-sm text-[var(--talos-text)]">
                             {{ source.obtained === 'snippet' ? t('research.onlySnippet') : t('research.pageRead') }}
                         </dd>
                     </div>
                     <div>
-                        <dt class="text-2xs uppercase tracking-wide text-[var(--talos-muted)]">{{ t('research.publishedAt') }}</dt>
+                        <dt class="text-2xs text-[var(--talos-muted)]">{{ t('research.publishedAt') }}</dt>
                         <dd class="mt-1 text-sm text-[var(--talos-text)]">{{ source.publishedAt ? talosPublishedOn(source.publishedAt, locale) : t('research.noDate') }}</dd>
                     </div>
                 </dl>
@@ -86,7 +87,7 @@ function openClaim(at: number): void {
                 </p>
 
                 <section v-else class="flex flex-col gap-2">
-                    <p class="text-xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">
+                    <p class="text-xs font-semibold text-[var(--talos-muted)]">
                         {{ t(dependants.length === 1 ? 'research.claimsOnThisSourceOne' : 'research.claimsOnThisSourceMany', { count: dependants.length }) }}
                     </p>
                     <button

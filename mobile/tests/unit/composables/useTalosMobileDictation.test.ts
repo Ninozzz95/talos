@@ -329,3 +329,172 @@ describe('native visibility inversion (F4-#18)', () => {
         expect(dictation.error.value).toMatch(/recognition|speech/i)
     })
 })
+
+/**
+ * N12 (13/10/2026) — il motore locale dà il testo GIUSTO dopo lo stop (Parakeet rilegge tutto il parlato). Prima ogni evento
+ * arrivato dopo lo stop veniva scartato, ed era giusto per il riconoscitore di sistema; per un motore che lo dichiara
+ * (`attendeIlFinale`) quell'ultimo testo è la ragione per cui esiste.
+ */
+describe('useTalosMobileDictation — il testo finale dopo lo stop (N12)', () => {
+    it('DETT-N12-01: con un motore che attende il finale, il testo arrivato DOPO lo stop sostituisce quello vivo', async () => {
+        const { engine, events } = engineStub({ attendeIlFinale: true })
+        const onTranscript = vi.fn()
+        let campo = 'Nota:'
+        const dictation = useTalosMobileDictation({ base: () => campo, onTranscript: (t) => { campo = t; onTranscript(t) }, engine })
+        await flush()
+        await dictation.toggle()
+        events().onPartial('ciao a tutti come state')
+        await dictation.toggle()                         // stop
+        expect(dictation.status.value).toBe('idle')
+        events().onPartial('Ciao a tutti, come state?')  // Parakeet, dopo lo stop
+        expect(onTranscript).toHaveBeenLastCalledWith('Nota: Ciao a tutti, come state?')
+        // uno solo: un secondo evento in ritardo non riscrive più niente
+        events().onPartial('coda in ritardo')
+        expect(onTranscript).toHaveBeenLastCalledWith('Nota: Ciao a tutti, come state?')
+    })
+
+    it('DETT-N12-02: se nel frattempo la persona ha toccato il testo, il finale NON lo sovrascrive', async () => {
+        const { engine, events } = engineStub({ attendeIlFinale: true })
+        const onTranscript = vi.fn()
+        let campo = ''
+        const dictation = useTalosMobileDictation({ base: () => campo, onTranscript: (t) => { campo = t; onTranscript(t) }, engine })
+        await flush()
+        await dictation.toggle()
+        events().onPartial('ciao a tutti')
+        await dictation.toggle()
+        campo = 'ciao a tutti e grazie'                  // ha scritto a mano
+        events().onPartial('Ciao a tutti.')
+        expect(onTranscript).toHaveBeenCalledTimes(1)
+        expect(campo).toBe('ciao a tutti e grazie')
+    })
+
+    it('DETT-N12-03 AL CONTRARIO: col riconoscitore di sistema un evento dopo lo stop resta inerte, come prima', async () => {
+        const { engine, events } = engineStub()
+        const onTranscript = vi.fn()
+        let campo = ''
+        const dictation = useTalosMobileDictation({ base: () => campo, onTranscript: (t) => { campo = t; onTranscript(t) }, engine })
+        await flush()
+        await dictation.toggle()
+        events().onPartial('ciao')
+        await dictation.toggle()
+        events().onPartial('ciao in ritardo')
+        expect(onTranscript).toHaveBeenCalledTimes(1)
+    })
+
+    it('DETT-N12-04: «invia» aspetta il finale (finisci), ma mai per sempre; «butta via» (cancel) non lo aspetta e non lo applica', async () => {
+        let libera: () => void = () => {}
+        const { engine, events } = engineStub({ attendeIlFinale: true, stop: vi.fn(() => new Promise<void>((ok) => { libera = ok })) })
+        const onTranscript = vi.fn()
+        let campo = ''
+        const dictation = useTalosMobileDictation({ base: () => campo, onTranscript: (t) => { campo = t; onTranscript(t) }, engine })
+        await flush()
+        await dictation.toggle()
+        events().onPartial('testo vivo')
+        let finito = false
+        const attesa = dictation.finisci().then(() => { finito = true })
+        await flush()
+        expect(finito).toBe(false)                       // sta aspettando Parakeet
+        events().onPartial('Testo giusto.')
+        libera()
+        await attesa
+        expect(campo).toBe('Testo giusto.')
+
+        // butta via: nessuna attesa, e il finale che arriva dopo non scrive
+        await dictation.toggle()
+        events().onPartial('altro')
+        dictation.cancel()
+        events().onPartial('Altro, giusto.')
+        expect(campo).toBe('Testo giusto. altro')
+
+        // un motore che non finisce mai non blocca l'invio
+        vi.useFakeTimers()
+        try {
+            const mai = engineStub({ attendeIlFinale: true, stop: vi.fn(() => new Promise<void>(() => {})) })
+            const d2 = useTalosMobileDictation({ base: () => '', onTranscript: vi.fn(), engine: mai.engine })
+            await vi.advanceTimersByTimeAsync(1)
+            await d2.toggle()
+            mai.events().onPartial('x')
+            let uscito = false
+            void d2.finisci().then(() => { uscito = true })
+            await vi.advanceTimersByTimeAsync(9000)
+            expect(uscito).toBe(true)
+        } finally { vi.useRealTimers() }
+    })
+    /**
+     * ⛔ DETT-N12-05 — MISURATO sul Pad il 13/10/2026, dal compositore vero: col motore locale la cattura non finisce mai da
+     * sola, quindi dopo 15 secondi senza parole nuove scattava il cane da guardia, che la trattava come un GUASTO
+     * («Speech stopped responding») e buttava via anche il testo di Parakeet. Per un motore che attende il finale, il
+     * silenzio lungo è la fine normale della dettatura: si chiude senza errore e il testo giusto arriva.
+     */
+    it('DETT-N12-05: col motore locale un silenzio lungo chiude la dettatura SENZA errore, e il testo giusto arriva lo stesso', async () => {
+        vi.useFakeTimers()
+        try {
+            const { engine, events } = engineStub({ attendeIlFinale: true })
+            let campo = ''
+            const dictation = useTalosMobileDictation({ base: () => campo, onTranscript: (t) => { campo = t }, engine })
+            await vi.advanceTimersByTimeAsync(1)
+            await dictation.toggle()
+            events().onPartial('ho finito di parlare')
+            await vi.advanceTimersByTimeAsync(15_100)
+            expect(engine.stop).toHaveBeenCalledTimes(1)
+            expect(dictation.status.value).toBe('idle')
+            expect(dictation.errorCode.value).toBeNull()
+            events().onPartial('Ho finito di parlare.')
+            expect(campo).toBe('Ho finito di parlare.')
+
+            // AL CONTRARIO: col riconoscitore di sistema lo stesso silenzio resta il guasto di prima
+            const s = engineStub()
+            const d2 = useTalosMobileDictation({ base: () => '', onTranscript: vi.fn(), engine: s.engine })
+            await vi.advanceTimersByTimeAsync(1)
+            await d2.toggle()
+            s.events().onPartial('ciao')
+            await vi.advanceTimersByTimeAsync(15_100)
+            expect(d2.errorCode.value).toBe('stoppedResponding')
+        } finally { vi.useRealTimers() }
+    })
+    /**
+     * DETT-N12-06 — la barra dell'assistente (owner 13/10/2026: «anche nella barra»): chi vuole che il turno lo chiuda il
+     * silenzio lo dice al motore (`endOnSilence`); chi non lo dice (chat, Codice) non lo chiede, e resta tutto com'era.
+     */
+    it('DETT-N12-06: «chiudeAlSilenzio» arriva al motore come endOnSilence; senza, non viene chiesto', async () => {
+        const a = engineStub()
+        const barra = useTalosMobileDictation({ base: () => '', onTranscript: vi.fn(), engine: a.engine, chiudeAlSilenzio: () => true })
+        await flush()
+        await barra.toggle()
+        expect(vi.mocked(a.engine.start).mock.calls[0][1]).toMatchObject({ endOnSilence: true })
+
+        const b = engineStub()
+        const chat = useTalosMobileDictation({ base: () => '', onTranscript: vi.fn(), engine: b.engine })
+        await flush()
+        await chat.toggle()
+        expect(vi.mocked(b.engine.start).mock.calls[0][1]?.endOnSilence).not.toBe(true)
+    })
+    /**
+     * DETT-N12-07 — owner 13/10/2026: «Via l'attesa di sicurezza». Quando la fine del turno l'ha decisa un motore che
+     * attende il finale (il locale: il testo giusto è già scritto), chi sta sopra deve poterlo sapere per mandare subito.
+     * Col riconoscitore di sistema resta falso, e la barra tiene la sua attesa.
+     */
+    it('DETT-N12-07: «chiusaDalMotore» è vero solo quando la fine l ha decisa un motore che attende il finale, dopo parole sentite', async () => {
+        const a = engineStub({ attendeIlFinale: true })
+        const locale = useTalosMobileDictation({ base: () => '', onTranscript: vi.fn(), engine: a.engine, chiudeAlSilenzio: () => true })
+        await flush()
+        expect(locale.chiusaDalMotore.value).toBe(false)
+        await locale.toggle()
+        a.events().onPartial('Che ore sono?')
+        a.events().onEnd()
+        expect(locale.status.value).toBe('idle')
+        expect(locale.chiusaDalMotore.value).toBe(true)
+        // una dettatura nuova riparte da falso
+        await locale.toggle()
+        expect(locale.chiusaDalMotore.value).toBe(false)
+
+        const s = engineStub()
+        const sistema = useTalosMobileDictation({ base: () => '', onTranscript: vi.fn(), engine: s.engine })
+        await flush()
+        await sistema.toggle()
+        s.events().onPartial('che ore sono')
+        s.events().onEnd()
+        expect(sistema.status.value).toBe('idle')
+        expect(sistema.chiusaDalMotore.value).toBe(false)
+    })
+})

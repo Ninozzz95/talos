@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useTalosSheetTitle } from '@/lib/sheetTitle'
+import TalosMobilePageHeader from '@/components/talos/ui/TalosMobilePageHeader.vue'
 /**
  * La stazione della Ricerca: che cosa hai chiesto, e quanto hanno tenuto le risposte.
  *
@@ -643,12 +644,11 @@ useTalosSheetTitle(() => t('stations.deepResearchTitle'))
              mette: una stazione aperta dal menu deve dire da sola dove si e'
              finiti. Il pulsante primario sta QUI, e non c'e' piu' un bottone
              che galleggia sopra l'ultima scheda. -->
-        <header>
-            <!-- Keep the subtitle full width; only the title shares the primary action row. -->
-            <div class="flex items-center justify-between gap-[var(--talos-space-section)]">
-                <h1 data-talos-sheet-title :class="['font-semibold leading-[1.15] tracking-[-0.03em] text-[var(--talos-text)]', isTablet ? 'text-3xl' : 'text-2xl']">
-                    {{ t('stations.deepResearchTitle') }}
-                </h1>
+        <TalosMobilePageHeader
+            :title="t('stations.deepResearchTitle')"
+            :subtitle="t('research.subtitle')"
+        >
+            <template #action>
                 <Button
                     v-if="!isTablet"
                     type="button"
@@ -660,11 +660,8 @@ useTalosSheetTitle(() => t('stations.deepResearchTitle'))
                 >
                     <Plus class="size-5" aria-hidden="true" />
                 </Button>
-            </div>
-            <p class="mt-[var(--talos-space-inline)] text-sm leading-6 text-[var(--talos-muted)]">
-                {{ t('research.subtitle') }}
-            </p>
-        </header>
+            </template>
+        </TalosMobilePageHeader>
 
         <!-- Ricerca e presentazione, sulla stessa riga: sono le due cose che si
              fanno prima di guardare. Il campo sta FUORI da ogni catena `v-if` —

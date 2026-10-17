@@ -87,6 +87,8 @@ vi.mock('@/lib/harness/codiceDati', () => codiceDatiMock)
  */
 const terminalePonteMock = vi.hoisted(() => ({
     talosTerminaleDisponibile: vi.fn(() => false),
+    // «Codice in casa» (13/10/2026): qui il banco è quello del ponte, dove l'avviso d'ingresso resta com'era.
+    talosCodiceInCasa: vi.fn(async () => false),
     avviaServerHarnessConChiaveProvider: vi.fn(async () => ({
         ok: true, giaAttivo: false, stdout: '', stderr: '', exitCode: 0, motivo: null,
     })),
@@ -99,6 +101,12 @@ const segretoMock = vi.hoisted(() => ({
     apriEventiServerCodice: vi.fn((url: string) => ({ url })),
 }))
 vi.mock('@/lib/harness/harnessUiSegreto', () => segretoMock)
+
+/** ⛔ F4 (14/10/2026): il custode dei giri del Codice ha i suoi test (custodeGiriCodice.test.ts); qui solo il collegamento. */
+const custodeMock = vi.hoisted(() => ({
+    custodeGiriCodice: { osserva: vi.fn() },
+}))
+vi.mock('@/lib/harness/custodeGiriCodice', () => custodeMock)
 
 /** ⛔⛔ 70-B (30/09/2026 notte): gli artefatti del Codice hanno i loro test (harnessUiArtefatti.test.ts); qui solo il ponte. */
 const artefattiMock = vi.hoisted(() => ({
@@ -792,6 +800,28 @@ describe('HarnessSessionScreen (28/8) — real sessions + a DRAFT state, shadow 
         expect(source.default).not.toContain('useChatController')
     })
 
+    it('COD-COMP-01 (owner 09/10) the Code composer is a docked bar like the chat: one-row field, not the home’s three', async () => {
+        vi.spyOn(Capacitor, 'isPluginAvailable').mockReturnValue(true)
+        const w = mount(HarnessSessionScreen)
+        const host = w.get('[data-testid="talos-harness-session-host"]').element as HTMLElement
+        await resolveScriptLoad(host)
+
+        expect(w.getComponent({ name: 'TalosMobileComposer' }).props('docked')).toBe(true)
+    })
+
+    /*
+     * COD-COMP-02 — found on the Pad on 11/10 (portrait, 914×1292): after COD-COMP-01 the Code composer was one row and centred,
+     * but its bottom edge sat at the very bottom of the window (margin 0, under the gesture bar) while the chat composer keeps
+     * max(--talos-space-page, safe area) below it. jsdom has no layout, so the rule is pinned on the stylesheet itself.
+     */
+    it('COD-COMP-02 the Code composer dock keeps the chat composer bottom spacing (safe area included) on the wide layout', async () => {
+        const source = (await import('@/screens/HarnessSessionScreen.vue?raw')).default
+        const dock = source.match(/\.talos-code-composer-dock \{[^}]*\}/)?.[0] ?? ''
+        expect(dock).toContain('padding-bottom: max(var(--talos-space-page), env(safe-area-inset-bottom))')
+        // On the phone layout the dock already sits above the bottom navigation: no extra gap there.
+        expect(source).toMatch(/@media \(max-width: 780px\), \(max-height: 500px\) \{\s*\.talos-code-composer-dock \{\s*bottom: 68px;\s*padding-bottom: 0;/)
+    })
+
     it('CODE-COMPOSER-AUTONOMY-PILL-01 keeps the mockup policy selector beside the model in the shared composer', async () => {
         vi.spyOn(Capacitor, 'isPluginAvailable').mockReturnValue(true)
         const announceComposerAction = vi.fn(() => true)
@@ -902,6 +932,47 @@ describe('HarnessSessionScreen (28/8) — real sessions + a DRAFT state, shadow 
         expect(await ponti.__talosHarnessIntestazioni?.({ rinnova: true })).toEqual({ Authorization: `Bearer ${'5'.repeat(64)}` })
         expect(segretoMock.intestazioniServerCodice).toHaveBeenCalledWith({ rinnova: true })
         expect(ponti.__talosHarnessApriEventi?.('http://localhost:4174/api/v1/sessions/s/events')).toEqual({ url: 'http://localhost:4174/api/v1/sessions/s/events' })
+        w.unmount()
+    })
+
+    // ⛔ F4 (14/10/2026, owner «Notifica solo mentre lavora»): il flusso degli eventi passa al custode dei giri, che tiene
+    // acceso il servizio in primo piano finché il giro lavora; il server in casa lo dice il nativo (`dove: 'casa'`).
+    it('COD-F4-SCHERMO-01 il flusso degli eventi passa al custode col titolo della sessione e «in casa» dal nativo', async () => {
+        vi.spyOn(Capacitor, 'isPluginAvailable').mockReturnValue(true)
+        vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 200 })))
+        terminalePonteMock.talosTerminaleDisponibile.mockReturnValue(true)
+        terminalePonteMock.avviaServerHarnessConChiaveProvider.mockResolvedValueOnce({
+            ok: true, giaAttivo: false, stdout: '', stderr: '', exitCode: 0, motivo: null, dove: 'casa',
+        } as never)
+        custodeMock.custodeGiriCodice.osserva.mockClear()
+        try {
+            const w = mount(HarnessSessionScreen)
+            await resolveScriptLoad(w.get('[data-testid="talos-harness-session-host"]').element as HTMLElement)
+            const url = 'http://localhost:4174/api/v1/sessions/s/events'
+            const flussoAperto = (window as unknown as PontiSegreto).__talosHarnessApriEventi?.(url)
+            expect(custodeMock.custodeGiriCodice.osserva).toHaveBeenCalledTimes(1)
+            const [urlVisto, flussoVisto, opzioni] = custodeMock.custodeGiriCodice.osserva.mock.calls[0] as unknown as
+                [string, unknown, { titolo: string, testo: string, inCasa: () => Promise<boolean> }]
+            expect(urlVisto).toBe(url)
+            expect(flussoVisto).toBe(flussoAperto)
+            expect(opzioni.titolo).toBe('Refactor auth flow')
+            expect(opzioni.testo).toBe('Code is working')
+            expect(await opzioni.inCasa()).toBe(true)
+            w.unmount()
+        } finally {
+            terminalePonteMock.talosTerminaleDisponibile.mockReturnValue(false)
+            vi.unstubAllGlobals()
+        }
+    })
+
+    it('COD-F4-SCHERMO-02 sulla strada del ponte «in casa» è falso', async () => {
+        vi.spyOn(Capacitor, 'isPluginAvailable').mockReturnValue(true)
+        custodeMock.custodeGiriCodice.osserva.mockClear()
+        const w = mount(HarnessSessionScreen)
+        await resolveScriptLoad(w.get('[data-testid="talos-harness-session-host"]').element as HTMLElement)
+        ;(window as unknown as PontiSegreto).__talosHarnessApriEventi?.('http://localhost:4174/api/v1/sessions/s/events')
+        const opzioni = custodeMock.custodeGiriCodice.osserva.mock.calls[0]?.[2] as unknown as { inCasa: () => Promise<boolean> }
+        expect(await opzioni.inCasa()).toBe(false)
         w.unmount()
     })
 
@@ -1031,6 +1102,18 @@ describe('HarnessSessionScreen (28/8) — real sessions + a DRAFT state, shadow 
         expect(dockRule).not.toContain('--talos-tablet-rail')
     })
 
+    /**
+     * COD-COMP-05 — visto sul Pad il 13/10/2026 dopo aver stretto il compositore (COD-COMP-04): a tastiera aperta il titolo
+     * di benvenuto del Codice spuntava ai lati del compositore, perché il benvenuto era centrato su tutta l'altezza.
+     */
+    it('COD-COMP-05 the draft welcome centres above the composer and keeps only logo and name while the keyboard is open', async () => {
+        const source = (await import('@/screens/HarnessSessionScreen.vue?raw')).default
+        expect(source).toContain('padding-bottom: calc(var(--talos-code-composer-height, 0px) + 1.5rem);')
+        expect(source).toContain(':global(body.keyboard-open .talos-code-draft-hero .talos-code-draft-words)')
+        expect(source).toContain('<div class="talos-code-draft-words"><TalosWelcomeTitle /></div>')
+        expect(source.split('talos-code-draft-words').length - 1).toBeGreaterThanOrEqual(3)
+    })
+
     it('CODE-COMPOSER-MAX-WIDTH-01 caps and centers the shared composer when both rails collapse', async () => {
         const source = await import('@/screens/HarnessSessionScreen.vue?raw')
         const { descriptor } = parse(source.default, { filename: 'HarnessSessionScreen.vue' })
@@ -1047,7 +1130,7 @@ describe('HarnessSessionScreen (28/8) — real sessions + a DRAFT state, shadow 
         expect(compiled.errors).toHaveLength(0)
         const composerRule = compiled.code.match(/\.talos-code-composer-dock[^}]*\[data-testid="talos-mobile-composer"\][^{]*\{([^}]*)\}/s)?.[1] ?? ''
         expect(composerRule).toContain('width: calc(100% - 1.5rem)')
-        expect(composerRule).toContain('max-width: 920px')
+        expect(composerRule).toContain('max-width: var(--talos-composer-max-width, 920px)') // COD-COMP-04 (13/10/2026): il tetto è quello comune; 920px dove non è dichiarato
         expect(composerRule).toContain('margin-inline: auto')
         expect(composerRule).toContain('box-sizing: border-box')
     })
@@ -1373,6 +1456,35 @@ describe('HarnessSessionScreen (28/8) — real sessions + a DRAFT state, shadow 
             eventi.onPartial('sistema il test instabile adesso')
             await flushPromises()
             expect(composer.props('prompt')).toBe('')
+        })
+
+        /**
+         * N12 (13/10/2026) — col motore locale il testo GIUSTO (Parakeet) arriva un attimo dopo lo stop. In chat «invia» lo
+         * aspettava già; nel Codice chiamava ancora `cancel`, e mandava le parole grezze del riconoscitore di sistema.
+         */
+        it('CODE-DICTATION-N12 con un motore che attende il finale, «invia» manda il testo giusto arrivato dopo lo stop', async () => {
+            const submitPrompt = vi.fn(() => true)
+            ;(window as unknown as {
+                __talosHarnessUiRuntime?: { selectSession(): void, submitPrompt(text: string): boolean }
+            }).__talosHarnessUiRuntime = { selectSession: vi.fn(() => true), submitPrompt }
+            const motore = dettaturaMock.motore as typeof dettaturaMock.motore & { attendeIlFinale?: boolean }
+            motore.attendeIlFinale = true
+            // lo stop del motore locale si chiude solo DOPO aver consegnato il testo di Parakeet
+            motore.stop.mockImplementationOnce(async () => { dettaturaMock.stato.eventi!.onPartial('Sistema il test instabile.') })
+            try {
+                const w = await montaSessioneConMicrofono()
+                const composer = w.getComponent({ name: 'TalosMobileComposer' })
+                composer.vm.$emit('toggleDictation')
+                await flushPromises()
+                dettaturaMock.stato.eventi!.onPartial('sistema il test instabile')
+                await flushPromises()
+                composer.vm.$emit('sendDictation')
+                await flushPromises()
+                expect(submitPrompt).toHaveBeenCalledTimes(1)
+                expect((submitPrompt.mock.calls[0] as unknown[])[0]).toBe('Sistema il test instabile.')
+            } finally {
+                delete motore.attendeIlFinale
+            }
         })
 
         it('CODE-DICTATION-06 un errore vero parla sopra il compositore in rosso; il silenzio no', async () => {

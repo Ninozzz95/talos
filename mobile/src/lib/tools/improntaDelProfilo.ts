@@ -218,7 +218,7 @@ export function talosCacheSopravvissuta(
         if (messi.length) pezzi.push(`aggiunti ${messi.join(', ')}`)
         return { sopravvive: false, perche: pezzi.join(' · ') }
     }
-    if (prima.attrezzi.join(' ') !== dopo.attrezzi.join(' ')) {
+    if (prima.attrezzi.join('\u0000') !== dopo.attrezzi.join('\u0000')) {
         return { sopravvive: false, perche: 'stessi attrezzi, ORDINE diverso' }
     }
     /*

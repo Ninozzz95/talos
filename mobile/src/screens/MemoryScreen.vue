@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useTalosSheetTitle } from '@/lib/sheetTitle'
+import TalosMobilePageHeader from '@/components/talos/ui/TalosMobilePageHeader.vue'
 /**
  * La Memoria, nella forma del mockup «Talos Calm Finale» (owner 12/09/2026).
  *
@@ -390,12 +391,11 @@ useTalosSheetTitle(() => t('navigation.memory'))
         <!-- Che posto è questo. Il titolo e una riga sola che dice cosa ci si
              mette: è il primo pezzo del mockup, e serve perché una stazione
              aperta dal menu deve dire da sola dove si è finiti. -->
-        <header>
-            <!-- Keep the subtitle full width; only the title shares the primary action row. -->
-            <div class="flex items-center justify-between gap-[var(--talos-space-section)]">
-                <h1 data-talos-sheet-title :class="['font-semibold leading-[1.15] tracking-[-0.03em] text-[var(--talos-text)]', isTablet ? 'text-3xl' : 'text-2xl']">
-                    {{ t('navigation.memory') }}
-                </h1>
+        <TalosMobilePageHeader
+            :title="t('navigation.memory')"
+            :subtitle="t('memory.subtitle')"
+        >
+            <template #action>
                 <Button
                     v-if="!isTablet"
                     type="button"
@@ -407,11 +407,8 @@ useTalosSheetTitle(() => t('navigation.memory'))
                 >
                     <Plus class="size-5" aria-hidden="true" />
                 </Button>
-            </div>
-            <p class="mt-[var(--talos-space-inline)] text-sm leading-6 text-[var(--talos-muted)]">
-                {{ t('memory.subtitle') }}
-            </p>
-        </header>
+            </template>
+        </TalosMobilePageHeader>
 
         <!-- Ricerca e densità, sulla stessa riga: sono le due cose che si fanno
              prima di guardare. Il campo sta FUORI da ogni catena `v-if` — deve

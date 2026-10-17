@@ -1,0 +1,14 @@
+{
+  "origine": {
+    "commit": "701c6c0d2d711879b53aa21bddad5a06d33538e7",
+    "percorso": "harness-ui/frontend/src/i18n/testi/chat.js",
+    "sha256": "eaaf4c713de5ca18948df455c22a29386587aa815e46576a7ed166d1afc13458",
+    "prefisso": "note.serverText"
+  },
+  "it": {
+    "note.serverText": "Testo del server"
+  },
+  "en": {
+    "note.serverText": "Server text"
+  }
+}

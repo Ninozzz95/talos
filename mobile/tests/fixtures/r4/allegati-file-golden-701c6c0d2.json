@@ -1,0 +1,340 @@
+{
+  "_origine": {
+    "r4": "701c6c0d2",
+    "funzioni": [
+      "legacy/app.js èTestoAllegabile",
+      "components/allegati.js stimaTokenTesto + etichettaCosto"
+    ]
+  },
+  "estensioni": "const ESTENSIONI_TESTO_ALLEGABILE = ['md', 'txt', 'json', 'jsonl', 'csv', 'log', 'yml', 'yaml', 'xml', 'js', 'mjs', 'cjs', 'ts', 'tsx', 'jsx', 'py', 'sh', 'bat', 'ps1', 'ini', 'toml', 'html', 'css', 'svg'];",
+  "testo": [
+    {
+      "nome": "NOTA.md",
+      "tipo": "",
+      "testo": true
+    },
+    {
+      "nome": "note.txt",
+      "tipo": "text/plain",
+      "testo": true
+    },
+    {
+      "nome": "dati.json",
+      "tipo": "",
+      "testo": true
+    },
+    {
+      "nome": "dati.json",
+      "tipo": "application/json",
+      "testo": true
+    },
+    {
+      "nome": "log.jsonl",
+      "tipo": "",
+      "testo": true
+    },
+    {
+      "nome": "tabella.csv",
+      "tipo": "text/csv",
+      "testo": true
+    },
+    {
+      "nome": "app.log",
+      "tipo": "",
+      "testo": true
+    },
+    {
+      "nome": "conf.yml",
+      "tipo": "",
+      "testo": true
+    },
+    {
+      "nome": "conf.yaml",
+      "tipo": "",
+      "testo": true
+    },
+    {
+      "nome": "x.xml",
+      "tipo": "",
+      "testo": true
+    },
+    {
+      "nome": "a.js",
+      "tipo": "",
+      "testo": true
+    },
+    {
+      "nome": "a.mjs",
+      "tipo": "",
+      "testo": true
+    },
+    {
+      "nome": "a.cjs",
+      "tipo": "",
+      "testo": true
+    },
+    {
+      "nome": "a.ts",
+      "tipo": "",
+      "testo": true
+    },
+    {
+      "nome": "a.tsx",
+      "tipo": "",
+      "testo": true
+    },
+    {
+      "nome": "a.jsx",
+      "tipo": "",
+      "testo": true
+    },
+    {
+      "nome": "a.py",
+      "tipo": "",
+      "testo": true
+    },
+    {
+      "nome": "a.sh",
+      "tipo": "",
+      "testo": true
+    },
+    {
+      "nome": "a.bat",
+      "tipo": "",
+      "testo": true
+    },
+    {
+      "nome": "a.ps1",
+      "tipo": "",
+      "testo": true
+    },
+    {
+      "nome": "a.ini",
+      "tipo": "",
+      "testo": true
+    },
+    {
+      "nome": "a.toml",
+      "tipo": "",
+      "testo": true
+    },
+    {
+      "nome": "a.html",
+      "tipo": "",
+      "testo": true
+    },
+    {
+      "nome": "a.css",
+      "tipo": "",
+      "testo": true
+    },
+    {
+      "nome": "a.svg",
+      "tipo": "",
+      "testo": true
+    },
+    {
+      "nome": "icona.svg",
+      "tipo": "image/svg+xml",
+      "testo": true
+    },
+    {
+      "nome": "README",
+      "tipo": "text/markdown",
+      "testo": true
+    },
+    {
+      "nome": "README",
+      "tipo": "",
+      "testo": false
+    },
+    {
+      "nome": ".bashrc",
+      "tipo": "",
+      "testo": false
+    },
+    {
+      "nome": "foto.png",
+      "tipo": "image/png",
+      "testo": false
+    },
+    {
+      "nome": "relazione.pdf",
+      "tipo": "application/pdf",
+      "testo": false
+    },
+    {
+      "nome": "archivio.zip",
+      "tipo": "",
+      "testo": false
+    },
+    {
+      "nome": "NOTA.MD",
+      "tipo": "",
+      "testo": true
+    },
+    {
+      "nome": "strano.Txt",
+      "tipo": "application/octet-stream",
+      "testo": true
+    },
+    {
+      "nome": "documento.docx",
+      "tipo": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "testo": false
+    },
+    {
+      "nome": "x.",
+      "tipo": "",
+      "testo": false
+    },
+    {
+      "nome": ".md",
+      "tipo": "",
+      "testo": false
+    },
+    {
+      "nome": "a.kt",
+      "tipo": "text/x-kotlin",
+      "testo": true
+    },
+    {
+      "nome": "risposta",
+      "tipo": "application/json",
+      "testo": true
+    },
+    {
+      "nome": "disegno",
+      "tipo": "image/svg+xml",
+      "testo": true
+    },
+    {
+      "nome": "appunti",
+      "tipo": "text/plain",
+      "testo": true
+    },
+    {
+      "nome": "binario",
+      "tipo": "application/octet-stream",
+      "testo": false
+    }
+  ],
+  "costo": {
+    "it": [
+      {
+        "caratteri": 0,
+        "etichetta": ""
+      },
+      {
+        "caratteri": 1,
+        "etichetta": "~1 token"
+      },
+      {
+        "caratteri": 3,
+        "etichetta": "~1 token"
+      },
+      {
+        "caratteri": 4,
+        "etichetta": "~1 token"
+      },
+      {
+        "caratteri": 5,
+        "etichetta": "~2 token"
+      },
+      {
+        "caratteri": 3999,
+        "etichetta": "~1,0k token"
+      },
+      {
+        "caratteri": 4000,
+        "etichetta": "~1,0k token"
+      },
+      {
+        "caratteri": 4001,
+        "etichetta": "~1,0k token"
+      },
+      {
+        "caratteri": 9999,
+        "etichetta": "~2,5k token"
+      },
+      {
+        "caratteri": 10000,
+        "etichetta": "~2,5k token"
+      },
+      {
+        "caratteri": 39996,
+        "etichetta": "~10,0k token"
+      },
+      {
+        "caratteri": 40000,
+        "etichetta": "~10k token"
+      },
+      {
+        "caratteri": 200000,
+        "etichetta": "~50k token"
+      },
+      {
+        "caratteri": 1234567,
+        "etichetta": "~309k token"
+      }
+    ],
+    "en": [
+      {
+        "caratteri": 0,
+        "etichetta": ""
+      },
+      {
+        "caratteri": 1,
+        "etichetta": "~1 token"
+      },
+      {
+        "caratteri": 3,
+        "etichetta": "~1 token"
+      },
+      {
+        "caratteri": 4,
+        "etichetta": "~1 token"
+      },
+      {
+        "caratteri": 5,
+        "etichetta": "~2 token"
+      },
+      {
+        "caratteri": 3999,
+        "etichetta": "~1.0k token"
+      },
+      {
+        "caratteri": 4000,
+        "etichetta": "~1.0k token"
+      },
+      {
+        "caratteri": 4001,
+        "etichetta": "~1.0k token"
+      },
+      {
+        "caratteri": 9999,
+        "etichetta": "~2.5k token"
+      },
+      {
+        "caratteri": 10000,
+        "etichetta": "~2.5k token"
+      },
+      {
+        "caratteri": 39996,
+        "etichetta": "~10.0k token"
+      },
+      {
+        "caratteri": 40000,
+        "etichetta": "~10k token"
+      },
+      {
+        "caratteri": 200000,
+        "etichetta": "~50k token"
+      },
+      {
+        "caratteri": 1234567,
+        "etichetta": "~309k token"
+      }
+    ]
+  }
+}

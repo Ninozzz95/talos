@@ -1,0 +1,16 @@
+{
+  "origine": {
+    "commit": "701c6c0d2d711879b53aa21bddad5a06d33538e7",
+    "percorso": "harness-ui/frontend/src/i18n/testi/kernel.js",
+    "sha256": "5bcab5e04072b8afe6e73dafb6833e672689df2784d68aaa946c9c4ea5a83686",
+    "prefisso": "prova."
+  },
+  "it": {
+    "prova.nessunTestRiga": "⊘ Test non eseguiti: il comando è partito ma non ha eseguito nessun test",
+    "prova.nessunTestBreve": "nessun test eseguito"
+  },
+  "en": {
+    "prova.nessunTestRiga": "⊘ Tests not run: the command started but ran no tests",
+    "prova.nessunTestBreve": "no tests ran"
+  }
+}

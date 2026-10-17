@@ -1,0 +1,27 @@
+{
+  "origine": {
+    "commit": "701c6c0d2d711879b53aa21bddad5a06d33538e7",
+    "percorso": "harness-ui/frontend/src/i18n/testi/errori.js",
+    "sha256": "1c54a18f9f27f84ede0f86ae64f563433dd8e64f5222f9d336c30b40790fba44",
+    "prefisso": [
+      "turno.fermato.",
+      "turno.vestizione.fermato."
+    ]
+  },
+  "it": {
+    "turno.fermato.cosa": "Hai fermato il giro.",
+    "turno.fermato.perche": "Il lavoro si è chiuso al primo punto sicuro, come chiesto. Quello che era già fatto resta: i file scritti restano scritti.",
+    "turno.fermato.perchePunto": "Il lavoro si è chiuso al primo punto sicuro ({punto}), come chiesto. Quello che era già fatto resta: i file scritti restano scritti.",
+    "turno.fermato.rimedio1": "Scrivi un altro messaggio per continuare da qui, nella stessa sessione.",
+    "turno.vestizione.fermato.badge": "Fermato",
+    "turno.vestizione.fermato.titolo": "TALOS · fermato"
+  },
+  "en": {
+    "turno.fermato.cosa": "You stopped the turn.",
+    "turno.fermato.perche": "The work closed at the first safe point, as requested. What was already done stays: the files written stay written.",
+    "turno.fermato.perchePunto": "The work closed at the first safe point ({punto}), as requested. What was already done stays: the files written stay written.",
+    "turno.fermato.rimedio1": "Write another message to continue from here, in the same session.",
+    "turno.vestizione.fermato.badge": "Stopped",
+    "turno.vestizione.fermato.titolo": "TALOS · stopped"
+  }
+}

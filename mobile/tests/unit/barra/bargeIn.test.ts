@@ -98,3 +98,45 @@ describe('VOICE-BARGE-IN-03 e VOICE-LOCKSCREEN-04', () => {
         expect(dopoSblocco).toContain('blocco.isDeviceLocked() || blocco.isKeyguardLocked()')
     })
 })
+
+/**
+ * ⛔ VOICE-BARRA-ASCOLTA-SE-STESSA — owner 13/10/2026 sul Pad: «se premo il pulsante per riprodurre ad alta voce la
+ * risposta, l'ascolto del microfono non si spegne, cioè ascolta la risposta ad alta voce». Aprire il microfono zittiva
+ * già la voce; il contrario mancava. Quando TALOS comincia a leggere, da qualunque porta, il microfono si chiude e la
+ * frase a metà non parte; alla fine della lettura l'ascolto torna com'era.
+ */
+describe('VOICE-BARRA-ASCOLTA-SE-STESSA', () => {
+    it('quando una lettura comincia la barra chiude il microfono, senza mandare niente, e il turno resta di voce', () => {
+        const barra = leggi('src/components/barra/TalosBarraRoot.vue')
+        const inizio = barra.indexOf('() => lettura.speakingId.value,')
+        expect(inizio).toBeGreaterThan(-1)
+        const corpo = barra.slice(inizio, inizio + 2400)
+        // vale anche nel «respiro»: microfono chiuso in quell'istante, ma ascolto ancora voluto
+        expect(corpo).toContain('if (!ascoltava && !ascoltoVoluto.value) return')
+        expect(corpo).toContain("annullaLaGrazia('TALOS legge')")
+        expect(corpo).toContain('ascoltoVoluto.value = false')
+        expect(corpo).toContain('dettatura.cancel()')
+        expect(corpo.indexOf('ascoltoVoluto.value = false')).toBeLessThan(corpo.indexOf('dettatura.cancel()'))
+        expect(corpo).toContain('if (ascoltoVoluto.value) turnoNatoDiVoce = true')
+        // la riapertura la fa la regola di «TALOS ha finito di parlare», che vale per i turni di voce
+        expect(corpo.indexOf('if (ascoltoVoluto.value) turnoNatoDiVoce = true')).toBeLessThan(corpo.indexOf('ascoltoVoluto.value = false'))
+    })
+})
+
+/**
+ * VOICE-BARRA-SUBITO — owner 13/10/2026: «Via l'attesa di sicurezza». Quando il turno l'ha chiuso il motore locale il testo
+ * giusto è già nel campo: la barra manda subito, senza i 900 ms di grazia e senza riaprire il microfono «nel dubbio».
+ */
+describe('VOICE-BARRA-SUBITO', () => {
+    it('turno chiuso dal motore locale ⇒ invio immediato, prima della grazia; col riconoscitore di sistema la grazia resta', () => {
+        const barra = leggi('src/components/barra/TalosBarraRoot.vue')
+        const subito = barra.indexOf('if (dettatura.chiusaDalMotore.value) {')
+        const grazia = barra.indexOf('        aspettaPrimaDiMandare()\n')
+        expect(subito).toBeGreaterThan(-1)
+        expect(grazia).toBeGreaterThan(subito)
+        const ramo = barra.slice(subito, grazia)
+        expect(ramo).toContain('void invia()')
+        expect(ramo).toContain('return')
+        expect(barra).toContain('const GRAZIA_MS = 900')
+    })
+})

@@ -1,0 +1,38 @@
+{
+  "origine": {
+    "commit": "701c6c0d2d711879b53aa21bddad5a06d33538e7",
+    "percorso": "harness-ui/frontend/src/i18n/testi/agenti.js",
+    "sha256": "c2701df3e85991e4c685e34d27622fb1ec9f68d066db5b7449f4fcee423972c1",
+    "prefisso": "workflow.runState."
+  },
+  "it": {
+    "workflow.runState.created": "Creato",
+    "workflow.runState.running": "In esecuzione",
+    "workflow.runState.paused": "In pausa",
+    "workflow.runState.needsAttention": "Serve attenzione",
+    "workflow.runState.succeeded": "Riuscito",
+    "workflow.runState.succeededWithSetAside": "Fatto, con passi messi da parte",
+    "workflow.runState.failed": "Non riuscito",
+    "workflow.runState.cancelled": "Annullato",
+    "workflow.runState.planned": "Da avviare",
+    "workflow.runState.proposed": "Da approvare",
+    "workflow.runState.approved": "Approvato, da avviare",
+    "workflow.runState.pausing": "Pausa in corso",
+    "workflow.runState.cancelling": "Annullamento in corso"
+  },
+  "en": {
+    "workflow.runState.created": "Created",
+    "workflow.runState.running": "Running",
+    "workflow.runState.paused": "Paused",
+    "workflow.runState.needsAttention": "Needs attention",
+    "workflow.runState.succeeded": "Succeeded",
+    "workflow.runState.succeededWithSetAside": "Done, with steps set aside",
+    "workflow.runState.failed": "Failed",
+    "workflow.runState.cancelled": "Cancelled",
+    "workflow.runState.planned": "To start",
+    "workflow.runState.proposed": "Awaiting approval",
+    "workflow.runState.approved": "Approved, ready to start",
+    "workflow.runState.pausing": "Pausing",
+    "workflow.runState.cancelling": "Cancelling"
+  }
+}

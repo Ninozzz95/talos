@@ -209,8 +209,17 @@ describe('TalosMobileVoiceSettings', () => {
      * di rete = timbro che cambia a metà lettura). Con una voce nominata di
      * rete E una locale entrambe disponibili, online, il menù mostrava la
      * prima e il pulsante play ne diceva un'altra.
+     *
+     * ⛔ RISCRITTA il 13/10/2026 su ordine dell'owner, dal Pad: «appare una terza
+     * voce, tipo legacy, troppo robotica, invece delle due migliori… togliamola
+     * definitivamente: rimane come predefinita nelle risposte». La cura del 22/8
+     * aveva messo d'accordo menù e lettura scegliendo per tutti e due la voce
+     * SUL TELEFONO — la robotica — e aggiungendola al menù come terza. Ciò che il
+     * Rilievo 3 chiedeva resta provato qui: la voce mostrata, quella
+     * dell'anteprima e quella che legge sono LA STESSA (`talosVoceDiSerie`). È
+     * cambiato quale: la prima delle due offerte, mai la voce sul telefono.
      */
-    it('PVOICE-DEFAULT-01 the shown/previewed default is the SAME voice toggle() would speak (rete:false), never a network voice that only wins online', async () => {
+    it('PVOICE-DEFAULT-01 the shown/previewed default is the first OFFERED voice (the one that reads), not the on-device voice', async () => {
         expect(navigator.onLine).not.toBe(false) // jsdom: online di default, come sul telefono con dati
         service.voices.mockReturnValueOnce([
             // Nominata di rete: vince l'ordinamento SOLO se rete:true.
@@ -225,23 +234,23 @@ describe('TalosMobileVoiceSettings', () => {
         const trigger = wrapper.get(
             '[data-testid="talos-tts-controls"] [data-testid="talos-themed-select-trigger"]',
         )
-        expect(trigger.text()).toContain('Itc')
-        expect(trigger.text()).not.toContain('Itb')
+        expect(trigger.text()).toContain('Itb')
+        expect(trigger.text()).not.toContain('Itc')
 
         // L'anteprima deve parlare la stessa voce mostrata, non una terza.
         wrapper.get('[data-testid="talos-voice-preview"]').trigger('click')
         expect(service.speak).toHaveBeenCalledWith(
             expect.any(String),
-            expect.objectContaining({ voiceURI: 'it-it-x-itc-local' }),
+            expect.objectContaining({ voiceURI: 'it-it-x-itb-network' }),
         )
 
-        // La voce di rete resta SELEZIONABILE (una scelta esplicita puo'
-        // ancora prenderla): solo il default non e' lei. Scoping su
+        // La voce di serie è la prima del menù. (Con meno di tre voci si offre ciò che c'è: l'esclusione della
+        // voce sul telefono, quando le offerte bastano, è provata in PVOICE-SELECT-01.) Scoping su
         // "talos-tts-controls": l'indice [0] fra tutti i TalosThemedSelect
         // e' il selettore della LINGUA di dettatura, non quello delle voci.
         const voci = wrapper.get('[data-testid="talos-tts-controls"]')
             .findComponent(TalosThemedSelect).props('items') as { value: string }[]
-        expect(voci.some((v) => v.value === 'it-it-x-itb-network')).toBe(true)
+        expect(voci[0]?.value).toBe('it-it-x-itb-network')
     })
 
     /**
@@ -256,8 +265,14 @@ describe('TalosMobileVoiceSettings', () => {
      * `TalosThemedSelect` mostra onestamente il placeholder quando il suo
      * `modelValue` non è fra le `items` — il difetto stava nel non
      * ricostituire quella voce nell'elenco, non nel selettore.
+     *
+     * ⛔ RISCRITTA il 13/10/2026 su ordine dell'owner («togliamo definitivamente
+     * la voce robotica al terzo posto»): la voce sul telefono salvata da prima non
+     * si ricostituisce più nell'elenco — era lei la terza. Ciò che il rilievo
+     * chiedeva resta: MAI il segnaposto. Una scelta che non è più offerta non
+     * vale, e al suo posto si mostra (e si usa) la voce di serie.
      */
-    it('PVOICE-SELECT-01 backfills an explicitly-chosen voice that online network-ordering pushed out of the offered list, instead of falling back to the placeholder', async () => {
+    it('PVOICE-SELECT-01 a saved on-device voice that is no longer offered is neither listed nor shown: the default offered voice takes its place, never the placeholder', async () => {
         expect(navigator.onLine).not.toBe(false) // jsdom: online di default, come sul telefono con dati
         service.voices.mockReturnValueOnce([
             // Tre nominate di rete: con la rete accettata vincono tutte e tre
@@ -279,12 +294,21 @@ describe('TalosMobileVoiceSettings', () => {
         const trigger = wrapper.get(
             '[data-testid="talos-tts-controls"] [data-testid="talos-themed-select-trigger"]',
         )
-        expect(trigger.text()).toContain('Ite')
+        // la voce di serie: la SECONDA delle due offerte (owner 13/10/2026)
+        expect(trigger.text()).toContain('Itd')
+        expect(trigger.text()).not.toContain('Ite')
         expect(trigger.text()).not.toContain('Select an option')
 
         const voci = wrapper.get('[data-testid="talos-tts-controls"]')
             .findComponent(TalosThemedSelect).props('items') as { value: string }[]
-        expect(voci.some((v) => v.value === 'it-it-x-ite-local')).toBe(true)
+        expect(voci.map((v) => v.value)).toEqual(['it-it-x-itb-network', 'it-it-x-itd-network'])
+
+        // e l'anteprima parla la voce mostrata, non quella salvata
+        wrapper.get('[data-testid="talos-voice-preview"]').trigger('click')
+        expect(service.speak).toHaveBeenCalledWith(
+            expect.any(String),
+            expect.objectContaining({ voiceURI: 'it-it-x-itd-network' }),
+        )
 
         settings.state.voice.voice_uri = null
     })

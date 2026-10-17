@@ -4,6 +4,7 @@ import {
     talosModelFolder,
     talosModelSize,
     TALOS_INSTALLED_MODEL_SORT_DEFAULT,
+    talosVarianteGiaSulTelefono,
 } from '@/lib/models/installedModels'
 import type { TalosLocalModelFile } from '@/services/localEngine'
 
@@ -127,5 +128,27 @@ describe('the size of a model, as a person says it', () => {
     it('says nothing rather than «0 B» for a size it does not have', () => {
         expect(talosModelSize(0, 'it')).toBe('—')
         expect(talosModelSize(Number.NaN, 'it')).toBe('—')
+    })
+})
+
+/**
+ * ⛔ N13-SCARICA-01 — MISURATO sul Pad l'11/10/2026 e di nuovo il 12/10: a download finito, la pagina del modello
+ * (`/settings/models/local/LiquidAI/LFM2.5-2.6B-GGUF`) mostrava ancora «Scarica Q4_0 · 1,5 GB». La pagina conosceva
+ * solo «in corso» e «da scaricare»: nessuno le diceva che il file era già sul telefono.
+ */
+describe('N13-SCARICA — la variante già sul telefono', () => {
+    const file = (path: string) => ({ path, bytes: 1_500_000_000, name: path.split('/').pop()! })
+    const sulPad = [file('/storage/emulated/0/Android/data/ai.talos.dev/files/models/LiquidAI/LFM2.5-2.6B-GGUF/main/LFM2.5-2.6B-QAD-Q4_0.gguf')]
+
+    it('N13-SCARICA-01: il file di quel repository c è ⇒ la variante risulta già scaricata', () => {
+        expect(talosVarianteGiaSulTelefono(sulPad, 'LiquidAI/LFM2.5-2.6B-GGUF', 'LFM2.5-2.6B-QAD-Q4_0.gguf')?.name)
+            .toBe('LFM2.5-2.6B-QAD-Q4_0.gguf')
+    })
+
+    it('N13-SCARICA-02 AL CONTRARIO: stesso nome in un ALTRO repository, o un altro file, non conta', () => {
+        expect(talosVarianteGiaSulTelefono(sulPad, 'unsloth/LFM2.5-2.6B-GGUF', 'LFM2.5-2.6B-QAD-Q4_0.gguf')).toBeNull()
+        expect(talosVarianteGiaSulTelefono(sulPad, 'LiquidAI/LFM2.5-2.6B-GGUF', 'LFM2.5-2.6B-Q8_0.gguf')).toBeNull()
+        expect(talosVarianteGiaSulTelefono(sulPad, 'LiquidAI/LFM2.5-2.6B-GGUF', 'Q4_0.gguf')).toBeNull()
+        expect(talosVarianteGiaSulTelefono([], 'LiquidAI/LFM2.5-2.6B-GGUF', 'LFM2.5-2.6B-QAD-Q4_0.gguf')).toBeNull()
     })
 })
