@@ -1,4 +1,5 @@
 import './src/difesa-ricerca-programmi.mjs'; // ⛔ PER PRIMO: su Windows un `git.exe` dentro il workspace non deve battere il git vero (misura e fonti nel file)
+import { KERNEL_DI_SERIE_DESKTOP } from './src/kernel-di-serie-desktop.avvio.mjs'; // ⛔ PER SECONDO (L3-9): senza la variabile del kernel vale l'adattatore desktop, e va deciso PRIMA che config e runtime la leggano
 import { mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { randomBytes } from 'node:crypto'; // F3 (24/09): il gettone dello spegnimento gentile
 import { createServer } from 'node:http';
@@ -9,6 +10,7 @@ import { createAutomationScheduler } from './src/automation-scheduler.mjs';
 import { creaOspiteAutomazioni } from './src/automation-per-il-modello.mjs'; // automazioni a due porte (08/10/2026)
 import { createAutomationStore } from './src/automation-store.mjs';
 import { loadConfig, trovaPortaLibera } from './src/config.mjs';
+import { leggiSegretiDaStdin } from './src/segreti-da-stdin.mjs'; // owner 14/10 (via mobile): i segreti dallo stdin
 import { createHttpApp } from './src/http-app.mjs';
 import { createSessionRegistry } from './src/session-registry.mjs';
 import { createProcessOutputStore } from './src/process-output-store.mjs';
@@ -24,7 +26,7 @@ import { creaOnWorkflowFn } from './src/workflow/per-il-modello.mjs';
 import { createStaticHandler } from './src/static-files.mjs';
 import { listaTaskDisponibili } from './src/task-catalog.mjs';
 import { elencaCartelleProgetto, validaCartellaLibera } from './src/custom-task.mjs';
-import { diagnosi } from './src/doctor.mjs';
+import { diagnosi, statoDelServizioAgente } from './src/doctor.mjs';
 import { avviaPuliziaScratch, statoScratch } from './src/scratch.mjs';
 import { statoPrimoAvvio } from './src/setup-stato.mjs';
 import { createSearchSourceStore } from './src/search-source-store.mjs';
@@ -51,6 +53,7 @@ import { createLlamaServerSupervisor } from './src/llama-server-supervisor.mjs';
 import { motoreConosceArchitettura } from './src/motore-architetture.mjs';
 import { createLlamaServerRuntime } from './src/local-runtime-llama-server.mjs';
 import { createProviderProbe, CATALOGHI_DIRETTI } from './src/provider-probe.mjs';
+import { descriviKernelCaricato } from './src/kernel-caricato.mjs';
 import { creaModelliUtilizzabili } from './src/modelli-utilizzabili.mjs';
 import { createProviderCredentialStore } from './src/provider-credential-store.mjs';
 import { leggiScopePortachiavi, avvolgiAdattatoreKeyring, creaAdattatorePortachiavi, leggiPortachiaviDiProva } from './src/adattatore-keyring.mjs';
@@ -81,6 +84,7 @@ import { creaOspiteFornitori } from './src/fornitori-per-il-modello.mjs'; // 0.1
 import { slugDelFornitore } from './src/openrouter-fornitori.mjs';
 import { creaCustodiaChatgpt } from './src/chatgpt-custodia.mjs'; // 11/10/2026: «Continue with ChatGPT»
 import { creaAccessoChatgpt } from './src/chatgpt-accesso.mjs';
+import { creaLucchettoRinnovoChatgpt, fileLucchettoRinnovoChatgpt } from './src/chatgpt-lucchetto-rinnovo.mjs'; // L3-1
 import { accessoConUso, creaRegistroUsoChatgpt } from './src/chatgpt-uso.mjs';
 import { creaCatalogoChatgpt, creaRotteChatgpt } from './src/chatgpt-rotte.mjs';
 
@@ -96,7 +100,11 @@ function percorsoDatiDesktop(relativo) {
 }
 
 async function startServer() {
-  const config = loadConfig(process.env, import.meta.url);
+  /* ⭐ 14/10/2026 — `TALOS_HARNESS_UI_SEGRETI_DA=stdin`: i segreti arrivano dallo stdin, PRIMA del config. Il token va al config in
+     una COPIA dell'ambiente e mai in `process.env` (lo erediterebbero i processi figli, e su Android si legge in
+     /proc/<pid>/environ); il resto va al portachiavi a modulo. Vedi `src/segreti-da-stdin.mjs`. */
+  const segreti = await leggiSegretiDaStdin({ env: process.env });
+  const config = loadConfig({ ...process.env, ...segreti.perR4 }, import.meta.url);
   /*
    * ⭐ F3, onda 2 di F2 (24/09/2026) — IL WRITER SINCRONO NON SCAVALCA PIÙ LA CODA (J3, rapporto F2 §2.2). Con
    *   `'busy'` un sync che trova una scrittura in volo lancia `SESSION_STORE_BUSY` prima di toccare il disco, e il
@@ -129,8 +137,11 @@ async function startServer() {
   try {
     /* ⛔ (16/09/2026) — l'adattatore arriva dalla fabbrica unica di `src/adattatore-keyring.mjs`,
        condivisa con la routine di pulizia alla disinstallazione: un contratto, nessuna copia. */
-    providerKeyring = avvolgiAdattatoreKeyring(await creaAdattatorePortachiavi(process.env), scopePortachiavi);
-  } catch {
+    providerKeyring = avvolgiAdattatoreKeyring(await creaAdattatorePortachiavi(process.env, { segreti: segreti.perIlPortachiavi }), scopePortachiavi);
+  } catch (errore) {
+    /* 14/10/2026 — il portachiavi di un MODULO scelto da chi ospita (`modulo:<percorso>`) è chiuso per difetto: se non si carica,
+       il server non parte. Proseguire senza portachiavi (come per quello del sistema) lascerebbe le chiavi senza custodia. */
+    if (String(errore?.code ?? '').startsWith('KEYRING_MODULE')) throw errore;
     console.warn('[provider-store] portachiavi del sistema non disponibile; Doctor segnalerà il limite');
   }
   /*
@@ -157,6 +168,8 @@ async function startServer() {
     keyring: providerKeyring,
     runtimeFile: percorsoDatiDesktop('.provider-runtime.json'),
     ignoraSemiAmbiente,
+    /* Owner 14/10/2026 (desktop): la chiave Z.AI va SOLO all'indirizzo scelto dalla persona; senza scelta non si parte. */
+    indirizzoDaScegliere: ['zai'],
   });
   providerStore.loadFromKeyring();
   /*
@@ -166,7 +179,13 @@ async function startServer() {
   /* Il conteggio NOSTRO di ciò che TALOS manda col piano (decisione owner 11/10: «Link + conteggio nostro»): soli numeri, nella
      cartella dei dati. Scollegare lo azzera, da tutte e due le porte (`accessoConUso`). */
   const usoChatgpt = creaRegistroUsoChatgpt({ file: percorsoDatiDesktop('.chatgpt-uso.json') });
-  const accessoChatgpt = providerKeyring ? accessoConUso(creaAccessoChatgpt({ custodia: creaCustodiaChatgpt({ keyring: providerKeyring }) }), usoChatgpt) : null;
+  /* L3-1 (13/10/2026): il portachiavi di sistema è di TUTTI i processi TALOS desktop dell'utente (l'app e un server a mano):
+     un rinnovo alla volta fra loro, o il secondo butta la sessione che il primo ha appena salvato. La custodia di prova
+     (`memoria`) è di questo processo solo: lì nessun lucchetto. */
+  const lucchettoRinnovoChatgpt = portachiaviDiProva ? undefined
+    : creaLucchettoRinnovoChatgpt({ file: fileLucchettoRinnovoChatgpt({ scope: scopePortachiavi }) });
+  const accessoChatgpt = providerKeyring ? accessoConUso(creaAccessoChatgpt({ custodia: creaCustodiaChatgpt({ keyring: providerKeyring }),
+    ...(lucchettoRinnovoChatgpt ? { conLucchettoDiRinnovo: lucchettoRinnovoChatgpt } : {}) }), usoChatgpt) : null;
   const catalogoChatgpt = accessoChatgpt ? creaCatalogoChatgpt({ accesso: accessoChatgpt }) : null;
   const rotteChatgpt = creaRotteChatgpt({ accesso: accessoChatgpt, catalogo: catalogoChatgpt, uso: usoChatgpt });
 
@@ -333,6 +352,8 @@ async function startServer() {
 
   const ownerRuntime = createOwnerRuntimeAdapter({
     providerStore,
+    /* Owner 14/10/2026: niente sonde degli altri indirizzi Z.AI, niente cambio da soli; a un «niente credito» lo si dice. */
+    zaiSoloIndirizzo: true,
     resolveImagesFn: messages => chatImageStore.resolveMessages(messages),
     modulePath: config.ownerRuntimeModule,
     openRouterRuntimeFn: () => providerStore.getRuntime('openrouter'),
@@ -611,6 +632,9 @@ async function startServer() {
     processOutputStoreFn,
     cartellaDatiProgettoFn: cartellaDatiProgetto,
     finestraTokenFn: finestraDallaRoute,
+    /* owner 14/10/2026 (anche per il desktop, confermato in sessione): una domanda SCADUTA non ferma il giro; il modello riceve
+       «nessuna risposta» e prosegue col suo giudizio, come Codex, Hermes e zcode (l'interruttore è della CLI, `110714a01`). */
+    domandaScadutaFerma: false,
     ...(impostazioniContesto ? { motoreContestoPerNuoveFn: () => impostazioniContesto.motorePerUnaConversazioneNuova() } : {}),
     contextHooksFn: motoreContestoAttivo ? input => contextRuntime?.service.createKernelHooks(input) : undefined,
     // C1 review Y1: lo stesso criterio di `politicaAbilitazione`/`enabledSessionIds` qui sotto, ma sincrono, PRIMA dei ganci
@@ -642,6 +666,11 @@ async function startServer() {
     /* ⛔ C2-Q (owner 07/10/2026 sera, contratto C2 §5): il desktop sa mostrare la domanda di una figlia alla persona (la carta nel
        padre), quindi la accende. CLI e mobile decidono da sé; il loro predefinito resta `false`. */
     domandeDeiFigli: true,
+    /* ⛔ owner 14/10/2026 notte («Se lo chiedi tu, vale», decisione presa con la sessione CLI): un file che la persona, nel SUO
+       messaggio di quel giro, chiede di leggere e seguire diventa la sua richiesta — stessi permessi, stessa modalità, mai un file
+       nominato da un altro file, l'uscita di un attrezzo, il risultato di una figlia o un messaggio di TALOS (confine-dati.mjs).
+       Il desktop la accende come la CLI 0.6.5. ⛔ Una sessione salvata prima tiene la frase di prima (la riconosce dal segno) */
+    fileAdottatiDallaPersona: true,
     /* ⛔⛔ C2b «Coordinazione» (owner 08/10/2026 sera): il desktop la accende — spenta di serie per ogni sessione, carta prima di
        avviare un agente, tetto di 20 avvii da soli per albero. Il modello chiesto per una figlia si sceglie fra lo stesso catalogo
        che i passi di Workflow usano già (F3-11c, decisione owner 42, `workflowPlanProposeFn` qui sotto). CLI e mobile no. */
@@ -675,6 +704,8 @@ async function startServer() {
        chiusura che nessuno poteva chiamare, e per i fornitori diversi da OpenRouter contava come «pronta» anche una chiave
        in PANCHINA (`hasKey` invece di `getKey`): la sessione partiva e il giro moriva senza una chiave utilizzabile. */
     prontoFn: creaProntoFn({ providerStore, chiaveApi: ignoraSemiAmbiente ? null : config.chiaveApi }),
+    obiettiviNellaChat: config.obiettiviNellaChat === true, // /goal: la seconda porta dell'obiettivo, solo dove c'è la sua superficie
+    compattazioneIstantanea: config.compattazioneIstantanea === true, // 15/10/2026: il riassunto pronto prima della soglia
     /*
      * ⛔⛔⛔ CLI-REQ-05, punto 2 e 3 — LA STESSA DESTINAZIONE CHE USA UN GIRO NORMALE.
      * Senza questa, la compattazione e il giudice della ricerca partivano con una `fetch` nuda, e
@@ -888,17 +919,7 @@ async function startServer() {
   const diagnosiFn = async () => {
     let snapshot;
     try { snapshot = await ownerRuntime.runtimeSnapshot(); } catch (error) { snapshot = { status: 'unavailable', reason: error?.code || 'runtime_unavailable' }; }
-    const ownerRuntimeState = {
-      configurato: Boolean(config.ownerRuntimeModule),
-      pronto: snapshot?.status === 'available',
-      /* K4b (03/10/2026): frase inglese di riserva + chiave del dizionario (area `server`); l'errore del catalogo è già
-         inglese e non ha chiave: si dice com'è. */
-      ...(snapshot?.status === 'available'
-        ? { dettaglio: 'Agent runtime ready.', dettaglioChiave: 'server.doctor.runtime.ready' }
-        : taskCatalogError?.message
-          ? { dettaglio: taskCatalogError.message }
-          : { dettaglio: 'The agent runtime is not ready for all the required features.', dettaglioChiave: 'server.doctor.runtime.notReady' }),
-    };
+    const ownerRuntimeState = statoDelServizioAgente({ configurato: Boolean(config.ownerRuntimeModule), snapshot, taskCatalogError });
     return diagnosi({
       chiaveConfigurata: providerStore.hasKey('openrouter'), cartelleProgetto: config.cartelleProgetto,
       ricercaWeb: searchSourceStore.listPublic(),
@@ -941,20 +962,12 @@ async function startServer() {
     chiudiPtyFn: (terminalId) => registroTerminali.chiudiForzato(terminalId),
     statoPtyFn: (terminalId) => registroTerminali.stato(terminalId),
     /*
-     * ⛔⛔ DEBITO DICHIARATO, non un fallback. Misurato il 05/9 leggendo
-     * `public/app.js` (congelato dal contratto, non modificabile):
-     * `idTerminaleCorrente()` usa il `sessionId` quando una sessione c'è, e
-     * ALTRIMENTI inventa un `crypto.randomUUID()` lato client — il "terminale
-     * standalone", raggiungibile aprendo il tab Terminale prima di avviare
-     * qualsiasi cosa. Senza questa riga quella funzione del monolite smette di
-     * funzionare. La differenza con il `??` di prima: la cartella è nominata
-     * QUI, una volta sola, ed è sotto lo stesso tetto delle altre schede — non
-     * è una catena di ripieghi valutata a ogni connessione, e le rotte nuove
-     * non producono MAI una scheda di questo tipo.
-     * ⛔ Si spegne mettendo `null` il giorno in cui il frontend nuovo
-     * sostituisce il monolite.
+     * ⛔ 16/10/2026, owner («Chiudila adesso») — il «debito dichiarato» del 05/09 è chiuso: il monolite inventava un id per il
+     *   terminale senza sessione e il registro lo accoglieva qui. Ora quei terminali nascono SOLO da `POST /api/v1/terminals`, con
+     *   l'id scelto dal server, uno per finestra (owner, la sera stessa); questa è la loro cartella. Un id inventato riceve 403.
      */
-    cartellaStandaloneLegacy: config.cartelleProgetto[0]?.percorso ?? process.cwd(),
+    // 16/10/2026: la cartella dei terminali senza sessione, che nascono solo dalla rotta POST /api/v1/terminals (id del server)
+    cartellaStandalone: config.cartelleProgetto[0]?.percorso ?? process.cwd(),
   });
 
   /*
@@ -977,6 +990,8 @@ async function startServer() {
   const servizioGit = creaServizioGit({ cartellaDiSessione: (sessionId) => sessionRegistry.cartellaDi(sessionId) });
 
   const app = createHttpApp({
+    // /goal G2c (14/10/2026): la proposta dei criteri adatta il ragionamento al catalogo del modello, come i giri
+    modelCapabilityFn: readModelCapabilities,
     /*
      * ⛔ 16/09 — il tetto sul corpo delle richieste (10 MiB di serie, vedi `MAX_REQUEST_BODY_BYTES` in http-app.mjs):
      *   `TALOS_HTTP_BODY_MAX_BYTES` lo cambia; un valore storto (vuoto, non numerico, ≤ 0) NON deve impedire
@@ -999,6 +1014,7 @@ async function startServer() {
     rotteChatgpt, catalogoChatgpt,
     leggiTokenDelPianoFn: accessoChatgpt ? () => accessoChatgpt.tokenDiAccesso() : null,
     registraUsoDelPianoFn: (voce) => usoChatgpt.registra(voce),
+    registraLimitiDelPianoFn: (voce) => usoChatgpt.registraLimiti(voce),
     contextService: contextRuntime?.service,
     impostazioniContesto, // C1: «Motore del contesto» in Impostazioni → Contesto
     // ⭐ 10/09: le favicon delle fonti, prese dal server una volta sola e tenute qui accanto alle sessioni.
@@ -1292,6 +1308,18 @@ async function startServer() {
   process.once('SIGINT', shutdown);
   process.once('SIGTERM', shutdown);
   console.log(`Harness UI disponibile su http://${config.host}:${portaAscolto}`);
+  /*
+   * 13/10/2026 (bugfixer, C1) — QUALE KERNEL: una riga, e un avviso quando non è l'adattatore desktop (`src/kernel-caricato.mjs`).
+   * Tre volte un server di prova è rimasto per giorni sul kernel di base senza dirlo. Si guarda il modulo CARICATO (lo stesso
+   * specifier dell'adattatore del runtime: la cache dei moduli lo restituisce, non lo ricarica); non si aspetta e non blocca.
+   */
+  void (async () => {
+    const percorso = config.ownerRuntimeModule ?? null;
+    let modulo = null; let erroreKernel = null;
+    if (percorso) { try { modulo = await import(pathToFileURL(percorso).href); } catch (errore) { erroreKernel = errore; } }
+    const kernel = descriviKernelCaricato({ percorso, modulo, errore: erroreKernel, daVariabile: !KERNEL_DI_SERIE_DESKTOP.applicato && Boolean(process.env.TALOS_OWNER_RUNTIME_MODULE?.trim()) });
+    (kernel.avviso ? console.error : console.log)(kernel.riga);
+  })();
   /*
    * ⭐ P0 · punto 7: si stampa ciò che il server ha DAVVERO (rilettura, non ciò che gli abbiamo
    * chiesto) più il failsafe attivo. Sono i due numeri che servono quando qualcuno segnala «si è

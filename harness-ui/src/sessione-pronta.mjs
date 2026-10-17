@@ -68,6 +68,7 @@ export function creaProntoFn({ providerStore, chiaveApi = null, adessoFn = Date.
       fornitore: record.etichetta,
       codice: 'CONFIG_INVALID',
       messaggio: panchina ?? `The ${record.etichetta} key is missing: connect it from Providers and access.`,
+      ...(panchina ? {} : { motivo: 'provider-key-missing-named' }), // 15/10: il registro lo rifiuta col motivo, l'interfaccia lo traduce
     };
   };
 }

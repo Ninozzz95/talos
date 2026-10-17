@@ -39,8 +39,10 @@ test('PHASE1-ASSET-ALLOWLIST-01 copia esattamente font, licenze upstream e march
     // 55 dal 27/09 (ATLAS F3, owner: «prima pagina con pdf.js»): +3 — pdfjs-dist 6.3.289, la libreria, il worker e la licenza.
     // 246 dal 27/09 sera (ATLAS F3, owner: «aggiungi le risorse»): +191 — 168 CMap, 14 font standard, 2 decodificatori
     // JPEG2000/JBIG2 in versione JS e 7 licenze, dall'elenco unico `src/pdfjs-risorse.mjs`.
-    assert.equal(manifest.files.length, 55 + PDFJS_CMAPS.length + PDFJS_FONT_STANDARD.length + PDFJS_DECODIFICATORI_JS.length + PDFJS_LICENZE.length);
-    assert.equal(manifest.files.length, 246);
+    // 244 dal 14/10/2026: −2, le licenze di dagre e graphlib (la libreria è uscita col diagramma classico delle deleghe,
+    // decisione owner) ⇒ la base senza pdf.js scende da 55 a 53.
+    assert.equal(manifest.files.length, 53 + PDFJS_CMAPS.length + PDFJS_FONT_STANDARD.length + PDFJS_DECODIFICATORI_JS.length + PDFJS_LICENZE.length);
+    assert.equal(manifest.files.length, 244);
     const pdfjs = [
       ['vendor/pdfjs/pdf.min.mjs', 'build/pdf.min.mjs'],
       ['vendor/pdfjs/pdf.worker.min.mjs', 'build/pdf.worker.min.mjs'],
@@ -71,10 +73,9 @@ test('PHASE1-ASSET-ALLOWLIST-01 copia esattamente font, licenze upstream e march
       assert.ok(manifest.files.some((item) => item.path === percorso), `manca ${percorso}`);
     }
     assert.equal(await readFile(path.join(output, 'vendor/elk/elk-worker.min.js'), 'utf8'), await readFile(new URL('../../node_modules/elkjs/lib/elk-worker.min.js', import.meta.url), 'utf8'));
-    for (const [pacchetto, file] of [['dagre', 'LICENSE-dagre'], ['graphlib', 'LICENSE-graphlib']]) {
-      assert.ok(manifest.files.some(item => item.path === `vendor/dagre/${file}`));
-      assert.equal(await readFile(path.join(output, 'vendor/dagre', file), 'utf8'), await readFile(new URL(`../../node_modules/@dagrejs/${pacchetto}/LICENSE`, import.meta.url), 'utf8'));
-    }
+    /* 14/10/2026 — `@dagrejs/dagre` è uscita col diagramma classico delle deleghe (decisione owner): nessuna sua licenza va più
+       nel pacchetto, e una copia rimasta direbbe che la usiamo ancora. */
+    assert.deepEqual(manifest.files.filter((item) => item.path.startsWith('vendor/dagre/')).map((item) => item.path), []);
     for (const nome of ['LICENSE-shell-quote', 'README.md', 'parse.js']) {
       assert.ok(manifest.files.some((item) => item.path === `vendor/shell-quote/${nome}`), `manca vendor/shell-quote/${nome}`);
     }

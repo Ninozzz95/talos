@@ -174,6 +174,9 @@ const MOTIVI = Object.freeze({
      è partita dalla compattazione semplice (`talosHarness.desktop-hotfix.mjs`, ripiego). La riga lo dice, e non ferma niente. */
   ripiego: 'chat.context.failure.fellBack',
 });
+/* Owner 12/10/2026 («Si ripara da solo»): l'archivio del motore non combaciava con la conversazione; i vecchi originali sono stati
+   messi da parte e il motore è ripartito. Non è un fallimento: la riga dice che cosa è successo e che niente si è perso. */
+const RIALLINEATO = 'archivio-riallineato';
 export function motivoUmano(motivo, dettaglio = null) {
   const frase = motivo in MOTIVI ? t(MOTIVI[motivo]) : String(motivo ?? '');
   return dettaglio ? `${frase} (${dettaglio})` : frase;
@@ -182,9 +185,15 @@ export function motivoUmano(motivo, dettaglio = null) {
 /** Il testo della riga persistente: i numeri quando ci sono, mai inventati quando mancano. */
 export function testoRigaCompattazione({ stato, tokenPrima = null, tokenDopo = null, motivo = null, dettaglio = null } = {}) {
   if (stato === 'annullata') return t('chat.context.row.undone');
+  if (stato === 'non-riuscita' && motivo === RIALLINEATO) return t('chat.context.row.realigned');
   if (stato === 'non-riuscita') return `${t('chat.context.row.notSummarized')}${motivo ? ` · ${motivoUmano(motivo, dettaglio)}` : ''}`;
-  const base = t('chat.context.row.summarized');
-  return numero(tokenPrima) && numero(tokenDopo) ? `${base} · ${formattaToken(tokenPrima)} → ${formattaToken(tokenDopo)} ${t('chat.context.row.tokens')}` : base;
+  /* ⭐ 15/10/2026 (owner, compattazione istantanea, «solo il separatore»): la riga dice che la conversazione è compattata e QUANTO si
+     è risparmiato, come Claude Code dopo la sua compattazione precalcolata; i numeri prima → dopo restano nel Context Manager */
+  const base = t('chat.context.row.compacted');
+  const risparmiati = numero(tokenPrima) && numero(tokenDopo) ? tokenPrima - tokenDopo : null;
+  return risparmiati > 0
+    ? `${base} · ${tn('chat.context.row.savedOne', 'chat.context.row.savedMany', risparmiati, { n: formattaToken(risparmiati) })}`
+    : base;
 }
 
 /** La frase della barra mentre il legacy lavora: fissa (Hermes `status.tsx:52`), col motivo solo quando aggiunge qualcosa. */

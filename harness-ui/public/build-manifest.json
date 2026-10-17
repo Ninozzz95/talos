@@ -8,13 +8,13 @@
   "files": [
     {
       "path": "app.js",
-      "bytes": 5280068,
-      "sha256": "11ca850baebaf8ddb65fe4374ab022cfb0b5882a8bd6b957b8afe1ae15005c1b"
+      "bytes": 5273983,
+      "sha256": "b7dbc308740cdef337439c2e46c30b7e381e654b77f48c5f1b3839598d91f757"
     },
     {
       "path": "asset-manifest.json",
-      "bytes": 42078,
-      "sha256": "7ca4d93847ab0617b1c0611f4ec6437e68985db6ec2587131ee8ecdac937860d"
+      "bytes": 41753,
+      "sha256": "869d1106530ade8bf8598f6a9a2e273c5d57570a711f82d7ec9a268928b2c0fb"
     },
     {
       "path": "avvio.js",
@@ -78,8 +78,8 @@
     },
     {
       "path": "lettore-foglio.js",
-      "bytes": 1756739,
-      "sha256": "50bf4d81263e8563b5fca778063cd912fdd79c0defe47197bfc773f53f65e2e1"
+      "bytes": 1771702,
+      "sha256": "409354556a001744852a190ede161cade2d96a28d2d033a2a2cadc1ae8253bb3"
     },
     {
       "path": "lettore-ospite-documento.js",
@@ -88,13 +88,13 @@
     },
     {
       "path": "lettore-ospite-presentazione.js",
-      "bytes": 4387851,
-      "sha256": "774638d039dc4f1666cd4e250c02fe0b54483f4121066eb53663cd42125d804e"
+      "bytes": 4402814,
+      "sha256": "282d883f078efea9dcfdf2173033900e10912b620f6ba9027b80b96a67b270fe"
     },
     {
       "path": "styles.css",
-      "bytes": 640001,
-      "sha256": "8cde931cacab4f56b2b88a554f158dcf763ea17f7775eb51930388f2549c3708"
+      "bytes": 625842,
+      "sha256": "c6683c301d44e6e8ce375b6539a43b247606f2acdd284ca2bb635b4358e68ae6"
     },
     {
       "path": "talos/brand/logo-short.svg",
@@ -105,16 +105,6 @@
       "path": "talos/browser-annota.js",
       "bytes": 11646,
       "sha256": "fbc7d4ea66a0abf30b0b3a296122114df562fb7bf7fbe8448b0c2e8b48dce52a"
-    },
-    {
-      "path": "vendor/dagre/LICENSE-dagre",
-      "bytes": 1062,
-      "sha256": "6a349742a6cb219d5a2fc8d0844f6d89a6efc62e20c664450d884fc7ff2d6015"
-    },
-    {
-      "path": "vendor/dagre/LICENSE-graphlib",
-      "bytes": 1062,
-      "sha256": "6a349742a6cb219d5a2fc8d0844f6d89a6efc62e20c664450d884fc7ff2d6015"
     },
     {
       "path": "vendor/elk/LICENSE-elkjs",

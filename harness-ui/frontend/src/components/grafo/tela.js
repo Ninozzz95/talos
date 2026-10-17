@@ -31,7 +31,8 @@ const FAMIGLIE = [
   ['errori', 'agenti.family.errors', 'errore'],
 ];
 const tonoDi = (stato) => STATI_PASSO[stato]?.tono ?? 'neutro';
-const parolaDi = parolaDelPasso;
+/* le famiglie dei conti di un lotto di DELEGHE, con le parole delle deleghe (owner 14/10/2026) */
+const FAMIGLIA_NELLE_DELEGHE = Object.freeze({ 'agenti.family.running': 'agenti.family.inProgress', 'agenti.family.cancelled': 'agenti.family.stopped' });
 
 /** Passo di zoom a scatti del 10% (Argo): dal valore attuale al multiplo di 0,1 successivo, nel verso chiesto. */
 export function prossimoZoom(k, verso) {
@@ -43,7 +44,15 @@ export function prossimoZoom(k, verso) {
 export function creaTela(host, opzioni) {
   const d = host.ownerDocument;
   const finestra = d.defaultView;
-  const { icona, onSeleziona, onGruppo, onZoom, onDisegnati, onMancano } = opzioni;
+  const { icona, onSeleziona, onGruppo, onZoom, onDisegnati, onMancano, lotti = false, onSessione = null } = opzioni;
+  /* UI deleghe (owner 12/10/2026): la stessa tela disegna i LOTTI di delega. Un lotto ha già il suo nome («Delega 2 · 10:31»):
+     «Fase 2 — …» davanti sarebbe la parola del Workflow su una cosa che fase non è. Solo le chiavi cambiano. */
+  const K = lotti
+    ? { titolo: 'agenti.graph.batchTitle', corsia: 'agenti.graph.batchLane', aria: 'agenti.graph.batchGroupAria', ariaAvanzamento: 'agenti.graph.batchGroupAriaProgress' }
+    : { titolo: 'agenti.graph.phaseTitle', corsia: 'agenti.graph.phaseLane', aria: 'agenti.graph.groupAria', ariaAvanzamento: 'agenti.graph.groupAriaProgress' };
+  // le parole dello stato: nelle deleghe quelle delle deleghe («In corso», «Interrotto»), nel Workflow le sue (`tempo.js`)
+  const parolaDi = (stato) => parolaDelPasso(stato, { deleghe: lotti });
+  const famiglia = (chiave) => (lotti ? FAMIGLIA_NELLE_DELEGHE[chiave] ?? chiave : chiave);
   const el = (tag, classe, testo) => { const n = d.createElement(tag); if (classe) n.className = classe; if (testo != null) n.textContent = testo; return n; };
   const svg = (tag, attributi = {}) => { const n = d.createElementNS(SVG, tag); for (const [k, v] of Object.entries(attributi)) n.setAttribute(k, v); return n; };
 
@@ -67,6 +76,8 @@ export function creaTela(host, opzioni) {
   const cartaSessione = el('div', 'gv-sessione');
   cartaSessione.dataset.coordinatore = 'true';
   mondo.append(fili, strato.blocchi, cartaSessione, strato.nodi);
+  cartaSessione.addEventListener('click', (e) => { if (!onSessione) return; e.stopPropagation(); onSessione(); });
+  cartaSessione.addEventListener('keydown', (e) => { if (onSessione && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onSessione(); } });
   const lod = el('canvas', 'gv-lod');
   lod.setAttribute('aria-hidden', 'true');
   const etichette = el('div', 'gv-etichette');
@@ -158,7 +169,7 @@ export function creaTela(host, opzioni) {
     barra.setAttribute('role', 'img');
     const c = conteggiFase(counts);
     const parti = FAMIGLIE.map(([chiave, parola, tono]) => ({ n: c[chiave], parola, tono })).concat([{ n: c.annullati, parola: 'agenti.family.cancelled', tono: 'neutro' }]).filter((p) => p.n > 0);
-    barra.setAttribute('aria-label', parti.map((p) => tr('agenti.graph.segmentCount', { parola: tr(p.parola), n: cifra(p.n) })).join(', ') || tr('agenti.graph.noSteps'));
+    barra.setAttribute('aria-label', parti.map((p) => tr('agenti.graph.segmentCount', { parola: tr(famiglia(p.parola)), n: cifra(p.n) })).join(', ') || tr('agenti.graph.noSteps'));
     for (const p of parti) {
       const s = el('span', 'gv-segmento');
       s.dataset.tono = p.tono;
@@ -175,8 +186,8 @@ export function creaTela(host, opzioni) {
     const c = dati.conteggi(g.phaseId) ?? { counts: {}, terminated: 0, attention: 0, total: g.total, progress: null };
     const riga = el('div', 'gv-testa-riga');
     const ic = el('span', 'gv-testa-icona'); ic.append(icona(iconaDellaFase(g)));
-    const nome = el('span', 'gv-testa-nome talos-wfg__fase-nome', tr('agenti.graph.phaseTitle', { n: g.order + 1, nome: g.label }));
-    nome.title = tr('agenti.graph.phaseTitle', { n: g.order + 1, nome: g.label }); // il nome intero anche quando due righe non bastano
+    const nome = el('span', 'gv-testa-nome talos-wfg__fase-nome', tr(K.titolo, { n: g.order + 1, nome: g.label }));
+    nome.title = tr(K.titolo, { n: g.order + 1, nome: g.label }); // il nome intero anche quando due righe non bastano
     const perc = el('span', 'gv-testa-perc', percento(c));
     const chiudi = el('button', 'gv-testa-chiudi nopan');
     chiudi.type = 'button';
@@ -184,9 +195,13 @@ export function creaTela(host, opzioni) {
     chiudi.dataset.focusKey = `chiudi:${g.phaseId}`;
     chiudi.append(icona('i-chevron', 'gv-gira'));
     chiudi.addEventListener('click', (e) => { e.stopPropagation(); onGruppo?.(g.phaseId, false, b); });
+    /* nelle deleghe il primo gruppo è la conversazione, da sola: una percentuale e «0 di 1 terminati» su di lei non dicono
+       niente (non è un lavoro che avanza: è chi li ha avviati). Resta il nome. */
     riga.append(ic, nome, perc, chiudi);
     const sotto = el('div', 'gv-testa-sotto');
-    sotto.append(segmentata(c.counts, g.total), el('span', 'gv-testa-conto', `${tr('agenti.graph.finishedOf', { fatti: cifra(c.terminated), totale: cifra(g.total) })}${c.attention ? ` · ${tr('agenti.graph.toCheck', { n: c.attention })}` : ''}`));
+    /* nelle deleghe l'ora del lotto sta qui e non nel titolo: nel titolo andava a capo col punto appeso (foto del 12/10 sera) */
+    const ora = lotti ? dati.panoramica?.groups?.find((x) => x.phaseId === g.phaseId)?.ora : null;
+    sotto.append(segmentata(c.counts, g.total), el('span', 'gv-testa-conto', `${ora ? `${ora} · ` : ''}${tr('agenti.graph.finishedOf', { fatti: cifra(c.terminated), totale: cifra(g.total) })}${c.attention ? ` · ${tr('agenti.graph.toCheck', { n: c.attention })}` : ''}`));
     testa.append(riga, sotto);
   }
   function riempiCartaGruppo(carta, g) {
@@ -194,7 +209,7 @@ export function creaTela(host, opzioni) {
     const c = dati.conteggi(g.phaseId) ?? { counts: {}, terminated: 0, attention: 0, total: g.total, progress: null };
     const conti = conteggiFase(c.counts);
     const ic = el('span', 'talos-wfg__gruppo-icona'); ic.append(icona(iconaDellaFase(g)));
-    const nome = el('span', 'talos-wfg__gruppo-nome', tr('agenti.graph.phaseTitle', { n: g.order + 1, nome: g.label }));
+    const nome = el('span', 'talos-wfg__gruppo-nome', tr(K.titolo, { n: g.order + 1, nome: g.label }));
     const totaleDetto = tn('agenti.graph.agentOne', 'agenti.graph.agentMany', g.total, { n: cifra(g.total) });
     const conto = el('span', 'talos-wfg__gruppo-conto', totaleDetto);
     const barra = el('span', 'gv-gruppo-barra');
@@ -202,15 +217,15 @@ export function creaTela(host, opzioni) {
     const dl = el('dl', 'talos-wfg__conti');
     for (const [chiave, chiaveTesto, tono] of FAMIGLIE) {
       const r = el('div', 'talos-wfg__conto');
-      const dt = el('dt'); const punto = el('span', conti[chiave] > 0 ? 'talos-wfg__punto' : 'talos-wfg__punto talos-wfg__punto--vuoto'); punto.dataset.tono = conti[chiave] > 0 ? tono : 'neutro'; dt.append(punto, tr(chiaveTesto));
+      const dt = el('dt'); const punto = el('span', conti[chiave] > 0 ? 'talos-wfg__punto' : 'talos-wfg__punto talos-wfg__punto--vuoto'); punto.dataset.tono = conti[chiave] > 0 ? tono : 'neutro'; dt.append(punto, tr(famiglia(chiaveTesto)));
       r.append(dt, el('dd', null, cifra(conti[chiave])));
       dl.append(r);
     }
     const apri = el('span', 'gv-gruppo-apri', tr('agenti.graph.openHere'));
     carta.append(ic, nome, conto, barra, dl, apri);
     carta.setAttribute('aria-label', c.progress === null || c.progress === undefined
-      ? tr('agenti.graph.groupAria', { n: g.order + 1, nome: g.label, totale: totaleDetto })
-      : tr('agenti.graph.groupAriaProgress', { n: g.order + 1, nome: g.label, totale: totaleDetto, perc: Math.floor(c.progress * 100) }));
+      ? tr(K.aria, { n: g.order + 1, nome: g.label, totale: totaleDetto })
+      : tr(K.ariaAvanzamento, { n: g.order + 1, nome: g.label, totale: totaleDetto, perc: Math.floor(c.progress * 100) }));
     carta.dataset.tono = c.attention > 0 ? 'errore' : conti.inCorso > 0 ? 'corso' : g.total > 0 && conti.conclusi === g.total ? 'ok' : 'attesa';
   }
   function disegnaBlocchi() {
@@ -234,7 +249,7 @@ export function creaTela(host, opzioni) {
         corsia.dataset.forma = b.tipo;
         corsia.dataset.blocco = b.id;
         corsia.dataset.phaseId = b.phaseId;
-        corsia.setAttribute('aria-label', tr('agenti.graph.phaseLane', { n: g.order + 1, nome: g.label }));
+        corsia.setAttribute('aria-label', tr(K.corsia, { n: g.order + 1, nome: g.label }));
         posiziona(corsia, b.x, b.y, b.w, b.h);
         const testa = el('header', 'gv-testa talos-wfg__fase');
         riempiTestaFase(testa, g, b);
@@ -264,9 +279,12 @@ export function creaTela(host, opzioni) {
     const nome = el('span', 'talos-wfg__coordinatore-nome', sessione.titolo); nome.title = sessione.titolo;
     corpo.append(nome);
     corpo.append(riga);
-    if (sessione.sotto) { const sotto = el('span', 'talos-wfg__passo-modello', sessione.sotto); sotto.title = sessione.sotto; corpo.append(sotto); }
+    if (sessione.sotto) { const sotto = el('span', 'talos-wfg__passo-modello', sessione.sotto); sotto.title = sessione.sottoIntero ?? sessione.sotto; corpo.append(sotto); }
     cartaSessione.append(ic, corpo);
-    cartaSessione.setAttribute('aria-label', tr('agenti.graph.mainSession', { titolo: sessione.titolo }));
+    // nelle deleghe non c'è un workflow da coordinare: la scheda in cima è la conversazione, e ha avviato lei questi agenti
+    cartaSessione.setAttribute('aria-label', tr(lotti ? 'agenti.graph.mainSessionDelegations' : 'agenti.graph.mainSession', { titolo: sessione.titolo }));
+    // nelle deleghe la scheda in cima È la conversazione: si apre (il suo contesto), come ogni altro agente
+    if (onSessione) { cartaSessione.setAttribute('role', 'button'); cartaSessione.tabIndex = 0; cartaSessione.classList.add('nopan'); cartaSessione.dataset.apribile = 'true'; }
   }
   function posiziona(n, x, y, w, h) {
     n.style.transform = `translate(${x}px, ${y}px)`;
@@ -298,8 +316,13 @@ export function creaTela(host, opzioni) {
     // l'albero della sessione: giù dalla sessione, una sbarra orizzontale, una freccia su ogni colonna (struttura R4)
     const s = disp.sessione;
     const barra = s.y + s.h + 36;
-    const centri = disp.blocchi.map((b) => b.x + b.w / 2);
-    gFili.append(svg('path', { class: 'gv-albero', d: `M${s.x + s.w / 2} ${s.y + s.h} V${barra} M${Math.min(...centri, s.x + s.w / 2)} ${barra} H${Math.max(...centri, s.x + s.w / 2)}` }));
+    // nelle deleghe le frecce dalla conversazione vanno solo ai lotti che ha avviato lei (i sotto-agenti arrivano dal loro agente)
+    const dallaCima = lotti ? disp.blocchi.filter((b) => dati.panoramica?.groups?.find((g) => g.phaseId === b.phaseId)?.daConversazione === true) : disp.blocchi;
+    /* il gruppo «Stessa cartella» (le ALTRE conversazioni della cartella) non l'ha avviato questa conversazione: nessuna
+       freccia verso di lui, nemmeno quando è l'unico blocco (foto del 13/10/2026: ambito «Cartella» senza agenti) */
+    const centri = (dallaCima.length ? dallaCima : lotti ? disp.blocchi.filter((b) => b.phaseId !== 'cartella') : disp.blocchi).map((b) => b.x + b.w / 2);
+    // senza colonne non c'è un albero: il tronco pendeva sotto la scheda, verso niente (foto del 13/10/2026, stato vuoto)
+    if (centri.length) gFili.append(svg('path', { class: 'gv-albero', d: `M${s.x + s.w / 2} ${s.y + s.h} V${barra} M${Math.min(...centri, s.x + s.w / 2)} ${barra} H${Math.max(...centri, s.x + s.w / 2)}` }));
     for (const c of centri) gFili.append(svg('path', { class: 'gv-albero', d: `M${c} ${barra} V${disp.cima - 2}`, 'marker-end': 'url(#gv-freccia)' }));
     conteggioArchi = disp.archi.length;
     for (const a of disp.archi) {
@@ -358,17 +381,24 @@ export function creaTela(host, opzioni) {
     carta.disabled = false;
     delete carta.dataset.carica;
     carta.dataset.nodoId = riga.nodeId;
+    // un agente delegato è una sessione: la scheda dice quale (le schede si riciclano, quindi si toglie quando non c'è)
+    if (typeof riga.sessionId === 'string') carta.dataset.sessione = riga.sessionId; else delete carta.dataset.sessione;
     carta.dataset.focusKey = `passo:${riga.nodeId}`;
     const stato = dati.statoDi(riga.nodeId) ?? riga.state;
     const tono = tonoDi(stato);
     const durata = dati.durataDi(riga.nodeId, stato);
-    const firma = `${riga.nodeId}|${stato}|${pos.forma}|${durata}|${tela.dataset.lod}|${riga.label}`;
+    /* deleghe (owner 13/10/2026): la riga sotto il nome dice che cosa fa l'agente; chi non la dà (il Workflow) resta com'era */
+    const attivita = pos.forma === 'mini' ? null : dati.attivitaDi?.(riga, stato) ?? null;
+    const firma = `${riga.nodeId}|${stato}|${pos.forma}|${durata}|${tela.dataset.lod}|${riga.label}|${attivita?.testo ?? ''}`;
     carta.dataset.stato = stato;
     carta.dataset.tono = tono;
     carta.dataset.forma = pos.forma;
     if (carta.dataset.firma === firma) return;
     carta.dataset.firma = firma;
     carta.replaceChildren();
+    /* un nome lungo o un modello lungo si accorciano coi puntini: il suggerimento della scheda li porta interi (esame degli
+       stati del 12/10/2026: «Rifattorizza il modulo di importazione…» non si leggeva da nessuna parte nel diagramma) */
+    { const modelloIntero = dati.modelloDi(riga); carta.title = modelloIntero ? `${riga.label} · ${modelloIntero}` : riga.label; }
     const testa = el('span', 'gv-passo-testa');
     const punto = el('span', 'talos-wfg__punto'); punto.dataset.tono = tono;
     testa.append(punto, el('span', 'gv-passo-nome', riga.label), el('span', 'gv-passo-durata', durata ?? '—'));
@@ -380,10 +410,20 @@ export function creaTela(host, opzioni) {
       const ruolo = el('span', 'gv-passo-ruolo'); ruolo.append(icona(iconaDelPasso(riga)));
       const modello = dati.modelloDi(riga);
       carta.append(testa);
-      if (modello) carta.append(el('span', 'gv-passo-modello', modello));
-      carta.append(pill, ruolo);
+      if (attivita) {
+        // l'attività prende la riga del modello (piena se l'agente lavora adesso); il modello scende accanto allo stato: stessa altezza
+        const cheFa = el('span', 'gv-passo-modello gv-passo-attivita', attivita.testo); cheFa.dataset.vivo = String(attivita.vivo === true);
+        const piede = el('span', 'gv-passo-piede'); piede.append(pill);
+        /* accanto allo stato il posto è poco (in italiano «In esecuzione» lasciava «z-ai/glm-…»): chi lo sa dà il nome CORTO del
+           modello (owner 13/10/2026); quello intero, col fornitore, resta nel suggerimento della scheda e nel dettaglio */
+        if (modello) piede.append(el('span', 'gv-passo-modello', dati.modelloCortoDi?.(riga) ?? modello));
+        carta.append(cheFa, piede, ruolo);
+      } else {
+        if (modello) carta.append(el('span', 'gv-passo-modello', modello));
+        carta.append(pill, ruolo);
+      }
     }
-    carta.setAttribute('aria-label', `${riga.label}, ${parolaDi(stato)}${durata ? `, ${durata}` : ''}`);
+    carta.setAttribute('aria-label', `${riga.label}, ${parolaDi(stato)}${durata ? `, ${durata}` : ''}${attivita ? `, ${attivita.testo}` : ''}`);
   }
   function disegnaVisibili() {
     if (!disp || !dati) return;
@@ -583,7 +623,10 @@ export function creaTela(host, opzioni) {
       if (migliore) { onSeleziona?.(migliore); api.vaiA(migliore, { soloSeFuori: true }); }
       return;
     }
-    if (e.key === 'Enter' && evidenza.selezionato) { e.preventDefault(); onSeleziona?.(evidenza.selezionato, { apri: true }); }
+    /* 13/10/2026 (K1, trovato dalla sessione desktop): con una scheda a FUOCO l'Invio è suo — l'attivazione nativa del bottone, la
+       stessa dello Spazio: apre QUELLA. Prima l'ascoltatore lo prendeva anche qui e apriva l'agente già SCELTO (un altro), e il
+       `preventDefault` toglieva il clic alla scheda col fuoco. Con la tela a fuoco, Invio apre lo scelto, com'era. */
+    if (e.key === 'Enter' && e.target === tela && evidenza.selezionato) { e.preventDefault(); onSeleziona?.(evidenza.selezionato, { apri: true }); }
   });
 
   /* ——— l'API ——— */
@@ -668,6 +711,29 @@ export function creaTela(host, opzioni) {
       if (soloSeFuori && sx > 24 && sy > 24 && sx + p.w * vista.zoom < r.width - 24 && sy + p.h * vista.zoom < r.height - 24) return;
       pz.setViewport({ x: r.width / 2 - (p.x + p.w / 2) * k, y: r.height / 2 - (p.y + Math.min(p.h, 200) / 2) * k, zoom: k }, { duration: movimentoRidotto() ? 0 : durata });
       annuncio.textContent = dati?.riga(id)?.label ?? '';
+    },
+    /**
+     * Mette un passo nella vista spostandola il MENO possibile e senza cambiare lo zoom (come `scrollIntoView({ block: 'nearest' })`):
+     * se lo si vede già per intero non si muove niente. Misurato il 13/10/2026 (1920×1080, cinque agenti, diagramma adattato a
+     * zoom 1): scelto un agente il dettaglio si apre e toglie altezza alla tela, la sua scheda finisce a meno di 24 px dal bordo in
+     * basso e `vaiA({ soloSeFuori })` la CENTRAVA — la vista passava da x 297 a x −37 e il resto del diagramma andava contro il
+     * bordo sinistro. Se a questo zoom il passo non ci sta, o non è un passo disposto (un blocco chiuso), ci si va come `vaiA`.
+     * Torna `true` se la vista si è mossa.
+     */
+    mostra(id, { margine = 8, durata = 260 } = {}) {
+      const p = disp?.passi.get(dati?.chiaveDi(id) ?? id);
+      const r = dimensioniTela();
+      const w = (p?.w ?? 0) * vista.zoom, h = (p?.h ?? 0) * vista.zoom;
+      // un id che il diagramma non ha (né passo disposto né blocco) non muove niente, e lo si dice
+      if (!p && !disp?.blocchi.some((b) => b.id === id || b.phaseId === id)) return false;
+      if (!p || w > r.width - 2 * margine || h > r.height - 2 * margine) { api.vaiA(id, { soloSeFuori: true, durata }); return true; }
+      const sx = p.x * vista.zoom + vista.x, sy = p.y * vista.zoom + vista.y;
+      const dx = sx < margine ? margine - sx : sx + w > r.width - margine ? r.width - margine - (sx + w) : 0;
+      const dy = sy < margine ? margine - sy : sy + h > r.height - margine ? r.height - margine - (sy + h) : 0;
+      if (dx === 0 && dy === 0) return false;
+      pz.setViewport({ x: vista.x + dx, y: vista.y + dy, zoom: vista.zoom }, { duration: movimentoRidotto() ? 0 : durata });
+      annuncio.textContent = dati?.riga(id)?.label ?? '';
+      return true;
     },
     /** Un blocco in alto a sinistra (o al centro, se è più stretto della vista), a uno zoom leggibile. */
     mostraInAlto(id, k = 0.8) {

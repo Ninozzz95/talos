@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import { DEFAULT_INHERITED_ENV_VARS } from '@modelcontextprotocol/client/stdio';
 import { connettiAgenteAcp, validaRuntimeAgenteEsterno } from '../src/acp-agent.mjs';
+import { VARIABILE_DIFESA_RICERCA } from '../src/difesa-ricerca-programmi.mjs';
 
 const script = fileURLToPath(new URL('./fixtures/acp-agent-finto.mjs', import.meta.url));
 async function prepara(t, modo = 'normale') {
@@ -94,7 +95,9 @@ test('PL-ACP-07 — ambiente minimo e nomi dichiarati, segreti vietati negli arg
   assert.equal(prima.vietata, false);
   // PL-REG-WINDOWS-ENV: queste tre variabili OS sono aggiunte su questo Windows.
   const aggiunteOs = process.platform === 'win32' ? ['LOGONSERVER', 'USERDOMAIN', 'WINDIR'] : [];
-  assert.ok(prima.ambiente.every(k => [...DEFAULT_INHERITED_ENV_VARS, ...aggiunteOs, 'PL_CHIAVE_DICHIARATA'].map(v => v.toUpperCase()).includes(k.toUpperCase())));
+  /* R1 (CLI 0.6.8): l'unica variabile in più è la difesa contro il programma piantato, voluta (i figli dell'agente non cercano nella cartella) */
+  assert.ok(prima.ambiente.every(k => [...DEFAULT_INHERITED_ENV_VARS, ...aggiunteOs, 'PL_CHIAVE_DICHIARATA', VARIABILE_DIFESA_RICERCA].map(v => v.toUpperCase()).includes(k.toUpperCase())));
+  assert.ok(prima.ambiente.some(k => k.toUpperCase() === VARIABILE_DIFESA_RICERCA.toUpperCase()), 'the defence reaches the agent');
   assert.throws(() => validaRuntimeAgenteEsterno({ ...f.runtime, argomenti: ['--api-key', 'segreto-finto-pl'] }, { env }), { code: 'ACP_RUNTIME_INVALID' });
   assert.throws(() => validaRuntimeAgenteEsterno({ ...f.runtime, variabiliAmbiente: ['NODE_OPTIONS'] }, { env }), { code: 'ACP_RUNTIME_INVALID' });
   assert.throws(() => validaRuntimeAgenteEsterno({ ...f.runtime, cwd: '.' }), { code: 'ACP_RUNTIME_INVALID' });

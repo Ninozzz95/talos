@@ -80,7 +80,8 @@ export function shortenRecentLargeOutputs(messages, { pointer = DEFAULT_CLEARED_
      quelle righe utente non rispondono al giro. Come Hermes `_pending_tool_round` (1365-1376, che salta le righe «steer» in
      coda) si saltano le righe utente che seguono DIRETTAMENTE le uscite, e si risparmiano solo le uscite. */
   let pendingEnd = list.length; // se prima delle righe utente non c'è un'uscita, il giro sotto risulta vuoto: niente si risparmia
-  while (pendingEnd > 0 && list[pendingEnd - 1]?.role === 'user') pendingEnd--;
+  // 15/10/2026: anche un system tardo (l'aggiornamento del contesto, che ora resta al suo posto) non risponde al giro
+  while (pendingEnd > 0 && ['user', 'system', 'developer'].includes(list[pendingEnd - 1]?.role)) pendingEnd--;
   let pendingStart = pendingEnd;
   while (pendingStart > 0 && list[pendingStart - 1]?.role === 'tool') pendingStart--;
   const pendingChars = list.slice(pendingStart, pendingEnd).reduce((n, m) => n + (typeof m?.content === 'string' ? m.content.length : 0), 0);

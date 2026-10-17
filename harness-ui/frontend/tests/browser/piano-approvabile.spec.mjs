@@ -65,7 +65,9 @@ test('R4-PLAN-APPROVE-LIVE: le quattro scelte sulla scheda; «accettando le modi
   // Fino all'evento del server la scheda non si dichiara approvata.
   await expect(card).toHaveAttribute('data-status', 'proposed');
   const chip = page.locator('#schermoChat .talos-chat-foot [data-open-sheet="permissions"] .talos-chip__label');
-  await expect(chip).toContainText('Solo lettura');
+  /* 13/10/2026 (bugfixer): in Piano la pillola dice «Piano: solo lettura» (revisione della pillola del 10/10, 89ecfb4bd): la prova
+     cercava «Solo lettura» con la maiuscola di prima. La regola non cambia: in Piano il permesso è di sola lettura, e si vede. */
+  await expect(chip).toHaveText('Piano: solo lettura');
   await evento(page, decisione(sid, { status: 'approved', decisione: 'procedi-accetta-modifiche' }));
   await evento(page, { type: 'CUSTOM', name: 'talos.impostazioni-sessione', _sequenza: 4,
     value: { modalitaOperativa: 'normale', permessi: 'Workspace write', motivo: 'piano-approvato' } });
@@ -124,7 +126,7 @@ test('R4-PLAN-REPLAY-AND-CLOSED: in rigiocata la ricevuta è una sola; un piano 
   const vecchioCambio = { type: 'CUSTOM', name: 'talos.impostazioni-sessione', _sequenza: 4,
     value: { modalitaOperativa: 'normale', permessi: 'Workspace write', motivo: 'piano-approvato' } };
   const { bodies } = await apri(page, sid, { replay: [avvio(sid), proposta(sid), chiuso, vecchioCambio] });
-  await expect(page.locator('#schermoChat .talos-chat-foot [data-open-sheet="permissions"] .talos-chip__label')).toContainText('Solo lettura');
+  await expect(page.locator('#schermoChat .talos-chat-foot [data-open-sheet="permissions"] .talos-chip__label')).toHaveText('Piano: solo lettura'); // 89ecfb4bd, vedi sopra
   const schede = page.locator('#conversation [data-c="PlanArtifact"]');
   await expect(schede).toHaveCount(1);
   await expect(schede.locator('.talos-plan-artifact__state')).toHaveText('Chiuso senza scelta');

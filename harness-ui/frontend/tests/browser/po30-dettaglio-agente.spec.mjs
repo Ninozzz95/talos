@@ -6,8 +6,11 @@
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, test } from '@playwright/test';
-import { PNG } from 'pngjs';
-import { chiudiToastAperti } from './aiuto-toast.mjs';
+
+/* 14/10/2026 — le deleghe stanno sul diagramma nuovo (quello del Workflow): la vista classica è stata tolta. Le prove che erano
+   SUE sono passate in `deleghe-sul-diagramma.spec.mjs`, `deleghe-diagramma-parita.spec.mjs`, `-memoria`, `-dati-fermi`, `-vuoto`
+   e `-registro-vero` (chi copre che cosa: handoff `TABELLA-PROVE-CLASSICA-2026-10-13.md`). Qui restano il dettaglio dell'agente e
+   il pannello Agenti; dove aprono il diagramma, è quello nuovo. */
 
 const FOTO = join(import.meta.dirname, '..', '..', 'artifacts', 'po30-dettaglio-agente');
 const ALBERO = { '': [{ nome: 'src', cartella: true }, { nome: 'README.md', cartella: false }], src: [{ nome: 'registro.mjs', cartella: false }] };
@@ -44,8 +47,9 @@ async function scena(page, { larghezza = 1440, altezza = 900, tema = 'dark', fig
   });
   const inVista = await page.locator('#railTabs').evaluate((n) => { const r = n.getBoundingClientRect(); return r.width > 0 && r.left < window.innerWidth; }).catch(() => false);
   if (!inVista) {
-    const grafo=page.locator('[data-c="GrafoAgenti"]');
-    if (await grafo.isVisible()) { const radice=grafo.locator('[data-nodo-id="po30d-uno"] .talos-grafo__nome'); await radice.focus(); await radice.press('Enter'); }
+    // a finestra stretta la colonna destra è chiusa: col diagramma aperto la apre la scheda in cima (è la conversazione), se no «Dettagli»
+    const grafo = page.locator('#schermoChat > [data-c="GrafoAgenti"]');
+    if (await grafo.isVisible()) await grafo.locator('.gv-sessione').click();
     else await page.locator('.talos-screen:not([hidden]) [data-azione="dettagli"]').first().click();
   }
   await page.locator('#railTabs [data-rail="agenti"]').click();
@@ -53,121 +57,6 @@ async function scena(page, { larghezza = 1440, altezza = 900, tema = 'dark', fig
 }
 const apri = (page, quale = 0) => page.locator('#railAgenti [data-c="AgentRow"]').nth(quale).click();
 const dettaglio = (page) => page.locator('[data-c="DettaglioAgente"]');
-
-test('RIPRESA-GRAFO-INGRESSI — elenco e dettaglio aprono lo stesso grafo centrale con deleghe HTTP', async ({ page }) => {
-  await scena(page);
-  await page.locator('#railAgenti').getByRole('button', { name: 'Apri visuale diagramma' }).click();
-  const grafo = page.locator('[data-c="GrafoAgenti"]');
-  await expect(grafo).toBeVisible();
-  await expect(grafo.locator('[data-nodo-id]')).toHaveCount(3);
-  await expect(grafo.locator('[data-nodo-id="po30d-figlia-a"]')).toContainText('leggi il registro');
-  await expect(grafo.locator('[data-arco]')).toHaveCount(2);
-  const titoloAgente = grafo.getByRole('button', { name: 'Apri dettaglio leggi il registro e correggi la guardia', exact: true });
-  await titoloAgente.hover();
-  expect(await titoloAgente.evaluate(n => n.getAttribute('data-tip') || n.title)).toBe('');
-  await page.waitForTimeout(450);
-  await expect(page.locator('#talosTip')).toBeHidden();
-  await grafo.getByRole('button', { name: 'Apri dettaglio leggi il registro e correggi la guardia', exact: true }).click();
-  await expect(dettaglio(page)).toBeVisible();
-  await expect(grafo).toBeVisible();
-  await dettaglio(page).getByRole('button', { name: 'Apri questo agente nel diagramma' }).click();
-  await expect(grafo.locator('[data-nodo-id="po30d-figlia-a"]')).toHaveAttribute('data-selezionato', 'true');
-  await grafo.getByRole('button', { name: 'Chiudi il diagramma' }).click();
-  await expect(grafo).toHaveCount(0);
-  await expect(page.locator('#conversation')).toBeVisible();
-});
-
-test('RIPRESA-GRAFO-SESSIONE-VUOTA — una nuova sessione offline non eredita le deleghe precedenti', async ({ page }) => {
-  await scena(page);
-  await page.route('**/api/v1/sessions/po30d-vuota/children', r => r.fulfill({ status: 503, json: { ok: false, error: { message: 'Lettura non disponibile' } } }));
-  await page.evaluate(() => {
-    const r = window.__talosHarnessUiRuntime;
-    r.passaASessione('po30d-vuota', 'workspace', 'Sessione senza snapshot');
-    r.handleRealEvent({ type: 'CUSTOM', name: 'talos.fine-rigiocata', value: null }, r.realSessionState.generation); // VELO-SPEC-3: anche l'altra sessione riceve il confine
-  });
-  await page.locator('#railTabs [data-rail="agenti"]').click();
-  await expect(page.locator('#railAgenti').getByRole('status')).toContainText('Dati non aggiornati');
-  await expect(page.locator('#railAgenti [data-c="AgentRow"]')).toHaveCount(0);
-  await page.locator('#railAgenti').getByRole('button', { name: 'Apri visuale diagramma' }).click();
-  await expect(page.locator('[data-c="GrafoAgenti"] [data-nodo-id]')).toHaveCount(1);
-});
-
-test('RIPRESA-GRAFO-FILTRI — ricerca lista conservata al refresh, filtri grafo e tastiera', async ({ page }) => {
-  await scena(page);
-  const ricerca = page.getByRole('searchbox', { name: 'Cerca agenti' });
-  await ricerca.fill('registro');
-  await expect(page.locator('#railAgenti [data-c="AgentRow"]')).toHaveCount(1);
-  await page.evaluate(() => { const r = window.__talosHarnessUiRuntime; r.handleRealEvent({ type: 'ToolCallResult', toolCallId: 'd1', content: 'ok', _sequenza: 9400 }, r.realSessionState.generation); });
-  await expect(ricerca).toHaveValue('registro');
-  await page.locator('#railAgenti').getByRole('button', { name: 'Apri visuale diagramma' }).click();
-  const grafo = page.locator('[data-c="GrafoAgenti"]');
-  await grafo.getByRole('button', { name: 'Cerca nel diagramma' }).click();
-  await grafo.getByRole('searchbox', { name: 'Cerca agente nel diagramma' }).fill('controlla');
-  await expect(grafo.locator('[data-nodo-id]')).toHaveCount(1);
-  await grafo.getByRole('button', { name: 'Altri comandi del diagramma' }).click(); await grafo.getByRole('menuitem', { name: 'Azzera filtri', exact: true }).click();
-  await expect(grafo.locator('[data-nodo-id]')).toHaveCount(3);
-  await grafo.getByRole('button', { name: 'Aumenta zoom' }).focus();
-  await page.keyboard.press('Enter');
-  await expect(grafo.locator('[data-zoom]')).not.toHaveText('100%');
-});
-
-test('RIPRESA-GRAFO-ERRORE — una rilettura fallita conserva nodi e filtro, poi recupera', async ({ page }) => {
-  await scena(page);
-  await page.locator('#railAgenti').getByRole('button', { name: 'Apri visuale diagramma' }).click();
-  const grafo = page.locator('[data-c="GrafoAgenti"]');
-  // la rilettura automatica ogni 5 s (`app.js`, grafoTimer) salta a scheda nascosta: così il rosso e il recupero li porta SOLO «Aggiorna»
-  await page.evaluate(() => Object.defineProperty(document, 'hidden', { configurable: true, get: () => true }));
-  // e lo stream degli eventi, che nella scena si chiude e si riapre ogni ~3 s rileggendo le deleghe a ogni `onopen`, aspetta 10 minuti (campo SSE `retry`)
-  await page.route('**/api/v1/sessions/po30d-*/events*', (r) => r.fulfill({ contentType: 'text/event-stream', body: 'retry: 600000\n\n' }));
-  await page.waitForTimeout(3500);
-  await page.route('**/api/v1/sessions/po30d-uno/children', r => r.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ ok: false, error: { message: 'Banco temporaneamente offline' } }) }));
-  await grafo.getByRole('button', { name: 'Altri comandi del diagramma' }).click(); await grafo.getByRole('menuitem', { name: 'Aggiorna', exact: true }).click();
-  await expect(grafo.locator('.talos-grafo__stato')).toContainText('Dati non aggiornati');
-  await expect(grafo.locator('[data-nodo-id]')).toHaveCount(3);
-  await page.route('**/api/v1/sessions/po30d-uno/children', r => r.fulfill({ json: { ok: true, data: { figli: FIGLIE.map(a => ({ ...a, conclusa: true })) } } }));
-  await grafo.getByRole('button', { name: 'Altri comandi del diagramma' }).click(); await grafo.getByRole('menuitem', { name: 'Aggiorna', exact: true }).click();
-  await expect(grafo.locator('.talos-grafo__stato')).not.toContainText('Dati non aggiornati');
-  await expect(grafo.locator('[data-nodo-id="po30d-figlia-a"]')).toHaveAttribute('data-stato', 'done');
-});
-
-test('RIPRESA-GRAFO-NAVIGAZIONE — ricarica ricorda la ricerca, un’altra sessione non eredita il grafo', async ({ page }) => {
-  await scena(page);
-  await page.locator('#railAgenti').getByRole('button', { name: 'Apri visuale diagramma' }).click();
-  const grafo = page.locator('[data-c="GrafoAgenti"]');
-  await grafo.getByRole('button', { name: 'Cerca nel diagramma' }).click();
-  await grafo.getByRole('searchbox').fill('controlla');
-  // Nuovo documento con lo stesso setup HTTP e la stessa sessione, senza ricreare il browser context.
-  await scena(page);
-  await expect(grafo).toBeVisible();
-  await expect(grafo.getByRole('searchbox')).toHaveValue('controlla');
-  await expect(grafo.locator('[data-nodo-id]')).toHaveCount(1);
-  await page.route('**/api/v1/sessions/po30d-due/children', r => r.fulfill({ json: { ok: true, data: { figli: [] } } }));
-  await page.evaluate(() => {
-    const r = window.__talosHarnessUiRuntime;
-    r.passaASessione('po30d-due', 'workspace', 'Altra sessione');
-    r.handleRealEvent({ type: 'CUSTOM', name: 'talos.fine-rigiocata', value: null }, r.realSessionState.generation); // VELO-SPEC-3: anche l'altra sessione riceve il confine
-  });
-  await expect(grafo).toHaveCount(0);
-  await expect(page.locator('#schermoChat')).toBeVisible();
-  await expect(page.locator('#schermoChat')).not.toHaveClass(/talos-grafo-aperto/);
-  await expect(page.locator('#conversation')).toHaveCSS('visibility', 'visible');
-});
-
-for (const larghezza of [1024, 1440]) for (const tema of ['dark', 'light']) {
-  test(`RIPRESA-GRAFO-FOTO ${larghezza} ${tema}`, async ({ page }, testInfo) => {
-    await scena(page, { larghezza, altezza: larghezza === 1024 ? 800 : 900, tema });
-    await page.locator('#railAgenti').getByRole('button', { name: 'Apri visuale diagramma' }).click();
-    const g = page.locator('[data-c="GrafoAgenti"]');
-    await expect(g.locator('[data-nodo-id]')).toHaveCount(3);
-    await expect(g).toBeVisible();
-    const misure = await g.evaluate(n => { const c = n.querySelector('.talos-grafo__canvas').getBoundingClientRect(); const r = n.getBoundingClientRect(); return { sfonda: n.scrollWidth > n.clientWidth + 1, dentro: r.left >= 0 && r.right <= innerWidth + 1, larghezza: c.width, altezza: c.height }; });
-    expect(misure.sfonda).toBe(false); expect(misure.dentro).toBe(true); expect(misure.larghezza).toBeGreaterThan(250); expect(misure.altezza).toBeGreaterThan(150);
-    await page.screenshot({ path: testInfo.outputPath('grafo.png'), fullPage: true });
-    await g.getByRole('button', { name: 'Apri dettaglio leggi il registro e correggi la guardia', exact: true }).click();
-    await expect(dettaglio(page)).toBeVisible();
-    await page.screenshot({ path: testInfo.outputPath('grafo-dettaglio.png'), fullPage: true });
-  });
-}
 
 test('PO30-AGENTE-01 — si apre sulla Panoramica: compito intero, fatti veri in parole umane, niente righe vuote', async ({ page }) => {
   await scena(page);
@@ -305,71 +194,16 @@ for (const [larghezza, altezza] of [[1440, 900], [1024, 800]]) {
 }
 
 
-test('RIPRESA-GRAFO-MOVIMENTO — tracking reale, pixel animati, identità e movimento ridotto', async ({ page }, testInfo) => {
-  await scena(page);
-  await page.emulateMedia({ reducedMotion: 'no-preference' });
-  await page.locator('#railAgenti').getByRole('button', { name: 'Apri visuale diagramma' }).click();
-  const g=page.locator('[data-c="GrafoAgenti"]'), a=g.locator('[data-nodo-id="po30d-figlia-a"]');
-  await expect(g.locator('[data-statistica="chiamate"] strong')).toHaveText('5');
-  await expect(g.locator('[data-statistica="file"] strong')).toHaveText('2');
-  await expect(g.locator('.talos-grafo__copertura')).toContainText('conteggi parziali');
-  await expect(a).toHaveAttribute('data-operativo','true');
-  await a.evaluate(n=>{window.__nodoPrima=n;});
-  const arco=g.locator('[data-attivo="true"]').first();
-  await expect(arco).toBeVisible();
-  // come il fronte del Workflow: tratteggio che scorre (`grafo-tela.css`, `.gv-arco[data-tipo="fronte"]`)
-  await expect(g.locator('[data-arco="delega"][data-attivo="true"]').first()).toHaveCSS('stroke-dasharray', '7px, 5px');
-  await expect(arco).toHaveCSS('animation-name', 'gv-scorre');
-  await expect.poll(()=>arco.evaluate(n=>n.getAnimations().filter(a=>a.playState==='running').length)).toBe(1);
-  // Stessa area dipinta, durante due fasi reali dell'animazione.
-  const box=await arco.boundingBox(); const clip={x:Math.max(0,box.x-3),y:Math.max(0,box.y-3),width:Math.max(8,box.width+6),height:Math.max(8,box.height+6)};
-  const prima=PNG.sync.read(await page.screenshot({clip,path:testInfo.outputPath('arco-prima.png')}));
-  await page.waitForTimeout(270);
-  const dopo=PNG.sync.read(await page.screenshot({clip,path:testInfo.outputPath('arco-durante.png')}));
-  let diff=0;for(let i=0;i<prima.data.length;i+=4)if(prima.data[i]!==dopo.data[i]||prima.data[i+1]!==dopo.data[i+1]||prima.data[i+2]!==dopo.data[i+2])diff++;
-  expect(diff).toBeGreaterThan(3);
-  await g.getByRole('button',{name:'Aumenta zoom'}).click(); const zoom=await g.locator('[data-zoom]').textContent();
-  await g.getByRole('button',{name:'Altri comandi del diagramma'}).click();await g.getByRole('menuitem',{name:'Aggiorna',exact:true}).click();
-  await expect.poll(()=>a.evaluate(n=>n===window.__nodoPrima)).toBe(true);
-  await expect(g.locator('[data-zoom]')).toHaveText(zoom);
-  await page.emulateMedia({reducedMotion:'reduce'});
-  await expect(arco).toHaveCSS('animation-name','gv-scorre');await expect(arco).toHaveCSS('animation-duration','6s');
-  await expect(a).toHaveCSS('transition-duration','0s');
-  await g.locator('summary').click(); await expect(g.locator('.talos-grafo__eventi button').first()).toBeVisible();
-});
-
 test('RIPRESA-AGENTI-EVENTO — nuova delega e strumenti arrivano senza uscire dalla chat',async({page})=>{
  await scena(page);
  await page.locator('#railAgenti').getByRole('button',{name:'Apri visuale diagramma'}).click();
+ const grafo=page.locator('#schermoChat > [data-c="GrafoAgenti"]');await expect(grafo.locator('[data-sessione]')).toHaveCount(2);
  const nuovo={...FIGLIE[0],sessionId:'po30d-live',padreId:'po30d-uno',taskCorto:'Agente arrivato in diretta',attivita:{chiamate:1,file:[],attrezzoCorrente:'shell',passi:[]}};
  await page.route('**/api/v1/sessions/po30d-uno/children',r=>r.fulfill({json:{ok:true,data:{figli:[...FIGLIE,nuovo]}}}));
  await page.evaluate(agent=>{const r=window.__talosHarnessUiRuntime;r.handleRealEvent({type:'CUSTOM',name:'talos.agenti',value:{version:1,parentId:'po30d-uno',childId:agent.sessionId,reason:'created',agent}},r.realSessionState.generation);},nuovo);
- await expect(page.locator('[data-c="GrafoAgenti"] [data-nodo-id="po30d-live"]')).toBeVisible({timeout:2000});
+ await expect(grafo.locator('[data-sessione="po30d-live"]')).toBeVisible({timeout:2000});
  await expect(page.locator('#railAgenti [data-c="AgentRow"]')).toHaveCount(3,{timeout:2000});
- await expect(page.locator('[data-nodo-id="po30d-live"]')).toHaveAttribute('data-operativo','true');
-});
-
-test('RIPRESA-AGENTI-CONFINI — nipote conserva padre e un evento estraneo non contamina',async({page})=>{
- await scena(page);await page.locator('#railAgenti').getByRole('button',{name:'Apri visuale diagramma'}).click();
- const manda=async(value)=>page.evaluate(value=>{const r=window.__talosHarnessUiRuntime;r.handleRealEvent({type:'CUSTOM',name:'talos.agenti',value},r.realSessionState.generation)},value);
- const agent={...FIGLIE[0],sessionId:'po30d-nipote',padreId:'po30d-figlia-a',taskCorto:'Nipote in diretta'};
- await manda({version:1,sessionId:'po30d-uno',parentId:agent.padreId,childId:agent.sessionId,reason:'updated',agent});
- await expect(page.locator('[data-nodo-id="po30d-nipote"]')).toBeAttached();
- await expect(page.locator('#railAgenti [data-c="AgentRow"]')).toHaveCount(3);
- await manda({version:1,sessionId:'estranea',parentId:'po30d-uno',childId:'intruso',reason:'created',agent:{...agent,sessionId:'intruso',padreId:'po30d-uno'}});
- await expect(page.locator('[data-nodo-id="intruso"]')).toHaveCount(0);
- // da tastiera: a 1440×900 con le due colonne aperte la minimappa copre questo pulsante (misurato il 02/10)
- const collassa=page.locator('[data-nodo-id="po30d-figlia-a"]').getByRole('button',{name:/Espandi o collassa/});await collassa.focus();await collassa.press('Enter');
- await expect(page.locator('[data-nodo-id="po30d-nipote"]')).toHaveCount(0);
-});
-
-test('RIPRESA-GRAFO-MADRE — anche operazioni e fine del padre si aggiornano in diretta',async({page})=>{
- await scena(page);await page.locator('#railAgenti').getByRole('button',{name:'Apri visuale diagramma'}).click();
- const nodo=page.locator('[data-nodo-id="po30d-uno"]');
- await page.evaluate(()=>{const r=window.__talosHarnessUiRuntime;r.handleRealEvent({type:'ToolCallStart',toolCallId:'madre-live',toolCallName:'leggi',_sequenza:10001},r.realSessionState.generation)});
- await expect(nodo).toHaveAttribute('data-operativo','true',{timeout:1500});
- await page.evaluate(()=>{const r=window.__talosHarnessUiRuntime;r.handleRealEvent({type:'ToolCallResult',toolCallId:'madre-live',content:'letto',_sequenza:10002},r.realSessionState.generation);r.handleRealEvent({type:'RunFinished',_sequenza:10003},r.realSessionState.generation)});
- await expect(nodo).toHaveAttribute('data-operativo','false',{timeout:1500});await expect(nodo).toHaveAttribute('data-stato','done');
+ await expect(grafo.locator('[data-sessione="po30d-live"]')).toHaveAttribute('data-stato','running');
 });
 
 test('RIPRESA-AGENTI-RISULTATO — esito dopo fine padre non impersona TU e non riapre attesa',async({page})=>{
@@ -378,64 +212,6 @@ test('RIPRESA-AGENTI-RISULTATO — esito dopo fine padre non impersona TU e non 
  const nota=page.locator('#conversation .real-session-status').last();await expect(nota).toContainText('Risultato del sotto-agente');await expect(nota).toContainText('Test passati');
  await expect(page.locator('#conversation [data-turno=utente]')).toHaveCount(prima);expect(await page.evaluate(()=>window.iniettato)).toBeUndefined();
  await expect(page.getByRole('button',{name:'Invia',exact:true}).first()).toBeVisible();
-});
-
-test('RIPRESA-GRAFO-RICONNESSIONE — nipote conclusa offline sostituisce snapshot live obsoleto',async({page})=>{
- await scena(page);
- await page.locator('#railAgenti').getByRole('button',{name:'Apri visuale diagramma'}).click();
- const nipote={sessionId:'po30d-nipote',padreId:'po30d-figlia-a',taskCorto:'Verifica offline',conclusa:false,attivita:{chiamate:1,file:[],attrezzoCorrente:'leggi',passi:[]}};
- await page.evaluate(agent=>{const r=window.__talosHarnessUiRuntime;r.handleRealEvent({type:'CUSTOM',name:'talos.agenti',value:{version:1,sessionId:'po30d-uno',parentId:agent.padreId,childId:agent.sessionId,reason:'created',agent}},r.realSessionState.generation)},nipote);
- const nodo=page.locator('[data-nodo-id="po30d-nipote"]');await expect(nodo).toHaveAttribute('data-stato','active');
- await page.route('**/api/v1/sessions/po30d-figlia-a/children',r=>r.fulfill({json:{ok:true,data:{figli:[{...nipote,conclusa:true,attivita:{chiamate:2,file:[],attrezzoCorrente:null,passi:[]}}]}}}));
- await page.evaluate(()=>window.__talosHarnessUiRuntime.realSessionState.eventSource.onopen());
- await expect(nodo).toHaveAttribute('data-stato','done',{timeout:3000});await expect(nodo).toHaveAttribute('data-operativo','false');
-});
-
-test('RIPRESA-GRAFO-INDICATORI — stato visibile, animato e accessibile nei nodi',async({page})=>{
- await scena(page);await page.locator('#railAgenti').getByRole('button',{name:'Apri visuale diagramma'}).click();
- const nodo=page.locator('[data-nodo-id="po30d-figlia-a"]'),pallino=nodo.locator('.talos-grafo__pallino');
- await expect(pallino).toBeVisible();await expect(nodo.locator('.talos-grafo__badge-stato')).toHaveText('In corso');
- // chi lavora ha il bordo che gira, come il passo «running» del Workflow; col movimento ridotto rallenta, non si ferma
- expect(await nodo.evaluate(n=>getComputedStyle(n,'::before').animationName)).toBe('gv-gira');
- await page.emulateMedia({reducedMotion:'reduce'});expect(await nodo.evaluate(n=>getComputedStyle(n,'::before').animationDuration)).toBe('7s');
- await page.emulateMedia({reducedMotion:'no-preference'});
- const colori=[await pallino.evaluate(n=>getComputedStyle(n).backgroundColor)];
- for(const [ultimoEsito,testo,stato] of [['ok','Concluso','done'],['errore','Errore','error']]){
-  await page.evaluate(({agent,ultimoEsito})=>{const r=window.__talosHarnessUiRuntime;r.handleRealEvent({type:'CUSTOM',name:'talos.agenti',value:{version:1,sessionId:'po30d-uno',parentId:'po30d-uno',childId:agent.sessionId,reason:'updated',agent:{...agent,padreId:'po30d-uno',conclusa:true,ultimoEsito}}},r.realSessionState.generation)},{agent:FIGLIE[0],ultimoEsito});
-  await expect(nodo).toHaveAttribute('data-stato',stato);await expect(nodo.locator('.talos-grafo__badge-stato')).toHaveText(testo);colori.push(await pallino.evaluate(n=>getComputedStyle(n).backgroundColor));
- }
- expect(new Set(colori).size).toBe(3);
- // al contrario: un agente fermo (qui in errore) non gira
- expect(await nodo.evaluate(n=>getComputedStyle(n,'::before').animationName)).toBe('none');
-});
-
-test('RIPRESA-GRAFO-MOCKUP — minimappa, file affiancato e cronologia osservata reali',async({page})=>{
- const records=[{sessionId:'po30d-uno',conclusa:false}, {...FIGLIE[0],padreId:'po30d-uno'}].map((node,i)=>({schema:'talos.agent-timeline.v1',rootId:'po30d-uno',seq:i+1,at:'2026-09-19T10:00:00Z',event:'created',node}));
- await page.route('**/api/v1/sessions/po30d-uno/agent-timeline*',r=>{const after=Number(new URL(r.request().url()).searchParams.get('after')||0);return r.fulfill({json:{ok:true,data:{schema:'talos.agent-timeline.v1',rootId:'po30d-uno',through:2,next:null,coverage:'complete',persisted:true,items:records.filter(e=>e.seq>after)}}});});
- await scena(page);await page.route('**/api/v1/sessions/po30d-figlia-a/tree/file?*',r=>r.fulfill({json:{ok:true,data:{contenuto:'export const verifica = 42;'}}}));
- await page.locator('#railAgenti').getByRole('button',{name:'Apri visuale diagramma'}).click();
- const g=page.locator('[data-c="GrafoAgenti"]');
- // la minimappa c'è solo quando serve: con tutto il grafo in vista no, appena una parte esce sì (decisione owner 02/10)
- await g.getByRole('button',{name:'Adatta il diagramma alla finestra'}).click();await expect(g.getByRole('button',{name:'Panoramica del diagramma'})).toHaveCount(0);
- const piu=g.getByRole('button',{name:'Aumenta zoom'});await piu.click();await piu.click();await expect(g.getByRole('button',{name:'Panoramica del diagramma'})).toBeVisible();
- expect(await g.locator('.talos-grafo__mini [data-mini-nodo]').count()).toBe(3);
- await g.getByRole('button',{name:'Apri dettaglio leggi il registro e correggi la guardia',exact:true}).click();
- await g.getByRole('button', { name: 'Altri comandi del diagramma' }).click(); await g.getByRole('menuitem', { name: 'Affianca file', exact: true }).click();await expect(g.locator('.talos-grafo__anteprima pre')).toHaveText('export const verifica = 42;');
- await g.getByRole('button',{name:'Chiudi affiancamento'}).click();
- await page.evaluate(agent=>{const r=window.__talosHarnessUiRuntime;r.handleRealEvent({type:'CUSTOM',name:'talos.agenti',value:{version:1,sessionId:'po30d-uno',parentId:'po30d-uno',childId:agent.sessionId,reason:'completed',agent:{...agent,padreId:'po30d-uno',conclusa:true,ultimoEsito:'ok'}}},r.realSessionState.generation)},FIGLIE[0]);
- await expect(g.locator('[data-nodo-id="po30d-figlia-a"]')).toHaveAttribute('data-stato','done');
- const cursore=g.getByRole('slider',{name:'Cronologia osservata del diagramma'});await expect(cursore).toHaveAttribute('max','1');await cursore.fill('1');
- await expect(g.locator('[data-nodo-id="po30d-figlia-a"]')).toHaveAttribute('data-stato','active');await expect(g).toHaveAttribute('data-replay','true');
- await g.getByRole('button',{name:'Torna al vivo',exact:true}).click();await expect(g.locator('[data-nodo-id="po30d-figlia-a"]')).toHaveAttribute('data-stato','done');
-});
-
-test('RIPRESA-GRAFO-MADRE-ERRORE — errore e stop del padre non diventano successo',async({page})=>{
- await scena(page);await page.locator('#railAgenti').getByRole('button',{name:'Apri visuale diagramma'}).click();
- const nodo=page.locator('[data-nodo-id="po30d-uno"]');
- await page.evaluate(()=>{const r=window.__talosHarnessUiRuntime;r.handleRealEvent({type:'RunError',code:'provider-error',message:'Errore controllato',_sequenza:12000},r.realSessionState.generation)});
- await expect(nodo).toHaveAttribute('data-stato','error',{timeout:1500});
- await page.evaluate(()=>{const r=window.__talosHarnessUiRuntime;r.handleRealEvent({type:'RunStarted',_sequenza:12001,input:{consegna:'Riprova'}},r.realSessionState.generation);r.handleRealEvent({type:'RunError',code:'fermato',message:'Fermato',_sequenza:12002},r.realSessionState.generation)});
- await expect(nodo).toHaveAttribute('data-stato','interrupted',{timeout:1500});
 });
 
 for(const modalita of ['resume','redirect'])test(`RIPRESA-AGENTI-CODA-MANUALE — ${modalita} preserva fonte e mostra una sola nota`,async({page})=>{
@@ -447,33 +223,6 @@ for(const modalita of ['resume','redirect'])test(`RIPRESA-AGENTI-CODA-MANUALE �
 });
 
 for (const larghezza of [1440, 390]) {
-  test(`RIPRESA-GRAFO-CARD-INTERA ${larghezza} — badge, misure e spazio aprono, collassa resta separato`, async ({ page }) => {
-    await scena(page, { larghezza });
-    await page.locator('#railAgenti').getByRole('button', { name: 'Apri visuale diagramma' }).click();
-    const grafo = page.locator('[data-c="GrafoAgenti"]');
-    const card = grafo.locator('[data-nodo-id="po30d-figlia-a"]');
-    // Apri visuale diagramma richiude già il rail mobile.
-    for (const parte of ['.talos-grafo__badge-stato', '.talos-grafo__misure']) {
-      await chiudiToastAperti(page); // decisione owner 23/09: il toast può coprire il grafo, si chiude come farebbe una persona
-      await card.locator(parte).click();
-      await expect(dettaglio(page)).toBeVisible();
-      await expect(dettaglio(page)).toHaveAttribute('data-sessione-figlia', 'po30d-figlia-a');
-      await dettaglio(page).getByRole('button', { name: 'Tutti gli agenti', exact: true }).click();
-      if (larghezza < 600) await page.keyboard.press('Escape');
-    }
-    const title = card.getByRole('button', { name: /Apri dettaglio/ });
-    await title.focus(); await title.press('Enter');
-    await expect(dettaglio(page)).toHaveAttribute('data-sessione-figlia', 'po30d-figlia-a');
-    await dettaglio(page).getByRole('button', { name: 'Tutti gli agenti', exact: true }).click();
-    if (larghezza < 600) await page.keyboard.press('Escape');
-    await card.click({ position: { x: 6, y: 6 } });
-    await expect(dettaglio(page)).toBeVisible();
-    await dettaglio(page).getByRole('button', { name: 'Tutti gli agenti', exact: true }).click();
-    if (larghezza < 600) await page.keyboard.press('Escape');
-    await grafo.locator('[data-nodo-id="po30d-uno"]').getByRole('button', { name: /Espandi o collassa/ }).click();
-    await expect(grafo.locator('[data-nodo-id]')).toHaveCount(1);
-    await expect(dettaglio(page)).toHaveCount(0);
-  });
   test(`RIPRESA-AGENTE-PANORAMICA-MD ${larghezza} — compito e risultato formattati e contenuti non fidati`, async ({ page }, info) => {
     await scena(page, { larghezza });
     const task = '## Obiettivo\n\nLeggi **registro** e `src/main.js`.\n\n- Primo passo\n- Secondo passo\n\n```js\nconst esempio = 1;\n```\n\n[Documentazione](https://example.com)\n\n<img src=x onerror="window.__unsafe=1">\n\n[Pericolo](javascript:alert(1))';
@@ -523,10 +272,12 @@ for (const larghezza of [1024, 1440]) for (const tema of ['dark', 'light']) {
   expect(await rows.first().evaluate(n=>n.getBoundingClientRect().height)).toBeLessThan(165);
   await page.screenshot({path:info.outputPath('sidebar-elenco.png'),fullPage:true});
   await rail.getByRole('button',{name:'Apri visuale diagramma'}).click();
-  const grafo=page.locator('[data-c="GrafoAgenti"]');await expect(grafo.locator('[data-nodo-id]')).toHaveCount(9);
-  await expect(grafo.locator('[data-nodo-id="po30d-estraneo"]')).toHaveCount(0);
+  const grafo=page.locator('#schermoChat > [data-c="GrafoAgenti"]');await expect(grafo).toHaveAttribute('data-sorgente','deleghe');
+  // quattro agenti e i loro quattro nipoti: tutti nel diagramma (un lotto della conversazione, quattro degli agenti); l'estraneo no
+  await expect(grafo.locator('.talos-wfg__cima')).toContainText('8 agenti in 5 lotti');
+  await expect(grafo.locator('[data-sessione="po30d-estraneo"]')).toHaveCount(0);
   // A 1024 il pannello destro è un overlay: torna alla chat per aprirlo dal comando reale.
-  await grafo.getByRole('button',{name:'Chiudi il diagramma'}).click();
+  await grafo.locator('.talos-wfg__torna').click();
   if(!(await rail.isVisible())) await page.locator('.talos-screen:not([hidden]) [data-azione="dettagli"]').first().click();
   await rows.filter({hasText:'Verifica 0'}).click();await expect(dettaglio(page).locator('.talos-agente__nome')).toHaveText('Verifica 0');
   nipoti[0]={...nipoti[0],attivita:{...nipoti[0].attivita,chiamate:42}};
@@ -536,63 +287,17 @@ for (const larghezza of [1024, 1440]) for (const tema of ['dark', 'light']) {
   await dettaglio(page).getByRole('button',{name:'Tutti gli agenti',exact:true}).click();
   await rail.getByRole('button',{name:'Apri visuale diagramma'}).click();
   await page.route('**/api/v1/sessions/po30d-padre-0/children',r=>r.fulfill({status:503,json:{ok:false,error:{message:'Lettura nipote temporaneamente offline'}}}));
-  await grafo.getByRole('button',{name:'Altri comandi del diagramma'}).click();await grafo.getByRole('menuitem',{name:'Aggiorna',exact:true}).click();await expect(grafo.locator('.talos-grafo__stato')).toContainText('Dati non aggiornati');
+  // il diagramma nuovo non ha «Aggiorna»: rilegge da solo; qui la rilettura la porta la riconnessione del flusso
+  await page.evaluate(()=>window.__talosHarnessUiRuntime.realSessionState.eventSource.onopen());await expect(grafo.locator('.talos-wfg__avviso')).toContainText('Dati non aggiornati',{timeout:9000});
   await page.evaluate(agent=>{const r=window.__talosHarnessUiRuntime;r.handleRealEvent({type:'CUSTOM',name:'talos.agenti',value:{version:1,sessionId:'po30d-uno',parentId:agent.padreId,childId:agent.sessionId,reason:'updated',agent}},r.realSessionState.generation)},figli[1]);
-  await expect(grafo.locator('.talos-grafo__stato')).toContainText('Dati non aggiornati');
-  const nodoNipote=grafo.getByRole('button',{name:'Apri dettaglio Verifica 0',exact:true});await nodoNipote.focus();await page.keyboard.press('Enter');
-  await expect(dettaglio(page).locator('.talos-agente__nome')).toHaveText('Verifica 0');
+  await expect(grafo.locator('.talos-wfg__avviso')).toContainText('Dati non aggiornati');
+  const schedaNipote=grafo.locator('[data-sessione="po30d-nipote-0"]');await schedaNipote.focus();await page.keyboard.press('Enter');
+  await expect(grafo.locator('.gv-dettaglio .talos-wfg__dettaglio-testa')).toContainText('Verifica 0');
   await page.route('**/api/v1/sessions/po30d-padre-0/children',r=>r.fulfill({json:{ok:true,data:{figli:[nipoti[0]]}}}));
   await scena(page,{larghezza,tema,figlie:figli});await expect(rows).toHaveCount(8);
 
  });
 }
-
-test('RIPRESA-GRAFO-DENSITA — quattordici nodi leggibili, panoramica e ritorno alla lettura',async({page})=>{
- const figli=Array.from({length:13},(_,i)=>({...FIGLIE[0],sessionId:`po30d-denso-${i}`,taskCorto:`Agente ${i}`}));
- await scena(page,{figlie:figli});await page.locator('#railAgenti').getByRole('button',{name:'Apri visuale diagramma'}).click();
- const g=page.locator('[data-c="GrafoAgenti"]');await expect(g.locator('[data-nodo-id]')).toHaveCount(14);
- const zoom=()=>g.locator('[data-zoom]').innerText().then(s=>parseInt(s));expect(await zoom()).toBeGreaterThanOrEqual(80);
- await g.getByRole('button',{name:'Adatta il diagramma alla finestra',exact:true}).click();expect(await zoom()).toBeLessThan(80);
- await g.getByRole('button',{name:'Zoom di lettura',exact:true}).click();expect(await zoom()).toBeGreaterThanOrEqual(80);
- const nodo=g.locator('[data-nodo-id="po30d-denso-12"]');await nodo.getByRole('button',{name:'Apri dettaglio Agente 12',exact:true}).focus();
- await expect.poll(()=>nodo.evaluate(n=>{const r=n.getBoundingClientRect(),c=n.closest('.talos-grafo__canvas').getBoundingClientRect();return r.left>=c.left&&r.right<=c.right&&r.top>=c.top&&r.bottom<=c.bottom})).toBe(true);
- await page.setViewportSize({width:1024,height:800});
- await expect.poll(()=>nodo.evaluate(n=>{const r=n.getBoundingClientRect(),c=n.closest('.talos-grafo__canvas').getBoundingClientRect();return r.left>=c.left&&r.right<=c.right&&r.top>=c.top&&r.bottom<=c.bottom})).toBe(true);
- await page.keyboard.press('Enter');await expect(dettaglio(page).locator('.talos-agente__nome')).toHaveText('Agente 12');
-});
-
-
-/* 09/10/2026 notte (bugfixer, regressione mia di c82341a4a): «Segui attivo» porta la vista sull'agente al lavoro, quindi non è più la
-   vista di lettura; senza spegnerla, al primo ridimensionamento l'osservatore rifaceva `lettura()` e l'agente usciva dalla tela. */
-test('RIPRESA-GRAFO-SEGUI — «Segui attivo» dopo la lettura: l’agente al lavoro resta nella tela anche quando la finestra cambia',async({page})=>{
- const figli=Array.from({length:13},(_,i)=>({...FIGLIE[0],sessionId:`po30d-segui-${i}`,taskCorto:`Agente ${i}`,conclusa:i!==12}));
- await scena(page,{figlie:figli});await page.locator('#railAgenti').getByRole('button',{name:'Apri visuale diagramma'}).click();
- const g=page.locator('[data-c="GrafoAgenti"]');await expect(g.locator('[data-nodo-id]')).toHaveCount(14);
- await g.getByRole('button',{name:'Zoom di lettura',exact:true}).click();
- const segui=g.locator('[aria-pressed]').filter({has:page.locator('use[href="#i-robot"]')}).first();await segui.click();await expect(segui).toHaveAttribute('aria-pressed','true');
- const nodo=g.locator('[data-nodo-id="po30d-segui-12"]');
- const dentro=()=>nodo.evaluate(n=>{const r=n.getBoundingClientRect(),c=n.closest('.talos-grafo__canvas').getBoundingClientRect();return r.left>=c.left&&r.right<=c.right&&r.top>=c.top&&r.bottom<=c.bottom});
- await expect.poll(dentro).toBe(true);
- await page.setViewportSize({width:1024,height:800});
- await expect.poll(dentro).toBe(true);
-});
-
-/* 09/10/2026 notte (bugfixer, owner «sì, in questo lotto»): `else if (segui) centraAttivo();` stava dentro un commento dal 19/09, e
-   «Segui attivo» centrava solo al clic. Qui un aggiornamento in cui lavora un ALTRO agente deve portare la vista su di lui. */
-test('RIPRESA-GRAFO-SEGUI-AGGIORNA — con «Segui attivo» acceso, un aggiornamento porta la vista sull’agente che lavora adesso',async({page})=>{
- const conAttivo=(attivo)=>Array.from({length:13},(_,i)=>({...FIGLIE[0],sessionId:`po30d-segue-${i}`,taskCorto:`Agente ${i}`,conclusa:i!==attivo}));
- await scena(page,{figlie:conAttivo(12)});await page.locator('#railAgenti').getByRole('button',{name:'Apri visuale diagramma'}).click();
- const g=page.locator('[data-c="GrafoAgenti"]');await expect(g.locator('[data-nodo-id]')).toHaveCount(14);
- await g.getByRole('button',{name:'Zoom di lettura',exact:true}).click();
- const segui=g.locator('[aria-pressed]').filter({has:page.locator('use[href="#i-robot"]')}).first();await segui.click();await expect(segui).toHaveAttribute('aria-pressed','true');
- const dentro=(id)=>g.locator(`[data-nodo-id="${id}"]`).evaluate(n=>{const r=n.getBoundingClientRect(),c=n.closest('.talos-grafo__canvas').getBoundingClientRect();return r.left>=c.left&&r.right<=c.right&&r.top>=c.top&&r.bottom<=c.bottom});
- await expect.poll(()=>dentro('po30d-segue-12')).toBe(true);
- expect(await dentro('po30d-segue-0'),'la premessa: l’altro agente sta fuori dalla tela').toBe(false);
- // adesso lavora l'agente 0: un aggiornamento dei figli
- await page.route('**/api/v1/sessions/po30d-uno/children',(r)=>r.fulfill({contentType:'application/json',body:JSON.stringify({ok:true,data:{figli:conAttivo(0)}})}));
- await g.getByRole('button',{name:'Altri comandi del diagramma'}).click();await g.getByRole('menuitem',{name:'Aggiorna',exact:true}).click();
- await expect.poll(()=>dentro('po30d-segue-0'),{timeout:10_000}).toBe(true);
-});
 
 test('RIPRESA-AGENTI-STATO-IGNOTO — dati incompleti non diventano agenti attivi',async({page})=>{
  const {conclusa,...ignoto}=FIGLIE[0];await scena(page,{figlie:[ignoto]});const rail=page.locator('#railAgenti');
@@ -603,16 +308,17 @@ test('RIPRESA-AGENTI-STATO-IGNOTO — dati incompleti non diventano agenti attiv
 });
 
 
-test('RIPRESA-AGENTI-LETTURA-LENTA — refresh sovrapposti non invalidano lo snapshot',async({page})=>{
+test('RIPRESA-AGENTI-LETTURA-LENTA — riletture sovrapposte non si accumulano e non invalidano lo stato',async({page})=>{
+ test.setTimeout(45_000);
  await scena(page);await page.locator('#railAgenti').getByRole('button',{name:'Apri visuale diagramma'}).click();
+ const g=page.locator('#schermoChat > [data-c="GrafoAgenti"]');await expect(g.locator('[data-sessione]')).toHaveCount(2);
  let richieste=0,release;const gate=new Promise(r=>release=r);
- await page.route('**/api/v1/sessions/po30d-uno/children',async r=>{richieste++;await gate;await r.fulfill({json:{ok:true,data:{figli:FIGLIE.map(a=>({...a,conclusa:true}))}}})});
- const g=page.locator('[data-c="GrafoAgenti"]');
+ await page.route('**/api/v1/sessions/po30d-uno/children',async r=>{richieste++;await gate;await r.fulfill({json:{ok:true,data:{figli:FIGLIE.map(a=>({...a,conclusa:true,esitoDelega:'concluso'}))}}})});
  try {
-  await g.getByRole('button',{name:'Altri comandi del diagramma'}).click();await g.getByRole('menuitem',{name:'Aggiorna',exact:true}).click();await expect.poll(()=>richieste).toBe(1);
-  await g.getByRole('button',{name:'Altri comandi del diagramma'}).click();await g.getByRole('menuitem',{name:'Aggiorna',exact:true}).click();await g.getByRole('button',{name:'Altri comandi del diagramma'}).click();await g.getByRole('menuitem',{name:'Aggiorna',exact:true}).click();
-  await page.waitForTimeout(5300);expect(richieste).toBe(1);release();
-  await expect(g.locator('[data-nodo-id="po30d-figlia-a"]')).toHaveAttribute('data-stato','done');
+  // il diagramma rilegge da solo ogni 5 s (non ha più «Aggiorna»): con la prima lettura ancora in volo le successive non partono
+  await expect.poll(()=>richieste,{timeout:9000}).toBe(1);
+  await page.waitForTimeout(11_000);expect(richieste,'due battiti dopo, la lettura in volo è ancora una sola').toBe(1);release();
+  await expect(g.locator('[data-sessione="po30d-figlia-a"]')).toHaveAttribute('data-stato','succeeded',{timeout:9000});
  } finally {release();}
 });
 
@@ -628,93 +334,3 @@ test('RIPRESA-AGENTI-ANNUNCI — refresh invariato non riannuncia il conteggio',
 });
 
 
-test('RIPRESA-GRAFO-SNAPSHOT-INIZIALE — nessun passo fantasma prima di cambi reali',async({page})=>{
- await scena(page);await page.locator('#railAgenti').getByRole('button',{name:'Apri visuale diagramma'}).click();
- const g=page.locator('[data-c="GrafoAgenti"]');await expect(g.locator('.talos-grafo__timeline input')).toBeDisabled();
- const piu=g.getByRole('button',{name:'Aumenta zoom'});await piu.click();await piu.click();const mini=g.getByRole('button',{name:'Panoramica del diagramma'});await mini.focus();const prima=await g.locator('[data-zoom]').innerText();
- await page.keyboard.press('Enter');await expect(g.locator('[data-zoom]')).toHaveText(prima);
-});
-
-/*
- * ⭐ 02/10/2026 — il grafo delle deleghe con la grammatica del Workflow (owner: «gli stessi movimenti … i tasti e pulsanti»).
- * Ciò che le prove sopra non toccavano: il dettaglio in basso (chi · Evidenze recenti · Task corrente · «⋯»), i menu da
- * tastiera (frecce, Esc che restituisce il fuoco), la lente che apre e richiude il campo, il filtro per stato e la velocità.
- */
-test('RIPRESA-GRAFO-GRAMMATICA — dettaglio, menu da tastiera, lente, stato e velocità come il Workflow',async({page})=>{
- await scena(page);await page.locator('#railAgenti').getByRole('button',{name:'Apri visuale diagramma'}).click();
- const g=page.locator('[data-c="GrafoAgenti"]'),det=g.locator('.talos-grafo__dettaglio');
- await expect(g.locator('[data-nodo-id]')).toHaveCount(3);await expect(det).toBeHidden();
- // il dettaglio: si apre scegliendo un agente, coi fatti veri della delega
- const nodo=g.getByRole('button',{name:'Apri dettaglio leggi il registro e correggi la guardia',exact:true});await nodo.focus();await nodo.press('Enter');
- await expect(det).toBeVisible();
- await expect(det.locator('.talos-wfg__dettaglio-nome')).toHaveText('leggi il registro e correggi la guardia');
- await expect(det.locator('.talos-wfg__pill')).toHaveAttribute('data-tono','corso');await expect(det.locator('.talos-wfg__pill')).toHaveText('In corso');
- await expect(det.getByRole('region',{name:'Evidenze recenti'})).toContainText('src/registro.mjs');
- await expect(det.getByRole('region',{name:'Task corrente'})).toContainText('correggi la guardia di stallo');
- await det.getByRole('button',{name:'Altre azioni sull\'agente'}).click();await det.getByRole('menuitem',{name:'Chiudi il dettaglio'}).click();
- await expect(det).toBeHidden();
- // il «⋯» del diagramma: le frecce scorrono le voci, Esc chiude e rende il fuoco al pulsante
- const altro=g.getByRole('button',{name:'Altri comandi del diagramma'});await altro.click();
- await expect(altro).toHaveAttribute('aria-expanded','true');const voci=g.getByRole('menuitem');
- await expect(voci.first()).toBeFocused();await page.keyboard.press('ArrowDown');await expect(voci.nth(1)).toBeFocused();
- await page.keyboard.press('ArrowUp');await page.keyboard.press('ArrowUp');await expect(voci.last()).toBeFocused();
- await page.keyboard.press('Escape');await expect(altro).toHaveAttribute('aria-expanded','false');await expect(altro).toBeFocused();
- await expect(g.getByRole('menuitem')).toHaveCount(0);
- await page.waitForTimeout(300);await expect(page.getByText('Fermo il giro?').filter({visible:true})).toHaveCount(0); // Esc è del menu, non della chat
- // la lente: apre il campo col fuoco dentro; Esc a campo vuoto lo richiude e torna alla lente
- const lente=g.getByRole('button',{name:'Cerca nel diagramma'});await expect(g.getByRole('searchbox')).toHaveCount(0);
- await lente.click();await expect(g.getByRole('searchbox',{name:'Cerca agente nel diagramma'})).toBeFocused();
- // con un giro in corso Esc NON deve arrivare alla chat («Fermo il giro?»): col testo svuota, a vuoto chiude
- await page.keyboard.type('controlla');await expect(g.locator('[data-nodo-id]')).toHaveCount(1);
- await page.keyboard.press('Escape');await expect(g.getByRole('searchbox')).toHaveValue('');await expect(g.locator('[data-nodo-id]')).toHaveCount(3);
- await page.keyboard.press('Escape');await expect(g.getByRole('searchbox')).toHaveCount(0);await expect(lente).toBeFocused();
- await page.waitForTimeout(300);await expect(page.getByText('Fermo il giro?').filter({visible:true})).toHaveCount(0);
- // il filtro per stato: una scelta, non un <select> nativo; l'etichetta dice lo stato scelto
- await expect(g.locator('select')).toHaveCount(0);
- await g.getByRole('button',{name:/^Filtra stato nel diagramma/}).click();await g.getByRole('menuitemradio',{name:'Conclusi'}).click();
- await expect(g.getByRole('button',{name:'Filtra stato nel diagramma: Conclusi'})).toBeVisible();
- await expect(g.locator('[data-nodo-id="po30d-figlia-b"]')).toHaveCount(1);await expect(g.locator('[data-nodo-id="po30d-figlia-a"]')).toHaveCount(0);
- // la velocità della riproduzione: un gruppo di scelte, una sola accesa
- const vel=g.getByRole('radiogroup',{name:'Velocità riproduzione'});await vel.getByRole('radio',{name:'4×'}).click();
- await expect(vel.getByRole('radio',{checked:true})).toHaveCount(1);await expect(vel.getByRole('radio',{name:'4×'})).toHaveAttribute('aria-checked','true');
-});
-
-test('RIPRESA-GRAFO-MADRE-INTERROTTA — un giro rimasto a metà per la morte del processo: il nodo radice dice «Interrotto» come la barra laterale', async ({ page }) => {
-  // ⛔ 09/10/2026 sera (bugfixer, visto sul 4174 e riprodotto sulla 4176 uccidendo il server a metà giro): la barra laterale
-  //   diceva «interrotta» e il nodo radice «Concluso», perché l'ultimo evento rigiocato era un RunStarted senza fine.
-  const SID = 'po30d-interrotta';
-  const voce = { sessionId: SID, taskId: 'workspace', nome: 'Giro a metà', conclusa: false, interrotta: true, ultimoEsito: null, motivoChiusura: null, modello: 'qwen/qwen3.8-flash', avviataAlle: new Date(Date.now() - 5 * 60_000).toISOString() };
-  await page.setViewportSize({ width: 1440, height: 900 });
-  await page.route(/\/api\/v1\/sessions(\?.*)?$/u, async (route) => {
-    if (route.request().method() !== 'GET') return route.fallback();
-    const r = await route.fetch(); const j = await r.json().catch(() => null);
-    const items = [voce, ...((j?.data?.items) ?? []).filter((s) => s.sessionId !== SID)];
-    return route.fulfill({ response: r, json: { ...(j ?? { ok: true }), data: { ...(j?.data ?? {}), items } } });
-  });
-  await page.route(`**/api/v1/sessions/${SID}/events*`, () => { /* aperto e muto */ });
-  await page.route(`**/api/v1/sessions/${SID}/children`, (r) => r.fulfill({ contentType: 'application/json', body: JSON.stringify({ ok: true, data: { figli: [] } }) }));
-  await page.goto('/');
-  await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 8000 });
-  await page.waitForFunction(() => window.__talosHarnessUiRuntime);
-  await expect(page.locator(`[data-real-session-id="${SID}"]`).first(), 'la premessa: la barra laterale dice «interrotta»').toContainText('interrotta');
-  await page.evaluate((v) => {
-    const r = window.__talosHarnessUiRuntime;
-    r.passaASessione(v.sessionId, v.taskId, v.nome, v.modello, v);
-    const g = r.realSessionState.generation;
-    // la storia rigiocata: il giro è partito, e la sua fine non arriverà mai (il processo che l'avrebbe mandata è morto)
-    r.handleRealEvent({ type: 'RunStarted', _sequenza: 9401, input: { consegna: 'Un giro lento' } }, g);
-    r.handleRealEvent({ type: 'CUSTOM', name: 'talos.fine-rigiocata', value: null }, g);
-  }, voce);
-  if (!(await page.locator('#railTabs [data-rail="agenti"]').isVisible())) await page.locator('.talos-screen:not([hidden]) [data-azione="dettagli"]').first().click();
-  await page.locator('#railTabs [data-rail="agenti"]').click();
-  await page.locator('#railAgenti').getByRole('button', { name: 'Apri visuale diagramma' }).click();
-  const nodo = page.locator(`[data-nodo-id="${SID}"]`).first();
-  await expect(nodo).toHaveAttribute('data-stato', 'interrupted');
-  await expect(nodo).toContainText('Interrotto');
-  await expect(nodo).not.toContainText('Concluso');
-  // al contrario: un giro che riparte davvero torna vivo (`interrotta` non vince su un giro in corso)
-  await page.evaluate(() => { const r = window.__talosHarnessUiRuntime; r.handleRealEvent({ type: 'RunStarted', _sequenza: 9402, input: { consegna: 'Riprendi' } }, r.realSessionState.generation); });
-  await expect(nodo).toHaveAttribute('data-stato', 'active');
-  await page.evaluate(() => { const r = window.__talosHarnessUiRuntime; r.handleRealEvent({ type: 'RunFinished', _sequenza: 9403 }, r.realSessionState.generation); });
-  await expect(nodo).toHaveAttribute('data-stato', 'done');
-});

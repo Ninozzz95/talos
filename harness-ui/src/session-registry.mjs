@@ -4,7 +4,7 @@ import { copiaDellaRichiesta, ripartizioneDellaRichiesta } from './richiesta-del
 import { creaRegistroLetture } from './letture-prima-di-sovrascrivere.mjs'; // T25/B09
 import { delegaLimitata } from './delegation-contract.mjs';
 import { attivitaDellaVoce, contatoriAttivitaDellaVoce } from './attivita-figlia.mjs';
-import { ContrattoDomandaUtenteError, ESITO_DOMANDA_SENZA_INTERFACCIA, ESITO_DOMANDA_SOSTITUITA, validaDomandeUtente, validaRispostaDomanda } from './user-question-contract.mjs';
+import { ContrattoDomandaUtenteError, ESITO_DOMANDA_SCADUTA_PROSEGUE, ESITO_DOMANDA_SENZA_INTERFACCIA, ESITO_DOMANDA_SOSTITUITA, validaDomandeUtente, validaRispostaDomanda } from './user-question-contract.mjs';
 import { ContrattoPianoError, PERMESSI_DOPO_IL_PIANO, esitoPianoPerIlModello, improntaPiano, validaDecisionePiano, validaPiano } from './plan-contract.mjs';
 
 /*
@@ -53,7 +53,8 @@ import { argomentiVuoti } from './argomenti-vuoti.mjs';
 import { randomUUID } from 'node:crypto';
 import { canonicalHash } from './workflow/canonical-json.mjs'; // G02-6: la firma di un avvio idempotente (RFC 8785)
 import { realpath } from 'node:fs/promises';
-import { parse as parsePath } from 'node:path';
+import { realpathSync } from 'node:fs'; // G3-REV-17: la chiave di una cartella è il suo percorso vero
+import { parse as parsePath, resolve as resolvePath, sep as sepPath } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { segnalaFileCambiati } from './contesto-del-progetto.mjs'; // P-13 (10/09): l'elenco si rifà quando i file cambiano davvero
@@ -76,6 +77,9 @@ import {
   leggiPaginaPerLaVista,
   // ⭐ L9 (12/09): una domanda sola a un modello, senza attrezzi — è come si interpella il GIUDICE.
   chiediAlModelloUnaVolta as chiediAlModelloUnaVoltaReale,
+  // /goal G3 (14/10/2026): le prove del contratto — stessa esecuzione e stesso cancello dei permessi dell'attrezzo shell
+  eseguiComandoDellaProva as eseguiComandoDellaProvaReale,
+  permessoDelMotore as permessoDelMotoreReale,
 } from './agent-service.mjs';
 import {
   approvalRequested, approvalResolved, userQuestionRequested, userQuestionResolved, mcpElicitationRequested, mcpElicitationResolved, hookInvoked, queuedMessageDelivered, workspaceChanged, contextEngineEvent,
@@ -89,6 +93,7 @@ import {
      chiamato. Nessun comportamento cambia; se ne va perché adesso si vede. */
 } from './agui-events.mjs';
 import { CustomTaskError, preparaEsecuzioneLibera as preparaEsecuzioneLiberaReale } from './custom-task.mjs';
+import { contaGrafemi, nomeConSuffisso, nomeMostrato, primiGrafemi, titoloBreve, TITOLO_MASSIMO } from './titolo-breve.mjs'; // 15/10/2026: una regola sola per i nomi corti
 import { creaRegistroRicerche } from './kernel/ricerche-in-corso.mjs'; // F001b (owner 01/10/2026): le ricerche che continuano
 import { creaCasaLinuxSessione } from './kernel/casa-linux.mjs'; // Fase B (owner 01/10/2026): la casa Linux della sessione
 import { ambienteSenzaCredenziali } from './kernel/talosHarness.mjs'; // Fase B: l'ambiente della casa Linux, mai le chiavi del server
@@ -128,7 +133,7 @@ import {
 } from './mcp-registry.mjs';
 import { caricaSkill as caricaSkillReale, SkillRegistryError } from './skill-registry.mjs';
 import { ATTREZZI_CON_PERMESSO_PER_ATTREZZO, permessiPerAttrezzoRichiestaValido } from './config.mjs';
-import { ePercorsoDiControllo } from './path-policy.mjs';
+import { ePercorsoDiControllo, motivoDaChiedere as motivoDaChiederePerLaProva } from './path-policy.mjs';
 import {
   elencaVoci as elencaVociReale, leggiVoce as leggiVoceLibreriaReale, salvaVoce as salvaVoceLibreriaReale,
   eliminaVoce as eliminaVoceLibreriaReale, LibraryStoreError,
@@ -188,6 +193,18 @@ import { readProcessOutputPage, formatProcessOutputPage } from './process-output
 import { separaFonteModello } from './model-destination.mjs';
 import { LIVELLI_DI_ACCESSO, livelloConcedeDaSolo, permessiDellaCatena, sempreValeNellaCatena } from './permessi-catena.mjs';
 import { CHIAVE_COORDINAZIONE, TETTO_AVVII_DA_SOLO, modoCoordinazione, sempreDellaFigliaVarrebbe } from './coordinazione.mjs';
+import { EVENTO_OBIETTIVO, TESTO_MASSIMO as OBIETTIVO_TESTO_MASSIMO, alRipristino as obiettivoAlRipristino, mettiInPausa as mettiInPausaObiettivo, nuovoObiettivo, obiettivoDalGiornale, rigaObiettivo, riprendi as riprendiObiettivoFermo, conContratto as obiettivoConContratto, testoObiettivo } from './obiettivo/stato.mjs'; // /goal G1
+import { CRITERI_MASSIMI as OBIETTIVO_CRITERI_MASSIMI, aggiungiCriteri as aggiungiCriteriAlContratto, confrontaContratti, nuovoContratto } from './obiettivo/contratto.mjs'; // /goal G2
+import { aFatto as obiettivoAFatto, aTetto as obiettivoATetto, conCiclo as obiettivoConCiclo, conVerifica as obiettivoConVerifica } from './obiettivo/stato.mjs'; // /goal G3-G4
+import { GIRI_MASSIMI_DI_SERIE, TOKEN_MASSIMI_DI_SERIE, ceProgresso, contoDopoIlGiro, decidiDopoIlGiro, decidiSenzaContratto } from './obiettivo/ciclo.mjs'; // /goal G4, G5c; G6: i tetti per la fascia
+import { programmaTrovato as programmaTrovatoReale, testoPerIlModello as testoObiettivoPerIlModello, verificaContratto } from './obiettivo/verifica.mjs'; // /goal G3
+import { stat as statDellaProva } from 'node:fs/promises'; // /goal G3: la cartella della conversazione c'è, ed è una cartella
+import { readFile as leggiFileDelGiudice } from 'node:fs/promises'; // /goal G5: i file scritti dal giro, che il giudice legge
+import { isAbsolute as percorsoAssoluto, relative as relativoAllaCartella } from 'node:path'; // /goal G5: un altro disco dà un percorso assoluto
+import { ERRORI_DI_FORMA_MASSIMI, ERRORI_DI_TRASPORTO_MASSIMI, FILE_MASSIMI as FILE_DEL_GIUDICE, giudizioDallaRisposta, impronta as improntaDelGiudice, promptPerIlGiudice, proveDelGiro, testoDelGiudizioDelTesto } from './obiettivo/giudice.mjs'; // /goal G5
+import { conConfutazione as obiettivoConConfutazione, conGiudizio as obiettivoConGiudizio, conGiudizioDelTesto as obiettivoConGiudizioDelTesto } from './obiettivo/stato.mjs'; // /goal G5
+import { creaOspiteObiettivo } from './obiettivo/per-il-modello.mjs'; // /goal G6: la seconda porta
+import { GIRI_DEL_CONFUTATORE, SMENTITE_MASSIME, consegnaDelConfutatore, esitoDelConfutatore, testoDellaSmentita } from './obiettivo/confutatore.mjs'; // /goal G5
 import { dentroDi as cartellaDentroDi } from './automation-sicurezza.mjs';
 /* ⛔ BC-76: la fonte di un motore locale si CHIEDE al registro dei fornitori, non si scrive qui. */
 import { ID_MOTORI_LOCALI_OPENAI, idPerWire } from './provider-registry.mjs';
@@ -257,15 +274,16 @@ export function modelloDiSessionePerRete(voce) {
 /**
  * ⛔ 26/09/2026, difetto (4) delle foto di Ask e del Piano: «una sessione creata senza nome si chiama "Compito libero" dal
  *   vivo e prende la consegna come nome dopo il riavvio». Il ripristino ricavava il nome di un compito libero dalla sua
- *   consegna (stesso valore di `titoloDalPrimoMessaggio` del client, 80 caratteri); una voce nata dal vivo senza la
+ *   consegna (dal 15/10/2026 la stessa regola di `titoloDalPrimoMessaggio` del client: `titoloBreve`, `titolo-breve.mjs`); una voce nata dal vivo senza la
  *   rinomina del client (API, prove, un rename perso) restava `null`. ⇒ Una regola sola, dal vivo e al ripristino.
  * ⛔ Un nome DERIVATO non si scrive sul disco: una riga `nome-sessione` resta solo per un nome scelto (rinomina).
  * @returns {string|null}
  */
 export function nomeDerivatoDalCompito(taskId, task) {
   if (typeof taskId !== 'string' || !taskId.startsWith('libero:')) return null;
-  const consegna = typeof task?.consegnaCorta === 'string' ? task.consegnaCorta.replace(/\s+/g, ' ').trim() : '';
-  return consegna ? consegna.slice(0, 80) : null;
+  // 15/10/2026: la stessa regola del client (`titoloBreve`, parola intera e «…»); prima 80 secchi su un `consegnaCorta` da 77 + «...»
+  const consegna = typeof task?.consegnaCorta === 'string' ? titoloBreve(task.consegnaCorta) : '';
+  return consegna || null;
 }
 
 /**
@@ -446,6 +464,8 @@ const ATTREZZI_NEGATI_AI_PASSI = new Set([
   'automation_list', 'automation_runs', 'automation_create', 'automation_update', 'automation_control', // C5: pause/resume/run/stop → automation_control
   // 0.1.25: un passo non tocca i fornitori esclusi (difesa in profondità: il registro già non li offre)
   'provider_exclusions_list', 'provider_exclude', 'provider_allow', 'chatgpt_account', // 11/10/2026: l'accesso col piano ChatGPT
+  // /goal G6: un passo non tocca l'obiettivo della conversazione (difesa in profondità: il registro già non lo offre)
+  'goal_status', 'goal_create', 'goal_update',
 ]);
 const UUID_LEGAME = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 const NODO_LEGAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u;
@@ -885,9 +905,26 @@ export function storiaPerIlMotore(righe) {
  * ⛔ L'inglese è un LETTERALE nella chiamata, con i `{segnaposto}`: la prova lo legge dal sorgente. I valori veri stanno in
  *   `params`, mai incollati nella frase scritta nel codice.
  */
+/*
+ * «Nessuno davanti» per GIRO (CLI, 16/10/2026, compito 50). `senzaInterfaccia` salvato nell'intestazione (decisione owner 30) vale
+ * per chi nasce senza nessuno davanti per costruzione (automazioni, passi dei Workflow, confutatore). Ma una sessione nata con
+ * `talos -p` e ripresa nella TUI ha la persona davanti: lo decide CHI c'è in quel giro. L'ospite in processo lo dice con
+ * `senzaInterfacciaNelGiro` (vero o falso) ad `avvia`, `avviaLibero` e `resume`: vive solo in memoria, mai sul disco, e le riprese
+ * interne (il padre che riparte, la coda) lo tengono. L'opzione del giro vince; senza, vale quella salvata.
+ */
+function nessunoDavanti(voce) {
+  return typeof voce?.senzaInterfacciaNelGiro === 'boolean' ? voce.senzaInterfacciaNelGiro : voce?.senzaInterfaccia === true;
+}
+
 function rifiuto(code, reason, inglese, params) {
   const frase = params ? inglese.replace(/\{([a-zA-Z0-9_]+)\}/gu, (tutto, nome) => (nome in params ? String(params[nome]) : tutto)) : inglese;
   return { erroreAvvio: frase, code, reason, ...(params ? { params } : {}) };
+}
+
+/** 16/10/2026 (mobile) — un errore dell'albero dei file come rifiuto: il MOTIVO (`motivi-dei-file.mjs`) viaggia col codice, così la
+    persona legge la frase vera invece di «Invalid query». Gli errori senza motivo restano come prima. */
+function rifiutoDaErroreDeiFile(errore) {
+  return { erroreAvvio: errore.message, code: errore.code, ...(typeof errore.reason === 'string' ? { reason: errore.reason } : {}) };
 }
 
 /*
@@ -1568,7 +1605,8 @@ export function registraScritturaDiFiglia(scrittePerMadre, { madreId, figliaId, 
  * scrittura fatta DOPO il riavvio collide con una fatta PRIMA.
  *
  * ⛔ L'ordine non è inventato: gli eventi AG-UI persistiti non portano un istante (verificato in
- *   `agui-events.mjs`: solo l'evento di contesto ha `timestamp`), e `_sequenza` è per sessione, non
+ *   `agui-events.mjs`: solo l'evento di contesto ha `timestamp`; dal 15/10/2026 anche inizio e fine di ogni giro, non le
+ *   scritture), e `_sequenza` è per sessione, non
  *   globale. Si ordina per `avviataAlle` della figlia e poi per `_sequenza` — cioè «ha cominciato
  *   prima» — e si dichiara: è un ordine fra SORELLE, non un orologio. Chi legge la scheda vede
  *   comunque il nome del file, che è la cosa azionabile.
@@ -1607,11 +1645,24 @@ export function ricostruisciCollisioniDiScrittura(sessioni, scrittePerMadre) {
   return ricostruite;
 }
 
+/**
+ * Il nome con cui una sessione NASCE, prima del «-N» (`nomeUnicoInElenco`): un compito libero prende la sua consegna
+ * (`nomeDerivatoDalCompito`); dal 16/10/2026 sera (owner) una DELEGA prende il nome corto del suo compito, lo stesso testo di
+ * `taskDelega`; tutto il resto nasce senza nome.
+ */
+export function nomeDiNascita(taskId, task, padreId) {
+  /* NOMI2-REV-02 (bugfixer, 16/10): solo una DELEGA vera (`delega:<madre>`, subagent-orchestrator.mjs) — i ruoli interni con una madre
+     (il confutatore del /goal, `confutatore:…`) nascono senza nome, o la barra conterebbe «Goal refuter-2, -3…». */
+  const delega = Boolean(padreId) && typeof taskId === 'string' && taskId.startsWith('delega:');
+  return nomeDerivatoDalCompito(taskId, task)
+    ?? (delega ? nomeCortoDaConsegna(task?.consegnaCorta || compitoDaPromptDiDelega(task?.consegna)) : null);
+}
+
 export function nomeCortoDaConsegna(consegna) {
-  const riga = String(consegna || '').split(String.fromCharCode(10)).map((r) => r.trim()).find((r) => r.length > 0);
+  // revisione del bugfixer 16/10: una riga fatta solo di U+200B-U+200D, U+2060, U+FEFF non è vuota per `trim()`, ma a schermo sì
+  const riga = String(consegna || '').split(String.fromCharCode(10)).map((r) => r.trim()).find((r) => /[^\s\u200B-\u200D\u2060\uFEFF]/u.test(r));
   if (!riga) return null;
-  const pulita = riga.replace(/\s+/g, ' ');
-  return pulita.length > 80 ? `${pulita.slice(0, 79)}…` : pulita;
+  return titoloBreve(riga); // 15/10/2026: prima 79 + «…» a metà parola
 }
 
 export function processiDaEventi(eventi, { istanti = null, adesso = null } = {}) {
@@ -1898,7 +1949,8 @@ export function guardiaDiStallo(eventi, { istanti = null, adesso = null, soglie 
  *  - `_sequenza` c'è su TUTTI i 60.437 eventi, ma l'ordine SUL DISCO è
  *    diverso dall'ordine di `_sequenza` in 71 file su 73 ⇒ `eventiInOrdine`
  *    è obbligatorio, non una precauzione;
- *  - NESSUN evento persistito porta un orario (zero campi ts/timestamp/at):
+ *  - NESSUN evento persistito porta un orario (zero campi ts/timestamp/at; misura di allora — dal 15/10/2026 inizio e fine
+ *    di ogni giro portano `timestamp`, ma il primo token no, quindi la regola qui sotto resta):
  *    il tempo esiste solo nella mappa `istanti` tenuta IN MEMORIA da
  *    `broadcast` ⇒ per una sessione RIPRISTINATA il tempo al primo token
  *    è `null` con il motivo DETTO, mai uno zero inventato;
@@ -2419,6 +2471,8 @@ export const STRUMENTI_ESTESI_PREDEFINITI = Object.freeze([
   'automation_list', 'automation_runs', 'automation_create', 'automation_update', 'automation_control', // C5: pause/resume/run/stop → automation_control
   // 0.1.25 (owner 09/10/2026): i fornitori esclusi — il kernel li offre solo al root e solo con `onFornitoriFn` (il desktop)
   'provider_exclusions_list', 'provider_exclude', 'provider_allow', 'chatgpt_account', // 11/10/2026: l'accesso col piano ChatGPT
+  // /goal G6 (owner 15/10/2026): la seconda porta dell'obiettivo — il kernel la offre solo al root e solo con `onObiettivoFn`
+  'goal_status', 'goal_create', 'goal_update',
   'research_find', 'research_start', 'research_read', 'research_rename', // C5: research_list + research_search → research_find
   'research_control', 'research_delete', // C5: research_pause/resume/cancel → research_control
   /*
@@ -2479,6 +2533,18 @@ export function createSessionRegistry({
    *   finché non la accendono (OpenCode: lo strumento domande solo per i client che lo mostrano).
    */
   domandeDeiFigli = false,
+  /* owner 14/10/2026 («Se lo chiedi tu, vale»): un file che la persona chiede di seguire nel SUO messaggio diventa la sua richiesta
+     (confine-dati.mjs `ISTRUZIONE_CONFINE_DATI_CON_ADOZIONE`). Predefinita `false`: la regola di prima, parola per parola, finché
+     un host non la accende (la CLI dalla 0.6.5). */
+  fileAdottatiDallaPersona = false,
+  /* richiesta CLI 15/10/2026: il permesso del giro come lo deve leggere il MODELLO, se l'ospite applica un modo suo (una stringa, o
+     una funzione della sessione). Solo la riga «Turn permission» del preambolo; la UI e i cancelli restano su `permessi`. */
+  permessoPerIlModello = null,
+  /* richiesta CLI 16/10/2026 notte: la CLI manda al kernel sempre «On request» e applica Full access da sé (F-P-001), e il modo cambia
+     a sessione aperta (Shift+Tab). `(voce) => boolean`, con `voce = { sessionId, radiceId }` (`radiceId` = la conversazione principale
+     da cui discende una figlia): si chiede ADESSO, nel momento in cui una regola la guarda (oggi `document_create` su un segreto,
+     agent-service.mjs). Assente ⇒ vale solo `livelloAccesso`, come prima. */
+  accessoPienoDellOspite = null,
   /* ⭐ CLI, passo 7 dei sotto-agenti asincroni: tetti della delega e modello/sforzo di serie delle figlie, FACOLTATIVI
      (subagent-orchestrator.mjs `limiti`, `figlioDefault`; `modelloDellaFigliaConDefault`). Assenti: come prima. */
   limitiDelega = null,
@@ -2535,6 +2601,31 @@ export function createSessionRegistry({
    */
   workflowPerIlModelloFn = null,
   eseguiComandoDirettoFn = eseguiComandoDirettoReale,
+  /* /goal G3: chi esegue una prova a comando, chi decide il permesso, chi dice se il programma c'è (le prove li sostituiscono) */
+  eseguiComandoDellaProvaFn = eseguiComandoDellaProvaReale,
+  permessoDelMotoreFn = permessoDelMotoreReale,
+  programmaTrovatoFn = programmaTrovatoReale,
+  /* /goal G4: i tetti del ciclo (`{ giri, token }`); assenti = quelli di serie di `obiettivo/ciclo.mjs` (20 giri, token dal banco G7) */
+  tettiCicloObiettivo = undefined,
+  /* /goal G4-REV-03: i ritentativi del ciclo quando la sua verifica è rifiutata (`{ tentativi, primaMs }`); assenti = 8 e 250 ms */
+  ritentativiCicloObiettivo = undefined,
+  /* /goal G5: i tentativi del giudice dentro UN giudizio (`{ forma, trasporto, primaMs }`); di serie quelli di Hermes
+     (`goals.py:43,46`) e un secondo di attesa che raddoppia fra i guasti di trasporto. Le prove li stringono. */
+  ritentativiGiudiceObiettivo = undefined,
+  /* /goal G5: chi confuta un «fatto» — `(voce, obiettivo) => Promise<{esito, motivo, prove?}>`. Di serie la figlia in sola lettura
+     (`confutaObiettivo` qui sotto); le prove lo sostituiscono per non avviare un modello. */
+  confutaObiettivoFn = null,
+  /* /goal (CLI, 15/10/2026): gli attrezzi dell'obiettivo (`goal_*`, la seconda porta) si danno al modello SOLO se l'host lo chiede.
+     Spento di serie: un host senza una superficie per l'obiettivo (la CLI oggi) non deve trovarsi un ciclo che lavora da solo, che
+     la persona non vede e non può fermare — e senza `onObiettivoFn` il kernel non li offre e rifiuta una chiamata che arriva lo
+     stesso (`talosHarness.mjs`, «not available in this session»). Il server desktop lo accende (`server.mjs`). */
+  obiettiviNellaChat = false,
+  /* ⭐ 15/10/2026 — la compattazione istantanea dell'adapter desktop (`compattazioneIstantanea`): spenta di serie, come gli obiettivi,
+     perché la CLI usa lo stesso registro e lo stesso adapter con le sue decisioni; il server desktop la accende (`server.mjs`). */
+  compattazioneIstantanea = false,
+  /* /goal G5 (riserva S5 del bugfixer, 15/10): la scadenza del confutatore, in ms. Con un ciclo solo per obiettivo, un confutatore
+     che non finisce mai (figlia eliminata a metà, kernel appeso) terrebbe fermo l'obiettivo per sempre. */
+  scadenzaConfutatoreMs = 20 * 60_000,
   leggiAlberoWorkspaceFn = leggiAlberoWorkspaceReale,
   cercaNelWorkspaceFn = cercaNelWorkspaceReale, // PO-30: la ricerca di un file in tutta la cartella della sessione
   leggiContenutoFileFn = leggiContenutoFileReale,
@@ -2988,9 +3079,56 @@ export function createSessionRegistry({
    * pannello dice «non osservato», non elenca zero attrezzi.
    */
   attrezziKernelFn = null,
+  /*
+   * ⛔ 14/10/2026, owner — una domanda SCADUTA ferma il giro? Di serie sì (decisione 9 del 24/09, comportamento di prima);
+   *   con `false` il modello riceve `ESITO_DOMANDA_SCADUTA_PROSEGUE` e il giro prosegue (la CLI la passa; il desktop la passa
+   *   quando la prende, l'owner l'ha decisa per tutti e due). La domanda sopravvissuta a un riavvio non cambia: nessun giro
+   *   da fermare né da riprendere.
+   */
+  domandaScadutaFerma = true,
 } = {}) {
   const preparaTask = preparaEsecuzioneFn ?? ((taskId) => preparaEsecuzioneReale(taskId, taskCatalogProvider));
   const sessioni = new Map();
+  /*
+   * ⛔ 16/10/2026, owner («-2 anche dal server»): due sessioni nate dallo stesso compito (API, deleghe, CLI) avevano lo STESSO nome, e
+   *   il «-N» lo dava solo l'interfaccia alla rinomina (`nomeUnicoSessione`, app.js). Qui la stessa regola, col numero dentro il tetto
+   *   (`nomeConSuffisso`). Owner, la sera stessa: si conta contro TUTTE le sessioni in elenco, al lavoro o ferme (una chat col giro
+   *   finito è «conclusa» e prima non contava: due chat ferme restavano gemelle); una eliminata esce dall'elenco e libera il nome.
+   */
+  /* Owner, 16/10 sera (NOMI2-REV-01 del bugfixer): una DELEGA si conta solo fra le sorelle, le figlie della stessa conversazione —
+     nella barra stanno sotto la loro conversazione, ed è lì che due nomi uguali si confondono; contro tutto l'archivio la figlia
+     unica di una chat nuova nasceva «…-2» e il numero cresceva coi mesi. Una sessione senza madre si conta fra le sessioni senza madre. */
+  const nomeUnicoInElenco = (nome, escludi = null, padreId = null) => {
+    if (typeof nome !== 'string' || nome === '') return nome;
+    const presi = new Set([...sessioni.values()]
+      .filter((v) => v.sessionId !== escludi && typeof v.nome === 'string' && (v.padreId ?? null) === (padreId ?? null))
+      .map((v) => v.nome));
+    let candidato = nome;
+    for (let n = 2; presi.has(candidato); n += 1) candidato = nomeConSuffisso(nome, `-${n}`);
+    return candidato;
+  };
+  /*
+   * ⛔ Owner 16/10/2026 sera («Solo a schermo»): due conversazioni nate PRIMA del «-N» col nome automatico uguale restavano gemelle
+   *   nella barra e nella Home. Al ripristino, fra quelle col nome automatico (`nomeAutomaticoAlRipristino`) e fra sorelle come
+   *   `nomeUnicoInElenco`: la più vecchia resta com'è, le altre prendono «-2», «-3» in ordine di nascita. Solo in memoria — sul disco
+   *   non si scrive niente — e un nome scelto a mano non si tocca. Una sessione ricaricata da sola rientra nel suo gruppo e ritrova
+   *   lo stesso numero.
+   */
+  const numeraDoppioniVecchiASchermo = () => {
+    const gruppi = new Map();
+    for (const v of sessioni.values()) {
+      if (v.nomeAutomaticoAlRipristino !== true || typeof v.nome !== 'string' || v.nome === '') continue;
+      const chiave = `${v.padreId ?? ''}\u0000${v.nome}`;
+      if (!gruppi.has(chiave)) gruppi.set(chiave, []);
+      gruppi.get(chiave).push(v);
+    }
+    for (const gruppo of gruppi.values()) {
+      if (gruppo.length < 2) continue;
+      gruppo.sort((a, b) => String(a.avviataAlle ?? '').localeCompare(String(b.avviataAlle ?? '')) || String(a.sessionId).localeCompare(String(b.sessionId)));
+      const base = gruppo[0].nome;
+      for (const v of gruppo.slice(1)) v.nome = nomeUnicoInElenco(base, v.sessionId, v.padreId ?? null);
+    }
+  };
   /* Automazioni a due porte (08/10/2026): la fabbrica dell'ospite degli attrezzi `automation_*` (`automation-per-il-modello.mjs`),
      collegata dal server DOPO aver creato negozio e scheduler, che a loro volta hanno bisogno di questo registro. */
   let ospiteAutomazioni = null;
@@ -3563,7 +3701,8 @@ export function createSessionRegistry({
   function nodoTimeline(voce, { completo = true } = {}) {
     const stats = statisticheFiglio(voce);
     return { sessionId: voce.sessionId, padreId: voce.padreId ?? null,
-      taskCorto: String(voce.nome || voce.task?.consegnaCorta || voce.task?.consegna || 'Sessione').slice(0, 160),
+      nome: typeof voce.nome === 'string' && voce.nome !== '' ? voce.nome : null, // L3-17 (owner 16/10): il nome dell'agente, quello della barra
+      taskCorto: primiGrafemi(String(voce.nome || voce.task?.consegnaCorta || voce.task?.consegna || 'Sessione'), 160), // REV2-07: mai una bandiera spezzata
       modello: voce.modello ?? null, conclusa: voce.conclusa === true, interrotta: voce.interrotta === true,
       esitoDelega: voce.esitoDelega ?? null, avviataAlle: voce.avviataAlle ?? null,
       ...stats, conclusaAlle: stats.conclusaAlle ?? voce.timelineConclusaAlle ?? null,
@@ -3634,7 +3773,14 @@ export function createSessionRegistry({
     const riassunto = [risultato?.riassunto, risultato?.motivo].filter((testo) => typeof testo === 'string' && testo.trim() !== '').join('\n');
     /* F-027, estensione (03/10/2026): la forma (una riga di TALOS, il JSON sulla seconda) è la stessa di prima; il riassunto ora è
        neutralizzato e scansionato, e un sospetto va nel campo `sospetto`, che il kernel legge per chiedere conferma. */
-    return testoDelRisultatoFiglio({ childId, stato, compito, riassunto: riassunto || '(no summary available)' });
+    /* F3 della CLI (16/10/2026): il nome dell'agente, su una riga e al più 160 caratteri come il compito breve. Revisione del
+       bugfixer: senza i caratteri che ingannano (controlli, inversione della scrittura: la stessa classe di `attivita-figlia.mjs`),
+       che arrivavano alla CLI; e il taglio per PUNTI di codice, non per unità UTF-16 (`slice` spezzava una coppia surrogata). */
+    const nomePieno = typeof figlio?.nome === 'string'
+      ? figlio.nome.replace(/[\u0000-\u001F\u007F-\u009F\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/gu, ' ').replace(/\s+/gu, ' ').trim() : '';
+    const punti = Array.from(nomePieno);
+    const nome = punti.length > 160 ? `${punti.slice(0, 159).join('').trimEnd()}…` : nomePieno;
+    return testoDelRisultatoFiglio({ childId, stato, compito, nome, riassunto: riassunto || '(no summary available)' });
   }
 
   function programmaRisveglioDaFiglie(voce) {
@@ -4062,8 +4208,9 @@ export function createSessionRegistry({
    *   SOLO TRASPORTO (effimero come WorkspaceChanged: niente `_sequenza`, mai in `voce.eventi`, BC-07) e si scrive in un
    *   record `coda` — l'ultimo vince al ripristino, come `impostazioni-sessione`.
    */
+  const ORIGINI_DI_CODA = new Set(['delega', 'workflow', 'agent-dialogue', 'sfondo']);
   function voceDiCoda(item) {
-    if (typeof item === 'string') return { id: null, testo: item, immagini: [], origine: null, childId: null, runId: null, toolCallId: null, sfondo: null, requestId: null, dialogueKind: null, bolla: null };
+    if (typeof item === 'string') return { id: null, testo: item, immagini: [], origine: null, childId: null, runId: null, toolCallId: null, sfondo: null, requestId: null, dialogueKind: null, bolla: null, autore: null };
     return {
       id: typeof item?.id === 'string' ? item.id : null,
       testo: String(item?.testo ?? ''),
@@ -4076,6 +4223,7 @@ export function createSessionRegistry({
       requestId: typeof item?.requestId === 'string' ? item.requestId : null,
       dialogueKind: item?.dialogueKind === 'request' || item?.dialogueKind === 'reply' ? item.dialogueKind : null,
       bolla: bollaPerLaConsegna(item?.bolla, String(item?.testo ?? '')), // C09: ciò che la persona ha scritto e i suoi chip, accanto al testo per il modello
+      autore: item?.autore === 'persona' && !ORIGINI_DI_CODA.has(item?.origine) ? 'persona' : null, // owner 15/10/2026
     };
   }
 
@@ -4171,13 +4319,696 @@ export function createSessionRegistry({
     timer.unref?.();
     ritentiCodaAffittata.set(sessionId, timer);
   }
+  /*
+   * ⭐⭐⭐ /goal G1 (owner 14/10/2026: «Sì, parti dal server») — L'OBIETTIVO DELLA CONVERSAZIONE. La macchina a stati è pura
+   *   (`obiettivo/stato.mjs`, con chi fa che cosa fra Codex, Hermes e Claude Code); qui c'è ciò che la lega alla sessione.
+   * ⛔ `ok:true` solo se la riga è sul giornale (regola F3 del 24/09: un append fallito è un fallimento): prima si salva, poi
+   *   cambia la memoria e lo sanno le finestre. Se il salvataggio fallisce non è cambiato niente, e la persona lo legge.
+   * ⛔ Le transizioni di una conversazione vanno IN FILA: due finestre che premono insieme leggono ognuna lo stato lasciato
+   *   dall'altra, mai tutte e due quello di prima (due righe con la stessa revisione, e la seconda che cancella la prima).
+   * L'annuncio (`talos.obiettivo`) è STATO, non storia: arriva a chi ascolta adesso; chi apre dopo lo legge dalla sua rotta.
+   */
+  function inFilaPerLObiettivo(voce, lavoro) {
+    const esito = (voce.filaObiettivo ?? Promise.resolve()).then(lavoro);
+    voce.filaObiettivo = esito.then(() => {}, () => {});
+    return esito;
+  }
+  async function salvaObiettivo(voce, obiettivo) {
+    if (cartellaStore) {
+      try { await registraRigaFn({ cartellaStore, sessionId: voce.sessionId, record: rigaObiettivo(obiettivo), durable: true }); }
+      catch (errore) {
+        console.error(`[session-store] goal row NOT written for ${voce.sessionId}:`, errore instanceof Error ? errore.message : errore);
+        return rifiuto('SESSION_STORE_WRITE_FAILED', 'goal-not-saved', 'The goal was not saved: nothing changed. Try again after checking the disk.');
+      }
+    }
+    voce.obiettivo = obiettivo;
+    voce.obiettivoSulGiornale = impronteDellObiettivo(obiettivo); // REV-GOAL-07: ciò che il giornale dice adesso, scritto da qui
+    /* G6, riserva S5 del bugfixer (owner 15/10/2026): il «complete» del modello vale per QUESTO obiettivo finché resta attivo. Una
+       pausa, un tetto, un «fatto» o un obiettivo diverso lo spengono: alla ripresa il modello non deve leggere «You said…» di un
+       giro di prima. */
+    if (!obiettivo || obiettivo.stato !== 'attivo' || voce.obiettivoRivendicato !== obiettivo.id) voce.obiettivoRivendicato = null;
+    broadcast(voce, { type: 'CUSTOM', name: EVENTO_OBIETTIVO, value: { obiettivo } });
+    return { ok: true, obiettivo };
+  }
+  /** /goal G6 (fascia): i tetti che il ciclo applica DAVVERO (quelli di questo registro, o i di serie), per scrivere «giro 4 di 20».
+      `token: null` = nessun tetto di token, detto così e non nascosto. */
+  function tettiDellObiettivo() {
+    const tetti = tettiCicloObiettivo ?? {};
+    return { giri: tetti.giri === undefined ? GIRI_MASSIMI_DI_SERIE : tetti.giri, token: tetti.token === undefined ? TOKEN_MASSIMI_DI_SERIE : tetti.token };
+  }
+  /** Quale riga obiettivo è sul giornale: `id` e `revisione`, o `null` per «nessuno». Serve a riconoscerla alla ricarica. */
+  function impronteDellObiettivo(obiettivo) {
+    return obiettivo ? { id: obiettivo.id, revisione: obiettivo.revisione } : null;
+  }
+  /**
+   * ⛔ Dove un obiettivo NON è ammesso: un sotto-agente lavora per l'obiettivo di chi l'ha avviato (in Codex i consumi dei
+   *   sotto-agenti vanno sull'obiettivo della radice, `ext/goal/src/accounting.rs`), e un passo di Workflow lo guida il suo Workflow.
+   *   Una regola sola per chi lo imposta e per chi ne fa proporre i criteri (G2c).
+   * @returns {{erroreAvvio:string, code:string}|null}
+   */
+  function rifiutoSeObiettivoNonAmmesso(voce) {
+    if (voce.padreId) return rifiuto('GOAL_NOT_ALLOWED', 'goal-on-sub-agent', 'A goal belongs to the main conversation: a sub-agent cannot have one');
+    if (voce.legameWorkflow) return rifiuto('GOAL_NOT_ALLOWED', 'goal-on-workflow-step', 'A Workflow step cannot have a goal: the Workflow drives it');
+    /* OB-REV-01 (revisione del bugfixer, 15/10): la porta della PERSONA ha la stessa regola dell'attrezzo e del ciclo — in un host che
+       non mostra gli obiettivi, o senza nessuno davanti, un obiettivo nascerebbe «attivo» e niente lo porterebbe mai avanti */
+    if (obiettiviNellaChat !== true) return rifiuto('GOAL_NOT_ALLOWED', 'goal-not-in-this-host', 'Goals are off in this app: a goal set here would never move forward');
+    if (nessunoDavanti(voce)) return rifiuto('GOAL_NOT_ALLOWED', 'goal-nobody-in-front', 'Nobody is in front of this conversation: a goal here would never be seen or stopped');
+    return null;
+  }
+  /** Il rifiuto della macchina detto dal registro: un letterale per motivo, perché la prova del dizionario li legge dal sorgente. */
+  function rifiutoObiettivo(motivo) {
+    if (motivo === 'goal-text-empty') return rifiuto('GOAL_TEXT_INVALID', 'goal-text-empty', 'The goal cannot be empty');
+    if (motivo === 'goal-text-too-long') return rifiuto('GOAL_TEXT_INVALID', 'goal-text-too-long', 'The goal is too long: the character limit is {massimo}', { massimo: OBIETTIVO_TESTO_MASSIMO });
+    if (motivo === 'goal-not-set') return rifiuto('GOAL_STATE_CONFLICT', 'goal-not-set', 'This conversation has no goal');
+    if (motivo === 'goal-not-active') return rifiuto('GOAL_STATE_CONFLICT', 'goal-not-active', 'The goal is not active: there is nothing to pause');
+    if (motivo === 'goal-cap-reached') return rifiuto('GOAL_STATE_CONFLICT', 'goal-cap-reached', 'The goal reached its limit: it cannot be resumed as it is');
+    if (motivo === 'goal-already-done') return rifiuto('GOAL_STATE_CONFLICT', 'goal-already-done', 'The goal is already done: set a new one to continue');
+    // G3 — le prove del contratto
+    if (motivo === 'goal-no-contract') return rifiuto('GOAL_STATE_CONFLICT', 'goal-no-contract', 'The goal has no criteria to check: add some first');
+    if (motivo === 'goal-check-running') return rifiuto('GOAL_STATE_CONFLICT', 'goal-check-running', 'The checks of the goal are already running');
+    if (motivo === 'goal-check-while-working') return rifiuto('GOAL_STATE_CONFLICT', 'goal-check-while-working', 'The conversation is working: run the checks when it stops');
+    if (motivo === 'goal-changed-during-check' || motivo === 'goal-contract-changed') return rifiuto('GOAL_STATE_CONFLICT', 'goal-changed-during-check', 'The goal changed while its checks were running: the result was not saved');
+    if (motivo === 'goal-check-stopped') return rifiuto('GOAL_STATE_CONFLICT', 'goal-check-stopped', 'The checks were stopped before the end: the result was not saved');
+    throw new Error(`rifiutoObiettivo: motivo sconosciuto ${motivo}`);
+  }
+  /**
+   * G3 — con che cosa girano le prove di QUESTA conversazione (`obiettivo/verifica.mjs`, `verificaCriterio`).
+   * ⛔ La cartella è quella della conversazione, non quella dove l'ultimo `!cd` ha lasciato i comandi: le prove guardano il
+   *   progetto, sempre dallo stesso posto. Deve esistere QUI, ed essere una cartella; sul telefono le prove non girano.
+   * ⛔ Il permesso di un comando lo decide il cancello del motore (`verificaPermessoScrittura`, come l'attrezzo shell). Chi
+   *   chiede non c'è: se il cancello vorrebbe chiedere, la risposta è «no» e la prova dice «serve il tuo sì».
+   *   Un cancello che non si riesce a interpellare nega (chi non riesce a valutare nega).
+   * ⛔ Il permesso di LEGGERE un file per `contiene` segue la regola dei segreti di `leggi`: davanti a un segreto (fuori
+   *   dall'Accesso pieno) si vorrebbe chiedere ⇒ «serve il tuo sì»; un sì «per questo percorso» dato nella conversazione vale.
+   */
+  /*
+   * ⭐⭐⭐ /goal G4 — IL CICLO (owner 14/10/2026 notte, ledger del /goal §18): dopo ogni giro di una conversazione con un obiettivo
+   *   ATTIVO e un contratto, il sistema esegue le prove (G3) e decide (`obiettivo/ciclo.mjs`): «fatto» (con N da guardare), «tetto»,
+   *   pausa «nessun progresso», oppure riparte da solo col messaggio dei rossi (`testoPerIlModello`, come Hermes `goals.py:96-110`).
+   * ⛔ Un giro fermato dalla PERSONA mette in pausa (Codex: interrompere ferma l'obiettivo); un giro fallito mette in pausa col
+   *   codice: mai un ciclo che ritenta un guasto da solo.
+   * ⛔ Nessuna coda durevole: dopo un riavvio l'obiettivo torna comunque in pausa (G1), e la ripresa la fa la persona.
+   * ⛔ Se nel frattempo c'è altro da consegnare (un messaggio della persona in coda, i risultati delle figlie) non si riparte: quel
+   *   giro arriverà, e alla sua fine il ciclo ripasserà di qui.
+   */
+  function programmaCicloObiettivo(voce, esitoGiro, { ritardoMs = 25 } = {}) {
+    const obiettivo = voce.obiettivo ?? null;
+    // G5c: anche senza contratto (il pavimento) — lo giudica il giudice sul testo intero; senza un modello il ciclo esce da sé
+    if (chiuso || !obiettivo || obiettivo.stato !== 'attivo' || voce.padreId || voce.legameWorkflow) return;
+    /* 15/10: la stessa porta dell'attrezzo — in un host che non mostra gli obiettivi (o senza nessuno davanti) un obiettivo già
+       attivo, per esempio scritto da un altro processo nello stesso archivio, non lavora da solo senza che nessuno lo veda */
+    if (obiettiviNellaChat !== true || nessunoDavanti(voce)) return;
+    /* G4-REV-07 (seconda revisione, 14/10): il ciclo porta con sé l'obiettivo per cui è NATO — un ritentativo che scatta dopo che la
+       persona ne ha impostato uno nuovo non lavora sul nuovo (impostare non avvia niente, G1) */
+    const conObiettivo = { ...(esitoGiro ?? { pulito: false, fermatoDallaPersona: false, codice: 'failed' }), obiettivoId: esitoGiro?.obiettivoId ?? obiettivo.id };
+    const t = setTimeout(() => { void cicloObiettivo(voce, conObiettivo); }, ritardoMs);
+    t.unref?.();
+  }
+  /* G4-REV-03 (revisione del bugfixer, 14/10): quando la verifica del ciclo è RIFIUTATA per un motivo che passa (una verifica della
+     persona già in corso, qualcuno che lavora nella cartella, il contratto cambiato a metà) il ciclo non si ferma in silenzio: aspetta
+     e riprova, con un'attesa che raddoppia; finiti i tentativi mette in pausa col motivo. Se nel frattempo parte un giro, è la fine di
+     QUEL giro a ripassare di qui. */
+  const RIFIUTI_CHE_PASSANO = new Set(['goal-check-running', 'goal-check-while-working', 'goal-changed-during-check', 'goal-check-stopped']);
+  const RITENTATIVI_DEL_CICLO = 8;
+  const PRIMA_ATTESA_DEL_CICLO_MS = 250;
+  /** I fatti del giro appena finito, dai suoi eventi: i token spesi (`consumo-fornitore`) e le scritture di file degli attrezzi. */
+  function fattiDelGiroPerLObiettivo(voce) {
+    const eventi = Array.isArray(voce.eventi) ? voce.eventi : [];
+    const inizio = eventi.findLastIndex((evento) => evento?.type === 'RunStarted');
+    const delGiro = inizio >= 0 ? eventi.slice(inizio) : eventi;
+    const intero = (n) => (Number.isSafeInteger(n) && n >= 0 ? n : 0);
+    let token = 0;
+    let scritture = 0;
+    for (const evento of delGiro) {
+      if (evento?.type === 'CUSTOM' && evento.name === 'consumo-fornitore') token += intero(evento.value?.usage?.prompt_tokens) + intero(evento.value?.usage?.completion_tokens);
+      if (evento?.type === 'ToolCallStart' && (evento.toolCallName === 'scrivi' || evento.toolCallName === 'file_edit')) scritture += 1;
+    }
+    return { token, scritture };
+  }
+  /** G5d: i token spesi in una lista di eventi (`consumo-fornitore`), per la figlia del confutatore. */
+  function tokenDegliEventi(eventi) {
+    const intero = (n) => (Number.isSafeInteger(n) && n >= 0 ? n : 0);
+    let token = 0;
+    for (const evento of Array.isArray(eventi) ? eventi : []) {
+      if (evento?.type === 'CUSTOM' && evento.name === 'consumo-fornitore') token += intero(evento.value?.usage?.prompt_tokens) + intero(evento.value?.usage?.completion_tokens);
+    }
+    return token;
+  }
+  const tokenDellUsage = (u) => [u?.prompt_tokens, u?.completion_tokens].reduce((s, n) => s + (Number.isSafeInteger(n) && n >= 0 ? n : 0), 0);
+  /** G5d (owner 15/10/2026, «tutti i giri»): i file scritti nell'ultimo giro, se quel giro è nato DOPO l'obiettivo (l'ora sul
+   *  RunStarted, ORA-GIRI 15/10): un giro di prima non è lavoro per l'obiettivo e non si ricorda. */
+  /* G5D-REV-01 (bugfixer, 15/10/2026): un ciclo che rinuncia (un giro della persona è finito mentre il giudice pensava) non salva,
+     e quello dopo guarda solo l'ULTIMO giro: i file del giro giudicato sparivano. Si tengono qui, legati all'obiettivo, finché una
+     decisione non li salva; un obiettivo nuovo riparte da zero. In memoria e non sul disco: scriverli a parte cambierebbe la
+     revisione sotto il ciclo che pensa, e lo farebbe ripartire. */
+  function fileInAttesa(voce, obiettivo, scritti = []) {
+    const prima = voce.fileInAttesa?.id === obiettivo?.id ? voce.fileInAttesa.file : [];
+    voce.fileInAttesa = { id: obiettivo?.id ?? null, file: [...new Set([...scritti, ...prima])] };
+    return voce.fileInAttesa.file;
+  }
+  const salvatiIFileInAttesa = (voce, salvato) => { if (salvato && voce.fileInAttesa?.id === salvato.id) voce.fileInAttesa = null; };
+  function fileDelGiroPerLObiettivo(voce, obiettivo) {
+    const eventi = Array.isArray(voce.eventi) ? voce.eventi : [];
+    const inizio = eventi.findLastIndex((evento) => evento?.type === 'RunStarted');
+    if (inizio < 0) return [];
+    const nato = eventi[inizio].timestamp;
+    if (typeof nato === 'number' && nato < Date.parse(obiettivo?.creatoAlle ?? '')) {
+      /* G6-REV-04 (owner 15/10/2026): il giro in cui il MODELLO ha creato l'obiettivo (`goal_create`, «Keep working on it») è nato
+         prima dell'obiettivo, ma ciò che scrive DOPO la creazione è lavoro per l'obiettivo: conta da quell'evento in poi. In memoria:
+         dopo un riavvio quel giro è finito da tempo, e il suo ciclo è già passato. */
+      const marca = voce.obiettivoNatoNelGiro;
+      if (!marca || marca.id !== obiettivo?.id) return [];
+      const da = eventi.lastIndexOf(marca.dopoEvento);
+      return da >= inizio ? proveDelGiro(eventi.slice(da + 1)).scritti : [];
+    }
+    return proveDelGiro(eventi.slice(inizio)).scritti;
+  }
+  /* G5-CURA-REV-02 (bugfixer, 15/10/2026): UN ciclo per obiettivo alla volta. Giudice e confutatore pensano per minuti; un giro
+     della persona che finisce intanto chiamava un secondo ciclo, e due giudici pagati erano in volo insieme. Chi arriva mentre un
+     ciclo lavora lascia il suo esito (l'ultimo vince) e riparte quando quello finisce. */
+  async function cicloObiettivo(voce, esitoGiro) {
+    if (voce.cicloObiettivoInCorso) { voce.cicloObiettivoDaRifare = esitoGiro; return; }
+    voce.cicloObiettivoInCorso = true;
+    try {
+      await cicloObiettivoUnaVolta(voce, esitoGiro);
+    } finally {
+      voce.cicloObiettivoInCorso = false;
+      const daRifare = voce.cicloObiettivoDaRifare;
+      voce.cicloObiettivoDaRifare = null;
+      if (daRifare && !chiuso && sessioni.get(voce.sessionId) === voce) programmaCicloObiettivo(voce, daRifare);
+    }
+  }
+  async function cicloObiettivoUnaVolta(voce, esitoGiro) {
+    try {
+      if (chiuso || sessioni.get(voce.sessionId) !== voce) return;
+      const prima = voce.obiettivo ?? null;
+      if (!prima || prima.stato !== 'attivo') return;
+      if (esitoGiro.obiettivoId && esitoGiro.obiettivoId !== prima.id) return; // G4-REV-07: nato per un altro obiettivo
+      /* G4-REV-05: «Riprendi» della persona fa ripartire il ciclo senza un giro alle spalle — non si conta un giro, non si giudica
+         un giro che non c'è */
+      const ripresa = esitoGiro.ripresa === true;
+      /* G5D-REV-02 (bugfixer, 15/10/2026): un giro dell'obiettivo che finisce in errore o fermato dalla persona mette in pausa QUI,
+         prima del giudice — e i file che ha scritto non entravano mai in `fileInAttesa`. Se poi la persona fa un suo giro e riprende,
+         la ripresa guarda solo l'ultimo giro e quei file sparivano. Si tengono prima delle due pause: la decisione che salva li porta. */
+      if (!ripresa && (esitoGiro.fermatoDallaPersona || !esitoGiro.pulito || esitoGiro.storiaConfermata === false)) {
+        fileInAttesa(voce, prima, fileDelGiroPerLObiettivo(voce, prima));
+      }
+      if (!ripresa && esitoGiro.fermatoDallaPersona) {
+        await transizioneObiettivo(voce.sessionId, (o, { adesso }) => (o?.id === prima.id ? mettiInPausaObiettivo(o, { tipo: 'persona', adesso }) : { ok: true, obiettivo: o, invariato: true }));
+        return;
+      }
+      if (!ripresa && (!esitoGiro.pulito || esitoGiro.storiaConfermata === false)) {
+        await transizioneObiettivo(voce.sessionId, (o, { adesso }) => (o?.id === prima.id ? mettiInPausaObiettivo(o, { tipo: 'errore', dettaglio: String(esitoGiro.codice ?? 'failed'), adesso }) : { ok: true, obiettivo: o, invariato: true }));
+        return;
+      }
+      const { token, scritture } = ripresa ? { token: 0, scritture: 0 } : fattiDelGiroPerLObiettivo(voce);
+      const scrittiDelGiro = fileInAttesa(voce, prima, fileDelGiroPerLObiettivo(voce, prima)); // G5d + G5D-REV-01
+      if (!prima.contratto) { await cicloSenzaContratto(voce, esitoGiro, prima, { ripresa, token, scritture }); return; } // G5c: il pavimento
+      const inizio = Date.now();
+      let esito = await registryApi.verificaObiettivo(voce.sessionId);
+      if (!esito?.ok && esito?.reason === 'goal-check-running' && voce.verificaObiettivo?.fine) {
+        /* le prove le sta già eseguendo la persona («Verifica»), dopo il giro: si aspetta la LORO fine e si usa il loro esito, se si è
+           salvato — rieseguirle spenderebbe una seconda volta una suite che può durare minuti */
+        await voce.verificaObiettivo.fine.catch(() => {});
+        const ora = voce.obiettivo ?? null;
+        esito = ora?.id === prima.id && ora.verifica?.alle && Date.parse(ora.verifica.alle) >= inizio
+          ? { ok: true, obiettivo: ora }
+          : await registryApi.verificaObiettivo(voce.sessionId);
+      }
+      if (!esito?.ok) {
+        if (!RIFIUTI_CHE_PASSANO.has(esito?.reason)) return; // obiettivo tolto, non più attivo, sessione chiusa: niente da portare avanti
+        if (!(voce.conclusa === true || voce.interrotta === true)) return; // un giro è partito: la sua fine ripasserà di qui
+        const tentativo = (esitoGiro.ritentativi ?? 0) + 1;
+        const attuale = voce.obiettivo ?? null;
+        if (!attuale || attuale.id !== prima.id || attuale.stato !== 'attivo') return;
+        if (tentativo > (ritentativiCicloObiettivo?.tentativi ?? RITENTATIVI_DEL_CICLO)) {
+          /* la parola giusta per la persona: una cartella in cui qualcuno lavora da un minuto non è un «errore» (riserva del bugfixer) */
+          const tipo = esito.reason === 'goal-check-while-working' ? 'cartella-occupata' : 'errore';
+          await transizioneObiettivo(voce.sessionId, (o, { adesso }) => (o?.id === prima.id ? mettiInPausaObiettivo(o, { tipo, ...(tipo === 'errore' ? { dettaglio: String(esito.reason) } : {}), adesso }) : { ok: true, obiettivo: o, invariato: true }));
+          return;
+        }
+        programmaCicloObiettivo(voce, { ...esitoGiro, ritentativi: tentativo }, { ritardoMs: (ritentativiCicloObiettivo?.primaMs ?? PRIMA_ATTESA_DEL_CICLO_MS) * (2 ** (tentativo - 1)) });
+        return;
+      }
+      let dopo = esito.obiettivo;
+      /* ⛔ G5-REV-03/04 (bugfixer, 15/10/2026): giudice e confutatore PENSANO, e intanto il mondo cambia. Un verdetto vale solo se
+         regge nel momento in cui produce effetto (arXiv 2607.10487 «Commit-Time Authorization for LLM Agents», luglio 2026:
+         «refresh, rebind, replan, or refuse at the durability boundary»; arXiv 2608.26306 «Approved Too Late», 26/08/2026: ogni
+         approvazione corretta al controllo deve restare valida all'uso). Quindi: con un giro in corso non si decide (la sua fine
+         ripasserà di qui); se l'obiettivo è cambiato sotto (una «Verifica» della persona) il ciclo RIPARTE invece di tacere. */
+      const giroInCorso = () => !(voce.conclusa === true || voce.interrotta === true);
+      const ripartiDopoUnCambio = () => {
+        const ora = voce.obiettivo ?? null;
+        const volte = (esitoGiro.ripreseDopoUnCambio ?? 0) + 1;
+        /* G5D-RIV-06 (bugfixer, 15/10/2026): se un giro è finito mentre il giudice pensava, `cicloObiettivoDaRifare` c'è già e il
+           `finally` di `cicloObiettivo` lo farà ripartire. Riprogrammare anche qui faceva DUE cicli: il primo trovava il secondo
+           in attesa e buttava il proprio giudizio, all'infinito (4 giudici pagati, ogni «sì» scartato, pausa «goal-kept-changing»).
+           Una sola ripartenza per fine giro, come Hermes: il giudizio post-giro si rimanda finché c'è un messaggio vero in coda e si
+           rifà UNA volta dopo quel giro (`hermes_cli/cli_loops_mixin.py:693-697`, «A real user message already queued preempts
+           judging (re-judged after their turn)»; `gateway/run_goals.py:279`, «enqueue a continuation through the adapter FIFO so a
+           simultaneous real user message takes priority»). */
+        if (giroInCorso() || !ora || ora.id !== prima.id || ora.stato !== 'attivo' || voce.cicloObiettivoDaRifare) return;
+        /* G5-CURA-REV-01 (bugfixer, 15/10/2026): oltre il tetto non si tace — una pausa col suo motivo, e decide la persona */
+        if (volte > 3) {
+          void transizioneObiettivo(voce.sessionId, (o, { adesso }) => (o?.id === prima.id && o.stato === 'attivo'
+            ? mettiInPausaObiettivo(o, { tipo: 'errore', dettaglio: 'goal-kept-changing', adesso }) : { ok: true, obiettivo: o, invariato: true }));
+          return;
+        }
+        programmaCicloObiettivo(voce, { ...esitoGiro, ripresa: true, ripreseDopoUnCambio: volte });
+      };
+      /* ⭐ G5 — IL GIUDICE, dopo le prove e solo se sono tutte verdi (Hermes: i cancelli prima del giudice, `goals.py:1498-1504`):
+         decide i criteri a giudizio sulle PROVE del giro. Senza un modello della sessione resta il comportamento della G4. */
+      const giudizio = await giudicaObiettivo(voce, dopo, scrittiDelGiro);
+      if (giudizio?.giudizio) {
+        if (giroInCorso()) return;
+        const giudicato = await inFilaPerLObiettivo(voce, async () => {
+          const attuale = voce.obiettivo ?? null;
+          if (!attuale || attuale.id !== dopo.id || attuale.revisione !== dopo.revisione || giroInCorso() || voce.cicloObiettivoDaRifare) return null; // cambiato nel frattempo
+          /* G5-REV-02: le impronte si rileggono QUI, sotto la coda, subito prima di applicare: un file cambiato mentre il giudice
+             pensava rende il suo «sì» vecchio (dsh-goalloop: ciò che è stato giudicato non è ciò che si consegna ⇒ annullato) */
+          const verdetti = await verdettiConLeImpronteDiAdesso(voce, giudizio.giudizio.verdetti);
+          const con = obiettivoConGiudizio(attuale, { ...giudizio.giudizio, verdetti }, { adesso: new Date().toISOString() });
+          if (!con.ok) return null;
+          const scritto = await salvaObiettivo(voce, con.obiettivo);
+          return scritto.ok ? scritto.obiettivo : null;
+        });
+        if (!giudicato) { ripartiDopoUnCambio(); return; }
+        dopo = giudicato;
+      }
+      const progresso = ripresa || ceProgresso(prima.verifica?.verdetti ? prima.verifica : null, dopo.verifica, { scritture });
+      const cicloDelGiro = ripresa ? (dopo.ciclo ?? { giri: 0, token: 0, senzaProgresso: 0 }) : contoDopoIlGiro(dopo.ciclo, { token, progresso });
+      /* G5d (owner 15/10/2026, «sì, nel tetto»): anche quello che spende il giudice entra nel conto dell'obiettivo */
+      const ciclo = { ...cicloDelGiro, token: cicloDelGiro.token + (giudizio?.token ?? 0) };
+      const decisione = decidiDopoIlGiro({ obiettivo: dopo, verifica: dopo.verifica, ciclo, ...(tettiCicloObiettivo ? { tetti: tettiCicloObiettivo } : {}),
+        ...(giudizio?.guasto ? { giudice: { guasto: giudizio.guasto } } : {}) });
+      /* ⭐ G5 (owner 15/10/2026: «prima di ogni fatto», sola lettura, 8 giri) — IL CONFUTATORE prova a smentire il «fatto» PRIMA che
+         si dica. Se nel frattempo l'obiettivo cambia (la persona scrive, lo ferma, cambia il contratto) il suo esito non si applica:
+         il controllo di revisione qui sotto lo scarta. */
+      const confutazione = decisione.azione === 'fatto'
+        ? await Promise.resolve((typeof confutaObiettivoFn === 'function' ? confutaObiettivoFn : confutaObiettivo)(voce, dopo))
+          .catch(() => ({ esito: 'senza-esito', motivo: 'refuter-failed' }))
+        : null;
+      if (chiuso || sessioni.get(voce.sessionId) !== voce || giroInCorso() || voce.cicloObiettivoDaRifare) return; // CONFUTA-REV-04
+      const salvato = await inFilaPerLObiettivo(voce, async () => {
+        const attuale = voce.obiettivo ?? null;
+        if (!attuale || attuale.id !== dopo.id || attuale.revisione !== dopo.revisione || giroInCorso() || voce.cicloObiettivoDaRifare) return null; // cambiato nel frattempo: non si decide su un altro
+        /* riserva S5 del bugfixer (15/10): il confutatore pensa per minuti — prima di dire «fatto» le impronte citate dal giudice si
+           rileggono ADESSO; un file cambiato intanto (anche fuori da TALOS) annulla il «fatto», e il ciclo rifà la verifica */
+        if (decisione.azione === 'fatto' && await improntaCambiataDopoIlGiudizio(voce, attuale)) return null;
+        const adesso = new Date().toISOString();
+        /* G5d: e quello che spende il confutatore (la sua figlia, tutti i suoi giri) */
+        let prossimo = obiettivoConCiclo(attuale, { ...ciclo, token: ciclo.token + (confutazione?.token ?? 0) }, { adesso, scritti: scrittiDelGiro }).obiettivo;
+        if (decisione.azione === 'fatto' && confutazione) {
+          const con = obiettivoConConfutazione(prossimo, confutazione, { daGuardare: decisione.daGuardare, smentiteMassime: SMENTITE_MASSIME, adesso });
+          if (!con.ok) return null;
+          prossimo = con.obiettivo;
+        } else if (decisione.azione === 'fatto') prossimo = obiettivoAFatto(prossimo, { daGuardare: decisione.daGuardare, adesso }).obiettivo;
+        else if (decisione.azione === 'tetto') prossimo = obiettivoATetto(prossimo, { tipo: decisione.tipo, adesso }).obiettivo;
+        else if (decisione.azione === 'pausa') prossimo = mettiInPausaObiettivo(prossimo, { tipo: decisione.tipo, dettaglio: decisione.dettaglio, adesso }).obiettivo;
+        const scritto = await salvaObiettivo(voce, prossimo);
+        return scritto.ok ? scritto.obiettivo : null;
+      });
+      if (!salvato) { ripartiDopoUnCambio(); return; }
+      salvatiIFileInAttesa(voce, salvato);
+      if (salvato.stato !== 'attivo') return;
+      /* G5: un «fatto» smentito torna attivo, e il giro dopo riceve la smentita */
+      if (decisione.azione !== 'continua' && !(decisione.azione === 'fatto' && salvato.confutazione?.esito === 'smentito')) return;
+      ripartiPerLObiettivo(voce, salvato);
+    } catch (errore) {
+      console.error(`[session-store] goal loop not completed for ${voce.sessionId}:`, errore instanceof Error ? errore.message : errore);
+    }
+  }
+  /**
+   * ⭐ /goal G5 — IL GIUDICE dei criteri a giudizio (`src/obiettivo/giudice.mjs`). `null` quando non c'è niente da giudicare, quando
+   * qualche prova non è verde (si ripara prima quella), o quando la sessione non dichiara un modello; `{ giudizio }` coi verdetti già
+   * controllati sulle impronte; `{ guasto: 'forma'|'trasporto' }` dopo i tentativi di Hermes (3 risposte illeggibili, 5 guasti di
+   * trasporto di fila, `goals.py:43,46`): mai un «fatto».
+   * Il modello è quello della SESSIONE, per la strada della compattazione e di «Genera messaggio» (`chiediAllaSessione`): Hermes
+   * giudica col modello principale di serie (`agent/auxiliary_client.py:4677`), e la nostra C2b fa lo stesso per le deleghe.
+   */
+  async function giudicaObiettivo(voce, obiettivo, inAttesa = []) {
+    const verdetti = obiettivo?.verifica?.verdetti ?? [];
+    const daGiudicare = verdetti.filter((v) => v.esito === 'da-giudicare');
+    if (daGiudicare.length === 0 || verdetti.some((v) => v.esito !== 'da-giudicare' && v.esito !== 'verde')) return null;
+    const perRete = modelloDiSessionePerRete(voce);
+    if (perRete === null) return null;
+    const criteri = daGiudicare.map((v) => obiettivo.contratto?.criteri?.find((c) => c.id === v.id)).filter(Boolean).map((c) => ({ id: c.id, testo: c.testo }));
+    if (criteri.length === 0) return null;
+    const esito = await chiediAlGiudice(voce, obiettivo.testo, criteri, perRete, { fileGiaScritti: [...inAttesa, ...(obiettivo.fileScritti ?? [])] });
+    if (!esito || esito.guasto) return esito;
+    return { giudizio: { alle: obiettivo.verifica.alle, verdetti: esito.verdetti }, token: esito.token };
+  }
+  /** Il cuore del giudice: le prove del giro, la domanda, i tentativi di Hermes, la lettura controllata. `{ verdetti }`, `{ guasto }`, o
+   *  `null` se la sessione è chiusa nel frattempo. */
+  async function chiediAlGiudice(voce, testoObiettivo, criteri, perRete, { fileGiaScritti = [] } = {}) {
+    const eventi = Array.isArray(voce.eventi) ? voce.eventi : [];
+    const inizio = eventi.findLastIndex((evento) => evento?.type === 'RunStarted');
+    const prove = proveDelGiro(inizio >= 0 ? eventi.slice(inizio) : eventi);
+    /* G5d (owner 15/10/2026, «tutti i giri»): i file di questo giro per primi, poi quelli dei giri prima dell'obiettivo */
+    const file = await fileDelGiudice(voce, [...new Set([...prove.scritti, ...fileGiaScritti])].slice(0, FILE_DEL_GIUDICE));
+    const impronteAttuali = new Map(file.map((f) => [f.percorso, f.impronta]));
+    const prompt = promptPerIlGiudice({ obiettivo: testoObiettivo, criteri, prove, file, risposta: prove.risposta });
+    const tetti = {
+      forma: ritentativiGiudiceObiettivo?.forma ?? ERRORI_DI_FORMA_MASSIMI,
+      trasporto: ritentativiGiudiceObiettivo?.trasporto ?? ERRORI_DI_TRASPORTO_MASSIMI,
+      primaMs: ritentativiGiudiceObiettivo?.primaMs ?? 1_000,
+    };
+    let forma = 0;
+    let trasporto = 0;
+    let token = 0; // G5d: ogni tentativo pagato entra nel tetto dell'obiettivo
+    for (;;) {
+      if (chiuso || sessioni.get(voce.sessionId) !== voce) return null;
+      let testo;
+      try {
+        testo = await chiediAlModelloUnaVoltaFn({
+          modello: perRete,
+          chiave: typeof chiaveFn === 'function' ? chiaveFn() : chiave,
+          prompt,
+          onConsumo: (usage) => { token += tokenDellUsage(usage); },
+          ...(typeof fetchModelloFn === 'function' ? { fetchDiRete: fetchModelloFn() } : {}),
+        });
+      } catch {
+        trasporto += 1;
+        if (trasporto >= tetti.trasporto) return { guasto: 'trasporto', token };
+        await new Promise((fatto) => setTimeout(fatto, tetti.primaMs * 2 ** (trasporto - 1)));
+        continue;
+      }
+      const letto = giudizioDallaRisposta(testo, { criteri, impronteAttuali, improntaRisposta: improntaDelGiudice(prove.risposta) });
+      if (!letto.ok) {
+        forma += 1;
+        if (forma >= tetti.forma) return { guasto: 'forma', token };
+        continue;
+      }
+      return { verdetti: letto.verdetti, token };
+    }
+  }
+  /**
+   * ⭐ /goal G5c — IL PAVIMENTO: un obiettivo senza contratto (la proposta dei criteri non è riuscita, o la persona non li ha voluti).
+   * Nessuna prova a comando: dopo ogni giro il giudice valuta il TESTO intero dell'obiettivo sulle prove del giro, come Claude Code e
+   * Hermes fanno per ogni obiettivo (piano del /goal, G1/G2c: «il giudice riceve sempre il testo intero»). Poi le stesse regole del
+   * contratto: un «sì» solo con un file d'impronta attuale, niente decisioni con un giro in corso, tetti e progresso della G4, e il
+   * confutatore prima di ogni «fatto». Senza un modello della sessione resta com'era: fermo, nessun giro.
+   */
+  async function cicloSenzaContratto(voce, esitoGiro, prima, { ripresa, token, scritture }) {
+    const perRete = modelloDiSessionePerRete(voce);
+    if (perRete === null) return;
+    const giroInCorso = () => !(voce.conclusa === true || voce.interrotta === true);
+    const scrittiDelGiro = fileInAttesa(voce, prima, fileDelGiroPerLObiettivo(voce, prima)); // G5d + G5D-REV-01
+    const esito = await chiediAlGiudice(voce, prima.testo, [{ id: 'obiettivo', testo: prima.testo }], perRete, { fileGiaScritti: [...scrittiDelGiro, ...(prima.fileScritti ?? [])] });
+    if (!esito || chiuso || sessioni.get(voce.sessionId) !== voce || giroInCorso()) return;
+    const verdetto = esito.verdetti?.[0] ?? null;
+    const progresso = ripresa || scritture > 0 || (verdetto !== null && verdetto.esito !== prima.giudizioDelTesto?.esito);
+    const cicloDelGiro = ripresa ? (prima.ciclo ?? { giri: 0, token: 0, senzaProgresso: 0 }) : contoDopoIlGiro(prima.ciclo, { token, progresso });
+    const ciclo = { ...cicloDelGiro, token: cicloDelGiro.token + (esito.token ?? 0) }; // G5d: il giudice nel tetto
+    const conGiudizioProvvisorio = verdetto ? obiettivoConGiudizioDelTesto(prima, verdetto, { adesso: new Date().toISOString() }) : null;
+    const decisione = decidiSenzaContratto({ obiettivo: conGiudizioProvvisorio?.ok ? conGiudizioProvvisorio.obiettivo : prima, ciclo,
+      ...(tettiCicloObiettivo ? { tetti: tettiCicloObiettivo } : {}), ...(esito.guasto ? { giudice: { guasto: esito.guasto } } : {}) });
+    const confutazione = decisione.azione === 'fatto'
+      ? await Promise.resolve((typeof confutaObiettivoFn === 'function' ? confutaObiettivoFn : confutaObiettivo)(voce, prima))
+        .catch(() => ({ esito: 'senza-esito', motivo: 'refuter-failed' }))
+      : null;
+    if (chiuso || sessioni.get(voce.sessionId) !== voce || giroInCorso() || voce.cicloObiettivoDaRifare) return; // CONFUTA-REV-04
+    const salvato = await inFilaPerLObiettivo(voce, async () => {
+      const attuale = voce.obiettivo ?? null;
+      if (!attuale || attuale.id !== prima.id || attuale.revisione !== prima.revisione || giroInCorso() || voce.cicloObiettivoDaRifare || attuale.contratto) return null;
+      const adesso = new Date().toISOString();
+      let prossimo = obiettivoConCiclo(attuale, { ...ciclo, token: ciclo.token + (confutazione?.token ?? 0) }, { adesso, scritti: scrittiDelGiro }).obiettivo; // G5d
+      if (verdetto) {
+        /* le impronte citate si rileggono QUI, subito prima di applicare (G5-REV-02 / riserva S5) */
+        const [aggiornato] = await verdettiConLeImpronteDiAdesso(voce, [verdetto]);
+        const con = obiettivoConGiudizioDelTesto(prossimo, aggiornato, { adesso });
+        if (!con.ok) return null;
+        prossimo = con.obiettivo;
+        if (decisione.azione === 'fatto' && prossimo.giudizioDelTesto.esito !== 'verde') return null; // il «sì» non regge più: si rifà
+      }
+      if (decisione.azione === 'fatto' && confutazione) {
+        const con = obiettivoConConfutazione(prossimo, confutazione, { daGuardare: 0, smentiteMassime: SMENTITE_MASSIME, adesso });
+        if (!con.ok) return null;
+        prossimo = con.obiettivo;
+      } else if (decisione.azione === 'fatto') prossimo = obiettivoAFatto(prossimo, { daGuardare: 0, adesso }).obiettivo;
+      else if (decisione.azione === 'tetto') prossimo = obiettivoATetto(prossimo, { tipo: decisione.tipo, adesso }).obiettivo;
+      else if (decisione.azione === 'pausa') prossimo = mettiInPausaObiettivo(prossimo, { tipo: decisione.tipo, dettaglio: decisione.dettaglio, adesso }).obiettivo;
+      const scritto = await salvaObiettivo(voce, prossimo);
+      return scritto.ok ? scritto.obiettivo : null;
+    });
+    if (!salvato) {
+      const ora = voce.obiettivo ?? null;
+      const volte = (esitoGiro.ripreseDopoUnCambio ?? 0) + 1;
+      /* PAV-REV-03 (bugfixer, 15/10/2026): se nel frattempo è arrivato un contratto il ciclo NON tace: riparte, e prende la sua strada */
+      // G5D-RIV-06: con un ciclo già da rifare ci pensa il `finally` di `cicloObiettivo` — una sola ripartenza (vedi il ramo col contratto)
+      if (giroInCorso() || !ora || ora.id !== prima.id || ora.stato !== 'attivo' || voce.cicloObiettivoDaRifare) return;
+      if (volte > 3) {
+        void transizioneObiettivo(voce.sessionId, (o, { adesso }) => (o?.id === prima.id && o.stato === 'attivo'
+          ? mettiInPausaObiettivo(o, { tipo: 'errore', dettaglio: 'goal-kept-changing', adesso }) : { ok: true, obiettivo: o, invariato: true }));
+        return;
+      }
+      programmaCicloObiettivo(voce, { ...esitoGiro, ripresa: true, ripreseDopoUnCambio: volte });
+      return;
+    }
+    salvatiIFileInAttesa(voce, salvato);
+    if (salvato.stato !== 'attivo') return;
+    if (decisione.azione !== 'continua' && !(decisione.azione === 'fatto' && salvato.confutazione?.esito === 'smentito')) return;
+    ripartiPerLObiettivo(voce, salvato);
+  }
+  /** Se un file che il giudice ha citato per un verde salvato non ha più quell'impronta (o non c'è più). */
+  async function improntaCambiataDopoIlGiudizio(voce, obiettivo) {
+    const citate = (obiettivo?.verifica?.verdetti ?? []).flatMap((v) => (v.esito === 'verde' ? (v.giudizio?.prove ?? []).filter((p) => p.percorso) : []));
+    if (citate.length === 0) return false;
+    const adesso = new Map((await fileDelGiudice(voce, [...new Set(citate.map((p) => p.percorso))])).map((f) => [f.percorso, f.impronta]));
+    return citate.some((p) => adesso.get(p.percorso) !== p.impronta);
+  }
+  /** G5-REV-02: i verdetti verdi le cui prove su file non hanno più l'impronta citata diventano «non giudicabili» (`evidence-stale`). */
+  async function verdettiConLeImpronteDiAdesso(voce, verdetti) {
+    const percorsi = [...new Set(verdetti.flatMap((v) => (v.esito === 'verde' ? (v.prove ?? []).filter((p) => p.percorso).map((p) => p.percorso) : [])))];
+    if (percorsi.length === 0) return verdetti;
+    const adesso = new Map((await fileDelGiudice(voce, percorsi)).map((f) => [f.percorso, f.impronta]));
+    return verdetti.map((v) => (v.esito === 'verde' && (v.prove ?? []).some((p) => p.percorso && adesso.get(p.percorso) !== p.impronta)
+      ? { id: v.id, esito: 'non-giudicabile', motivo: 'evidence-stale' } : v));
+  }
+  /** I file scritti dal giro, come il giudice li vede: solo dentro la cartella (anche dopo i collegamenti), mai un segreto, entro un
+   *  mega, e l'impronta di ADESSO. Un file sparito o illeggibile non è una prova. */
+  async function fileDelGiudice(voce, scritti) {
+    const cartella = typeof voce.cartella === 'string' ? voce.cartella : '';
+    if (cartella === '') return [];
+    let radice;
+    try { radice = await realpath(cartella); } catch { return []; }
+    const dentro = (assoluto) => { const rel = relativoAllaCartella(radice, assoluto); return rel !== '' && !rel.startsWith('..') && !percorsoAssoluto(rel); };
+    const file = [];
+    for (const scritto of scritti) {
+      try { if (motivoDaChiederePerLaProva({ tipo: 'leggi', percorso: scritto, cartella })) continue; } catch { continue; }
+      try {
+        const vero = await realpath(resolvePath(cartella, scritto));
+        if (!dentro(vero)) continue;
+        const info = await statDellaProva(vero);
+        if (!info.isFile() || info.size > 1024 * 1024) continue;
+        const testo = await leggiFileDelGiudice(vero, 'utf8');
+        file.push({ percorso: scritto, impronta: improntaDelGiudice(testo), estratto: testo });
+      } catch { /* sparito o illeggibile */ }
+    }
+    return file;
+  }
+  /**
+   * ⭐ /goal G5 — IL CONFUTATORE di serie: UNA figlia a contesto pulito, col modello della conversazione (`modelloDellaFiglia`, la
+   * regola delle deleghe: una sessione locale resta locale), che prova a smentire il «fatto». Sola lettura: livello «On request» e
+   * ogni domanda chiusa da `richiediApprovazione` (passano SOLO i comandi del contratto confermati dalla persona); nessuno davanti
+   * (`senzaInterfaccia`); al più `GIRI_DEL_CONFUTATORE` giri. Il suo esito è un fatto strutturato (`esitoDelConfutatore`).
+   * ⛔ Non passa dall'orchestratore delle deleghe: il suo risultato non è un messaggio per la madre (che non deve ripartire per
+   *   lui), è un esito per il ciclo. Nel diagramma delle deleghe si vede come figlia della conversazione.
+   */
+  function confutaObiettivo(voce, obiettivo) {
+    return new Promise((risolvi) => {
+      let finito = false;
+      let figliaId = null;
+      let orologio = null;
+      /* G5d (owner 15/10/2026, «sì, nel tetto»): con l'esito, quello che la figlia ha speso in tutti i suoi giri — anche alla scadenza */
+      const fine = (esito) => { if (!finito) { finito = true; clearTimeout(orologio); risolvi({ ...esito, token: figliaId ? tokenDegliEventi(sessioni.get(figliaId)?.eventi) : 0 }); } };
+      const scelta = modelloDellaFiglia(voce);
+      if (scelta?.ok !== true || typeof scelta.modello !== 'string' || scelta.modello === '') { fine({ esito: 'senza-esito', motivo: 'refuter-no-model' }); return; }
+      const eventi = Array.isArray(voce.eventi) ? voce.eventi : [];
+      const inizio = eventi.findLastIndex((evento) => evento?.type === 'RunStarted');
+      const { scritti: delGiro } = proveDelGiro(inizio >= 0 ? eventi.slice(inizio) : eventi);
+      const inAttesa = voce.fileInAttesa?.id === obiettivo.id ? voce.fileInAttesa.file : [];
+      const scritti = [...new Set([...delGiro, ...inAttesa, ...(obiettivo.fileScritti ?? [])])].slice(0, FILE_DEL_GIUDICE); // G5d: tutti i giri
+      const consegna = consegnaDelConfutatore({ obiettivo, verdetti: obiettivo.verifica?.verdetti ?? [], scritti });
+      const avvio = avviaESegui({
+        taskId: `confutatore:${voce.sessionId}`,
+        cartella: voce.cartellaBase ?? voce.cartella, cartellaGiaScelta: true,
+        task: { consegna, consegnaCorta: 'Goal refuter' },
+        padreId: voce.sessionId, profonditaDelega: (voce.profonditaDelega ?? 0) + 1,
+        modelloRichiesta: scelta.modello, reasoningRichiesto: voce.reasoning ?? null, linguaInterfaccia: voce.linguaInterfaccia ?? null,
+        permessiRichiesti: 'On request', permessiPerAttrezzoRichiesti: {}, modalitaOperativaRichiesta: 'normale', senzaInterfaccia: true,
+        giriMassimi: GIRI_DEL_CONFUTATORE, soloComandiDelContratto: obiettivo.comandiApprovati ?? [],
+        onConclusioneFn: (risultato) => fine(risultato?.ok === false || typeof risultato?.esito?.detto !== 'string'
+          ? { esito: 'senza-esito', motivo: 'refuter-failed' }
+          : esitoDelConfutatore(risultato.esito.detto)),
+      });
+      if (avvio?.erroreAvvio || !avvio?.sessionId) { fine({ esito: 'senza-esito', motivo: 'refuter-not-started' }); return; }
+      figliaId = avvio.sessionId;
+      /* la scadenza: «senza esito» (mai un «fatto») e la figlia si ferma, perché non continui a spendere per nessuno */
+      orologio = setTimeout(() => {
+        if (finito) return;
+        fine({ esito: 'senza-esito', motivo: 'refuter-timeout' });
+        try { registryApi.ferma(figliaId, { daChi: 'sistema' }); } catch { /* già finita o eliminata */ }
+      }, scadenzaConfutatoreMs);
+      orologio.unref?.();
+    });
+  }
+  /*
+   * ⛔ CONFUTA-REV-02/03 (bugfixer, 15/10/2026): il confutatore riceveva gli attrezzi di una figlia qualunque — una domanda alla madre
+   *   faceva partire un giro della conversazione coi permessi della madre, e con la Coordinazione accesa poteva avviare agenti senza
+   *   chiedere (il nipote nasceva senza la sua restrizione). Sola lettura vuol dire anche: nessun dialogo, nessuna delega, nessuna
+   *   domanda, nessun piano, nessun Workflow, automazione o fornitore. Codex `spawn.rs`: le prove del padre non diventano
+   *   l'autorizzazione della figlia.
+   */
+  const ATTREZZI_TOLTI_AL_CONFUTATORE = Object.freeze(['askParentFn', 'answerChildQuestionFn', 'askChildFn', 'answerParentQuestionFn',
+    'onDelega', 'coordinazioneFn', 'listChildrenFn', 'stopChildFn', 'pauseChildFn', 'resumeChildFn', 'chiediDomandaFn', 'presentaPianoFn',
+    'onWorkflowFn', 'onWorkflowPlanPropose', 'onAutomazioneFn', 'onFornitoriFn', 'onObiettivoFn']);
+  function senzaAttrezziPerIlConfutatore(voce, opzioni) {
+    if (!Array.isArray(voce?.soloComandiDelContratto)) return opzioni;
+    const ridotte = { ...opzioni };
+    for (const chiave of ATTREZZI_TOLTI_AL_CONFUTATORE) delete ridotte[chiave];
+    return ridotte;
+  }
+  /** La ripresa del ciclo: un messaggio del SISTEMA (mai della persona) coi rossi e la regola. */
+  function ripartiPerLObiettivo(voce, obiettivo) {
+    if (chiuso || sessioni.get(voce.sessionId) !== voce || voce.codaMessaggi.length > 0 || voce.codaInPausa) return;
+    const daSolo = testoObiettivoPerIlModello(obiettivo, obiettivo.verifica) ?? testoDellaSmentita(obiettivo) ?? testoDelGiudizioDelTesto(obiettivo); // G5: la smentita; G5c: il giudizio del testo
+    if (!daSolo) return;
+    /* /goal G6: il modello aveva detto «fatto» (goal_update complete) e il controllo non è d'accordo — lo legge per primo */
+    const rivendicato = voce.obiettivoRivendicato === obiettivo.id;
+    voce.obiettivoRivendicato = null;
+    const testo = rivendicato ? `You said the goal was complete, but TALOS's checks do not agree yet.\n${daSolo}` : daSolo;
+    const esito = registryApi.resume(voce.sessionId, testo, [], { notificaObiettivo: { obiettivoId: obiettivo.id, riepilogo: obiettivo.verifica?.riepilogo ?? null } });
+    if (esito?.erroreAvvio) {
+      void transizioneObiettivo(voce.sessionId, (o, { adesso }) => (o?.id === obiettivo.id ? mettiInPausaObiettivo(o, { tipo: 'errore', dettaglio: String(esito.code ?? 'resume-refused'), adesso }) : { ok: true, obiettivo: o, invariato: true }));
+    }
+  }
+  async function contestoDellaProva(voce, segnaleStop) {
+    const base = { segnaleStop, eseguiComando: null, permessoComando: null, permessoLettura: null };
+    if (voce.mobile) return { ...base, cartella: null, perche: 'workspace-not-here' };
+    if ((voce.modalitaOperativa ?? 'normale') === 'piano') return { ...base, cartella: null, perche: 'plan-mode' };
+    const cartella = typeof voce.cartella === 'string' ? voce.cartella : '';
+    const eCartella = cartella !== '' && await statDellaProva(cartella).then((info) => info.isDirectory(), () => false);
+    if (!eCartella) return { ...base, cartella: null, perche: 'workspace-missing' };
+    const livelloAccesso = livelloDiUnAnello(voce.permessi);
+    const consensi = consensiDellaCatena(voce);
+    return {
+      cartella, segnaleStop,
+      async permessoComando(comando) {
+        /* G4 (owner 14/10: «il sì al contratto li approva»): un comando del contratto confermato dalla PERSONA ha già la risposta
+           alla DOMANDA del cancello — ma il cancello si interpella sempre, e i suoi divieti (un «nega» della persona per l'attrezzo
+           o per quel comando, il Piano, i comandi pericolosi) restano sovrani: come Claude Code, dove una regola «deny» vince
+           sempre su un «allow» (code.claude.com/docs/en/permissions, «Manage permissions»: «Rules are evaluated in order: deny, then ask, then allow», letto il 14/10/2026). */
+        const approvato = (voce.obiettivo?.comandiApprovati ?? []).includes(comando);
+        let chiesto = false;
+        try {
+          const esito = await permessoDelMotoreFn({ tipo: 'shell', comando }, {
+            livelloAccesso, modalitaOperativa: voce.modalitaOperativa ?? 'normale', permessiPerAttrezzo: voce.permessiPerAttrezzo ?? {},
+            cartella, consensiSessione: consensi, segnaleStop,
+            chiediApprovazioneFn: async () => (approvato ? { approvato: true } : (chiesto = true, { approvato: false, motivo: 'no one to ask outside a turn' })),
+          });
+          if (esito?.consentito === true) return { consentito: true };
+          return { consentito: false, motivo: esito?.via === 'modalita-piano' ? 'plan-mode' : chiesto ? 'permission-needed' : 'permission-denied' };
+        } catch {
+          return { consentito: false, motivo: 'permission-needed' };
+        }
+      },
+      async permessoLettura(percorso) {
+        const accessoPieno = livelloAccesso === 'accesso-pieno';
+        if (accessoPieno) return { consentito: true };
+        let segreto;
+        try { segreto = motivoDaChiederePerLaProva({ tipo: 'leggi', percorso, cartella }); } catch { return { consentito: false, motivo: 'permission-needed' }; }
+        if (!segreto) return { consentito: true };
+        return consensi?.segretiConsentiti?.includes?.(segreto.percorso) ? { consentito: true } : { consentito: false, motivo: 'permission-needed' };
+      },
+      async eseguiComando(comando, { timeoutMs, onPezzo, segnaleStop: stop }) {
+        const esito = await eseguiComandoDellaProvaFn(comando, cartella, {
+          dove: voce.doveGiranoIComandi ?? null,
+          wsl: preferenzeWslAdesso(),
+          ...(casaLinux ? { automaticoInLinux: true } : {}),
+          timeoutMs, onPezzo, segnaleStop: stop,
+        });
+        return { ...esito, ambiente: esito?.enforcement === 'wsl2' || process.platform !== 'win32' ? 'posix' : 'windows' };
+      },
+      programmaTrovato: (comando) => programmaTrovatoFn(comando, { cartella }),
+    };
+  }
+  /**
+   * G2 — il rifiuto del CONTRATTO detto dal registro: un letterale per motivo (la prova del dizionario li legge dal sorgente).
+   * `posizione` è il criterio storto (da 1), `operatore` il simbolo che nasconde l'esito di un comando: viaggiano nei valori.
+   * ⛔ Le frasi cominciano con «Criterion {posizione}:» e non mettono mai una parola in -s dopo un segnaposto (cancello dei
+   *   plurali, `frontend/tests/unit/aiuto-plurali.mjs`).
+   */
+  function rifiutoContratto({ motivo, posizione, operatore }) {
+    const p = { posizione };
+    if (motivo === 'contract-empty') return rifiuto('GOAL_CONTRACT_INVALID', 'contract-empty', 'The goal needs at least one criterion');
+    if (motivo === 'contract-too-many-criteria') return rifiuto('GOAL_CONTRACT_INVALID', 'contract-too-many-criteria', 'Too many criteria: the limit is {massimo}', { massimo: OBIETTIVO_CRITERI_MASSIMI });
+    if (motivo === 'criterion-invalid') return rifiuto('GOAL_CONTRACT_INVALID', 'criterion-invalid', 'Criterion {posizione}: it is not valid', p);
+    if (motivo === 'criterion-text-invalid') return rifiuto('GOAL_CONTRACT_INVALID', 'criterion-text-invalid', 'Criterion {posizione}: its text is missing or too long', p);
+    if (motivo === 'criterion-check-missing') return rifiuto('GOAL_CONTRACT_INVALID', 'criterion-check-missing', 'Criterion {posizione}: it does not say how to check it', p);
+    if (motivo === 'criterion-check-unknown') return rifiuto('GOAL_CONTRACT_INVALID', 'criterion-check-unknown', 'Criterion {posizione}: its kind of check is not known', p);
+    if (motivo === 'criterion-command-invalid') return rifiuto('GOAL_CONTRACT_INVALID', 'criterion-command-invalid', 'Criterion {posizione}: the command is missing or too long', p);
+    if (motivo === 'criterion-exit-code-invalid') return rifiuto('GOAL_CONTRACT_INVALID', 'criterion-exit-code-invalid', 'Criterion {posizione}: the expected exit code must be a whole number from 0 to 255', p);
+    if (motivo === 'criterion-command-not-attributable') return rifiuto('GOAL_CONTRACT_INVALID', 'criterion-command-not-attributable', 'Criterion {posizione}: the exit code of this command would not tell how it went. Remove {operatore}', { posizione, operatore });
+    if (motivo === 'criterion-command-unreadable') return rifiuto('GOAL_CONTRACT_INVALID', 'criterion-command-unreadable', 'Criterion {posizione}: the command has a quote that is never closed', p);
+    if (motivo === 'criterion-command-multiline') return rifiuto('GOAL_CONTRACT_INVALID', 'criterion-command-multiline', 'Criterion {posizione}: the command must be on a single line', p);
+    if (motivo === 'criterion-path-invalid') return rifiuto('GOAL_CONTRACT_INVALID', 'criterion-path-invalid', 'Criterion {posizione}: the file path is missing or too long', p);
+    if (motivo === 'criterion-path-outside') return rifiuto('GOAL_CONTRACT_INVALID', 'criterion-path-outside', 'Criterion {posizione}: the file must be inside the project', p);
+    if (motivo === 'criterion-file-fact-unknown') return rifiuto('GOAL_CONTRACT_INVALID', 'criterion-file-fact-unknown', 'Criterion {posizione}: the fact about the file is not known', p);
+    if (motivo === 'criterion-file-text-invalid') return rifiuto('GOAL_CONTRACT_INVALID', 'criterion-file-text-invalid', 'Criterion {posizione}: the text to look for is missing or too long', p);
+    if (motivo === 'criterion-file-text-not-allowed') return rifiuto('GOAL_CONTRACT_INVALID', 'criterion-file-text-not-allowed', 'Criterion {posizione}: this fact about the file takes no text', p);
+    if (motivo === 'criterion-id-invalid') return rifiuto('GOAL_CONTRACT_INVALID', 'criterion-id-invalid', 'Criterion {posizione}: its identifier is not valid', p);
+    if (motivo === 'criterion-id-duplicate') return rifiuto('GOAL_CONTRACT_INVALID', 'criterion-id-duplicate', 'Criterion {posizione}: its identifier is used twice', p);
+    if (motivo === 'criterion-id-not-allowed') return rifiuto('GOAL_CONTRACT_INVALID', 'criterion-id-not-allowed', 'A new criterion cannot choose its identifier');
+    throw new Error(`rifiutoContratto: motivo sconosciuto ${motivo}`);
+  }
+  /** G2 — un contratto nuovo sull'obiettivo che c'è: in fila, salvato, annunciato; la risposta dice che cosa è cambiato. */
+  function cambioDiContratto(sessionId, costruisci, { conferma = null } = {}) {
+    const voce = sessioni.get(sessionId);
+    if (!voce) return Promise.resolve(rifiuto('NOT_FOUND', 'session-not-found', 'Session not found'));
+    return inFilaPerLObiettivo(voce, async () => {
+      const obiettivo = voce.obiettivo ?? null;
+      if (!obiettivo) return rifiutoObiettivo('goal-not-set');
+      // un obiettivo «fatto» lo è stato con QUEL contratto: si dice subito, prima di chiedere una conferma che non servirebbe
+      if (obiettivo.stato === 'fatto') return rifiutoObiettivo('goal-already-done');
+      const forma = costruisci(obiettivo.contratto ?? null);
+      if (!forma.ok) return rifiutoContratto(forma);
+      const { aggiunti, tolti, cambiati, serveConferma } = confrontaContratti(obiettivo.contratto ?? null, forma.contratto);
+      /* ⛔ Ridefinire il successo a lavoro avviato è il modo più facile di «finire»: togliere o cambiare un criterio passa solo
+         con la conferma esplicita di chi chiama, che ha davanti che cosa cambia (gli `id` viaggiano nei valori del rifiuto).
+         ⛔ REV-GOAL-05 (revisione del bugfixer, 14/10/2026): la conferma è l'IMPRONTA del contratto che la persona aveva davanti,
+         non un sì in bianco. Se nel frattempo il contratto è cambiato (un'altra finestra ha aggiunto un criterio), il sì non vale:
+         la persona confermerebbe anche la rimozione di ciò che non ha mai visto. Il «If-Match» che mancava. */
+      if (serveConferma && (typeof conferma !== 'string' || conferma !== (obiettivo.contratto?.impronta ?? null))) {
+        return rifiuto('GOAL_CONTRACT_NEEDS_CONFIRMATION', 'goal-contract-change-needs-confirmation', 'Removing or changing criteria of the goal needs your confirmation', { tolti: tolti.join(' '), cambiati: cambiati.join(' ') });
+      }
+      const esito = obiettivoConContratto(obiettivo, forma.contratto, { adesso: new Date().toISOString() });
+      if (!esito.ok) return rifiutoObiettivo(esito.motivo);
+      if (esito.invariato) return { ok: true, obiettivo: esito.obiettivo, invariato: true };
+      const salvato = await salvaObiettivo(voce, esito.obiettivo);
+      return salvato.ok ? { ...salvato, cambio: { aggiunti, tolti, cambiati } } : salvato;
+    });
+  }
+  /** Una transizione su un obiettivo che c'è: in fila, salvata, annunciata. `invariato` non scrive niente. */
+  function transizioneObiettivo(sessionId, passo) {
+    const voce = sessioni.get(sessionId);
+    if (!voce) return Promise.resolve(rifiuto('NOT_FOUND', 'session-not-found', 'Session not found'));
+    return inFilaPerLObiettivo(voce, async () => {
+      const esito = passo(voce.obiettivo ?? null, { adesso: new Date().toISOString() });
+      if (!esito.ok) return rifiutoObiettivo(esito.motivo);
+      if (esito.invariato) return { ok: true, obiettivo: esito.obiettivo, invariato: true };
+      return salvaObiettivo(voce, esito.obiettivo);
+    });
+  }
+
   function annunciaCoda(voce, { persisti = true } = {}) {
     const value = statoCodaDi(voce);
     broadcast(voce, { type: 'CUSTOM', name: 'talos.coda', value });
     if (!persisti || !cartellaStore || !voce?.sessionId) return true;
     try {
-      const voci = voce.codaMessaggi.map(voceDiCoda).map(({ id, testo, immagini, origine, childId, runId, toolCallId, sfondo, requestId, dialogueKind, bolla }) => ({
+      const voci = voce.codaMessaggi.map(voceDiCoda).map(({ id, testo, immagini, origine, childId, runId, toolCallId, sfondo, requestId, dialogueKind, bolla, autore }) => ({
         id: id ?? randomUUID(), testo,
+        ...(autore ? { autore } : {}),
         ...(bolla ? { bolla } : {}),
         ...(immagini.length ? { immagini } : {}),
         ...(origine ? { origine } : {}),
@@ -4526,6 +5357,9 @@ export function createSessionRegistry({
   function avviaCompattazioneInBackground(voce) {
     const { sessionId } = voce;
     if (chiuso || !sessionId || compattazioniInBackground.has(sessionId) || compattazioniInCorso.has(sessionId)) return null;
+    /* 15/10/2026: con l'istantanea un riassunto pronto (o in arrivo) il giro dopo lo scambia subito alla prima richiesta: un secondo
+       riassunto qui si pagherebbe due volte */
+    if (compattazioneIstantanea === true && (voce.compattazionePronta || voce.compattazioneInArrivo)) return null;
     const storia = voce.messaggiFinali;
     if (!Array.isArray(storia) || storia.length === 0) return null;
     const perRete = modelloDiSessionePerRete(voce);
@@ -4712,7 +5546,8 @@ export function createSessionRegistry({
      *   sessioni in corso salgono in cima, e «se ne ho tre e quelle più in basso mandano un
      *   messaggio, dopo un attimo sale in cima e viene segnalato».
      *
-     * ⛔ L'istante si prende QUI e non dagli eventi persistiti: quelli non portano un orario
+     * ⛔ L'istante si prende QUI e non dagli eventi persistiti: quelli non portano un orario (dal 15/10/2026 solo inizio e
+     *   fine di ogni giro lo portano, qui sotto; la fine di un messaggio no)
      *   (vedi `MOTIVO_SENZA_ISTANTI` in questo file), quindi il tempo si conosce solo mentre passa.
      * ⛔ Si segna su `TextMessageEnd`, cioè quando il modello ha FINITO di dire una cosa: usare
      *   ogni pezzo dello streaming farebbe risalire una riga a ogni token, e la barra diventerebbe
@@ -4721,6 +5556,14 @@ export function createSessionRegistry({
     const ricevutoAdesso = voce.padreId && evento?.type !== 'CUSTOM' ? clock() : null;
     const ricevutoAlle = ricevutoAdesso?.toISOString() ?? null;
     if (evento?.type === 'TextMessageEnd') voce.ultimaRispostaAlle = ricevutoAlle ?? new Date().toISOString();
+    /* ⭐ 15/10/2026 (richiesta della sessione mobile, K3: nella storia rigiocata i messaggi perdevano l'ora): l'inizio e la fine di
+       OGNI giro portano l'istante sul disco, nel campo `timestamp` di AG-UI (BaseEvent, «Optional timestamp indicating when the event
+       was created», docs.ag-ui.com/concepts/events, letta il 15/10/2026), in millisecondi come già `talos.context`
+       (`agui-events.mjs`). Così dal vivo e nella storia l'ora è la stessa. Un evento che la porta già non si ritocca; le sessioni
+       salvate prima non ce l'hanno, e lo restano. */
+    if ((evento?.type === 'RunStarted' || evento?.type === 'RunFinished' || evento?.type === 'RunError') && !Number.isFinite(evento.timestamp)) {
+      evento.timestamp = (ricevutoAdesso ?? clock()).getTime();
+    }
     /* Gli eventi di una figlia portano il proprio istante sul disco: il grafo puo ricostruire
        l'ultima attivita e la fine anche dopo il riavvio, senza inventare tempi dal reload. */
     if (voce.padreId && evento?.type !== 'CUSTOM') {
@@ -4753,7 +5596,7 @@ export function createSessionRegistry({
      */
     /* ⭐ 14/09 — e così l'annuncio della coda: è STATO, non storia. Chi si collega dopo lo riceve dalla rotta degli eventi. */
     const effimero = workspaceCambiato || evento.type === 'ToolCallOutput'
-      || (evento.type === 'CUSTOM' && (evento.name === 'talos.coda' || evento.name === 'talos.agenti' || evento.name === EVENTO_RICHIESTA_DEL_GIRO
+      || (evento.type === 'CUSTOM' && (evento.name === 'talos.coda' || evento.name === 'talos.agenti' || evento.name === EVENTO_OBIETTIVO || evento.name === EVENTO_RICHIESTA_DEL_GIRO
         || evento.name === compattazione.NOME_EVENTO_PROGRESSO_COMPATTAZIONE)) // lane CLI 03/10: avanzamento, non storia
       /* ⛔ BUG-8 t1 (04/10/2026) — il rigioco della domanda e il suo colpo di silenzio sono AVANZAMENTO, non storia:
          la domanda vera è già in `voce.eventi` (quella persistita), rigiocarla nel registro scriverebbe la stessa
@@ -4918,6 +5761,20 @@ export function createSessionRegistry({
    * i test li accorciano, l'ospite può accordarli — i default sono le costanti in testa al file.
    */
   function richiediApprovazione(voce, azione, { silenzioPrimaMs = attesaSilenzioPrimaMs, silenzioRipetiMs = attesaSilenzioRipetiMs, livelloAvvio } = {}) {
+    /* ⛔ /goal G5 (owner 15/10/2026, «sola lettura»): il CONFUTATORE dell'obiettivo non chiede mai niente a nessuno. Fa girare SOLO
+       i comandi del contratto che la persona ha confermato, identici; ogni altra cosa che chiederebbe (scrivere, un altro comando,
+       un segreto, un agente) è un no SUBITO, col motivo per il modello. Codex `spawn.rs`: le prove del padre non diventano
+       l'autorizzazione della figlia. */
+    if (Array.isArray(voce.soloComandiDelContratto)) {
+      const requestId = randomUUID();
+      const approvato = azione?.tipo === 'shell' && typeof azione.comando === 'string' && voce.soloComandiDelContratto.includes(azione.comando);
+      broadcast(voce, approvalRequested({ requestId, azione }));
+      broadcast(voce, approvalResolved({ requestId, approvato, motivo: approvato ? 'contratto-obiettivo' : 'confutatore-sola-lettura' }));
+      return Promise.resolve(approvato ? { approvato: true } : {
+        approvato: false,
+        motivo: 'you are the TALOS goal refuter and work READ-ONLY: you may only run the goal contract commands, exactly as written. Nothing else ran.',
+      });
+    }
     /*
      * ⛔⛔ F4-03 (owner 01/10/2026 sera) — una scrittura FUORI dal progetto in una sessione che nessuno segue (automazioni,
      *   passi dei Workflow: `senzaInterfaccia`) si chiude SUBITO con un no, e la cronologia dice perché (`motivo`). Owner:
@@ -4926,7 +5783,7 @@ export function createSessionRegistry({
      */
     /* ⛔ C2b (owner 08/10/2026 sera, «Negato subito»): l'avvio di un agente in una sessione che nessuno segue, con Coordinazione
        spenta, si chiude SUBITO — come la scrittura fuori dal progetto qui sotto. Il no porta la frase per il modello. */
-    if (voce.senzaInterfaccia && azione?.tipo === CHIAVE_COORDINAZIONE) {
+    if (nessunoDavanti(voce) && azione?.tipo === CHIAVE_COORDINAZIONE) {
       const requestId = randomUUID();
       broadcast(voce, approvalRequested({ requestId, azione }));
       broadcast(voce, approvalResolved({ requestId, approvato: false, motivo: 'nessuna-interfaccia' }));
@@ -4939,7 +5796,7 @@ export function createSessionRegistry({
           : 'no one can answer here (an automation or a Workflow step), and "Coordination" is off for it: no agent was started. Turn Coordination on for this automation to let it start agents.',
       });
     }
-    if (voce.senzaInterfaccia && azione?.fuoriDalProgetto) {
+    if (nessunoDavanti(voce) && azione?.fuoriDalProgetto) {
       const requestId = randomUUID();
       broadcast(voce, approvalRequested({ requestId, azione }));
       broadcast(voce, approvalResolved({ requestId, approvato: false, motivo: 'nessuna-interfaccia' }));
@@ -4947,7 +5804,7 @@ export function createSessionRegistry({
     }
     /* A13 (owner 10/10/2026, «Sì, come nella CLI»: «un no — o nessuno che possa rispondere — chiude il giro col suo motivo»): i giri
        in tondo in una sessione che nessuno segue si chiudono SUBITO, come le due domande qui sopra; il no porta la frase per il modello. */
-    if (voce.senzaInterfaccia && azione?.tipo === 'giri-in-tondo') {
+    if (nessunoDavanti(voce) && azione?.tipo === 'giri-in-tondo') {
       const requestId = randomUUID();
       broadcast(voce, approvalRequested({ requestId, azione }));
       broadcast(voce, approvalResolved({ requestId, approvato: false, motivo: 'nessuna-interfaccia' }));
@@ -5163,7 +6020,7 @@ export function createSessionRegistry({
     const requestId = randomUUID();
     const toolCallId = typeof ctx?.toolCallId === 'string' && ctx.toolCallId ? ctx.toolCallId : null;
     const origine = { modalita: voce.modalitaOperativa ?? 'normale', agente: voce.padreId ? 'figlio' : 'principale' };
-    if (voce.senzaInterfaccia) {
+    if (nessunoDavanti(voce)) {
       broadcast(voce, userQuestionRequested({ requestId, questions: domande, at: clock().toISOString(), toolCallId, origine, ripristinabile: false }));
       broadcast(voce, userQuestionResolved({ requestId, status: ESITO_DOMANDA_SENZA_INTERFACCIA.status, at: clock().toISOString(), da: 'sistema', motivo: 'nessuna-interfaccia' }));
       return Promise.resolve({ ...ESITO_DOMANDA_SENZA_INTERFACCIA });
@@ -6138,6 +6995,10 @@ export function createSessionRegistry({
   function avviaESegui({
     sessionId = randomUUID(), taskId, cartella, task, comandoProva, messaggiIniziali,
     forkDa = null, voceEsistente = null, modelloRichiesta = null, reasoningRichiesto = null, mobile = false,
+    giroNonDellaPersona = false, // 0.6.5, terza revisione: il giro riparte per un messaggio che la persona non ha scritto ora
+    /* owner 15/10/2026 (difesa in profondità): il testo che la persona ha SCRITTO per questo giro, l'unico che può adottare un file.
+       Assente ⇒ nessuno (ogni strada della persona lo passa in positivo: avvio, ripresa, correzione, voce di coda sua). */
+    testoDellaPersona = null,
     linguaInterfaccia = null, // K3b (03/10/2026): lingua interfaccia per una voce NUOVA; assente => italiano di prima
     operationId = null, operationSignature = null, // G02-6: identità opaca di deduplica (vedi firmaOperazioneAvvio)
     /*
@@ -6163,6 +7024,10 @@ export function createSessionRegistry({
      *   Lo dichiara chi avvia (lo scheduler), mai dedotto da `origineRichiesta`, che è solo diagnostica.
      */
     senzaInterfaccia = false,
+    senzaInterfacciaNelGiro = undefined, // CLI 16/10: «nessuno davanti» per questo giro, solo in memoria (`nessunoDavanti`)
+    /* /goal G5 (owner 15/10/2026) — il CONFUTATORE dell'obiettivo: `giriMassimi` (8) e i soli comandi che può far girare (quelli
+       del contratto confermato dalla persona). Lo passa solo `confutaObiettivo`; ogni altra sessione `null`, come prima. */
+    giriMassimi = null, soloComandiDelContratto = null,
     /*
      * ⭐ F3-32 (25/09/2026) — il legame di una sessione con il PASSO di un Workflow che la esegue: run, nodo, attività,
      *   tentativo, lease. Lo dichiara solo `avviaSessioneDiPasso` (mai il modello, mai una richiesta HTTP), sta
@@ -6286,7 +7151,10 @@ export function createSessionRegistry({
      *   volta (un solo tick di ritardo fece cadere 148 prove, un `await` nella catena 213). La
      *   domanda non ha bisogno di rete: l'host la risponde guardando il suo portachiavi.
      */
-    if (!senzaGiro && providerEffettivo !== 'local' && !prontezzaInterna) { // senza giro: nessun fornitore da interpellare
+    /* /goal G6 (15/10/2026, visto dal vivo): la chat nata FERMA non chiama il fornitore adesso, ma il suo primo giro lo farà appena
+       la persona preme «Avvia». Senza questo controllo nasceva senza chiave, l'obiettivo diventava «attivo» e il primo giro moriva con
+       un CONFIG_INVALID: un obiettivo attivo che non gira. Si controlla come una chat normale (`verificaPronto`); un fork resta com'era. */
+    if ((!senzaGiro || senzaGiro.verificaPronto === true) && providerEffettivo !== 'local' && !prontezzaInterna) { // senza giro: nessun fornitore da interpellare
       if (typeof prontoFn === 'function') {
         let esito;
         try {
@@ -6299,7 +7167,9 @@ export function createSessionRegistry({
         }
         if (!esito?.pronto) {
           const codice = esito?.codice || 'CONFIG_INVALID';
-          if (esito?.messaggio) return { erroreAvvio: esito.messaggio, code: codice };
+          /* La chiave che manca e basta ha un MOTIVO e il nome del fornitore: l'interfaccia la dice nella sua lingua («Manca la chiave
+             di OpenRouter…») invece di «Configurazione non valida». Le altre frasi (la panchina, il modello da scegliere) restano com'erano. */
+          if (esito?.messaggio && esito?.motivo !== 'provider-key-missing-named') return { erroreAvvio: esito.messaggio, code: codice };
           return esito?.fornitore
             ? rifiuto(codice, 'provider-key-missing-named', 'The {provider} key is missing: connect it from the provider settings.', { provider: esito.fornitore })
             : rifiuto(codice, 'provider-key-missing', 'The key is missing: connect it from the provider settings.');
@@ -6359,11 +7229,17 @@ export function createSessionRegistry({
       // ⭐ D-11: chi ha creato questa sessione. Diagnostica, mai un controllo d'accesso.
       origineRichiesta,
       senzaInterfaccia: senzaInterfaccia === true, // decisione owner 30: vedi il parametro
+      ...(typeof senzaInterfacciaNelGiro === 'boolean' ? { senzaInterfacciaNelGiro } : {}), // CLI 16/10: mai sul disco
+      giriMassimi: Number.isSafeInteger(giriMassimi) && giriMassimi > 0 ? giriMassimi : null, // /goal G5: vedi il parametro
+      soloComandiDelContratto: Array.isArray(soloComandiDelContratto) ? soloComandiDelContratto.filter((c) => typeof c === 'string' && c !== '') : null,
       legameWorkflow: legameWorkflowValido(legameWorkflow), // F3-32: vedi il parametro
       // G02-6: identità opaca di deduplica. Non concede alcun permesso e non cambia il workspace.
       operationId, operationSignature,
       task, comandoProva, forkDa,
-      nome: nomeDerivatoDalCompito(taskId, task), // 26/09, difetto (4): lo stesso nome che il ripristino le darebbe
+      // 26/09, difetto (4): lo stesso nome che il ripristino le darebbe; 16/10: col «-N» se una sessione in elenco ha già quel nome.
+      // 16/10 sera (owner): anche una DELEGA nasce col nome corto del suo compito (prima `null`, e la barra mostrava il compito: due
+      // deleghe dello stesso compito erano gemelle), lo stesso testo di `taskDelega`.
+      nome: nomeUnicoInElenco(nomeDiNascita(taskId, task, padreId), null, padreId),
       avviataAlle: clock().toISOString(), messaggiFinali: null, modello: modelloEffettivo,
       modelloPlanner: modelloPlannerEffettivo,
       reasoning: reasoningEffettivo, mobile, permessi: permessiEffettivi,
@@ -6392,6 +7268,10 @@ export function createSessionRegistry({
     };
     voce.delegaAutoAmmessa = false;
     voce.fermataDallaPersona = false;
+    /* /goal G3 (G3-REV-03, revisione del bugfixer 14/10): un giro che parte FERMA le prove dell'obiettivo in corso — leggerebbero
+       file che l'agente sta scrivendo — e il loro esito non si salva (`goal-check-stopped`). La persona che scrive non aspetta. */
+    fermaLeProveDellaCatena(voce, 'turn-started'); // G3-REV-11: anche quelle della madre e della radice del Workflow
+    voce.esitoGiroObiettivo = null; // /goal G4: l'esito si legge solo dal giro che finisce adesso
     /*
      * Il punto sicuro può arrivare anche dopo un timeout/abort avvenuto prima
      * del primo token. In quel caso il runtime non restituisce una nuova
@@ -6508,10 +7388,20 @@ export function createSessionRegistry({
             // ⭐ D-11: sopravvive al riavvio, perché è qui e non nei log — che il riavvio riazzera.
             ...(voce.origineRichiesta ? { origine: voce.origineRichiesta } : {}),
             ...(voce.senzaInterfaccia ? { senzaInterfaccia: true } : {}), // decisione owner 30: sopravvive al riavvio
+            // CONFUTA-REV-05: il confutatore resta in sola lettura e col suo tetto anche dopo un riavvio
+            ...(voce.giriMassimi ? { giriMassimi: voce.giriMassimi } : {}),
+            ...(Array.isArray(voce.soloComandiDelContratto) ? { soloComandiDelContratto: voce.soloComandiDelContratto } : {}),
             ...(voce.legameWorkflow ? { workflow: voce.legameWorkflow } : {}), // F3-32: il legame del passo, prima di ogni giro
             ...(voce.operationId ? { operationId: voce.operationId, operationSignature: voce.operationSignature } : {}), // G02-6: sopravvive al riavvio
           },
         });
+        /* 16/10/2026: un nome DERIVATO non si scrive (lo rifà il ripristino), ma col «-N» non è più derivato — lo si scrive come la
+           rinomina, così il numero regge al riavvio. Se la riga non si scrive la sessione parte lo stesso: al riavvio torna il nome
+           senza numero, che è il comportamento di prima. */
+        if (voce.nome && voce.nome !== nomeDerivatoDalCompito(taskId, task)) {
+          try { scriviRigaSyncOInCoda(voce, { tipo: 'nome-sessione', nome: voce.nome }); }
+          catch (errore) { console.warn(`[session-store] duplicate number not saved for ${sessionId} (${errore?.code || 'I/O'})`); }
+        }
       } catch (errore) {
         // Senza un header verificato il replay perderebbe la sessione: non
         // pubblicarla in RAM e non avviare il modello.
@@ -6566,10 +7456,13 @@ export function createSessionRegistry({
       if (cartellaStore) {
         const piano = pianificaStoriaDiVoce(voce, senzaGiro.storia, { versioneGiro: 0, fase: 'finale', forzaCheckpoint: true });
         try {
-          registraRigaSyncFn({ cartellaStore, sessionId, record: piano.record });
+          /* /goal G6 (15/10/2026, misurato dal vivo sul 4177): una chat nata FERMA dall'avvio libero ha già una riga in volo (l'avvio
+             ne scrive in coda), e il sincrono la trovava occupata (`SESSION_STORE_BUSY` ⇒ «fork-not-saved», 503). Con una coda in
+             volo la riga si accoda IN ORDINE (`scriviRigaSyncOInCoda`, la strada di F3); ogni altro errore fa ancora fallire la nascita. */
+          scriviRigaSyncOInCoda(voce, piano.record);
           piano.applica();
           if (voce.recordCompattazione) {
-            registraRigaSyncFn({ cartellaStore, sessionId, record: { tipo: 'compattazione', versioneGiro: 0, record: voce.recordCompattazione } });
+            scriviRigaSyncOInCoda(voce, { tipo: 'compattazione', versioneGiro: 0, record: voce.recordCompattazione });
           }
         } catch (errore) {
           piano.fallita();
@@ -6742,7 +7635,7 @@ export function createSessionRegistry({
       if (voce.codaInPausa) return null;
       const item = voce.codaMessaggi.shift();
       if (item == null) return null;
-      const { id: codaId, testo, immagini, origine, childId, runId, bolla } = voceDiCoda(item);
+      const { id: codaId, testo, immagini, origine, childId, runId, bolla, autore } = voceDiCoda(item);
       const registrato = broadcast(voce, {
         ...queuedMessageDelivered({ testo }),
         ...(immagini?.length ? { immagini } : {}),
@@ -6758,8 +7651,16 @@ export function createSessionRegistry({
         return null;
       }
       annunciaCoda(voce); // ⭐ 14/09: chi guarda da un'altra finestra vede la coda accorciarsi
-      return imageMessageContent(testo, immagini);
+      /* richiesta CLI 15/10/2026: la voce che la persona ha scritto (il marchio `autore`, messo solo da accodaMessaggio) arriva al
+         kernel col suo segno, e un file che nomina vale come sua richiesta anche consegnata a giro in corso */
+      const contenuto = imageMessageContent(testo, immagini);
+      /* /goal G6, G6-REV-02 (owner 15/10/2026, «Sì, conta»): una voce della PERSONA consegnata a giro in corso apre il suo giro anche
+         per gli attrezzi dell'obiettivo — durante un /goal ogni giro parte da un avviso, e la coda è il solo modo di parlare senza
+         fermarlo. Gli avvisi, le deleghe, i passi e lo sfondo non hanno il marchio `autore` e restano fuori. */
+      if (autore === 'persona') unaVoceDellaPersonaNelGiro = true;
+      return autore === 'persona' ? { testo: contenuto, dallaPersona: true } : contenuto;
     };
+    let unaVoceDellaPersonaNelGiro = false;
 
     /*
      * ⭐⭐⭐ FASE N, ottavo sistema (30/8) — Deep Research: 8 thin delegate
@@ -6975,6 +7876,16 @@ export function createSessionRegistry({
       },
       // ⭐ 02/09 — l'etichetta del permesso, dichiarata in RunStarted.contesto (vedi agent-service.mjs): è `voce.permessi` letto ADESSO, cioè anche un cambio arrivato da un altro client via POST /settings fra un giro e l'altro.
       permessi: voce.permessi ?? null,
+      /* riserva S4 del bugfixer (15/10/2026): solo la conversazione principale — una figlia, un passo di Workflow o il confutatore
+         hanno i loro cancelli, più stretti, e leggerebbero «Full access» mentre non lo hanno */
+      ...(permessoPerIlModello === null || voce.padreId || voce.legameWorkflow ? {} : { permessoPerIlModello: (() => {
+        if (typeof permessoPerIlModello !== 'function') return permessoPerIlModello;
+        try { return permessoPerIlModello(voce); } catch { return null; } // una funzione dell'ospite che lancia non ferma il giro: vale `permessi`
+      })() }),
+      /* richiesta CLI 16/10 notte: il Full access dell'ospite, chiesto quando serve (mai fotografato all'avvio); una funzione che lancia vale «no» */
+      ...(typeof accessoPienoDellOspite === 'function' ? { accessoPienoDellOspite: () => {
+        try { return accessoPienoDellOspite({ sessionId: voce.sessionId, radiceId: radiceDi(voce)?.sessionId ?? voce.sessionId }) === true; } catch { return false; }
+      } } : {}),
       modalitaOperativa: voce.modalitaOperativa ?? 'normale',
       segnaleStop: controller.signal,
       segnalePausa: controllerPausa.signal, // C3 tappa 4: la pausa di una delega (l'attrezzo in volo finisce, poi si ferma)
@@ -6998,9 +7909,22 @@ export function createSessionRegistry({
         ? Promise.reject(new ContrattoDomandaUtenteError('Only the root agent can ask the user', 'QUESTION_CHILD_FORBIDDEN'))
         : richiediDomandaUtente(voce, questions, ctx),
       /* C2-Q: una figlia SENZA interfaccia (di un'automazione) non chiede alla persona: resta `ask_parent`, come prima. */
-      figliaChiedeAllaPersona: Boolean(voce.padreId && domandeDeiFigli && !voce.senzaInterfaccia), hookFn,
+      figliaChiedeAllaPersona: Boolean(voce.padreId && domandeDeiFigli && !nessunoDavanti(voce)), /* 14/10/2026 (revisione 0.6.5 + ricerca: Codex, Claude Code, DeepSeek-harness danno l'autorità della persona solo alla radice):
+         a una figlia o a un passo di workflow il messaggio arriva dal modello del padre, mai dalla persona ⇒ niente eccezione */
+      ...(voce.giriMassimi ? { giriMassimi: voce.giriMassimi } : {}), // /goal G5: il tetto del confutatore
+      testoDellaPersona: !giroNonDellaPersona && typeof testoDellaPersona === 'string' ? testoDellaPersona : '', // owner 15/10/2026
+      fileAdottatiDallaPersona: fileAdottatiDallaPersona === true && !voce.padreId && !voce.legameWorkflow && voce.senzaInterfaccia !== true && !giroNonDellaPersona, hookFn,
+      /* ⛔ CLI 16/10/2026 sera (0.6.8 ferma): qui conta se il messaggio è della PERSONA, non se c'è qualcuno davanti. `talos -p "Leggi
+         ISTRUZIONI.md ed eseguilo"` ha nessuno davanti (nessuno può rispondere) ma il messaggio l'ha appena scritto la persona: i file
+         che nomina sono la sua richiesta. Un'automazione invece nasce col segno SALVATO e il suo messaggio non è della persona di adesso.
+         ⇒ il segno salvato, non `nessunoDavanti` (che vale anche per il giro). Le riprese interne restano fuori (`giroNonDellaPersona`). */
       // 24/09/2026, decisioni owner 36-39: la scelta sul piano; una figlia non presenta piani (il kernel non le offre l'attrezzo).
-      ...(voce.padreId ? {} : { presentaPianoFn: (argomenti) => richiediDecisionePiano(voce, argomenti) }),
+      /* CLI (15/10/2026): la carta del piano aspetta una persona — senza interfaccia aspettava fino a RUN_TIMEOUT. Senza il canale il
+         kernel non offre `present_plan` e non dice «it is the only way to get it approved». */
+      ...(voce.padreId || nessunoDavanti(voce) ? {} : { presentaPianoFn: (argomenti) => richiediDecisionePiano(voce, argomenti) }),
+      /* OB-REV-03 (owner 15/10 sera, «il motore sa che nessuno è davanti»): la domanda resta offerta e si chiude da sola (decisione
+         30), ma le note del kernel non mandano più il modello a chiedere a una persona che non c'è */
+      ...(nessunoDavanti(voce) ? { nessunoDavanti: true } : {}),
       /*
        * ⛔⛔ Rilievo 3 (piano 0.1.19 §1.7, 28/09, decisione D3 «attrezzo + fascia») — il canale di
        *   `request_plan_mode`: ACCODA il cambio del modo, NON lo applica. La patch la scrive la
@@ -7079,7 +8003,7 @@ export function createSessionRegistry({
         if (avvio === 'da-solo') {
           prenotata = prenotaAvvioDaSolo(voce);
           if (!prenotata) {
-            return { esito: 'rifiutato', motivo: voce.senzaInterfaccia
+            return { esito: 'rifiutato', motivo: nessunoDavanti(voce)
               ? 'no one can answer here (an automation or a Workflow step), and this run has already started the most agents allowed on its own.'
               : `this conversation has already started the most agents allowed on its own (${TETTO_AVVII_DA_SOLO}). Call delega_sottotask again to ask the person to approve this one.` };
           }
@@ -7137,7 +8061,7 @@ export function createSessionRegistry({
       // ⭐⭐⭐ FASE E (29/8) — sempre passata (stesso principio di cartellaTrustHook per gli hook): agent-service.mjs legge .harness-ui-mcp.json SOLO se il workspace lo dichiara, zero I/O altrimenti (vedi la sua doc su cartellaTrustMcp).
       cartellaTrustMcp,
       /* ⛔ 02/10/2026 — elicitation MCP: solo con una persona (senza interfaccia la capacità non si dichiara, Gemini #22249) */
-      ...(voce.senzaInterfaccia ? {} : { onElicitazioneMcp: (richiesta) => richiediElicitazioneMcp(voce, richiesta) }),
+      ...(nessunoDavanti(voce) ? {} : { onElicitazioneMcp: (richiesta) => richiediElicitazioneMcp(voce, richiesta) }),
       // ⭐⭐⭐ FASE G (29/8) — stesso principio di cartellaTrustMcp appena sopra: agent-service.mjs legge .harness-ui-plugins/ SOLO se il workspace lo dichiara, zero I/O altrimenti.
       cartellaTrustPlugin,
       // ⭐⭐⭐ FASE N, quarto sistema (30/8) — sempre passata: GLOBALE, non legata al workspace di questa sessione (vedi la doc in notes-store.mjs).
@@ -7168,7 +8092,7 @@ export function createSessionRegistry({
       ...(() => {
         if (typeof ospiteAutomazioni !== 'function' || voce.legameWorkflow) return {};
         const automazioneDelGiro = typeof voce.taskId === 'string' && voce.taskId.startsWith('automazione:') ? voce.taskId.slice('automazione:'.length) : null;
-        if (voce.senzaInterfaccia && !automazioneDelGiro) return {};
+        if (nessunoDavanti(voce) && !automazioneDelGiro) return {};
         const ospite = ospiteAutomazioni({
           sessionId, cartella: voce.cartellaBase ?? voce.cartella, modello: voce.modello ?? null, automazioneDelGiro,
           verificaModelloFn: (modello) => verificaModelloChiesto(voce, modello),
@@ -7185,6 +8109,29 @@ export function createSessionRegistry({
         return { onAutomazioneFn: (nome, argomenti, opzioni) => ospite(nome, argomenti, opzioni) };
       })(),
       /*
+       * ⭐ /goal G6 (owner 15/10/2026) — la seconda porta dell'obiettivo (`src/obiettivo/per-il-modello.mjs`). Solo la conversazione
+       *   principale, come le porte HTTP (`rifiutoSeObiettivoNonAmmesso`): mai a una figlia, a un passo di Workflow o a una sessione
+       *   senza interfaccia. Il «giro della persona» lo dice il registro: il testo che la persona ha scritto per QUESTO giro
+       *   (`testoDellaPersona`), mai un avviso del /goal, una delega o la coda di qualcun altro.
+       */
+      ...(() => {
+        if (obiettiviNellaChat !== true || voce.padreId || voce.legameWorkflow || nessunoDavanti(voce)) return {};
+        const giroDellaPersona = !giroNonDellaPersona && typeof testoDellaPersona === 'string' && testoDellaPersona.trim() !== '';
+        const ospite = creaOspiteObiettivo({
+          leggi: () => voce.obiettivo ?? null,
+          imposta: async (testo, criteri) => {
+            const esito = await registryApi.impostaObiettivo(sessionId, testo, criteri ? { criteri } : {});
+            /* G6-REV-04: da qui in avanti, in QUESTO giro, ciò che il modello scrive è per l'obiettivo appena nato */
+            if (esito?.ok && esito.obiettivo) voce.obiettivoNatoNelGiro = { id: esito.obiettivo.id, dopoEvento: Array.isArray(voce.eventi) ? voce.eventi.at(-1) : undefined };
+            return esito;
+          },
+          pausa: (motivo) => transizioneObiettivo(sessionId, (o, { adesso }) => mettiInPausaObiettivo(o, { ...motivo, adesso })),
+          rivendica: () => { voce.obiettivoRivendicato = voce.obiettivo?.id ?? null; },
+          contesto: () => ({ giroDellaPersona: giroDellaPersona || unaVoceDellaPersonaNelGiro, accessoPieno: livelloDiUnAnello(voce.permessi) === 'accesso-pieno' }), // G6-REV-02: letto dal vivo
+        });
+        return { onObiettivoFn: (nome, argomenti, opzioni) => ospite(nome, argomenti, opzioni) };
+      })(),
+      /*
        * ⭐ 0.1.25 (owner 09/10/2026) — la seconda porta dei fornitori esclusi. Stesse regole delle automazioni: mai ai passi di
        *   Workflow, mai a una sessione senza interfaccia che non sia un giro; un giro di automazione legge ma non cambia (l'ospite
        *   lo rifiuta: nessuno risponderebbe alla carta).
@@ -7192,8 +8139,11 @@ export function createSessionRegistry({
       ...(() => {
         if (typeof ospiteFornitori !== 'function' || voce.legameWorkflow) return {};
         const automazioneDelGiro = typeof voce.taskId === 'string' && voce.taskId.startsWith('automazione:') ? voce.taskId.slice('automazione:'.length) : null;
-        if (voce.senzaInterfaccia && !automazioneDelGiro) return {};
-        const ospite = ospiteFornitori({ automazioneDelGiro });
+        /* ⛔ s58 della CLI (16/10/2026 notte): con «nessuno davanti» per giro (f3d93b25c) qui la porta spariva tutta, e `talos -p`
+           perdeva anche l'ELENCO dei fornitori esclusi, che prima leggeva (prova di accettazione s58 del 09/10). Con nessuno davanti
+           la porta resta, ma in sola lettura come un giro d'automazione: l'elenco e lo stato si leggono, i cambi si rifiutano
+           (nessuno risponderebbe alla carta). */
+        const ospite = ospiteFornitori({ automazioneDelGiro, soloLettura: nessunoDavanti(voce) });
         return { onFornitoriFn: (nome, argomenti, opzioni) => ospite(nome, argomenti, opzioni) };
       })(),
       /*
@@ -7302,13 +8252,18 @@ export function createSessionRegistry({
       onRichiestaSpedita: (richiesta) => registraUltimaRichiesta(voce, richiesta), // C1 (10/10): la scheda Contesto
       finestraToken: leggiFinestraToken(opzioni.modello),
       ...(compattazione.eRecordValido(voce.recordCompattazione) ? { recordCompattazioneIniziale: voce.recordCompattazione } : {}),
+      /* 15/10/2026: con l'istantanea, il riassunto preparato e non usato dal giro prima — l'adapter lo usa alla soglia se il prefisso
+         che copre è intatto, altrimenti lo scarta da sé (impronta e base) */
+      ...(compattazioneIstantanea === true ? { compattazioneIstantanea: true, ...(voce.compattazionePronta ? { compattazionePronta: voce.compattazionePronta }
+        /* owner 15/10/2026 notte, «passa al giro dopo»: il riassunto ancora in arrivo diventa quello in volo del giro nuovo */
+        : voce.preparazioneInArrivo ? { compattazioneInArrivo: voce.preparazioneInArrivo } : {}) } : {}),
     });
     let hookDelContesto = null;
     /* ⛔ C1 review Y1 (bugfixer, 10/10/2026): col motore di serie `contextHooksFn` esiste SEMPRE, e prima di questo controllo ogni
        giro, anche delle conversazioni legacy, partiva un passo asincrono dopo (A/B del bugfixer su 94 file: 9 → 615 rossi). Il
        controllo è sincrono: una conversazione che non usa il motore parte identica a prima. */
     const avviaIlGiro = (opzioniGrezze) => {
-      const opzioni = conCompattazione(opzioniGrezze);
+      const opzioni = senzaAttrezziPerIlConfutatore(voce, conCompattazione(opzioniGrezze));
       return typeof contextHooksFn === 'function' && giroConIlMotore(sessionId, voce)
         ? Promise.resolve().then(async () => {
           const contextHooks = await contextHooksFn({ sessionId, runId: `${sessionId}:${versioneGiro}`, signal: controller.signal });
@@ -7370,6 +8325,7 @@ export function createSessionRegistry({
     let scritturaDelGiro = null;
     let scritturaPianoDelGiro = Promise.resolve();
     let esitoPerRisveglioFiglie = false;
+    let esitoGiroObiettivo = null; // /goal G4: come è finito il giro, per il ciclo dell'obiettivo
     const concludiAssestamento = () => {
       /* Una correzione che riparte dentro il blocco ha già messo la SUA promessa: quella non si tocca. */
       if (voce.assestamento === assestamento) {
@@ -7384,6 +8340,7 @@ export function createSessionRegistry({
       }
       risolviAssestamento();
       if (voce.delegaAutoAmmessa) programmaRisveglioDaFiglie(voce);
+      programmaCicloObiettivo(voce, voce.esitoGiroObiettivo); // /goal G4: dopo ogni giro, le prove e la decisione
     };
     let esecuzione;
     /* v2 (revisione Codex, punto 6): un `avviaSessioneFn` iniettato che LANCIA in modo sincrono lasciava la promessa senza
@@ -7482,6 +8439,12 @@ export function createSessionRegistry({
        */
       const storiaScritta = persistiMessaggiFinali(voce, versioneGiro);
       scritturaDelGiro = storiaScritta;
+      /* /goal G4: il giro chiuso pulito, fermato dalla persona, o fallito (col codice) — il ciclo dell'obiettivo decide su questo */
+      esitoGiroObiettivo = {
+        pulito: risultato?.ok === true && risultato?.esito?.comeFinita === 'concluso' && !voce.controller.signal.aborted,
+        fermatoDallaPersona: voce.controller.signal.aborted && voce.fermataDallaPersona === true,
+        codice: typeof risultato?.codiceErrore === 'string' ? risultato.codiceErrore : (risultato?.esito?.comeFinita ?? null),
+      };
       esitoPerRisveglioFiglie = (risultato?.ok === true && risultato?.esito?.comeFinita === 'concluso'
         && !voce.controller.signal.aborted)
         /* K2 (F-020): un giro fermato DALLA PERSONA ammette il risveglio coi figli; uno fallito no (F-010-FAILED-PARENT) */
@@ -7531,6 +8494,21 @@ export function createSessionRegistry({
        *   Con `integraRisultatiFigliNelloStorico` la storia la scrive un altro percorso: si aspetta comunque quel punto.
        */
       const recordDelTurno = Array.isArray(risultato?.esito?.recordDiCompattazione) ? risultato.esito.recordDiCompattazione.at(-1) : null;
+      /* ⭐ 15/10/2026 — il riassunto pronto e non usato torna al registro, e il giro dopo lo riceve: preparato e pagato una volta sola.
+         Quello ancora in preparazione a fine giro si tiene quando arriva, se intanto non è partito un altro giro. In memoria: dopo un
+         riavvio si riprepara (come Claude Code lo terrebbe su disco, `precompact.json`, è un passo dopo). */
+      if (compattazioneIstantanea === true) {
+        voce.compattazionePronta = risultato?.esito?.compattazionePronta ?? null;
+        voce.preparazioneInArrivo = null; // quella che questo giro ha ricevuto è già sua: l'ha usata, o è tornata come pronta o in arrivo
+        const inArrivo = risultato?.esito?.compattazioneInPreparazione;
+        if (!voce.compattazionePronta && inArrivo && typeof inArrivo.then === 'function') {
+          const versioneAllaFine = voce.versioneGiro;
+          voce.preparazioneInArrivo = inArrivo; // owner 15/10 notte: se intanto parte un giro, la riceve lui (`compattazioneInArrivo`)
+          voce.compattazioneInArrivo = Promise.resolve(inArrivo).then((pronta) => {
+            if (pronta && voce.versioneGiro === versioneAllaFine && !voce.compattazionePronta) voce.compattazionePronta = pronta;
+          }, () => {}).finally(() => { voce.compattazioneInArrivo = null; if (voce.preparazioneInArrivo === inArrivo) voce.preparazioneInArrivo = null; });
+        }
+      }
       storiaScritta.then(async (scritta) => {
         if (recordDelTurno) await persistiRecordCompattazione(voce, recordDelTurno, versioneGiro);
         if (scritta && risultato?.ok === true) avviaCompattazioneInBackground(voce);
@@ -7596,6 +8574,8 @@ export function createSessionRegistry({
         }
         if (consegnaCoda) annunciaCoda(voce);
         const ripartenza = avviaESegui({
+          giroNonDellaPersona: Boolean(redirect.consegnaCoda?.origine), // 0.6.5: un messaggio di coda non della persona
+          testoDellaPersona: redirect.consegnaCoda ? (redirect.consegnaCoda.autore === 'persona' ? redirect.testo : null) : redirect.testo, // owner 15/10/2026
           sessionId,
           taskId: voce.taskId,
           cartella: voce.cartella,
@@ -7669,6 +8649,7 @@ export function createSessionRegistry({
           scritturaPianoDelGiro,
         ]);
         voce.delegaAutoAmmessa = esitoPerRisveglioFiglie && storiaConfermata === true;
+        voce.esitoGiroObiettivo = esitoGiroObiettivo ? { ...esitoGiroObiettivo, storiaConfermata: storiaConfermata === true } : { pulito: false, fermatoDallaPersona: false, codice: 'failed', storiaConfermata: false };
       })
       .then(concludiAssestamento, concludiAssestamento);
 
@@ -7898,6 +8879,16 @@ export function createSessionRegistry({
       ...(voce.padreId ? { origineSempre: origineSempreProssima } : {}),
       modelId,
     };
+    /* Cache del piano (CLI, 15/10/2026): `talos --resume <id> -p … --model X` mandava il modello anche quando era GIÀ quello salvato,
+       e ogni ripresa scriveva una riga; nella CLI quella scrittura ricostruiva la testa (0 token in cache, 10.752 su 11.376 senza).
+       Come R7-04 per l'unione: un aggiornamento che non cambia NIENTE non scrive. Si confronta tutto ciò che la riga direbbe, più la
+       cartella e la mappa dei permessi; e mai quando la fascia «usava Workflow» è accesa, perché è la riga nuova che la spegne. */
+    const uguale = (x, y) => JSON.stringify(x ?? null) === JSON.stringify(y ?? null);
+    const invariata = !voce.usavaModalitaWorkflow && cartellaProssima === voce.cartella
+      && ['modello', 'modelloPlanner', 'reasoning', 'permessi', 'modalitaOperativa', 'fallbackProviders'].every((k) => uguale(prossimo[k], voce[k]))
+      && uguale(modelId, voce.modelId) && uguale(prossimo.permessiPerAttrezzo, voce.permessiPerAttrezzo)
+      && (!voce.padreId || uguale(origineSempreProssima, voce.origineSempre));
+    if (invariata) return { ok: true, ...(nonUniti.length ? { nonUniti } : {}) };
     if (cartellaStore) await registraRigaFn({ cartellaStore, sessionId, record });
 
     voce.modello = prossimo.modello;
@@ -7994,6 +8985,58 @@ export function createSessionRegistry({
        concluso — i loro risultati arriveranno qui. (Fra un passo e l'altro non c'è un passo vivo: lì vale l'attesa di `aspettaLAffitto`.) */
     && !(subagentOrchestrator.contaFigliAttivi(sessionId) > 0)
     && ![...sessioni.values()].some((v) => v.radiceDelWorkflow === sessionId && !(v.conclusa === true || v.interrotta === true));
+  /* /goal G3-REV-10/11 (seconda riverifica del bugfixer, 14/10): chi COMINCIA a lavorare nella cartella — un `!` della persona, il
+     giro di una figlia o di un passo di Workflow — ferma le prove dell'obiettivo di tutta la sua catena (sé, le madri, la radice
+     del Workflow): leggerebbero file che qualcuno sta scrivendo, e il loro esito non si salva (`goal-check-stopped`). Il controllo
+     all'inizio delle prove (REV-05) non basta: guarda solo chi lavora GIÀ. */
+  function fermaLeProveDellaCatena(voce, motivo) {
+    const visti = new Set();
+    for (let c = voce; c && !visti.has(c); c = sessioni.get(c.padreId ?? c.radiceDelWorkflow ?? '') ?? null) {
+      visti.add(c);
+      c.verificaObiettivo?.ferma.abort(motivo);
+    }
+    /* ⛔ G3-REV-13 (terza riverifica, 14/10): e quelle di ogni ALTRA conversazione sulla stessa cartella — due chat sullo stesso
+       progetto, o un'automazione che lavora lì, non hanno legami di catena ma scrivono negli stessi file. */
+    const cartella = chiaveDellaCartella(voce.cartella);
+    if (cartella) for (const altra of sessioni.values()) if (cartelleSiToccano(chiaveDellaCartella(altra.cartella), cartella)) altra.verificaObiettivo?.ferma.abort(motivo);
+  }
+  /* La cartella come la vede il file system: risolta e, su Windows, senza maiuscole (NTFS non le distingue).
+     ⛔ G3-REV-17 (quinta riverifica, 14/10): e col percorso VERO — una giunzione, un'unità `subst` o un nome corto 8.3 portano
+     alla stessa cartella con un nome diverso. `realpathSync.native` (GetFinalPathNameByHandle su Windows); una cartella che non si
+     risolve (sparita, su un telefono) resta col percorso com'è. Una cache di 5 s: si chiede a ogni avvio di giro, per ogni
+     sessione in memoria. */
+  const chiaviDelleCartelle = new Map();
+  function chiaveDellaCartella(cartella) {
+    if (typeof cartella !== 'string' || cartella === '') return null;
+    const inCache = chiaviDelleCartelle.get(cartella);
+    if (inCache && Date.now() - inCache.alle < 5000) return inCache.chiave;
+    let vera;
+    try { vera = realpathSync.native(cartella); } catch { vera = resolvePath(cartella); }
+    const chiave = process.platform === 'win32' ? vera.toLowerCase() : vera;
+    if (chiaviDelleCartelle.size > 2000) chiaviDelleCartelle.clear();
+    chiaviDelleCartelle.set(cartella, { chiave, alle: Date.now() });
+    return chiave;
+  }
+  /* ⛔ G3-REV-15 (quarta riverifica, 14/10): due conversazioni scrivono negli stessi file anche quando una lavora in una SOTTOCARTELLA
+     dell'altra (`progetto` e `progetto/packages/api`): uguali, o una dentro l'altra, nei due versi. */
+  function cartelleSiToccano(a, b) {
+    if (!a || !b) return false;
+    if (a === b) return true;
+    const conSeparatore = (x) => (x.endsWith(sepPath) ? x : x + sepPath);
+    return a.startsWith(conSeparatore(b)) || b.startsWith(conSeparatore(a));
+  }
+  /* Chi lavora ADESSO nella cartella di questa sessione, per le prove dell'obiettivo (REV-05, REV-13 della G3): la sessione stessa
+     non ferma (giro, figlie, passi, ricerche, compattazioni), un suo `!` o un comando del modello ancora vivo in sottofondo, e lo
+     stesso per ogni altra conversazione sulla stessa cartella. ⛔ Limiti dichiarati: la scheda Terminale della persona e la ricerca
+     approfondita non sono qui — come la persona che scrive nel suo editor, le prove non le vedono. */
+  function qualcunoLavoraNellaCartella(sessionId, voce) {
+    const occupata = (id, v) => !sessioneFermaQui(id, v) || (v.comandiUtenteInCorso ?? 0) > 0 || (v.comandiFermabili?.size ?? 0) > 0;
+    if (occupata(sessionId, voce)) return true;
+    const cartella = chiaveDellaCartella(voce.cartella);
+    if (!cartella) return false;
+    for (const [id, altra] of sessioni) if (altra !== voce && cartelleSiToccano(chiaveDellaCartella(altra.cartella), cartella) && occupata(id, altra)) return true;
+    return false;
+  }
   const togliPredicatoInUso = affitti
     ? affitti.aggiungiInUso((sessionId) => { const voce = sessioni.get(sessionId); return Boolean(voce) && !sessioneFermaQui(sessionId, voce); })
     : null;
@@ -8024,6 +9067,22 @@ export function createSessionRegistry({
         nuova.ascoltatori.add(ascoltatore);
       }
       vecchia.ascoltatori.clear();
+      /*
+       * ⛔ REV-GOAL-07 (revisione del bugfixer, 14/10/2026): la ricarica scatta per QUALUNQUE riga scritta da un altro processo
+       *   (un giro di chat dell'app), non per una riga dell'obiettivo. Se la riga obiettivo sul giornale è ancora quella che QUESTO
+       *   processo conosceva (letta all'avvio o scritta da lui), vale la memoria di qui — compresa la pausa derivata dal riavvio,
+       *   che sul giornale non c'è: senza questo l'obiettivo tornava «attivo» senza che nessuno avesse premuto Riprendi. Solo una
+       *   riga obiettivo DIVERSA (un altro processo l'ha cambiato) passa com'è.
+       */
+      const sulGiornale = nuova.obiettivoSulGiornale ?? null;
+      const conosciuta = vecchia.obiettivoSulGiornale ?? null;
+      const stessaRiga = (sulGiornale === null && conosciuta === null)
+        || (sulGiornale !== null && conosciuta !== null && sulGiornale.id === conosciuta.id && sulGiornale.revisione === conosciuta.revisione);
+      if (stessaRiga) nuova.obiettivo = vecchia.obiettivo ?? null;
+      /* ⛔ REV-GOAL-08: l'obiettivo cambiato da un altro processo arriva in memoria con la ricarica, e le finestre già in ascolto
+         lo devono sapere: la riga obiettivo non è un evento con `_sequenza` e non passa dal rigioco qui sopra. Lo stesso annuncio
+         di `salvaObiettivo`, agli ascoltatori ora sulla voce nuova. */
+      else broadcast(nuova, { type: 'CUSTOM', name: EVENTO_OBIETTIVO, value: { obiettivo: nuova.obiettivo ?? null } });
       fermaWatcherSessione(vecchia);
       if (nuova.ascoltatori.size > 0) attivaWatcherSessione(nuova, nuova.cartella);
       if (vecchia.casaLinux && !nuova.casaLinux) nuova.casaLinux = vecchia.casaLinux; // risorsa di processo: resta di chi l'ha aperta
@@ -8341,6 +9400,11 @@ export function createSessionRegistry({
         const impostazioniRecord = record.filter((r) => r.tipo === 'impostazioni-sessione').at(-1) ?? null;
         // C2b R2 (nota 1): il totale degli avvii da soli dell'albero, sulla radice — l'ultima riga vince, come le impostazioni
         const avviiDaSoloRecord = record.filter((r) => r.tipo === 'avvii-da-solo' && Number.isSafeInteger(r.totale) && r.totale >= 0).at(-1) ?? null;
+        /* /goal G1 (14/10/2026): l'obiettivo com'è sul giornale. Al riavvio di QUESTO processo quello attivo torna in pausa
+           (`alRipristino`, in memoria: il giornale non si tocca all'avvio); una ricarica per l'affitto lo lascia com'è, perché
+           l'ha scritto adesso un altro processo vivo. */
+        const obiettivoSulGiornale = obiettivoDalGiornale(record);
+        if (obiettivoSulGiornale.illeggibile) console.error(`[session-store] ${sessionId}: the last goal row cannot be read: the conversation is restored without a goal.`);
         // ⭐ 02/09 — il nome scelto (o dato dal primo messaggio) sopravvive al riavvio: l'ULTIMA riga nome-sessione vince, come per le impostazioni.
         const nomeRecord = record.filter((r) => r.tipo === 'nome-sessione' && typeof r.nome === 'string' && r.nome.trim().length > 0).at(-1) ?? null;
         /* ⭐ 14/09 — la coda sopravvive al riavvio, come in Codex (ThreadStore). Il processo che l'avrebbe consegnata non c'è
@@ -8359,6 +9423,7 @@ export function createSessionRegistry({
             ...(typeof v.requestId === 'string' ? { requestId: v.requestId } : {}),
             ...(v.dialogueKind === 'request' || v.dialogueKind === 'reply' ? { dialogueKind: v.dialogueKind } : {}),
             ...(bollaPerLaConsegna(v.bolla, v.testo) ? { bolla: bollaPerLaConsegna(v.bolla, v.testo) } : {}), // C09
+            ...(v.autore === 'persona' && !ORIGINI_DI_CODA.has(v.origine) ? { autore: 'persona' } : {}), // owner 15/10/2026
           }));
         /* C06 (a): le uscite fermate dalla persona, ancora da portare col suo prossimo messaggio */
         const fermateRipristinate = (Array.isArray(codaRecord?.fermate) ? codaRecord.fermate : [])
@@ -8503,7 +9568,15 @@ export function createSessionRegistry({
           modello: impostazioni.modello, modelloPlanner: impostazioni.modelloPlanner, reasoning: impostazioni.reasoning,
           fallbackProviders: [], // owner 11/10/2026: le riserve salvate nelle sessioni vecchie si ignorano
           // Sessioni nate PRIMA della riga nome-sessione (o mai rinominate): per un compito libero il client ha sempre usato il primo messaggio come titolo (titoloDalPrimoMessaggio, 80 caratteri) — stesso valore, ricavato dall'intestazione invece che perso. Un task del corpus resta col suo taskId, come prima.
-          nome: nomeRecord?.nome ?? nomeDerivatoDalCompito(intestazione.taskId, intestazione.task), // 26/09: la stessa regola del vivo
+          /* 26/09: la stessa regola del vivo; 15/10 sera (owner, «solo a schermo»): un nome nella forma di un taglio automatico di prima
+             si mostra con la regola nuova (`nomeMostrato`), senza riscrivere il disco */
+          nome: nomeMostrato(nomeRecord?.nome ?? nomeDerivatoDalCompito(intestazione.taskId, intestazione.task),
+            [intestazione.task?.bolla?.testo, intestazione.task?.consegna, intestazione.task?.consegnaCorta]),
+          /* owner 16/10 sera (doppioni VECCHI «solo a schermo»): il nome è quello che il compito darebbe da solo, cioè non scelto a mano.
+             Solo questi si numerano a schermo (`numeraDoppioniVecchiASchermo`, sotto). */
+          nomeAutomaticoAlRipristino: (nomeRecord?.nome ?? null) === null
+            || nomeMostrato(nomeRecord.nome, [intestazione.task?.bolla?.testo, intestazione.task?.consegna, intestazione.task?.consegnaCorta])
+              === nomeMostrato(nomeDerivatoDalCompito(intestazione.taskId, intestazione.task), [intestazione.task?.bolla?.testo, intestazione.task?.consegna, intestazione.task?.consegnaCorta]),
           /* ⛔ F3-10 (23/09/2026) — «upcast on read»: la riga storica `workflow` si LEGGE come Normale, il file
              resta com'è (Axon Framework, «Event Versioning», letto il 23/09/2026: «the complete event history
              remains intact»). La voce ricorda che la usava, per la fascia dell'interfaccia. */
@@ -8517,7 +9590,11 @@ export function createSessionRegistry({
           approvazionePendente: null, domandaPendente: null, reindirizzamentoPendente: null, redirectAnnullati: new Set(), padreId: intestazione.padreId, profonditaDelega: intestazione.profonditaDelega,
           avvioDelega: intestazione.avvioDelega === 'da-solo' || intestazione.avvioDelega === 'consentito' ? intestazione.avvioDelega : null, // C2b
           avviiDaSoloTotali: avviiDaSoloRecord?.totale ?? 0, // C2b R2: vedi `avviiDaSoloNellAlbero`
+          obiettivo: perRicarica ? obiettivoSulGiornale.obiettivo : obiettivoAlRipristino(obiettivoSulGiornale.obiettivo, { adesso: new Date().toISOString() }), // /goal G1
+          obiettivoSulGiornale: impronteDellObiettivo(obiettivoSulGiornale.obiettivo), // REV-GOAL-07: la riga com'è, prima della pausa derivata
           senzaInterfaccia: intestazione.senzaInterfaccia === true, // decisione owner 30
+          giriMassimi: Number.isSafeInteger(intestazione.giriMassimi) && intestazione.giriMassimi > 0 ? intestazione.giriMassimi : null, // CONFUTA-REV-05
+          soloComandiDelContratto: Array.isArray(intestazione.soloComandiDelContratto) ? intestazione.soloComandiDelContratto.filter((c) => typeof c === 'string' && c !== '') : null,
           legameWorkflow: legameWorkflowValido(ultimoLegameDelPasso(record) ?? intestazione.workflow), // F3-32; C3 2b: l'ultimo legame
           esitoDelega: intestazione.padreId ? esitoDelegaDaEventi(eventi, { task: intestazione.task }) : null,
           // C3 tappa 4: la nota «nessuna modifica fatta» e la fonte del verdetto, ricostruite come alla fine del giro
@@ -8618,7 +9695,7 @@ export function createSessionRegistry({
            *   Altrimenti (domande nate prima di questa cura, scrittura della storia fallita) si chiude, e la ricevuta dice
            *   perché: `motivo:'interrotta'`, dal sistema — mai una scelta della persona.
            */
-          const riprendibile = domandaOrfana.ripristinabile === true && !voce.padreId && !voce.senzaInterfaccia
+          const riprendibile = domandaOrfana.ripristinabile === true && !voce.padreId && !nessunoDavanti(voce)
             && conEsitoDellaChiamata(voce.messaggiPendente, domandaOrfana.toolCallId, '') !== null;
           if (riprendibile) {
             voce.domandaPendente = {
@@ -8714,6 +9791,7 @@ export function createSessionRegistry({
         if (history && (voce.interrotta || !last || last.conclusa !== voce.conclusa)) registraTimeline(voce, 'recovery-gap', { partial: true });
       }
       ricostruisciCollisioniDiScrittura(sessioni, scrittureDelleFiglie);
+      numeraDoppioniVecchiASchermo(); // owner 16/10 sera: i doppioni vecchi, solo a schermo
       /*
        * F3 (24/09/2026): le righe che il ripristino scrive (lapidi delle domande orfane, redirect falliti, la coda in
        * pausa, l'annuncio della riparazione) prima erano sincrone; con la politica `busy` possono finire IN CODA. Qui
@@ -8791,7 +9869,9 @@ export function createSessionRegistry({
       }
       if (typeof testo !== 'string' || testo.trim() === '') return rifiuto('QUERY_INVALID', 'queue-message-empty', 'The queued message cannot be empty');
       const pausaPrima = voce.codaInPausa;
-      voce.codaMessaggi.push({ id: randomUUID(), testo, ...(immagini.length ? { immagini } : {}), ...(bollaPerLaConsegna(bolla, testo) ? { bolla: bollaPerLaConsegna(bolla, testo) } : {}) });
+      /* owner 15/10/2026: `autore: 'persona'` lo mette SOLO questa porta; una voce senza il marchio (figlie, workflow, sfondo, dialogo,
+         una voce di prima) non adotta mai un file, anche se la sua origine si perde */
+      voce.codaMessaggi.push({ id: randomUUID(), testo, autore: 'persona', ...(immagini.length ? { immagini } : {}), ...(bollaPerLaConsegna(bolla, testo) ? { bolla: bollaPerLaConsegna(bolla, testo) } : {}) });
       // ⭐ 14/09 — accodare di nuovo scioglie una pausa di prima, come in Hermes (`store/composer-queue.ts`): la persona ha ripreso a parlare.
       voce.codaInPausa = false;
       /*
@@ -8832,6 +9912,172 @@ export function createSessionRegistry({
     /** C3b (owner 09/10/2026 sera): l'esito di un run Workflow sveglia la sessione che lo ha avviato (vedi `accodaEsitoWorkflow`). */
     accodaEsitoWorkflow,
 
+    /**
+     * ⭐ /goal G1 — l'obiettivo della conversazione com'è adesso; `null` se non ce n'è uno (Codex: `thread/goal/get`).
+     * @returns {{ok:true, obiettivo:object|null}|{erroreAvvio:string, code:string}}
+     */
+    statoObiettivo(sessionId) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return rifiuto('NOT_FOUND', 'session-not-found', 'Session not found');
+      return { ok: true, obiettivo: voce.obiettivo ?? null };
+    },
+
+    /** /goal G6 (fascia) — i tetti del ciclo di QUESTO registro. Non cambiano mentre il processo vive: il server li manda una volta,
+        all'apertura del flusso, e l'interfaccia tiene gli ultimi che ha visto. */
+    tettiObiettivo() {
+      return tettiDellObiettivo();
+    },
+
+    /**
+     * ⭐ /goal G1 — imposta un obiettivo NUOVO (attivo): quello di prima, in qualunque stato fosse, è sostituito.
+     * ⛔ Solo sulla conversazione principale (`rifiutoSeObiettivoNonAmmesso`). ⛔ In G1 impostarlo NON avvia niente: il ciclo
+     *   arriva dopo, e una porta che spende da sola non esiste.
+     * @returns {Promise<{ok:true, obiettivo:object}|{erroreAvvio:string, code:string}>}
+     */
+    impostaObiettivo(sessionId, testo, { criteri } = {}) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return Promise.resolve(rifiuto('NOT_FOUND', 'session-not-found', 'Session not found'));
+      const nonAmmesso = rifiutoSeObiettivoNonAmmesso(voce);
+      if (nonAmmesso) return Promise.resolve(nonAmmesso);
+      voce.verificaObiettivo?.ferma.abort('goal-replaced'); // G3: le prove dell'obiettivo di prima non servono più
+      return inFilaPerLObiettivo(voce, async () => {
+        // G2: coi `criteri` l'obiettivo nasce col suo contratto; un criterio storto rifiuta tutto, e l'obiettivo non nasce
+        let contratto;
+        if (criteri !== undefined) {
+          const forma = nuovoContratto({ criteri });
+          if (!forma.ok) return rifiutoContratto(forma);
+          contratto = forma.contratto;
+        }
+        const esito = nuovoObiettivo({ testo, id: `ob-${randomUUID()}`, adesso: new Date().toISOString(), contratto });
+        return esito.ok ? salvaObiettivo(voce, esito.obiettivo) : rifiutoObiettivo(esito.motivo);
+      });
+    },
+
+    /** ⭐ /goal G1 — la persona mette in pausa l'obiettivo attivo. Già in pausa: resta com'è (`invariato`), col motivo di prima. */
+    pausaObiettivo(sessionId) {
+      return transizioneObiettivo(sessionId, (obiettivo, { adesso }) => mettiInPausaObiettivo(obiettivo, { tipo: 'persona', adesso }));
+    },
+
+    /** ⭐ /goal G1 — la persona riprende un obiettivo in pausa o bloccato. Da «tetto» e da «fatto» è un rifiuto che dice perché. */
+    async riprendiObiettivo(sessionId) {
+      const daRifiutare = sessioni.get(sessionId); // OB-REV-01: riprendere qui non porterebbe avanti niente (vedi rifiutoSeObiettivoNonAmmesso)
+      const nonAmmesso = daRifiutare ? rifiutoSeObiettivoNonAmmesso(daRifiutare) : null;
+      if (nonAmmesso) return nonAmmesso;
+      const esito = await transizioneObiettivo(sessionId, (obiettivo, { adesso }) => riprendiObiettivoFermo(obiettivo, { adesso }));
+      /* G4-REV-05 (revisione del bugfixer, 14/10): «attivo» vuol dire che qualcuno lo porta avanti. A sessione ferma il ciclo riparte
+         SUBITO (prove, poi la ripresa coi rossi), come Codex e Hermes alla ripresa; con un giro in corso, la sua fine ripasserà di qui */
+      const voce = sessioni.get(sessionId);
+      if (esito?.ok && !esito.invariato && esito.obiettivo?.stato === 'attivo' && voce && (voce.conclusa === true || voce.interrotta === true)) {
+        programmaCicloObiettivo(voce, { ripresa: true });
+      }
+      return esito;
+    },
+
+    /** ⭐ /goal G1 — toglie l'obiettivo. Sul giornale resta la sua storia; l'ultima riga dice «nessuno». Senza obiettivo: `invariato`. */
+    togliObiettivo(sessionId) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return Promise.resolve(rifiuto('NOT_FOUND', 'session-not-found', 'Session not found'));
+      voce.verificaObiettivo?.ferma.abort('goal-cleared'); // G3: le prove di un obiettivo tolto non servono più
+      return inFilaPerLObiettivo(voce, async () => ((voce.obiettivo ?? null) === null ? { ok: true, obiettivo: null, invariato: true } : salvaObiettivo(voce, null)));
+    },
+
+    /**
+     * ⭐⭐⭐ /goal G3 — LE PROVE DEL CONTRATTO, eseguite dal sistema (owner 14/10/2026 sera: 3 tentativi poi pausa, «non
+     *   verificabile» come terzo esito, uscita marcata di 3.000 caratteri). Le regole stanno in `obiettivo/verifica.mjs`; qui
+     *   c'è ciò che le lega alla conversazione:
+     *   · DOVE: solo nella cartella della conversazione, su questo computer (Hermes `_gate_workspace`, `goals.py:373-393`); una
+     *     conversazione sul telefono o con la cartella sparita non esegue, e ogni prova lo dice;
+     *   · CON CHE COSA: la stessa esecuzione dell'attrezzo shell (dove girano i comandi, WSL, casa Linux) e lo STESSO cancello dei
+     *     permessi del motore. Fuori da un giro non c'è nessuno a cui chiedere: una prova che vorrebbe il sì della persona è «non
+     *     verificabile, serve il tuo sì» — il ciclo (G4) la porterà dentro il giro, dove la carta c'è;
+     *   · QUANDO: mai mentre un giro lavora (le prove leggerebbero file a metà), mai due verifiche insieme;
+     *   · e il gesto NON tiene in fila gli altri gesti dell'obiettivo: le prove possono durare minuti, e Pausa o Togli devono
+     *     rispondere subito. Solo il salvataggio passa dalla fila, e se nel frattempo obiettivo o contratto sono cambiati l'esito
+     *     si butta (`goal-changed-during-check`).
+     * @returns {Promise<{ok:true, obiettivo:object, verifica:object, criteriAlTetto:string[]}|{erroreAvvio:string, code:string}>}
+     */
+    async verificaObiettivo(sessionId) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return rifiuto('NOT_FOUND', 'session-not-found', 'Session not found');
+      if (chiuso) return rifiutoPerChiusura();
+      const nonAmmesso = rifiutoSeObiettivoNonAmmesso(voce);
+      if (nonAmmesso) return nonAmmesso;
+      const obiettivo = voce.obiettivo ?? null;
+      if (!obiettivo) return rifiutoObiettivo('goal-not-set');
+      if (obiettivo.stato === 'fatto') return rifiutoObiettivo('goal-already-done');
+      if (!obiettivo.contratto) return rifiutoObiettivo('goal-no-contract');
+      if (voce.verificaObiettivo) return rifiutoObiettivo('goal-check-running');
+      /* G3-REV-05 (riverifica del bugfixer, 14/10): «ferma» come la intende l'affitto fra processi (`sessioneFermaQui`): anche a
+         giro concluso una madre con figlie vive o con un passo vivo di un suo Workflow ha qualcuno che scrive nella cartella; e
+         così un comando `!` della persona ancora in corso. REV-13: anche un'altra conversazione sulla stessa cartella, e un comando
+         del modello ancora vivo in sottofondo. */
+      if (qualcunoLavoraNellaCartella(sessionId, voce)) return rifiutoObiettivo('goal-check-while-working');
+      const ferma = new AbortController();
+      let finita;
+      // G4-REV-03: `fine` si risolve quando queste prove finiscono — il ciclo che le trova in corso aspetta questa, non un orologio
+      const lavoro = { ferma, fine: new Promise((r) => { finita = r; }) };
+      voce.verificaObiettivo = lavoro;
+      try {
+        const contesto = await contestoDellaProva(voce, ferma.signal);
+        const esito = await verificaContratto(obiettivo.contratto, contesto);
+        return await inFilaPerLObiettivo(voce, async () => {
+          const adesso = voce.obiettivo ?? null;
+          if (!adesso || adesso.id !== obiettivo.id || adesso.contratto?.impronta !== obiettivo.contratto.impronta) {
+            return rifiutoObiettivo('goal-changed-during-check');
+          }
+          // G3-REV-03/04: fermate da un giro partito o dal registro che si chiude — l'obiettivo è lo stesso, l'esito è a metà
+          if (ferma.signal.aborted) return rifiutoObiettivo('goal-check-stopped');
+          const passo = obiettivoConVerifica(adesso, esito, { adesso: new Date().toISOString() });
+          if (!passo.ok) return rifiutoObiettivo(passo.motivo);
+          const salvato = await salvaObiettivo(voce, passo.obiettivo);
+          return salvato.ok ? { ...salvato, verifica: passo.obiettivo.verifica, criteriAlTetto: passo.criteriAlTetto } : salvato;
+        });
+      } finally {
+        if (voce.verificaObiettivo === lavoro) voce.verificaObiettivo = null;
+        finita();
+      }
+    },
+
+    /**
+     * ⭐ /goal G2 — il CONTRATTO dell'obiettivo che c'è: l'elenco intero dei criteri (quelli tenuti portano il loro `id`).
+     * Aggiungere è libero; togliere o cambiare un criterio vuole `conferma: <impronta del contratto mostrato>` (REV-GOAL-05), se
+     * no è un rifiuto che dice quali (`tolti`,
+     * `cambiati` nei valori) e non cambia niente. La forma e le sue regole: `obiettivo/contratto.mjs`.
+     * @returns {Promise<{ok:true, obiettivo:object, cambio?:{aggiunti:string[], tolti:string[], cambiati:string[]}, invariato?:true}|{erroreAvvio:string, code:string}>}
+     */
+    contrattoObiettivo(sessionId, criteri, { conferma = null } = {}) {
+      // REV-GOAL-04: il contratto di prima dice quali id sono già stati dati, anche a criteri poi tolti: non si riusano
+      return cambioDiContratto(sessionId, (prima) => nuovoContratto({ criteri }, { prima }), { conferma });
+    },
+
+    /** ⭐ /goal G2 — criteri IN PIÙ, in coda a quelli che ci sono (senza `id`: lo ricevono). Chiede di più: non vuole conferma. */
+    aggiungiCriteriObiettivo(sessionId, criteri) {
+      return cambioDiContratto(sessionId, (contratto) => (contratto ? aggiungiCriteriAlContratto(contratto, criteri) : nuovoContratto({ criteri })));
+    },
+
+    /**
+     * ⭐ /goal G2c — ciò che serve per far PROPORRE i criteri di un obiettivo: il testo pulito, chi è il modello della
+     *   conversazione (la stessa forma di `leggiSessioneContesto`) e la cartella del PROGETTO (quella di partenza: con «Full
+     *   access» la cartella effettiva è la radice del disco, e il contesto del progetto sarebbe quello di un altro posto).
+     * ⛔ Rifiuta dove un obiettivo non è ammesso e un testo che non potrebbe diventarlo: una proposta per un obiettivo che non
+     *   nascerà è una chiamata pagata per niente. Non scrive niente e non mette in fila: una proposta non è uno stato.
+     * @returns {{ok:true, testo:string, cartella:string|null, contesto:object}|{erroreAvvio:string, code:string}}
+     */
+    contestoPropostaObiettivo(sessionId, testo) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return rifiuto('NOT_FOUND', 'session-not-found', 'Session not found');
+      const nonAmmesso = rifiutoSeObiettivoNonAmmesso(voce);
+      if (nonAmmesso) return nonAmmesso;
+      const letto = testoObiettivo(testo);
+      if (!letto.ok) return rifiutoObiettivo(letto.motivo);
+      return {
+        ok: true,
+        testo: letto.testo,
+        cartella: voce.cartellaBase ?? voce.cartella ?? null,
+        contesto: structuredClone({ sessionId, modello: voce.modello, provider: voce.provider, runtimeId: voce.runtimeId, modelId: voce.modelId, reasoning: voce.reasoning }),
+      };
+    },
+
     /** ⭐ 14/09 — la coda com'è adesso, per chi apre la sessione dopo (Codex: `thread/queue/list`). */
     statoCoda(sessionId) {
       const voce = sessioni.get(sessionId);
@@ -8854,9 +10100,10 @@ export function createSessionRegistry({
       const indice = voce.codaMessaggi.findIndex((item) => voceDiCoda(item).id === id);
       if (indice < 0) return rifiuto('NOT_FOUND', 'queue-message-gone', 'This message is no longer in the queue');
       const item = voce.codaMessaggi[indice];
-      const { testo, immagini, origine, childId, bolla } = voceDiCoda(item);
+      const { testo, immagini, origine, childId, bolla, autore } = voceDiCoda(item);
       const consegnaCoda = {
         codaId: id,
+        ...(autore ? { autore } : {}),
         ...(origine ? { origine } : {}),
         ...(childId ? { childId } : {}),
       };
@@ -8927,6 +10174,7 @@ export function createSessionRegistry({
       provider = 'cloud', runtimeId = null, modelId = null, fallbackConsent = false, fallbackProviders,
       linguaInterfaccia = null, // K3b (03/10/2026)
       senzaInterfaccia = false, // decisione owner 30 (24/09/2026): la passa lo scheduler delle automazioni
+      senzaInterfacciaNelGiro = undefined, // CLI 16/10: per questo giro, mai salvato (vedi `nessunoDavanti`)
     } = {},
     /*
      * ⭐ D-11 — ARGOMENTO A PARTE, e non per stile: l'origine non è una scelta di chi avvia la
@@ -8945,13 +10193,14 @@ export function createSessionRegistry({
       }
       return avviaESegui({
         taskId, cartella: preparato.cartella, task: preparato.task, comandoProva: preparato.comandoProva,
+        testoDellaPersona: preparato.task?.consegna ?? null, // owner 15/10/2026: il task scelto dalla persona (un'automazione è esclusa a parte)
         modelloRichiesta: modelloScelto, modelloPlannerRichiesta: modelloPlannerScelto, reasoningRichiesto: reasoningScelto, mobile,
         permessiRichiesti: permessiScelto, permessiPerAttrezzoRichiesti: permessiPerAttrezzoScelto, modalitaOperativaRichiesta: modalitaOperativaScelta,
         // ⭐⭐⭐ 04/9 — W0-08: la cartella di un task del catalogo non è MAI un punto di partenza "stretto" da cui allargarsi — è sempre la copia usa-e-getta preparata da task-catalog.mjs. Vedi la doc qui sopra.
         cartellaGiaScelta: true,
         provider, runtimeId, modelId, fallbackConsent, fallbackProviders, linguaInterfaccia, // K3b
         origineRichiesta, // ⭐ D-11
-        senzaInterfaccia,
+        senzaInterfaccia, senzaInterfacciaNelGiro,
       });
     },
 
@@ -9013,6 +10262,17 @@ export function createSessionRegistry({
       permessi: permessiScelto = null, permessiPerAttrezzo: permessiPerAttrezzoScelto = null, modalitaOperativa: modalitaOperativaScelta = null,
       operationId = null,
       linguaInterfaccia = null, // K3b (03/10/2026): la lingua dell'interfaccia di chi avvia, per il primo giro
+      /* owner 15/10/2026: `avviaLibero` è la porta della PERSONA; chi la usa dall'interno con un testo che non ha scritto lei (il piano
+         approvato, scritto dal modello) lo dice qui, e quel testo non adotta file */
+      consegnaNonDellaPersona = false,
+      /* /goal G6 (owner 15/10/2026, «chat nuova ferma»): la conversazione nasce SENZA giro (il ramo `senzaGiro` del fork «prima del
+         giro», con una storia vuota). `consegna` dà solo il titolo; il primo giro lo avvia la persona dalla carta dei controlli. */
+      ferma = false,
+      /* CLI (15/10/2026, nona revisione): una chat che nessuna interfaccia seguirà (`talos -p`, nessuno davanti) lo DICE chi la avvia,
+         come lo scheduler per le automazioni (decisione owner 30, D36): una domanda si chiude subito con l'ipotesi prudente, niente
+         carta del piano, niente obiettivo. Solo per chi ospita il registro in processo: la rotta HTTP non lo accetta. */
+      senzaInterfaccia = false,
+      senzaInterfacciaNelGiro = undefined, // CLI 16/10: per questo giro, mai salvato (vedi `nessunoDavanti`)
     },
     origineRichiesta = null) { // ⭐ D-11, argomento a parte: vedi la doc su `avvia`
       if (modalitaOperativaScelta !== null && !MODALITA_OPERATIVE.includes(modalitaOperativaScelta)) return esitoModalitaNonAmmessa(modalitaOperativaScelta);
@@ -9069,9 +10329,13 @@ export function createSessionRegistry({
       const bollaPrima = bollaPerLaConsegna(bolla, consegna);
       if (bollaPrima) {
         const frase = bollaPrima.testo.replace(/\s+/g, ' ').trim() || bollaPrima.allegati.map((a) => a.nome || a.percorso).join(', ');
-        preparato.task = { ...preparato.task, bolla: bollaPrima, ...(frase ? { consegnaCorta: frase.length > 80 ? `${frase.slice(0, 77)}...` : frase } : {}) };
+        preparato.task = { ...preparato.task, bolla: bollaPrima, ...(frase ? { consegnaCorta: titoloBreve(frase) } : {}) };
       }
       const risultato = avviaESegui({
+        testoDellaPersona: consegnaNonDellaPersona === true || ferma === true ? null : consegna, // owner 15/10/2026
+        ...(ferma === true ? { senzaGiro: { storia: [], verificaPronto: true } } : {}), // /goal G6: nessun giro adesso, ma la chiave c'è
+        ...(senzaInterfaccia === true ? { senzaInterfaccia: true } : {}), // nessuno davanti: vedi il parametro
+        ...(typeof senzaInterfacciaNelGiro === 'boolean' ? { senzaInterfacciaNelGiro } : {}), // per questo giro, mai salvato
         // ⛔ 12/09 — `libero:full-access` è un NOME STORICO, non un permesso: dal 12/09 una
         // cartella scelta a mano parte con qualunque permesso (vedi la doc di questo metodo).
         // Non si rinomina perché è scritto nei .jsonl già su disco e la mappa dei nomi umani
@@ -9279,7 +10543,8 @@ export function createSessionRegistry({
       if (conclusa) chiudi(sessionId).then(risolvi, rifiuta);
       /* il nome della sessione del giro è quello dell'automazione: dal vivo (08/10/2026) la barra mostrava `automazione:072787c…`,
          l'id grezzo. Stessa riga `nome-sessione` di una rinomina (sopravvive al riavvio); un errore qui non ferma il giro. */
-      const nomeDelGiro = titoloCorto.slice(0, 80).trim();
+      // 15/10/2026: parola intera e «…», come gli altri nomi; 16/10 sera (owner): due giri vivi della stessa automazione si numerano
+      const nomeDelGiro = nomeUnicoInElenco(titoloBreve(titoloCorto), sessionId);
       if (nomeDelGiro) Promise.resolve(registryApi.rinomina(sessionId, nomeDelGiro)).catch(() => {});
       return { sessionId, fine, modello: sessioni.get(sessionId)?.modello ?? modello };
     },
@@ -9343,7 +10608,7 @@ export function createSessionRegistry({
      *
      * @returns {{sessionId:string}|{erroreAvvio:string, code:string}}
      */
-    forka(sessionIdOrigine, { primaDelGiro = null, modelloRichiesta = null } = {}) {
+    forka(sessionIdOrigine, { primaDelGiro = null, modelloRichiesta = null, senzaInterfacciaNelGiro = undefined } = {}) {
       const originale = sessioni.get(sessionIdOrigine);
       if (!originale) return rifiuto('NOT_FOUND', 'source-session-not-found', 'Source session not found');
       if (originale.scrittureImpostazioniComandi?.size) return rifiuto('SESSION_NOT_READY', 'settings-being-saved', 'The command settings are being saved: try again in a moment.');
@@ -9413,6 +10678,11 @@ export function createSessionRegistry({
         cartellaGiaScelta: originale.cartellaGiaScelta === true,
         task: originale.task,
         comandoProva: originale.comandoProva, messaggiIniziali: originale.messaggiFinali,
+        /* ⛔ ADOZIONE-REV-04 (bugfixer, 15/10/2026): un fork riparte dalla storia SENZA un messaggio nuovo della persona — l'ha chiesto
+           col clic, non l'ha scritto — e l'ultimo `user` di quella storia può essere una voce di coda entrata a giro in corso (il
+           risultato di una figlia, che il kernel aggiunge senza `talosOrigin`). Niente eccezione dei file adottati, come la ripresa
+           senza messaggio nuovo. */
+        giroNonDellaPersona: true,
         /*
          * ⭐⭐⭐ RICERCA 5×5×5×5 cambio-modello (owner 05/10/2026, dossier §1.1f/§5.1) — QUARTA cosa che `forka`
          * dimenticava di ripassare, per lo stesso motivo di cartella/permessi/permessiPerAttrezzo qui sotto: un fork
@@ -9446,6 +10716,8 @@ export function createSessionRegistry({
         permessiRichiesti: originale.permessi == null || PAROLE_DEI_PERMESSI.includes(originale.permessi) ? originale.permessi : 'Read only',
         permessiPerAttrezzoRichiesti: originale.permessiPerAttrezzo,
         ...(taglio ? { senzaGiro: { storia: taglio.messaggi, recordCompattazione: taglio.recordCompattazione } } : {}),
+        /* R2 (CLI 0.6.8, S3): `talos -p --fork` ha nessuno davanti come `--resume` — per questo giro, mai sul disco (`nessunoDavanti`) */
+        ...(typeof senzaInterfacciaNelGiro === 'boolean' ? { senzaInterfacciaNelGiro } : {}),
       });
       return taglio && esitoFork?.sessionId ? { ...esitoFork, taglio: taglio.taglio } : esitoFork;
     },
@@ -9477,7 +10749,7 @@ export function createSessionRegistry({
      * @param {string} [nuovoMessaggioUtente]
      * @returns {{sessionId:string}|{erroreAvvio:string, code:string}}
      */
-    resume(sessionId, nuovoMessaggioUtente = null, immagini = [], { consegnaCoda = null, rispostaDomanda = null, notificaDelega = null, prontezzaDelega = null, onConclusioneFn = null, bolla = null } = {}) {
+    resume(sessionId, nuovoMessaggioUtente = null, immagini = [], { consegnaCoda = null, rispostaDomanda = null, notificaDelega = null, prontezzaDelega = null, onConclusioneFn = null, bolla = null, notificaObiettivo = null, senzaInterfacciaNelGiro = undefined } = {}) {
       const voce = sessioni.get(sessionId);
       if (!voce) return rifiuto('NOT_FOUND', 'session-not-found', 'Session not found');
       if (chiuso) return rifiutoPerChiusura(); // F3 (24/09): il fence dello spegnimento, prima di ogni altro controllo
@@ -9491,6 +10763,8 @@ export function createSessionRegistry({
       if (!voce.conclusa && !voce.interrotta) {
         return rifiuto('SESSION_NOT_READY', 'running-wait-resume', 'The session is still running: wait for it to finish before resuming it');
       }
+      // CLI 16/10: chi riprende dice se c'è qualcuno davanti in questo giro; senza, resta quello di prima (le riprese interne)
+      if (typeof senzaInterfacciaNelGiro === 'boolean') voce.senzaInterfacciaNelGiro = senzaInterfacciaNelGiro;
       const haNuovoMessaggio = typeof nuovoMessaggioUtente === 'string' && nuovoMessaggioUtente.trim() !== '';
       if (notificaDelega) {
         const ids = notificaDelega.codaIds;
@@ -9517,6 +10791,34 @@ export function createSessionRegistry({
         : (Array.isArray(voce.messaggiFinali) ? voce.messaggiFinali : null);
       if (!storiaRiprendibile && (voce.conclusa || voce.interrotta) && typeof nuovoMessaggioUtente === 'string' && nuovoMessaggioUtente.trim() !== '') {
         storiaRiprendibile = messaggiRipristinabiliDaEventi(voce);
+      }
+      /*
+       * ⭐ /goal G6 (owner 15/10/2026, «chat nuova ferma») — IL PRIMO GIRO di una conversazione nata ferma (`avviaLibero({ferma:true})`):
+       *   conclusa al giro 0, senza storia, mai interrotta. Il messaggio della persona («Avvia» sulla carta dei controlli) è il suo
+       *   PRIMO messaggio: il giro parte fresco, come un avvio — niente `messaggiIniziali`, il kernel costruisce sistema e messaggio
+       *   (`talosHarness.mjs`, ramo senza storia). Il segno sta sul disco (checkpoint finale a versione 0), non in memoria: regge a un
+       *   riavvio. ⛔ Solo col messaggio della persona: un avviso, una risposta, una voce di coda non aprono una chat ferma.
+       */
+      const primoGiroDellaChatFerma = (!storiaRiprendibile || storiaRiprendibile.length === 0) && voce.conclusa === true && !voce.interrotta
+        && (voce.versioneGiro ?? 0) === 0 && haNuovoMessaggio && !notificaDelega && !notificaObiettivo && !rispostaDomanda && !consegnaCoda && !voce.padreId;
+      if (primoGiroDellaChatFerma) {
+        const bollaPrima = bollaPerLaConsegna(bolla, nuovoMessaggioUtente);
+        const primo = avviaESegui({
+          testoDellaPersona: nuovoMessaggioUtente,
+          sessionId, taskId: voce.taskId, cartella: voce.cartella,
+          task: { ...voce.task, consegna: nuovoMessaggioUtente, ...(immagini.length ? { immagini } : {}), ...(bollaPrima ? { bolla: bollaPrima } : {}) },
+          comandoProva: voce.comandoProva, voceEsistente: voce, versioneGiroRichiesta: 1,
+          ...(typeof onConclusioneFn === 'function' ? { onConclusioneFn } : {}),
+        });
+        /* G6C-REV-01 (revisione del bugfixer, 15/10/2026): la chiave si controlla alla nascita della chat ferma, ma fra la nascita e
+           «Avvia» può andare in panchina (basta un 429 sulla proposta dei controlli). L'obiettivo l'ha già salvato `POST /goal`: se il
+           primo giro è rifiutato, l'obiettivo NON resta «attivo» con niente che gira — va in pausa con l'errore, come quando il ciclo
+           non riesce a ripartire (`ripartiPerLObiettivo`), e la persona lo riprende quando la chiave torna. */
+        const ob = voce.obiettivo;
+        if (primo?.erroreAvvio && ob?.stato === 'attivo' && (ob.ciclo?.giri ?? 0) === 0) {
+          void transizioneObiettivo(sessionId, (o, { adesso }) => (o?.id === ob.id ? mettiInPausaObiettivo(o, { tipo: 'errore', dettaglio: String(primo.reason ?? primo.code ?? 'resume-refused'), adesso }) : { ok: true, obiettivo: o, invariato: true }));
+        }
+        return primo;
       }
       if (!storiaRiprendibile || storiaRiprendibile.length === 0) {
         /*
@@ -9571,12 +10873,14 @@ export function createSessionRegistry({
       const { messaggi: storiaChiusa, chiusure } = chiudiChiamateOrfane(storiaRiprendibile);
       storiaRiprendibile = storiaChiusa;
       /* C06 (a): le uscite fermate dalla persona viaggiano col SUO messaggio (mai con un risveglio, mai con la risposta a una domanda) */
-      const noteFermate = haNuovoMessaggio && !notificaDelega && !rispostaDomanda && voce.noteSfondoFermate?.length ? [...voce.noteSfondoFermate] : [];
+      const noteFermate = haNuovoMessaggio && !notificaDelega && !notificaObiettivo && !rispostaDomanda && voce.noteSfondoFermate?.length ? [...voce.noteSfondoFermate] : [];
       if (noteFermate.length) storiaRiprendibile = [...storiaRiprendibile, { role: 'user', content: noteFermate.map((nota) => nota.testo).join('\n\n'), talosOrigin: 'background-notice' }];
       const messaggiIniziali = nuovoMessaggioUtente
         ? [...storiaRiprendibile, notificaDelega
           ? { role: 'user', content: nuovoMessaggioUtente, talosOrigin: notificaDelega.origine === 'workflow' ? 'workflow-notice' : notificaDelega.origine === 'sfondo' ? 'background-notice' : 'delegation-notice' }
-          : { role: 'user', content: imageMessageContent(nuovoMessaggioUtente, immagini) }]
+          : notificaObiettivo
+            ? { role: 'user', content: nuovoMessaggioUtente, talosOrigin: 'goal-notice' } // /goal G4: il ciclo, mai la persona
+            : { role: 'user', content: imageMessageContent(nuovoMessaggioUtente, immagini) }]
         : storiaRiprendibile;
       const prossimaVersioneGiro = (voce.versioneGiro ?? 0) + 1;
       if (recupero) recupero.versioneGiro = prossimaVersioneGiro;
@@ -9632,6 +10936,8 @@ export function createSessionRegistry({
             // C06: un comando in sottofondo finito, annunciato come l'esito di un Workflow (una nota, mai la persona)
             ...(notificaDelega?.origine === 'sfondo' ? { origine: 'sfondo', codaIds: notificaDelega.codaIds, toolCallIds: notificaDelega.toolCallIds,
               risultatiSfondo: notificaDelega.risultati } : {}),
+            // /goal G4: il ciclo dell'obiettivo che riparte (la chat lo disegna come una nota, mai come la persona)
+            ...(notificaObiettivo ? { origine: 'obiettivo', obiettivoId: notificaObiettivo.obiettivoId, riepilogo: notificaObiettivo.riepilogo ?? null } : {}),
           }
         : rispostaDomanda
           /* decisione owner 29: la ripresa dopo la risposta NON è un messaggio della persona (niente `seguito`): la chat
@@ -9641,9 +10947,13 @@ export function createSessionRegistry({
       /* ⛔ K1 (F-020, 03/10): un messaggio della persona scioglie la pausa della coda, la stessa regola di `accodaMessaggio`
          («la persona ha ripreso a parlare»): così risultati e domande dei figli rimasti in coda passano in questo giro. Prima un
          resume non la scioglieva mai e, senza un `accoda`, la coda restava ferma per sempre. Non si rimette se l'avvio fallisce. */
-      const sciogliePausa = haNuovoMessaggio && !consegnaCoda && !notificaDelega && voce.codaInPausa === true;
+      const sciogliePausa = haNuovoMessaggio && !consegnaCoda && !notificaDelega && !notificaObiettivo && voce.codaInPausa === true;
       if (sciogliePausa) voce.codaInPausa = false;
       const ripresa = avviaESegui({
+        /* 0.6.5, terza revisione: una domanda o una risposta di un agente (agent-dialogue), una delega, un passo, lo sfondo, o una
+           ripresa senza un messaggio nuovo della persona: il giro non ha un messaggio della persona, quindi niente eccezione */
+        giroNonDellaPersona: !haNuovoMessaggio || Boolean(notificaDelega) || Boolean(notificaObiettivo) || Boolean(consegnaCoda?.origine), // desktop: anche l'avviso del /goal
+        testoDellaPersona: consegnaCoda ? (consegnaCoda.autore === 'persona' ? nuovoMessaggioUtente : null) : nuovoMessaggioUtente, // owner 15/10/2026
         sessionId, taskId: voce.taskId, cartella: voce.cartella, task: taskAnnunciato,
         comandoProva: voce.comandoProva, messaggiIniziali,
         forkDa: voce.forkDa, voceEsistente: voce,
@@ -10388,7 +11698,7 @@ export function createSessionRegistry({
         return { ok: true, ...(await apriFileConProgrammaPredefinitoFn({ cartella: radice, percorso })) };
       } catch (errore) {
         if (errore instanceof WorkspaceFileError || errore instanceof LibraryStoreError) {
-          return { erroreAvvio: errore.message, code: errore.code };
+          return rifiutoDaErroreDeiFile(errore);
         }
         throw errore;
       }
@@ -10405,7 +11715,7 @@ export function createSessionRegistry({
         return { ok: true, ...(await rivelaInEsploraFileFn({ cartella: radice, percorso })) };
       } catch (errore) {
         if (errore instanceof WorkspaceFileError || errore instanceof LibraryStoreError) {
-          return { erroreAvvio: errore.message, code: errore.code };
+          return rifiutoDaErroreDeiFile(errore);
         }
         throw errore;
       }
@@ -10858,6 +12168,7 @@ export function createSessionRegistry({
       }
       /* ⛔ Il conteggio dei comandi vivi è SUO: non tocca `conclusa`, che parla del giro del modello. */
       voce.comandiUtenteInCorso = (voce.comandiUtenteInCorso ?? 0) + 1;
+      fermaLeProveDellaCatena(voce, 'direct-command-started'); // /goal G3-REV-10: un `!` a metà prove le ferma, la persona non aspetta
       /*
        * ⛔⛔⛔ 10/09 — LA CARTELLA DI LAVORO E' DELLA SESSIONE, non del singolo comando.
        *   Owner, con la sua schermata: `ls` mostrava il Desktop, `cd Games` non faceva niente, e un
@@ -10982,7 +12293,7 @@ export function createSessionRegistry({
       /* C-005 (CLI 01/10, portato in C2 il 07/10): il quarto argomento della CLI è il MOTIVO del no, una stringa
          (`rispondiApprovazione(id, req, false, 'Denied: not interactive.')`); quello del desktop è un oggetto di opzioni. La CLI
          legge questo modulo a runtime: le due forme valgono. */
-      const { ambito, rispostoDa, motivo: motivoDato, automazioneModificata } = typeof opzioni === 'string' ? { motivo: opzioni } : (opzioni ?? {});
+      const { ambito, rispostoDa, motivo: motivoDato, automazioneModificata, obiettivoModificato } = typeof opzioni === 'string' ? { motivo: opzioni } : (opzioni ?? {});
       let motivo = motivoDato;
       const voce = sessioni.get(sessionId);
       if (!voce) return rifiuto('NOT_FOUND', 'session-not-found', 'Session not found');
@@ -11032,6 +12343,18 @@ export function createSessionRegistry({
           ? `the person edited your draft and created the automation themselves (id ${automazioneModificata}): do not create it again; call automation_list to see it.`
           : `the person edited the change and saved it themselves on automation ${automazioneModificata}: do not change it again; call automation_list to see it.`;
       }
+      /* /goal G6 (owner 15/10/2026) — «Modifica i controlli» sulla carta di goal_create: la persona ha corretto i controlli e ha
+         impostato l'obiettivo LEI (porta HTTP, contratto suo). Come per le automazioni: un no, e il perché lo scrive il server. Il
+         ciclo parte alla fine di questo giro come per ogni obiettivo nato nel giro. */
+      if (obiettivoModificato !== undefined) {
+        /* G6UI-REV-01 (revisione del bugfixer 15/10): la forma non basta — l'id dev'essere l'obiettivo che questa conversazione ha
+           DAVVERO, o il modello si sente dire che la persona ha impostato un obiettivo che non esiste (e non lo crea più). */
+        if (approvato !== false || pendente.azione?.tipo !== 'goal_create' || typeof obiettivoModificato !== 'string' || !/^ob-[0-9a-f-]{8,64}$/u.test(obiettivoModificato)
+          || voce.obiettivo?.id !== obiettivoModificato) {
+          return rifiuto('QUERY_INVALID', 'permission-request-not-goal', 'This request is not a goal the person can edit');
+        }
+        motivo = 'the person edited the checks and set the goal themselves: do not create it again; call goal_status to see it, then keep working on it.';
+      }
       /*
        * ⛔⛔ F4-03 (owner 01/10/2026 sera) — «Consenti in questa cartella per la sessione». Si ricorda la cartella che il KERNEL
        *   ha misurato e messo nella domanda (`fuoriDalProgetto.chiave`, percorso vero), mai un percorso mandato dal client; e
@@ -11046,7 +12369,8 @@ export function createSessionRegistry({
          sì; vive in memoria come `cartelleFuori` (un riavvio del server lo richiede). SOLO il
          percorso esatto: nessun prefisso, nessuna cartella — gli altri segreti continuano a
          chiedere. */
-      const percorsoSegreto = pendente.azione?.segreto?.percorso;
+      /* owner 16/10/2026 notte («No, separati»): una scrittura porta la sua chiave, così il sì per leggere non la copre */
+      const percorsoSegreto = pendente.azione?.segreto?.chiaveDelConsenso ?? pendente.azione?.segreto?.percorso;
       const ambitoValido = ambito === undefined
         || (ambito === 'cartella' && approvato === true && typeof chiaveCartella === 'string' && chiaveCartella)
         || (ambito === 'percorso' && approvato === true && typeof percorsoSegreto === 'string' && percorsoSegreto);
@@ -11072,7 +12396,7 @@ export function createSessionRegistry({
       broadcast(voce, approvalResolved({
         requestId, approvato: Boolean(approvato), ...(ambito === 'cartella' || ambito === 'percorso' ? { ambito } : {}),
         // automazioni a due porte (08/10/2026): la carta dice «modificata da te», non «negata» (il perché per il modello resta qui sopra)
-        ...(automazioneModificata !== undefined ? { motivo: 'modificata-dalla-persona' } : {}),
+        ...(automazioneModificata !== undefined || obiettivoModificato !== undefined ? { motivo: 'modificata-dalla-persona' } : {}), // G6: anche l'obiettivo
         // C2 R6: la risposta è arrivata da un'altra sessione della catena (la carta nel padre) — la traccia lo dice
         ...(rispostoDa !== undefined && rispostoDa !== sessionId ? { rispostoDa } : {}),
       }));
@@ -11124,12 +12448,21 @@ export function createSessionRegistry({
       if (!pendente || pendente.requestId !== requestId) {
         const giaData = voce.risposteDomande?.get(requestId);
         const richiesta = giaData ? null : voce.eventi.findLast((e) => e?.type === 'UserQuestionRequested' && e.requestId === requestId);
+        const salvata = voce.eventi.findLast((e) => e?.type === 'UserQuestionResolved' && e.requestId === requestId);
+        /* 16/10/2026: il motivo dice COME si è chiusa, non sempre «scaduta» — una seconda risposta diversa a una domanda già
+           risposta (un'altra finestra, il telefono, la carta nel padre) leggeva «non più in attesa» come se il tempo fosse finito.
+           Vale l'ultima chiusura nella cronologia (dopo una scrittura fallita è `cancelled`, anche se in memoria c'è la risposta; e
+           la cronologia in memoria ha l'evento già mentre la prima risposta è in volo). La risposta in memoria è solo un ripiego. «Error reasons are unique within a particular domain of
+           errors» e identificano «the proximate cause» (Google, ErrorInfo; AIP-193, letti il 16/10/2026). */
+        const comeChiusa = salvata?.status ?? (giaData ? JSON.parse(giaData.impronta)[0] : undefined);
+        const chiusa = comeChiusa === 'answered' || comeChiusa === 'skipped'
+          ? rifiuto('QUESTION_NOT_PENDING', 'question-already-answered', 'This question has already been answered')
+          : comeChiusa === 'cancelled' ? rifiuto('QUESTION_NOT_PENDING', 'question-closed', 'This question was closed without an answer') : nonInAttesa;
         let ripetuta;
         try { ripetuta = impronta(validaRispostaDomanda(giaData?.questions ?? richiesta?.questions, risposta)); }
-        catch { return nonInAttesa; }
-        if (giaData) return giaData.impronta === ripetuta ? giaData.esito : nonInAttesa;
-        const salvata = voce.eventi.findLast((e) => e?.type === 'UserQuestionResolved' && e.requestId === requestId);
-        return salvata && impronta(salvata) === ripetuta ? { ok: true } : nonInAttesa;
+        catch { return chiusa; }
+        if (giaData) return giaData.impronta === ripetuta ? giaData.esito : chiusa;
+        return salvata && impronta(salvata) === ripetuta ? { ok: true } : chiusa;
       }
       let validata;
       try {
@@ -11166,10 +12499,12 @@ export function createSessionRegistry({
           const ripresa = this.resume(sessionId, null, [], { rispostaDomanda: { requestId, toolCallId: pendente.toolCallId, esito: validata } });
           return ripresa?.erroreAvvio ? ripresa : { ok: true };
         }
-        pendente.resolve(validata);
+        /* ⛔ 14/10/2026: con `domandaScadutaFerma: false` la scaduta porta al modello l'istruzione di proseguire (la ricevuta
+           salvata sopra resta quella di prima). */
+        pendente.resolve(validata.status === 'expired' && !domandaScadutaFerma ? { ...ESITO_DOMANDA_SCADUTA_PROSEGUE } : validata);
         /* ⛔ 24/09/2026, decisione owner 9: scaduta ⇒ il giro si FERMA. Il modello riceve prima l'esito (`expired`), poi lo stop
-           al primo punto sicuro, come uno stop della persona. */
-        if (validata.status === 'expired') this.ferma(sessionId, { daChi: 'sistema' });
+           al primo punto sicuro, come uno stop della persona. Di serie; 14/10: non con `domandaScadutaFerma: false`. */
+        if (validata.status === 'expired' && domandaScadutaFerma) this.ferma(sessionId, { daChi: 'sistema' });
         return { ok: true };
       })();
       (voce.risposteDomande ??= new Map()).set(requestId, { questions: pendente.questions, impronta: impronta(validata), esito: conferma });
@@ -11221,6 +12556,7 @@ export function createSessionRegistry({
           const avvio = this.avviaLibero({
             cartellaLibera: voce.cartellaBase ?? voce.cartella,
             consegna: 'Implement this approved plan. Follow it step by step and declare which step you are on.\n\n' + pendente.content,
+            consegnaNonDellaPersona: true, // il piano l'ha scritto il modello: un file che nomina non diventa la richiesta della persona
             modello: voce.modello ?? null, modelloPlanner: voce.modelloPlanner ?? null, reasoning: voce.reasoning ?? null,
             permessi: 'Workspace write', permessiPerAttrezzo: voce.permessiPerAttrezzo ?? null, modalitaOperativa: 'normale',
             linguaInterfaccia: voce.linguaInterfaccia ?? null, // K3b
@@ -11333,7 +12669,7 @@ export function createSessionRegistry({
         const voci = await leggiAlberoWorkspaceFn({ cartella: progetto.percorso, percorso });
         return { ok: true, voci };
       } catch (errore) {
-        if (errore instanceof WorkspaceTreeError) return { erroreAvvio: errore.message, code: errore.code };
+        if (errore instanceof WorkspaceTreeError) return rifiutoDaErroreDeiFile(errore);
         throw errore;
       }
     },
@@ -11370,7 +12706,7 @@ export function createSessionRegistry({
         const voci = await leggiAlberoWorkspaceFn({ cartella: voce.cartella, percorso });
         return { ok: true, voci };
       } catch (errore) {
-        if (errore instanceof WorkspaceTreeError) return { erroreAvvio: errore.message, code: errore.code };
+        if (errore instanceof WorkspaceTreeError) return rifiutoDaErroreDeiFile(errore);
         throw errore;
       }
     },
@@ -11402,7 +12738,7 @@ export function createSessionRegistry({
       try {
         return { ok: true, ...(await leggiContenutoFileFn({ cartella: voce.cartella, percorso })) };
       } catch (errore) {
-        if (errore instanceof WorkspaceFileError) return { erroreAvvio: errore.message, code: errore.code };
+        if (errore instanceof WorkspaceFileError) return rifiutoDaErroreDeiFile(errore);
         throw errore;
       }
     },
@@ -11418,7 +12754,7 @@ export function createSessionRegistry({
       try {
         return { ok: true, ...(await leggiFilePerScaricoFn({ cartella: voce.cartella, percorso })) };
       } catch (errore) {
-        if (errore instanceof WorkspaceFileError) return { erroreAvvio: errore.message, code: errore.code };
+        if (errore instanceof WorkspaceFileError) return rifiutoDaErroreDeiFile(errore);
         throw errore;
       }
     },
@@ -11434,7 +12770,7 @@ export function createSessionRegistry({
       try {
         return { ok: true, ...(await leggiFilePaginaFn({ cartella: voce.cartella, segmenti })) };
       } catch (errore) {
-        if (errore instanceof WorkspaceFileError) return { erroreAvvio: errore.message, code: errore.code };
+        if (errore instanceof WorkspaceFileError) return rifiutoDaErroreDeiFile(errore);
         throw errore;
       }
     },
@@ -11445,7 +12781,7 @@ export function createSessionRegistry({
       try {
         return { ok: true, ...(await rinominaFileFn({ cartella: voce.cartella, percorso, nuovoNome })) };
       } catch (errore) {
-        if (errore instanceof WorkspaceFileError) return { erroreAvvio: errore.message, code: errore.code };
+        if (errore instanceof WorkspaceFileError) return rifiutoDaErroreDeiFile(errore);
         throw errore;
       }
     },
@@ -11456,7 +12792,7 @@ export function createSessionRegistry({
       try {
         return { ok: true, ...(await eliminaFileFn({ cartella: voce.cartella, percorso })) };
       } catch (errore) {
-        if (errore instanceof WorkspaceFileError) return { erroreAvvio: errore.message, code: errore.code };
+        if (errore instanceof WorkspaceFileError) return rifiutoDaErroreDeiFile(errore);
         throw errore;
       }
     },
@@ -11467,7 +12803,7 @@ export function createSessionRegistry({
       try {
         return { ok: true, ...(await rivelaInEsploraFileFn({ cartella: voce.cartella, percorso })) };
       } catch (errore) {
-        if (errore instanceof WorkspaceFileError) return { erroreAvvio: errore.message, code: errore.code };
+        if (errore instanceof WorkspaceFileError) return rifiutoDaErroreDeiFile(errore);
         throw errore;
       }
     },
@@ -11485,7 +12821,7 @@ export function createSessionRegistry({
       try {
         return { ok: true, ...(await apriInEsploraFileFn({ cartella: voce.cartella, percorso })) };
       } catch (errore) {
-        if (errore instanceof WorkspaceFileError) return { erroreAvvio: errore.message, code: errore.code };
+        if (errore instanceof WorkspaceFileError) return rifiutoDaErroreDeiFile(errore);
         throw errore;
       }
     },
@@ -11502,7 +12838,7 @@ export function createSessionRegistry({
       try {
         return { ok: true, ...(await spostaFileFn({ cartella: voce.cartella, percorso, cartellaDestinazione })) };
       } catch (errore) {
-        if (errore instanceof WorkspaceFileError) return { erroreAvvio: errore.message, code: errore.code };
+        if (errore instanceof WorkspaceFileError) return rifiutoDaErroreDeiFile(errore);
         throw errore;
       }
     },
@@ -11513,7 +12849,7 @@ export function createSessionRegistry({
       try {
         return { ok: true, ...(await copiaFileFn({ cartella: voce.cartella, percorso })) };
       } catch (errore) {
-        if (errore instanceof WorkspaceFileError) return { erroreAvvio: errore.message, code: errore.code };
+        if (errore instanceof WorkspaceFileError) return rifiutoDaErroreDeiFile(errore);
         throw errore;
       }
     },
@@ -11524,7 +12860,7 @@ export function createSessionRegistry({
       try {
         return { ok: true, ...(await creaVoceWorkspaceFn({ cartella: voce.cartella, percorsoBase, nome, tipo })) };
       } catch (errore) {
-        if (errore instanceof WorkspaceFileError) return { erroreAvvio: errore.message, code: errore.code };
+        if (errore instanceof WorkspaceFileError) return rifiutoDaErroreDeiFile(errore);
         throw errore;
       }
     },
@@ -11788,7 +13124,9 @@ export function createSessionRegistry({
       const voce = sessioni.get(sessionId);
       if (!voce) return rifiuto('NOT_FOUND', 'session-not-found', 'Session not found');
       const pulito = typeof nome === 'string' ? nome.trim() : '';
-      if (pulito.length === 0 || pulito.length > 80) {
+      // 15/10/2026 (REV-TITOLO-01): si conta per grafema come il client — prima in unità UTF-16, e un titolo con emoji che il client
+      // riteneva corto veniva rifiutato in silenzio
+      if (pulito.length === 0 || contaGrafemi(pulito) > TITOLO_MASSIMO) {
         return rifiuto('QUERY_INVALID', 'session-name-invalid', 'Invalid name: 1-80 characters are needed');
       }
       if (cartellaStore) await registraRigaFn({ cartellaStore, sessionId, record: { tipo: 'nome-sessione', nome: pulito } });
@@ -12066,6 +13404,9 @@ export function createSessionRegistry({
           inAttesaApprovazioneDaMs: voce.approvazionePendente
             ? Math.max(0, clock().getTime() - (voce.approvazionePendente.da ?? clock().getTime()))
             : null,
+          /* /goal G6 (15/10/2026): una chat nata FERMA (o un fork prima del giro) non ha ancora un giro — conclusa al giro 0, mai
+             interrotta. L'elenco la dice «in attesa del primo messaggio», non «conclusa · esito non registrato» (visto dal vivo). */
+          ...(voce.conclusa === true && !voce.interrotta && (voce.versioneGiro ?? 0) === 0 && !(voce.messaggiFinali?.length > 0) ? { primoMessaggioAtteso: true } : {}),
           // ⭐ 02/09 — la Board diceva "Conclusa" anche a una sessione morta su RunError: l'ultimo evento del ciclo agente decide.
           ultimoEsito: ultimoEsitoDaEventi(voce.eventi),
           // ⛔ 07/9 — il TERZO esito: «fermata» non e ne un errore ne una fine pulita (vedi
@@ -12210,6 +13551,7 @@ export function createSessionRegistry({
       ritentiCodaAffittata.clear();
       for (const v of sessioni.values()) v.ricercheInCorso?.fermaTutte('fermata'); // F001b: nessun rg orfano dopo lo spegnimento
       for (const v of sessioni.values()) v.casaLinux?.chiudi(); // Fase B: nessun Node per Linux orfano dopo lo spegnimento
+      for (const v of sessioni.values()) v.verificaObiettivo?.ferma.abort('registry-closing'); // /goal G3 (G3-REV-04): nessuna prova orfana
       const sintesiInCorso = compattazioniInBackground.size;
       if (!cartellaStore) return { scaduta: false, scrittureAttese: 0, giri: 0, sintesiInCorso };
       let scadenza = null;

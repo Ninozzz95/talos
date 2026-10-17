@@ -216,6 +216,30 @@ test('C36-SESS-02: la misura sveglia il flusso solo se qualcuno lo segue; senza 
   assert.equal(cdp.attivi.size, 1, 'il flusso è vivo dopo il risveglio');
 });
 
+test('DENSITA-01 (owner 12/10: «la risoluzione è troppo bassa»): apertura e misura rendono alla densità dello schermo; senza, 1x', async () => {
+  const cdp = cdpComeChrome();
+  const { g } = gestoreFinto({ cdp });
+  const scale = () => cdp.inviati.filter((c) => c.metodo === 'Emulation.setDeviceMetricsOverride').map((c) => c.parametri.deviceScaleFactor);
+  await g.apri('sessione-A', 'https://example.org', { larghezza: 1200, altezza: 800, scala: 1.5 });
+  await g.misura('sessione-A', { larghezza: 1000, altezza: 700, scala: 1.25 });
+  assert.deepEqual(scale(), [1.5, 1.25]);
+  // AL CONTRARIO: chi non dice la densità (un client vecchio) resta a 1x, come prima
+  await g.misura('sessione-A', { larghezza: 1000, altezza: 700 });
+  assert.deepEqual(scale(), [1.5, 1.25, 1]);
+});
+
+test('DENSITA-02: il Chromium pilotato si lancia con la densità di chi apre la prima pagina (in headless si fissa al lancio)', async () => {
+  const lanci = [];
+  const g = creaGestoreBrowserVivo({
+    trovaFn: () => ({ percorso: 'C:/chrome.exe', canale: 'chrome' }),
+    avviaFn: async (opzioni) => { lanci.push(opzioni.scala); return { pid: 1234, wsUrl: 'ws://127.0.0.1:9999/x', chiudi: async () => {} }; },
+    clientFn: () => cdpComeChrome(), connettiFn: async () => ({}), cartellaProfilo: 'C:/temp/profilo-di-prova',
+  });
+  await g.apri('sessione-A', 'https://example.org', { larghezza: 1200, altezza: 800, scala: 1.5 });
+  await g.apri('sessione-B', 'https://example.org', { larghezza: 1200, altezza: 800, scala: 2 });
+  assert.deepEqual(lanci, [1.5], 'un lancio solo, con la densità della prima apertura');
+});
+
 /* C36, nota della review della sessione desktop (10/10/2026): il risveglio al ridimensionamento riparte con le SCELTE di chi segue
    (qualità, tetti, un fotogramma ogni N), non con quelle predefinite — dopo C36 ogni ridimensionamento passa di lì. */
 test('C36-SESS-03: the resize wake restarts the stream with the follower\'s quality and limits; a new follow uses its own', async () => {

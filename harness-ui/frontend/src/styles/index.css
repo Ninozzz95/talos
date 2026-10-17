@@ -405,6 +405,15 @@ use[href="#glifo"],.talos-brand__mark .glyph,.talos-empty__mark .glyph,.talos-av
 @container (max-width:720px){ .talos-topbar [data-azione="comandi"]{display:none} .talos-topbar__actions{gap:4px} }
 .talos-topbar__title h1{font-size:15px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 .talos-topbar__title .i{color:var(--talos-muted)}
+/* 15/10/2026 (owner, «il numero sempre visibile»): un doppione tiene il suo «-2» in vista; si tronca la parte prima del numero.
+   min-width:0 sulla base, o un figlio flex non scende sotto il suo testo e l'ellipsis non compare (nome-con-numero.js). */
+.talos-session-item__title.talos-nome-numerato,.talos-topbar__title h1.talos-nome-numerato{display:flex; min-width:0}
+.talos-nome-numerato__base{min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.talos-nome-numerato__numero{flex:none; white-space:nowrap}
+/* NOME-NUMERO-REV-02: testo alternativo vuoto, o il lettore di schermo legge i puntini due volte */
+.talos-nome-numerato__base--tagliata::after{content:"\2026" / ""}
+/* i puntini del taglio del server, che stanno DOPO il numero: nel testo, ma larghi zero (a schermo li mostra la base) */
+.talos-nome-numerato__coda{flex:none; width:0; overflow:hidden; white-space:nowrap}
 .talos-topbar__path{font-family:var(--talos-font-mono); font-size:11.5px; color:var(--talos-muted); white-space:nowrap; flex:1 1 0; min-width:40px; overflow:hidden; text-overflow:ellipsis}
 .talos-topbar__actions{display:flex; gap:6px}
 
@@ -738,7 +747,8 @@ button.talos-turn-spine__tick:focus-visible{outline:var(--talos-focus-width) sol
 .talos-activity--segment .talos-tool-row[data-tool-state="running"] .talos-tool-row__name{color:var(--talos-text); font-weight:600}
 /* 27/09, decisione owner 47: una domanda del modello respinta per la forma e riformulata — riga DISCRETA, non un errore.
    Senza il prefisso del segmento: con una riga sola il segmento non c'è ancora (nasce da due voci, `assicuraInvolucroSegmento`). */
-.talos-tool-row[data-tool-state="corrected"] .talos-tool-row__name{color:var(--talos-muted); font-weight:400}
+.talos-tool-row[data-tool-state="corrected"] .talos-tool-row__name,
+.talos-tool-row[data-tool-state="duplicate"] .talos-tool-row__name{color:var(--talos-muted); font-weight:400}
 /* 27/09/2026, decisione owner (capacità delle sezioni): il link a un'altra conversazione nella risposta (`markdown.js`). Un pulsante
    che si legge come un link; il fuoco da tastiera è la regola globale `:focus-visible`. */
 .talos-link-conversazione{display:inline; padding:0; border:0; background:none; font:inherit; color:var(--talos-accent); text-decoration:underline; text-underline-offset:2px; cursor:pointer}
@@ -772,7 +782,8 @@ button.talos-turn-spine__tick:focus-visible{outline:var(--talos-focus-width) sol
 #schermoImpostazioni .talos-siti-fidati{margin-top:18px}
 #schermoImpostazioni .talos-siti-fidati .talos-setting>.talos-setting__control{width:auto; justify-content:flex-end}
 /* …e il suo pallino: il neutro di serie è `--talos-border-strong`, quasi nero in tema chiaro (visto nella foto del 4174). */
-.talos-tool-row[data-tool-state="corrected"] .talos-dot{background:var(--talos-muted); opacity:.55}
+.talos-tool-row[data-tool-state="corrected"] .talos-dot,
+.talos-tool-row[data-tool-state="duplicate"] .talos-dot{background:var(--talos-muted); opacity:.55}
 /* Il dettaglio di un attrezzo: monospazio, tetto 240 px (regola di casa, `:651`); da chiuso è `until-found` a scatola ZERO. */
 .talos-activity--segment .talos-tool-row__body{margin:2px 6px 6px 34px}
 .talos-activity--segment .talos-tool-row[aria-expanded="false"] + .talos-tool-row__body[hidden="until-found"]{margin:0; padding:0; border:0; max-height:0}
@@ -1865,6 +1876,15 @@ a.talos-button{text-decoration:none}
    in un pulsante affiancato (owner 10/09). Il fuoco da tastiera ha un contorno vero: una card
    che risponde solo al passaggio del mouse è una card che chi naviga da tastiera non trova. */
 .talos-inspector-card--apribile{cursor:pointer; transition:background var(--talos-motion-duration-fast,.12s) var(--talos-motion-ease), border-color var(--talos-motion-duration-fast,.12s) var(--talos-motion-ease)}
+/* UI deleghe (12/10/2026): nel pannello Agenti le deleghe si dividono per richiesta della persona; la testata di ogni gruppo */
+.talos-agenti-richiesta{display:grid; grid-template-columns:minmax(0,1fr); gap:1px; width:100%; margin-top:10px; padding:8px 10px; border:1px solid var(--talos-border); border-radius:10px; background:var(--talos-panel-soft); color:var(--talos-text); font:inherit; text-align:start; cursor:pointer}
+.talos-agenti-richiesta:first-child{margin-top:0}
+.talos-agenti-richiesta:hover, .talos-agenti-richiesta:focus-visible{background:var(--talos-card-hover)}
+.talos-agenti-richiesta[aria-expanded="true"]{border-color:var(--talos-accent-border)}
+.talos-agenti-richiesta__titolo{font-size:.8125rem; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.talos-agenti-richiesta__conto{font-size:.75rem; color:var(--talos-muted)}
+/* UI deleghe (12/10/2026): la scheda dell'agente scelto nel diagramma, nel pannello Agenti */
+.talos-inspector-card[data-evidenziata="true"]{border-color:var(--talos-accent-border); background:var(--talos-panel-soft); box-shadow:inset 3px 0 0 var(--talos-accent)}
 .talos-inspector-card--apribile:hover{background:var(--talos-panel-soft); border-color:var(--talos-accent-border)}
 .talos-inspector-card--apribile:focus-visible{outline:2px solid var(--talos-accent-border); outline-offset:2px}
 .talos-inspector-card__vai{flex:none; width:14px; height:14px; color:var(--talos-muted); opacity:.75}

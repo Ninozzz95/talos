@@ -36,7 +36,9 @@ export function tentativiDallaStoria(voci) {
       if (!tentativi.has(voce.nodeId)) tentativi.set(voce.nodeId, []);
       tentativi.get(voce.nodeId).push(t);
     } else if (!lavora && aperto) {
-      aperto.a = ms(voce.at);
+      /* (terza passata, T8) un tentativo non finisce mai PRIMA di cominciare: se l'orologio di chi ha scritto la storia è stato
+         corretto all'indietro fra l'avvio e la fine, la fine coincide con l'inizio — mai «16:02 → 16:01 · null» in una barra */
+      aperto.a = Math.max(ms(voce.at), aperto.da);
       aperto.esito = voce.state;
       aperti.delete(voce.nodeId);
     }

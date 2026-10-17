@@ -13,7 +13,10 @@
  * ⛔ Componente puro di DOM: non chiama la rete e non conosce lo stato dell'app. Chi lo monta gli passa i dati e le azioni.
  */
 import { nomeUmanoAttrezzo } from './nomi-attrezzi.js';
+import { nomeDellAgente } from './grafo/run-dalle-deleghe.js';
 import { renderizzaMarkdown } from './markdown.js';
+// 13/10/2026: nome, consegna e file dell'agente a schermo senza i caratteri che ingannano (una funzione sola, `testo-a-schermo.js`)
+import { senzaInganni, senzaInganniSuPiuRighe, suUnaRiga } from './testo-a-schermo.js';
 import { fermataNellaLingua } from './coda-messaggi.js';
 import { linguaCorrenteDiT, t as tr, tn } from './lingua.js';
 
@@ -140,8 +143,9 @@ export function creaDettaglioAgente(figlia, { document: documento, sezione: sezi
     b.type = 'button';
     b.dataset.percorso = voce.percorso;
     const nomeFile = voce.percorso.includes('/') ? voce.percorso.slice(voce.percorso.lastIndexOf('/') + 1) : voce.percorso;
-    b.append(icona(d, 'i-file'), el(d, 'span', 'talos-agente__file-nome', nomeFile), el(d, 'span', 'talos-agente__file-segno talos-muted', segnoFileAgente(voce)));
-    b.title = tr('agenti.agent.showInFilesTab', { percorso: voce.percorso });
+    // il percorso VERO resta per aprire il file (`data-percorso`, il clic); a schermo sta ripulito
+    b.append(icona(d, 'i-file'), el(d, 'span', 'talos-agente__file-nome', senzaInganni(nomeFile)), el(d, 'span', 'talos-agente__file-segno talos-muted', segnoFileAgente(voce)));
+    b.title = tr('agenti.agent.showInFilesTab', { percorso: senzaInganni(voce.percorso) });
     b.addEventListener('click', () => azioni.apriFile?.(voce.percorso));
     return b;
   }
@@ -157,7 +161,7 @@ export function creaDettaglioAgente(figlia, { document: documento, sezione: sezi
     const pezzi = [];
     pezzi.push(el(d, 'p', 'talos-agente__etichetta talos-muted', tr('agenti.agent.task')));
     const compito = el(d, 'div', 'talos-agente__compito');
-    compito.append(renderizzaMarkdown(dati.task || dati.taskCorto || tr('agenti.agent.noTaskRecorded'), { document: d, linkMarkdown: true }));
+    compito.append(renderizzaMarkdown(senzaInganniSuPiuRighe(dati.task || dati.taskCorto || '') || tr('agenti.agent.noTaskRecorded'), { document: d, linkMarkdown: true }));
     pezzi.push(compito);
     const fatti = el(d, 'div', 'talos-agente__fatti');
     if (dati.modello) fatti.appendChild(riga(tr('agenti.agent.model'), String(dati.modello)));
@@ -175,7 +179,7 @@ export function creaDettaglioAgente(figlia, { document: documento, sezione: sezi
     if (fatti.childElementCount > 0) pezzi.push(fatti);
     const collisioni = Array.isArray(dati.collisioni) ? dati.collisioni : [];
     if (collisioni.length > 0) {
-      pezzi.push(el(d, 'div', 'talos-callout talos-agente__avviso', tn('agenti.agent.collisionOne', 'agenti.agent.collisionMany', collisioni.length, { elenco: collisioni.map((c) => c.percorso).join(', ') })));
+      pezzi.push(el(d, 'div', 'talos-callout talos-agente__avviso', tn('agenti.agent.collisionOne', 'agenti.agent.collisionMany', collisioni.length, { elenco: collisioni.map((c) => senzaInganni(c.percorso)).join(', ') })));
     }
     /* C3 tappa 4 (owner 09/10, «fatti strutturati + nota»): la figlia poteva modificare e non ha scritto niente. L'esito resta
        «Concluso» (in testata); qui lo si dice, perché la persona controlli se una modifica serviva. */
@@ -234,8 +238,8 @@ export function creaDettaglioAgente(figlia, { document: documento, sezione: sezi
   }
 
   function disegnaTestata() {
-    nome.textContent = dati.taskCorto || dati.task || tr('agenti.agent.defaultName');
-    nome.title = dati.task || '';
+    nome.textContent = nomeDellAgente(dati) || tr('agenti.agent.defaultName'); // L3-17: il nome dell'agente, una funzione sola
+    nome.title = senzaInganniSuPiuRighe(dati.task || dati.taskCorto || ''); // L3-17: `task` manca quando è uguale a `taskCorto`
     ruolo.textContent = tr('agenti.agent.subAgentOfSession');
     const s = statoAgente(dati);
     stato.textContent = s.testo;

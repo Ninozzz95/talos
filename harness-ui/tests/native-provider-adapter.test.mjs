@@ -110,3 +110,19 @@ test('K4B-NATIVE-01 — risposta incompleta: la frase inglese coincide con la vo
   assert.equal(voce('it', errore.chiave, errore.params), 'Risposta gemini incompleta (length). Riprova: la cronologia precedente è conservata.');
   assert.equal(voce('it', 'server.nativeAdapter.incompleteNamed', { label: 'MiniMax' }), 'Risposta di MiniMax incompleta. Riprova: la cronologia precedente è conservata.');
 });
+
+/*
+ * K2 (S2, stress test della CLI 0.6.7, 16/10/2026): un `tool-call` che l'SDK segna `invalid` (attrezzo inesistente, argomenti fuori
+ * schema) prima si LANCIAVA e il kernel lo leggeva come connessione caduta. Ora arriva al dispatch come una chiamata qualsiasi, che la
+ * rifiuta col perché. AL CONTRARIO: una chiamata valida resta identica (NATIVE-03).
+ */
+test('K2-NATIVE-01 — an unknown tool and out-of-schema arguments reach the kernel as calls, not as a dropped stream', async () => {
+  for (const [nome, args] of [['non_esiste', { x: 1 }], ['leggi', {}]]) {
+    const frame = { ...geminiReply, candidates: [{ content: { role: 'model', parts: [{ functionCall: { name: nome, args } }] }, finishReason: 'STOP' }] };
+    const result = await native('gemini', { messages, tools, stream: true }, async () => new Response(`data: ${JSON.stringify(frame)}\n\n`, { headers: { 'content-type': 'text/event-stream' } }));
+    const parsed = await consumaFlussoSSE(result);
+    assert.equal(parsed.scelta.tool_calls.length, 1, nome);
+    assert.equal(parsed.scelta.tool_calls[0].function.name, nome);
+    assert.deepEqual(JSON.parse(parsed.scelta.tool_calls[0].function.arguments), args, nome);
+  }
+});

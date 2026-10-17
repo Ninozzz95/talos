@@ -30,7 +30,8 @@ test('NATIVE-CATALOG-02 cataloghi Anthropic/OpenAI e paginazione guasta restano 
   const calls = [];
   const probe = createProviderProbe({
     leggiChiave: () => 'catalog-test-secret',
-    leggiRuntime: () => ({ endpoint: 'https://provider.test/v1', timeoutSeconds: 5 }),
+    // 16/10/2026: il filtro dei nomi di OpenAI vale sul SUO catalogo (vedi PROBE-OPENAI-ENDPOINT-SCELTO per l'indirizzo della persona)
+    leggiRuntime: (p) => ({ endpoint: p === 'openai' ? 'https://api.openai.com/v1' : 'https://provider.test/v1', timeoutSeconds: 5 }),
     fetchImpl: async (url, init) => {
       calls.push({ url: new URL(url), headers: new Headers(init.headers) });
       if (init.headers.Authorization) return Response.json({ data: [{id:'gpt-5.4'}, {id:'gpt-4o-audio-preview'}, {id:'gpt-3.5-turbo-instruct'}] });
@@ -51,6 +52,26 @@ test('NATIVE-CATALOG-02 cataloghi Anthropic/OpenAI e paginazione guasta restano 
   await assert.rejects(broken.elencaModelli('anthropic'), {code:'CATALOG_UPSTREAM_ERROR'});
   const missing = createProviderProbe({ leggiChiave:()=>null, leggiRuntime:()=>({}), fetchImpl:()=>assert.fail('Non chiamare senza credenziale') });
   await assert.rejects(missing.elencaModelli('gemini'), {code:'PROVIDER_KEY_MISSING'});
+});
+
+test('PROBE-OPENAI-ENDPOINT-SCELTO — su un indirizzo scelto dalla persona (LiteLLM, vLLM, LM Studio) valgono tutti gli id dei modelli che conversano; sul catalogo di OpenAI resta il filtro dei nomi', async () => {
+  // 16/10/2026, dalla CLI (stress test 0.6.6): `openai:mock-model` spariva da /model ed era rifiutato a un sotto-agente
+  const righe = { data: [{ id: 'mock-model' }, { id: 'qwen3-coder' }, { id: 'gpt-5.4' }, { id: 'gpt-4o-audio-preview' }] };
+  const conIndirizzo = (endpoint) => createProviderProbe({ leggiChiave: () => 'k', leggiRuntime: () => ({ endpoint, timeoutSeconds: 5 }), fetchImpl: async () => Response.json(righe) });
+  for (const endpoint of ['http://127.0.0.1:4000/v1', 'https://litellm.example.test/v1', 'https://api.openai.com.evil.test/v1']) {
+    const r = await conIndirizzo(endpoint).elencaModelli('openai');
+    assert.deepEqual(r.modelli.map((m) => m.id), ['openai:mock-model', 'openai:qwen3-coder', 'openai:gpt-5.4'], endpoint); // owner 16/10: chi non conversa (audio) resta fuori
+  }
+  // owner 16/10 (FILTRO-REV-02): su un indirizzo scelto si tolgono SOLO i modelli che non conversano, e i nomi «gpt-» restano
+  const proxy = createProviderProbe({ leggiChiave: () => 'k', leggiRuntime: () => ({ endpoint: 'https://litellm.example.test/v1', timeoutSeconds: 5 }),
+    fetchImpl: async () => Response.json({ data: ['gpt-5.4', 'qwen3-coder', 'tts-1', 'gpt-4o-mini-TTS', 'text-embedding-3-small', 'dall-e-3', 'whisper-1', 'gpt-4o-audio-preview', 'gpt-realtime', 'gpt-4o-transcribe', 'gpt-image-1', 'omni-moderation-latest', 'babbage-002', 'davinci-002', 'Qwen2.5-7B-Instruct'].map((id) => ({ id })) }) });
+  // AL CONTRARIO: un modello aperto «-Instruct» conversa e resta
+  assert.deepEqual((await proxy.elencaModelli('openai')).modelli.map((m) => m.id), ['openai:gpt-5.4', 'openai:qwen3-coder', 'openai:Qwen2.5-7B-Instruct']);
+  // AL CONTRARIO: sul catalogo di OpenAI, scritto in ogni forma, il filtro resta
+  for (const endpoint of ['https://api.openai.com/v1', 'https://api.openai.com/v1/', 'https://API.OpenAI.com/v1', 'https://api.openai.com./v1']) { // senza indirizzo il catalogo si ferma prima («provider endpoint is missing»)
+    const r = await conIndirizzo(endpoint).elencaModelli('openai');
+    assert.deepEqual(r.modelli.map((m) => m.id), ['openai:gpt-5.4'], String(endpoint));
+  }
 });
 
 /*

@@ -30,3 +30,29 @@ test('G02-4 a cancelled tool call is marked cancelled; a normal result is not', 
   assert.equal(results.c1.content, 'Stopped before it ran.');
   assert.equal('outcome' in results.c2, false);
 });
+
+/*
+ * 2026-10-12, owner (photo: 13 reads shown as "failed"): an identical copy the kernel discarded did not fail, it never ran.
+ * The kernel says why with `causa: 'copia'` on 'tool-annullato'; the event carries the additive `duplicate: true`, and the
+ * chat draws a quiet "duplicate, skipped" row instead of a failure. Other cancellations stay exactly as they were.
+ */
+test('DUP-01 toolCallResult carries duplicate only when it is exactly true', () => {
+  assert.equal(toolCallResult({messageId: 'm', toolCallId: 'c', content: 'x', duplicate: true}).duplicate, true);
+  for (const other of [undefined, false, 'true', 1]) assert.equal('duplicate' in toolCallResult({messageId: 'm', toolCallId: 'c', content: 'x', duplicate: other}), false, String(other));
+  assert.equal(eventoPerEsitoTool({messageId: 'm', toolCallId: 'c', content: 'x', duplicate: true}).duplicate, true, 'the helper forwards it');
+});
+
+test('DUP-02 a discarded identical copy is marked duplicate; a cancellation for another reason is not', async () => {
+  const events = [];
+  await avviaSessione({cartella: tmpdir(), task: {consegna: 'x'}, modello: 'm', chiave: 'k', comandoProva: 'npm test', onEvento: (e) => events.push(e),
+    talosLavoraFn: async ({onDelta}) => {
+      onDelta({giro: 0, tipo: 'tool-annullato', indice: 2, toolCallId: 'c3', nome: 'leggi', motivo: 'Discarded copy.', causa: 'copia'});
+      onDelta({giro: 0, tipo: 'tool-annullato', indice: 0, toolCallId: 'c1', nome: 'scrivi', motivo: 'Stopped before it ran.'});
+      return {detto: 'ok', comeFinita: 'concluso', messaggiFinali: []};
+    }});
+  const results = Object.fromEntries(events.filter((e) => e.type === 'ToolCallResult').map((e) => [e.toolCallId, e]));
+  assert.equal(results.c3.duplicate, true);
+  assert.equal(results.c3.outcome, 'cancelled', 'still a cancellation for whoever reads only that');
+  assert.equal(results.c3.isError, true, 'and the text-based readers (delegation evidence) see what they saw before');
+  assert.equal('duplicate' in results.c1, false);
+});

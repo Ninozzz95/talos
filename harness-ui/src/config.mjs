@@ -608,6 +608,12 @@ export function loadConfig(
     // ⭐ 03/9, R-01: true solo se l'owner ha scritto qualcosa in
     // TALOS_HARNESS_UI_PORT — vedi trovaPortaLibera() sopra.
     portaEsplicita: typeof env.TALOS_HARNESS_UI_PORT === 'string' && env.TALOS_HARNESS_UI_PORT !== '',
+    /* /goal (15/10/2026): gli attrezzi dell'obiettivo al modello — accesi di serie, perché l'interfaccia desktop ha la fascia e la carta;
+       chi ospita il server senza quella superficie (il telefono, se la sua interfaccia non la mostra) li spegne con «0», «false» o «off». */
+    obiettiviNellaChat: !/^(0|false|off|no)$/iu.test(String(env.TALOS_HARNESS_UI_GOALS ?? '').trim()),
+    /* ⭐ 15/10/2026 (owner: «i minuti di compattazione non devono esistere»): la compattazione istantanea — il riassunto si prepara in
+       sottofondo dall'80% della soglia e alla soglia si scambia senza attesa. Accesa di serie sul desktop; «0», «false» o «off» la spengono. */
+    compattazioneIstantanea: !/^(0|false|off|no)$/iu.test(String(env.TALOS_HARNESS_UI_INSTANT_COMPACTION ?? '').trim()),
     publicDir,
     modello: parseModello(env.TALOS_HARNESS_UI_MODEL),
     // Come lo stato dell'arte: in assenza di elenco esplicito la prima

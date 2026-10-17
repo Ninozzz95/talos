@@ -82,7 +82,9 @@ test.beforeEach(async ({ page }) => {
 });
 
 /** Le righe a schermo che il contratto delle preferenze NON elenca, per nome (PARITA-03, PARITA-07). */
-const FUORI_CONTRATTO = ['workspaceRestore', 'motoreContesto'];
+/* 13/10/2026 (bugfixer): `linkDove` — dove si aprono i link della chat (owner 12/10, `756ecdedd`): una riga della carta «Link dalla
+   chat», che scrive nella sua memoria (`siti-fidati.js`), non in `values[field.chiave]`. Fuori dal contratto come le altre due. */
+const FUORI_CONTRATTO = ['workspaceRestore', 'motoreContesto', 'linkDove'];
 
 test('PARITA-01 · i cinque gruppi del mockup, nell’ordine del mockup, con i suoi titoli', async ({ page }) => {
   await apriAspetto(page);

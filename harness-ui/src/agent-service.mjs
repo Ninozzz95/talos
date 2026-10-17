@@ -30,7 +30,8 @@ import { createToolOutputPreview } from './kernel/tool-output-preview.mjs';
 import { NOME_EVENTO_PROGRESSO_COMPATTAZIONE, creaContatoreRiassunto } from './kernel/compattazione-desktop.mjs'; // lane CLI, 03/10/2026: compaction.progress
 import { delegaLimitata } from './delegation-contract.mjs';
 import { join as joinPercorso, relative as percorsoRelativo, sep as separatorePercorso } from 'node:path';
-import { percorsoFileSfondo, registroDellAvvio } from './kernel/talosHarness.mjs'; // BUG-14: il file di output dei comandi in sfondo (solo il percorso, nessun ciclo); C1: ciò che l'esecutore dice al lancio
+import { motivoDaChiedere as motivoDelSegreto } from './path-policy.mjs';
+import { livelloLetto, percorsoFileSfondo, registroDellAvvio } from './kernel/talosHarness.mjs'; // BUG-14: il file di output dei comandi in sfondo (solo il percorso, nessun ciclo); C1: ciò che l'esecutore dice al lancio
 
 import { createOwnerRuntimeAdapter } from './runtime-owner-adapter.mjs';
 import { salvaArtefatto as salvaArtefattoReale } from './artifact-store.mjs';
@@ -146,6 +147,14 @@ const chiamaConRitenta = (options) => OWNER_RUNTIME.chiamaConRitenta(options);
  */
 export function leggiPaginaPerLaVista(url) {
   return OWNER_RUNTIME.leggiPagina(url);
+}
+/* /goal G3 (14/10/2026): le prove del contratto girano con la STESSA esecuzione dell'attrezzo shell e passano dallo STESSO cancello
+   dei permessi, quelli del motore della sessione (mai una seconda implementazione che diverge in silenzio). */
+export function eseguiComandoDellaProva(...args) {
+  return OWNER_RUNTIME.eseguiComandoSandboxato(...args);
+}
+export function permessoDelMotore(...args) {
+  return OWNER_RUNTIME.verificaPermessoScrittura(...args);
 }
 /* ⭐ 06/10/2026 — la ricarica post-compact (opzione A, ricerca 5×5×5×5 §6.4): il TERZO argomento
  * (le fonti dichiarate per il blocco di fatti) attraversa anche questa maglia. Additivo: chi chiama
@@ -285,9 +294,19 @@ export async function avviaSessione({
    */
   cartellaDatiProgettoFn = null,
   onEvento, segnaleStop, messaggiIniziali, reasoning, contextHooks, onStoriaIniziale, ricostruisciContestoIniziale = false, mobile = false,
+  /* ⛔ IST-REV-00/00b (bugfixer, 15/10/2026 notte): il registro mette questi campi (session-registry.mjs, `conCompattazione`) e qui
+     in mezzo l'elenco esplicito li perdeva — lo stesso «cavo che mancava» di BUG-5 per `finestraToken`. Dal vivo sul 4176:
+     l'istantanea mai accesa, e dal 24/09 (5ca876475) ogni giro dopo una compattazione ripartiva dalla storia INTERA
+     (giro 2 a 30.273 token, ricompattato in primo piano per 13,6 s). Passati al motore solo se ci sono: la CLI non li passa. */
+  recordCompattazioneIniziale = null, compattazioneIstantanea = false, compattazionePronta = null, compattazioneInArrivo = null,
   /* C3 tappa 4 (owner 09/10): la PAUSA di una delega — l'attrezzo in volo finisce, il giro dopo non parte. Passata al motore
      solo se c'è (la CLI non la passa e non vede niente di diverso). */
   segnalePausa = null,
+  /* L3-6 (13/10/2026) — C1, la scheda Contesto: `({ messages, tools, model }) => void`, il corpo che parte DAVVERO verso il
+     fornitore. Il registro lo passava dal 10/10 e l'adattatore lo chiama se lo trova nell'input del motore, ma QUI in mezzo si
+     perdeva: in produzione «l'ultima richiesta» non arrivava mai. Passato così com'è, solo se c'è (chi non lo passa non vede
+     nessuna chiave nuova nell'input del motore). */
+  onRichiestaSpedita = null,
   /* Stop per riga (owner 02/10/2026): `({ toolCallId, ferma }) => sgancia`, passata così com'è al motore. */
   registraComandoFermabile = null,
   /* A6-bis (08/10/2026): `({ toolCallId, codice, segnale }) => void`, l'uscita vera di un comando già sfondato; passata al motore. */
@@ -313,6 +332,15 @@ export async function avviaSessione({
    * dichiara, e la cronologia lo mostra sotto la bolla utente.
    */
   permessi = null,
+  /* richiesta CLI 15/10/2026: come l'OSPITE vuole che il modello legga il permesso del giro, se diverso dall'etichetta di `permessi`
+     (la CLI manda sempre «On request» e applica il suo modo da sé: il modello in accesso pieno leggeva «On request» e rinunciava).
+     Lo leggono SOLO la riga «Turn permission» del preambolo e la sua chiave; `RunStarted.contesto` e `livelloAccesso` restano su
+     `permessi`. Codex fa lo stesso: dice al modello la politica DAVVERO in vigore (`prompts/src/permissions_instructions.rs:88`,
+     «Developer fragment describing the active sandbox and approval policy»). Assente ⇒ identico a prima. */
+  permessoPerIlModello = null,
+  /* richiesta CLI 16/10/2026 notte: `() => boolean`, il Full access che l'ospite applica da sé (la CLI manda «On request» al kernel).
+     Lo guarda `onDocumento` (un documento su un segreto). Assente ⇒ vale solo `livelloAccesso`. */
+  accessoPienoDellOspite = null,
   modalitaOperativa = 'normale',
   strumentiEstesi, ricercaWeb,
   // ⭐ 04/9, R-03 — trasporto iniettato per la ricerca SENZA chiave (DuckDuckGo, `duckduckgo-search.mjs`): inoltrato al kernel com'è (parametro `richiediRicercaFn` di talosLavora), undefined per le fonti con chiave.
@@ -388,6 +416,13 @@ export async function avviaSessione({
   chiediDomandaFn,
   // CLI 6b (02/10/2026): inoltrato senza logica, come `chiediDomandaFn`.
   figliaChiedeAllaPersona,
+  // owner 14/10/2026 («Se lo chiedi tu, vale»): interruttore del confine dei dati, inoltrato senza logica (confine-dati.mjs).
+  fileAdottatiDallaPersona,
+  // owner 15/10/2026: il testo scritto dalla persona in questo giro, dal registro; inoltrato senza logica (talosHarness.mjs).
+  testoDellaPersona,
+  /* /goal G5 (owner 15/10/2026, «8 giri»): il tetto dei giri di QUESTA sessione — oggi solo il confutatore dell'obiettivo. Inoltrato
+     senza logica al parametro del kernel che lo regge (`_giriMassimiInterno`); assente ⇒ il kernel come sempre. */
+  giriMassimi = null,
   // 24/09/2026, decisioni owner 36-39: il canale della scelta sul piano, inoltrato SENZA logica come `chiediDomandaFn`.
   presentaPianoFn,
   agentRole, askParentFn, answerChildQuestionFn, askChildFn, answerParentQuestionFn, onWorkflowPlanPropose, listChildrenFn, stopChildFn,
@@ -437,6 +472,8 @@ export async function avviaSessione({
   onAutomazioneFn,
   /* 0.1.25 (owner 09/10/2026): il canale degli attrezzi `provider_*` (fornitori esclusi), inoltrato com'è (lo lega il registro). */
   onFornitoriFn,
+  // /goal G6 (owner 15/10/2026): la seconda porta dell'obiettivo, inoltrata com'è (src/obiettivo/per-il-modello.mjs)
+  onObiettivoFn,
   /*
    * ⛔⛔ Rilievo 3 (piano 0.1.19 §1.7, 28/09) — il canale di `request_plan_mode`: inoltrato così
    *   com'è (il registro lo costruisce: accoda il cambio del modo, la patch va a fine giro).
@@ -729,7 +766,7 @@ export async function avviaSessione({
        *   che la persona vede nella pillola. Due nomi diversi per lo stesso permesso — uno a
        *   schermo e uno nel prompt — sarebbero due verita' da tenere allineate a mano.
        */
-      permesso: permessi ?? null,
+      permesso: rigaDelPermessoPerIlModello(permessoPerIlModello) ?? permessi ?? null,
       modello: modello ?? null,
       piattaforma: process.platform,
     });
@@ -1141,7 +1178,7 @@ export async function avviaSessione({
      * è mai partito, non un buco.
      */
     if (evento.tipo === 'tool-annullato') {
-      onEvento(eventoPerEsitoTool({ messageId: randomUUID(), toolCallId: evento.toolCallId, content: evento.motivo, isError: true, outcome: 'cancelled' }));
+      onEvento(eventoPerEsitoTool({ messageId: randomUUID(), toolCallId: evento.toolCallId, content: evento.motivo, isError: true, outcome: 'cancelled', ...(evento.causa === 'copia' ? { duplicate: true } : {}) }));
       return;
     }
     /*
@@ -1289,8 +1326,16 @@ export async function avviaSessione({
     if (evento.tipo === 'compattazione-fine') {
       const record = evento.compattato ? evento.record : null;
       onEvento({ type: 'CUSTOM', name: 'talos.compattazione', value: record
-        ? { fase: 'fine', giro: evento.giro, compattato: true, tokenPrima: record.tokenPrima ?? null, tokenDopo: record.tokenDopo ?? null, misura: record.misura ?? null, coveredThrough: record.coveredThrough, at: record.at, modello: record.modello ?? null, motivo: motivoCompattazionePerGiro.get(evento.giro) ?? null }
-        : { fase: 'fine', giro: evento.giro, compattato: false, motivo: evento.motivo ?? null, ...(evento.interrottaIn ? { interrottaIn: evento.interrottaIn } : {}) } });
+        ? { fase: 'fine', giro: evento.giro, compattato: true, tokenPrima: record.tokenPrima ?? null, tokenDopo: record.tokenDopo ?? null, misura: record.misura ?? null, coveredThrough: record.coveredThrough, at: record.at, modello: record.modello ?? null,
+          /* 15/10/2026: lo scambio istantaneo non ha un `compattazione-inizio` — il motivo lo porta lui, e il giornale dice che è stato
+             istantaneo (nessuna attesa). Solo se lo è: il contratto delle compattazioni di prima non cambia. */
+          motivo: motivoCompattazionePerGiro.get(evento.giro) ?? (evento.istantanea === true ? evento.motivo ?? null : null),
+          ...(evento.istantanea === true ? { istantanea: true } : {}) }
+        : { fase: 'fine', giro: evento.giro, compattato: false, motivo: evento.motivo ?? null, ...(evento.interrottaIn ? { interrottaIn: evento.interrottaIn } : {}),
+          /* R-05 fino in fondo (12/10/2026): il codice e il «dove» (posizioni e ruolo, mai contenuto) arrivano al giornale e al
+             trascritto. Nel trascritto dell'owner (36289618) la riga del ripiego era muta sulla causa. Solo se ci sono. */
+          ...(typeof evento.codice === 'string' ? { codice: evento.codice } : {}),
+          ...(evento.dettaglio && typeof evento.dettaglio === 'object' && !Array.isArray(evento.dettaglio) ? { dettaglio: evento.dettaglio } : {}) } });
       motivoCompattazionePerGiro.delete(evento.giro);
     }
     /*
@@ -1298,6 +1343,17 @@ export async function avviaSessione({
      *   contato dal vivo, sostituzione). È AVANZAMENTO, non storia: il registro lo consegna a chi è connesso adesso e non
      *   lo scrive (`consegnaEvento`, elenco degli effimeri), come l'uscita di un comando.
      */
+    /*
+     * 16/10/2026 — la compattazione istantanea prepara i riassunti in sottofondo (`compattazione-preparata`: `inizio`, `pronta`,
+     *   `scartata` col perché, o `compattato: false` col motivo del fallimento). Sono riassunti PAGATI: il giornale li tiene, durevoli,
+     *   così il Doctor e il banco sanno quanti ne sono stati fatti e perché non sono stati usati. L'interfaccia non disegna i CUSTOM che
+     *   non conosce: la chat non cambia.
+     */
+    if (evento.tipo === 'compattazione-preparata') {
+      const { tipo: _tipo, ...valore } = evento;
+      onEvento({ type: 'CUSTOM', name: 'talos.compattazione-preparata', value: valore }, { durable: true });
+      return;
+    }
     if (evento.tipo === 'compattazione-progresso') {
       const { tipo: _tipo, ...valore } = evento;
       onEvento({ type: 'CUSTOM', name: NOME_EVENTO_PROGRESSO_COMPATTAZIONE, value: valore });
@@ -1510,6 +1566,26 @@ export async function avviaSessione({
       return {
         ok: false,
         esito: `The file was written but failed its check (${controllo.detail}), so it was discarded. Tell the user, and try a simpler structure.`,
+      };
+    }
+
+    /*
+     * ⛔ Revisione del bugfixer, 16/10/2026 notte (SEG-DOC-REV-01): `document_create` scriveva un segreto del progetto senza domanda —
+     *   `{format:"json", title:"credentials", mode:"append"}` accodava a `credentials.json` con 0 carte, mentre `scrivi` sullo stesso
+     *   file chiede (owner 16/10: «Chiedi, ma non in Full access»). Il cancello del kernel vede solo `{tipo, formato}`: il nome finale
+     *   si conosce QUI. ⇒ Un documento che finirebbe su un file che può contenere chiavi o password non si scrive da qui: il modello
+     *   usa `scrivi` sullo stesso percorso, che chiede alla persona con tutto il resto (il «per la sessione» separato, nessuno davanti,
+     *   le credenziali della casa mai). Una domanda sola, sempre la stessa. In Full access si scrive, come ogni altra scrittura.
+     */
+    const relativoDelDocumento = sottocartella ? `${sottocartella}/${documento.fileName}` : documento.fileName;
+    const accessoPienoAdesso = livelloLetto(livelloAccesso) === 'accesso-pieno'
+      || (typeof accessoPienoDellOspite === 'function' && accessoPienoDellOspite() === true); // la CLI: il suo Full access (16/10 notte)
+    if (!accessoPienoAdesso
+      && motivoDelSegreto({ tipo: 'scrivi', percorso: relativoDelDocumento, cartella: cartellaPerCreare })) {
+      return {
+        ok: false,
+        esito: `"${relativoDelDocumento}" may hold keys or passwords, so document_create does not write it and nothing was written. `
+          + 'Use scrivi with the same path instead: it asks the person first.',
       };
     }
 
@@ -2186,6 +2262,11 @@ export async function avviaSessione({
       cartella, task, modello, chiave, comandoProva, segnaleStop, messaggiIniziali, mobile,
       ...(segnalePausa ? { segnalePausa } : {}), // C3 tappa 4: la pausa di una delega
       finestraToken, /* ⛔ BUG-5 (05/10/2026): inoltrata al kernel — la soglia diventa 0,75 della finestra VERA del modello */
+      ...(recordCompattazioneIniziale ? { recordCompattazioneIniziale } : {}), // IST-REV-00b: il turno parte già proiettato
+      ...(compattazioneIstantanea === true ? { compattazioneIstantanea: true } : {}), // IST-REV-00: la compattazione istantanea
+      ...(compattazionePronta ? { compattazionePronta } : {}),
+      ...(compattazioneInArrivo ? { compattazioneInArrivo } : {}),
+      ...(typeof onRichiestaSpedita === 'function' ? { onRichiestaSpedita } : {}), // L3-6: la scheda Contesto
       ...(typeof registraComandoFermabile === 'function' ? { registraComandoFermabile } : {}),
       ...(typeof segnalaUscitaSfondo === 'function' ? { segnalaUscitaSfondo } : {}),
       ...(checkpointSessionId ? { checkpointSessionId, checkpointOperation } : {}),
@@ -2253,7 +2334,9 @@ export async function avviaSessione({
       // la cache della corsa e la finestra della pagina le costruisce `research-orchestrator.mjs`
       // («raccolta viva»). Assenti ⇒ il kernel si comporta esattamente come ieri.
       cacheWeb, onPaginaLetta,
-      livelloAccesso, modalitaOperativa, chiediApprovazioneFn, chiediDomandaFn, figliaChiedeAllaPersona, presentaPianoFn,
+      livelloAccesso, modalitaOperativa, chiediApprovazioneFn, chiediDomandaFn, figliaChiedeAllaPersona, fileAdottatiDallaPersona, presentaPianoFn,
+      ...(typeof testoDellaPersona === 'string' ? { testoDellaPersona } : {}),
+      ...(Number.isSafeInteger(giriMassimi) && giriMassimi > 0 ? { _giriMassimiInterno: giriMassimi } : {}), // /goal G5
       agentRole, askParentFn, answerChildQuestionFn, askChildFn, answerParentQuestionFn, onWorkflowPlanPropose, listChildrenFn, stopChildFn, pauseChildFn, resumeChildFn,
       modalitaOperativaCorrenteFn, figliViviAllAvvio, permessiCorrentiFn,
       hookFn: hookFnConPlugin, permessiPerAttrezzo, onDelega, coordinazioneFn, codaMessaggiFn,
@@ -2271,6 +2354,7 @@ export async function avviaSessione({
       onWorkflowFn, // F-012 (piano 0.1.19 §1.5): i tre attrezzi dei run, inoltrato com'è
       onAutomazioneFn, // automazioni a due porte (08/10/2026): inoltrato com'è
       onFornitoriFn, // 0.1.25: i fornitori esclusi, inoltrato com'è
+      onObiettivoFn, // /goal G6: l'obiettivo, inoltrato com'è
       onRichiestaPianoFn, // Rilievo 3 (§1.7): la richiesta del modo Piano, inoltrata com'è
       onRicercaLista, onRicercaAvvia, onRicercaLeggi, onRicercaRinomina,
       onRicercaPausa, onRicercaRiprendi, onRicercaAnnulla, onRicercaElimina,
@@ -2432,6 +2516,13 @@ export async function riassumiPerCompattazione({ modello, chiave, messaggi, maxO
   return { scelta: esito?.scelta ?? null, finishReason: esito?.finishReason ?? null, usage: esito?.usage ?? null };
 }
 
+/** Il permesso detto al modello dall'ospite: una riga sola, entro 200 caratteri; vuoto o non stringa ⇒ `null` (vale `permessi`). */
+export function rigaDelPermessoPerIlModello(valore) {
+  if (typeof valore !== 'string') return null;
+  const riga = valore.replace(/\s+/gu, ' ').trim();
+  return riga === '' ? null : [...riga].slice(0, 200).join('');
+}
+
 /**
  * ⭐⭐⭐⭐ L9 (12/09/2026) — UNA DOMANDA SOLA A UN MODELLO, senza attrezzi e senza giro.
  *
@@ -2461,13 +2552,16 @@ export async function riassumiPerCompattazione({ modello, chiave, messaggi, maxO
  * @param {string} input.prompt
  * @param {AbortSignal} [input.segnaleStop]
  * @param {typeof fetch} [input.fetchDiRete] — SOLO per test
+ * @param {(usage: object|null) => void} [input.onConsumo] — /goal G5d (owner 15/10/2026, «giudice e confutatore nel tetto»): chi deve
+ *   contare la spesa riceve l'`usage` del fornitore; un osservatore che lancia non cambia l'esito
  * @returns {Promise<string>}
  */
-export async function chiediAlModelloUnaVolta({ modello, chiave, prompt, segnaleStop, fetchDiRete = fetch }) {
-  const { scelta } = await chiamaConRitenta({
+export async function chiediAlModelloUnaVolta({ modello, chiave, prompt, segnaleStop, fetchDiRete = fetch, onConsumo }) {
+  const { scelta, usage } = await chiamaConRitenta({
     modello, chiave, messaggi: [{ role: 'user', content: String(prompt ?? '') }], attrezzi: [],
     fetchDiRete, ...(segnaleStop ? { segnaleStop } : {}),
   });
+  if (typeof onConsumo === 'function') { try { onConsumo(usage ?? null); } catch { /* osservatore isolato */ } }
   return String(scelta?.content ?? '').trim();
 }
 

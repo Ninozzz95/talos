@@ -100,7 +100,7 @@ export function creaRotteChatgpt({ accesso, catalogo = null, uso = null } = {}) 
     try {
       if (nome === 'stato') {
         const stato = accesso.stato();
-        return { stato: 200, dati: { ...stato, ultimoEsito, ...(uso && stato.collegato ? { usoTalos: uso.riepilogo() } : {}) } };
+        return { stato: 200, dati: { ...stato, ultimoEsito, ...(uso && stato.collegato ? { usoTalos: uso.riepilogo(), limiti: uso.limiti?.() ?? null } : {}) } };
       }
       if (nome === 'inizia') {
         if (corpo !== null && (typeof corpo !== 'object' || Array.isArray(corpo) || Object.keys(corpo).some((k) => k !== 'consenso') || ('consenso' in corpo && typeof corpo.consenso !== 'boolean'))) {
@@ -112,6 +112,9 @@ export function creaRotteChatgpt({ accesso, catalogo = null, uso = null } = {}) 
         const { indirizzo, scadeTraMs, esito } = await accesso.inizia({ consenso: corpo?.consenso === true });
         esito.then((e) => {
           if (mio !== tentativoCorrente) return;
+          /* 13/10/2026 (B1): un tentativo chiuso prima che il browser tornasse (scaduto, annullato) ora finisce con un esito
+             dichiarato invece di restare appeso. L'interfaccia continua a vedere ciò che vedeva: nessun esito pubblicato. */
+          if (e?.senzaRitorno === true) return;
           ultimoEsito = e;
           if (!e?.ok) return;
           catalogo?.dimentica();

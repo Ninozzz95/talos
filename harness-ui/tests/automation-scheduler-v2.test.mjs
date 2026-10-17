@@ -204,3 +204,70 @@ test('SCHED2-08 — esegui ora: anche da spenta, col contesto marcato come dato;
   assert.deepEqual(await scheduler.eseguiOra(v1.id), { ok: false, code: 'AUTOMATION_LEGACY' })
   assert.equal(await scheduler.eseguiOra('nessuna'), null)
 })
+
+/* Lo store vero è congelato: per far fallire UNA sua funzione lo scheduler riceve una copia con quella sola ridefinibile. */
+function scenaConNegozio(t, guasti) {
+  const cartella = mkdtempSync(join(tmpdir(), 'talos-sched-v2-'))
+  t.after(() => rimuoviCartellaDiProva(cartella))
+  const clock = () => new Date('2026-10-08T21:30:00.000Z')
+  const vero = createAutomationStore({ cartella, clock })
+  const store = { ...vero }
+  for (const [nome, fn] of Object.entries(guasti)) store[nome] = (...a) => fn(vero[nome], ...a)
+  const registro = registroFinto()
+  const scheduler = createAutomationScheduler({ store, sessionRegistry: registro, clock, onGiroFinito: () => {} })
+  return { store: vero, registro, scheduler }
+}
+
+test('SCHED2-APRI-01 (CLI, 15/10/2026, S3) — se il negozio non riesce ad APRIRE il giro dopo la partenza, la sessione si ferma e la voce non resta «in corso» per sempre', async (t) => {
+  let guasto = true
+  const { store, registro, scheduler } = scenaConNegozio(t, { apriGiro: (vero, ...a) => (guasto
+    ? Promise.reject(Object.assign(new Error('EIO: i/o error, read'), { code: 'AUTOMATION_STORE_READ_FAILED' })) : vero(...a)) })
+  const voce = await store.crea(v2({ pianificazione: { tipo: 'manuale' } }))
+  await assert.rejects(scheduler.eseguiOra(voce.id), /EIO/u, 'il guasto del negozio arriva a chi ha chiesto il giro')
+  assert.deepEqual(registro.fermate.map(([id]) => id), [registro.giri[0].sessionId], 'la sessione partita senza un giro registrato si ferma: nessuno la seguirebbe')
+  guasto = false
+  const diNuovo = await scheduler.eseguiOra(voce.id)
+  assert.equal(diNuovo.ok, true, `il giro dopo parte: niente AUTOMATION_RUN_IN_PROGRESS fantasma (${JSON.stringify(diNuovo)})`)
+})
+
+test('SCHED2-APRI-02 (CLI, 15/10/2026, S4) — se la fine di un giro FINITO non si riesce a scrivere, il ripiego dice «esito non salvato» e non mette il messaggio grezzo come riassunto', async (t) => {
+  let tentativi = 0
+  const { store, registro, scheduler } = scenaConNegozio(t, { chiudiGiro: (vero, ...a) => {
+    tentativi += 1
+    return tentativi === 1 ? Promise.reject(new Error('EPERM: operation not permitted, open C:/dati/automazioni/x.json')) : vero(...a)
+  } })
+  const voce = await store.crea(v2({ pianificazione: { tipo: 'manuale' } }))
+  await scheduler.eseguiOra(voce.id)
+  registro.giri[0].chiudi({ esito: 'succeeded', testoFinale: 'Tutto a posto.' })
+  await attendi(async () => (await store.giri(voce.id)).some((g) => g.finitaAlle), 'la riga di fine')
+  const fine = (await store.giri(voce.id)).find((g) => g.finitaAlle)
+  assert.equal(fine.motivo, 'fine-non-scritta')
+  assert.equal(fine.riassunto, null, 'mai il messaggio grezzo (con un percorso) come riassunto')
+  assert.equal(fine.daGuardare, true)
+})
+
+test('SCHED2-APRI-03 (cura di AUTO-APRI-REV-02) — un giro che si APRE azzera il raffreddamento: il guasto dopo riparte dal minuto, non dai 5', async (t) => {
+  const cartella = mkdtempSync(join(tmpdir(), 'talos-sched-v2-'))
+  t.after(() => rimuoviCartellaDiProva(cartella))
+  const orologio = { ora: new Date('2026-10-08T21:30:00.000Z') }
+  const clock = () => new Date(orologio.ora)
+  const vero = createAutomationStore({ cartella, clock })
+  let guasto = true
+  const store = { ...vero, apriGiro: (...a) => (guasto ? Promise.reject(Object.assign(new Error('EIO: i/o error, read'), { code: 'AUTOMATION_STORE_READ_FAILED' })) : vero.apriGiro(...a)) }
+  const registro = registroFinto()
+  const scheduler = createAutomationScheduler({ store, sessionRegistry: registro, clock, onGiroFinito: () => {} })
+  const voce = await vero.crea(v2())
+  orologio.ora = new Date('2026-10-08T22:00:05.000Z'); await scheduler.unTick() // guasto 1: attesa di 1 minuto
+  orologio.ora = new Date('2026-10-08T22:01:10.000Z'); await scheduler.unTick() // guasto 2: la prossima attesa sarebbe di 5 minuti
+  assert.equal(registro.giri.length, 2, 'premise: two failed tries')
+  guasto = false
+  orologio.ora = new Date('2026-10-08T22:01:20.000Z')
+  assert.equal((await scheduler.eseguiOra(voce.id)).ok, true, 'premise: the store opens again (Run now does not wait)')
+  registro.giri.at(-1).chiudi({ esito: 'succeeded', testoFinale: 'ok' })
+  await attendi(async () => !(await vero.leggi(voce.id))?.giroInCorso, 'the run closes')
+  guasto = true
+  const prima = registro.giri.length
+  orologio.ora = new Date('2026-10-08T22:31:30.000Z'); await scheduler.unTick() // dovuto di nuovo (22:31:20, dopo «Esegui ora»): guasto, attesa di NUOVO di 1 minuto
+  orologio.ora = new Date('2026-10-08T22:32:40.000Z'); await scheduler.unTick()
+  assert.equal(registro.giri.length, prima + 2, 'after a run that opened, the next failure waits one minute again, not five')
+})

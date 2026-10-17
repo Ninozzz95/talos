@@ -161,11 +161,15 @@ test('CTX-TRIAL-PROVIDER-USAGE-PREFERRED the provider prompt_tokens anchors the 
   assert.ok(secondo.measurement.inputTokens >= 782 && secondo.measurement.inputTokens < 900, `777 + 5 + stima del delta, misurato ${secondo.measurement.inputTokens}`);
   assert.equal(conteggi, 1, 'il contatore separato non si chiama quando il fornitore ha già contato');
   // Verso contrario: un prefisso diverso (l’ancora non combacia) ⇒ si conta di nuovo, niente numero preso a caso.
-  const terzo = await hooks.prepare({ messages: [{ role: 'user', content: 'Altra conversazione' }, risposta], tools: [] }).catch(error => error);
-  assert.equal(terzo.code, 'CTX_HISTORY_DIVERGED');
+  /* 12/10/2026, owner («Si ripara da solo»): la divergenza non ferma più la richiesta — l'archivio si riallinea — ma il numero
+     del fornitore non si prende lo stesso: il prefisso non combacia, e si conta di nuovo. */
+  const terzo = await hooks.prepare({ messages: [{ role: 'user', content: 'Altra conversazione' }, risposta], tools: [] });
+  assert.equal(terzo.riallineato?.primoDiverso, 0);
+  assert.notEqual(terzo.measurement.method, 'provider', 'un prefisso diverso non eredita il numero del fornitore');
+  assert.equal(conteggi, 2);
   const altro = await runtime.service.createKernelHooks({ sessionId: 'chat', runId: 'run-2' });
   await altro.captureProviderResponse({ response: risposta, giro: 0, usage: { prompt_tokens: 0 } });
   const quarto = await altro.prepare({ messages: [...messages, risposta, { role: 'user', content: 'Grazie' }, { role: 'assistant', content: 'Prego' }, { role: 'user', content: 'Ciao' }], tools: [] });
   assert.equal(quarto.measurement.method, 'provider', 'l’ancora buona resta valida finché il prefisso combacia');
-  assert.equal(conteggi, 1);
+  assert.equal(conteggi, 2, 'nessun conteggio in più oltre quello del prefisso diverso');
 });

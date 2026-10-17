@@ -35,7 +35,7 @@ const RADICE_FRONTEND = fileURLToPath(new URL('../frontend/tests/', import.meta.
 /** I file che NON adottano l'aiuto, e il perche'. Il valore e' il motivo, e viene letto. */
 const CLASSE_B = new Map([
   ['tests/agent-timeline.test.mjs', 'registro con writer asincroni e server HTTP: attendere le scritture prima della rimozione, senza retry che nascondano handle aperti'],
-  ['frontend/tests/browser/ripresa-replay.spec.mjs', 'browser e server HTTP reali con registro persistente: chiudere le connessioni e attendere tutti i writer prima della rimozione senza retry'],
+  ['frontend/tests/browser/deleghe-diagramma-registro-vero.spec.mjs', 'browser e server HTTP reali con registro persistente (erede di ripresa-replay.spec.mjs, tolta con la vista classica il 14/10/2026): chiudere le connessioni e attendere tutti i writer prima della rimozione senza retry'],
   ['tests/acp-agent.test.mjs', 'un agente ACP esterno vive nella cartella e va chiuso (`agente.chiudi()`)'],
   ['tests/context-embedding-runtime.test.mjs', 'il runtime degli embedding lancia un processo figlio (`runtime.close()`)'],
   ['tests/context-engine-server.test.mjs', 'il servizio del contesto e un processo figlio con un socket (`stop()`)'],
@@ -51,7 +51,7 @@ const CLASSE_B = new Map([
   ['tests/http-routes-sessions.test.mjs', 'server HTTP in ascolto sulla cartella della prova'],
   ['tests/kernel-loop-locale-e-stop.test.mjs', 'comandi veri e taskkill sull albero dei processi: un nipote vivo tiene la cartella'],
   ['tests/local-resume-diagnostics.test.mjs', 'il recorder mantiene una coda di scritture asincrone nella cartella: flush deve terminarle prima del teardown, senza ritentativi che nascondano writer ancora vivi'],
-  ['tests/local-resume-report.test.mjs', 'la prova avvia un processo CLI reale che legge nella cartella e un server HTTP: completamento del figlio e chiusura del server devono restare osservabili'],
+  ['tests/local-resume-report-desktop.test.mjs', 'la prova avvia un processo CLI reale che legge nella cartella e un server HTTP: completamento del figlio e chiusura del server devono restare osservabili'],
   ['tests/local-resume-sink.test.mjs', 'il sink possiede writer asincroni e una coda seriale nella cartella: dopo flush nessun handle deve restare vivo, la rimozione fallita resta un errore'],
   ['tests/plugin-session.test.mjs', 'il plugin esegue `node -e` col cwd DENTRO la cartella'],
   ['tests/provider-pi.test.mjs', 'server HTTP in ascolto sulla cartella della prova'],

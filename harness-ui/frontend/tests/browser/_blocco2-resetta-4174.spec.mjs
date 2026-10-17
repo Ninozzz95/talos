@@ -54,7 +54,7 @@ test.afterAll(() => {
 });
 
 for (const tema of ['dark', 'light']) {
-  test(`4174 (1440x900, ${tema}) — cinque «Resetta» su Impostazioni → Aspetto`, async ({ page }) => {
+  test(`@sonda-4174 4174 (1440x900, ${tema}) — cinque «Resetta» su Impostazioni → Aspetto`, async ({ page }) => {
     test.setTimeout(60000);
     await apriAspetto(page, { tema });
     const prima = await page.evaluate(MISURA);

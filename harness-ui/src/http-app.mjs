@@ -4,6 +4,10 @@ import { creaCampionatoreRisorse } from './risorse-processi.mjs'; // C1 (10/10/2
 import { pipeline } from 'node:stream/promises';
 import { prepareProcessOutputDownload } from './process-output-download.mjs';
 import { chiediMiglioramentoAlProvider } from './prompt-enhancer-provider.mjs';
+import { RAGIONAMENTO_PROPOSTA, USCITA_MASSIMA_PROPOSTA, messaggiPerLaProposta, pavimentoPerGuasto, propostaDallaRisposta } from './obiettivo/proposta.mjs'; // /goal G2c, 14/10
+import { normalizzaReasoningPerModello } from './runtime-owner-adapter.mjs'; // /goal G2c: lo stesso clamp sul catalogo dei giri
+import { contestoDelProgetto as contestoDelProgettoReale } from './contesto-del-progetto.mjs'; // /goal G2c: il preambolo che vede l'agente
+import { creaFiltroGitignore as creaFiltroGitignoreReale } from './gitignore-elenco.mjs';
 import { comprimiDiffPerMessaggio, promptMessaggioCommit, pulisciMessaggioGenerato } from './messaggio-commit.mjs'; // F6-1 ✨, 26/09
 import { CARTELLA_ASSISTENZA_PREDEFINITA, MAX_DOMANDA_ASSISTENZA, cercaAssistenza } from './assistenza.mjs';
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'; // 08/9, BH-06: il nonce CSP del documento, nuovo a ogni risposta; F3 (24/09): il gettone di spegnimento a tempo costante
@@ -247,6 +251,8 @@ const API_ERROR_CODES = new Set([
   /* F3-51c (25/09/2026): Avvia e i controlli del run. */
   'WORKFLOW_RUNTIME_NOT_READY', 'WORKFLOW_RUN_STATE_CONFLICT', 'WORKFLOW_DEFINITION_NOT_APPROVED', 'WORKFLOW_START_UNSUPPORTED',
   'WORKFLOW_COMMAND_ORIGIN_FORBIDDEN',
+  /* /goal G1 (14/10/2026): l'obiettivo della conversazione. */
+  'GOAL_TEXT_INVALID', 'GOAL_STATE_CONFLICT', 'GOAL_NOT_ALLOWED', 'GOAL_CONTRACT_INVALID', 'GOAL_CONTRACT_NEEDS_CONFIRMATION',
   /* F3-33b (25/09/2026): «Modifica» i tetti (una versione nuova) e la v1 superata dall'approvazione della v2. */
   'WORKFLOW_REVISION_INVALID', 'WORKFLOW_REVISION_EMPTY', 'WORKFLOW_VERSION_NOT_LATEST', 'WORKFLOW_ALREADY_STARTED',
   'WORKFLOW_VERSION_SUPERSEDED', 'WORKFLOW_DEFINITION_INVALID',
@@ -336,7 +342,7 @@ const API_ERROR_CODES = new Set([
      quelli del piano durante un giro (limite d'uso, piano non ammesso, richiesta non ammessa…). Ognuno ha stato e frase qui sotto. */
   'CHATGPT_NON_DISPONIBILE', 'CHATGPT_NON_COLLEGATO', 'CHATGPT_PIANO_NON_ABILITATO', 'CHATGPT_ACCESSO_SCADUTO',
   'CHATGPT_ACCESSO_NON_VALIDO', 'CHATGPT_RETE', 'CHATGPT_RINNOVO_FALLITO', 'CHATGPT_ELENCO_NON_LETTO',
-  'CHATGPT_RICHIESTA_NON_VALIDA', 'CHATGPT_CUSTODIA_FALLITA', 'CHATGPT_ERRORE', 'CHATGPT_LIMITE_DEL_PIANO',
+  'CHATGPT_RICHIESTA_NON_VALIDA', 'CHATGPT_CUSTODIA_FALLITA', 'CHATGPT_USCITA_INCOMPLETA', 'CHATGPT_ERRORE', 'CHATGPT_LIMITE_DEL_PIANO',
   'CHATGPT_PIANO_NON_AMMESSO', 'CHATGPT_RICHIESTA_NON_AMMESSA', 'CHATGPT_SERVIZIO_NON_DISPONIBILE',
 ]);
 
@@ -391,6 +397,17 @@ const STATUS_BY_CODE = Object.freeze({
   TASK_CATALOG_UNAVAILABLE: 503,
   /** ⭐ 409 Conflict: la sessione origine esiste ma non è nello stato giusto per un fork (ancora in corso, o senza storia). */
   SESSION_NOT_READY: 409,
+  /* /goal G1 (14/10/2026): il testo non va (400, col suo codice: così la frase precisa arriva alla persona, vedi
+     `MESSAGGIO_GIA_PER_LA_PERSONA`); l'obiettivo c'è ma non è nello stato giusto per il gesto (409, come
+     WORKFLOW_RUN_STATE_CONFLICT); oppure questa conversazione non può averne uno (422: la richiesta è ben formata, è il
+     soggetto che non va). */
+  GOAL_TEXT_INVALID: 400,
+  GOAL_STATE_CONFLICT: 409,
+  GOAL_NOT_ALLOWED: 422,
+  /* /goal G2: un criterio del contratto non è in forma (422, come WORKFLOW_DEFINITION_INVALID); togliere o cambiare un criterio
+     già concordato senza la conferma esplicita (409: la richiesta è giusta, manca il sì di chi ha davanti che cosa cambia). */
+  GOAL_CONTRACT_INVALID: 422,
+  GOAL_CONTRACT_NEEDS_CONFIRMATION: 409,
   /*
    * ⭐⭐ 02/9 — due COLLISIONI, non due guasti: un runtime già acceso e un
    * modello già presente. Entrambe rispondevano 500 INTERNAL_ERROR — «si è
@@ -719,6 +736,7 @@ const STATUS_BY_CODE = Object.freeze({
   CHATGPT_ELENCO_NON_LETTO: 502,
   CHATGPT_RICHIESTA_NON_VALIDA: 400,
   CHATGPT_CUSTODIA_FALLITA: 500,
+  CHATGPT_USCITA_INCOMPLETA: 500,
   CHATGPT_ERRORE: 502,
   CHATGPT_LIMITE_DEL_PIANO: 429,
   CHATGPT_PIANO_NON_AMMESSO: 403,
@@ -950,6 +968,7 @@ export const MESSAGE_BY_CODE = Object.freeze({
   CHATGPT_ELENCO_NON_LETTO: 'I could not read the models of your ChatGPT plan: try again shortly',
   CHATGPT_RICHIESTA_NON_VALIDA: 'The ChatGPT sign-in request is not valid',
   CHATGPT_CUSTODIA_FALLITA: 'The ChatGPT sign-in worked, but the credentials could not be stored safely: open Doctor',
+  CHATGPT_USCITA_INCOMPLETA: 'Signed out of ChatGPT here, but the system keychain refused to remove the credentials: open Doctor',
   CHATGPT_ERRORE: 'The request to the ChatGPT plan did not complete',
   CHATGPT_LIMITE_DEL_PIANO: 'The usage limit of your ChatGPT plan was reached: check ChatGPT Settings → Usage',
   CHATGPT_PIANO_NON_AMMESSO: 'Using a ChatGPT plan in other apps is not available for this account: ChatGPT Plus or Pro is required',
@@ -1979,6 +1998,7 @@ const ROTTE_API = Object.freeze([
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/children$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/agent-timeline$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/terminals$/, metodi: ['GET', 'POST'] },
+  { schema: /^\/api\/v1\/terminals$/, metodi: ['GET', 'POST'] }, // 16/10/2026: i terminali senza sessione, con l'id del server
   { schema: /^\/api\/v1\/search-source(?:\/(key|key\/remove|test))?$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/providers\/([^/]+)\/test$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/providers\/([^/]+)\/(key|keys)(?:\/(remove))?$/, metodi: ['POST'] },
@@ -2047,6 +2067,8 @@ const ROTTE_API = Object.freeze([
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/queue$/, metodi: ['GET', 'POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/queue\/annulla$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/queue\/invia$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/goal$/, metodi: ['GET', 'POST'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/goal\/(?:pausa|riprendi|togli|contratto|criteri|proposta|verifica)$/, metodi: ['POST'] }, // G3: verifica
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/hooks\/([^/]+)\/trust$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/tool-forge\/([^/]+)\/enable$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/mcp\/([^/]+)\/trust$/, metodi: ['POST'] },
@@ -2338,7 +2360,9 @@ function requireHuggingFaceDownloadBody(body) {
 
 function requireCustomTaskBody(body) {
   // ⭐⭐⭐ 29/8 — FASE K: stesso principio di requireTaskIdBody, modelloPlanner riusa modelloRichiestaValido.
-  const AMMESSE = ['cartellaId', 'cartellaLibera', 'workspaceLaunchId', 'consegna', 'comandoProva', 'modello', 'modelloPlanner', 'reasoning', 'client', 'permessi', 'permessiPerAttrezzo', 'modalitaOperativa', 'fallbackProviders', 'linguaInterfaccia'];
+  // /goal G6 (owner 15/10/2026, «chat nuova ferma»): `ferma: true` apre la conversazione SENZA un giro — la persona ha scritto
+  // `/goal <testo>` in una chat nuova, e il lavoro parte solo dal suo «Avvia» sulla carta dei controlli
+  const AMMESSE = ['cartellaId', 'cartellaLibera', 'workspaceLaunchId', 'consegna', 'comandoProva', 'modello', 'modelloPlanner', 'reasoning', 'client', 'permessi', 'permessiPerAttrezzo', 'modalitaOperativa', 'fallbackProviders', 'linguaInterfaccia', 'ferma'];
   const chiavi = Object.keys(body ?? {});
   const haCartellaId = 'cartellaId' in body && body.cartellaId !== undefined;
   const haCartellaLibera = 'cartellaLibera' in body && body.cartellaLibera !== undefined;
@@ -2351,8 +2375,9 @@ function requireCustomTaskBody(body) {
     || (haCartellaLibera && typeof body.cartellaLibera !== 'string')
     || (haWorkspaceLaunchId && (typeof body.workspaceLaunchId !== 'string' || !/^[A-Za-z0-9_-]{32}$/.test(body.workspaceLaunchId)))
     || ('client' in body && body.client !== 'desktop' && body.client !== 'mobile')
+    || ('ferma' in body && body.ferma !== true && body.ferma !== false)
   ) {
-    const errore = new Error('Invalid body: expected {cartellaId XOR cartellaLibera XOR workspaceLaunchId, consegna, comandoProva?, modello?, modelloPlanner?, reasoning?, client?, permessi?, permessiPerAttrezzo?}');
+    const errore = new Error('Invalid body: expected {cartellaId XOR cartellaLibera XOR workspaceLaunchId, consegna, comandoProva?, modello?, modelloPlanner?, reasoning?, client?, permessi?, permessiPerAttrezzo?, ferma?}');
     errore.code = 'QUERY_INVALID';
     throw errore;
   }
@@ -2402,6 +2427,7 @@ function requireCustomTaskBody(body) {
     permessi: 'permessi' in body && body.permessi !== undefined ? body.permessi : null,
     permessiPerAttrezzo: 'permessiPerAttrezzo' in body && body.permessiPerAttrezzo !== undefined ? body.permessiPerAttrezzo : null,
     modalitaOperativa: 'modalitaOperativa' in body ? body.modalitaOperativa : null,
+    ...(body.ferma === true ? { ferma: true } : {}), // /goal G6: la chat nuova che nasce ferma
   };
 }
 
@@ -2768,13 +2794,16 @@ function requireComandoBody(body) {
 function requireApprovaBody(body) {
   const chiavi = Object.keys(body ?? {});
   // automazioni a due porte (08/10/2026): `automazioneModificata` = «Modifica» sulla carta d'automazione, solo con un no
-  const AMMESSE = ['requestId', 'approvato', 'ambito', 'rispostoDa', 'automazioneModificata'];
+  // /goal G6 (owner 15/10/2026): `obiettivoModificato` = «Modifica i controlli» sulla carta di goal_create — la persona l'ha impostato lei
+  const AMMESSE = ['requestId', 'approvato', 'ambito', 'rispostoDa', 'automazioneModificata', 'obiettivoModificato'];
   const conAmbito = chiavi.includes('ambito');
   const conRispostoDa = chiavi.includes('rispostoDa');
   const conModificata = chiavi.includes('automazioneModificata');
+  const conObiettivo = chiavi.includes('obiettivoModificato');
   if (
-    chiavi.length !== 2 + (conAmbito ? 1 : 0) + (conRispostoDa ? 1 : 0) + (conModificata ? 1 : 0) || !chiavi.every((k) => AMMESSE.includes(k))
+    chiavi.length !== 2 + (conAmbito ? 1 : 0) + (conRispostoDa ? 1 : 0) + (conModificata ? 1 : 0) + (conObiettivo ? 1 : 0) || !chiavi.every((k) => AMMESSE.includes(k))
     || (conModificata && (typeof body.automazioneModificata !== 'string' || body.automazioneModificata.length === 0 || body.approvato !== false || conAmbito))
+    || (conObiettivo && (typeof body.obiettivoModificato !== 'string' || !/^ob-[0-9a-f-]{8,64}$/u.test(body.obiettivoModificato) || body.approvato !== false || conAmbito || conModificata))
     || typeof body.requestId !== 'string' || body.requestId.length === 0
     || typeof body.approvato !== 'boolean'
     || (conAmbito && ((body.ambito !== 'cartella' && body.ambito !== 'percorso') || body.approvato !== true))
@@ -2785,7 +2814,7 @@ function requireApprovaBody(body) {
     throw errore;
   }
   return { requestId: body.requestId, approvato: body.approvato, ...(conAmbito ? { ambito: body.ambito } : {}),
-    ...(conRispostoDa ? { rispostoDa: body.rispostoDa } : {}), ...(conModificata ? { automazioneModificata: body.automazioneModificata } : {}) };
+    ...(conRispostoDa ? { rispostoDa: body.rispostoDa } : {}), ...(conModificata ? { automazioneModificata: body.automazioneModificata } : {}), ...(conObiettivo ? { obiettivoModificato: body.obiettivoModificato } : {}) };
 }
 
 /*
@@ -2868,6 +2897,34 @@ function requireQueueBody(body) {
     throw errore;
   }
   return body.messaggio;
+}
+
+/**
+ * /goal G1-G2: `{testo}` oppure `{testo, criteri}` (un elenco), e nient'altro. Qui si guarda solo la FORMA del corpo: che il testo
+ * sia vuoto o troppo lungo, e che ogni criterio sia in forma, lo dice il registro col suo motivo.
+ */
+function requireGoalBody(body) {
+  const chiavi = body && typeof body === 'object' && !Array.isArray(body) ? Object.keys(body) : null;
+  if (!chiavi || typeof body.testo !== 'string' || chiavi.some((chiave) => chiave !== 'testo' && chiave !== 'criteri')
+    || (Object.hasOwn(body, 'criteri') && !Array.isArray(body.criteri))) {
+    const errore = new Error('Invalid body: expected {testo, criteri?}');
+    errore.code = 'QUERY_INVALID';
+    throw errore;
+  }
+  return { testo: body.testo, ...(Object.hasOwn(body, 'criteri') ? { criteri: body.criteri } : {}) };
+}
+
+/** /goal G2: `{criteri}` (un elenco) e, solo per il contratto intero, `conferma`: l'IMPRONTA del contratto che la persona ha
+ *  confermato (REV-GOAL-05, 14/10/2026: un sì si dà a un contratto preciso, non in bianco). `false` resta un no esplicito. */
+function requireGoalContractBody(body, { conConferma }) {
+  const chiavi = body && typeof body === 'object' && !Array.isArray(body) ? Object.keys(body) : null;
+  if (!chiavi || !Array.isArray(body.criteri) || chiavi.some((chiave) => chiave !== 'criteri' && !(conConferma && chiave === 'conferma'))
+    || (Object.hasOwn(body, 'conferma') && body.conferma !== false && !(typeof body.conferma === 'string' && /^sha256:[0-9a-f]{64}$/u.test(body.conferma)))) {
+    const errore = new Error(conConferma ? 'Invalid body: expected {criteri, conferma?}' : 'Invalid body: expected {criteri}');
+    errore.code = 'QUERY_INVALID';
+    throw errore;
+  }
+  return { criteri: body.criteri, conferma: typeof body.conferma === 'string' ? body.conferma : null };
 }
 
 /** Resume legacy senza body oppure nuovo turno con una sola stringa non vuota. */
@@ -3235,6 +3292,7 @@ export function createHttpApp({
   // 11/10/2026: il token del piano e il conteggio nostro, per le chiamate al modello che NON passano dal trasporto dei giri («Migliora prompt»)
   leggiTokenDelPianoFn = null,
   registraUsoDelPianoFn = null,
+  registraLimitiDelPianoFn = null,
   /*
    * ⭐ BC-15 — la porta di rete del prompt enhancer, SEPARATA da `fetchOpenRouterFn` e da
    * `fetchFn` per la stessa ragione già scritta trenta righe più su: una prova che finge il
@@ -3245,6 +3303,17 @@ export function createHttpApp({
    *   in nessuna risposta e in nessun messaggio d'errore (vedi `messaggioSenzaChiave`).
    */
   fetchMiglioraPromptFn = globalThis.fetch,
+  /*
+   * /goal G2c (14/10/2026) — la porta di rete della PROPOSTA dei criteri, separata da `fetchMiglioraPromptFn` per la stessa
+   * ragione: una prova che finge una delle due non deve poter cambiare l'altra. E le due dipendenze del contesto del progetto
+   * (lo stesso preambolo che legge l'agente), iniettabili perché una prova non cammini il disco vero.
+   */
+  fetchPropostaObiettivoFn = globalThis.fetch,
+  contestoDelProgettoFn = contestoDelProgettoReale,
+  creaFiltroGitignoreFn = creaFiltroGitignoreReale,
+  /* /goal G2c: la voce del catalogo di un modello (`server.mjs::readModelCapabilities`), per adattare il ragionamento chiesto a ciò
+     che il modello supporta, come il trasporto dei giri. Senza: nessun adattamento (il livello chiesto parte com'è). */
+  modelCapabilityFn = async () => null,
   /* C1 (owner 10/10/2026): il campionatore di CPU e memoria della scheda Processi (`risorse-processi.mjs`). Iniettabile per le prove;
      di serie nasce alla prima richiesta e si spegne da solo dopo 30 s senza. */
   campionatoreRisorse: campionatoreRisorseIniettato = null,
@@ -5798,6 +5867,31 @@ export function createHttpApp({
      * ricevuto dal client e concatenato senza validazione permetteva di
      * agganciarsi alla PTY di un'altra persona.
      */
+    /*
+     * ⛔ 16/10/2026, owner («Chiudila adesso») — i terminali SENZA sessione (il Terminale aperto prima di avviare qualunque cosa). Fino
+     *   a ieri il client inventava l'id e il registro lo accoglieva in una cartella di ripiego: un id inventato apriva una shell
+     *   (segnalato dalla sessione mobile). Ora nascono qui, con l'id scelto dal server, come le schede di una sessione; GET dice
+     *   quali esistono (dopo un riavvio nessuno: il client ne crea uno nuovo). Stesse regole della rotta qui sotto: niente query,
+     *   corpo vuoto.
+     */
+    if ((method === 'GET' || method === 'POST') && url.pathname === '/api/v1/terminals') {
+      try {
+        requireNoQuery(url);
+        if (!terminalRegistry) { const error = new Error('Terminals not available'); error.code = 'TERMINAL_STORE_UNAVAILABLE'; throw error; }
+        if (method === 'GET') { sendJson(res, 200, successEnvelope(terminalRegistry.elencaStandalone(), clock), method); return; }
+        const body = await leggiCorpoJson(req);
+        const keys = body && typeof body === 'object' && !Array.isArray(body) ? Object.keys(body) : [];
+        if (keys.length !== 0) { const error = new Error('Invalid body'); error.code = 'QUERY_INVALID'; throw error; }
+        const esito = terminalRegistry.creaStandalone();
+        if ('erroreAvvio' in esito) { throw erroreDelRegistro(esito); }
+        sendJson(res, 200, successEnvelope(esito, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
     if (method === 'POST' && /^\/api\/v1\/sessions\/([^/]+)\/terminals$/.test(url.pathname)) {
       try {
         requireNoQuery(url);
@@ -7223,6 +7317,43 @@ export function createHttpApp({
      * passa da OpenRouter come tutto il resto della chat (config.mjs), con la chiave che
      * vive SOLO in `providerStore`.
      */
+    /*
+     * La chiamata al MODELLO DELLA SESSIONE fuori da un giro, non in stream: «migliora il prompt» e la proposta dei criteri
+     * del /goal (G2c) passano di qui, una strada sola. Locale ⇒ `localRuntimes[runtimeId].generateStream`; cloud ⇒ lo stesso
+     * instradamento della chat (`chiediMiglioramentoAlProvider`), col piano ChatGPT se la sessione lo usa.
+     * `maxTokens` e `reasoning` assenti = la richiesta di sempre di «migliora il prompt» (2048, nessun ragionamento).
+     */
+    const chiediAlModelloDellaSessione = async ({ contesto, messaggi, fetchFn, prefissoGiro, maxTokens = 2048, reasoning = null }) => {
+      if (contesto.provider === 'local' || (contesto.runtimeId && contesto.modelId)) {
+        const runtime = localRuntimes?.[contesto.runtimeId];
+        if (!runtime || typeof runtime.generateStream !== 'function') {
+          const e = new Error('This session’s local engine is not available.'); e.code = 'RUNTIME_NOT_AVAILABLE'; throw e;
+        }
+        const modelloUsato = contesto.modelId || contesto.modello;
+        const giro = `${prefissoGiro}-${randomUUID()}`;
+        let contenuto = '';
+        for await (const evento of runtime.generateStream({
+          runId: giro, turnId: giro, modelId: modelloUsato, messages: messaggi, maxTokens,
+        })) {
+          if (evento?.type === 'text' && typeof evento.value === 'string') contenuto += evento.value;
+          if (evento?.type === 'error') {
+            const e = new Error('The local engine did not complete the request.'); e.code = 'RUNTIME_NOT_AVAILABLE'; throw e;
+          }
+        }
+        return { contenuto, modelloUsato, fornitoreUsato: contesto.runtimeId };
+      }
+      return chiediMiglioramentoAlProvider({
+        modello: contesto.modello,
+        messaggi,
+        providerStore,
+        fetchFn,
+        leggiTokenDelPiano: leggiTokenDelPianoFn,
+        registraUsoDelPiano: registraUsoDelPianoFn,
+        registraLimitiDelPiano: registraLimitiDelPianoFn,
+        maxTokens,
+        reasoning,
+      });
+    };
     const migliorMatch = method === 'POST' && sessionRegistry
       && /^\/api\/v1\/sessions\/([^/]+)\/migliora-prompt$/.exec(url.pathname);
     if (migliorMatch) {
@@ -7271,38 +7402,9 @@ export function createHttpApp({
           { role: 'user', content: JSON.stringify({ task: 'enhance_prompt', language_policy: 'same_as_original_prompt', original_prompt: prompt }) },
         ];
 
-        let contenuto = '';
-        let modelloUsato;
-        let fornitoreUsato;
-        if (contesto.provider === 'local' || (contesto.runtimeId && contesto.modelId)) {
-          const runtime = localRuntimes?.[contesto.runtimeId];
-          if (!runtime || typeof runtime.generateStream !== 'function') {
-            const e = new Error('This session’s local engine is not available.'); e.code = 'RUNTIME_NOT_AVAILABLE'; throw e;
-          }
-          modelloUsato = contesto.modelId || contesto.modello;
-          fornitoreUsato = contesto.runtimeId;
-          const giro = `migliora-${randomUUID()}`;
-          for await (const evento of runtime.generateStream({
-            runId: giro, turnId: giro, modelId: modelloUsato, messages: messaggi, maxTokens: 2048,
-          })) {
-            if (evento?.type === 'text' && typeof evento.value === 'string') contenuto += evento.value;
-            if (evento?.type === 'error') {
-              const e = new Error('The local engine did not complete the rewrite.'); e.code = 'RUNTIME_NOT_AVAILABLE'; throw e;
-            }
-          }
-        } else {
-          const risultato = await chiediMiglioramentoAlProvider({
-            modello: contesto.modello,
-            messaggi,
-            providerStore,
-            fetchFn: fetchMiglioraPromptFn,
-            leggiTokenDelPiano: leggiTokenDelPianoFn,
-            registraUsoDelPiano: registraUsoDelPianoFn,
-          });
-          contenuto = risultato.contenuto;
-          modelloUsato = risultato.modelloUsato;
-          fornitoreUsato = risultato.fornitoreUsato;
-        }
+        const { contenuto, modelloUsato, fornitoreUsato } = await chiediAlModelloDellaSessione({
+          contesto, messaggi, fetchFn: fetchMiglioraPromptFn, prefissoGiro: 'migliora',
+        });
 
         const esito = leggiRispostaMiglioramento(contenuto);
         if (!esito) {
@@ -7318,6 +7420,79 @@ export function createHttpApp({
         sendJson(res, 200, successEnvelope({
           ...esito, promptOriginale: prompt, profondita, modello: modelloUsato, fornitore: fornitoreUsato,
         }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
+    /*
+     * ⭐⭐⭐ /goal G2c (decisione owner 14/10/2026: «il modello li propone, poi il pavimento») — LA PROPOSTA DEI CRITERI.
+     *   `POST …/goal/proposta {testo}`: il modello DELLA SESSIONE (come «migliora il prompt»: mai uno scelto da chi chiama)
+     *   propone i criteri dell'obiettivo. È una PROPOSTA, non un contratto: non si salva niente, e la persona la conferma con
+     *   `POST …/goal {testo, criteri}`. Il modello vede il testo dell'obiettivo e il preambolo del progetto
+     *   (`contestoDelProgetto`, lo stesso che l'agente legge al primo giro, già dentro il confine dei dati); Hermes
+     *   `draft_contract` gli dà il solo obiettivo (`hermes_cli/goals.py:1063`, letto il 14/10). Ledger del /goal, §13.
+     * ⛔ Una proposta che non riesce NON è un errore della rotta: è il PAVIMENTO dichiarato (`pavimento: true` col motivo e, se
+     *   la chiamata è fallita, il codice dell'errore), perché l'obiettivo resta possibile anche senza criteri. Sono errori solo
+     *   le domande sbagliate: corpo storto, conversazione che non c'è, obiettivo non ammesso, testo vuoto o troppo lungo.
+     * ⛔ Il preambolo è un di più: se non si riesce a costruirlo la proposta parte senza (`progetto: false`), non si ferma.
+     *   Si chiede con permesso e modello `null`: la sua voce nella cache dei preamboli non è mai quella di un giro.
+     */
+    const propostaMatch = method === 'POST' && sessionRegistry && typeof sessionRegistry.contestoPropostaObiettivo === 'function'
+      && /^\/api\/v1\/sessions\/([^/]+)\/goal\/proposta$/.exec(url.pathname);
+    if (propostaMatch) {
+      try {
+        requireNoQuery(url);
+        let sessionId;
+        try { sessionId = decodeURIComponent(propostaMatch[1]); }
+        catch { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+        const corpo = await leggiCorpoJson(req, 64 * 1024);
+        // /goal G6: `lingua` (facoltativa) = la lingua dell'interfaccia, in cui scrivere le frasi dei controlli
+        if (!corpo || typeof corpo !== 'object' || Array.isArray(corpo) || typeof corpo.testo !== 'string' || Object.keys(corpo).some((chiave) => chiave !== 'testo' && chiave !== 'lingua')
+          || (Object.hasOwn(corpo, 'lingua') && corpo.lingua !== 'it' && corpo.lingua !== 'en')) {
+          const e = new Error('Invalid body: expected {testo, lingua?: "it"|"en"}'); e.code = 'QUERY_INVALID'; throw e;
+        }
+        const pronto = sessionRegistry.contestoPropostaObiettivo(sessionId, corpo.testo);
+        if ('erroreAvvio' in pronto) throw erroreDelRegistro(pronto);
+        let progetto = null;
+        if (pronto.cartella) {
+          try {
+            const preambolo = await contestoDelProgettoFn({
+              cartella: pronto.cartella,
+              creaFiltro: (radice) => creaFiltroGitignoreFn({ radice }), // la stessa forma di agent-service: `{radice}`, mai la stringa nuda
+              permesso: null,
+              modello: null,
+              piattaforma: process.platform,
+            });
+            progetto = typeof preambolo?.testo === 'string' && preambolo.testo !== '' ? preambolo.testo : null;
+          } catch {
+            progetto = null;
+          }
+        }
+        let proposta;
+        let modello = null;
+        let fornitore = null;
+        try {
+          // il ragionamento chiesto, adattato a ciò che il modello supporta (mai più caro); il tetto alto: vedi `USCITA_MASSIMA_PROPOSTA`
+          const capacita = await Promise.resolve(modelCapabilityFn(pronto.contesto.modello)).catch(() => null);
+          const risposta = await chiediAlModelloDellaSessione({
+            contesto: pronto.contesto,
+            messaggi: messaggiPerLaProposta({ testo: pronto.testo, progetto, lingua: corpo.lingua ?? null }),
+            fetchFn: fetchPropostaObiettivoFn,
+            prefissoGiro: 'proposta-obiettivo',
+            maxTokens: USCITA_MASSIMA_PROPOSTA,
+            reasoning: normalizzaReasoningPerModello({ ...RAGIONAMENTO_PROPOSTA }, capacita),
+          });
+          proposta = propostaDallaRisposta(risposta.contenuto);
+          modello = risposta.modelloUsato ?? null;
+          fornitore = risposta.fornitoreUsato ?? null;
+        } catch (guasto) {
+          proposta = pavimentoPerGuasto(normalizeError(guasto).code);
+        }
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 200, successEnvelope({ ok: true, proposta, progetto: progetto !== null, modello, fornitore }, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
         sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
@@ -7572,9 +7747,9 @@ export function createHttpApp({
           return;
         }
         const corpo = await leggiCorpoJson(req);
-        const { requestId, approvato, ambito, rispostoDa, automazioneModificata } = requireApprovaBody(corpo);
+        const { requestId, approvato, ambito, rispostoDa, automazioneModificata, obiettivoModificato } = requireApprovaBody(corpo);
         const opzioni = { ...(ambito === undefined ? {} : { ambito }), ...(rispostoDa === undefined ? {} : { rispostoDa }),
-          ...(automazioneModificata === undefined ? {} : { automazioneModificata }) };
+          ...(automazioneModificata === undefined ? {} : { automazioneModificata }), ...(obiettivoModificato === undefined ? {} : { obiettivoModificato }) };
         const esito = Object.keys(opzioni).length === 0
           ? sessionRegistry.rispondiApprovazione(sessionId, requestId, approvato)
           : sessionRegistry.rispondiApprovazione(sessionId, requestId, approvato, opzioni);
@@ -7868,6 +8043,59 @@ export function createHttpApp({
       return;
     }
 
+    /*
+     * ⭐⭐⭐ /goal G1 (owner 14/10/2026: «Sì, parti dal server») — LE PORTE DELL'OBIETTIVO della conversazione: leggerlo,
+     *   impostarlo, metterlo in pausa, riprenderlo, toglierlo. Codex ha le stesse (`thread/goal/get`, `set`, `clear`,
+     *   app-server-protocol v2, letto nel clone il 12/10/2026); la forma è quella di qui: POST col verbo nel percorso, corpo
+     *   stretto, rifiuti con codice e motivo. L'affitto fra processi lo guarda il cancello delle rotte di sessione, più sopra.
+     * ⛔ Impostare un obiettivo NON avvia un giro: in G1 il ciclo non c'è, e nessuna di queste porte spende.
+     */
+    const goalMatch = sessionRegistry && typeof sessionRegistry.statoObiettivo === 'function' && (method === 'GET' || method === 'POST')
+      && /^\/api\/v1\/sessions\/([^/]+)\/goal(?:\/(pausa|riprendi|togli|contratto|criteri|verifica))?$/.exec(url.pathname);
+    if (goalMatch && !(method === 'GET' && goalMatch[2])) {
+      try {
+        requireNoQuery(url);
+        let sessionId;
+        try {
+          sessionId = decodeURIComponent(goalMatch[1]);
+        } catch {
+          sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+          return;
+        }
+        let esito;
+        if (method === 'GET') {
+          esito = sessionRegistry.statoObiettivo(sessionId);
+        } else if (!goalMatch[2]) {
+          const { testo, criteri } = requireGoalBody(await leggiCorpoJson(req));
+          esito = await sessionRegistry.impostaObiettivo(sessionId, testo, criteri === undefined ? {} : { criteri });
+        } else if (goalMatch[2] === 'contratto' || goalMatch[2] === 'criteri') {
+          // G2: il contratto intero (togliere o cambiare vuole `conferma: true`) oppure criteri in più (liberi)
+          const { criteri, conferma } = requireGoalContractBody(await leggiCorpoJson(req), { conConferma: goalMatch[2] === 'contratto' });
+          esito = await (goalMatch[2] === 'contratto' ? sessionRegistry.contrattoObiettivo(sessionId, criteri, { conferma })
+            : sessionRegistry.aggiungiCriteriObiettivo(sessionId, criteri));
+        } else {
+          const corpo = await leggiCorpoJson(req);
+          if (!corpo || typeof corpo !== 'object' || Array.isArray(corpo) || Object.keys(corpo).length !== 0) {
+            const errore = new Error('Invalid body: expected {}'); errore.code = 'QUERY_INVALID'; throw errore;
+          }
+          /* G3 (14/10/2026): `verifica` esegue le prove del contratto (può durare minuti: è la richiesta della persona che aspetta). */
+          esito = await (goalMatch[2] === 'pausa' ? sessionRegistry.pausaObiettivo(sessionId)
+            : goalMatch[2] === 'riprendi' ? sessionRegistry.riprendiObiettivo(sessionId)
+              : goalMatch[2] === 'verifica' ? sessionRegistry.verificaObiettivo(sessionId) : sessionRegistry.togliObiettivo(sessionId));
+        }
+        if ('erroreAvvio' in esito) {
+          throw erroreDelRegistro(esito);
+        }
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 200, successEnvelope({ ...(method === 'GET' ? {} : { ok: true }), obiettivo: esito.obiettivo, ...(esito.invariato ? { invariato: true } : {}), ...(esito.cambio ? { cambio: esito.cambio } : {}),
+          ...(esito.verifica ? { verifica: esito.verifica, criteriAlTetto: esito.criteriAlTetto ?? [] } : {}) }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
       /*
        * ⭐⭐⭐ 07/9 — LE ROTTE DEL BROWSER VIVO. Owner: «visualizzare ogni fottuta pagina web».
        * La cornice non basta: chi vieta l'iframe resta un rettangolo grigio, e Chrome ci carica
@@ -7928,7 +8156,8 @@ export function createHttpApp({
             const corpo = await leggiCorpoJson(req);
             const indirizzo = typeof corpo?.url === 'string' ? corpo.url : '';
             if (!indirizzo || indirizzo.length > 2048) { const error = new Error('Address missing'); error.code = 'QUERY_INVALID'; throw error; }
-            data = await browserVivo.apri(sessionId, indirizzo, { larghezza: Number(corpo?.larghezza) || 1280, altezza: Number(corpo?.altezza) || 800 });
+            /* la densità dello schermo di chi guarda (12/10: a 1x la pagina usciva sfocata); `ridimensiona` la tiene fra 0,5 e 3 */
+            data = await browserVivo.apri(sessionId, indirizzo, { larghezza: Number(corpo?.larghezza) || 1280, altezza: Number(corpo?.altezza) || 800, scala: Number(corpo?.scala) || 1 });
           } else if (method === 'POST' && url.pathname === '/api/v1/browser/vivo/gesto') {
             data = await browserVivo.gesto(sessionId, await leggiCorpoJson(req) || {});
           } else if (method === 'POST' && url.pathname === '/api/v1/browser/vivo/descrivi') {
@@ -7942,6 +8171,7 @@ export function createHttpApp({
             data = await browserVivo.misura(sessionId, {
               larghezza: Number(corpo?.larghezza) || 0,
               altezza: Number(corpo?.altezza) || 0,
+              scala: Number(corpo?.scala) || 1,
             });
           } else if (method === 'POST' && url.pathname === '/api/v1/browser/vivo/chiudi') {
             data = await browserVivo.chiudi(sessionId);
@@ -8976,6 +9206,13 @@ export function createHttpApp({
             if (typeof sessionRegistry.statoCoda === 'function') {
               const coda = sessionRegistry.statoCoda(sessionId);
               if (coda && !('erroreAvvio' in coda)) sseSession.send({ type: 'CUSTOM', name: 'talos.coda', value: { voci: coda.voci, inPausa: coda.inPausa } });
+            }
+            /* /goal G6 (15/10/2026): lo stesso per l'obiettivo — l'annuncio è effimero (stato, non storia), quindi chi apre la sessione
+               dopo lo riceve qui, anche `null`: la fascia di una finestra che ricordava un obiettivo tolto altrove si spegne. */
+            if (typeof sessionRegistry.statoObiettivo === 'function') {
+              const stato = sessionRegistry.statoObiettivo(sessionId);
+              const tetti = typeof sessionRegistry.tettiObiettivo === 'function' ? sessionRegistry.tettiObiettivo() : null;
+              if (stato && !('erroreAvvio' in stato)) sseSession.send({ type: 'CUSTOM', name: 'talos.obiettivo', value: { obiettivo: stato.obiettivo ?? null, ...(tetti ? { tetti } : {}) } });
             }
             /*
              * ⛔⛔⛔ 28/8 — SECONDA metà della stessa cura (setNoDelay sopra

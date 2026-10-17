@@ -669,3 +669,91 @@ test('CTX-REG-RESUME-CLOSES-ORPHAN-TOOL-CALLS — una tool_call senza risultato 
     rimuoviCartellaDiProva(cartellaStore);
   }
 });
+
+/* ─── 15/10/2026: la compattazione istantanea passa dal registro ───────────────────────────────────── */
+
+test('CTX-REG-ISTANTANEA-01 — con l opzione accesa il registro chiede all adapter la compattazione istantanea e gli ridà il riassunto pronto del giro prima; AL CONTRARIO, spenta, niente', async (t) => {
+  conTetto(t, 2_000);
+  for (const accesa of [true, false]) {
+    const cartellaStore = cartellaStoreVera();
+    const storia = storiaDiBase();
+    const pronta = { record: recordDiProva(storia), impronta: 'abc', base: 'nessuna', soloCoda: false };
+    const { finte, avviaSessioneFn } = sessioniControllabili(2);
+    try {
+      const registro = createSessionRegistry({ cartellaStore, avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'z-ai/glm-5.3-flash', chiave: 'k', riassumiPerCompattazioneFn: riassuntoreFinto().fn, compattazioneIstantanea: accesa });
+      const { sessionId } = registro.avvia('task-vero');
+      assert.equal(finte[0].ultimoInput.compattazioneIstantanea === true, accesa);
+      finte[0].concludi({ type: 'RunFinished' }, { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storia, recordDiCompattazione: [], compattazionePronta: pronta } });
+      await attendiScritture({ cartellaStore, sessionId });
+      await unTick();
+      registro.resume(sessionId, 'dopo');
+      if (accesa) assert.deepEqual(finte[1].ultimoInput.compattazionePronta, pronta, 'il giro dopo riceve il riassunto pronto');
+      else assert.equal(finte[1].ultimoInput.compattazionePronta, undefined, 'spenta: nessun riassunto pronto passa');
+      finte[1].concludi({ type: 'RunFinished' }, { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: [...finte[1].ultimoInput.messaggiIniziali, { role: 'assistant', content: 'ok' }], recordDiCompattazione: [] } });
+      await attendiScritture({ cartellaStore, sessionId });
+    } finally {
+      rimuoviCartellaDiProva(cartellaStore);
+    }
+  }
+});
+
+test('CTX-REG-ISTANTANEA-02 — un riassunto ancora in preparazione a fine giro si tiene quando arriva; e con un riassunto pronto il registro NON ne paga un secondo a fine giro', async (t) => {
+  conTetto(t, 2_000);
+  const cartellaStore = cartellaStoreVera();
+  const storia = storiaGrande(); // sopra la soglia: senza l istantanea il registro riassumerebbe da solo (CTX-REG-BACKGROUND)
+  const pronta = { record: recordDiProva(storia), impronta: 'def', base: 'nessuna', soloCoda: false };
+  let consegna;
+  const inArrivo = new Promise((r) => { consegna = r; });
+  const riassuntore = riassuntoreFinto();
+  const { finte, avviaSessioneFn } = sessioniControllabili(2);
+  try {
+    const registro = createSessionRegistry({ cartellaStore, avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'z-ai/glm-5.3-flash', chiave: 'k', riassumiPerCompattazioneFn: riassuntore.fn, compattazioneIstantanea: true });
+    const { sessionId } = registro.avvia('task-vero');
+    finte[0].concludi({ type: 'RunFinished' }, { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storia, recordDiCompattazione: [], compattazionePronta: null, compattazioneInPreparazione: inArrivo } });
+    await attendiScritture({ cartellaStore, sessionId });
+    consegna(pronta);
+    await new Promise((r) => setTimeout(r, 50));
+    assert.equal(riassuntore.chiamate.length, 0, 'nessun secondo riassunto a fine giro: quello in arrivo basta');
+    registro.resume(sessionId, 'dopo');
+    assert.deepEqual(finte[1].ultimoInput.compattazionePronta, pronta, 'il riassunto arrivato dopo la fine del giro passa al giro dopo');
+    finte[1].concludi({ type: 'RunFinished' }, { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: [...finte[1].ultimoInput.messaggiIniziali, { role: 'assistant', content: 'ok' }], recordDiCompattazione: [] } });
+    await attendiScritture({ cartellaStore, sessionId });
+  } finally {
+    rimuoviCartellaDiProva(cartellaStore);
+  }
+});
+
+test('CTX-REG-ISTANTANEA-03 — owner 15/10 notte, «passa al giro dopo»: un giro che parte mentre il riassunto è ancora in arrivo lo riceve come `compattazioneInArrivo`; AL CONTRARIO, arrivato prima, passa come pronto', async (t) => {
+  conTetto(t, 2_000);
+  for (const arrivaPrima of [false, true]) {
+    const cartellaStore = cartellaStoreVera();
+    const storia = storiaGrande();
+    const pronta = { record: recordDiProva(storia), impronta: 'ghi', base: 'nessuna', soloCoda: false };
+    let consegna;
+    const inArrivo = new Promise((r) => { consegna = r; });
+    const riassuntore = riassuntoreFinto();
+    const { finte, avviaSessioneFn } = sessioniControllabili(2);
+    try {
+      const registro = createSessionRegistry({ cartellaStore, avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'z-ai/glm-5.3-flash', chiave: 'k', riassumiPerCompattazioneFn: riassuntore.fn, compattazioneIstantanea: true });
+      const { sessionId } = registro.avvia('task-vero');
+      finte[0].concludi({ type: 'RunFinished' }, { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storia, recordDiCompattazione: [], compattazionePronta: null, compattazioneInPreparazione: inArrivo } });
+      await attendiScritture({ cartellaStore, sessionId });
+      if (arrivaPrima) { consegna(pronta); await new Promise((r) => setTimeout(r, 50)); }
+      registro.resume(sessionId, 'dopo');
+      if (arrivaPrima) {
+        assert.deepEqual(finte[1].ultimoInput.compattazionePronta, pronta);
+        assert.equal(finte[1].ultimoInput.compattazioneInArrivo, undefined);
+      } else {
+        assert.equal(finte[1].ultimoInput.compattazioneInArrivo, inArrivo, 'la stessa promessa del kernel, non una copia');
+        assert.equal(finte[1].ultimoInput.compattazionePronta, undefined);
+        consegna(pronta);
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      assert.equal(riassuntore.chiamate.length, 0, 'in nessuno dei due casi il registro paga un secondo riassunto');
+      finte[1].concludi({ type: 'RunFinished' }, { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: [...finte[1].ultimoInput.messaggiIniziali, { role: 'assistant', content: 'ok' }], recordDiCompattazione: [] } });
+      await attendiScritture({ cartellaStore, sessionId });
+    } finally {
+      rimuoviCartellaDiProva(cartellaStore);
+    }
+  }
+});

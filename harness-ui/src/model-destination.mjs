@@ -268,6 +268,11 @@ export function risolviDestinazioneModello(modello, { leggiChiave, leggiRuntime,
   if (record.chiaveObbligatoria === true && (typeof chiave !== 'string' || chiave.trim() === '')) {
     throw new ModelDestinationError(`The key for ${record.etichetta} is missing: enter it in Model Lab → Providers.`, 'PROVIDER_KEY_MISSING');
   }
+  /* ⛔ 14/10/2026, owner — la chiave va solo all'indirizzo che la persona ha scelto (`indirizzoDaScegliere` del portachiavi):
+     senza una scelta non si parte, e lo si dice PRIMA della rete. Dopo la chiave: senza chiave il rimedio è un altro. */
+  if (runtime.endpointDaScegliere === true) {
+    throw new ModelDestinationError(`Choose where your ${record.etichetta} key goes: Model Lab → Providers → Configure.`, 'PROVIDER_ENDPOINT_NOT_CHOSEN');
+  }
 
   // P-K — lo stesso contratto di autenticazione per chat e sonda.
   if (record.cloud) return destinazioneCloud(fonte, runtime, chiave, modelloRemoto);

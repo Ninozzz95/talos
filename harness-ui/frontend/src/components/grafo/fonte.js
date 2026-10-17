@@ -25,7 +25,9 @@ export function creaFonte({ client, sorgente, onCambio = () => {} }) {
     celle: new Map(), // phaseId → Array(total) di nodeId
     pagine: new Map(), // `${phaseId}:${n}` → Promise
     archi: { chiave: null, items: [], promessa: null },
-    storia: { items: [], inCorso: null, versione: 0 },
+    /* `struttura` conta i cambi di struttura, `letta` dice per quale la storia è stata letta per intero (vedi `azzeraStruttura`);
+       `fonte` è da dove viene la storia tenuta, per chi lo dichiara (`client.fonteDellaStoria`: 'fatti' o 'registro') */
+    storia: { items: [], inCorso: null, versione: 0, struttura: 0, letta: 0, fonte: null },
     discendenze: new Map(),
   };
   let coda = [];
@@ -36,6 +38,14 @@ export function creaFonte({ client, sorgente, onCambio = () => {} }) {
     f.righe.clear(); f.posto.clear(); f.celle.clear(); f.pagine.clear();
     f.archi = { chiave: null, items: [], promessa: null };
     f.discendenze.clear();
+    /* ⛔ 13/10/2026 (foto: isolato il ramo di «b», il suo dettaglio portava gli orari di «a»). Nelle deleghe la storia è un
+       elenco RICAVATO da ciò che si guarda (una richiesta, uno stato, un ramo isolato, l'ambito): quando cambia, l'elenco è un
+       altro, e allungare in coda quello di prima mescolava due storie. Chi ha una storia così lo dichiara
+       (`storiaLegataAllaStruttura`), e a ogni cambio di struttura la si rilegge da capo e la si SOSTITUISCE. Fino ad allora
+       resta quella di prima (un attimo), mai un diagramma senza storia: dal 13/10 sera gli id dei nodi delle deleghe seguono
+       la sessione (prima erano posizionali, e in quell'attimo la storia di «a» si leggeva sotto «b»). Un run di workflow ha
+       id veri e una storia numerata dal server: per lui non cambia niente. */
+    if (client.storiaLegataAllaStruttura === true) f.storia.struttura += 1;
   }
 
   /** Panoramica (sempre) e revisione (una volta): se la struttura del grafo è cambiata, righe e archi si rileggono. */
@@ -44,7 +54,11 @@ export function creaFonte({ client, sorgente, onCambio = () => {} }) {
     /* ⛔ 26/09/2026, prova nel browser (WF-UI-LIVE-HEADER): una rilettura partita PRIMA di un fotogramma e arrivata DOPO
        riportava indietro i conteggi che il fotogramma aveva appena spostato (la testata tornava al 40% con la card già
        «Concluso»), fino alla rilettura successiva. Una panoramica più vecchia di ciò che è già stato applicato non vince. */
-    const vecchia = f.panoramica && data.graphVersion === f.panoramica.graphVersion
+    /* (terza passata, fuori lotto) La guardia vale per chi ha una storia NUMERATA dal server (un run di Workflow). Le deleghe
+       leggono dalla memoria della app, in ordine, e il loro `lastSeq` è la lunghezza di una storia ricostruita dai fatti: quando
+       una delega finita RIPARTE («Riprova») quella storia si accorcia, e la panoramica nuova veniva scartata come «più vecchia»
+       — testata e conti del lotto restavano «2 di 2 terminati» con un agente di nuovo al lavoro. */
+    const vecchia = client.storiaLegataAllaStruttura !== true && f.panoramica && data.graphVersion === f.panoramica.graphVersion
       && Number.isSafeInteger(data.lastSeq) && Number.isSafeInteger(f.panoramica.lastSeq) && data.lastSeq < f.panoramica.lastSeq;
     if (vecchia) { f.revisione = revisione; return f.panoramica; }
     if (f.graphVersion !== null && data.graphVersion !== f.graphVersion) azzeraStruttura();
@@ -102,6 +116,21 @@ export function creaFonte({ client, sorgente, onCambio = () => {} }) {
   }
   /** Dimentica le richieste di celle non ancora partite (un gruppo si è chiuso, la vista si è spostata). */
   const dimentica = () => { coda = []; };
+  /* ⛔ 13/10/2026, trovato portando le prove della vista classica: lo stato «dal vivo» di una scheda è quello della riga in
+     memoria (`statoDi`), che in un Workflow si aggiorna coi fotogrammi del flusso. Le DELEGHE non hanno fotogrammi: a struttura
+     invariata la rilettura aggiornava la testata ma non le righe, e un agente finito restava «al lavoro» sulla sua scheda
+     finché non ne nasceva un altro. Qui le righe già caricate prendono i fatti freschi; i conti dei gruppi vengono dalla
+     panoramica appena riletta e non si toccano (non è un fotogramma: niente `spostaConteggi`). */
+  function aggiornaRighe(righe) {
+    let cambiate = 0;
+    for (const nuova of righe ?? []) {
+      const prima = f.righe.get(nuova?.nodeId);
+      if (!prima) continue;
+      if (prima.state !== nuova.state || prima.updatedAt !== nuova.updatedAt || prima.finishedAt !== nuova.finishedAt) cambiate += 1;
+      f.righe.set(nuova.nodeId, { ...prima, ...nuova });
+    }
+    return cambiate;
+  }
 
   async function archiPer(fasi) {
     const chiave = [...fasi].sort().join('\u0000');
@@ -117,11 +146,40 @@ export function creaFonte({ client, sorgente, onCambio = () => {} }) {
     if (f.storia.inCorso) return f.storia.inCorso;
     f.storia.inCorso = (async () => {
       try {
-        const nuova = await client.storia(f.sorgente, { offset: f.storia.items.length });
-        if (!nuova.items.length) return false;
-        f.storia.items.push(...nuova.items);
-        f.storia.versione += 1;
-        return true;
+        /* ⛔ Una lettura vale solo per la STRUTTURA e per la FONTE sotto cui è partita (seconda passata del bugfixer, 13/10/2026):
+           (a) se la struttura cambia mentre la lettura è in volo, ciò che arriva è la coda di un ALTRO elenco: non si appende, e
+               si rilegge subito da capo — prima chi chiamava dopo il cambio riceveva quella lettura, e la storia restava
+               mescolata fino alla rilettura dopo;
+           (b) se cambia la fonte senza che cambi la struttura (il registro registra il suo primo record: dai 'fatti' al
+               'registro'), l'`offset` è stato applicato a un altro elenco: stessa cosa, da capo.
+           Al più tre giri: se la struttura continua a cambiare, `letta` resta indietro e la prossima chiamata riprova.
+           «I dati della chiave di prima si tengono solo dichiarandolo» (TanStack Query, `placeholderData`/`isPlaceholderData`,
+           letta dal revisore il 13/10/2026): qui la chiave è struttura + fonte. */
+        let daRifare = false;
+        for (let giro = 0; giro < 3; giro += 1) {
+          const struttura = f.storia.struttura; const daCapo = daRifare || f.storia.letta !== struttura;
+          const tenute = f.storia.items.length;
+          let nuova;
+          try { nuova = await client.storia(f.sorgente, { offset: daCapo ? 0 : tenute }); }
+          catch (errore) {
+            /* la storia di PRIMA resta solo finché arriva quella nuova: se non si riesce a leggerla (il registro non risponde),
+               non può restare attribuita agli agenti di adesso. Si svuota; `letta` resta indietro e la prossima chiamata riprova. */
+            if (daCapo && f.storia.items.length) { f.storia.items = []; f.storia.letta = -1; f.storia.versione += 1; }
+            throw errore;
+          }
+          const fonteOra = client.fonteDellaStoria?.() ?? null;
+          if (f.storia.struttura !== struttura) { daRifare = false; continue; } // (a): `letta` è già indietro, il prossimo giro è da capo
+          if (!daCapo && tenute > 0 && fonteOra !== f.storia.fonte) { daRifare = true; continue; } // (b)
+          // da capo: si sostituisce (anche con una storia vuota)
+          if (daCapo) { f.storia.items = [...nuova.items]; f.storia.letta = struttura; f.storia.fonte = fonteOra; f.storia.versione += 1; return true; }
+          f.storia.fonte = fonteOra;
+          if (!nuova.items.length) return false;
+          f.storia.items.push(...nuova.items);
+          f.storia.versione += 1;
+          return true;
+        }
+        if (daRifare) f.storia.letta = -1; // non si è riusciti a rileggere da capo: la prossima chiamata riparte da lì
+        return false;
       } finally { f.storia.inCorso = null; }
     })();
     return f.storia.inCorso;
@@ -202,7 +260,7 @@ export function creaFonte({ client, sorgente, onCambio = () => {} }) {
     get storia() { return f.storia.items; },
     get versioneStoria() { return f.storia.versione; },
     get archiCaricati() { return f.archi.items; },
-    caricaPanoramica: panoramica, pagina, righeFase, chiedi, dimentica, archiPer, aggiornaStoria, discendenza, applicaFotogramma,
+    caricaPanoramica: panoramica, pagina, righeFase, chiedi, dimentica, aggiornaRighe, archiPer, aggiornaStoria, discendenza, applicaFotogramma,
     riga: (nodeId) => f.righe.get(nodeId) ?? null,
     cella: (phaseId, indice) => { const id = f.celle.get(phaseId)?.[indice]; return id ? f.righe.get(id) ?? null : null; },
     posto: (nodeId) => f.posto.get(nodeId) ?? null,

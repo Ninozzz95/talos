@@ -61,7 +61,14 @@ export function creaRegistroUsoChatgpt({ file = null, ora = Date.now } = {}) {
     const dentro = voci.filter((v) => v.quando >= soglia);
     return { richieste: dentro.length, token: dentro.reduce((t, v) => t + (v.token ?? 0), 0), senzaMisura: dentro.filter((v) => v.token === null).length };
   };
+  /* 12/10/2026: i limiti che il SERVIZIO dichiara (5 ore, settimana), dall'ultima risposta. Solo in memoria: valgono per l'account
+     collegato adesso, e una fotografia vecchia letta dal disco direbbe una cosa non più vera. */
+  let limiti = null;
   return Object.freeze({
+    /** La fotografia dei limiti dall'ultima risposta del piano: `limiti` è `null` se il servizio non li ha dichiarati (e lo si dice). */
+    registraLimiti({ limiti: letti = null, nomi = [], stato = null } = {}) {
+      limiti = { ...(letti ?? { primario: null, secondario: null, scattato: null }), dichiarati: letti !== null, intestazioni: [...nomi], statoHttp: stato, lettoAlle: ora() };
+    },
     /** Una richiesta finita col piano. Conta solo `esito: 'completato'`. */
     async registra({ esito, usage } = {}) {
       if (esito !== 'completato') return;
@@ -70,8 +77,10 @@ export function creaRegistroUsoChatgpt({ file = null, ora = Date.now } = {}) {
       await scrivi();
     },
     riepilogo() { return { cinqueOre: somma(FINESTRE_USO_CHATGPT.cinqueOre), setteGiorni: somma(FINESTRE_USO_CHATGPT.setteGiorni) }; },
+    /** I limiti dichiarati dal servizio all'ultima risposta, o `null` se col piano non è ancora passata nessuna richiesta. */
+    limiti() { return limiti; },
     /** Allo scollegamento: il conteggio era di quell'account. */
-    async azzera() { voci = []; await scrivi(); },
+    async azzera() { voci = []; limiti = null; await scrivi(); },
   });
 }
 

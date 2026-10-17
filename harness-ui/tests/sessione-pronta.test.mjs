@@ -46,6 +46,7 @@ test('PRONTA-03 — la causa cambia la frase: il traffico si dice col suo nome; 
   const esito = creaProntoFn({ providerStore: store })('deepseek:deepseek-chat');
   assert.equal(esito.pronto, false);
   assert.match(esito.messaggio, /heavy traffic/u, 'K4b: la frase del server è inglese (la chiave la traduce)');
+  assert.equal(esito.motivo, undefined, '15/10: la panchina non è «manca la chiave», resta la sua frase');
 });
 
 test('PRONTA-03-bis — ⛔ BUG-25: senza scadenza dichiarata il credito NON panchina la chiave unica: la sessione è PRONTA', () => {
@@ -60,6 +61,8 @@ test('PRONTA-04 — al contrario: nessuna chiave affatto dice «Manca la chiave�
   const esito = creaProntoFn({ providerStore: storeCon({}) })('openai:gpt-5');
   assert.equal(esito.pronto, false);
   assert.match(esito.messaggio, /^The OpenAI key is missing/u);
+  assert.equal(esito.motivo, 'provider-key-missing-named', '15/10: il motivo, perché la dica la UI, nella sua lingua');
+  assert.equal(esito.fornitore, 'OpenAI');
   assert.doesNotMatch(esito.messaggio, /OPENROUTER_API_KEY/u, 'mai una variabile d\'ambiente a schermo');
 });
 

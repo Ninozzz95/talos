@@ -123,10 +123,25 @@ export function conAncoraDelFornitore(counter) {
 export function credenzialeDelContatore(provider, { leggiRuntime, leggiChiave, baseLocale }) {
   if (provider === 'local') return { baseURL: baseLocale };
   if (REGISTRO_FORNITORI[provider]?.credenziale === false) return {};
-  return { baseURL: leggiRuntime(provider).endpoint, apiKey: leggiChiave(provider) };
+  const runtime = leggiRuntime(provider);
+  /* ⛔ 14/10/2026, revisione del bugfixer (REV-ZAI-01): il contatore gira in `contextHooks.prepare`, PRIMA della destinazione del
+     modello, e con un indirizzo non ancora scelto mandava la chiave Z.AI all'indirizzo di serie (il saldo a consumo). La stessa
+     regola della destinazione (`model-destination.mjs`): la chiave va solo all'indirizzo scelto, e lo si dice col codice della
+     carta gialla. */
+  if (runtime?.endpointDaScegliere === true) {
+    throw Object.assign(new Error(`Choose where your ${REGISTRO_FORNITORI[provider]?.etichetta ?? provider} key goes: Model Lab → Providers → Configure.`), { code: 'PROVIDER_ENDPOINT_NOT_CHOSEN' });
+  }
+  return { baseURL: runtime.endpoint, apiKey: leggiChiave(provider) };
 }
 
-export function createContextTokenCounter({ fetchFn, resolveProfile, hashFn = text => createHash('sha256').update(text).digest('hex') } = {}) {
+/*
+ * Revisione del bugfixer, 16/10/2026 (CONTA-REV-01): un contatore che accetta la connessione e non risponde teneva fermo il giro —
+ *   il conteggio aveva solo il segnale del giro, e il client HTTP aspetta le intestazioni fino a 300 s. Un conteggio è una misura di
+ *   supporto: oltre questo tempo vale la stima dichiarata (`fallback: 'CTX_TOKEN_TIMEOUT'`), come per ogni altro guasto del contatore.
+ */
+export const TEMPO_MASSIMO_DEL_CONTEGGIO_MS = 10_000;
+
+export function createContextTokenCounter({ fetchFn, resolveProfile, hashFn = text => createHash('sha256').update(text).digest('hex'), tempoMassimoMs = TEMPO_MASSIMO_DEL_CONTEGGIO_MS } = {}) {
   if (typeof resolveProfile !== 'function' || typeof fetchFn !== 'function') fail('CTX_TOKEN_PORT_INVALID', 'Profile resolution and transport must be injected.');
   return {
     async countPreparedContext({ messages, tools = [], model, signal }) {
@@ -159,6 +174,16 @@ export function createContextTokenCounter({ fetchFn, resolveProfile, hashFn = te
         const inputTokens = Math.ceil(Buffer.byteLength(JSON.stringify(body), 'utf8') / 3.5) + messages.length * 4;
         return { ...base, inputTokens, method: 'heuristic', exact: false, estimatedMarginTokens: Math.max(256, Math.ceil(inputTokens * 0.15)) };
       };
+      /*
+       * ⛔ 16/10/2026 (segnalato dalla CLI, stress test della 0.6.6, riprodotto sulla 0.6.6 pubblicata) — UN CONTEGGIO CHE NON SI PUÒ
+       *   LEGGERE È UNA STIMA, MAI UN GIRO FALLITO. Un proxy o un server locale compatibile OpenAI che risponde 200 a
+       *   `/responses/input_tokens` senza implementarlo, un 429 o un 5xx del contatore, una rete che non risponde: il conteggio è una
+       *   MISURA di supporto del giro, e fino a ieri il suo guasto faceva fallire il giro intero. Hermes non chiede mai un conteggio al
+       *   fornitore: stima sempre (`agent/model_metadata.py`, `estimate_tokens_rough`) e corregge coi numeri veri della risposta.
+       * ⇒ Questi tre guasti diventano la stima dichiarata (`method: 'heuristic'`, `exact: false`), con `fallback` che dice da quale
+       *   guasto nasce. Restano errori quelli di CONFIGURAZIONE — credenziale rifiutata, indirizzo malformato — e uno Stop.
+       */
+      const stimaDopoUnGuasto = (codice) => ({ ...heuristic(), fallback: codice });
       const cloud = Object.hasOwn(defaults, provider);
       const runtime = provider === 'local' || provider === 'llama.cpp' || provider === 'llamacpp';
       if (!cloud && !runtime) return heuristic();
@@ -178,16 +203,19 @@ export function createContextTokenCounter({ fetchFn, resolveProfile, hashFn = te
       else if (profile.apiKey) headers.authorization = `Bearer ${profile.apiKey}`;
       signal?.throwIfAborted();
       let response;
-      try { response = await fetchFn(url.href, { method: 'POST', headers, body: JSON.stringify(body), signal, redirect: 'error' }); }
-      catch { signal?.throwIfAborted(); fail('CTX_TOKEN_NETWORK', 'The selected token counter could not be reached.'); }
+      const tetto = AbortSignal.timeout(tempoMassimoMs);
+      const conTetto = signal ? AbortSignal.any([signal, tetto]) : tetto;
+      const guasto = (codice) => { signal?.throwIfAborted(); return stimaDopoUnGuasto(tetto.aborted ? 'CTX_TOKEN_TIMEOUT' : codice); };
+      try { response = await fetchFn(url.href, { method: 'POST', headers, body: JSON.stringify(body), signal: conTetto, redirect: 'error' }); }
+      catch { return guasto('CTX_TOKEN_NETWORK'); }
       signal?.throwIfAborted();
       if ([404, 405, 501].includes(response.status)) return heuristic();
       if ([401, 403].includes(response.status)) fail('CTX_TOKEN_AUTH', 'The token counter rejected the injected credential.');
-      if (!response.ok) fail('CTX_TOKEN_HTTP', `The token counter failed with HTTP ${response.status}.`);
+      if (!response.ok) return stimaDopoUnGuasto('CTX_TOKEN_HTTP');
       let result;
-      try { result = await response.json(); } catch { fail('CTX_TOKEN_RESPONSE_INVALID', 'The token counter returned invalid JSON.'); }
+      try { result = await response.json(); } catch { return guasto('CTX_TOKEN_RESPONSE_INVALID'); }
       const inputTokens = provider === 'gemini' ? result?.totalTokens : result?.input_tokens;
-      if (!Number.isSafeInteger(inputTokens) || inputTokens < 0) fail('CTX_TOKEN_RESPONSE_INVALID', 'The token counter returned an invalid input token count.');
+      if (!Number.isSafeInteger(inputTokens) || inputTokens < 0) return stimaDopoUnGuasto('CTX_TOKEN_RESPONSE_INVALID');
       // Provider preflight is a measurement, not a promise of later billed usage.
       return { ...base, inputTokens, method: runtime ? 'runtime' : 'provider', exact: runtime };
     },

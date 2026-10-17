@@ -7,8 +7,9 @@
  * (`components/testo-server.js`); senza la chiave nel dizionario mostra la frase inglese, mai la chiave. Stesso schema del
  * «contenuto sospetto» (area `kernel`, commit 8d894b012).
  *
- * ⛔ L'italiano è ESATTAMENTE la frase che il server mandava prima (parola per parola, anche dove è difettosa: vedi
- *   `doctor.folders.availableOne`, «1 cartella di progetto disponibili»); l'inglese è la sorgente. Segnaposto uguali.
+ * ⛔ L'italiano è ESATTAMENTE la frase che il server mandava prima (parola per parola, anche dove è difettosa); l'inglese è la
+ *   sorgente. Segnaposto uguali. ⛔ 15/10/2026 (dalla Mobile, sul Pad): `doctor.folders.availableOne` diceva «1 cartella di progetto
+ *   disponibili» — corretto al singolare; il difetto conservato non serve più a nessuno.
  * ⛔ Due chiavi finiscono in `One`/`Many`: il server manda la chiave senza suffisso e il numero `n`, l'interfaccia sceglie la
  *   forma col plurale della lingua (`tn`).
  * ⛔ I nomi propri (DuckDuckGo, SearXNG, Z.AI, MiniMax, llama.cpp) restano uguali nelle due lingue.
@@ -59,6 +60,12 @@ export default {
     'research.reason.modelDeposited': "depositata dal modello che ha scritto il rapporto: nessun giudice indipendente l'ha ancora controllata.",
     'runtime.notice.noTools': "Questo modello non usa gli attrezzi: qui resta una chat. Può rispondere, non può leggere file né eseguire comandi.",
     'runtime.notice.keyRejected': "Una chiave di {provider} è stata rifiutata: controlla Fornitori e accessi.",
+    'runtime.notice.zaiNoCredit': "Z.AI dice che non c'è credito su {on}. TALOS non ha provato un altro indirizzo con la tua chiave: scegli quello che vuoi in Configura.",
+    'runtime.notice.zaiEndpointSwitched': "Z.AI dice che su {from} non c'è credito: TALOS è passato a {to} e prosegue.",
+    'zai.address.coding': 'il piano GLM Coding',
+    'zai.address.codingCn': 'il piano GLM Coding (Cina)',
+    'zai.address.general': 'il saldo a consumo',
+    'zai.address.generalCn': 'il saldo a consumo (Cina)',
     'runtime.notice.trafficFallback': "Il fornitore {provider} limita il traffico: continuo con {nextProvider} · modello {model}",
     'runtime.notice.unavailableFallback': "Il fornitore {provider} non risponde: continuo con {nextProvider} · modello {model}",
     'sessionStore.corrupt': "La sessione {sessionId} ha una riga corrotta (non l'ultima): il file non è un crash a metà append, è danneggiato altrove.",
@@ -141,12 +148,14 @@ export default {
     'doctor.sessionStore.link': 'Le sessioni si salvano con la pubblicazione atomica (collegamento): il disco la supporta.',
     'doctor.sessionStore.noLink': 'Le sessioni si salvano con il ripiego sicuro (creazione esclusiva e byte verificati): il disco non supporta i collegamenti, ad esempio exFAT. Un crash a metà scrittura può lasciare una riga spezzata, che viene riparata alla riapertura.',
     'doctor.sessionStore.unknown': 'Nessuna sessione ancora salvata da questo avvio: la modalità si conosce alla prima scrittura.',
-    'doctor.folders.availableOne': '{n} cartella di progetto disponibili.',
+    'doctor.folders.availableOne': '{n} cartella di progetto disponibile.',
     'doctor.folders.availableMany': '{n} cartelle di progetto disponibili.',
     'doctor.folders.none': 'Nessuna cartella di progetto è stata configurata nell’elenco consentito.',
     'doctor.runtime.notObserved': 'Stato runtime non osservato.',
     'doctor.runtime.ready': 'Runtime agente pronto.',
     'doctor.runtime.notReady': 'Il runtime agente non è pronto per tutte le funzioni richieste.',
+    'doctor.runtime.noTaskCatalog': 'Il runtime agente non espone l’elenco delle attività richiesto.',
+    'doctor.runtime.unavailable': 'Il runtime agente non è disponibile. Controlla la configurazione del server.',
     'doctor.catalog.notObserved': 'Elenco attività predefinite non osservato.',
     'doctor.catalog.available': 'Elenco attività predefinite disponibile.',
     'doctor.catalog.unavailable': 'L’elenco delle attività predefinite non è disponibile in questa installazione.',
@@ -161,6 +170,10 @@ export default {
     'approval.read.secret': "Questa lettura apre un file che può contenere chiavi o password ({percorso}): vuoi che la faccia?",
     'approval.list.secret': "Questo elenco apre un file che può contenere chiavi o password ({percorso}): vuoi che lo faccia?",
     'approval.command.secret': "Il comando tocca un file che può contenere chiavi o password ({percorso}): vuoi che lo esegua?",
+    'approval.write.secret': "Questa scrittura modifica un file che può contenere chiavi o password ({percorso}): vuoi che la faccia?",
+    'approval.write.keychain': "Questa scrittura modifica il portachiavi del sistema, dove sono custodite le password: vuoi che la faccia?",
+    'approval.read.exampleWithKey': "Questa lettura apre un file d'esempio che contiene qualcosa che sembra una chiave vera ({percorso}): vuoi che la faccia?",
+    'approval.command.exampleWithKey': "Il comando tocca un file d'esempio che contiene qualcosa che sembra una chiave vera ({percorso}): vuoi che lo esegua?",
     'approval.read.outside': "Questa lettura apre un file fuori dalla cartella di lavoro ({percorso}): vuoi che la faccia?",
     'approval.list.outside': "Questo elenco apre una cartella fuori dalla cartella di lavoro ({percorso}): vuoi che lo faccia?",
     'approval.read.hiddenOutside': "Questa lettura apre una cartella nascosta fuori dalla cartella di lavoro ({percorso}): vuoi che la faccia?",
@@ -205,6 +218,7 @@ export default {
     'probe.agentInitialized': 'Agente inizializzato e chiuso. Nessun messaggio inviato.',
     'probe.noModelList': 'Questo fornitore non espone un elenco modelli su cui provare la credenziale.',
     'probe.noKeySaved': 'Nessuna chiave salvata per {provider}.',
+    'probe.endpointNotChosen': '{provider}: prima scegli dove va la chiave, in Configura.',
     'probe.noDocumentedList': '{provider}: non è documentato un elenco modelli per verificare la chiave. La prova minima richiede una generazione con limite di un token e può consumare credito o quota; occorre richiederla esplicitamente.',
     'probe.addressMissing': 'Manca l\'indirizzo di {provider}.',
     'probe.noResponse': '{provider}: nessuna risposta entro {seconds} secondi.',
@@ -320,6 +334,12 @@ export default {
     'research.reason.modelDeposited': "deposited by the model that wrote the report: no independent judge has checked it yet.",
     'runtime.notice.noTools': "This model does not use tools: this remains a chat. It can answer, but it cannot read files or run commands.",
     'runtime.notice.keyRejected': "A {provider} key was rejected: check Providers and access.",
+    'runtime.notice.zaiNoCredit': "Z.AI said there is no credit on {on}. TALOS did not try another address with your key: choose the address you want for it.",
+    'runtime.notice.zaiEndpointSwitched': "Z.AI said there is no credit on {from}: TALOS switched to {to} and goes on.",
+    'zai.address.coding': 'the GLM Coding Plan',
+    'zai.address.codingCn': 'the GLM Coding Plan (China)',
+    'zai.address.general': 'the pay-as-you-go balance',
+    'zai.address.generalCn': 'the pay-as-you-go balance (China)',
     'runtime.notice.trafficFallback': "Provider {provider} is limiting traffic: continuing with {nextProvider} · model {model}",
     'runtime.notice.unavailableFallback': "Provider {provider} is not responding: continuing with {nextProvider} · model {model}",
     'sessionStore.corrupt': "Session {sessionId} has a corrupt line (not the last one): the file is not a crash midway through an append; it is damaged elsewhere.",
@@ -408,6 +428,8 @@ export default {
     'doctor.runtime.notObserved': 'Runtime state not observed.',
     'doctor.runtime.ready': 'Agent runtime ready.',
     'doctor.runtime.notReady': 'The agent runtime is not ready for all the required features.',
+    'doctor.runtime.noTaskCatalog': 'The agent runtime does not expose the requested task catalog.',
+    'doctor.runtime.unavailable': 'The agent runtime is not available. Check the server configuration.',
     'doctor.catalog.notObserved': 'Preset tasks list not observed.',
     'doctor.catalog.available': 'Preset tasks list available.',
     'doctor.catalog.unavailable': 'The preset tasks list is not available in this installation.',
@@ -422,6 +444,10 @@ export default {
     'approval.read.secret': "This read opens a file that may contain keys or passwords ({percorso}): do you want me to do it?",
     'approval.list.secret': "This listing opens a file that may contain keys or passwords ({percorso}): do you want me to do it?",
     'approval.command.secret': "The command touches a file that may contain keys or passwords ({percorso}): do you want me to run it?",
+    'approval.write.secret': "This write changes a file that may contain keys or passwords ({percorso}): do you want me to do it?",
+    'approval.write.keychain': "This write changes the system keychain, where passwords are kept: do you want me to do it?",
+    'approval.read.exampleWithKey': "This read opens an example file that holds something that looks like a real key ({percorso}): do you want me to do it?",
+    'approval.command.exampleWithKey': "The command touches an example file that holds something that looks like a real key ({percorso}): do you want me to run it?",
     'approval.read.outside': "This read opens a file outside the working folder ({percorso}): do you want me to do it?",
     'approval.list.outside': "This listing opens a folder outside the working folder ({percorso}): do you want me to do it?",
     'approval.read.hiddenOutside': "This read opens a hidden folder outside the working folder ({percorso}): do you want me to do it?",
@@ -466,6 +492,7 @@ export default {
     'probe.agentInitialized': 'Agent initialized and closed. No message sent.',
     'probe.noModelList': 'This provider does not expose a model list to test the credential on.',
     'probe.noKeySaved': 'No key saved for {provider}.',
+    'probe.endpointNotChosen': '{provider}: choose where the key goes first, in Configure.',
     'probe.noDocumentedList': '{provider}: a model list to check the key is not documented. The minimal test needs a generation limited to one token and may use credit or quota; it has to be requested explicitly.',
     'probe.addressMissing': 'The address of {provider} is missing.',
     'probe.noResponse': '{provider}: no response within {seconds} seconds.',

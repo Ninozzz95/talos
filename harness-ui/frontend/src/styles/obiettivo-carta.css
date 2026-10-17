@@ -1,0 +1,110 @@
+/*
+ * ⭐ /goal G6 (owner 15/10/2026) — LA CARTA DI CONFERMA DEI CONTROLLI (C1), «così com'è» sul mockup `mockup-goal-2026-10-15/`:
+ * una carta della chat (`talos-card`) col bordo dell'accento (è una domanda che aspetta la persona), il titolo con l'icona, una
+ * frase, un controllo per riga — tipo a sinistra (icona + parola), frase e come lo prova TALOS a destra, la prova in monospazio —,
+ * poi i limiti e il revisore in piccolo, e le azioni. Nessun colore nuovo: i token del tema, chiaro e scuro da soli.
+ */
+.talos-carta-obiettivo {
+  display: grid;
+  gap: var(--talos-space-sm);
+  max-width: 760px;
+  margin: var(--talos-space-sm) 0 var(--talos-space-md);
+  padding: 18px 20px 16px;
+  border: 1px solid var(--talos-accent-border);
+  border-radius: var(--talos-radius-card);
+  background: var(--talos-card);
+  color: var(--talos-text);
+}
+.talos-carta-obiettivo[data-chiusa] { border-color: var(--talos-border); }
+.talos-carta-obiettivo__testa { display: flex; align-items: center; gap: var(--talos-space-sm); }
+.talos-carta-obiettivo__icona { display: inline-grid; place-items: center; color: var(--talos-accent-text); }
+.talos-carta-obiettivo__titolo { margin: 0; font-size: var(--talos-font-size-md, 0.95rem); font-weight: 600; }
+.talos-carta-obiettivo__obiettivo { margin: 0; font-weight: 550; overflow-wrap: anywhere; }
+.talos-carta-obiettivo__guida { margin: 0; color: var(--talos-muted); font-size: var(--talos-font-size-sm); }
+.talos-carta-obiettivo[data-modo="attesa"] .talos-carta-obiettivo__guida { font-style: italic; }
+
+.talos-carta-obiettivo__controlli { display: grid; gap: 0; }
+.talos-carta-obiettivo__riga {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: var(--talos-space-md);
+  align-items: start;
+  padding: 10px 4px;
+  border-top: 1px solid var(--talos-border-subtle);
+}
+.talos-carta-obiettivo__riga:last-of-type { border-bottom: 1px solid var(--talos-border-subtle); }
+.talos-carta-obiettivo__tipo { display: inline-flex; align-items: center; gap: 6px; color: var(--talos-muted); font-size: var(--talos-font-size-sm); }
+.talos-carta-obiettivo__corpo { display: grid; gap: 2px; min-width: 0; }
+.talos-carta-obiettivo__frase { margin: 0; overflow-wrap: anywhere; }
+.talos-carta-obiettivo__prova { margin: 0; color: var(--talos-muted); font-size: var(--talos-font-size-xs, 0.75rem); overflow-wrap: anywhere; }
+
+/* la modifica: tipo · frase · togli, e sotto i campi del tipo scelto */
+.talos-carta-obiettivo__riga--modifica { grid-template-columns: 140px minmax(0, 1fr) auto; align-items: center; }
+.talos-carta-obiettivo__prova-modifica { grid-column: 2 / -1; display: flex; flex-wrap: wrap; gap: var(--talos-space-xs); }
+.talos-carta-obiettivo__prova-modifica > .sheet-input { flex: 1 1 180px; min-width: 0; }
+.talos-carta-obiettivo__prova-modifica > [hidden] { display: none; }
+.talos-carta-obiettivo__controlli > .talos-button { justify-self: start; margin-top: var(--talos-space-xs); }
+
+.talos-carta-obiettivo__limiti { margin: 0; color: var(--talos-muted); font-size: var(--talos-font-size-xs, 0.75rem); }
+.talos-carta-obiettivo__errore { margin: 0; color: var(--talos-danger); font-size: var(--talos-font-size-sm); overflow-wrap: anywhere; }
+.talos-carta-obiettivo__azioni { display: flex; align-items: center; gap: var(--talos-space-xs); }
+.talos-carta-obiettivo__azioni[hidden] { display: none; }
+.talos-carta-obiettivo__esito { margin: 0; color: var(--talos-muted); font-size: var(--talos-font-size-sm); }
+
+/* il suggerimento di `/goal` sopra il compositore: un elenco di una voce, la grammatica dei menu di casa */
+.talos-suggerimento-comandi:not([hidden]) {
+  position: absolute;
+  left: var(--talos-space-sm);
+  bottom: calc(100% + 6px);
+  z-index: 40;
+  display: grid;
+  min-width: 320px;
+  padding: 5px;
+  border: 1px solid var(--talos-border);
+  border-radius: 10px;
+  background: var(--talos-panel);
+  box-shadow: 0 18px 50px rgb(0 0 0 / 22%);
+}
+.talos-suggerimento-comandi__voce {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--talos-space-sm);
+  align-items: baseline;
+  padding: 8px 10px;
+  border-radius: 7px;
+  color: var(--talos-text);
+  cursor: pointer;
+}
+.talos-suggerimento-comandi__voce[aria-selected="true"] { background: var(--talos-accent-soft); }
+.talos-suggerimento-comandi__nome { font-weight: 600; }
+.talos-suggerimento-comandi__aiuto { color: var(--talos-muted); font-size: var(--talos-font-size-sm); }
+
+/*
+ * ⛔ 15/10/2026, dal vivo: la carta vive DENTRO un messaggio, e `.talos-message p` (index.css, misura della chat, margine 10px,
+ *   interlinea 1,6) vinceva sulle classi semplici — i testi uscivano più grandi del mockup. Qui le misure del mockup C1 con una
+ *   specificità che le batte (classe + classe). E `.sheet-input` usa le variabili dei FOGLI (`--line`, `--surface`): in chat il
+ *   bordo spariva, quindi i campi della modifica prendono i token del tema.
+ */
+.talos-carta-obiettivo .talos-carta-obiettivo__titolo { font-size: 15px; line-height: 1.35; }
+.talos-carta-obiettivo .talos-carta-obiettivo__obiettivo { margin: 0; font-size: 14px; line-height: 1.45; }
+.talos-carta-obiettivo .talos-carta-obiettivo__guida { margin: 0; font-size: 13px; line-height: 1.45; }
+.talos-carta-obiettivo .talos-carta-obiettivo__frase { margin: 0; font-size: 14px; line-height: 1.4; color: var(--talos-text); }
+.talos-carta-obiettivo .talos-carta-obiettivo__prova { margin: 0; font-size: 12px; line-height: 1.4; }
+.talos-carta-obiettivo .talos-carta-obiettivo__limiti,
+.talos-carta-obiettivo .talos-carta-obiettivo__esito,
+.talos-carta-obiettivo .talos-carta-obiettivo__errore { margin: 0; font-size: 12px; line-height: 1.45; }
+.talos-carta-obiettivo .talos-carta-obiettivo__tipo { font-size: 12px; }
+.talos-carta-obiettivo .sheet-input {
+  width: 100%;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--talos-border-strong);
+  border-radius: 8px;
+  background: var(--talos-panel);
+  color: var(--talos-text);
+  font-size: 13px;
+}
+.talos-carta-obiettivo .sheet-input:focus { outline: none; border-color: var(--talos-accent-border); box-shadow: 0 0 0 2px var(--talos-accent-soft); }
+/* S5 (revisione 15/10/2026): la riga che dice che `/goal` sostituisce l'obiettivo in corso — tono d'avviso, coi token del tema */
+.talos-carta-obiettivo .talos-carta-obiettivo__sostituisce { margin: 0; padding: 6px 10px; font-size: 13px; line-height: 1.45; color: var(--talos-text);
+  background: var(--talos-warning-soft); border: 1px solid var(--talos-warning-border); border-radius: calc(var(--talos-radius-control) - 4px); }

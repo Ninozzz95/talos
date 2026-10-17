@@ -458,6 +458,14 @@ test('⛔⛔⛔⛔ BC76-08 — un ESITO DEL TASK non è un guasto del motore: ne
   const { sessionId } = registro.avvia('task-vero', {
     provider: 'local', runtimeId: 'llama.cpp', modelId: 'un-gguf.gguf', fallbackConsent: true,
   });
+  /* ⛔ 12/10/2026, owner («una soluzione che non comprometta la fluidità della conversazione»): una risposta con copie identiche
+     non ferma più il giro. Sul desktop la guardia dei giri in tondo è accesa: alla quinta esecuzione identica chiede alla
+     persona, e qui la persona dice NO. L'esito resta un esito del TASK, ed è quello che questa prova difende. */
+  const scadenza = Date.now() + 30_000;
+  while (!registro.domandaInAttesa(sessionId) && Date.now() < scadenza) await new Promise((r) => setTimeout(r, 25));
+  const carta = registro.domandaInAttesa(sessionId);
+  assert.equal(carta?.azione?.tipo, 'giri-in-tondo', 'il giro è andato avanti dopo le copie scartate, fino alla domanda sui giri in tondo');
+  await registro.rispondiApprovazione(sessionId, carta.requestId, false);
   await attendiFine(registro, sessionId, { ms: 30_000 });
   /* ⛔ Stesso respiro di BC76-09, e per lo stesso motivo: un ripiego parte DOPO il primo evento finale. */
   await new Promise((r) => setTimeout(r, 500));

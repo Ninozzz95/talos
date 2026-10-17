@@ -101,24 +101,30 @@ test('FORN-07 — escludere per un modello ciò che quel modello già esclude di
 })
 
 test('FORN-09 AL CONTRARIO — una carta con due cambi e la scrittura che fallisce: NIENTE cambia (memoria e disco), e il rifiuto lo dice', async (t) => {
-  const { mkdirSync, rmdirSync, readFileSync } = await import('node:fs')
+  const { mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } = await import('node:fs')
   const dir = mkdtempSync(join(tmpdir(), 'talos-ospite-fornitori-guasto-'))
   t.after(() => rimuoviCartellaDiProva(dir))
-  // il file temporaneo del negozio diventa una CARTELLA: writeFileSync fallisce, come un disco pieno o un EPERM
   const runtimeFile = join(dir, 'providers.json')
   const negozio = createProviderCredentialStore({ env: {}, runtimeFile })
   negozio.impostaEsclusi('openrouter', ['open-inference', 'chutes'])
   const primaSuDisco = readFileSync(runtimeFile, 'utf8')
   const ospiteGuasto = creaOspiteFornitori({ providerStore: negozio })({})
-  mkdirSync(`${runtimeFile}.tmp`)
+  /* il guasto: al posto del file c'è una CARTELLA non vuota, e il `rename` del temporaneo su di lei fallisce (EPERM/EISDIR), come
+     un disco che rifiuta. ⛔ Prima il guasto era una cartella col nome del temporaneo FISSO `providers.json.tmp`: col temporaneo per
+     scrittura (pid + uuid, cura del motore 14/10) quel trucco non mordeva più e la garanzia restava senza prova (FORN-09 della
+     revisione del bugfixer) */
+  unlinkSync(runtimeFile)
+  mkdirSync(runtimeFile)
+  writeFileSync(join(runtimeFile, 'blocca'), 'x')
   const no = await ospiteGuasto('provider_allow', { provider: 'open-inference' }, { fase: 'esegui' })
   assert.equal(no.ok, false)
   assert.match(no.messaggio, /nothing was changed/u)
   assert.deepEqual(negozio.getRuntime('openrouter').esclusi, ['open-inference', 'chutes'], 'la lista della persona è com\'era')
   assert.deepEqual(negozio.getRuntime('openrouter').esclusiDiSerieTolti, [], 'il di-serie è com\'era')
-  assert.equal(readFileSync(runtimeFile, 'utf8'), primaSuDisco, 'il file non è cambiato')
-  // e tolto il guasto la stessa carta passa intera
-  rmdirSync(`${runtimeFile}.tmp`)
+  assert.deepEqual(readdirSync(dir), ['providers.json'], 'nessun temporaneo lasciato indietro')
+  // e tolto il guasto (il file di prima al suo posto) la stessa carta passa intera
+  rimuoviCartellaDiProva(runtimeFile)
+  writeFileSync(runtimeFile, primaSuDisco)
   assert.equal((await ospiteGuasto('provider_allow', { provider: 'open-inference' }, { fase: 'esegui' })).ok, true)
   const riletto = createProviderCredentialStore({ env: {}, runtimeFile })
   assert.deepEqual(riletto.getRuntime('openrouter').esclusi, ['chutes'])
@@ -213,4 +219,19 @@ test('FORN-13 AL CONTRARIO — chatgpt_account: azione sbagliata rifiutata; un g
   const vuoto = scenaChatgpt(t, accessoFinto({ collegato: false }))
   assert.deepEqual(await vuoto.ospite('chatgpt_account', { action: 'disconnect' }, { fase: 'anteprima' }), { ok: true, carta: false })
   assert.match((await vuoto.ospite('chatgpt_account', { action: 'disconnect' }, { fase: 'esegui' })).testo, /Nothing to do/u)
+})
+
+test('FORN-SOLA-LETTURA-01 (s58) — nessuno davanti: la lista e lo stato si leggono, escludere, riammettere e scollegare ChatGPT si rifiutano', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'talos-ospite-fornitori-'))
+  t.after(() => rimuoviCartellaDiProva(dir))
+  const providerStore = createProviderCredentialStore({ env: {}, runtimeFile: join(dir, 'providers.json') })
+  const soloLettura = creaOspiteFornitori({ providerStore })({ soloLettura: true })
+  assert.match((await soloLettura('provider_exclusions_list', {}, { fase: 'esegui' })).testo, /Excluded/u)
+  for (const [nome, argomenti] of [['provider_exclude', { provider: 'deepinfra' }], ['provider_allow', { provider: 'deepinfra' }], ['chatgpt_account', { action: 'disconnect' }]]) {
+    const esito = await soloLettura(nome, argomenti, { fase: 'anteprima' })
+    assert.equal(esito.ok, false, nome)
+    assert.match(String(esito.motivo ?? esito.testo ?? JSON.stringify(esito)), /a turn with nobody in front cannot/u, nome)
+  }
+  for (const nome of ['provider_exclude', 'provider_allow']) await soloLettura(nome, { provider: 'deepinfra' }, { fase: 'esegui' })
+  assert.doesNotMatch((await soloLettura('provider_exclusions_list', {}, { fase: 'esegui' })).testo, /deepinfra/u, 'nothing changed, even when the run phase is called')
 })

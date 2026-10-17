@@ -60,6 +60,7 @@
  */
 import { accessSync, constants, realpathSync, statSync } from 'node:fs';
 import { isAbsolute } from 'node:path';
+import { titoloBreve } from './titolo-breve.mjs'; // 15/10/2026: una regola sola per i nomi corti
 
 export class CustomTaskError extends Error {
   constructor(message, code = 'PROJECT_NOT_ALLOWED') {
@@ -170,6 +171,6 @@ export function preparaEsecuzioneLibera(cartelleProgetto, { cartellaId, cartella
   return {
     cartella,
     comandoProva: comando,
-    task: { consegna, consegnaCorta: consegna.length > 80 ? `${consegna.slice(0, 77)}...` : consegna, progetto: nomeProgetto },
+    task: { consegna, consegnaCorta: titoloBreve(consegna), progetto: nomeProgetto },
   };
 }

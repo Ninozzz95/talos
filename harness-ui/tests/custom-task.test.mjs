@@ -33,8 +33,9 @@ test('⭐ preparaEsecuzioneLibera su un cartellaId ammesso torna il percorso VER
   assert.equal(cartella, cartelle[0].percorso);
   assert.equal(comandoProva, 'npm test');
   assert.equal(task.consegna, consegnaLunga, 'la consegna intera arriva integra a talosLavora');
-  assert.equal(task.consegnaCorta.length, 80, '77 caratteri + "..."');
-  assert.ok(task.consegnaCorta.endsWith('...'));
+  // 15/10/2026: la regola unica dei nomi corti (`titolo-breve.mjs`): 80 grafemi, «…»; una parola sola si taglia secca
+  assert.equal([...task.consegnaCorta].length, 80, '79 caratteri + «…»');
+  assert.ok(task.consegnaCorta.endsWith('…'));
 });
 
 test('⭐⭐ un comandoProva esplicito sostituisce il default', (t) => {

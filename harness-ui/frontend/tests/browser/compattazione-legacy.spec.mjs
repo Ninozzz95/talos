@@ -50,6 +50,9 @@ function giro(seq = 1, consegna = 'Sistema i test del progetto', prompt = 52_000
    :7779`): `tokenPrima` all'inizio, `at` al primo livello alla fine (nessun `record`, nessun riassunto nell'evento),
    l'annullo è `fase:'annullata'` sullo stesso evento, il journal porta `riparato:true|false`. */
 const INIZIO = { type: 'CUSTOM', name: 'talos.compattazione', _sequenza: 20, value: { fase: 'inizio', tokenPrima: 184_000, soglia: 150_000, motivo: 'background', coveredThrough: 40, at: AT } };
+/* 15/10/2026 (owner, «solo il separatore»): la barra resta per la compattazione che il giro ASPETTA (emergenza, overflow, a mano);
+   quella del server in sottofondo (`INIZIO`, motivo «background») non la apre più. Le prove della barra usano questa. */
+const INIZIO_ATTESO = { ...INIZIO, value: { ...INIZIO.value, motivo: 'emergenza' } };
 const FINE = { type: 'CUSTOM', name: 'talos.compattazione', _sequenza: 21, value: { fase: 'fine', compattato: true, tokenPrima: 184_000, tokenDopo: 41_000, misura: 'stima', coveredThrough: 40, at: AT, modello: MODELLO, motivo: 'background' } };
 const FINE_FALLITA = { type: 'CUSTOM', name: 'talos.compattazione', _sequenza: 21, value: { fase: 'fine', compattato: false, motivo: 'errore: HTTP 500 dal fornitore', at: AT } };
 const ANNULLATA = { type: 'CUSTOM', name: 'talos.compattazione', _sequenza: 22, value: { fase: 'annullata', at: AT, coveredThrough: 40 } };
@@ -134,7 +137,7 @@ test('CTX-UI-WINDOW-ALWAYS-OPENS — col trial spento il bottone apre la finestr
      schede del motore non ci sono; i numeri dell'avviso sono nella testata, sul limite che agisce, e la barra ha la tacca. */
   await expect(finestra.locator('[data-context-legacy-note]')).toBeVisible();
   await expect(finestra.locator('[data-context-tab]:not([hidden])')).toHaveCount(2);
-  await expect(finestra.locator('[data-context-headline]'), 'gli stessi numeri dell’avviso (solo prompt_tokens dell’ultima richiesta)').toHaveText('52k di 150k · 34,7%');
+  await expect(finestra.locator('[data-context-headline]'), 'gli stessi numeri dell’avviso (solo prompt_tokens dell’ultima richiesta)').toHaveText('52k di 150k · 34,6%'); // 13/10/2026 (bugfixer): 52.000 / 150.000 = 34,67% e la percentuale si TRONCA (owner 11/10 «Troncare in tutti e due», 9fcbb1a85): la prova, del 10/10, aspettava l'arrotondato
   await expect(finestra.locator('[data-context-measurement]')).toContainText('150k');
   await expect(finestra.locator('[data-context-gauge]')).toBeVisible();
   await expect(barra(page), 'aprire la finestra non compatta').toHaveCount(0);
@@ -160,7 +163,7 @@ test('CTX-UI-WINDOW-ALWAYS-OPENS — col trial spento il bottone apre la finestr
   await expect(finestra.locator('[data-context-job]')).toHaveText('Conversazione riassunta. La misura si aggiorna alla prossima risposta.');
   await expect(finestra.locator('[data-context-progress-bar]')).toBeHidden();
   await expect(barra(page)).toHaveCount(0);
-  await expect(separatore(page), 'esito: una riga persistente in chat').toContainText('Conversazione riassunta');
+  await expect(separatore(page), 'esito: una riga persistente in chat').toContainText('Conversazione compattata');
   expect(chiamate, 'una POST sola').toHaveLength(1);
   expect(mutazioniTrial, 'col trial spento il trial non si tocca').toEqual([]);
   await page.keyboard.press('Escape');
@@ -247,7 +250,7 @@ for (const moto of ['reduce', 'no-preference']) {
   test(`CTX-UI-BAR-CALM-NOT-FROZEN-${moto} — la barra del riassunto si muove (${moto === 'reduce' ? '3,2 s col movimento ridotto' : '1,6 s'}) e si vede muoversi`, async ({ page }) => {
     await page.setViewportSize({ width: 1920, height: 1080 });
     await page.emulateMedia({ reducedMotion: moto });
-    await apri(page, `cl-moto-${moto}`, [...giro(), INIZIO]);
+    await apri(page, `cl-moto-${moto}`, [...giro(), INIZIO_ATTESO]);
     const progress = barra(page).locator('progress');
     await expect(progress).toBeVisible();
     const animazioni = await progress.evaluate((el) => el.getAnimations().map((a) => ({ stato: a.playState, durata: a.effect?.getTiming?.().duration })));
@@ -330,7 +333,7 @@ test('CTX-UI-POLICY-REREAD — dopo il refresh della route il confine di turno r
 async function avriChiudi(page) { await page.locator('#avvisoContesto [data-avviso-contesto="chiudi"]').click(); await expect(page.locator('#avvisoContesto')).toBeHidden(); }
 
 test('CTX-UI-DURING-STATE — a fase:inizio la barra parte per il legacy, altezza fissa; a fase:fine sparisce e resta la riga', async ({ page }) => {
-  await apri(page, 'cl-durante', [...giro(), INIZIO]);
+  await apri(page, 'cl-durante', [...giro(), INIZIO_ATTESO]);
   await expect(barra(page)).toBeVisible();
   await expect(barra(page)).toContainText('Riassumo la conversazione');
   await expect(page.locator('#avvisoContesto'), 'mentre il server riassume, «Compatta ora» non si offre').toBeHidden();
@@ -342,13 +345,62 @@ test('CTX-UI-DURING-STATE — a fase:inizio la barra parte per il legacy, altezz
   await eventi(page, [FINE]);
   await expect(barra(page)).toHaveCount(0);
   await expect(separatore(page)).toHaveCount(1);
-  await expect(separatore(page)).toContainText('Conversazione riassunta · 184.000 → 41.000 token');
+  await expect(separatore(page)).toContainText('Conversazione compattata · 143.000 token risparmiati');
+});
+
+test('CTX-UI-BACKGROUND-ONLY-SEPARATOR — la compattazione del server in sottofondo non apre la barra: alla fine c’è solo il separatore', async ({ page }) => {
+  await apri(page, 'cl-sottofondo', [...giro(), INIZIO]);
+  await expect(page.locator('#conversation')).toContainText('Ho letto la cartella dei test');
+  await page.waitForTimeout(300); // la barra, se ci fosse, è già a schermo: la disegna l'evento stesso
+  await expect(barra(page), 'nessuna attesa da mostrare: il giro non aspetta').toHaveCount(0);
+  /* senza barra il riassunto c'è lo stesso: la finestra lo dice e non offre un secondo «Compatta» (la barra faceva da bandierina) */
+  const finestra = page.locator('#veloContesto');
+  await page.locator('#compactSessionBtn').click();
+  await expect(finestra.locator('[data-context-job]')).toHaveText('Riassumo la conversazione…');
+  await expect(finestra.locator('[data-context-start]')).toBeDisabled();
+  await page.keyboard.press('Escape');
+  await eventi(page, [FINE]);
+  await expect(separatore(page)).toHaveCount(1);
+  await expect(separatore(page)).toContainText('Conversazione compattata · 143.000 token risparmiati');
+  await expect(barra(page)).toHaveCount(0);
+  await page.locator('#compactSessionBtn').click();
+  await expect(finestra.locator('[data-context-job]'), 'alla fine la finestra lo lascia').toHaveText('Nessuna compattazione in corso.');
+  await page.keyboard.press('Escape');
+  // AL CONTRARIO: la stessa conversazione con la compattazione che il giro aspetta la barra la apre
+  await apri(page, 'cl-sottofondo-contrario', [...giro(), INIZIO_ATTESO]);
+  await expect(barra(page)).toBeVisible();
+});
+
+test('CTX-UI-BACKGROUND-NOTICE-SILENT — mentre il server riassume in sottofondo l’avviso non offre «Compatta ora», anche senza barra', async ({ page }) => {
+  await page.route('**/api/v1/models*', (route) => route.fulfill({ json: { ok: true, data: { modelli: [{ id: MODELLO, nome: 'GLM 5.3 Flash', provider: 'openrouter', contextLength: 200_000 }] }, meta: {} } }));
+  const pieno = giro(1, undefined, 130_000);
+  await policyFixture(page, '**/api/v1/sessions/cl-avviso-contrario/compaction-policy');
+  await policyFixture(page, '**/api/v1/sessions/cl-avviso-sottofondo/compaction-policy');
+  // premessa, AL CONTRARIO: la stessa conversazione senza riassunto in corso l'avviso lo mostra
+  await apri(page, 'cl-avviso-contrario', pieno);
+  await expect(page.locator('#avvisoContesto')).toBeVisible();
+  await apri(page, 'cl-avviso-sottofondo', [...pieno, INIZIO]);
+  await expect(page.locator('#conversation')).toContainText('Ho letto la cartella dei test');
+  await page.waitForTimeout(300); // l'avviso si ricalcola al confine della storia: si lascia passare
+  await expect(page.locator('#avvisoContesto'), '«Compatta ora» mentre il server riassume sarebbe un secondo riassunto').toBeHidden();
+  await expect(barra(page)).toHaveCount(0);
+});
+
+test('CTX-UI-BACKGROUND-ERROR-CLEARS — un giro finito in ERRORE spegne anche il riassunto in sottofondo: nessuno manderà il suo «fine»', async ({ page }) => {
+  await apri(page, 'cl-sottofondo-errore', [...giro(), INIZIO]);
+  await eventi(page, [{ type: 'RunStarted', _sequenza: 30, threadId: 'cl-sottofondo-errore', runId: 'r2' },
+    { type: 'RunError', _sequenza: 31, message: 'Il fornitore ha chiuso la connessione.' }]);
+  const finestra = page.locator('#veloContesto');
+  await page.locator('#compactSessionBtn').click();
+  await expect(finestra.locator('[data-context-job]')).toHaveText('Nessuna compattazione in corso.');
+  await expect(finestra.locator('[data-context-start]')).toBeEnabled();
+  await page.keyboard.press('Escape');
 });
 
 test('CTX-UI-SEPARATOR-SURVIVES-RELOAD-LEGACY — la riga «X → Y token» si ricostruisce dagli eventi rigiocati, una sola', async ({ page }) => {
   await apri(page, 'cl-riga', [...giro(), INIZIO, FINE, ...giro(30, 'E adesso la suite lenta')]);
   await expect(separatore(page)).toHaveCount(1);
-  await expect(separatore(page)).toContainText('184.000 → 41.000 token');
+  await expect(separatore(page)).toContainText('143.000 token risparmiati');
   // il separatore sta NEL PUNTO della conversazione: dopo il primo turno, prima del secondo
   const ordine = await page.evaluate(() => [...document.querySelectorAll('#conversation > *')].map((n) => n.dataset.compattazioneLegacy !== undefined ? 'riga' : (n.dataset.turno || n.className.split(' ')[0])));
   expect(ordine.indexOf('riga')).toBeGreaterThan(0);
@@ -358,7 +410,7 @@ test('CTX-UI-SEPARATOR-SURVIVES-RELOAD-LEGACY — la riga «X → Y token» si r
   await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 8000 });
   await apri(page, 'cl-riga', [...giro(), INIZIO, FINE, ...giro(30, 'E adesso la suite lenta')]);
   await expect(separatore(page)).toHaveCount(1);
-  await expect(separatore(page)).toContainText('184.000 → 41.000 token');
+  await expect(separatore(page)).toContainText('143.000 token risparmiati');
   // una riconnessione SSE rimanda lo stesso evento: la riga resta una (chiave = `at` del record)
   await eventi(page, [FINE]);
   await expect(separatore(page)).toHaveCount(1);
@@ -399,7 +451,7 @@ test('CTX-UI-OVERFLOW-ACTION-WORKS — l’errore «contesto pieno» porta un pu
   const nota = page.locator('#conversation .real-session-status').last();
   await expect(nota).toContainText('non entra nella finestra');
   await nota.getByRole('button', { name: 'Compatta ora' }).click();
-  await expect(separatore(page)).toContainText('Conversazione riassunta');
+  await expect(separatore(page)).toContainText('Conversazione compattata');
   expect(chiamate).toHaveLength(1);
 });
 
@@ -458,7 +510,7 @@ test('CTX-UI-BAR-RECONCILED-ON-ERROR — un giro finito in ERRORE spegne la barr
 });
 
 test('CTX-UI-BAR-CLOSED-BY-RESTORE — la chiusura «interrotta» del ripristino spegne la barra e lo dice a parole, senza Annulla', async ({ page }) => {
-  await apri(page, 'cl-barra-interrotta', [...giro(), INIZIO,
+  await apri(page, 'cl-barra-interrotta', [...giro(), INIZIO_ATTESO,
     { type: 'CUSTOM', name: 'talos.compattazione', _sequenza: 21, value: { fase: 'fine', compattato: false, motivo: 'interrotta', at: AT } }]);
   await expect(separatore(page)).toContainText('il server si è fermato mentre riassumeva');
   await expect(barra(page)).toHaveCount(0);
@@ -494,7 +546,7 @@ for (const modo of ['dark', 'light']) {
     await apri(page, `foto-${modo}-avviso`, pieno);
     await expect(page.locator('#avvisoContesto')).toBeVisible();
     await foto('1-avviso');
-    await apri(page, `foto-${modo}-durante`, [...giro(), INIZIO]);
+    await apri(page, `foto-${modo}-durante`, [...giro(), INIZIO_ATTESO]);
     await expect(barra(page)).toBeVisible();
     await foto('2-durante');
     await eventi(page, [FINE]);

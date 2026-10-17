@@ -318,3 +318,91 @@ test('CTX-NOTICE-IDEMPOTENT one notice per id across repeats and after acknowled
   await assert.rejects(store.recordContextNotice({ sessionId: 'b', event: notice }), /belongs to its own session/u);
   assert.deepEqual((await store.readContextOutbox({ sessionId: 'b' })).filter(event => event.id === notice.id), []);
 });
+
+/*
+ * 2026-10-12, owner decision («it repairs itself»): when the active history no longer matches the archive, the old originals
+ * are set aside under another id (nothing is lost) and the session starts again empty. The immutability guards are suspended
+ * and recreated inside the same transaction: after it they protect exactly as before.
+ */
+/* 13/10/2026 (bugfixer, review of ac8f5a362): the failure at the WORST point — originals already moved, the three
+   immutability guards dropped and not yet recreated. All or nothing: after the error (or the death of the process) nothing
+   has moved and the guards are there. */
+for (const faultPoint of ['aside-after-move', 'crash-aside-after-move']) {
+  test(`CTX-SET-ASIDE-CRASH ${faultPoint}: nothing moved and the immutability guards are still there`, async t => {
+    const { store, databasePath } = await fixture(t, { faultPoint });
+    await store.appendOriginalBatch({ sessionId: 'a', records: [record('r1'), record('r2')], expectedRevision: 0 });
+    const before = await store.readContextSnapshot({ sessionId: 'a' });
+    await assert.rejects(store.setAsideSession({ sessionId: 'a', asideId: 'a.aside-1' }), { code: faultPoint.startsWith('crash') ? 'CTX_WORKER_EXIT' : 'CTX_PERSISTENCE_FAILED' });
+    await store.close();
+    const reopened = createSqliteContextStore({ databasePath });
+    try {
+      assert.deepEqual((await reopened.readOriginals({ sessionId: 'a' })).map(r => [r.id, r.sequence]), [['r1', 1], ['r2', 2]]);
+      assert.equal(await reopened.readContextSnapshot({ sessionId: 'a.aside-1' }), null);
+      assert.equal((await reopened.readContextSnapshot({ sessionId: 'a' })).revision, before.revision);
+      assert.equal((await reopened.health()).integrity, 'ok');
+    } finally { await reopened.close(); }
+    const db = new DatabaseSync(databasePath);
+    try {
+      assert.equal(db.prepare("SELECT count(*) AS n FROM sqlite_master WHERE type='trigger' AND name IN ('originals_no_update','assets_no_update','versions_no_update')").get().n, 3);
+      assert.throws(() => db.prepare('UPDATE original_records SET record_json=?').run('{}'), /immutable/);
+    } finally { db.close(); }
+  });
+}
+
+test('CTX-SET-ASIDE moves the archive under another id in one transaction, and the immutability guards still hold', async t => {
+  const { store, databasePath } = await fixture(t);
+  await store.appendOriginalBatch({ sessionId: 'a', records: [record('r1'), record('r2')], expectedRevision: 0 });
+  await store.recordUsage({ sessionId: 'a', operationId: 'op', usage: { prompt_tokens: 3, completion_tokens: 1 } });
+  const source = [{ recordId: 'r1', quote: 'r1' }];
+  await store.upsertProtectedFact({ sessionId: 'a', expectedRevision: (await store.readContextSnapshot({ sessionId: 'a' })).revision, fact: { id: 'f1', text: 'The project uses Node 24', status: 'active', revision: 0, sources: source } });
+  const before = await store.readContextSnapshot({ sessionId: 'a' });
+  const after = await store.setAsideSession({ sessionId: 'a', asideId: 'a.aside-1' });
+  assert.deepEqual(after.facts.map(f => [f.id, f.text, f.sources]), [['f1', 'The project uses Node 24', []]], 'the fact stays with the person, without quoting originals that are no longer here');
+  assert.deepEqual((await store.readContextSnapshot({ sessionId: 'a.aside-1' })).facts[0].sources.map(s => ({ recordId: s.recordId, quote: s.quote })), source, 'the copy set aside keeps its sources');
+  await store.exportSession({ sessionId: 'a' }); // the live session is still a consistent archive: export verifies it
+  assert.equal(after.headSequence, 0);
+  assert.equal(after.activeVersion, null);
+  assert.ok(after.revision > before.revision, 'a stale revision is found out');
+  assert.deepEqual(after.settings, before.settings, 'the person\'s settings stay with the session');
+  assert.deepEqual(await store.readOriginals({ sessionId: 'a' }), []);
+  const aside = await store.readOriginals({ sessionId: 'a.aside-1' });
+  assert.deepEqual(aside.map(r => [r.id, r.sequence, r.sha256]), [['r1', 1, hash(JSON.stringify(record('r1').message))], ['r2', 2, hash(JSON.stringify(record('r2').message))]], 'same ids, sequences and hashes: not a byte of content changed');
+  assert.equal((await store.readUsage({ sessionId: 'a' })).length >= 1, true, 'what was spent stays counted on the session');
+  /* the session works again from scratch, with the same record ids */
+  await store.appendOriginalBatch({ sessionId: 'a', records: [record('r1', 'new history')], expectedRevision: after.revision });
+  assert.equal((await store.readOriginals({ sessionId: 'a' }))[0].message.content, 'new history');
+  /* and the guards are back */
+  const db = new DatabaseSync(databasePath);
+  assert.throws(() => db.prepare('UPDATE original_records SET record_json=?').run('{}'), /immutable/);
+  assert.throws(() => db.prepare('DELETE FROM original_records').run(), /immutable/);
+  assert.equal(db.prepare("SELECT count(*) AS n FROM sqlite_master WHERE type='trigger' AND name IN ('originals_no_update','assets_no_update','versions_no_update')").get().n, 3);
+  db.close();
+  assert.equal((await store.health()).integrity, 'ok');
+  /* refused: same id, or an id already used — and then nothing moved */
+  await assert.rejects(store.setAsideSession({ sessionId: 'a', asideId: 'a' }), { code: 'CTX_INVALID_INPUT' });
+  await assert.rejects(store.setAsideSession({ sessionId: 'a', asideId: 'a.aside-1' }), { code: 'CTX_ASIDE_CONFLICT' });
+  assert.equal((await store.readOriginals({ sessionId: 'a' })).length, 1);
+  await assert.rejects(store.setAsideSession({ sessionId: 'missing', asideId: 'x' }), { code: 'CTX_SESSION_NOT_FOUND' });
+});
+
+/* L3-3 (13/10/2026, bugfixer): a copy set aside that carries a committed version, its job and the usage of that job is still a
+   verified archive when exported — every embedded provenance says the conversation it belonged to. */
+test('CTX-SET-ASIDE-EXPORT a copy with a version, a job and the usage of that job exports as a verified archive of its conversation', async t => {
+  const { store } = await fixture(t);
+  await store.appendOriginalBatch({ sessionId: 'a', records: [record('r1'), record('r2')] });
+  const args = await candidate(store);
+  await store.commitContextVersion(args);
+  await store.recordUsage({ sessionId: 'a', jobId: args.jobId, operationId: 'riassunto', usage: { inputTokens: 11, outputTokens: 3 } });
+  await store.recordUsage({ sessionId: 'a', jobId: null, operationId: 'giro', usage: { inputTokens: 5 } });
+  await store.setAsideSession({ sessionId: 'a', asideId: 'a.aside-1700000000000-aaaaaaaa' });
+  const archive = await store.exportSession({ sessionId: 'a.aside-1700000000000-aaaaaaaa' });
+  assert.equal(archive.session.sessionId, 'a');
+  assert.deepEqual(archive.versions.map(v => v.id), [args.version.id]);
+  assert.equal(archive.session.activeVersion.id, args.version.id);
+  assert.deepEqual(archive.jobs.map(j => [j.id, j.state]), [[args.jobId, 'committed']]);
+  assert.deepEqual(archive.usage.map(u => [u.sessionId, u.operationId, u.jobId]), [['a', 'riassunto', args.jobId]], 'the usage of the job went with the job; the usage of the turn stays counted on the live session');
+  assert.deepEqual((await store.readUsage({ sessionId: 'a' })).map(u => u.operationId), ['giro']);
+  await store.exportSession({ sessionId: 'a' }); // the live one still verifies
+  /* pruning with this richer copy as the one to keep reads it back whole */
+  assert.deepEqual((await store.pruneAsideSessions({ sessionId: 'a', keep: 'a.aside-1700000000000-aaaaaaaa' })).removed, []);
+});

@@ -98,3 +98,27 @@ test('C1-VIVO-03: under pressure the big outputs of the recent part are shortene
   assert.equal(esiti[2].content, grande(3), 'the latest output stays whole');
   assert.ok(preparata.measurement.inputTokens < conta(messaggi));
 });
+
+test('C1-VIVO-SYSTEM (15/10/2026, cache del piano): with a summary, a late system message after the covered part stays in place in the tail; none is lost or doubled', async (t) => {
+  // r1 = the initial system message, r2 = «Leggi il capitolo 1»: the fake summary cites r2 (the shared `valida` counts ids in fours)
+  const cita = () => ({ text: JSON.stringify({ schema: 'talos.context.summary.v1', text: 'Letti i capitoli.', goal: 'leggere', decisions: [], constraints: [], completed: [], pending: [], resources: [], sources: [{ recordId: 'r2', quote: 'Leggi il capitolo' }] }), finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1 } });
+  const b0 = await banco(t, { summarize: async () => cita() });
+  const tutti = [];
+  const b = { ...b0, aggiungi: async (m) => { tutti.push(m); await b0.aggiungi(m); } };
+  await b.aggiungi({ role: 'system', content: 'istruzioni iniziali' });
+  await giro(b, 1);
+  await b.aggiungi({ role: 'system', content: 'Project context update A' });
+  for (const i of [2, 3]) await giro(b, i);
+  await b.aggiungi({ role: 'system', content: 'Project context update B' });
+  const stretto = { provider: 'local', model: 'fixture', windowTokens: finestra(conta([{ role: 'user', content: grande(0) }]) * 3, 0.95), responseReserve: 2048, local: true };
+  const lavoro = await b.engine.startCompaction({ sessionId: 'chat', sessionModel: stretto, idempotencyKey: 'giro-3-system' });
+  const fine = await b.engine.waitForCompaction({ sessionId: 'chat', jobId: lavoro.id });
+  assert.equal(fine.state, 'committed', JSON.stringify(fine.error));
+  const largo = { ...stretto, windowTokens: 2_000_000 };
+  const { messages } = await b.engine.prepareForRequest({ sessionId: 'chat', messages: tutti, tools: [], sessionModel: largo });
+  const testi = messages.map((m) => (typeof m.content === 'string' ? m.content : ''));
+  for (const s of ['istruzioni iniziali', 'Project context update A', 'Project context update B']) assert.equal(testi.filter((x) => x === s).length, 1, `${s}: exactly once`);
+  assert.ok(testi.some((x) => x.includes('Letti i capitoli.')), 'premise: the request carries the summary');
+  assert.equal(testi[0], 'istruzioni iniziali', 'the initial system block stays first');
+  assert.ok(testi.indexOf('Project context update B') > testi.indexOf('Codice del capitolo 3'), 'the late system message after the covered part stays after the last turn');
+});

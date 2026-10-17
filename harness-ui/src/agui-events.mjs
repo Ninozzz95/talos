@@ -215,7 +215,7 @@ export function toolCallOutput({ toolCallId, delta }) {
  *   non poteva sapere CHE COSA e' stato eseguito ne' DOVE. Per `shell` `cwd` e' la cartella
  *   EFFETTIVA (quella che il comando ha visto davvero), non quella richiesta.
  */
-export function toolCallResult({ messageId, toolCallId, content, role = 'tool', durataMs, comando, cwd, stdout, stderr, exitCode, isError, receipt, outcome, suspicious, inSfondo, fileSfondo, sfondoDa }) {
+export function toolCallResult({ messageId, toolCallId, content, role = 'tool', durataMs, comando, cwd, stdout, stderr, exitCode, isError, receipt, outcome, suspicious, inSfondo, fileSfondo, sfondoDa, duplicate }) {
     const evento = { type: 'ToolCallResult', messageId, toolCallId, content, role }
     // Optional TALOS extension, using MCP's boolean semantics. Never infer it from content.
     if (typeof isError === 'boolean') evento.isError = isError
@@ -258,6 +258,8 @@ export function toolCallResult({ messageId, toolCallId, content, role = 'tool', 
     if (receipt && typeof receipt === 'object' && !Array.isArray(receipt)) evento.receipt = receipt
     /* G02 (dalla lane CLI, 6167226e9): un attrezzo annullato prima di partire lo DICE; solo il valore 'cancelled'. */
     if (outcome === 'cancelled') evento.outcome = outcome
+    /* 12/10/2026: una copia identica scartata — annullata prima di partire PERCHÉ era un doppione. Solo `true`, solo se c'è. */
+    if (duplicate === true) evento.duplicate = true
     /* F-027 (owner 02/10/2026): il risultato porta testo che sembra un'istruzione per un'IA — da dove e quali pattern, per il
        segno nella scheda. Solo se c'è: senza, l'evento resta identico a prima, byte per byte. */
     if (suspicious && typeof suspicious.source === 'string' && Array.isArray(suspicious.patterns) && suspicious.patterns.length > 0) {
@@ -487,14 +489,14 @@ export function eventiPerRisposta(risposta, { messageId, parentMessageId, testoG
  * talosLavora mette in `messaggi.push({role:'tool', tool_call_id,
  * content})`, talosHarness.mjs riga ~836) a ToolCallResult.
  */
-export function eventoPerEsitoTool({ messageId, toolCallId, content, durataMs, comando, cwd, stdout, stderr, exitCode, isError, receipt, outcome, suspicious, inSfondo, fileSfondo, sfondoDa }) {
+export function eventoPerEsitoTool({ messageId, toolCallId, content, durataMs, comando, cwd, stdout, stderr, exitCode, isError, receipt, outcome, suspicious, inSfondo, fileSfondo, sfondoDa, duplicate }) {
     /* ⭐ OSS-1/OSS-2 — inoltro puro: la decisione su COSA entra nell'evento sta tutta in
        `toolCallResult` qui sopra, un posto solo. Chi non passa i tre campi ottiene l'oggetto
        identico di prima, byte per byte.
        ⛔ BLOCCO 7 (B4): stessa regola per i due flussi e per il codice d'uscita — l'inoltro non
          decide niente, e la guardia «solo se non vuoti» vive in `toolCallResult`.
        ⛔ BUG-14: e stessa regola per i tre campi dello sfondo (`inSfondo`/`fileSfondo`/`sfondoDa`). */
-    return toolCallResult({ messageId, toolCallId, content: String(content), durataMs, comando, cwd, stdout, stderr, exitCode, isError, receipt, outcome, suspicious, inSfondo, fileSfondo, sfondoDa })
+    return toolCallResult({ messageId, toolCallId, content: String(content), durataMs, comando, cwd, stdout, stderr, exitCode, isError, receipt, outcome, suspicious, inSfondo, fileSfondo, sfondoDa, duplicate })
 }
 
 /**

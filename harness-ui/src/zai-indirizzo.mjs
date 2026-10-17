@@ -15,11 +15,14 @@
  * Cline (`sdk/packages/llms/src/providers/builtins.ts`) e Goose (`provider_metadata.json`) — chi ha il piano e anche un po' di
  * saldo non paga due volte.
  */
+/* 14/10/2026: `etichettaChiave` è la stessa etichetta nel dizionario (area `server`): negli avvisi viaggia come `onChiave`/`fromChiave`/
+   `toChiave`, e l'interfaccia la dice nella lingua della persona (`testo-server.js`, `<nome>Chiave`). Prima, in italiano, l'avviso
+   diceva «non c'è credito su the GLM Coding Plan». */
 export const INDIRIZZI_ZAI = Object.freeze([
-  Object.freeze({ id: 'coding', endpoint: 'https://api.z.ai/api/coding/paas/v4', etichetta: 'the GLM Coding Plan' }),
-  Object.freeze({ id: 'coding-cn', endpoint: 'https://open.bigmodel.cn/api/coding/paas/v4', etichetta: 'the GLM Coding Plan (China)' }),
-  Object.freeze({ id: 'general', endpoint: 'https://api.z.ai/api/paas/v4', etichetta: 'the pay-as-you-go balance' }),
-  Object.freeze({ id: 'general-cn', endpoint: 'https://open.bigmodel.cn/api/paas/v4', etichetta: 'the pay-as-you-go balance (China)' }),
+  Object.freeze({ id: 'coding', endpoint: 'https://api.z.ai/api/coding/paas/v4', etichetta: 'the GLM Coding Plan', etichettaChiave: 'server.zai.address.coding' }),
+  Object.freeze({ id: 'coding-cn', endpoint: 'https://open.bigmodel.cn/api/coding/paas/v4', etichetta: 'the GLM Coding Plan (China)', etichettaChiave: 'server.zai.address.codingCn' }),
+  Object.freeze({ id: 'general', endpoint: 'https://api.z.ai/api/paas/v4', etichetta: 'the pay-as-you-go balance', etichettaChiave: 'server.zai.address.general' }),
+  Object.freeze({ id: 'general-cn', endpoint: 'https://open.bigmodel.cn/api/paas/v4', etichetta: 'the pay-as-you-go balance (China)', etichettaChiave: 'server.zai.address.generalCn' }),
 ]);
 /* Un account del piano può avere solo i modelli recenti; uno più vecchio ancora glm-4.7 (Hermes `_ZAI_CODING_PROBE_MODELS`).
    Il modello della sessione si prova per primo. */
@@ -67,14 +70,22 @@ export async function sondaIndirizziZai({ chiave, fetchFn = fetch, modelli = MOD
  * Il rilevatore della fetch del kernel. `indirizzoPer` riscrive l'URL di una richiesta verso l'indirizzo ricordato per la
  * chiave (o lo rileva); `dopoCredito` rifà la sonda senza l'indirizzo che ha appena risposto «credito» e lo dice.
  */
-export function creaRilevatoreZai({ providerStore, fetchFn, ora = Date.now, onAvviso = null }) {
+/*
+ * ⛔ 14/10/2026, owner (CLI e desktop) — `soloIndirizzo: true`: «la chiave va SOLO all'indirizzo scelto; l'altro solo se lo
+ *   chiede la persona». Niente sonde, niente indirizzo ricordato, niente cambio da soli: la richiesta va all'indirizzo in uso
+ *   (quello scelto, o quello di serie), e a un «niente credito» si DICE una volta, con l'indirizzo, perché la persona scelga.
+ *   Di serie `false`: tutto come il 09/10. Contesto dell'owner: due prodotti su due abbonamenti diversi (piano Z.AI, OpenRouter),
+ *   «così non accavalliamo i crediti».
+ */
+export function creaRilevatoreZai({ providerStore, fetchFn, ora = Date.now, onAvviso = null, soloIndirizzo = false }) {
   const fallite = new Map();
+  const detti = new Set();
   const configurato = () => providerStore.getRuntime('zai')?.endpointConfigured === true;
   const sostituisci = (target, da, a) => `${a}${String(target).slice(da.length)}`;
   const salva = (endpoint, corta) => { try { providerStore.impostaIndirizzoRilevato('zai', endpoint, corta); } catch { /* resta in memoria per questa richiesta */ } };
 
   async function indirizzoPer(target, scelta, modello) {
-    if (!scelta?.chiave || configurato()) return target;
+    if (soloIndirizzo || !scelta?.chiave || configurato()) return target;
     const base = providerStore.getRuntime('zai')?.endpoint;
     if (typeof base !== 'string' || !String(target).startsWith(`${base}/`)) return target;
     const corta = improntaBreve(scelta.impronta);
@@ -88,6 +99,20 @@ export function creaRilevatoreZai({ providerStore, fetchFn, ora = Date.now, onAv
   }
 
   async function dopoCredito(target, scelta, modello) {
+    if (soloIndirizzo) {
+      const noto = INDIRIZZI_ZAI.find((i) => String(target).startsWith(`${i.endpoint}/`));
+      const endpoint = noto?.endpoint ?? String(target).replace(/\/chat\/completions(?:\?.*)?$/u, '');
+      const etichetta = noto?.etichetta ?? endpoint;
+      const chiaveDetto = `${improntaBreve(scelta?.impronta)}|${endpoint}`;
+      if (typeof onAvviso === 'function' && !detti.has(chiaveDetto)) {
+        detti.add(chiaveDetto);
+        try {
+          await onAvviso({ testo: `Z.AI said there is no credit on ${etichetta}. TALOS did not try another address with your key: choose the address you want for it.`,
+            testoChiave: 'server.runtime.notice.zaiNoCredit', testoParams: { on: etichetta, ...(noto ? { onChiave: noto.etichettaChiave } : {}), endpoint } }, { ripetibile: true });
+        } catch { /* l'avviso non ferma il lavoro */ }
+      }
+      return null;
+    }
     if (!scelta?.chiave || configurato()) return null;
     const usato = INDIRIZZI_ZAI.find((i) => String(target).startsWith(`${i.endpoint}/`));
     const corta = improntaBreve(scelta.impronta);
@@ -98,7 +123,7 @@ export function creaRilevatoreZai({ providerStore, fetchFn, ora = Date.now, onAv
     if (typeof onAvviso === 'function') {
       try {
         await onAvviso({ testo: `Z.AI said there is no credit on ${usato.etichetta}: TALOS switched to ${vinto.etichetta} and goes on.`,
-          testoChiave: 'server.runtime.notice.zaiEndpointSwitched', testoParams: { from: usato.etichetta, to: vinto.etichetta } }, { ripetibile: true });
+          testoChiave: 'server.runtime.notice.zaiEndpointSwitched', testoParams: { from: usato.etichetta, fromChiave: usato.etichettaChiave, to: vinto.etichetta, toChiave: vinto.etichettaChiave } }, { ripetibile: true });
       } catch { /* l'avviso non ferma il lavoro */ }
     }
     return sostituisci(target, usato.endpoint, vinto.endpoint);

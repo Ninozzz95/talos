@@ -55,6 +55,10 @@
 /** Le spiegazioni, una per ogni livello che il kernel sa dichiarare. */
 const SPIEGAZIONI = Object.freeze({
     none: 'cmd.exe nativo: stesso utente e stessi privilegi del processo, nessun isolamento',
+    /* Lane mobile, 15/10/2026: sul Pad l'esito diceva «cmd.exe nativo». Fuori da Windows `none` è la shell del sistema
+       (`shellDeiComandi`: `/system/bin/sh` su Android); sul telefono con le parole di `doctor.check.shell.device`. */
+    'none:android': "sh di Android: eseguito direttamente sul dispositivo, stesso utente e stessi privilegi dell'app, senza isolamento",
+    'none:posix': 'sh di sistema: stesso utente e stessi privilegi del processo, nessun isolamento',
     wsl2: 'Linux in WSL; nessun isolamento: i dischi di Windows sono in /mnt con i diritti dell\'utente Windows di TALOS',
     'adb-shell-on-device': 'shell sul dispositivo collegato, fuori da questa macchina',
 });
@@ -64,13 +68,16 @@ const SPIEGAZIONI = Object.freeze({
  * @param {string} enforcement il valore di macchina (`none`, `wsl2`, `adb-shell-on-device`)
  * @param {{utente?: string|null, disco?: {montaggio: string, metadata: boolean|null}|null}|null} [dettagli] solo per
  *   `wsl2`: il campo `wsl` dell'esito di `eseguiComandoSandboxato` (F009). Assente = il fatto generale.
+ * @param {string} [piattaforma] dove gira il kernel: `none` è cmd.exe solo su Windows
  * @returns {string} il valore, con la spiegazione fra parentesi quando la conosco
  */
-export function etichettaSandbox(enforcement, dettagli = null) {
+export function etichettaSandbox(enforcement, dettagli = null, piattaforma = process.platform) {
     const valore = String(enforcement ?? '').trim();
     if (!valore) return 'non dichiarato';
     if (valore === 'wsl2' && dettagli && typeof dettagli === 'object') return `wsl2 (${spiegazioneWsl(dettagli)})`;
-    const spiegazione = SPIEGAZIONI[valore];
+    const spiegazione = valore === 'none' && piattaforma !== 'win32'
+        ? SPIEGAZIONI[piattaforma === 'android' ? 'none:android' : 'none:posix']
+        : SPIEGAZIONI[valore];
     return spiegazione ? `${valore} (${spiegazione})` : valore;
 }
 

@@ -2,6 +2,10 @@ import { expect, test } from '@playwright/test';
 import { attendiFineStoria, flussoConConfine } from './aiuto-confine.mjs';
 import { chiudiToastAperti } from './aiuto-toast.mjs';
 
+/* 14/10/2026 — la vista classica delle deleghe è stata tolta: le prove di questo file che aprono il diagramma delle deleghe
+   guardano quello nuovo (misure del 14/10: 13 agenti tutti nella tela; 199 in griglia compatta; 4.999 con ~100 schede montate).
+   «Cinquemila sessioni non montano cinquemila nodi» è DELEGHE-DIAGRAMMA-05 (`deleghe-sul-diagramma.spec.mjs`). */
+
 test('R4-RETURN-ASK-GATE-TRANSITION: pending Ask protects controls, resolution restores the transparent overlay', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   // VELO-SPEC (08/10/2026): stream aperto e muto — un corpo che si chiude fa riaprire lo stream, e ogni onopen rimette la chat nella storia
@@ -236,11 +240,10 @@ test('R4-PLAN-TYPED-REPLAY: the durable versioned fact replaces legacy final-tex
   await expect(plan).not.toContainText('Revisione provvisoria');
 });
 
-test('R4-GRAPH-INITIAL-FIT-14: every real session node is inside the central canvas on first open', async ({ page }) => {
-  /* 23/09/2026 — rosso 4/4 sulla base (revisione avversaria, D5): le card del grafo 14 escono dal canvas
-     (left −548). Il mockup approvato le vuole in COLONNE DI FASE, che esistono solo nei dati Workflow v2:
-     la cura è il grafo per fasi della fetta F3-42, non un ritocco qui. Dichiarato, non nascosto. */
-  test.fixme(true, 'D5: si chiude col grafo per fasi (F3-42), i dati di fase oggi non ci sono');
+test('R4-GRAPH-INITIAL-FIT-14: every agent card and the conversation card are inside the central canvas on first open', async ({ page }) => {
+  /* 23/09/2026 — era rossa 4/4 sulla vista classica (revisione avversaria, D5: le card del grafo a 14 uscivano dal canvas,
+     left −548) e restava «fixme» in attesa del grafo per fasi. 14/10/2026: le deleghe stanno sul diagramma nuovo, che dispone
+     per lotti — misurato: 13 agenti, tutti nella tela all'apertura, zoom 86%. La prova non è più sospesa. */
   const children = Array.from({ length: 13 }, (_, index) => ({
     sessionId: `r4-child-${index}`, padreId: 'r4-graph-root',
     taskCorto: `Agente ${index + 2}`, conclusa: index % 2 === 0,
@@ -252,9 +255,7 @@ test('R4-GRAPH-INITIAL-FIT-14: every real session node is inside the central can
       version: 1, appearance: { colorMode: 'light', uiLanguage: 'it' },
     }));
   });
-  await page.route('**/api/v1/sessions/r4-graph-root/events*', (route) => route.fulfill({
-    contentType: 'text/event-stream', body: '',
-  }));
+  await page.route('**/api/v1/sessions/r4-graph-root/events*', flussoConConfine);
   await page.route('**/api/v1/sessions/r4-graph-root/children', (route) => route.fulfill({
     json: { ok: true, data: { figli: children } },
   }));
@@ -269,27 +270,30 @@ test('R4-GRAPH-INITIAL-FIT-14: every real session node is inside the central can
       'r4-graph-root', 'workspace', 'Grafo R4', 'z-ai/glm-5.3-flash', { conclusa: false },
     );
   });
+  await attendiFineStoria(page);
   await page.locator('#railTabs [data-rail="agenti"]').click();
   await expect(page.locator('#railAgenti [data-c="AgentRow"]')).toHaveCount(13);
   await page.locator('#railAgenti').getByRole('button', { name: 'Apri visuale diagramma' }).click();
   const graph = page.locator('#schermoChat > [data-c="GrafoAgenti"]');
-  await expect(graph.locator('[data-nodo-id]')).toHaveCount(14);
+  await expect(graph).toHaveAttribute('data-sorgente', 'deleghe');
+  await expect(graph.locator('[data-sessione]')).toHaveCount(13);
+  await expect(graph.locator('.gv-dettaglio .talos-wfg__dettaglio-testa')).toBeVisible(); // l'apertura è finita (il dettaglio accorcia la tela)
+  await page.waitForTimeout(600);
   const inspection = await graph.evaluate((root) => {
-    const canvasElement = root.querySelector('.talos-grafo__canvas');
-    const canvas = canvasElement.getBoundingClientRect();
-    const clipped = [...root.querySelectorAll('[data-nodo-id]')].filter((node) => {
+    const canvas = root.querySelector('.gv-tela').getBoundingClientRect();
+    const clipped = [...root.querySelectorAll('[data-sessione], .gv-sessione')].filter((node) => {
       const bounds = node.getBoundingClientRect();
       return bounds.left < canvas.left - 1 || bounds.right > canvas.right + 1
         || bounds.top < canvas.top - 1 || bounds.bottom > canvas.bottom + 1;
     }).map((node) => {
       const bounds = node.getBoundingClientRect();
-      return { id: node.dataset.nodoId, top: bounds.top, bottom: bounds.bottom,
+      return { id: node.dataset.sessione ?? 'conversazione', top: bounds.top, bottom: bounds.bottom,
         left: bounds.left, right: bounds.right, canvasTop: canvas.top,
         canvasBottom: canvas.bottom, canvasLeft: canvas.left, canvasRight: canvas.right };
     });
-    return { clipped, transform: root.querySelector('.talos-grafo__mondo').style.transform,
-      scrollTop: canvasElement.scrollTop, scrollLeft: canvasElement.scrollLeft };
+    return { clipped, cards: root.querySelectorAll('[data-sessione]').length, zoom: root.querySelector('.gv-percento').textContent };
   });
+  expect(inspection.cards).toBe(13);
   expect(inspection.clipped, JSON.stringify(inspection)).toEqual([]);
   for (const [route, name] of [['chat', 'Chat'], ['terminale', 'Terminale'], ['review', 'Review'], ['browser', 'Browser']]) {
     const tab = page.locator(`#schermoChat .talos-topbar [data-vaia="${route}"]`);
@@ -334,68 +338,10 @@ test('R4-RAIL-5000-BOUNDED: 200 logical agents remain reachable with bounded row
   await page.locator('#railAgenti').getByRole('button', { name: 'Apri visuale diagramma' }).click();
   const graph = page.locator('#schermoChat > [data-c="GrafoAgenti"]');
   await expect(graph).toBeVisible();
-  await expect(graph).toHaveAttribute('data-density', 'aggregate');
-  expect(await graph.locator('[data-nodo-id]').count()).toBeLessThanOrEqual(20);
-  await expect(graph).toContainText('200 sessioni');
-});
-
-test('R4-GRAPH-5000-BOUNDED: five thousand logical sessions do not mount five thousand nodes', async ({ page }) => {
-  test.setTimeout(120_000);
-  const children = Array.from({ length: 4999 }, (_, index) => ({
-    sessionId: `r4-scale-${index}`, padreId: 'r4-scale-root',
-    taskCorto: `Agente ${index + 1}`, conclusa: index % 5 !== 0,
-  }));
-  // ⛔ 08/10/2026: il flusso finto porta il confine fra storia e presente (aiuto-confine.mjs): senza, la barra restava da disegnare
-  await page.route('**/api/v1/sessions/r4-scale-root/events*', flussoConConfine);
-  await page.route('**/api/v1/sessions/r4-scale-root/children', (route) => route.fulfill({
-    json: { ok: true, data: { figli: children } },
-  }));
-  await page.route('**/api/v1/sessions/r4-scale-root/tree*', (route) => route.fulfill({
-    json: { ok: true, data: { voci: [] } },
-  }));
-  // 23/09/2026 (D6): lingua fissata, perché i conteggi seguono la lingua attiva («4.999» / «4,999»).
-  await page.addInitScript(() => {
-    localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({
-      version: 1, appearance: { colorMode: 'light', uiLanguage: 'it' },
-    }));
-  });
-  await page.goto('/');
-  await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 8_000 });
-  await page.waitForFunction(() => window.__talosHarnessUiRuntime);
-  const baselineDom = await page.locator('body *').count();
-  await page.evaluate(() => window.__talosHarnessUiRuntime.passaASessione(
-    'r4-scale-root', 'workspace', 'Grafo scala', 'z-ai/glm-5.3-flash', { conclusa: false },
-  ));
-  await attendiFineStoria(page);
-  await page.locator('#railTabs [data-rail="agenti"]').click();
-  const rows = page.locator('#railAgenti [data-c="AgentRow"]');
-  await expect(rows).toHaveCount(25, { timeout: 30_000 });
-  await expect(page.locator('#railAgenti')).toContainText('4.999 di 4.999 agenti');
-  await page.locator('#railAgenti').getByRole('button', { name: 'Apri visuale diagramma' }).click();
-  const graph = page.locator('#schermoChat > [data-c="GrafoAgenti"]');
-  await expect(graph).toHaveAttribute('data-density', 'aggregate', { timeout: 30_000 });
-  await expect(graph).toContainText('5.000 sessioni');
-  expect(await graph.locator('[data-nodo-id]').count()).toBe(0);
-  expect(await graph.locator('.talos-grafo__gruppo-riga').count()).toBeLessThanOrEqual(12);
-  const finalDom = await page.locator('body *').count();
-  expect(finalDom - baselineDom, `baseline ${baselineDom}, graph ${finalDom}`).toBeLessThan(1_000);
-  const firstAgent = await graph.locator('.talos-grafo__gruppo-riga').first().textContent();
-  await chiudiToastAperti(page); // decisione owner 23/09: il toast può coprire il grafo, si chiude come farebbe una persona
-  await graph.getByRole('button', { name: 'Pagina successiva del gruppo' }).click();
-  await expect(graph.locator('.talos-grafo__gruppo-riga').first()).not.toHaveText(firstAgent);
-  // vista densa: restano ambito, stato, lente e «⋯»; spariscono solo gli attrezzi della tela (zoom, Adatta, Segui)
-  await expect(graph.getByRole('radiogroup', { name: 'Ambito del diagramma' })).toBeVisible();
-  await expect(graph.getByRole('button', { name: 'Aumenta zoom' })).toHaveCount(0);await expect(graph.getByRole('button', { name: 'Segui l’agente attivo' })).toHaveCount(0);
-  // il «⋯» in vista densa scorre solo le voci visibili (Isola e Affianca sono della tela)
-  await graph.getByRole('button', { name: 'Altri comandi del diagramma' }).click();
-  await expect(graph.getByRole('menuitem', { name: 'Aggiorna', exact: true })).toBeFocused();
-  await page.keyboard.press('ArrowDown'); await expect(graph.getByRole('menuitem', { name: 'Azzera filtri' })).toBeFocused();
-  await page.keyboard.press('ArrowDown'); await expect(graph.getByRole('menuitem', { name: 'Aggiorna', exact: true })).toBeFocused();
-  await page.keyboard.press('Escape');
-  await graph.getByRole('button', { name: 'Cerca nel diagramma' }).click(); // 02/10: il campo si apre dalla lente, come nel Workflow
-  await graph.getByRole('searchbox', { name: 'Cerca agente nel diagramma' }).fill('Agente 4999');
-  await expect(graph.locator('[data-nodo-id]')).toHaveCount(1);
-  await expect(graph.locator('[data-nodo-id]')).toContainText('Agente 4999');
+  await expect(graph).toHaveAttribute('data-sorgente', 'deleghe');
+  await expect(graph.locator('.talos-wfg__cima')).toContainText('199 agenti in 1 lotto');
+  // misurato il 14/10/2026 sul diagramma nuovo: 199 schede in griglia compatta, ~2.050 nodi nel diagramma (la classica aggregava)
+  expect(await graph.locator('*').count()).toBeLessThan(4_000);
 });
 
 /*
@@ -407,8 +353,8 @@ test('R4-GRAPH-5000-BOUNDED: five thousand logical sessions do not mount five th
 for (const [lingua, attesi] of [
   /* ⛔ 09/10/2026 (bugfixer): dal 03/10 (fase della lingua) anche le PAROLE seguono la lingua, non solo i numeri — l'atteso inglese
      era rimasto «4,999 di 4,999 agenti». Frasi misurate sul prodotto il 09/10 (agents.countAllLevels, family.done, …). */
-  ['it', { rail: '4.999 di 4.999 agenti · tutti i livelli', pagina: '1–25 di 4.999', grafo: '5.000 sessioni', gruppo: 'Conclusi · 3.999', righe: '1–12 di 3.999', diagramma: 'Apri visuale diagramma' }],
-  ['en', { rail: '4,999 of 4,999 agents · all levels', pagina: '1–25 of 4,999', grafo: '5,000 sessions', gruppo: 'Done · 3,999', righe: '1–12 of 3,999', diagramma: 'Open diagram view' }],
+  ['it', { rail: '4.999 di 4.999 agenti · tutti i livelli', pagina: '1–25 di 4.999', grafo: '4.999 agenti in 1 lotto', terminati: '3.999 di 4.999 terminati', diagramma: 'Apri visuale diagramma' }],
+  ['en', { rail: '4,999 of 4,999 agents · all levels', pagina: '1–25 of 4,999', grafo: '4,999 agents in 1 batch', terminati: '3,999 of 4,999 finished', diagramma: 'Open diagram view' }],
 ]) {
   test(`R4-COUNT-LOCALE-5000: rail and graph group thousands in the active language (${lingua})`, async ({ page }) => {
     test.setTimeout(120_000);
@@ -443,13 +389,14 @@ for (const [lingua, attesi] of [
     await expect(page.locator('#railAgenti .talos-agenti-pagine')).toContainText(attesi.pagina);
     await page.locator('#railAgenti').getByRole('button', { name: attesi.diagramma }).click();
     const graph = page.locator('#schermoChat > [data-c="GrafoAgenti"]');
-    await expect(graph).toHaveAttribute('data-density', 'aggregate', { timeout: 30_000 });
-    await expect(graph).toContainText(attesi.grafo);
-    await expect(graph.locator('.talos-grafo__gruppo-dettaglio > h3')).toHaveText(attesi.gruppo);
-    await expect(graph.locator('.talos-grafo__gruppo-pagine')).toContainText(attesi.righe);
-    // Nessun numero di quattro o più cifre senza separatore nel testo del grafo e del rail (i nomi
-    // delle righe visibili qui sono «Agente 1…25»: nessun dato a quattro cifre che non sia un conteggio).
-    const testo = [await graph.innerText(), await page.locator('#railAgenti').innerText()].join('\n');
+    await expect(graph).toHaveAttribute('data-sorgente', 'deleghe', { timeout: 30_000 });
+    const testata = graph.locator('.talos-wfg__cima'); const lotto = graph.locator('.gv-testa').first();
+    await expect(testata).toContainText(attesi.grafo, { timeout: 30_000 });
+    await expect(testata).toContainText(attesi.terminati);
+    await expect(lotto).toContainText(attesi.terminati);
+    // Nessun numero di quattro o più cifre senza separatore dove si scrivono dei CONTI: testata, testa del lotto, barra della
+    // riproduzione, rail. (I nomi sulle schede sono dati — «Agente 1001» — e a 4.999 agenti la tela si apre dove si lavora.)
+    const testo = [await testata.innerText(), await lotto.innerText(), await graph.locator('.gv-rip').innerText(), await page.locator('#railAgenti [role="status"]').innerText(), await page.locator('#railAgenti .talos-agenti-pagine').innerText()].join('\n');
     expect(testo.match(/(?<![\d.,])\d{4,}(?![\d.,])/g) ?? [], testo.slice(0, 400)).toEqual([]);
   });
 }

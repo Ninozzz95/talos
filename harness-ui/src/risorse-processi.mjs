@@ -19,7 +19,8 @@
  *     processo passato a un altro utente, `sudo`, non si leggerebbe. ⛔ Non è un'elevazione: `wsl -u root` non chiede password,
  *     quindi non dà niente che l'utente di Windows non abbia già — review N2 del 10/10, scritto perché nessuno lo «corregga») somma i processi col marcatore — 72-100 ms a
  *     campione (misurato il 10/10/2026 su Ubuntu). Più solido dell'albero: segue anche i processi che cambiano padre.
- *   · Linux ospite: `/proc` direttamente.
+ *   · Linux ospite: `/proc` direttamente. Anche Android (lane mobile, 15/10/2026: r4 dentro l'app, `process.platform === 'android'`,
+ *     e `metodo: null` sul Pad): lo stesso `/proc`, dove l'app vede i suoi processi — il comando e i suoi figli sono suoi.
  *   · Altrove: niente misura, e l'interfaccia dice «—».
  * La CPU è la differenza fra due campioni dei tempi, normalizzata sui core come Gestione attività (0-100 %); al primo campione non
  *   c'è ancora (`null`). Ogni lettore persistente si spegne da solo dopo `spentoDopoMs` senza richieste: con la scheda chiusa non gira
@@ -27,7 +28,7 @@
  */
 import { spawn as spawnReale } from 'node:child_process';
 import { readdirSync as readdirReale, readFileSync as readFileReale } from 'node:fs';
-import { cpus } from 'node:os';
+import { availableParallelism, cpus } from 'node:os';
 
 const FINE = 'FINE';
 /* Windows: una riga «leggi» ⇒ una riga JSON [[pid, ppid, workingSetByte, tempoCpu100ns, natoMs], …] e poi FINE */
@@ -134,6 +135,19 @@ function righeDaProc({ readdirSync, readFileSync }) {
   return righe;
 }
 
+/**
+ * I core su cui si normalizza la CPU. ⛔ Lane mobile, 15/10/2026: sul Pad `os.cpus()` restituisce una lista VUOTA (Android nasconde
+ *   le CPU alle app) mentre i core sono 8 (`nproc`, `availableParallelism()`): col solo `cpus()` il divisore era 1, e un comando che
+ *   tiene occupato un core diceva 99,4 % invece di ~12 %. `availableParallelism` (Node ≥ 18.14) conta i core che il processo può
+ *   usare; si prende `cpus()` quando c'è, per non cambiare niente dove funzionava già.
+ */
+export function coreDellaMacchina({ cpusFn = cpus, parallelismoFn = availableParallelism } = {}) {
+  let n = 0;
+  try { n = cpusFn()?.length || 0; } catch { n = 0; }
+  if (!n) { try { n = typeof parallelismoFn === 'function' ? Number(parallelismoFn()) || 0 : 0; } catch { n = 0; } }
+  return Math.max(1, n);
+}
+
 /*
  * Un lettore persistente: un processo che a ogni riga sull'ingresso risponde con righe e poi «FINE». Si accende alla prima lettura, si
  * spegne dopo `spentoDopoMs` senza richieste, e una lettura che non torna entro `attesaMassimaMs` lo spegne (la prossima lo riaccende).
@@ -197,14 +211,14 @@ export function creaCampionatoreRisorse({
   readdirSync = readdirReale,
   readFileSync = readFileReale,
   ora = () => Date.now(),
-  core = Math.max(1, cpus()?.length || 1),
+  core = coreDellaMacchina(),
   spentoDopoMs = 30_000,
   attesaMassimaMs = 8_000,
   dimenticaDopoMs = 30_000,
   impostaTimer = setTimeout,
   cancellaTimer = clearTimeout,
 } = {}) {
-  const metodo = piattaforma === 'win32' ? 'cim' : piattaforma === 'linux' ? 'proc' : null;
+  const metodo = piattaforma === 'win32' ? 'cim' : piattaforma === 'linux' || piattaforma === 'android' ? 'proc' : null;
   let chiuso = false;
   const precedenti = new Map(); // chiave della misura → { cpu100ns, istante }
   const lettori = new Map(); // 'windows' | `wsl:<distro>` → lettore persistente

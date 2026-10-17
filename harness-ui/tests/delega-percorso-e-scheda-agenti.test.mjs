@@ -321,7 +321,8 @@ test('⭐⭐⭐ TRE DELEGHE SU TRE riescono dopo un tentativo storto, e la sched
     assert.deepEqual(new Set(figli.map((figlia) => figlia.sessionId)), new Set(ricevute.map((ricevuta) => ricevuta.childId)));
     assert.ok(figli.every((figlia) => figlia.conclusa && figlia.esitoDelega === 'concluso'),
       'le tre conclusioni esplicite devono produrre tre terminali reali nella scheda');
-    assert.deepEqual(figli.map((f) => f.task), ['scrivi la PARTE 1', 'scrivi la PARTE 2', 'scrivi la PARTE 3'],
+    // L3-17 (16/10): `task` non si ripete quando è uguale a `taskCorto`; chi lo legge ripiega su `taskCorto`
+    assert.deepEqual(figli.map((f) => f.task ?? f.taskCorto), ['scrivi la PARTE 1', 'scrivi la PARTE 2', 'scrivi la PARTE 3'],
       'i tre compiti si sono confusi fra loro, o la scheda mostra tre righe uguali');
   } finally {
     rimuoviCartellaDiProva(cartellaMadre);
