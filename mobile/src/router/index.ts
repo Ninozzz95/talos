@@ -38,7 +38,7 @@ export const router: Router = createRouter({
  * come rete di sicurezza — due livelli, non uno che sostituisce l'altro.
  */
 router.beforeEach((to) => {
-    if ((to.name === 'harness' || to.name === 'harness-session') && !talosHarnessUiAvailable()) {
+    if ((to.name === 'harness' || to.name === 'harness-session' || to.name === 'codice-r4') && !talosHarnessUiAvailable()) {
         return { name: 'chat' }
     }
     return true

@@ -1,3 +1,5 @@
+import { talosFlussoNativoDisponibile } from '@/lib/chat/flussoNativoDisponibile'
+import { talosFlussoNativo } from '@/lib/chat/providers/flussoNativo'
 import { z } from 'zod'
 import type { TalosMobileProviderId } from '@/components/chat/mobileChatTypes'
 import type {
@@ -15,6 +17,7 @@ import { talosPromptCacheKey } from '@/lib/chat/promptCache'
 import { talosModelSupportsToolCalling } from '@/lib/chat/modelToolCapabilities'
 import { talosToolsForOpenAiResponses } from '@/lib/tools/registry'
 import { talosReadOpenAiResponse, talosReadOpenAiResponsesEvent } from '@/lib/chat/providers/openAiResponses'
+import { adattaCorpoAlPiano, attesaDelLimiteDelPiano, erroreDelPiano, eventoFinaleDelFlusso } from '@/lib/chatgpt/richiesta'
 import {
     TALOS_OPENAI_REASONING_NONE,
     talosHasReasoningConflict,
@@ -43,6 +46,7 @@ function chiamateDalTesto(blocchi: readonly string[] | undefined, giaPresenti: n
     return trovate
 }
 import {
+    TalosMobileProviderError,
     emptyProviderResponse,
     malformedProviderResponse,
     normalizeHttpEndpoint,
@@ -112,9 +116,77 @@ const completionSchema = z.object({
 }).passthrough()
 
 interface OpenAiCompatibleConfig {
-    provider: Extract<TalosMobileProviderId, 'openai' | 'deepseek' | 'openrouter'>
+    provider: Extract<TalosMobileProviderId, 'openai' | 'deepseek' | 'openrouter' | 'chatgpt'>
     baseUrl: string
     metadata: 'basic' | 'openrouter'
+    /**
+     * N15 — il piano ChatGPT della persona («Continue with ChatGPT»). Stessa API Responses di OpenAI, con le regole del piano
+     * (developers.openai.com/siwc/token-sharing-open-source/): solo `GET /v1/models` e `POST /v1/responses`, corpo passato da
+     * `adattaCorpoAlPiano`, elenco dei modelli dell'account, errori detti col loro nome. La «chiave» è il token d'accesso,
+     * che il controller chiede al servizio a ogni giro. ⛔ Mai un indirizzo personalizzato: quel token va solo a OpenAI.
+     */
+    piano?: boolean
+}
+
+/** Il corpo per `/responses`: quello di sempre per la chiave API, quello che il piano accetta per il piano. */
+function corpoResponses(config: OpenAiCompatibleConfig, input: TalosMobileCompletionInput, stream: boolean): Record<string, unknown> {
+    const corpo = responsesCompletionData(input, stream)
+    return config.piano ? adattaCorpoAlPiano(corpo).corpo : corpo
+}
+
+/**
+ * Un guasto del piano, col suo nome (`CHATGPT_…`) come messaggio e una frase nelle due lingue. ⛔ Il limite d'uso NON è una
+ * chiave sbagliata e non si ritenta alla cieca: chi sta sopra ferma il giro e offre le scelte, mai un altro fornitore.
+ */
+function errorePiano(operation: 'list_models' | 'complete', status: number | null, data: unknown, headers?: Record<string, string>): TalosMobileProviderError {
+    const guasto = erroreDelPiano({ statusCode: status ?? undefined, data: data && typeof data === 'object' ? data : null,
+        responseBody: typeof data === 'string' ? data : undefined, responseHeaders: headers })
+    const errore = new TalosMobileProviderError({
+        provider: 'chatgpt', operation, message: guasto.code, ...(status === null ? {} : { status }),
+        uiMessageKey: `models.chatgptErrors.${guasto.code}`,
+    })
+    // Al limite d'uso chi sta sopra ASPETTA e rifà la stessa richiesta (`lib/chatgpt/attesaLimite.ts`): quanto, lo dice OpenAI
+    // (`Retry-After`), o sono 30 minuti; `null` = oltre 24 ore, non si aspetta.
+    return guasto.code === 'CHATGPT_LIMITE_DEL_PIANO' ? Object.assign(errore, { attesaMs: attesaDelLimiteDelPiano(headers ?? null) }) : errore
+}
+
+const efforts = (livelli: unknown): string[] => (Array.isArray(livelli) ? livelli : [])
+    .map((l) => (typeof l === 'string' ? l : (l as { effort?: unknown } | null)?.effort))
+    .filter((l): l is string => typeof l === 'string')
+
+/** L'elenco dei modelli dell'ACCOUNT: solo `visibility == "list"`, nell'ordine del server; si mostra `display_name`, si passa `slug`. */
+async function elencoDelPiano(apiKey: string, transport: TalosMobileHttpTransport, credential: TalosMobileProviderCredential): Promise<TalosMobileProviderCatalog> {
+    const response = await transport.request({
+        method: 'GET', url: 'https://api.openai.com/v1/models',
+        headers: { authorization: `Bearer ${apiKey}`, accept: 'application/json' },
+        ...requestTimeouts(credential),
+    })
+    if (response.status < 200 || response.status >= 300) throw errorePiano('list_models', response.status, response.data, response.headers)
+    const dati = response.data as { models?: unknown, data?: unknown } | null
+    const righe = Array.isArray(dati?.models) ? dati.models : Array.isArray(dati?.data) ? dati.data : null
+    if (!righe) throw malformedProviderResponse('chatgpt', 'list_models', { received: response.data })
+    return {
+        provider: 'chatgpt',
+        models: (righe as Array<Record<string, unknown> | null>)
+            .filter((m): m is Record<string, unknown> => !!m && typeof m.slug === 'string' && m.slug !== '' && m.visibility === 'list')
+            .map((m) => {
+                const livelli = efforts(m.supported_reasoning_levels)
+                const contesto = typeof m.context_window === 'number' ? m.context_window : typeof m.max_context_window === 'number' ? m.max_context_window : null
+                return {
+                    id: m.slug as string,
+                    provider: 'chatgpt' as const,
+                    displayName: typeof m.display_name === 'string' && m.display_name.trim() ? m.display_name : m.slug as string,
+                    chatCompatibility: 'supported' as const,
+                    contextLength: contesto,
+                    inputModalities: Array.isArray(m.input_modalities) ? m.input_modalities.filter((x): x is string => typeof x === 'string') : ['text'],
+                    outputModalities: ['text'],
+                    // Il piano offre attrezzi a funzione su Responses (misurato dal desktop l'11/10/2026).
+                    supportedParameters: ['tools', ...(livelli.length ? ['reasoning'] : [])],
+                    capabilityProvenance: 'declared' as const,
+                    reasoning: livelli.length ? { mandatory: false, supportedEfforts: livelli } : null,
+                }
+            }),
+    }
 }
 
 function contentText(content: string | Array<{ text?: string }>): string {
@@ -211,7 +283,7 @@ function compatibleBaseUrl(
     credential: TalosMobileProviderCredential,
     operation: 'list_models' | 'complete',
 ): string {
-    return credential.endpoint
+    return credential.endpoint && !config.piano
         ? normalizeHttpEndpoint(config.provider, operation, credential.endpoint)
         : config.baseUrl
 }
@@ -448,11 +520,15 @@ function createOpenAiCompatibleAdapter(config: OpenAiCompatibleConfig): TalosMob
     return {
         provider: config.provider,
         requiresSecret: true,
+        // N15-RITARDO-01: il piano parla con `api.openai.com`, che rifiuta le origini di pagina — il flusso dalla WebView non
+        // può riuscire (1,8 s persi a ogni giro, misurati sul Pad). Si va subito dal trasporto nativo.
+        ...(config.piano ? { flussoNonRaggiungibileDallaPagina: true } : {}),
         // OpenAI, DeepSeek and OpenRouter each publish a fixed base URL, baked
         // in below. The key is the only thing that is not already known.
         requiresEndpoint: false,
         async listModels(credential: TalosMobileProviderCredential, transport: TalosMobileHttpTransport): Promise<TalosMobileProviderCatalog> {
             const apiKey = requireProviderApiKey(config.provider, 'list_models', credential)
+            if (config.piano) return elencoDelPiano(apiKey, transport, credential)
             const baseUrl = compatibleBaseUrl(config, credential, 'list_models')
             const response = await transport.request({
                 method: 'GET',
@@ -480,6 +556,33 @@ function createOpenAiCompatibleAdapter(config: OpenAiCompatibleConfig): TalosMob
              * Ollama restano dove sono, e il test di regressione controlla
              * proprio che il loro corpo non cambi.
              */
+            if (config.piano) {
+                // ⛔ Un solo invio: sul piano un 429 è il LIMITE D'USO, non un inciampo da ritentare. Sempre in flusso (il piano
+                // lo impone): il trasporto nativo torna il flusso intero come testo, e la risposta si costruisce da lì.
+                const response = await transport.request({
+                    method: 'POST',
+                    url: `${baseUrl}/responses`,
+                    headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json', accept: 'text/event-stream' },
+                    data: corpoResponses(config, input, false),
+                    ...requestTimeouts(credential),
+                })
+                if (response.status < 200 || response.status >= 300) throw errorePiano('complete', response.status, response.data, response.headers)
+                const finale = await eventoFinaleDelFlusso(typeof response.data === 'string' ? response.data : JSON.stringify(response.data ?? ''))
+                // Un flusso che non arriva a `response.completed` non è una risposta: mai un testo mozzo spacciato per intero.
+                if (finale?.tipo !== 'response.completed' || !finale.risposta) {
+                    throw errorePiano('complete', null, finale?.risposta ?? null)
+                }
+                const read = talosReadOpenAiResponse(finale.risposta)
+                if (!read.text && read.toolCalls.length === 0) throw emptyProviderResponse('chatgpt', 'complete', read.status)
+                return {
+                    text: read.text,
+                    model: input.model.id,
+                    finishReason: read.toolCalls.length ? 'tool_calls' : read.status,
+                    usage: read.usage,
+                    toolCalls: read.toolCalls.map((call) => ({ ...call })),
+                    reasoning: read.reasoningSummaries.join(TALOS_SUMMARY_SEPARATOR) || undefined,
+                }
+            }
             if (config.provider === 'openai') {
                 // DEBT-MOBILE-016: un 429/408/5xx si ritenta con backoff (onora
                 // Retry-After se il fornitore lo manda) invece di lanciare al
@@ -627,15 +730,19 @@ function createOpenAiCompatibleAdapter(config: OpenAiCompatibleConfig): TalosMob
              * consegna intera, con il suo `call_id`, e ricostruirla a mano
              * sarebbe lavoro in piu' e meno affidabile.
              */
-            if (config.provider === 'openai') {
+            if (config.provider === 'openai' || config.piano) {
                 const calls: Array<{ name: string, arguments: string, id: string }> = []
                 let usage: Record<string, number> | null = null
                 const stream = await talosStreamText({
                     url: `${baseUrl}/responses`,
                     headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
-                    body: responsesCompletionData(input, true),
+                    body: corpoResponses(config, input, true),
                     signal: handlers.signal,
                     accumulator: createTalosSseAccumulator(),
+                    // N15 (owner 13/10/2026: «Sì, risposta a pezzi»): il piano legge il flusso dal trasporto NATIVO, dove
+                    // c'è — dalla pagina `api.openai.com` non si raggiunge (misurato sul Pad). La chiave OpenAI resta
+                    // sulla strada di sempre: lì niente è stato misurato, e niente si cambia.
+                    ...(config.piano && talosFlussoNativoDisponibile() ? { trasporto: talosFlussoNativo } : {}),
                     extract: (payload) => {
                         const read = talosReadOpenAiResponsesEvent(JSON.parse(payload))
                         if (read.kind === 'tool-call') calls.push({ ...read.call })
@@ -644,9 +751,16 @@ function createOpenAiCompatibleAdapter(config: OpenAiCompatibleConfig): TalosMob
                     },
                     onChunk: handlers.onChunk,
                     onReasoning: handlers.onReasoning,
+                }).catch((guasto: unknown) => {
+                    // Sul piano un rifiuto HTTP ha il suo nome (limite d'uso, piano non abilitato…): `talosStreamText` lo dice
+                    // come «stream HTTP <stato>: <corpo>», e qui torna un errore del piano. Tutto il resto passa com'è.
+                    const http = config.piano && guasto instanceof Error ? /^stream HTTP (\d{3})(?:: ([\s\S]*))?$/u.exec(guasto.message) : null
+                    const dopo = (guasto as { retryAfter?: unknown }).retryAfter
+                    if (http) throw errorePiano('complete', Number(http[1]), http[2] ?? null, typeof dopo === 'string' ? { 'retry-after': dopo } : undefined)
+                    throw guasto
                 })
                 if (!stream.text && calls.length === 0) {
-                    throw malformedProviderResponse('openai', 'complete', {
+                    throw malformedProviderResponse(config.provider, 'complete', {
                         received: { text: stream.text, calls: calls.length },
                         note: 'stream ended with no text and no tool calls',
                     })
@@ -763,3 +877,5 @@ function createOpenAiCompatibleAdapter(config: OpenAiCompatibleConfig): TalosMob
 export const openAiAdapter = createOpenAiCompatibleAdapter({ provider: 'openai', baseUrl: 'https://api.openai.com/v1', metadata: 'basic' })
 export const deepSeekAdapter = createOpenAiCompatibleAdapter({ provider: 'deepseek', baseUrl: 'https://api.deepseek.com', metadata: 'basic' })
 export const openRouterAdapter = createOpenAiCompatibleAdapter({ provider: 'openrouter', baseUrl: 'https://openrouter.ai/api/v1', metadata: 'openrouter' })
+/** N15 — il piano ChatGPT: vedi `piano` in `OpenAiCompatibleConfig`. */
+export const chatgptAdapter = createOpenAiCompatibleAdapter({ provider: 'chatgpt', baseUrl: 'https://api.openai.com/v1', metadata: 'basic', piano: true })

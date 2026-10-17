@@ -1,0 +1,648 @@
+/*
+ * K3-C (15/10/2026): le righe dei fogli dell'header del Codice su r4 («Altre azioni», «Albero della sessione», «Hook del
+ * progetto»). Sono le righe di «Azioni messaggio» (`TalosMobileMessageOverflowMenu.vue`): stessa altezza, stessa icona ambra,
+ * una verticale sola a sinistra. Un file solo per i tre fogli, così non possono andare per conto loro.
+ */
+.talos-codice-r4-elenco { display: flex; flex-direction: column; padding-bottom: var(--talos-space-inline, 0.5rem); }
+.talos-codice-r4-azione {
+    display: flex;
+    align-items: center;
+    gap: var(--talos-space-control, 0.75rem);
+    width: 100%;
+    min-height: var(--talos-touch-target, 3rem);
+    padding-inline: 0.75rem;
+    border-radius: var(--talos-radius-control);
+    background: transparent;
+    color: var(--talos-text);
+    text-align: left;
+    font-size: var(--text-md);
+}
+.talos-codice-r4-azione:disabled { opacity: 0.5; }
+.talos-codice-r4-azione:focus-visible { outline: 2px solid var(--talos-ring); outline-offset: 2px; }
+.talos-codice-r4-azione-icona { width: 1.125rem; height: 1.125rem; flex: none; color: var(--talos-accent); }
+.talos-codice-r4-azione-testo { display: flex; min-width: 0; flex: 1; flex-direction: column; }
+.talos-codice-r4-azione-testo > small { color: var(--talos-muted); font-size: var(--text-xs); }
+.talos-codice-r4-nota { padding: 0.5rem 0.75rem; color: var(--talos-muted); font-size: var(--text-sm); }
+/* K3-C3a: i gruppi della tavolozza e i campi (ricerca, nome): stessa misura del tocco, i colori della casa. */
+.talos-codice-r4-gruppo { padding: 0.5rem 0.75rem 0.25rem; color: var(--talos-muted); font-size: var(--text-xs); font-weight: 500; }
+.talos-codice-r4-campo {
+    width: 100%;
+    min-height: var(--talos-touch-target, 3rem);
+    padding-inline: 0.875rem;
+    border: 1px solid var(--talos-border);
+    border-radius: var(--talos-radius-control);
+    background: var(--talos-panel, transparent);
+    color: var(--talos-text);
+    font-size: var(--text-md);
+}
+.talos-codice-r4-campo::placeholder { color: var(--talos-muted); }
+.talos-codice-r4-campo:focus-visible { outline: 2px solid var(--talos-ring); outline-offset: 2px; }
+@media (hover: hover) and (pointer: fine) {
+    button.talos-codice-r4-azione:hover:not(:disabled) { background: var(--talos-panel-soft, var(--talos-panel)); }
+}
+/* K3-C2b: una voce del Doctor: icona della gravità in alto, titolo, gravità a parole e le righe sotto; stessa colonna delle azioni. */
+.talos-codice-r4-voce-doctor { display: flex; align-items: flex-start; gap: var(--talos-space-control, 0.75rem); padding: 0.5rem 0.75rem; color: var(--talos-text); }
+.talos-codice-r4-voce-doctor .talos-codice-r4-azione-testo > small { margin-top: 0.125rem; }
+/* Visto sul Pad (15/10): le regole comuni delle righe coloravano tutte le icone d'ambra e tutte le gravità di grigio. Il colore della
+   gravità vale per l'icona e per la sua parola; le righe restano nel grigio delle note. */
+.talos-codice-r4-doctor-icona { width: 1.125rem; height: 1.125rem; flex: none; margin-top: 0.125rem; }
+.talos-codice-r4-voce-doctor[data-gravita="danger"] :is(.talos-codice-r4-doctor-icona, .talos-codice-r4-doctor-gravita) { color: var(--talos-danger); }
+.talos-codice-r4-voce-doctor[data-gravita="warning"] :is(.talos-codice-r4-doctor-icona, .talos-codice-r4-doctor-gravita) { color: var(--talos-warning); }
+.talos-codice-r4-voce-doctor[data-gravita="info"] :is(.talos-codice-r4-doctor-icona, .talos-codice-r4-doctor-gravita) { color: var(--talos-muted); }
+.talos-codice-r4-voce-doctor[data-gravita="success"] :is(.talos-codice-r4-doctor-icona, .talos-codice-r4-doctor-gravita) { color: var(--talos-success); }
+/* K3-C3b-1: il pannello ▤ — schede, sezioni e righe chiave/valore come le card del desktop (`talos-kv`): etichetta a sinistra, valore
+   a destra che non va a capo, salvo le righe che il desktop marca «a-capo». Le stime («~») sono in grigio come nel desktop. */
+.talos-codice-r4-schede { display: flex; gap: 0.25rem; padding: 0 0.75rem; border-bottom: 1px solid var(--talos-border); }
+.talos-codice-r4-scheda { min-height: var(--talos-touch-target, 3rem); padding: 0 0.75rem; color: var(--talos-muted); font-size: var(--text-sm); border-bottom: 2px solid transparent; }
+.talos-codice-r4-scheda[aria-selected="true"] { color: var(--talos-text); border-bottom-color: var(--talos-accent); }
+.talos-codice-r4-scheda:focus-visible { outline: 2px solid var(--talos-ring); outline-offset: -2px; }
+.talos-codice-r4-sezione { padding: 0 0.75rem; }
+.talos-codice-r4-sezione > h3 { display: flex; justify-content: space-between; gap: 0.75rem; margin-bottom: 0.375rem; color: var(--talos-text); font-size: var(--text-sm); font-weight: 600; }
+.talos-codice-r4-sezione-destra { color: var(--talos-muted); font-weight: 400; }
+.talos-codice-r4-kv { display: flex; justify-content: space-between; gap: 0.75rem; padding: 0.25rem 0; font-size: var(--text-sm); }
+.talos-codice-r4-kv > dt { min-width: 0; color: var(--talos-muted); overflow-wrap: anywhere; }
+.talos-codice-r4-kv > dd { flex: none; color: var(--talos-text); text-align: right; white-space: nowrap; }
+.talos-codice-r4-kv[data-classe="a-capo"] > dd { flex: 1 1 auto; white-space: normal; }
+.talos-codice-r4-kv[data-classe="stima"] > dd { color: var(--talos-muted); }
+.talos-codice-r4-kv[data-classe="accent"] > dd { color: var(--talos-accent); }
+.talos-codice-r4-kv[data-classe="warning"] > dd { color: var(--talos-warning); }
+/* K3-C3b-1: la colonna del pannello sul tablet, a destra della conversazione: larghezza fissa, scorre da sola, filo a sinistra. */
+.talos-codice-r4-colonna { flex: none; width: min(22rem, 40vw); min-height: 0; overflow-y: auto; overscroll-behavior: contain; border-left: 1px solid var(--talos-border); background: var(--talos-window-bg, var(--talos-background)); }
+/* K3-C3b-2a: la scheda Processi. Filtro, stati (una riga che scorre, come il desktop e Hermes), «Ferma tutti», le righe. */
+.talos-codice-r4-campo { width: 100%; min-height: var(--talos-touch-target, 3rem); padding: 0 0.75rem; border: 1px solid var(--talos-border); border-radius: 0.75rem; background: transparent; color: var(--talos-text); font-size: var(--text-sm); }
+.talos-codice-r4-campo:focus-visible { outline: 2px solid var(--talos-ring); outline-offset: 1px; }
+.talos-codice-r4-stati { display: flex; gap: 0.375rem; padding: 0 0.75rem; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; }
+.talos-codice-r4-stati > button { flex: none; min-height: 2.25rem; padding: 0 0.75rem; border: 1px solid var(--talos-border); border-radius: 999px; color: var(--talos-muted); font-size: var(--text-xs); white-space: nowrap; }
+.talos-codice-r4-stati > button[aria-pressed="true"] { border-color: var(--talos-accent); color: var(--talos-text); }
+.talos-codice-r4-stati > button:focus-visible, .talos-codice-r4-ferma-tutti:focus-visible, .talos-codice-r4-processo-bottone:focus-visible { outline: 2px solid var(--talos-ring); outline-offset: 2px; }
+.talos-codice-r4-ferma-tutti { width: 100%; min-height: var(--talos-touch-target, 3rem); border: 1px solid var(--talos-border); border-radius: 0.75rem; color: var(--talos-text); font-size: var(--text-sm); }
+.talos-codice-r4-sezione-titolo { padding: 0.25rem 0.75rem 0; color: var(--talos-muted); font-size: var(--text-xs); font-weight: 600; }
+.talos-codice-r4-processo { display: flex; flex-direction: column; gap: 0.375rem; padding: 0.625rem 0.75rem; border: 1px solid var(--talos-border); border-radius: 0.75rem; }
+.talos-codice-r4-processo-testa { display: flex; align-items: flex-start; gap: 0.5rem; }
+.talos-codice-r4-processo-famiglia { width: 1rem; height: 1rem; flex: none; margin-top: 0.125rem; color: var(--talos-muted); }
+.talos-codice-r4-processo-titolo, .talos-codice-r4-processo-comando { min-width: 0; flex: 1; color: var(--talos-text); font-size: var(--text-sm); overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.talos-codice-r4-processo-comando { font-family: var(--font-mono, ui-monospace, monospace); font-size: var(--text-xs); }
+.talos-codice-r4-processo-comando [data-tipo="eseguibile"] { font-weight: 600; }
+.talos-codice-r4-processo-comando [data-tipo="flag"], .talos-codice-r4-processo-comando [data-tipo="operatore"], .talos-codice-r4-processo-comando [data-tipo="commento"] { color: var(--talos-muted); }
+.talos-codice-r4-processo-comando [data-tipo="percorso"], .talos-codice-r4-processo-comando [data-tipo="url"] { color: var(--talos-accent); }
+/* il bersaglio del tocco è di 44 px anche se l'icona è piccola */
+.talos-codice-r4-processo-bottone { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 2.75rem; height: 2.75rem; margin: -0.625rem -0.25rem -0.5rem 0; border-radius: 0.75rem; color: var(--talos-muted); }
+.talos-codice-r4-processo-bottone:disabled { opacity: 0.5; }
+.talos-codice-r4-processo-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.625rem; color: var(--talos-muted); font-size: var(--text-xs); }
+.talos-codice-r4-processo-stato { display: inline-flex; align-items: center; gap: 0.25rem; color: var(--talos-text); }
+.talos-codice-r4-processo-stato[data-tono="accent"] { color: var(--talos-accent); }
+.talos-codice-r4-processo-stato[data-tono="warning"] { color: var(--talos-warning); }
+.talos-codice-r4-processo-stato[data-tono="success"] { color: var(--talos-success); }
+.talos-codice-r4-processo-stato[data-tono="danger"] { color: var(--talos-danger); }
+.talos-codice-r4-processo-fermo { color: var(--talos-warning); font-size: var(--text-xs); line-height: 1.4; }
+.talos-codice-r4-processo-avviso { color: var(--talos-muted); font-size: var(--text-xs); }
+.talos-codice-r4-processo-azioni { display: flex; flex-direction: column; border-top: 1px solid var(--talos-border); }
+.talos-codice-r4-processo-azioni .talos-codice-r4-azione[data-pericolo] { color: var(--talos-danger); }
+.talos-codice-r4-processo-dettaglio { border-top: 1px solid var(--talos-border); padding-top: 0.375rem; }
+.talos-codice-r4-scheda-numero { margin-left: 0.375rem; padding: 0 0.375rem; border-radius: 999px; background: var(--talos-accent); color: var(--talos-accent-contrast, var(--primary-foreground)); font-size: var(--text-xs); }
+/* i valori lunghi del dettaglio di un processo (comando, descrizione, file d'uscita): una classe loro, come il desktop
+   (`CLASSI_DETTAGLIO_PROCESSO`); visto sul Pad il 15/10: l'etichetta si spezzava («Descrizion/e») e il valore stava a destra */
+.talos-codice-r4-kv[data-classe="lungo"] > dt { flex: none; }
+.talos-codice-r4-kv[data-classe="lungo"] > dd { flex: 1 1 auto; min-width: 0; text-align: left; white-space: pre-wrap; overflow-wrap: anywhere; }
+/* nel dettaglio di un processo ogni valore può andare a capo (la cartella è un percorso), e nessuna etichetta si stringe */
+.talos-codice-r4-processo-dettaglio .talos-codice-r4-kv > dt { flex: none; }
+.talos-codice-r4-processo-dettaglio .talos-codice-r4-kv > dd { min-width: 0; overflow-wrap: anywhere; }
+.talos-codice-r4-processo-dettaglio .talos-codice-r4-kv:not([data-classe="lungo"]) > dd { flex: 0 1 auto; white-space: normal; }
+/* K3-C3b-2b: la scheda Agenti. Le teste dei gruppi per richiesta (si aprono e si chiudono), le righe che aprono la delega. */
+.talos-codice-r4-agenti-richiesta { display: flex; align-items: center; gap: 0.5rem; margin: 0 0.75rem; min-height: var(--talos-touch-target, 3rem); padding: 0.375rem 0.25rem; text-align: left; color: var(--talos-text); }
+.talos-codice-r4-agenti-richiesta:focus-visible, .talos-codice-r4-agente:focus-visible, .talos-codice-r4-agenti-pagine > button:focus-visible { outline: 2px solid var(--talos-ring); outline-offset: 2px; }
+.talos-codice-r4-agenti-richiesta-titolo { display: block; overflow: hidden; font-size: var(--text-sm); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.talos-codice-r4-agenti-richiesta-conto { display: block; color: var(--talos-muted); font-size: var(--text-xs); }
+.talos-codice-r4-agente { display: flex; width: 100%; flex-direction: column; gap: 0.375rem; padding: 0.625rem 0.75rem; border: 1px solid var(--talos-border); border-radius: 0.75rem; text-align: left; color: var(--talos-text); font-size: var(--text-sm); }
+.talos-codice-r4-agente-testa { display: flex; align-items: center; gap: 0.5rem; }
+.talos-codice-r4-agente-stato { flex: none; color: var(--talos-muted); font-size: var(--text-xs); }
+.talos-codice-r4-agente-stato[data-tono="success"] { color: var(--talos-success); }
+.talos-codice-r4-agente-stato[data-tono="danger"] { color: var(--talos-danger); }
+.talos-codice-r4-agente-stato[data-tono="warning"] { color: var(--talos-warning); }
+.talos-codice-r4-agente-compito { color: var(--talos-muted); font-size: var(--text-xs); line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.talos-codice-r4-agenti-pagine { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 0 0.75rem; color: var(--talos-muted); font-size: var(--text-xs); }
+.talos-codice-r4-agenti-pagine > button { min-height: var(--talos-touch-target, 3rem); padding: 0 0.75rem; color: var(--talos-text); }
+.talos-codice-r4-agenti-pagine > button:disabled { opacity: 0.5; }
+
+/* K3-FILE: l'albero dei file (riga da 44 px come le altre del pannello), i risultati della ricerca e l'anteprima. */
+.talos-codice-r4-file-riga { display: flex; width: 100%; min-height: var(--talos-touch-target, 2.75rem); align-items: center; gap: 0.375rem; padding: 0.25rem 0.75rem; text-align: left; color: var(--talos-text); font-size: var(--text-sm); }
+.talos-codice-r4-file-riga:hover { background: var(--talos-hover, transparent); }
+.talos-codice-r4-file-riga:focus-visible { outline: 2px solid var(--talos-ring); outline-offset: -2px; }
+.talos-codice-r4-file-freccia { display: inline-flex; width: 0.875rem; flex: none; color: var(--talos-muted); }
+.talos-codice-r4-file-icona { width: 1rem; height: 1rem; flex: none; color: var(--talos-muted); }
+.talos-codice-r4-file-nome { min-width: 0; flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.talos-codice-r4-file-percorso { min-width: 0; flex: 0 1 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--talos-muted); font-size: var(--text-xs); direction: rtl; text-align: right; }
+.talos-codice-r4-anteprima { display: flex; min-height: 0; flex-direction: column; gap: 0.5rem; }
+.talos-codice-r4-anteprima-testa { display: flex; align-items: center; gap: 0.5rem; padding: 0 0.75rem; }
+.talos-codice-r4-anteprima-nome { min-width: 0; flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; font-size: var(--text-sm); }
+.talos-codice-r4-anteprima-testo { margin: 0 0.75rem; padding: 0.75rem; overflow: auto; border: 1px solid var(--talos-border); border-radius: 0.5rem; font-family: var(--talos-font-mono, ui-monospace, monospace); font-size: var(--text-xs); line-height: 1.5; white-space: pre; color: var(--talos-text); }
+.talos-codice-r4-icona-azione { display: inline-flex; min-width: var(--talos-touch-target, 2.75rem); min-height: var(--talos-touch-target, 2.75rem); align-items: center; justify-content: center; border-radius: 0.5rem; color: var(--talos-muted); }
+.talos-codice-r4-icona-azione:focus-visible { outline: 2px solid var(--talos-ring); outline-offset: 2px; }
+.talos-codice-r4-file-voce { display: flex; align-items: center; }
+.talos-codice-r4-file-voce > .talos-codice-r4-file-riga { flex: 1 1 auto; min-width: 0; }
+.talos-codice-r4-file-testa { display: flex; align-items: center; justify-content: space-between; padding-inline-end: 0; }
+/* K3-C Allegati A1: la casella di un file (bersaglio intero, segno piccolo) e la barra della selezione, ferma in fondo al pannello. */
+.talos-codice-r4-file-scegli { color: var(--talos-muted); }
+.talos-codice-r4-file-selezione { position: sticky; bottom: 0; display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.75rem; border-top: 1px solid var(--talos-border); background: var(--talos-panel); }
+/* Misurato sul Pad (foglio in verticale): sotto la barra il foglio ha il suo margine in fondo, e lì l'albero continuava a scorrere
+   visibile. Lo sfondo della barra si allunga di sotto e lo copre. */
+.talos-codice-r4-file-selezione::after { content: ''; position: absolute; inset-inline: 0; top: 100%; height: 3rem; background: var(--talos-panel); }
+
+/* ⛔ K3-TERM T4 (owner 16/10): «Chat · Terminale». In basso col Codice stretto, come `.mobile-nav` del Codice vecchio (68 px con
+   l'area sicura, icona + parola, la vista attiva sull'accento tenue); nella testata col Codice largo, due schede compatte. */
+.talos-codice-r4-viste-barra {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr)); /* K3 Revisione: Chat · Terminale · Review */
+    gap: 0.25rem;
+    min-height: 68px;
+    padding: 5px max(5px, env(safe-area-inset-right)) max(5px, env(safe-area-inset-bottom)) max(5px, env(safe-area-inset-left));
+    border-top: 1px solid var(--talos-border);
+    background: var(--talos-window-bg);
+}
+.talos-codice-r4-viste-barra .talos-codice-r4-vista {
+    display: flex;
+    min-height: var(--talos-touch-target, 2.75rem);
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    border-radius: 9px;
+    color: var(--talos-muted);
+    font-size: var(--text-xs);
+}
+.talos-codice-r4-viste-schede { display: inline-flex; flex-shrink: 0; gap: 0.125rem; }
+.talos-codice-r4-viste-schede .talos-codice-r4-vista {
+    min-height: var(--talos-touch-target, 2.75rem);
+    padding: 0 0.75rem;
+    border-radius: 999px;
+    color: var(--talos-muted);
+    font-size: var(--text-sm);
+}
+.talos-codice-r4-vista[aria-selected="true"] { background: var(--talos-accent-soft); color: var(--talos-text); }
+.talos-codice-r4-vista:focus-visible { outline: 2px solid var(--talos-ring); outline-offset: -2px; }
+
+/* ⛔ K3-TERM T3: la vista Terminale. Lo schermo ha i colori dei blocchi di codice della chat; le schede sono quelle del pannello ▤. */
+.talos-codice-r4-terminale { display: flex; min-height: 0; flex-direction: column; background: var(--talos-window-bg); }
+.talos-codice-r4-terminale-testa { display: flex; align-items: center; gap: 0.25rem; padding: 0 0.5rem; border-bottom: 1px solid var(--talos-border); }
+.talos-codice-r4-terminale-schede { display: flex; min-width: 0; flex: 1; gap: 0.125rem; overflow-x: auto; scrollbar-width: none; }
+.talos-codice-r4-terminale-linguetta { display: flex; flex-shrink: 0; align-items: center; border-bottom: 2px solid transparent; }
+.talos-codice-r4-terminale-linguetta[data-attiva="true"] { border-bottom-color: var(--talos-accent); }
+.talos-codice-r4-terminale-scheda {
+    display: inline-flex;
+    max-width: 12rem;
+    min-height: var(--talos-touch-target, 2.75rem);
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0 0.25rem 0 0.5rem;
+    color: var(--talos-muted);
+    font-size: var(--text-sm);
+}
+.talos-codice-r4-terminale-scheda[aria-selected="true"] { color: var(--talos-text); }
+.talos-codice-r4-terminale-pallino { width: 0.375rem; height: 0.375rem; flex-shrink: 0; border-radius: 999px; background: var(--talos-muted); }
+.talos-codice-r4-terminale-pallino[data-stato="connesso"] { background: var(--talos-success); }
+.talos-codice-r4-terminale-pallino[data-stato="connessione"] { background: var(--talos-warning); }
+.talos-codice-r4-terminale-pallino[data-stato="disconnesso"],
+.talos-codice-r4-terminale-pallino[data-stato="terminato"] { background: var(--talos-danger); }
+.talos-codice-r4-terminale-chiudi,
+.talos-codice-r4-terminale-piu {
+    display: inline-flex;
+    min-width: var(--talos-touch-target, 2.75rem);
+    min-height: var(--talos-touch-target, 2.75rem);
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    color: var(--talos-muted);
+}
+.talos-codice-r4-terminale-chiudi { min-width: 2rem; }
+.talos-codice-r4-terminale-piu:disabled { opacity: 0.4; }
+.talos-codice-r4-terminale-chiudi:focus-visible,
+.talos-codice-r4-terminale-piu:focus-visible,
+.talos-codice-r4-terminale-scheda:focus-visible { outline: 2px solid var(--talos-ring); outline-offset: -2px; }
+.talos-codice-r4-terminale-area { position: relative; min-height: 0; flex: 1; background: var(--talos-code-bg, var(--talos-window-bg)); }
+.talos-codice-r4-terminale-schermo { position: absolute; inset: 0.375rem 0.5rem; }
+.talos-codice-r4-terminale-vuoto {
+    display: flex;
+    height: 100%;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 1rem;
+    color: var(--talos-muted);
+    font-size: var(--text-sm);
+    text-align: center;
+}
+.talos-codice-r4-terminale-nuova {
+    display: inline-flex;
+    min-height: var(--talos-touch-target, 2.75rem);
+    align-items: center;
+    gap: 0.375rem;
+    margin-top: 0.25rem;
+    padding: 0 1rem;
+    border: 1px solid var(--talos-border-strong);
+    border-radius: 999px;
+    color: var(--talos-text);
+}
+.talos-codice-r4-terminale-piede {
+    display: flex;
+    min-height: 1.75rem;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0 0.75rem;
+    color: var(--talos-muted);
+    font-size: var(--text-xs);
+}
+.talos-codice-r4-terminale-ricollega { display: inline-flex; min-height: var(--talos-touch-target, 2.75rem); align-items: center; gap: 0.25rem; color: var(--talos-accent-text, var(--talos-accent)); }
+/* La barra dei tasti (owner 16/10: una riga scorrevole, tasti da 44 px). Ctrl e Alt premuti stanno sull'accento. */
+.talos-codice-r4-tasti {
+    display: flex;
+    gap: 0.25rem;
+    padding: 0.25rem 0.5rem;
+    overflow-x: auto;
+    border-top: 1px solid var(--talos-border);
+    background: var(--talos-panel-soft, var(--talos-window-bg));
+    scrollbar-width: none;
+}
+.talos-codice-r4-tasto {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: var(--talos-touch-target, 2.75rem);
+    min-height: var(--talos-touch-target, 2.75rem);
+    flex-shrink: 0;
+    padding: 0 0.5rem;
+    border: 1px solid var(--talos-border);
+    border-radius: 0.5rem;
+    background: var(--talos-window-bg);
+    color: var(--talos-text);
+    font-family: var(--talos-font-mono);
+    font-size: var(--text-sm);
+}
+.talos-codice-r4-tasto[aria-pressed="true"] { border-color: var(--talos-accent); background: var(--talos-accent-soft); }
+.talos-codice-r4-tasto:focus-visible { outline: 2px solid var(--talos-ring); outline-offset: -2px; }
+
+/* ⛔ K3-AP1 (owner 16/10 «Carta nella conversazione»): la carta del permesso. Il comando esatto ha i colori dei blocchi di codice
+   della chat; i pulsanti stanno su una riga (Nega, Consenti una volta) e il terzo va a capo, come nell'anteprima approvata. */
+.talos-codice-r4-approvazione__codice {
+    max-height: 9rem;
+    overflow: auto;
+    padding: 0.375rem 0.5rem;
+    border: 1px solid var(--talos-code-border, var(--talos-border));
+    border-radius: 0.375rem;
+    background: var(--talos-code-bg, var(--talos-window-bg));
+    color: var(--talos-code-text, var(--talos-text));
+    font-family: var(--talos-font-mono);
+    font-size: var(--text-xs);
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+.talos-codice-r4-approvazione__codice:focus-visible { outline: 2px solid var(--talos-ring); outline-offset: 1px; }
+.talos-codice-r4-approvazione__pulsanti { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.5rem; }
+.talos-codice-r4-approvazione__terzo { flex-basis: 100%; }
+.talos-codice-r4-approvazione__nega { color: var(--talos-danger); }
+.talos-codice-r4-approvazione__esito[data-esito="si"] { color: var(--talos-success); }
+.talos-codice-r4-approvazione__esito[data-esito="no"] { color: var(--talos-danger); }
+
+/* ⛔ K3-AP2 (owner 16/10: carta nella conversazione, una domanda alla volta): la carta delle domande di TALOS. Stessa famiglia della
+   carta del permesso; in attesa il tono è l'accento (è una scelta, non un rischio). Le opzioni sono righe intere da 44 px con un segno
+   proprio (tondo per la scelta singola, quadro per la multipla): niente controlli nativi. */
+.talos-codice-r4-domanda--attesa {
+    border-color: var(--talos-accent-border, var(--talos-accent));
+    background: color-mix(in srgb, var(--talos-accent) 7%, var(--talos-panel));
+}
+.talos-codice-r4-domanda:focus-visible { outline: 2px solid var(--talos-ring); outline-offset: 2px; }
+.talos-codice-r4-domanda__opzioni { display: flex; flex-direction: column; gap: 0.375rem; }
+.talos-codice-r4-domanda__opzione {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    width: 100%;
+    min-height: 2.75rem;
+    padding: 0.375rem 0.625rem;
+    border: 1px solid var(--talos-border);
+    border-radius: 0.375rem;
+    background: var(--talos-panel);
+    color: var(--talos-text);
+    text-align: left;
+}
+.talos-codice-r4-domanda__opzione[aria-checked="true"] {
+    border-color: var(--talos-accent);
+    background: var(--talos-active, color-mix(in srgb, var(--talos-accent) 14%, var(--talos-panel)));
+}
+.talos-codice-r4-domanda__opzione:focus-visible { outline: 2px solid var(--talos-ring); outline-offset: 1px; }
+.talos-codice-r4-domanda__opzione:disabled { opacity: 0.6; }
+.talos-codice-r4-domanda__segno {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    width: 1.125rem;
+    height: 1.125rem;
+    border: 1.5px solid var(--talos-muted);
+    border-radius: 999px;
+    color: var(--talos-accent-text, var(--talos-background));
+}
+.talos-codice-r4-domanda__segno[data-forma="quadro"] { border-radius: 0.25rem; }
+[aria-checked="true"] > .talos-codice-r4-domanda__segno { border-color: var(--talos-accent); background: var(--talos-accent); }
+[aria-checked="true"] > .talos-codice-r4-domanda__segno[data-forma="tondo"] { box-shadow: inset 0 0 0 3px var(--talos-panel); }
+.talos-codice-r4-domanda__tasto {
+    flex-shrink: 0;
+    min-width: 1.25rem;
+    padding: 0 0.25rem;
+    border: 1px solid var(--talos-border);
+    border-radius: 0.25rem;
+    color: var(--talos-muted);
+    font-family: var(--talos-font-mono);
+    font-size: var(--text-2xs);
+    text-align: center;
+}
+@media (pointer: coarse) { .talos-codice-r4-domanda__tasto { display: none; } }
+.talos-codice-r4-domanda__consigliata,
+.talos-codice-r4-domanda__scelta {
+    padding: 0 0.375rem;
+    border-radius: 999px;
+    font-size: var(--text-2xs);
+    line-height: 1rem;
+}
+.talos-codice-r4-domanda__consigliata { border: 1px solid var(--talos-accent-border, var(--talos-accent)); color: var(--talos-accent); }
+.talos-codice-r4-domanda__scelta { background: var(--talos-accent); color: var(--talos-accent-text, var(--talos-background)); }
+.talos-codice-r4-domanda__campo {
+    width: 100%;
+    padding-inline: 0.75rem;
+    border: 1px solid var(--talos-border);
+    border-radius: 0.375rem;
+    background: var(--talos-input, var(--talos-background));
+    color: var(--talos-text);
+    font-size: var(--text-sm);
+    outline: none;
+    resize: vertical;
+}
+.talos-codice-r4-domanda__campo:focus { border-color: var(--talos-accent); }
+.talos-codice-r4-domanda__azioni { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.5rem; }
+.talos-codice-r4-domanda__indietro { margin-inline-end: auto; }
+.talos-codice-r4-domanda__offerte > summary { display: flex; align-items: center; cursor: pointer; list-style: none; }
+.talos-codice-r4-domanda__offerte > summary::-webkit-details-marker { display: none; }
+.talos-codice-r4-domanda__offerte > summary:focus-visible { outline: 2px solid var(--talos-ring); outline-offset: 1px; border-radius: 0.25rem; }
+.talos-codice-r4-domanda__offerte[open] .talos-codice-r4-domanda__freccia { transform: rotate(90deg); }
+
+/* K3-AP3: la riga «L'agente «…» chiede» sulla carta di una sotto-sessione. Il nome è un collegamento discreto che la apre (owner 16/10);
+   si accorcia solo il nome, la frase resta leggibile; il bersaglio del tocco arriva a 44 px senza allargare la riga. */
+.talos-codice-r4-chi__nome {
+    position: relative;
+    color: var(--talos-text);
+    text-decoration: underline;
+    text-decoration-color: var(--talos-border-strong, var(--talos-muted));
+    text-underline-offset: 2px;
+}
+.talos-codice-r4-chi__testo { display: inline-block; max-width: 22ch; overflow: hidden; vertical-align: bottom; text-overflow: ellipsis; white-space: nowrap; }
+.talos-codice-r4-chi__nome::after { content: ''; position: absolute; inset: -14px -4px; }
+.talos-codice-r4-chi__nome:focus-visible { outline: 2px solid var(--talos-ring); outline-offset: 1px; border-radius: 0.125rem; }
+
+/* ⛔ K3 piano (owner 17/10 «Carta + modo Normale/Piano»): la carta del piano. Stessa famiglia della carta delle domande: in attesa il
+   tono è l'accento (è una scelta). Il corpo scorre dentro la carta oltre una certa altezza, come sul desktop (`workflow-r4.css:58`,
+   `min(45vh, 480px)`), e i titoli del piano restano sotto quello della carta: la gerarchia si legge dal peso, non dalla taglia. */
+.talos-codice-r4-piano--attesa {
+    border-color: var(--talos-accent-border, var(--talos-accent));
+    background: color-mix(in srgb, var(--talos-accent) 7%, var(--talos-panel));
+}
+.talos-codice-r4-piano:focus-visible { outline: 2px solid var(--talos-ring); outline-offset: 2px; }
+.talos-codice-r4-piano__stato {
+    flex-shrink: 0;
+    max-width: 50%;
+    overflow: hidden;
+    padding: 0 0.5rem;
+    border: 1px solid var(--talos-border);
+    border-radius: 999px;
+    color: var(--talos-muted);
+    font-size: var(--text-2xs);
+    line-height: 1.25rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.talos-codice-r4-piano__stato[data-tono="attesa"] { border-color: var(--talos-accent-border, var(--talos-accent)); color: var(--talos-accent); }
+.talos-codice-r4-piano__stato[data-tono="approved"] { border-color: var(--talos-success); color: var(--talos-success); }
+.talos-codice-r4-piano__corpo {
+    max-height: min(45vh, 480px);
+    overflow: auto;
+    margin-inline: 0.75rem;
+    padding: 0.25rem 0.75rem 0.5rem;
+    border: 1px solid var(--talos-border);
+    border-radius: 0.375rem;
+    background: var(--talos-panel);
+    overscroll-behavior: contain;
+}
+.talos-codice-r4-piano__corpo:focus-visible { outline: 2px solid var(--talos-ring); outline-offset: -2px; }
+/* Pad 17/10: «## Piano per slugify» usciva più grande del titolo della carta; alla pari, si distingue dal peso. */
+/* più forte di `.talos-message-content h2` (TalosMobileMessageContent.vue, caricato dopo): a pari forza vinceva lui, misurato sul Pad */
+.talos-codice-r4-piano__corpo .talos-message-content :is(h1, h2, h3, h4) { font-size: var(--text-sm); line-height: 1.3; }
+.talos-codice-r4-piano__corpo .talos-message-content :is(h1, h2) { font-weight: 650; }
+.talos-codice-r4-piano__corpo .talos-message-content :is(h3, h4) { font-weight: 600; }
+.talos-codice-r4-piano__scelte { display: flex; flex-direction: column; gap: 0.375rem; }
+.talos-codice-r4-piano__scelta {
+    width: 100%;
+    min-height: 2.75rem;
+    padding: 0.375rem 0.625rem;
+    border: 1px solid var(--talos-border);
+    border-radius: 0.375rem;
+    background: var(--talos-panel);
+    color: var(--talos-text);
+    text-align: left;
+}
+.talos-codice-r4-piano__scelta[aria-expanded="true"],
+.talos-codice-r4-piano__scelta[data-in-volo="true"] {
+    border-color: var(--talos-accent);
+    background: var(--talos-active, color-mix(in srgb, var(--talos-accent) 14%, var(--talos-panel)));
+}
+.talos-codice-r4-piano__scelta:focus-visible { outline: 2px solid var(--talos-ring); outline-offset: 1px; }
+.talos-codice-r4-piano__scelta:disabled { opacity: 0.6; }
+.talos-codice-r4-piano__correzione { padding: 0.25rem 0 0.375rem 0.625rem; border-inline-start: 2px solid var(--talos-accent); }
+
+/* K3 piano: la pillola del permesso nel piede del compositore (il chip del desktop): il colore del rischio sta sull'icona, il testo
+   resta leggibile e si accorcia sul telefono (per intero nel nome accessibile e in cima al foglio). */
+/* Pad 17/10: a 24ch si troncava anche sul Pad orizzontale, con lo spazio libero accanto; la riga degli attrezzi va a capo da sé. */
+.talos-codice-r4-permesso__testo { display: inline-block; max-width: 40ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.talos-codice-r4-permesso[data-tono="warning"] .talos-codice-r4-permesso__icona { color: var(--talos-warning); }
+.talos-codice-r4-permesso[data-tono="danger"] .talos-codice-r4-permesso__icona { color: var(--talos-danger); }
+.talos-codice-r4-permesso[data-modo="piano"] .talos-codice-r4-permesso__icona { color: var(--talos-accent); }
+
+/* K3 piano: le righe del foglio «Quanto può fare TALOS qui» (gruppi radio, segno tondo come la carta delle domande). */
+.talos-codice-r4-modo__riga {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    width: 100%;
+    min-height: 2.75rem;
+    padding: 0.5rem 0.625rem;
+    border: 1px solid var(--talos-border);
+    border-radius: 0.375rem;
+    background: var(--talos-panel);
+    color: var(--talos-text);
+    text-align: left;
+}
+.talos-codice-r4-modo__riga[aria-checked="true"] {
+    border-color: var(--talos-accent);
+    background: var(--talos-active, color-mix(in srgb, var(--talos-accent) 14%, var(--talos-panel)));
+}
+.talos-codice-r4-modo__riga:focus-visible { outline: 2px solid var(--talos-ring); outline-offset: 1px; }
+.talos-codice-r4-modo__riga:disabled { opacity: 0.55; }
+.talos-codice-r4-modo__rischio { padding: 0 0.375rem; border: 1px solid currentColor; border-radius: 999px; font-size: var(--text-2xs); line-height: 1rem; }
+.talos-codice-r4-modo__rischio[data-tono="success"] { color: var(--talos-success); }
+.talos-codice-r4-modo__rischio[data-tono="warning"] { color: var(--talos-warning); }
+.talos-codice-r4-modo__rischio[data-tono="danger"] { color: var(--talos-danger); }
+
+/* K3 piano: la fascia «Piano attivo dal prossimo giro» e l'avviso «Piano aggiornato», sopra il compositore come l'errore. */
+/* Pad 17/10: larga come il compositore (`.talos-calm-composer.is-docked`), non come il suo contenitore. */
+.talos-codice-r4-fascia {
+    display: flex;
+    max-width: var(--talos-composer-max-width, none);
+    margin-inline: auto;
+    align-items: flex-start;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--talos-accent-border, var(--talos-accent));
+    border-radius: 0.375rem;
+    background: color-mix(in srgb, var(--talos-accent) 9%, var(--talos-card));
+    color: var(--talos-text);
+}
+/* l'avviso ha i pulsanti sulla stessa riga del testo: tutto al centro (Pad 17/10: il testo stava in alto) */
+.talos-codice-r4-fascia--avviso { align-items: center; }
+
+/* K3 automazioni e fornitori: il blocco della carta (la bozza in parole). Righe chiave-valore su due colonne che vanno a capo sul
+   telefono; gli avvisi in un riquadro (le minacce col tono del pericolo, come il `talos-callout--pericolo` del desktop). */
+.talos-codice-r4-automazione { display: flex; flex-direction: column; gap: 0.375rem; }
+.talos-codice-r4-automazione__riga {
+    display: grid;
+    grid-template-columns: minmax(6rem, max-content) minmax(0, 1fr);
+    gap: 0.75rem;
+    font-size: var(--text-sm);
+    line-height: 1.25rem;
+}
+@media (max-width: 480px) { .talos-codice-r4-automazione__riga { grid-template-columns: minmax(0, 1fr); gap: 0; } }
+.talos-codice-r4-automazione__testo { display: flex; flex-direction: column; gap: 0.125rem; }
+.talos-codice-r4-automazione__avvisi {
+    padding: 0.5rem 0.625rem;
+    border: 1px solid var(--talos-warning-border, var(--talos-warning));
+    border-radius: 0.375rem;
+    background: var(--talos-panel);
+}
+.talos-codice-r4-automazione__avvisi[data-pericolo="true"] { border-color: var(--talos-danger-border, var(--talos-danger)); color: var(--talos-danger); }
+
+/* K3 Coordinazione: l'interruttore del foglio (niente controlli nativi: la riga intera è lo `switch`, il segno è il suo stato). */
+.talos-codice-r4-modo__interruttore {
+    position: relative;
+    flex-shrink: 0;
+    width: 2.25rem;
+    height: 1.25rem;
+    border: 1.5px solid var(--talos-muted);
+    border-radius: 999px;
+}
+.talos-codice-r4-modo__interruttore::after {
+    content: '';
+    position: absolute;
+    top: 0.125rem;
+    left: 0.125rem;
+    width: 0.75rem;
+    height: 0.75rem;
+    border-radius: 999px;
+    background: var(--talos-muted);
+    transition: transform 150ms ease;
+}
+[aria-checked="true"] > .talos-codice-r4-modo__interruttore { border-color: var(--talos-accent); background: var(--talos-accent); }
+[aria-checked="true"] > .talos-codice-r4-modo__interruttore::after { transform: translateX(1rem); background: var(--talos-accent-text, var(--talos-background)); }
+@media (prefers-reduced-motion: reduce) { .talos-codice-r4-modo__interruttore::after { transition: none; } }
+
+/*
+ * ⛔ K3 Revisione (ledger `LEDGER-K3-REVISIONE-2026-10-17.md`): la vista «Review», come `#schermoReview` del desktop r4 @ 701c6c0d2
+ * (`styles/index.css:876-880`, `:2506-2517`; `design-system/controls.css:195-196`). Le linguette sono quelle del Terminale; il
+ * riassunto sta a destra delle linguette (BC-80: dove si legge). Le righe non vanno a capo e scorrono in orizzontale (`white-space:
+ * pre`, come il desktop): il colore della riga copre tutta la larghezza anche scorrendo.
+ */
+.talos-codice-r4-revisione { display: flex; min-height: 0; flex-direction: column; background: var(--talos-window-bg); container-type: inline-size; }
+.talos-codice-r4-revisione-vuoto {
+    display: flex;
+    min-height: 0;
+    flex: 1;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 1.5rem 1rem;
+    text-align: center;
+}
+.talos-codice-r4-revisione-scheda { max-width: 16rem; }
+.talos-codice-r4-revisione-piu,
+.talos-codice-r4-revisione-meno { flex-shrink: 0; font-family: var(--talos-font-mono); font-size: var(--text-xs); }
+.talos-codice-r4-revisione-piu { color: var(--talos-success); }
+.talos-codice-r4-revisione-meno { color: var(--talos-danger); }
+.talos-codice-r4-revisione-sommario {
+    flex-shrink: 1;
+    min-width: 0;
+    max-width: 40%;
+    overflow: hidden;
+    padding-left: 0.5rem;
+    border-left: 1px solid var(--talos-border);
+    color: var(--talos-muted);
+    font-family: var(--talos-font-mono);
+    font-size: var(--text-xs);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.talos-codice-r4-revisione-diff { display: flex; min-height: 0; flex: 1; flex-direction: column; }
+.talos-codice-r4-revisione-testa {
+    display: flex;
+    min-height: var(--talos-touch-target, 2.75rem);
+    align-items: center;
+    gap: 0.625rem;
+    padding: 0 0.25rem 0 0.875rem;
+    border-bottom: 1px solid var(--talos-border);
+    color: var(--talos-text);
+    font-size: var(--text-sm);
+}
+.talos-codice-r4-revisione-avviso {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.625rem;
+    margin: 0.625rem 0.875rem 0;
+    padding: 0.625rem 0.75rem;
+    border: 1px solid var(--talos-warning-border);
+    border-radius: var(--talos-radius-control);
+    background: var(--talos-warning-soft);
+    color: var(--talos-text);
+    font-size: var(--text-sm);
+    line-height: 1.25rem;
+}
+.talos-codice-r4-revisione-badge {
+    flex-shrink: 0;
+    padding: 0 0.5rem;
+    border-radius: 999px;
+    background: var(--talos-warning);
+    color: var(--talos-background);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    line-height: 1.25rem;
+}
+.talos-codice-r4-revisione-righe {
+    min-height: 0;
+    flex: 1;
+    overflow: auto;
+    padding: 0.5rem 0;
+    font-family: var(--talos-font-mono);
+    font-size: var(--text-xs); /* i 12 px del desktop, nella scala dell'app */
+    line-height: 1.7;
+    overscroll-behavior: contain;
+}
+.talos-codice-r4-revisione-righe-dentro { width: max-content; min-width: 100%; }
+.talos-codice-r4-revisione-riga { padding: 0 0.875rem; white-space: pre; }
+.talos-codice-r4-revisione-riga[data-tipo="del"] { background: var(--talos-danger-soft); color: var(--talos-danger); }
+.talos-codice-r4-revisione-riga[data-tipo="add"] { background: var(--talos-success-soft); color: var(--talos-success); }
+.talos-codice-r4-revisione-riga[data-tipo="ctx"] { color: var(--talos-muted); }
+/* Visto sul Pad (telefono, 17/10): a 411 px il riassunto prendeva metà della riga e la linguetta scelta restava «lib». Sotto i 34rem
+   le linguette hanno la riga intera; riassunto e «Copia i diff» vanno sotto, il riassunto per intero (nel desktop si legge sempre). */
+@container (max-width: 34rem) {
+    .talos-codice-r4-revisione .talos-codice-r4-terminale-testa { flex-wrap: wrap; }
+    .talos-codice-r4-revisione .talos-codice-r4-terminale-schede { flex-basis: 100%; }
+    .talos-codice-r4-revisione .talos-codice-r4-revisione-sommario { max-width: none; flex: 1; padding-left: 0.5rem; border-left: 0; }
+}

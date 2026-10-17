@@ -78,7 +78,8 @@ function openSource(): void {
             </p>
 
             <template v-else>
-                <p class="text-base leading-6 text-[var(--talos-text)]">{{ claim.text }}</p>
+                <!-- ⛔ G1 (14/10/2026, owner «Sì, solo etichette e titoli»): lo stesso titolo del rapporto. -->
+                <h1 data-talos-sheet-title class="talos-title pt-4 text-xl font-semibold leading-7 text-[var(--talos-text)]">{{ claim.text }}</h1>
 
                 <p data-testid="talos-research-verdict" class="rounded-xl border p-3 text-sm leading-5 text-[var(--talos-text)]" :class="tone">
                     {{ t(`research.support.${claim.checks.claimSupported}`) }}
@@ -100,7 +101,7 @@ function openSource(): void {
                     data-testid="talos-research-dissenso"
                     class="rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)] p-3"
                 >
-                    <p class="mb-1 text-2xs font-medium uppercase tracking-wide text-[var(--talos-muted)]">
+                    <p class="mb-1 text-2xs font-medium text-[var(--talos-muted)]">
                         {{ t('research.dissensoTitolo') }}
                     </p>
                     <p class="mb-3 text-2xs leading-5 text-[var(--talos-muted)]">{{ t('research.dissensoSpiega') }}</p>
@@ -126,7 +127,7 @@ function openSource(): void {
                      this, because nobody else stored it — which is also why a
                      re-check is possible here and impossible there. -->
                 <section data-testid="talos-research-passage" class="rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)] p-3">
-                    <p class="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">
+                    <p class="mb-2 flex items-center gap-2 text-xs font-semibold text-[var(--talos-muted)]">
                         <Quote class="size-3.5" aria-hidden="true" /> {{ t('research.passageTitle') }}
                     </p>
                     <p v-if="claim.passage" class="text-sm leading-6 text-[var(--talos-text)]">{{ claim.passage }}</p>
@@ -141,7 +142,7 @@ function openSource(): void {
                     @click="openSource()"
                 >
                     <span class="min-w-0 flex-1">
-                        <span class="block text-2xs uppercase tracking-wide text-[var(--talos-muted)]">{{ t('research.fromSource') }}</span>
+                        <span class="block text-2xs text-[var(--talos-muted)]">{{ t('research.fromSource') }}</span>
                         <span class="mt-1 block truncate text-sm text-[var(--talos-text)]">{{ source.title || source.url }}</span>
                         <span class="mt-1 block font-mono text-2xs text-[var(--talos-muted)]">
                             {{ source.obtained === 'snippet' ? t('research.onlySnippet') : t('research.pageRead') }}

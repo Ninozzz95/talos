@@ -51,7 +51,12 @@ test('keyboard-height resize keeps the persistent panel mounted', async ({ page 
     await expect(page.getByLabel('Message TALOS')).toBeVisible()
 })
 
-test('tablet Settings stays beside the persistent chat rail and closes back to chat', async ({ page }) => {
+/*
+ * ⛔ 13/10/2026, owner dal Pad (`486b914f8`, TABLET-SETTINGS-RAIL-01): due barre affiancate nelle Impostazioni stavano male,
+ * quella dell'app sparisce lì. Questa prova era rimasta al contratto di prima («Settings stays beside the persistent chat
+ * rail») ed è caduta nella CI della release v0.1.41 (PR #66): il percorso è lo stesso, cambia l'attesa.
+ */
+test('tablet Settings hides the global chat rail and closes back to chat with the rail', async ({ page }) => {
     await page.goto('/')
     const panel = page.locator(PANEL)
     await expect(panel).toBeVisible()
@@ -59,19 +64,17 @@ test('tablet Settings stays beside the persistent chat rail and closes back to c
     await page.locator(`${PANEL} [aria-label="Open Settings"]`).click()
 
     await expect(page.locator(SHEET)).toBeVisible()
-    await expect(panel).toBeVisible()
-    await expect(page.locator(DIVIDER)).toBeVisible()
+    await expect(page.locator(PANEL)).toHaveCount(0)
+    await expect(page.locator(DIVIDER)).toHaveCount(0)
     await expect(page.locator('[data-testid="settings-category-pane"]')).toBeVisible()
     await page.locator('[data-settings-tab="ai_defaults"]').click()
     await expect(page.locator('[data-testid="settings-detail-pane"]')).toBeVisible()
     await expect(page.locator('[data-settings-panel="ai_defaults"]')).toBeVisible()
 
-    const panelBox = (await panel.boundingBox())!
     const sheetBox = (await page.locator(SHEET).boundingBox())!
     const categoriesBox = (await page.locator('[data-testid="settings-category-pane"]').boundingBox())!
-    // The station owns only the content column; it must not cover the global rail.
-    expect(Math.round(sheetBox.x)).toBe(originalWidth)
-    expect(sheetBox.x).toBeGreaterThanOrEqual(panelBox.x + panelBox.width - 1)
+    // Settings owns the whole width: its own category list takes the place of the app's rail.
+    expect(Math.round(sheetBox.x)).toBe(0)
     expect(categoriesBox.x).toBeGreaterThanOrEqual(sheetBox.x)
 
     await closeToolSheet(page)

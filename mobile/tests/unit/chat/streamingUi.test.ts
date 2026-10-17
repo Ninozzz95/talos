@@ -251,7 +251,8 @@ describe('TalosMobileComposer stop control (F2-T4)', () => {
 describe('tool activity in the streaming reply', () => {
     it('names the running tools in plain language, before any text exists', async () => {
         const wrapper = mountStreaming(true, null, [{ name: 'library_search', detail: null }])
-        await flushPromises()
+        // N13: le righe vivono nella linea del tempo del turno, caricata a richiesta (il primo caricamento costa qualche tick).
+        await vi.waitFor(() => expect(wrapper.find('[data-testid="talos-tool-activity"]').exists()).toBe(true))
         const activity = wrapper.get('[data-testid="talos-tool-activity"]')
         expect(activity.text()).toContain('Searching your Library')
         // The wire name must not leak into the interface.

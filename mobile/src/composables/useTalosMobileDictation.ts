@@ -16,6 +16,12 @@ export interface UseTalosMobileDictationOptions {
     /** Receives the FULL composed draft (base + live transcript). */
     onTranscript: (text: string) => void
     engine?: TalosDictationEngine
+    /**
+     * N12 — chiede il motore locale (Parakeet) quando il suo modello è sul telefono: il testo giusto arriva dopo lo stop.
+     * Lo chiede solo chi è fatto per aspettarlo: chat e Codice, e la barra dell'assistente insieme a `chiudeAlSilenzio`
+     * (senza, la sua cattura non finirebbe mai da sola: DICT-N12-01).
+     */
+    motoreLocale?: boolean
     /** Injectable for tests; defaults to the real platform check. */
     native?: boolean
     /** Resolved at start so a persisted language change applies next session. */
@@ -39,8 +45,18 @@ export interface UseTalosMobileDictationOptions {
      */
     silenceMillis?: () => number | undefined
     minimumMillis?: () => number | undefined
+    /**
+     * N12 — «a turno»: il motore locale chiude da sé quando chi parla tace (la barra dell'assistente). Il riconoscitore di
+     * sistema lo fa già per conto suo; chat e Codice non lo chiedono, lì la dettatura la chiude la persona.
+     */
+    chiudeAlSilenzio?: () => boolean
     /** Live locale boundary; raw plugin prose never becomes application UI. */
     errorMessage?: (code: TalosDictationErrorCode) => string
+    /**
+     * N12 — il motore locale non ha potuto fare la sua parte e il testo è quello del riconoscitore di sistema: non è un
+     * errore (il testo c'è), ma chi detta deve poterlo sapere. Arriva il codice del motivo; la frase la sceglie chi compone.
+     */
+    onFallback?: (code: string) => void
 }
 
 export interface TalosMobileDictation {
@@ -57,13 +73,24 @@ export interface TalosMobileDictation {
     errorCode: Ref<TalosDictationErrorCode | null>
     /** F5.2 waveform: 0..1, spikes on incoming speech, decays to a listening floor. */
     level: Ref<number>
+    /**
+     * N12 — vero quando la fine della dettatura l'ha decisa un motore che attende il finale (il locale), dopo parole
+     * sentite: il testo giusto è già scritto, e chi sta sopra può mandare subito (owner 13/10/2026: «Via l'attesa di
+     * sicurezza»). Col riconoscitore di sistema resta falso. Torna falso a ogni dettatura nuova.
+     */
+    chiusaDalMotore: Ref<boolean>
     toggle(): Promise<void>
     /** SF5-3: silent teardown (send-time cleanup) — no messages, no resurrection. */
     cancel(): void
+    /**
+     * N12 — chiude la dettatura per USARNE il testo (invio): se il motore dà il testo giusto dopo lo stop, lo aspetta
+     * (mai più di qualche secondo); altrimenti è come `cancel`.
+     */
+    finisci(): Promise<void>
 }
 
 export function useTalosMobileDictation(options: UseTalosMobileDictationOptions): TalosMobileDictation {
-    const engine = options.engine ?? talosDictationEngine()
+    const engine = options.engine ?? talosDictationEngine({ locale: options.motoreLocale === true })
     const native = options.native ?? Capacitor.isNativePlatform()
     const supported = ref(false)
     const status = ref<TalosMobileDictationStatus>('idle')
@@ -91,6 +118,7 @@ export function useTalosMobileDictation(options: UseTalosMobileDictationOptions)
     // speech. Spike on partials (scaled by new characters), exponential decay
     // to a quiet listening floor, hard zero when the session ends.
     const level = ref(0)
+    const chiusaDalMotore = ref(false)
     const LEVEL_FLOOR = 0.12
     let decayTimer: ReturnType<typeof setInterval> | null = null
     let lastPartialLength = 0
@@ -241,10 +269,20 @@ export function useTalosMobileDictation(options: UseTalosMobileDictationOptions)
     const LISTENING_INACTIVITY_MS = 15000
     let watchdog: ReturnType<typeof setTimeout> | null = null
     let heardAnything = false
+    /** La bozza che c'era nel campo quando questa dettatura è partita (serve a ricomporre il testo finale). */
+    let basePresa = ''
     // SF5-1/3: the native stop() promise may NEVER settle (plugin never
     // resolves the call) and late events from a dead session must be inert —
     // every session gets an epoch; stale events are dropped.
     let sessionEpoch = 0
+    /**
+     * N12 — la sessione appena fermata di cui si aspetta ancora UN testo: quello giusto, che il motore locale dà dopo lo
+     * stop. `scritto` è ciò che la dettatura ha messo nel campo per ultimo: se la persona l'ha toccato, il finale non si applica.
+     */
+    let finaleAtteso: { epoch: number, base: string, scritto: string } | null = null
+    let ultimoScritto = ''
+    /** Oltre questo l'invio non aspetta più: sul Pad Parakeet risponde in meno di un secondo, col modello già caricato. */
+    const TETTO_DEL_FINALE_MS = 8000
 
     function clearWatchdog(): void {
         if (watchdog !== null) clearTimeout(watchdog)
@@ -259,6 +297,17 @@ export function useTalosMobileDictation(options: UseTalosMobileDictationOptions)
         clearWatchdog()
         watchdog = setTimeout(() => {
             if (epoch !== sessionEpoch || status.value !== 'listening') return
+            // N12 (Pad, 13/10/2026): col motore locale la cattura non finisce da sola. Un silenzio lungo lì NON è un guasto:
+            // è la fine normale della dettatura, e il testo giusto (Parakeet) deve ancora arrivare.
+            if (engine.attendeIlFinale === true) {
+                talosDettaturaAnnota('dett: silenzio lungo, chiudo e aspetto il testo finale')
+                aspettaIlFinale()
+                sessionEpoch += 1
+                status.value = 'idle'
+                stopLevel()
+                stopEngineBestEffort()
+                return
+            }
             talosDettaturaAnnota('dett: CANE DA GUARDIA, nessuna parziale da troppo')
             stopEngineBestEffort()
             sessionEpoch += 1
@@ -298,7 +347,10 @@ export function useTalosMobileDictation(options: UseTalosMobileDictationOptions)
             return
         }
         const capturedBase = options.base().trim()
+        finaleAtteso = null
+        ultimoScritto = ''
         heardAnything = false
+        chiusaDalMotore.value = false
         status.value = 'starting'
         sessionEpoch += 1
         const epoch = sessionEpoch
@@ -319,7 +371,16 @@ export function useTalosMobileDictation(options: UseTalosMobileDictationOptions)
                 armListeningWatchdog(epoch)
             },
             onPartial: (text) => {
-                if (epoch !== sessionEpoch) return
+                if (epoch !== sessionEpoch) {
+                    // N12: l'unico evento che conta dopo lo stop è il testo finale di un motore che lo dichiara.
+                    const atteso = finaleAtteso
+                    if (!atteso || atteso.epoch !== epoch) return
+                    finaleAtteso = null
+                    const finale = text.trim()
+                    if (!finale || options.base().trim() !== atteso.scritto.trim()) return
+                    options.onTranscript(atteso.base ? `${atteso.base} ${finale}` : finale)
+                    return
+                }
                 if (status.value === 'starting') {
                     status.value = 'listening'
                     startLevel()
@@ -329,7 +390,13 @@ export function useTalosMobileDictation(options: UseTalosMobileDictationOptions)
                 heardAnything = true
                 const transcript = text.trim()
                 if (!transcript) return
-                options.onTranscript(capturedBase ? `${capturedBase} ${transcript}` : transcript)
+                ultimoScritto = capturedBase ? `${capturedBase} ${transcript}` : transcript
+                basePresa = capturedBase
+                options.onTranscript(ultimoScritto)
+            },
+            onFallback: (code) => {
+                talosDettaturaAnnota(`dett: ripiego sul sistema ${code}`)
+                options.onFallback?.(code)
             },
             onLevel: (db) => {
                 if (epoch !== sessionEpoch) return
@@ -343,6 +410,8 @@ export function useTalosMobileDictation(options: UseTalosMobileDictationOptions)
                 stopLevel()
                 if (status.value !== 'starting' && status.value !== 'listening') return
                 if (heardAnything) {
+                    // Prima del cambio di stato: chi osserva lo stato lo legge già giusto.
+                    chiusaDalMotore.value = engine.attendeIlFinale === true
                     status.value = 'idle'
                     return
                 }
@@ -365,6 +434,8 @@ export function useTalosMobileDictation(options: UseTalosMobileDictationOptions)
             allowedLanguages: options.allowedLanguages?.() ?? [],
             silenceMillis: options.silenceMillis?.(),
             minimumMillis: options.minimumMillis?.(),
+            // Solo quando serve: chi non lo chiede manda al motore le stesse opzioni di prima (DICT-I18N-01).
+            ...(options.chiudeAlSilenzio?.() === true ? { endOnSilence: true } : {}),
         })
     }
 
@@ -379,6 +450,7 @@ export function useTalosMobileDictation(options: UseTalosMobileDictationOptions)
             // SF5-1: the native stop() promise may never settle — the UI goes
             // idle NOW; the engine teardown is best-effort in the background.
             clearWatchdog()
+            aspettaIlFinale()
             sessionEpoch += 1
             status.value = 'idle'
             stopLevel()
@@ -416,6 +488,8 @@ export function useTalosMobileDictation(options: UseTalosMobileDictationOptions)
          * — abbiamo smesso di volerlo — e va detta comunque. Fermare un motore
          * già fermo non è un errore: lo dice anche il nativo, che lo ignora.
          */
+        // Chi butta via non vuole nemmeno il testo giusto che sta per arrivare.
+        finaleAtteso = null
         if (status.value !== 'listening' && status.value !== 'starting') {
             stopEngineBestEffort()
             return
@@ -429,5 +503,30 @@ export function useTalosMobileDictation(options: UseTalosMobileDictationOptions)
         stopEngineBestEffort()
     }
 
-    return { supported, visible, status, error, errorCode, level, toggle, cancel }
+    /** Se il motore dà il testo giusto dopo lo stop, la sessione che si sta chiudendo ne aspetta ancora uno. */
+    function aspettaIlFinale(): void {
+        finaleAtteso = engine.attendeIlFinale === true && heardAnything
+            ? { epoch: sessionEpoch, base: basePresa, scritto: ultimoScritto }
+            : null
+    }
+
+    async function finisci(): Promise<void> {
+        if (status.value !== 'listening' && status.value !== 'starting') { cancel(); return }
+        if (engine.attendeIlFinale !== true) { cancel(); return }
+        clearWatchdog()
+        aspettaIlFinale()
+        sessionEpoch += 1
+        status.value = 'idle'
+        error.value = null
+        errorCode.value = null
+        stopLevel()
+        let sveglia: ReturnType<typeof setTimeout> | undefined
+        await Promise.race([
+            engine.stop().catch(() => undefined),
+            new Promise<void>((basta) => { sveglia = setTimeout(basta, TETTO_DEL_FINALE_MS) }),
+        ])
+        clearTimeout(sveglia)
+    }
+
+    return { supported, visible, status, error, errorCode, level, chiusaDalMotore, toggle, cancel, finisci }
 }

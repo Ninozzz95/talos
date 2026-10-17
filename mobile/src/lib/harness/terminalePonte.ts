@@ -56,9 +56,27 @@ interface TalosTerminalePlugin {
         stderr: string
         exitCode: number
         motivo: string | null
+        /** ⛔ F4: «casa» quando il server acceso è quello dentro l'app (`TalosTerminalPlugin.kt`, ramo «Codice in casa»). */
+        dove?: 'casa'
     }>
     // ⛔⛔ 70-A (30/09/2026): il segreto che il server del Codice scrive a ogni avvio (`TalosTerminalPlugin.leggiSegretoServer`).
     leggiSegretoServer(): Promise<{ ok: boolean, segreto: string | null, motivo: string | null }>
+    /** «Codice in casa»: questo APK sa far girare il server del Codice dentro l'app, senza ponte? */
+    codiceInCasa(): Promise<{ disponibile: boolean }>
+    /** ⛔ F4 (14/10/2026): il nativo segue il giro del Codice e tiene acceso il servizio in primo piano finché lavora. */
+    seguiGiroCodice(opzioni: { idSessione: string, titolo: string, testo: string }): Promise<{ custodito: boolean }>
+    lasciaGiroCodice(opzioni: { idSessione: string }): Promise<{ ok: boolean }>
+    /** K2-B/K3-B2: r4 accanto al Codice di oggi, solo nella build di sviluppo con l'archivio. Mai il token. */
+    statoR4Sviluppo(): Promise<TalosStatoR4>
+    avviaR4Sviluppo(): Promise<TalosStatoR4 & { motivo?: string }>
+}
+
+/** Lo stato di r4 nella build di sviluppo: se c'è, se è acceso, e la cartella di lavoro che conosce. */
+export interface TalosStatoR4 {
+    disponibile: boolean
+    acceso: boolean
+    porta: number
+    cartella: string
 }
 
 let pluginCache: TalosTerminalePlugin | null = null
@@ -125,7 +143,7 @@ const NOME_VAR_PER_PROVIDER: Record<typeof PROVIDER_DI_RETE[number], string> = O
  * l'errore onesto del provider mancante (`CONFIG_INVALID`/
  * `PROVIDER_KEY_MISSING`), non un fallimento muto.
  */
-export async function avviaServerHarnessConChiaveProvider(): Promise<ReturnType<TalosTerminalePlugin['avviaServerHarness']>> {
+export async function avviaServerHarnessConChiaveProvider(): Promise<Awaited<ReturnType<TalosTerminalePlugin['avviaServerHarness']>>> {
     const ambiente: Record<string, string> = {}
     /*
      * ⛔ TUTTE e sei le letture in parallelo, non in sequenza: cinque dal
@@ -155,4 +173,69 @@ export async function avviaServerHarnessConChiaveProvider(): Promise<ReturnType<
  */
 export function leggiSegretoServerDalPonte(): ReturnType<TalosTerminalePlugin['leggiSegretoServer']> {
     return plugin().leggiSegretoServer()
+}
+
+/**
+ * «Codice in casa» (owner 13/10/2026: il Codice senza il ponte ADB). Vero quando il server del Codice può girare dentro
+ * l'app: lì il ponte è un extra per il terminale, non una condizione. Sul web, o con un APK che non lo sa fare, è falso.
+ */
+export async function talosCodiceInCasa(): Promise<boolean> {
+    if (!talosTerminaleDisponibile()) return false
+    try {
+        return (await plugin().codiceInCasa()).disponibile === true
+    } catch {
+        return false
+    }
+}
+
+/**
+ * ⛔ F4 (14/10/2026, owner «Notifica solo mentre lavora»): un giro del Codice in casa è cominciato. Il nativo
+ * (`TalosCodiceCustode.kt`) chiede lo stato al server e tiene acceso il servizio finché la sessione lavora: in secondo piano
+ * la WebView è congelata (misurato sul Pad) e da qui la fine non si vedrebbe. Mai un errore: senza custode il giro continua
+ * com'era prima.
+ */
+export async function talosSeguiGiroCodice(idSessione: string, titolo: string, testo: string): Promise<boolean> {
+    if (!talosTerminaleDisponibile()) return false
+    try {
+        return (await plugin().seguiGiroCodice({ idSessione, titolo, testo })).custodito === true
+    } catch {
+        return false
+    }
+}
+
+/**
+ * K3-B2: r4 acceso e pronto per il Codice su r4, oppure `null` (web, build senza r4, avvio fallito). Avvia se serve: lato nativo
+ * è idempotente (`TalosR4Avvio.avvia`).
+ */
+export async function talosR4Pronto(): Promise<TalosStatoR4 | null> {
+    if (!talosTerminaleDisponibile()) return null
+    try {
+        const stato = await plugin().statoR4Sviluppo()
+        if (!stato.disponibile) return null
+        if (stato.acceso) return stato
+        const avviato = await plugin().avviaR4Sviluppo()
+        return avviato.acceso && !avviato.motivo ? avviato : null
+    } catch {
+        return null
+    }
+}
+
+/** K4-E: questo APK porta r4? Solo la domanda, senza accenderlo (`TalosR4Avvio.disponibile`: l'archivio negli asset). */
+export async function talosR4Disponibile(): Promise<boolean> {
+    if (!talosTerminaleDisponibile()) return false
+    try {
+        return (await plugin().statoR4Sviluppo()).disponibile === true
+    } catch {
+        return false
+    }
+}
+
+/** ⛔ F4: la fine del giro vista dall'app davanti; se l'app è dietro la vede il nativo da solo. */
+export async function talosLasciaGiroCodice(idSessione: string): Promise<void> {
+    if (!talosTerminaleDisponibile()) return
+    try {
+        await plugin().lasciaGiroCodice({ idSessione })
+    } catch {
+        // Il nativo rilascia comunque al prossimo controllo dello stato.
+    }
 }

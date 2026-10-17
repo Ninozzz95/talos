@@ -4,7 +4,7 @@ import { useTalosTouchWave } from '@/composables/useTalosTouchWave'
 import { useTalosI18n } from '@/i18n'
 import {
     BookMarked, BookOpen, CheckSquare, FlaskConical, MessageSquareText,
-    Check, Cpu, MonitorSmartphone, Search, Settings, StickyNote, Stethoscope, Wrench, X,
+    Check, Code2, Cpu, MonitorSmartphone, Search, Settings, StickyNote, Stethoscope, Wrench, X,
 } from '@lucide/vue'
 import { useRoute } from 'vue-router'
 import { Button } from '@/components/ui/button'
@@ -25,6 +25,7 @@ import { talosCaricaNovita, talosChatNuova } from '@/stores/chatNovita'
 import { talosStatoDellaChat, type TalosFontiStatoChat } from '@/lib/chat/statoDellaChat'
 import { talosDaIntitolare } from '@/stores/chat'
 import type { TalosMobileRouteName } from '@/lib/mobileRoutes'
+import { talosSidebarSezioneAttiva } from '@/lib/sidebarSection'
 import { talosHarnessUiAvailable } from '@/services/harnessUi'
 import { talosLightImpact } from '@/services/haptics'
 import {
@@ -180,7 +181,7 @@ const sezioni = computed<Array<{ route: TalosMobileRouteName, key: string, icon:
     // (`['/toolforge','wrench','Strumenti']`). Owner 12/09: «come te lo sei
     // potuto dimenticare?». La UI nuova non nasconde funzioni che ci sono.
     { route: 'toolforge', key: 'navigation.toolForge', icon: Wrench },
-    ...(harnessAvailable ? [{ route: 'harness' as TalosMobileRouteName, key: 'navigation.harness', icon: Settings }] : []),
+    ...(harnessAvailable ? [{ route: 'harness' as TalosMobileRouteName, key: 'navigation.harness', icon: Code2 }] : []),
 ])
 
 /**
@@ -398,24 +399,9 @@ function onOrientamento(): void {
 }
 onMounted(() => window.addEventListener('orientationchange', onOrientamento))
 onBeforeUnmount(() => window.removeEventListener('orientationchange', onOrientamento))
-/**
- * La riga della sezione in cui ci si trova e' evidenziata, come nel mockup
- * (`.nav-row.active`: fondo `--talos-active`, icona in accento). La rotta si
- * legge dal router; le pagine di dettaglio contano per la loro sezione.
- */
+/** La voce della sezione in cui ci si trova e' evidenziata: la regola sta in `talosSidebarSezioneAttiva`. */
 const rotta = useRoute()
-const sezioneAttiva = computed<TalosMobileRouteName | null>(() => {
-    const nome = String(rotta.name ?? '')
-    if (nome === 'chat' || nome === 'chats') return 'chats'
-    if (nome.startsWith('settings-models')) return 'settings-models'
-    if (nome.startsWith('task')) return 'tasks'
-    if (nome.startsWith('memory')) return 'memory'
-    if (nome.startsWith('note')) return 'notes'
-    if (nome.startsWith('research')) return 'research'
-    if (nome.startsWith('harness')) return 'harness'
-    if (nome === 'context' || nome === 'doctor') return nome
-    return null
-})
+const sezioneAttiva = computed<TalosMobileRouteName | null>(() => talosSidebarSezioneAttiva(String(rotta.name ?? '')))
 function attiva(route: TalosMobileRouteName): 'page' | undefined {
     return sezioneAttiva.value === route ? 'page' : undefined
 }
@@ -738,7 +724,7 @@ const onda = useTalosTouchWave()
                                     <TalosMobileNovitaChat
                                         v-if="talosChatNuova(session)"
                                         :id="idDellaNovita(session.id)"
-                                        forma="pastiglia"
+                                        forma="punto"
                                     />
                                 </button>
                                 <div class="recent-menu">

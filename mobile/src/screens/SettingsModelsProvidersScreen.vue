@@ -2,6 +2,7 @@
 import { defineAsyncComponent } from 'vue'
 import { SlidersHorizontal } from '@lucide/vue'
 import { useTalosI18n } from '@/i18n'
+import TalosMobilePageHeader from '@/components/talos/ui/TalosMobilePageHeader.vue'
 import TalosMobileProviderRuntimePanel from '@/components/talos/models/TalosMobileProviderRuntimePanel.vue'
 import TalosMobileHuggingFaceAccessCard from '@/components/talos/models/TalosMobileHuggingFaceAccessCard.vue'
 
@@ -13,7 +14,8 @@ const TalosMobileModelAdvancedOptions = defineAsyncComponent(
 
 <template>
     <section data-testid="settings-models-providers-screen" class="flex h-full min-w-0 flex-col gap-[var(--talos-space-section)] overflow-y-auto bg-[var(--talos-background)] p-[var(--talos-space-page)] text-[var(--talos-text)]">
-        <p class="text-xs leading-5 text-[var(--talos-muted)]">{{ t('models.providerAccessDescription') }}</p>
+        <!-- ⛔ G1 (14/10/2026): l'intestazione delle stazioni, col titolo e la riga della scheda del centro Modelli. -->
+        <TalosMobilePageHeader :title="t('models.providerAccessTitle')" :subtitle="t('models.providerAccessDescription')" />
         <TalosMobileHuggingFaceAccessCard />
         <TalosMobileProviderRuntimePanel />
         <details class="rounded-[var(--talos-radius-card)] border border-[var(--talos-border)] bg-[var(--talos-panel)] p-[var(--talos-space-card)]">

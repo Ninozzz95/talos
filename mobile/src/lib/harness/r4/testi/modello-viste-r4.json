@@ -1,0 +1,25 @@
+{
+  "origine": {
+    "commit": "701c6c0d2d711879b53aa21bddad5a06d33538e7",
+    "percorso": "harness-ui/frontend/src/i18n/testi/modello.js",
+    "sha256": "8e11b2cf43c281fd77a35bc620ec348775935aea39fb8682736d5def14505590",
+    "prefisso": [
+      "chat.chat",
+      "chat.terminal"
+    ]
+  },
+  "it": {
+    "chat.chat": "Chat",
+    "chat.terminal": "Terminale",
+    "chat.terminalCommand": "Comando nel terminale",
+    "chat.terminalCommand2": "Comando nel terminale ·",
+    "chat.terminalHeightUpAnd": "Altezza del terminale: frecce su e giù per cambiarla"
+  },
+  "en": {
+    "chat.chat": "Chat",
+    "chat.terminal": "Terminal",
+    "chat.terminalCommand": "Terminal command",
+    "chat.terminalCommand2": "Terminal command ·",
+    "chat.terminalHeightUpAnd": "Terminal height: up and down arrows change it"
+  }
+}

@@ -15,6 +15,7 @@
  * imparare una seconda volta. Confermato dal mockup approvato il 27/8.
  */
 import { onMounted, ref } from 'vue'
+import TalosMobilePageHeader from '@/components/talos/ui/TalosMobilePageHeader.vue'
 import { useTalosI18n } from '@/i18n'
 import { Wrench } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
@@ -138,10 +139,11 @@ async function onDetailDeleted(): Promise<void> {
 
 <template>
     <div
-        class="flex min-h-full flex-col gap-3 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3"
+        class="flex min-h-full flex-col gap-3 px-[var(--talos-space-page)] pb-[max(var(--talos-space-page),env(safe-area-inset-bottom))] pt-[var(--talos-space-section)]"
         data-testid="talos-tool-forge-station"
     >
-        <p class="text-xs leading-5 text-[var(--talos-muted)]">{{ t('toolForge.intro') }}</p>
+        <!-- ⛔ G1 (14/10/2026): l'intestazione delle stazioni — titolo e la riga che dice che posto è (la frase di sempre). -->
+        <TalosMobilePageHeader :title="t('navigation.toolForge')" :subtitle="t('toolForge.intro')" />
 
         <!-- ⛔ Owner 2026-08-27, trovato sul dispositivo: la frase dice
              «N installati», ma passava `enabledCount` (gli ABILITATI) — con

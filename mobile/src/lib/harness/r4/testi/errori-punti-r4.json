@@ -1,0 +1,30 @@
+{
+  "origine": {
+    "commit": "701c6c0d2d711879b53aa21bddad5a06d33538e7",
+    "percorso": "harness-ui/frontend/src/i18n/testi/errori.js",
+    "sha256": "1c54a18f9f27f84ede0f86ae64f563433dd8e64f5222f9d336c30b40790fba44",
+    "prefisso": "turno.punto."
+  },
+  "it": {
+    "turno.punto.approvazione": "mentre aspettavo la tua approvazione per «{nome}»",
+    "turno.punto.inCorso": "mentre «{nome}» era in corso",
+    "turno.punto.primaDelGiro": "prima del giro {n}",
+    "turno.punto.rispostaDelModello": "mentre il modello stava rispondendo, al giro {n}",
+    "turno.punto.primaDellInvio": "prima che la richiesta partisse, al giro {n}",
+    "turno.punto.attesaDopoRispostaVuota": "mentre aspettavo di richiedere una risposta arrivata vuota, al giro {n}",
+    "turno.punto.compattazione": "durante la compattazione, al giro {n}",
+    "turno.punto.attrezzi": "mentre lavoravo con gli attrezzi del giro {n}",
+    "turno.punto.attrezziNonEseguiti": "mentre lavoravo con gli attrezzi del giro {n}; {quanti} non eseguiti ({elenco})"
+  },
+  "en": {
+    "turno.punto.approvazione": "while waiting for your approval for “{nome}”",
+    "turno.punto.inCorso": "while “{nome}” was running",
+    "turno.punto.primaDelGiro": "before round {n}",
+    "turno.punto.rispostaDelModello": "while the model was answering, at round {n}",
+    "turno.punto.primaDellInvio": "before the request was sent, at round {n}",
+    "turno.punto.attesaDopoRispostaVuota": "while waiting to ask again after an empty answer, at round {n}",
+    "turno.punto.compattazione": "during compaction, at round {n}",
+    "turno.punto.attrezzi": "while working with the tools of round {n}",
+    "turno.punto.attrezziNonEseguiti": "while working with the tools of round {n}; {quanti} not run ({elenco})"
+  }
+}

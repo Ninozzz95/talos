@@ -30,6 +30,8 @@ const providerLogos: Record<TalosMobileProviderId, string> = {
     ollama: ollamaLogo,
     openai: openaiLogo,
     openrouter: openrouterLogo,
+    // N15: il piano ChatGPT porta il segno di OpenAI, come nel mockup approvato.
+    chatgpt: openaiLogo,
 }
 const logo = computed(() => (
     provider.value.id === 'unknown' ? null : providerLogos[provider.value.id]

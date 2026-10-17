@@ -1,0 +1,41 @@
+{
+  "origine": {
+    "commit": "701c6c0d2d711879b53aa21bddad5a06d33538e7",
+    "percorso": "harness-ui/frontend/src/i18n/testi/app.js",
+    "sha256": "19b9eb9d26356513c31bf08c83b6fff039cd0db16e2d8d6337613df34dca046d",
+    "prefisso": [
+      "automations.coordination",
+      "sheets.permissions.coordination",
+      "permissions.coordinationOn",
+      "permissions.coordinationOff"
+    ]
+  },
+  "it": {
+    "sheets.permissions.coordination": "Coordinazione",
+    "sheets.permissions.coordinationTitle": "Il modello avvia agenti da solo",
+    "sheets.permissions.coordinationSubOne": "Spenta: ti chiede prima, con una carta. Al massimo {n} agente da solo in questa conversazione.",
+    "sheets.permissions.coordinationSubMany": "Spenta: ti chiede prima, con una carta. Al massimo {n} agenti da solo in questa conversazione.",
+    "sheets.permissions.coordinationInDelegation": "In un agente delegato decide la conversazione principale.",
+    "sheets.permissions.coordinationNoSession": "Si accende quando la conversazione è partita.",
+    "sheets.permissions.coordinationStateOn": "Accesa",
+    "sheets.permissions.coordinationStateOff": "Spenta",
+    "permissions.coordinationOn": "Accesa: il modello avvia gli agenti da solo in questa conversazione.",
+    "permissions.coordinationOff": "Spenta: il modello ti chiede prima di avviare un agente.",
+    "automations.coordination": "Coordinazione",
+    "automations.coordinationHint": "Avvia agenti da sola, al massimo {n} per esecuzione. Spenta di serie: non ne avvia nessuno."
+  },
+  "en": {
+    "sheets.permissions.coordination": "Coordination",
+    "sheets.permissions.coordinationTitle": "The model starts agents on its own",
+    "sheets.permissions.coordinationSubOne": "Off: it asks you first, with a card. At most {n} agent on its own in this conversation.",
+    "sheets.permissions.coordinationSubMany": "Off: it asks you first, with a card. At most {n} agents on its own in this conversation.",
+    "sheets.permissions.coordinationInDelegation": "In a delegated agent, the main conversation decides.",
+    "sheets.permissions.coordinationNoSession": "Turn it on once the conversation has started.",
+    "sheets.permissions.coordinationStateOn": "On",
+    "sheets.permissions.coordinationStateOff": "Off",
+    "permissions.coordinationOn": "On: the model starts agents on its own in this conversation.",
+    "permissions.coordinationOff": "Off: the model asks you before starting an agent.",
+    "automations.coordination": "Coordination",
+    "automations.coordinationHint": "It starts agents on its own, at most {n} per run. Off by default: it starts none."
+  }
+}

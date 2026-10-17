@@ -761,10 +761,18 @@ export interface ChatControllerDeps {
     }
 }
 
+const pianoChatgpt = () => import('@/services/chatgptAccesso').then((modulo) => modulo.talosChatgpt())
+
 const realDeps: ChatControllerDeps = {
     translate: talosT,
-    hasKey: realHasKey,
-    getKey: realGetKey,
+    // N15: per il piano ChatGPT la «chiave» è il token d'accesso, chiesto al servizio a ogni giro (si rinnova da solo);
+    // «ha la chiave» = account collegato col piano abilitato. Servizio a richiesta: niente dell'accesso entra all'avvio.
+    hasKey: (provider) => provider === 'chatgpt'
+        ? pianoChatgpt().then((piano) => piano.stato()).then((stato) => stato.pianoAbilitato).catch(() => false)
+        : realHasKey(provider),
+    getKey: (provider) => provider === 'chatgpt'
+        ? pianoChatgpt().then((piano) => piano.tokenDiAccesso()).catch(() => null)
+        : realGetKey(provider),
     setKey: realSetKey,
     clearKey: realClearKey,
     getEndpoint: realGetEndpoint,
@@ -843,6 +851,8 @@ export interface ChatController {
     readonly toolActivity: Readonly<Ref<TalosToolActivity[]>>
     /** Durable requests; oldest first. Pending state survives navigation/reload. */
     readonly pendingToolAuthorizations: Readonly<Ref<TalosToolAuthorizationPrompt[]>>
+    /** N15 — un giro col piano ChatGPT fermo al limite d'uso: quando riprende, a che tentativo, e in quale chat. `null` = nessuno. */
+    readonly attesaDelPiano: Readonly<Ref<{ riprendeAlle: number, tentativo: number, totale: number, sessionId: string } | null>>
     /** Uncertain side effects; never retried without this explicit recovery path. */
     readonly toolAuthorizationRecoveries: Readonly<Ref<TalosToolAuthorizationRecoveryView[]>>
     /** False after “Later”; pending decisions remain unchanged. */
@@ -1275,6 +1285,8 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
      */
     let ultimoGiroTool = 0
     const pendingToolAuthorizations = ref<TalosToolAuthorizationPrompt[]>([])
+    /** N15 — un giro col piano ChatGPT fermo al limite d'uso: quando riprende, a che tentativo, e in quale chat. */
+    const attesaDelPiano = ref<{ riprendeAlle: number, tentativo: number, totale: number, sessionId: string } | null>(null)
     const toolAuthorizationRecoveries = ref<TalosToolAuthorizationRecoveryView[]>([])
     const toolAuthorizationPromptVisible = ref(false)
     const recoveringToolAuthorizations = new Set<string>()
@@ -4365,7 +4377,22 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                     thinking: sendRuntime.thinking,
                     locale: localization.state.locale,
                 })
-                const result = await completeOnce(roundTurns, timed ?? handlers, attrezziDelGiro)
+                const unaRichiesta = () => completeOnce(roundTurns, timed ?? handlers, attrezziDelGiro)
+                /*
+                 * N15 — il limite d'uso del piano ChatGPT è una PAUSA: il giro resta vivo, aspetta e rifà la STESSA richiesta
+                 * (owner 13/10/2026: «come il desktop, con notifica»). La carta la mostra la schermata da `attesaDelPiano`;
+                 * «Ferma l'attesa» è lo Stop del giro. ⛔ Mai un altro fornitore.
+                 */
+                const result = profile?.provider === 'chatgpt'
+                    ? await (await import('@/lib/chatgpt/attesaLimite')).conAttesaDelLimiteDelPiano(unaRichiesta, {
+                        signal: stream?.signal,
+                        onAttesa: (attesa) => {
+                            attesaDelPiano.value = attesa ? { ...attesa, sessionId: sendIdentity.sessionId } : null
+                            // Android non deve chiudere l'app mentre aspetta: il servizio in primo piano resta acceso, e dice perché.
+                            if (attesa) keeper.engage(deps.translate('chatgptPlan.limitNotification'))
+                        },
+                    })
+                    : await unaRichiesta()
                 const { stimaRichiesta, tokenDellaRichiesta, tokenDellaRisposta } = await import('@/lib/chat/compattazioneChat')
                 const tokenDelGiro = tokenDellaRisposta(result.usage)
                 if (tokenDelGiro !== null) tokenUltimoGiroPerChat.set(sendIdentity.sessionId, tokenDelGiro)
@@ -4375,6 +4402,10 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                 if (veri !== null && stimati > 0) taraturaPerChat.set(sendIdentity.sessionId, veri / stimati)
                 round.open?.cache?.(result.usage)
                 runMeter.add(result.usage, result.callId)
+                // N15 — una richiesta al piano ChatGPT è partita: la conta il telefono (il piano non pubblica i suoi limiti).
+                if (profile?.provider === 'chatgpt') {
+                    void import('@/services/chatgptConsumi').then((m) => m.talosConsumiChatgpt().registra(tokenDelGiro)).catch(() => {})
+                }
                 // Anche una chiamata inattesa dal provider non arriva a preflight/consenso.
                 return toolsDisabledByPerson
                     ? { ...result, toolCalls: undefined, finishReason: result.toolCalls?.length ? 'stop' : result.finishReason }
@@ -4946,6 +4977,9 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                         name: call.name,
                         detail: talosToolActivityDetail(call.name, call.arguments),
                     }))
+                    // ⭐ N13 (owner 02/10): lo store segna dove finiva questo giro, perché la riga degli attrezzi stia sotto il ragionamento
+                    // e il testo che l'hanno preceduta, anche dopo il reload.
+                    stream?.onToolRound?.(toolActivity.value)
                     // ⭐ B3 — da qui gli attrezzi sono IN USO: esiste un passo fra attrezzi dove un indirizzo può entrare.
                     giroConAttrezzi.value = sendIdentity.sessionId
                 },
@@ -7697,6 +7731,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         thinking,
         toolActivity,
         pendingToolAuthorizations,
+        attesaDelPiano,
         toolAuthorizationRecoveries,
         toolAuthorizationPromptVisible,
         decideToolAuthorization,

@@ -100,28 +100,36 @@ export function useTalosSpeech() {
      */
     async function voceFissa(reading: VoiceReadingState): Promise<string | undefined> {
         const scelta = reading.route.voiceUri
-        if (scelta) return scelta
         const gia = reading.fixedSystemVoice
         if (gia) return gia
         try {
-            const [{ useTalosSpeechService }, { talosVoceDaUsare }] = await Promise.all([
+            const [{ useTalosSpeechService }, { talosVoceDiSerie, talosVociDalServizio }] = await Promise.all([
                 import('@/services/speech'),
                 import('@/lib/voice/sceltaVoce'),
             ])
-            const voci = await useTalosSpeechService().voices()
-            const { voce } = talosVoceDaUsare(voci as never, {
+            /*
+             * ⛔ VOCE-SERIE (owner 13/10/2026: «togliamo definitivamente la voce robotica… rimane come predefinita nelle
+             * risposte»). La regola sta in `talosVoceDiSerie`, la stessa del menù delle Impostazioni: senza una scelta è la
+             * PRIMA delle voci offerte, e una scelta salvata che non è più offerta (la robotica sul telefono) non vale.
+             * Il timbro resta lo stesso dall'inizio alla fine perché si decide UNA volta per lettura, qui.
+             *
+             * ⛔ Prima qui le voci del servizio passavano con la forma sbagliata (`as never`): nessuna risultava della
+             * lingua giusta, la funzione non sceglieva mai niente e decideva il motore. Ora la forma è quella vera.
+             */
+            const voci = talosVociDalServizio(await useTalosSpeechService().voices())
+            const voce = talosVoceDiSerie(voci, {
                 lingua: reading.route.locale,
-                // ⛔ `rete: false` — non e' avarizia di dati: e' l'unica scelta
-                // che garantisce lo STESSO timbro dall'inizio alla fine.
-                rete: false,
-                scelta: null,
+                rete: typeof navigator === 'undefined' || navigator.onLine !== false,
+                scelta: scelta ?? null,
             })
-            if (voce) reading.fixedSystemVoice = voce.name
-            return voce?.name
+            // Elenco non ancora arrivato o lingua senza voci: vale la scelta salvata, o decide il motore, come prima.
+            const nome = voce?.name ?? scelta ?? undefined
+            if (nome) reading.fixedSystemVoice = nome
+            return nome
         } catch {
-            // Se non si riesce a scegliere, si lascia decidere al motore: e' il
+            // Se non si riesce a scegliere, si lascia la scelta salvata o decide il motore: e' il
             // comportamento di prima, non un guasto nuovo.
-            return undefined
+            return scelta ?? undefined
         }
     }
 

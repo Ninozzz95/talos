@@ -101,3 +101,6 @@ server-token
 server-token.*.tmp
 # ⛔ 70-B (30/09/2026): gli artefatti del Codice su disco, accanto a server.mjs quando manca la cartella di stato (dev).
 /android/app/src/main/assets/talos-harness-ui/harness-ui/artifacts/
+
+# K0 (14/10/2026): server e kernel del desktop r4 copiati per la prova sul Pad, rigenerabili con scripts/kernel-r4/copia-r4.mjs.
+/.kernel-r4/

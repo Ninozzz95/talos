@@ -1,0 +1,4 @@
+/* Il foglio di stile vero dell'app, più le sorgenti di `src/` per Tailwind: la radice di Vite qui è la cartella del mockup, e senza
+   questa riga le classi dei componenti veri (foglio, compositore) non verrebbero generate. */
+@import "../../src/style.css";
+@source "../../src";

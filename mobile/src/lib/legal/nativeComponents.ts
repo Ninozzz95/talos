@@ -6,7 +6,9 @@
  * librerie da Termux), `PROVENIENZA-PAROLA.md` + README di openWakeWord
  * (letto il 01/10: codice Apache-2.0, modelli addestrati CC BY-NC-SA 4.0),
  * `docs/upstream-provenance.md` (llama.cpp), versioni lette dai binari di
- * `assets/talos-node-lib` (pacchetti Termux).
+ * Node e delle sue librerie (pacchetti Termux), che dal 14/10/2026 stanno in
+ * `android/app/src/main/jniLibs/arm64-v8a/libtalos*.so` col solo RUNPATH e i
+ * nomi ritoccati (`jniLibs/PROVENIENZA-NODE.md`).
  *
  * ⛔ Il software Qualcomm NON è qui: ha la sua sezione e le sue condizioni
  * (`npuTerms.ts`, PKLA 2.1 b).
@@ -36,6 +38,10 @@ export const TALOS_NATIVE_COMPONENTS: readonly TalosNativeComponent[] = Object.f
     { name: 'LLVM libc++ / OpenMP', version: null, license: 'Apache-2.0 WITH LLVM-exception', source: 'https://llvm.org' },
     { name: 'ONNX Runtime', version: null, license: 'MIT', source: 'https://github.com/microsoft/onnxruntime' },
     { name: 'SentencePiece', version: null, license: 'Apache-2.0', source: 'https://github.com/google/sentencepiece' },
+    // N12 — riconoscimento vocale locale. Fonti e impronte: `android/app/src/main/jniLibs/PROVENIENZA-ASR.md` (13/10/2026).
+    { name: 'sherpa-onnx', version: '1.13.8', license: 'Apache-2.0', source: 'https://github.com/k2-fsa/sherpa-onnx', note: 'Riconoscimento vocale locale. La sua libreria contiene una propria copia di ONNX Runtime 1.28.2 (MIT), distinta da quella della parola di attivazione.' },
+    { name: 'Silero VAD', version: null, license: 'MIT', source: 'https://github.com/snakers4/silero-vad', note: 'Il modello che riconosce le pause mentre detti.' },
+    { name: 'NVIDIA Parakeet TDT 0.6B v3', version: null, license: 'CC-BY-4.0', source: 'https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3', note: 'Modello del riconoscimento vocale, nel formato di sherpa-onnx. Non è dentro l’app: si scarica al primo uso.' },
     { name: 'openWakeWord — melspectrogram ed embedding', version: '0.5.1', license: 'Apache-2.0 (da confermare)', source: 'https://github.com/dscripka/openWakeWord', note: 'Derivati da google/speech_embedding (Apache-2.0); il README di openWakeWord indica però CC BY-NC-SA 4.0 per tutti i modelli addestrati inclusi.' },
     { name: 'Classificatore della parola «TALOS»', version: null, license: 'Apache-2.0', source: 'https://github.com/livekit/livekit-wakeword', note: 'Addestrato da noi con livekit-wakeword (Apache-2.0).' },
 ])

@@ -14,24 +14,24 @@ import {
 import { writeTalosClipboardText } from '@/services/clipboard'
 import { deliverTalosSessionExport } from '@/services/sessionExportDelivery'
 import { useChatController } from '@/stores/chatController'
+import type { TalosFormatoEsportazione, TalosSorgenteEsportazione } from '@/lib/chat/sorgenteEsportazione'
 
 /**
  * F4-#16 — "Export chat" sheet from the immersive 3-dot menu. Desktop parity:
  * the same four artifacts as TalosExportDialog (JSON evidence pack, Markdown
  * transcript, Context manifest, Benchmark scenario), generated locally and
  * delivered via the system share sheet (native) or download (web).
+ *
+ * K3-C Esporta e Condividi (owner 17/10, «Come la chat»): with a `sorgente` the same sheet exports something else (the Code
+ * session on r4: Markdown and raw JSON); without it, it is the chat sheet, unchanged.
  */
+const props = defineProps<{ sorgente?: TalosSorgenteEsportazione | null }>()
 const emit = defineEmits<{ close: [] }>()
 
 const controller = useChatController()
 const { t } = useTalosI18n()
 
-const formats = computed<Array<{
-    format: TalosMobileSessionExportFormat
-    label: string
-    action: string
-    detail: string
-}>>(() => [
+const formats = computed<readonly TalosFormatoEsportazione[]>(() => props.sorgente?.formati ?? [
     {
         format: 'json',
         label: t('export.jsonLabel'),
@@ -60,13 +60,14 @@ const formats = computed<Array<{
 
 const exporting = ref(false)
 const error = ref<string | null>(null)
-const generated = ref<{ format: TalosMobileSessionExportFormat; reportType: string; content: string; benchmarkReady: boolean } | null>(null)
+const generated = ref<{ format: string; reportType: string; content: string; benchmarkReady: boolean } | null>(null)
 const copyingMarkdown = ref(false)
 const markdownCopied = ref(false)
 const copyStatus = ref('')
 
-const sessionTitle = computed(() => controller.chat.activeSession.value?.title ?? t('export.noActiveSession'))
-const hasSession = computed(() => controller.chat.activeSession.value !== null)
+const sessionTitle = computed(() => props.sorgente?.titolo ?? controller.chat.activeSession.value?.title ?? t('export.noActiveSession'))
+const hasSession = computed(() => (props.sorgente ? true : controller.chat.activeSession.value !== null))
+const intro = computed(() => props.sorgente?.dettaglio ?? t('export.localArtifactDetail'))
 
 function artifactFor(format: TalosMobileSessionExportFormat, input: TalosMobileSessionExportInput) {
     switch (format) {
@@ -91,7 +92,7 @@ function artifactFor(format: TalosMobileSessionExportFormat, input: TalosMobileS
 
 let lastArtifact: { fileName: string; content: string; contentType: string } | null = null
 
-async function generate(format: TalosMobileSessionExportFormat): Promise<void> {
+async function generate(format: string): Promise<void> {
     if (exporting.value || copyingMarkdown.value) return
     exporting.value = true
     error.value = null
@@ -99,9 +100,15 @@ async function generate(format: TalosMobileSessionExportFormat): Promise<void> {
     markdownCopied.value = false
     copyStatus.value = ''
     try {
+        if (props.sorgente) {
+            const artifact = await props.sorgente.genera(format)
+            lastArtifact = { fileName: artifact.fileName, content: artifact.content, contentType: artifact.contentType }
+            generated.value = { format, reportType: artifact.reportType, content: artifact.content, benchmarkReady: false }
+            return
+        }
         const snapshot = await controller.chat.exportSnapshot()
         const input: TalosMobileSessionExportInput = { ...snapshot, exported_at: new Date().toISOString() }
-        const artifact = artifactFor(format, input)
+        const artifact = artifactFor(format as TalosMobileSessionExportFormat, input)
         const stamp = input.exported_at.replace(/[:.]/g, '-')
         lastArtifact = {
             fileName: `talos-${format}-${stamp}.${artifact.extension}`,
@@ -151,7 +158,9 @@ async function share(): Promise<void> {
     try {
         await deliverTalosSessionExport(lastArtifact)
     } catch (cause) {
-        error.value = cause instanceof Error && cause.message ? cause.message : String(cause)
+        const message = cause instanceof Error && cause.message ? cause.message : String(cause)
+        // Pad 17/10: closing the Android share sheet without choosing («Share canceled») is not an error
+        if (!/cancel/iu.test(message)) error.value = message
     }
 }
 
@@ -189,10 +198,10 @@ async function saveToLibrary(): Promise<void> {
 </script>
 
 <template>
-    <TalosMobileComposerSheet :title="$t('chat.exportChat')" testid="talos-export-sheet" @close="emit('close')">
+    <TalosMobileComposerSheet :title="sorgente?.intestazione ?? $t('chat.exportChat')" testid="talos-export-sheet" @close="emit('close')">
         <p class="px-1 text-xs leading-5 text-[var(--talos-muted)]">
             <span class="font-semibold text-[var(--talos-text)]">{{ sessionTitle }}</span> —
-            {{ $t('export.localArtifactDetail') }}
+            {{ intro }}
         </p>
 
         <div class="space-y-2">

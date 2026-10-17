@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useTalosSheetTitle } from '@/lib/sheetTitle'
+import TalosMobilePageHeader from '@/components/talos/ui/TalosMobilePageHeader.vue'
 import type { Component, ComponentPublicInstance } from 'vue'
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useInfiniteScroll } from '@vueuse/core'
@@ -1134,12 +1135,12 @@ useTalosSheetTitle(() => t('library.title'))
         <!-- ⛔ Owner 14/09: «il titolo è troppo attaccato» alla barra. Pad a 360 px: il titolo della
              Libreria partiva a 86 px, sotto il bordo della barra (91), quello di Note a 103 — le altre
              stazioni hanno `pt-[var(--talos-space-section)]` sul loro contenitore, questa no. -->
-        <header class="pt-[var(--talos-space-section)]">
-            <!-- Keep the subtitle full width; only the title shares the primary action row. -->
-            <div class="flex items-center justify-between gap-[var(--talos-space-section)]">
-                <h1 data-talos-sheet-title :class="['font-semibold leading-[1.15] tracking-[-0.03em] text-[var(--talos-text)]', isTablet ? 'text-3xl' : 'text-2xl']">
-                    {{ t('library.title') }}
-                </h1>
+        <TalosMobilePageHeader
+            class="pt-[var(--talos-space-section)]"
+            :title="t('library.title')"
+            :subtitle="t('library.subtitle')"
+        >
+            <template #action>
                 <Button
                     v-if="!isTablet"
                     type="button"
@@ -1152,11 +1153,8 @@ useTalosSheetTitle(() => t('library.title'))
                 >
                     <Plus class="size-5" aria-hidden="true" />
                 </Button>
-            </div>
-            <p class="mt-[var(--talos-space-inline)] text-sm leading-6 text-[var(--talos-muted)]">
-                {{ t('library.subtitle') }}
-            </p>
-        </header>
+            </template>
+        </TalosMobilePageHeader>
 
         <!-- ⛔ LA RIGA DEGLI STRUMENTI — owner 14/09/2026: ricerca · vista ·
              opzioni · «Aggiungi file», su UNA riga. Il campo sta FUORI da ogni

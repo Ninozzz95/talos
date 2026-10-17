@@ -200,5 +200,33 @@ export function talosGroupGgufFiles(files: readonly TalosHuggingFaceFile[]): Tal
 
     // Largest last: quantisations read naturally small-to-large, and the
     // smallest is the one most likely to run on the phone reading the list.
+    distinguiEtichetteUguali(sets)
     return sets.sort((left, right) => left.totalBytes - right.totalBytes)
+}
+
+/**
+ * ⛔ N13-ETICHETTA-01 (Pad, 12/10/2026): `LFM2.5-2.6B-Q4_0.gguf` e `LFM2.5-2.6B-QAD-Q4_0.gguf` uscivano tutte e due
+ * «Q4_0», e la pagina apriva quella non scaricata. Owner 12/10: l'etichetta INTERA. Solo fra varianti che hanno la
+ * STESSA etichetta: si toglie la parte del nome che hanno in comune (a pezzi separati da «-») e quello che resta davanti
+ * alla quantizzazione entra nell'etichetta («QAD-Q4_0»). Senza doppioni non cambia niente.
+ */
+function distinguiEtichetteUguali(sets: TalosGgufSet[]): void {
+    const perEtichetta = new Map<string, TalosGgufSet[]>()
+    for (const set of sets) perEtichetta.set(set.label, [...(perEtichetta.get(set.label) ?? []), set])
+    for (const [etichetta, gruppo] of perEtichetta) {
+        if (gruppo.length < 2) continue
+        const pezziPrima = gruppo.map((set) => {
+            const nome = (set.paths[0] ?? '').split('/').pop() ?? ''
+            const stelo = nome.replace(/\.gguf$/i, '').replace(/-\d{5}-of-\d{5}$/i, '')
+            const quant = set.quantisation ?? etichetta
+            const indice = stelo.toLocaleLowerCase('en-US').lastIndexOf(`-${quant.toLocaleLowerCase('en-US')}`)
+            return (indice < 0 ? stelo : stelo.slice(0, indice)).split('-')
+        })
+        let comuni = 0
+        while (pezziPrima.every((pezzi) => pezzi.length > comuni && pezzi[comuni] === pezziPrima[0]![comuni])) comuni++
+        gruppo.forEach((set, i) => {
+            const resto = pezziPrima[i]!.slice(comuni).join('-')
+            if (resto) set.label = `${resto}-${etichetta}`
+        })
+    }
 }

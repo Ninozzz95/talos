@@ -1,0 +1,243 @@
+{
+  "prima": {
+    "id": "deepseek",
+    "requiresKey": true,
+    "keyConfigured": false,
+    "origineChiave": null,
+    "supportsEndpoint": true,
+    "endpoint": "https://api.deepseek.com",
+    "endpointConfigured": false,
+    "endpointPredefinito": true
+  },
+  "sessionePrima": {
+    "modello": "lmstudio:finto",
+    "reasoning": {
+      "effort": "none"
+    }
+  },
+  "chiave": {
+    "stato": 200,
+    "d": {
+      "ok": true,
+      "data": {
+        "provider": "deepseek",
+        "keyConfigured": true
+      },
+      "meta": {
+        "schema": "talos.harness-ui.api.v1",
+        "generatedAt": "2026-10-16T17:56:35.998Z"
+      }
+    }
+  },
+  "dopoChiave": {
+    "id": "deepseek",
+    "requiresKey": true,
+    "keyConfigured": true,
+    "origineChiave": "custodia",
+    "supportsEndpoint": true,
+    "endpoint": "https://api.deepseek.com",
+    "endpointConfigured": false,
+    "endpointPredefinito": true
+  },
+  "indirizzo": {
+    "stato": 200,
+    "d": {
+      "ok": true,
+      "data": {
+        "provider": "deepseek",
+        "endpoint": "https://api.deepseek.com/v1",
+        "endpointConfigured": true,
+        "timeoutSeconds": 600
+      },
+      "meta": {
+        "schema": "talos.harness-ui.api.v1",
+        "generatedAt": "2026-10-16T17:56:36.005Z"
+      }
+    }
+  },
+  "dopoIndirizzo": {
+    "id": "deepseek",
+    "requiresKey": true,
+    "keyConfigured": true,
+    "origineChiave": "custodia",
+    "supportsEndpoint": true,
+    "endpoint": "https://api.deepseek.com/v1",
+    "endpointConfigured": true,
+    "endpointPredefinito": false
+  },
+  "indirizzoReset": {
+    "stato": 200,
+    "d": {
+      "ok": true,
+      "data": {
+        "provider": "deepseek",
+        "endpoint": "https://api.deepseek.com",
+        "endpointConfigured": false,
+        "timeoutSeconds": 600
+      },
+      "meta": {
+        "schema": "talos.harness-ui.api.v1",
+        "generatedAt": "2026-10-16T17:56:36.011Z"
+      }
+    }
+  },
+  "dopoReset": {
+    "id": "deepseek",
+    "requiresKey": true,
+    "keyConfigured": true,
+    "origineChiave": "custodia",
+    "supportsEndpoint": true,
+    "endpoint": "https://api.deepseek.com",
+    "endpointConfigured": false,
+    "endpointPredefinito": true
+  },
+  "impostazioni": {
+    "stato": 200,
+    "d": {
+      "ok": true,
+      "data": {
+        "updated": true
+      },
+      "meta": {
+        "schema": "talos.harness-ui.api.v1",
+        "generatedAt": "2026-10-16T17:56:36.018Z"
+      }
+    }
+  },
+  "sessioneDopo": {
+    "modello": "deepseek:deepseek-v4-pro",
+    "reasoning": {
+      "effort": "high"
+    }
+  },
+  "soloRagionamento": {
+    "stato": 200,
+    "d": {
+      "ok": true,
+      "data": {
+        "updated": true
+      },
+      "meta": {
+        "schema": "talos.harness-ui.api.v1",
+        "generatedAt": "2026-10-16T17:56:36.030Z"
+      }
+    }
+  },
+  "sessioneSoloRagionamento": {
+    "modello": "deepseek:deepseek-v4-pro",
+    "reasoning": {
+      "effort": "none"
+    }
+  },
+  "modelloStorto": {
+    "stato": 400,
+    "d": {
+      "ok": false,
+      "error": {
+        "code": "MODEL_ID_INVALID",
+        "message": "The chosen model has a name this server does not recognize: choose it again from the model pill",
+        "title": "Operation failed",
+        "explanation": "An unexpected problem occurred during the operation.",
+        "action": "Open Doctor, copy the reference and try again.",
+        "doctorReference": "doctor-7dd70aa06d57"
+      },
+      "meta": {
+        "schema": "talos.harness-ui.api.v1",
+        "generatedAt": "2026-10-16T17:56:36.043Z"
+      }
+    }
+  },
+  "ragionamentoStorto": {
+    "stato": 400,
+    "d": {
+      "ok": false,
+      "error": {
+        "code": "REASONING_INVALID",
+        "message": "The chosen reasoning level is not among the allowed ones: choose it again from the reasoning pill",
+        "title": "Operation failed",
+        "explanation": "An unexpected problem occurred during the operation.",
+        "action": "Open Doctor, copy the reference and try again.",
+        "doctorReference": "doctor-8d1e183cd194"
+      },
+      "meta": {
+        "schema": "talos.harness-ui.api.v1",
+        "generatedAt": "2026-10-16T17:56:36.048Z"
+      }
+    }
+  },
+  "togliChiave": {
+    "stato": 200,
+    "d": {
+      "ok": true,
+      "data": {
+        "provider": "deepseek",
+        "keyConfigured": false
+      },
+      "meta": {
+        "schema": "talos.harness-ui.api.v1",
+        "generatedAt": "2026-10-16T17:56:36.055Z"
+      }
+    }
+  },
+  "dopoTogli": {
+    "id": "deepseek",
+    "requiresKey": true,
+    "keyConfigured": false,
+    "origineChiave": null,
+    "supportsEndpoint": true,
+    "endpoint": "https://api.deepseek.com",
+    "endpointConfigured": false,
+    "endpointPredefinito": true
+  },
+  "invioSenzaChiave": {
+    "stato": 500,
+    "d": {
+      "ok": false,
+      "error": {
+        "code": "CONFIG_INVALID",
+        "message": "Invalid configuration",
+        "title": "Configuration not ready",
+        "explanation": "The DeepSeek key is missing: connect it from the provider settings.",
+        "action": "Open Doctor and follow the checks listed, then try again.",
+        "doctorReference": "doctor-2d479fa3fc31",
+        "params": {
+          "provider": "DeepSeek"
+        },
+        "reason": "provider-key-missing-named"
+      },
+      "meta": {
+        "schema": "talos.harness-ui.api.v1",
+        "generatedAt": "2026-10-16T17:56:36.066Z"
+      }
+    }
+  },
+  "esitoSenzaChiave": {
+    "ultimoEsito": "errore",
+    "motivoChiusura": "fermata"
+  },
+  "ripristino": {
+    "stato": 200,
+    "d": {
+      "ok": true,
+      "data": {
+        "updated": true
+      },
+      "meta": {
+        "schema": "talos.harness-ui.api.v1",
+        "generatedAt": "2026-10-16T17:56:40.103Z"
+      }
+    }
+  },
+  "sessioneRipristinata": {
+    "modello": "lmstudio:finto",
+    "reasoning": {
+      "effort": "none"
+    }
+  },
+  "sessionId": "33333333-3333-4333-8333-333333333333",
+  "_origine": {
+    "r4": "2161afb32",
+    "registrata": "Pad 2ea6573c, 16/10/2026, script scratchpad npty-110/registra-modello.js",
+    "nota": "chiave finta di DeepSeek, poi tolta; nessun giro verso un fornitore vero"
+  }
+}

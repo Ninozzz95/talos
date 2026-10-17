@@ -235,3 +235,84 @@ describe('avvisoPonteCodice — l’avviso', () => {
         expect(esito.mostrato).toBe(true)
     })
 })
+
+/**
+ * ⛔ COD-AVVISO-01 — owner 13/10/2026, dal Pad, guardando il Codice: «questo alert è troppo strano e mi dà fastidio,
+ * sistemiamolo» → scelta: «Toast corto, sopra il campo». MISURATO sulle foto del Pad (orizzontale e verticale): l'avviso
+ * del 12/09 era di sette righe, restava 12 secondi e a tastiera aperta copriva il testo che si stava scrivendo, perché la
+ * regione degli avvisi conosceva solo l'altezza del compositore della CHAT.
+ */
+describe('COD-AVVISO-01: l avviso del terminale è corto e non copre mai il campo', () => {
+    it('una riga in tutte e due le lingue, un azione che dice cosa fa, sei secondi', async () => {
+        const { readFileSync } = await import('node:fs')
+        const { resolve } = await import('node:path')
+        const radice = resolve(__dirname, '../../..')
+        for (const lingua of ['it', 'en']) {
+            const testo = readFileSync(resolve(radice, `src/i18n/locales/${lingua}.ts`), 'utf8')
+            const frase = /bridgeOffline: '([^']*)'/.exec(testo)?.[1] ?? ''
+            const azione = /bridgeOfflineAction: '([^']*)'/.exec(testo)?.[1] ?? ''
+            const assente = /bridgeMissing: '([^']*)'/.exec(testo)?.[1] ?? ''
+            expect(frase.length, `${lingua}: ${frase}`).toBeGreaterThan(0)
+            expect(frase.length, `${lingua}: ${frase}`).toBeLessThanOrEqual(32)
+            expect(assente.length, `${lingua}: ${assente}`).toBeLessThanOrEqual(48)
+            expect(['Collega', 'Connect']).toContain(azione)
+        }
+        expect(TALOS_AVVISO_PONTE_DURATA_MS).toBe(6_000)
+    })
+
+    it('la regione degli avvisi sta sopra il compositore del Codice, che pubblica quanto spazio occupa dal fondo', async () => {
+        const { readFileSync } = await import('node:fs')
+        const { resolve } = await import('node:path')
+        const radice = resolve(__dirname, '../../..')
+        const regione = readFileSync(resolve(radice, 'src/components/shell/TalosMobileToastRegion.vue'), 'utf8')
+        expect(regione).toContain('max(var(--talos-composer-height,180px),var(--talos-code-composer-height,0px))')
+        const codice = readFileSync(resolve(radice, 'src/screens/HarnessSessionScreen.vue'), 'utf8')
+        expect(codice).toContain("document.documentElement.style.setProperty('--talos-code-composer-height'")
+        // e la toglie quando esce: fuori dal Codice quell'altezza non esiste
+        expect(codice).toContain("document.documentElement.style.removeProperty('--talos-code-composer-height')")
+    })
+})
+
+/**
+ * ⛔ COD-CASA-AVVISO — 13/10/2026, «Codice in casa». MISURATO sul Pad a ponte scollegato: il Codice risponde, l'agente
+ * esegue i comandi e il campo della scheda Terminale funziona, coi permessi dell'app. L'avviso d'ingresso «Terminale non
+ * collegato» direbbe quindi una cosa FALSA: dove il Codice gira in casa non si mostra. Dove non può (APK senza Node fra le
+ * librerie native, cioè la strada del ponte) resta com'era.
+ */
+describe('COD-CASA-AVVISO: dove il Codice gira in casa l avviso d ingresso non compare', () => {
+    beforeEach(() => { __resetAvvisoPonteCodicePerTest() })
+    afterEach(() => { __resetAvvisoPonteCodicePerTest() })
+
+    it('in casa: nessun avviso, e il ponte non viene nemmeno interrogato', async () => {
+        const toasts = bancoToast(); const router = bancoRouter()
+        const leggiStato = vi.fn(async () => 'staccato' as const)
+        const esito = await avvisaSePonteStaccato({
+            router, toasts, t: (k: string) => k, sezioneDisponibile: true, leggiStato, codiceInCasa: async () => true,
+        })
+        expect(esito).toMatchObject({ mostrato: false, motivo: 'codice-in-casa' })
+        expect(toasts.spinti).toHaveLength(0)
+        expect(leggiStato).not.toHaveBeenCalled()
+    })
+
+    it('AL CONTRARIO: se in casa non può girare, o se non si riesce a saperlo, l avviso resta quello di prima', async () => {
+        for (const codiceInCasa of [async () => false, async () => { throw new Error('plugin muto') }]) {
+            __resetAvvisoPonteCodicePerTest()
+            const toasts = bancoToast(); const router = bancoRouter()
+            const esito = await avvisaSePonteStaccato({
+                router, toasts, t: (k: string) => k, sezioneDisponibile: true, leggiStato: async () => 'staccato', codiceInCasa,
+            })
+            expect(esito).toMatchObject({ mostrato: true, stato: 'staccato' })
+            expect(toasts.spinti).toHaveLength(1)
+        }
+    })
+
+    it('le due schermate del Codice passano la stessa domanda al nativo', async () => {
+        const { readFileSync } = await import('node:fs')
+        const { resolve } = await import('node:path')
+        const radice = resolve(__dirname, '../../..')
+        for (const schermata of ['src/screens/HarnessSessionScreen.vue', 'src/screens/HarnessScreen.vue']) {
+            expect(readFileSync(resolve(radice, schermata), 'utf8')).toContain('codiceInCasa: talosCodiceInCasa')
+        }
+        expect(readFileSync(resolve(radice, 'src/lib/harness/terminalePonte.ts'), 'utf8')).toContain('export async function talosCodiceInCasa(): Promise<boolean>')
+    })
+})

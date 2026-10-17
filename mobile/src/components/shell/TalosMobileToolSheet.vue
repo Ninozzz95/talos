@@ -77,6 +77,12 @@ const props = withDefaults(defineProps<{
     /** Let the one app-level procedural scene remain visible through a station
      * whose own panels already provide the necessary readable glass surfaces. */
     sceneBackground?: boolean
+    /**
+     * ⛔ K3-B2 (Pad, 15/10/2026): il fondo della pagina va a filo dello schermo come nella chat. Il foglio non riserva il margine
+     * in basso (`max(0.75rem, area sicura)`): ci pensa il compositore della pagina, che altrimenti stava 16 px più su di quello
+     * della chat. La cima resta quella del foglio (owner 15/10: la barra in alto si decide con l'header del Codice, K3-C).
+     */
+    fondoAFilo?: boolean
 }>(), {
     presentation: 'fullscreen',
     parentBack: null,
@@ -342,8 +348,9 @@ function onSheetScroll(event: Event): void {
                 data-testid="talos-mobile-sheet-body"
                 class="talos-sheet-body min-h-0 flex-1"
                 :data-under-controls="String(!hideChrome && hasControls)"
+                :data-fondo-a-filo="String(fondoAFilo === true)"
                 :class="[
-                    lockBodyScroll
+                    lockBodyScroll || fondoAFilo
                         ? 'overflow-hidden'
                         : 'overflow-y-auto overscroll-contain pb-[max(0.75rem,env(safe-area-inset-bottom))]',
                     hideChrome ? 'talos-mobile-tool-sheet-body-chromeless' : '',
@@ -471,8 +478,7 @@ function onSheetScroll(event: Event): void {
  * sua barra). E sotto i tondi 3,25rem, non 4: il margine della pagina si somma (vuoto di ~90 px).
  */
 .talos-sheet-body[data-under-controls="false"]:not(.talos-mobile-tool-sheet-body-chromeless) { padding-top: env(safe-area-inset-top); }
-.talos-sheet-body[data-under-controls="true"] { padding-top: calc(3.25rem + env(safe-area-inset-top)); }
-/* Nascosta non ruba i tocchi: `visibility` passa a visible solo quando la barra c'e'. */
+.talos-sheet-body[data-under-controls="true"] { padding-top: calc(3.25rem + env(safe-area-inset-top)); }/* Nascosta non ruba i tocchi: `visibility` passa a visible solo quando la barra c'e'. */
 .talos-sheet-bar { opacity: 0; visibility: hidden; }
 .talos-mobile-tool-sheet-surface[data-scrolled="true"] .talos-sheet-bar { opacity: 1; visibility: visible; }
 @supports (animation-timeline: scroll()) {

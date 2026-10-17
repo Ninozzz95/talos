@@ -165,6 +165,9 @@ describe('parseTalosMobileSettings', () => {
         // ⛔ Il default e' AUTOMATICO: una lingua inchiodata all'installazione
         // e' esattamente cio' che ha fatto perdere una dettatura all'owner.
         expect(parseTalosMobileSettings(null).voice.dictation_language).toBe('auto')
+        // Owner 13/10/2026: «metti di default tonalità 0.8»; una tonalità salvata resta quella salvata.
+        expect(parseTalosMobileSettings(null).voice.pitch).toBe(0.8)
+        expect(parseTalosMobileSettings(JSON.stringify({ voice: { pitch: 1 } })).voice.pitch).toBe(1)
         expect(parseTalosMobileSettings(JSON.stringify({
             voice: { dictation_language: 'it' },
         })).voice.dictation_language).toBe('auto')

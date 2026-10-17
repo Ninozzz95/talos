@@ -48,7 +48,7 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useTalosI18n } from '@/i18n'
-import { Check, CircleAlert, CircleX, Clock, FlaskConical, Loader2, MessageSquarePlus, X } from '@lucide/vue'
+import { Check, CircleAlert, CircleX, Clock, Loader2, MessageSquarePlus, X } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import TalosMobileScreen from '@/components/shell/TalosMobileScreen.vue'
 import TalosMobileNewChatFab from '@/components/shell/TalosMobileNewChatFab.vue'
@@ -58,6 +58,8 @@ import { deleteCodiceSession, listCodiceSessions, renameCodiceSession } from '@/
 import { fetchTalosHarnessSessionsStatus, type TalosHarnessSessionStatus } from '@/lib/harness/harnessUiSessionStatus'
 import type { TalosLocalChatSession } from '@/repositories/chatRepository'
 import { avvisaSePonteStaccato } from '@/lib/harness/avvisoPonteCodice'
+import { talosCodiceInCasa, talosR4Disponibile } from '@/lib/harness/terminalePonte'
+import { apriCodiceR4SeDisponibile } from '@/lib/harness/r4/sceltaCodiceR4'
 import { talosHarnessUiAvailable } from '@/services/harnessUi'
 import { useTalosMobileToasts } from '@/stores/toasts'
 import { talosChatDateBuckets } from '@/lib/chat/chatDateBuckets'
@@ -68,7 +70,7 @@ withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
 
 const router = useRouter()
 const route = useRoute()
-const { t, locale } = useTalosI18n()
+const { t, tTesto, locale } = useTalosI18n()
 const toasts = useTalosMobileToasts()
 
 const sessions = ref<TalosLocalChatSession[]>([])
@@ -131,8 +133,11 @@ onMounted(refresh)
  * modulo impedisce il doppione quando, sul tablet, questa lista incorporata e la
  * schermata instradata montano nello stesso istante.
  */
-onMounted(() => {
-    void avvisaSePonteStaccato({ router, toasts, t, sezioneDisponibile: talosHarnessUiAvailable() })
+onMounted(async () => {
+    // K4-E (owner 17/10 «r4 al posto, il vecchio come ripiego»): la voce «Codice» apre r4 quando l'APK lo porta; qui si resta
+    // solo col ripiego (`?ripiego=1`, r4 che non parte) o senza r4. Mandati a r4, l'avviso del Codice vecchio non serve.
+    if (await apriCodiceR4SeDisponibile({ rotta: route, router, disponibile: talosR4Disponibile })) return
+    void avvisaSePonteStaccato({ router, toasts, t, sezioneDisponibile: talosHarnessUiAvailable(), codiceInCasa: talosCodiceInCasa })
 })
 /**
  * The list stays mounted across `harness` ↔ `harness-session/:id` on the
@@ -233,7 +238,7 @@ async function submitRename(): Promise<void> {
         actionError.value = null
         await refresh()
     } catch (error) {
-        actionError.value = t('harness.renameFailed', { detail: actionErrorText(error) })
+        actionError.value = tTesto('harness.renameFailed', { detail: actionErrorText(error) })
     } finally {
         actionBusy.value = false
     }
@@ -256,7 +261,7 @@ async function confirmDelete(): Promise<void> {
         actionError.value = null
         await refresh()
     } catch (error) {
-        actionError.value = t('harness.deleteFailed', { detail: actionErrorText(error) })
+        actionError.value = tTesto('harness.deleteFailed', { detail: actionErrorText(error) })
     } finally {
         actionBusy.value = false
     }
@@ -296,12 +301,7 @@ async function confirmDelete(): Promise<void> {
                         class="flex min-w-0 items-center gap-3 rounded-xl px-1 py-1"
                         :class="{ 'bg-[var(--talos-active)]': isCurrentSession(session) }"
                     >
-                        <span
-                            class="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)]"
-                            aria-hidden="true"
-                        >
-                            <FlaskConical class="size-5 text-[var(--talos-accent)]" />
-                        </span>
+                        <!-- owner 16/10: niente casella con la provetta (uguale per tutte, non diceva niente): titolo e stato, come le chat -->
                         <button
                             type="button"
                             data-testid="talos-harness-row"
@@ -353,7 +353,7 @@ async function confirmDelete(): Promise<void> {
                         <div class="flex shrink-0 items-center">
                             <TalosRowActions
                                 :test-id="`talos-harness-actions-${session.id}`"
-                                :label="t('harness.actionsFor', { title: session.title })"
+                                :label="tTesto('harness.actionsFor', { title: session.title })"
                                 :items="sessionActions()"
                                 @select="(action) => act(session, action)"
                             />
@@ -399,7 +399,7 @@ async function confirmDelete(): Promise<void> {
         <TalosMobileConfirmDialog
             v-if="deleteTarget !== null"
             :title="t('harness.deleteTitle')"
-            :description="t('harness.deleteDescription', { title: deleteTarget.title })"
+            :description="tTesto('harness.deleteDescription', { title: deleteTarget.title })"
             @close="actionBusy ? undefined : deleteTarget = null"
         >
             <template #footer>

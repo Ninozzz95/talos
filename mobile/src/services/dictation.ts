@@ -20,6 +20,11 @@ export interface TalosDictationEvents {
     /** ⭐ La lingua che il motore ha davvero sentito (API 34). */
     onLanguage?: (tag: string) => void
     /**
+     * N12 — il motore locale (Parakeet) non ha potuto fare la sua parte e la dettatura è andata avanti col riconoscitore di
+     * sistema: non è un errore (il testo c'è), ma chi detta deve poterlo sapere. Arriva il codice del motivo.
+     */
+    onFallback?: (code: string) => void
+    /**
      * ⭐⭐ IL VOLUME VERO DEL MICROFONO, in dB grezzi come li dà Android.
      *
      * ⛔ Grezzi di proposito: la scala di `onRmsChanged` non è dichiarata in
@@ -66,6 +71,12 @@ export interface TalosDictationStartOptions {
      * l'altro.
      */
     minimumMillis?: number
+
+    /**
+     * N12 — «a turno»: il motore chiude da sé quando chi parla tace (la barra dell'assistente). Il riconoscitore di sistema
+     * lo fa già per conto suo; serve al motore locale, la cui cattura altrimenti la chiude solo la persona.
+     */
+    endOnSilence?: boolean
 }
 
 export interface TalosDictationEngine {
@@ -73,6 +84,12 @@ export interface TalosDictationEngine {
     requestPermission(): Promise<boolean>
     start(events: TalosDictationEvents, options?: TalosDictationStartOptions): Promise<void>
     stop(): Promise<void>
+    /**
+     * N12 — vero per un motore che dà il testo GIUSTO dopo lo stop (il locale: Parakeet rilegge tutto il parlato): dopo
+     * `stop()` arriva ancora UN `onPartial` col testo finale, e la promessa di `stop()` si chiude quando è arrivato.
+     * Per gli altri motori ciò che arriva dopo lo stop resta inerte.
+     */
+    readonly attendeIlFinale?: boolean
 }
 
 // F5.2 — migrated to the MAINTAINED fork (@capgo/capacitor-speech-recognition):
@@ -436,15 +453,43 @@ function casaEngine(): TalosDictationEngine {
 }
 
 /**
+ * N12 — davanti al riconoscitore di sistema, il motore locale (Parakeet) quando il suo modello è sul telefono e verificato.
+ * La scelta si fa a OGNI dettatura (il modello può essere stato scaricato o tolto nel frattempo) e il modulo si carica
+ * solo lì: chi non detta non paga niente all'avvio. Supporto e permesso restano quelli del sistema: il microfono è uno.
+ */
+function conIlLocale(sistema: TalosDictationEngine): TalosDictationEngine {
+    let inUso: TalosDictationEngine = sistema
+    return {
+        supported: () => sistema.supported(),
+        requestPermission: () => sistema.requestPermission(),
+        start: async (eventi, opzioni) => {
+            try {
+                const modulo = await import('@/services/dictationLocale')
+                inUso = await modulo.motorePerQuestaDettatura(sistema, modulo.talosMotoreLocale())
+            } catch {
+                inUso = sistema
+            }
+            return inUso.start(eventi, opzioni)
+        },
+        stop: () => inUso.stop(),
+        get attendeIlFinale() { return inUso.attendeIlFinale === true },
+    }
+}
+
+/**
  * ⛔ La scelta si rifà a ogni chiamata, e NON si tiene in cache: la prima
  * versione la memorizzava «per non attraversare il ponte», che era un'ipotesi
  * sbagliata — `isPluginAvailable` legge la mappa dei plugin registrati in
  * pagina, non chiama il nativo. Una cache lì avrebbe solo congelato una scelta
  * fatta prima che i plugin finissero di registrarsi.
  */
-export function talosDictationEngine(): TalosDictationEngine {
+export function talosDictationEngine(opzioni: { locale?: boolean } = {}): TalosDictationEngine {
     if (Capacitor.isNativePlatform()) {
-        return Capacitor.isPluginAvailable('TalosDictation') ? casaEngine() : nativeEngine()
+        const sistema = Capacitor.isPluginAvailable('TalosDictation') ? casaEngine() : nativeEngine()
+        // ⛔ DICT-N12-01: il motore locale SOLO a chi lo chiede. Con lui la cattura non finisce da sola e il testo giusto
+        // arriva dopo lo stop: chi non è fatto per questo (la barra dell'assistente, che chiude il turno al silenzio del
+        // riconoscitore di sistema) deve restare sul motore di sempre.
+        return opzioni.locale === true && Capacitor.isPluginAvailable('TalosAsrLocale') ? conIlLocale(sistema) : sistema
     }
     if (webSpeechConstructor()) return webEngine()
     return unsupportedEngine

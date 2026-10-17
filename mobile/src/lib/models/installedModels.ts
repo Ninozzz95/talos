@@ -144,3 +144,22 @@ export function talosModelSize(bytes: number, locale: string): string {
         maximumFractionDigits: digits,
     })} ${units[unit]}`
 }
+
+/**
+ * ⛔ N13-SCARICA-01 (Pad, 11-12/10/2026): a download finito la pagina del modello mostrava ancora «Scarica …». Questo
+ * dice se la variante (`chiave` = percorso del file nel repository) è già sul telefono: il percorso del file installato
+ * contiene la cartella del repository e finisce col percorso della variante. Stesso nome in un altro repository non
+ * conta — sono due modelli diversi anche se il file si chiama uguale.
+ */
+export function talosVarianteGiaSulTelefono(
+    installati: readonly TalosLocalModelFile[],
+    repoId: string,
+    chiave: string,
+): TalosLocalModelFile | null {
+    const repo = `/${repoId.replace(/^\/+|\/+$/g, '')}/`
+    const coda = `/${chiave.replace(/^\/+/, '')}`
+    return installati.find((file) => {
+        const percorso = file.path.replace(/\\/g, '/')
+        return percorso.includes(repo) && percorso.endsWith(coda)
+    }) ?? null
+}

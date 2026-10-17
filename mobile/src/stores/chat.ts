@@ -3,6 +3,7 @@ import { talosTurnToolActivities } from '@/lib/chat/turnActivities'
 import { computed, reactive, readonly, ref, type Ref } from 'vue'
 import { talosEphemeralSessionId, talosIsEphemeralSessionId } from '@/lib/chat/ephemeralSession'
 import type { TalosTranslate } from '@/i18n/contracts'
+import type { TalosAttrezzoDelGiro, TalosConfineDelGiro } from '@/lib/chat/sequenzaDelTurno'
 import { talosTranslatableErrorMessage } from '@/i18n/uiErrors'
 import type {
     TalosMobileMessageRole,
@@ -118,6 +119,24 @@ function capturedReasoning(text: string, translate: TalosTranslate): string {
         })}`
 }
 
+/** Il testo che lo schermo mostra: senza i marcatori del salvataggio in Libreria (stessa regola di `streamingText`). */
+function visibile(streamed: string): string {
+    return streamed.includes('[TALOS_SAVE_LIBRARY') ? stripLibrarySaveMarkers(streamed) : streamed
+}
+
+/**
+ * ⭐ N13: la sequenza ordinata da salvare nel messaggio, solo se il turno ha avuto giri di attrezzi. Il modulo si carica qui, al
+ * salvataggio, e non all'avvio dell'app.
+ */
+async function sequenzaDaSalvare(
+    confini: readonly TalosConfineDelGiro[], streamed: string, reasoned: string, testoFinale: string, translate: TalosTranslate,
+): Promise<Record<string, unknown>> {
+    if (confini.length === 0) return {}
+    const { talosSequenzaDaSalvare, TALOS_METADATA_SEQUENZA } = await import('@/lib/chat/sequenzaDelTurno')
+    const sequenza = talosSequenzaDaSalvare(confini, visibile(streamed), reasoned, testoFinale, (testo) => capturedReasoning(testo, translate))
+    return sequenza ? { [TALOS_METADATA_SEQUENZA]: sequenza } : {}
+}
+
 /** Debt A1: a provider-agnostic tool call (hub-and-spoke IR — each adapter
  *  translates this to its own wire shape). */
 export interface TalosToolCall {
@@ -180,6 +199,11 @@ export interface TalosStreamHandlers {
      * will ever see.
      */
     onReasoningReset?: () => void
+    /**
+     * ⭐ N13 (owner 02/10): partono gli attrezzi di un giro. Lo store segna dove finiva il giro (testo e ragionamento già arrivati),
+     * così ragionamento, righe degli attrezzi e testo restano nell'ordine in cui sono successi, anche dopo il reload.
+     */
+    onToolRound?: (attrezzi: readonly TalosAttrezzoDelGiro[]) => void
     signal?: AbortSignal
 }
 
@@ -300,6 +324,8 @@ export interface ChatState {
     sendingSessionId: string | null
     /** Defect #5: the reasoning of the reply being streamed right now. */
     streamingReasoning: string | null
+    /** ⭐ N13: i confini dei giri di attrezzi della risposta che sta arrivando (`lib/chat/sequenzaDelTurno`). */
+    streamingConfini: readonly TalosConfineDelGiro[] | null
     /** Defect #4: false once the oldest message of the session is on screen. */
     hasOlderMessages: boolean
     loadingOlderMessages: boolean
@@ -716,6 +742,7 @@ export function createChatStore<Runtime = undefined>(
         streamingSessionId: null,
         sendingSessionId: null,
         streamingReasoning: null,
+        streamingConfini: null,
         hasOlderMessages: false,
         loadingOlderMessages: false,
         lastError: null,
@@ -1637,6 +1664,7 @@ export function createChatStore<Runtime = undefined>(
         activeStreamAbort = abort
         let streamed = ''
         let reasoned = ''
+        const confini: TalosConfineDelGiro[] = []
         try {
             /**
              * The chat you are IN counts, even when no history lists it.
@@ -1702,6 +1730,10 @@ export function createChatStore<Runtime = undefined>(
                     ritmoRagionamento.reset()
                     state.streamingReasoning = null
                 },
+                onToolRound: (attrezzi) => {
+                    confini.push({ testo: visibile(streamed).length, ragionamento: reasoned.length, attrezzi: [...attrezzi] })
+                    state.streamingConfini = [...confini]
+                },
                 signal: abort.signal,
             }
             const invocation: ChatCompletionInvocation<Runtime> = Object.freeze({
@@ -1728,6 +1760,7 @@ export function createChatStore<Runtime = undefined>(
                     : {}),
                 ...(thinking ? { reasoning: thinking } : {}),
                 ...(reply.sources?.length ? { sources: reply.sources } : {}),
+                ...(await sequenzaDaSalvare(confini, streamed, reasoned, reply.text, translate)),
             }
             await appendDurable(
                 owner.id,
@@ -1754,6 +1787,7 @@ export function createChatStore<Runtime = undefined>(
                             ...(reasoned
                                 ? { reasoning: capturedReasoning(reasoned, translate) }
                                 : {}),
+                            ...(await sequenzaDaSalvare(confini, streamed, reasoned, stripLibrarySaveMarkers(streamed), translate)),
                         },
                     )
                 } catch (persistenceError) {
@@ -1781,6 +1815,7 @@ export function createChatStore<Runtime = undefined>(
             state.streamingSessionId = null
             state.sendingSessionId = null
             state.streamingReasoning = null
+            state.streamingConfini = null
             if (activeStreamAbort === abort) activeStreamAbort = null
             state.sending = false
         }
@@ -1978,6 +2013,7 @@ export function createChatStore<Runtime = undefined>(
             state.streamingSessionId = null
             state.sendingSessionId = null
             state.streamingReasoning = null
+            state.streamingConfini = null
             activeStreamAbort = null
             state.sending = false
             void drainContinuationQueue()
@@ -2142,6 +2178,7 @@ export function createChatStore<Runtime = undefined>(
         let streamed = ''
         let esitoGiro: TalosTurnOutcome = 'concluso'
         let reasoned = ''
+        let confini: TalosConfineDelGiro[] = []
         const ritmoRagionamento = talosCreateReasoningGate()
         try {
             const handlers: TalosStreamHandlers = {
@@ -2167,6 +2204,10 @@ export function createChatStore<Runtime = undefined>(
                     ritmoRagionamento.reset()
                     state.streamingReasoning = null
                 },
+                onToolRound: (attrezzi) => {
+                    confini.push({ testo: visibile(streamed).length, ragionamento: reasoned.length, attrezzi: [...attrezzi] })
+                    state.streamingConfini = [...confini]
+                },
                 signal: abort.signal,
             }
             const chiama = (conTurni: ChatTurn[]) => (options.captureSendRuntime || options.prepareSend
@@ -2186,8 +2227,10 @@ export function createChatStore<Runtime = undefined>(
                 if (!(compattata.ok && compattata.compattato)) throw error
                 streamed = ''
                 reasoned = ''
+                confini = []
                 state.streamingText = null
                 state.streamingReasoning = null
+                state.streamingConfini = null
                 turns = await costruisciTurni()
                 reply = await chiama(turns)
             }
@@ -2213,6 +2256,7 @@ export function createChatStore<Runtime = undefined>(
                 // Persisted with the message: a citation that disappears on
                 // reload is not a citation.
                 ...(reply.sources?.length ? { sources: reply.sources } : {}),
+                ...(await sequenzaDaSalvare(confini, streamed, reasoned, reply.text, translate)),
             }
             await appendDurable(
                 session.id,
@@ -2237,8 +2281,8 @@ export function createChatStore<Runtime = undefined>(
                             // Stop after 30s of thinking and before the first
                             // token used to discard everything — exactly the
                             // case where the trace is the only artifact left.
-                            ? { interrupted: true, reasoning: stripLibrarySaveMarkers(reasoned) }
-                            : { interrupted: true })
+                            ? { interrupted: true, reasoning: stripLibrarySaveMarkers(reasoned), ...(await sequenzaDaSalvare(confini, streamed, reasoned, stripLibrarySaveMarkers(streamed), translate)) }
+                            : { interrupted: true, ...(await sequenzaDaSalvare(confini, streamed, reasoned, stripLibrarySaveMarkers(streamed), translate)) })
                 } catch (persistenceError) {
                     markPersistenceFailure(persistenceError)
                 }

@@ -1,0 +1,190 @@
+{
+  "origine": "r4 @ 2161afb32de5d75c542b866d9dd340c69a16ad3d, registrato sul Pad il 16/10/2026 (app di sviluppo ai.talos.dev, r4 dentro l'app); id anonimizzati",
+  "passi": [
+    {
+      "nome": "elenco-vuoto",
+      "stato": 200,
+      "risposta": {
+        "ok": true,
+        "data": {
+          "items": []
+        },
+        "meta": {
+          "schema": "talos.harness-ui.api.v1",
+          "generatedAt": "2026-10-16T10:09:24.153Z"
+        }
+      }
+    },
+    {
+      "nome": "crea-prima",
+      "stato": 200,
+      "risposta": {
+        "ok": true,
+        "data": {
+          "terminalId": "11111111-1111-4111-8111-111111111111",
+          "sessionId": "11111111-1111-4111-8111-111111111111",
+          "cartella": "/data/data/ai.talos.dev/files/codice/workspace",
+          "creatoAlle": "2026-10-16T10:09:24.166Z",
+          "origine": "prima-scheda",
+          "attiva": false
+        },
+        "meta": {
+          "schema": "talos.harness-ui.api.v1",
+          "generatedAt": "2026-10-16T10:09:24.166Z"
+        }
+      }
+    },
+    {
+      "nome": "crea-seconda",
+      "stato": 200,
+      "risposta": {
+        "ok": true,
+        "data": {
+          "terminalId": "22222222-2222-4222-8222-222222222222",
+          "sessionId": "11111111-1111-4111-8111-111111111111",
+          "cartella": "/data/data/ai.talos.dev/files/codice/workspace",
+          "creatoAlle": "2026-10-16T10:09:24.174Z",
+          "origine": "rotta",
+          "attiva": false
+        },
+        "meta": {
+          "schema": "talos.harness-ui.api.v1",
+          "generatedAt": "2026-10-16T10:09:24.174Z"
+        }
+      }
+    },
+    {
+      "nome": "crea-corpo-non-vuoto",
+      "stato": 400,
+      "risposta": {
+        "ok": false,
+        "error": {
+          "code": "QUERY_INVALID",
+          "message": "Invalid query",
+          "title": "Operation failed",
+          "explanation": "An unexpected problem occurred during the operation.",
+          "action": "Open Doctor, copy the reference and try again.",
+          "doctorReference": "anonimo"
+        },
+        "meta": {
+          "schema": "talos.harness-ui.api.v1",
+          "generatedAt": "2026-10-16T10:09:24.181Z"
+        }
+      }
+    },
+    {
+      "nome": "elenco-con-una-attiva",
+      "stato": 200,
+      "risposta": {
+        "ok": true,
+        "data": {
+          "items": [
+            {
+              "terminalId": "11111111-1111-4111-8111-111111111111",
+              "sessionId": "11111111-1111-4111-8111-111111111111",
+              "cartella": "/data/data/ai.talos.dev/files/codice/workspace",
+              "creatoAlle": "2026-10-16T10:09:24.166Z",
+              "origine": "prima-scheda",
+              "attiva": true
+            },
+            {
+              "terminalId": "22222222-2222-4222-8222-222222222222",
+              "sessionId": "11111111-1111-4111-8111-111111111111",
+              "cartella": "/data/data/ai.talos.dev/files/codice/workspace",
+              "creatoAlle": "2026-10-16T10:09:24.174Z",
+              "origine": "rotta",
+              "attiva": false
+            }
+          ]
+        },
+        "meta": {
+          "schema": "talos.harness-ui.api.v1",
+          "generatedAt": "2026-10-16T10:09:25.415Z"
+        }
+      }
+    },
+    {
+      "nome": "chiudi",
+      "stato": 200,
+      "risposta": {
+        "ok": true,
+        "data": {
+          "ok": true,
+          "terminalId": "11111111-1111-4111-8111-111111111111",
+          "sessionId": "11111111-1111-4111-8111-111111111111"
+        },
+        "meta": {
+          "schema": "talos.harness-ui.api.v1",
+          "generatedAt": "2026-10-16T10:09:28.352Z"
+        }
+      }
+    },
+    {
+      "nome": "chiudi-di-nuovo",
+      "stato": 404,
+      "risposta": {
+        "ok": false,
+        "error": {
+          "code": "NOT_FOUND",
+          "message": "Resource not found",
+          "title": "Operation failed",
+          "explanation": "An unexpected problem occurred during the operation.",
+          "action": "Open Doctor, copy the reference and try again.",
+          "doctorReference": "anonimo"
+        },
+        "meta": {
+          "schema": "talos.harness-ui.api.v1",
+          "generatedAt": "2026-10-16T10:09:28.366Z"
+        }
+      }
+    },
+    {
+      "nome": "chiudi-seconda",
+      "stato": 200,
+      "risposta": {
+        "ok": true,
+        "data": {
+          "ok": true,
+          "terminalId": "22222222-2222-4222-8222-222222222222",
+          "sessionId": "11111111-1111-4111-8111-111111111111"
+        },
+        "meta": {
+          "schema": "talos.harness-ui.api.v1",
+          "generatedAt": "2026-10-16T10:09:28.376Z"
+        }
+      }
+    },
+    {
+      "nome": "elenco-finale",
+      "stato": 200,
+      "risposta": {
+        "ok": true,
+        "data": {
+          "items": []
+        },
+        "meta": {
+          "schema": "talos.harness-ui.api.v1",
+          "generatedAt": "2026-10-16T10:09:28.386Z"
+        }
+      }
+    }
+  ],
+  "controlli": [
+    {
+      "id": "reg-1",
+      "json": "{\"evento\":\"agganciato\",\"ripreso\":false,\"shell\":\"posix-shell\",\"comando\":\"/system/bin/sh\"}"
+    },
+    {
+      "id": "reg-2",
+      "json": "{\"evento\":\"agganciato\",\"ripreso\":true,\"shell\":\"posix-shell\",\"comando\":\"/system/bin/sh\"}"
+    },
+    {
+      "id": "reg-2",
+      "json": "{\"evento\":\"uscita\",\"codice\":3}"
+    }
+  ],
+  "erroreDalSorgente": {
+    "nota": "non riproducibile dalla pagina: forma copiata da terminal-ws.mjs:150-160 @ 2161afb32",
+    "json": "{\"evento\":\"errore\",\"code\":\"TERMINAL_START_FAILED\",\"reason\":\"folder-missing\",\"cartella\":\"/data/data/ai.talos.dev/files/codice/sparita\",\"message\":\"The terminal could not start: the folder \\\"/data/data/ai.talos.dev/files/codice/sparita\\\" does not exist.\"}"
+  }
+}

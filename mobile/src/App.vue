@@ -55,7 +55,7 @@ import { useTalosMobileToasts } from '@/stores/toasts'
 import { talosAnswerNpuTerms, talosNpuTermsPromptOpen } from '@/stores/npuTermsPrompt'
 import { useTalosTabletLayout } from '@/composables/useTalosTabletLayout'
 import { useTalosSheetNav } from '@/composables/useTalosSheetNav'
-import { TALOS_TABLET_CHAT_SIDEBAR_DEFAULT, TALOS_TABLET_CHAT_SIDEBAR_MIN, TALOS_TABLET_SIDEBAR_MAX, clampTalosTabletChatSidebarWidth, clampTalosTabletSidebarWidth, talosTabletLeavesChatsRoute, talosTabletLeavesHarnessListRoute, talosTabletSidebarEffectiveWidth } from '@/lib/tabletLayout'
+import { TALOS_TABLET_CHAT_SIDEBAR_DEFAULT, TALOS_TABLET_CHAT_SIDEBAR_MIN, TALOS_TABLET_SIDEBAR_MAX, clampTalosTabletChatSidebarWidth, clampTalosTabletSidebarWidth, talosTabletLeavesChatsRoute, talosTabletLeavesHarnessListRoute, talosTabletRailVariant, talosTabletSidebarEffectiveWidth } from '@/lib/tabletLayout'
 import { useLauncherIconController } from '@/services/launcherIcon'
 import { parseTalosSessionLibraryContextPolicy } from '@/lib/chat/libraryPolicy'
 const router = useRouter()
@@ -647,8 +647,10 @@ function tabletSelect(sessionId: string): void {
     sidebarSelect(sessionId)
 }
 function tabletNewChat(): void {
+    // ⛔ N13-RECENTI-01 (Pad, 12/10/2026): niente `onTabletActivated()` qui. Portava in chat PRIMA che la sessione
+    // nuova esistesse, e dalle Impostazioni si atterrava nella chat vecchia (il messaggio finiva lì, «Recenti» non
+    // cambiava). Il ritorno alla chat lo fa già `sidebarNewChat`, DOPO `newSession` — come per `tabletSelect`.
     sidebarNewChat()
-    onTabletActivated()
 }
 
 // F2-T3.6 immersive chrome: 3-dot options act on the ACTIVE session.
@@ -825,8 +827,12 @@ const stationParentTitle = computed(() => {
     return key ? t(key) : undefined
 })
 
-// Settings owns its category menu inside the workspace; global navigation stays visible.
-const tabletChatRailVisible = computed(() => tabletLayout.isTablet.value)
+// ⛔ Owner 13/10/2026, dal Pad: «un po' bruttina la doppia sidebar quando sei in impostazioni» → scelta «Sparisce».
+// Le Impostazioni hanno già il loro elenco di categorie dentro lo spazio di lavoro: lì la barra dell'app si toglie, e si
+// torna all'app dal pulsante «indietro» del foglio (`root-back`, che esiste proprio per quando la barra non c'è).
+const tabletChatRailVisible = computed(() => (
+    tabletLayout.isTablet.value && talosMobileStationOf(activeRoute.value) !== 'settings'
+))
 
 // F6 sidebar refactor (24/8): quale contenuto mostra il rail persistente.
 // Ferma alla stessa domanda già risposta sopra (talosMobileStationOf), non
@@ -843,9 +849,11 @@ const tabletChatRailVisible = computed(() => tabletLayout.isTablet.value)
 // Codice" da un pannello e lo negava dall'altro. Il guard nuovo in
 // router/index.ts impedisce ormai di ARRIVARE su quella rotta senza
 // disponibilità; questo controllo resta come seconda rete, non l'unica.
-const tabletRailVariant = computed<'chat' | 'harness'>(() => (
-    talosMobileStationOf(activeRoute.value) === 'harness' && talosHarnessUiAvailable() ? 'harness' : 'chat'
-))
+const tabletRailVariant = computed<'chat' | 'harness'>(() => talosTabletRailVariant({
+    stazione: talosMobileStationOf(activeRoute.value),
+    rotta: activeRoute.value,
+    codiceVecchio: talosHarnessUiAvailable(),
+}))
 const tabletHarnessRailCollapsed = computed(() => (
     tabletRailVariant.value === 'harness'
     && settingsStore.state.shell.tablet_harness_sidebar_collapsed
@@ -912,6 +920,7 @@ const SHEET_TITLE_KEY: Record<TalosMobileRouteName, string> = {
     // memory/memory-item, tasks/task-item, notes/note-item do.
     harness: 'navigation.harness',
     'harness-session': 'navigation.harness',
+    'codice-r4': 'harness.r4Title',
     toolforge: 'navigation.toolForge',
     settings: 'stations.settingsCenterTitle',
     'settings-models': 'models.labTitle',
@@ -985,9 +994,11 @@ watch(
  * all'avvio: nessun motivo per pagarla nel chunk iniziale.
  */
 async function openDefaultHarnessSession(): Promise<void> {
-    const { listCodiceSessions } = await import('@/lib/harness/codiceSessions')
-    const sessions = await listCodiceSessions()
-    void router.replace({ name: 'harness-session', params: { id: sessions[0]?.id ?? 'new' } })
+    // K4-E (owner 17/10 «r4 al posto, il vecchio come ripiego»; visto sul Pad: vinceva la sessione vecchia): prima r4, se l'APK lo porta
+    const [{ listCodiceSessions }, { talosR4Disponibile }, { apriCodiceSulTabletR4 }] = await Promise.all([
+        import('@/lib/harness/codiceSessions'), import('@/lib/harness/terminalePonte'), import('@/lib/harness/r4/sceltaCodiceR4'),
+    ])
+    await apriCodiceSulTabletR4({ rottaAttuale: () => router.currentRoute.value, router, disponibile: talosR4Disponibile, sessioniVecchie: listCodiceSessions })
 }
 
 async function navigate(
@@ -1016,6 +1027,19 @@ onMounted(async () => {
     void import('@/services/capabilityWatchService')
         .then((modulo) => { staccaGuardiano = modulo.talosStartCapabilityWatch() })
         .catch(() => { /* un guardiano che non parte non deve fermare l'app */ })
+
+    /*
+     * N15 — un accesso a ChatGPT rimasto a metà (Android ha ricreato l'app con la scheda davanti) si riprende QUI, non solo
+     * dal riquadro di OpenAI. Il segno è una voce senza segreti; senza segno non si carica niente (`chatgptRipresa.ts`).
+     */
+    try {
+        if (localStorage.getItem('talos.chatgpt.accesso-aperto.v1') !== null) {
+            void import('@/services/chatgptAccesso').then((modulo) => modulo.talosRiprendiAccessoChatgptRimasto(
+                async () => { await chatController.refreshSecrets(); await chatController.refreshProvider('chatgpt') },
+                (messaggio) => toastsStore.push({ message: messaggio, durationMs: 6000 }),
+            )).catch(() => { /* resta la ripresa dal riquadro di OpenAI */ })
+        }
+    } catch { /* preferenze illeggibili: resta la ripresa dal riquadro di OpenAI */ }
 
     /**
      * Il centro notifiche prende le sue due superfici.
@@ -1501,9 +1525,15 @@ onBeforeUnmount(async () => {
                     </template>
                 </template>
 
+                <!--
+                    ⛔ Pad 17/10 (ledger LEDGER-CHAT-SOTTO-LE-STAZIONI): sotto il foglio aria-modal di una stazione la chat restava
+                    ATTIVA nello stesso rettangolo, e un invio dal Codice r4 è partito dalla chat col suo modello. WAI-ARIA APG
+                    «Dialog (Modal)»: «Windows under a modal dialog are inert». La barra delle chat del tablet sta fuori da qui.
+                -->
                 <div
                     class="relative flex min-h-0 min-w-0 flex-1 flex-col"
                     :class="{ invisible: stationLocksBodyScroll }"
+                    :inert="isStation || undefined"
                 >
                     <TalosMobileHeader
                         v-if="!immersiveHeader"
@@ -1596,7 +1626,8 @@ onBeforeUnmount(async () => {
                     :shell-back="talosIndietro"
                     :parent-title="stationParentTitle"
                     :lock-body-scroll="stationLocksBodyScroll"
-                    :hide-chrome="stationLocksBodyScroll"
+                    :hide-chrome="stationLocksBodyScroll || activeRoute === 'codice-r4'"
+                    :fondo-a-filo="activeRoute === 'codice-r4'"
                     @close="navigate('chat')"
                 >
                     <RouterView v-slot="{ Component, route: renderedRoute }">

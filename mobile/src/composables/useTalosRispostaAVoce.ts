@@ -41,7 +41,7 @@ export function useTalosRispostaAVoce(input: {
     /** Il testo che sta arrivando dal modello, o `null` quando è finito. */
     streaming: () => string | null
     /** I messaggi della chat, per posare il segnalino su quello vero. */
-    messaggi: () => readonly { id: string; role: string }[]
+    messaggi: () => readonly { id: string; role: string; content?: string | null }[]
     /** La lingua in cui TALOS sta parlando adesso. */
     interfaccia: () => string
 }): TalosRispostaAVoce {
@@ -100,6 +100,35 @@ export function useTalosRispostaAVoce(input: {
         attesa.value = false
         ultimoTesto = ''
     })
+
+    /**
+     * ⛔ VOICE-BUFFERED (owner 13/10/2026, dal Pad: «la voce parte solo quando premo il pulsante»). Non tutte le risposte
+     * passano dal testo in arrivo: quando lo streaming non è possibile (misurato col fornitore ChatGPT nella barra) la
+     * risposta arriva TUTTA INSIEME e nasce direttamente il messaggio. Chi aveva chiesto a voce la sente lo stesso: appena
+     * il messaggio dell'assistente esiste e ha del testo, lo si legge per intero. Se la lettura è già aperta sul testo in
+     * arrivo, qui non si fa niente: la chiude lei.
+     */
+    const elenco = (): readonly { id: string; role: string; content?: string | null }[] => {
+        const messaggi = input.messaggi()
+        return Array.isArray(messaggi) ? messaggi : []
+    }
+    watch(
+        () => [...elenco()].reverse().find((m) => m.role === 'assistant')?.id ?? null,
+        (id, prima) => {
+            if (!attesa.value || !id || id === prima) return
+            if (parla.speakingId.value === ID_TURNO) return
+            const testo = (elenco().find((m) => m.id === id)?.content ?? '').trim()
+            // Un messaggio ancora senza parole (sta usando un attrezzo) non è la risposta: si continua ad aspettare.
+            if (!testo) return
+            attesa.value = false
+            ultimoTesto = ''
+            // Qualcosa si sta già leggendo: chi l'ha chiesto viene prima.
+            if (!parla.apriLetturaDiVoce(ID_TURNO, input.source)) return
+            void parla.seguiIlTesto(ID_TURNO, testo, true)
+            parla.segnaLetta(id)
+            parla.rinominaLettura(ID_TURNO, id)
+        },
+    )
 
     return {
         get lingue() { return lingue.value },

@@ -7,6 +7,7 @@
  * mode (the sort_index model stays).
  */
 import TalosThemedCheckbox from '@/components/talos/ui/TalosThemedCheckbox.vue'
+import TalosMobilePageHeader from '@/components/talos/ui/TalosMobilePageHeader.vue'
 import { computed, nextTick, onMounted, ref, unref } from 'vue'
 import { useRouter } from 'vue-router'
 import TalosRowActions, { type TalosRowAction } from '@/components/talos/ui/TalosRowActions.vue'
@@ -790,11 +791,15 @@ function act(
     <div class="relative flex flex-col" :class="props.embedded ? 'min-h-0' : 'min-h-full'" data-testid="talos-chats-screen">
         <!-- ⭐ A3-84 — che posto è questo, come nelle stazioni (Memoria, Note): il titolo e una riga sola che dice cosa
              c'è e come si agisce. Nel pannello del tablet no: il pannello ha già la sua intestazione (owner, 25/09). -->
-        <header v-if="!props.embedded" class="px-[var(--talos-space-page)] pt-[var(--talos-space-section)]">
-            <div class="flex items-center justify-between gap-[var(--talos-space-section)]">
-                <h1 :class="['font-semibold leading-[1.15] tracking-[-0.03em] text-[var(--talos-text)]', isTablet ? 'text-3xl' : 'text-2xl']">
-                    {{ t('navigation.chats') }}
-                </h1>
+        <TalosMobilePageHeader
+            v-if="!props.embedded"
+            class="px-[var(--talos-space-page)] pt-[var(--talos-space-section)]"
+            :title="t('navigation.chats')"
+            :subtitle="t('chats.subtitle')"
+            :sheet-title="false"
+            subtitle-testid="talos-chats-subtitle"
+        >
+            <template #action>
                 <!-- Sul telefono l'azione principale sta accanto al titolo (owner 14/09 per le stazioni; 25/09 per le
                      chat, dove prende il posto del pulsante flottante). -->
                 <Button
@@ -808,11 +813,8 @@ function act(
                 >
                     <Plus class="size-5" aria-hidden="true" />
                 </Button>
-            </div>
-            <p data-testid="talos-chats-subtitle" class="mt-[var(--talos-space-inline)] text-sm leading-6 text-[var(--talos-muted)]">
-                {{ t('chats.subtitle') }}
-            </p>
-        </header>
+            </template>
+        </TalosMobilePageHeader>
 
         <div
             class="flex items-stretch gap-[var(--talos-space-inline)]"

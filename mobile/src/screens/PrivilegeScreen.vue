@@ -6,6 +6,7 @@ import {
     talosNominaAssistenteColPonte,
     type TalosStatoRuoloAssistente,
 } from '@/lib/device/ruoloAssistente'
+import TalosMobilePageHeader from '@/components/talos/ui/TalosMobilePageHeader.vue'
 import {
     talosAccendiLaParola,
     talosLeggiLaParola,
@@ -948,7 +949,7 @@ onUnmounted(() => {
 
 <template>
     <div
-        class="flex min-h-full flex-col gap-4 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3"
+        class="flex min-h-full flex-col gap-4 px-[var(--talos-space-page)] pb-[max(var(--talos-space-page),env(safe-area-inset-bottom))] pt-[var(--talos-space-section)]"
         data-testid="talos-privilege-screen"
     >
         <!-- ⛔ Il consenso all'autonomia: si chiede PRIMA, guardando lo schermo
@@ -958,10 +959,8 @@ onUnmounted(() => {
             @consenti="concediAutonomia"
             @annulla="consensoAperto = false"
         />
-        <p class="flex items-start gap-2 text-xs leading-5 text-[var(--talos-muted)]">
-            <Smartphone class="mt-0.5 size-4 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
-            {{ t('privilege.intro') }}
-        </p>
+        <!-- ⛔ G1 (14/10/2026): l'intestazione delle stazioni — titolo e la riga che dice che posto è (la frase di sempre). -->
+        <TalosMobilePageHeader :title="t('privilege.pageTitle')" :subtitle="t('privilege.intro')" />
 
         <!--
             ⭐⭐⭐ COME LO CHIAMI — una categoria sola, righe uguali.

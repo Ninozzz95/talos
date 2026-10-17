@@ -9,7 +9,6 @@ import { ArrowUp,
     Mic,
     Plus,
     Square, } from '@lucide/vue'
-import TalosMobileAttachmentTray from '@/components/chat/TalosMobileAttachmentTray.vue'
 /**
  * Il cassetto del modello e dello sforzo si apre a richiesta, quindi si carica
  * a richiesta.
@@ -49,6 +48,10 @@ import type {
 
 const TalosMobileSlashCommandMenu = defineAsyncComponent(
     () => import('@/components/chat/TalosMobileSlashCommandMenu.vue'),
+)
+// K3-C Allegati A2 (16/10): il vassoio esiste solo con un allegato, quindi si carica a richiesta (pacchetto d'avvio sotto il tetto).
+const TalosMobileAttachmentTray = defineAsyncComponent(
+    () => import('@/components/chat/TalosMobileAttachmentTray.vue'),
 )
 // Il foglio «+» resta caricato a richiesta nella forma unica Calm.
 const TalosMobileComposerDrawer = defineAsyncComponent(
@@ -779,7 +782,7 @@ watch(() => [props.prompt, props.docked, dictating.value], () => {
     <section
         data-testid="talos-mobile-composer"
         class="talos-calm-composer"
-        :class="{ 'is-compact': composerCompact }"
+        :class="{ 'is-compact': composerCompact, 'is-docked': docked }"
         :data-talos-composer-compact="composerCompact ? 'true' : 'false'"
         :aria-label="$t('chat.composer')"
     >
@@ -799,6 +802,7 @@ watch(() => [props.prompt, props.docked, dictating.value], () => {
         </div>
 
         <TalosMobileAttachmentTray
+            v-if="attachments.length || attachmentBusy || attachmentError"
             :items="attachments"
             :busy="attachmentBusy"
             :error="attachmentError"

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
+import { talosVociOfferte, talosVoceDiSerie,
     talosSiglaVoce,
     talosVoceDaUsare,
     talosVoceGenerica,
@@ -111,5 +111,46 @@ describe('⛔ la voce SCELTA vince — finché esiste', () => {
         const r = talosVoceDaUsare(PAD, { lingua: 'ja', rete: true, scelta: null })
         expect(r.motivo).toBe('nessuna')
         expect(r.voce).toBeNull()
+    })
+})
+
+/**
+ * ⛔ VOCE-SERIE — owner 13/10/2026, dal Pad: «nel drop down della selezione voce appare una terza voce, tipo legacy, troppo
+ * robotica, invece delle due migliori… togliamola definitivamente: rimane come predefinita nelle risposte».
+ *
+ * MISURATO sul Pad (nove voci italiane, tutte `quality: 400`): senza una scelta salvata la voce «di ripiego» si calcolava
+ * rifiutando la rete, quindi era `it-it-x-itb-local` — fuori dalle due offerte (`itb · rete`, `itd · rete`). Il menù la
+ * aggiungeva come terza perché «è quella in uso», e le risposte si leggevano con lei. La voce di serie è la PRIMA delle
+ * offerte; una scelta salvata vale solo se è fra le offerte (o è di un'altra lingua, scelta apposta da «tutte le lingue»).
+ */
+describe('talosVoceDiSerie — la voce quando nessuno ha scelto, e le scelte fuori elenco', () => {
+    const v = (name: string, network = false, locale = 'it-IT') => ({ name, locale, quality: 400, latency: 200, network, notInstalled: false })
+    const PAD = [
+        v('it-it-x-itb-local'), v('it-it-x-itb-network', true), v('it-it-x-itc-local'), v('it-IT-language'),
+        v('it-it-x-kda-network', true), v('it-it-x-itc-network', true), v('it-it-x-itd-local'), v('it-it-x-itd-network', true),
+        v('it-it-x-kda-local'), v('en-us-x-sfg-network', true, 'en-US'),
+    ]
+
+    it('VOCE-SERIE-01: senza scelta, in rete, è la SECONDA delle due offerte (owner: «la seconda non la prima») — mai la voce sul telefono', () => {
+        expect(talosVoceDiSerie(PAD, { lingua: 'it-IT', rete: true, scelta: null })?.name).toBe('it-it-x-itd-network')
+        // con una voce sola, quella; e se la seconda offerta è quella sul telefono, resta la prima
+        expect(talosVoceDiSerie([v('it-it-x-itb-network', true), v('it-it-x-itc-local')], { lingua: 'it-IT', rete: true, scelta: null })?.name).toBe('it-it-x-itb-network')
+        expect(talosVoceDiSerie([v('it-it-x-itb-network', true)], { lingua: 'it-IT', rete: true, scelta: null })?.name).toBe('it-it-x-itb-network')
+        expect(talosVociOfferte(PAD, { lingua: 'it-IT', rete: true }).map((x) => x.name)).toEqual(['it-it-x-itb-network', 'it-it-x-itd-network'])
+    })
+
+    it('VOCE-SERIE-02: una scelta salvata fuori dalle offerte (la robotica) non vale più; una fra le offerte sì', () => {
+        expect(talosVoceDiSerie(PAD, { lingua: 'it-IT', rete: true, scelta: 'it-it-x-itb-local' })?.name).toBe('it-it-x-itd-network')
+        expect(talosVoceDiSerie(PAD, { lingua: 'it-IT', rete: true, scelta: 'it-IT-language' })?.name).toBe('it-it-x-itd-network')
+        expect(talosVoceDiSerie(PAD, { lingua: 'it-IT', rete: true, scelta: 'it-it-x-itb-network' })?.name).toBe('it-it-x-itb-network')
+    })
+
+    it('VOCE-SERIE-03: una voce di un altra lingua, scelta apposta, resta quella scelta', () => {
+        expect(talosVoceDiSerie(PAD, { lingua: 'it-IT', rete: true, scelta: 'en-us-x-sfg-network' })?.name).toBe('en-us-x-sfg-network')
+    })
+
+    it('VOCE-SERIE-04: senza rete si offre e si usa ciò che il telefono ha, e niente voci non dichiara niente', () => {
+        expect(talosVoceDiSerie(PAD, { lingua: 'it-IT', rete: false, scelta: 'it-it-x-itd-network' })?.name).toBe('it-it-x-itd-local')
+        expect(talosVoceDiSerie([], { lingua: 'it-IT', rete: true, scelta: null })).toBeNull()
     })
 })

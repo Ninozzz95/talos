@@ -38,6 +38,8 @@
    * vuota o rotta.
    */
   const DIZIONARIO_IT = {
+    offered: 'offerta',
+    'not offered': 'non offerta',
     Chat: 'Chat',
     Terminal: 'Terminale',
     Review: 'Revisione',
@@ -371,6 +373,8 @@
       'Il conteggio giornaliero si azzera a mezzanotte del telefono. Un avvio registrato non dice se l’attività è riuscita: tocca il nome per aprire l’ultima esecuzione.',
     'Tiered discount': 'Sconto a scaglioni',
     'Real task': 'Attività reale',
+    // ⛔ ITA-TASK-01 (14/10/2026): l'etichetta di un comando diretto, sotto il messaggio e nella bolla.
+    'Direct command': 'Comando diretto',
     'Run now': 'Avvia ora',
     'Next run': 'Prossima esecuzione',
     'None active': 'Nessuna attiva',
@@ -3680,15 +3684,15 @@
      * secondo) — solo un F5/resume, che riparte da zero e replica
      * l'evento VERO, lo rivelava. Tre forme distinte, tre etichette oneste.
      */
-    bubble.textContent = task.consegna || task.consegnaCorta || task.comandoDiretto || (task.id ? task.id : 'Direct command');
+    bubble.textContent = task.consegna || task.consegnaCorta || task.comandoDiretto || (task.id ? task.id : t('Direct command'));
     const meta = document.createElement('div');
     meta.className = 'message-meta';
     const span = document.createElement('span');
     span.textContent = task.id
-      ? `Real task · ${task.id}`
+      ? `${t('Real task')} · ${task.id}`
       : (task.consegna || task.consegnaCorta)
         ? `${t('Free task')}${task.progetto ? ` · ${task.progetto}` : ''}`
-        : 'Direct command';
+        : t('Direct command');
     meta.appendChild(span);
     article.append(bubble, meta);
     conversation.appendChild(article);
@@ -6606,7 +6610,7 @@
   async function startRealSession(task) {
     const generation = nuovaGenerazioneSessione();
     state.realSession.taskId = task.id;
-    state.session = `Real task · ${task.id}`;
+    state.session = `${t('Real task')} · ${task.id}`;
     mostraTitoloSessione(state.session);
     setView('chat');
     closePanels();
@@ -6696,8 +6700,11 @@
     const nomi = attrezziOffertiCorrenti();
     const imposta = (chiave, testo) => { const el = $(`[data-capability-count="${chiave}"]`); if (el) el.textContent = testo; };
     imposta('tools', nomi ? String(nomi.length) : '—');
-    imposta('web_search', nomi?.includes('web_search') ? 'web_search' : '—');
-    imposta('naviga', nomi?.includes('naviga') ? 'naviga' : '—');
+    // ⛔ K3-ESC (15/10): mai l'id dell'attrezzo a schermo («Browser: naviga» anche in inglese). Le parole del desktop r4
+    // (`app.capability.notOffered` @ fc5); senza un giro concluso resta «—».
+    const offerto = (nome) => (!nomi ? '—' : nomi.includes(nome) ? t('offered') : t('not offered'));
+    imposta('web_search', offerto('web_search'));
+    imposta('naviga', offerto('naviga'));
   }
 
   function aggiornaControlliSessione() {
@@ -6726,7 +6733,7 @@
       const dati = await apiPost(`/api/v1/sessions/${encodeURIComponent(idOrigine)}/fork`, {});
       const generation = nuovaGenerazioneSessione();
       state.realSession.taskId = taskIdOrigine;
-      state.session = `Real task · ${taskIdOrigine} (fork)`;
+      state.session = `${t('Real task')} · ${taskIdOrigine} (fork)`;
       mostraTitoloSessione(state.session);
       appendStatusNote(`Fork started from session ${idOrigine.slice(0, 8)}… — same folder, same history.`);
       collegaEventiSessione(dati.sessionId, generation);
@@ -6861,7 +6868,7 @@
     if (contenutoGiaVisibile) { setView('chat'); closePanels(); return; }
     const generation = nuovaGenerazioneSessione();
     state.realSession.taskId = taskId;
-    state.session = nome || `Real task · ${taskId}`; // ⭐ un nome scelto dall'owner vince sul taskId
+    state.session = nome || `${t('Real task')} · ${taskId}`; // ⭐ un nome scelto dall'owner vince sul taskId
     mostraTitoloSessione(state.session);
     setView('chat');
     closePanels();
@@ -6948,7 +6955,7 @@
     if (!eventi || eventi.length === 0) return false;
     const generation = nuovaGenerazioneSessione();
     state.realSession.taskId = taskIdFallback;
-    state.session = nomeFallback || `Real task · ${taskIdFallback}`;
+    state.session = nomeFallback || `${t('Real task')} · ${taskIdFallback}`;
     mostraTitoloSessione(state.session);
     setView('chat');
     closePanels();
@@ -7393,7 +7400,9 @@
     mostraTitoloOvunque(state.session);
     setView('chat');
     closePanels();
-    appendRealTaskStart(taskSintetico);
+    // ⛔ ITA-TASK-02 (14/10/2026, Pad): la bolla ha la stessa forma dell'evento vero che il ricaricamento rigioca (consegna e
+    // progetto, nessun id): prima diceva «Attività reale · libero:workspace» all'invio e «Attività libera · workspace» dopo.
+    appendRealTaskStart({ consegna, progetto: nomeCartella });
     mostraAttesaRisposta();
     toast('Avvio in corso', `${nomeCartella} · runs directly on the real folder, no copy.`);
 

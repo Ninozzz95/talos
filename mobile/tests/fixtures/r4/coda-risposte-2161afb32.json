@@ -1,0 +1,175 @@
+{
+ "accoda1": {
+  "stato": 200,
+  "d": {
+   "ok": true,
+   "data": {
+    "ok": true,
+    "posizione": 1,
+    "coda": {
+     "voci": [
+      {
+       "id": "7135b38f-57af-4dff-af6c-f7231edf07d2",
+       "testo": "Controlla anche i test",
+       "immagini": 0
+      }
+     ],
+     "inPausa": false
+    }
+   },
+   "meta": {
+    "schema": "talos.harness-ui.api.v1",
+    "generatedAt": "2026-10-16T16:20:51.245Z"
+   }
+  }
+ },
+ "vuoto": {
+  "stato": 400,
+  "d": {
+   "ok": false,
+   "error": {
+    "code": "QUERY_INVALID",
+    "message": "Invalid query",
+    "title": "Operation failed",
+    "explanation": "An unexpected problem occurred during the operation.",
+    "action": "Open Doctor, copy the reference and try again.",
+    "doctorReference": "doctor-3f9d08bd6dff"
+   },
+   "meta": {
+    "schema": "talos.harness-ui.api.v1",
+    "generatedAt": "2026-10-16T16:20:51.278Z"
+   }
+  }
+ },
+ "annulla": {
+  "stato": 200,
+  "d": {
+   "ok": true,
+   "data": {
+    "ok": true,
+    "rimosso": true,
+    "coda": {
+     "voci": [
+      {
+       "id": "7135b38f-57af-4dff-af6c-f7231edf07d2",
+       "testo": "Controlla anche i test",
+       "immagini": 0
+      }
+     ],
+     "inPausa": false
+    }
+   },
+   "meta": {
+    "schema": "talos.harness-ui.api.v1",
+    "generatedAt": "2026-10-16T16:20:51.297Z"
+   }
+  }
+ },
+ "invia": {
+  "stato": 200,
+  "d": {
+   "ok": true,
+   "data": {
+    "ok": true,
+    "modo": "reindirizzato",
+    "coda": {
+     "voci": [],
+     "inPausa": false
+    },
+    "redirectId": "9470e0a8-3cd4-47ba-8e38-e566fab6dbd7"
+   },
+   "meta": {
+    "schema": "talos.harness-ui.api.v1",
+    "generatedAt": "2026-10-16T16:20:51.312Z"
+   }
+  }
+ },
+ "stop": {
+  "stato": 200,
+  "d": {
+   "ok": true,
+   "data": {
+    "stopped": true
+   },
+   "meta": {
+    "schema": "talos.harness-ui.api.v1",
+    "generatedAt": "2026-10-16T16:20:55.151Z"
+   }
+  }
+ },
+ "letturaInPausa": {
+  "stato": 200,
+  "d": {
+   "ok": true,
+   "data": {
+    "voci": [
+     {
+      "id": "bc126fb1-ef62-4e98-b106-aec1091bf7a3",
+      "testo": "Poi aggiorna il README",
+      "immagini": 0
+     }
+    ],
+    "inPausa": true
+   },
+   "meta": {
+    "schema": "talos.harness-ui.api.v1",
+    "generatedAt": "2026-10-16T16:20:56.666Z"
+   }
+  }
+ },
+ "riprendi": {
+  "stato": 200,
+  "d": {
+   "ok": true,
+   "data": {
+    "ok": true,
+    "modo": "ripreso",
+    "coda": {
+     "voci": [],
+     "inPausa": false
+    }
+   },
+   "meta": {
+    "schema": "talos.harness-ui.api.v1",
+    "generatedAt": "2026-10-16T16:20:56.697Z"
+   }
+  }
+ },
+ "annullaIgnota": {
+  "stato": 200,
+  "d": {
+   "ok": true,
+   "data": {
+    "ok": true,
+    "rimosso": false,
+    "coda": {
+     "voci": [],
+     "inPausa": false
+    }
+   },
+   "meta": {
+    "schema": "talos.harness-ui.api.v1",
+    "generatedAt": "2026-10-16T16:21:02.714Z"
+   }
+  }
+ },
+ "inviaIgnota": {
+  "stato": 404,
+  "d": {
+   "ok": false,
+   "error": {
+    "code": "NOT_FOUND",
+    "message": "Resource not found",
+    "title": "Operation failed",
+    "explanation": "An unexpected problem occurred during the operation.",
+    "action": "Open Doctor, copy the reference and try again.",
+    "doctorReference": "doctor-15c55def4f9c",
+    "reason": "queue-message-gone"
+   },
+   "meta": {
+    "schema": "talos.harness-ui.api.v1",
+    "generatedAt": "2026-10-16T16:21:02.731Z"
+   }
+  }
+ }
+}

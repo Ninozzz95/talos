@@ -1,0 +1,2075 @@
+{
+  "origine": {
+    "commit": "701c6c0d2d711879b53aa21bddad5a06d33538e7",
+    "file": {
+      "components/review.js": "c2bf967512d03a3ebc84a39b49d2e513006f57f205657f3239abd32a2942a962",
+      "legacy/app.js": "70347f2fa3aa15bb4eec269d313fb5e79376765d582239d6eed64585cbf634fe"
+    }
+  },
+  "tetto": 1500,
+  "scritture": [
+    {
+      "giro": 3,
+      "vera": true,
+      "delta": [
+        {
+          "op": "add",
+          "path": "/file/slugify.mjs",
+          "value": "export const slugify = (t) => t.toLowerCase()\n",
+          "prima": null
+        }
+      ]
+    },
+    {
+      "giro": 3,
+      "vera": true,
+      "delta": [
+        {
+          "op": "replace",
+          "path": "/file/slugify.mjs",
+          "value": "export const slugify = (t) => t\n  .toLowerCase()\n  .trim()\n  .replace(/\\s+/g, '-')\n",
+          "prima": "export const slugify = (t) => t.toLowerCase()\n"
+        }
+      ]
+    },
+    {
+      "giro": 4,
+      "vera": true,
+      "delta": [
+        {
+          "op": "add",
+          "path": "/file/src/util.js",
+          "value": "export function somma(a, b) {\n  return a + b\n}\n\nexport function sottrai(a, b) {\n  return a - b\n}\n",
+          "prima": null
+        }
+      ]
+    },
+    {
+      "giro": 4,
+      "vera": true,
+      "delta": [
+        {
+          "op": "add",
+          "path": "/file/lib/util.js",
+          "value": "export const versione = 1\n",
+          "prima": null
+        }
+      ]
+    },
+    {
+      "giro": 4,
+      "vera": true,
+      "delta": [
+        {
+          "op": "replace",
+          "path": "/file/src/util.js",
+          "value": "export function somma(a, b) {\n  return a + b\n}\n",
+          "prima": "export function somma(a, b) {\n  return a + b\n}\n\nexport function sottrai(a, b) {\n  return a - b\n}\n"
+        }
+      ]
+    },
+    {
+      "giro": 9,
+      "vera": false,
+      "delta": [
+        {
+          "op": "replace",
+          "path": "/file/crlf.txt",
+          "prima": "uno\r\ndue\r\ntre\r\n",
+          "value": "uno\r\nDUE\r\ntre\r\n"
+        }
+      ]
+    },
+    {
+      "giro": 10,
+      "vera": false,
+      "delta": [
+        {
+          "op": "add",
+          "path": "/file/vecchio-chiamante.txt",
+          "value": "a\nb\n"
+        }
+      ]
+    },
+    {
+      "giro": 11,
+      "vera": false,
+      "delta": [
+        {
+          "op": "replace",
+          "path": "/file/vecchio-chiamante-2.txt",
+          "value": "a\nb"
+        }
+      ]
+    },
+    {
+      "giro": 12,
+      "vera": false,
+      "delta": [
+        {
+          "op": "replace",
+          "path": "/file/lungo.txt",
+          "prima": {
+            "righeNumerate": 1501
+          },
+          "value": {
+            "righeNumerate": 1501,
+            "piu": "fine"
+          }
+        }
+      ]
+    },
+    {
+      "giro": 13,
+      "vera": false,
+      "delta": [
+        {
+          "op": "replace",
+          "path": "/file/svuotato.py",
+          "prima": "def a():\n    pass\n\nclass B:\n    pass\n\nasync def c():\n    pass\n",
+          "value": ""
+        }
+      ]
+    },
+    {
+      "giro": 14,
+      "vera": false,
+      "delta": [
+        {
+          "op": "replace",
+          "path": "/file/simboli.js",
+          "prima": "export async function uno() {}\nexport class Due {}\nfunction tre() {}\n  function annidata() {}\n",
+          "value": "function tre() {}\n"
+        }
+      ]
+    },
+    {
+      "giro": 15,
+      "vera": false,
+      "delta": [
+        {
+          "op": "replace",
+          "path": "/file/stesso.txt",
+          "prima": "x\n",
+          "value": "x\n"
+        }
+      ]
+    },
+    {
+      "giro": 16,
+      "vera": false,
+      "delta": [
+        {
+          "op": "add",
+          "path": "/file/a/b/c/index.js",
+          "prima": null,
+          "value": "export {}\n"
+        }
+      ]
+    },
+    {
+      "giro": 17,
+      "vera": false,
+      "delta": [
+        {
+          "op": "add",
+          "path": "/file/d/b/c/index.js",
+          "prima": null,
+          "value": "export {}\n"
+        }
+      ]
+    },
+    {
+      "giro": 18,
+      "vera": false,
+      "delta": [
+        {
+          "op": "add",
+          "path": "/file/vuoto.txt",
+          "prima": null,
+          "value": ""
+        }
+      ]
+    },
+    {
+      "giro": 19,
+      "vera": false,
+      "delta": [
+        {
+          "op": "add",
+          "path": "/file/progetto-molto-lungo/sottocartella-profonda/x/y/index.js",
+          "prima": null,
+          "value": "export {}\n"
+        }
+      ]
+    },
+    {
+      "giro": 20,
+      "vera": false,
+      "delta": [
+        {
+          "op": "add",
+          "path": "/file/altro-progetto-lungo/sottocartella-profonda/x/y/index.js",
+          "prima": null,
+          "value": "export {}\n"
+        }
+      ]
+    }
+  ],
+  "perScrittura": [
+    {
+      "path": "slugify.mjs",
+      "giro": 3,
+      "nuovo": true,
+      "diffVero": true,
+      "code": [
+        [
+          "add",
+          "   1 + export const slugify = (t) => t.toLowerCase()"
+        ]
+      ],
+      "simboliPersi": []
+    },
+    {
+      "path": "slugify.mjs",
+      "giro": 3,
+      "nuovo": false,
+      "diffVero": true,
+      "code": [
+        [
+          "del",
+          "     - export const slugify = (t) => t.toLowerCase()"
+        ],
+        [
+          "add",
+          "   1 + export const slugify = (t) => t"
+        ],
+        [
+          "add",
+          "   2 +   .toLowerCase()"
+        ],
+        [
+          "add",
+          "   3 +   .trim()"
+        ],
+        [
+          "add",
+          "   4 +   .replace(/\\s+/g, '-')"
+        ]
+      ],
+      "simboliPersi": []
+    },
+    {
+      "path": "src/util.js",
+      "giro": 4,
+      "nuovo": true,
+      "diffVero": true,
+      "code": [
+        [
+          "add",
+          "   1 + export function somma(a, b) {"
+        ],
+        [
+          "add",
+          "   2 +   return a + b"
+        ],
+        [
+          "add",
+          "   3 + }"
+        ],
+        [
+          "add",
+          "   4 + "
+        ],
+        [
+          "add",
+          "   5 + export function sottrai(a, b) {"
+        ],
+        [
+          "add",
+          "   6 +   return a - b"
+        ],
+        [
+          "add",
+          "   7 + }"
+        ]
+      ],
+      "simboliPersi": []
+    },
+    {
+      "path": "lib/util.js",
+      "giro": 4,
+      "nuovo": true,
+      "diffVero": true,
+      "code": [
+        [
+          "add",
+          "   1 + export const versione = 1"
+        ]
+      ],
+      "simboliPersi": []
+    },
+    {
+      "path": "src/util.js",
+      "giro": 4,
+      "nuovo": false,
+      "diffVero": true,
+      "code": [
+        [
+          "ctx",
+          "   1   export function somma(a, b) {"
+        ],
+        [
+          "ctx",
+          "   2     return a + b"
+        ],
+        [
+          "ctx",
+          "   3   }"
+        ],
+        [
+          "del",
+          "     - "
+        ],
+        [
+          "del",
+          "     - export function sottrai(a, b) {"
+        ],
+        [
+          "del",
+          "     -   return a - b"
+        ],
+        [
+          "del",
+          "     - }"
+        ]
+      ],
+      "simboliPersi": [
+        "sottrai"
+      ]
+    },
+    {
+      "path": "crlf.txt",
+      "giro": 9,
+      "nuovo": false,
+      "diffVero": true,
+      "code": [
+        [
+          "ctx",
+          "   1   uno"
+        ],
+        [
+          "del",
+          "     - due"
+        ],
+        [
+          "add",
+          "   2 + DUE"
+        ],
+        [
+          "ctx",
+          "   3   tre"
+        ]
+      ],
+      "simboliPersi": []
+    },
+    {
+      "path": "vecchio-chiamante.txt",
+      "giro": 10,
+      "nuovo": true,
+      "diffVero": false,
+      "code": [
+        [
+          "add",
+          "   1 + a"
+        ],
+        [
+          "add",
+          "   2 + b"
+        ],
+        [
+          "add",
+          "   3 + "
+        ]
+      ],
+      "simboliPersi": []
+    },
+    {
+      "path": "vecchio-chiamante-2.txt",
+      "giro": 11,
+      "nuovo": false,
+      "diffVero": false,
+      "code": [
+        [
+          "ctx",
+          "   1   a"
+        ],
+        [
+          "ctx",
+          "   2   b"
+        ]
+      ],
+      "simboliPersi": []
+    },
+    {
+      "path": "lungo.txt",
+      "giro": 12,
+      "nuovo": false,
+      "diffVero": false,
+      "code": {
+        "lunghezza": 1502,
+        "testa": [
+          [
+            "ctx",
+            "   1   riga 0"
+          ],
+          [
+            "ctx",
+            "   2   riga 1"
+          ],
+          [
+            "ctx",
+            "   3   riga 2"
+          ]
+        ],
+        "coda": [
+          [
+            "ctx",
+            "1500   riga 1499"
+          ],
+          [
+            "ctx",
+            "1501   riga 1500"
+          ],
+          [
+            "ctx",
+            "1502   fine"
+          ]
+        ]
+      },
+      "simboliPersi": []
+    },
+    {
+      "path": "svuotato.py",
+      "giro": 13,
+      "nuovo": false,
+      "diffVero": true,
+      "code": [
+        [
+          "del",
+          "     - def a():"
+        ],
+        [
+          "del",
+          "     -     pass"
+        ],
+        [
+          "del",
+          "     - "
+        ],
+        [
+          "del",
+          "     - class B:"
+        ],
+        [
+          "del",
+          "     -     pass"
+        ],
+        [
+          "del",
+          "     - "
+        ],
+        [
+          "del",
+          "     - async def c():"
+        ],
+        [
+          "del",
+          "     -     pass"
+        ]
+      ],
+      "simboliPersi": [
+        "a",
+        "B",
+        "c"
+      ]
+    },
+    {
+      "path": "simboli.js",
+      "giro": 14,
+      "nuovo": false,
+      "diffVero": true,
+      "code": [
+        [
+          "del",
+          "     - export async function uno() {}"
+        ],
+        [
+          "del",
+          "     - export class Due {}"
+        ],
+        [
+          "ctx",
+          "   1   function tre() {}"
+        ],
+        [
+          "del",
+          "     -   function annidata() {}"
+        ]
+      ],
+      "simboliPersi": [
+        "uno",
+        "Due"
+      ]
+    },
+    {
+      "path": "stesso.txt",
+      "giro": 15,
+      "nuovo": false,
+      "diffVero": true,
+      "code": [
+        [
+          "ctx",
+          "   1   x"
+        ]
+      ],
+      "simboliPersi": []
+    },
+    {
+      "path": "a/b/c/index.js",
+      "giro": 16,
+      "nuovo": true,
+      "diffVero": true,
+      "code": [
+        [
+          "add",
+          "   1 + export {}"
+        ]
+      ],
+      "simboliPersi": []
+    },
+    {
+      "path": "d/b/c/index.js",
+      "giro": 17,
+      "nuovo": true,
+      "diffVero": true,
+      "code": [
+        [
+          "add",
+          "   1 + export {}"
+        ]
+      ],
+      "simboliPersi": []
+    },
+    {
+      "path": "vuoto.txt",
+      "giro": 18,
+      "nuovo": true,
+      "diffVero": true,
+      "code": [],
+      "simboliPersi": []
+    },
+    {
+      "path": "progetto-molto-lungo/sottocartella-profonda/x/y/index.js",
+      "giro": 19,
+      "nuovo": true,
+      "diffVero": true,
+      "code": [
+        [
+          "add",
+          "   1 + export {}"
+        ]
+      ],
+      "simboliPersi": []
+    },
+    {
+      "path": "altro-progetto-lungo/sottocartella-profonda/x/y/index.js",
+      "giro": 20,
+      "nuovo": true,
+      "diffVero": true,
+      "code": [
+        [
+          "add",
+          "   1 + export {}"
+        ]
+      ],
+      "simboliPersi": []
+    }
+  ],
+  "voci": [
+    {
+      "path": "slugify.mjs",
+      "giro": 3,
+      "nuovo": false,
+      "diffVero": true,
+      "code": [
+        [
+          "del",
+          "     - export const slugify = (t) => t.toLowerCase()"
+        ],
+        [
+          "add",
+          "   1 + export const slugify = (t) => t"
+        ],
+        [
+          "add",
+          "   2 +   .toLowerCase()"
+        ],
+        [
+          "add",
+          "   3 +   .trim()"
+        ],
+        [
+          "add",
+          "   4 +   .replace(/\\s+/g, '-')"
+        ]
+      ],
+      "simboliPersi": []
+    },
+    {
+      "path": "src/util.js",
+      "giro": 4,
+      "nuovo": false,
+      "diffVero": true,
+      "code": [
+        [
+          "ctx",
+          "   1   export function somma(a, b) {"
+        ],
+        [
+          "ctx",
+          "   2     return a + b"
+        ],
+        [
+          "ctx",
+          "   3   }"
+        ],
+        [
+          "del",
+          "     - "
+        ],
+        [
+          "del",
+          "     - export function sottrai(a, b) {"
+        ],
+        [
+          "del",
+          "     -   return a - b"
+        ],
+        [
+          "del",
+          "     - }"
+        ]
+      ],
+      "simboliPersi": [
+        "sottrai"
+      ]
+    },
+    {
+      "path": "lib/util.js",
+      "giro": 4,
+      "nuovo": true,
+      "diffVero": true,
+      "code": [
+        [
+          "add",
+          "   1 + export const versione = 1"
+        ]
+      ],
+      "simboliPersi": []
+    },
+    {
+      "path": "crlf.txt",
+      "giro": 9,
+      "nuovo": false,
+      "diffVero": true,
+      "code": [
+        [
+          "ctx",
+          "   1   uno"
+        ],
+        [
+          "del",
+          "     - due"
+        ],
+        [
+          "add",
+          "   2 + DUE"
+        ],
+        [
+          "ctx",
+          "   3   tre"
+        ]
+      ],
+      "simboliPersi": []
+    },
+    {
+      "path": "vecchio-chiamante.txt",
+      "giro": 10,
+      "nuovo": true,
+      "diffVero": false,
+      "code": [
+        [
+          "add",
+          "   1 + a"
+        ],
+        [
+          "add",
+          "   2 + b"
+        ],
+        [
+          "add",
+          "   3 + "
+        ]
+      ],
+      "simboliPersi": []
+    },
+    {
+      "path": "vecchio-chiamante-2.txt",
+      "giro": 11,
+      "nuovo": false,
+      "diffVero": false,
+      "code": [
+        [
+          "ctx",
+          "   1   a"
+        ],
+        [
+          "ctx",
+          "   2   b"
+        ]
+      ],
+      "simboliPersi": []
+    },
+    {
+      "path": "lungo.txt",
+      "giro": 12,
+      "nuovo": false,
+      "diffVero": false,
+      "code": {
+        "lunghezza": 1502,
+        "testa": [
+          [
+            "ctx",
+            "   1   riga 0"
+          ],
+          [
+            "ctx",
+            "   2   riga 1"
+          ],
+          [
+            "ctx",
+            "   3   riga 2"
+          ]
+        ],
+        "coda": [
+          [
+            "ctx",
+            "1500   riga 1499"
+          ],
+          [
+            "ctx",
+            "1501   riga 1500"
+          ],
+          [
+            "ctx",
+            "1502   fine"
+          ]
+        ]
+      },
+      "simboliPersi": []
+    },
+    {
+      "path": "svuotato.py",
+      "giro": 13,
+      "nuovo": false,
+      "diffVero": true,
+      "code": [
+        [
+          "del",
+          "     - def a():"
+        ],
+        [
+          "del",
+          "     -     pass"
+        ],
+        [
+          "del",
+          "     - "
+        ],
+        [
+          "del",
+          "     - class B:"
+        ],
+        [
+          "del",
+          "     -     pass"
+        ],
+        [
+          "del",
+          "     - "
+        ],
+        [
+          "del",
+          "     - async def c():"
+        ],
+        [
+          "del",
+          "     -     pass"
+        ]
+      ],
+      "simboliPersi": [
+        "a",
+        "B",
+        "c"
+      ]
+    },
+    {
+      "path": "simboli.js",
+      "giro": 14,
+      "nuovo": false,
+      "diffVero": true,
+      "code": [
+        [
+          "del",
+          "     - export async function uno() {}"
+        ],
+        [
+          "del",
+          "     - export class Due {}"
+        ],
+        [
+          "ctx",
+          "   1   function tre() {}"
+        ],
+        [
+          "del",
+          "     -   function annidata() {}"
+        ]
+      ],
+      "simboliPersi": [
+        "uno",
+        "Due"
+      ]
+    },
+    {
+      "path": "stesso.txt",
+      "giro": 15,
+      "nuovo": false,
+      "diffVero": true,
+      "code": [
+        [
+          "ctx",
+          "   1   x"
+        ]
+      ],
+      "simboliPersi": []
+    },
+    {
+      "path": "a/b/c/index.js",
+      "giro": 16,
+      "nuovo": true,
+      "diffVero": true,
+      "code": [
+        [
+          "add",
+          "   1 + export {}"
+        ]
+      ],
+      "simboliPersi": []
+    },
+    {
+      "path": "d/b/c/index.js",
+      "giro": 17,
+      "nuovo": true,
+      "diffVero": true,
+      "code": [
+        [
+          "add",
+          "   1 + export {}"
+        ]
+      ],
+      "simboliPersi": []
+    },
+    {
+      "path": "vuoto.txt",
+      "giro": 18,
+      "nuovo": true,
+      "diffVero": true,
+      "code": [],
+      "simboliPersi": []
+    },
+    {
+      "path": "progetto-molto-lungo/sottocartella-profonda/x/y/index.js",
+      "giro": 19,
+      "nuovo": true,
+      "diffVero": true,
+      "code": [
+        [
+          "add",
+          "   1 + export {}"
+        ]
+      ],
+      "simboliPersi": []
+    },
+    {
+      "path": "altro-progetto-lungo/sottocartella-profonda/x/y/index.js",
+      "giro": 20,
+      "nuovo": true,
+      "diffVero": true,
+      "code": [
+        [
+          "add",
+          "   1 + export {}"
+        ]
+      ],
+      "simboliPersi": []
+    }
+  ],
+  "it": {
+    "riassunto": "15 file modificati · +13 −17",
+    "riassuntoVuoto": "Nessuna modifica in questa sessione",
+    "riassuntoUno": "1 file modificato · +4 −1",
+    "voci": [
+      {
+        "path": "slugify.mjs",
+        "conta": {
+          "aggiunte": 4,
+          "rimozioni": 1
+        },
+        "sottotitolo": "giro 3 · file modificato",
+        "suggerimento": "slugify.mjs — giro 3 · file modificato",
+        "etichetta": "slugify.mjs",
+        "copia": "### slugify.mjs\n     - export const slugify = (t) => t.toLowerCase()\n   1 + export const slugify = (t) => t\n   2 +   .toLowerCase()\n   3 +   .trim()\n   4 +   .replace(/\\s+/g, '-')\n",
+        "card": {
+          "testa": {
+            "percorso": "slugify.mjs",
+            "piu": "+4",
+            "meno": "−1",
+            "giro": "giro 3"
+          },
+          "righe": [
+            [
+              "del",
+              "     - export const slugify = (t) => t.toLowerCase()"
+            ],
+            [
+              "add",
+              "   1 + export const slugify = (t) => t"
+            ],
+            [
+              "add",
+              "   2 +   .toLowerCase()"
+            ],
+            [
+              "add",
+              "   3 +   .trim()"
+            ],
+            [
+              "add",
+              "   4 +   .replace(/\\s+/g, '-')"
+            ]
+          ],
+          "avviso": null
+        }
+      },
+      {
+        "path": "src/util.js",
+        "conta": {
+          "aggiunte": 0,
+          "rimozioni": 4
+        },
+        "sottotitolo": "giro 4 · file modificato · ⚠ 1 simbolo sparito",
+        "suggerimento": "src/util.js — giro 4 · file modificato · ⚠ 1 simbolo sparito",
+        "etichetta": "src/util.js",
+        "copia": "### src/util.js\n   1   export function somma(a, b) {\n   2     return a + b\n   3   }\n     - \n     - export function sottrai(a, b) {\n     -   return a - b\n     - }\n",
+        "card": {
+          "testa": {
+            "percorso": "src/util.js",
+            "piu": "+0",
+            "meno": "−4",
+            "giro": "giro 4"
+          },
+          "righe": [
+            [
+              "ctx",
+              "   1   export function somma(a, b) {"
+            ],
+            [
+              "ctx",
+              "   2     return a + b"
+            ],
+            [
+              "ctx",
+              "   3   }"
+            ],
+            [
+              "del",
+              "     - "
+            ],
+            [
+              "del",
+              "     - export function sottrai(a, b) {"
+            ],
+            [
+              "del",
+              "     -   return a - b"
+            ],
+            [
+              "del",
+              "     - }"
+            ]
+          ],
+          "avviso": {
+            "badge": "Attenzione",
+            "titolo": "Questa riscrittura fa sparire una funzione o classe che c'erano prima",
+            "elenco": "sottrai"
+          }
+        }
+      },
+      {
+        "path": "lib/util.js",
+        "conta": {
+          "aggiunte": 1,
+          "rimozioni": 0
+        },
+        "sottotitolo": "giro 4 · nuovo file",
+        "suggerimento": "lib/util.js — giro 4 · nuovo file",
+        "etichetta": "lib/util.js",
+        "copia": "### lib/util.js (nuovo)\n   1 + export const versione = 1\n",
+        "card": {
+          "testa": {
+            "percorso": "lib/util.js",
+            "piu": "+1",
+            "meno": null,
+            "giro": "giro 4"
+          },
+          "righe": [
+            [
+              "add",
+              "   1 + export const versione = 1"
+            ]
+          ],
+          "avviso": null
+        }
+      },
+      {
+        "path": "crlf.txt",
+        "conta": {
+          "aggiunte": 1,
+          "rimozioni": 1
+        },
+        "sottotitolo": "giro 9 · file modificato",
+        "suggerimento": "crlf.txt — giro 9 · file modificato",
+        "etichetta": "crlf.txt",
+        "copia": "### crlf.txt\n   1   uno\n     - due\n   2 + DUE\n   3   tre\n",
+        "card": {
+          "testa": {
+            "percorso": "crlf.txt",
+            "piu": "+1",
+            "meno": "−1",
+            "giro": "giro 9"
+          },
+          "righe": [
+            [
+              "ctx",
+              "   1   uno"
+            ],
+            [
+              "del",
+              "     - due"
+            ],
+            [
+              "add",
+              "   2 + DUE"
+            ],
+            [
+              "ctx",
+              "   3   tre"
+            ]
+          ],
+          "avviso": null
+        }
+      },
+      {
+        "path": "vecchio-chiamante.txt",
+        "conta": {
+          "aggiunte": 3,
+          "rimozioni": 0
+        },
+        "sottotitolo": "giro 10 · nuovo file",
+        "suggerimento": "vecchio-chiamante.txt — giro 10 · nuovo file",
+        "etichetta": "vecchio-chiamante.txt",
+        "copia": "### vecchio-chiamante.txt (nuovo)\n   1 + a\n   2 + b\n   3 + \n",
+        "card": {
+          "testa": {
+            "percorso": "vecchio-chiamante.txt",
+            "piu": "+3",
+            "meno": null,
+            "giro": "giro 10"
+          },
+          "righe": [
+            [
+              "add",
+              "   1 + a"
+            ],
+            [
+              "add",
+              "   2 + b"
+            ],
+            [
+              "add",
+              "   3 + "
+            ]
+          ],
+          "avviso": null
+        }
+      },
+      {
+        "path": "vecchio-chiamante-2.txt",
+        "conta": {
+          "aggiunte": 0,
+          "rimozioni": 0
+        },
+        "sottotitolo": "giro 11 · file modificato",
+        "suggerimento": "vecchio-chiamante-2.txt — giro 11 · file modificato",
+        "etichetta": "vecchio-chiamante-2.txt",
+        "copia": "### vecchio-chiamante-2.txt\n   1   a\n   2   b\n",
+        "card": {
+          "testa": {
+            "percorso": "vecchio-chiamante-2.txt",
+            "piu": "+0",
+            "meno": null,
+            "giro": "giro 11"
+          },
+          "righe": [
+            [
+              "ctx",
+              "   1   a"
+            ],
+            [
+              "ctx",
+              "   2   b"
+            ]
+          ],
+          "avviso": null
+        }
+      },
+      {
+        "path": "lungo.txt",
+        "conta": {
+          "aggiunte": 0,
+          "rimozioni": 0
+        },
+        "sottotitolo": "giro 12 · file modificato",
+        "suggerimento": "lungo.txt — giro 12 · file modificato",
+        "etichetta": "lungo.txt",
+        "copia": {
+          "lunghezza": 1504,
+          "testa": [
+            "### lungo.txt",
+            "   1   riga 0",
+            "   2   riga 1"
+          ],
+          "coda": [
+            "1501   riga 1500",
+            "1502   fine",
+            ""
+          ]
+        },
+        "card": {
+          "testa": {
+            "percorso": "lungo.txt",
+            "piu": "+0",
+            "meno": null,
+            "giro": "giro 12"
+          },
+          "righe": {
+            "lunghezza": 1502,
+            "testa": [
+              [
+                "ctx",
+                "   1   riga 0"
+              ],
+              [
+                "ctx",
+                "   2   riga 1"
+              ],
+              [
+                "ctx",
+                "   3   riga 2"
+              ]
+            ],
+            "coda": [
+              [
+                "ctx",
+                "1500   riga 1499"
+              ],
+              [
+                "ctx",
+                "1501   riga 1500"
+              ],
+              [
+                "ctx",
+                "1502   fine"
+              ]
+            ]
+          },
+          "avviso": null
+        }
+      },
+      {
+        "path": "svuotato.py",
+        "conta": {
+          "aggiunte": 0,
+          "rimozioni": 8
+        },
+        "sottotitolo": "giro 13 · file modificato · ⚠ 3 simboli spariti",
+        "suggerimento": "svuotato.py — giro 13 · file modificato · ⚠ 3 simboli spariti",
+        "etichetta": "svuotato.py",
+        "copia": "### svuotato.py\n     - def a():\n     -     pass\n     - \n     - class B:\n     -     pass\n     - \n     - async def c():\n     -     pass\n",
+        "card": {
+          "testa": {
+            "percorso": "svuotato.py",
+            "piu": "+0",
+            "meno": "−8",
+            "giro": "giro 13"
+          },
+          "righe": [
+            [
+              "del",
+              "     - def a():"
+            ],
+            [
+              "del",
+              "     -     pass"
+            ],
+            [
+              "del",
+              "     - "
+            ],
+            [
+              "del",
+              "     - class B:"
+            ],
+            [
+              "del",
+              "     -     pass"
+            ],
+            [
+              "del",
+              "     - "
+            ],
+            [
+              "del",
+              "     - async def c():"
+            ],
+            [
+              "del",
+              "     -     pass"
+            ]
+          ],
+          "avviso": {
+            "badge": "Attenzione",
+            "titolo": "Questa riscrittura fa sparire 3 funzioni o classi che c'erano prima",
+            "elenco": "a, B, c"
+          }
+        }
+      },
+      {
+        "path": "simboli.js",
+        "conta": {
+          "aggiunte": 0,
+          "rimozioni": 3
+        },
+        "sottotitolo": "giro 14 · file modificato · ⚠ 2 simboli spariti",
+        "suggerimento": "simboli.js — giro 14 · file modificato · ⚠ 2 simboli spariti",
+        "etichetta": "simboli.js",
+        "copia": "### simboli.js\n     - export async function uno() {}\n     - export class Due {}\n   1   function tre() {}\n     -   function annidata() {}\n",
+        "card": {
+          "testa": {
+            "percorso": "simboli.js",
+            "piu": "+0",
+            "meno": "−3",
+            "giro": "giro 14"
+          },
+          "righe": [
+            [
+              "del",
+              "     - export async function uno() {}"
+            ],
+            [
+              "del",
+              "     - export class Due {}"
+            ],
+            [
+              "ctx",
+              "   1   function tre() {}"
+            ],
+            [
+              "del",
+              "     -   function annidata() {}"
+            ]
+          ],
+          "avviso": {
+            "badge": "Attenzione",
+            "titolo": "Questa riscrittura fa sparire 2 funzioni o classi che c'erano prima",
+            "elenco": "uno, Due"
+          }
+        }
+      },
+      {
+        "path": "stesso.txt",
+        "conta": {
+          "aggiunte": 0,
+          "rimozioni": 0
+        },
+        "sottotitolo": "giro 15 · file modificato",
+        "suggerimento": "stesso.txt — giro 15 · file modificato",
+        "etichetta": "stesso.txt",
+        "copia": "### stesso.txt\n   1   x\n",
+        "card": {
+          "testa": {
+            "percorso": "stesso.txt",
+            "piu": "+0",
+            "meno": null,
+            "giro": "giro 15"
+          },
+          "righe": [
+            [
+              "ctx",
+              "   1   x"
+            ]
+          ],
+          "avviso": null
+        }
+      },
+      {
+        "path": "a/b/c/index.js",
+        "conta": {
+          "aggiunte": 1,
+          "rimozioni": 0
+        },
+        "sottotitolo": "giro 16 · nuovo file",
+        "suggerimento": "a/b/c/index.js — giro 16 · nuovo file",
+        "etichetta": "a/b/c/index.js",
+        "copia": "### a/b/c/index.js (nuovo)\n   1 + export {}\n",
+        "card": {
+          "testa": {
+            "percorso": "a/b/c/index.js",
+            "piu": "+1",
+            "meno": null,
+            "giro": "giro 16"
+          },
+          "righe": [
+            [
+              "add",
+              "   1 + export {}"
+            ]
+          ],
+          "avviso": null
+        }
+      },
+      {
+        "path": "d/b/c/index.js",
+        "conta": {
+          "aggiunte": 1,
+          "rimozioni": 0
+        },
+        "sottotitolo": "giro 17 · nuovo file",
+        "suggerimento": "d/b/c/index.js — giro 17 · nuovo file",
+        "etichetta": "d/b/c/index.js",
+        "copia": "### d/b/c/index.js (nuovo)\n   1 + export {}\n",
+        "card": {
+          "testa": {
+            "percorso": "d/b/c/index.js",
+            "piu": "+1",
+            "meno": null,
+            "giro": "giro 17"
+          },
+          "righe": [
+            [
+              "add",
+              "   1 + export {}"
+            ]
+          ],
+          "avviso": null
+        }
+      },
+      {
+        "path": "vuoto.txt",
+        "conta": {
+          "aggiunte": 0,
+          "rimozioni": 0
+        },
+        "sottotitolo": "giro 18 · nuovo file",
+        "suggerimento": "vuoto.txt — giro 18 · nuovo file",
+        "etichetta": "vuoto.txt",
+        "copia": "### vuoto.txt (nuovo)\n",
+        "card": {
+          "testa": {
+            "percorso": "vuoto.txt",
+            "piu": "+0",
+            "meno": null,
+            "giro": "giro 18"
+          },
+          "righe": [],
+          "avviso": null
+        }
+      },
+      {
+        "path": "progetto-molto-lungo/sottocartella-profonda/x/y/index.js",
+        "conta": {
+          "aggiunte": 1,
+          "rimozioni": 0
+        },
+        "sottotitolo": "giro 19 · nuovo file",
+        "suggerimento": "progetto-molto-lungo/sottocartella-profonda/x/y/index.js — giro 19 · nuovo file",
+        "etichetta": "progetto-molto-lungo/sottocartella-profonda/…dex.js",
+        "copia": "### progetto-molto-lungo/sottocartella-profonda/x/y/index.js (nuovo)\n   1 + export {}\n",
+        "card": {
+          "testa": {
+            "percorso": "progetto-molto-lungo/sottocartella-profonda/x/y/index.js",
+            "piu": "+1",
+            "meno": null,
+            "giro": "giro 19"
+          },
+          "righe": [
+            [
+              "add",
+              "   1 + export {}"
+            ]
+          ],
+          "avviso": null
+        }
+      },
+      {
+        "path": "altro-progetto-lungo/sottocartella-profonda/x/y/index.js",
+        "conta": {
+          "aggiunte": 1,
+          "rimozioni": 0
+        },
+        "sottotitolo": "giro 20 · nuovo file",
+        "suggerimento": "altro-progetto-lungo/sottocartella-profonda/x/y/index.js — giro 20 · nuovo file",
+        "etichetta": "altro-progetto-lungo/sottocartella-profonda/…dex.js",
+        "copia": "### altro-progetto-lungo/sottocartella-profonda/x/y/index.js (nuovo)\n   1 + export {}\n",
+        "card": {
+          "testa": {
+            "percorso": "altro-progetto-lungo/sottocartella-profonda/x/y/index.js",
+            "piu": "+1",
+            "meno": null,
+            "giro": "giro 20"
+          },
+          "righe": [
+            [
+              "add",
+              "   1 + export {}"
+            ]
+          ],
+          "avviso": null
+        }
+      }
+    ],
+    "vuota": {
+      "testa": {
+        "percorso": "—",
+        "piu": null,
+        "meno": null,
+        "giro": null
+      },
+      "righe": [
+        [
+          "ctx",
+          "Nessun file scritto finora."
+        ]
+      ],
+      "avviso": null
+    },
+    "menu": {
+      "label": "Azioni sul file",
+      "apri": "Apri il file",
+      "copiaPercorso": "Copia il percorso",
+      "copiaDiff": "Copia il diff di questo file"
+    },
+    "copiati": [
+      "Diff di 1 file copiato",
+      "Diff di 2 file copiato",
+      "Diff di 5 file copiato"
+    ]
+  },
+  "en": {
+    "riassunto": "15 files changed · +13 −17",
+    "riassuntoVuoto": "No changes in this session",
+    "riassuntoUno": "1 file changed · +4 −1",
+    "voci": [
+      {
+        "path": "slugify.mjs",
+        "conta": {
+          "aggiunte": 4,
+          "rimozioni": 1
+        },
+        "sottotitolo": "turn 3 · modified file",
+        "suggerimento": "slugify.mjs — turn 3 · modified file",
+        "etichetta": "slugify.mjs",
+        "copia": "### slugify.mjs\n     - export const slugify = (t) => t.toLowerCase()\n   1 + export const slugify = (t) => t\n   2 +   .toLowerCase()\n   3 +   .trim()\n   4 +   .replace(/\\s+/g, '-')\n",
+        "card": {
+          "testa": {
+            "percorso": "slugify.mjs",
+            "piu": "+4",
+            "meno": "−1",
+            "giro": "turn 3"
+          },
+          "righe": [
+            [
+              "del",
+              "     - export const slugify = (t) => t.toLowerCase()"
+            ],
+            [
+              "add",
+              "   1 + export const slugify = (t) => t"
+            ],
+            [
+              "add",
+              "   2 +   .toLowerCase()"
+            ],
+            [
+              "add",
+              "   3 +   .trim()"
+            ],
+            [
+              "add",
+              "   4 +   .replace(/\\s+/g, '-')"
+            ]
+          ],
+          "avviso": null
+        }
+      },
+      {
+        "path": "src/util.js",
+        "conta": {
+          "aggiunte": 0,
+          "rimozioni": 4
+        },
+        "sottotitolo": "turn 4 · modified file · ⚠ 1 symbol gone",
+        "suggerimento": "src/util.js — turn 4 · modified file · ⚠ 1 symbol gone",
+        "etichetta": "src/util.js",
+        "copia": "### src/util.js\n   1   export function somma(a, b) {\n   2     return a + b\n   3   }\n     - \n     - export function sottrai(a, b) {\n     -   return a - b\n     - }\n",
+        "card": {
+          "testa": {
+            "percorso": "src/util.js",
+            "piu": "+0",
+            "meno": "−4",
+            "giro": "turn 4"
+          },
+          "righe": [
+            [
+              "ctx",
+              "   1   export function somma(a, b) {"
+            ],
+            [
+              "ctx",
+              "   2     return a + b"
+            ],
+            [
+              "ctx",
+              "   3   }"
+            ],
+            [
+              "del",
+              "     - "
+            ],
+            [
+              "del",
+              "     - export function sottrai(a, b) {"
+            ],
+            [
+              "del",
+              "     -   return a - b"
+            ],
+            [
+              "del",
+              "     - }"
+            ]
+          ],
+          "avviso": {
+            "badge": "Warning",
+            "titolo": "This rewrite removes a function or class that existed before",
+            "elenco": "sottrai"
+          }
+        }
+      },
+      {
+        "path": "lib/util.js",
+        "conta": {
+          "aggiunte": 1,
+          "rimozioni": 0
+        },
+        "sottotitolo": "turn 4 · new file",
+        "suggerimento": "lib/util.js — turn 4 · new file",
+        "etichetta": "lib/util.js",
+        "copia": "### lib/util.js (new)\n   1 + export const versione = 1\n",
+        "card": {
+          "testa": {
+            "percorso": "lib/util.js",
+            "piu": "+1",
+            "meno": null,
+            "giro": "turn 4"
+          },
+          "righe": [
+            [
+              "add",
+              "   1 + export const versione = 1"
+            ]
+          ],
+          "avviso": null
+        }
+      },
+      {
+        "path": "crlf.txt",
+        "conta": {
+          "aggiunte": 1,
+          "rimozioni": 1
+        },
+        "sottotitolo": "turn 9 · modified file",
+        "suggerimento": "crlf.txt — turn 9 · modified file",
+        "etichetta": "crlf.txt",
+        "copia": "### crlf.txt\n   1   uno\n     - due\n   2 + DUE\n   3   tre\n",
+        "card": {
+          "testa": {
+            "percorso": "crlf.txt",
+            "piu": "+1",
+            "meno": "−1",
+            "giro": "turn 9"
+          },
+          "righe": [
+            [
+              "ctx",
+              "   1   uno"
+            ],
+            [
+              "del",
+              "     - due"
+            ],
+            [
+              "add",
+              "   2 + DUE"
+            ],
+            [
+              "ctx",
+              "   3   tre"
+            ]
+          ],
+          "avviso": null
+        }
+      },
+      {
+        "path": "vecchio-chiamante.txt",
+        "conta": {
+          "aggiunte": 3,
+          "rimozioni": 0
+        },
+        "sottotitolo": "turn 10 · new file",
+        "suggerimento": "vecchio-chiamante.txt — turn 10 · new file",
+        "etichetta": "vecchio-chiamante.txt",
+        "copia": "### vecchio-chiamante.txt (new)\n   1 + a\n   2 + b\n   3 + \n",
+        "card": {
+          "testa": {
+            "percorso": "vecchio-chiamante.txt",
+            "piu": "+3",
+            "meno": null,
+            "giro": "turn 10"
+          },
+          "righe": [
+            [
+              "add",
+              "   1 + a"
+            ],
+            [
+              "add",
+              "   2 + b"
+            ],
+            [
+              "add",
+              "   3 + "
+            ]
+          ],
+          "avviso": null
+        }
+      },
+      {
+        "path": "vecchio-chiamante-2.txt",
+        "conta": {
+          "aggiunte": 0,
+          "rimozioni": 0
+        },
+        "sottotitolo": "turn 11 · modified file",
+        "suggerimento": "vecchio-chiamante-2.txt — turn 11 · modified file",
+        "etichetta": "vecchio-chiamante-2.txt",
+        "copia": "### vecchio-chiamante-2.txt\n   1   a\n   2   b\n",
+        "card": {
+          "testa": {
+            "percorso": "vecchio-chiamante-2.txt",
+            "piu": "+0",
+            "meno": null,
+            "giro": "turn 11"
+          },
+          "righe": [
+            [
+              "ctx",
+              "   1   a"
+            ],
+            [
+              "ctx",
+              "   2   b"
+            ]
+          ],
+          "avviso": null
+        }
+      },
+      {
+        "path": "lungo.txt",
+        "conta": {
+          "aggiunte": 0,
+          "rimozioni": 0
+        },
+        "sottotitolo": "turn 12 · modified file",
+        "suggerimento": "lungo.txt — turn 12 · modified file",
+        "etichetta": "lungo.txt",
+        "copia": {
+          "lunghezza": 1504,
+          "testa": [
+            "### lungo.txt",
+            "   1   riga 0",
+            "   2   riga 1"
+          ],
+          "coda": [
+            "1501   riga 1500",
+            "1502   fine",
+            ""
+          ]
+        },
+        "card": {
+          "testa": {
+            "percorso": "lungo.txt",
+            "piu": "+0",
+            "meno": null,
+            "giro": "turn 12"
+          },
+          "righe": {
+            "lunghezza": 1502,
+            "testa": [
+              [
+                "ctx",
+                "   1   riga 0"
+              ],
+              [
+                "ctx",
+                "   2   riga 1"
+              ],
+              [
+                "ctx",
+                "   3   riga 2"
+              ]
+            ],
+            "coda": [
+              [
+                "ctx",
+                "1500   riga 1499"
+              ],
+              [
+                "ctx",
+                "1501   riga 1500"
+              ],
+              [
+                "ctx",
+                "1502   fine"
+              ]
+            ]
+          },
+          "avviso": null
+        }
+      },
+      {
+        "path": "svuotato.py",
+        "conta": {
+          "aggiunte": 0,
+          "rimozioni": 8
+        },
+        "sottotitolo": "turn 13 · modified file · ⚠ 3 symbols gone",
+        "suggerimento": "svuotato.py — turn 13 · modified file · ⚠ 3 symbols gone",
+        "etichetta": "svuotato.py",
+        "copia": "### svuotato.py\n     - def a():\n     -     pass\n     - \n     - class B:\n     -     pass\n     - \n     - async def c():\n     -     pass\n",
+        "card": {
+          "testa": {
+            "percorso": "svuotato.py",
+            "piu": "+0",
+            "meno": "−8",
+            "giro": "turn 13"
+          },
+          "righe": [
+            [
+              "del",
+              "     - def a():"
+            ],
+            [
+              "del",
+              "     -     pass"
+            ],
+            [
+              "del",
+              "     - "
+            ],
+            [
+              "del",
+              "     - class B:"
+            ],
+            [
+              "del",
+              "     -     pass"
+            ],
+            [
+              "del",
+              "     - "
+            ],
+            [
+              "del",
+              "     - async def c():"
+            ],
+            [
+              "del",
+              "     -     pass"
+            ]
+          ],
+          "avviso": {
+            "badge": "Warning",
+            "titolo": "This rewrite removes 3 functions or classes that existed before",
+            "elenco": "a, B, c"
+          }
+        }
+      },
+      {
+        "path": "simboli.js",
+        "conta": {
+          "aggiunte": 0,
+          "rimozioni": 3
+        },
+        "sottotitolo": "turn 14 · modified file · ⚠ 2 symbols gone",
+        "suggerimento": "simboli.js — turn 14 · modified file · ⚠ 2 symbols gone",
+        "etichetta": "simboli.js",
+        "copia": "### simboli.js\n     - export async function uno() {}\n     - export class Due {}\n   1   function tre() {}\n     -   function annidata() {}\n",
+        "card": {
+          "testa": {
+            "percorso": "simboli.js",
+            "piu": "+0",
+            "meno": "−3",
+            "giro": "turn 14"
+          },
+          "righe": [
+            [
+              "del",
+              "     - export async function uno() {}"
+            ],
+            [
+              "del",
+              "     - export class Due {}"
+            ],
+            [
+              "ctx",
+              "   1   function tre() {}"
+            ],
+            [
+              "del",
+              "     -   function annidata() {}"
+            ]
+          ],
+          "avviso": {
+            "badge": "Warning",
+            "titolo": "This rewrite removes 2 functions or classes that existed before",
+            "elenco": "uno, Due"
+          }
+        }
+      },
+      {
+        "path": "stesso.txt",
+        "conta": {
+          "aggiunte": 0,
+          "rimozioni": 0
+        },
+        "sottotitolo": "turn 15 · modified file",
+        "suggerimento": "stesso.txt — turn 15 · modified file",
+        "etichetta": "stesso.txt",
+        "copia": "### stesso.txt\n   1   x\n",
+        "card": {
+          "testa": {
+            "percorso": "stesso.txt",
+            "piu": "+0",
+            "meno": null,
+            "giro": "turn 15"
+          },
+          "righe": [
+            [
+              "ctx",
+              "   1   x"
+            ]
+          ],
+          "avviso": null
+        }
+      },
+      {
+        "path": "a/b/c/index.js",
+        "conta": {
+          "aggiunte": 1,
+          "rimozioni": 0
+        },
+        "sottotitolo": "turn 16 · new file",
+        "suggerimento": "a/b/c/index.js — turn 16 · new file",
+        "etichetta": "a/b/c/index.js",
+        "copia": "### a/b/c/index.js (new)\n   1 + export {}\n",
+        "card": {
+          "testa": {
+            "percorso": "a/b/c/index.js",
+            "piu": "+1",
+            "meno": null,
+            "giro": "turn 16"
+          },
+          "righe": [
+            [
+              "add",
+              "   1 + export {}"
+            ]
+          ],
+          "avviso": null
+        }
+      },
+      {
+        "path": "d/b/c/index.js",
+        "conta": {
+          "aggiunte": 1,
+          "rimozioni": 0
+        },
+        "sottotitolo": "turn 17 · new file",
+        "suggerimento": "d/b/c/index.js — turn 17 · new file",
+        "etichetta": "d/b/c/index.js",
+        "copia": "### d/b/c/index.js (new)\n   1 + export {}\n",
+        "card": {
+          "testa": {
+            "percorso": "d/b/c/index.js",
+            "piu": "+1",
+            "meno": null,
+            "giro": "turn 17"
+          },
+          "righe": [
+            [
+              "add",
+              "   1 + export {}"
+            ]
+          ],
+          "avviso": null
+        }
+      },
+      {
+        "path": "vuoto.txt",
+        "conta": {
+          "aggiunte": 0,
+          "rimozioni": 0
+        },
+        "sottotitolo": "turn 18 · new file",
+        "suggerimento": "vuoto.txt — turn 18 · new file",
+        "etichetta": "vuoto.txt",
+        "copia": "### vuoto.txt (new)\n",
+        "card": {
+          "testa": {
+            "percorso": "vuoto.txt",
+            "piu": "+0",
+            "meno": null,
+            "giro": "turn 18"
+          },
+          "righe": [],
+          "avviso": null
+        }
+      },
+      {
+        "path": "progetto-molto-lungo/sottocartella-profonda/x/y/index.js",
+        "conta": {
+          "aggiunte": 1,
+          "rimozioni": 0
+        },
+        "sottotitolo": "turn 19 · new file",
+        "suggerimento": "progetto-molto-lungo/sottocartella-profonda/x/y/index.js — turn 19 · new file",
+        "etichetta": "progetto-molto-lungo/sottocartella-profonda/…dex.js",
+        "copia": "### progetto-molto-lungo/sottocartella-profonda/x/y/index.js (new)\n   1 + export {}\n",
+        "card": {
+          "testa": {
+            "percorso": "progetto-molto-lungo/sottocartella-profonda/x/y/index.js",
+            "piu": "+1",
+            "meno": null,
+            "giro": "turn 19"
+          },
+          "righe": [
+            [
+              "add",
+              "   1 + export {}"
+            ]
+          ],
+          "avviso": null
+        }
+      },
+      {
+        "path": "altro-progetto-lungo/sottocartella-profonda/x/y/index.js",
+        "conta": {
+          "aggiunte": 1,
+          "rimozioni": 0
+        },
+        "sottotitolo": "turn 20 · new file",
+        "suggerimento": "altro-progetto-lungo/sottocartella-profonda/x/y/index.js — turn 20 · new file",
+        "etichetta": "altro-progetto-lungo/sottocartella-profonda/…dex.js",
+        "copia": "### altro-progetto-lungo/sottocartella-profonda/x/y/index.js (new)\n   1 + export {}\n",
+        "card": {
+          "testa": {
+            "percorso": "altro-progetto-lungo/sottocartella-profonda/x/y/index.js",
+            "piu": "+1",
+            "meno": null,
+            "giro": "turn 20"
+          },
+          "righe": [
+            [
+              "add",
+              "   1 + export {}"
+            ]
+          ],
+          "avviso": null
+        }
+      }
+    ],
+    "vuota": {
+      "testa": {
+        "percorso": "—",
+        "piu": null,
+        "meno": null,
+        "giro": null
+      },
+      "righe": [
+        [
+          "ctx",
+          "No files written yet."
+        ]
+      ],
+      "avviso": null
+    },
+    "menu": {
+      "label": "File actions",
+      "apri": "Open the file",
+      "copiaPercorso": "Copy the path",
+      "copiaDiff": "Copy this file’s diff"
+    },
+    "copiati": [
+      "Diff of 1 file copied",
+      "Diff of 2 files copied",
+      "Diff of 5 files copied"
+    ]
+  },
+  "compattato": {
+    "file": "lungo.txt",
+    "come": "code, card.righe e copia → {lunghezza, testa, coda}; delta → {righeNumerate}"
+  }
+}

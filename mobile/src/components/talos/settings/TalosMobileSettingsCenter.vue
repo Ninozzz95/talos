@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, ref, watch, type Component } from 'vue'
 import { useTalosI18n } from '@/i18n'
+import TalosMobilePageHeader from '@/components/talos/ui/TalosMobilePageHeader.vue'
 import { Bell, Bot, BrainCircuit, ChevronRight, Globe2, Languages, Mail, Palette, Scale, Search, Settings, Shield, ShieldCheck, Smartphone, DatabaseBackup, User, Volume2, Wrench } from '@lucide/vue'
 import { useTalosSheetNav } from '@/composables/useTalosSheetNav'
 import { useTalosMediaQuery } from '@/composables/useTalosMediaQuery'
@@ -239,6 +240,9 @@ const LOCAL_PANELS: Partial<Record<TalosMobileSettingsTabId, Component>> = {
             @animationend="clearMobilePaneMotion('categories', $event)"
         >
             <div data-testid="settings-category-list" class="settings-category-list">
+                <!-- ⛔ G1 (14/10/2026): l'intestazione delle stazioni sull'elenco delle categorie; nel dettaglio no, lì il
+                     titolo è quello della sezione aperta. -->
+                <TalosMobilePageHeader v-if="mobilePane === 'categories'" :title="t('stations.settingsCenterTitle')" />
                 <button
                     v-if="mobilePane === 'detail'"
                     type="button"

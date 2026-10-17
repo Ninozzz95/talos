@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { onBeforeUnmount, ref, watch } from 'vue'
+import { inject, onBeforeUnmount, ref, watch } from 'vue'
 import { Image as ImageIcon, Sparkles, X } from '@lucide/vue'
 import { useChatController } from '@/stores/chatController'
+import { TALOS_BYTE_IMMAGINE } from '@/lib/chat/byteImmagine'
 
 /**
  * An image in a message bubble, shown as an image.
@@ -23,6 +24,8 @@ const props = defineProps<{
 }>()
 
 const controller = useChatController()
+// K3-C Allegati A2: nel Codice su r4 i byte li legge la schermata da r4; altrove la Libreria, come sempre
+const daAltrove = inject(TALOS_BYTE_IMMAGINE, null)
 const source = ref<string | null>(null)
 const failed = ref(false)
 let current: string | null = null
@@ -56,7 +59,7 @@ watch(() => props.fileId, async (fileId) => {
          * sia la sua dichiarazione. Chiedere il file due volte per leggerlo
          * due volte costerebbe il doppio a ogni foto che scorre.
          */
-        const bytes = await controller.attachments.previewBytes(fileId)
+        const bytes = daAltrove ? await daAltrove(fileId) : await controller.attachments.previewBytes(fileId)
         if (bytes === null) { failed.value = true; return }
         /*
          * Il lettore di provenienza arriva quando serve, non all'avvio.

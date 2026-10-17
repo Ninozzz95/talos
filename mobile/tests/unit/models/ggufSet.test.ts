@@ -186,3 +186,27 @@ describe('grouping a repository into models', () => {
         expect(talosGroupGgufFiles([file('pytorch_model.bin', 5_000_000_000)])).toEqual([])
     })
 })
+
+/**
+ * ⛔ N13-ETICHETTA-01 — MISURATO sul Pad il 12/10/2026: in `LiquidAI/LFM2.5-2.6B-GGUF` le varianti `…-Q4_0.gguf` e
+ * `…-QAD-Q4_0.gguf` comparivano tutte e due come «Q4_0», e la pagina apriva quella non scaricata. Owner 12/10: mostrare
+ * l'etichetta INTERA («QAD-Q4_0»).
+ */
+describe('N13-ETICHETTA — due varianti con la stessa quantizzazione', () => {
+    it('N13-ETICHETTA-01: la parte del nome che le distingue entra nell etichetta («QAD-Q4_0»), l altra resta «Q4_0»', () => {
+        const sets = talosGroupGgufFiles([
+            file('LFM2.5-2.6B-Q4_0.gguf', 1_500_000_000),
+            file('LFM2.5-2.6B-QAD-Q4_0.gguf', 1_510_000_000),
+            file('LFM2.5-2.6B-Q8_0.gguf', 2_800_000_000),
+        ])
+        expect(sets.map((set) => set.label)).toEqual(['Q4_0', 'QAD-Q4_0', 'Q8_0'])
+    })
+
+    it('N13-ETICHETTA-02 AL CONTRARIO: senza doppioni le etichette non cambiano', () => {
+        const sets = talosGroupGgufFiles([
+            file('Qwen3-4B-Instruct-Q4_K_M.gguf', 2_500_000_000),
+            file('Qwen3-4B-Instruct-Q6_K.gguf', 3_300_000_000),
+        ])
+        expect(sets.map((set) => set.label)).toEqual(['Q4_K_M', 'Q6_K'])
+    })
+})

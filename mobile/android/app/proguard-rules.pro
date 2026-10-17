@@ -74,6 +74,13 @@
 # requires this keep rule for R8-minimized applications.
 -keep class ai.onnxruntime.** { *; }
 
+# N12 — sherpa-onnx (riconoscimento vocale locale). Il suo JNI costruisce le
+# configurazioni leggendo i campi delle classi Kotlin PER NOME (GetFieldID) e
+# crea i risultati chiamandone i costruttori: rinominate o tolte da R8, il
+# riconoscitore non parte. E' l'interfaccia ufficiale, copiata invariata
+# (`src/main/jniLibs/PROVENIENZA-ASR.md`).
+-keep class com.k2fsa.sherpa.onnx.** { *; }
+
 # ⛔⛔⛔ CODICE (harness UI + terminale), 3/9 — appena arrivate in `main`.
 #
 # Le altre 26 registrazioni di MainActivity chiamano `registerPlugin(X.class)`

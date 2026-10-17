@@ -1,0 +1,58 @@
+{
+  "origine": {
+    "commit": "701c6c0d2d711879b53aa21bddad5a06d33538e7",
+    "percorso": "harness-ui/frontend/src/i18n/testi/chat.js",
+    "sha256": "eaaf4c713de5ca18948df455c22a29386587aa815e46576a7ed166d1afc13458",
+    "prefisso": [
+      "queue.agentResultPrefix",
+      "queue.workflowOutcomePrefix",
+      "queue.backgroundEndPrefix",
+      "queue.agentMessage",
+      "queue.workflow",
+      "queue.questionFromSubAgent",
+      "queue.answerFromSubAgent",
+      "queue.questionFromMainAgent",
+      "background."
+    ]
+  },
+  "it": {
+    "queue.agentResultPrefix": "Risultato di un agente · ",
+    "queue.workflowOutcomePrefix": "Esito di un Workflow · ",
+    "queue.backgroundEndPrefix": "Comando in sottofondo finito · ",
+    "background.aCommand": "Un comando in sottofondo",
+    "background.completed": "riuscito (codice {codice})",
+    "background.failed": "non riuscito (codice {codice})",
+    "background.failedToRun": "non è partito",
+    "background.terminated": "terminato",
+    "background.terminatedSignal": "terminato ({segnale})",
+    "background.outputIn": "Uscita completa: {file}",
+    "background.stoppedByYou": "fermato da te",
+    "background.readsNext": "Il modello lo leggerà col tuo prossimo messaggio.",
+    "queue.workflow": "Workflow",
+    "queue.workflowMoreSteps": "E altri {n} passi: li trovi nel pannello del Workflow.",
+    "queue.questionFromSubAgent": "Domanda del sotto-agente",
+    "queue.questionFromMainAgent": "Domanda dell'agente principale",
+    "queue.answerFromSubAgent": "Risposta del sotto-agente",
+    "queue.agentMessage": "Messaggio di un altro agente"
+  },
+  "en": {
+    "queue.agentResultPrefix": "Result from an agent · ",
+    "queue.workflowOutcomePrefix": "Workflow outcome · ",
+    "queue.backgroundEndPrefix": "Background command finished · ",
+    "background.aCommand": "A background command",
+    "background.completed": "completed (exit code {codice})",
+    "background.failed": "failed (exit code {codice})",
+    "background.failedToRun": "could not run",
+    "background.terminated": "terminated",
+    "background.terminatedSignal": "terminated ({segnale})",
+    "background.outputIn": "Full output: {file}",
+    "background.stoppedByYou": "stopped by you",
+    "background.readsNext": "The model reads this with your next message.",
+    "queue.workflow": "Workflow",
+    "queue.workflowMoreSteps": "And {n} more steps: they are in the Workflow panel.",
+    "queue.questionFromSubAgent": "Question from the sub-agent",
+    "queue.questionFromMainAgent": "Question from the main agent",
+    "queue.answerFromSubAgent": "Answer from the sub-agent",
+    "queue.agentMessage": "Message from another agent"
+  }
+}

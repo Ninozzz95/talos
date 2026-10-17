@@ -1,3 +1,4 @@
+import { talosFlussoNativoDisponibile } from '@/lib/chat/flussoNativoDisponibile'
 import type { TalosMobileProviderId } from '@/components/chat/mobileChatTypes'
 import type { TalosMobileProviderAdapter } from '@/lib/chat/providerContracts'
 import { TalosMobileProviderError } from '@/lib/chat/providerErrors'
@@ -12,6 +13,8 @@ type AdapterLoader = () => Promise<TalosMobileProviderAdapter>
 interface AdapterNeeds {
     readonly requiresSecret: boolean
     readonly requiresEndpoint: boolean
+    /** Vedi `flussoNonRaggiungibileDallaPagina` nel contratto: va detto QUI, perché l'involucro nasce prima che il modulo si carichi. */
+    readonly flussoNonRaggiungibileDallaPagina?: boolean
 }
 
 function lazyAdapter(
@@ -39,6 +42,12 @@ function lazyAdapter(
         provider,
         requiresSecret: needs.requiresSecret,
         requiresEndpoint: needs.requiresEndpoint,
+        // N15: vero SOLO finché non c'è il flusso nativo. Si chiede a ogni lettura (l'involucro è congelato, i plugin si
+        // registrano dopo): dove il nativo c'è il flusso si tenta, e arriva a pezzi; dove non c'è si va subito all'intera.
+        // (Scritto come proprietà calcolata e non sparso con `...`: lo spargimento leggerebbe il valore una volta sola.)
+        get flussoNonRaggiungibileDallaPagina(): boolean | undefined {
+            return needs.flussoNonRaggiungibileDallaPagina ? !talosFlussoNativoDisponibile() : undefined
+        },
         async listModels(credential, transport) {
             return (await load()).listModels(credential, transport)
         },
@@ -80,6 +89,10 @@ export const TALOS_MOBILE_PROVIDER_ADAPTERS: Readonly<Record<TalosMobileProvider
     anthropic: lazyAdapter('anthropic', KEY_ONLY, async () => (await import('@/lib/chat/providers/anthropicAdapter')).anthropicAdapter),
     gemini: lazyAdapter('gemini', KEY_ONLY, async () => (await import('@/lib/chat/providers/geminiAdapter')).geminiAdapter),
     openrouter: lazyAdapter('openrouter', KEY_ONLY, async () => (await loadOpenAiCompatible()).openRouterAdapter),
+    // N15: il piano ChatGPT. La «chiave» è il token d'accesso, che il controller chiede al servizio a ogni giro.
+    // N15-RITARDO-01: MISURATO sul Pad il 13/10/2026 — la dichiarazione messa solo nel modulo non arrivava a chi decide,
+    // perché chi decide vede QUESTO involucro. La prova tiene d'accordo i due.
+    chatgpt: lazyAdapter('chatgpt', { ...KEY_ONLY, flussoNonRaggiungibileDallaPagina: true }, async () => (await loadOpenAiCompatible()).chatgptAdapter),
     ollama: lazyAdapter('ollama', ADDRESS_ONLY, async () => (await import('@/lib/chat/providers/ollamaAdapter')).ollamaAdapter),
     // Lazy like the rest, and for a sharper reason: this one pulls in the
     // bridge to the native engine, which has no business in the entry chunk of

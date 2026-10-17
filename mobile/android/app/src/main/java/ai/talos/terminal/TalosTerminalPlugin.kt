@@ -253,6 +253,9 @@ class TalosTerminalPlugin : Plugin() {
     private fun stagingLocale(): File {
         val dest = File(context.filesDir, "talos-node-staging")
         if (!dest.exists()) dest.mkdirs()
+        // ⛔ K2-A (14/10/2026): negli asset resta solo `talos-exec.js`; Node e le librerie stanno fra le native
+        // ([TalosNodeNativo]). Il runtime di prima, copiato qui da versioni vecchie, si toglie (COD-NODE-04).
+        TalosNodeNativo.pulisciRuntimeVecchio(dest)
         val am = context.assets
         val nomi = am.list(ASSET_DIR) ?: emptyArray()
         for (nome in nomi) {
@@ -404,9 +407,11 @@ class TalosTerminalPlugin : Plugin() {
 
         val locale = stagingLocale()
         TalosPonteAdb.esegui(context, listOf("shell", "mkdir", "-p", AREA_REMOTA))
-        val file = locale.listFiles() ?: emptyArray()
-        for (f in file) {
-            val remoto = if (f.name == "talos-node-bin") BINARIO_REMOTO else "$AREA_REMOTA/${f.name}"
+        // ⛔ COD-NODE-03 (K2-A): `talos-exec.js` dagli asset; Node (nome remoto `node`) e le sue 9 librerie dalle librerie
+        // native, tutti in AREA_REMOTA: `$ORIGIN` le trova accanto al binario.
+        val daSpingere = (locale.listFiles() ?: emptyArray()).map { it to "$AREA_REMOTA/${it.name}" } +
+            TalosNodeNativo.fileDaSpingere(File(context.applicationInfo.nativeLibraryDir), AREA_REMOTA)
+        for ((f, remoto) in daSpingere) {
             val push = TalosPonteAdb.esegui(
                 context, listOf("push", f.absolutePath, remoto), attesaMs = 120_000,
             )
@@ -743,6 +748,26 @@ class TalosTerminalPlugin : Plugin() {
             }
         }
 
+        /*
+         * ⭐ «CODICE IN CASA» (owner 13/10/2026: il Codice senza il ponte ADB). PRIMA di tutto si prova ad accendere il
+         * server dentro l'app: non ha bisogno del ponte, e MISURATO sul Pad parte in 0,63 s. Solo se in questo APK Node
+         * fra le librerie native non c'è (`avvia` torna `null`) si prosegue sulla strada del ponte, che resta com'era.
+         * Vedi [TalosCodiceInCasa] e il ledger `LEDGER-CODICE-SENZA-PONTE-2026-10-13.md`.
+         */
+        val inCasa = TalosCodiceInCasa.avvia(context, ambienteDalChiamante)
+        if (inCasa != null) {
+            val res = JSObject()
+            res.put("ok", inCasa.ok)
+            res.put("giaAttivo", inCasa.giaAttivo)
+            res.put("stdout", "")
+            res.put("stderr", "")
+            res.put("exitCode", if (inCasa.ok) 0 else 1)
+            res.put("motivo", inCasa.motivo ?: JSObject.NULL)
+            res.put("dove", "casa")
+            call.resolve(res)
+            return
+        }
+
         val pronto = assicuraRuntimeSulTelefono()
         if (!pronto.ok) {
             val res = pronto.toJs("stdout")
@@ -942,6 +967,63 @@ class TalosTerminalPlugin : Plugin() {
         call.resolve(res)
     }
 
+    /** «Codice in casa»: questo APK sa far girare il server del Codice dentro l'app? Lo chiede la schermata, per non avvisare a vuoto. */
+    @PluginMethod
+    fun codiceInCasa(call: PluginCall) {
+        call.resolve(JSObject().apply { put("disponibile", TalosCodiceInCasa.disponibile(context)) })
+    }
+
+    /**
+     * K2-B, B4 (owner 14/10 «Affiancato»): accende r4 accanto al Codice di oggi, sulla porta di prova. Solo nella build di
+     * sviluppo che ha l'archivio negli asset. L'estrazione del pacchetto può durare secondi: gira su un filo suo.
+     */
+    @PluginMethod
+    fun avviaR4Sviluppo(call: PluginCall) {
+        Thread({
+            val motivo = TalosR4Avvio.avvia(context, emptyMap())
+            call.resolve(statoR4().apply { if (motivo != null) put("motivo", motivo) })
+        }, "talos-r4-avvio").start()
+    }
+
+    /**
+     * `{ disponibile, acceso, porta, cartella }`; `cartella` è la cartella di lavoro che r4 conosce (`PROJECT_DIRS`), dove il Codice
+     * apre le sue sessioni.
+     * ⛔ K3-B2 (15/10): niente token. Fino a K3-B1 era qui «per l'interfaccia»; da K3-B1 le chiamate a r4 passano da
+     * [TalosR4ClientePlugin], che il cookie lo mette da sé: il token non lascia mai il lato nativo, e la pagina non lo vede.
+     */
+    @PluginMethod
+    fun statoR4Sviluppo(call: PluginCall) {
+        call.resolve(statoR4())
+    }
+
+    private fun statoR4(): JSObject = JSObject().apply {
+        put("disponibile", TalosR4Avvio.disponibile(context))
+        put("acceso", TalosR4Avvio.acceso())
+        put("porta", TalosR4Avvio.PORTA)
+        put("cartella", TalosCodiceInCasa.disposizione(File(context.filesDir, "codice")).lavoro.path)
+    }
+
+    /**
+     * ⛔ F4 (14/10/2026, owner «Notifica solo mentre lavora»): un giro del Codice è cominciato (`RunStarted`). Il nativo
+     * tiene acceso il servizio in primo piano finché il server in casa dice che la sessione lavora: in secondo piano la
+     * WebView è congelata e non vedrebbe la fine. Vedi [TalosCodiceCustode]. Torna `{ custodito }`.
+     */
+    @PluginMethod
+    fun seguiGiroCodice(call: PluginCall) {
+        val id = call.getString("idSessione")?.takeIf { it.isNotBlank() } ?: return call.reject("idSessione mancante")
+        val titolo = call.getString("titolo") ?: "TALOS"
+        val testo = call.getString("testo") ?: ""
+        call.resolve(JSObject().apply { put("custodito", TalosCodiceCustode.segui(context, id, titolo, testo)) })
+    }
+
+    /** ⛔ F4: il giro è finito e l'app l'ha visto (via veloce con l'app davanti); altrimenti lo vede [TalosCodiceCustode]. */
+    @PluginMethod
+    fun lasciaGiroCodice(call: PluginCall) {
+        val id = call.getString("idSessione")?.takeIf { it.isNotBlank() } ?: return call.reject("idSessione mancante")
+        TalosCodiceCustode.lascia(context, id)
+        call.resolve(JSObject().apply { put("ok", true) })
+    }
+
     /**
      * ⛔⛔ 70-A (30/09/2026, contratto desktop 70) — il segreto del server del Codice, letto dal file che il server
      * scrive a ogni avvio (`server-secret.mjs`, modo 0600, utente `shell`: nessun'altra app lo legge). Owner, 30/09
@@ -952,6 +1034,16 @@ class TalosTerminalPlugin : Plugin() {
      */
     @PluginMethod
     fun leggiSegretoServer(call: PluginCall) {
+        // «Codice in casa»: se il server acceso è quello dentro l'app, il suo segreto sta nella cartella privata e si
+        // legge da lì, senza ponte. Stessa forma di risposta; mai nel registro.
+        TalosCodiceInCasa.segretoSeInCasa(context)?.let { inCasa ->
+            val res = JSObject()
+            res.put("ok", inCasa.segreto != null)
+            res.put("segreto", inCasa.segreto ?: JSObject.NULL)
+            res.put("motivo", if (inCasa.segreto != null) JSObject.NULL else "segreto assente o non valido")
+            call.resolve(res)
+            return
+        }
         val lettura = TalosPonteAdb.esegui(context, listOf("shell", "cat", FILE_SEGRETO_REMOTO))
         val segreto = if (lettura.ok) TalosSegretoServer.valido(lettura.uscita) else null
         val res = JSObject()

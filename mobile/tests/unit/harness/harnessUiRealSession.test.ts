@@ -282,7 +282,7 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
      * sempre, un compito libero (id sintetico `libero:<cartella>`, MAI
      * `undefined`) ne mostra una propria.
      */
-    it('REAL-SESSION-MESSAGE-02 the plain-message bubble reads "Task reale · libero:<cartella>", never "Task reale · undefined"', async () => {
+    it('REAL-SESSION-MESSAGE-02 the plain-message bubble reads "Free task · <cartella>", never "Task reale · undefined"', async () => {
         mockFetch([
             { metodo: 'GET', percorso: '/api/v1/projects', corpo: { items: [{ id: 'p1', nome: 'talos' }] } },
             { metodo: 'POST', percorso: '/api/v1/sessions/custom', corpo: { sessionId: 'sess-msg-2' } },
@@ -292,7 +292,10 @@ describe('Harness UI — real session, la parte portata da lane/harness-ui', () 
         await runtime().startRealSessionFromMessage('ciao')
 
         const meta = document.querySelector('.user-message .message-meta')
-        expect(meta?.textContent).toContain('Real task · libero:talos') // ⭐ 3/9 — etichetta tradotta in inglese (avm-03, commit 8398f860), asserzione aggiornata a pari passo
+        // ⛔ ITA-TASK-02 (14/10/2026, Pad): prima «Real task · libero:talos» all'invio e «Free task · talos» dopo il ricaricamento,
+        // per la stessa sessione. Ora una sola etichetta, quella dell'evento vero; resta il contratto «mai undefined».
+        expect(meta?.textContent).toContain('Free task · talos')
+        expect(meta?.textContent).not.toContain('libero:')
         expect(meta?.textContent).not.toContain('undefined')
         expect(document.querySelector('.user-message .message-bubble')?.textContent).toBe('ciao')
     })

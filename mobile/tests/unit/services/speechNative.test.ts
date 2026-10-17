@@ -123,3 +123,67 @@ describe('talosNativeSpeechSynth() — il motore di sistema nativo', () => {
         expect(bridge.voices).toHaveBeenCalledTimes(1)
     })
 })
+
+/**
+ * ⛔ SPEECH-STOP-01 — owner 13/10/2026, dal Pad, nella barra dell'assistente: «se premo il pulsante per riprodurre ad alta
+ * voce la risposta, l'ascolto del microfono non si spegne, cioè ascolta la risposta ad alta voce». MISURATO dal vivo: il
+ * pulsante risultava «sta leggendo» per 14 millisecondi e poi no, mentre il motore di Google stava parlando.
+ *
+ * La causa: leggere dal pulsante comincia con un «ferma» (`cancel`), e il nativo a OGNI «ferma» manda `talosSpeechDone`.
+ * Quell'evento arrivava dopo che la frase nuova aveva già registrato il suo «ho finito», e glielo faceva scattare subito.
+ * Chi sta sopra credeva che TALOS avesse smesso di parlare e riapriva il microfono sopra la sua voce.
+ */
+describe('talosNativeSpeechSynth() — il «finito» di un ferma non chiude la frase dopo', () => {
+    it('SPEECH-STOP-01: l evento di fine che nasce dal nostro «ferma» non fa scattare onend della frase nuova; quello vero sì', async () => {
+        let done: () => void = () => {}
+        bridge.addListener.mockImplementation(async (evento: string, cb: () => void) => {
+            if (evento === 'talosSpeechDone') done = cb
+            return { remove: vi.fn(async () => {}) }
+        })
+        bridge.voices.mockResolvedValue({ available: true, voices: [IT_LOCAL], current: IT_LOCAL.name })
+        bridge.setVoice.mockResolvedValue({ done: true })
+        let fermato: () => void = () => {}
+        bridge.stop.mockImplementation(() => new Promise<void>((ok) => { fermato = ok }))
+
+        const synth = talosNativeSpeechSynth()!
+        const onend = vi.fn()
+        // come fa il pulsante: prima ferma ciò che c'era, poi dice la frase nuova
+        synth.cancel()
+        synth.speak({ text: 'La risposta da leggere.', rate: 1, pitch: 1, onend })
+        // il nativo risponde al «ferma»: prima l'evento, poi la chiamata che torna
+        done()
+        fermato()
+        await vi.waitFor(() => expect(bridge.speak).toHaveBeenCalledTimes(1))
+        expect(onend).not.toHaveBeenCalled()
+
+        // la fine vera, quando la voce ha finito davvero
+        done()
+        expect(onend).toHaveBeenCalledTimes(1)
+    })
+
+    it('SPEECH-STOP-02 AL CONTRARIO: senza un «ferma» in volo, la fine chiude la frase come sempre; e un «ferma» fallito non lascia sordi', async () => {
+        let done: () => void = () => {}
+        bridge.addListener.mockImplementation(async (evento: string, cb: () => void) => {
+            if (evento === 'talosSpeechDone') done = cb
+            return { remove: vi.fn(async () => {}) }
+        })
+        bridge.voices.mockResolvedValue({ available: true, voices: [IT_LOCAL], current: IT_LOCAL.name })
+        bridge.setVoice.mockResolvedValue({ done: true })
+        bridge.stop.mockRejectedValue(new Error('ponte giù'))
+
+        const synth = talosNativeSpeechSynth()!
+        const prima = vi.fn()
+        synth.speak({ text: 'Uno.', rate: 1, pitch: 1, onend: prima })
+        await vi.waitFor(() => expect(bridge.speak).toHaveBeenCalledTimes(1))
+        done()
+        expect(prima).toHaveBeenCalledTimes(1)
+
+        synth.cancel()
+        await new Promise((r) => setTimeout(r, 0))
+        const dopo = vi.fn()
+        synth.speak({ text: 'Due.', rate: 1, pitch: 1, onend: dopo })
+        await vi.waitFor(() => expect(bridge.speak).toHaveBeenCalledTimes(2))
+        done()
+        expect(dopo).toHaveBeenCalledTimes(1)
+    })
+})

@@ -180,3 +180,54 @@ export function talosVociOfferte(
     if (candidate.length <= 2) return candidate
     return [candidate[0], candidate[candidate.length - 1]]
 }
+
+/**
+ * ⭐⭐ LA VOCE DI SERIE — quella che parla quando nessuno ha scelto, e l'unica regola su quali scelte valgono ancora.
+ *
+ * Owner 13/10/2026, dal Pad: «appare una terza voce, tipo legacy, troppo robotica, invece delle due migliori… togliamola
+ * definitivamente: rimane come predefinita nelle risposte». MISURATO: senza una scelta salvata il ripiego si calcolava
+ * rifiutando la rete e cadeva su `it-it-x-itb-local`, che non è fra le due offerte; il menù la mostrava come terza e le
+ * risposte si leggevano con lei.
+ *
+ * ⇒ Un posto solo decide: la voce di serie è la SECONDA di `talosVociOfferte` (owner 13/10/2026: «di default usa la
+ * seconda non la prima»; se ce n'è una sola, quella). Una scelta salvata vale se è fra le offerte,
+ * oppure se è di un'ALTRA lingua (chi l'ha presa da «tutte le lingue» l'ha voluta). Una scelta della stessa lingua che non
+ * è più offerta — la robotica, la generica, una voce sparita — non vale: si torna alla voce di serie.
+ *
+ * ⛔ Senza rete `talosVociOfferte` offre le voci sul telefono: lì non c'è altro da dire, e lo si dice con quelle.
+ */
+export function talosVoceDiSerie(
+    voci: readonly TalosVoceDispositivo[],
+    preferenza: TalosPreferenzaVoce & { scelta?: string | null },
+): TalosVoceDispositivo | null {
+    const offerte = talosVociOfferte(voci, preferenza)
+    if (preferenza.scelta) {
+        const scelta = voci.find((v) => v.name === preferenza.scelta && !v.notInstalled)
+        const altraLingua = scelta && talosLinguaDi(scelta.locale) !== talosLinguaDi(preferenza.lingua)
+        if (scelta && (altraLingua ? preferenza.rete || !scelta.network : offerte.some((o) => o.name === scelta.name))) return scelta
+    }
+    // Owner 13/10/2026, dopo averle risentite: «di default usa la seconda non la prima».
+    // ⛔ Solo se la seconda è della stessa razza della prima: con poche voci la seconda offerta può essere quella sul
+    // telefono o la generica, e sceglierla di serie rimetterebbe in testa proprio la voce che l'owner ha tolto.
+    const [prima, seconda] = offerte
+    if (prima && seconda && seconda.network === prima.network && !talosVoceGenerica(seconda)) return seconda
+    return prima ?? null
+}
+
+/**
+ * Le voci come le dà il servizio vocale (`voiceURI`, nome a schermo, lingua) nella forma che questo file capisce. Il
+ * servizio non porta qualità e prontezza: l'ordinamento usa ciò che resta — nominata contro generica, e la rete, che il
+ * nome a schermo dichiara con « · rete» — cioè i criteri che distinguono davvero (sul Pad la qualità è 400 per tutte).
+ */
+export function talosVociDalServizio(
+    voci: readonly { voiceURI: string, name: string, lang: string }[],
+): TalosVoceDispositivo[] {
+    return voci.map((v) => ({
+        name: v.voiceURI,
+        locale: v.lang,
+        quality: 400,
+        latency: 200,
+        network: / · rete$/.test(v.name),
+        notInstalled: false,
+    }))
+}

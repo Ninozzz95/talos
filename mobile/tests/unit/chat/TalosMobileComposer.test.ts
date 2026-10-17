@@ -325,6 +325,9 @@ describe('TalosMobileComposer', () => {
             prompt: '',
             attachments: [authorizedAttachment],
         })
+        // il vassoio si carica a richiesta (K3-C Allegati A2, pacchetto d'avvio)
+        await vi.dynamicImportSettled()
+        await flushPromises()
 
         expect(view.get('[data-testid="talos-mobile-attachment-tray"]').text()).toContain('brief.txt')
         expect(view.get<HTMLButtonElement>('[aria-label="Send message"]').element.disabled).toBe(false)
@@ -344,6 +347,9 @@ describe('TalosMobileComposer', () => {
             }],
             attachmentError: 'One file needs attention.',
         })
+        // il vassoio si carica a richiesta (K3-C Allegati A2, pacchetto d'avvio)
+        await vi.dynamicImportSettled()
+        await flushPromises()
 
         await view.get('[aria-label="Remove brief.txt"]').trigger('click')
         await view.get('[aria-label="Dismiss attachment error"]').trigger('click')

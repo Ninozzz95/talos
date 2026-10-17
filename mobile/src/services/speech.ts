@@ -325,7 +325,16 @@ export function talosNativeSpeechSynth(): TalosSpeechSynth | null {
      * l'altra. Vedi il commento dentro `speak`.
      */
     let catena: Promise<unknown> = Promise.resolve()
+    /*
+     * ⛔ SPEECH-STOP-01 (owner 13/10/2026, dal Pad: «premo il pulsante e il microfono ascolta la risposta ad alta voce»).
+     * Il nativo manda `talosSpeechDone` a OGNI «ferma», e leggere dal pulsante comincia proprio con un «ferma»: quell'evento
+     * arrivava quando la frase nuova aveva già messo qui il suo «ho finito», e glielo faceva scattare dopo 14 ms (misurato)
+     * mentre la voce parlava. Finché un nostro «ferma» è in volo, la fine che arriva è la SUA e non chiude niente: il
+     * nativo manda l'evento prima di rispondere alla chiamata, quindi quando la chiamata torna il conto è pari.
+     */
+    let fermateInVolo = 0
     void plugin.addListener('talosSpeechDone', () => {
+        if (fermateInVolo > 0) return
         const chiudi = finita
         finita = null
         chiudi?.()
@@ -438,7 +447,8 @@ export function talosNativeSpeechSynth(): TalosSpeechSynth | null {
         },
         cancel() {
             finita = null
-            void plugin.stop().catch(() => undefined)
+            fermateInVolo += 1
+            void plugin.stop().catch(() => undefined).finally(() => { fermateInVolo -= 1 })
         },
     }
 }

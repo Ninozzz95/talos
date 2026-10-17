@@ -12,6 +12,8 @@ export type TalosMobileRouteName =
     | 'settings-models' | 'settings-models-providers'
     | 'settings-models-catalog' | 'settings-models-local' | 'settings-models-local-repo'
     | 'harness' | 'harness-session'
+    // K3-B2 (15/10/2026): il Codice sul motore nuovo, solo nella build di sviluppo con r4, accanto al Codice di oggi.
+    | 'codice-r4'
     | 'toolforge'
 
 export interface TalosMobileRoute {
@@ -50,6 +52,7 @@ const loadContextScreen = () => import('@/screens/ContextScreen.vue').then((modu
 // against the CSP (`frame-src 'none'`) when the Settings link first shipped.
 const loadHarnessScreen = () => import('@/screens/HarnessScreen.vue').then((module) => module.default)
 const loadHarnessSessionScreen = () => import('@/screens/HarnessSessionScreen.vue').then((module) => module.default)
+const loadCodiceR4Screen = () => import('@/screens/CodiceR4Screen.vue').then((module) => module.default)
 // Tool Forge (27/8): tool creati da manifest dichiarativi, non da codice
 // generato dal modello — vedi ADR-001 nel pacchetto d'origine.
 const loadToolForgeScreen = () => import('@/screens/ToolForgeScreen.vue').then((module) => module.default)
@@ -174,6 +177,7 @@ export const TALOS_MOBILE_ROUTES: readonly TalosMobileRoute[] = Object.freeze([
     { name: 'context', path: '/context', desktop_station_id: 'context_vault', component: loadContextScreen },
     { name: 'harness', path: '/harness', desktop_station_id: 'harness', component: loadHarnessScreen },
     { name: 'harness-session', path: '/harness/:id', desktop_station_id: 'harness', component: loadHarnessSessionScreen, parent: 'harness' },
+    { name: 'codice-r4', path: '/codice-r4/:id?', desktop_station_id: 'harness', component: loadCodiceR4Screen, parent: 'harness' },
     // Tool Forge — mobile-first, non è ancora nel ledger di parità desktop
     // (il pacchetto d'origine lo dichiara esplicitamente: "architecture-
     // compatible, not implemented in v1"). Stesso schema di 'harness', che

@@ -26,6 +26,7 @@ type Runtime = {
     openSheet(type: string): void
     resumeSession(): Promise<void>
     passaASessione(sessionId: string, taskId: string, nome?: string): void
+    startCustomSession(opzioni: Record<string, unknown>): Promise<void>
 }
 
 class FakeEventSource {
@@ -161,6 +162,42 @@ describe('il Codice in italiano', () => {
         const avvisi = [...document.querySelectorAll('.toast')].map((e) => e.textContent ?? '').join(' / ')
         expect(avvisi).toContain('Nessuna sessione reale da riprendere')
         expect(avvisi).not.toContain('No real session to resume')
+    })
+
+    // ⛔ ITA-TASK-01 (Pad, 14/10/2026, foto della prova F4): sotto il messaggio della persona «Real task · libero:workspace»
+    // anche in italiano — la traduzione c'era nel dizionario, ma l'etichetta non passava da `t()`; «Direct command» nemmeno
+    // nel dizionario.
+    it('ITA-TASK-01 l’etichetta del compito sotto il messaggio è in italiano (attività, attività libera, comando diretto)', () => {
+        monta('it')
+        const generazione = rt().realSessionState.generation
+        rt().handleRealEvent({ type: 'RunStarted', input: { id: 'libero:workspace', consegna: 'Scrivi uno script' } }, generazione)
+        const etichette = () => [...document.querySelectorAll('.message-meta')].map((e) => e.textContent ?? '').join(' / ')
+        expect(etichette()).toContain('Attività reale · libero:workspace')
+        expect(etichette()).not.toContain('Real task')
+
+        monta('it')
+        rt().handleRealEvent({ type: 'RunStarted', input: { comandoDiretto: 'ls' } }, rt().realSessionState.generation)
+        expect(etichette()).toContain('Comando diretto')
+        expect(etichette()).not.toContain('Direct command')
+
+        monta('en')
+        rt().handleRealEvent({ type: 'RunStarted', input: { id: 'libero:workspace', consegna: 'Write a script' } }, rt().realSessionState.generation)
+        expect(etichette()).toContain('Real task · libero:workspace')
+    })
+
+    // ⛔ ITA-TASK-02 (Pad, 14/10/2026): la STESSA sessione libera diceva «Attività reale · libero:workspace» all'invio (la bolla
+    // ottimistica col task sintetico) e «Attività libera · workspace» dopo il ricaricamento (l'evento vero). Una sola etichetta.
+    it('ITA-TASK-02 all’invio di un’attività libera l’etichetta è quella del ricaricamento, senza l’id interno', async () => {
+        monta('it')
+        vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ sessionId: 's-libera' }), { status: 200 })))
+        try {
+            const avvio = rt().startCustomSession({ cartellaLibera: '/dati/workspace', nomeCartella: 'workspace', consegna: 'Scrivi uno script' })
+            const etichette = [...document.querySelectorAll('.message-meta')].map((e) => e.textContent ?? '')
+            expect(etichette).toEqual(['Attività libera · workspace'])
+            await avvio.catch(() => {})
+        } finally {
+            vi.unstubAllGlobals()
+        }
     })
 
     it('ITA-04 la conversazione: riga dell’autore, riassunto e categorie dei gruppi di strumenti in italiano', () => {

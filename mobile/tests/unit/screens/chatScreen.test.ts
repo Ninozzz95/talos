@@ -171,6 +171,8 @@ function makeController(messages: FakeMessage[] = []) {
          * schermata: era una finzione piu' povera del vero.
          */
         pendingToolAuthorizations: ref([]),
+        // N15 — nessun giro fermo al limite d'uso del piano (il controller vero lo espone sempre).
+        attesaDelPiano: ref(null),
         toolAuthorizationRecoveries: ref([]),
         showToolAuthorization: vi.fn(),
         profiles: ref([]),
@@ -410,7 +412,12 @@ describe('ChatScreen (functional, local-first)', () => {
             { id: 's-new', title: 'Newest idea', updated_at: '2026-09-12T10:00:00.000Z' } as never,
             { id: 's-mid', title: 'Middle idea', updated_at: '2026-09-11T10:00:00.000Z' } as never,
         )
+        // Due sul TABLET (dal 13/10/2026 il telefono ne mostra una: CALM-HOME-02b).
+        const { useTalosTabletLayout, __resetTalosTabletLayoutForTests } = await import('@/composables/useTalosTabletLayout')
+        __resetTalosTabletLayoutForTests()
+        useTalosTabletLayout().isTablet.value = true
         const wrapper = mount(ChatScreen)
+        __resetTalosTabletLayoutForTests()
         const cards = wrapper.get('[data-testid="talos-resume-section"]').findAll('.talos-resume-card')
         expect(cards.map(c => c.find('strong').text())).toEqual(['Newest idea', 'Middle idea'])
         await cards[1]!.trigger('click')
@@ -418,6 +425,32 @@ describe('ChatScreen (functional, local-first)', () => {
         expect(mockState.controller.selectSession).toHaveBeenCalledWith('s-mid')
         await wrapper.get('[data-testid="talos-resume-all"]').trigger('click')
         expect(mockState.routerPush).toHaveBeenCalledWith({ name: 'chats' })
+    })
+
+    /**
+     * CALM-HOME-02b — owner 13/10/2026, con la foto del telefono in verticale: «in layout telefonino "Riprendi da qui" ha due
+     * righe di chat. Solo per questo layout ne vorrei solo una». Sul telefono la seconda scheda spingeva il resto sotto la
+     * piega; resta la più recente, e «Tutte le chat» porta alle altre. Sul tablet restano due (CALM-HOME-02).
+     */
+    it('CALM-HOME-02b on the phone layout «Riprendi da qui» shows only the most recent chat; all the others stay one tap away', async () => {
+        mockState.controller = makeController()
+        mockState.controller.chat.sessions.push(
+            { id: 's-old', title: 'Older idea', updated_at: '2026-09-10T10:00:00.000Z' } as never,
+            { id: 's-new', title: 'Newest idea', updated_at: '2026-09-12T10:00:00.000Z' } as never,
+            { id: 's-mid', title: 'Middle idea', updated_at: '2026-09-11T10:00:00.000Z' } as never,
+        )
+        const { useTalosTabletLayout, __resetTalosTabletLayoutForTests } = await import('@/composables/useTalosTabletLayout')
+        __resetTalosTabletLayoutForTests()
+        useTalosTabletLayout().isTablet.value = false
+        const wrapper = mount(ChatScreen)
+        const cards = wrapper.get('[data-testid="talos-resume-section"]').findAll('.talos-resume-card')
+        expect(cards.map(c => c.find('strong').text())).toEqual(['Newest idea'])
+        expect(wrapper.find('[data-testid="talos-resume-all"]').exists()).toBe(true)
+        // e segue il layout: se diventa tablet (pieghevole aperto, finestra allargata) tornano due
+        useTalosTabletLayout().isTablet.value = true
+        await flushPromises()
+        expect(wrapper.get('[data-testid="talos-resume-section"]').findAll('.talos-resume-card')).toHaveLength(2)
+        __resetTalosTabletLayoutForTests()
     })
 
     it('CALM-HOME-03 without other chats there is nothing to resume, and the incognito pill is still there', () => {
@@ -429,6 +462,15 @@ describe('ChatScreen (functional, local-first)', () => {
     it('DEBT-MOBILE-007 RED: chat thread allows vertical scroll but not viewport pinch zoom', () => {
         const wrapper = mount(ChatScreen)
         expect(wrapper.get('[data-testid="talos-chat-scroll"]').classes()).toContain('touch-pan-y')
+    })
+
+    /* Regressione misurata sul Pad (16/10, come la cornice del Codice in K3-AP3): i 78 testi per il lettore di schermo (`sr-only`,
+       assoluti) di una chat di 79 messaggi avevano come blocco contenitore la `section.relative` FUORI dallo scorrimento, che non li
+       tagliava: `main.overflow-hidden` arrivava a 14.827 px contro 914, e portare in vista l'ultimo messaggio lo faceva scorrere di
+       317 px, con tutta la schermata. jsdom non calcola il layout: qui si fissa il contratto, la misura vera è sul Pad. */
+    it('CHAT-CORNICE-01 lo scorrimento della chat è il blocco contenitore delle sue righe assolute (la cornice non si allunga)', () => {
+        const wrapper = mount(ChatScreen)
+        expect(wrapper.get('[data-testid="talos-chat-scroll"]').classes()).toContain('relative')
     })
 
     it('replaces the hero with the message thread once the conversation starts', () => {
@@ -471,6 +513,9 @@ describe('ChatScreen (functional, local-first)', () => {
         })
         mockState.controller = controller
         const wrapper = mount(ChatScreen, { global: { stubs: { teleport: true } } })
+        // il vassoio si carica a richiesta (K3-C Allegati A2, pacchetto d'avvio)
+        await vi.dynamicImportSettled()
+        await flushPromises()
 
         expect(wrapper.get('[data-testid="talos-mobile-attachment-tray"]').text()).toContain('brief.txt')
         await wrapper.get('[data-testid="talos-composer-plus"]').trigger('click')
@@ -1370,5 +1415,59 @@ describe('B3 — Accoda, coda del giro e Riprendi nella schermata', () => {
         await riprendi.trigger('click')
         await vi.waitFor(() => expect(controller.resumeSession).toHaveBeenCalledTimes(1))
         wrapper.unmount()
+    })
+})
+
+/**
+ * N15 fetta 8 (13/10/2026) — la pastiglia «ChatGPT plan» sta nel compositore SOLO quando il modello scelto è del piano:
+ * dice chi paga il giro che sta per partire. Con un altro fornitore non c'è.
+ */
+vi.mock('@/components/chat/TalosMobileChatgptPastiglia.vue', async () => {
+    const { h } = await import('vue')
+    return { __esModule: true, default: { render: () => h('span', { 'data-testid': 'talos-chatgpt-pill' }) } }
+})
+vi.mock('@/components/chat/TalosMobileChatgptLimite.vue', async () => {
+    const { h } = await import('vue')
+    return { __esModule: true, default: { props: ['attesa'], emits: ['ferma'], render(this: { attesa: { tentativo: number }, $emit: (e: string) => void }) {
+        return h('button', { 'data-testid': 'talos-chatgpt-limit', onClick: () => this.$emit('ferma') }, String(this.attesa.tentativo))
+    } } }
+})
+describe('N15 — la carta del limite d uso sopra il compositore', () => {
+    it('N15-LIM-UI-02: compare solo nella chat il cui giro sta aspettando; «Ferma» è lo Stop del giro', async () => {
+        const controller = makeController()
+        controller.chat.activeSession.value = { id: 'chat-aperta', title: 'Prova' }
+        Object.assign(controller.chat, { stopStreaming: vi.fn() })
+        const idAperta = 'chat-aperta'
+        controller.attesaDelPiano.value = { riprendeAlle: 1, tentativo: 3, totale: 9, sessionId: 'un-altra-chat' } as never
+        mockState.controller = controller
+        const wrapper = mount(ChatScreen)
+        await flushPromises()
+        expect(wrapper.find('[data-testid="talos-chatgpt-limit"]').exists()).toBe(false)
+        controller.attesaDelPiano.value = { riprendeAlle: 1, tentativo: 3, totale: 9, sessionId: idAperta } as never
+        await flushPromises()
+        await flushPromises()
+        const carta = wrapper.get('[data-testid="talos-chatgpt-limit"]')
+        expect(carta.text()).toBe('3')
+        await carta.trigger('click')
+        expect((controller.chat as unknown as { stopStreaming: ReturnType<typeof vi.fn> }).stopStreaming).toHaveBeenCalledTimes(1)
+    })
+})
+describe('N15 — la pastiglia del piano ChatGPT nel compositore', () => {
+    const profilo = (id: string, provider: string) => ({
+        id, provider, model: id, display_name: id, status: 'healthy', has_secret: true, effort_levels: ['high'],
+        supports_thinking: true, show_in_composer: true, capabilities: null, probe_ok: true,
+    })
+    it('N15-PAST-03: modello del piano scelto → pastiglia; modello di un altro fornitore → niente pastiglia', async () => {
+        const controller = makeController()
+        controller.profiles.value = [profilo('piano', 'chatgpt'), profilo('chiave', 'openai')] as never
+        controller.selectedModelId.value = 'piano' as never
+        mockState.controller = controller
+        const wrapper = mount(ChatScreen)
+        await flushPromises()
+        await flushPromises()
+        expect(wrapper.find('[data-testid="talos-chatgpt-pill"]').exists()).toBe(true)
+        controller.selectedModelId.value = 'chiave' as never
+        await flushPromises()
+        expect(wrapper.find('[data-testid="talos-chatgpt-pill"]').exists()).toBe(false)
     })
 })

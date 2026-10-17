@@ -33,12 +33,44 @@ import {
  *
  * ## Ciò che questo NON fa, detto
  *
- * Non sopravvive alla chiusura dell'app: quelle misure non sono su disco.
- * Riaprendo una chat di ieri la riga non c'è. È la scelta onesta — meglio
- * niente che una riga di zeri — ed è il debito da chiudere il giorno in cui la
- * catena dei metadati avrà un canale per le misure.
+ * ~~Non sopravvive alla chiusura dell'app~~ — ⛔ N13-TPS-01 (Pad, 11/10/2026): dopo il ricaricamento la riga spariva, e
+ * l'owner il 12/10 ha chiesto di curarlo. La catena dei metadati resta intoccata (vedi sopra): il legame si salva a
+ * parte, in `localStorage`, per id del messaggio, con un TETTO (cadono le misure più vecchie). Sono solo tempi del
+ * motore, niente testo della chat. Ciò che si rilegge si controlla campo per campo: un dato rotto non diventa una riga
+ * di zeri, diventa nessuna riga — la stessa regola di sempre.
  */
-const misurePerMessaggio = ref<Record<string, TalosLocalGenerationMetrics>>({})
+const CHIAVE_SALVATAGGIO = 'talos.misure-locali.v1'
+const MASSIMO_SALVATE = 300
+
+const numeroONull = (valore: unknown): boolean => valore === null || (typeof valore === 'number' && Number.isFinite(valore))
+
+function misuraValida(valore: unknown): valore is TalosLocalGenerationMetrics {
+    if (!valore || typeof valore !== 'object') return false
+    const m = valore as Record<string, unknown>
+    return typeof m.traceId === 'string' && typeof m.finishedAt === 'number'
+        && ['firstVisibleMs', 'tokensPerSecond', 'msPerToken', 'producedTokens', 'promptTokens', 'prefillMs', 'engineFirstTokenMs']
+            .every((campo) => numeroONull(m[campo] ?? null))
+}
+
+function leggiSalvate(): Record<string, TalosLocalGenerationMetrics> {
+    try {
+        const grezzo: unknown = JSON.parse(window.localStorage.getItem(CHIAVE_SALVATAGGIO) ?? '{}')
+        if (!grezzo || typeof grezzo !== 'object' || Array.isArray(grezzo)) return {}
+        return Object.fromEntries(Object.entries(grezzo).filter(([, misura]) => misuraValida(misura))) as Record<string, TalosLocalGenerationMetrics>
+    } catch {
+        return {}
+    }
+}
+
+function salva(misure: Record<string, TalosLocalGenerationMetrics>): Record<string, TalosLocalGenerationMetrics> {
+    // L'ordine d'inserimento è l'ordine d'arrivo: oltre il tetto cadono le prime, cioè le più vecchie.
+    const voci = Object.entries(misure)
+    const tenute = Object.fromEntries(voci.slice(Math.max(0, voci.length - MASSIMO_SALVATE)))
+    try { window.localStorage.setItem(CHIAVE_SALVATAGGIO, JSON.stringify(tenute)) } catch { /* memoria piena o negata: resta la riga di questa sessione */ }
+    return tenute
+}
+
+const misurePerMessaggio = ref<Record<string, TalosLocalGenerationMetrics>>(leggiSalvate())
 
 /**
  * Gli id visti all'ultimo sguardo. `null` = mai guardato: al primo sguardo si
@@ -71,7 +103,7 @@ export function talosAggiornaMisureDeiMessaggi(
     // Ritira SEMPRE: svuota anche quando non c'è niente da mostrare.
     const misura = talosRitiraMisuraLocale()
     if (misura === null) return
-    misurePerMessaggio.value = { ...misurePerMessaggio.value, [ultimo.id]: misura }
+    misurePerMessaggio.value = salva({ ...misurePerMessaggio.value, [ultimo.id]: misura })
 }
 
 export function talosMisureDelMessaggio(
@@ -89,4 +121,5 @@ export const talosQuanteMisureLegate = computed(
 export function talosScordaLegameMisure(): void {
     misurePerMessaggio.value = {}
     idsPrecedenti = null
+    try { window.localStorage.removeItem(CHIAVE_SALVATAGGIO) } catch { /* niente da togliere */ }
 }

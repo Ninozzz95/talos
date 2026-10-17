@@ -1,0 +1,795 @@
+{
+  "origine": {
+    "r4": "701c6c0d2d711879b53aa21bddad5a06d33538e7",
+    "registrato": "Pad, app di sviluppo, 17/10/2026"
+  },
+  "passi": [
+    {
+      "nome": "radice",
+      "metodo": "GET",
+      "percorso": "/tree?percorso=",
+      "dati": null,
+      "stato": 200,
+      "risposta": {
+        "ok": true,
+        "data": {
+          "voci": [
+            {
+              "nome": ".talos",
+              "cartella": true
+            },
+            {
+              "nome": "allegati",
+              "cartella": true
+            },
+            {
+              "nome": "provaCartella",
+              "cartella": true
+            },
+            {
+              "nome": "qa-campagna",
+              "cartella": true
+            },
+            {
+              "nome": ".harness-ui-hooks.json",
+              "cartella": false
+            },
+            {
+              "nome": "calcola-iva.mjs",
+              "cartella": false
+            },
+            {
+              "nome": "calcola-iva.test.mjs",
+              "cartella": false
+            },
+            {
+              "nome": "clean_functions_guide.md",
+              "cartella": false
+            },
+            {
+              "nome": "NOTA.md",
+              "cartella": false
+            },
+            {
+              "nome": "nota.txt",
+              "cartella": false
+            },
+            {
+              "nome": "orologio.sh",
+              "cartella": false
+            },
+            {
+              "nome": "orologio.txt",
+              "cartella": false
+            },
+            {
+              "nome": "prova-b1.txt",
+              "cartella": false
+            },
+            {
+              "nome": "slug-pannello.mjs",
+              "cartella": false
+            },
+            {
+              "nome": "slugify.mjs",
+              "cartella": false
+            },
+            {
+              "nome": "slugify.test.mjs",
+              "cartella": false
+            },
+            {
+              "nome": "top10_download.sh",
+              "cartella": false
+            }
+          ]
+        },
+        "meta": {
+          "schema": "talos.harness-ui.api.v1",
+          "generatedAt": "2026-10-17T09:01:51.504Z"
+        }
+      }
+    },
+    {
+      "nome": "crea-cartella",
+      "metodo": "POST",
+      "percorso": "/tree/create",
+      "dati": {
+        "percorsoBase": "",
+        "nome": "prova-albero",
+        "tipo": "cartella"
+      },
+      "stato": 200,
+      "risposta": {
+        "ok": true,
+        "data": {
+          "percorso": "prova-albero"
+        },
+        "meta": {
+          "schema": "talos.harness-ui.api.v1",
+          "generatedAt": "2026-10-17T09:01:51.527Z"
+        }
+      }
+    },
+    {
+      "nome": "crea-file",
+      "metodo": "POST",
+      "percorso": "/tree/create",
+      "dati": {
+        "percorsoBase": "prova-albero",
+        "nome": "nota prova.md",
+        "tipo": "file"
+      },
+      "stato": 200,
+      "risposta": {
+        "ok": true,
+        "data": {
+          "percorso": "prova-albero/nota prova.md"
+        },
+        "meta": {
+          "schema": "talos.harness-ui.api.v1",
+          "generatedAt": "2026-10-17T09:01:51.539Z"
+        }
+      }
+    },
+    {
+      "nome": "crea-sottocartella",
+      "metodo": "POST",
+      "percorso": "/tree/create",
+      "dati": {
+        "percorsoBase": "prova-albero",
+        "nome": "sotto",
+        "tipo": "cartella"
+      },
+      "stato": 200,
+      "risposta": {
+        "ok": true,
+        "data": {
+          "percorso": "prova-albero/sotto"
+        },
+        "meta": {
+          "schema": "talos.harness-ui.api.v1",
+          "generatedAt": "2026-10-17T09:01:51.545Z"
+        }
+      }
+    },
+    {
+      "nome": "crea-file-codice",
+      "metodo": "POST",
+      "percorso": "/tree/create",
+      "dati": {
+        "percorsoBase": "prova-albero/sotto",
+        "nome": "slug.mjs",
+        "tipo": "file"
+      },
+      "stato": 200,
+      "risposta": {
+        "ok": true,
+        "data": {
+          "percorso": "prova-albero/sotto/slug.mjs"
+        },
+        "meta": {
+          "schema": "talos.harness-ui.api.v1",
+          "generatedAt": "2026-10-17T09:01:51.549Z"
+        }
+      }
+    },
+    {
+      "nome": "cartella-di-prova",
+      "metodo": "GET",
+      "percorso": "/tree?percorso=prova-albero",
+      "dati": null,
+      "stato": 200,
+      "risposta": {
+        "ok": true,
+        "data": {
+          "voci": [
+            {
+              "nome": "sotto",
+              "cartella": true
+            },
+            {
+              "nome": "nota prova.md",
+              "cartella": false
+            }
+          ]
+        },
+        "meta": {
+          "schema": "talos.harness-ui.api.v1",
+          "generatedAt": "2026-10-17T09:01:51.553Z"
+        }
+      }
+    },
+    {
+      "nome": "anteprima-vuota",
+      "metodo": "GET",
+      "percorso": "/tree/file?percorso=prova-albero%2Fnota%20prova.md",
+      "dati": null,
+      "stato": 200,
+      "risposta": {
+        "ok": true,
+        "data": {
+          "percorso": "prova-albero/nota prova.md",
+          "contenuto": "",
+          "dimensione": 0
+        },
+        "meta": {
+          "schema": "talos.harness-ui.api.v1",
+          "generatedAt": "2026-10-17T09:01:51.558Z"
+        }
+      }
+    },
+    {
+      "nome": "anteprima-esistente",
+      "metodo": "GET",
+      "percorso": "/tree/file?percorso=NOTA.md",
+      "dati": null,
+      "stato": 200,
+      "risposta": {
+        "ok": true,
+        "data": {
+          "percorso": "NOTA.md",
+          "contenuto": "# Nota\n\nIl modulo `slugify` va scritto entro venerdì.\n",
+          "dimensione": 55
+        },
+        "meta": {
+          "schema": "talos.harness-ui.api.v1",
+          "generatedAt": "2026-10-17T09:01:51.564Z"
+        }
+      }
+    },
+    {
+      "nome": "duplica",
+      "metodo": "POST",
+      "percorso": "/tree/copy",
+      "dati": {
+        "percorso": "prova-albero/nota prova.md"
+      },
+      "stato": 200,
+      "risposta": {
+        "ok": true,
+        "data": {
+          "nuovoPercorso": "prova-albero/nota prova (copia).md"
+        },
+        "meta": {
+          "schema": "talos.harness-ui.api.v1",
+          "generatedAt": "2026-10-17T09:01:51.571Z"
+        }
+      }
+    },
+    {
+      "nome": "duplica-ancora",
+      "metodo": "POST",
+      "percorso": "/tree/copy",
+      "dati": {
+        "percorso": "prova-albero/nota prova.md"
+      },
+      "stato": 200,
+      "risposta": {
+        "ok": true,
+        "data": {
+          "nuovoPercorso": "prova-albero/nota prova (copia 2).md"
+        },
+        "meta": {
+          "schema": "talos.harness-ui.api.v1",
+          "generatedAt": "2026-10-17T09:01:51.575Z"
+        }
+      }
+    },
+    {
+      "nome": "rinomina",
+      "metodo": "POST",
+      "percorso": "/tree/rename",
+      "dati": {
+        "percorso": "prova-albero/nota prova.md",
+        "nuovoNome": "nota.md"
+      },
+      "stato": 200,
+      "risposta": {
+        "ok": true,
+        "data": {
+          "nuovoPercorso": "prova-albero/nota.md"
+        },
+        "meta": {
+          "schema": "talos.harness-ui.api.v1",
+          "generatedAt": "2026-10-17T09:01:51.579Z"
+        }
+      }
+    },
+    {
+      "nome": "sposta",
+      "metodo": "POST",
+      "percorso": "/tree/move",
+      "dati": {
+        "percorso": "prova-albero/nota.md",
+        "cartellaDestinazione": "prova-albero/sotto"
+      },
+      "stato": 200,
+      "risposta": {
+        "ok": true,
+        "data": {
+          "nuovoPercorso": "prova-albero/sotto/nota.md"
+        },
+        "meta": {
+          "schema": "talos.harness-ui.api.v1",
+          "generatedAt": "2026-10-17T09:01:51.582Z"
+        }
+      }
+    },
+    {
+      "nome": "dopo-le-azioni",
+      "metodo": "GET",
+      "percorso": "/tree?percorso=prova-albero",
+      "dati": null,
+      "stato": 200,
+      "risposta": {
+        "ok": true,
+        "data": {
+          "voci": [
+            {
+              "nome": "sotto",
+              "cartella": true
+            },
+            {
+              "nome": "nota prova (copia 2).md",
+              "cartella": false
+            },
+            {
+              "nome": "nota prova (copia).md",
+              "cartella": false
+            }
+          ]
+        },
+        "meta": {
+          "schema": "talos.harness-ui.api.v1",
+          "generatedAt": "2026-10-17T09:01:51.585Z"
+        }
+      }
+    },
+    {
+      "nome": "sotto",
+      "metodo": "GET",
+      "percorso": "/tree?percorso=prova-albero%2Fsotto",
+      "dati": null,
+      "stato": 200,
+      "risposta": {
+        "ok": true,
+        "data": {
+          "voci": [
+            {
+              "nome": "nota.md",
+              "cartella": false
+            },
+            {
+              "nome": "slug.mjs",
+              "cartella": false
+            }
+          ]
+        },
+        "meta": {
+          "schema": "talos.harness-ui.api.v1",
+          "generatedAt": "2026-10-17T09:01:51.587Z"
+        }
+      }
+    },
+    {
+      "nome": "cerca",
+      "metodo": "GET",
+      "percorso": "/tree/search?q=nota",
+      "dati": null,
+      "stato": 200,
+      "risposta": {
+        "ok": true,
+        "data": {
+          "risultati": [
+            {
+              "percorso": "NOTA.md",
+              "nome": "NOTA.md",
+              "cartella": false
+            },
+            {
+              "percorso": "nota.txt",
+              "nome": "nota.txt",
+              "cartella": false
+            },
+            {
+              "percorso": "prova-albero/sotto/nota.md",
+              "nome": "nota.md",
+              "cartella": false
+            },
+            {
+              "percorso": "allegati/talos-prova-nota.md",
+              "nome": "talos-prova-nota.md",
+              "cartella": false
+            },
+            {
+              "percorso": "allegati/talos-prova-nota-2.md",
+              "nome": "talos-prova-nota-2.md",
+              "cartella": false
+            },
+            {
+              "percorso": "prova-albero/nota prova (copia).md",
+              "nome": "nota prova (copia).md",
+              "cartella": false
+            },
+            {
+              "percorso": "prova-albero/nota prova (copia 2).md",
+              "nome": "nota prova (copia 2).md",
+              "cartella": false
+            }
+          ],
+          "troncato": false,
+          "motivo": null,
+          "saltate": []
+        },
+        "meta": {
+          "schema": "talos.harness-ui.api.v1",
+          "generatedAt": "2026-10-17T09:01:51.590Z"
+        }
+      }
+    },
+    {
+      "nome": "cerca-niente",
+      "metodo": "GET",
+      "percorso": "/tree/search?q=zzz-nessun-file",
+      "dati": null,
+      "stato": 200,
+      "risposta": {
+        "ok": true,
+        "data": {
+          "risultati": [],
+          "troncato": false,
+          "motivo": null,
+          "saltate": []
+        },
+        "meta": {
+          "schema": "talos.harness-ui.api.v1",
+          "generatedAt": "2026-10-17T09:01:51.593Z"
+        }
+      }
+    },
+    {
+      "nome": "errore-esiste",
+      "metodo": "POST",
+      "percorso": "/tree/create",
+      "dati": {
+        "percorsoBase": "prova-albero",
+        "nome": "sotto",
+        "tipo": "cartella"
+      },
+      "stato": 409,
+      "risposta": {
+        "ok": false,
+        "error": {
+          "code": "FILE_EXISTS",
+          "message": "A file with this name already exists",
+          "title": "Operation failed",
+          "explanation": "An unexpected problem occurred during the operation.",
+          "action": "Open Doctor, copy the reference and try again.",
+          "doctorReference": "doctor-bf596b7192bf"
+        },
+        "meta": {
+          "schema": "talos.harness-ui.api.v1",
+          "generatedAt": "2026-10-17T09:01:51.598Z"
+        }
+      }
+    },
+    {
+      "nome": "errore-nome-percorso",
+      "metodo": "POST",
+      "percorso": "/tree/rename",
+      "dati": {
+        "percorso": "prova-albero/sotto/nota.md",
+        "nuovoNome": "a/b.md"
+      },
+      "stato": 400,
+      "risposta": {
+        "ok": false,
+        "error": {
+          "code": "QUERY_INVALID",
+          "message": "Invalid query",
+          "title": "Operation failed",
+          "explanation": "Invalid new name — a file name, not a path",
+          "action": "Open Doctor, copy the reference and try again.",
+          "doctorReference": "doctor-3f9d08bd6dff",
+          "reason": "new-name-invalid"
+        },
+        "meta": {
+          "schema": "talos.harness-ui.api.v1",
+          "generatedAt": "2026-10-17T09:01:51.603Z"
+        }
+      }
+    },
+    {
+      "nome": "errore-rinomina-su-esistente",
+      "metodo": "POST",
+      "percorso": "/tree/rename",
+      "dati": {
+        "percorso": "prova-albero/sotto/nota.md",
+        "nuovoNome": "slug.mjs"
+      },
+      "stato": 409,
+      "risposta": {
+        "ok": false,
+        "error": {
+          "code": "FILE_EXISTS",
+          "message": "A file with this name already exists",
+          "title": "Operation failed",
+          "explanation": "An unexpected problem occurred during the operation.",
+          "action": "Open Doctor, copy the reference and try again.",
+          "doctorReference": "doctor-bf596b7192bf"
+        },
+        "meta": {
+          "schema": "talos.harness-ui.api.v1",
+          "generatedAt": "2026-10-17T09:01:51.607Z"
+        }
+      }
+    },
+    {
+      "nome": "errore-sposta-in-se",
+      "metodo": "POST",
+      "percorso": "/tree/move",
+      "dati": {
+        "percorso": "prova-albero/sotto",
+        "cartellaDestinazione": "prova-albero/sotto"
+      },
+      "stato": 400,
+      "risposta": {
+        "ok": false,
+        "error": {
+          "code": "QUERY_INVALID",
+          "message": "Invalid query",
+          "title": "Operation failed",
+          "explanation": "You cannot move an item into itself or one of its descendants",
+          "action": "Open Doctor, copy the reference and try again.",
+          "doctorReference": "doctor-3f9d08bd6dff",
+          "reason": "move-into-itself"
+        },
+        "meta": {
+          "schema": "talos.harness-ui.api.v1",
+          "generatedAt": "2026-10-17T09:01:51.611Z"
+        }
+      }
+    },
+    {
+      "nome": "errore-anteprima-cartella",
+      "metodo": "GET",
+      "percorso": "/tree/file?percorso=prova-albero%2Fsotto",
+      "dati": null,
+      "stato": 400,
+      "risposta": {
+        "ok": false,
+        "error": {
+          "code": "QUERY_INVALID",
+          "message": "Invalid query",
+          "title": "Operation failed",
+          "explanation": "Not a file — open a folder from the tree, not from here",
+          "action": "Open Doctor, copy the reference and try again.",
+          "doctorReference": "doctor-3f9d08bd6dff",
+          "reason": "not-a-file-preview"
+        },
+        "meta": {
+          "schema": "talos.harness-ui.api.v1",
+          "generatedAt": "2026-10-17T09:01:51.615Z"
+        }
+      }
+    },
+    {
+      "nome": "errore-anteprima-mancante",
+      "metodo": "GET",
+      "percorso": "/tree/file?percorso=prova-albero%2Fmanca.md",
+      "dati": null,
+      "stato": 404,
+      "risposta": {
+        "ok": false,
+        "error": {
+          "code": "FILE_NOT_FOUND",
+          "message": "File not found",
+          "title": "Operation failed",
+          "explanation": "An unexpected problem occurred during the operation.",
+          "action": "Open Doctor, copy the reference and try again.",
+          "doctorReference": "doctor-332640751c76"
+        },
+        "meta": {
+          "schema": "talos.harness-ui.api.v1",
+          "generatedAt": "2026-10-17T09:01:51.622Z"
+        }
+      }
+    },
+    {
+      "nome": "errore-albero-fuori",
+      "metodo": "GET",
+      "percorso": "/tree?percorso=..%2F",
+      "dati": null,
+      "stato": 400,
+      "risposta": {
+        "ok": false,
+        "error": {
+          "code": "QUERY_INVALID",
+          "message": "Invalid query",
+          "title": "Operation failed",
+          "explanation": "Path outside the session folder",
+          "action": "Open Doctor, copy the reference and try again.",
+          "doctorReference": "doctor-3f9d08bd6dff",
+          "reason": "path-outside-session"
+        },
+        "meta": {
+          "schema": "talos.harness-ui.api.v1",
+          "generatedAt": "2026-10-17T09:01:51.629Z"
+        }
+      }
+    },
+    {
+      "nome": "errore-albero-mancante",
+      "metodo": "GET",
+      "percorso": "/tree?percorso=prova-albero%2Fmanca",
+      "dati": null,
+      "stato": 400,
+      "risposta": {
+        "ok": false,
+        "error": {
+          "code": "QUERY_INVALID",
+          "message": "Invalid query",
+          "title": "Operation failed",
+          "explanation": "Folder not found",
+          "action": "Open Doctor, copy the reference and try again.",
+          "doctorReference": "doctor-3f9d08bd6dff",
+          "reason": "folder-not-found"
+        },
+        "meta": {
+          "schema": "talos.harness-ui.api.v1",
+          "generatedAt": "2026-10-17T09:01:51.636Z"
+        }
+      }
+    },
+    {
+      "nome": "errore-elimina-radice",
+      "metodo": "POST",
+      "percorso": "/tree/delete",
+      "dati": {
+        "percorso": ""
+      },
+      "stato": 400,
+      "risposta": {
+        "ok": false,
+        "error": {
+          "code": "QUERY_INVALID",
+          "message": "Invalid query",
+          "title": "Operation failed",
+          "explanation": "Invalid path",
+          "action": "Open Doctor, copy the reference and try again.",
+          "doctorReference": "doctor-3f9d08bd6dff",
+          "reason": "path-invalid"
+        },
+        "meta": {
+          "schema": "talos.harness-ui.api.v1",
+          "generatedAt": "2026-10-17T09:01:51.643Z"
+        }
+      }
+    },
+    {
+      "nome": "elimina-file",
+      "metodo": "POST",
+      "percorso": "/tree/delete",
+      "dati": {
+        "percorso": "prova-albero/sotto/nota.md"
+      },
+      "stato": 200,
+      "risposta": {
+        "ok": true,
+        "data": {
+          "eliminato": true
+        },
+        "meta": {
+          "schema": "talos.harness-ui.api.v1",
+          "generatedAt": "2026-10-17T09:01:51.647Z"
+        }
+      }
+    },
+    {
+      "nome": "elimina-cartella",
+      "metodo": "POST",
+      "percorso": "/tree/delete",
+      "dati": {
+        "percorso": "prova-albero"
+      },
+      "stato": 200,
+      "risposta": {
+        "ok": true,
+        "data": {
+          "eliminato": true
+        },
+        "meta": {
+          "schema": "talos.harness-ui.api.v1",
+          "generatedAt": "2026-10-17T09:01:51.653Z"
+        }
+      }
+    },
+    {
+      "nome": "radice-dopo",
+      "metodo": "GET",
+      "percorso": "/tree?percorso=",
+      "dati": null,
+      "stato": 200,
+      "risposta": {
+        "ok": true,
+        "data": {
+          "voci": [
+            {
+              "nome": ".talos",
+              "cartella": true
+            },
+            {
+              "nome": "allegati",
+              "cartella": true
+            },
+            {
+              "nome": "provaCartella",
+              "cartella": true
+            },
+            {
+              "nome": "qa-campagna",
+              "cartella": true
+            },
+            {
+              "nome": ".harness-ui-hooks.json",
+              "cartella": false
+            },
+            {
+              "nome": "calcola-iva.mjs",
+              "cartella": false
+            },
+            {
+              "nome": "calcola-iva.test.mjs",
+              "cartella": false
+            },
+            {
+              "nome": "clean_functions_guide.md",
+              "cartella": false
+            },
+            {
+              "nome": "NOTA.md",
+              "cartella": false
+            },
+            {
+              "nome": "nota.txt",
+              "cartella": false
+            },
+            {
+              "nome": "orologio.sh",
+              "cartella": false
+            },
+            {
+              "nome": "orologio.txt",
+              "cartella": false
+            },
+            {
+              "nome": "prova-b1.txt",
+              "cartella": false
+            },
+            {
+              "nome": "slug-pannello.mjs",
+              "cartella": false
+            },
+            {
+              "nome": "slugify.mjs",
+              "cartella": false
+            },
+            {
+              "nome": "slugify.test.mjs",
+              "cartella": false
+            },
+            {
+              "nome": "top10_download.sh",
+              "cartella": false
+            }
+          ]
+        },
+        "meta": {
+          "schema": "talos.harness-ui.api.v1",
+          "generatedAt": "2026-10-17T09:01:51.657Z"
+        }
+      }
+    }
+  ]
+}

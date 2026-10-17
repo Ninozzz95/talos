@@ -68,6 +68,8 @@ describe('router wiring', () => {
             'doctor',
             'research', 'research-new', 'research-report', 'research-claim', 'research-source',
             'context', 'harness', 'harness-session',
+            // K3-B2 (15/10/2026): il Codice sul motore nuovo (r4), solo sviluppo, accanto al Codice di oggi; torna a 'harness'.
+            'codice-r4',
             // Tool Forge — mobile-first come 'harness': nessun
             // desktop_station_id nel ledger di parità (schema deliberato,
             // vedi mobileRoutes.ts).
@@ -96,6 +98,7 @@ describe('router wiring', () => {
             ['memory-edit', 'memory-item'],
             // U-13: idem per l'attivita'.
             ['task-edit', 'task-item'],
+            ['codice-r4', 'harness'],
         ] as const) {
             // I genitori che sono una PAGINA di dettaglio vogliono il loro
             // `:id`; le stazioni no. Scritto come regola e non come elenco di

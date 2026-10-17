@@ -1,0 +1,1499 @@
+{
+  "schema": "talos.mobile.attese-r4.v1",
+  "pin": "9f8b5fae5",
+  "nota": "Ogni riga è una prova di r4 che sul Pad è rossa per l'ambiente (Android, niente git/npm/ripgrep, prove scritte per Windows/WSL), letta una per una il 17/10/2026 sul giro 2 di K4 (pin 701c6c0d2), confermata uguale al pin 9f8b5fae5 (desktop 0.1.31) lo stesso giorno: 805 file, 246 rosse attese, nessuna nuova. Il cancello fallisce per una rossa NON qui e per una riga qui che adesso passa.",
+  "cause": {
+    "casa-linux-wsl": "la casa Linux in WSL esiste solo sul desktop",
+    "file-non-copiato": "la prova legge un file che il pacchetto delle prove non porta",
+    "git-assente": "git non c'è sul telefono (fase a parte del Codice)",
+    "helper-allegati-windows": "l'aiuto degli allegati talos-chat-upload.exe è solo Windows",
+    "link-vietato": "link() è vietato alle app Android (r4 ha il ripiego, la prova presume link)",
+    "llama-server-desktop": "il motore dei modelli locali del desktop (llama-server, scaricamento diretto da Hugging Face): il mobile ha il suo",
+    "modulo-runtime-per-percorso": "il modulo di runtime per percorso Windows scritto nella prova",
+    "npm-assente": "npm e npx non ci sono sul telefono",
+    "prova-che-lancia-prove": "la prova lancia altre prove, che sul telefono sono rosse per l'ambiente",
+    "ripgrep-assente": "ripgrep non c'è sul telefono (la ricerca ripiega sulla camminata JS)",
+    "ripgrep-assente-cerca": "senza ripgrep «cerca» sul telefono dà i nomi dei file e non le righe: la prova presume le righe",
+    "shell-windows-wsl": "la prova sceglie la shell Windows/WSL",
+    "watcher-linux": "su Linux il watcher ricorsivo dei file è fatto da più watcher: la prova conta quelli di Windows",
+    "windows-nella-prova": "la prova scrive un percorso o un comportamento di Windows"
+  },
+  "voci": [
+    {
+      "file": "src/kernel/talosHarness.test.mjs",
+      "prova": "ETICHETTA-SANDBOX — dire dove ha girato, e che cosa è vero lì > dichiara il fatto, non solo il valore: `none` non è una spiegazione",
+      "esito": "fail",
+      "causa": "windows-nella-prova"
+    },
+    {
+      "file": "src/kernel/talosHarness.test.mjs",
+      "prova": "percorsoMirrorDevice — dove il mirror del task finisce sul telefono > ⭐ un caso reale, lo stesso pattern usato da preparaCopia in TALOS-BANCO",
+      "esito": "fail",
+      "causa": "windows-nella-prova"
+    },
+    {
+      "file": "src/kernel/talosHarness.test.mjs",
+      "prova": "talosLavora — verificaPermessoScrittura (livelloAccesso/chiediApprovazioneFn), opzionali per costruzione > ⛔ E IL VERSO CONTRARIO: una prova che ESEGUE qualcosa non viene accusata di niente",
+      "esito": "fail",
+      "causa": "npm-assente"
+    },
+    {
+      "file": "src/kernel/talosHarness.test.mjs",
+      "prova": "talosLavora — verificaPermessoScrittura (livelloAccesso/chiediApprovazioneFn), opzionali per costruzione > ⛔ FALLA 1, AL CONTRARIO — con un `package.json` che dichiara lo script, la prova GIRA",
+      "esito": "fail",
+      "causa": "npm-assente"
+    },
+    {
+      "file": "src/kernel/talosHarness.test.mjs",
+      "prova": "talosLavora — verificaPermessoScrittura (livelloAccesso/chiediApprovazioneFn), opzionali per costruzione > ⛔⛔⛔ il COLLEGAMENTO: una dichiarazione di zero test diventa loud — NOT RUN: NO_TESTS_RAN, col codice vero del runner (owner 03/10)",
+      "esito": "fail",
+      "causa": "npm-assente"
+    },
+    {
+      "file": "tests/agent-command-environment.test.mjs",
+      "prova": "SHELL07-APPROVAL: selection is rechecked after approval",
+      "esito": "fail",
+      "causa": "shell-windows-wsl"
+    },
+    {
+      "file": "tests/agent-command-environment.test.mjs",
+      "prova": "SHELL07-CHANGE: a command prepared before an environment change is never executed",
+      "esito": "fail",
+      "causa": "shell-windows-wsl"
+    },
+    {
+      "file": "tests/agent-command-environment.test.mjs",
+      "prova": "SHELL07-TAP-EMPTY: a real Node TAP reporter with zero tests is not a pass",
+      "esito": "fail",
+      "causa": "shell-windows-wsl"
+    },
+    {
+      "file": "tests/agent-service.test.mjs",
+      "prova": "⭐⭐ senza iniezione, il contesto workspace è QUELLO VERO (nessun mock): questo repo ha un branch reale",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/agent-service.test.mjs",
+      "prova": "D-10B: i pezzi di output escono come ToolCallOutput PRIMA del risultato, e nell’ordine",
+      "esito": "fail",
+      "causa": "windows-nella-prova"
+    },
+    {
+      "file": "tests/aggiorna-4174-registro-workflow.test.mjs",
+      "prova": "AGGIORNA-4174-WORKFLOW-ALTRO: the app Workflow store is passed read-only only when the sessions are the app ones",
+      "esito": "fail",
+      "causa": "windows-nella-prova"
+    },
+    {
+      "file": "tests/aggiorna-4174-registro-workflow.test.mjs",
+      "prova": "AGGIORNA-4174-WORKFLOW-DIR-CONFIG: the server reads that folder, and it is not inside any default project",
+      "esito": "fail",
+      "causa": "windows-nella-prova"
+    },
+    {
+      "file": "tests/assert-errore-cricchetto.test.mjs",
+      "prova": "ASSERT-ERRORE-02 — cricchetto: nessuna assert.throws/rejects NUOVA senza l'errore atteso, e il debito scende soltanto",
+      "esito": "fail",
+      "causa": "file-non-copiato"
+    },
+    {
+      "file": "tests/bc57-prova-senza-suite.test.mjs",
+      "prova": "BC-57 — `prova` senza una suite da lanciare > ⛔⛔⛔ B1 — MONOREPO: da una sottocartella vuota la suite del GENITORE si esegue, non si rifiuta",
+      "esito": "fail",
+      "causa": "npm-assente"
+    },
+    {
+      "file": "tests/bc57-prova-senza-suite.test.mjs",
+      "prova": "F-017 residuo — «exit 0» con ZERO test eseguiti NON è un pass > ⛔ «0 passing» di Mocha con uscita 0 (mochajs/mocha #4062): la CI muta diventa loud",
+      "esito": "fail",
+      "causa": "npm-assente"
+    },
+    {
+      "file": "tests/browser-vivo.test.mjs",
+      "prova": "RIPIEGO VERO, al contrario: su questa macchina un Chromium ESISTE e la funzione lo trova",
+      "esito": "fail",
+      "causa": "windows-nella-prova"
+    },
+    {
+      "file": "tests/c16-permessi-a-giro-vivo.test.mjs",
+      "prova": "C16-01 DOWNGRADE: «Full access» → «On request» while the turn works ⇒ the NEXT command of the same turn asks, and the model is told",
+      "esito": "fail",
+      "causa": "shell-windows-wsl"
+    },
+    {
+      "file": "tests/c16-permessi-a-giro-vivo.test.mjs",
+      "prova": "C16-02 UPGRADE: «On request» → «Full access» while the turn works ⇒ the next command runs without asking, and the model is told",
+      "esito": "fail",
+      "causa": "shell-windows-wsl"
+    },
+    {
+      "file": "tests/c16-permessi-a-giro-vivo.test.mjs",
+      "prova": "C16-03 THE TOOL LIST follows the level both ways: «Read only» → «Workspace write» offers scrivi from the next request; back down removes it",
+      "esito": "fail",
+      "causa": "shell-windows-wsl"
+    },
+    {
+      "file": "tests/c16-permessi-a-giro-vivo.test.mjs",
+      "prova": "C16-04 AL CONTRARIO: no change while the turn works ⇒ no line for the model, no question, the same tools",
+      "esito": "fail",
+      "causa": "shell-windows-wsl"
+    },
+    {
+      "file": "tests/c16-permessi-a-giro-vivo.test.mjs",
+      "prova": "C16-05 PER-TOOL: «shell: chiedi» set while the turn works in full access ⇒ the next shell command asks",
+      "esito": "fail",
+      "causa": "shell-windows-wsl"
+    },
+    {
+      "file": "tests/c5-elenca.test.mjs",
+      "prova": "C5-ELENCA-14 (review b): one folder, one name for the cursor and the count; another depth is another listing",
+      "esito": "fail",
+      "causa": "windows-nella-prova"
+    },
+    {
+      "file": "tests/capability-hub.test.mjs",
+      "prova": "O-01 — attrezziKernel(): nomi e descrizioni VERI dal kernel, base ed estesi separati",
+      "esito": "fail",
+      "causa": "modulo-runtime-per-percorso"
+    },
+    {
+      "file": "tests/capability-hub.test.mjs",
+      "prova": "O-01 AL CONTRARIO — un kernel che non espone gli attrezzi non produce una lista vuota: dichiara il contratto mancante",
+      "esito": "fail",
+      "causa": "modulo-runtime-per-percorso"
+    },
+    {
+      "file": "tests/cerca-kernel.test.mjs",
+      "prova": "⛔ CERCA-20: con ripgrep un file da 9 MB si cerca davvero — il tetto degli 8 MB lo saltava in silenzio",
+      "esito": "fail",
+      "causa": "ripgrep-assente"
+    },
+    {
+      "file": "tests/chat-files.test.mjs",
+      "prova": "CHAT-FILES-ABORT: a failed stream leaves no published file",
+      "esito": "fail",
+      "causa": "helper-allegati-windows"
+    },
+    {
+      "file": "tests/chat-files.test.mjs",
+      "prova": "CHAT-FILES-ASSOLUTO: BUG-20 — the receipt carries the ABSOLUTE path, resolvable from any session root",
+      "esito": "fail",
+      "causa": "helper-allegati-windows"
+    },
+    {
+      "file": "tests/chat-files.test.mjs",
+      "prova": "CHAT-FILES-BYTES: copied binary bytes survive without UTF-8 decoding",
+      "esito": "fail",
+      "causa": "helper-allegati-windows"
+    },
+    {
+      "file": "tests/chat-files.test.mjs",
+      "prova": "CHAT-FILES-COLLISION: concurrent uploads get distinct paths and never overwrite",
+      "esito": "fail",
+      "causa": "helper-allegati-windows"
+    },
+    {
+      "file": "tests/chat-files.test.mjs",
+      "prova": "CHAT-FILES-DIRECTORY-SWAP: replacing the checked attachments directory cannot publish outside",
+      "esito": "fail",
+      "causa": "helper-allegati-windows"
+    },
+    {
+      "file": "tests/chat-files.test.mjs",
+      "prova": "CHAT-FILES-HTTP: authenticated same-origin request copies bytes to the selected session only",
+      "esito": "fail",
+      "causa": "helper-allegati-windows"
+    },
+    {
+      "file": "tests/chat-files.test.mjs",
+      "prova": "CHAT-FILES-LIMIT: count bytes while streaming and remove incomplete file",
+      "esito": "fail",
+      "causa": "helper-allegati-windows"
+    },
+    {
+      "file": "tests/chat-files.test.mjs",
+      "prova": "CHAT-FILES-REAL-SESSION: HTTP receipt resolves to bytes in the actual registry workspace",
+      "esito": "fail",
+      "causa": "helper-allegati-windows"
+    },
+    {
+      "file": "tests/chat-files.test.mjs",
+      "prova": "CHAT-FILES-SYMLINK: an attachments link outside the workspace is refused",
+      "esito": "fail",
+      "causa": "helper-allegati-windows"
+    },
+    {
+      "file": "tests/config.test.mjs",
+      "prova": "config accepts an explicit llama-server binary path and discovers the pinned local binary when present",
+      "esito": "fail",
+      "causa": "llama-server-desktop"
+    },
+    {
+      "file": "tests/confine-adozione-nominato.test.mjs",
+      "prova": "ADOZIONE-NOM-02 — sul kernel: il file nominato dalla persona riceve l'eccezione, gli altri e le ricerche no",
+      "esito": "fail",
+      "causa": "ripgrep-assente-cerca"
+    },
+    {
+      "file": "tests/context-engine-integration.test.mjs",
+      "prova": "CTX-OPENROUTER-NO-DOUBLE-COMPRESSION disables the documented plugin only on context-owned requests",
+      "esito": "fail",
+      "causa": "modulo-runtime-per-percorso"
+    },
+    {
+      "file": "tests/context-token-counters.test.mjs",
+      "prova": "CTX-DESKTOP-COUNT-WIRE counts resolved images, shell schema and normalized chat reasoning",
+      "esito": "fail",
+      "causa": "modulo-runtime-per-percorso"
+    },
+    {
+      "file": "tests/custom-task.test.mjs",
+      "prova": "⛔⛔ AL CONTRARIO — cartellaLibera che NON esiste è PROJECT_NOT_ALLOWED, mai una cartella creata al volo",
+      "esito": "fail",
+      "causa": "windows-nella-prova"
+    },
+    {
+      "file": "tests/delega-percorso-e-scheda-agenti.test.mjs",
+      "prova": "⛔⛔⛔ FORMA — «/tmp» è rifiutata, e nessun figlio parte (su Windows «/» è ancorato all'unità corrente: il disco risponde per C:\\tmp)",
+      "esito": "fail",
+      "causa": "windows-nella-prova"
+    },
+    {
+      "file": "tests/delega-percorso-e-scheda-agenti.test.mjs",
+      "prova": "⭐ la forma si legge dalla RADICE, non dal sistema operativo scritto in un if",
+      "esito": "fail",
+      "causa": "windows-nella-prova"
+    },
+    {
+      "file": "tests/documento-cartella-nel-titolo.test.mjs",
+      "prova": "DOC-FOLDER-JUNCTION-ESCAPE — AL CONTRARIO: una cartella esistente che è una giunzione verso fuori NON riceve il file",
+      "esito": "fail",
+      "causa": "windows-nella-prova"
+    },
+    {
+      "file": "tests/elenco-profondo.test.mjs",
+      "prova": "ELENCO-TESTO-09: l'intestazione dice il nome della cartella, mai il percorso della persona",
+      "esito": "fail",
+      "causa": "windows-nella-prova"
+    },
+    {
+      "file": "tests/f027-contenuto-non-fidato.test.mjs",
+      "prova": "F027-CERCA-NIENTE: «no file matches» di TALOS resta fuori dal confine",
+      "esito": "fail",
+      "causa": "ripgrep-assente-cerca"
+    },
+    {
+      "file": "tests/f027-contenuto-non-fidato.test.mjs",
+      "prova": "F027-CERCA: le righe trovate in un file sono dati, e una trappola si segnala anche da qui",
+      "esito": "fail",
+      "causa": "ripgrep-assente-cerca"
+    },
+    {
+      "file": "tests/full-access-root-e2e.test.mjs",
+      "prova": "Full access su radice volume non avvia un watcher ricorsivo",
+      "esito": "fail",
+      "causa": "windows-nella-prova"
+    },
+    {
+      "file": "tests/full-access-root-e2e.test.mjs",
+      "prova": "Full access su una cartella ordinaria mantiene il watcher",
+      "esito": "fail",
+      "causa": "watcher-linux"
+    },
+    {
+      "file": "tests/g02-approval-tool-call.test.mjs",
+      "prova": "G02-3 the approval request for notes_create names its tool call",
+      "esito": "fail",
+      "causa": "shell-windows-wsl"
+    },
+    {
+      "file": "tests/g02-approval-tool-call.test.mjs",
+      "prova": "G02-3 the approval request for scrivi names its tool call",
+      "esito": "fail",
+      "causa": "shell-windows-wsl"
+    },
+    {
+      "file": "tests/g02-approval-tool-call.test.mjs",
+      "prova": "G02-3 the approval request for shell names its tool call",
+      "esito": "fail",
+      "causa": "shell-windows-wsl"
+    },
+    {
+      "file": "tests/g02-cli-shell-broker.test.mjs",
+      "prova": "G02-1 BROKER inside capture: the model's shell runs through the injected executor, never on the host",
+      "esito": "fail",
+      "causa": "shell-windows-wsl"
+    },
+    {
+      "file": "tests/g02-cli-shell-broker.test.mjs",
+      "prova": "G02-1 BROKER: the model's shell runs through the injected executor, never on the host",
+      "esito": "fail",
+      "causa": "shell-windows-wsl"
+    },
+    {
+      "file": "tests/g02-pre-mutation-barrier.test.mjs",
+      "prova": "G02-9 the model shell passes the barrier before the executor; a read never does",
+      "esito": "fail",
+      "causa": "shell-windows-wsl"
+    },
+    {
+      "file": "tests/git-messaggio-commit.test.mjs",
+      "prova": "F6-1 ✨ — il diff è quello PREPARATO se c'è, altrimenti quello dei file; solo la cartella della sessione; con i soggetti",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-messaggio-commit.test.mjs",
+      "prova": "F6-1 ✨ — niente da descrivere è un rifiuto per nome, non una richiesta vuota al modello",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service-confronto.test.mjs",
+      "prova": "F6-2 p4 — «In arrivo» / «In uscita»: dalla base comune alla punta data",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service-confronto.test.mjs",
+      "prova": "F6-2 p4 — AL CONTRARIO: nomi, hash corti, opzioni, commit inesistenti e percorsi fuori sono rifiutati per nome",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service-confronto.test.mjs",
+      "prova": "F6-2 p4 — da una SOTTOCARTELLA: i percorsi sono quelli della sessione, e ciò che cambia fuori si CONTA",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service-confronto.test.mjs",
+      "prova": "F6-2 p4 — i file di un commit contro il suo PRIMO genitore; la radice contro l albero vuoto; aggiunti, modificati, eliminati, rinominati",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service-confronto.test.mjs",
+      "prova": "F6-2 p4 — il diff di un file fra due commit, e di un rinominato col nome di prima; sola lettura, stessi divieti",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service-f6-passo3.test.mjs",
+      "prova": "F6-1 p3 — annulla il PRIMO commit: niente HEAD, e tutto resta preparato",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service-f6-passo3.test.mjs",
+      "prova": "F6-1 p3 — annulla l'ultimo commit: le modifiche tornano PREPARATE e il messaggio torna a chi chiede",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service-f6-passo3.test.mjs",
+      "prova": "F6-1 p3 — annulla si ferma su unione, inviato, HEAD cambiato e commit che tocca file fuori dalla sessione",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service-f6-passo3.test.mjs",
+      "prova": "F6-1 p3 — con un git in italiano: «non unito», «niente da mettere da parte» e «conflitto» restano decisioni giuste",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service-f6-passo3.test.mjs",
+      "prova": "F6-1 p3 — elimina: mai il corrente; un non unito solo con forza esplicita; un unito subito",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service-f6-passo3.test.mjs",
+      "prova": "F6-1 p3 — il cambio di ramo che sovrascriverebbe modifiche si ferma per NOME, e i file restano come erano",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service-f6-passo3.test.mjs",
+      "prova": "F6-1 p3 — la storia ha un tetto e lo dice («altri»), mai un taglio muto",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service-f6-passo3.test.mjs",
+      "prova": "F6-1 p3 — la storia: vuota senza commit, poi dal più recente, e «inviato» vero solo per ciò che sta in un ramo remoto",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service-f6-passo3.test.mjs",
+      "prova": "F6-1 p3 — mettere da parte da una sottocartella prende SOLO la cartella della sessione; senza modifiche lo dice",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service-f6-passo3.test.mjs",
+      "prova": "F6-1 p3 — modifica: messaggio nuovo più ciò che è preparato, stesso genitore",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service-f6-passo3.test.mjs",
+      "prova": "F6-1 p3 — modifica: si ferma per NOME su HEAD cambiato, commit già inviato, impronta vecchia",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service-f6-passo3.test.mjs",
+      "prova": "F6-1 p3 — rami: elenco con il corrente, crea e ci passa, cambia, rinomina",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service-f6-passo3.test.mjs",
+      "prova": "F6-1 p3 — riprendere con un conflitto lo dice per nome e la voce RESTA messa da parte",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service-f6-passo3.test.mjs",
+      "prova": "F6-1 p3 — riprendere e scartare vogliono indice E hash visti; una voce con file fuori non si riprende",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service-f6-passo3.test.mjs",
+      "prova": "F6-1 p3 — un nome di ramo è testo non fidato: trattino, «@{», spazi, «..», «.lock», HEAD si rifiutano e NIENTE cambia",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service-f6-pezzi.test.mjs",
+      "prova": "F6-1 pezzi — annullare un pezzo nell'albero con CRLF e autocrlf=true rimette i byte, CRLF compresi",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service-f6-pezzi.test.mjs",
+      "prova": "F6-1 pezzi — con apply.whitespace=error il pezzo con spazi in coda si prepara lo stesso (--whitespace=nowarn)",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service-f6-pezzi.test.mjs",
+      "prova": "F6-1 pezzi — i rifiuti per NOME: diff cambiato, pezzo o azione o area che non esistono, file nuovo",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service-f6-pezzi.test.mjs",
+      "prova": "F6-1 pezzi — l'impronta del diff cambia col testo e resta uguale altrimenti",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service-f6-pezzi.test.mjs",
+      "prova": "F6-1 pezzi — preparare il PRIMO pezzo da una sottocartella: l'indice prende quello solo, l'albero non si tocca",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service-f6-pezzi.test.mjs",
+      "prova": "F6-1 pezzi — togliere un pezzo preparato lo rimette fra i da preparare, e non tocca un cambio di MODO del file",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service-f6.test.mjs",
+      "prova": "F6-1 — annulla ELIMINA un file nuovo e una cartella nuova, e lo dice; rifiuta ciò che è solo preparato",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service-f6.test.mjs",
+      "prova": "F6-1 — annulla non elimina MAI un repository annidato",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service-f6.test.mjs",
+      "prova": "F6-1 — annulla riporta un file tracciato alla versione PREPARATA (non a quella del commit) e non tocca l'indice",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service-f6.test.mjs",
+      "prova": "F6-1 — gli hook del repository girano: un pre-commit che rifiuta ferma il commit e torna col suo testo",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service-f6.test.mjs",
+      "prova": "F6-1 — guardare un diff NON esegue i programmi che il repository configura (textconv, diff esterno)",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service-f6.test.mjs",
+      "prova": "F6-1 — il commit prende l'INDICE: la versione preparata, non quella cambiata dopo nell'albero",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service-f6.test.mjs",
+      "prova": "F6-1 — il commit si ferma per NOME: impronta vecchia, niente preparato, messaggio vuoto",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service-f6.test.mjs",
+      "prova": "F6-1 — il diff di un file: area «lavoro» e area «preparato» sono due cose diverse",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service-f6.test.mjs",
+      "prova": "F6-1 — l'impronta cambia quando cambia ciò che è preparato o HEAD, e resta uguale altrimenti",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service-f6.test.mjs",
+      "prova": "F6-1 — la base si dichiara: null senza commit, poi hash corto e soggetto del commit",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service-f6.test.mjs",
+      "prova": "F6-1 — un file NUOVO ha il suo diff contro il vuoto; un file binario lo dice; un file pulito è un rifiuto per nome",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service-f6.test.mjs",
+      "prova": "F6-1 — un file preparato FUORI dalla cartella della sessione ferma il commit (e lo stato lo conta)",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service-per-la-pr.test.mjs",
+      "prova": "PR-BOZZA-01 — base predefinita, rami del remoto, i commit del ramo dal più recente; col corpo",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service-per-la-pr.test.mjs",
+      "prova": "PR-BOZZA-01b — oltre 250 commit la lista si taglia e LO DICE (`commitOltre`); a 250 esatti no",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service-per-la-pr.test.mjs",
+      "prova": "PR-BOZZA-02 — la base scritta per il ramo vince sulla predefinita; una base chiesta vince su tutte",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service-per-la-pr.test.mjs",
+      "prova": "PR-BOZZA-03 — al contrario: un remoto che non è del repository, una base che non è un nome di ramo, e una base che il remoto non ha",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service-remoto.test.mjs",
+      "prova": "F6-2 — «Ferma» durante un recupero: il comando riceve il segnale, l esito è GIT_ABORTED, un secondo recupero è rifiutato mentre gira, e il lock NOSTRO si toglie",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service-remoto.test.mjs",
+      "prova": "F6-2 — il remoto per l invio segue l ordine di git: pushRemote, pushDefault, il remoto del ramo, origin, l unico; con due e niente config è NULL",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service-remoto.test.mjs",
+      "prova": "F6-2 — invia: pubblica un ramo nuovo con --set-upstream sul remoto scelto, poi manda i commit; niente da inviare lo dice; il flag «!» di --porcelain è un rifiuto",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service-remoto.test.mjs",
+      "prova": "F6-2 — recupera: senza remoti si rifiuta, un remoto sconosciuto si rifiuta, un nome che comincia per «-» non esiste",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service-remoto.test.mjs",
+      "prova": "F6-2 — remoti e sincronizzazione: il riferimento, avanti/indietro coi numeri, l ultimo recupero, il remoto per l invio",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service-remoto.test.mjs",
+      "prova": "F6-2 — scarica con conflitto: non è un errore, è lo stato che torna (conflitti > 0), e da lì niente altro scarica finché non si risolve",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service-remoto.test.mjs",
+      "prova": "F6-2 — scarica passa `--ff` solo se `pull.ff` tace (GitHub Desktop `pull.ts:115-135`), e sempre `--no-edit`, `--` e il remoto del riferimento",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service-remoto.test.mjs",
+      "prova": "F6-2 — scarica: avanti veloce quando si può, unione quando serve; senza riferimento si rifiuta; i file che verrebbero sovrascritti fermano tutto, per nome",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service-remoto.test.mjs",
+      "prova": "F6-2 — un repository senza commit non invia, e con due remoti e nessuna preferenza chiede il remoto",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service-remoto.test.mjs",
+      "prova": "F6-2 p3 — la storia porta il ramo E il suo remoto in ordine topologico, con HEAD, la punta del remoto, il suo nome e la base comune",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service.test.mjs",
+      "prova": "⛔ AL CONTRARIO — committare un percorso che non ha NIENTE da committare è rifiutato per nome, non con un errore di git",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service.test.mjs",
+      "prova": "⛔ un elenco di percorsi ripetuti non moltiplica gli argomenti passati a git",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service.test.mjs",
+      "prova": "⛔⛔ AL CONTRARIO — un commit senza MESSAGGIO è rifiutato, e non nasce nessun commit",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service.test.mjs",
+      "prova": "⛔⛔ AL CONTRARIO — un commit SENZA percorsi espliciti è rifiutato (fotograferebbe l'intero indice condiviso)",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service.test.mjs",
+      "prova": "⛔⛔ HEAD STACCATA: `ramo` è null e `staccata` è true — mai la stringa «HEAD», che sembrerebbe un nome di ramo",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service.test.mjs",
+      "prova": "⛔⛔ una sessione SCONOSCIUTA non prende NIENTE: nessun ripiego su una cartella qualunque",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service.test.mjs",
+      "prova": "⛔⛔⛔ AL CONTRARIO — un file cambiato DOPO lo stage è RIFIUTATO per nome, perché il commit prenderebbe la versione nuova in silenzio",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service.test.mjs",
+      "prova": "⛔⛔⛔ la magia dei pathspec non passa: `:/` metterebbe in stage l'INTERO repository padre (misurato), qui è rifiutata",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service.test.mjs",
+      "prova": "⛔⛔⛔ sessione in una SOTTOCARTELLA: i percorsi sono relativi ALLA SESSIONE, e il resto del repo padre NON si vede",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service.test.mjs",
+      "prova": "⛔⛔⛔ un percorso FUORI dal workspace è rifiutato in tutte le sue forme",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service.test.mjs",
+      "prova": "⛔⛔⛔ un repository ANNIDATO non si attraversa: si vede la cartella, mai i file dentro, ed è MARCATA (W1-13)",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service.test.mjs",
+      "prova": "⛔⛔⛔ una cartella che NON è un repository: errore pulito e NOMINATO, mai un crash né un falso «pulito»",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service.test.mjs",
+      "prova": "⛔⛔⛔ una cartella di sessione INTERAMENTE non tracciata non diventa UNA voce con il percorso VUOTO: si vedono i file veri",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service.test.mjs",
+      "prova": "⭐ un WORKTREE (dove `.git` è un FILE, non una cartella) è un repository come gli altri",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service.test.mjs",
+      "prova": "⭐ una sessione che È la radice del repo lo dichiara (prefisso vuoto)",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service.test.mjs",
+      "prova": "⭐⭐ il messaggio passa da un FILE, non dalla riga di comando: multilinea, accenti e `#` sopravvivono intatti",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service.test.mjs",
+      "prova": "⭐⭐ il ramo si legge anche su un repository SENZA NEMMENO UN COMMIT (dove `rev-parse --abbrev-ref HEAD` esce 128)",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service.test.mjs",
+      "prova": "⭐⭐ stage e unstage, andata e ritorno, con un nome accentato e uno con spazio",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service.test.mjs",
+      "prova": "⭐⭐ un CONFLITTO non è né staged né non-staged: è una terza cosa, e si conta a parte",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service.test.mjs",
+      "prova": "⭐⭐ una cancellazione messa in stage è `eliminato` + staged, non un file sparito",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service.test.mjs",
+      "prova": "⭐⭐⭐ commit di percorsi ESPLICITI: quello che un'ALTRA sessione ha messo in stage resta FUORI e resta in stage",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service.test.mjs",
+      "prova": "⭐⭐⭐ staged e non-staged si distinguono per i DUE caratteri XY: X è l'indice, Y l'albero di lavoro",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service.test.mjs",
+      "prova": "⭐⭐⭐ un nome ACCENTATO e uno con uno SPAZIO arrivano IDENTICI, senza escape (è la prova che morde su `-z`)",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service.test.mjs",
+      "prova": "⭐⭐⭐ una RINOMINA arriva nel verso GIUSTO: `da` è il nome vecchio, `percorso` il nuovo (nel flusso -z l'ordine è invertito)",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service.test.mjs",
+      "prova": "INIT-01 — una cartella qualunque diventa un repository: .git c'è, il ramo è quello della configurazione, i file sono «nuovi»",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service.test.mjs",
+      "prova": "INIT-02 — dentro un repository (anche in una sottocartella) si rifiuta: nessun repository annidato",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service.test.mjs",
+      "prova": "INIT-03 — una cartella che CONTIENE la cartella utente vuole la conferma, come VS Code; confermata, si crea",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/git-service.test.mjs",
+      "prova": "WORKFLOW-BASELINE-CHARACTERIZATION — un submodule dirty è osservato come modifica ma NON è un repoAnnidato non tracciato",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/hf-direct-transfer.test.mjs",
+      "prova": "HF-DIRECT-SECURITY-01 rifiuta risposta CDN non HTTPS",
+      "esito": "fail",
+      "causa": "llama-server-desktop"
+    },
+    {
+      "file": "tests/http-routes-git.test.mjs",
+      "prova": "⛔ senza il servizio cablato le POST lo DICONO (503), non fingono un repository pulito",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/http-routes-git.test.mjs",
+      "prova": "⛔⛔ un commit senza percorsi o senza messaggio: 422, e nessun commit nasce",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/http-routes-git.test.mjs",
+      "prova": "⛔⛔ un corpo con chiavi NON previste è rifiutato, non ignorato in silenzio",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/http-routes-git.test.mjs",
+      "prova": "⛔⛔ un file cambiato dopo lo stage: 409 GIT_WORKTREE_DIFFERS invece di committare la versione sbagliata in silenzio",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/http-routes-git.test.mjs",
+      "prova": "⛔⛔⛔ PIN — le rotte del remoto (F6-2, 27/09) sono QUATTRO POST e DUE GET, nominate; il push non ha una forma forzata e non esiste in GET",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/http-routes-git.test.mjs",
+      "prova": "⛔⛔⛔ un percorso fuori dalla sessione: 422 GIT_PATH_INVALID, e niente viene toccato",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/http-routes-git.test.mjs",
+      "prova": "⛔⛔⛔ una cartella che non è un repository: 409 GIT_NOT_A_REPOSITORY, mai un 200 con un elenco vuoto",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/http-routes-git.test.mjs",
+      "prova": "⛔⛔⛔ una sessione che non esiste: 404, su tutte e cinque le rotte",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/http-routes-git.test.mjs",
+      "prova": "⭐ una sessione in una sottocartella parla lo stesso vocabolario anche via HTTP",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/http-routes-git.test.mjs",
+      "prova": "⭐⭐ GET /git/branch dice il ramo, e su HEAD staccata dice la verità invece della stringa «HEAD»",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/http-routes-git.test.mjs",
+      "prova": "⭐⭐ unstage dal solo HTTP",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/http-routes-git.test.mjs",
+      "prova": "⭐⭐⭐ GET /git/status: le voci arrivano al client con i nomi INTATTI, accenti e spazi compresi",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/http-routes-git.test.mjs",
+      "prova": "⭐⭐⭐ stage → commit dal solo HTTP: il commit tocca SOLO il percorso nominato",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/http-routes-git.test.mjs",
+      "prova": "F6-1 — GET /git/diff: il diff di un file per area, e la query sbagliata è un rifiuto (mai una parte ignorata)",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/http-routes-git.test.mjs",
+      "prova": "F6-1 — POST /git/discard e /git/commit-staged: le chiavi ammesse, l'impronta, i rifiuti per nome",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/http-routes-git.test.mjs",
+      "prova": "F6-1 ✨ — POST /git/commit-message: il diff preparato e i soggetti vanno al modello della sessione, torna il messaggio ripulito",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/http-routes-git.test.mjs",
+      "prova": "F6-1 ✨ — senza un modello collegato al server, /git/commit-message dice MODEL_CALL_FAILED e non tocca git",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/http-routes-git.test.mjs",
+      "prova": "F6-1 p3 — GET /git/log, /git/branches, /git/stashes: sola lettura, e una query è un rifiuto",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/http-routes-git.test.mjs",
+      "prova": "F6-1 p3 — POST amend/undo-commit/rami/stash: le chiavi ammesse, «forza» solo true, i rifiuti per nome",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/http-routes-git.test.mjs",
+      "prova": "F6-1 pezzi — POST /git/hunk: le chiavi ammesse, l'impronta del diff visto, il pezzo preparato e i rifiuti per nome",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/http-routes-git.test.mjs",
+      "prova": "F6-2 — GET /git/remotes e /git/sync, POST fetch/pull/push/fetch-stop: con un remoto vero su disco, le chiavi ammesse, i rifiuti per nome",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/http-routes-git.test.mjs",
+      "prova": "F6-2 p4 — GET /git/changes e /git/changes-diff: le chiavi ammesse (una volta sola), gli hash interi, i rifiuti per nome, niente POST",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/http-routes-git.test.mjs",
+      "prova": "INIT-HTTP — POST /git/init: una cartella che non è un repository lo diventa; il corpo porta solo «conferma»; la seconda volta 409",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/http-routes-git.test.mjs",
+      "prova": "INIT-HTTP-CONFERMA — la cartella che contiene quella utente: 409 senza conferma, e «conferma» vale SOLO come true",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/kernel-android.test.mjs",
+      "prova": "ANDROID-03 — publish once: link first; where links are refused, exclusive creation and read-back; never an overwrite",
+      "esito": "fail",
+      "causa": "link-vietato"
+    },
+    {
+      "file": "tests/llama-server-supervisor.test.mjs",
+      "prova": "AL CONTRARIO: senza gpuLayers, nessuno dei flag GPU-only compare — non solo -ngl",
+      "esito": "fail",
+      "causa": "llama-server-desktop"
+    },
+    {
+      "file": "tests/llama-server-supervisor.test.mjs",
+      "prova": "con GPU e un binario moderno accende KV f16 e la speculativa a n-grammi",
+      "esito": "fail",
+      "causa": "llama-server-desktop"
+    },
+    {
+      "file": "tests/llama-server-supervisor.test.mjs",
+      "prova": "con un backend GPU attivo aggiunge flash-attention e KV cache quantizzata simmetrica, non solo -ngl",
+      "esito": "fail",
+      "causa": "llama-server-desktop"
+    },
+    {
+      "file": "tests/llama-server-supervisor.test.mjs",
+      "prova": "exposes only an authenticated relative-path transport to the runtime adapter",
+      "esito": "fail",
+      "causa": "llama-server-desktop"
+    },
+    {
+      "file": "tests/llama-server-supervisor.test.mjs",
+      "prova": "le risposte del binario si pagano una volta sola: il secondo avvio non ri-sonda",
+      "esito": "fail",
+      "causa": "llama-server-desktop"
+    },
+    {
+      "file": "tests/llama-server-supervisor.test.mjs",
+      "prova": "process error transitions to failed and rejects start",
+      "esito": "fail",
+      "causa": "llama-server-desktop"
+    },
+    {
+      "file": "tests/llama-server-supervisor.test.mjs",
+      "prova": "se il binario non offre --spec-type la leva NON si accende, e la KV resta quantizzata se non entra",
+      "esito": "fail",
+      "causa": "llama-server-desktop"
+    },
+    {
+      "file": "tests/llama-server-supervisor.test.mjs",
+      "prova": "speculativaNgram: off spegne la leva anche se il binario la offre",
+      "esito": "fail",
+      "causa": "llama-server-desktop"
+    },
+    {
+      "file": "tests/llama-server-supervisor.test.mjs",
+      "prova": "starts llama-server on loopback without shell and reaches ready after health 503→200",
+      "esito": "fail",
+      "causa": "llama-server-desktop"
+    },
+    {
+      "file": "tests/llama-server-supervisor.test.mjs",
+      "prova": "stop kills the process, is idempotent, and clears the runtime",
+      "esito": "fail",
+      "causa": "llama-server-desktop"
+    },
+    {
+      "file": "tests/llama-server-supervisor.test.mjs",
+      "prova": "un motore che si chiude da solo viene dichiarato SUBITO, con le sue ultime righe",
+      "esito": "fail",
+      "causa": "llama-server-desktop"
+    },
+    {
+      "file": "tests/local-model-store.test.mjs",
+      "prova": "rejects traversal, absolute paths, short revisions, invalid hashes and unknown fields",
+      "esito": "fail",
+      "causa": "windows-nella-prova"
+    },
+    {
+      "file": "tests/local-runtime-conformance.test.mjs",
+      "prova": "SECURITY-NO-SECRETS-01 status e adapter non restituiscono api key o path assoluti",
+      "esito": "fail",
+      "causa": "llama-server-desktop"
+    },
+    {
+      "file": "tests/local-runtime-conformance.test.mjs",
+      "prova": "SECURITY-ORPHAN-01 stop chiude il processo e rende il runtime unavailable",
+      "esito": "fail",
+      "causa": "llama-server-desktop"
+    },
+    {
+      "file": "tests/mcp-client.test.mjs",
+      "prova": "⛔⛔⛔ AL CONTRARIO — connettiServerMcp: un connect() che fallisce si propaga, non sparisce in un null",
+      "esito": "fail",
+      "causa": "npm-assente"
+    },
+    {
+      "file": "tests/mcp-client.test.mjs",
+      "prova": "⭐⭐ connettiServerMcp: argomenti assenti diventano un array vuoto, mai undefined verso il transport",
+      "esito": "fail",
+      "causa": "npm-assente"
+    },
+    {
+      "file": "tests/mcp-client.test.mjs",
+      "prova": "⭐⭐ connettiServerMcp: nome/versione hanno un default onesto quando non passati",
+      "esito": "fail",
+      "causa": "npm-assente"
+    },
+    {
+      "file": "tests/mcp-client.test.mjs",
+      "prova": "⭐⭐⭐ connettiServerMcp: chiudi() chiama DAVVERO client.close()",
+      "esito": "fail",
+      "causa": "npm-assente"
+    },
+    {
+      "file": "tests/mcp-client.test.mjs",
+      "prova": "⭐⭐⭐ connettiServerMcp: costruisce Client/Transport coi parametri giusti e chiama connect",
+      "esito": "fail",
+      "causa": "npm-assente"
+    },
+    {
+      "file": "tests/motore-architetture.test.mjs",
+      "prova": "ARCH-05 — la rete di sicurezza: se il motore parte e poi scrive «unknown model architecture», la carta è la stessa, non «si è chiuso dopo 0 s»",
+      "esito": "fail",
+      "causa": "llama-server-desktop"
+    },
+    {
+      "file": "tests/process-output-read-integration.test.mjs",
+      "prova": "OUTPUT15-REAL: real session/process -> reference -> tool read -> HTTP -> restart, with no repeated execution",
+      "esito": "fail",
+      "causa": "shell-windows-wsl"
+    },
+    {
+      "file": "tests/process-policy.test.mjs",
+      "prova": "process policy fences working directory and forwards only approved environment keys",
+      "esito": "fail",
+      "causa": "windows-nella-prova"
+    },
+    {
+      "file": "tests/process-policy.test.mjs",
+      "prova": "runApprovedProcess requires a named capability and rejects a cwd outside it",
+      "esito": "fail",
+      "causa": "windows-nella-prova"
+    },
+    {
+      "file": "tests/prova-output-memory.test.mjs",
+      "prova": "OUTPUT17-HEAP-capture: 64MiB does not remain in the zero-test classifier",
+      "esito": "fail",
+      "causa": "shell-windows-wsl"
+    },
+    {
+      "file": "tests/prova-output-memory.test.mjs",
+      "prova": "OUTPUT17-STOP-capture-stop: a zero-test declaration cannot override cancellation",
+      "esito": "fail",
+      "causa": "shell-windows-wsl"
+    },
+    {
+      "file": "tests/rev-casa-linux.test.mjs",
+      "prova": "CL-01: l avvio — wsl -d <distro> [-u <utente F009>] --exec <node su C:> <servente> <rg>, tutto in percorsi di Linux",
+      "esito": "fail",
+      "causa": "casa-linux-wsl"
+    },
+    {
+      "file": "tests/rev-casa-linux.test.mjs",
+      "prova": "CL-02: un errore della casa Linux arriva col suo codice e il suo percorso (EACCES, ENOENT restano quelli)",
+      "esito": "fail",
+      "causa": "casa-linux-wsl"
+    },
+    {
+      "file": "tests/rev-casa-linux.test.mjs",
+      "prova": "CL-03: richieste in parallelo — ognuna riceve la SUA risposta, anche fuori ordine",
+      "esito": "fail",
+      "causa": "casa-linux-wsl"
+    },
+    {
+      "file": "tests/rev-casa-linux.test.mjs",
+      "prova": "CL-04: lo Stop annulla QUELLA richiesta (il servente riceve «annulla») e il processo resta acceso",
+      "esito": "fail",
+      "causa": "casa-linux-wsl"
+    },
+    {
+      "file": "tests/rev-casa-linux.test.mjs",
+      "prova": "CL-05a: il processo muore PRIMA di annunciarsi (WSL non risponde) — la richiesta non è arrivata di là, si rimanda UNA volta",
+      "esito": "fail",
+      "causa": "casa-linux-wsl"
+    },
+    {
+      "file": "tests/rev-casa-linux.test.mjs",
+      "prova": "CL-05b: se muore due volte prima di annunciarsi, la richiesta fallisce col testo di wsl.exe (stdout compreso, senza NUL)",
+      "esito": "fail",
+      "causa": "casa-linux-wsl"
+    },
+    {
+      "file": "tests/rev-casa-linux.test.mjs",
+      "prova": "CL-05c: se muore DOPO essersi annunciato, non si rimanda niente (una scrittura potrebbe essere già avvenuta); la chiamata dopo lo riaccende",
+      "esito": "fail",
+      "causa": "casa-linux-wsl"
+    },
+    {
+      "file": "tests/rev-casa-linux.test.mjs",
+      "prova": "CL-05d: si annuncia, esegue e muore, e `exit` arriva PRIMA dei suoi dati di stdout — niente rinvio: si decide a `close`, quando stdout è letto tutto",
+      "esito": "fail",
+      "causa": "casa-linux-wsl"
+    },
+    {
+      "file": "tests/rev-casa-linux.test.mjs",
+      "prova": "CL-06: chiudi con la sessione — le richieste in volo falliscono, stdin si chiude, e il processo esce",
+      "esito": "fail",
+      "causa": "casa-linux-wsl"
+    },
+    {
+      "file": "tests/rev-casa-linux.test.mjs",
+      "prova": "CL-07: righe che non sono del protocollo (e risposte a richieste ignote) non rompono il canale",
+      "esito": "fail",
+      "causa": "casa-linux-wsl"
+    },
+    {
+      "file": "tests/rev-casa-linux.test.mjs",
+      "prova": "CL-11: l ambiente si DICHIARA — senza, la casa non parte; con, arriva a wsl.exe così com è",
+      "esito": "fail",
+      "causa": "casa-linux-wsl"
+    },
+    {
+      "file": "tests/rev-collegamenti-linux.test.mjs",
+      "prova": "5A-04: /mnt/<x>/… si legge come il disco di Windows",
+      "esito": "fail",
+      "causa": "casa-linux-wsl"
+    },
+    {
+      "file": "tests/rev-filename-inventory.test.mjs",
+      "prova": "SEARCH33-REAL-SCOPE-IGNORE — shipped rg respects scope ignore pruning and binary filenames",
+      "esito": "fail",
+      "causa": "ripgrep-assente"
+    },
+    {
+      "file": "tests/rev-filename-inventory.test.mjs",
+      "prova": "SEARCH33-REAL20K — a filename beyond20000 is found by actual shipped rg",
+      "esito": "fail",
+      "causa": "ripgrep-assente"
+    },
+    {
+      "file": "tests/rev-rg-partial-error.test.mjs",
+      "prova": "SEARCH32-REAL-UPSTREAM — the shipped rg actually returns a match alongside exit2",
+      "esito": "fail",
+      "causa": "ripgrep-assente"
+    },
+    {
+      "file": "tests/rev-ricerca-che-continua.test.mjs",
+      "prova": "RC-13: col ripgrep VERO su un albero vero, la ricerca che continua arriva a TUTTI i file",
+      "esito": "fail",
+      "causa": "ripgrep-assente"
+    },
+    {
+      "file": "tests/rev-search-pagination.test.mjs",
+      "prova": "SEARCH34-RG-LINES —100line cap advances by20 actual files rather than40",
+      "esito": "fail",
+      "causa": "ripgrep-assente"
+    },
+    {
+      "file": "tests/ricerca-giornale-e-ripresa.test.mjs",
+      "prova": "⛔⛔ AL CONTRARIO — la contesa che NON passa: si rilancia, e il contenuto nuovo resta accanto",
+      "esito": "fail",
+      "causa": "windows-nella-prova"
+    },
+    {
+      "file": "tests/ricerca-giornale-e-ripresa.test.mjs",
+      "prova": "⛔⛔ AL CONTRARIO — un rename IMPOSSIBILE (destinazione = una cartella) rilancia dopo i tentativi",
+      "esito": "fail",
+      "causa": "windows-nella-prova"
+    },
+    {
+      "file": "tests/ricerca-giornale-e-ripresa.test.mjs",
+      "prova": "⭐⭐⭐⭐ 12/09 — un LETTORE con l'handle aperto fa fallire il rename: si ritenta, e passa",
+      "esito": "fail",
+      "causa": "windows-nella-prova"
+    },
+    {
+      "file": "tests/runtime-owner-adapter.test.mjs",
+      "prova": "K3B-ADAPTER-02 — talosLavora porta la lingua del giro (input.linguaInterfaccia) fino al corpo mandato al modello",
+      "esito": "fail",
+      "causa": "modulo-runtime-per-percorso"
+    },
+    {
+      "file": "tests/runtime-owner-adapter.test.mjs",
+      "prova": "owner runtime exposes task catalog only through an explicitly configured module",
+      "esito": "fail",
+      "causa": "modulo-runtime-per-percorso"
+    },
+    {
+      "file": "tests/runtime-owner-adapter.test.mjs",
+      "prova": "runtime owner snapshot is truthful: absent owner is unavailable, explicit empty owner is available",
+      "esito": "fail",
+      "causa": "modulo-runtime-per-percorso"
+    },
+    {
+      "file": "tests/runtime-owner-adapter.test.mjs",
+      "prova": "TOOL-DESCRIPTION-OWNER-BOUNDARY-04 — talosLavora inietta il fetch adattato senza cambiare la firma owner",
+      "esito": "fail",
+      "causa": "modulo-runtime-per-percorso"
+    },
+    {
+      "file": "tests/scratch-desktop.test.mjs",
+      "prova": "SCRATCH-06 — la radice segue TALOS_DESKTOP_DATA_DIR, e guscio desktop e server calcolano la STESSA radice",
+      "esito": "fail",
+      "causa": "windows-nella-prova"
+    },
+    {
+      "file": "tests/scratch.test.mjs",
+      "prova": "SCRATCH-01 — la radice: esplicita, poi cartella dati spostata, poi %LOCALAPPDATA%\\TALOS\\cache\\scratch",
+      "esito": "fail",
+      "causa": "windows-nella-prova"
+    },
+    {
+      "file": "tests/scratch.test.mjs",
+      "prova": "SCRATCH-09 — all'avvio: la radice più i residui STORICI fuori radice (TEMP e avvio-* della cartella dati), solo i nostri e solo se fermi",
+      "esito": "fail",
+      "causa": "windows-nella-prova"
+    },
+    {
+      "file": "tests/session-output-lifecycle.test.mjs",
+      "prova": "SESSION18-BUSY: an unsettled capture prevents journal unlink and keeps the session recoverable",
+      "esito": "fail",
+      "causa": "shell-windows-wsl"
+    },
+    {
+      "file": "tests/session-output-lifecycle.test.mjs",
+      "prova": "SESSION18-DELETE: deleting a real settled session removes its stored command bytes",
+      "esito": "fail",
+      "causa": "shell-windows-wsl"
+    },
+    {
+      "file": "tests/session-output-lifecycle.test.mjs",
+      "prova": "SESSION18-HTTP: authenticated deletion exposes pending cleanup without paths; unauthorized requests do not delete",
+      "esito": "fail",
+      "causa": "shell-windows-wsl"
+    },
+    {
+      "file": "tests/session-output-lifecycle.test.mjs",
+      "prova": "SESSION18-REPLAY-RACE: replay during deletion neither cancels the intent nor restores the deleted session",
+      "esito": "fail",
+      "causa": "shell-windows-wsl"
+    },
+    {
+      "file": "tests/session-output-lifecycle.test.mjs",
+      "prova": "SESSION18-RESTART-BEFORE: startup cancels an intent whose journal still exists",
+      "esito": "fail",
+      "causa": "shell-windows-wsl"
+    },
+    {
+      "file": "tests/session-output-lifecycle.test.mjs",
+      "prova": "SESSION18-STORE-FAIL: failed output cleanup stays pending and startup completes it without resurrecting the session",
+      "esito": "fail",
+      "causa": "shell-windows-wsl"
+    },
+    {
+      "file": "tests/session-output-lifecycle.test.mjs",
+      "prova": "SESSION18-UNLINK-FAIL: failed journal delete restores the session and leaves its output readable after restart",
+      "esito": "fail",
+      "causa": "shell-windows-wsl"
+    },
+    {
+      "file": "tests/session-process-output-integration.test.mjs",
+      "prova": "OUTPUT14-ENVIRONMENT-FENCE: a change while output admission waits cannot execute a command in the old environment",
+      "esito": "fail",
+      "causa": "shell-windows-wsl"
+    },
+    {
+      "file": "tests/session-process-output-integration.test.mjs",
+      "prova": "OUTPUT14-KERNEL-prova: an approved real process uses capture exactly once",
+      "esito": "fail",
+      "causa": "shell-windows-wsl"
+    },
+    {
+      "file": "tests/session-process-output-integration.test.mjs",
+      "prova": "OUTPUT14-KERNEL-RETENTION-ERROR: real command success remains exit zero but its tool result reports retention failure",
+      "esito": "fail",
+      "causa": "shell-windows-wsl"
+    },
+    {
+      "file": "tests/session-process-output-integration.test.mjs",
+      "prova": "OUTPUT14-KERNEL-shell: an approved real process uses capture exactly once",
+      "esito": "fail",
+      "causa": "shell-windows-wsl"
+    },
+    {
+      "file": "tests/session-process-output-integration.test.mjs",
+      "prova": "OUTPUT14-REGISTRY: real registry, service, kernel and process persist exact output identities across restart",
+      "esito": "fail",
+      "causa": "shell-windows-wsl"
+    },
+    {
+      "file": "tests/session-registry.test.mjs",
+      "prova": "CTX-HEADER-QUARANTINE-DIAGNOSTIC — restart conta e spiega il finale sospeso",
+      "esito": "fail",
+      "causa": "link-vietato"
+    },
+    {
+      "file": "tests/session-store-senza-link.test.mjs",
+      "prova": "EXFAT-PROBE-NTFS — su un disco coi link la modalità resta quella B2 e la prova non lascia residui",
+      "esito": "fail",
+      "causa": "link-vietato"
+    },
+    {
+      "file": "tests/session-store.test.mjs",
+      "prova": "CTX-HEADER-POST-LINK-VERIFY-FAIL — se verifica e rollback falliscono il pending isola il finale",
+      "esito": "fail",
+      "causa": "link-vietato"
+    },
+    {
+      "file": "tests/session-store.test.mjs",
+      "prova": "CTX-HEADER-QUARANTINE-INDEX — 200 journal distinguono alias veri ed estranei senza falsi nascosti",
+      "esito": "fail",
+      "causa": "link-vietato"
+    },
+    {
+      "file": "tests/temp-hf-lifecycle.test.mjs",
+      "prova": "DESK-TEMP-HF-DIRECT-CLEANUP — test fixtures leave no private model roots",
+      "esito": "fail",
+      "causa": "prova-che-lancia-prove"
+    },
+    {
+      "file": "tests/temp-nessun-residuo.test.mjs",
+      "prova": "DESK-TEMP-1 — «session-registry.test.mjs» non lascia cartelle nella TEMP",
+      "esito": "fail",
+      "causa": "prova-che-lancia-prove"
+    },
+    {
+      "file": "tests/temp-nessun-residuo.test.mjs",
+      "prova": "DESK-TEMP-2 — «frontend/tests/unit/ripresa-isolamento.test.mjs» non lascia cartelle nella TEMP né rapporti in artifacts/ripresa",
+      "esito": "fail",
+      "causa": "prova-che-lancia-prove"
+    },
+    {
+      "file": "tests/tool-output-preview-integration.test.mjs",
+      "prova": "OUTPUT11-KERNEL-UNICODE: the real shell tool bounds its live deltas without splitting Unicode",
+      "esito": "fail",
+      "causa": "shell-windows-wsl"
+    },
+    {
+      "file": "tests/workflow-orchestrator.test.mjs",
+      "prova": "ADMISSION-WORKSPACE-ALIAS — path aliases share one writer ceiling",
+      "esito": "fail",
+      "causa": "windows-nella-prova"
+    },
+    {
+      "file": "tests/workspace-browser.test.mjs",
+      "prova": "WORKSPACE-CHOOSER-REPARSE-04 — non offre symlink o junction come cartelle navigabili",
+      "esito": "fail",
+      "causa": "windows-nella-prova"
+    },
+    {
+      "file": "tests/workspace-browser.test.mjs",
+      "prova": "WORKSPACE-CHOOSER-REPARSE-DIRECT-26 — rifiuta una junction in qualunque segmento del percorso diretto",
+      "esito": "fail",
+      "causa": "windows-nella-prova"
+    },
+    {
+      "file": "tests/workspace-context.test.mjs",
+      "prova": "⭐ su un repository git VERO (questo stesso repo), il branch è reale — nessun mock",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/workspace-context.test.mjs",
+      "prova": "AVVIO-GIT-01 su questo repo (worktree collegato, sottocartella) ramo e worktree arrivano SENZA lanciare git",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/workspace-context.test.mjs",
+      "prova": "AVVIO-GIT-02 repo principale e worktree collegato, ciascuno col suo ramo, senza git",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/workspace-context.test.mjs",
+      "prova": "AVVIO-GIT-03 HEAD staccato: «HEAD», la stessa parola di `rev-parse --abbrev-ref HEAD`, senza git",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/workspace-context.test.mjs",
+      "prova": "AVVIO-GIT-04 AL CONTRARIO: un repository reftable non si indovina dal file, si chiede a git (e senza git: null)",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/workspace-context.test.mjs",
+      "prova": "AVVIO-GIT-06 AL CONTRARIO: un repository BARE dentro un altro non prende il ramo di quello esterno (review 27/09)",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/workspace-context.test.mjs",
+      "prova": "repoAnnidati AL CONTRARIO: una cartella con un nome SIMILE a node_modules (non esatto) NON è saltata — match esatto sul nome, non un prefisso",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/workspace-context.test.mjs",
+      "prova": "repoAnnidati: node_modules è SALTATA anche se contiene un repository git vero",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/workspace-context.test.mjs",
+      "prova": "repoAnnidati: una sottocartella con un repository git VERO è trovata",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/workspace-info.test.mjs",
+      "prova": "RITRATTO-RADICE: un disco, una home, una scrivania sono radici; un progetto no",
+      "esito": "fail",
+      "causa": "windows-nella-prova"
+    }
+  ]
+}

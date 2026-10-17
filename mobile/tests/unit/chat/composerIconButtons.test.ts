@@ -262,6 +262,39 @@ describe('composer icon buttons', () => {
         expect(css).toContain('min-height: 1.75rem;')
     })
 
+    /**
+     * ⛔ COD-COMP-03 — owner 13/10/2026, dal Pad, guardando il Codice: «la riga testo non è allineata nel compositore come
+     * nella chat, bisogna allinearla al millimetro, anzi deve essere lo stesso componente».
+     *
+     * MISURATO sul Pad, stesso testo, campo a fuoco: nella chat il campo è alto 28 px e il centro del testo coincide col
+     * centro di «+» e Invia (384 px); nel Codice il campo è alto 80 px, il testo sta in cima (762) e i pulsanti al centro
+     * (790): 28 px di scarto. Il componente È lo stesso; ma il «pavimento a una riga» stava nel CSS sotto
+     * `.talos-docked-composer`, un contenitore che esiste solo nella schermata della chat. Il Codice passava
+     * `docked` al componente e il CSS non lo sapeva. ⇒ Il pavimento segue il componente (`is-docked`), non chi lo ospita.
+     */
+    it('COD-COMP-03: il pavimento a una riga del campo dipende dal componente (is-docked), non dal contenitore della chat', async () => {
+        const source = await composerSource()
+        expect(source).toContain("'is-docked': docked")
+        const css = readFileSync('src/style.css', 'utf8')
+        expect(css).toContain('.talos-calm-composer.is-docked .talos-calm-prompt { min-height: 1.75rem; }')
+        // nessuna regola del campo può più dipendere dal contenitore che ha solo la chat
+        expect(css).not.toMatch(/\.talos-docked-composer\s+[^{]*\.talos-calm-prompt/)
+    })
+
+    /**
+     * COD-COMP-04 — owner 13/10/2026: «vorrei che il compositore in modalità tablet landscape sia meno largo» → scelta: 672
+     * punti, uguale in chat e Codice. MISURATO sul Pad prima: chat 768, Codice 894 (aveva un suo limite, 920). Un valore
+     * solo (`--talos-composer-max-width`), letto dal componente e dal contenitore del Codice.
+     */
+    it('COD-COMP-04: sul tablet in orizzontale il compositore è largo al più 42rem (672 px), con lo stesso valore in chat e nel Codice', () => {
+        const css = readFileSync('src/style.css', 'utf8')
+        expect(css).toMatch(/@media \(orientation: landscape\) and \(min-width: 1000px\) \{\s*:root \{ --talos-composer-max-width: 42rem; \}/)
+        expect(css).toContain('.talos-calm-composer.is-docked { max-width: var(--talos-composer-max-width, none); margin-inline: auto; }')
+        const codice = readFileSync('src/screens/HarnessSessionScreen.vue', 'utf8')
+        expect(codice).toContain('max-width: var(--talos-composer-max-width, 920px);')
+        expect(codice.split('max-width: 920px').length - 1).toBe(0)
+    })
+
     it('keeps the 44px touch target on both controls', async () => {
         const source = await composerSource()
         // Removing a border is a visual choice; shrinking a 44px target is an

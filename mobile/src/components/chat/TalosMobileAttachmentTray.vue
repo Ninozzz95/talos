@@ -21,6 +21,15 @@ function formatBytes(value: number): string {
     return `${Number.isInteger(megabytes) ? megabytes : megabytes.toFixed(1)} MB`
 }
 
+/**
+ * La riga dei permessi dice quelli VERI della bozza (Pad 16/10, K3-C Allegati A2): le immagini del Codice su r4 le legge il modello
+ * e non si caricano da nessuna parte. La chat ha sempre tutti e due, nell'ordine di sempre.
+ */
+const PERMESSI = [['model.read', 'chat.attachmentModelRead'], ['browser.upload', 'chat.attachmentBrowserUpload']] as const
+function capabilities(item: TalosMobileAttachmentDraft, t: (key: string) => string): string {
+    return [formatBytes(item.sizeBytes), ...PERMESSI.filter(([p]) => item.permissions.includes(p)).map(([, k]) => t(k))].join(' · ')
+}
+
 function isImage(mediaType: string): boolean {
     return mediaType.startsWith('image/')
 }
@@ -78,7 +87,7 @@ function isImage(mediaType: string): boolean {
                     <p class="truncate text-3xs text-[var(--talos-muted)]">
                         <template v-if="item.status === 'ingesting'">{{ $t('chat.addingFile') }}</template>
                         <template v-else-if="item.status === 'failed'">{{ $t('chat.addFileFailed') }}</template>
-                        <template v-else>{{ $t('chat.attachmentCapabilities', { size: formatBytes(item.sizeBytes) }) }}</template>
+                        <template v-else>{{ capabilities(item, $t) }}</template>
                     </p>
                     <p v-if="item.error" class="truncate text-3xs text-[var(--talos-danger,var(--destructive))]">
                         {{ item.error }}

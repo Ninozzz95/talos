@@ -207,6 +207,11 @@ export interface TalosMobileShellPreferences {
      * `null` = nessuna scelta ancora, vale il predefinito del Codice.
      */
     codice_model: string | null
+    /**
+     * K3-C Scelta del modello (owner 16/10, «come il desktop»): il livello di ragionamento scelto nel Codice su r4, gemello di
+     * `codice_model` (da cui partono le sessioni NUOVE). `null` = nessuna scelta, vale quello della chat riportato al modello.
+     */
+    codice_effort: string | null
     /** Owner 2026-07-25: remembered Library view (grid gallery / list). */
     /**
      * Quanto accesso ha il MODELLO alla Libreria — owner 2026-08-03.
@@ -386,6 +391,7 @@ const DEFAULT_SHELL_PREFERENCES: TalosMobileShellPreferences = {
     // Nessuna scelta ancora fatta: decide `ensureSelection`. Vedi `composer_model`.
     composer_model: null,
     codice_model: null,
+    codice_effort: null,
     library_access: 'ask',
     memory_write_access: 'ask',
     plan_scope: 'turn',
@@ -415,6 +421,9 @@ const DEFAULT_SHELL_PREFERENCES: TalosMobileShellPreferences = {
     tablet_harness_sidebar_collapsed: false,
 }
 
+/** Una scelta salvata vale solo se è una stringa non vuota; altrimenti «nessuna» (`null`, il predefinito di queste tre). */
+const sceltaOppureNessuna = (valore: unknown): string | null => (typeof valore === 'string' && valore.trim() !== '' ? valore : null)
+
 function parseShellPreferences(value: unknown): TalosMobileShellPreferences {
     const record = (typeof value === 'object' && value !== null) ? value as Record<string, unknown> : {}
     return {
@@ -442,12 +451,9 @@ function parseShellPreferences(value: unknown): TalosMobileShellPreferences {
             : DEFAULT_SHELL_PREFERENCES.library_autosave_generated,
         // ⛔ Solo una stringa non vuota è una scelta: `''` vale come «nessuna»,
         // se no una preferenza corrotta bloccherebbe la scelta automatica.
-        composer_model: typeof record.composer_model === 'string' && record.composer_model.trim() !== ''
-            ? record.composer_model
-            : DEFAULT_SHELL_PREFERENCES.composer_model,
-        codice_model: typeof record.codice_model === 'string' && record.codice_model.trim() !== ''
-            ? record.codice_model
-            : DEFAULT_SHELL_PREFERENCES.codice_model,
+        composer_model: sceltaOppureNessuna(record.composer_model),
+        codice_model: sceltaOppureNessuna(record.codice_model),
+        codice_effort: sceltaOppureNessuna(record.codice_effort),
         // Re-review 2026-07-25: this hardcoded 'grid' as the fallback, so the
         // documented 'list' default never shipped.
         // Chi aveva il booleano ACCESO diventa `allow`; chi lo aveva spento
@@ -767,7 +773,8 @@ export interface TalosMobileVoicePreferences {
 const DEFAULT_VOICE_PREFERENCES: TalosMobileVoicePreferences = {
     voice_uri: null,
     rate: 1.2,
-    pitch: 1,
+    // Owner 13/10/2026, dal Pad: «metti di default tonalità 0.8». Vale per chi non ha mai salvato una tonalità sua.
+    pitch: 0.8,
     dictation_language: 'system',
     engine: 'system',
     personal_profile_id: null,

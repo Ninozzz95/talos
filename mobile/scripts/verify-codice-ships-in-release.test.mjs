@@ -30,6 +30,12 @@ function radiceConTuttoInMain(t) {
 }
 
 describe('verificaCodiceInMain', () => {
+    // ⛔ K2-A (14/10/2026): Node e le sue librerie non stanno più negli asset ma fra le librerie native di main/.
+    it('⛔ K2-A — Node fra le librerie native di main/ è un percorso richiesto', () => {
+        assert.ok(PERCORSI_RICHIESTI_IN_MAIN.includes('jniLibs/arm64-v8a/libtalosnode.so'))
+        assert.ok(PERCORSI_RICHIESTI_IN_MAIN.includes('assets/talos-node-lib'), 'talos-exec.js resta negli asset')
+    })
+
     it('⭐ tutto in main/: ok, zero segnalazioni', (t) => {
         const radice = radiceConTuttoInMain(t)
         const { ok, issues } = verificaCodiceInMain(radice)

@@ -29,7 +29,8 @@
  * «alta» su tutto. In correzione il valore resta quello che era — questo
  * modulo non lo tocca, e `update` lascia stare i campi che non riceve.
  */
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
+import TalosMobilePageHeader from '@/components/talos/ui/TalosMobilePageHeader.vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useTalosI18n } from '@/i18n'
 import { Plus } from '@lucide/vue'
@@ -73,14 +74,19 @@ const error = ref<string | null>(null)
  * dieci — e trovare un modulo vuoto da compilare è il modo di far chiudere la
  * pagina.
  */
+/** Una funzione e non un oggetto: ogni modulo vuoto riceve la SUA copia dei valori di serie. */
+function pianificazioneDiSerie(): TalosTaskSchedule {
+    return {
+        kind: 'daily',
+        at: '09:00',
+        days: [1, 2, 3, 4, 5],
+        everyMinutes: TALOS_TASK_MIN_INTERVAL_MINUTES * 4,
+    }
+}
+
 const scheduleOn = ref(false)
 const instruction = ref('')
-const schedule = ref<TalosTaskSchedule>({
-    kind: 'daily',
-    at: '09:00',
-    days: [1, 2, 3, 4, 5],
-    everyMinutes: TALOS_TASK_MIN_INTERVAL_MINUTES * 4,
-})
+const schedule = ref<TalosTaskSchedule>(pianificazioneDiSerie())
 
 /**
  * Con la pianificazione accesa servono ANCHE l'istruzione e una ricorrenza
@@ -93,12 +99,36 @@ const canSave = computed(() => {
     return instruction.value.trim().length > 0 && talosIsValidSchedule(schedule.value)
 })
 
-onMounted(async () => {
-    if (!correggendo.value) return
-    loading.value = true
+/**
+ * ⛔ COD-G1-STATO-03 (Pad, 14/10/2026) — il modulo si RIEMPIE da capo a ogni rotta.
+ *
+ * `/tasks/<id>/edit` e `/tasks/new` hanno lo stesso componente, e vue-router
+ * riusa l'istanza quando si passa dall'una all'altra: `onMounted` non riparte
+ * (https://router.vuejs.org/guide/essentials/dynamic-matching.html, «Reacting
+ * to Params Changes»). «Nuova attività» avrebbe mostrato l'attività appena
+ * corretta — pianificazione e istruzione comprese — col tasto acceso. Ora ogni
+ * modo parte dai valori di serie, e la correzione ricarica l'attività
+ * dell'indirizzo. Stessa cura di `NoteNewScreen.vue`.
+ *
+ * Il contatore `giro` scarta una lettura arrivata tardi: da «modifica A» a
+ * «modifica B» in fretta, la lista di A non deve sovrascrivere B.
+ */
+let giro = 0
+
+async function caricaModulo(id: string): Promise<void> {
+    const mio = ++giro
+    title.value = ''
+    description.value = ''
+    instruction.value = ''
+    scheduleOn.value = false
+    schedule.value = pianificazioneDiSerie()
+    error.value = null
+    loading.value = id.length > 0
+    if (!id) return
     try {
         const tutte = await controller.tasks.list()
-        const trovata = tutte.find((entry) => entry.id === idInCorrezione.value)
+        if (mio !== giro) return
+        const trovata = tutte.find((entry) => entry.id === id)
         // Se non c'è, non si apre un modulo vuoto che al salvataggio
         // fallirebbe: si torna all'elenco, che è l'unico posto onesto.
         if (!trovata) {
@@ -118,10 +148,28 @@ onMounted(async () => {
             schedule.value = { ...schedule.value, ...salvata }
         }
     } catch (cause) {
+        if (mio !== giro) return
         error.value = cause instanceof Error && cause.message ? cause.message : String(cause)
     } finally {
-        loading.value = false
+        if (mio === giro) loading.value = false
     }
+}
+
+onMounted(() => caricaModulo(idInCorrezione.value))
+
+/**
+ * La chiave è il MODO di questa pagina, e vale solo sulle sue due rotte: mentre
+ * si esce verso un'altra pagina la rotta cambia prima che il modulo sparisca, e
+ * svuotarlo lì sarebbe lavoro inutile.
+ */
+const chiaveModulo = computed(() => {
+    if (route.name === 'task-new') return 'new'
+    if (route.name === 'task-edit') return `edit:${idInCorrezione.value}`
+    return null
+})
+
+watch(chiaveModulo, (chiave) => {
+    if (chiave !== null) void caricaModulo(idInCorrezione.value)
 })
 
 async function submit(): Promise<void> {
@@ -210,8 +258,14 @@ const onda = useTalosTouchWave()
         :title="correggendo ? t('tasks.editTitle') : t('tasks.add')"
         data-testid="talos-task-new-screen"
     >
+        <!-- ⛔ G1 (14/10/2026, owner «Titolo + un solo riquadro»): il titolo con l'intestazione delle stazioni, nella colonna
+             del modulo. Dentro il foglio TalosMobileScreen nasconde il suo e `data-talos-sheet-title` quello del foglio. -->
+        <TalosMobilePageHeader
+            class="mx-auto w-full max-w-[46rem] pb-[var(--talos-space-section)] pt-[var(--talos-space-section)]"
+            :title="correggendo ? t('tasks.editTitle') : t('tasks.add')"
+        />
         <form
-            class="mx-auto flex w-full max-w-[46rem] flex-col gap-[var(--talos-space-section)] px-[var(--talos-space-page)] pt-[var(--talos-space-section)]"
+            class="mx-auto flex w-full max-w-[46rem] flex-col gap-[var(--talos-space-section)] rounded-[var(--talos-radius-card)] border border-[var(--talos-border)] bg-[var(--talos-panel)]/60 p-[var(--talos-space-page)]"
             :data-editing="correggendo"
             @submit.prevent="submit"
         >

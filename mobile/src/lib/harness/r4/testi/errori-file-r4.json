@@ -1,0 +1,21 @@
+{
+  "origine": {
+    "commit": "701c6c0d2d711879b53aa21bddad5a06d33538e7",
+    "percorso": "harness-ui/frontend/src/i18n/testi/errori.js",
+    "sha256": "1c54a18f9f27f84ede0f86ae64f563433dd8e64f5222f9d336c30b40790fba44",
+    "prefisso": [
+      "FILE_EXISTS.",
+      "FILE_NOT_FOUND.",
+      "NOT_A_FILE.",
+      "FOLDER_INVALID."
+    ]
+  },
+  "it": {
+    "FILE_NOT_FOUND.message": "File non trovato",
+    "FILE_EXISTS.message": "Esiste già un file con questo nome"
+  },
+  "en": {
+    "FILE_NOT_FOUND.message": "File not found",
+    "FILE_EXISTS.message": "A file with this name already exists"
+  }
+}

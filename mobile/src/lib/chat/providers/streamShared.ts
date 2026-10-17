@@ -138,7 +138,8 @@ export async function talosFetchStream(request: TalosStreamRequest): Promise<voi
     if (!response.ok) {
         let detail = ''
         try { detail = (await response.text()).slice(0, 512) } catch { /* unreadable */ }
-        throw new Error(`stream HTTP ${response.status}${detail ? `: ${detail}` : ''}`)
+        // `retryAfter`: chi sa aspettare (il piano ChatGPT al limite d'uso) legge quanto, anche su questa strada.
+        throw Object.assign(new Error(`stream HTTP ${response.status}${detail ? `: ${detail}` : ''}`), { retryAfter: response.headers.get('retry-after') })
     }
     if (!response.body) throw new Error('stream unsupported: response has no body')
     const reader = response.body.getReader()
@@ -203,6 +204,11 @@ export interface TalosStreamTextOptions {
      */
     extractReasoning?: (payload: string) => string
     onReasoning?: (text: string) => void
+    /**
+     * Chi porta i byte: di serie il `fetch` della pagina (`talosFetchStream`). N15: il piano ChatGPT passa il flusso nativo
+     * (`flussoNativo.ts`), perché dalla pagina il suo servizio non si raggiunge. Stessa firma, stessi errori.
+     */
+    trasporto?: (request: TalosStreamRequest) => Promise<void>
 }
 
 export interface TalosStreamTextResult {
@@ -244,7 +250,7 @@ export async function talosStreamText(options: TalosStreamTextOptions): Promise<
             }
         }
     }
-    await talosFetchStream({
+    await (options.trasporto ?? talosFetchStream)({
         url: options.url,
         headers: options.headers,
         body: options.body,

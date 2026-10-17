@@ -1,3 +1,5 @@
+import { chiaveDiChiamata } from '@/lib/tools/chiaveDiChiamata'
+
 /**
  * ⛔ La bolla vuota dopo che gli strumenti sono partiti.
  *
@@ -49,10 +51,15 @@ export function talosRispostaVuotaDopoStrumenti(
  * Un avviso che nasce per non far credere cose false non può cominciare con un
  * numero gonfiato. Si contano i **nomi distinti**: è la stessa unità che una
  * persona intende quando legge «strumenti», ed è vera comunque il modello si
- * comporti.
+ * comporti. ⛔ Corretto l'11/10/2026: «nomi distinti» era troppo poco (cinque
+ * ricerche diverse diventavano «1»); l'unità giusta è la chiamata distinta per
+ * nome E argomenti, la stessa che decide che cosa il ciclo non riesegue.
  */
 export function talosStrumentiPartiti(
-    eseguiti: ReadonlyArray<{ call: { name: string } }>,
+    eseguiti: ReadonlyArray<{ call: { name: string, arguments?: unknown } }>,
 ): number {
-    return new Set(eseguiti.map((riga) => riga.call.name)).size
+    // ⛔ N13-STR-01 (Pad, 11/10/2026): contare i NOMI diceva «(1)» dopo cinque `web_search` vere, ognuna con la sua domanda.
+    // Si conta con la chiave della rete anti-ripetizione (nome + argomenti in forma canonica): i doppioni che il ciclo non ha
+    // rieseguito restano uno, le chiamate vere con argomenti diversi contano tutte.
+    return new Set(eseguiti.map((riga) => chiaveDiChiamata(riga.call))).size
 }

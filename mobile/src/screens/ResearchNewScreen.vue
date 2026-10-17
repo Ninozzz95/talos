@@ -15,6 +15,7 @@
  * consequence of it.
  */
 import { computed, ref } from 'vue'
+import TalosMobilePageHeader from '@/components/talos/ui/TalosMobilePageHeader.vue'
 import { useRouter } from 'vue-router'
 import { Play, Plus, Trash2 } from '@lucide/vue'
 import { useTalosI18n } from '@/i18n'
@@ -182,11 +183,17 @@ async function start(): Promise<void> {
 
 <template>
     <TalosMobileScreen :title="t('research.newTitle')" data-testid="talos-research-new-screen">
-        <div class="flex flex-col gap-4">
+        <!-- ⛔ G1 (14/10/2026, owner «Titolo + un solo riquadro»): il titolo con l'intestazione delle stazioni, nella colonna
+             del modulo. Dentro il foglio TalosMobileScreen nasconde il suo e `data-talos-sheet-title` quello del foglio. -->
+        <TalosMobilePageHeader
+            class="mx-auto w-full max-w-[46rem] pb-[var(--talos-space-section)] pt-[var(--talos-space-section)]"
+            :title="t('research.newTitle')"
+        />
+        <div class="mx-auto flex w-full max-w-[46rem] flex-col gap-4 rounded-[var(--talos-radius-card)] border border-[var(--talos-border)] bg-[var(--talos-panel)]/60 p-[var(--talos-space-page)]">
             <p class="text-xs leading-5 text-[var(--talos-muted)]">{{ t('research.phaseNote') }}</p>
 
             <label class="block">
-                <span class="mb-2 block text-xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">
+                <span class="mb-2 block text-sm font-medium text-[var(--talos-text)]">
                     {{ t('research.questionLabel') }}
                 </span>
                 <textarea
@@ -226,7 +233,7 @@ async function start(): Promise<void> {
             </Button>
 
             <div data-testid="talos-research-models" class="space-y-2 rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)] p-3">
-                <p class="text-xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">{{ t('research.modelsTitle') }}</p>
+                <p class="text-sm font-medium text-[var(--talos-text)]">{{ t('research.modelsTitle') }}</p>
 
                 <div class="space-y-1">
                     <span class="block text-xs text-[var(--talos-text)]">{{ t('research.authorLabel') }}</span>
@@ -290,7 +297,7 @@ async function start(): Promise<void> {
             </div>
 
             <div v-if="plan.length > 0" data-testid="talos-research-plan" class="space-y-2 rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)] p-3">
-                <p class="text-xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">{{ t('research.planTitle') }}</p>
+                <p class="text-sm font-medium text-[var(--talos-text)]">{{ t('research.planTitle') }}</p>
 
                 <div v-for="branch in plan" :key="branch.id" class="flex items-center gap-2">
                     <input

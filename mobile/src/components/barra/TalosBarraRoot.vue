@@ -194,6 +194,12 @@ const voce = useTalosRispostaAVoce({
 })
 
 const dettatura = useTalosMobileDictation({
+    /*
+     * N12 (owner 13/10/2026: «Sì, anche nella barra»): col modello sul telefono il testo lo scrive Parakeet. Qui il turno
+     * lo chiude il silenzio, non la persona: il motore locale finisce da sé e la barra vede ciò che vedeva (testo, poi fine).
+     */
+    motoreLocale: true,
+    chiudeAlSilenzio: () => true,
     base: () => bozza.value,
     onTranscript: (testo) => {
         /*
@@ -1027,6 +1033,17 @@ watch(
          * riapre subito l'ascolto: se arrivano altre parole si annulla l'invio e
          * si continua ad accumulare; se passa il tempo in silenzio, si manda.
          */
+        /*
+         * ⛔ VOICE-BARRA-SUBITO (owner 13/10/2026: «Via l'attesa di sicurezza»). MISURATO sul Pad: fra il testo pronto e
+         * l'invio passavano ~0,9 s di grazia, con il microfono riaperto «nel dubbio». Quando il turno l'ha chiuso il motore
+         * locale, il silenzio l'ha già misurato lui e il testo di Parakeet è nel campo: si manda subito. Col riconoscitore
+         * di sistema la grazia resta, perché lì la fine della sessione non vuol dire che la frase sia finita.
+         */
+        if (dettatura.chiusaDalMotore.value) {
+            annota('barra: turno chiuso dal motore locale, mando subito')
+            void invia()
+            return
+        }
         aspettaPrimaDiMandare()
         riapriSePossibile('la frase potrebbe non essere finita')
     },
@@ -1289,6 +1306,37 @@ let turnoNatoDiVoce = false
 /** Quanto si aspetta prima di credere che la voce abbia finito. Vedi sotto. */
 const ASSESTAMENTO_MS = 600
 let assestamento: ReturnType<typeof setTimeout> | null = null
+
+/**
+ * ⛔ VOICE-BARRA-ASCOLTA-SE-STESSA — owner 13/10/2026, dal Pad: «se premo il pulsante per riprodurre ad alta voce la
+ * risposta, l'ascolto del microfono non si spegne, cioè ascolta la risposta ad alta voce».
+ *
+ * Aprire il microfono zittiva già la voce (`zittisci`); il contrario mancava. Quando una lettura COMINCIA — dal pulsante
+ * o da sola — il microfono si chiude: prima si toglie `ascoltoVoluto`, così la chiusura non manda la frase a metà e non
+ * riapre; poi il turno diventa «di voce» (l'ascolto era acceso), e la regola qui sotto lo riaccende a lettura finita.
+ */
+watch(
+    () => lettura.speakingId.value,
+    (adesso, prima) => {
+        if (adesso === null || prima !== null) return
+        const stato = dettatura.status.value
+        const ascoltava = stato === 'listening' || stato === 'starting'
+        /*
+         * ⛔ Anche quando il microfono in quell'istante è chiuso ma l'ascolto è ancora VOLUTO: MISURATO sul Pad il
+         * 13/10/2026, il pulsante premuto nel mezzo secondo di «respiro» dopo un silenzio — la riapertura già in coda
+         * scattava 260 ms dopo e zittiva la lettura appena cominciata. Togliere l'intenzione ferma anche quella.
+         */
+        if (!ascoltava && !ascoltoVoluto.value) return
+        annota('barra: TALOS comincia a leggere, chiudo il microfono')
+        // L'ascolto era acceso e voluto: è un turno di voce, e la regola qui sotto lo riapre a lettura finita.
+        if (ascoltoVoluto.value) turnoNatoDiVoce = true
+        annullaLaGrazia('TALOS legge')
+        // Anche il conto dei dieci secondi: scadendo durante la lettura diceva «non ho sentito niente» sopra la voce (misurato).
+        if (timerAscolto !== null) { clearTimeout(timerAscolto); timerAscolto = null }
+        ascoltoVoluto.value = false
+        if (ascoltava) dettatura.cancel()
+    },
+)
 
 /**
  * Il keyguard è un confine, non uno stato grafico. Su una activity `singleTask`
