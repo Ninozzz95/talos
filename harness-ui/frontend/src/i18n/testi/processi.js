@@ -186,6 +186,10 @@ export default {
     'process.stateInterrupted': 'Interrotto',
     // A6-bis (08/10/2026): un comando in sfondo partito prima del riavvio del server — nessuno lo segue più (Hermes: «lost»)
     'process.stateLost': 'Non più seguito',
+    // owner 17/10/2026 («Adottarli come Hermes, con "Ferma"»): un comando in sfondo ripreso dopo un riavvio, poi uscito da solo
+    'process.stateEndedUnknown': 'Finito (esito non noto)',
+    'process.detailTracking': 'Seguito',
+    'process.reattached': 'Ripreso dopo un riavvio: «Ferma questo comando» funziona, ma il suo output non viene più raccolto',
     /* ⛔ BUG-14 (05/10/2026): lo stato «in sfondo», il pulsante per riga e il dettaglio (file + chi lo ha sfondato). */
     'process.stateBackgrounded': 'In sfondo',
     'process.background': 'Manda in sfondo',
@@ -482,6 +486,9 @@ export default {
     'process.stateInterrupted': 'Interrupted',
     // A6-bis (08/10/2026): a background command started before the server restarted — nobody follows it any more (Hermes: «lost»)
     'process.stateLost': 'No longer tracked',
+    'process.stateEndedUnknown': 'Ended (exit unknown)',
+    'process.detailTracking': 'Tracking',
+    'process.reattached': 'Re-attached after a restart: “Stop this command” works, but its output is no longer collected',
     /* ⛔ BUG-14 (05/10/2026): the «in background» state, the per-row button and the detail (file + who backgrounded it). */
     'process.stateBackgrounded': 'In background',
     'process.background': 'Send to background',

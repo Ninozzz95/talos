@@ -43,6 +43,7 @@ import { stimaTokenConversazione } from './talosHarness.mjs';
 // ⭐ 06/10/2026 — la ricarica della memoria post-compact (opzione A + C-b, ricerca 5×5×5×5 §6.4): il
 // recinto della sintesi entra nella proiezione accanto all'indice meccanico, NELLO STESSO messaggio.
 import { PREFISSO_SINTESI_RECINTATA } from './ricarica-post-compact.mjs';
+import { chiamataPerChiGuarda } from './ponte-attrezzi.mjs';
 
 export const SCHEMA_RECORD_COMPATTAZIONE = 'talos.compattazione.v1';
 export const VARIABILE_TETTO_TOKEN = 'TALOS_COMPACTION_TOKEN_CAP';
@@ -371,7 +372,10 @@ export function indiceMeccanico(messaggi, { fileRilettiMassimi = FILE_RILETTI_MA
   const ERRORE = /^\s*(?:\w*error\b|ERR_[A-Z_]+|✗|exit [1-9]\d* \[sandbox\b)/i; // `\w*error`: anche AssertionError/TypeError… (Hermes `[A-Z][a-zA-Z]*Error`)
   const chiamatePerId = new Map();
   for (const m of Array.isArray(messaggi) ? messaggi : []) {
-    for (const c of m?.tool_calls ?? []) {
+    for (const grezza of m?.tool_calls ?? []) {
+      /* C5, revisione H: una chiamata dal ponte conta col suo attrezzo VERO e coi suoi argomenti (file letti e scritti). */
+      const vista = chiamataPerChiGuarda(grezza?.function?.name, grezza?.function?.arguments);
+      const c = vista.nome === grezza?.function?.name ? grezza : { ...grezza, function: { ...grezza.function, name: vista.nome, arguments: vista.argomenti } };
       if (typeof c?.id === 'string') chiamatePerId.set(c.id, c);
       const trovati = percorsiDaArgomenti(c?.function?.arguments);
       for (const p of trovati) percorsi.add(p);

@@ -31,6 +31,7 @@ import { isAbsolute, join, relative, resolve } from 'node:path';
 import { POSIZIONI_CONFIGURAZIONE, primaPerId } from './configurazione-progetto.mjs';
 import { createProcessPolicy, parseProcessCommand } from './process-policy.mjs';
 import { VARIABILE_DIFESA_RICERCA } from './difesa-ricerca-programmi.mjs';
+import { areaDelProgetto, hookCommandTokens, referencedScripts } from './script-del-progetto.mjs';
 
 export class HookRegistryError extends Error {
   constructor(message, code = 'HOOK_INVALID') {
@@ -83,7 +84,35 @@ export const EVENTI_VALIDI = new Set(['pre_tool_call', 'post_tool_call', 'sessio
  */
 export const MAX_BYTE_FILE_HOOK = 8 * 1024 * 1024;
 
-export async function improntaHook({ comando, cartella }, deps = {}) {
+/*
+ * ⛔⛔⛔ 17/10/2026 — UNA REGOLA SOLA CON LA CLI (owner: «Curare come gli hook, insieme alla CLI», poi «Stessa regola, una nuova
+ *   fiducia»). La regola del 17/09 qui sotto contava solo i file NOMINATI nel comando: misurato dal bugfixer sui casi veri, lasciava
+ *   fuori 11 forme su 22 che la CLI contava già — `node guardia` senza estensione, la cartella di uno script, gli import, i valori dei
+ *   flag (`--require=./x`), `npm run x`, `python -m pkg`. Ora l'elenco dei file viene dalla regola condivisa
+ *   (`script-del-progetto.mjs`, la stessa della CLI 0.6.9), e la FORMA dell'impronta resta quella di prima: un hook il cui elenco non
+ *   cambia (un `node guardia.mjs` alla radice, un comando senza file) conserva la sua impronta byte per byte; chi ha un elenco nuovo
+ *   riapprova UNA volta, e la carta dice perché (`statoTrustHook`, «regola-precedente»). ⛔ Mai una migrazione silenziosa: la
+ *   fiducia vecchia non vale per i file che allora non si guardavano.
+ * ⛔ Cambiano due cose della regola del 17/09, perché la regola è quella della CLI: un collegamento a un file si fissa per il file
+ *   VERO (prima si rifiutava), e un file oltre 64 MB si fissa per dimensione e data (prima si rifiutava oltre 8 MB).
+ */
+export async function improntaHook({ comando, cartella }) {
+  const base = createHash('sha256').update(comando).digest('hex');
+  if (typeof cartella !== 'string' || cartella.length === 0) return base;
+  let area;
+  try { area = await areaDelProgetto(cartella); } catch { return base; } // una cartella che non c'è non ha file da eseguire
+  let scripts;
+  try { scripts = await referencedScripts(area, hookCommandTokens(comando)); }
+  catch (errore) { throw new HookRegistryError(`the files this guard runs cannot be read (${errore?.code ?? 'error'})`, 'HOOK_FILE_UNREADABLE'); }
+  if (scripts.length === 0) return base;
+  return createHash('sha256').update(`${comando}\0file\0${scripts.map((s) => `${s.path}\0${s.sha256}`).sort().join('\0')}`).digest('hex');
+}
+
+/**
+ * La regola del 17/09 (solo i file NOMINATI), tenuta per UN uso: dire PERCHÉ una fiducia è caduta. Se l'impronta salvata è quella che
+ * questa regola darebbe oggi, la persona non ha cambiato niente: è TALOS che ora guarda di più. ⛔ Non rende fidato niente.
+ */
+export async function improntaHookRegolaPrecedente({ comando, cartella }, deps = {}) {
   const lstatFn = deps.lstatFn ?? fsp.lstat;
   const leggiFn = deps.leggiFileHookFn ?? ((percorso) => fsp.readFile(percorso));
   const base = createHash('sha256').update(comando).digest('hex');
@@ -150,7 +179,7 @@ async function caricaHooksDaFile({ cartella, nomeFile = NOME_FILE_HOOKS }, deps 
     if (typeof voce.comando !== 'string' || voce.comando.length === 0) {
       throw new HookRegistryError(`hooks[${indice}] ("${voce.id}") is missing "comando" (a non-empty string)`, 'HOOK_MALFORMED');
     }
-    const hash = await improntaHook({ comando: voce.comando, cartella }, deps);
+    const hash = await improntaHook({ comando: voce.comando, cartella });
     return { id: voce.id, eventi: voce.eventi, comando: voce.comando, hash };
   }));
   return { hooks };
@@ -190,6 +219,38 @@ export async function verificaTrust({ cartellaTrust, hookId, hash }, deps = {}) 
   }
 }
 
+/*
+ * 17/10/2026 — LE FRASI della fiducia caduta (owner: «la carta lo dice»), come quelle dei plugin (`plugin-registry.mjs`,
+ * CLI-REQ-02): a schermo va la `frase`, mai il `motivo`, che è un nome tecnico. Le chiavi sono nel dizionario dell'interfaccia
+ * (area `server`), in inglese e in italiano.
+ */
+const CHIAVI_TRUST_HOOK = Object.freeze({
+  'regola-precedente': 'server.hook.trust.scriptsNowCovered',
+  'contenuto-cambiato': 'server.hook.trust.contentChanged',
+});
+const FRASI_TRUST_HOOK = Object.freeze({
+  'regola-precedente': 'This hook was trusted when only the files named in its command were checked. It now also covers the project scripts it runs, which were not checked then: trust it again.',
+  'contenuto-cambiato': 'This hook, or a script it runs, has changed since you trusted it.',
+});
+
+/**
+ * Lo stato della fiducia di UN hook, col perché: `fidato`, `mai-approvato`, `regola-precedente` (l'impronta salvata è quella della
+ * regola di prima: la persona non ha cambiato niente, TALOS ora guarda anche gli script) o `contenuto-cambiato`. ⛔ Il secondo e il
+ * terzo NON sono fidati: cambia solo la frase. Non lancia mai: un archivio assente o illeggibile è «mai approvato».
+ * @returns {Promise<{fidato:boolean, motivo:string, frase:string|null, fraseChiave:string|null}>}
+ */
+export async function statoTrustHook({ cartellaTrust, hookId, hash, comando, cartella }, deps = {}) {
+  const readFileFn = deps.readFileFn ?? fsp.readFile;
+  const esito = (motivo) => ({ fidato: motivo === 'fidato', motivo, frase: FRASI_TRUST_HOOK[motivo] ?? null, fraseChiave: CHIAVI_TRUST_HOOK[motivo] ?? null });
+  let salvato;
+  try { salvato = JSON.parse(await readFileFn(percorsoTrust(cartellaTrust, hookId), 'utf8'))?.hash; } catch { return esito('mai-approvato'); }
+  if (typeof salvato !== 'string') return esito('mai-approvato');
+  if (salvato === hash) return esito('fidato');
+  let prima = null;
+  try { prima = await improntaHookRegolaPrecedente({ comando, cartella }); } catch { prima = null; }
+  return esito(prima !== null && salvato === prima ? 'regola-precedente' : 'contenuto-cambiato');
+}
+
 /**
  * Registra il trust — chiamata SOLO da un'azione owner esplicita (la
  * rotta HTTP dedicata, mai automatica dal ciclo dell'agente).
@@ -226,7 +287,7 @@ export async function eseguiHook({ hook, evento, cartella }, deps = {}) {
        sull'intero pacchetto, e non passano di qui con un `hash`. Chiuso per difetto: se non torna, la
        guardia NON gira e nega — una guardia sostituita che «consente» sarebbe peggio di nessuna. */
     if (typeof hook?.hash === 'string' && hook.hash.length > 0) {
-      const adesso = await improntaHook({ comando: hook.comando, cartella }, deps);
+      const adesso = await improntaHook({ comando: hook.comando, cartella });
       if (adesso !== hook.hash) {
         return { consentito: false, motivo: 'A file of this guard has changed since you approved it: I will not run it. Approve it again from the guards settings.', codice: 'HOOK_CHANGED_SINCE_TRUST' };
       }

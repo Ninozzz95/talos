@@ -216,6 +216,8 @@ export default {
     // ── Fornitori: il motivo di una prova
     'probe.configureAgent': 'Configura l\'agente esterno in Fornitori e accessi',
     'probe.agentInitialized': 'Agente inizializzato e chiuso. Nessun messaggio inviato.',
+    'mcp.toolListFailed': 'L\'elenco degli strumenti non è arrivato: {detail}',
+    'program.notOnPath': '«{command}» non è nel PATH. Un programma nella cartella del progetto non parte mai col solo nome: scrivi il suo percorso (per esempio {example}) se è quello che intendi.',
     'probe.noModelList': 'Questo fornitore non espone un elenco modelli su cui provare la credenziale.',
     'probe.noKeySaved': 'Nessuna chiave salvata per {provider}.',
     'probe.endpointNotChosen': '{provider}: prima scegli dove va la chiave, in Configura.',
@@ -272,6 +274,11 @@ export default {
     'plugin.fault.generic': "Questo plugin non si può offrire in questa sessione.",
     'plugin.trust.previousRule': "Questo plugin era stato approvato quando il controllo guardava solo la sua scheda. Adesso copre tutti i suoi file: approvalo di nuovo.",
     'plugin.trust.contentChanged': "Il contenuto di questo plugin è cambiato da quando l'hai approvato.",
+    // 17/10/2026: hook e server MCP ora contano anche gli script del progetto (l'inglese è la sorgente, più sotto)
+    'hook.trust.scriptsNowCovered': 'Questo hook era stato reso fidato quando si guardavano solo i file nominati nel suo comando. Adesso copre anche gli script del progetto che esegue, che allora non si guardavano: fidalo di nuovo.',
+    'hook.trust.contentChanged': "Questo hook, o uno script che esegue, è cambiato da quando l'hai reso fidato.",
+    'mcp.trust.scriptsNowCovered': 'Questo connettore era stato reso fidato quando si guardavano solo le sue impostazioni. Adesso copre anche gli script del progetto che esegue, che allora non si guardavano: fidalo di nuovo.',
+    'mcp.trust.contentChanged': "Le impostazioni di questo connettore, o uno script che esegue, sono cambiate da quando l'hai reso fidato.",
     'liveBrowser.nameNotResolved': "Il nome del sito non esiste",
     'liveBrowser.connectionRefused': "Nessuno risponde a quell'indirizzo",
     'liveBrowser.timedOut': "Il sito non ha risposto in tempo",
@@ -490,6 +497,8 @@ export default {
     // ── Providers: the reason of a test
     'probe.configureAgent': 'Set up the external agent in Providers and access',
     'probe.agentInitialized': 'Agent initialized and closed. No message sent.',
+    'mcp.toolListFailed': 'Listing the tools failed: {detail}',
+    'program.notOnPath': '"{command}" was not found on PATH. A program in the project folder is never started by bare name: write its path (for example {example}) if that is the one you mean.',
     'probe.noModelList': 'This provider does not expose a model list to test the credential on.',
     'probe.noKeySaved': 'No key saved for {provider}.',
     'probe.endpointNotChosen': '{provider}: choose where the key goes first, in Configure.',
@@ -546,6 +555,11 @@ export default {
     'plugin.fault.generic': "This plugin cannot be offered in this session.",
     'plugin.trust.previousRule': "This plugin was approved when the check only looked at its manifest. It now covers all of its files: approve it again.",
     'plugin.trust.contentChanged': "The content of this plugin has changed since you approved it.",
+    // 17/10/2026 (owner «la fiducia vecchia non vale più, e la carta lo dice»): hook e server MCP ora contano anche gli script del progetto
+    'hook.trust.scriptsNowCovered': 'This hook was trusted when only the files named in its command were checked. It now also covers the project scripts it runs, which were not checked then: trust it again.',
+    'hook.trust.contentChanged': 'This hook, or a script it runs, has changed since you trusted it.',
+    'mcp.trust.scriptsNowCovered': 'This connector was trusted when only its settings were checked. It now also covers the project scripts it runs, which were not checked then: trust it again.',
+    'mcp.trust.contentChanged': 'The settings of this connector, or a script it runs, have changed since you trusted it.',
     'liveBrowser.nameNotResolved': "The site name does not exist",
     'liveBrowser.connectionRefused': "Nobody answers at that address",
     'liveBrowser.timedOut': "The site did not answer in time",

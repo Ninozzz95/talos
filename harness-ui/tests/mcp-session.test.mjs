@@ -140,7 +140,7 @@ test('⛔⛔ AL CONTRARIO — un server che fallisce a ELENCARE i tool finisce i
   );
 
   assert.equal(falliti.length, 1);
-  assert.match(falliti[0].errore, /elenco tool fallito/);
+  assert.match(falliti[0].errore, /listing the tools failed/);
   assert.deepEqual(toolMcp.map((t) => t.name), ['mcp__sano__read_file']);
 });
 
@@ -318,7 +318,7 @@ test('⛔⛔ F07 — in parallelo un server che non parte resta un FALLITO nomin
 
   assert.deepEqual(toolMcp.map((t) => t.name), ['mcp__alfa__read_file', 'mcp__delta__read_file']);
   assert.deepEqual(falliti.map((f) => f.serverId), ['beta', 'gamma'], 'i falliti restano in ordine di dichiarazione, non di arrivo');
-  assert.match(falliti[1].errore, /elenco tool fallito: protocollo muto/);
+  assert.match(falliti[1].errore, /listing the tools failed: protocollo muto/);
 });
 
 test('⛔⛔ F07 — concorrenzaAvvioMcp: spenta di serie, e qualunque valore storto torna 1 invece di far fallire la sessione', () => {

@@ -343,6 +343,8 @@ export async function avviaSessione({
   accessoPienoDellOspite = null,
   modalitaOperativa = 'normale',
   strumentiEstesi, ricercaWeb,
+  // C5 attrezzi differiti (17/10/2026): inoltrato al kernel com'è; assente ⇒ spento, come prima
+  attrezziDifferiti,
   // ⭐ 04/9, R-03 — trasporto iniettato per la ricerca SENZA chiave (DuckDuckGo, `duckduckgo-search.mjs`): inoltrato al kernel com'è (parametro `richiediRicercaFn` di talosLavora), undefined per le fonti con chiave.
   richiediRicercaFn,
   /*
@@ -816,6 +818,17 @@ export async function avviaSessione({
     toolMcp = preparato.toolMcp;
     chiamaToolMcpFn = preparato.chiamaToolMcpFn;
     chiudiMcp = preparato.chiudiTutti;
+    /*
+     * ⛔ Owner 17/10/2026 («Avviso in chat + stato in Estensioni»): i server che non partivano finivano in `falliti` e qui si
+     *   scartavano in silenzio — la persona non sapeva che un suo server era giù, né perché. Come Codex («MCP client for `x`
+     *   failed to start: …», `tui/src/chatwidget/tests/mcp_startup.rs:536-565`) l'esito di ogni server diventa un evento DUREVOLE:
+     *   la chat dice chi non parte (una volta, finché l'esito non cambia), la scheda Estensioni lo rilegge accanto al server.
+     *   Non blocca niente: la sessione prosegue con i server che sono partiti. Una delega in modifica o un passo di Workflow avviano
+     *   MCP anche loro (solo le deleghe limitate lo saltano, `delegation-contract.mjs:22-24`): l'evento va nella LORO sessione.
+     */
+    if (Array.isArray(preparato.esiti) && preparato.esiti.length > 0) {
+      await onEvento({ type: 'CUSTOM', name: 'talos.mcp-avvio', value: { id: randomUUID(), esiti: preparato.esiti } }, { durable: true });
+    }
   }
 
   /*
@@ -1115,6 +1128,11 @@ export async function avviaSessione({
    * quando `eventiPerRisposta` traduce la risposta finale.
    */
   const toolCallIdStreamatiPerGiro = new Map();
+  /* C5 attrezzi differiti (17/10/2026): una chiamata a `tool_call` NON si annuncia a pezzi. Il suo nome dice solo «il ponte»,
+     e l'attrezzo vero sta dentro argomenti ancora incompleti: la annuncia `eventiPerRisposta` a risposta intera, già
+     spacchettata (`chiamataPerChiGuarda`). Non annunciata ⇒ non si chiude nemmeno da annullata: la regola dell'11/09
+     («N annunciati, N chiusi») resta vera. */
+  const chiamateDelPonte = new Set();
   /*
    * ⭐ SEMPRE passato (non condizionato da `reasoning`): chiedere lo
    * streaming del TESTO è a costo zero — stessi token, consegnati a
@@ -1123,6 +1141,8 @@ export async function avviaSessione({
    * Le due cose sono indipendenti in chiamaConRitenta (vedi la sua doc).
    */
   const onDelta = (evento) => {
+    if (attrezziDifferiti === true && evento.tipo === 'tool-inizio' && evento.nome === 'tool_call') { chiamateDelPonte.add(evento.toolCallId); return; }
+    if ((evento.tipo === 'tool-args' || evento.tipo === 'tool-annullato') && chiamateDelPonte.has(evento.toolCallId)) return;
     if (evento.tipo === 'tool-inizio' || evento.tipo === 'tool-args') {
       /*
        * ⭐⭐⭐ Piano procedi-col-generare-un-snoopy-neumann.md, Fase 4 —
@@ -1266,7 +1286,7 @@ export async function avviaSessione({
       if (toolCallsGiaStreamate) toolCallIdStreamatiPerGiro.delete(evento.giro);
 
       const messageId = randomUUID();
-      for (const e of eventiPerRisposta(evento.risposta, { messageId, testoGiaStreamato: Boolean(messageIdTesto), toolCallsGiaStreamate })) onEvento(e);
+      for (const e of eventiPerRisposta(evento.risposta, { messageId, testoGiaStreamato: Boolean(messageIdTesto), toolCallsGiaStreamate, ponteAcceso: attrezziDifferiti === true })) onEvento(e);
       /*
        * ⭐⭐⭐ Piano procedi-col-generare-un-snoopy-neumann.md, Fase 3 —
        * `evento.totali`, quando presente (talosHarness.mjs lo omette
@@ -1299,6 +1319,10 @@ export async function avviaSessione({
         ...(ricevuta ? { receipt: ricevuta } : {}),
         // F-027: il kernel ha trovato nel risultato testo che sembra un'istruzione per un'IA
         ...(evento.contenutoSospetto ? { suspicious: { source: evento.contenutoSospetto.fonte, patterns: evento.contenutoSospetto.motivi, place: evento.contenutoSospetto.luogo } } : {}),
+        // Full access (owner 17/10/2026): un'automazione fatta senza carta, con ciò che la carta avrebbe segnalato
+        ...(evento.senzaCarta ? { unasked: evento.senzaCarta } : {}),
+        // R-03 (17/10/2026): il rifiuto della delega come dati, per chi lo traduce per la persona (la CLI) senza regex sul testo
+        ...(evento.rifiuto ? { refusal: { code: evento.rifiuto.codice, retryable: evento.rifiuto.ritentabile, reason: evento.rifiuto.motivo } } : {}),
         /* ⛔ BUG-14: il kernel sparge `processoPerEvento` direttamente sull'evento `tool-esito`
            (talosHarness.mjs `...(processoPerEvento ?? {})`) — inoltra i campi sfondo per la riga dei Processi. */
         ...(evento.inSfondo === true
@@ -2330,6 +2354,7 @@ export async function avviaSessione({
       },
       onConsumoFornitore: async evento => onEvento({ type: 'CUSTOM', name: 'consumo-fornitore', value: evento }, { durable: true }),
       strumentiEstesi, ricercaWeb, richiediRicercaFn, onArtefatto, onDocumento, onImmagine, modelloPlanner,
+      ...(attrezziDifferiti === true ? { attrezziDifferiti: true } : {}),
       // ⭐ L9 (12/09/2026) — inoltrati SENZA logica propria, come tutto il resto in questo file:
       // la cache della corsa e la finestra della pagina le costruisce `research-orchestrator.mjs`
       // («raccolta viva»). Assenti ⇒ il kernel si comporta esattamente come ieri.

@@ -306,7 +306,7 @@ test('CTX-SUMMARY-RETRY-COMPACT: a truncated summary is retried once with the co
   const job = await engine.waitForCompaction({ sessionId, jobId: started.id });
   assert.equal(job.state, 'committed', JSON.stringify(job.error));
   assert.ok(calls.length >= 2, 'la seconda chiamata è il ritentativo');
-  assert.match(richieste[1], /precedente era troppo lunga/i, 'il ritentativo porta l’istruzione compatta');
+  assert.match(richieste[1], /previous summary was too long/i, 'il ritentativo porta l’istruzione compatta');
 });
 
 test('CTX-SUMMARY-RETRY-ONCE: two truncations in a row fail with CTX_TRUNCATED_SUMMARY, no loop', async t => {

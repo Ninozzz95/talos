@@ -1112,6 +1112,8 @@ function bancoBolleRigiocate({ restoring = false, differito = false } = {}) {
     scrollStreamingOutput: () => { counts.writer += 1; },
     eventoPerLoSchermo: event => event, providerRetryUi: { evento() {} },
     runRealeAttivo: () => false, interpretaEventoCompattazione: () => null,
+    // 17/10/2026 (owner, «Avviso in chat + stato in Estensioni»): il server MCP che non parte, detto dal gestore degli eventi
+    EVENTO_MCP_AVVIO: 'talos.mcp-avvio', avvisiMcpDetti: new Map(), nuoviServerNonPartiti: () => [], creaNotaMcpNonPartito: () => null,
     aggiornaAvvisoSogliaContesto() {}, accendiRagionamentiApertiDopoLaStoria() {},
     disegnaTestiRimastiNellaStoria: () => { counts.testiRimasti = (counts.testiRimasti ?? 0) + 1; }, // TESTO-PERSO: il testo rimasto indietro, al confine
     aggiornaRiassuntoSegmento() {}, disegnaFasciaPianoRichiesto() {},

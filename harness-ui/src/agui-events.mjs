@@ -19,6 +19,7 @@
  */
 
 import { ContextEventV1 } from '../../context-engine/src/contracts.mjs';
+import { chiamataPerChiGuarda } from './kernel/ponte-attrezzi.mjs';
 
 /** AG-UI CUSTOM ufficiale; l'identita persistita resta nel payload TALOS v1. */
 export function contextEngineEvent(input) {
@@ -215,7 +216,7 @@ export function toolCallOutput({ toolCallId, delta }) {
  *   non poteva sapere CHE COSA e' stato eseguito ne' DOVE. Per `shell` `cwd` e' la cartella
  *   EFFETTIVA (quella che il comando ha visto davvero), non quella richiesta.
  */
-export function toolCallResult({ messageId, toolCallId, content, role = 'tool', durataMs, comando, cwd, stdout, stderr, exitCode, isError, receipt, outcome, suspicious, inSfondo, fileSfondo, sfondoDa, duplicate }) {
+export function toolCallResult({ messageId, toolCallId, content, role = 'tool', durataMs, comando, cwd, stdout, stderr, exitCode, isError, receipt, outcome, suspicious, inSfondo, fileSfondo, sfondoDa, duplicate, unasked, refusal }) {
     const evento = { type: 'ToolCallResult', messageId, toolCallId, content, role }
     // Optional TALOS extension, using MCP's boolean semantics. Never infer it from content.
     if (typeof isError === 'boolean') evento.isError = isError
@@ -266,6 +267,18 @@ export function toolCallResult({ messageId, toolCallId, content, role = 'tool', 
         /* `place`: il tipo di posto e il nome (`{tipo, nome}` dal kernel); le parole nelle due lingue le mette l'interfaccia. */
         evento.suspicious = { source: suspicious.source, patterns: suspicious.patterns.map(String),
             ...(suspicious.place && typeof suspicious.place.tipo === 'string' ? { place: { tipo: suspicious.place.tipo, ...(typeof suspicious.place.nome === 'string' ? { nome: suspicious.place.nome } : {}) } } : {}) }
+    }
+    /* Full access (owner 17/10/2026, dopo la revisione I): un'automazione fatta SENZA carta, con ciò che la carta avrebbe segnalato
+       (`oltre`: oggetti col `codice`; `minacce`: codici). Solo se c'è qualcosa: senza, l'evento resta identico a prima. */
+    const oltre = Array.isArray(unasked?.oltre) ? unasked.oltre.filter((a) => a && typeof a.codice === 'string') : []
+    const minacce = Array.isArray(unasked?.minacce) ? unasked.minacce.filter((m) => typeof m === 'string') : []
+    if (oltre.length || minacce.length) {
+        evento.unasked = { oltre, minacce, ...(typeof unasked.automazioneId === 'string' && unasked.automazioneId ? { automationId: unasked.automazioneId } : {}) }
+    }
+    /* R-03 (17/10/2026): un rifiuto della delega come dati — `code` stabile, `retryable` se c'è, `reason` (lo stesso motivo del testo).
+       Solo se c'è un codice valido: senza, l'evento resta identico a prima. */
+    if (refusal && typeof refusal.code === 'string' && /^[A-Z][A-Z0-9_]*$/u.test(refusal.code)) {
+        evento.refusal = { code: refusal.code, ...(typeof refusal.retryable === 'boolean' ? { retryable: refusal.retryable } : {}), reason: typeof refusal.reason === 'string' ? refusal.reason : '' }
     }
     return evento
 }
@@ -461,7 +474,7 @@ export function hookInvoked({ hookId, tipo, azione, esito }) {
  * l'altre (fornitori/percorsi che non passano da `onDelta`, es. la
  * risposta non-streaming) restano emesse come sempre.
  */
-export function eventiPerRisposta(risposta, { messageId, parentMessageId, testoGiaStreamato = false, toolCallsGiaStreamate } = {}) {
+export function eventiPerRisposta(risposta, { messageId, parentMessageId, testoGiaStreamato = false, toolCallsGiaStreamate, ponteAcceso = false } = {}) {
     const eventi = []
     if (risposta?.content && !testoGiaStreamato) {
         eventi.push(textMessageStart({ messageId, role: risposta.role ?? 'assistant' }))
@@ -471,14 +484,21 @@ export function eventiPerRisposta(risposta, { messageId, parentMessageId, testoG
     const streamate = toolCallsGiaStreamate ?? new Set()
     for (const chiamata of risposta?.tool_calls ?? []) {
         if (streamate.has(chiamata.id)) continue
+        /* C5 attrezzi differiti (17/10/2026): `tool_call` si mostra come l'attrezzo vero, come il feed delle attività di Hermes;
+           la storia del modello tiene la chiamata al ponte (vedi `ponte-attrezzi.mjs`). */
+        /* H-06 (revisione H): solo a ponte ACCESO. Spento, `tool_call` è un nome sconosciuto e il kernel risponde «unknown tool»:
+           mostrarlo come l'attrezzo vero direbbe alla persona una cosa che non è successa. */
+        const vista = ponteAcceso
+            ? chiamataPerChiGuarda(chiamata.function?.name, chiamata.function?.arguments ?? '')
+            : { nome: chiamata.function?.name, argomenti: chiamata.function?.arguments ?? '' }
         eventi.push(toolCallStart({
             toolCallId: chiamata.id,
-            toolCallName: chiamata.function?.name,
+            toolCallName: vista.nome,
             parentMessageId,
         }))
         eventi.push(toolCallArgs({
             toolCallId: chiamata.id,
-            delta: chiamata.function?.arguments ?? '',
+            delta: vista.argomenti ?? '',
         }))
     }
     return eventi
@@ -489,14 +509,14 @@ export function eventiPerRisposta(risposta, { messageId, parentMessageId, testoG
  * talosLavora mette in `messaggi.push({role:'tool', tool_call_id,
  * content})`, talosHarness.mjs riga ~836) a ToolCallResult.
  */
-export function eventoPerEsitoTool({ messageId, toolCallId, content, durataMs, comando, cwd, stdout, stderr, exitCode, isError, receipt, outcome, suspicious, inSfondo, fileSfondo, sfondoDa, duplicate }) {
+export function eventoPerEsitoTool({ messageId, toolCallId, content, durataMs, comando, cwd, stdout, stderr, exitCode, isError, receipt, outcome, suspicious, inSfondo, fileSfondo, sfondoDa, duplicate, unasked, refusal }) {
     /* ⭐ OSS-1/OSS-2 — inoltro puro: la decisione su COSA entra nell'evento sta tutta in
        `toolCallResult` qui sopra, un posto solo. Chi non passa i tre campi ottiene l'oggetto
        identico di prima, byte per byte.
        ⛔ BLOCCO 7 (B4): stessa regola per i due flussi e per il codice d'uscita — l'inoltro non
          decide niente, e la guardia «solo se non vuoti» vive in `toolCallResult`.
        ⛔ BUG-14: e stessa regola per i tre campi dello sfondo (`inSfondo`/`fileSfondo`/`sfondoDa`). */
-    return toolCallResult({ messageId, toolCallId, content: String(content), durataMs, comando, cwd, stdout, stderr, exitCode, isError, receipt, outcome, suspicious, inSfondo, fileSfondo, sfondoDa, duplicate })
+    return toolCallResult({ messageId, toolCallId, content: String(content), durataMs, comando, cwd, stdout, stderr, exitCode, isError, receipt, outcome, suspicious, inSfondo, fileSfondo, sfondoDa, duplicate, unasked, refusal })
 }
 
 /**

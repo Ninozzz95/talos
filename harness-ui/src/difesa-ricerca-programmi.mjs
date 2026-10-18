@@ -70,7 +70,12 @@ export function risolviProgrammaSenzaCartella(comando, { env = process.env, piat
       if (eFile(candidato)) return candidato;
     }
   }
-  throw Object.assign(new Error(`"${comando}" was not found on PATH. A program in the project folder is never started by bare name: write its path (for example .${windows ? '\\' : '/'}${comando}) if that is the one you mean.`), { code: 'ENOENT' });
+  /* Dalla revisione del bugfixer (16/10/2026): la frase era solo inglese. Resta la sorgente (chi non ha il dizionario la mostra così);
+     la chiave e i valori viaggiano nell'elenco dei server MCP falliti (`mcp-session.mjs`) e la fanno dire nelle due lingue (area
+     `server` del dizionario). */
+  const esempio = `.${windows ? '\\' : '/'}${comando}`;
+  throw Object.assign(new Error(`"${comando}" was not found on PATH. A program in the project folder is never started by bare name: write its path (for example ${esempio}) if that is the one you mean.`),
+    { code: 'ENOENT', chiave: 'server.program.notOnPath', params: { command: comando, example: esempio } });
 }
 
 function eUnFileEseguibile(percorso) {

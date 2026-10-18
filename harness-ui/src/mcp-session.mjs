@@ -94,13 +94,24 @@ export async function preparaToolMcpPerSessione({ cartella, cartellaTrust, onEli
     ({ fidati } = await serverMcpFidatiFn({ cartella, cartellaTrust }));
   } catch {
     // ⭐ stesso principio degli hook: un registro che non si legge non blocca la sessione, degrada a "nessun server".
-    return { toolMcp: [], chiamaToolMcpFn: null, falliti: [], chiudiTutti: async () => {} };
+    return { toolMcp: [], chiamaToolMcpFn: null, falliti: [], esiti: [], chiudiTutti: async () => {} };
   }
 
   const toolMcp = [];
   const instradamento = new Map(); // nomeEsposto -> { client, nomeOriginale }
   const connessioni = []; // { client, chiudi } — per chiudiTutti
   const falliti = [];
+  /*
+   * Owner 17/10/2026 («Avviso in chat + stato in Estensioni»): l'esito di OGNI server fidato, in ordine, con l'impronta della sua
+   * dichiarazione (`hash`) — il registro lo scrive negli eventi della sessione, la chat dice i server che non partono, la scheda
+   * Estensioni mostra l'ultimo esito accanto al server (e lo ignora se la dichiarazione è cambiata dopo).
+   */
+  const esitiDeiServer = [];
+  /* Revisione D (bugfixer, 17/10/2026): il motivo lo scrive un server di TERZI (il dettaglio del suo errore) e l'evento si riscrive nel
+     giornale a ogni giro: misurato, 50.000 caratteri diventavano una nota e una riga da 50.000. Si tiene corto, coi valori. */
+  /* per CARATTERI, non per unità UTF-16: un taglio a metà di un'emoji lasciava una mezza coppia, «�» a schermo (riverifica D) */
+  const corto = (testo, massimo) => { const t = String(testo ?? ''); const c = Array.from(t); return c.length > massimo ? `${c.slice(0, massimo - 1).join('')}…` : t; };
+  const valoriCorti = (params) => Object.fromEntries(Object.entries(params ?? {}).map(([k, v]) => [k, typeof v === 'string' ? corto(v, 300) : v]));
 
   /** L'avvio di UN server: non lancia mai — un fallimento è un esito come un altro, da comporre in ordine più sotto. */
   async function avviaUnServer(server) {
@@ -112,14 +123,17 @@ export async function preparaToolMcpPerSessione({ cartella, cartellaTrust, onEli
         typeof onElicitazione === 'function' ? { onElicitazione: (parametri) => onElicitazione({ server: server.id, parametri }) } : {}));
     } catch (errore) {
       // un server che non parte non ferma gli altri, ne' la sessione
-      return { server, errore: errore instanceof Error ? errore.message : String(errore) };
+      /* la chiave del dizionario e i valori, se l'errore li porta (`server.program.notOnPath`): chi mostra i falliti lo dice nelle due lingue */
+      return { server, errore: errore instanceof Error ? errore.message : String(errore),
+        ...(typeof errore?.chiave === 'string' ? { erroreChiave: errore.chiave, erroreParams: errore.params ?? {} } : {}) };
     }
     let tuttiITool;
     try {
       tuttiITool = await elencaToolMcpFn({ client });
     } catch (errore) {
       // la connessione resta aperta (chiusa comunque da chiudiTutti), ma zero tool da questo server
-      return { server, client, chiudi, errore: `elenco tool fallito: ${errore instanceof Error ? errore.message : String(errore)}` };
+      const dettaglio = errore instanceof Error ? errore.message : String(errore);
+      return { server, client, chiudi, errore: `listing the tools failed: ${dettaglio}`, erroreChiave: 'server.mcp.toolListFailed', erroreParams: { detail: dettaglio } };
     }
     return { server, client, chiudi, tool: filtraToolMcpFn(tuttiITool, server.allowlist) };
   }
@@ -144,8 +158,13 @@ export async function preparaToolMcpPerSessione({ cartella, cartellaTrust, onEli
   for (const esito of esiti) {
     if (!esito) continue;
     if (esito.chiudi) connessioni.push({ client: esito.client, chiudi: esito.chiudi });
+    esitiDeiServer.push(esito.errore
+      ? { serverId: esito.server.id, hash: esito.server.hash ?? null, esito: 'non-partito', motivo: corto(esito.errore, 500),
+        ...(esito.erroreChiave ? { motivoChiave: esito.erroreChiave, motivoParams: valoriCorti(esito.erroreParams) } : {}) }
+      : { serverId: esito.server.id, hash: esito.server.hash ?? null, esito: 'collegato' });
     if (esito.errore) {
-      falliti.push({ serverId: esito.server.id, errore: esito.errore });
+      falliti.push({ serverId: esito.server.id, errore: esito.errore,
+        ...(esito.erroreChiave ? { erroreChiave: esito.erroreChiave, erroreParams: esito.erroreParams } : {}) });
       continue;
     }
     for (const t of esito.tool) {
@@ -175,5 +194,5 @@ export async function preparaToolMcpPerSessione({ cartella, cartellaTrust, onEli
     }
   };
 
-  return { toolMcp, chiamaToolMcpFn, falliti, chiudiTutti };
+  return { toolMcp, chiamaToolMcpFn, falliti, esiti: esitiDeiServer, chiudiTutti };
 }

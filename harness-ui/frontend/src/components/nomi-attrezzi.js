@@ -114,6 +114,10 @@ export const NOMI_UMANI_ATTREZZI = Object.freeze({
   research_search: 'varie.tools.name.researchSearch',
   research_find: 'varie.tools.name.researchFind', // C5 (10/10): accorpa research_list e research_search; i due vecchi restano per la storia
   conversation_search: 'varie.tools.name.conversationSearch',
+  // C5 attrezzi differiti (17/10/2026): il ponte. `tool_call` di solito non arriva a schermo (si mostra l'attrezzo vero), ma ha il suo nome
+  tool_search: 'varie.tools.name.toolSearch',
+  tool_describe: 'varie.tools.name.toolDescribe',
+  tool_call: 'varie.tools.name.toolCall',
   research_start: 'varie.tools.name.researchStart',
   research_read: 'varie.tools.name.researchRead',
   research_rename: 'varie.tools.name.researchRename',
@@ -424,6 +428,9 @@ export const DESCRIZIONI_ATTREZZI = Object.freeze({
   research_search: 'varie.tools.description.researchSearch',
   research_find: 'varie.tools.description.researchFind',
   conversation_search: 'varie.tools.description.conversationSearch',
+  tool_search: 'varie.tools.description.toolSearch',
+  tool_describe: 'varie.tools.description.toolDescribe',
+  tool_call: 'varie.tools.description.toolCall',
   research_start: 'varie.tools.description.researchStart',
   research_read: 'varie.tools.description.researchRead',
   research_rename: 'varie.tools.description.researchRename',

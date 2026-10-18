@@ -14,9 +14,9 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
  * solo ospitate nello stesso file.
  */
 
-import { existsSync as esisteSync, readdirSync as elencaSync, realpathSync as realpathSyncNativa, lstatSync as lstatSyncNativa, readlinkSync as readlinkSyncNativa, openSync as apriSync, readSync as leggiSync, closeSync as chiudiSync, fstatSync as fstatSyncNativa } from 'node:fs';
+import { existsSync as esisteSync, readdirSync as elencaSync, realpathSync as realpathSyncNativa, statSync as statSyncNativa, lstatSync as lstatSyncNativa, readlinkSync as readlinkSyncNativa, openSync as apriSync, readSync as leggiSync, closeSync as chiudiSync, fstatSync as fstatSyncNativa } from 'node:fs';
 import { formaDiSegretoNelTesto } from './forme-di-segreto.mjs';
-import { homedir } from 'node:os';
+import { homedir, hostname } from 'node:os';
 import { basename as nomeBase, dirname as cartellaDi, parse as parsePercorso, relative as relativoA, resolve as risolvi, sep as separatore } from 'node:path';
 
 /**
@@ -395,9 +395,11 @@ function classeDelPezzo(pezzo, home) {
  * @param {string} percorso relativo alla radice del progetto (o assoluto)
  * @returns {boolean}
  */
-export function eUnFileSegreto(percorso, { home = homeDiSistema(), cartella, leggiTesta } = {}) {
+export function eUnFileSegreto(percorso, { home = homeDiSistema(), cartella, leggiTesta, memoria } = {}) {
   if (typeof percorso !== 'string') return false;
   if (classeDelPezzo(percorso, home) !== null) return true;
+  /* R1 (revisione del bugfixer, 16/10 notte): un hard link verso un segreto esce dalla ricerca come il segreto (owner «Cartella + radice + casa») */
+  if (segretoDiUnCollegamentoFisico(percorso, { cartella, home, ...(memoria ? { memoria } : {}) }) !== null) return true;
   // 14/10/2026: un file d'esempio con una chiave vera dentro esce dalla ricerca come gli altri (serve la radice per leggerlo)
   return esempioConUnaChiave(percorso, { cartella, home, ...(leggiTesta ? { leggiTesta } : {}) }) !== null;
 }
@@ -875,6 +877,60 @@ function sostituzioniDiComando(t) {
   return dentro;
 }
 
+/*
+ * ⛔ Dalla revisione del bugfixer (16/10/2026, preesistente): un glob dentro le virgolette di un INTERPRETE ANNIDATO non chiedeva —
+ *   `powershell -c "gc .e*v"`, `bash -c 'cat .e*v'`, `cmd /c "type .e*v"` leggevano il `.env` (PowerShell davvero). Le virgolette
+ *   impediscono il glob al primo livello, ed è giusto; ma quel testo è un COMANDO che l'interprete rileggerà. ⇒ Si estrae e si giudica
+ *   come un comando, con la stessa ricorsione (e lo stesso tetto) delle sostituzioni `$(…)`. Come Codex, che apre `bash -lc`/`-c`
+ *   (`codex-rs/shell-command/src/bash.rs:110`) e `powershell -Command`/`-c` (`powershell.rs:56-64`); in più qui i prefissi che
+ *   PowerShell accetta (`-co`, `-comm`…, senza elenco: vedi sotto), `-EncodedCommand` decodificato (UTF-16LE, base64) e `cmd /c` `/k` `/r`.
+ */
+const INTERPRETI_SHELL = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh', 'mksh', 'fish']);
+const OPZIONE_CODIFICATA_PS = /^-(?:e|ec|en|enc|enco|encod|encode|encoded|encodedc|encodedco|encodedcom|encodedcomm|encodedcomma|encodedcomman|encodedcommand)$/iu;
+function comandiDegliInterpreti(testo) {
+  const parole = paroleDellaShell(testo).map((p) => p.testo);
+  const interni = [];
+  for (let i = 0; i < parole.length; i += 1) {
+    const nome = nomeDelComando(parole[i]);
+    const resto = parole.slice(i + 1);
+    if (INTERPRETI_SHELL.has(nome)) {
+      /*
+       * Riverifica del bugfixer (16/10/2026 notte): bash esegue il primo argomento che NON è un'opzione dopo `-c` (`bash -c -- '…'`,
+       * `-c -e '…'`, `-c -x '…'` girano davvero), e gli argomenti che seguono diventano `$0`, `$1`… (`bash -c 'cat "$1"' _ .env`).
+       * ⇒ Si rilegge TUTTO ciò che segue `-c`, come per PowerShell. In più `fish --command '…'` e `--command='…'` (le parole della
+       * shell staccano già il valore dopo `=`: un ramo a parte per `--command=` era un mutante equivalente, provato).
+       */
+      const k = resto.findIndex((p) => /^-[A-Za-z]*c[A-Za-z]*$/u.test(p) || /^--command$/iu.test(p));
+      if (k !== -1) interni.push(resto.slice(k + 1).join(' '));
+    } else if (nome === 'iex' || nome === 'invoke-expression') {
+      /* dentro PowerShell, `iex '…'` / `Invoke-Expression '…'` esegue il testo che riceve: si rilegge come un comando */
+      interni.push(resto.join(' '));
+    } else if (nome === 'powershell' || nome === 'pwsh') {
+      const ke = resto.findIndex((p) => OPZIONE_CODIFICATA_PS.test(p));
+      if (ke !== -1 && resto[ke + 1]) {
+        try { interni.push(Buffer.from(resto[ke + 1], 'base64').toString('utf16le')); } catch { /* non è base64: niente da rileggere */ }
+      }
+      /*
+       * Si rilegge TUTTO ciò che segue `powershell`, senza le virgolette: col `-Command` (`-c`, `-co`, `-comm`… i prefissi che
+       * PowerShell accetta) e senza opzione (il `-Command` di serie) il testo del comando è lì dentro. Le opzioni e i loro valori
+       * (`-NoProfile`, `-ExecutionPolicy Bypass`, il base64 di `-EncodedCommand`) vi finiscono come parole in più: innocue, perché il
+       * giudizio guarda i pezzi uno per uno. Riconoscere `-Command` coi suoi prefissi, o saltare le opzioni, non cambiava nessun esito
+       * (due mutanti equivalenti, provati il 16/10): per questo non c'è.
+       * Riverifica del bugfixer: un blocco di script (`& {gc .e*v}`, `. {…}`) si rilegge senza le graffe, che altrimenti restano
+       * attaccate alle parole (`.e*v}` non è più il nome di nessun file). ⛔ Restano fuori, dichiarate, le forme CALCOLATE
+       * (`$x = '.e*v'; gc $x`, stringhe composte): a parole non si sa che cosa varranno.
+       */
+      interni.push(resto.join(' ').replace(/[{}]/gu, ' '));
+    } else if (nome === 'cmd') {
+      /* `/c` anche attaccato al testo che segue (`cmd /c"type .e*v"`, che cmd esegue), e `//c`: da Git Bash si scrive così, perché
+         MSYS trasformerebbe `/c` in un percorso (riverifica del bugfixer, 17/10/2026) */
+      const k = resto.findIndex((p) => /^\/{1,2}[ckr]/iu.test(p));
+      if (k !== -1) interni.push([resto[k].replace(/^\/{1,2}[ckr]/iu, ''), ...resto.slice(k + 1)].join(' '));
+    }
+  }
+  return interni.filter((x) => x.trim() !== '');
+}
+
 /** I comandi che stampano soltanto i loro argomenti, in bash, cmd e PowerShell (F-P-004c). */
 const SOLO_STAMPA = new Set(['echo', 'printf', 'write-output', 'write-host']);
 /** `C:\\x\\Echo.EXE` → `echo`: il nome del comando senza cartella, estensione e maiuscole. */
@@ -889,7 +945,7 @@ function nominaUnSegretoPerGlob(testo, { home, cartella, elenca, puntiNascosti, 
   const esempio = (percorso) => esempioConUnaChiave(percorso, { cartella, home, ...(leggiTesta ? { leggiTesta } : {}) });
   const bilancio = ereditato ?? { cartelle: 0, nomi: 0, cache: new Map(), orologio, scadenza: orologio() + TETTI_GLOB_SEGRETI.millisecondi };
   /* v5: prima i comandi dentro le sostituzioni (al massimo quattro livelli: oltre, si chiede) */
-  for (const interno of sostituzioniDiComando(senzaCorpiDiHeredoc(testo))) {
+  for (const interno of [...sostituzioniDiComando(senzaCorpiDiHeredoc(testo)), ...comandiDegliInterpreti(senzaCorpiDiHeredoc(testo))]) {
     if (profondita >= 4) return { classe: 'segreto', percorso: interno.slice(0, 120) };
     const trovato = nominaUnSegreto(interno, { home }) ?? nominaUnSegretoPerGlob(interno, { home, cartella, elenca, puntiNascosti, orologio, bilancio, profondita: profondita + 1 });
     if (trovato) return trovato;
@@ -967,7 +1023,7 @@ export function nominaUnSegreto(testo, {
   }
   /* C-005 terzo giro (08/10/2026): solo per un comando di shell, dopo il passo sul testo, e solo se c'è una graffa o un carattere jolly.
      v5: anche se c'è un apice, una barra rovescia, un `$`, un apice inverso o `^` (cmd): la shell li toglie o li sostituisce prima di aprire il file. */
-  if (espandi && /[*?[{'"\\$`^]|[@+!]\(/u.test(intero)) {
+  if (espandi && (/[*?[{'"\\$`^]|[@+!]\(/u.test(intero) || comandiDegliInterpreti(intero).length > 0)) {
     /* Un modulo dentro un cancello di sicurezza non lancia: se il passo dei glob si rompe per un motivo che non so, CHIEDE (mai in silenzio). */
     try { return nominaUnSegretoPerGlob(intero, { home, cartella, elenca, puntiNascosti, orologio, ...(leggiTesta ? { leggiTesta } : {}) }); } catch { return { classe: 'segreto', percorso: intero.trim().slice(0, 120) }; }
   }
@@ -1149,6 +1205,107 @@ function bersaglioSegretoDiUnCollegamento(percorso, { cartella, home, fsSync = {
   }
 }
 
+/*
+ * ⛔ Owner 16/10/2026 notte («Cartella + radice + casa»), dalla riverifica del bugfixer (SEG-DOC-RI-05): un HARD LINK col nome
+ *   innocuo (`appunti.md`) è lo STESSO file del `.env` — leggi, scrivi, file_edit, la shell e document_create non chiedevano,
+ *   perché la classe si decide sul nome e non c'è un bersaglio da seguire come per un collegamento simbolico. Nessun concorrente lo
+ *   gestisce (Hermes `agent/file_safety.py` usa solo `realpath`, che un hard link non lo vede).
+ * ⇒ Solo per i file con più di un nome (`nlink > 1`, raro fuori dai `node_modules` di pnpm) si confronta l'identità (`dev` + `ino`,
+ *   in bigint: su Windows è il numero di file di NTFS) con i segreti PER NOME di tre posti: la cartella del file, la radice del
+ *   progetto, la casa (le sue credenziali e le cartelle `.ssh`, `.aws`… un livello sotto). Un `.env` in un'altra sottocartella
+ *   resta fuori, dichiarato dall'owner. Mai un'eccezione da un cancello: un `stat` che fallisce vale «non lo so» = `null`.
+ */
+function segretoDiUnCollegamentoFisico(percorso, { cartella, home, statFn = statSyncNativa, elencaFn = elencaSync, fsSync, memoria = {} } = {}) {
+  const grezzo = String(percorso ?? '').trim();
+  if (grezzo === '' || eDiRete(grezzo)) return null;
+  const normalizzato = conLaHomeEspansa(grezzo, home);
+  if (normalizzato === '' || normalizzato.includes('://') || normalizzato.startsWith('//')) return null;
+  const assolutoScritto = /^[A-Za-z]:\//u.test(normalizzato) || normalizzato.startsWith('/');
+  const conCartella = typeof cartella === 'string' && cartella !== '' && !eDiRete(cartella);
+  /* Senza radice un percorso relativo non si controlla (il ponte del telefono): lo stesso limite, dichiarato, di `esempioConUnaChiave`. */
+  if (!assolutoScritto && !conCartella) return null;
+  const fs = fsSync?.lstatSync ? fsSync : { lstatSync: lstatSyncNativa, readlinkSync: readlinkSyncNativa };
+  try {
+    const assoluto = assolutoScritto ? risolvi(normalizzato) : risolvi(cartella, normalizzato);
+    /*
+     * ⛔ RETE-10: prima di ogni `stat` il percorso VERO a parole (`lstat`/`readlink`, mai aperto): un collegamento verso una
+     *   condivisione dà `null` e qui non si tocca niente — la domanda della rete viene prima.
+     * ⛔ R6 (riverifica del bugfixer, banco da 1.000 risultati di ricerca in un `node_modules` stile pnpm: da ~15 ms a ~350 ms): il
+     *   cammino a parole costava un `lstat` per OGNI pezzo del percorso, per ogni risultato. Ora la CARTELLA si cammina una volta
+     *   (`memoria.veri`, viva quanto una ricerca) e il file con un `lstat` solo; un file che è esso stesso un collegamento si cammina
+     *   per intero (raro).
+     */
+    const veri = (memoria.veri ??= new Map());
+    const cartellaScritta = cartellaDi(assoluto);
+    if (!veri.has(cartellaScritta)) veri.set(cartellaScritta, percorsoVeroAParole(cartellaScritta, fs));
+    const cartellaVera = veri.get(cartellaScritta);
+    if (cartellaVera === null) return null;
+    let reale = join(cartellaVera, nomeBase(assoluto));
+    const foglia = fs.lstatSync(reale);
+    if (foglia.isSymbolicLink()) {
+      reale = percorsoVeroAParole(reale, fs);
+      if (reale === null) return null;
+    }
+    const info = statFn(reale, { bigint: true });
+    /* R3 (revisione): `ino` 0 su certe unità (rete, FUSE, WebDAV) farebbe di ogni file con due nomi «il .env»; R4: un file vuoto non ha
+       niente da rivelare (e il magazzino di pnpm fa di tutti i file vuoti uguali lo STESSO file). */
+    if (!info.isFile() || info.nlink < 2n || info.ino === 0n || info.size === 0n) return null;
+    const stessoFile = (altro) => {
+      try { const i = statFn(altro, { bigint: true }); return i.isFile() && i.dev === info.dev && i.ino === info.ino; } catch { return false; }
+    };
+    const confronta = (x) => (process.platform === 'win32' ? x.toLowerCase() : x);
+    const stessoNome = (altro) => { const c = confronta(risolvi(altro)); return c === confronta(assoluto) || c === confronta(reale); };
+    /* la cartella del file (anche quella VERA, R2: un collegamento simbolico verso un hard link di un `.env` che sta altrove) e la
+       radice del progetto: i nomi segreti di quel livello */
+    const cartelle = [...new Set([cartellaDi(assoluto), cartellaDi(reale), ...(conCartella ? [risolvi(cartella)] : [])])];
+    for (const dir of cartelle) {
+      for (const nome of segretiDellaCartella(dir, { home, elencaFn, memoria })) {
+        const candidato = join(dir, nome);
+        if (stessoNome(candidato)) continue;
+        if (stessoFile(candidato)) return { classe: classeDelPezzo(nome, home), percorso: `${grezzo} = ${candidato}` };
+      }
+    }
+    /* la casa: le identità delle sue credenziali, calcolate una volta per chiamata (R1: per una ricerca, una volta per ricerca) */
+    if (typeof home === 'string' && home !== '') {
+      const trovato = identitaDellaCasa(home, { statFn, elencaFn, memoria }).get(`${info.dev}:${info.ino}`);
+      if (trovato && !stessoNome(trovato)) return { classe: classeDelPezzo(trovato.replace(/\\/gu, '/'), home) ?? 'segreto', percorso: `${grezzo} = ${trovato}` };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/* R1 + riverifica (16/10 notte): la memoria vive quanto UNA ricerca (`senzaFileSegreti` passa la sua a `eUnFileSegreto`), mai globale a
+   tempo: una memoria a 2 s lasciava invisibile per 2 s un hard link appena creato (HL-RV-01). Le altre porte (leggi, scrivi, la shell)
+   ricevono una memoria nuova a ogni chiamata, cioè leggono sempre il disco vero (0,7 ms per un file con due nomi). */
+function segretiDellaCartella(dir, { home, elencaFn, memoria }) {
+  const cartelle = (memoria.cartelle ??= new Map());
+  if (cartelle.has(dir)) return cartelle.get(dir);
+  let nomi = [];
+  try { nomi = elencaFn(dir).filter((nome) => classeDelPezzo(nome, home)); } catch { nomi = []; }
+  cartelle.set(dir, nomi);
+  return nomi;
+}
+function identitaDellaCasa(home, { statFn, elencaFn, memoria }) {
+  const case_ = (memoria.case ??= new Map());
+  if (case_.has(home)) return case_.get(home);
+  const mappa = new Map();
+  const nomiDi = (dir) => { try { return elencaFn(dir); } catch { return []; } };
+  const candidati = [
+    ...CREDENZIALI_DELLA_CASA.file.map((n) => join(home, n)),
+    ...CREDENZIALI_DELLA_CASA.cartelle.flatMap((c) => nomiDi(join(home, ...c.split('/'))).map((n) => join(home, ...c.split('/'), n))),
+  ];
+  for (const candidato of candidati) {
+    try {
+      const i = statFn(candidato, { bigint: true });
+      if (i.isFile() && i.ino !== 0n && i.size !== 0n) mappa.set(`${i.dev}:${i.ino}`, candidato);
+    } catch { /* non c'è: niente da confrontare */ }
+  }
+  case_.set(home, mappa);
+  return mappa;
+}
+
 const LETTURE = new Set(['leggi', 'elenca']);
 /* Owner 16/10/2026 sera («Chiedi, ma non in Full access»): scrivere o modificare un segreto del progetto chiede come leggerlo. */
 const SCRITTURE = new Set(['scrivi', 'file_edit']);
@@ -1274,15 +1431,154 @@ export function scritturaDiUnaCredenziale(percorso, { cartella, home = homeDiSis
   if (isAbsolute(percorso)) assoluto = risolvi(percorso);
   else if (typeof cartella === 'string' && cartella !== '') assoluto = risolvi(cartella, percorso);
   else return null;
-  const relativo = relativoA(reale(risolvi(home)), reale(assoluto));
+  return credenzialeSottoLaCasa(reale(assoluto), reale(risolvi(home))) ? { percorso: reale(assoluto) } : null;
+}
+
+/** Il confronto a parole con l'elenco: `assoluto` sta sotto `casa` e nomina una credenziale (mai `.ssh/config`)? */
+function credenzialeSottoLaCasa(assoluto, casa) {
+  return credenzialeDellaCasaToccata(assoluto, casa) !== null;
+}
+
+/** La voce dell'elenco che `assoluto` tocca (`{ voce, profondita }`: i pezzi di `assoluto` sotto la casa), o `null`. */
+function credenzialeDellaCasaToccata(assoluto, casa) {
+  const relativo = relativoA(casa, assoluto);
   if (relativo === '' || relativo.startsWith('..') || isAbsolute(relativo)) return null;
   const confronta = (x) => (process.platform === 'win32' ? x.toLowerCase() : x);
-  const segmenti = relativo.split(/[\\/]+/u).map((x) => confronta(x.replace(/:.*$/su, ''))).filter(Boolean);
+  /* senza lo stream di NTFS (K1) e senza il punto o lo spazio in coda, che Windows toglie aprendo (`.ssh.\id_rsa` è `.ssh\id_rsa`) */
+  const segmenti = relativo.split(/[\\/]+/u).map((x) => confronta(x.replace(/:.*$/su, '').replace(/[. ]+$/u, ''))).filter(Boolean);
   const unito = segmenti.join('/');
   if (CREDENZIALI_DELLA_CASA.chiedono.includes(unito)) return null;
-  if (segmenti.length === 1 && CREDENZIALI_DELLA_CASA.file.includes(segmenti[0])) return { percorso: reale(assoluto) };
-  const dentro = CREDENZIALI_DELLA_CASA.cartelle.some((c) => unito === c || unito.startsWith(`${c}/`));
-  return dentro ? { percorso: reale(assoluto) } : null;
+  if (segmenti.length === 1 && CREDENZIALI_DELLA_CASA.file.includes(segmenti[0])) return { voce: segmenti[0], profondita: 1 };
+  const voce = CREDENZIALI_DELLA_CASA.cartelle.find((c) => unito === c || unito.startsWith(`${c}/`));
+  return voce ? { voce, profondita: segmenti.length } : null;
+}
+
+/*
+ * ⛔ Riverifica 2 del bugfixer (16/10/2026 notte, su 889bfe188): grafie dello STESSO disco locale che il confronto a parole non
+ *   riconosceva, e che leggevano una credenziale senza carta in Full access:
+ *   - `\\?\C:\…` e `\\.\C:\…` (lo spazio dei nomi di Win32 scritto per esteso);
+ *   - `\\localhost\C$\…`, `\\127.0.0.1\C$\…`, `\\?\UNC\localhost\C$\…` (la condivisione amministrativa della macchina stessa);
+ *   - `/mnt/c/…` (WSL) e `/c/…` (Git Bash), solo su Windows;
+ *   - `%HOMEDRIVE%%HOMEPATH%` e `$env:HOMEDRIVE$env:HOMEPATH` (la casa in due pezzi).
+ *   Qui si riportano al disco `C:\…` prima del confronto; il punto e lo spazio in coda a un segmento (Windows li toglie) li toglie
+ *   `credenzialeDellaCasaToccata`. ⛔ Restano dichiarati: la casa Linux dentro WSL (`\\wsl$\…`, un'altra macchina) e i nomi corti 8.3
+ *   (`PROGRA~1`), che a parole non si ricostruiscono senza toccare il disco.
+ */
+/*
+ * ⛔ Riverifica 3 (16/10/2026 notte): sfuggivano ancora il NOME di questa macchina (`\\DESKTOP-…\C$`, il più realistico), ogni indirizzo
+ *   di `127.0.0.0/8` e le sue forme corte (`\\127.0.0.2\C$`, `\\127.1\C$`), le graffe di PowerShell (`${env:USERPROFILE}`) e il percorso
+ *   relativo al disco senza barra (`C:Users\…`, letto dalla radice: chiedere in più in un caso raro è il verso sicuro).
+ */
+const nomeDellaMacchina = (() => { try { return hostname(); } catch { return ''; } })();
+const PER_ESPRESSIONE = (testo) => testo.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+const QUESTA_MACCHINA = new RegExp(String.raw`^\\\\(?:[?.]\\UNC\\)?(?:localhost|127(?:\.\d{1,3}){1,3}|\[?::1\]?|0--1\.ipv6-literal\.net`
+  + (nomeDellaMacchina ? `|${PER_ESPRESSIONE(nomeDellaMacchina)}(?:\\.[^\\\\]*)?` : '') + String.raw`)\\([A-Za-z])\$(\\.*)?$`, 'isu');
+function comeDiscoLocale(testo, home) {
+  let t = testo;
+  if (typeof home === 'string' && home !== '') {
+    t = t.replace(/%HOMEDRIVE%%HOMEPATH%|\$env:HOMEDRIVE\$env:HOMEPATH|\$\{env:HOMEDRIVE\}\$\{env:HOMEPATH\}/giu, home);
+    t = t.replace(/\$\{env:(?:USERPROFILE|HOME)\}|\$env:HOME(?![A-Za-z0-9_])/giu, home);
+  }
+  const b = t.replace(/\//gu, '\\');
+  const esteso = /^\\\\[?.]\\([A-Za-z]:(?:\\.*)?)$/su.exec(b);
+  if (esteso) return esteso[1];
+  const amministrativa = QUESTA_MACCHINA.exec(b);
+  if (amministrativa) return `${amministrativa[1]}:${amministrativa[2] ?? '\\'}`;
+  const relativoAlDisco = /^([A-Za-z]):(?![\\/])(.+)$/su.exec(t);
+  if (relativoAlDisco) return `${relativoAlDisco[1]}:/${relativoAlDisco[2]}`;
+  if (process.platform === 'win32') {
+    const unix = /^\/(?:mnt\/)?([A-Za-z])(\/.*)?$/su.exec(t);
+    if (unix) return `${unix[1]}:${unix[2] ?? '/'}`;
+  }
+  return t;
+}
+
+/*
+ * ⛔ Owner 16/10/2026 notte («Il progetto vince, ma non se È la cartella», dopo la revisione CRED-RI-04 del bugfixer): un progetto
+ *   aperto DENTRO una cartella di credenziali (`~/.docker/mio-progetto`, `~/.config/gh/estensione`) faceva chiedere in Full access ogni
+ *   lettura e ogni `npm test`. Ciò che sta sotto la radice del progetto non conta come credenziale della casa — purché la radice stia
+ *   PIÙ IN BASSO della voce dell'elenco: `~/.docker` o `~/.ssh` aperti come progetto restano credenziali. `~/.docker/config.json`, fuori
+ *   dal progetto, chiede ancora. Concorrenti letti nel codice: opencode `packages/core/src/file-access.ts:93-98` (tutto ciò che sta sotto
+ *   il progetto è «interno»), Codex `windows-sandbox-rs/src/setup.rs:59-72` e `:1307` (toglie la cartella anche se è il progetto: lì non
+ *   si lavora), Hermes `tools/approval_detection.py:20-37` (non chiede mai per LEGGERE `~/.ssh`). È opencode più la guardia che non ha.
+ * ⛔ Solo le LETTURE: le scritture restano vietate come prima (`scritturaDiUnaCredenziale`).
+ */
+function progettoSottoUnaCredenziale(cartella, casa) {
+  if (typeof cartella !== 'string' || cartella === '' || eDiRete(cartella)) return null;
+  const radice = risolvi(cartella);
+  const toccata = credenzialeDellaCasaToccata(radice, casa);
+  if (toccata === null || toccata.voce.split('/').length >= toccata.profondita) return null;
+  return radice;
+}
+
+/*
+ * ⛔ Owner 16/10/2026 notte (CLI «Chiedere sempre», desktop «Sì, anche sul desktop»): LEGGERE una credenziale della casa chiede SEMPRE,
+ *   anche in Full access — l'eccezione dichiarata alla regola del 12/10 «Full access non chiede mai». I segreti del progetto (`.env`)
+ *   restano liberi in Full access; scriverle resta vietato sempre (`scritturaDiUnaCredenziale`).
+ * ⛔ A PAROLE, senza `realpath`: risolvere un percorso che porta in rete sarebbe un contatto prima del sì (la lezione di RETE-10). Un
+ *   collegamento verso una credenziale lo trova già `motivoDaChiedere` (`→ reale` / `= candidato`): il kernel confronta anche quello.
+ * @returns la segnalazione nella forma di `motivoDaChiedere`, o `null`.
+ */
+export function credenzialeDellaCasaLetta({ tipo, percorso, comando, cartella, home = homeDiSistema(), segreto = null, fsSync, statFn = statSyncNativa, elencaFn = elencaSync } = {}) {
+  if (typeof home !== 'string' || home === '') return null;
+  const casa = risolvi(home);
+  const progetto = progettoSottoUnaCredenziale(cartella, casa);
+  const nelProgetto = (assoluto) => {
+    if (progetto === null) return false;
+    const relativo = relativoA(progetto, assoluto);
+    return relativo === '' || (!relativo.startsWith('..') && !isAbsolute(relativo));
+  };
+  /*
+   * ⛔ R7 (riverifica 3 del bugfixer, 16/10/2026 notte): un collegamento col NOME segreto (`id_ed25519`, `.npmrc` hard link verso la
+   *   casa; una giunzione `ponte` → `~/.ssh` letta come `ponte/id_ed25519`) non chiedeva, perché `motivoDaChiedere` riconosce il nome e
+   *   risponde senza calcolare dove porta, e qui il nome scritto stava nel progetto. Stessa falla per i nomi che segreti non sono
+   *   (`gh-ponte/hosts.yml` → `~/.config/gh`). ⇒ Per ogni pezzo anche il percorso VERO (`percorsoVeroAParole`: `lstat`/`readlink`, mai
+   *   aperto; `null` = porta in rete e la domanda della rete viene prima, RETE-10) e, per un file con più di un nome, la sua identità
+   *   contro quelle delle credenziali della casa (`identitaDellaCasa`, la stessa degli hard link). L'esenzione del progetto vale sul
+   *   percorso vero, non su quello scritto.
+   */
+  const fs = fsSync?.lstatSync ? fsSync : { lstatSync: lstatSyncNativa, readlinkSync: readlinkSyncNativa };
+  const memoria = {};
+  const veroDi = (p) => { try { return percorsoVeroAParole(p, fs); } catch { return null; } };
+  const casaVera = veroDi(casa) ?? casa;
+  const credenziale = (p) => !nelProgetto(p) && (credenzialeSottoLaCasa(p, casa) || (casaVera !== casa && credenzialeSottoLaCasa(p, casaVera)));
+  const stessoFileDiUnaCredenziale = (vero) => {
+    try {
+      const info = statFn(vero, { bigint: true });
+      if (!info.isFile() || info.nlink < 2n || info.ino === 0n || info.size === 0n) return null;
+      const trovato = identitaDellaCasa(home, { statFn, elencaFn, memoria }).get(`${info.dev}:${info.ino}`);
+      return trovato && credenziale(trovato) ? trovato : null;
+    } catch {
+      return null;
+    }
+  };
+  /** Dove il pezzo tocca una credenziale della casa (la descrizione per la carta), o `null`. */
+  const dentro = (pezzo) => {
+    const scritto = String(pezzo ?? '').trim();
+    const pulito = comeDiscoLocale(scritto.replace(/^["'`]+|["'`]+$/gu, ''), home);
+    if (pulito === '' || eDiRete(pulito)) return null;
+    const espanso = conLaHomeEspansa(pulito, home);
+    if (espanso === '' || espanso.includes('://') || espanso.startsWith('//')) return null;
+    const assoluto = /^[A-Za-z]:\//u.test(espanso) || espanso.startsWith('/') ? risolvi(espanso)
+      : typeof cartella === 'string' && cartella !== '' ? risolvi(cartella, espanso) : null;
+    if (assoluto === null) return null;
+    if (credenziale(assoluto)) return scritto;
+    const vero = veroDi(assoluto);
+    if (vero === null) return null;
+    if (vero !== assoluto && credenziale(vero)) return `${scritto} → ${vero}`;
+    const trovato = stessoFileDiUnaCredenziale(vero);
+    return trovato ? `${scritto} = ${trovato}` : null;
+  };
+  const pezzi = LETTURE.has(tipo) ? [percorso] : tipo === 'shell' ? pezziDelComando(comando) : [];
+  /* il bersaglio vero di un collegamento, se il controllo dei segreti l'ha già trovato */
+  const bersaglio = typeof segreto?.percorso === 'string' ? segreto.percorso.split(/ (?:→|=) /u).pop() : null;
+  for (const pezzo of [...pezzi, ...(bersaglio ? [bersaglio] : [])]) {
+    const toccata = dentro(pezzo);
+    if (toccata === null) continue;
+    const segnalazione = { classe: 'segreto', percorso: segreto?.percorso?.match(/ (?:→|=) /u) ? segreto.percorso : toccata };
+    return { ...segnalazione, ...frasePerLaPersona(segnalazione, tipo), credenzialeDellaCasa: true };
+  }
+  return null;
 }
 
 export function motivoDaChiedere({ tipo, comando, percorso, cartella, home = homeDiSistema(), accessoPieno = false, elenca, puntiNascosti, orologio, fsSync, leggiTesta } = {}) {
@@ -1300,6 +1596,13 @@ export function motivoDaChiedere({ tipo, comando, percorso, cartella, home = hom
   /* LINK-SEGRETO: il nome è innocuo, il file vero dietro un collegamento no (vedi `bersaglioSegretoDiUnCollegamento`). */
   const collegato = perPercorso ? bersaglioSegretoDiUnCollegamento(testo, { cartella, home, ...(fsSync ? { fsSync } : {}) }) : null;
   if (collegato) return conChiaveDelConsenso({ ...collegato, ...frasePerLaPersona(collegato, tipo) }, scrittura);
+  /* HARD LINK (owner 16/10 notte): per la lettura e la scrittura di un file, e per ogni pezzo di un comando che sia un file */
+  if (tipo !== 'elenca') {
+    for (const pezzo of perPercorso ? [testo] : pezziDelComando(testo)) {
+      const fisico = segretoDiUnCollegamentoFisico(pezzo, { cartella, home, ...(fsSync?.statSync ? { statFn: fsSync.statSync } : {}), ...(fsSync?.lstatSync ? { fsSync } : {}) });
+      if (fisico) return conChiaveDelConsenso({ ...fisico, ...frasePerLaPersona(fisico, tipo) }, scrittura);
+    }
+  }
   if (scrittura) return null;
   /* 14/10/2026: un file d'esempio nominato da una lettura o da un comando, con una chiave vera dentro (un elenco non apre i file). */
   if (tipo !== 'elenca') {

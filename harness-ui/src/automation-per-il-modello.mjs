@@ -249,7 +249,7 @@ export function creaOspiteAutomazioni({ store, scheduler, verificaCartellaFn = (
             return { ok: true, carta: true, azione: { bozza, avvisi: avvisiPer(bozza, { testi: [bozza.istruzioni] }) } };
           }
           const voce = await store.crea({ ...(await campiDellaBozza(argomenti)), origine: { tipo: 'chat', ...(sessionId ? { sessionId } : {}) } });
-          return { ok: true, testo: `Automation "${voce.nome}" created (id ${voce.id}). It is on and runs ${descriviPianificazione(voce.pianificazione)}: ${prossimoInParole(voce)}. `
+          return { ok: true, id: voce.id, testo: `Automation "${voce.nome}" created (id ${voce.id}). It is on and runs ${descriviPianificazione(voce.pianificazione)}: ${prossimoInParole(voce)}. `
             + 'The person can change or delete it in Automations.' };
         }
 

@@ -336,6 +336,9 @@ export const STATI_PROCESSO = Object.freeze({
   /* A6-bis (08/10/2026): sfondato prima di un riavvio del server — il processo forse vive ancora, ma nessuno lo segue più:
      non si conta fra i vivi e non si inventa un esito (Hermes, `process_registry_notifications.py`: «Lost»). */
   perso: { get etichetta() { return tr('processi.process.stateLost'); }, tono: '', icona: 'i-sfondo', vivo: false },
+  /* Owner 17/10/2026 («Adottarli come Hermes»): un comando ripreso dopo un riavvio è uscito da solo. Il suo codice non l'ha raccolto
+     nessuno (Hermes: «recovery has no waitable handle»): finito, ma senza dire se è riuscito. */
+  'finito-ignoto': { get etichetta() { return tr('processi.process.stateEndedUnknown'); }, tono: '', icona: 'i-sfondo', vivo: false },
   /*
    * ⛔ 17/09, OSS-2 — «NON ESEGUITO» non è «NON RIUSCITO», e la differenza si vede in una foto.
    *   Una `prova` su un progetto senza suite torna `exit 127` con «nessuna suite trovata», e il
@@ -532,10 +535,12 @@ export function datiProcesso(p = {}) {
        non è nella tabella si mostra com'è invece di sparire. */
     ...(p.fileSfondo ? [[tr('processi.process.detailOutputFile'), p.fileSfondo, 'lungo']] : []),
     ...(p.sfondoDa ? [[tr('processi.process.detailBackgroundedBy'), CHI_SFONDA[p.sfondoDa] ? tr(CHI_SFONDA[p.sfondoDa]) : p.sfondoDa]] : []),
+    /* owner 17/10: un ripreso lo dice, e dice che cosa NON fa più (l'output non lo raccoglie nessuno) */
+    ...(p.adottato === true && descrittore.vivo ? [[tr('processi.process.detailTracking'), tr('processi.process.reattached'), 'lungo']] : []),
     /* ⛔ 17/09, OSS-2 — la cartella NON è più «—» per costruzione: `ToolCallResult` porta `cwd`
        (corsia B). Resta «—» quando il campo non arriva davvero, che è un fatto, non un ripiego. */
     [tr('processi.process.detailFolder'), cartella],
-    [tr('processi.process.detailPid'), '—'],
+    [tr('processi.process.detailPid'), p.adottato === true && Number.isSafeInteger(p.pid) ? String(p.pid) : '—'],
     [tr('processi.process.detailWho'), chi],
     [tr('processi.process.detailDescription'), typeof p.descrizione === 'string' && p.descrizione.trim() ? p.descrizione.trim() : '—', 'lungo'],
   ];
@@ -703,7 +708,7 @@ function strisciaScorrevole(riga) {
  */
 const FERMABILE_O_SFONDO = new Set([...FERMABILE, 'in-sfondo']);
 /* «Togli» solo su una riga FINITA: la stessa regola del server (`togliProcesso`, 409 `PROCESS_STILL_RUNNING` se è viva). */
-const TOGLIBILE = new Set(['riuscito', 'fallito', 'annullato', 'ucciso', 'non-eseguito', 'interrotto', 'perso']);
+const TOGLIBILE = new Set(['riuscito', 'fallito', 'annullato', 'ucciso', 'non-eseguito', 'interrotto', 'perso', 'finito-ignoto']);
 
 /** Le voci che la riga può offrire ADESSO, dal suo stato e da ciò che chi disegna sa fare. */
 function vociDellaRiga(riga, scheda) {
@@ -2126,6 +2131,9 @@ export function processiDagliEventi(eventi = [], { adesso = Date.now(), nomiComa
   /* C1 (owner 10/10/2026, «Sì, resta tolta»): i comandi tolti dalla scheda (`talos.processo-tolto`, durevole). La riga resta nei
      dati con `tolto: true` — la scheda Processi la salta (`legacy/app.js`), le schede «Agente» del terminale no: lì è l'output. */
   const tolti = new Set();
+  /* Owner 17/10/2026 («Adottarli come Hermes, con "Ferma"»): i comandi in sottofondo del server di prima ripresi da un server
+     successivo (`talos.sfondo-adottato`): toolCallId → { sequenza, pid }. Vale solo l'adozione del server di ADESSO (sotto). */
+  const adottati = new Map();
   /* ⛔ Taccuino (08/10/2026): la DURATA di uno sfondato è quella del processo, dall'avvio all'uscita vera (Hermes: `started_at` e
      `exited_at`, `tools/process_registry.py:533-536`). Quella del risultato «in sfondo» (0,2 s, misurato sulla 4176 per un
      comando di 8 s) è il tempo della CHIAMATA fino allo sfondamento: detta come durata, era falsa. Un orologio che va indietro
@@ -2140,6 +2148,9 @@ export function processiDagliEventi(eventi = [], { adesso = Date.now(), nomiComa
   const chiudiSfondo = (p, e) => {
     if (e.fermatoDallaPersona === true) {
       p.stato = 'annullato';
+      p.uscita = null;
+    } else if (e.esitoIgnoto === true) { // owner 17/10: un ripreso uscito da solo — nessun codice raccolto, nessun esito inventato
+      p.stato = 'finito-ignoto';
       p.uscita = null;
     } else {
       p.stato = e.esito === 'riuscito' ? 'riuscito' : e.esito === 'fallito' ? 'fallito' : 'ucciso';
@@ -2173,6 +2184,10 @@ export function processiDagliEventi(eventi = [], { adesso = Date.now(), nomiComa
      */
     if (e.type === 'ProcessoTolto') {
       if (typeof e.toolCallId === 'string') tolti.add(e.toolCallId);
+      continue;
+    }
+    if (e.type === 'ProcessoAdottato') {
+      if (typeof e.toolCallId === 'string') adottati.set(e.toolCallId, { sequenza: Number.isFinite(e._sequenza) ? e._sequenza : null, pid: Number.isSafeInteger(e.pid) ? e.pid : null });
       continue;
     }
     if (e.type === 'ProcessoSfondoFinito') {
@@ -2305,6 +2320,16 @@ export function processiDagliEventi(eventi = [], { adesso = Date.now(), nomiComa
      segue più nessuno: «Non più seguito», non vivo. Senza il dato (sessione nata da questo server, chiamanti vecchi) non cambia niente. */
   if (Number.isFinite(sfondiNonSeguitiFinoA)) {
     for (const p of lista) if (p.stato === 'in-sfondo' && Number.isFinite(p.sequenzaSfondo) && p.sequenzaSfondo <= sfondiNonSeguitiFinoA) p.stato = 'perso';
+  }
+  /* Owner 17/10/2026: ripreso dal server di ADESSO (la sua adozione sta dopo il tratto del server di prima) ⇒ di nuovo «In sfondo», con
+     «Ferma». Un'adozione di un server già morto a sua volta resta «Non più seguito» finché un server vivo non lo riprende. */
+  for (const p of lista) {
+    const a = adottati.get(p.id);
+    if (!a || p.stato !== 'perso') continue;
+    if (Number.isFinite(sfondiNonSeguitiFinoA) && !(Number.isFinite(a.sequenza) && a.sequenza > sfondiNonSeguitiFinoA)) continue;
+    p.stato = 'in-sfondo';
+    p.adottato = true;
+    p.pid = a.pid;
   }
   for (const p of lista) {
     if (!STATI_PROCESSO[p.stato]?.vivo || p.stato === 'in-sfondo' || p.chi === 'tu') continue;

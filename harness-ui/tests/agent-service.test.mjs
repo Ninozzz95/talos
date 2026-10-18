@@ -3126,7 +3126,7 @@ test('D-10B: i pezzi di output escono come ToolCallOutput PRIMA del risultato, e
    */
   assert.equal(
     eventi.find((e) => e.type === 'ToolCallResult').content,
-    'exit 0 [sandbox: none (cmd.exe nativo: stesso utente e stessi privilegi del processo, nessun isolamento)]\nriga uno\nattenzione\nriga due',
+    'exit 0 [sandbox: none (native cmd.exe: same user and same privileges as the process, no isolation)]\nriga uno\nattenzione\nriga due',
   );
 });
 
@@ -3529,4 +3529,54 @@ test('K3B-AGENT-01 — la lingua dell\'interfaccia arriva al kernel; senza lingu
   }
   assert.equal(visti[0].linguaInterfaccia, 'en');
   assert.equal('linguaInterfaccia' in visti[1], false);
+});
+
+/*
+ * ⭐ C5 attrezzi differiti (17/10/2026) — una chiamata a `tool_call` NON si annuncia a pezzi: il suo nome è il ponte, e l'attrezzo
+ *   vero sta dentro argomenti ancora incompleti. La annuncia la risposta intera, già come l'attrezzo vero; e siccome non è stata
+ *   annunciata, un `tool-annullato` dello stesso id non chiude niente («N annunciati, N chiusi», 11/09).
+ */
+test('PONTE-SERVER-01: tool_call in streaming non si annuncia; arriva a risposta intera come l\'attrezzo vero, una volta sola', async () => {
+  const eventi = [];
+  const talosLavoraFn = talosLavoraFinto({
+    script: {
+      esito: { comeFinita: 'concluso', detto: 'fatto' },
+      deltas: [
+        { giro: 0, tipo: 'tool-inizio', indice: 0, toolCallId: 'p1', nome: 'tool_call' },
+        { giro: 0, tipo: 'tool-args', indice: 0, toolCallId: 'p1', delta: '{"name":"notes_create","arguments":{"title":"T",' },
+        { giro: 0, tipo: 'tool-args', indice: 0, toolCallId: 'p1', delta: '"content":"C"}}' },
+        { giro: 0, tipo: 'tool-annullato', indice: 0, toolCallId: 'p1', nome: 'tool_call', motivo: 'x' },
+        { giro: 0, tipo: 'tool-inizio', indice: 1, toolCallId: 'c2', nome: 'leggi' },
+        { giro: 0, tipo: 'tool-args', indice: 1, toolCallId: 'c2', delta: '{}' },
+      ],
+      risposta: {
+        role: 'assistant', content: '',
+        tool_calls: [
+          { id: 'p1', function: { name: 'tool_call', arguments: '{"name":"notes_create","arguments":{"title":"T","content":"C"}}' } },
+          { id: 'c2', function: { name: 'leggi', arguments: '{}' } },
+        ],
+      },
+    },
+  });
+
+  await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: (e) => eventi.push(e), talosLavoraFn, attrezziDifferiti: true });
+
+  const inizi = eventi.filter((e) => e.type === 'ToolCallStart');
+  assert.deepEqual(inizi.map((e) => [e.toolCallId, e.toolCallName]), [['c2', 'leggi'], ['p1', 'notes_create']]);
+  assert.deepEqual(eventi.filter((e) => e.type === 'ToolCallArgs' && e.toolCallId === 'p1').map((e) => e.delta), ['{"title":"T","content":"C"}']);
+  assert.equal(eventi.filter((e) => e.type === 'ToolCallResult' && e.toolCallId === 'p1').length, 0, 'mai annunciata ⇒ nessuna chiusura da annullata');
+});
+
+/*
+ * ⛔ C5 (17/10/2026, prova a secco dell'A/B) — l'interruttore NON arrivava al kernel: `avviaSessione` inoltra i campi uno per uno,
+ *   e `attrezziDifferiti` non era fra quelli. Le prove PONTE chiamavano il kernel direttamente e PONTE-SERVER-01 usava un kernel
+ *   finto: nessuna guardava il filo intero. Il banco l'ha visto: 67 attrezzi e 20.048 token nel braccio «acceso».
+ */
+test('PONTE-SERVER-02: avviaSessione inoltra attrezziDifferiti al kernel; assente ⇒ assente', async () => {
+  const visti = [];
+  const talosLavoraFn = async (opzioni) => { visti.push(opzioni); return { comeFinita: 'concluso', detto: 'ok' }; };
+  await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn, attrezziDifferiti: true });
+  await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn });
+  assert.equal(visti[0].attrezziDifferiti, true);
+  assert.equal('attrezziDifferiti' in visti[1], false);
 });
