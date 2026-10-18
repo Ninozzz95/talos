@@ -5,7 +5,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, realpathSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { worktreeDiWindowsLettoDaLinux, spiegazioneWorktreeWindows } from '../src/kernel/worktree-windows.mjs'
@@ -65,7 +65,10 @@ test('F016-03 (WSL vero): il git di Linux su un worktree di Windows — esito di
     assert.equal(rotto.codice, 128)
     assert.match(rotto.testo, /fatal: not a git repository: .*\/\.git\/worktrees\/ramo/, 'la riga di git resta')
     assert.match(rotto.testo, /\n\n⛔ This is not a broken repository\..*git worktree repair --relative-paths/s)
-    assert.match(rotto.testo, new RegExp(`in the main repository ${principale.replace(/\\/g, '/').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}:`), 'il repository principale giusto')
+    /* 18/10/2026: git scrive nel worktree il percorso VERO del repository principale (nome lungo); con una TEMP dal nome corto 8.3
+       (`VIRTUA~1`, il runner `RUNNER~1`) quello costruito qui non è lo stesso. Si confronta col percorso nativo, come IMP-06. */
+    const principaleVero = realpathSync.native(principale)
+    assert.match(rotto.testo, new RegExp(`in the main repository ${principaleVero.replace(/\\/g, '/').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}:`), 'il repository principale giusto')
 
     gitWindows(principale, 'worktree', 'repair', '--relative-paths')
     const riparato = await eseguiComandoSandboxato('git status --short', ramo, { dove: 'wsl2' })

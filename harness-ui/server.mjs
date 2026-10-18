@@ -84,6 +84,7 @@ import { creaOspiteFornitori } from './src/fornitori-per-il-modello.mjs'; // 0.1
 import { slugDelFornitore } from './src/openrouter-fornitori.mjs';
 import { creaCustodiaChatgpt } from './src/chatgpt-custodia.mjs'; // 11/10/2026: «Continue with ChatGPT»
 import { creaAccessoChatgpt } from './src/chatgpt-accesso.mjs';
+import { creaAccessoChatgptOspite } from './src/chatgpt-accesso-ospite.mjs'; // 18/10/2026: il custode del piano è l'app che ospita r4
 import { creaLucchettoRinnovoChatgpt, fileLucchettoRinnovoChatgpt } from './src/chatgpt-lucchetto-rinnovo.mjs'; // L3-1
 import { accessoConUso, creaRegistroUsoChatgpt } from './src/chatgpt-uso.mjs';
 import { creaCatalogoChatgpt, creaRotteChatgpt } from './src/chatgpt-rotte.mjs';
@@ -184,8 +185,13 @@ async function startServer() {
      (`memoria`) è di questo processo solo: lì nessun lucchetto. */
   const lucchettoRinnovoChatgpt = portachiaviDiProva ? undefined
     : creaLucchettoRinnovoChatgpt({ file: fileLucchettoRinnovoChatgpt({ scope: scopePortachiavi }) });
-  const accessoChatgpt = providerKeyring ? accessoConUso(creaAccessoChatgpt({ custodia: creaCustodiaChatgpt({ keyring: providerKeyring }),
-    ...(lucchettoRinnovoChatgpt ? { conLucchettoDiRinnovo: lucchettoRinnovoChatgpt } : {}) }), usoChatgpt) : null;
+  /* 18/10/2026, legge dell'owner «un solo accesso» (contratto con la sessione mobile): con `TALOS_CHATGPT_CUSTODE=app` il custode del
+     piano è l'app che ospita r4 (il telefono). r4 non crea la sua custodia, non legge né scrive `talos-harness-chatgpt` e non rinnova
+     mai: tiene in memoria il token che l'app spinge (`POST /api/v1/providers/chatgpt/access`). Senza la variabile, tutto come prima. */
+  const custodeChatgptApp = process.env.TALOS_CHATGPT_CUSTODE === 'app';
+  const accessoChatgpt = custodeChatgptApp ? accessoConUso(creaAccessoChatgptOspite(), usoChatgpt)
+    : providerKeyring ? accessoConUso(creaAccessoChatgpt({ custodia: creaCustodiaChatgpt({ keyring: providerKeyring }),
+      ...(lucchettoRinnovoChatgpt ? { conLucchettoDiRinnovo: lucchettoRinnovoChatgpt } : {}) }), usoChatgpt) : null;
   const catalogoChatgpt = accessoChatgpt ? creaCatalogoChatgpt({ accesso: accessoChatgpt }) : null;
   const rotteChatgpt = creaRotteChatgpt({ accesso: accessoChatgpt, catalogo: catalogoChatgpt, uso: usoChatgpt });
 
@@ -323,6 +329,8 @@ async function startServer() {
       return accessoChatgpt.tokenDiAccesso();
     },
     registraUsoDelPiano: (voce) => usoChatgpt.registra(voce),
+    /* 18/10/2026: col custode nell'app un 401 del piano = token da rinnovare nell'app; r4 lo dimentica e lo dice (runtime-owner-adapter) */
+    ...(custodeChatgptApp ? { suTokenDelPianoRifiutato: () => { accessoChatgpt.dimentica(); return Object.assign(new Error('The ChatGPT access token must be renewed by the app.'), { code: 'CHATGPT_TOKEN_DA_RINNOVARE', transitorio: false, fornitore: 'chatgpt' }); } } : {}),
     /*
      * ⛔ Si passa il PONTE, non la chiave: `request()` del supervisore
      * aggiunge da sé l'`--api-key` generata all'avvio, che non deve essere

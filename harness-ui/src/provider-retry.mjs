@@ -48,6 +48,12 @@ export function leggiAttesaResetDalCorpo(testo) {
   };
   let m = /\bquotaResetDelay\s*[:=]\s*(\d+(?:\.\d+)?)\s*(ms|s|m|h)\b/i.exec(testo);
   if (m) return componi([[m[1], m[2]]]);
+  /* 18/10/2026 — Google (Gemini) dice l'attesa nel corpo del 429 in due forme, e r4 non le leggeva: `RetryInfo` («"retryDelay": "34s"»,
+     google.rpc) e la frase «Please retry in 34.928045328s.» (misurate sul servizio vero, quota gratuita al minuto). */
+  m = /"retryDelay"\s*:\s*"(\d+(?:\.\d+)?)s"/i.exec(testo);
+  if (m) return componi([[m[1], 's']]);
+  m = /\bretry\s+in\s+(\d+(?:\.\d+)?)\s*(ms|secs?|seconds?|mins?|minutes?|s|m|h)\b/i.exec(testo);
+  if (m) return componi([[m[1], m[2]]]);
   m = /\bresets_in_seconds\s*["']?\s*[:=]\s*(\d+(?:\.\d+)?)/i.exec(testo);
   if (m) return componi([[m[1], 's']]);
   m = /\bresets\s+in\s+((?:\d+(?:\.\d+)?\s*(?:ms|hrs?|hours?|mins?|minutes?|secs?|seconds?|s|m|h)\b[,\s]*){1,4})/i.exec(testo);

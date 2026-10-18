@@ -30,12 +30,18 @@ function progetto(t) {
   t.after(() => rimuoviCartellaDiProva(radice));
   return radice;
 }
+/* 18/10/2026: sul runner Windows della CI, sotto il carico della suite intera, 5 s non bastavano (G5-REV-01 controllo ~9 s, push in main
+   dopo la #69): il tetto è 15 s, che costa tempo solo a una prova che fallisce. */
 async function aspetta(condizione, cosa) {
-  const fino = Date.now() + 5000;
+  const fino = Date.now() + 15_000;
   while (Date.now() < fino) { if (condizione()) return; await new Promise((r) => setTimeout(r, 5)); }
   assert.fail(`mai successo: ${cosa}`);
 }
 const riposa = async () => { for (let i = 0; i < 20; i += 1) { await passo(); await new Promise((r) => setTimeout(r, 10)); } };
+
+/* 18/10/2026: i controlli «fermo in silenzio» aspettano che il giro si MUOVA (o 15 s), invece di 20-30 pause da 10 ms: sul runner lento
+   il giro si muoveva dopo, e la prova lo chiamava fermo. Se il giro resta fermo davvero, l'asserzione dopo cade lo stesso. */
+const riposaFinche = async (mosso) => { const fino = Date.now() + 15_000; while (Date.now() < fino && !mosso()) { await passo(); await new Promise((r) => setTimeout(r, 10)); } };
 function banco(cartellaStore, cartella, { giudice, ...extra }) {
   const domande = [];
   const b = registroAGiri(cartellaStore, {
@@ -117,7 +123,7 @@ test('PAV-REV-03 (S3) — a contract added WHILE the floor judge thinks: the loo
   const contratto = await b.registro.aggiungiCriteriObiettivo(sessionId, CRITERI);
   assert.equal(contratto?.ok, true, `premessa: il contratto si aggiunge mentre il giudice pensa (${JSON.stringify(contratto)?.slice(0, 160)})`);
   rispondi(verdetto({ verdict: 'yes', reason: 'install documented', evidence: [{ path: 'README.md', sha256: impronta(README) }] }));
-  await riposa();
+  await riposaFinche(() => { const x = stato(b, sessionId); return x.stato !== 'attivo' || Boolean(x.verifica?.verdetti) || b.giri.length > giriPrima + 1; });
   const o = stato(b, sessionId);
   const fermoInSilenzio = o.stato === 'attivo' && Boolean(o.contratto) && !o.verifica?.verdetti && b.giri.length === giriPrima + 1;
   assert.equal(fermoInSilenzio, false, `goal ${o.stato}, contract ${Boolean(o.contratto)}, checked ${Boolean(o.verifica?.verdetti)}: nobody will move it`);

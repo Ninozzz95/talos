@@ -294,6 +294,17 @@ const REGOLE = [
       tecnico: tecnico.includes('OPENROUTER_ALL_PROVIDERS_EXCLUDED') ? tecnico : `[OPENROUTER_ALL_PROVIDERS_EXCLUDED]${tecnico ? ` ${tecnico}` : ''}`,
     }),
   },
+  /* 18/10/2026: un modello ritirato o chiuso agli account nuovi (Gemini 2.5 Flash-Lite, misurato). Il codice lo mette il server
+     (`classificaRifiutoNoto`); non è un limite del servizio né un guasto: si sceglie un altro modello. */
+  {
+    id: 'modello-non-disponibile', riconosce: (_testo, code) => code === 'PROVIDER_MODEL_UNAVAILABLE',
+    spiega: tecnico => ({
+      cosa: t('errori.turno.modelloNonDisponibile.cosa'),
+      perche: t('errori.turno.modelloNonDisponibile.perche'),
+      rimedi: [t('errori.turno.modelloNonDisponibile.rimedio1')],
+      tecnico: tecnico.includes('PROVIDER_MODEL_UNAVAILABLE') ? tecnico : `[PROVIDER_MODEL_UNAVAILABLE]${tecnico ? ` ${tecnico}` : ''}`,
+    }),
+  },
   /*
    * 11/10/2026 notte — GLI ERRORI DEL PIANO CHATGPT (`CHATGPT_*`). Trovato dal vivo sul 4177: scollegato ChatGPT dalla chat, il giro
    * ha chiesto ancora al modello del piano ed è finito con CHATGPT_NON_COLLEGATO, e la chat mostrava «non ancora tradotto» col testo

@@ -539,15 +539,18 @@ export const REGISTRO_FORNITORI = congela({
     id: 'gemini',
     // P-F, fonti e strumenti verificati il 12/09/2026; parità con models.dev nel test.
     modelliDiRiserva: congela([
-      // 12/09/2026 — https://ai.google.dev/gemini-api/docs/models/gemini-2.5-flash-lite
-      congela({ id: 'gemini-2.5-flash-lite', nome: 'Gemini 2.5 Flash-Lite', toolCalling: true,
-        fonte: 'https://ai.google.dev/gemini-api/docs/models/gemini-2.5-flash-lite', data: '2026-09-12' }),
+      /* 18/10/2026 — 2.5 Flash-Lite non risponde più a un account nuovo (404 «no longer available to new users … use
+         models/gemini-3.5-flash-lite», misurato sul motore vero) e la pagina ufficiale dice «we are limiting access to the 2.5 models
+         to users who have actively used them in the past … For any new projects, use our latest models: 3.5 Flash-Lite».
+         https://ai.google.dev/gemini-api/docs/models (letta il 18/10/2026: 3.5 Flash-Lite sotto «Stable»). */
+      congela({ id: 'gemini-3.5-flash-lite', nome: 'Gemini 3.5 Flash-Lite', toolCalling: true,
+        fonte: 'https://ai.google.dev/gemini-api/docs/models', data: '2026-10-18' }),
       // 12/09/2026 — https://ai.google.dev/gemini-api/docs/models/gemini-3.1-flash-lite
       congela({ id: 'gemini-3.1-flash-lite', nome: 'Gemini 3.1 Flash-Lite', toolCalling: true,
         fonte: 'https://ai.google.dev/gemini-api/docs/models/gemini-3.1-flash-lite', data: '2026-09-12' }),
     ]),
     // 12/09/2026 — 2.5: 0,10/0,40 USD per milione sul piano standard; https://ai.google.dev/gemini-api/docs/pricing.
-    modelloAusiliario: 'gemini-2.5-flash-lite',
+    modelloAusiliario: 'gemini-3.5-flash-lite', // 18/10/2026: il 2.5 non risponde agli account nuovi (vedi sopra)
     modelsDevId: 'google',
     etichetta: 'Google Gemini',
     descrizione: 'Direct Google AI Studio API.',

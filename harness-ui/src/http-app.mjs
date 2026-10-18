@@ -50,7 +50,7 @@ import { creaReplayCoalescente } from './sse-replay-coalescente.mjs'; // 11/09: 
 import { iconaDelDominio } from './favicon-proxy.mjs'; // 10/09: le favicon delle fonti, prese dal server e mai dal browser
 import { creaRegistroAttese, ritornoDaHost, scambiaCodicePerChiave } from './openrouter-oauth.mjs'; // PO-01 10/9: i conti dell'accesso a OpenRouter, puri e provabili senza rete
 import { intestazioniDellaPagina, paginaDiRitorno } from './pagina-ritorno-accesso.mjs';
-import { PREFISSO_ROTTE as PREFISSO_ROTTE_CHATGPT, creaRotteChatgpt, ragionamentoDelPiano } from './chatgpt-rotte.mjs'; // 11/10/2026: «Continue with ChatGPT» // 11/10/2026: la pagina comune del ritorno dagli accessi
+import { PREFISSO_ROTTE as PREFISSO_ROTTE_CHATGPT, ROTTE_TOKEN_CHATGPT, creaRotteChatgpt, ragionamentoDelPiano } from './chatgpt-rotte.mjs'; // 11/10/2026: «Continue with ChatGPT» // 11/10/2026: la pagina comune del ritorno dagli accessi
 import { slugDelFornitore } from './openrouter-fornitori.mjs'; // decisione 14 (08/10/2026): dal nome del fornitore a valle allo slug
 import { fileURLToPath } from 'node:url'; // 11/09: i tre magazzini GLOBALI stanno accanto a server.mjs, come li trova session-registry.mjs
 /*
@@ -344,6 +344,8 @@ const API_ERROR_CODES = new Set([
   'CHATGPT_ACCESSO_NON_VALIDO', 'CHATGPT_RETE', 'CHATGPT_RINNOVO_FALLITO', 'CHATGPT_ELENCO_NON_LETTO',
   'CHATGPT_RICHIESTA_NON_VALIDA', 'CHATGPT_CUSTODIA_FALLITA', 'CHATGPT_USCITA_INCOMPLETA', 'CHATGPT_ERRORE', 'CHATGPT_LIMITE_DEL_PIANO',
   'CHATGPT_PIANO_NON_AMMESSO', 'CHATGPT_RICHIESTA_NON_AMMESSA', 'CHATGPT_SERVIZIO_NON_DISPONIBILE',
+  // 18/10/2026: il custode del piano è l'app che ospita r4 (`chatgpt-accesso-ospite.mjs`)
+  'CHATGPT_TOKEN_DA_RINNOVARE', 'CHATGPT_GESTITO_DALL_APP', 'CHATGPT_CUSTODE_NON_APP',
 ]);
 
 const STATUS_BY_CODE = Object.freeze({
@@ -742,6 +744,9 @@ const STATUS_BY_CODE = Object.freeze({
   CHATGPT_PIANO_NON_AMMESSO: 403,
   CHATGPT_RICHIESTA_NON_AMMESSA: 400,
   CHATGPT_SERVIZIO_NON_DISPONIBILE: 503,
+  CHATGPT_TOKEN_DA_RINNOVARE: 409,
+  CHATGPT_GESTITO_DALL_APP: 409,
+  CHATGPT_CUSTODE_NON_APP: 409,
 });
 
 export const MESSAGE_BY_CODE = Object.freeze({
@@ -974,6 +979,9 @@ export const MESSAGE_BY_CODE = Object.freeze({
   CHATGPT_PIANO_NON_AMMESSO: 'Using a ChatGPT plan in other apps is not available for this account: ChatGPT Plus or Pro is required',
   CHATGPT_RICHIESTA_NON_AMMESSA: 'This request uses something the ChatGPT plan does not support',
   CHATGPT_SERVIZIO_NON_DISPONIBILE: 'ChatGPT plan usage is temporarily unavailable: try again shortly',
+  CHATGPT_TOKEN_DA_RINNOVARE: 'The ChatGPT access must be renewed by the app: try again',
+  CHATGPT_GESTITO_DALL_APP: 'The ChatGPT account is managed in the app’s chat: sign in or out from there',
+  CHATGPT_CUSTODE_NON_APP: 'This server keeps its own ChatGPT sign-in: it does not take a token from an app',
   RUNTIME_NOT_AVAILABLE: 'Local runtime not available',
   RUNTIME_UNREACHABLE: 'Local runtime unreachable',
   RUNTIME_OPERATION_UNSUPPORTED: 'Runtime operation not supported',
@@ -2087,6 +2095,9 @@ const ROTTE_API = Object.freeze([
   { schema: '/api/v1/auth/chatgpt/inizia', metodi: ['POST'] },
   { schema: '/api/v1/auth/chatgpt/annulla', metodi: ['POST'] },
   { schema: '/api/v1/auth/chatgpt/esci', metodi: ['POST'] },
+  // 18/10/2026: il token spinto dall'app che ospita r4 (custode nell'app); fuori da quella modalità rispondono 409
+  { schema: '/api/v1/providers/chatgpt/access', metodi: ['POST'] },
+  { schema: '/api/v1/providers/chatgpt/access/remove', metodi: ['POST'] },
   { schema: '/api/v1/auth/openrouter/inizia', metodi: ['POST'] },
   { schema: '/api/v1/auth/openrouter/codice', metodi: ['POST'] },
   { schema: '/api/v1/auth/openrouter/ritorno', metodi: ['GET'] },
@@ -4197,10 +4208,12 @@ export function createHttpApp({
      *   risposta, in un errore o in un log: l'unica cosa che la persona vede è lo `stato`, che
      *   è 32 byte di caso e non significa niente.
      */
-    if (url.pathname.startsWith(PREFISSO_ROTTE_CHATGPT)) {
+    if (url.pathname.startsWith(PREFISSO_ROTTE_CHATGPT) || ROTTE_TOKEN_CHATGPT.some((r) => r.schema === url.pathname)) {
       try {
         requireNoQuery(url);
-        const corpo = method === 'POST' ? await leggiCorpoJson(req, 1024) : null;
+        /* 18/10: un token di accesso è un JWT di qualche KB; le altre rotte del piano restano a 1 KB */
+        const tettoCorpo = url.pathname.startsWith(PREFISSO_ROTTE_CHATGPT) ? 1024 : 16 * 1024;
+        const corpo = method === 'POST' ? await leggiCorpoJson(req, tettoCorpo) : null;
         const rotta = rotteChatgpt ?? creaRotteChatgpt({ accesso: null });
         const esito = await rotta({ method, percorso: url.pathname, corpo });
         if (esito?.dati !== undefined) { sendJson(res, esito.stato, successEnvelope(esito.dati, clock), method); return; }

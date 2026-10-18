@@ -25,6 +25,17 @@ export const ROTTE_CHATGPT = Object.freeze([
   Object.freeze({ schema: `${PREFISSO_ROTTE}esci`, metodi: Object.freeze(['POST']) }),
 ]);
 /** Per quanto vale l'elenco letto: i modelli di un piano non cambiano di minuto in minuto, ma un piano può cambiare. */
+/* 18/10/2026, custode nell'app (contratto con la sessione mobile): l'app spinge il token di accesso prima di ogni giro, come le chiavi
+   dei fornitori (`/api/v1/providers/:id/key`); r4 lo tiene solo in memoria (`chatgpt-accesso-ospite.mjs`). Fuori da quella modalità:
+   409 `CHATGPT_CUSTODE_NON_APP`. Corpo: `{ accessToken, scadeAlle, accountId? }`, niente altro (l'email non esce dalla chat). */
+export const ROTTA_TOKEN_DALL_APP = '/api/v1/providers/chatgpt/access';
+export const ROTTA_TOKEN_DIMENTICA = '/api/v1/providers/chatgpt/access/remove';
+export const ROTTE_TOKEN_CHATGPT = Object.freeze([
+  Object.freeze({ schema: ROTTA_TOKEN_DALL_APP, metodi: Object.freeze(['POST']) }),
+  Object.freeze({ schema: ROTTA_TOKEN_DIMENTICA, metodi: Object.freeze(['POST']) }),
+]);
+const CAMPI_DEL_TOKEN = new Set(['accessToken', 'scadeAlle', 'accountId']);
+
 export const VITA_ELENCO_MS = 10 * 60 * 1000;
 
 function errore(messaggio, code, extra = {}) {
@@ -77,6 +88,7 @@ export function creaCatalogoChatgpt({ accesso, fetchDiRete = globalThis.fetch, c
 export const STATO_PER_CODICE_CHATGPT = Object.freeze({
   CHATGPT_NON_DISPONIBILE: 503, CHATGPT_NON_COLLEGATO: 409, CHATGPT_PIANO_NON_ABILITATO: 409, CHATGPT_ACCESSO_SCADUTO: 401, CHATGPT_ACCESSO_NON_VALIDO: 401,
   CHATGPT_RETE: 502, CHATGPT_RINNOVO_FALLITO: 502, CHATGPT_ELENCO_NON_LETTO: 502, CHATGPT_RICHIESTA_NON_VALIDA: 400, CHATGPT_CUSTODIA_FALLITA: 500,
+  CHATGPT_TOKEN_DA_RINNOVARE: 409, CHATGPT_GESTITO_DALL_APP: 409, CHATGPT_CUSTODE_NON_APP: 409,
 });
 
 /**
@@ -91,6 +103,20 @@ export function creaRotteChatgpt({ accesso, catalogo = null, uso = null } = {}) 
   let tentativoCorrente = 0; // parla solo l'ULTIMO tentativo: uno sostituito o annullato finisce comunque, ma il suo esito non è più di nessuno
   const rifiuta = (code, message) => ({ stato: STATO_PER_CODICE_CHATGPT[code] ?? 500, errore: { code, message } });
   return async function rottaChatgpt({ method, percorso, corpo = null }) {
+    const rottaToken = ROTTE_TOKEN_CHATGPT.find((r) => r.schema === percorso);
+    if (rottaToken) {
+      if (!rottaToken.metodi.includes(method)) return { stato: 405, errore: { code: 'METHOD_NOT_ALLOWED', message: 'Method not allowed.' }, allow: rottaToken.metodi.join(', ') };
+      if (!accesso?.gestitoDallApp) return rifiuta('CHATGPT_CUSTODE_NON_APP', 'This server keeps its own ChatGPT sign-in: it does not take a token from an app.');
+      if (percorso === ROTTA_TOKEN_DIMENTICA) { accesso.dimentica(); catalogo?.dimentica(); return { stato: 200, dati: { dimenticato: true } }; }
+      if (!corpo || typeof corpo !== 'object' || Array.isArray(corpo) || Object.keys(corpo).some((k) => !CAMPI_DEL_TOKEN.has(k))) {
+        return rifiuta('CHATGPT_RICHIESTA_NON_VALIDA', 'The token request accepts only «accessToken», «scadeAlle» and «accountId».');
+      }
+      const accountDiPrima = accesso.stato().accountId ?? null;
+      const rifiuto = accesso.ricevi(corpo);
+      if (rifiuto) return rifiuta(rifiuto.code, rifiuto.message);
+      if ((accesso.stato().accountId ?? null) !== accountDiPrima) catalogo?.dimentica(); // l'elenco dei modelli è dell'account
+      return { stato: 200, dati: { scadeAlle: accesso.stato().scadeAlle } };
+    }
     if (!percorso.startsWith(PREFISSO_ROTTE)) return null;
     const rotta = ROTTE_CHATGPT.find((r) => r.schema === percorso);
     if (!rotta) return { stato: 404, errore: { code: 'CHATGPT_ROTTA_SCONOSCIUTA', message: 'Unknown ChatGPT sign-in route.' } };

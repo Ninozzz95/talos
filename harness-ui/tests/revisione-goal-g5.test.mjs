@@ -37,8 +37,10 @@ function progetto(t) {
   t.after(() => rimuoviCartellaDiProva(radice));
   return radice;
 }
+/* 18/10/2026: sul runner Windows della CI, sotto il carico della suite intera, 5 s non bastavano (G5-REV-01 controllo ~9 s, push in main
+   dopo la #69): il tetto è 15 s, che costa tempo solo a una prova che fallisce. */
 async function aspetta(condizione, cosa) {
-  const fino = Date.now() + 5000;
+  const fino = Date.now() + 15_000;
   while (Date.now() < fino) { if (condizione()) return; await new Promise((r) => setTimeout(r, 5)); }
   assert.fail(`mai successo: ${cosa}`);
 }
