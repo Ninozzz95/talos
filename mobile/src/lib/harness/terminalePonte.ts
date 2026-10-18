@@ -230,6 +230,16 @@ export async function talosR4Disponibile(): Promise<boolean> {
     }
 }
 
+/** CHATGPT NEL CODICE: r4 è già acceso? Solo la domanda, senza avviarlo (per l'uscita dalla chat). */
+export async function talosR4Acceso(): Promise<boolean> {
+    if (!talosTerminaleDisponibile()) return false
+    try {
+        return (await plugin().statoR4Sviluppo()).acceso === true
+    } catch {
+        return false
+    }
+}
+
 /** ⛔ F4: la fine del giro vista dall'app davanti; se l'app è dietro la vede il nativo da solo. */
 export async function talosLasciaGiroCodice(idSessione: string): Promise<void> {
     if (!talosTerminaleDisponibile()) return

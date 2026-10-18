@@ -114,6 +114,17 @@ class TalosR4AvvioTest {
     }
 
     @Test
+    fun `R4AV-03e il custode del piano ChatGPT e l'app, e il chiamante non lo cambia`() {
+        // ⛔ CHATGPT NEL CODICE (owner 18/10/2026, «un solo accesso»; r4 f6c6625ac `server.mjs:191`): r4 non rinnova mai il token del
+        // piano, lo riceve dall'app. Senza la variabile r4 terrebbe una custodia sua, e due custodi si bruciano il refresh token.
+        val d = TalosR4Avvio.disposizione(radice())
+        val lavoro = File("/data/data/ai.talos.dev/files/codice/workspace")
+        val attrezzi = File("/data/data/ai.talos.dev/files/codice/bin")
+        assertEquals("app", TalosR4Avvio.ambiente(d, lavoro, attrezzi, File("cache"), emptyMap())["TALOS_CHATGPT_CUSTODE"])
+        assertEquals("app", TalosR4Avvio.ambiente(d, lavoro, attrezzi, File("cache"), mapOf("TALOS_CHATGPT_CUSTODE" to "r4"))["TALOS_CHATGPT_CUSTODE"])
+    }
+
+    @Test
     fun `R4AV-04 tutto sta sotto la cartella di r4, coi percorsi canonici`() {
         val r = radice()
         val d = TalosR4Avvio.disposizione(r)

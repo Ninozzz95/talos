@@ -166,7 +166,8 @@ export function creaSessioneChatgpt({ custodia, fetchFn = globalThis.fetch, cloc
     /** Un tentativo d'accesso: se il suo ascolto è aperto, e con quale numero (assente = quello rimasto nel canale, dopo una ripresa). */
     type Tentativo = { aperto: boolean, id?: number }
     /** Ciò che un rinnovo dà a chi lo aspetta: `fresco` falso = la rete è caduta e questo è il token di prima, che vale ancora. */
-    type Rinnovato = { token: string, fresco: boolean, guasto?: unknown }
+    /** `scadeAlle` è quella di `token` (ChatGPT nel Codice, 18/10: r4 vuole il token con la SUA scadenza). */
+    type Rinnovato = { token: string, scadeAlle: number, fresco: boolean, guasto?: unknown }
     let scoperta: { token: string, jwks: string, revoca: string | null } | null = null
     let rinnovoInCorso: Promise<Rinnovato> | null = null
     /** Un solo accesso vivo alla volta: un secondo «Continue with ChatGPT» chiude il primo (l'ascolto è una porta). */
@@ -358,6 +359,19 @@ export function creaSessioneChatgpt({ custodia, fetchFn = globalThis.fetch, cloc
      * fallita dopo la rotazione non lascia una sessione morta che sembra collegata (C2); un rinnovo partito prima di un'uscita
      * o di un nuovo accesso non salva e non cancella niente (C3, C4); chi forza non riceve il token di prima (C5, in `tokenDiAccesso`).
      */
+    /** Il rinnovo in corso, o uno nuovo: chi arriva intanto si accoda (chat e Codice insieme fanno UN rinnovo). */
+    function rinnovoUnico(s: TalosChatgptSessioneSalvata): Promise<Rinnovato> {
+        if (!rinnovoInCorso) {
+            // ⛔ Revisione 13/10/2026 (C6): il posto si libera DOPO averlo preso. Liberandolo nel `finally` del lavoro, un rinnovo
+            // che falliva prima della sua prima attesa lo liberava prima dell'assegnazione, e la promessa finita restava lì per sempre.
+            const lavoro = rinnovaSessione(s)
+            rinnovoInCorso = lavoro
+            const libera = () => { if (rinnovoInCorso === lavoro) rinnovoInCorso = null }
+            void lavoro.then(libera, libera)
+        }
+        return rinnovoInCorso
+    }
+
     async function rinnovaSessione(s: TalosChatgptSessioneSalvata): Promise<Rinnovato> {
         const miaEpoca = epoca
         try {
@@ -383,7 +397,7 @@ export function creaSessioneChatgpt({ custodia, fetchFn = globalThis.fetch, cloc
                     throw guasto
                 }
             }
-            return { token: t.accessToken, fresco: true }
+            return { token: t.accessToken, scadeAlle: t.scadeAlle, fresco: true }
         } catch (guasto) {
             const codice = (guasto as { code?: string })?.code
             if (codice === 'CHATGPT_ACCESSO_SCADUTO') {
@@ -400,7 +414,7 @@ export function creaSessioneChatgpt({ custodia, fetchFn = globalThis.fetch, cloc
             if (codice === 'CHATGPT_NON_COLLEGATO' || codice === 'CHATGPT_CUSTODIA_FALLITA') throw guasto
             const daRiprovare = codice === 'CHATGPT_RETE' ? errore('The ChatGPT session could not be renewed.', 'CHATGPT_RINNOVO_FALLITO') : guasto
             // un rinnovo non riuscito per rete non butta via un token che vale ancora
-            if (clock() < s.scadeAlle) return { token: s.accessToken, fresco: false, guasto: daRiprovare }
+            if (clock() < s.scadeAlle) return { token: s.accessToken, scadeAlle: s.scadeAlle, fresco: false, guasto: daRiprovare }
             throw daRiprovare
         }
     }
@@ -523,18 +537,31 @@ export function creaSessioneChatgpt({ custodia, fetchFn = globalThis.fetch, cloc
             if (!pianoAbilitato(s.scopes)) throw errore('Using the ChatGPT plan is not enabled for this sign-in.', 'CHATGPT_PIANO_NON_ABILITATO')
             const daRinnovare = forzaRinnovo || clock() >= quandoRinnovare({ scadeAlle: s.scadeAlle, rinnovaNonPrimaDi: s.rinnovaNonPrimaDi })
             if (!daRinnovare) return s.accessToken
-            if (!rinnovoInCorso) {
-                // ⛔ Revisione 13/10/2026 (C6): il posto si libera DOPO averlo preso. Liberandolo nel `finally` del lavoro, un rinnovo
-                // che falliva prima della sua prima attesa lo liberava prima dell'assegnazione, e la promessa finita restava lì per sempre.
-                const lavoro = rinnovaSessione(s)
-                rinnovoInCorso = lavoro
-                const libera = () => { if (rinnovoInCorso === lavoro) rinnovoInCorso = null }
-                void lavoro.then(libera, libera)
-            }
-            const esito = await rinnovoInCorso
+            const esito = await rinnovoUnico(s)
             // C5: chi ha forzato (il piano gli ha appena rifiutato quel token) non lo riceve indietro, nemmeno se si è accodato.
             if (esito.fresco || !forzaRinnovo) return esito.token
             throw esito.guasto
+        },
+
+        /**
+         * ⛔ CHATGPT NEL CODICE (owner 18/10/2026, un solo accesso; ledger `LEDGER-CHATGPT-NEL-CODICE-2026-10-18.md`): il token e la SUA
+         * scadenza, per spingerli a r4 prima di un giro. Vale almeno `almenoMs` (r4 rifiuta sotto i 5 minuti, e un giro dura minuti),
+         * altrimenti si rinnova con lo STESSO rinnovo unico della chat. Un rinnovo fallito non passa un token troppo corto. Errori come
+         * `tokenDiAccesso`, mai col token nel messaggio.
+         */
+        async accessoValido({ almenoMs, forzaRinnovo = false }: { almenoMs: number, forzaRinnovo?: boolean }): Promise<{ accessToken: string, scadeAlle: number }> {
+            const s = await leggiSessione()
+            if (!s?.refreshToken || !s.accessToken) throw nonCollegato()
+            if (!pianoAbilitato(s.scopes)) throw errore('Using the ChatGPT plan is not enabled for this sign-in.', 'CHATGPT_PIANO_NON_ABILITATO')
+            const corto = s.scadeAlle - clock() < almenoMs
+            const daRinnovare = forzaRinnovo || corto || clock() >= quandoRinnovare({ scadeAlle: s.scadeAlle, rinnovaNonPrimaDi: s.rinnovaNonPrimaDi })
+            if (!daRinnovare) return { accessToken: s.accessToken, scadeAlle: s.scadeAlle }
+            const esito = await rinnovoUnico(s)
+            if (forzaRinnovo && !esito.fresco) throw esito.guasto
+            if (esito.scadeAlle - clock() < almenoMs) {
+                throw esito.guasto ?? errore('The ChatGPT session could not be renewed.', 'CHATGPT_RINNOVO_FALLITO')
+            }
+            return { accessToken: esito.token, scadeAlle: esito.scadeAlle }
         },
 
         /** Esce: revoca il refresh token e toglie la sessione. `revocaConfermata` falso = tolta qui, da scollegare anche in ChatGPT. */

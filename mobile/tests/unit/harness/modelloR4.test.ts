@@ -8,11 +8,14 @@ import {
     FORNITORI_DEL_CODICE_R4,
     fornitoreDelModelloR4,
     messaggioErroreModelloR4,
+    dimenticaAccessoChatgptR4,
     livelloDelRagionamentoR4,
     modelloR4DelProfilo,
     profiloDelModelloR4,
     ragionamentoR4,
     sincronizzaFornitoreR4,
+    spingiAccessoChatgptR4,
+    MINIMO_ACCESSO_CHATGPT_R4_MS,
 } from '@/lib/harness/r4/modelloR4'
 
 /**
@@ -55,10 +58,32 @@ describe('il modello del Codice su r4 (K3-C Scelta del modello)', () => {
             expect(id).toBe(voce.id)
             expect([voce.valido, voce.fonte, voce.modelloRemoto]).toEqual([true, voce.provider, voce.model])
         }
-        // fuori dal Codice: il motore dentro l'app e il piano ChatGPT
+        // fuori dal Codice: il motore dentro l'app (r4 non lo raggiunge, fase «Codice col motore locale»)
         expect(modelloR4DelProfilo(profilo('local', 'gemma.gguf'))).toBeNull()
-        expect(modelloR4DelProfilo(profilo('chatgpt', 'gpt-5'))).toBeNull()
-        expect([...FORNITORI_DEL_CODICE_R4].sort()).toEqual(['anthropic', 'deepseek', 'gemini', 'ollama', 'openai', 'openrouter'])
+        // ⛔ CHATGPT NEL CODICE (owner 18/10: «Deve selezionarli esattamente come i modelli della chat»): il piano è nel Codice, con l'id
+        // che r4 riconosce (`chatgpt:<modello>`, lo stesso della prova vera K4-C sul Pad: `chatgpt:gpt-6.1-sol`)
+        expect(modelloR4DelProfilo(profilo('chatgpt', 'gpt-6.1-sol'))).toBe('chatgpt:gpt-6.1-sol')
+        expect(fornitoreDelModelloR4('chatgpt:gpt-6.1-sol')).toBe('chatgpt')
+        expect([...FORNITORI_DEL_CODICE_R4].sort()).toEqual(['anthropic', 'chatgpt', 'deepseek', 'gemini', 'ollama', 'openai', 'openrouter'])
+    })
+
+    /*
+     * ⛔ CHATGPT NEL CODICE — un solo custode (ledger `LEDGER-CHATGPT-NEL-CODICE-2026-10-18.md`, contratto col Desktop del 18/10): l'app
+     * spinge a r4 il token e la sua scadenza (`POST /api/v1/providers/chatgpt/access`), NIENT'ALTRO (r4 rifiuta ogni altro campo, email
+     * compresa); senza collegamento nella chat r4 lo dimentica (`…/access/remove`). Mai il token in un messaggio d'errore.
+     */
+    it('MOD-08 la spinta dell\'accesso del piano: solo token e scadenza; senza collegamento si toglie; un rifiuto non porta il token', async () => {
+        const c = cliente({}, (r) => (r.percorso.startsWith('/api/v1/providers/chatgpt/access') ? { stato: 200, corpo: JSON.stringify({ ok: true, data: {} }) } : null))
+        await spingiAccessoChatgptR4(c.ponte, { accessToken: 'TOKEN-SEGRETO', scadeAlle: 1_800_000_600_000 })
+        expect(c.scritte()).toEqual([{ metodo: 'POST', percorso: '/api/v1/providers/chatgpt/access', corpo: JSON.stringify({ accessToken: 'TOKEN-SEGRETO', scadeAlle: 1_800_000_600_000 }) }])
+        await spingiAccessoChatgptR4(c.ponte, null)
+        expect(c.scritte().at(-1)).toEqual({ metodo: 'POST', percorso: '/api/v1/providers/chatgpt/access/remove', corpo: '{}' })
+        const rifiuta = cliente({}, () => ({ stato: 409, corpo: JSON.stringify({ ok: false, error: { code: 'CHATGPT_CUSTODE_NON_APP', message: 'Operation failed' } }) }))
+        let preso: unknown = null
+        try { await spingiAccessoChatgptR4(rifiuta.ponte, { accessToken: 'TOKEN-SEGRETO', scadeAlle: 1 }) } catch (e) { preso = e }
+        expect((preso as { code?: string }).code).toBe('CHATGPT_CUSTODE_NON_APP')
+        expect(String((preso as Error).message)).not.toContain('TOKEN-SEGRETO')
+        expect(MINIMO_ACCESSO_CHATGPT_R4_MS).toBe(10 * 60 * 1000)
     })
 
     it('MOD-02 dal modello della sessione al profilo; un modello che l\'app non ha diventa un profilo col nome di r4', () => {
@@ -134,5 +159,21 @@ describe('il modello del Codice su r4 (K3-C Scelta del modello)', () => {
             .toBe('Il modello scelto ha un nome che questo server non riconosce: sceglilo di nuovo dalla pillola del modello')
         expect(messaggioErroreModelloR4({ code: 'REASONING_INVALID', message: vere.ragionamentoStorto.d.error.message }, 'en')).toBe(vere.ragionamentoStorto.d.error.message)
         expect(messaggioErroreModelloR4({ code: 'NOT_FOUND', message: 'Resource not found' }, 'it')).toBe('Resource not found')
+    })
+
+    it('MOD-09 i codici del piano ChatGPT che manda r4 con le parole del desktop (`errori.js` @ f6c6625ac), nelle due lingue', () => {
+        expect(messaggioErroreModelloR4({ code: 'CHATGPT_TOKEN_DA_RINNOVARE', message: 'The ChatGPT access token must be renewed by the app.' }, 'it'))
+            .toBe('L’accesso a ChatGPT va rinnovato dall’app: riprova')
+        expect(messaggioErroreModelloR4({ code: 'CHATGPT_CUSTODE_NON_APP', message: 'x' }, 'en')).not.toBe('x')
+        expect(messaggioErroreModelloR4({ code: 'CHATGPT_SCONOSCIUTO', message: 'x' }, 'it')).toBe('x')
+    })
+
+    it('MOD-10 uscendo dalla chat r4 dimentica l’accesso del piano, ma solo se è già acceso: non si accende per questo', async () => {
+        const richieste: string[] = []
+        const cliente = () => ({ richiesta: async (r: { percorso: string; corpo?: string }) => { richieste.push(`${r.percorso} ${r.corpo}`); return { stato: 200, corpo: '{"ok":true,"data":{"dimenticato":true}}' } } })
+        await dimenticaAccessoChatgptR4(async () => false, cliente as never)
+        expect(richieste).toEqual([])
+        await dimenticaAccessoChatgptR4(async () => true, cliente as never)
+        expect(richieste).toEqual(['/api/v1/providers/chatgpt/access/remove {}'])
     })
 })

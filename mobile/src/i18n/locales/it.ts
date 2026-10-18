@@ -1448,7 +1448,7 @@ export const TALOS_IT_MESSAGES = {
         r4Unavailable: 'Il motore nuovo del Codice non è in questa build.',
         r4FileNotCopied: 'Non sono riuscito a copiare il file nella cartella degli allegati.',
         r4LibraryLater: 'La Libreria non è ancora collegata al Codice: allega un file dal telefono o dal pannello ▤.',
-        r4ModelsUnavailable: 'I modelli sul telefono e il piano ChatGPT non sono ancora disponibili nel Codice.',
+        r4ModelsUnavailable: 'I modelli sul telefono non sono ancora disponibili nel Codice.',
         // ⛔ K3-C1 (15/10/2026): l'header del Codice sul motore nuovo.
         r4Back: 'Indietro',
         r4More: 'Altre azioni',
@@ -2389,6 +2389,11 @@ export const TALOS_IT_MESSAGES = {
             CHATGPT_PIANO_NON_ABILITATO: 'L’uso del tuo piano ChatGPT in TALOS non è abilitato. Abilitalo in Modelli, sotto OpenAI.',
             CHATGPT_SERVIZIO_NON_DISPONIBILE: 'ChatGPT non è disponibile in questo momento. Riprova fra poco.',
             CHATGPT_ERRORE: 'Il piano ChatGPT non ha completato la risposta. Riprova.',
+            // CHATGPT NEL CODICE — la custodia del piano nell'app, detta col posto dove il telefono accede
+            CHATGPT_NON_COLLEGATO: 'Nessun account ChatGPT è collegato: accedi in Modelli, sotto OpenAI.',
+            CHATGPT_ACCESSO_SCADUTO: 'L’accesso con ChatGPT è scaduto: rifallo in Modelli, sotto OpenAI.',
+            CHATGPT_RINNOVO_FALLITO: 'Non sono riuscito a rinnovare l’accesso con ChatGPT in questo momento. Riprova fra poco.',
+            CHATGPT_RETE: 'Non sono riuscito a raggiungere OpenAI: controlla la connessione e riprova.',
         },
         providerCatalogMalformed: '{provider} ha restituito un catalogo modelli non valido.',
         providerChatEmpty: '{provider} ha risposto senza dire niente. Prova con un altro modello.',

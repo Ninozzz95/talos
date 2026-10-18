@@ -169,6 +169,24 @@ class TalosOAuthLoopbackAscoltoTest {
      * c'è un ascolto per canale (OpenRouter quello senza nome, ChatGPT il suo) e ognuno ha un numero: aprire su un canale
      * non tocca l'altro, e chiudere con un numero vecchio non chiude l'ascolto nuovo.
      */
+    /**
+     * LOOPBACK-A5 — gate android della `main` pubblica dopo la v0.1.42 (run 39120178851): la prova qui sotto è caduta alla riga
+     * `assertFalse(primo.aperto())`. Chiudere chiudeva solo la porta, e lo stato «chiuso» lo scriveva il thread dell'ascolto quando
+     * se ne accorgeva: per un attimo un ascolto chiuso si diceva ancora aperto. Chiuso da fuori, è chiuso subito.
+     */
+    @Test
+    fun chiusoDaFuori_eChiusoSubito_ancheSenzaAspettareIlSuoThread() {
+        repeat(300) { giro ->
+            val a = TalosOAuthLoopbackPlugin.apri("prova-a5", "/auth/callback", 30_000)
+            TalosOAuthLoopbackPlugin.chiudi("prova-a5", a.id)
+            assertFalse("giro $giro: chiuso con chiudi(), si dice ancora aperto", a.aperto())
+            val b = TalosOAuthLoopbackPlugin.apri("prova-a5", "/auth/callback", 30_000)
+            val c = TalosOAuthLoopbackPlugin.apri("prova-a5", "/auth/callback", 30_000)
+            assertFalse("giro $giro: sostituito da un ascolto nuovo, si dice ancora aperto", b.aperto())
+            TalosOAuthLoopbackPlugin.chiudi("prova-a5", c.id)
+        }
+    }
+
     @Test
     fun dueCanaliNonSiChiudonoAVicenda_eUnNumeroVecchioNonChiudeIlNuovo() {
         val openRouter = TalosOAuthLoopbackPlugin.apri("", null, 30_000)

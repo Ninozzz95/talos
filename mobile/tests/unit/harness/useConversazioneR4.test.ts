@@ -684,6 +684,122 @@ describe('la conversazione del Codice su r4 (K3-B2)', () => {
             expect(conv.errore.value?.code).toBe('REASONING_INVALID')
         })
 
+        /*
+         * ⛔ CHATGPT NEL CODICE (ledger `LEDGER-CHATGPT-NEL-CODICE-2026-10-18.md`, contratto col Desktop del 18/10): r4 non rinnova mai.
+         * Un giro che parte senza token valido ha dalla rotta 409 `CHATGPT_TOKEN_DA_RINNOVARE`; l'app rinnova (forzato), spinge e
+         * ripete la STESSA richiesta UNA volta. Al secondo rifiuto, o se il rinnovo non riesce, l'errore si dice.
+         */
+        it('USR4-CG-01 il rifiuto «token da rinnovare» su custom e resume: un rinnovo, una ripetizione, poi l\'errore', async () => {
+            const daRinnovare = { stato: 409, corpo: JSON.stringify({ ok: false, error: { code: 'CHATGPT_TOKEN_DA_RINNOVARE', message: 'Operation failed' } }) }
+            let rifiutiCustom = 1
+            let rifiutiResume = 9
+            const c = clienteFinto((r) => {
+                if (r.percorso.endsWith('/custom')) return rifiutiCustom-- > 0 ? daRinnovare : { stato: 200, corpo: JSON.stringify({ ok: true, data: { sessionId: SESSIONE } }) }
+                if (r.percorso.endsWith('/resume')) return rifiutiResume-- > 0 ? daRinnovare : { stato: 200, corpo: '{"ok":true,"data":{}}' }
+                return { stato: 200, corpo: '{"ok":true,"data":{}}' }
+            })
+            const rinnovi: (string | null)[] = []
+            let rinnovoRotto: Error | null = null
+            const conv = monta({
+                cliente: c.ponte, cartella: '/w', attesaRiapertura: () => 0,
+                rinnovaAccesso: async (m) => { rinnovi.push(m); if (rinnovoRotto) throw rinnovoRotto },
+            })
+            await conv.impostaModello('chatgpt:gpt-6.1-sol', { effort: 'medium' })
+            expect(await conv.invia('Ciao')).toBe(true)
+            expect(c.richieste.filter((r) => r.percorso.endsWith('/custom'))).toHaveLength(2)
+            expect(rinnovi).toEqual(['chatgpt:gpt-6.1-sol'])
+            expect(conv.errore.value).toBeNull()
+            c.pezzo(['data: {"type":"RunStarted","runId":"r1","input":{"consegna":"Ciao"}}', 'data: {"type":"RunFinished","runId":"r1"}', ''].join(String.fromCharCode(10, 10)))
+            // due rifiuti di fila: UN rinnovo, UNA ripetizione, poi l'errore
+            expect(await conv.invia('Ancora')).toBe(false)
+            expect(c.richieste.filter((r) => r.percorso.endsWith('/resume'))).toHaveLength(2)
+            expect(rinnovi).toHaveLength(2)
+            expect(conv.errore.value?.code).toBe('CHATGPT_TOKEN_DA_RINNOVARE')
+            // il rinnovo non riesce: niente ripetizione, e si dice perché
+            rinnovoRotto = Object.assign(new Error('The ChatGPT session could not be renewed.'), { code: 'CHATGPT_ACCESSO_SCADUTO' })
+            const primaDi = c.richieste.filter((r) => r.percorso.endsWith('/resume')).length
+            expect(await conv.invia('Di nuovo')).toBe(false)
+            expect(c.richieste.filter((r) => r.percorso.endsWith('/resume')).length).toBe(primaDi + 1)
+            expect(conv.errore.value?.code).toBe('CHATGPT_ACCESSO_SCADUTO')
+        })
+
+        /*
+         * ⛔ A metà giro (Desktop 18/10, `http-app.mjs:7078-7110`, `session-registry.mjs:11032-11068`): dopo un 401 del servizio r4
+         * chiude il giro con RunError `CHATGPT_TOKEN_DA_RINNOVARE` e dimentica il token. Si rinnova, si rispinge e si riprende con
+         * `resume {}` (riparte dalla storia salvata, NON ripete il messaggio) UNA volta; `SESSION_NOT_READY` della finestra di
+         * chiusura si riprova poco dopo; `interrupted-write-message` no.
+         */
+        const SEP = String.fromCharCode(10, 10)
+        const fineStoria = 'data: {"type":"CUSTOM","name":"talos.fine-rigiocata","value":{}}'
+        const erroreDelPiano = 'data: {"type":"RunError","runId":"r1","message":"The ChatGPT access token must be renewed by the app.","code":"CHATGPT_TOKEN_DA_RINNOVARE"}'
+        it('USR4-CG-03 RunError dal vivo «token da rinnovare»: rinnovo, resume {} una volta (anche dopo la finestra di chiusura)', async () => {
+            let nonPronta = 1
+            const c = clienteFinto((r) => (r.percorso.endsWith('/resume')
+                ? (nonPronta-- > 0
+                    ? { stato: 409, corpo: JSON.stringify({ ok: false, error: { code: 'SESSION_NOT_READY', message: 'x', reason: 'closing-turn-history-pending' } }) }
+                    : { stato: 200, corpo: '{"ok":true,"data":{}}' })
+                : { stato: 200, corpo: '{"ok":true,"data":{}}' }))
+            const rinnovi: (string | null)[] = []
+            const conv = monta({ cliente: c.ponte, cartella: '/w', sessioneId: 's1', attesaRiapertura: () => 0, rinnovaAccesso: async (m) => { rinnovi.push(m) } })
+            await conv.apri()
+            c.pezzo([fineStoria, 'data: {"type":"RunStarted","runId":"r1","input":{"consegna":"Ciao"}}', erroreDelPiano, ''].join(SEP))
+            await vi.waitFor(() => expect(c.richieste.filter((r) => r.percorso === '/api/v1/sessions/s1/resume')).toHaveLength(2))
+            expect(rinnovi).toHaveLength(1)
+            expect(c.richieste.filter((r) => r.percorso === '/api/v1/sessions/s1/resume').every((r) => r.corpo === '{}')).toBe(true)
+            await vi.waitFor(() => expect(conv.errore.value).toBeNull())
+            // un secondo errore uguale nello stesso giro: niente altri tentativi
+            c.pezzo(['data: {"type":"RunStarted","runId":"r2","input":{}}', erroreDelPiano.replace('"r1"', '"r2"'), ''].join(SEP))
+            await new Promise((x) => setTimeout(x, 20))
+            expect(rinnovi).toHaveLength(1)
+        })
+
+        it('USR4-CG-04 AL CONTRARIO: un RunError «token da rinnovare» della STORIA non rifà niente; dopo un riavvio si dice e basta', async () => {
+            const c = clienteFinto((r) => (r.percorso.endsWith('/resume')
+                ? { stato: 409, corpo: JSON.stringify({ ok: false, error: { code: 'SESSION_NOT_READY', message: 'x', reason: 'interrupted-write-message' } }) }
+                : { stato: 200, corpo: '{"ok":true,"data":{}}' }))
+            const rinnovi: (string | null)[] = []
+            const conv = monta({ cliente: c.ponte, cartella: '/w', sessioneId: 's1', attesaRiapertura: () => 0, rinnovaAccesso: async (m) => { rinnovi.push(m) } })
+            await conv.apri()
+            c.pezzo(['data: {"type":"RunStarted","runId":"r0","input":{"consegna":"Vecchio"}}', erroreDelPiano.replace('"r1"', '"r0"'), fineStoria, ''].join(SEP))
+            await new Promise((x) => setTimeout(x, 20))
+            expect(rinnovi).toHaveLength(0)
+            expect(c.richieste.filter((r) => r.percorso.endsWith('/resume'))).toHaveLength(0)
+            c.pezzo(['data: {"type":"RunStarted","runId":"r1","input":{"consegna":"Ciao"}}', erroreDelPiano, ''].join(SEP))
+            await vi.waitFor(() => expect(conv.errore.value?.code).toBe('SESSION_NOT_READY'))
+            expect(c.richieste.filter((r) => r.percorso.endsWith('/resume'))).toHaveLength(1)
+        })
+
+        it('USR4-CG-05 il consumo del giro dal vivo (differenza fra due `/usage`), mai quello della storia; un giro nuovo riparte da zero', async () => {
+            const c = clienteFinto(() => ({ stato: 200, corpo: '{"ok":true,"data":{}}' }))
+            const consumi: { richieste: number; token: number }[] = []
+            const conv = monta({ cliente: c.ponte, cartella: '/w', sessioneId: 's1', suConsumo: (x) => consumi.push(x) })
+            await conv.apri()
+            const uso = (giri: number, p: number, r: number) => `data: {"type":"StateDelta","delta":[{"op":"replace","path":"/usage","value":{"prompt_tokens":${p},"completion_tokens":${r},"cached_tokens":0,"giri":${giri}}}]}`
+            // la storia: niente
+            c.pezzo(['data: {"type":"RunStarted","runId":"r0","input":{}}', uso(3, 9000, 300), fineStoria, ''].join(SEP))
+            await new Promise((x) => setTimeout(x, 10))
+            expect(consumi).toEqual([])
+            c.pezzo(['data: {"type":"RunStarted","runId":"r1","input":{"consegna":"Ciao"}}', uso(1, 1000, 50), uso(3, 3200, 140), ''].join(SEP))
+            c.pezzo([uso(3, 3200, 140), 'data: {"type":"RunStarted","runId":"r2","input":{}}', uso(1, 800, 20), ''].join(SEP))
+            await vi.waitFor(() => expect(consumi).toEqual([{ richieste: 1, token: 1050 }, { richieste: 2, token: 2290 }, { richieste: 1, token: 820 }]))
+        })
+
+        it('USR4-CG-02 AL CONTRARIO: senza `rinnovaAccesso` (o con un altro rifiuto) non si ripete niente', async () => {
+            const c = clienteFinto((r) => (r.percorso.endsWith('/custom')
+                ? { stato: 409, corpo: JSON.stringify({ ok: false, error: { code: 'CHATGPT_TOKEN_DA_RINNOVARE', message: 'x' } }) }
+                : { stato: 200, corpo: '{"ok":true,"data":{}}' }))
+            const conv = monta({ cliente: c.ponte, cartella: '/w', attesaRiapertura: () => 0 })
+            expect(await conv.invia('Ciao')).toBe(false)
+            expect(c.richieste.filter((r) => r.percorso.endsWith('/custom'))).toHaveLength(1)
+            const altro = clienteFinto((r) => (r.percorso.endsWith('/custom')
+                ? { stato: 400, corpo: JSON.stringify({ ok: false, error: { code: 'QUERY_INVALID', message: 'x' } }) }
+                : { stato: 200, corpo: '{"ok":true,"data":{}}' }))
+            let rinnovi = 0
+            const conv2 = monta({ cliente: altro.ponte, cartella: '/w', attesaRiapertura: () => 0, rinnovaAccesso: async () => { rinnovi += 1 } })
+            expect(await conv2.invia('Ciao')).toBe(false)
+            expect(rinnovi).toBe(0)
+        })
+
         it('USR4-32 senza sessione la scelta va in `custom`; `primaDiInviare` passa prima di `custom` e `resume`; il suo rifiuto ferma l\'invio', async () => {
             const ordine: string[] = []
             let rifiuta: Error | null = null

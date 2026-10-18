@@ -1,0 +1,50 @@
+{
+  "origine": {
+    "commit": "f6c6625ac327a82cbf50e15bd989e129e7f81e1d",
+    "percorso": "harness-ui/frontend/src/i18n/testi/errori.js",
+    "sha256": "d2d763a1ea3648b451e312e5f537ed053ca6d0194cdd7f38c6756de504e3dc75",
+    "prefisso": "CHATGPT_"
+  },
+  "it": {
+    "CHATGPT_NON_DISPONIBILE.message": "Su questo computer non si può collegare un account ChatGPT: il portachiavi del sistema non è disponibile",
+    "CHATGPT_NON_COLLEGATO.message": "Nessun account ChatGPT è collegato: usa «Continue with ChatGPT» in Fornitori",
+    "CHATGPT_PIANO_NON_ABILITATO.message": "Hai fatto l’accesso, ma l’uso del tuo piano ChatGPT in TALOS non è abilitato: abilitalo da Fornitori, oppure usa una chiave API",
+    "CHATGPT_ACCESSO_SCADUTO.message": "L’accesso con ChatGPT è scaduto: rifai l’accesso con «Continue with ChatGPT»",
+    "CHATGPT_ACCESSO_NON_VALIDO.message": "OpenAI non ha accettato questo collegamento a ChatGPT: controlla l’account, poi rifai l’accesso",
+    "CHATGPT_RETE.message": "Non sono riuscito a raggiungere OpenAI: controlla la connessione e riprova",
+    "CHATGPT_RINNOVO_FALLITO.message": "Non sono riuscito a rinnovare l’accesso con ChatGPT in questo momento: riprova fra poco",
+    "CHATGPT_ELENCO_NON_LETTO.message": "Non sono riuscito a leggere i modelli del tuo piano ChatGPT: riprova fra poco",
+    "CHATGPT_RICHIESTA_NON_VALIDA.message": "La richiesta di accesso con ChatGPT non è valida",
+    "CHATGPT_CUSTODIA_FALLITA.message": "L’accesso con ChatGPT è riuscito, ma non sono riuscito a mettere al sicuro le credenziali: apri Doctor",
+    "CHATGPT_USCITA_INCOMPLETA.message": "Sei uscito da ChatGPT qui, ma il portachiavi del sistema non ha tolto le credenziali: apri Doctor",
+    "CHATGPT_ERRORE.message": "La richiesta al piano ChatGPT non è andata a buon fine",
+    "CHATGPT_LIMITE_DEL_PIANO.message": "Hai raggiunto il limite d’uso del tuo piano ChatGPT: controlla Impostazioni → Utilizzo su ChatGPT",
+    "CHATGPT_PIANO_NON_AMMESSO.message": "L’uso del piano ChatGPT nelle altre app non è disponibile per questo account: serve ChatGPT Plus o Pro",
+    "CHATGPT_RICHIESTA_NON_AMMESSA.message": "Questa richiesta usa qualcosa che il piano ChatGPT non permette",
+    "CHATGPT_SERVIZIO_NON_DISPONIBILE.message": "L’uso del piano ChatGPT non è disponibile in questo momento: riprova fra poco",
+    "CHATGPT_TOKEN_DA_RINNOVARE.message": "L’accesso a ChatGPT va rinnovato dall’app: riprova",
+    "CHATGPT_GESTITO_DALL_APP.message": "L’account ChatGPT si gestisce nella chat dell’app: accedi o esci da lì",
+    "CHATGPT_CUSTODE_NON_APP.message": "Questo server tiene il suo accesso a ChatGPT: non accetta un token da un’app"
+  },
+  "en": {
+    "CHATGPT_NON_DISPONIBILE.message": "A ChatGPT account cannot be connected on this computer: the system keyring is not available",
+    "CHATGPT_NON_COLLEGATO.message": "No ChatGPT account is connected: use “Continue with ChatGPT” in Providers",
+    "CHATGPT_PIANO_NON_ABILITATO.message": "You are signed in, but using your ChatGPT plan in TALOS is not enabled: enable it from Providers, or use an API key",
+    "CHATGPT_ACCESSO_SCADUTO.message": "The ChatGPT sign-in has expired: sign in again with “Continue with ChatGPT”",
+    "CHATGPT_ACCESSO_NON_VALIDO.message": "OpenAI did not accept this ChatGPT connection: check the account, then sign in again",
+    "CHATGPT_RETE.message": "I could not reach OpenAI: check the connection and try again",
+    "CHATGPT_RINNOVO_FALLITO.message": "The ChatGPT sign-in could not be renewed right now: try again shortly",
+    "CHATGPT_ELENCO_NON_LETTO.message": "I could not read the models of your ChatGPT plan: try again shortly",
+    "CHATGPT_RICHIESTA_NON_VALIDA.message": "The ChatGPT sign-in request is not valid",
+    "CHATGPT_CUSTODIA_FALLITA.message": "The ChatGPT sign-in worked, but the credentials could not be stored safely: open Doctor",
+    "CHATGPT_USCITA_INCOMPLETA.message": "Signed out of ChatGPT here, but the system keychain refused to remove the credentials: open Doctor",
+    "CHATGPT_ERRORE.message": "The request to the ChatGPT plan did not complete",
+    "CHATGPT_LIMITE_DEL_PIANO.message": "The usage limit of your ChatGPT plan was reached: check ChatGPT Settings → Usage",
+    "CHATGPT_PIANO_NON_AMMESSO.message": "Using a ChatGPT plan in other apps is not available for this account: ChatGPT Plus or Pro is required",
+    "CHATGPT_RICHIESTA_NON_AMMESSA.message": "This request uses something the ChatGPT plan does not support",
+    "CHATGPT_SERVIZIO_NON_DISPONIBILE.message": "ChatGPT plan usage is temporarily unavailable: try again shortly",
+    "CHATGPT_TOKEN_DA_RINNOVARE.message": "The ChatGPT access must be renewed by the app: try again",
+    "CHATGPT_GESTITO_DALL_APP.message": "The ChatGPT account is managed in the app’s chat: sign in or out from there",
+    "CHATGPT_CUSTODE_NON_APP.message": "This server keeps its own ChatGPT sign-in: it does not take a token from an app"
+  }
+}

@@ -6,14 +6,18 @@
  *   · il ragionamento: r4 vuole `none` dove la chat dice `off` (`config.mjs` `EFFORT_AMMESSI`; `off` → 400 `REASONING_INVALID`);
  *   · la chiave: una sola, quella dell'app. Passa nel portachiavi di r4 (`POST /providers/:id/key`, cifrato con la chiave sigillata
  *     nell'archivio sicuro di Android, K2-C), mai nell'ambiente; se l'app non l'ha, la copia di r4 si toglie (owner 16/10).
- * Fuori dal Codice: il motore dentro l'app (`local`, r4 non lo raggiunge) e il piano ChatGPT (`chatgpt`, N15).
+ * Fuori dal Codice: il motore dentro l'app (`local`, r4 non lo raggiunge; fase «Codice col motore locale»).
+ * ⛔ CHATGPT NEL CODICE (owner 18/10/2026: «Deve selezionarli esattamente come i modelli della chat»; ledger
+ *   `LEDGER-CHATGPT-NEL-CODICE-2026-10-18.md`): il piano è nel Codice come nella chat. Un solo custode, l'app: prima di ogni giro
+ *   spinge a r4 il token e la sua scadenza (`spingiAccessoChatgptR4`); r4 (`TALOS_CHATGPT_CUSTODE=app`) non rinnova mai.
  */
 import type { TalosMobileModelProfileView, TalosMobileProviderId } from '@/components/chat/mobileChatTypes'
 import type { TalosR4ClientePonte } from './clienteR4'
 import erroriModello from './testi/errori-modello-r4.json'
+import erroriChatgpt from './testi/errori-chatgpt-r4.json'
 import { testoApprovazioneR4 } from './approvazioniR4'
 
-export const FORNITORI_DEL_CODICE_R4: ReadonlySet<TalosMobileProviderId> = new Set<TalosMobileProviderId>(['openai', 'deepseek', 'anthropic', 'gemini', 'openrouter', 'ollama'])
+export const FORNITORI_DEL_CODICE_R4: ReadonlySet<TalosMobileProviderId> = new Set<TalosMobileProviderId>(['openai', 'chatgpt', 'deepseek', 'anthropic', 'gemini', 'openrouter', 'ollama'])
 
 /**
  * Le fonti che r4 riconosce davanti ai due punti (`provider-registry.mjs` `ID_DESTINAZIONE_CHAT` @ 701c6c0d2, invariato da 2161afb32, golden
@@ -77,8 +81,9 @@ const italiano = (lingua: string) => /^it(?:-|$)/iu.test(lingua)
  * Dal pin 701c6c0d2 il desktop dice la chiave che manca con `fraseDelMotivo` (#44): sulla busta vera la frase è la stessa (MOT-R4-03).
  */
 export function messaggioErroreModelloR4(errore: { code: string; message: string; reason?: string; params?: Record<string, unknown> }, lingua: string): string {
-    const tabella = (italiano(lingua) ? erroriModello.it : erroriModello.en) as Record<string, string>
-    const dalDizionario = (chiave: string) => (Object.hasOwn(tabella, chiave) ? tabella[chiave] : undefined)
+    // ⛔ CHATGPT NEL CODICE: accanto, i codici del piano che r4 manda (`testi/errori-chatgpt-r4.json`)
+    const tabelle = (italiano(lingua) ? [erroriModello.it, erroriChatgpt.it] : [erroriModello.en, erroriChatgpt.en]) as Record<string, string>[]
+    const dalDizionario = (chiave: string) => tabelle.find((t) => Object.hasOwn(t, chiave))?.[chiave]
     const motivo = errore.code === 'CONFIG_INVALID' && (errore.reason === 'provider-key-missing' || errore.reason === 'provider-key-missing-named')
         ? dalDizionario(`CONFIG_INVALID.${errore.reason.replace(/-/gu, '_')}`)
         : undefined
@@ -122,7 +127,8 @@ export async function sincronizzaFornitoreR4(
     fornitore: string,
     { chiave, indirizzo }: { chiave: string | null; indirizzo: string | null },
 ): Promise<void> {
-    if (!FORNITORI_DEL_CODICE_R4.has(fornitore as TalosMobileProviderId)) return
+    // il piano ChatGPT non ha una chiave: il suo accesso passa da `spingiAccessoChatgptR4`
+    if (!FORNITORI_DEL_CODICE_R4.has(fornitore as TalosMobileProviderId) || fornitore === 'chatgpt') return
     const chiama = async (metodo: 'GET' | 'POST', percorso: string, corpo?: unknown): Promise<string> => {
         const r = await cliente.richiesta({ metodo, percorso, ...(corpo === undefined ? {} : { corpo: JSON.stringify(corpo) }) })
         if (r.stato < 200 || r.stato >= 300) throw rifiuto(r.stato, r.corpo)
@@ -140,6 +146,33 @@ export async function sincronizzaFornitoreR4(
         if (indirizzo && indirizzo !== voce.endpoint) await chiama('POST', `${base}/runtime`, { endpoint: indirizzo })
         else if (!indirizzo && voce.endpointConfigured) await chiama('POST', `${base}/runtime/reset`, {})
     }
+}
+
+/**
+ * Quanto deve valere ancora il token del piano quando lo si spinge a r4: r4 rifiuta un giro con un token che scade entro 5 minuti, e
+ * non ha un canale per chiederne uno nuovo a metà giro (contratto col Desktop, 18/10/2026). Hermes rinnova 120 s prima
+ * (`hermes_cli/auth_constants.py:93`), ma lì il rinnovo avviene durante la chiamata.
+ */
+export const MINIMO_ACCESSO_CHATGPT_R4_MS = 10 * 60 * 1000
+
+/**
+ * ⛔ CHATGPT NEL CODICE: l'accesso del piano dato a r4 (`POST /api/v1/providers/chatgpt/access {accessToken, scadeAlle}`), oppure
+ * tolto (`…/access/remove`) quando la chat non è collegata. NIENT'ALTRO nel corpo: r4 rifiuta ogni altro campo, email compresa.
+ * Un rifiuto porta il codice e le parole di r4, mai il token (Codex `external_auth.rs`: «it may contain a token»).
+ */
+export async function spingiAccessoChatgptR4(cliente: Pick<TalosR4ClientePonte, 'richiesta'>, accesso: { accessToken: string; scadeAlle: number } | null): Promise<void> {
+    const r = accesso
+        ? await cliente.richiesta({ metodo: 'POST', percorso: '/api/v1/providers/chatgpt/access', corpo: JSON.stringify({ accessToken: accesso.accessToken, scadeAlle: accesso.scadeAlle }) })
+        : await cliente.richiesta({ metodo: 'POST', percorso: '/api/v1/providers/chatgpt/access/remove', corpo: '{}' })
+    if (r.stato < 200 || r.stato >= 300) throw rifiuto(r.stato, r.corpo)
+}
+
+/**
+ * ⛔ CHATGPT NEL CODICE: uscendo dalla chat, r4 dimentica l'accesso del piano, ma solo se è GIÀ acceso (`acceso` non lo avvia): un
+ * r4 spento non ha token, e al prossimo avvio il Codice lo chiede di nuovo al custode, che non è più collegato.
+ */
+export async function dimenticaAccessoChatgptR4(acceso: () => Promise<boolean>, cliente: () => Pick<TalosR4ClientePonte, 'richiesta'>): Promise<void> {
+    if (await acceso()) await spingiAccessoChatgptR4(cliente(), null)
 }
 
 /**

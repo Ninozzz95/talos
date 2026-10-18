@@ -81,7 +81,9 @@ describe('N15 — «Continue with ChatGPT» nel pannello di OpenAI', () => {
 
     it('N15-UI-03: l uscita chiede conferma, con due azioni una sotto l altra; «Stay connected» non scollega', async () => {
         const s = servizio({ collegato: true, email: 'x@y.z' })
-        const w = mount(TalosMobileChatgptAccesso, { props: { servizio: s } })
+        // ⛔ CHATGPT NEL CODICE: uscire dalla chat toglie l'accesso anche al Codice (r4 lo dimentica)
+        const dimenticaNelCodice = vi.fn(async () => undefined)
+        const w = mount(TalosMobileChatgptAccesso, { props: { servizio: s, dimenticaNelCodice } })
         await flushPromises()
         await t(w, 'talos-chatgpt-disconnect').trigger('click')
         const conferma = t(w, 'talos-chatgpt-confirm')
@@ -89,10 +91,12 @@ describe('N15 — «Continue with ChatGPT» nel pannello di OpenAI', () => {
         await t(w, 'talos-chatgpt-disconnect-no').trigger('click')
         expect(s.esci).not.toHaveBeenCalled()
         expect(t(w, 'talos-chatgpt-email').exists()).toBe(true)
+        expect(dimenticaNelCodice).not.toHaveBeenCalled()
         await t(w, 'talos-chatgpt-disconnect').trigger('click')
         await t(w, 'talos-chatgpt-disconnect-yes').trigger('click')
         await flushPromises()
         expect(s.esci).toHaveBeenCalledTimes(1)
+        expect(dimenticaNelCodice).toHaveBeenCalledTimes(1)
         expect(t(w, 'talos-chatgpt-status').text()).toBe('Not connected')
         expect(t(w, 'talos-chatgpt-continue').exists()).toBe(true)
     })

@@ -92,6 +92,9 @@ object TalosR4Avvio {
         // misurati solo su glm via OpenRouter e su ChatGPT Luna, mai su DeepSeek e Gemini del Codice del telefono. Spenti finché il
         // banco del desktop non li misura.
         a["TALOS_ATTREZZI_DIFFERITI"] = "0"
+        // ⛔ CHATGPT NEL CODICE (owner 18/10/2026, «un solo accesso»; r4 f6c6625ac `server.mjs:191`): il custode del piano è l'app, che
+        // spinge il token prima di ogni giro (`POST /api/v1/providers/chatgpt/access`); r4 non rinnova mai. Dopo il chiamante.
+        a["TALOS_CHATGPT_CUSTODE"] = "app"
         // ⛔ K3-TERM T1 (16/10): il Terminale di r4 apre `$SHELL || /bin/bash` (`pty-terminal.mjs` `sceltaShell`); su Android la
         // shell è /system/bin/sh, e /bin/bash non esiste. Messa dopo il chiamante: non si sceglie da fuori.
         a["SHELL"] = "/system/bin/sh"

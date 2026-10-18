@@ -58,6 +58,13 @@ function prepara({ r4, commit, lavoro }) {
 function lancia({ lavoro }) {
     const archivio = join(lavoro, NOME_ARCHIVIO)
     if (!existsSync(archivio)) throw new Error(`manca ${archivio}: prima «prepara»`)
+    // ⛔ 18/10: dopo `adb install` il collegamento `codice-r4/bin/node` punta ancora all'APK di prima finché r4 non riparte; il giro
+    // lanciato così ha dato 20 rosse false (ogni `node` da una shell usciva -1). Prima si avvia r4 nell'app, poi si lancia.
+    try {
+        comeApp(`test -e /data/data/${PACCHETTO}/files/codice-r4/bin/node`)
+    } catch {
+        throw new Error('il node di r4 sul Pad non esiste (APK appena installato?): avvia r4 nell\'app (apri il Codice), poi rilancia')
+    }
     shellPad(`mkdir -p ${TMP_PAD}`)
     esegui(adb, ['push', archivio, `${TMP_PAD}/${NOME_ARCHIVIO}`])
     esegui(adb, ['push', join(QUI, NOME_LANCIATORE), `${TMP_PAD}/${NOME_LANCIATORE}`])

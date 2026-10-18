@@ -35,6 +35,10 @@ const stato = vi.hoisted(() => ({
     params: { id: '33333333-3333-4333-8333-333333333333' } as Record<string, string>,
     shell: { codice_model: null as string | null, codice_effort: null as string | null },
     setShell: [] as Record<string, unknown>[],
+    // ⛔ CHATGPT NEL CODICE: il custode della chat (finto); `guasto` = il codice con cui rifiuta
+    accessi: [] as { almenoMs: number; forzaRinnovo?: boolean }[],
+    guastoPiano: null as string | null,
+    registrati: [] as (number | null)[],
     chat: null as null | { profiles: { value: TalosMobileModelProfileView[] }; selectedModelId: { value: string | null }; effort: { value: string } },
 }))
 vi.mock('vue-router', async () => {
@@ -44,6 +48,22 @@ vi.mock('vue-router', async () => {
 })
 vi.mock('@/lib/harness/terminalePonte', () => ({ talosR4Pronto: async () => ({ disponibile: true, acceso: true, porta: 4178, cartella: '/data/w' }) }))
 vi.mock('@/services/secureKeyStore', () => ({ getProviderKey: async (p: string) => stato.chiavi[p] ?? null }))
+vi.mock('@/services/chatgptAccesso', () => ({
+    talosChatgpt: () => ({
+        accessoValido: async (o: { almenoMs: number; forzaRinnovo?: boolean }) => {
+            stato.accessi.push(o)
+            if (stato.guastoPiano) throw Object.assign(new Error('No ChatGPT account is connected.'), { code: stato.guastoPiano })
+            return { accessToken: o.forzaRinnovo ? 'tok-nuovo' : 'tok-app', scadeAlle: 1_900_000_000_000 }
+        },
+    }),
+}))
+vi.mock('@/services/chatgptConsumi', () => ({
+    talosConsumiChatgpt: () => ({ registra: (token: number | null) => { stato.registrati.push(token) } }),
+}))
+vi.mock('@/components/chat/TalosMobileChatgptPastiglia.vue', async () => {
+    const { h } = await import('vue')
+    return { __esModule: true, default: { render: () => h('span', { 'data-testid': 'talos-chatgpt-pill' }) } }
+})
 vi.mock('@/stores/chatController', async () => {
     const { ref, reactive } = await import('vue')
     const chat = {
@@ -125,6 +145,9 @@ afterEach(() => {
     stato.shell.codice_model = null
     stato.shell.codice_effort = null
     stato.setShell = []
+    stato.accessi = []
+    stato.guastoPiano = null
+    stato.registrati = []
     stato.chat!.selectedModelId.value = null
     stato.chat!.effort.value = 'medium'
 })
@@ -135,8 +158,9 @@ describe('la scelta del modello nel Codice su r4 (K3-C)', () => {
         const c = compositore(w)
         expect(c.props('selectedModelProfileId')).toBe('deepseek:deepseek-v4-pro')
         expect(c.props('selectedEffort')).toBe('high')
-        expect((c.props('modelProfiles') as TalosMobileModelProfileView[]).map((p) => p.id)).toEqual(['deepseek:deepseek-v4-pro', 'openrouter:z-ai/glm-4.7-flash'])
-        expect(c.props('discoveryProblems')).toEqual([{ message: 'On-device models and the ChatGPT plan are not available in Code yet.' }])
+        // ⛔ CHATGPT NEL CODICE (owner 18/10): il piano c'è come nella chat; fuori resta solo il motore dentro l'app
+        expect((c.props('modelProfiles') as TalosMobileModelProfileView[]).map((p) => p.id)).toEqual(['deepseek:deepseek-v4-pro', 'openrouter:z-ai/glm-4.7-flash', 'chatgpt:gpt-5'])
+        expect(c.props('discoveryProblems')).toEqual([{ message: 'On-device models are not available in Code yet.' }])
         w.unmount()
     })
 
@@ -230,6 +254,93 @@ describe('la scelta del modello nel Codice su r4 (K3-C)', () => {
         const w2 = await schermata()
         expect(compositore(w2).props('selectedModelProfileId')).toBe(DEEPSEEK.id)
         expect(compositore(w2).props('selectedEffort')).toBe(clampMobileEffortFor(DEEPSEEK, 'max'))
+        w2.unmount()
+    })
+
+    /*
+     * ⛔ CHATGPT NEL CODICE (ledger `LEDGER-CHATGPT-NEL-CODICE-2026-10-18.md`): un solo accesso, quello della chat. Il custode dell'app
+     * dà il token (valido almeno 10 minuti) e r4 lo riceve con la sua scadenza, alla scelta e prima di ogni giro; mai una chiave.
+     */
+    it('CMO-08 scegliere il piano: il token del custode della chat va in r4 (solo token e scadenza), poi `/settings` con `chatgpt:`', async () => {
+        const w = await schermata()
+        compositore(w).vm.$emit('selectModelProfile', PIANO.id)
+        await asciuga()
+        expect(stato.accessi).toEqual([{ almenoMs: 600_000 }])
+        expect(scritte()[0]).toBe('/api/v1/providers/chatgpt/access {"accessToken":"tok-app","scadeAlle":1900000000000}')
+        expect(scritte()[1]).toMatch(new RegExp(`^/api/v1/sessions/${SESSIONE}/settings [{]"modello":"chatgpt:gpt-5"`))
+        expect(scritte().some((x) => x.includes('/key'))).toBe(false)
+        expect(compositore(w).props('selectedModelProfileId')).toBe(PIANO.id)
+        w.unmount()
+    })
+
+    it('CMO-09 un invio col piano che r4 rifiuta per il token da rinnovare: rinnovo forzato nel custode, nuova spinta, lo stesso invio una volta', async () => {
+        stato.sessione = { modello: 'chatgpt:gpt-5', reasoning: { effort: 'medium' } }
+        let rifiuti = 1
+        stato.rispondi = (r) => (r.percorso.endsWith('/resume') && rifiuti-- > 0
+            ? { stato: 409, corpo: JSON.stringify({ ok: false, error: { code: 'CHATGPT_TOKEN_DA_RINNOVARE', message: 'The ChatGPT access token must be renewed by the app.' } }) }
+            : null)
+        const w = await schermata()
+        await w.get('[data-testid="talos-composer-prompt"]').setValue('Esegui i test')
+        compositore(w).vm.$emit('send')
+        await asciuga()
+        expect(stato.accessi).toEqual([{ almenoMs: 600_000 }, { almenoMs: 600_000, forzaRinnovo: true }])
+        expect(scritte()).toEqual([
+            '/api/v1/providers/chatgpt/access {"accessToken":"tok-app","scadeAlle":1900000000000}',
+            `/api/v1/sessions/${SESSIONE}/resume {"messaggio":"Esegui i test"}`,
+            '/api/v1/providers/chatgpt/access {"accessToken":"tok-nuovo","scadeAlle":1900000000000}',
+            `/api/v1/sessions/${SESSIONE}/resume {"messaggio":"Esegui i test"}`,
+        ])
+        expect(w.find('[data-testid="talos-codice-r4-errore"]').exists()).toBe(false)
+        w.unmount()
+    })
+
+    it("CMO-10 la chat non è collegata: r4 dimentica l'accesso, l'invio non parte e la riga dice dove accedere, con le parole del telefono", async () => {
+        stato.sessione = { modello: 'chatgpt:gpt-5', reasoning: { effort: 'medium' } }
+        stato.guastoPiano = 'CHATGPT_NON_COLLEGATO'
+        const w = await schermata()
+        await w.get('[data-testid="talos-composer-prompt"]').setValue('Esegui i test')
+        compositore(w).vm.$emit('send')
+        await asciuga()
+        expect(scritte()).toEqual(['/api/v1/providers/chatgpt/access/remove {}'])
+        expect(w.get('[data-testid="talos-codice-r4-errore"]').text()).toBe('No ChatGPT account is connected: sign in in Models, under OpenAI.')
+        w.unmount()
+    })
+
+    it('CMO-11 un codice del piano che manda r4 si dice con le parole del desktop; uno che il telefono dice già, con quelle della chat', async () => {
+        stato.sessione = { modello: 'chatgpt:gpt-5', reasoning: { effort: 'medium' } }
+        stato.rispondi = (r) => (r.percorso.endsWith('/resume')
+            ? { stato: 409, corpo: JSON.stringify({ ok: false, error: { code: 'CHATGPT_CUSTODE_NON_APP', message: 'x' } }) }
+            : null)
+        const w = await schermata()
+        await w.get('[data-testid="talos-composer-prompt"]').setValue('Esegui i test')
+        compositore(w).vm.$emit('send')
+        await asciuga()
+        expect(w.get('[data-testid="talos-codice-r4-errore"]').text()).toBe('This server keeps its own ChatGPT sign-in: it does not take a token from an app')
+        w.unmount()
+    })
+    it('CMO-12 col modello del piano il compositore ha la pastiglia «Piano ChatGPT» come la chat, e i giri del Codice entrano nel suo conto', async () => {
+        stato.sessione = { modello: 'chatgpt:gpt-5', reasoning: { effort: 'medium' } }
+        const w = await schermata()
+        expect(w.find('[data-testid="talos-chatgpt-pill"]').exists()).toBe(true)
+        // un giro dal vivo: due chiamate al modello, poi un'altra
+        const flusso = stato.flussi.at(-1)!
+        const manda = (testo: string) => (stato.ascoltatori.r4Pezzo ?? []).forEach((a) => a({ id: flusso.id, testo }))
+        const uso = (giri: number, p: number) => `data: {"type":"StateDelta","delta":[{"op":"replace","path":"/usage","value":{"prompt_tokens":${p},"completion_tokens":0,"giri":${giri}}}]}`
+        manda(['data: {"type":"CUSTOM","name":"talos.fine-rigiocata","value":{}}', 'data: {"type":"RunStarted","runId":"r1","input":{}}', uso(2, 3000), uso(3, 4000), ''].join(String.fromCharCode(10, 10)))
+        await vi.waitFor(() => expect(stato.registrati).toEqual([3000, null, 1000]))
+        w.unmount()
+
+        // un altro fornitore: niente pastiglia
+        stato.sessione = { modello: 'deepseek:deepseek-v4-pro', reasoning: { effort: 'high' } }
+        const w2 = await schermata()
+        expect(w2.find('[data-testid="talos-chatgpt-pill"]').exists()).toBe(false)
+        // …e i suoi giri non entrano nel conto del piano
+        stato.registrati = []
+        const flusso2 = stato.flussi.at(-1)!
+        ;(stato.ascoltatori.r4Pezzo ?? []).forEach((a) => a({ id: flusso2.id, testo: ['data: {"type":"CUSTOM","name":"talos.fine-rigiocata","value":{}}', 'data: {"type":"RunStarted","runId":"r1","input":{}}', uso(1, 500), ''].join(String.fromCharCode(10, 10)) }))
+        await asciuga()
+        await new Promise((x) => setTimeout(x, 20))
+        expect(stato.registrati).toEqual([])
         w2.unmount()
     })
 })
