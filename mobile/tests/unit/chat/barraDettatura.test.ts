@@ -19,16 +19,14 @@ const monta = (props: Partial<{
 })
 
 describe('⭐ la barra della dettatura', () => {
-    it('⛔ LE PAROLE MENTRE LE DICI: la trascrizione viva si vede', () => {
-        // Il difetto era invisibile: le parziali finivano nella bozza, ma la
-        // bozza durante la dettatura è NASCOSTA. Si parlava al buio.
+    it('⛔ DET-FUORI-02: le parole NON stanno più nella barra gialla (owner 18/10/2026: «proprio fuori»)', () => {
+        // Le parole mentre le dici si vedono ancora (owner 2026-08-10: niente
+        // dettatura al buio), ma SOPRA il compositore: DET-FUORI-01 in
+        // `TalosMobileComposer.dictation.test.ts`. Qui restano onda e comandi.
         const w = monta({ trascrizione: 'accendi la torcia' })
-        expect(w.get('[data-testid="talos-dictation-transcript"]').text())
-            .toBe('accendi la torcia')
-    })
-
-    it('e finché non si è detto niente non c\'è nessuna riga vuota che balla', () => {
-        expect(monta().find('[data-testid="talos-dictation-transcript"]').exists()).toBe(false)
+        expect(w.find('[data-testid="talos-dictation-transcript"]').exists()).toBe(false)
+        expect(w.find('[data-testid="talos-scia-parole"]').exists()).toBe(false)
+        expect(w.text()).not.toContain('accendi la torcia')
     })
 
     it('⛔ TRE comandi distinti, e ognuno emette il SUO', async () => {

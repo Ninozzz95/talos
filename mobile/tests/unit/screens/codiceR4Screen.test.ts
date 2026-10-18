@@ -17,11 +17,15 @@ const vivo = readFileSync(resolve(FIXTURE, 'r4-99ffa3d38-vivo.sse'), 'utf8').rep
 const stato = vi.hoisted(() => ({
     params: {} as Record<string, string>,
     replace: vi.fn(),
+    push: vi.fn(),
     pronto: { disponibile: true, acceso: true, porta: 4178, cartella: '/data/w' } as Record<string, unknown> | null,
     ascoltatori: {} as Record<string, ((d: Record<string, unknown>) => void)[]>,
     flussi: [] as { id: string; percorso: string }[],
     rispondi: null as null | ((r: { metodo: string; percorso: string }) => { stato: number; corpo: string } | null),
+    // TAB-INDIETRO-03: la schermata su tablet (l'elenco sta nella colonna)
+    tablet: false,
 }))
+vi.mock('@/composables/useTalosTabletLayout', () => ({ useTalosTabletLayout: () => ({ isTablet: { get value() { return stato.tablet } } }) }))
 // La rotta è reattiva come quella vera: SCR4-11 cambia il parametro e la schermata deve seguirlo.
 const rotta = vi.hoisted(() => ({ corrente: null as null | { params: Record<string, string> } }))
 vi.mock('vue-router', async () => {
@@ -32,7 +36,7 @@ vi.mock('vue-router', async () => {
             rotta.corrente!.params = stato.params
             return rotta.corrente
         },
-        useRouter: () => ({ push: vi.fn(), replace: stato.replace }),
+        useRouter: () => ({ push: stato.push, replace: stato.replace }),
     }
 })
 vi.mock('@/lib/harness/terminalePonte', () => ({ talosR4Pronto: async () => stato.pronto }))
@@ -182,6 +186,63 @@ describe('il Codice su r4 coi pezzi della chat (K3-B2)', () => {
         expect(w.find('[data-testid="talos-codice-r4-indietro"]').exists()).toBe(true)
         expect(w.find('[data-testid="talos-codice-r4-titolo"]').exists()).toBe(true)
         w.unmount()
+    })
+
+    /*
+     * ⛔ USCITA-R4-01 — owner 18/10/2026 notte, sul telefono con la v0.1.41 appena pubblicata: «non riesco a uscire da questa
+     * schermata col tasto indietro o la gesture». Riprodotto sul Pad: ← portava a `/harness`, la pagina del Codice vecchio, che con
+     * K4-E rimanda a r4 → giro chiuso.
+     * ELENCO-R4 (owner 18/10 «la lista delle sessioni … esattamente come sulla chat Legacy»): `/harness` è di nuovo l'elenco, ora
+     * delle sessioni di r4, e non rimanda più; ← torna lì, come dalla sessione del Codice classico.
+     */
+    it('USCITA-R4-01 → ELENCO-R4-FRECCIA-01 la ← dell intestazione torna all elenco delle sessioni', async () => {
+        stato.params = { id: 's1' }
+        stato.push.mockClear()
+        const w = await schermata()
+        await w.get('[data-testid="talos-codice-r4-indietro"]').trigger('click')
+        expect(stato.push).toHaveBeenCalledWith({ name: 'harness' })
+        w.unmount()
+    })
+
+    // ⛔ TAB-INDIETRO-03 (Pad, 18/10): sul tablet `/harness` riapre l'ultima sessione: la ← esce verso la chat, come Indietro di sistema
+    it('TAB-INDIETRO-03 sul tablet la ← esce dalla stazione, non torna a una pagina elenco che riapre la sessione', async () => {
+        stato.params = { id: 's1' }
+        stato.push.mockClear()
+        stato.tablet = true
+        const w = await schermata()
+        try {
+            await w.get('[data-testid="talos-codice-r4-indietro"]').trigger('click')
+            expect(stato.push).toHaveBeenCalledWith({ name: 'chat' })
+        } finally {
+            stato.tablet = false
+            w.unmount()
+        }
+    })
+
+    /*
+     * ⛔ REV-ELENCO-09 (review avversariale v0.1.42): sul tablet la sessione aperta al centro si rinomina o si elimina dalla colonna.
+     * Prima il titolo restava vecchio, e dopo l'eliminazione il centro restava su una conversazione che non esiste più.
+     */
+    it('REV-ELENCO-09 un annuncio sulla sessione aperta ne cambia il titolo, o apre la bozza se è stata eliminata; le altre no', async () => {
+        const { annunciaCambioSessioneR4 } = await import('@/lib/harness/r4/avvisiSessioniR4')
+        stato.params = { id: 's1' }
+        stato.replace.mockClear()
+        const w = await schermata()
+        try {
+            annunciaCambioSessioneR4({ id: 'altra', nome: 'Non mia' })
+            annunciaCambioSessioneR4({ id: 'altra', eliminata: true })
+            await flushPromises()
+            expect(w.get('[data-testid="talos-codice-r4-titolo"]').text()).not.toBe('Non mia')
+            expect(stato.replace).not.toHaveBeenCalledWith({ name: 'codice-r4' })
+            annunciaCambioSessioneR4({ id: 's1', nome: 'Nome dalla colonna' })
+            await flushPromises()
+            expect(w.get('[data-testid="talos-codice-r4-titolo"]').text()).toBe('Nome dalla colonna')
+            annunciaCambioSessioneR4({ id: 's1', eliminata: true })
+            await flushPromises()
+            expect(stato.replace).toHaveBeenCalledWith({ name: 'codice-r4' })
+        } finally {
+            w.unmount()
+        }
     })
 
     /*

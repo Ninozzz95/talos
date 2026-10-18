@@ -294,6 +294,9 @@ class TalosAsrLocalePlugin : Plugin() {
                 // serve, e buttarlo vorrebbe dire rileggere due volte. Vale solo per QUESTA cattura (`di`), quindi non può
                 // finire nel testo di un'altra; una cattura nuova lo azzera.
                 anticipato = Anticipato(presa, testo)
+                // ⛔ N12-ANTEPRIMA (owner 18/10/2026: l'anteprima «si blocca a metà»; «Parakeet aggiorna l'anteprima alle pause»):
+                // le parole vive del sistema arrivano in ritardo, il testo di Parakeet va anche alla pagina. Solo a cattura aperta.
+                if (cattura === presa && testo.isNotBlank()) notifyListeners("talosAsrRiletto", JSObject().put("text", testo))
             }
         }
         call.resolve()

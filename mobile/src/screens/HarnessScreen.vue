@@ -45,7 +45,7 @@
  * stagia — chi guarda solo questa lista lo trova magari spento, e la riga
  * resta quella di sempre, mai un errore mostrato per questo.
  */
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useTalosI18n } from '@/i18n'
 import { Check, CircleAlert, CircleX, Clock, Loader2, MessageSquarePlus, X } from '@lucide/vue'
@@ -58,32 +58,84 @@ import { deleteCodiceSession, listCodiceSessions, renameCodiceSession } from '@/
 import { fetchTalosHarnessSessionsStatus, type TalosHarnessSessionStatus } from '@/lib/harness/harnessUiSessionStatus'
 import type { TalosLocalChatSession } from '@/repositories/chatRepository'
 import { avvisaSePonteStaccato } from '@/lib/harness/avvisoPonteCodice'
-import { talosCodiceInCasa, talosR4Disponibile } from '@/lib/harness/terminalePonte'
-import { apriCodiceR4SeDisponibile } from '@/lib/harness/r4/sceltaCodiceR4'
+import { talosCodiceInCasa, talosR4Disponibile, talosR4Pronto } from '@/lib/harness/terminalePonte'
+import { ROTTA_RIPIEGO_R4 } from '@/lib/harness/r4/sceltaCodiceR4'
+import { eliminaSessioneR4, fraseRifiutoSessioneR4, leggiSessioniR4, rinominaSessioneR4 } from '@/lib/harness/r4/elencoSessioniR4'
+import { annunciaCambioSessioneR4, talosCambiSessioniR4 } from '@/lib/harness/r4/avvisiSessioniR4'
+import { talosClienteR4 } from '@/lib/harness/r4/clienteR4'
 import { talosHarnessUiAvailable } from '@/services/harnessUi'
 import { useTalosMobileToasts } from '@/stores/toasts'
 import { talosChatDateBuckets } from '@/lib/chat/chatDateBuckets'
 import { chatRowBucketTitle, chatRowWhenInBucket } from '@/lib/chat/chatRowTime'
 import { talosRelativeTime } from '@/lib/relativeTime'
 
-withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
+const props = withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
 
 const router = useRouter()
 const route = useRoute()
 const { t, tTesto, locale } = useTalosI18n()
 const toasts = useTalosMobileToasts()
 
-const sessions = ref<TalosLocalChatSession[]>([])
+/** Una riga dell'elenco: una sessione del Codice classico o una di r4 (`elencoSessioniR4.ts`), la pagina usa solo questi tre campi. */
+type TalosRigaElenco = Pick<TalosLocalChatSession, 'id' | 'title' | 'updated_at'>
+
+const sessions = ref<TalosRigaElenco[]>([])
 const loading = ref(true)
+/**
+ * ⛔ Owner 18/10 «non riesco andare alla lista delle sessioni … esattamente come sulla chat Legacy» (ledger
+ * `LEDGER-ELENCO-SESSIONI-R4-2026-10-18.md`): con r4 nell'APK questa pagina elenca le sessioni di r4 e le apre su `/codice-r4/:id`.
+ * Prima (K4-E, 17/10) rimandava subito a r4, che un elenco suo non ce l'ha: dal Codice non si tornava più all'elenco.
+ */
+const suR4 = ref(false)
+/** REV-ELENCO-05: l'elenco che non si legge ha il suo avviso, che sparisce alla prima lettura riuscita (gli errori delle azioni no). */
+const erroreElenco = ref<string | null>(null)
+/**
+ * REV-ELENCO-03: la lettura di r4 può durare fino a ~20 s (r4 che si accende, `leggiSessioniR4`); una lettura partita prima che
+ * finisce dopo una più nuova rimetteva l'elenco vecchio. Vale solo l'ultima partita.
+ */
+let ultimaLettura = 0
 /** ⭐⭐⭐ 2/9 — piano §16.1: per sessionId, quando il server on-device risponde. Assente = "non lo so ancora, o il server è spento" — mai un valore inventato. */
 const serverStatus = ref<Map<string, TalosHarnessSessionStatus>>(new Map())
 
+/**
+ * Vero se l'elenco viene da r4: l'APK lo porta, non si è sul ripiego, e r4 si accende (`talosR4Pronto`, idempotente). Se non si
+ * accende, la pagina torna al Codice classico dicendolo, come fa la sessione su r4 (`CodiceR4Screen.vue`).
+ */
+async function sorgenteR4(): Promise<boolean> {
+    if (route.query?.ripiego === '1' || !(await talosR4Disponibile())) return false
+    if (await talosR4Pronto()) return true
+    // REV-ELENCO-04: lo dice la pagina, una volta; la colonna del tablet (`embedded`) monta insieme a lei e non ripete né sposta
+    if (route.name === 'harness' && !props.embedded) {
+        toasts.push({ message: t('harness.r4Fallback'), durationMs: 6000 })
+        void router.replace(ROTTA_RIPIEGO_R4)
+    }
+    return false
+}
+
 async function refresh(): Promise<void> {
+    const questa = ++ultimaLettura
     loading.value = true
     try {
-        sessions.value = await listCodiceSessions()
+        const r4 = await sorgenteR4()
+        if (questa !== ultimaLettura) return
+        suR4.value = r4
+        if (r4) {
+            const righe = await leggiSessioniR4(talosClienteR4())
+            if (questa !== ultimaLettura) return
+            sessions.value = righe
+            serverStatus.value = new Map(righe.map((riga) => [riga.id, riga.stato]))
+            erroreElenco.value = null
+            return
+        }
+        const vecchie = await listCodiceSessions()
+        if (questa !== ultimaLettura) return
+        sessions.value = vecchie
+    } catch (error) {
+        if (!suR4.value) throw error
+        if (questa === ultimaLettura) erroreElenco.value = tTesto('harness.r4ListFailed', { detail: dettaglioErrore(error) })
+        return
     } finally {
-        loading.value = false
+        if (questa === ultimaLettura) loading.value = false
     }
     // Non bloccante apposta: la lista nativa è già a schermo, questo arriva
     // quando/se il server on-device risponde (best-effort, vedi
@@ -95,7 +147,7 @@ async function refresh(): Promise<void> {
         .catch(() => {})
 }
 
-function statoServer(session: TalosLocalChatSession): TalosHarnessSessionStatus | undefined {
+function statoServer(session: TalosRigaElenco): TalosHarnessSessionStatus | undefined {
     return serverStatus.value.get(session.id)
 }
 
@@ -117,9 +169,12 @@ function statoServer(session: TalosLocalChatSession): TalosHarnessSessionStatus 
  */
 interface TalosHarnessRowBadge { kind: 'running' | 'interrupted' | 'waiting-approval' | 'error' | 'idle', label: string }
 
-function statusBadge(session: TalosLocalChatSession, bucket: string): TalosHarnessRowBadge {
+function statusBadge(session: TalosRigaElenco, bucket: string): TalosHarnessRowBadge {
     const stato = statoServer(session)
-    if (stato?.inAttesaApprovazione) return { kind: 'waiting-approval', label: t('harness.statusWaitingApproval') }
+    // ELENCO-R4-PAG-06 (Pad, 18/10): con r4 l'attesa è di qualunque tipo (approvazione, domanda, piano) e una sessione interrotta da
+    // un riavvio resta non conclusa: ordine e parola del desktop (`statoSessione()`, harness-ui `app.js`: attesa, interrotta, in corso)
+    if (stato?.inAttesaApprovazione) return { kind: 'waiting-approval', label: t(suR4.value ? 'harness.statusWaitingForYou' : 'harness.statusWaitingApproval') }
+    if (suR4.value && stato?.interrotta) return { kind: 'interrupted', label: t('harness.statusInterrupted') }
     if (stato && !stato.conclusa) return { kind: 'running', label: t('harness.statusRunning') }
     if (stato?.interrotta) return { kind: 'interrupted', label: t('harness.statusInterrupted') }
     if (stato?.ultimoEsito === 'errore') return { kind: 'error', label: t('harness.statusError') }
@@ -134,9 +189,8 @@ onMounted(refresh)
  * schermata instradata montano nello stesso istante.
  */
 onMounted(async () => {
-    // K4-E (owner 17/10 «r4 al posto, il vecchio come ripiego»): la voce «Codice» apre r4 quando l'APK lo porta; qui si resta
-    // solo col ripiego (`?ripiego=1`, r4 che non parte) o senza r4. Mandati a r4, l'avviso del Codice vecchio non serve.
-    if (await apriCodiceR4SeDisponibile({ rotta: route, router, disponibile: talosR4Disponibile })) return
+    // K4-E: con r4 l'avviso del collegamento del Codice classico non serve (r4 vive nell'app)
+    if (route.query?.ripiego !== '1' && await talosR4Disponibile()) return
     void avvisaSePonteStaccato({ router, toasts, t, sezioneDisponibile: talosHarnessUiAvailable(), codiceInCasa: talosCodiceInCasa })
 })
 /**
@@ -156,7 +210,8 @@ onMounted(async () => {
  * cheap and harmless to repeat).
  */
 watch(() => [route.name, route.params.id], () => {
-    if (route.name === 'harness' || route.name === 'harness-session') void refresh()
+    // 18/10: anche `codice-r4` (sul tablet l'elenco resta montato accanto alla sessione r4: la bozza che diventa sessione vera)
+    if (route.name === 'harness' || route.name === 'harness-session' || route.name === 'codice-r4') void refresh()
 })
 
 const relativeTimeLabels = computed(() => ({
@@ -177,7 +232,11 @@ function titoloFascia(gruppo: { bucket: string, monthKey: string | null }): stri
 
 const fasce = computed(() => talosChatDateBuckets(sessions.value, (session) => session.updated_at, new Date()))
 
-function openSession(session: TalosLocalChatSession): void {
+function openSession(session: TalosRigaElenco): void {
+    if (suR4.value) {
+        void router.push({ name: 'codice-r4', params: { id: session.id } })
+        return
+    }
     void router.push({ name: 'harness-session', params: { id: session.id } })
 }
 
@@ -186,11 +245,16 @@ function newSession(): void {
     // real session lazily, on the FIRST message actually sent. Pressing
     // "New" and typing straight into a blank Codice page both end up on
     // this exact same path (owner, 28/8: sending directly must work too,
-    // not only the button).
+    // not only the button). r4 does the same: `/codice-r4` without an id is the draft.
+    if (suR4.value) {
+        void router.push({ name: 'codice-r4' })
+        return
+    }
     void router.push({ name: 'harness-session', params: { id: 'new' } })
 }
 
-function isCurrentSession(session: TalosLocalChatSession): boolean {
+function isCurrentSession(session: TalosRigaElenco): boolean {
+    if (suR4.value) return route.name === 'codice-r4' && String(route.params.id ?? '') === session.id
     return route.name === 'harness-session' && String(route.params.id ?? '') === session.id
 }
 
@@ -202,6 +266,42 @@ const actionBusy = ref(false)
 function actionErrorText(error: unknown): string {
     return error instanceof Error && error.message ? error.message : String(error)
 }
+/**
+ * REV-ELENCO-01/02: il perché di un rifiuto di r4 nella lingua dell'app (la busta porta un `message` generico come «Invalid query»:
+ * conta il motivo, `fraseRifiutoSessioneR4`), e r4 che non risponde a parole, non col codice del client nativo.
+ */
+function dettaglioErrore(error: unknown): string {
+    const frase = fraseRifiutoSessioneR4(error, locale.value)
+    if (frase) return frase
+    if (error instanceof Error && error.message === 'TALOS_R4_IRRAGGIUNGIBILE') return t('harness.r4Unreachable')
+    return actionErrorText(error)
+}
+/** REV-ELENCO-07: l'ultimo annuncio fatto da questa pagina, che si è già riletta da sé. */
+let mioAnnuncio = -1
+function annuncia(cambio: { id: string; nome?: string; eliminata?: boolean }): void {
+    annunciaCambioSessioneR4(cambio)
+    mioAnnuncio = talosCambiSessioniR4.value.n
+}
+watch(() => talosCambiSessioniR4.value.n, (n) => {
+    if (n !== mioAnnuncio && suR4.value) void refresh()
+})
+
+/**
+ * REV-ELENCO-10 (review avversariale v0.1.42): una riga «In corso» (un'automazione, un giro lasciato a metà) restava ferma finché non
+ * si cambiava pagina. Come il battito del desktop per le figlie (`legacy/app.js:11666`, 5 s): l'elenco si rilegge ogni 5 s solo
+ * finché una riga lavora o aspetta qualcuno, e mai con l'app in sottofondo.
+ */
+const qualcunaLavora = computed(() => suR4.value && [...serverStatus.value.values()]
+    .some((stato) => stato.inAttesaApprovazione || (!stato.conclusa && !stato.interrotta)))
+let battito: ReturnType<typeof setInterval> | null = null
+onMounted(() => {
+    battito = setInterval(() => {
+        if (qualcunaLavora.value && document.visibilityState === 'visible') void refresh()
+    }, 5000)
+})
+onBeforeUnmount(() => {
+    if (battito !== null) clearInterval(battito)
+})
 
 function sessionActions(): TalosRowAction[] {
     return [
@@ -210,16 +310,16 @@ function sessionActions(): TalosRowAction[] {
     ]
 }
 
-function act(session: TalosLocalChatSession, action: string): void {
+function act(session: TalosRigaElenco, action: string): void {
     if (action === 'rename') void openRename(session)
     else openDelete(session)
 }
 
-const renameTarget = ref<TalosLocalChatSession | null>(null)
+const renameTarget = ref<TalosRigaElenco | null>(null)
 const renameValue = ref('')
 const renameInput = ref<HTMLInputElement | null>(null)
 
-async function openRename(session: TalosLocalChatSession): Promise<void> {
+async function openRename(session: TalosRigaElenco): Promise<void> {
     actionError.value = null
     renameTarget.value = session
     renameValue.value = session.title
@@ -233,20 +333,23 @@ async function submitRename(): Promise<void> {
     if (!target || !title || actionBusy.value) return
     actionBusy.value = true
     try {
-        await renameCodiceSession(target.id, title)
+        if (suR4.value) {
+            await rinominaSessioneR4(talosClienteR4(), target.id, title)
+            annuncia({ id: target.id, nome: title })
+        } else await renameCodiceSession(target.id, title)
         renameTarget.value = null
         actionError.value = null
         await refresh()
     } catch (error) {
-        actionError.value = tTesto('harness.renameFailed', { detail: actionErrorText(error) })
+        actionError.value = tTesto('harness.renameFailed', { detail: dettaglioErrore(error) })
     } finally {
         actionBusy.value = false
     }
 }
 
-const deleteTarget = ref<TalosLocalChatSession | null>(null)
+const deleteTarget = ref<TalosRigaElenco | null>(null)
 
-function openDelete(session: TalosLocalChatSession): void {
+function openDelete(session: TalosRigaElenco): void {
     actionError.value = null
     deleteTarget.value = session
 }
@@ -256,12 +359,15 @@ async function confirmDelete(): Promise<void> {
     if (!target || actionBusy.value) return
     actionBusy.value = true
     try {
-        await deleteCodiceSession(target.id)
+        if (suR4.value) {
+            await eliminaSessioneR4(talosClienteR4(), target.id)
+            annuncia({ id: target.id, eliminata: true })
+        } else await deleteCodiceSession(target.id)
         deleteTarget.value = null
         actionError.value = null
         await refresh()
     } catch (error) {
-        actionError.value = tTesto('harness.deleteFailed', { detail: actionErrorText(error) })
+        actionError.value = tTesto('harness.deleteFailed', { detail: dettaglioErrore(error) })
     } finally {
         actionBusy.value = false
     }
@@ -284,8 +390,9 @@ async function confirmDelete(): Promise<void> {
             </button>
 
             <p v-if="actionError" role="alert" class="px-1 text-xs leading-5 text-[var(--talos-danger,#dc5b5b)]">{{ actionError }}</p>
+            <p v-if="erroreElenco" role="alert" data-testid="talos-harness-list-error" class="px-1 text-xs leading-5 text-[var(--talos-danger,#dc5b5b)]">{{ erroreElenco }}</p>
 
-            <p v-if="!loading && !sessions.length" data-testid="talos-harness-empty" class="px-1 text-sm text-[var(--talos-muted)]">
+            <p v-if="!loading && !sessions.length && !erroreElenco" data-testid="talos-harness-empty" class="px-1 text-sm text-[var(--talos-muted)]">
                 {{ t('harness.emptyBody') }}
             </p>
 
@@ -384,6 +491,7 @@ async function confirmDelete(): Promise<void> {
             <input
                 ref="renameInput"
                 v-model="renameValue"
+                :maxlength="suR4 ? 80 : undefined"
                 :aria-label="t('harness.sessionName')"
                 class="min-h-touch w-full rounded-md border border-[var(--talos-border)] bg-[var(--talos-input,var(--talos-background))] px-3 text-sm text-[var(--talos-text)] outline-none focus:border-[var(--talos-accent)]"
                 @keydown.enter.prevent="submitRename"

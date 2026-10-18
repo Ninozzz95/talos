@@ -1,7 +1,7 @@
 {
   "schema": "talos.mobile.attese-r4.v1",
-  "pin": "9f8b5fae5",
-  "nota": "Ogni riga è una prova di r4 che sul Pad è rossa per l'ambiente (Android, niente git/npm/ripgrep, prove scritte per Windows/WSL), letta una per una il 17/10/2026 sul giro 2 di K4 (pin 701c6c0d2), confermata uguale al pin 9f8b5fae5 (desktop 0.1.31) lo stesso giorno: 805 file, 246 rosse attese, nessuna nuova. Il cancello fallisce per una rossa NON qui e per una riga qui che adesso passa.",
+  "pin": "a813c2377",
+  "nota": "Ogni riga è una prova di r4 che sul Pad è rossa per l'ambiente (Android, niente git/npm/ripgrep, prove scritte per Windows/WSL), letta una per una il 17/10/2026 sul giro 2 di K4 (pin 701c6c0d2), confermata uguale al pin 9f8b5fae5 (desktop 0.1.31) lo stesso giorno: 805 file, 246 rosse attese, nessuna nuova. Il cancello fallisce per una rossa NON qui e per una riga qui che adesso passa. — 18/10/2026: pin a813c2377 (desktop 0.1.33); +17 righe (14 link-vietato, 2 ripgrep-assente-cerca, 1 ctime-a-scatti, misurate sul Pad), −1 (ETICHETTA-SANDBOX ora passa).",
   "cause": {
     "casa-linux-wsl": "la casa Linux in WSL esiste solo sul desktop",
     "file-non-copiato": "la prova legge un file che il pacchetto delle prove non porta",
@@ -16,15 +16,10 @@
     "ripgrep-assente-cerca": "senza ripgrep «cerca» sul telefono dà i nomi dei file e non le righe: la prova presume le righe",
     "shell-windows-wsl": "la prova sceglie la shell Windows/WSL",
     "watcher-linux": "su Linux il watcher ricorsivo dei file è fatto da più watcher: la prova conta quelli di Windows",
-    "windows-nella-prova": "la prova scrive un percorso o un comportamento di Windows"
+    "windows-nella-prova": "la prova scrive un percorso o un comportamento di Windows",
+    "ctime-a-scatti": "la ctime del kernel del Pad avanza a scatti: due cambi nello stesso scatto la lasciano uguale (misurato: 199 su 200), la prova presume che cambi sempre"
   },
   "voci": [
-    {
-      "file": "src/kernel/talosHarness.test.mjs",
-      "prova": "ETICHETTA-SANDBOX — dire dove ha girato, e che cosa è vero lì > dichiara il fatto, non solo il valore: `none` non è una spiegazione",
-      "esito": "fail",
-      "causa": "windows-nella-prova"
-    },
     {
       "file": "src/kernel/talosHarness.test.mjs",
       "prova": "percorsoMirrorDevice — dove il mirror del task finisce sul telefono > ⭐ un caso reale, lo stesso pattern usato da preparaCopia in TALOS-BANCO",
@@ -1494,6 +1489,108 @@
       "prova": "RITRATTO-RADICE: un disco, una home, una scrivania sono radici; un progetto no",
       "esito": "fail",
       "causa": "windows-nella-prova"
+    },
+    {
+      "file": "tests/credenziali-progetto-sotto-cartella.test.mjs",
+      "prova": "tests/credenziali-progetto-sotto-cartella.test.mjs",
+      "esito": "fail",
+      "causa": "link-vietato"
+    },
+    {
+      "file": "tests/hard-link-ai-segreti.test.mjs",
+      "prova": "HARD-LINK-01 — a hard link to .env asks for read, write, file_edit and the shell, and says which secret it is",
+      "esito": "fail",
+      "causa": "link-vietato"
+    },
+    {
+      "file": "tests/hard-link-ai-segreti.test.mjs",
+      "prova": "HARD-LINK-02 — a hard link to a home credential (~/.ssh/id_ed25519) asks too",
+      "esito": "fail",
+      "causa": "link-vietato"
+    },
+    {
+      "file": "tests/hard-link-ai-segreti.test.mjs",
+      "prova": "HARD-LINK-03 — AL CONTRARIO: two harmless files linked together stay silent, and a secret in ANOTHER subfolder is out of scope (owner)",
+      "esito": "fail",
+      "causa": "link-vietato"
+    },
+    {
+      "file": "tests/hard-link-ai-segreti.test.mjs",
+      "prova": "HARD-LINK-04 — AL CONTRARIO: the same inode on ANOTHER volume (dev differs) is another file, never «the .env»",
+      "esito": "fail",
+      "causa": "link-vietato"
+    },
+    {
+      "file": "tests/hard-link-revisione-bugfixer.test.mjs",
+      "prova": "HL-RI-01 — falso positivo escluso: due .env uguali PER CONTENUTO ma file diversi (ino diverso) non scattano",
+      "esito": "fail",
+      "causa": "link-vietato"
+    },
+    {
+      "file": "tests/hard-link-revisione-bugfixer.test.mjs",
+      "prova": "HL-RI-02 — [CURATO R1] la ricerca (`eUnFileSegreto`, il filtro di `cerca`) vede l hard link e lo toglie dai risultati",
+      "esito": "fail",
+      "causa": "link-vietato"
+    },
+    {
+      "file": "tests/hard-link-revisione-bugfixer.test.mjs",
+      "prova": "HL-RI-03 — [CURATO R4] i file deduplicati di pnpm vuoti (lo stesso file nel magazzino) non chiedono: un file vuoto non ha niente da rivelare",
+      "esito": "fail",
+      "causa": "link-vietato"
+    },
+    {
+      "file": "tests/hard-link-revisione-bugfixer.test.mjs",
+      "prova": "HL-RI-05 — collegamento SIMBOLICO verso un hard link che sta in un ALTRA cartella",
+      "esito": "fail",
+      "causa": "link-vietato"
+    },
+    {
+      "file": "tests/hard-link-revisione-bugfixer.test.mjs",
+      "prova": "HL-RI-05b — giunzione di CARTELLA verso la cartella del segreto: la cartella elencata è quella vista dalla giunzione, chiede",
+      "esito": "fail",
+      "causa": "link-vietato"
+    },
+    {
+      "file": "tests/hard-link-revisione-bugfixer.test.mjs",
+      "prova": "HL-RI-05c — [CURATO R2] il simbolico di FILE (simulato con lstat/readlink iniettati): si guarda anche la cartella del file VERO",
+      "esito": "fail",
+      "causa": "link-vietato"
+    },
+    {
+      "file": "tests/hard-link-revisione-bugfixer.test.mjs",
+      "prova": "HL-RI-06 — la chiave del «per la sessione»: stabile per la stessa scrittura, distinta lettura/scrittura, la shell = la lettura",
+      "esito": "fail",
+      "causa": "link-vietato"
+    },
+    {
+      "file": "tests/hard-link-revisione-bugfixer.test.mjs",
+      "prova": "HL-RI-07 — MISURA il costo: lettura di un file a due nomi (il caso pnpm) contro uno a nome solo, casa realistica",
+      "esito": "fail",
+      "causa": "link-vietato"
+    },
+    {
+      "file": "tests/impronta-script-condivisa.test.mjs",
+      "prova": "IMP-10 — un file cambiato con un’altra data fa cadere la fiducia; e anche rimettendo la stessa dimensione e la stessa data di modifica, la data di cambiamento lo tradisce",
+      "esito": "fail",
+      "causa": "ctime-a-scatti"
+    },
+    {
+      "file": "tests/r03-stesso-attrezzo-e-rifiuti.test.mjs",
+      "prova": "K-06: un risultato LUNGO che la nota sostituisce non arriva al modello, e leggere il verdetto non gli mette il segno",
+      "esito": "fail",
+      "causa": "ripgrep-assente-cerca"
+    },
+    {
+      "file": "tests/r03-stesso-attrezzo-e-rifiuti.test.mjs",
+      "prova": "K-07: un risultato CORTO accodato alla nota dei giri in tondo è nel confine, con l'avviso e il segno",
+      "esito": "fail",
+      "causa": "ripgrep-assente-cerca"
+    },
+    {
+      "file": "tests/segreti-document-create-riverifica.test.mjs",
+      "prova": "SEG-DOC-RI-05 — un collegamento FISICO (hard link) col nome innocuo verso il .env: accodare non tocca il segreto [CURATO 16/10 notte, owner «Cartella + radice + casa»]",
+      "esito": "fail",
+      "causa": "link-vietato"
     }
   ]
 }

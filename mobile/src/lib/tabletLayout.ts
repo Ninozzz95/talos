@@ -38,16 +38,16 @@ export function clampTalosTabletSidebarWidth(value: unknown): number {
 }
 
 /**
- * ⛔ K4-E (owner 17/10 «Colonna delle chat»): il Codice r4 (`codice-r4`) è il Codice, e le sessioni del Codice vecchio si vedono solo
- * dal ripiego. La colonna «harness» (l'elenco di `HarnessScreen`) resta alle sole pagine del Codice vecchio; in r4 la colonna è quella
- * delle chat, come nelle altre stazioni (le sessioni r4 stanno nel pannello della schermata).
+ * La colonna del tablet nella stazione Codice è l'elenco delle sessioni (`HarnessScreen` incorporato), come nel Codice classico.
+ * K4-E (17/10) la toglieva in r4 perché l'elenco mostrava le sessioni del Codice vecchio; dal 18/10 (owner «la lista delle sessioni …
+ * esattamente come sulla chat Legacy») l'elenco legge le sessioni di r4, e la colonna torna anche su `codice-r4`.
  */
-export function talosTabletRailVariant({ stazione, rotta, codiceVecchio }: {
+export function talosTabletRailVariant({ stazione, codiceVecchio }: {
     stazione: string | null
     rotta: string
     codiceVecchio: boolean
 }): TalosTabletSidebarVariant {
-    return stazione === 'harness' && rotta !== 'codice-r4' && codiceVecchio ? 'harness' : 'chat'
+    return stazione === 'harness' && codiceVecchio ? 'harness' : 'chat'
 }
 
 export function talosTabletSidebarEffectiveWidth(
@@ -114,4 +114,13 @@ export function talosTabletLeavesHarnessListRoute(
 ): boolean {
     if (!routeName) return false
     return isTablet && routeName === 'harness'
+}
+
+/**
+ * ⛔ TAB-INDIETRO-01 (Pad, 18/10): sul tablet la pagina elenco del Codice (`harness`) non c'è, l'elenco sta nella colonna e quella
+ * rotta riapre l'ultima sessione (`talosTabletLeavesHarnessListRoute`). Come genitore era un giro chiuso: Indietro dalla sessione più
+ * recente tornava a lei. Sul tablet, quindi, il genitore `harness` non vale e Indietro esce dalla stazione; sul telefono resta.
+ */
+export function talosTabletStationParent<T extends { name: string }>(isTablet: boolean, parent: T | null): T | null {
+    return parent && talosTabletLeavesHarnessListRoute(isTablet, parent.name) ? null : parent
 }

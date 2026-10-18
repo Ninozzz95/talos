@@ -16,6 +16,7 @@
  */
 import { registerPlugin } from '@capacitor/core'
 import { TALOS_MODELLO_PARAKEET } from '@/lib/voice/modelloParakeet'
+import { talosAnteprimaDettatura } from '@/lib/voice/anteprimaDettatura'
 import type { TalosDictationEngine, TalosDictationEvents, TalosDictationStartOptions } from '@/services/dictation'
 
 export interface TalosAsrLocalePonte {
@@ -79,7 +80,8 @@ export function creaMotoreLocale({ ponte, tettoFinaleMs = TETTO_FINALE_MS, rilas
     tettoFinaleMs?: number
     rilascioDopoMs?: number
 }): TalosMotoreLocale {
-    type Sessione = { eventi: TalosDictationEvents, finito: string, viva: string, anticipata: boolean }
+    /** `riletto`/`sistemaAllaRilettura`: l'ultima rilettura di Parakeet e il testo del sistema in quell'istante (N12-ANTEPRIMA). */
+    type Sessione = { eventi: TalosDictationEvents, finito: string, viva: string, anticipata: boolean, riletto: string | null, sistemaAllaRilettura: string }
     let sessione: Sessione | null = null
 
     /** Chiude QUELLA sessione: Parakeet rilegge tutto, il suo testo sostituisce quello vivo, poi `onEnd`. Una volta sola. */
@@ -133,7 +135,13 @@ export function creaMotoreLocale({ ponte, tettoFinaleMs = TETTO_FINALE_MS, rilas
 
         async start(eventi: TalosDictationEvents, opzioni: TalosDictationStartOptions = {}): Promise<void> {
             clearTimeout(rilascio)
-            const mia: Sessione = { eventi, finito: '', viva: '', anticipata: false }
+            const mia: Sessione = { eventi, finito: '', viva: '', anticipata: false, riletto: null, sistemaAllaRilettura: '' }
+            /*
+             * ⛔ N12-ANTEPRIMA (owner 18/10/2026: l'anteprima «si blocca a metà»; «Parakeet aggiorna l'anteprima alle pause»): le vive del
+             * sistema arrivano in ritardo. Dopo ogni rilettura l'anteprima è il testo di Parakeet più le parole NUOVE del sistema, senza
+             * la coda che Parakeet ha già scritto (`talosAnteprimaDettatura`).
+             */
+            const anteprima = (): string => talosAnteprimaDettatura({ riletto: mia.riletto, sistemaAllaRilettura: mia.sistemaAllaRilettura, sistema: accoda(mia.finito, mia.viva) })
             const apertaLaCattura = clock()
             // L'ultimo istante in cui c'è stata voce, cioè un livello sopra il rumore (N12-TURNO).
             // ⛔ NON le parole vive: MISURATO sul Pad il 13/10/2026 — arrivano in ritardo, a frase già finita, e contarle
@@ -144,13 +152,19 @@ export function creaMotoreLocale({ ponte, tettoFinaleMs = TETTO_FINALE_MS, rilas
             await ponte.addListener('talosAsrViva', (d) => {
                 if (sessione !== mia || !d.text) return
                 mia.viva = d.text
-                eventi.onPartial(accoda(mia.finito, mia.viva))
+                eventi.onPartial(anteprima())
             })
             await ponte.addListener('talosAsrTratto', (d) => {
                 if (sessione !== mia || !d.text) return
                 mia.finito = accoda(mia.finito, d.text)
                 mia.viva = ''
-                eventi.onPartial(mia.finito)
+                eventi.onPartial(anteprima())
+            })
+            await ponte.addListener('talosAsrRiletto', (d) => {
+                if (sessione !== mia || !d.text?.trim()) return
+                mia.riletto = d.text.trim()
+                mia.sistemaAllaRilettura = accoda(mia.finito, mia.viva)
+                eventi.onPartial(anteprima())
             })
             // La lingua che il riconoscitore ha sentito: chi compone la usa per rispondere nella stessa lingua, come oggi.
             await ponte.addListener('talosAsrLingua', (d) => {

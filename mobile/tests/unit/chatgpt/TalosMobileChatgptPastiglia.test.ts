@@ -26,7 +26,8 @@ describe('N15 — la pastiglia del piano nel compositore', () => {
         expect(pulsante.attributes('aria-haspopup')).toBe('dialog')
         expect(pulsante.attributes('aria-expanded')).toBe('false')
         expect(pulsante.classes()).toEqual(expect.arrayContaining(['min-h-touch', 'min-w-touch']))
-        expect(w.get('[data-testid="talos-chatgpt-pill-badge"]').classes()).toContain('h-7')
+        // il disegno basso del mockup (28 px) dal tablet in su; sul telefono ancora più basso (N15-PAST-05, owner 18/10)
+        expect(w.get('[data-testid="talos-chatgpt-pill-badge"]').classes()).toContain('sm:h-7')
         expect(t('talos-chatgpt-usage-panel')).toBeNull()
 
         await pulsante.trigger('click')
@@ -42,6 +43,26 @@ describe('N15 — la pastiglia del piano nel compositore', () => {
         expect(t('talos-chatgpt-usage-note')!.textContent).toContain('Counted by TALOS on this device')
         t('talos-chatgpt-usage-manage')!.click()
         expect(apri).toHaveBeenCalledWith(CONSUMI)
+        w.unmount()
+    })
+
+    /**
+     * ⛔ N15-PAST-05 — owner 18/10/2026 notte, foto dal telefono: «ridurre pill piano chatgpt da telefonino». Accanto al modello
+     * (che ha già il logo ChatGPT) la scritta intera «Piano ChatGPT» allargava la riga degli attrezzi e mandava a capo la freccia
+     * di espansione. Sotto i 640 px il distintivo dice solo «Piano», più piccolo; dal tablet in su resta quello del mockup.
+     * Il nome intero resta per chi usa un lettore di schermo (`aria-label`).
+     */
+    it('N15-PAST-05: sul telefono il distintivo è corto e piccolo, dal tablet in su resta intero; il nome per il lettore non cambia', async () => {
+        const w = mount(TalosMobileChatgptPastiglia, { props: { servizio: servizio(), consumi: conto() }, attachTo: document.body })
+        const distintivo = w.get('[data-testid="talos-chatgpt-pill-badge"]')
+        const corto = w.get('[data-testid="talos-chatgpt-pill-short"]')
+        const intero = w.get('[data-testid="talos-chatgpt-pill-full"]')
+        expect(corto.text()).toBe('Plan')
+        expect(corto.classes()).toContain('sm:hidden')
+        expect(intero.text()).toBe('ChatGPT plan')
+        expect(intero.classes()).toEqual(expect.arrayContaining(['hidden', 'sm:inline']))
+        expect(distintivo.classes()).toEqual(expect.arrayContaining(['h-6', 'sm:h-7', 'text-2xs', 'sm:text-xs']))
+        expect(w.get('[data-testid="talos-chatgpt-pill"]').attributes('aria-label')).toBe('ChatGPT plan')
         w.unmount()
     })
 

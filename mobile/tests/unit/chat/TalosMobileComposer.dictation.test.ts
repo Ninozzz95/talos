@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import TalosMobileComposer from '@/components/chat/TalosMobileComposer.vue'
 import type { TalosMobileModelProfileView } from '@/components/chat/mobileChatTypes'
@@ -82,6 +82,25 @@ describe('TalosMobileComposer dictation (F2-T5)', () => {
          * Qui resta la responsabilità del COMPOSITORE: mentre si detta, il
          * campo sparisce.
          */
+    })
+
+    /*
+     * ⛔ DET-FUORI-01 — owner 18/10/2026 notte, dal telefono: «facciamo in modo che il testo vada fuori dal composer no dentro i
+     * composer nella sezione gialla proprio fuori»; scelta «Sopra il compositore, una riga sola». La riga delle parole (la stessa
+     * della barra dell'assistente) sta sopra il bordo del compositore, come il menu «/», non nella barra gialla.
+     */
+    it('DET-FUORI-01 mentre si detta le parole stanno SOPRA il compositore, fuori dalla barra gialla; senza parole niente riga', async () => {
+        const wrapper = mountComposer({ dictationSupported: true, dictationListening: true, dictationTranscript: 'ok grazie dell informazione' })
+        await flushPromises()
+        const fuori = wrapper.get('[data-testid="talos-dictation-fuori"]')
+        expect(fuori.classes()).toEqual(expect.arrayContaining(['absolute', 'bottom-full']))
+        expect(fuori.element.closest('[data-testid="talos-dictation-live"]')).toBeNull()
+        await vi.waitFor(() => expect(fuori.find('[data-testid="talos-scia-parole"]').exists()).toBe(true))
+        expect(fuori.text()).toBe('ok grazie dell informazione')
+        const muto = mountComposer({ dictationSupported: true, dictationListening: true, dictationTranscript: '' })
+        expect(muto.find('[data-testid="talos-dictation-fuori"]').exists()).toBe(false)
+        const fermo = mountComposer({ dictationSupported: true, dictationListening: false, dictationTranscript: 'resto' })
+        expect(fermo.find('[data-testid="talos-dictation-fuori"]').exists()).toBe(false)
     })
 
 })

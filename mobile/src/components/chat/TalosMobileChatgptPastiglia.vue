@@ -92,9 +92,12 @@ onBeforeUnmount(chiudi)
         class="talos-pressable flex min-h-touch min-w-touch shrink-0 items-center justify-center"
         @pointerdown.prevent @click="alterna"
     >
-        <span data-testid="talos-chatgpt-pill-badge" class="flex h-7 items-center gap-1.5 rounded-full border border-[var(--talos-border)] bg-[var(--talos-panel)] px-2.5 text-xs text-[var(--talos-text)]">
+        <span data-testid="talos-chatgpt-pill-badge" class="flex h-6 items-center gap-1 rounded-full border border-[var(--talos-border)] bg-[var(--talos-panel)] px-2 text-2xs text-[var(--talos-text)] sm:h-7 sm:gap-1.5 sm:px-2.5 sm:text-xs">
             <span class="size-2 rounded-full bg-[var(--talos-success)]" aria-hidden="true" />
-            <span>{{ t('chatgptPlan.pill') }}</span>
+            <!-- ⛔ N15-PAST-05 (owner 18/10, foto dal telefono): sotto i 640 px la scritta intera mandava a capo la freccia di
+                 espansione del compositore. Lì dice «Piano», accanto al modello col logo ChatGPT; il nome intero resta nell'aria-label. -->
+            <span data-testid="talos-chatgpt-pill-short" class="sm:hidden" aria-hidden="true">{{ t('chatgptPlan.pillShort') }}</span>
+            <span data-testid="talos-chatgpt-pill-full" class="hidden sm:inline" aria-hidden="true">{{ t('chatgptPlan.pill') }}</span>
         </span>
     </button>
     <Teleport to="body">

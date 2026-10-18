@@ -68,7 +68,7 @@ describe('router wiring', () => {
             'doctor',
             'research', 'research-new', 'research-report', 'research-claim', 'research-source',
             'context', 'harness', 'harness-session',
-            // K3-B2 (15/10/2026): il Codice sul motore nuovo (r4), solo sviluppo, accanto al Codice di oggi; torna a 'harness'.
+            // K3-B2 (15/10/2026): il Codice sul motore nuovo (r4); torna all'elenco 'harness' (ELENCO-R4, 18/10).
             'codice-r4',
             // Tool Forge — mobile-first come 'harness': nessun
             // desktop_station_id nel ledger di parità (schema deliberato,
@@ -98,6 +98,8 @@ describe('router wiring', () => {
             ['memory-edit', 'memory-item'],
             // U-13: idem per l'attivita'.
             ['task-edit', 'task-item'],
+            // ELENCO-R4 (18/10/2026): la sessione r4 torna all'elenco, che ora elenca le sessioni di r4 e non rimanda più qui
+            // (il giro chiuso di USCITA-R4-02 nasceva da quel rimando).
             ['codice-r4', 'harness'],
         ] as const) {
             // I genitori che sono una PAGINA di dettaglio vogliono il loro

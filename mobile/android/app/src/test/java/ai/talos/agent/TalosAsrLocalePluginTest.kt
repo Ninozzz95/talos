@@ -156,4 +156,18 @@ class TalosAsrLocalePluginTest {
         val annulla = sorgente.substringAfter("fun annulla(call: PluginCall)").substringBefore("\n    }\n")
         assertTrue(annulla.contains("anticipato = null"))
     }
+
+    /**
+     * ⛔ N12-ANTEPRIMA (owner 18/10/2026, dal telefono: l'anteprima «si blocca a metà»; «Parakeet aggiorna l'anteprima alle pause»):
+     * la rilettura non resta solo per `trascrivi`, la pagina la riceve con `talosAsrRiletto`. Solo se la cattura è ancora QUELLA:
+     * a dettatura chiusa un'anteprima in ritardo non deve riscrivere niente.
+     */
+    @Test
+    fun laRiletturaAnticipataAggiornaLAnteprimaSoloConLaCatturaAperta() {
+        val sorgente = sequenceOf("src/main/java/ai/talos/agent/TalosAsrLocalePlugin.kt", "app/src/main/java/ai/talos/agent/TalosAsrLocalePlugin.kt")
+            .map { File(it) }.first { it.isFile }.readText().replace("\r", "")
+        val anticipa = sorgente.substringAfter("fun anticipa(call: PluginCall)").substringBefore("private fun decodifica")
+        val dopo = anticipa.substringAfter("anticipato = Anticipato(presa, testo)")
+        assertTrue(dopo.contains("if (cattura === presa && testo.isNotBlank()) notifyListeners(\"talosAsrRiletto\", JSObject().put(\"text\", testo))"))
+    }
 }

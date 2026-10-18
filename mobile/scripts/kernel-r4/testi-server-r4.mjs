@@ -6,7 +6,7 @@
  *
  * K3-C2b: anche le chiavi `doctor.*` dell'area `varie` (i testi del Doctor), filtrate per prefisso; il prefisso entra nella provenienza.
  *
- * Uso: node scripts/kernel-r4/testi-server-r4.mjs --r4 <checkout r4> --commit <sha> --uscita <file.json> [--area server|varie-doctor|processi-inspector|varie-pannello|modello-inspector|processi-scheda|kernel-prova|errori-processi|agenti-scheda|varie-attrezzi|app-risultato-delega|chat-risultato-delega|errori-punti|app-file|errori-file|app-terminale|processi-terminale|modello-viste|app-approvazione|chat-approvazione|kernel-approvazione|chat-permessi|chat-domande|errori-domande|chat-coda|agenti-coda|errori-fermato|chat-nota|errori-modello|app-allegati|app-trascrizione|errori-motivi|chat-piano|app-piano|modello-permessi|errori-piano|sezioni-automazioni|app-coordinazione|varie-fornitori]
+ * Uso: node scripts/kernel-r4/testi-server-r4.mjs --r4 <checkout r4> --commit <sha> --uscita <file.json> [--area server|varie-doctor|processi-inspector|varie-pannello|modello-inspector|processi-scheda|kernel-prova|errori-processi|agenti-scheda|varie-attrezzi|app-risultato-delega|chat-risultato-delega|errori-punti|app-file|errori-file|app-terminale|processi-terminale|modello-viste|app-approvazione|chat-approvazione|kernel-approvazione|chat-permessi|chat-domande|errori-domande|chat-coda|agenti-coda|errori-fermato|chat-nota|errori-modello|app-allegati|app-trascrizione|errori-motivi|chat-piano|app-piano|modello-permessi|errori-piano|sezioni-automazioni|app-coordinazione|varie-fornitori|errori-sessioni]
  */
 import { createHash } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
@@ -103,6 +103,10 @@ const AREE = {
         'review.noFileWrittenSo', 'review.whenTalosWritesOr'] },
     'app-revisione': { percorso: PERCORSO_TESTI_APP, prefisso: ['review.', 'common.pathCopied', 'common.copyFailed'] },
     'errori-piano': { percorso: PERCORSO_TESTI_ERRORI, prefisso: ['PLAN_', 'NOT_FOUND.', 'ORIGIN_FORBIDDEN.', 'INTERNAL_ERROR.', 'QUERY_INVALID.message'] },
+    // ELENCO-R4 (ledger `LEDGER-ELENCO-SESSIONI-R4-2026-10-18.md`): il perché di una rinomina o di un'eliminazione rifiutata dall'elenco
+    // delle sessioni. La busta di r4 porta un `message` generico («Invalid query», «Operation failed», misurato sul Pad): conta il motivo.
+    'errori-sessioni': { percorso: PERCORSO_TESTI_ERRORI, prefisso: ['SESSION_STILL_RUNNING.', 'WORKFLOW_RUN_NOT_FINISHED.', 'SESSION_NOT_READY.',
+        'NOT_FOUND.session_not_found', 'NOT_FOUND.session_deleted', 'QUERY_INVALID.session_name_invalid'] },
 }
 
 /** Un dizionario d'area di r4 a quel commit (`export default { it: {…}, en: {…} }`), letto come modulo; con `prefisso` (uno o più), solo quelle chiavi. */

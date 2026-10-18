@@ -28,6 +28,18 @@ describe('the parent of a page inside a station', () => {
         expect(parent?.params).not.toHaveProperty('index')
     })
 
+    /*
+     * ⛔ USCITA-R4-02 — owner 18/10/2026 notte, v0.1.41 sul telefono: «non riesco a uscire da questa schermata col tasto
+     * indietro o la gesture». Allora `/harness` rimandava subito a r4 e Indietro verso `harness` girava in tondo.
+     * ⛔ ELENCO-R4-ROTTA-01 — owner 18/10 «non riesco andare alla lista delle sessioni … esattamente come sulla chat Legacy»: `/harness`
+     * è di nuovo l'elenco (ora delle sessioni di r4) e non rimanda più; la sessione r4 torna lì, come la sessione del Codice classico.
+     */
+    it('ELENCO-R4-ROTTA-01 Back from an r4 session goes to the session list, like a classic Code session', () => {
+        expect(talosMobileParentRoute('codice-r4')).toEqual({ name: 'harness', params: {} })
+        expect(talosMobileParentRoute('codice-r4', { id: 's1' })).toEqual({ name: 'harness', params: {} })
+        expect(talosMobileParentRoute('harness-session', { id: 'vecchia' })).toEqual({ name: 'harness', params: {} })
+    })
+
     it('is null for a station top and for the chat', () => {
         // Not an oversight: a station top has an older answer of its own —
         // owner 2026-07-24, Back there reopens the main menu it was launched

@@ -177,6 +177,8 @@ export const TALOS_MOBILE_ROUTES: readonly TalosMobileRoute[] = Object.freeze([
     { name: 'context', path: '/context', desktop_station_id: 'context_vault', component: loadContextScreen },
     { name: 'harness', path: '/harness', desktop_station_id: 'harness', component: loadHarnessScreen },
     { name: 'harness-session', path: '/harness/:id', desktop_station_id: 'harness', component: loadHarnessSessionScreen, parent: 'harness' },
+    // ⛔ ELENCO-R4 (owner 18/10 «la lista delle sessioni … esattamente come sulla chat Legacy»): la sessione r4 è figlia dell'elenco
+    // `/harness`, che ora elenca le sessioni di r4 e non rimanda più qui (il giro chiuso di USCITA-R4-02 non può tornare).
     { name: 'codice-r4', path: '/codice-r4/:id?', desktop_station_id: 'harness', component: loadCodiceR4Screen, parent: 'harness' },
     // Tool Forge — mobile-first, non è ancora nel ledger di parità desktop
     // (il pacchetto d'origine lo dichiara esplicitamente: "architecture-

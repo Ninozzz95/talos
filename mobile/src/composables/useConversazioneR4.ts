@@ -27,6 +27,7 @@ import type { TalosSorgenteStreaming } from '@/lib/chat/sorgenteStreaming'
 import { messaggioErroreServerR4 } from '@/lib/harness/r4/pianoR4'
 import type { DecisionePianoR4 } from '@/lib/harness/r4/pianoChiave'
 import { CHIAVE_COORDINAZIONE_R4, catenaDellaSessioneR4, coordinazioneAccesaNellaCatenaR4 } from '@/lib/harness/r4/coordinazioneR4'
+import { annunciaCambioSessioneR4 } from '@/lib/harness/r4/avvisiSessioniR4'
 
 export interface ErroreR4 {
     code: string
@@ -748,8 +749,13 @@ export function useConversazioneR4(opzioni: OpzioniConversazioneR4) {
         const nuovo = nome.trim()
         if (!sessioneId.value || !nuovo) return false
         errore.value = null
-        const esito = await posta(`/api/v1/sessions/${encodeURIComponent(sessioneId.value)}/rename`, { nome: nuovo })
-        if (esito.ok) titolo.value = nuovo
+        const id = sessioneId.value
+        const esito = await posta(`/api/v1/sessions/${encodeURIComponent(id)}/rename`, { nome: nuovo })
+        if (esito.ok) {
+            titolo.value = nuovo
+            // REV-ELENCO-08: la colonna del tablet mostra la stessa sessione e si rilegge (`avvisiSessioniR4.ts`)
+            annunciaCambioSessioneR4({ id, nome: nuovo })
+        }
         return esito.ok
     }
 

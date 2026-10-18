@@ -202,6 +202,12 @@ const props = withDefaults(defineProps<{
     toolReviewCount: 0,
 })
 
+/**
+ * ⛔ DET-FUORI (owner 18/10/2026: «il testo vada fuori dal composer … proprio fuori», «Sopra il compositore, una riga sola»): la riga
+ * delle parole sta sopra il bordo, con lo stesso componente della barra dell'assistente. A richiesta come la barra: chi scrive a
+ * tastiera non la paga nel grafo d'avvio.
+ */
+const TalosSciaParole = defineAsyncComponent(() => import('@/components/brand/TalosSciaParole.vue'))
 const TalosMobileDictationBar = defineAsyncComponent(
     () => import('@/components/chat/TalosMobileDictationBar.vue'),
 )
@@ -826,6 +832,15 @@ watch(() => [props.prompt, props.docked, dictating.value], () => {
             mezzo l'onda che reagisce alla voce, che e' l'unica cosa che dice
             «ti sto sentendo».
         -->
+        <!-- ⛔ DET-FUORI (owner 18/10/2026): le parole mentre le dici stanno SOPRA il compositore, fuori dalla barra gialla, sulla
+             sfumatura che già copre i messaggi; la barra tiene solo onda e comandi. -->
+        <div
+            v-if="dictating && props.dictationTranscript.trim()"
+            data-testid="talos-dictation-fuori"
+            class="pointer-events-none absolute bottom-full left-0 right-0 mb-2"
+        >
+            <TalosSciaParole :testo="props.dictationTranscript" />
+        </div>
         <TalosMobileDictationBar
             v-if="dictationListening || dictationStarting"
             :avvio="dictationStarting"
