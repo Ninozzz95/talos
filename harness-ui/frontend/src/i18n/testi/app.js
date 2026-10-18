@@ -992,6 +992,7 @@ export default {
     'transcript.error': '> ⛔ **ERRORE{codice}:** {messaggio}',
     'transcript.unknownEvent': '_Evento non riconosciuto `{tipo}`:_',
     'transcript.servedVia': '_Servita da {fornitore} su OpenRouter._',
+    'transcript.internalOmitted': '_Eventi interni non mostrati qui (consumo di token, misure del contesto, uscita dei comandi): {n}. L’esportazione JSON li contiene tutti._',
     // ── sessioni
     'sessions.selectedCountOne': '{n} selezionata',
     'sessions.selectedCountMany': '{n} selezionate',
@@ -2495,6 +2496,7 @@ export default {
     'transcript.error': '> ⛔ **ERROR{codice}:** {messaggio}',
     'transcript.unknownEvent': '_Unrecognized event `{tipo}`:_',
     'transcript.servedVia': '_Served by {fornitore} on OpenRouter._',
+    'transcript.internalOmitted': '_Internal events not shown here (token usage, context measurements, command output): {n}. The JSON export contains all of them._',
     // ── sessioni
     'sessions.selectedCountOne': '{n} selected',
     'sessions.selectedCountMany': '{n} selected',

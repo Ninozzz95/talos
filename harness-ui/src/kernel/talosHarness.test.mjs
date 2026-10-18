@@ -218,18 +218,18 @@ describe('FLUSSI-SEPARATI — stdout e stderr escono distinti, e il fuso resta',
 
 describe('ETICHETTA-SANDBOX — dire dove ha girato, e che cosa è vero lì', () => {
     it('dichiara il fatto, non solo il valore: `none` non è una spiegazione', () => {
-        assert.match(etichettaSandbox('none'), /^none \(.*stessi privilegi.*\)$/)
-        assert.match(etichettaSandbox('none'), /nessun isolamento/)
+        assert.match(etichettaSandbox('none'), /^none \(.*same privileges.*\)$/)
+        assert.match(etichettaSandbox('none'), /no isolation/)
         /* ⛔ F009 (01/10/2026): «namespace Linux: filesystem e processi separati» era falso — /mnt/c è il disco di Windows,
            scrivibile, e l'interop lancia programmi Windows. L'etichetta ora dice che NON c'è isolamento. */
-        assert.match(etichettaSandbox('wsl2'), /^wsl2 \(Linux in WSL; nessun isolamento: .*\)$/)
+        assert.match(etichettaSandbox('wsl2'), /^wsl2 \(Linux in WSL; no isolation: .*\)$/)
         assert.doesNotMatch(etichettaSandbox('wsl2'), /namespace|separat/i)
         assert.match(etichettaSandbox('adb-shell-on-device'), /^adb-shell-on-device \(/)
     })
     it('⛔ un valore che non conosco NON si decora: si restituisce com\'è', () => {
         assert.equal(etichettaSandbox('qualcosa-di-nuovo'), 'qualcosa-di-nuovo')
-        assert.equal(etichettaSandbox(''), 'non dichiarato')
-        assert.equal(etichettaSandbox(null), 'non dichiarato')
+        assert.equal(etichettaSandbox(''), 'not declared')
+        assert.equal(etichettaSandbox(null), 'not declared')
     })
     it('⛔ IL CONTRATTO DEI PARSER: nessuna quadra dentro, e la riga finisce dopo la quadra', () => {
         for (const livello of ['none', 'wsl2', 'adb-shell-on-device', 'ignoto']) {

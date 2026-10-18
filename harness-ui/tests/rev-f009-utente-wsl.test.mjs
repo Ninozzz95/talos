@@ -84,11 +84,11 @@ test('F009-05: `-u <utente>` solo quando si sceglie un utente; senza, l argv è 
 test('F009-06: l etichetta non promette più un isolamento, e dice con che utente e che cosa vale sul disco', () => {
     const nuda = etichettaSandbox('wsl2')
     assert.doesNotMatch(nuda, /namespace|separat/i, 'la frase falsa di prima')
-    assert.match(nuda, /^wsl2 \(Linux in WSL; nessun isolamento: /)
+    assert.match(nuda, /^wsl2 \(Linux in WSL; no isolation: /)
     const root = etichettaSandbox('wsl2', { utente: 'root', disco: { montaggio: '/mnt/c', metadata: false } })
-    assert.equal(root, "wsl2 (Linux in WSL come root; nessun isolamento: /mnt/c è il disco di Windows con i diritti dell'utente Windows di TALOS, e lì i permessi Linux non valgono)")
-    assert.doesNotMatch(etichettaSandbox('wsl2', { utente: 'mario', disco: { montaggio: '/mnt/c', metadata: true } }), /permessi Linux non valgono/)
-    assert.match(etichettaSandbox('wsl2', { utente: null, disco: null }), /con un utente non verificato; nessun isolamento: i dischi di Windows sono in \/mnt/)
+    assert.equal(root, 'wsl2 (Linux in WSL as root; no isolation: /mnt/c is the Windows disk with the rights of the Windows user running TALOS, and Linux permissions do not apply there)')
+    assert.doesNotMatch(etichettaSandbox('wsl2', { utente: 'mario', disco: { montaggio: '/mnt/c', metadata: true } }), /Linux permissions do not apply/)
+    assert.match(etichettaSandbox('wsl2', { utente: null, disco: null }), /with an unverified user; no isolation: the Windows disks are under \/mnt/)
     for (const sporco of [{ utente: 'x]y' }, { utente: 'root', disco: { montaggio: '/mnt/c]', metadata: false } }]) {
         const riga = `exit 0 [sandbox: ${etichettaSandbox('wsl2', sporco)}]\nciao`
         assert.doesNotMatch(etichettaSandbox('wsl2', sporco), /\]/)
@@ -236,7 +236,7 @@ test('F009-14: la preferenza arriva all esecuzione e alla sonda; un lettore che 
 
 test('F009-15: l esito della shell dichiara con che utente ha girato e che cosa vale sul disco', async (t) => {
     const { esiti } = await giro(t, {})
-    assert.match(esiti[0], /^exit 0 \[sandbox: wsl2 \(Linux in WSL come root; nessun isolamento: \/mnt\/c è il disco di Windows .*permessi Linux non valgono\)\]\nciao/)
+    assert.match(esiti[0], /^exit 0 \[sandbox: wsl2 \(Linux in WSL as root; no isolation: \/mnt\/c is the Windows disk .*Linux permissions do not apply there\)\]\nciao/)
 })
 
 test('F009-16: `prova` chiede solo quando la sessione ha scelto Linux — col ripiego automatico gira su Windows', { skip: process.platform !== 'win32' ? 'la scelta di Linux esiste solo su Windows' : false }, async (t) => {
@@ -264,7 +264,7 @@ test('F009-17: agent-service porta preferenza e consensi al kernel com sono; il 
     await eseguiComandoDiretto({ cartella: 'C:\\x', comando: 'id -un', onEvento: (e) => eventi.push(e), preferenzeWsl: { usaUtenteNormale: false },
         eseguiComandoSandboxatoFn: async (_c, _d, o) => { opzioni = o; return { codice: 0, testo: 'root', enforcement: 'wsl2', wsl: { utente: 'root', root: true, disco: null } } } })
     assert.deepEqual(opzioni.wsl, { usaUtenteNormale: false })
-    assert.match(eventi.find((e) => e.type === 'ToolCallResult').content, /^exit 0 \[sandbox: wsl2 \(Linux in WSL come root; /)
+    assert.match(eventi.find((e) => e.type === 'ToolCallResult').content, /^exit 0 \[sandbox: wsl2 \(Linux in WSL as root; /)
 })
 
 test('F009-18: il registro dà a ogni sessione i suoi consensi, gli stessi per i suoi giri, e la preferenza ai comandi `!`', async (t) => {
@@ -354,7 +354,7 @@ test('F009-21 (WSL vero): il comando gira con l utente che la sonda dice, e l es
     assert.equal(r.codice, 0)
     assert.equal(r.testo.trim(), atteso)
     assert.equal(r.wsl.utente, atteso)
-    assert.match(etichettaSandbox(r.enforcement, r.wsl), new RegExp(`^wsl2 \\(Linux in WSL come ${atteso}; nessun isolamento: `))
+    assert.match(etichettaSandbox(r.enforcement, r.wsl), new RegExp(`^wsl2 \\(Linux in WSL as ${atteso}; no isolation: `))
     const stato = await statoWsl({ usaUtenteNormale: true })
     assert.equal(stato.disponibile, true)
     assert.equal(stato.utenteUsato, atteso)

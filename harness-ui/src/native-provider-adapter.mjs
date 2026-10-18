@@ -102,7 +102,40 @@ function canonicalUsage(usage = {}, provider) {
   };
 }
 
-function responseMessage(response, provider, model, finishReason) {
+/*
+ * ⛔ C5 (17/10/2026) — I NOMI CHE IL FILO RESPONSES RISERVA. OpenAI Responses (api.openai.com e il servizio Codex del piano ChatGPT)
+ *   ha un suo Tool Search e rifiuta una funzione del cliente che si chiami `tool_search` («Function 'tool_search.tool_search' not
+ *   allowed in reserved namespace 'tool_search'»): il ponte degli attrezzi differiti la dichiara proprio così. Come Hermes
+ *   (`agent/transports/codex.py:83-86` i nomi, `:126-151` l'alias con suffisso se già preso, `:269-271` solo dove il filo lo
+ *   riserva, `:836-843` il ritorno al nome vero nelle chiamate del modello): sul filo va `talos_tool_search`, il kernel vede sempre
+ *   `tool_search`. Gli altri fili non cambiano.
+ * ⛔ Revisione L (owner 17/10, «Rinominare anche la storia»): Hermes lascia il nome vero nelle chiamate già in storia, e il 400
+ *   documentato è sulla dichiarazione; ma se OpenAI rifiutasse anche una chiamata in storia col nome riservato, una conversazione
+ *   riaperta senza lo stato salvato (o su un altro fornitore Responses) cadrebbe. Sul filo Responses la storia usa lo stesso alias
+ *   della dichiarazione: coerente comunque la pensi il servizio, e il kernel vede sempre il nome vero.
+ */
+function storiaConAlias(messaggi, verso) {
+  if (!verso.size) return messaggi;
+  const sulFilo = (nome) => verso.get(nome) ?? nome;
+  return messaggi.map((m) => (Array.isArray(m.content) && m.content.some((p) => (p.type === 'tool-call' || p.type === 'tool-result') && verso.has(p.toolName))
+    ? { ...m, content: m.content.map((p) => ((p.type === 'tool-call' || p.type === 'tool-result') && verso.has(p.toolName) ? { ...p, toolName: sulFilo(p.toolName) } : p)) }
+    : m));
+}
+const RISERVATI_SUL_FILO_RESPONSES = Object.freeze(['tool_search']);
+export function aliasDelFilo(nomi, wireResponses) {
+  const verso = new Map(), indietro = new Map();
+  if (!wireResponses) return { verso, indietro };
+  const presi = new Set(nomi);
+  for (const nome of nomi) {
+    if (!RISERVATI_SUL_FILO_RESPONSES.includes(nome)) continue;
+    let alias = `talos_${nome}`;
+    for (let n = 2; presi.has(alias); n += 1) alias = `talos_${nome}_${n}`;
+    presi.add(alias); verso.set(nome, alias); indietro.set(alias, nome);
+  }
+  return { verso, indietro };
+}
+
+function responseMessage(response, provider, model, finishReason, nomiVeri = new Map()) {
   if (!['stop', 'tool-calls'].includes(finishReason)) {
     // P-J — nei nuovi profili lo schermo usa il nome umano, senza codici del protocollo.
     const record = fornitore(provider);
@@ -117,7 +150,7 @@ function responseMessage(response, provider, model, finishReason) {
   const assistant = response.messages.findLast(m => m.role === 'assistant');
   const content = assistant?.content ?? [];
   const text = content.filter(p => p.type === 'text').map(p => p.text).join('');
-  const calls = content.filter(p => p.type === 'tool-call').map(p => ({ id: p.toolCallId, type: 'function', function: { name: p.toolName, arguments: JSON.stringify(p.input) } }));
+  const calls = content.filter(p => p.type === 'tool-call').map(p => ({ id: p.toolCallId, type: 'function', function: { name: nomiVeri.get(p.toolName) ?? p.toolName, arguments: JSON.stringify(p.input) } }));
   const reasoning = content.filter(p => p.type === 'reasoning').map(p => p.text).join('');
   return {
     role: 'assistant', content: text || null,
@@ -152,13 +185,15 @@ export async function nativeProviderResponse({ provider, model, apiKey, baseURL,
      mandava `""` in ogni campo facoltativo (trascritto dell'owner: `modello` 31 volte, `cartella` 21, `model` 18) e delega e
      Workflow lo rifiutavano. I nostri schemi hanno campi facoltativi per contratto: si dichiarano non strict, come Codex
      (`codex-rs/core/src/tools/handlers/multi_agents_spec.rs:92`). Gli altri fili non conoscono il campo e restano com'erano. */
-  const tools = Object.fromEntries((body.tools ?? []).map(t => [t.function.name, { description: t.function.description, inputSchema: jsonSchema(t.function.parameters), ...(wireResponses ? { strict: false } : {}) }]));
+  const alias = aliasDelFilo((body.tools ?? []).map(t => t.function.name), wireResponses);
+  const sulFilo = (nome) => alias.verso.get(nome) ?? nome;
+  const tools = Object.fromEntries((body.tools ?? []).map(t => [sulFilo(t.function.name), { description: t.function.description, inputSchema: jsonSchema(t.function.parameters), ...(wireResponses ? { strict: false } : {}) }]));
   const effort = body.reasoning_effort ?? body.reasoning?.effort;
   const providerOptions = wireResponses ? { openai: { store: false, include: ['reasoning.encrypted_content'] } }
     : provider === 'anthropic' ? opzioniAnthropicNative(provider, model, body) : opzioniAnthropicTerzi(provider, model, body);
   /* Con le opzioni esplicite (ragionamento adattivo + livello) il livello NON passa anche dal `reasoning` comune dell'SDK, che non conosce «max». */
   const sforzoEsplicito = provider === 'anthropic' && providerOptions.anthropic?.thinking != null;
-  const nativeMessages = toNativeMessages(body.messages, { provider, model });
+  const nativeMessages = storiaConAlias(toNativeMessages(body.messages, { provider, model }), alias.verso);
   /*
    * ⛔ Cache del piano fra un giro e l'altro (CLI, 15/10/2026: 91% in cache dentro un giro, 0 fra due giri). Sul filo Responses un
    *   messaggio di sistema arrivato DOPO la storia (l'aggiornamento del preambolo che l'agent-service APPENDE apposta per non toccare il
@@ -179,7 +214,7 @@ export async function nativeProviderResponse({ provider, model, apiKey, baseURL,
       ? { messages: nativeMessages.slice(iniziali), instructions: nativeMessages.slice(0, iniziali), allowSystemInMessages: true }
       : { messages: nativeMessages.filter(m => m.role !== 'system'), instructions: nativeMessages.filter(m => m.role === 'system') }),
     ...(Object.keys(tools).length ? { tools } : {}),
-    ...(body.tool_choice ? { toolChoice: typeof body.tool_choice === 'string' ? body.tool_choice : { type: 'tool', toolName: body.tool_choice.function.name } } : {}),
+    ...(body.tool_choice ? { toolChoice: typeof body.tool_choice === 'string' ? body.tool_choice : { type: 'tool', toolName: sulFilo(body.tool_choice.function.name) } } : {}),
     ...(body.temperature != null ? { temperature: body.temperature } : {}),
     ...(body.top_p != null ? { topP: body.top_p } : {}),
     ...(body.stop ? { stopSequences: Array.isArray(body.stop) ? body.stop : [body.stop] } : {}),
@@ -194,7 +229,7 @@ export async function nativeProviderResponse({ provider, model, apiKey, baseURL,
     const result = await generateText({ ...common, onStepFinish: step => { usageDelloStep = step.usage; } });
     // P-J — l'aggregato perde raw anche con un solo step; lo step mantiene la misura originale.
     const usage = wireAnthropic && provider !== 'anthropic' ? usageDelloStep : result.usage;
-    return Response.json({ choices: [{ index: 0, message: responseMessage(result.response, provider, model, result.finishReason), finish_reason: result.finishReason === 'tool-calls' ? 'tool_calls' : result.finishReason }], usage: canonicalUsage(usage, provider) });
+    return Response.json({ choices: [{ index: 0, message: responseMessage(result.response, provider, model, result.finishReason, alias.indietro), finish_reason: result.finishReason === 'tool-calls' ? 'tool_calls' : result.finishReason }], usage: canonicalUsage(usage, provider) });
   }
   const abort = new AbortController();
   const combinedSignal = signal ? AbortSignal.any([signal, abort.signal]) : abort.signal;
@@ -241,7 +276,7 @@ export async function nativeProviderResponse({ provider, model, apiKey, baseURL,
           if (part.type === 'reasoning-delta') { emit({ reasoning_content: part.text }); return; }
           if (part.type === 'tool-input-start') {
             callIndices.set(part.id, callIndices.size);
-            emit({ tool_calls: [{ index: callIndices.get(part.id), id: part.id, type: 'function', function: { name: part.toolName, arguments: '' } }] }); return;
+            emit({ tool_calls: [{ index: callIndices.get(part.id), id: part.id, type: 'function', function: { name: alias.indietro.get(part.toolName) ?? part.toolName, arguments: '' } }] }); return;
           }
           if (part.type === 'tool-input-delta') {
             if (typeof part.delta === 'string' && part.delta !== '') conArgomenti.add(part.id);
@@ -270,14 +305,14 @@ export async function nativeProviderResponse({ provider, model, apiKey, baseURL,
             const intero = typeof part.input === 'string' ? part.input : part.input === undefined ? '' : JSON.stringify(part.input);
             if (!callIndices.has(part.toolCallId)) {
               callIndices.set(part.toolCallId, callIndices.size);
-              emit({ tool_calls: [{ index: callIndices.get(part.toolCallId), id: part.toolCallId, type: 'function', function: { name: part.toolName, arguments: '' } }] });
+              emit({ tool_calls: [{ index: callIndices.get(part.toolCallId), id: part.toolCallId, type: 'function', function: { name: alias.indietro.get(part.toolName) ?? part.toolName, arguments: '' } }] });
             }
             conArgomenti.add(part.toolCallId);
             if (intero !== '') { emit({ tool_calls: [{ index: callIndices.get(part.toolCallId), function: { arguments: intero } }] }); return; }
           }
           if (part.type === 'finish-step') usageDelloStep = part.usage; // P-J
           if (part.type === 'finish') {
-            const message = responseMessage(await result.response, provider, model, part.finishReason);
+            const message = responseMessage(await result.response, provider, model, part.finishReason, alias.indietro);
             // P-J — una sola chiamata/step: gli aggregati scartano raw, finish-step lo conserva.
             const usage = wireAnthropic && provider !== 'anthropic' ? usageDelloStep : part.totalUsage;
             emit(message.talos_provider_state ? { talos_provider_state: message.talos_provider_state } : {}, { usage: canonicalUsage(usage, provider) }, part.finishReason);

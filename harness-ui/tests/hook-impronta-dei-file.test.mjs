@@ -71,9 +71,14 @@ test('HOOK-IMPRONTA-04 — entrano i file del PROGETTO, non quelli fuori; e l’
   assert.equal(await improntaHook({ comando: conFuori, cartella }), createHash('sha256').update(conFuori).digest('hex'));
 });
 
-test('HOOK-IMPRONTA-05 — un collegamento non si segue e non si salta: si rifiuta', async (t) => {
+/* 17/10/2026 (owner «Stessa regola, una nuova fiducia»): la regola è quella condivisa con la CLI (`script-del-progetto.mjs`): un
+   collegamento a un file del progetto si fissa per il file VERO (prima si rifiutava). Cambiare il file vero cambia l'impronta. */
+test('HOOK-IMPRONTA-05 — un collegamento a un file si fissa per il file VERO: cambiato quello, cambia l’impronta', async (t) => {
   const { cartella } = scena(t);
   try { symlinkSync(join(cartella, 'guardia.mjs'), join(cartella, 'alias.mjs'), 'file'); }
   catch (errore) { t.skip(`questa macchina non lascia creare collegamenti a file (${errore.code})`); return; }
-  await assert.rejects(() => improntaHook({ comando: 'node alias.mjs', cartella }), { code: 'HOOK_FILE_LINK' });
+  const prima = await improntaHook({ comando: 'node alias.mjs', cartella });
+  assert.notEqual(prima, createHash('sha256').update('node alias.mjs').digest('hex'), 'il collegamento non è un argomento qualunque');
+  writeFileSync(join(cartella, 'guardia.mjs'), SOSTITUITA);
+  assert.notEqual(await improntaHook({ comando: 'node alias.mjs', cartella }), prima);
 });

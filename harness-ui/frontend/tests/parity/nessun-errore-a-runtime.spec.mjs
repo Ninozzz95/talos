@@ -103,16 +103,19 @@ test('FASE3-MULTISELECT-UNA-POST — conferma unica ed esito parziale restano vi
   await page.evaluate(() => { window.__talosHarnessUiRuntime.realSessionState.id = 'fase-3-ui'; });
   await page.locator('.talos-sidebar [data-vaia="libreria"]').first().click();
   await expect(page.locator('#schermoLibreria .td-card-select')).toHaveCount(3);
-  await page.getByLabel('Seleziona visibili', { exact: true }).check();
-  await page.getByLabel('Seleziona Terzo.md', { exact: true }).uncheck();
+  /* 17/10/2026 (bugfixer): dall'08/10 (`ea460896e`) anche le Automazioni usano lo stesso elenco con «Seleziona visibili», nel loro
+     schermo nascosto: senza l'ambito la casella era DUE elementi e la prova moriva in strict mode prima di provare qualcosa. */
+  const libreria = page.locator('#schermoLibreria');
+  await libreria.getByLabel('Seleziona visibili', { exact: true }).check();
+  await libreria.getByLabel('Seleziona Terzo.md', { exact: true }).uncheck();
   await expect(page.locator('#schermoLibreria .td-bulk-count')).toHaveText('2 selezionate');
 
   page.once('dialog', (dialog) => dialog.accept());
   await page.getByRole('button', { name: 'Elimina selezionati', exact: true }).click();
   await expect.poll(() => richieste.length).toBe(1);
   expect(richieste[0]).toEqual({ azione: 'elimina', ids: ['lib-1', 'lib-2'] });
-  await expect(page.getByLabel('Seleziona Primo.md', { exact: true })).not.toBeChecked();
-  await expect(page.getByLabel('Seleziona Secondo.md', { exact: true })).toBeChecked();
+  await expect(libreria.getByLabel('Seleziona Primo.md', { exact: true })).not.toBeChecked();
+  await expect(libreria.getByLabel('Seleziona Secondo.md', { exact: true })).toBeChecked();
   await expect(page.locator('#schermoLibreria .td-bulk-status')).toHaveText('1 eliminate, 1 non eliminate.');
 });
 

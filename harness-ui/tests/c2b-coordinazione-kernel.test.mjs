@@ -59,16 +59,17 @@ test('C2B-K-03 — «chiedi»: la carta porta compito, cartella, modello e il pe
   const no = await giro(c, [chiama('b', { task: 'rifai i test', cartella: c })], { risposta: false, coordinazioneFn: () => ({ modo: 'chiedi', motivo: 'tetto' }) })
   assert.deepEqual(no.domande, [{ tipo: 'delega_sottotask', toolCallId: 'b', compito: 'rifai i test', cartella: c, coordinazione: { motivo: 'tetto' } }])
   assert.deepEqual(no.deleghe, [], 'un no non fa nascere nessuna figlia')
-  assert.match(no.esito('b'), /^REFUSED\. the person did not approve starting this agent\. No child was started\./u)
+  /* R-03 (17/10): il rifiuto porta il codice e dice che ritentare uguale non serve; il motivo resta lo stesso */
+  assert.match(no.esito('b'), /^REFUSED \[DELEGATION_NOT_ALLOWED\]\. the person did not approve starting this agent\. Retrying the same call will be refused again: change the request, or tell the person what blocks it\. No child was started\./u)
 })
 
 test('C2B-K-04 — «chiedi» senza nessuno davanti (automazione): il no porta il suo motivo; senza canale: rifiuto onesto', async (t) => {
   const c = cartella(t)
   const nessuno = await giro(c, [chiama('a', { task: 't' })], { risposta: { approvato: false, motivo: 'no one can answer here' }, coordinazioneFn: () => ({ modo: 'chiedi', motivo: 'spenta' }) })
-  assert.match(nessuno.esito('a'), /^REFUSED\. no one can answer here No child was started\./u)
+  assert.match(nessuno.esito('a'), /^REFUSED \[DELEGATION_NOT_ALLOWED\]\. no one can answer here\. Retrying the same call/u)
   assert.deepEqual(nessuno.deleghe, [])
   const senzaCanale = await giro(c, [chiama('b', { task: 't' })], { coordinazioneFn: () => ({ modo: 'chiedi', motivo: 'spenta' }) })
-  assert.match(senzaCanale.esito('b'), /^REFUSED\. starting an agent needs the person's approval here, but this session has no approval channel\./u)
+  assert.match(senzaCanale.esito('b'), /^REFUSED \[DELEGATION_NOT_ALLOWED\]\. starting an agent needs the person's approval here, but this session has no approval channel\./u)
   assert.deepEqual(senzaCanale.deleghe, [])
 })
 
@@ -76,7 +77,7 @@ test('C2B-K-05 — «nega»: rifiuto senza chiedere, nessuna figlia', async (t) 
   const { esito, deleghe, domande } = await giro(cartella(t), [chiama('a', { task: 't' })], { risposta: true, coordinazioneFn: () => ({ modo: 'nega' }) })
   assert.deepEqual(domande, [])
   assert.deepEqual(deleghe, [])
-  assert.match(esito('a'), /^REFUSED\. starting agents is turned off in this session\./u)
+  assert.match(esito('a'), /^REFUSED \[DELEGATION_NOT_ALLOWED\]\. starting agents is turned off in this session\./u)
 })
 
 test('C2B-K-06 — coordinazioneFn si legge a OGNI delega: la persona la cambia a metà giro e vale subito', async (t) => {

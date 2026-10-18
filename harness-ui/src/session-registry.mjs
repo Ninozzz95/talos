@@ -123,12 +123,14 @@ import {
   eseguiHook as eseguiHookReale,
   fidaHook as fidaHookReale,
   HookRegistryError,
+  statoTrustHook as statoTrustHookReale,
   verificaTrust as verificaTrustReale,
 } from './hook-registry.mjs';
 import {
   caricaServerMcp as caricaServerMcpReale,
   fidaServerMcp as fidaServerMcpReale,
   McpRegistryError,
+  statoTrustMcp as statoTrustMcpReale,
   verificaTrustMcp as verificaTrustMcpReale,
 } from './mcp-registry.mjs';
 import { caricaSkill as caricaSkillReale, SkillRegistryError } from './skill-registry.mjs';
@@ -441,6 +443,11 @@ import {
   attivaAffittiArchivio, // affitto fra processi (10/10/2026): lo accende `affittoFraProcessi`
 } from './session-store.mjs';
 import { fraseDetentore } from './session-lease.mjs';
+/* Owner 17/10/2026 («Adottarli come Hermes»): i fatti durevoli dei comandi in sottofondo che sopravvivono al server (vedi `adottaSfondiOrfani`) */
+export const EVENTO_SFONDO_IMPRONTA = 'talos.sfondo-impronta';
+export const EVENTO_SFONDO_ADOTTATO = 'talos.sfondo-adottato';
+export const EVENTO_SFONDO_PERSO = 'talos.sfondo-perso';
+import { leggiImpronte as leggiImpronteReale, esisteProcesso as esisteProcessoReale, esisteGruppo as esisteGruppoReale, fermaAlberoWindows, segnalaProcesso, leggiAlbero as leggiAlberoReale } from './impronta-processo.mjs'; // owner 17/10: gli orfani in sottofondo, adottati come Hermes
 import { leggiParametriElenco, leggiValoreFiltro, paginaDa, testoElenco, confrontaChiavi } from './elenco-paginato.mjs'; // C5: il contratto degli elenchi
 
 export const EXPORT_SCHEMA = 'talos.harness-ui.session-export.v1';
@@ -2771,6 +2778,7 @@ export function createSessionRegistry({
   cartellaTrustHook = fileURLToPath(new URL('../.hooks-trust/', import.meta.url)),
   caricaHooksFn = caricaHooksReale,
   verificaTrustFn = verificaTrustReale,
+  statoTrustHookFn = statoTrustHookReale, // 17/10/2026: il PERCHÉ di una fiducia caduta, per la frase della carta
   eseguiHookFn = eseguiHookReale,
   /*
    * ⭐⭐⭐ 29/8 — FASE E, seconda metà. Stesso pattern REALE di
@@ -2790,6 +2798,7 @@ export function createSessionRegistry({
    */
   caricaServerMcpFn = caricaServerMcpReale,
   verificaTrustMcpFn = verificaTrustMcpReale,
+  statoTrustMcpFn = statoTrustMcpReale, // 17/10/2026: il PERCHÉ di una fiducia caduta, per la frase della carta
   fidaServerMcpFn = fidaServerMcpReale,
   /*
    * ⭐⭐⭐ 29/8 — FASE F, il pannello Capability hub: stesso pattern
@@ -3033,6 +3042,9 @@ export function createSessionRegistry({
   // ⭐ FASE N, sesto sistema (30/8) — ventiquattresimo-ventisettesimo: i 4 tool Memory (ATTREZZI_ESTESI[23..26] nel kernel). Le 3 mutazioni MUTANO davvero, stesso principio.
   // ⭐ FASE N, ottavo sistema (30/8) — ventottesimo-trentacinquesimo: gli 8 tool Deep Research (ATTREZZI_ESTESI[27..34] nel kernel). Le 6 mutazioni MUTANO davvero, stesso principio.
   strumentiEstesi = STRUMENTI_ESTESI_PREDEFINITI,
+  /* C5 attrezzi differiti (owner 17/10/2026): spento di serie; il desktop lo accende solo dopo l'A/B e il sì dell'owner.
+     Per l'A/B e le prove sul 4177: `TALOS_ATTREZZI_DIFFERITI=1`. */
+  attrezziDifferiti = process.env.TALOS_ATTREZZI_DIFFERITI === '1',
   ricercaWeb,
   // ⭐ 04/9, R-03 — se presente vince su `ricercaWeb`: letta a OGNI giro (come `chiaveFn`), così una fonte cambiata dalle Impostazioni vale dal giro successivo senza riavvio. Restituisce { ricercaWeb, richiediRicercaFn }.
   ricercaWebFn = null,
@@ -3086,6 +3098,14 @@ export function createSessionRegistry({
    *   da fermare né da riprendere.
    */
   domandaScadutaFerma = true,
+  /*
+   * ⛔ Owner 17/10/2026 («Adottarli come Hermes, con "Ferma"») — i comandi in sottofondo sopravvissuti a una morte di colpo del server.
+   *   Ciò che serve a riconoscerli e a fermarli, iniettabile perché le prove non tocchino processi veri che non hanno creato:
+   *   `leggiImpronte(pids) → Promise<Map(pid → {impronta, gruppo}|null)>`, `esiste(pid)`, `gruppoEsiste(pgid)`, `fermaAlbero(pid)`
+   *   (solo Windows: `taskkill /T /F`), `segnale(pgid, segnale)` (POSIX), `piattaforma`, `pidOspite`, `ogniMs` (la sorveglianza
+   *   dei ripresi), `graziaMs`. `null` = i veri (`impronta-processo.mjs`).
+   */
+  processiOspite = null,
 } = {}) {
   const preparaTask = preparaEsecuzioneFn ?? ((taskId) => preparaEsecuzioneReale(taskId, taskCatalogProvider));
   const sessioni = new Map();
@@ -5494,6 +5514,8 @@ export function createSessionRegistry({
     /* C06 (a), review del desktop (bite 3): un comando in PRIMO PIANO fermato dalla persona finisce col suo risultato e non avrà
        mai un'uscita in sottofondo che consumi il segno: lo si toglie qui. Uno sfondato ha già avuto il suo risultato prima del «Ferma». */
     if (evento?.type === 'ToolCallResult' && typeof evento.toolCallId === 'string') voce.fermatiDallaPersona?.delete(evento.toolCallId);
+    /* Owner 17/10/2026 («Adottarli come Hermes»): un comando appena messo in sottofondo lascia la sua impronta d'avvio sul giornale */
+    if (evento?.type === 'ToolCallResult' && evento.inSfondo === true && evento.rifiutato !== true && typeof evento.toolCallId === 'string') registraImprontaSfondo(voce, evento.toolCallId);
     if (voce.terminaleInConsegna) {
       const inAttesa = new Promise((esito) => { voce.eventiInFila.push([evento, opzioni, esito]); });
       /* v8 (Codex v7, punto 5): quasi nessuno guarda l'esito di un broadcast; se questa promessa si rifiutasse senza un
@@ -5524,9 +5546,13 @@ export function createSessionRegistry({
    *   dei Processi lo chiude e il numero sulla scheda smette di contarlo. Senza, una riga «in sfondo» restava viva per
    *   sempre. L'esito in parole è un VALORE (riuscito | fallito | terminato), le frasi le sceglie l'interfaccia.
    */
-  function segnalaUscitaSfondoIn(voce) {
+  function segnalaUscitaSfondoIn(voceDiPartenza) {
     return ({ toolCallId, codice = null, segnale = null, errore = false, comando = null, file = null } = {}) => {
       if (typeof toolCallId !== 'string' || !toolCallId) return;
+      /* ⛔ Owner 17/10/2026 sera: un comando in sottofondo vive più a lungo della voce che l'ha lanciato — una ricarica dall'archivio
+         condiviso la sostituisce. La sua uscita va alla voce di ADESSO (ascoltatori, coda, sequenza del giornale ricaricato), non a
+         quella vecchia, dove nessuno la vedeva e prendeva un numero di sequenza già usato. Una sessione eliminata: quella di prima. */
+      const voce = sessioni.get(voceDiPartenza.sessionId) ?? voceDiPartenza;
       const esito = errore ? 'fallito' : Number.isSafeInteger(codice) ? (codice === 0 ? 'riuscito' : 'fallito') : 'terminato';
       const dallaPersona = voce.fermatiDallaPersona?.delete(toolCallId) === true; // C06 (a): segnato da `fermaComando`
       accodaUscitaSfondo(voce, { toolCallId, esito, codice: Number.isSafeInteger(codice) ? codice : null, segnale: typeof segnale === 'string' ? segnale : null, comando, file, dallaPersona });
@@ -5539,6 +5565,223 @@ export function createSessionRegistry({
           ...(dallaPersona ? { fermatoDallaPersona: true, ...(comandoPulito ? { comando: comandoPulito } : {}) } : {}) },
       }, { durable: true });
     };
+  }
+
+  /*
+   * ⛔⛔ Owner 17/10/2026 («Adottarli come Hermes, con "Ferma"») — I COMANDI IN SOTTOFONDO SOPRAVVISSUTI A UNA MORTE DI COLPO DEL SERVER.
+   *   Misurato dal Mobile sul Pad (r4 `701c6c0d2`): `shell {comando:"sleep 600", background:true}`, poi `am force-stop` ⇒ `sleep 600`
+   *   vivo, PPID 1, e alla riapertura la riga diceva «Non più seguito» senza nessun modo di fermarlo. Su Windows lo stesso (Nino1, 17/10:
+   *   `taskkill /F` del padre, il `ping` resta vivo figlio della sua shell). Lo spegnimento ordinato li ferma già
+   *   (`creaPuliziaDeiGruppi`, kernel); un SIGKILL all'host no.
+   * ⇒ Come Hermes (`tools/process_registry_checkpoint.py:20-126`, `_write_checkpoint` / `recover_from_checkpoint`):
+   *   1. alla partenza in sottofondo il giornale riceve `talos.sfondo-impronta` (PID, gruppo POSIX, impronta d'avvio del processo, e chi
+   *      lo segue: il PID e l'impronta di QUESTO server). Il «registro» è il giornale stesso: una riga chiusa (`talos.processo-sfondo`,
+   *      `talos.processo-tolto`, `talos.sfondo-perso`) ne esce per costruzione. ⛔ Su Windows anche l'ALBERO (`membri`): misurato il
+   *      17/10 (bugfixer, tre prove su tre), morto il server muore anche la SHELL che il kernel conosce, e il comando vero resta vivo
+   *      col padre morto — la sola shell non si ritroverebbe mai (`impronta-processo.mjs`);
+   *   2. al ripristino, per ogni impronta aperta: PID vivo E impronta uguale ⇒ ADOTTATO (`talos.sfondo-adottato`, e torna fermabile con
+   *      «Ferma»: SIGTERM al gruppo e SIGKILL dopo la grazia, su Windows `taskkill /T /F`). PID morto ⇒ la riga esce dal registro
+   *      (`talos.sfondo-perso`, senza nessuna lettura: un `kill(pid, 0)`). PID vivo con un'impronta DIVERSA ⇒ è un altro processo:
+   *      non si tocca, e la riga esce dal registro. Impronta che non si legge ⇒ non si tocca, e la riga resta com'era.
+   *   ⛔ Più stretto di Hermes in un punto, per decisione dell'owner (brief del 17/10): Hermes adotta anche quando l'ora d'avvio non si
+   *     legge (`_detached_host_fate`: «not proof the PID was reused»); qui no — un processo che non si sa riconoscere non si ferma.
+   *   ⭐ Più di Hermes in un altro: l'archivio è CONDIVISO fra due processi vivi (il 4174 e l'app, l'affitto del 09/10). Se chi lo segue
+   *     (l'ultimo che l'ha lanciato o adottato) è ancora vivo con la sua impronta, nessun altro lo adotta: due «padroni» scriverebbero
+   *     due uscite sullo stesso giornale.
+   * ⛔ Non coperti, e detti: WSL lanciato da Windows (lì il PID è quello di `wsl.exe`, il comando ha un marcatore e non un PID), il
+   *   telefono via adb, e macOS (nessuna impronta ⇒ nessuna adozione). Il RISVEGLIO della chat no: un ripreso che finisce da solo non
+   *   ha un codice d'uscita raccolto, e chiude la riga senza svegliare il modello (Hermes: «A completion is not queued here: recovery
+   *   has no waitable handle»).
+   */
+  const ospite = {
+    piattaforma: processiOspite?.piattaforma ?? process.platform,
+    pidOspite: processiOspite?.pidOspite ?? process.pid,
+    leggiImpronte: processiOspite?.leggiImpronte ?? ((pids) => leggiImpronteReale(pids)),
+    leggiAlbero: processiOspite?.leggiAlbero ?? ((radice, opzioni) => leggiAlberoReale(radice, opzioni)),
+    esiste: processiOspite?.esiste ?? ((pid) => esisteProcessoReale(pid)),
+    gruppoEsiste: processiOspite?.gruppoEsiste ?? ((gruppo) => esisteGruppoReale(gruppo)),
+    segnale: processiOspite?.segnale ?? ((bersaglio, nome, { gruppo = false } = {}) => segnalaProcesso(bersaglio, nome, { gruppo })),
+    fermaAlbero: processiOspite?.fermaAlbero ?? ((pid) => fermaAlberoWindows(pid)),
+    ogniMs: processiOspite?.ogniMs ?? 5_000,
+    graziaMs: processiOspite?.graziaMs ?? 2_000,
+    attendi: processiOspite?.attendi ?? ((ms) => new Promise((ok) => { const t = setTimeout(ok, ms); t.unref?.(); })),
+  };
+  const win = ospite.piattaforma === 'win32';
+  let improntaOspite; // undefined = non ancora letta; null = non si legge
+  let adozioneSfondi = null;
+  let sorveglianzaAdottati = null;
+  const chiSegueOra = () => ({ pid: ospite.pidOspite, impronta: improntaOspite ?? null });
+  const membriValidi = (membri) => (Array.isArray(membri) ? membri : [])
+    .filter((m) => Number.isSafeInteger(m?.pid) && m.pid > 0 && typeof m.impronta === 'string' && m.impronta !== '')
+    .map((m) => ({ pid: m.pid, impronta: m.impronta }));
+
+  function registraImprontaSfondo(voce, toolCallId) {
+    const ingresso = voce.comandiFermabili?.get(toolCallId);
+    if (!ingresso || ingresso.adottato) return;
+    let pid = null;
+    try { pid = ingresso.pid?.() ?? null; } catch { pid = null; }
+    if (!Number.isSafeInteger(pid) || pid <= 0) return; // WSL (un marcatore, non un PID), il telefono via adb, chi non lo dice
+    const sessionId = voce.sessionId;
+    void (async () => {
+      let letto;
+      try { letto = await ospite.leggiAlbero(pid, { conImpronteDi: improntaOspite === undefined ? [ospite.pidOspite] : [] }); } catch { return; }
+      if (improntaOspite === undefined && letto?.altri) improntaOspite = letto.altri.get(ospite.pidOspite)?.impronta ?? null;
+      const membri = membriValidi(letto?.membri);
+      const ora = sessioni.get(sessionId);
+      if (!membri.length || !ora || chiuso) return;
+      if (ora.comandiFermabili?.get(toolCallId) !== ingresso) return; // già uscito: non c'è niente da riprendere
+      /* il gruppo solo se il comando lo GUIDA (`setsid` alla partenza, `opzioniGruppoDelComando`): un comando rimasto nel gruppo
+         dell'host, colpito per gruppo dopo la morte dell'host, colpirebbe altri processi (il terminale che l'aveva lanciato) */
+      const gruppo = !win && letto.gruppo === pid ? pid : null;
+      void broadcast(ora, { type: 'CUSTOM', name: EVENTO_SFONDO_IMPRONTA, value: {
+        toolCallId, pid, gruppo, impronta: membri.find((m) => m.pid === pid)?.impronta ?? null, ...(win ? { membri } : {}), ospite: chiSegueOra() } }, { durable: true });
+    })();
+  }
+
+  /** Le impronte ancora aperte di una sessione: lanciate in sottofondo, mai chiuse. Ogni riga porta i suoi membri (POSIX: uno). */
+  function improntePendenti(voce) {
+    const impronte = new Map();
+    const adozioni = new Map();
+    const chiusi = new Set();
+    for (const e of voce?.eventi ?? []) {
+      if (e?.type !== 'CUSTOM' || typeof e.value?.toolCallId !== 'string') continue;
+      if (e.name === EVENTO_SFONDO_IMPRONTA) impronte.set(e.value.toolCallId, e.value);
+      else if (e.name === EVENTO_SFONDO_ADOTTATO) adozioni.set(e.value.toolCallId, e.value);
+      else if (e.name === 'talos.processo-sfondo' || e.name === 'talos.processo-tolto' || e.name === EVENTO_SFONDO_PERSO) chiusi.add(e.value.toolCallId);
+    }
+    const righe = [];
+    for (const [toolCallId, v] of impronte) {
+      if (chiusi.has(toolCallId)) continue;
+      const membri = membriValidi(Array.isArray(v.membri) ? v.membri : [{ pid: v.pid, impronta: v.impronta }]);
+      if (!membri.length) continue;
+      righe.push({ toolCallId, membri, gruppo: Number.isSafeInteger(v.gruppo) && v.gruppo === v.pid && membri.some((m) => m.pid === v.gruppo) ? v.gruppo : null,
+        seguitoDa: adozioni.get(toolCallId)?.ospite ?? v.ospite ?? null });
+    }
+    return righe;
+  }
+
+  /** Vivo? POSIX: il gruppo (o il processo, se non guida un gruppo); Windows: almeno un membro. */
+  const vivoAdottato = (a) => (!win && a.gruppo ? ospite.gruppoEsiste(a.gruppo) : a.membri.some((m) => ospite.esiste(m.pid)));
+
+  /** I membri ancora vivi E ancora loro, e se fra quelli vivi ce n'è uno che non si è potuto leggere. */
+  function riconosci(membri, impronte) {
+    const vivi = membri.filter((m) => ospite.esiste(m.pid));
+    const suoi = vivi.filter((m) => impronte.get(m.pid)?.impronta === m.impronta);
+    const illeggibili = vivi.some((m) => !impronte.get(m.pid));
+    return { vivi, suoi, illeggibili };
+  }
+
+  /** Il comando di una riga, dagli argomenti sul giornale (per la nota «fermato da te»); `null` se non si ricostruisce. */
+  function comandoDellaRiga(voce, toolCallId) {
+    let testo = '';
+    for (const e of voce?.eventi ?? []) if (e?.type === 'ToolCallArgs' && e.toolCallId === toolCallId) testo += String(e.delta ?? '');
+    try { const a = JSON.parse(testo); const c = a?.comando ?? a?.command; return typeof c === 'string' && c.trim() ? c : null; } catch { return null; }
+  }
+
+  /** Un ripreso è uscito (da solo, o fermato): esce dai fermabili e la riga si chiude. Senza un codice raccolto: «esito non noto». */
+  function chiudiAdottato(sessionId, toolCallId, { segnale = null } = {}) {
+    const voce = sessioni.get(sessionId);
+    if (!voce || chiuso) return;
+    const ingresso = voce.comandiFermabili?.get(toolCallId);
+    if (!ingresso?.adottato) return;
+    voce.comandiFermabili.delete(toolCallId);
+    if (voce.fermatiDallaPersona?.has(toolCallId)) {
+      segnalaUscitaSfondoIn(voce)({ toolCallId, segnale, comando: comandoDellaRiga(voce, toolCallId) }); // la nota «fermato da te», come un vivo
+      return;
+    }
+    void broadcast(voce, { type: 'CUSTOM', name: 'talos.processo-sfondo',
+      value: { toolCallId, esito: 'terminato', codice: null, segnale: null, finitoAlle: clock().toISOString(), esitoIgnoto: true } }, { durable: true });
+  }
+
+  /*
+   * «Ferma» su un ripreso: l'identità si riprova SUBITO prima del colpo (Hermes `_terminate_host_pid`, `process_registry_termination.py:
+   *   45-49`: «a mismatch or dead PID means the number was recycled onto a stranger and we refuse to touch it»). POSIX: SIGTERM al
+   *   gruppo, SIGKILL dopo la grazia (come lo Stop di sempre, `uccidiAlberoDelProcesso`); Windows: `taskkill /T /F` su ogni membro
+   *   ancora suo.
+   */
+  async function fermaAdottato(sessionId, toolCallId) {
+    const a = sessioni.get(sessionId)?.comandiFermabili?.get(toolCallId)?.adottato;
+    if (!a || a.fermando) return;
+    a.fermando = true;
+    try {
+      let impronte = new Map();
+      try { impronte = await ospite.leggiImpronte(a.membri.map((m) => m.pid)); } catch { impronte = new Map(); }
+      const { vivi, suoi, illeggibili } = riconosci(a.membri, impronte);
+      if (!suoi.length) {
+        if (!vivi.length || !illeggibili) { sessioni.get(sessionId)?.fermatiDallaPersona?.delete(toolCallId); chiudiAdottato(sessionId, toolCallId); } // non è più lui: non si tocca
+        return; // vivo ma l'impronta non si legge: non si tocca, e resta fermabile
+      }
+      let segnale = null;
+      if (win) { for (const m of suoi) await ospite.fermaAlbero(m.pid); }
+      else {
+        const capo = suoi[0];
+        const colpisci = (nome) => (a.gruppo ? ospite.segnale(a.gruppo, nome, { gruppo: true }) : ospite.segnale(capo.pid, nome));
+        colpisci('SIGTERM'); segnale = 'SIGTERM';
+        for (let atteso = 0; atteso < ospite.graziaMs && vivoAdottato(a); atteso += 100) await ospite.attendi(100);
+        if (vivoAdottato(a)) { colpisci('SIGKILL'); segnale = 'SIGKILL'; }
+      }
+      a.membri = suoi; // un membro che ha cambiato padrone non tiene viva la riga: da qui si aspetta solo chi era ancora suo
+      for (let i = 0; i < 50 && vivoAdottato(a); i += 1) await ospite.attendi(100);
+      if (!vivoAdottato(a)) chiudiAdottato(sessionId, toolCallId, { segnale });
+    } finally { a.fermando = false; }
+  }
+
+  function avviaSorveglianzaAdottati() {
+    if (sorveglianzaAdottati || chiuso) return;
+    sorveglianzaAdottati = setInterval(() => {
+      let restano = 0;
+      for (const [sessionId, voce] of sessioni) {
+        for (const [toolCallId, ingresso] of voce.comandiFermabili ?? []) {
+          const a = ingresso?.adottato;
+          if (!a) continue;
+          restano += 1;
+          if (!a.fermando && !vivoAdottato(a)) chiudiAdottato(sessionId, toolCallId);
+        }
+      }
+      if (!restano || chiuso) { clearInterval(sorveglianzaAdottati); sorveglianzaAdottati = null; }
+    }, ospite.ogniMs);
+    sorveglianzaAdottati.unref?.();
+  }
+
+  /** Al ripristino: riprende i comandi in sottofondo ancora vivi e ancora loro. ⇒ `{ adottati, usciti, riusati, intatti }`. */
+  async function adottaSfondiOrfani(voci) {
+    const esito = { adottati: 0, usciti: 0, riusati: 0, intatti: 0 };
+    const lavori = [];
+    for (const voce of voci) for (const c of improntePendenti(voce)) lavori.push({ sessionId: voce.sessionId, ...c });
+    if (!lavori.length) return esito;
+    const daLeggere = new Set();
+    for (const l of lavori) {
+      const vivi = l.membri.filter((m) => ospite.esiste(m.pid));
+      for (const m of vivi) daLeggere.add(m.pid);
+      const s = l.seguitoDa;
+      if (vivi.length && Number.isSafeInteger(s?.pid) && s.pid !== ospite.pidOspite && ospite.esiste(s.pid)) daLeggere.add(s.pid);
+    }
+    if (daLeggere.size && improntaOspite === undefined) daLeggere.add(ospite.pidOspite);
+    let impronte = new Map();
+    if (daLeggere.size) { try { impronte = await ospite.leggiImpronte([...daLeggere]); } catch { impronte = new Map(); } }
+    if (daLeggere.has(ospite.pidOspite) && improntaOspite === undefined) improntaOspite = impronte.get(ospite.pidOspite)?.impronta ?? null;
+    for (const l of lavori) {
+      const voce = sessioni.get(l.sessionId);
+      if (!voce || chiuso) continue;
+      if (voce.comandiFermabili?.has(l.toolCallId)) { esito.intatti += 1; continue; } // già seguito qui
+      const perso = (motivo) => { void broadcast(voce, { type: 'CUSTOM', name: EVENTO_SFONDO_PERSO, value: { toolCallId: l.toolCallId, motivo } }, { durable: true }); };
+      const { vivi, suoi, illeggibili } = riconosci(l.membri, impronte);
+      if (!vivi.length) { perso('uscito'); esito.usciti += 1; continue; }
+      const s = l.seguitoDa;
+      if (Number.isSafeInteger(s?.pid) && s.pid !== ospite.pidOspite && typeof s.impronta === 'string' && impronte.get(s.pid)?.impronta === s.impronta) { esito.intatti += 1; continue; } // un altro server vivo lo segue
+      if (!suoi.length) {
+        if (illeggibili) { esito.intatti += 1; continue; } // l'impronta non si legge: non si tocca
+        perso('riusato'); esito.riusati += 1; continue; // vivi, ma altri processi con gli stessi numeri
+      }
+      const adottato = { membri: suoi, gruppo: !win && l.gruppo && suoi.some((m) => m.pid === l.gruppo) ? l.gruppo : null, fermando: false };
+      (voce.comandiFermabili ??= new Map()).set(l.toolCallId, {
+        ferma: () => { void fermaAdottato(l.sessionId, l.toolCallId); }, sfonda: null, pid: () => suoi[0].pid, wsl: () => null, segnaleDelGiro: null, adottato,
+      });
+      void broadcast(voce, { type: 'CUSTOM', name: EVENTO_SFONDO_ADOTTATO, value: { toolCallId: l.toolCallId, pid: suoi[0].pid, membri: suoi.map((m) => m.pid), ospite: chiSegueOra() } }, { durable: true });
+      esito.adottati += 1;
+    }
+    if (esito.adottati) avviaSorveglianzaAdottati();
+    return esito;
   }
 
   function consegnaEvento(voce, evento, { durable = false, durableSync = false } = {}) {
@@ -7915,6 +8158,7 @@ export function createSessionRegistry({
         return { dove: voce.doveGiranoIComandi ?? null, revisione: voce.revisioneAmbienteComandi ?? 0 };
       },
       // F3-32: un passo di Workflow non propone workflow, non presenta piani, non delega e non chiede (decisione owner 12).
+      attrezziDifferiti,
       strumentiEstesi: strumentiEstesi.filter(nome => (nome!=='process_output' || typeof processOutputStoreFn==='function')
         && (!voce.legameWorkflow || !ATTREZZI_NEGATI_AI_PASSI.has(nome))),
       ...(typeof ricercaWebFn === 'function' ? ricercaWebFn() : { ricercaWeb }), firma, immagine, persistGeneratedImageFn, removeGeneratedImageFn,
@@ -8020,7 +8264,8 @@ export function createSessionRegistry({
         if (avvio === 'da-solo') {
           prenotata = prenotaAvvioDaSolo(voce);
           if (!prenotata) {
-            return { esito: 'rifiutato', motivo: nessunoDavanti(voce)
+            /* R-03: con la persona davanti la stessa chiamata riesce (le si chiede la carta); senza nessuno, no */
+            return { esito: 'rifiutato', codice: 'DELEGATION_SOLO_LIMIT', ritentabile: !nessunoDavanti(voce), motivo: nessunoDavanti(voce)
               ? 'no one can answer here (an automation or a Workflow step), and this run has already started the most agents allowed on its own.'
               : `this conversation has already started the most agents allowed on its own (${TETTO_AVVII_DA_SOLO}). Call delega_sottotask again to ask the person to approve this one.` };
           }
@@ -8034,7 +8279,7 @@ export function createSessionRegistry({
           let modelloChiesto = null;
           if (modello !== undefined && modello !== null) {
             const verifica = await verificaModelloChiesto(voce, modello);
-            if (!verifica.ok) { rendi(); return { esito: 'rifiutato', motivo: verifica.motivo }; }
+            if (!verifica.ok) { rendi(); return { esito: 'rifiutato', codice: 'DELEGATION_MODEL_NOT_AVAILABLE', ritentabile: false, motivo: verifica.motivo }; }
             modelloChiesto = verifica.modello;
           }
           risultato = await subagentOrchestrator.delegaSottoTask({
@@ -9103,6 +9348,20 @@ export function createSessionRegistry({
       fermaWatcherSessione(vecchia);
       if (nuova.ascoltatori.size > 0) attivaWatcherSessione(nuova, nuova.cartella);
       if (vecchia.casaLinux && !nuova.casaLinux) nuova.casaLinux = vecchia.casaLinux; // risorsa di processo: resta di chi l'ha aperta
+      /*
+       * ⛔ Owner 17/10/2026 sera («Sì, nello stesso ramo»): i comandi FERMABILI sono di questo processo, come la casa Linux — i vivi
+       *   lanciati qui (un `!` della persona, uno sfondato del modello) e i ripresi dopo un riavvio. La voce nuova nasceva senza: uno
+       *   sfondato vivo rispondeva «non in corso» al suo «Ferma». Passa la STESSA mappa (e lo stesso insieme dei «fermati da te»):
+       *   lo sgancio di chi l'ha registrato tiene la voce vecchia, e deve togliere dalla mappa che la voce nuova legge.
+       */
+      if (vecchia.comandiFermabili?.size) {
+        for (const [toolCallId, ingresso] of nuova.comandiFermabili ?? []) if (!vecchia.comandiFermabili.has(toolCallId)) vecchia.comandiFermabili.set(toolCallId, ingresso);
+        nuova.comandiFermabili = vecchia.comandiFermabili;
+      }
+      if (vecchia.fermatiDallaPersona?.size) {
+        for (const toolCallId of nuova.fermatiDallaPersona ?? []) vecchia.fermatiDallaPersona.add(toolCallId);
+        nuova.fermatiDallaPersona = vecchia.fermatiDallaPersona;
+      }
       /* review Y1: le voci di coda che aspettavano l'affitto non sono sul disco — passano alla voce nuova (per id, senza doppioni) */
       if (vecchia.codaAspettaAffitto) {
         const gia = new Set(nuova.codaMessaggi.map((item) => voceDiCoda(item).id));
@@ -9809,6 +10068,10 @@ export function createSessionRegistry({
       }
       ricostruisciCollisioniDiScrittura(sessioni, scrittureDelleFiglie);
       numeraDoppioniVecchiASchermo(); // owner 16/10 sera: i doppioni vecchi, solo a schermo
+      /* Owner 17/10/2026 («Adottarli come Hermes, con "Ferma"»): i comandi in sottofondo sopravvissuti al server di prima. Non si
+         aspetta: su Windows l'impronta costa un PowerShell (~1 s), e il server deve accettare richieste subito. Una ricarica
+         dell'affitto no: lì i ripresi passano dalla voce vecchia alla nuova (`ricaricaDalDisco`). */
+      if (!perRicarica && ripristinateOra.length) adozioneSfondi = adottaSfondiOrfani(ripristinateOra).catch(() => null);
       /*
        * F3 (24/09/2026): le righe che il ripristino scrive (lapidi delle domande orfane, redirect falliti, la coda in
        * pausa, l'annuncio della riparazione) prima erano sincrone; con la politica `busy` possono finire IN CODA. Qui
@@ -11337,6 +11600,13 @@ export function createSessionRegistry({
         } catch {
           fidato = false;
         }
+        /* 17/10/2026 (owner: «la fiducia vecchia non vale più, e la carta lo dice»): una fiducia CADUTA porta la frase del perché —
+           gli script ora contati, o un contenuto cambiato. Il caso normale (mai approvato) resta com'era, senza campi in più. */
+        if (!fidato) {
+          let stato = null;
+          try { stato = await statoTrustHookFn({ cartellaTrust: cartellaTrustHook, hookId: hook.id, hash: hook.hash, comando: hook.comando, cartella: voce.cartella }); } catch { stato = null; }
+          if (stato?.frase) return { id: hook.id, eventi: hook.eventi, fidato, motivo: stato.motivo, frase: stato.frase, fraseChiave: stato.fraseChiave };
+        }
         return { id: hook.id, eventi: hook.eventi, fidato };
       }));
       return { ok: true, hooks: conFiducia, errore: null };
@@ -11511,6 +11781,22 @@ export function createSessionRegistry({
         if (errore instanceof McpRegistryError) return { ok: true, server: null, errore: errore.message };
         throw errore;
       }
+      /*
+       * Owner 17/10/2026 («Avviso in chat + stato in Estensioni»): l'ULTIMO esito d'avvio di ogni server, dagli eventi già
+       *   persistiti (`talos.mcp-avvio`, scritto da agent-service), come fanno i Processi. Vale solo se l'impronta della
+       *   dichiarazione è la stessa: un comando corretto DOPO il fallimento non deve restare «non partito».
+       */
+      const ultimoEsito = new Map();
+      for (const evento of voce.eventi ?? []) {
+        if (evento?.type !== 'CUSTOM' || evento.name !== 'talos.mcp-avvio' || !Array.isArray(evento.value?.esiti)) continue;
+        for (const e of evento.value.esiti) if (typeof e?.serverId === 'string') ultimoEsito.set(e.serverId, e);
+      }
+      const connessioneDi = (s) => {
+        const e = ultimoEsito.get(s.id);
+        if (!e || e.hash !== s.hash || (e.esito !== 'collegato' && e.esito !== 'non-partito')) return null;
+        return { esito: e.esito, ...(e.esito === 'non-partito' ? { motivo: String(e.motivo ?? ''),
+          ...(typeof e.motivoChiave === 'string' ? { motivoChiave: e.motivoChiave, motivoParams: e.motivoParams ?? {} } : {}) } : {}) };
+      };
       const conFiducia = await Promise.all(server.map(async (s) => {
         let fidato = false;
         try {
@@ -11518,7 +11804,13 @@ export function createSessionRegistry({
         } catch {
           fidato = false;
         }
-        return { id: s.id, comando: s.comando, argomenti: s.argomenti, allowlist: s.allowlist, fidato };
+        /* 17/10/2026: come gli hook — una fiducia caduta porta la frase del perché; il caso «mai approvato» resta com'era. */
+        if (!fidato) {
+          let stato = null;
+          try { stato = await statoTrustMcpFn({ cartellaTrust: cartellaTrustMcp, serverId: s.id, hash: s.hash, comando: s.comando, argomenti: s.argomenti, allowlist: s.allowlist }); } catch { stato = null; }
+          if (stato?.frase) return { id: s.id, comando: s.comando, argomenti: s.argomenti, allowlist: s.allowlist, fidato, motivo: stato.motivo, frase: stato.frase, fraseChiave: stato.fraseChiave, connessione: connessioneDi(s) };
+        }
+        return { id: s.id, comando: s.comando, argomenti: s.argomenti, allowlist: s.allowlist, fidato, connessione: connessioneDi(s) };
       }));
       return { ok: true, server: conFiducia, errore: null };
     },
@@ -13083,6 +13375,9 @@ export function createSessionRegistry({
      *   la distro i processi col marcatore. Entrambi `null` per un comando il cui esecutore non l'ha detto (il telefono, l'esecutore
      *   della CLI). Sola lettura. ⇒ `null` se la sessione non c'è.
      */
+    /** Owner 17/10/2026: l'adozione dei comandi in sottofondo del server di prima, partita col ripristino (per le prove e il Doctor). */
+    attendiAdozioneSfondi() { return adozioneSfondi ?? Promise.resolve(null); },
+
     pidDeiComandi(sessionId) {
       const voce = sessioni.get(sessionId);
       if (!voce) return null;
@@ -13563,6 +13858,7 @@ export function createSessionRegistry({
      */
     async chiudi({ attesaMassimaMs = 10_000 } = {}) {
       chiuso = true;
+      if (sorveglianzaAdottati) { clearInterval(sorveglianzaAdottati); sorveglianzaAdottati = null; } // owner 17/10: i ripresi
       togliPredicatoInUso?.(); // l'affitto resta del processo: lo rilascia il battito, o l'uscita
       for (const timer of ritentiCodaAffittata.values()) clearTimeout(timer);
       ritentiCodaAffittata.clear();

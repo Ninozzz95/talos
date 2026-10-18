@@ -24,7 +24,7 @@ import { REGISTRO_FORNITORI } from '../src/provider-registry.mjs';
 import { createSearchSourceStore } from '../src/search-source-store.mjs';
 
 /* K4b (03/10/2026): anche il registro (Capability, motivi delle metriche) e `server.mjs` (Doctor) nominano chiavi `server.…`. */
-const FILE_DEL_SERVER = ['kernel/talosHarness', 'doctor', 'frasi-runtime-owner', 'provider-registry', 'provider-probe', 'search-source-store', 'gh-service', 'session-registry', '../server', 'path-policy', 'provider-auth-cloud', 'acp-agent', 'research-orchestrator', 'research-store', 'session-store', 'research/verification', 'runtime-owner-adapter', 'provider-retry', 'generation-idle', 'openai-compatible-runtime', 'plugin-registry', 'browser-vivo', 'native-provider-adapter', 'workspace-search', 'zai-indirizzo'];
+const FILE_DEL_SERVER = ['kernel/talosHarness', 'doctor', 'frasi-runtime-owner', 'provider-registry', 'provider-probe', 'search-source-store', 'gh-service', 'session-registry', '../server', 'path-policy', 'provider-auth-cloud', 'acp-agent', 'research-orchestrator', 'research-store', 'session-store', 'research/verification', 'runtime-owner-adapter', 'provider-retry', 'generation-idle', 'openai-compatible-runtime', 'plugin-registry', 'browser-vivo', 'native-provider-adapter', 'workspace-search', 'zai-indirizzo', 'difesa-ricerca-programmi', 'mcp-session', 'hook-registry', 'mcp-registry']; // 17/10/2026: le frasi della fiducia caduta per gli script
 const sorgente = (nome) => readFileSync(new URL(`../src/${nome}.mjs`, import.meta.url), 'utf8');
 
 const en = (chiave) => server.en[chiave.replace(/^server\./u, '')];

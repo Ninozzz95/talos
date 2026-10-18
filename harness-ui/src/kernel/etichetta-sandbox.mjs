@@ -52,15 +52,20 @@
  *   (`utente-wsl.mjs`, `NOME_UTENTE`).
  */
 
+/*
+ * ⛔ 17/10/2026 — L'ETICHETTA È IN INGLESE: la legge il MODELLO in ogni esito di shell, e il testo per il modello è inglese (decisione
+ *   owner del 03/10). Prima era italiana. Le sessioni salvate restano italiane per sempre: chi la mostra (`esito-comando.js`,
+ *   `dovEGirato`) legge tutte e due le forme. Il prefisso «Linux in WSL» è lo stesso nelle due lingue, apposta.
+ */
 /** Le spiegazioni, una per ogni livello che il kernel sa dichiarare. */
 const SPIEGAZIONI = Object.freeze({
-    none: 'cmd.exe nativo: stesso utente e stessi privilegi del processo, nessun isolamento',
+    none: 'native cmd.exe: same user and same privileges as the process, no isolation',
     /* Lane mobile, 15/10/2026: sul Pad l'esito diceva «cmd.exe nativo». Fuori da Windows `none` è la shell del sistema
        (`shellDeiComandi`: `/system/bin/sh` su Android); sul telefono con le parole di `doctor.check.shell.device`. */
-    'none:android': "sh di Android: eseguito direttamente sul dispositivo, stesso utente e stessi privilegi dell'app, senza isolamento",
-    'none:posix': 'sh di sistema: stesso utente e stessi privilegi del processo, nessun isolamento',
-    wsl2: 'Linux in WSL; nessun isolamento: i dischi di Windows sono in /mnt con i diritti dell\'utente Windows di TALOS',
-    'adb-shell-on-device': 'shell sul dispositivo collegato, fuori da questa macchina',
+    'none:android': "Android sh: run directly on the device, same user and same privileges as the app, no isolation",
+    'none:posix': 'system sh: same user and same privileges as the process, no isolation',
+    wsl2: 'Linux in WSL; no isolation: the Windows disks are under /mnt with the rights of the Windows user running TALOS',
+    'adb-shell-on-device': 'shell on the connected device, outside this machine',
 });
 
 /**
@@ -73,7 +78,7 @@ const SPIEGAZIONI = Object.freeze({
  */
 export function etichettaSandbox(enforcement, dettagli = null, piattaforma = process.platform) {
     const valore = String(enforcement ?? '').trim();
-    if (!valore) return 'non dichiarato';
+    if (!valore) return 'not declared';
     if (valore === 'wsl2' && dettagli && typeof dettagli === 'object') return `wsl2 (${spiegazioneWsl(dettagli)})`;
     const spiegazione = valore === 'none' && piattaforma !== 'win32'
         ? SPIEGAZIONI[piattaforma === 'android' ? 'none:android' : 'none:posix']
@@ -83,9 +88,9 @@ export function etichettaSandbox(enforcement, dettagli = null, piattaforma = pro
 
 /* F009 — la spiegazione di `wsl2` coi fatti di QUESTO comando: chi ha eseguito, e il disco della cartella. */
 function spiegazioneWsl({ utente = null, disco = null }) {
-    const chi = typeof utente === 'string' && /^[a-z_][a-z0-9_-]{0,31}\$?$/iu.test(utente) ? `come ${utente}` : 'con un utente non verificato';
+    const chi = typeof utente === 'string' && /^[a-z_][a-z0-9_-]{0,31}\$?$/iu.test(utente) ? `as ${utente}` : 'with an unverified user';
     const dove = disco && typeof disco.montaggio === 'string' && /^\/mnt\/[a-z]$/u.test(disco.montaggio)
-        ? `${disco.montaggio} è il disco di Windows con i diritti dell'utente Windows di TALOS${disco.metadata === false ? ', e lì i permessi Linux non valgono' : ''}`
-        : "i dischi di Windows sono in /mnt con i diritti dell'utente Windows di TALOS";
-    return `Linux in WSL ${chi}; nessun isolamento: ${dove}`;
+        ? `${disco.montaggio} is the Windows disk with the rights of the Windows user running TALOS${disco.metadata === false ? ', and Linux permissions do not apply there' : ''}`
+        : 'the Windows disks are under /mnt with the rights of the Windows user running TALOS';
+    return `Linux in WSL ${chi}; no isolation: ${dove}`;
 }

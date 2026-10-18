@@ -44,8 +44,20 @@ function shortenArguments(raw) {
 
 /** The one-line signature of a call: its name and its arguments, at most 150 characters (CliffCompaction). */
 export function toolCallSignature(call) {
-  const name = call?.function?.name ?? 'tool';
-  const args = typeof call?.function?.arguments === 'string' ? call.function.arguments : JSON.stringify(call?.function?.arguments ?? {});
+  let name = call?.function?.name ?? 'tool';
+  let args = typeof call?.function?.arguments === 'string' ? call.function.arguments : JSON.stringify(call?.function?.arguments ?? {});
+  /* C5 (17/10/2026, revisione H del bugfixer): una chiamata passata dal ponte degli attrezzi differiti è `tool_call({name,
+     arguments})`; la firma dice l'attrezzo VERO, come il kernel lo spacchetta (`harness-ui/src/kernel/ponte-attrezzi.mjs`,
+     `chiamataPerChiGuarda`). Una forma diversa resta com'era. */
+  if (name === 'tool_call') {
+    try {
+      const interna = JSON.parse(args);
+      if (interna && typeof interna.name === 'string' && interna.name) {
+        name = interna.name;
+        args = typeof interna.arguments === 'string' ? interna.arguments : JSON.stringify(interna.arguments ?? {});
+      }
+    } catch { /* argomenti che non si leggono: la firma del ponte, com'era */ }
+  }
   return cut(`${name}(${args})`, SIGNATURE_CHARS);
 }
 

@@ -98,6 +98,7 @@ export function bersaglioAttrezzo(nome, argomenti, { corto = false } = {}) {
     case 'web_search': return a.query ? `«${a.query}»` : '';
     case 'naviga': return a.url ? String(a.url) : '';
     case 'delega_sottotask': return a.task ? accorciaTesto(String(a.task), corto ? 40 : 80) : '';
+    case 'automation_create': case 'automation_update': return typeof a.nome === 'string' && a.nome.trim() ? accorciaTesto(a.nome, corto ? 40 : 80) : '';
     default: return '';
   }
 }
@@ -734,22 +735,28 @@ class VistaSegmento {
   }
 
   /* D3 — un errore si legge senza aprire: la voce fallita resta fissata sotto la riga finché il segmento è chiuso. */
+  /* ⛔ 17/10/2026, trovato dal vivo (owner: «niente carta, avviso visibile a te»): un'automazione fatta senza carta in Full access,
+     o un risultato col contenuto sospetto, mettono il segno sulla LORO riga — che sta dentro il segmento chiuso, quindi non si vedeva.
+     Una voce segnata resta fissata come un errore, con l'icona d'avviso e lo stesso segno, finché il segmento è chiuso. */
   aggiornaFissate(coppie = this.vociNormalizzate()) {
-    const fallite = coppie.filter(({ voce }) => voce.tipo === 'tool' && voce.stato === 'fallito');
+    const segno = (riga) => riga.querySelector(':scope > .talos-tool-row__senza-carta, :scope > .talos-tool-row__sospetto');
+    const fallite = coppie.filter(({ riga, voce }) => voce.tipo === 'tool' && (voce.stato === 'fallito' || segno(riga)));
     const mostra = fallite.length > 0 && !this.aperto();
-    const firma = mostra ? fallite.map(({ riga }) => `${riga.querySelector('.tool-note-summary-text')?.textContent}|${riga.querySelector('.talos-tool-row__detail')?.textContent}|${riga.querySelector('.talos-voce__meta')?.textContent}`).join('\n') : '';
+    const firma = mostra ? fallite.map(({ riga }) => `${riga.querySelector('.tool-note-summary-text')?.textContent}|${riga.querySelector('.talos-tool-row__detail')?.textContent}|${riga.querySelector('.talos-voce__meta')?.textContent}|${segno(riga)?.textContent ?? ''}`).join('\n') : '';
     this.fissate.hidden = !mostra;
     if (this.fissate.dataset.firma === firma) return;
     this.fissate.dataset.firma = firma;
     if (!mostra) { this.fissate.replaceChildren(); return; }
-    this.fissate.replaceChildren(...fallite.map(({ riga }) => {
+    this.fissate.replaceChildren(...fallite.map(({ riga, voce }) => {
       const b = el('button', 'talos-activity__fissata');
       b.type = 'button';
+      const avviso = voce.stato !== 'fallito' ? segno(riga) : null;
+      if (avviso) b.dataset.tono = 'avviso';
       b.append(
-        icona('i-x', 'i talos-activity__fissata-icona'),
+        icona(avviso ? 'i-alert' : 'i-x', 'i talos-activity__fissata-icona'),
         el('span', 'talos-voce__verbo', riga.querySelector('.tool-note-summary-text')?.textContent ?? ''),
         el('span', 'talos-voce__oggetto', riga.querySelector('.talos-tool-row__detail')?.textContent ?? ''),
-        el('span', 'talos-voce__meta', riga.querySelector('.talos-voce__meta')?.textContent ?? ''),
+        avviso ? avviso.cloneNode(true) : el('span', 'talos-voce__meta', riga.querySelector('.talos-voce__meta')?.textContent ?? ''),
       );
       b.addEventListener('click', () => this.apriVoce(riga, { fuoco: true }));
       return b;

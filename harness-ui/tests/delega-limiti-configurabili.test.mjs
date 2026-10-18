@@ -31,17 +31,17 @@ test('⛔ SENZA limiti: i tetti e i testi di rifiuto sono quelli di oggi, byte p
   assert.equal(LIMITE_PROFONDITA_DELEGA, 2);
   const troppi = await creaSubagentOrchestrator({ sessioni: conFigli(10), cartellaEsisteFn: () => true, avviaESeguiFn: mai })
     .delegaSottoTask({ sessionPadreId: 'padre-1', task: 'x', cartella: '/x' });
-  assert.deepEqual(troppi, { esito: 'rifiutato', motivo: 'limit of 10 concurrent children reached' });
+  assert.deepEqual(troppi, { esito: 'rifiutato', codice: 'DELEGATION_CHILDREN_LIMIT', ritentabile: true, motivo: 'limit of 10 concurrent children reached' });
   const profondo = await creaSubagentOrchestrator({ sessioni: new Map([['padre-1', vocePadre({ profonditaDelega: 2 })]]), cartellaEsisteFn: () => true, avviaESeguiFn: mai })
     .delegaSottoTask({ sessionPadreId: 'padre-1', task: 'x', cartella: '/x' });
-  assert.deepEqual(profondo, { esito: 'rifiutato', motivo: 'maximum delegation depth reached (limit 2)' });
+  assert.deepEqual(profondo, { esito: 'rifiutato', codice: 'DELEGATION_DEPTH_LIMIT', ritentabile: false, motivo: 'maximum delegation depth reached (limit 2)' });
 });
 
 test('⭐ CON limiti: il tetto delle figlie e quello della profondità sono quelli dati, nei testi e nei conti', async () => {
   const limiti = { figliConcorrenti: 3, profondita: 4 };
   const terza = await creaSubagentOrchestrator({ sessioni: conFigli(3), limiti, cartellaEsisteFn: () => true, avviaESeguiFn: mai })
     .delegaSottoTask({ sessionPadreId: 'padre-1', task: 'x', cartella: '/x' });
-  assert.deepEqual(terza, { esito: 'rifiutato', motivo: 'limit of 3 concurrent children reached' });
+  assert.deepEqual(terza, { esito: 'rifiutato', codice: 'DELEGATION_CHILDREN_LIMIT', ritentabile: true, motivo: 'limit of 3 concurrent children reached' });
   let partita = null;
   creaSubagentOrchestrator({ sessioni: conFigli(2), limiti, cartellaEsisteFn: () => true, avviaESeguiFn: (o) => { partita = o; return { sessionId: 'f' }; } })
     .delegaSottoTask({ sessionPadreId: 'padre-1', task: 'x', cartella: '/x' });
@@ -52,7 +52,7 @@ test('⭐ CON limiti: il tetto delle figlie e quello della profondità sono quel
   assert.equal(profonditaRicevuta, 4, 'esattamente al tetto dato: ammessa');
   const oltre = await creaSubagentOrchestrator({ sessioni: new Map([['padre-1', vocePadre({ profonditaDelega: 4 })]]), limiti, cartellaEsisteFn: () => true, avviaESeguiFn: mai })
     .delegaSottoTask({ sessionPadreId: 'padre-1', task: 'x', cartella: '/x' });
-  assert.deepEqual(oltre, { esito: 'rifiutato', motivo: 'maximum delegation depth reached (limit 4)' });
+  assert.deepEqual(oltre, { esito: 'rifiutato', codice: 'DELEGATION_DEPTH_LIMIT', ritentabile: false, motivo: 'maximum delegation depth reached (limit 4)' });
   let undicesima = null;
   creaSubagentOrchestrator({ sessioni: conFigli(10), limiti: { figliConcorrenti: 12 }, cartellaEsisteFn: () => true, avviaESeguiFn: (o) => { undicesima = o; return { sessionId: 'f' }; } })
     .delegaSottoTask({ sessionPadreId: 'padre-1', task: 'x', cartella: '/x' });
@@ -63,7 +63,7 @@ test('⛔ AL CONTRARIO — un valore che non è un intero positivo non cambia ni
   for (const sbagliato of [0, -1, 1.5, '3', Number.NaN, null, Infinity]) {
     const esito = await creaSubagentOrchestrator({ sessioni: conFigli(10), limiti: { figliConcorrenti: sbagliato, profondita: sbagliato }, cartellaEsisteFn: () => true, avviaESeguiFn: mai })
       .delegaSottoTask({ sessionPadreId: 'padre-1', task: 'x', cartella: '/x' });
-    assert.deepEqual(esito, { esito: 'rifiutato', motivo: 'limit of 10 concurrent children reached' }, String(sbagliato));
+    assert.deepEqual(esito, { esito: 'rifiutato', codice: 'DELEGATION_CHILDREN_LIMIT', ritentabile: true, motivo: 'limit of 10 concurrent children reached' }, String(sbagliato));
   }
 });
 
@@ -130,7 +130,7 @@ test('⭐ REGISTRO — `limitiDelega` e `figlioDefault` arrivano all\'orchestrat
   assert.equal(figlia.input.modello, 'openrouter:figlia', 'il modello di serie delle figlie non arriva dal registro');
   assert.deepEqual(figlia.input.reasoning, { effort: 'low' }, 'lo sforzo di serie delle figlie non arriva dal registro');
   const seconda = await madre.input.onDelega('secondo compito');
-  assert.deepEqual(seconda, { esito: 'rifiutato', motivo: 'limit of 1 concurrent children reached' }, 'il tetto delle figlie non arriva dal registro');
+  assert.deepEqual(seconda, { esito: 'rifiutato', codice: 'DELEGATION_CHILDREN_LIMIT', ritentabile: true, motivo: 'limit of 1 concurrent children reached' }, 'il tetto delle figlie non arriva dal registro');
   figlia.concludi(); madre.concludi(); await prima;
 });
 

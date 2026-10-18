@@ -165,6 +165,9 @@ test('C2B-R-13 — R2, nota 2: due deleghe in parallelo al diciannovesimo avvio 
   assert.deepEqual(esiti, ['avviato', 'rifiutato'], JSON.stringify([a, b]))
   const no = a?.esito === 'rifiutato' ? a : b
   assert.match(no.motivo, /already started the most agents allowed on its own \(20\)/u)
+  // R-03, revisione J: con la persona davanti la stessa chiamata riesce chiedendo la carta, quindi è ritentabile
+  assert.equal(no.codice, 'DELEGATION_SOLO_LIMIT')
+  assert.equal(no.ritentabile, true)
   assert.equal(registry.elenca().filter((s) => s.avvioDelega === 'da-solo').length, 20)
   assert.deepEqual(await input.coordinazioneFn(), { modo: 'chiedi', motivo: 'tetto' })
 })

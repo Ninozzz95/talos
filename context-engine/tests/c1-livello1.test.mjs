@@ -201,3 +201,14 @@ test('C1-L1-Y1-COUNT-FAILS-UNDER: the estimate says «under», the full count is
   assert.equal(b.conteggi.piena, 1, 'the full count was tried');
   assert.ok(preparata.toolOutputsCleared > 0, 'and the light request went out');
 });
+
+/* C5 (17/10/2026, revisione H del bugfixer): una chiamata passata dal ponte degli attrezzi differiti firma col nome VERO. */
+test('C5-PONTE-FIRMA: la firma di una chiamata dal ponte dice l\'attrezzo vero; una forma che non si legge resta com\'era', async () => {
+  const { toolCallSignature } = await import('../src/tool-output-clearing.mjs');
+  assert.equal(toolCallSignature({ function: { name: 'tool_call', arguments: JSON.stringify({ name: 'notes_update', arguments: { id: 'n1', testo: 'x' } }) } }),
+    'notes_update({"id":"n1","testo":"x"})');
+  assert.equal(toolCallSignature({ function: { name: 'tool_call', arguments: JSON.stringify({ name: 'leggi', arguments: '{"percorso":"a.md"}' }) } }), 'leggi({"percorso":"a.md"})');
+  assert.equal(toolCallSignature({ function: { name: 'tool_call', arguments: 'non json' } }), 'tool_call(non json)', 'AL CONTRARIO: illeggibile, com\'era');
+  assert.equal(toolCallSignature({ function: { name: 'tool_call', arguments: '{"x":1}' } }), 'tool_call({"x":1})', 'senza `name`, com\'era');
+  assert.equal(toolCallSignature({ function: { name: 'leggi', arguments: '{"percorso":"b.md"}' } }), 'leggi({"percorso":"b.md"})', 'fuori dal ponte, com\'era');
+});

@@ -523,17 +523,17 @@ export function creaSubagentOrchestrator({
     return new Promise((resolve) => {
       const padre = sessioni.get(sessionPadreId);
       if (!padre) {
-        resolve({ esito: 'rifiutato', motivo: 'the parent session no longer exists' });
+        resolve({ esito: 'rifiutato', codice: 'DELEGATION_PARENT_GONE', ritentabile: false, motivo: 'the parent session no longer exists' });
         return;
       }
       const padreInLettura = padre.permessi === 'Read only' || delegaLimitata(padre.task);
       if (modalita === undefined) modalita = padreInLettura ? 'lettura' : 'modifica';
       if (!['lettura', 'modifica'].includes(modalita)) {
-        resolve({ esito: 'rifiutato', motivo: 'The delegation mode must be read or write.' });
+        resolve({ esito: 'rifiutato', codice: 'DELEGATION_MODE_INVALID', ritentabile: false, motivo: 'The delegation mode must be read or write.' });
         return;
       }
       if (modalita === 'modifica' && padreInLettura) {
-        resolve({ esito: 'rifiutato', motivo: 'The parent session is limited to reading: it cannot delegate changes.' });
+        resolve({ esito: 'rifiutato', codice: 'DELEGATION_PARENT_READ_ONLY', ritentabile: false, motivo: 'The parent session is limited to reading: it cannot delegate changes.' });
         return;
       }
       const taskFiglio = {
@@ -552,7 +552,7 @@ export function creaSubagentOrchestrator({
         ? { ok: true, modello: modelloChiesto } // C2b: chiesto dalla persona, già verificato dal registro
         : modelloPerLaFigliaFn(padre);
       if (modelloScelto?.ok !== true) {
-        resolve({ esito: 'rifiutato', motivo: modelloScelto?.motivo ?? 'it is not known which model to start the sub-session with' });
+        resolve({ esito: 'rifiutato', codice: 'DELEGATION_MODEL_UNKNOWN', ritentabile: false, motivo: modelloScelto?.motivo ?? 'it is not known which model to start the sub-session with' });
         return;
       }
       /*
@@ -578,7 +578,7 @@ export function creaSubagentOrchestrator({
       const dove = proposta ?? padre.cartella;
       const forma = percorsoDellaFigliaUsabile(proposta, padre.cartella);
       if (!forma.ok) {
-        resolve({ esito: 'rifiutato', motivo: forma.motivo });
+        resolve({ esito: 'rifiutato', codice: 'DELEGATION_TASK_INVALID', ritentabile: false, motivo: forma.motivo });
         return;
       }
       if (!cartellaEsisteFn(dove)) {
@@ -594,16 +594,16 @@ export function creaSubagentOrchestrator({
         const invece = madreConsigliabile
           ? ` Omit the folder to work where the one who delegated to you works, or use exactly "${padre.cartella}".`
           : '';
-        resolve({ esito: 'rifiutato', motivo: `the folder ${dove} does not exist on this computer.${invece}` });
+        resolve({ esito: 'rifiutato', codice: 'DELEGATION_FOLDER_MISSING', ritentabile: false, motivo: `the folder ${dove} does not exist on this computer.${invece}` });
         return;
       }
       const profonditaVoluta = (padre.profonditaDelega ?? 0) + 1;
       if (profonditaVoluta > limiteProfondita) {
-        resolve({ esito: 'rifiutato', motivo: `maximum delegation depth reached (limit ${limiteProfondita})` });
+        resolve({ esito: 'rifiutato', codice: 'DELEGATION_DEPTH_LIMIT', ritentabile: false, motivo: `maximum delegation depth reached (limit ${limiteProfondita})` });
         return;
       }
       if (contaFigliAttivi(sessionPadreId) >= limiteFigli) {
-        resolve({ esito: 'rifiutato', motivo: `limit of ${limiteFigli} concurrent children reached` });
+        resolve({ esito: 'rifiutato', codice: 'DELEGATION_CHILDREN_LIMIT', ritentabile: true, motivo: `limit of ${limiteFigli} concurrent children reached` });
         return;
       }
       let figlioId = null;
@@ -743,11 +743,15 @@ export function creaSubagentOrchestrator({
       figlioId = risultatoAvvio?.sessionId ?? null;
       // ⛔ AL CONTRARIO: avviaESeguiFn può rifiutare PRIMA di avviare (es. chiave API non configurata) — mai una Promise appesa in eterno se onConclusioneFn non scatterà mai.
       if (risultatoAvvio?.erroreAvvio) {
-        resolve({ esito: 'rifiutato', motivo: risultatoAvvio.erroreAvvio });
+        /* Revisione J (owner 17/10, «Non ritentabile se è chiave o configurazione»): dietro un avvio rifiutato c'è quasi sempre la
+           chiave mancante o una configurazione non valida (CONFIG_INVALID, MCP_INVALID, PLUGIN_INVALID…), che riprovando non
+           cambiano. Ritentabile resta solo il resto (un archivio occupato, una sessione non pronta), o un rifiuto senza codice. */
+        const daConfigurare = typeof risultatoAvvio.code === 'string' && /_INVALID$/u.test(risultatoAvvio.code);
+        resolve({ esito: 'rifiutato', codice: 'DELEGATION_START_FAILED', ritentabile: !daConfigurare, motivo: risultatoAvvio.erroreAvvio });
         return;
       }
       if (!figlioId) {
-        resolve({ esito: 'rifiutato', motivo: 'the child session did not return a valid identifier' });
+        resolve({ esito: 'rifiutato', codice: 'DELEGATION_START_FAILED', ritentabile: true, motivo: 'the child session did not return a valid identifier' });
         return;
       }
       notificaSenzaBloccare(onFiglioCreatoFn, { parentId: sessionPadreId, childId: figlioId });

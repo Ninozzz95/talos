@@ -92,7 +92,10 @@ test('BC-36/2 — CANCELLO: `passaASessione` legge l\'elenco PRIMA di cadere sul
 
 test('BC-37/6 — CANCELLO: quando la fonte è «ripiego» si CHIEDE, con le due guardie', () => {
   const inizio = APP.indexOf('function passaASessione(');
-  const corpo = APP.slice(inizio, inizio + 14000);
+  /* il corpo INTERO, fino alla funzione successiva dello stesso livello: una finestra fissa di 14.000 caratteri restava a ~120 dalla
+     riga attesa e la spingeva fuori qualunque riga aggiunta più su (17/10/2026, il ricordo degli avvisi MCP) */
+  const prossima = /\n  (?:async )?function /g; prossima.lastIndex = inizio + 1;
+  const corpo = APP.slice(inizio, prossima.exec(APP)?.index);
   assert.ok(/const identita = identitaSessione\(\{ nome, impostazioni: impostazioniSessione, dallElenco, taskId \}\);/.test(corpo),
     'il nome esce da UNA funzione sola, non da un `||` riscritto qui');
   assert.ok(/identita\.fonte === 'ripiego' \|\| identita\.contratto === null/.test(corpo),

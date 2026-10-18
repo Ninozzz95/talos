@@ -701,9 +701,47 @@ test('⭐⭐⭐ elencaServerMcp: torna ogni server con il suo VERO stato di fidu
   assert.equal(esito.ok, true);
   assert.equal(esito.errore, null);
   assert.deepEqual(esito.server, [
-    { id: 'filesystem', comando: 'npx', argomenti: ['-y', 'x'], allowlist: ['read_file'], fidato: true },
-    { id: 'altro', comando: 'npx', argomenti: [], allowlist: ['y'], fidato: false },
+    { id: 'filesystem', comando: 'npx', argomenti: ['-y', 'x'], allowlist: ['read_file'], fidato: true, connessione: null },
+    { id: 'altro', comando: 'npx', argomenti: [], allowlist: ['y'], fidato: false, connessione: null },
   ]);
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+/* Owner 17/10/2026 («Avviso in chat + stato in Estensioni»): l'ultimo esito d'avvio di ogni server, dagli eventi della sessione */
+test('MCP-AVVIO-REG-01 — elencaServerMcp carries the LAST start outcome per server, with its translated reason', async () => {
+  const finta = sessioneControllabile();
+  const serverA = { id: 'filesystem', comando: 'npx', argomenti: [], allowlist: ['read_file'], hash: 'hash-a' };
+  const serverB = { id: 'git', comando: 'uvx', argomenti: [], allowlist: [], hash: 'hash-b' };
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    caricaServerMcpFn: async () => ({ server: [serverA, serverB] }),
+    verificaTrustMcpFn: async () => true,
+  });
+  const { sessionId } = registro.avvia('task-vero');
+  const avvio = (esiti) => finta.emetti({ type: 'CUSTOM', name: 'talos.mcp-avvio', value: { id: `x-${esiti.length}`, esiti } });
+  avvio([{ serverId: 'filesystem', hash: 'hash-a', esito: 'collegato' },
+    { serverId: 'git', hash: 'hash-b', esito: 'non-partito', motivo: '"uvx" was not found on PATH.', motivoChiave: 'server.program.notOnPath', motivoParams: { command: 'uvx', example: '.\\uvx' } }]);
+  /* un avvio dopo: filesystem cade, git resta giù — vale l'ULTIMO */
+  avvio([{ serverId: 'filesystem', hash: 'hash-a', esito: 'non-partito', motivo: 'boom' }]);
+  const esito = await registro.elencaServerMcp(sessionId);
+  const perId = Object.fromEntries(esito.server.map((x) => [x.id, x.connessione]));
+  assert.deepEqual(perId.filesystem, { esito: 'non-partito', motivo: 'boom' });
+  assert.deepEqual(perId.git, { esito: 'non-partito', motivo: '"uvx" was not found on PATH.', motivoChiave: 'server.program.notOnPath', motivoParams: { command: 'uvx', example: '.\\uvx' } });
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('MCP-AVVIO-REG-02 — AL CONTRARIO: an outcome recorded for an OLDER declaration (another hash) is not shown', async () => {
+  const finta = sessioneControllabile();
+  const server = { id: 'git', comando: 'uvx', argomenti: [], allowlist: [], hash: 'hash-nuovo' };
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    caricaServerMcpFn: async () => ({ server: [server] }),
+    verificaTrustMcpFn: async () => true,
+  });
+  const { sessionId } = registro.avvia('task-vero');
+  finta.emetti({ type: 'CUSTOM', name: 'talos.mcp-avvio', value: { id: 'x', esiti: [{ serverId: 'git', hash: 'hash-vecchio', esito: 'non-partito', motivo: 'boom' }] } });
+  const esito = await registro.elencaServerMcp(sessionId);
+  assert.equal(esito.server[0].connessione, null);
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
 });
 

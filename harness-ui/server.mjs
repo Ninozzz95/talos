@@ -635,6 +635,10 @@ async function startServer() {
     /* owner 14/10/2026 (anche per il desktop, confermato in sessione): una domanda SCADUTA non ferma il giro; il modello riceve
        «nessuna risposta» e prosegue col suo giudizio, come Codex, Hermes e zcode (l'interruttore è della CLI, `110714a01`). */
     domandaScadutaFerma: false,
+    /* C5 attrezzi differiti (owner 18/10/2026, «Acceso nella 0.1.33», dopo l'A/B del banco C5): sul desktop il ponte è ACCESO di
+       serie — prima chiamata −50% sul codice (56/60 = 56/60) e −49% sulle sezioni (27/30 = 27/30), circa due giri in più sulle
+       sezioni. Il registro resta spento di serie per chi lo importa (la CLI decide da sé). `TALOS_ATTREZZI_DIFFERITI=0` lo spegne. */
+    attrezziDifferiti: process.env.TALOS_ATTREZZI_DIFFERITI !== '0',
     ...(impostazioniContesto ? { motoreContestoPerNuoveFn: () => impostazioniContesto.motorePerUnaConversazioneNuova() } : {}),
     contextHooksFn: motoreContestoAttivo ? input => contextRuntime?.service.createKernelHooks(input) : undefined,
     // C1 review Y1: lo stesso criterio di `politicaAbilitazione`/`enabledSessionIds` qui sotto, ma sincrono, PRIMA dei ganci

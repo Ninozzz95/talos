@@ -52,7 +52,7 @@ test('SEG-DOC-RI-04 — un collegamento SIMBOLICO col nome innocuo verso il .env
   assert.equal(readFileSync(join(cartella, '.env'), 'utf8'), segreto, `il .env è cambiato attraverso il collegamento: ${JSON.stringify(esito)?.slice(0, 160)}`);
 });
 
-test('SEG-DOC-RI-05 — un collegamento FISICO (hard link) col nome innocuo verso il .env: accodare non tocca il segreto', { todo: 'preesistente, fuori da questo ramo (riverifica del bugfixer 16/10): un hard link scavalca ogni classe di segreto — leggi, scrivi, file_edit e la shell compresi; la cura (dev/ino per i file con nlink > 1) è in coda nella tabella di marcia' }, async (t) => {
+test('SEG-DOC-RI-05 — un collegamento FISICO (hard link) col nome innocuo verso il .env: accodare non tocca il segreto [CURATO 16/10 notte, owner «Cartella + radice + casa»]', async (t) => {
   const segreto = 'API_KEY=sk-vero\n';
   const { cartella, esito } = await documento(t, { format: 'md', title: 'appunti', body: 'riga', mode: 'append' }, {
     prepara: (c) => { writeFileSync(join(c, '.env'), segreto); linkSync(join(c, '.env'), join(c, 'appunti.md')); },

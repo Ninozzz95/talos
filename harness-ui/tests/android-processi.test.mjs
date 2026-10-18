@@ -33,14 +33,14 @@ test('AND-01 — su Android CPU e memoria si leggono da /proc come su Linux (`me
 });
 
 test('AND-02 — l\'etichetta della sandbox dice la shell vera: cmd.exe solo su Windows, sh di Android sul telefono', () => {
-  assert.match(etichettaSandbox('none', null, 'win32'), /^none \(cmd\.exe nativo: stesso utente e stessi privilegi del processo, nessun isolamento\)$/u);
-  assert.equal(etichettaSandbox('none', null, 'android'), 'none (sh di Android: eseguito direttamente sul dispositivo, stesso utente e stessi privilegi dell\'app, senza isolamento)');
-  assert.equal(etichettaSandbox('none', null, 'linux'), 'none (sh di sistema: stesso utente e stessi privilegi del processo, nessun isolamento)');
+  assert.match(etichettaSandbox('none', null, 'win32'), /^none \(native cmd\.exe: same user and same privileges as the process, no isolation\)$/u);
+  assert.equal(etichettaSandbox('none', null, 'android'), 'none (Android sh: run directly on the device, same user and same privileges as the app, no isolation)');
+  assert.equal(etichettaSandbox('none', null, 'linux'), 'none (system sh: same user and same privileges as the process, no isolation)');
   assert.doesNotMatch(etichettaSandbox('none', null, 'darwin'), /cmd\.exe/u);
   // i lettori si fermano alla quadra: dentro non ce n'è mai una
   for (const p of ['win32', 'android', 'linux', 'darwin']) assert.doesNotMatch(etichettaSandbox('none', null, p), /\]/u);
   // gli altri valori non cambiano
-  assert.equal(etichettaSandbox('adb-shell-on-device', null, 'android'), 'adb-shell-on-device (shell sul dispositivo collegato, fuori da questa macchina)');
+  assert.equal(etichettaSandbox('adb-shell-on-device', null, 'android'), 'adb-shell-on-device (shell on the connected device, outside this machine)');
 });
 
 test('AND-03 — fuori da Windows lo Stop colpisce il GRUPPO del comando, poi lo uccide dopo la grazia; senza gruppo, la shell', () => {

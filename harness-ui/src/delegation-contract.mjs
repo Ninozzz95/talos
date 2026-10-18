@@ -7,6 +7,7 @@ const LETTURE = new Set([
   'notes_find', 'notes_read', 'tasks_find', // C5: *_find accorpa l'elenco e la ricerca della sezione
   'memory_find', 'research_find', 'research_read',
   'conversation_search', 'ask_parent', 'answer_parent_question',
+  'tool_search', 'tool_describe', // C5 attrezzi differiti: il catalogo si legge; `tool_call` si giudica sull'attrezzo vero
 ]);
 
 /** Missing metadata is legacy; present but invalid metadata fails closed. */

@@ -1,10 +1,20 @@
 import { t, tn } from './lingua.js';
 import { testoDelCampo } from './testo-server.js'; // K4b: la frase del server nella lingua dell'interfaccia
+import { motivoMcp } from './avviso-mcp.js'; // owner 17/10/2026: il motivo di un server MCP che non parte, come in chat
 /** Inventari per progetto: forma canonica, fiducia distinta da esecuzione. Ricerca 05/09/2026 nel ledger B4.2. */
 const EVENTI={get pre_tool_call(){return t('modelli.extensions.beforeTool');},get post_tool_call(){return t('modelli.extensions.afterTool');},get session_start(){return t('modelli.extensions.sessionStart');},get session_end(){return t('modelli.extensions.sessionEnd');}};
 const ORIGINI={skills:'.harness-ui-skills/',mcp:'.harness-ui-mcp.json',plugins:'.harness-ui-plugins/',hooks:'.harness-ui-hooks.json'};
 const el=(doc,tag,classe,testo)=>{const n=doc.createElement(tag);if(classe)n.className=classe;if(testo!==undefined)n.textContent=testo;return n;};
 const eventi=xs=>(xs||[]).map(e=>EVENTI[e]||e).join(' · ');
+/*
+ * Owner 17/10/2026 («Avviso in chat + stato in Estensioni»): l'ultimo esito d'avvio del server (`connessione`, dal registro, solo se la
+ * dichiarazione non è cambiata dopo). Il motivo arriva con la sua chiave (`motivoChiave`) e si dice nella lingua dell'interfaccia.
+ */
+function connessioneMcp(c){
+ if(c?.esito==='collegato')return t('modelli.extensions.connectionStarted');
+ if(c?.esito==='non-partito')return t('modelli.extensions.connectionFailed',{motivo:motivoMcp(c)});
+ return t('modelli.extensions.connectionNotYet');
+}
 export function datiEstensione(tipo,v){
  const skill=tipo==='skills',stato=skill?t('modelli.extensions.available'):v.fidato===true?t('modelli.extensions.trusted'):v.fidato===false?t('modelli.extensions.needsTrust'):t('modelli.extensions.trustUnobserved');
  /*
@@ -18,10 +28,11 @@ export function datiEstensione(tipo,v){
   * ⛔ Se la frase non c'è non si inventa: il pannello resta com'era, senza una riga vuota.
   */
  const r={id:v.id,titolo:v.name||v.nome||v.id,descrizione:v.description||v.descrizione||(tipo==='mcp'?t('modelli.extensions.mcpDeclared'):eventi(v.eventi)),stato,fidabile:!skill&&v.fidato===false,frase:typeof v.frase==='string'&&v.frase.trim()?String(testoDelCampo(v,'frase')).trim():null,origine:ORIGINI[tipo]||t('modelli.extensions.originUnobserved'),righe:[],avvisi:Array.isArray(v.avvisi)?v.avvisi:[]};
- if(tipo==='mcp')r.righe=[[t('modelli.extensions.command'),v.comando],[t('modelli.extensions.arguments'),v.argomenti?.length?v.argomenti.join(' · '):t('modelli.extensions.none')],[t('modelli.extensions.allowedTools'),v.allowlist?.length?v.allowlist.join(' · '):t('modelli.extensions.unobserved')],[t('modelli.extensions.connection'),t('modelli.extensions.connectionUnobserved')]];
+ if(tipo==='mcp')r.righe=[[t('modelli.extensions.command'),v.comando],[t('modelli.extensions.arguments'),v.argomenti?.length?v.argomenti.join(' · '):t('modelli.extensions.none')],[t('modelli.extensions.allowedTools'),v.allowlist?.length?v.allowlist.join(' · '):t('modelli.extensions.unobserved')],[t('modelli.extensions.connection'),connessioneMcp(v.connessione),v.connessione?.esito==='non-partito'?'frase':'']];
  if(tipo==='plugins'){r.righe=[[t('modelli.extensions.tools'),String(v.tools?.length??0)],[t('modelli.extensions.hook'),String(v.hooks?.length??0)]];for(const strumento of v.tools||[])r.righe.push([strumento.nome,strumento.descrizione+' · '+strumento.comando]);for(const h of v.hooks||[])r.righe.push([h.id,eventi(h.eventi)+' · '+h.comando]);}
  if(tipo==='hooks')r.righe=[[t('modelli.extensions.when'),eventi(v.eventi)],[t('modelli.extensions.command'),t('modelli.extensions.commandHidden')]];
  if(skill)r.righe=[[t('modelli.extensions.loading'),t('modelli.extensions.onRequest')],[t('modelli.extensions.fullInstructions'),t('modelli.extensions.instructionsFile')]];
+ if(tipo==='mcp'&&v.connessione?.esito==='non-partito'){r.stato=t('modelli.extensions.notStarted');r.attenzione=true;}
  return r;
 }
 export function filtraEstensioni(tipo,voci,query=''){const q=String(query).trim().toLocaleLowerCase('it');return voci.filter(v=>!q||JSON.stringify(datiEstensione(tipo,v)).toLocaleLowerCase('it').includes(q));}
@@ -29,7 +40,7 @@ export function creaExtensionRow(tipo,v,{document:doc=globalThis.document,selezi
  const d=datiEstensione(tipo,v),r=el(doc,'button','talos-list-row');r.type='button';r.dataset.extId=d.id;r.setAttribute('role','option');r.setAttribute('aria-selected',String(selezionata));r.tabIndex=selezionata?0:-1;
  const i=el(doc,'span','talos-list-row__icon'),svg=doc.createElementNS('http://www.w3.org/2000/svg','svg'),u=doc.createElementNS('http://www.w3.org/2000/svg','use');svg.setAttribute('class','i');svg.setAttribute('aria-hidden','true');u.setAttribute('href',tipo==='mcp'?'#i-globe':'#i-bolt');svg.append(u);i.append(svg);
  const testo=el(doc,'span','talos-list-row__text');testo.append(el(doc,'span','talos-list-row__title',d.titolo),el(doc,'span','talos-list-row__sub',d.descrizione));
- const a=el(doc,'span','talos-list-row__aside');a.append(el(doc,'span','talos-badge'+(d.fidabile?' talos-badge--warning':''),d.stato));r.append(i,testo,a);r.addEventListener('click',()=>onSeleziona?.(d.id));return r;
+ const a=el(doc,'span','talos-list-row__aside');a.append(el(doc,'span','talos-badge'+(d.fidabile||d.attenzione?' talos-badge--warning':''),d.stato));r.append(i,testo,a);r.addEventListener('click',()=>onSeleziona?.(d.id));return r;
 }
 const PANELS=new WeakMap();
 export function aggiornaEstensioni(panel,voci,opzioni={}){
@@ -67,11 +78,11 @@ function render(panel,p){
   const blocco=panel.querySelector('[data-ext-falliti-blocco]');
   if(blocco)blocco.hidden=falliti.length===0;
  }
- const v=voci.find(v=>v.id===p.scelto),detail=panel.querySelector('[data-ext-detail]');detail.hidden=!v;if(!v)return;const d=datiEstensione(o.tipo,v);detail.querySelector('h3').textContent=d.titolo;detail.querySelector('[data-ext-desc]').textContent=d.descrizione;detail.querySelector('[data-ext-stato]').textContent=d.stato;detail.querySelector('[data-ext-origine]').textContent=d.origine;detail.querySelector('[data-ext-meta]').replaceChildren(...d.righe.map(([k,v])=>{const r=el(doc,'div','talos-kv');r.append(el(doc,'span','talos-kv__k',k),el(doc,'span','talos-kv__v',v));return r;}));
+ const v=voci.find(v=>v.id===p.scelto),detail=panel.querySelector('[data-ext-detail]');detail.hidden=!v;if(!v)return;const d=datiEstensione(o.tipo,v);detail.querySelector('h3').textContent=d.titolo;detail.querySelector('[data-ext-desc]').textContent=d.descrizione;detail.querySelector('[data-ext-stato]').textContent=d.stato;detail.querySelector('[data-ext-origine]').textContent=d.origine;detail.querySelector('[data-ext-meta]').replaceChildren(...d.righe.map(([k,v,forma])=>{const r=el(doc,'div','talos-kv');r.append(el(doc,'span','talos-kv__k',k),el(doc,'span','talos-kv__v'+(forma==='frase'?' talos-kv__v--frase':''),v));return r;}));
  const avvisi=detail.querySelector('[data-ext-warnings]');avvisi.hidden=!d.avvisi.length;avvisi.replaceChildren(...d.avvisi.map(a=>el(doc,'p','talos-detail__desc',a.origine+': '+a.avviso)));if(d.avvisi.length)avvisi.append(el(doc,'p','talos-muted',t('modelli.extensions.scanWarning')));
  /*
-  * 5-ter: la FRASE della fiducia, accanto allo stato che spiega (F3). Nodo che esiste solo nel
-  * pannello dei plugin — gli altri tre non ce l'hanno, e l'`if` lo dice senza rompere niente.
+  * 5-ter: la FRASE della fiducia, accanto allo stato che spiega (F3). Dal 17/10/2026 c'è anche in hook e MCP (gli script ora contati);
+  * le Skill non ce l'hanno, e l'`if` lo dice senza rompere niente.
   * ⛔ Il testo va in un figlio, non sul blocco: il blocco porta anche l'icona dell'avviso, e un
   *   `textContent` sul padre la cancellerebbe al primo disegno.
   */
