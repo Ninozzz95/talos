@@ -146,26 +146,37 @@ async function folderEntry(folder, realpath) {
  *   cambiamento (la ctime, che un programma normale non può scegliere: la sposta il sistema a ogni scrittura e a ogni `utimes`) non
  *   viene visto finché il processo non riparte, o finché la voce non esce dalla memoria. Le stesse condizioni in cui git non vede una
  *   modifica («racily clean»).
+ * ⛔⛔ 18/10/2026 — I TIMESTAMP «RACY», come git (trovato da Nino3 sul Pad: la ctime avanza a SCATTI, due scritture di fila con un
+ *   `utimes` in mezzo danno la stessa `ctimeNs` 199 volte su 200, misurato col Node dell'app). Se un file viene riscritto nello stesso
+ *   scatto in cui il suo hash è stato memorizzato, con la stessa dimensione e la stessa mtime rimessa, dimensione e date sono uguali e
+ *   l'hash vecchio si riusava. Cura di git (`Documentation/technical/racy-git.adoc`): una voce le cui date NON sono più vecchie di uno
+ *   scatto rispetto al momento della lettura è «racily clean» e non si crede alle date: si rilegge il contenuto. Qui ogni voce ricorda
+ *   `lettoAlleMs`, e conta solo se la più recente fra mtime e ctime sta almeno `granaMs` (2 s: la grana più grossa diffusa, i 2 s di
+ *   FAT, e ben sopra lo scatto misurato sul Pad) prima di quel momento. Una voce racy si rilegge al calcolo dopo, e la si rimemorizza
+ *   col momento nuovo: appena le sue date sono abbastanza vecchie, torna a valere.
  * ⛔ Un tetto al numero di voci (`massimoVoci`): esce la meno usata di recente, così la memoria non cresce senza fine.
  * È un'OPZIONE di `referencedScripts` (`memoria`): di serie una memoria del processo; `null` la spegne. Con o senza, l'impronta è la
  * stessa: la memoria cambia solo quanto si legge.
  */
 export const MEMORIA_HASH_VOCI_PREDEFINITE = 50_000;
-export function creaMemoriaDegliHash({ massimoVoci = MEMORIA_HASH_VOCI_PREDEFINITE } = {}) {
+export const GRANA_RACY_MS = 2_000;
+/** `granaMs` 0 spegne la regola racy (la memoria di UN calcolo: lì il file si legge comunque una volta sola); `ora` per le prove */
+export function creaMemoriaDegliHash({ massimoVoci = MEMORIA_HASH_VOCI_PREDEFINITE, granaMs = GRANA_RACY_MS, ora = Date.now } = {}) {
   const voci = new Map();
   const stessa = (v, s) => v.dimensione === s.size && v.mtimeMs === s.mtimeMs && v.ctimeMs === s.ctimeMs && v.ino === s.ino;
+  const racy = (v) => granaMs > 0 && !(Math.max(v.mtimeMs, v.ctimeMs) <= v.lettoAlleMs - granaMs);
   return {
     get voci() { return voci.size; },
     /** la voce del file se dimensione, date e ino non sono cambiati; altrimenti null (e la voce vecchia si toglie) */
     cerca(percorso, stato) {
       const v = voci.get(percorso); if (!v) return null;
       voci.delete(percorso);
-      if (!stessa(v, stato)) return null;
+      if (!stessa(v, stato) || racy(v)) return null;
       voci.set(percorso, v); return v;
     },
     metti(percorso, stato, dati) {
       voci.delete(percorso);
-      voci.set(percorso, { dimensione: stato.size, mtimeMs: stato.mtimeMs, ctimeMs: stato.ctimeMs, ino: stato.ino, ...dati });
+      voci.set(percorso, { dimensione: stato.size, mtimeMs: stato.mtimeMs, ctimeMs: stato.ctimeMs, ino: stato.ino, lettoAlleMs: ora(), ...dati });
       while (voci.size > massimoVoci) voci.delete(voci.keys().next().value);
     },
   };
@@ -234,8 +245,13 @@ function relativeId(root, pathname) { return path.relative(root, pathname).split
  * @returns {Promise<{path:string, sha256:string}[]>}
  */
 export async function referencedScripts(workspace, tokens, { maxFolderFiles = MAX_SCRIPT_FOLDER_FILES, realpath = fsp.realpath, memoria = MEMORIA_DI_PROCESSO } = {}) {
-  /* `memoria: null` spegne la memoria del processo; dentro UN calcolo un file si legge comunque una volta sola (import e hash) */
-  const memoriaDelCalcolo = memoria ?? creaMemoriaDegliHash({ massimoVoci: Number.MAX_SAFE_INTEGER });
+  /* `memoria: null` spegne la memoria del processo; dentro UN calcolo un file si legge comunque una volta sola (import e hash), anche se
+     le sue date sono «racy» (18/10/2026): la memoria del calcolo non ha la regola, quella del processo sì. */
+  const delCalcolo = creaMemoriaDegliHash({ massimoVoci: Number.MAX_SAFE_INTEGER, granaMs: 0 });
+  const memoriaDelCalcolo = {
+    cerca: (p, s) => delCalcolo.cerca(p, s) ?? memoria?.cerca(p, s) ?? null,
+    metti: (p, s, d) => { delCalcolo.metti(p, s, d); memoria?.metti(p, s, d); },
+  };
   const area = { requestedRoot: workspace.requestedRoot ?? workspace.canonicalRoot, canonicalRoot: workspace.canonicalRoot };
   const root = area.canonicalRoot;
   const pinned = new Map(); const walkedFolders = new Set(); const queue = []; const followed = new Set();

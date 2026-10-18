@@ -1143,6 +1143,24 @@ function classificaTuttiEsclusiOpenRouter(testo) {
  * di quelli del traffico e lo chiamava `contesto`, non transitorio: niente attesa, niente ritento — e da F1 la frase avrebbe detto
  * «finestra di contesto». Qui, dove lo stato HTTP c'è, torna `traffico`.
  */
+/*
+ * 18/10/2026 — due rifiuti di Google che la tabella BC-44 leggeva male (misurati sul servizio vero con la quota gratuita):
+ * · un 429 `RESOURCE_EXHAUSTED` col `RetryInfo` (quota al MINUTO, «limit: 15») dice «check your plan and billing details» e diventava
+ *   `credito`, non transitorio: nessuna attesa, nessun ritento, e la persona leggeva «Credit not available». È traffico: come Hermes
+ *   (`agent/error_classifier.py:145-148` e `:640`, `resource_exhausted` → rate limit), e l'attesa la dà Google (`provider-retry.mjs`);
+ * · un 404 di un modello ritirato o chiuso agli account nuovi («no longer available», «is not found for API version», `model_not_found`)
+ *   usciva come «The provider did not accept the request.». Come Hermes (`_MODEL_NOT_FOUND_PATTERNS`, `:273`) ha un codice suo, non si
+ *   ritenta, e la frase dice di scegliere un altro modello; in più di Hermes si riconosce la frase del ritiro di Google.
+ */
+function classificaRifiutoNoto(testo, stato) {
+  if (typeof testo !== 'string' || Buffer.byteLength(testo, 'utf8') >= 16_384) return null;
+  if (stato === 429 && /RESOURCE_EXHAUSTED|"retryDelay"|PerMinute|\bretry\s+in\s+\d/iu.test(testo)) return { classe: 'traffico', transitorio: true };
+  if ((stato === 404 || stato === 400) && /no longer available|model_not_found|is not found for API version|the model `[^`]*` does not exist|\bno such model\b|\bunknown model\b/iu.test(testo)) {
+    return { code: 'PROVIDER_MODEL_UNAVAILABLE', classe: 'modello-non-disponibile', transitorio: false };
+  }
+  return null;
+}
+
 function limiteNonContesto(classificazione, stato) {
   return stato === 429 && classificazione?.classe === 'contesto' ? { classe: 'traffico', transitorio: true } : classificazione;
 }
@@ -1161,6 +1179,7 @@ function erroreFornitorePubblico(classificazione, stato = null) {
     'richiesta-costosa': 'The estimated cost of the request exceeds the available budget.',
     'limite-credito': 'The service rejected the request because of an unspecified spending limit.',
     'tutti-esclusi': 'Every provider of this model is in your excluded list on OpenRouter.',
+    'modello-non-disponibile': 'The provider no longer offers this model to this account: choose another model.',
     /* F1 della CLI (prima revisione della 0.6.8, 16/10/2026): la frase porta il marcatore `context_length_exceeded`, così chi riprova
        dopo un «contesto pieno» (K8 del legacy, il guscio e il servizio del contesto: `classificaErroreFornitore`) lo riconosce anche
        dietro questo adattatore, che il corpo del fornitore non lo lascia mai passare. */
@@ -1294,6 +1313,13 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
       try { return await conPrimoPezzo(await creaFetchInstradata(fetchDiRete, { risolvi, dipendenze, onAvviso, inattivitaGenerazioneMs, sorvegliaCorpo, memoriaAttrezzi })(url, opzioni)); }
       catch (guasto) {
         const errore = erroreDelPiano(guasto);
+        /* 18/10/2026, custode nell'app (`chatgpt-accesso-ospite.mjs`): un 401 vuol dire che il token spinto dall'app non vale più. r4 non
+           lo rinnova (non ha un refresh token): lo dimentica e lo DICE con `CHATGPT_TOKEN_DA_RINNOVARE`, l'app rinnova e riprova.
+           Senza il gancio (desktop, custodia nostra) il 401 resta `CHATGPT_ACCESSO_NON_VALIDO`, come prima. */
+        if (errore.stato === 401 && typeof dipendenze?.suTokenDelPianoRifiutato === 'function') {
+          const altro = dipendenze.suTokenDelPianoRifiutato(errore);
+          if (altro) throw altro;
+        }
         /* Il limite d'uso: il kernel aspetta e rifà la STESSA richiesta (come Claude Code), mostrando quando; «Ferma» annulla. */
         if (errore.code === 'CHATGPT_LIMITE_DEL_PIANO') {
           /* 12/10/2026, owner «come Codex»: se il servizio dichiara QUANDO torna il limite finito, si aspetta fino a lì (oltre 24 ore il
@@ -1442,7 +1468,8 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
         const classificazione = contestoPieno ? { classe: 'contesto', transitorio: false }
           : fonte === 'openrouter' && response.status === 402
           ? classificaLimiteOpenRouter(testo)
-          : (fonte === 'openrouter' && response.status === 404 && classificaTuttiEsclusiOpenRouter(testo)) || limiteNonContesto(classificaGuasto({ message: testo }, response.status), response.status);
+          : (fonte === 'openrouter' && response.status === 404 && classificaTuttiEsclusiOpenRouter(testo)) || classificaRifiutoNoto(testo, response.status)
+            || limiteNonContesto(classificaGuasto({ message: testo }, response.status), response.status);
         /* Owner 09/10/2026 («Riprova sull'altro e lo dice»): «credito finito» da Z.AI ⇒ una sonda sola senza l'indirizzo appena
            rifiutato; se un altro risponde la stessa richiesta riparte lì (non è un ritento: il primo invio è stato rifiutato). */
         if (rilevatoreZai && fonte === 'zai' && scelta && classificazione.classe === 'credito' && !contesto.zaiCambiato) {

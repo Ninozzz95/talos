@@ -263,6 +263,32 @@ test('ORF-11: fra l\'adozione e «Ferma» il numero è passato a un altro proces
  *   muore DI COLPO (su Windows `TerminateProcess`, cioè `taskkill /F`; su POSIX SIGKILL). Si tocca solo ciò che questa prova ha lanciato.
  */
 import { spawn as spawnVero, spawnSync } from 'node:child_process';
+
+/*
+ * 18/10/2026 — ORF-13/14 rosse sul runner Windows della CI pubblica (push in main dopo la #69 e la PR #70), verdi sul Pad e qui, e
+ *   verdi sulla #69 col codice identico. La prova lanciava l'ALTRO processo e non guardava mai il suo esito: se in quell'istante il
+ *   registro si era ripreso l'affitto della sessione (il comando vivo in sottofondo scrive), il figlio veniva rifiutato ed usciva senza
+ *   scrivere, e la premessa «la sessione è stata ricaricata» cadeva senza dire perché. Qui il figlio deve dire `FATTO`; se no si rilascia
+ *   l'affitto e si riprova, e dopo 20 volte la prova dice che cosa ha risposto il figlio.
+ */
+async function scriviDaUnAltroProcesso(t, store, righe, FIGLIO) {
+  const { attivaAffittiArchivio } = await import('../src/session-store.mjs');
+  let ultimo = '';
+  for (let tentativo = 1; tentativo <= 20; tentativo += 1) {
+    attivaAffittiArchivio(store).rilascia?.(SESSIONE);
+    const figlio = spawnVero(process.execPath, [FIGLIO, store, SESSIONE, 'scrivi-ed-esci', JSON.stringify(righe)], { stdio: ['ignore', 'pipe', 'pipe'] });
+    let uscita = '';
+    figlio.stdout.on('data', (d) => { uscita += d; }); figlio.stderr.on('data', (d) => { uscita += d; });
+    const codice = await new Promise((ok) => figlio.on('exit', ok));
+    if (codice === 0 && uscita.includes('FATTO')) {
+      if (tentativo > 1) t.diagnostic(`the other process wrote at attempt ${tentativo} (before: ${ultimo})`);
+      return tentativo;
+    }
+    ultimo = `exit ${codice}: ${uscita.replace(/\s+/gu, ' ').slice(0, 300)}`;
+    await new Promise((ok) => setTimeout(ok, 50));
+  }
+  throw new Error(`the other process never wrote the session: ${ultimo}`);
+}
 import { esisteProcesso, leggiAlbero } from '../src/impronta-processo.mjs';
 
 const REALE = process.platform === 'win32' || process.platform === 'linux';
@@ -429,8 +455,7 @@ test('ORF-12: una ricarica dall\'archivio (l\'altro processo ha scritto) non per
   // l'ALTRO processo (vero) continua la conversazione e se ne va
   const FIGLIO = fileURLToPath(new URL('./fixtures/affitto-processo-figlio.mjs', import.meta.url));
   const righe = [{ type: 'RunStarted', threadId: SESSIONE, runId: 'r9', _sequenza: 50 }, { type: 'RunFinished', threadId: SESSIONE, runId: 'r9', result: { detto: 'x' }, _sequenza: 51 }];
-  const figlio = spawnVero(process.execPath, [FIGLIO, store, SESSIONE, 'scrivi-ed-esci', JSON.stringify(righe)], { stdio: ['ignore', 'pipe', 'pipe'] });
-  await new Promise((ok) => figlio.on('exit', ok));
+  await scriviDaUnAltroProcesso(t, store, righe, FIGLIO);
   assert.equal((await registro.allineaSessione(SESSIONE, { scrivere: false })).ricaricata, true, 'premessa: la sessione è stata ricaricata');
   assert.deepEqual(registro.pidDeiComandi(SESSIONE), [{ toolCallId: 'bg1', pid: 4242, wsl: null }], 'il ripreso è passato alla voce nuova');
   assert.equal(registro.fermaComando(SESSIONE, 'bg1'), 'fermato');
@@ -471,8 +496,7 @@ test('ORF-13: dopo una ricarica dall\'archivio uno sfondato VIVO si ferma ancora
   attivaAffittiArchivio(store).rilascia?.(SESSIONE);
   const FIGLIO = fileURLToPath(new URL('./fixtures/affitto-processo-figlio.mjs', import.meta.url));
   const righe = [{ type: 'RunStarted', threadId: SESSIONE, runId: 'r9', _sequenza: 500 }, { type: 'RunFinished', threadId: SESSIONE, runId: 'r9', result: { detto: 'x' }, _sequenza: 501 }];
-  const figlio = spawnVero(process.execPath, [FIGLIO, store, SESSIONE, 'scrivi-ed-esci', JSON.stringify(righe)], { stdio: ['ignore', 'pipe', 'pipe'] });
-  await new Promise((ok) => figlio.on('exit', ok));
+  await scriviDaUnAltroProcesso(t, store, righe, FIGLIO);
   assert.equal((await registro.allineaSessione(SESSIONE, { scrivere: false })).ricaricata, true, 'premessa: la sessione è stata ricaricata');
   const visti = [];
   registro.iscriviti(SESSIONE, (e) => { if (e?.name === 'talos.processo-sfondo' && e.value?.toolCallId === 'vivo1') visti.push(e); });
@@ -515,8 +539,7 @@ test('ORF-14: «Ferma» premuto PRIMA della ricarica, uscita DOPO: resta «ferma
   attivaAffittiArchivio(store).rilascia?.(SESSIONE);
   const FIGLIO = fileURLToPath(new URL('./fixtures/affitto-processo-figlio.mjs', import.meta.url));
   const righe = [{ type: 'RunStarted', threadId: SESSIONE, runId: 'r9', _sequenza: 500 }, { type: 'RunFinished', threadId: SESSIONE, runId: 'r9', result: { detto: 'x' }, _sequenza: 501 }];
-  const figlio = spawnVero(process.execPath, [FIGLIO, store, SESSIONE, 'scrivi-ed-esci', JSON.stringify(righe)], { stdio: ['ignore', 'pipe', 'pipe'] });
-  await new Promise((ok) => figlio.on('exit', ok));
+  await scriviDaUnAltroProcesso(t, store, righe, FIGLIO);
   assert.equal((await registro.allineaSessione(SESSIONE, { scrivere: false })).ricaricata, true, 'premessa: la sessione è stata ricaricata');
   const visti = [];
   registro.iscriviti(SESSIONE, (e) => { if (e?.name === 'talos.processo-sfondo' && e.value?.toolCallId === 'vivo1') visti.push(e); });

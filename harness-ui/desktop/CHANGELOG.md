@@ -6,6 +6,25 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
 
 ## Unreleased
 
+## desktop-v0.1.34 — 2026-10-18
+
+### Security
+
+- Trust in the project scripts that hooks and MCP servers run no longer relies on a timestamp taken in the same instant the
+  file was being written: like git, a file changed within two seconds of being read is hashed again before it is trusted.
+
+### Added
+
+- An app that hosts the TALOS server (the Android app) can keep the ChatGPT plan sign-in itself and hand the server
+  short-lived access tokens, so there is one sign-in and one place that renews it.
+
+### Fixed
+
+- Gemini: the free tier's per-minute quota is now treated as a rate limit and TALOS waits the time Google asks for, instead
+  of reporting a credit problem. A model Google has retired says so, with a clear card, instead of a generic error; the
+  catalog lists Gemini 3.5 Flash-Lite.
+- Several tests that depended on timing or on Windows short folder names (`RUNNER~1`) are now reliable on slow machines.
+
 ## desktop-v0.1.33 — 2026-10-18
 
 ### Security

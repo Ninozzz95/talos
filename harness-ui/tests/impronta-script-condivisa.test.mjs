@@ -175,7 +175,8 @@ async function contaLetture(t, fn) {
 test('IMP-09 — un file non toccato NON si rilegge al secondo calcolo; con la memoria spenta sì, e l’impronta è la stessa', async (t) => {
   const { cartella, scrivi } = progetto(t);
   scrivi('tools/srv/index.mjs', "import './aiuto.mjs';\n"); scrivi('tools/srv/aiuto.mjs', '// a\n');
-  const area = await areaDelProgetto(cartella); const memoria = creaMemoriaDegliHash();
+  /* 18/10/2026: i file appena scritti sono «racy» (IMP-13); qui l'orologio della memoria sta 10 s avanti, cioè file VECCHI */
+  const area = await areaDelProgetto(cartella); const memoria = creaMemoriaDegliHash({ ora: () => Date.now() + 10_000 });
   const token = hookCommandTokens('node tools/srv/index.mjs');
   let primo, secondo, spenta;
   const letturePrima = await contaLetture(t, async () => { primo = await referencedScripts(area, token, { memoria }); });
@@ -220,4 +221,37 @@ test('IMP-12 — la memoria ha un tetto: oltre `massimoVoci` esce la meno usata'
   const area = await areaDelProgetto(cartella); const memoria = creaMemoriaDegliHash({ massimoVoci: 2 });
   await referencedScripts(area, hookCommandTokens('node tools/a.mjs'), { memoria });
   assert.equal(memoria.voci, 2, 'tre file nella cartella, due voci al massimo');
+});
+
+/* 18/10/2026 — I TIMESTAMP «RACY», come git (Nino3: sul Pad la ctime avanza a scatti, due scritture di fila hanno la stessa ctimeNs). */
+test('IMP-13 — un file APPENA scritto si rilegge a ogni calcolo finché le sue date non sono più vecchie di 2 s; AL CONTRARIO, dopo sì dalla memoria', async (t) => {
+  const { cartella, scrivi } = progetto(t);
+  scrivi('tools/a.mjs', '// a\n');
+  const area = await areaDelProgetto(cartella); const token = hookCommandTokens('node tools/a.mjs');
+  let adesso = Date.now();
+  const memoria = creaMemoriaDegliHash({ ora: () => adesso });
+  const deiFile = (lette) => lette.filter((p) => /tools[\\/]a\.mjs$/u.test(p)).length;
+  assert.equal(deiFile(await contaLetture(t, () => referencedScripts(area, token, { memoria }))), 1, 'inside one computation a racy file is read once');
+  assert.equal(deiFile(await contaLetture(t, () => referencedScripts(area, token, { memoria }))), 1, '⛔ a racy entry was trusted');
+  adesso += 5_000; // la voce si rimemorizza col momento nuovo: ora le date sono vecchie di più di 2 s
+  await referencedScripts(area, token, { memoria });
+  assert.equal(deiFile(await contaLetture(t, () => referencedScripts(area, token, { memoria }))), 0, 'an old enough entry is used');
+});
+
+test('IMP-14 — lo scenario del Pad: stessa dimensione, stessa mtime E stessa ctime (scatto grossolano), contenuto diverso → l’hash si ricalcola', () => {
+  let adesso = 1_000_000;
+  const memoria = creaMemoriaDegliHash({ ora: () => adesso });
+  const stato = { size: 14, mtimeMs: 999_500, ctimeMs: 999_900, ino: 7 }; // date nello stesso scatto della lettura
+  memoria.metti('/p/mcp.mjs', stato, { sha256: 'vecchio', imports: [] });
+  assert.equal(memoria.cerca('/p/mcp.mjs', stato), null, '⛔ a racily clean entry was trusted: the file may have changed in the same tick');
+  /* la forma esatta del Pad: la mtime RIMESSA vecchia con utimes, la ctime fresca dello stesso scatto: decide la ctime */
+  const rimessa = { ...stato, mtimeMs: 900_000, ctimeMs: 999_900 };
+  memoria.metti('/p/mcp.mjs', rimessa, { sha256: 'vecchio', imports: [] });
+  assert.equal(memoria.cerca('/p/mcp.mjs', rimessa), null, '⛔ an old mtime hid a fresh ctime');
+  adesso = 1_000_000;
+  memoria.metti('/p/mcp.mjs', { ...stato, mtimeMs: 990_000, ctimeMs: 990_000 }, { sha256: 'h', imports: [] });
+  assert.equal(memoria.cerca('/p/mcp.mjs', { ...stato, mtimeMs: 990_000, ctimeMs: 990_000 })?.sha256, 'h', 'AL CONTRARIO: dates 10 s older than the read are trusted');
+  const delCalcolo = creaMemoriaDegliHash({ granaMs: 0, ora: () => adesso });
+  delCalcolo.metti('/p/x.mjs', stato, { sha256: 'x', imports: [] });
+  assert.equal(delCalcolo.cerca('/p/x.mjs', stato)?.sha256, 'x', 'inside ONE computation the rule is off: a file is read once');
 });

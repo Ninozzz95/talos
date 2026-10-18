@@ -69,7 +69,9 @@ const RISERVE_PUBBLICHE = {
   zai: { 'glm-4.7-flash': true, 'glm-4.7': true },
   /* claude-haiku-5-5: models.dev api.json read 09/10/2026 (TALOS cache), tool_call true, release_date 2026-10-07. */
   anthropic: { 'claude-haiku-4-5-20251001': true, 'claude-sonnet-5': true, 'claude-haiku-5-5': true },
-  google: { 'gemini-2.5-flash-lite': true, 'gemini-3.1-flash-lite': true },
+  /* gemini-3.5-flash-lite: models.dev api.json read 18/10/2026, tool_call true, release_date 2026-07-21 (the 2.5 Flash-Lite answers
+     404 to new accounts). */
+  google: { 'gemini-2.5-flash-lite': true, 'gemini-3.1-flash-lite': true, 'gemini-3.5-flash-lite': true },
   openrouter: { 'liquid/lfm-2.5-2.6b:free': true, 'openai/gpt-5-nano': true },
 };
 
@@ -101,7 +103,7 @@ test('PF-PAR-01 — riserve non vuote per ogni chat remota; locali e download di
         assert.ok(Object.isFrozen(m));
         assert.equal(m.toolCalling, true);
         assert.match(m.fonte, /^https:\/\//u);
-        assert.equal(m.data, m.id === 'claude-haiku-5-5' ? '2026-10-09' : '2026-09-12');
+        assert.equal(m.data, m.id === 'claude-haiku-5-5' ? '2026-10-09' : m.id === 'gemini-3.5-flash-lite' ? '2026-10-18' : '2026-09-12');
       }
     } else {
       assert.equal(r.modelliDiRiserva, null, r.id);
@@ -129,7 +131,7 @@ test('PF-PAR-03 — lettore ausiliario puro: id upstream esatti, null dichiarati
   assert.equal(typeof APIRegistro.modelloAusiliarioPer, 'function');
   const attesi = {
     openai: 'gpt-5-nano', deepseek: 'deepseek-flash', zai: 'glm-4.7-flash',
-    anthropic: 'claude-haiku-4-5-20251001', gemini: 'gemini-2.5-flash-lite',
+    anthropic: 'claude-haiku-4-5-20251001', gemini: 'gemini-3.5-flash-lite',
     openrouter: 'liquid/lfm-2.5-2.6b:free', ollama: null, lmstudio: null, local: null, huggingface: null,
   };
   for (const [id, modello] of Object.entries(attesi)) assert.equal(APIRegistro.modelloAusiliarioPer(id), modello, id);
