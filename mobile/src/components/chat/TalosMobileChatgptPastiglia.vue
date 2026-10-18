@@ -104,7 +104,7 @@ onBeforeUnmount(chiudi)
         <div
             v-if="aperto" ref="pannello" data-testid="talos-chatgpt-usage-panel" role="dialog"
             :aria-label="t('chatgptPlan.panelTitle')" :style="posto"
-            class="fixed z-50 w-[min(22rem,calc(100vw-2rem))] rounded-[var(--talos-radius-card)] border border-[var(--talos-border)] bg-[var(--talos-window-bg)] p-[var(--talos-space-card)] text-[var(--talos-text)] shadow-lg overflow-y-auto"
+            class="fixed z-[var(--talos-z-app-overlay)] w-[min(22rem,calc(100vw-2rem))] rounded-[var(--talos-radius-card)] border border-[var(--talos-border)] bg-[var(--talos-window-bg)] p-[var(--talos-space-card)] text-[var(--talos-text)] shadow-lg overflow-y-auto"
             @pointerdown.prevent
         >
             <p class="font-semibold">{{ t('chatgptPlan.panelTitle') }}</p>

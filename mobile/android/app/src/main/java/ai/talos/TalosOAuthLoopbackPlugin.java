@@ -166,7 +166,7 @@ public class TalosOAuthLoopbackPlugin extends Plugin {
     static Ascolto apri(String canale, String percorso, int timeoutMs, int letturaMs, String statoAtteso, Runnable alRitornoGiusto) throws Exception {
         synchronized (ASCOLTI) {
             Ascolto vecchio = ASCOLTI.get(canale);
-            if (vecchio != null) vecchio.chiudi();
+            if (vecchio != null) vecchio.chiudiDaFuori();
             prossimoId += 1;
             Ascolto nuovo = new Ascolto(prossimoId, percorso, timeoutMs, letturaMs, statoAtteso, alRitornoGiusto);
             ASCOLTI.put(canale, nuovo);
@@ -184,7 +184,7 @@ public class TalosOAuthLoopbackPlugin extends Plugin {
     /** Chiude l'ascolto del canale. Con un numero, solo se è ancora QUELLO: un tentativo vecchio non chiude il nuovo. */
     static void chiudi(String canale, Integer id) {
         Ascolto corrente = ascolto(canale);
-        if (corrente != null && (id == null || corrente.id == id)) corrente.chiudi();
+        if (corrente != null && (id == null || corrente.id == id)) corrente.chiudiDaFuori();
     }
 
     /**
@@ -289,6 +289,17 @@ public class TalosOAuthLoopbackPlugin extends Plugin {
             } catch (Exception ignored) {
                 // Chiudere una porta già chiusa non è un problema di nessuno.
             }
+        }
+
+        /**
+         * ⛔ LOOPBACK-A5 (gate android della `main` pubblica dopo la v0.1.42): chiuso da fuori (un ascolto nuovo sullo stesso canale,
+         * o `chiudi` col suo numero) è chiuso SUBITO. Prima solo la porta si chiudeva, e «chiuso» lo scriveva il thread quando se ne
+         * accorgeva: per un attimo {@link #aperto()} diceva ancora sì. Il thread, dopo, non cambia l'esito ({@link #finisci} vale una
+         * volta); lui stesso chiude solo la porta, così il suo esito (scaduto, ritorno consegnato) resta il suo.
+         */
+        void chiudiDaFuori() {
+            chiudi();
+            finisci(CANCELLED);
         }
 
         private void ascolta() {
@@ -487,7 +498,7 @@ public class TalosOAuthLoopbackPlugin extends Plugin {
         }
         for (Ascolto uno : tutti) {
             uno.dimenticaAttesa();
-            if (!uno.haPercorso()) uno.chiudi();
+            if (!uno.haPercorso()) uno.chiudiDaFuori();
         }
         super.handleOnDestroy();
     }

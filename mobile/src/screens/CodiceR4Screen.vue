@@ -32,6 +32,8 @@ import TalosCodiceR4Revisione from '@/components/codice/TalosCodiceR4Revisione.v
 import { numeroSchedaRevisioneR4 } from '@/lib/harness/r4/revisioneR4'
 // K3-C Accoda: la striscia della coda, caricata a richiesta come nella chat (la coda esiste solo quando qualcuno ha accodato)
 const TalosCodiceR4Coda = defineAsyncComponent(() => import('@/components/codice/TalosCodiceR4Coda.vue'))
+// ⛔ CHATGPT NEL CODICE: la stessa pastiglia della chat, a richiesta come lì
+const TalosMobileChatgptPastiglia = defineAsyncComponent(() => import('@/components/chat/TalosMobileChatgptPastiglia.vue'))
 // K3-C Esporta: lo stesso foglio di esportazione della chat, caricato a richiesta
 const TalosMobileSessionExportSheet = defineAsyncComponent(() => import('@/components/chat/TalosMobileSessionExportSheet.vue'))
 import { LARGHEZZA_VISTE_IN_TESTATA, testoTerminaleR4 } from '@/lib/harness/r4/terminaleR4'
@@ -66,8 +68,8 @@ import { getProviderKey } from '@/services/secureKeyStore'
 import { clampMobileEffortFor } from '@/lib/mobileEffort'
 import type { TalosMobileModelProfileView } from '@/components/chat/mobileChatTypes'
 import {
-    FORNITORI_DEL_CODICE_R4, fornitoreDelModelloR4, livelloDelRagionamentoR4, messaggioErroreModelloR4, modelloR4DelProfilo, profiloDelModelloR4,
-    ragionamentoR4, sincronizzaFornitoreR4,
+    FORNITORI_DEL_CODICE_R4, MINIMO_ACCESSO_CHATGPT_R4_MS, fornitoreDelModelloR4, livelloDelRagionamentoR4, messaggioErroreModelloR4, modelloR4DelProfilo,
+    profiloDelModelloR4, ragionamentoR4, sincronizzaFornitoreR4, spingiAccessoChatgptR4,
 } from '@/lib/harness/r4/modelloR4'
 import { useTalosMobileToasts } from '@/stores/toasts'
 import type { TalosSorgenteEsportazione } from '@/lib/chat/sorgenteEsportazione'
@@ -177,11 +179,21 @@ const composer = ref<InstanceType<typeof TalosMobileComposer> | null>(null)
 const scorrimento = ref<HTMLDivElement | null>(null)
 const dock = ref<HTMLDivElement | null>(null)
 
+/** I codici del piano con una frase del telefono (`models.chatgptErrors`, EN+IT): gli stessi della chat, più quelli del custode. */
+const FRASI_DEL_PIANO: ReadonlySet<string> = new Set([
+    'CHATGPT_LIMITE_DEL_PIANO', 'CHATGPT_PIANO_NON_AMMESSO', 'CHATGPT_RICHIESTA_NON_AMMESSA', 'CHATGPT_ACCESSO_NON_VALIDO', 'CHATGPT_PIANO_NON_ABILITATO',
+    'CHATGPT_SERVIZIO_NON_DISPONIBILE', 'CHATGPT_ERRORE', 'CHATGPT_NON_COLLEGATO', 'CHATGPT_ACCESSO_SCADUTO', 'CHATGPT_RINNOVO_FALLITO', 'CHATGPT_RETE',
+])
 const messaggi = computed(() => conversazione.value?.messaggi.value ?? [])
 const sending = computed(() => conversazione.value?.sorgente.sending.value ?? false)
 const errore = computed(() => conversazione.value?.errore.value ?? null)
 // K3-C Scelta del modello: i rifiuti legati al modello (la chiave che manca, il nome, il livello) con le parole del desktop
-const testoErrore = computed(() => (errore.value ? messaggioErroreModelloR4(errore.value, locale.value) : ''))
+// ⛔ CHATGPT NEL CODICE: i codici del piano che il telefono dice già (la chat, «Modelli, sotto OpenAI») con le parole della chat;
+// gli altri (quelli di r4: custode, rotte) col dizionario del desktop
+const testoErrore = computed(() => {
+    if (!errore.value) return ''
+    return FRASI_DEL_PIANO.has(errore.value.code) ? t(`models.chatgptErrors.${errore.value.code}`) : messaggioErroreModelloR4(errore.value, locale.value)
+})
 
 /*
  * ⛔ K3 piano (ledger `LEDGER-K3-PIANO-2026-10-17.md`; owner 17/10 «Nel piede del compositore»): la pillola del permesso accanto al
@@ -291,6 +303,15 @@ async function apriSessione(id: string | null): Promise<void> {
         cliente: talosClienteR4(), cartella: cartellaDiLavoro, sessioneId: id,
         // K3-C Scelta del modello (owner 16/10 «alla scelta e a ogni invio»): la chiave dell'app in r4 prima di ogni giro
         primaDiInviare: (modello) => sincronizzaFornitore(fornitoreDelModelloR4(modello)),
+        // ⛔ CHATGPT NEL CODICE: r4 dice che il token del piano va rinnovato ⇒ il custode della chat rinnova (forzato) e si rispinge
+        rinnovaAccesso: () => sincronizzaChatgpt(true),
+        // ⛔ e i suoi giri nel conto del piano, come la chat (`chatController` N15): una riga per richiesta, i token sulla prima
+        suConsumo: ({ richieste, token }) => {
+            if (fornitoreDelModelloR4(conversazione.value?.modello.value) !== 'chatgpt') return
+            void contoDelPiano().then((conto) => {
+                for (let i = 0; i < Math.max(1, richieste); i += 1) conto.registra(i === 0 ? token : null)
+            }).catch(() => undefined)
+        },
     })) ?? null
     if (!id) await sceltaPerLaSessioneNuova()
     await conversazione.value?.apri()
@@ -513,7 +534,9 @@ async function invia(): Promise<void> {
  * ⛔ K3-C Scelta del modello (ledger `LEDGER-K3-MODELLO-2026-10-16.md`; owner 16/10): la stessa pastiglia e lo stesso foglio della
  * chat, coi profili che la chat ha già caricato (letti, mai cambiati: la chat aperta resta la sua). Il modello e il livello li dice
  * r4: la pastiglia cambia solo dopo che `/settings` li ha accettati (come il desktop, `legacy/app.js:7600`, e Hermes).
- *   · fuori dal Codice il motore dentro l'app e il piano ChatGPT: r4 non li raggiunge, e la frase lo dice nel foglio;
+ *   · fuori dal Codice il motore dentro l'app: r4 non lo raggiunge, e la frase lo dice nel foglio;
+ *   · ⛔ il piano ChatGPT (owner 18/10, ledger `LEDGER-CHATGPT-NEL-CODICE-2026-10-18.md`): come nella chat, con l'accesso della chat.
+ *     Un solo custode, l'app: il token (valido almeno 10 minuti) va in r4 con la sua scadenza, alla scelta e prima di ogni giro;
  *   · la chiave è una sola, quella dell'app: passa in r4 alla scelta e prima di ogni invio; se l'app non l'ha, in r4 si toglie;
  *   · il livello resta se il modello nuovo lo regge, altrimenti il più vicino (`clampMobileEffortFor`, lo stesso della chat);
  *   · una sessione nuova parte dall'ultima scelta del Codice (`codice_model`, owner 23/09), la prima volta da quella della chat.
@@ -524,6 +547,11 @@ const profiloScelto = computed(() => profiloDelModelloR4(conversazione.value?.mo
 const profiliNelFoglio = computed<TalosMobileModelProfileView[]>(() => (profiloScelto.value && !profiliDelCodice.value.includes(profiloScelto.value)
     ? [profiloScelto.value, ...profiliDelCodice.value] : profiliDelCodice.value))
 const livelloScelto = computed(() => livelloDelRagionamentoR4(conversazione.value?.ragionamento.value))
+/** Il conto del piano, caricato una volta a richiesta (come la chat): i consumi di un giro arrivano a raffica. */
+let contoCaricato: Promise<ReturnType<typeof import('@/services/chatgptConsumi')['talosConsumiChatgpt']>> | null = null
+const contoDelPiano = () => (contoCaricato ??= import('@/services/chatgptConsumi').then((m) => m.talosConsumiChatgpt()))
+/** Il modello della sessione è del piano ChatGPT: la pastiglia lo dice, come nella chat (`pianoChatgptInUso`). */
+const pianoInUso = computed(() => fornitoreDelModelloR4(conversazione.value?.modello.value) === 'chatgpt')
 const problemiDeiModelli = computed(() => [
     ...chat.discoveryProblems.value,
     ...(chat.profiles.value.some((p) => !FORNITORI_DEL_CODICE_R4.has(p.provider)) ? [{ message: t('harness.r4ModelsUnavailable') }] : []),
@@ -531,9 +559,29 @@ const problemiDeiModelli = computed(() => [
 
 async function sincronizzaFornitore(fornitore: string | null): Promise<void> {
     if (!fornitore || !FORNITORI_DEL_CODICE_R4.has(fornitore as TalosMobileModelProfileView['provider'])) return
+    if (fornitore === 'chatgpt') return sincronizzaChatgpt(false)
     const chiave = await getProviderKey(fornitore).catch(() => null)
     const indirizzo = (chat.endpoints as Record<string, string | null | undefined>)[fornitore] ?? null
     await sincronizzaFornitoreR4(talosClienteR4(), fornitore, { chiave, indirizzo })
+}
+/**
+ * Il token del piano dal custode della chat (lo stesso servizio, caricato a richiesta come fa la chat) a r4. La chat scollegata, o
+ * col piano non abilitato: r4 dimentica quello che aveva, poi il rifiuto va nella riga. Un guasto passeggero (rete, rinnovo) non
+ * toglie niente: il token di prima, se c'è, scade da sé.
+ */
+async function sincronizzaChatgpt(forzaRinnovo: boolean): Promise<void> {
+    const { talosChatgpt } = await import('@/services/chatgptAccesso')
+    let accesso: { accessToken: string; scadeAlle: number }
+    try {
+        accesso = await talosChatgpt().accessoValido({ almenoMs: MINIMO_ACCESSO_CHATGPT_R4_MS, ...(forzaRinnovo ? { forzaRinnovo } : {}) })
+    } catch (guasto) {
+        const code = (guasto as { code?: unknown })?.code
+        if (code === 'CHATGPT_NON_COLLEGATO' || code === 'CHATGPT_PIANO_NON_ABILITATO' || code === 'CHATGPT_ACCESSO_SCADUTO') {
+            await spingiAccessoChatgptR4(talosClienteR4(), null).catch(() => undefined)
+        }
+        throw guasto
+    }
+    await spingiAccessoChatgptR4(talosClienteR4(), accesso)
 }
 function rifiutoNellaRiga(guasto: unknown): void {
     const code = typeof (guasto as { code?: unknown })?.code === 'string' ? (guasto as { code: string }).code : 'TALOS_R4_FORNITORE'
@@ -970,6 +1018,8 @@ onBeforeUnmount(() => {
                         @remove-attachment="allegati.togli"
                         @dismiss-attachment-error="allegati.errore.value = null"
                     >
+                        <!-- ⛔ CHATGPT NEL CODICE: la pastiglia del piano come nella chat (`ChatScreen` N15), subito dopo il modello -->
+                        <TalosMobileChatgptPastiglia v-if="pianoInUso" />
                         <!-- K3 piano: la pillola del permesso, accanto al modello (il chip del piede del desktop) -->
                         <button
                             type="button"

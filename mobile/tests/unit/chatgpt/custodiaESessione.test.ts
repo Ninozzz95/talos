@@ -250,4 +250,37 @@ describe('N15 — il token di accesso e il rinnovo uno alla volta', () => {
         await custodia.scrivi('sessione', sessione({ scadeAlle: ORA - 1 }))
         expect(await sess.tokenDiAccesso()).toBe('ACCESSO-2')
     })
+
+    /*
+     * ⛔ CHATGPT NEL CODICE (owner 18/10/2026: «Deve selezionarli esattamente come i modelli della chat», un solo accesso; ledger
+     * `LEDGER-CHATGPT-NEL-CODICE-2026-10-18.md`): l'app è l'unico custode e SPINGE a r4 il token con la sua scadenza prima di ogni giro.
+     * r4 rifiuta un token che scade entro 5 minuti, e un giro dura minuti: il token spinto deve valere ALMENO `almenoMs`.
+     */
+    const DIECI_MINUTI = 10 * 60 * 1000
+    it('N15-SESS-13: accessoValido dà token e scadenza; se vale ancora almeno quanto chiesto non tocca la rete', async () => {
+        const { sess, fetchFn } = await pronto()
+        expect(await sess.accessoValido({ almenoMs: DIECI_MINUTI })).toEqual({ accessToken: 'ACCESSO-1', scadeAlle: ORA + 60 * 60 * 1000 })
+        expect(fetchFn).not.toHaveBeenCalled()
+    })
+
+    it('N15-SESS-14: un token che vale meno di quanto chiesto si rinnova, con UN solo rinnovo anche insieme alla chat', async () => {
+        const { sess, chiamate } = await pronto(sessione({ scadeAlle: ORA + 8 * 60 * 1000 }), [nuovi(2), nuovi(3)])
+        const [codiceR4, chat] = await Promise.all([sess.accessoValido({ almenoMs: DIECI_MINUTI }), sess.tokenDiAccesso({ forzaRinnovo: true })])
+        expect(codiceR4).toEqual({ accessToken: 'ACCESSO-2', scadeAlle: ORA + 3600 * 1000 })
+        expect(chat).toBe('ACCESSO-2')
+        expect(chiamate.filter((c) => c.url === SCOPERTA.token_endpoint)).toHaveLength(1)
+    })
+
+    it('N15-SESS-15: forzato non ridà il token rifiutato; un rinnovo fallito non passa un token troppo corto; nessun token nei messaggi', async () => {
+        const forzato = await pronto(sessione(), [nuovi(2)])
+        expect((await forzato.sess.accessoValido({ almenoMs: DIECI_MINUTI, forzaRinnovo: true })).accessToken).toBe('ACCESSO-2')
+        const corto = await pronto(sessione({ scadeAlle: ORA + 8 * 60 * 1000 }), [() => { throw Object.assign(new TypeError('fetch failed'), {}) }])
+        let preso: unknown = null
+        try { await corto.sess.accessoValido({ almenoMs: DIECI_MINUTI }) } catch (e) { preso = e }
+        expect((preso as { code?: string }).code).toBe('CHATGPT_RINNOVO_FALLITO')
+        expect(String((preso as Error).message)).not.toMatch(/ACCESSO|REFRESH/u)
+        // forzato (r4 ha appena rifiutato quel token) e rinnovo caduto per rete: il token vecchio, anche se lungo, NON torna
+        const rifiutato = await pronto(sessione(), [() => { throw new TypeError('fetch failed') }])
+        expect(await codice(() => rifiutato.sess.accessoValido({ almenoMs: DIECI_MINUTI, forzaRinnovo: true }))).toBe('CHATGPT_RINNOVO_FALLITO')
+    })
 })

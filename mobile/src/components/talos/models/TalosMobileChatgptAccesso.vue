@@ -22,10 +22,23 @@ type ServizioIntero = ReturnType<typeof talosChatgpt>
 type Servizio = Pick<ServizioIntero, 'stato' | 'accedi' | 'annulla' | 'esci'> & Partial<Pick<ServizioIntero, 'riprendi' | 'quandoCambia'>>
 type Esito = Awaited<ReturnType<ServizioIntero['accedi']>>
 type Conto = Pick<ReturnType<typeof talosConsumiChatgpt>, 'benvenutoDaMostrare' | 'segnaBenvenuto' | 'azzera'>
-const props = withDefaults(defineProps<{ servizio?: Servizio, apri?: (indirizzo: string) => Promise<unknown>, consumi?: Conto }>(), {
+/**
+ * ⛔ CHATGPT NEL CODICE (ledger `LEDGER-CHATGPT-NEL-CODICE-2026-10-18.md`): l'accesso è uno, quello della chat; uscendo, anche il
+ * Codice lo perde (r4, se è acceso, dimentica il token). Di serie a richiesta, come il resto del Codice; nelle prove, finto.
+ */
+async function dimenticaNelCodiceDiSerie(): Promise<void> {
+    const [{ talosR4Acceso }, { talosClienteR4 }, { dimenticaAccessoChatgptR4 }] = await Promise.all([
+        import('@/lib/harness/terminalePonte'), import('@/lib/harness/r4/clienteR4'), import('@/lib/harness/r4/modelloR4'),
+    ])
+    await dimenticaAccessoChatgptR4(talosR4Acceso, talosClienteR4)
+}
+const props = withDefaults(defineProps<{
+    servizio?: Servizio, apri?: (indirizzo: string) => Promise<unknown>, consumi?: Conto, dimenticaNelCodice?: () => Promise<void>,
+}>(), {
     servizio: undefined,
     apri: undefined,
     consumi: undefined,
+    dimenticaNelCodice: undefined,
 })
 /** `cambiato`: lo stato del piano può essere diverso (accesso riuscito, uscita); chi sta sopra lo rilegge. */
 const emit = defineEmits<{ cambiato: [] }>()
@@ -138,6 +151,8 @@ async function esci(): Promise<void> {
         const { revocaConfermata } = await servizio().esci()
         // il conto locale era di quell'account
         conto().azzera()
+        // un r4 che non risponde non ferma l'uscita: il giro dopo chiede il token al custode, che dice «non collegato» e lo toglie
+        void (props.dimenticaNelCodice ?? dimenticaNelCodiceDiSerie)().catch(() => undefined)
         avviso.value = revocaConfermata ? null : t('chatgptPlan.disconnectedHere')
     } finally {
         inUscita.value = false

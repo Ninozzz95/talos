@@ -6,6 +6,33 @@ signed APK under [Releases](../../releases).
 
 Numbers in this file are measured on a device, not estimated.
 
+## v0.1.43
+
+Code can use your ChatGPT plan, with the same sign-in as the chat.
+
+### Added
+
+- In Code, the model picker now lists the models of your ChatGPT plan, the same ones as in the chat, picked the same
+  way. There is still one sign-in, the one in the chat: the app keeps the plan's access and renews it, and Code
+  receives it when you pick the model and before every turn. Code never signs in on its own. Tested on the Pad with
+  GPT-6.1-Sol at medium reasoning: Code wrote a small CSV address-book module with 16 passing tests, then extended it
+  to 21 passing tests.
+- If the plan's access has to be renewed in the middle of a Code turn, the app renews it and the turn picks up again
+  by itself, once, without sending your message twice.
+- The "ChatGPT plan" badge is in the Code composer too, and Code turns are counted in its usage panel together with
+  the chat.
+- When the plan cannot be used in Code (not signed in, plan not enabled, sign-in expired), Code says so and tells you
+  where to sign in: Models, under OpenAI. Signing out in the chat also stops Code from using the plan.
+
+### Fixed
+
+- Starting a new browser sign-in while the previous one was still waiting, or closing the app during a sign-in, now
+  closes the old sign-in right away instead of leaving it open for a moment.
+
+### Changed
+
+- Code runs on the same engine as TALOS desktop 0.1.34.
+
 ## v0.1.42
 
 Code has its session list again, and dictation shows what you said while you say it.

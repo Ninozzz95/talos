@@ -1415,7 +1415,7 @@ export const TALOS_EN_MESSAGES = {
         r4Unavailable: "The new Code engine isn't in this build.",
         r4FileNotCopied: 'The file could not be copied into the attachments folder.',
         r4LibraryLater: 'The Library is not connected to Code yet: attach a file from the phone or from the ▤ panel.',
-        r4ModelsUnavailable: 'On-device models and the ChatGPT plan are not available in Code yet.',
+        r4ModelsUnavailable: 'On-device models are not available in Code yet.',
         // ⛔ K3-C1 (15/10/2026): the Code header on the new engine.
         r4Back: 'Back',
         r4More: 'More actions',
@@ -2314,6 +2314,11 @@ export const TALOS_EN_MESSAGES = {
             CHATGPT_PIANO_NON_ABILITATO: 'Using your ChatGPT plan in TALOS is not enabled. Enable it in Models, under OpenAI.',
             CHATGPT_SERVIZIO_NON_DISPONIBILE: 'ChatGPT is not available right now. Try again in a moment.',
             CHATGPT_ERRORE: 'The ChatGPT plan did not complete the answer. Try again.',
+            // CHATGPT NEL CODICE — the app's custody of the plan, said where the phone signs in
+            CHATGPT_NON_COLLEGATO: 'No ChatGPT account is connected: sign in in Models, under OpenAI.',
+            CHATGPT_ACCESSO_SCADUTO: 'The ChatGPT sign-in has expired: sign in again in Models, under OpenAI.',
+            CHATGPT_RINNOVO_FALLITO: 'The ChatGPT sign-in could not be renewed right now. Try again in a moment.',
+            CHATGPT_RETE: 'OpenAI could not be reached: check the connection and try again.',
         },
         providerCatalogMalformed: '{provider} returned a malformed model catalog.',
         providerChatEmpty: '{provider} answered with nothing at all. Try another model.',

@@ -74,6 +74,26 @@ export interface OpzioniConversazioneR4 {
      * chiave dell'app in r4 (owner 16/10 «alla scelta e a ogni invio»); un rifiuto ferma l'invio e si dice.
      */
     primaDiInviare?: (modello: string | null) => Promise<void>
+    /**
+     * ⛔ CHATGPT NEL CODICE (ledger `LEDGER-CHATGPT-NEL-CODICE-2026-10-18.md`): r4 non rinnova mai il token del piano. Quando un invio è
+     * rifiutato con `CHATGPT_TOKEN_DA_RINNOVARE`, qui la schermata rinnova (forzato) e rispinge; l'invio si ripete UNA volta.
+     */
+    rinnovaAccesso?: (modello: string | null) => Promise<void>
+    /**
+     * ⛔ CHATGPT NEL CODICE (emendamento 18/10): il consumo di un giro DAL VIVO, come lo dice r4 (`StateDelta` `replace /usage`,
+     * totali cumulativi nel giro): le chiamate al modello e i token (richiesta + risposta) in più rispetto al totale di prima.
+     */
+    suConsumo?: (consumo: { richieste: number; token: number }) => void
+}
+
+/** I totali che r4 manda a ogni chiamata del giro (`talosHarness.mjs` `conto`); `null` se l'evento non è un consumo. */
+function totaliDelConsumo(dati: Record<string, unknown>): { giri: number; token: number } | null {
+    if (dati.type !== 'StateDelta' || !Array.isArray(dati.delta)) return null
+    const voce = (dati.delta as { op?: unknown; path?: unknown; value?: unknown }[]).find((d) => d?.op === 'replace' && d.path === '/usage')
+    const v = voce?.value as Record<string, unknown> | undefined
+    if (!v || typeof v !== 'object') return null
+    const numero = (x: unknown) => (typeof x === 'number' && Number.isFinite(x) && x > 0 ? x : 0)
+    return { giri: numero(v.giri), token: numero(v.prompt_tokens) + numero(v.completion_tokens) }
 }
 
 const attesaDiSerie = (tentativo: number): number => Math.min(5000, 500 * 2 ** (tentativo - 1))
@@ -106,6 +126,12 @@ function erroreDalCorpo(stato: number, corpo: string): ErroreR4 {
         // un corpo che non è JSON: resta lo stato HTTP
     }
     return { code: `HTTP_${stato}`, message: `HTTP ${stato}` }
+}
+
+/** Un guasto del passo prima dell'invio o del rinnovo: il suo codice, se ce l'ha (mai il token: le frasi sono dei nostri errori). */
+function erroreDalGuasto(guasto: unknown): ErroreR4 {
+    const code = typeof (guasto as { code?: unknown })?.code === 'string' ? (guasto as { code: string }).code : 'TALOS_R4_FORNITORE'
+    return { code, message: guasto instanceof Error ? guasto.message : String(guasto) }
 }
 
 export function useConversazioneR4(opzioni: OpzioniConversazioneR4) {
@@ -174,6 +200,8 @@ export function useConversazioneR4(opzioni: OpzioniConversazioneR4) {
     let timerRiapertura: ReturnType<typeof setTimeout> | null = null
     const maniglie: Promise<{ remove(): Promise<void> }>[] = []
 
+    /** I totali `/usage` del giro visti per ultimi (dalla storia o dal vivo): il consumo nuovo è la differenza. */
+    let consumoDelGiro = { giri: 0, token: 0 }
     function consuma(testo: string): void {
         // Il nativo legge a righe e le chiude con «\n»; un «\r\n» di un altro trasporto diventa lo stesso.
         buffer += testo.replace(/\r\n/gu, '\n')
@@ -184,7 +212,19 @@ export function useConversazioneR4(opzioni: OpzioniConversazioneR4) {
         let c = stato.value
         let p = statoPannello.value
         const eraFinita = c.storiaFinita
+        let daRinnovare = false
         for (const evento of leggiFlussoSse(interi)) {
+            // la fine della storia può stare nello stesso pezzo: il vivo si decide evento per evento
+            if (c.storiaFinita && evento.dati.type === 'RunError' && evento.dati.code === 'CHATGPT_TOKEN_DA_RINNOVARE') daRinnovare = true
+            // il consumo: l'ultimo totale si segue anche nella storia (un flusso riaperto a metà giro non riconta), si dice solo dal vivo
+            if (evento.dati.type === 'RunStarted') consumoDelGiro = { giri: 0, token: 0 }
+            const totali = totaliDelConsumo(evento.dati)
+            if (totali) {
+                const richieste = Math.max(0, totali.giri - consumoDelGiro.giri)
+                const token = Math.max(0, totali.token - consumoDelGiro.token)
+                consumoDelGiro = totali
+                if (c.storiaFinita && (richieste || token)) opzioni.suConsumo?.({ richieste, token })
+            }
             c = applicaEventoR4(c, evento.dati, opzioniEventi)
             p = applicaEventoPannelloR4(p, evento.dati)
             const richiesta = richiestaDellaFigliaR4(evento.dati, sessioneId.value)
@@ -201,6 +241,7 @@ export function useConversazioneR4(opzioni: OpzioniConversazioneR4) {
         if (c !== stato.value) stato.value = c
         if (p !== statoPannello.value) statoPannello.value = p
         if (!eraFinita && c.storiaFinita) void riprendiFiglie()
+        if (daRinnovare) void riprendiDopoIlRinnovo()
     }
 
     // ---- K3-AP3: le richieste delle sotto-sessioni (`cartaDellaFiglia`, `leggiDomandaDellaFiglia`, `legacy/app.js:11320-11390`) ----
@@ -533,6 +574,54 @@ export function useConversazioneR4(opzioni: OpzioniConversazioneR4) {
         if (esito.ok) ragionamento.value = reasoning
         return esito.ok
     }
+    /**
+     * Un invio (`custom`, `resume` col messaggio) che r4 rifiuta perché il token del piano va rinnovato: un rinnovo e UNA ripetizione
+     * della stessa richiesta. Al secondo rifiuto, o se il rinnovo non riesce, resta l'errore nella riga.
+     */
+    async function postaUnInvio(percorso: string, corpo: unknown): Promise<{ ok: true; corpo: string } | { ok: false }> {
+        const prima = await posta(percorso, corpo)
+        if (prima.ok || errore.value?.code !== 'CHATGPT_TOKEN_DA_RINNOVARE' || !opzioni.rinnovaAccesso) return prima
+        try {
+            await opzioni.rinnovaAccesso(modello.value)
+        } catch (guasto) {
+            errore.value = erroreDalGuasto(guasto)
+            return { ok: false }
+        }
+        errore.value = null
+        return posta(percorso, corpo)
+    }
+
+    /**
+     * ⛔ A metà giro (Desktop 18/10, `http-app.mjs:7078-7110`, `session-registry.mjs:11032-11068`): dopo un 401 del servizio r4 chiude
+     * il giro con RunError `CHATGPT_TOKEN_DA_RINNOVARE` e dimentica il token. Rinnovo, nuova spinta e `resume {}` (riparte dalla storia
+     * salvata, senza ripetere il messaggio) UNA volta per invio. `SESSION_NOT_READY` mentre r4 chiude il giro si riprova poco dopo;
+     * `interrupted-write-message` (il messaggio non è stato salvato) no: resta l'errore.
+     */
+    let giroRiprovato = false
+    const TENTATIVI_RIPRESA = 5
+    async function riprendiDopoIlRinnovo(): Promise<void> {
+        if (giroRiprovato || chiuso || !opzioni.rinnovaAccesso || !sessioneId.value) return
+        giroRiprovato = true
+        try {
+            await opzioni.rinnovaAccesso(modello.value)
+        } catch (guasto) {
+            errore.value = erroreDalGuasto(guasto)
+            return
+        }
+        const percorso = `/api/v1/sessions/${encodeURIComponent(sessioneId.value)}/resume`
+        for (let tentativo = 1; !chiuso; tentativo += 1) {
+            const esito = await posta(percorso, {})
+            if (esito.ok) {
+                errore.value = null
+                if (!flussoId) await apri()
+                return
+            }
+            const rifiuto = errore.value
+            if (rifiuto?.code !== 'SESSION_NOT_READY' || rifiuto.reason === 'interrupted-write-message' || tentativo >= TENTATIVI_RIPRESA) return
+            await new Promise((fatto) => setTimeout(fatto, attesa(tentativo)))
+        }
+    }
+
     /** Il passo prima di ogni invio (la chiave in r4); un rifiuto ferma l'invio e va nella riga d'errore. */
     async function prontoPerInviare(): Promise<boolean> {
         if (!opzioni.primaDiInviare) return true
@@ -540,8 +629,7 @@ export function useConversazioneR4(opzioni: OpzioniConversazioneR4) {
             await opzioni.primaDiInviare(modello.value)
             return true
         } catch (guasto) {
-            const code = typeof (guasto as { code?: unknown })?.code === 'string' ? (guasto as { code: string }).code : 'TALOS_R4_FORNITORE'
-            errore.value = { code, message: guasto instanceof Error ? guasto.message : String(guasto) }
+            errore.value = erroreDalGuasto(guasto)
             return false
         }
     }
@@ -588,6 +676,7 @@ export function useConversazioneR4(opzioni: OpzioniConversazioneR4) {
         if (chiuso || !consegna || inviando.value || inCorso.value) return false
         inviando.value = true
         errore.value = null
+        giroRiprovato = false
         if (!(await prontoPerInviare())) {
             inviando.value = false
             return false
@@ -596,7 +685,7 @@ export function useConversazioneR4(opzioni: OpzioniConversazioneR4) {
             // ⛔ K3-LOC (Pad, 15/10): senza `client`. In r4 `client: 'mobile'` è il telefono attaccato al PC via adb
             // (`talosHarness.mjs:8209` @ fc5), e ogni `shell` tornava «No ADB device»: qui r4 gira DENTRO il telefono.
             // K3-C Scelta del modello: il modello e il ragionamento scelti per la prima (senza, decide r4)
-            const esito = await posta('/api/v1/sessions/custom', {
+            const esito = await postaUnInvio('/api/v1/sessions/custom', {
                 cartellaLibera: cartella, consegna,
                 ...(modello.value ? { modello: modello.value } : {}), ...(ragionamento.value ? { reasoning: ragionamento.value } : {}),
                 // K3 piano: il modo e il permesso scelti dal foglio prima della sessione
@@ -620,7 +709,7 @@ export function useConversazioneR4(opzioni: OpzioniConversazioneR4) {
             await apri()
             return true
         }
-        const esito = await posta(`/api/v1/sessions/${encodeURIComponent(sessioneId.value)}/resume`, { messaggio: consegna, ...conExtra(extra) })
+        const esito = await postaUnInvio(`/api/v1/sessions/${encodeURIComponent(sessioneId.value)}/resume`, { messaggio: consegna, ...conExtra(extra) })
         if (!esito.ok) {
             inviando.value = false
             return false

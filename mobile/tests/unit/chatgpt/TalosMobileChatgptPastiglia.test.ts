@@ -87,6 +87,18 @@ describe('N15 — la pastiglia del piano nel compositore', () => {
         campo.remove()
     })
 
+    it('N15-PAST-06: il pannello sta nello strato sovrapposto dell\'app, sopra le schermate a foglio (il Codice è fisso a z 70)', async () => {
+        // ⛔ Pad 18/10/2026 (foto `cg-21`): nel Codice il pannello si apriva a z 50, SOTTO lo strato fisso del Codice (z 70):
+        // aperto, dentro lo schermo, invisibile. Lo strato è quello dei popover dell'app (`--talos-z-app-overlay`, 120).
+        const w = mount(TalosMobileChatgptPastiglia, { props: { servizio: servizio(), consumi: conto() }, attachTo: document.body })
+        await w.get('[data-testid="talos-chatgpt-pill"]').trigger('click')
+        await flushPromises()
+        const classi = t('talos-chatgpt-usage-panel')!.className.split(/\s+/u)
+        expect(classi).toContain('z-[var(--talos-z-app-overlay)]')
+        expect(classi.filter((c) => /^z-/u.test(c))).toEqual(['z-[var(--talos-z-app-overlay)]'])
+        w.unmount()
+    })
+
     it('N15-PAST-02: il pannello si chiude con Esc, toccando fuori e ritoccando la pastiglia; riaperto rilegge il conto', async () => {
         const c = conto()
         const w = mount(TalosMobileChatgptPastiglia, { props: { servizio: servizio(), consumi: c }, attachTo: document.body })
