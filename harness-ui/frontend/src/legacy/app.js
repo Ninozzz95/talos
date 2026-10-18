@@ -111,7 +111,7 @@ import { creaVistaViva } from '../components/browser-vivo.js'; // 07/9: lo scher
 import { montaMiglioraPrompt } from '../components/migliora-prompt.js'; // 11/9 BC-15: «Migliora il prompt», il pannello del composer
 import { gestoPerIlServer } from '../components/browser-gesti.js'; // 07/9: la vista e il server parlano due lingue: qui si traducono
 import { montaScorciatoie, normalizzaTastiScritti, riconosci, suApple, etichettaTasto } from '../components/scorciatoie.js'; // 06/9 audit: le scorciatoie scritte a schermo devono funzionare, col modificatore della piattaforma
-import { TIPO_FRAME_CONTROLLO, TIPO_FRAME_DATI, codificaFrameClient, collegaAppunti, creaTerminaleXterm, decodificaFrameServer } from '../components/terminale-xterm.js';
+import { TIPO_FRAME_CONTROLLO, TIPO_FRAME_DATI, codificaFrameClient, collegaAppunti, creaCodaTasti, creaTerminaleXterm, decodificaFrameServer } from '../components/terminale-xterm.js';
 import { aCapoXterm, creaMemoSchedeAgente, idComandoVivoUnico, idSchedaAgente, schedeAgenteConMemo as schedeAgenteConMemoComponente, testoSchedaAgente } from '../components/terminale-agente.js'; // PO-10 passo 2 (02/10/2026) → BUG-23 (06/10): la scheda agente UNICA del Terminale // P0/A 16/09: il corpo del terminale — xterm, appunti e menu — fuori dal monolite
 import { aggiornaPiedeChat, dettaglioUtile, etichettaPermesso, fondoInVista, nomeModelloUmano } from '../components/chat-foot.js';
 import { progettiConSessioni } from '../components/progetti.js'; // 06/9: la voce «Progetti» aveva un contatore e nessuna pagina (il montaggio è in sezioni-adattatori.js)
@@ -15968,7 +15968,13 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       tema: temaTerminaleReale(),
       fontFamily: getComputedStyle(document.documentElement).getPropertyValue('--talos-font-mono').trim() || 'Menlo, Consolas, monospace',
       suDati: (dati) => {
-        if (record.ws?.readyState === WebSocket.OPEN) record.ws.send(codificaFrameClient(TIPO_FRAME_DATI_CLIENT, dati));
+        /* 17/10/2026: prima dell'aggancio i tasti vanno in coda e partono all'evento `agganciato` (creaCodaTasti, come VS Code):
+           prima si buttavano in silenzio, e un `echo` scritto subito dopo l'apertura non arrivava mai alla shell. */
+        if (record.agganciato && record.ws?.readyState === WebSocket.OPEN) record.ws.send(codificaFrameClient(TIPO_FRAME_DATI_CLIENT, dati));
+        else if ((record.codaTasti ??= creaCodaTasti()).metti(dati) > 0 && !record.avvisoCodaPiena) {
+          record.avvisoCodaPiena = true; // una volta per coda: la persona sa che una parte non partirà
+          record.term?.writeln(`\r\n[${tr('app.terminal.queueFull')}]`);
+        }
       },
       suMisura: () => inviaResizeTerminale(record),
     });
@@ -16066,6 +16072,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     const ws = new WebSocket(`${protocollo}://${window.location.host}/api/v1/terminal/ws?id=${encodeURIComponent(record.terminalId)}`);
     ws.binaryType = 'arraybuffer';
     record.ws = ws;
+    record.agganciato = false; // una connessione nuova: si torna ad accodare finché il server non dice `agganciato`
     ws.onopen = () => { impostaStatoScheda(record, 'connesso'); inviaResizeTerminale(record); };
     ws.onmessage = (evento) => {
       /* ⛔ 16/09: si decodifica con la stessa funzione che codifica (`terminale-xterm.js`), non con
@@ -16080,6 +16087,17 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
         const messaggio = JSON.parse(corpo);
         if (messaggio.evento === 'agganciato') {
           record.ripreso = messaggio.ripreso === true;
+          /* revisione del bugfixer, 18/10: un `agganciato` di una connessione già sostituita non svuota la coda su quella vecchia */
+          if (record.ws !== ws) return;
+          record.agganciato = true;
+          const inCoda = record.codaTasti?.svuota() ?? '';
+          record.avvisoCodaPiena = false;
+          /* owner 18/10, «solo nella stessa shell»: la coda parte al PRIMO aggancio o se il server dice che la shell è la stessa;
+             una shell nuova (server ripartito, shell chiusa dal reaper) non riceve ciò che era scritto per un'altra, e si dice. */
+          const stessaShell = !record.giaAgganciato || messaggio.ripreso === true;
+          record.giaAgganciato = true;
+          if (inCoda && stessaShell) ws.send(codificaFrameClient(TIPO_FRAME_DATI_CLIENT, inCoda)); // nell'ordine in cui sono stati scritti
+          else if (inCoda) record.term?.writeln(`\r\n[${tr('app.terminal.queuedDropped')}]`);
           if (messaggio.shell) { record.shell = messaggio.shell; record.comando = messaggio.comando || ''; }
           renderizzaSchedeTerminale();
         } else if (messaggio.evento === 'errore') {
@@ -16095,7 +16113,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
         }
       } catch { /* messaggio di controllo malformato: ignorato, mai un crash della connessione */ }
     };
-    ws.onclose = () => { if (record.ws === ws && record.stato !== 'terminato') impostaStatoScheda(record, 'disconnesso'); };
+    ws.onclose = () => { if (record.ws === ws) record.agganciato = false; if (record.ws === ws && record.stato !== 'terminato') impostaStatoScheda(record, 'disconnesso'); };
   }
 
   /** Il terminale è a schermo: nella sua vista, oppure nel pannello in basso del composer (PO-09). */

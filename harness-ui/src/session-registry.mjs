@@ -4905,7 +4905,8 @@ export function createSessionRegistry({
           const esito = await permessoDelMotoreFn({ tipo: 'shell', comando }, {
             livelloAccesso, modalitaOperativa: voce.modalitaOperativa ?? 'normale', permessiPerAttrezzo: voce.permessiPerAttrezzo ?? {},
             cartella, consensiSessione: consensi, segnaleStop,
-            chiediApprovazioneFn: async () => (approvato ? { approvato: true } : (chiesto = true, { approvato: false, motivo: 'no one to ask outside a turn' })),
+            /* owner 17/10 sera: il sì è `true` — il kernel approva SOLO `true` (`esitoApprovazione`, C-005), e `{ approvato: true }` era un no */
+            chiediApprovazioneFn: async () => (approvato ? true : (chiesto = true, { approvato: false, motivo: 'no one to ask outside a turn' })),
           });
           if (esito?.consentito === true) return { consentito: true };
           return { consentito: false, motivo: esito?.via === 'modalita-piano' ? 'plan-mode' : chiesto ? 'permission-needed' : 'permission-denied' };
@@ -5760,19 +5761,35 @@ export function createSessionRegistry({
    * I tempi sono opzioni della factory (`attesaSilenzioPrimaMs`/`attesaSilenzioRipetiMs`):
    * i test li accorciano, l'ospite può accordarli — i default sono le costanti in testa al file.
    */
+  /** Owner 17/10 sera: la forma in cui si confronta un comando del contratto — spazi in testa e in coda tolti, dentro identico. */
+  const formaDelComandoDelContratto = (comando) => (typeof comando === 'string' ? comando.trim() : '');
   function richiediApprovazione(voce, azione, { silenzioPrimaMs = attesaSilenzioPrimaMs, silenzioRipetiMs = attesaSilenzioRipetiMs, livelloAvvio } = {}) {
     /* ⛔ /goal G5 (owner 15/10/2026, «sola lettura»): il CONFUTATORE dell'obiettivo non chiede mai niente a nessuno. Fa girare SOLO
        i comandi del contratto che la persona ha confermato, identici; ogni altra cosa che chiederebbe (scrivere, un altro comando,
        un segreto, un agente) è un no SUBITO, col motivo per il modello. Codex `spawn.rs`: le prove del padre non diventano
        l'autorizzazione della figlia. */
+    /*
+     * ⛔⛔ Owner 17/10/2026 sera («Adesso, al bugfixer»): sulla 0.1.31 il revisore NON lanciava mai il comando del contratto, e /goal
+     *   non arrivava a «fatto» (trascritto vero `8ec3c036-…`: «the tool refused to run npm test without owner approval»). Due cause:
+     *   - il sì era `{ approvato: true }`, e il kernel approva SOLO `true` (`esitoApprovazione`, C-005, fail-closed): la carta diceva
+     *     «contratto-obiettivo» e il kernel rispondeva «the owner did not approve this action»;
+     *   - passava solo `shell`: lo stesso comando chiesto con `prova` (l'attrezzo delle prove, che lancia il comando di prova della
+     *     sessione) era un no.
+     * ⇒ Il sì è `true`; passano `shell` e `prova` col comando del contratto. La forma si confronta con UNA regola dichiarata: spazi in
+     *   testa e in coda tolti (come Hermes, `hermes_cli/goals.py:1265` `add_gate`: `command.strip()`), DENTRO identico — `npm  test`
+     *   non è `npm test`: dentro un comando gli spazi possono stare fra virgolette e cambiarne il senso. Il no dice quali sono i
+     *   comandi del contratto, scritti come vanno lanciati.
+     */
     if (Array.isArray(voce.soloComandiDelContratto)) {
       const requestId = randomUUID();
-      const approvato = azione?.tipo === 'shell' && typeof azione.comando === 'string' && voce.soloComandiDelContratto.includes(azione.comando);
+      const contratto = voce.soloComandiDelContratto.map(formaDelComandoDelContratto).filter((c) => c !== '');
+      const comando = formaDelComandoDelContratto(azione?.comando);
+      const approvato = (azione?.tipo === 'shell' || azione?.tipo === 'prova') && comando !== '' && contratto.includes(comando);
       broadcast(voce, approvalRequested({ requestId, azione }));
       broadcast(voce, approvalResolved({ requestId, approvato, motivo: approvato ? 'contratto-obiettivo' : 'confutatore-sola-lettura' }));
-      return Promise.resolve(approvato ? { approvato: true } : {
+      return Promise.resolve(approvato ? true : {
         approvato: false,
-        motivo: 'you are the TALOS goal refuter and work READ-ONLY: you may only run the goal contract commands, exactly as written. Nothing else ran.',
+        motivo: `you are the TALOS goal refuter and work READ-ONLY: you may only run the goal contract commands, exactly as written (${contratto.length ? contratto.map((c) => JSON.stringify(c)).join(', ') : 'this contract has none'}). Nothing else ran.`,
       });
     }
     /*

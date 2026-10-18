@@ -8,7 +8,9 @@ import {
   TIPO_FRAME_DATI,
   azioneAppunti,
   codificaFrameClient,
+  TETTO_CODA_TASTI,
   collegaAppunti,
+  creaCodaTasti,
   creaTerminaleXterm,
   decodificaFrameServer,
   vociMenuTerminale,
@@ -355,4 +357,32 @@ test('PO10-MENU-SOLA-LETTURA: Copia e Seleziona tutto; niente Incolla né Pulisc
   assert.equal(pezzi.term.gestoreTasti(tasto({ ctrlKey: true, key: 'v' })), true, 'il tasto torna alla xterm, che senza stdin non fa niente');
   await new Promise((r) => setImmediate(r));
   assert.deepEqual(pezzi.term.incollate, []);
+});
+
+/* 17/10/2026 — i tasti scritti prima che il terminale si agganci non si perdono più (creaCodaTasti, come VS Code `_preLaunchInputQueue`). */
+test('CODA-TASTI-01 — prima dell’aggancio i tasti si tengono, nell’ordine, e si svuotano una volta sola', () => {
+  const coda = creaCodaTasti();
+  assert.equal(coda.metti('echo '), 0);
+  assert.equal(coda.metti('TALOS-R01'), 0);
+  assert.equal(coda.metti('\r'), 0);
+  assert.equal(coda.lunghezza, 'echo TALOS-R01\r'.length);
+  assert.equal(coda.svuota(), 'echo TALOS-R01\r', 'the queued keystrokes are lost or reordered');
+  assert.equal(coda.svuota(), '', 'the queue is sent twice');
+  assert.equal(coda.lunghezza, 0);
+});
+
+test('CODA-TASTI-02 AL CONTRARIO — oltre il tetto il pezzo che non entra si scarta INTERO e lo si dice, mai una coda senza fine', () => {
+  const coda = creaCodaTasti(8);
+  assert.equal(coda.metti('12345'), 0);
+  assert.equal(coda.metti('6789ab'), 6, 'the overflow is not reported, or the piece was cut in half');
+  assert.equal(coda.metti('678'), 0, 'a piece that fits after a refused one is lost');
+  assert.equal(coda.svuota(), '12345678');
+  assert.equal(creaCodaTasti().metti('x'.repeat(TETTO_CODA_TASTI + 10)), TETTO_CODA_TASTI + 10);
+});
+
+test('CODA-TASTI-03 — un incolla che non entra non lascia la shell in modalità incolla (revisione del bugfixer, 18/10)', () => {
+  const coda = creaCodaTasti(16);
+  const incolla = '\x1b[200~ls -la\nrm -rf x\n\x1b[201~';
+  assert.equal(coda.metti(incolla), incolla.length);
+  assert.equal(coda.svuota(), '', 'half of a bracketed paste was queued: the shell would stay in paste mode');
 });

@@ -6,6 +6,19 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
 
 ## Unreleased
 
+## desktop-v0.1.32 — 2026-10-17
+
+### Fixed
+
+- /goal reaches «done» again when a check is a command. In 0.1.31 the read-only reviewer that must fail to refute the goal
+  could not run the contract command (its approval was refused), so the goal paused with «The reviewer could not reach a
+  verdict» even with every check passed. The reviewer now runs the commands of the contract, exactly as confirmed (spaces at
+  the edges are ignored), with the shell or the test tool, and nothing else. The same fix applies to the contract checks run
+  in the conversation of a session that asks before commands.
+- The Terminal no longer loses what you type right after opening it. Keystrokes typed before the shell is attached were
+  dropped in silence, so a command typed at once could vanish; now they wait and are sent, in order, as soon as the shell is
+  ready. If the shell that comes back is a new one, what you typed for the old one is not sent, and the Terminal says so.
+
 ## desktop-v0.1.31 — 2026-10-16
 
 A regular release: installs of 0.1.21 and later receive it automatically. The headline is /goal: give a conversation a goal and

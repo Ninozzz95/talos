@@ -97,11 +97,18 @@ test('CONFUTA-REG-02 — le domande del confutatore: SOLO i comandi del contratt
   await aspetta(() => stato(b, sessionId).stato === 'fatto', 'fatto');
   const chiedi = b.confutatori[0].chiediApprovazioneFn;
   assert.equal(typeof chiedi, 'function', 'premessa: il confutatore ha il suo canale di approvazione');
-  assert.deepEqual(await chiedi({ tipo: 'shell', comando: 'npm test' }), { approvato: true });
-  for (const azione of [{ tipo: 'shell', comando: 'npm test && rm -rf .' }, { tipo: 'shell', comando: 'git push' }, { tipo: 'scrivi', percorso: 'a.txt' }, { tipo: 'delega' }]) {
+  /* owner 17/10 sera: il sì è `true`, l'unico che il kernel accetta (`esitoApprovazione`, C-005). Questa prova pretendeva
+     `{ approvato: true }`: diceva la forma del registro, non quella del kernel che la legge — ed era verde mentre il revisore della
+     0.1.31 non poteva lanciare niente (la prova col kernel vero è `goal-revisore-comando-contratto.test.mjs`). */
+  assert.equal(await chiedi({ tipo: 'shell', comando: 'npm test' }), true);
+  assert.equal(await chiedi({ tipo: 'prova', comando: 'npm test' }), true, 'lo stesso comando chiesto con l\'attrezzo delle prove');
+  assert.equal(await chiedi({ tipo: 'shell', comando: '  npm test \n' }), true, 'la regola dichiarata: spazi in testa e in coda non contano');
+  for (const azione of [{ tipo: 'shell', comando: 'npm test && rm -rf .' }, { tipo: 'shell', comando: 'npm  test' }, { tipo: 'shell', comando: 'git push' }, { tipo: 'prova', comando: 'npm run lint' },
+    { tipo: 'scrivi', percorso: 'a.txt' }, { tipo: 'delega' }, { tipo: 'shell' }]) {
     const no = await chiedi(azione);
     assert.equal(no.approvato, false, JSON.stringify(azione));
     assert.match(no.motivo, /READ-ONLY/u);
+    assert.match(no.motivo, /\("npm test"\)/u, 'il no dice quali comandi si possono lanciare, scritti come vanno lanciati');
   }
 }));
 
