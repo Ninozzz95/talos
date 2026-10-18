@@ -36,7 +36,7 @@ import { creaAutomationRow } from '../components/automazioni.js';
 import { aggiornaPaginaAutomazioni, apriAutomazioneNelPannello } from '../components/automazioni-sezione.js'; // 08/10/2026: la pagina come Libreria e Note (owner)
 import { vociMenuAutomazione, parolaEsitoGiro } from '../components/automazioni-v2.js'; // automazioni a due porte (owner 08/10/2026 notte)
 import { creaFoglioAutomazione } from '../components/automazione-foglio.js';
-import { eCartaAutomazione, cartaModificabile, testiCartaAutomazione, creaBloccoCartaAutomazione } from '../components/automazione-carta.js';
+import { eCartaAutomazione, cartaModificabile, testiCartaAutomazione, creaBloccoCartaAutomazione, segnaAutomazioneSenzaCarta } from '../components/automazione-carta.js';
 import { eCartaFornitori, testiCartaFornitori, creaBloccoCartaFornitori } from '../components/fornitori-carta.js'; // 0.1.25
 import { creaForgeRow, aggiornaPaginaOfficina } from '../components/officina.js'; // 05/9 Fase 2: Officina
 import { creaReportRow } from '../components/ricerca.js'; // 05/9 Fase 2: Ricerca (riga del foglio laterale)
@@ -138,12 +138,14 @@ import { apriModale as apriModaleScheda } from '../components/modale-td.js'; // 
 import { caricatoreOffice, fonteDaCartella } from '../components/lettore/fonti.js';
 import { montaContextCompactor } from '../components/context-compactor.js';
 import { finestraDiContesto } from '../components/contesto.js'; // 09/09: la finestra è UNA SOLA — la colonna destra e la modale leggono lo stesso descrittore
+import { creaContestoTrascrizione, trascriviEventoInterno } from '../components/trascrizione-eventi-interni.js'; // R-04 (17/10/2026): il trascritto esportato non mostra la contabilita
 import { aggiornaSeparatoreContesto, aggiornaSeparatoreLegacy, alternaRiassuntoLegacy } from '../components/context-separator.js'; // F5, 24/09/2026: il separatore esteso al legacy
 import { createContextClient } from '../services/context-client.js';
 import { createContextMonitor } from '../services/context-monitor.js';
 import { aggiornaAvanzamentoContesto, aggiornaAvanzamentoLegacy } from '../components/context-progress.js'; // F5, 24/09/2026: la barra anche per il legacy
 import { montaFasciaObiettivo, aggiornaFasciaObiettivo, sceltaPer as sceltaFasciaObiettivo, ricordaScelta as ricordaSceltaFasciaObiettivo, chiaveDelloStato as chiaveDelloStatoObiettivo } from '../components/obiettivo-fascia.js'; // /goal G6, 15/10/2026: la fascia dell'obiettivo
 import { creaCartaObiettivo, comandoObiettivo, suggerisciComando, stessiControlli } from '../components/obiettivo-carta.js'; // /goal G6: la carta di conferma dei controlli e `/goal`
+import { EVENTO_MCP_AVVIO, creaRicordoAvvisiMcp, nuoviServerNonPartiti, creaNotaMcpNonPartito } from '../components/avviso-mcp.js'; // owner 17/10/2026: un server MCP che non parte si dice in chat
 import { interpretaEventoCompattazione, valutaSogliaContesto, testoRigaCompattazione, testoBarraLegacy, montaAvvisoContesto, aggiornaAvvisoContesto, aggiornaNotaJournalRiparato, compattaLegacy, annullaCompattazioneLegacy } from '../components/compattazione-legacy.js'; // F5, 24/09/2026: la compattazione legacy che si vede e si può fare
 import { aggiornaDiffReview, aggiornaSommarioSchedeReview, chiaveFileReview, creaSchedeReview, etichettaFileReview, nascondiAzioniFase3, riassuntoReviewTestata as riassuntoReviewPerTestata } from '../components/review.js'; // 05/9 Fase 2: Review — elenco dei file e diff nel disegno; 17/09 BC-75: `etichettaFileReview` è la regola del nome, e non si riscrive qui del mockup; 17/09 BC-63: le linguette sono il componente condiviso col Terminale
 import { creaStatoVuoto, suggerimentiDallaCartella } from '../components/stato-vuoto.js'; // 05/9 Fase 2: EmptyState — lo stato vuoto del mockup, dai fatti della cartella
@@ -153,6 +155,7 @@ import { tieniInVistaScheda } from '../components/schede.js'; // 26/09 F6-1: la 
 import { impostaNomiNoti, scriviNomeConNumero } from '../components/nome-con-numero.js'; // 15/10/2026 (owner): il «-2» di un doppione resta in vista
 import { aggiornaTopbar, impostaConteggioScheda } from '../components/topbar.js'; // 05/9 Fase 2: Topbar — titolo, percorso e conteggi delle schede dai dati; 20/09: lo stesso scrittore di badge serve le schede della colonna destra
 import { aggiornaWorkspaceFooter, fornitoreDelModello, testiPiede as testiPiedeWorkspace } from '../components/workspace-footer.js'; // 05/9 Fase 2: WorkspaceFooter — il piede della sidebar dice cartella, tema e chi serve il modello // 05/9 Fase 2: SessionItem — la riga della sidebar è un componente del mockup // 19/09 FASE 3: `fornitoreDelModello` serve alla banda del laboratorio, che deve dire «Locale» o «Cloud»
+const avvisiMcpDetti = creaRicordoAvvisiMcp(); // owner 17/10/2026: i server MCP non partiti già detti, per sessione
 
 (() => {
   // BOOT-03/CORE-04: one navigation epoch and additive UI preferences.
@@ -6180,6 +6183,8 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       textElement('strong', null, hook.id),
       textElement('small', null, hook.eventi.join(', ')),
     );
+    // 17/10/2026: una fiducia CADUTA dice perché (gli script ora contati, o un contenuto cambiato) — la frase del server, mai il motivo
+    if (!hook.fidato && typeof hook.frase === 'string' && hook.frase.trim()) testo.append(textElement('small', null, String(testoDelCampo(hook, 'frase'))));
     let statoEl;
     if (hook.fidato) {
       statoEl = textElement('span', 'status-chip success', tr('app.board.chipActive'));
@@ -6930,6 +6935,8 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       textElement('strong', null, server.id),
       textElement('small', null, tr('app.board.mcp.serverLine', { comando: server.comando, attrezzi: server.allowlist.join(', ') })),
     );
+    // 17/10/2026: come per gli hook — la frase del perché, quando la fiducia è caduta
+    if (!server.fidato && typeof server.frase === 'string' && server.frase.trim()) testo.append(textElement('small', null, String(testoDelCampo(server, 'frase'))));
     let statoEl;
     if (server.fidato) {
       statoEl = textElement('span', 'status-chip success', tr('app.board.chipActive'));
@@ -14630,6 +14637,8 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       //   riavvolgerla ne dava due. `fraseCercata` la rende una frase da leggere, non da eseguire.
       case 'web_search': return fraseCercata(a.query, 60);
       case 'delega_sottotask': return a.task ? tronca(a.task, 60) : '';
+      // revisione K (17/10/2026): due automazioni create nello stesso giro erano «Nuova automazione» due volte, indistinguibili
+      case 'automation_create': case 'automation_update': return typeof a.nome === 'string' && a.nome.trim() ? tronca(a.nome.trim(), 60) : '';
       default: return ''; // elenca/prova/altri: nessun bersaglio singolo pulito, meglio niente che un suggerimento goffo
     }
   }
@@ -16086,9 +16095,10 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       try {
         const messaggio = JSON.parse(corpo);
         if (messaggio.evento === 'agganciato') {
-          record.ripreso = messaggio.ripreso === true;
-          /* revisione del bugfixer, 18/10: un `agganciato` di una connessione già sostituita non svuota la coda su quella vecchia */
+          /* revisione del bugfixer, 18/10: un `agganciato` di una connessione già sostituita non svuota la coda su quella vecchia,
+             e non cambia nemmeno l'etichetta «ripresa» della scheda (la mia revisione, 18/10) */
           if (record.ws !== ws) return;
+          record.ripreso = messaggio.ripreso === true;
           record.agganciato = true;
           const inCoda = record.codaTasti?.svuota() ?? '';
           record.avvisoCodaPiena = false;
@@ -17711,6 +17721,8 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     }
 
     let numeroGiro = 0;
+    let interniOmessi = 0; // R-04: la contabilità lasciata fuori si conta, e il conto si dice in fondo
+    const contestoTrascrizione = creaContestoTrascrizione(); // 18/10: i server MCP già detti, come in chat (solo i cambi)
     for (const evento of esportato.eventi) {
       switch (evento.type) {
         case 'RunStarted': {
@@ -17825,6 +17837,11 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
             righe.push(tr('app.transcript.servedVia', { fornitore: evento.value.fornitore.trim() }), '');
             break;
           }
+          /* R-04 (17/10/2026): un evento interno che la chat disegna diventa la sua frase, la contabilità resta fuori (si conta),
+             uno che non si riconosce prosegue nel `default` col suo JSON. Vedi `trascrizione-eventi-interni.js`. */
+          const interno = trascriviEventoInterno(evento, contestoTrascrizione);
+          if (interno?.testo) { righe.push(`_${interno.testo}_`, ''); break; }
+          if (interno?.omesso) { interniOmessi += 1; break; }
         }
         // falls through
         default: {
@@ -17833,6 +17850,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
         }
       }
     }
+    if (interniOmessi > 0) righe.push('', tr('app.transcript.internalOmitted', { n: interniOmessi }));
     // un segnaposto riempito diventa le sue righe; uno mai riempito (blocco mai chiuso) resta fuori, come prima
     return righe.flatMap((riga) => (riga && typeof riga === 'object' && 'postoTrascrizione' in riga ? (riga.contenuto ?? []) : [riga])).join('\n');
   }
@@ -21017,6 +21035,13 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
      */
     const compattazione = interpretaEventoCompattazione(evento);
     if (compattazione) { applicaEventoCompattazioneLegacy(compattazione, evento); return; }
+    /* owner 17/10/2026 («Avviso in chat + stato in Estensioni»): un server MCP che non parte, detto una volta finché l'esito non cambia */
+    if (evento.type === 'CUSTOM' && evento.name === EVENTO_MCP_AVVIO) {
+      /* nel turno di TALOS come ogni nota del giro (`nellaChat`): rigiocando, l'evento arriva prima del primo testo e fuori dal turno
+         la nota aveva un'altra larghezza e un altro corpo (revisione D, bugfixer 17/10/2026) */
+      for (const esito of nuoviServerNonPartiti(avvisiMcpDetti, state.realSession.id, evento.value)) nellaChat(creaNotaMcpNonPartito(esito, { document }));
+      return;
+    }
     // a inizio giro l'avviso si ritira (in rigiocata resta nascosto: la sessione a schermo può essere cambiata), a fine giro si rivaluta
     if (evento.type === 'RunStarted' || evento.type === 'RunFinished') void aggiornaAvvisoSogliaContesto();
     /*
@@ -21220,9 +21245,17 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
        giro finito, quindi la colonna si ridisegna qui: nessun altro evento la toccherebbe. Solo i campi che servono alla riga. */
     else if (evento.type === 'CUSTOM' && evento.name === 'talos.processo-sfondo' && typeof evento.value?.toolCallId === 'string') {
       state.realSession.eventiAttrezzi.push({ type: 'ProcessoSfondoFinito', ...(Number.isFinite(evento._sequenza) ? { _sequenza: evento._sequenza } : {}), toolCallId: evento.value.toolCallId, esito: evento.value.esito, codice: evento.value.codice, finitoAlle: Date.parse(evento.value.finitoAlle ?? ''), // NaN se manca: nessuna durata inventata
-        ...(evento.value.fermatoDallaPersona === true ? { fermatoDallaPersona: true } : {}) }); // C06: l'arresto della persona vince sul codice (10/10)
+        ...(evento.value.fermatoDallaPersona === true ? { fermatoDallaPersona: true } : {}), // C06: l'arresto della persona vince sul codice (10/10)
+        ...(evento.value.esitoIgnoto === true ? { esitoIgnoto: true } : {}) }); // owner 17/10: un ripreso finito da solo, senza un codice raccolto
       aggiornaInspectorDaStato();
       if (evento.value.fermatoDallaPersona === true) mostraFermatoDallaPersona(evento.value); // C06 (a)
+    }
+    /* Owner 17/10/2026 («Adottarli come Hermes, con "Ferma"»): un comando in sottofondo del server di prima, ancora vivo e ancora suo,
+       ripreso da questo server (`talos.sfondo-adottato`, durevole): la riga torna «In sfondo» e fermabile invece di «Non più seguito». */
+    else if (evento.type === 'CUSTOM' && evento.name === 'talos.sfondo-adottato' && typeof evento.value?.toolCallId === 'string') {
+      state.realSession.eventiAttrezzi.push({ type: 'ProcessoAdottato', ...(Number.isFinite(evento._sequenza) ? { _sequenza: evento._sequenza } : {}), toolCallId: evento.value.toolCallId,
+        pid: Number.isSafeInteger(evento.value.pid) ? evento.value.pid : null });
+      aggiornaInspectorDaStato();
     }
     /* C1 (owner 10/10/2026, «Sì, resta tolta»): una riga tolta dalla scheda Processi (`talos.processo-tolto`, durevole). Arriva
        anche a giro finito, e alla rigiocata: la colonna si ridisegna qui, come per l'uscita di uno sfondato. */
@@ -21942,6 +21975,9 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
         /* F-027 (owner 02/10/2026, «+1 con conferma»): il risultato portava testo che sembra un'istruzione per un'IA — il segno sulla
            riga e la nota in testa al dettaglio, con le parole del kernel. */
         if (evento.suspicious && info?.article) segnaContenutoSospetto({ riga: info.article, corpo: info.detail, sospetto: evento.suspicious });
+        // Full access (owner 17/10/2026): un'automazione fatta senza carta lo dice nella sua riga, con «Apri l'automazione»
+        if (evento.unasked && info?.article) segnaAutomazioneSenzaCarta({ riga: info.article, corpo: info.detail, senzaCarta: evento.unasked,
+          apri: (id) => { setView('automations'); if (apriAutomazioneNelPannello($('#schermoAutomazioni'), id)) mostraAutomazioni(); } });
         /* C2 R6 (08/10/2026): una regola di un ANTENATO ha coperto questa chiamata senza domanda — la ricevuta lo dice, la riga pure. */
         if (evento.receipt?.consentitoDa && info?.article) {
           segnaConsentitoDa({ riga: info.article, corpo: info.detail, consentitoDa: evento.receipt.consentitoDa, nomeSessione: nomeVivoDellaSessione });
@@ -24764,6 +24800,9 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
      *   (02/9: lì il rinvio bloccava lo streaming).
      */
     state.realSession.deferHistoricalRendering = !pronta;
+    /* riverifica D (bugfixer, 17/10/2026): la chat si ridisegna dagli eventi ⇒ il ricordo degli avvisi MCP di questa sessione si
+       azzera, o la rigiocata non ridice la nota (misurato: 1 → 0 tornando dopo cinque altre sessioni, e dopo un cambio di lingua) */
+    if (!pronta) avvisiMcpDetti.delete(sessionId);
     /*
      * ⛔⛔ 07/9, O-48 — owner con due screenshot: «il pulsante di un'altra sessione è su stop quando
      * una sessione separata è in reasoning». Il pulsante non guardava l'altra sessione: guardava

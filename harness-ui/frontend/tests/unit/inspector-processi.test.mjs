@@ -154,8 +154,10 @@ const FINE = (id, { uscita = 0, errore = false, a = 2_000 } = {}) => ({ type: 'T
 //    risultato (Stop, errore, server riavviato). Non è «annullato» né «fallito»: non si sa come è finito.
 // ⛔ 08/10/2026, A6-bis: TREDICI — è entrato «Non più seguito»: un comando sfondato prima di un riavvio del server, che
 //    nessuno segue più. Non è vivo e non ha un esito: non si sa se e come è finito.
-test('PROC-STATI: tredici stati, ognuno con etichetta E icona — mai il solo colore', () => {
-  const attesi = ['in-coda', 'in-avvio', 'in-corso', 'in-attesa', 'in-consenso', 'in-sfondo', 'riuscito', 'fallito', 'annullato', 'ucciso', 'perso', 'non-eseguito', 'interrotto'];
+// ⛔ 17/10/2026, owner «Adottarli come Hermes»: QUATTORDICI — è entrato «Finito (esito non noto)»: un comando ripreso dopo un
+//    riavvio che è uscito da solo. Finito, ma il suo codice non l'ha raccolto nessuno: né «riuscito» né «fallito».
+test('PROC-STATI: quattordici stati, ognuno con etichetta E icona — mai il solo colore', () => {
+  const attesi = ['in-coda', 'in-avvio', 'in-corso', 'in-attesa', 'in-consenso', 'in-sfondo', 'riuscito', 'fallito', 'annullato', 'ucciso', 'perso', 'finito-ignoto', 'non-eseguito', 'interrotto'];
   assert.deepEqual(Object.keys(STATI_PROCESSO), attesi);
   for (const s of attesi) {
     assert.ok(STATI_PROCESSO[s].etichetta.length > 2, `${s} ha una parola sua`);

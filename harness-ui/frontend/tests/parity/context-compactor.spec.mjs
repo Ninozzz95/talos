@@ -53,10 +53,25 @@ async function mount(page) {
   await expect(page.locator('[data-context-start]')).toBeEnabled();
 }
 
+/*
+ * 17/10/2026 (bugfixer) — LA FINESTRA È CAMBIATA IL 10/10 E QUESTE PROVE NO. `fead8061d` (owner: «Panoramica + schede»,
+ *   «Pulsante in panoramica, con conferma») ha messo l'interruttore automatico nella scheda «Impostazioni» e la conferma davanti a
+ *   «Compatta ora» anche per il motore; l'ultima tappa del fuoco è il pannello della scheda attiva (APG Tabs, tabindex 0). Cinque prove
+ *   su sei morivano lì, a tutte e tre le larghezze, prima di provare quello per cui sono nate. I due passi nuovi stanno qui.
+ */
+async function compattaOra(page) {
+  await page.locator('[data-context-start]').click();
+  await page.locator('[data-context-conferma-si]').click();
+}
+async function apriScheda(page, chiave) {
+  await page.locator(`#veloContesto [data-context-tab="${chiave}"]`).click();
+  await expect(page.locator(`#veloContesto [data-context-panel="${chiave}"]`)).toBeVisible();
+}
+
 test('CTX-UI-SMALL-NOOP una chat breve riceve una spiegazione senza progresso fittizio', async ({ page }) => {
   await mount(page);
   await page.evaluate(() => { window.ctxSmall = true; });
-  await page.locator('[data-context-start]').click();
+  await compattaOra(page);
   await expect(page.locator('[data-context-status]')).toHaveAttribute('role', 'status');
   await expect(page.locator('[data-context-status]')).toContainText('ultimo scambio');
   await expect(page.locator('[data-context-status]')).toContainText('Nessun messaggio');
@@ -70,7 +85,9 @@ test('CTX-UI-LIFECYCLE chiusura e cambio chat respingono risposte tardive', asyn
   await expect(page.locator('[data-context-title]')).toBeFocused();
   await expect(page.locator('#ctx-open')).toHaveJSProperty('inert', true);
   await page.keyboard.press('Shift+Tab');
-  await expect(page.locator('#veloContesto [data-context-close]').last()).toBeFocused();
+  await expect(page.locator('#veloContesto [role="tabpanel"]:not([hidden])')).toBeFocused(); // l'ultima tappa: il fuoco resta dentro
+  await page.keyboard.press('Tab');
+  await expect(page.locator('#veloContesto [data-dialog-resize="width"]')).toBeFocused(); // e il giro ricomincia dalla prima
   await page.keyboard.press('Escape');
   await expect(page.locator('#veloContesto')).toBeHidden();
   await expect(page.locator('#ctx-open')).toBeFocused();
@@ -89,6 +106,7 @@ test('CTX-UI-LIFECYCLE chiusura e cambio chat respingono risposte tardive', asyn
 
 test('CTX-UI-INTERACTIONS fatti, fonti, ripristino e guasti restano visibili', async ({ page }) => {
   await mount(page);
+  await apriScheda(page, 'impostazioni');
   await page.locator('[data-context-auto]').uncheck();
   await expect.poll(() => page.evaluate(() => window.ctxState.settings.auto)).toBe(false);
   await page.getByText('Da non dimenticare', { exact: true }).click();
@@ -112,13 +130,14 @@ test('CTX-UI-INTERACTIONS fatti, fonti, ripristino e guasti restano visibili', a
   await expect(page.locator('[data-context-source-text]')).toContainText('La decisione originale era SQLite.');
   await page.evaluate(async () => { window.ctxFail = true; await window.ctx.refresh(); });
   await expect(page.locator('[data-context-status]')).toHaveAttribute('role', 'alert');
-  await expect(page.locator('[data-context-status]')).toContainText('non disponibile');
+  await expect(page.locator('[data-context-status]')).toContainText('Non è stato possibile leggere il contesto'); // la frase del 10/10 (`fead8061d`)
   await expect(page.locator('[data-context-start]')).toBeDisabled();
 });
 
 test('CTX-UI-CLOSE-MUTATION riaprire durante una modifica non lascia la modale bloccata', async ({ page }) => {
   await mount(page);
   await page.evaluate(() => { window.ctxHoldMutation = true; });
+  await apriScheda(page, 'impostazioni');
   await page.locator('[data-context-auto]').click();
   await expect(page.locator('[data-context-start]')).toBeDisabled();
   await page.keyboard.press('Escape');
@@ -130,7 +149,7 @@ test('CTX-UI-CLOSE-MUTATION riaprire durante una modifica non lascia la modale b
 
 test('CTX-UI-PROGRESS avanzamento e resize usano dati e maniglie reali', async ({ page }) => {
   await mount(page);
-  await page.locator('[data-context-start]').click();
+  await compattaOra(page);
   await expect(page.locator('[data-context-job]')).toHaveText('Compattazione contesto in corso');
   await expect(page.locator('[data-context-progress]')).toHaveText('Completati 1 di 3');
   await expect(page.locator('[data-context-progress-bar]')).toHaveAttribute('value', '1');

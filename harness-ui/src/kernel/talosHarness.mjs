@@ -80,6 +80,7 @@ import { creaFiltroGitignore } from '../gitignore-elenco.mjs'
 /* BLOCCO 6 (B3), 20/09/2026 — l'intestazione onesta del risultato di una shell. Una fonte sola, in
    un modulo che importano sia il kernel sia `agent-service.mjs` (che non passa di qui). */
 import { etichettaSandbox } from './etichetta-sandbox.mjs'
+import { dividiPerIlPonte, cercaAttrezzi, descriviAttrezzi, risolviChiamataDelPonte, NOME_CHIAMATA_ATTREZZO, NOME_RICERCA_ATTREZZI, NOME_DESCRIZIONE_ATTREZZI } from './ponte-attrezzi.mjs'
 /*
  * ⛔ F15 (17/09/2026) — la GRAMMATICA DEI SEGRETI vive in `path-policy.mjs`, dove già vive
  * quella dei file di controllo: sono la stessa domanda («questo percorso è speciale?») fatta su
@@ -88,7 +89,7 @@ import { etichettaSandbox } from './etichetta-sandbox.mjs'
  * (solo `node:fs`/`node:os`/`node:path`) come gli altri tre import qui sopra: il kernel resta
  * trasportabile nel bundle del banco.
  */
-import { motivoDaChiedere, eUnFileSegreto, scritturaDiUnaCredenziale } from '../path-policy.mjs'
+import { motivoDaChiedere, eUnFileSegreto, scritturaDiUnaCredenziale, credenzialeDellaCasaLetta } from '../path-policy.mjs'
 import { withoutEchoedMarker } from '../eco-del-marcatore.mjs'
 import { ARGOMENTI_NESSUNO, argomentiVuoti, conArgomentiVuotiComeOggetto } from '../argomenti-vuoti.mjs'
 /*
@@ -594,10 +595,98 @@ export function creaGuardiaGiriInTondo() {
         azzera(nome, argomenti) { viste.delete(firmaChiamata(nome, argomenti)) },
     }
 }
-export function notaGiriInTondo(nome, volte, esito) {
+/* ⛔ Revisione L (bugfixer, 17/10/2026; owner «Sì, adesso nel ramo R-03»): il risultato corto accodato alla nota arrivava al modello
+   GREZZO, fuori dal confine dei dati — un «Ignore all previous instructions» letto due volte passava la seconda senza confine, senza
+   avviso e senza segno (dal 09/10, `276c7c8c9`). `nelConfine` lo avvolge come l'esito normale, e SOLO quando lo accoda davvero: un
+   risultato lungo non arriva al modello, e non deve lasciare segni. */
+export function notaGiriInTondo(nome, volte, esito, { nelConfine = (testo) => testo } = {}) {
     const nota = `[TALOS: this is call ${volte} of "${nome}" with the same arguments, and the result is the same as before, with nothing`
         + ' changed in between. Use what you already have, or do something different; at the 5th the person is asked whether to go on.]'
-    return esito.length < RIMANDO_SOTTO_CARATTERI ? `${nota}\n${esito}` : nota
+    return esito.length < RIMANDO_SOTTO_CARATTERI ? `${nota}\n${nelConfine(esito)}` : nota
+}
+
+/*
+ * ⭐ R-03 — LO STESSO ATTREZZO CHE FALLISCE (owner 17/10/2026, «Come Hermes: avviso dopo 3»). La guardia qui sopra vede solo le
+ *   chiamate IDENTICHE; un modello che riceve un rifiuto e ritenta cambiando di poco gli argomenti le sfugge (revisione degli
+ *   attrezzi del 12/10, R-03: ha ripetuto finché l'anti-loop non l'ha avvisato). Dalla 3ª volta di fila in cui lo STESSO attrezzo
+ *   fallisce, l'esito porta una nota che chiede di cambiare strada. Solo una nota, mai un arresto: con la persona davanti Hermes
+ *   non si ferma (`agent/tool_guardrails.py:126-127`, same_tool_failure warn 3 / halt 8 solo se hard_stop_enabled; `:376-417` il
+ *   conto; `:589-603` il testo, ripreso qui).
+ * ⛔ Fuori `shell` e `prova`: lì un rosso è lavoro normale (una suite che fallisce, un comando di diagnosi), come i
+ *   FAILURE_TOLERANT_TOOL_NAMES di Hermes (`:53-57`). Una riuscita di `shell` conta però come progresso (sta fra le azioni che
+ *   cambiano qualcosa, come `terminal` per Hermes); `prova` no: esegue le prove e non cambia niente.
+ * ⛔ Il conto si azzera quando quell'attrezzo riesce, e del tutto quando riesce un'azione che cambia qualcosa (Hermes
+ *   PROGRESS_RESET_TOOL_NAMES, `:60-66`): dopo una modifica il ritentativo è un esperimento nuovo, non una replica.
+ * Vale per il giro (una richiesta della persona), come il resto di questa guardia, e solo con `guardiaGiriInTondo`.
+ * ⛔ Revisione J (17/10/2026): molti fallimenti non portano `erroreTool` (`file_edit` NOT FOUND, i rifiuti di `scrivi`, `cerca`,
+ *   `naviga`, MCP, plugin…), e nemmeno le scritture riuscite: la guardia vedeva pochi fallimenti e non ripartiva mai dopo una
+ *   modifica. Owner 17/10, «Come Hermes: ripiego sul testo»: quando l'attrezzo non dà un verdetto, lo si legge dall'inizio
+ *   dell'esito (`esitoFallito`), come `classify_tool_failure` (`agent/tool_guardrails.py:218-241`, usato a `:381-382` solo se
+ *   chi chiama non passa `failed`). Un verdetto esplicito vince sempre.
+ */
+export const STESSO_ATTREZZO_CHE_FALLISCE_AVVISO = 3
+const ATTREZZI_DOVE_UN_ROSSO_E_LAVORO = new Set(['shell', 'prova'])
+export function creaGuardiaStessoAttrezzo() {
+    const fallimenti = new Map()
+    return {
+        /** → quante volte di fila quell'attrezzo è fallito (0 se non conta) */
+        osserva({ nome, fallito, progresso }) {
+            if (progresso) fallimenti.clear()
+            if (ATTREZZI_DOVE_UN_ROSSO_E_LAVORO.has(nome)) return 0
+            if (!fallito) { fallimenti.delete(nome); return 0 }
+            const volte = (fallimenti.get(nome) ?? 0) + 1
+            fallimenti.set(nome, volte)
+            return volte
+        },
+    }
+}
+/* Le forme con cui un esito di TALOS dice «non è riuscito», all'inizio del testo: i rifiuti (REFUSED, anche col codice), i non
+   trovati, gli argomenti non validi, «Nothing was written/done…», gli errori (`error:`, `<attrezzo> failed`, `MCP tool error:`),
+   i blocchi (`blocked:`), i codici `…_INVALID/_UNAVAILABLE/_FAILED…`, gli attrezzi non configurati. ⛔ Le note di TALOS
+   («[TALOS: …», il rifiuto di una chiamata identica) NON sono fallimenti: come `is_guardrail_refusal` di Hermes (`:225-229`),
+   contarle farebbe scattare l'avviso per un rifiuto della guardia stessa. Sono fuori perché nessuna forma qui inizia con «[». */
+const INIZIO_DI_UN_FALLIMENTO = /^(?:REFUSED\b|NOT FOUND\b|INVALID\b|FAILED\b|ERROR\b|Error\b|error:|blocked:|Nothing was \w+|MCP tool error:|[a-z][a-z_ ]{0,40} failed\b|[A-Z][A-Z0-9_]*_(?:INVALID|UNAVAILABLE|FAILED|NOT_FOUND|BLOCKED|FORBIDDEN)(?:_[A-Z0-9_]+)?\b)/u
+const ATTREZZO_NON_CONFIGURATO = /^[\w -]{1,60} (?:is|are) not configured on this harness\b|^[\w -]{1,60} not configured on this harness\b|^[\w -]{1,60} is only available inside\b/u
+/* Revisione K (owner 17/10, «Le quattro sì, la navigazione no»): `cerca` senza argomenti, la cartella che `elenca` non apre, l'attrezzo
+   che non c'è in questa sessione (la delega non configurata è sopra, col trattino). Una pagina 404/500 di `naviga` NON conta: come
+   Hermes (`FAILURE_TOLERANT_TOOL_NAMES`, `browser_navigate`), lì un rosso è lavoro normale. */
+const ALTRI_FALLIMENTI = /^give at least one of |^"[^"\n]*" is not a readable folder of this workspace\.|^[\w-]{1,80} is not available in this session\./u
+export function esitoFallito(esito) {
+    const testo = String(esito ?? '').trimStart()
+    return INIZIO_DI_UN_FALLIMENTO.test(testo) || ATTREZZO_NON_CONFIGURATO.test(testo) || ALTRI_FALLIMENTI.test(testo)
+}
+export function notaStessoAttrezzo(nome, volte) {
+    return `[TALOS: "${nome}" has failed ${volte} times in a row in this turn. This looks like a loop. Do not switch to text-only`
+        + ' replies; read the latest error and check your assumptions before retrying. Try different arguments, a narrower path or'
+        + ' query, or a different tool that can make progress. If the blocker is outside your control, say so after one diagnostic'
+        + ' attempt instead of repeating the same failing path.]'
+}
+
+/*
+ * R-03, seconda metà (owner 17/10/2026): un rifiuto della delega porta un CODICE stabile e dice se la STESSA chiamata può
+ *   riuscire più tardi. Prima era una frase, e il modello ripeteva chiamate identiche finché l'anti-loop non l'avvisava (revisione
+ *   degli attrezzi del 12/10). Codex fa lo stesso coi suoi errori (`AskForApproval::Never`: «failures are immediately returned to
+ *   the model»); Hermes dice «stop retrying it unchanged» (`tool_guardrails.py:247-250`). Un host che non manda il codice resta
+ *   com'era (la CLI, un ospite vecchio): la frase non cambia.
+ */
+/** I dati del rifiuto per l'evento d'esito: solo col codice valido (un ospite vecchio non ne ha, e l'evento resta com'era). */
+export function datiDelRifiuto({ codice, ritentabile, motivo } = {}) {
+    if (typeof codice !== 'string' || !/^[A-Z][A-Z0-9_]*$/u.test(codice)) return null
+    return { codice, ...(typeof ritentabile === 'boolean' ? { ritentabile } : {}), motivo: typeof motivo === 'string' ? motivo.trim() : '' }
+}
+export function rifiutoDellaDelega({ codice, ritentabile, motivo } = {}) {
+    const conCodice = typeof codice === 'string' && /^[A-Z][A-Z0-9_]*$/u.test(codice)
+    const grezzo = typeof motivo === 'string' && motivo.trim() ? motivo.trim() : 'the delegation was refused.'
+    /* nel formato nuovo la frase finisce col suo punto («no one can answer here» arrivava senza); il vecchio resta identico */
+    const perche = conCodice && !/[.!?]$/u.test(grezzo) ? `${grezzo}.` : grezzo
+    const testa = conCodice ? `REFUSED [${codice}].` : 'REFUSED.'
+    /* Revisione J (owner 17/10, «Solo richiama per chiedere»): il limite «da solo» con la persona davanti dice già «richiama per
+       chiedere»; la coda «riprova quando la causa è cambiata» lo contraddiceva. Nei dati resta ritentabile. */
+    const coda = codice === 'DELEGATION_SOLO_LIMIT' ? ''
+        : ritentabile === false
+        ? ' Retrying the same call will be refused again: change the request, or tell the person what blocks it.'
+        : ritentabile === true ? ' This can succeed later: retry only after the cause has changed.' : ''
+    return `${testa} ${perche}${coda} No child was started.`
 }
 
 export const CONTINUAZIONI_MASSIME = 3
@@ -4142,6 +4231,25 @@ export const ATTREZZI_AUTOMAZIONI = new Set(['automation_list', 'automation_runs
 /** 0.1.25 (owner 09/10/2026): gli attrezzi dei fornitori a valle esclusi, che passano da `onFornitoriFn`. */
 export const ATTREZZI_FORNITORI = new Set(['provider_exclusions_list', 'provider_exclude', 'provider_allow', 'chatgpt_account'])
 
+/*
+ * ⭐ Full access non chiede (owner 12/10/2026, «per legge»; quarta tornata 17/10, due consigliate): in «Full access» le carte delle
+ *   automazioni (crea, modifica, riprendi) e dell'esclusione dei fornitori non si mostrano. L'azione si fa subito, e l'esito dice
+ *   che cosa la carta avrebbe segnalato: è la traccia visibile scelta il 12/10 per i segreti. ⛔ Lo scollegamento dell'account
+ *   ChatGPT (`chatgpt_account`) RESTA con la conferma: scelta esplicita dell'owner del 12/10.
+ *   Come fanno gli altri: Claude Code bypassPermissions (docs «permissions»), Hermes yolo (`tools/approval.py:483-488`), Codex
+ *   `AskForApproval::Never` (`protocol/src/protocol.rs:1003-1005`): nessuna domanda in quella modalità.
+ */
+export const SENZA_CARTA_IN_ACCESSO_PIENO = new Set([...ATTREZZI_AUTOMAZIONI, 'provider_exclude', 'provider_allow'])
+
+/** Che cosa la carta avrebbe segnalato, detto nell'esito quando in Full access la carta non c'è. Vuoto se non c'era niente. */
+export function notaSenzaCarta(azione) {
+    const oltre = (Array.isArray(azione?.avvisi?.oltre) ? azione.avvisi.oltre : []).map((a) => a?.codice).filter((c) => typeof c === 'string' && c)
+    const minacce = (Array.isArray(azione?.avvisi?.minacce) ? azione.avvisi.minacce : []).filter((m) => typeof m === 'string' && m)
+    return ' Full access: done without asking the person.'
+        + (oltre.length ? ` The confirmation card would have flagged: ${oltre.join(', ')}.` : '')
+        + (minacce.length ? ` Suspicious text in the instructions: ${minacce.join(', ')}.` : '')
+}
+
 /** /goal G6 (owner 15/10/2026): gli attrezzi dell'obiettivo, che passano da `onObiettivoFn`. */
 export const ATTREZZI_OBIETTIVO = new Set(['goal_status', 'goal_create', 'goal_update'])
 
@@ -6075,7 +6183,8 @@ function intestazioneDellaRicerca(voce, file) {
    chiave vera esce dai risultati come gli altri segreti (`eUnFileSegreto` ne guarda i primi 256 KB). Senza radice, come prima. */
 function senzaFileSegreti(percorsi, radice = null) {
     const tenuti = [], omessi = []
-    const opzioni = typeof radice === 'string' && radice !== '' ? { cartella: radice } : {}
+    /* R6 (riverifica del bugfixer, 16/10 notte): una memoria per questa ricerca — le cartelle e la casa si guardano una volta, non per ogni risultato */
+    const opzioni = { ...(typeof radice === 'string' && radice !== '' ? { cartella: radice } : {}), memoria: {} }
     for (const p of percorsi) (eUnFileSegreto(p, opzioni) ? omessi : tenuti).push(p)
     return { tenuti, omessi: omessi.length }
 }
@@ -10379,9 +10488,17 @@ export async function verificaPermessoScrittura(azione, { livelloAccesso, modali
     /* ⛔ Owner 16/10/2026 sera («Chiedi, ma non in Full access»): scrivere o modificare un segreto del progetto chiede come leggerlo.
        Il sì «per la sessione» di una scrittura è suo (`chiaveDelConsenso`, owner 16/10 notte «No, separati»): quello della lettura
        dello stesso file non lo copre. */
-    const segreto = (azione.tipo === 'shell' || lettura || scrittura)
+    const segretoDelPercorso = (azione.tipo === 'shell' || lettura || scrittura)
         ? motivoDaChiedere({ tipo: azione.tipo, comando: azione.comando, percorso: azione.percorso, cartella, accessoPieno: livelloAccesso === 'accesso-pieno' })
         : null
+    /* ⛔ Owner 16/10/2026 notte («Sì, anche sul desktop»): in Full access LEGGERE una credenziale della casa (`~/.ssh`, `.aws`, `.netrc`,
+       `.npmrc`…) chiede lo stesso — l'eccezione dichiarata al «Full access non chiede mai» del 12/10. Fuori da Full access chiede già
+       come segreto. Nessuno davanti ⇒ il rifiuto col motivo, come ogni segreto. */
+    const credenzialeLetta = livelloAccesso === 'accesso-pieno' && (lettura || azione.tipo === 'shell')
+        ? credenzialeDellaCasaLetta({ tipo: azione.tipo, percorso: azione.percorso, comando: azione.comando, cartella, segreto: segretoDelPercorso })
+        : null
+    /* il segno `credenzialeDellaCasa` arriva con la domanda anche quando il percorso era già un segreto per nome: l'ospite lo riconosce */
+    const segreto = segretoDelPercorso && credenzialeLetta ? { ...segretoDelPercorso, credenzialeDellaCasa: true } : (segretoDelPercorso ?? credenzialeLetta)
     /* ⛔ 04/10/2026, BUG-A (owner: «Aggiungi Consenti per la sessione davanti ai segreti») — il sì
        dato con `ambito: 'percorso'` resta in `consensiSessione.segretiConsentiti` (SOLO il percorso
        chiamato in causa dalla domanda, mai un prefisso, mai una cartella): quel percorso non
@@ -10405,7 +10522,7 @@ export async function verificaPermessoScrittura(azione, { livelloAccesso, modali
        l'Accesso pieno — anche `leggi`/`elenca` su un segreto (owner: «File segreti» fra le carte da togliere). Come Claude Code
        `bypassPermissions` (code.claude.com/docs/en/permissions, letta il 12/10/2026) e Hermes «yolo» (`tools/approval.py:483-488`).
        Un «chiedi» o un «nega» per attrezzo scelto dalla persona restano sovrani (più sotto). */
-    const segretoForzaConferma = Boolean(segreto) && !segretoConsentito && !accessoPieno
+    const segretoForzaConferma = Boolean(segreto) && !segretoConsentito && (!accessoPieno || Boolean(credenzialeLetta))
     /* C2 R6 (08/10/2026): il sì «questo percorso per la sessione» ha evitato una domanda vera (non con l'Accesso pieno sulla
        shell, dove il segreto non chiede comunque) ⇒ se l'ha dato un antenato, la traccia lo dice. Opzione facoltativa: chi non
        la passa (banco, CLI, mobile) non vede differenze. */
@@ -11278,6 +11395,9 @@ export async function talosLavora({
      * per `onScrittura`): comportamento bit-per-bit identico a oggi.
      */
     strumentiEstesi, // array di nomi da ATTREZZI_ESTESI da offrire, es. ['web_search','artifact_create']
+    /* ⭐ C5 attrezzi differiti (owner 17/10/2026): `true` ⇒ gli attrezzi di `ATTREZZI_DIFFERIBILI` passano dietro il ponte
+       tool_search/tool_describe/tool_call (`ponte-attrezzi.mjs`). Spento di serie: chi non lo passa resta bit per bit com'era. */
+    attrezziDifferiti = false,
     ricercaWeb, // {provider, apiKey?, endpoint?} — usato solo se 'web_search' è in strumentiEstesi
     /*
      * ⭐⭐⭐⭐ L9 (12/09/2026) — DUE PARAMETRI, ENTRAMBI OPZIONALI, per la ricerca approfondita.
@@ -12101,6 +12221,12 @@ export async function talosLavora({
         ? { fonte: sospettoDelContesto.fonte, motivi: [...sospettoDelContesto.motivi], luogo: sospettoDelContesto.luogo ?? luogoDellaFonte(sospettoDelContesto.fonte) }
         : null
     let sospettoDellaChiamata = null
+    /* Full access (owner 17/10/2026, dopo la revisione I): un'automazione fatta SENZA carta, con qualcosa che la carta avrebbe
+       segnalato. Viaggia sull'evento d'esito; le parole le mette l'interfaccia, nelle due lingue. */
+    let senzaCartaDellaChiamata = null
+    /* R-03 (17/10/2026, richiesta della CLI): il rifiuto della delega anche come DATI sull'evento d'esito, così un ospite legge
+       codice e motivo da un campo e non da una regex sul testo (la CLI traduce il rifiuto per la persona). */
+    let rifiutoDellaChiamata = null
     /* Il testo di un messaggio, anche quando porta immagini (`content` a pezzi). */
     const testoDelMessaggio = (contenuto) => (typeof contenuto === 'string' ? contenuto
         : Array.isArray(contenuto) ? contenuto.map((pezzo) => (typeof pezzo?.text === 'string' ? pezzo.text : '')).join('\n') : '')
@@ -12162,17 +12288,22 @@ export async function talosLavora({
     ])
     const DI_COMANDI = new Set(['shell', 'prova', 'process_output'])
     const ESITI_DI_CERCA = /^(?:REFUSED\.|NOT FOUND\.|INVALID\.|give at least one of |stopped: the search was interrupted\.|no file matches |no further matches at offset |inconclusive search: |⛔ fermato su richiesta)/u
-    const conConfine = (nome, esito) => {
+    /* Revisione K (17/10/2026): `segna: false` avvolge senza mettere il segno del contenuto sospetto — serve alla guardia R-03, che
+       legge il verdetto dall'esito GIÀ nel confine (un risultato di `cerca` che si chiama «ERROR.md» non deve sembrare un errore)
+       anche quando poi l'esito viene sostituito dalla nota dei giri in tondo e non arriva al modello. */
+    const avvolgiSenzaSegni = (fonte, opzioniConfine = {}) => (testo) => (typeof testo !== 'string' || testo === '' ? testo : avvolgiDati(testo, { fonte, ...opzioniConfine }).testo)
+    const conConfine = (nome, esito, { segna = true } = {}) => {
         if (typeof esito !== 'string' || esito === '') return esito
+        const avvolgi = segna ? avvolgiEsterno : avvolgiSenzaSegni
         const opzioniConfine = DI_COMANDI.has(nome) ? { comandi: true } : {}
-        const dentroTutto = () => avvolgiEsterno(nome, opzioniConfine)(esito)
+        const dentroTutto = () => avvolgi(nome, opzioniConfine)(esito)
         const fuori = (testo) => scansionaIstruzioni(testo).length === 0
         const testa = TESTE_DI_TALOS.get(nome)
         if (testa) {
             const trovata = testa.exec(esito)?.[0]
             if (trovata === undefined) return fuori(esito) ? esito : dentroTutto()
             if (!fuori(trovata)) return dentroTutto()
-            return `${trovata}${avvolgiEsterno(nome, opzioniConfine)(esito.slice(trovata.length))}`
+            return `${trovata}${avvolgi(nome, opzioniConfine)(esito.slice(trovata.length))}`
         }
         if (nome === 'cerca') return ESITI_DI_CERCA.test(esito) && fuori(esito) ? esito : dentroTutto()
         return esito
@@ -12380,6 +12511,8 @@ export async function talosLavora({
         .map(a => [a.function.name, a.function.description]))
     const ATTREZZI_PIANO = new Set([
         'elenca', 'cerca', 'leggi', 'naviga', 'web_search', 'time_now', 'ask_user_question', 'ask_parent', 'answer_parent_question', 'workflow_plan_propose',
+        // C5 attrezzi differiti: cercare e leggere lo schema non toccano niente; `tool_call` si giudica sull'attrezzo VERO
+        NOME_RICERCA_ATTREZZI, NOME_DESCRIZIONE_ATTREZZI,
         'present_plan', // 24/09/2026, decisione owner 36
         'library_find', 'library_read', 'library_file_origin', // C5: library_find accorpa elenco e ricerca
         'notes_find', 'tasks_find', 'memory_find', 'research_find', 'research_read', // C5: *_find accorpa elenco e ricerca
@@ -12428,6 +12561,13 @@ export async function talosLavora({
             ...(attrezzoSkillOpenAI ? [attrezzoSkillOpenAI] : []),
         ].filter(filtraContrattoDelega)
     }
+    /* ⭐ C5 attrezzi differiti: `attrezziOpenAI` resta la lista VIVA del giro (Piano, livello, ruolo, delega: tutto come prima);
+       al modello parte la sua divisione, che per la stessa lista è lo stesso oggetto ⇒ la richiesta resta uguale fra i giri. */
+    /* Gli attrezzi centrali del compito restano davanti: la Ricerca approfondita (riconosciuta da `task.ricercaId`, che sopravvive
+       alla ripresa) deposita il rapporto con `research_deposit` (owner 17/10, dopo la revisione H). */
+    const attrezziCentrali = typeof task?.ricercaId === 'string' && task.ricercaId ? ['research_deposit'] : []
+    const divisioneDelGiro = () => dividiPerIlPonte(attrezziOpenAI, attrezziCentrali)
+    const attrezziVersoIlModello = () => (attrezziDifferiti ? divisioneDelGiro().attrezzi : attrezziOpenAI)
     const nomiToolMcp = attrezziMcpOpenAI ? new Set(attrezziMcpOpenAI.map((a) => a.function.name)) : null
     const nomiToolPlugin = attrezziPluginOpenAI ? new Set(attrezziPluginOpenAI.map((a) => a.function.name)) : null
     const nomiToolForge = attrezziForgeOpenAI ? new Set(attrezziForgeOpenAI.map((a) => a.function.name)) : null
@@ -12698,6 +12838,7 @@ export async function talosLavora({
     let tagliataSenzaRimedio = null
     /* Giri in tondo: la guardia del giro, e la chiamata su cui la persona (o nessuno) ha detto di fermarsi. */
     const giriInTondo = guardiaGiriInTondo === true ? creaGuardiaGiriInTondo() : null
+    const stessoAttrezzo = guardiaGiriInTondo === true ? creaGuardiaStessoAttrezzo() : null // R-03, stesso interruttore
     let fermatoPerGiriInTondo = null
     /*
      * ⭐⭐⭐ BC-10 (13/09/2026) — quante pagine dello STESSO elenco sono già state chieste in
@@ -12852,7 +12993,7 @@ export async function talosLavora({
             const esito = await compattaConversazione(
                 messaggi,
                 (richiesta) => chiamaConRitenta({
-                    modello, chiave, messaggi: richiesta, attrezzi: attrezziOpenAI,
+                    modello, chiave, messaggi: richiesta, attrezzi: attrezziVersoIlModello(),
                     ...(fetchDiRete ? { fetchDiRete } : {}),
                     segnaleStop,
                 }),
@@ -12961,7 +13102,7 @@ export async function talosLavora({
             }
             const messaggiDelGiro = noteInCoda.length > 0 ? [...messaggi, ...noteInCoda] : messaggi
             const preparedContext = contextHooks
-                ? await contextHooks.prepare({ messages: messaggiDelGiro, tools: attrezziOpenAI, model: modello, signal: segnaleStop })
+                ? await contextHooks.prepare({ messages: messaggiDelGiro, tools: attrezziVersoIlModello(), model: modello, signal: segnaleStop })
                 : null
             const invoke = (signal = segnaleStop) => chiamaIlModelloConRitenta(
                 /* Stallo dell'owner (07/10/2026), revisione avversariale: senza Context Engine la storia parte com'è, e una sessione avvelenata
@@ -12975,7 +13116,7 @@ export async function talosLavora({
                    rimpiazza la lista sul posto e richiama. Stessa lista se non c'è niente da togliere: sul motore già pulito non costa. */
                 modello, chiave, conArgomentiVuotiComeOggetto(withoutEchoedMarker(preparedContext?.messages ?? messaggiDelGiro)), fetchDiRete,
                 onDelta ? (e) => onDelta({ giro, ...e }) : undefined,
-                reasoning, attrezziOpenAI, signal, preparedContext?.measurement?.responseReserve,
+                reasoning, attrezziVersoIlModello(), signal, preparedContext?.measurement?.responseReserve,
                 onDelta ? osservaChiamataCompleta : undefined,
                 onGiro ? evento => onGiro({ giro, tipo: 'provider-retry', ...evento }) : undefined,
                 attesaRitentaMassimaMs,
@@ -13329,6 +13470,8 @@ export async function talosLavora({
         let fermatoDentroIlGiro = false
         for (const c of chiamate) {
             sospettoDellaChiamata = null // F-027: il segno della scheda è di QUESTA chiamata
+            senzaCartaDellaChiamata = null
+            rifiutoDellaChiamata = null
             /*
              * ⛔⛔ 08/09/2026 — quello che avevamo già ACCODATO va fermato
              * anche lui. È il limite noto di chi si ferma solo a monte
@@ -13339,9 +13482,22 @@ export async function talosLavora({
              * l'utente aveva già premuto «Ferma».
              */
             if (segnaleStop?.aborted) { fermatoDentroIlGiro = true; break }
-            const nomeChiamato = c.function?.name
+            let nomeChiamato = c.function?.name
             let argomenti = {}
             try { argomenti = JSON.parse(c.function?.arguments || '{}') } catch { /* vuoto */ }
+            /*
+             * ⭐ C5 attrezzi differiti (owner 17/10/2026) — `tool_call` si spacchetta QUI, prima di ogni cancello: Piano, delega,
+             *   livello, ganci, approvazioni e ricevute vedono l'attrezzo vero, come in Hermes (`agent/tool_executor.py:395-445`,
+             *   `_unwrap_tool_search_call`). La storia tiene la chiamata al ponte, con lo stesso id. Un nome fuori dalla lista viva
+             *   del giro, o argomenti che lo schema non regge, si rifiutano senza eseguire niente.
+             */
+            let rifiutoDelPonte = null
+            let viaPonte = false
+            if (attrezziDifferiti && nomeChiamato === NOME_CHIAMATA_ATTREZZO) {
+                const risolta = risolviChiamataDelPonte(argomenti, attrezziOpenAI)
+                if (risolta.rifiuto) rifiutoDelPonte = risolta.rifiuto
+                else { nomeChiamato = risolta.nome; argomenti = risolta.argomenti; viaPonte = true }
+            }
             /*
              * ⭐ C5 (owner 10/10/2026; contratto §7) — `research_control` entra nel dispatch col nome di PRIMA (`research_pause`…):
              *   permesso, hook, ricevuta firmata, catena e Piano restano quelli di sempre. Un nome vecchio chiamato direttamente
@@ -13364,6 +13520,7 @@ export async function talosLavora({
              */
             const perHook = {
                 attrezzoChiamato: nomeChiamato,
+                ...(viaPonte ? { viaPonte: true } : {}),
                 ...(['child_control', 'automation_control', 'research_control'].includes(nomeChiamato)
                     ? { action: nomeChiamato === 'research_control' ? azioneRicerca
                         : typeof argomenti?.action === 'string' ? argomenti.action.trim().toLowerCase() : null }
@@ -13440,7 +13597,7 @@ export async function talosLavora({
             const bloccatoDalPiano = modalitaOperativa === 'piano' && !ATTREZZI_PIANO.has(nome)
             const motivoBloccoNamespace = inCasaLinux() ? null : motivoNamespaceDellaChiamata(nome, argomenti)
             let motivoBloccoPreHook = null
-            if (!bloccatoDallaDelega && !bloccatoDalPiano && !motivoBloccoNamespace && hookFn) {
+            if (!rifiutoDelPonte && !bloccatoDallaDelega && !bloccatoDalPiano && !motivoBloccoNamespace && hookFn) {
                 try {
                     const esitoPreHook = await hookFn({ tipo: 'pre_tool_call', azione: nome, argomenti, giro, ...perHook })
                     if (esitoPreHook && esitoPreHook.consentito === false && azioneMutantePerHook) {
@@ -13452,7 +13609,11 @@ export async function talosLavora({
                 }
             }
 
-            if (bloccatoDallaDelega) {
+            if (rifiutoDelPonte) {
+                erroreTool = true
+                esito = rifiutoDelPonte
+            }
+            else if (bloccatoDallaDelega) {
                 erroreTool = true
                 esito = 'REFUSED. DELEGATION_READ_ONLY: this delegated task cannot use this tool. Nothing was done. Ask the parent for a new delegation with the required authority.'
             }
@@ -15370,7 +15531,7 @@ export async function talosLavora({
                                 testo: testoRapporto,
                                 affermazioni: argomenti.affermazioni,
                                 fonti: argomenti.fonti,
-                                ...(aParti ? { parte: argomenti.parte, byteArgomenti: Buffer.byteLength(typeof c.function.arguments === 'string' ? c.function.arguments : JSON.stringify(argomenti), 'utf8') } : {}),
+                                ...(aParti ? { parte: argomenti.parte, byteArgomenti: Buffer.byteLength(!viaPonte && typeof c.function.arguments === 'string' ? c.function.arguments : JSON.stringify(argomenti), 'utf8') } : {}),
                             })
                         }
                         catch {
@@ -15649,11 +15810,13 @@ export async function talosLavora({
                         try {
                             const anteprima = await ospiteFn(nomeOspite, argomentiOspite, { fase: 'anteprima', toolCallId: c.id })
                             let via = Boolean(anteprima?.ok)
+                            /* Full access non chiede (vedi SENZA_CARTA_IN_ACCESSO_PIENO): il livello è quello riletto per QUESTA chiamata */
+                            const senzaCarta = via && Boolean(anteprima.carta) && livelloAccesso === 'accesso-pieno' && SENZA_CARTA_IN_ACCESSO_PIENO.has(nome)
                             if (!via) {
                                 erroreTool = true
                                 esito = `REFUSED. ${anteprima?.messaggio ?? (fornitori ? 'this provider request is not valid.' : 'this automation request is not valid.')}`
                             }
-                            else if (anteprima.carta) {
+                            else if (anteprima.carta && !senzaCarta) {
                                 const verifica = await verificaAzioneAutomazione({ ...(anteprima.azione ?? {}), tipo: nomeOspite, toolCallId: c.id },
                                     { chiediApprovazioneFn, segnaleStop })
                                 if (!verifica.consentito) {
@@ -15666,6 +15829,14 @@ export async function talosLavora({
                                 const fatto = await ospiteFn(nomeOspite, argomentiOspite, { fase: 'esegui', toolCallId: c.id })
                                 if (fatto?.ok) {
                                     esito = uscitaUtile(String(fatto.testo ?? ''), 16_000, 0.25)
+                                    if (senzaCarta) esito += notaSenzaCarta(anteprima.azione)
+                                    const avvisiSenzaCarta = senzaCarta && ATTREZZI_AUTOMAZIONI.has(nome) ? anteprima.azione?.avvisi : null
+                                    const oltreSenzaCarta = Array.isArray(avvisiSenzaCarta?.oltre) ? avvisiSenzaCarta.oltre : []
+                                    const minacceSenzaCarta = Array.isArray(avvisiSenzaCarta?.minacce) ? avvisiSenzaCarta.minacce : []
+                                    if (oltreSenzaCarta.length || minacceSenzaCarta.length) {
+                                        const id = typeof fatto.id === 'string' ? fatto.id : anteprima.azione?.automazione?.id
+                                        senzaCartaDellaChiamata = { oltre: oltreSenzaCarta, minacce: minacceSenzaCarta, ...(typeof id === 'string' && id ? { automazioneId: id } : {}) }
+                                    }
                                     if (nome === 'automation_runs') esito = avvolgiEsterno('automation_runs')(esito)
                                 }
                                 else {
@@ -15909,6 +16080,13 @@ export async function talosLavora({
                 else if (nome === 'time_now') {
                     esito = formattaOraCorrente(orologioFn())
                 }
+                // C5 attrezzi differiti: il catalogo si ricava dalla lista viva del giro (Hermes: «stateless — rebuilt every assembly»)
+                else if (attrezziDifferiti && nome === NOME_RICERCA_ATTREZZI) {
+                    esito = cercaAttrezzi(divisioneDelGiro().differiti, argomenti)
+                }
+                else if (attrezziDifferiti && nome === NOME_DESCRIZIONE_ATTREZZI) {
+                    esito = descriviAttrezzi(divisioneDelGiro().differiti, argomenti)
+                }
                 /*
                  * ⭐⭐⭐ FASE C (28/8) — sub-agenti. NON passa da
                  * `verificaPermessoScrittura`: non è "sempre/chiedi/nega"
@@ -15982,7 +16160,8 @@ export async function talosLavora({
                         }, { coordinazione, chiediApprovazioneFn, segnaleStop })
                         if (!avvio.consentito) {
                             erroreTool = true
-                            esito = `REFUSED. ${avvio.motivo} No child was started.`
+                            rifiutoDellaChiamata = datiDelRifiuto({ codice: 'DELEGATION_NOT_ALLOWED', ritentabile: false, motivo: avvio.motivo })
+                            esito = rifiutoDellaDelega({ codice: 'DELEGATION_NOT_ALLOWED', ritentabile: false, motivo: avvio.motivo })
                         }
                         else try {
                             // F-022 (owner 01/10): senza `modalita` decide chi ospita la delega — sul desktop i permessi del padre
@@ -15993,7 +16172,8 @@ export async function talosLavora({
                             })
                             if (risultato?.esito === 'rifiutato') {
                                 erroreTool = true
-                                esito = `REFUSED. ${risultato.motivo ?? 'the delegation was refused.'} No child was started.`
+                                rifiutoDellaChiamata = datiDelRifiuto(risultato)
+                                esito = rifiutoDellaDelega(risultato)
                             }
                             else if (risultato?.esito === 'avviato') {
                                 esito = risultato?.riassunto ?? '(no summary returned)'
@@ -16028,10 +16208,12 @@ export async function talosLavora({
                         try {
                             const risultato = await chiamaToolMcpFn(nome, argomenti)
                             esito = avvolgiEsterno(`mcp ${nome}`)(formattaEsitoMcp(risultato)) // F-027: tutto ciò che torna è del server
+                            erroreTool = risultato?.isError === true // revisione K (owner 17/10): il verdetto esplicito, perché l'esito è già nel confine e nessuna forma lo riconoscerebbe
                         }
                         catch (rotto) {
                             // F-027: il messaggio d'errore può essere del server (JSON-RPC `error.message`)
                             esito = avvolgiEsterno(`mcp ${nome}`)(`MCP tool call failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`)
+                            erroreTool = true
                         }
                     }
                 }
@@ -16053,6 +16235,7 @@ export async function talosLavora({
                         }
                         catch (rotto) {
                             esito = avvolgiEsterno(`plugin ${nome}`)(`plugin tool call failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`)
+                            erroreTool = true // revisione K (owner 17/10): il verdetto esplicito, perché l'esito è già nel confine e nessuna forma lo riconoscerebbe
                         }
                     }
                 }
@@ -16075,10 +16258,13 @@ export async function talosLavora({
                     }
                     else {
                         try {
-                            esito = avvolgiEsterno(`tool ${nome}`)(formattaEsitoForge(await eseguiToolForgeFn(nome, argomenti))) // F-027
+                            const risultatoForge = await eseguiToolForgeFn(nome, argomenti)
+                            esito = avvolgiEsterno(`tool ${nome}`)(formattaEsitoForge(risultatoForge)) // F-027
+                            erroreTool = risultatoForge?.status !== 'succeeded' // revisione K (owner 17/10): il verdetto esplicito, perché l'esito è già nel confine e nessuna forma lo riconoscerebbe
                         }
                         catch (rotto) {
                             esito = avvolgiEsterno(`tool ${nome}`)(`forged tool call failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`)
+                            erroreTool = true
                         }
                     }
                 }
@@ -16178,11 +16364,18 @@ export async function talosLavora({
                DICHIARANDO quanto manca (testa + coda, `uscitaUtile`), non con uno `slice` muto che si legge «era tutto qui». */
             /* Giri in tondo: si confronta il risultato GREZZO (il confine dei dati ha un id nuovo a ogni chiamata). Un'azione che
                cambia qualcosa ed è riuscita è progresso; la nota è testo di TALOS, non contenuto esterno, e non va nel confine. */
+            /* Revisione K (17/10/2026, owner «Leggere dopo il confine + segno esplicito»): il verdetto dell'attrezzo se c'è, altrimenti
+               quello letto dall'esito GIÀ nel confine, dove il contenuto esterno non può imitare una forma di TALOS. Una volta sola, per
+               le due guardie: prima i giri in tondo prendevano uno `scrivi` RIFIUTATO per un passo avanti (`!erroreTool` con
+               `erroreTool` assente), e la nota delle chiamate identiche non scattava (owner: «Sì, nello stesso ramo»). */
+            const fallitoOsservato = (giriInTondo || stessoAttrezzo)
+                ? (typeof erroreTool === 'boolean' ? erroreTool : esitoFallito(conConfine(nome, esito, { segna: false })))
+                : Boolean(erroreTool)
             let notaRipetizione = null
             if (giriInTondo) {
-                const volte = giriInTondo.osserva({ nome, argomenti, esito, progresso: AZIONI_MUTANTI_PER_HOOK.includes(nome) && !erroreTool })
+                const volte = giriInTondo.osserva({ nome, argomenti, esito, progresso: AZIONI_MUTANTI_PER_HOOK.includes(nome) && !fallitoOsservato })
                 if (volte >= GIRI_IN_TONDO_AVVISO) {
-                    notaRipetizione = notaGiriInTondo(nome, volte, String(esito))
+                    notaRipetizione = notaGiriInTondo(nome, volte, String(esito), { nelConfine: (testo) => conConfine(nome, testo) })
                     if (volte >= GIRI_IN_TONDO_DOMANDA) {
                         const verifica = await verificaAzioneAutomazione({ tipo: 'giri-in-tondo', strumento: nome, volte, toolCallId: c.id },
                             { chiediApprovazioneFn, segnaleStop })
@@ -16191,7 +16384,16 @@ export async function talosLavora({
                     }
                 }
             }
+            /* R-03: lo stesso attrezzo che fallisce di fila, anche con argomenti diversi. Il verdetto dell'attrezzo se c'è (`erroreTool`
+               booleano), altrimenti quello letto dall'esito come Hermes (revisione J). La nota dei giri in tondo, quando c'è, dice già
+               di cambiare strada e basta una. */
+            let notaStesso = null
+            if (stessoAttrezzo) {
+                const volte = stessoAttrezzo.osserva({ nome, fallito: fallitoOsservato, progresso: AZIONI_MUTANTI_PER_HOOK.includes(nome) && !fallitoOsservato })
+                if (volte >= STESSO_ATTREZZO_CHE_FALLISCE_AVVISO && !notaRipetizione) notaStesso = notaStessoAttrezzo(nome, volte)
+            }
             esito = notaRipetizione ?? conConfine(nome, esito) // F-027: il contenuto esterno nel confine, prima del taglio e dell'evento
+            if (notaStesso) esito = `${esito}\n\n${notaStesso}` // testo di TALOS, dopo il risultato e fuori dal confine (Hermes: in coda)
             /* C16: testo di TALOS, fuori dal confine dei dati, una volta sola */
             if (notaPermessiCambiati) { esito = `${notaPermessiCambiati}\n\n${esito}`; notaPermessiCambiati = null }
             const contenutoTool = contextHooks ? String(esito) : uscitaUtile(String(esito), 8_000, 0.5)
@@ -16205,7 +16407,9 @@ export async function talosLavora({
                fisse: chi non misura non manda `durataMs: undefined`, che in JSON diventerebbe una
                chiave fantasma e romperebbe i `deepStrictEqual` gia' scritti altrove. */
             onGiro?.({ giro, tipo: 'tool-esito', toolCallId: c.id, content: contenutoTool, ...(processoPerEvento ?? {}), ...(typeof erroreTool === 'boolean' ? { isError: erroreTool } : {}),
-                ...(sospettoDellaChiamata ? { contenutoSospetto: sospettoDellaChiamata } : {}) })
+                ...(sospettoDellaChiamata ? { contenutoSospetto: sospettoDellaChiamata } : {}),
+                ...(senzaCartaDellaChiamata ? { senzaCarta: senzaCartaDellaChiamata } : {}),
+                ...(rifiutoDellaChiamata ? { rifiuto: rifiutoDellaChiamata } : {}) })
             if (fermatoPerGiriInTondo) break
         }
 

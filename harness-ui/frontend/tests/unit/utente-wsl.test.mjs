@@ -8,6 +8,26 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { testiUtenteWsl, comandoPerCreareUtente, testiDoveGiranoIComandi } from '../../src/components/utente-wsl.js';
 import { dovEGirato, leggiEsitoComando, rigaDiStatoComando } from '../../src/components/esito-comando.js';
+import { etichettaSandbox } from '../../../src/kernel/etichetta-sandbox.mjs';
+
+/*
+ * 17/10/2026 — l'etichetta è in INGLESE (la legge il modello): l'interfaccia legge quella che il kernel scrive OGGI, presa dal
+ * kernel stesso (scrittore e lettore nella stessa prova: se uno cambia senza l'altro, diventa rossa), e quella delle sessioni salvate
+ * prima, in italiano (WSL-T-04 qui sotto).
+ */
+test('WSL-T-05: the interface reads the label the kernel writes today, in English, user and unverified user included', () => {
+  const disco = { montaggio: '/mnt/c', metadata: false };
+  assert.equal(dovEGirato(etichettaSandbox('wsl2', { utente: 'root', disco })), 'in Linux (WSL) come root, non su Windows');
+  assert.equal(dovEGirato(etichettaSandbox('wsl2', { utente: 'mario', disco: null })), 'in Linux (WSL) come mario, non su Windows');
+  assert.equal(dovEGirato(etichettaSandbox('wsl2', { utente: null, disco })), 'in Linux (WSL), con un utente non verificato');
+  assert.equal(dovEGirato(etichettaSandbox('wsl2')), 'in Linux (WSL), non su Windows');
+  assert.equal(dovEGirato(etichettaSandbox('none', null, 'win32')), dovEGirato('none'));
+  /* l'etichetta che legge il modello non ha più parole italiane */
+  for (const e of [etichettaSandbox('wsl2', { utente: 'root', disco }), etichettaSandbox('wsl2', { utente: null, disco }), etichettaSandbox('none', null, 'win32'),
+    etichettaSandbox('none', null, 'android'), etichettaSandbox('none', null, 'linux'), etichettaSandbox('adb-shell-on-device'), etichettaSandbox('')]) {
+    assert.doesNotMatch(e, /\b(nessun|isolamento|stesso|utente|dischi|diritti|come|nativo|dichiarato)\b/u, e);
+  }
+});
 
 const STATO_VERO = {
   preferenze: { usaUtenteNormale: true },

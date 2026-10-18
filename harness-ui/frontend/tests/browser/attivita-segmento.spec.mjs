@@ -207,6 +207,49 @@ test.describe('R4 segmento compatto — prodotto', () => {
     await expect(seg).toContainText('✖ ragionamento.test.mjs');
   });
 
+  /* 17/10/2026, trovato dal vivo sul 4177 (owner: «niente carta, avviso visibile a te»): l'automazione fatta senza carta in Full access
+     metteva il segno e «Apri l'automazione» dentro il segmento CHIUSO, e a schermo non c'era niente. Come un errore (D3), la voce
+     segnata resta fissata sotto la testa, col tono d'avviso e lo stesso segno; il clic apre la voce, e dentro c'è il pulsante. */
+  test('ATTIVITA-D3-AVVISO — un\'automazione fatta senza chiedere si vede a segmento CHIUSO; una voce riuscita senza segno no', async ({ page }) => {
+    const c = await apri(page, { tema: 'light' });
+    await scena(page, 'breve', 'd3avviso');
+    const eventi = [
+      { type: 'RunStarted', input: { consegna: 'Crea l\'automazione' } },
+      { type: 'ToolCallStart', toolCallId: 'au-1', toolCallName: 'automation_create' },
+      { type: 'ToolCallArgs', toolCallId: 'au-1', delta: JSON.stringify({ nome: 'Riassunto mattutino', istruzioni: 'Riassumi README.md' }) },
+      { type: 'ToolCallResult', toolCallId: 'au-1', content: 'created: Riassunto mattutino', unasked: { oltre: [], minacce: [], automationId: 'auto-1' } },
+      { type: 'ToolCallStart', toolCallId: 'au-2', toolCallName: 'leggi' },
+      { type: 'ToolCallArgs', toolCallId: 'au-2', delta: JSON.stringify({ percorso: 'README.md' }) },
+      { type: 'ToolCallResult', toolCallId: 'au-2', content: '# Demo' },
+      { type: 'TextMessageStart', messageId: 'au-m1' },
+      { type: 'TextMessageContent', messageId: 'au-m1', delta: 'Fatto.' },
+      { type: 'TextMessageEnd', messageId: 'au-m1' },
+      { type: 'RunFinished', outcome: { type: 'success' } },
+    ].map((e, i) => ({ ...e, _sequenza: 1000 + i }));
+    for (const evento of eventi) {
+      await page.evaluate((e) => { const r = window.__talosHarnessUiRuntime; r.handleRealEvent(e, r.realSessionState.generation); }, evento);
+    }
+    await dueFotogrammi(page);
+    const seg = page.locator(SEG).last();
+    await expect(seg.locator(':scope > .talos-activity__head')).toHaveAttribute('aria-expanded', 'false');
+    const fissata = seg.locator(':scope > .talos-activity__fissate .talos-activity__fissata');
+    await expect(fissata, 'solo la voce segnata, non la lettura riuscita').toHaveCount(1);
+    await expect(fissata).toBeVisible();
+    await expect(fissata).toHaveAttribute('data-tono', 'avviso');
+    await expect(fissata).toContainText('Senza conferma');
+    await expect(fissata, 'revisione K: il nome dell\'automazione è l\'oggetto della riga (due automazioni non sono più identiche)').toContainText('Riassunto mattutino');
+    /* revisione L del bugfixer (17/10/2026): anche la TESTA del segmento chiuso nomina l'automazione (`bersaglioAttrezzo` di
+       attivita-segmento.js); senza questa riga, togliere il nome dalla testa non faceva diventare rossa nessuna prova */
+    await expect(seg.locator(':scope > .talos-activity__head .talos-activity__bersagli')).toContainText('Riassunto mattutino');
+    await fissata.click();
+    await expect(seg.locator(':scope > .talos-activity__head')).toHaveAttribute('aria-expanded', 'true');
+    await expect(seg.locator('[data-automazione-senza-carta] button')).toBeVisible();
+    // revisione K: gli argomenti con la misura dell'esito, non quella della chat (17 px)
+    const misura = await seg.locator('.tool-arg-row').first().evaluate((n) => parseFloat(getComputedStyle(n).fontSize));
+    expect(misura).toBe(12.5);
+    expect(c.nonGet, 'nessuna scrittura verso il server').toBe(0);
+  });
+
   test('ATTIVITA-D4-D13 — scheda da 32 px con testa a 30, voci da 28 px normale e 24 compatta, icone da 16', async ({ page }) => {
     /* ⛔ 09/10/2026 (bugfixer): dal 29/09 (0.1.19, 14086c7b4) la densità di SERIE è «compatta», e la prova partiva già compatta
        misurando 24 dove pretendeva il 28 «normale». Le due misure del mockup restano: si parte esplicitamente da «comoda». */

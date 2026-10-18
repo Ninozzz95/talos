@@ -710,6 +710,9 @@ button.talos-turn-spine__tick:focus-visible{outline:var(--talos-focus-width) sol
 .talos-activity__fissata:hover{background:var(--talos-card-hover, var(--talos-card-subtle))}
 .talos-activity__fissata-icona{width:14px; height:14px; flex:none; color:var(--talos-danger)}
 .talos-activity__fissata .talos-voce__meta{color:var(--talos-danger); font-weight:600}
+/* 17/10/2026 — una voce col segno d'avviso (Full access senza carta, contenuto sospetto) fissata come un errore, nel tono d'avviso. */
+.talos-activity__fissata[data-tono="avviso"] .talos-activity__fissata-icona{color:var(--talos-warning)}
+.talos-activity__fissata .talos-badge{flex:none}
 /* ⛔ `[hidden]{display:none !important}` (`:232`) spegnerebbe l'`until-found`: MDN — «If the element … has a display value of
    none … the element will not be revealed by 'Find in page' or fragment navigation». Dentro il segmento un contenitore
    `until-found` resta un blocco (UA: `content-visibility:hidden`), con la scatola azzerata dove serve (vedi sotto). */
@@ -886,6 +889,9 @@ button.talos-turn-spine__tick:focus-visible{outline:var(--talos-focus-width) sol
 .talos-tool-row[role="button"]{cursor:pointer}
 .talos-tool-row__body{margin:0 6px 6px 50px; padding:8px 10px; border-radius:9px; background:var(--talos-panel-soft); border:1px solid var(--talos-border-subtle); font-family:var(--talos-font-mono); font-size:11.5px; line-height:1.55; color:var(--talos-muted); white-space:pre-wrap; overflow-wrap:anywhere; max-height:240px; overflow:auto}
 .talos-tool-row[aria-expanded="false"] + .talos-tool-row__body{display:none}
+/* Revisione K (17/10/2026): gli argomenti «chiave: valore» non avevano una regola e prendevano la grandezza della chat da
+   `.assistant-copy` (17 px a spaziatura fissa), sopra un esito a 12,5. La stessa misura dell'esito che sta sotto. */
+.talos-tool-row__body > .tool-arg-row{font-size:12.5px; line-height:1.55}
 /* F-027 (owner 02/10/2026): il segno del contenuto sospetto sulla riga, e la sua nota in testa al dettaglio — col carattere e gli a
    capo della chat, non col monospazio del corpo. */
 .talos-tool-row > .talos-tool-row__sospetto{flex:none}
@@ -894,6 +900,13 @@ button.talos-turn-spine__tick:focus-visible{outline:var(--talos-focus-width) sol
 /* C2 R6 (08/10/2026): la chiamata è passata per un permesso dato PIÙ IN ALTO — stesso posto del segno qui sopra, ma badge neutro
    (è una provenienza, non un avviso), e la nota col carattere della chat in tono attenuato. */
 .talos-tool-row > .talos-tool-row__consentito-da{flex:none}
+/* 17/10/2026, foto dal vivo a 1920×1080: il riquadro «Fatto senza chiedere» (Full access) vive nel <pre> dell'esito come le due note
+   sorelle, e ne ereditava il carattere a spaziatura fissa. Lo stesso carattere e lo stesso a capo delle note; né il bordo di fondo né il
+   margine della carta, e il pulsante alla sua larghezza. */
+.talos-tool-row__body > .talos-tool-row__senza-carta-blocco{margin:0 0 8px; padding:0; border-bottom:0; font-family:var(--talos-font-ui); font-size:13px; line-height:1.45; white-space:normal; color:var(--talos-text)}
+.talos-tool-row__senza-carta-blocco > .talos-button{align-self:flex-start; margin-top:6px}
+/* (0,2,1): `.talos-message p` (0,1,1, più avanti nel foglio) gli dava la grandezza della chat, 17 px sotto un titolo da 13 */
+.talos-tool-row__body > .talos-tool-row__senza-carta-blocco > p{margin:2px 0 4px; font-size:13px; line-height:1.5; color:var(--talos-assistant-text)}
 .talos-tool-row__body > .talos-tool-row__nota-consentito-da{margin:0 0 8px; font-family:var(--talos-font-ui); font-size:13px; line-height:1.45; white-space:normal; color:var(--talos-muted)}
 /* ⛔⛔ BLOCCO 7 (B4) — IL TETTO DEL CORPO ERA IL BUDGET DI UN FLUSSO SOLO.
     Misurato il 20/09/2026 sul 4174: con i due flussi separati il contenuto misura 316 px contro un
@@ -2010,6 +2023,9 @@ a.talos-button{text-decoration:none}
 .talos-kv:has(> .talos-kv__v--a-capo){align-items:flex-start; padding-block:6px}
 .talos-kv:has(> .talos-kv__v--a-capo) > .talos-kv__k{flex:none}
 .talos-kv__v.talos-kv__v--a-capo{flex:1 1 auto; min-width:0; white-space:normal; text-align:right}
+/* 17/10/2026: un valore che è una FRASE (il motivo per cui un server MCP non è partito, estensioni.js) si legge col carattere
+   dell'interfaccia e va a capo: il monospazio resta ai valori tecnici (comando, argomenti, attrezzi). */
+.talos-kv__v.talos-kv__v--frase{flex:1 1 auto; min-width:0; white-space:normal; font-family:var(--talos-font-ui); font-size:12.5px; font-weight:400; line-height:1.45}
 /* ---------- Processi (P0-E punto 9, 16/09/2026) ----------
    ⛔ IL DIFETTO: `.talos-process__cmd` era `white-space:nowrap` + `text-overflow:ellipsis`, cioè il
      comando si leggeva solo fino a dove arrivava la colonna (~300 px) e l'ellissi tagliava la CODA

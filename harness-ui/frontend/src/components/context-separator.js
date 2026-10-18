@@ -19,6 +19,16 @@ function testoPausa(event, english) {
   return t('chat.context.separator.summaryFailed', { tentativi: volte > 1 ? t('chat.context.separator.timesInARow', { n: volte }) : '', riprova: ora ? t('chat.context.separator.nextTry', { ora }) : '' });
 }
 
+/**
+ * The separator's words, without the DOM: `null` when the event draws no separator (a usage measurement, a version that is not
+ * committed). R-04 (17/10/2026): the transcript export says the same words as the chat, from here.
+ */
+export function etichettaSeparatoreContesto(event) {
+  if (!identity(event)) return null;
+  if (event.kind === COOLING) return testoPausa(event, linguaCorrenteDiT() === 'en');
+  return event.kind?.includes('restor') ? t('chat.context.separator.restored') : t('chat.context.separator.compacted');
+}
+
 /** Persistence belongs to the event/version archive. Replaying it reconstructs the separator. */
 export function creaSeparatoreContesto(event, { document: doc = globalThis.document, onOpen } = {}) {
   const key = identity(event); if (!key) return null;
@@ -27,8 +37,7 @@ export function creaSeparatoreContesto(event, { document: doc = globalThis.docum
   row.dataset.contextSeparator = key; row.dataset.contextSession = event.sessionId;
   if (event.versionId) row.dataset.contextVersion = event.versionId;
   row.setAttribute('role', 'group');
-  const restored = event.kind?.includes('restor');
-  const label = cooling ? testoPausa(event, linguaCorrenteDiT() === 'en') : (restored ? t('chat.context.separator.restored') : t('chat.context.separator.compacted'));
+  const label = etichettaSeparatoreContesto(event);
   row.setAttribute('aria-label', label);
   const text = doc.createElement('span'); text.textContent = label; row.append(text);
   if (onOpen) { const button = doc.createElement('button'); button.type = 'button'; button.className = 'talos-button talos-button--ghost talos-button--sm'; button.textContent = t('chat.context.separator.view'); button.addEventListener('click', () => onOpen(event)); row.append(button); }

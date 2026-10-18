@@ -29,6 +29,7 @@ import * as kernel from './talosHarness.mjs';
 // ⭐ 06/10/2026 — la ricarica della memoria post-compact (opzione A, ricerca 5×5×5×5 §6.4): il blocco di
 // fatti freschi che `compattaOra` fonde nella proiezione, accanto all'indice meccanico.
 import { costruisciBloccoFatti } from './ricarica-post-compact.mjs';
+import { chiamataPerChiGuarda } from './ponte-attrezzi.mjs';
 
 export * from './talosHarness.mjs';
 
@@ -61,9 +62,11 @@ const PATH_SPECIAL = /^(?:[\\/]|[A-Za-z]:)|(?:^|[\\/])[^\\/]*:[^\\/]*(?:[\\/]|$)
 
 function parseToolCall(call) {
   if (!call?.id) return null;
+  /* C5, revisione H: una chiamata passata dal ponte (`tool_call`) riceve le correzioni del desktop del suo attrezzo VERO. */
+  const vera = chiamataPerChiGuarda(call.function?.name ?? '', call.function?.arguments || '{}');
   let args = {};
-  try { args = JSON.parse(call.function?.arguments || '{}'); } catch { /* malformed calls are handled by the kernel */ }
-  return { id: call.id, name: call.function?.name ?? '', args };
+  try { args = JSON.parse(vera.argomenti || '{}'); } catch { /* malformed calls are handled by the kernel */ }
+  return { id: call.id, name: vera.nome ?? '', args };
 }
 
 function pathArg(args) {

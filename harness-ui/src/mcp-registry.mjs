@@ -35,6 +35,7 @@ import { createHash } from 'node:crypto';
 import { promises as fsp } from 'node:fs';
 import { join } from 'node:path';
 import { POSIZIONI_CONFIGURAZIONE, primaPerId } from './configurazione-progetto.mjs';
+import { areaDelProgetto, mcpSemanticContent } from './script-del-progetto.mjs';
 
 export class McpRegistryError extends Error {
   constructor(message, code = 'MCP_CONFIG_INVALID') {
@@ -83,7 +84,11 @@ async function caricaServerMcpDaFile({ cartella, nomeFile = NOME_FILE_MCP }, dep
   if (!dati || !Array.isArray(dati.server)) {
     throw new McpRegistryError(`${nomeFile} must have a "server" field (array)`, 'MCP_CONFIG_MALFORMED');
   }
-  const server = dati.server.map((voce, indice) => {
+  /* 17/10/2026 (owner «Curare come gli hook, insieme alla CLI»): il progetto, per contare gli script che il server esegue. Una
+     cartella che non si risolve non ha file da eseguire: il contenuto resta quello della sola dichiarazione. */
+  let area = null;
+  try { area = await areaDelProgetto(cartella); } catch { area = null; }
+  const server = await Promise.all(dati.server.map(async (voce, indice) => {
     if (typeof voce?.id !== 'string' || voce.id.length === 0) {
       throw new McpRegistryError(`server[${indice}] is missing "id" (a non-empty string)`, 'MCP_CONFIG_MALFORMED');
     }
@@ -97,9 +102,22 @@ async function caricaServerMcpDaFile({ cartella, nomeFile = NOME_FILE_MCP }, dep
       throw new McpRegistryError(`server[${indice}] ("${voce.id}") is missing "allowlist" (a non-empty array of tool names) — an MCP server is not declared without saying which tools are allowed`, 'MCP_CONFIG_MALFORMED');
     }
     const argomenti = voce.argomenti ?? [];
-    const hash = createHash('sha256').update(JSON.stringify({ comando: voce.comando, argomenti, allowlist: voce.allowlist })).digest('hex');
+    /*
+     * ⛔⛔⛔ 17/10/2026 — L'IMPRONTA CONTA ANCHE GLI SCRIPT DEL PROGETTO CHE IL SERVER ESEGUE (owner: «Curare come gli hook, insieme
+     *   alla CLI»). Prima guardava solo comando, argomenti e allowlist: se lo script che il server lancia cambiava (un `git pull`, il
+     *   modello che lo riscrive) il server restava «fidato» e partiva senza domanda. Il contenuto è quello della CLI 0.6.9
+     *   (`mcpSemanticContent`, regola condivisa in `script-del-progetto.mjs`): SENZA script è la stringa di sempre, byte per byte, e
+     *   l'impronta non cambia; CON script entra l'elenco `scripts`, e chi aveva approvato riapprova una volta (la carta dice perché,
+     *   `statoTrustMcp`).
+     */
+    let contenuto = JSON.stringify({ comando: voce.comando, argomenti, allowlist: voce.allowlist });
+    if (area) {
+      try { contenuto = (await mcpSemanticContent(area, { comando: voce.comando, argomenti, allowlist: voce.allowlist })).content; }
+      catch (errore) { throw new McpRegistryError(`server[${indice}] ("${voce.id}"): the scripts it runs cannot be read (${errore?.code ?? 'error'})`, 'MCP_SCRIPT_UNREADABLE'); }
+    }
+    const hash = createHash('sha256').update(contenuto).digest('hex');
     return { id: voce.id, comando: voce.comando, argomenti, allowlist: voce.allowlist, hash };
-  });
+  }));
   return { server };
 }
 
@@ -136,6 +154,35 @@ export async function verificaTrustMcp({ cartellaTrust, serverId, hash }, deps =
   } catch {
     return false;
   }
+}
+
+/*
+ * 17/10/2026 — LE FRASI della fiducia caduta (owner: «la carta lo dice»), come per gli hook e i plugin: a schermo la `frase`, mai il
+ * `motivo`. Le chiavi sono nel dizionario dell'interfaccia (area `server`), in inglese e in italiano.
+ */
+const CHIAVI_TRUST_MCP = Object.freeze({
+  'regola-precedente': 'server.mcp.trust.scriptsNowCovered',
+  'contenuto-cambiato': 'server.mcp.trust.contentChanged',
+});
+const FRASI_TRUST_MCP = Object.freeze({
+  'regola-precedente': 'This connector was trusted when only its settings were checked. It now also covers the project scripts it runs, which were not checked then: trust it again.',
+  'contenuto-cambiato': 'The settings of this connector, or a script it runs, have changed since you trusted it.',
+});
+
+/**
+ * Lo stato della fiducia di UN server, col perché (come `statoTrustHook`): `regola-precedente` quando l'impronta salvata è quella
+ * della sola dichiarazione (comando, argomenti, allowlist), cioè la regola di prima degli script. ⛔ Non è fidato: cambia la frase.
+ * Non lancia mai.
+ */
+export async function statoTrustMcp({ cartellaTrust, serverId, hash, comando, argomenti = [], allowlist }, deps = {}) {
+  const readFileFn = deps.readFileFn ?? fsp.readFile;
+  const esito = (motivo) => ({ fidato: motivo === 'fidato', motivo, frase: FRASI_TRUST_MCP[motivo] ?? null, fraseChiave: CHIAVI_TRUST_MCP[motivo] ?? null });
+  let salvato;
+  try { salvato = JSON.parse(await readFileFn(percorsoTrust(cartellaTrust, serverId), 'utf8'))?.hash; } catch { return esito('mai-approvato'); }
+  if (typeof salvato !== 'string') return esito('mai-approvato');
+  if (salvato === hash) return esito('fidato');
+  const prima = createHash('sha256').update(JSON.stringify({ comando, argomenti, allowlist })).digest('hex');
+  return esito(salvato === prima ? 'regola-precedente' : 'contenuto-cambiato');
 }
 
 /**

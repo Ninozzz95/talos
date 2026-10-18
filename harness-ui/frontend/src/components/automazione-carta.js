@@ -124,6 +124,35 @@ function creaAvvisi(doc, avvisi) {
 }
 
 /**
+ * Full access (owner 17/10/2026, dopo la revisione I: «niente carta, avviso visibile a te»). Un'automazione creata o cambiata
+ * SENZA carta, con qualcosa che la carta avrebbe segnalato: la riga dell'attrezzo porta il segno, e il dettaglio gli STESSI
+ * riquadri della carta (`creaAvvisi`) più «Apri l'automazione» per controllarla o spegnerla. Come il segno del contenuto
+ * sospetto (`contenuto-sospetto.js`): una volta sola per riga, così una riconnessione che rimanda gli eventi non raddoppia.
+ * @param {{riga: HTMLElement, corpo?: HTMLElement|null, senzaCarta: {oltre?: object[], minacce?: string[], automationId?: string}, apri?: (id: string) => void}} parti
+ */
+export function segnaAutomazioneSenzaCarta({ riga, corpo = null, senzaCarta, apri = null }, opzioni = {}) {
+  if (!riga || !senzaCarta || riga.dataset.senzaCarta === 'si') return;
+  const doc = opzioni.document || riga.ownerDocument || globalThis.document;
+  riga.dataset.senzaCarta = 'si';
+  const segno = el(doc, 'span', 'talos-badge talos-badge--warning talos-badge--sm talos-tool-row__senza-carta', traduci('sezioni.automations.v2.unasked.badge'));
+  segno.title = traduci('sezioni.automations.v2.unasked.title');
+  const prima = riga.querySelector(':scope > .talos-voce__meta') || riga.querySelector(':scope > .talos-dot');
+  if (prima) prima.before(segno); else riga.append(segno);
+  if (!corpo) return;
+  const blocco = el(doc, 'div', 'talos-approval__automazione talos-tool-row__senza-carta-blocco');
+  blocco.dataset.automazioneSenzaCarta = 'si';
+  blocco.append(el(doc, 'b', '', traduci('sezioni.automations.v2.unasked.title')), el(doc, 'p', '', traduci('sezioni.automations.v2.unasked.body')));
+  blocco.append(...creaAvvisi(doc, { oltre: senzaCarta.oltre, minacce: senzaCarta.minacce }));
+  if (typeof apri === 'function' && typeof senzaCarta.automationId === 'string' && senzaCarta.automationId) {
+    const bottone = el(doc, 'button', 'talos-button talos-button--secondary talos-button--sm', traduci('sezioni.automations.v2.unasked.open'));
+    bottone.type = 'button';
+    bottone.addEventListener('click', () => apri(senzaCarta.automationId));
+    blocco.append(bottone);
+  }
+  corpo.prepend(blocco);
+}
+
+/**
  * Il blocco con la bozza. Crea: tutti i campi. Modifica: solo ciò che cambia, «prima → dopo». Riprendi: quando gira.
  * Esegui ora: dove e con che cosa gira, e il contesto in più se il modello ne ha passato uno. In testa, gli avvisi.
  */

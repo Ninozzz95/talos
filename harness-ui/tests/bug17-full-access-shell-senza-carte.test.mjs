@@ -66,10 +66,14 @@ test('B17-F009-01: accesso pieno + WSL root — ZERO carte, il comando gira, il 
     assert.equal(secondo.eseguiti.length, 1)
 })
 
-test('B17-F009-02: accesso pieno + segreto + root — nessuna carta nemmeno per `cat ~/.ssh/id_rsa`', async (t) => {
-    const { chieste, eseguiti } = await giro(t, { rootWslDelComandoFn: comeRoot, chiamate: [['shell', { comando: 'cat ~/.ssh/id_rsa' }]] })
-    assert.equal(chieste.length, 0, 'F15 non interrompe più la shell in accesso pieno (owner 05/10)')
-    assert.equal(eseguiti.length, 1)
+test('B17-F009-02: accesso pieno + root — `cat .env` senza carta; `cat ~/.ssh/id_rsa` UNA carta (owner 16/10 notte: le credenziali della casa chiedono sempre)', async (t) => {
+    const progetto = await giro(t, { rootWslDelComandoFn: comeRoot, chiamate: [['shell', { comando: 'cat .env' }]] })
+    assert.equal(progetto.chieste.length, 0, 'un segreto del progetto resta libero in accesso pieno (owner 12/10)')
+    assert.equal(progetto.eseguiti.length, 1)
+    const casa = await giro(t, { rootWslDelComandoFn: comeRoot, chiamate: [['shell', { comando: 'cat ~/.ssh/id_rsa' }]] })
+    assert.equal(casa.chieste.length, 1, 'una credenziale della casa chiede anche in accesso pieno')
+    assert.equal(casa.chieste[0].segreto?.credenzialeDellaCasa, true)
+    assert.equal(casa.eseguiti.length, 1, 'dopo il sì il comando gira')
 })
 
 test('B17-F009-03: un per-attrezzo «chiedi» resta sovrano anche in accesso pieno', async (t) => {
@@ -144,12 +148,17 @@ test('B17-UNIT-03: accesso pieno — una SCRITTURA dopo un contenuto sospetto no
     assert.equal(esito.via, 'nessun-vincolo')
 })
 
-test('B17-UNIT-04: accesso pieno — una LETTURA o un ELENCO su un segreto non chiedono più (owner 12/10)', async () => {
-    for (const azione of [{ tipo: 'leggi', percorso: '.env' }, { tipo: 'leggi', percorso: '~/.ssh/id_rsa' }, { tipo: 'elenca', percorso: '~/.ssh' }]) {
+test('B17-UNIT-04: accesso pieno — leggere un segreto del PROGETTO non chiede (owner 12/10); una credenziale della CASA sì, e senza nessuno davanti si rifiuta (owner 16/10 notte)', async () => {
+    const progetto = await verificaPermessoScrittura({ tipo: 'leggi', percorso: '.env' }, { livelloAccesso: 'accesso-pieno' })
+    assert.equal(progetto.consentito, true)
+    assert.equal(progetto.via, 'nessun-vincolo')
+    for (const azione of [{ tipo: 'leggi', percorso: '~/.ssh/id_rsa' }, { tipo: 'elenca', percorso: '~/.ssh' }, { tipo: 'leggi', percorso: '~/.npmrc' }]) {
         const esito = await verificaPermessoScrittura(azione, { livelloAccesso: 'accesso-pieno' })
-        assert.equal(esito.consentito, true, JSON.stringify(azione))
-        assert.equal(esito.via, 'nessun-vincolo', JSON.stringify(azione))
+        assert.equal(esito.consentito, false, JSON.stringify(azione))
+        assert.equal(esito.via, 'segreto-forza-conferma', JSON.stringify(azione))
     }
+    /* AL CONTRARIO: ~/.ssh/config non è una credenziale (non ha chiavi) e in accesso pieno resta libero */
+    assert.equal((await verificaPermessoScrittura({ tipo: 'leggi', percorso: '~/.ssh/config' }, { livelloAccesso: 'accesso-pieno' })).via, 'nessun-vincolo')
 })
 
 test('B17-UNIT-06: contropelo — sotto l\'Accesso pieno il segreto e il contenuto sospetto chiedono come prima', async () => {

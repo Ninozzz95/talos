@@ -12,7 +12,7 @@ import { test } from 'node:test';
 import { approveDefinition, createDefinition, createRun, createWorkflowStore } from '../src/workflow/store.mjs';
 import { approveWorkflowProposal, proposeWorkflowFromTool, workflowIdForToolCall } from '../src/workflow/planning-control.mjs';
 import { startWorkflowRun } from '../src/workflow/run-control.mjs';
-import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
+import { rimuoviCartellaDiProva, rimuoviCartellaDiProvaAttesa } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 const harnessDir = fileURLToPath(new URL('../', import.meta.url));
 const definition = JSON.parse(await readFile(new URL('./fixtures/workflow/records/definition-record-v1.json', import.meta.url), 'utf8'));
@@ -295,10 +295,22 @@ test('WF-SESSION-DRAFT-PROPOSE: il modello propone una bozza, il server vero la 
  *   dal comando di avvio, lo porta a `run_started` dopo il recupero e ne ammette il primo passo; un run v1 che non sa eseguire
  *   resta com'era (prima della guardia sarebbe partito e avrebbe girato a vuoto sui rifiuti).
  */
+/*
+ * ⛔ F3-41b, LA ROSSA CHE VA E VIENE (bugfixer, 17/10/2026) — `rmSync` EPERM sulla radice, solo sotto carico, solo qui.
+ *   Questa è l'unica prova del file che ferma il server APPENA è in piedi (il run è già ammesso al primo `health`), cioè mentre il
+ *   Doctor d'avvio ha ancora vivo il suo `echo ok` con la cwd DENTRO la radice (`scratch/talos-doctor-*`, `src/doctor.mjs`). Su
+ *   Windows libuv mette i figli in un job che li uccide col server, ma la loro fine arriva DOPO l'`exit` del server: in quella
+ *   finestra la cwd del nipote tiene la cartella e `rmSync` esce con EPERM, che la via sincrona non ritenta (lo dice e lo misura
+ *   `aiuto/rimuovi-cartella-di-prova.mjs`). Misurato con una riproduzione minima, sotto 40 processi che occupano la CPU, 15 giri per
+ *   braccio: nipote con la cwd dentro → EPERM 7/15 e 9/15; cwd fuori → 0/15; stessa cosa con la rimozione ASINCRONA → 0/15. E sulla
+ *   prova vera, col solo `echo` del Doctor reso lento (3 s, stessa cwd) e lo stesso carico: 2 rosse su 10, EPERM sulla radice.
+ * ⇒ Qui la rimozione è quella asincrona, che ritenta e LASCIA L'AVVISO col codice: la corsa resta visibile, la rossa no. Le altre tre
+ *   prove fermano il server dopo le loro chiamate HTTP, a Doctor finito, e restano sincrone.
+ */
 test('F3-41b WF-SERVER-COMPOSES-SCHEDULER: the real server starts a prepared v2 run after recovery, and leaves alone a run it cannot execute', async (t) => {
   const root = mkdtempSync(join(tmpdir(), 'talos-workflow-server-scheduler-'));
   for (const name of ['workspace', 'sessions', 'desktop']) mkdirSync(join(root, name));
-  t.after(() => rimuoviCartellaDiProva(root));
+  t.after(() => rimuoviCartellaDiProvaAttesa(root));
   const sessionId = randomUUID();
   writeFileSync(join(root, 'sessions', `${sessionId}.jsonl`), `${JSON.stringify({
     tipo: 'intestazione', sessionId, taskId: 'task-vero', cartella: join(root, 'workspace'),

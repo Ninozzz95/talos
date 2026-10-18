@@ -6,6 +6,40 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
 
 ## Unreleased
 
+## desktop-v0.1.33 — 2026-10-18
+
+### Security
+
+- Reading a credential in your home folder (SSH keys, cloud and package-manager tokens) now asks even in Full access, whatever
+  path, drive spelling, hard link or symbolic link leads to it, and also when a glob or a nested shell (`bash -c`, `cmd //c`)
+  would reach it. A project that lives inside a credential folder still reads its own files freely.
+- Hooks and MCP servers are trusted together with the project scripts they run: if one of those scripts changes, the trust
+  falls and the list says why. The same rule is shared with the TALOS CLI, so trust saved there stays valid.
+
+### Added
+
+- An MCP server that does not start is said in the conversation, once, with the reason and where to fix it (Capability ›
+  Connectors), and the connector list shows the same reason. The Markdown export carries the same note.
+- Background commands that outlived a server crash are adopted again: they show in Processes and can be stopped. Nothing is
+  ever killed automatically.
+
+### Changed
+
+- The model starts each conversation with a short list of tools and finds the others when it needs them (deferred
+  tools, like Hermes). The first request of a turn is about half the size it was, with the same results on our coding and
+  sections benchmark; a turn that needs a less common tool takes one or two steps more.
+- In Full access, creating an automation or excluding a provider no longer asks for a confirmation card. The conversation
+  says what the card would have shown, and the warning stays visible with the activity row closed.
+- When the same tool keeps failing, the model gets a note to change approach instead of retrying blindly; a refused
+  delegation now carries a stable code.
+- The Context Engine summary follows the conversation's language.
+
+### Fixed
+
+- The Markdown export no longer prints internal bookkeeping as «unrecognized event»: compactions read as in the chat, and
+  the count of left-out internal events is at the end.
+- The sandbox label and the «not found on PATH» refusal read correctly in English and Italian.
+
 ## desktop-v0.1.32 — 2026-10-17
 
 ### Fixed

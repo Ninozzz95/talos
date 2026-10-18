@@ -58,9 +58,11 @@ export function dovEGirato(livello) {
   if (nome === 'wsl2') {
     /* ⛔ F009 (owner 01/10/2026, «esito e foglio della shell») — l'etichetta dice con che utente: si porta a schermo, perché
        «come root» è proprio ciò che la persona deve sapere. Le etichette di prima (senza utente) restano lette com'erano. */
-    const utente = /\(Linux in WSL come ([a-z_][a-z0-9_-]{0,31}\$?);/iu.exec(l)?.[1];
+    /* 17/10/2026: il kernel scrive l'etichetta in INGLESE (la legge il modello); le sessioni salvate prima la hanno in italiano, e
+       si leggono tutte e due (`etichetta-sandbox.mjs`). */
+    const utente = /\(Linux in WSL (?:as|come) ([a-z_][a-z0-9_-]{0,31}\$?);/iu.exec(l)?.[1];
     if (utente) return t('chat.command.where.wslAs', { user: utente });
-    if (/\(Linux in WSL con un utente non verificato;/u.test(l)) return t('chat.command.where.wslUnverified');
+    if (/\(Linux in WSL (?:with an unverified user|con un utente non verificato);/u.test(l)) return t('chat.command.where.wslUnverified');
     return t('chat.command.where.wsl');
   }
   if (nome === 'none') return t('chat.command.where.windows');
