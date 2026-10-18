@@ -17,11 +17,14 @@ const mockState = vi.hoisted(() => ({
     routerReplace: vi.fn(),
     // K4-E: l'APK porta r4? Di serie no (come il web e le build senza archivio)
     r4: false,
+    // ELENCO-R4-PAG-05: l'APK porta r4 ma r4 non si accende
+    r4NonParte: false,
     route: { name: 'harness' as string, params: {} as Record<string, string>, query: {} as Record<string, string> },
 }))
 vi.mock('@/lib/harness/terminalePonte', async (originale) => ({
     ...(await originale<typeof import('@/lib/harness/terminalePonte')>()),
     talosR4Disponibile: async () => mockState.r4,
+    talosR4Pronto: async () => (mockState.r4 && !mockState.r4NonParte ? { disponibile: true, acceso: true, cartella: '/lavoro' } : null),
 }))
 // `reactive()` needs the real `vue` import bound, which `vi.hoisted`'s
 // factory runs BEFORE (its whole body is relocated above every import,
@@ -47,6 +50,19 @@ vi.mock('@/lib/harness/codiceSessions', () => ({ listCodiceSessions, renameCodic
 // popolano.
 const fetchTalosHarnessSessionsStatus = vi.hoisted(() => vi.fn())
 vi.mock('@/lib/harness/harnessUiSessionStatus', () => ({ fetchTalosHarnessSessionsStatus }))
+
+// Owner 18/10 «la lista delle sessioni … esattamente come sulla chat Legacy»: con r4 la pagina elenca le sessioni di r4
+const r4 = vi.hoisted(() => ({ leggi: vi.fn(), rinomina: vi.fn(), elimina: vi.fn() }))
+// review 18/10: la frase dei rifiuti e la classe restano quelle vere, si fingono solo le chiamate a r4
+vi.mock('@/lib/harness/r4/elencoSessioniR4', async (originale) => ({
+    ...(await originale<typeof import('@/lib/harness/r4/elencoSessioniR4')>()),
+    leggiSessioniR4: r4.leggi, rinominaSessioneR4: r4.rinomina, eliminaSessioneR4: r4.elimina,
+}))
+vi.mock('@/lib/harness/r4/clienteR4', () => ({ talosClienteR4: () => ({ richiesta: vi.fn() }) }))
+const rigaR4 = (id: string, title: string, stato: Record<string, unknown> = {}) => ({
+    id, title, updated_at: NOW,
+    stato: { conclusa: true, interrotta: false, ultimoMessaggio: null, inAttesaApprovazione: false, ultimoEsito: 'successo', ...stato },
+})
 
 import HarnessScreen from '@/screens/HarnessScreen.vue'
 
@@ -79,6 +95,11 @@ beforeEach(() => {
     deleteCodiceSession.mockResolvedValue(undefined)
     fetchTalosHarnessSessionsStatus.mockReset()
     fetchTalosHarnessSessionsStatus.mockResolvedValue(new Map())
+    r4.leggi.mockReset()
+    r4.leggi.mockResolvedValue([rigaR4('r4-a', 'Gestore di attività'), rigaR4('r4-b', 'Leggi NOTA.md')])
+    r4.rinomina.mockReset(); r4.rinomina.mockResolvedValue(undefined)
+    r4.elimina.mockReset(); r4.elimina.mockResolvedValue(undefined)
+    mockState.routerReplace.mockReset()
     // TalosRowActions' menu (and TalosMobileConfirmDialog) `Teleport to="body"`
     // — same convention as chatsScreen.test.ts: `attachTo: document.body` so
     // the teleported content actually lands somewhere findable, cleaned
@@ -93,17 +114,117 @@ async function mountScreen() {
 }
 
 describe('HarnessScreen (28/8) — real sessions, no more the five-row demo array', () => {
-    it('K4E-01 (owner 17/10 «r4 al posto, il vecchio come ripiego»): con r4 nell\'APK la voce «Codice» apre r4; col ripiego resta qui', async () => {
+    it('K4E-01 → ELENCO-R4-PAG-01 (owner 18/10): con r4 la voce «Codice» resta sull\'elenco, non rimanda più a r4', async () => {
         mockState.r4 = true
         try {
-            await mountScreen()
-            await flushPromises()
-            expect(mockState.routerReplace).toHaveBeenCalledWith({ name: 'codice-r4' })
-            mockState.routerReplace.mockClear()
-            mockState.route = reactive({ name: 'harness', params: {}, query: { ripiego: '1' } })
-            await mountScreen()
+            const w = await mountScreen()
             await flushPromises()
             expect(mockState.routerReplace).not.toHaveBeenCalled()
+            expect(listCodiceSessions).not.toHaveBeenCalled()
+            expect(w.findAll('[data-testid="talos-harness-row"]').map((r) => r.text())).toEqual([
+                expect.stringContaining('Gestore di attività'), expect.stringContaining('Leggi NOTA.md'),
+            ])
+        } finally {
+            mockState.r4 = false
+        }
+    })
+
+    it('ELENCO-R4-PAG-02: una riga apre la sessione su r4, «Nuova» apre r4 vuoto', async () => {
+        mockState.r4 = true
+        try {
+            const w = await mount(HarnessScreen, { attachTo: document.body, props: { embedded: true } })
+            await flushPromises(); await flushPromises()
+            await w.findAll('[data-testid="talos-harness-row"]')[1]!.trigger('click')
+            expect(mockState.routerPush).toHaveBeenLastCalledWith({ name: 'codice-r4', params: { id: 'r4-b' } })
+            await w.get('[data-testid="talos-harness-new"]').trigger('click')
+            expect(mockState.routerPush).toHaveBeenLastCalledWith({ name: 'codice-r4' })
+        } finally {
+            mockState.r4 = false
+        }
+    })
+
+    it('ELENCO-R4-PAG-03: la riga della sessione aperta su r4 è quella attiva; lo stato viene da r4', async () => {
+        mockState.r4 = true
+        mockState.route = reactive({ name: 'codice-r4', params: { id: 'r4-b' }, query: {} })
+        r4.leggi.mockResolvedValue([rigaR4('r4-a', 'Gestore di attività', { conclusa: false }), rigaR4('r4-b', 'Leggi NOTA.md', { inAttesaApprovazione: true })])
+        try {
+            const w = await mountScreen()
+            await flushPromises()
+            const righe = w.findAll('[data-testid="talos-harness-row"]')
+            expect(righe.map((r) => r.attributes('data-harness-active'))).toEqual([undefined, 'true'])
+            expect(w.findAll('[data-testid="talos-harness-row-status"]').map((s) => s.attributes('data-harness-status'))).toEqual(['running', 'waiting-approval'])
+        } finally {
+            mockState.r4 = false
+        }
+    })
+
+    it('ELENCO-R4-PAG-05: r4 nell APK ma non parte: si torna al Codice classico col ripiego, e intanto si vede il suo elenco', async () => {
+        mockState.r4 = true
+        mockState.r4NonParte = true
+        try {
+            const w = await mountScreen()
+            await flushPromises()
+            expect(mockState.routerReplace).toHaveBeenCalledWith({ name: 'harness', query: { ripiego: '1' } })
+            expect(r4.leggi).not.toHaveBeenCalled()
+            expect(w.findAll('[data-testid="talos-harness-row"]').map((r) => r.text())).toEqual([
+                expect.stringContaining('Refactor auth flow'), expect.stringContaining('Fix mobile composer'),
+            ])
+        } finally {
+            mockState.r4 = false
+            mockState.r4NonParte = false
+        }
+    })
+
+    /*
+     * ⛔ ELENCO-R4-PAG-06 — visto sul Pad (18/10): 4 sessioni r4 col cerchio «In corso» mentre non girava niente. Erano interrotte
+     * (`interrotta: true`, non concluse: r4 le ha trovate a metà dopo un riavvio). Con r4 vale l'ordine del desktop (`statoSessione()`,
+     * harness-ui `app.js`): attesa, poi interrotta, poi in corso. E l'attesa è di qualunque tipo (domanda, piano…): «Aspetta te».
+     */
+    it('ELENCO-R4-PAG-06: con r4 una sessione interrotta e non conclusa è interrotta, non in corso; ogni attesa è «Aspetta te»', async () => {
+        mockState.r4 = true
+        r4.leggi.mockResolvedValue([
+            rigaR4('r4-a', 'Interrotta a metà', { conclusa: false, interrotta: true, ultimoEsito: null }),
+            rigaR4('r4-b', 'Domanda in sospeso', { conclusa: false, interrotta: true, inAttesaApprovazione: true }),
+            rigaR4('r4-c', 'Gira davvero', { conclusa: false }),
+        ])
+        try {
+            const w = await mountScreen()
+            await flushPromises()
+            const stati = w.findAll('[data-testid="talos-harness-row-status"]')
+            expect(stati.map((s) => s.attributes('data-harness-status'))).toEqual(['interrupted', 'waiting-approval', 'running'])
+            expect(stati[1]!.text()).toBe('Waiting for you')
+        } finally {
+            mockState.r4 = false
+        }
+    })
+
+    it('ELENCO-R4-PAG-04: rinomina ed elimina passano per r4; col ripiego resta l\'elenco del Codice classico', async () => {
+        mockState.r4 = true
+        try {
+            const w = await mountScreen()
+            await flushPromises()
+            await w.get('[data-testid="talos-harness-actions-r4-a"]').trigger('click')
+            ;(document.querySelector('[data-testid="talos-harness-action-rename"]') as HTMLElement).click()
+            await flushPromises()
+            const campo = document.querySelector('input[aria-label]') as HTMLInputElement
+            campo.value = 'Nome nuovo'; campo.dispatchEvent(new Event('input'))
+            campo.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }))
+            await flushPromises()
+            expect(r4.rinomina).toHaveBeenCalledWith(expect.anything(), 'r4-a', 'Nome nuovo')
+            expect(renameCodiceSession).not.toHaveBeenCalled()
+            await w.get('[data-testid="talos-harness-actions-r4-b"]').trigger('click')
+            ;(document.querySelector('[data-testid="talos-harness-action-delete"]') as HTMLElement).click()
+            await flushPromises()
+            ;(document.querySelector('[data-testid="talos-harness-delete-confirm"]') as HTMLElement).click()
+            await flushPromises()
+            expect(r4.elimina).toHaveBeenCalledWith(expect.anything(), 'r4-b')
+            expect(deleteCodiceSession).not.toHaveBeenCalled()
+
+            mockState.route = reactive({ name: 'harness', params: {}, query: { ripiego: '1' } })
+            r4.leggi.mockClear()
+            await mountScreen()
+            expect(r4.leggi).not.toHaveBeenCalled()
+            expect(listCodiceSessions).toHaveBeenCalled()
         } finally {
             mockState.r4 = false
         }
@@ -266,6 +387,16 @@ describe('HarnessScreen (28/8) — real sessions, no more the five-row demo arra
             const w = await mountScreen()
             const status = w.get('[data-harness-session-id="session-a"]').element.closest('[role="listitem"]')!.querySelector('[data-testid="talos-harness-row-status"]')!
             expect(status.getAttribute('data-harness-status')).toBe('interrupted')
+        })
+
+        // ELENCO-R4-PAG-06 cambia l'ordine solo per r4: nel Codice classico una sessione che riparte non è più interrotta (2/9)
+        it('HARNESS-STATUS-PRECEDENCE-02 nel Codice classico "in corso" vince ancora su "interrotta"', async () => {
+            fetchTalosHarnessSessionsStatus.mockResolvedValue(new Map([
+                ['session-a', { conclusa: false, interrotta: true, ultimoMessaggio: null, inAttesaApprovazione: false, ultimoEsito: null }],
+            ]))
+            const w = await mountScreen()
+            const status = w.get('[data-harness-session-id="session-a"]').element.closest('[role="listitem"]')!.querySelector('[data-testid="talos-harness-row-status"]')!
+            expect(status.getAttribute('data-harness-status')).toBe('running')
         })
 
         it('HARNESS-STATUS-PREVIEW-01 shows the real last-message preview the server reports, verbatim', async () => {
@@ -477,5 +608,141 @@ describe('HarnessScreen (28/8) — real sessions, no more the five-row demo arra
             expect(`${w.html()} ${document.body.innerHTML}`).not.toMatch(/&amp;apos;|&amp;#x2F;|&amp;quot;/u)
             w.unmount()
         })
+    })
+})
+
+/*
+ * ⛔ Review avversariale della v0.1.42 (owner 18/10: «voglio che questa versione sia estremamente robusta»), ledger
+ * `LEDGER-ELENCO-SESSIONI-R4-2026-10-18.md`, sezione «Review avversariale». Ogni prova nomina il difetto che ha trovato.
+ */
+describe('elenco delle sessioni r4: review avversariale (REV-ELENCO)', () => {
+    const conR4 = async (corpo: () => Promise<void>) => {
+        mockState.r4 = true
+        try { await corpo() } finally { mockState.r4 = false; mockState.r4NonParte = false }
+    }
+
+    it('REV-ELENCO-01 il perché di un rifiuto di r4 si legge in italiano, dal motivo (non «Invalid query»)', () => conR4(async () => {
+        const { RifiutoSessioneR4 } = await import('@/lib/harness/r4/elencoSessioniR4')
+        r4.elimina.mockRejectedValue(new RifiutoSessioneR4('Operation failed', 'SESSION_STILL_RUNNING', 'running-stop-before-delete'))
+        const w = await mountScreen()
+        await w.get('[data-testid="talos-harness-actions-r4-a"]').trigger('click')
+        ;(document.querySelector('[data-testid="talos-harness-action-delete"]') as HTMLElement).click()
+        await flushPromises()
+        ;(document.querySelector('[data-testid="talos-harness-delete-confirm"]') as HTMLElement).click()
+        await flushPromises()
+        expect(document.body.textContent).toContain('Session still running — stop it before deleting it')
+        expect(document.body.textContent).not.toContain('Operation failed')
+    }))
+
+    it('REV-ELENCO-02 r4 che non risponde si dice a parole, non col codice TALOS_R4_IRRAGGIUNGIBILE', () => conR4(async () => {
+        r4.leggi.mockRejectedValue(new Error('TALOS_R4_IRRAGGIUNGIBILE'))
+        const w = await mountScreen()
+        expect(w.text()).not.toContain('TALOS_R4_IRRAGGIUNGIBILE')
+        expect(w.get('[role="alert"]').text()).toContain('Code is not responding yet')
+    }))
+
+    it('REV-ELENCO-03 una lettura vecchia che arriva dopo una nuova non rimette l\'elenco vecchio', () => conR4(async () => {
+        let finisciVecchia: (righe: unknown) => void = () => {}
+        r4.leggi.mockImplementationOnce(() => new Promise((ok) => { finisciVecchia = ok }))
+        r4.leggi.mockResolvedValueOnce([rigaR4('nuova', 'Dopo')])
+        const w = mount(HarnessScreen, { attachTo: document.body })
+        await flushPromises()
+        mockState.route.name = 'codice-r4'
+        mockState.route.params = { id: 'nuova' }
+        await flushPromises()
+        finisciVecchia([rigaR4('vecchia', 'Prima')])
+        await flushPromises()
+        expect(w.findAll('[data-testid="talos-harness-row"]').map((r) => r.attributes('data-harness-session-id'))).toEqual(['nuova'])
+    }))
+
+    it('REV-ELENCO-04 l\'elenco nella colonna non avvisa e non sposta la rotta se r4 non parte: lo fa la pagina, una volta', () => conR4(async () => {
+        mockState.r4NonParte = true
+        const { useTalosMobileToasts } = await import('@/stores/toasts')
+        const prima = useTalosMobileToasts().items.value.length
+        mount(HarnessScreen, { attachTo: document.body, props: { embedded: true } })
+        await flushPromises()
+        expect(mockState.routerReplace).not.toHaveBeenCalled()
+        expect(useTalosMobileToasts().items.value.length).toBe(prima)
+    }))
+
+    it('REV-ELENCO-05 un errore di lettura sparisce quando l\'elenco poi si carica', () => conR4(async () => {
+        r4.leggi.mockRejectedValueOnce(new Error('TALOS_R4_IRRAGGIUNGIBILE'))
+        const w = await mountScreen()
+        expect(w.find('[role="alert"]').exists()).toBe(true)
+        mockState.route.params = { id: 'altra' }
+        mockState.route.name = 'codice-r4'
+        await flushPromises()
+        expect(w.find('[role="alert"]').exists()).toBe(false)
+        expect(w.findAll('[data-testid="talos-harness-row"]')).toHaveLength(2)
+    }))
+
+    it('REV-ELENCO-06 il nome di una sessione r4 si ferma a 80 caratteri, come vuole r4', () => conR4(async () => {
+        const w = await mountScreen()
+        await w.get('[data-testid="talos-harness-actions-r4-a"]').trigger('click')
+        ;(document.querySelector('[data-testid="talos-harness-action-rename"]') as HTMLElement).click()
+        await flushPromises()
+        expect((document.querySelector('input[aria-label]') as HTMLInputElement).maxLength).toBe(80)
+    }))
+
+    it('REV-ELENCO-07 rinomina ed eliminazione si annunciano; un annuncio da fuori (il titolo della sessione) rilegge l\'elenco', () => conR4(async () => {
+        const { talosCambiSessioniR4 } = await import('@/lib/harness/r4/avvisiSessioniR4')
+        const w = await mountScreen()
+        await w.get('[data-testid="talos-harness-actions-r4-a"]').trigger('click')
+        ;(document.querySelector('[data-testid="talos-harness-action-rename"]') as HTMLElement).click()
+        await flushPromises()
+        const campo = document.querySelector('input[aria-label]') as HTMLInputElement
+        campo.value = 'Nome nuovo'; campo.dispatchEvent(new Event('input'))
+        campo.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }))
+        await flushPromises()
+        expect(talosCambiSessioniR4.value).toMatchObject({ id: 'r4-a', nome: 'Nome nuovo', eliminata: false })
+        await w.get('[data-testid="talos-harness-actions-r4-b"]').trigger('click')
+        ;(document.querySelector('[data-testid="talos-harness-action-delete"]') as HTMLElement).click()
+        await flushPromises()
+        ;(document.querySelector('[data-testid="talos-harness-delete-confirm"]') as HTMLElement).click()
+        await flushPromises()
+        expect(talosCambiSessioniR4.value).toMatchObject({ id: 'r4-b', eliminata: true })
+        const letture = r4.leggi.mock.calls.length
+        const { annunciaCambioSessioneR4 } = await import('@/lib/harness/r4/avvisiSessioniR4')
+        annunciaCambioSessioneR4({ id: 'r4-a', nome: 'Dal titolo' })
+        await flushPromises()
+        expect(r4.leggi.mock.calls.length).toBeGreaterThan(letture)
+    }))
+})
+
+describe('elenco delle sessioni r4: lo stato vivo si aggiorna (REV-ELENCO-10)', () => {
+    /*
+     * ⛔ REV-ELENCO-10 (review avversariale v0.1.42): una riga «In corso» (un'automazione, un giro lasciato a metà) restava ferma
+     * finché non si cambiava pagina. Come il battito del desktop per le figlie (`legacy/app.js:11666`, 5 s), l'elenco si rilegge
+     * ogni 5 s solo finché una riga lavora o aspetta, e mai con l'app in sottofondo.
+     */
+    it('REV-ELENCO-10 con una riga che lavora l\'elenco si rilegge ogni 5 s; senza, o con l\'app nascosta, no', async () => {
+        vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+        mockState.r4 = true
+        try {
+            r4.leggi.mockResolvedValue([rigaR4('r4-a', 'Lavora', { conclusa: false })])
+            const w = mount(HarnessScreen, { attachTo: document.body })
+            await flushPromises()
+            const prima = r4.leggi.mock.calls.length
+            vi.advanceTimersByTime(5000)
+            await flushPromises()
+            expect(r4.leggi.mock.calls.length).toBe(prima + 1)
+            Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true })
+            vi.advanceTimersByTime(5000)
+            await flushPromises()
+            expect(r4.leggi.mock.calls.length).toBe(prima + 1)
+            Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
+            r4.leggi.mockResolvedValue([rigaR4('r4-a', 'Finita')])
+            vi.advanceTimersByTime(5000)
+            await flushPromises()
+            const dopoFinita = r4.leggi.mock.calls.length
+            vi.advanceTimersByTime(15000)
+            await flushPromises()
+            expect(r4.leggi.mock.calls.length).toBe(dopoFinita)
+            w.unmount()
+        } finally {
+            mockState.r4 = false
+            vi.useRealTimers()
+            Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
+        }
     })
 })

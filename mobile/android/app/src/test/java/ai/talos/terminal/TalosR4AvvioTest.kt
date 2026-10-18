@@ -102,6 +102,18 @@ class TalosR4AvvioTest {
     }
 
     @Test
+    fun `R4AV-03d gli attrezzi differiti sono spenti sul telefono, e il chiamante non li riaccende`() {
+        // ⛔ Owner 18/10/2026 («Spento nel telefono»): r4 della desktop 0.1.33 (a813c2377) accende di serie il ponte degli attrezzi
+        // differiti (`server.mjs`, `TALOS_ATTREZZI_DIFFERITI !== '0'`). Misurato solo su glm via OpenRouter e su ChatGPT Luna, mai su
+        // DeepSeek e Gemini che il Codice del telefono usa: resta spento finché il banco non li misura.
+        val d = TalosR4Avvio.disposizione(radice())
+        val lavoro = File("/data/data/ai.talos.dev/files/codice/workspace")
+        val attrezzi = File("/data/data/ai.talos.dev/files/codice/bin")
+        assertEquals("0", TalosR4Avvio.ambiente(d, lavoro, attrezzi, File("cache"), emptyMap())["TALOS_ATTREZZI_DIFFERITI"])
+        assertEquals("0", TalosR4Avvio.ambiente(d, lavoro, attrezzi, File("cache"), mapOf("TALOS_ATTREZZI_DIFFERITI" to "1"))["TALOS_ATTREZZI_DIFFERITI"])
+    }
+
+    @Test
     fun `R4AV-04 tutto sta sotto la cartella di r4, coi percorsi canonici`() {
         val r = radice()
         val d = TalosR4Avvio.disposizione(r)

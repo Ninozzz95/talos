@@ -252,6 +252,20 @@ describe('la conversazione del Codice su r4 (K3-B2)', () => {
         expect(await conv.rinomina('   ')).toBe(false)
     })
 
+    // REV-ELENCO-08 (review avversariale v0.1.42): rinominata dal titolo, la riga della colonna del tablet restava col nome vecchio
+    it('REV-ELENCO-08 una rinomina riuscita si annuncia (la colonna si rilegge); una rifiutata no', async () => {
+        const { talosCambiSessioniR4 } = await import('@/lib/harness/r4/avvisiSessioniR4')
+        const c = clienteFinto((r) => (r.corpo?.includes('"nome":"x"')
+            ? { stato: 400, corpo: '{"ok":false,"error":{"code":"QUERY_INVALID","message":"Invalid name"}}' }
+            : { stato: 200, corpo: '{"ok":true,"data":{"ok":true}}' }))
+        const conv = monta({ cliente: c.ponte, cartella: '/w', sessioneId: 's1', attesaRiapertura: () => 0 })
+        await conv.rinomina('Nome dal titolo')
+        expect(talosCambiSessioniR4.value).toMatchObject({ id: 's1', nome: 'Nome dal titolo', eliminata: false })
+        const n = talosCambiSessioniR4.value.n
+        await conv.rinomina('x')
+        expect(talosCambiSessioniR4.value.n).toBe(n)
+    })
+
     it('USR4-14 Duplica manda fork e restituisce la sessione nuova; un guasto dà null', async () => {
         const c = clienteFinto((r) => (r.percorso.endsWith('/fork')
             ? { stato: 200, corpo: '{"ok":true,"data":{"sessionId":"s2"}}' }

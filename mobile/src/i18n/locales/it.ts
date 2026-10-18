@@ -1509,6 +1509,8 @@ export const TALOS_IT_MESSAGES = {
         r4AutomationPhoneNote: 'Sul telefono gira solo mentre il Codice è aperto; un giro perso parte una volta quando lo riapri.',
         // K4-E (owner 17/10 «il vecchio come ripiego»): r4 non è partito e si apre il Codice di prima
         r4Fallback: 'Il Codice nuovo non è partito su questo dispositivo: si apre il Codice classico.',
+        r4ListFailed: 'Le sessioni non si sono caricate: {detail}',
+        r4Unreachable: 'Il Codice non risponde ancora. Riprova fra poco.',
         r4RenameTitle: 'Rinomina la sessione',
         r4RenameField: 'Nome della sessione',
         r4RenameSave: 'Salva',
@@ -1562,6 +1564,7 @@ export const TALOS_IT_MESSAGES = {
         statusRunningAria: 'Sessione ancora in corso',
         statusInterrupted: 'Interrotta',
         statusWaitingApproval: 'In attesa di approvazione',
+        statusWaitingForYou: 'Aspetta te',
         statusError: 'Conclusa con errore',
     },
     privilege: {
@@ -4422,6 +4425,8 @@ export const TALOS_IT_MESSAGES = {
         disconnectedHere: 'Scollegato da questo dispositivo. Per sicurezza toglilo anche dalle impostazioni di ChatGPT.',
         chatReady: 'I suoi modelli sono nel selettore dei modelli, sotto ChatGPT.',
         pill: 'Piano ChatGPT',
+        /** N15-PAST-05 (owner 18/10): sul telefono il distintivo è corto, accanto al modello che ha già il logo ChatGPT. */
+        pillShort: 'Piano',
         panelTitle: 'Stai usando il piano ChatGPT',
         last5h: 'Ultime 5 ore',
         last7d: 'Ultimi 7 giorni',

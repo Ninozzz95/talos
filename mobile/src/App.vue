@@ -55,7 +55,7 @@ import { useTalosMobileToasts } from '@/stores/toasts'
 import { talosAnswerNpuTerms, talosNpuTermsPromptOpen } from '@/stores/npuTermsPrompt'
 import { useTalosTabletLayout } from '@/composables/useTalosTabletLayout'
 import { useTalosSheetNav } from '@/composables/useTalosSheetNav'
-import { TALOS_TABLET_CHAT_SIDEBAR_DEFAULT, TALOS_TABLET_CHAT_SIDEBAR_MIN, TALOS_TABLET_SIDEBAR_MAX, clampTalosTabletChatSidebarWidth, clampTalosTabletSidebarWidth, talosTabletLeavesChatsRoute, talosTabletLeavesHarnessListRoute, talosTabletRailVariant, talosTabletSidebarEffectiveWidth } from '@/lib/tabletLayout'
+import { TALOS_TABLET_CHAT_SIDEBAR_DEFAULT, TALOS_TABLET_CHAT_SIDEBAR_MIN, TALOS_TABLET_SIDEBAR_MAX, clampTalosTabletChatSidebarWidth, clampTalosTabletSidebarWidth, talosTabletLeavesChatsRoute, talosTabletLeavesHarnessListRoute, talosTabletRailVariant, talosTabletSidebarEffectiveWidth, talosTabletStationParent } from '@/lib/tabletLayout'
 import { useLauncherIconController } from '@/services/launcherIcon'
 import { parseTalosSessionLibraryContextPolicy } from '@/lib/chat/libraryPolicy'
 const router = useRouter()
@@ -800,10 +800,10 @@ function leaveStation(): void {
  * tablet 2026-08-03). The route table now declares each nested page's parent;
  * this reads it rather than pattern-matching on names.
  */
-const stationParent = computed(() => talosMobileParentRoute(
+const stationParent = computed(() => talosTabletStationParent(tabletLayout.isTablet.value, talosMobileParentRoute(
     activeRoute.value,
     route.params as Record<string, unknown>,
-))
+)))
 /**
  * Il gradino sopra, per il pulsante in alto a sinistra.
  *
@@ -995,10 +995,15 @@ watch(
  */
 async function openDefaultHarnessSession(): Promise<void> {
     // K4-E (owner 17/10 «r4 al posto, il vecchio come ripiego»; visto sul Pad: vinceva la sessione vecchia): prima r4, se l'APK lo porta
-    const [{ listCodiceSessions }, { talosR4Disponibile }, { apriCodiceSulTabletR4 }] = await Promise.all([
+    const [{ listCodiceSessions }, { talosR4Disponibile, talosR4Pronto }, { apriCodiceSulTabletR4 }, { leggiSessioniR4 }, { talosClienteR4 }] = await Promise.all([
         import('@/lib/harness/codiceSessions'), import('@/lib/harness/terminalePonte'), import('@/lib/harness/r4/sceltaCodiceR4'),
+        import('@/lib/harness/r4/elencoSessioniR4'), import('@/lib/harness/r4/clienteR4'),
     ])
-    await apriCodiceSulTabletR4({ rottaAttuale: () => router.currentRoute.value, router, disponibile: talosR4Disponibile, sessioniVecchie: listCodiceSessions })
+    await apriCodiceSulTabletR4({
+        rottaAttuale: () => router.currentRoute.value, router, disponibile: talosR4Disponibile, sessioniVecchie: listCodiceSessions,
+        // ELENCO-R4 (18/10): come il classico, l'ultima sessione; r4 si accende qui se serve (idempotente), come fa l'elenco
+        sessioniR4: async () => ((await talosR4Pronto()) ? leggiSessioniR4(talosClienteR4()) : []),
+    })
 }
 
 async function navigate(

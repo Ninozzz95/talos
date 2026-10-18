@@ -55,6 +55,9 @@ import { talosComposerFlags } from '@/lib/composerStyle'
 import { resolveTalosDictationLanguageTag, talosRilevamentoAcceso } from '@/lib/dictationPolicy'
 import { useConversazioneR4 } from '@/composables/useConversazioneR4'
 import { createTalosChatLiveEdge } from '@/composables/useTalosChatLiveEdge'
+import { useTalosTabletLayout } from '@/composables/useTalosTabletLayout'
+import { talosTabletStationParent } from '@/lib/tabletLayout'
+import { talosCambiSessioniR4 } from '@/lib/harness/r4/avvisiSessioniR4'
 import { useTalosMobileDictation } from '@/composables/useTalosMobileDictation'
 import { useTalosSpeech } from '@/composables/useTalosSpeech'
 import { useSettingsStore } from '@/stores/settings'
@@ -80,6 +83,25 @@ const TalosMobileConfirmDialog = defineAsyncComponent(() => import('@/components
 const { t, locale } = useTalosI18n()
 const route = useRoute()
 const router = useRouter()
+const tabletLayout = useTalosTabletLayout()
+/**
+ * La ← fa quello che fa Indietro di sistema (`stationParent` di App.vue): sul telefono l'elenco delle sessioni (ELENCO-R4, 18/10);
+ * sul tablet l'elenco sta nella colonna e `/harness` riaprirebbe l'ultima sessione (TAB-INDIETRO-01), quindi si esce verso la chat.
+ */
+function indietro(): void {
+    void router.push(talosTabletStationParent(tabletLayout.isTablet.value, { name: 'harness' }) ?? { name: 'chat' })
+}
+/**
+ * REV-ELENCO-09 (review avversariale v0.1.42): sul tablet la colonna rinomina o elimina la sessione aperta qui. Rinominata, il titolo
+ * cambia; eliminata, si apre la bozza invece di restare su una conversazione che non esiste più.
+ */
+watch(() => talosCambiSessioniR4.value.n, () => {
+    const cambio = talosCambiSessioniR4.value
+    const conv = conversazione.value
+    if (!conv || !cambio.id || cambio.id !== conv.sessioneId.value) return
+    if (cambio.eliminata) void router.replace({ name: 'codice-r4' })
+    else if (cambio.nome) conv.titolo.value = cambio.nome
+})
 const settings = useSettingsStore()
 const toasts = useTalosMobileToasts()
 
@@ -702,7 +724,7 @@ onBeforeUnmount(() => {
             <TalosCodiceR4Header
                 :titolo="conversazione?.titolo.value || t('harness.r4Title')"
                 :occupato="sending"
-                @indietro="void router.push({ name: 'harness' })"
+                @indietro="indietro"
                 @riprendi="void conversazione?.riprendi()"
                 @compatta="void compattaIlContesto()"
                 @dettagli="foglio = 'albero'"

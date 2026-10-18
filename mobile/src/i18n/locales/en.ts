@@ -1476,6 +1476,8 @@ export const TALOS_EN_MESSAGES = {
         r4AutomationPhoneNote: 'On the phone it runs only while Code is open; a missed run starts once when you open it again.',
         // K4-E (owner 17/10 «the old one as fallback»): r4 did not start and the previous Code opens
         r4Fallback: 'The new Code did not start on this device: the classic Code opens instead.',
+        r4ListFailed: 'Sessions did not load: {detail}',
+        r4Unreachable: 'Code is not responding yet. Try again in a moment.',
         r4RenameTitle: 'Rename the session',
         r4RenameField: 'Session name',
         r4RenameSave: 'Save',
@@ -1520,6 +1522,7 @@ export const TALOS_EN_MESSAGES = {
         statusRunningAria: 'Session still running',
         statusInterrupted: 'Interrupted',
         statusWaitingApproval: 'Waiting for approval',
+        statusWaitingForYou: 'Waiting for you',
         statusError: 'Concluded with an error',
     },
     privilege: {
@@ -4190,6 +4193,8 @@ export const TALOS_EN_MESSAGES = {
         disconnectedHere: 'Disconnected on this device. To be safe, remove it in your ChatGPT settings too.',
         chatReady: 'Its models are in the model picker, under ChatGPT.',
         pill: 'ChatGPT plan',
+        /** N15-PAST-05 (owner 18/10): on phones the badge is short, next to the model that already shows the ChatGPT logo. */
+        pillShort: 'Plan',
         panelTitle: 'You’re using your ChatGPT plan',
         last5h: 'Last 5 hours',
         last7d: 'Last 7 days',

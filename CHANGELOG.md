@@ -6,6 +6,36 @@ signed APK under [Releases](../../releases).
 
 Numbers in this file are measured on a device, not estimated.
 
+## v0.1.42
+
+Code has its session list again, and dictation shows what you said while you say it.
+
+### Fixed
+
+- In v0.1.41, Code opened straight into a session and there was no session list. On a phone, Back, the back gesture
+  and the arrow at the top left led to the classic Code page, which opened Code again, so there was no way out.
+  Now "Code" opens the list of your Code sessions, like the classic Code did: grouped by date, with each session's
+  state (running, waiting for you, interrupted, error), "New", rename and delete. Tap a session to open it; Back,
+  the gesture and the arrow go back to the list, and Back from the list leaves Code. On tablets the list is in the
+  sidebar again, Code opens your most recent session, and Back leaves Code. If Code cannot start on the device, the
+  classic Code opens instead, as before.
+- Code sessions stopped halfway by a restart are now shown as interrupted, not as running.
+- Code runs on the same engine as TALOS desktop 0.1.33. A command that Code left running in the background when the app
+  was closed abruptly is picked up again at the next start and can be stopped from Code, instead of staying out of
+  reach. Deferred tools, which desktop 0.1.33 turns on, stay off on the phone until they are measured with the
+  providers Code uses here.
+- In the Code session list, a session that is working updates by itself, and when renaming or deleting is refused
+  (for example a session still running) the reason is shown in your language. On tablets, renaming or deleting the
+  open session from the sidebar updates it in the centre too.
+- With on-device dictation, the words on screen could stop halfway while you were still talking, and the full text
+  appeared only when you confirmed. Now, at every pause, Parakeet rewrites what you said so far, with punctuation, and
+  the words keep coming in between. Measured on the Pad with a 12-second sentence that has a pause in the middle: the
+  exact text is on screen 0.35 seconds after the last word.
+- The words you are dictating now sit just above the composer, on one line, like in the assistant bar, instead of
+  inside the recording bar. This works the same in the chat and in Code.
+- On phones the ChatGPT plan badge in the composer is smaller and says "Plan", so the composer controls stay on one
+  line. From tablets up it is unchanged.
+
 ## v0.1.41
 
 Code now runs the desktop's own server and agent inside the phone, chats can use a ChatGPT plan, and dictation can

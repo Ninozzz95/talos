@@ -217,8 +217,10 @@ describe('⛔ l\'assistente mostra le schede, non solo il testo', () => {
      * finché l'owner non ha guardato la chat dopo aver visto l'assistente.
      */
     it('⭐ chat e assistente montano LO STESSO componente', () => {
+        // ⛔ 18/10/2026 (DET-FUORI, owner: «il testo vada fuori dal composer … proprio fuori»): nella chat la riga sta nel
+        // COMPOSITORE, sopra il bordo, non più nella barra della dettatura. Il componente resta lo stesso dell'assistente.
         const chat = readFileSync(
-            resolve(RADICE, 'src/components/chat/TalosMobileDictationBar.vue'), 'utf8',
+            resolve(RADICE, 'src/components/chat/TalosMobileComposer.vue'), 'utf8',
         )
         for (const superficie of [sorgente, chat]) {
             expect(superficie).toContain("@/components/brand/TalosSciaParole.vue")

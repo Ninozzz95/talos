@@ -34,14 +34,21 @@ describe('quale Codice apre la voce «Codice» (K4-E)', () => {
         const sessioniVecchie = vi.fn(async () => [{ id: 'vecchia-1' }, { id: 'vecchia-2' }])
         const elenco = () => ({ name: 'harness', query: {} })
         const r = router()
-        await apriCodiceSulTabletR4({ rottaAttuale: elenco, router: r, disponibile: async () => true, sessioniVecchie })
-        expect(r.replace).toHaveBeenCalledWith({ name: 'codice-r4' })
+        // ELENCO-R4-TAB-01 (owner 18/10 «esattamente come sulla chat Legacy»): come il classico, si apre l'ultima sessione (di r4)
+        await apriCodiceSulTabletR4({ rottaAttuale: elenco, router: r, disponibile: async () => true, sessioniVecchie, sessioniR4: async () => [{ id: 'r4-ultima' }, { id: 'r4-prima' }] })
+        expect(r.replace).toHaveBeenCalledWith({ name: 'codice-r4', params: { id: 'r4-ultima' } })
         expect(sessioniVecchie).not.toHaveBeenCalled()
+        // nessuna sessione r4, o r4 che non risponde: la bozza di r4, come prima
+        for (const sessioniR4 of [async () => [], async () => { throw new Error('giù') }]) {
+            const vuoto = router()
+            await apriCodiceSulTabletR4({ rottaAttuale: elenco, router: vuoto, disponibile: async () => true, sessioniVecchie, sessioniR4 })
+            expect(vuoto.replace).toHaveBeenCalledWith({ name: 'codice-r4' })
+        }
         const senza = router()
-        await apriCodiceSulTabletR4({ rottaAttuale: elenco, router: senza, disponibile: async () => false, sessioniVecchie })
+        await apriCodiceSulTabletR4({ rottaAttuale: elenco, router: senza, disponibile: async () => false, sessioniVecchie, sessioniR4: async () => [] })
         expect(senza.replace).toHaveBeenCalledWith({ name: 'harness-session', params: { id: 'vecchia-1' } })
         const ripiego = router()
-        await apriCodiceSulTabletR4({ rottaAttuale: () => ({ name: 'harness', query: { ripiego: '1' } }), router: ripiego, disponibile: async () => true, sessioniVecchie: async () => [] })
+        await apriCodiceSulTabletR4({ rottaAttuale: () => ({ name: 'harness', query: { ripiego: '1' } }), router: ripiego, disponibile: async () => true, sessioniVecchie: async () => [], sessioniR4: async () => [] })
         expect(ripiego.replace).toHaveBeenCalledWith({ name: 'harness-session', params: { id: 'new' } })
         // ⛔ visto sul Pad (17/10): mentre si chiedeva al ponte, `HarnessScreen` aveva già mandato a r4; la rotta letta all'inizio
         // diceva ancora `harness` e si apriva la sessione vecchia 57 ms dopo. La rotta si rilegge al momento di decidere.
@@ -50,7 +57,7 @@ describe('quale Codice apre la voce «Codice» (K4-E)', () => {
         await apriCodiceSulTabletR4({
             rottaAttuale: () => attuale, router: gara,
             disponibile: async () => { attuale = { name: 'codice-r4', query: {} }; return false },
-            sessioniVecchie,
+            sessioniVecchie, sessioniR4: async () => [],
         })
         expect(gara.replace).not.toHaveBeenCalled()
     })

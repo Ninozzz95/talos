@@ -91,6 +91,32 @@ describe('N12 — il motore locale della dettatura', () => {
         expect(visti.at(-1)).toBe('Ciao a tutti. Come state oggi?')
     })
 
+    /*
+     * ⛔ N12-ANTEPRIMA-01 — owner 18/10/2026 notte, dal telefono: l'anteprima «si blocca a metà», poi alla conferma «si vede tutto
+     * formattato bene». Le vive del sistema arrivano in ritardo; owner: «Parakeet aggiorna l'anteprima alle pause».
+     */
+    it('N12-ANTEPRIMA-01: la rilettura di Parakeet alla pausa aggiorna l anteprima, e le vive in ritardo non la riportano indietro né la doppiano', async () => {
+        const b = ponte({ finale: { testo: 'Ok, grazie dell\'informazione, valuterò da me. E poi ti dico.' } })
+        const motore = creaMotoreLocale({ ponte: b.p })
+        const { e, visti } = eventi()
+        await motore.start(e, { language: 'it-IT' })
+        b.manda('talosAsrViva', { text: 'ok grazie dell\'informazione' })
+        b.manda('talosAsrRiletto', { text: 'Ok, grazie dell\'informazione, valuterò da me.' })
+        expect(visti.at(-1)).toBe('Ok, grazie dell\'informazione, valuterò da me.')
+        // il sistema arriva dopo con la stessa coda: niente di nuovo, niente doppione
+        b.manda('talosAsrViva', { text: 'ok grazie dell\'informazione valuterò da me' })
+        expect(visti.at(-1)).toBe('Ok, grazie dell\'informazione, valuterò da me.')
+        // parole davvero nuove, dopo la pausa: si accodano
+        b.manda('talosAsrTratto', { text: 'ok grazie dell\'informazione valuterò da me' })
+        b.manda('talosAsrViva', { text: 'e poi ti dico' })
+        expect(visti.at(-1)).toBe('Ok, grazie dell\'informazione, valuterò da me. e poi ti dico')
+        await motore.stop()
+        expect(visti.at(-1)).toBe('Ok, grazie dell\'informazione, valuterò da me. E poi ti dico.')
+        // dopo la fine una rilettura in ritardo non riscrive niente
+        b.manda('talosAsrRiletto', { text: 'vecchia' })
+        expect(visti.at(-1)).toBe('Ok, grazie dell\'informazione, valuterò da me. E poi ti dico.')
+    })
+
     it('N12-LINGUA-01: le scelte di lingua sono quelle della dettatura di oggi, e la lingua SENTITA torna a chi compone', async () => {
         const b = ponte()
         const motore = creaMotoreLocale({ ponte: b.p })

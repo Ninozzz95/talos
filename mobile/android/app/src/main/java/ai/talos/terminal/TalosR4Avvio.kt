@@ -88,6 +88,10 @@ object TalosR4Avvio {
         // ⛔ K3-R4SPOSTA (r4 2161afb32): gli obiettivi restano spenti finché il mobile non mostra l'obiettivo del modello. r4 toglie
         // l'attrezzo e rifiuta POST /goal (422 GOAL_NOT_ALLOWED goal-not-in-this-host): un obiettivo che nessuno vede non si ferma.
         a["TALOS_HARNESS_UI_GOALS"] = "0"
+        // ⛔ Owner 18/10/2026 («Spento nel telefono»): r4 della desktop 0.1.33 accende di serie gli attrezzi differiti (`server.mjs`);
+        // misurati solo su glm via OpenRouter e su ChatGPT Luna, mai su DeepSeek e Gemini del Codice del telefono. Spenti finché il
+        // banco del desktop non li misura.
+        a["TALOS_ATTREZZI_DIFFERITI"] = "0"
         // ⛔ K3-TERM T1 (16/10): il Terminale di r4 apre `$SHELL || /bin/bash` (`pty-terminal.mjs` `sceltaShell`); su Android la
         // shell è /system/bin/sh, e /bin/bash non esiste. Messa dopo il chiamante: non si sceglie da fuori.
         a["SHELL"] = "/system/bin/sh"

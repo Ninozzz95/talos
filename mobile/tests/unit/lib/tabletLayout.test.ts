@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import {
     TALOS_TABLET_CHAT_SIDEBAR_DEFAULT,
     TALOS_TABLET_HARNESS_RAIL_COLLAPSED,
@@ -9,6 +11,7 @@ import {
     clampTalosTabletSidebarWidth,
     talosTabletSidebarEffectiveWidth,
     talosTabletLeavesHarnessListRoute,
+    talosTabletStationParent,
     talosTabletRailVariant,
 } from '@/lib/tabletLayout'
 import {
@@ -183,13 +186,36 @@ describe('settings hydrate bridge fence (R1-6)', () => {
     })
 })
 
-describe('colonna del tablet nel Codice r4 (K4-E, owner 17/10 «Colonna delle chat»)', () => {
-    it('K4E-COL-01 in r4 la colonna è quella delle chat, come nelle altre stazioni: le sessioni del Codice vecchio solo dal ripiego', () => {
-        // ⛔ visto sul Pad (17/10): «Codice» apriva r4 e la colonna elencava le sessioni del Codice vecchio accanto.
-        expect(talosTabletRailVariant({ stazione: 'harness', rotta: 'codice-r4', codiceVecchio: true })).toBe('chat')
+describe('colonna del tablet nel Codice r4', () => {
+    it('K4E-COL-01 → ELENCO-R4-COL-01 (owner 18/10 «esattamente come sulla chat Legacy»): in r4 la colonna è l\'elenco delle sessioni', () => {
+        // 17/10 la colonna era quella delle chat perché l'elenco mostrava le sessioni del Codice vecchio; dal 18/10 elenca quelle di r4
+        // (`HarnessScreen.vue` con `elencoSessioniR4.ts`), quindi in r4 torna la colonna del Codice, come prima di K4-E.
+        expect(talosTabletRailVariant({ stazione: 'harness', rotta: 'codice-r4', codiceVecchio: true })).toBe('harness')
         expect(talosTabletRailVariant({ stazione: 'harness', rotta: 'harness', codiceVecchio: true })).toBe('harness')
         expect(talosTabletRailVariant({ stazione: 'harness', rotta: 'harness-session', codiceVecchio: true })).toBe('harness')
         expect(talosTabletRailVariant({ stazione: 'harness', rotta: 'harness-session', codiceVecchio: false })).toBe('chat')
         expect(talosTabletRailVariant({ stazione: 'notes', rotta: 'notes', codiceVecchio: true })).toBe('chat')
+    })
+})
+
+/*
+ * ⛔ TAB-INDIETRO-01 — riprodotto sul Pad (18/10, tablet orizzontale, sessione r4 più recente aperta): Indietro di sistema tre volte,
+ * la rotta restava `/codice-r4/<id>`. Il genitore della sessione è la pagina elenco `/harness`, che sul tablet non esiste (l'elenco sta
+ * nella colonna) e riapre l'ultima sessione: lo stesso giro chiuso del telefono (USCITA-R4), valeva anche per `harness-session`.
+ * Sul tablet, quando il genitore è quella pagina, Indietro esce dalla stazione; sul telefono torna all'elenco.
+ */
+describe('Indietro dal Codice sul tablet (TAB-INDIETRO-01)', () => {
+    it('TAB-INDIETRO-01 sul tablet la pagina elenco del Codice non è un genitore; sul telefono sì, e gli altri genitori restano', () => {
+        const elenco = { name: 'harness', params: {} }
+        expect(talosTabletStationParent(true, elenco)).toBeNull()
+        expect(talosTabletStationParent(false, elenco)).toEqual(elenco)
+        const nota = { name: 'note-item', params: { id: 'n1' } }
+        expect(talosTabletStationParent(true, nota)).toEqual(nota)
+        expect(talosTabletStationParent(true, null)).toBeNull()
+    })
+
+    it('TAB-INDIETRO-02 Indietro di sistema e freccia della barra leggono il genitore filtrato per il tablet', () => {
+        const app = readFileSync(resolve(__dirname, '../../../src/App.vue'), 'utf8')
+        expect(app).toMatch(/const stationParent = computed\(\(\) => talosTabletStationParent\(tabletLayout\.isTablet\.value, talosMobileParentRoute\(/u)
     })
 })
