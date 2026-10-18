@@ -9,6 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
+import { esitoApprovazione } from '../src/kernel/talosHarness.mjs';
 import { conStore, conversazioneFerma, passo, registroAGiri } from './aiuto/banco-obiettivo.mjs';
 import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
@@ -154,7 +155,9 @@ test('G4-REG-04 — il sì al contratto RISPONDE alla domanda del cancello per i
     if (divieto) return { consentito: false, via: 'regola' };
     const risposta = await chiediApprovazioneFn({ tipo: 'shell', comando: riga });
     domande.push(riga);
-    return { consentito: risposta?.approvato === true };
+    /* owner 17/10 sera: la risposta si legge COME LA LEGGE IL KERNEL (`esitoApprovazione`: approva solo `true`). Il cancello finto
+       leggeva `risposta?.approvato === true`, cioè la forma del registro: era verde mentre il cancello vero diceva no. */
+    return { consentito: esitoApprovazione(risposta).approvato };
   };
   const b = banco(cartellaStore, cartella, () => ({ codice: 0, enforcement: 'none' }), { permessoDelMotoreFn });
   const sessionId = await conversazioneFerma(b);

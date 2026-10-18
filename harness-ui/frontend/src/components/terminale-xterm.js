@@ -66,6 +66,39 @@ export function decodificaFrameServer(buffer) {
   return { tipo: byte[0], corpo: new TextDecoder().decode(byte.subarray(1)) };
 }
 
+/**
+ * ⛔⛔ 17/10/2026 (owner: «Cura nella 0.1.32») — I TASTI SCRITTI PRIMA DELL'AGGANCIO SI PERDEVANO IN SILENZIO. `suDati` mandava solo a
+ *   connessione aperta (`app.js`, `readyState === OPEN`) e buttava il resto; dalla 0.1.31 il terminale senza sessione lo crea il
+ *   server, e la finestra fra la scheda pronta e la shell agganciata è più lunga. Misurato sulla CI pubblica: R01-GUSCIO
+ *   (`desktop/tests/guscio.spec.mjs:128`, «echo TALOS-R01» scritto e mai riletto) verde 1 volta su 3 sullo stesso codice.
+ * ⇒ Come VS Code (`terminalProcessManager.ts`, `_preLaunchInputQueue`: «If the pty is not ready, queue the data received to send
+ *   later», svuotata in `onProcessReady`; letto il 17/10/2026): i tasti si tengono finché il server dice `agganciato`, poi partono
+ *   tutti insieme, nell'ordine. Un tetto (16 KiB) perché una connessione che non arriva mai non accumuli senza fine: oltre, il
+ *   pezzo che non entra si scarta INTERO, e chi chiama lo sa dal valore di ritorno (e lo dice alla persona).
+ * ⛔ Owner 18/10/2026, «solo nella stessa shell»: la coda parte al primo aggancio o quando il server dice `ripreso` (la stessa
+ *   shell); se la shell è nuova si scarta, e il Terminale lo dice. Nessun comando finisce dove la persona non l'ha scritto.
+ */
+export const TETTO_CODA_TASTI = 16 * 1024;
+
+export function creaCodaTasti(tetto = TETTO_CODA_TASTI) {
+  let coda = '';
+  return {
+    /**
+     * Accoda un pezzo INTERO o niente; torna quanti caratteri sono stati scartati (0 = tenuto). Revisione del bugfixer, 18/10:
+     *   tagliare a metà lasciava un incolla senza la sua chiusura (la shell resta in modalità incolla) o mezza riga di comando.
+     */
+    metti(dati) {
+      const testo = String(dati ?? '');
+      if (coda.length + testo.length > tetto) return testo.length;
+      coda += testo;
+      return 0;
+    },
+    /** Svuota e torna tutto ciò che era in coda, nell'ordine in cui è stato scritto. */
+    svuota() { const tutto = coda; coda = ''; return tutto; },
+    get lunghezza() { return coda.length; },
+  };
+}
+
 /* ═════════════════════════ le parole a schermo ═════════════════════════ */
 
 /** ⛔ Nomi umani, mai tecnici: a schermo non compaiono «clipboard», «paste» né «xterm». */
