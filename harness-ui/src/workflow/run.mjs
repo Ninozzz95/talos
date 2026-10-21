@@ -551,14 +551,21 @@ function applyEvent(next, event) {
     }
     next.budget.reservations.delete(event.payload.reservationId);
     for (const [key, amount] of Object.entries(event.payload.actual)) if (amount !== null) next.budget.spent[key] += amount;
-    if (event.payload.overrunDimensions.length) addAttention(next, 'budget_overrun');
+    if (event.payload.overrunDimensions.length) {
+      addAttention(next, 'budget_overrun');
+      /* 21/10/2026 (visto dal vivo: «Run budget limit reached» senza dire QUALE): l'ultimo sforamento si ricorda, per la panoramica */
+      next.budget.lastOverrun = { source: 'settled', dimensions: [...event.payload.overrunDimensions], observed: null };
+    }
   } else if (event.type === 'budget_released') {
     assertTransition(next.budget.reservations.has(event.payload.reservationId), 'budget_released references an unknown reservation');
     assertTransition(![...next.capacityClaims.values()].some((claim) => claim.state === 'active' && claim.budgetReservationId === event.payload.reservationId),
       'budget_released cannot close an active capacity claim');
     next.budget.reservations.delete(event.payload.reservationId);
-  } else if (event.type === 'budget_overrun_observed') addAttention(next, 'budget_overrun');
-  else if (event.type === 'budget_ceiling_raised') {
+  } else if (event.type === 'budget_overrun_observed') {
+    addAttention(next, 'budget_overrun');
+    next.budget.lastOverrun = { source: event.payload.source === 'admission' ? 'admission' : 'settled', dimensions: [...event.payload.dimensions],
+      observed: event.payload.source === 'admission' ? clone(event.payload.observed) : null };
+  } else if (event.type === 'budget_ceiling_raised') {
     /*
      * ⭐ C3 tappa 3 (09/10/2026, owner «quanto serve per finire») — la persona alza il tetto del run: solo su un run in «Serve
      *   attenzione» per il budget, non annullato. L'aumento si somma a `ceilingRaise` (lo stesso campo del Riprova, F3-51b: il
@@ -570,6 +577,7 @@ function applyEvent(next, event) {
     next.budget.ceilingRaise = Object.fromEntries(Object.keys(SPENT_ZERO).map((key) =>
       [key, (next.budget.ceilingRaise?.[key] ?? 0) + event.payload.amount[key]]));
     next.run.needsAttentionReasons = next.run.needsAttentionReasons.filter((reason) => reason !== 'budget_overrun');
+    next.budget.lastOverrun = null;
   } else if (event.type === 'retry_scheduled') {
     /*
      * ⭐ F3-41a (25/09/2026) — un ritentativo si decide DOPO il tentativo che ha fallito e dopo il suo saldo (catalogo §19:

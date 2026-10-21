@@ -70,5 +70,5 @@ export function bollaDaConsegna(consegna, { intestazioni = [], prefissiFile = []
 export function bollaPerLaRigiocata({ bolla = null, consegna = '', immagini = [], lingue } = {}) {
   const base = bolla && typeof bolla === 'object' && typeof bolla.testo === 'string' ? bolla : bollaDaConsegna(consegna, lingue);
   if (!base) return null;
-  return { testo: base.testo, allegati: [...(Array.isArray(base.allegati) ? base.allegati : []), ...(Array.isArray(immagini) ? immagini : [])] };
+  return { testo: base.testo, allegati: [...(Array.isArray(base.allegati) ? base.allegati : []), ...(Array.isArray(immagini) ? immagini : [])], ...(base.origine?.tipo === 'telefono' ? { origine: base.origine } : {}) };
 }

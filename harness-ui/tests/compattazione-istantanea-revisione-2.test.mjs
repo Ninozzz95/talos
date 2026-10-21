@@ -44,7 +44,7 @@ function rete({ letture, riassunto, ritardoModello = 60 }) {
 const RIASSUNTO_BUONO = () => Response.json({ choices: [{ index: 0, message: { role: 'assistant', content: `## Riassunto\n${'Dettaglio. '.repeat(20)}` }, finish_reason: 'stop' }], usage: { prompt_tokens: 1000, completion_tokens: 100 } });
 const RIASSUNTO_TRONCATO = () => Response.json({ choices: [{ index: 0, message: { role: 'assistant', content: 'Riassunto a me' }, finish_reason: 'length' }], usage: { prompt_tokens: 1000, completion_tokens: 100 } });
 
-test('IST2-REV-01 — [VERDE, da sapere] UN riassunto di sottofondo fallito (troncato) spegne l\'istantanea per il resto del giro: niente più preparazioni, e all\'emergenza si aspetta in primo piano — la stessa politica del modo classico (un fallimento: alla soglia non si riprova), con una attesa in meno', async (t) => {
+test('IST2-REV-01 — (owner 21/10/2026, «sta maledetta compattazione») un riassunto di sottofondo TRONCATO si richiede una volta più breve: riesce, e lo scambio istantaneo avviene senza attesa in primo piano', async (t) => {
   const cartella = mkdtempSync(join(tmpdir(), 'istantanea-rev2-'));
   t.after(() => rimuoviCartellaDiProva(cartella));
   for (let i = 1; i <= 12; i += 1) writeFileSync(join(cartella, `f${i}.txt`), `${'riga del file '.repeat(60)}\n`);
@@ -53,10 +53,23 @@ test('IST2-REV-01 — [VERDE, da sapere] UN riassunto di sottofondo fallito (tro
   await talosLavora({ cartella, modello: 'z-ai/glm-5.3-flash', chiave: 'finta', task: { consegna: 'Leggi.' }, messaggiIniziali: [...storia(coppiePer(3250)), { role: 'user', content: 'Leggi i file.' }],
     compattazioneIstantanea: true, contestoDelProgetto: 'Project files:\n', fetchDiRete: r0.fn, permessi: 'Full access',
     onGiro: (e) => { if (/^compattazione-(inizio|fine|preparata)$/u.test(e?.tipo ?? '')) eventi.push(`${e.tipo}${e.fase ? `/${e.fase}` : ''}${e.istantanea ? '/istantanea' : ''}${e.motivo ? `/${e.motivo}` : ''}`); } });
-  assert.ok(eventi.includes('compattazione-preparata/troncato'), `premessa: il primo riassunto di sottofondo è fallito — ${JSON.stringify(eventi)}`);
-  assert.deepEqual(eventi, ['compattazione-preparata/inizio/precalcolo', 'compattazione-preparata/troncato', 'compattazione-inizio/emergenza', 'compattazione-fine'],
-    'il fallimento di sottofondo conta in `tentativiFallitiNelTurno` come uno del giro (IST-05 lo vuole: un riassuntore rotto non si ripaga)');
-  assert.equal(r0.conti.riassunti, 2, 'uno di sottofondo (fallito) e quello della emergenza');
+  assert.ok(!eventi.includes('compattazione-preparata/troncato'), `il troncato si è ritentato e non è un fallimento: ${JSON.stringify(eventi)}`);
+  assert.ok(eventi.some((e) => e.startsWith('compattazione-fine/istantanea')), JSON.stringify(eventi));
+  assert.deepEqual(eventi.filter((e) => e.startsWith('compattazione-inizio')), [], `nessuna attesa in primo piano: ${JSON.stringify(eventi)}`);
+  assert.ok(r0.conti.riassunti >= 2, 'il primo troncato e il ritentativo');
+});
+
+test('IST2-REV-01c — [VERDE, da sapere] TUTTI E DUE i tentativi di sottofondo troncati: l’istantanea si spegne per il resto del giro e all’emergenza si aspetta in primo piano — la politica di prima, ora dopo il ritentativo', async (t) => {
+  const cartella = mkdtempSync(join(tmpdir(), 'istantanea-rev2c-'));
+  t.after(() => rimuoviCartellaDiProva(cartella));
+  for (let i = 1; i <= 12; i += 1) writeFileSync(join(cartella, `f${i}.txt`), `${'riga del file '.repeat(60)}\n`);
+  const r0 = rete({ letture: 12, riassunto: (n) => (n <= 2 ? RIASSUNTO_TRONCATO() : RIASSUNTO_BUONO()) });
+  const eventi = [];
+  await talosLavora({ cartella, modello: 'z-ai/glm-5.3-flash', chiave: 'finta', task: { consegna: 'Leggi.' }, messaggiIniziali: [...storia(coppiePer(3250)), { role: 'user', content: 'Leggi i file.' }],
+    compattazioneIstantanea: true, contestoDelProgetto: 'Project files:\n', fetchDiRete: r0.fn, permessi: 'Full access',
+    onGiro: (e) => { if (/^compattazione-(inizio|fine|preparata)$/u.test(e?.tipo ?? '')) eventi.push(`${e.tipo}${e.fase ? `/${e.fase}` : ''}${e.istantanea ? '/istantanea' : ''}${e.motivo ? `/${e.motivo}` : ''}`); } });
+  assert.deepEqual(eventi, ['compattazione-preparata/inizio/precalcolo', 'compattazione-preparata/troncato', 'compattazione-inizio/emergenza', 'compattazione-fine'], JSON.stringify(eventi));
+  assert.equal(r0.conti.riassunti, 3, 'due di sottofondo (troncati) e quello della emergenza');
 });
 
 test('IST2-REV-01b — [VERDE] AL CONTRARIO, lo stesso giro con un riassunto buono: scambio istantaneo, nessuna attesa in primo piano', async (t) => {

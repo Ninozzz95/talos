@@ -642,7 +642,11 @@ function metadatiNoti(record, id) {
     fonteMetadati: modello.fonte, dataMetadati: modello.data, maxOutputTokens: modello.maxOutputTokens,
     prezzi: { ...record.prezzi, ...modello.prezzi }, ragionamento: modello.ragionamento, cache: record.cache.etichetta,
     reasoning: { supportedEfforts: modello.ragionamento.livelli,
-      defaultEffort: modello.ragionamento.livelli.includes('max') ? 'max' : null,
+      /* Revisione D2, 21/10/2026: il predefinito è quello DICHIARATO dal fornitore (DeepSeek high, Z.AI max); «max se c'è» era la
+         regola di Z.AI applicata a tutti. Senza dichiarazione resta la regola di prima. */
+      defaultEffort: record.ragionamento?.livelloPredefinito !== undefined
+        ? (modello.ragionamento.livelli.includes(record.ragionamento.livelloPredefinito) ? record.ragionamento.livelloPredefinito : null)
+        : (modello.ragionamento.livelli.includes('max') ? 'max' : null),
       defaultEnabled: true, mandatory: !modello.ragionamento.thinking.includes('disabled') },
   };
 }

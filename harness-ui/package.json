@@ -34,7 +34,9 @@
     "pdfjs-dist": "6.3.289",
     "pdfmake": "0.3.11",
     "pptxgenjs": "4.0.1",
+    "qrcode-generator": "2.0.4",
     "unicode-segmenter": "0.15.0",
+    "web-push": "3.6.7",
     "ws": "8.21.3",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
     "zod": "4.5.4"

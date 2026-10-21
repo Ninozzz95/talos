@@ -37,7 +37,7 @@ test('BUG18-LIV-01 — xhigh su glm-5.3-flash: alias canonico → max, SILENZIOS
     const result = preparaZai({ model: 'glm-5.3-flash', messages: [], ...extra });
     assert.equal(result.corpo.reasoning_effort, 'max');
     assert.equal(result.corpo.reasoning, undefined);
-    assert.deepEqual(result.corpo.thinking, { type: 'enabled' });
+    assert.deepEqual(result.corpo.thinking, { type: 'enabled', clear_thinking: false }); // owner 21/10/2026: il ragionamento passato si tiene
     assert.deepEqual(result.avvisi, []);
     assert.deepEqual(result.note, [], 'alias = stessa grafia del livello: silenzioso');
   }
@@ -70,7 +70,7 @@ test('BUG18-LIV-04 — none su un modello che non si spegne: thinking forzato + 
      la regola 24/09 impone il floor al minimo documentato (hermes auxiliary_reasoning_floor). */
   const result = preparaZai({ model: 'glm-5.3-flash', messages: [], reasoning: { effort: 'none' } });
   assert.equal(result.corpo.reasoning_effort, 'low');
-  assert.deepEqual(result.corpo.thinking, { type: 'enabled' });
+  assert.deepEqual(result.corpo.thinking, { type: 'enabled', clear_thinking: false }); // owner 21/10/2026: il ragionamento passato si tiene
   assert.deepEqual(result.avvisi, []);
   assert.equal(result.note.length, 2);
   assert.match(result.note.join(' '), /cannot disable reasoning/u);
@@ -138,7 +138,7 @@ test('BUG18-LIV-09 — groq senza «nome»: il clamp cita il modello, mai «unde
 test('BUG18-LIV-10 — «disattiva» rifiutato + livello in lista: il livello resta, una sola nota (cura3 D4)', () => {
   const result = preparaZai({ model: 'glm-5.3-flash', messages: [], reasoning_effort: 'high', thinking: { type: 'disabled' } });
   assert.equal(result.corpo.reasoning_effort, 'high');
-  assert.deepEqual(result.corpo.thinking, { type: 'enabled' });
+  assert.deepEqual(result.corpo.thinking, { type: 'enabled', clear_thinking: false }); // owner 21/10/2026: il ragionamento passato si tiene
   assert.deepEqual(result.avvisi, []);
   assert.equal(result.note.length, 1, 'nessuna seconda nota sul livello');
   assert.match(result.note[0], /cannot disable/u);

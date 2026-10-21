@@ -46,6 +46,21 @@ const SEGNAPOSTO_NOTI = Object.freeze(['AKIAIOSFODNN7EXAMPLE']);
 const CARICO_DI_JWT_IO = '.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.';
 const eUnSegnapostoNoto = (trovato) => SEGNAPOSTO_NOTI.includes(trovato) || trovato.includes(CARICO_DI_JWT_IO);
 
+/*
+ * Revisione del 20/10/2026 (D2, ripiego del riassunto): le stesse forme, OSCURATE nel testo invece che solo riconosciute — come
+ *   Hermes passa il suo ripiego in `_redact_compaction_text` (`agent/context_compressor.py:3709`). In più le credenziali dentro un
+ *   indirizzo (`https://utente:password@…`). I segnaposto noti restano: non sono chiavi.
+ */
+export const SEGRETO_OSCURATO = '[redacted]';
+export function oscuraFormeDiSegreto(testo) {
+  if (typeof testo !== 'string' || testo === '') return testo;
+  let fuori = testo;
+  for (const forma of FORME_DI_SEGRETO) {
+    fuori = fuori.replace(new RegExp(forma.source, `${forma.flags}g`), (trovato) => (eUnSegnapostoNoto(trovato) ? trovato : SEGRETO_OSCURATO));
+  }
+  return fuori.replace(/(\b[a-z][a-z0-9+.-]{1,20}:\/\/)[^\s/@:"']{1,256}:[^\s/@"']{1,256}@/giu, `$1${SEGRETO_OSCURATO}@`);
+}
+
 /** Il testo contiene qualcosa che ha la forma di una chiave vera? Il NOME della forma, o `null`. */
 export function formaDiSegretoNelTesto(testo) {
   if (typeof testo !== 'string' || testo === '') return null;

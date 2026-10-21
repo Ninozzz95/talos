@@ -196,3 +196,27 @@ export async function preparaToolMcpPerSessione({ cartella, cartellaTrust, onEli
 
   return { toolMcp, chiamaToolMcpFn, falliti, esiti: esitiDeiServer, chiudiTutti };
 }
+
+/**
+ * R5.8 (contratto del controllo remoto §6, decisione owner del 17/10: «test e riconnessione di un MCP», dal PC e dal telefono) — UN
+ * server, adesso: lo stesso avvio di `preparaToolMcpPerSessione` ristretto a lui (stessi motivi d'errore, stessa impronta), poi lo
+ * si chiude. Le connessioni vivono un giro alla volta: «riconnetti» è questo — la prova dice se il server ora parte, e il prossimo
+ * giro lo usa. Un server NON fidato non si prova: avviarlo eseguirebbe codice di terzi, e la fiducia si dà solo dal PC.
+ * Torna `{ trovato, fidato, esito? , attrezzi?, ms? }`; non lancia.
+ */
+export async function provaUnServerMcp({ cartella, cartellaTrust, serverId }, deps = {}) {
+  const serverMcpFidatiFn = deps.serverMcpFidatiFn ?? serverMcpFidatiReale;
+  const caricaServerMcpFn = deps.caricaServerMcpFn ?? caricaServerMcpReale;
+  const clock = deps.clock ?? (() => Date.now());
+  let dichiarati = [];
+  try { ({ server: dichiarati } = await caricaServerMcpFn({ cartella })); } catch { return { trovato: false, fidato: false }; }
+  if (!Array.isArray(dichiarati) || !dichiarati.some((s) => s.id === serverId)) return { trovato: false, fidato: false };
+  let fidati = [];
+  try { ({ fidati } = await serverMcpFidatiFn({ cartella, cartellaTrust })); } catch { fidati = []; }
+  const lui = fidati.find((s) => s.id === serverId);
+  if (!lui) return { trovato: true, fidato: false };
+  const inizio = clock();
+  const preparato = await preparaToolMcpPerSessione({ cartella, cartellaTrust }, { ...deps, serverMcpFidatiFn: async () => ({ fidati: [lui] }) });
+  try { await preparato.chiudiTutti(); } catch { /* chiudere male non cambia l'esito della prova */ }
+  return { trovato: true, fidato: true, esito: preparato.esiti[0] ?? null, attrezzi: preparato.toolMcp.length, ms: Math.max(0, clock() - inizio) };
+}

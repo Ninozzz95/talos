@@ -1490,7 +1490,7 @@ export function disegnaAgenti(d, contenitore, agenti, azioni = {}) {
       s = { sessionId: azioni.sessionId, cerca, filtro, valore: 'tutti', conto, righe, dati: [], azioni: {}, pagina: 0, richiesteAperte: new Map() };
       const disegna = () => {
         const q = s.cerca.value.toLocaleLowerCase().trim();
-        const filtrati = s.dati.filter(a => (!q || `${a.nome || ''} ${a.taskCorto || ''} ${a.task || ''} ${a.modello || ''}`.toLocaleLowerCase().includes(q)) && (s.valore === 'tutti' || statoDelega(a) === s.valore));
+        const filtrati = s.dati.filter(a => (!q || `${a.nome || ''} ${a.taskCorto || ''} ${a.task || ''} ${a.modello || ''}`.toLocaleLowerCase().includes(q)) && agenteNelFiltro(a, s.valore));
         const paginaMassima = Math.max(0, Math.ceil(filtrati.length / 25) - 1);
         s.pagina = Math.min(s.pagina, paginaMassima);
         const inizio = s.pagina * 25;
@@ -1621,7 +1621,7 @@ export function disegnaAgenti(d, contenitore, agenti, azioni = {}) {
     /* ⛔ 09/09: `taskCorto` prima di `task` — la consegna intera comincia col preambolo del kernel,
        uguale per ogni figlia, e a 52 caratteri due deleghe diverse diventano la stessa riga (visto
        nella foto della scheda «Agenti» del giro D2). Il ripiego su `task` regge le figlie vecchie. */
-    head.append(el(d, 'b', '', tronca(nomeDellAgente(a) || tr('agenti.agent.noTaskRecorded'), 52)), el(d, 'span', `talos-badge talos-badge--sm${statoDelega(a) === 'fallita' ? ' talos-badge--danger' : statoDelega(a) === 'conclusa' ? ' talos-badge--success' : ['in-pausa', 'interrotta'].includes(statoDelega(a)) ? ' talos-badge--warning' : ''}`, etichettaDelega(a)));
+    head.append(el(d, 'b', '', tronca(nomeDellAgente(a) || tr('agenti.agent.noTaskRecorded'), 52)), el(d, 'span', `talos-badge talos-badge--sm${['fallita', 'incerta'].includes(statoDelega(a)) ? ' talos-badge--danger' : statoDelega(a) === 'conclusa' ? ' talos-badge--success' : ['in-pausa', 'interrotta'].includes(statoDelega(a)) ? ' talos-badge--warning' : ''}`, etichettaDelega(a)));
     /*
      * ⛔⛔ 10/09, owner, regola generale e non un caso: «non mettere i pulsanti uno accanto
      *   all'altro, usa i tre puntini + dropdown… e anche azioni tasto destro mouse, ragiona sempre
@@ -1781,15 +1781,28 @@ export function contoDellaRichiesta(agenti = []) {
   const stati = agenti.map((a) => statoDelPasso(a));
   return { totale: stati.length, terminati: stati.filter((s) => PASSO_TERMINATO.has(s)).length, daControllare: stati.filter((s) => PASSO_DA_CONTROLLARE.has(s)).length };
 }
+/*
+ * ⛔ 21/10/2026 (revisione di L3-15, S4): il badge di ogni scheda e il filtro leggevano una regola LORO, diversa da `statoDelPasso`
+ *   del diagramma e del conto qui sopra. Due casi veri in cui il pannello contraddiceva sé stesso: un esito INCERTO («Conclusa»
+ *   verde, mentre il conto diceva «1 da guardare») e un verdetto di delega fallito con il giro finito bene (`ultimoEsito:
+ *   'successo'`, `esitoDelega: 'fallito'`, `subagent-orchestrator.mjs:810`): badge «Conclusa», filtro «Errori» che non lo trovava.
+ *   Ora lo stato del pannello DERIVA da `statoDelPasso`, un posto solo, come Hermes («the ONE primitive the sidebar row, the pane
+ *   tabs, and the session switcher render, so a session's status can never disagree between surfaces», `apps/desktop/src/app/
+ *   chat/session-status-dot.tsx:117-121`). L'incerto si chiama come nel diagramma («Da verificare», tono d'errore come lì,
+ *   `grafo/comuni.js:34`) e sta nel filtro «Errori», che nel diagramma raccoglie fallito e incerto (`comuni.js:76`).
+ *   Restano del pannello solo due distinzioni che il diagramma non fa: in pausa contro in attesa di te (tutti e due
+ *   `waiting_human`), e «non disponibile» quando la scheda non dice nemmeno se il giro è chiuso.
+ */
 function statoDelega(a) {
-  if (a?.interrotta === true || a?.motivoChiusura === 'fermata') return 'interrotta';
-  // C3 tappa 4: in pausa non è né un errore né una fine (chiude con un RunError «in-pausa»): uno stato suo
-  if (a?.esitoDelega === 'in-pausa' || a?.motivoChiusura === 'in-pausa') return 'in-pausa';
-  if (a?.conclusa === true) return ['errore', 'error', 'fallito', 'failed', 'rifiutato'].includes(a.ultimoEsito || a.esitoDelega) ? 'fallita' : 'conclusa';
-  if (a?.approvalPendingCount > 0 || a?.inAttesaApprovazione > 0 || a?.inAttesaApprovazione === true) return 'attesa';
-  return a?.conclusa === false ? 'in-corso' : 'ignoto';
+  const passo = statoDelPasso(a ?? {});
+  if (passo === 'cancelled') return 'interrotta';
+  if (passo === 'waiting_human') return a?.esitoDelega === 'in-pausa' || a?.motivoChiusura === 'in-pausa' ? 'in-pausa' : 'attesa';
+  if (a?.conclusa !== true && a?.conclusa !== false) return 'ignoto';
+  return { failed: 'fallita', uncertain: 'incerta', succeeded: 'conclusa' }[passo] ?? 'in-corso';
 }
-function etichettaDelega(a) { return tr({ 'in-pausa': 'processi.agents.statePaused', interrotta: 'processi.agents.stateStopped', 'in-corso': 'processi.agents.stateRunning', fallita: 'processi.agents.stateFailed', conclusa: 'processi.agents.stateDone', attesa: 'processi.agents.stateWaiting', ignoto: 'agenti.delegations.statusUnavailable' }[statoDelega(a)]); }
+function etichettaDelega(a) { return tr({ 'in-pausa': 'processi.agents.statePaused', interrotta: 'processi.agents.stateStopped', 'in-corso': 'processi.agents.stateRunning', fallita: 'processi.agents.stateFailed', incerta: 'agenti.stepState.toVerify', conclusa: 'processi.agents.stateDone', attesa: 'processi.agents.stateWaiting', ignoto: 'agenti.delegations.statusUnavailable' }[statoDelega(a)]); }
+/** Il filtro «Errori» raccoglie fallito e incerto, come nel diagramma (`grafo/comuni.js:76`). */
+export const agenteNelFiltro = (a, valore) => valore === 'tutti' || statoDelega(a) === valore || (valore === 'fallita' && statoDelega(a) === 'incerta');
 
 /*
  * ⛔⛔ I DUE NUMERI DELLE SCHEDE — owner, 20/09/2026: «badge counter in tempo reale in sidebar

@@ -1,0 +1,27 @@
+{
+  "name": "talos-relay",
+  "version": "0.1.0",
+  "description": "Your own relay server for TALOS remote control: the official iroh-relay, pinned and verified, with one command.",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "bin": {
+    "talos-relay": "bin/talos-relay.mjs"
+  },
+  "files": [
+    "bin",
+    "src",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs"
+  },
+  "homepage": "https://talos-code.com",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Ninozzz95/talos.git",
+    "directory": "harness-ui/relay"
+  }
+}

@@ -26,7 +26,8 @@ function progetto(t) {
   return radice;
 }
 async function aspetta(condizione, cosa) {
-  const fino = Date.now() + 5000;
+  /* G5D-REV-01 (20/10/2026): 5 s fissi sono caduti sul runner della release 0.1.31, sotto carico. Il tetto pesa solo quando la prova fallisce: la condizione si guarda ogni 5 ms e si esce appena è vera. */
+  const fino = Date.now() + 60_000;
   while (Date.now() < fino) { if (condizione()) return; await new Promise((r) => setTimeout(r, 5)); }
   assert.fail(`mai successo: ${cosa}`);
 }

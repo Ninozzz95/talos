@@ -56,6 +56,7 @@ import { StringDecoder } from 'node:string_decoder'
 import { createParser } from 'eventsource-parser'
 import { leggiAttesaRichiestaDalFornitore, erroreEsitoProviderIncerto, erroreEsitoProviderIncertoEsaurito, erroreNessunaPrimaRispostaEsaurito, leggiRifiutoProvider } from '../provider-retry.mjs'
 import { SilenzioDelFornitoreError, leggiInattivitaDatiMs } from '../generation-idle.mjs'
+import { rifiutoOspiteDalCodice } from '../accesso-locale-ospite.mjs' // 21/10: i rifiuti del motore dell'app anche dentro il flusso
 import { PREFISSO_SINTESI_RECINTATA, costruisciBloccoFatti } from './ricarica-post-compact.mjs' // ⭐ 06/10/2026: la ricarica della memoria post-compact (opzione A + C-a + C-b, ricerca 5×5×5×5 §6.4)
 import { createHash, generateKeyPairSync, randomUUID, sign as firmaCrypto, verify as verificaCrypto } from 'node:crypto'
 import { lookup as risolviDns } from 'node:dns'
@@ -80,7 +81,8 @@ import { creaFiltroGitignore } from '../gitignore-elenco.mjs'
 /* BLOCCO 6 (B3), 20/09/2026 — l'intestazione onesta del risultato di una shell. Una fonte sola, in
    un modulo che importano sia il kernel sia `agent-service.mjs` (che non passa di qui). */
 import { etichettaSandbox } from './etichetta-sandbox.mjs'
-import { dividiPerIlPonte, cercaAttrezzi, descriviAttrezzi, risolviChiamataDelPonte, NOME_CHIAMATA_ATTREZZO, NOME_RICERCA_ATTREZZI, NOME_DESCRIZIONE_ATTREZZI } from './ponte-attrezzi.mjs'
+import { creaFiltroRagionamentoNelTesto, separaRagionamentoNelTesto } from './ragionamento-nel-testo.mjs' // L1 motore locale (20/10/2026): il `<think>` dentro il testo
+import { dividiPerIlPonte, pesoInToken, budgetElencoDelPonte, cercaAttrezzi, descriviAttrezzi, risolviChiamataDelPonte, NOME_CHIAMATA_ATTREZZO, NOME_RICERCA_ATTREZZI, NOME_DESCRIZIONE_ATTREZZI } from './ponte-attrezzi.mjs'
 /*
  * ⛔ F15 (17/09/2026) — la GRAMMATICA DEI SEGRETI vive in `path-policy.mjs`, dove già vive
  * quella dei file di controllo: sono la stessa domanda («questo percorso è speciale?») fatta su
@@ -116,6 +118,8 @@ import { avvolgiDati, avvisoSospetto, scansionaIstruzioni, luogoDellaFonte, ISTR
 export { APERTURA_DATI, CHIUSURA_DATI, avvolgiDati, avvisoSospetto, neutralizzaDati, scansionaIstruzioni, togliConfiniDati, testoPerLoSchermo, luogoDellaFonte, ISTRUZIONE_CONFINE_DATI, ISTRUZIONE_CONFINE_DATI_CON_ADOZIONE, istruzioneConfineDati, SEGNO_ISTRUZIONE_CONFINE, ECCEZIONE_ADOZIONE, SEGNO_ECCEZIONE_ADOZIONE, TIPI_DI_LUOGO, INTESTAZIONE_RISULTATO_FIGLIO, testoDelRisultatoFiglio, sospettoNeiRisultatiFigli, INTESTAZIONE_ESITO_WORKFLOW, testoDellEsitoWorkflow } from './confine-dati.mjs'
 import { serveLoStatoDelBersaglio, motivoPerNonScrivereTesto } from './guardia-scrittura-binari.mjs' // F-001, owner 02/10/2026: «tutta la guardia di Hermes»
 import { bloccoDelPavimento, rifiutoDelPavimento } from './pavimento-comandi.mjs' // N-02, owner 02/10/2026: il pavimento di Hermes, parti 1+2+3
+import { notaDoveSei, ultimaNotaDove, aliasDelPercorso, argomentiConAlias } from './dove-sei.mjs' // L1 (owner 20/10/2026): il percorso vero e gli alias
+import { homedir } from 'node:os'
 import { vistaWindows, vistaLinux } from './percorsi-casa-linux.mjs' // Fase B, owner 01/10/2026: le due viste dello stesso percorso
 import { SCRIPT_FATTI_WSL, leggiFattiWsl, sceltaUtenteWsl, discoDellaCartella } from './utente-wsl.mjs' // F009, owner 01/10/2026: con che utente girano i comandi Linux
 
@@ -303,9 +307,14 @@ const RICHIESTA_DI_RIASSUNTO = [
  * solo fatti e puntatori, nessuna direttiva; un solo cache-break. La
  * costruzione è fail-soft: una fonte che fallisce si DICE, il compact continua.
  */
+/*
+ * ⛔ 21/10/2026 (inventario della CLI, D5; owner «sta maledetta compattazione»): un `compattato: false` diceva la stessa cosa per
+ *   «niente da compattare» e per «la chiamata è fallita» — la CLI mostrava «Already compact» dopo un errore. Ora ogni `false` porta il
+ *   suo `motivo` (`niente-da-compattare`, `errore` col `codice`, `troncato`, `vuoto`). Additivo: i campi di prima restano identici.
+ */
 export async function compattaConversazione(messaggi, chiamaModello, fontiRicarica = null) {
     if (!Array.isArray(messaggi) || !messaggi[0] || !messaggi[1]) {
-        return { messaggi, compattato: false, usage: null }
+        return { messaggi, compattato: false, usage: null, motivo: 'niente-da-compattare' }
     }
     const richiesta = [...messaggi, { role: 'user', content: RICHIESTA_DI_RIASSUNTO }]
     let risposta
@@ -314,14 +323,14 @@ export async function compattaConversazione(messaggi, chiamaModello, fontiRicari
     try {
         ; ({ scelta: risposta, usage, finishReason } = await chiamaModello(richiesta))
     }
-    catch {
-        return { messaggi, compattato: false, usage: null }
+    catch (errore) {
+        return { messaggi, compattato: false, usage: null, motivo: 'errore', codice: typeof errore?.code === 'string' ? errore.code : null }
     }
     if (finishReason !== null && finishReason !== undefined && finishReason !== 'stop') {
-        return { messaggi, compattato: false, usage }
+        return { messaggi, compattato: false, usage, motivo: 'troncato' }
     }
     const riassunto = String(risposta?.content ?? '').trim()
-    if (!riassunto) return { messaggi, compattato: false, usage }
+    if (!riassunto) return { messaggi, compattato: false, usage, motivo: 'vuoto' }
 
     /* ⭐ 06/10/2026 — la ricarica della memoria (opzione A): il blocco di fatti si calcola ORA, al momento
      * del compact, con letture fresche — mai dalla memoria del modello. `costruisciBloccoFatti` non lancia
@@ -808,6 +817,12 @@ export async function consumaFlussoSSE(response, onDelta, { segnaleStop, ripetiz
     })
     let content = ''
     let reasoning = ''
+    /* L1 del motore locale (20/10/2026, vedi `ragionamento-nel-testo.mjs`): un blocco `<think>` in APERTURA del testo è
+       ragionamento, non risposta. Va al riquadro del ragionamento solo se il fornitore non ne ha dato uno nativo (Hermes
+       `stream_delivery.py:55-56`, #89647); altrimenti è il secondo giro dello stesso pensiero, e si toglie e basta. */
+    const filtroDelTesto = creaFiltroRagionamentoNelTesto()
+    let ragionamentoNativo = false
+    let ragionamentoDalTesto = ''
     const toolCalls = []
     let usage = null
     let providerState = null
@@ -828,6 +843,7 @@ export async function consumaFlussoSSE(response, onDelta, { segnaleStop, ripetiz
      *   se fossero risposte (giro dal vivo dell'08/10, «VIP.aaa · USDT») non si riconosce. Additivo: solo se il pacchetto lo porta.
      */
     let fornitoreAValle = null
+    let tempiDelMotore = null // A1 (21/10/2026): i `timings` di llama-server (e del motore dell'app, stessa forma), per la stima prima
     let streamCompleted = false
     /* ⛔ Vedi il ramo `if (!delta)` più sotto: il messaggio completo di llama-server si usa solo se di delta non ne è arrivato NEMMENO UNO. */
     let messaggioIntero = null
@@ -1087,6 +1103,7 @@ export async function consumaFlussoSSE(response, onDelta, { segnaleStop, ripetiz
                 throw Object.assign(new Error('Invalid SSE event.'), { code: 'PROVIDER_STREAM_INVALID' })
             }
             if (pacchetto.usage) usage = pacchetto.usage
+            if (pacchetto.timings) tempiDelMotore = leggiTempiDelMotore(pacchetto.timings) ?? tempiDelMotore
             if (fornitoreAValle === null) fornitoreAValle = nomeDelFornitoreAValle(pacchetto.provider)
             const sceltaDelPacchetto = pacchetto?.choices?.[0]
             const erroreDelPacchetto = pacchetto.error ?? sceltaDelPacchetto?.error
@@ -1121,9 +1138,13 @@ export async function consumaFlussoSSE(response, onDelta, { segnaleStop, ripetiz
             /* F-ENG-4: un delta vuoto (solo `role`, o contenuto '') non è un dato: è un fornitore che dice «ci sono» */
             if (delta.content || delta.reasoning_content || delta.reasoning || delta.tool_calls?.length) datiVisti += 1
             if (delta.talos_provider_state?.version === 1) providerState = delta.talos_provider_state
-            if (delta.content) { content += delta.content; onDelta?.({ tipo: 'testo', delta: delta.content }) }
+            if (delta.content) {
+                const parti = filtroDelTesto.scrivi(delta.content)
+                if (parti.ragionamento) { ragionamentoDalTesto += parti.ragionamento; if (!ragionamentoNativo) onDelta?.({ tipo: 'ragionamento', delta: parti.ragionamento }) }
+                if (parti.testo) { content += parti.testo; onDelta?.({ tipo: 'testo', delta: parti.testo }) }
+            }
             const ragionamento = delta.reasoning_content ?? delta.reasoning
-            if (ragionamento) { reasoning += ragionamento; onDelta?.({ tipo: 'ragionamento', delta: ragionamento }) }
+            if (ragionamento) { ragionamentoNativo = true; reasoning += ragionamento; onDelta?.({ tipo: 'ragionamento', delta: ragionamento }) }
             for (const pezzo of delta.tool_calls ?? []) {
                 const quanteErano = toolCalls.length
                 const i = posizioneDelPezzo(pezzo)
@@ -1180,12 +1201,24 @@ export async function consumaFlussoSSE(response, onDelta, { segnaleStop, ripetiz
         if (chiamateInCorso) annullaAnnunciate(0, '⛔ The connection to the provider dropped before this call was complete: it was not run.')
         await lettore.cancel().catch(() => {})
         if (errore && typeof errore === 'object') {
-            errore.parziale = { content: !vistoUnDelta && typeof messaggioIntero?.content === 'string' ? messaggioIntero.content : content, chiamateInCorso }
+            errore.parziale = { content: !vistoUnDelta && typeof messaggioIntero?.content === 'string' ? separaRagionamentoNelTesto(messaggioIntero.content).testo : content, chiamateInCorso } // D4 (revisione 20/10): niente `<think>` nel frammento rimesso in storia
             errore.usage = usage
         }
         throw errore
     } finally {
         if (sveglia) segnaleStop?.removeEventListener?.('abort', sveglia)
+    }
+    {
+        /* Fine del flusso: ciò che il filtro teneva da parte torna testo. Un blocco aperto e mai chiuso torna testo PER INTERO
+           (vincolo 3 della CLI, 20/10): una risposta tagliata a metà ragionamento resta leggibile; e la sua parte già data come
+           ragionamento esce dal ragionamento, per non contarla due volte (a schermo è già passata: lo dice il testo). */
+        const coda = filtroDelTesto.chiudi()
+        if (coda.daRitirare && ragionamentoDalTesto.endsWith(coda.daRitirare)) ragionamentoDalTesto = ragionamentoDalTesto.slice(0, ragionamentoDalTesto.length - coda.daRitirare.length)
+        /* D6/D7 (revisione 20/10): il ragionamento della risposta si COMPONE qui, a fine flusso — il nativo se c'è stato, altrimenti
+           quello preso dal testo — invece di sommarli mentre arrivano: un blocco nel testo arrivato PRIMA del nativo non resta
+           accodato, e il ritiro di un blocco mai chiuso vale anche se il nativo è arrivato a metà. */
+        if (!ragionamentoNativo) reasoning = ragionamentoDalTesto
+        if (coda.testo) { content += coda.testo; onDelta?.({ tipo: 'testo', delta: coda.testo }) }
     }
     finalizza(-1)
     const motiviDelFornitore = { ...(nativeFinishReason ? { nativeFinishReason } : {}), ...(erroreFornitore ? { erroreFornitore } : {}),
@@ -1258,9 +1291,10 @@ export async function consumaFlussoSSE(response, onDelta, { segnaleStop, ripetiz
      */
     if (!vistoUnDelta && messaggioIntero) {
         const limite = limitaRipetizioniIdentiche(messaggioIntero.tool_calls, ripetizioniMassime)
-        const sceltaIntera = { role: 'assistant', content: messaggioIntero.content ?? null }
+        const nelTesto = separaRagionamentoNelTesto(messaggioIntero.content)
+        const sceltaIntera = { role: 'assistant', content: nelTesto.testo ?? null }
         if (limite.toolCalls.length > 0) sceltaIntera.tool_calls = limite.toolCalls
-        const ragionamentoIntero = messaggioIntero.reasoning_content ?? messaggioIntero.reasoning
+        const ragionamentoIntero = (messaggioIntero.reasoning_content ?? messaggioIntero.reasoning) || nelTesto.ragionamento
         if (ragionamentoIntero) sceltaIntera.reasoning_content = ragionamentoIntero
         return { scelta: sceltaIntera, usage, ...(finishReason !== null ? { finishReason } : {}), ...(limite.ripetizione ? { ripetizione: limite.ripetizione } : {}), ...motiviDelFornitore }
     }
@@ -1268,7 +1302,8 @@ export async function consumaFlussoSSE(response, onDelta, { segnaleStop, ripetiz
     if (toolCalls.length > 0) scelta.tool_calls = toolCalls
     if (reasoning) scelta.reasoning_content = reasoning
     if (streamCompleted && !ripetizione && providerState) scelta.talos_provider_state = providerState
-    return { scelta, usage, ...(finishReason !== null ? { finishReason } : {}), ...(ripetizione ? { ripetizione } : {}), ...motiviDelFornitore }
+    return { scelta, usage, ...(finishReason !== null ? { finishReason } : {}), ...(ripetizione ? { ripetizione } : {}), ...motiviDelFornitore,
+        ...(tempiDelMotore ? { timings: tempiDelMotore } : {}) }
 }
 
 /** Il nome del fornitore a valle (OpenRouter `provider`), corto e pulito; `null` se il pacchetto non lo porta. */
@@ -1278,12 +1313,45 @@ function nomeDelFornitoreAValle(valore) {
     return nome || null
 }
 
+/*
+ * A1 (owner 21/10/2026 sera, la «stima prima» del riassunto): i tempi del motore locale nella forma di llama-server
+ *   (`tools/server/server-common.cpp:139-150`, clone `llama.cpp-2026-10-21` f849095: `prompt_n` letti davvero, senza la cache,
+ *   `prompt_ms`, `cache_n`; li mette nell'ULTIMO pacchetto del flusso chat, `server-task.cpp:508-510`, e nel corpo senza flusso). Il
+ *   motore dell'app manda la stessa forma (accordo col Mobile, 21/10). Solo numeri finiti non negativi; altrimenti null.
+ */
+export function leggiTempiDelMotore(t) {
+    if (!t || typeof t !== 'object' || Array.isArray(t)) return null
+    const n = (v) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : null)
+    const tempi = { prompt_n: n(t.prompt_n), prompt_ms: n(t.prompt_ms), cache_n: n(t.cache_n), predicted_n: n(t.predicted_n), predicted_ms: n(t.predicted_ms) }
+    return tempi.prompt_n === null || tempi.prompt_ms === null ? null : tempi
+}
+
 /** Il motivo di un errore mandato DENTRO il flusso (OpenRouter: `{ error: { code, message, metadata: { error_type } } }`), corto e senza oggetti annidati. */
 function descriviErroreDelFornitore(errore) {
     const messaggio = typeof errore.message === 'string' ? errore.message.slice(0, 300) : ''
     const codice = typeof errore.code === 'string' || Number.isFinite(errore.code) ? errore.code : null
     const tipo = typeof errore.metadata?.error_type === 'string' ? errore.metadata.error_type : null
     return { messaggio, codice, tipo }
+}
+
+/*
+ * ⛔ 21/10/2026 (revisione del lotto + contratto del Mobile): una FINESTRA PIENA detta DENTRO la risposta — il pacchetto d'errore
+ *   alla OpenRouter che il motore dell'app manda dopo la sua coda (`CONTEXT_LENGTH_EXCEEDED`, `finish_reason: "error"`), o il
+ *   corpo JSON con `error` — usciva come `PROVIDER_STREAM_ERROR`, cioè un esito incerto, e perdeva il codice: nessuno compattava.
+ *   Come Hermes (`agent/error_classifier.py:644` e `:689-690`: il codice si confronta in minuscolo, `context_length_exceeded` ⇒
+ *   overflow di contesto, si compatta e non si ripete) il codice o il marcatore nel messaggio la fanno riconoscere; sotto esce il
+ *   «contesto pieno» dei fili compatibili (`erroreFinestraPiena`), senza reinvii.
+ */
+function eFinestraPienaDelFornitore(errore) {
+    if (!errore || typeof errore !== 'object') return false
+    return /^(?:context_length_exceeded|local_context_exceeded)$/iu.test(String(errore.codice ?? ''))
+        || /context[_ ]length[_ ]exceeded/iu.test(String(errore.messaggio ?? ''))
+}
+
+/** Il «contesto pieno» dei fili compatibili (`runtime-owner-adapter.mjs`, classe `contesto`, F1 della CLI 0.6.8): non si ripete. */
+function erroreFinestraPiena(usage) {
+    return Object.assign(new Error('The request is larger than the model context window (context_length_exceeded).'),
+        { code: 'PROVIDER_REQUEST_ERROR', classe: 'contesto', transitorio: false, stato: null, finestraPiena: true, ...(usage ? { usage } : {}) })
 }
 
 /**
@@ -2048,13 +2116,21 @@ async function chiamaConRitentaBase({
         })
         if (r.ok) {
             if (inStreaming) {
-                const { scelta, usage, ripetizione, finishReason, nativeFinishReason, erroreFornitore, fornitoreAValle } = await consumaFlussoSSE(r, onDelta, { segnaleStop, ...(onChiamataCompleta ? { onChiamataCompleta } : {}) })
+                const { scelta, usage, ripetizione, finishReason, nativeFinishReason, erroreFornitore, fornitoreAValle, timings } = await consumaFlussoSSE(r, onDelta, { segnaleStop, ...(onChiamataCompleta ? { onChiamataCompleta } : {}) })
                 if (erroreFornitore || finishReason === 'error') {
                     for (const [indice, chiamata] of (scelta.tool_calls ?? []).entries()) onDelta?.({ tipo: 'tool-annullato', indice, toolCallId: chiamata.id, nome: chiamata.function?.name, motivo: '⛔ The provider cut the response short: this tool did not run.' })
+                    if (eFinestraPienaDelFornitore(erroreFornitore)) throw erroreFinestraPiena(usage)
+                    /* 21/10/2026, contratto del Mobile: dopo la coda del motore dell'app i suoi rifiuti (occupato, modello cambiato, nessun
+                       modello aperto) arrivano come pacchetto d'errore nel flusso, non più come 409/503. Prima di qualunque testo non c'è
+                       niente di incerto: è lo stesso rifiuto noto dell'HTTP (`rifiutoDelMotoreOspite`), con la sua frase e senza reinvii.
+                       Solo per il motore dell'app: il codice è suo, un altro fornitore non lo manda. */
+                    const rifiutoOspite = typeof modello === 'string' && modello.startsWith('locale-ospite:')
+                        && !scelta.content && !scelta.tool_calls?.length ? rifiutoOspiteDalCodice(erroreFornitore?.codice) : null
+                    if (rifiutoOspite) throw rifiutoOspite
                     throw erroreEsitoProviderIncerto({ code: 'PROVIDER_STREAM_ERROR', usage,
                         parziale: { content: typeof scelta.content === 'string' ? scelta.content : '', chiamateInCorso: Boolean(scelta.tool_calls?.length) } })
                 }
-                const motivi = { ...(nativeFinishReason ? { nativeFinishReason } : {}), ...(erroreFornitore ? { erroreFornitore } : {}),
+                const motivi = { ...(nativeFinishReason ? { nativeFinishReason } : {}), ...(erroreFornitore ? { erroreFornitore } : {}), ...(timings ? { timings } : {}),
                     ...(fornitoreAValle ? { fornitoreAValle } : {}) }
                 /*
                  * ⛔⛔ 25/09/2026 notte — UNA RISPOSTA VUOTA NON È UN FLUSSO INTERROTTO (sessione `c15ba17c…`, Gemini 3.8, decisione
@@ -2076,10 +2152,20 @@ async function chiamaConRitentaBase({
             const j = await r.json()
             const scelta = j?.choices?.[0]?.message
             if (j?.error || j?.choices?.[0]?.error || j?.choices?.[0]?.finish_reason === 'error') {
+                const erroreNelCorpo = j?.error ?? j?.choices?.[0]?.error
+                if (erroreNelCorpo && typeof erroreNelCorpo === 'object' && eFinestraPienaDelFornitore(descriviErroreDelFornitore(erroreNelCorpo))) throw erroreFinestraPiena(j?.usage)
                 throw erroreEsitoProviderIncerto({ code: 'PROVIDER_STREAM_ERROR', usage: j?.usage,
                     parziale: { content: typeof scelta?.content === 'string' ? scelta.content : '', chiamateInCorso: Boolean(scelta?.tool_calls?.length) } })
             }
             if (!scelta) throw new Error('response without a message: ' + JSON.stringify(j).slice(0, 300))
+            /* L1 motore locale (20/10/2026): lo stesso filtro dello streaming sul messaggio intero. */
+            if (typeof scelta.content === 'string' && scelta.content) {
+                const nelTesto = separaRagionamentoNelTesto(scelta.content)
+                if (nelTesto.testo !== scelta.content) {
+                    scelta.content = nelTesto.testo
+                    if (nelTesto.ragionamento && !(scelta.reasoning_content ?? scelta.reasoning)) scelta.reasoning_content = nelTesto.ragionamento
+                }
+            }
             /*
              * ⛔⛔ LA VALANGA NON PASSA SOLO DALLO STREAMING — 11/09/2026. Senza
              * `onDelta` (è la strada di TALOS-BANCO, e di chiunque chiami questa
@@ -2094,7 +2180,7 @@ async function chiamaConRitentaBase({
             const finishReason = j?.choices?.[0]?.finish_reason
             const fornitoreAValle = nomeDelFornitoreAValle(j?.provider) // decisione 14: anche senza streaming
             return { scelta, usage: j?.usage ?? null, tentativi: tentativo + 1, ...(typeof finishReason === 'string' ? { finishReason } : {}), ...(limite.ripetizione ? { ripetizione: limite.ripetizione } : {}),
-                ...(fornitoreAValle ? { fornitoreAValle } : {}) }
+                ...(fornitoreAValle ? { fornitoreAValle } : {}), ...(leggiTempiDelMotore(j?.timings) ? { timings: leggiTempiDelMotore(j.timings) } : {}) }
         }
         ultimoStato = r.status
         ultimoRifiuto = leggiRifiutoProvider(r)
@@ -4080,6 +4166,54 @@ const ATTREZZI_ESTESI = [
      *   col motivo. Il kernel delega a `onObiettivoFn(nome, argomenti, {fase})` (`src/obiettivo/per-il-modello.mjs`): senza, non
      *   si offrono. Hermes e Claude Code non danno attrezzi al modello (solo `/goal`).
      */
+    /*
+     * ⭐ R5.11 — LA SECONDA PORTA di «Annulla le modifiche ai file» (owner 18/10/2026: «Come Hermes, PC e telefono», poi «sì, con
+     *   la carta di conferma» e «in Accesso pieno senza carta, come la legge»). Il kernel delega a `onAnnullaFileFn(nome, argomenti,
+     *   {fase, toolCallId})`, con le due fasi delle automazioni: senza, l'attrezzo NON ESISTE — né nell'elenco né altrove (richiesta
+     *   della CLI del 18/10: la CLI ha già il suo `/undo` della persona). Hermes (`/rollback`) e Claude Code (Esc Esc) lo danno solo
+     *   alla persona; Codex l'ha tolto (`codex-rs/features/src/lib.rs:440-443`). Qui il modello PROPONE e la persona decide.
+     */
+    {
+        name: 'file_changes_undo',
+        description: 'Put the project files back as they were before one of the person\'s earlier messages, undoing what was changed since then. '
+            + 'Use it ONLY when the person explicitly asks to undo or revert file changes. "turns_back" counts the earlier messages that '
+            + 'changed files, from the latest: 1 (the default) undoes the latest one. A file the person or a command changed is left as it '
+            + 'is unless it is listed in "include". The person confirms on a card that shows the files and the changes, except in Full '
+            + 'access. Files written outside the project folder cannot be undone.',
+        input_schema: { type: 'object', properties: {
+            turns_back: { type: 'integer', minimum: 1, maximum: 20, description: 'how many earlier messages that changed files to go back; 1 by default' },
+            include: { type: 'array', items: { type: 'string' }, maxItems: 200, description: 'relative paths changed by the person or a command to put back anyway, only when the person asked for them' },
+        }, required: [] },
+    },
+    /*
+     * ⭐ R5.12 — LA SECONDA PORTA dei telefoni collegati (owner 18/10/2026: «Elenca, apre il QR, revoca»; «Carta sempre, anche in
+     *   Accesso pieno» per il QR). Il kernel delega a `onTelefoniFn(nome, argomenti, {fase, toolCallId})`, con le due fasi delle
+     *   automazioni: senza, gli attrezzi NON ESISTONO. Al modello solo nome, stato, ultimo contatto e un id corto: mai chiavi,
+     *   gettoni, iscrizioni Web Push o il codice di 6 cifre (richiesta della CLI del 18/10). Accendere il remoto e scegliere il
+     *   relay restano della schermata. Hermes (`gateway/pairing.py:1-7`, solo CLI) e Claude Code (Remote Control è un comando della
+     *   persona) non danno niente al modello: qui il modello propone e la persona decide sulla carta.
+     */
+    {
+        name: 'remote_phones',
+        description: 'List the phones paired with this computer for remote control: name, whether it is connected now, when it was '
+            + 'last seen, and a short id. Also says whether remote control is on. Read-only.',
+        input_schema: { type: 'object', properties: {}, required: [] },
+    },
+    {
+        name: 'remote_phone_pair',
+        description: 'Show the person a QR code in the chat to pair a new phone, ONLY when the person asks to connect a phone. The person '
+            + 'always confirms on a card first, then scans the code with the phone and confirms the 6-digit code on this computer. '
+            + 'You never see the code or the link. Fails if remote control is off: only the person turns it on, from the Phones screen.',
+        input_schema: { type: 'object', properties: {}, required: [] },
+    },
+    {
+        name: 'remote_phone_revoke',
+        description: 'Disconnect a paired phone so it can no longer reach this computer, ONLY when the person asks. Use the short id '
+            + 'from remote_phones. The person confirms on a card, except in Full access. To use it again, the phone must be paired anew.',
+        input_schema: { type: 'object', properties: {
+            phone: { type: 'string', description: 'the short id from remote_phones' },
+        }, required: ['phone'] },
+    },
     {
         name: 'goal_status',
         description: 'Get this conversation\'s goal: its text, status (and why it is paused), the turns and tokens spent, and each '
@@ -4239,7 +4373,8 @@ export const ATTREZZI_FORNITORI = new Set(['provider_exclusions_list', 'provider
  *   Come fanno gli altri: Claude Code bypassPermissions (docs «permissions»), Hermes yolo (`tools/approval.py:483-488`), Codex
  *   `AskForApproval::Never` (`protocol/src/protocol.rs:1003-1005`): nessuna domanda in quella modalità.
  */
-export const SENZA_CARTA_IN_ACCESSO_PIENO = new Set([...ATTREZZI_AUTOMAZIONI, 'provider_exclude', 'provider_allow'])
+export const SENZA_CARTA_IN_ACCESSO_PIENO = new Set([...ATTREZZI_AUTOMAZIONI, 'provider_exclude', 'provider_allow', 'file_changes_undo', 'remote_phone_revoke']) // R5.11: owner 18/10, «senza carta, come la legge»
+// ⛔ R5.12 (owner 18/10/2026): `remote_phone_pair` NON sta qui — la carta del QR c'è sempre, anche in Accesso pieno (seconda eccezione dopo `chatgpt_account`)
 
 /** Che cosa la carta avrebbe segnalato, detto nell'esito quando in Full access la carta non c'è. Vuoto se non c'era niente. */
 export function notaSenzaCarta(azione) {
@@ -4252,6 +4387,12 @@ export function notaSenzaCarta(azione) {
 
 /** /goal G6 (owner 15/10/2026): gli attrezzi dell'obiettivo, che passano da `onObiettivoFn`. */
 export const ATTREZZI_OBIETTIVO = new Set(['goal_status', 'goal_create', 'goal_update'])
+/** R5.11 (owner 18/10/2026): annullare le modifiche ai file dalla chat, che passa da `onAnnullaFileFn`. */
+export const ATTREZZI_ANNULLA = new Set(['file_changes_undo'])
+/** R5.12 (owner 18/10/2026): i telefoni collegati dalla chat, che passano da `onTelefoniFn`. */
+export const ATTREZZI_TELEFONI = new Set(['remote_phones', 'remote_phone_pair', 'remote_phone_revoke'])
+/** 19/10/2026: la riga della lingua, solo per il profilo del modello del telefono (vedi dove si compone il primo messaggio di sistema). */
+export const RIGA_LINGUA_DELLA_PERSONA = 'Always reply in the same language the person writes in, unless they ask for another one.'
 
 export const ATTREZZI_ESTESI_OPENAI = ATTREZZI_ESTESI.map((a) => ({
     type: 'function',
@@ -5084,6 +5225,9 @@ function estensioneDiPercorso(percorso) {
     const barra = percorso.lastIndexOf('/')
     return punto > barra + 1 ? percorso.slice(punto).toLowerCase() : ''
 }
+
+/** L1 (20/10/2026): oltre questa parte della finestra gli attrezzi davanti diventano i soli essenziali (vedi `finestraPerGliAttrezzi`). */
+export const QUOTA_ATTREZZI_DELLA_FINESTRA = 0.15
 
 /** Un segmento `..` in qualunque punto del percorso: e' l'unica forma che porta FUORI. */
 const RISALITA = /(^|[\\/])\.\.([\\/]|$)/
@@ -9445,6 +9589,8 @@ const AZIONI_MOBILE_PER_ATTREZZO = {
     scrivi: { action: 'write', requiredActions: ['write'] },
     // ⭐ PO-12 (13/09/2026) — stessa azione di `scrivi`: e' una scrittura sul workspace. Essendo qui dentro, `attrezziNegatiDalLivello` lo toglie dalla lista sotto 'lettura' e 'ricerca', come tutte le altre scritture.
     file_edit: { action: 'write', requiredActions: ['write'] },
+    // R5.11 (18/10/2026): rimettere i file com'erano È una scrittura sul workspace — sotto 'lettura' e 'ricerca' non si offre
+    file_changes_undo: { action: 'write', requiredActions: ['write'] },
     prova: { action: 'execute', requiredActions: ['execute'] },
     shell: { action: 'execute', requiredActions: ['execute', 'outbound', 'write'] },
     document_create: { action: 'write', requiredActions: ['write'] },
@@ -10822,7 +10968,7 @@ export async function verificaPermessoScrittura(azione, { livelloAccesso, modali
 // ⭐ FASE N, quinto sistema (30/8) — le 4 mutazioni Tasks si aggiungono, stesso trattamento.
 // ⭐ FASE N, sesto sistema (30/8) — le 3 mutazioni Memory si aggiungono, stesso trattamento.
 // ⭐ PO-12 (13/09/2026) — `file_edit` muta un file quanto `scrivi`: un hook che puo' bloccare l'una deve poter bloccare l'altra, altrimenti la modifica mirata sarebbe la porta di servizio della scrittura.
-const AZIONI_MUTANTI_PER_HOOK = ['scrivi', 'file_edit', 'shell', 'document_create', 'generate_image', 'library_rename', 'library_delete', 'library_export', 'library_context_policy_update', 'notes_create', 'notes_update', 'notes_delete', 'tasks_create', 'tasks_complete', 'tasks_update', 'tasks_delete', 'memory_write', 'memory_update', 'memory_delete', 'research_start', 'research_rename', 'research_pause', 'research_resume', 'research_cancel', 'research_delete', 'research_deposit', 'tool_create', 'workflow_plan_propose']
+const AZIONI_MUTANTI_PER_HOOK = ['scrivi', 'file_edit', 'shell', 'document_create', 'generate_image', 'library_rename', 'library_delete', 'library_export', 'library_context_policy_update', 'notes_create', 'notes_update', 'notes_delete', 'tasks_create', 'tasks_complete', 'tasks_update', 'tasks_delete', 'memory_write', 'memory_update', 'memory_delete', 'research_start', 'research_rename', 'research_pause', 'research_resume', 'research_cancel', 'research_delete', 'research_deposit', 'tool_create', 'workflow_plan_propose', 'file_changes_undo', 'remote_phone_pair', 'remote_phone_revoke']
 
 /*
  * ⭐⭐⭐ 29/8 — un asse DIVERSO da `AZIONI_MUTANTI_PER_HOOK` qui sopra, non lo
@@ -11396,7 +11542,9 @@ export async function talosLavora({
      */
     strumentiEstesi, // array di nomi da ATTREZZI_ESTESI da offrire, es. ['web_search','artifact_create']
     /* ⭐ C5 attrezzi differiti (owner 17/10/2026): `true` ⇒ gli attrezzi di `ATTREZZI_DIFFERIBILI` passano dietro il ponte
-       tool_search/tool_describe/tool_call (`ponte-attrezzi.mjs`). Spento di serie: chi non lo passa resta bit per bit com'era. */
+       tool_search/tool_describe/tool_call (`ponte-attrezzi.mjs`). Spento di serie: chi non lo passa resta bit per bit com'era.
+       19/10/2026 (owner, «Essenziali + ponte per il resto»): `'essenziali'` ⇒ davanti SOLO `ATTREZZI_ESSENZIALI_LOCALI`, tutto il
+       resto dietro il ponte — il modello locale del telefono (fonte `locale-ospite`), lo sceglie il registro. */
     attrezziDifferiti = false,
     ricercaWeb, // {provider, apiKey?, endpoint?} — usato solo se 'web_search' è in strumentiEstesi
     /*
@@ -11541,6 +11689,12 @@ export async function talosLavora({
     /* /goal G6 (owner 15/10/2026) — `onObiettivoFn(nome, argomenti, {fase, toolCallId})`: il canale di `ATTREZZI_OBIETTIVO`, con
        le due fasi delle automazioni (`anteprima` ⇒ carta o rifiuto; `esegui` ⇒ testo). Assente ⇒ non si offrono (la CLI oggi). */
     onObiettivoFn,
+    /* R5.11 (owner 18/10/2026) — `onAnnullaFileFn(nome, argomenti, {fase, toolCallId})`: il canale di `ATTREZZI_ANNULLA`, con le due
+       fasi delle automazioni. Assente ⇒ l'attrezzo non esiste (la CLI). */
+    onAnnullaFileFn,
+    /* R5.12 (owner 18/10/2026) — `onTelefoniFn(nome, argomenti, {fase, toolCallId})`: il canale di `ATTREZZI_TELEFONI`, con le due
+       fasi delle automazioni. Assente ⇒ gli attrezzi non esistono (la CLI, una figlia, nessuno davanti). */
+    onTelefoniFn,
     /* Giri in tondo (owner 09/10/2026, lane CLI): la guardia fra un giro e l'altro (`creaGuardiaGiriInTondo`). Spenta di serie. */
     guardiaGiriInTondo = false,
     /*
@@ -11874,6 +12028,19 @@ export async function talosLavora({
      *   «Automatico» (owner, sera: «anche Automatico»). Assente (TALOS-BANCO, CLI, mobile, binari mancanti) ⇒ come prima.
      */
     casaLinuxSessione = null,
+    /*
+     * L1 motore locale (owner 20/10/2026 sera, «Percorso vero a tutti»): con `true` il modello riceve la nota «dove sei» (il percorso
+     *   della cartella come lo vedono gli attrezzi, e dove girano davvero) e gli alias del percorso (`dove-sei.mjs`). Spento di
+     *   serie: la CLI e il banco restano byte per byte (CLI, Voce 213). Mai in una sessione mobile.
+     */
+    doveNelPrompt = false,
+    /*
+     * L1 motore locale (owner 20/10/2026: «11 essenziali + ponte anche sul PC quando gli attrezzi non entrano») — la finestra del
+     *   modello, data SOLO per il motore locale del PC (`local:`, il registro). Con il ponte acceso: se gli attrezzi davanti pesano
+     *   più del 15% della finestra, davanti restano gli essenziali; e l'elenco del ponte sta nel budget di Hermes. Assente (cloud,
+     *   CLI, banco) ⇒ la divisione di sempre, byte per byte. La riga della lingua resta del solo telefono (`attrezziDifferiti`).
+     */
+    finestraPerGliAttrezzi = null,
 }) {
     livelloAccesso = livelloLetto(livelloAccesso) // una grammatica sola (vedi `livelloLetto`): assente resta assente, l'illeggibile è «Sola lettura»
     if (ricercheInCorso && segnaleStop) segnaleStop.addEventListener('abort', () => ricercheInCorso.fermaTutte('fermata'), { once: true })
@@ -12031,6 +12198,35 @@ export async function talosLavora({
     const istantaneaDelGiro = (percorso) => (inCasaLinux()
         ? chiamaCasa('istantanea', { percorso: percorsiPosix.resolve(casaDelGiro.radice, linuxDi(percorso)) })
         : istantaneaDelFile(cartella, percorso))
+    /*
+     * L1 (owner 20/10/2026 sera) — DOVE SEI e gli ALIAS (`dove-sei.mjs`). La nota dice la cartella come la vedono gli attrezzi del
+     *   giro (nella casa Linux la vista Linux), e dove girano shell e attrezzi. Gli alias riscrivono il percorso PRIMA di ogni
+     *   controllo (CLI, Voce 213): chi decide vede il percorso nuovo come se il modello l'avesse scritto così.
+     */
+    const doveAcceso = doveNelPrompt === true && !mobile && typeof cartella === 'string' && cartella !== ''
+    const notaDoveAttuale = () => {
+        if (inCasaLinux()) return notaDoveSei({ percorso: casaDelGiro.radice, casa: 'linux' })
+        if (process.platform !== 'win32') return notaDoveSei({ percorso: resolve(cartella), casa: 'altro', piattaforma: process.platform })
+        // la shell in Linux esiste solo con la scelta dell'ambiente (`ambienteComandiFn`), e non con «Windows»
+        const shellInLinux = ambienteComandiFn !== undefined && ambienteDelGiro.dove !== 'windows'
+        return notaDoveSei({
+            percorso: resolve(cartella), casa: 'windows',
+            shell: ambienteComandiFn !== undefined ? ambienteDelGiro.dove : null,
+            percorsoLinux: shellInLinux ? vistaLinux(resolve(cartella), { distro: '' }) : null,
+        })
+    }
+    const aliasPerPercorso = (percorso, { soloCasa = false } = {}) => aliasDelPercorso(percorso, {
+        soloCasa,
+        nomeCartella: basename(resolve(cartella)),
+        // nel dubbio «esiste»: un percorso che non si sa controllare non si riscrive
+        // revisione D (20/10): solo l'ASSENZA vera dice «non esiste»; un errore di I/O (permesso, disco) lancia e vale «esiste»
+        esiste: (scritto) => { try { return statSync(percorsoComeDiscoNode(cartella, percorsoDelGiro(scritto)), { throwIfNoEntry: false }) !== undefined } catch { return true } },
+        maiuscoleIndifferenti: process.platform === 'win32',
+        // `~` solo dove la casa dell'utente è quella degli attrezzi: nella casa Linux `~` è la casa di Linux, e non si indovina
+        casaUtente: inCasaLinux() ? null : homedir(),
+        separatoreCasa: sep,
+    })
+    const conAlias = (nome, argomenti) => (doveAcceso ? argomentiConAlias(nome, argomenti, aliasPerPercorso, ALIAS_PERCORSO) : null)
     /* C25: l'impronta la calcola la casa che possiede il file */
     const improntaDelGiro = (percorso) => (inCasaLinux()
         ? chiamaCasa('impronta', { percorso: percorsiPosix.resolve(casaDelGiro.radice, linuxDi(percorso)) }).catch(() => null)
@@ -12409,7 +12605,7 @@ export async function talosLavora({
     const needsRoleFilter = agentRole === 'child' || (strumentiEstesi ?? []).some((name) =>
         ['ask_parent', 'answer_parent_question', 'ask_child', 'answer_child_question', 'list_children', 'child_control', 'workflow_plan_propose', 'present_plan', 'request_plan_mode'].includes(name)
         // F-012 (§1.5): i tre dei run hanno filtri loro (root, runtime presente) — quando chiesti, si filtra
-        || ATTREZZI_WORKFLOW.has(name) || name === 'process_output' || ATTREZZI_AUTOMAZIONI.has(name) || ATTREZZI_FORNITORI.has(name) || ATTREZZI_OBIETTIVO.has(name))
+        || ATTREZZI_WORKFLOW.has(name) || name === 'process_output' || ATTREZZI_AUTOMAZIONI.has(name) || ATTREZZI_FORNITORI.has(name) || ATTREZZI_OBIETTIVO.has(name) || ATTREZZI_ANNULLA.has(name) || ATTREZZI_TELEFONI.has(name))
     const filterBaseTools = (a, negati = negatiDalLivello) => {
         const name = a.function.name
         if (negati.has(name)) return false
@@ -12438,6 +12634,10 @@ export async function talosLavora({
         if (ATTREZZI_FORNITORI.has(name) && (agentRole === 'child' || typeof onFornitoriFn !== 'function')) return false
         /* /goal G6: l'obiettivo è della conversazione principale — al root, e solo se l'ospite può rispondere */
         if (ATTREZZI_OBIETTIVO.has(name) && (agentRole === 'child' || typeof onObiettivoFn !== 'function')) return false
+        /* R5.11: annullare è della conversazione principale, e solo se l'ospite sa rispondere */
+        if (ATTREZZI_ANNULLA.has(name) && (agentRole === 'child' || typeof onAnnullaFileFn !== 'function')) return false
+        /* R5.12: i telefoni sono della conversazione principale, e solo se l'ospite sa rispondere */
+        if (ATTREZZI_TELEFONI.has(name) && (agentRole === 'child' || typeof onTelefoniFn !== 'function')) return false
         /* ⛔ Rilievo 3 (piano §1.7): il modo Piano lo può chiedere SOLO il root in Normale, col
            canale presente — in Piano l'attrezzo non esiste, ai figli nemmeno. */
         if (name === 'request_plan_mode' && (agentRole === 'child' || modalitaOperativa === 'piano' || typeof onRichiestaPianoFn !== 'function')) return false
@@ -12527,6 +12727,8 @@ export async function talosLavora({
         'provider_exclusions_list',
         // /goal G6: dell'obiettivo, del Piano entra solo la lettura
         'goal_status',
+        // R5.12: dei telefoni, del Piano entra solo l'elenco
+        'remote_phones',
         // K3 (03/10): guardare i propri figli e fermarne uno non tocca il disco (desktop, revisione della proposta)
         // C5: `child_control` sta nel Piano per stop e pausa (non toccano il disco); la ripresa la rifiuta il ramo (riparte un lavoro)
         'list_children', 'child_control',
@@ -12566,7 +12768,24 @@ export async function talosLavora({
     /* Gli attrezzi centrali del compito restano davanti: la Ricerca approfondita (riconosciuta da `task.ricercaId`, che sopravvive
        alla ripresa) deposita il rapporto con `research_deposit` (owner 17/10, dopo la revisione H). */
     const attrezziCentrali = typeof task?.ricercaId === 'string' && task.ricercaId ? ['research_deposit'] : []
-    const divisioneDelGiro = () => dividiPerIlPonte(attrezziOpenAI, attrezziCentrali)
+    /* L1 (20/10): la ricerca del motore locale proponeva il 15% («se attrezzi > 15% della finestra si attiva il profilo essenziali
+       + ponte»): due volte il 5% che Hermes dà al solo elenco, perché davanti restano comunque gli schemi interi degli essenziali */
+    const finestraAttrezzi = Number.isSafeInteger(finestraPerGliAttrezzi) && finestraPerGliAttrezzi > 0 ? finestraPerGliAttrezzi : null
+    const budgetElenco = budgetElencoDelPonte(finestraAttrezzi)
+    /* Revisione del 20/10 (D3, poi R2): il modo va SOLO verso gli essenziali dentro una richiesta, mai indietro. La lista si ricrea a
+       ogni giro (la descrizione della shell; il Piano approvato la allarga da ~3.000 a ~6.400 token): ricalcolarlo da capo faceva
+       saltare gli attrezzi davanti/dietro, e fissarlo al primo giro lasciava tutta la lista del piano approvato davanti a 32K. */
+    let versoEssenziali = false
+    const modoDellaDivisione = () => {
+        if (attrezziDifferiti === 'essenziali') return 'essenziali'
+        if (finestraAttrezzi === null) return 'su-richiesta'
+        if (!versoEssenziali) {
+            const suRichiesta = dividiPerIlPonte(attrezziOpenAI, attrezziCentrali, 'su-richiesta', { budgetElenco })
+            versoEssenziali = pesoInToken(JSON.stringify(suRichiesta.attrezzi)) > finestraAttrezzi * QUOTA_ATTREZZI_DELLA_FINESTRA
+        }
+        return versoEssenziali ? 'essenziali' : 'su-richiesta'
+    }
+    const divisioneDelGiro = () => dividiPerIlPonte(attrezziOpenAI, attrezziCentrali, modoDellaDivisione(), finestraAttrezzi === null ? undefined : { budgetElenco })
     const attrezziVersoIlModello = () => (attrezziDifferiti ? divisioneDelGiro().attrezzi : attrezziOpenAI)
     const nomiToolMcp = attrezziMcpOpenAI ? new Set(attrezziMcpOpenAI.map((a) => a.function.name)) : null
     const nomiToolPlugin = attrezziPluginOpenAI ? new Set(attrezziPluginOpenAI.map((a) => a.function.name)) : null
@@ -12666,7 +12885,12 @@ export async function talosLavora({
         const askDisponibile = agentRole !== 'child' && askOfferto && nessunoDavanti !== true
         // CLI 6b: una figlia con il canale della persona riceve la SUA guida (ask_parent prima, la persona solo per ciò che decide lei)
         const guidaAsk = askDisponibile ? ISTRUZIONI_ASK : agentRole === 'child' && askOfferto ? ISTRUZIONI_ASK_FIGLIA : null
-        messaggi = [{ role: 'system', content: guidaAsk ? `${istruzioniDiBase(fileAdottatiDallaPersona)}\n\n${guidaAsk}` : istruzioniDiBase(fileAdottatiDallaPersona) }]
+        /* 19/10/2026 (owner, «Solo per il modello del telefono»): un modello locale piccolo risponde in inglese a una richiesta in
+           italiano (misurato dal Mobile su LFM2.5-2.6B); i grandi seguono la persona da soli. La riga va SOLO col profilo del telefono
+           (`attrezziDifferiti === 'essenziali'`): il prompt del PC, della CLI e del banco resta identico. Come opencode
+           `system-prompt/kimi.txt:19` («you MUST use the SAME language as the user»). */
+        const rigaLingua = attrezziDifferiti === 'essenziali' ? `\n\n${RIGA_LINGUA_DELLA_PERSONA}` : ''
+        messaggi = [{ role: 'system', content: `${guidaAsk ? `${istruzioniDiBase(fileAdottatiDallaPersona)}\n\n${guidaAsk}` : istruzioniDiBase(fileAdottatiDallaPersona)}${rigaLingua}` }]
         /*
          * ⭐⭐⭐ P-13 (10/09) — QUALI FILE ESISTONO, e perché sta ESATTAMENTE qui.
          *
@@ -12691,6 +12915,15 @@ export async function talosLavora({
          */
         if (typeof contestoDelProgetto === 'string' && contestoDelProgetto.trim()) {
             messaggi.push({ role: 'system', content: contestoDelProgetto })
+        }
+        /* L1 (owner 20/10/2026 sera): dove sei, subito dopo la scheda e prima della consegna. Se l'ambiente non si legge, lo dirà il
+           primo giro (che rilegge e, se manca, la mette lui). */
+        if (doveAcceso) {
+            try {
+                ambienteDelGiro = await leggiAmbienteComandi()
+                await decidiCasaDelGiro()
+                messaggi.push({ role: 'system', content: notaDoveAttuale() })
+            } catch { /* il giro rilegge l'ambiente e ne dice l'errore */ }
         }
         /*
          * ⭐ 27/09/2026, decisione owner (`decisioni-owner-capacita-sezioni-27-09`, punto 1: «memoria come Hermes») — le memorie
@@ -12960,6 +13193,11 @@ export async function talosLavora({
         try {
             ambienteDelGiro = await leggiAmbienteComandi()
             await decidiCasaDelGiro()
+            /* L1: la nota si ripete solo se è cambiata (Windows ↔ casa Linux) o se manca (ripresa vecchia, compattazione) */
+            if (doveAcceso) {
+                const nota = notaDoveAttuale()
+                if (nota !== ultimaNotaDove(messaggi)) messaggi.push({ role: 'system', content: nota })
+            }
         } catch (errore) {
             if (!segnaleStop?.aborted) throw errore
             fermatoSuRichiesta = true
@@ -13021,6 +13259,9 @@ export async function talosLavora({
                 messaggi = esito.messaggi
                 compattazioni += 1
             }
+            /* ⛔ 21/10/2026 (inventario della CLI, D4; forma concordata con la CLI): una compattazione fallita del ciclo di base non resta
+             * più MUTA — l'evento è lo stesso del desktop (`talosHarness.desktop-hotfix.mjs`), col perché di `compattaConversazione`. */
+            else onGiro?.({ giro, tipo: 'compattazione-fine', compattato: false, motivo: esito.motivo ?? 'errore', ...(esito.codice ? { codice: esito.codice } : {}) })
             /* ⛔ Solo un riassunto riuscito occupa questo giro. Se fallisce,
              * il task usa il giro normale qui sotto con la storia invariata. */
             if (esito.compattato) continue
@@ -13050,16 +13291,28 @@ export async function talosLavora({
          */
         const partiteNelloStream = new Map()
         const nomiNelloStream = []
+        /*
+         * L1, revisione del 20/10 (D2): l'alias dipende dal DISCO, quindi si calcola UNA volta per chiamata e il percorso riscritto
+         *   entra nella firma. Se fra lo stream e il ciclo il disco cambia (una figlia crea `<cartella>/<cartella>`), la firma non
+         *   combacia più e l'esito anticipato non si riusa: il ramo legge con l'alias che ha calcolato lui.
+         */
+        const argomentiConAliasDi = (nome, grezzi) => {
+            let letti
+            try { letti = JSON.parse(grezzi || '{}') } catch { return null }
+            if (!letti || typeof letti !== 'object' || Array.isArray(letti)) return null
+            const alias = conAlias(nome, letti)
+            return { argomenti: alias?.argomenti ?? letti, alias }
+        }
+        const firmaDellaLettura = (nome, grezzi, calcolo) => `${nome}\x00${grezzi}\x00${calcolo?.alias ? JSON.stringify(calcolo.argomenti) : ''}`
         const osservaChiamataCompleta = ({ indice, nome, argomenti }) => {
             nomiNelloStream[indice] = nome
             for (let k = 0; k <= indice; k += 1) if (!LETTURE_PURE.has(nomiNelloStream[k])) return
             if (partiteNelloStream.size >= MAX_LETTURE_INSIEME || segnaleStop?.aborted) return
-            const firma = `${nome}\x00${argomenti}`
+            const calcolo = argomentiConAliasDi(nome, argomenti)
+            if (!calcolo) return
+            const firma = firmaDellaLettura(nome, argomenti, calcolo)
             if (partiteNelloStream.get(indice)?.firma === firma) return
-            let argomentiLettura
-            try { argomentiLettura = JSON.parse(argomenti || '{}') } catch { return }
-            if (!argomentiLettura || typeof argomentiLettura !== 'object' || Array.isArray(argomentiLettura)) return
-            const esito = avviaLettura(nome, argomentiLettura)
+            const esito = avviaLettura(nome, calcolo.argomenti) // L1: gli stessi argomenti del ramo
             if (esito) partiteNelloStream.set(indice, { firma, esito })
         }
         /* S4 della CLI (quarta revisione della 0.6.7, 16/10/2026): un Esc mentre TALOS contava la richiesta (o aspettava il motore del
@@ -13157,6 +13410,21 @@ export async function talosLavora({
                     ? `while the model was answering, at round ${giro + 1}`
                     : `before the request was sent, at round ${giro + 1}`
                 break
+            }
+            /*
+             * ⛔ 21/10/2026 (revisione del lotto, misurato col kernel e l'adattatore nativo veri): una FINESTRA PIENA a metà flusso
+             *   (Anthropic `model_context_window_exceeded`, che l'adattatore nativo dà come errore col marcatore `context_length_exceeded`)
+             *   arrivava qui con un `parziale` e diventava un esito incerto: senza testo visibile 10 reinvii, ognuno a contesto pieno e
+             *   pagato per intero; con testo, un `PROVIDER_OUTCOME_UNKNOWN` che perdeva il marcatore, e nessuno compattava. Un contesto
+             *   pieno è un esito NOTO: esce come il «contesto pieno» dei fili compatibili (`runtime-owner-adapter.mjs`, `contesto`,
+             *   F1 della CLI 0.6.8), senza reinvii e senza rimettere il pezzo in storia (allungherebbe ancora la richiesta).
+             */
+            /* Il marcatore nel testo vale solo per un esito che altrimenti sarebbe INCERTO (un flusso rotto, con o senza pezzo): un
+               rifiuto HTTP già noto (il 400 di un compatibile, classificato da chi riprova) passa com'è, con stato e classificazione
+               (`CTX-HOTFIX-OVERFLOW-TWICE-IN-A-ROW`). */
+            if (rotta?.finestraPiena === true || rotta?.code === 'NATIVE_CONTEXT_WINDOW_EXCEEDED'
+                || ((rotta?.esitoIncerto === true || rotta?.parziale) && /context_length_exceeded/iu.test(String(rotta?.message ?? '')))) {
+                throw erroreFinestraPiena(rotta?.usage)
             }
             // RETRY-02: retain delivered text for explicit recovery, never repeat an uncertain generation.
             const parziale = rotta?.parziale
@@ -13451,8 +13719,12 @@ export async function talosLavora({
         /* F-Y-004 (15/10/2026): togliendo le copie identiche gli indici dopo una copia si spostano di uno — la lettura già partita si
            riconosce dalla FIRMA (nome + argomenti grezzi), che dopo la cura è unica nella risposta; l'indice resta il primo tentativo */
         const partitePerFirma = new Map([...partiteNelloStream.values()].map((p) => [p.firma, p]))
+        /* L1 (D2): l'alias di ogni lettura del prefisso, calcolato QUI una volta e riusato dal ramo (stesso disco, stessa decisione) */
+        const aliasPerChiamata = new Map()
         prefissoDiLettura.forEach((c, indice) => {
-            const firma = `${c.function?.name}\x00${c.function?.arguments}`
+            const calcolo = argomentiConAliasDi(c.function?.name, c.function?.arguments)
+            aliasPerChiamata.set(c, calcolo)
+            const firma = firmaDellaLettura(c.function?.name, c.function?.arguments, calcolo)
             const giaPartita = partiteNelloStream.get(indice)?.firma === firma ? partiteNelloStream.get(indice) : partitePerFirma.get(firma)
             if (giaPartita?.firma === firma) lettureAvviate.set(c, giaPartita.esito)
         })
@@ -13460,14 +13732,14 @@ export async function talosLavora({
             let partite = partiteNelloStream.size
             for (const c of prefissoDiLettura) {
                 if (lettureAvviate.has(c) || partite >= MAX_LETTURE_INSIEME) continue
-                let argomentiLettura = {}
-                try { argomentiLettura = JSON.parse(c.function?.arguments || '{}') } catch { /* vuoto: il ramo dira' cosa manca */ }
-                const avviata = avviaLettura(c.function?.name, argomentiLettura)
+                /* un JSON rotto parte con `{}`: il ramo dira' cosa manca */
+                const avviata = avviaLettura(c.function?.name, aliasPerChiamata.get(c)?.argomenti ?? {})
                 if (avviata) { lettureAvviate.set(c, avviata); partite += 1 }
             }
         }
 
         let fermatoDentroIlGiro = false
+        let notaAliasDellaChiamata = null // L1: «"/Desktop/x" was read as "x"», testo di TALOS in testa all'esito
         for (const c of chiamate) {
             sospettoDellaChiamata = null // F-027: il segno della scheda è di QUESTA chiamata
             senzaCartaDellaChiamata = null
@@ -13512,6 +13784,11 @@ export async function talosLavora({
                 const { action: _azione, ...resto } = argomenti
                 argomenti = resto
             }
+            /* L1 (owner 20/10/2026 sera): l'alias del percorso QUI, prima di ogni cancello, hook e ricevuta (CLI, Voce 213) */
+            notaAliasDellaChiamata = null
+            // L1 (D2): la lettura del prefisso ha già deciso il suo alias; il ramo usa QUELLO, non un secondo sguardo al disco
+            const conAliasQui = nome === c.function?.name && aliasPerChiamata.has(c) ? aliasPerChiamata.get(c)?.alias ?? null : conAlias(nome, argomenti)
+            if (conAliasQui) { argomenti = conAliasQui.argomenti; notaAliasDellaChiamata = conAliasQui.nota }
             /*
              * C5, review N3 del bugfixer (10/10/2026) — i hook vedono anche il nome CHIAMATO dal modello (quello delle sue chiamate e
              *   della storia) e, per i tre controlli accorpati, l'azione: `azione` resta quella di sempre (per le ricerche il nome di
@@ -15790,9 +16067,11 @@ export async function talosLavora({
                 /* 0.1.25 (owner 09/10/2026): i fornitori esclusi passano dalla STESSA strada delle automazioni (anteprima, carta, esegui),
                    col loro ospite `onFornitoriFn`. */
                 /* /goal G6: l'obiettivo passa dalla STESSA strada (anteprima, carta, esegui), col suo ospite `onObiettivoFn` */
-                else if (ATTREZZI_AUTOMAZIONI.has(nome) || ATTREZZI_FORNITORI.has(nome) || ATTREZZI_OBIETTIVO.has(nome)) {
+                /* R5.11: annullare le modifiche ai file passa dalla STESSA strada, col suo ospite `onAnnullaFileFn` */
+                /* R5.12: i telefoni collegati passano dalla STESSA strada, col loro ospite `onTelefoniFn` */
+                else if (ATTREZZI_AUTOMAZIONI.has(nome) || ATTREZZI_FORNITORI.has(nome) || ATTREZZI_OBIETTIVO.has(nome) || ATTREZZI_ANNULLA.has(nome) || ATTREZZI_TELEFONI.has(nome)) {
                     const fornitori = ATTREZZI_FORNITORI.has(nome)
-                    const ospiteFn = fornitori ? onFornitoriFn : ATTREZZI_OBIETTIVO.has(nome) ? onObiettivoFn : onAutomazioneFn
+                    const ospiteFn = fornitori ? onFornitoriFn : ATTREZZI_OBIETTIVO.has(nome) ? onObiettivoFn : ATTREZZI_ANNULLA.has(nome) ? onAnnullaFileFn : ATTREZZI_TELEFONI.has(nome) ? onTelefoniFn : onAutomazioneFn
                     /* C5: `automation_control` arriva all'ospite col nome di prima (`automation_<azione>`), con i soli campi dell'azione */
                     const azioneAutomazione = nome === 'automation_control' && typeof argomenti?.action === 'string' ? argomenti.action.trim().toLowerCase() : null
                     const nomeOspite = nome === 'automation_control' ? `automation_${azioneAutomazione}` : nome
@@ -16396,6 +16675,7 @@ export async function talosLavora({
             if (notaStesso) esito = `${esito}\n\n${notaStesso}` // testo di TALOS, dopo il risultato e fuori dal confine (Hermes: in coda)
             /* C16: testo di TALOS, fuori dal confine dei dati, una volta sola */
             if (notaPermessiCambiati) { esito = `${notaPermessiCambiati}\n\n${esito}`; notaPermessiCambiati = null }
+            if (notaAliasDellaChiamata) { esito = `${notaAliasDellaChiamata}\n\n${esito}`; notaAliasDellaChiamata = null } // L1, fuori dal confine
             const contenutoTool = contextHooks ? String(esito) : uscitaUtile(String(esito), 8_000, 0.5)
             messaggi.push({
                 role: 'tool',

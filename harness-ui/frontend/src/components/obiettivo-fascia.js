@@ -86,6 +86,13 @@ const FRASI_DEI_MOTIVI = Object.freeze({
   'fatto-smentito': 'chat.goal.why.doneRefutedMany', 'confutatore-guasto': 'chat.goal.why.reviewerBroken', bloccato: 'chat.goal.why.blocked',
   giri: 'chat.goal.why.capTurns', token: 'chat.goal.why.capTokens',
 });
+/* I codici con cui TALOS (non il modello) dice perché il revisore non ha un esito: `src/obiettivo/confutatore.mjs` e il registro. */
+const FRASI_DEL_REVISORE = Object.freeze({
+  'refuter-no-model': 'chat.goal.reviewer.noModel', 'refuter-not-started': 'chat.goal.reviewer.notStarted',
+  'refuter-failed': 'chat.goal.reviewer.failed', 'refuter-timeout': 'chat.goal.reviewer.timeout',
+  'refuter-unreadable': 'chat.goal.reviewer.unreadable', 'refuter-undecided': 'chat.goal.reviewer.undecided',
+  'refutation-without-evidence': 'chat.goal.reviewer.noEvidence',
+});
 
 /**
  * Perché l'obiettivo è fermo, o com'è finito: `{testo, citazione?}`. `citazione` è testo di un MODELLO (il modello che si dice
@@ -109,6 +116,16 @@ export function motivoDaLeggere(obiettivo) {
     const parole = typeof obiettivo.confutazione?.motivo === 'string' ? obiettivo.confutazione.motivo.trim() : '';
     const volte = intero(Number(dettaglio)) && Number(dettaglio) > 0 ? Number(dettaglio) : 2;
     return { testo: tn('chat.goal.why.doneRefutedOne', 'chat.goal.why.doneRefutedMany', volte), ...(parole ? { citazione: { chi: t('chat.goal.who.reviewer'), testo: parole } } : {}) };
+  }
+  /* C-4 (indagine del 21/10/2026, /goal in pausa dal vivo «The reviewer could not reach a verdict»): la frase unica nascondeva PERCHÉ.
+     Il server manda l'esito del revisore in `confutazione.motivo` (`src/obiettivo/stato.mjs` `conConfutazione`): o un codice di
+     TALOS (`src/obiettivo/confutatore.mjs` `esitoDelConfutatore`, il registro `confutaObiettivo`), che diventa una frase, o le
+     PAROLE del revisore (`refuted: null` col suo motivo), che vanno a schermo come citazione con chi le ha dette. */
+  if (tipo === 'confutatore-guasto') {
+    const parole = typeof obiettivo.confutazione?.motivo === 'string' ? obiettivo.confutazione.motivo.trim() : '';
+    const codice = Object.hasOwn(FRASI_DEL_REVISORE, parole) ? FRASI_DEL_REVISORE[parole] : null;
+    if (codice) return { testo: `${t(chiave)} ${t(codice)}` };
+    return { testo: t(chiave), ...(parole ? { citazione: { chi: t('chat.goal.who.reviewer'), testo: parole } } : {}) };
   }
   if (tipo === 'prove-rosse') return { testo: t(chiave, { criteri: dettaglio || '—' }) };
   /* 15/10/2026 (visto dal vivo): il primo giro rifiutato perché manca la chiave non «è finito con un errore» — non è partito, e la

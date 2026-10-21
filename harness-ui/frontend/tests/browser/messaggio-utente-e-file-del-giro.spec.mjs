@@ -85,7 +85,8 @@ test('UTENTE-02 — riga e menu: intersezione vuota, unione completa, e la confe
   const inRiga = await messaggio.locator('[data-message-action]:not([data-message-action="piu"])').evaluateAll((n) => n.map((b) => b.getAttribute('aria-label')));
   await messaggio.locator('[data-message-action="piu"]').click();
   const nelMenu = await page.locator('#menuRispostaMessaggio [role="menuitem"]').allTextContents();
-  expect(nelMenu).toEqual(['Elimina il messaggio']);
+  /* 18/10/2026: R5.11 «Annulla le modifiche ai file da qui» (mockup approvato) sta nel menu, prima di «Elimina»: la regola resta */
+  expect(nelMenu).toEqual(['Annulla le modifiche ai file da qui', 'Elimina il messaggio']);
   const normale = (s) => s.replace(/\s+/gu, ' ').trim().toLowerCase();
   expect(inRiga.map(normale).filter((v) => nelMenu.map(normale).includes(v)), 'intersezione vuota').toEqual([]);
   /* ⛔ La conferma non nasconde la conseguenza: se ne va anche la risposta che ne dipendeva. */

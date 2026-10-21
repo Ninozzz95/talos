@@ -36,6 +36,7 @@ export const MESSAGES = Object.freeze({
   PLAN_DECISION_NOT_SAVED: { title: 'Choice not saved', explanation: 'TALOS could not save your choice to disk: the plan is still waiting.', action: 'Check the data folder space in Doctor and choose again.' },
   PLAN_APPROVAL_ORIGIN_FORBIDDEN: { title: 'Plan choice blocked', explanation: 'The request comes from a window other than TALOS.', action: 'Go back to the plan open in TALOS and choose from there.' },
   // 23/09/2026 (F3-10): un solo selettore Normale / Piano.
+  NOT_ALLOWED_REMOTELY: { title: 'Only from the computer', explanation: 'From the phone a new session can start only in one of the folders allowed on the computer. Any other folder is chosen on the computer.', action: 'Choose one of the allowed folders, or start the session from the computer.' },
   MODE_WORKFLOW_RETIRED: { title: 'Mode no longer available', explanation: 'Workflow mode has been removed: you now work in Normal or Plan, and Workflow is a tool the model uses when needed.', action: 'Choose Normal or Plan and try again.' },
   RUNTIME_UNREACHABLE: { title: 'Local service unreachable', explanation: 'The local service did not respond.', action: 'Check in Doctor that it is running and try again.' },
   PATH_NOT_ALLOWED: { title: 'Path not allowed', explanation: 'The chosen path is outside the authorized area.', action: 'Choose a folder inside the open project.' },

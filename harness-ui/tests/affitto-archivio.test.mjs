@@ -545,7 +545,7 @@ test('REG-AFF-05 (review Y1b): a child result refused because another process ho
 `);
   unlinkSync(fileAffitto(b.store, b.sessionId));
   /* 18/10/2026: rossa una volta sul runner della release 0.1.33 (stesso codice verde sulla PR un'ora prima): 400 ms fissi non bastano
-     sotto carico al ritento ogni 60 ms. Si aspetta la CONDIZIONE, con un tetto di 5 s: il ritento resta la cosa provata. */
-  for (const fine = Date.now() + 5_000; righeCoda().length === 0 && Date.now() < fine;) await pausa(50);
+     sotto carico al ritento ogni 60 ms. Si aspetta la CONDIZIONE, con un tetto di 60 s (G5D-REV-01, 20/10): il ritento resta la cosa provata. */
+  for (const fine = Date.now() + 60_000; righeCoda().length === 0 && Date.now() < fine;) await pausa(50);
   assert.ok(righeCoda().length >= 1, 'the result is in the parent\'s queue on disk');
 });

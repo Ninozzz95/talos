@@ -3,7 +3,7 @@ import { LINGUA_PSEUDO, linguaCorrenteDiT, t } from '../../components/lingua.js'
 import { TESTI } from '../../i18n/testi/index.js';
 export type SettingsLanguage = 'it' | 'en';
 export type LocalText = Readonly<{ it: string; en: string; chiave: string }>;
-export type SettingsSection = 'appearance' | 'chat' | 'tools' | 'memoria' | 'privacy' | 'models' | 'costi' | 'workspace' | 'account';
+export type SettingsSection = 'appearance' | 'chat' | 'tools' | 'memoria' | 'privacy' | 'telefoni' | 'models' | 'costi' | 'workspace' | 'account';
 export interface LegacySettingField {
   id: string; chiave: string; titolo: string; sezione: string; gruppo: string; tipo: string;
   opzioni?: readonly (readonly string[])[]; min?: number; max?: number; unita?: string;
@@ -33,6 +33,8 @@ export const SETTINGS_SECTIONS: Readonly<Record<SettingsSection, { title: LocalT
   tools: { title: text('impostazioni.sections.tools.title'), description: text('impostazioni.sections.tools.description'), scope: text('impostazioni.sections.tools.scope'), icon: 'sliders', keywords: 'tools permissions permessi policy search ricerca web duckduckgo tavily brave chiave key' },
   memoria: { title: text('impostazioni.sections.memoria.title'), description: text('impostazioni.sections.memoria.description'), scope: text('impostazioni.sections.memoria.scope'), icon: 'brain', keywords: 'memory contesto context tokens token memoria finestra compaction' },
   privacy: { title: text('impostazioni.sections.privacy.title'), description: text('impostazioni.sections.privacy.description'), scope: text('impostazioni.sections.privacy.scope'), icon: 'shield', keywords: 'privacy security sicurezza dati data export esporta import importa backup reset ripristina' },
+  /* 18/10/2026 — «Telefoni collegati» subito dopo «Sicurezza e privacy» (owner 17/10, mockup v4-v5 del controllo remoto). */
+  telefoni: { title: text('impostazioni.sections.telefoni.title'), description: text('impostazioni.sections.telefoni.description'), scope: text('impostazioni.sections.telefoni.scope'), icon: 'phone', keywords: 'phone phones telefono telefoni remote remoto controllo control pair accoppia collega connect qr revoke revoca relay iroh mobile android' },
   /* ⛔ 23/09/2026 — DECISIONE OWNER: «Provider e accessi» è TOLTA DEL TUTTO dalle Impostazioni
      («Toglierla del tutto»). Era una seconda porta sugli STESSI fornitori della scheda «Provider»
      del laboratorio qui sotto: due superfici per una cosa sola. Le sue parole di ricerca passano

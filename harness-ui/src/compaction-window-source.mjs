@@ -31,7 +31,11 @@ export function createCompactionWindowSource({
         if (data?.id !== id || !Array.isArray(endpoints) || endpoints.length === 0 || endpoints.length > 1_000) return null;
         if (!endpoints.every((endpoint) => endpoint?.model_id === id && validWindow(endpoint?.context_length))) return null;
         const windowTokens = Math.min(...endpoints.map((endpoint) => endpoint.context_length));
-        cached.set(id, { windowTokens, expiresAt: now() + ttlMs });
+        /* 21/10/2026 (revisione S2 della compattazione): il limite d'uscita, il MINIMO fra gli endpoint a cui il router può mandare il
+           giro; se uno solo non lo dichiara, ignoto (null): vale 32.000 e la cintura del ritentativo */
+        const outputTokens = endpoints.every((endpoint) => validWindow(endpoint?.max_completion_tokens))
+          ? Math.min(...endpoints.map((endpoint) => endpoint.max_completion_tokens)) : null;
+        cached.set(id, { windowTokens, outputTokens, expiresAt: now() + ttlMs });
         retryAfter.delete(id);
         return windowTokens;
       } catch {
@@ -55,5 +59,14 @@ export function createCompactionWindowSource({
     return null;
   }
 
-  return Object.freeze({ get, refresh });
+  /** Il limite d'uscita dalla stessa lettura (sincrono; `null` = ignoto o non ancora letto). */
+  function getUscita(id) {
+    if (!validId(id)) return null;
+    const entry = cached.get(id);
+    if (entry && entry.expiresAt > now()) return entry.outputTokens ?? null;
+    get(id); // la stessa lettura in sottofondo, alle stesse regole
+    return null;
+  }
+
+  return Object.freeze({ get, getUscita, refresh });
 }

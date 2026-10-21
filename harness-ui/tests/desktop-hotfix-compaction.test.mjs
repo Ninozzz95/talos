@@ -172,16 +172,17 @@ test('CTX-HOTFIX-SUMMARY-NO-TOOLS — il riassuntore non riceve attrezzi e ha ma
   assert.ok(riassunti.length >= 1);
   for (const body of riassunti) {
     assert.deepEqual(body.tools ?? [], [], 'nessun attrezzo al riassuntore');
-    /* 02/10/2026: il tetto non è più fisso (`MAX_TOKEN_RIASSUNTO`), è il budget di Hermes — qui il mezzo è piccolo e
-     * vale il pavimento di 2.000; il prompt dichiara le parole di QUEL budget. */
-    assert.ok(body.max_tokens >= 2_000 && body.max_tokens <= 10_000, `max_tokens ${body.max_tokens}`);
-    assert.ok(testoDi(body.messages.at(-1)).includes(`at most ${Math.floor((body.max_tokens * 1_200) / 2_048)} words`), 'le parole seguono il budget');
+    /* 02/10/2026: il budget di Hermes (2.000-10.000) scala col mezzo e sta nel PROMPT (le parole). 21/10/2026 (owner, «sta maledetta
+     * compattazione»; revisione S2): sul filo il tetto è quello di opencode — qui finestra e limite del modello sono ignoti ⇒ 32.000. */
+    assert.equal(body.max_tokens, 32_000, `max_tokens ${body.max_tokens}`);
+    const parole = Number(/at most (\d+) words/u.exec(testoDi(body.messages.at(-1)))?.[1]);
+    assert.ok(parole >= Math.floor((2_000 * 1_200) / 2_048) && parole <= Math.floor((10_000 * 1_200) / 2_048), `le parole seguono il budget: ${parole}`);
     assert.ok(!body.messages.some((m) => testoDi(m).startsWith(PIANO)), 'nessun effimero nel riassunto');
   }
   assert.ok(MAX_TOKEN_RIASSUNTO > 0, 'la costante storica resta esportata');
 });
 
-test('CTX-HOTFIX-SUMMARY-TRUNCATED-NO-IDENTICAL-RETRY — un riassunto fermato dal tetto NON si richiede uguale una seconda volta', async (t) => {
+test('CTX-HOTFIX-SUMMARY-TRUNCATED-NO-IDENTICAL-RETRY — un riassunto fermato dal tetto NON si richiede UGUALE: una volta, più breve (21/10, Hermes :768)', async (t) => {
   conTetto(t, 8_000);
   const cartella = cartellaDiProva(t);
   const fornitore = fintoFornitore({
@@ -193,8 +194,13 @@ test('CTX-HOTFIX-SUMMARY-TRUNCATED-NO-IDENTICAL-RETRY — un riassunto fermato d
   const inizi = eventi.filter((e) => e.tipo === 'compattazione-inizio').length;
   const fini = eventi.filter((e) => e.tipo === 'compattazione-fine');
   assert.ok(inizi >= 1, 'almeno una compattazione tentata');
-  assert.ok(fini.every((f) => f.compattato === false && f.motivo === 'troncato'), JSON.stringify(fini));
-  assert.equal(fornitore.riassuntiChiesti().length, inizi, 'una sola richiesta di riassunto per compattazione, non due identiche');
+  /* un fallimento è «troncato»; una compattazione fatta viene SOLO dal ripiego senza modello (contatore pieno, L1) — mai dal testo troncato */
+  assert.ok(fini.every((f) => (f.compattato === false && f.motivo === 'troncato') || (f.compattato === true && f.ripiego === true)), JSON.stringify(fini.map((f) => [f.compattato, f.motivo, f.ripiego])));
+  const chiesti = fornitore.riassuntiChiesti();
+  assert.ok(chiesti.length <= 2 * inizi, `al più la richiesta e UN ritentativo per compattazione: ${chiesti.length} per ${inizi}`);
+  assert.ok(chiesti.length >= 2, 'premessa: il ritentativo più breve c’è stato');
+  const paroleDi = (b) => Number(/at most (\d+) words/u.exec(testoDi(b.messages.at(-1)))?.[1]);
+  assert.ok(paroleDi(chiesti[1]) < paroleDi(chiesti[0]), `il ritentativo chiede meno parole, mai la stessa richiesta: ${paroleDi(chiesti[0])} → ${paroleDi(chiesti[1])}`);
 });
 
 test('CTX-HOTFIX-SUMMARY-BUDGET-SCALES — una conversazione grande riceve più di 2.048 token per il riassunto (sessione b1e7382a)', async (t) => {
@@ -206,9 +212,11 @@ test('CTX-HOTFIX-SUMMARY-BUDGET-SCALES — una conversazione grande riceve più 
   const riassunti = fornitore.riassuntiChiesti();
   assert.ok(riassunti.length >= 1, 'la conversazione ha superato la soglia');
   const primo = riassunti[0];
-  assert.ok(primo.max_tokens > 2_048, `il riassunto di una conversazione grande ha più dei 2.048 storici: ${primo.max_tokens}`);
-  assert.ok(primo.max_tokens <= 10_000, `mai oltre il tetto di Hermes: ${primo.max_tokens}`);
-  assert.ok(testoDi(primo.messages.at(-1)).includes(`at most ${Math.floor((primo.max_tokens * 1_200) / 2_048)} words`));
+  /* 21/10/2026: il budget che scala si legge nelle PAROLE del prompt; sul filo il tetto di opencode (ignoti ⇒ 32.000) */
+  const parole = Number(/at most (\d+) words/u.exec(testoDi(primo.messages.at(-1)))?.[1]);
+  assert.ok(parole > Math.floor((2_048 * 1_200) / 2_048), `il riassunto di una conversazione grande ha più dei 2.048 storici: ${parole} parole`);
+  assert.ok(parole <= Math.floor((10_000 * 1_200) / 2_048), `mai oltre il tetto di Hermes: ${parole} parole`);
+  assert.equal(primo.max_tokens, 32_000);
 });
 
 test('CTX-HOTFIX-SUMMARY-RETRIES-ONCE — un riassunto con attrezzo o vuoto si ritenta UNA volta, poi si va avanti', async (t) => {

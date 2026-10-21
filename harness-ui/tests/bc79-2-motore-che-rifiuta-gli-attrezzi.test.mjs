@@ -383,8 +383,8 @@ test('⛔⛔ BC79-07 — le fonti di motore locale si DERIVANO dal registro dei 
   assert.ok(FONTI_DI_MOTORE_LOCALE instanceof Set, '⛔ un insieme, non un array da cercare con includes');
   assert.deepEqual([...FONTI_DI_MOTORE_LOCALE].sort(), [...idPerWire('locale'), ...ID_MOTORI_LOCALI_OPENAI].sort(),
     '⛔ l\'insieme si deriva dal registro: un fornitore locale aggiunto domani deve entrarci da solo');
-  assert.deepEqual([...FONTI_DI_MOTORE_LOCALE].sort(), ['lmstudio', 'local', 'ollama'],
-    '⛔ misurato oggi: sono questi tre. Se il registro cambia, cambia la riga sopra, non questa cura');
+  assert.deepEqual([...FONTI_DI_MOTORE_LOCALE].sort(), ['lmstudio', 'local', 'locale-ospite', 'ollama'],
+    '⛔ misurato il 18/10/2026: sono questi quattro (in più il motore dell’app che ospita r4, `locale-ospite`). Se il registro cambia, cambia la riga sopra, non questa cura');
   /* ⛔ Il verso contrario: nessun fornitore che gira ALTROVE deve essere dentro. */
   for (const id of Object.keys(REGISTRO_FORNITORI)) {
     if (FONTI_DI_MOTORE_LOCALE.has(id)) continue;

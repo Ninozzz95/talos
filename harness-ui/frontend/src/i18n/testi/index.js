@@ -27,9 +27,11 @@ import home from './home.js';
 import impostazioni from './impostazioni.js';
 import modello from './modello.js'; // 03/10/2026, corsia S1: il modello HTML e i frammenti
 import server from './server.js'; // 03/10/2026, corsia K4a: i testi che il server manda alla persona come dati
+import remoto from './remoto.js'; // 18/10/2026: il controllo remoto dalla finestra del desktop
+import annulla from './annulla.js'; // 18/10/2026: «Annulla le modifiche ai file» (R5.11)
 
 /** Le aree registrate: per aggiungerne una si importa qui il suo file. */
-export const AREE = Object.freeze({ kernel, app, chat, agenti, processi, modelli, sezioni, github, varie, errori, comandi, home, impostazioni, modello, server });
+export const AREE = Object.freeze({ kernel, app, chat, agenti, processi, modelli, sezioni, github, varie, errori, comandi, home, impostazioni, modello, server, remoto, annulla });
 
 function appiattisci(lingua) {
   const fuori = {};

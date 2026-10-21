@@ -6,6 +6,8 @@ import { createOpenAI } from '@ai-sdk/openai';
 import { ID_NATIVI_SDK, fornitore } from './provider-registry.mjs';
 import { tokenDaCache, tokenScrittiInCache } from './usage-cache.mjs';
 import { argomentiVuoti } from './argomenti-vuoti.mjs';
+import { createHash } from 'node:crypto';
+import { livelloRagionamentoPiuVicino } from './openai-compatible-runtime.mjs';
 
 // Only this adapter knows the SDK message format. The kernel owns tool execution.
 export function stripNativeMetadata(messages) {
@@ -40,7 +42,9 @@ function sistemaNativo(content, { anthropic }) {
 
 export function toNativeMessages(messages, { provider, model }) {
   const toolNames = new Map(messages.flatMap(m => (m.tool_calls ?? []).map(t => [t.id, t.function.name])));
-  const anthropic = fornitore(provider)?.wire === 'anthropic-messages';
+  /* owner 21/10/2026 sera, «come Hermes» (revisione M1): il marcatore passa solo se il fornitore lo DICHIARA (`cache.marcatore`), non
+     perché il filo è Anthropic — Z.AI sulla porta Anthropic non lo dichiara, e Hermes non lo manderebbe (`agent_runtime_helpers.py:1779`). */
+  const anthropic = fornitore(provider)?.wire === 'anthropic-messages' && fornitore(provider)?.cache?.marcatore === 'cache_control';
   return messages.map(message => {
     if (message.role === 'system' || message.role === 'developer') return sistemaNativo(message.content, { anthropic });
     if (message.role === 'tool') {
@@ -135,8 +139,26 @@ export function aliasDelFilo(nomi, wireResponses) {
   return { verso, indietro };
 }
 
-function responseMessage(response, provider, model, finishReason, nomiVeri = new Map()) {
-  if (!['stop', 'tool-calls'].includes(finishReason)) {
+/*
+ * Revisione della strada nativa (21/10/2026, d'accordo con la CLI): due fini per tetto, due trattamenti.
+ *   · il TETTO D'USCITA (`max_tokens` di Anthropic, `max_output_tokens` di Responses, `MAX_TOKENS` di Gemini: per l'SDK tutti `length`)
+ *     passa come `finish_reason: 'length'` col testo parziale e SENZA `talos_provider_state`: il kernel lo legge come taglio del tetto
+ *     (`troncataDalTetto`) e continua, come sui compatibili. Prima diventava «Try again» e il kernel non vedeva mai il taglio.
+ *   · la FINESTRA PIENA (Anthropic `model_context_window_exceeded`, che l'SDK appiattisce su `length`: si riconosce dal motivo grezzo)
+ *     NON è un `length`: continuare su una finestra piena fallisce di nuovo fino al tetto delle continuazioni e non compatta mai. Esce come
+ *     il «contesto pieno» dei compatibili, col marcatore `context_length_exceeded` (F1 della CLI 0.6.8), che `classificaErroreFornitore`
+ *     riconosce. (platform.claude.com/docs/en/build-with-claude/context-windows, letta il 21/10: da Claude 4.5 si ferma con quello stop.)
+ */
+const FRASE_FINESTRA_PIENA = 'The request is larger than the model context window (context_length_exceeded).';
+function finestraPiena(finishReason, rawFinishReason) {
+  return finishReason === 'length' && rawFinishReason === 'model_context_window_exceeded';
+}
+
+function responseMessage(response, provider, model, finishReason, nomiVeri = new Map(), rawFinishReason = null) {
+  if (finestraPiena(finishReason, rawFinishReason)) {
+    throw Object.assign(new Error(FRASE_FINESTRA_PIENA), { code: 'NATIVE_CONTEXT_WINDOW_EXCEEDED', finestraPiena: true });
+  }
+  if (!['stop', 'tool-calls', 'length'].includes(finishReason)) {
     // P-J — nei nuovi profili lo schermo usa il nome umano, senza codici del protocollo.
     const record = fornitore(provider);
     const error = new Error(provider !== 'anthropic' && record?.wire === 'anthropic-messages'
@@ -189,7 +211,18 @@ export async function nativeProviderResponse({ provider, model, apiKey, baseURL,
   const sulFilo = (nome) => alias.verso.get(nome) ?? nome;
   const tools = Object.fromEntries((body.tools ?? []).map(t => [sulFilo(t.function.name), { description: t.function.description, inputSchema: jsonSchema(t.function.parameters), ...(wireResponses ? { strict: false } : {}) }]));
   const effort = body.reasoning_effort ?? body.reasoning?.effort;
-  const providerOptions = wireResponses ? { openai: { store: false, include: ['reasoning.encrypted_content'] } }
+  /* P1 della ricognizione (21/10/2026): verso OpenAI con la chiave API la `prompt_cache_key` partiva solo col piano ChatGPT
+     (`chatgpt-richiesta.mjs:58-63`); OpenAI sceglie la macchina della cache per quella chiave («requests are routed to a machine based on
+     prompt_cache_key», guida «Prompt caching», developers.openai.com/api/docs/guides/prompt-caching). Stessa impronta del prefisso stabile
+     (modello, attrezzi, messaggi fino al primo della persona), 64 caratteri come pi (`openai-prompt-cache.ts:1`). Il piano resta com'era:
+     la chiave la calcola il suo adattatore sul corpo Responses, e una data qui la sostituirebbe. Una chiave del chiamante resta sua. */
+  const chiaveCacheOpenAI = provider === 'openai' && wireResponses ? (typeof body.prompt_cache_key === 'string' && body.prompt_cache_key ? body.prompt_cache_key : (() => {
+    const messaggi = Array.isArray(body.messages) ? body.messages : [];
+    const primo = messaggi.findIndex((m) => m?.role === 'user');
+    const prefisso = primo >= 0 ? messaggi.slice(0, primo + 1) : messaggi.slice(0, 1);
+    return `talos-${createHash('sha256').update(JSON.stringify([model, body.tools ?? null, prefisso])).digest('hex')}`.slice(0, 64);
+  })()) : null;
+  const providerOptions = wireResponses ? { openai: { store: false, include: ['reasoning.encrypted_content'], ...(chiaveCacheOpenAI ? { promptCacheKey: chiaveCacheOpenAI } : {}) } }
     : provider === 'anthropic' ? opzioniAnthropicNative(provider, model, body) : opzioniAnthropicTerzi(provider, model, body);
   /* Con le opzioni esplicite (ragionamento adattivo + livello) il livello NON passa anche dal `reasoning` comune dell'SDK, che non conosce «max». */
   const sforzoEsplicito = provider === 'anthropic' && providerOptions.anthropic?.thinking != null;
@@ -219,7 +252,16 @@ export async function nativeProviderResponse({ provider, model, apiKey, baseURL,
     ...(body.top_p != null ? { topP: body.top_p } : {}),
     ...(body.stop ? { stopSequences: Array.isArray(body.stop) ? body.stop : [body.stop] } : {}),
     ...(effort && !(wireAnthropic && provider !== 'anthropic') && !sforzoEsplicito ? { reasoning: effort } : {}), // P-J: opzioni esplicite per i terzi.
-    maxOutputTokens: body.max_completion_tokens ?? body.max_tokens ?? 8192,
+    /* P1 della ricognizione (21/10/2026): senza un limite chiesto, il ripiego fisso di 8.192 token troncava le risposte lunghe dei modelli
+       che ne scrivono 64-128K (e il ragionamento adattivo di Claude si mangia lo stesso tetto). Sui fornitori di PRIMA parte il limite si
+       lascia all'SDK o al servizio: l'SDK di Anthropic mette il massimo del modello (`@ai-sdk/anthropic` 4.0.49, `getModelCapabilities`:
+       128K per Opus 5, Fable 5, Sonnet 5; 64K per i 4.5), come Hermes (`agent/anthropic_adapter.py:119-141`); e da Claude 4.5 un ingresso
+       più `max_tokens` oltre la finestra è accettato (platform.claude.com/docs/en/build-with-claude/context-windows, letta il 21/10:
+       si ferma con `model_context_window_exceeded`). Responses senza il campo usa il massimo del modello. ⛔ Gemini NO (revisione N1): senza
+       il campo l'API usa un suo valore interno basso e tronca, quindi si manda il tetto pubblicato comune ai Gemini di testo, 65.535,
+       come Hermes (`agent/gemini_native_adapter.py:40-42` e `:489-497`). Sui compatibili di terzi l'SDK non conosce l'id e scenderebbe a
+       4.096: lì resta il ripiego di prima. */
+    maxOutputTokens: body.max_completion_tokens ?? body.max_tokens ?? (provider === 'gemini' ? 65_535 : provider === 'anthropic' || wireResponses ? undefined : 8192),
     providerOptions, maxRetries: 0, stopWhen: stepCountIs(1), abortSignal: signal,
     // The caller owns retries, stop, tools and traces. No telemetry or automatic downloads.
     experimental_download: async urls => { if (urls.length) throw new Error('Implicit image download is not allowed.'); return []; },
@@ -229,7 +271,11 @@ export async function nativeProviderResponse({ provider, model, apiKey, baseURL,
     const result = await generateText({ ...common, onStepFinish: step => { usageDelloStep = step.usage; } });
     // P-J — l'aggregato perde raw anche con un solo step; lo step mantiene la misura originale.
     const usage = wireAnthropic && provider !== 'anthropic' ? usageDelloStep : result.usage;
-    return Response.json({ choices: [{ index: 0, message: responseMessage(result.response, provider, model, result.finishReason, alias.indietro), finish_reason: result.finishReason === 'tool-calls' ? 'tool_calls' : result.finishReason }], usage: canonicalUsage(usage, provider) });
+    /* la finestra piena senza streaming esce come il rifiuto HTTP dei compatibili: l'instradamento la classifica «contesto» */
+    if (finestraPiena(result.finishReason, result.rawFinishReason)) {
+      return Response.json({ error: { message: FRASE_FINESTRA_PIENA, code: 'context_length_exceeded', type: 'invalid_request_error' } }, { status: 400 });
+    }
+    return Response.json({ choices: [{ index: 0, message: responseMessage(result.response, provider, model, result.finishReason, alias.indietro, result.rawFinishReason), finish_reason: result.finishReason === 'tool-calls' ? 'tool_calls' : result.finishReason }], usage: canonicalUsage(usage, provider) });
   }
   const abort = new AbortController();
   const combinedSignal = signal ? AbortSignal.any([signal, abort.signal]) : abort.signal;
@@ -312,7 +358,8 @@ export async function nativeProviderResponse({ provider, model, apiKey, baseURL,
           }
           if (part.type === 'finish-step') usageDelloStep = part.usage; // P-J
           if (part.type === 'finish') {
-            const message = responseMessage(await result.response, provider, model, part.finishReason, alias.indietro);
+            /* in streaming la finestra piena resta un errore (mai un `length`), con il marcatore nel messaggio */
+            const message = responseMessage(await result.response, provider, model, part.finishReason, alias.indietro, part.rawFinishReason ?? null);
             // P-J — una sola chiamata/step: gli aggregati scartano raw, finish-step lo conserva.
             const usage = wireAnthropic && provider !== 'anthropic' ? usageDelloStep : part.totalUsage;
             emit(message.talos_provider_state ? { talos_provider_state: message.talos_provider_state } : {}, { usage: canonicalUsage(usage, provider) }, part.finishReason);
@@ -411,6 +458,16 @@ function opzioniAnthropicTerzi(provider, model, body) {
   }
   if (provider === 'minimax-anthropic') {
     if (body.stop) rifiuta('stop sequences are not supported on this route.');
+    /* P1 della ricognizione (21/10/2026): MiniMax-M3.1-Flash ragiona SEMPRE e accetta `output_config.effort` low|medium|high|xhigh|max,
+       di serie max; «disabled» e «none» danno 400 (platform.minimax.io/docs/api-reference/text-anthropic-api, letta il 21/10). Prima
+       ogni livello era rifiutato con un errore. Come sulla porta Anthropic di Z.AI: il livello va in `effort` (l'SDK lo scrive in
+       `output_config.effort`), prima il più debole (BUG-18), e «Spento» scende al minimo «low» invece del 400 — mai più caro del chiesto. */
+    if (model.toLowerCase() === 'minimax-m3.1-flash') {
+      const livelli = ['low', 'medium', 'high', 'xhigh', 'max'];
+      const spento = body.reasoning?.enabled === false || effort === 'none';
+      const scelto = spento ? 'low' : typeof effort === 'string' ? livelloRagionamentoPiuVicino(effort, livelli) : null;
+      return { anthropic: { thinking: { type: 'adaptive' }, ...(scelto ? { effort: scelto } : {}) } };
+    }
     if (effort) rifiuta('reasoning effort levels are not documented on this route.');
     if (typeof body.reasoning?.enabled === 'boolean') {
       if (model !== 'MiniMax-M3') rifiuta('this model does not declare reasoning control.');

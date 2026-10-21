@@ -34,7 +34,7 @@ test('CTX-CONTEXT-TRANSPORT-LOCAL uses the existing supervisor without cloud fal
   const result = await adapter.callContextModel({ provider: 'local', model: 'fixture', messages: history, maxOutputTokens: 2048, fetchDiRete: async () => { clouds++; throw new Error('No cloud'); } });
   assert.equal(result.text, 'Sintesi verificabile'); assert.equal(result.finishReason, 'stop');
   assert.equal(result.usage.prompt_tokens, 120); assert.equal(body.max_tokens, 2048);
-  assert.equal(body.model, 'fixture'); assert.deepEqual(body.tools, []); assert.equal(clouds, 0);
+  assert.equal(body.model, 'fixture'); assert.equal((body.tools ?? []).length, 0, 'no tools: 46311934c drops an empty list without tool history'); assert.equal(Object.hasOwn(body, 'tool_choice'), false); assert.equal(clouds, 0);
 });
 
 test('CTX-CONTEXT-TRANSPORT-NO-FALLBACK refuses an unavailable local transport before network', async () => {

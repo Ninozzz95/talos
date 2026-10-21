@@ -915,6 +915,11 @@ const MESSAGGI_DEL_KERNEL = [
   { chiave: 'errori.kernel.rispostaIncompleta', re: /^(?:The provider did not complete the response\.|Il fornitore non ha completato la risposta\.)$/u },
   { chiave: 'errori.kernel.inattivoOltreLimite', re: /^(?:OpenRouter stayed idle past the configured limit\.|OpenRouter è rimasto inattivo oltre il limite configurato\.)$/u },
   { chiave: 'errori.kernel.motoreLocaleScollegato', re: /^(?:The local engine is not connected to this server\.|Il motore locale non è collegato a questo server\.)$/u },
+  /* 18/10/2026: il motore locale dell'app che ospita r4 (`accesso-locale-ospite.mjs`) */
+  { chiave: 'errori.kernel.motoreOspiteOccupato', re: /^(?:The on-device model is busy with another job \(a chat reply or a context summary\); try again when it has finished\.|Il modello sul dispositivo è occupato con un altro lavoro \(una risposta nella chat o un riassunto del contesto\); riprova quando ha finito\.|The local model is busy answering in the chat: one reply at a time\. Try again when it has finished\.|Il modello locale sta rispondendo nella chat: una risposta alla volta\. Riprova quando ha finito\.)$/u },
+  { chiave: 'errori.kernel.motoreOspiteNonAperto', re: /^(?:No local model is open in the app: open one from the model picker\.|Nessun modello locale è aperto nell’app: aprine uno dal selettore dei modelli\.)$/u },
+  { chiave: 'errori.kernel.motoreOspiteCambiato', re: /^(?:Another on-device model is open now; choose it again in Code\.|Ora sul dispositivo è aperto un altro modello: sceglilo di nuovo nel Codice\.)$/u },
+  { chiave: 'errori.kernel.motoreOspiteNonRisponde', re: /^(?:The local engine in the app does not answer\.|Il motore locale dell’app non risponde\.)$/u },
   { chiave: 'errori.kernel.richiestaInterrotta', re: /^(?:The request to the provider was interrupted\.|La richiesta al fornitore è stata interrotta\.)$/u },
   { chiave: 'errori.kernel.fornitoreIrraggiungibile', re: /^(?:The provider could not be reached\.|Non è stato possibile raggiungere il fornitore\.)$/u },
   { chiave: 'errori.kernel.credenzialeNonAccettata', re: /^(?:Credential not accepted by the provider\.|Credenziale non accettata dal fornitore\.)$/u },

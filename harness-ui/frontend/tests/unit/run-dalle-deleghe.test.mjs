@@ -595,3 +595,12 @@ test('DELEGHE-RUN-VUOTO — senza agenti la sorgente c’è solo per chi la chie
   // AL CONTRARIO: con un agente la sorgente c'è anche senza chiederla
   assert.notEqual(await creaClientDeleghe({ leggi: async () => ({ corrente: madre, figli: [figlia('a', 10)] }) }).sorgente(), null);
 });
+
+test('DELEGHE-RUN-PAUSA-01 (21/10) una figlia in pausa non è «al lavoro»: la conversazione non la aspetta; una che lavora sì', () => {
+  const attivita = (figli) => runDalleDeleghe({ corrente: madre, figli }).conversazione?.activity ?? null;
+  const pausa = figlia('p', 10, { conclusa: true, ultimoEsito: 'errore', esitoDelega: 'in-pausa', motivoChiusura: 'in-pausa' });
+  assert.notEqual(attivita([pausa])?.kind, 'waitingAgents', JSON.stringify(attivita([pausa])));
+  // AL CONTRARIO: una figlia che lavora fa aspettare la conversazione
+  assert.deepEqual(attivita([figlia('l', 10)]), { kind: 'waitingAgents', count: 1 });
+  assert.deepEqual(attivita([pausa, figlia('l', 10)]), { kind: 'waitingAgents', count: 1 }, 'la pausa non entra nel conto');
+});

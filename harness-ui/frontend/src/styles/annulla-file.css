@@ -1,0 +1,24 @@
+/*
+ * R5.11 «Annulla le modifiche ai file» (mockup approvato dall'owner il 18/10/2026). Solo la disposizione: gruppi, righe, casella,
+ * diff e toast sono i pezzi che il prodotto ha già (scheda Git, chat, modale). Una finestra larga perché il diff si legga intero.
+ */
+dialog.td-modal[data-annulla-file] { width: min(1180px, calc(100vw - 48px)); }
+.talos-annulla { display: grid; grid-template-columns: minmax(300px, 400px) minmax(0, 1fr); gap: var(--talos-space-lg, 20px); margin-top: 12px; padding: 0; height: auto; background: transparent; }
+.talos-annulla__elenco { display: grid; gap: 14px; align-content: start; min-width: 0; }
+.talos-annulla__diff { min-width: 0; overflow: auto; max-height: min(60dvh, 560px); }
+.talos-annulla__diff .talos-diff-chat { margin: 0; }
+.talos-annulla .talos-github-riga { display: flex; align-items: center; }
+.talos-annulla .talos-github-riga__apri { flex: 1; }
+/* il file scelto: il fondo «al passaggio» delle schede del tema (quello della riga Git, `--talos-card`, sul pannello quasi non si vede) */
+.talos-annulla .talos-github-riga:has(> .talos-github-riga__apri[aria-pressed="true"]) { background: var(--talos-card-hover); }
+.talos-annulla__includi { display: inline-flex; align-items: center; gap: 6px; padding-inline: 8px; white-space: nowrap; cursor: pointer; }
+.talos-annulla__piede { display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-top: 16px; }
+.talos-annulla__nota { margin-inline-end: auto; }
+/* la carta in chat (seconda porta): righe non cliccabili, ogni diff nel suo «details» sotto la riga */
+.talos-annulla-carta { display: grid; gap: 10px; margin-top: 8px; padding: 0; height: auto; background: transparent; }
+.talos-annulla-carta .talos-github-riga { display: block; }
+.talos-annulla-carta__riga { cursor: default; }
+.talos-annulla-carta .talos-diff-chat { margin: 4px 0 8px; }
+@media (max-width: 860px) {
+  .talos-annulla { grid-template-columns: minmax(0, 1fr); }
+}

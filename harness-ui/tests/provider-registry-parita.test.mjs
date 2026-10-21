@@ -257,6 +257,7 @@ test('PAR-03 — destinazioni di chat: il prefisso, il router e la regex dicono 
       : REGISTRO_FORNITORI[fonte]?.baseUrl ?? 'https://esempio.test/v1' }),
     // P-K — fine
     localePronto: () => true,
+    ospitePronto: () => true, // 18/10/2026: il motore dell'app che ospita r4 (`locale-ospite`), come quello del PC qui sopra
   };
   for (const id of ID_DESTINAZIONE_CHAT) {
     /* ⛔ 1) il router la riconosce… */

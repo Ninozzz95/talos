@@ -17,6 +17,16 @@
  * ⛔ Non tocca MAI i messaggi della persona né quelli di sistema (Lost in Compaction, arXiv 2608.11242: i vincoli laterali si
  *   perdono quando si riscrivono), non toglie messaggi e non spezza una coppia chiamata/esito: cambia solo `content` degli
  *   esiti, gli argomenti delle chiamate (dentro il JSON, che resta valido) e il ragionamento in chiaro.
+ *
+ * ⛔ 21/10/2026 (revisione Z-2, d'accordo con la CLI): il ragionamento in chiaro dei turni vecchi oltre `REASONING_KEEP_CHARS` si
+ *   TOGLIE, non si accorcia. Z.AI con `clear_thinking: false` rilegge il ragionamento passato e chiede di rimandarlo «complete,
+ *   unmodified» (docs.z.ai/guides/capabilities/thinking-mode, letta il 21/10/2026: un blocco modificato peggiora resa e cache); Qwen con
+ *   `preserve_thinking` lo rilegge allo stesso modo, e senza `reasoning_content` non dà errore (alibabacloud.com/help/en/model-studio/
+ *   deep-thinking, aggiornata il 19/10/2026). Un ragionamento ASSENTE va bene a tutti: chi lo vuole sempre (DeepSeek, Kimi) riceve dal
+ *   traduttore il riempimento " " (`rimandaRagionamento`). Hermes manda i campi generici del pensiero solo per il turno più recente
+ *   (`agent/context_compressor.py:1294-1300`) e non li accorcia mai. ⛔ Non rimetterlo a 300 caratteri più «…».
+ *   Solo i campi STRINGA `reasoning_content` e `reasoning`: i blocchi firmati (`talos_provider_state`, `reasoning_details`) non si
+ *   toccano, il fornitore li vuole interi.
  */
 export const KEEP_RECENT_TOOL_OUTPUTS = 6;
 export const CLEARING_STEP = 16;
@@ -162,9 +172,12 @@ export function clearOldToolOutputs(messages, { keepRecent = KEEP_RECENT_TOOL_OU
       if (changed) patch.tool_calls = shortened;
     }
     for (const field of ['reasoning_content', 'reasoning']) {
-      if (typeof message[field] === 'string' && message[field].length > REASONING_KEEP_CHARS) { patch[field] = `${message[field].slice(0, REASONING_KEEP_CHARS)}…`; changed = true; }
+      if (typeof message[field] === 'string' && message[field].length > REASONING_KEEP_CHARS) { patch[field] = undefined; changed = true; }
     }
-    return changed ? { ...message, ...patch } : message;
+    if (!changed) return message;
+    const out = { ...message, ...patch };
+    for (const field of ['reasoning_content', 'reasoning']) if (Object.hasOwn(patch, field) && patch[field] === undefined) delete out[field];
+    return out;
   });
   return cleared || next.some((message, index) => message !== list[index]) ? { messages: next, cleared } : { messages: list, cleared: 0 };
 }

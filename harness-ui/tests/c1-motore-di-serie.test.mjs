@@ -69,6 +69,28 @@ test('C1-SERIE-04: the default profile follows the catalog window, never above c
   await assert.rejects(() => locale({ state: 'loading' }), { code: 'CTX_RUNTIME_PROFILE_MISMATCH' });
 });
 
+/* 21/10/2026, dal vivo sul Pad: il motore del contesto dava al modello del motore dell'app 266.667 token (id nudo ⇒ nessuna finestra),
+   mentre la politica del registro, che passa l'id col fornitore, diceva 28.160. Si prova con la `finestraDelModelloOspite` VERA:
+   riconosce il motore dell'app solo da `locale-ospite:`. */
+test('C1-SERIE-04b: the app engine model (locale-ospite) gets its real window, with the provider in the id; prudent 16,384 when unknown', async () => {
+  const { resolveDesktopDefaultProfile, FINESTRA_PRUDENTE_MOTORE_DELL_APP } = await import('../src/context-runtime.mjs');
+  const { finestraDelModelloOspite } = await import('../src/accesso-locale-ospite.mjs');
+  const accesso = { finestra: (id) => (id === 'LFM2.5-2.6B-QAD-Q4_0.gguf' ? 28_160 : null) };
+  const chiesti = [];
+  const finestraFn = (m) => { chiesti.push(m); const ospite = finestraDelModelloOspite(accesso, m); return ospite !== undefined ? ospite : null; };
+  const o = (model) => resolveDesktopDefaultProfile({ provider: 'locale-ospite', model, finestraFn });
+  const noto = await o('LFM2.5-2.6B-QAD-Q4_0.gguf');
+  assert.equal(noto.windowTokens, 28_160, 'the window the app engine opened, as the registry policy says');
+  assert.equal(noto.responseReserve, 3_520);
+  assert.equal(chiesti[0], 'locale-ospite:LFM2.5-2.6B-QAD-Q4_0.gguf', 'the id goes with its provider');
+  assert.equal((await o('mai-visto.gguf')).windowTokens, FINESTRA_PRUDENTE_MOTORE_DELL_APP, 'unknown: prudent, never the cloud maximum');
+  assert.equal(FINESTRA_PRUDENTE_MOTORE_DELL_APP, 16_384);
+  // verso contrario: OpenRouter resta con l'id nudo (il catalogo è il suo)
+  const orChiesti = [];
+  await resolveDesktopDefaultProfile({ provider: 'openrouter', model: 'z-ai/glm-5.3-flash', finestraFn: (m) => { orChiesti.push(m); return 200_000; } });
+  assert.deepEqual(orChiesti, ['z-ai/glm-5.3-flash']);
+});
+
 test('C1-SERIE-05: GET and POST /api/v1/context-settings — the switch, a body with only the expected field', async (t) => {
   const { createHttpApp } = await import('../src/http-app.mjs');
   const http = await import('node:http');

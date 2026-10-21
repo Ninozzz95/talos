@@ -102,7 +102,16 @@ function ricitaSugliOriginali(summary, records) {
 
 /** The injected store owns durability; this controller owns candidate validity.
  * Inference never receives a context which failed its final measurement. */
-export function createContextEngine({ store, model, tokenCounter, retrieval, embedding, toolCatalog, assets, usagePolicy, recoveryHint = null, anchorIndex = null, isPersonRequest = null, clearedToolPointer = DEFAULT_CLEARED_POINTER, clock = () => new Date().toISOString(), idFactory = () => crypto.randomUUID() }) {
+/*
+ * A1 (owner 21/10/2026 sera; contratto riga viva §4): il riassunto che il GIRO aspetta (`waitForCompaction` dentro `prepareForRequest`)
+ *   ha un tetto. Dal vivo sul Pad un lavoro è durato 22 minuti (16 + 6, poi rifiutato) con la chat su «Elaborazione». Hermes abbandona
+ *   la compattazione a 600 s (`agent/conversation_compression.py:668`). Allo scadere il lavoro si annulla e il giro riceve
+ *   `CTX_COMPACTION_TIMEOUT`: chi lo ospita prosegue con un riassunto senza modello. Il riassunto in sottofondo non ha tetto (non ferma
+ *   nessuno). `inTurnSummaryCeilingMs` per il motore, `summaryCeilingMs` per una chiamata.
+ */
+export const IN_TURN_SUMMARY_CEILING_MS = 600_000;
+
+export function createContextEngine({ store, model, tokenCounter, retrieval, embedding, toolCatalog, assets, usagePolicy, recoveryHint = null, anchorIndex = null, isPersonRequest = null, clearedToolPointer = DEFAULT_CLEARED_POINTER, clock = () => new Date().toISOString(), idFactory = () => crypto.randomUUID(), inTurnSummaryCeilingMs = IN_TURN_SUMMARY_CEILING_MS }) {
   if (!store || !model?.resolveModel || !model?.summarize || !tokenCounter?.countPreparedContext) fail('CTX_PORT_MISSING', 'Archivio, modello e contatore sono necessari.');
   const running = new Map();
   const key = (sessionId, jobId) => JSON.stringify([sessionId, jobId]);
@@ -419,7 +428,29 @@ export function createContextEngine({ store, model, tokenCounter, retrieval, emb
       return job;
     },
     /** `projection`: la storia corretta, allineata 1:1 ai record (vedi `checkProjection`); `messages` resta il controllo d'archivio di prima. */
-    async prepareForRequest({ sessionId, messages, projection, tools = [], sessionModel, signal, waitForInFlight = false }) {
+    async prepareForRequest({ sessionId, messages, projection, tools = [], sessionModel, signal, waitForInFlight = false, summaryCeilingMs, onInTurnWait }) {
+      /* A1: il riassunto atteso nel giro gara col suo tetto; allo scadere si annulla e il giro riceve CTX_COMPACTION_TIMEOUT */
+      const tettoNelGiro = Number.isSafeInteger(summaryCeilingMs) && summaryCeilingMs > 0 ? summaryCeilingMs : inTurnSummaryCeilingMs;
+      /* B1 (21/10/2026, revisione del Mobile): chi ospita il motore sa QUANDO il giro aspetta un riassunto — `waiting` all'inizio
+         dell'attesa, `done` alla fine comunque sia andata (pubblicato, fallito, scaduto, annullato). Senza, la riga viva con «Skip»
+         non compariva mai sulla strada del motore, che per le conversazioni nuove è quella di serie. Un ascoltatore che lancia non
+         tocca il giro. */
+      const segnalaAttesa = (evento) => { if (typeof onInTurnWait === 'function') { try { onInTurnWait(evento); } catch { /* solo un avviso */ } } };
+      const attendiNelGiro = async (jobId) => {
+        segnalaAttesa({ state: 'waiting', jobId, ceilingMs: tettoNelGiro });
+        let esitoAttesa = 'failed';
+        try {
+          let scaduto = false; let timer = null;
+          const scadenza = new Promise((risolvi) => { timer = setTimeout(() => { scaduto = true; risolvi(null); }, tettoNelGiro); });
+          try {
+            const esito = await Promise.race([api.waitForCompaction({ sessionId, jobId }), scadenza]);
+            if (!scaduto) { esitoAttesa = typeof esito?.state === 'string' ? esito.state : 'failed'; return esito; }
+          } finally { clearTimeout(timer); }
+          esitoAttesa = 'timeout';
+          try { await api.cancelCompaction({ sessionId, jobId }); } catch { /* già concluso o sparito: il tetto vale lo stesso */ }
+          fail('CTX_COMPACTION_TIMEOUT', `The summary took longer than ${Math.round(tettoNelGiro / 1000)} s: the turn continues without waiting for it.`);
+        } finally { segnalaAttesa({ state: 'done', jobId, outcome: esitoAttesa }); }
+      };
       let snapshot = await recoverInterrupted(sessionId, await state(sessionId));
       const records = await originals(sessionId);
       if (messages && JSON.stringify(messages) !== JSON.stringify(records.map(r => r.message))) fail('CTX_UNARCHIVED_CONTEXT', 'Archiviare i nuovi messaggi prima di preparare la richiesta.');
@@ -512,7 +543,10 @@ export function createContextEngine({ store, model, tokenCounter, retrieval, emb
       await record(measurement);
       const budget = budgetFor(measurement, snapshot.settings);
       let job; let compactionCooling = null; let senzaAttesa = false;
-      if (snapshot.settings.auto && budget.shouldPrepare) {
+      /* 21/10/2026: su un motore a posto unico (`sessionModel.singleSlot`) il riassunto di sottofondo occuperebbe il motore mentre il giro
+         ha una richiesta in volo (dal vivo sul Pad: 409 LOCAL_ENGINE_BUSY e giro in errore). Lì si compatta solo quando la richiesta non
+         entra più, dentro il giro e aspettando (`withinTurn`), mai in parallelo. */
+      if (snapshot.settings.auto && budget.shouldPrepare && !(sessionModel?.singleSlot === true && budget.fits)) {
         job = snapshot.jobs.find(entry => !terminal.has(entry.state));
         const inVoloPrima = Boolean(job);
         // 25/09 — in pausa dopo un rifiuto: niente lavoro nuovo (l'avviso si riscrive con lo stesso id: copre i lavori
@@ -540,7 +574,7 @@ export function createContextEngine({ store, model, tokenCounter, retrieval, emb
         senzaAttesa = !waitForInFlight && !budget.fits && inVoloPrima && job?.state !== 'paused' && measurement.inputTokens <= budget.windowTokens - budget.responseReserve;
         if (!budget.fits && job && !senzaAttesa) {
           if (job.state === 'paused') job = await api.resumeCompaction({ sessionId, jobId: job.id, sessionModel, tools, signal, projection });
-          const result = await api.waitForCompaction({ sessionId, jobId: job.id });
+          const result = await attendiNelGiro(job.id);
           if (result.state !== 'committed') fail(result.error?.code ?? 'CTX_COMPACTION_REQUIRED', result.error?.message ?? 'Il contesto richiede una compattazione completata.');
           snapshot = await state(sessionId);
           ({ prepared, measurement, cleared: toolOutputsCleared, level1 = null } = await project(snapshot, overlay(await originals(sessionId), projection)));
@@ -553,7 +587,7 @@ export function createContextEngine({ store, model, tokenCounter, retrieval, emb
             try { ancora = await api.startCompaction({ sessionId, idempotencyKey: `auto-${snapshot.revision}-${await hash(identity(sessionModel))}-more`, sessionModel, tools, signal, projection, withinTurn: true, retainRecentTurns: 1 }); }
             catch (error) { if (error.code !== 'CTX_NOTHING_TO_COMPACT') throw error; }
             if (ancora) {
-              const secondo = await api.waitForCompaction({ sessionId, jobId: ancora.id });
+              const secondo = await attendiNelGiro(ancora.id);
               if (secondo.state === 'committed') {
                 job = secondo;
                 snapshot = await state(sessionId);

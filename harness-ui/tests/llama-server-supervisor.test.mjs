@@ -35,7 +35,7 @@ test('starts llama-server on loopback without shell and reaches ready after heal
   const status = await supervisor.start({ modelPath: 'C:\\models\\model.gguf' });
 
   assert.equal(status.state, 'ready');
-  assert.deepEqual(spawnCall[1], ['-m', 'C:\\models\\model.gguf', '--host', '127.0.0.1', '--port', '18080', '--api-key', spawnCall[1][7], '--jinja', '--metrics', '--props']);
+  assert.deepEqual(spawnCall[1], ['-m', 'C:\\models\\model.gguf', '--host', '127.0.0.1', '--port', '18080', '--api-key', spawnCall[1][7], '-np', '1', '--jinja', '--metrics', '--props']);
   assert.equal(spawnCall[2].shell, false);
   assert.deepEqual(spawnCall[2].stdio, ['ignore', 'pipe', 'pipe']);
   assert.equal(Object.hasOwn(status, 'apiKey'), false);
@@ -96,7 +96,7 @@ test('con un backend GPU attivo aggiunge flash-attention e KV cache quantizzata 
     // vinto sull'ipotesi, come vuole la regola del progetto.
     '-ngl', '99',
     '-fa', '1', '--cache-type-k', 'q8_0', '--cache-type-v', 'q8_0',
-    '--jinja', '--metrics', '--props',
+    '-np', '1', '--jinja', '--metrics', '--props',
   ]);
 });
 
@@ -275,7 +275,7 @@ test('con GPU e un binario moderno accende KV f16 e la speculativa a n-grammi', 
   assert.deepEqual(argv.slice(argv.indexOf('-fa')), [
     '-fa', '1', '--cache-type-k', 'f16', '--cache-type-v', 'f16',
     '--spec-type', 'ngram-mod',
-    '--jinja', '--metrics', '--props',
+    '-np', '1', '--jinja', '--metrics', '--props',
   ]);
   // ⛔ Il fitter va interrogato sul MODELLO e sul CONTESTO veri, non a vuoto:
   // la risposta cambia con entrambi.
@@ -302,7 +302,7 @@ test('se il binario non offre --spec-type la leva NON si accende, e la KV resta 
   const argv = spawnCall[1];
   assert.deepEqual(argv.slice(argv.indexOf('-fa')), [
     '-fa', '1', '--cache-type-k', 'q8_0', '--cache-type-v', 'q8_0',
-    '--jinja', '--metrics', '--props',
+    '-np', '1', '--jinja', '--metrics', '--props',
   ]);
   assert.equal(argv.includes('--spec-type'), false);
 });

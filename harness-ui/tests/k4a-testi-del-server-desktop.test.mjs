@@ -123,10 +123,13 @@ test('K4A-S05 — fornitori: le tre note delle schede cloud e i quattro nomi con
   }
   assert.equal(it('server.provider.cloudNote.azure'), 'Scegli il nome della distribuzione presente nella tua risorsa. Un modello nel catalogo non è una distribuzione.');
   const nomi = Object.values(REGISTRO_FORNITORI).filter((r) => r.etichettaChiave);
-  assert.deepEqual(nomi.map((r) => r.id).sort(), ['chatgpt', 'esterno', 'local', 'minimax-anthropic', 'zai-anthropic']);
+  assert.deepEqual(nomi.map((r) => r.id).sort(), ['chatgpt', 'esterno', 'local', 'locale-ospite', 'minimax-anthropic', 'zai-anthropic']);
   /* l'etichetta che il registro porta ancora è quella italiana di prima: la voce italiana la dice uguale.
-     11/10/2026: «ChatGPT plan» nasce in inglese (regola «inglese prima»): per lei è la voce INGLESE a essere uguale al registro. */
-  for (const r of nomi) assert.equal((r.id === 'chatgpt' ? en : it)(r.etichettaChiave), r.etichetta, r.id);
+     11/10/2026: «ChatGPT plan» nasce in inglese (regola «inglese prima»): per lei è la voce INGLESE a essere uguale al registro.
+     18/10/2026: «On this device» (il motore dell'app che ospita r4) nasce in inglese anche lui. */
+  const nateInInglese = new Set(['chatgpt', 'locale-ospite']);
+  for (const r of nomi) assert.equal((nateInInglese.has(r.id) ? en : it)(r.etichettaChiave), r.etichetta, r.id);
+  assert.equal(it('server.provider.label.guestEngine'), 'Su questo dispositivo');
   assert.equal(it('server.provider.label.chatgptPlan'), 'Piano ChatGPT');
 });
 

@@ -9,6 +9,7 @@
  * comportamento già coperto dai test senza nascondere una dipendenza.
  */
 import { pathToFileURL, fileURLToPath } from 'node:url';
+import { createHash } from 'node:crypto';
 import { isAbsolute } from 'node:path';
 import { statSync } from 'node:fs';
 import { createParser } from 'eventsource-parser';
@@ -36,6 +37,7 @@ import { collegaSezioniAiContextHooks } from './context-provider-adapter.mjs';
 // compattazione LOCALE riceve lo stesso punto di aggancio del kernel, con lo stesso blocco di fatti.
 import { PREFISSO_SINTESI_RECINTATA, costruisciBloccoFatti } from './kernel/ricarica-post-compact.mjs';
 import { classificaErroreFornitore } from './kernel/compattazione-desktop.mjs';
+import { rifiutoDelMotoreOspite } from './accesso-locale-ospite.mjs'; // 18/10/2026: il motore dell'app occupato o chiuso, detto per nome
 import { conUtentiUniti } from './kernel/utenti-uniti.mjs'; // riga del bugfixer 10/10: due `user` di fila, solo verso un motore locale
 // P0 · punto 7 (16/09): il failsafe di inattività e il dispatcher stanno in una porta sola.
 import {
@@ -182,6 +184,12 @@ class ContestoLocalePienoError extends Error {
     super(`The conversation${quanti(promptToken)} does not fit in the local model’s window${quanti(finestraToken)}.`);
     this.name = 'ContestoLocalePienoError';
     this.code = 'LOCAL_CONTEXT_EXCEEDED';
+    /* 21/10/2026 sera: la classe del guasto come il «contesto pieno» dei compatibili (F1 della CLI 0.6.8, `erroreFornitorePubblico`):
+       sul disco e per un passo di Workflow (`agent-service.mjs`, F3-41a) si legge «contesto», non un guasto senza nome. Il marcatore
+       per chi riprova resta il CODICE (`LOCAL_CONTEXT_EXCEEDED`, `classificaErroreFornitore`): la frase resta quella che la carta
+       traduce (`errori.kernel.*`), che un marcatore in coda non riconoscerebbe più. */
+    this.classe = 'contesto';
+    this.transitorio = false;
     this.stato = 400;
     this.promptToken = Number.isSafeInteger(promptToken) ? promptToken : null;
     this.finestraToken = Number.isSafeInteger(finestraToken) ? finestraToken : null;
@@ -189,12 +197,24 @@ class ContestoLocalePienoError extends Error {
   }
 }
 
-/** Il 400 di llama-server per un prompt più lungo della finestra, dal suo campo `type`; null se è un altro 400. */
+/*
+ * 21/10/2026 sera (dal vivo sul Pad, sessione lunga del Mobile, motore dell'APP con LFM2.5): il motore ospite risponde PRIMA di generare
+ *   `400 {"error":{"code":"CONTEXT_LENGTH_EXCEEDED","message":"The conversation does not fit in the on-device model's context window.",
+ *   "type":"server_error"}}`. Il suo `type` è generico, il campo che lo dice è `code`: senza leggerlo la riprova di BC-79.2 partiva
+ *   senza attrezzi, «riusciva» col prompt più corto e la persona leggeva «This model does not use tools» dopo otto passi con gli
+ *   attrezzi — lo stesso inganno del 25/09. ⇒ Anche `error.code` (il motore ospite, e la forma OpenAI `context_length_exceeded`)
+ *   è un campo STRUTTURATO: vale come contesto pieno, mai dalla frase (la regola di BC-79.2).
+ */
+const CODICI_DEL_CONTESTO_PIENO = Object.freeze(['context_length_exceeded']);
+
+/** Il 400 di un motore locale per un prompt più lungo della finestra, dai suoi campi strutturati (`type` di llama-server, `code` del
+ *  motore dell'app); null se è un altro 400. */
 function contestoLocalePieno(dettaglio) {
   let corpo = null;
   try { corpo = JSON.parse(dettaglio); } catch { return null; }
   const errore = corpo?.error;
-  if (errore?.type !== 'exceed_context_size_error') return null;
+  const perCodice = typeof errore?.code === 'string' && CODICI_DEL_CONTESTO_PIENO.includes(errore.code.toLowerCase());
+  if (errore?.type !== 'exceed_context_size_error' && !perCodice) return null;
   return new ContestoLocalePienoError(Number(errore.n_prompt_tokens), Number(errore.n_ctx), dettaglio);
 }
 
@@ -807,7 +827,7 @@ export function creaFetchOpenRouterResiliente(fetchDiRete = fetch, {
  *   (P0-D-20: stessi byte, stesso stato, stessi header). ⇒ Le prove della cache iniettano il
  *   guardiano identità e misurano il loro contratto; il guardiano vero si prova da solo (P0-D-15/16).
  */
-function creaFetchInstradata(fetchDiRete = fetch, { risolvi = risolviDestinazioneModello, dipendenze = null, onAvviso = null, instradaOpenRouter = false, inattivitaGenerazioneMs = null, sorvegliaCorpo = sorvegliaCorpoDiGenerazione,
+function creaFetchInstradata(fetchDiRete = fetch, { risolvi = risolviDestinazioneModello, dipendenze = null, onAvviso = null, instradaOpenRouter = false, inattivitaGenerazioneMs = null, sorvegliaCorpo = sorvegliaCorpoDiGenerazione, chiaveDiSessione = null,
   /*
    * BC-79.2 — la memoria del giro di sessione, CONDIVISA e non di questa chiusura: sulla strada del
    * multi-provider `creaFetchInstradata` viene ricostruita a OGNI richiesta (`invia`), quindi una
@@ -855,7 +875,9 @@ function creaFetchInstradata(fetchDiRete = fetch, { risolvi = risolviDestinazion
     try {
       destinazione = risolvi(corpo.model, dipendenze);
     } catch (erroreRisoluzione) {
-      if (erroreRisoluzione?.code !== 'LOCAL_RUNTIME_NOT_READY' || typeof dipendenze.avviaLocale !== 'function') throw erroreRisoluzione;
+      /* 18/10/2026: un modello del motore dell'APP (`ospite`) non si accende da qui — vive nel telefono, e il llama-server del PC
+         coprirebbe il motivo vero con «non configurato» */
+      if (erroreRisoluzione?.code !== 'LOCAL_RUNTIME_NOT_READY' || erroreRisoluzione?.ospite === true || typeof dipendenze.avviaLocale !== 'function') throw erroreRisoluzione;
       const { modelloRemoto } = separaFonteModello(corpo.model);
       await dipendenze.avviaLocale(modelloRemoto); // ⛔ se l'avvio stesso fallisce, il SUO errore (non quello generico non acceso) arriva a chi ha chiamato
       destinazione = risolvi(corpo.model, dipendenze); // dopo un avvio riuscito questo non deve più lanciare: se lancia ancora, è un errore vero da mostrare, non da inghiottire
@@ -918,11 +940,28 @@ function creaFetchInstradata(fetchDiRete = fetch, { risolvi = risolviDestinazion
       const { reasoning, ...resto } = corpo;
       corpo = { ...resto, ...(typeof reasoning.effort === 'string' ? { reasoning_effort: reasoning.effort } : {}) };
     }
+    /* L1 del motore locale (20/10/2026): sul llama.cpp che spediamo, «ragionamento spento» non spegneva niente. Misurato su
+       b10517 con LFM2.5-24B-A2B (il template dichiara `supports_reasoning_effort: false`): `reasoning_effort:'none'`,
+       `reasoning_budget:0` e `chat_template_kwargs.enable_thinking:false` ⇒ 474 pezzi di ragionamento, come senza niente; il
+       campo per richiesta `thinking_budget_tokens: 0` ⇒ 0 (`llama-server --help`: «--reasoning-budget N … 0 for immediate end»).
+       Per questo i riassunti uscivano troncati: il ragionamento si mangiava tutto `max_tokens` (sessione e00ae242).
+       ⛔ Solo per la fonte `local` (il nostro motore, versione nota), MAI dal nome del modello: un server compatibile scelto
+       dalla persona (vLLM, LM Studio) potrebbe rifiutare il campo con un 400 (Hermes riconosce quel rifiuto apposta,
+       `agent/error_classifier.py:509-519`). */
+    if (destinazione.fonte === 'local' && chiedeRagionamentoSpento(corpo) && corpo.thinking_budget_tokens === undefined) {
+      corpo = { ...corpo, thinking_budget_tokens: 0 };
+    }
     /* P-D (12/09, Astra): il traduttore del fornitore toglie ciò che il fornitore non accetta (es.
        `reasoning_effort: low` per Z.AI, che ammette solo high e max) e lo DICE. Senza un canale per
        dirlo (`onAvviso`) si preferisce fermarsi prima della rete con una frase in italiano, invece di
        spedire in silenzio una richiesta diversa da quella chiesta (fail-closed, come nel rapporto). */
-    const adattata = preparaRichiestaCompatibile(destinazione.fonte, { ...corpo, model: destinazione.modelloRemoto });
+    /* Revisione O1 (21/10/2026): verso chi dichiara `instradamento.campo: 'session_id'` (OpenRouter) la chiave è quella della SESSIONE,
+       come Hermes (`plugins/model-providers/openrouter/__init__.py:126-133`), non l'impronta del prefisso: l'impronta cambia quando
+       cambiano gli attrezzi (un server MCP che parte, Piano/Normale) o dopo un riassunto, e ogni volta l'instradamento «sticky» e la
+       vista Sessions dei log ripartivano da capo. Senza sessione (riassunti, chiamate di contorno) resta l'impronta del traduttore. */
+    const corpoDaTradurre = chiaveDiSessione && REGISTRO_FORNITORI[destinazione.fonte]?.instradamento?.campo === 'session_id' && corpo.session_id === undefined
+      ? { ...corpo, session_id: chiaveDiSessione } : corpo;
+    const adattata = preparaRichiestaCompatibile(destinazione.fonte, { ...corpoDaTradurre, model: destinazione.modelloRemoto });
     for (const [indice, avviso] of adattata.avvisi.entries()) {
       const frase = adattata.frasiAvvisi?.[indice];
       if (typeof onAvviso !== 'function') {
@@ -968,6 +1007,18 @@ function creaFetchInstradata(fetchDiRete = fetch, { risolvi = risolviDestinazion
      * mano: HTTP 401 «Invalid API Key» in 4 ms.
      */
     const spedisci = async (corpo) => {
+      /* 18/10/2026 — il motore dell'APP: la chiave e il socket li ha l'accesso (`accesso-locale-ospite.mjs`), come il supervisore qui
+         sotto. Un 503 col suo codice (la chat sta generando, o nessun modello aperto) diventa un rifiuto leggibile, non un guasto da
+         ritentare né un fornitore di riserva (richiesta della sessione mobile). */
+      if (destinazione.ospite) {
+        if (typeof dipendenze.chiamaLocaleOspite !== 'function') {
+          throw Object.assign(new Error('No local model is open in the app: open one from the model picker.'), { code: 'LOCAL_RUNTIME_NOT_READY' });
+        }
+        const risposta = await dipendenze.chiamaLocaleOspite(destinazione.percorso, { ...opzioni, method: 'POST', headers: { 'Content-Type': 'application/json' }, body: corpo });
+        const rifiuto = await rifiutoDelMotoreOspite(risposta);
+        if (rifiuto) { try { await risposta.body?.cancel(); } catch { /* già chiusa */ } throw rifiuto; }
+        return sorveglia(risposta);
+      }
       if (destinazione.locale) {
         if (typeof dipendenze.chiamaLocale !== 'function') {
           const errore = new Error('The local engine is not connected to this server.');
@@ -1095,6 +1146,10 @@ async function inviaCloudProtetta(rete, url, opzioni) {
  */
 const CONDIZIONI_PRIMA_DELLA_RETE = new Set([
   'LOCAL_RUNTIME_NOT_CONFIGURED', 'LOCAL_RUNTIME_NOT_READY',
+  /* 18/10/2026: il motore dell'app è occupato dalla chat (un giro alla volta). Arriva DALLA rete del socket, ma prima di ogni
+     generazione: nessun consumo, e un fornitore di riserva non è la risposta — si dice e si riprova quando la chat ha finito. */
+  'LOCAL_ENGINE_BUSY',
+  'LOCAL_MODEL_CHANGED', // 18/10/2026: nell'app è aperto un altro modello (409 del Mobile), si sceglie di nuovo
   'RUNTIME_PROCESS_FAILED', 'RUNTIME_OUT_OF_MEMORY', 'RUNTIME_ARCH_UNSUPPORTED', 'RUNTIME_HEALTH_TIMEOUT', 'RUNTIME_ALREADY_RUNNING', 'RUNTIME_START_CANCELLED',
   'RUNTIME_NOT_READY', 'RUNTIME_MISCONFIGURED', 'RUNTIME_INVALID',
   'PROVIDER_RUNTIME_INVALID', 'MODEL_DESTINATION_INVALID',
@@ -1265,6 +1320,12 @@ function classificaGuasto(error, stato = null) {
   return classificaErroreDiCorsa({ messaggio: 'upstream error' });
 }
 
+/** L1 del motore locale (20/10/2026): il corpo chiede il ragionamento SPENTO? Solo `none` o `enabled:false`, mai un livello. */
+export function chiedeRagionamentoSpento(corpo) {
+  const sforzo = corpo?.reasoning_effort ?? corpo?.reasoning?.effort;
+  return (typeof sforzo === 'string' && sforzo.trim().toLowerCase() === 'none') || corpo?.reasoning?.enabled === false;
+}
+
 /** P-H: la fetch conosce la chiave; il kernel resta proprietario dei ritentativi.
  * eseguiConFallback avvolge UNA chiamata del kernel, mai il ciclo degli attrezzi.
  * I callback del cambio e del consumo devono essere durabili prima della nuova chiamata.
@@ -1279,6 +1340,8 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
   inattivitaGenerazioneMs = null,
   /* 17/09: il guardiano del corpo, iniettabile per le prove dello strato cache (vedi `creaFetchInstradata`). */
   sorvegliaCorpo = sorvegliaCorpoDiGenerazione,
+  /* Revisione O1 (21/10/2026): la chiave d'instradamento della sessione (vedi `creaFetchInstradata`), già ridotta a impronta. */
+  chiaveDiSessione = null,
 } = {}) {
   const catena = validaFallbackProviders(fallbackProviders);
   /*
@@ -1490,7 +1553,7 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
     };
     const instradata = creaFetchInstradata(rete, { risolvi, dipendenze: {
       ...dipendenze, leggiChiave: p => p === fonte && scelta ? scelta.chiave : dipendenze.leggiChiave(p),
-    }, onAvviso, instradaOpenRouter: true, inattivitaGenerazioneMs, sorvegliaCorpo, memoriaAttrezzi });
+    }, onAvviso, instradaOpenRouter: true, inattivitaGenerazioneMs, sorvegliaCorpo, memoriaAttrezzi, chiaveDiSessione });
     try {
       const risposta = await instradata(url, opzioni);
       /* ⛔ BUG-25 — il rifiuto-credito CON scadenza dichiarata NON si lancia come eccezione: si
@@ -1968,6 +2031,9 @@ export function createOwnerRuntimeAdapter({
         inattivitaGenerazioneMs: leggiInattivitaGenerazioneMs(),
         dipendenze: destinazioneModelloDeps, providerStore, fallbackProviders, modelloSessione: input?.modello, zaiSoloIndirizzo,
         onAvviso: input?.onAvviso, onCambioFornitore: input?.onCambioFornitore, onConsumoFornitore: input?.onConsumoFornitore,
+        /* O1: l'id della sessione non esce in chiaro verso il fornitore, solo la sua impronta (64 caratteri, sotto i 256 di OpenRouter) */
+        chiaveDiSessione: typeof input?.checkpointSessionId === 'string' && input.checkpointSessionId
+          ? `talos-s-${createHash('sha256').update(input.checkpointSessionId).digest('hex')}`.slice(0, 64) : null,
       });
       const fetchConImmagini = async (url, init = {}, successiva = fetchInstradata) => {
         // BC-48 C-bis: GLM via OpenRouter usa cache implicita (fonti nel rapporto

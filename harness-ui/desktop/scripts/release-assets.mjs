@@ -133,7 +133,7 @@ The GitHub attestation certifies where the build came from; it is not an Authent
 
 ## What is inside
 
-An Electron 44.3.0 shell with the Node runtime included, the TALOS backend, the built frontend, the kernel, the context engine, native addons, and llama.cpp b10517 CPU/Vulkan builds with their licences.
+An Electron 44.3.0 shell with the Node runtime included, the TALOS backend, the built frontend, the kernel, the context engine, native addons, and llama.cpp v0.7.0 (build b11669) CPU/Vulkan builds with their licences.
 Vulkan needs a compatible driver; the CPU engine is included as the alternative.
 Node.js 24.18.0 and ripgrep 15.0.0 for Linux, with their licences: when WSL is installed and a session runs its commands in Linux, the file tools run there too, with these binaries. Nothing is installed inside the WSL distribution.
 No GGUF model and no credential is bundled, and there is no telemetry.

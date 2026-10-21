@@ -193,6 +193,10 @@ test('IST-05 — un riassuntore che fallisce in sottofondo non ferma il giro, si
   const falliti = eventi.filter((e) => e.tipo === 'compattazione-preparata' && e.compattato === false);
   assert.ok(falliti.length >= 1 && falliti.every((e) => e.classe === 'vuoto'), JSON.stringify(falliti));
   assert.ok(fornitore.riassuntiChiesti().length <= 3, `il giro di fallimenti tiene: ${fornitore.riassuntiChiesti().length}`);
+  /* L1 (20/10/2026): il ripiego senza modello nasce solo quando la compattazione serve ADESSO, mai preparato in sottofondo: un
+     riassunto del codice preparato in anticipo e poi applicato come «istantaneo» passerebbe per un riassunto vero */
+  assert.ok(!eventi.some((e) => e.ripiego && (e.istantanea || e.tipo === 'compattazione-preparata')),
+    JSON.stringify(eventi.filter((e) => e.ripiego).map((e) => [e.tipo, e.istantanea, e.classe])));
 });
 
 test('IST-06 — all\'emergenza si ASPETTA il riassunto già in preparazione e lo si usa; mai un secondo riassunto al suo posto', async (t) => {

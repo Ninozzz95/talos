@@ -83,8 +83,11 @@ export const idDelNodo = (sessionId) => `s-${sessionId}`;
 /** Lo stato di un agente nelle parole dei passi del Workflow (`grafo/comuni.js`, `STATI_PASSO`). Stessa regola di `statoAgente`. */
 export function statoDelPasso(a = {}) {
   if (a.interrotta === true || a.motivoChiusura === 'fermata') return 'cancelled';
+  /* in pausa: riparte quando lo dici tu, dal suo menu. ⛔ 21/10/2026 (revisione di L3-15): una figlia in pausa ha il giro CHIUSO
+     (`conclusa: true`, `ultimoEsito: 'errore'` dal RunError «in-pausa», come la scrivono `c3-pausa-non-e-un-errore` e
+     `c3-menu-delega`). Letta dopo `conclusa`, la pausa diventava «fallito» e «da controllare» nel diagramma: si legge prima. */
+  if (a.esitoDelega === 'in-pausa' || a.motivoChiusura === 'in-pausa') return 'waiting_human';
   if (a.conclusa !== true) {
-    if (a.esitoDelega === 'in-pausa' || a.motivoChiusura === 'in-pausa') return 'waiting_human'; // in pausa: riparte quando lo dici tu, dal suo menu
     if (a.inAttesaApprovazione === true || a.inAttesaDomanda === true || a.inAttesaPiano === true || a.approvalPendingCount > 0 || a.questionPendingCount > 0) return 'waiting_human';
     return istante(a.avviataAlle) === null ? 'pending' : 'running';
   }
@@ -177,7 +180,9 @@ export function runDalleDeleghe({ corrente = {}, sessioni = [], figli = [] } = {
      richiesta scelta, il filtro per stato o il ramo isolato tolgono dal diagramma. Si guarda qui, PRIMA di ogni filtro: con
      «Finiti» o con un ramo isolato la scheda in cima diceva «Riuscito» mentre un agente nascosto lavorava ancora. */
   const unAgenteLavora = lotti.some((l) => l.agenti.some((a) => !TERMINALI.has(statoDelPasso(a))));
-  const agentiAlLavoro = lotti.reduce((n, l) => n + l.agenti.filter((a) => !TERMINALI.has(statoDelPasso(a))).length, 0);
+  /* 21/10/2026 (revisione di dc09fad37, S5): una figlia IN PAUSA non lavora — la conversazione non la «aspetta» (riparte quando lo
+     dice la persona, dal suo menu). Resta invece in `unAgenteLavora`: col run in pausa la scheda in cima non dice «Riuscito». */
+  const agentiAlLavoro = lotti.reduce((n, l) => n + l.agenti.filter((a) => !TERMINALI.has(statoDelPasso(a)) && a.esitoDelega !== 'in-pausa' && a.motivoChiusura !== 'in-pausa').length, 0);
   const agentiDellaConversazione = new Set(lotti.flatMap((l) => l.agenti.map((a) => a.sessionId)));
   if (richiestaMostrata && richiestaMostrata !== 'tutte') {
     const tenuti = lotti.filter((l) => l.richiesta === richiestaMostrata);

@@ -95,7 +95,8 @@ export function createResumeRecorder({ sink, secret = randomBytes(32), sessionId
     return Object.freeze({ ...supervisor,
       async start(options) {
         const before = snapshotStatus(supervisor);
-        record({ type: 'load-start', before, requestedContextTokens: scalar(options?.contextLength), requestedModelKey: key(options?.modelId) });
+        // L1-d (20/10/2026): con la scheda il caricatore dà una RISERVA e la finestra la sceglie il supervisore: si registrano tutte e due
+        record({ type: 'load-start', before, requestedContextTokens: scalar(options?.contextLength), reserveContextTokens: scalar(options?.finestraDiRiserva), requestedModelKey: key(options?.modelId) });
         try {
           const result = await supervisor.start(options);
           record({ type: 'load-end', outcome: 'resolved', runtime: snapshotStatus(supervisor) });

@@ -15,6 +15,8 @@
  *   sconosciuti cadono. Una bolla malformata non rompe l'invio: vale «nessuna bolla», e la rigiocata ripiega sul
  *   lettore delle sessioni vecchie (lato interfaccia).
  */
+import { origineValida } from './origine-remota.mjs';
+
 export const TETTI_BOLLA = Object.freeze({ testo: 20_000, allegati: 20, nome: 300, percorso: 2_000, tipo: 20 });
 
 const stringaCorta = (valore, massimo) => (typeof valore === 'string' && valore.length > 0 ? valore.slice(0, massimo) : null);
@@ -58,5 +60,8 @@ export function bollaValida(grezza) {
     const allegati = Array.isArray(grezza.allegati)
         ? grezza.allegati.slice(0, TETTI_BOLLA.allegati).map(allegatoDellaBolla).filter(Boolean) : [];
     if (testo.trim() === '' && allegati.length === 0) return null;
-    return { testo, allegati };
+    /* 18/10/2026: l'origine «dal telefono» resta se ha la sua forma. Che non arrivi da un client lo garantisce `separaBolla`
+       (http-app.mjs), che la toglie al confine: qui passa solo quella messa dal server (`origine-remota.mjs`). */
+    const origine = origineValida(grezza.origine);
+    return { testo, allegati, ...(origine ? { origine } : {}) };
 }

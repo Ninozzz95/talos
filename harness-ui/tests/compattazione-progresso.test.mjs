@@ -369,3 +369,19 @@ test('CP-REGISTRO-03 — in background a fine giro: lettura → riassunto → so
     rimuoviCartellaDiProva(cartellaStore);
   }
 });
+
+/* D5 a della CLI (21/10/2026): quando il kernel dice PERCHÉ non ha riassunto (`motivo`, `codice`), chi ha chiesto «Compatta ora» lo riceve. */
+test('CP-REGISTRO-02b — «Compatta ora» che non riassume porta il motivo e il codice del kernel; senza, la forma resta quella di prima', async () => {
+  for (const [dalKernel, atteso] of [
+    [{ compattato: false, messaggi: STORIA, usage: null, motivo: 'vuoto', codice: 'SUMMARY_EMPTY' }, { ok: true, compattato: false, fase: 'riassunto', motivo: 'vuoto', codice: 'SUMMARY_EMPTY' }],
+    [{ compattato: false, messaggi: STORIA, usage: null, motivo: 7 }, { ok: true, compattato: false, fase: 'riassunto' }],
+  ]) {
+    const { giri, avviaSessioneFn } = giriFinti(1);
+    const registro = createSessionRegistry({ avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'z-ai/glm-5.3-flash', chiave: 'k',
+      compattaSessioneFn: async () => dalKernel });
+    const { sessionId } = registro.avvia('task-vero');
+    giri[0].concludi({ comeFinita: 'concluso', messaggiFinali: STORIA });
+    await new Promise((r) => setImmediate(r));
+    assert.deepEqual(await registro.compatta(sessionId), atteso);
+  }
+});

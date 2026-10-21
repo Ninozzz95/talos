@@ -56,8 +56,13 @@ export const FRAZIONE_AVVISO = 0.8;
 export const EVENTO_COMPATTAZIONE = 'talos.compattazione';
 export const EVENTO_ANNULLATA = 'talos.compattazione-annullata';
 export const EVENTO_JOURNAL_RIPARATO = 'talos.journal-riparato';
+/** B1 (owner 21/10/2026): i passi del riassunto ATTESO, effimeri (solo a chi è connesso). Contratto §2, `CONTRATTO-RIGA-VIVA-…-21.md`. */
+export const EVENTO_PROGRESSO = 'talos.compattazione-progresso';
+/** Contratto §3: perché un riassunto è stato fatto SENZA il modello (`ripiego:true`). Un valore fuori elenco resta `null`. */
+export const RAGIONI_RIPIEGO = Object.freeze(['tempo', 'saltato', 'rifiutato', 'stima', 'esaurito']);
 
 const numero = (v) => typeof v === 'number' && Number.isFinite(v) && v >= 0;
+const intero = (v) => Number.isSafeInteger(v) && v >= 0;
 const inglese = () => linguaCorrenteDiT() === 'en';
 /** I numeri di token con i separatori delle migliaia della lingua corrente (Hermes: `~{before:,} → ~{after:,}`). */
 export function formattaToken(n) { return new Intl.NumberFormat(inglese() ? 'en-US' : 'it-IT').format(n); }
@@ -111,7 +116,9 @@ export function interpretaEventoCompattazione(evento) {
     if (!v || typeof v !== 'object') return null;
     if (v.fase === 'inizio') {
       const token = numero(v.tokenPrima) ? v.tokenPrima : numero(v.tokenMisurati) ? v.tokenMisurati : null;
-      return { tipo: 'inizio', tokenMisurati: token, soglia: numero(v.soglia) ? v.soglia : null, motivo: typeof v.motivo === 'string' ? v.motivo : null };
+      return { tipo: 'inizio', tokenMisurati: token, soglia: numero(v.soglia) ? v.soglia : null, motivo: typeof v.motivo === 'string' ? v.motivo : null,
+        /* 21/10/2026 (revisione del Mobile): il giro a cui appartiene; quella di sfondo del registro non ne ha. Solo se c'è. */
+        ...(Number.isSafeInteger(v.giro) ? { giro: v.giro } : {}) };
     }
     if (v.fase === 'fine') {
       const compattato = v.compattato === true;
@@ -122,16 +129,39 @@ export function interpretaEventoCompattazione(evento) {
           annullabile: v.annullabile !== false }
         : null;
       let motivo = typeof v.motivo === 'string' ? v.motivo : null, dettaglio = null;
-      if (motivo && /^errore:\s*/i.test(motivo)) { dettaglio = motivo.replace(/^errore:\s*/i, '').trim() || null; motivo = 'errore'; }
+      /* 21/10/2026 (revisione del Mobile): il riassunto di sfondo del registro scrive `error: <testo>` in inglese; lo leggiamo come l'italiano */
+      if (motivo && /^(?:errore|error):\s*/i.test(motivo)) { dettaglio = motivo.replace(/^(?:errore|error):\s*/i, '').trim() || null; motivo = 'errore'; }
       return {
-        tipo: 'fine', compattato,
+        tipo: 'fine', compattato, ...(Number.isSafeInteger(v.giro) ? { giro: v.giro } : {}),
         tokenPrima: compattato && numero(v.tokenPrima) ? v.tokenPrima : null,
         tokenDopo: compattato && numero(v.tokenDopo) ? v.tokenDopo : null,
         record, motivo, dettaglio,
+        /* B1, contratto §3 (21/10/2026): un riassunto riuscito ma SENZA il modello dice perché. Solo quando c'è: chi legge la forma
+           di sempre (le prove CTX-UI-LEGACY-EVENT-PARSE la confrontano intera) non vede campi in più. */
+        ...(compattato && v.ripiego === true ? { ripiego: true, ragione: RAGIONI_RIPIEGO.includes(v.ragione) ? v.ragione : null } : {}),
       };
     }
     if (v.fase === 'annullata') return at(v) ? { tipo: 'annullata', at: v.at } : null;
     return null;
+  }
+  if (evento.name === EVENTO_PROGRESSO) {
+    if (!v || typeof v !== 'object') return null;
+    /* B1, contratto §2: tutti i campi sono facoltativi e si tengono SOLO se hanno la forma dichiarata. Un campo assente o storto è
+       `null`, mai uno zero: la riga non può dire «0%» o «~0 s» su un numero che il motore non ha dato. `tokenRiassunto` è il nome
+       che il contatore del kernel usa oggi (`compattazione-desktop.mjs:533`), `tokenScritti` quello del contratto: vince il secondo. */
+    const testo = (x) => (typeof x === 'string' && x ? x : null);
+    return {
+      tipo: 'progresso',
+      fase: testo(v.fase), motivo: testo(v.motivo), origine: testo(v.origine),
+      tentativo: intero(v.tentativo) && v.tentativo > 0 ? v.tentativo : null,
+      tentativi: intero(v.tentativi) && v.tentativi > 0 ? v.tentativi : null,
+      trascorsoMs: intero(v.trascorsoMs) ? v.trascorsoMs : null,
+      letti: intero(v.letti) ? v.letti : null,
+      inCache: intero(v.inCache) ? v.inCache : null,
+      totale: intero(v.totale) ? v.totale : null,
+      stimaRestanteSec: intero(v.stimaRestanteSec) ? v.stimaRestanteSec : null,
+      tokenScritti: intero(v.tokenScritti) ? v.tokenScritti : intero(v.tokenRiassunto) ? v.tokenRiassunto : null,
+    };
   }
   if (evento.name === EVENTO_ANNULLATA) return at(v) ? { tipo: 'annullata', at: v.at } : null;
   if (evento.name === EVENTO_JOURNAL_RIPARATO) {
@@ -177,16 +207,55 @@ const MOTIVI = Object.freeze({
 /* Owner 12/10/2026 («Si ripara da solo»): l'archivio del motore non combaciava con la conversazione; i vecchi originali sono stati
    messi da parte e il motore è ripartito. Non è un fallimento: la riga dice che cosa è successo e che niente si è perso. */
 const RIALLINEATO = 'archivio-riallineato';
+/* 21/10/2026 (6): il riassunto di sfondo messo da parte perché la persona ha scritto (`motivo:'ceduta'`, motore a posto unico). È voluto,
+   non è un fallimento: nessuna riga, la barra si chiude e basta. La CLI fa lo stesso (`COMPACTION_QUIET`). */
+/* B1 (21/10/2026): `motore` chiude la riga di un riassunto che ha scritto il motore del contesto — il suo separatore lo racconta già. */
+const MOTIVI_MUTI = new Set(['ceduta', 'motore']);
+/** Una fine non riuscita che non si racconta. */
+export function fineMuta(c) {
+  return c?.tipo === 'fine' && c.compattato !== true && MOTIVI_MUTI.has(c.motivo);
+}
 export function motivoUmano(motivo, dettaglio = null) {
   const frase = motivo in MOTIVI ? t(MOTIVI[motivo]) : String(motivo ?? '');
   return dettaglio ? `${frase} (${dettaglio})` : frase;
 }
 
+/*
+ * B1 (owner 21/10/2026, mockup approvato alla terza versione) — IL RIPIEGO DETTO IN UNA RIGA. Il riassunto c'è (la conversazione è
+ * compattata), ma lo ha fatto TALOS senza il modello: la riga lo dice con la ragione in una parola e i numeri brevi «31.2k → 9.9k»;
+ * il perché per esteso sta nel `title` della frase (`percheRipiego`), non in un paragrafo che allunga la chat.
+ */
+const RAGIONE_BREVE = Object.freeze({
+  tempo: 'chat.context.fallback.reasonTime', saltato: 'chat.context.fallback.reasonSkipped', rifiutato: 'chat.context.fallback.reasonRejected',
+  stima: 'chat.context.fallback.reasonEstimate', esaurito: 'chat.context.fallback.reasonExhausted',
+});
+const RAGIONE_PERCHE = Object.freeze({
+  tempo: 'chat.context.fallback.whyTime', saltato: 'chat.context.fallback.whySkipped', rifiutato: 'chat.context.fallback.whyRejected',
+  stima: 'chat.context.fallback.whyEstimate', esaurito: 'chat.context.fallback.whyExhausted',
+});
+/** La ragione del ripiego in una parola, o `null` se non è una del contratto (non si riporta un codice grezzo). */
+export function ragioneRipiegoBreve(ragione) { return Object.hasOwn(RAGIONE_BREVE, ragione) ? t(RAGIONE_BREVE[ragione]) : null; }
+/** Il perché per esteso, per il `title` della riga. */
+export function percheRipiego(ragione) { return t(Object.hasOwn(RAGIONE_PERCHE, ragione) ? RAGIONE_PERCHE[ragione] : 'chat.context.fallback.whyUnknown'); }
+/** I token in breve, come il mockup: «31.2k» (in italiano «31,2k»); sotto il migliaio il numero intero. */
+export function formattaTokenBreve(n) {
+  if (!numero(n)) return null;
+  if (n < 1000) return formattaToken(Math.round(n));
+  const migliaia = new Intl.NumberFormat(inglese() ? 'en-US' : 'it-IT', { maximumFractionDigits: 1 }).format(Math.round(n / 100) / 10);
+  return t('chat.context.row.thousands', { n: migliaia });
+}
+
 /** Il testo della riga persistente: i numeri quando ci sono, mai inventati quando mancano. */
-export function testoRigaCompattazione({ stato, tokenPrima = null, tokenDopo = null, motivo = null, dettaglio = null } = {}) {
+export function testoRigaCompattazione({ stato, tokenPrima = null, tokenDopo = null, motivo = null, dettaglio = null, ripiego = false, ragione = null } = {}) {
   if (stato === 'annullata') return t('chat.context.row.undone');
   if (stato === 'non-riuscita' && motivo === RIALLINEATO) return t('chat.context.row.realigned');
   if (stato === 'non-riuscita') return `${t('chat.context.row.notSummarized')}${motivo ? ` · ${motivoUmano(motivo, dettaglio)}` : ''}`;
+  if (ripiego === true) {
+    const breve = ragioneRipiegoBreve(ragione);
+    const base = breve ? t('chat.context.row.withoutModelBecause', { ragione: breve }) : t('chat.context.row.withoutModel');
+    const prima = formattaTokenBreve(tokenPrima), dopo = formattaTokenBreve(tokenDopo);
+    return prima && dopo ? `${base} · ${t('chat.context.row.beforeAfter', { prima, dopo })}` : base;
+  }
   /* ⭐ 15/10/2026 (owner, compattazione istantanea, «solo il separatore»): la riga dice che la conversazione è compattata e QUANTO si
      è risparmiato, come Claude Code dopo la sua compattazione precalcolata; i numeri prima → dopo restano nel Context Manager */
   const base = t('chat.context.row.compacted');
@@ -352,6 +421,18 @@ export async function compattaLegacy({ fetchFn = globalThis.fetch, base = '/api/
   return compattato
     ? { compattato, at: typeof corpo.at === 'string' && corpo.at ? corpo.at : null, annullabile: corpo.annullabile !== false, tokenPrima: intero(corpo.tokenPrima), tokenDopo: intero(corpo.tokenDopo) }
     : { compattato };
+}
+
+/**
+ * B1, contratto §5 (21/10/2026): «Skip» = `POST /api/v1/sessions/:id/compaction/skip`, stessa origine e stessa chiamata sorvegliata
+ * delle altre (chi la usa passa `fetchSorvegliata`). Torna `{ saltato }`: `false` vuol dire che in quel momento nessun riassunto era
+ * atteso. Un controllo della PERSONA sul proprio giro: il modello non ha un attrezzo per farlo.
+ */
+export async function saltaRiassuntoLegacy({ fetchFn = globalThis.fetch, base = '/api/v1', sessionId, signal } = {}) {
+  if (typeof sessionId !== 'string' || !sessionId) throw guasto('SESSIONE', t('chat.context.live.nothingToSkip'));
+  const dati = await chiamaPost(fetchFn, `${base.replace(/\/$/, '')}/sessions/${encodeURIComponent(sessionId)}/compaction/skip`, signal);
+  const corpo = dati?.data ?? dati ?? {};
+  return { saltato: corpo.saltato === true };
 }
 
 /** `POST /api/v1/sessions/:id/compaction/:at/undo` (rotta di F3, forma del brief). Torna i dati della busta. */

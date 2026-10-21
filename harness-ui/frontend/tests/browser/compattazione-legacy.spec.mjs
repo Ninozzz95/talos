@@ -159,7 +159,7 @@ test('CTX-UI-WINDOW-ALWAYS-OPENS — col trial spento il bottone apre la finestr
   await expect(finestra.locator('[data-context-progress-bar]')).toBeVisible();
   await expect(finestra.locator('[data-context-progress-bar]')).not.toHaveAttribute('value', /.*/);
   await expect(finestra.locator('[data-context-start]'), 'in volo: niente seconda richiesta').toBeDisabled();
-  await expect(barra(page), 'e anche in chat').toContainText('Riassumo la conversazione');
+  await expect(barra(page), 'e anche in chat').toContainText('Riassumo il contesto'); // B1 21/10/2026: la riga viva, «Summarizing context»
   await expect(finestra.locator('[data-context-job]')).toHaveText('Conversazione riassunta. La misura si aggiorna alla prossima risposta.');
   await expect(finestra.locator('[data-context-progress-bar]')).toBeHidden();
   await expect(barra(page)).toHaveCount(0);
@@ -335,7 +335,7 @@ async function avriChiudi(page) { await page.locator('#avvisoContesto [data-avvi
 test('CTX-UI-DURING-STATE — a fase:inizio la barra parte per il legacy, altezza fissa; a fase:fine sparisce e resta la riga', async ({ page }) => {
   await apri(page, 'cl-durante', [...giro(), INIZIO_ATTESO]);
   await expect(barra(page)).toBeVisible();
-  await expect(barra(page)).toContainText('Riassumo la conversazione');
+  await expect(barra(page)).toContainText('Riassumo il contesto'); // B1 21/10/2026: la riga viva, «Summarizing context»
   await expect(page.locator('#avvisoContesto'), 'mentre il server riassume, «Compatta ora» non si offre').toBeHidden();
   await expect(barra(page).locator('progress')).not.toHaveAttribute('value', /.*/);
   const prima = await barra(page).boundingBox();
@@ -524,6 +524,61 @@ test('CTX-UI-COMPACTION-FAILED-ROW — una compattazione fallita con «errore: <
   await expect(separatore(page)).toContainText('Conversazione non riassunta · il fornitore ha risposto con un errore (HTTP 500 dal fornitore)');
   await expect(separatore(page).locator('[data-compattazione-menu]')).toHaveCount(0);
 });
+
+/* B1 sul motore e revisione del Mobile (21/10/2026): la riga di un riassunto che il giro aspetta porta il suo `giro`. Una fine di SFONDO
+   (dal registro, senza giro) arrivata mentre il giro aspetta non la chiude; la chiude la fine del suo giro — anche quella muta del motore
+   (`motivo:'motore'`), che non disegna niente perché il separatore lo mette il motore. */
+const INIZIO_DEL_GIRO = { type: 'CUSTOM', name: 'talos.compattazione', _sequenza: 30, value: { fase: 'inizio', giro: 3, tokenPrima: null, soglia: null, motivo: 'soglia', at: AT } };
+const FINE_DI_SFONDO = { type: 'CUSTOM', name: 'talos.compattazione', _sequenza: 31, value: { fase: 'fine', compattato: false, motivo: 'error: HTTP 503', at: AT } };
+const FINE_DEL_MOTORE = { type: 'CUSTOM', name: 'talos.compattazione', _sequenza: 32, value: { fase: 'fine', giro: 3, compattato: false, motivo: 'motore', at: AT } };
+test('CTX-UI-TURN-ROW-OUTLIVES-BACKGROUND-END — la fine di sfondo non chiude la riga del giro; la chiude la sua, muta se del motore', async ({ page }) => {
+  const fermate = [];
+  await page.route('**/api/**', (route) => (route.request().method() === 'GET' ? route.fallback() : (fermate.push(route.request().method()), route.abort())));
+  await page.routeWebSocket(/.*/, (ws) => ws.close());
+  await apri(page, 'cl-riga-del-giro', [...giro()]);
+  await eventi(page, [INIZIO_DEL_GIRO]);
+  await expect(barra(page)).toBeVisible();
+  await eventi(page, [FINE_DI_SFONDO]);
+  await expect(barra(page), 'la fine di sfondo non tocca la riga del giro').toBeVisible();
+  await expect(separatore(page)).toContainText('il fornitore ha risposto con un errore (HTTP 503)', { useInnerText: true });
+  await eventi(page, [FINE_DEL_MOTORE]);
+  await expect(barra(page), 'la fine del suo giro la chiude').toHaveCount(0);
+  await expect(separatore(page), 'muta: resta solo la riga dello sfondo').toHaveCount(1);
+  expect(fermate).toEqual([]);
+});
+
+/* (6) 21/10/2026: il riassunto di sfondo che CEDE il posto unico al messaggio della persona finisce con `motivo:'ceduta'`. È voluto:
+   nessuna barra, nessuna riga — né rigiocato, né dal vivo. Al contrario la fine fallita qui sopra (`CTX-UI-COMPACTION-FAILED-ROW`) la riga
+   la scrive. Foto a 1920×1080 nei due temi, da ispezionare. */
+const FINE_CEDUTA = { type: 'CUSTOM', name: 'talos.compattazione', _sequenza: 21, value: { fase: 'fine', compattato: false, motivo: 'ceduta', interrottaIn: 'riassunto', at: AT } };
+for (const modo of ['dark', 'light']) {
+  test(`CTX-UI-YIELDED-SILENT-${modo} — la fine «ceduta» non disegna niente, rigiocata e dal vivo`, async ({ page }, info) => {
+    /* contro il 4174 dell'owner si legge e basta: ogni richiesta che scriverebbe si ferma e si conta, e niente WebSocket (il Terminale) */
+    const fermate = [];
+    await page.route('**/api/**', (route) => (route.request().method() === 'GET' ? route.fallback() : (fermate.push(`${route.request().method()} ${route.request().url()}`), route.abort())));
+    await page.routeWebSocket(/.*/, (ws) => ws.close());
+    info.annotations.push({ type: 'non-GET fermate', description: () => fermate.join(', ') });
+    await page.setViewportSize({ width: 1920, height: 1080 });
+    await page.addInitScript((colorMode) => { if (window.top !== window) return; try { localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({ appearance: { colorMode } })); } catch { /* documento senza deposito */ } }, modo);
+    await page.emulateMedia({ colorScheme: modo });
+    await apri(page, 'cl-ceduta', [...giro(), INIZIO, FINE_CEDUTA]);
+    await expect(page.locator('#conversation')).toContainText('Ho letto la cartella dei test');
+    await expect(barra(page)).toHaveCount(0);
+    await expect(separatore(page), 'rigiocata: nessuna riga').toHaveCount(0);
+    await expect(page.locator('#conversation')).not.toContainText('Conversazione non riassunta');
+    await apri(page, 'cl-ceduta-vivo', [...giro(), INIZIO]);
+    await eventi(page, [FINE_CEDUTA]);
+    await expect(barra(page)).toHaveCount(0);
+    await expect(separatore(page), 'dal vivo: nessuna riga').toHaveCount(0);
+    /* la foto si scatta a ripristino FINITO (il velo «Apro la cronologia…» copre la chat finché c'è `is-restoring`): la prima corsa
+       l'aveva scattata durante il velo, e una foto del velo non prova niente sulla riga */
+    await expect(page.locator('#conversation'), 'il ripristino finisce').not.toHaveClass(/is-restoring/, { timeout: 10_000 });
+    await expect(page.locator('#conversation').getByText('Ho letto la cartella dei test')).toBeVisible();
+    await mkdir(FOTO, { recursive: true });
+    await page.screenshot({ path: resolve(FOTO, `ceduta-${modo}-1920.png`) });
+    console.log(`[CTX-UI-YIELDED-SILENT-${modo}] non-GET fermate: ${fermate.length}${fermate.length ? ` — ${fermate.join(', ')}` : ''}`);
+  });
+}
 
 for (const modo of ['dark', 'light']) {
   test(`CTX-UI-FOTO-${modo} — ogni stato nei viewport almeno 1080p, tema ${modo === 'dark' ? 'scuro' : 'chiaro'}`, async ({ page }) => {

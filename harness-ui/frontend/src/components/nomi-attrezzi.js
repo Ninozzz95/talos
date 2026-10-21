@@ -70,6 +70,10 @@ export const NOMI_UMANI_ATTREZZI = Object.freeze({
   // /goal G6 (owner 15/10/2026): la seconda porta dell'obiettivo
   goal_status: 'varie.tools.name.goalStatus',
   goal_create: 'varie.tools.name.goalCreate',
+  file_changes_undo: 'varie.tools.name.fileChangesUndo', // R5.11 (18/10/2026)
+  remote_phones: 'varie.tools.name.remotePhones', // R5.12 (18/10/2026)
+  remote_phone_pair: 'varie.tools.name.remotePhonePair',
+  remote_phone_revoke: 'varie.tools.name.remotePhoneRevoke',
   goal_update: 'varie.tools.name.goalUpdate',
   ask_parent: 'varie.tools.name.askParent',
   answer_parent_question: 'varie.tools.name.answerParentQuestion',
@@ -383,6 +387,10 @@ export const DESCRIZIONI_ATTREZZI = Object.freeze({
   chatgpt_account: 'varie.tools.description.chatgptAccount',
   goal_status: 'varie.tools.description.goalStatus',
   goal_create: 'varie.tools.description.goalCreate',
+  file_changes_undo: 'varie.tools.description.fileChangesUndo', // R5.11 (18/10/2026)
+  remote_phones: 'varie.tools.description.remotePhones', // R5.12 (18/10/2026)
+  remote_phone_pair: 'varie.tools.description.remotePhonePair',
+  remote_phone_revoke: 'varie.tools.description.remotePhoneRevoke',
   goal_update: 'varie.tools.description.goalUpdate',
   ask_parent: 'varie.tools.description.askParent',
   answer_parent_question: 'varie.tools.description.answerParentQuestion',

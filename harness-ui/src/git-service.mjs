@@ -948,6 +948,35 @@ export function creaServizioGit({
      *   La punta del remoto passa per hash, mai per nome, sulla riga di comando. `testa` è HEAD: con il remoto davanti il primo
      *   commit della lista può non essere il nostro.
      */
+    /**
+     * C-3, cura del 21/10/2026 (revisione del lotto della sera, C3-DATA-01 e C3-SOTTO-03): i commit della CARTELLA della sessione nati da
+     *   `dalle` in poi, per il confutatore del /goal.
+     * ⛔ La data è quella del COMMITTER (`%cI`, e `--since` di git legge quella), non quella d'autore (`%aI` di `storia`): `commit --date`,
+     *   `--amend`, rebase e cherry-pick tengono la data d'autore di prima e il commit di oggi spariva. Resta fuori solo chi imposta di
+     *   proposito `GIT_COMMITTER_DATE` (dichiarato: la cura senza date è l'ancora di HEAD all'inizio dell'obiettivo).
+     * ⛔ `-- .`: solo i commit che toccano la cartella della sessione (git-log(1), «Paths … commits that modify the given paths»); i
+     *   lavori di un'altra cartella dello stesso repository restano fuori. Senza commit nel repository: elenco vuoto, mai un errore.
+     * @returns {{ commit: {commit:string, breve:string, data:string, padri:string[], soggetto:string}[], altri: boolean }}
+     */
+    async commitDellaCartella({ sessionId, dalle, limite = 50 } = {}) {
+      try {
+        const cartella = cartellaDi(sessionId);
+        const inizio = Date.parse(dalle ?? '');
+        if (!Number.isFinite(inizio)) throw new GitServiceError('A start time is required', 'QUERY_INVALID');
+        const n = Number.isInteger(limite) && limite > 0 && limite <= 200 ? limite : 50;
+        const base = await baseInterna(cartella);
+        if (!base) return { commit: [], altri: false };
+        const esito = await git(cartella, ['log', `--since=${new Date(inizio).toISOString()}`, `--max-count=${n + 1}`, '--no-color',
+          '--format=%H%x1f%h%x1f%cI%x1f%P%x1f%s%x1e', 'HEAD', '--', '.']);
+        const record = esito.stdout.split('\x1e').map((r) => r.replace(/^\n/u, '')).filter(Boolean);
+        const commit = record.map((r) => {
+          const [hash, breve, data, genitori, soggetto] = r.split('\x1f');
+          return { commit: hash, breve, data, padri: genitori ? genitori.split(' ') : [], soggetto };
+        }).filter((c) => Date.parse(c.data) >= inizio); // `--since` è al secondo: il confine si rilegge qui
+        return { commit: commit.slice(0, n), altri: commit.length > n };
+      } catch (errore) { return rifiuto(errore); }
+    },
+
     async storia({ sessionId, limite = 50 } = {}) {
       try {
         const cartella = cartellaDi(sessionId);

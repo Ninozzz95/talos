@@ -15,7 +15,7 @@ import test from 'node:test';
 import { createSessionRegistry as createSessionRegistryReale } from '../src/session-registry.mjs';
 import { SessionStoreError, attendiScritture, registraRigaSync } from '../src/session-store.mjs';
 import {
-  MARCATORE_RIASSUNTO, SCHEMA_RECORD_COMPATTAZIONE, VARIABILE_TETTO_TOKEN, applicaRecord, creaRecord,
+  MARCATORE_RIASSUNTO, SCHEMA_RECORD_COMPATTAZIONE, VARIABILE_TETTO_TOKEN, applicaRecord, caratteriIngressoPerFinestra, creaRecord,
 } from '../src/kernel/compattazione-desktop.mjs';
 import { talosLavora as talosLavoraKernel } from '../src/kernel/talosHarness.mjs';
 import { createOwnerRuntimeAdapter } from '../src/runtime-owner-adapter.mjs';
@@ -246,7 +246,41 @@ test('CTX-REG-BACKGROUND-COMPACTION-AFTER-TURN — sopra soglia, dopo RunFinishe
   }
 });
 
-test('CTX-REG-BACKGROUND-TRUNCATED-ONE-CALL — riassunto fermato dal tetto: UNA chiamata, budget di Hermes, «troncato» dichiarato', async (t) => {
+/* L1 del motore locale (20/10/2026): la prova dal vivo 7432bdf4 ha fatto fallire QUESTA strada — l'ingresso del riassunto di
+   sfondo non aveva limite e il motore locale ha risposto «79599 tokens does not fit in 65536». */
+test('CTX-REG-BACKGROUND-INPUT-FITS-WINDOW (L1) — l\'ingresso del riassunto di sfondo entra nella finestra; dopo un errore, la metà', async (t) => {
+  conTetto(t, undefined);
+  const cartellaStore = cartellaStoreVera();
+  const storia = storiaGrande(30_000); // 6 letture da 30.000 caratteri: ~180.000 caratteri, ben oltre una finestra da 16.384
+  const chiamate = [];
+  const riassuntore = async (input) => {
+    chiamate.push(input);
+    if (chiamate.length === 1) throw new Error('The conversation does not fit in the local model window');
+    return { scelta: { role: 'assistant', content: 'RIASSUNTO' }, finishReason: 'stop', usage: { prompt_tokens: 100, completion_tokens: 10 } };
+  };
+  const { finte, avviaSessioneFn } = sessioniControllabili(1);
+  try {
+    const registro = createSessionRegistry({ cartellaStore, avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'z-ai/glm-5.3-flash', chiave: 'k',
+      riassumiPerCompattazioneFn: riassuntore, finestraTokenFn: () => 16_384 });
+    const { sessionId } = registro.avvia('task-vero');
+    const eventi = [];
+    registro.iscriviti(sessionId, (e) => eventi.push(e));
+    finte[0].concludi({ type: 'RunFinished' }, { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storia, recordDiCompattazione: [] } });
+    await attendi(() => eventi.some((e) => e.type === 'CUSTOM' && e.name === 'talos.compattazione' && e.value.fase === 'fine'), { messaggio: 'nessuna fine dal background' });
+    assert.equal(chiamate.length, 2, 'un errore, poi un secondo tentativo');
+    const caratteri = (c) => c.messaggi.reduce((s, m) => s + String(m.content ?? '').length, 0);
+    const tetto = caratteriIngressoPerFinestra({ finestraToken: 16_384, maxOutputTokens: chiamate[0].maxOutputTokens });
+    assert.ok(caratteri(chiamate[0]) <= tetto + 2_000, `primo ingresso ${caratteri(chiamate[0])} entro la finestra (${tetto})`);
+    assert.ok(caratteri(chiamate[1]) < caratteri(chiamate[0]), 'il secondo tentativo è più piccolo');
+    assert.ok(!chiamate[0].messaggi.some((m) => String(m.content ?? '').length > 7_000), 'nessuna lettura arriva intera');
+    await attendiScritture({ cartellaStore, sessionId });
+  } finally {
+    await attendiScritture({ cartellaStore });
+    rimuoviCartellaDiProva(cartellaStore);
+  }
+});
+
+test('CTX-REG-BACKGROUND-TRUNCATED-ONE-CALL — riassunto fermato dal tetto: UN ritentativo più breve (owner 21/10, Hermes :768), poi «troncato» dichiarato', async (t) => {
   conTetto(t, 2_000);
   const cartellaStore = cartellaStoreVera();
   const storia = storiaGrande();
@@ -262,10 +296,12 @@ test('CTX-REG-BACKGROUND-TRUNCATED-ONE-CALL — riassunto fermato dal tetto: UNA
     const fine = eventi.find((e) => e.type === 'CUSTOM' && e.name === 'talos.compattazione' && e.value.fase === 'fine');
     assert.equal(fine.value.compattato, false);
     assert.equal(fine.value.motivo, 'troncato');
-    assert.equal(riassuntore.chiamate.length, 1, 'un riassunto troncato non si richiede uguale una seconda volta');
-    // mezzo piccolo, soglia 2.000 senza finestra ⇒ il pavimento di Hermes, non il vecchio 2.048 fisso
-    assert.equal(riassuntore.chiamate[0].maxOutputTokens, 2_000);
+    assert.equal(riassuntore.chiamate.length, 2, 'un troncato si richiede UNA volta, più breve — mai uguale, mai una terza');
+    // il budget resta nel PROMPT (mezzo piccolo ⇒ il pavimento di Hermes, 2.000 token ⇒ 1.171 parole); il tetto sul filo è quello di
+    // opencode, con finestra e limite ignoti 32.000 (21/10, revisione S2)
+    assert.equal(riassuntore.chiamate[0].maxOutputTokens, 32_000);
     assert.ok(riassuntore.chiamate[0].messaggi.at(-1).content.includes(`at most ${Math.floor((2_000 * 1_200) / 2_048)} words`));
+    assert.ok(riassuntore.chiamate[1].messaggi.at(-1).content.includes(`at most ${Math.floor(Math.floor((2_000 * 1_200) / 2_048) / 2)} words`), 'la seconda chiede metà delle parole');
     assert.equal(registro.statoCompattazione(sessionId).record ?? null, null, 'nessun record da un riassunto troncato');
     await attendi(() => !registro.statoCompattazione(sessionId).inCorso);
     await attendiScritture({ cartellaStore, sessionId });
@@ -273,6 +309,33 @@ test('CTX-REG-BACKGROUND-TRUNCATED-ONE-CALL — riassunto fermato dal tetto: UNA
     await attendiScritture({ cartellaStore });
     rimuoviCartellaDiProva(cartellaStore);
   }
+});
+
+test('CTX-REG-BACKGROUND-SPENTO — con riassuntoDiFineGiro:false nessun riassunto parte a fine giro (CLI 0.6.12); acceso, nella stessa finestra sì', async (t) => {
+  conTetto(t, 2_000);
+  const chiamatePer = async (opzioni) => {
+    const cartellaStore = cartellaStoreVera();
+    const riassuntore = riassuntoreFinto({ contenuto: '## Objective\nriassunto' });
+    const { finte, avviaSessioneFn } = sessioniControllabili(1);
+    try {
+      const registro = createSessionRegistry({ cartellaStore, avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'z-ai/glm-5.3-flash', chiave: 'k', riassumiPerCompattazioneFn: riassuntore.fn, ...opzioni });
+      const { sessionId } = registro.avvia('task-vero');
+      const eventi = [];
+      registro.iscriviti(sessionId, (e) => eventi.push(e));
+      finte[0].concludi({ type: 'RunFinished' }, { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaGrande(), recordDiCompattazione: [] } });
+      await attendiScritture({ cartellaStore, sessionId });
+      await new Promise((r) => { setTimeout(r, 300); });
+      await attendi(() => !registro.statoCompattazione(sessionId).inCorso);
+      return { chiamate: riassuntore.chiamate.length, eventi: eventi.filter((e) => e.type === 'CUSTOM' && e.name === 'talos.compattazione').length };
+    } finally {
+      await attendiScritture({ cartellaStore });
+      rimuoviCartellaDiProva(cartellaStore);
+    }
+  };
+  const spento = await chiamatePer({ riassuntoDiFineGiro: false });
+  assert.deepEqual(spento, { chiamate: 0, eventi: 0 }, 'spento: nessuna chiamata pagata, nessun evento');
+  const acceso = await chiamatePer({});
+  assert.ok(acceso.chiamate >= 1 && acceso.eventi >= 1, `controllo positivo, di serie acceso: ${JSON.stringify(acceso)}`);
 });
 
 test('CTX-REG-BACKGROUND-DOES-NOT-BLOCK-NEXT-TURN — un turno che parte durante la sintesi non aspetta, e la sintesi non copre i messaggi nuovi', async (t) => {

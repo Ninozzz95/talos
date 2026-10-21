@@ -96,7 +96,11 @@ export function livelliRagionamentoDiretti() {
     if (!record) continue;
     const perModello = {};
     const profilo = record.ragionamento?.livelli;
-    if (Array.isArray(profilo) && profilo.length) perModello['*'] = Object.freeze([...profilo]);
+    /* revisione U1 (21/10/2026): per together, reasoning_effort ed enable_thinking i livelli dicono cosa accetta il FILO, non cosa sa
+       fare ogni modello (un Llama di DeepInfra non ragiona): niente voce '*', la pillola resta al catalogo come prima. Pi manda i campi
+       di Together solo ai modelli che il catalogo dice ragionanti (`openai-completions.ts:955`). */
+    const perTuttiIModelli = !['together', 'reasoning_effort', 'enable_thinking'].includes(record.ragionamento?.formato);
+    if (perTuttiIModelli && Array.isArray(profilo) && profilo.length) perModello['*'] = Object.freeze([...profilo]);
     const modelli = record.richiestaCompatibile?.modelli;
     if (modelli && typeof modelli === 'object') {
       for (const [id, m] of Object.entries(modelli)) {
@@ -147,7 +151,9 @@ export function filoRagionamentoDiretti() {
           throw errore;
         }
         const effort = corpo?.reasoning_effort ?? corpo?.reasoning?.effort;
-        perLivello[chiesto] = typeof effort === 'string' ? effort : corpo?.thinking?.type === 'disabled' ? 'none' : null;
+        /* revisione U2 (21/10/2026): lo spegnimento ha più forme sul filo — thinking.type, reasoning.enabled (Together), enable_thinking */
+        const spento = corpo?.thinking?.type === 'disabled' || corpo?.reasoning?.enabled === false || corpo?.enable_thinking === false;
+        perLivello[chiesto] = typeof effort === 'string' ? effort : spento ? 'none' : null;
       }
       filo[modello] = Object.freeze(perLivello);
     }
@@ -199,9 +205,10 @@ const NATIVI = ID_NATIVI_SDK;
  * @param {(fonte: string) => string|null} deps.leggiChiave dal portachiavi
  * @param {(fonte: string) => {endpoint?: string|null}} deps.leggiRuntime indirizzo configurato
  * @param {() => boolean} [deps.localePronto] il motore locale è acceso adesso?
+ * @param {(modello: string) => boolean} [deps.ospitePronto] l'app che ospita r4 ha aperto QUESTO modello?
  * @returns {{fonte: string, url: string, headers: Record<string,string>, modelloRemoto: string}}
  */
-export function risolviDestinazioneModello(modello, { leggiChiave, leggiRuntime, localePronto = () => false } = {}) {
+export function risolviDestinazioneModello(modello, { leggiChiave, leggiRuntime, localePronto = () => false, ospitePronto = () => false } = {}) {
   if (typeof leggiChiave !== 'function' || typeof leggiRuntime !== 'function') {
     throw new ModelDestinationError('destination dependencies are invalid', 'MODEL_DESTINATION_MISCONFIGURED');
   }
@@ -239,6 +246,18 @@ export function risolviDestinazioneModello(modello, { leggiChiave, leggiRuntime,
       throw new ModelDestinationError('The local engine is not running: load it from the Model Lab before using it in chat.', 'LOCAL_RUNTIME_NOT_READY');
     }
     return { fonte, modelloRemoto, locale: true, percorso: REGISTRO_FORNITORI[fonte].endpoint.chat };
+  }
+
+  /*
+   * 18/10/2026 — il motore dell'APP che ospita r4 (`accesso-locale-ospite.mjs`). Come sopra: il risolutore dice solo che il
+   * modello aperto nell'app è QUESTO; a spedire (con la chiave) ci pensa l'accesso. ⛔ `ospite: true` sull'errore: il ponte non
+   * deve provare ad accendere il llama-server del PC (`avviaLocale`) per un modello che vive nel telefono.
+   */
+  if (fonte === 'locale-ospite') {
+    if (typeof ospitePronto !== 'function' || !ospitePronto(modelloRemoto)) {
+      throw Object.assign(new ModelDestinationError('No local model is open in the app: open one from the model picker.', 'LOCAL_RUNTIME_NOT_READY'), { ospite: true });
+    }
+    return { fonte, modelloRemoto, locale: true, ospite: true, percorso: REGISTRO_FORNITORI[fonte].endpoint.chat };
   }
 
   /*

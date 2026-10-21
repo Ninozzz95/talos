@@ -80,7 +80,7 @@ export default Object.freeze({
     'Provider e accessi': 'Providers and access', 'Strumenti agente e permessi': 'Agent tools and permissions',
     'Privacy e dati locali': 'Privacy and local data', 'File e workspace': 'Files and workspace', 'Account, Doctor e backup': 'Account, Doctor and backup',
     // 06/09, D2/D13/D21/D22/D26 — le tre sezioni nuove delle Impostazioni
-    'Memoria e contesto': 'Memory and context', 'Sicurezza e privacy': 'Security and privacy', 'Costi e consumo': 'Cost and usage',
+    'Memoria e contesto': 'Memory and context', 'Sicurezza e privacy': 'Security and privacy', 'Telefoni collegati': 'Connected phones', 'Costi e consumo': 'Cost and usage',
     // titoli delle righe
     'Animazione risposta': 'Reply animation', 'Animazioni interfaccia': 'Interface animations', 'Apertura del pulsante +': 'The “+” button opens',
     'Bagliore': 'Glow', 'Chat a tutta larghezza': 'Full-width chat', 'Scadenza delle domande': 'Question timeout', 'Domande di TALOS': 'TALOS questions', 'Nessuna': 'None', '1 minuto': '1 minute', '5 minuti': '5 minutes', '10 minuti': '10 minutes', 'Composer': 'Composer', 'Contrasto': 'Contrast', 'Curva': 'Easing',
@@ -166,6 +166,7 @@ export default Object.freeze({
     'Azioni sulla risposta': 'Actions on the answer',
     'Azioni sul tuo messaggio': 'Actions on your message',
     'Altre azioni sulla risposta': 'More actions on the answer',
+    'Altre azioni sul tuo messaggio': 'More actions on your message',
     'Altre azioni sulla risposta — eliminare si può a giro finito': 'More actions on the answer — deleting is possible once the run is over',
     'Copia la risposta': 'Copy the answer',
     'Copia il tuo messaggio': 'Copy your message',

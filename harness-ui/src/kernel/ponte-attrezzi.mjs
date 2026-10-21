@@ -59,6 +59,16 @@ export const ATTREZZI_DIFFERIBILI = Object.freeze(new Set([
     'tool_create', 'generate_image', 'process_output', 'conversation_search',
 ]))
 
+/*
+ * ⭐ 19/10/2026 — IL MODELLO LOCALE DEL TELEFONO (owner: «Essenziali + ponte per il resto», solo per la fonte `locale-ospite`).
+ *   Misurato dal Mobile sul Pad: 18.331 token di prompt al primo passo, quasi tutti schemi d'attrezzi, ~105 s al primo token su
+ *   LFM2.5-2.6B. In questo modo restano davanti SOLO gli undici qui sotto (~3.700 token) e TUTTO il resto passa dal ponte, anche gli
+ *   attrezzi MCP e delle skill. Più tre attrezzi di dialogo e di Piano che il kernel offre solo a chi ne ha bisogno (una figlia,
+ *   il modo Piano): nascosti, una figlia non saprebbe più rispondere alla madre né il Piano chiudersi — e altrove non costano niente.
+ */
+export const ATTREZZI_ESSENZIALI_LOCALI = Object.freeze(['elenca', 'cerca', 'leggi', 'scrivi', 'file_edit', 'shell', 'prova', 'naviga', 'web_search', 'ask_user_question', 'time_now'])
+const SEMPRE_DAVANTI_SE_OFFERTI = Object.freeze(['ask_parent', 'answer_parent_question', 'present_plan'])
+
 /* Hermes `tool_search.py`: «Defaults to 5 and is clamped to the configured maximum (25 by default)». */
 const RISULTATI_PREDEFINITI = 5
 const RISULTATI_MASSIMI = 25
@@ -114,9 +124,36 @@ function testoDaCercare(a) {
 /* `sempreDavanti`: gli attrezzi CENTRALI del compito, che non si nascondono mai (owner 17/10, dopo la revisione H: nella Ricerca
    approfondita `research_deposit` resta davanti; Hermes non differisce mai gli attrezzi del nucleo, `tool_search.py:1-7`). */
 const divisioniFatte = new WeakMap()
-export function dividiPerIlPonte(lista, sempreDavanti = []) {
+/*
+ * L1 motore locale (owner 20/10/2026: «11 essenziali + ponte anche sul PC quando gli attrezzi non entrano») — il PESO e l'ELENCO.
+ *   Hermes stima i token degli schemi a 4 caratteri l'uno (`agent/model_metadata.py:2374`, `CHARS_PER_TOKEN = 4`;
+ *   `tools/tool_search.py:193`) e dà all'elenco del ponte min(4000, 5% della finestra) (`tool_search.py:208-212`,
+ *   `listing_token_budget`, `threshold_pct` 5): oltre, l'elenco degrada da pieno a soli nomi a niente
+ *   (`tool_search_catalog.py:261-268`). Qui lo stesso, solo quando chi chiama dà la finestra (il modello locale del PC).
+ */
+export const CARATTERI_PER_TOKEN_ATTREZZI = 4
+export const ELENCO_PONTE_MASSIMO = 4_000
+export const QUOTA_ELENCO_PONTE = 0.05
+export const pesoInToken = (testo) => Math.ceil(String(testo ?? '').length / CARATTERI_PER_TOKEN_ATTREZZI)
+/** Il budget dell'elenco per una finestra; `null` = nessun limite (la finestra non si sa: come prima). */
+export function budgetElencoDelPonte(finestra) {
+    return Number.isSafeInteger(finestra) && finestra > 0 ? Math.min(ELENCO_PONTE_MASSIMO, Math.floor(finestra * QUOTA_ELENCO_PONTE)) : null
+}
+/** L'elenco dei differiti entro il budget: pieno, o soli nomi, o niente (`{ forma, testo }`). */
+export function elencoDelPonteEntro(differiti, budget) {
+    const pieno = elencoDeiDifferiti(differiti)
+    if (budget === null || budget === undefined || pesoInToken(pieno) <= budget) return { forma: 'pieno', testo: pieno }
+    const nomi = [...differiti.keys()].join(', ')
+    if (pesoInToken(nomi) <= budget) return { forma: 'nomi', testo: nomi }
+    return { forma: 'nessuno', testo: null }
+}
+
+/* `modo`: 'su-richiesta' (di serie: l'insieme approvato il 17/10) o 'essenziali' (il modello locale del telefono, 19/10, e quello
+   del PC quando gli attrezzi non entrano, 20/10). `budgetElenco`: vedi `budgetElencoDelPonte`; assente ⇒ l'elenco pieno di sempre. */
+export function dividiPerIlPonte(lista, sempreDavanti = [], modo = 'su-richiesta', { budgetElenco = null } = {}) {
     if (!Array.isArray(lista)) return { attrezzi: lista, differiti: new Map() }
-    const chiave = [...sempreDavanti].sort().join('\u0000')
+    const essenziali = modo === 'essenziali'
+    const chiave = `${essenziali ? 'E' : 'R'}\u0000${budgetElenco ?? ''}\u0000${[...sempreDavanti].sort().join('\u0000')}`
     let perLista = divisioniFatte.get(lista)
     if (!perLista) { perLista = new Map(); divisioniFatte.set(lista, perLista) }
     const giaFatta = perLista.get(chiave)
@@ -126,12 +163,15 @@ export function dividiPerIlPonte(lista, sempreDavanti = []) {
     for (const a of lista) {
         const nome = nomeDi(a)
         if (NOMI_DEL_PONTE.includes(nome)) continue
-        if (ATTREZZI_DIFFERIBILI.has(nome) && !sempreDavanti.includes(nome)) differiti.set(nome, a)
+        const dietro = essenziali
+            ? !ATTREZZI_ESSENZIALI_LOCALI.includes(nome) && !SEMPRE_DAVANTI_SE_OFFERTI.includes(nome)
+            : ATTREZZI_DIFFERIBILI.has(nome)
+        if (dietro && !sempreDavanti.includes(nome)) differiti.set(nome, a)
         else davanti.push(a)
     }
     const divisione = differiti.size === 0
         ? { attrezzi: lista, differiti }
-        : { attrezzi: [...davanti, ...schemiDelPonte(differiti)], differiti }
+        : { attrezzi: [...davanti, ...schemiDelPonte(differiti, elencoDelPonteEntro(differiti, budgetElenco))], differiti }
     perLista.set(chiave, divisione)
     return divisione
 }
@@ -146,16 +186,20 @@ function schemaDelPonte(nome, descrizione, proprieta, richiesti) {
     return { type: 'function', function: { name: nome, description: descrizione, parameters: { type: 'object', properties: proprieta, required: richiesti } } }
 }
 
-function schemiDelPonte(differiti) {
+function schemiDelPonte(differiti, elenco = elencoDelPonteEntro(differiti, null)) {
+    /* la frase d'apertura e il fondo dipendono da quanto dell'elenco entra: pieno (la forma di sempre, byte per byte), soli nomi, niente */
+    const apertura = elenco.forma === 'nessuno'
+        ? `Search ${differiti.size} more tools that are loaded on demand. They are not listed here: search before deciding that a tool is missing, and `
+        : `Search ${differiti.size} more tools that are loaded on demand. Every one of them is listed below${elenco.forma === 'nomi' ? ' by name' : ''}: when you see the `
+            + `exact name you need, skip the search and load it with \`${NOME_DESCRIZIONE_ATTREZZI}\`. If a tool name appears here, `
     return [
         schemaDelPonte(
             NOME_RICERCA_ATTREZZI,
-            `Search ${differiti.size} more tools that are loaded on demand. Every one of them is listed below: when you see the `
-            + `exact name you need, skip the search and load it with \`${NOME_DESCRIZIONE_ATTREZZI}\`. If a tool name appears here, `
+            apertura
             + 'do NOT claim it is unavailable. Queries are keywords, not questions: an object and an action, no filler words '
             + '(`notes create`, `automation schedule`, `library delete file`). Returns the matching names with their description. '
             + `Then \`${NOME_DESCRIZIONE_ATTREZZI}\` loads their parameters and \`${NOME_CHIAMATA_ATTREZZO}\` runs one. `
-            + `Tools listed at the top level are already available and do not need to be searched.\n\n${elencoDeiDifferiti(differiti)}`,
+            + `Tools listed at the top level are already available and do not need to be searched.${elenco.testo ? `\n\n${elenco.testo}` : ''}`,
             {
                 queries: {
                     type: 'array',

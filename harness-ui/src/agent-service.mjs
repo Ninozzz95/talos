@@ -253,6 +253,18 @@ export async function avviaSessione({
    *   la passa resta com'era (null → tetto).
    */
   finestraToken = null,
+  /* 21/10/2026 (revisione avversaria S2 della compattazione): il limite d'uscita del modello, sullo stesso filo della finestra. Additivo. */
+  limiteUscitaToken = null,
+  /* 21/10/2026 (CLI, `context.compactAtTokens`): il tetto di compattazione scelto dall'ospite, sullo stesso filo. Additivo. */
+  tettoCompattazioneToken = null,
+  /* 21/10/2026 (CLI): il modello che scrive i riassunti e la sua finestra, sullo stesso filo. Additivi: assenti ⇒ la conversazione. */
+  modelloRiassunto = null,
+  finestraRiassuntoToken = null,
+  /* 21/10/2026 (A1 + B1 dell'owner, contratto riga viva §4-§5): lo Skip della persona (un segnale per giro, dal registro) e i due
+     orologi del riassunto atteso (l'ospite li cambia; assenti ⇒ quelli di serie dell'adattatore). Additivi. */
+  segnaleSaltaRiassunto = null,
+  riassuntoInattivitaMs = null,
+  riassuntoTettoMs = null,
   /*
    * ⛔⛔⛔ 11/09/2026 — DOVE FINISCE UN FILE *GENERATO*, che non è dove il modello LEGGE.
    *
@@ -345,6 +357,8 @@ export async function avviaSessione({
   strumentiEstesi, ricercaWeb,
   // C5 attrezzi differiti (17/10/2026): inoltrato al kernel com'è; assente ⇒ spento, come prima
   attrezziDifferiti,
+  // L1 (20/10/2026): la finestra del motore locale del PC per gli attrezzi davanti; inoltrata com'è, assente ⇒ come prima
+  finestraPerGliAttrezzi = null,
   // ⭐ 04/9, R-03 — trasporto iniettato per la ricerca SENZA chiave (DuckDuckGo, `duckduckgo-search.mjs`): inoltrato al kernel com'è (parametro `richiediRicercaFn` di talosLavora), undefined per le fonti con chiave.
   richiediRicercaFn,
   /*
@@ -476,6 +490,10 @@ export async function avviaSessione({
   onFornitoriFn,
   // /goal G6 (owner 15/10/2026): la seconda porta dell'obiettivo, inoltrata com'è (src/obiettivo/per-il-modello.mjs)
   onObiettivoFn,
+  // R5.11 (owner 18/10/2026): annullare le modifiche ai file dalla chat, inoltrato com'è (lo lega il registro)
+  onAnnullaFileFn,
+  // R5.12 (owner 18/10/2026): i telefoni collegati dalla chat, inoltrato com'è (lo lega il registro)
+  onTelefoniFn,
   /*
    * ⛔⛔ Rilievo 3 (piano 0.1.19 §1.7, 28/09) — il canale di `request_plan_mode`: inoltrato così
    *   com'è (il registro lo costruisce: accoda il cambio del modo, la patch va a fine giro).
@@ -770,7 +788,10 @@ export async function avviaSessione({
        */
       permesso: rigaDelPermessoPerIlModello(permessoPerIlModello) ?? permessi ?? null,
       modello: modello ?? null,
-      piattaforma: process.platform,
+      /* L1 (owner 20/10/2026 sera, «Sì, dire dove girano»): sul desktop la piattaforma VERA la dice il kernel nella nota «dove sei»
+         (`doveNelPrompt`, qui sotto), perché la casa Linux si decide a ogni giro; «Piattaforma: win32» mentiva con gli attrezzi in
+         Linux. La sessione mobile tiene la riga di prima. */
+      piattaforma: mobile ? process.platform : null,
     });
     testoContestoProgetto = preambolo?.testo;
     /* F-027, estensione (owner 03/10/2026): il sospetto della mappa o della scheda va al kernel SOLO se il preambolo arriva al
@@ -1133,6 +1154,8 @@ export async function avviaSessione({
      spacchettata (`chiamataPerChiGuarda`). Non annunciata ⇒ non si chiude nemmeno da annullata: la regola dell'11/09
      («N annunciati, N chiusi») resta vera. */
   const chiamateDelPonte = new Set();
+  /* 19/10/2026: il ponte è acceso col valore di sempre (`true`) e per il modello locale del telefono (`'essenziali'`) */
+  const ponteAcceso = attrezziDifferiti === true || attrezziDifferiti === 'essenziali';
   /*
    * ⭐ SEMPRE passato (non condizionato da `reasoning`): chiedere lo
    * streaming del TESTO è a costo zero — stessi token, consegnati a
@@ -1141,7 +1164,7 @@ export async function avviaSessione({
    * Le due cose sono indipendenti in chiamaConRitenta (vedi la sua doc).
    */
   const onDelta = (evento) => {
-    if (attrezziDifferiti === true && evento.tipo === 'tool-inizio' && evento.nome === 'tool_call') { chiamateDelPonte.add(evento.toolCallId); return; }
+    if (ponteAcceso && evento.tipo === 'tool-inizio' && evento.nome === 'tool_call') { chiamateDelPonte.add(evento.toolCallId); return; }
     if ((evento.tipo === 'tool-args' || evento.tipo === 'tool-annullato') && chiamateDelPonte.has(evento.toolCallId)) return;
     if (evento.tipo === 'tool-inizio' || evento.tipo === 'tool-args') {
       /*
@@ -1286,7 +1309,7 @@ export async function avviaSessione({
       if (toolCallsGiaStreamate) toolCallIdStreamatiPerGiro.delete(evento.giro);
 
       const messageId = randomUUID();
-      for (const e of eventiPerRisposta(evento.risposta, { messageId, testoGiaStreamato: Boolean(messageIdTesto), toolCallsGiaStreamate, ponteAcceso: attrezziDifferiti === true })) onEvento(e);
+      for (const e of eventiPerRisposta(evento.risposta, { messageId, testoGiaStreamato: Boolean(messageIdTesto), toolCallsGiaStreamate, ponteAcceso })) onEvento(e);
       /*
        * ⭐⭐⭐ Piano procedi-col-generare-un-snoopy-neumann.md, Fase 3 —
        * `evento.totali`, quando presente (talosHarness.mjs lo omette
@@ -1354,8 +1377,15 @@ export async function avviaSessione({
           /* 15/10/2026: lo scambio istantaneo non ha un `compattazione-inizio` — il motivo lo porta lui, e il giornale dice che è stato
              istantaneo (nessuna attesa). Solo se lo è: il contratto delle compattazioni di prima non cambia. */
           motivo: motivoCompattazionePerGiro.get(evento.giro) ?? (evento.istantanea === true ? evento.motivo ?? null : null),
-          ...(evento.istantanea === true ? { istantanea: true } : {}) }
+          ...(evento.istantanea === true ? { istantanea: true } : {}),
+          /* 21/10/2026 (contratto riga viva §3, e D5 b della CLI): il riassunto SENZA modello si dice — `ripiego`, la `ragione` in una
+             parola (tempo · saltato · esaurito · rifiutato) e la `classe` dell'adattatore. Prima si perdevano qui. Solo se ci sono. */
+          ...(evento.ripiego === true ? { ripiego: true } : {}),
+          ...(typeof evento.ragione === 'string' ? { ragione: evento.ragione } : {}),
+          ...(typeof evento.classe === 'string' ? { classe: evento.classe } : {}) }
         : { fase: 'fine', giro: evento.giro, compattato: false, motivo: evento.motivo ?? null, ...(evento.interrottaIn ? { interrottaIn: evento.interrottaIn } : {}),
+          ...(typeof evento.classe === 'string' ? { classe: evento.classe } : {}), // D5 b della CLI (21/10): la classe del fallimento
+          ...(Number.isSafeInteger(evento.fallimentiConsecutivi) ? { fallimentiConsecutivi: evento.fallimentiConsecutivi } : {}),
           /* R-05 fino in fondo (12/10/2026): il codice e il «dove» (posizioni e ruolo, mai contenuto) arrivano al giornale e al
              trascritto. Nel trascritto dell'owner (36289618) la riga del ripiego era muta sulla causa. Solo se ci sono. */
           ...(typeof evento.codice === 'string' ? { codice: evento.codice } : {}),
@@ -2286,6 +2316,13 @@ export async function avviaSessione({
       cartella, task, modello, chiave, comandoProva, segnaleStop, messaggiIniziali, mobile,
       ...(segnalePausa ? { segnalePausa } : {}), // C3 tappa 4: la pausa di una delega
       finestraToken, /* ⛔ BUG-5 (05/10/2026): inoltrata al kernel — la soglia diventa 0,75 della finestra VERA del modello */
+      ...(limiteUscitaToken ? { limiteUscitaToken } : {}), // 21/10: il tetto d'uscita del riassunto (`tettoUscitaRiassunto`)
+      ...(Number.isSafeInteger(tettoCompattazioneToken) && tettoCompattazioneToken > 0 ? { tettoCompattazioneToken } : {}), // 21/10: il tetto dell'ospite
+      ...(typeof modelloRiassunto === 'string' && modelloRiassunto ? { modelloRiassunto } : {}), // 21/10 (CLI): il modello dei riassunti
+      ...(Number.isFinite(finestraRiassuntoToken) && finestraRiassuntoToken > 0 ? { finestraRiassuntoToken } : {}),
+      ...(segnaleSaltaRiassunto instanceof AbortSignal ? { segnaleSaltaRiassunto } : {}), // 21/10: lo Skip del riassunto atteso
+      ...(Number.isSafeInteger(riassuntoInattivitaMs) && riassuntoInattivitaMs > 0 ? { riassuntoInattivitaMs } : {}),
+      ...(Number.isSafeInteger(riassuntoTettoMs) && riassuntoTettoMs > 0 ? { riassuntoTettoMs } : {}),
       ...(recordCompattazioneIniziale ? { recordCompattazioneIniziale } : {}), // IST-REV-00b: il turno parte già proiettato
       ...(compattazioneIstantanea === true ? { compattazioneIstantanea: true } : {}), // IST-REV-00: la compattazione istantanea
       ...(compattazionePronta ? { compattazionePronta } : {}),
@@ -2354,7 +2391,8 @@ export async function avviaSessione({
       },
       onConsumoFornitore: async evento => onEvento({ type: 'CUSTOM', name: 'consumo-fornitore', value: evento }, { durable: true }),
       strumentiEstesi, ricercaWeb, richiediRicercaFn, onArtefatto, onDocumento, onImmagine, modelloPlanner,
-      ...(attrezziDifferiti === true ? { attrezziDifferiti: true } : {}),
+      ...(ponteAcceso ? { attrezziDifferiti } : {}), // 19/10: `true` o `'essenziali'` (il modello locale del telefono), inoltrato com'è
+      ...(ponteAcceso && Number.isSafeInteger(finestraPerGliAttrezzi) && finestraPerGliAttrezzi > 0 ? { finestraPerGliAttrezzi } : {}), // L1, 20/10
       // ⭐ L9 (12/09/2026) — inoltrati SENZA logica propria, come tutto il resto in questo file:
       // la cache della corsa e la finestra della pagina le costruisce `research-orchestrator.mjs`
       // («raccolta viva»). Assenti ⇒ il kernel si comporta esattamente come ieri.
@@ -2380,6 +2418,8 @@ export async function avviaSessione({
       onAutomazioneFn, // automazioni a due porte (08/10/2026): inoltrato com'è
       onFornitoriFn, // 0.1.25: i fornitori esclusi, inoltrato com'è
       onObiettivoFn, // /goal G6: l'obiettivo, inoltrato com'è
+      onAnnullaFileFn, // R5.11: annullare le modifiche ai file, inoltrato com'è
+      onTelefoniFn, // R5.12: i telefoni collegati, inoltrato com'è
       onRichiestaPianoFn, // Rilievo 3 (§1.7): la richiesta del modo Piano, inoltrata com'è
       onRicercaLista, onRicercaAvvia, onRicercaLeggi, onRicercaRinomina,
       onRicercaPausa, onRicercaRiprendi, onRicercaAnnulla, onRicercaElimina,
@@ -2392,6 +2432,9 @@ export async function avviaSessione({
       preferenzeWslFn,
       consensiSessione,
       casaLinuxSessione,
+      /* L1 (owner 20/10/2026 sera, «Percorso vero a tutti»): la nota «dove sei» e gli alias del percorso (`kernel/dove-sei.mjs`);
+         il kernel la ignora in una sessione mobile. */
+      doveNelPrompt: true,
     });
     onEvento(esitoInEventoFinale({ threadId, runId, esito }));
     return { threadId, runId, ok: esito.comeFinita === 'concluso', esito, erroreInterno: null };

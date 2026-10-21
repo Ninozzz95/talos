@@ -27,8 +27,10 @@
  * ⭐ LE DUE SCELTE DI OGGI (owner 17/10/2026, «Vince il desktop, si fissa anche quello»):
  *   1. Un file raggiunto attraverso una GIUNZIONE (o un collegamento) che porta FUORI dal progetto ENTRA nell'impronta, col nome con cui
  *      la riga lo raggiunge dentro il progetto (`giunzione/y.mjs`). Prima la CLI lo scartava perché il suo percorso vero sta fuori, e
- *      così un file eseguito davvero restava fuori dalla fiducia. Si fissa da solo: niente cartella intera e niente import seguiti,
- *      perché fuori dal progetto non si cammina. È l'unico caso in cui un'impronta della CLI cambia.
+ *      così un file eseguito davvero restava fuori dalla fiducia. Si fissa senza la sua cartella intera; i SUOI import si seguono col
+ *      nome scritto (owner 21/10/2026, «Seguirli»): JavaScript dal percorso vero come Node, Python dal nome scritto. E un file che Node
+ *      esegue fuori dal progetto, raggiunto per percorso vero da un file entrato così, entra con un id `external:` (owner 21/10/2026,
+ *      «Fissarlo col percorso vero»): solo il file, senza cartella, e i suoi import NON si seguono — oltre non si cammina.
  *   2. Un file raggiunto attraverso una giunzione che resta DENTRO il progetto ha UN nome solo: quello del suo PERCORSO VERO. Perché:
  *      lo stesso file raggiunto da due nomi deve contare una volta; la cartella intera e gli import si percorrono già sui percorsi veri
  *      (un nome della giunzione accanto a uno vero darebbe lo stesso file due volte, coi due nomi); ed è il nome che la CLI usa da
@@ -42,6 +44,11 @@ import path from 'node:path';
 export const MAX_SCRIPT_FOLDER_FILES = 10_000;
 /** Quanti script si seguono al massimo negli import, per una riga di comando. */
 const MAX_FOLLOWED_SCRIPTS = 2_000;
+/* Revisione CLI 0.6.12 (21/10/2026, domanda 1): un repo fatto apposta (3.000 file × 20 import che non si risolvono, ~30 tentativi l'uno)
+   faceva durare ogni controllo della fiducia ~60 s. Un tetto alle chiamate a `realpath` DENTRO un calcolo (non al tempo: l'impronta deve
+   restare la stessa a ogni calcolo), oltre il quale lo si DICE con una riga, come per gli script seguiti. Misurato sul repo vero r4:
+   `node server.mjs` in harness-ui 995 chiamate, `node harness-ui/server.mjs` dalla radice 18, ⇒ 100 volte il caso vero più grande. */
+const MAX_REALPATH_PER_CALCOLO = 100_000;
 const MAX_HASHED_BYTES = 64 * 1024 * 1024;
 const FINGERPRINT_CONCURRENCY = 32;
 /* `.exe` e `.com`: Windows esegue `bin/srv` come `bin/srv.exe` (PATHEXT) */
@@ -186,7 +193,11 @@ const MEMORIA_DI_PROCESSO = creaMemoriaDegliHash();
 
 /** hash e import di un file, letto al massimo UNA volta: dalla memoria se dimensione e date non sono cambiate */
 async function contenutoDelFile(pathname, memoria) {
-  const stato = await fsp.lstat(pathname); // come la CLI (lstat): per un file vero è lo stesso numero
+  let stato = await fsp.lstat(pathname); // come la CLI (lstat): per un file vero è lo stesso numero
+  /* ⛔ 20/10/2026 notte, S2 della revisione della CLI 0.6.11: un file fissato col nome scritto attraverso un symlink (`pinThroughLink`)
+     ha come `lstat` quello del LINK, che non cambia quando cambia il bersaglio: la memoria rendeva l'impronta vecchia per tutta la vita
+     del processo (il server, una sessione lunga). La chiave della memoria è lo `stat` di ciò che si legge davvero, il bersaglio. */
+  if (stato.isSymbolicLink()) stato = await fsp.stat(pathname);
   const noto = memoria?.cerca(pathname, stato);
   if (noto) return noto;
   let dati;
@@ -208,7 +219,30 @@ async function importNames(file, memoria) {
 function nomiImportati(file, text) {
   const names = new Set();
   for (const match of text.matchAll(/(?:require\s*\(\s*|import\s*\(\s*|\bfrom\s+|\bimport\s+)["'](\.{1,2}(?:\/[^"'\n]*)?)["']/gu)) names.add(match[1]);
-  if (/\.py$/iu.test(file)) for (const match of text.matchAll(/^[ \t]*(?:from[ \t]+(\.*[\w.]*)[ \t]+import|import[ \t]+([\w.]+))/gmu)) { const module = (match[1] ?? match[2] ?? '').replace(/^\.+/u, ''); if (module) names.add(module.split('.').join('/')); }
+  if (/\.py$/iu.test(file)) {
+    /* Revisione CLI 0.6.12 (21/10/2026, S2-2a e S3-1): Python esegue `pkg/__init__.py` prima di `pkg/helper.py` per `import pkg.helper`, e
+       `from pkg import helper` carica `pkg/helper.py` se `helper` è un sottomodulo. Prima si estraeva solo `pkg`: dentro il progetto la
+       cartella intera lo copriva, attraverso un link (dove la cartella NON si fissa, scelta 1) un helper cambiato non faceva cadere la
+       fiducia. Ora ogni sottomodulo nominato e ogni `__init__.py` lungo il percorso puntato; un nome che non esiste (un attributo) si
+       salta da solo. I punti iniziali sono livelli: `from .. import x` è `../x`. */
+    const python = (su, parti) => {
+      if (!parti.length) return;
+      names.add(su + parti.join('/'));
+      for (let i = 1; i < parti.length; i += 1) names.add(su + parti.slice(0, i).join('/') + '/__init__.py');
+    };
+    for (const match of text.matchAll(/^[ \t]*from[ \t]+(\.*)([\w.]*)[ \t]+import[ \t]+(\([^)]*\)|[^\n#;]+)/gmu)) {
+      const su = match[1].length > 1 ? '../'.repeat(match[1].length - 1) : '';
+      const base = match[2] ? match[2].split('.').filter(Boolean) : [];
+      python(su, base);
+      for (const voce of match[3].replace(/[()]/gu, '').split(',')) {
+        const nome = voce.trim().split(/\s+as\s+/u)[0].trim();
+        if (/^\w+$/u.test(nome)) python(su, [...base, nome]);
+      }
+    }
+    for (const match of text.matchAll(/^[ \t]*import[ \t]+([^\n#;]+)/gmu)) {
+      for (const voce of match[1].split(',')) { const modulo = voce.trim().split(/\s+as\s+/u)[0].trim(); if (/^[\w.]+$/u.test(modulo)) python('', modulo.split('.').filter(Boolean)); }
+    }
+  }
   return [...names].slice(0, 256);
 }
 function isInsideStrict(root, canonical) { const relative = path.relative(root, canonical); return relative !== '' && !relative.startsWith('..') && !path.isAbsolute(relative); }
@@ -244,7 +278,14 @@ function relativeId(root, pathname) { return path.relative(root, pathname).split
  * quella del processo; `null` la spegne).
  * @returns {Promise<{path:string, sha256:string}[]>}
  */
-export async function referencedScripts(workspace, tokens, { maxFolderFiles = MAX_SCRIPT_FOLDER_FILES, realpath = fsp.realpath, memoria = MEMORIA_DI_PROCESSO } = {}) {
+export async function referencedScripts(workspace, tokens, { maxFolderFiles = MAX_SCRIPT_FOLDER_FILES, realpath: realpathDato = fsp.realpath, memoria = MEMORIA_DI_PROCESSO, maxRealpath = MAX_REALPATH_PER_CALCOLO } = {}) {
+  /* dentro UN calcolo: lo stesso percorso si risolve una volta sola, e oltre il tetto non si risolve più niente (lo dice una riga) */
+  const risolti = new Map(); let oltreIlTetto = false;
+  const realpath = (p) => {
+    if (risolti.has(p)) return risolti.get(p);
+    if (risolti.size >= maxRealpath) { oltreIlTetto = true; return Promise.reject(Object.assign(new Error('realpath budget'), { code: 'ENOENT' })); }
+    const r = Promise.resolve().then(() => realpathDato(p)); r.catch(() => {}); risolti.set(p, r); return r;
+  };
   /* `memoria: null` spegne la memoria del processo; dentro UN calcolo un file si legge comunque una volta sola (import e hash), anche se
      le sue date sono «racy» (18/10/2026): la memoria del calcolo non ha la regola, quella del processo sì. */
   const delCalcolo = creaMemoriaDegliHash({ massimoVoci: Number.MAX_SAFE_INTEGER, granaMs: 0 });
@@ -255,6 +296,23 @@ export async function referencedScripts(workspace, tokens, { maxFolderFiles = MA
   const area = { requestedRoot: workspace.requestedRoot ?? workspace.canonicalRoot, canonicalRoot: workspace.canonicalRoot };
   const root = area.canonicalRoot;
   const pinned = new Map(); const walkedFolders = new Set(); const queue = []; const followed = new Set();
+  /* owner 21/10/2026, «Fissarlo col percorso vero»: i file che Node esegue fuori dal progetto, raggiunti per percorso vero da un file
+     entrato attraverso un link. Entrano con un id `external:<percorso vero>`; i loro import non si seguono. */
+  const esterni = new Set();
+  /* revisione del 21/10 (S5): `resolveName` prova anche `.py`, `.ps1`, `index.py`…: fuori dal progetto entra solo ciò che `require`/
+     `import` di Node caricano davvero, mai un file che Node non eseguirebbe */
+  /* revisione 3 della CLI 0.6.12 (21/10, S2): Node 24 (la CLI vuole ≥24.18) esegue anche TypeScript di serie (toglie i tipi), e un
+     `require("../run.sh")` col nome COMPLETO carica il file come JavaScript qualunque sia l'estensione. ⇒ Entra un file con
+     un'estensione che Node carica, OPPURE il cui nome è scritto per intero nell'import. Resta fuori solo ciò che Node non carica MAI
+     (un `.py` trovato aggiungendo l'estensione, che Node non aggiunge): lì nessuna riga, perché non c'è niente da controllare. */
+  /* Node non AGGIUNGE mai `.ts`/`.mts`/`.cts` da sé: TypeScript lo carica solo col nome scritto per intero, e lo copre la regola sotto */
+  const ESTENSIONI_DI_NODE = new Set(['.js', '.cjs', '.mjs', '.json', '.node']);
+  const pinExternal = (canonical, nomeScritto = '') => {
+    const scrittoPerIntero = path.basename(String(nomeScritto)) === path.basename(canonical);
+    if (!ESTENSIONI_DI_NODE.has(path.extname(canonical).toLowerCase()) && !scrittoPerIntero) return;
+    esterni.add(canonical);
+    if (!pinned.has(canonical)) pinned.set(canonical, null);
+  };
   const isIn = (canonical) => isInsideStrict(root, canonical) && isPathInsideWorkspace(area, canonical);
   const pinScript = (file) => { if (!pinned.has(file)) pinned.set(file, null); if (!followed.has(file)) { followed.add(file); queue.push(file); } };
   const pinFolder = async (folder) => {
@@ -265,8 +323,11 @@ export async function referencedScripts(workspace, tokens, { maxFolderFiles = MA
     if (walk.truncated) pinned.set(path.join(folder, '…'), 'not-checked:more-than-' + maxFolderFiles + '-files');
   };
   const pinEntry = async (file) => { if (path.dirname(file) !== root && path.basename(file) !== 'package.json') await pinFolder(path.dirname(file)); pinScript(file); };
-  /* scelta 1 dell'owner (17/10): fuori dal progetto per il percorso vero, dentro per il nome scritto ⇒ il file entra col nome scritto, da solo */
-  const pinThroughLink = (lexical) => { if (!pinned.has(lexical)) pinned.set(lexical, null); };
+  /* scelta 1 dell'owner (17/10): fuori dal progetto per il percorso vero, dentro per il nome scritto ⇒ il file entra col nome scritto,
+     senza la sua cartella. ⛔ Owner 21/10/2026 notte («Seguirli»): i SUOI import si seguono come quelli di ogni altro script, sempre
+     nello spazio dei nomi scritti (la coda tiene il nome scritto, e un suo import si risolve da lì): un helper cambiato accanto al
+     file fuori dal progetto fa cadere la fiducia come uno dentro. Il tetto `MAX_FOLLOWED_SCRIPTS` vale anche qui. */
+  const pinThroughLink = (lexical) => { if (!pinned.has(lexical)) pinned.set(lexical, null); if (!followed.has(lexical)) { followed.add(lexical); queue.push(lexical); } };
   const lexicallyIn = (lexical) => isInsideStrict(root, lexical);
   const names = await nameCandidates(root, tokens);
   for (const name of names) {
@@ -275,7 +336,11 @@ export async function referencedScripts(workspace, tokens, { maxFolderFiles = MA
       if (!lexicallyIn(found.lexical)) continue;
       if (found.kind === 'file') { pinThroughLink(found.lexical); continue; }
       const entry = await folderEntry(found.lexical, realpath);
-      if (entry) pinThroughLink(path.join(found.lexical, path.relative(found.canonical, entry)));
+      /* CLI, 20/10/2026 (probe-junction-main2): il nome scritto si ricompone SOLO per un ingresso sotto la cartella vera. Un `main`
+         che esce con `..` o assoluto dava un nome inventato (ENOENT, progetto che non si apre) o, peggio, un altro file fissato in
+         silenzio: lì vale la risoluzione normale — dentro il progetto si fissa, fuori si salta. */
+      if (entry && isInsideStrict(found.canonical, entry)) pinThroughLink(path.join(found.lexical, path.relative(found.canonical, entry)));
+      else if (entry && isIn(entry)) await pinEntry(entry);
       continue;
     }
     if (found.kind === 'file') { await pinEntry(found.canonical); continue; }
@@ -286,16 +351,56 @@ export async function referencedScripts(workspace, tokens, { maxFolderFiles = MA
   if (tokens.some((name) => name === '.' || name === './')) { const entry = await folderEntry(root, realpath); if (entry && isIn(entry)) await pinEntry(entry); }
   /* gli import relativi di ogni script fissato, a catena: un file entra (con la sua cartella solo se è un ingresso suo, mai qui), una
      cartella o un pacchetto entrano interi */
+  /* il file VERO già seguito attraverso un nome scritto: due giunzioni che si chiamano a vicenda non allungano più il nome a ogni giro
+     (revisione del 21/10, S5: 21-33 righe finte `lib/back/lib/back/…`, fino al limite del sistema e senza il segno `…`) */
+  const veriSeguiti = new Set();
   while (queue.length && followed.size <= MAX_FOLLOWED_SCRIPTS) {
     const file = queue.shift();
+    /* Revisione del 21/10 (S4): Node, senza `--preserve-symlinks`, risolve gli import di un modulo dal suo percorso VERO; Python
+       dal nome con cui il pacchetto è stato trovato. Per un file JavaScript/TypeScript entrato col nome scritto, se le due strade
+       portano a file DIVERSI vale quella di Node: entra se è nel progetto per percorso vero, altrimenti resta fuori (scelta 1 del
+       17/10) — mai un altro file del progetto al suo posto. Se portano allo stesso file, col nome scritto, come prima. */
+    const daPython = path.extname(file).toLowerCase() === '.py';
+    let veroDelFile = file;
+    if (!daPython) { try { veroDelFile = await realpath(file); } catch { veroDelFile = file; } }
     for (const name of await importNames(file, memoriaDelCalcolo)) {
-      const resolved = await resolveName(path.dirname(file), name, realpath); if (!resolved || !isIn(resolved.canonical)) continue;
+      const resolved = await resolveName(path.dirname(file), name, realpath);
+      if (veroDelFile !== file) {
+        const dalVero = await resolveName(path.dirname(veroDelFile), name, realpath);
+        if (!dalVero) continue;
+        /* seconda revisione del 21/10 (S4): anche quando col nome scritto l'import NON si risolve, Node esegue quello del percorso
+           vero — prima `if (!resolved) continue` veniva prima del confronto e quel file restava fuori dall'impronta */
+        if (!resolved || dalVero.canonical !== resolved.canonical) {
+          if (isIn(dalVero.canonical)) { if (dalVero.kind === 'file') pinScript(dalVero.canonical); else await pinFolder(dalVero.canonical); }
+          else if (dalVero.kind === 'file') pinExternal(dalVero.canonical, name);
+          else { const ingresso = await folderEntry(dalVero.canonical, realpath); if (ingresso) pinExternal(ingresso, name); } // solo il file, mai la cartella
+          continue;
+        }
+      }
+      if (!resolved) continue;
+      if (!isIn(resolved.canonical)) {
+        /* CLI, revisione 2 della 0.6.11 (21/10/2026): uno script IMPORTATO attraverso un link verso fuori (`require('./lib/x.js')` con
+           `lib` giunzione o symlink) non si fissava, mentre lo stesso file NOMINATO nel comando sì (sopra, `pinThroughLink`): cambiato
+           `x.js`, la fiducia restava valida. Stessa regola del nome scritto (scelta 1 dell'owner, 17/10): il file entra col nome
+           scritto, senza la sua cartella; i suoi import si seguono (owner 21/10, `pinThroughLink` qui sopra). */
+        if (!lexicallyIn(resolved.lexical) || veriSeguiti.has(resolved.canonical)) continue;
+        veriSeguiti.add(resolved.canonical);
+        if (resolved.kind === 'file') { pinThroughLink(resolved.lexical); continue; }
+        /* revisione del 21/10 (S4): `import pkg` da Python esegue `pkg/__init__.py`, non `__main__.py` (che è l'ingresso di
+           `python -m pkg`, cioè di `folderEntry`): con tutti e due, un `__init__.py` cambiato lasciava la fiducia intatta */
+        const init = path.extname(file).toLowerCase() === '.py' ? await existing(path.join(resolved.lexical, '__init__.py'), realpath) : null;
+        const entry = init?.kind === 'file' ? init.canonical : await folderEntry(resolved.lexical, realpath);
+        if (entry && isInsideStrict(resolved.canonical, entry)) pinThroughLink(path.join(resolved.lexical, path.relative(resolved.canonical, entry)));
+        continue;
+      }
       if (resolved.kind === 'file') pinScript(resolved.canonical); else await pinFolder(resolved.canonical);
     }
   }
   /* il tetto si dice, come una cartella troncata: mai un taglio muto */
   if (queue.length) pinned.set(path.join(root, '…imports'), 'not-checked:imports-past-' + MAX_FOLLOWED_SCRIPTS + '-scripts');
-  const rows = await mapBounded([...pinned], FINGERPRINT_CONCURRENCY, async ([file, stands]) => ({ path: relativeId(root, file), sha256: stands ?? await fileDigest(file, memoriaDelCalcolo) }));
+  if (oltreIlTetto) pinned.set(path.join(root, '…resolutions'), 'not-checked:resolutions-past-' + maxRealpath);
+  const idDi = (file) => (esterni.has(file) ? 'external:' + file.split(path.sep).join('/') : relativeId(root, file));
+  const rows = await mapBounded([...pinned], FINGERPRINT_CONCURRENCY, async ([file, stands]) => ({ path: idDi(file), sha256: stands ?? await fileDigest(file, memoriaDelCalcolo) }));
   return rows.sort((a, b) => a.path.localeCompare(b.path));
 }
 

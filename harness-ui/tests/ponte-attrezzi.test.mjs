@@ -228,3 +228,21 @@ test('PONTE-15: l\'indice dei file della compattazione conta anche i file letti 
   assert.deepEqual(diretto, ['src/a.mjs'], 'premessa: la lettura diretta entra nell\'indice');
   assert.deepEqual(indiceMeccanico(storia('tool_call', { name: 'leggi', arguments: { percorso: 'src/a.mjs' } })).fileRiletti, diretto);
 });
+
+test('LINGUA-TEL-01 (owner 19/10) la riga della lingua va SOLO col profilo del telefono: col ponte di serie e spento il primo messaggio di sistema non la porta', async () => {
+  const { talosLavora, RIGA_LINGUA_DELLA_PERSONA } = await import('../src/kernel/talosHarness.mjs')
+  const { mkdtempSync } = await import('node:fs')
+  const { tmpdir } = await import('node:os')
+  const { join } = await import('node:path')
+  const primoSistema = async (attrezziDifferiti) => {
+    let sistema = null
+    await talosLavora({
+      cartella: mkdtempSync(join(tmpdir(), 'talos-lingua-')), task: { consegna: 'ciao' }, modello: 'x', chiave: 'y', attrezziDifferiti,
+      fetchDiRete: async (_u, init) => { sistema ??= JSON.parse(init.body).messages[0].content; return { ok: true, status: 200, text: async () => '', json: async () => ({ choices: [{ message: { role: 'assistant', content: 'ok' } }], usage: { prompt_tokens: 1, completion_tokens: 1 } }) } },
+    })
+    return String(sistema)
+  }
+  assert.ok((await primoSistema('essenziali')).includes(RIGA_LINGUA_DELLA_PERSONA))
+  assert.ok(!(await primoSistema(true)).includes(RIGA_LINGUA_DELLA_PERSONA))
+  assert.ok(!(await primoSistema(false)).includes(RIGA_LINGUA_DELLA_PERSONA))
+})

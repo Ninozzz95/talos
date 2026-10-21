@@ -49,7 +49,8 @@ for (const ordine of ['C', 'pre-C']) {
     verificaPrefisso(misura);
     assert.equal(misura.preamboli[0], misura.preamboli[1], 'senza ascoltatore attivo resta il contesto nella cache locale');
     assert.equal(misura.invalidazioni, 0);
-    assert.equal(JSON.parse(misura.corpi[1]).messages.length, 5);
+    /* L1 (owner 20/10/2026 sera): +1 per la nota «dove sei» del desktop (`doveNelPrompt`), che sta nel prefisso e non si ripete */
+    assert.equal(JSON.parse(misura.corpi[1]).messages.length, 6);
     misure.push(misura);
   });
 
@@ -59,7 +60,7 @@ for (const ordine of ['C', 'pre-C']) {
     assert.notEqual(misura.preamboli[0], misura.preamboli[1]);
     assert.match(misura.preamboli[1], /(?:1 unsaved files|1 file non salvati)/);
     const dopo = JSON.parse(misura.corpi[1]);
-    assert.equal(dopo.messages.length, 6);
+    assert.equal(dopo.messages.length, 7); // L1: +1, la nota «dove sei» (vedi sopra)
     assert.match(dopo.messages.at(-1).content, /^(?:Project context update|Aggiornamento del contesto del progetto):/);
     assert.ok(dopo.messages.at(-1).content.endsWith(misura.preamboli[1]));
     misure.push(misura);

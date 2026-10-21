@@ -1,4 +1,5 @@
 import { t, linguaCorrenteDiT } from './lingua.js';
+import { percheRipiego } from './compattazione-legacy.js';
 
 /*
  * 25/09/2026 — la riga sorella «Riassunto automatico non riuscito», dall'evento `context.compaction.cooling` del motore
@@ -125,10 +126,16 @@ export function aggiornaSeparatoreLegacy(container, voce, { sessionId, document:
   if (voce.tokenDopo != null) row.dataset.compattazioneTokenDopo = String(voce.tokenDopo);
   /* 26/09: la compattazione manuale non ha un record da riavvolgere — un «Annulla» che non può funzionare non si offre. */
   if (voce.annullabile === false) row.dataset.compattazioneAnnullabile = 'no'; else if (voce.annullabile === true) delete row.dataset.compattazioneAnnullabile;
+  /* B1 (owner 21/10/2026): un riassunto fatto SENZA il modello lo ricorda la riga stessa (la ragione, o vuoto se ignota), così l'annullo e
+     la rigiocata ridicono le stesse parole; `ripiego:false` lo toglie, assente lo lascia com'era. */
+  if (voce.ripiego === true) row.dataset.compattazioneRipiego = typeof voce.ragione === 'string' ? voce.ragione : ''; else if (voce.ripiego === false) delete row.dataset.compattazioneRipiego;
   const frase = typeof testo === 'string' ? testo : '';
   const span = row.querySelector('[data-compattazione-testo]');
   if (span.textContent !== frase) span.textContent = frase;
   row.setAttribute('aria-label', frase);
+  // il perché per esteso del ripiego sta nel `title` (mockup B1: la riga resta una), solo finché il riassunto è vivo
+  const perche = row.dataset.compattazioneLegacy === 'riassunta' && row.dataset.compattazioneRipiego !== undefined ? percheRipiego(row.dataset.compattazioneRipiego) : '';
+  if (perche) { if (span.title !== perche) span.title = perche; } else span.removeAttribute('title');
   // il menu esiste solo finché c'è qualcosa da fare: un riassunto vivo, col suo record
   const conMenu = row.dataset.compattazioneLegacy === 'riassunta' && Boolean(at) && typeof onMenu === 'function'
     && (row.dataset.compattazioneAnnullabile !== 'no' || Boolean(row.dataset.compattazioneRiassunto));
@@ -150,6 +157,7 @@ export function leggiVoceLegacy(row) {
   return {
     at: row.dataset.compattazioneAt || null, stato: row.dataset.compattazioneLegacy || null, inVolo: row.dataset.compattazioneAperta === '1',
     riassunto: row.dataset.compattazioneRiassunto || null, nodo: row, annullabile: row.dataset.compattazioneAnnullabile !== 'no',
+    ripiego: row.dataset.compattazioneRipiego !== undefined, ragione: row.dataset.compattazioneRipiego || null,
     tokenPrima: row.dataset.compattazioneTokenPrima ? Number(row.dataset.compattazioneTokenPrima) : null,
     tokenDopo: row.dataset.compattazioneTokenDopo ? Number(row.dataset.compattazioneTokenDopo) : null,
   };

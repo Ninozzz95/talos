@@ -120,8 +120,11 @@ export function conAncoraDelFornitore(counter) {
  *   stima, e si ancora ai `prompt_tokens` veri delle risposte (`conAncoraDelFornitore`) — quindi non gli serve nessuna credenziale.
  * ⛔ Un nome che il registro NON conosce continua a lanciare: tacere lì nasconderebbe un modello scritto male.
  */
-export function credenzialeDelContatore(provider, { leggiRuntime, leggiChiave, baseLocale }) {
+export function credenzialeDelContatore(provider, { leggiRuntime, leggiChiave, baseLocale, contaOspite = null }) {
   if (provider === 'local') return { baseURL: baseLocale };
+  /* 21/10/2026: il motore dell'APP conta da sé il prompt esatto (`POST /tokenize`, contratto del Mobile: lo stesso corpo della chat,
+     risposta `{count, max_model_len}`). La chiave e il socket li ha l'accesso: qui passa solo la funzione che lo chiama. */
+  if (provider === 'locale-ospite') return typeof contaOspite === 'function' ? { contaOspite } : {};
   if (REGISTRO_FORNITORI[provider]?.credenziale === false) return {};
   const runtime = leggiRuntime(provider);
   /* ⛔ 14/10/2026, revisione del bugfixer (REV-ZAI-01): il contatore gira in `contextHooks.prepare`, PRIMA della destinazione del
@@ -184,6 +187,28 @@ export function createContextTokenCounter({ fetchFn, resolveProfile, hashFn = te
        *   guasto nasce. Restano errori quelli di CONFIGURAZIONE — credenziale rifiutata, indirizzo malformato — e uno Stop.
        */
       const stimaDopoUnGuasto = (codice) => ({ ...heuristic(), fallback: codice });
+      /*
+       * 21/10/2026 — il CONTEGGIO ESATTO del motore dell'app (contratto del Mobile del 21/10, adattato da vLLM `TokenizeChatRequest`):
+       *   `POST /tokenize` col corpo della chat ⇒ `{count, max_model_len}`, il prompt che il motore genererebbe davvero (template e
+       *   tokenizer sull'attore). Dal vivo sul Pad (giro 16 della sessione lunga) il prompt era 23.851 token esatti contro un limite
+       *   d'ingresso di 23.756: decisioni così vicine al confine vanno prese col numero vero, non con la stima. Un'app vecchia (404/405/501) ⇒ la stima, come per un contatore che non c'è; un motore occupato, lento o
+       *   che risponde male ⇒ la stima dichiarata col suo `fallback`, mai un giro fallito (la regola qui sopra).
+       */
+      if (provider === 'locale-ospite') {
+        if (typeof profile.contaOspite !== 'function') return heuristic();
+        const tetto = AbortSignal.timeout(tempoMassimoMs);
+        const conTetto = signal ? AbortSignal.any([signal, tetto]) : tetto;
+        let risposta;
+        try { risposta = await profile.contaOspite(compiled.body, conTetto); }
+        catch { signal?.throwIfAborted(); return stimaDopoUnGuasto(tetto.aborted ? 'CTX_TOKEN_TIMEOUT' : 'CTX_TOKEN_NETWORK'); }
+        signal?.throwIfAborted();
+        if ([404, 405, 501].includes(risposta?.status)) return heuristic();
+        if (!risposta?.ok) return stimaDopoUnGuasto('CTX_TOKEN_HTTP');
+        let esito;
+        try { esito = await risposta.json(); } catch { return stimaDopoUnGuasto('CTX_TOKEN_RESPONSE_INVALID'); }
+        if (!Number.isSafeInteger(esito?.count) || esito.count < 0) return stimaDopoUnGuasto('CTX_TOKEN_RESPONSE_INVALID');
+        return { ...base, inputTokens: esito.count, method: 'runtime', exact: true };
+      }
       const cloud = Object.hasOwn(defaults, provider);
       const runtime = provider === 'local' || provider === 'llama.cpp' || provider === 'llamacpp';
       if (!cloud && !runtime) return heuristic();

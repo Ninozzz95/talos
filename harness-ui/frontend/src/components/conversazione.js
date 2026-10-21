@@ -206,12 +206,20 @@ export function impostaTonoUltimoTick(spine, tono) {
  * `meta` è ciò che l'originale scriveva sotto la bolla (Task reale · id,
  * Follow-up, i permessi del giro): resta, dopo l'ora.
  */
-export function creaMessaggioUtente({ testo = '', ora = '', meta = '' } = {}, opzioni = {}) {
+export function creaMessaggioUtente({ testo = '', ora = '', meta = '', origine = null } = {}, opzioni = {}) {
   const documentObj = opzioni.document || globalThis.document;
   const messaggio = el(documentObj, 'div', 'talos-message talos-message--user');
   messaggio.setAttribute('data-c', 'Message');
   const testata = el(documentObj, 'div', 'talos-message__head');
   testata.append(el(documentObj, 'span', 'talos-message__who', t('chat.message.you')), el(documentObj, 'span', 'talos-message__meta', [ora, meta].filter(Boolean).join(' · ')));
+  /* 18/10/2026 — «dal telefono “Pad di Nino”» nella testata (mockup v5 del controllo remoto, owner 17/10: nella testata, non sotto la
+     bolla). Uno span suo, perché il RunStarted riscrive `.talos-message__meta` col permesso del giro. L'origine la mette solo il
+     server (`origine-remota.mjs`). */
+  if (origine?.tipo === 'telefono') {
+    const dal = el(documentObj, 'span', 'talos-message__origine', t('remoto.origin.fromPhone', { name: origine.nome || t('remoto.confirm.unnamed') }));
+    dal.dataset.origineTelefono = '';
+    testata.append(dal);
+  }
   const corpo = el(documentObj, 'div', 'talos-message__body message-bubble');
   /* 11/10/2026 (owner: link cliccabili, «blu per la bolla utente»): il testo della persona resta LETTERALE (niente Markdown), ma un
      indirizzo web che ha scritto diventa un link, con la stessa conferma di quelli delle risposte (`link-esterni.js`). `textContent`
@@ -299,6 +307,7 @@ export const TESTI_MESSAGGIO = Object.freeze({
   get azioniRisposta() { return t('chat.message.answerActions'); },
   get azioniTuo() { return t('chat.message.yourActions'); },
   get altreAzioni() { return t('chat.message.moreAnswerActions'); },
+  get altreAzioniTuo() { return t('chat.message.moreYourActions'); },
   get altreAzioniGiroVivo() { return t('chat.message.moreAnswerActionsDeleteLater'); },
   get copiaRisposta() { return t('chat.message.copyAnswer'); },
   get copiaTuo() { return t('chat.message.copyYours'); },
@@ -373,7 +382,9 @@ export function creaAzioniMessaggio({ ascolta = true } = {}, opzioni = {}) {
   }
   if (!vociMenu) return gruppo; // chi non dà voci non ha un menu: meglio niente «⋯» che un «⋯» vuoto
 
-  const piu = bottone('piu', TESTI_MESSAGGIO.altreAzioni, 'i-more');
+  /* 18/10: chi monta il blocco sul messaggio della persona dà il suo nome al «⋯» (prima diceva «… sulla risposta» anche lì) */
+  const etichettaAltre = typeof opzioni.etichettaAltre === 'string' && opzioni.etichettaAltre.trim() ? opzioni.etichettaAltre.trim() : TESTI_MESSAGGIO.altreAzioni;
+  const piu = bottone('piu', etichettaAltre, 'i-more');
   piu.setAttribute('aria-haspopup', 'menu');
   piu.setAttribute('aria-expanded', 'false');
   gruppo.append(piu);
@@ -826,6 +837,7 @@ export const ICONA_ATTREZZO = Object.freeze({
   scrivi: 'i-code', file_edit: 'i-code', naviga: 'i-globe', web_search: 'i-globe', delega_sottotask: 'i-user',
   memory_write: 'i-brain', artifact_create: 'i-doc', document_create: 'i-doc', generate_image: 'i-doc',
   time_now: 'i-clock', research_start: 'i-globe',
+  remote_phones: 'i-phone', remote_phone_pair: 'i-phone', remote_phone_revoke: 'i-phone', // R5.12 (18/10/2026)
 });
 
 export function iconaAttrezzo(nome) {

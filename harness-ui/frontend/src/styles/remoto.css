@@ -1,0 +1,115 @@
+/*
+ * Il CONTROLLO REMOTO (18/10/2026) — le finestre e la sezione «Telefoni collegati» del mockup v5 approvato dall'owner, coi token del
+ * tema Forge vero: nessun colore scritto a mano, così il tema chiaro e quello scuro valgono da soli. Le misure sono quelle del
+ * mockup (QR 148 px, codice in due gruppi grande e spaziato, opzioni del relay a riquadro con l'accento sulla scelta).
+ */
+
+/* L'icona del telefono nella barra laterale, col pallino verde quando un telefono è in linea */
+.talos-remoto-icona { position: relative; }
+.talos-remoto-icona__pallino {
+  position: absolute; top: 3px; right: 3px; width: 7px; height: 7px; border-radius: 50%;
+  background: var(--talos-success); box-shadow: 0 0 0 2px var(--talos-panel);
+}
+
+/* Il sopratitolo delle finestre («TALOS / Controllo dal telefono»), nel colore d'accento come nel mockup */
+.talos-remoto__sopratitolo {
+  margin: 0 0 var(--talos-space-xs); color: var(--talos-accent-text); font-size: var(--talos-font-size-xs);
+  font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
+}
+.talos-remoto__centro { text-align: center; }
+.talos-remoto__errore { color: var(--talos-danger); margin: 0; }
+/* Il piede delle finestre: i pulsanti a destra, il primario per ultimo (mockup v5) */
+.talos-remoto__piede { justify-content: flex-end; }
+.talos-remoto__rifiuta { color: var(--talos-danger); }
+
+/* «Solo la prima volta»: due opzioni a riquadro, l'accento su quella scelta */
+.talos-remoto-scelte { display: grid; gap: var(--talos-space-sm); margin: var(--talos-space-md) 0; }
+.talos-remoto-scelta {
+  display: grid; grid-template-columns: 18px 1fr; column-gap: 10px; row-gap: 2px; align-items: start; text-align: left;
+  width: 100%; padding: 12px 14px; border: 1px solid var(--talos-border); border-radius: var(--talos-radius-card);
+  background: var(--talos-panel-soft); color: var(--talos-text); font: inherit; cursor: pointer;
+  transition: border-color var(--talos-motion-duration-control) var(--talos-motion-ease), background var(--talos-motion-duration-control) var(--talos-motion-ease);
+}
+.talos-remoto-scelta:hover { border-color: var(--talos-border-strong); }
+.talos-remoto-scelta:focus-visible { outline: var(--talos-focus-width) solid var(--talos-accent); outline-offset: 2px; }
+.talos-remoto-scelta[aria-checked="true"] { border-color: var(--talos-accent-border); background: var(--talos-accent-soft); }
+.talos-remoto-scelta__pallino {
+  grid-row: 1 / span 2; width: 14px; height: 14px; margin-top: 2px; border-radius: 50%; border: 1.5px solid var(--talos-muted);
+}
+.talos-remoto-scelta[aria-checked="true"] .talos-remoto-scelta__pallino {
+  border-color: var(--talos-accent); background: radial-gradient(circle, var(--talos-accent) 0 3.5px, transparent 4px);
+}
+.talos-remoto-scelta__titolo { font-weight: 600; }
+.talos-remoto-scelta__aiuto { font-size: var(--talos-font-size-sm); }
+.talos-remoto-scelte__url { width: 100%; }
+
+/* «Collega il tuo telefono»: il QR su fondo chiaro (si legge anche dal tema scuro), accanto le due frasi */
+.talos-remoto-qr { display: grid; grid-template-columns: 148px 1fr; gap: var(--talos-space-md); align-items: center; margin: var(--talos-space-sm) 0; }
+.talos-remoto-qr__immagine { width: 148px; height: 148px; padding: 8px; border-radius: 10px; background: #f3efe6; }
+.talos-remoto-qr__svg { display: block; width: 100%; height: 100%; }
+.talos-remoto-qr__fondo { fill: #f3efe6; }
+.talos-remoto-qr__punti { fill: #0b0c0e; }
+.talos-remoto-qr__testo p { margin: 0 0 var(--talos-space-sm); }
+.talos-remoto-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: var(--talos-space-sm) 0 var(--talos-space-md); }
+.talos-remoto-chip {
+  padding: 3px 10px; border: 1px solid var(--talos-border); border-radius: 999px; color: var(--talos-muted);
+  font-size: var(--talos-font-size-xs); font-variant-numeric: tabular-nums;
+}
+.talos-remoto-chip--accento { border-color: var(--talos-accent-border); color: var(--talos-accent-text); }
+
+/* «Collegare questo telefono?»: la scheda del telefono e il codice grande */
+.talos-remoto-telefono {
+  display: grid; grid-template-columns: 30px 1fr; column-gap: 10px; align-items: center; padding: 10px 12px;
+  border: 1px solid var(--talos-border); border-radius: var(--talos-radius-card); background: var(--talos-panel-soft);
+}
+.talos-remoto-telefono__icona {
+  grid-row: 1 / span 2; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 8px;
+  border: 1px solid var(--talos-border); color: var(--talos-accent-text);
+}
+.talos-remoto-telefono__nome { color: var(--talos-text); }
+.talos-remoto-telefono__piattaforma { font-size: var(--talos-font-size-xs); }
+.talos-remoto-codice {
+  margin: var(--talos-space-lg) 0 var(--talos-space-md); text-align: center; color: var(--talos-text);
+  font-family: var(--talos-font-mono); font-size: 34px; font-weight: 700; letter-spacing: .14em; font-variant-numeric: tabular-nums;
+}
+
+/* Impostazioni › Telefoni collegati */
+.talos-remoto-elenco { display: grid; gap: var(--talos-space-sm); margin: var(--talos-space-md) 0; }
+.talos-remoto-riga {
+  display: grid; grid-template-columns: 1fr auto auto; gap: var(--talos-space-md); align-items: center; padding: 12px 14px;
+  border: 1px solid var(--talos-border); border-radius: var(--talos-radius-card); background: var(--talos-panel-soft);
+}
+.talos-remoto-riga__nome { display: block; color: var(--talos-text); font-weight: 600; }
+.talos-remoto-riga__dettaglio { display: block; font-size: var(--talos-font-size-xs); font-variant-numeric: tabular-nums; }
+.talos-remoto-riga__stato { display: inline-flex; align-items: center; gap: 6px; font-size: var(--talos-font-size-sm); color: var(--talos-muted); }
+.talos-remoto-riga__stato::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--talos-muted); }
+.talos-remoto-riga__stato[data-in-linea="true"] { color: var(--talos-success); }
+.talos-remoto-riga__stato[data-in-linea="true"]::before { background: var(--talos-success); }
+.talos-remoto-riga[data-revocato="true"] { opacity: .62; }
+.talos-remoto-relay { display: flex; align-items: center; gap: var(--talos-space-sm); flex-wrap: wrap; margin-top: var(--talos-space-md); }
+
+@media (prefers-reduced-motion: reduce) {
+  .talos-remoto-scelta { transition: none; }
+}
+@media (max-width: 560px) {
+  .talos-remoto-qr { grid-template-columns: 1fr; justify-items: center; }
+}
+
+/* «dal telefono “Pad di Nino”» nella testata del messaggio della persona, nel colore d'accento come nel mockup */
+.talos-message__origine { color: var(--talos-accent-text); }
+.talos-message__origine::before { content: "· "; color: var(--talos-muted); }
+
+/* La pillola del telefono collegato nel piede del compositore, accanto alle altre (mockup v5, «Dopo, nell'uso») */
+.talos-composer__bar .talos-remoto-pillola { flex: none; gap: 6px; white-space: nowrap; }
+.talos-composer__bar .talos-remoto-pillola .talos-dot { width: 6px; height: 6px; }
+
+/* R5.12 (18/10/2026, mockup approvato) — i blocchi dei telefoni in chat: i pulsanti restano larghi quanto il loro testo, a sinistra
+   (nel blocco a griglia si sarebbero stirati su tutta la riga, visto nelle foto della prova TEL-UI) */
+.talos-telefoni-chat { display: grid; gap: var(--talos-space-sm); }
+.talos-telefoni-chat .talos-telefoni-chat__azione { justify-self: start; align-self: flex-start; width: auto; }
+.talos-remoto-elenco.talos-telefoni-chat { margin: 0; }
+
+/* 19/10/2026, foto del 4174 dopo la fusione: con l'icona del telefono la testata della barra laterale porta TRE pulsanti e l'ultimo
+   sbordava di 5 px (280 su 276, misurato sul DOM a 1920, 1440 e 1024). Lo spazio fra i pezzi passa da 10 a 5 px solo in quel caso (i pulsanti finiscono a 260, dentro il margine di 14):
+   20 px recuperati, nessun pulsante più piccolo; la barra a sole icone tiene i suoi 8 px (regola più specifica). */
+.talos-brand:has(.talos-remoto-icona) { gap: 5px; }

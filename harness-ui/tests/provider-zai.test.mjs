@@ -124,7 +124,7 @@ test('PD-07 — i livelli documentati passano; il resto si adatta al più debole
     const original = { model: id, messages: [], reasoning: { effort } };
     const result = prepara(original);
     assert.equal(result.corpo.reasoning_effort, effort);
-    assert.deepEqual(result.corpo.thinking, { type: 'enabled' });
+    assert.deepEqual(result.corpo.thinking, { type: 'enabled', clear_thinking: false }); // owner 21/10/2026: il ragionamento passato si tiene
     assert.equal(result.corpo.reasoning, undefined);
     assert.equal(original.reasoning.effort, effort);
     assert.deepEqual(result.avvisi, []);
@@ -170,7 +170,8 @@ test('PD-08 — thinking disabled consentito fino a 5.2, dichiarato impossibile 
     assert.deepEqual(result.avvisi, [], 'BUG-18: il controllo del ragionamento va in nota');
     assert.match(result.note.join(' '), /cannot disable/u);
   }
-  assert.equal(prepara({ model: modello }).corpo.thinking, undefined, 'nessuna preferenza: default del server');
+  // revisione Z-1 (21/10/2026): nessuna preferenza = lo stato di serie del server (acceso), dichiarato col ragionamento tenuto (owner 21/10)
+  assert.deepEqual(prepara({ model: modello }).corpo.thinking, { type: 'enabled', clear_thinking: false }, 'nessuna preferenza: acceso come di serie, ragionamento tenuto');
 });
 
 test('PD-11 — controllo del ragionamento malformato respinto con un errore leggibile', () => {

@@ -140,8 +140,10 @@ export function createDesktopContextService({ engine, store, loadLegacy, selectL
       return Object.freeze({
         capture: ({ messages }) => api.syncOriginals({ sessionId, messages }),
         /* 24/09 — F4, contratto con l'adapter (F1): `messages` = proiezione corretta, `originali` = grezzo. */
-        prepare: async ({ messages, originali, tools, signal, waitForInFlight }) => {
-          const result = await api.prepare({ sessionId, messages, originali, tools, signal, waitForInFlight });
+        prepare: async ({ messages, originali, tools, signal, waitForInFlight, summaryCeilingMs, onInTurnWait }) => {
+          /* A1 (21/10/2026): il tetto del riassunto atteso scelto dall'ospite arriva fino al motore (`summaryCeilingMs`); B1: e chi
+             vuole sapere quando il giro aspetta un riassunto (`onInTurnWait`) */
+          const result = await api.prepare({ sessionId, messages, originali, tools, signal, waitForInFlight, summaryCeilingMs, onInTurnWait });
           mandataSenzaAttesa = result?.sentWithoutWaiting === true && Array.isArray(result.messages) ? { input: { messages, originali, tools }, result } : null;
           return result;
         },
@@ -332,7 +334,7 @@ export function createDesktopContextService({ engine, store, loadLegacy, selectL
      * Code (issue #26125, 16/02/2026: «The full transcript is preserved in transcript.jsonl on disk» mentre al
      * modello arrivano i «compacted summaries»): la trascrizione grezza e il contesto inviato sono due cose.
      */
-    async prepare({ sessionId, messages, originali, tools, signal, waitForInFlight = false }) {
+    async prepare({ sessionId, messages, originali, tools, signal, waitForInFlight = false, summaryCeilingMs, onInTurnWait }) {
       let projection;
       if (originali !== undefined) {
         if (!Array.isArray(originali) || !Array.isArray(messages) || messages.length !== originali.length || messages.some((message, index) => message?.role !== originali[index]?.role)) fail('CTX_INVALID_INPUT', 'The request projection is not aligned with the originals (different length or roles).');
@@ -370,7 +372,9 @@ export function createDesktopContextService({ engine, store, loadLegacy, selectL
         riallineato = Object.freeze({ asideId, ...(errore.dettaglio && typeof errore.dettaglio === 'object' ? errore.dettaglio : {}) });
       }
       let result;
-      try { result = await engine.prepareForRequest({ sessionId, projection, tools, sessionModel: await modelFor(sessionId), signal, waitForInFlight: waitForInFlight === true }); }
+      try { result = await engine.prepareForRequest({ sessionId, projection, tools, sessionModel: await modelFor(sessionId), signal, waitForInFlight: waitForInFlight === true,
+        ...(Number.isSafeInteger(summaryCeilingMs) && summaryCeilingMs > 0 ? { summaryCeilingMs } : {}),
+        ...(typeof onInTurnWait === 'function' ? { onInTurnWait } : {}) }); }
       catch (error) {
         /* 25/09 — l'avviso «compattazione automatica in pausa» nasce anche quando la richiesta MUORE (contesto che non entra,
            riassunto rifiutato mentre si aspettava): senza questa consegna restava nella coda fino alla richiesta dopo. Una

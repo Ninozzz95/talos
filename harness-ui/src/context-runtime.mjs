@@ -51,6 +51,9 @@ export async function resolveDesktopContextProfile({ profiles, provider, model, 
  * allo stesso punto anche su un modello da 1M. Finestra ignota ⇒ la stessa, prudenziale. Il motore locale vale solo se è
  * pronto con QUEL modello e dice la sua finestra vera.
  */
+/** La finestra prudente per un modello del motore dell'app di cui non si conosce l'apertura (come il motore locale del PC, L1-d). */
+export const FINESTRA_PRUDENTE_MOTORE_DELL_APP = 16_384;
+
 export async function resolveDesktopDefaultProfile({ provider, model, finestraFn, readLocalRuntime, env = process.env }) {
   const tetto = leggiTettoEsplicito(env) ?? TETTO_TOKEN_DEFAULT;
   const massima = Math.ceil(tetto / FRAZIONE_FINESTRA);
@@ -60,11 +63,21 @@ export async function resolveDesktopDefaultProfile({ provider, model, finestraFn
     if (runtime?.state !== 'ready' || runtime.modelId !== model || !Number.isSafeInteger(runtime.windowTokens) || runtime.windowTokens <= 0) fail('CTX_RUNTIME_PROFILE_MISMATCH', 'The local model is not ready with this model and a known window.');
     finestra = runtime.windowTokens;
   } else {
+    /* ⛔ 21/10/2026, dal vivo sul Pad (sessione lunga del Mobile, LFM2.5 sul motore dell'app): il motore del contesto chiedeva la
+       finestra con l'id NUDO del modello, e `finestraDallaRoute` riconosce il motore dell'app solo dal prefisso `locale-ospite:`
+       (`finestraDelModelloOspite`, `accesso-locale-ospite.mjs:131-133`) ⇒ nessuna finestra ⇒ la massima da cloud, 266.667 token, con la
+       soglia a 177.711: in un giro da 32k su un motore da ~32k la compattazione non scattava mai, mentre la politica del registro
+       (che passa l'id col fornitore) diceva 28.160. Ora l'id parte col suo fornitore, come nel registro; OpenRouter resta com'era. */
+    const id = provider && provider !== 'openrouter' && !String(model).startsWith(`${provider}:`) ? `${provider}:${model}` : model;
     let dalCatalogo = null;
-    try { dalCatalogo = finestraFn?.(model) ?? null; } catch { dalCatalogo = null; }
+    try { dalCatalogo = finestraFn?.(id) ?? null; } catch { dalCatalogo = null; }
+    /* e il motore dell'app senza una finestra nota non è un modello da cloud: la prudente del motore locale (L1-d, 16.384), mai 266.667 */
+    if (!(Number.isSafeInteger(dalCatalogo) && dalCatalogo > 0) && provider === 'locale-ospite') dalCatalogo = FINESTRA_PRUDENTE_MOTORE_DELL_APP;
     finestra = Number.isSafeInteger(dalCatalogo) && dalCatalogo > 0 ? Math.min(dalCatalogo, massima) : massima;
   }
-  return { provider, model, windowTokens: finestra, responseReserve: Math.min(16_384, Math.floor(finestra / 8)) };
+  /* 21/10/2026: un motore a posto unico (motore dell'app, motore del PC con `-np 1`) non riceve riassunti in sottofondo durante il giro */
+  return { provider, model, windowTokens: finestra, responseReserve: Math.min(16_384, Math.floor(finestra / 8)),
+    ...(provider === 'local' || provider === 'locale-ospite' ? { singleSlot: true } : {}) };
 }
 
 /** Desktop composition root. Model metadata, credentials, counter transport and
@@ -107,7 +120,9 @@ export async function createDesktopContextRuntime({ sessionDirectory, enabledSes
     if (!resolved || resolved.provider !== selected.provider || resolved.model !== selected.model) fail('CTX_MODEL_MISMATCH', 'The server profile does not match the selected model.');
     if (!Number.isSafeInteger(resolved.windowTokens) || !Number.isSafeInteger(resolved.responseReserve) || resolved.responseReserve < 1 || resolved.windowTokens <= resolved.responseReserve) fail('CTX_MODEL_INVALID', 'Model window and reserve are not verified.');
     // Never persist the resolver object: it may contain credentials or endpoints.
-    return { provider: resolved.provider, model: resolved.model, windowTokens: resolved.windowTokens, responseReserve: resolved.responseReserve };
+    /* 21/10/2026: `singleSlot` arriva fino al motore del contesto, o la cura del posto unico si perderebbe qui (profilo ricostruito) */
+    return { provider: resolved.provider, model: resolved.model, windowTokens: resolved.windowTokens, responseReserve: resolved.responseReserve,
+      ...(resolved.singleSlot === true ? { singleSlot: true } : {}) };
   }
   async function sessionProfile({ sessionId, session }) {
     session ??= await readSession(sessionId);
