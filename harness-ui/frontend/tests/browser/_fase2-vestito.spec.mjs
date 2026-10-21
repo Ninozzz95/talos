@@ -129,8 +129,9 @@ async function avvia(page, tentate, colorMode) {
   await expect(page.locator('#schermoImpostazioni')).toBeVisible({ timeout: 10_000 });
   await expect(page.locator('#schermoImpostazioni[data-settings-ui="v3"]')).toHaveCount(1);
   const pannelli = await page.locator('[id^="setting-panel-"]').count();
-  /* 23/09/2026, decisione owner: da dieci a NOVE («Provider e accessi» tolta del tutto). */
-  expect(pannelli, 'i pannelli delle sezioni devono essere nove: se sono meno, la misura sarebbe su una schermata incompleta').toBe(9);
+  /* 23/09/2026, decisione owner: da dieci a NOVE («Provider e accessi» tolta del tutto). 18/10/2026: di nuovo dieci, con «Telefoni
+     collegati» (controllo remoto, mockup v5 approvato). */
+  expect(pannelli, 'i pannelli delle sezioni devono essere dieci: se sono meno, la misura sarebbe su una schermata incompleta').toBe(10);
 }
 
 /** Apre una sezione e pretende che il suo pannello sia VISIBILE. */

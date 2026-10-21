@@ -259,6 +259,37 @@ export const REGISTRO_FORNITORI = congela({
       inclusiNelTotale: true,
       scontoDichiarato: null,
     }),
+    /*
+     * ⛔ 21/10/2026, P0 della ricognizione dei parametri (owner: «ogni parametro definito dalla loro documentazione… previsto»): lo sforzo
+     *   partiva nella forma di OpenRouter (`reasoning: { effort }`), che DeepSeek non documenta. Documentazione ufficiale, letta il
+     *   21/10/2026: `api-docs.deepseek.com/api/create-chat-completion` — `thinking: { type: enabled | disabled }` (default enabled) e
+     *   `reasoning_effort: none | low | high | max` (default high; `none` spegne il pensiero); `guides/thinking_mode` — con gli attrezzi il
+     *   `reasoning_content` «must be fully passed back to the API in all subsequent requests», altrimenti 400. È la stessa forma di Z.AI
+     *   (`ragionamento.formato: 'thinking'`), già tradotta da `preparaRichiestaCompatibile`. Concorrenti: Hermes
+     *   `plugins/model-providers/deepseek/__init__.py:1-9` («sets thinking explicitly and maps effort onto reasoning_effort»), pi
+     *   `compat-schema.ts` forma `deepseek` («thinking.type plus reasoning_effort»).
+     * Modelli: `quick_start/pricing` (21/10/2026) — finestra 1M, uscita massima 384K; prezzi di PUNTA per milione (fuori punta la metà):
+     *   il registro tiene il più alto, prudente.
+     * `modelliIgnoti`: thinking e reasoning_effort sono parametri dell'API, non di un modello — la stessa pagina accetta ancora gli
+     *   alias `deepseek-v4-flash` e `deepseek-v4-flash-vision-exp`, e il catalogo `/models` può portare id nuovi. Hermes li tratta a
+     *   livello di fornitore (`deepseek/__init__.py:1-9`): un id fuori da `modelliNoti` non perde lo sforzo chiesto.
+     */
+    /* `rimandaRagionamento` (revisione D1, 21/10/2026): con gli attrezzi DeepSeek risponde 400 se un messaggio dell'assistente torna
+       senza `reasoning_content` (guides/thinking_mode) — succede dopo un giro a pensiero «Spento», dopo un cambio di modello, o col
+       messaggio sintetico d'errore del kernel. Ogni messaggio dell'assistente lo porta: il suo, o uno spazio. */
+    ragionamento: congela({ formato: 'thinking', livelli: congela(['low', 'high', 'max']), rimandaRagionamento: true, livelloPredefinito: 'high',
+      modelliIgnoti: congela({ livelli: congela(['low', 'high', 'max']), thinking: congela(['enabled', 'disabled']) }),
+      fonte: 'https://api-docs.deepseek.com/api/create-chat-completion', data: '2026-10-21' }),
+    modelliNoti: congela([
+      congela({ id: 'deepseek-flash', nome: 'DeepSeek V4.1 Flash', contextLength: 1_000_000, contestoDichiarato: '1M', maxOutputTokens: 393_216,
+        fonte: 'https://api-docs.deepseek.com/quick_start/pricing/', data: '2026-10-21',
+        prezzi: congela({ ingresso: 0.3, cache: 0.006, uscita: 1.2 }),
+        ragionamento: congela({ livelli: congela(['low', 'high', 'max']), thinking: congela(['enabled', 'disabled']) }) }),
+      congela({ id: 'deepseek-v4-pro', nome: 'DeepSeek V4 Pro', contextLength: 1_000_000, contestoDichiarato: '1M', maxOutputTokens: 393_216,
+        fonte: 'https://api-docs.deepseek.com/quick_start/pricing/', data: '2026-10-21',
+        prezzi: congela({ ingresso: 1.32, cache: 0.044, uscita: 3.96 }),
+        ragionamento: congela({ livelli: congela(['low', 'high', 'max']), thinking: congela(['enabled', 'disabled']) }) }),
+    ]),
     catalogo: congela({ fonte: 'fornitore', forma: 'openai-data', percorso: '/models', inUI: true }),
     prezzi: congela({ fonte: 'nessuna' }),
     limiti: congela({ timeoutPredefinitoSecondi: 60, tempoMassimoModificabile: true }),
@@ -293,17 +324,25 @@ export const REGISTRO_FORNITORI = congela({
     chiaveObbligatoria: true, formaIdModello: 'nome', oauth: null,
     endpoint: congela({ chat: '/chat/completions', modelli: '/models' }),
     streaming: 'dichiarato', toolCalling: 'dichiarato',
-    cache: congela({ marcatore: null, letturaUsage: congela(['cached_tokens']),
+    cache: congela({ marcatore: 'prompt_cache_key' /* P1, platform.kimi.ai/docs/api/chat (21/10): «recommended for Coding Agents… a session or task ID» */, letturaUsage: congela(['cached_tokens']),
       scritturaUsage: congela([]), inclusiNelTotale: true, scontoDichiarato: null,
       etichetta: 'Cache declared in the response; no count: not measured.',
       fonte: 'https://platform.kimi.ai/docs/api/chat', data: '2026-09-12' }),
-    richiestaCompatibile: congela({ limiteUscita: null, ragionamento: 'thinking',
+    /* P1 della ricognizione (passata 2), platform.kimi.ai/docs/api/chat letta il 21/10/2026:
+     *   - `max_tokens` «Deprecated, please refer to max_completion_tokens» ⇒ limiteUscita;
+     *   - «always preserve the reasoning_content of each historical assistant message» ⇒ rimandaRagionamento (come Hermes per Kimi
+     *     a pensiero acceso, `reasoning_params.py:157` `_needs_kimi_tool_reasoning`: senza, un tool_call rimandato dà 400);
+     *   - `kimi-k3` «always reasons», `reasoning_effort` low|high|max (di serie max), nessun campo `thinking` nello schema ⇒ attivo: null
+     *     e i livelli; Moonshot rifiuta thinking e reasoning_effort insieme (Hermes `kimi-coding/__init__.py:52-56`). */
+    richiestaCompatibile: congela({ limiteUscita: 'max_completion_tokens', ragionamento: 'thinking', rimandaRagionamento: true,
       modelli: congela({
         'kimi-k2.6': congela({ livelliRagionamento: congela([]), temperaturaServer: true, sceltaObbligata: false, sceltaForzataConThinking: false,
           thinking: congela({ attivo: 'enabled', disattivabile: true, predefinito: true }) }),
         'kimi-k2.7-code': congela({ livelliRagionamento: congela([]), temperaturaServer: true, sceltaObbligata: false, sceltaForzataConThinking: false,
           thinking: congela({ attivo: 'enabled', disattivabile: false, predefinito: true, conserva: 'all' }) }),
-      }), fonte: 'https://platform.kimi.ai/docs/api/models-overview', data: '2026-09-12' }),
+        'kimi-k3': congela({ livelliRagionamento: congela(['low', 'high', 'max']), temperaturaServer: true, sceltaObbligata: true, sceltaForzataConThinking: true,
+          thinking: congela({ attivo: null, disattivabile: false, predefinito: true }) }),
+      }), fonte: 'https://platform.kimi.ai/docs/api/chat', data: '2026-10-21' }),
     catalogo: congela({ fonte: 'fornitore', forma: 'openai-data', percorso: '/models', inUI: true }),
     prezzi: congela({ fonte: 'https://models.dev/api.json', data: '2026-09-12' }),
     limiti: congela({ timeoutPredefinitoSecondi: 60, tempoMassimoModificabile: true }),
@@ -335,15 +374,24 @@ export const REGISTRO_FORNITORI = congela({
       scritturaUsage: congela([]), inclusiNelTotale: true, scontoDichiarato: null,
       etichetta: 'Cache declared in the response; no count: not measured.',
       fonte: 'https://platform.minimax.io/docs/api-reference/text-prompt-caching', data: '2026-09-12' }),
-    richiestaCompatibile: congela({ limiteUscita: null, ragionamento: 'thinking',
+    /* P1 della ricognizione (passata 2), platform.minimax.io/docs/api-reference/text-openai-api letta il 21/10/2026:
+     *   - MiniMax-M3.1-Flash: «disabled» = 400 (non si spegne), `reasoning_effort` low|medium|high|xhigh|max (di serie max), «none» = 400;
+     *   - `reasoning_split: true` porta il ragionamento in `reasoning_content`, con false resta in `content` fra `<think>` (M3.1-Flash non
+     *     accetta false): parametro fisso, come Hermes `plugins/model-providers/minimax/__init__.py:27-36` (`reasoning_split: True` sempre);
+     *   - `max_tokens` «Legacy», il ragionamento ci conta dentro ⇒ `max_completion_tokens`;
+     *   - temperature e top_p «Not supported yet» (M3 e M3.1-Flash: sempre 1 e 0,95). */
+    richiestaCompatibile: congela({ limiteUscita: 'max_completion_tokens', ragionamento: 'thinking',
+      parametriFissi: congela({ reasoning_split: true }),
       modelli: congela({
-        'MiniMax-M3': congela({ livelliRagionamento: congela([]),
+        'MiniMax-M3.1-Flash': congela({ livelliRagionamento: congela(['low', 'medium', 'high', 'xhigh', 'max']), temperaturaServer: true,
+          thinking: congela({ attivo: null, disattivabile: false, predefinito: true }) }),
+        'MiniMax-M3': congela({ livelliRagionamento: congela([]), temperaturaServer: true,
           thinking: congela({ attivo: 'adaptive', disattivabile: true, predefinito: true }) }),
         'MiniMax-M2.7': congela({ livelliRagionamento: congela([]),
           thinking: congela({ attivo: null, disattivabile: false, predefinito: true }) }),
         'MiniMax-M2.5': congela({ livelliRagionamento: congela([]),
           thinking: congela({ attivo: null, disattivabile: false, predefinito: true }) }),
-      }), fonte: 'https://platform.minimax.io/docs/api-reference/text-openai-api', data: '2026-09-12' }),
+      }), fonte: 'https://platform.minimax.io/docs/api-reference/text-openai-api', data: '2026-10-21' }),
     catalogo: congela({ fonte: 'fornitore', forma: 'openai-data', percorso: '/models', inUI: true }),
     prezzi: congela({ fonte: 'https://models.dev/api.json', data: '2026-09-12' }),
     limiti: congela({ timeoutPredefinitoSecondi: 60, tempoMassimoModificabile: true }),
@@ -376,6 +424,12 @@ export const REGISTRO_FORNITORI = congela({
       etichetta: 'Cache declared in the response; no count: not measured.',
       fonte: 'https://www.alibabacloud.com/help/en/model-studio/context-cache', data: '2026-09-12' }),
     richiestaCompatibile: congela({ limiteUscita: null, ragionamento: 'enable_thinking',
+      /* owner 21/10/2026 «Opzione nel registro, spenta»: Qwen fa UNA chiamata d'attrezzo per giro se non si chiede `parallel_tool_calls`
+         (di serie false). Come opencode (`providerOptions.parallelToolCalls`); Hermes e pi non lo mandano. Si accende dopo il banco. */
+      chiamateParallele: congela({ attiva: false, fonte: 'https://www.alibabacloud.com/help/en/model-studio/qwen-api-via-openai-chat-completions', data: '2026-10-21' }),
+      /* owner 21/10/2026: come Z.AI, il ragionamento dei giri passati si tiene, sui soli modelli che Alibaba elenca */
+      conservaRagionamento: congela({ forma: 'preserve_thinking', modelli: congela(['qwen3.8-flash']),
+        fonte: 'https://www.alibabacloud.com/help/en/model-studio/deep-thinking', data: '2026-10-21' }),
       modelli: congela({
         'qwen-flash': congela({ livelliRagionamento: congela([]), sceltaForzataConThinking: false,
           thinking: congela({ attivo: true, disattivabile: true, predefinito: false }) }),
@@ -448,7 +502,10 @@ export const REGISTRO_FORNITORI = congela({
     documentato) + catalogo provider misurato 24/09 `supported_efforts: [max, high, low]`,
     `default_effort: max` (runtime-owner-adapter.mjs:388-390). Nessun ramo per provider: il
     meccanismo resta generico (alias canonico xhigh≡max + più-debole-prima + minimo di cura). */
-    ragionamento: congela({ formato: 'thinking', livelli: congela(['low', 'high', 'max']), fonte: 'https://docs.z.ai/api-reference/llm/chat-completion', data: '2026-10-05' }),
+    ragionamento: congela({ formato: 'thinking', livelli: congela(['low', 'high', 'max']), livelloPredefinito: 'max', fonte: 'https://docs.z.ai/api-reference/llm/chat-completion', data: '2026-10-05',
+      /* owner 21/10/2026: il ragionamento dei giri passati si tiene (spento di serie sull'indirizzo standard) */
+      conservaRagionamento: congela({ forma: 'clear_thinking', diSerie: congela(['glm-5.3-flash', 'glm-5.3', 'glm-5.2', 'glm-5']),
+        fonte: 'https://docs.z.ai/guides/capabilities/thinking-mode', data: '2026-10-21' }) }),
     modelliNoti: congela([
       congela({ id: 'glm-5.3-flash', nome: 'GLM-5.3-Flash', contextLength: 1_000_000, contestoDichiarato: '1M', maxOutputTokens: 131_072,
         fonte: 'https://docs.z.ai/guides/vlm/glm-5.3-flash', data: '2026-10-05',
@@ -593,6 +650,8 @@ export const REGISTRO_FORNITORI = congela({
   // ── OpenRouter — l'aggregatore, e l'unico che oggi porta anche i PREZZI ────────────────────
   openrouter: congela({
     id: 'openrouter',
+    /* P1, 21/10/2026: la chiave d'instradamento costante della conversazione (vedi `conChiaveDellaCache`) */
+    instradamento: congela({ campo: 'session_id', fonte: 'https://openrouter.ai/docs/guides/best-practices/prompt-caching', data: '2026-10-21' }),
     // P-F, fonti e strumenti verificati il 12/09/2026; parità con models.dev nel test.
     modelliDiRiserva: congela([
       // 12/09/2026 — https://openrouter.ai/api/v1/models
@@ -715,6 +774,12 @@ export const REGISTRO_FORNITORI = congela({
   // P-G, 12/09/2026 — Groq. Fonte HTTP: https://console.groq.com/docs/api-reference
   groq: congela({
     id: 'groq',
+    /* P0 della ricognizione dei parametri, passata 2 (21/10/2026): fornitore RIGIDO, rifiuta con 400/422 i campi che non conosce —
+       Hermes `agent/message_sanitization.py:765-768`: «Strict OpenAI-compatible providers (Mistral, Cerebras, Groq, SambaNova, …)
+       reject ANY reasoning_content key in input messages with HTTP 400/422 ("Extra inputs are not permitted")». Il kernel mette il
+       marcatore `cache_control` sul sistema per tutti (`talosHarness.mjs:2046`) e questo fornitore non lo dichiara: la sua cache è
+       automatica, toglierlo non perde niente. Il traduttore li toglie (`togliCampiRifiutati`). */
+    campiRifiutati: congela({ campi: congela(['reasoning_content', 'cache_control']), fonte: 'https://console.groq.com/docs/api-reference', data: '2026-10-21' }),
     modelliDiRiserva: congela([
       congela({ id: 'openai/gpt-oss-20b', nome: 'GPT OSS 20B', toolCalling: true,
         fonte: 'https://console.groq.com/docs/tool-use/overview', data: '2026-09-12' }),
@@ -764,6 +829,17 @@ export const REGISTRO_FORNITORI = congela({
   // P-G, 12/09/2026 — Cerebras. Fonte HTTP: https://inference-docs.cerebras.ai/api-reference/chat-completions
   cerebras: congela({
     id: 'cerebras',
+    /* P0 della ricognizione dei parametri, passata 2 (21/10/2026): fornitore RIGIDO, rifiuta con 400/422 i campi che non conosce —
+       Hermes `agent/message_sanitization.py:765-768`: «Strict OpenAI-compatible providers (Mistral, Cerebras, Groq, SambaNova, …)
+       reject ANY reasoning_content key in input messages with HTTP 400/422 ("Extra inputs are not permitted")». Il kernel mette il
+       marcatore `cache_control` sul sistema per tutti (`talosHarness.mjs:2046`) e questo fornitore non lo dichiara: la sua cache è
+       automatica, toglierlo non perde niente. Il traduttore li toglie (`togliCampiRifiutati`). */
+    /* revisione F1 (21/10): `stream_options` non è nello schema di oggi; l'uso arriva di serie nell'ultimo pezzo dello stream */
+    campiRifiutati: congela({ campi: congela(['reasoning_content', 'cache_control', 'stream_options']), fonte: 'https://inference-docs.cerebras.ai/api-reference/chat-completions', data: '2026-10-21' }),
+    /* revisione F1 (21/10/2026): il messaggio di Cerebras ha un campo suo per il ragionamento rimandato — «Reasoning from an assistant
+       response supplied back in conversation history. Supported behavior varies by model» (schema ChatMessage, letto il 21/10): il
+       `reasoning_content` non si butta, si porta lì. */
+    ragionamentoNeiMessaggi: congela({ campo: 'reasoning', fonte: 'https://inference-docs.cerebras.ai/api-reference/chat-completions', data: '2026-10-21' }),
     modelliDiRiserva: congela([
       congela({ id: 'gpt-oss-120b', nome: 'GPT OSS 120B', toolCalling: true,
         fonte: 'https://inference-docs.cerebras.ai/capabilities/tool-use', data: '2026-09-12' }),
@@ -786,7 +862,7 @@ export const REGISTRO_FORNITORI = congela({
     streaming: 'dichiarato',
     toolCalling: 'dichiarato',
     cache: congela({
-      marcatore: null, letturaUsage: congela(['prompt_tokens_details.cached_tokens']),
+      marcatore: 'prompt_cache_key' /* P1, inference-docs.cerebras.ai/api-reference/chat-completions (21/10): «An opaque identifier that groups related requests so they reuse the same prompt cache» */, letturaUsage: congela(['prompt_tokens_details.cached_tokens']),
       scritturaUsage: congela([]), inclusiNelTotale: true, scontoDichiarato: null,
       etichetta: 'Cache declared by the provider; no count: not measured.',
       fonte: 'https://inference-docs.cerebras.ai/capabilities/prompt-caching', data: '2026-09-12',
@@ -813,6 +889,20 @@ export const REGISTRO_FORNITORI = congela({
   // P-G, 12/09/2026 — Mistral. Fonte HTTP: https://docs.mistral.ai/api/endpoint/chat
   mistral: congela({
     id: 'mistral',
+    /* P0 della ricognizione dei parametri, passata 2 (21/10/2026): fornitore RIGIDO, rifiuta con 400/422 i campi che non conosce —
+       Hermes `agent/message_sanitization.py:765-768`: «Strict OpenAI-compatible providers (Mistral, Cerebras, Groq, SambaNova, …)
+       reject ANY reasoning_content key in input messages with HTTP 400/422 ("Extra inputs are not permitted")». Il kernel mette il
+       marcatore `cache_control` sul sistema per tutti (`talosHarness.mjs:2046`) e questo fornitore non lo dichiara: la sua cache è
+       automatica, toglierlo non perde niente. Il traduttore li toglie (`togliCampiRifiutati`). */
+    /* Mistral, in più: `stream_options` non è nell'API (docs.mistral.ai/api/endpoint/chat, 21/10/2026) e i campi in più danno
+       «Extra inputs are not permitted» (changelog). L'uso arriva lo stesso nell'ultimo pezzo dello stream. */
+    campiRifiutati: congela({ campi: congela(['reasoning_content', 'cache_control', 'stream_options']), fonte: 'https://docs.mistral.ai/api/endpoint/chat', data: '2026-10-21' }),
+    /* revisione F4 (21/10/2026): Mistral accetta solo id di chiamata di 9 caratteri alfanumerici; una storia con id di un altro fornitore
+       (`call_…`, dopo un cambio di modello) dà errore. Come pi (`mistral-conversations.ts:259-267`) e opencode
+       (`protocols/utils/mistral-tool-id.ts:3-30`): hash deterministico, id già validi riservati, chiamata ed esito coerenti.
+       ⛔ La documentazione di Mistral NON lo dichiara (docs.mistral.ai/capabilities/function_calling, 21/10: solo un id d'esempio di 9,
+       «D681PevKs»): la fonte è l'errore dell'API visto da pi e opencode. Non verificato dal vivo da noi. */
+    idChiamate: congela({ forma: 'alfanumerico-9', fonte: 'https://github.com/badlogic/pi-mono/blob/main/packages/ai/src/api/mistral-conversations.ts', data: '2026-10-21' }),
     modelliDiRiserva: congela([
       congela({ id: 'mistral-small-latest', nome: 'Mistral Small', toolCalling: true,
         fonte: 'https://docs.mistral.ai/studio/conversations/function-calling', data: '2026-09-12' }),
@@ -840,10 +930,23 @@ export const REGISTRO_FORNITORI = congela({
       etichetta: 'Cache declared by the provider; no count: not measured.',
       fonte: 'https://docs.mistral.ai/studio/conversations/advanced/prompt-caching', data: '2026-09-12',
     }),
+    /* P1, 21/10/2026: `reasoning_effort` SOLO ai modelli che la pagina «Reasoning» elenca (docs.mistral.ai/capabilities/reasoning, letta
+       il 21/10): gli altri rispondono 422 «Extra inputs are not permitted» (Hermes issue #11243; Hermes non lo manda mai a api.mistral.ai,
+       `agent/reasoning_params.py:107`). Livelli come pi (`api/mistral-conversations.ts:203-209`, models.dev `reasoning_options`):
+       none/high per i Mistral, low/high/max per GLM servito da Mistral. Un id non elencato non riceve il campo, e lo si dice. */
     richiestaCompatibile: congela({
-      limiteUscita: null, ragionamento: 'effort',
-      modelli: congela({}),
-      fonte: 'https://docs.mistral.ai/api/endpoint/chat', data: '2026-09-12',
+      limiteUscita: null, ragionamento: 'effort', soloModelliElencati: true,
+      modelli: congela({
+        'mistral-small-latest': congela({ livelliRagionamento: congela(['none', 'high']) }),
+        'mistral-small-2603': congela({ livelliRagionamento: congela(['none', 'high']) }),
+        'mistral-medium-latest': congela({ livelliRagionamento: congela(['none', 'high']) }),
+        'mistral-medium-3-5': congela({ livelliRagionamento: congela(['none', 'high']) }),
+        'mistral-large-4-0': congela({ livelliRagionamento: congela(['none', 'high']) }),
+        'mistral-large-4': congela({ livelliRagionamento: congela(['none', 'high']) }),
+        'mistral-medium-2604': congela({ livelliRagionamento: congela(['none', 'high']) }),
+        'zai-glm-5-3': congela({ livelliRagionamento: congela(['low', 'high', 'max']) }),
+      }),
+      fonte: 'https://docs.mistral.ai/capabilities/reasoning', data: '2026-10-21',
     }),
     catalogo: congela({ fonte: 'fornitore', forma: 'openai-data', percorso: '/models', inUI: true }),
     prezzi: congela({ fonte: 'https://models.dev/api.json', data: '2026-09-12' }),
@@ -859,6 +962,10 @@ export const REGISTRO_FORNITORI = congela({
   // P-G, 12/09/2026 — Together. Fonte HTTP: https://docs.together.ai/docs/inference/openai-compatibility
   together: congela({
     id: 'together',
+    /* P1 della ricognizione (passata 2, 21/10/2026): docs.together.ai/reference/chat-completions-1 — `reasoning: { enabled }` più
+       `reasoning_effort` low|medium|high. Prima partiva `reasoning:{effort}`: né l'accensione né il livello arrivavano. Come pi
+       (`openai-completions.ts:955-963`, thinkingFormat "together"). */
+    ragionamento: congela({ formato: 'together', livelli: congela(['low', 'medium', 'high']), fonte: 'https://docs.together.ai/reference/chat-completions-1', data: '2026-10-21' }),
     modelliDiRiserva: congela([
       congela({ id: 'meta-llama/Llama-3.3-70B-Instruct-Turbo', nome: 'Llama 3.3 70B', toolCalling: true,
         fonte: 'https://docs.together.ai/docs/serverless/models', data: '2026-09-12' }),
@@ -923,7 +1030,7 @@ export const REGISTRO_FORNITORI = congela({
     streaming: 'dichiarato',
     toolCalling: 'dichiarato',
     cache: congela({
-      marcatore: null, letturaUsage: congela(['prompt_tokens_details.cached_tokens']),
+      marcatore: 'prompt_cache_key' /* P1, docs.fireworks.ai/api-reference/post-chatcompletions (21/10): «Requests with the same prompt_cache_key are routed to the same backend to maximize KV cache hit rates» */, letturaUsage: congela(['prompt_tokens_details.cached_tokens']),
       scritturaUsage: congela([]), inclusiNelTotale: true, scontoDichiarato: null,
       etichetta: 'Cache declared by the provider; no count: not measured.',
       fonte: 'https://docs.fireworks.ai/api-reference/post-chatcompletions', data: '2026-09-12',
@@ -947,6 +1054,9 @@ export const REGISTRO_FORNITORI = congela({
   // P-G, 12/09/2026 — DeepInfra. Fonte HTTP: https://docs.deepinfra.com/chat/overview
   deepinfra: congela({
     id: 'deepinfra',
+    /* P1 della ricognizione (passata 2, 21/10/2026): `reasoning_effort` A RADICE, e «none» è l'unico modo di spegnerlo (DeepInfra
+       applica un predefinito per modello quando manca). Come Hermes `plugins/model-providers/deepinfra/__init__.py:18-30`. */
+    ragionamento: congela({ formato: 'reasoning_effort', livelli: congela(['minimal', 'low', 'medium', 'high', 'xhigh', 'max']), fonte: 'https://docs.deepinfra.com/chat/overview', data: '2026-10-21' }),
     modelliDiRiserva: congela([
       congela({ id: 'openai/gpt-oss-20b', nome: 'GPT OSS 20B', toolCalling: true,
         fonte: 'https://deepinfra.com/openai/gpt-oss-20b', data: '2026-09-12' }),
@@ -1000,6 +1110,10 @@ export const REGISTRO_FORNITORI = congela({
   // La documentazione HTTP usa /openai/v1; alcuni esempi SDK e models.dev indicano /openai. Qui si segue il riferimento HTTP, senza aggiungere un secondo /v1.
   novita: congela({
     id: 'novita',
+    /* P1 della ricognizione (passata 2, 21/10/2026): docs.novita.ai/api-reference/model-apis-llm-create-chat-completion —
+       `enable_thinking` (di serie true) e `separate_reasoning` (di serie FALSE: il ragionamento finirebbe dentro `content`). Lo sforzo
+       non è documentato: non si manda, e si dice nelle note. */
+    ragionamento: congela({ formato: 'enable_thinking', livelli: congela([]), fonte: 'https://docs.novita.ai/api-reference/model-apis-llm-create-chat-completion', data: '2026-10-21' }),
     modelliDiRiserva: congela([
       congela({ id: 'qwen/qwen3-coder-30b-a3b-instruct', nome: 'Qwen3 Coder 30B', toolCalling: true,
         fonte: 'https://novita.ai/models/model-detail/qwen-qwen3-coder-30b-a3b-instruct', data: '2026-09-12' }),
@@ -1124,7 +1238,7 @@ export const REGISTRO_FORNITORI = congela({
     streaming: 'dichiarato',
     toolCalling: 'dichiarato',
     cache: congela({
-      marcatore: null, letturaUsage: congela(['prompt_tokens_details.cached_tokens']),
+      marcatore: 'prompt_cache_key' /* P1, docs.x.ai/developers/rest-api-reference/inference/chat-completions (21/10): «A stable cache key for best-effort sticky routing / prompt-cache hits across requests sharing a prompt prefix», «Plumbed to x-grok-conv-id» */, letturaUsage: congela(['prompt_tokens_details.cached_tokens']),
       scritturaUsage: congela([]), inclusiNelTotale: true, scontoDichiarato: null,
       etichetta: 'Cache declared by the provider; no count: not measured.',
       fonte: 'https://docs.x.ai/developers/rest-api-reference/inference/chat-completions', data: '2026-09-12',
@@ -1351,7 +1465,10 @@ export const REGISTRO_FORNITORI = congela({
     auth: congela({ tipo: 'header', header: 'api-key', nomeVariabile: congela(['AZURE_OPENAI_API_KEY', 'AZURE_FOUNDRY_API_KEY']) }),
     chiaveObbligatoria: true, formaIdModello: 'nome', oauth: null,
     endpoint: congela({ chat: '/chat/completions', modelli: '/models' }),
-    cloud: congela({ tipo: 'azure', versione: 'v1', campi: congela(['endpointRisorsa', 'versioneApi']),
+    cloud: congela({ tipo: 'azure', versione: 'v1',
+      /* P1 della ricognizione (21/10/2026), learn.microsoft.com/en-us/rest/api/microsoft-foundry/azureopenai/chat (v1): `max_tokens`
+         «is now deprecated in favor of `max_completion_tokens`, and is not compatible with o1 series models» */
+      limiteUscita: 'max_completion_tokens', campi: congela(['endpointRisorsa', 'versioneApi']),
       fonte: 'https://learn.microsoft.com/en-us/azure/foundry/openai/api-version-lifecycle', data: '2026-09-12',
       nota: 'Choose the name of the deployment in your resource. A model in the catalog is not a deployment.', notaChiave: 'server.provider.cloudNote.azure' }),
     streaming: 'dichiarato', toolCalling: 'dichiarato',
@@ -1393,7 +1510,10 @@ export const REGISTRO_FORNITORI = congela({
     auth: congela({ tipo: 'bearer', header: 'Authorization', nomeVariabile: congela(['VERTEX_ACCESS_TOKEN']) }),
     chiaveObbligatoria: true, formaIdModello: 'vendor/nome', oauth: null,
     endpoint: congela({ chat: '/chat/completions', modelli: null }),
-    cloud: congela({ tipo: 'vertex', versione: 'v1', campi: congela(['progetto', 'regione']),
+    cloud: congela({ tipo: 'vertex', versione: 'v1',
+      /* P1 della ricognizione (21/10/2026), docs.cloud.google.com/gemini-enterprise-agent-platform/models/start/openai: `reasoning_effort`
+         «minimal», «low», «medium» o «high» (diventano `thinking_level` su Gemini 3); il resto non è documentato */
+      livelliRagionamento: congela(['minimal', 'low', 'medium', 'high']), campi: congela(['progetto', 'regione']),
       fonte: 'https://docs.cloud.google.com/vertex-ai/generative-ai/docs/samples/generativeaionvertexai-gemini-chat-completions-non-streaming', data: '2026-09-12',
       nota: 'Enter a temporary access token you already got from Google. It must be replaced when it expires; automatic renewal is not connected. The catalog cannot be checked from this connection.', notaChiave: 'server.provider.cloudNote.vertex' }),
     streaming: 'dichiarato', toolCalling: 'dichiarato',
@@ -1444,6 +1564,44 @@ export const REGISTRO_FORNITORI = congela({
     credenziale: false,
     esecuzione: 'motore locale',
   }),
+
+  /*
+   * ── Il motore locale DELL'APP che ospita r4 (il telefono) — 18/10/2026, contratto con la sessione mobile ─────────────────
+   *   Il modello è già aperto dall'app; r4 gli parla su un socket Unix privato con una chiave per avvio, spinta dall'app
+   *   (`accesso-locale-ospite.mjs`). Stesso protocollo di `local`, quindi stesso wire; la chiave non è sul disco e non entra nel
+   *   portachiavi, come quella di llama-server. ⛔ Sta DOPO `local`: `idPerWire('locale')[0]` è il supervisore del PC
+   *   (`session-registry.mjs`, FONTE_DEL_SUPERVISORE_LOCALE).
+   */
+  'locale-ospite': congela({
+    id: 'locale-ospite',
+    modelliDiRiserva: null,
+    modelloAusiliario: null,
+    modelsDevId: null,
+    etichetta: 'On this device', etichettaChiave: 'server.provider.label.guestEngine',
+    descrizione: 'The model the app has open, reached through its private socket.',
+    paginaChiavi: null,
+    wire: 'locale',
+    baseUrl: null,               // un socket dell'app, non un indirizzo
+    indirizzoModificabile: false,
+    envIndirizzo: congela([]),
+    auth: congela({ tipo: 'effimera', header: 'Authorization', nomeVariabile: congela([]) }),
+    chiaveObbligatoria: false,
+    formaIdModello: 'nome',
+    oauth: null,
+    endpoint: congela({ chat: '/v1/chat/completions', modelli: null }),
+    streaming: 'dichiarato',
+    toolCalling: 'dichiarato',
+    cache: congela({ marcatore: null, letturaUsage: congela([]), scritturaUsage: congela([]), inclusiNelTotale: true, scontoDichiarato: null }),
+    catalogo: congela({ fonte: 'runtime-locale', forma: null, percorso: null, inUI: false }),
+    prezzi: congela({ fonte: 'nessuna' }),
+    /* il tempo alla PRIMA risposta: sulla CPU del telefono il prefill va a ~109 token/s (misure del Pad, 18/10), quindi 16k di
+       contesto sono ~150 s prima del primo byte se l'app non manda subito gli header */
+    limiti: congela({ timeoutPredefinitoSecondi: 300, tempoMassimoModificabile: false }),
+    sonda: congela({ attiva: false, auth: 'nessuna', percorso: null, urlAssoluto: null, conta: () => null }),
+    destinazioneChat: true,
+    credenziale: false,
+    esecuzione: 'motore locale',
+  }),
 });
 
 export class ProviderRegistryError extends Error {
@@ -1462,6 +1620,15 @@ export class ProviderRegistryError extends Error {
  *   chat senza `wire`, una capacità con un booleano al posto dei tre stati — tutti e tre devono
  *   LANCIARE, non degradare.
  */
+/** Le forme del ragionamento che il traduttore sa scrivere (21/10/2026: together, reasoning_effort a radice, enable_thinking). */
+export const FORMATI_RAGIONAMENTO = Object.freeze(['thinking', 'together', 'reasoning_effort', 'enable_thinking']);
+
+/** I parametri che un profilo può fissare su ogni richiesta (`parametriFissi`, 21/10/2026): booleani documentati dal fornitore. */
+export const PARAMETRI_FISSI_AMMESSI = Object.freeze(['reasoning_split']);
+
+/** I campi che il traduttore sa togliere per un fornitore rigido (`campiRifiutati`, 21/10/2026). */
+export const CAMPI_RIFIUTABILI = Object.freeze(['reasoning_content', 'cache_control', 'stream_options']);
+
 export function verificaRegistro(registro = REGISTRO_FORNITORI) {
   const visti = new Set();
   for (const [chiave, record] of Object.entries(registro)) {
@@ -1541,6 +1708,15 @@ export function verificaRegistro(registro = REGISTRO_FORNITORI) {
     if (record.richiestaCompatibile !== undefined) {
       const p = record.richiestaCompatibile;
       if (!p || ![null, 'max_completion_tokens'].includes(p.limiteUscita) || ![null, 'effort', 'thinking', 'enable_thinking'].includes(p.ragionamento)
+        || (p.rimandaRagionamento !== undefined && p.rimandaRagionamento !== true)
+        || (p.soloModelliElencati !== undefined && (p.soloModelliElencati !== true || p.ragionamento !== 'effort'))
+        || (p.chiamateParallele !== undefined && (typeof p.chiamateParallele?.attiva !== 'boolean' || typeof p.chiamateParallele.fonte !== 'string'
+          || !p.chiamateParallele.fonte.startsWith('https://') || !/^\d{4}-\d{2}-\d{2}$/u.test(p.chiamateParallele.data ?? '')))
+        || (p.conservaRagionamento !== undefined && (p.ragionamento !== 'enable_thinking' || p.conservaRagionamento?.forma !== 'preserve_thinking'
+          || !Array.isArray(p.conservaRagionamento.modelli) || p.conservaRagionamento.modelli.some(id => !Object.hasOwn(p.modelli ?? {}, id))
+          || typeof p.conservaRagionamento.fonte !== 'string' || !p.conservaRagionamento.fonte.startsWith('https://') || !/^\d{4}-\d{2}-\d{2}$/u.test(p.conservaRagionamento.data ?? '')))
+        || (p.parametriFissi !== undefined && (!p.parametriFissi || typeof p.parametriFissi !== 'object' || Array.isArray(p.parametriFissi)
+          || Object.entries(p.parametriFissi).some(([k, v]) => !PARAMETRI_FISSI_AMMESSI.includes(k) || typeof v !== 'boolean')))
         || !p.modelli || typeof p.modelli !== 'object' || Array.isArray(p.modelli)
         || typeof p.fonte !== 'string' || !p.fonte.startsWith('https://') || !/^\d{4}-\d{2}-\d{2}$/u.test(p.data ?? '')) {
         throw new ProviderRegistryError(`${dove}: compatibility profile without a contract or a dated source`);
@@ -1554,7 +1730,9 @@ export function verificaRegistro(registro = REGISTRO_FORNITORI) {
         }
         if (['thinking', 'enable_thinking'].includes(p.ragionamento)) {
           const t = m.thinking;
-          if (!t || m.livelliRagionamento.length || typeof t.disattivabile !== 'boolean' || typeof t.predefinito !== 'boolean'
+          /* 21/10/2026: i livelli convivono col controllo `thinking` solo per un modello che ragiona SEMPRE e non ha l'interruttore
+             (`attivo: null`, kimi-k3): lì lo sforzo è l'unica leva, e i due campi insieme danno 400 su Moonshot */
+          if (!t || (m.livelliRagionamento.length && (t.attivo !== null || p.ragionamento !== 'thinking')) || typeof t.disattivabile !== 'boolean' || typeof t.predefinito !== 'boolean'
             || (p.ragionamento === 'enable_thinking' ? t.attivo !== true : ![null, 'enabled', 'adaptive'].includes(t.attivo))
             || (t.attivo === null && t.disattivabile) || (!t.disattivabile && !t.predefinito)
             || (t.conserva !== undefined && (t.conserva !== 'all' || t.attivo !== 'enabled'))
@@ -1600,6 +1778,42 @@ export function verificaRegistro(registro = REGISTRO_FORNITORI) {
         if (['ingresso', 'cache', 'uscita'].some(k => typeof modello.prezzi?.[k] !== 'number' || !Number.isFinite(modello.prezzi[k]) || modello.prezzi[k] < 0)) throw new ProviderRegistryError(`${dove}: invalid model prices`);
         if (!Array.isArray(modello.ragionamento?.livelli) || modello.ragionamento.livelli.some(l => !record.ragionamento?.livelli?.includes(l)) || !Array.isArray(modello.ragionamento.thinking) || modello.ragionamento.thinking.some(t => !['enabled', 'disabled'].includes(t))) throw new ProviderRegistryError(`${dove}: invalid reasoning options`);
       }
+    }
+    if (record.ragionamento?.formato !== undefined && !FORMATI_RAGIONAMENTO.includes(record.ragionamento.formato)) {
+      throw new ProviderRegistryError(`${dove}: unknown reasoning format`);
+    }
+    if (record.ragionamento?.livelloPredefinito !== undefined && !record.ragionamento.livelli?.includes(record.ragionamento.livelloPredefinito)) {
+      throw new ProviderRegistryError(`${dove}: the default reasoning level is not one of the documented levels`);
+    }
+    if (record.ragionamento?.rimandaRagionamento !== undefined && record.ragionamento.rimandaRagionamento !== true) {
+      throw new ProviderRegistryError(`${dove}: rimandaRagionamento is either true or absent`);
+    }
+    const conserva = record.ragionamento?.conservaRagionamento;
+    if (conserva !== undefined && (record.ragionamento.formato !== 'thinking' || conserva?.forma !== 'clear_thinking'
+      || (conserva.diSerie !== undefined && (!Array.isArray(conserva.diSerie) || conserva.diSerie.some(id => !record.modelliNoti?.some(m => m.id === id))))
+      || typeof conserva.fonte !== 'string' || !conserva.fonte.startsWith('https://') || !/^\d{4}-\d{2}-\d{2}$/u.test(conserva.data ?? ''))) {
+      throw new ProviderRegistryError(`${dove}: keeping past reasoning needs the thinking format and a dated source`);
+    }
+    if (record.instradamento !== undefined && (record.instradamento?.campo !== 'session_id' || typeof record.instradamento.fonte !== 'string'
+      || !record.instradamento.fonte.startsWith('https://') || !/^\d{4}-\d{2}-\d{2}$/u.test(record.instradamento.data ?? ''))) {
+      throw new ProviderRegistryError(`${dove}: the routing key field must be known, with a dated source`);
+    }
+    if (record.idChiamate !== undefined && (record.idChiamate?.forma !== 'alfanumerico-9' || !record.idChiamate.fonte || !/^\d{4}-\d{2}-\d{2}$/u.test(record.idChiamate.data ?? ''))) {
+      throw new ProviderRegistryError(`${dove}: tool call id shape must be known, with a dated source`);
+    }
+    if (record.ragionamentoNeiMessaggi !== undefined && (record.ragionamentoNeiMessaggi?.campo !== 'reasoning' || !record.ragionamentoNeiMessaggi.fonte
+      || !/^\d{4}-\d{2}-\d{2}$/u.test(record.ragionamentoNeiMessaggi.data ?? ''))) {
+      throw new ProviderRegistryError(`${dove}: the reasoning field in messages must be known, with a dated source`);
+    }
+    if (record.campiRifiutati !== undefined) {
+      const { campi, fonte, data } = record.campiRifiutati ?? {};
+      if (!Array.isArray(campi) || campi.length === 0 || campi.some(c => !CAMPI_RIFIUTABILI.includes(c)) || !fonte || !/^\d{4}-\d{2}-\d{2}$/u.test(data ?? '')) {
+        throw new ProviderRegistryError(`${dove}: rejected fields must be known fields with a dated source`);
+      }
+    }
+    const ignoti = record.ragionamento?.modelliIgnoti;
+    if (ignoti !== undefined && (!Array.isArray(ignoti?.livelli) || ignoti.livelli.some(l => !record.ragionamento.livelli?.includes(l)) || !Array.isArray(ignoti.thinking) || ignoti.thinking.some(t => !['enabled', 'disabled'].includes(t)))) {
+      throw new ProviderRegistryError(`${dove}: invalid reasoning options for unknown models`);
     }
   }
   return true;

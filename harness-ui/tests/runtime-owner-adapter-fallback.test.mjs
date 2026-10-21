@@ -42,7 +42,13 @@ test('PH-FALLBACK-01 kernel reale: esaurisce gli undici tentativi (1 + 10 come C
   assert.equal(b.consumi.at(-1).provider, 'zai');
   assert.equal(b.consumi.at(-1).costoDichiarato, 0.002);
   const ultimo = b.richieste.at(-1); assert.equal(ultimo.body.model, 'glm-4.7-flash');
-  assert.deepEqual(ultimo.body.messages, b.richieste[0].body.messages);
+  /* 21/10/2026 (revisione D1): verso DeepSeek ogni messaggio dell'assistente porta reasoning_content (il suo o " "), verso Z.AI no —
+     il campo si riconcilia per il fornitore ATTIVO, come Hermes `reapply_reasoning_echo` (agent/message_sanitization.py:793-800).
+     La storia resta intatta: tolto il riempimento, i messaggi sono gli stessi. */
+  const senzaRiempimento = (ms) => ms.map((m) => (m.reasoning_content === ' ' ? (({ reasoning_content: _r, ...resto }) => resto)(m) : m));
+  assert.ok(b.richieste[0].body.messages.some((m) => m.role === 'assistant' && m.reasoning_content === ' '), 'verso DeepSeek il riempimento c\'è');
+  assert.equal(ultimo.body.messages.some((m) => Object.hasOwn(m, 'reasoning_content')), false, 'verso Z.AI nessun riempimento');
+  assert.deepEqual(ultimo.body.messages, senzaRiempimento(b.richieste[0].body.messages));
   assert.equal(JSON.stringify([b.eventi,b.consumi]).includes('finta-'), false);
   assert.equal(b.richieste.length, 12, 'undici richieste reali al primario prima della riserva');
 });

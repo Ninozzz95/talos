@@ -346,6 +346,13 @@ test('ATLAS-F1-07 · Alto contrasto: il contorno del bottone resta visibile (MDN
 
 test('ATLAS-F1-08 · Le istanze vere della Home seguono la ricetta (nessun contesto la annulla)', async ({ page }) => {
   const nonGet = await apri(page);
+  /* 18/10/2026 — «Nuova conversazione» la Home la mostra a store VUOTO; con una sessione già lì mostra «Riprendi il lavoro». Nella
+     suite intera lo store è condiviso e dipendeva dall'ORDINE delle spec (una spec della Libreria crea una sessione): aggiungendo
+     un file di prove l'ordine dei worker è cambiato e questa è caduta tre corse su tre, mentre da sola passava. Si misura lo
+     stato che la prova dichiara: la lista delle sessioni vuota, finta, registrata DOPO la rotta universale di `apri` (vince l'ultima). */
+  await page.route((url) => url.pathname === '/api/v1/sessions', (r) => (r.request().method() === 'GET' ? r.fulfill({ json: { ok: true, data: { items: [] } } }) : r.fallback()));
+  await page.reload();
+  await expect(page.locator('.talos-nav-item[data-vaia="chat"]').first()).toBeVisible();
   await page.locator('.talos-sidebar [data-vaia="home"]').click();
   // Il bottone lo disegna features/navigation/workspace-chrome.ts (button2 «Nuova conversazione»).
   const nuova = page.locator('.talos-button--secondary:visible', { hasText: 'Nuova conversazione' }).first();

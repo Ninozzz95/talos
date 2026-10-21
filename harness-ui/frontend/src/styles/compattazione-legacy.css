@@ -6,9 +6,8 @@
  *    `talos-avviso-piano talos-avviso-contesto`: è la sorella dell'avviso del piano (D4, 24/09) e ne
  *    eredita ogni regola (`avviso-piano.css`) — qui solo ciò che cambia. Niente colore d'avvertimento:
  *    è una notizia con l'azione accanto, non un pericolo (Claude Code docs `costs`: «not a usage limit»).
- *  · la barra «Riassumo la conversazione…» è la riga di avanzamento del trial (`.talos-context-chat-progress`,
- *    `index.css:2845`) senza il pulsante del Context Manager e con l'ALTEZZA FISSA: mentre lavora non
- *    cambia di un pixel (decisione 6: «altezza fissa, niente salti nella chat»).
+ *  · la barra «Riassumo la conversazione…»: dal 21/10/2026 (B1) è la RIGA VIVA qui sotto (`.talos-riga-viva`), una riga sola
+ *    con l'ALTEZZA FISSA di 30 px: mentre lavora non cambia di un pixel (decisione 6: «altezza fissa, niente salti nella chat»).
  *  · la riga «Conversazione riassunta · X → Y token» è il separatore del trial (`.talos-context-separator`,
  *    `index.css:2864`) con il menu «⋯» a destra e, aperto, il riassunto sotto la riga, a tutta larghezza.
  */
@@ -16,21 +15,71 @@
 /* l'icona dell'avviso: stessa scatola dell'avviso del piano, il glifo della cronologia */
 .talos-avviso-contesto .talos-avviso-piano__icona { color: var(--talos-accent-text); }
 
-/* la barra legacy: una colonna sola (niente pulsante), altezza che non balla */
-.talos-context-chat-progress--legacy {
-  grid-template-columns: minmax(0, 1fr);
-  min-height: calc(var(--talos-space-md) * 2 + 1.5rem + 6px + var(--talos-space-sm));
-  box-sizing: border-box;
+/*
+ * ⭐ B1 (owner 21/10/2026, mockup approvato alla terza versione: `mockup2.mjs`, costanti `CSS` e `VIVA`) — LA RIGA VIVA.
+ * Una riga sola alta 30 px, senza riquadro: prende il posto della barra legacy del 24/09 (che era un riquadro alto) e anche della
+ * riga del trial (`.talos-riga-viva--contesto`, `aggiornaAvanzamentoContesto`). Testo xs smorzato, lo stato nel colore del testo,
+ * due pulsanti testuali a destra, e in fondo un filo da 2 px. Solo token Forge; nessuno stile in linea (la CSP del server lo
+ * scarta): le due larghezze del filo arrivano come variabili CSS da `style.setProperty` (MDN CSP `style-src`, 15/12/2025).
+ * `color-mix(in srgb, <token> N%, transparent)`: MDN `color-mix()` (28/09/2026), esempio «Adding transparency».
+ */
+.talos-riga-viva {
+  --talos-riga-viva-binario: color-mix(in srgb, var(--talos-border) 35%, transparent);
+  position: relative; display: flex; align-items: center; gap: var(--talos-space-sm);
+  height: 30px; box-sizing: border-box; margin-block: var(--talos-space-md); padding: 0 2px; min-width: 0;
+  font-size: var(--talos-font-size-xs); color: var(--talos-muted); font-variant-numeric: tabular-nums;
 }
-.talos-context-chat-progress--legacy > span { min-height: 1.5rem; display: flex; align-items: center; }
+/* lo stato e i numeri: si accorciano loro (coi puntini), mai i pulsanti */
+.talos-riga-viva > [data-context-chat-text] {
+  display: flex; align-items: center; gap: var(--talos-space-sm); flex: 0 1 auto; min-width: 0;
+  overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+}
+.talos-riga-viva [data-context-chat-status] { color: var(--talos-text); }
+.talos-riga-viva [data-context-chat-eta]:empty { display: none; }
+.talos-riga-viva__azioni { display: flex; align-items: center; gap: 2px; margin-left: auto; flex: none; }
+.talos-riga-viva__azioni[hidden], .talos-riga-viva__azione[hidden] { display: none; }
+.talos-riga-viva__azione {
+  background: none; border: 0; padding: 2px 6px; border-radius: var(--talos-radius-control);
+  color: var(--talos-muted); font: inherit; cursor: pointer; white-space: nowrap;
+}
+.talos-riga-viva__azione--sola { margin-left: auto; flex: none; }
+.talos-riga-viva__azione:hover { color: var(--talos-text); background: color-mix(in srgb, var(--talos-border) 40%, transparent); }
+.talos-riga-viva__azione:focus-visible { outline: 2px solid var(--talos-accent); outline-offset: 1px; }
+.talos-riga-viva__azione--forte { color: var(--talos-accent-text, var(--talos-accent)); }
+.talos-riga-viva__azione:disabled { opacity: .5; cursor: default; background: none; }
+
+/* il filo: l'`<progress>` (indeterminato, o con `value` per il trial) e, quando ci sono letti/totale, i due tratti disegnati a parte */
+.talos-riga-viva > .talos-riga-viva__barra {
+  position: absolute; left: 0; right: 0; bottom: 0; display: block; width: 100%; height: 2px; margin: 0;
+  border: 0; border-radius: 2px; overflow: hidden; appearance: none; background: var(--talos-riga-viva-binario); accent-color: var(--talos-accent);
+}
+.talos-riga-viva > .talos-riga-viva__barra[hidden] { display: none; }
+.talos-riga-viva > .talos-riga-viva__barra::-webkit-progress-bar { background: var(--talos-riga-viva-binario); }
+.talos-riga-viva > .talos-riga-viva__barra::-webkit-progress-value { background: var(--talos-accent); }
+.talos-riga-viva > .talos-riga-viva__barra::-moz-progress-bar { background: var(--talos-accent); }
+/* coi due tratti la barra resta per chi usa lo schermo (`aria-valuetext`), ma non si vede: si vede il filo */
+.talos-riga-viva[data-riga-viva-tratti] > .talos-riga-viva__barra { opacity: 0; }
+.talos-riga-viva__filo {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 2px; display: flex; border-radius: 2px; overflow: hidden;
+  background: var(--talos-riga-viva-binario); pointer-events: none;
+}
+.talos-riga-viva__filo[hidden] { display: none; }
+.talos-riga-viva__filo > span { display: block; height: 100%; flex: none; }
+.talos-riga-viva__filo > [data-tratto="cache"] { width: var(--talos-riga-viva-cache, 0%); background: color-mix(in srgb, var(--talos-accent) 40%, transparent); }
+.talos-riga-viva__filo > [data-tratto="letto"] { width: var(--talos-riga-viva-letto, 0%); background: var(--talos-accent); }
+
 /* indeterminata: MDN `<progress>` (28/08/2026) — senza `value` la barra dice «in corso, non so quanto».
    24/09 sera: la stessa barra anche DENTRO la finestra del Context Manager (`[data-context-progress-bar]`), che nel
    modo semplice mostra il riassunto in corso: prima lì un `<progress>` indeterminato era un binario vuoto e fermo. */
 /* il binario del motore (`::-webkit-progress-bar`) è una scatola che copre lo sfondo dell'elemento: se è pieno, il gradiente
-   che scorre sotto non si vede. Trasparente: il colore del binario lo dà già il gradiente (`--talos-panel-soft` ai lati). */
-.talos-context-chat-progress--legacy > progress:indeterminate::-webkit-progress-bar,
+   che scorre sotto non si vede. Trasparente: il colore del binario lo dà già il gradiente ai lati. */
+.talos-riga-viva > .talos-riga-viva__barra:indeterminate::-webkit-progress-bar,
 .talos-context__progress[data-context-progress-bar]:indeterminate::-webkit-progress-bar { background: transparent; }
-.talos-context-chat-progress--legacy > progress:indeterminate,
+.talos-riga-viva > .talos-riga-viva__barra:indeterminate {
+  background: linear-gradient(90deg, var(--talos-riga-viva-binario) 0 35%, var(--talos-accent) 50%, var(--talos-riga-viva-binario) 65% 100%);
+  background-size: 220% 100%;
+  animation: talosCompattazioneScorre 1.6s linear infinite;
+}
 .talos-context__progress[data-context-progress-bar]:indeterminate {
   background: linear-gradient(90deg, var(--talos-panel-soft) 0 35%, var(--talos-accent) 50%, var(--talos-panel-soft) 65% 100%);
   background-size: 220% 100%;
@@ -42,11 +91,13 @@
    barra di progresso». Decisione owner del 02/09 per gli indicatori di STATO: «si CALMA, non si congela» — come l'orb, che
    col movimento ridotto gira a 3 s invece di 1,5 (`segnavia-mobile.css:81-82`). MDN «prefers-reduced-motion» (pagina
    aggiornata il 10/06/2026): il movimento si riduce o si sostituisce, non si toglie per forza. Qui scorre un gradiente
-   dentro un binario di 6 px, niente cambia posizione né misura: si dimezza la velocità. */
-body.reduce-motion .talos-context-chat-progress--legacy > progress:indeterminate,
+   dentro un filo di 2 px, niente cambia posizione né misura: si dimezza la velocità.
+   ⛔ B1 (21/10/2026): il brief diceva «fermo col movimento ridotto»; resta la decisione del 24/09 (e la prova
+   CTX-UI-BAR-CALM-NOT-FROZEN-reduce che la tiene) finché l'owner non la cambia. Segnalato nella consegna. */
+body.reduce-motion .talos-riga-viva > .talos-riga-viva__barra:indeterminate,
 body.reduce-motion .talos-context__progress[data-context-progress-bar]:indeterminate { animation-duration: 3.2s; }
 @media (prefers-reduced-motion: reduce) {
-  .talos-context-chat-progress--legacy > progress:indeterminate,
+  .talos-riga-viva > .talos-riga-viva__barra:indeterminate,
   .talos-context__progress[data-context-progress-bar]:indeterminate { animation-duration: 3.2s; }
 }
 

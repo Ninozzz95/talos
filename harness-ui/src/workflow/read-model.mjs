@@ -209,6 +209,23 @@ function base(state) {
     /* C3 tappa 3 (09/10/2026): PERCHÉ il run aspetta (i codici del riduttore), così il diagramma offre «Alza il tetto e
        riprendi» solo per `budget_overrun`. Solo quando ce n'è uno: le panoramiche dei run di sempre non cambiano (ETag). */
     ...(state.run.needsAttentionReasons?.length ? { attentionReasons: [...new Set(state.run.needsAttentionReasons)].sort() } : {}),
+    /* 21/10/2026 (visto dal vivo, sessione video: «Run budget limit reached · Raise it from the diagram» senza dire QUALE limite): con
+       `budget_overrun` la panoramica dice quali voci si sono esaurite, quanto se n'è speso e il tetto di adesso (aumenti compresi);
+       all'ammissione anche quanto serviva. Solo in quel caso: le panoramiche di sempre non cambiano (ETag). */
+    ...(state.run.needsAttentionReasons?.includes('budget_overrun') && state.budget?.lastOverrun ? { budgetOverrun: sforamento(state) } : {}),
+  };
+}
+
+function sforamento(state) {
+  const { source, dimensions, observed } = state.budget.lastOverrun;
+  return {
+    source,
+    dimensions: [...new Set(dimensions)].sort().map((name) => {
+      const tetto = state.definition.budgets?.[name];
+      const limit = tetto === null || tetto === undefined ? null : tetto + (state.budget.ceilingRaise?.[name] ?? 0);
+      const needed = source === 'admission' && Number.isFinite(observed?.[name]) ? observed[name] : null;
+      return { name, spent: state.budget.spent?.[name] ?? null, limit, ...(needed !== null ? { needed } : {}) };
+    }),
   };
 }
 

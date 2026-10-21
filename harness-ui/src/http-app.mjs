@@ -32,13 +32,19 @@ import { leggiPaginaPerLaVista } from './agent-service.mjs';
 import { ritrattoCartella } from './workspace-info.mjs'; // 06/9 F9/F10/F19-F21: cosa c'e' dentro la cartella, PRIMA di darla a un agente // 06/9: gli occhi del modello sulla pagina dove navighi TU // 06/9: il proxy locale per annotare gli elementi
 import { modelloRichiestaValido, permessiPerAttrezzoRichiestaValido, permessiRichiestaValido, reasoningRichiestaValido } from './config.mjs';
 import { bollaValida } from './bolla-della-persona.mjs';
+import { ORIGINE_REMOTA, bollaConOrigine, origineValida } from './origine-remota.mjs'; // 18/10/2026: «dal telefono X»; R5.8 la chiusura
 
 /** C09 (owner 10/10/2026): la copia per lo schermo viaggia accanto al messaggio e si stacca prima dei validatori dei corpi, che
  *  rifiutano le chiavi sconosciute. Facoltativa: chi non la manda (la CLI, i client vecchi) non vede cambiare niente. */
-function separaBolla(corpo) {
-  if (!corpo || typeof corpo !== 'object' || Array.isArray(corpo) || !Object.hasOwn(corpo, 'bolla')) return { corpo, bolla: null };
+/* 18/10/2026: `origine` è quella della RICHIESTA (il telefono, attaccata in processo da `remoto/chiamata-interna.mjs`), mai quella
+   scritta nel corpo: una `bolla.origine` mandata da un client si toglie qui (`origine-remota.mjs`). */
+function separaBolla(corpo, req = null) {
+  const origine = req?.[ORIGINE_REMOTA] ?? null;
+  if (!corpo || typeof corpo !== 'object' || Array.isArray(corpo) || !Object.hasOwn(corpo, 'bolla')) return { corpo, bolla: null, origine };
   const { bolla, ...resto } = corpo;
-  return { corpo: resto, bolla: bollaValida(bolla) };
+  const valida = bollaValida(bolla);
+  if (valida) delete valida.origine;
+  return { corpo: resto, bolla: valida, origine };
 }
 import { ID_CATALOGO_IN_UI, REGISTRO_FORNITORI } from './provider-registry.mjs'; // 12/09, P-A: le rotte del catalogo per fornitore si costruiscono dal registro, non da una terna ricopiata due volte
 import { cartelleFrequenti as cartelleFrequentiReale } from './frequent-dirs.mjs';
@@ -46,10 +52,12 @@ import { CustomTaskError, validaCartellaLibera } from './custom-task.mjs'; // au
 import { RUNTIME_BOOTSTRAP_SCHEMA, RUNTIME_RESOURCE_SCHEMA, parseBootstrapEnvelope } from './runtime-contract.mjs';
 import { getDiagnosticProblem, paramsPubblici, toPublicProblem } from './public-problem.mjs';
 import { createSseSession } from './http-lifecycle.mjs';
-import { creaReplayCoalescente } from './sse-replay-coalescente.mjs'; // 11/09: il replay di una sessione lunga non si rigioca token per token — vedi la rotta /events
+import { iscriviConRigiocata } from './iscrizione-sessione.mjs';
+import { PREFISSO_ROTTE_REMOTO, ROTTE_REMOTO, creaRotteRemoto } from './remoto/rotte.mjs'; // 18/10/2026: il controllo remoto, rotte della finestra // 18/10/2026: la stessa iscrizione per la finestra e per il telefono
 import { iconaDelDominio } from './favicon-proxy.mjs'; // 10/09: le favicon delle fonti, prese dal server e mai dal browser
 import { creaRegistroAttese, ritornoDaHost, scambiaCodicePerChiave } from './openrouter-oauth.mjs'; // PO-01 10/9: i conti dell'accesso a OpenRouter, puri e provabili senza rete
 import { intestazioniDellaPagina, paginaDiRitorno } from './pagina-ritorno-accesso.mjs';
+import { ROTTA_ACCESSO_LOCALE_OSPITE, ROTTA_DIMENTICA_LOCALE_OSPITE } from './accesso-locale-ospite.mjs'; // 18/10/2026: il motore locale dell'app che ospita r4
 import { PREFISSO_ROTTE as PREFISSO_ROTTE_CHATGPT, ROTTE_TOKEN_CHATGPT, creaRotteChatgpt, ragionamentoDelPiano } from './chatgpt-rotte.mjs'; // 11/10/2026: «Continue with ChatGPT» // 11/10/2026: la pagina comune del ritorno dagli accessi
 import { slugDelFornitore } from './openrouter-fornitori.mjs'; // decisione 14 (08/10/2026): dal nome del fornitore a valle allo slug
 import { fileURLToPath } from 'node:url'; // 11/09: i tre magazzini GLOBALI stanno accanto a server.mjs, come li trova session-registry.mjs
@@ -241,6 +249,8 @@ const API_ERROR_CODES = new Set([
   'QUESTION_ANSWER_FORBIDDEN',
   /* ⛔ F3-10, 23/09/2026 — il modo Workflow è ritirato (400). */
   'MODE_WORKFLOW_RETIRED',
+  /* RA-03, 20/10/2026 — dal telefono una cartella qualsiasi del PC no: solo quelle ammesse (403). */
+  'NOT_ALLOWED_REMOTELY',
   /* ⛔ CTX-D2, 23/09/2026 — la risposta Ask non è stata salvata: mai un 200 (vedi rispondiDomanda). */
   'QUESTION_ANSWER_NOT_SAVED',
   /* ⛔ 24/09/2026, decisioni owner 36-39 — la scelta sul piano approvabile. */
@@ -346,9 +356,16 @@ const API_ERROR_CODES = new Set([
   'CHATGPT_PIANO_NON_AMMESSO', 'CHATGPT_RICHIESTA_NON_AMMESSA', 'CHATGPT_SERVIZIO_NON_DISPONIBILE',
   // 18/10/2026: il custode del piano è l'app che ospita r4 (`chatgpt-accesso-ospite.mjs`)
   'CHATGPT_TOKEN_DA_RINNOVARE', 'CHATGPT_GESTITO_DALL_APP', 'CHATGPT_CUSTODE_NON_APP',
+  // 18/10/2026: il motore locale dell'app che ospita r4 (`accesso-locale-ospite.mjs`)
+  'LOCAL_GUEST_DISABLED', 'LOCAL_GUEST_SOCKET_INVALID',
+  // 18/10/2026: il controllo remoto (`remoto/rotte.mjs`), le rotte della finestra
+  'REMOTE_UNAVAILABLE', 'REMOTE_RELAY_NOT_CHOSEN', 'REMOTE_RELAY_INVALID', 'REMOTE_KEYRING_MISSING', 'REMOTE_KEY_INVALID',
+  'REMOTE_OFF', 'REMOTE_TOO_MANY_PHONES', 'REMOTE_DEVICE_UNKNOWN', 'REMOTE_DEVICE_BAD', 'REMOTE_DEVICES_UNREADABLE', 'PAIR_LOCKED', 'PAIR_NOT_PENDING',
+  'REMOTE_ORIGIN_FORBIDDEN',
 ]);
 
 const STATUS_BY_CODE = Object.freeze({
+  NOT_ALLOWED_REMOTELY: 403, // RA-03 (20/10/2026): una cartella qualsiasi del PC si sceglie solo dal PC
   WORKFLOW_STORE_UNAVAILABLE: 503,
   WORKFLOW_PROPOSAL_NOT_FOUND: 404,
   WORKFLOW_DEFINITION_HASH_MISMATCH: 409,
@@ -747,6 +764,10 @@ const STATUS_BY_CODE = Object.freeze({
   CHATGPT_TOKEN_DA_RINNOVARE: 409,
   CHATGPT_GESTITO_DALL_APP: 409,
   CHATGPT_CUSTODE_NON_APP: 409,
+  LOCAL_GUEST_DISABLED: 404, LOCAL_GUEST_SOCKET_INVALID: 400,
+  REMOTE_UNAVAILABLE: 503, REMOTE_RELAY_NOT_CHOSEN: 409, REMOTE_RELAY_INVALID: 400, REMOTE_KEYRING_MISSING: 503, REMOTE_KEY_INVALID: 409,
+  REMOTE_OFF: 409, REMOTE_TOO_MANY_PHONES: 409, REMOTE_DEVICE_UNKNOWN: 404, REMOTE_DEVICE_BAD: 400, REMOTE_DEVICES_UNREADABLE: 500, PAIR_LOCKED: 429,
+  PAIR_NOT_PENDING: 409, REMOTE_ORIGIN_FORBIDDEN: 403,
 });
 
 export const MESSAGE_BY_CODE = Object.freeze({
@@ -938,6 +959,7 @@ export const MESSAGE_BY_CODE = Object.freeze({
   PLAN_DECISION_NOT_SAVED: 'The choice on the plan was not saved: the plan is still waiting, you can try again',
   PLAN_APPROVAL_ORIGIN_FORBIDDEN: 'The choice on the plan must come from this TALOS window',
   MODE_WORKFLOW_RETIRED: 'Workflow mode no longer exists: choose Normal or Plan',
+  NOT_ALLOWED_REMOTELY: 'From the phone a new session opens only in one of the allowed folders',
   WORKSPACE_LAUNCH_UNAUTHORIZED: 'The local command is not authorized. Restart TALOS and try again.',
   WORKSPACE_LAUNCH_NOT_AVAILABLE: 'This link is no longer available. Use “Open folder with TALOS” again.',
   WORKSPACE_NOT_AVAILABLE: 'The folder is not available. Check that it exists and that TALOS can work in it, then try again.',
@@ -982,6 +1004,21 @@ export const MESSAGE_BY_CODE = Object.freeze({
   CHATGPT_TOKEN_DA_RINNOVARE: 'The ChatGPT access must be renewed by the app: try again',
   CHATGPT_GESTITO_DALL_APP: 'The ChatGPT account is managed in the app’s chat: sign in or out from there',
   CHATGPT_CUSTODE_NON_APP: 'This server keeps its own ChatGPT sign-in: it does not take a token from an app',
+  LOCAL_GUEST_DISABLED: 'This server does not take a local engine from an app',
+  LOCAL_GUEST_SOCKET_INVALID: 'The local engine socket is not valid: it must be a socket inside the app folder',
+  REMOTE_UNAVAILABLE: 'Remote control is not available on this computer',
+  REMOTE_RELAY_NOT_CHOSEN: 'Choose how the phone reaches this computer away from home first',
+  REMOTE_RELAY_INVALID: 'Enter the https address of your own server, or choose the free servers',
+  REMOTE_KEYRING_MISSING: 'Remote control needs the system keyring',
+  REMOTE_KEY_INVALID: 'The remote-control key of this computer is damaged: unpair the phones and set it up again',
+  REMOTE_OFF: 'Remote control is off: turn it on from the Phones screen', // R5.12: il QR chiesto dalla chat non lo accende
+  REMOTE_TOO_MANY_PHONES: 'At most 16 phones can be connected to this computer: remove one first',
+  REMOTE_DEVICE_UNKNOWN: 'This phone is not connected to this computer',
+  REMOTE_DEVICE_BAD: 'The phone name cannot be empty',
+  REMOTE_DEVICES_UNREADABLE: 'The list of connected phones cannot be read',
+  PAIR_LOCKED: 'Too many wrong attempts: connecting a phone is paused for 15 minutes',
+  PAIR_NOT_PENDING: 'This request expired: show a new code on this computer',
+  REMOTE_ORIGIN_FORBIDDEN: 'Phones can be connected only from the TALOS window',
   RUNTIME_NOT_AVAILABLE: 'Local runtime not available',
   RUNTIME_UNREACHABLE: 'Local runtime unreachable',
   RUNTIME_OPERATION_UNSUPPORTED: 'Runtime operation not supported',
@@ -1798,11 +1835,16 @@ const ROTTE_API = Object.freeze([
   // ⭐ F3 (24/09): lo spegnimento gentile (loopback + gettone) e l'Annulla della compattazione automatica.
   { schema: '/api/v1/admin/shutdown', metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/compaction\/([^/]+)\/undo$/, metodi: ['POST'] },
+  /* B1 (owner 21/10/2026 sera): «Skip the summary», la persona salta il riassunto che il giro sta aspettando. */
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/compaction\/skip$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/compaction-policy$/, metodi: ['GET'] },
   /* C1 (10/10/2026): l'ultima richiesta spedita al modello, per la scheda Contesto (prompt di sistema e messaggi grezzi). Sola lettura. */
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/last-request$/, metodi: ['GET'] },
   /* C1 (10/10/2026): l'ultima compattazione legacy di una conversazione (record pubblico, riassunto compreso). Sola lettura. */
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/compaction-state$/, metodi: ['GET'] },
+  /* R5.11 (owner 18/10/2026, «Come Hermes, PC e telefono»): i punti di ripristino dei file, l'anteprima e l'annullamento. */
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/file-undo$/, metodi: ['GET'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/file-undo\/([^/]+)$/, metodi: ['GET', 'POST'] },
   { schema: /^\/api\/v1\/workflows\/([^/]+)\/versions\/([^/]+)$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/workflows\/([^/]+)\/versions\/([^/]+)\/approve$/, metodi: ['POST'] },
   /* F3-33b (25/09/2026): «Modifica» i tetti, una versione nuova da riapprovare. */
@@ -2080,6 +2122,10 @@ const ROTTE_API = Object.freeze([
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/hooks\/([^/]+)\/trust$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/tool-forge\/([^/]+)\/enable$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/mcp\/([^/]+)\/trust$/, metodi: ['POST'] },
+  /* R5.8 (18/10/2026): prova (e riconnessione) di un server MCP fidato, dal PC e dal telefono */
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/mcp\/([^/]+)\/test$/, metodi: ['POST'] },
+  /* R5.8 (owner 18/10/2026, «Ferma e libera tutto»): chiudere la sessione sul PC, distinto da eliminarla */
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/close$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/plugins\/([^/]+)\/trust$/, metodi: ['POST'] },
   /*
    * ⭐⭐⭐ PO-01 (10/9) — le tre porte dell'accesso a OpenRouter.
@@ -2098,6 +2144,11 @@ const ROTTE_API = Object.freeze([
   // 18/10/2026: il token spinto dall'app che ospita r4 (custode nell'app); fuori da quella modalità rispondono 409
   { schema: '/api/v1/providers/chatgpt/access', metodi: ['POST'] },
   { schema: '/api/v1/providers/chatgpt/access/remove', metodi: ['POST'] },
+  // 18/10/2026: il motore locale dell'app che ospita r4 (`accesso-locale-ospite.mjs`); senza TALOS_LOCALE_OSPITE_DIR rispondono 404
+  { schema: '/api/v1/providers/locale-ospite/access', metodi: ['POST'] },
+  { schema: '/api/v1/providers/locale-ospite/access/remove', metodi: ['POST'] },
+  // 18/10/2026: il controllo remoto, solo dalla finestra (`remoto/rotte.mjs`)
+  ...ROTTE_REMOTO,
   { schema: '/api/v1/auth/openrouter/inizia', metodi: ['POST'] },
   { schema: '/api/v1/auth/openrouter/codice', metodi: ['POST'] },
   { schema: '/api/v1/auth/openrouter/ritorno', metodi: ['GET'] },
@@ -3300,6 +3351,12 @@ export function createHttpApp({
    */
   rotteChatgpt = null,
   catalogoChatgpt = null,
+  /* 18/10/2026 — il motore locale dell'app che ospita r4 (`accesso-locale-ospite.mjs`): l'app spinge socket, chiave, modello e
+     finestra. Assente o spento (`TALOS_LOCALE_OSPITE_DIR` non data): le rotte rispondono 404 `LOCAL_GUEST_DISABLED`. */
+  accessoLocaleOspite = null,
+  /* 18/10/2026 — il controllo remoto (`remoto/index.mjs`). Una FUNZIONE che lo restituisce: il remoto chiama questo stesso gestore
+     in processo per le operazioni del telefono, quindi nasce dopo di lui (server.mjs). Assente: le rotte rispondono 503. */
+  remotoFn = () => null,
   // 11/10/2026: il token del piano e il conteggio nostro, per le chiamate al modello che NON passano dal trasporto dei giri («Migliora prompt»)
   leggiTokenDelPianoFn = null,
   registraUsoDelPianoFn = null,
@@ -4208,6 +4265,46 @@ export function createHttpApp({
      *   risposta, in un errore o in un log: l'unica cosa che la persona vede è lo `stato`, che
      *   è 32 byte di caso e non significa niente.
      */
+    /*
+     * 18/10/2026 — il CONTROLLO REMOTO, le rotte della finestra (`remoto/rotte.mjs`): stato, scelta del relay, QR, conferma del codice,
+     * telefoni collegati. ⛔ Le scritture solo dalla finestra di TALOS, con la stessa guardia di Piano, Workflow e automazioni: collegare
+     * un telefono gli dà l'Accesso pieno (owner 14/10), e non deve poterlo fare un sito estraneo né un processo senza il gettone.
+     */
+    if (url.pathname === PREFISSO_ROTTE_REMOTO || url.pathname.startsWith(`${PREFISSO_ROTTE_REMOTO}/`)) {
+      try {
+        requireNoQuery(url);
+        if (method === 'POST' && rifiutoOrigineApprovazione(req, { token })) {
+          sendJson(res, 403, errorEnvelope('REMOTE_ORIGIN_FORBIDDEN', clock), method);
+          return;
+        }
+        const corpo = method === 'POST' ? await leggiCorpoJson(req, 4096) : null;
+        const esito = await creaRotteRemoto({ remoto: remotoFn() })({ method, percorso: url.pathname, corpo });
+        if (esito?.dati !== undefined) { sendJson(res, esito.stato, successEnvelope(esito.dati, clock), method); return; }
+        const codice = esito?.stato === 404 ? 'NOT_FOUND' : esito?.stato === 405 ? 'METHOD_NOT_ALLOWED' : esito?.errore?.code;
+        const extra = { ...(esito?.allow ? { Allow: esito.allow } : {}), ...(Number.isFinite(esito?.retryAfterMs) ? { 'Retry-After': String(Math.ceil(esito.retryAfterMs / 1000)) } : {}) };
+        sendJson(res, esito?.stato ?? 404, errorEnvelope(API_ERROR_CODES.has(codice) ? codice : 'INTERNAL_ERROR', clock), method, Object.keys(extra).length ? extra : undefined);
+      } catch (error) { const normalized = normalizeError(error); sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method); }
+      return;
+    }
+    /* 18/10/2026 — il motore locale dell'app (contratto con la sessione mobile): `access` tiene socket, chiave, modello e finestra;
+       `access/remove` lo dimentica. La chiave non torna mai indietro: la risposta è lo `stato()` dell'accesso. */
+    if (url.pathname === ROTTA_ACCESSO_LOCALE_OSPITE || url.pathname === ROTTA_DIMENTICA_LOCALE_OSPITE) {
+      try {
+        if (method !== 'POST') { sendJson(res, 405, errorEnvelope('METHOD_NOT_ALLOWED', clock), method, { Allow: 'POST' }); return; }
+        requireNoQuery(url);
+        if (!accessoLocaleOspite?.attivo) throw Object.assign(new Error('This server does not take a local engine from an app.'), { code: 'LOCAL_GUEST_DISABLED' });
+        const corpo = await leggiCorpoJson(req, 4 * 1024);
+        if (url.pathname === ROTTA_DIMENTICA_LOCALE_OSPITE) {
+          if (corpo && (typeof corpo !== 'object' || Array.isArray(corpo) || Object.keys(corpo).length > 0)) throw Object.assign(new Error('The remove request takes no fields.'), { code: 'QUERY_INVALID' });
+          accessoLocaleOspite.dimentica();
+        } else {
+          const rifiuto = await accessoLocaleOspite.ricevi(corpo);
+          if (rifiuto) throw rifiuto;
+        }
+        sendJson(res, 200, successEnvelope(accessoLocaleOspite.stato(), clock), method, { 'Cache-Control': 'private, no-store' });
+      } catch (error) { const normalized = normalizeError(error); sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method); }
+      return;
+    }
     if (url.pathname.startsWith(PREFISSO_ROTTE_CHATGPT) || ROTTE_TOKEN_CHATGPT.some((r) => r.schema === url.pathname)) {
       try {
         requireNoQuery(url);
@@ -6318,10 +6415,20 @@ export function createHttpApp({
     if (method === 'POST' && sessionRegistry && url.pathname === '/api/v1/sessions/custom') {
       try {
         requireNoQuery(url);
-        const { corpo, bolla } = separaBolla(await leggiCorpoJson(req));
+        const { corpo, bolla: bollaDelClient, origine } = separaBolla(await leggiCorpoJson(req), req);
         const { body: senzaImmagini, immagini } = await imageInput(corpo);
+        /* RA-03 (20/10/2026 notte): dal telefono (origine remota, attaccata solo in processo da `remoto/chiamata-interna.mjs`) una
+           sessione nuova si apre solo in una cartella ammessa (`cartellaId`); `cartellaLibera` e `workspaceLaunchId` restano del PC.
+           Anche `remoto/operazioni.mjs` lo rifiuta: questo è il cancello vero, per qualunque strada arrivi la richiesta. */
+        if (origine && senzaImmagini && typeof senzaImmagini === 'object'
+          && (senzaImmagini.cartellaLibera !== undefined || senzaImmagini.workspaceLaunchId !== undefined)) {
+          const errore = new Error('From the phone a new session opens only in one of the allowed folders.');
+          errore.code = 'NOT_ALLOWED_REMOTELY';
+          throw errore;
+        }
         const richiesta = requireCustomTaskBody(senzaImmagini);
         if (immagini.length) richiesta.immagini = immagini;
+        const bolla = bollaConOrigine(bollaDelClient, origine, richiesta.consegna);
         if (bolla) richiesta.bolla = bolla;
         const esito = sessionRegistry.avviaLibero(richiesta, origineDellaRichiesta(req));
         if ('erroreAvvio' in esito) {
@@ -7030,9 +7137,10 @@ export function createHttpApp({
           sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
           return;
         }
-        const { corpo: corpoRedirect, bolla } = separaBolla(await leggiCorpoJson(req));
+        const { corpo: corpoRedirect, bolla: bollaDelClient, origine } = separaBolla(await leggiCorpoJson(req), req);
         const { body, immagini } = await imageInput(corpoRedirect);
         const { messaggio, redirectId } = requireRedirectBody(body);
+        const bolla = bollaConOrigine(bollaDelClient, origine, messaggio);
         const esito = sessionRegistry.reindirizza(sessionId, messaggio, { ...(redirectId ? { redirectId } : {}), ...(immagini.length ? { immagini } : {}), ...(bolla ? { bolla } : {}) });
         if ('erroreAvvio' in esito) {
           throw erroreDelRegistro(esito);
@@ -7095,12 +7203,13 @@ export function createHttpApp({
          * campo diverso da stringa: un body malformato resta silenziosamente
          * "nessun messaggio nuovo" invece di rompere il resume classico.
          */
-        const { corpo: corpoRipresa, bolla } = separaBolla(await leggiCorpoJson(req));
+        const { corpo: corpoRipresa, bolla: bollaDelClient, origine } = separaBolla(await leggiCorpoJson(req), req);
         const { body, immagini } = await imageInput(corpoRipresa);
         const nuovoMessaggioUtente = requireResumeBody(body);
         if (!nuovoMessaggioUtente && immagini.length) throw Object.assign(new Error('Write a message to send the images.'), { code: 'QUERY_INVALID' });
         /* REV-SESSION-READY v2: come per il fork, la finestra di chiusura si aspetta. */
         if (sessionRegistry.staChiudendoIlGiro?.(sessionId)) await sessionRegistry.attendiFuoriDallaFinestra(sessionId);
+        const bolla = bollaConOrigine(bollaDelClient, origine, nuovoMessaggioUtente);
         const esito = sessionRegistry.resume(sessionId, nuovoMessaggioUtente, immagini, ...(bolla && nuovoMessaggioUtente ? [{ bolla }] : []));
         if ('erroreAvvio' in esito) {
           throw erroreDelRegistro(esito);
@@ -7215,6 +7324,29 @@ export function createHttpApp({
       return;
     }
 
+    /*
+     * B1 (owner 21/10/2026 sera, contratto riga viva §5): `POST /api/v1/sessions/:id/compaction/skip` — salta il riassunto che il giro
+     *   sta aspettando; il giro prosegue col riassunto senza modello. `{saltato:false}` se in quel momento non ce n'era uno.
+     */
+    const skipMatch = method === 'POST' && sessionRegistry && typeof sessionRegistry.saltaRiassunto === 'function'
+      && /^\/api\/v1\/sessions\/([^/]+)\/compaction\/skip$/.exec(url.pathname);
+    if (skipMatch) {
+      try {
+        requireNoQuery(url);
+        let sessionId;
+        try { sessionId = decodeURIComponent(skipMatch[1]); }
+        catch { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+        const esito = sessionRegistry.saltaRiassunto(sessionId);
+        if ('erroreAvvio' in esito) { throw erroreDelRegistro(esito); }
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 200, successEnvelope({ saltato: esito.saltato === true }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
     const policyMatch = method === 'GET' && sessionRegistry && typeof sessionRegistry.politicaCompattazione === 'function'
       && /^\/api\/v1\/sessions\/([^/]+)\/compaction-policy$/.exec(url.pathname);
     if (policyMatch) {
@@ -7270,6 +7402,110 @@ export function createHttpApp({
         if ('erroreAvvio' in stato) { throw erroreDelRegistro(stato); }
         if (req.aborted || res.destroyed) return;
         sendJson(res, 200, successEnvelope(stato, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
+    /*
+     * R5.11 — «Annulla le modifiche ai file» (owner 18/10/2026, «Come Hermes, PC e telefono»; `src/punti-di-ripristino.mjs`).
+     *   GET  …/file-undo          i turni che si possono annullare;
+     *   GET  …/file-undo/<turno>  che cosa si rimetterebbe e che cosa si salterebbe, col diff;
+     *   POST …/file-undo/<turno>  lo fa; `include` = i file saltati che la persona ha scelto di rimettere lo stesso;
+     *   POST …/file-undo/redo     «Rifai»: rimette com'erano prima dell'ultimo annullamento (corpo vuoto).
+     * Il turno sta nel percorso: un intero in forma canonica, nient'altro.
+     */
+    const annullaFileMatch = sessionRegistry && typeof sessionRegistry.puntiDiRipristinoDi === 'function'
+      && /^\/api\/v1\/sessions\/([^/]+)\/file-undo(?:\/([^/]+))?$/.exec(url.pathname);
+    if (annullaFileMatch && (method === 'GET' || (method === 'POST' && annullaFileMatch[2] !== undefined))) {
+      try {
+        requireNoQuery(url);
+        let sessionId;
+        try { sessionId = decodeURIComponent(annullaFileMatch[1]); }
+        catch { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+        const turnoGrezzo = annullaFileMatch[2];
+        const rifai = turnoGrezzo === 'redo';
+        if (rifai && method !== 'POST') { sendJson(res, 405, errorEnvelope('METHOD_NOT_ALLOWED', clock), method); return; }
+        const turno = turnoGrezzo === undefined || rifai ? null : (/^(0|[1-9][0-9]{0,8})$/u.test(turnoGrezzo) ? Number(turnoGrezzo) : NaN);
+        if (Number.isNaN(turno)) { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+        let esito;
+        if (rifai) {
+          const body = await leggiCorpoJsonCon(req, Math.min(limiteCorpoByte, 1_024));
+          if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).length > 0) {
+            throw Object.assign(new Error('Redo body is invalid'), { code: 'QUERY_INVALID' });
+          }
+          esito = await sessionRegistry.rifaiAnnullamento(sessionId);
+        } else if (turno === null) esito = await sessionRegistry.puntiDiRipristinoDi(sessionId);
+        else if (method === 'GET') esito = await sessionRegistry.anteprimaAnnulla(sessionId, turno);
+        else {
+          const body = await leggiCorpoJsonCon(req, Math.min(limiteCorpoByte, 65_536));
+          const include = body?.include ?? [];
+          if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).some((k) => k !== 'include')
+            || !Array.isArray(include) || include.length > 2_000 || include.some((x) => typeof x !== 'string' || x.length === 0 || x.length > 4_096)) {
+            throw Object.assign(new Error('Undo body is invalid'), { code: 'QUERY_INVALID' });
+          }
+          esito = await sessionRegistry.annullaModifiche(sessionId, turno, include);
+        }
+        if (esito && 'erroreAvvio' in esito) { throw erroreDelRegistro(esito); }
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 200, successEnvelope(esito, clock), method, { 'Cache-Control': 'private, no-store' });
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
+    /* R5.8 (owner 17/10 «sì, con conferma; resta salvata», 18/10 «Ferma e libera tutto»): chiudere la sessione sul PC. La conferma la
+       chiede chi chiama (il telefono); qui si ferma il giro, i comandi in sottofondo e i terminali. L'origine arriva SOLO dal modulo
+       remoto in processo (il simbolo sulla richiesta), mai dal corpo, che deve essere vuoto. */
+    const chiudiMatch = method === 'POST' && sessionRegistry && typeof sessionRegistry.chiudiSessione === 'function'
+      && /^\/api\/v1\/sessions\/([^/]+)\/close$/.exec(url.pathname);
+    if (chiudiMatch) {
+      try {
+        requireNoQuery(url);
+        let sessionId;
+        try { sessionId = decodeURIComponent(chiudiMatch[1]); }
+        catch { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+        const corpo = await leggiCorpoJsonCon(req, Math.min(limiteCorpoByte, 1_024));
+        if (!corpo || typeof corpo !== 'object' || Array.isArray(corpo) || Object.keys(corpo).length > 0) {
+          throw Object.assign(new Error('Close body is invalid'), { code: 'QUERY_INVALID' });
+        }
+        const esito = sessionRegistry.chiudiSessione(sessionId, { origine: origineValida(req[ORIGINE_REMOTA]) ?? null });
+        if ('erroreAvvio' in esito) throw erroreDelRegistro(esito);
+        let terminali = 0;
+        if (terminalRegistry) {
+          const elenco = terminalRegistry.elenca(sessionId);
+          for (const scheda of elenco?.items ?? []) if (terminalRegistry.chiudi({ sessionId, terminalId: scheda.terminalId })?.ok) terminali += 1;
+        }
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 200, successEnvelope({ ...esito, terminali }, clock), method, { 'Cache-Control': 'private, no-store' });
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
+    /* R5.8 (decisione owner 17/10, «test e riconnessione di un MCP»): prova adesso un server MCP FIDATO di questa conversazione. */
+    const provaMcpMatch = method === 'POST' && sessionRegistry && typeof sessionRegistry.provaServerMcp === 'function'
+      && /^\/api\/v1\/sessions\/([^/]+)\/mcp\/([^/]+)\/test$/.exec(url.pathname);
+    if (provaMcpMatch) {
+      try {
+        requireNoQuery(url);
+        let sessionId, serverId;
+        try { sessionId = decodeURIComponent(provaMcpMatch[1]); serverId = decodeURIComponent(provaMcpMatch[2]); }
+        catch { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+        const corpo = await leggiCorpoJsonCon(req, Math.min(limiteCorpoByte, 1_024));
+        if (!corpo || typeof corpo !== 'object' || Array.isArray(corpo) || Object.keys(corpo).length > 0) {
+          throw Object.assign(new Error('MCP test body is invalid'), { code: 'QUERY_INVALID' });
+        }
+        const esito = await sessionRegistry.provaServerMcp(sessionId, serverId);
+        if ('erroreAvvio' in esito) throw erroreDelRegistro(esito);
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 200, successEnvelope(esito, clock), method, { 'Cache-Control': 'private, no-store' });
       } catch (error) {
         const normalized = normalizeError(error);
         sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
@@ -7969,12 +8205,13 @@ export function createHttpApp({
           sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
           return;
         }
-        const { corpo, bolla } = separaBolla(await leggiCorpoJson(req));
+        const { corpo, bolla: bollaDelClient, origine } = separaBolla(await leggiCorpoJson(req), req);
         const { body, immagini } = await imageInput(corpo);
         const messaggio = requireQueueBody(body);
         /* REV-SESSION-READY v3 (owner 27/09, «decide all'assestamento»): nella finestra di chiusura la coda rifiuta — qui si
            aspetta che il giro sia chiuso, poi il registro decide come sempre (conclusa ⇒ «usa resume»). */
         if (sessionRegistry.staChiudendoIlGiro?.(sessionId)) await sessionRegistry.attendiFuoriDallaFinestra(sessionId);
+        const bolla = bollaConOrigine(bollaDelClient, origine, messaggio);
         const esito = sessionRegistry.accodaMessaggio(sessionId, messaggio, immagini, ...(bolla ? [{ bolla }] : []));
         if ('erroreAvvio' in esito) {
           throw erroreDelRegistro(esito);
@@ -9197,9 +9434,6 @@ export function createHttpApp({
              *   trasporto, e si cura al livello di trasporto. Il perché nel dettaglio, con le
              *   fonti (AG-UI, 11/09/2026), in `sse-replay-coalescente.mjs`.
              */
-            const replay = creaReplayCoalescente((evento) => { sseSession.send(evento); });
-            const disiscrivi = sessionRegistry.iscriviti(sessionId, replay.ascoltatore, daSequenza);
-            replay.fineReplay();
             /*
              * ⭐⭐ 13/09 notte — LA STORIA È FINITA, e il browser adesso lo sa. Trovato col GIRO VERO
              *   (glm-5.3-flash, banco 5471): riaperta una sessione ANCORA VIVA, la chat trattava ogni evento
@@ -9213,20 +9447,13 @@ export function createHttpApp({
              *   by the standard event types» (docs.ag-ui.com/concepts/events, letto il 13/09/2026). Chi non lo
              *   conosce lo ignora.
              */
-            sseSession.send({ type: 'CUSTOM', name: 'talos.fine-rigiocata', value: null });
             /* ⭐ 14/09 — e com'è la coda ADESSO: l'annuncio `talos.coda` è effimero, quindi chi apre la sessione dopo (un'altra
                finestra, una ricarica) lo riceve qui, subito dopo la storia. Anche vuota: dice «nessuna coda» a chi ne ricordava una. */
-            if (typeof sessionRegistry.statoCoda === 'function') {
-              const coda = sessionRegistry.statoCoda(sessionId);
-              if (coda && !('erroreAvvio' in coda)) sseSession.send({ type: 'CUSTOM', name: 'talos.coda', value: { voci: coda.voci, inPausa: coda.inPausa } });
-            }
             /* /goal G6 (15/10/2026): lo stesso per l'obiettivo — l'annuncio è effimero (stato, non storia), quindi chi apre la sessione
                dopo lo riceve qui, anche `null`: la fascia di una finestra che ricordava un obiettivo tolto altrove si spegne. */
-            if (typeof sessionRegistry.statoObiettivo === 'function') {
-              const stato = sessionRegistry.statoObiettivo(sessionId);
-              const tetti = typeof sessionRegistry.tettiObiettivo === 'function' ? sessionRegistry.tettiObiettivo() : null;
-              if (stato && !('erroreAvvio' in stato)) sseSession.send({ type: 'CUSTOM', name: 'talos.obiettivo', value: { obiettivo: stato.obiettivo ?? null, ...(tetti ? { tetti } : {}) } });
-            }
+            /* 18/10/2026: la sequenza (rigiocata coalescente, fine della storia, coda, obiettivo) sta in `iscrizione-sessione.mjs`,
+               condivisa col controllo remoto: il telefono vede la storia esattamente come questa finestra. */
+            const disiscrivi = iscriviConRigiocata({ sessionRegistry, sessionId, daSequenza, manda: (evento) => { sseSession.send(evento); } });
             /*
              * ⛔⛔⛔ 28/8 — SECONDA metà della stessa cura (setNoDelay sopra
              * è la prima): senza scritture nuove, una connessione può

@@ -14,9 +14,11 @@ const index = () => buildSettingsIndex(CAMPI_IMPOSTAZIONI, CONTROLLI_MIGRATI, 'i
    direbbe QUALE è sparita. I fornitori vivono solo in Laboratorio modelli → scheda «Provider». */
 /* 24/09/2026, decisione owner 35: «Scadenza delle domande» (Nessuna / 1 / 5 / 10 minuti) entra nella sezione Chat.
    Trentanove ID diventano QUARANTA e i controlli di lettura/scrittura da cinque diventano sei. */
-test('SET-01 preserves all nine destinations and all forty stable setting IDs', () => {
+/* 18/10/2026, owner 17/10 (controllo remoto, mockup v4-v5): «Telefoni collegati» subito dopo «Sicurezza e privacy». Le destinazioni da
+   nove diventano DIECI; gli ID dei controlli restano quaranta (la sezione non aggiunge preferenze, mostra i telefoni). */
+test('SET-01 preserves all ten destinations and all forty stable setting IDs', () => {
   assert.deepEqual(Object.keys(SETTINGS_SECTIONS), SEZIONI_IMPOSTAZIONI.map(s=>s.id));
-  assert.deepEqual(Object.keys(SETTINGS_SECTIONS), ['appearance','chat','tools','memoria','privacy','models','costi','workspace','account']);
+  assert.deepEqual(Object.keys(SETTINGS_SECTIONS), ['appearance','chat','tools','memoria','privacy','telefoni','models','costi','workspace','account']);
   assert.equal(SEZIONI_IMPOSTAZIONI.some(s=>s.id==='providers'||s.titolo==='Provider e accessi'),false,'«Provider e accessi» è stata tolta dall owner');
   assert.equal(CAMPI_IMPOSTAZIONI.length,40);
   assert.ok(CAMPI_IMPOSTAZIONI.some(f=>f.id==='askTimeoutSelect'),'la scadenza delle domande è un\'impostazione (decisione owner 35)');

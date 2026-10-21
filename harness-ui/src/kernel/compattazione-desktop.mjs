@@ -44,8 +44,23 @@ import { stimaTokenConversazione } from './talosHarness.mjs';
 // recinto della sintesi entra nella proiezione accanto all'indice meccanico, NELLO STESSO messaggio.
 import { PREFISSO_SINTESI_RECINTATA } from './ricarica-post-compact.mjs';
 import { chiamataPerChiGuarda } from './ponte-attrezzi.mjs';
+import { oscuraFormeDiSegreto } from '../forme-di-segreto.mjs';
 
 export const SCHEMA_RECORD_COMPATTAZIONE = 'talos.compattazione.v1';
+
+/* 21/10/2026, dal vivo sul Pad (sessione lunga del Mobile, LFM2.5 sul motore dell'app): un motore a POSTO UNICO serve una richiesta alla
+   volta. Il riassunto preparato in sottofondo è partito mentre il giro aveva una richiesta in volo, e la richiesta successiva del giro
+   ha preso 409 LOCAL_ENGINE_BUSY: il giro è finito in errore per un lavoro di TALOS stesso. Su questi motori si compatta FRA due
+   passi, aspettando, mai in parallelo al giro: il motore dell'app (`locale-ospite`) e il motore del PC (`local`, che parte con `-np 1`,
+   L1 `3d30fc3f5`). Vive qui e non nell'adapter perché la usa anche il registro (il riassunto di fine giro, che cede il posto). */
+export function motoreAPostoUnico(modello) {
+  return typeof modello === 'string' && /^(?:locale-ospite|local):/u.test(modello);
+}
+
+/** Il motore di un modello a posto unico (`local`, `locale-ospite`), o `null`: il posto unico è del MOTORE, non della sessione. */
+export function motoreDelPostoUnico(modello) {
+  return motoreAPostoUnico(modello) ? modello.slice(0, modello.indexOf(':')) : null;
+}
 export const VARIABILE_TETTO_TOKEN = 'TALOS_COMPACTION_TOKEN_CAP';
 export const TETTO_TOKEN_DEFAULT = 200_000;
 export const FRAZIONE_FINESTRA = 0.75;
@@ -473,11 +488,28 @@ export function costruisciRichiestaDiRiassunto({ testa = [], mezzo = [], paroleM
 }
 
 /** Una risposta del riassuntore vale solo se è testo, finito, senza chiamate di attrezzo. */
+/*
+ * ⛔ 21/10/2026 (banco di stress della compattazione, caso «rifiuto»): un fornitore può rispondere con un RIFIUTO in prosa e
+ *   `finish_reason: "stop"` («I'm sorry, but I can't help with summarizing…»): non è vuoto, quindi diventava la storia della
+ *   conversazione al posto del lavoro fatto. Hermes lo scarta (`agent/context_compressor.py:171-200`, `_is_summary_refusal`, `865ba906`):
+ *   la regola è STRETTA — il rifiuto apre la risposta, nelle prime 400 lettere parla del riassunto, e la risposta non ha i titoli «## »
+ *   di un riassunto vero (che può citare un rifiuto avvenuto nella storia). Portata così com'è.
+ */
+const RIFIUTO_IN_TESTA = /^\s*(?:(?:sorry|i(?:['’]m| am)\s+sorry|i\s+apologi[sz]e|as\s+an\s+ai)\s*[,;:]?\s*(?:but\s+)?)?(?:i|we)\s+(?:can(?:\s*not|['’]t)|could\s*not|couldn['’]t|won['’]t|will\s+not|must\s+decline|refuse\s+to|am\s+unable\s+to|am\s+not\s+able\s+to)\b|^\s*(?:i['’]?m|i\s+am)\s+(?:unable|not\s+able)\b/iu;
+export function eRifiutoDiRiassunto(contenuto) {
+  const testo = String(contenuto ?? '');
+  const normale = testo.split(/\s+/u).filter(Boolean).join(' ');
+  if (!RIFIUTO_IN_TESTA.test(normale)) return false;
+  if (/^##\s/mu.test(testo)) return false;
+  const apertura = normale.slice(0, 400).toLowerCase();
+  return apertura.includes('summar') || apertura.includes('checkpoint');
+}
 export function valutaRispostaDiRiassunto({ scelta, finishReason } = {}) {
   if (Array.isArray(scelta?.tool_calls) && scelta.tool_calls.length > 0) return { ok: false, riassunto: '', motivo: 'attrezzo' };
   if (finishReason !== null && finishReason !== undefined && finishReason !== 'stop') return { ok: false, riassunto: '', motivo: 'troncato' };
   const riassunto = String(scelta?.content ?? '').trim();
   if (!riassunto) return { ok: false, riassunto: '', motivo: 'vuoto' };
+  if (eRifiutoDiRiassunto(riassunto)) return { ok: false, riassunto: '', motivo: 'rifiuto' };
   return { ok: true, riassunto, motivo: null };
 }
 
@@ -545,6 +577,75 @@ export function creaContatoreRiassunto({ emetti, tentativo = 1, intervalloMs = I
 export const RIGA_RECUPERO = 'Earlier parts of this conversation are summarized above and kept whole on disk. To recover an exact path, value, '
   + 'error or tool output the summary does not carry, call conversation_search with this_conversation=true and the words to find, '
   + 'then read around the hit with around_message.';
+
+/*
+ * L1 motore locale (owner 20/10/2026, «riassunto a pezzi senza ragionamento con ripiego senza modello») — IL RIPIEGO.
+ *   Hermes, quando il riassuntore non risponde, inserisce un riassunto fatto dal codice invece di lasciare la conversazione senza
+ *   compattazione (`agent/context_compressor.py:5472-5497` `_fallback_summary_for_window`, `:3680-3740`
+ *   `_build_static_fallback_summary`: richieste, azioni fatte, file, errori, ultimi turni; «Secrets and credentials were
+ *   redacted»; tetto `_FALLBACK_SUMMARY_MAX_CHARS = 8_000`). Qui le richieste letterali, l'indice meccanico (file, impronte,
+ *   errori) e la coda la proiezione li porta GIÀ: il ripiego scrive solo il posto del riassunto, cioè che cosa è stato fatto nella
+ *   parte compattata, e lo dichiara. Nessun testo degli esiti entra qui: solo nomi d'attrezzo e il loro argomento principale
+ *   (`provenienzaDellaChiamata`), così niente di un file o di un comando passa nel ripiego.
+ */
+export const RIPIEGO_AZIONI_MASSIME = 20;
+export const RIPIEGO_CARATTERI_MASSIMI = 8_000;
+/* Revisione del 20/10 (D1): il riassunto PRECEDENTE resta, come Hermes «## Previous Summary Snapshot» (`context_compressor.py:3690-3698`,
+   `_FALLBACK_PREVIOUS_SUMMARY_MAX_CHARS = 3_000`): obiettivo, decisioni e vincoli scritti dal modello non si perdono perché questa
+   volta il riassuntore non ha risposto. Senza il suo indice meccanico: quello si fonde per codice (`indiceMeccanico`, `precedente`). */
+export const RIPIEGO_RIASSUNTO_PRECEDENTE_MASSIMO = 3_000;
+const MARCATORI_DEL_RIASSUNTO = () => [MARCATORE_RIASSUNTO, MARCATORE_RIASSUNTO_IT];
+const APERTURA_DEL_RIPIEGO = 'This summary was written by TALOS without a model:';
+const TITOLO_PRECEDENTE = 'Previous summary (kept as it was, because this time the summarizer did not answer):\n';
+const TITOLO_AZIONI = /\n\nActions in the compacted part \([^)\n]*\):\n/u;
+/*
+ * Il riassunto precedente e, se quello era già un ripiego, le sue azioni. Revisione del 20/10 (R1): un ripiego dopo un ripiego non
+ *   annida le intestazioni (ognuna mangiava ~400 dei 3.000 caratteri, e dal nono il riassunto del modello spariva): si prende il
+ *   SUO «Previous summary» interno e le sue azioni si uniscono a quelle nuove. Il recinto della sintesi resta fuori.
+ */
+function riassuntoPrecedenteNel(messaggi) {
+  for (let i = messaggi.length - 1; i >= 0; i -= 1) {
+    const testo = typeof messaggi[i]?.content === 'string' ? messaggi[i].content : '';
+    const marcatore = MARCATORI_DEL_RIASSUNTO().find((m) => testo.startsWith(m));
+    if (!marcatore) continue;
+    const indice = posizioneIndiceMeccanico(testo);
+    const corpo = (indice === -1 ? testo : testo.slice(0, indice)).slice(marcatore.length)
+      .replace(RIGA_RECUPERO, '').replace(PREFISSO_SINTESI_RECINTATA, '').trim();
+    if (!corpo.startsWith(APERTURA_DEL_RIPIEGO)) return { riassunto: corpo, azioni: [] };
+    const azioniTrovate = TITOLO_AZIONI.exec(corpo);
+    const azioni = azioniTrovate
+      ? corpo.slice(azioniTrovate.index + azioniTrovate[0].length).split('\n').filter((r) => r.startsWith('- ')).map((r) => r.slice(2))
+      : [];
+    const inizio = corpo.indexOf(TITOLO_PRECEDENTE);
+    const riassunto = inizio === -1 ? '' : corpo.slice(inizio + TITOLO_PRECEDENTE.length, azioniTrovate ? azioniTrovate.index : undefined).trim();
+    return { riassunto, azioni };
+  }
+  return { riassunto: '', azioni: [] };
+}
+export function riassuntoDiRipiego(mezzo, { classe = null } = {}) {
+  const messaggi = Array.isArray(mezzo) ? mezzo : [];
+  const { riassunto: precedente, azioni: azioniPrecedenti } = riassuntoPrecedenteNel(messaggi);
+  const azioni = [...azioniPrecedenti];
+  for (const m of messaggi) {
+    for (const grezza of m?.tool_calls ?? []) {
+      const vista = chiamataPerChiGuarda(grezza?.function?.name, grezza?.function?.arguments);
+      azioni.push(provenienzaDellaChiamata({ ...grezza, function: { ...grezza?.function, name: vista.nome, arguments: vista.argomenti } }));
+    }
+  }
+  const ultime = azioni.slice(-RIPIEGO_AZIONI_MASSIME);
+  const motivo = typeof classe === 'string' && /^[a-z_-]{1,40}$/u.test(classe) ? ` (${classe})` : '';
+  const precedenteCorto = precedente.length <= RIPIEGO_RIASSUNTO_PRECEDENTE_MASSIMO ? precedente : `${precedente.slice(0, RIPIEGO_RIASSUNTO_PRECEDENTE_MASSIMO - 1)}…`;
+  const righe = [
+    `This summary was written by TALOS without a model: the summarizer was unavailable${motivo}. It replaces ${messaggi.length} earlier messages.`,
+    'The person\'s requests are kept word for word before this message; the files and the errors are listed below. For exact details re-read the files or check the current state instead of assuming.',
+    ...(precedenteCorto ? [`${TITOLO_PRECEDENTE}${precedenteCorto}`] : []),
+    azioni.length
+      ? `Actions in the compacted part (${ultime.length < azioni.length ? `last ${ultime.length} of ${azioni.length}` : azioni.length}, oldest first):\n${ultime.map((a) => `- ${a}`).join('\n')}`
+      : 'No tool actions in the compacted part.',
+  ];
+  const testo = oscuraFormeDiSegreto(righe.join('\n\n')); // D2: un comando con una chiave dentro non arriva al record né al modello
+  return testo.length <= RIPIEGO_CARATTERI_MASSIMI ? testo : `${testo.slice(0, RIPIEGO_CARATTERI_MASSIMI - 1)}…`;
+}
 
 export function costruisciProiezione({ testa = [], richiesteLetterali = [], riassunto = '', indice = '', coda = [], bloccoFatti = '', recintaSintesi = false } = {}) {
   const contenuto = [
@@ -746,8 +847,15 @@ export function classificaErroreFornitore(errore) {
   return null;
 }
 
-/** Il ragionamento per il riassunto: si ABBASSA, mai si alza, e non si inventa dove la sessione non lo ha. */
-export function reasoningPerRiassunto(reasoning) {
+/**
+ * Il ragionamento per il riassunto: si ABBASSA, mai si alza, e non si inventa dove la sessione non lo ha.
+ * L1 del motore locale (20/10/2026): sul nostro motore locale (`modello` con la fonte `local:`) si chiede SPENTO, sempre.
+ *   «low» non abbassa niente su un template che ragiona per forza (LFM2.5, `supports_reasoning_effort:false`), e il pensiero si
+ *   mangiava tutto `max_tokens` del riassunto (sessione e00ae242, `completion_tokens: 2000`, «troncato»). Lo spegnimento vero lo
+ *   fa l'adattatore (`runtime-owner-adapter.mjs`, `thinking_budget_tokens: 0`). La fonte dal PREFISSO, mai dal nome del modello.
+ */
+export function reasoningPerRiassunto(reasoning, { modello } = {}) {
+  if (typeof modello === 'string' && modello.startsWith('local:')) return { effort: 'none' };
   if (!reasoning || typeof reasoning !== 'object' || Array.isArray(reasoning)) return undefined;
   if (typeof reasoning.effort !== 'string') return { ...reasoning };
   if (['none', 'minimal', 'low'].includes(reasoning.effort)) return { ...reasoning };
@@ -771,9 +879,172 @@ export function reasoningPerRiassunto(reasoning) {
 export const CARATTERI_INGRESSO_RIASSUNTO = 160_000;
 export const MARCATORE_INGRESSO_TAGLIATO = '[… middle of the compaction input omitted: everything here is covered by the summary instruction at the end; the original messages remain in the session history …]';
 
-export function limitaIngressoRiassunto(messaggi, { caratteriMassimi = CARATTERI_INGRESSO_RIASSUNTO } = {}) {
+/*
+ * L1 del motore locale (owner 20/10/2026, «riassunto a pezzi»): l'ingresso del riassuntore si misura sulla FINESTRA del modello,
+ *   non solo in caratteri. Prova dal vivo del 20/10 (sessione 7432bdf4, LFM2.5 a 65.536): il riassunto di sfondo del registro
+ *   non aveva NESSUN limite d'ingresso (lo aveva solo la strada «overflow») e il motore ha risposto «The conversation (79599
+ *   tokens) does not fit in the local model's window (65536 tokens)». Sul codice letto dagli attrezzi un token vale ~2 caratteri,
+ *   non i 4 della stima: 160.000 caratteri sono ~80.000 token.
+ * ⇒ Due cose, come Hermes (`agent/context_compressor.py:3433-3440`, «Summarizer-input limits: the budget is the summary model's
+ *   window, not the main model's»; `_CONTENT_MAX = 6000`, `_CONTENT_HEAD = 4000`, `_CONTENT_TAIL = 1500`):
+ *   1. ogni messaggio del mezzo oltre 6.000 caratteri si accorcia a inizio + fine (i messaggi di sistema e l'istruzione finale no);
+ *   2. il totale si limita a quanto entra nella finestra tolto il budget d'uscita e un margine, a 2 caratteri per token.
+ *   Finestra ignota ⇒ resta il tetto di sempre (160.000).
+ */
+export const CARATTERI_PER_TOKEN_PRUDENTI = 2;
+export const CARATTERI_MESSAGGIO_RIASSUNTO = 6_000;
+const MARGINE_TOKEN_RIASSUNTO = 1_024;
+/** L'ingresso più piccolo che il riassuntore riceve (`caratteriIngressoPerFinestra` non scende sotto): la richiesta minima. */
+export const INGRESSO_MINIMO_TOKEN_RIASSUNTO = 1_024;
+
+/*
+ * 21/10/2026, richiesta della CLI (owner 14/10: il lavoro di contorno va sul modello «più economico dello stesso fornitore», il
+ * `modelloAusiliario` del registro fornitori, `cli/src/runtime/auxiliary-model.ts`) — QUALE modello scrive il riassunto, e su quale
+ * finestra si misura. Hermes fa lo stesso con `auxiliary.compression` (`agent/context_compressor.py`, il modello del riassunto è
+ * un'opzione separata da quello della conversazione).
+ * - Nessun modello del riassunto, o lo stesso della conversazione: tutto com'era (modello e finestra della conversazione).
+ * - Un altro modello: la finestra è la più piccola delle due (l'ausiliario può averla minore: Haiku accanto a un modello da 1M); se
+ *   la sua non è nota, vale quella della conversazione. Budget, ingresso e tetto si misurano su QUELLA finestra.
+ * - Se in quella finestra non entra nemmeno la richiesta minima (budget d'uscita + margine + `INGRESSO_MINIMO_TOKEN_RIASSUNTO`), il
+ *   riassunto va sul modello della conversazione: meglio pagare di più che mandare un ingresso tagliato male. `ripiego: 'finestra'`.
+ */
+export function sceltaDelRiassunto({ modelloConversazione, finestraConversazione = null, modelloRiassunto = null, finestraRiassunto = null, tokenDaRiassumere, soglia = null } = {}) {
+  const positivo = (n) => Number.isFinite(n) && n > 0;
+  const fc = positivo(finestraConversazione) ? Math.floor(finestraConversazione) : null;
+  const diConversazione = (extra = {}) => ({
+    modello: modelloConversazione, finestraToken: fc, ausiliario: false,
+    budget: budgetRiassunto({ tokenDaRiassumere, finestraToken: fc, soglia }), ...extra,
+  });
+  if (typeof modelloRiassunto !== 'string' || !modelloRiassunto || modelloRiassunto === modelloConversazione) return diConversazione();
+  const fa = positivo(finestraRiassunto) ? Math.floor(finestraRiassunto) : null;
+  const finestra = fa !== null && fc !== null ? Math.min(fa, fc) : (fa ?? fc);
+  const budget = budgetRiassunto({ tokenDaRiassumere, finestraToken: finestra, soglia });
+  if (finestra !== null && finestra - budget.maxOutputTokens - MARGINE_TOKEN_RIASSUNTO < INGRESSO_MINIMO_TOKEN_RIASSUNTO) {
+    return diConversazione({ ripiego: 'finestra' });
+  }
+  return { modello: modelloRiassunto, finestraToken: finestra, ausiliario: true, budget };
+}
+
+/*
+ * ⛔ Owner 21/10/2026 («fai in modo che sta maledetta compattazione non dia più problemi sia con modelli locali che api key»): il TETTO
+ *   D'USCITA del riassunto NON è più il budget (2.000-10.000), che un modello prolisso o che ragiona toccava ⇒ «troncato» ⇒ scartato.
+ *   È quello di opencode, alla lettera (`packages/core/src/session/model-request.ts:88-98` `outputLimit` e `compaction.ts:931-947`
+ *   `fitOutput`, `78359c6` del 15/10): il MINIMO fra il limite d'uscita del modello (se noto), 32.000, e lo spazio che la richiesta
+ *   lascia nella finestra (se nota).
+ * ⛔⛔ Revisione avversaria del 21/10 (ROSSO S2 sulla prima forma, `349a3f9a4`): «lo spazio nella finestra» DA SOLO mandava `max_tokens`
+ *   fino a 116.651 e i fornitori col limite d'uscita proprio (gpt-4o: 16.384) rispondevano 400 ⇒ nessuna compattazione con le chiavi
+ *   API, proprio il caso dell'owner. Avevo letto `fitOutput` al contrario: abbassa il tetto (`Math.min`), non lo alza.
+ * ⇒ Il budget resta nel prompt (le parole). Limite ignoto ⇒ 32.000; e se un fornitore rifiuta comunque il tetto (400 sul `max_tokens`),
+ *   chi chiama ritenta una volta col budget (`eRifiutoDelTettoUscita`).
+ */
+export const TETTO_USCITA_RIASSUNTO = 32_000;
+export function tettoUscitaRiassunto(richiesta, { finestraToken = null, limiteUscita = null } = {}) {
+  const tetti = [TETTO_USCITA_RIASSUNTO];
+  if (Number.isFinite(limiteUscita) && limiteUscita > 0) tetti.push(Math.floor(limiteUscita));
+  if (Number.isFinite(finestraToken) && finestraToken > 0) {
+    const ingresso = (Array.isArray(richiesta) ? richiesta : []).reduce((somma, m) => somma + misuraPerRiassunto(m), 0);
+    tetti.push(Math.max(1_024, Math.floor(finestraToken - Math.ceil(ingresso / CARATTERI_PER_TOKEN_PRUDENTI) - MARGINE_TOKEN_RIASSUNTO)));
+  }
+  return Math.min(...tetti);
+}
+/** Il fornitore ha rifiutato il TETTO d'uscita (400 che parla di `max_tokens` / token d'uscita): si ritenta col budget. */
+export function eRifiutoDelTettoUscita(errore) {
+  const stato = errore?.stato ?? errore?.status ?? errore?.statusCode;
+  const testo = String(errore?.message ?? errore ?? '');
+  if (stato !== 400 && !/\b400\b/u.test(testo)) return false;
+  return /max[_ ]?(completion[_ ]?|output[_ ]?)?tokens|maximum (number of )?(output|completion) tokens|output tokens? (limit|exceed)|too many (output|completion) tokens/iu.test(testo);
+}
+
+export function caratteriIngressoPerFinestra({ finestraToken = null, maxOutputTokens = 0 } = {}) {
+  if (!Number.isFinite(finestraToken) || finestraToken <= 0) return CARATTERI_INGRESSO_RIASSUNTO;
+  const uscita = Number.isFinite(maxOutputTokens) && maxOutputTokens > 0 ? maxOutputTokens : MAX_TOKEN_RIASSUNTO;
+  const tokenIngresso = Math.max(INGRESSO_MINIMO_TOKEN_RIASSUNTO, finestraToken - uscita - MARGINE_TOKEN_RIASSUNTO);
+  return Math.min(CARATTERI_INGRESSO_RIASSUNTO, Math.floor(tokenIngresso * CARATTERI_PER_TOKEN_PRUDENTI));
+}
+
+/*
+ * Quinta revisione del 20/10 (V1, V2): il peso VERO di un messaggio nell'ingresso del riassuntore. Prima si contava solo un
+ * `content` stringa: gli argomenti delle chiamate (una scrittura di file da 300.000 caratteri) e i `content` ad array (un allegato
+ * di testo, un'immagine in base64) non pesavano niente e passavano interi — nelle sessioni di codice, il prossimo «non entra».
+ */
+const IMMAGINE_OMESSA = '[image omitted from the summary input]';
+function misuraPerRiassunto(m) {
+  let n = 0;
+  if (typeof m?.content === 'string') n += m.content.length;
+  else if (Array.isArray(m?.content)) {
+    for (const parte of m.content) {
+      if (typeof parte?.text === 'string') n += parte.text.length;
+      else if (typeof parte?.image_url?.url === 'string') n += parte.image_url.url.length;
+      else if (typeof parte?.image_url === 'string') n += parte.image_url.length;
+      else n += JSON.stringify(parte ?? '').length;
+    }
+  }
+  if (Array.isArray(m?.tool_calls)) n += JSON.stringify(m.tool_calls).length;
+  return n;
+}
+
+/** Il messaggio lungo del mezzo, a inizio + fine (Hermes 4.000 + 1.500). Il sistema e l'ultimo messaggio (l'istruzione) restano. */
+function accorciaPerRiassunto(m, indice, ultimo) {
+  if (indice === ultimo || m?.role === 'system' || !m || typeof m !== 'object') return m;
+  let fuori = m;
+  if (typeof m.content === 'string' && m.content.length > CARATTERI_MESSAGGIO_RIASSUNTO) {
+    fuori = { ...fuori, content: accorciaTesto(m.content, { inizio: 4_000, fine: 1_500 }) };
+  } else if (Array.isArray(m.content)) {
+    // V2: le immagini diventano un segnaposto, i pezzi di testo lunghi si accorciano come il testo
+    let cambiato = false;
+    const parti = m.content.map((parte) => {
+      if (parte?.type === 'image_url' || parte?.image_url !== undefined) { cambiato = true; return { type: 'text', text: IMMAGINE_OMESSA }; }
+      if (typeof parte?.text === 'string' && parte.text.length > CARATTERI_MESSAGGIO_RIASSUNTO) {
+        cambiato = true;
+        return { ...parte, text: accorciaTesto(parte.text, { inizio: 4_000, fine: 1_500 }) };
+      }
+      return parte;
+    });
+    if (cambiato) fuori = { ...fuori, content: parti };
+  }
+  if (Array.isArray(m.tool_calls)) {
+    // V1: gli argomenti lunghi si accorciano DENTRO il JSON (`accorciaArgomenti`, come la proiezione), una stringa rotta farebbe 400
+    let cambiato = false;
+    const chiamate = m.tool_calls.map((c) => {
+      const argomenti = c?.function?.arguments;
+      if (typeof argomenti !== 'string' || argomenti.length <= CARATTERI_MESSAGGIO_RIASSUNTO) return c;
+      const corti = accorciaArgomenti(argomenti);
+      if (corti === argomenti) return c;
+      cambiato = true;
+      return { ...c, function: { ...c.function, arguments: corti } };
+    });
+    if (cambiato) fuori = { ...fuori, tool_calls: chiamate };
+  }
+  return fuori;
+}
+
+/**
+ * La richiesta di riassunto che ENTRA nella finestra: messaggi lunghi accorciati, poi il totale limitato (`limitaIngressoRiassunto`).
+ * `frazione` < 1 restringe ancora (il secondo tentativo dopo un «non entra» usa la metà).
+ */
+export function ingressoRiassuntoPerFinestra(richiesta, { finestraToken = null, maxOutputTokens = 0, frazione = 1 } = {}) {
+  const lista = Array.isArray(richiesta) ? richiesta : [];
+  const quota = frazione > 0 && frazione <= 1 ? frazione : 1;
+  const caratteri = Math.max(4_000, Math.floor(caratteriIngressoPerFinestra({ finestraToken, maxOutputTokens }) * quota));
+  /* Condizione della CLI (20/10, Voce 208), più prudente di Hermes che accorcia sempre: il taglio per messaggio scatta SOLO con la
+     finestra NOTA e un ingresso che NON ci sta. Finestra ignota ⇒ il solo tetto sul totale, come prima, con i confini che non
+     spezzano le coppie (Voce 210); un ingresso che ci sta ⇒ la richiesta com'è, oggetto per oggetto. Un risultato d'attrezzo lungo
+     e importante non si taglia senza motivo. */
+  const finestraNota = Number.isFinite(finestraToken) && finestraToken > 0;
+  /* CLI, Voce 210: anche qui il taglio (che avviene SOLO sopra il tetto, come prima) non spezza le coppie chiamata/esito.
+     Sotto il tetto la richiesta resta identica byte per byte: `coppieIntere` sposta solo DOVE cade un taglio che c'è comunque. */
+  if (!finestraNota) return limitaIngressoRiassunto(lista, { caratteriMassimi: Math.floor(CARATTERI_INGRESSO_RIASSUNTO * quota), coppieIntere: true });
+  const totale = lista.reduce((somma, m) => somma + misuraPerRiassunto(m), 0);
+  if (totale <= caratteri) return lista;
+  const accorciata = lista.map((m, i) => accorciaPerRiassunto(m, i, lista.length - 1));
+  return limitaIngressoRiassunto(accorciata, { caratteriMassimi: caratteri, lunghezza: misuraPerRiassunto, coppieIntere: true });
+}
+
+/* `lunghezza`: come si pesa un messaggio. Di serie il solo `content` stringa, come sempre (finestra ignota, chiamanti di prima).
+   `coppieIntere`: i confini non spezzano una coppia chiamata/esito (sesta revisione, W2); di serie spento, come sempre. */
+export function limitaIngressoRiassunto(messaggi, { caratteriMassimi = CARATTERI_INGRESSO_RIASSUNTO, lunghezza = null, coppieIntere = false } = {}) {
   const lista = Array.isArray(messaggi) ? messaggi : [];
-  const lunghezzaDi = (m) => String(m?.content ?? '').length;
+  const lunghezzaDi = typeof lunghezza === 'function' ? lunghezza : (m) => String(m?.content ?? '').length;
   const totale = lista.reduce((somma, m) => somma + lunghezzaDi(m), 0);
   if (!(caratteriMassimi > 0) || totale <= caratteriMassimi) return lista;
   const budgetTesta = Math.floor(caratteriMassimi / 2);
@@ -801,6 +1072,22 @@ export function limitaIngressoRiassunto(messaggi, { caratteriMassimi = CARATTERI
     usatiCoda += lunghezza;
     inizioCoda -= 1;
   }
+  if (coppieIntere) {
+    /* Sesta revisione del 20/10 (W2): il taglio a messaggi interi spezzava le coppie chiamata/esito ai due confini — una
+       chiamata in testa coi suoi esiti nel mezzo omesso, o esiti in coda la cui chiamata è sparita — e un fornitore severo
+       risponde 400 sul riassunto. Testa: torna a prima dell'ultima chiamata che non ha TUTTI i suoi esiti in testa. Coda: salta
+       gli esiti iniziali (l'ultimo messaggio, l'istruzione, resta sempre). */
+    const idChiamate = (m) => (m?.role === 'assistant' && Array.isArray(m.tool_calls) ? m.tool_calls.map((c) => c?.id).filter(Boolean) : []);
+    for (;;) {
+      let k = fineTesta - 1;
+      while (k >= 0 && lista[k]?.role === 'tool') k -= 1;
+      if (k < 0 || idChiamate(lista[k]).length === 0) break;
+      const esiti = new Set(lista.slice(k + 1, fineTesta).map((m) => m?.tool_call_id));
+      if (idChiamate(lista[k]).every((id) => esiti.has(id))) break;
+      fineTesta = k;
+    }
+    while (inizioCoda < lista.length - 1 && lista[inizioCoda]?.role === 'tool') inizioCoda += 1;
+  }
   if (inizioCoda <= fineTesta) return lista; /* testa+coda coprono tutto: nulla da omettere, si resta com'era */
   return [
     ...lista.slice(0, fineTesta),
@@ -818,13 +1105,13 @@ export function limitaIngressoRiassunto(messaggi, { caratteriMassimi = CARATTERI
  *   (via `classificaErroreFornitore`), 'limite-tariffa' (429/402/quota/credit — NON è overflow: il contesto
  *   c'entra, il portafoglio no), 'errore-rete' (fetch/timeout/connessione/abort), 'errore-ignoto'.
  */
-export const CLASSI_FALLIMENTO_RIASSUNTO = Object.freeze(['vuoto', 'troncato', 'attrezzo', 'contesto-pieno', 'limite-tariffa', 'errore-rete', 'errore-ignoto']);
+export const CLASSI_FALLIMENTO_RIASSUNTO = Object.freeze(['vuoto', 'troncato', 'attrezzo', 'rifiuto', 'contesto-pieno', 'limite-tariffa', 'errore-rete', 'errore-ignoto']);
 const PATTERN_LIMITE_TARIFFA = /\b(?:402|429)\b|quota|credit|insufficient|rate[ _-]?limit|too many requests/i;
 const PATTERN_ERRORE_RETE = /fetch failed|network error|timeout|timed?[ _-]?out|ECONN|ENOTFOUND|EAI_AGAIN|socket hang up|aborted|operation was aborted/i;
 
 export function classificaFallimentoRiassunto({ esito = null, errore = null } = {}) {
   if (esito && esito.ok === false) {
-    if (esito.motivo === 'vuoto' || esito.motivo === 'troncato' || esito.motivo === 'attrezzo') return esito.motivo;
+    if (esito.motivo === 'vuoto' || esito.motivo === 'troncato' || esito.motivo === 'attrezzo' || esito.motivo === 'rifiuto') return esito.motivo;
     return classificaFallimentoRiassunto({ errore: errore ?? esito.errore ?? null });
   }
   if (!errore) return 'errore-ignoto';

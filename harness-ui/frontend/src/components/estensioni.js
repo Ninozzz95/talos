@@ -44,7 +44,7 @@ export function creaExtensionRow(tipo,v,{document:doc=globalThis.document,selezi
 }
 const PANELS=new WeakMap();
 export function aggiornaEstensioni(panel,voci,opzioni={}){
- let p=PANELS.get(panel);if(!p){p={query:'',scelto:null,voci:[],opzioni:{},ambito:undefined};PANELS.set(panel,p);panel.querySelector('[data-ext-query]').addEventListener('input',e=>{p.query=e.target.value;render(panel,p);});panel.querySelector('[data-ext-refresh]').addEventListener('click',()=>p.opzioni.onAggiorna?.());panel.querySelector('[data-ext-trust]').addEventListener('click',()=>{const v=p.voci.find(v=>v.id===p.scelto);if(v&&datiEstensione(p.opzioni.tipo,v).fidabile&&!p.opzioni.salvataggio&&!p.opzioni.caricamento){p.fuoco=panel.ownerDocument.activeElement===panel.querySelector('[data-ext-trust]')?{id:v.id,ambito:p.ambito}:null;p.opzioni.onFida?.(v);}});}
+ let p=PANELS.get(panel);if(!p){p={query:'',scelto:null,voci:[],opzioni:{},ambito:undefined};PANELS.set(panel,p);panel.querySelector('[data-ext-query]').addEventListener('input',e=>{p.query=e.target.value;render(panel,p);});panel.querySelector('[data-ext-refresh]').addEventListener('click',()=>p.opzioni.onAggiorna?.());/* R5.8 (18/10/2026): «Prova il collegamento» di un server MCP già fidato */panel.querySelector('[data-ext-test]')?.addEventListener('click',()=>{const v=p.voci.find(v=>v.id===p.scelto);if(v&&p.opzioni.tipo==='mcp'&&v.fidato===true&&!p.opzioni.prova&&!p.opzioni.caricamento)p.opzioni.onProva?.(v);});panel.querySelector('[data-ext-trust]').addEventListener('click',()=>{const v=p.voci.find(v=>v.id===p.scelto);if(v&&datiEstensione(p.opzioni.tipo,v).fidabile&&!p.opzioni.salvataggio&&!p.opzioni.caricamento){p.fuoco=panel.ownerDocument.activeElement===panel.querySelector('[data-ext-trust]')?{id:v.id,ambito:p.ambito}:null;p.opzioni.onFida?.(v);}});}
  if(p.ambito!==opzioni.ambito){p.scelto=null;p.ambito=opzioni.ambito;}p.voci=voci;p.opzioni={...p.opzioni,...opzioni};render(panel,p);
 }
 function render(panel,p){
@@ -89,6 +89,8 @@ function render(panel,p){
  const nodoFrase=detail.querySelector('[data-ext-frase]');
  if(nodoFrase){nodoFrase.hidden=!d.frase;(nodoFrase.querySelector('[data-ext-frase-testo]')||nodoFrase).textContent=d.frase||'';}
  const b=detail.querySelector('[data-ext-trust]');b.hidden=!d.fidabile;b.disabled=Boolean(o.caricamento||o.salvataggio)||!o.ambito;b.textContent=o.salvataggio?t('modelli.common.saving'):t('modelli.extensions.trust');detail.querySelector('[data-ext-nota]').hidden=o.tipo==='skills';
+ /* R5.8: la prova si offre solo a un server MCP fidato (provare un server non fidato vorrebbe dire eseguire codice di terzi) */
+ const pr=detail.querySelector('[data-ext-test]');if(pr){const v=p.voci.find(x=>x.id===p.scelto);pr.hidden=!(o.tipo==='mcp'&&v?.fidato===true&&typeof o.onProva==='function');pr.disabled=Boolean(o.caricamento||o.salvataggio||o.prova)||!o.ambito;pr.textContent=o.prova?t('modelli.extensions.testing'):t('modelli.extensions.testConnection');}
  if(p.fuoco&&!o.caricamento&&!o.salvataggio){const f=p.fuoco;p.fuoco=null;if(f.id===p.scelto&&f.ambito===p.ambito&&!panel.hidden&&doc.activeElement===doc.body){const target=d.fidabile?b:detail.querySelector('h3');if(target.tagName==='H3')target.tabIndex=-1;target.focus({preventScroll:true});}}
 }
 const SCHEDE=new WeakMap();

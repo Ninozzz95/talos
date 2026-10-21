@@ -4,7 +4,72 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
 [SemVer](https://semver.org/): in 0.y.z anything may still change. The version lives in
 `package.json` and in the `desktop-vX.Y.Z` tag.
 
-## Unreleased
+## desktop-v0.1.35 — 2026-10-21
+
+### Security
+
+- Remote control: the phone's diagnostics no longer carry provider secrets or paths of your PC; from the phone a session
+  opens only in a folder you allowed; a session id made only of dots can no longer leave its fixed route; a refusal
+  reaches the phone with its reason, cleaned.
+- Trust in project scripts follows what Node and Python really load: imports reached through a link or a junction are
+  resolved from the real path and followed, a linked script is pinned by its target, Python submodules and packages count,
+  and link loops stop.
+
+### Added
+
+- **Undo the file changes of a turn**, from the computer and from the phone: a window, a card in the chat, and a tool the
+  model can use to propose it — you decide.
+- **Remote control, more complete.** A phone that is not connected is woken with a notification when a run fails or a
+  session waits for you (never for a sub-agent); the phone sees the PC's models in its picker, can close a session on the
+  PC and test an MCP server; from the chat you can list the paired phones, show the pairing QR and revoke a phone;
+  `talos-relay` runs your own relay with one command; the name the phone shows for your PC can be chosen.
+  **Not usable yet in this version:** remote control needs the iroh binding, which our CI builds after this release; until a
+  release ships it, the Remote control page says it is not available.
+- **The phone's own model as a source on the PC** (`locale-ospite`): it gets the 11 essential tools, answers in your
+  language, and its context is counted exactly by the phone's engine.
+- **The summary of a long conversation never blocks the chat.** While a turn waits for it, one line shows the progress and
+  an estimated time, with **Skip** (go on with a summary written without the model) and **Stop**; the wait has a time
+  ceiling; on a slow local engine TALOS estimates first and does not even ask for a summary that would not fit the ceiling;
+  when the summarizer fails, the summary is written without the model and the row says why.
+- Workflows: the overview says which budget ran out.
+- A compatibility bench for llama.cpp updates (models × controls).
+
+### Changed
+
+- The model now knows where it is working: the prompt gives the full path of the working folder, as the file tools see it
+  (`/mnt/c/...` when they run in Linux), and says whether the shell and the file tools run on Windows or in Linux (WSL2).
+  The old line said «win32» even when the tools worked in Linux, and a local model went looking in `/`, `/Desktop` and
+  `/workspace`. **Privacy:** that path contains your Windows user name, and it is now sent to every model, cloud providers
+  included, the same way Hermes, Claude Code, pi and opencode do.
+- A path that names the working folder as if it were inside itself (`/Desktop/notes` while working in Desktop) is read as
+  `notes` when `/Desktop` does not exist, and the result says so. Every permission check sees the rewritten path.
+- Listing a folder that does not exist now suggests up to three real names close to the one asked for.
+- A local model with a small context window gets only the essential tools up front, like the phone does; the others stay one
+  search away. With a 16K or 32K window, the tool definitions shrink from about 6,400 to about 4,400 tokens.
+- When the model that writes conversation summaries keeps failing, TALOS no longer leaves a long conversation over the window:
+  it writes the summary itself (your requests, the files, the errors and the last actions) and says so in it.
+- On a local engine that serves one request at a time (the PC's llama.cpp, the phone's engine), the summary prepared at the
+  end of a turn gives way to your next message at once, instead of making it wait in line.
+- Providers, each aligned with its own documentation: reasoning is sent in each provider's own shape (DeepSeek, Kimi,
+  MiniMax, Cerebras, Together, DeepInfra, Novita), past reasoning is kept where the provider wants it back (Z.AI, Qwen),
+  prompt caching is used where it exists (xAI and the providers that document a cache key; the cache marker only where it
+  is declared), the output limit never exceeds the model's declared maximum, and fields that strict providers reject are no
+  longer sent. Qwen's parallel tool calls are an option, off by default.
+
+### Fixed
+
+- A context window that fills up, even when the provider says so in the middle of an answer, is handled as a full window:
+  the conversation is compacted and continues, instead of ending with an uncertain outcome.
+- The PC's local engine: compaction knows its real window (at least 64K when the machine can hold it), it serves one request
+  at a time, and summaries ask for reasoning off — and «off» really switches it off.
+- Reasoning that a model writes inside its answer (a `<think>` block) no longer shows up as the reply.
+- /goal: the reviewer gets the real state of the repository from the server, and when it cannot reach a verdict the goal
+  strip says why.
+- A paused sub-agent is no longer shown as working or failed, and the conversation does not say it is waiting for it.
+- The composer and the branch tree follow a change of language.
+- Vertex and Mistral: «off» really turns Gemini's thinking off on Vertex, and Mistral's reasoning effort goes only to the
+  models that take it.
+- The sidebar header no longer clips its third button.
 
 ## desktop-v0.1.34 — 2026-10-18
 

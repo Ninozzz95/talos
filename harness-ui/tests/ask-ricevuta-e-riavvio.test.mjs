@@ -402,3 +402,58 @@ test('NESSUNO-PER-GIRO-04 (R2, CLI 0.6.8): `forka` porta il «nessuno davanti» 
   assert.notEqual(giri.giro(2).input.nessunoDavanti, true, 'a fork from the app has the person in front');
   assert.equal(typeof giri.giro(2).input.onElicitazioneMcp, 'function');
 });
+
+test('SVE-REG-02 (21/10) inizio e fine dell’ultimo giro sopravvivono al riavvio: stessi istanti del vivo, dal `timestamp` sul disco', async () => {
+  const cartellaStore = cartellaDiProva('talos-sveglia-riavvio-');
+  try {
+    const orologio = ['2026-10-21T08:00:00.000Z', '2026-10-21T08:00:07.000Z'];
+    let tic = 0;
+    const prima = giriFinti();
+    const registro = createSessionRegistry({ cartellaStore, avviaSessioneFn: prima.avviaSessioneFn, clock: () => new Date(orologio[Math.min(tic++, 1)]) });
+    const { sessionId } = registro.avvia('task-vero');
+    prima.concludi(0);
+    await new Promise((r) => setImmediate(r));
+    const vivo = registro.elenca().find((v) => v.sessionId === sessionId);
+    assert.ok(vivo.inizioGiroAlle && vivo.fineGiroAlle, JSON.stringify(vivo));
+    await svuota(cartellaStore);
+
+    const riavviato = createSessionRegistry({ cartellaStore, avviaSessioneFn: giriFinti().avviaSessioneFn });
+    await riavviato.ripristina();
+    const dopo = riavviato.elenca().find((v) => v.sessionId === sessionId);
+    assert.equal(dopo.inizioGiroAlle, vivo.inizioGiroAlle);
+    assert.equal(dopo.fineGiroAlle, vivo.fineGiroAlle, '⛔ dopo il riavvio la fine del giro deve restare quella di prima, non null');
+    await svuota(cartellaStore);
+  } finally {
+    rimuoviCartellaDiProva(cartellaStore);
+  }
+});
+
+test('SVE-REG-03 (seconda revisione del 21/10, S4) un RunError di solo avviso a giro chiuso (SESSION_LEASED) non è la fine di un giro: né dal vivo né dopo il riavvio', async () => {
+  const cartellaStore = cartellaDiProva('talos-sveglia-avviso-');
+  try {
+    let adesso = Date.parse('2026-10-21T08:00:00.000Z');
+    const prima = giriFinti();
+    const registro = createSessionRegistry({ cartellaStore, avviaSessioneFn: prima.avviaSessioneFn, clock: () => new Date(adesso) });
+    const { sessionId } = registro.avvia('task-vero');
+    adesso += 7_000;
+    prima.concludi(0);
+    await new Promise((r) => setImmediate(r));
+    const chiuso = registro.elenca().find((v) => v.sessionId === sessionId);
+    assert.ok(chiuso.fineGiroAlle, JSON.stringify(chiuso));
+    adesso += 5 * 60_000; // l'avviso arriva cinque minuti dopo: con un istante suo
+    // l'avviso arriva sulla chat ferma, senza un RunStarted davanti
+    prima.giro(0).input.onEvento({ type: 'RunError', code: 'SESSION_LEASED', message: 'la chat è aperta in un’altra finestra' });
+    await new Promise((r) => setImmediate(r));
+    const dopo = registro.elenca().find((v) => v.sessionId === sessionId);
+    assert.ok(registro.esporta(sessionId).eventi.some((e) => e.type === 'RunError' && e.code === 'SESSION_LEASED'), 'l’avviso è nella storia');
+    assert.equal(dopo.fineGiroAlle, chiuso.fineGiroAlle, '⛔ un avviso non è la fine di un giro: il telefono lo prenderebbe per un giro fallito');
+    await svuota(cartellaStore);
+
+    const riavviato = createSessionRegistry({ cartellaStore, avviaSessioneFn: giriFinti().avviaSessioneFn });
+    await riavviato.ripristina();
+    assert.equal(riavviato.elenca().find((v) => v.sessionId === sessionId).fineGiroAlle, chiuso.fineGiroAlle, 'anche dal giornale');
+    await svuota(cartellaStore);
+  } finally {
+    rimuoviCartellaDiProva(cartellaStore);
+  }
+});

@@ -94,7 +94,9 @@ export function montaPonteLegacy(documentObj = document) {
   /* 3) La sidebar. */
   const sidebar = uno(radice, '.talos-sidebar');
   battezza(sidebar, { id: 'sessionsPanel', classi: ['sessions-panel'] });
-  const campanella = uno(sidebar, '.talos-brand .talos-icon-button');
+  /* 18/10/2026: nella riga del marchio, prima della campanella, c'è ora l'icona del telefono (controllo remoto, mockup v5): la
+     campanella è il primo pulsante che NON è il telefono, o il telefono diventerebbe il pulsante delle notifiche. */
+  const campanella = uno(sidebar, '.talos-brand .talos-icon-button:not(.talos-remoto-icona)');
   battezza(campanella, { id: 'notificationsBtn' });
   /* ⛔ Automazioni a due porte (08/10/2026, punto 10 dell'owner: «i non letti sempre visibili») — `app.js` scrive il conteggio in
      `#notificationsBadge` dal 02/09, ma qui l'elemento non nasceva: il numero viveva solo nel nome per i lettori di schermo, e a
@@ -238,9 +240,14 @@ export function montaPonteLegacy(documentObj = document) {
   // 06/9 T-18: l'albero dei rami è Fase 3 (BranchTree): via i rami DIMOSTRATIVI del mockup, resta una frase onesta
   const veloAlbero = documentObj.querySelector('#veloAlbero');
   if (veloAlbero) {
-    const titolo = veloAlbero.querySelector('.talos-dialog__title'); if (titolo) titolo.textContent = traduci("varie.bridge.branches.title");
+    /* 21/10/2026 (trovato dalla sessione video sulla 0.1.34 in inglese: titolo e frase in italiano): il testo si scriveva UNA volta,
+       e il titolo restava col `data-t` del modello (`modello.tree.branchesAndDelegationsOf`), che al cambio di lingua non riconosce
+       più il testo e lo lascia com'è (`ancoraDelModello`, `components/lingua.js`). Ora l'elemento dichiara la chiave che mostra:
+       `applicaLingua` lo ridisegna nella lingua nuova, come ogni altro `data-t` con chiave stabile. */
+    const titolo = veloAlbero.querySelector('.talos-dialog__title');
+    if (titolo) { titolo.setAttribute('data-t', 'varie.bridge.branches.title'); titolo.textContent = traduci("varie.bridge.branches.title"); }
     const albero = veloAlbero.querySelector('[data-c="BranchTree"]');
-    if (albero) { albero.replaceChildren(); const p = documentObj.createElement('p'); p.className = 'talos-inspector__hint'; p.textContent = traduci("varie.bridge.branches.empty"); albero.appendChild(p); }
+    if (albero) { albero.replaceChildren(); const p = documentObj.createElement('p'); p.className = 'talos-inspector__hint'; p.setAttribute('data-t', 'varie.bridge.branches.empty'); p.textContent = traduci("varie.bridge.branches.empty"); albero.appendChild(p); }
     for (const b of veloAlbero.querySelectorAll('.talos-dialog__footer .talos-button--secondary, .talos-dialog__body .talos-card')) b.hidden = true;
   }
 

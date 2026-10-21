@@ -82,13 +82,14 @@ test('NATIVE-05 cambio provider elimina stato estraneo senza cambiare testo o st
   assert.throws(() => toNativeMessages([{ role: 'user', content: [{ type: 'image_url', image_url: { url: 'http://localhost/private' } }] }], { provider: 'gemini' }), /image/i);
 });
 
-test('NATIVE-07 stream troncato fallisce esplicitamente e inoltra stopSequences', async () => {
+test('NATIVE-07 stream fermato per un motivo non di tetto (SAFETY) fallisce esplicitamente e inoltra stopSequences', async () => {
+  /* 21/10/2026: il tetto d'uscita (MAX_TOKENS) non è più un errore ma `length` (NATIVE-FINE-01); l'incompleta resta per gli altri motivi */
   let body;
   const result = await native('gemini', { messages, stream: true, stop: ['ALT'] }, async (_, init) => {
     body = JSON.parse(init.body);
-    return new Response('data: ' + JSON.stringify({ ...geminiReply, candidates: [{ content: { role: 'model', parts: [{ text: 'Parziale' }] }, finishReason: 'MAX_TOKENS' }] }) + '\n\n', { headers: { 'content-type': 'text/event-stream' } });
+    return new Response('data: ' + JSON.stringify({ ...geminiReply, candidates: [{ content: { role: 'model', parts: [{ text: 'Parziale' }] }, finishReason: 'SAFETY' }] }) + '\n\n', { headers: { 'content-type': 'text/event-stream' } });
   });
-  await assert.rejects(() => result.text(), /incomplete.*length/);
+  await assert.rejects(() => result.text(), /incomplete.*content-filter/);
   assert.deepEqual(body.generationConfig.stopSequences, ['ALT']);
 });
 
@@ -101,13 +102,13 @@ test('NATIVE-08 EOF senza finishReason non viene promosso a risposta riuscita', 
 test('K4B-NATIVE-01 — risposta incompleta: la frase inglese coincide con la voce inglese, la voce italiana è la frase di prima', async () => {
   const { default: dizionario } = await import('../frontend/src/i18n/testi/server.js');
   const voce = (lingua, chiave, params) => dizionario[lingua][chiave.replace(/^server\./u, '')].replace(/\{([a-zA-Z0-9_]+)\}/gu, (t, n) => String(params[n]));
-  const result = await native('gemini', { messages, stream: true }, async () => new Response('data: ' + JSON.stringify({ ...geminiReply, candidates: [{ content: { role: 'model', parts: [{ text: 'Parziale' }] }, finishReason: 'MAX_TOKENS' }] }) + '\n\n', { headers: { 'content-type': 'text/event-stream' } }));
+  const result = await native('gemini', { messages, stream: true }, async () => new Response('data: ' + JSON.stringify({ ...geminiReply, candidates: [{ content: { role: 'model', parts: [{ text: 'Parziale' }] }, finishReason: 'SAFETY' }] }) + '\n\n', { headers: { 'content-type': 'text/event-stream' } }));
   const errore = await result.text().then(() => null, (e) => e);
   assert.equal(errore?.code, 'NATIVE_RESPONSE_INCOMPLETE');
   assert.equal(errore.chiave, 'server.nativeAdapter.incompleteWithReason');
-  assert.deepEqual(errore.params, { provider: 'gemini', reason: 'length' });
+  assert.deepEqual(errore.params, { provider: 'gemini', reason: 'content-filter' });
   assert.equal(errore.message, voce('en', errore.chiave, errore.params), 'la frase inglese è la voce inglese coi valori');
-  assert.equal(voce('it', errore.chiave, errore.params), 'Risposta gemini incompleta (length). Riprova: la cronologia precedente è conservata.');
+  assert.equal(voce('it', errore.chiave, errore.params), 'Risposta gemini incompleta (content-filter). Riprova: la cronologia precedente è conservata.');
   assert.equal(voce('it', 'server.nativeAdapter.incompleteNamed', { label: 'MiniMax' }), 'Risposta di MiniMax incompleta. Riprova: la cronologia precedente è conservata.');
 });
 

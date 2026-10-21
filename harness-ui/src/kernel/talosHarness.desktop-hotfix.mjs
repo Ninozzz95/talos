@@ -19,7 +19,7 @@
  * runtime wiring and the canonical kernel remains the benchmark source.
  */
 import { createHash } from 'node:crypto'; // 15/10/2026: l'impronta del prefisso coperto da un riassunto preparato in anticipo
-import { lstatSync, realpathSync } from 'node:fs';
+import { lstatSync, readdirSync, realpathSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 
@@ -32,6 +32,10 @@ import { costruisciBloccoFatti } from './ricarica-post-compact.mjs';
 import { chiamataPerChiGuarda } from './ponte-attrezzi.mjs';
 
 export * from './talosHarness.mjs';
+
+/* 21/10/2026: `motoreAPostoUnico` vive in `compattazione-desktop.mjs` (la usa anche il registro, per il riassunto di fine giro che cede
+   il posto); qui si riesporta com'era. */
+export { motoreAPostoUnico } from './compattazione-desktop.mjs';
 
 export const DESKTOP_BLACKBOX_HOTFIX_VERSION = '2026-09-15';
 export const NO_TEST_SUITE_CODE = 'NO_TEST_SUITE_CONFIGURED';
@@ -76,6 +80,55 @@ function pathArg(args) {
   return '';
 }
 
+/*
+ * L1 motore locale (owner 20/10/2026 sera): un nome che non c'è torna coi nomi VERI più vicini, come Hermes `_suggest_similar_files`
+ *   (`tools/file_operations.py:1204-1240`): uguale senza maiuscole 100, stesso nome senza estensione 90, prefisso 70, contiene 60,
+ *   quasi uguale 50, contenuto 40. Hermes misura il «quasi uguale» con `difflib` ≥ 0,8; qui con Levenshtein normalizzato ≥ 0,8.
+ *   Al massimo tre, le cartelle prima (`elenca` apre cartelle), e solo dentro la cartella di lavoro (il genitore è già passato
+ *   dai controlli dei collegamenti qui sotto). Un modello piccolo si corregge al giro dopo invece di arrendersi.
+ */
+const VICINI_MASSIMI = 3;
+const VOCI_LETTE_PER_I_VICINI = 500;
+
+function somiglianza(a, b) {
+  if (a === b) return 1;
+  const lunga = Math.max(a.length, b.length);
+  if (lunga === 0 || lunga > 200) return 0;
+  let prima = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i += 1) {
+    const ora = [i];
+    for (let j = 1; j <= b.length; j += 1) {
+      ora[j] = Math.min(prima[j] + 1, ora[j - 1] + 1, prima[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    }
+    prima = ora;
+  }
+  return 1 - prima[b.length] / lunga;
+}
+
+function punteggioDelNome(cercato, trovato) {
+  const c = cercato.toLowerCase();
+  const t = trovato.toLowerCase();
+  const senzaEstensione = (n) => n.replace(/\.[^.]*$/u, '');
+  if (t === c) return 100;
+  if (senzaEstensione(t) === senzaEstensione(c) && senzaEstensione(c) !== '') return 90;
+  if (t.startsWith(c) || c.startsWith(t)) return 70;
+  if (t.includes(c)) return 60;
+  if (somiglianza(c, t) >= 0.8) return 50;
+  if (c.includes(t) && t.length > 2) return 40;
+  return 0;
+}
+
+export function nomiViciniNellaCartella(genitore, nome, prefisso = '') {
+  let voci;
+  try { voci = readdirSync(genitore, { withFileTypes: true }).slice(0, VOCI_LETTE_PER_I_VICINI); } catch { return []; }
+  return voci
+    .map((voce) => ({ voce, punti: punteggioDelNome(nome, voce.name) }))
+    .filter(({ punti }) => punti > 0)
+    .sort((a, b) => (b.punti - a.punti) || (Number(b.voce.isDirectory()) - Number(a.voce.isDirectory())) || (a.voce.name < b.voce.name ? -1 : 1))
+    .slice(0, VICINI_MASSIMI)
+    .map(({ voce }) => `${prefisso}${voce.name}${voce.isDirectory() ? '/' : ''}`);
+}
+
 function classifyElencaTarget(cartella, args) {
   const requested = pathArg(args);
   if (!requested) return null;
@@ -99,7 +152,10 @@ function classifyElencaTarget(cartella, args) {
       let stat;
       try { stat = lstatSync(current); }
       catch (error) {
-        if (error?.code === 'ENOENT' || error?.code === 'ENOTDIR') return { type: 'missing', requested };
+        if (error?.code === 'ENOENT' || error?.code === 'ENOTDIR') {
+          const prefisso = segments.slice(0, index).map((pezzo) => `${pezzo}/`).join('');
+          return { type: 'missing', requested, vicini: nomiViciniNellaCartella(join(rootReal, ...segments.slice(0, index)), segments[index], prefisso) };
+        }
         return { type: 'unreadable', requested };
       }
       // Fail closed on every reparse point. A parent junction/symlink must not
@@ -125,8 +181,20 @@ function shellExecutionBase(text) {
   return base;
 }
 
+/* L1, revisione del 20/10 (D1): la nota con cui il kernel apre l'esito di un percorso riletto (`dove-sei.mjs`). Testo di TALOS, mai
+   del modello o di un file: sta FUORI dal confine dei dati, in testa. */
+const NOTA_ALIAS = /^Note: "[^"\n]*" was read as "([^"\n]*)"[^\n]*\n\n/u;
+
 export function correggiEsitoToolDesktop({ name, args, content, cartella }) {
   let text = String(content ?? '');
+  /* L1 (D1): con un alias la correzione guarda l'esito DOPO la nota e il percorso RISCRITTO, quello che il kernel ha davvero aperto
+     (`args` sono gli argomenti grezzi del modello); la nota resta in testa, com'era. */
+  const notaAlias = NOTA_ALIAS.exec(text);
+  if (notaAlias) {
+    text = text.slice(notaAlias[0].length);
+    args = { percorso: notaAlias[1] };
+  }
+  const conNota = (risultato) => (notaAlias ? `${notaAlias[0]}${risultato}` : risultato);
 
   /* 27/09/2026 (owner): the kernel itself now opens an incomplete zero-match search with «inconclusive search: …»
      (`RICERCA_NON_CONCLUSIVA`), for ripgrep and for the JS walk alike, so the «no file matches.» rewrite that lived here
@@ -142,7 +210,8 @@ export function correggiEsitoToolDesktop({ name, args, content, cartella }) {
     if (target?.type === 'file') {
       text = `"${target.requested}" is a FILE, not a folder. Use \`leggi\` to read it; use \`elenca\` only on directories.`;
     } else if (target?.type === 'missing') {
-      text = `"${target.requested}" does not exist in this workspace. Use \`cerca\` to locate the file or folder instead of treating it as an unreadable directory.`;
+      const vicini = target.vicini?.length ? ` Closest existing names: ${target.vicini.map((v) => `"${v}"`).join(', ')}.` : '';
+      text = `"${target.requested}" does not exist in this workspace.${vicini} Use \`cerca\` to locate the file or folder instead of treating it as an unreadable directory.`;
     } else if (target?.type === 'outside') {
       text = `REFUSED. "${target.requested}" resolves outside the workspace.`;
     }
@@ -158,10 +227,16 @@ export function correggiEsitoToolDesktop({ name, args, content, cartella }) {
     if (suspiciousZero && !text.startsWith(POWERSHELL_ZERO_WARNING)) text = `${POWERSHELL_ZERO_WARNING}\n${text}`;
   }
 
-  return text;
+  return conNota(text);
 }
 
-export function correggiMessaggiDesktop(messages, { cartella } = {}) {
+/*
+ * L1 (20/10/2026 sera): `memoria` FISSA la correzione di un esito alla prima volta che la si calcola. Questa funzione gira a ogni
+ *   richiesta al fornitore sulla storia INTERA, e un esito corretto guardando il disco (file o cartella, i nomi vicini) cambierebbe
+ *   quando il disco cambia: il prefisso già in cache si romperebbe, e il modello vedrebbe riscritto un passato che aveva letto.
+ *   La chiave è l'id della chiamata più l'impronta del testo grezzo.
+ */
+export function correggiMessaggiDesktop(messages, { cartella, memoria = null } = {}) {
   if (!Array.isArray(messages)) return messages;
   const calls = new Map();
   const fixed = [];
@@ -183,7 +258,15 @@ export function correggiMessaggiDesktop(messages, { cartella } = {}) {
       fixed.push(message);
       continue;
     }
-    const content = correggiEsitoToolDesktop({ ...call, content: message.content, cartella });
+    /* D4: solo `elenca` si corregge guardando il DISCO; gli altri sono funzioni del testo e non serve fissarli (né calcolarne
+       l'impronta: 2.000 esiti da 20 KB costavano 20 ms a richiesta) */
+    const chiave = memoria && call.name === 'elenca'
+      ? `${message.tool_call_id}\u0000${createHash('sha256').update(String(message.content ?? '')).digest('hex')}` : null;
+    let content = chiave ? memoria.get(chiave) : undefined;
+    if (content === undefined) {
+      content = correggiEsitoToolDesktop({ ...call, content: message.content, cartella });
+      if (chiave) memoria.set(chiave, content);
+    }
     calls.delete(message.tool_call_id);
     if (content === String(message.content ?? '')) fixed.push(message);
     else {
@@ -393,9 +476,57 @@ function wrapOnGiro(original, { cartella, telemetry, calls }) {
  *   richiamare `invoke()` manda la storia compattata senza toccare il kernel (che non è di questa corsia). La forma
  *   pulita sarebbe un `prepare` richiamato dal kernel dopo l'overflow: è scritta nel rapporto F1 come debito.
  */
+const TENTATIVI_RIASSUNTO = 2;
+const ATTESA_RITENTA_RIASSUNTO_MS = 10_000;
+
+/*
+ * A1 (owner 21/10/2026 sera, dopo la ricerca su 12 concorrenti — `bugfixer/RICERCA-TETTO-E-VISIBILITA-RIASSUNTO-2026-10-21.md`): il
+ *   riassunto che il giro ASPETTA ha due orologi. Dal vivo sul Pad un solo passaggio del modello del telefono è durato 16 minuti, il
+ *   secondo 6, poi sono stati rifiutati: 22 minuti su «Elaborazione». Valori di serie di Hermes (`agent/conversation_compression.py:
+ *   667-668`, 120 s alzati al budget del riassunto ≥ 300 s `:786-797`, e 600 s in tutto), da tarare sul banco; l'ospite li cambia.
+ * ⛔ L'inattività conta DAL PRIMO TOKEN: mentre il motore legge il prompt non manda niente (llama.cpp senza `prompt_progress`), e un
+ *   prefill sano non è un blocco (la ricerca: i timeout d'inattività di Crush 120 s, Codex 300 s, opencode 900 s lo ucciderebbero).
+ *   Prima del primo token vale solo il tetto totale.
+ */
+/* I codici del motore del contesto per un riassunto del MODELLO che non è stato accettato (`engine.mjs`, `FALLIMENTI_DEL_RIASSUNTO`):
+   ripetere la stessa richiesta allo stesso modello nella stessa richiesta del giro non lo guarisce */
+const RIASSUNTI_RIFIUTATI_DAL_MOTORE = new Set(['CTX_INVALID_SUMMARY', 'CTX_EMPTY_SUMMARY', 'CTX_TRUNCATED_SUMMARY', 'CTX_INVALID_SOURCE', 'CTX_COMPACTION_FAILED']);
+const LETTURA_MINIMA_PER_LA_STIMA = 256;
+const RIASSUNTO_INATTIVITA_MS = 300_000;
+const RIASSUNTO_TETTO_MS = 600_000;
+const interoPositivo = (valore, predefinito) => (Number.isSafeInteger(valore) && valore > 0 ? valore : predefinito);
+
+/**
+ * L'orologio di UN riassunto atteso (tutti i suoi tentativi): il segnale da passare alla richiesta (Stop della persona, Skip, tetto
+ * totale, inattività dal primo token), `vita()` a ogni pezzo che arriva, `ragione` = `'tempo'` | `'saltato'` | null, `chiudi()` alla fine.
+ * Lo Stop resta lo Stop: non ha una ragione qui, e chi chiama lo riconosce dal SUO segnale.
+ */
+export function creaOrologioRiassunto({ segnaleStop = null, segnaleSalta = null, inattivitaMs = RIASSUNTO_INATTIVITA_MS, tettoMs = RIASSUNTO_TETTO_MS } = {}) {
+  const controllo = new AbortController();
+  let ragione = null;
+  const ferma = (perche) => {
+    if (ragione !== null || controllo.signal.aborted) return;
+    ragione = perche;
+    controllo.abort(Object.assign(new Error(perche === 'saltato' ? 'The summary was skipped.' : 'The summary took too long.'), { name: 'AbortError', code: perche === 'saltato' ? 'SUMMARY_SKIPPED' : 'SUMMARY_TIME_LIMIT' }));
+  };
+  const tetto = setTimeout(() => ferma('tempo'), tettoMs);
+  let inattivita = null;
+  const suSalta = () => ferma('saltato');
+  if (segnaleSalta?.aborted) ferma('saltato'); else segnaleSalta?.addEventListener?.('abort', suSalta, { once: true });
+  return {
+    segnale: segnaleStop ? AbortSignal.any([segnaleStop, controllo.signal]) : controllo.signal,
+    vita() { clearTimeout(inattivita); inattivita = setTimeout(() => ferma('tempo'), inattivitaMs); },
+    get ragione() { return ragione; },
+    chiudi() { clearTimeout(tetto); clearTimeout(inattivita); segnaleSalta?.removeEventListener?.('abort', suSalta); },
+  };
+}
+
 function wrapContextHooks(original, {
   cartella, modello, chiave, fetchDiRete, segnaleStop, telemetry, extraUsage, emitOnGiro,
-  reasoning, soglie, recordIniziale = null, records = [], progressoAcceso = false,
+  reasoning, soglie, recordIniziale = null, records = [], progressoAcceso = false, limiteUscitaToken = null,
+  riassuntoInattivitaMs = RIASSUNTO_INATTIVITA_MS, riassuntoTettoMs = RIASSUNTO_TETTO_MS, segnaleSaltaRiassunto = null,
+  /* 21/10/2026 (CLI): il modello che scrive i riassunti (null ⇒ quello della conversazione) e la sua finestra (`sceltaDelRiassunto`) */
+  modelloRiassunto = null, finestraRiassuntoToken = null,
   /* ⭐ 06/10/2026 — le fonti dichiarate dall'ospite per il blocco di fatti post-compact (`input.fontiRicarica`):
    * LEDGER append-only, coda pendente, pericoli aperti. `cartella` (la cartella della sessione) resta la fonte
    * del `git log` locale; i file toccati vengono dall'indice meccanico di ogni compattazione. */
@@ -406,12 +537,14 @@ function wrapContextHooks(original, {
      riassunto IN VOLO di questo giro — niente secondo riassunto pagato — e, quando arriva, quello PRONTO se l'impronta regge. */
   compattazioneInArrivo = null,
   /* ⭐ 15/10/2026 — la compattazione istantanea è una scelta dell'OSPITE (il desktop la accende dal registro): spenta, tutto resta
-     com'era — la CLI passa da questo stesso adapter, ha le sue decisioni sulla compattazione e il suo avanzamento in streaming. */
+     com'era. La CLI oggi (0.6.12) carica il kernel di BASE, non questo adapter; dalla 0.6.13 passerà di qui con le sue decisioni
+     sulla compattazione e il suo avanzamento in streaming (lane CLI, 21/10/2026: il commento di prima lo dava già per fatto). */
   istantanea = false,
 } = {}) {
   let compacted = compattazione.eRecordValido(recordIniziale) ? recordIniziale : null;
   let compactions = 0;
   let providerRequests = 0;
+  const correzioniFissate = new Map(); // L1: una correzione per esito, fissata alla prima richiesta (vedi `correggiMessaggiDesktop`)
   /* L'ancora: il numero VERO del fornitore per la lista lunga `lunghezza`; null finché non arriva una risposta. */
   let ancora = null;
   let tentativiFallitiNelTurno = 0;
@@ -437,7 +570,7 @@ function wrapContextHooks(original, {
   let richiestaSenzaAttesa = null; // col motore: la richiesta mandata senza aspettare il riassunto in volo (ritentativo qui sotto)
   /* Owner 12/10/2026: il ripiego dal motore del contesto si DICE una volta per turno, non a ogni richiesta. */
   let ripiegoDetto = false;
-  const reasoningRiassunto = compattazione.reasoningPerRiassunto(reasoning);
+  const reasoningRiassunto = compattazione.reasoningPerRiassunto(reasoning, { modello });
 
   const legacyMode = original === undefined || original === null;
   if (!legacyMode && typeof original.prepare !== 'function') {
@@ -469,23 +602,71 @@ function wrapContextHooks(original, {
    *   `valutaRispostaDiRiassunto` («vuoto»). Acceso, si tiene lo stesso esito di prima.
    */
   const progresso = (giro, valore) => { if (progressoAcceso) emitOnGiro?.({ giro, tipo: 'compattazione-progresso', ...valore }); };
+  /* B1 (21/10/2026, revisione del Mobile): sulla strada del motore del contesto il giro aspetta un riassunto che scrive il MOTORE.
+     Il motore dice quando (`onInTurnWait`: `waiting` e poi `done`, comunque sia andata); qui diventa lo stesso `compattazione-inizio`
+     della compattazione semplice, così la riga viva con «Skip» compare e il registro sa che un riassunto è atteso. La chiusura è
+     MUTA (`motivo:'motore'`): il riassunto pubblicato lo racconta già il separatore del motore, e se il motore fallisce (tetto, Skip)
+     il ripiego qui sotto apre e chiude la sua riga. Un'attesa per volta per richiesta; un secondo riassunto riapre la riga. */
+  const ascoltaAttesaDelMotore = (requestIndex) => {
+    let aperta = false;
+    return (evento) => {
+      if (evento?.state === 'waiting' && !aperta) {
+        aperta = true;
+        emitOnGiro?.({ giro: requestIndex, tipo: 'compattazione-inizio', tokenMisurati: null, soglia: null, motivo: 'soglia', origine: 'motore' });
+        progresso(requestIndex, { fase: 'riassunto', motivo: 'soglia', origine: 'motore', trascorsoMs: 0 });
+      } else if (evento?.state === 'done' && aperta) {
+        aperta = false;
+        emitOnGiro?.({ giro: requestIndex, tipo: 'compattazione-fine', compattato: false, motivo: 'motore', origine: 'motore' });
+      }
+    };
+  };
 
   /* `secondaria`: il riassunto preparato IN SOTTOFONDO mentre il giro va avanti è una seconda chiamata della sessione in contemporanea —
      l'involucro dei fornitori (runtime-owner-adapter.mjs, `eseguiConFallback`) la fa senza il suo guardiano «una per volta» */
-  const chiediRiassunto = async (messaggiRichiesta, maxOutputTokens, contatore = null, { secondaria = false } = {}) => {
+  /* A1: la richiesta del giro per cui il motore del contesto ha già scaduto/saltato/rifiutato il riassunto del modello — lì la
+     compattazione semplice va dritta al riassunto senza modello (`{ requestIndex, ragione }`) */
+  let senzaModelloPerRichiesta = null;
+  /* A1, la STIMA PRIMA: la velocità di lettura del prompt misurata dal motore locale (`timings` di llama-server o del motore
+     dell'app: token letti davvero / ms, `leggiTempiDelMotore` nel kernel). Solo su letture di almeno `LETTURA_MINIMA_PER_LA_STIMA`
+     token: una lettura piccola misura il rumore. Ignota (i fornitori cloud non la mandano) ⇒ nessuna stima: decidono gli orologi.
+     Vale la lettura PIÙ GRANDE del giro, non l'ultima (Mobile 21/10, sul Pad: 6.203 token a 123,7 t/s, poi 182 a 49,9 — un passo
+     piccolo paga il costo fisso del passo e sottostima la velocità di 2-4×, cioè un riassunto da migliaia di token). */
+  let velocitaLetturaTokSec = null;
+  let letturaPiuGrande = 0;
+  const registraTempi = (timings) => {
+    const n = timings?.prompt_n; const ms = timings?.prompt_ms;
+    if (!Number.isFinite(n) || !Number.isFinite(ms) || n < LETTURA_MINIMA_PER_LA_STIMA || ms <= 0 || n < letturaPiuGrande) return;
+    letturaPiuGrande = n;
+    velocitaLetturaTokSec = (n * 1000) / ms;
+  };
+  const osservaTempi = (invoke) => async (segnale) => { const esito = await invoke(segnale); registraTempi(esito?.timings); return esito; };
+  const chiediRiassunto = async (messaggiRichiesta, maxOutputTokens, contatore = null, { secondaria = false, orologio = null, modelloScelto = null } = {}) => {
+    const segnale = orologio?.segnale ?? segnaleStop;
+    /* 21/10/2026 (CLI): col modello del riassunto anche il ragionamento si sceglie per LUI */
+    const reasoningScelto = modelloScelto && modelloScelto !== modello ? compattazione.reasoningPerRiassunto(reasoning, { modello: modelloScelto }) : reasoningRiassunto;
     const esito = await kernel.chiamaConRitenta({
-      modello,
+      modello: modelloScelto ?? modello,
       chiave,
       messaggi: messaggiRichiesta,
       attrezzi: [],
       maxOutputTokens,
-      ...(reasoningRiassunto ? { reasoning: reasoningRiassunto } : {}),
+      ...(reasoningScelto ? { reasoning: reasoningScelto } : {}),
       ...(fetchDiRete ? { fetchDiRete } : {}),
-      ...(segnaleStop ? { segnaleStop } : {}),
-      ...(contatore ? { onDelta: contatore.onDelta, accettaVuota: true } : {}),
+      ...(segnale ? { segnaleStop: segnale } : {}),
+      /* l'inattività si misura sui pezzi in arrivo: solo con lo streaming acceso (il contatore), come il progresso */
+      ...(contatore ? { onDelta: (evento) => { orologio?.vita(); contatore.onDelta(evento); }, accettaVuota: true } : {}),
       ...(secondaria ? { secondaria: true } : {}),
+      /* 21/10/2026 (banco di stress: un riassuntore che risponde 429 o 500 teneva fermo il giro 502 s, coi 10 ritentativi di serie). Il
+         riassunto non è il giro: come Hermes (`context_compressor.py:830-840`, un sovraccarico ANNULLA la compattazione e la sessione
+         resta intatta) al più un ritentativo con attese brevi; il ciclo della compattazione ha già il suo secondo tentativo, e sopra
+         la regola di sempre (sotto la soglia si annulla, in overflow il ripiego). */
+      tentativiMassimi: TENTATIVI_RIASSUNTO, attesaRitentaMassimaMs: ATTESA_RITENTA_RIASSUNTO_MS,
     });
     usageAdd(extraUsage, esito.usage);
+    /* anche il riassunto è una lettura misurata. Con un modello dei riassunti diverso la sua velocità non conta: la scelta del modello
+       dipende dalla sola finestra (`sceltaDelRiassunto`: ripiego ⟺ finestra < 4.048), quindi in un giro i riassunti vanno TUTTI
+       all'ausiliario e la stima, che vale solo per il modello della conversazione (sotto), non la legge mai. */
+    registraTempi(esito.timings);
     contatore?.chiudi(esito.usage);
     return compattazione.valutaRispostaDiRiassunto(esito);
   };
@@ -534,44 +715,101 @@ function wrapContextHooks(original, {
       emitOnGiro?.({ giro: requestIndex, tipo: 'compattazione-inizio', tokenMisurati, soglia, motivo });
       progresso(requestIndex, { fase: 'lettura', messaggi: projected.length, tokenPrima: tokenMisurati, motivo });
     }
-    const budget = compattazione.budgetRiassunto({
-      tokenDaRiassumere: kernel.stimaTokenConversazione(parti.mezzo), finestraToken: soglie.finestraToken, soglia: soglie.soglia,
+    /* 21/10/2026 (CLI): quale modello scrive il riassunto, e su quale finestra si misura (`sceltaDelRiassunto`); il record resta
+       intestato al modello della CONVERSAZIONE (lo legge il controllo «modello cambiato» qui sopra) */
+    const scelta = compattazione.sceltaDelRiassunto({
+      modelloConversazione: modello, finestraConversazione: soglie.finestraToken, modelloRiassunto, finestraRiassunto: finestraRiassuntoToken,
+      tokenDaRiassumere: kernel.stimaTokenConversazione(parti.mezzo), soglia: soglie.soglia,
     });
+    const { budget } = scelta;
+    const finestraDelRiassunto = scelta.finestraToken;
+    /* il limite d'uscita che il registro passa è quello della conversazione: per un altro modello non vale (32.000 + la cintura) */
+    const limiteDelRiassunto = scelta.ausiliario ? null : limiteUscitaToken;
     const richiesta = compattazione.costruisciRichiestaDiRiassunto({ ...parti, paroleMassime: budget.paroleMassime });
+    /* Owner 21/10/2026: un riassunto TRONCATO si richiede UNA volta, più breve (metà delle parole) — Hermes `context_compressor.py:768`
+       («one main-model retry»), opencode `compaction.ts:286-310` (un richiamo, NUDGE). Prima: «lo stesso budget lo troncherebbe uguale»,
+       nessun ritentativo — vero col tetto uguale al budget, non più col tetto sulla finestra (`tettoUscitaRiassunto`). */
+    let piuBreve = false;
+    const richiestaBreve = () => compattazione.costruisciRichiestaDiRiassunto({ ...parti, paroleMassime: Math.max(200, Math.floor(budget.paroleMassime / 2)) });
     /* ⛔ BUG-5 (05/10/2026): l'INGRESSO del riassuntore si LIMITA (testa+coda, marcatore in mezzo) — 213.785
      *   token di ingresso (sessione vera b1e7382a) erano la causa dei tre riassunti «troncato» su tre giri:
      *   la richiesta di riassunto da sola rientrava nell'overflow e la compattazione non sostituiva MAI la storia. */
-    const richiestaLimitata = compattazione.limitaIngressoRiassunto(richiesta);
+    /* L1 (20/10/2026): il limite si misura sulla FINESTRA del modello (`ingressoRiassuntoPerFinestra`), non solo in caratteri:
+       sul codice un token vale ~2 caratteri e 160.000 caratteri non entravano in 65.536 token. Al secondo tentativo, la metà. */
+    const richiestaPer = (tentativo) => compattazione.ingressoRiassuntoPerFinestra(piuBreve ? richiestaBreve() : richiesta, {
+      finestraToken: finestraDelRiassunto, maxOutputTokens: budget.maxOutputTokens, frazione: tentativo === 0 ? 1 : 0.5,
+    });
     /* ⛔ BUG-5, revisione R1 (05/10/2026): `esito` parte null. Se la GUARDIA del giro di fallimenti rompe al primo
      *   giro (contatore già al massimo: il ritentativo overflow K8 dell'infer chiama `compattaOra` senza passare da
      *   `decidiCompattazione`), nessun tentativo si paga e l'esito sintetico più sotto rende la chiusura CLASSIFICATA
      *   e osservabile (evento `compattazione-fine`), non un TypeError interno. */
     let esito = null;
-    for (let tentativo = 0; tentativo < 2; tentativo += 1) {
+    /* A1: il riassunto ATTESO ha i suoi orologi e lo Skip; quello in sottofondo no (non ferma nessuno, e si annulla da sé) */
+    const inizioRiassunto = Date.now();
+    /* A1, stima prima: con la velocità di lettura misurata, un riassunto che non starebbe nel tetto non si chiede nemmeno */
+    /* la velocità misurata è quella del motore della CONVERSAZIONE: per un altro modello dei riassunti la stima non vale */
+    const stimaLetturaMs = !inSottofondo && velocitaLetturaTokSec && scelta.modello === modello ? (kernel.stimaTokenConversazione(richiestaPer(0)) * 1000) / velocitaLetturaTokSec : null;
+    const forzato = inSottofondo ? null : senzaModelloPerRichiesta?.requestIndex === requestIndex ? senzaModelloPerRichiesta.ragione
+      : stimaLetturaMs !== null && stimaLetturaMs > riassuntoTettoMs ? 'stima' : null;
+    const orologio = inSottofondo || forzato ? null : creaOrologioRiassunto({ segnaleStop, segnaleSalta: segnaleSaltaRiassunto, inattivitaMs: riassuntoInattivitaMs, tettoMs: riassuntoTettoMs });
+    if (forzato) esito = { ok: false, riassunto: '', motivo: forzato, classe: forzato };
+    for (let tentativo = 0; tentativo < 2 && !forzato; tentativo += 1) {
       /* ⛔ BUG-5 (05/10/2026), il GIRO DI FALLIMENTI: si pagano al massimo `FALLIMENTI_RIASSUNTO_
        *   CONSECUTIVI_MASSIMI` tentativi consecutivi del riassuntore PER TURNO — il quarto identico non si
        *   chiede (credito, chiave o fornitore giù: un secondo giro identico non guarisce). Il contatore si
        *   conta a TENTATIVO, dentro il ciclo, così il tetto vale anche a cavallo di due compattazioni. */
       if (fallimentiRiassuntoConsecutivi >= compattazione.FALLIMENTI_RIASSUNTO_CONSECUTIVI_MASSIMI) break;
       const contatore = progressoAcceso && !inSottofondo
-        ? compattazione.creaContatoreRiassunto({ emetti: (valore) => progresso(requestIndex, { ...valore, motivo }), tentativo: tentativo + 1 })
+        ? compattazione.creaContatoreRiassunto({ emetti: (valore) => progresso(requestIndex, { ...valore, motivo, tentativi: 2, trascorsoMs: Date.now() - inizioRiassunto, origine: 'adattatore' }), tentativo: tentativo + 1 })
         : null;
-      try { esito = await chiediRiassunto(richiestaLimitata, budget.maxOutputTokens, contatore, { secondaria: inSottofondo }); }
+      const inviata = richiestaPer(tentativo);
+      const tetto = compattazione.tettoUscitaRiassunto(inviata, { finestraToken: finestraDelRiassunto, limiteUscita: limiteDelRiassunto });
+      try {
+        try { esito = await chiediRiassunto(inviata, tetto, contatore, { secondaria: inSottofondo, orologio, modelloScelto: scelta.modello }); }
+        catch (rifiuto) {
+          /* revisione del 21/10 (S2): il fornitore ha un limite d'uscita più basso del tetto ⇒ una volta col budget, che lo rispetta */
+          if (segnaleStop?.aborted || orologio?.ragione || tetto <= budget.maxOutputTokens || !compattazione.eRifiutoDelTettoUscita(rifiuto)) throw rifiuto;
+          esito = await chiediRiassunto(inviata, budget.maxOutputTokens, contatore, { secondaria: inSottofondo, orologio, modelloScelto: scelta.modello });
+        }
+      }
       catch (errore) {
-        if (segnaleStop?.aborted) throw errore;
+        if (segnaleStop?.aborted) { orologio?.chiudi(); throw errore; }
+        /* A1: tetto scaduto o Skip della persona ⇒ niente secondo tentativo; sotto, il riassunto senza modello parte subito */
+        if (orologio?.ragione) {
+          /* il tempo scaduto è un fallimento del riassuntore (al prossimo giro di fila si va dritti al ripiego, come la pausa crescente
+             di Hermes); lo Skip no, è una scelta della persona */
+          if (orologio.ragione === 'tempo') fallimentiRiassuntoConsecutivi += 1;
+          esito = { ok: false, riassunto: '', motivo: orologio.ragione, classe: orologio.ragione };
+          break;
+        }
         /* ⛔ BUG-5 (05/10/2026): l'errore NON si butta più — la sua classe va all'evento (credito? rete?
          *   overflow?), così chi guarda il registro decide se riprovare, aspettare o smettere. */
         esito = { ok: false, riassunto: '', motivo: 'errore', classe: compattazione.classificaFallimentoRiassunto({ errore }) };
       }
       if (esito.ok) fallimentiRiassuntoConsecutivi = 0;
       else fallimentiRiassuntoConsecutivi += 1;
-      /* Troncato: lo stesso budget lo troncherebbe uguale, un secondo tentativo identico paga e non serve. */
-      if (esito.ok || esito.motivo === 'troncato') break;
+      if (esito.ok) break;
+      if (esito.motivo === 'troncato') piuBreve = true; // il secondo tentativo chiede metà delle parole
     }
+    orologio?.chiudi();
     if (esito === null) {
       /* ⛔ BUG-5, revisione R1: entrati a contatore pieno — zero tentativi pagati, zero NUOVI fallimenti contati
        *   (il contatore resta com'era: il giro di fallimenti era già aperto) — e la chiusura si DICE. */
       esito = { ok: false, riassunto: '', motivo: 'esaurito', classe: 'esaurito' };
+    }
+    /* L1 (owner 20/10/2026): il riassuntore ha esaurito i suoi tentativi e la compattazione serve ADESSO (non in sottofondo) ⇒ il
+       RIPIEGO senza modello (`riassuntoDiRipiego`, come Hermes), invece di lasciare la conversazione oltre la finestra. Il contatore
+       resta pieno: la compattazione dopo, in questo turno, va dritta al ripiego senza pagare tentativi. */
+    /* Owner 21/10/2026: quando la compattazione è per OVERFLOW (il fornitore ha già detto «non entra») lasciare la conversazione com'è
+       vuol dire far morire il giro con «contesto pieno» — il ripiego scatta SUBITO. Sotto la soglia invece vale la regola di Hermes
+       (`context_compressor.py:768`, `:830-840`): si annulla e la sessione resta intatta, il ripiego solo al contatore pieno. */
+    /* A1 (21/10/2026): tetto scaduto e Skip portano al ripiego SEMPRE — il giro aspettava perché la richiesta non stava sotto la soglia */
+    const perOrologio = esito.motivo === 'tempo' || esito.motivo === 'saltato' || (forzato !== null && esito.motivo === forzato);
+    if (!esito.ok && !inSottofondo && (perOrologio || motivo === 'overflow' || esito.motivo === 'esaurito' || fallimentiRiassuntoConsecutivi >= compattazione.FALLIMENTI_RIASSUNTO_CONSECUTIVI_MASSIMI)) {
+      /* la ragione in una parola per la riga d'esito (contratto riga viva §3): tempo · saltato · esaurito · rifiutato */
+      const ragione = perOrologio ? esito.motivo : esito.motivo === 'esaurito' || fallimentiRiassuntoConsecutivi >= compattazione.FALLIMENTI_RIASSUNTO_CONSECUTIVI_MASSIMI ? 'esaurito' : 'rifiutato';
+      esito = { ok: true, ripiego: true, classe: esito.classe ?? esito.motivo, ragione,
+        riassunto: compattazione.riassuntoDiRipiego(parti.mezzo, { classe: esito.classe ?? esito.motivo }) };
     }
     if (!esito.ok) {
       tentativiFallitiNelTurno += 1;
@@ -616,7 +854,7 @@ function wrapContextHooks(original, {
       modello,
       indice,
     });
-    return { proiezione, record, soloCoda: false, ...misureDelPavimento, budget: budget.maxOutputTokens };
+    return { proiezione, record, soloCoda: false, ...misureDelPavimento, budget: budget.maxOutputTokens, ...(esito.ripiego ? { ripiego: true, classe: esito.classe, ragione: esito.ragione } : {}) };
   };
 
   /** Applica un riassunto (appena fatto o preparato prima): da qui il giro manda la proiezione nuova. */
@@ -632,7 +870,8 @@ function wrapContextHooks(original, {
     compactions += 1;
     ancora = null;
     attendeVerdetto = true;
-    emitOnGiro?.({ giro: requestIndex, tipo: 'compattazione-fine', compattato: true, record, ...(preparata.soloCoda ? { soloCoda: true } : {}), ...(istantanea ? { istantanea: true, motivo } : {}) });
+    emitOnGiro?.({ giro: requestIndex, tipo: 'compattazione-fine', compattato: true, record, ...(preparata.soloCoda ? { soloCoda: true } : {}), ...(istantanea ? { istantanea: true, motivo } : {}),
+      ...(preparata.ripiego ? { ripiego: true, classe: preparata.classe, ...(preparata.ragione ? { ragione: preparata.ragione } : {}) } : {}) }); // L1: chi guarda sa che il riassunto è del codice
     return preparata.proiezione;
   };
 
@@ -879,13 +1118,18 @@ function wrapContextHooks(original, {
       const { messaggi: grezzi, effimeri } = separaEffimeri(payload.messages);
       // Correct BEFORE any context-engine projection or legacy compaction so an
       // ambiguous raw tool result cannot be summarized into a false statement.
-      const inputMessages = correggiMessaggiDesktop(grezzi, { cartella });
+      const inputMessages = correggiMessaggiDesktop(grezzi, { cartella, memoria: correzioniFissate });
       let prepared;
       let ripiego = false;
       if (legacyMode) prepared = { messages: await maybeCompactLegacy(inputMessages, requestIndex) };
       else {
         try {
-          prepared = await original.prepare({ ...payload, messages: inputMessages, originali: grezzi });
+          /* A1 + B1 (21/10/2026): al motore il tetto del riassunto atteso, e lo Skip dentro il segnale della richiesta — così il motore
+             annulla davvero il suo lavoro (su un motore a posto unico lo libera) invece di lasciarlo correre sotto il giro */
+          const segnaleRichiesta = segnaleSaltaRiassunto && payload?.signal ? AbortSignal.any([payload.signal, segnaleSaltaRiassunto])
+            : segnaleSaltaRiassunto ?? payload?.signal;
+          prepared = await original.prepare({ ...payload, messages: inputMessages, originali: grezzi, summaryCeilingMs: riassuntoTettoMs,
+            onInTurnWait: ascoltaAttesaDelMotore(requestIndex), ...(segnaleRichiesta ? { signal: segnaleRichiesta } : {}) });
           /* 12/10/2026, decisione dell'owner («Si ripara da solo»): l'archivio non combaciava, i vecchi originali sono stati messi
              da parte e il motore è ripartito dalla storia attiva. La chat lo dice con una riga, che non ferma niente. */
           if (prepared?.riallineato) {
@@ -900,7 +1144,13 @@ function wrapContextHooks(original, {
              che regge anche il contesto troppo grande, sotto in `infer`), e la chat lo dice una volta con una riga che non ferma
              niente. Uno Stop della persona invece resta uno Stop. L'archivio del motore non si tocca qui: la causa della
              divergenza si cura a parte (R-05). */
-          if (segnaleStop?.aborted || payload?.signal?.aborted || errore?.name === 'AbortError') throw errore;
+          const saltato = segnaleSaltaRiassunto?.aborted === true && !segnaleStop?.aborted && !payload?.signal?.aborted;
+          if (!saltato && (segnaleStop?.aborted || payload?.signal?.aborted || errore?.name === 'AbortError')) throw errore;
+          /* A1: il riassunto del motore è scaduto, è stato saltato o rifiutato ⇒ la compattazione semplice di QUESTA richiesta non
+             richiama il modello (era lui il lento, o il rifiutato): riassunto senza modello, con la ragione per la riga d'esito */
+          const ragioneSenzaModello = saltato ? 'saltato' : errore?.code === 'CTX_COMPACTION_TIMEOUT' ? 'tempo'
+            : RIASSUNTI_RIFIUTATI_DAL_MOTORE.has(errore?.code) ? 'rifiutato' : null;
+          if (ragioneSenzaModello) senzaModelloPerRichiesta = { requestIndex, ragione: ragioneSenzaModello };
           ripiego = true;
           if (!ripiegoDetto) {
             ripiegoDetto = true;
@@ -911,7 +1161,7 @@ function wrapContextHooks(original, {
           prepared = { messages: await maybeCompactLegacy(inputMessages, requestIndex) };
         }
       }
-      const proiettati = correggiMessaggiDesktop(prepared?.messages ?? inputMessages, { cartella });
+      const proiettati = correggiMessaggiDesktop(prepared?.messages ?? inputMessages, { cartella, memoria: correzioniFissate });
       const messages = compattazione.riattaccaEffimeri(proiettati, effimeri);
       richiestaCorrente = legacyMode || ripiego ? { array: messages, grezzi: inputMessages, effimeri, requestIndex, lunghezzaProiezione: proiettati.length } : null;
       richiestaSenzaAttesa = !legacyMode && !ripiego && prepared?.sentWithoutWaiting === true ? { array: messages, payload, grezzi, inputMessages, effimeri, requestIndex } : null;
@@ -951,7 +1201,7 @@ function wrapContextHooks(original, {
           ? usaPronta(scambio, { requestIndex, motivo: 'overflow' })
           : await compattaOra(grezzi, projected, { requestIndex, motivo: 'overflow', tokenMisurati: token, misura, soglia: soglie.soglia });
         if (!proiezione) throw errore;
-        const nuova = compattazione.riattaccaEffimeri(correggiMessaggiDesktop(proiezione, { cartella }), effimeri);
+        const nuova = compattazione.riattaccaEffimeri(correggiMessaggiDesktop(proiezione, { cartella, memoria: correzioniFissate }), effimeri);
         array.splice(0, array.length, ...nuova);
         richiestaCorrente.lunghezzaProiezione = nuova.length - effimeri.length;
         try {
@@ -965,7 +1215,7 @@ function wrapContextHooks(original, {
         }
       }
   };
-  if (legacyMode) hooks.infer = inferLegacy;
+  if (legacyMode) hooks.infer = (opzioni, invoke) => inferLegacy(opzioni, osservaTempi(invoke));
   else {
     /* Owner 12/10/2026 (ripiego qui sopra): una richiesta preparata dalla compattazione semplice perché il motore è caduto ha anche
        la sua rete per il contesto troppo grande. Col motore sano `richiestaCorrente` è null e tutto va come prima. */
@@ -993,7 +1243,7 @@ function wrapContextHooks(original, {
            ripartiva IDENTICA (44.056 caratteri contro 44.056). Qui il fornitore ha già detto che non entra: come K8 (`inferLegacy`)
            si ignora la soglia, si usa il riassunto pronto o in preparazione, o se ne forza uno per «overflow». */
         let preparata;
-        try { preparata = await original.prepare({ ...r.payload, messages: r.inputMessages, originali: r.grezzi, waitForInFlight: true }); }
+        try { preparata = await original.prepare({ ...r.payload, messages: r.inputMessages, originali: r.grezzi, waitForInFlight: true, onInTurnWait: ascoltaAttesaDelMotore(r.requestIndex) }); }
         catch (secondo) {
           if (segnaleStop?.aborted || opzioni.signal?.aborted || secondo?.name === 'AbortError') throw secondo;
           if (!ripiegoDetto) {
@@ -1009,7 +1259,7 @@ function wrapContextHooks(original, {
             : await compattaOra(r.inputMessages, proiettata, { requestIndex: r.requestIndex, motivo: 'overflow', tokenMisurati: token, misura, soglia: soglie.soglia });
           preparata = { messages: riassunta ?? proiettata };
         }
-        const nuova = compattazione.riattaccaEffimeri(correggiMessaggiDesktop(preparata?.messages ?? r.inputMessages, { cartella }), r.effimeri);
+        const nuova = compattazione.riattaccaEffimeri(correggiMessaggiDesktop(preparata?.messages ?? r.inputMessages, { cartella, memoria: correzioniFissate }), r.effimeri);
         r.array.splice(0, r.array.length, ...nuova);
         try { return await inferBase(opzioni, invoke); }
         catch (secondo) {
@@ -1018,7 +1268,8 @@ function wrapContextHooks(original, {
         }
       }
     };
-    hooks.infer = (opzioni = {}, invoke) => {
+    hooks.infer = (opzioni = {}, invokeGrezzo) => {
+      const invoke = osservaTempi(invokeGrezzo); // A1: ogni risposta del giro dice quanto veloce il motore legge
       if (richiestaCorrente) return inferLegacy(opzioni, invoke);
       const r = richiestaSenzaAttesa; richiestaSenzaAttesa = null;
       return r ? inferSenzaAttesa(r, opzioni, invoke) : inferBase(opzioni, invoke);
@@ -1028,7 +1279,18 @@ function wrapContextHooks(original, {
 }
 
 export async function talosLavora(input = {}) {
-  const telemetry = creaTelemetriaStallo();
+  /* 21/10/2026, lane CLI (b): l'avviso di inattività va dove lo vuole l'OSPITE. Con `onStallo` il record arriva a lui (la CLI ne fa
+     un evento, in `-p` stderr resta pulito); senza, resta il `console.warn` di sempre del desktop. Un errore della funzione
+     dell'ospite non deve fermare il giro per una diagnostica: si scarta lì, e solo lì. */
+  const telemetry = creaTelemetriaStallo(typeof input.onStallo === 'function'
+    ? { log: (record) => {
+      try {
+        const esito = input.onStallo(record);
+        /* revisione C-1: un ospite `async` che rifiuta lascerebbe un rifiuto senza gestore, e Node lo fa uscire */
+        if (esito && typeof esito.then === 'function') esito.then(undefined, () => { /* diagnostica: mai fatale */ });
+      } catch { /* diagnostica: mai fatale */ }
+    } }
+    : {});
   const calls = new Map();
   const extraUsage = { prompt_tokens: 0, completion_tokens: 0, cached_tokens: 0, giri: 0 };
   const explicitTestCommand = typeof input.comandoProva === 'string'
@@ -1041,10 +1303,16 @@ export async function talosLavora(input = {}) {
    * Le soglie si calcolano UNA volta per turno, dall'ambiente e dalla finestra che il chiamante passa
    * (`finestraToken`: null oggi — la cabla l'onda 2 dal catalogo; con null vale il solo tetto assoluto).
    */
+  /* 21/10/2026, lane CLI (a): il tetto si passa anche come OPZIONE (la CLI ha `context.compactAtTokens`), come Hermes lo passa al
+     costruttore da configurazione (`agent/context_compressor.py:2903` threshold_tokens_cap, letto in `agent_init.py:1463`). Vince
+     sull'ambiente; solo un intero positivo è un tetto scritto apposta, il resto ricade sulla variabile. */
+  const tettoOpzione = Number.isSafeInteger(input.tettoCompattazioneToken) && input.tettoCompattazioneToken > 0 ? input.tettoCompattazioneToken : null;
   const soglie = compattazione.calcolaSoglie({
-    tettoToken: compattazione.leggiTettoEsplicito(process.env),
+    tettoToken: tettoOpzione ?? compattazione.leggiTettoEsplicito(process.env),
     finestraToken: input.finestraToken ?? null,
   });
+  /* 21/10/2026 (revisione S2): il limite d'uscita del modello, dove il registro lo sa (endpoint OpenRouter); null ⇒ 32.000 + la cintura */
+  const limiteUscitaToken = Number.isFinite(input.limiteUscitaToken) && input.limiteUscitaToken > 0 ? Math.floor(input.limiteUscitaToken) : null;
   const records = [];
   const contextHooks = wrapContextHooks(input.contextHooks, {
     cartella: input.cartella,
@@ -1057,13 +1325,21 @@ export async function talosLavora(input = {}) {
     emitOnGiro: onGiro,
     reasoning: input.reasoning,
     soglie,
+    limiteUscitaToken,
     recordIniziale: input.recordCompattazioneIniziale ?? null,
     records,
     progressoAcceso: input.progressoCompattazione === true,
     fontiRicarica: input.fontiRicarica ?? null,
     compattazionePronta: input.compattazionePronta ?? null,
-    istantanea: input.compattazioneIstantanea === true,
+    istantanea: input.compattazioneIstantanea === true && !compattazione.motoreAPostoUnico(input.modello),
     compattazioneInArrivo: input.compattazioneInArrivo ?? null,
+    /* A1 (owner 21/10/2026 sera): i due orologi del riassunto ATTESO e il «Skip» della persona (contratto riga viva §4-§5) */
+    riassuntoInattivitaMs: interoPositivo(input.riassuntoInattivitaMs, RIASSUNTO_INATTIVITA_MS),
+    riassuntoTettoMs: interoPositivo(input.riassuntoTettoMs, RIASSUNTO_TETTO_MS),
+    segnaleSaltaRiassunto: input.segnaleSaltaRiassunto instanceof AbortSignal ? input.segnaleSaltaRiassunto : null,
+    /* 21/10/2026 (CLI): il modello dei riassunti dell'ospite e la sua finestra; assenti ⇒ quelli della conversazione */
+    modelloRiassunto: typeof input.modelloRiassunto === 'string' && input.modelloRiassunto ? input.modelloRiassunto : null,
+    finestraRiassuntoToken: Number.isFinite(input.finestraRiassuntoToken) && input.finestraRiassuntoToken > 0 ? input.finestraRiassuntoToken : null,
   });
   const onDelta = wrapOnDelta(input.onDelta, telemetry);
 

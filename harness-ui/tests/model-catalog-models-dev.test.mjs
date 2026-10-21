@@ -283,6 +283,7 @@ test('PE-10 — mappa completa; non esiste non è un registro rotto né un model
     azure: null, bedrock: null, vertex: null, // P-K: i cataloghi cloud dipendono dal collegamento dell'owner, non da models.dev
     esterno: null, // P-L: l'agente esterno non ha un catalogo remoto
     chatgpt: null, // 11/10/2026: i modelli del piano li dice l'account, non models.dev
+    'locale-ospite': null, // 18/10/2026: il modello lo apre l'app che ospita r4, nessun catalogo remoto
   });
   const { catalogo } = await banco(t, { fetchFn: async () => assert.fail('nessun fetch senza mappa') });
   for (const id of ['ollama', 'local', 'inesistente', '__proto__']) {

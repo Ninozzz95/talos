@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import { ID_MOTORI_LOCALI_OPENAI, REGISTRO_FORNITORI } from './provider-registry.mjs';
 import { createStreamPartitioner } from './stream-partition.mjs';
 
@@ -112,12 +114,145 @@ export function livelloRagionamentoPiuVicino(richiesto, livelli) {
   return livelloRagionamentoMinimo(livelli);
 }
 
+/*
+ * 21/10/2026, P0 della ricognizione (passata 2): un fornitore rigido dichiara i campi che rifiuta (`campiRifiutati`), e questo è
+ * l'UNICO punto che li toglie, dopo ogni ramo del traduttore — come Hermes, che li toglie alla ricostruzione e di nuovo sui messaggi
+ * già pronti (`reapply_reasoning_echo`, `agent/message_sanitization.py:793-800`). Il corpo del chiamante non si tocca.
+ */
+function togliCampiRifiutati(record, esito) {
+  if (!record || !esito?.corpo || typeof esito.corpo !== 'object') return esito;
+  /* owner 21/10/2026 sera, «come Hermes»: il marcatore `cache_control` (il kernel lo mette sul sistema per TUTTI, `talosHarness.mjs:2046`)
+     parte solo verso chi lo dichiara nel registro (`cache.marcatore`), come `anthropic_prompt_cache_policy` in Hermes
+     (`agent/agent_runtime_helpers.py:1779-1850`): altrove è un campo in più, nel migliore dei casi ignorato, nel peggiore un 400. */
+  const campi = [...(record.campiRifiutati?.campi ?? []), ...(record.cache?.marcatore === 'cache_control' ? [] : ['cache_control'])];
+  if (campi.length === 0) return esito;
+  const corpo = { ...esito.corpo };
+  if (campi.includes('stream_options')) delete corpo.stream_options;
+  if (Array.isArray(corpo.messages) && (campi.includes('reasoning_content') || campi.includes('cache_control'))) {
+    corpo.messages = corpo.messages.map((m) => {
+      if (!m || typeof m !== 'object') return m;
+      let nuovo = m;
+      if (campi.includes('reasoning_content') && m.role === 'assistant' && Object.hasOwn(m, 'reasoning_content')) {
+        const { reasoning_content: tolto, ...resto } = m; nuovo = resto;
+        /* revisione F1 (Cerebras): dove il fornitore ha un campo SUO per il ragionamento rimandato, il testo vero ci va (mai il riempimento
+           di un altro fornitore, mai un vuoto) */
+        const campoProprio = record.ragionamentoNeiMessaggi?.campo;
+        if (campoProprio && typeof tolto === 'string' && tolto.trim() !== '' && !Object.hasOwn(resto, campoProprio)) nuovo = { ...resto, [campoProprio]: tolto };
+      }
+      if (campi.includes('cache_control') && Array.isArray(nuovo.content) && nuovo.content.some((p) => p && typeof p === 'object' && Object.hasOwn(p, 'cache_control'))) {
+        const parti = nuovo.content.map((p) => (p && typeof p === 'object' && Object.hasOwn(p, 'cache_control') ? (({ cache_control: _c, ...r }) => r)(p) : p));
+        /* il kernel trasforma il sistema in UN pezzo di testo solo per appendergli il marcatore: tolto quello, torna la stringa che era */
+        nuovo = { ...nuovo, content: parti.length === 1 && parti[0]?.type === 'text' && Object.keys(parti[0]).length === 2 && typeof parti[0].text === 'string' ? parti[0].text : parti };
+      }
+      return nuovo;
+    });
+  }
+  return { ...esito, corpo };
+}
+
 export function preparaRichiestaCompatibile(provider, corpo) {
+  const record = REGISTRO_FORNITORI[provider];
+  return conAttrezziCoerenti(conTettoDiUscita(record, conChiaveDellaCache(record, conIdChiamateDelFornitore(record, togliCampiRifiutati(record, preparaRichiestaPerFornitore(provider, corpo))))));
+}
+
+/* P2 della ricognizione (revisione dei rigidi, 21/10/2026): il riassunto parte con `tools: []` e `tool_choice: 'auto'`
+   (`talosHarness.mjs:2047-2048`, `runtime-owner-adapter.mjs:2115`), e un `tool_choice` senza attrezzi l'API di OpenAI lo rifiuta. Senza
+   attrezzi la scelta dell'attrezzo e le chiamate parallele non significano niente: si tolgono. La lista vuota si toglie come fa Hermes
+   (`agent/transports/chat_completions.py:366`, `if tools:`), tranne quando la storia ha chiamate d'attrezzo: lì resta, come pi
+   (`api/openai-completions.ts:862-865`, «requires tools param when conversation has tool_calls/tool_results»). */
+function conAttrezziCoerenti(esito) {
+  const corpo = esito?.corpo;
+  if (!corpo || !Array.isArray(corpo.tools) || corpo.tools.length > 0) return esito;
+  const conStoria = Array.isArray(corpo.messages) && corpo.messages.some((m) => (m?.role === 'assistant' && Array.isArray(m.tool_calls) && m.tool_calls.length) || m?.role === 'tool');
+  const { tools, tool_choice, parallel_tool_calls, ...resto } = corpo;
+  esito.corpo = conStoria ? { ...resto, tools } : resto;
+  return esito;
+}
+
+/* P1 della ricognizione (21/10/2026): un limite d'uscita più alto del massimo che il registro DICHIARA per il modello (`modelliNoti`,
+   `maxOutputTokens`, con fonte e data) si abbassa a quel massimo PRIMA di partire, e lo si dice. Hermes lo fa solo dopo il rifiuto del
+   fornitore (`agent/turn_overflow.py:285-300`, «max_tokens too large» ⇒ ritenta); pi lo taglia prima, sul contesto
+   (`api/simple-options.ts:18-22`). Un modello che il registro non conosce resta com'è: niente tetto inventato. */
+function conTettoDiUscita(record, esito) {
+  if (!Array.isArray(record?.modelliNoti) || !esito?.corpo || typeof esito.corpo.model !== 'string') return esito;
+  const id = esito.corpo.model.startsWith(`${record.id}:`) ? esito.corpo.model.slice(record.id.length + 1) : esito.corpo.model;
+  const modello = record.modelliNoti.find((m) => m.id.toLowerCase() === id.toLowerCase());
+  if (!Number.isSafeInteger(modello?.maxOutputTokens)) return esito;
+  for (const campo of ['max_tokens', 'max_completion_tokens']) {
+    const chiesto = esito.corpo[campo];
+    if (Number.isSafeInteger(chiesto) && chiesto > modello.maxOutputTokens) {
+      esito.corpo = { ...esito.corpo, [campo]: modello.maxOutputTokens };
+      esito.note = [...(esito.note ?? []), `${record.etichetta}: the output limit ${chiesto} is above this model's maximum; sent ${modello.maxOutputTokens}.`];
+    }
+  }
+  return esito;
+}
+
+/* P1 della ricognizione (21/10/2026): `prompt_cache_key` verso i fornitori che lo DICHIARANO (`cache.marcatore`), per tenere le richieste
+   della stessa conversazione sulla stessa macchina della cache. Come per il piano ChatGPT (`chatgpt-richiesta.mjs:46-63`): la chiave è
+   l'IMPRONTA del prefisso stabile — modello, attrezzi e messaggi fino al primo della persona — così ogni giro della stessa chat la ritrova
+   senza che il traduttore conosca la sessione. Una chiave messa da chi chiama resta sua. Tetto di 64 caratteri come pi
+   (`openai-prompt-cache.ts:1`). */
+/* P1 OpenRouter (21/10/2026): lo stesso valore va anche nel `session_id` a radice verso chi dichiara `instradamento.campo: 'session_id'`.
+   OpenRouter (openrouter.ai/docs/guides/best-practices/prompt-caching, letta il 21/10): con `session_id` l'instradamento «sticky» parte
+   dalla PRIMA richiesta riuscita, senza aspettare un colpo di cache, e non dipende dall'hash dei primi messaggi; massimo 256 caratteri;
+   vince sull'intestazione `x-session-id`. Hermes lo manda con l'id della sessione (`plugins/model-providers/openrouter/__init__.py:126-133`). */
+function conChiaveDellaCache(record, esito) {
+  const perCache = record?.cache?.marcatore === 'prompt_cache_key';
+  const perInstradamento = record?.instradamento?.campo === 'session_id';
+  if ((!perCache && !perInstradamento) || !esito?.corpo || !Array.isArray(esito.corpo.messages)) return esito;
+  const suo = (campo) => typeof esito.corpo[campo] === 'string' && esito.corpo[campo] !== '';
+  if ((!perCache || suo('prompt_cache_key')) && (!perInstradamento || suo('session_id'))) return esito;
+  const messaggi = esito.corpo.messages;
+  const primoDellaPersona = messaggi.findIndex((m) => m?.role === 'user');
+  const prefisso = primoDellaPersona >= 0 ? messaggi.slice(0, primoDellaPersona + 1) : messaggi.slice(0, 1);
+  const impronta = createHash('sha256').update(JSON.stringify([esito.corpo.model ?? null, esito.corpo.tools ?? null, prefisso])).digest('hex');
+  const chiave = `talos-${impronta}`.slice(0, 64);
+  return { ...esito, corpo: { ...esito.corpo,
+    ...(perCache && !suo('prompt_cache_key') ? { prompt_cache_key: chiave } : {}),
+    ...(perInstradamento && !suo('session_id') ? { session_id: chiave } : {}) } };
+}
+
+/* revisione F4 (21/10/2026): gli id delle chiamate nella forma che il fornitore accetta (Mistral: 9 caratteri alfanumerici). Ogni id non
+   valido diventa un hash deterministico (FNV-1a su due semi, base 36, come opencode); gli id già validi della storia sono riservati
+   prima, così due id diversi non diventano mai lo stesso; chiamata (`tool_calls[].id`) ed esito (`tool_call_id`) restano accoppiati. */
+const ID_ALFANUMERICO_9 = /^[A-Za-z0-9]{9}$/u;
+function hashId(valore) {
+  const passata = (seme) => { let h = seme; for (const c of valore) h = Math.imul(h ^ c.charCodeAt(0), 16777619); return (h >>> 0).toString(36); };
+  return `${passata(2166136261).padStart(7, '0')}${passata(2246822519).padStart(7, '0')}`.slice(-9);
+}
+function conIdChiamateDelFornitore(record, esito) {
+  if (record?.idChiamate?.forma !== 'alfanumerico-9' || !Array.isArray(esito?.corpo?.messages)) return esito;
+  const messaggi = esito.corpo.messages;
+  const tutti = messaggi.flatMap((m) => [...(Array.isArray(m?.tool_calls) ? m.tool_calls.map((t) => t?.id) : []), m?.tool_call_id]).filter((id) => typeof id === 'string');
+  if (tutti.every((id) => ID_ALFANUMERICO_9.test(id))) return esito;
+  const usati = new Set(tutti.filter((id) => ID_ALFANUMERICO_9.test(id)));
+  const mappa = new Map();
+  const nuovo = (id) => {
+    if (typeof id !== 'string' || ID_ALFANUMERICO_9.test(id)) return id;
+    if (mappa.has(id)) return mappa.get(id);
+    let tentativo = 0; let candidato = hashId(id);
+    while (usati.has(candidato)) candidato = hashId(`${id}:${++tentativo}`);
+    usati.add(candidato); mappa.set(id, candidato);
+    return candidato;
+  };
+  const corpo = { ...esito.corpo, messages: messaggi.map((m) => {
+    if (!m || typeof m !== 'object') return m;
+    let n = m;
+    if (Array.isArray(m.tool_calls)) n = { ...n, tool_calls: m.tool_calls.map((t) => (t && typeof t === 'object' ? { ...t, id: nuovo(t.id) } : t)) };
+    if (typeof m.tool_call_id === 'string') n = { ...n, tool_call_id: nuovo(m.tool_call_id) };
+    return n;
+  }) };
+  return { ...esito, corpo };
+}
+
+function preparaRichiestaPerFornitore(provider, corpo) {
   const record = REGISTRO_FORNITORI[provider];
   // P-K — il corpo HTTP usa reasoning_effort, non l'involucro del router.
   if (record?.cloud) return preparaRichiestaCloud(record, corpo);
   // P-K — fine
   if (record?.richiestaCompatibile) return preparaProfiloCompatibile(record, corpo);
+  if (['together', 'reasoning_effort', 'enable_thinking'].includes(record?.ragionamento?.formato)) return preparaFormatoSemplice(record, corpo);
   if (record?.ragionamento?.formato !== 'thinking') return { corpo, avvisi: [], note: [] };
   const oggetto = v => v !== null && typeof v === 'object' && !Array.isArray(v);
   if (!oggetto(corpo) || typeof corpo.model !== 'string') fail(`${record.etichetta} request is not valid.`);
@@ -127,7 +262,8 @@ export function preparaRichiestaCompatibile(provider, corpo) {
   if (thinking !== undefined && (!oggetto(thinking) || !['enabled', 'disabled'].includes(thinking.type))) fail(`${record.etichetta} reasoning control is not valid.`);
   const id = corpo.model.startsWith(`${provider}:`) ? corpo.model.slice(provider.length + 1) : corpo.model;
   const modello = record.modelliNoti.find(m => m.id === id);
-  const opzioni = modello?.ragionamento;
+  /* 21/10/2026 (P0 DeepSeek): un id fuori da modelliNoti usa le opzioni del FORNITORE se le dichiara (`modelliIgnoti`). */
+  const opzioni = modello?.ragionamento ?? (modello ? undefined : record.ragionamento.modelliIgnoti);
   const avvisi = [], frasiAvvisi = [];
   const note = []; /* ⛔ BUG-18: telemetria di normalizzazione del ragionamento, mai chat. K4b: classe L, inglese semplice. */
   const effort = reasoning_effort ?? reasoning?.effort;
@@ -139,11 +275,22 @@ export function preparaRichiestaCompatibile(provider, corpo) {
     let tipo = preferenza;
     if (!opzioni.thinking.includes(tipo)) {
       tipo = 'enabled';
-      note.push(`${record.etichetta} · ${modello.nome}: this model cannot disable reasoning; it remains active.`);
+      note.push(`${record.etichetta} · ${modello?.nome ?? corpo.model}: this model cannot disable reasoning; it remains active.`);
     }
-    risultato.thinking = { type: tipo, ...(typeof thinking?.clear_thinking === 'boolean' ? { clear_thinking: thinking.clear_thinking } : {}) };
+    /* 21/10/2026, owner «Tenerlo, come pi e opencode»: col pensiero acceso Z.AI riceve `clear_thinking: false` e rilegge il ragionamento
+       dei giri passati (docs.z.ai/guides/capabilities/thinking-mode, letta il 21/10: «disabled by default on the standard API endpoint»;
+       pi `api/openai-completions.ts:886`, opencode `core/src/variant.ts:293`). Una scelta del chiamante resta sua. */
+    const conserva = tipo === 'enabled' && record.ragionamento.conservaRagionamento?.forma === 'clear_thinking';
+    risultato.thinking = { type: tipo, ...(typeof thinking?.clear_thinking === 'boolean' ? { clear_thinking: thinking.clear_thinking } : conserva ? { clear_thinking: false } : {}) };
   } else if (preferenza !== undefined && richiesto == null) {
     note.push(`${record.etichetta}: reasoning control is not documented for this model; not sent.`);
+  } else if (preferenza === undefined && thinking === undefined
+    && record.ragionamento.conservaRagionamento?.forma === 'clear_thinking'
+    && (record.ragionamento.conservaRagionamento.diSerie ?? []).some((m) => m.toLowerCase() === String(id).toLowerCase())) {
+    /* revisione Z-1 (21/10/2026): «Automatico» (nessuna preferenza) lasciava il pensiero acceso di serie SENZA `clear_thinking`, quindi
+       il ragionamento passato si cancellava, mentre Qwen nello stesso caso lo teneva. Sui modelli che la pagina di Z.AI dà accesi di
+       serie (GLM-5.x) si manda lo stato di serie dichiarato, col ragionamento tenuto — come pi, che manda `thinking` sempre (:886). */
+    risultato.thinking = { type: 'enabled', clear_thinking: false };
   }
   if (richiesto != null) {
     /* ⛔ BUG-7 (04/10, owner): il livello chiesto si ADATTA al modello, non si butta.
@@ -188,7 +335,68 @@ export function preparaRichiestaCompatibile(provider, corpo) {
       note.push(`${record.etichetta}: the requested reasoning level is not supported by the P-D profile for this model; not sent.`);
     }
   }
+  if (record.ragionamento.rimandaRagionamento === true && Array.isArray(risultato.messages)) risultato.messages = conRagionamentoRimandato(risultato.messages);
   return { corpo: risultato, avvisi, note, ...(frasiAvvisi.length ? { frasiAvvisi } : {}) };
+}
+
+/* Il riempimento del ragionamento (revisione D1, 21/10/2026), condiviso da DeepSeek e Kimi: vedi il commento qui sotto. */
+function conRagionamentoRimandato(messages) {
+  {
+    /* Revisione D1, 21/10/2026 — come Hermes `apply_reasoning_content_policy` (`agent/message_sanitization.py:748-790`) e
+       `build_assistant_message` (`agent/chat_completion_helpers.py:1684-1691`): il ragionamento del messaggio resta com'è; se manca,
+       o è la stringa vuota, uno SPAZIO — DeepSeek V4 Pro rifiuta anche "" (pi usa "", ed è il caso che Hermes ha corretto, #17341).
+       Il riempimento non inventa pensiero e non ne copia: un messaggio senza ragionamento riceve uno spazio. ⛔ Ma il ragionamento GIÀ
+       salvato non dice da quale fornitore viene (revisione D-1, 21/10): dopo un cambio di modello quello di GLM riparte verso DeepSeek
+       come se fosse suo. Hermes tiene due campi (`message_sanitization.py:775-780`); qui è un aperto dichiarato. Il corpo del chiamante
+       non si tocca. */
+    return messages.map((m) => (m?.role === 'assistant'
+      && !(typeof m.reasoning_content === 'string' && m.reasoning_content.length > 0)
+      ? { ...m, reasoning_content: ' ' }
+      : m));
+  }
+}
+
+/*
+ * 21/10/2026, P1 della ricognizione dei parametri: tre forme dello sforzo che non sono né OpenRouter né `thinking`.
+ *   together         `reasoning: { enabled }` + `reasoning_effort` fra i livelli dichiarati (pi `openai-completions.ts:955-963`)
+ *   reasoning_effort `reasoning_effort` a radice, «none» per spegnere (Hermes `deepinfra/__init__.py:18-30`)
+ *   enable_thinking  `enable_thinking` + `separate_reasoning: true`; lo sforzo non è documentato (docs.novita.ai, 21/10)
+ * Il livello si adatta come altrove (BUG-18: prima il più debole, mai un costo più alto di quello scelto). Prima di questa funzione
+ * il corpo partiva con l'involucro di OpenRouter, che questi fornitori non documentano: la scelta della persona si perdeva in silenzio.
+ */
+function preparaFormatoSemplice(record, corpo) {
+  const oggetto = v => v !== null && typeof v === 'object' && !Array.isArray(v);
+  if (!oggetto(corpo) || typeof corpo.model !== 'string') fail(`${record.etichetta} request is not valid.`);
+  if (corpo.reasoning !== undefined && !oggetto(corpo.reasoning)) fail(`${record.etichetta} reasoning options are not valid.`);
+  const { reasoning, reasoning_effort, enable_thinking, ...resto } = corpo;
+  const grezzo = reasoning_effort ?? reasoning?.effort;
+  const richiesto = typeof grezzo === 'string' ? grezzo.trim().toLowerCase() : (grezzo ?? null);
+  const spento = reasoning?.enabled === false || enable_thinking === false || richiesto === 'none';
+  const acceso = !spento && (reasoning?.enabled === true || enable_thinking === true || richiesto != null);
+  const risultato = { ...resto };
+  const note = [];
+  const livelli = record.ragionamento.livelli;
+  const livello = () => {
+    if (richiesto == null || richiesto === 'none') return null;
+    const vicino = livelloRagionamentoPiuVicino(richiesto, livelli);
+    if (vicino != null && vicino !== richiesto && aliasGrafiaRagionamento(richiesto, livelli) == null) {
+      note.push(`${record.etichetta}: the level "${richiesto}" is not documented; sent "${vicino}", the nearest.`);
+    }
+    return vicino;
+  };
+  if (record.ragionamento.formato === 'together') {
+    if (spento || acceso) risultato.reasoning = { enabled: acceso };
+    const l = acceso ? livello() : null;
+    if (l != null) risultato.reasoning_effort = l;
+  } else if (record.ragionamento.formato === 'reasoning_effort') {
+    if (spento) risultato.reasoning_effort = 'none';
+    else { const l = livello(); if (l != null) risultato.reasoning_effort = l; }
+  } else {
+    if (spento || acceso) risultato.enable_thinking = acceso;
+    if (richiesto != null && richiesto !== 'none') note.push(`${record.etichetta}: reasoning levels are not documented; only on/off is sent.`);
+    risultato.separate_reasoning = true;
+  }
+  return { corpo: risultato, avvisi: [], note };
 }
 
 // P-K — OpenAI v1 ufficiale: nessuna deduzione di famiglia dal nome della distribuzione Azure.
@@ -205,10 +413,84 @@ function preparaRichiestaCloud(record, corpo) {
     }
     if (Object.keys(corpo.reasoning).some(k => k !== 'effort')) note.push(`${record.etichetta}: these reasoning options are not supported by the connection.`);
   }
-  // I limiti di generazione restano quelli chiesti; compatibilità finale dipendente dal modello.
+  /* 21/10/2026 (Vertex): i livelli documentati dalla connessione; «none» = il minimo (BUG-18 gen.2: senza campo decide il modello),
+     il resto il più vicino senza superare il costo scelto (BUG-18), la grafia xhigh≡max in silenzio */
+  const livelli = record.cloud?.livelliRagionamento;
+  /* revisione V-1 + G-1 (21/10/2026): «Spento» NON è «minimal», e non si spegne ovunque. La pagina «Thinking» di Vertex
+     (docs.cloud.google.com/gemini-enterprise-agent-platform/models/thinking, aggiornata il 20/10/2026, letta il 21/10) dice:
+     - «You can turn off thinking for Gemini 2.5 Flash and Gemini 2.5 Flash-Lite by setting thinking_budget to 0» ⇒ lì si spegne;
+     - «You can't turn off thinking for Gemini 2.5 Pro» (budget 128-32.768) ⇒ il minimo documentato, 128, e si dice;
+     - «The thinking_budget parameter is deprecated for Gemini 3 and later models» (400 intermittenti sul 3, sempre sul 4) ⇒ il
+       livello più basso che OGNI Gemini 3 documenta, `low` (3.1 Pro non elenca MINIMAL, e MINIMAL vuole le firme del pensiero
+       nei giri multipli), e si dice.
+     Hermes (`agent/transports/chat_completions.py:177-188`, #91927) manda budget 0 a 2.5 e 3+: qui si segue la pagina di oggi.
+     Il `thinking_config` del chiamante si sostituisce SOLO col nostro spegnimento, e lo si dice; il resto di `extra_body` resta suo. */
+  if (Array.isArray(livelli) && risultato.reasoning_effort === 'none') {
+    delete risultato.reasoning_effort;
+    const nome = String(corpo.model).trim().toLowerCase().replace(/^google\//u, '');
+    const maggiore = /^gemini-(\d+)/u.exec(nome);
+    const conBudget = (budget) => {
+      const extra = oggetto(risultato.extra_body) ? risultato.extra_body : {};
+      const google = oggetto(extra.google) ? extra.google : {};
+      if (google.thinking_config !== undefined) note.push(`${record.etichetta}: your thinking_config was replaced to turn reasoning off.`);
+      risultato.extra_body = { ...extra, google: { ...google, thinking_config: { include_thoughts: false, thinking_budget: budget } } };
+    };
+    if (nome.startsWith('gemini-2.5-flash')) conBudget(0);
+    else if (nome.startsWith('gemini-2.5-pro')) {
+      conBudget(128);
+      note.push(`${record.etichetta}: reasoning cannot be turned off on this model; sent the documented minimum budget (128).`);
+    } else if (nome === 'gemini-flash-latest' || (maggiore && Number(maggiore[1]) >= 3)) {
+      risultato.reasoning_effort = 'low';
+      note.push(`${record.etichetta}: reasoning cannot be turned off on this model; sent "low", the lowest level it documents.`);
+      /* revisione V-1 (21/10/2026): Vertex accetta UNO solo fra `reasoning_effort` e `thinking_config` («only one … may be specified»,
+         pagina OpenAI-compatibile): quello del chiamante si toglie, e lo si dice; il resto di `extra_body` resta suo. */
+      const extra = oggetto(risultato.extra_body) ? risultato.extra_body : null;
+      if (extra && oggetto(extra.google) && extra.google.thinking_config !== undefined) {
+        const { thinking_config: _tolto, ...google } = extra.google;
+        risultato.extra_body = { ...extra, google };
+        note.push(`${record.etichetta}: your thinking_config was removed: only one reasoning control can be sent.`);
+      }
+    } else {
+      note.push(`${record.etichetta}: turning reasoning off is not documented for this model; nothing is sent.`);
+    }
+  }
+  if (Array.isArray(livelli) && typeof risultato.reasoning_effort === 'string') {
+    const chiesto = risultato.reasoning_effort;
+    const scelto = chiesto === 'none' ? livelloRagionamentoMinimo(livelli) : livelloRagionamentoPiuVicino(chiesto, livelli);
+    if (scelto == null) { delete risultato.reasoning_effort; note.push(`${record.etichetta}: the level "${chiesto}" is not documented; not sent.`); }
+    else if (scelto !== chiesto) {
+      risultato.reasoning_effort = scelto;
+      if (chiesto === 'none' || aliasGrafiaRagionamento(chiesto, livelli) == null) note.push(`${record.etichetta}: the level "${chiesto}" is not documented; sent "${scelto}", the nearest.`);
+    }
+  }
+  /* Revisione V-2 (21/10/2026): la regola di V-1 vale per OGNI livello, non solo per «Spento». Vertex accetta UNO solo fra
+     `reasoning_effort` e il `thinking_config` del chiamante («only one … may be specified»): se parte un livello, quello del chiamante
+     si toglie e lo si dice; il resto di `extra_body` resta suo. */
+  if (Array.isArray(livelli) && typeof risultato.reasoning_effort === 'string' && oggetto(risultato.extra_body)
+    && oggetto(risultato.extra_body.google) && risultato.extra_body.google.thinking_config !== undefined) {
+    const { thinking_config: _tolto, ...google } = risultato.extra_body.google;
+    risultato.extra_body = { ...risultato.extra_body, google };
+    note.push(`${record.etichetta}: your thinking_config was removed: only one reasoning control can be sent.`);
+  }
+  /* 21/10/2026 (Azure): il limite d'uscita che la connessione dichiara */
+  if (record.cloud?.limiteUscita === 'max_completion_tokens' && Object.hasOwn(risultato, 'max_tokens')) {
+    if (risultato.max_tokens != null && risultato.max_completion_tokens != null && risultato.max_completion_tokens !== risultato.max_tokens) {
+      fail(`${record.etichetta}: two different output limits were given.`);
+    }
+    risultato.max_completion_tokens = risultato.max_completion_tokens ?? risultato.max_tokens;
+    delete risultato.max_tokens;
+  }
   return { corpo: risultato, avvisi, note };
 }
 // P-K — fine
+
+/** Owner 21/10/2026 (Qwen): `parallel_tool_calls: true` solo se il profilo lo ACCENDE e la richiesta porta attrezzi; spento di serie.
+ *  Una scelta del chiamante resta sua. Esportata per provare anche il verso acceso, che il registro di serie non ha. */
+export function conChiamateParallele(profilo, corpo) {
+  if (profilo?.chiamateParallele?.attiva !== true || !Array.isArray(corpo?.tools) || corpo.tools.length === 0
+    || Object.hasOwn(corpo, 'parallel_tool_calls')) return corpo;
+  return { ...corpo, parallel_tool_calls: true };
+}
 
 /** P-G, 12/09/2026: sole differenze documentate nel record, senza confronti sui fornitori. */
 function preparaProfiloCompatibile(record, corpo) {
@@ -216,9 +498,36 @@ function preparaProfiloCompatibile(record, corpo) {
   if (!oggetto(corpo) || typeof corpo.model !== 'string' || !corpo.model.trim()) fail(`${record.etichetta} request is not valid.`);
   const profilo = record.richiestaCompatibile;
   const id = corpo.model.startsWith(`${record.id}:`) ? corpo.model.slice(record.id.length + 1) : corpo.model;
-  const modello = Object.hasOwn(profilo.modelli, id) ? profilo.modelli[id] : null;
+  /* revisione K1 (21/10/2026): l'id si confronta senza badare alle maiuscole (`minimax-m3.1-flash` è lo stesso modello) */
+  const idProfilo = Object.hasOwn(profilo.modelli, id) ? id : Object.keys(profilo.modelli).find(k => k.toLowerCase() === id.toLowerCase());
+  const modello = idProfilo ? profilo.modelli[idProfilo] : null;
   if (['thinking', 'enable_thinking'].includes(profilo.ragionamento)) {
-    return modello ? preparaControlloThinking(record, modello, corpo) : { corpo, avvisi: [], note: [] };
+    /* revisione K1: un id che il profilo non elenca (kimi-latest, MiniMax-M2.1) prima partiva senza NESSUNA cura. Del fornitore valgono
+       comunque il limite d'uscita e i parametri fissi; l'involucro di OpenRouter (`reasoning`) il fornitore non lo documenta: si toglie e
+       si dice, e un `reasoning_effort` a radice scelto dal chiamante resta com'è. */
+    const esito = modello ? preparaControlloThinking(record, modello, corpo)
+      : (() => {
+        const { reasoning, ...resto } = corpo;
+        return { corpo: resto, avvisi: [], note: reasoning !== undefined ? [`${record.etichetta}: reasoning options are not documented for this model; not sent.`] : [] };
+      })();
+    /* 21/10/2026 (MiniMax): i parametri fissi del profilo, dichiarati con la loro fonte, partono sempre. Revisione M1: se il chiamante ne
+       aveva scelto un altro valore, lo si dice */
+    for (const [k, v] of Object.entries(profilo.parametriFissi ?? {})) {
+      if (Object.hasOwn(esito.corpo, k) && esito.corpo[k] !== v) esito.note.push(`${record.etichetta}: "${k}" is always ${JSON.stringify(v)} for this provider; the requested value is not sent.`);
+      esito.corpo[k] = v;
+    }
+    /* 21/10/2026 (Kimi): il limite d'uscita del profilo vale anche su questo ramo, che prima tornava prima di arrivarci */
+    if (profilo.limiteUscita === 'max_completion_tokens' && Object.hasOwn(esito.corpo, 'max_tokens')) {
+      if (esito.corpo.max_tokens != null && esito.corpo.max_completion_tokens != null && esito.corpo.max_completion_tokens !== esito.corpo.max_tokens) {
+        fail(`${record.etichetta}: two different output limits were given.`);
+      }
+      esito.corpo.max_completion_tokens = esito.corpo.max_completion_tokens ?? esito.corpo.max_tokens;
+      delete esito.corpo.max_tokens;
+    }
+    esito.corpo = conChiamateParallele(profilo, esito.corpo);
+    /* solo a pensiero acceso, come Hermes (`_needs_kimi_tool_reasoning`): con `thinking: disabled` il campo non serve */
+    if (profilo.rimandaRagionamento === true && esito.corpo.thinking?.type !== 'disabled' && Array.isArray(esito.corpo.messages)) esito.corpo.messages = conRagionamentoRimandato(esito.corpo.messages);
+    return esito;
   }
   const risultato = { ...corpo };
   const avvisi = [];
@@ -250,6 +559,12 @@ function preparaProfiloCompatibile(record, corpo) {
     if (Object.keys(altre).length || (enabled === true && richiesto == null && corpo.reasoning_effort == null)) {
       note.push(`${record.etichetta}: some reasoning options have no documented translation; not sent.`);
     }
+  }
+  /* P1 Mistral, 21/10/2026: un profilo che dichiara `soloModelliElencati` manda lo sforzo solo ai modelli che elenca (gli altri rifiutano il
+     campo); per ogni altro profilo vale la regola qui sotto. */
+  if (profilo.soloModelliElencati === true && !modello && risultato.reasoning_effort != null) {
+    delete risultato.reasoning_effort;
+    note.push(`${record.etichetta}: reasoning effort is not documented for this model; not sent.`);
   }
   // Un modello futuro o non documentato conserva i parametri: nessuna incompatibilità dedotta.
   if (risultato.reasoning_effort != null && modello?.livelliRagionamento
@@ -296,7 +611,9 @@ function preparaControlloThinking(record, modello, corpo) {
   if (reasoning?.effort !== undefined && reasoning_effort !== undefined && reasoning.effort !== reasoning_effort) invalida();
   if (enable_thinking !== undefined && (!qwen || typeof enable_thinking !== 'boolean')) invalida();
   if (thinking !== undefined) {
-    const tipi = qwen ? ['enabled', 'disabled'] : [modello.thinking.attivo ?? 'adaptive', 'disabled'];
+    const tipi = qwen ? ['enabled', 'disabled'] : modello.thinking.attivo === null && modello.livelliRagionamento.length
+      ? ['enabled', 'adaptive', 'disabled'] // revisione K2: kimi-k3/M3.1-Flash non hanno l'interruttore, lo si toglie (sotto) e si dice
+      : [modello.thinking.attivo ?? 'adaptive', 'disabled'];
     if (!oggetto(thinking) || !tipi.includes(thinking.type)
       || Object.keys(thinking).some(k => !['type', 'keep'].includes(k))
       || (thinking.keep !== undefined && (qwen || modello.thinking.attivo !== 'enabled' || ![null, 'all'].includes(thinking.keep)))
@@ -313,6 +630,27 @@ function preparaControlloThinking(record, modello, corpo) {
   delete risultato.reasoning_effort;
   delete risultato.thinking;
   delete risultato.enable_thinking;
+  const soloLivelli = modello.livelliRagionamento.length > 0 && modello.thinking.attivo === null;
+  if (soloLivelli) {
+    /* kimi-k3 (21/10/2026): ragiona sempre, la leva è `reasoning_effort` fra i livelli dichiarati; «Spento» non esiste ⇒ il MINIMO
+       (BUG-18 gen.2: lasciare il campo a casa darebbe il predefinito del fornitore, `max`, il più caro); il resto come altrove,
+       prima il più debole (BUG-18). Mai `thinking` accanto: Moonshot rifiuta i due insieme (Hermes `kimi-coding/__init__.py:52-56`). */
+    const vuoleSpento = effort === 'none' || reasoning?.enabled === false || thinking?.type === 'disabled';
+    const scelto = vuoleSpento ? livelloRagionamentoMinimo(modello.livelliRagionamento)
+      : effort !== undefined ? livelloRagionamentoPiuVicino(effort, modello.livelliRagionamento) : null;
+    delete risultato.reasoning; delete risultato.reasoning_effort; delete risultato.thinking; delete risultato.enable_thinking;
+    if (scelto != null) risultato.reasoning_effort = scelto;
+    if (thinking !== undefined && !vuoleSpento) note.push(`${record.etichetta}: this model has no reasoning switch; only the level is sent.`);
+    if (vuoleSpento) note.push(`${record.etichetta}: this model cannot disable reasoning; sent "${scelto}", the lowest documented level (the provider default costs more).`);
+    else if (scelto != null && scelto !== effort && aliasGrafiaRagionamento(effort, modello.livelliRagionamento) == null) {
+      note.push(`${record.etichetta}: the level "${effort}" is not documented for this model; sent "${scelto}", the nearest.`);
+    }
+    if (modello.temperaturaServer && Object.hasOwn(risultato, 'temperature')) {
+      delete risultato.temperature;
+      aggiungiAvviso(avvisi, frasiAvvisi, { testo: `${record.etichetta}: temperature is managed by the model; the requested value is not sent.`, testoChiave: 'server.compatibleNotice.temperatureIgnored', testoParams: { provider: record.etichetta } });
+    }
+    return { corpo: risultato, avvisi, note, ...(frasiAvvisi.length ? { frasiAvvisi } : {}) };
+  }
   if ((effort !== undefined && effort !== 'none') || Object.keys(reasoning ?? {}).some(k => !['enabled', 'effort'].includes(k))) {
     note.push(`${record.etichetta}: this model only supports switching reasoning on or off; the requested level is not sent.`);
   }
@@ -327,6 +665,12 @@ function preparaControlloThinking(record, modello, corpo) {
       ...(attivo && modello.thinking.conserva ? { keep: modello.thinking.conserva } : {}) };
   }
   const thinkingEffettivo = attivo ?? modello.thinking.predefinito;
+  /* 21/10/2026, owner «la stessa scelta di Z.AI»: col pensiero acceso Qwen rilegge il ragionamento dei giri passati, solo sui modelli che
+     Alibaba elenca (alibabacloud.com/help/en/model-studio/deep-thinking, aggiornata il 19/10/2026: «This Parameter only supports …»);
+     senza `reasoning_content` nella storia non dà errore. Costa token d'ingresso, e si dichiara. Una scelta del chiamante resta sua. */
+  const conservaQwen = record.richiestaCompatibile.conservaRagionamento;
+  if (qwen && thinkingEffettivo && conservaQwen?.forma === 'preserve_thinking' && conservaQwen.modelli.includes(String(corpo.model).replace(/^[^:/]+:/u, ''))
+    && risultato.preserve_thinking === undefined) risultato.preserve_thinking = true;
   if (modello.thinking.soloStreaming && thinkingEffettivo && risultato.stream !== true) {
     fail(`${record.etichetta}: this model requires streaming when reasoning is enabled.`);
   }

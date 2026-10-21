@@ -5,8 +5,8 @@ import { createLlamaBinaryProbe } from './llama-binary-probe.mjs';
 import { createServer } from 'node:net';
 import { basename, dirname, isAbsolute, join } from 'node:path';
 import { createProcessPolicy } from './process-policy.mjs';
-import { statSync } from 'node:fs';
-import { leggiArchitetturaGguf } from './gguf-header.mjs';
+import { mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
+import { leggiArchitetturaGguf, readGgufHeader } from './gguf-header.mjs';
 import { RIGA_ARCHITETTURA_SCONOSCIUTA, buildDelMotore, libreriaDelMotorePresente, motoreConosceArchitettura, testoArchitetturaSconosciuta } from './motore-architetture.mjs';
 
 const LOOPBACK = '127.0.0.1';
@@ -143,16 +143,44 @@ export function leggiNglDalFitter(stdout) {
  * @returns {{tipo: 'f16'|'q8_0', perche: string}}
  */
 export function decidiTipoKvCache({ nglConF16, nglConQ8 } = {}) {
+  /* L1-d (20/10/2026): `tuttoSullaScheda` dice anche se tenere `-ngl 99` (vero) o lasciar decidere `--fit` (falso); assente quando
+     il fitter non ha risposto, e allora resta il comportamento di prima. */
   if (nglConF16 === 'tutto') {
-    return { tipo: 'f16', perche: 'with f16 KV the binary fitter declares that ALL layers fit on the device' };
+    return { tipo: 'f16', perche: 'with f16 KV the binary fitter declares that ALL layers fit on the device', tuttoSullaScheda: true };
   }
   if (nglConF16 === null || nglConF16 === undefined) {
     return { tipo: 'q8_0', perche: 'the binary fitter did not answer: staying on the previous quantized KV' };
   }
   if (nglConQ8 === 'tutto') {
-    return { tipo: 'q8_0', perche: `with f16 KV only ${nglConF16} layers would fit, with q8_0 all of them fit` };
+    return { tipo: 'q8_0', perche: `with f16 KV only ${nglConF16} layers would fit, with q8_0 all of them fit`, tuttoSullaScheda: true };
   }
-  return { tipo: 'q8_0', perche: `with f16 KV only ${nglConF16} layers would fit: the halved cache fits more` };
+  return { tipo: 'q8_0', perche: `with f16 KV only ${nglConF16} layers would fit: the halved cache fits more`, tuttoSullaScheda: nglConQ8 === null || nglConQ8 === undefined ? undefined : false };
+}
+
+/*
+ * L1-d del motore locale (owner 20/10/2026: «finestra calcolata dal GGUF, ≥64K quando la memoria basta, `-c` sempre passato»).
+ * Senza `-c`, `--fit` stringe la finestra finché tutto sta nella scheda: LFM2.5-24B (128K addestrati) usciva a 16.384 sulla RX
+ * 9070 XT dell'owner, e la conversazione moriva al quinto giro (sessione e00ae242). Misurato il 20/10 sulla stessa scheda, prompt
+ * di 3.541 token: senza `-c` 21.504 (KV f16) · `-c 65536` KV q8_0 tutto sulla scheda 155 t/s, prompt ~5.000 t/s (il più veloce
+ * misurato) · `-c 131072` prompt ~960 t/s, 5 volte più lento.
+ * ⇒ Il pavimento di Hermes: `FLOOR = 64 * 1024  # = target` (`hermes_cli/local_runtime/context_policy.py:16`), mai oltre il
+ *   contesto addestrato del file. La crescita oltre il pavimento (la scala 64K → 96K → 128K di Hermes, `:36-44`) è un passo dopo.
+ *   Un file illeggibile non sceglie niente: resta il comportamento di prima.
+ */
+export const FINESTRA_DI_SERIE = 64 * 1024;
+
+export async function finestraDiSerie(modelPath, { leggiIntestazione = readGgufHeader } = {}) {
+  try {
+    const intestazione = await leggiIntestazione(modelPath);
+    const addestrata = intestazione?.trainedContext;
+    if (!Number.isSafeInteger(addestrata) || addestrata <= 0) return null;
+    const moe = Number.isSafeInteger(intestazione.expertCount) && intestazione.expertCount > 1;
+    return addestrata <= FINESTRA_DI_SERIE
+      ? { finestra: addestrata, moe, perche: `the model's trained context (${addestrata}), below the ${FINESTRA_DI_SERIE} floor` }
+      : { finestra: FINESTRA_DI_SERIE, moe, perche: `the ${FINESTRA_DI_SERIE} floor (the model is trained on ${addestrata})` };
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -223,6 +251,28 @@ async function allocatePort() {
   return port;
 }
 
+/*
+ * L1-c (20/10/2026): la finestra di un modello `local:` per chi compatta. La fonte dal PREFISSO dell'id, mai dal nome del
+ * modello: Ollama e LM Studio non sono il nostro motore (`undefined`, e chi chiama ripiega sul catalogo come prima).
+ * Revisione del 20/10 (T3): le soglie si calcolano PRIMA che il motore parta (il motore si accende dentro il giro). Quindi, in
+ * ordine: il motore pronto con QUEL modello · la finestra vera vista l'ultima volta che quel modello è stato acceso · e se non
+ * si sa ancora niente, una finestra PRUDENTE: la banda più alta che il caricatore dà di riserva. Compattare un po' prima al primo
+ * giro costa poco; sforare la finestra vera costa la conversazione (sessione e00ae242). Mai più i 200.000 della finestra ignota.
+ */
+export const FINESTRA_PRUDENTE = 16_384;
+
+export function finestraDelMotoreLocale(statoFn, modello, { notaFn } = {}) {
+  if (typeof modello !== 'string' || !modello.startsWith('local:')) return undefined;
+  const id = modello.slice('local:'.length);
+  const valida = (n) => Number.isSafeInteger(n) && n > 0;
+  let stato = null;
+  try { stato = typeof statoFn === 'function' ? statoFn() : null; } catch { stato = null; }
+  if (stato?.state === 'ready' && stato.modelId === id && valida(stato.windowTokens)) return stato.windowTokens;
+  let nota;
+  try { nota = typeof notaFn === 'function' ? notaFn(id) : undefined; } catch { nota = undefined; }
+  return valida(nota) ? nota : FINESTRA_PRUDENTE;
+}
+
 export function createLlamaServerSupervisor({
   binaryPath,
   // R-03: il binario CPU di riserva e la descrizione del motore scelto dal guscio.
@@ -241,6 +291,8 @@ export function createLlamaServerSupervisor({
    * stiamo toccando.
    */
   gpuLayers = 0,
+  /** L1 (20/10/2026), quarta revisione D3: dove si ricordano le finestre vere fra un avvio dell'app e l'altro (null = solo in memoria). */
+  finestreFile = null,
   pollIntervalMs = DEFAULT_POLL_MS,
   /**
    * ⭐ BC-13 — come si INTERROGA il binario (il suo `--help`, il suo fitter).
@@ -279,6 +331,39 @@ export function createLlamaServerSupervisor({
    * R-03: si ricordano PER BINARIO — la riserva CPU non offre le stesse cose. */
   const aiutoPerBinario = new Map();
   const leveMemorizzate = new Map();
+  /* L1-c, revisione del 20/10 (T3): la finestra VERA di ogni modello già acceso in questo processo. Le soglie della compattazione
+     si calcolano prima che il motore parta: per un modello visto si usa questa, senza aspettare che sia di nuovo pronto. */
+  const finestreViste = new Map();
+  /* Quarta revisione (D3): in sola memoria, dopo ogni riavvio dell'app il primo giro di una sessione lunga usava la finestra
+     prudente (16.384) e compattava per nulla un LFM2.5 che ne ha 65.536. Si ricordano su un file piccolo, letto qui e scritto in
+     modo atomico (temporaneo, poi rename); un file rotto o illeggibile vale «non lo so», mai un errore d'avvio. */
+  const leggiFinestreSalvate = () => {
+    const lette = new Map();
+    if (typeof finestreFile !== 'string' || !finestreFile) return lette;
+    try {
+      const salvate = JSON.parse(readFileSync(finestreFile, 'utf8'));
+      if (salvate && typeof salvate === 'object' && !Array.isArray(salvate)) {
+        for (const [id, n] of Object.entries(salvate)) if (Number.isSafeInteger(n) && n > 0) lette.set(id, n);
+      }
+    } catch { /* nessun file o file rotto: si parte senza */ }
+    return lette;
+  };
+  for (const [id, n] of leggiFinestreSalvate()) finestreViste.set(id, n);
+  const ricordaFinestra = (modelId, finestra) => {
+    if (finestreViste.get(modelId) === finestra) return;
+    finestreViste.set(modelId, finestra);
+    if (typeof finestreFile !== 'string' || !finestreFile) return;
+    try {
+      /* Quinta revisione (V4): l'app installata e il 4174 possono condividere la cartella dati. Si rilegge e si FONDE prima di
+         scrivere: ognuno aggiunge la sua voce, nessuno cancella quelle dell'altro. */
+      const unite = leggiFinestreSalvate();
+      unite.set(modelId, finestra);
+      mkdirSync(dirname(finestreFile), { recursive: true });
+      const temporaneo = `${finestreFile}.${process.pid}.tmp`;
+      writeFileSync(temporaneo, JSON.stringify(Object.fromEntries(unite)));
+      renameSync(temporaneo, finestreFile);
+    } catch { /* non scritto: resta in memoria per questo processo */ }
+  };
   const motoreIniziale = Object.freeze({
     variante: motoreDichiarato?.variante ?? (/vulkan/iu.test(basename(binaryPath)) ? 'vulkan' : 'cpu'),
     dispositivi: Array.isArray(motoreDichiarato?.dispositivi) ? [...motoreDichiarato.dispositivi] : [],
@@ -357,6 +442,7 @@ export function createLlamaServerSupervisor({
        * del modello caricato attribuito a QUALUNQUE modello ispezionato.
        */
       modelId: current.modelId ?? null,
+      ...(Number.isSafeInteger(current.windowTokens) ? { windowTokens: current.windowTokens } : {}), // L1-c: la finestra vera, se letta
       observedAt: now().toISOString(),
     };
   }
@@ -433,6 +519,27 @@ export function createLlamaServerSupervisor({
     }
   }
 
+  /*
+   * L1-c del motore locale (owner 20/10/2026): la finestra VERA del motore appena pronto. Senza `-c`, `--fit` (acceso di serie in
+   * b10517) la stringe finché tutto sta nella scheda: sulla RX 9070 XT dell'owner LFM2.5 da 128K esce a 16.384. Chi compatta non
+   * lo sapeva e usava la soglia della finestra «ignota», 200.000 (sessione e00ae242: overflow, riassunto d'emergenza, errore).
+   * Una sola lettura, entro 3 s, «se riesce»: un `/props` che manca o dice un numero non valido lascia la finestra IGNOTA come
+   * prima (null), mai inventata, e non cambia l'esito dell'avvio.
+   */
+  async function finestraLetta(entry, operation) {
+    try {
+      const risposta = await fetchImpl(`${entry.baseUrl}/props`, {
+        headers: { Accept: 'application/json', Authorization: `Bearer ${entry.apiKey}` },
+        signal: AbortSignal.any([operation.controller.signal, AbortSignal.timeout(3_000)]),
+      });
+      if (!risposta?.ok || typeof risposta.json !== 'function') return null;
+      const nCtx = (await risposta.json())?.default_generation_settings?.n_ctx;
+      return Number.isSafeInteger(nCtx) && nCtx > 0 ? nCtx : null;
+    } catch {
+      return null;
+    }
+  }
+
   // Internal authenticated transport. The bearer token never leaves this
   // module through status() or logs; runtimes receive only this capability.
   async function request(path, options = {}) {
@@ -492,7 +599,7 @@ export function createLlamaServerSupervisor({
     return { variante, dispositivi: variante === motoreIniziale.variante ? [...motoreIniziale.dispositivi] : [], ripiego: null, proposta: null };
   }
 
-  async function lanciaProcesso({ modelId, modelPath, selectedPort, contextLength, binario, ngl, apiKey, operation }) {
+  async function lanciaProcesso({ modelId, modelPath, selectedPort, contextLength, finestraDiRiserva, binario, ngl, apiKey, operation }) {
     checkStart(operation);
     const entry = {
       child: null,
@@ -521,10 +628,42 @@ export function createLlamaServerSupervisor({
      * su un modello da 2,3 GB e in 3,9 s su uno da 15,3 GB; `--help` in
      * meno di 0,3 s; e si pagano una volta sola per (binario, modello, contesto).
      */
-    const leve = conOffload
-      ? await leveVelocita(binario, modelPath, contextLength, operation)
+    /* L1-d (owner 20/10/2026): chi carica senza dire la finestra ne riceve una di serie, il pavimento di Hermes (vedi
+       `finestraDiSerie`). Solo sulla strada con la scheda, dove l'avvio aspetta già il fitter: nessun `await` nuovo altrove. */
+    let finestraScelta = conOffload && !(Number.isInteger(contextLength) && contextLength > 0) ? await finestraDiSerie(modelPath) : null;
+    checkStart(operation);
+    /* Quarta revisione (D2): la finestra di serie vale solo se è PIÙ GRANDE della riserva. Un modello addestrato sotto la riserva
+       (meno di 8.192, per esempio) ha sempre avuto la banda del caricatore: dargli meno sarebbe una regressione. */
+    if (finestraScelta && Number.isInteger(finestraDiRiserva) && finestraScelta.finestra <= finestraDiRiserva) finestraScelta = null;
+    // Revisione del 20/10 (T1): sulla scheda il caricatore non decide più la finestra, la dà come RISERVA (la sua banda di sempre)
+    let finestra = finestraScelta?.finestra ?? contextLength ?? finestraDiRiserva;
+    let leve = conOffload
+      ? await leveVelocita(binario, modelPath, finestra, operation)
       : { kv: { tipo: 'q8_0', perche: 'no offload to the device: the KV cache is not part of the choice' }, speculativa: await speculativaDisponibile(binario, operation) };
     checkStart(operation);
+    /*
+     * Tre strade, e il fitter decide quale (misure del 20/10 e del 03/09):
+     *   · alla finestra di serie ci sta TUTTO ⇒ `-c` e `-ngl 99` (155 t/s su LFM2.5, la riga più veloce misurata);
+     *   · un MoE che non ci sta ⇒ `-c` e decide `--fit`, che sposta pesi degli esperti sulla CPU (145 t/s): decisione owner del
+     *     15/10 «--fit al posto di -ngl 99» per i MoE, come Hermes (`context_policy.py:266-276, 282`);
+     *   · un modello DENSO che non ci sta, o un fitter che non risponde ⇒ come prima: la finestra di RISERVA del caricatore (la
+     *     sua banda misurata, fino a 16.384) e `-ngl 99`. Il 03/09 un 27B denso fuori dalla scheda andava a 13,28 t/s con
+     *     `-ngl 99` e a 11,12 lasciando decidere a llama.cpp, che scendeva a 4.096 token.
+     */
+    let ngl99 = conOffload;
+    if (finestraScelta && leve.kv.tuttoSullaScheda !== true) {
+      if (finestraScelta.moe && leve.kv.tuttoSullaScheda === false) {
+        ngl99 = false;
+      } else {
+        finestraScelta = null;
+        finestra = contextLength ?? finestraDiRiserva;
+        leve = await leveVelocita(binario, modelPath, finestra, operation);
+        checkStart(operation);
+      }
+    }
+    operation.finestraNostra = finestraScelta ? finestraScelta.finestra : null; // T4: solo una finestra scelta da noi si ritenta
+    if (finestraScelta) emitLog('stderr', `[talos] context window ${finestraScelta.finestra} — ${finestraScelta.perche}\n`);
+    if (conOffload && !ngl99) emitLog('stderr', '[talos] GPU layers: chosen by --fit (a mixture-of-experts model that does not fit whole at this window)\n');
     emitLog('stderr', `[talos] engine ${motore.variante}${motore.ripiego ? ` (fallback from ${motore.ripiego.da})` : ''}: ${binario}\n`);
     emitLog('stderr', `[talos] KV cache ${leve.kv.tipo} — ${leve.kv.perche}\n`);
     emitLog('stderr', `[talos] n-gram speculative decoding: ${leve.speculativa ? 'on (--spec-type ngram-mod)' : 'not offered by this binary'}\n`);
@@ -542,7 +681,7 @@ export function createLlamaServerSupervisor({
        * dice «model loaded / listening» in 13 secondi. Storia intera nel
        * commit c89dc763 e seguenti.
        */
-      ...(Number.isInteger(contextLength) && contextLength > 0 ? ['-c', String(contextLength)] : []),
+      ...(Number.isInteger(finestra) && finestra > 0 ? ['-c', String(finestra)] : []),
       /*
        * ⭐⭐⭐ 03/9 — LA GPU: `-ngl 99` esplicito (misurato meglio di `auto` su
        * RX 9070 XT, banco A/B del 03/9: 13,28 contro 11,12 tok/s). Solo se il
@@ -550,7 +689,7 @@ export function createLlamaServerSupervisor({
        * `-ngl 0 --device none` (llama.cpp b10517, common/arg.cpp: «none = don't
        * use»), così un ripiego non tenta mai un offload silenzioso.
        */
-      ...(conOffload ? ['-ngl', String(ngl)] : (motore.ripiego ? ['-ngl', '0', '--device', 'none'] : [])),
+      ...(conOffload ? (ngl99 ? ['-ngl', String(ngl)] : []) : (motore.ripiego ? ['-ngl', '0', '--device', 'none'] : [])),
       /*
        * ⭐⭐⭐ 3/9 + BC-13 12/09 — KV cache quantizzata SIMMETRICA con `-fa 1`
        * solo con offload (+15 % generazione, +408 % prompt, misurati); il tipo
@@ -565,6 +704,16 @@ export function createLlamaServerSupervisor({
        * «unknown argument»). Misure nel commento di `supportaSpeculativaNgram`.
        */
       ...(leve.speculativa ? ['--spec-type', 'ngram-mod'] : []),
+      /*
+       * L1 del motore locale (owner 20/10/2026): UNO slot. Di serie llama-server b10517 apre 4 slot su UNA cache unificata grande
+       * quanto la finestra (`n_slots = 4, n_ctx_slot = 65536, kv_unified = 'true'`): due richieste insieme — il riassunto di
+       * sfondo e il giro nuovo, o due deleghe — si dividono la stessa finestra. Misurato il 20/10 con LFM2.5 a 64K: due prompt
+       * da ~30K insieme ⇒ TUTTI E DUE «Context size has been exceeded»; con `-np 1` tutti e due finiti in 14-15 s, il secondo
+       * riusando la cache del primo (2.266 token da elaborare invece di 37.275). È il guasto della prova dal vivo 7432bdf4
+       * (PROVIDER_OUTCOME_UNKNOWN a metà riassunto). Su un desktop con una persona e un modello, la coda dentro il motore è la
+       * forma giusta: Hermes non ci arriva perché comprime dentro il giro, mai in parallelo.
+       */
+      '-np', '1',
       '--jinja',
       '--metrics',
       '--props',
@@ -605,6 +754,12 @@ export function createLlamaServerSupervisor({
       const result = await health({ signal: AbortSignal.any([operation.controller.signal, AbortSignal.timeout(Math.max(1, deadline - Date.now()))]) });
       checkStart(operation);
       if (result.ok && !entry.closed && !entry.failure) {
+        entry.windowTokens = await finestraLetta(entry, operation);
+        checkStart(operation);
+        /* Revisione del 20/10 (T2): il processo può morire durante la lettura di /props; allora NON è pronto. Il giro dopo del
+           ciclo trova `entry.closed` e lancia l'errore con le ultime righe del motore, come prima della lettura. */
+        if (entry.closed || entry.failure) continue;
+        if (Number.isSafeInteger(entry.windowTokens) && entry.modelId) ricordaFinestra(entry.modelId, entry.windowTokens); // T3, D3
         entry.state = 'ready';
         state = 'ready';
         return status();
@@ -620,7 +775,7 @@ export function createLlamaServerSupervisor({
 
   // Reserve the operation before the first await (port allocation/lock included).
   // A stop drains this owner before a subsequent start may acquire the model lock.
-  async function start({ modelId, modelPath, port, contextLength, signal } = {}) {
+  async function start({ modelId, modelPath, port, contextLength, finestraDiRiserva, signal } = {}) {
     if (pendingStart || stopPromise || (current && ['loading', 'ready', 'stopping'].includes(current.state))) {
       throw new LlamaServerSupervisorError('runtime is already active', 'RUNTIME_ALREADY_RUNNING');
     }
@@ -661,10 +816,33 @@ export function createLlamaServerSupervisor({
       const apiKey = randomBytes(32).toString('hex');
       motore = nuovoMotore(motoreIniziale.variante);
       try {
-        return await lanciaProcesso({ modelId, modelPath, selectedPort, contextLength, binario: binaryPath, ngl: gpuLayers, apiKey, operation });
+        return await lanciaProcesso({ modelId, modelPath, selectedPort, contextLength, finestraDiRiserva, binario: binaryPath, ngl: gpuLayers, apiKey, operation });
       } catch (primo) {
         checkStart(operation); // Stop is never a reason to start a CPU fallback.
         const guasto = motore.variante === 'vulkan' && primo.code === 'RUNTIME_PROCESS_FAILED' ? classificaGuastoVulkan(primo.righeMotore ?? []) : null;
+        /* L1-d, revisione del 20/10 (T4): se la finestra l'abbiamo scelta NOI e la scheda la rifiuta (un fitter ottimista, altri
+           programmi che hanno preso memoria nel frattempo), si riprova UNA volta con la finestra di riserva — quella di prima. Una
+           finestra chiesta da chi carica non si cambia: lì il «memoria piena» resta la carta onesta di sempre. */
+        if (guasto?.classe === 'memoria' && operation.finestraNostra && Number.isInteger(finestraDiRiserva) && finestraDiRiserva > 0) {
+          const primaEntry = current;
+          chiudi(primaEntry);
+          if (current === primaEntry) current = null;
+          for (const listener of listeners) {
+            try { listener({ stream: 'stderr', text: `[talos] the device refused the ${operation.finestraNostra} window: loading again with ${finestraDiRiserva}.\n` }); } catch { /* observer isolation */ }
+          }
+          operation.finestraNostra = null;
+          try {
+            return await lanciaProcesso({ modelId, modelPath, selectedPort, contextLength: finestraDiRiserva, binario: binaryPath, ngl: gpuLayers, apiKey, operation });
+          } catch (riprova) {
+            checkStart(operation);
+            const ancora = motore.variante === 'vulkan' && riprova.code === 'RUNTIME_PROCESS_FAILED' ? classificaGuastoVulkan(riprova.righeMotore ?? []) : null;
+            if (ancora?.classe === 'memoria') {
+              motore.proposta = { a: 'cpu', motivo: `${ancora.motivo}; the model can run on the processor, slower: the choice belongs to the person` };
+              throw erroreMemoriaPiena(riprova, modelPath);
+            }
+            throw riprova;
+          }
+        }
         if (guasto?.classe === 'memoria') {
           motore.proposta = { a: 'cpu', motivo: `${guasto.motivo}; the model can run on the processor, slower: the choice belongs to the person` };
           throw erroreMemoriaPiena(primo, modelPath); // 25/09 sera: la carta vera, coi numeri (vedi `erroreMemoriaPiena`)
@@ -679,7 +857,8 @@ export function createLlamaServerSupervisor({
           try { listener({ stream: 'stderr', text: `[talos] ${guasto.motivo}: the model is being loaded on the processor.\n`, ripiego }); } catch { /* observer isolation */ }
         }
         try {
-          return await lanciaProcesso({ modelId, modelPath, selectedPort, contextLength, binario: fallbackBinaryPath, ngl: 0, apiKey, operation });
+          // L1-d: sul processore la finestra di serie non vale (è una scelta per la scheda): resta quella del caricatore
+          return await lanciaProcesso({ modelId, modelPath, selectedPort, contextLength: contextLength ?? finestraDiRiserva, binario: fallbackBinaryPath, ngl: 0, apiKey, operation });
         } catch (secondo) {
           checkStart(operation);
           const codaGpu = ripiego.righe.join(' | ');
@@ -731,5 +910,7 @@ export function createLlamaServerSupervisor({
     return () => listeners.delete(listener);
   }
 
-  return Object.freeze({ start, health, request, stop, status, subscribeLogs });
+  /** T3: la finestra vera dell'ultima volta che QUESTO modello è stato acceso, o `undefined`. */
+  const finestraNota = (modelId) => finestreViste.get(modelId);
+  return Object.freeze({ start, health, request, stop, status, subscribeLogs, finestraNota });
 }

@@ -256,6 +256,27 @@ test('PJ-13 — opzioni terze esplicite: i livelli documentati passano, il resto
   }
 });
 
+test('PJ-19 — MiniMax-M3.1-Flash sulla porta Anthropic: lo sforzo va in output_config.effort, «Spento» scende a low (P1 21/10/2026)', async t => {
+  /* platform.minimax.io/docs/api-reference/text-anthropic-api (letta il 21/10/2026): solo M3.1-Flash, low|medium|high|xhigh|max,
+     di serie max; «disabled» e «none» = 400. M3 e gli altri restano come in PJ-13. */
+  const b = await banco(t, (r, res) => json(res, risposta(r.body.model)));
+  for (const effort of ['low', 'medium', 'high', 'xhigh', 'max']) {
+    await b.invia('minimax-anthropic', { model: 'MiniMax-M3.1-Flash', reasoning_effort: effort });
+    assert.equal(b.richieste.at(-1).body.output_config.effort, effort);
+    assert.equal(b.richieste.at(-1).body.thinking.type, 'adaptive');
+  }
+  for (const body of [{ reasoning: { enabled: false } }, { reasoning_effort: 'none' }, { reasoning_effort: 'minimal' }]) {
+    await b.invia('minimax-anthropic', { model: 'MiniMax-M3.1-Flash', ...body });
+    assert.equal(b.richieste.at(-1).body.output_config.effort, 'low', JSON.stringify(body));
+    assert.equal(b.richieste.at(-1).body.thinking.type, 'adaptive', 'mai «disabled»: sarebbe un 400');
+  }
+  await b.invia('minimax-anthropic', { model: 'MiniMax-M3.1-Flash' });
+  assert.equal(b.richieste.at(-1).body.output_config?.effort, undefined, 'senza scelta decide il fornitore');
+  const prima = b.richieste.length;
+  await assert.rejects(() => b.invia('minimax-anthropic', { model: 'MiniMax-M3', reasoning_effort: 'high' }), { code: 'PROVIDER_REASONING_UNSUPPORTED' });
+  assert.equal(b.richieste.length, prima, 'M3 resta senza livelli');
+});
+
 test('PJ-14 — HTTP reale: credenziali, cataloghi e sonda ordinaria senza generazione implicita', async t => {
   const { createHttpApp } = await import('../src/http-app.mjs');
   const b = await banco(t, (_r, res) => json(res, { data: [{ id: 'MiniMax-M2.5', display_name: 'MiniMax M2.5' }], has_more: false }));
@@ -315,7 +336,8 @@ test('PJ-16 — fallback nel kernel nei due versi OpenAI e Anthropic, storia str
 });
 
 test('PJ-17 — risposta incompleta del terzo usa il nome umano, senza ID tecnico', async t => {
-  const b = await banco(t, (r, res) => json(res, { ...risposta(r.body.model), stop_reason: 'max_tokens' }));
+  /* 21/10/2026: `max_tokens` ora passa come `length` (NATIVE-FINE-01); l'incompleta resta per gli altri motivi, qui un rifiuto */
+  const b = await banco(t, (r, res) => json(res, { ...risposta(r.body.model), stop_reason: 'refusal' }));
   await assert.rejects(() => b.invia('zai-anthropic'), e => e.code === 'NATIVE_RESPONSE_INCOMPLETE' && e.message.includes('Z.AI (porta Anthropic)') && !e.message.includes('zai-anthropic'));
 });
 

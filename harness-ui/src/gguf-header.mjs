@@ -192,11 +192,14 @@ export async function readGgufHeader(path) {
     };
     const headCount = numeroInteroOpzionale(metadata.get(`${architecture}.attention.head_count`));
     const headCountKv = numeroInteroOpzionale(metadata.get(`${architecture}.attention.head_count_kv`));
+    // L1-d (20/10/2026): quanti esperti (MoE). Facoltativo come le teste: un modello denso non lo dichiara.
+    const expertCount = numeroInteroOpzionale(metadata.get(`${architecture}.expert_count`));
 
     return {
       magic,
       version,
       trainedContext: contextLength,
+      ...(expertCount !== undefined ? { expertCount } : {}),
       /** ⭐ 02/9 — il costo per TOKEN, così chi chiama può stimare sul contesto che gli serve invece che su quello addestrato. */
       kvCacheBytesPerToken: kvBytesPerToken({ blockCount, embeddingLength, headCount, headCountKv }),
       estimatedWorkingBytes: estimateWorkingBytes({ fileBytes, blockCount, contextLength, embeddingLength, headCount, headCountKv }),

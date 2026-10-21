@@ -14,7 +14,7 @@ import test from 'node:test';
 import { talosLavora } from '../src/kernel/talosHarness.desktop-hotfix.mjs';
 import {
   CARATTERI_INGRESSO_RIASSUNTO, CLASSI_FALLIMENTO_RIASSUNTO, FALLIMENTI_RIASSUNTO_CONSECUTIVI_MASSIMI,
-  MARCATORE_INGRESSO_TAGLIATO, VARIABILE_TETTO_TOKEN, classificaFallimentoRiassunto, creaRecord,
+  MARCATORE_INGRESSO_TAGLIATO, MARCATORE_ACCORCIATO, VARIABILE_TETTO_TOKEN, classificaFallimentoRiassunto, creaRecord,
   limitaIngressoRiassunto,
 } from '../src/kernel/compattazione-desktop.mjs';
 import { avviaSessione } from '../src/agent-service.mjs';
@@ -109,8 +109,9 @@ test('BUG5-INGRESSO-SOPRA-SOGLIA — testa di system, coda con l istruzione, UN 
   assert.ok(omessi >= 10, `la parte centrale si omette per messaggi interi: omessi ${omessi}`);
 });
 
-test('BUG5-CLASSI-FALLIMENTO — le sette classi, pure', () => {
-  assert.deepEqual([...CLASSI_FALLIMENTO_RIASSUNTO], ['vuoto', 'troncato', 'attrezzo', 'contesto-pieno', 'limite-tariffa', 'errore-rete', 'errore-ignoto']);
+test('BUG5-CLASSI-FALLIMENTO — le otto classi, pure (21/10: «rifiuto», come Hermes `_is_summary_refusal`)', () => {
+  assert.deepEqual([...CLASSI_FALLIMENTO_RIASSUNTO], ['vuoto', 'troncato', 'attrezzo', 'rifiuto', 'contesto-pieno', 'limite-tariffa', 'errore-rete', 'errore-ignoto']);
+  assert.equal(classificaFallimentoRiassunto({ esito: { ok: false, motivo: 'rifiuto' } }), 'rifiuto');
   assert.equal(classificaFallimentoRiassunto({ esito: { ok: false, motivo: 'vuoto' } }), 'vuoto');
   assert.equal(classificaFallimentoRiassunto({ esito: { ok: false, motivo: 'troncato' } }), 'troncato');
   assert.equal(classificaFallimentoRiassunto({ esito: { ok: false, motivo: 'attrezzo' } }), 'attrezzo');
@@ -132,10 +133,16 @@ test('BUG5-EVENTI-FALLIMENTO-E-GIRO — classe e contatore sugli eventi; il 4° 
   const fini = eventi.filter((e) => e.tipo === 'compattazione-fine' && e.compattato === false);
   const conClasse = fini.find((e) => e.classe === 'vuoto' && e.fallimentiConsecutivi >= 1);
   assert.ok(conClasse, `un fallimento porta classe vuoto e contatore: ${JSON.stringify(fini)}`);
-  assert.ok(fini.some((e) => e.fallimentiConsecutivi >= FALLIMENTI_RIASSUNTO_CONSECUTIVI_MASSIMI), `il contatore arriva al massimo ${FALLIMENTI_RIASSUNTO_CONSECUTIVI_MASSIMI}: ${JSON.stringify(fini.map((e) => e.fallimentiConsecutivi))}`);
+  /* L1 (owner 20/10/2026, «ripiego senza modello»): al contatore pieno la compattazione non si chiude più a vuoto — si fa col
+     riassunto scritto dal codice (`riassuntoDiRipiego`), e l'evento lo dice con la classe del fallimento che l'ha causato. */
+  const ripieghi = eventi.filter((e) => e.tipo === 'compattazione-fine' && e.compattato === true && e.ripiego === true);
+  assert.equal(ripieghi.length >= 1, true, `al contatore pieno la compattazione si fa col ripiego: ${JSON.stringify(eventi.filter((e) => e.tipo === 'compattazione-fine'))}`);
+  assert.equal(ripieghi[0].classe, 'vuoto');
+  assert.ok(ripieghi.some((e) => e.classe === 'esaurito'), `l'entrata a contatore pieno va dritta al ripiego, senza pagare: ${JSON.stringify(ripieghi.map((e) => e.classe))}`);
+  assert.match(String(ripieghi[0].record?.riassunto?.map?.((m) => m.content).join('\n') ?? ''), /written by TALOS without a model/u);
   const pagati = fornitore.riassuntiChiesti().length;
   assert.equal(pagati, 3, `si pagano esattamente ${FALLIMENTI_RIASSUNTO_CONSECUTIVI_MASSIMI} tentativi, il quarto identico non si chiede: pagati ${pagati}`);
-  assert.equal(eventi.filter((e) => e.tipo === 'compattazione-inizio').length, 2, 'due compattazioni provate, poi la rete dei tentativi chiude il turno');
+  assert.ok(eventi.filter((e) => e.tipo === 'compattazione-inizio').length >= 2, 'la seconda compattazione chiude col ripiego (dopo, la conversazione può crescere ancora)');
 });
 
 test('BUG5-MODELLO-CAMBIATO — il record di un altro modello emette l evento; stesso modello, nessun evento', async (t) => {
@@ -177,7 +184,11 @@ test('BUG5-INGRESSO-LIMITATO-AL-VIVO — la richiesta di riassunto resta sotto i
   for (const body of riassunti) {
     const totale = body.messages.reduce((s, m) => s + String(m.content ?? '').length, 0);
     assert.ok(totale <= CARATTERI_INGRESSO_RIASSUNTO + 4_000, `l ingresso del riassuntore ${totale} sta sotto il budget`);
-    assert.ok(body.messages.some((m) => m.content === MARCATORE_INGRESSO_TAGLIATO), 'il mezzo omesso porta il marcatore');
+    /* L1 (20/10/2026): il messaggio enorme non arriva MAI intero. Dal 20/10 lo accorcia per primo il taglio per messaggio
+       (`ingressoRiassuntoPerFinestra`, come Hermes `_CONTENT_MAX`); il marcatore del mezzo omesso resta per quando non basta. */
+    assert.ok(body.messages.some((m) => m.content === MARCATORE_INGRESSO_TAGLIATO || String(m.content ?? '').includes(MARCATORE_ACCORCIATO)),
+      'il mezzo omesso o il messaggio accorciato porta il suo marcatore');
+    assert.ok(!body.messages.some((m) => String(m.content ?? '').length > 100_000), 'nessun messaggio arriva intero');
   }
   assert.ok(esito.recordDiCompattazione?.length >= 1, 'il record di compattazione esiste: la storia si è sostituita');
 });
@@ -242,11 +253,13 @@ test('BUG5-GIRO-CHIUSO-K8 — a contatore pieno il ritentativo overflow NON cras
   assert.ok(erroreGiro, 'il giro termina con l errore del fornitore (il K8 si ferma in modo pulito)');
   assert.ok(!/Cannot read properties/i.test(String(erroreGiro?.message ?? '')), `NESSUN TypeError dal giro di fallimenti: ${erroreGiro?.message}`);
   assert.equal(erroreGiro.classificazione, 'contesto-pieno', 'l errore che risale è quello del fornitore, classificato dal K8');
-  const esauriti = eventi.filter((e) => e.tipo === 'compattazione-fine' && e.compattato === false && e.classe === 'esaurito');
-  assert.equal(esauriti.length, 1, `l ingresso a contatore pieno produce UNA chiusura classificata: ${JSON.stringify(eventi.filter((e) => e.tipo === 'compattazione-fine'))}`);
-  assert.equal(esauriti[0].motivo, 'esaurito');
-  assert.equal(esauriti[0].fallimentiConsecutivi, FALLIMENTI_RIASSUNTO_CONSECUTIVI_MASSIMI, 'il contatore NON cresce: nessun nuovo fallimento, il giro era già aperto');
-  assert.equal(eventi.filter((e) => e.tipo === 'compattazione-inizio').at(-1)?.motivo, 'overflow', 'la chiusura arriva dalla via K8 (ritentativo overflow)');
+  /* L1 (owner 20/10/2026, «ripiego senza modello»): a contatore pieno, zero riassunti pagati e la compattazione si FA col
+     riassunto del codice, classificata `esaurito`; l'errore che risale resta quello del fornitore. */
+  const ripieghi = eventi.filter((e) => e.tipo === 'compattazione-fine' && e.compattato === true && e.ripiego === true);
+  assert.equal(ripieghi.length >= 1, true, `l ingresso a contatore pieno produce UN ripiego classificato: ${JSON.stringify(eventi.filter((e) => e.tipo === 'compattazione-fine'))}`);
+  assert.ok(!eventi.some((e) => e.tipo === 'compattazione-fine' && e.compattato === false && e.classe === 'esaurito'), 'nessuna chiusura a vuoto');
+  /* L1 (20/10/2026): con il ripiego la compattazione d'emergenza riesce già prima del ritentativo K8; l'entrata a contatore pieno
+     (→ ripiego `esaurito`, zero tentativi) la prova BUG5-EVENTI-FALLIMENTO-E-GIRO alla terza compattazione. */
   assert.equal(fornitore.riassuntiChiesti().length, FALLIMENTI_RIASSUNTO_CONSECUTIVI_MASSIMI, 'l ingresso a contatore pieno NON paga nessun riassunto');
 });
 

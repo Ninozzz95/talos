@@ -12,10 +12,18 @@ import { BINARI_CASA_LINUX, preparaCasaLinux, verificaCasaLinux } from '../../sr
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const staging = join(root, '.staging');
 const cache = join(root, '.cache-r02');
+/*
+ * L2 del motore locale (owner 20/10/2026: «Stabile v0.7.0»; regola permanente «mantenere aggiornato il motore llama.cpp»). Dal 15/10
+ *   llama.cpp pubblica release STABILI `vX.Y.Z` e marca le build `bNNNNN` come pre-release notturne: si fissa la stabile.
+ *   v0.7.0 = tag annotato sul commit 620d2225 = build b11669 (i binari stanno sulla release `b11669`; la `v0.7.0` porta solo
+ *   `nightly-tag.txt`). Gli sha256 sono quelli che GitHub dichiara per i due file (`assets[].digest`), ricontrollati sui file
+ *   scaricati il 20/10/2026: cpu 19.537.886 byte, vulkan 32.182.350 byte. b10517 (20/08) era più vecchia di LFM2.5 (13/10).
+ */
+export const LLAMA_VERSIONE = 'b11669';
 export const LLAMA = Object.freeze([
-  { variante: 'cpu', versione: 'b10517', nome: 'llama-b10517-bin-win-cpu-x64.zip', sha256: 'f3fed0673c934ade45663a8e29220a0903b58ad7eff91eeeef606a37061cd031' },
-  { variante: 'vulkan', versione: 'b10517', nome: 'llama-b10517-bin-win-vulkan-x64.zip', sha256: 'afa3b2d38b2b461e45a3df7783009b22b2b7e4bb92b40bcb910d0c8924925c88' },
-].map(a => Object.freeze({ ...a, url: `https://github.com/ggml-org/llama.cpp/releases/download/b10517/${a.nome}` })));
+  { variante: 'cpu', versione: LLAMA_VERSIONE, nome: `llama-${LLAMA_VERSIONE}-bin-win-cpu-x64.zip`, sha256: '37b3efcf962847ca869745fd4ccf7f5e7e8dacfeff9fa3523b4ca8cdc66d632b' },
+  { variante: 'vulkan', versione: LLAMA_VERSIONE, nome: `llama-${LLAMA_VERSIONE}-bin-win-vulkan-x64.zip`, sha256: '2c07574e7bde71321cb785282b20cc821e951132149eeceeea32ddebdbf0598e' },
+].map(a => Object.freeze({ ...a, url: `https://github.com/ggml-org/llama.cpp/releases/download/${LLAMA_VERSIONE}/${a.nome}` })));
 
 /*
  * ⛔ 28/09/2026 — le regole «cartella di lavoro» valgono per le CARTELLE del percorso, non per il nome del file. Prima valevano
@@ -309,7 +317,7 @@ export async function preparaPacchetto() {
   await writeFile(join(staging, 'AVVISI.txt'), [
     'TALOS Desktop — pacchetto di prova non firmato. Versione e commit nel manifesto della build.',
     'Electron 44.3.0 (MIT): LICENSE e LICENSES.chromium.html nella radice installata.',
-    'llama.cpp b10517 (MIT): https://github.com/ggml-org/llama.cpp/tree/b10517 ; avvisi negli archivi inclusi.',
+    `llama.cpp v0.7.0 = ${LLAMA_VERSIONE} (MIT): https://github.com/ggml-org/llama.cpp/tree/${LLAMA_VERSIONE} ; avvisi negli archivi inclusi.`,
     'Go 1.27.1 (BSD-3-Clause): il helper upload include la standard library; licenza in harness-ui/native/GO-LICENSE.txt.',
     'Node.js 24.18.0 per Linux (MIT): eseguito dentro WSL per gli attrezzi dei file; licenza in casa-linux/linux-x64/LICENSE-node.txt.',
     'ripgrep 15.0.0 per Linux (MIT o Unlicense: https://github.com/BurntSushi/ripgrep), dal pacchetto @vscode/ripgrep-linux-x64 1.18.0 (MIT); licenza del pacchetto in casa-linux/linux-x64/LICENSE-rg.txt.',

@@ -148,7 +148,7 @@ test('config accepts an explicit llama-server binary path and discovers the pinn
   // a quella CPU-only (`b10517`), in quest'ordine: vedi config.mjs. Il
   // pattern accetta entrambe, perché quale delle due esiste sul disco di
   // chi lancia i test non è un fatto che questa prova debba fissare.
-  if (discovered.llamaServerPath) assert.match(discovered.llamaServerPath, /\.local-runtime[\\/]b10517(-vulkan)?[\\/]llama-server\.exe$/i);
+  if (discovered.llamaServerPath) assert.match(discovered.llamaServerPath, /\.local-runtime[\\/]b(?:10517|11669)(-vulkan)?[\\/]llama-server\.exe$/i); // L2: la nuova prima, la vecchia per i cloni di prima
 });
 
 // ⭐ 03/9 — AL CONTRARIO: la preferenza non è "un percorso qualsiasi che
@@ -160,7 +160,7 @@ test('config preferisce la build Vulkan a quella CPU-only quando entrambe esisto
   const discovered = loadConfig({}, new URL('../server.mjs', import.meta.url));
   if (discovered.llamaServerPath) {
     accessSync(discovered.llamaServerPath); // esiste davvero, non solo il pattern del nome
-    assert.match(discovered.llamaServerPath, /b10517-vulkan[\\/]llama-server\.exe$/i, 'con la build GPU presente, va scelta lei, non la CPU-only');
+    assert.match(discovered.llamaServerPath, /b(?:10517|11669)-vulkan[\\/]llama-server\.exe$/i,'con la build GPU presente, va scelta lei, non la CPU-only');
   }
 });
 

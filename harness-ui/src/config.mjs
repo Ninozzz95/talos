@@ -412,7 +412,9 @@ function parseLlamaServerPath(raw, moduleUrl, sondaMotore) {
    * E resta solo un DEFAULT: `TALOS_LLAMA_SERVER_PATH` continua a vincere,
    * perché chi sa cosa sta facendo deve poter scegliere.
    */
-  for (const cartella of ['.local-runtime/b10517-vulkan/', '.local-runtime/b10517/']) {
+  /* L2 (20/10/2026): prima la build fissata nel pacchetto (b11669 = v0.7.0), poi quella di prima, per i cloni di sviluppo che hanno
+     ancora la vecchia (ognuno resta un DEFAULT: `TALOS_LLAMA_SERVER_PATH` vince sempre) */
+  for (const cartella of ['.local-runtime/b11669-vulkan/', '.local-runtime/b11669/', '.local-runtime/b10517-vulkan/', '.local-runtime/b10517/']) {
     try {
       const candidate = fileURLToPath(new URL(`${cartella}llama-server.exe`, moduleUrl));
       if (!statSync(candidate).isFile()) continue;

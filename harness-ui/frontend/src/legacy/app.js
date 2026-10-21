@@ -17,6 +17,9 @@ import { POLITICHE, nomeUmanoPolitica, descrizionePolitica, notaPolitica, valori
 import { CHIAVE_COORDINAZIONE, TETTO_AVVII_DA_SOLO, coordinazioneAccesaNellaCatena, mappaPerUnaSessioneNuova } from '../components/coordinazione.js'; // C2b (owner 08/10/2026)
 import { testiUtenteWsl, testiDoveGiranoIComandi } from '../components/utente-wsl.js'; // F009 (owner 01/10/2026): con che utente girano i comandi Linux; fase B: la casa Linux
 import { montaPastigliaPiano, mostraBenvenutoPiano } from '../components/piano-chatgpt.js'; // 11/10/2026: il piano ChatGPT nel composer
+import { creaRemotoUi, disegnaTelefoni } from '../components/remoto.js'; // 18/10/2026: il controllo remoto (mockup v5)
+import { creaAnnullaFile, creaBloccoCartaAnnulla, testiCartaAnnulla } from '../components/annulla-file.js';
+import { creaBloccoElencoTelefoni, creaBloccoQrInChat, creaBloccoRemotoSpento, creaBloccoCartaRevoca, testiCartaRevoca, creaBloccoCartaQr, testiCartaQr, segnaRevocaSenzaCarta, nomeDallEsitoRevoca, chiudiQr } from '../components/telefoni-chat.js'; // R5.12: i telefoni collegati dalla chat (mockup approvato 18/10) // 18/10/2026: «Annulla le modifiche ai file» (R5.11, mockup approvato)
 import { montaClicSuiLink } from '../components/conferma-link.js'; // 11/10/2026: i link della chat, col clic che chiede conferma
 import { sitiFidatiDellApp, destinazioneDeiLinkDellApp } from '../components/link-esterni.js';
 import { PROVIDER_DIRETTI, eFonteDiretta, fontiDelSelettore, modelliDellaFonte, fraseVuotoDiretto, senzaChiave, fornitoriConCatalogo, aggiornaTestoModelloSelettore, nomeFornitore } from '../components/fonti-modelli.js'; // BC-12 (11/09): «Diretti» si spezza in una scheda per fornitore // P-C (12/09): un motore locale non ha chiave da collegare
@@ -64,7 +67,7 @@ import { renderizzaMarkdown } from '../components/markdown.js'; // BC-29 (12/09)
 import { confermaModale } from '../components/modale-td.js'; // 11/09 lotto G: al posto di window.confirm()
 import { montaScorciatoiaTemi } from '../components/theme-studio.js'; // 11/09 lotto F
 import { aggiornaBoard, creaRigaBoard, cartellaDaExport } from '../components/board.js'; // 05/9 Fase 2: Board
-import { applicaCollocazioneToast, creaPilaToast } from '../components/toast.js';
+import { applicaCollocazioneToast, azioneAnnulla, creaPilaToast } from '../components/toast.js';
 import { creaAvvisiEliminazione } from '../components/session-deletion-feedback.js';
 import { normalizzaRicevutaOutput, creaLettoreOutput } from '../components/process-output.js';
 import { eventoPerLoSchermo } from '../contracts/confine-dati.js'; // F-027 (owner 02/10/2026): il confine dei dati è per il modello
@@ -142,11 +145,11 @@ import { creaContestoTrascrizione, trascriviEventoInterno } from '../components/
 import { aggiornaSeparatoreContesto, aggiornaSeparatoreLegacy, alternaRiassuntoLegacy } from '../components/context-separator.js'; // F5, 24/09/2026: il separatore esteso al legacy
 import { createContextClient } from '../services/context-client.js';
 import { createContextMonitor } from '../services/context-monitor.js';
-import { aggiornaAvanzamentoContesto, aggiornaAvanzamentoLegacy } from '../components/context-progress.js'; // F5, 24/09/2026: la barra anche per il legacy
+import { aggiornaAvanzamentoContesto, aggiornaAvanzamentoLegacy, ridisegnaRigaVivaNellaLingua } from '../components/context-progress.js'; // F5, 24/09/2026: la barra anche per il legacy
 import { montaFasciaObiettivo, aggiornaFasciaObiettivo, sceltaPer as sceltaFasciaObiettivo, ricordaScelta as ricordaSceltaFasciaObiettivo, chiaveDelloStato as chiaveDelloStatoObiettivo } from '../components/obiettivo-fascia.js'; // /goal G6, 15/10/2026: la fascia dell'obiettivo
 import { creaCartaObiettivo, comandoObiettivo, suggerisciComando, stessiControlli } from '../components/obiettivo-carta.js'; // /goal G6: la carta di conferma dei controlli e `/goal`
 import { EVENTO_MCP_AVVIO, creaRicordoAvvisiMcp, nuoviServerNonPartiti, creaNotaMcpNonPartito } from '../components/avviso-mcp.js'; // owner 17/10/2026: un server MCP che non parte si dice in chat
-import { interpretaEventoCompattazione, valutaSogliaContesto, testoRigaCompattazione, testoBarraLegacy, montaAvvisoContesto, aggiornaAvvisoContesto, aggiornaNotaJournalRiparato, compattaLegacy, annullaCompattazioneLegacy } from '../components/compattazione-legacy.js'; // F5, 24/09/2026: la compattazione legacy che si vede e si può fare
+import { interpretaEventoCompattazione, valutaSogliaContesto, testoRigaCompattazione, montaAvvisoContesto, aggiornaAvvisoContesto, aggiornaNotaJournalRiparato, compattaLegacy, annullaCompattazioneLegacy, saltaRiassuntoLegacy, fineMuta } from '../components/compattazione-legacy.js'; // F5, 24/09/2026: la compattazione legacy che si vede e si può fare
 import { aggiornaDiffReview, aggiornaSommarioSchedeReview, chiaveFileReview, creaSchedeReview, etichettaFileReview, nascondiAzioniFase3, riassuntoReviewTestata as riassuntoReviewPerTestata } from '../components/review.js'; // 05/9 Fase 2: Review — elenco dei file e diff nel disegno; 17/09 BC-75: `etichettaFileReview` è la regola del nome, e non si riscrive qui del mockup; 17/09 BC-63: le linguette sono il componente condiviso col Terminale
 import { creaStatoVuoto, suggerimentiDallaCartella } from '../components/stato-vuoto.js'; // 05/9 Fase 2: EmptyState — lo stato vuoto del mockup, dai fatti della cartella
 import { montaGuscioLaboratorio } from '../components/lab-cornice-v3.js'; // 18/09 corsia 2: il guscio a quattro schede del Laboratorio modelli — monta i comandi legacy in una scheda sola
@@ -437,6 +440,9 @@ const avvisiMcpDetti = creaRicordoAvvisiMcp(); // owner 17/10/2026: i server MCP
       /** ⭐⭐⭐ 27/8, R1 — messageId(ragionamento) -> {summaryText, detail, grezzo}, la bolla collassabile che ospita il ragionamento in streaming (riusa la stessa forma di appendToolNote, non un componente nuovo). Il testo grezzo si accumula qui per lo stesso motivo di testoGrezzoMessaggi: renderizzaMarkdownSemplice lavora sul totale, non sul delta. */
       ragionamentoBubble: new Map(),
       inRigiocata: false, // ⭐ 13/09 notte: vero fra l'apertura del flusso e `talos.fine-rigiocata`
+      /* R5.11 (18/10/2026): l'ultima sequenza della STORIA, fissata al confine; un evento con una sequenza più alta è dal vivo. Non basta
+         `inRigiocata`: la storia differita si disegna AL confine, quando il segno è già spento (misurato con una sonda, ANNULLA-UI-05). */
+      sequenzaFineStoria: 0,
       preferenzeDaSalvareAlConfine: false, // B3 09/10: un giro della storia ha cambiato il modo; si salva al confine, una volta
       ragionamentiInCorso: null, // ⭐ 13/09 notte: { sessionId, inizi } — l'inizio vero dei ragionamenti aperti, dal registro
       /** ⛔⛔⛔ 27/8, owner: "ricevo risposte duplicate" — ogni evento.`_sequenza` (assegnato dal server, vedi session-registry.mjs broadcast()) entra qui la PRIMA volta che passa da handleRealEvent; una riconnessione (EventSource nativo dopo una caduta, o runDirectShell che ne apre una fresca) rimanda l'intero buffer da capo, e questo Set lo riconosce e lo scarta invece di duplicare bubble/testo. Sopravvive a un `continua:true` (stessa sessione, nuovo giro) — si azzera SOLO per una sessione davvero diversa. */
@@ -2930,6 +2936,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
   collegaScalaComposer(composerForm?.querySelector('.talos-composer__bar'), { win: window });
   /* 11/10/2026 — «Using ChatGPT plan» accanto al selettore (linee guida OpenAI; owner: solo la pastiglia compatta). Lo stato del
      piano si legge all'avvio e dopo ogni accesso o scollegamento (`rileggiStatoDelPiano`); il modello lo dice il piede. */
+  montaRemoto();
   pastigliaPiano = montaPastigliaPiano({ pastiglia: composerForm?.querySelector('[data-piano-chatgpt]'), leggiStato: () => apiGet('/api/v1/auth/chatgpt/stato') });
   rileggiStatoDelPiano();
   if (typeof ResizeObserver === 'function') {
@@ -3536,6 +3543,116 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
   }
 
   function apiGet(pathname, options) { return apiCentrale().get(pathname, options); }
+
+  /*
+   * 18/10/2026 — IL CONTROLLO REMOTO (contratto v0.3, mockup v5 approvato): l'icona del telefono accanto alla campanella apre
+   * l'accoppiamento; il pallino verde dice che un telefono è in linea; «Telefoni collegati» nelle Impostazioni. Le finestre le
+   * disegna `components/remoto.js`; qui solo le chiamate e il ritmo con cui si rilegge lo stato (ogni 20 s, e subito dopo un gesto).
+   * Un errore del server diventa la frase del dizionario nella lingua della persona (`testoErroreServer`).
+   */
+  /* ⛔ Solo dichiarazioni di funzione: `montaRemoto()` parte all'avvio, PRIMA di queste righe (una `const` qui darebbe «Cannot access
+     before initialization» e fermerebbe il resto dell'avvio — visto nella prima foto, 18/10). L'interfaccia viva sta su `montaRemoto.ui`. */
+  function erroreRemoto(e) { return Object.assign(e instanceof Error ? e : new Error(String(e)), { messaggio: testoErroreServer(e)?.message || e?.message }); }
+  function apiRemoto() { return {
+    stato: () => apiGet('/api/v1/remote'),
+    imposta: (x) => apiCentrale().post('/api/v1/remote/settings', x).catch((e) => { throw erroreRemoto(e); }),
+    apri: () => apiCentrale().post('/api/v1/remote/pair', {}).catch((e) => { throw Object.assign(erroreRemoto(e), { retryAfterMs: e?.problem?.retryAfterMs }); }),
+    chiudi: (gettone) => apiCentrale().post('/api/v1/remote/pair/close', { gettone }).catch(() => null),
+    conferma: async (id) => { const r = await apiCentrale().post(`/api/v1/remote/pair/${encodeURIComponent(id)}/confirm`, {}).catch((e) => { throw erroreRemoto(e); }); void aggiornaRemoto(); return r; },
+    rifiuta: (id) => apiCentrale().post(`/api/v1/remote/pair/${encodeURIComponent(id)}/reject`, {}),
+  }; }
+  async function aggiornaRemoto() {
+    let stato = null;
+    try { stato = await apiRemoto().stato(); } catch { stato = { disponibile: false, telefoni: [] }; }
+    const pallino = document.querySelector('[data-remoto-pallino]');
+    if (pallino) pallino.hidden = !(stato?.inLinea?.length > 0);
+    /* La pillola del telefono nel piede del compositore (mockup v5: «● Pad di Nino»), col nome del primo telefono in linea. */
+    const pillola = document.querySelector('[data-remoto-pillola]');
+    const inLinea = (stato?.telefoni ?? []).find((v) => v.inLinea && !v.revocatoAlle);
+    if (pillola) {
+      pillola.hidden = !inLinea;
+      const nome = inLinea?.nome || tr('remoto.confirm.unnamed');
+      const etichetta = pillola.querySelector('[data-remoto-pillola-nome]');
+      if (etichetta) etichetta.textContent = inLinea ? nome : '';
+      if (inLinea) { pillola.setAttribute('aria-label', tr('remoto.pill.label', { name: nome })); pillola.title = tr('remoto.pill.label', { name: nome }); }
+    }
+    disegnaTelefoni(document.querySelector('#settingsTelefoni'), stato, {
+      lingua: linguaCorrenteDiT(),
+      onRevoca: async (id) => { await apiCentrale().post(`/api/v1/remote/phones/${encodeURIComponent(id)}/revoke`, {}).catch(() => null); void aggiornaRemoto(); },
+      onCollega: () => montaRemoto.ui?.avvia(),
+      onCambiaRelay: async () => { if (await montaRemoto.ui?.primaVolta()) void aggiornaRemoto(); },
+    });
+    return stato;
+  }
+  /*
+   * R5.12 (owner 18/10/2026, mockup approvato) — i blocchi dei telefoni sotto la riga dell'attrezzo del modello. Dal vivo soltanto
+   *   (sequenza oltre la fine della storia): rigiocando la storia un QR di ieri non si riapre e un elenco non finge di essere di
+   *   allora. L'avviso «spento» invece si disegna sempre: è la spiegazione di un rifiuto, vera anche dopo.
+   * ⛔ Il QR lo chiede QUESTA finestra (`soloSeAcceso`: dalla chat il remoto non si accende); il gettone non passa dal modello.
+   */
+  function apriTelefoniCollegati() { setView('settings'); setSettingsSection('telefoni'); }
+  function montaTelefoniInChat(info, evento, { fallito = false } = {}) {
+    const vivo = Number(evento._sequenza) > state.realSession.sequenzaFineStoria;
+    const testo = String(evento.content ?? '');
+    /* ⛔ Dopo il SEGMENTO delle attività, non dopo la riga: il segmento è chiuso di serie e un QR lì dentro non si vedrebbe (preso
+       dalla prova TEL-UI, 19/10). Come nel mockup: la riga, poi il blocco, nel turno. */
+    const dopoLaRiga = (blocco) => { (info.article.closest('.talos-activity') ?? info.article).after(blocco); return blocco; };
+    if (info.nome === 'remote_phone_pair' && /^REFUSED\. Remote control is (?:off|not available)/u.test(testo)) {
+      dopoLaRiga(creaBloccoRemotoSpento(document, { onApri: apriTelefoniCollegati, nonDisponibile: /not available/u.test(testo) }));
+      if (info.dettaglio) info.dettaglio.textContent = tr('remoto.chat.offDetail');
+      return;
+    }
+    if (fallito || !vivo) return;
+    if (info.nome === 'remote_phones') {
+      void apiRemoto().stato().catch(() => ({ disponibile: false, telefoni: [] })).then((stato) => {
+        if (!info.article.isConnected) return;
+        const { blocco, dettaglio } = creaBloccoElencoTelefoni(document, stato, { onApri: apriTelefoniCollegati, lingua: linguaCorrenteDiT() });
+        dopoLaRiga(blocco);
+        if (info.dettaglio && dettaglio) info.dettaglio.textContent = dettaglio;
+      });
+      return;
+    }
+    if (info.nome === 'remote_phone_revoke') {
+      if (/ Full access: done without asking the person\./u.test(testo)) {
+        segnaRevocaSenzaCarta({ riga: info.article, corpo: info.detail, nome: nomeDallEsitoRevoca(testo), onApri: apriTelefoniCollegati });
+      }
+      void aggiornaRemoto();
+      return;
+    }
+    if (info.nome !== 'remote_phone_pair' || !/^The pairing QR code is now on the person/u.test(testo)) return;
+    void apiCentrale().post('/api/v1/remote/pair', { soloSeAcceso: true }).then(async (offerta) => {
+      if (!info.article.isConnected) { void apiRemoto().chiudi(offerta.gettone); return; }
+      const visti = new Set((await apiRemoto().stato().catch(() => null))?.attese?.map((a) => a.id) ?? []);
+      let poll = null;
+      const qr = creaBloccoQrInChat(document, offerta, {
+        copia: (x) => navigator.clipboard?.writeText?.(x),
+        aggiornaDettaglio: (frase) => { if (info.dettaglio) info.dettaglio.textContent = frase; },
+        onScade: () => { if (poll) window.clearInterval(poll); },
+      });
+      dopoLaRiga(qr.blocco);
+      /* a QR aperto il computer sorveglia le richieste: la prima nuova apre «Collegare questo telefono?» col codice di 6 cifre */
+      poll = window.setInterval(async () => {
+        if (!qr.blocco.isConnected) { window.clearInterval(poll); qr.ferma(); void apiRemoto().chiudi(offerta.gettone); return; }
+        const s = await apiRemoto().stato().catch(() => null);
+        const nuova = s?.attese?.find((a) => !visti.has(a.id));
+        if (!nuova) return;
+        window.clearInterval(poll); qr.ferma();
+        chiudiQr(document, qr.blocco, tr('remoto.chat.qrUsed'));
+        montaRemoto.ui?.conferma(nuova);
+      }, 1000);
+    }).catch((e) => {
+      if (e?.code === 'REMOTE_OFF' || e?.problem?.code === 'REMOTE_OFF') { dopoLaRiga(creaBloccoRemotoSpento(document, { onApri: apriTelefoniCollegati })); return; }
+      toast(tr('remoto.pair.title'), erroreRemoto(e).messaggio);
+    });
+  }
+  function montaRemoto() {
+    const icona = document.querySelector('#telefoniRemoto');
+    if (!icona) return;
+    montaRemoto.ui = creaRemotoUi({ api: apiRemoto(), copia: (testo) => navigator.clipboard?.writeText?.(testo) });
+    icona.addEventListener('click', () => { void montaRemoto.ui.avvia().finally(() => { void aggiornaRemoto(); }); });
+    void aggiornaRemoto();
+    window.setInterval(() => { if (document.visibilityState === 'visible') void aggiornaRemoto(); }, 20_000);
+  }
 
   function formattaByteModelLab(bytes) {
     const value = Number(bytes);
@@ -5234,7 +5351,8 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
    * puntano lì) ma a schermo si chiama «Sicurezza e privacy», che è la sezione
    * a parte chiesta da D13: vale SEMPRE, mentre i permessi valgono per sessione.
    */
-  const SETTINGS_SECTIONS = ['appearance', 'chat', 'tools', 'memoria', 'privacy', 'models', 'costi', 'workspace', 'account'];
+  /* 18/10/2026 — «Telefoni collegati» subito dopo «Sicurezza e privacy» (owner 17/10, mockup v4-v5 del controllo remoto). */
+  const SETTINGS_SECTIONS = ['appearance', 'chat', 'tools', 'memoria', 'privacy', 'telefoni', 'models', 'costi', 'workspace', 'account'];
   const SETTINGS_SECTION_STORAGE_KEY = 'talos.harness.desktop.settings.section.v1';
 
   /** List-detail Settings: una sola categoria visibile e un solo punto di verità per il tab attivo. */
@@ -5342,6 +5460,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     // 06/9 D26 e D21/D22: si leggono all'APERTURA della sezione, non a ogni ridisegno.
     if (selected === 'memoria') void caricaRipartizioneContesto();
     if (selected === 'costi') void caricaCostiConsumo();
+    if (selected === 'telefoni') void aggiornaRemoto(); // 18/10/2026: lo stato vero dei telefoni a ogni apertura
   }
 
   /*
@@ -6419,7 +6538,8 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     const p = inventariEstensioni.get(tipo), panel = $('#capPanel-' + tipo);
     if (!p || !panel || p.sessionId !== state.realSession.id) return;
     /* 5-ter, 17/09: i pacchetti GUASTI arrivano dal server accanto ai plugin, e non si perdono qui. */
-    aggiornaEstensioni(panel, p.voci, { tipo, ambito: p.sessionId, errore: p.errore, erroreAzione: p.erroreAzione, caricamento: p.caricamento, falliti: p.falliti, salvataggio: Boolean(scritturaEstensione), onAggiorna: () => caricaEstensioniCapability(tipo), onFida: v => fidaEstensioneCapability(tipo, v, p.sessionId) });
+    aggiornaEstensioni(panel, p.voci, { tipo, ambito: p.sessionId, errore: p.errore, erroreAzione: p.erroreAzione, caricamento: p.caricamento, falliti: p.falliti, salvataggio: Boolean(scritturaEstensione), onAggiorna: () => caricaEstensioniCapability(tipo), onFida: v => fidaEstensioneCapability(tipo, v, p.sessionId),
+      ...(tipo === 'mcp' ? { prova: Boolean(provaMcpInCorso), onProva: v => provaServerMcpCapability(v, p.sessionId) } : {}) });
   }
   async function caricaEstensioniCapability(tipo) {
     if (!['skills', 'mcp', 'plugins', 'hooks'].includes(tipo)) return;
@@ -6442,6 +6562,29 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     } catch (e) { if (!attuale()) return; p.voci = []; p.errore = tr('app.board.extensions.unavailableWith', { motivo: e.message }); }
     finally { if (attuale()) { p.caricamento = false; mostraInventarioEstensioni(tipo); } }
   }
+  /*
+   * R5.8 (decisione owner del 17/10, «test e riconnessione di un MCP», dal PC e dal telefono) — prova adesso un server MCP già
+   *   fidato: il server ne scrive l'esito come ogni avvio (`talos.mcp-avvio`), quindi la riga «Connessione» e la nota in chat si
+   *   aggiornano da sole; il prossimo messaggio lo usa. Il toast dice l'esito in parole.
+   */
+  let provaMcpInCorso = null;
+  async function provaServerMcpCapability(voce, sessionId) {
+    if (provaMcpInCorso || !sessionId || state.realSession.id !== sessionId || voce?.fidato !== true) return;
+    provaMcpInCorso = voce.id;
+    mostraInventarioEstensioni('mcp');
+    try {
+      const r = await apiPost('/api/v1/sessions/' + encodeURIComponent(sessionId) + '/mcp/' + encodeURIComponent(voce.id) + '/test', {});
+      if (r?.esito === 'collegato') toast(tr('app.board.extensions.testOkTitle'), trn('app.board.extensions.testOkOne', 'app.board.extensions.testOkMany', r.attrezzi ?? 0, { nome: voce.id }));
+      else toast(tr('app.board.extensions.testFailedTitle'), tr('app.board.extensions.testFailed', { nome: voce.id, motivo: String(testoDelCampo(r ?? {}, 'motivo') || '') }), { tono: 'avviso' });
+      if (state.realSession.id === sessionId) await caricaEstensioniCapability('mcp');
+    } catch (e) {
+      toast(tr('app.board.extensions.testFailedTitle'), messaggioErroreUtente(e, tr('app.errors.retryShortlyCapital')), { tono: 'guasto' });
+    } finally {
+      provaMcpInCorso = null;
+      mostraInventarioEstensioni('mcp');
+    }
+  }
+
   async function fidaEstensioneCapability(tipo, voce, sessionId) {
     if (scritturaEstensione || !sessionId || state.realSession.id !== sessionId || !['mcp', 'plugins', 'hooks'].includes(tipo) || voce.fidato !== false) return;
     const p = inventariEstensioni.get(tipo);
@@ -12632,7 +12775,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
         ? (task.progetto ? tr('app.composer.freeTaskIn', { progetto: task.progetto }) : tr('app.composer.freeTask'))
         : tr('app.composer.directCommand')) + etichettaPermessiGiro(contesto);
     // 05/9 Fase 2: Conversazione — il messaggio della persona nel blocco del mockup (ora · etichetta del giro)
-    const article = nellaChat(creaMessaggioUtente({ testo: testoBolla, ora: state.realSession.deferHistoricalRendering ? '' : oraMessaggio(), meta: etichettaMeta }), 'utente')
+    const article = nellaChat(creaMessaggioUtente({ testo: testoBolla, ora: state.realSession.deferHistoricalRendering ? '' : oraMessaggio(), meta: etichettaMeta, origine: daMostrare?.origine ?? null }), 'utente')
     const allegatiVisibili = daMostrare?.allegati?.length ? daMostrare.allegati : task.immagini;
     if (allegatiVisibili?.length) disegnaChipAllegati(article, allegatiVisibili);
     void conversation;
@@ -12715,7 +12858,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
        stesso segnale con cui la rigiocata sceglie fra primo messaggio e seguito — non il DOM, che a finestra non ha le bolle vecchie),
        l'etichetta è quella di un primo messaggio («Compito libero»); la base resta sulla bolla, per chi la completa col permesso. */
     const etichettaBase = state.realSession.taskBubbleMostrata ? 'Follow-up' : tr('app.composer.freeTask');
-    const messaggioUtente = creaMessaggioUtente({ testo: testoBolla, ora, meta: `${etichettaBase}${etichettaPermessiGiro(contesto)}` });
+    const messaggioUtente = creaMessaggioUtente({ testo: testoBolla, ora, meta: `${etichettaBase}${etichettaPermessiGiro(contesto)}`, origine: daMostrare?.origine ?? null });
     messaggioUtente.dataset.etichettaBase = etichettaBase;
     if (!state.realSession.taskBubbleMostrata) messaggioUtente.dataset.primoMessaggio = '1';
     messaggioUtente.dataset.oraMessaggio = ora; // ⛔ 14/09: il RunStarted completa la testata col permesso, e deve ritrovare l'ora
@@ -13243,6 +13386,29 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
    *   un successo anche quando il server rifiuta — ed è esattamente la bugia che questo giro
    *   toglie. Se il server dice di no, la bolla resta dov'è e il toast dice perché.
    */
+  /*
+   * R5.11 (owner 18/10/2026, «Come Hermes, PC e telefono»; mockup approvato la sera stessa) — «Annulla le modifiche ai file da qui»
+   *   nel «⋯» del messaggio della persona. La finestra la disegna `components/annulla-file.js`; qui solo le chiamate. Il messaggio
+   *   è `giro:<sequenza del suo RunStarted>`, e il server dice per ogni punto la sequenza del turno in cui è nato (`seqAvvio`).
+   * ⛔ Solo dichiarazioni di funzione, come per il remoto: chi le chiama può partire prima di queste righe.
+   */
+  function apiAnnullaFile(sessionId) {
+    const base = `/api/v1/sessions/${encodeURIComponent(sessionId)}/file-undo`;
+    const errore = (e) => { throw new Error(testoErroreServer(e)?.message || messaggioErroreUtente(e, tr('app.errors.retryShortlyCapital'))); };
+    return {
+      punti: () => apiGet(base).catch(errore),
+      anteprima: (turno) => apiGet(`${base}/${turno}`).catch(errore),
+      annulla: (turno, include) => apiCentrale().post(`${base}/${turno}`, { include }).catch(errore),
+      rifai: () => apiCentrale().post(`${base}/redo`, {}).catch(errore),
+    };
+  }
+  function apriAnnullaFile(riferimento, testo) {
+    const sessionId = state.realSession.id;
+    const sequenza = Number(/^giro:(\d+)$/u.exec(riferimento ?? '')?.[1]);
+    if (!sessionId || !Number.isSafeInteger(sequenza)) return;
+    void creaAnnullaFile({ api: apiAnnullaFile(sessionId), toast }).apri({ sequenza, testoMessaggio: testo });
+  }
+
   async function eliminaMessaggioReale({ riferimento, nodo, quale }) {
     const sessionId = state.realSession.id;
     if (!sessionId) { toast(tr('app.messages.nothingToDelete'), tr('app.messages.notASessionYet')); return false; }
@@ -13310,7 +13476,14 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       radiceMenu: ROOT().body || ROOT(),
       ospiteTastoDestro: messaggio,
       etichetta: TESTI_MESSAGGIO.azioniTuo,
+      etichettaAltre: TESTI_MESSAGGIO.altreAzioniTuo, // 18/10: il «⋯» del TUO messaggio non si chiama più «… sulla risposta»
       vociMenu: () => [
+        /* R5.11: prima di «Elimina»; spenta finché il server non sa quale giro è, o mentre un giro lavora (il server rifiuterebbe) */
+        {
+          testo: tr('annulla.menu.undo'),
+          abilitato: Boolean(messaggio.dataset.riferimentoMessaggio) && !runRealeAttivo(),
+          fai: () => apriAnnullaFile(messaggio.dataset.riferimentoMessaggio, testo || messaggio.querySelector('.message-bubble')?.textContent || ''),
+        },
         {
           testo: TESTI_MESSAGGIO.eliminaMessaggio,
           conferma: TESTI_MESSAGGIO.confermaEliminaMessaggio,
@@ -15391,6 +15564,11 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     if (eCartaAutomazione(azione) && !figlia) return appendCartaAutomazione(requestId, azione);
     /* 0.1.25 (owner 09/10/2026): escludere o riammettere un fornitore a valle — la stessa carta, Approva · Annulla */
     if (eCartaFornitori(azione) && !figlia) return appendCartaAutomazione(requestId, azione, CARTA_FORNITORI);
+    /* R5.11: il modello propone di annullare le modifiche ai file — la carta con l'elenco e il diff, decide la persona */
+    if (azione?.tipo === 'file_changes_undo' && !figlia) return appendCartaAutomazione(requestId, azione, CARTA_ANNULLA);
+    /* R5.12: il modello propone di mostrare il QR (carta sempre, anche in Accesso pieno) o di revocare un telefono */
+    if (azione?.tipo === 'remote_phone_pair' && !figlia) return appendCartaAutomazione(requestId, azione, CARTA_QR_TELEFONO);
+    if (azione?.tipo === 'remote_phone_revoke' && !figlia) return appendCartaAutomazione(requestId, azione, CARTA_REVOCA_TELEFONO);
     /*
      * 05/9 Fase 2: Conversazione — la scheda di approvazione del mockup: cosa
      * chiede (badge), il bersaglio, il perche', e tre risposte. «Per questa
@@ -15585,6 +15763,15 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
      da `ApprovalResolved`; cambiano parole, blocco e se c'è «Modifica» (i fornitori non hanno una bozza da correggere). */
   const CARTA_AUTOMAZIONI = Object.freeze({ testi: testiCartaAutomazione, modificabile: cartaModificabile, blocco: creaBloccoCartaAutomazione, dato: 'cartaAutomazione' });
   const CARTA_FORNITORI = Object.freeze({ testi: testiCartaFornitori, modificabile: () => false, blocco: creaBloccoCartaFornitori, dato: 'cartaFornitori' });
+  /* R5.11 (owner 18/10/2026, «sì, con la carta»): annullare le modifiche ai file dalla chat — la stessa carta, coi pulsanti suoi:
+     «Annulla» da solo, su una carta che annulla, direbbe la cosa opposta a quella che fa. */
+  const CARTA_ANNULLA = Object.freeze({ testi: testiCartaAnnulla, modificabile: () => false, blocco: creaBloccoCartaAnnulla, dato: 'cartaAnnulla',
+    pulsanti: { approva: () => tr('annulla.card.approve'), nega: () => tr('annulla.card.keep') } });
+  /* R5.12 (owner 18/10/2026): le due carte dei telefoni — «Mostra il QR» / «Non ora», «Revoca» / «Lascialo collegato» (mockup) */
+  const CARTA_QR_TELEFONO = Object.freeze({ testi: testiCartaQr, modificabile: () => false, blocco: creaBloccoCartaQr, dato: 'cartaTelefoni',
+    pulsanti: { approva: () => tr('remoto.chat.pairCard.approve'), nega: () => tr('remoto.chat.pairCard.deny') } });
+  const CARTA_REVOCA_TELEFONO = Object.freeze({ testi: testiCartaRevoca, modificabile: () => false, blocco: creaBloccoCartaRevoca, dato: 'cartaTelefoni',
+    pulsanti: { approva: () => tr('remoto.chat.revokeCard.approve'), nega: () => tr('remoto.chat.revokeCard.keep') } });
   function appendCartaAutomazione(requestId, azione, adattatore = CARTA_AUTOMAZIONI) {
     const testi = adattatore.testi(azione);
     const modificabile = adattatore.modificabile(azione);
@@ -15596,9 +15783,9 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     article.dataset[adattatore.dato] = azione.tipo;
     scheda.perche.after(adattatore.blocco(document, azione));
     const { unaVolta: approvaBtn, sessione: modificaBtn, nega: annullaBtn } = scheda.pulsanti;
-    approvaBtn.textContent = tr('sezioni.automations.v2.card.approve');
+    approvaBtn.textContent = adattatore.pulsanti?.approva?.() ?? tr('sezioni.automations.v2.card.approve');
     modificaBtn.textContent = tr('sezioni.automations.v2.card.edit');
-    annullaBtn.textContent = tr('sezioni.automations.v2.card.cancel');
+    annullaBtn.textContent = adattatore.pulsanti?.nega?.() ?? tr('sezioni.automations.v2.card.cancel');
     approvaBtn.dataset.approvaUnaVolta = ''; annullaBtn.dataset.nega = ''; modificaBtn.dataset.modificaAutomazione = '';
     if (!modificabile) modificaBtn.remove();
     let rispostaDataDaQuestaScheda = false;
@@ -16637,6 +16824,11 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       () => { void aggiornaElencoSessioniReali(); },
       () => { aggiornaPiedeSidebar(); aggiornaTestataSessione(); aggiornaSottotitoloSessione(); },
       () => aggiornaInspectorDaStato({ subito: true }),
+      /* 21/10/2026 (foto del 4174 dopo il cambio it → en): il segnaposto e le etichette del compositore restavano nella lingua di
+         prima — li scrive solo `syncRunComposerState`, e senza una conversazione aperta nessun altro passo lo richiamava */
+      () => syncRunComposerState(),
+      /* B1 (21/10/2026): la riga viva del riassunto vive solo durante un giro, quando la conversazione NON si rilegge: si ridice da sé */
+      () => ridisegnaRigaVivaNellaLingua(colonnaConversazione(ROOT())),
       () => rileggiConversazioneNellaLingua(),
     ];
     for (const passo of passi) {
@@ -21052,6 +21244,21 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       for (const esito of nuoviServerNonPartiti(avvisiMcpDetti, state.realSession.id, evento.value)) nellaChat(creaNotaMcpNonPartito(esito, { document }));
       return;
     }
+    /* R5.8 (owner 18/10/2026, «Ferma e libera tutto»): la sessione è stata chiusa — dal telefono, con la sua origine. La nota resta
+       nella storia; tornare alla Home si fa solo DAL VIVO (sequenza oltre la fine della storia) e solo se il PC mostra questa
+       conversazione: rigiocando la storia non si viene portati via. */
+    if (evento.type === 'CUSTOM' && evento.name === 'talos.sessione-chiusa') {
+      const nome = typeof evento.value?.origine?.nome === 'string' && evento.value.origine.nome ? evento.value.origine.nome : null;
+      const titolo = evento.value?.origine?.tipo === 'telefono'
+        ? (nome ? tr('chat.closed.fromPhoneNamed', { name: nome }) : tr('chat.closed.fromPhone'))
+        : tr('chat.closed.title');
+      nellaChat(creaNotaSistema({ tipo: 'info', badge: tr('app.common.note'), titolo, testo: tr('chat.closed.body') }, { document }));
+      const sessioneChiusa = state.realSession.id;
+      if (Number(evento._sequenza) > state.realSession.sequenzaFineStoria && sessioneChiusa) {
+        queueMicrotask(() => { if (state.realSession.id === sessioneChiusa) setView('home'); });
+      }
+      return;
+    }
     // a inizio giro l'avviso si ritira (in rigiocata resta nascosto: la sessione a schermo può essere cambiata), a fine giro si rivaluta
     if (evento.type === 'RunStarted' || evento.type === 'RunFinished') void aggiornaAvvisoSogliaContesto();
     /*
@@ -21073,6 +21280,9 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       }
     }
     if (evento.type === 'CUSTOM' && evento.name === 'talos.fine-rigiocata') void aggiornaAvvisoSogliaContesto({ forza: true });
+    /* R5.11: al confine si fissa l'ultima sequenza della storia — un evento con una sequenza più alta è dal vivo (il toast «Rifai») */
+    /* ⛔ Una sola istruzione, senza graffa: le prove A1BIS-05/B1-05 cercano il blocco del confine con `… 'talos.fine-rigiocata') {` */
+    if (evento.type === 'CUSTOM' && evento.name === 'talos.fine-rigiocata') state.realSession.sequenzaFineStoria = [...state.realSession.sequenzeViste].reduce((m, s) => (Number.isSafeInteger(s) && s > m ? s : m), 0);
     /*
      * ⭐⭐ 13/09 notte — IL CONFINE FRA LA STORIA E LA DIRETTA, detto dal server (`http-app.mjs`, subito dopo
      *   `replay.fineReplay()`). Trovato col GIRO VERO: riaperta una sessione viva, un ragionamento di 8 s
@@ -21928,6 +22138,15 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
         if (info?.uscitaViva) { info.uscitaViva.parentElement?.remove(); info.uscitaViva = null; info.uscitaVivaTesto = ''; }
         // 06/9: la delega e' finita — l'esito del figlio cambia, la scheda «Agenti» lo deve dire subito
         if (info?.nome === 'delega_sottotask') void caricaFigliSessione();
+        /* R5.11: un annullamento fatto dalla chat (con la carta, o in Accesso pieno senza) — il toast col «Rifai», come dalla finestra.
+           Solo dal vivo (sequenza oltre la fine della storia): rigiocando la storia un «Rifai» di ieri non si offre. */
+        if (info?.nome === 'file_changes_undo' && Number(evento._sequenza) > state.realSession.sequenzaFineStoria && /^Put back as they were before that message: (?!no file)/u.test(String(evento.content))) {
+          /* la lista finisce al primo punto seguito da uno spazio o dalla fine: il punto di «a.txt» non la chiude (visto con la sonda) */
+          const quanti = String(evento.content).match(/^Put back as they were before that message: (.*?)\.(?:\s|$)/u)?.[1]?.split(', ').length ?? 0;
+          const sessionePerRifai = state.realSession.id;
+          toast(tr('annulla.chat.doneTitle'), quanti === 1 ? tr('annulla.done.bodyOne') : tr('annulla.done.bodyMany', { n: quanti }),
+            azioneAnnulla(() => { void creaAnnullaFile({ api: apiAnnullaFile(sessionePerRifai), toast }).rifai(); }, { etichetta: tr('annulla.done.redo') }));
+        }
         /*
          * ⛔ 28/8 — Terminale REALE (LEDGER-TERMINALE-REALE.md): il tool
          * `shell` dell'AGENTE non viene più specchiato nella vista
@@ -21952,7 +22171,10 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
         const fermatoApposta = Boolean(esitoDelComando?.annullato || esitoDelComando?.terminato);
         /* Owner 03/10/2026: una prova NON ESEGUITA (nessuna suite, o zero test eseguiti: `NOT RUN:`) non è né riuscita né fallita.
            Pallino d'attenzione e «non eseguito», come nei Processi; mai contata fra gli errori. */
-        const provaNonEseguita = info?.nome === 'prova' && provaSenzaSuite(testoEsito);
+        /* 19/10/2026 (mockup R5.12 approvato: pallino giallo, non rosso): il QR chiesto dalla chat a remoto SPENTO non è un guasto, non
+           è partito — la stessa parola «non eseguita» della prova senza suite, fuori dal conto degli errori. */
+        const provaNonEseguita = (info?.nome === 'prova' && provaSenzaSuite(testoEsito))
+          || (info?.nome === 'remote_phone_pair' && /^REFUSED\. Remote control is (?:off|not available)/u.test(testoEsito));
         /* Owner 12/10/2026 (foto: 13 letture «non riuscito»): una copia identica che il kernel ha SCARTATO non è fallita, non è
            mai partita. Il fatto arriva nell'evento (`duplicate`), mai dedotto dal testo: riga discreta, pallino neutro, fuori
            dal conto degli errori. Hermes le toglie in silenzio (`run_agent.py:1198-1214`); noi lo diciamo in una parola. */
@@ -21988,6 +22210,8 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
         // Full access (owner 17/10/2026): un'automazione fatta senza carta lo dice nella sua riga, con «Apri l'automazione»
         if (evento.unasked && info?.article) segnaAutomazioneSenzaCarta({ riga: info.article, corpo: info.detail, senzaCarta: evento.unasked,
           apri: (id) => { setView('automations'); if (apriAutomazioneNelPannello($('#schermoAutomazioni'), id)) mostraAutomazioni(); } });
+        // R5.12: i telefoni collegati dalla chat — elenco, QR, remoto spento, revoca senza carta (dopo il dettaglio della riga, che lo sovrascriverebbe)
+        if (info?.article && /^remote_phone/u.test(String(info.nome ?? ''))) montaTelefoniInChat(info, evento, { fallito });
         /* C2 R6 (08/10/2026): una regola di un ANTENATO ha coperto questa chiamata senza domanda — la ricevuta lo dice, la riga pure. */
         if (evento.receipt?.consentitoDa && info?.article) {
           segnaConsentitoDa({ riga: info.article, corpo: info.detail, consentitoDa: evento.receipt.consentitoDa, nomeSessione: nomeVivoDellaSessione });
@@ -22711,6 +22935,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
        quello che arriva è passato (vedi `handleRealEvent`). Anche una riconnessione fatta da sola rigioca, da
        `Last-Event-ID`: per questo lo stesso segno si rimette all'apertura. */
     state.realSession.inRigiocata = true;
+    state.realSession.sequenzaFineStoria = Number.POSITIVE_INFINITY; // R5.11: finché la storia non finisce, niente è dal vivo
     // B1 (owner 10/10): una chat ripresa dalle pronte chiede solo gli eventi dopo l'ultima sequenza vista (http-app.mjs, `?after=`)
     const source = new EventSource(API(`/api/v1/sessions/${encodeURIComponent(sessionId)}/events${dopo > 0 ? `?after=${dopo}` : ''}`));
     segnaTappaLatenza('sseCollegato');
@@ -23308,7 +23533,9 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
    *   né record — provvisoria — e si completa quando arriva l'evento con il record (F3). Non si inventano
    *   numeri che il server non ha detto.
    */
-  const compattazioneLegacy = { inVolo: new Set(), inSottofondo: new Set(), trial: new Map(), ultimaMisura: new Map(), avvisoChiusoA: new Map() };
+  /* `rigaDelGiro` (21/10/2026, revisione del Mobile): il giro della riga viva aperta. La fine di un riassunto di SFONDO (senza giro)
+     non chiude la riga di un giro che sta aspettando il suo. */
+  const compattazioneLegacy = { inVolo: new Set(), inSottofondo: new Set(), trial: new Map(), ultimaMisura: new Map(), avvisoChiusoA: new Map(), rigaDelGiro: new Map() };
   /* ⭐ 15/10/2026 — «c'è un riassunto in corso?» ha UNA risposta: quello chiesto a mano (`inVolo`), quello del server in sottofondo
      (`inSottofondo`: non ha più la barra, owner «solo il separatore», ma la finestra e l'avviso devono saperlo, o offrono un secondo
      «Compatta» mentre il primo lavora) e quello che il giro aspetta (la barra a schermo). Prima la barra faceva da bandierina. */
@@ -23453,6 +23680,18 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     const turnoAperto = ultimo?.classList?.contains('talos-turn') && ultimo.dataset.turno === 'talos' && !state.realSession.eventoTerminaleVisto;
     if (turnoAperto) nellaChat(riga); else colonna.append(riga);
   }
+  /* B1 (owner 21/10/2026): la riga viva del riassunto atteso, con «Salta» (contratto §5) e «Ferma» (lo stesso Stop del compositore) */
+  const opzioniRigaViva = (sessionId) => ({ sessionId, inserisci: inserisciRigaCompattazione, onSalta: () => saltaRiassuntoInCorso(sessionId), onFerma: () => { void stopRealSession(); } });
+  async function saltaRiassuntoInCorso(sessionId) {
+    try {
+      const esito = await saltaRiassuntoLegacy({ fetchFn: fetchSorvegliata, base: API('/api/v1'), sessionId });
+      if (!esito.saltato && sessionId === state.realSession.id) toast(tr('chat.context.live.nothingToSkip'));
+      return esito;
+    } catch (errore) {
+      if (sessionId === state.realSession.id) toast(tr('chat.context.live.skipFailed'), errore?.message || tr('app.common.operationFailed'));
+      throw errore;
+    }
+  }
   const opzioniRigaLegacy = (sessionId) => ({ sessionId, inserisci: inserisciRigaCompattazione, onMenu: (richiesta) => apriMenuRiassuntoLegacy(sessionId, richiesta),
     staccato: (chiave) => separatoriStaccati().get(chiave) ?? null }); // review B1 parte 3: la riga staccata con un turno vecchio
   /* Torna l'esito per chi l'ha chiesto dalla finestra (`{ stato, messaggio? }`); la chat lo mostra comunque da sé. */
@@ -23460,7 +23699,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     if (compattazioneLegacy.inVolo.has(sessionId)) return { stato: 'in-corso' };
     compattazioneLegacy.inVolo.add(sessionId);
     const colonna = colonnaConversazione(ROOT());
-    aggiornaAvanzamentoLegacy(colonna, { fase: 'inizio', motivo: 'manuale' }, { sessionId, testo: testoBarraLegacy('manuale'), inserisci: inserisciRigaCompattazione });
+    aggiornaAvanzamentoLegacy(colonna, { fase: 'inizio', motivo: 'manuale' }, { sessionId, inserisci: inserisciRigaCompattazione });
     void aggiornaAvvisoSogliaContesto();
     contextCompactor?.aggiornaLegacy?.();
     try {
@@ -23508,14 +23747,14 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     if (voce.inVolo) return; // la riga è già in volo: una POST sola, anche a clic ravvicinati
     const colonna = colonnaConversazione(ROOT());
     const vivo = () => ({ ...opzioniRigaLegacy(sessionId) });
-    aggiornaSeparatoreLegacy(colonna, { ...voce, inVolo: true }, { ...vivo(), testo: testoRigaCompattazione({ stato: 'riassunta', tokenPrima: voce.tokenPrima, tokenDopo: voce.tokenDopo }) });
+    aggiornaSeparatoreLegacy(colonna, { ...voce, inVolo: true }, { ...vivo(), testo: testoRigaCompattazione({ stato: 'riassunta', tokenPrima: voce.tokenPrima, tokenDopo: voce.tokenDopo, ripiego: voce.ripiego, ragione: voce.ragione }) });
     try {
       await annullaCompattazioneLegacy({ fetchFn: fetchSorvegliata, base: API('/api/v1'), sessionId, at: voce.at });
       if (sessionId !== state.realSession.id) return;
       aggiornaSeparatoreLegacy(colonna, { ...voce, stato: 'annullata', inVolo: false }, { ...vivo(), testo: testoRigaCompattazione({ stato: 'annullata' }) });
     } catch (errore) {
       if (sessionId !== state.realSession.id) return;
-      aggiornaSeparatoreLegacy(colonna, { ...voce, inVolo: false }, { ...vivo(), testo: testoRigaCompattazione({ stato: 'riassunta', tokenPrima: voce.tokenPrima, tokenDopo: voce.tokenDopo }) });
+      aggiornaSeparatoreLegacy(colonna, { ...voce, inVolo: false }, { ...vivo(), testo: testoRigaCompattazione({ stato: 'riassunta', tokenPrima: voce.tokenPrima, tokenDopo: voce.tokenDopo, ripiego: voce.ripiego, ragione: voce.ragione }) });
       toast(tr('app.contextManager.undoFailed'), errore?.message || tr('app.common.operationFailed'));
     }
   }
@@ -23530,25 +23769,44 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
          nessuno, quindi non apre la barra «Riassumo…»: alla fine arriva il separatore, e basta. Quella che il giro aspetta (overflow,
          emergenza, a mano) la barra la tiene, perché lì si aspetta davvero. */
       if (c.motivo === 'background') compattazioneLegacy.inSottofondo.add(sessionId);
-      else aggiornaAvanzamentoLegacy(colonna, { fase: 'inizio', motivo: c.motivo }, { sessionId, testo: testoBarraLegacy(c.motivo), inserisci: inserisciRigaCompattazione });
+      else {
+        if (Number.isSafeInteger(c.giro)) compattazioneLegacy.rigaDelGiro.set(sessionId, c.giro);
+        else compattazioneLegacy.rigaDelGiro.delete(sessionId);
+        aggiornaAvanzamentoLegacy(colonna, { fase: 'inizio', motivo: c.motivo }, opzioniRigaViva(sessionId));
+      }
       /* B1 (09/10/2026 sera, profilo del ritorno su 300 giri): in rigiocata ogni compattazione forzava l'avviso, cioè una lettura
          HTTP dei numeri a giro (286 su quella sessione); il confine `talos.fine-rigiocata` lo ricalcola già una volta, forzato. */
       void aggiornaAvvisoSogliaContesto({ forza: !state.realSession.inRigiocata });
       contextCompactor?.aggiornaLegacy?.(); // la finestra aperta dice «Riassumo…» anche quando è il server a partire
       return;
     }
+    /* B1 (owner 21/10/2026): i passi del riassunto che il giro aspetta (contratto §2) aggiornano la riga viva; quello in sottofondo non ha riga */
+    if (c.tipo === 'progresso') {
+      /* 21/10/2026 (revisione del Mobile): si scarta il passo di SFONDO, non quelli del giro mentre uno sfondo è in corso */
+      if (c.motivo === 'background') return;
+      /* un passo AGGIORNA la riga aperta dall'inizio, non la crea: un passo effimero arrivato dopo la fine (o dopo la fine del giro)
+         riaccenderebbe una riga che nessuno spegne più */
+      const rigaAperta = colonna.querySelector('[data-compattazione-barra]');
+      if (!rigaAperta || rigaAperta.dataset.contextSession !== sessionId) return;
+      // la compattazione chiesta a mano è fuori da un giro: niente «Salta» né «Ferma», come al suo inizio
+      const aMano = compattazioneLegacy.inVolo.has(sessionId); // lo tiene `compattaConversazioneLegacy` finché la POST manuale è in volo
+      aggiornaAvanzamentoLegacy(colonna, c, aMano ? { sessionId, inserisci: inserisciRigaCompattazione } : opzioniRigaViva(sessionId));
+      return;
+    }
     if (c.tipo === 'fine') {
       compattazioneLegacy.inSottofondo.delete(sessionId);
-      aggiornaAvanzamentoLegacy(colonna, null, { sessionId });
+      /* una fine senza giro (lo sfondo del registro) mentre la riga è di un giro: la riga resta, la chiuderà la fine del suo giro */
+      const diSfondoSopraUnGiro = !Number.isSafeInteger(c.giro) && compattazioneLegacy.rigaDelGiro.has(sessionId);
+      if (!diSfondoSopraUnGiro) { compattazioneLegacy.rigaDelGiro.delete(sessionId); aggiornaAvanzamentoLegacy(colonna, null, { sessionId }); }
       if (c.compattato) misuraDopoCompattazione(sessionId, c.tokenDopo); // 26/09: la misura di prima non vale più (Pi, Hermes)
       if (c.compattato) contaCompattazioneLegacy({ at: c.record?.at ?? null, tokenPrima: c.tokenPrima ?? null, tokenDopo: c.tokenDopo ?? null });
       if (c.compattato && c.record) {
-        aggiornaSeparatoreLegacy(colonna, { at: c.record.at, stato: 'riassunta', annullabile: c.record.annullabile, tokenPrima: c.tokenPrima, tokenDopo: c.tokenDopo, riassunto: typeof c.record.riassunto === 'string' ? c.record.riassunto : null }, { ...opzioniRigaLegacy(sessionId), testo: testoRigaCompattazione({ stato: 'riassunta', tokenPrima: c.tokenPrima, tokenDopo: c.tokenDopo }) });
+        aggiornaSeparatoreLegacy(colonna, { at: c.record.at, stato: 'riassunta', annullabile: c.record.annullabile, tokenPrima: c.tokenPrima, tokenDopo: c.tokenDopo, riassunto: typeof c.record.riassunto === 'string' ? c.record.riassunto : null, ripiego: c.ripiego === true, ragione: c.ragione ?? null }, { ...opzioniRigaLegacy(sessionId), testo: testoRigaCompattazione({ stato: 'riassunta', tokenPrima: c.tokenPrima, tokenDopo: c.tokenDopo, ripiego: c.ripiego === true, ragione: c.ragione ?? null }) });
       } else if (c.compattato) {
         // compattato senza `at` (contratto fuso: l'`at` sta al primo livello, `session-registry.mjs:3111` — qui si arriva solo se manca):
         // la riga c'è (è vero), ma senza identificativo non ha un annullo. Non si inventa.
-        aggiornaSeparatoreLegacy(colonna, { at: null, stato: 'riassunta', tokenPrima: c.tokenPrima, tokenDopo: c.tokenDopo }, { ...opzioniRigaLegacy(sessionId), testo: testoRigaCompattazione({ stato: 'riassunta', tokenPrima: c.tokenPrima, tokenDopo: c.tokenDopo }) });
-      } else {
+        aggiornaSeparatoreLegacy(colonna, { at: null, stato: 'riassunta', tokenPrima: c.tokenPrima, tokenDopo: c.tokenDopo, ripiego: c.ripiego === true, ragione: c.ragione ?? null }, { ...opzioniRigaLegacy(sessionId), testo: testoRigaCompattazione({ stato: 'riassunta', tokenPrima: c.tokenPrima, tokenDopo: c.tokenDopo, ripiego: c.ripiego === true, ragione: c.ragione ?? null }) });
+      } else if (!fineMuta(c)) { // (6) 21/10: «ceduta» (sfondo messo da parte per il messaggio della persona) chiude la barra e basta
         // fallita: motivo umano + dettaglio (`errore: <testo>` del registro, `:3098`); nessun nome tecnico a schermo
         aggiornaSeparatoreLegacy(colonna, { at: `fallita:${evento?._sequenza ?? Date.now()}`, stato: 'non-riuscita', motivo: c.motivo }, { ...opzioniRigaLegacy(sessionId), testo: testoRigaCompattazione({ stato: 'non-riuscita', motivo: c.motivo, dettaglio: c.dettaglio }) });
       }

@@ -7,7 +7,7 @@ import { test } from '@playwright/test';
  * ripete il tema della sezione) o un titolo di BLOCCO (che introduce un contenuto suo).
  */
 // ⛔ 23/09/2026, decisione owner: «Provider e accessi» (`providers`) tolta del tutto — le sezioni sono nove.
-const SEZIONI = ['appearance', 'chat', 'tools', 'memoria', 'privacy', 'models', 'costi', 'workspace', 'account'];
+const SEZIONI = ['appearance', 'chat', 'tools', 'memoria', 'privacy', 'telefoni', 'models', 'costi', 'workspace', 'account']; // 18/10/2026: + «Telefoni collegati»
 
 test('SONDA — le intestazioni DENTRO ogni sezione', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });

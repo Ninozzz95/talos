@@ -13,6 +13,7 @@ import test from 'node:test';
 import { conMarcatoreDiCache } from '../src/kernel/talosHarness.mjs';
 import { creaFetchDelPiano } from '../src/chatgpt-richiesta.mjs';
 import { nativeProviderResponse, toNativeMessages } from '../src/native-provider-adapter.mjs';
+import { fornitore } from '../src/provider-registry.mjs';
 
 const sse = (pezzi) => `${pezzi.map((p) => `data: ${JSON.stringify(p)}\n\n`).join('')}data: [DONE]\n\n`;
 const COMPLETA = [{ type: 'response.completed', response: { id: 'r', status: 'completed', output: [{ type: 'message', id: 'm', role: 'assistant', content: [{ type: 'output_text', text: 'ok', annotations: [] }] }], usage: { input_tokens: 1, output_tokens: 1 } } }];
@@ -72,8 +73,14 @@ for (const provider of ['anthropic', 'zai-anthropic', 'minimax-anthropic']) {
     assert.ok(sistema.every((b) => typeof b.text === 'string'), `a system block of ${provider} carries a non-string text: ${JSON.stringify(sistema.map((b) => typeof b.text))}`);
     const blocco = sistema.find((b) => b.text.startsWith('Project context update'));
     assert.ok(blocco, 'the update is not in the system blocks');
-    assert.deepEqual(blocco.cache_control, { type: 'ephemeral', ttl: '1h' }, 'the cache marker did not reach the update\'s system block');
-    assert.equal(sistema.filter((b) => b.cache_control).length, 1, 'only the block the kernel marked carries the marker');
+    /* owner 21/10/2026 sera, «come Hermes» (revisione M1): il marcatore solo a chi lo DICHIARA nel registro. Z.AI sulla porta Anthropic
+       non lo dichiara e la sua documentazione non lo nomina (letta il 21/10): il testo resta stringa, il marcatore non parte. */
+    if (fornitore(provider).cache?.marcatore === 'cache_control') {
+      assert.deepEqual(blocco.cache_control, { type: 'ephemeral', ttl: '1h' }, 'the cache marker did not reach the update\'s system block');
+      assert.equal(sistema.filter((b) => b.cache_control).length, 1, 'only the block the kernel marked carries the marker');
+    } else {
+      assert.equal(sistema.filter((b) => b.cache_control).length, 0, `${provider} does not declare the marker: none is sent`);
+    }
   });
 }
 

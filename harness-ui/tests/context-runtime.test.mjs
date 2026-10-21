@@ -173,3 +173,24 @@ test('CTX-TRIAL-PROVIDER-USAGE-PREFERRED the provider prompt_tokens anchors the 
   assert.equal(quarto.measurement.method, 'provider', 'l’ancora buona resta valida finché il prefisso combacia');
   assert.equal(conteggi, 2, 'nessun conteggio in più oltre quello del prefisso diverso');
 });
+
+/* 21/10/2026: la cura del posto unico vive nel motore del contesto (`sessionModel.singleSlot`); il profilo si ricostruisce qui
+   (`profileFor`), quindi si prova che il campo arriva DAVVERO al motore, non solo che il risolutore lo scrive. */
+test('CTX-RUNTIME-SINGLE-SLOT the default profile marks the two single-slot engines and the flag reaches the engine', async t => {
+  const { resolveDesktopDefaultProfile } = await import('../src/context-runtime.mjs');
+  const finestraFn = () => 32_768;
+  assert.equal((await resolveDesktopDefaultProfile({ provider: 'locale-ospite', model: 'lfm2.5.gguf', finestraFn })).singleSlot, true);
+  assert.equal((await resolveDesktopDefaultProfile({ provider: 'local', model: 'gemma', finestraFn, readLocalRuntime: async () => ({ state: 'ready', modelId: 'gemma', windowTokens: 32_768 }) })).singleSlot, true);
+  assert.equal('singleSlot' in await resolveDesktopDefaultProfile({ provider: 'openrouter', model: 'z-ai/glm-5.3-flash', finestraFn }), false);
+  for (const singleSlot of [true, false]) {
+    const visti = [];
+    const { open } = await fixture(t, {
+      resolveModelProfile: async () => (singleSlot ? { ...profile, singleSlot: true } : profile),
+      tokenCounter: { countPreparedContext: async ({ messages, model }) => { visti.push(model.singleSlot); return { schema: 'talos.context.tokens.v1', inputTokens: Math.ceil(JSON.stringify(messages).length / 4), windowTokens: model.windowTokens, responseReserve: model.responseReserve, method: 'heuristic', exact: false, requestHash: createHash('sha256').update(JSON.stringify(messages)).digest('hex'), provider: model.provider, model: model.model }; } },
+    });
+    const runtime = await open();
+    await runtime.service.prepare({ sessionId: 'chat', messages: [{ role: 'user', content: 'Ciao' }], tools: [] });
+    assert.ok(visti.length >= 1);
+    assert.deepEqual([...new Set(visti)], [singleSlot ? true : undefined], `singleSlot=${singleSlot}`);
+  }
+});

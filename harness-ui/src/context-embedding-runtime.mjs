@@ -12,7 +12,7 @@ const MODEL = Object.freeze({
   files: [{ path: 'Qwen3-Embedding-0.6B-Q8_0.gguf', bytes: 639150592, sha256: '06507c7b42688469c4e7298b0a1e16deff06caf291cf0a5b278c308249c3e439' }],
 });
 const QUERY_INSTRUCTION = 'Given a conversation search query, retrieve relevant passages from the same conversation';
-const PROFILE = Object.freeze({ runtime: 'llama.cpp', runtimeVersion: 'b10517', runtimeCommit: 'dc72703fc69698b1ea68ece8d2dd8a96e6a4e1fe', dimensions: 1024, pooling: 'last', queryInstruction: QUERY_INSTRUCTION });
+const PROFILE = Object.freeze({ runtime: 'llama.cpp', runtimeVersion: 'b11669', runtimeCommit: '620d2225cc436ab0b001e3200e590e3b286ef9ab', dimensions: 1024, pooling: 'last', queryInstruction: QUERY_INSTRUCTION });
 const HEALTH_TIMEOUT = 30000;
 const REQUEST_TIMEOUT = 30000;
 const MAX_RESPONSE = 2 * 1024 * 1024;

@@ -1,6 +1,6 @@
 import { TESTI } from '../i18n/testi/index.js';
 import { descriviContextCompactor } from './context-compactor.js';
-import { t, interpola, linguaCorrenteDiT } from './lingua.js';
+import { t, tn, interpola, linguaCorrenteDiT } from './lingua.js';
 
 const ACTIVE = new Set(['queued', 'preparing', 'summarizing', 'validating', 'ready']);
 
@@ -146,10 +146,11 @@ export function aggiornaAvanzamentoContesto(container, snapshot, { onOpen, stale
   if (!view.visible) { row?.remove(); return; }
   const doc = container.ownerDocument, english = linguaCorrenteDiT() === 'en';
   if (!row || row.dataset.contextSession !== snapshot.sessionId) {
-    row?.remove(); row = doc.createElement('section'); row.className = 'talos-context-chat-progress';
+    /* B1 (owner 21/10/2026): non più un riquadro alto ma UNA riga nello stile della riga viva (`compattazione-legacy.css`), col filo
+       da 2 px in fondo e «Context Manager» come pulsante testuale. Il markup (stato, stima, pulsante, `<progress>`) resta lo stesso. */
+    row?.remove(); row = doc.createElement('section'); row.className = 'talos-riga-viva talos-riga-viva--contesto';
     row.dataset.contextChatProgress = ''; row.dataset.contextSession = snapshot.sessionId;
-    // Un solo figlio nella prima colonna della griglia (`minmax(0,1fr) auto`): lo stato e la
-    // stima stanno dentro lo stesso `span`, così il foglio di stile esistente resta intatto.
+    // lo stato e la stima stanno dentro lo stesso `span`: si accorcia lui, mai i pulsanti
     const testo = doc.createElement('span'); testo.dataset.contextChatText = '';
     const status = doc.createElement('span'); status.dataset.contextChatStatus = ''; status.setAttribute('role', 'status');
     // ⛔ La stima sta FUORI dal `role="status"`: quella è una live region (role=status implica
@@ -159,14 +160,17 @@ export function aggiornaAvanzamentoContesto(container, snapshot, { onOpen, stale
     //   Chi usa lo schermo la trova comunque: sfogliando la riga, e dentro `aria-valuetext`.
     const stima = doc.createElement('span'); stima.dataset.contextChatEta = ''; stima.setAttribute('aria-live', 'off');
     testo.append(status, stima);
-    const bar = doc.createElement('progress'); bar.className = 'talos-context__progress';
-    const button = doc.createElement('button'); button.type = 'button'; button.className = 'talos-button talos-button--ghost talos-button--sm'; button.textContent = t('chat.context.manager'); button.addEventListener('click', () => onOpen?.());
+    const bar = doc.createElement('progress'); bar.className = 'talos-riga-viva__barra';
+    const button = doc.createElement('button'); button.type = 'button'; button.className = 'talos-riga-viva__azione talos-riga-viva__azione--sola'; button.dataset.contextChatOpen = ''; button.addEventListener('click', () => onOpen?.());
     row.append(testo, button, bar); container.append(row);
   }
+  // il nome del pulsante si riscrive a ogni aggiornamento: dopo un cambio di lingua la riga si ridice al giro dopo del monitor
+  scriviSeCambia(row.querySelector('[data-context-chat-open]'), t('chat.context.manager'));
   row.dataset.contextJob = view.job.id; row.dataset.contextState = view.job.state;
   const bar = row.querySelector('progress'); bar.hidden = !view.active;
   const text = stale ? (t('chat.context.progress.reconnecting')) : view.label;
-  row.querySelector('[data-context-chat-status]').textContent = text;
+  // ⛔ una live region si riscrive solo se la frase CAMBIA: riscrivere lo stesso testo a ogni giro del monitor la rifarebbe parlare
+  scriviSeCambia(row.querySelector('[data-context-chat-status]'), text);
   bar.setAttribute('aria-label', t('chat.context.progress.barLabel'));
   // La stima compare solo nella fase che HA segmenti: su «Preparazione» o «Pubblicazione» un
   // «tempo non ancora stimabile» sarebbe rumore, ed è il periodo iniziale che Microsoft dice di
@@ -186,39 +190,189 @@ export function aggiornaAvanzamentoContesto(container, snapshot, { onOpen, stale
   return row;
 }
 
+
+/** Riscrive un testo solo se cambia: una live region riscritta con le stesse parole parlerebbe di nuovo. */
+function scriviSeCambia(nodo, testo) {
+  if (nodo && nodo.textContent !== testo) nodo.textContent = testo;
+}
+
 /*
- * ⭐ F5 (onda 2), 24/09/2026 — LA BARRA PER IL LEGACY. Stessa riga del trial (`.talos-context-chat-progress`),
- * ma senza segmenti da contare: il legacy fa UNA richiesta di riassunto e non sa quanto ci vuole, quindi la
- * barra è INDETERMINATA (MDN `<progress>`, 28/08/2026: «If there is no value attribute, the progress bar is
- * indeterminate») e senza stima del tempo (non c'è un campione da cui ricavarla — la disciplina qui sopra).
- * Etichetta FISSA e umana mentre lavora, come Hermes desktop (`status.tsx:52`, «Summarizing thread»),
- * non il testo grezzo del motore; altezza fissa via CSS (`compattazione-legacy.css`): mentre lavora non
- * cambia di un pixel, e a `fase:'fine'` sparisce (chi la chiama passa `null`).
- * Niente pulsante «Context Manager»: quel dialogo è del trial, e sul legacy non ha niente da mostrare.
+ * ⭐ B1 (owner 21/10/2026, mockup approvato alla terza versione: «troppo alto, quasi un wall of text» la prima) — LA RIGA VIVA DEL
+ *   RIASSUNTO. Prende il posto della barra legacy del 24/09 (F5, onda 2), con gli stessi attributi (`data-compattazione-barra`, la
+ *   sessione, il motivo: `app.js` li legge per spegnerla a fine giro) e la stessa barra indeterminata quando non c'è niente da contare.
+ *   UNA riga alta 30 px, senza riquadro: «Riassumo il contesto» poi «62% · ~1 min», a destra «Salta» e «Ferma», in fondo un filo da 2 px.
+ *   I numeri vengono SOLO da `talos.compattazione-progresso` (contratto §2): un campo che il motore non dà resta fuori dalla frase —
+ *   niente percento senza `letti`/`totale`, niente tempo senza `stimaRestanteSec` (la stessa disciplina della stima qui sopra).
+ *
+ * Ricerca del passo, letta il 21/10/2026:
+ *  · MDN role `status` (23/06/2025, già citato sopra): live region `polite` ⇒ dentro va solo la frase che cambia di rado (lo stato); il
+ *    percento e il tempo cambiano a ogni passo e stanno FUORI, con `aria-live="off"` come la stima del trial (precedente: role `timer`).
+ *  · MDN `<progress>` (28/08/2026): senza `value` la barra è indeterminata; con `value` porta `aria-valuetext` («62% · ~1 min»). Il
+ *    filo a DUE tratti (in cache / letti davvero) non è una barra sola: lo si disegna a parte, `aria-hidden`, e l'`<progress>` resta
+ *    sotto, trasparente, per chi usa lo schermo.
+ *  · MDN CSP `style-src` (ultima modifica 15/12/2025): «styles properties that are set directly on the element's style property will
+ *    not be blocked» ⇒ le larghezze dei due tratti passano da `style.setProperty` su due variabili CSS, come `range-scia.js`; mai un
+ *    attributo `style` (la CSP del server, `http-app.mjs:1050`, lo scarterebbe).
+ *  · MDN `color-mix()` (ultima modifica 28/09/2026, Baseline «widely available» da maggio 2023): binario e tratto tenue sono
+ *    `color-mix(in srgb, <token> N%, transparent)`, la forma del suo esempio «Adding transparency».
+ *  · WCAG 2.2 (W3C Recommendation, edizione del 12/12/2024), 2.5.3 «Label in Name»: il nome accessibile dei pulsanti CONTIENE la parola visibile («Skip the summary…» per «Skip»).
  */
-export function aggiornaAvanzamentoLegacy(container, stato, { sessionId, testo = null, inserisci = null, document: doc = container?.ownerDocument ?? globalThis.document } = {}) {
+const MINUTO_S = 60;
+/** I secondi rimasti in breve, come il mockup («~1 min», «~40 s»): passi di 5 s, mai «~0 s» e mai «~60 s». */
+export function stimaBreveRigaViva(secondi) {
+  if (!Number.isSafeInteger(secondi) || secondi < 1) return '';
+  const arrotondati = Math.max(5, Math.round(secondi / 5) * 5);
+  if (arrotondati < MINUTO_S) return t('chat.context.live.etaSeconds', { n: arrotondati });
+  return t('chat.context.live.etaMinutes', { n: Math.max(1, Math.round(secondi / MINUTO_S)) });
+}
+/** Il tempo trascorso in breve («3m 12s», in italiano «3 min 12 s»). */
+export function durataBreveRigaViva(ms) {
+  if (!Number.isSafeInteger(ms) || ms < 0) return '';
+  const tutti = Math.floor(ms / 1000);
+  if (tutti < MINUTO_S) return t('chat.context.live.durationSeconds', { s: tutti });
+  return t('chat.context.live.durationMinutes', { m: Math.floor(tutti / MINUTO_S), s: tutti % MINUTO_S });
+}
+const interoPositivo = (v) => Number.isSafeInteger(v) && v >= 0;
+const numeroLocale = (n) => new Intl.NumberFormat(linguaCorrenteDiT() === 'en' ? 'en-US' : 'it-IT').format(n);
+const MOTIVO_NEL_TITOLO = Object.freeze({ overflow: 'chat.context.progress.overflow', emergenza: 'chat.context.progress.emergency' });
+
+/**
+ * Che cosa dice la riga, senza il DOM. `stato` è un passo di `talos.compattazione-progresso` già letto
+ * (`interpretaEventoCompattazione`, tipo `progresso`) o l'inizio `{ fase:'inizio', motivo }`. Pura: si prova nei due versi.
+ */
+export function descriviRigaViva(stato) {
+  const s = stato && typeof stato === 'object' ? stato : {};
+  const totale = interoPositivo(s.totale) && s.totale > 0 ? s.totale : null;
+  const letti = totale !== null && interoPositivo(s.letti) ? Math.min(s.letti, totale) : null;
+  const determinato = letti !== null;
+  // la cache è una parte di ciò che è letto (llama.cpp `prompt_progress`: `cache` ≤ `processed`): un numero incoerente non sfora
+  const inCache = determinato && interoPositivo(s.inCache) ? Math.min(s.inCache, letti) : 0;
+  const percento = determinato ? Math.floor((letti * 100) / totale) : null;
+  const stima = stimaBreveRigaViva(s.stimaRestanteSec);
+
+  const dettaglio = [];
+  if (s.fase === 'riassunto') {
+    dettaglio.push(interoPositivo(s.tokenScritti)
+      ? tn('chat.context.live.writingOne', 'chat.context.live.writingMany', s.tokenScritti, { n: numeroLocale(s.tokenScritti) })
+      : t('chat.context.live.writingPlain'));
+  } else if (determinato) dettaglio.push(t('chat.context.live.percent', { n: percento }));
+  if (stima) dettaglio.push(stima);
+
+  const titolo = [];
+  if (Object.hasOwn(MOTIVO_NEL_TITOLO, s.motivo)) titolo.push(t(MOTIVO_NEL_TITOLO[s.motivo]));
+  if (totale !== null) {
+    // il plurale segue il numero (cancello LINGUA-7-04); la cache è un pezzo a parte, dopo una virgola
+    const daLeggere = tn('chat.context.live.tipToReadOne', 'chat.context.live.tipToReadMany', totale, { n: numeroLocale(totale) });
+    titolo.push(inCache > 0 ? `${daLeggere}, ${t('chat.context.live.tipCached', { c: numeroLocale(inCache) })}` : daLeggere);
+  }
+  const trascorso = durataBreveRigaViva(s.trascorsoMs);
+  if (trascorso) titolo.push(t('chat.context.live.tipElapsed', { t: trascorso }));
+  if (interoPositivo(s.tentativo) && s.tentativo > 0) {
+    titolo.push(interoPositivo(s.tentativi) && s.tentativi >= s.tentativo
+      ? t('chat.context.live.tipAttemptOf', { n: s.tentativo, m: s.tentativi })
+      : t('chat.context.live.tipAttempt', { n: s.tentativo }));
+  }
+
+  return {
+    etichetta: t('chat.context.live.summarizing'),
+    dettaglio: dettaglio.join(' · '),
+    titolo: titolo.join(' · '),
+    determinato,
+    letti, totale,
+    // le due larghezze del filo, in percento della riga: la cache tenue, poi ciò che è stato letto davvero
+    tratti: determinato ? { cache: (inCache * 100) / totale, letto: ((letti - inCache) * 100) / totale } : null,
+    valoreTesto: determinato ? [t('chat.context.live.percent', { n: percento }), stima].filter(Boolean).join(' · ') : '',
+  };
+}
+
+const percentoCss = (x) => `${Math.round(Math.min(100, Math.max(0, x)) * 100) / 100}%`;
+
+/** Disegna lo stato nella riga già montata. Separata dal montaggio: la usa anche il ridisegno al cambio di lingua. */
+function disegnaRigaViva(row, stato) {
+  const vista = descriviRigaViva(stato);
+  const opzioni = row._rigaViva ?? {};
+  row.dataset.contextState = 'summarizing';
+  if (typeof stato?.motivo === 'string') row.dataset.compattazioneMotivo = stato.motivo;
+  else if (row.dataset.compattazioneMotivo === undefined) row.dataset.compattazioneMotivo = '';
+  if (typeof stato?.fase === 'string' && stato.fase) row.dataset.compattazioneFase = stato.fase;
+  scriviSeCambia(row.querySelector('[data-context-chat-status]'), vista.etichetta);
+  scriviSeCambia(row.querySelector('[data-context-chat-eta]'), vista.dettaglio);
+  if (vista.titolo) { if (row.title !== vista.titolo) row.title = vista.titolo; } else row.removeAttribute('title');
+
+  const salta = row.querySelector('[data-riga-viva="salta"]'), ferma = row.querySelector('[data-riga-viva="ferma"]');
+  scriviSeCambia(salta, t('chat.context.live.skip')); salta.setAttribute('aria-label', t('chat.context.live.skipLabel'));
+  scriviSeCambia(ferma, t('chat.context.live.stop')); ferma.setAttribute('aria-label', t('chat.context.live.stopLabel'));
+  salta.hidden = typeof opzioni.onSalta !== 'function';
+  ferma.hidden = typeof opzioni.onFerma !== 'function';
+  row.querySelector('[data-riga-viva-azioni]').hidden = salta.hidden && ferma.hidden;
+
+  const bar = row.querySelector('progress'), filo = row.querySelector('[data-riga-viva-filo]');
+  bar.hidden = false;
+  bar.setAttribute('aria-label', t('chat.context.summaryInProgress'));
+  if (vista.determinato) {
+    bar.setAttribute('max', String(vista.totale)); bar.setAttribute('value', String(vista.letti));
+    bar.setAttribute('aria-valuetext', vista.valoreTesto);
+    row.dataset.rigaVivaTratti = '';
+    filo.hidden = false;
+    filo.style.setProperty('--talos-riga-viva-cache', percentoCss(vista.tratti.cache));
+    filo.style.setProperty('--talos-riga-viva-letto', percentoCss(vista.tratti.letto));
+  } else {
+    // indeterminata (MDN `<progress>`: senza `value`), e il filo a due tratti non si mostra: niente da dividere
+    bar.removeAttribute('value'); bar.removeAttribute('max'); bar.removeAttribute('aria-valuetext');
+    delete row.dataset.rigaVivaTratti;
+    filo.hidden = true;
+  }
+}
+
+/**
+ * La riga viva del riassunto atteso. `stato` nullo la toglie (a `fase:'fine'`, o a fine giro). `onSalta()` (torna una promessa con
+ * `{ saltato }`) e `onFerma()` accendono i due pulsanti: senza, la riga resta senza azioni (la compattazione chiesta a mano, fuori da
+ * un giro, non ha un giro da fermare). Ogni passo SOSTITUISCE il precedente: i campi assenti tornano assenti, non restano vecchi.
+ */
+export function aggiornaAvanzamentoLegacy(container, stato, { sessionId, inserisci = null, onSalta = null, onFerma = null, document: doc = container?.ownerDocument ?? globalThis.document } = {}) {
   if (!container || !sessionId) return null;
-  // ⛔ Attributo SUO, non `data-context-chat-progress`: `aggiornaAvanzamentoContesto` qui sopra (:142-143) cerca
-  //   quell'attributo e lo RIMUOVE quando il trial non ha niente da mostrare — cioè a ogni `CTX_NOT_ENABLED`
-  //   del monitor, con un tempo che dipende dalla rete. Misurato sulla 4176: barra sparita in 2 corse su 3.
+  // ⛔ Attributo SUO, non `data-context-chat-progress`: `aggiornaAvanzamentoContesto` qui sopra cerca quell'attributo e lo RIMUOVE
+  //   quando il trial non ha niente da mostrare — cioè a ogni `CTX_NOT_ENABLED` del monitor (24/09: barra sparita in 2 corse su 3).
   let row = container.querySelector('[data-compattazione-barra]');
   if (!stato) { row?.remove(); return null; }
   if (!row || row.dataset.contextSession !== sessionId) {
     row?.remove();
-    row = doc.createElement('section'); row.className = 'talos-context-chat-progress talos-context-chat-progress--legacy';
+    row = doc.createElement('section'); row.className = 'talos-riga-viva talos-riga-viva--riassunto';
     row.dataset.compattazioneBarra = ''; row.dataset.compattazioneLegacy = ''; row.dataset.contextSession = sessionId;
-    const span = doc.createElement('span'); span.dataset.contextChatText = '';
+    const testo = doc.createElement('span'); testo.dataset.contextChatText = '';
     const status = doc.createElement('span'); status.dataset.contextChatStatus = ''; status.setAttribute('role', 'status');
-    span.append(status);
-    const bar = doc.createElement('progress'); bar.className = 'talos-context__progress';
-    row.append(span, bar);
+    const dettaglio = doc.createElement('span'); dettaglio.dataset.contextChatEta = ''; dettaglio.setAttribute('aria-live', 'off');
+    testo.append(status, dettaglio);
+    const azioni = doc.createElement('span'); azioni.className = 'talos-riga-viva__azioni'; azioni.dataset.rigaVivaAzioni = '';
+    const salta = doc.createElement('button'); salta.type = 'button'; salta.className = 'talos-riga-viva__azione talos-riga-viva__azione--forte'; salta.dataset.rigaViva = 'salta';
+    const ferma = doc.createElement('button'); ferma.type = 'button'; ferma.className = 'talos-riga-viva__azione'; ferma.dataset.rigaViva = 'ferma';
+    azioni.append(salta, ferma);
+    salta.addEventListener('click', () => {
+      const chiama = row._rigaViva?.onSalta;
+      if (typeof chiama !== 'function' || salta.disabled) return;
+      // una POST sola anche a clic ravvicinati; se il server dice che non c'era niente da saltare, il pulsante torna
+      salta.disabled = true;
+      Promise.resolve().then(() => chiama()).then((esito) => { if (esito?.saltato !== true) salta.disabled = false; }, () => { salta.disabled = false; });
+    });
+    ferma.addEventListener('click', () => { const chiama = row._rigaViva?.onFerma; if (typeof chiama === 'function') chiama(); });
+    const bar = doc.createElement('progress'); bar.className = 'talos-riga-viva__barra';
+    const filo = doc.createElement('span'); filo.className = 'talos-riga-viva__filo'; filo.dataset.rigaVivaFilo = ''; filo.setAttribute('aria-hidden', 'true');
+    const cache = doc.createElement('span'); cache.dataset.tratto = 'cache';
+    const letto = doc.createElement('span'); letto.dataset.tratto = 'letto';
+    filo.append(cache, letto);
+    row.append(testo, azioni, bar, filo);
     // `inserisci` decide dove va (dentro il turno aperto, o in coda): una riga appesa alla colonna a metà turno spezza il turno TALOS
     if (typeof inserisci === 'function') inserisci(row); else container.append(row);
   }
-  row.dataset.contextState = 'summarizing'; row.dataset.compattazioneMotivo = stato.motivo ?? '';
-  row.querySelector('[data-context-chat-status]').textContent = testo ?? (t('chat.context.summarizing'));
-  const bar = row.querySelector('progress');
-  bar.hidden = false; bar.removeAttribute('value'); bar.removeAttribute('aria-valuetext');
-  bar.setAttribute('aria-label', t('chat.context.summaryInProgress'));
+  row._rigaViva = { stato, onSalta: typeof onSalta === 'function' ? onSalta : null, onFerma: typeof onFerma === 'function' ? onFerma : null };
+  disegnaRigaViva(row, stato);
   return row;
+}
+
+/** Al cambio di lingua: la riga viva (se c'è) si ridice con l'ultimo passo che ha ricevuto, senza aspettare il passo dopo. */
+export function ridisegnaRigaVivaNellaLingua(container) {
+  const row = container?.querySelector?.('[data-compattazione-barra]');
+  if (!row?._rigaViva?.stato) return false;
+  disegnaRigaViva(row, row._rigaViva.stato);
+  return true;
 }

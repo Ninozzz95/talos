@@ -1,0 +1,86 @@
+# 18/10/2026 — il binding Node di iroh per il controllo remoto (Windows x64), compilato da NOI (owner: «Compilato nella nostra CI»).
+#
+# Perché: `@number0/iroh` 1.1.0 su npm porta rustls 0.23.42, colpito da RUSTSEC-2026-0285 (corretto da 0.23.45). Qui si compila
+# iroh-ffi allo STESSO commit del pacchetto npm (tag v1.1.0) con il NOSTRO Cargo.lock (rustls 0.23.46), come la sessione mobile fa
+# per Android. Il lock e il controllo stanno in harness-ui/native/iroh/.
+# I passi sono quelli della CI ufficiale di iroh-ffi (.github/workflows/ci_js.yml, job «build», host windows-latest: `yarn install`,
+# `yarn build`), letti il 18/10/2026, con le azioni fissate a commit come nel resto del repo.
+# ⛔ Le Actions del repo privato non partono (fatturazione dell'account, misurato il 18/10): questo workflow gira sul pubblico.
+name: iroh-binding
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'harness-ui/native/iroh/**'
+      - '.github/workflows/iroh-binding.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  win32-x64:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write # actions/attest v4 lo richiede (come release.yml:41-45)
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: n0-computer/iroh-ffi
+          ref: 5e451092dba0c1a09ee83ff6e5be37b1152a5c58 # tag v1.1.0, lo stesso del pacchetto npm
+          path: iroh-ffi
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+      - name: Il nostro Cargo.lock, e il suo controllo
+        shell: bash
+        run: |
+          cp harness-ui/native/iroh/Cargo.lock iroh-ffi/Cargo.lock
+          node harness-ui/native/iroh/controlla-lock.mjs iroh-ffi/Cargo.lock
+      - name: Rust
+        shell: bash
+        run: |
+          rustup toolchain install 1.97.1 --profile minimal --target x86_64-pc-windows-msvc
+          rustup default 1.97.1
+      - name: Il lock è coerente col codice (niente aggiornamenti in silenzio)
+        shell: bash
+        working-directory: iroh-ffi
+        run: cargo metadata --locked --format-version 1 > /dev/null
+      - name: Compila
+        shell: bash
+        working-directory: iroh-ffi/iroh-js
+        run: |
+          npm install -g corepack --force
+          corepack enable
+          yarn install
+          yarn build --target x86_64-pc-windows-msvc
+      - name: Prova senza rete (un endpoint solo diretto, poi chiuso)
+        shell: bash
+        working-directory: iroh-ffi/iroh-js
+        run: |
+          node -e "const i=require('./index.js');(async()=>{const b=i.Endpoint.builder();i.presetMinimal(b);b.relayMode(i.RelayMode.disabled());const e=await b.bind();console.log('endpoint',e.id().toString());await e.close();})().catch(e=>{console.error(e);process.exit(1)})"
+      - name: Impronta
+        shell: bash
+        working-directory: iroh-ffi/iroh-js
+        run: |
+          ls -l iroh.win32-x64-msvc.node
+          sha256sum iroh.win32-x64-msvc.node | tee iroh.win32-x64-msvc.node.sha256
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-path: iroh-ffi/iroh-js/iroh.win32-x64-msvc.node
+      - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: iroh-win32-x64-msvc
+          path: |
+            iroh-ffi/iroh-js/iroh.win32-x64-msvc.node
+            iroh-ffi/iroh-js/iroh.win32-x64-msvc.node.sha256
+          if-no-files-found: error

@@ -188,6 +188,11 @@ const TABELLA = [
   ['GOAL_CONTRACT_INVALID', 'criterion-id-not-allowed', 'Un criterio nuovo non può scegliere il suo identificatore', 'A new criterion cannot choose its identifier'],
   ['GOAL_CONTRACT_NEEDS_CONFIRMATION', 'goal-contract-change-needs-confirmation', 'Togliere o cambiare criteri dell’obiettivo vuole la tua conferma', 'Removing or changing criteria of the goal needs your confirmation'],
   ['SESSION_STORE_WRITE_FAILED', 'goal-not-saved', 'L’obiettivo non è stato salvato: non è cambiato niente. Riprova dopo aver controllato il disco.', 'The goal was not saved: nothing changed. Try again after checking the disk.'],
+  // R5.11 (18/10/2026): «Annulla le modifiche ai file»
+  ['SESSION_NOT_READY', 'undo-off', 'Qui non si possono annullare le modifiche ai file.', 'Undoing file changes is not available here.'],
+  ['SESSION_NOT_READY', 'undo-while-working', 'Una conversazione sta lavorando in questa cartella: annulla quando ha finito.', 'A conversation is working in this folder: undo when it has finished.'],
+  // R5.8 (18/10/2026): prova e riconnessione di un server MCP
+  ['SESSION_NOT_READY', 'mcp-not-trusted', 'Questo server MCP non è ancora fidato: rendilo fidato dal computer.', 'This MCP server is not trusted yet: trust it from the computer first.'],
 ];
 const NUOVE = new Set(['fork-not-saved', 'fork-point-compacted', 'fork-point-not-found', 'permission-answer-outside-chain',
   // automazioni a due porte (08/10/2026): nate in inglese, senza un italiano «di prima»
@@ -202,7 +207,11 @@ const NUOVE = new Set(['fork-not-saved', 'fork-point-compacted', 'fork-point-not
   'goal-text-empty', 'goal-text-too-long', 'goal-not-set', 'goal-not-active', 'goal-cap-reached',
   'goal-already-done', 'goal-on-sub-agent', 'goal-on-workflow-step', 'goal-not-saved',
   // OB-REV-01 (15/10/2026)
-  'goal-not-in-this-host', 'goal-nobody-in-front']);
+  'goal-not-in-this-host', 'goal-nobody-in-front',
+  // R5.11 (18/10/2026): «Annulla le modifiche ai file»
+  'undo-off', 'undo-while-working',
+  // R5.8 (18/10/2026): prova e riconnessione di un server MCP
+  'mcp-not-trusted']);
 const chiaveDizionario = (code, reason) => `${code}.${reason.replace(/-/gu, '_')}`;
 const voce = (chiave, lingua) => AREE.errori[lingua][chiave];
 

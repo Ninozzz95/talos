@@ -1,5 +1,5 @@
 import { etichettaSeparatoreContesto } from './context-separator.js';
-import { interpretaEventoCompattazione, testoRigaCompattazione } from './compattazione-legacy.js';
+import { fineMuta, interpretaEventoCompattazione, testoRigaCompattazione } from './compattazione-legacy.js';
 import { EVENTO_MCP_AVVIO, motivoMcp, nuoviServerNonPartiti } from './avviso-mcp.js';
 import { t } from './lingua.js';
 import { suUnaRiga } from './testo-a-schermo.js';
@@ -63,9 +63,10 @@ export function trascriviEventoInterno(evento, contesto = creaContestoTrascrizio
     const c = interpretaEventoCompattazione(evento);
     if (!c) return null;
     if (c.tipo === 'inizio') return { omesso: true }; // in chat è la barra «Riassumo…» che sparisce: la riga vera è la fine
+    if (fineMuta(c)) return { omesso: true }; // (6) 21/10: un riassunto di sfondo che ha ceduto il posto non si racconta
     if (c.tipo === 'fine') {
       return { testo: c.compattato
-        ? testoRigaCompattazione({ stato: 'riassunta', tokenPrima: c.tokenPrima, tokenDopo: c.tokenDopo })
+        ? testoRigaCompattazione({ stato: 'riassunta', tokenPrima: c.tokenPrima, tokenDopo: c.tokenDopo, ripiego: c.ripiego === true, ragione: c.ragione ?? null })
         : testoRigaCompattazione({ stato: 'non-riuscita', motivo: c.motivo, dettaglio: c.dettaglio }) };
     }
     if (c.tipo === 'annullata') return { testo: testoRigaCompattazione({ stato: 'annullata' }) };

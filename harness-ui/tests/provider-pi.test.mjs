@@ -37,7 +37,7 @@ async function ascolta(t, handler) {
 }
 
 test('PI-01 — ventitré record, tre contratti internazionali completi, chiavi e modelli distinti', () => {
-  assert.equal(ID_FORNITORI.length, 30 /* 12/09, review: P-J zai-anthropic, minimax-anthropic; P-K azure, bedrock, vertex; P-L esterno; 11/10/2026: chatgpt (piano) */);
+  assert.equal(ID_FORNITORI.length, 31 /* 12/09, review: P-J zai-anthropic, minimax-anthropic; P-K azure, bedrock, vertex; P-L esterno; 11/10/2026: chatgpt (piano); 18/10/2026: locale-ospite */);
   for (const [id, [nome, base, variabile, catalogo, ausiliario]] of Object.entries(ATTESI)) {
     const r = REGISTRO_FORNITORI[id];
     assert.ok(r, id);
@@ -143,7 +143,9 @@ test('PI-04 — Kimi K2: temperatura del server, thinking, strumenti e isolament
   assert.equal(r.corpo.temperature, undefined);
   assert.deepEqual(r.corpo.thinking, { type: 'disabled' });
   assert.equal(r.corpo.reasoning, undefined);
-  assert.equal(r.corpo.max_tokens, 16);
+  // 21/10/2026: `max_tokens` «Deprecated, please refer to max_completion_tokens» (platform.kimi.ai/docs/api/chat)
+  assert.equal(r.corpo.max_completion_tokens, 16);
+  assert.equal(Object.hasOwn(r.corpo, 'max_tokens'), false);
   assert.deepEqual(r.corpo.stream_options, origine.stream_options);
   assert.ok(r.avvisi.length);
   assert.deepEqual(origine, copia);
@@ -158,18 +160,24 @@ test('PI-04 — Kimi K2: temperatura del server, thinking, strumenti e isolament
     assert.throws(() => prepara('kimi', model, { tool_choice: { type: 'function', function: { name: 'ora' } } }), { code: 'RUNTIME_INVALID' });
   }
   assert.doesNotThrow(() => prepara('kimi', 'kimi-k2.6', { thinking: { type: 'disabled' }, tool_choice: { type: 'function', function: { name: 'ora' } } }));
-  const k3 = { model: 'kimi-k3', reasoning_effort: 'max', temperature: 1 };
-  assert.deepEqual(preparaRichiestaCompatibile('kimi', k3), { corpo: k3, avvisi: [], note: [] });
+  // 21/10/2026: kimi-k3 è nel profilo (ragiona sempre, solo reasoning_effort): la sua forma sta in fornitori-kimi-21-10; qui l'isolamento da K2
+  const k3 = preparaRichiestaCompatibile('kimi', { model: 'kimi-k3', reasoning_effort: 'max', temperature: 1 });
+  assert.equal(k3.corpo.reasoning_effort, 'max');
+  assert.equal(Object.hasOwn(k3.corpo, 'thinking'), false);
+  assert.equal(Object.hasOwn(k3.corpo, 'temperature'), false);
 });
 
-test('PI-05 — MiniMax: M3 adaptive/disabled, M2.7 sempre attivo, nessuno split implicito', () => {
+test('PI-05 — MiniMax: M3 adaptive/disabled, M2.7 sempre attivo, reasoning_split sempre (docs 21/10)', () => {
   assert.deepEqual(prepara('minimax', 'MiniMax-M3', { reasoning: { enabled: true } }).corpo.thinking, { type: 'adaptive' });
   const r = prepara('minimax', 'MiniMax-M3', { extra_body: { thinking: { type: 'disabled' } }, temperature: 0, max_tokens: 18, tool_choice: 'auto' });
   assert.deepEqual(r.corpo.thinking, { type: 'disabled' });
   assert.equal(r.corpo.extra_body, undefined);
-  assert.equal(r.corpo.temperature, 0);
-  assert.equal(r.corpo.max_tokens, 18);
-  assert.equal(r.corpo.reasoning_split, undefined);
+  /* 21/10/2026, platform.minimax.io/docs/api-reference/text-openai-api: temperature «Not supported yet» (M3: sempre 1) ⇒ non si manda,
+     e si dice; `max_tokens` «Legacy» ⇒ max_completion_tokens; `reasoning_split:false` lascia il ragionamento in `content` fra `<think>`
+     (e M3.1-Flash non lo accetta) ⇒ sempre true, come Hermes `minimax/__init__.py:27-36`. Prima (12/09) qui c'era «nessuno split». */
+  assert.equal(Object.hasOwn(r.corpo, 'temperature'), false);
+  assert.equal(r.corpo.max_completion_tokens, 18);
+  assert.equal(r.corpo.reasoning_split, true);
   const fisso = prepara('minimax', 'MiniMax-M2.7', { thinking: { type: 'disabled' } });
   assert.notEqual(fisso.corpo.thinking?.type, 'disabled');
   assert.ok(fisso.note.length, 'BUG-18: M2.7 non si spegne, si dice in nota');
@@ -205,11 +213,18 @@ test('PI-REG-CONFLITTI e PI-REG-ISOLAMENTO — opzioni malformate/discordanti re
     assert.equal(r.corpo.reasoning_effort, undefined);
     assert.ok(r.note.length, 'BUG-18: livello trasformato in controllo binario dichiarato in nota');
     assert.deepEqual(r.avvisi, []);
+    /* 21/10/2026 (revisione K1): un modello che il profilo non elenca riceve comunque le cure del FORNITORE (parametri fissi), e
+       l'involucro di OpenRouter, che nessuno di questi documenta, non parte: lo si dice. Il resto del corpo resta com'è. */
     const sconosciuto = { model: 'modello-futuro', temperature: 0.2, reasoning: { effort: 'high' }, tool_choice: 'required' };
-    assert.deepEqual(preparaRichiestaCompatibile(id, sconosciuto), { corpo: sconosciuto, avvisi: [], note: [] });
+    const copiaSconosciuto = structuredClone(sconosciuto);
+    const esitoSconosciuto = preparaRichiestaCompatibile(id, sconosciuto);
+    const { reasoning: _r, ...senzaInvolucro } = sconosciuto;
+    assert.deepEqual(esitoSconosciuto.corpo, { ...senzaInvolucro, ...(REGISTRO_FORNITORI[id].richiestaCompatibile.parametriFissi ?? {}) }, id);
+    assert.equal(esitoSconosciuto.note.length, 1, id);
+    assert.deepEqual(sconosciuto, copiaSconosciuto, 'il corpo del chiamante non cambia');
   }
   assert.throws(() => prepara('qwen', 'qwen-flash', { enable_thinking: false, extra_body: { enable_thinking: true } }), { code: 'RUNTIME_INVALID' });
-  for (const id of ['deepseek', 'openrouter', 'novita']) {
+  for (const id of ['openrouter']) { // deepseek e novita: 21/10 forma propria, fornitori-deepseek-21-10 e fornitori-formati-ragionamento-21-10
     const corpo = { model: 'kimi-k2.6', temperature: 0.2, reasoning_effort: 'high', tool_choice: 'required' };
     assert.deepEqual(preparaRichiestaCompatibile(id, corpo), { corpo, avvisi: [], note: [] });
   }

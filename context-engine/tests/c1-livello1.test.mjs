@@ -53,7 +53,7 @@ test('C1-L1-PURE: old long outputs become signature + pointer; recent outputs, s
   const primaChiamata = messages.find((m) => m.tool_calls)?.tool_calls[0].function.arguments;
   assert.doesNotThrow(() => JSON.parse(primaChiamata), 'shortened arguments stay valid JSON');
   assert.ok(primaChiamata.length < 400 && /characters cleared to save context/u.test(primaChiamata));
-  assert.ok(messages[2].reasoning_content.length <= 301, 'old reasoning shortened');
+  assert.equal(Object.hasOwn(messages[2], 'reasoning_content'), false, 'old reasoning removed, never shortened (Z-2, 21/10/2026)');
   assert.equal(messages.at(-3).reasoning_content, messaggi.at(-3).reasoning_content, 'recent reasoning untouched');
 });
 

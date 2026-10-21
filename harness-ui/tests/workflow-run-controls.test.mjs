@@ -18,6 +18,7 @@ import { TaskCatalogError } from '../src/task-catalog.mjs';
 import { createWorkflowOrchestrator } from '../src/workflow-orchestrator.mjs';
 import { createAgentSessionAdapter } from '../src/workflow/adapters/agent-session.mjs';
 import { creaOnWorkflowFn } from '../src/workflow/per-il-modello.mjs';
+import { projectWorkflowOverview } from '../src/workflow/read-model.mjs';
 import { approveWorkflowProposal, proposeWorkflowFromTool } from '../src/workflow/planning-control.mjs';
 import { resolveNodeCommandHash, runControlCommandHash, startWorkflowRun } from '../src/workflow/run-control.mjs';
 import { reserveBudget } from '../src/workflow/budget.mjs';
@@ -1159,6 +1160,13 @@ test('C3-17 RAISE-CEILING: an overrun asks for attention; the preview says what 
   let { eventi, stato } = await b.stato();
   assert.deepEqual(stato.run.needsAttentionReasons, ['budget_overrun']);
   assert.equal(stato.nodes.get('dopo').state, 'ready', 'the step that waited for «uno» is ready, and does not start');
+  /* 21/10/2026 (visto dal vivo: «Run budget limit reached» senza dire QUALE limite): la panoramica lo dice, col tetto di adesso */
+  const sforato = projectWorkflowOverview({ state: stato }).budgetOverrun;
+  assert.ok(sforato, 'the overview says which limit ran out');
+  assert.deepEqual(sforato.dimensions.map((voce) => voce.name), ['promptTokens']);
+  assert.equal(sforato.dimensions[0].spent, stato.budget.spent.promptTokens);
+  assert.equal(sforato.dimensions[0].limit, stato.definition.budgets.promptTokens);
+  assert.equal(sforato.source, 'settled', 'a step spent more than its reserve: the run may still be under its own ceiling');
   assert.equal(b.giri.quanti, 4);
 
   const anteprima = await p.orchestrator.ceilingPreview({ runId: b.runId });
@@ -1186,6 +1194,7 @@ test('C3-17 RAISE-CEILING: an overrun asks for attention; the preview says what 
   assert.deepEqual(fatto.payload, { reason: 'user', amount: anteprima.amount });
   assert.ok(eventi.findIndex((evento) => evento.type === 'run_resumed') > eventi.indexOf(fatto), 'then the run goes on by itself');
   assert.equal(stato.budget.ceilingRaise.promptTokens, anteprima.amount.promptTokens, 'raised by exactly what was said');
+  assert.equal(Object.hasOwn(projectWorkflowOverview({ state: stato }), 'budgetOverrun'), false, 'after the raise the overrun is gone');
   assert.equal((await alzaIlTetto(p, b.runId, anteprima.amount, comando)).deduplicated, true, 'the same command is a repeat');
   await assert.rejects(() => alzaIlTetto(p, b.runId, { ...anteprima.amount, toolCalls: 1 }, comando), { code: 'WORKFLOW_COMMAND_CONFLICT' });
 
@@ -1252,6 +1261,13 @@ test('C3-18 CEILING-AT-ADMISSION: a step that no longer fits the run ceiling ask
   const segnale = eventi.findLast((evento) => evento.type === 'budget_overrun_observed');
   assert.deepEqual([segnale.nodeId, segnale.payload.source, segnale.payload.reservationId, segnale.payload.dimensions], ['dopo', 'admission', null, ['promptTokens']]);
   assert.ok(segnale.payload.observed.promptTokens > stato.definition.budgets.promptTokens + stato.budget.ceilingRaise.promptTokens, 'what it would reach');
+  /* 21/10/2026: all'ammissione la panoramica dice anche quanto serviva, e il tetto di adesso con l'aumento già concesso */
+  const sforato = projectWorkflowOverview({ state: stato }).budgetOverrun;
+  assert.equal(sforato.source, 'admission');
+  assert.deepEqual(sforato.dimensions.map((voce) => voce.name), ['promptTokens']);
+  assert.equal(sforato.dimensions[0].limit, stato.definition.budgets.promptTokens + stato.budget.ceilingRaise.promptTokens);
+  assert.equal(sforato.dimensions[0].needed, segnale.payload.observed.promptTokens);
+  assert.ok(sforato.dimensions[0].needed > sforato.dimensions[0].limit);
   validateWorkflowEvent(segnale);
   assert.equal(b.giri.quanti, 5, 'the retry did not start');
   assert.deepEqual(p.errori, [], 'no silent error any more');

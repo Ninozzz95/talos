@@ -622,6 +622,7 @@ export const SEZIONI_IMPOSTAZIONI = [
   { "id": "tools", "gruppo": "comportamento" },
   { "id": "memoria", "gruppo": "comportamento" },
   { "id": "privacy", "gruppo": "comportamento" },
+  { "id": "telefoni", "gruppo": "comportamento" }, // 18/10/2026: il controllo remoto (owner 17/10: dopo «Sicurezza e privacy»)
   { "id": "models", "gruppo": "infrastruttura" },
   { "id": "costi", "gruppo": "infrastruttura" },
   { "id": "workspace", "gruppo": "infrastruttura" },

@@ -51,6 +51,7 @@ import { argomentiVuoti } from './argomenti-vuoti.mjs';
  * l'accumulo è un costo di spazio disco, non un difetto di correttezza.
  */
 import { randomUUID } from 'node:crypto';
+import { provaUnServerMcp } from './mcp-session.mjs'; // R5.8 (18/10/2026): prova e riconnessione di un server MCP
 import { canonicalHash } from './workflow/canonical-json.mjs'; // G02-6: la firma di un avvio idempotente (RFC 8785)
 import { realpath } from 'node:fs/promises';
 import { realpathSync } from 'node:fs'; // G3-REV-17: la chiave di una cartella è il suo percorso vero
@@ -252,6 +253,16 @@ export function fonteLocaleDelRuntime(runtimeId) {
  *
  * @returns {string|null}
  */
+/**
+ * Il ragionamento del riassunto in sottofondo (L1, 20/10/2026). La fonte dal PREFISSO dell'id, non da `voce.provider`: la sessione
+ * e00ae242 aveva `cloud` con un id `local:…`. Sul nostro motore (`local:`) il riassunto chiede il ragionamento spento; un motore
+ * locale che NON è il nostro (Ollama, LM Studio) resta com'era prima, senza campo (revisione del 20/10, S5).
+ */
+export function reasoningDelRiassuntoDiSfondo(voce, perRete) {
+  const altroMotoreLocale = voce?.provider === 'local' && !(typeof perRete === 'string' && perRete.startsWith('local:'));
+  return compattazione.reasoningPerRiassunto(altroMotoreLocale ? null : voce?.reasoning, { modello: perRete });
+}
+
 export function modelloDiSessionePerRete(voce) {
   if (!voce) return null;
   /* ⛔ BC-76 (17/09): il prefisso non è più la costante `local:` — una sessione avviata su Ollama
@@ -449,6 +460,9 @@ export const EVENTO_SFONDO_ADOTTATO = 'talos.sfondo-adottato';
 export const EVENTO_SFONDO_PERSO = 'talos.sfondo-perso';
 import { leggiImpronte as leggiImpronteReale, esisteProcesso as esisteProcessoReale, esisteGruppo as esisteGruppoReale, fermaAlberoWindows, segnalaProcesso, leggiAlbero as leggiAlberoReale } from './impronta-processo.mjs'; // owner 17/10: gli orfani in sottofondo, adottati come Hermes
 import { leggiParametriElenco, leggiValoreFiltro, paginaDa, testoElenco, confrontaChiavi } from './elenco-paginato.mjs'; // C5: il contratto degli elenchi
+import { FONTE_LOCALE_OSPITE } from './accesso-locale-ospite.mjs'; // 19/10/2026: il modello locale del telefono vede solo gli essenziali
+/** Il fornitore per cui il ponte degli attrezzi differiti resta spento (owner 21/10/2026, banco C5 sotto soglia): Gemini diretto. */
+const FORNITORE_SENZA_PONTE = 'gemini';
 
 export const EXPORT_SCHEMA = 'talos.harness-ui.session-export.v1';
 
@@ -473,6 +487,10 @@ const ATTREZZI_NEGATI_AI_PASSI = new Set([
   'provider_exclusions_list', 'provider_exclude', 'provider_allow', 'chatgpt_account', // 11/10/2026: l'accesso col piano ChatGPT
   // /goal G6: un passo non tocca l'obiettivo della conversazione (difesa in profondità: il registro già non lo offre)
   'goal_status', 'goal_create', 'goal_update',
+  // R5.11: un passo non annulla le modifiche ai file della conversazione (difesa in profondità: il registro già non lo offre)
+  'file_changes_undo',
+  // R5.12: un passo non tocca i telefoni collegati (difesa in profondità: il registro già non li offre)
+  'remote_phones', 'remote_phone_pair', 'remote_phone_revoke',
 ]);
 const UUID_LEGAME = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 const NODO_LEGAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u;
@@ -1114,6 +1132,20 @@ export function raccontoDelComando({ comando, codice, testo }) {
     + `<bash-exit>${codice ?? '?'}</bash-exit>`;
 }
 
+/* 21/10/2026 (sveglia del telefono): inizio e fine dell'ULTIMO giro ricostruiti dal disco al ripristino. Dal 15/10/2026 gli eventi
+   RunStarted/RunFinished/RunError persistiti portano `timestamp` (ms); un evento senza (file più vecchio) lascia null, mai un
+   istante inventato. Al vivo li scrive `consegnaEvento`. */
+function istantiDellUltimoGiro(eventi = []) {
+  let inizio = null; let fine = null; let aperto = false;
+  for (const e of eventi) {
+    if (!Number.isFinite(e?.timestamp)) continue;
+    if (e.type === 'RunStarted') { inizio = e.timestamp; aperto = true; }
+    else if ((e.type === 'RunFinished' || e.type === 'RunError') && aperto) { fine = e.timestamp; aperto = false; } // come dal vivo
+  }
+  const iso = (ms) => (ms === null ? null : new Date(ms).toISOString());
+  // il giro interrotto da un crash NON resta aperto: un avviso dopo il riavvio non lo «chiude» (lo riapre solo un RunStarted)
+  return { inizioGiroAlle: iso(inizio), fineGiroAlle: iso(fine) };
+}
 const MOTIVO_SENZA_ISTANTI = "no instant observed: the saved events carry no time, so the time is known only for a session followed live by this process";
 const MOTIVO_ANCORA_IN_CORSO = "the process has not reported an outcome yet: the final duration does not exist yet";
 const MOTIVO_FINE_NON_OSSERVATA = "the outcome arrived without its instant being observed (session resumed midway)";
@@ -2480,6 +2512,10 @@ export const STRUMENTI_ESTESI_PREDEFINITI = Object.freeze([
   'provider_exclusions_list', 'provider_exclude', 'provider_allow', 'chatgpt_account', // 11/10/2026: l'accesso col piano ChatGPT
   // /goal G6 (owner 15/10/2026): la seconda porta dell'obiettivo — il kernel la offre solo al root e solo con `onObiettivoFn`
   'goal_status', 'goal_create', 'goal_update',
+  // R5.11 (owner 18/10/2026): annullare le modifiche ai file — il kernel la offre solo al root e solo con `onAnnullaFileFn`
+  'file_changes_undo',
+  // R5.12 (owner 18/10/2026): i telefoni collegati — il kernel li offre solo al root e solo con `onTelefoniFn`
+  'remote_phones', 'remote_phone_pair', 'remote_phone_revoke',
   'research_find', 'research_start', 'research_read', 'research_rename', // C5: research_list + research_search → research_find
   'research_control', 'research_delete', // C5: research_pause/resume/cancel → research_control
   /*
@@ -2630,6 +2666,11 @@ export function createSessionRegistry({
   /* ⭐ 15/10/2026 — la compattazione istantanea dell'adapter desktop (`compattazioneIstantanea`): spenta di serie, come gli obiettivi,
      perché la CLI usa lo stesso registro e lo stesso adapter con le sue decisioni; il server desktop la accende (`server.mjs`). */
   compattazioneIstantanea = false,
+  /* 21/10/2026, lane CLI (S2 della sua revisione 4 sulla 0.6.12): il riassunto di fine giro produce un record che legge SOLO l'adapter
+     desktop (`recordCompattazioneIniziale`). Un ospite che carica il kernel di base lo pagherebbe senza usarlo — e col tetto di opencode
+     e il ritentativo del troncato, fino a due chiamate da 32.000. Con `false` non parte; la compattazione manuale resta. Di serie acceso:
+     desktop e mobile passano dall'adapter. La CLI lo spegne nella 0.6.12 e lo riaccende con l'adapter nella 0.6.13. */
+  riassuntoDiFineGiro = true,
   /* /goal G5 (riserva S5 del bugfixer, 15/10): la scadenza del confutatore, in ms. Con un ciclo solo per obiettivo, un confutatore
      che non finisce mai (figlia eliminata a metà, kernel appeso) terrebbe fermo l'obiettivo per sempre. */
   scadenzaConfutatoreMs = 20 * 60_000,
@@ -2717,6 +2758,15 @@ export function createSessionRegistry({
    *   `null` = finestra ignota ⇒ l'adapter usa il solo tetto assoluto (`TALOS_COMPACTION_TOKEN_CAP`).
    */
   finestraTokenFn = null,
+  limiteUscitaFn = null, // 21/10/2026: il limite d'uscita del modello (endpoint OpenRouter), per il tetto del riassunto
+  /* 21/10/2026 (richiesta della CLI, `context.compactAtTokens`): il tetto di compattazione scelto dall'ospite, sincrono, `(modello) =>
+     intero positivo | null`. Vince sulla variabile d'ambiente come l'opzione dell'adattatore (`tettoCompattazioneToken`), e il registro la
+     passa anche al giro: senza, il riassunto di fine giro si preparava a una soglia diversa da quella dell'adattatore e si buttava. */
+  tettoCompattazioneFn = null,
+  /* 21/10/2026 (richiesta della CLI; owner 14/10, «il più economico dello stesso fornitore»): il modello che scrive i riassunti, sincrono,
+     `(modelloPerRete) => string | null`; null, o una forma che non è un modello, ⇒ quello della conversazione, come oggi. Vale per il
+     riassunto di fine giro qui e, passato al giro come `modelloRiassunto` + `finestraRiassuntoToken`, per quelli dentro il giro. */
+  modelloRiassuntoFn = null,
   /* C1 (owner 09/10/2026 sera): il motore del contesto di una conversazione NUOVA — 'engine' (il Context Engine col metodo,
      di serie) o 'legacy' — letto alla nascita dall'interruttore del server (`impostazioni-contesto.mjs`) e timbrato sulla
      conversazione. Senza questa funzione non si timbra niente, e una conversazione senza timbro resta col legacy. */
@@ -2798,6 +2848,8 @@ export function createSessionRegistry({
    */
   caricaServerMcpFn = caricaServerMcpReale,
   verificaTrustMcpFn = verificaTrustMcpReale,
+  /* R5.8 (18/10/2026): la prova di UN server MCP (`mcp-session.mjs`, `provaUnServerMcp`); le prove la sostituiscono */
+  provaServerMcpFn = provaUnServerMcp,
   statoTrustMcpFn = statoTrustMcpReale, // 17/10/2026: il PERCHÉ di una fiducia caduta, per la frase della carta
   fidaServerMcpFn = fidaServerMcpReale,
   /*
@@ -3002,6 +3054,20 @@ export function createSessionRegistry({
    *   cartella effettiva è la radice del disco, e la Libreria finiva in `C:.harness-ui-library`.
    */
   cartellaDatiProgettoFn = async (cartellaProgetto) => cartellaProgetto,
+  /*
+   * R5.11 (owner 18/10/2026, «Come Hermes, PC e telefono») — «Annulla le modifiche ai file»: l'istanza di
+   *   `creaPuntiDiRipristino` (`src/punti-di-ripristino.mjs`). Il server la passa con l'archivio nella cartella dati del progetto;
+   *   chi non la passa (le prove, la CLI) resta com'era: nessuna foto, nessun git lanciato.
+   */
+  puntiDiRipristino = null,
+  /*
+   * R5.12 (owner 18/10/2026, «Elenca, apre il QR, revoca») — `remotoFn() => creaRemoto(...) | null`: il controllo remoto del server
+   *   (nasce dopo il registro, per questo una funzione). Chi non la passa (le prove, la CLI) non offre gli attrezzi dei telefoni.
+   */
+  remotoFn = null,
+  /* C-3 (owner 21/10/2026): `repositoryFn() => servizio git | null` (stato, storia, modificheFra), per lo stato del repository nella consegna
+     del confutatore del /goal. Nasce dopo il registro, come `remotoFn`. Chi non la passa: il confutatore riceve la consegna di prima. */
+  repositoryFn = null,
   elencaToolForgiatiFn = elencaToolForgiatiReale,
   abilitaToolForgiatoFn = abilitaToolForgiatoReale,
   installaVersioneToolForgiatoOwnerFn = installaVersioneToolForgiatoOwnerReale,
@@ -3260,10 +3326,34 @@ export function createSessionRegistry({
       return Number.isFinite(valore) && valore > 0 ? Math.floor(valore) : null;
     } catch { return null; }
   };
+  /** Il limite d'uscita del modello, sincrono; `null` = ignoto (vale 32.000 e la cintura). */
+  const leggiLimiteUscita = (modelloPerRete) => {
+    if (typeof limiteUscitaFn !== 'function' || typeof modelloPerRete !== 'string' || !modelloPerRete) return null;
+    try {
+      const valore = limiteUscitaFn(modelloPerRete);
+      return Number.isFinite(valore) && valore > 0 ? Math.floor(valore) : null;
+    } catch { return null; }
+  };
+  /** Il tetto di compattazione dell'ospite, sincrono; `null` = nessuna scelta (vale la variabile d'ambiente). */
+  const leggiTettoCompattazione = (modelloPerRete) => {
+    if (typeof tettoCompattazioneFn !== 'function') return null;
+    try {
+      const valore = tettoCompattazioneFn(modelloPerRete ?? null);
+      return Number.isSafeInteger(valore) && valore > 0 ? valore : null;
+    } catch { return null; }
+  };
+  /** Il modello dei riassunti dell'ospite per questa conversazione, o `null` (vale quello della conversazione). */
+  const leggiModelloRiassunto = (modelloPerRete) => {
+    if (typeof modelloRiassuntoFn !== 'function' || typeof modelloPerRete !== 'string' || !modelloPerRete) return null;
+    try {
+      const valore = modelloRiassuntoFn(modelloPerRete);
+      return typeof valore === 'string' && valore !== modelloPerRete && formaDiModelloRiconosciuta(valore) ? valore : null;
+    } catch { return null; }
+  };
   const sogliePerVoce = (voce) => {
     const modelId = modelloDiSessionePerRete(voce);
     const windowTokens = modelId === null ? null : leggiFinestraToken(modelId);
-    const cap = compattazione.leggiTettoEsplicito(process.env);
+    const cap = leggiTettoCompattazione(modelId) ?? compattazione.leggiTettoEsplicito(process.env);
     const soglie = compattazione.calcolaSoglie({ tettoToken: cap, finestraToken: windowTokens });
     const source = cap !== null && soglie.soglia === cap ? 'explicit-cap' : windowTokens !== null ? 'route-minimum' : 'fallback';
     return { ...soglie, modelId, source };
@@ -4835,8 +4925,59 @@ export function createSessionRegistry({
    * ⛔ Non passa dall'orchestratore delle deleghe: il suo risultato non è un messaggio per la madre (che non deve ripartire per
    *   lui), è un esito per il ciclo. Nel diagramma delle deleghe si vede come figlia della conversazione.
    */
+  /*
+   * C-3 (owner 21/10/2026, «No, basta lo stato dal server»): lo stato del repository per il confutatore, raccolto dal server come fa Hermes
+   *   coi suoi controlli (`goals.py:396-414`, fuori dalle approvazioni), senza nessun permesso nuovo al confutatore. Due voci: le modifiche
+   *   non committate (git status) e i file cambiati dai commit nati DOPO l'inizio dell'obiettivo (il commit che lo precede ⇒ HEAD). Un guasto
+   *   o un repository assente non fermano mai il confutatore: si parte senza, come prima. Tetto di tempo, come ogni lettura qui.
+   */
+  /*
+   * C-3, cure del 21/10/2026 sera (revisione del lotto, C3-DATA-01 / C3-SOTTO-03 / tetto):
+   *   · i commit dell'obiettivo si scelgono per data del COMMITTER e solo nella cartella della sessione (`git.commitDellaCartella`):
+   *     prima la data d'autore (`storia`, `%aI`) nascondeva `--date`, `--amend`, rebase e cherry-pick, e `git log HEAD` portava i
+   *     soggetti dei commit di altre cartelle;
+   *   · le due parti si leggono INSIEME, ognuna col suo tetto: una che scade o si guasta manca da sola, ed è detta in `incomplete`;
+   *     prima uno stato scaduto buttava tutto il blocco;
+   *   · senza `commitDellaCartella` (un servizio git più vecchio) la parte dei commit manca e lo si dice, mai la data d'autore.
+   */
+  async function statoDelRepositoryPerIlConfutatore(voce, obiettivo) {
+    const git = typeof repositoryFn === 'function' ? repositoryFn() : null;
+    if (!git || typeof git.stato !== 'function') return null;
+    const TETTO_MS = 5_000;
+    const conTetto = (promessa) => Promise.race([Promise.resolve(promessa).catch(() => null),
+      new Promise((r) => { const t = setTimeout(() => r(null), TETTO_MS); t.unref?.(); })]);
+    const sessionId = voce.sessionId;
+    const inizio = Date.parse(obiettivo?.creatoAlle ?? '');
+    const leggiCommit = async () => {
+      if (!Number.isFinite(inizio) || typeof git.commitDellaCartella !== 'function') return null;
+      const elenco = await conTetto(git.commitDellaCartella({ sessionId, dalle: new Date(inizio).toISOString(), limite: 50 }));
+      if (!Array.isArray(elenco?.commit)) return null;
+      if (elenco.commit.length === 0) return { commits: [], files: [] };
+      const piuVecchio = elenco.commit.at(-1);
+      const fra = typeof git.modificheFra === 'function'
+        ? await conTetto(git.modificheFra({ sessionId, da: piuVecchio.padri?.[0] ?? null, a: elenco.commit[0].commit })) : null;
+      return {
+        commits: elenco.commit.slice(0, 20).map((c) => ({ commit: c.breve, subject: c.soggetto })),
+        files: Array.isArray(fra?.file) ? fra.file.slice(0, 200) : null,
+        ...(elenco.altri ? { more_commits: true } : {}),
+      };
+    };
+    try {
+      const [stato, commit] = await Promise.all([conTetto(git.stato({ sessionId })), leggiCommit().catch(() => null)]);
+      const repository = {};
+      const incomplete = [];
+      if (Array.isArray(stato?.voci)) repository.uncommitted_changes = stato.voci.slice(0, 200).map((v) => ({ path: v.percorso, status: `${v.x ?? ' '}${v.y ?? ' '}`.trim() || v.tipo }));
+      else incomplete.push('uncommitted_changes');
+      if (commit && commit.commits.length > 0) repository.committed_since_goal_start = commit;
+      else if (!commit) incomplete.push('committed_since_goal_start');
+      if (!repository.uncommitted_changes && !repository.committed_since_goal_start) return null;
+      if (incomplete.length) repository.incomplete = incomplete;
+      return repository;
+    } catch { return null; }
+  }
+
   function confutaObiettivo(voce, obiettivo) {
-    return new Promise((risolvi) => {
+    return new Promise((risolvi) => { void (async () => {
       let finito = false;
       let figliaId = null;
       let orologio = null;
@@ -4849,7 +4990,8 @@ export function createSessionRegistry({
       const { scritti: delGiro } = proveDelGiro(inizio >= 0 ? eventi.slice(inizio) : eventi);
       const inAttesa = voce.fileInAttesa?.id === obiettivo.id ? voce.fileInAttesa.file : [];
       const scritti = [...new Set([...delGiro, ...inAttesa, ...(obiettivo.fileScritti ?? [])])].slice(0, FILE_DEL_GIUDICE); // G5d: tutti i giri
-      const consegna = consegnaDelConfutatore({ obiettivo, verdetti: obiettivo.verifica?.verdetti ?? [], scritti });
+      const repository = await statoDelRepositoryPerIlConfutatore(voce, obiettivo);
+      const consegna = consegnaDelConfutatore({ obiettivo, verdetti: obiettivo.verifica?.verdetti ?? [], scritti, repository });
       const avvio = avviaESegui({
         taskId: `confutatore:${voce.sessionId}`,
         cartella: voce.cartellaBase ?? voce.cartella, cartellaGiaScelta: true,
@@ -4860,7 +5002,7 @@ export function createSessionRegistry({
         giriMassimi: GIRI_DEL_CONFUTATORE, soloComandiDelContratto: obiettivo.comandiApprovati ?? [],
         onConclusioneFn: (risultato) => fine(risultato?.ok === false || typeof risultato?.esito?.detto !== 'string'
           ? { esito: 'senza-esito', motivo: 'refuter-failed' }
-          : esitoDelConfutatore(risultato.esito.detto)),
+          : esitoDelConfutatore(risultato.esito.detto, { repository })), // C-3: una prova dal repository vale solo se è nello stato consegnato
       });
       if (avvio?.erroreAvvio || !avvio?.sessionId) { fine({ esito: 'senza-esito', motivo: 'refuter-not-started' }); return; }
       figliaId = avvio.sessionId;
@@ -4871,7 +5013,7 @@ export function createSessionRegistry({
         try { registryApi.ferma(figliaId, { daChi: 'sistema' }); } catch { /* già finita o eliminata */ }
       }, scadenzaConfutatoreMs);
       orologio.unref?.();
-    });
+    })().catch(() => risolvi({ esito: 'senza-esito', motivo: 'refuter-failed', token: 0 })); });
   }
   /*
    * ⛔ CONFUTA-REV-02/03 (bugfixer, 15/10/2026): il confutatore riceveva gli attrezzi di una figlia qualunque — una domanda alla madre
@@ -4882,7 +5024,7 @@ export function createSessionRegistry({
    */
   const ATTREZZI_TOLTI_AL_CONFUTATORE = Object.freeze(['askParentFn', 'answerChildQuestionFn', 'askChildFn', 'answerParentQuestionFn',
     'onDelega', 'coordinazioneFn', 'listChildrenFn', 'stopChildFn', 'pauseChildFn', 'resumeChildFn', 'chiediDomandaFn', 'presentaPianoFn',
-    'onWorkflowFn', 'onWorkflowPlanPropose', 'onAutomazioneFn', 'onFornitoriFn', 'onObiettivoFn']);
+    'onWorkflowFn', 'onWorkflowPlanPropose', 'onAutomazioneFn', 'onFornitoriFn', 'onObiettivoFn', 'onAnnullaFileFn', 'onTelefoniFn']);
   function senzaAttrezziPerIlConfutatore(voce, opzioni) {
     if (!Array.isArray(voce?.soloComandiDelContratto)) return opzioni;
     const ridotte = { ...opzioni };
@@ -5366,6 +5508,29 @@ export function createSessionRegistry({
    * ⛔ Sotto soglia: nessuna chiamata, nessuna riga, nessun evento (verso contrario provato).
    */
   /*
+   * 21/10/2026 (6) — IL RIASSUNTO DI FINE GIRO CEDE IL POSTO UNICO. Su un motore a posto unico (`local:` `-np 1`, `locale-ospite:`)
+   * il riassunto in sottofondo occupa l'unico posto: se intanto la persona scrive, la prima richiesta del suo giro aspetta dietro
+   * TUTTO il riassunto (llama-server la mette in coda). Hermes e Claude Code non riassumono in sottofondo, compattano dentro il giro;
+   * qui il riassunto si fa lo stesso a giro fermo — è gratis finché nessuno scrive — ma un giro che parte su quel motore lo FERMA:
+   * la richiesta si chiude e il motore cancella il lavoro (llama.cpp `tools/server/server-queue.cpp:549-561`, `stop()` `:603-619`:
+   * la cancellazione va in testa alla coda; il motore dell'app fa lo stesso con `stream:true`, Mobile 21/10, SERV-07/11/16). Se poi
+   * serve, il giro compatta da sé col tetto, la stima e «Salta». La fine dice `motivo:'ceduta'`: voluta, la riga resta muta.
+   * ⛔ Il posto è del MOTORE, non della sessione: cede il riassunto di OGNI sessione su quel motore (la madre di una figlia locale).
+   */
+  function giroInCorsoSulMotore(motore, esclusa) {
+    for (const v of sessioni.values()) {
+      if (v === esclusa || v.conclusa === true || v.interrotta === true) continue;
+      if (compattazione.motoreDelPostoUnico(modelloDiSessionePerRete(v)) === motore) return true;
+    }
+    return false;
+  }
+  function cediRiassuntiDiSfondo(modelloDelGiro) {
+    const motore = compattazione.motoreDelPostoUnico(modelloDelGiro);
+    if (!motore) return;
+    for (const lavoro of compattazioniInBackground.values()) if (lavoro.motore === motore) lavoro.cedi?.();
+  }
+
+  /*
    * Lane CLI, 03/10/2026 — `compaction.progress`: i passi VERI di una compattazione (lettura, riassunto contato mentre si
    *   scrive, sostituzione), consegnati a chi è connesso adesso e mai scritti (`consegnaEvento`, elenco degli effimeri).
    *   `sessionId` nel valore come l'ha chiesto la CLI; `motivo` dice quale compattazione (`manuale`, `background`, o quelle
@@ -5375,7 +5540,7 @@ export function createSessionRegistry({
     broadcast(voce, { type: 'CUSTOM', name: compattazione.NOME_EVENTO_PROGRESSO_COMPATTAZIONE, value: { sessionId: voce.sessionId, ...valore } });
   }
 
-  function avviaCompattazioneInBackground(voce) {
+  function avviaCompattazioneInBackground(voce, { versioneDelGiro = null } = {}) {
     const { sessionId } = voce;
     if (chiuso || !sessionId || compattazioniInBackground.has(sessionId) || compattazioniInCorso.has(sessionId)) return null;
     /* 15/10/2026: con l'istantanea un riassunto pronto (o in arrivo) il giro dopo lo scambia subito alla prima richiesta: un secondo
@@ -5393,6 +5558,21 @@ export function createSessionRegistry({
     if (!decisione.scatta) return null;
     const parti = compattazione.dividiPerCompattazione(proiettata);
     if (!parti.tagliabile) return null;
+    /* 21/10/2026 (CLI): quale modello scrive il riassunto di fine giro e su quale finestra (`sceltaDelRiassunto`); il record resta
+       intestato a `perRete`, il modello della conversazione */
+    const modelloRiassunto = leggiModelloRiassunto(perRete);
+    const scelta = compattazione.sceltaDelRiassunto({
+      modelloConversazione: perRete, finestraConversazione: soglie.finestraToken,
+      modelloRiassunto, finestraRiassunto: modelloRiassunto ? leggiFinestraToken(modelloRiassunto) : null,
+      tokenDaRiassumere: stimaTokenConversazione(parti.mezzo), soglia: soglie.soglia,
+    });
+    /* (6): sul posto unico non parte se intanto è partito un giro — il suo (la storia si scrive in modo asincrono: la persona può aver
+       già riscritto; si confronta la versione del giro) o di un'altra sessione sullo stesso motore — e si tiene il modo di fermarlo
+       quando ne parte uno (`cediRiassuntiDiSfondo`). Il motore è quello del modello che SCRIVE il riassunto (`scelta.modello`): una
+       conversazione locale col riassunto su un fornitore a chiave non contende il posto. */
+    const motoreUnico = compattazione.motoreDelPostoUnico(scelta.modello);
+    if (motoreUnico && ((versioneDelGiro !== null && voce.versioneGiro !== versioneDelGiro) || giroInCorsoSulMotore(motoreUnico, voce))) return null;
+    const cessione = motoreUnico ? new AbortController() : null;
     const coveredThrough = storia.length;
     const versioneAlVia = voce.versioneGiro ?? 0;
     const at = clock().toISOString();
@@ -5411,25 +5591,46 @@ export function createSessionRegistry({
     const lavoro = (async () => {
       /* 02/10/2026, owner «Come Hermes»: il budget scala col mezzo (`budgetRiassunto`), e un riassunto TRONCATO non si
        * richiede uguale una seconda volta (sessione b1e7382a: 2 × 2.048 token, zero riassunti). */
-      const budget = compattazione.budgetRiassunto({
-        tokenDaRiassumere: stimaTokenConversazione(parti.mezzo), finestraToken: soglie.finestraToken, soglia: soglie.soglia,
+      const { budget } = scelta;
+      const richiestaIntera = compattazione.costruisciRichiestaDiRiassunto({ ...parti, paroleMassime: budget.paroleMassime });
+      /* L1 (20/10/2026): l'ingresso del riassunto di sfondo NON aveva limite (prova dal vivo 7432bdf4: 79.599 token in una
+         finestra da 65.536). Ora entra nella finestra; il secondo tentativo, dopo un errore, ne usa la metà. */
+      const richiestaPer = (tentativo) => compattazione.ingressoRiassuntoPerFinestra(richiestaIntera, {
+        finestraToken: scelta.finestraToken, maxOutputTokens: budget.maxOutputTokens, frazione: tentativo === 0 ? 1 : 0.5,
       });
-      const richiesta = compattazione.costruisciRichiestaDiRiassunto({ ...parti, paroleMassime: budget.paroleMassime });
-      const reasoning = compattazione.reasoningPerRiassunto(voce.provider === 'local' ? null : voce.reasoning);
+      const reasoning = reasoningDelRiassuntoDiSfondo(voce, scelta.modello);
       let esito = { ok: false, riassunto: '', motivo: 'errore' };
-      for (let tentativo = 0; tentativo < 2 && !esito.ok && esito.motivo !== 'troncato'; tentativo += 1) {
+      /* 21/10/2026 (owner, «sta maledetta compattazione»): come l'adattatore — il tetto è quello di opencode (limite del modello, 32.000,
+         spazio nella finestra), un troncato si richiede una volta più breve, e un 400 sul tetto si ritenta col budget */
+      let piuBreve = false;
+      const richiestaBreve = () => compattazione.costruisciRichiestaDiRiassunto({ ...parti, paroleMassime: Math.max(200, Math.floor(budget.paroleMassime / 2)) });
+      const limiteUscita = leggiLimiteUscita(scelta.modello);
+      for (let tentativo = 0; tentativo < 2 && !esito.ok && !cessione?.signal.aborted; tentativo += 1) {
         try {
-          const risposta = await riassumiPerCompattazioneFn({
-            modello: perRete, chiave: typeof chiaveFn === 'function' ? chiaveFn() : chiave, messaggi: richiesta,
-            maxOutputTokens: budget.maxOutputTokens, ...(reasoning ? { reasoning } : {}),
+          const inviata = piuBreve
+            ? compattazione.ingressoRiassuntoPerFinestra(richiestaBreve(), { finestraToken: scelta.finestraToken, maxOutputTokens: budget.maxOutputTokens, frazione: 0.5 })
+            : richiestaPer(tentativo);
+          const tetto = compattazione.tettoUscitaRiassunto(inviata, { finestraToken: scelta.finestraToken, limiteUscita });
+          const chiedi = (maxOutputTokens) => riassumiPerCompattazioneFn({
+            modello: scelta.modello, chiave: typeof chiaveFn === 'function' ? chiaveFn() : chiave, messaggi: inviata,
+            maxOutputTokens, ...(reasoning ? { reasoning } : {}),
             ...(typeof fetchModelloFn === 'function' ? { fetchDiRete: fetchModelloFn() } : {}),
             onProgresso: passo, tentativo: tentativo + 1,
+            ...(cessione ? { segnaleStop: cessione.signal } : {}),
           });
+          let risposta;
+          try { risposta = await chiedi(tetto); }
+          catch (rifiuto) {
+            if (tetto <= budget.maxOutputTokens || !compattazione.eRifiutoDelTettoUscita(rifiuto)) throw rifiuto;
+            risposta = await chiedi(budget.maxOutputTokens);
+          }
           esito = compattazione.valutaRispostaDiRiassunto(risposta);
+          if (esito.motivo === 'troncato') piuBreve = true;
         } catch (errore) {
           esito = { ok: false, riassunto: '', motivo: `error: ${errore instanceof Error ? errore.message : String(errore)}` };
         }
       }
+      if (!esito.ok && cessione?.signal.aborted) { await fine({ fase: 'fine', compattato: false, motivo: 'ceduta', at, interrottaIn: 'riassunto' }); return false; }
       if (!esito.ok) { await fine({ fase: 'fine', compattato: false, motivo: esito.motivo, at, interrottaIn: 'riassunto' }); return false; }
       const indice = compattazione.indiceMeccanico(parti.mezzo, { precedente: voce.recordCompattazione?.indice ?? null });
       /* ⭐ 06/10/2026 — RICARICA POST-COMPACT (opzione A, percorso desktop in background): con fonti dichiarate
@@ -5458,7 +5659,7 @@ export function createSessionRegistry({
       return scritto;
     })().catch((errore) => { console.error(`[session-store] background compaction failed for ${sessionId}:`, errore instanceof Error ? errore.message : errore); return false; })
       .finally(() => { if (compattazioniInBackground.get(sessionId)?.promessa === lavoro) compattazioniInBackground.delete(sessionId); });
-    compattazioniInBackground.set(sessionId, { promessa: lavoro, coveredThrough, at });
+    compattazioniInBackground.set(sessionId, { promessa: lavoro, coveredThrough, at, motore: motoreUnico, cedi: cessione ? () => cessione.abort() : null });
     return lavoro;
   }
 
@@ -5852,6 +6053,16 @@ export function createSessionRegistry({
        essa tutto il vantaggio, riportando l'elenco a costare pieno ogni volta. */
     if (workspaceCambiato && voce.cartella) segnalaFileCambiatiFn(voce.cartella);
     if (!effimero) evento._sequenza = (voce.prossimaSequenza = (voce.prossimaSequenza ?? 0) + 1);
+    /* R5.11: il messaggio della persona a schermo è `giro:<sequenza del suo RunStarted>`; il punto di ripristino del turno se la ricorda */
+    if (evento.type === 'RunStarted' && Number.isSafeInteger(evento._sequenza)) voce.sequenzaUltimoRunStarted = evento._sequenza;
+    /* 21/10/2026 (sveglia del telefono, revisione rossa S3): l'inizio e la fine dell'ULTIMO giro, per l'elenco. Chi guarda a intervalli
+       (la sveglia, ogni 5 s) vede un giro nuovo anche quando è iniziato e finito fra due sguardi (un rifiuto per chiave o credito in
+       pochi secondi), e la durata del giro — non quella della sessione, `avviataAlle`. */
+    /* lo stesso istante che va sul disco (`timestamp`, sopra): vivo e ripristino (`istantiDellUltimoGiro`) dicono la stessa ora */
+    /* seconda revisione del 21/10 (S4): un RunError di solo avviso su una chat ferma (`SESSION_LEASED`, una scrittura fallita) non
+       chiude nessun giro — la fine si scrive solo se c'è un giro aperto, o il telefono lo prendeva per un «giro fallito» */
+    if (evento.type === 'RunStarted') { voce.inizioGiroAlle = new Date(evento.timestamp).toISOString(); voce.giroAperto = true; }
+    if ((evento.type === 'RunFinished' || evento.type === 'RunError') && voce.giroAperto) { voce.fineGiroAlle = new Date(evento.timestamp).toISOString(); voce.giroAperto = false; }
     /* F3 (24/09): un evento `durableSync` con la coda in volo si accoda in ordine (mai più il leapfrog di J3); `scrittaInCoda` è la promessa. */
     let scrittaInCoda = null;
     if (durableSync && !effimero && cartellaStore && voce.sessionId) {
@@ -7115,6 +7326,124 @@ export function createSessionRegistry({
    */
   const ATTREZZI_CHE_SCRIVONO_PER_PERCORSO = Object.freeze(['scrivi', 'file_edit']);
 
+  /*
+   * R5.11 — gli attrezzi prima dei quali si fotografa il progetto: chi scrive un file per percorso, e la shell (un comando può
+   *   scrivere qualunque cosa: la foto lo copre, ma ciò che ha scritto si rimette solo se la persona lo sceglie).
+   */
+  const ATTREZZI_CHE_FOTOGRAFANO = Object.freeze([...ATTREZZI_CHE_SCRIVONO_PER_PERCORSO, 'shell']);
+  /** Il progetto e la conversazione a cui appartiene un punto: le figlie scrivono dentro il turno della madre (stessa cartella). */
+  function doveVaIlPunto(voce) {
+    const progetto = voce.cartellaBase ?? voce.cartella;
+    const radice = radiceTimeline(voce);
+    const progettoRadice = radice?.cartellaBase ?? radice?.cartella;
+    const da = radice && progettoRadice === progetto ? radice : voce;
+    return { progetto, sessionId: da.sessionId, turno: da.versioneGiro ?? 0, seqAvvio: da.sequenzaUltimoRunStarted ?? null };
+  }
+  async function puntoDiRipristinoPer(voce, evento) {
+    try {
+      if (typeof voce.cartellaBase !== 'string' && typeof voce.cartella !== 'string') return;
+      if (evento?.tipo === 'pre_tool_call' && ATTREZZI_CHE_FOTOGRAFANO.includes(evento.azione)) {
+        const { progetto, sessionId, turno, seqAvvio } = doveVaIlPunto(voce);
+        const percorso = ATTREZZI_CHE_SCRIVONO_PER_PERCORSO.includes(evento.azione) && typeof evento.argomenti?.percorso === 'string' ? evento.argomenti.percorso : null;
+        await puntiDiRipristino.primaDiScrivere({ sessionId, turno, seqAvvio, progetto, percorso, cartellaAttrezzo: voce.cartella ?? progetto, chiamante: voce.sessionId });
+      } else if (evento?.tipo === 'post_tool_call' && ATTREZZI_CHE_SCRIVONO_PER_PERCORSO.includes(evento.azione)) {
+        await puntiDiRipristino.dopoLaScrittura({ progetto: doveVaIlPunto(voce).progetto, chiamante: voce.sessionId });
+      }
+    } catch { /* un servizio di supporto non ferma mai il giro (owner 12/10) */ }
+  }
+
+  /**
+   * R5.11 — l'ospite di `file_changes_undo`. `anteprima`: sceglie il punto (il `turns_back`-esimo turno PRIMA di questo che ha
+   *   cambiato file), chiede l'anteprima e prepara la carta; `esegui`: annulla e dice al modello che cosa è tornato e che cosa no.
+   * ⛔ La conversazione che chiama sta lavorando (è il suo giro): non conta come «qualcuno lavora in questa cartella». Le ALTRE sì.
+   */
+  async function ospiteAnnullaFile(voce, argomenti = {}, { fase } = {}) {
+    const indietro = argomenti?.turns_back ?? 1;
+    if (!Number.isSafeInteger(indietro) || indietro < 1 || indietro > 20) return { ok: false, messaggio: '"turns_back" must be a whole number from 1 to 20. Nothing was undone.' };
+    const includi = argomenti?.include ?? [];
+    if (!Array.isArray(includi) || includi.length > 200 || includi.some((x) => typeof x !== 'string' || x.length === 0 || x.length > 4096)) {
+      return { ok: false, messaggio: '"include" must be a list of relative paths. Nothing was undone.' };
+    }
+    const { progetto, sessionId: radice, turno: turnoAdesso } = doveVaIlPunto(voce);
+    const albero = radiceTimeline(voce)?.sessionId;
+    const altri = [...sessioni.values()].some((v) => (v.cartellaBase ?? v.cartella) === progetto && radiceTimeline(v)?.sessionId !== albero
+      && !(v.conclusa === true || v.interrotta === true));
+    if (altri) return { ok: false, messaggio: 'Another conversation is working in this folder: undo when it has finished. Nothing was undone.' };
+    const punti = (await puntiDiRipristino.elenco({ sessionId: radice, progetto })).filter((p) => p.turno < turnoAdesso);
+    const punto = punti.slice().sort((a, b) => b.turno - a.turno)[indietro - 1] ?? null;
+    if (!punto) return { ok: false, messaggio: 'TALOS did not change any file in the earlier messages of this conversation: there is nothing to undo.' };
+    if (!punto.annullabile) return { ok: false, messaggio: `The files cannot be put back: there is no copy from that moment (${punto.motivo ?? 'unknown'}). Nothing was undone.` };
+    const piano = await puntiDiRipristino.anteprima({ sessionId: radice, progetto, turno: punto.turno });
+    if (!piano?.ok) return { ok: false, messaggio: `The files cannot be put back (${piano?.motivo ?? 'unknown'}). Nothing was undone.` };
+    const saltati = new Set(piano.salta.map((s) => s.percorso));
+    const scelti = includi.filter((p) => saltati.has(p));
+    if (fase !== 'esegui') {
+      if (!piano.ripristina.length && !scelti.length) {
+        return { ok: false, messaggio: `Nothing to put back: the files changed since then were changed by the person or by a command (${piano.salta.map((s) => s.percorso).join(', ') || 'none'}). Name them in "include" only if the person asked for them.` };
+      }
+      return {
+        ok: true, carta: true,
+        azione: {
+          tipo: 'file_changes_undo', turno: piano.turno, alle: piano.alle,
+          ripristina: piano.ripristina, salta: piano.salta, inclusi: scelti, fuori: piano.fuori, troppoGrandi: piano.troppoGrandi,
+          diff: piano.diff.length > 60_000 ? piano.diff.slice(0, 60_000) : piano.diff, troncato: piano.troncato || piano.diff.length > 60_000,
+        },
+      };
+    }
+    const r = await puntiDiRipristino.ripristina({ sessionId: radice, progetto, turno: punto.turno, includi: scelti });
+    if (!r?.ok) return { ok: false, messaggio: `The files were not put back (${r?.motivo ?? 'unknown'}).` };
+    const righe = [`Put back as they were before that message: ${r.ripristinati.length ? r.ripristinati.join(', ') : 'no file'}.`];
+    if (r.saltati?.length) righe.push(`Left as they are (changed by the person or by a command): ${r.saltati.join(', ')}.`);
+    if (r.nonTolti?.length) righe.push(`Could not be removed: ${r.nonTolti.join(', ')}.`);
+    if (r.fuori?.length) righe.push(`Written outside the project folder, not undone: ${r.fuori.length} file(s).`);
+    righe.push('The person can redo it from the app.');
+    return { ok: true, testo: righe.join(' ') };
+  }
+
+  /**
+   * R5.12 — l'ospite di `ATTREZZI_TELEFONI`. Al modello solo nome (tra virgolette, accorciato), stato, ultimo contatto e un id corto
+   *   (i primi 8 caratteri): mai l'endpoint, le chiavi Web Push, il relay, il gettone o il codice di 6 cifre (richiesta della CLI).
+   * ⛔ `remote_phone_pair` NON apre il QR e NON accende il remoto: controlla che sia acceso e chiede la carta; il QR lo apre la
+   *   finestra che ha risposto alla carta, con la rotta della schermata e `soloSeAcceso` — il gettone non passa mai dal kernel.
+   */
+  async function ospiteTelefoni(nome, argomenti = {}, { fase } = {}) {
+    const remoto = remotoFn();
+    if (!remoto) return { ok: false, messaggio: 'Remote control is not available on this computer.' };
+    const stato = await remoto.stato();
+    const vivi = (stato.telefoni ?? []).filter((v) => !v.revocatoAlle);
+    const corto = (v) => String(v.id).slice(0, 8);
+    const nomeDi = (v) => JSON.stringify(String(v.nome || 'Unnamed phone').replace(/[\p{Cc}\p{Cf}]/gu, ' ').slice(0, 64));
+    const statoAcceso = !stato.disponibile ? 'not available on this computer' : stato.acceso ? 'on' : 'off';
+    if (nome === 'remote_phones') {
+      if (fase !== 'esegui') return { ok: true, carta: false };
+      const righe = [`Remote control is ${statoAcceso}. Paired phones: ${vivi.length}.`];
+      for (const v of vivi) {
+        const quando = v.inLinea ? 'connected now' : Number.isFinite(v.ultimaVoltaAlle) ? `last seen ${new Date(v.ultimaVoltaAlle).toISOString()}` : 'never seen since pairing';
+        righe.push(`- ${nomeDi(v)} · id ${corto(v)} · ${quando}`);
+      }
+      return { ok: true, testo: righe.join('\n') };
+    }
+    if (nome === 'remote_phone_pair') {
+      if (!stato.disponibile) return { ok: false, messaggio: 'Remote control is not available on this computer. No QR code was shown.' };
+      if (!stato.acceso || !stato.sceltaFatta) return { ok: false, messaggio: 'Remote control is off: only the person can turn it on, from the Phones screen. No QR code was shown.' };
+      if (fase !== 'esegui') return { ok: true, carta: true, azione: { tipo: 'remote_phone_pair', telefoni: vivi.length } };
+      return { ok: true, testo: 'The pairing QR code is now on the person\'s screen, valid once for a few minutes. The person scans it with the phone and confirms the 6-digit code on this computer: you will not see the result unless you call remote_phones later.' };
+    }
+    if (nome === 'remote_phone_revoke') {
+      const chiesto = typeof argomenti?.phone === 'string' ? argomenti.phone.trim() : '';
+      if (!/^[A-Za-z0-9_-]{4,64}$/u.test(chiesto)) return { ok: false, messaggio: '"phone" must be the short id from remote_phones. Nothing was disconnected.' };
+      const trovati = vivi.filter((v) => String(v.id).startsWith(chiesto));
+      if (trovati.length !== 1) return { ok: false, messaggio: `${trovati.length ? 'More than one' : 'No'} paired phone has the id "${chiesto}": call remote_phones first. Nothing was disconnected.` };
+      const v = trovati[0];
+      if (fase !== 'esegui') {
+        return { ok: true, carta: true, azione: { tipo: 'remote_phone_revoke', telefono: { idCorto: corto(v), nome: String(v.nome || '').slice(0, 64), piattaforma: v.piattaforma ?? null, inLinea: Boolean(v.inLinea), ultimaVoltaAlle: v.ultimaVoltaAlle ?? null } } };
+      }
+      await remoto.revoca(v.id);
+      return { ok: true, testo: `Disconnected ${nomeDi(v)} (id ${corto(v)}): it can no longer reach this computer. To use it again, the person pairs it anew.` };
+    }
+    return { ok: false, messaggio: `${nome} is not a phones tool.` };
+  }
+
   function costruisciCancelloFileDiControllo(voce) {
     return async (evento) => {
       if (evento?.tipo !== 'pre_tool_call' || !ATTREZZI_CHE_SCRIVONO_PER_PERCORSO.includes(evento.azione)) return { consentito: true };
@@ -7531,6 +7860,7 @@ export function createSessionRegistry({
     /* /goal G3 (G3-REV-03, revisione del bugfixer 14/10): un giro che parte FERMA le prove dell'obiettivo in corso — leggerebbero
        file che l'agente sta scrivendo — e il loro esito non si salva (`goal-check-stopped`). La persona che scrive non aspetta. */
     fermaLeProveDellaCatena(voce, 'turn-started'); // G3-REV-11: anche quelle della madre e della radice del Workflow
+    cediRiassuntiDiSfondo(modelloDiSessionePerRete(voce)); // (6): un riassunto di sfondo sul suo motore a posto unico gli cede il posto
     voce.esitoGiroObiettivo = null; // /goal G4: l'esito si legge solo dal giro che finisce adesso
     /*
      * Il punto sicuro può arrivare anche dopo un timeout/abort avvenuto prima
@@ -7874,7 +8204,10 @@ export function createSessionRegistry({
     const hookFn = async (evento) => {
       const esitoCancello = await cancelloFileDiControllo(evento);
       if (esitoCancello?.consentito === false) return esitoCancello;
-      return hookFnUtente(evento);
+      const esito = await hookFnUtente(evento);
+      /* R5.11: la foto del turno PRIMA di una scrittura permessa, l'impronta di ciò che è stato scritto DOPO. Mai un blocco. */
+      if (puntiDiRipristino && esito?.consentito !== false) await puntoDiRipristinoPer(voce, evento);
+      return esito;
     };
     /*
      * ⭐⭐⭐ FASE D (28/8) — sempre costruita (stesso principio di
@@ -8158,7 +8491,18 @@ export function createSessionRegistry({
         return { dove: voce.doveGiranoIComandi ?? null, revisione: voce.revisioneAmbienteComandi ?? 0 };
       },
       // F3-32: un passo di Workflow non propone workflow, non presenta piani, non delega e non chiede (decisione owner 12).
-      attrezziDifferiti,
+      /* 19/10/2026 (owner, «Essenziali + ponte per il resto»): il modello locale del telefono (fonte `locale-ospite`) vede davanti
+         solo gli undici essenziali e il resto dietro il ponte — 18.331 token di prompt al primo passo sul Pad, ~105 s al primo
+         token. Si decide dal modello del giro, mai dal testo; tutte le altre fonti restano col ponte di serie (spento sul PC). */
+      /* 21/10/2026 (owner, «Spento per Gemini»): la quarta corsa del banco C5 su Gemini 3.5 Flash Lite diretto non ha raggiunto la
+         soglia scritta prima sul codice (27/30 col ponte contro 29/30 senza, al più 1 in meno; `TALOS-RICERCHE/banco-c5-differiti-
+         2026-10-17/ESITO-…`, sezione «ripresa»). Per il fornitore Gemini diretto il ponte resta spento; gli altri come prima. */
+      attrezziDifferiti: providerEffettivo === FONTE_LOCALE_OSPITE || String(modelloEffettivo ?? '').startsWith(`${FONTE_LOCALE_OSPITE}:`) ? 'essenziali'
+        : providerEffettivo === FORNITORE_SENZA_PONTE || String(modelloEffettivo ?? '').startsWith(`${FORNITORE_SENZA_PONTE}:`) ? false : attrezziDifferiti,
+      /* L1 (owner 20/10/2026, «11 essenziali + ponte anche sul PC quando gli attrezzi non entrano»): la finestra del motore locale del
+         PC (`local:`), la stessa che usa la compattazione (`finestraTokenFn` ⇒ motore pronto · finestra vista · prudente 16.384). Il
+         kernel decide da lei quanti attrezzi mettere davanti; per ogni altra fonte niente, e la richiesta resta quella di prima. */
+      finestraPerGliAttrezzi: String(modelloEffettivo ?? '').startsWith('local:') ? leggiFinestraToken(modelloEffettivo) : null,
       strumentiEstesi: strumentiEstesi.filter(nome => (nome!=='process_output' || typeof processOutputStoreFn==='function')
         && (!voce.legameWorkflow || !ATTREZZI_NEGATI_AI_PASSI.has(nome))),
       ...(typeof ricercaWebFn === 'function' ? ricercaWebFn() : { ricercaWeb }), firma, immagine, persistGeneratedImageFn, removeGeneratedImageFn,
@@ -8394,6 +8738,25 @@ export function createSessionRegistry({
         return { onObiettivoFn: (nome, argomenti, opzioni) => ospite(nome, argomenti, opzioni) };
       })(),
       /*
+       * ⭐ R5.11 (owner 18/10/2026: «Come Hermes, PC e telefono», «sì, con la carta», «in Accesso pieno senza carta») — la seconda
+       *   porta di «Annulla le modifiche ai file». Solo la conversazione principale (mai una figlia o un passo di Workflow) e solo con
+       *   qualcuno davanti: senza, la carta non la vedrebbe nessuno (richiesta della CLI del 18/10: come piano e domande).
+       */
+      ...(() => {
+        /* 19/10/2026 (dal Mobile): senza git (il telefono) l'attrezzo non si offre — una porta che risponde sempre «manca git» non è una porta */
+        if (!puntiDiRipristino || puntiDiRipristino.gitPresente?.() === false || voce.padreId || voce.legameWorkflow || nessunoDavanti(voce)) return {};
+        return { onAnnullaFileFn: (nome, argomenti, opzioni) => ospiteAnnullaFile(voce, argomenti, opzioni) };
+      })(),
+      /*
+       * ⭐ R5.12 (owner 18/10/2026: «Elenca, apre il QR, revoca»; «Carta sempre, anche in Accesso pieno» per il QR) — la seconda
+       *   porta dei telefoni collegati. Come «Annulla»: solo la conversazione principale e solo con qualcuno davanti — senza, nessuno
+       *   vedrebbe la carta né il QR (richiesta della CLI del 18/10: senza nessuno davanti `pair` e `revoke` non si legano).
+       */
+      ...(() => {
+        if (typeof remotoFn !== 'function' || voce.padreId || voce.legameWorkflow || nessunoDavanti(voce)) return {};
+        return { onTelefoniFn: (nome, argomenti, opzioni) => ospiteTelefoni(nome, argomenti, opzioni) };
+      })(),
+      /*
        * ⭐ 0.1.25 (owner 09/10/2026) — la seconda porta dei fornitori esclusi. Stesse regole delle automazioni: mai ai passi di
        *   Workflow, mai a una sessione senza interfaccia che non sia un giro; un giro di automazione legge ma non cambia (l'ospite
        *   lo rifiuta: nessuno risponderebbe alla carta).
@@ -8464,7 +8827,15 @@ export function createSessionRegistry({
         { sessionId, sessionNome: voce.nome ?? null, ...voceLib },
         depsLib,
       ),
-      onEvento: (evento, opzioni) => broadcast(voce, evento, opzioni),
+      onEvento: (evento, opzioni) => {
+        /* 21/10/2026 (B1, «Skip the summary»): il registro sa se il giro sta ASPETTANDO un riassunto (inizio senza ancora la fine), così
+           uno Skip arrivato fuori tempo non arma il giro in anticipo (`saltaRiassunto`). */
+        if (evento?.type === 'CUSTOM' && evento.name === 'talos.compattazione' && evento.value && Number.isSafeInteger(evento.value.giro)) {
+          if (evento.value.fase === 'inizio') voce.riassuntoAtteso = true;
+          else if (evento.value.fase === 'fine') voce.riassuntoAtteso = false;
+        }
+        broadcast(voce, evento, opzioni);
+      },
     };
     /*
      * ⛔⛔⛔ BC-76 (17/09/2026) — UN GIRO SOLO PER TUTTI, e il motore locale è un TRASPORTO.
@@ -8509,10 +8880,19 @@ export function createSessionRegistry({
      *   `recordCompattazioneIniziale` = l'ultimo record persistito (decisione 3: il turno parte già proiettato).
      *   Sincroni: `RunStarted` deve restare nel buffer al ritorno di `avviaESegui`.
      */
+    /* 21/10/2026 (B1): un segnale di Skip per GIRO, che il giro riceve come `segnaleSaltaRiassunto`; `saltaRiassunto` lo fa scattare */
+    voce.saltaRiassuntoControllo = new AbortController();
+    voce.riassuntoAtteso = false;
     const conCompattazione = (opzioni) => ({
       ...opzioni,
+      segnaleSaltaRiassunto: voce.saltaRiassuntoControllo.signal,
       onRichiestaSpedita: (richiesta) => registraUltimaRichiesta(voce, richiesta), // C1 (10/10): la scheda Contesto
       finestraToken: leggiFinestraToken(opzioni.modello),
+      ...(leggiLimiteUscita(opzioni.modello) ? { limiteUscitaToken: leggiLimiteUscita(opzioni.modello) } : {}),
+      ...(leggiTettoCompattazione(opzioni.modello) ? { tettoCompattazioneToken: leggiTettoCompattazione(opzioni.modello) } : {}),
+      /* 21/10/2026 (CLI): il modello dei riassunti dentro il giro, con la sua finestra (l'adattatore non ha il catalogo) */
+      ...(leggiModelloRiassunto(opzioni.modello) ? { modelloRiassunto: leggiModelloRiassunto(opzioni.modello),
+        ...(leggiFinestraToken(leggiModelloRiassunto(opzioni.modello)) ? { finestraRiassuntoToken: leggiFinestraToken(leggiModelloRiassunto(opzioni.modello)) } : {}) } : {}),
       ...(compattazione.eRecordValido(voce.recordCompattazione) ? { recordCompattazioneIniziale: voce.recordCompattazione } : {}),
       /* 15/10/2026: con l'istantanea, il riassunto preparato e non usato dal giro prima — l'adapter lo usa alla soglia se il prefisso
          che copre è intatto, altrimenti lo scarta da sé (impronta e base) */
@@ -8773,7 +9153,9 @@ export function createSessionRegistry({
       }
       storiaScritta.then(async (scritta) => {
         if (recordDelTurno) await persistiRecordCompattazione(voce, recordDelTurno, versioneGiro);
-        if (scritta && risultato?.ok === true) avviaCompattazioneInBackground(voce);
+        /* 21/10/2026 (CLI): il record del riassunto di fine giro lo legge solo la compattazione semplice dell'adattatore (`recordIniziale`,
+           modo legacy o ripiego). Un giro che è andato col motore del contesto non lo userebbe: pagarlo a ogni giro era buttarlo. */
+        if (scritta && risultato?.ok === true && riassuntoDiFineGiro !== false && hookDelContesto === null) avviaCompattazioneInBackground(voce, { versioneDelGiro: versioneGiro });
       }).catch((errore) => { console.error(`[session-store] end-of-turn compaction not started for ${sessionId}:`, errore instanceof Error ? (errore.stack ?? errore.message) : errore); });
       // ⭐⭐⭐ FASE C (28/8) — per il foglio "Albero sessione": lo stato reale di OGNI sessione che conclude, non solo delle figlie (inerte/ignorato per una sessione senza padre).
       voce.esitoDelega = risultato?.esito?.comeFinita ?? (risultato?.ok === false ? 'fallito' : null);
@@ -9882,6 +10264,7 @@ export function createSessionRegistry({
           ...(fermateRipristinate.length ? { noteSfondoFermate: fermateRipristinate } : {}),
           conclusa, ripristinata: true, interrotta: !conclusa,
           prossimaSequenza: ultimaSequenza, versioneGiro,
+          ...istantiDellUltimoGiro(eventi), // 21/10: la sveglia del telefono e la riga dell'elenco li ritrovano dopo un riavvio
           /* A6-bis: fin qui gli eventi sono di un server di PRIMA. Un comando sfondato prima del riavvio non lo segue più nessuno:
              la riga dei Processi lo dice («Non più seguito») invece di contarlo vivo per sempre (Hermes: «lost»). */
           sequenzaAlRipristino: ultimaSequenza,
@@ -11534,7 +11917,10 @@ export function createSessionRegistry({
           return { ok: true, compattato: true, at, annullabile: false, tokenPrima, tokenDopo };
         }
         /* Lane CLI 03/10: un riassunto che non è venuto si è fermato al riassunto, e lo si dice. */
-        return risultato.compattato ? { ok: true, compattato: risultato.compattato } : { ok: true, compattato: false, fase: 'riassunto' };
+        /* D5 a della CLI (21/10/2026): il PERCHÉ del kernel (`motivo`, `codice`: talosHarness.mjs li dà sempre) arriva a chi ha chiesto,
+           così «/compact» dice cosa è successo invece di «il kernel non ha detto perché». Solo se ci sono. */
+        return risultato.compattato ? { ok: true, compattato: risultato.compattato } : { ok: true, compattato: false, fase: 'riassunto',
+          ...(typeof risultato.motivo === 'string' ? { motivo: risultato.motivo } : {}), ...(typeof risultato.codice === 'string' ? { codice: risultato.codice } : {}) };
       } finally {
         compattazioniInCorso.delete(sessionId);
       }
@@ -11769,6 +12155,27 @@ export function createSessionRegistry({
       const ms = interrotta || etaDi === null ? null : etaDellEvento(etaDi, { istanti: voce.istantiEvento ?? null, adesso: clock().getTime() });
       const etaEvento = ms === null ? null : { sequenza: etaDi, ms };
       return { ok: true, ...metriche, chiusura, interrotta, cacheSessione: cacheSessioneDaEventi(voce.eventi), ragionamentiMs, ragionamentiInCorsoDaMs, etaEvento };
+    },
+
+    /**
+     * R5.8 (decisione owner 17/10, «test e riconnessione di un MCP», dal PC e dal telefono) — prova adesso un server dichiarato e
+     *   FIDATO di questa conversazione; l'esito entra negli eventi come ogni avvio (`talos.mcp-avvio`, con `prova:true`), così
+     *   Estensioni e la nota in chat si aggiornano da soli, e il prossimo giro lo usa (le connessioni vivono un giro alla volta).
+     */
+    async provaServerMcp(sessionId, serverId) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return rifiuto('NOT_FOUND', 'session-not-found', 'Session not found');
+      const r = typeof serverId === 'string' && serverId
+        ? await provaServerMcpFn({ cartella: voce.cartella, cartellaTrust: cartellaTrustMcp, serverId })
+        : { trovato: false };
+      /* la stessa frase della fiducia (`fidaServerMcp`): un server che il file del progetto non dichiara */
+      if (!r?.trovato) return rifiuto('NOT_FOUND', 'mcp-server-not-found', 'MCP server "{serverId}" not found in .harness-ui-mcp.json', { serverId: String(serverId ?? '') });
+      if (!r.fidato) return rifiuto('SESSION_NOT_READY', 'mcp-not-trusted', 'This MCP server is not trusted yet: trust it from the computer first.');
+      if (r.esito) broadcast(voce, { type: 'CUSTOM', name: 'talos.mcp-avvio', value: { id: randomUUID(), esiti: [r.esito], prova: true } }, { durableSync: true });
+      return {
+        ok: true, esito: r.esito?.esito ?? 'non-partito', attrezzi: r.attrezzi ?? 0, ms: r.ms ?? null,
+        ...(r.esito?.esito === 'non-partito' ? { motivo: r.esito.motivo ?? '', ...(r.esito.motivoChiave ? { motivoChiave: r.esito.motivoChiave, motivoParams: r.esito.motivoParams ?? {} } : {}) } : {}),
+      };
     },
 
     async elencaServerMcp(sessionId) {
@@ -13336,6 +13743,26 @@ export function createSessionRegistry({
       return true;
     },
 
+    /**
+     * R5.8 (owner 17/10: «chiudere la sessione sul PC dal telefono: sì, con conferma; la conversazione resta salvata»; 18/10 sera:
+     *   «Ferma e libera tutto», l'`/exit` di Claude Code). Ferma il giro se lavora, e quelli delle figlie; ferma i comandi in
+     *   sottofondo di tutto l'albero (anche dei giri passati: non solo quelli che uno Stop ferma); scrive `talos.sessione-chiusa`
+     *   (con l'origine, se arriva da un telefono) perché il PC lo dica e, se la sta mostrando, torni alla Home. I terminali li chiude
+     *   la rotta, che ha il loro registro. La conversazione resta com'è, nell'elenco.
+     */
+    chiudiSessione(sessionId, { origine = null } = {}) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return rifiuto('NOT_FOUND', 'session-not-found', 'Session not found');
+      const discendenti = (id) => [...sessioni.values()].filter((v) => v.padreId === id).flatMap((v) => [...discendenti(v.sessionId), v]);
+      const albero = [voce, ...discendenti(sessionId)];
+      let giri = 0;
+      for (const v of albero) if (!(v.conclusa === true || v.interrotta === true) && registryApi.ferma(v.sessionId)) giri += 1;
+      let comandi = 0;
+      for (const v of albero) for (const toolCallId of [...(v.comandiFermabili?.keys() ?? [])]) if (registryApi.fermaComando(v.sessionId, toolCallId) === 'fermato') comandi += 1;
+      broadcast(voce, { type: 'CUSTOM', name: 'talos.sessione-chiusa', value: { alle: new Date().toISOString(), giri, comandi, ...(origine ? { origine } : {}) } }, { durableSync: true });
+      return { ok: true, giri, comandi };
+    },
+
     /*
      * ⛔ Stop per riga (owner 02/10/2026): ferma UN comando della scheda «Processi» — dell'agente, una `prova`, o un `!` della
      *   persona — e l'agente CONTINUA (il comando finisce «fermato su richiesta», 130, e il modello lo legge). Come Hermes
@@ -13601,6 +14028,46 @@ export function createSessionRegistry({
       return perProgetto.size;
     },
 
+    /*
+     * R5.11 — «Annulla le modifiche ai file» (owner 18/10/2026, «Come Hermes, PC e telefono»). `punti` elenca i turni annullabili,
+     *   `anteprimaAnnulla` dice che cosa si rimetterebbe e che cosa si salterebbe (con il diff), `annullaModifiche` lo fa.
+     *   ⛔ Mai mentre una conversazione lavora nella stessa cartella: un ripristino sotto un attrezzo che scrive darebbe un file
+     *   mezzo dell'uno e mezzo dell'altro. Si dice, e si riprova a giro finito.
+     */
+    async puntiDiRipristinoDi(sessionId) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return rifiuto('NOT_FOUND', 'session-not-found', 'Session not found');
+      if (!puntiDiRipristino) return { ok: true, disponibile: false, punti: [] };
+      const { progetto, sessionId: radice } = doveVaIlPunto(voce);
+      return { ok: true, disponibile: true, punti: await puntiDiRipristino.elenco({ sessionId: radice, progetto }) };
+    },
+    async anteprimaAnnulla(sessionId, turno) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return rifiuto('NOT_FOUND', 'session-not-found', 'Session not found');
+      if (!puntiDiRipristino) return rifiuto('SESSION_NOT_READY', 'undo-off', 'Undoing file changes is not available here.');
+      const { progetto, sessionId: radice } = doveVaIlPunto(voce);
+      return puntiDiRipristino.anteprima({ sessionId: radice, progetto, turno });
+    },
+    async annullaModifiche(sessionId, turno, includi = []) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return rifiuto('NOT_FOUND', 'session-not-found', 'Session not found');
+      if (!puntiDiRipristino) return rifiuto('SESSION_NOT_READY', 'undo-off', 'Undoing file changes is not available here.');
+      const { progetto, sessionId: radice } = doveVaIlPunto(voce);
+      const lavora = [...sessioni.values()].some((v) => (v.cartellaBase ?? v.cartella) === progetto && !(v.conclusa === true || v.interrotta === true));
+      if (lavora) return rifiuto('SESSION_NOT_READY', 'undo-while-working', 'A conversation is working in this folder: undo when it has finished.');
+      return puntiDiRipristino.ripristina({ sessionId: radice, progetto, turno, includi });
+    },
+    /** «Rifai» dell'ultimo annullamento di questa conversazione: stessa guardia di `annullaModifiche`. */
+    async rifaiAnnullamento(sessionId) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return rifiuto('NOT_FOUND', 'session-not-found', 'Session not found');
+      if (!puntiDiRipristino) return rifiuto('SESSION_NOT_READY', 'undo-off', 'Undoing file changes is not available here.');
+      const { progetto, sessionId: radice } = doveVaIlPunto(voce);
+      const lavora = [...sessioni.values()].some((v) => (v.cartellaBase ?? v.cartella) === progetto && !(v.conclusa === true || v.interrotta === true));
+      if (lavora) return rifiuto('SESSION_NOT_READY', 'undo-while-working', 'A conversation is working in this folder: undo when it has finished.');
+      return puntiDiRipristino.rifai({ sessionId: radice, progetto });
+    },
+
     elenca() {
       /*
        * ⛔ C2-R7 (owner 08/10/2026 sera, «la madre dice "aspetta te"») — chi ha una DISCENDENTE (figlia, nipote…) che aspetta la
@@ -13630,6 +14097,7 @@ export function createSessionRegistry({
           /* ⭐ 11/09 — l'ultima volta che il modello ha parlato in questa sessione: è ciò che
              decide chi sta in cima fra le sessioni vive. `null` finché non ha mai risposto. */
           ultimaRispostaAlle: voce.ultimaRispostaAlle ?? null,
+          inizioGiroAlle: voce.inizioGiroAlle ?? null, fineGiroAlle: voce.fineGiroAlle ?? null, // 21/10: la sveglia (vedi consegnaEvento)
           conclusa: voce.conclusa,
           forkDa: voce.forkDa,
           modello: voce.modello ?? null,
@@ -13797,6 +14265,17 @@ export function createSessionRegistry({
     },
 
     /** La policy attuale è una lettura della stessa decisione usata dal kernel. */
+    /**
+     * B1 (owner 21/10/2026 sera, «Skip the summary»): la persona salta il riassunto che il giro sta aspettando; il giro prosegue col
+     * riassunto senza modello (`ragione: 'saltato'`). Vero se c'era un riassunto atteso, falso altrimenti (e niente si arma per dopo).
+     */
+    saltaRiassunto(sessionId) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return rifiuto('NOT_FOUND', 'session-not-found', 'Session not found');
+      if (voce.riassuntoAtteso !== true || !voce.saltaRiassuntoControllo || voce.saltaRiassuntoControllo.signal.aborted) return { saltato: false };
+      voce.saltaRiassuntoControllo.abort();
+      return { saltato: true };
+    },
     politicaCompattazione(sessionId) {
       const voce = sessioni.get(sessionId);
       if (!voce) return rifiuto('NOT_FOUND', 'session-not-found', 'Session not found');

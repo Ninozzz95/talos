@@ -44,7 +44,7 @@ async function ascolta(t, handler) {
 }
 
 test('PG-01 — undici percorsi chat P-G, ventinove record unici dopo P-I, P-J, P-K e P-L, e tutte le proiezioni coerenti', () => {
-  assert.equal(ID_FORNITORI.length, 30, 'Hugging Face riusa il record; P-I: Kimi, MiniMax, Qwen; P-J: zai-anthropic, minimax-anthropic; P-K: azure, bedrock, vertex; P-L: esterno; 11/10/2026: chatgpt (piano)');
+  assert.equal(ID_FORNITORI.length, 31, 'Hugging Face riusa il record; P-I: Kimi, MiniMax, Qwen; P-J: zai-anthropic, minimax-anthropic; P-K: azure, bedrock, vertex; P-L: esterno; 11/10/2026: chatgpt (piano); 18/10/2026: locale-ospite (il motore dell’app)');
   // P-L · le nuove lane possono aggiungere record: restano obbligatori tutti i venti originali.
   const originali = ['openai', 'deepseek', 'zai', 'anthropic', 'gemini', 'openrouter', 'ollama', 'lmstudio', 'local', ...Object.keys(ATTESI)];
   assert.equal(new Set(originali).size, 20, 'Hugging Face riusa il record esistente');
@@ -161,7 +161,7 @@ test('PG-05 — alias uscita documentati e conflitti: nessuna mutazione né este
     assert.equal(Object.hasOwn(preparaRichiestaCompatibile(id, { ...corpo, max_tokens: null, max_completion_tokens: 16 }).corpo, 'max_tokens'), false,
       'PG-REG-LIMITE-NULL: due alias presenti restano vietati anche con null');
   }
-  for (const id of ['mistral', 'together', 'fireworks', 'deepinfra', 'novita', 'nebius', 'ollama-cloud', 'huggingface', 'deepseek', 'openrouter']) {
+  for (const id of ['fireworks', 'deepinfra', 'nebius', 'ollama-cloud', 'huggingface', 'openrouter']) { // mistral: 21/10 lo sforzo solo ai modelli elencati, fornitori-mistral-sforzo-21-10 MSF-02 // together e novita: 21/10 forma propria, fornitori-formati-ragionamento-21-10 // deepseek: 21/10 forma propria, fornitori-deepseek-21-10
     const corpo = { model: 'modello-non-qualificato', max_tokens: 17, reasoning_effort: 'high', tool_choice: 'required' };
     assert.deepEqual(preparaRichiestaCompatibile(id, corpo), { corpo, avvisi: [], note: [] }, id);
   }
@@ -189,7 +189,7 @@ test('PG-06 — ragionamento documentato e strumenti: solo le particolarità del
   }
   assert.equal(preparaRichiestaCompatibile('xai', { model: 'grok-4.3', reasoning_effort: 'none' }).corpo.reasoning_effort, 'none');
   assert.equal(preparaRichiestaCompatibile('xai', { model: 'grok-4.6', reasoning_effort: 'none' }).note.length, 1);
-  for (const id of ['together', 'deepinfra', 'ollama-cloud', 'novita']) {
+  for (const id of ['ollama-cloud']) { // together, deepinfra e novita: 21/10 forma propria, fornitori-formati-ragionamento-21-10
     const corpo = { ...corpoPer(id), reasoning: { effort: 'high' } };
     assert.deepEqual(preparaRichiestaCompatibile(id, corpo), { corpo, avvisi: [], note: [] });
   }

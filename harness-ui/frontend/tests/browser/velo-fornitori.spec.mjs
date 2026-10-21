@@ -36,7 +36,7 @@ const FORNITORI = [
   { id: 'ollama', label: 'Ollama', requiresKey: false, keyConfigured: false, supportsEndpoint: true, endpoint: 'http://127.0.0.1:11434', endpointConfigured: true, timeoutSeconds: 60, execution: 'local' },
   { id: 'anthropic', label: 'Anthropic', requiresKey: true, keyConfigured: false, supportsEndpoint: true, endpoint: '', endpointConfigured: false, timeoutSeconds: 60, execution: 'cloud' },
 ];
-const NOVE = ['appearance', 'chat', 'tools', 'memoria', 'privacy', 'models', 'costi', 'workspace', 'account'];
+const NOVE = ['appearance', 'chat', 'tools', 'memoria', 'privacy', 'telefoni', 'models', 'costi', 'workspace', 'account']; // 18/10/2026: + «Telefoni collegati»
 const CHIAVE_SEZIONE = 'talos.harness.desktop.settings.section.v1';
 const FOTO = resolve(process.cwd(), 'artifacts', 'provider-unica-superficie-2026-09-23');
 
@@ -142,12 +142,12 @@ test('VELO-FORNITORI-A — le Impostazioni hanno NOVE sezioni, e «Provider e ac
   const tentate = await avvia(page);
   await apriImpostazioniDallaBarra(page);
   const nav = page.locator('#schermoImpostazioni [role="tablist"] [data-settings-tab]');
-  await expect(nav).toHaveCount(9);
+  await expect(nav).toHaveCount(NOVE.length); // 18/10/2026: dieci con «Telefoni collegati» — il conto viene dalla lista, non da un numero a mano
   expect(await nav.evaluateAll((n) => n.map((x) => x.dataset.settingsTab))).toEqual(NOVE);
   /* La colonna delle sezioni (e non ogni tablist: il laboratorio ha la SUA, con la scheda «Provider»). */
   await expect(page.locator('#schermoImpostazioni .settings-nav')).not.toContainText('Provider e accessi');
   await expect(page.locator('#setting-tab-providers')).toHaveCount(0);
-  await expect(page.locator('[id^="setting-panel-"]')).toHaveCount(9);
+  await expect(page.locator('[id^="setting-panel-"]')).toHaveCount(NOVE.length); // 18/10/2026: dieci, dalla lista
   /* Il selettore della finestra stretta nasce dallo stesso elenco: nove anche lui. */
   expect(await page.locator('#settingsSectionSelect option').evaluateAll((o) => o.map((x) => x.value))).toEqual(NOVE);
   /* E la ricerca delle parole dei fornitori porta al laboratorio, mai a un vuoto. */

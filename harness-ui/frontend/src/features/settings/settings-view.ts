@@ -355,7 +355,9 @@ export function createSettingsView(screen: HTMLElement, options: SettingsViewOpt
   const groups: HTMLSpanElement[] = [];
   for (const [i, key] of Object.keys(SETTINGS_SECTIONS).entries()) {
     const id = key as SettingsSection;
-    if (i === 0 || i === 5) { const heading = node('span', 'settings-nav__group'); heading.setAttribute('aria-hidden', 'true'); groups.push(heading); list.append(heading); }
+    /* 18/10/2026: il secondo gruppo comincia da «Laboratorio modelli», non dalla sesta voce (con «Telefoni collegati» le voci di
+       «Comportamento» sono sei, e un indice fisso metteva il telefono sotto «Infrastruttura»). */
+    if (i === 0 || id === 'models') { const heading = node('span', 'settings-nav__group'); heading.setAttribute('aria-hidden', 'true'); groups.push(heading); list.append(heading); }
     const button = node('button', 'talos-nav-item settings-nav__item'); button.type = 'button'; button.id = 'setting-tab-' + id; button.dataset.settingsTab = id;
     button.setAttribute('role', 'tab'); button.setAttribute('aria-controls', 'setting-panel-' + id);
     /*

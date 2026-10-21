@@ -1,4 +1,5 @@
 import { t, tn, linguaCorrenteDiT } from './lingua.js';
+import { senzaInganni } from './testo-a-schermo.js';
 /*
  * ⭐ F3 Workflow UI, fetta F3-33a (25/09/2026) — la CARD della proposta di workflow nel transcript, nel punto dell'attrezzo
  *   (decisione owner D20). Sorella della scheda del Piano (`plan-artifact.js`): stesse classi di base, stessa gerarchia —
@@ -33,6 +34,81 @@ const TESTI_AVVISI = Object.freeze({
   get PREFLIGHT_UNKNOWN_COST() { return t('chat.workflow.preflight.unknownCost'); },
 });
 const testoAvviso = (voce) => TESTI_AVVISI[voce?.code] ?? t('chat.workflow.preflight.genericWarning');
+
+/*
+ * Revisione del 21/10/2026 (visto dal vivo: cinque righe identiche «The preflight check has a warning about this proposal.»). Ogni
+ * avviso di `src/workflow/preflight.mjs` diventa una frase per persone, coi suoi soggetti come parametri; gli avvisi con lo STESSO
+ * codice diventano UNA riga (un `PREFLIGHT_BUDGET_PROBABLY_INSUFFICIENT` arriva una volta per ogni limite, `addBudgetWarnings`).
+ * ⛔ I soggetti arrivano ORDINATI come stringhe (`diagnostic`, `allSubjects.sort()`): il loro ordine non dice niente. Si
+ *   riconoscono per forma: un percorso (ha `/`, `.`, `*` o `?`) non è mai un id di passo (`draft-compiler.mjs` `ID_BOZZA`);
+ *   i numeri si leggono come numeri. ⛔ Percorsi e nomi vengono dalla bozza del modello: passano dal filtro dei testi a schermo.
+ */
+/* chiavi scritte per intero (il cancello della lingua legge le chiavi nel sorgente) */
+const NOMI_DEI_LIMITI = Object.freeze({
+  promptTokens: () => t('chat.workflow.preflight.limit.promptTokens'), completionTokens: () => t('chat.workflow.preflight.limit.completionTokens'),
+  wallMs: () => t('chat.workflow.preflight.limit.wallMs'), agentSeconds: () => t('chat.workflow.preflight.limit.agentSeconds'),
+  toolCalls: () => t('chat.workflow.preflight.limit.toolCalls'), modelRequests: () => t('chat.workflow.preflight.limit.modelRequests'),
+  retryPromptTokens: () => t('chat.workflow.preflight.limit.retryPromptTokens'), retryModelRequests: () => t('chat.workflow.preflight.limit.retryModelRequests'),
+  knownCostUsd: () => t('chat.workflow.preflight.limit.knownCostUsd'),
+});
+export const nomeDelLimite = (campo) => (Object.hasOwn(NOMI_DEI_LIMITI, campo) ? NOMI_DEI_LIMITI[campo]() : t('chat.workflow.preflight.limit.other'));
+const ELENCO_MASSIMO = 4;
+const soggetti = (voce) => (Array.isArray(voce?.subjects) ? voce.subjects.map(String) : []);
+const eUnPercorso = (s) => !s.startsWith('+') && /[/.*?]/u.test(s);
+function elenco(valori, massimo = ELENCO_MASSIMO) {
+  const unici = [...new Set(valori.map((v) => senzaInganni(v)).filter(Boolean))];
+  const mostrati = unici.slice(0, massimo);
+  if (unici.length > mostrati.length) mostrati.push(t('chat.workflow.preflight.andMore', { n: unici.length - mostrati.length }));
+  try { return new Intl.ListFormat(linguaCorrenteDiT() === 'en' ? 'en' : 'it', { style: 'long', type: 'conjunction' }).format(mostrati); }
+  catch { return mostrati.join(', '); }
+}
+const FRASI_RAGGRUPPATE = Object.freeze({
+  PREFLIGHT_UNKNOWN_COST: () => t('chat.workflow.preflight.unknownCost'),
+  PREFLIGHT_BUDGET_PROBABLY_INSUFFICIENT: (voci) => {
+    const campi = [...new Set(voci.flatMap(soggetti))];
+    return t('chat.workflow.preflight.budgetSum', { limiti: elenco(campi.map(nomeDelLimite), Infinity) /* nove limiti al più, tutti corti */ });
+  },
+  PREFLIGHT_HOTSPOT_FILE: (voci) => {
+    const file = voci.flatMap(soggetti).filter(eUnPercorso);
+    return file.length ? t('chat.workflow.preflight.hotspotFile', { files: elenco(file) }) : t('chat.workflow.preflight.hotspotFileUnnamed');
+  },
+  PREFLIGHT_WRITESET_OVERLAP: (voci) => {
+    const posti = voci.flatMap(soggetti).filter(eUnPercorso);
+    return posti.length ? t('chat.workflow.preflight.writesetOverlap', { paths: elenco(posti) }) : t('chat.workflow.preflight.writesetOverlapUnnamed');
+  },
+  PREFLIGHT_HIGH_FANOUT: (voci) => {
+    const n = Math.max(...voci.flatMap(soggetti).map(Number).filter(Number.isSafeInteger), 0);
+    return n > 0 ? tn('chat.workflow.preflight.highFanoutOne', 'chat.workflow.preflight.highFanoutMany', n, { n }) : t('chat.workflow.preflight.genericWarning');
+  },
+  PREFLIGHT_LONG_CRITICAL_PATH: (voci) => {
+    const numeri = soggetti(voci[0]).map(Number).filter(Number.isSafeInteger);
+    if (numeri.length < 2) return t('chat.workflow.preflight.genericWarning');
+    return t('chat.workflow.preflight.longPath', { n: Math.min(...numeri), max: Math.max(...numeri) });
+  },
+  PREFLIGHT_SINGLE_MODEL_JUDGE: (voci) => {
+    const n = new Set(voci.flatMap(soggetti).filter((s) => !s.startsWith('+'))).size;
+    return tn('chat.workflow.preflight.singleJudgeOne', 'chat.workflow.preflight.singleJudgeMany', Math.max(n, 1), { n: Math.max(n, 1) });
+  },
+});
+/**
+ * Gli avvisi del controllo preliminare in frasi: una riga per CODICE, nell'ordine in cui il codice compare per la prima volta.
+ * Un codice che questa versione non conosce resta la frase generica, una riga per avviso (mai il testo grezzo del server).
+ * @param {{code:string, subjects?:string[]}[]} avvisi
+ * @returns {string[]}
+ */
+export function righeDegliAvvisi(avvisi) {
+  const gruppi = new Map();
+  const righe = [];
+  for (const voce of Array.isArray(avvisi) ? avvisi : []) {
+    const codice = voce?.code;
+    if (typeof codice === 'string' && Object.hasOwn(FRASI_RAGGRUPPATE, codice)) {
+      if (!gruppi.has(codice)) { gruppi.set(codice, []); righe.push(codice); }
+      gruppi.get(codice).push(voce);
+    } else righe.push(null);
+  }
+  /* due codici sconosciuti danno la STESSA frase generica: una riga sola anche per loro */
+  return [...new Set(righe.map((codice) => (codice ? FRASI_RAGGRUPPATE[codice](gruppi.get(codice)) : t('chat.workflow.preflight.genericWarning'))))];
+}
 
 const STATI_RUN = Object.freeze({
   created: { chiave: 'avviato', get etichetta() { return t('chat.workflow.state.started'); } },
@@ -270,7 +346,7 @@ export function disegnaCardProposta(section, {
       const note = make('ul', 'talos-workflow-proposal__notes');
       note.setAttribute('aria-label', t('chat.workflow.preflight.title'));
       for (const voce of problemi) { const li = make('li', 'talos-workflow-proposal__note', t('chat.workflow.preflight.needsCorrection', { avviso: testoAvviso(voce) })); li.dataset.kind = 'error'; note.append(li); }
-      for (const voce of avvisi) { const li = make('li', 'talos-workflow-proposal__note', testoAvviso(voce)); li.dataset.kind = 'warning'; note.append(li); }
+      for (const riga of righeDegliAvvisi(avvisi)) { const li = make('li', 'talos-workflow-proposal__note', riga); li.dataset.kind = 'warning'; note.append(li); }
       corpo.append(note);
     }
     parti.push(corpo);

@@ -314,3 +314,49 @@ test('F3-50: con un workflow la sincronizzazione non ridisegna le deleghe classi
   aggiornaInspector(inspector, { agenti: [FIGLIA], azioniAgenti: {}, agentiDelWorkflow: false }, { document: d });
   assert.notDeepEqual(rail.figli, [segno], 'without a workflow the classic delegations draw as always');
 });
+
+/*
+ * ⛔ 21/10/2026 (revisione di L3-15, S4): il badge e il filtro del pannello leggono lo stato da `statoDelPasso`, come il conto e il
+ *   diagramma. I tre casi in cui il pannello contraddiceva sé stesso, ciascuno col badge, lo stato della scheda e il conto.
+ */
+test('L315-BADGE-01 incerto, verdetto fallito con giro buono, pausa vera: badge, stato della scheda e conto dicono la stessa cosa', async () => {
+  const { contoDellaRichiesta } = await import('../../src/components/inspector.js');
+  const casi = [
+    { nome: 'incerto', a: { ...FIGLIA, sessionId: 'i', esitoDelega: 'incerto' }, stato: 'incerta', tono: 'talos-badge--danger', conto: { totale: 1, terminati: 0, daControllare: 1 } },
+    { nome: 'verdetto fallito, giro buono', a: { ...FIGLIA, sessionId: 'f', ultimoEsito: 'successo', esitoDelega: 'fallito' }, stato: 'fallita', tono: 'talos-badge--danger', conto: { totale: 1, terminati: 1, daControllare: 1 } },
+    { nome: 'in pausa (giro chiuso col RunError «in-pausa»)', a: { ...FIGLIA, sessionId: 'p', ultimoEsito: 'errore', esitoDelega: 'in-pausa', motivoChiusura: 'in-pausa' }, stato: 'in-pausa', tono: 'talos-badge--warning', conto: { totale: 1, terminati: 0, daControllare: 0 } },
+    // AL CONTRARIO: una riuscita resta riuscita
+    { nome: 'riuscita', a: { ...FIGLIA, sessionId: 'r' }, stato: 'conclusa', tono: 'talos-badge--success', conto: { totale: 1, terminati: 1, daControllare: 0 } },
+  ];
+  for (const { nome, a, stato, tono, conto } of casi) {
+    const { card } = disegna([a], {});
+    assert.equal(card.dataset.stato, stato, nome);
+    const badge = card.trova('talos-badge');
+    assert.ok(badge?.classi.has(tono), `${nome}: ${badge?.className}`);
+    if (tono !== 'talos-badge--success') assert.ok(!badge.classi.has('talos-badge--success'), `⛔ ${nome}: verde`);
+    assert.deepEqual(contoDellaRichiesta([a]), conto, nome);
+  }
+});
+
+test('L315-BADGE-02 la pausa vera nel DIAGRAMMA: aspetta te, non fallita (prima: «failed» e «da controllare»)', async () => {
+  const { statoDelPasso } = await import('../../src/components/grafo/run-dalle-deleghe.js');
+  assert.equal(statoDelPasso({ conclusa: true, ultimoEsito: 'errore', esitoDelega: 'in-pausa', motivoChiusura: 'in-pausa' }), 'waiting_human');
+  assert.equal(statoDelPasso({ conclusa: false, esitoDelega: 'in-pausa' }), 'waiting_human');
+  // AL CONTRARIO: un errore vero, chiuso senza pausa, resta fallito; e una fermata resta fermata anche se diceva «in pausa» prima
+  assert.equal(statoDelPasso({ conclusa: true, ultimoEsito: 'errore' }), 'failed');
+  assert.equal(statoDelPasso({ conclusa: true, interrotta: true, esitoDelega: 'in-pausa' }), 'cancelled');
+});
+
+test('L315-BADGE-03 il filtro «Errori» trova il fallito e l\'incerto, come il diagramma; «Finiti» non li trova', async () => {
+  const { agenteNelFiltro } = await import('../../src/components/inspector.js');
+  const incerto = { ...FIGLIA, esitoDelega: 'incerto' };
+  const fallitoGiroBuono = { ...FIGLIA, ultimoEsito: 'successo', esitoDelega: 'fallito' };
+  for (const a of [incerto, fallitoGiroBuono]) {
+    assert.equal(agenteNelFiltro(a, 'fallita'), true);
+    assert.equal(agenteNelFiltro(a, 'conclusa'), false);
+    assert.equal(agenteNelFiltro(a, 'tutti'), true);
+  }
+  // AL CONTRARIO: una riuscita non sta negli errori
+  assert.equal(agenteNelFiltro(FIGLIA, 'fallita'), false);
+  assert.equal(agenteNelFiltro(FIGLIA, 'conclusa'), true);
+});

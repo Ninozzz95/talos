@@ -49,7 +49,7 @@ import { ID_MOTORI_LOCALI_OPENAI } from './src/provider-registry.mjs'; // 12/09,
 import { createHfHubClient } from './src/hf-hub-client.mjs';
 import { createHfDirectTransfer } from './src/hf-direct-transfer.mjs';
 import { fetchAllowedHfImage } from './src/hf-image-proxy.mjs';
-import { createLlamaServerSupervisor } from './src/llama-server-supervisor.mjs';
+import { createLlamaServerSupervisor, finestraDelMotoreLocale } from './src/llama-server-supervisor.mjs';
 import { motoreConosceArchitettura } from './src/motore-architetture.mjs';
 import { createLlamaServerRuntime } from './src/local-runtime-llama-server.mjs';
 import { createProviderProbe, CATALOGHI_DIRETTI } from './src/provider-probe.mjs';
@@ -78,7 +78,8 @@ import { creaGestoreBrowserVivo } from './src/browser-sessione-viva.mjs'; // 07/
 import { createLocalRuntimeProbe } from './src/local-runtime-probe.mjs';
 import { readGgufHeader } from './src/gguf-header.mjs';
 import { join, parse, isAbsolute } from 'node:path';
-import { CARTELLA_PROGETTI, creaCartellaDatiProgetto } from './src/cartella-dati-progetto.mjs'; // PO-26 (24/09): Libreria e Ricerca fuori dal progetto
+import { CARTELLA_PROGETTI, creaCartellaDatiProgetto } from './src/cartella-dati-progetto.mjs';
+import { creaPuntiDiRipristino } from './src/punti-di-ripristino.mjs'; // R5.11: «Annulla le modifiche ai file» // PO-26 (24/09): Libreria e Ricerca fuori dal progetto
 import { creaInstradamentoDiSerie } from './src/esclusi-di-serie.mjs'; // 0.1.25: i fornitori a valle esclusi di serie, per modello
 import { creaOspiteFornitori } from './src/fornitori-per-il-modello.mjs'; // 0.1.25: la seconda porta dei fornitori esclusi
 import { slugDelFornitore } from './src/openrouter-fornitori.mjs';
@@ -88,6 +89,12 @@ import { creaAccessoChatgptOspite } from './src/chatgpt-accesso-ospite.mjs'; // 
 import { creaLucchettoRinnovoChatgpt, fileLucchettoRinnovoChatgpt } from './src/chatgpt-lucchetto-rinnovo.mjs'; // L3-1
 import { accessoConUso, creaRegistroUsoChatgpt } from './src/chatgpt-uso.mjs';
 import { creaCatalogoChatgpt, creaRotteChatgpt } from './src/chatgpt-rotte.mjs';
+import { creaAccessoLocaleOspite, finestraDelModelloOspite } from './src/accesso-locale-ospite.mjs';
+import { hostname } from 'node:os';
+import { creaRemoto } from './src/remoto/index.mjs'; // 18/10/2026: il controllo remoto, lato PC
+import { caricaBindingIroh } from './src/remoto/binding.mjs';
+import { creaChiamataInterna } from './src/remoto/chiamata-interna.mjs';
+import { iscriviConRigiocata } from './src/iscrizione-sessione.mjs';
 
 /** ⛔ Stessi tre nomi loopback validati in config.mjs (`LOOPBACK_HOSTS`, non esportato — costante minuscola e stabile, duplicarla qui è più semplice che aggiungere un export per tre stringhe). Un browser può presentarsi con uno qualunque dei tre alias anche se il server è bindato su un altro. */
 const ALIAS_LOOPBACK = ['127.0.0.1', '::1', 'localhost'];
@@ -194,6 +201,10 @@ async function startServer() {
       ...(lucchettoRinnovoChatgpt ? { conLucchettoDiRinnovo: lucchettoRinnovoChatgpt } : {}) }), usoChatgpt) : null;
   const catalogoChatgpt = accessoChatgpt ? creaCatalogoChatgpt({ accesso: accessoChatgpt }) : null;
   const rotteChatgpt = creaRotteChatgpt({ accesso: accessoChatgpt, catalogo: catalogoChatgpt, uso: usoChatgpt });
+  /* 18/10/2026, legge dell'owner «il Codice è identico alla chat» (contratto con la sessione mobile): con `TALOS_LOCALE_OSPITE_DIR`
+     l'app che ospita r4 spinge il suo motore locale (socket privato + chiave per avvio) e i modelli `locale-ospite:<nome>` gli
+     parlano. Senza la variabile la fonte non esiste e le sue rotte rispondono 404. */
+  const accessoLocaleOspite = creaAccessoLocaleOspite({ cartella: process.env.TALOS_LOCALE_OSPITE_DIR || null });
 
   /*
    * ⭐⭐⭐ 04/9 — R-03, la fonte della ricerca web dalle Impostazioni (parità
@@ -323,6 +334,9 @@ async function startServer() {
     leggiChiave: (fonte) => { try { return providerStore.getKey(fonte); } catch { return null; } },
     leggiRuntime: (fonte) => { try { return providerStore.getRuntime(fonte); } catch { return {}; } },
     localePronto: () => supervisoreLocale?.status?.()?.state === 'ready',
+    // 18/10/2026: il motore dell'app che ospita r4 — pronto se ha aperto QUEL modello; spedisce l'accesso, che ha socket e chiave
+    ospitePronto: (modello) => accessoLocaleOspite.pronto(modello),
+    chiamaLocaleOspite: (percorso, opzioni) => accessoLocaleOspite.chiama(percorso, opzioni),
     // 11/10/2026: il token del piano ChatGPT, preso (e rinnovato) un attimo prima di ogni invio. Mai la chiave API al suo posto.
     leggiTokenDelPiano: async () => {
       if (!accessoChatgpt) throw Object.assign(new Error('A ChatGPT account cannot be connected on this computer.'), { code: 'CHATGPT_NON_DISPONIBILE' });
@@ -445,6 +459,8 @@ async function startServer() {
       motore: { variante: gpuLayers > 0 ? 'vulkan' : 'cpu', dispositivi },
       modelStore: localModelStore,
       gpuLayers,
+      // L1 (20/10/2026): le finestre vere dei modelli già accesi, fra un avvio dell'app e l'altro (accanto ai modelli, file piccolo)
+      finestreFile: percorsoDatiDesktop('.local-models/finestre-viste.json'),
     })));
     // ⛔ Registrato SUBITO dopo la creazione: è l'unico punto in cui il
     // legame tardivo di sopra si chiude davvero. Senza questa riga i modelli
@@ -534,6 +550,10 @@ async function startServer() {
                si resta su un contesto piccolo e sicuro, che almeno parte. */
             contextLength = 8_192;
           }
+          /* L1-d, revisione del 20/10 (T1): con la scheda la finestra la decide il SUPERVISORE (pavimento di 64K se ci sta, vedi
+             `finestraDiSerie`): questa banda gli arriva come RISERVA, per i modelli densi che non ci stanno e per un fitter muto —
+             cioè resta esattamente quello che succedeva prima. Senza scheda si decide qui, come sempre. */
+          if (gpuLayers > 0) return llama.load({ modelId, modelPath, finestraDiRiserva: contextLength ?? 8_192 });
         }
         return llama.load({ modelId, modelPath, contextLength: contextLength ?? 8_192 });
       },
@@ -595,9 +615,18 @@ async function startServer() {
    * limita in modo conservativo una route OpenRouter dinamica. La prima lettura
    * resta sincrona e prudenziale mentre la verifica parte in background. */
   const compactionWindowSource = createCompactionWindowSource();
-  const finestraDallaRoute = (modello) => compactionWindowSource.get(
-    typeof modello === 'string' && modello.startsWith('openrouter:') ? modello.slice('openrouter:'.length) : modello,
-  );
+  const finestraDallaRoute = (modello) => {
+    /* 18/10/2026: un modello del motore dell'app ha la finestra VERA della sua apertura (16-32k sul Pad, decisione dell'owner),
+       spinta dall'app: compattare per una finestra da catalogo la sforerebbe */
+    const ospite = finestraDelModelloOspite(accessoLocaleOspite, modello);
+    if (ospite !== undefined) return ospite;
+    /* L1-c (20/10/2026): un modello del motore del PC ha la finestra VERA con cui è partito (16.384 per LFM2.5 da 128K sulla RX
+       9070 XT, la banda del caricatore qui sotto, prima di L1-d); senza, la compattazione usava la finestra «ignota» (200.000) e non
+       scattava mai in tempo. Motore spento: la finestra vista l'ultima volta, o una prudente (vedi `finestraDelMotoreLocale`). */
+    const delMotore = finestraDelMotoreLocale(() => supervisoreLocale?.status?.() ?? null, modello, { notaFn: (id) => supervisoreLocale?.finestraNota?.(id) });
+    if (delMotore !== undefined) return delMotore;
+    return compactionWindowSource.get(typeof modello === 'string' && modello.startsWith('openrouter:') ? modello.slice('openrouter:'.length) : modello);
+  };
   /* F3 (24/09): l'oggetto della rotta di spegnimento; gettone e funzione si riempiono dopo che `shutdown` esiste. */
   const spegnimentoPerLaApp = { gettone: null, spegniFn: null };
   /*
@@ -636,10 +665,28 @@ async function startServer() {
     ? createImpostazioniContesto({ file: join(config.cartellaStore, 'context', 'impostazioni-contesto.json') })
     : null;
   const motoreContestoAttivo = Boolean(config.contextTrial || impostazioniContesto);
+  /* 18/10/2026 — il controllo remoto nasce DOPO il gestore HTTP (chiama le stesse rotte in processo) e dopo il legame alla porta:
+     il gestore e il registro (R5.12, gli attrezzi dei telefoni) lo raggiungono attraverso una funzione, e fino ad allora le sue
+     rotte rispondono «non disponibile». Dichiarato QUI, prima del registro, perché la sua funzione non cada nella zona morta. */
+  let remoto = null;
+  /* R5.11: l'archivio ombra di «Annulla le modifiche ai file». 19/10/2026: git si misura SUBITO, così dove manca (il telefono)
+     l'attrezzo del modello non si offre nemmeno al primo giro (`gitPresente`, session-registry). */
+  const puntiDiRipristino = creaPuntiDiRipristino({
+    cartellaDelloStore: async (progetto) => join(await cartellaDatiProgetto(progetto), '.file-checkpoints'),
+    avvisa: (x) => console.warn(`[punti-di-ripristino] ${x.tipo}: ${x.motivo ?? ''}${x.dettaglio ? ` — ${x.dettaglio}` : ''}`),
+  });
+  void puntiDiRipristino.misuraGit(process.cwd()).catch(() => {});
   const sessionRegistry = resumeDiagnostics.wrapRegistry(createSessionRegistry(resumeDiagnostics.registryOptions({
     processOutputStoreFn,
+    remotoFn: () => remoto, // R5.12 (owner 18/10/2026): elenca, apre il QR, revoca — dalla chat
+    repositoryFn: () => servizioGit, // C-3 (owner 21/10/2026): lo stato del repository per il confutatore del /goal
     cartellaDatiProgettoFn: cartellaDatiProgetto,
+    /* R5.11 (owner 18/10/2026, «Come Hermes, PC e telefono»): «Annulla le modifiche ai file». L'archivio git ombra di ogni progetto
+       sta nella sua cartella dati (PO-26), mai nel progetto; un guasto non ferma mai un giro (`src/punti-di-ripristino.mjs`). */
+    puntiDiRipristino,
     finestraTokenFn: finestraDallaRoute,
+    /* 21/10/2026: il limite d'uscita del modello per il tetto del riassunto (solo le route OpenRouter lo dichiarano negli endpoint) */
+    limiteUscitaFn: (modello) => compactionWindowSource.getUscita(typeof modello === 'string' && modello.startsWith('openrouter:') ? modello.slice('openrouter:'.length) : modello),
     /* owner 14/10/2026 (anche per il desktop, confermato in sessione): una domanda SCADUTA non ferma il giro; il modello riceve
        «nessuna risposta» e prosegue col suo giudizio, come Codex, Hermes e zcode (l'interruttore è della CLI, `110714a01`). */
     domandaScadutaFerma: false,
@@ -841,7 +888,9 @@ async function startServer() {
     };
     const tokenCounter = createContextTokenCounter({
       resolveProfile: async model => ({
-        ...credenzialeDelContatore(model.provider, { leggiRuntime: (p) => providerStore.getRuntime(p), leggiChiave: (p) => providerStore.getKey(p), baseLocale: localCounterBase }),
+        ...credenzialeDelContatore(model.provider, { leggiRuntime: (p) => providerStore.getRuntime(p), leggiChiave: (p) => providerStore.getKey(p), baseLocale: localCounterBase,
+          /* 21/10/2026: il conteggio esatto del motore dell'app, sul suo socket con la sua chiave (`accesso-locale-ospite.mjs`) */
+          contaOspite: (corpo, segnale) => accessoLocaleOspite.chiama('/tokenize', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo), signal: segnale }) }),
         nativeRequestBuilder: request => buildPreparedDesktopContextRequest(request, {
           resolveImages: messages => chatImageStore.resolveMessages(messages), readModelCapabilities,
         }),
@@ -1002,6 +1051,7 @@ async function startServer() {
   const servizioGit = creaServizioGit({ cartellaDiSessione: (sessionId) => sessionRegistry.cartellaDi(sessionId) });
 
   const app = createHttpApp({
+    remotoFn: () => remoto,
     // /goal G2c (14/10/2026): la proposta dei criteri adatta il ragionamento al catalogo del modello, come i giri
     modelCapabilityFn: readModelCapabilities,
     /*
@@ -1024,6 +1074,7 @@ async function startServer() {
      */
     custodisciChiaveOpenRouter: async (chiave) => { providerStore.setKey('openrouter', chiave); },
     rotteChatgpt, catalogoChatgpt,
+    accessoLocaleOspite, // 18/10/2026: il motore locale dell'app che ospita r4
     leggiTokenDelPianoFn: accessoChatgpt ? () => accessoChatgpt.tokenDiAccesso() : null,
     registraUsoDelPianoFn: (voce) => usoChatgpt.registra(voce),
     registraLimitiDelPianoFn: (voce) => usoChatgpt.registraLimiti(voce),
@@ -1188,6 +1239,34 @@ async function startServer() {
    * `terminalId` che il server non ha creato riceve 403 e la PTY non nasce
    * nemmeno. I due registri sono montati più in alto, insieme alle rotte.
    */
+  /*
+   * 18/10/2026 — il CONTROLLO REMOTO (contratto v0.3, mockup v5). Spento di serie: nessun endpoint finché la persona non sceglie
+   * come il telefono arriva al PC fuori casa. Le chiavi nel portachiavi del sistema, le impostazioni e l'elenco dei telefoni nella
+   * cartella dei dati. Senza portachiavi o senza binding iroh il remoto lo dice («non disponibile») e il server parte lo stesso.
+   */
+  if (providerKeyring) {
+    try {
+      remoto = creaRemoto({
+        keyring: providerKeyring,
+        fileImpostazioni: percorsoDatiDesktop('remoto/impostazioni.json'),
+        fileTelefoni: percorsoDatiDesktop('remoto/telefoni.json'),
+        chiama: creaChiamataInterna({ httpApp: app, porta: portaAscolto, gettone: config.token ?? null }),
+        sessionRegistry, iscriviConRigiocata,
+        caricaIroh: caricaBindingIroh,
+        /* 21/10/2026 (ripresa M09 del video): il nome che il telefono mostra per questo PC si può scegliere (`TALOS_REMOTE_PC_NAME`,
+           es. un'istanza di prova «Studio PC» senza l'hostname vero); senza, resta l'hostname. Solo testo stampabile, al massimo 64. */
+        nomePc: (() => {
+          const scelto = String(process.env.TALOS_REMOTE_PC_NAME ?? '').replace(/[\p{Cc}\p{Cf}]/gu, '').trim().slice(0, 64);
+          return scelto || hostname();
+        })(),
+        avvisa: (a) => { if (a?.tipo && !String(a.tipo).startsWith('telefono-')) console.info(`[remoto] ${a.tipo}${a.motivo ? `: ${a.motivo}` : ''}`); },
+      });
+      remoto.riprendi().catch((e) => console.warn('[remoto] non riacceso:', e?.code ?? e?.message));
+    } catch (e) {
+      console.warn('[remoto] non disponibile:', e?.code ?? e?.message);
+    }
+  }
+
   const originiTerminaleConsentite = new Set(ALIAS_LOOPBACK.map((host) => `http://${host}:${portaAscolto}`));
   const terminaleWs = creaGestoreTerminaleWs({
     registro: registroTerminali,
@@ -1222,6 +1301,7 @@ async function startServer() {
     shutdownStarted = true;
     togliGettoneSpegnimento();
     clearInterval(reaperTerminali);
+    await remoto?.ferma().catch(() => {}); // 18/10/2026: l'endpoint del controllo remoto si chiude col server
     /*
      * ⛔⛔ 05/9, W1-01 — le chiavi si fotografano PRIMA di iterare: ora le
      * schede per sessione sono molte, `chiudiForzato` cancella dalla stessa

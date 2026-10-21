@@ -358,6 +358,18 @@ test('BC49: inventario e campi TALOS-BANCO invariati, eccetto le esenzioni dichi
       goal_create: [['criteria', 'objective'], ['objective']],
       goal_update: [['reason', 'status'], ['status']],
     });
+    /* R5.11 (owner 18/10/2026, «sì, con la carta»): la seconda porta di «Annulla le modifiche ai file», un attrezzo esteso NUOVO
+     * fissato qui come i fornitori e l'obiettivo; nessuno nella base, le due impronte restano. */
+    Object.assign(attrezziAutomazioni, {
+      file_changes_undo: [['include', 'turns_back'], []],
+    });
+    /* R5.12 (owner 18/10/2026, «Elenca, apre il QR, revoca»): la seconda porta dei telefoni collegati, tre attrezzi estesi NUOVI
+     * fissati qui come «Annulla»; nessuno nella base, le due impronte restano. */
+    Object.assign(attrezziAutomazioni, {
+      remote_phones: [[], []],
+      remote_phone_pair: [[], []],
+      remote_phone_revoke: [['phone'], ['phone']],
+    });
     for (const [nome, [campi, obbligatori]] of Object.entries(attrezziAutomazioni)) {
       const tool = attrezzi.map((entry) => entry.function ?? entry).find((entry) => entry.name === nome);
       if (attrezzi === ATTREZZI_OPENAI) assert.equal(tool, undefined, `${nome} non deve entrare nel banco base`);

@@ -151,3 +151,30 @@ test('IN-TURN guard: when the latest exchange alone keeps the turn above the tar
   assert.deepEqual((await engine.getContextState({ sessionId: 'turn' })).jobs, [], 'the summary would not make room: none is started');
   assert.equal(calls.length, 0);
 });
+
+/*
+ * 21/10/2026, dal vivo sul Pad (sessione lunga del Mobile, LFM2.5 sul motore dell'app): su un motore a POSTO UNICO il riassunto di
+ * sottofondo occupa il motore mentre il giro ha una richiesta in volo, e la richiesta dopo prende 409 LOCAL_ENGINE_BUSY. Con
+ * `singleSlot` niente lavoro di sottofondo finché la richiesta entra; quando non entra più si riassume dentro il giro, aspettando.
+ */
+test('IN-TURN single slot: past the soft trigger but within the limit, NO background job (the engine serves one request at a time)', async t => {
+  const { engine, append, calls } = await engineFixture(t);
+  await append('s0', { role: 'system', content: 'Sei un assistente.' });
+  await append('u0', { role: 'user', content: TASK });
+  for (let k = 1; k <= 5; k++) { await append(`a${k}`, readCall(k)); await append(`t${k}`, readResult(k)); }
+  const prepared = await engine.prepareForRequest({ sessionId: 'turn', sessionModel: { ...modelProfile, singleSlot: true } });
+  assert.equal(prepared.messages.filter(m => m.role === 'tool').length, 5, 'the request is sent whole');
+  assert.deepEqual((await engine.getContextState({ sessionId: 'turn' })).jobs, [], 'no job in parallel to the turn');
+  assert.equal(calls.length, 0, 'no summary request while the turn has one in flight');
+});
+
+test('IN-TURN single slot: past the limit, the summary still happens inside the turn and the request waits for it', async t => {
+  const { engine, append, calls } = await engineFixture(t);
+  await append('s0', { role: 'system', content: 'Sei un assistente.' });
+  await append('u0', { role: 'user', content: TASK });
+  for (let k = 1; k <= 10; k++) { await append(`a${k}`, readCall(k)); await append(`t${k}`, readResult(k)); }
+  const prepared = await engine.prepareForRequest({ sessionId: 'turn', sessionModel: { ...modelProfile, singleSlot: true } });
+  assert.ok(calls.length >= 1, 'a summary was requested');
+  assert.ok(prepared.measurement.inputTokens < modelProfile.windowTokens - modelProfile.responseReserve, `below the input limit: ${prepared.measurement.inputTokens}`);
+  assert.ok(prepared.messages.some(m => typeof m.content === 'string' && m.content.includes('talos-context-memory')), 'this request already carries the summary');
+});

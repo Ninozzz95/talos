@@ -530,7 +530,8 @@ test('⛔⛔⛔⛔ BC76-09 — dopo uno STOP non si esce di casa, nemmeno col co
     provider: 'local', runtimeId: 'llama.cpp', modelId: 'un-gguf.gguf', fallbackConsent: true,
   });
   /* Si ferma MENTRE il giro sta partendo: è il punto in cui l'uscita dipende solo da quella guardia. */
-  const tetto = Date.now() + 5_000;
+  /* il tetto pesa solo se il giro non parte mai (G5D-REV-01, 20/10: 5 s sono pochi sotto carico) */
+  const tetto = Date.now() + 60_000;
   while (Date.now() < tetto && !hookChiamato) await new Promise((r) => setTimeout(r, 5));
   assert.equal(hookChiamato, true, 'il giro deve essere partito prima dello stop');
   assert.equal(registro.ferma(sessionId), true);
