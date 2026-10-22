@@ -495,23 +495,28 @@ test('JOURNAL-1000-TURNS-REPLAY-UNDER-2S — in un figlio fresco: 1.000 turni a 
   console.log(`  [1000 turni] journal ${(esito.byteJournal / 1048576).toFixed(1)} MB (storia ${(esito.byteStoria / 1048576).toFixed(1)} MB, ${esito.checkpointScritti} checkpoint) · generazione ${esito.msGenerazione} ms · ripristina ${esito.msRipristina} ms · RSS picco ripristino ${(esito.rssPiccoRipristino / 1048576).toFixed(0)} MB`);
 });
 
-test('JOURNAL-COMPACT-WRITES-A-CHECKPOINT — «Compatta ora» sostituisce la storia: sul disco è un checkpoint, e dopo il riavvio la storia è quella compattata', async () => {
+test('JOURNAL-COMPACT-WRITES-A-RECORD — 22/10/2026 (S2-A): «Compatta ora» scrive una riga di RECORD, la storia sul disco resta intera, e dopo il riavvio il giro parte dal record', async () => {
   const cartellaStore = cartellaDiProva('talos-f2bis-compatta-');
   let sessionId = 'sess-compatta';
-  const riassunto = [{ role: 'system', content: 'Riassunto.' }, { role: 'user', content: 'Continua' }];
   try {
     // un modello che il registro sa riconoscere: con `m` la compattazione rifiuta onestamente (SESSION_MODEL_UNKNOWN), come CTX-LEGACY-RESTART-PERSISTENCE
-    const { registro, finta } = registroDiProva(cartellaStore, { modello: 'z-ai/glm-5.3-flash', compattaSessioneFn: async () => ({ compattato: true, messaggi: riassunto }) });
-    await giraTurni(registro, finta, sessionId, { turni: 2, byteRisposta: 300, byteDomanda: 100 });
+    const { registro, finta } = registroDiProva(cartellaStore, { modello: 'z-ai/glm-5.3-flash',
+      riassumiPerCompattazioneFn: async () => ({ scelta: { role: 'assistant', content: '## Riassunto\nRiassunto.' }, finishReason: 'stop', usage: null }) });
+    /* 22/10/2026 (CLI, revisione 3, S2-2): risposte da 3.000 byte, non 300 — un /compact che non riduce non scrive più un record, e con
+       tre righe brevi il «Riassunto.» con l'indice era più lungo di ciò che sostituiva */
+    await giraTurni(registro, finta, sessionId, { turni: 4, byteRisposta: 3000, byteDomanda: 100 });
     sessionId = idDi(registro);
-    assert.deepEqual(senzaStime(await registro.compatta(sessionId)), { ok: true, compattato: true, annullabile: false });
-    const ultima = righeDelJournal(cartellaStore, sessionId).filter(eRigaDiStoria).at(-1);
-    assert.equal(ultima.tipo, 'checkpoint');
-    assert.deepEqual(ultima.storia, riassunto);
+    const primaDelCompact = righeDelJournal(cartellaStore, sessionId).filter(eRigaDiStoria).length;
+    const esito = await registro.compatta(sessionId);
+    assert.deepEqual(senzaStime(esito), { ok: true, compattato: true, annullabile: true });
+    const righe = righeDelJournal(cartellaStore, sessionId);
+    assert.equal(righe.filter(eRigaDiStoria).length, primaDelCompact, 'nessuna riga di storia nuova: la storia grezza resta com\'era');
+    assert.equal(righe.filter((r) => r.tipo === 'compattazione').at(-1)?.record?.at, esito.at, 'una riga di record');
     const { registro: dopo, finta: fintaDopo } = registroDiProva(cartellaStore);
     await dopo.ripristina();
     assert.ok(!dopo.resume(sessionId, 'ancora').erroreAvvio);
-    assert.deepEqual(fintaDopo.ultimoInput.messaggiIniziali, [...riassunto, { role: 'user', content: 'ancora' }]);
+    assert.equal(fintaDopo.ultimoInput.recordCompattazioneIniziale?.at, esito.at, 'dopo il riavvio il giro parte dal record');
+    assert.deepEqual(fintaDopo.ultimoInput.messaggiIniziali.at(-1), { role: 'user', content: 'ancora' });
     fintaDopo.concludi({ type: 'RunFinished' }, { ok: true, esito: { messaggiFinali: fintaDopo.ultimoInput.messaggiIniziali } });
     await new Promise((r) => setImmediate(r));
   } finally {

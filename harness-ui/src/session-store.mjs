@@ -38,9 +38,9 @@
  * un taglio silenzioso.
  */
 import { randomUUID } from 'node:crypto';
+import { rigaJson } from './kernel/riga-json.mjs';
 import { promises as fsp, constants as fsConstants, createReadStream, createWriteStream, mkdirSync, appendFileSync, closeSync, existsSync, linkSync, openSync, readFileSync, readSync, statSync, truncateSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
-import { createInterface } from 'node:readline';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { setTimeout as attendiMs } from 'node:timers/promises';
@@ -302,12 +302,25 @@ function verificaCodaAppendibile(percorso) {
   }
 }
 
+/*
+ * 22/10/2026 — U+2028 e U+2029 (LINE/PARAGRAPH SEPARATOR) sono validi DENTRO una stringa JSON e `JSON.stringify` li lascia crudi; ma il
+ * lettore del giornale usava `readline`, che li prende per fine riga (Node `lib/internal/readline/interface.js`, `lineEnding =
+ * /\r?\n|\r(?!\n)|\u2028|\u2029/g`). Una risposta del modello che li conteneva (testo copiato da una pagina, da un PDF) spezzava la sua
+ * riga in due e la sessione diventava «corrotta» al riavvio: SESSION_STORE_CORRUPT, conversazione persa. Misurato il 22/10 sul codice
+ * della 0.1.35 (sonda in scratchpad: «niente» ok, U+2028 e U+2029 CORRUPT). Due cure: chi scrive li sfugge (`\u2028`, JSON valido e
+ * identico alla rilettura: `rigaJson`, la stessa del canale della casa Linux), e chi legge divide SOLO su `\n` — così anche i giornali
+ * già scritti coi caratteri crudi tornano leggibili.
+ */
+export function rigaDelGiornale(record) {
+  return rigaJson(record);
+}
+
 export async function registraRiga({ cartellaStore, sessionId, record, durable = false }, deps = {}) {
   const mkdirFn = deps.mkdirFn ?? fsp.mkdir;
   const appendFileFn = deps.appendFileFn ?? fsp.appendFile;
   const percorso = percorsoDi(cartellaStore, sessionId);
   // ⛔ Serializzato SUBITO, non dentro la coda: `record` potrebbe cambiare mentre questa scrittura aspetta il suo turno.
-  const riga = `${JSON.stringify(record)}\n`;
+  const riga = rigaDelGiornale(record);
   const precedente = codeDiScrittura.get(percorso) ?? Promise.resolve();
   const corrente = precedente.catch(() => {}).then(async () => {
     garantisciAffittoPerScrittura(cartellaStore, sessionId);
@@ -366,7 +379,7 @@ export function registraRigaSync({ cartellaStore, sessionId, record }, deps = {}
   verificaCodaAppendibile(percorso);
   const prima = dimensioneOZero(percorso);
   try {
-    appendFileSyncFn(percorso, `${JSON.stringify(record)}\n`, 'utf8');
+    appendFileSyncFn(percorso, rigaDelGiornale(record), 'utf8');
   } catch (errore) {
     avvelenaSeIlFileECambiato(percorso, prima, errore); // 24/09/2026: zero byte scritti ⇒ nessun veleno
     throw errore;
@@ -497,7 +510,7 @@ export function registraIntestazioneSync({ cartellaStore, sessionId, record }, d
   const chiaveCartella = resolve(cartellaStore);
   const finale = percorsoDi(cartellaStore, sessionId);
   const staging = join(cartellaStore, `.${sessionId}.${randomUUID()}.pending`);
-  const attesi = Buffer.from(`${JSON.stringify(record)}\n`, 'utf8');
+  const attesi = Buffer.from(rigaDelGiornale(record), 'utf8');
   garantisciAffittoPerScrittura(cartellaStore, sessionId);
   let conservaStaging = false;
   let stagingRimosso = false;
@@ -648,7 +661,7 @@ export function registraIntestazioneSync({ cartellaStore, sessionId, record }, d
  */
 export function registraRigaConfermata({ cartellaStore, sessionId, record, puoAccodareFn, confermaFn }, deps = {}) {
   const percorso = percorsoDi(cartellaStore, sessionId);
-  const bytesAttesi = Buffer.from(`${JSON.stringify(record)}\n`, 'utf8');
+  const bytesAttesi = Buffer.from(rigaDelGiornale(record), 'utf8');
   const appendFileSyncFn = deps.appendFileSyncFn ?? appendFileSync;
   const truncateSyncFn = deps.truncateSyncFn ?? truncateSync;
   const precedente = codeDiScrittura.get(percorso) ?? Promise.resolve();
@@ -1038,8 +1051,9 @@ export function riparaCodaSpezzata({ percorso, cartellaStore, sessionId }, deps 
  * «fermati qui», che chiude lo stream e ritorna `interrotta:true`); `byte` è la taglia della riga in UTF-8
  * SENZA il fine riga; un'eccezione di `perRiga` ferma la lettura e arriva al chiamante così com'è, senza
  * toccare il file. Un errore lo si lancia; un lavoro asincrono lo si accumula e lo si fa dopo.
- * ⛔ `readline` tratta anche un `\r` solo come fine riga: nel journal non può comparire (JSON.stringify lo
- *   scrive `\\r`), e `\r\n` con `crlfDelay: Infinity` è UNA riga — parità con lo `split('\n')` di prima.
+ * ⛔ 22/10/2026: NON più `readline`, che spezzava anche su U+2028 e U+2029 (vedi `rigaDelGiornale`): le righe si dividono a mano
+ *   SOLO su `\n`, togliendo un `\r` finale (parità con `crlfDelay: Infinity` e con lo `split('\n')` di prima). L'ultima riga senza
+ *   `\n` arriva lo stesso come riga, come faceva `readline` (la coda incerta la dice l'ultimo byte, guardato prima).
  */
 function inCodaDelPercorso(percorso, lavoro) {
   const precedente = codeDiScrittura.get(percorso) ?? Promise.resolve();
@@ -1070,15 +1084,13 @@ async function leggiAStreamInterna(percorso, sessionId, perRiga, deps = {}, cart
   let rottaPendente = false; // una riga non parsabile: è un crash a metà append solo se resta l'ULTIMA
   let fermata = null;        // { errore } | { interrotta: true }
   const input = createReadStreamFn(percorso, { encoding: 'utf8', end: dimensione - 1 });
-  const rl = createInterface({ input, crlfDelay: Infinity });
   const ferma = (esito) => {
     if (fermata) return;
     fermata = esito;
-    rl.close();
     input.destroy();
   };
-  rl.on('line', (riga) => {
-    if (fermata) return; // `rl.close()` non ferma le righe già in un blocco: si ignorano
+  const suRiga = (riga) => {
+    if (fermata) return; // `destroy()` non ferma le righe già in un blocco: si ignorano
     if (riga.trim() === '') return;
     if (rottaPendente) {
       ferma({ errore: new SessionStoreError(`Session ${sessionId} has a corrupt line (not the last one): the file is not a crash midway through an append; it is damaged elsewhere.`, 'SESSION_STORE_CORRUPT', { chiave: 'server.sessionStore.corrupt', params: { sessionId } }) });
@@ -1092,11 +1104,28 @@ async function leggiAStreamInterna(percorso, sessionId, perRiga, deps = {}, cart
     try { esito = perRiga(record, { indice: indice++, byte: Buffer.byteLength(riga, 'utf8') }); }
     catch (errore) { ferma({ errore }); return; }
     if (esito === false) ferma({ interrotta: true });
+  };
+  /* 22/10/2026 (revisione avversaria): i pezzi di una riga lunga si tengono in un elenco e si cerca `\n` solo nel pezzo NUOVO — prima
+     `resto += pezzo` e la ricerca da capo erano quadratici su una riga sola (checkpoint): 96 MB in 12,9 s contro 0,29 di readline. */
+  let pezziDellaRiga = [];
+  const senzaCr = (riga) => (riga.endsWith('\r') ? riga.slice(0, -1) : riga);
+  input.on('data', (pezzo) => {
+    if (fermata) return;
+    let inizio = 0;
+    for (let fine = pezzo.indexOf('\n'); fine !== -1 && !fermata; fine = pezzo.indexOf('\n', inizio)) {
+      pezziDellaRiga.push(pezzo.slice(inizio, fine));
+      const riga = pezziDellaRiga.length === 1 ? pezziDellaRiga[0] : pezziDellaRiga.join('');
+      pezziDellaRiga = [];
+      suRiga(senzaCr(riga));
+      inizio = fine + 1;
+    }
+    if (!fermata && inizio < pezzo.length) pezziDellaRiga.push(pezzo.slice(inizio));
   });
+  input.on('end', () => { if (!fermata && pezziDellaRiga.length) suRiga(senzaCr(pezziDellaRiga.join(''))); pezziDellaRiga = []; });
   await new Promise((resolve) => {
-    input.on('error', (errore) => { if (!fermata) fermata = { errore: erroreDiLettura(errore) }; rl.close(); });
-    // La chiusura dello STREAM (fd chiuso) è il segnale completo: arriva dopo l'ultima riga, anche su
-    // errore (autoClose) e dopo `destroy()`. Il `close` di readline arriverebbe prima, a fd ancora aperto.
+    input.on('error', (errore) => { if (!fermata) fermata = { errore: erroreDiLettura(errore) }; });
+    // La chiusura dello STREAM (fd chiuso) è il segnale completo: arriva dopo l'ultima riga (`end` viene prima di `close`),
+    // anche su errore (autoClose) e dopo `destroy()`.
     input.on('close', resolve);
   });
   if (fermata?.errore) throw fermata.errore;

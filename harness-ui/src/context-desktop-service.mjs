@@ -32,6 +32,9 @@ export function budgetDellaMisura(snapshot, profilo = null) {
   } catch { return null; }
 }
 
+/** Ogni quanto il /compact a mano sul motore dice a che punto è (Mobile 22/10: senza, ~18 minuti di riga ferma). */
+export const AVANZAMENTO_DEL_COMPACT_MS = 2_000;
+
 export function createDesktopContextService({ engine, store, loadLegacy, selectLegacyCheckpoint = null, resolveSessionModel, isSessionEnabled, readSession, onEvent, onPrepared, runInference, registraAncora, clock = () => new Date().toISOString() }) {
   if (!engine || !store || typeof readSession !== 'function' || typeof resolveSessionModel !== 'function' || typeof isSessionEnabled !== 'function') fail('CTX_PORT_MISSING', 'Incomplete desktop context services.');
   const queues = new Map();
@@ -195,13 +198,49 @@ export function createDesktopContextService({ engine, store, loadLegacy, selectL
         },
       });
     },
-    async compact({ sessionId, messages }) {
+    async compact({ sessionId, messages, onProgresso = null, intervalloAvanzamentoMs = AVANZAMENTO_DEL_COMPACT_MS }) {
       if (!await isSessionEnabled(sessionId)) return undefined;
       const session = await readSession(sessionId);
       if (Array.isArray(messages) && session?.conclusa !== false) await api.syncOriginals({ sessionId, messages });
       const snapshot = await serial(sessionId, () => ensure(sessionId));
       const { job } = await api.request({ sessionId, method: 'POST', path: '/jobs', body: { kind: 'compact', expectedRevision: snapshot.revision, idempotencyKey: randomUUID() } });
-      const finished = await engine.waitForCompaction({ sessionId, jobId: job.id });
+      /*
+       * 22/10/2026 (Mobile, dal vivo): il lavoro del motore durava ~18 minuti (un modello locale che legge 24.331 token a 55,7 t/s, due
+       *   tentativi) e la riga non riceveva NIENTE dopo la lettura: sembrava ferma. Il motore salva lo stato del lavoro a ogni passo
+       *   (`engine.mjs`: summarizing, validating, ready); qui lo si legge a intervalli e lo si passa come passo del contratto della riga
+       *   viva (`fase` ∈ riassunto · sostituzione, `trascorsoMs`). Solo letture: il lavoro non cambia, e un passo che non si legge
+       *   non ferma niente.
+       */
+      /* ⛔ Revisione avversaria del 22/10: `clearInterval` ferma i colpi nuovi, non le letture già partite — con un archivio lento
+         (SQLite occupato dal lavoro stesso) i passi arrivavano DOPO il ritorno del /compact, e potevano sovrapporsi e arrivare fuori
+         ordine. ⇒ Una lettura alla volta, nessun passo dopo la fine, e l'orologio non tiene vivo il processo (`unref`). */
+      /* ⛔ Quarta passata: una lettura che non torna MAI teneva `inLettura` per sempre, e la riga tornava muta — il sintomo di partenza.
+         ⇒ una lettura più vecchia di tre intervalli non blocca più i colpi; il suo esito, se arriva dopo uno più nuovo, si scarta (numero
+         di lettura), così l'ordine dei passi resta quello delle letture. */
+      const inizio = Date.now();
+      let finito = false;
+      let letturaIniziata = 0;
+      let ultimaLettura = 0;
+      let ultimoConsegnato = 0;
+      const leggiPasso = async () => {
+        if (finito || (letturaIniziata && Date.now() - letturaIniziata < 3 * intervalloAvanzamentoMs)) return;
+        const numero = ++ultimaLettura;
+        letturaIniziata = Date.now();
+        try {
+          const corrente = await store.readContextJob({ sessionId, jobId: job.id });
+          const fase = ['validating', 'ready', 'committing'].includes(corrente?.state) ? 'sostituzione' : 'riassunto';
+          if (!finito && numero > ultimoConsegnato) {
+            ultimoConsegnato = numero;
+            onProgresso({ fase, trascorsoMs: Date.now() - inizio, origine: 'motore' });
+          }
+        } catch { /* un passo non letto non è un guasto del lavoro */ }
+        finally { if (numero === ultimaLettura) letturaIniziata = 0; }
+      };
+      const orologio = typeof onProgresso === 'function' ? setInterval(() => { void leggiPasso(); }, intervalloAvanzamentoMs) : null;
+      orologio?.unref?.();
+      let finished;
+      try { finished = await engine.waitForCompaction({ sessionId, jobId: job.id }); }
+      finally { finito = true; if (orologio) clearInterval(orologio); }
       await deliver(sessionId);
       return { ok: true, compattato: finished.state === 'committed', jobId: job.id, ...(finished.error ? { error: finished.error } : {}) };
     },

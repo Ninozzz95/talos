@@ -23707,7 +23707,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       if (sessionId !== state.realSession.id) return { stato: esito.compattato ? 'riassunta' : 'invariata' };
       aggiornaAvanzamentoLegacy(colonna, null, { sessionId });
       /* 26/09: la rotta manuale ora risponde con `at` e numeri, e registra lo STESSO evento durevole: POST ed evento
-         aggiornano la stessa riga (chiave `at`), e il suo checkpoint non si annulla (`annullabile:false`). */
+         aggiornano la stessa riga (chiave `at`). Dal 22/10/2026 (S2-A) è un record, quindi si annulla: `annullabile` lo dice il server. */
       if (esito.compattato) {
         misuraDopoCompattazione(sessionId, esito.tokenDopo);
         aggiornaSeparatoreLegacy(colonna, { at: esito.at, stato: 'riassunta', annullabile: esito.annullabile, tokenPrima: esito.tokenPrima, tokenDopo: esito.tokenDopo }, { ...opzioniRigaLegacy(sessionId), testo: testoRigaCompattazione({ stato: 'riassunta', tokenPrima: esito.tokenPrima, tokenDopo: esito.tokenDopo }) });

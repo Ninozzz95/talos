@@ -58,6 +58,17 @@ const RICHIESTA_DI_RIASSUNTO = [
   '(commit, push, publish, delete) must be named VERBATIM with its identifier — the full commit hash.',
 ].join('\n');
 const GIRI_PRIMA_DI_COMPATTARE = 12;
+/**
+ * Dove va una chiamata secondaria. Di serie sul fornitore ATTIVO del giro (`effettivo`, se la catena ha già cambiato fornitore), come
+ * prima. ⛔ 22/10/2026 (CLI, revisione 3 della 0.6.13, S2-1): un riassunto sul modello LEGGERO (`modelloProprio`) va al SUO modello —
+ * dopo un cambio di fornitore finiva sul modello di riserva del giro, cioè non era più il riassunto che la persona aveva scelto.
+ */
+export function destinazioneDellaSecondaria({ effettivo = null, modello, modelloProprio = false } = {}) {
+  const iniziale = separaFonteModello(modello);
+  const proprio = { provider: iniziale.fonte, model: iniziale.modelloRemoto };
+  return modelloProprio ? proprio : (effettivo ?? proprio);
+}
+
 /** La chiamata secondaria (il riassunto preparato in sottofondo): la richiesta e UN ritentativo (IST2-REV-02, vedi `eseguiConFallback`). */
 const TENTATIVI_DELLA_SECONDARIA = 2;
 /** IST3-REV-01 (16/10): un `Retry-After: 3600` teneva il riassunto «in volo» un'ora, e all'emergenza il giro aspettava lui. Se il
@@ -1613,8 +1624,7 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
        mentre il giro gli chiede le sue, e all'emergenza il giro aspetta proprio quella promessa. Un ritentativo basta a un guasto di
        passaggio; oltre, il riassunto non è pronto e il giro compatta da sé quando gli serve. */
     if (opzioni.secondaria === true) {
-      const iniziale = separaFonteModello(opzioni.modello);
-      const destinazione = effettivo ?? { provider: iniziale.fonte, model: iniziale.modelloRemoto };
+      const destinazione = destinazioneDellaSecondaria({ effettivo, modello: opzioni.modello, modelloProprio: opzioni.modelloProprio === true });
       const contesto = { guastiHttp: new Map() };
       let risultato;
       try {

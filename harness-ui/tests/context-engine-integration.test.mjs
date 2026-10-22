@@ -90,6 +90,19 @@ test('CTX-REGISTRY-COMPACT-COMMON delegates manual compaction without replacing 
   assert.equal(legacy, 0);
 });
 
+test('CTX-REGISTRY-COMPACT-FAILED-VS-NOTHING (Mobile 22/10) a failed engine job says «errore» with its code; a job with nothing to gain says so', async () => {
+  const fallito = registry({ contextCompactFn: async () => ({ ok: true, compattato: false, jobId: 'j1', error: { code: 'CTX_INVALID_SOURCE', message: 'x' } }) });
+  const a = fallito.avvia('test'); await tick();
+  assert.deepEqual(await fallito.compatta(a.sessionId), { ok: true, compattato: false, jobId: 'j1', error: { code: 'CTX_INVALID_SOURCE', message: 'x' }, fase: 'riassunto', motivo: 'errore', codice: 'CTX_INVALID_SOURCE' });
+  const niente = registry({ contextCompactFn: async () => ({ ok: true, compattato: false, jobId: 'j2' }) });
+  const b = niente.avvia('test'); await tick();
+  assert.deepEqual(await niente.compatta(b.sessionId), { ok: true, compattato: false, jobId: 'j2', fase: 'riassunto', motivo: 'niente-da-compattare' });
+  /* AL CONTRARIO: un esito riuscito, o uno che porta già il suo motivo, passa intatto */
+  const ok = registry({ contextCompactFn: async () => ({ ok: true, compattato: true }) });
+  const c = ok.avvia('test'); await tick();
+  assert.deepEqual(await ok.compatta(c.sessionId), { ok: true, compattato: true });
+});
+
 test('CTX-REGISTRY-PREPARE-FAILURE refuses inference after archive preparation fails', async () => {
   let calls = 0;
   const r = registry({ contextHooksFn: async () => { throw Object.assign(new Error('Archivio non disponibile'), { code: 'CTX_PERSIST_FAILED' }); }, avviaSessioneFn: async () => { calls++; return completed; } });
@@ -134,4 +147,18 @@ test('CTX-SUMMARY-REASONING-ATE-BUDGET a reply with no text but reasoning tokens
   await assert.rejects(adapter.callContextModel({ provider: 'openrouter', model: 'z-ai/glm-5.3-flash', messages: history, maxOutputTokens: 512,
     fetchDiRete: async () => Response.json({ choices: [{ message: { content: null, reasoning: 'pensa pensa' }, finish_reason: 'length' }], usage: { completion_tokens: 512, completion_tokens_details: { reasoning_tokens: 512 } } }) }),
     error => error.code === 'CTX_TRUNCATED_SUMMARY' && /512 tokens/.test(error.message) && /reasoning/.test(error.message) && error.usage?.completion_tokens === 512);
+});
+
+test('CTX-REGISTRY-COMPACT-PROGRESS (Mobile 22/10) the engine job\'s steps reach the live row through the registry', async () => {
+  const r = registry({ contextCompactFn: async (input) => {
+    input.onProgresso({ fase: 'riassunto', trascorsoMs: 2000, origine: 'motore' });
+    input.onProgresso({ fase: 'sostituzione', trascorsoMs: 4000, origine: 'motore' });
+    return { ok: true, compattato: true };
+  } });
+  const started = r.avvia('test'); await tick();
+  const eventi = [];
+  r.iscriviti(started.sessionId, (e) => eventi.push(e));
+  await r.compatta(started.sessionId);
+  const passi = eventi.filter((e) => e.type === 'CUSTOM' && /progress/u.test(e.name)).map((e) => [e.value.fase, e.value.motivo, e.value.trascorsoMs ?? null]);
+  assert.deepEqual(passi.filter(([fase]) => fase !== 'lettura'), [['riassunto', 'manuale', 2000], ['sostituzione', 'manuale', 4000]], JSON.stringify(passi));
 });

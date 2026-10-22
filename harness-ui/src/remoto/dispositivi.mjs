@@ -93,7 +93,7 @@ export function vocePubblica(v) {
 }
 
 export function creaElencoDispositivi({ file, fs = fsp, clock = () => Date.now(), casuale = (n) => randomBytes(n) } = {}) {
-  if (typeof file !== 'string' || !file) throw errore('REMOTE_DEVICES_FILE', 'The paired phones need a data file.');
+  if (typeof file !== 'string' || !file) throw errore('REMOTE_DEVICES_FILE', 'The paired devices need a data file.');
   let voci = null;
   let coda = Promise.resolve();
 
@@ -103,7 +103,7 @@ export function creaElencoDispositivi({ file, fs = fsp, clock = () => Date.now()
     try { grezzo = await fs.readFile(file, 'utf8'); } catch (e) { if (e?.code !== 'ENOENT') throw e; }
     let dati = null;
     if (grezzo != null) {
-      try { dati = JSON.parse(grezzo); } catch { throw errore('REMOTE_DEVICES_UNREADABLE', 'The list of paired phones cannot be read.'); }
+      try { dati = JSON.parse(grezzo); } catch { throw errore('REMOTE_DEVICES_UNREADABLE', 'The list of paired devices cannot be read.'); }
     }
     /* Un file illeggibile NON si legge come vuoto: vorrebbe dire ammettere nessuno, ma anche riscriverlo e perdere le revoche. */
     voci = Array.isArray(dati?.dispositivi) ? dati.dispositivi.map(normalizza).filter(Boolean) : [];
@@ -141,11 +141,11 @@ export function creaElencoDispositivi({ file, fs = fsp, clock = () => Date.now()
     aggiungi({ endpointId, nome = null, piattaforma = null, sveglia = null }) {
       return inFila(async () => {
         await carica();
-        if (typeof endpointId !== 'string' || !endpointId) throw errore('REMOTE_DEVICE_BAD', 'A phone needs its endpoint id.');
+        if (typeof endpointId !== 'string' || !endpointId) throw errore('REMOTE_DEVICE_BAD', 'A device needs its endpoint id.');
         const vivi = voci.filter((x) => !x.revocatoAlle);
         /* Lo stesso telefono riaccoppiato: la voce vecchia esce, non restano due voci vive per una chiave. */
         for (const x of vivi) if (x.endpointId === endpointId) { x.revocatoAlle = clock(); x.revocatoDa = 'pc'; }
-        if (voci.filter((x) => !x.revocatoAlle).length >= TELEFONI_MASSIMI) throw errore('REMOTE_TOO_MANY_PHONES', `At most ${TELEFONI_MASSIMI} phones can be paired with this computer.`);
+        if (voci.filter((x) => !x.revocatoAlle).length >= TELEFONI_MASSIMI) throw errore('REMOTE_TOO_MANY_PHONES', `At most ${TELEFONI_MASSIMI} devices can be paired with this computer.`);
         const voce = normalizza({ id: Buffer.from(casuale(12)).toString('base64url'), endpointId, nome, piattaforma, sveglia, collegatoAlle: clock() });
         voci.push(voce);
         await salva();
@@ -157,7 +157,7 @@ export function creaElencoDispositivi({ file, fs = fsp, clock = () => Date.now()
       return inFila(async () => {
         await carica();
         const v = voci.find((x) => x.id === id);
-        if (!v) throw errore('REMOTE_DEVICE_UNKNOWN', 'This phone is not paired.');
+        if (!v) throw errore('REMOTE_DEVICE_UNKNOWN', 'This device is not paired.');
         const pulito = String(nome ?? '').trim().slice(0, 64);
         if (!pulito) throw errore('REMOTE_DEVICE_BAD', 'The name cannot be empty.');
         v.nome = pulito;
@@ -170,7 +170,7 @@ export function creaElencoDispositivi({ file, fs = fsp, clock = () => Date.now()
       return inFila(async () => {
         await carica();
         const v = voci.find((x) => x.id === id && !x.revocatoAlle);
-        if (!v) throw errore('REMOTE_DEVICE_UNKNOWN', 'This phone is not paired.');
+        if (!v) throw errore('REMOTE_DEVICE_UNKNOWN', 'This device is not paired.');
         v.sveglia = normalizza({ ...v, sveglia }).sveglia;
         await salva();
         return vocePubblica(v);
@@ -194,7 +194,7 @@ export function creaElencoDispositivi({ file, fs = fsp, clock = () => Date.now()
       return inFila(async () => {
         await carica();
         const v = voci.find((x) => x.id === id);
-        if (!v) throw errore('REMOTE_DEVICE_UNKNOWN', 'This phone is not paired.');
+        if (!v) throw errore('REMOTE_DEVICE_UNKNOWN', 'This device is not paired.');
         if (!v.revocatoAlle) { v.revocatoAlle = clock(); v.revocatoDa = da === 'telefono' ? 'telefono' : 'pc'; v.sveglia = null; await salva(); }
         return vocePubblica(v);
       });

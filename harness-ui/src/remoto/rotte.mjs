@@ -65,7 +65,7 @@ export function creaRotteRemoto({ remoto }) {
       }
       const tel = /^\/api\/v1\/remote\/phones\/([^/]+)\/(rename|revoke)$/.exec(percorso);
       if (tel) {
-        if (!ID.test(tel[1])) return rifiuta('QUERY_INVALID', 'Invalid phone id.');
+        if (!ID.test(tel[1])) return rifiuta('QUERY_INVALID', 'Invalid device id.');
         if (tel[2] === 'rename') {
           if (!soloChiavi(['nome']) || typeof c.nome !== 'string') return rifiuta('QUERY_INVALID', 'The body accepts only the name.');
           return { stato: 200, dati: { telefono: await remoto.rinomina(tel[1], c.nome) } };

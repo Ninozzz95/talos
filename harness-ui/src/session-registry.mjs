@@ -5479,7 +5479,7 @@ export function createSessionRegistry({
     if (!compattazione.eRecordValido(record) || !voce.sessionId) return Promise.resolve(false);
     const corrente = voce.recordCompattazione;
     if (compattazione.eRecordValido(corrente) && corrente.coveredThrough > record.coveredThrough) return Promise.resolve(false);
-    voce.recordCompattazione = record;
+    voce.recordCompattazione = record; voce.riassuntoInefficace = null;
     if (!cartellaStore) return Promise.resolve(true);
     return Promise.resolve()
       .then(() => registraRigaConfermataFn({ cartellaStore, sessionId: voce.sessionId, record: { tipo: 'compattazione', versioneGiro, record } }))
@@ -5540,6 +5540,120 @@ export function createSessionRegistry({
     broadcast(voce, { type: 'CUSTOM', name: compattazione.NOME_EVENTO_PROGRESSO_COMPATTAZIONE, value: { sessionId: voce.sessionId, ...valore } });
   }
 
+  /*
+   * 22/10/2026 (CLI, S2-A, bloccante) — IL RIASSUNTO DELLE PARTI È UNO: lo usano il riassunto di fine giro e il /compact a mano.
+   * Prima il /compact a mano chiamava il kernel nudo (`compattaConversazione`): mandava la storia GREZZA (non la proiezione: con un
+   * record poteva sforare), teneva solo i primi due messaggi (le note di sistema, non il compito), scriveva col modello della
+   * conversazione e non col leggero, e SOSTITUIVA la storia lasciando vivo il record dell'adapter — che, appena la storia tornava
+   * lunga quanto lui, rimetteva davanti al modello le richieste di prima al posto del riassunto nuovo, senza un avviso.
+   * Ora le due strade fanno la stessa cosa: proiezione → `dividiPerCompattazione` → riassunto (modello leggero, ritentativi
+   * dell'adapter) → proiezione nuova → record con l'impronta del tratto coperto. Hermes fa lo stesso: un compressore solo per
+   * `/compress` e per la soglia (`agent/context_compressor.py`).
+   */
+  async function scriviRiassuntoDelleParti(voce, { parti, scelta, passo, segnaleStop = null }) {
+    const { budget } = scelta;
+    const richiestaIntera = compattazione.costruisciRichiestaDiRiassunto({ ...parti, paroleMassime: budget.paroleMassime });
+    /* L1 (20/10/2026): l'ingresso del riassunto di sfondo NON aveva limite (prova dal vivo 7432bdf4: 79.599 token in una
+       finestra da 65.536). Ora entra nella finestra; il secondo tentativo, dopo un errore, ne usa la metà. */
+    const richiestaPer = (tentativo) => compattazione.ingressoRiassuntoPerFinestra(richiestaIntera, {
+      finestraToken: scelta.finestraToken, maxOutputTokens: budget.maxOutputTokens, frazione: tentativo === 0 ? 1 : 0.5,
+    });
+    const reasoning = reasoningDelRiassuntoDiSfondo(voce, scelta.modello);
+    let esito = { ok: false, riassunto: '', motivo: 'errore' };
+    /* 21/10/2026 (owner, «sta maledetta compattazione»): come l'adattatore — il tetto è quello di opencode (limite del modello, 32.000,
+       spazio nella finestra), un troncato si richiede una volta più breve, e un 400 sul tetto si ritenta col budget */
+    let piuBreve = false;
+    const richiestaBreve = () => compattazione.costruisciRichiestaDiRiassunto({ ...parti, paroleMassime: Math.max(200, Math.floor(budget.paroleMassime / 2)) });
+    const limiteUscita = leggiLimiteUscita(scelta.modello);
+    for (let tentativo = 0; tentativo < 2 && !esito.ok && !segnaleStop?.aborted; tentativo += 1) {
+      try {
+        const inviata = piuBreve
+          ? compattazione.ingressoRiassuntoPerFinestra(richiestaBreve(), { finestraToken: scelta.finestraToken, maxOutputTokens: budget.maxOutputTokens, frazione: 0.5 })
+          : richiestaPer(tentativo);
+        const tetto = compattazione.tettoUscitaRiassunto(inviata, { finestraToken: scelta.finestraToken, limiteUscita });
+        const chiedi = (maxOutputTokens) => riassumiPerCompattazioneFn({
+          modello: scelta.modello, chiave: typeof chiaveFn === 'function' ? chiaveFn() : chiave, messaggi: inviata,
+          maxOutputTokens, ...(reasoning ? { reasoning } : {}),
+          ...(typeof fetchModelloFn === 'function' ? { fetchDiRete: fetchModelloFn() } : {}),
+          onProgresso: passo, tentativo: tentativo + 1,
+          ...(segnaleStop ? { segnaleStop } : {}),
+          /* 22/10/2026 (CLI, revisione 1 della 0.6.13): i ritentativi dell'adapter, non quelli di un giro */
+          tentativiMassimi: compattazione.TENTATIVI_RIASSUNTO, attesaRitentaMassimaMs: compattazione.ATTESA_RITENTA_RIASSUNTO_MS,
+        });
+        let risposta;
+        try { risposta = await chiedi(tetto); }
+        catch (rifiuto) {
+          if (tetto <= budget.maxOutputTokens || !compattazione.eRifiutoDelTettoUscita(rifiuto)) throw rifiuto;
+          risposta = await chiedi(budget.maxOutputTokens);
+        }
+        esito = compattazione.valutaRispostaDiRiassunto(risposta);
+        if (esito.motivo === 'troncato') piuBreve = true;
+      } catch (errore) {
+        esito = { ok: false, riassunto: '', motivo: `error: ${errore instanceof Error ? errore.message : String(errore)}`, ...(typeof errore?.code === 'string' ? { codice: errore.code } : {}) };
+      }
+    }
+    return esito;
+  }
+
+  async function proiezioneDelRiassunto({ parti, riassunto, precedente }) {
+    const indice = compattazione.indiceMeccanico(parti.mezzo, { precedente: precedente?.indice ?? null });
+    /* ⭐ 06/10/2026 — RICARICA POST-COMPACT (opzione A, percorso desktop in background): con fonti dichiarate
+     * il blocco di fatti freschi si fonde nella STESSA proiezione (un solo cache-break), recintando la sintesi.
+     * Fail-soft: una fonte che fallisce si dichiara nel blocco, la compattazione continua. */
+    let bloccoFatti = '';
+    if (fontiRicarica && typeof fontiRicarica === 'object') {
+      try {
+        bloccoFatti = (await ricaricaPostCompact.costruisciBloccoFatti({
+          ...fontiRicarica,
+          fileToccati: [...(Array.isArray(fontiRicarica.fileToccati) ? fontiRicarica.fileToccati : []), ...indice.fileRiletti],
+        })).testo;
+      } catch { /* costruisciBloccoFatti non lancia mai: qui non si arriva; per difesa si continua senza blocco. */ }
+    }
+    const proiezione = compattazione.costruisciProiezione({ testa: parti.testa, richiesteLetterali: parti.richiesteLetterali, riassunto, indice: indice.testo, coda: parti.coda, ...(bloccoFatti ? { bloccoFatti, recintaSintesi: true } : {}) });
+    return { proiezione, indice };
+  }
+
+  /*
+   * ⛔⛔ 22/10/2026 (CLI, revisione 3 della 0.6.13, S2-2) — LA CODA PROTETTA SI ACCORCIA ANCHE QUI. Il riassunto di fine giro e il
+   *   /compact a mano dividevano soltanto (`dividiPerCompattazione`); la via dentro il giro accorcia anche gli esiti lunghi della coda
+   *   letterale (`riduciCodaSottoPressione`, Hermes «la coda letterale non è un pavimento»). Quando il contenuto grosso sta negli ultimi
+   *   due scambi — tipicamente il giro che ha appena passato la soglia — il riassunto di fine giro si PAGAVA e scriveva un record PIÙ
+   *   GRANDE (misurato dalla CLI: 15.630 → 15.792), e il /compact diceva «niente da compattare» al doppio della soglia.
+   * ⇒ Le tre vie dividono allo stesso modo. Senza niente da riassumere ma con la coda accorciata, la proiezione nuova è deterministica e
+   *   non si paga nessun riassunto (come `recordSolaCoda` dell'adattatore). E nessuna via scrive un record, né dice «compattato», se
+   *   la proiezione nuova non è più piccola di quella di prima.
+   */
+  /*
+   * Settima revisione avversaria (22/10): «pavimento ≥ conto» non scattava MAI (le richieste tenute sono copie del mezzo, la coda ridotta
+   *   è al più la coda: misurato 8.810 contro 8.807), e un riassunto «inefficace» si pagava a OGNI fine giro. Ciò che un riassunto può
+   *   togliere è ciò che sta sopra il pavimento; se è meno di un riassunto minimo, il riassunto non può ridurre e non si paga.
+   */
+  const RIASSUNTO_MINIMO_TOKEN = 256;
+  const riassuntoNonPuoRidurre = (token, pavimento) => token - pavimento <= RIASSUNTO_MINIMO_TOKEN;
+  /* E un «inefficace» si ricorda: il riassunto di fine giro non riprova finché la proiezione non è cresciuta di un decimo.
+     ⛔ Ottava passata: il ricordo è legato al RECORD vivo (`base`) — un record scritto, un /compact, un «Annulla» lo rendono vecchio, e
+     ricordato per sempre spegneva i riassunti di fine giro che servivano. E un tetto: dopo due «inefficace» di fila sulla stessa base
+     non si riprova più (un riassuntore prolisso con giri grossi superava il 10% a ogni giro e si pagava ogni volta). */
+  const CRESCITA_PER_RIPROVARE = 1.1;
+  const INEFFICACI_DI_FILA_MASSIMI = 2;
+  function inefficaceVale(voce, token) {
+    const ricordo = voce.riassuntoInefficace;
+    /* nona passata: oltre alla base, il ricordo si cancella a OGNI cambio del record vivo (scritto, /compact, «Annulla», ripristino) —
+       un «Annulla» verso nessun record riportava la base «nessuna» del ricordo vecchio, e il tetto tornava a valere */
+    if (!ricordo || ricordo.base !== compattazione.chiaveBaseDelRecord(voce.recordCompattazione ?? null)) return false;
+    return ricordo.volte >= INEFFICACI_DI_FILA_MASSIMI || token < ricordo.token * CRESCITA_PER_RIPROVARE;
+  }
+
+  function partiConCodaRidotta(proiettata, soglie) {
+    const divise = compattazione.dividiPerCompattazione(proiettata);
+    const pressione = compattazione.riduciCodaSottoPressione(divise.coda, { budgetToken: compattazione.budgetCoda(soglie.soglia) });
+    const parti = { ...divise, coda: pressione.coda };
+    const pavimento = stimaTokenConversazione([...parti.testa, ...parti.richiesteLetterali, ...parti.coda]);
+    return { parti, ridotti: pressione.ridotti, pavimento };
+  }
+  /** Niente da riassumere ma la coda accorciata: la proiezione senza riassunto, come quella «solo coda» dell'adattatore. */
+  const proiezioneSoloCoda = (parti) => [...parti.testa, ...parti.mezzo, ...parti.coda];
+
   function avviaCompattazioneInBackground(voce, { versioneDelGiro = null } = {}) {
     const { sessionId } = voce;
     if (chiuso || !sessionId || compattazioniInBackground.has(sessionId) || compattazioniInCorso.has(sessionId)) return null;
@@ -5556,8 +5670,12 @@ export function createSessionRegistry({
     const { token, misura } = compattazione.misuraOccupazione({ messaggi: proiettata, finestraToken });
     const decisione = compattazione.decidiCompattazione({ token, soglia: soglie.soglia, emergenza: soglie.emergenza });
     if (!decisione.scatta) return null;
-    const parti = compattazione.dividiPerCompattazione(proiettata);
-    if (!parti.tagliabile) return null;
+    const { parti, ridotti, pavimento } = partiConCodaRidotta(proiettata, soglie);
+    if (!parti.tagliabile && ridotti === 0) return null;
+    /* il pavimento (sistema, richieste tenute e coda già accorciata) non scende sotto il conto di adesso: un riassunto non può ridurre,
+       e non si paga */
+    if (parti.tagliabile && riassuntoNonPuoRidurre(token, pavimento)) return null;
+    if (inefficaceVale(voce, token)) return null;
     /* 21/10/2026 (CLI): quale modello scrive il riassunto di fine giro e su quale finestra (`sceltaDelRiassunto`); il record resta
        intestato a `perRete`, il modello della conversazione */
     const modelloRiassunto = leggiModelloRiassunto(perRete);
@@ -5571,10 +5689,17 @@ export function createSessionRegistry({
        quando ne parte uno (`cediRiassuntiDiSfondo`). Il motore è quello del modello che SCRIVE il riassunto (`scelta.modello`): una
        conversazione locale col riassunto su un fornitore a chiave non contende il posto. */
     const motoreUnico = compattazione.motoreDelPostoUnico(scelta.modello);
-    if (motoreUnico && ((versioneDelGiro !== null && voce.versioneGiro !== versioneDelGiro) || giroInCorsoSulMotore(motoreUnico, voce))) return null;
-    const cessione = motoreUnico ? new AbortController() : null;
+    /* 22/10/2026 (CLI, revisione 3, domanda b): un messaggio in coda fa partire il giro dopo SUBITO — un riassunto di fine giro partito
+       dopo di lui si paga e viene superato (il giro nuovo compatta da sé, e il suo record copre di più). Vale per ogni motore, non solo
+       per il posto unico. */
+    if (versioneDelGiro !== null && voce.versioneGiro !== versioneDelGiro) return null;
+    if (motoreUnico && giroInCorsoSulMotore(motoreUnico, voce)) return null;
+    /* 22/10/2026 (CLI, revisione 1 della 0.6.13): ogni riassunto di fine giro si può fermare — dal giro che parte sul posto unico
+       (`cedi`, motivo 'ceduta') e dalla chiusura del registro (`ferma`, nessuna «fine»). Prima solo il posto unico aveva il segnale. */
+    const arresto = new AbortController();
     const coveredThrough = storia.length;
     const versioneAlVia = voce.versioneGiro ?? 0;
+    const baseAlVia = compattazione.chiaveBaseDelRecord(voce.recordCompattazione ?? null);
     const at = clock().toISOString();
     const prefissoIntatto = () => {
       const attuale = Array.isArray(voce.messaggiPendente) ? voce.messaggiPendente : voce.messaggiFinali;
@@ -5589,65 +5714,27 @@ export function createSessionRegistry({
     const passo = (valore) => progressoCompattazione(voce, { ...valore, motivo: 'background', at });
     passo({ fase: 'lettura', messaggi: proiettata.length, tokenPrima: token });
     const lavoro = (async () => {
-      /* 02/10/2026, owner «Come Hermes»: il budget scala col mezzo (`budgetRiassunto`), e un riassunto TRONCATO non si
-       * richiede uguale una seconda volta (sessione b1e7382a: 2 × 2.048 token, zero riassunti). */
-      const { budget } = scelta;
-      const richiestaIntera = compattazione.costruisciRichiestaDiRiassunto({ ...parti, paroleMassime: budget.paroleMassime });
-      /* L1 (20/10/2026): l'ingresso del riassunto di sfondo NON aveva limite (prova dal vivo 7432bdf4: 79.599 token in una
-         finestra da 65.536). Ora entra nella finestra; il secondo tentativo, dopo un errore, ne usa la metà. */
-      const richiestaPer = (tentativo) => compattazione.ingressoRiassuntoPerFinestra(richiestaIntera, {
-        finestraToken: scelta.finestraToken, maxOutputTokens: budget.maxOutputTokens, frazione: tentativo === 0 ? 1 : 0.5,
-      });
-      const reasoning = reasoningDelRiassuntoDiSfondo(voce, scelta.modello);
-      let esito = { ok: false, riassunto: '', motivo: 'errore' };
-      /* 21/10/2026 (owner, «sta maledetta compattazione»): come l'adattatore — il tetto è quello di opencode (limite del modello, 32.000,
-         spazio nella finestra), un troncato si richiede una volta più breve, e un 400 sul tetto si ritenta col budget */
-      let piuBreve = false;
-      const richiestaBreve = () => compattazione.costruisciRichiestaDiRiassunto({ ...parti, paroleMassime: Math.max(200, Math.floor(budget.paroleMassime / 2)) });
-      const limiteUscita = leggiLimiteUscita(scelta.modello);
-      for (let tentativo = 0; tentativo < 2 && !esito.ok && !cessione?.signal.aborted; tentativo += 1) {
-        try {
-          const inviata = piuBreve
-            ? compattazione.ingressoRiassuntoPerFinestra(richiestaBreve(), { finestraToken: scelta.finestraToken, maxOutputTokens: budget.maxOutputTokens, frazione: 0.5 })
-            : richiestaPer(tentativo);
-          const tetto = compattazione.tettoUscitaRiassunto(inviata, { finestraToken: scelta.finestraToken, limiteUscita });
-          const chiedi = (maxOutputTokens) => riassumiPerCompattazioneFn({
-            modello: scelta.modello, chiave: typeof chiaveFn === 'function' ? chiaveFn() : chiave, messaggi: inviata,
-            maxOutputTokens, ...(reasoning ? { reasoning } : {}),
-            ...(typeof fetchModelloFn === 'function' ? { fetchDiRete: fetchModelloFn() } : {}),
-            onProgresso: passo, tentativo: tentativo + 1,
-            ...(cessione ? { segnaleStop: cessione.signal } : {}),
-          });
-          let risposta;
-          try { risposta = await chiedi(tetto); }
-          catch (rifiuto) {
-            if (tetto <= budget.maxOutputTokens || !compattazione.eRifiutoDelTettoUscita(rifiuto)) throw rifiuto;
-            risposta = await chiedi(budget.maxOutputTokens);
-          }
-          esito = compattazione.valutaRispostaDiRiassunto(risposta);
-          if (esito.motivo === 'troncato') piuBreve = true;
-        } catch (errore) {
-          esito = { ok: false, riassunto: '', motivo: `error: ${errore instanceof Error ? errore.message : String(errore)}` };
-        }
-      }
-      if (!esito.ok && cessione?.signal.aborted) { await fine({ fase: 'fine', compattato: false, motivo: 'ceduta', at, interrottaIn: 'riassunto' }); return false; }
+      const esito = parti.tagliabile ? await scriviRiassuntoDelleParti(voce, { parti, scelta, passo, segnaleStop: arresto.signal })
+        : { ok: true, soloCoda: true };
+      /* 22/10/2026: fermato dalla chiusura del registro (CLI, revisione 1): niente «fine», come le sintesi abbandonate allo spegnimento */
+      if (!esito.ok && arresto.signal.aborted && arresto.signal.reason === 'chiusura') return false;
+      if (!esito.ok && arresto.signal.aborted) { await fine({ fase: 'fine', compattato: false, motivo: 'ceduta', at, interrottaIn: 'riassunto' }); return false; }
       if (!esito.ok) { await fine({ fase: 'fine', compattato: false, motivo: esito.motivo, at, interrottaIn: 'riassunto' }); return false; }
-      const indice = compattazione.indiceMeccanico(parti.mezzo, { precedente: voce.recordCompattazione?.indice ?? null });
-      /* ⭐ 06/10/2026 — RICARICA POST-COMPACT (opzione A, percorso desktop in background): con fonti dichiarate
-       * il blocco di fatti freschi si fonde nella STESSA proiezione (un solo cache-break), recintando la sintesi.
-       * Fail-soft: una fonte che fallisce si dichiara nel blocco, la compattazione continua. */
-      let bloccoFatti = '';
-      if (fontiRicarica && typeof fontiRicarica === 'object') {
-        try {
-          bloccoFatti = (await ricaricaPostCompact.costruisciBloccoFatti({
-            ...fontiRicarica,
-            fileToccati: [...(Array.isArray(fontiRicarica.fileToccati) ? fontiRicarica.fileToccati : []), ...indice.fileRiletti],
-          })).testo;
-        } catch { /* costruisciBloccoFatti non lancia mai: qui non si arriva; per difesa si continua senza blocco. */ }
+      const { proiezione, indice } = esito.soloCoda ? { proiezione: proiezioneSoloCoda(parti), indice: voce.recordCompattazione?.indice ?? null }
+        : await proiezioneDelRiassunto({ parti, riassunto: esito.riassunto, precedente: voce.recordCompattazione });
+      const tokenDopo = stimaTokenConversazione(proiezione);
+      /* S2-2: un record che non riduce non si scrive (la fine è muta: niente è cambiato) */
+      if (tokenDopo >= token) {
+        const base = compattazione.chiaveBaseDelRecord(voce.recordCompattazione ?? null);
+        const prima = voce.riassuntoInefficace?.base === base ? voce.riassuntoInefficace.volte : 0;
+        voce.riassuntoInefficace = { token, base, volte: prima + 1 };
+        await fine({ fase: 'fine', compattato: false, motivo: 'inefficace', at, interrottaIn: 'sostituzione' });
+        return false;
       }
-      const proiezione = compattazione.costruisciProiezione({ testa: parti.testa, richiesteLetterali: parti.richiesteLetterali, riassunto: esito.riassunto, indice: indice.testo, coda: parti.coda, ...(bloccoFatti ? { bloccoFatti, recintaSintesi: true } : {}) });
-      const record = compattazione.creaRecord({ coveredThrough, riassunto: proiezione, tokenPrima: token, tokenDopo: stimaTokenConversazione(proiezione), misura, at, modello: perRete, indice });
-      if (sessioni.get(sessionId) !== voce || !prefissoIntatto()) {
+      const record = compattazione.creaRecord({ coveredThrough, riassunto: proiezione, tokenPrima: token, tokenDopo, misura, at, modello: perRete, indice, coperti: storia });
+      /* 22/10/2026 (revisione avversaria): anche qui il record vivo dev'essere quello con cui il riassunto è partito (un «Annulla» nel
+         frattempo lo cambia) — altrimenti il record nuovo, costruito sul riassunto annullato, tornerebbe vivo */
+      if (sessioni.get(sessionId) !== voce || !prefissoIntatto() || compattazione.chiaveBaseDelRecord(voce.recordCompattazione ?? null) !== baseAlVia) {
         await fine({ fase: 'fine', compattato: false, motivo: 'superata', at, versioneGiroAlVia: versioneAlVia, interrottaIn: 'sostituzione' });
         return false;
       }
@@ -5659,7 +5746,12 @@ export function createSessionRegistry({
       return scritto;
     })().catch((errore) => { console.error(`[session-store] background compaction failed for ${sessionId}:`, errore instanceof Error ? errore.message : errore); return false; })
       .finally(() => { if (compattazioniInBackground.get(sessionId)?.promessa === lavoro) compattazioniInBackground.delete(sessionId); });
-    compattazioniInBackground.set(sessionId, { promessa: lavoro, coveredThrough, at, motore: motoreUnico, cedi: cessione ? () => cessione.abort() : null });
+    /* 22/10/2026 (CLI, S3-B): per il giro che parte mentre questo riassunto è in volo — la forma di un riassunto pronto dell'adapter */
+    const perIlGiro = lavoro.then((scritto) => (scritto && compattazione.eRecordValido(voce.recordCompattazione) && voce.recordCompattazione.at === at
+      ? { record: voce.recordCompattazione, impronta: compattazione.improntaDelPrefisso(storia, coveredThrough), base: baseAlVia, soloCoda: false }
+      : null), () => null);
+    compattazioniInBackground.set(sessionId, { promessa: lavoro, perIlGiro, coveredThrough, at, motore: motoreUnico,
+      cedi: motoreUnico ? () => arresto.abort('ceduta') : null, ferma: () => arresto.abort('chiusura') });
     return lavoro;
   }
 
@@ -7412,11 +7504,11 @@ export function createSessionRegistry({
     const stato = await remoto.stato();
     const vivi = (stato.telefoni ?? []).filter((v) => !v.revocatoAlle);
     const corto = (v) => String(v.id).slice(0, 8);
-    const nomeDi = (v) => JSON.stringify(String(v.nome || 'Unnamed phone').replace(/[\p{Cc}\p{Cf}]/gu, ' ').slice(0, 64));
+    const nomeDi = (v) => JSON.stringify(String(v.nome || 'Unnamed device').replace(/[\p{Cc}\p{Cf}]/gu, ' ').slice(0, 64));
     const statoAcceso = !stato.disponibile ? 'not available on this computer' : stato.acceso ? 'on' : 'off';
     if (nome === 'remote_phones') {
       if (fase !== 'esegui') return { ok: true, carta: false };
-      const righe = [`Remote control is ${statoAcceso}. Paired phones: ${vivi.length}.`];
+      const righe = [`Remote control is ${statoAcceso}. Paired devices: ${vivi.length}.`];
       for (const v of vivi) {
         const quando = v.inLinea ? 'connected now' : Number.isFinite(v.ultimaVoltaAlle) ? `last seen ${new Date(v.ultimaVoltaAlle).toISOString()}` : 'never seen since pairing';
         righe.push(`- ${nomeDi(v)} · id ${corto(v)} · ${quando}`);
@@ -7425,15 +7517,15 @@ export function createSessionRegistry({
     }
     if (nome === 'remote_phone_pair') {
       if (!stato.disponibile) return { ok: false, messaggio: 'Remote control is not available on this computer. No QR code was shown.' };
-      if (!stato.acceso || !stato.sceltaFatta) return { ok: false, messaggio: 'Remote control is off: only the person can turn it on, from the Phones screen. No QR code was shown.' };
+      if (!stato.acceso || !stato.sceltaFatta) return { ok: false, messaggio: 'Remote control is off: only the person can turn it on, from the Connected devices screen. No QR code was shown.' };
       if (fase !== 'esegui') return { ok: true, carta: true, azione: { tipo: 'remote_phone_pair', telefoni: vivi.length } };
-      return { ok: true, testo: 'The pairing QR code is now on the person\'s screen, valid once for a few minutes. The person scans it with the phone and confirms the 6-digit code on this computer: you will not see the result unless you call remote_phones later.' };
+      return { ok: true, testo: 'The pairing QR code is now on the person\'s screen, valid once for a few minutes. The person scans it with the device and confirms the 6-digit code on this computer: you will not see the result unless you call remote_phones later.' };
     }
     if (nome === 'remote_phone_revoke') {
       const chiesto = typeof argomenti?.phone === 'string' ? argomenti.phone.trim() : '';
       if (!/^[A-Za-z0-9_-]{4,64}$/u.test(chiesto)) return { ok: false, messaggio: '"phone" must be the short id from remote_phones. Nothing was disconnected.' };
       const trovati = vivi.filter((v) => String(v.id).startsWith(chiesto));
-      if (trovati.length !== 1) return { ok: false, messaggio: `${trovati.length ? 'More than one' : 'No'} paired phone has the id "${chiesto}": call remote_phones first. Nothing was disconnected.` };
+      if (trovati.length !== 1) return { ok: false, messaggio: `${trovati.length ? 'More than one' : 'No'} paired device has the id "${chiesto}": call remote_phones first. Nothing was disconnected.` };
       const v = trovati[0];
       if (fase !== 'esegui') {
         return { ok: true, carta: true, azione: { tipo: 'remote_phone_revoke', telefono: { idCorto: corto(v), nome: String(v.nome || '').slice(0, 64), piattaforma: v.piattaforma ?? null, inLinea: Boolean(v.inLinea), ultimaVoltaAlle: v.ultimaVoltaAlle ?? null } } };
@@ -7441,7 +7533,7 @@ export function createSessionRegistry({
       await remoto.revoca(v.id);
       return { ok: true, testo: `Disconnected ${nomeDi(v)} (id ${corto(v)}): it can no longer reach this computer. To use it again, the person pairs it anew.` };
     }
-    return { ok: false, messaggio: `${nome} is not a phones tool.` };
+    return { ok: false, messaggio: `${nome} is not a devices tool.` };
   }
 
   function costruisciCancelloFileDiControllo(voce) {
@@ -8041,7 +8133,7 @@ export function createSessionRegistry({
      */
     if (senzaGiro) {
       voce.versioneGiro = 0;
-      voce.recordCompattazione = senzaGiro.recordCompattazione ?? null;
+      voce.recordCompattazione = senzaGiro.recordCompattazione ?? null; voce.riassuntoInefficace = null;
       /* il controller resta quello creato qui sopra, come per una sessione ripristinata: Stop e reindirizza lo leggono senza `?.` */
       if (cartellaStore) {
         const piano = pianificaStoriaDiVoce(voce, senzaGiro.storia, { versioneGiro: 0, fase: 'finale', forzaCheckpoint: true });
@@ -8831,10 +8923,25 @@ export function createSessionRegistry({
         /* 21/10/2026 (B1, «Skip the summary»): il registro sa se il giro sta ASPETTANDO un riassunto (inizio senza ancora la fine), così
            uno Skip arrivato fuori tempo non arma il giro in anticipo (`saltaRiassunto`). */
         if (evento?.type === 'CUSTOM' && evento.name === 'talos.compattazione' && evento.value && Number.isSafeInteger(evento.value.giro)) {
-          if (evento.value.fase === 'inizio') voce.riassuntoAtteso = true;
-          else if (evento.value.fase === 'fine') voce.riassuntoAtteso = false;
+          /* 22/10/2026 (terza revisione avversaria): un CONTATORE delle compattazioni aperte, non un booleano — una `fine` arrivata dopo
+             l'`inizio` della compattazione seguente spegneva il booleano con quella ancora aperta, e il suo Skip veniva rifiutato. */
+          if (evento.value.fase === 'inizio') {
+            voce.riassuntiAperti = (voce.riassuntiAperti ?? 0) + 1;
+            voce.riassuntoAtteso = true;
+            /* 22/10/2026 (revisione avversaria, C): uno Skip vale per la compattazione che ha saltato, non per il resto del giro — il
+               segnale si riarma quando quella si CHIUDE (sotto) e, per sicurezza, quando se ne apre un'altra; il giro lo legge al momento
+               (`saltaRiassuntoFn`). Alla fine e non solo all'inizio: il giro legge lo Skip della richiesta PRIMA di chiamare il motore,
+               che apre la sua riga solo dopo (misurato: MOT-07 rossa col solo riarmo all'inizio). */
+            if (voce.saltaRiassuntoControllo?.signal.aborted) voce.saltaRiassuntoControllo = new AbortController();
+          } else if (evento.value.fase === 'fine') {
+            voce.riassuntiAperti = Math.max(0, (voce.riassuntiAperti ?? 0) - 1);
+            voce.riassuntoAtteso = voce.riassuntiAperti > 0;
+            if (voce.saltaRiassuntoControllo?.signal.aborted) voce.saltaRiassuntoControllo = new AbortController();
+          }
         }
-        broadcast(voce, evento, opzioni);
+        /* 22/10/2026 (CLI): `return` — `broadcast` torna la promessa della scrittura durevole, e chi fa `await onEvento(…, { durable: true })`
+           (agent-service) deve aspettarla davvero; senza, una scrittura fallita era un rifiuto non gestito e il giro andava avanti. */
+        return broadcast(voce, evento, opzioni);
       },
     };
     /*
@@ -8883,9 +8990,11 @@ export function createSessionRegistry({
     /* 21/10/2026 (B1): un segnale di Skip per GIRO, che il giro riceve come `segnaleSaltaRiassunto`; `saltaRiassunto` lo fa scattare */
     voce.saltaRiassuntoControllo = new AbortController();
     voce.riassuntoAtteso = false;
+    voce.riassuntiAperti = 0;
     const conCompattazione = (opzioni) => ({
       ...opzioni,
       segnaleSaltaRiassunto: voce.saltaRiassuntoControllo.signal,
+      saltaRiassuntoFn: () => voce.saltaRiassuntoControllo?.signal ?? null,
       onRichiestaSpedita: (richiesta) => registraUltimaRichiesta(voce, richiesta), // C1 (10/10): la scheda Contesto
       finestraToken: leggiFinestraToken(opzioni.modello),
       ...(leggiLimiteUscita(opzioni.modello) ? { limiteUscitaToken: leggiLimiteUscita(opzioni.modello) } : {}),
@@ -8899,6 +9008,8 @@ export function createSessionRegistry({
       ...(compattazioneIstantanea === true ? { compattazioneIstantanea: true, ...(voce.compattazionePronta ? { compattazionePronta: voce.compattazionePronta }
         /* owner 15/10/2026 notte, «passa al giro dopo»: il riassunto ancora in arrivo diventa quello in volo del giro nuovo */
         : voce.preparazioneInArrivo ? { compattazioneInArrivo: voce.preparazioneInArrivo } : {}) } : {}),
+      /* 22/10/2026 (CLI, S3-B): senza l'istantanea, il riassunto di fine giro ancora in volo passa al giro come «in arrivo» */
+      ...(compattazioneIstantanea !== true && compattazioniInBackground.get(sessionId)?.perIlGiro ? { compattazioneInArrivo: compattazioniInBackground.get(sessionId).perIlGiro } : {}),
     });
     let hookDelContesto = null;
     /* ⛔ C1 review Y1 (bugfixer, 10/10/2026): col motore di serie `contextHooksFn` esiste SEMPRE, e prima di questo controllo ogni
@@ -8947,6 +9058,11 @@ export function createSessionRegistry({
       && typeof modelloDiRipiegoCloud === 'string' && modelloDiRipiegoCloud.length > 0;
     const ripiegaSulCloud = (codice) => {
       voce.fallbackProvider = 'openrouter';
+      /* 22/10/2026 (quinta passata): il giro sul cloud è un giro nuovo nella stessa esecuzione — lo Skip e il conto delle compattazioni
+         aperte ripartono da zero, come all'avvio (il giro locale morto non chiude le sue righe) */
+      voce.saltaRiassuntoControllo = new AbortController();
+      voce.riassuntoAtteso = false;
+      voce.riassuntiAperti = 0;
       broadcast(voce, { type: 'RuntimeFallback', from: 'local', to: 'openrouter', reason: codice || 'LOCAL_RUNTIME_FAILED', provider: 'local', runtimeId: runtimeIdEffettivo, modelId: voce.modelId, backend: runtimeIdEffettivo, at: clock().toISOString() });
       return avviaIlGiro({ ...cloudOptions, modello: modelloDiRipiegoCloud });
     };
@@ -9151,12 +9267,15 @@ export function createSessionRegistry({
           }, () => {}).finally(() => { voce.compattazioneInArrivo = null; if (voce.preparazioneInArrivo === inArrivo) voce.preparazioneInArrivo = null; });
         }
       }
-      storiaScritta.then(async (scritta) => {
+      /* 22/10/2026 (CLI): la decisione del riassunto di fine giro arriva a storia scritta; chi chiude subito dopo il giro la aspetta
+         con `attendiRiassuntoDiFineGiro` invece di leggere `inCorso:false` nella finestra prima che parta. */
+      const catenaFineGiro = storiaScritta.then(async (scritta) => {
         if (recordDelTurno) await persistiRecordCompattazione(voce, recordDelTurno, versioneGiro);
         /* 21/10/2026 (CLI): il record del riassunto di fine giro lo legge solo la compattazione semplice dell'adattatore (`recordIniziale`,
            modo legacy o ripiego). Un giro che è andato col motore del contesto non lo userebbe: pagarlo a ogni giro era buttarlo. */
         if (scritta && risultato?.ok === true && riassuntoDiFineGiro !== false && hookDelContesto === null) avviaCompattazioneInBackground(voce, { versioneDelGiro: versioneGiro });
       }).catch((errore) => { console.error(`[session-store] end-of-turn compaction not started for ${sessionId}:`, errore instanceof Error ? (errore.stack ?? errore.message) : errore); });
+      voce.catenaFineGiro = catenaFineGiro;
       // ⭐⭐⭐ FASE C (28/8) — per il foglio "Albero sessione": lo stato reale di OGNI sessione che conclude, non solo delle figlie (inerte/ignorato per una sessione senza padre).
       voce.esitoDelega = risultato?.esito?.comeFinita ?? (risultato?.ok === false ? 'fallito' : null);
       /* 0.1.23: una figlia ripresa con un seguito chiude un giro nuovo senza ripassare dall'orchestratore: il resoconto si
@@ -10094,8 +10213,14 @@ export function createSessionRegistry({
          *   torna grezza. Basta l'ultimo: il suo `riassunto` è la proiezione intera al momento in cui è nato.
          */
         const indiceRecordCompattazione = record.findLastIndex((r) => r.tipo === 'compattazione' && compattazione.eRecordValido(r.record));
+        /* 22/10/2026 (CLI, S2-A): un /compact a mano di PRIMA della cura sostituiva la storia e lasciava vivo il record. Se dopo il record
+           c'è una compattazione manuale riuscita con un `at` diverso, quel record parla di un'altra storia: non si ripristina. */
+        const recordSuperatoDaUnCompactDiPrima = (r) => eventi.some((e) => e?.type === 'CUSTOM' && e.name === 'talos.compattazione'
+          && e.value?.fase === 'fine' && e.value?.motivo === 'manuale' && e.value?.compattato === true && typeof e.value.at === 'string'
+          && e.value.at !== r.at && e.value.at > r.at);
         const recordCompattazioneRipristinato = indiceRecordCompattazione >= 0
           && !record.slice(indiceRecordCompattazione + 1).some((r) => r.tipo === 'compattazione-annullata' && r.at === record[indiceRecordCompattazione].record.at)
+          && !recordSuperatoDaUnCompactDiPrima(record[indiceRecordCompattazione].record)
           ? record[indiceRecordCompattazione].record : null;
         const ultimoEventoEsecuzione = [...eventi].reverse().find((evento) => (
           evento?.type === 'RunStarted' || evento?.type === 'RunFinished' || evento?.type === 'RunError'
@@ -11744,6 +11869,19 @@ export function createSessionRegistry({
     },
 
     async compatta(sessionId) {
+      /*
+       * 22/10/2026 (Mobile, dal vivo su d06f6a9d3): sul percorso del motore del contesto un lavoro FALLITO (CTX_INVALID_SOURCE dopo
+       *   ~18 minuti) tornava `{ ok:true, compattato:false, error }`, e il telefono diceva «Niente da compattare». Lo stesso contratto del
+       *   percorso dell'adattatore (S2-A): `motivo:'niente-da-compattare'` è «niente da guadagnare»; ogni altro `motivo` è un
+       *   fallimento, col suo `codice`. `error` resta com'era per chi lo legge già.
+       */
+      const esitoDelCompactDelMotore = (result) => {
+        if (!result || typeof result !== 'object' || result.compattato !== false || typeof result.motivo === 'string') return result;
+        const codice = typeof result.error?.code === 'string' ? result.error.code : null;
+        return codice
+          ? { ...result, fase: 'riassunto', motivo: 'errore', codice }
+          : { ...result, fase: 'riassunto', motivo: 'niente-da-compattare' };
+      };
       const voce = sessioni.get(sessionId);
       if (!voce) return rifiuto('NOT_FOUND', 'session-not-found', 'Session not found');
       /* ⛔ REV-SESSION-READY — annunciato l'evento finale, la cronologia arriva con l'assestamento: la si aspetta (come
@@ -11795,11 +11933,12 @@ export function createSessionRegistry({
           }
         }
         if (typeof contextCompactFn === 'function' && giroConIlMotore(sessionId, voce)) {
-          const result = await contextCompactFn({ sessionId, messages: storiaIniziale });
+          /* 22/10/2026 (Mobile): i passi del lavoro del motore arrivano alla riga, che prima restava ferma dopo la lettura */
+          const result = await contextCompactFn({ sessionId, messages: storiaIniziale, onProgresso: (valore) => passo(valore) });
           if (!snapshotValido()) return result === undefined
             ? { ...rifiuto('SESSION_NOT_READY', 'changed-during-summary', 'The session changed while the summary was being prepared. No history was replaced.'), fase: 'riassunto' }
             : { ...rifiuto('SESSION_NOT_READY', 'changed-during-compaction-job', 'The session changed while the compaction job was running. The context may have been updated: check the Context tab before trying again.'), fase: 'riassunto' };
-          if (result !== undefined) return result;
+          if (result !== undefined) return esitoDelCompactDelMotore(result);
         }
       /*
        * ⛔⛔⛔ CLI-REQ-05, punto 2 (17/09/2026) — LA COMPATTAZIONE ANDAVA SEMPRE A OPENROUTER.
@@ -11848,47 +11987,65 @@ export function createSessionRegistry({
           fase: 'riassunto',
         };
       }
-        const risultato = await compattaSessioneFn({
-          messaggiFinali: storiaIniziale,
-          modello: perRete,
-          chiave: typeof chiaveFn === 'function' ? chiaveFn() : chiave,
-          ...(typeof fetchModelloFn === 'function' ? { fetchDiRete: fetchModelloFn() } : {}),
-          onProgresso: passo,
-          // ⭐ 06/10/2026: le fonti della ricarica post-compact passano al riassuntore manuale (additivo: chi
-          // inietta una `compattaSessioneFn` propria le ignora, come le prove esistenti).
-          ...(fontiRicarica && typeof fontiRicarica === 'object' ? { fontiRicarica } : {}),
+        /*
+         * ⛔⛔ 22/10/2026 (CLI, S2-A; owner «cura completa») — il /compact a mano fa quello che fa il riassunto di fine giro
+         *   (`scriviRiassuntoDelleParti`): parte dalla PROIEZIONE (il record vivo applicato), tiene alla lettera la prima richiesta e le
+         *   ultime tre, scrive col modello leggero, e il risultato è un RECORD che copre tutta la storia, scritto con conferma. La storia
+         *   grezza resta com'è (decisione 3 del 24/09) e il record vecchio è sostituito da quello nuovo nella STESSA scrittura: non può
+         *   più restare vivo sotto. Per la stessa ragione ora si può annullare, come quello di fine giro (`annullaCompattazione`).
+         * ⛔ Un riassunto di fine giro ancora in corso si aspetta: due riassunti sulla stessa storia, l'ultimo a scrivere vincerebbe.
+         */
+        const inSottofondo = compattazioniInBackground.get(sessionId);
+        if (inSottofondo) {
+          await inSottofondo.promessa.catch(() => false);
+          if (!snapshotValido()) return { ...rifiuto('SESSION_NOT_READY', 'changed-during-summary', 'The session changed while the summary was being prepared. No history was replaced.'), fase: 'riassunto' };
+        }
+        const recordPrima = voce.recordCompattazione ?? null;
+        /* 22/10/2026 (revisione avversaria): un «Annulla» (o un altro record) arrivato mentre il riassunto si scrive cambia la base di
+           questo /compact — il suo ingresso conteneva il riassunto annullato. Allora non si scrive, e lo si dice. */
+        const recordInvariato = () => (voce.recordCompattazione ?? null) === recordPrima;
+        const proiettata = compattazione.applicaRecord(storiaIniziale, recordPrima);
+        const soglie = sogliePerVoce(voce);
+        const { token: tokenPrima, misura } = compattazione.misuraOccupazione({ messaggi: proiettata, finestraToken: soglie.finestraToken });
+        const { parti, ridotti, pavimento } = partiConCodaRidotta(proiettata, soglie);
+        /* S2-2: «niente da compattare» solo se è vero; sopra la soglia senza niente da ridurre si dice che è AL MINIMO */
+        const sopraLaSoglia = tokenPrima >= soglie.soglia;
+        if (!parti.tagliabile && ridotti === 0) return { ok: true, compattato: false, fase: 'riassunto', motivo: sopraLaSoglia ? 'al-minimo' : 'niente-da-compattare' };
+        if (parti.tagliabile && riassuntoNonPuoRidurre(tokenPrima, pavimento)) return { ok: true, compattato: false, fase: 'riassunto', motivo: sopraLaSoglia ? 'al-minimo' : 'niente-da-compattare' };
+        const modelloRiassunto = leggiModelloRiassunto(perRete);
+        const scelta = compattazione.sceltaDelRiassunto({
+          modelloConversazione: perRete, finestraConversazione: soglie.finestraToken,
+          modelloRiassunto, finestraRiassunto: modelloRiassunto ? leggiFinestraToken(modelloRiassunto) : null,
+          tokenDaRiassumere: stimaTokenConversazione(parti.mezzo), soglia: soglie.soglia,
         });
-        if (!snapshotValido()) {
+        const esito = parti.tagliabile ? await scriviRiassuntoDelleParti(voce, { parti, scelta, passo }) : { ok: true, soloCoda: true };
+        if (!snapshotValido() || !recordInvariato()) {
           return { ...rifiuto('SESSION_NOT_READY', 'changed-during-summary', 'The session changed while the summary was being prepared. No history was replaced.'), fase: 'riassunto' };
         }
-        if (!risultato || typeof risultato !== 'object') {
-          return { ...rifiuto('SESSION_STORE_WRITE_FAILED', 'summary-invalid-result', 'The summary did not return a valid result. The original history remains available.'), fase: 'riassunto' };
+        if (!esito.ok) {
+          /* lo stesso contratto del kernel (D5 a della CLI, 21/10): `motivo`, e `codice` quando l'errore ne ha uno */
+          const errore = typeof esito.motivo === 'string' && esito.motivo.startsWith('error: ');
+          return { ok: true, compattato: false, fase: 'riassunto', motivo: errore ? 'errore' : esito.motivo,
+            ...(errore ? { dettaglio: esito.motivo.slice('error: '.length) } : {}), ...(typeof esito.codice === 'string' ? { codice: esito.codice } : {}) };
         }
-        if (risultato.compattato) {
-          let messaggiConfermati;
+        const { proiezione, indice } = esito.soloCoda ? { proiezione: proiezioneSoloCoda(parti), indice: recordPrima?.indice ?? null }
+          : await proiezioneDelRiassunto({ parti, riassunto: esito.riassunto, precedente: recordPrima });
+        const tokenDopo = stimaTokenConversazione(proiezione);
+        /* S2-2: un riassunto che non riduce non diventa un record, e non si risponde «compattato» */
+        if (tokenDopo >= tokenPrima) return { ok: true, compattato: false, fase: 'sostituzione', motivo: 'inefficace', tokenPrima, tokenDopo };
+        const at = clock().toISOString();
+        const record = compattazione.creaRecord({ coveredThrough: storiaIniziale.length, riassunto: proiezione, tokenPrima,
+          tokenDopo, misura, at, modello: perRete, indice, coperti: storiaIniziale });
+        passo({ fase: 'sostituzione', tokenDopo: record.tokenDopo });
+        if (cartellaStore) {
           try {
-            if (!Array.isArray(risultato.messaggi) || !risultato.messaggi.every((messaggio) =>
-              messaggio && typeof messaggio === 'object' && !Array.isArray(messaggio) && typeof messaggio.role === 'string')) {
-              throw new Error('invalid messages');
-            }
-            messaggiConfermati = JSON.parse(JSON.stringify(risultato.messaggi));
-            if (!isDeepStrictEqual(messaggiConfermati, risultato.messaggi)) throw new Error('messages are not JSON-safe');
-          } catch {
-            return { ...rifiuto('SESSION_STORE_WRITE_FAILED', 'summary-invalid-history', 'The summary does not contain a valid history. The original history remains available.'), fase: 'riassunto' };
-          }
-          passo({ fase: 'sostituzione', tokenDopo: stimaTokenConversazione(messaggiConfermati) });
-          if (cartellaStore) {
-            /* F2-bis B (24/09): la compattazione manuale SOSTITUISCE la storia ⇒ sempre un `checkpoint`, mai un delta. */
-            const piano = pianificaStoriaDiVoce(voce, messaggiConfermati, { versioneGiro: versioneIniziale, fase: 'finale', forzaCheckpoint: true });
-            try {
-              await registraRigaConfermataFn({
-                cartellaStore, sessionId,
-                record: piano.record,
-                puoAccodareFn: snapshotValido,
-                confermaFn: () => { voce.messaggiFinali = messaggiConfermati; piano.applica(); },
-              });
+            await registraRigaConfermataFn({
+              cartellaStore, sessionId,
+              record: { tipo: 'compattazione', versioneGiro: versioneIniziale, record },
+              puoAccodareFn: () => snapshotValido() && recordInvariato(),
+              confermaFn: () => { voce.recordCompattazione = record; voce.riassuntoInefficace = null; },
+            });
             } catch (errore) {
-              piano.fallita();
               if (errore?.code === 'SESSION_STORE_PRECONDITION_FAILED') {
                 return { ...rifiuto('SESSION_NOT_READY', 'changed-during-summary-save', 'The session changed while the summary was waiting to be saved. No history was replaced.'), fase: 'sostituzione' };
               }
@@ -11897,30 +12054,14 @@ export function createSessionRegistry({
               }
               return { ...rifiuto('SESSION_STORE_WRITE_FAILED', 'summary-not-saved', 'The summary was not saved. The original history remains available; try again.'), fase: 'sostituzione' };
             }
-          } else {
-            voce.messaggiFinali = messaggiConfermati;
-          }
-          /*
-           * ⛔ 26/09/2026 — owner, con la foto: «avviso spunta anche dopo compattazione». Questa via rispondeva
-           *   `{ ok, compattato }` e basta: nessun evento, nessun numero. La chat non sapeva che la storia era cambiata
-           *   (l'avviso restava sulla misura di prima) e, riaperta la sessione, la riga «Conversazione riassunta» spariva.
-           * ⇒ Lo STESSO evento durevole della via automatica (`avviaCompattazioneInBackground`), con un `at` suo che
-           *   anche la risposta porta — POST ed evento aggiornano la stessa riga — e `annullabile:false`: questo
-           *   checkpoint non ha un record da riavvolgere, e un «Annulla» che non può funzionare non si offre.
-           *   I numeri sono STIME (`stimaTokenConversazione`, come il `tokenDopo` della via automatica): dopo, conta la
-           *   prossima risposta del fornitore (Pi `agent-session.ts:3865-3890`, Hermes `conversation_compression.py:3468`).
-           */
-          const at = clock().toISOString();
-          const tokenPrima = stimaTokenConversazione(storiaIniziale);
-          const tokenDopo = stimaTokenConversazione(messaggiConfermati);
-          broadcast(voce, { type: 'CUSTOM', name: 'talos.compattazione', value: { fase: 'fine', compattato: true, motivo: 'manuale', annullabile: false, at, tokenPrima, tokenDopo } }, { durable: true });
-          return { ok: true, compattato: true, at, annullabile: false, tokenPrima, tokenDopo };
+        } else {
+          if (!recordInvariato()) return { ...rifiuto('SESSION_NOT_READY', 'changed-during-summary', 'The session changed while the summary was being prepared. No history was replaced.'), fase: 'sostituzione' };
+          voce.recordCompattazione = record; voce.riassuntoInefficace = null;
         }
-        /* Lane CLI 03/10: un riassunto che non è venuto si è fermato al riassunto, e lo si dice. */
-        /* D5 a della CLI (21/10/2026): il PERCHÉ del kernel (`motivo`, `codice`: talosHarness.mjs li dà sempre) arriva a chi ha chiesto,
-           così «/compact» dice cosa è successo invece di «il kernel non ha detto perché». Solo se ci sono. */
-        return risultato.compattato ? { ok: true, compattato: risultato.compattato } : { ok: true, compattato: false, fase: 'riassunto',
-          ...(typeof risultato.motivo === 'string' ? { motivo: risultato.motivo } : {}), ...(typeof risultato.codice === 'string' ? { codice: risultato.codice } : {}) };
+        /* Lo STESSO evento durevole della via automatica, con lo stesso `at` del record: «Annulla» lo trova e lo riavvolge. */
+        broadcast(voce, { type: 'CUSTOM', name: 'talos.compattazione', value: { fase: 'fine', compattato: true, motivo: 'manuale', annullabile: true, at,
+          tokenPrima: record.tokenPrima, tokenDopo: record.tokenDopo, misura: record.misura, coveredThrough: record.coveredThrough, modello: perRete } }, { durable: true });
+        return { ok: true, compattato: true, at, annullabile: true, tokenPrima: record.tokenPrima, tokenDopo: record.tokenDopo };
       } finally {
         compattazioniInCorso.delete(sessionId);
       }
@@ -14297,6 +14438,27 @@ export function createSessionRegistry({
      * l'altro: durante un giro il record è già nelle mani del kernel.
      * @returns {Promise<{ok:true, annullata:true}|{erroreAvvio:string, code:string}>}
      */
+    /**
+     * 22/10/2026 (CLI) — per chi esce subito dopo un giro: si risolve quando la decisione del riassunto di fine giro è presa e, se è
+     * partito, quando è finito (scritto, fallito o fermato). Non rifiuta mai; con `attesaMassimaMs` smette di aspettare e lo dice.
+     * @returns {Promise<{atteso:boolean, scaduta:boolean}>}
+     */
+    async attendiRiassuntoDiFineGiro(sessionId, { attesaMassimaMs = null } = {}) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return { atteso: false, scaduta: false };
+      const tutto = (async () => {
+        /* prima l'assestamento del giro: subito dopo l'evento finale la catena di fine giro non è ancora nata (FINE-GIRO-01) */
+        if (voce.assestamento) await voce.assestamento;
+        await voce.catenaFineGiro?.catch(() => {});
+        await compattazioniInBackground.get(sessionId)?.promessa?.catch(() => {});
+        return { atteso: true, scaduta: false };
+      })();
+      if (!Number.isFinite(attesaMassimaMs)) return tutto;
+      let timer = null;
+      const scadenza = new Promise((ok) => { timer = setTimeout(() => ok({ atteso: false, scaduta: true }), Math.max(0, attesaMassimaMs)); });
+      try { return await Promise.race([tutto, scadenza]); } finally { clearTimeout(timer); }
+    },
+
     async annullaCompattazione(sessionId, at) {
       const voce = sessioni.get(sessionId);
       if (!voce) return rifiuto('NOT_FOUND', 'session-not-found', 'Session not found');
@@ -14311,7 +14473,7 @@ export function createSessionRegistry({
           await registraRigaConfermataFn({
             cartellaStore, sessionId, record: { tipo: 'compattazione-annullata', versioneGiro: voce.versioneGiro ?? 0, at },
             puoAccodareFn: () => sessioni.get(sessionId) === voce && voce.recordCompattazione === record,
-            confermaFn: () => { voce.recordCompattazione = null; },
+            confermaFn: () => { voce.recordCompattazione = null; voce.riassuntoInefficace = null; },
           });
         } catch (errore) {
           if (errore?.code === 'SESSION_STORE_PRECONDITION_FAILED') return rifiuto('SESSION_NOT_READY', 'compaction-changed-during-cancel', 'The compaction changed while the cancellation was waiting to be saved. Nothing was cancelled.');
@@ -14319,7 +14481,7 @@ export function createSessionRegistry({
           return rifiuto('SESSION_STORE_WRITE_FAILED', 'compaction-cancel-not-saved', 'The cancellation was not saved to disk: the compaction stays active.');
         }
       } else {
-        voce.recordCompattazione = null;
+        voce.recordCompattazione = null; voce.riassuntoInefficace = null;
       }
       broadcast(voce, { type: 'CUSTOM', name: 'talos.compattazione', value: { fase: 'annullata', at, coveredThrough: record.coveredThrough } }, { durable: true });
       return { ok: true, annullata: true };
@@ -14345,6 +14507,7 @@ export function createSessionRegistry({
       for (const v of sessioni.values()) v.casaLinux?.chiudi(); // Fase B: nessun Node per Linux orfano dopo lo spegnimento
       for (const v of sessioni.values()) v.verificaObiettivo?.ferma.abort('registry-closing'); // /goal G3 (G3-REV-04): nessuna prova orfana
       const sintesiInCorso = compattazioniInBackground.size;
+      for (const lavoro of compattazioniInBackground.values()) lavoro.ferma?.(); // 22/10 (CLI): un riassunto non sopravvive alla chiusura
       if (!cartellaStore) return { scaduta: false, scrittureAttese: 0, giri: 0, sintesiInCorso };
       let scadenza = null;
       const timer = new Promise((resolve) => { scadenza = setTimeout(() => resolve({ scaduta: true }), attesaMassimaMs); });

@@ -186,7 +186,7 @@ export function creaRemoto({
         if (cambiato && trasporto) await ferma();
       }
       if (acceso !== undefined) i.acceso = acceso === true;
-      if (i.acceso && !i.relay) throw errore('REMOTE_RELAY_NOT_CHOSEN', 'Choose how the phone reaches this computer away from home first.');
+      if (i.acceso && !i.relay) throw errore('REMOTE_RELAY_NOT_CHOSEN', 'Choose how the device reaches this computer away from home first.');
       await salvaImpostazioni();
       if (i.acceso) await accendi(); else await ferma();
       return this.stato();
@@ -198,8 +198,8 @@ export function creaRemoto({
      */
     async apriAccoppiamento({ soloSeAcceso = false } = {}) {
       const i = await leggiImpostazioni();
-      if (!i.relay) throw errore('REMOTE_RELAY_NOT_CHOSEN', 'Choose how the phone reaches this computer away from home first.');
-      if (!i.acceso && soloSeAcceso) throw errore('REMOTE_OFF', 'Remote control is off: turn it on from the Phones screen.');
+      if (!i.relay) throw errore('REMOTE_RELAY_NOT_CHOSEN', 'Choose how the device reaches this computer away from home first.');
+      if (!i.acceso && soloSeAcceso) throw errore('REMOTE_OFF', 'Remote control is off: turn it on from the Connected devices screen.');
       if (!i.acceso) { i.acceso = true; await salvaImpostazioni(); }
       const t = await accendi();
       const relay = i.relay.modo === 'proprio' ? i.relay.url : t.relayDiCasa();

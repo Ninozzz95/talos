@@ -1,0 +1,13 @@
+{
+  "nota": "Il binding iroh del controllo remoto: nel repo NON c'è il .node (16,6 MB), c'è questo riferimento. scripts/scarica-binding-iroh.mjs lo scarica da questa corsa, verifica l'attestazione (firmata da iroh-binding.yml su main) e l'impronta qui sotto. Owner 22/10/2026: «Nel repo solo l'impronta». Gli artefatti scadono: dopo la data sotto si rilancia iroh-binding.yml e si aggiorna questo file. Fuori da native/iroh/ di proposito: là ogni modifica rilancerebbe la compilazione.",
+  "repository": "Ninozzz95/talos",
+  "workflow": ".github/workflows/iroh-binding.yml",
+  "runId": 39686248443,
+  "artefatto": "iroh-win32-x64-msvc",
+  "file": "iroh.win32-x64-msvc.node",
+  "sha256": "4047896d91c101633e06795ea764ad31114252e58152f4a19f62400efc6adda1",
+  "byte": 17411072,
+  "commitSorgente": "2ea6f9fecbb061210a953d3909095af85668411d",
+  "ramoSorgente": "refs/heads/main",
+  "scade": "2027-01-19"
+}
