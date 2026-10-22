@@ -1,5 +1,6 @@
 import { preparaMisuraDialogo, collegaRidimensionamentoDialoghi } from './dialoghi.js';
 import { t, linguaCorrenteDiT, EVENTO_LINGUA } from './lingua.js';
+import { chiaveNotaCompactManuale } from './compattazione-legacy.js'; // 22/10: la stessa frase della nota per «al-minimo» e «inefficace»
 import { TESTI } from '../i18n/testi/index.js';
 // C1 (owner 10/10/2026): la panoramica e le schede usano gli stessi dati e le stesse finestre della scheda Contesto della colonna
 import { limiteCheAgisce, percheDelLimite, misuraDellaPanoramica, compattazioniDellaConversazione, cosaHaTenuto, CHIAVI_CATEGORIA } from './contesto-scheda.js';
@@ -209,7 +210,7 @@ export function montaContextCompactor(root, { client, sessionId, state = null, d
     q('job').hidden = !inCorso && !esitoLegacy;
     q('job').textContent = inCorso ? t('chat.context.summarizing')
       : esitoLegacy?.stato === 'riassunta' ? t('chat.context.legacy.summarizedWithUpdate')
-        : esitoLegacy?.stato === 'invariata' ? t('chat.context.legacy.unchanged')
+        : esitoLegacy?.stato === 'invariata' ? (['al-minimo', 'inefficace'].includes(esitoLegacy.motivo) ? t(chiaveNotaCompactManuale(esitoLegacy.motivo)) : t('chat.context.legacy.unchanged'))
           : errore ? t('chat.context.legacy.notSummarized') : t('chat.context.noCompaction');
     q('progress').textContent = '';
     const bar = q('progress-bar'); bar.hidden = !inCorso; bar.removeAttribute('value'); bar.setAttribute('aria-label', t('chat.context.summaryInProgress'));

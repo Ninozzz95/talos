@@ -135,3 +135,29 @@ test('CTX-RIALLINEATO-RIGA — owner 12/10 («Si ripara da solo»): archivio ria
   assert.match(it, /^Archivio del contesto riallineato/u);
   for (const testo of [en, it]) assert.doesNotMatch(testo, /non riassunta|not summarized|archivio-riallineato|CTX_|object Object/u);
 });
+
+test('CTX-COMPACT-NOTA-MOTIVO (revisione 3 della CLI, 22/10) — «al-minimo» e «inefficace» hanno la loro frase, nelle due lingue; ogni altro motivo la generica', async () => {
+  const { chiaveNotaCompactManuale } = await import('../../src/components/compattazione-legacy.js');
+  const { t: tr } = await import('../../src/components/lingua.js');
+  assert.equal(chiaveNotaCompactManuale('al-minimo'), 'app.contextManager.atMinimum');
+  assert.equal(chiaveNotaCompactManuale('inefficace'), 'app.contextManager.ineffective');
+  for (const motivo of ['niente-da-compattare', 'errore', undefined]) assert.equal(chiaveNotaCompactManuale(motivo), 'app.contextManager.notSummarized');
+  for (const lingua of ['en', 'it']) {
+    impostaLingua(lingua);
+    for (const chiave of ['app.contextManager.atMinimum', 'app.contextManager.ineffective']) {
+      const frase = tr(chiave);
+      assert.ok(typeof frase === 'string' && frase.length > 20 && frase !== chiave, `${lingua} ${chiave}: ${frase}`);
+    }
+  }
+  impostaLingua('it');
+});
+
+test('COMPACT-PERCHE-FILO (22/10, revisione del ramo dei testi) — compattaLegacy restituisce motivo e codice, e la nota sceglie la frase giusta', async () => {
+  const { compattaLegacy, chiaveNotaCompactManuale } = await import('../../src/components/compattazione-legacy.js');
+  for (const [motivo, chiave] of [['inefficace', 'app.contextManager.ineffective'], ['al-minimo', 'app.contextManager.atMinimum'], ['niente-da-compattare', 'app.contextManager.notSummarized']]) {
+    const fetchFn = async () => new Response(JSON.stringify({ ok: true, data: { compattato: false, motivo } }), { status: 200, headers: { 'content-type': 'application/json' } });
+    const esito = await compattaLegacy({ fetchFn, base: 'http://x/api/v1', sessionId: 's1' });
+    assert.deepEqual(esito, { compattato: false, motivo, codice: null });
+    assert.equal(chiaveNotaCompactManuale(esito.motivo), chiave);
+  }
+});

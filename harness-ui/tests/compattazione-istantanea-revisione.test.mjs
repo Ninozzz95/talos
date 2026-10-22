@@ -153,10 +153,19 @@ test('IST-REV-05 — owner 15/10 notte, «passa al giro dopo»: il giro che rice
     await talosLavora({ cartella, modello: 'z-ai/glm-5.3-flash', chiave: 'finta', task: { consegna: 'Leggi.' }, permessi: 'Full access',
       messaggiIniziali: [...uno.messaggiFinali, { role: 'user', content: `Adesso ${'altro testo '.repeat(300)}` }],
       compattazioneIstantanea: true, ...(conInArrivo ? { compattazioneInArrivo: inArrivo } : {}), contestoDelProgetto: 'Project files:\n', fetchDiRete: lente,
-      onGiro: (e) => { if (e?.tipo === 'compattazione-fine') eventi.push(e.istantanea === true); } });
+      onGiro: (e) => {
+        if (e?.tipo === 'compattazione-fine') eventi.push(e.istantanea === true);
+        if (e?.tipo === 'compattazione-preparata' && e.fase === 'inizio') eventi.push('preparata');
+      } });
     if (conInArrivo) {
-      assert.equal(r1.conti.riassunti, 0, `nessun secondo riassunto pagato — eventi ${JSON.stringify(eventi)}`);
-      assert.ok(eventi.includes(true), `lo scambio istantaneo col riassunto arrivato — eventi ${JSON.stringify(eventi)}`);
+      /* 22/10/2026: con la PRIMA richiesta tenuta (owner, «prima + ultime tre») la proiezione dopo lo scambio è ~105 token più lunga, e
+         sul tetto di prova da 4.000 le due letture dopo la portano oltre l'80% (sonda: 3.264 su 3.200): il giro prepara il riassunto
+         SUCCESSIVO, com'è giusto. Ciò che la prova guarda è un'altra cosa: per QUESTA compattazione nessun riassunto suo, prima dello
+         scambio col riassunto arrivato. */
+      const scambio = eventi.indexOf(true);
+      assert.ok(scambio >= 0, `lo scambio istantaneo col riassunto arrivato — eventi ${JSON.stringify(eventi)}`);
+      assert.equal(eventi.slice(0, scambio).filter((e) => e === 'preparata').length, 0, `nessun riassunto suo prima dello scambio — eventi ${JSON.stringify(eventi)}`);
+      assert.ok(r1.conti.riassunti <= eventi.filter((e) => e === 'preparata').length, `ogni riassunto pagato è una preparazione dichiarata — riassunti ${r1.conti.riassunti}, eventi ${JSON.stringify(eventi)}`);
     } else {
       assert.ok(r1.conti.riassunti >= 1, 'senza il riassunto in arrivo, il giro ne prepara uno suo');
     }
@@ -203,6 +212,21 @@ test('IST-REV-06b — AL CONTRARIO: il riassunto DENTRO il giro (il giro lo aspe
   assert.ok(riassunti.every((v) => !v.secondaria), `dentro il giro il riassunto NON è secondario — ${JSON.stringify(visti)}`);
 });
 
+test('IST-REV-06c (CLI, revisione 3 della 0.6.13, S2-1) — dentro il giro, un riassunto sul modello LEGGERO (diverso da quello della conversazione) è una chiamata secondaria: un suo 429 non mette in panchina la chiave del giro', async (t) => {
+  const cartella = cartellaConFile(t, 0, 0);
+  const r0 = rete({ riassunto: () => RIASSUNTO() });
+  const visti = [];
+  const fetchConInvolucro = (u, o) => r0.fn(u, o);
+  fetchConInvolucro.eseguiConFallback = async (chiama, opzioni) => { visti.push({ secondaria: opzioni.secondaria === true, attrezzi: (opzioni.attrezzi?.length ?? 0) > 0, modello: opzioni.modello, proprio: opzioni.modelloProprio === true }); return chiama({}); };
+  await talosLavora({ cartella, modello: 'z-ai/glm-5.3-flash', chiave: 'finta', task: { consegna: 'Continua.' }, messaggiIniziali: storia(coppiePer(4600)),
+    modelloRiassunto: 'liquid/lfm-2.5-2.6b:free', finestraRiassuntoToken: 32_768, contestoDelProgetto: 'Project files:\n', fetchDiRete: fetchConInvolucro });
+  const riassunti = visti.filter((v) => !v.attrezzi);
+  assert.ok(riassunti.length >= 1, `premessa: una compattazione dentro il giro — ${JSON.stringify(visti)}`);
+  assert.ok(riassunti.every((v) => v.modello === 'liquid/lfm-2.5-2.6b:free'), `premessa: scritta dal modello leggero — ${JSON.stringify(visti)}`);
+  assert.ok(riassunti.every((v) => v.secondaria && v.proprio), `sul modello leggero il riassunto è secondario, e sul SUO modello — ${JSON.stringify(visti)}`);
+  assert.ok(visti.filter((v) => v.attrezzi).every((v) => !v.secondaria), 'le richieste del giro restano normali');
+});
+
 test('IST-REV-07 — un riassunto pronto che alla soglia NON vale lo dice una volta, col perché (prefisso cambiato); AL CONTRARIO, uno che vale si scambia senza scarto', async (t) => {
   const cartella = cartellaConFile(t, 0, 0);
   const r0 = rete({ riassunto: () => RIASSUNTO() });
@@ -219,4 +243,79 @@ test('IST-REV-07 — un riassunto pronto che alla soglia NON vale lo dice una vo
     if (cambiaUnMessaggioVecchio) assert.deepEqual(eventi.filter((x) => x !== 'ISTANTANEA'), ['prefix-changed'], JSON.stringify(eventi));
     else assert.deepEqual(eventi, ['ISTANTANEA'], JSON.stringify(eventi));
   }
+});
+
+test('IST-REV-05b — owner 22/10 sera, «one-up su tutti»: con l\'istantanea SPENTA, ALLA SOGLIA un riassunto di fine giro già arrivato si usa senza pagarne un secondo; uno ancora in volo NON si aspetta e NON si ripaga (Codex `take_ready`, Hermes «sit out»): la richiesta parte com\'è', async (t) => {
+  for (const caso of ['arrivato', 'arriva-durante', 'mai-arrivato']) {
+    const cartella = cartellaConFile(t, 0, 0);
+    const r0 = rete({ riassunto: () => RIASSUNTO() });
+    const uno = await talosLavora({ cartella, modello: 'z-ai/glm-5.3-flash', chiave: 'finta', task: { consegna: 'Continua.' }, messaggiIniziali: storia(coppiePer(3450)), compattazioneIstantanea: true, contestoDelProgetto: 'Project files:\n', fetchDiRete: r0.fn });
+    const prontaVera = uno.compattazionePronta ?? await uno.compattazioneInPreparazione;
+    assert.ok(prontaVera, 'premessa');
+    const inArrivo = caso === 'arrivato' ? Promise.resolve(prontaVera)
+      : caso === 'arriva-durante' ? new Promise((ok) => { setTimeout(() => ok(prontaVera), 300).unref(); }) : new Promise(() => {});
+    if (caso === 'arrivato') await inArrivo; // arrivato prima che il giro tocchi la soglia
+    const eventi = [];
+    const r1 = rete({ riassunto: () => RIASSUNTO() });
+    const inizio = Date.now();
+    const giro = talosLavora({ cartella, modello: 'z-ai/glm-5.3-flash', chiave: 'finta', task: { consegna: 'x' },
+      messaggiIniziali: [...uno.messaggiFinali, { role: 'user', content: `Adesso ${'altro testo '.repeat(300)}` }],
+      compattazioneInArrivo: inArrivo, contestoDelProgetto: 'Project files:\n', fetchDiRete: r1.fn,
+      onGiro: (e) => { if (e?.tipo === 'compattazione-fine') eventi.push(e.istantanea === true ? true : e.ragione ?? e.compattato); } });
+    const esito = await Promise.race([giro.then(() => 'finito'), new Promise((ok) => { setTimeout(() => ok('APPESO'), 5_000).unref(); })]);
+    assert.equal(esito, 'finito', `${caso}: il giro non resta appeso dietro il riassunto di sfondo`);
+    assert.equal(r1.conti.riassunti, 0, `${caso}: nessun secondo riassunto pagato — eventi ${JSON.stringify(eventi)}`);
+    if (caso === 'arrivato') assert.deepEqual(eventi, [true], 'compattato col riassunto arrivato');
+    else {
+      assert.deepEqual(eventi, [], `${caso}: sotto l'emergenza il giro non compatta e non aspetta`);
+      assert.ok(Date.now() - inizio < 250, `${caso}: e non aspetta il riassunto in volo (${Date.now() - inizio} ms)`);
+    }
+  }
+});
+
+/* All'EMERGENZA (owner 22/10 sera, «one-up su tutti»): il riassunto in volo si aspetta SOLO se vale ancora (la firma, come Codex
+   `wait_for_pending`); uno valido ma insufficiente diventa la BASE (il one-up che Codex e Claude Code non fanno). */
+async function giroAllEmergenza(t, { inArrivo: crea, coda }) {
+  const cartella = cartellaConFile(t, 0, 0);
+  const r0 = rete({ riassunto: () => RIASSUNTO() });
+  const uno = await talosLavora({ cartella, modello: 'z-ai/glm-5.3-flash', chiave: 'finta', task: { consegna: 'Continua.' }, messaggiIniziali: storia(coppiePer(3450)), compattazioneIstantanea: true, contestoDelProgetto: 'Project files:\n', fetchDiRete: r0.fn });
+  const prontaVera = uno.compattazionePronta ?? await uno.compattazioneInPreparazione;
+  assert.ok(prontaVera, 'premessa');
+  const inArrivo = crea(prontaVera, uno.messaggiFinali);
+  const eventi = [];
+  const ingressi = [];
+  const r1 = rete({ riassunto: (o) => { ingressi.push(stima(JSON.parse(o.body).messages)); return RIASSUNTO(); } });
+  const messaggiIniziali = [...uno.messaggiFinali, { role: 'user', content: `Adesso ${coda}` }];
+  assert.ok(stima(messaggiIniziali) > 4_800, `premessa: sopra l'emergenza (${stima(messaggiIniziali)})`);
+  const inizio = Date.now();
+  await talosLavora({ cartella, modello: 'z-ai/glm-5.3-flash', chiave: 'finta', task: { consegna: 'x' }, messaggiIniziali,
+    compattazioneInArrivo: inArrivo, contestoDelProgetto: 'Project files:\n', fetchDiRete: r1.fn,
+    onGiro: (e) => { if (e?.tipo === 'compattazione-fine') eventi.push(e.istantanea === true ? 'ereditato' : e.ragione ?? e.compattato); } });
+  return { ms: Date.now() - inizio, riassunti: r1.conti.riassunti, ingressi, eventi, prontaVera };
+}
+const conFirma = (promessa, firma) => Object.assign(promessa, { firma });
+
+test('IST-REV-05c — all\'emergenza, un riassunto in volo che VALE (firma giusta) si aspetta e si usa: nessun secondo riassunto pagato', async (t) => {
+  const esito = await giroAllEmergenza(t, { coda: 'altro testo '.repeat(700), inArrivo: (pronta, storiaUno) => conFirma(
+    new Promise((ok) => { setTimeout(() => ok(pronta), 300).unref(); }),
+    { coveredThrough: pronta.record.coveredThrough, impronta: pronta.impronta, base: pronta.base }) });
+  assert.equal(esito.riassunti, 0, JSON.stringify(esito.eventi));
+  assert.deepEqual(esito.eventi, ['ereditato']);
+});
+
+test('IST-REV-05d — all\'emergenza, un riassunto in volo che NON vale più (la storia è cambiata: firma diversa) NON si aspetta: il giro compatta subito (prima: 1.220 ms in serie)', async (t) => {
+  const esito = await giroAllEmergenza(t, { coda: 'altro testo '.repeat(700), inArrivo: (pronta, storiaUno) => conFirma(
+    new Promise((ok) => { setTimeout(() => ok(pronta), 2_000).unref(); }),
+    { coveredThrough: pronta.record.coveredThrough, impronta: 'impronta-di-una-storia-che-non-c-e-piu', base: pronta.base }) });
+  assert.ok(esito.ms < 1_500, `non ha aspettato i 2 s del riassunto che non vale (${esito.ms} ms)`);
+  assert.equal(esito.riassunti, 1, 'ne paga uno suo, subito');
+});
+
+test('IST-REV-05e — ONE-UP: all\'emergenza un riassunto arrivato VALIDO ma INSUFFICIENTE (da solo non riporta sotto la soglia) diventa la base: il giro non riassume da capo la storia già coperta', async (t) => {
+  const esito = await giroAllEmergenza(t, { coda: 'altro testo '.repeat(1_500), inArrivo: (pronta, storiaUno) => conFirma(
+    Promise.resolve(pronta), { coveredThrough: pronta.record.coveredThrough, impronta: pronta.impronta, base: pronta.base }) });
+  assert.ok(esito.ingressi.length >= 1, 'premessa: il giro riassume il resto');
+  for (const ingresso of esito.ingressi) assert.ok(ingresso < 3_000, `un riassunto sul resto, partendo dalla base ereditata, non sulla storia già coperta (${esito.ingressi})`);
+  /* seconda passata (N3): UNA riga per la richiesta, dal numero di partenza a quello finale — non la base e poi il resto */
+  assert.deepEqual(esito.eventi, [true], `una sola riga di compattazione per la richiesta (${JSON.stringify(esito.eventi)})`);
 });

@@ -39,7 +39,8 @@
  *  - OpenCode `packages/core/src/session/compaction.ts:12-45`: riassunto a sezioni fisse («Keep every section, even
  *    when empty», «Preserve exact file paths… error strings»), incrementale con `<prior-summary>`.
  */
-import { stimaTokenConversazione } from './talosHarness.mjs';
+import { createHash } from 'node:crypto';
+import { stimaToken, stimaTokenConversazione } from './talosHarness.mjs';
 // ⭐ 06/10/2026 — la ricarica della memoria post-compact (opzione A + C-b, ricerca 5×5×5×5 §6.4): il
 // recinto della sintesi entra nella proiezione accanto all'indice meccanico, NELLO STESSO messaggio.
 import { PREFISSO_SINTESI_RECINTATA } from './ricarica-post-compact.mjs';
@@ -67,6 +68,16 @@ export const FRAZIONE_FINESTRA = 0.75;
 export const FRAZIONE_EMERGENZA = 0.90;
 export const MOLTIPLICATORE_EMERGENZA_SENZA_FINESTRA = 1.2;
 export const RICHIESTE_UTENTE_LETTERALI = 3;
+/* Owner 22/10/2026 («prima + ultime tre»): la PRIMA richiesta della persona resta sempre alla lettera, come Hermes protegge la
+   testa (`protect_first_n`, agent_init.py:1549). Il compito iniziale non finisce più nel riassunto dopo tre richieste nuove.
+   Con un tetto: oltre questi caratteri se ne tengono inizio e fine, e il taglio è detto nel testo (`accorciaTesto`). */
+export const PRIMA_RICHIESTA_CARATTERI_MASSIMI = 8_000;
+export const PRIMA_RICHIESTA_INIZIO = 6_000;
+export const PRIMA_RICHIESTA_FINE = 2_000;
+/* Il riassunto (dell'adapter e del registro) non ritenta come un giro: due tentativi, attesa al più 10 s (CLI 22/10, revisione 1 della
+   0.6.13: col trasporto di serie un fornitore che risponde 503 prendeva 15 richieste in 5,5 minuti per UN riassunto di fine giro). */
+export const TENTATIVI_RIASSUNTO = 2;
+export const ATTESA_RITENTA_RIASSUNTO_MS = 10_000;
 export const SCAMBI_CHIUSI_LETTERALI = 2;
 export const FILE_RILETTI_MASSIMI = 5;
 /*
@@ -209,6 +220,38 @@ export function calcolaSoglie({ tettoToken = null, finestraToken = null } = {}) 
  * lista più corta dell'ancora (è appena stata compattata) — si stima tutto e lo si dichiara.
  * Forma presa da Hermes (`website/docs/developer-guide/context-compression-and-caching.md:107-116`, «usage anchor»).
  */
+/**
+ * 22/10/2026 (revisione avversaria di 068b2c172, F1) — LA STIMA È CIECA SUI PEZZI. `stimaTokenConversazione` conta solo il testo in
+ * stringa: un messaggio a parti (testo e immagini, come li costruisce `chat-image-attachments.mjs`) vale 0. Fra due stime così, un
+ * riassunto che toglie davvero dodici immagini «cresce» (116 token stimati prima, poche centinaia dopo), e la guardia «non riduce»
+ * lo buttava: la richiesta ripartiva con tutte le immagini, e sul contesto pieno il giro moriva. ⇒ Dove la stima non vede tutto ciò
+ * che c'è, «non riduce» e «al minimo» non si giudicano: si fa come prima.
+ */
+export function stimaCiecaSuiPezzi(messaggi) {
+  return Array.isArray(messaggi) && messaggi.some((m) => m?.content != null && typeof m.content !== 'string');
+}
+
+/**
+ * 22/10/2026 (seconda passata avversaria, N1): l'esenzione qui sopra era tutto-o-niente — UNA immagine da 4 byte in una sessione di
+ * solo testo spegneva la guardia «non riduce» per sempre (misurato: un riassunto che portava la richiesta da 6.288 a 23.223 token
+ * passava). Le guardie «non riduce» pesano invece i pezzi, come Hermes `estimate_messages_tokens_rough`
+ * (`agent/model_metadata.py:2403-2415`, `:2493-2540`): il testo, anche dentro i pezzi, più un costo fisso per immagine
+ * (`DEFAULT_IMAGE_TOKEN_COST = 1500`, `agent/image_token_cost.py:23`, il valore di Hermes prima della taratura sull'uso del fornitore).
+ * Prima e dopo si misurano con la stessa stima: il riassunto toglie le immagini e le sostituisce col segnaposto di testo.
+ */
+export const COSTO_IMMAGINE_TOKEN = 1_500;
+export function stimaConPezzi(messaggi) {
+  let somma = stimaTokenConversazione(Array.isArray(messaggi) ? messaggi : []);
+  for (const m of Array.isArray(messaggi) ? messaggi : []) {
+    if (!Array.isArray(m?.content)) continue;
+    for (const parte of m.content) {
+      if (TIPI_IMMAGINE.has(parte?.type)) somma += COSTO_IMMAGINE_TOKEN;
+      else if (typeof parte?.text === 'string') somma += stimaToken(parte.text);
+    }
+  }
+  return somma;
+}
+
 export function misuraOccupazione({ ancora = null, messaggi = [], finestraToken = null } = {}) {
   const promptTokens = Number(ancora?.promptTokens);
   const lunghezza = Number(ancora?.lunghezza);
@@ -259,9 +302,24 @@ export function riattaccaEffimeri(messaggi, effimeri) {
   return [...messaggi, ...effimeri];
 }
 
-/** Una richiesta della persona: `user` che non è un nostro riassunto. */
+/**
+ * Il testo di un contenuto: la stringa, o le parti `text` di un contenuto a parti (testo e immagini). `null` se non è né l'una né
+ * l'altro. Un contenuto di sole immagini ha testo vuoto ma resta un contenuto della persona.
+ */
+export function testoDelContenuto(content) {
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content) || content.length === 0) return null;
+  return content.filter((p) => p?.type === 'text' && typeof p.text === 'string').map((p) => p.text).join('\n');
+}
+
+/**
+ * Una richiesta della persona: `user` che non è un nostro riassunto. 22/10/2026 (CLI, S3-C): anche col contenuto a parti — una
+ * richiesta con un'immagine allegata era trattata come «non una richiesta» e finiva nel riassunto invece di restare alla lettera.
+ */
 export function eRichiestaDellaPersona(m) {
-  return m?.role === 'user' && typeof m.content === 'string' && !iniziaConMarcatoreRiassunto(m.content);
+  if (m?.role !== 'user') return false;
+  const testo = testoDelContenuto(m.content);
+  return testo !== null && !iniziaConMarcatoreRiassunto(testo);
 }
 
 /**
@@ -273,7 +331,31 @@ export function eRichiestaDellaPersona(m) {
  * Solo all'INIZIO esatto del testo: una persona che cita `[TALOS]` in mezzo a una frase resta una persona.
  */
 export function eNotaDiTalos(m) {
-  return m?.role === 'user' && typeof m.content === 'string' && (m.content.startsWith('[TALOS]') || m.content.startsWith('[TALOS:'));
+  if (m?.role !== 'user') return false;
+  const testo = testoDelContenuto(m.content);
+  return typeof testo === 'string' && (testo.startsWith('[TALOS]') || testo.startsWith('[TALOS:'));
+}
+
+/** Una prima richiesta che `accorciaTesto` ha già tagliato: il marcatore sta subito dopo l'inizio tenuto, e la lunghezza è quella di un taglio. */
+function giaAccorciata(testo) {
+  if (testo.length > PRIMA_RICHIESTA_INIZIO + PRIMA_RICHIESTA_FINE + 1_000) return false;
+  const dopo = testo.slice(PRIMA_RICHIESTA_INIZIO, PRIMA_RICHIESTA_INIZIO + 200);
+  return dopo.startsWith('\n[… ') && dopo.includes(MARCATORE_ACCORCIATO);
+}
+
+/** La prima richiesta com'entra nella proiezione: intera, o inizio e fine col taglio detto se supera il tetto (solo le parti di testo). */
+export function primaRichiestaPerLaProiezione(m) {
+  /* 22/10/2026 (revisione avversaria): una copia GIÀ accorciata non si riaccorcia alla compattazione dopo — il marcatore stesso la portava
+     oltre il tetto, e il secondo taglio dichiarava «324 characters omitted» al posto dei 42.012 veri. ⛔ Seconda revisione: la copia si
+     riconosce dal marcatore AL SUO POSTO (subito dopo l'inizio tenuto, `giaAccorciata`), non dalla frase in un punto qualsiasi — chi
+     incolla un log di TALOS nella prima richiesta la contiene, e il tetto saltava (130.073 caratteri tenuti interi in ogni proiezione). */
+  const accorcia = (testo) => (typeof testo === 'string' && testo.length > PRIMA_RICHIESTA_CARATTERI_MASSIMI && !giaAccorciata(testo)
+    ? accorciaTesto(testo, { inizio: PRIMA_RICHIESTA_INIZIO, fine: PRIMA_RICHIESTA_FINE }) : testo);
+  if (typeof m?.content === 'string') return m.content.length > PRIMA_RICHIESTA_CARATTERI_MASSIMI ? { ...m, content: accorcia(m.content) } : m;
+  if (Array.isArray(m?.content) && m.content.some((p) => p?.type === 'text' && typeof p.text === 'string' && p.text.length > PRIMA_RICHIESTA_CARATTERI_MASSIMI)) {
+    return { ...m, content: m.content.map((p) => (p?.type === 'text' ? { ...p, text: accorcia(p.text) } : p)) };
+  }
+  return m;
 }
 
 /**
@@ -287,8 +369,10 @@ export function eNotaDiTalos(m) {
  * parola per parola anche quando tutto il resto del mezzo è riassunto. Forma presa da Codex
  * (`compact.rs:60`, richieste della persona letterali dalla più recente).
  * `tagliabile:false` quando il mezzo non ha niente da riassumere.
+ * 22/10/2026 (owner, «prima + ultime tre»): la PRIMA richiesta vera, se sta nel mezzo, va in testa a `richiesteLetterali`
+ * (`primaRichiestaPerLaProiezione`: col tetto). `primaRichiesta:false` torna alla forma di prima.
  */
-export function dividiPerCompattazione(messaggi, { richiesteUtente = RICHIESTE_UTENTE_LETTERALI, scambiChiusi = SCAMBI_CHIUSI_LETTERALI } = {}) {
+export function dividiPerCompattazione(messaggi, { richiesteUtente = RICHIESTE_UTENTE_LETTERALI, scambiChiusi = SCAMBI_CHIUSI_LETTERALI, primaRichiesta = true } = {}) {
   const lista = Array.isArray(messaggi) ? messaggi : [];
   let fineTesta = 0;
   while (fineTesta < lista.length && eSistema(lista[fineTesta])) fineTesta += 1;
@@ -319,7 +403,9 @@ export function dividiPerCompattazione(messaggi, { richiesteUtente = RICHIESTE_U
   const richiestaVera = (m) => eRichiestaDellaPersona(m) && !eNotaDiTalos(m);
   const utentiInCoda = coda.filter(richiestaVera).length;
   const daTenere = Math.max(0, richiesteUtente - utentiInCoda);
-  const richiesteLetterali = daTenere === 0 ? [] : mezzo.filter(richiestaVera).slice(-daTenere);
+  const ultime = daTenere === 0 ? [] : mezzo.filter(richiestaVera).slice(-daTenere);
+  const prima = primaRichiesta ? mezzo.find(richiestaVera) : undefined;
+  const richiesteLetterali = prima && !ultime.includes(prima) ? [primaRichiestaPerLaProiezione(prima), ...ultime] : ultime;
   const tagliabile = mezzo.length >= 2 && mezzo.some((m) => m?.role !== 'user');
   return { testa, mezzo, coda, richiesteLetterali, tagliabile };
 }
@@ -482,9 +568,22 @@ function senzaIndice(m) {
   return posizione === -1 ? m : { ...m, content: m.content.slice(0, posizione).trimEnd() };
 }
 
+/*
+ * 22/10/2026 (CLI, revisione 3 della 0.6.13, domanda a): un'immagine nel tratto da riassumere partiva INTERA (`image_url`) verso il
+ *   riassuntore — un modello leggero solo testo la rifiuta, e ogni riassunto falliva. Hermes la sostituisce con un segnaposto di testo
+ *   (`agent/context_compressor.py:1425` `_replace_image_parts`, «[Attached image — stripped after compression]»). Qui lo stesso, solo
+ *   nella richiesta di riassunto: la storia e le richieste tenute alla lettera non cambiano.
+ */
+const TIPI_IMMAGINE = new Set(['image_url', 'input_image', 'image']);
+export const SEGNAPOSTO_IMMAGINE = '[Attached image — not shown to the summarizer]';
+function senzaImmagini(m) {
+  if (!Array.isArray(m?.content) || !m.content.some((p) => TIPI_IMMAGINE.has(p?.type))) return m;
+  return { ...m, content: m.content.map((p) => (TIPI_IMMAGINE.has(p?.type) ? { type: 'text', text: SEGNAPOSTO_IMMAGINE } : p)) };
+}
+
 export function costruisciRichiestaDiRiassunto({ testa = [], mezzo = [], paroleMassime = PAROLE_MASSIME_RIASSUNTO } = {}) {
   const haRiassuntoPrecedente = mezzo.some((m) => m?.role === 'user' && typeof m.content === 'string' && iniziaConMarcatoreRiassunto(m.content));
-  return [...testa, ...mezzo.map(senzaIndice), { role: 'user', content: testoRichiestaDiRiassunto({ paroleMassime, haRiassuntoPrecedente }) }];
+  return [...testa.map(senzaImmagini), ...mezzo.map(senzaIndice).map(senzaImmagini), { role: 'user', content: testoRichiestaDiRiassunto({ paroleMassime, haRiassuntoPrecedente }) }];
 }
 
 /** Una risposta del riassuntore vale solo se è testo, finito, senza chiamate di attrezzo. */
@@ -787,9 +886,35 @@ export function riduciCodaSottoPressione(coda, { budgetToken, stima = stimaToken
  * `coveredThrough` = quanti messaggi GREZZI (senza effimeri) la proiezione copre; `riassunto` = i messaggi che li
  * sostituiscono. `tokenDopo` è sempre una stima (caratteri/4): il numero vero arriva con la risposta successiva.
  */
-export function creaRecord({ coveredThrough, riassunto, tokenPrima, tokenDopo, misura, at, modello, indice = null } = {}) {
+/*
+ * 22/10/2026 (CLI, S2-A, bloccante) — L'IMPRONTA DEL TRATTO COPERTO. Un record diceva solo «copro i primi N messaggi», e
+ * `applicaRecord` controllava solo che la storia ne avesse almeno N. Quando la storia sotto il record cambiava (il /compact a mano la
+ * sostituiva con tre messaggi e lasciava vivo il record), appena tornava a N messaggi il modello rivedeva il riassunto VECCHIO al posto
+ * di quelli nuovi, senza un avviso. Ora il record porta l'impronta del primo e dell'ultimo messaggio coperti: se non tornano, non si
+ * applica. Due messaggi e non tutto il tratto perché `applicaRecord` gira a ogni richiesta (l'adapter, :593): l'impronta intera di
+ * una storia lunga costerebbe a ogni passo, e basta a riconoscere una storia diversa.
+ */
+const improntaDiUno = (m) => createHash('sha256').update(JSON.stringify(m ?? null) ?? 'null').digest('hex').slice(0, 16);
+/* 22/10/2026 (CLI, S3-B): l'impronta INTERA del prefisso e la chiave della base di un riassunto pronto, prima interne all'adapter
+   (15/10, compattazione istantanea): ora le usa anche il registro, che passa al giro il riassunto di fine giro ancora in volo. */
+export function improntaDelPrefisso(messaggi, fino) {
+  const h = createHash('sha256');
+  for (let i = 0; i < fino; i += 1) h.update(JSON.stringify(messaggi[i] ?? null)).update('\u0000');
+  return h.digest('hex');
+}
+export function chiaveBaseDelRecord(record) {
+  return record ? `${record.at ?? ''}|${record.coveredThrough ?? ''}` : 'nessuna';
+}
+
+export function improntaDelTrattoCoperto(storia, coveredThrough) {
+  if (!Array.isArray(storia) || !Number.isInteger(coveredThrough) || coveredThrough < 1 || coveredThrough > storia.length) return null;
+  return { primo: improntaDiUno(storia[0]), ultimo: improntaDiUno(storia[coveredThrough - 1]) };
+}
+
+export function creaRecord({ coveredThrough, riassunto, tokenPrima, tokenDopo, misura, at, modello, indice = null, coperti = null } = {}) {
   if (!Number.isInteger(coveredThrough) || coveredThrough < 0) throw new TypeError('coveredThrough must be an integer ≥ 0');
   if (!Array.isArray(riassunto)) throw new TypeError('riassunto must be a list of messages');
+  const impronta = improntaDelTrattoCoperto(coperti, coveredThrough);
   return {
     schema: SCHEMA_RECORD_COMPATTAZIONE,
     coveredThrough,
@@ -810,6 +935,7 @@ export function creaRecord({ coveredThrough, riassunto, tokenPrima, tokenDopo, m
         fileRiletti: [...(indice.fileRiletti ?? [])],
       }
       : null,
+    ...(impronta ? { impronta } : {}),
   };
 }
 
@@ -823,10 +949,20 @@ export function eRecordValido(record) {
  * segue alla lettera. Un record che copre più di quanto la storia contenga non si applica (storia troncata o
  * record di un'altra storia): si torna la storia grezza, e chi chiama lo vede dalla lunghezza.
  * Basta l'ULTIMO record: il suo `riassunto` è già la proiezione intera al momento in cui è nato.
+ * 22/10/2026: un record con l'impronta si applica solo se il tratto coperto è ancora quello (`improntaDelTrattoCoperto`); i record di
+ * prima non la portano e si applicano come prima.
  */
+export function recordValePerLaStoria(storiaGrezza, record) {
+  const storia = Array.isArray(storiaGrezza) ? storiaGrezza : [];
+  if (!eRecordValido(record) || record.coveredThrough > storia.length) return false;
+  if (!record.impronta) return true;
+  const vera = improntaDelTrattoCoperto(storia, record.coveredThrough);
+  return !!vera && vera.primo === record.impronta.primo && vera.ultimo === record.impronta.ultimo;
+}
+
 export function applicaRecord(storiaGrezza, record) {
   const storia = Array.isArray(storiaGrezza) ? storiaGrezza : [];
-  if (!eRecordValido(record) || record.coveredThrough > storia.length) return storia;
+  if (!recordValePerLaStoria(storia, record)) return storia;
   return [...record.riassunto, ...storia.slice(record.coveredThrough)];
 }
 

@@ -16,10 +16,12 @@ import { createInterface } from 'node:readline';
 import { userInfo } from 'node:os';
 import { stat } from 'node:fs/promises';
 import { writeSync } from 'node:fs';
+import { rigaJson } from './riga-json.mjs';
 
 const rg = process.argv[2];
 if (rg) process.env.TALOS_RG_PATH = rg;
-const scriviRiga = (oggetto) => process.stdout.write(`${JSON.stringify(oggetto)}\n`);
+/* 22/10/2026: `rigaJson` — un file con U+2028 spezzava la risposta nel `readline` del cliente, e la chiamata restava appesa */
+const scriviRiga = (oggetto) => process.stdout.write(rigaJson(oggetto));
 console.log = (...parti) => process.stderr.write(`${parti.map(String).join(' ')}\n`);
 
 const kernel = await import('./talosHarness.mjs');
@@ -53,7 +55,7 @@ const OPERAZIONI = Object.freeze({
 const inCorso = new Map();
 /* L'annuncio: il kernel è importato e stdin si legge. Prima di questa riga il client sa che nessuna richiesta è stata eseguita. */
 /* SINCRONO: un annuncio rimasto in un buffer direbbe al client «non è partito» anche dopo una richiesta eseguita. */
-writeSync(1, `${JSON.stringify({ pronto: true, node: process.version })}\n`);
+writeSync(1, rigaJson({ pronto: true, node: process.version }));
 createInterface({ input: process.stdin }).on('line', async (riga) => {
   let messaggio;
   try { messaggio = JSON.parse(riga); } catch { return; }

@@ -2568,6 +2568,8 @@ const ATTREZZI = [
         description: 'Runs a shell command in the project folder. Prefer the other tools when they '
             + 'suffice — this is for anything they cannot do (installing a dependency, running a one-off '
             + 'script, inspecting environment state). '
+            /* 22/10/2026: «phone» resta APPOSTA (owner: «dispositivi, mai telefoni» vale per ciò che legge la persona) — questa descrizione è
+               nella lista BASE del banco (BC49, impronta 38d65a3f…): una parola cambiata qui cambia il preambolo di ogni campagna */
             + 'When this session runs on a connected Android phone instead of the PC, the shell is the '
             + "device's own minimal one: standard POSIX utilities (ls, cat, grep, wc, find, curl…) work, "
             + 'but there is no Node/npm/python/apt — and a standard Linux binary you download will not run '
@@ -4195,21 +4197,21 @@ const ATTREZZI_ESTESI = [
      */
     {
         name: 'remote_phones',
-        description: 'List the phones paired with this computer for remote control: name, whether it is connected now, when it was '
+        description: 'List the devices paired with this computer for remote control: name, whether it is connected now, when it was '
             + 'last seen, and a short id. Also says whether remote control is on. Read-only.',
         input_schema: { type: 'object', properties: {}, required: [] },
     },
     {
         name: 'remote_phone_pair',
-        description: 'Show the person a QR code in the chat to pair a new phone, ONLY when the person asks to connect a phone. The person '
-            + 'always confirms on a card first, then scans the code with the phone and confirms the 6-digit code on this computer. '
-            + 'You never see the code or the link. Fails if remote control is off: only the person turns it on, from the Phones screen.',
+        description: 'Show the person a QR code in the chat to pair a new device, ONLY when the person asks to connect a device. The person '
+            + 'always confirms on a card first, then scans the code with the device and confirms the 6-digit code on this computer. '
+            + 'You never see the code or the link. Fails if remote control is off: only the person turns it on, from the Connected devices screen.',
         input_schema: { type: 'object', properties: {}, required: [] },
     },
     {
         name: 'remote_phone_revoke',
-        description: 'Disconnect a paired phone so it can no longer reach this computer, ONLY when the person asks. Use the short id '
-            + 'from remote_phones. The person confirms on a card, except in Full access. To use it again, the phone must be paired anew.',
+        description: 'Disconnect a paired device so it can no longer reach this computer, ONLY when the person asks. Use the short id '
+            + 'from remote_phones. The person confirms on a card, except in Full access. To use it again, the device must be paired anew.',
         input_schema: { type: 'object', properties: {
             phone: { type: 'string', description: 'the short id from remote_phones' },
         }, required: ['phone'] },
@@ -8198,7 +8200,7 @@ async function sondaRuntimeMobileNode(seriale) {
         return `node is NOT on the PATH, but a working runtime is present at ${percorsoNoto}/node — call it like this: `
             + `LD_LIBRARY_PATH=${percorsoNoto}/lib ${percorsoNoto}/node <script>. Do not look for another one, do not try to download or install it: it would not work (Bionic, not glibc).`
     }
-    return 'No Node runtime is present on this device right now: do not try to download it, install it or look for it with apt/npm/curl — it would not work (the phone shell is Bionic, not glibc). If the task requires running JavaScript, state this limit instead of trying.'
+    return 'No Node runtime is present on this device right now: do not try to download it, install it or look for it with apt/npm/curl — it would not work (the device shell is Bionic, not glibc). If the task requires running JavaScript, state this limit instead of trying.'
 }
 
 /**
@@ -8667,7 +8669,7 @@ export async function eseguiComandoSandboxato(comando, cartella, { mobile = fals
         if (!seriale) {
             return {
                 codice: -1,
-                testo: 'No ADB device is ready right now: the session is mobile, but the phone cannot be reached (unplugged, or more than one device connected).',
+                testo: 'No ADB device is ready right now: the session is mobile, but the device cannot be reached (unplugged, or more than one device connected).',
                 enforcement: 'none',
             }
         }
@@ -8693,7 +8695,7 @@ export async function eseguiComandoSandboxato(comando, cartella, { mobile = fals
         if (push.codice !== 0) {
             return {
                 codice: push.codice,
-                testo: `Could not sync the task folder to the phone (adb push failed): ${uscitaUtile(`${push.fuori}\n${push.errori}`.trim(), 2_000, 0.25)}`,
+                testo: `Could not sync the task folder to the device (adb push failed): ${uscitaUtile(`${push.fuori}\n${push.errori}`.trim(), 2_000, 0.25)}`,
                 enforcement: 'adb-shell-on-device',
             }
         }

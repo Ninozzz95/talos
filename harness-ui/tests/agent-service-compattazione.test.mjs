@@ -57,6 +57,29 @@ test('CTX-REG-AGENT-SERVICE-INSTANT — lo scambio istantaneo (nessun `inizio`) 
   assert.equal(fini[2].motivo, null, 'un motivo sulla fine NON istantanea non si legge: il contratto di prima');
 });
 
+test('CTX-REG-AGENT-SERVICE-REST-FAILED — sulla riga della base adottata il perché del resto arriva al giornale, ridotto ai campi di codice; AL CONTRARIO senza resto non compare', async () => {
+  const eventi = [];
+  const record = creaRecord({ coveredThrough: 5, riassunto: [{ role: 'user', content: 'R' }], tokenPrima: 9_000, tokenDopo: 700, misura: 'fornitore', at: '2026-10-22T15:00:00.000Z', modello: 'z-ai/glm-5.3-flash' });
+  await avviaSessione({
+    cartella: '/tmp/x', task: { consegna: 'prova' }, modello: 'm', chiave: 'k',
+    onEvento: (e) => { eventi.push(e); },
+    talosLavoraFn: async ({ onGiro }) => {
+      onGiro({ giro: 3, tipo: 'compattazione-inizio', tokenMisurati: 9_500, soglia: 8_000, motivo: 'emergenza' });
+      onGiro({ giro: 3, tipo: 'compattazione-fine', compattato: true, record, istantanea: true, motivo: 'emergenza',
+        restoNonRiuscito: { motivo: 'x'.repeat(200), interrottaIn: 'riassunto', classe: 'server_error', fallimentiConsecutivi: 2, testo: 'testo del fornitore' } });
+      onGiro({ giro: 4, tipo: 'compattazione-fine', compattato: true, record, istantanea: true, motivo: 'soglia' });
+      onGiro({ giro: 5, tipo: 'compattazione-fine', compattato: true, record, istantanea: true, motivo: 'soglia', restoNonRiuscito: 'non un oggetto' });
+      return { comeFinita: 'concluso', detto: 'fatto', messaggiFinali: [], recordDiCompattazione: [record] };
+    },
+  });
+  const fini = eventi.filter((e) => e.type === 'CUSTOM' && e.name === 'talos.compattazione' && e.value.fase === 'fine').map((e) => e.value);
+  assert.deepEqual(fini[0].restoNonRiuscito, { motivo: 'x'.repeat(64), interrottaIn: 'riassunto', classe: 'server_error', fallimentiConsecutivi: 2 },
+    'il perché arriva, tagliato, e i campi che non sono di codice restano fuori');
+  assert.equal(fini[0].compattato, true, 'la riga resta quella della base');
+  assert.equal(fini[1].restoNonRiuscito, undefined, 'senza resto non compare');
+  assert.equal(fini[2].restoNonRiuscito, undefined, 'un valore che non è un oggetto non passa');
+});
+
 test('CTX-REG-AGENT-SERVICE-SUMMARY-CALL — riassumiPerCompattazione chiama il modello SENZA attrezzi, col tetto di uscita e il ragionamento passato', async () => {
   let body = null;
   const fetchDiRete = async (_url, init) => { body = JSON.parse(init.body); return Response.json({ choices: [{ message: { role: 'assistant', content: 'SINTESI' }, finish_reason: 'stop' }], usage: { prompt_tokens: 12, completion_tokens: 3 } }); };
