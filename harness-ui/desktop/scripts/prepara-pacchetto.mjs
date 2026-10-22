@@ -8,6 +8,7 @@ import { spawn } from 'node:child_process';
 import { pipeline } from 'node:stream/promises';
 import { createWriteStream } from 'node:fs';
 import { BINARI_CASA_LINUX, preparaCasaLinux, verificaCasaLinux } from '../../src/casa-linux-binari.mjs';
+import { preparaBindingIroh } from '../../scripts/scarica-binding-iroh.mjs';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const staging = join(root, '.staging');
@@ -279,6 +280,18 @@ export async function preparaPacchetto() {
   await copyFile(join(root, '../native/talos-chat-upload.exe'), join(backend, 'native/talos-chat-upload.exe'));
   await copyFile(join(root, '../native/GO-LICENSE.txt'), join(backend, 'native/GO-LICENSE.txt'));
   await esegui(join(backend, 'native/talos-chat-upload.exe'), ['--version'], root);
+  /*
+   * Il binding iroh del controllo remoto (owner 22/10/2026, «nel repo solo l'impronta»): dalla corsa fissata in
+   * native/iroh-binding.json, con attestazione e impronta verificate; senza, ci si ferma. Va accanto a src/ come lo cerca
+   * src/remoto/binding.mjs (`../../native/iroh/`), e verifica-nativi.mjs lo carica da lì con lo stesso caricatore dell'app.
+   */
+  const iroh = preparaBindingIroh();
+  /* revisione del 22/10: il preavviso di scadenza dell'artefatto si vede anche preparando il pacchetto, non solo dallo script */
+  if (iroh.avviso) console.warn(process.env.GITHUB_ACTIONS === 'true' ? `::warning title=Binding iroh::${iroh.avviso}` : `Attenzione: ${iroh.avviso}`);
+  await mkdir(join(backend, 'native/iroh'));
+  for (const nome of [iroh.rif.file, `${iroh.rif.file}.sha256`]) await copyFile(join(root, '../native/iroh', nome), join(backend, 'native/iroh', nome));
+  /* Owner 22/10/2026: le licenze delle crate Rust dentro il binding (cargo-about, `native/iroh-licenze/`) viaggiano con lui. */
+  await copyFile(join(root, '../native/iroh-THIRD_PARTY_NOTICES.txt'), join(backend, 'native/iroh/THIRD_PARTY_NOTICES.txt'));
   for (const nome of ['package.json', 'package-lock.json', 'THIRD_PARTY_NOTICES.md']) await copyFile(join(root, '../..', 'context-engine', nome), join(contesto, nome));
   await copiaAlberoProduzione(join(root, '../..', 'context-engine/src'), join(contesto, 'src'));
   await copiaAssistenza({ sorgente: join(root, '../..', 'docs/assistenza'), destinazione: join(staging, 'docs/assistenza') });
@@ -319,6 +332,7 @@ export async function preparaPacchetto() {
     'Electron 44.3.0 (MIT): LICENSE e LICENSES.chromium.html nella radice installata.',
     `llama.cpp v0.7.0 = ${LLAMA_VERSIONE} (MIT): https://github.com/ggml-org/llama.cpp/tree/${LLAMA_VERSIONE} ; avvisi negli archivi inclusi.`,
     'Go 1.27.1 (BSD-3-Clause): il helper upload include la standard library; licenza in harness-ui/native/GO-LICENSE.txt.',
+    'iroh-ffi 1.1.0 (MIT o Apache-2.0) per il controllo remoto, con le crate Rust che contiene: testi delle licenze e fonti in harness-ui/native/iroh/THIRD_PARTY_NOTICES.txt.',
     'Node.js 24.18.0 per Linux (MIT): eseguito dentro WSL per gli attrezzi dei file; licenza in casa-linux/linux-x64/LICENSE-node.txt.',
     'ripgrep 15.0.0 per Linux (MIT o Unlicense: https://github.com/BurntSushi/ripgrep), dal pacchetto @vscode/ripgrep-linux-x64 1.18.0 (MIT); licenza del pacchetto in casa-linux/linux-x64/LICENSE-rg.txt.',
     'Dipendenze Node: licenze originali conservate nei rispettivi node_modules.',

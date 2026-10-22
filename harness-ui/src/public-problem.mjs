@@ -36,7 +36,7 @@ export const MESSAGES = Object.freeze({
   PLAN_DECISION_NOT_SAVED: { title: 'Choice not saved', explanation: 'TALOS could not save your choice to disk: the plan is still waiting.', action: 'Check the data folder space in Doctor and choose again.' },
   PLAN_APPROVAL_ORIGIN_FORBIDDEN: { title: 'Plan choice blocked', explanation: 'The request comes from a window other than TALOS.', action: 'Go back to the plan open in TALOS and choose from there.' },
   // 23/09/2026 (F3-10): un solo selettore Normale / Piano.
-  NOT_ALLOWED_REMOTELY: { title: 'Only from the computer', explanation: 'From the phone a new session can start only in one of the folders allowed on the computer. Any other folder is chosen on the computer.', action: 'Choose one of the allowed folders, or start the session from the computer.' },
+  NOT_ALLOWED_REMOTELY: { title: 'Only from the computer', explanation: 'From the device a new session can start only in one of the folders allowed on the computer. Any other folder is chosen on the computer.', action: 'Choose one of the allowed folders, or start the session from the computer.' },
   MODE_WORKFLOW_RETIRED: { title: 'Mode no longer available', explanation: 'Workflow mode has been removed: you now work in Normal or Plan, and Workflow is a tool the model uses when needed.', action: 'Choose Normal or Plan and try again.' },
   RUNTIME_UNREACHABLE: { title: 'Local service unreachable', explanation: 'The local service did not respond.', action: 'Check in Doctor that it is running and try again.' },
   PATH_NOT_ALLOWED: { title: 'Path not allowed', explanation: 'The chosen path is outside the authorized area.', action: 'Choose a folder inside the open project.' },
@@ -147,12 +147,10 @@ const MESSAGGIO_PER_LA_PERSONA_CON_MOTIVO = new Set(['SESSION_STORE_WRITE_FAILED
 /* 16/10/2026 (mobile): i rifiuti dell'albero dei file (`motivi-dei-file.mjs`) uscivano tutti come «Invalid query»; le loro frasi sono
    scritte per lo schermo e senza percorsi (lo pretende `tests/motivi-dei-file.test.mjs`). */
 const MOTIVI_CON_FRASE_PER_LA_PERSONA = new Set(['provider-key-missing', 'provider-key-missing-named', 'standalone-terminals-in-use', ...Object.keys(FRASI_DEI_MOTIVI_DEI_FILE)]);
-/* REV2-GOAL-05 (14/10/2026): due motivi di quel codice non parlano del disco ma del RIASSUNTO che il modello ha restituito storto:
-   il loro titolo e la loro azione sono quelli della compattazione, non «Save failed · Check the free space on the disk». */
-const COPIA_PER_MOTIVO = Object.freeze({
-  'summary-invalid-result': { title: 'Compaction failed', action: 'Try compacting again. If the problem persists, use the diagnostic reference in Doctor.' },
-  'summary-invalid-history': { title: 'Compaction failed', action: 'Try compacting again. If the problem persists, use the diagnostic reference in Doctor.' },
-});
+/* REV2-GOAL-05 (14/10/2026): la copia per MOTIVO, quando un motivo di un codice non parla di ciò che il codice dice. I due che la
+   usavano (`summary-invalid-result`, `summary-invalid-history`, il riassunto storto del /compact a mano) non esistono più dal 22/10/2026:
+   il /compact scrive un record come il riassunto di fine giro (S2-A), e un riassunto che non vale si dice con `motivo`, non è un errore. */
+const COPIA_PER_MOTIVO = Object.freeze({});
 
 /** Un testo del registro e pubblicabile solo se e corto e non porta percorsi o identificatori. */
 function messaggioPubblicabile(testo) {

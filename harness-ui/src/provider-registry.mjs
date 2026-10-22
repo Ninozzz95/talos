@@ -291,7 +291,8 @@ export const REGISTRO_FORNITORI = congela({
         ragionamento: congela({ livelli: congela(['low', 'high', 'max']), thinking: congela(['enabled', 'disabled']) }) }),
     ]),
     catalogo: congela({ fonte: 'fornitore', forma: 'openai-data', percorso: '/models', inUI: true }),
-    prezzi: congela({ fonte: 'nessuna' }),
+    /* 22/10/2026 (CLI): i prezzi delle righe hanno la loro fonte; anche il fornitore la dice, invece di «nessuna» (come Z.AI e MiniMax) */
+    prezzi: congela({ fonte: 'https://api-docs.deepseek.com/quick_start/pricing/', data: '2026-10-21', valuta: 'USD', unita: 'million tokens' }),
     limiti: congela({ timeoutPredefinitoSecondi: 60, tempoMassimoModificabile: true }),
     sonda: congela({ attiva: true, auth: 'bearer', percorso: '/models', urlAssoluto: null, conta: (c) => c?.data?.length }),
     destinazioneChat: true,

@@ -16,7 +16,7 @@ voce, con le voci del sistema operativo.
 - ⛔ **Dettare non è offline.** Il riconoscimento vocale del browser manda
   l'audio a un servizio in rete: gira **dentro il browser**, ma non **dentro
   questo computer**. È un limite della piattaforma, non una scelta di TALOS, ed è
-  diverso dal motore vocale del telefono, che invece è locale.
+  diverso dal motore vocale del dispositivo, che invece è locale.
 - ⛔ **Non c'è un ascolto sempre acceso.** Niente parola di richiamo: si tiene
   premuto e si parla. Una scheda che perde il fuoco perde anche il microfono —
   comportamento del browser, non nostro.

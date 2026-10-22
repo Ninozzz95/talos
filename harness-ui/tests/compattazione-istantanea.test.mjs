@@ -206,7 +206,12 @@ test('IST-06 — all\'emergenza si ASPETTA il riassunto già in preparazione e l
   assert.equal(esito.comeFinita, 'concluso');
   const fini = eventi.filter((e) => e.tipo === 'compattazione-fine' && e.compattato);
   assert.ok(fini.some((e) => e.istantanea && e.motivo === 'emergenza'), JSON.stringify(fini.map((e) => [e.motivo, e.istantanea])));
-  assert.equal(eventi.filter((e) => e.tipo === 'compattazione-inizio').length, 0, 'nessuna compattazione sincrona: è bastato aspettare quella in corso');
+  /* 22/10/2026 (revisione avversaria, B): l'attesa d'emergenza apre la riga viva PRIMA di aspettare (Stop, «Salta», tetto), quindi un
+     `compattazione-inizio` per ogni attesa c'è; ciò che non deve esserci è un riassunto pagato in più: ogni riassunto chiesto è una
+     preparazione in sottofondo, e ogni riga aperta si chiude con lo scambio istantaneo */
+  const inizi = eventi.filter((e) => e.tipo === 'compattazione-inizio');
+  assert.equal(inizi.length, fini.filter((e) => e.istantanea && e.motivo === 'emergenza').length, `una riga per attesa, chiusa dallo scambio: ${JSON.stringify(eventi.filter((e) => /compattazione-(inizio|fine)/u.test(e.tipo)).map((e) => [e.tipo, e.motivo, e.istantanea]))}`);
+  assert.equal(fornitore.riassuntiChiesti().length, esito.preparazioniDiCompattazione.preparate, 'nessun riassunto sincrono: è bastato aspettare quello in corso');
   const massima = Math.max(...fornitore.lavori().map((b) => Math.ceil(JSON.stringify(b.messages).length / 4)));
   assert.ok(massima < 9_600 * 1.15, `nessuna richiesta molto oltre l'emergenza: ${massima}`);
 });

@@ -43,24 +43,16 @@ function contrattoDelFuturo() {
 }
 
 
-test('REV2-GOAL-05 (S4) — REV-06: la copia «neutra» di SESSION_STORE_WRITE_FAILED manda a controllare il DISCO anche quando è il MODELLO ad aver dato un riassunto storto', () => {
-  /* `summary-invalid-result` e `summary-invalid-history` (session-registry.mjs, compattazione) usano lo stesso codice: la frase del
-     motivo arriva, ma il titolo («Save failed») e l'azione («Check the free space on the disk») sono quelli del codice. Prima
-     dicevano «Try compacting again», che per questi due era giusto. */
-  for (const [motivo, frase] of [
-    ['summary-invalid-result', 'The summary did not return a valid result. The original history remains available.'],
-    ['summary-invalid-history', 'The summary does not contain a valid history. The original history remains available.'],
-  ]) {
-    const errore = Object.assign(new Error(frase), { code: 'SESSION_STORE_WRITE_FAILED', reason: motivo });
-    const problema = toPublicProblem(errore);
-    const busta = { code: 'SESSION_STORE_WRITE_FAILED', message: problema.title, ...problema, reason: motivo };
-    for (const lingua of ['en', 'it']) {
-      impostaLingua(lingua);
-      const detto = testoErroreServer(busta);
-      assert.doesNotMatch(`${detto.title} · ${detto.action}`, /disk|disco|space|spazio|save failed|salvataggio non riuscito/iu, `${motivo} (${lingua}): «${detto.title} · ${detto.action}»`);
-    }
+test('REV2-GOAL-05 (S4) — 22/10/2026: i due motivi del riassunto storto (`summary-invalid-result`, `summary-invalid-history`) sono spariti col /compact che scrive un record (S2-A): né il registro, né la copia pubblica, né il dizionario li dicono più', async () => {
+  const { readFileSync } = await import('node:fs');
+  const testi = ['../src/session-registry.mjs', '../src/public-problem.mjs', '../frontend/src/i18n/testi/errori.js']
+    .map((f) => readFileSync(new URL(f, import.meta.url), 'utf8'));
+  for (const motivo of ['summary-invalid-result', 'summary-invalid-history', 'summary_invalid_result', 'summary_invalid_history']) {
+    for (const testo of testi) assert.equal(testo.includes(`'${motivo}'`) || testo.includes(`.${motivo}'`), false, motivo);
   }
-  impostaLingua('it');
+  /* e il codice resta quello del disco: la sua copia neutra non ha più eccezioni per motivo */
+  const problema = toPublicProblem(Object.assign(new Error('x'), { code: 'SESSION_STORE_WRITE_FAILED', reason: 'summary-not-saved' }));
+  assert.equal(typeof problema.title, 'string');
 });
 
 

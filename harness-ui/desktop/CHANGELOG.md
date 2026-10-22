@@ -4,6 +4,37 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
 [SemVer](https://semver.org/): in 0.y.z anything may still change. The version lives in
 `package.json` and in the `desktop-vX.Y.Z` tag.
 
+## desktop-v0.1.36 — 2026-10-22
+
+### Added
+
+- **Remote control is usable.** The package now ships the iroh binding, downloaded from a pinned CI run whose attestation is
+  checked (signing workflow, source branch and commit) together with its SHA-256; the licences of the Rust crates inside it
+  ship next to it. Pair a device from Settings › Connected devices.
+
+### Changed
+
+- Everything you read says **devices**, not phones: the remote control screens, its messages and errors, the chat tools that
+  list, pair and revoke devices.
+- **Manual compaction works like the automatic one.** «Compact» writes a summary record over the conversation, as the
+  summary prepared at the end of a turn does: your first request is kept word for word (a very long one keeps its start and
+  its end), the last three requests too, and the compaction can be undone. Undoing while a compaction is still writing
+  stops it instead of losing the undo.
+- On the Context Engine, a manual compaction shows its progress while the engine works, and when it fails it says so with its
+  reason instead of «nothing to compact».
+
+### Fixed
+
+- A model answer that contains the characters U+2028 or U+2029 no longer breaks the session's journal: such a session could
+  not be reopened after a restart. Journals written by earlier versions read correctly again.
+- A turn never waits behind a summary prepared in the background: at the threshold it is used only if it is already
+  written; in an emergency the wait shows its line, with **Skip**, **Stop** and the time ceiling.
+- **Skip** applies to the summary you skipped, not to the rest of the turn: a later summary in the same turn can be skipped
+  again, and a real engine failure later in the turn is still reported.
+- After **Skip**, no «fallback» line contradicts the outcome line.
+- Reading a very long journal line is linear again (32 MB in tens of milliseconds instead of seconds).
+- DeepSeek prices name their source.
+
 ## desktop-v0.1.35 — 2026-10-21
 
 ### Security

@@ -55,7 +55,7 @@ for (const modo of ['dark', 'light']) {
       await prepara(page);
       await eventi(page, [
         { type: 'ToolCallStart', toolCallId: 'call-l1', toolCallName: 'remote_phones', _sequenza: 2 },
-        { type: 'ToolCallResult', toolCallId: 'call-l1', content: 'Remote control is on. Paired phones: 2.', _sequenza: 3 },
+        { type: 'ToolCallResult', toolCallId: 'call-l1', content: 'Remote control is on. Paired devices: 2.', _sequenza: 3 },
       ]);
       const elenco = page.locator('[data-telefoni-elenco]');
       await expect(elenco).toBeVisible();
@@ -112,7 +112,7 @@ for (const modo of ['dark', 'light']) {
       const { chiamate } = await prepara(page);
       await eventi(page, [
         { type: 'ToolCallStart', toolCallId: 'call-s1', toolCallName: 'remote_phone_pair', _sequenza: 2 },
-        { type: 'ToolCallResult', toolCallId: 'call-s1', content: 'REFUSED. Remote control is off: only the person can turn it on, from the Phones screen. No QR code was shown.', _sequenza: 3 },
+        { type: 'ToolCallResult', toolCallId: 'call-s1', content: 'REFUSED. Remote control is off: only the person can turn it on, from the Connected devices screen. No QR code was shown.', _sequenza: 3 },
       ]);
       const avviso = page.locator('[data-telefoni-spento]');
       await expect(avviso).toBeVisible();
@@ -190,7 +190,7 @@ for (const modo of ['dark', 'light']) {
           { type: 'ToolCallStart', toolCallId: 'call-h1', toolCallName: 'remote_phone_pair', _sequenza: 2 },
           { type: 'ToolCallResult', toolCallId: 'call-h1', content: 'The pairing QR code is now on the person\'s screen, valid once for a few minutes.', _sequenza: 3 },
           { type: 'ToolCallStart', toolCallId: 'call-h2', toolCallName: 'remote_phones', _sequenza: 4 },
-          { type: 'ToolCallResult', toolCallId: 'call-h2', content: 'Remote control is on. Paired phones: 2.', _sequenza: 5 },
+          { type: 'ToolCallResult', toolCallId: 'call-h2', content: 'Remote control is on. Paired devices: 2.', _sequenza: 5 },
         ]) r.handleRealEvent(e, r.realSessionState.generation);
         r.handleRealEvent({ type: 'CUSTOM', name: 'talos.fine-rigiocata', value: null }, r.realSessionState.generation);
       }, `telefoni-proof-rigiocata-${modo}`);

@@ -263,6 +263,8 @@ export async function avviaSessione({
   /* 21/10/2026 (A1 + B1 dell'owner, contratto riga viva §4-§5): lo Skip della persona (un segnale per giro, dal registro) e i due
      orologi del riassunto atteso (l'ospite li cambia; assenti ⇒ quelli di serie dell'adattatore). Additivi. */
   segnaleSaltaRiassunto = null,
+  /* 22/10/2026 (revisione avversaria, C): lo Skip della compattazione in corso, riarmato dal registro; letto al momento */
+  saltaRiassuntoFn = null,
   riassuntoInattivitaMs = null,
   riassuntoTettoMs = null,
   /*
@@ -1405,7 +1407,9 @@ export async function avviaSessione({
      */
     if (evento.tipo === 'compattazione-preparata') {
       const { tipo: _tipo, ...valore } = evento;
-      onEvento({ type: 'CUSTOM', name: 'talos.compattazione-preparata', value: valore }, { durable: true });
+      /* 22/10/2026: `onEvento` torna la promessa della scrittura durevole — qui non la si aspetta, ma un fallimento si registra */
+      Promise.resolve(onEvento({ type: 'CUSTOM', name: 'talos.compattazione-preparata', value: valore }, { durable: true }))
+        .catch((errore) => console.error('[agent-service] compaction-prepared event not saved:', errore instanceof Error ? errore.message : errore));
       return;
     }
     if (evento.tipo === 'compattazione-progresso') {
@@ -2321,6 +2325,7 @@ export async function avviaSessione({
       ...(typeof modelloRiassunto === 'string' && modelloRiassunto ? { modelloRiassunto } : {}), // 21/10 (CLI): il modello dei riassunti
       ...(Number.isFinite(finestraRiassuntoToken) && finestraRiassuntoToken > 0 ? { finestraRiassuntoToken } : {}),
       ...(segnaleSaltaRiassunto instanceof AbortSignal ? { segnaleSaltaRiassunto } : {}), // 21/10: lo Skip del riassunto atteso
+      ...(typeof saltaRiassuntoFn === 'function' ? { saltaRiassuntoFn } : {}), // 22/10 (C): riarmato a ogni compattazione
       ...(Number.isSafeInteger(riassuntoInattivitaMs) && riassuntoInattivitaMs > 0 ? { riassuntoInattivitaMs } : {}),
       ...(Number.isSafeInteger(riassuntoTettoMs) && riassuntoTettoMs > 0 ? { riassuntoTettoMs } : {}),
       ...(recordCompattazioneIniziale ? { recordCompattazioneIniziale } : {}), // IST-REV-00b: il turno parte già proiettato
@@ -2570,7 +2575,7 @@ export async function compattaSessione({
  *   misurato il 09/09 sul giro D1 (`runtime-owner-adapter.mjs::callContextModel`).
  * @returns {Promise<{scelta:object|null, finishReason:string|null, usage:object|null}>}
  */
-export async function riassumiPerCompattazione({ modello, chiave, messaggi, maxOutputTokens, reasoning, fetchDiRete = fetch, segnaleStop, onProgresso = null, tentativo = 1 }) {
+export async function riassumiPerCompattazione({ modello, chiave, messaggi, maxOutputTokens, reasoning, fetchDiRete = fetch, segnaleStop, onProgresso = null, tentativo = 1, tentativiMassimi, attesaRitentaMassimaMs }) {
   /* Lane CLI, 03/10/2026: con `onProgresso` il riassunto si conta mentre si scrive, come in `compattaSessione`. */
   const contatore = typeof onProgresso === 'function' ? creaContatoreRiassunto({ emetti: onProgresso, tentativo }) : null;
   const esito = await chiamaConRitenta({
@@ -2578,6 +2583,9 @@ export async function riassumiPerCompattazione({ modello, chiave, messaggi, maxO
     ...(Number.isSafeInteger(maxOutputTokens) && maxOutputTokens > 0 ? { maxOutputTokens } : {}),
     ...(reasoning ? { reasoning } : {}),
     ...(segnaleStop ? { segnaleStop } : {}),
+    /* 22/10/2026 (CLI): il riassunto ritenta come l'adapter (`TENTATIVI_RIASSUNTO`), non come un giro */
+    ...(Number.isSafeInteger(tentativiMassimi) && tentativiMassimi > 0 ? { tentativiMassimi } : {}),
+    ...(Number.isSafeInteger(attesaRitentaMassimaMs) && attesaRitentaMassimaMs >= 0 ? { attesaRitentaMassimaMs } : {}),
     ...(contatore ? { onDelta: contatore.onDelta, accettaVuota: true } : {}),
   });
   contatore?.chiudi(esito?.usage);

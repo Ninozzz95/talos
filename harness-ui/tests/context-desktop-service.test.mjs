@@ -241,3 +241,65 @@ test('CTX-DESKTOP-NOTICE-ON-FAILED-PREPARE delivers the queued notice when the r
   await store.recordContextNotice({ sessionId: 'chat', event: { ...notice, id: 'cooling-j2', jobId: 'j2' } });
   await assert.rejects(service.prepare({ sessionId: 'chat', messages }), { code: 'CTX_CONTEXT_OVERFLOW' });
 });
+
+/*
+ * 22/10/2026 (Mobile, dal vivo su d06f6a9d3): il /compact a mano sul motore durava ~18 minuti e la riga non riceveva niente dopo la
+ * lettura. Ora il servizio legge lo stato del lavoro a intervalli e lo passa come passo (`fase`, `trascorsoMs`). Motore e archivio
+ * VERI; l'attesa del lavoro si allunga di 150 ms (il lavoro vero qui finisce in pochi ms) e la lettura del lavoro dice «summarizing».
+ */
+test('CTX-COMPACT-PROGRESS — mentre il motore lavora, il /compact a mano dice a che punto è; finito, non dice più niente', async t => {
+  const { store, engine } = await fixture(t);
+  const lento = { ...engine, waitForCompaction: async (opzioni) => { await new Promise(r => { setTimeout(r, 150); }); return engine.waitForCompaction(opzioni); } };
+  const storeSpia = { ...store, readContextJob: async (opzioni) => ({ ...(await store.readContextJob(opzioni)), state: 'summarizing' }) };
+  const service = createDesktopContextService({ store: storeSpia, engine: lento, readSession: id => ({ sessionId: id, modello: 'local:test' }), isSessionEnabled: id => id === 'chat', resolveSessionModel: async () => ({ provider: 'local', model: 'test', windowTokens: 16384, responseReserve: 2048 }), clock: () => '2026-09-09T00:00:00.000Z' });
+  const passi = [];
+  const messages = Array.from({ length: 6 }, (_, i) => [{ role: 'user', content: `Domanda ${i}` }, { role: 'assistant', content: `Risposta ${i}` }]).flat();
+  const esito = await service.compact({ sessionId: 'chat', messages, onProgresso: v => passi.push(v), intervalloAvanzamentoMs: 20 });
+  assert.equal(esito.ok, true);
+  assert.ok(passi.length >= 3, `passi durante l'attesa: ${passi.length}`);
+  assert.ok(passi.every(p => p.fase === 'riassunto' && p.origine === 'motore' && Number.isSafeInteger(p.trascorsoMs)), JSON.stringify(passi));
+  assert.ok(passi.at(-1).trascorsoMs >= passi[0].trascorsoMs, 'il tempo cresce');
+  const dopo = passi.length;
+  await new Promise(r => { setTimeout(r, 80); });
+  assert.equal(passi.length, dopo, 'finito il lavoro, l\'orologio si ferma');
+  /* AL CONTRARIO: senza `onProgresso` (chi chiamava prima) niente orologio e lo stesso esito */
+  assert.equal((await service.compact({ sessionId: 'chat', messages, intervalloAvanzamentoMs: 20 })).ok, true);
+  await service.close(); // qui, prima che il `t.after` della fixture chiuda l'archivio (gli `after` girano nell'ordine in cui nascono)
+});
+
+test('CTX-COMPACT-PROGRESS-LATE (revisione 22/10) — una lettura lenta del lavoro non consegna passi dopo il ritorno, e le letture non si sovrappongono', async t => {
+  const { store, engine } = await fixture(t);
+  const lento = { ...engine, waitForCompaction: async (opzioni) => { await new Promise(r => { setTimeout(r, 60); }); return engine.waitForCompaction(opzioni); } };
+  let inVolo = 0; let massimo = 0;
+  const storeSpia = { ...store, readContextJob: async (opzioni) => {
+    inVolo += 1; massimo = Math.max(massimo, inVolo);
+    try { await new Promise(r => { setTimeout(r, 120); }); return { ...(await store.readContextJob(opzioni)), state: 'summarizing' }; } finally { inVolo -= 1; }
+  } };
+  const service = createDesktopContextService({ store: storeSpia, engine: lento, readSession: id => ({ sessionId: id, modello: 'local:test' }), isSessionEnabled: id => id === 'chat', resolveSessionModel: async () => ({ provider: 'local', model: 'test', windowTokens: 16384, responseReserve: 2048 }), clock: () => '2026-09-09T00:00:00.000Z' });
+  const messages = Array.from({ length: 6 }, (_, i) => [{ role: 'user', content: `Domanda ${i}` }, { role: 'assistant', content: `Risposta ${i}` }]).flat();
+  let tornato = false; const dopo = [];
+  await service.compact({ sessionId: 'chat', messages, intervalloAvanzamentoMs: 20, onProgresso: v => { if (tornato) dopo.push(v); } });
+  tornato = true;
+  await new Promise(r => { setTimeout(r, 300); });
+  assert.deepEqual(dopo, [], 'nessun passo dopo il ritorno del /compact');
+  assert.equal(massimo, 1, 'una lettura del lavoro alla volta');
+  await service.close();
+});
+
+test('CTX-COMPACT-PROGRESS-HUNG (quarta passata 22/10) — una lettura che non torna mai non ammutolisce la riga: i colpi dopo ripartono', async t => {
+  const { store, engine } = await fixture(t);
+  const lento = { ...engine, waitForCompaction: async (opzioni) => { await new Promise(r => { setTimeout(r, 300); }); return engine.waitForCompaction(opzioni); } };
+  let letture = 0;
+  const storeSpia = { ...store, readContextJob: async (opzioni) => {
+    letture += 1;
+    if (letture === 1) return new Promise(() => {}); // appesa per sempre
+    return { ...(await store.readContextJob(opzioni)), state: 'summarizing' };
+  } };
+  const service = createDesktopContextService({ store: storeSpia, engine: lento, readSession: id => ({ sessionId: id, modello: 'local:test' }), isSessionEnabled: id => id === 'chat', resolveSessionModel: async () => ({ provider: 'local', model: 'test', windowTokens: 16384, responseReserve: 2048 }), clock: () => '2026-09-09T00:00:00.000Z' });
+  const messages = Array.from({ length: 6 }, (_, i) => [{ role: 'user', content: `Domanda ${i}` }, { role: 'assistant', content: `Risposta ${i}` }]).flat();
+  const passi = [];
+  await service.compact({ sessionId: 'chat', messages, intervalloAvanzamentoMs: 20, onProgresso: v => passi.push(v) });
+  assert.ok(passi.length >= 2, `passi dopo la lettura appesa: ${passi.length}`);
+  assert.ok(passi.every((p, i) => i === 0 || p.trascorsoMs >= passi[i - 1].trascorsoMs), 'in ordine');
+  await service.close();
+});

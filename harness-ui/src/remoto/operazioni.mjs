@@ -66,7 +66,7 @@ const CAMPI_CARTELLA_SOLO_DAL_PC = Object.freeze(['cartellaLibera', 'workspaceLa
 const corpoAvvioDalTelefono = (args) => {
   const c = corpoOggetto(args);
   /* revisione del 21/10 (S4): lo stesso 403 della rotta, o il telefono (RA-04) leggerebbe «esito incerto» e la carta resterebbe ferma */
-  if (CAMPI_CARTELLA_SOLO_DAL_PC.some((k) => Object.hasOwn(c, k))) throw Object.assign(errore('NOT_ALLOWED_REMOTELY', 'From the phone a new session opens only in one of the allowed folders (cartellaId).'), { stato: 403 });
+  if (CAMPI_CARTELLA_SOLO_DAL_PC.some((k) => Object.hasOwn(c, k))) throw Object.assign(errore('NOT_ALLOWED_REMOTELY', 'From the device a new session opens only in one of the allowed folders (cartellaId).'), { stato: 403 });
   return c;
 };
 
@@ -181,7 +181,7 @@ export function creaOperazioni({ chiama, sessionRegistry, iscriviConRigiocata })
         if (typeof id !== 'string' || !ID_SESSIONE.test(id)) throw errore('BAD_MESSAGE', 'A valid session id is needed.');
         const after = Number.isSafeInteger(args?.after) && args.after >= 0 ? args.after : 0;
         const sub = typeof args?.sub === 'string' && /^[A-Za-z0-9_-]{1,32}$/.test(args.sub) ? args.sub : null;
-        if (!sub) throw errore('BAD_MESSAGE', 'A subscription needs a short id chosen by the phone.');
+        if (!sub) throw errore('BAD_MESSAGE', 'A subscription needs a short id chosen by the device.');
         if (!sessionRegistry.esiste(id)) throw errore('NOT_FOUND', 'Session not found.');
         /* La stessa iscrizione due volte (il telefono la richiede dopo una «Riprova»): la vecchia si chiude prima. */
         contesto.iscrizioni.get(sub)?.();
@@ -197,7 +197,7 @@ export function creaOperazioni({ chiama, sessionRegistry, iscriviConRigiocata })
         if (typeof chiudi === 'function') { chiudi(); contesto.iscrizioni.delete(sub); }
         return { sub, chiusa: typeof chiudi === 'function' };
       }
-      throw errore('UNKNOWN_OPERATION', 'This operation is not available from the phone.');
+      throw errore('UNKNOWN_OPERATION', 'This operation is not available from the device.');
     },
   };
 }

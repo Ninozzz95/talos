@@ -130,9 +130,11 @@ test('CEDE-02 verso contrario: su un fornitore a chiave il riassunto non si può
   const sessionId = avvia(CLOUD);
   g.tutti[0].concludi(storiaGrande());
   await attendi(() => registro.statoCompattazione(sessionId)?.inCorso === true, 'il riassunto di sfondo non è partito');
-  assert.equal(riassuntore.chiamate[0].segnaleStop, undefined);
+  /* 22/10/2026 (CLI): ogni riassunto di sfondo ha un segnale, perché la chiusura del registro lo ferma (CHIUSURA-01); un giro no */
+  assert.ok(riassuntore.chiamate[0].segnaleStop instanceof AbortSignal);
   registro.resume(sessionId, 'messaggio nuovo');
   await new Promise((r) => setTimeout(r, 30));
+  assert.equal(riassuntore.chiamate[0].segnaleStop.aborted, false, 'un giro nuovo non lo ferma');
   assert.equal(registro.statoCompattazione(sessionId).inCorso, true, 'continua in parallelo, come prima');
   riassuntore.rilasciaTutti();
   g.tutti[1].concludi([...g.tutti[1].input.messaggiIniziali, { role: 'assistant', content: 'ok' }]);
@@ -246,9 +248,9 @@ test('CEDE-07 conversazione locale, riassunto su un fornitore a chiave: nessuna 
   aChiave.g.tutti[0].concludi(storiaGrande());
   await attendi(() => aChiave.registro.statoCompattazione(a)?.inCorso === true, 'il riassunto non è partito');
   assert.equal(aChiave.riassuntore.chiamate[0].modello, CLOUD);
-  assert.equal(aChiave.riassuntore.chiamate[0].segnaleStop, undefined, 'un fornitore a chiave non ha un posto da cedere');
   aChiave.registro.resume(a, 'messaggio nuovo');
   await new Promise((r) => setTimeout(r, 30));
+  assert.equal(aChiave.riassuntore.chiamate[0].segnaleStop.aborted, false, 'un fornitore a chiave non ha un posto da cedere');
   assert.equal(aChiave.registro.statoCompattazione(a).inCorso, true, 'continua in parallelo al giro locale');
   aChiave.riassuntore.rilasciaTutti();
   aChiave.g.tutti[1].concludi([...aChiave.g.tutti[1].input.messaggiIniziali, { role: 'assistant', content: 'ok' }]);

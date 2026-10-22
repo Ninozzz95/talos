@@ -35,13 +35,15 @@ test('SVE-01 il primo giro fa da base: ciò che aspettava già non sveglia; una 
   const b = banco();
   b.set([sessione({ inAttesaApprovazione: true })]);
   assert.equal(await b.s.giro(), 0);
-  b.set([sessione({ inAttesaApprovazione: true }), sessione({ sessionId: 's2', inAttesaDomanda: true })]);
+  b.set([sessione({ inAttesaApprovazione: true }), sessione({ sessionId: 'id-sessione-che-non-deve-uscire', inAttesaDomanda: true })]);
   assert.equal(await b.s.giro(), 1);
   assert.deepEqual(Object.keys(b.inviate[0].carico).sort(), ['v', 'w']);
   assert.equal(b.inviate[0].carico.v, 1);
   assert.equal(b.inviate[0].opzioni.urgency, 'high');
   assert.equal(b.inviate[0].opzioni.vapidDetails.publicKey, vapid.publicKey);
-  assert.ok(!JSON.stringify(b.inviate[0]).includes('s2'), 'nessun id di sessione nel carico');
+  /* 22/10/2026: un id INCONFONDIBILE, cercato in tutto l'invio (carico, iscrizione e opzioni: TTL, urgency, intestazioni escono dal
+     PC anche loro) — prima si cercava «s2», e il 2,9% delle chiavi VAPID casuali lo contiene (misurato su 4.000): la prova cadeva a caso */
+  assert.ok(!JSON.stringify(b.inviate[0]).includes('id-sessione-che-non-deve-uscire'), 'nessun id di sessione in ciò che parte');
 });
 
 test('SVE-02 la fine di un giro LUNGO sveglia, quella di uno breve no', async () => {

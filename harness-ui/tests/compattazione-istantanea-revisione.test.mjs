@@ -153,10 +153,19 @@ test('IST-REV-05 — owner 15/10 notte, «passa al giro dopo»: il giro che rice
     await talosLavora({ cartella, modello: 'z-ai/glm-5.3-flash', chiave: 'finta', task: { consegna: 'Leggi.' }, permessi: 'Full access',
       messaggiIniziali: [...uno.messaggiFinali, { role: 'user', content: `Adesso ${'altro testo '.repeat(300)}` }],
       compattazioneIstantanea: true, ...(conInArrivo ? { compattazioneInArrivo: inArrivo } : {}), contestoDelProgetto: 'Project files:\n', fetchDiRete: lente,
-      onGiro: (e) => { if (e?.tipo === 'compattazione-fine') eventi.push(e.istantanea === true); } });
+      onGiro: (e) => {
+        if (e?.tipo === 'compattazione-fine') eventi.push(e.istantanea === true);
+        if (e?.tipo === 'compattazione-preparata' && e.fase === 'inizio') eventi.push('preparata');
+      } });
     if (conInArrivo) {
-      assert.equal(r1.conti.riassunti, 0, `nessun secondo riassunto pagato — eventi ${JSON.stringify(eventi)}`);
-      assert.ok(eventi.includes(true), `lo scambio istantaneo col riassunto arrivato — eventi ${JSON.stringify(eventi)}`);
+      /* 22/10/2026: con la PRIMA richiesta tenuta (owner, «prima + ultime tre») la proiezione dopo lo scambio è ~105 token più lunga, e
+         sul tetto di prova da 4.000 le due letture dopo la portano oltre l'80% (sonda: 3.264 su 3.200): il giro prepara il riassunto
+         SUCCESSIVO, com'è giusto. Ciò che la prova guarda è un'altra cosa: per QUESTA compattazione nessun riassunto suo, prima dello
+         scambio col riassunto arrivato. */
+      const scambio = eventi.indexOf(true);
+      assert.ok(scambio >= 0, `lo scambio istantaneo col riassunto arrivato — eventi ${JSON.stringify(eventi)}`);
+      assert.equal(eventi.slice(0, scambio).filter((e) => e === 'preparata').length, 0, `nessun riassunto suo prima dello scambio — eventi ${JSON.stringify(eventi)}`);
+      assert.ok(r1.conti.riassunti <= eventi.filter((e) => e === 'preparata').length, `ogni riassunto pagato è una preparazione dichiarata — riassunti ${r1.conti.riassunti}, eventi ${JSON.stringify(eventi)}`);
     } else {
       assert.ok(r1.conti.riassunti >= 1, 'senza il riassunto in arrivo, il giro ne prepara uno suo');
     }
@@ -218,5 +227,31 @@ test('IST-REV-07 — un riassunto pronto che alla soglia NON vale lo dice una vo
       onGiro: (e) => { if (e?.tipo === 'compattazione-preparata' && e.fase === 'scartata') eventi.push(e.motivo); if (e?.tipo === 'compattazione-fine' && e.istantanea) eventi.push('ISTANTANEA'); } });
     if (cambiaUnMessaggioVecchio) assert.deepEqual(eventi.filter((x) => x !== 'ISTANTANEA'), ['prefix-changed'], JSON.stringify(eventi));
     else assert.deepEqual(eventi, ['ISTANTANEA'], JSON.stringify(eventi));
+  }
+});
+
+test('IST-REV-05b — 22/10/2026 (CLI, S3-B; revisione avversaria): con l\'istantanea SPENTA il riassunto di fine giro GIÀ ARRIVATO si usa alla soglia senza pagarne un secondo; uno NON ancora arrivato non si aspetta mai (il giro non resta appeso, e ne paga uno suo, come prima)', async (t) => {
+  for (const caso of ['arrivato', 'mai-arrivato']) {
+    const cartella = cartellaConFile(t, 0, 0);
+    const r0 = rete({ riassunto: () => RIASSUNTO() });
+    const uno = await talosLavora({ cartella, modello: 'z-ai/glm-5.3-flash', chiave: 'finta', task: { consegna: 'Continua.' }, messaggiIniziali: storia(coppiePer(3450)), compattazioneIstantanea: true, contestoDelProgetto: 'Project files:\n', fetchDiRete: r0.fn });
+    const prontaVera = uno.compattazionePronta ?? await uno.compattazioneInPreparazione;
+    assert.ok(prontaVera, 'premessa');
+    const inArrivo = caso === 'arrivato' ? Promise.resolve(prontaVera) : new Promise(() => {});
+    if (caso === 'arrivato') await inArrivo; // arrivato prima che il giro tocchi la soglia
+    const eventi = [];
+    const r1 = rete({ riassunto: () => RIASSUNTO() });
+    const giro = talosLavora({ cartella, modello: 'z-ai/glm-5.3-flash', chiave: 'finta', task: { consegna: 'x' },
+      messaggiIniziali: [...uno.messaggiFinali, { role: 'user', content: `Adesso ${'altro testo '.repeat(300)}` }],
+      compattazioneInArrivo: inArrivo, contestoDelProgetto: 'Project files:\n', fetchDiRete: r1.fn,
+      onGiro: (e) => { if (e?.tipo === 'compattazione-fine') eventi.push(e.istantanea === true); } });
+    const esito = await Promise.race([giro.then(() => 'finito'), new Promise((ok) => { setTimeout(() => ok('APPESO'), 5_000).unref(); })]);
+    assert.equal(esito, 'finito', `${caso}: il giro non resta appeso dietro il riassunto di sfondo`);
+    if (caso === 'arrivato') {
+      assert.equal(r1.conti.riassunti, 0, `nessun secondo riassunto pagato — eventi ${JSON.stringify(eventi)}`);
+      assert.deepEqual(eventi, [true], 'compattato col riassunto arrivato');
+    } else {
+      assert.ok(r1.conti.riassunti >= 1, 'non arrivato: il giro ne paga uno suo, come prima');
+    }
   }
 });
