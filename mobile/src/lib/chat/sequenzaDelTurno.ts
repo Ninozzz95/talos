@@ -23,6 +23,12 @@
 export interface TalosAttrezzoDelGiro {
     name: string
     detail: string | null
+    /**
+     * Il suo risultato è arrivato (Codice r4, `ToolCallResult`). ⛔ Owner 22/10/2026 («guarda che casino»): senza testo fra una
+     * chiamata e l'altra r4 le mette tutte nello stesso confine, e una chiamata finita restava «in corso» col suo orologio. Assente
+     * (la chat, il salvato) vale la regola del confine, come prima.
+     */
+    finita?: true
 }
 
 /** Dove finiva un giro: la lunghezza del testo e del ragionamento già arrivati quando sono partiti i suoi attrezzi. */
@@ -146,4 +152,76 @@ export function talosSequenzaDaMetadata(valore: unknown): TalosSegmentoDelTurno[
         }
     }
     return segmenti.length ? segmenti : null
+}
+
+/**
+ * ⛔ Owner 20/10/2026 (difetto 2 delle righe degli attrezzi, foto dal Pad): con tante chiamate le righe occupano troppo spazio.
+ * Da questa soglia in su le righe CONSECUTIVE diventano un gruppo con una riga di riassunto che si apre al tocco (Hermes
+ * `apps/desktop/src/components/assistant-ui/tool/fallback.tsx:1012`, che raggruppa da 2; Codex `exec_cell/render.rs:318`).
+ * Tre: due righe non pesano, e il riassunto di due nasconderebbe più di quanto risparmia. Scelta da confermare con l'owner.
+ */
+export const TALOS_SOGLIA_GRUPPO_ATTREZZI = 3
+
+export interface TalosRigaDelBlocco {
+    attrezzo: TalosAttrezzoDelGiro
+    inCorso: boolean
+}
+
+/** Una voce di un blocco di passi, nell'ordine in cui è successa: un attrezzo o un ragionamento fra due attrezzi. */
+export type TalosVoceDelBlocco =
+    | { tipo: 'attrezzo'; riga: TalosRigaDelBlocco }
+    | { tipo: 'ragionamento'; testo: string }
+
+export type TalosBloccoDelTurno =
+    | { tipo: 'ragionamento'; testo: string }
+    | { tipo: 'testo'; testo: string }
+    /** `righe`: solo gli attrezzi (si contano e si riassumono); `voci`: attrezzi E ragionamenti in ordine (si disegnano). */
+    | { tipo: 'attrezzi'; righe: TalosRigaDelBlocco[]; voci: TalosVoceDelBlocco[] }
+
+/**
+ * I blocchi da disegnare. ⛔ DECISIONE OWNER 22/10/2026 («Ragionamento dentro il gruppo», supera quella del 09/10): i passi senza
+ * testo per la persona — attrezzi e ragionamenti fra un attrezzo e l'altro — diventano UN blocco, e il ragionamento ci sta dentro al
+ * suo posto (ordine cronologico all'apertura). Solo il testo per la persona spezza il blocco. Un ragionamento che non tocca nessun
+ * attrezzo resta da solo. Ogni riga si porta dietro se è «in corso» (`inCorso(indice del segmento)`), perché in un blocco possono
+ * stare insieme le righe chiuse dei giri prima e quelle vive dell'ultimo.
+ */
+export function talosBlocchiDelTurno(
+    segmenti: readonly TalosSegmentoDelTurno[],
+    inCorso: (indice: number) => boolean,
+): TalosBloccoDelTurno[] {
+    const blocchi: TalosBloccoDelTurno[] = []
+    /** I ragionamenti arrivati dopo un testo (o all'inizio): entrano nel blocco se segue un attrezzo, altrimenti restano da soli. */
+    let inAttesa: string[] = []
+    const scarica = () => {
+        for (const testo of inAttesa) blocchi.push({ tipo: 'ragionamento', testo })
+        inAttesa = []
+    }
+    segmenti.forEach((segmento, indice) => {
+        const ultimo = blocchi[blocchi.length - 1]
+        if (segmento.tipo === 'testo') {
+            scarica()
+            blocchi.push(segmento)
+            return
+        }
+        if (segmento.tipo === 'ragionamento') {
+            // subito dopo dei passi: è un passo anche lui (àncora: ragionamento-nel-blocco)
+            if (ultimo?.tipo === 'attrezzi' && inAttesa.length === 0) ultimo.voci.push({ tipo: 'ragionamento', testo: segmento.testo })
+            else inAttesa.push(segmento.testo)
+            return
+        }
+        const vivo = inCorso(indice)
+        // una chiamata col risultato già arrivato non è in corso, anche nell'ultimo confine di un giro vivo (owner 22/10)
+        const righe = segmento.attrezzi.map((attrezzo) => ({ attrezzo, inCorso: vivo && attrezzo.finita !== true }))
+        const voci: TalosVoceDelBlocco[] = righe.map((riga) => ({ tipo: 'attrezzo', riga }))
+        if (ultimo?.tipo === 'attrezzi' && inAttesa.length === 0) {
+            ultimo.righe.push(...righe)
+            ultimo.voci.push(...voci)
+            return
+        }
+        // i ragionamenti in attesa precedono questi attrezzi: aprono il blocco (àncora: ragionamento-apre-il-blocco)
+        blocchi.push({ tipo: 'attrezzi', righe, voci: [...inAttesa.map((testo) => ({ tipo: 'ragionamento' as const, testo })), ...voci] })
+        inAttesa = []
+    })
+    scarica()
+    return blocchi
 }

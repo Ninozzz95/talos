@@ -173,12 +173,27 @@ export type TalosOpenAiStreamEvent =
     | { kind: 'text', delta: string }
     | { kind: 'tool-call', call: TalosOpenAiResponseToolCall }
     | { kind: 'done', usage: Record<string, number> | null }
+    /**
+     * ⛔ Owner 20/10/2026: la chiamata MENTRE si forma, solo per mostrarla (la chiamata vera resta quella di `output_item.done`).
+     * `response.output_item.added` porta il nome subito; `response.function_call_arguments.delta` i pezzi degli argomenti.
+     */
+    | { kind: 'tool-draft', index: number, name?: string, chars: number }
     | { kind: 'ignore' }
 
 export function talosReadOpenAiResponsesEvent(payload: unknown): TalosOpenAiStreamEvent {
-    const event = (payload ?? {}) as { type?: unknown, delta?: unknown, item?: unknown, response?: unknown }
+    const event = (payload ?? {}) as { type?: unknown, delta?: unknown, item?: unknown, response?: unknown, output_index?: unknown }
     if (event.type === 'response.output_text.delta' && typeof event.delta === 'string') {
         return { kind: 'text', delta: event.delta }
+    }
+    if (event.type === 'response.output_item.added') {
+        const item = event.item as RawItem | undefined
+        if (item?.type === 'function_call' && typeof item.name === 'string') {
+            return { kind: 'tool-draft', index: indiceDellUscita(event), name: item.name, chars: typeof item.arguments === 'string' ? item.arguments.length : 0 }
+        }
+        return { kind: 'ignore' }
+    }
+    if (event.type === 'response.function_call_arguments.delta' && typeof event.delta === 'string') {
+        return { kind: 'tool-draft', index: indiceDellUscita(event), chars: event.delta.length }
     }
     if (event.type === 'response.output_item.done') {
         const item = event.item as RawItem | undefined
@@ -194,4 +209,9 @@ export function talosReadOpenAiResponsesEvent(payload: unknown): TalosOpenAiStre
         return { kind: 'done', usage: talosOpenAiResponsesUsage(response.usage) }
     }
     return { kind: 'ignore' }
+}
+
+/** La posizione dell'elemento in `output[]`: lega i pezzi degli argomenti al nome annunciato prima. */
+function indiceDellUscita(event: { output_index?: unknown }): number {
+    return typeof event.output_index === 'number' ? event.output_index : 0
 }

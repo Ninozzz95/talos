@@ -20,20 +20,26 @@ const props = defineProps<{
     conSessione: boolean
     /** Vero mentre un giro lavora. */
     occupato: boolean
+    /**
+     * ⛔ RA-11 (revisione avversariale R-M4, 21/10/2026): sulla sessione di un PC, il perché («Solo dal computer») delle voci che il PC
+     * rifiuta al telefono (`soloSulPc`): spente, col perché al posto del sottotitolo. Vuoto o assente in locale.
+     */
+    soloDalPc?: string
 }>()
 const emit = defineEmits<{ close: [], comando: [comando: ComandoCodiceR4] }>()
 const { t } = useTalosI18n()
 
-interface Voce { id: ComandoCodiceR4; gruppo: 'sessione' | 'vai'; titolo: string; sottotitolo: string; icona: Component; diSessione: boolean; soloLettura?: boolean }
+interface Voce { id: ComandoCodiceR4; gruppo: 'sessione' | 'vai'; titolo: string; sottotitolo: string; icona: Component; diSessione: boolean; soloLettura?: boolean; soloSulPc?: boolean }
 
 const VOCI = computed<Voce[]>(() => [
-    { id: 'nuova', gruppo: 'sessione', titolo: t('harness.r4CmdNew'), sottotitolo: t('harness.r4CmdNewHint'), icona: Plus, diSessione: false },
+    // D-RM4-11 (Pad 21/10/2026): sulla sessione di un PC la sessione nuova parte dalla scelta della cartella sul computer (Q2)
+    { id: 'nuova', gruppo: 'sessione', titolo: t('harness.r4CmdNew'), sottotitolo: props.soloDalPc ? t('harness.r4CmdNewOnPcHint') : t('harness.r4CmdNewHint'), icona: Plus, diSessione: false },
     { id: 'rinomina', gruppo: 'sessione', titolo: t('harness.r4CmdRename'), sottotitolo: t('harness.r4CmdRenameHint'), icona: Pencil, diSessione: true },
-    { id: 'duplica', gruppo: 'sessione', titolo: t('harness.r4CmdDuplicate'), sottotitolo: t('harness.r4CmdDuplicateHint'), icona: CopyPlus, diSessione: true },
+    { id: 'duplica', gruppo: 'sessione', titolo: t('harness.r4CmdDuplicate'), sottotitolo: t('harness.r4CmdDuplicateHint'), icona: CopyPlus, diSessione: true, soloSulPc: true },
     { id: 'riprendi', gruppo: 'sessione', titolo: t('harness.r4Resume'), sottotitolo: t('harness.r4CmdResumeHint'), icona: Play, diSessione: true },
     { id: 'compatta', gruppo: 'sessione', titolo: t('harness.r4Compact'), sottotitolo: t('harness.r4CmdCompactHint'), icona: Shrink, diSessione: true },
-    { id: 'esporta', gruppo: 'sessione', titolo: t('harness.r4CmdExport'), sottotitolo: t('harness.r4CmdExportHint'), icona: Download, diSessione: true, soloLettura: true },
-    { id: 'condividi', gruppo: 'sessione', titolo: t('harness.r4CmdShare'), sottotitolo: t('harness.r4CmdShareHint'), icona: Share2, diSessione: true, soloLettura: true },
+    { id: 'esporta', gruppo: 'sessione', titolo: t('harness.r4CmdExport'), sottotitolo: t('harness.r4CmdExportHint'), icona: Download, diSessione: true, soloLettura: true, soloSulPc: true },
+    { id: 'condividi', gruppo: 'sessione', titolo: t('harness.r4CmdShare'), sottotitolo: t('harness.r4CmdShareHint'), icona: Share2, diSessione: true, soloLettura: true, soloSulPc: true },
     { id: 'albero', gruppo: 'vai', titolo: t('harness.r4Tree'), sottotitolo: t('harness.r4CmdTreeHint'), icona: GitBranch, diSessione: false },
     { id: 'hook', gruppo: 'vai', titolo: t('harness.r4Hooks'), sottotitolo: t('harness.r4CmdHooksHint'), icona: Zap, diSessione: false },
     // K3-C2b: il Doctor di r4 non dipende dalla sessione aperta
@@ -49,7 +55,8 @@ const trovate = computed(() => {
 const gruppi = computed(() => (['sessione', 'vai'] as const)
     .map((g) => ({ id: g, titolo: g === 'sessione' ? t('harness.r4GroupSession') : t('harness.r4GroupGoTo'), voci: trovate.value.filter((v) => v.gruppo === g) }))
     .filter((g) => g.voci.length > 0))
-const spenta = (v: Voce): boolean => v.diSessione && (!props.conSessione || (props.occupato && !v.soloLettura))
+const soloSulPc = (v: Voce): boolean => Boolean(props.soloDalPc) && v.soloSulPc === true
+const spenta = (v: Voce): boolean => soloSulPc(v) || (v.diSessione && (!props.conSessione || (props.occupato && !v.soloLettura)))
 
 onMounted(() => { void nextTick(() => campo.value?.focus()) })
 </script>
@@ -84,7 +91,7 @@ onMounted(() => { void nextTick(() => campo.value?.focus()) })
                         <component :is="voce.icona" class="talos-codice-r4-azione-icona" aria-hidden="true" />
                         <span class="talos-codice-r4-azione-testo">
                             <span>{{ voce.titolo }}</span>
-                            <small>{{ voce.sottotitolo }}</small>
+                            <small>{{ soloSulPc(voce) ? soloDalPc : voce.sottotitolo }}</small>
                         </span>
                     </button>
                 </li>

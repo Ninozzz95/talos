@@ -5,7 +5,7 @@ import { talosTranslatableErrorMessage } from '@/i18n/uiErrors'
 import { Search } from '@lucide/vue'
 import TalosMobileCatalogProfileRow from '@/components/talos/models/TalosMobileCatalogProfileRow.vue'
 import TalosThemedSelect from '@/components/talos/ui/TalosThemedSelect.vue'
-import { TALOS_MOBILE_PROVIDERS } from '@/lib/mobileProviders'
+import { TALOS_MOBILE_PROVIDERS, talosMobileProviderLabel } from '@/lib/mobileProviders'
 import {
     talosInitialModelLimit,
     talosNextModelLimit,
@@ -29,7 +29,7 @@ const providerItems = computed(() => {
     const conModelli = new Set(controller.profiles.value.map((profile) => profile.provider))
     return TALOS_MOBILE_PROVIDERS
         .filter((provider) => provider.id !== 'unknown' && (provider.configurable || conModelli.has(provider.id)))
-        .map((provider) => ({ value: provider.id, label: provider.label }))
+        .map((provider) => ({ value: provider.id, label: talosMobileProviderLabel(provider.id, t) }))
 })
 
 const filteredProfiles = computed(() => {

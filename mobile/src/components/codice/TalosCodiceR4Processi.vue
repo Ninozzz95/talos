@@ -30,6 +30,11 @@ const props = defineProps<{
     processi: ProcessoGrezzoR4[]
     azione: (azione: AzioneProcessoR4, id: string) => Promise<{ ok: true } | { ok: false; motivo: string | null }>
     caricaRisorse: () => Promise<Map<string, RisorsaR4> | null>
+    /**
+     * ⛔ RA-11 (revisione avversariale R-M4, 21/10/2026): sulla sessione di un PC le righe si leggono, le azioni («…», «Ferma tutti»)
+     * si fanno dal PC: spente, con una riga che lo dice. Vuoto o assente in locale.
+     */
+    soloDalPc?: string
 }>()
 const { t, locale } = useTalosI18n()
 const tr = (chiave: string, valori?: Record<string, unknown>) => testoProcessiR4(chiave, locale.value, valori)
@@ -165,8 +170,9 @@ const risorseDi = (p: ProcessoR4) => testoRisorseR4(p, risorse.value, locale.val
                     @click="statoVoluto = s"
                 >{{ tr(STATI_PROCESSO_R4[s].chiave) }}</button>
             </div>
+            <p v-if="soloDalPc" data-testid="talos-codice-r4-processi-solo-dal-pc" class="talos-codice-r4-nota" role="status">{{ t('computer.processActionsOnlyFromPc') }}</p>
             <div v-if="fermabili.length > 1" class="talos-codice-r4-sezione">
-                <button type="button" data-testid="talos-codice-r4-processi-ferma-tutti" class="talos-codice-r4-ferma-tutti" @click="confermaAperta = true">
+                <button type="button" data-testid="talos-codice-r4-processi-ferma-tutti" class="talos-codice-r4-ferma-tutti disabled:opacity-50" :disabled="Boolean(soloDalPc)" @click="confermaAperta = true">
                     {{ tr('processi.process.stopAll') }}
                 </button>
             </div>
@@ -209,7 +215,7 @@ const risorseDi = (p: ProcessoR4) => testoRisorseR4(p, risorse.value, locale.val
                             class="talos-codice-r4-processo-bottone"
                             :aria-label="tr('processi.process.actions')"
                             :aria-expanded="menuDi === p.id"
-                            :disabled="Boolean(richieste.get(p.id ?? '')?.inCorso)"
+                            :disabled="Boolean(richieste.get(p.id ?? '')?.inCorso) || Boolean(soloDalPc)"
                             @click="menuDi = menuDi === p.id ? null : p.id"
                         ><MoreHorizontal class="size-4" aria-hidden="true" /></button>
                         <button

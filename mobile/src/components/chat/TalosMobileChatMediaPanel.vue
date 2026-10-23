@@ -875,7 +875,7 @@ const mediaScope = computed(() => {
             >
                 <template #footer>
                     <Button type="button" variant="outline" :disabled="deleteBusy" class="min-h-12" @click="deleteTarget = null">{{ $t('common.cancel') }}</Button>
-                    <Button type="button" data-testid="talos-chat-media-delete-confirm" :disabled="deleteBusy" class="min-h-12 bg-[var(--talos-danger)] text-white" @click="confirmDeleteOpened">{{ $t('library.deleteFile') }}</Button>
+                    <Button type="button" data-testid="talos-chat-media-delete-confirm" :disabled="deleteBusy" class="min-h-12 border border-[var(--talos-danger-border)] bg-[var(--talos-danger-soft)] text-[var(--talos-danger)]" @click="confirmDeleteOpened">{{ $t('library.deleteFile') }}</Button>
                 </template>
             </TalosMobileConfirmDialog>
         </section>

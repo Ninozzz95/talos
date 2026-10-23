@@ -108,6 +108,26 @@ export async function talosConsegnaLaSessione(
 }
 
 /**
+ * ⛔⛔ D-RM4-1 (sicurezza, visto dal vivo il 20/10/2026): COSA dell'indirizzo può finire nel diario.
+ *
+ * La sonda qui sotto scriveva l'indirizzo intero, e il diario esce nel logcat di Android (`TalosOrecchio: web: …`). Lo stesso
+ * aggancio riceve anche il collegamento del controllo remoto (`talos-remote:1?pc=…&relay=…&t=<gettone monouso>&exp=…`,
+ * `linkRemoto.ts`): il gettone finiva nel log di sistema, leggibile da `adb logcat` e da ogni segnalazione di guasto.
+ *
+ * ⇒ Resta solo ciò che serve alla diagnosi — QUALE tipo di indirizzo è arrivato: schema e rotta (`talos://chat`,
+ * `talos-remote:1`). Query e frammento spariscono INTERI, nomi dei parametri compresi, e al loro posto c'è `?…` (si vede che
+ * c'erano, non cosa dicevano); le credenziali dell'autorità (`https://utente:segreto@…`) pure. Si taglia sul TESTO, non con
+ * `new URL`: niente dipende da come la WebView di turno scompone gli schemi non speciali, e una stringa che non è un indirizzo
+ * perde la sua coda allo stesso modo.
+ */
+export function talosIndirizzoPerIlDiario(indirizzo: string | null | undefined): string {
+    if (!indirizzo) return '-'
+    const taglio = indirizzo.search(/[?#]/u)
+    const base = (taglio < 0 ? indirizzo : indirizzo.slice(0, taglio)).replace(/^([a-z][a-z0-9+.-]*:\/\/)[^/]*@/iu, '$1')
+    return taglio < 0 ? base : `${base}?…`
+}
+
+/**
  * Apre quella conversazione nell'app intera, adesso e a ogni ritorno.
  *
  * ⛔ DUE agganci, e servono tutti e due: `getLaunchUrl` per quando TALOS parte
@@ -141,11 +161,12 @@ export async function talosAscoltaLaConsegna(
     try {
         const { App } = await import('@capacitor/app')
         const lancio = await App.getLaunchUrl()
-        void annota(`consegna: freddo url=${lancio?.url ?? '-'}`)
+        // ⛔ D-RM4-1: mai l'indirizzo intero nel diario (porta il gettone del controllo remoto). Si decide sull'indirizzo VERO.
+        void annota(`consegna: freddo url=${talosIndirizzoPerIlDiario(lancio?.url)}`)
         const subito = talosSessioneDaAprire(lancio?.url)
         if (subito) await apri(subito)
         await App.addListener('appUrlOpen', (evento) => {
-            void annota(`consegna: caldo url=${evento.url}`)
+            void annota(`consegna: caldo url=${talosIndirizzoPerIlDiario(evento.url)}`)
             const dopo = talosSessioneDaAprire(evento.url)
             // ⛔ `catch` esplicito: fin qui era un `void` nudo, quindi un errore
             // dentro `apri` moriva come rejection non gestita — invisibile, e

@@ -135,12 +135,34 @@ public final class TalosLlamaEngine implements AutoCloseable {
          * questo, non sulla velocità di decodifica.
          */
         public final long ttftMs;
+        /**
+         * ⭐ PROB-07 (22/10/2026) — il testo finale letto dal parser del
+         * template: risposta separata dal ragionamento. Null quando chi ha
+         * chiesto la corsa non ha dato un {@link LettoreDellaProva}.
+         */
+        public final TalosLlamaProbe.Lettura lettura;
 
         Run(String text, TalosBenchmarkHarness.Sample[] samples, long ttftMs) {
+            this(text, samples, ttftMs, null);
+        }
+
+        Run(String text, TalosBenchmarkHarness.Sample[] samples, long ttftMs,
+            TalosLlamaProbe.Lettura lettura) {
             this.text = text;
             this.samples = samples;
             this.ttftMs = ttftMs;
+            this.lettura = lettura;
         }
+    }
+
+    /**
+     * ⭐ PROB-07 (22/10/2026) — come leggere il testo di una prova: che cosa il
+     * modello ha DETTO, separato da cio' che ha PENSATO. Si chiama dal filo
+     * che campiona, mentre il motore genera: deve usare solo vedette
+     * ({@link #parseReplyPartial}), mai un metodo dell'attore.
+     */
+    public interface LettoreDellaProva {
+        TalosLlamaProbe.Lettura leggi(String testo);
     }
 
     private final long handle;
@@ -623,6 +645,16 @@ public final class TalosLlamaEngine implements AutoCloseable {
         return TalosLlamaNative.nativeParseReply(handle, reply);
     }
 
+    /**
+     * ⛔ CODICE COL MOTORE LOCALE: la lettura parziale della risposta che sta arrivando (`{content, reasoning}`), per lo streaming
+     * verso r4. ⛔ VEDETTA come `textSoFar`: si chiama MENTRE l'attore genera, da un altro thread, quindi NON passa da `vivo` (che
+     * vuole l'attore). Chi la usa (`TalosMotoreOspite`) la chiama solo dentro il compito dell'attore che genera, e aspetta il suo
+     * lettore prima che il compito finisca: una chiusura, in coda sullo stesso attore, non può arrivare a metà.
+     */
+    public String parseReplyPartial(String reply) {
+        return TalosLlamaNative.nativeParseReplyPartial(handle, reply);
+    }
+
     /** Stops the current generation. What was produced so far still stands. */
     public void cancel() {
         TalosLlamaNative.nativeCancel(handle);
@@ -705,6 +737,19 @@ public final class TalosLlamaEngine implements AutoCloseable {
      */
     public Run run(String prompt, int maxTokens, ThermalSource thermal,
                    Mode mode) throws InterruptedException {
+        return run(prompt, maxTokens, thermal, mode, null);
+    }
+
+    /**
+     * @param lettore null = la misura si chiude alla finestra piena, come
+     *     sempre. Altrimenti la finestra piena non basta: serve anche una
+     *     risposta giudicabile ({@link TalosLlamaProbe#rispostaGiudicabile}),
+     *     cosi' un modello che ragiona prima di rispondere arriva alla
+     *     risposta prima che la corsa si chiuda. I tetti non cambiano:
+     *     {@code maxTokens} e {@link #RUN_TIMEOUT_MS}.
+     */
+    public Run run(String prompt, int maxTokens, ThermalSource thermal,
+                   Mode mode, LettoreDellaProva lettore) throws InterruptedException {
         vivo("run");
         AtomicReference<String> produced = new AtomicReference<>(null);
         Thread worker = new Thread(() -> {
@@ -746,6 +791,12 @@ public final class TalosLlamaEngine implements AutoCloseable {
             // per rendere più preciso un numero già valido.
             boolean measuredEnough = now - firstTokenAt >= MEASURE_FLOOR_MS
                     && tokens >= TalosBenchmarkHarness.MIN_TOKENS;
+            // ⛔ PROB-07: il testo si legge SOLO a finestra piena — la lettura
+            // non accorcia mai una misura, la allunga finche' c'e' una risposta.
+            if (measuredEnough && lettore != null) {
+                measuredEnough = TalosLlamaProbe.rispostaGiudicabile(
+                        lettore.leggi(TalosLlamaNative.nativeTextSoFar(handle)));
+            }
             if (measuredEnough) {
                 TalosLlamaNative.nativeCancel(handle);
                 break;
@@ -799,7 +850,8 @@ public final class TalosLlamaEngine implements AutoCloseable {
         // riportare — e comunque `judge` respinge questa corsa per pochi token,
         // quindi il numero non arriva mai a decidere niente.
         long ttftMs = firstTokenAt > 0 ? firstTokenAt - startedAt : 0;
-        return new Run(text, samples.toArray(new TalosBenchmarkHarness.Sample[0]), ttftMs);
+        TalosLlamaProbe.Lettura lettura = lettore == null ? null : lettore.leggi(text);
+        return new Run(text, samples.toArray(new TalosBenchmarkHarness.Sample[0]), ttftMs, lettura);
     }
 
     @Override

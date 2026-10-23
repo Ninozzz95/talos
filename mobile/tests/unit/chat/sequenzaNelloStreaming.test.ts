@@ -31,8 +31,9 @@ function monta(stato: Record<string, unknown>, attivi: Array<{ name: string; det
 
 /** Ragionamento (R), righe degli attrezzi (A), nell'ordine del documento. */
 function ordine(w: ReturnType<typeof monta>): string[] {
-    return [...w.element.querySelectorAll('[data-testid="talos-reasoning-block"], [data-segmento="attrezzi"]')].map((nodo) =>
-        nodo.matches('[data-segmento="attrezzi"]') ? 'A' : 'R')
+    // 22/10/2026 (owner: «ragionamento dentro il gruppo»): le righe a vista una per una, non i contenitori
+    return [...w.element.querySelectorAll('[data-testid="talos-reasoning-block"], [data-voce="attrezzo"]')].map((nodo) =>
+        nodo.matches('[data-voce="attrezzo"]') ? 'A' : 'R')
 }
 
 describe('N13 — l’ordine mentre la risposta arriva', () => {

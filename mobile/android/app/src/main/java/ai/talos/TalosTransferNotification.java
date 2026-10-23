@@ -15,8 +15,8 @@ import androidx.core.app.NotificationCompat;
 public final class TalosTransferNotification {
 
     public static final String CHANNEL_ID = "talos.download";
-    public static final int NOTIFICATION_ID = 4712;
-    public static final int SUMMARY_NOTIFICATION_ID = 4700;
+    public static final int NOTIFICATION_ID = TalosNotificationIds.TRANSFER_BAR;
+    public static final int SUMMARY_NOTIFICATION_ID = TalosNotificationIds.TRANSFER_SUMMARY;
     public static final String GROUP_KEY = "ai.talos.group.MODEL_DOWNLOADS";
     public static final String EXTRA_TRANSFER_ID = "ai.talos.extra.TRANSFER_ID";
 
@@ -26,13 +26,17 @@ public final class TalosTransferNotification {
     private TalosTransferNotification() {}
 
     public static void ensureChannel(Context context) {
+        ensureChannel(context, false);
+    }
+
+    /** `rinomina` solo da `TalosNotificationCentre.refreshNames` (lingua dell'app); gli altri creano soltanto se manca (N0, D-N0-6). */
+    static void ensureChannel(Context context, boolean rinomina) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
         NotificationManager manager = context.getSystemService(NotificationManager.class);
-        if (manager == null || manager.getNotificationChannel(CHANNEL_ID) != null) return;
-
+        if (manager == null || (!rinomina && manager.getNotificationChannel(CHANNEL_ID) != null)) return;
         NotificationChannel channel = new NotificationChannel(
-                CHANNEL_ID, "Model downloads", NotificationManager.IMPORTANCE_LOW);
-        channel.setDescription("Progress while models are downloading, and how they ended.");
+                CHANNEL_ID, context.getString(R.string.talos_canale_download_nome), NotificationManager.IMPORTANCE_LOW);
+        channel.setDescription(context.getString(R.string.talos_canale_download_descrizione));
         channel.setSound(null, null);
         channel.enableVibration(false);
         channel.setShowBadge(false);
@@ -53,7 +57,7 @@ public final class TalosTransferNotification {
                 + " / " + Formatter.formatShortFileSize(context, totalBytes);
         String detail = seconds == TalosTransferProgress.UNKNOWN
                 ? sizes
-                : sizes + " · " + remaining(seconds) + " left";
+                : sizes + " · " + context.getString(R.string.talos_download_mancano, remaining(seconds));
 
         Intent pause = new Intent(context, TalosTransferControl.class).setAction(ACTION_PAUSE);
         pause.putExtra(EXTRA_TRANSFER_ID, transferId);
@@ -68,7 +72,7 @@ public final class TalosTransferNotification {
                 .setOnlyAlertOnce(true)
                 .setOngoing(true)
                 .setGroup(GROUP_KEY)
-                .addAction(0, "Pause", pausing)
+                .addAction(0, context.getString(R.string.talos_download_pausa), pausing)
                 .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
                 .build();
     }
@@ -89,8 +93,8 @@ public final class TalosTransferNotification {
         return base(
                 context,
                 SUMMARY_NOTIFICATION_ID,
-                "Model downloads",
-                count == 1 ? "1 transfer active" : count + " transfers active")
+                context.getString(R.string.talos_canale_download_nome),
+                context.getResources().getQuantityString(R.plurals.talos_download_attivi, count, count))
                 .setGroup(GROUP_KEY)
                 .setGroupSummary(true)
                 .setOngoing(true)
@@ -110,7 +114,7 @@ public final class TalosTransferNotification {
                 context,
                 doneNotificationId(jobId),
                 modelName,
-                explain(reason),
+                explain(context, reason),
                 "/settings/models/local");
     }
 
@@ -124,11 +128,11 @@ public final class TalosTransferNotification {
     }
 
     static int notificationId(int jobId) {
-        return jobId;
+        return TalosNotificationIds.transferBar(jobId);
     }
 
     static int doneNotificationId(int jobId) {
-        return 1_000_000 + Math.floorMod(jobId, 1_000_000);
+        return TalosNotificationIds.transferDone(jobId);
     }
 
     private static NotificationCompat.Builder base(
@@ -160,16 +164,17 @@ public final class TalosTransferNotification {
         return (seconds / 3600) + "h " + ((seconds % 3600) / 60) + "m";
     }
 
-    private static String explain(String reason) {
-        if (reason == null) return "Downloaded and verified";
+    /** N0 (21/10/2026), D-N0-6: erano in inglese fisso. */
+    private static String explain(Context context, String reason) {
+        if (reason == null) return context.getString(R.string.talos_download_fine_ok);
         switch (reason) {
-            case "file-changed": return "The file changed on the server — start again";
-            case "hash-mismatch": return "The file did not match its checksum and was removed";
-            case "gone": return "The file is no longer published";
-            case "unreachable": return "Could not reach the server — try again later";
-            case "no-space": return "Not enough free space";
-            case "stopped": return "Paused — resumes where it left off";
-            default: return "Stopped: " + reason;
+            case "file-changed": return context.getString(R.string.talos_download_fine_cambiato);
+            case "hash-mismatch": return context.getString(R.string.talos_download_fine_controllo);
+            case "gone": return context.getString(R.string.talos_download_fine_sparito);
+            case "unreachable": return context.getString(R.string.talos_download_fine_irraggiungibile);
+            case "no-space": return context.getString(R.string.talos_download_fine_spazio);
+            case "stopped": return context.getString(R.string.talos_download_fine_pausa);
+            default: return context.getString(R.string.talos_download_fine_fermato, reason);
         }
     }
 }

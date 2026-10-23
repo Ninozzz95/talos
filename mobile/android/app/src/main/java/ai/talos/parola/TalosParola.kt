@@ -77,6 +77,9 @@ class TalosParola : Service() {
      */
     private var lavoratore: Thread? = null
 
+    /** A0-4: la parola si crede dopo tre punteggi di fila sopra `SOGLIA`, non dopo un picco isolato. */
+    private val conferma = TalosConfermaParola(soglia = SOGLIA)
+
     @Volatile
     private var ceduto = false
 
@@ -159,9 +162,16 @@ class TalosParola : Service() {
      * servizio NON è tornato (zero `ServiceRecord`, `appops duration=0`). Il
      * comportamento giusto era già quello, ma per caso — adesso è dichiarato.
      *
-     * ⇒ Se il sistema ci uccide, la parola resta spenta finché la persona non
-     * la riaccende. Perdere una funzione è meglio che tenere un microfono
-     * acceso che nessuno ricorda di aver acceso.
+     * ⇒ Il servizio da solo non torna mai: lo riaccende solo chi sa che la
+     * persona l'aveva VOLUTA (`riprendiSeVoluta`, preferenza scritta quando la
+     * accende e cancellata quando la spegne).
+     *
+     * A0-1 (21/10/2026, scelta dell'owner «parola riaccesa da onReady»): da
+     * adesso, se il sistema ci uccide, la parola torna quando il sistema rilega
+     * il servizio dell'assistente — senza che la persona apra TALOS, ma solo se
+     * l'aveva accesa lei, col permesso del microfono ancora concesso, e con la
+     * notifica che dice che ascolta. Non è più «resta spenta finché la persona
+     * non la riaccende»: è «resta come la persona l'ha lasciata».
      */
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (vivo) return START_NOT_STICKY
@@ -172,7 +182,18 @@ class TalosParola : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
-        avviaInPrimoPiano()
+        /*
+         * A0-1, revisione avversaria (3): da quando `TalosAssistente.onReady` la riaccende dal fondo, un `startForeground` rifiutato
+         * (una ROM più severa: `SecurityException`, `ForegroundServiceStartNotAllowedException`) farebbe cadere il processo, e il
+         * sistema rilegando l'assistente ricomincerebbe. Si ferma il servizio e basta: la parola resta spenta, il processo vivo.
+         */
+        try {
+            avviaInPrimoPiano()
+        } catch (rifiutato: RuntimeException) {
+            Log.w(MARCHIO, "il sistema non mi lascia in primo piano, mi fermo: " + rifiutato.javaClass.simpleName)
+            stopSelf()
+            return START_NOT_STICKY
+        }
         vivo = true
         // ⛔ Il thread si TIENE: senza un riferimento, `onDestroy` non può
         // aspettarlo, e la cura qui sotto non esisterebbe.
@@ -238,15 +259,17 @@ class TalosParola : Service() {
      */
     private fun avviaInPrimoPiano() {
         val gestore = getSystemService(NotificationManager::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        // Solo se manca: fino ad Android 12L il servizio parla la lingua del sistema; il nome lo rinomina l'attività (N0, D-N0-6)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && gestore.getNotificationChannel(CANALE) == null) {
             gestore.createNotificationChannel(
-                NotificationChannel(CANALE, "TALOS in ascolto", NotificationManager.IMPORTANCE_LOW)
-                    .apply { description = "Mostra quando TALOS aspetta la parola di attivazione" },
+                NotificationChannel(CANALE, getString(ai.talos.R.string.talos_canale_parola_nome), NotificationManager.IMPORTANCE_LOW)
+                    .apply { description = getString(ai.talos.R.string.talos_canale_parola_descrizione) },
             )
         }
         val avviso = Notification.Builder(this, CANALE)
-            .setContentTitle("TALOS aspetta «hey TALOS»")
-            .setContentText("Il microfono resta acceso finché non lo spegni.")
+            // N0 (21/10/2026), D-N0-6: erano in italiano fisso
+            .setContentTitle(getString(ai.talos.R.string.talos_parola_titolo))
+            .setContentText(getString(ai.talos.R.string.talos_parola_testo))
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .setOngoing(true)
             .build()
@@ -352,6 +375,7 @@ class TalosParola : Service() {
                     // copre il caso in cui la bandierina arrivi da sola.
                     runCatching { presa.stop() }
                     riconoscitore.azzera()
+                    conferma.azzera()
                     dentro = 0
                     eraCeduto = true
                     Log.i(MARCHIO, "microfono ceduto a chi ascolta davvero")
@@ -530,7 +554,7 @@ class TalosParola : Service() {
              * registro.
              */
             if (punteggio > CURIOSITA) Log.i(MARCHIO, "punteggio ${"%.3f".format(punteggio)}")
-            if (punteggio >= SOGLIA) {
+            if (conferma.ascolta(punteggio)) {
                 riconoscitore.azzera()
                 sentita(punteggio)
             }
@@ -710,8 +734,10 @@ class TalosParola : Service() {
          * venticinque giri — larghissimo, e comunque limitato.
          */
         private const val ATTESA_USCITA_MS = 2_000L
-        private const val CANALE = "talos-parola"
-        private const val AVVISO = 4711
+        /** Pubblico per `TalosNotificationCentre.refreshNames`, che lo rinomina nella lingua dell'app (N0, D-N0-6). */
+        const val CANALE = "talos-parola"
+        // N0 (21/10/2026), D-N0-5: era 4711 come il servizio dei giri, e chi si fermava per secondo toglieva la notifica dell'altro
+        private const val AVVISO = ai.talos.TalosNotificationIds.VOICE
         private const val FREQUENZA = 16_000
 
         /**
@@ -862,6 +888,10 @@ class TalosParola : Service() {
         /** Dove si ricorda che la persona la vuole accesa. */
         private const val MEMORIA = "talos_parola"
         private const val VOLUTA = "voluta"
+        /** A0-1: gli istanti delle ultime riprese chieste dal sistema, separati da virgole (per [frenoDellaRipresa]). */
+        private const val RIPRESE = "riprese_dal_sistema"
+        private const val RIPRESE_MASSIME = 3
+        private const val FINESTRA_RIPRESE_MS = 10 * 60_000L
 
         @JvmStatic
         fun accendi(contesto: Context) {
@@ -908,24 +938,66 @@ class TalosParola : Service() {
          * nessuno guarda è esattamente ciò che quella regola impedisce.
          *
          * ⇒ Si ricorda l'INTENZIONE e la si onora al primo momento legittimo:
-         * quando l'app torna davanti alla persona. Non è un ripiego — è l'unico
-         * istante in cui il sistema, e chi possiede il telefono, sono d'accordo.
+         * quando l'app torna davanti alla persona, oppure quando il sistema
+         * accende il servizio dell'assistente che la persona ha scelto.
+         *
+         * A0-1 (21/10/2026): il secondo istante è `TalosAssistente.onReady`, che
+         * arriva anche dopo un riavvio, o dopo che il sistema ha ucciso il
+         * processo, senza aprire TALOS: il sistema rilega da solo il servizio
+         * dell'assistente scelto dalla persona. Home Assistant riaccende l'ascolto
+         * proprio lì (`AssistVoiceInteractionService.kt:78-112`). Il microfono
+         * dal fondo vale per l'eccezione dei permessi *while-in-use* «the service
+         * starts by an app which provides the VoiceInteractionService».
+         * MISURATO sul Pad il 21/10 (Android 16): processo ucciso con `kill -9`
+         * ⇒ «Start proc … for service TalosAssistente» ⇒ «la riaccendo» ⇒
+         * `silenced:false` e «hey TALOS» sentita 10 volte su 10, app mai aperta.
          */
         @JvmStatic
-        fun riprendiSeVoluta(contesto: Context) {
-            if (accesa()) return
+        fun deveRiprendere(voluta: Boolean, permesso: Boolean, accesa: Boolean): Boolean =
+            voluta && permesso && !accesa
+
+        /** Vero quando la parola è stata davvero rimandata in avvio (il servizio può ancora rifiutarsi: vedi `onStartCommand`). */
+        @JvmStatic
+        fun riprendiSeVoluta(contesto: Context): Boolean {
+            val accesa = accesa()
             val voluta = contesto.getSharedPreferences(MEMORIA, Context.MODE_PRIVATE)
                 .getBoolean(VOLUTA, false)
-            if (!voluta) return
-            if (contesto.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)
-                != PackageManager.PERMISSION_GRANTED
-            ) {
+            val permesso = contesto.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) ==
+                PackageManager.PERMISSION_GRANTED
+            if (voluta && !permesso && !accesa) {
                 Log.w(MARCHIO, "la parola era voluta ma il permesso del microfono non c'è più")
+            }
+            if (!deveRiprendere(voluta, permesso, accesa)) return false
+            Log.i(MARCHIO, "la parola era voluta e non era viva: la riaccendo")
+            return runCatching { contesto.startForegroundService(Intent(contesto, TalosParola::class.java)) }
+                .onFailure { Log.w(MARCHIO, "non ho potuto riaccenderla: ${it.javaClass.simpleName}") }
+                .isSuccess
+        }
+
+        /**
+         * A0-1, revisione avversaria (3): il freno contro il giro dei crash. Se il servizio della parola fa cadere il processo
+         * appena parte, il sistema rilega l'assistente, `onReady` la riaccende e il processo cade di nuovo. Prima di A0 un crash
+         * lasciava la parola spenta; adesso al massimo [RIPRESE_MASSIME] riprese dal sistema in [FINESTRA_RIPRESE_MS], poi resta
+         * spenta finché la persona non apre TALOS (`MainActivity.onResume` non passa dal freno). Contano solo le riprese passate e
+         * recenti: una «dal futuro» (orologio spostato indietro) terrebbe il freno tirato per sempre.
+         */
+        @JvmStatic
+        fun frenoDellaRipresa(riprese: List<Long>, ora: Long): Boolean =
+            riprese.count { ora - it in 0 until FINESTRA_RIPRESE_MS } >= RIPRESE_MASSIME
+
+        /** La ripresa chiesta dal sistema (`TalosAssistente.onReady`): come [riprendiSeVoluta], ma col freno. */
+        @JvmStatic
+        fun riprendiDalSistema(contesto: Context) {
+            val memoria = contesto.getSharedPreferences(MEMORIA, Context.MODE_PRIVATE)
+            val ora = System.currentTimeMillis()
+            val riprese = memoria.getString(RIPRESE, "").orEmpty().split(',')
+                .mapNotNull { it.toLongOrNull() }
+                .filter { ora - it in 0 until FINESTRA_RIPRESE_MS }
+            if (frenoDellaRipresa(riprese, ora)) {
+                Log.w(MARCHIO, "già ${riprese.size} riprese dal sistema in dieci minuti: la lascio spenta finché TALOS non si apre")
                 return
             }
-            Log.i(MARCHIO, "la parola era voluta e non era viva: la riaccendo")
-            runCatching { contesto.startForegroundService(Intent(contesto, TalosParola::class.java)) }
-                .onFailure { Log.w(MARCHIO, "non ho potuto riaccenderla: ${it.javaClass.simpleName}") }
+            if (riprendiSeVoluta(contesto)) memoria.edit().putString(RIPRESE, (riprese + ora).joinToString(",")).apply()
         }
 
         @JvmStatic

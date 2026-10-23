@@ -1,5 +1,6 @@
 package ai.talos.agent
 
+import ai.talos.parola.TalosParola
 import android.app.assist.AssistContent
 import android.app.assist.AssistStructure
 import android.content.Intent
@@ -47,15 +48,35 @@ import android.util.Log
  */
 class TalosAssistente : VoiceInteractionService() {
 
+    /**
+     * A0-1: chiavistello a senso unico, come Home Assistant (`AssistVoiceInteractionService.kt:72-86`): il sistema può consegnare
+     * `onReady` anche mentre spegne il servizio — per esempio perché la persona ha appena scelto un altro assistente. Un `onReady`
+     * così tardivo non deve riprendersi il microfono per conto di un assistente che non è più quello scelto.
+     */
+    private var spento = false
+
     override fun onReady() {
         super.onReady()
+        if (spento) {
+            Log.w(TAG, "$SEGNO onReady arrivato dopo lo spegnimento: lo ignoro")
+            return
+        }
         vivo = this
         Log.i(TAG, "$SEGNO pronto")
+        // A0-1: dopo un riavvio «hey TALOS» torna senza aprire TALOS, se la persona l'aveva accesa e il microfono è concesso;
+        // col freno contro il giro dei crash (al massimo tre riprese dal sistema in dieci minuti)
+        TalosParola.riprendiDalSistema(this)
     }
 
     override fun onShutdown() {
+        spento = true
         vivo = null
         super.onShutdown()
+    }
+
+    override fun onDestroy() {
+        spento = true
+        super.onDestroy()
     }
 
     companion object {

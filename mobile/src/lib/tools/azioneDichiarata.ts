@@ -23,11 +23,12 @@ export const TALOS_SOLLECITO_AZIONE_DICHIARATA =
  * scritto «La nota è stata salvata». `tool_search` e `tool_details` consegnano solo la FORMA di altri strumenti (vedi
  * `chatController.ts`, «non è una capacità: è l'impianto del catalogo»): cercare non è fare.
  */
-const ATTREZZI_DI_SOLA_SCOPERTA: ReadonlySet<string> = new Set(['tool_search', 'tool_details'])
+// esportato per A0-5: ognuno di questi ha una parola a schermo (`tests/unit/tools/etichetteScoperta.test.ts`)
+export const TALOS_ATTREZZI_DI_SOLA_SCOPERTA: ReadonlySet<string> = new Set(['tool_search', 'tool_details'])
 
 /** Nel turno è partito almeno uno strumento che agisce davvero (non una semplice ricerca di strumenti)? */
 export function talosHaAgito(eseguiti: ReadonlyArray<{ call: { name: string } }>): boolean {
-    return eseguiti.some((voce) => !ATTREZZI_DI_SOLA_SCOPERTA.has(voce.call.name))
+    return eseguiti.some((voce) => !TALOS_ATTREZZI_DI_SOLA_SCOPERTA.has(voce.call.name))
 }
 
 const LETTERA = '\\p{L}'

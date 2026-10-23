@@ -308,7 +308,7 @@ export function talosIstruzioneDelPilota(input: {
         ? `\nQuello che hai gia' fatto:\n${(input.storia ?? []).join('\n')}`
         : ''
     return [
-        'Piloti lo schermo di un telefono Android. A ogni giro vedi gli elementi',
+        'Piloti lo schermo di un dispositivo Android. A ogni giro vedi gli elementi',
         'con cui si puo\' interagire, numerati, e scegli UNA azione sola.',
         '',
         `Obiettivo: ${input.obiettivo}${storia}`,

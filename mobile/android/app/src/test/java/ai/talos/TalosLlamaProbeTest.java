@@ -182,8 +182,314 @@ public class TalosLlamaProbeTest {
                 java.nio.charset.StandardCharsets.UTF_8);
         assertFalse(sorgente.contains("gpuWanted && cpuRecorded"));
         assertFalse(sorgente.contains("npuWanted && cpuRecorded"));
-        assertTrue(sorgente.contains("TalosLlamaProbe.answerIsCorrect(gpuRun.text)"));
-        assertTrue(sorgente.contains("TalosLlamaProbe.answerIsCorrect(npuRun.text)"));
+        // ⛔ 22/10/2026 (PROB-07): si giudica la RISPOSTA letta dal parser del template, non il testo grezzo.
+        assertTrue(sorgente.contains("TalosLlamaProbe.compitoSvolto(gpuRun.lettura)"));
+        assertTrue(sorgente.contains("TalosLlamaProbe.compitoSvolto(npuRun.lettura)"));
+    }
+
+    /*
+     * ⭐ PROB-07…12 (22/10/2026) — i modelli che RAGIONANO. Sul Pad, llama.cpp
+     * v0.7.0: Qwen3.5-2B (Q4_0/Q4_K_M/Q8_0), Granite 4.2 3B e LFM2.5-2.6B Q8_0
+     * uscivano WRONG_ANSWER tps 0.0 su TUTTI i motori, CPU compresa. I binari
+     * ufficiali (b11312 e v0.7.0, CPU e HTP0) col prompt esatto della prova
+     * scrivono lo stesso testo: il ragionamento, mai il conteggio, dentro la
+     * finestra misurata. Non era il motore: era la prova.
+     */
+
+    /** Il testo esatto letto sul Pad da `llama-completion` col prompt della prova. */
+    private static final String QWEN35_GREZZO =
+            "<think> Thinking Process: 1. **Analyze the Request:** * Input: A list of 16 notes "
+            + "about stations, temperatures, wind speeds. * Task: Ignore the notes ab";
+
+    private static String letturaJson(String contenuto, String ragionamento) {
+        try {
+            return new org.json.JSONObject()
+                    .put("content", contenuto)
+                    .put("reasoning", ragionamento)
+                    .put("toolCalls", new org.json.JSONArray())
+                    .toString();
+        } catch (org.json.JSONException nonPuoAccadereConChiaviCostanti) {
+            // ⛔ Sul classpath Android `put` dichiara l'eccezione: con chiavi costanti non scatta mai.
+            throw new IllegalStateException(nonPuoAccadereConChiaviCostanti);
+        }
+    }
+
+    /**
+     * PROB-07 — un modello che sta ancora RAGIONANDO non ha risposto: la misura
+     * non si chiude alla soglia dei quattro secondi, si aspetta la risposta.
+     */
+    @Test
+    public void prob07IlRagionamentoNonChiudeLaMisura() {
+        TalosLlamaProbe.Lettura lettura = TalosLlamaProbe.Lettura.dalParser(QWEN35_GREZZO,
+                letturaJson("", QWEN35_GREZZO.substring("<think> ".length())));
+        assertTrue(lettura.staAncoraPensando());
+        assertEquals("", lettura.risposta());
+        assertFalse("ragiona ancora: chiudere qui e' il WRONG_ANSWER del Pad",
+                TalosLlamaProbe.rispostaGiudicabile(lettura));
+        assertFalse(TalosLlamaProbe.compitoSvolto(lettura));
+    }
+
+    /**
+     * PROB-07b — e il motore la chiede DAVVERO a finestra piena. Letto dal
+     * sorgente: `run` non si prova sulla JVM (JNI).
+     */
+    @Test
+    public void prob07bIlMotoreAspettaUnaRispostaGiudicabile() throws java.io.IOException {
+        String motore = new String(java.nio.file.Files.readAllBytes(
+                new java.io.File("src/main/java/ai/talos/TalosLlamaEngine.java").toPath()),
+                java.nio.charset.StandardCharsets.UTF_8);
+        assertTrue(motore.contains("if (measuredEnough && lettore != null) {"));
+        assertTrue(motore.contains("measuredEnough = TalosLlamaProbe.rispostaGiudicabile("));
+        String plugin = new String(java.nio.file.Files.readAllBytes(
+                new java.io.File("src/main/java/ai/talos/TalosLlamaPlugin.java").toPath()),
+                java.nio.charset.StandardCharsets.UTF_8);
+        assertTrue(plugin.contains("TalosLlamaProbe.Lettura.dalParser(testo, engine.parseReplyPartial(testo))"));
+    }
+
+    /**
+     * PROB-08 — si giudica la RISPOSTA, mai il ragionamento. Un ragionamento a
+     * passi numerati «1. 2. 3. 4. 5.» non e' il compito svolto; il conteggio
+     * dopo il ragionamento si'.
+     */
+    @Test
+    public void prob08SiGiudicaLaRispostaDopoIlRagionamento() {
+        String passi = "1. Analyze. 2. Plan. 3. Check. 4. Draft. 5. Answer.";
+        TalosLlamaProbe.Lettura conta = TalosLlamaProbe.Lettura.dalParser(
+                "<think>" + passi + "</think>1\n2\n3\n4\n5\n6", letturaJson("1\n2\n3\n4\n5\n6", passi));
+        assertFalse(conta.staAncoraPensando());
+        assertTrue(TalosLlamaProbe.rispostaGiudicabile(conta));
+        assertTrue(TalosLlamaProbe.compitoSvolto(conta));
+
+        String chiacchiera = "Sure! I can definitely help you with that request, here it comes right away. "
+                + "Let me know if there is anything else you would like me to do for you today.";
+        TalosLlamaProbe.Lettura sbaglia = TalosLlamaProbe.Lettura.dalParser(
+                "<think>" + passi + "</think>" + chiacchiera, letturaJson(chiacchiera, passi));
+        assertTrue("una risposta lunga che non conta si giudica (e si boccia)",
+                TalosLlamaProbe.rispostaGiudicabile(sbaglia));
+        assertFalse("i passi numerati del ragionamento non sono il compito",
+                TalosLlamaProbe.compitoSvolto(sbaglia));
+    }
+
+    /**
+     * PROB-09 — la risposta e' appena cominciata («1\n»): non si chiude ancora,
+     * altrimenti si boccia un modello che stava contando.
+     */
+    @Test
+    public void prob09UnaRispostaAppenaIniziataNonSiGiudica() {
+        TalosLlamaProbe.Lettura appena = TalosLlamaProbe.Lettura.dalParser(
+                "<think>ok</think>1\n", letturaJson("1\n", "ok"));
+        assertFalse(TalosLlamaProbe.rispostaGiudicabile(appena));
+    }
+
+    /**
+     * PROB-10 — senza parser (GGUF senza template, lettura non riuscita: il JNI
+     * restituisce due stringhe vuote) vale il testo grezzo, come prima: le
+     * corse che oggi si qualificano non cambiano verdetto.
+     */
+    @Test
+    public void prob10SenzaParserValeIlTestoGrezzo() {
+        String grezzo = "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16\n17\n18\n19\n20\n";
+        TalosLlamaProbe.Lettura vuota = TalosLlamaProbe.Lettura.dalParser(grezzo, letturaJson("", ""));
+        assertFalse(vuota.staAncoraPensando());
+        assertTrue(TalosLlamaProbe.compitoSvolto(vuota));
+        assertTrue(TalosLlamaProbe.rispostaGiudicabile(vuota));
+        TalosLlamaProbe.Lettura illeggibile = TalosLlamaProbe.Lettura.dalParser(grezzo, null);
+        assertTrue(TalosLlamaProbe.compitoSvolto(illeggibile));
+        assertTrue(TalosLlamaProbe.compitoSvolto(TalosLlamaProbe.Lettura.dalParser(grezzo, "{non json")));
+        String coreano = "model 원: ? 어 (Translation **Model 어 원: ? 어 (Translation **Model 어 원: ? 어 "
+                + "(Translation **Model 어 원: ? 어 (Translation **Model 어 원: ? 어 (Translation **Model 어";
+        TalosLlamaProbe.Lettura guasta = TalosLlamaProbe.Lettura.dalParser(coreano, letturaJson("", ""));
+        assertTrue(TalosLlamaProbe.rispostaGiudicabile(guasta));
+        assertFalse("un motore rotto resta bocciato", TalosLlamaProbe.compitoSvolto(guasta));
+    }
+
+    /**
+     * PROB-11 — la prova parla al modello col SUO template e col ragionamento
+     * spento (come `llama-server` con `chat_template_kwargs.enable_thinking =
+     * false`); un GGUF senza template riceve il prompt grezzo di prima.
+     */
+    @Test
+    public void prob11IlPromptPassaDalTemplateColRagionamentoSpento() throws java.io.IOException {
+        String reso = "<|im_start|>user\n" + TalosLlamaProbe.PROMPT
+                + "<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n";
+        assertEquals(reso, TalosLlamaProbe.promptDellaProva(reso));
+        assertEquals(TalosLlamaProbe.PROMPT, TalosLlamaProbe.promptDellaProva(""));
+        assertEquals(TalosLlamaProbe.PROMPT, TalosLlamaProbe.promptDellaProva(null));
+
+        String sorgente = new String(java.nio.file.Files.readAllBytes(
+                new java.io.File("src/main/java/ai/talos/TalosLlamaPlugin.java").toPath()),
+                java.nio.charset.StandardCharsets.UTF_8);
+        assertTrue(sorgente.contains("new String[] {TalosLlamaProbe.PROMPT}, null, false)"));
+        assertFalse("nessuna corsa della prova col prompt grezzo",
+                sorgente.contains("TalosLlamaProbe.PROMPT, TalosLlamaProbe.TOKENS"));
+    }
+
+    /**
+     * PROB-12 — cambiato il metro, i verdetti NEGATIVI del metro vecchio non
+     * contano come «gia' misurato»: senza, Qwen3.5 restava FAILED per sempre
+     * anche dopo la cura. Le misure buone restano buone: i tempi non cambiano.
+     */
+    @Test
+    public void prob12UnaBocciaturaDelMetroVecchioSiRimisura() {
+        TalosLocalProfileIdentity id = new TalosLocalProfileIdentity("v0.7.0", "abc", 1_280_000_000L, 35, "fp");
+        TalosLocalProfile bocciatoPrima = new TalosLocalProfile(id, "cpu", null,
+                TalosBackendChoice.Outcome.FAILED, 1_200L, 1L, TalosLocalProfile.Level.Q1, 0, 52.0, 3_000L);
+        TalosLocalProfile bocciatoOra = new TalosLocalProfile(id, "cpu", null,
+                TalosBackendChoice.Outcome.FAILED, 1_200L, 1L, TalosLocalProfile.Level.Q1, 0, 52.0, 3_000L,
+                TalosLlamaProbe.metroId());
+        TalosLocalProfile buonoPrima = new TalosLocalProfile(id, "cpu", null,
+                TalosBackendChoice.Outcome.CORRECT, 900L, 1L, TalosLocalProfile.Level.Q1, 9.0, 52.0, 3_000L);
+        assertEquals("", bocciatoPrima.metro);
+        assertTrue(TalosLlamaProbe.profileMissingFor(java.util.Collections.singletonList(bocciatoPrima), 1_280_000_000L));
+        assertFalse(TalosLlamaProbe.profileMissingFor(java.util.Collections.singletonList(bocciatoOra), 1_280_000_000L));
+        assertFalse(TalosLlamaProbe.profileMissingFor(java.util.Collections.singletonList(buonoPrima), 1_280_000_000L));
+    }
+
+    /**
+     * PROB-13 — il caso del Pad, 22/10/2026 15:44-15:55: LFM2.5-2.6B Q4_K_M con
+     * i profili del metro vecchio (giro 1, 12:13) cpu VALID, opencl e hexagon
+     * WRONG_ANSWER. `qualifyBackend` rispondeva `already-proven`: il profilo
+     * cpu valido bastava a dire «il modello ha un profilo», e le evidenze per
+     * dispositivo avevano gia' GPU e NPU. Le due bocciature vecchie non si
+     * rimisuravano mai e «Automatico» restava sulla CPU per sempre.
+     *
+     * ⇒ La domanda e' PER MOTORE: si rimisura solo quello la cui bocciatura,
+     * per QUESTO file, viene da un altro metro; la CPU valida resta com'e'.
+     */
+    @Test
+    public void prob13SiRimisuraSoloIlMotoreBocciatoDalMetroVecchio() throws java.io.IOException {
+        long byteLfm = 1_620_000_000L;
+        TalosLocalProfileIdentity id = new TalosLocalProfileIdentity("v0.7.0", "lfm", byteLfm, 35, "fp");
+        TalosLocalProfile cpuValida = new TalosLocalProfile(id, "cpu", null,
+                TalosBackendChoice.Outcome.CORRECT, 1_100L, 1L, TalosLocalProfile.Level.Q1, 11.0, 70.0, 2_000L);
+        TalosLocalProfile gpuBocciata = new TalosLocalProfile(id, "opencl", "GPUOpenCL",
+                TalosBackendChoice.Outcome.FAILED, 900L, 1L, TalosLocalProfile.Level.Q1, 0, 300.0, 20_000L);
+        TalosLocalProfile npuBocciata = new TalosLocalProfile(id, "hexagon", "HTP0",
+                TalosBackendChoice.Outcome.FAILED, 600L, 1L, TalosLocalProfile.Level.Q1, 0, 1_100.0, 3_000L);
+        java.util.List<TalosLocalProfile> pad = java.util.Arrays.asList(cpuValida, gpuBocciata, npuBocciata);
+
+        assertFalse("il modello ha un profilo: e' il ramo che diceva already-proven",
+                TalosLlamaProbe.profileMissingFor(pad, byteLfm));
+        assertFalse("la CPU valida non si rimisura",
+                TalosLlamaProbe.bocciaturaDaRimisurare(pad, byteLfm, TalosBackendChoice.CPU));
+        assertTrue(TalosLlamaProbe.bocciaturaDaRimisurare(pad, byteLfm, TalosBackendChoice.OPENCL));
+        assertTrue(TalosLlamaProbe.bocciaturaDaRimisurare(pad, byteLfm, TalosBackendChoice.HEXAGON));
+        assertFalse("un altro file non c'entra",
+                TalosLlamaProbe.bocciaturaDaRimisurare(pad, 1L, TalosBackendChoice.HEXAGON));
+        TalosLocalProfile senzaDimensione = new TalosLocalProfile(
+                new TalosLocalProfileIdentity("v0.7.0", "lfm", 0L, 35, "fp"), "hexagon", "HTP0",
+                TalosBackendChoice.Outcome.FAILED, 600L, 1L, TalosLocalProfile.Level.Q1, 0, 1_100.0, 3_000L);
+        assertFalse("dimensione ignota: nel dubbio non si riparte",
+                TalosLlamaProbe.bocciaturaDaRimisurare(
+                        java.util.Collections.singletonList(senzaDimensione), 0L, TalosBackendChoice.HEXAGON));
+
+        // Rimisurata col metro di oggi: una bocciatura onesta resta duratura, niente giri all'infinito.
+        TalosLocalProfile npuBocciataOra = new TalosLocalProfile(id, "hexagon", "HTP0",
+                TalosBackendChoice.Outcome.FAILED, 600L, 2L, TalosLocalProfile.Level.Q1, 0, 1_100.0, 3_000L,
+                TalosLlamaProbe.metroId());
+        assertFalse(TalosLlamaProbe.bocciaturaDaRimisurare(
+                java.util.Arrays.asList(cpuValida, npuBocciataOra), byteLfm, TalosBackendChoice.HEXAGON));
+        // E se la riga nuova ha un dispositivo diverso la vecchia resta accanto: conta la nuova.
+        TalosLocalProfile gpuPromossaOra = new TalosLocalProfile(id, "opencl", "GPUOpenCL-2",
+                TalosBackendChoice.Outcome.CORRECT, 700L, 2L, TalosLocalProfile.Level.Q1, 20.0, 300.0, 20_000L,
+                TalosLlamaProbe.metroId());
+        assertFalse(TalosLlamaProbe.bocciaturaDaRimisurare(
+                java.util.Arrays.asList(gpuBocciata, gpuPromossaOra), byteLfm, TalosBackendChoice.OPENCL));
+
+        String sorgente = new String(java.nio.file.Files.readAllBytes(
+                new java.io.File("src/main/java/ai/talos/TalosLlamaPlugin.java").toPath()),
+                java.nio.charset.StandardCharsets.UTF_8);
+        assertTrue(sorgente.contains("gpuWanted = gpuWanted || gpuDaRimisurare;"));
+        assertTrue(sorgente.contains("npuWanted = npuWanted || npuDaRimisurare;"));
+        assertTrue(sorgente.contains("cpuNeeded = cpuNeeded || cpuDaRimisurare;"));
+        // Il cancello si decide DOPO la rimisura: altrimenti `already-proven` esce prima.
+        assertTrue(sorgente.indexOf("npuWanted = npuWanted || npuDaRimisurare;")
+                < sorgente.indexOf("return result.put(\"reason\", \"already-proven\");"));
+        assertTrue("la CPU valida non rigira per rimisurare solo un acceleratore",
+                sorgente.contains("attempt < MAX_PROBE_ATTEMPTS && cpuNeeded && !cpuRecorded"));
+    }
+
+    /**
+     * PROB-14 — revisione avversaria del 22/10/2026, rilievo 10. La CPU girava
+     * solo con {@code cpuNeeded}, che guarda le evidenze del DISPOSITIVO: un
+     * modello con un profilo GPU o NPU ma senza il suo profilo CPU (la CPU era
+     * uscita INCONCLUSIVE, calore o tempo, e non aveva scritto righe) restava
+     * senza riferimento CPU per sempre, perche' le evidenze CPU di un ALTRO
+     * modello bastavano a dire «gia' misurata». ⇒ La CPU gira se manca il
+     * profilo CPU di QUESTO modello.
+     */
+    @Test
+    public void prob14LaCpuGiraSeMancaIlProfiloCpuDiQuestoModello() throws java.io.IOException {
+        long byteLfm = 1_620_000_000L;
+        TalosLocalProfileIdentity id = new TalosLocalProfileIdentity("v0.7.0", "lfm", byteLfm, 35, "fp");
+        TalosLocalProfile gpuValida = new TalosLocalProfile(id, "opencl", "GPUOpenCL",
+                TalosBackendChoice.Outcome.CORRECT, 700L, 1L, TalosLocalProfile.Level.Q1, 20.0, 300.0, 20_000L,
+                TalosLlamaProbe.metroId());
+        TalosLocalProfile cpuValida = new TalosLocalProfile(id, "cpu", null,
+                TalosBackendChoice.Outcome.CORRECT, 1_100L, 1L, TalosLocalProfile.Level.Q1, 11.0, 70.0, 2_000L,
+                TalosLlamaProbe.metroId());
+
+        assertFalse("il modello ha un profilo: il ramo `profiloMancante` non scatta",
+                TalosLlamaProbe.profileMissingFor(java.util.Collections.singletonList(gpuValida), byteLfm));
+        assertTrue("ma il suo profilo CPU manca",
+                TalosLlamaProbe.profiloDelMotoreMancante(
+                        java.util.Collections.singletonList(gpuValida), byteLfm, TalosBackendChoice.CPU));
+        assertFalse("AL CONTRARIO — con la CPU di questo modello misurata non rigira",
+                TalosLlamaProbe.profiloDelMotoreMancante(
+                        java.util.Arrays.asList(gpuValida, cpuValida), byteLfm, TalosBackendChoice.CPU));
+        assertFalse("dimensione ignota: nel dubbio non si riparte",
+                TalosLlamaProbe.profiloDelMotoreMancante(java.util.Collections.emptyList(), 0L, TalosBackendChoice.CPU));
+
+        String sorgente = new String(java.nio.file.Files.readAllBytes(
+                new java.io.File("src/main/java/ai/talos/TalosLlamaPlugin.java").toPath()),
+                java.nio.charset.StandardCharsets.UTF_8);
+        assertTrue(sorgente.contains("cpuNeeded = cpuNeeded || cpuSenzaProfilo;"));
+        assertTrue("prima del cancello `already-proven`",
+                sorgente.indexOf("cpuNeeded = cpuNeeded || cpuSenzaProfilo;")
+                        < sorgente.indexOf("return result.put(\"reason\", \"already-proven\");"));
+    }
+
+    /**
+     * PROB-15 — revisione avversaria del 22/10/2026, rilievo 11. Una rimisura
+     * che esce INCONCLUSIVE (calore, tempo) o che non apre non scrive righe:
+     * la bocciatura del metro vecchio restava, e la qualificazione la
+     * rimisurava a OGNI giro — compilazione OpenCL compresa. ⇒ Un tentativo
+     * per metro, per file, per motore: si segna quando la rimisura e' girata
+     * davvero (non interrotta dalla persona), e il segno porta il metro dentro
+     * la chiave, cosi' un metro nuovo riapre la domanda.
+     */
+    @Test
+    public void prob15LaRimisuraSiTentaUnaVoltaPerMetro() throws java.io.IOException {
+        long byteLfm = 1_620_000_000L;
+        TalosLocalProfileIdentity id = new TalosLocalProfileIdentity("v0.7.0", "lfm", byteLfm, 35, "fp");
+        TalosLocalProfile gpuBocciata = new TalosLocalProfile(id, "opencl", "GPUOpenCL",
+                TalosBackendChoice.Outcome.FAILED, 900L, 1L, TalosLocalProfile.Level.Q1, 0, 300.0, 20_000L);
+        java.util.List<TalosLocalProfile> pad = java.util.Collections.singletonList(gpuBocciata);
+        java.util.Set<String> nessuna = java.util.Collections.emptySet();
+        java.util.Set<String> giaTentata = java.util.Collections.singleton(
+                TalosLlamaProbe.chiaveDellaRimisura(byteLfm, TalosBackendChoice.OPENCL));
+
+        assertTrue(TalosLlamaProbe.bocciaturaDaRimisurare(pad, byteLfm, TalosBackendChoice.OPENCL, nessuna));
+        assertFalse("gia' tentata con questo metro: non si rimisura a ogni qualificazione",
+                TalosLlamaProbe.bocciaturaDaRimisurare(pad, byteLfm, TalosBackendChoice.OPENCL, giaTentata));
+        assertTrue("il segno e' per motore: l'NPU dello stesso file ha il suo",
+                TalosLlamaProbe.chiaveDellaRimisura(byteLfm, TalosBackendChoice.HEXAGON)
+                        .equals(TalosLlamaProbe.chiaveDellaRimisura(byteLfm, TalosBackendChoice.HEXAGON))
+                        && !giaTentata.contains(TalosLlamaProbe.chiaveDellaRimisura(byteLfm, TalosBackendChoice.HEXAGON)));
+        assertTrue("il metro sta nella chiave: un metro nuovo riapre la domanda",
+                TalosLlamaProbe.chiaveDellaRimisura(byteLfm, TalosBackendChoice.OPENCL).contains(TalosLlamaProbe.metroId()));
+
+        String sorgente = new String(java.nio.file.Files.readAllBytes(
+                new java.io.File("src/main/java/ai/talos/TalosLlamaPlugin.java").toPath()),
+                java.nio.charset.StandardCharsets.UTF_8);
+        // Le tre domande leggono i tentativi gia' fatti...
+        assertTrue(sorgente.contains("profiliSalvati, byteDelFile, TalosBackendChoice.CPU, rimisureTentate)"));
+        assertTrue(sorgente.contains("profiliSalvati, byteDelFile, TalosBackendChoice.OPENCL, rimisureTentate)"));
+        assertTrue(sorgente.contains("profiliSalvati, byteDelFile, TalosBackendChoice.HEXAGON, rimisureTentate)"));
+        // ...e ogni rimisura girata davvero si segna, mai quella interrotta dalla persona.
+        assertTrue(sorgente.contains("if (cpuDaRimisurare && !qualificationCancelled.get()) segnaRimisura(context, byteDelFile, TalosBackendChoice.CPU);"));
+        assertTrue(sorgente.contains("if (gpuDaRimisurare && !qualificationCancelled.get()) segnaRimisura(context, byteDelFile, TalosBackendChoice.OPENCL);"));
+        assertTrue(sorgente.contains("if (npuDaRimisurare && npuWanted && !qualificationCancelled.get()) segnaRimisura(context, byteDelFile, TalosBackendChoice.HEXAGON);"));
     }
 
     /**

@@ -57,7 +57,7 @@ public class TalosLlamaPlugin extends Plugin {
     /** How often the generating thread is asked what it has produced. */
     private static final long POLL_INTERVAL_MS = 90L;
 
-    private final ExecutorService worker = Executors.newSingleThreadExecutor();
+    private final ExecutorService worker = TalosMotoreCondiviso.ATTORE;
 
     /*
      * ⭐ Punto 2 (01/10/2026) — i programmi della GPU pronti prima del primo uso ({@link TalosGpuPreparation}).
@@ -172,7 +172,8 @@ public class TalosLlamaPlugin extends Plugin {
      * corso di finire il token che ha per le mani.
      */
     private static final long CHIUSURA_MAX_MS = 1500L;
-    private final AtomicReference<TalosLlamaEngine> openEngine = new AtomicReference<>(null);
+    // ⛔ Condiviso col Codice (`TalosMotoreOspite`): un solo motore aperto per telefono
+    private final AtomicReference<TalosLlamaEngine> openEngine = TalosMotoreCondiviso.MOTORE;
     /**
      * ⛔ D13 (owner, 01/10/2026): «una copia sola». La prova dei motori si
      * interrompe quando la persona scrive (`cancelQualification`), e il motore
@@ -181,7 +182,7 @@ public class TalosLlamaPlugin extends Plugin {
      */
     private final AtomicBoolean qualificationCancelled = new AtomicBoolean(false);
     private final AtomicReference<TalosLlamaEngine> probeEngine = new AtomicReference<>(null);
-    private final AtomicReference<String> openPath = new AtomicReference<>(null);
+    private final AtomicReference<String> openPath = TalosMotoreCondiviso.PERCORSO;
 
     /**
      * ⭐⭐⭐ CON QUALI MANOPOLE DI CARICAMENTO è aperto il modello che c'è ora.
@@ -213,7 +214,7 @@ public class TalosLlamaPlugin extends Plugin {
     private final AtomicReference<String> openBackend = new AtomicReference<>("");
     private final AtomicReference<String> openDevice = new AtomicReference<>("");
     /** True from the moment a generation is accepted until it has finished. */
-    private final AtomicBoolean generating = new AtomicBoolean(false);
+    private final AtomicBoolean generating = TalosMotoreCondiviso.OCCUPATO;
 
     /**
      * ⛔ IL TERZO CRONOMETRO: quanto è costata l'ultima apertura.
@@ -1324,6 +1325,37 @@ public class TalosLlamaPlugin extends Plugin {
      * viene aperto vocab-only dal nativo: nessun tensore, prompt o template
      * sorgente attraversa questo confine.
      */
+    /**
+     * ⛔ CODICE COL MOTORE LOCALE (ledger `LEDGER-CODICE-MOTORE-LOCALE-2026-10-18.md`): ciò che il Codice spinge a r4 per usare il
+     * modello aperto qui — il socket privato dell'endpoint (`TalosMotoreOspite`, avviato la prima volta), la sua chiave, il modello e
+     * la finestra VERA. Senza modello aperto: `{pronto:false}`. Sull'attore, perché legge il motore.
+     */
+    @PluginMethod
+    public void motoreOspite(PluginCall call) {
+        worker.execute(() -> {
+            TalosLlamaEngine engine = openEngine.get();
+            String percorso = openPath.get();
+            JSObject result = new JSObject();
+            if (engine == null || percorso == null) {
+                result.put("pronto", false);
+                call.resolve(result);
+                return;
+            }
+            try {
+                TalosMotoreOspite ospite = TalosMotoreOspite.avvia(getContext());
+                result.put("pronto", true);
+                result.put("socketPath", ospite.socketPath);
+                result.put("chiave", ospite.chiave);
+                result.put("modello", new File(percorso).getName());
+                result.put("nCtx", engine.contextTokens());
+                call.resolve(result);
+            } catch (Exception failure) {
+                android.util.Log.w("TalosLlama", "endpoint del Codice non avviato", failure);
+                call.reject("TALOS_MOTORE_OSPITE_FAILED");
+            }
+        });
+    }
+
     @PluginMethod
     public void templateCapabilities(PluginCall call) {
         String path = call.getString("path");
@@ -1622,14 +1654,15 @@ public class TalosLlamaPlugin extends Plugin {
          */
         TalosLlamaEngine vivo = openEngine.get();
         if (vivo != null) vivo.cancel();
-        worker.execute(this::closeOpenModel);
-        worker.shutdown();
+        // ⛔ L'attore è CONDIVISO col Codice (`TalosMotoreCondiviso.ATTORE`) e sopravvive a questa Activity: non si spegne, si
+        // aspetta la sola chiusura del modello, con lo stesso tetto di prima. Spegnerlo lascerebbe la prossima Activity — e il
+        // Codice — con un esecutore che rifiuta tutto.
+        java.util.concurrent.Future<?> chiusura = worker.submit(this::closeOpenModel);
         try {
-            if (!worker.awaitTermination(CHIUSURA_MAX_MS, java.util.concurrent.TimeUnit.MILLISECONDS)) {
-                worker.shutdownNow();
-            }
+            chiusura.get(CHIUSURA_MAX_MS, java.util.concurrent.TimeUnit.MILLISECONDS);
+        } catch (java.util.concurrent.TimeoutException | java.util.concurrent.ExecutionException scaduta) {
+            // Il processo sta forse morendo: un modello non chiuso costa meno di un'app che si pianta chiudendosi.
         } catch (InterruptedException interrotto) {
-            worker.shutdownNow();
             Thread.currentThread().interrupt();
         }
     }
@@ -2127,6 +2160,36 @@ public class TalosLlamaPlugin extends Plugin {
          * dell'owner, non «la GPU perché c'è».
          */
         boolean profiloMancante = profiloAssentePerQuestoModello(context, path);
+        /*
+         * ⭐ PROB-13 (22/10/2026) — e PER MOTORE: una bocciatura di QUESTO file
+         * data da un altro metro si rimisura, anche quando il modello ha gia'
+         * un profilo valido su un altro motore e il telefono ha gia' le sue
+         * evidenze. Sul Pad, LFM2.5 Q4_K_M: cpu VALID, opencl e hexagon WRONG
+         * del prompt grezzo, e qui usciva `already-proven` per sempre. La
+         * regola vive in `TalosLlamaProbe.bocciaturaDaRimisurare`.
+         */
+        java.util.List<TalosLocalProfile> profiliSalvati =
+                java.util.Arrays.asList(TalosLocalProfileStore.load(context));
+        long byteDelFile = path == null ? 0L : new File(path).length();
+        // ⭐ PROB-15 (rilievo 11): una rimisura per metro, per file, per motore — segnata sotto quando gira davvero.
+        java.util.Set<String> rimisureTentate = rimisureTentate(context);
+        boolean cpuDaRimisurare = TalosLlamaProbe.bocciaturaDaRimisurare(
+                profiliSalvati, byteDelFile, TalosBackendChoice.CPU, rimisureTentate);
+        boolean gpuDaRimisurare = openclCompiled && TalosLlamaProbe.bocciaturaDaRimisurare(
+                profiliSalvati, byteDelFile, TalosBackendChoice.OPENCL, rimisureTentate);
+        boolean npuDaRimisurare = hexagonCompiled && TalosLlamaProbe.bocciaturaDaRimisurare(
+                profiliSalvati, byteDelFile, TalosBackendChoice.HEXAGON, rimisureTentate) && formatoPerNpu(path);
+        /*
+         * ⭐ PROB-14 (rilievo 10): la CPU gira anche quando manca il profilo CPU
+         * di QUESTO modello — le evidenze CPU del dispositivo, scritte da un
+         * altro modello, non gli danno il riferimento che il selettore usa.
+         */
+        boolean cpuSenzaProfilo = TalosLlamaProbe.profiloDelMotoreMancante(
+                profiliSalvati, byteDelFile, TalosBackendChoice.CPU);
+        cpuNeeded = cpuNeeded || cpuDaRimisurare;
+        cpuNeeded = cpuNeeded || cpuSenzaProfilo;
+        gpuWanted = gpuWanted || gpuDaRimisurare;
+        npuWanted = npuWanted || npuDaRimisurare;
         // ⛔ Una riga sola, e dice TUTTO cio' che decide: senza, «gia' misurato»
         // e' un verdetto senza premesse — e per scoprire perche' non girava
         // sarebbe servito indovinare.
@@ -2135,7 +2198,10 @@ public class TalosLlamaPlugin extends Plugin {
                 + " cpuNeeded=" + cpuNeeded + " gpuWanted=" + gpuWanted
                 + " openclCompiled=" + openclCompiled
                 + " npuWanted=" + npuWanted + " hexagonCompiled=" + hexagonCompiled
-                + " profiloMancante=" + profiloMancante);
+                + " profiloMancante=" + profiloMancante
+                + " cpuSenzaProfilo=" + cpuSenzaProfilo
+                + " daRimisurare=" + (cpuDaRimisurare ? "cpu " : "") + (gpuDaRimisurare ? "opencl " : "")
+                + (npuDaRimisurare ? "hexagon" : ""));
 
         if (!cpuNeeded && !gpuWanted && !npuWanted && !profiloMancante) {
             return result.put("reason", "already-proven");
@@ -2179,18 +2245,18 @@ public class TalosLlamaPlugin extends Plugin {
         // instabili sullo stesso telefono, stesso giorno. ⇒ pochi tentativi
         // interni, non uno solo: ogni corsa scalda il chip un po' di più.
         ProbeRun cpuRun = null;
-        String cpuText = null;
         boolean cpuRecorded = false;
         boolean cpuInconclusive = false;
-        for (int attempt = 0; attempt < MAX_PROBE_ATTEMPTS && !cpuRecorded && !qualificationCancelled.get(); attempt += 1) {
+        // ⛔ PROB-13: la CPU gira solo se serve — rimisurare un acceleratore non riscrive una CPU gia' valida.
+        for (int attempt = 0; attempt < MAX_PROBE_ATTEMPTS && cpuNeeded && !cpuRecorded && !qualificationCancelled.get(); attempt += 1) {
             cpuRun = runOne(path, 0);
             if (cpuRun == null) break;
-            cpuText = cpuRun.text;
-            boolean cpuOk = TalosLlamaProbe.referenceIsUsable(cpuText);
+            boolean cpuOk = TalosLlamaProbe.compitoSvolto(cpuRun.lettura);
             cpuRecorded = recordIfConclusive(
                     context, TalosBackendChoice.CPU, driver, cpuRun, cpuOk, identitaCorrente);
             cpuInconclusive = !cpuRecorded;
         }
+        if (cpuDaRimisurare && !qualificationCancelled.get()) segnaRimisura(context, byteDelFile, TalosBackendChoice.CPU);
         result.put("probedCpu", cpuRecorded);
         result.put("cpuInconclusive", cpuInconclusive);
 
@@ -2222,12 +2288,13 @@ public class TalosLlamaPlugin extends Plugin {
             for (int attempt = 0; attempt < MAX_PROBE_ATTEMPTS && !gpuRecorded && !qualificationCancelled.get(); attempt += 1) {
                 ProbeRun gpuRun = runOneTargeted(path, "OpenCL");
                 if (gpuRun == null) break;
-                boolean gpuOk = TalosLlamaProbe.answerIsCorrect(gpuRun.text);
+                boolean gpuOk = TalosLlamaProbe.compitoSvolto(gpuRun.lettura);
                 gpuRecorded = recordIfConclusive(
                         context, TalosBackendChoice.OPENCL, driver, gpuRun, gpuOk, identitaCorrente);
                 gpuInconclusive = !gpuRecorded;
             }
         }
+        if (gpuDaRimisurare && !qualificationCancelled.get()) segnaRimisura(context, byteDelFile, TalosBackendChoice.OPENCL);
         result.put("probedGpu", gpuRecorded);
         result.put("gpuInconclusive", gpuInconclusive);
 
@@ -2248,12 +2315,13 @@ public class TalosLlamaPlugin extends Plugin {
             for (int attempt = 0; attempt < MAX_PROBE_ATTEMPTS && !npuRecorded && !qualificationCancelled.get(); attempt += 1) {
                 ProbeRun npuRun = runOneTargeted(path, "HTP");
                 if (npuRun == null) break;
-                boolean npuOk = TalosLlamaProbe.answerIsCorrect(npuRun.text);
+                boolean npuOk = TalosLlamaProbe.compitoSvolto(npuRun.lettura);
                 npuRecorded = recordIfConclusive(
                         context, TalosBackendChoice.HEXAGON, driver, npuRun, npuOk, identitaCorrente);
                 npuInconclusive = !npuRecorded;
             }
         }
+        if (npuDaRimisurare && npuWanted && !qualificationCancelled.get()) segnaRimisura(context, byteDelFile, TalosBackendChoice.HEXAGON);
         result.put("probedNpu", npuRecorded);
         result.put("npuInconclusive", npuInconclusive);
 
@@ -2276,6 +2344,23 @@ public class TalosLlamaPlugin extends Plugin {
      * misurare (`length() == 0`) non deve far ripartire il sondaggio a ogni
      * tocco. Un dubbio non è un «manca».
      */
+    /**
+     * ⭐ PROB-15 (revisione del 22/10/2026, rilievo 11) — le rimisure gia' tentate, una per metro, per file, per motore
+     * ({@link TalosLlamaProbe#chiaveDellaRimisura}). Un archivio a parte e piccolo: una chiave per tentativo.
+     */
+    private static final String PREFS_RIMISURE = "talos.qualify.rimisure";
+
+    private static java.util.Set<String> rimisureTentate(android.content.Context context) {
+        return new java.util.HashSet<>(context.getSharedPreferences(PREFS_RIMISURE, android.content.Context.MODE_PRIVATE)
+                .getAll().keySet());
+    }
+
+    /** Segnata solo quando la rimisura e' girata davvero: una interrotta dalla persona (D13) si rifara'. */
+    private static void segnaRimisura(android.content.Context context, long modelBytes, String backend) {
+        context.getSharedPreferences(PREFS_RIMISURE, android.content.Context.MODE_PRIVATE).edit()
+                .putBoolean(TalosLlamaProbe.chiaveDellaRimisura(modelBytes, backend), true).apply();
+    }
+
     private static boolean profiloAssentePerQuestoModello(
             android.content.Context context, String path) {
         long dimensione = path == null ? 0L : new java.io.File(path).length();
@@ -2378,6 +2463,23 @@ public class TalosLlamaPlugin extends Plugin {
      * nome che non si risolve fa FALLIRE l'apertura invece di ripiegare in
      * silenzio — che e' esattamente la garanzia che serve a una misura.
      */
+    /**
+     * ⭐ PROB-11 (22/10/2026) — la prova parla al modello col SUO template e col
+     * ragionamento spento: `chat_template_kwargs.enable_thinking = false` di
+     * `llama-server`, la stessa richiesta che la chat fa gia'. Sul motore gia'
+     * aperto: nessuna seconda lettura del GGUF. Un file senza template riceve
+     * il prompt grezzo di prima ({@link TalosLlamaProbe#promptDellaProva}).
+     */
+    private static String promptDellaProva(TalosLlamaEngine engine) {
+        return TalosLlamaProbe.promptDellaProva(engine.chatPrompt(
+                new String[] {"user"}, new String[] {TalosLlamaProbe.PROMPT}, null, false));
+    }
+
+    /** PROB-07: il testo della prova letto dal parser del template — vedetta, si chiama mentre il motore genera. */
+    private static TalosLlamaEngine.LettoreDellaProva letturaDellaProva(TalosLlamaEngine engine) {
+        return testo -> TalosLlamaProbe.Lettura.dalParser(testo, engine.parseReplyPartial(testo));
+    }
+
     private ProbeRun runOneTargeted(String path, String backendName) {
         final long inizioApertura = System.nanoTime();
         TalosLlamaEngine.OpenAttempt attempt = TalosLlamaEngine.tryOpen(
@@ -2392,10 +2494,11 @@ public class TalosLlamaPlugin extends Plugin {
         try {
             if (qualificationCancelled.get()) return null;
             TalosLlamaEngine.Run run = engine.run(
-                    TalosLlamaProbe.PROMPT, TalosLlamaProbe.TOKENS,
-                    () -> TalosThermal.read(getContext()), TalosLlamaEngine.Mode.BENCHMARK);
+                    promptDellaProva(engine), TalosLlamaProbe.TOKENS,
+                    () -> TalosThermal.read(getContext()), TalosLlamaEngine.Mode.BENCHMARK,
+                    letturaDellaProva(engine));
             if (run == null) return null;
-            return new ProbeRun(run.text, run.samples, run.ttftMs,
+            return new ProbeRun(run.text, run.lettura, run.samples, run.ttftMs,
                     backendDeviceDi(engine), engine.engineAborted(),
                     openMs, velocitaDiLettura(engine));
         } catch (InterruptedException interrotta) {
@@ -2472,6 +2575,9 @@ public class TalosLlamaPlugin extends Plugin {
                 + " pp=" + String.format(java.util.Locale.ROOT, "%.1f", run.prefillTokPerSec)
                 + " open=" + run.openMs
                 + " registrato=" + conclusive
+                // PROB-07: che cosa ha risposto, quando non e' VALID — la prova e' un testo fisso, mai della persona.
+                + (measured.verdict == TalosBenchmarkHarness.Verdict.VALID
+                        ? "" : " risposta=" + TalosLlamaProbe.estratto(run.lettura))
                 + (conclusive ? "" : " campioni=" + samplesDump));
         if (!conclusive) return false;
         TalosBackendEvidenceStore.record(context, TalosLlamaProbe.evidenceOf(backend, driver, measured));
@@ -2493,7 +2599,9 @@ public class TalosLlamaPlugin extends Plugin {
                     // loggato finora — mai una seconda misura per questo.
                     measured.tokensPerSecond,
                     // D-53: lettura come velocita', e costo dell'apertura.
-                    run.prefillTokPerSec, run.openMs));
+                    run.prefillTokPerSec, run.openMs,
+                    // PROB-12: il metro che ha dato questo verdetto.
+                    TalosLlamaProbe.metroId()));
         }
         return true;
     }
@@ -2594,13 +2702,14 @@ public class TalosLlamaPlugin extends Plugin {
         try {
             if (qualificationCancelled.get()) return null;
             TalosLlamaEngine.Run run = engine.run(
-                    TalosLlamaProbe.PROMPT, TalosLlamaProbe.TOKENS,
-                    () -> TalosThermal.read(getContext()), TalosLlamaEngine.Mode.BENCHMARK);
+                    promptDellaProva(engine), TalosLlamaProbe.TOKENS,
+                    () -> TalosThermal.read(getContext()), TalosLlamaEngine.Mode.BENCHMARK,
+                    letturaDellaProva(engine));
             if (run == null) return null;
             // P0-2: va letto ORA — l'handle nativo muore nel finally qui
             // sotto, e uno snapshot chiesto dopo troverebbe solo un motore
             // già chiuso.
-            return new ProbeRun(run.text, run.samples, run.ttftMs,
+            return new ProbeRun(run.text, run.lettura, run.samples, run.ttftMs,
                     backendDeviceDi(engine), engine.engineAborted(),
                     openMs, velocitaDiLettura(engine));
         } catch (InterruptedException interrotta) {
@@ -2633,6 +2742,8 @@ public class TalosLlamaPlugin extends Plugin {
 
     private static final class ProbeRun {
         final String text;
+        /** PROB-07: la risposta separata dal ragionamento, su cui si giudica il compito. */
+        final TalosLlamaProbe.Lettura lettura;
         final TalosBenchmarkHarness.Sample[] samples;
         final long ttftMs;
         final String backendDevice;
@@ -2645,10 +2756,12 @@ public class TalosLlamaPlugin extends Plugin {
         final long openMs;
         final double prefillTokPerSec;
 
-        ProbeRun(String text, TalosBenchmarkHarness.Sample[] samples, long ttftMs,
+        ProbeRun(String text, TalosLlamaProbe.Lettura lettura,
+                 TalosBenchmarkHarness.Sample[] samples, long ttftMs,
                  String backendDevice, boolean abortitaDalMotore,
                  long openMs, double prefillTokPerSec) {
             this.text = text;
+            this.lettura = lettura == null ? TalosLlamaProbe.Lettura.dalParser(text, null) : lettura;
             this.samples = samples;
             this.ttftMs = ttftMs;
             this.backendDevice = backendDevice;

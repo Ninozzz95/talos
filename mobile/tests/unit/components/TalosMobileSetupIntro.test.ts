@@ -189,7 +189,7 @@ describe('what TALOS says it is, before asking for anything', () => {
     it('names every thing the owner asked to be named', async () => {
         const wrapper = await mountStory()
         const text = wrapper.text()
-        expect(text).toMatch(/encrypted on this phone/i) // privacy, local-first
+        expect(text).toMatch(/encrypted on this device/i) // privacy, local-first
         expect(text).toMatch(/download a model/i) // models on the device
         expect(text).toMatch(/memory/i) // a memory you can argue with
         expect(text).toMatch(/from inside the conversation/i) // changed from chat
@@ -252,7 +252,7 @@ describe('what TALOS says it is, before asking for anything', () => {
          */
         const voci = wrapper.findAll('li').map((node) => node.text())
         const built = voci.filter((text) =>
-            /encrypted on this phone|download a model|acts inside|verified state|wake word|remembers what you tell|second model|Library/i.test(text))
+            /encrypted on this device|download a model|acts inside|verified state|wake word|remembers what you tell|second model|Library/i.test(text))
         expect(built.length).toBeGreaterThanOrEqual(6)
         // Niente di NON costruito raccontato come se ci fosse.
         expect(built.join(' ')).not.toMatch(/zethos|encrypted sync/i)

@@ -41,23 +41,57 @@ public final class TalosDoneNotification {
     public static final String EXTRA_ROUTE = "ai.talos.extra.ROUTE";
 
     /**
+     * Revisione R-M5a bis (11), 21/10/2026: ogni notifica che porta una rotta porta anche un nonce. Con `singleTask` e il processo
+     * morto Android ricrea l'attività con l'intent ORIGINALE (rotta compresa: il `removeExtra` era solo in memoria); il ponte
+     * ricorda i nonce consumati e non riapre una pagina già aperta.
+     */
+    public static final String EXTRA_NONCE = "ai.talos.extra.ROUTE_NONCE";
+    static final int NONCE_RICORDATI = 64;
+
+    /** I nonce consumati (separati da virgole) dopo `nonce`; `null` se era già consumato. Senza nonce: si segue la rotta. */
+    static String consumaNonce(String salvate, String nonce) {
+        String base = salvate == null ? "" : salvate;
+        if (nonce == null || nonce.isEmpty()) return base;
+        java.util.List<String> elenco = new java.util.ArrayList<>();
+        for (String n : base.split(",")) if (!n.isEmpty()) elenco.add(n);
+        if (elenco.contains(nonce)) return null;
+        elenco.add(nonce);
+        while (elenco.size() > NONCE_RICORDATI) elenco.remove(0);
+        return String.join(",", elenco);
+    }
+
+    /** Vero se l'intent porta un nonce già consumato (e allora la sua rotta non va seguita); altrimenti lo segna consumato. */
+    public static boolean giaConsumata(Context context, Intent intent) {
+        if (intent == null) return false;
+        android.content.SharedPreferences p = context.getSharedPreferences("talos.route", Context.MODE_PRIVATE);
+        String dopo = consumaNonce(p.getString("nonce", ""), intent.getStringExtra(EXTRA_NONCE));
+        if (dopo == null) return true;
+        p.edit().putString("nonce", dopo).apply();
+        return false;
+    }
+
+    /**
      * Deliberately not the download bar's id. A notification cannot change
      * channel in place, so the outcome is a NEW post and the bar is cancelled —
      * reusing the id would silently keep it on the quiet channel.
      */
-    public static final int RESEARCH_ID = 4801;
-    public static final int TRANSFER_ID = 4802;
+    public static final int RESEARCH_ID = TalosNotificationIds.RESEARCH;
+    public static final int TRANSFER_ID = TalosNotificationIds.TRANSFER_DONE_LEGACY;
 
     private TalosDoneNotification() {}
 
     public static void ensureChannel(Context context) {
+        ensureChannel(context, false);
+    }
+
+    /** `rinomina` solo da `TalosNotificationCentre.refreshNames` (lingua dell'app); gli altri creano soltanto se manca (N0, D-N0-6). */
+    static void ensureChannel(Context context, boolean rinomina) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
         NotificationManager manager = context.getSystemService(NotificationManager.class);
-        if (manager == null || manager.getNotificationChannel(CHANNEL_ID) != null) return;
-
+        if (manager == null || (!rinomina && manager.getNotificationChannel(CHANNEL_ID) != null)) return;
         NotificationChannel channel = new NotificationChannel(
-                CHANNEL_ID, "Finished work", NotificationManager.IMPORTANCE_DEFAULT);
-        channel.setDescription("When a research or a download you were waiting for has finished.");
+                CHANNEL_ID, context.getString(R.string.talos_canale_finiti_nome), NotificationManager.IMPORTANCE_DEFAULT);
+        channel.setDescription(context.getString(R.string.talos_canale_finiti_descrizione));
         channel.setShowBadge(true);
         manager.createNotificationChannel(channel);
     }
@@ -75,7 +109,10 @@ public final class TalosDoneNotification {
         // rebuilt: recreating the activity would drop the WebView, and with it
         // every research still in flight.
         open.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-        if (route != null && !route.isEmpty()) open.putExtra(EXTRA_ROUTE, route);
+        if (route != null && !route.isEmpty()) {
+            open.putExtra(EXTRA_ROUTE, route);
+            open.putExtra(EXTRA_NONCE, java.util.UUID.randomUUID().toString());
+        }
 
         PendingIntent pending = PendingIntent.getActivity(
                 context,

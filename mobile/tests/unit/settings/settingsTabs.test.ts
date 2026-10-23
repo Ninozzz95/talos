@@ -34,7 +34,9 @@ describe('TALOS mobile settings registry', () => {
             .map((tab) => tab.id)
             .filter((id) => !(id in MOBILE_ONLY))
         // ⭐ CAMBIATO APPOSTA il 01/10/2026: entrano le Note legali (14).
-        expect(desktopIds).toHaveLength(14)
+        // ⭐ CAMBIATO APPOSTA il 22/10/2026: entrano gli Aggiornamenti (15) — come il backup, NON fra i mobile-only: il desktop li
+        // ha (dentro «Account, Doctor e backup»), e finché non sono una categoria sua questa riga è il ticket di parità.
+        expect(desktopIds).toHaveLength(15)
         for (const id of Object.keys(MOBILE_ONLY)) {
             expect(TALOS_MOBILE_SETTINGS_TABS.some((tab) => tab.id === id)).toBe(true)
         }
@@ -85,6 +87,7 @@ describe('TALOS mobile settings registry', () => {
             'backup',
             'account',
             'legal',
+            'updates',
             'agent_tools',
             'system',
         ])
@@ -103,6 +106,7 @@ describe('TALOS mobile settings registry', () => {
             'Backup and restore',
             'Account',
             'Legal notices',
+            'Updates',
             'Agent Tools',
             'System',
         ])
@@ -125,6 +129,7 @@ describe('TALOS mobile settings registry', () => {
             // 2026-08-10: Voice joined them, ed e' un pannello locale vero —
             // legge le voci del motore del telefono e ne applica una.
             // 2026-10-01: Legal notices, pannello locale vero (elenchi generati + condizioni Qualcomm).
-            .toEqual(['models', 'ai_defaults', 'search', 'browser', 'appearance', 'voice', 'language', 'privacy', 'backup', 'account', 'legal', 'agent_tools'])
+            // 2026-10-22: Updates, pannello locale vero (stato dal plugin nativo dell'aggiornamento automatico).
+            .toEqual(['models', 'ai_defaults', 'search', 'browser', 'appearance', 'voice', 'language', 'privacy', 'backup', 'account', 'legal', 'updates', 'agent_tools'])
     })
 })

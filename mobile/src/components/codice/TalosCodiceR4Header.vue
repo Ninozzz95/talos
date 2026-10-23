@@ -12,10 +12,14 @@
  * Il foglio delle azioni è lo stesso di «Azioni messaggio» (`TalosMobileComposerSheet`): dialogo modale, fuoco intrappolato,
  * chiusura col gesto e col pulsante.
  */
-import { ref } from 'vue'
+import { defineAsyncComponent, ref } from 'vue'
 import { ArrowLeft, ChevronDown, Command, Download, MoreHorizontal, PanelRight, Play, Share2, Shrink, Stethoscope, Zap } from '@lucide/vue'
 import TalosMobileComposerSheet from '@/components/chat/TalosMobileComposerSheet.vue'
+import { talosSegnaleAggiornamento } from '@/lib/updates/segnaleAggiornamento'
 import './codiceR4.css'
+
+// il segnale dell'aggiornamento anche qui: il Codice copre l'intestazione dell'app (owner 22/10, 1)
+const TalosMobileUpdateSignal = defineAsyncComponent(() => import('@/components/updates/TalosMobileUpdateSignal.vue'))
 
 defineProps<{
     titolo: string
@@ -25,6 +29,8 @@ defineProps<{
     pannelloAperto?: boolean
     /** K3-C Esporta e Condividi: c'è una sessione su r4 da esportare (prima del primo messaggio no). */
     conSessione?: boolean
+    /** ⛔ RA-11 (revisione avversariale R-M4, 21/10/2026): sulla sessione di un PC Esporta e Condividi si fanno dal PC; qui il perché. */
+    soloDalPc?: string
 }>()
 const emit = defineEmits<{ indietro: [], riprendi: [], compatta: [], dettagli: [], hook: [], comandi: [], doctor: [], pannello: [], esporta: [], condividi: [] }>()
 
@@ -107,6 +113,7 @@ function scegli(azione: 'riprendi' | 'compatta' | 'hook' | 'doctor' | 'esporta' 
         >
             <Shrink class="size-5" aria-hidden="true" />
         </button>
+        <TalosMobileUpdateSignal v-if="talosSegnaleAggiornamento.visibile" />
         <!-- K3-C3a: ⌘ in vista su tutte le larghezze (owner 15/10: «Tre in vista + Altro» sul telefono), dopo ▷ e ⊞ come oggi. -->
         <button
             type="button"
@@ -203,11 +210,15 @@ function scegli(azione: 'riprendi' | 'compatta' | 'hook' | 'doctor' | 'esporta' 
                         type="button"
                         data-testid="talos-codice-r4-esporta"
                         class="talos-codice-r4-azione"
-                        :disabled="!conSessione"
+                        :disabled="!conSessione || Boolean(soloDalPc)"
                         @click="scegli('esporta')"
                     >
                         <Download class="talos-codice-r4-azione-icona" aria-hidden="true" />
-                        <span>{{ $t('harness.r4CmdExport') }}</span>
+                        <span v-if="soloDalPc" class="talos-codice-r4-azione-testo">
+                            <span>{{ $t('harness.r4CmdExport') }}</span>
+                            <small>{{ soloDalPc }}</small>
+                        </span>
+                        <span v-else>{{ $t('harness.r4CmdExport') }}</span>
                     </button>
                 </li>
                 <li>
@@ -215,13 +226,13 @@ function scegli(azione: 'riprendi' | 'compatta' | 'hook' | 'doctor' | 'esporta' 
                         type="button"
                         data-testid="talos-codice-r4-condividi"
                         class="talos-codice-r4-azione"
-                        :disabled="!conSessione"
+                        :disabled="!conSessione || Boolean(soloDalPc)"
                         @click="scegli('condividi')"
                     >
                         <Share2 class="talos-codice-r4-azione-icona" aria-hidden="true" />
                         <span class="talos-codice-r4-azione-testo">
                             <span>{{ $t('harness.r4CmdShare') }}</span>
-                            <small>{{ $t('harness.r4CmdShareHint') }}</small>
+                            <small>{{ soloDalPc || $t('harness.r4CmdShareHint') }}</small>
                         </span>
                     </button>
                 </li>

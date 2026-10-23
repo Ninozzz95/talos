@@ -1,4 +1,5 @@
 import { talosFraseDaDire } from '@/lib/agent/voceDelPilota'
+import { talosCurrentLocale } from '@/i18n'
 import { talosLeggiOrdinale, talosNesimoInLista } from '@/lib/agent/trovaElemento'
 import { talosTracciaFuori } from '@/lib/device/traccia'
 import {
@@ -389,14 +390,16 @@ export async function talosGuidaLoSchermo(
 }
 
 /**
- * Come si racconta la fine a una PERSONA, in italiano.
+ * Come si racconta la fine a una PERSONA, nella lingua dell'app (22/10/2026: prima solo in italiano, e chi usava TALOS in inglese
+ * sentiva l'italiano dall'altoparlante — regola dell'owner «ogni parola in inglese e italiano», PILOTA-LINGUE-01).
  *
  * ⛔ Sta qui e non in un componente perché la corsa può finire mentre TALOS non
  * è a schermo — sta pilotando un'altra app — e allora questa frase è l'unica
  * cosa che la persona sente. Un `motivo` tecnico letto ad alta voce non lo
  * capirebbe nessuno.
  */
-export function talosFraseDiFine(fine: TalosFineCorsa): string {
+export function talosFraseDiFine(fine: TalosFineCorsa, lingua: string = talosCurrentLocale()): string {
+    const f = /^it(?:-|$)/iu.test(lingua) ? FRASI_DI_FINE.it : FRASI_DI_FINE.en
     switch (fine.motivo) {
         /*
          * ⭐⭐⭐ «FATTO» SOLO SE L'HA DETTO — e prima lo diceva anche a chi si era
@@ -422,27 +425,51 @@ export function talosFraseDiFine(fine: TalosFineCorsa): string {
          */
         case 'fine': {
             const cosa = fine.testo?.trim()
-            if (fine.esito === 'fallito') {
-                return cosa ? `Non ci sono riuscito: ${cosa}` : 'Non ci sono riuscito, e mi fermo qui.'
-            }
-            if (fine.esito === 'riuscito') return cosa ? `Fatto: ${cosa}` : 'Fatto.'
-            return cosa
-                ? `Mi fermo qui: ${cosa}`
-                : 'Mi fermo qui, ma non so dirti se ci sono riuscito.'
+            if (fine.esito === 'fallito') return cosa ? `${f.fallitoCon}${cosa}` : f.fallito
+            if (fine.esito === 'riuscito') return cosa ? `${f.fattoCon}${cosa}` : f.fatto
+            return cosa ? `${f.fermoCon}${cosa}` : f.fermo
         }
         case 'mano-sullo-schermo':
-            return 'Ti ho sentito toccare lo schermo, quindi mi fermo qui.'
+            return f.mano
         case 'freno-non-armato':
-            return 'Non parto: non riesco ad accorgermi se tocchi lo schermo, e senza quello non guido il tuo telefono.'
+            return f.freno
         case 'occhio-chiuso':
-            return 'Non riesco a vedere lo schermo: manca il permesso di lettura dello schermo.'
+            return f.occhio
         case 'troppi-passi':
-            return 'Ho fatto molti passaggi senza arrivarci: mi fermo invece di continuare a provare.'
+            return f.passi
         case 'tempo-scaduto':
-            return 'Ci sto mettendo troppo: mi fermo invece di continuare a provare.'
+            return f.tempo
         case 'troppi-fallimenti':
-            return 'Ho provato due volte e non ha funzionato: mi fermo qui.'
+            return f.fallimenti
         case 'modello-non-capito':
-            return 'Non ho capito che cosa fare da qui: mi fermo invece di toccare a caso.'
+            return f.capito
     }
 }
+
+/** Le frasi di `talosFraseDiFine`, nelle due lingue dell'app (dette dall'altoparlante: brevi, senza termini tecnici). */
+const FRASI_DI_FINE = {
+    it: {
+        fallitoCon: 'Non ci sono riuscito: ', fallito: 'Non ci sono riuscito, e mi fermo qui.',
+        fattoCon: 'Fatto: ', fatto: 'Fatto.',
+        fermoCon: 'Mi fermo qui: ', fermo: 'Mi fermo qui, ma non so dirti se ci sono riuscito.',
+        mano: 'Ti ho sentito toccare lo schermo, quindi mi fermo qui.',
+        freno: 'Non parto: non riesco ad accorgermi se tocchi lo schermo, e senza quello non guido il tuo dispositivo.',
+        occhio: 'Non riesco a vedere lo schermo: manca il permesso di lettura dello schermo.',
+        passi: 'Ho fatto molti passaggi senza arrivarci: mi fermo invece di continuare a provare.',
+        tempo: 'Ci sto mettendo troppo: mi fermo invece di continuare a provare.',
+        fallimenti: 'Ho provato due volte e non ha funzionato: mi fermo qui.',
+        capito: 'Non ho capito che cosa fare da qui: mi fermo invece di toccare a caso.',
+    },
+    en: {
+        fallitoCon: 'I could not do it: ', fallito: 'I could not do it, so I am stopping here.',
+        fattoCon: 'Done: ', fatto: 'Done.',
+        fermoCon: 'Stopping here: ', fermo: 'Stopping here, but I cannot tell you whether it worked.',
+        mano: 'I felt you touch the screen, so I am stopping here.',
+        freno: 'I am not starting: I cannot notice when you touch the screen, and without that I do not drive your device.',
+        occhio: 'I cannot see the screen: the screen-reading permission is missing.',
+        passi: 'I took many steps without getting there: stopping instead of trying again and again.',
+        tempo: 'This is taking too long: stopping instead of trying again and again.',
+        fallimenti: 'I tried twice and it did not work: stopping here.',
+        capito: 'I did not understand what to do from here: stopping instead of tapping at random.',
+    },
+} as const

@@ -127,7 +127,9 @@ final class TalosLocalProfileStore {
                     riga.optDouble("decodeTokPerSec", -1),
                     // D-53: stessa regola, -1 = non misurato, mai zero.
                     riga.optDouble("prefillTokPerSec", -1),
-                    riga.optLong("openMs", -1));
+                    riga.optLong("openMs", -1),
+                    // PROB-12: vuoto per le righe di prima = metro vecchio.
+                    riga.optString("metro", ""));
         } catch (JSONException rigaMalformata) {
             // Una riga sola corrotta non deve buttare via tutte le altre.
             return null;
@@ -160,6 +162,7 @@ final class TalosLocalProfileStore {
             o.put("decodeTokPerSec", riga.decodeTokPerSec);
             o.put("prefillTokPerSec", riga.prefillTokPerSec);
             o.put("openMs", riga.openMs);
+            o.put("metro", riga.metro);
         } catch (JSONException nonPuoAccadereConChiaviCostanti) {
             return null;
         }

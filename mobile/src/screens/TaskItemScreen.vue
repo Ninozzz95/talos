@@ -224,6 +224,8 @@ async function esporta(): Promise<void> {
             key: `task:exported:${corrente.id}`,
             channel: 'jobs',
             weight: 'notable',
+            // N0, D-N0-8: il gesto è della persona ⇒ toast sì, campanella e tendina no
+            origin: 'person',
             title: t('tasks.exportCopied'),
             body: corrente.title,
             at: Date.now(),

@@ -1,0 +1,128 @@
+{
+  "origine": {
+    "r4": "0f3f90f8e",
+    "funzioni": [
+      "model-destination.mjs separaFonteModello",
+      "config.mjs modelloRichiestaValido",
+      "provider-registry.mjs ID_DESTINAZIONE_CHAT"
+    ]
+  },
+  "voci": [
+    {
+      "provider": "openai",
+      "model": "gpt-5-mini",
+      "id": "openai:gpt-5-mini",
+      "valido": true,
+      "fonte": "openai",
+      "modelloRemoto": "gpt-5-mini"
+    },
+    {
+      "provider": "deepseek",
+      "model": "deepseek-v4-pro",
+      "id": "deepseek:deepseek-v4-pro",
+      "valido": true,
+      "fonte": "deepseek",
+      "modelloRemoto": "deepseek-v4-pro"
+    },
+    {
+      "provider": "anthropic",
+      "model": "claude-sonnet-5-5",
+      "id": "anthropic:claude-sonnet-5-5",
+      "valido": true,
+      "fonte": "anthropic",
+      "modelloRemoto": "claude-sonnet-5-5"
+    },
+    {
+      "provider": "gemini",
+      "model": "gemini-3.7-flash",
+      "id": "gemini:gemini-3.7-flash",
+      "valido": true,
+      "fonte": "gemini",
+      "modelloRemoto": "gemini-3.7-flash"
+    },
+    {
+      "provider": "ollama",
+      "model": "llama3.2:3b",
+      "id": "ollama:llama3.2:3b",
+      "valido": true,
+      "fonte": "ollama",
+      "modelloRemoto": "llama3.2:3b"
+    },
+    {
+      "provider": "openrouter",
+      "model": "z-ai/glm-4.7-flash",
+      "id": "z-ai/glm-4.7-flash",
+      "valido": true,
+      "fonte": "openrouter",
+      "modelloRemoto": "z-ai/glm-4.7-flash"
+    },
+    {
+      "provider": "openrouter",
+      "model": "deepseek/deepseek-r1:free",
+      "id": "deepseek/deepseek-r1:free",
+      "valido": true,
+      "fonte": "openrouter",
+      "modelloRemoto": "deepseek/deepseek-r1:free"
+    },
+    {
+      "provider": "openrouter",
+      "model": "openrouter/auto",
+      "id": "openrouter/auto",
+      "valido": true,
+      "fonte": "openrouter",
+      "modelloRemoto": "openrouter/auto"
+    },
+    {
+      "provider": "local",
+      "model": "/data/user/0/ai.talos.dev/files/models/LFM2.5-2.6B-QAD-Q4_0.gguf",
+      "id": "locale-ospite:LFM2.5-2.6B-QAD-Q4_0.gguf",
+      "valido": true,
+      "fonte": "locale-ospite",
+      "modelloRemoto": "LFM2.5-2.6B-QAD-Q4_0.gguf"
+    }
+  ],
+  "fontiDiChat": [
+    "esterno",
+    "openai",
+    "chatgpt",
+    "deepseek",
+    "kimi",
+    "minimax",
+    "qwen",
+    "zai",
+    "anthropic",
+    "gemini",
+    "openrouter",
+    "ollama",
+    "lmstudio",
+    "groq",
+    "cerebras",
+    "mistral",
+    "together",
+    "fireworks",
+    "deepinfra",
+    "novita",
+    "nebius",
+    "xai",
+    "ollama-cloud",
+    "huggingface",
+    "zai-anthropic",
+    "minimax-anthropic",
+    "azure",
+    "bedrock",
+    "vertex",
+    "local",
+    "locale-ospite"
+  ],
+  "fornitoreDi": {
+    "lmstudio:finto": "lmstudio",
+    "esterno:agente": "esterno",
+    "local:gemma": "local",
+    "chatgpt:gpt-5": "chatgpt",
+    "z-ai/glm-4.7-flash": "openrouter",
+    "deepseek/deepseek-r1:free": "openrouter",
+    "ollama:llama3.2:3b": "ollama",
+    "deepseek:deepseek-v4-pro": "deepseek",
+    "locale-ospite:lfm2.5-2.6b-q4_0.gguf": "locale-ospite"
+  }
+}

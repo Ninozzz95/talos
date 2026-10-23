@@ -857,3 +857,63 @@ describe('la conversazione del Codice su r4 (K3-B2)', () => {
         })
     })
 })
+
+describe('Ledger LEDGER-RIGA-VIVA-CODICE-2026-10-21 — Salta, Annulla e la riga viva', () => {
+    it('USR4-34 Salta il riassunto: POST senza corpo né query; saltato vero, falso, o null se r4 rifiuta', async () => {
+        let risposta = { stato: 200, corpo: '{"ok":true,"data":{"saltato":true}}' }
+        const c = clienteFinto(() => risposta)
+        const conv = monta({ cliente: c.ponte, cartella: '/w', sessioneId: 's 1', attesaRiapertura: () => 0 })
+        expect(await conv.saltaRiassunto()).toEqual({ saltato: true })
+        // contratto §8: senza corpo e senza query (una query viene rifiutata)
+        expect(c.richieste.at(-1)).toEqual({ metodo: 'POST', percorso: '/api/v1/sessions/s%201/compaction/skip' })
+        risposta = { stato: 200, corpo: '{"ok":true,"data":{"saltato":false}}' }
+        expect(await conv.saltaRiassunto()).toEqual({ saltato: false })
+        risposta = { stato: 404, corpo: '{"ok":false,"error":{"code":"NOT_FOUND","message":"no"}}' }
+        expect(await conv.saltaRiassunto()).toBeNull()
+        const senza = monta({ cliente: c.ponte, cartella: '/w', attesaRiapertura: () => 0 })
+        expect(await senza.saltaRiassunto()).toBeNull()
+    })
+
+    it('USR4-35 Annulla la compattazione: la rotta col suo `at`, senza corpo; un rifiuto va in errore', async () => {
+        let risposta = { stato: 200, corpo: '{"ok":true,"data":{}}' }
+        const c = clienteFinto(() => risposta)
+        const conv = monta({ cliente: c.ponte, cartella: '/w', sessioneId: 's1', attesaRiapertura: () => 0 })
+        expect(await conv.annullaCompattazione('2026-10-21T20:00:00.000Z')).toBe(true)
+        expect(c.richieste.at(-1)).toEqual({ metodo: 'POST', percorso: '/api/v1/sessions/s1/compaction/2026-10-21T20%3A00%3A00.000Z/undo' })
+        risposta = { stato: 409, corpo: '{"ok":false,"error":{"code":"RUN_ACTIVE","message":"A run is active"}}' }
+        expect(await conv.annullaCompattazione('a1')).toBe(false)
+        expect(conv.errore.value).toEqual({ code: 'RUN_ACTIVE', message: 'A run is active' })
+    })
+
+    it('USR4-36 la riga viva arriva dagli eventi del flusso e la fine la chiude', async () => {
+        const c = clienteFinto()
+        const conv = monta({ cliente: c.ponte, cartella: '/w', sessioneId: 's1', attesaRiapertura: () => 0 })
+        await conv.apri()
+        c.pezzo('id: 1\ndata: {"type":"RunStarted","runId":"r1","_sequenza":1}\n\n')
+        c.pezzo('id: 2\ndata: {"type":"CUSTOM","name":"talos.compattazione","value":{"fase":"inizio","motivo":"overflow"},"_sequenza":2}\n\n')
+        await nextTick()
+        expect(conv.rigaViva.value).toEqual({ tipo: 'inizio', motivo: 'overflow' })
+        c.pezzo('data: {"type":"CUSTOM","name":"talos.compattazione-progresso","value":{"fase":"lettura","motivo":"overflow","letti":5,"totale":10}}\n\n')
+        await nextTick()
+        expect(conv.rigaViva.value).toMatchObject({ tipo: 'progresso', letti: 5, totale: 10 })
+        c.pezzo('id: 3\ndata: {"type":"CUSTOM","name":"talos.compattazione","value":{"fase":"fine","compattato":true,"at":"A","ripiego":true,"ragione":"saltato"},"_sequenza":3}\n\n')
+        await nextTick()
+        expect(conv.rigaViva.value).toBeNull()
+    })
+
+    it("USR4-37 revisione: Compatta a mano apre la riga viva prima della POST (r4 non manda l'inizio) e la chiude al ritorno, anche se fallisce", async () => {
+        let libera: (r: { stato: number; corpo: string }) => void = () => {}
+        const c = clienteFinto((r) => (r.percorso.endsWith('/compact')
+            ? new Promise((ok) => { libera = ok }) as unknown as { stato: number; corpo: string }
+            : { stato: 200, corpo: '{"ok":true,"data":{}}' }))
+        const conv = monta({ cliente: c.ponte, cartella: '/w', sessioneId: 's1', attesaRiapertura: () => 0 })
+        const esito = conv.compatta()
+        await nextTick()
+        expect(conv.rigaViva.value).toEqual({ tipo: 'inizio', motivo: 'manuale' })
+        expect(conv.rigaVivaAMano.value).toBe(true)
+        libera({ stato: 409, corpo: '{"ok":false,"error":{"code":"RUN_ACTIVE","message":"A run is active"}}' })
+        expect(await esito).toBeNull()
+        expect(conv.rigaViva.value).toBeNull()
+        expect(conv.rigaVivaAMano.value).toBe(false)
+    })
+})

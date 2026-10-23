@@ -5,3 +5,5 @@
  */
 export const TALOS_METADATA_COMPATTAZIONE = 'talos_compattazione'
 export const TALOS_METADATA_COMPATTAZIONE_ANNULLATA = 'talos_compattazione_annullata'
+/** Ledger LEDGER-RIGA-VIVA-CODICE-2026-10-21 (D-MO-12): la riga «Conversazione non riassunta · <motivo>» del Codice su r4. */
+export const TALOS_METADATA_COMPATTAZIONE_FALLITA = 'talos_compattazione_fallita'

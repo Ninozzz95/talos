@@ -48,7 +48,7 @@ const MOTIVO: Record<string, string> = {
     'not-clearable': 'That notification cannot be dismissed: it belongs to something still running, and hiding it would hide that. Say so.',
     'dismiss-failed': 'The notification could not be dismissed. Tell the user.',
     'missing-argument': 'This is a bug in TALOS, not something the user can fix.',
-    'not-on-this-platform': 'There is no phone to read notifications from here.',
+    'not-on-this-platform': 'There is no device to read notifications from here.',
 }
 
 export function talosNotificationReason(reason: string | undefined): string {

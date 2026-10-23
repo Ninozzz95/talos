@@ -7,6 +7,7 @@ import {
     talosBackendKindOfRegistry,
     talosDecideLocalBackend,
     talosLocalBackendInUse,
+    talosLocalBackendKindOpen,
     talosLocalBackendOptions,
     talosLocalBackendRequest,
     type TalosLocalBackendDevice,
@@ -320,5 +321,24 @@ describe('SCELTO non è IN USO', () => {
         expect(talosLocalBackendInUse('gpu', {
             backendDevice: null, gpuLayersEffective: -1, offloadDevices: null,
         }).fellBack).toBe(false)
+    })
+})
+
+/**
+ * ⛔ Pad 22/10/2026 — su cosa gira il modello già aperto: solo dai fatti certi della snapshot nativa.
+ * I nomi dei dispositivi sono quelli del registro del Pad: `HTP0` (NPU) e `GPUOpenCL` (Adreno).
+ */
+describe('talosLocalBackendKindOpen', () => {
+    it('un dispositivo risolto è una conferma: HTP0 è l’NPU, GPUOpenCL la scheda grafica', () => {
+        expect(talosLocalBackendKindOpen({ backendDevice: 'HTP0', gpuLayersEffective: -1 })).toBe('hexagon')
+        expect(talosLocalBackendKindOpen({ backendDevice: 'GPUOpenCL', gpuLayersEffective: -1 })).toBe('gpu')
+    })
+
+    it('zero strati e nessun dispositivo è la CPU', () => {
+        expect(talosLocalBackendKindOpen({ backendDevice: null, gpuLayersEffective: 0 })).toBe('cpu')
+    })
+
+    it('AL CONTRARIO — strati spostati senza un dispositivo nominato: non lo so, e non si deduce', () => {
+        expect(talosLocalBackendKindOpen({ backendDevice: null, gpuLayersEffective: -1 })).toBeNull()
     })
 })

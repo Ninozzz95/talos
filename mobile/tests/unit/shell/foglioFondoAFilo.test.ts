@@ -44,8 +44,18 @@ describe('il foglio col fondo a filo (K3-B2)', () => {
     it('FIL-04 il Codice su r4 lo chiede, e nient\'altro del foglio cambia per lui', () => {
         const radice = resolve(__dirname, '..', '..', '..', 'src')
         const app = readFileSync(resolve(radice, 'App.vue'), 'utf8')
-        expect(app).toMatch(/:fondo-a-filo="activeRoute === 'codice-r4'"/u)
+        // RA-09 (21/10/2026): segue anche `computer-codice` (FIL-05)
+        expect(app).toMatch(/:fondo-a-filo="activeRoute === 'codice-r4'[ "]/u)
         const codice = readFileSync(resolve(radice, 'screens', 'CodiceR4Screen.vue'), 'utf8')
         expect(codice).not.toContain('pt-[calc(3.5rem+env(safe-area-inset-top))]')
+    })
+
+    it('FIL-05 ⛔ RA-09 (revisione avversariale R-M4, 21/10/2026): anche il Codice sulla sessione di un PC (`computer-codice`) ha il foglio senza cornice e a filo', () => {
+        const app = readFileSync(resolve(__dirname, '..', '..', '..', 'src', 'App.vue'), 'utf8')
+        const legame = (nome: string) => app.match(new RegExp(`:${nome}="([^"]*)"`, 'u'))?.[1] ?? ''
+        for (const nome of ['hide-chrome', 'fondo-a-filo']) {
+            expect(legame(nome), nome).toContain("activeRoute === 'codice-r4'")
+            expect(legame(nome), nome).toContain("activeRoute === 'computer-codice'")
+        }
     })
 })

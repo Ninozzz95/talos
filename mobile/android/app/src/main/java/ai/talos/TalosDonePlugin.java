@@ -56,7 +56,9 @@ public class TalosDonePlugin extends Plugin {
         JSObject result = new JSObject();
         Intent intent = getActivity() == null ? null : getActivity().getIntent();
         String route = intent == null ? null : intent.getStringExtra(TalosDoneNotification.EXTRA_ROUTE);
-        if (intent != null && route != null) intent.removeExtra(TalosDoneNotification.EXTRA_ROUTE);
+        // revisione R-M5a bis (11): un'attività ricreata col suo intent ORIGINALE non riapre una notifica già aperta
+        if (route != null && TalosDoneNotification.giaConsumata(getContext(), intent)) route = null;
+        if (intent != null && intent.hasExtra(TalosDoneNotification.EXTRA_ROUTE)) intent.removeExtra(TalosDoneNotification.EXTRA_ROUTE);
         result.put("route", route);
         call.resolve(result);
     }
@@ -68,8 +70,12 @@ public class TalosDonePlugin extends Plugin {
         String route = intent == null ? null : intent.getStringExtra(TalosDoneNotification.EXTRA_ROUTE);
         if (route == null || route.isEmpty()) return;
         intent.removeExtra(TalosDoneNotification.EXTRA_ROUTE);
+        if (TalosDoneNotification.giaConsumata(getContext(), intent)) return;
         JSObject payload = new JSObject();
         payload.put("route", route);
-        notifyListeners("route", payload);
+        // ⛔ D-RM5-2 (dal Pad, 21/10/2026): processo morto ma task viva. L'attività è `singleTask`, quindi Android la ricrea con
+        // l'intent VECCHIO (che `takeRoute` legge, vuoto) e consegna il nuovo qui, PRIMA che il JavaScript ascolti: l'evento
+        // andava perso e il tocco sulla notifica apriva l'ultima pagina ricordata. Trattenuto finché un ascoltatore non c'è.
+        notifyListeners("route", payload, true);
     }
 }

@@ -136,6 +136,14 @@ export interface TalosNotificationEvent {
      * sola — verso il silenzio.
      */
     origin?: TalosNotificationOrigin
+    /**
+     * Il telefono l'ha già detto in tendina da solo (N0, 21/10/2026, D-N0-4).
+     *
+     * I download hanno la loro barra e la loro notifica di fine nel servizio nativo
+     * (`TalosTransferNotification`): ripubblicarli dal registro con l'app viva in secondo piano diceva la stessa fine due
+     * volte, su due canali. Il registro e il toast restano; la tendina no.
+     */
+    systemPosted?: boolean
     at: number
 }
 
@@ -212,7 +220,18 @@ export function talosRouteNotification(
      * premuto Crea non ha bisogno che glielo si dica in nessuna delle tre
      * superfici.
      */
-    if (event.origin === 'person') return { feed: true, toast: false, android: false }
+    if (event.origin === 'person') {
+        /*
+         * N0 (21/10/2026), D-N0-8: l'unica cosa che esce è il toast di un esito DIVERSO da quello promesso dal pulsante
+         * («copiato negli appunti» invece del foglio di condivisione), e solo a chi guarda. Mai la tendina.
+         */
+        const davanti = (context.attention ?? (context.appVisible ? 'attended' : 'hidden')) === 'attended'
+        return {
+            feed: true,
+            toast: davanti && (event.weight === 'notable' || event.weight === 'demanding'),
+            android: false,
+        }
+    }
 
     // `away` non interrompe MAI chi sta guardando: la sua ragione d'essere è
     // esattamente il caso in cui chi guarda vedrebbe la cosa da sé.
@@ -252,10 +271,20 @@ export function talosRouteNotification(
         // viene ricordato: è la sola parte di questa regola che non ha eccezioni.
         feed: true,
         toast: attenzione === 'attended' && puoInterrompere && !staGuardandoProprioQuesto,
-        android: staGuardandoProprioQuesto
+        android: staGuardandoProprioQuesto || event.systemPosted === true
             ? false
             : escePerForza || (fuoriDaiGiochi && esceSeSeiFuori),
     }
+}
+
+/**
+ * Il testo del toast (N0, revisione avversaria 5). Di solito l'esito (`body`); ma una RICHIESTA deve dire anche che cosa chiede:
+ * il piano diceva solo «Niente è stato ancora fatto…», senza dire che c'era un piano da approvare.
+ */
+export function talosTestoDelToast(event: TalosNotificationEvent): string {
+    if (!event.body) return event.title
+    if (event.weight === 'demanding' && !event.body.includes(event.title)) return `${event.title}. ${event.body}`
+    return event.body
 }
 
 /** Quante voci il registro tiene prima di dimenticare le più vecchie. */

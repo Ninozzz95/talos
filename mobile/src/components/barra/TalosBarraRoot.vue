@@ -69,6 +69,7 @@ import { talosDettaturaAnnota as annota } from '@/services/dictation'
 import { useTalosRispostaAVoce } from '@/composables/useTalosRispostaAVoce'
 import { useTalosSpeech } from '@/composables/useTalosSpeech'
 import { talosOffsetDelTrascinamento, talosTrascinamentoApre } from '@/lib/barra/trascinamento'
+import { talosCorniceDelloSchermo } from '@/lib/barra/corniceDelloSchermo'
 import { TALOS_METADATA_DETTATO, TALOS_METADATA_SCHERMO } from '@/lib/tools/tracciaAzione'
 import type { TalosModoBarra } from '@/lib/barra/modoBarra'
 
@@ -1608,9 +1609,6 @@ async function contestoDaMandare(): Promise<string> {
             contestoSchermo(): Promise<{ testo: string, nodi: number, pagina?: string }>
         }>('TalosBarra')
         const visto = await ponte.contestoSchermo()
-        const schermo = (visto?.testo ?? '').trim()
-        const pagina = (visto?.pagina ?? '').trim()
-        if (!schermo && !pagina) return ''
         /*
          * ⭐⭐⭐ E L'INDIRIZZO DELLA PAGINA, quando c'è — rilievo #4.
          *
@@ -1625,11 +1623,8 @@ async function contestoDaMandare(): Promise<string> {
          * ⛔ E si manda anche SENZA testo: su una pagina che l'occhio non riesce
          * a leggere, l'indirizzo da solo è già tutto ciò che serve.
          */
-        const righe = [t('barra.contextPrompt')]
-        if (pagina) righe.push(t('barra.contextPage', { page: pagina }))
-        if (schermo) righe.push('"""', schermo, '"""')
-        righe.push('', '')
-        return righe.join('\n')
+        // A0-2: dentro una cornice col segno di questa domanda, indirizzo compreso (`lib/barra/corniceDelloSchermo.ts`)
+        return talosCorniceDelloSchermo({ testo: visto?.testo, pagina: visto?.pagina }, t)
     } catch {
         // ⛔ Nessun ponte, nessun contesto: la domanda parte nuda invece di non
         // partire. Una domanda senza schermo è utile; una che non parte no.

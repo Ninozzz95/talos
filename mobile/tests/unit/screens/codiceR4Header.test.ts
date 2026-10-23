@@ -197,7 +197,8 @@ describe('l\'header del Codice su r4 (K3-C1)', () => {
 
     it('HDR-05 la cornice del foglio si nasconde per il Codice su r4, e lo scorrimento del corpo non si blocca', () => {
         const app = readFileSync(resolve(__dirname, '..', '..', '..', 'src', 'App.vue'), 'utf8')
-        expect(app).toMatch(/:hide-chrome="stationLocksBodyScroll \|\| activeRoute === 'codice-r4'"/u)
+        // RA-09 (21/10/2026): segue anche `computer-codice` (FIL-05)
+        expect(app).toMatch(/:hide-chrome="stationLocksBodyScroll \|\| activeRoute === 'codice-r4'[ "]/u)
         const riga = app.split('\n').find((r) => r.includes('const stationLocksBodyScroll'))
         expect(riga).not.toContain('codice-r4')
         vi.restoreAllMocks()

@@ -724,6 +724,33 @@
             }
         },
         {
+            "uniqueId": "com.google.android.datatransport:transport-api",
+            "artifactVersion": "2.2.1",
+            "description": "",
+            "name": "transport-api",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "com.google.android.datatransport:transport-backend-cct",
+            "artifactVersion": "2.3.3",
+            "description": "",
+            "name": "transport-backend-cct",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "com.google.android.datatransport:transport-runtime",
+            "artifactVersion": "2.2.6",
+            "description": "",
+            "name": "transport-runtime",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
             "uniqueId": "com.google.android.gms:play-services-base",
             "artifactVersion": "18.5.0",
             "description": "",
@@ -739,6 +766,15 @@
             "name": "play-services-basement",
             "licenses": [
                 "ASDKL"
+            ]
+        },
+        {
+            "uniqueId": "com.google.android.gms:play-services-code-scanner",
+            "artifactVersion": "16.1.0",
+            "description": "",
+            "name": "play-services-code-scanner",
+            "licenses": [
+                "9962f44671a86e167c028415c7e21548"
             ]
         },
         {
@@ -767,6 +803,15 @@
             "website": "https://github.com/material-components/material-components-android",
             "licenses": [
                 "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "com.google.android.odml:image",
+            "artifactVersion": "1.0.0-beta1",
+            "description": "",
+            "name": "image",
+            "licenses": [
+                "ASDKL"
             ]
         },
         {
@@ -818,6 +863,42 @@
             }
         },
         {
+            "uniqueId": "com.google.firebase:firebase-annotations",
+            "artifactVersion": "16.0.0",
+            "description": "",
+            "name": "firebase-annotations",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "com.google.firebase:firebase-components",
+            "artifactVersion": "16.1.0",
+            "description": "",
+            "name": "firebase-components",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "com.google.firebase:firebase-encoders",
+            "artifactVersion": "16.1.0",
+            "description": "",
+            "name": "firebase-encoders",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "com.google.firebase:firebase-encoders-json",
+            "artifactVersion": "17.1.0",
+            "description": "",
+            "name": "firebase-encoders-json",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
             "uniqueId": "com.google.guava:listenablefuture",
             "artifactVersion": "1.0",
             "description": "Contains Guava's com.google.common.util.concurrent.ListenableFuture class,\n    without any of its other classes -- but is also available in a second\n    \"version\" that omits the class to avoid conflicts with the copy in Guava\n    itself. The idea is:\n\n    - If users want only ListenableFuture, they depend on listenablefuture-1.0.\n\n    - If users want all of Guava, they depend on guava, which, as of Guava\n    27.0, depends on\n    listenablefuture-9999.0-empty-to-avoid-conflict-with-guava. The 9999.0-...\n    version number is enough for some build systems (notably, Gradle) to select\n    that empty artifact over the \"real\" listenablefuture-1.0 -- avoiding a\n    conflict with the copy of ListenableFuture in guava itself. If users are\n    using an older version of Guava or a build system other than Gradle, they\n    may see class conflicts. If so, they can solve them by manually excluding\n    the listenablefuture artifact or manually forcing their build systems to\n    use 9999.0-....",
@@ -825,6 +906,33 @@
             "website": "https://github.com/google/guava/listenablefuture",
             "licenses": [
                 "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "com.google.mlkit:barcode-scanning-common",
+            "artifactVersion": "17.0.0",
+            "description": "",
+            "name": "barcode-scanning-common",
+            "licenses": [
+                "9962f44671a86e167c028415c7e21548"
+            ]
+        },
+        {
+            "uniqueId": "com.google.mlkit:common",
+            "artifactVersion": "18.9.0",
+            "description": "",
+            "name": "common",
+            "licenses": [
+                "9962f44671a86e167c028415c7e21548"
+            ]
+        },
+        {
+            "uniqueId": "com.google.mlkit:vision-common",
+            "artifactVersion": "17.0.0",
+            "description": "",
+            "name": "vision-common",
+            "licenses": [
+                "9962f44671a86e167c028415c7e21548"
             ]
         },
         {
@@ -859,6 +967,17 @@
             "website": "https://github.com/square/okio/",
             "licenses": [
                 "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "computer.iroh:iroh",
+            "artifactVersion": "1.1.0",
+            "description": "Kotlin bindings for iroh: distributed systems made simple.",
+            "name": "iroh",
+            "website": "https://github.com/n0-computer/iroh-ffi",
+            "licenses": [
+                "Apache-2.0",
+                "MIT"
             ]
         },
         {
@@ -899,6 +1018,27 @@
             "website": "https://github.com/OutSystems/OSInAppBrowserLib-Android",
             "licenses": [
                 "60f5592b436b0e17f4252b8b602854fe"
+            ]
+        },
+        {
+            "uniqueId": "javax.inject:javax.inject",
+            "artifactVersion": "1",
+            "description": "The javax.inject API",
+            "name": "javax.inject",
+            "website": "http://code.google.com/p/atinject/",
+            "licenses": [
+                "Apache-2.0"
+            ]
+        },
+        {
+            "uniqueId": "net.java.dev.jna:jna",
+            "artifactVersion": "5.15.0",
+            "description": "Java Native Access",
+            "name": "Java Native Access",
+            "website": "https://github.com/java-native-access/jna",
+            "licenses": [
+                "LGPL-2.1-or-later",
+                "Apache-2.0"
             ]
         },
         {
@@ -1043,6 +1183,11 @@
             "url": "https://github.com/OutSystems/OSInAppBrowserLib-Android/blob/main/LICENSE",
             "name": "License"
         },
+        "9962f44671a86e167c028415c7e21548": {
+            "hash": "9962f44671a86e167c028415c7e21548",
+            "url": "https://developers.google.com/ml-kit/terms",
+            "name": "ML Kit Terms of Service"
+        },
         "ASDKL": {
             "hash": "ASDKL",
             "internalHash": "ASDKL",
@@ -1057,12 +1202,19 @@
             "spdxId": "Apache-2.0",
             "name": "The Apache License, Version 2.0"
         },
+        "LGPL-2.1-or-later": {
+            "hash": "LGPL-2.1-or-later",
+            "internalHash": "LGPL-2.1-or-later",
+            "url": "https://www.gnu.org/licenses/old-licenses/lgpl-2.1",
+            "spdxId": "LGPL-2.1-or-later",
+            "name": "LGPL-2.1-or-later"
+        },
         "MIT": {
             "hash": "MIT",
             "internalHash": "MIT",
-            "url": "https://opensource.org/licenses/MIT",
+            "url": "https://opensource.org/license/mit",
             "spdxId": "MIT",
-            "name": "MIT License"
+            "name": "MIT"
         },
         "e9dc079177dba0f173e0aa487fd1017f": {
             "hash": "e9dc079177dba0f173e0aa487fd1017f",

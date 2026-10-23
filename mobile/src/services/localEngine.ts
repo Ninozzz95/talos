@@ -6,6 +6,7 @@ import {
 import type { TalosModelShape } from '@/lib/models/fit'
 import { talosPrefixesToEvict } from '@/lib/models/prefixCache'
 import { talosLocalBackendPlan } from '@/lib/models/localBackendPlan'
+import { TALOS_WARM_PROFILES_BUDGET_MS, talosEntroIlTetto as entroIlTetto } from '@/lib/models/localBackendChoice'
 import { talosStoredLocalBackendPreference } from '@/lib/models/localBackendPreferenceStore'
 import { talosT } from '@/i18n'
 import { useTalosMobileToasts } from '@/stores/toasts'
@@ -480,6 +481,8 @@ interface TalosLlamaPlugin {
      * template source itself never crosses the bridge.
      */
     templateCapabilities(options: { path: string }): Promise<{ capabilities: string }>
+    /** ⛔ CODICE COL MOTORE LOCALE: avvia l'endpoint del Codice sopra il modello aperto e dice dove sta. */
+    motoreOspite(): Promise<Record<string, unknown>>
     chatPrompt(options: {
         turns: ReadonlyArray<TalosLocalEngineTurn>
         /** Vedi `planPrompt.thinking`: assente = sì, come prima. */
@@ -1150,7 +1153,11 @@ export function talosModelShapeOf(raw: unknown, kvCacheType?: string | null): Ta
  */
 export async function talosLocalEngineBackendFacts(): Promise<{
     backendDevice: string | null
-    gpuLayersEffective: number
+    /**
+     * `null` = il ponte non l'ha detto (lancia, o l'istantanea è malformata e il nativo omette il campo). ⛔ Mai `0`:
+     * con `backendDevice: null` lo zero è la faccia di «gira sulla CPU» (revisione del 22/10/2026, rilievo 3).
+     */
+    gpuLayersEffective: number | null
     offloadDevices: number | null
     threadPoolSplit: boolean | null
 }> {
@@ -1163,7 +1170,7 @@ export async function talosLocalEngineBackendFacts(): Promise<{
             gpuLayersEffective: typeof stato.gpuLayersEffective === 'number'
                 && Number.isFinite(stato.gpuLayersEffective)
                 ? stato.gpuLayersEffective
-                : 0,
+                : null, // àncora: strati-ignoti-non-sono-zero
             offloadDevices: typeof stato.offloadDevices === 'number'
                 && Number.isFinite(stato.offloadDevices) && stato.offloadDevices >= 0
                 ? stato.offloadDevices
@@ -1174,7 +1181,7 @@ export async function talosLocalEngineBackendFacts(): Promise<{
         }
     } catch {
         return {
-            backendDevice: null, gpuLayersEffective: 0,
+            backendDevice: null, gpuLayersEffective: null, // àncora: ponte-che-lancia-non-e-cpu
             offloadDevices: null, threadPoolSplit: null,
         }
     }
@@ -1293,20 +1300,8 @@ let talosWarmInFlight: Promise<TalosLocalWarmOutcome> | null = null
  * il giorno in cui il lato nativo ricorderà lo sha invece di rifarlo — quella
  * sì sarebbe la cura vera, e sta in Java.
  */
-const TALOS_WARM_PROFILES_BUDGET_MS = 1_500
-
-/** Il valore, o `null` se non è arrivato entro il tetto. Non annulla niente: smette di aspettare. */
-async function entroIlTetto<T>(lavoro: Promise<T>, tettoMs: number): Promise<T | null> {
-    let sveglia: ReturnType<typeof setTimeout> | undefined
-    try {
-        return await Promise.race([
-            lavoro,
-            new Promise<null>((risolvi) => { sveglia = setTimeout(() => risolvi(null), tettoMs) }),
-        ])
-    } finally {
-        if (sveglia !== undefined) clearTimeout(sveglia)
-    }
-}
+// ⛔ Il numero e l'attesa vivono in `lib/models/localBackendChoice.ts` (revisione del 22/10/2026, rilievo 2): li usa anche
+// la chat che trova il modello GIÀ APERTO (`localAdapter.backendDiApertura`), e un tetto solo non può divergere.
 
 /** Cosa si chiederà al motore, e se lo si è deciso senza le misure. */
 export interface TalosWarmBackendPlan {
@@ -1325,9 +1320,19 @@ async function backendDelRiscaldamento(
     status: TalosLocalEngineStatus,
 ): Promise<TalosWarmBackendPlan> {
     try {
-        const [preferenza, fatti] = await Promise.all([
+        /*
+         * ⛔ Pad 22/10/2026: il formato dei pesi MANCAVA qui, e senza formato
+         * `talosLocalBackendOptions` tiene l'NPU fuori. LFM2.5-2.6B Q4_0, con
+         * l'NPU misurata più veloce (lettura 1298,9 contro 103,4), si apriva
+         * sulla CPU (`offloaded 0/31`) a ogni avvio — e anche una scelta manuale
+         * «Hexagon» diventava `unavailable`. Gli stessi quattro fatti
+         * dell'adattatore della chat (`backendDiApertura`), non tre.
+         * La lettura è in cache per percorso: una volta per modello.
+         */
+        const [preferenza, fatti, formato] = await Promise.all([
             talosStoredLocalBackendPreference(),
             talosLocalEngineBackendFacts(),
+            talosLocalModelQuantisation(path), // àncora: formato-del-riscaldamento
         ])
         /*
          * ⭐ La domanda cara si fa solo se la sua risposta può cambiare
@@ -1351,6 +1356,7 @@ async function backendDelRiscaldamento(
                 // Si sta per aprire comunque: nessun candidato è già attivo, quindi
                 // nessuno merita lo sconto sul costo di transizione (CR-12).
                 activeRegistry: null,
+                quantisation: formato,
             }).options,
             withoutMeasuredProfiles: profili === null,
         }
@@ -1577,6 +1583,25 @@ export async function talosLocalEngineChatPrompt(
     tools?: readonly unknown[],
 ): Promise<string> {
     return (await talosLocalEngineChatPlan(turns, tools)).prompt
+}
+
+export type TalosMotoreOspite =
+    | { pronto: false }
+    | { pronto: true, socketPath: string, chiave: string, modello: string, nCtx: number }
+
+/**
+ * ⛔ CODICE COL MOTORE LOCALE (ledger `LEDGER-CODICE-MOTORE-LOCALE-2026-10-18.md`): l'endpoint che r4 usa per il modello aperto
+ * nell'app (`TalosMotoreOspite.java`, socket Unix privato in `files/locale-ospite`, chiave per avvio). Senza modello aperto, o con
+ * una risposta del ponte che non ha la forma attesa, non c'è niente da dare a r4.
+ */
+export async function talosMotoreOspite(): Promise<TalosMotoreOspite> {
+    const r = await plugin.motoreOspite()
+    const { socketPath, chiave, modello, nCtx } = r
+    if (r.pronto !== true || typeof socketPath !== 'string' || !socketPath.startsWith('/') || typeof chiave !== 'string' || !chiave
+        || typeof modello !== 'string' || !modello || typeof nCtx !== 'number' || !Number.isSafeInteger(nCtx) || nCtx <= 0) {
+        return { pronto: false }
+    }
+    return { pronto: true, socketPath, chiave, modello, nCtx }
 }
 
 export async function talosLocalEngineClose(): Promise<void> {
@@ -1866,7 +1891,12 @@ export async function talosLocalModelQuantisation(path: string): Promise<string 
             }
         }
     } catch {
-        esito = null
+        /*
+         * ⛔ Revisione del 22/10/2026 (rilievo 14): un errore NON si ricorda. Il ponte occupato o un filo che lancia una
+         * volta sono passeggeri, e il riscaldamento legge questo formato: un `null` in cache terrebbe l'NPU fuori fino al
+         * riavvio dell'app. Si risponde «non lo so» adesso, e la prossima lettura riprova.
+         */
+        return null // àncora: errore-del-formato-non-in-cache
     }
     formatiLetti.set(path, esito)
     return esito

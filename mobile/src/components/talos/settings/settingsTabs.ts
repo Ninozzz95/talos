@@ -14,6 +14,7 @@ export type TalosMobileSettingsTabId =
     | 'account'
     | 'agent_tools'
     | 'legal'
+    | 'updates'
     | 'system'
 
 /** Compatibility id for `/settings?tab=models`; its visible row is routed. */
@@ -67,6 +68,8 @@ export const TALOS_MOBILE_SETTINGS_TABS: readonly TalosMobileSettingsTab[] = Obj
     { id: 'account', label: 'Account', description: 'Local workspace identity, app lock and introduction replay.', availability: 'available' },
     // ⛔ Note legali (owner, 01/10/2026): avviso Qualcomm (PKLA 3.8) e licenze di tutto ciò che è spedito.
     { id: 'legal', label: 'Legal notices', description: 'Licences of the included software and Qualcomm terms.', availability: 'available' },
+    // Aggiornamento automatico (owner 22/10/2026): la versione, «Controlla ora» e un interruttore; il resto sotto «Avanzate».
+    { id: 'updates', label: 'Updates', description: 'Version, automatic updates and checks.', availability: 'available' },
     { id: 'agent_tools', label: 'Agent Tools', description: 'Choose which capabilities the chat agent may use.', availability: 'available', group: 'Admin' },
     // The gate reason used to say "Doctor and backup services are not
     // installed" — and the Doctor ships, as a station of its own. Same defect
@@ -109,6 +112,6 @@ export const TALOS_MOBILE_SETTINGS_GROUPS: readonly TalosMobileSettingsGroup[] =
     { label: 'Interface', tabIds: ['appearance', 'voice', 'language'] },
     // Its own group: a privacy claim is TALOS's central promise, and burying it
     // under Interface would say the opposite.
-    { label: 'Privacy', tabIds: ['privacy', 'backup', 'legal'] },
+    { label: 'Privacy', tabIds: ['privacy', 'backup', 'updates', 'legal'] },
     { label: 'Unavailable', tabIds: ['integrations', 'email', 'reminders', 'system'] },
 ])

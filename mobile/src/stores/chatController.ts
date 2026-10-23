@@ -73,7 +73,7 @@ import {
     type TalosMobileModelProbeRecord,
 } from '@/lib/modelLabContracts'
 import { clampMobileEffortFor, mobileEffortLadderFor, type TalosMobileEffortLevel } from '@/lib/mobileEffort'
-import { talosMobileModelProfileIsCallable, TALOS_MOBILE_PROVIDERS } from '@/lib/mobileProviders'
+import { talosMobileModelProfileIsCallable, talosMobileProviderLabel, TALOS_MOBILE_PROVIDERS } from '@/lib/mobileProviders'
 import { cloneJsonObject, type TalosChatRepository } from '@/repositories/chatRepository'
 import { talosIsEphemeralSessionId } from '@/lib/chat/ephemeralSession'
 import { productionChatRepository } from '@/repositories/productionChatRepositorySingleton'
@@ -1520,8 +1520,9 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                 // Il NOME del provider, non il suo identificativo: «anthropic»
                 // in minuscolo e' una chiave interna, e in una frase rivolta
                 // a una persona si legge come un refuso.
-                provider: TALOS_MOBILE_PROVIDERS.find((entry) => entry.id === selectedProfile.value?.provider)?.label
-                    ?? deps.translate('chat.imageConsentProviderUnknown'),
+                provider: TALOS_MOBILE_PROVIDERS.some((entry) => entry.id === selectedProfile.value?.provider)
+                    ? talosMobileProviderLabel(selectedProfile.value?.provider, deps.translate)
+                    : deps.translate('chat.imageConsentProviderUnknown'),
             }
         })
     }
@@ -4855,61 +4856,43 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                         () => planRequest.value?.id === piano.id,
                         () => answerPlan(null),
                     )
-                    const decisione = await new Promise<{ admitted: readonly string[], cancelled: boolean }>(
-                        (resolve) => {
-                            // Se una seconda domanda arrivasse mentre la prima
-                            // e' aperta, si rifiuta: e' l'esito prudente, ed e'
-                            // la stessa regola del consenso immagini.
-                            if (planResolve) { resolve({ admitted: [], cancelled: true }); return }
-                            // Fermato PRIMA che il foglio si apra: non si apre
-                            // affatto, invece di chiedere di un lavoro annullato.
-                            if (stream?.signal?.aborted) {
-                                resolve({ admitted: [], cancelled: true })
-                                return
-                            }
-                            planResolve = resolve
-                            planRequest.value = piano
-                        },
-                    )
-                    staccaStop()
                     /*
-                     * ⛔ B8 — la notifica, e i due pesi.
+                     * ⛔ B8 — la notifica, e i due pesi: `demanding` sulla richiesta, perche' senza risposta non va avanti
+                     * nulla; `notable` sull'esito, perche' e' una notizia e non una domanda.
                      *
-                     * Il piano si propone mentre la persona potrebbe non essere
-                     * davanti: e' proprio il caso in cui un lavoro lungo si
-                     * ferma ad aspettare, ed e' il caso in cui il silenzio costa
-                     * di piu' — TALOS resta bloccato senza che nessuno lo sappia.
-                     *
-                     * `demanding` sulla richiesta, perche' senza risposta non va
-                     * avanti nulla. `notable` sull'esito, perche' e' una notizia
-                     * e non una domanda.
+                     * N0 (21/10/2026), D-N0-1: la richiesta partiva DOPO la risposta, cioe' non chiamava mai chi non
+                     * guardava. L'ordine e il canale (`attention`) stanno in `avvisoDelPiano.ts`, provati da soli.
                      */
-                    const { talosNotify } = await import('@/stores/notificationCentre')
-                    talosNotify({
-                        key: `plan:${piano.id}`,
-                        channel: 'chat',
-                        weight: 'demanding',
-                        title: deps.translate('chat.plan.title', { count: piano.steps.length }),
-                        body: deps.translate('chat.plan.nothingDoneYet'),
-                        surface: `chat:${sendIdentity.sessionId}`,
-                        at: Date.now(),
+                    const [{ talosNotify }, { talosAttendiPianoConAvviso }] = await Promise.all([
+                        import('@/stores/notificationCentre'),
+                        import('@/lib/chat/avvisoDelPiano'),
+                    ])
+                    const decisione = await talosAttendiPianoConAvviso({
+                        piano,
+                        sessionId: sendIdentity.sessionId,
+                        translate: deps.translate,
+                        notify: talosNotify,
+                        chiedi: () => new Promise<{ admitted: readonly string[], cancelled: boolean }>(
+                            (resolve) => {
+                                // Se una seconda domanda arrivasse mentre la prima
+                                // e' aperta, si rifiuta: e' l'esito prudente, ed e'
+                                // la stessa regola del consenso immagini.
+                                if (planResolve) { resolve({ admitted: [], cancelled: true }); return }
+                                // Fermato PRIMA che il foglio si apra: non si apre
+                                // affatto, invece di chiedere di un lavoro annullato.
+                                if (stream?.signal?.aborted) {
+                                    resolve({ admitted: [], cancelled: true })
+                                    return
+                                }
+                                planResolve = resolve
+                                planRequest.value = piano
+                            },
+                        ),
                     })
+                    staccaStop()
                     if (!decisione.cancelled) {
                         talosSetPlan(sendIdentity.sessionId, { ...piano, state: 'approved' })
                     }
-                    talosNotify({
-                        key: `plan:${piano.id}`,
-                        channel: 'chat',
-                        weight: 'notable',
-                        title: deps.translate(decisione.cancelled
-                            ? 'chat.plan.cancelledTitle'
-                            : 'chat.plan.approvedTitle'),
-                        body: deps.translate('chat.plan.approvedBody', {
-                            count: decisione.admitted.length,
-                        }),
-                        surface: `chat:${sendIdentity.sessionId}`,
-                        at: Date.now(),
-                    })
                     return decisione
                 },
                 /**

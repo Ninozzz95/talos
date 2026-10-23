@@ -4,7 +4,7 @@ import { useTalosI18n } from '@/i18n'
 import { useTalosMessageEntrance } from '@/composables/useTalosMessageEntrance'
 import './talosCalmMessages.css'
 import TalosMobileAssistantHeader from './TalosMobileAssistantHeader.vue'
-import { BookMarked, CheckCheck, ChevronRight, FileText, Mic, ShieldCheck, ShieldQuestion, ShieldX } from '@lucide/vue'
+import { BookMarked, CheckCheck, ChevronRight, FileText, Mic, ShieldQuestion } from '@lucide/vue'
 import { talosShortModelLabel } from '@/lib/models/modelLabel'
 import {
     TALOS_METADATA_AZIONI,
@@ -13,7 +13,7 @@ import {
     talosHaAzioniDaMostrare,
 } from '@/lib/tools/tracciaAzione'
 
-import { TALOS_TOOL_LABEL_KEYS, talosDynamicToolFallbackLabel, talosToolConsentCopy } from '@/lib/tools/toolLabels'
+import { TALOS_TOOL_LABEL_KEYS, talosDynamicToolFallbackLabel } from '@/lib/tools/toolLabels'
 import type { TalosAzioneMessaggio, TalosMobileMessageView } from '@/components/chat/mobileChatTypes'
 // La chat vuota non ha azioni per messaggio: arrivano con il primo messaggio.
 const TalosMobileMessageActions = defineAsyncComponent(() => import('./TalosMobileMessageActions.vue'))
@@ -75,14 +75,19 @@ const TalosMobileLocalMetricsRow = defineAsyncComponent(
     () => import('@/components/chat/TalosMobileLocalMetricsRow.vue'),
 )
 import TalosMobileStatusMessage from '@/components/chat/TalosMobileStatusMessage.vue'
-import { TALOS_METADATA_COMPATTAZIONE, TALOS_METADATA_COMPATTAZIONE_ANNULLATA } from '@/lib/chat/compattazioneChiavi'
+// Le ricevute dei permessi servono solo dopo un'approvazione: pigre come gli altri pezzi rari della lista (il pacchetto d'avvio
+// ha un tetto, 668.000 byte, e la lista vi abita).
+const TalosMobileEsitiPermesso = defineAsyncComponent(() => import('@/components/chat/TalosMobileEsitiPermesso.vue'))
+import { TALOS_METADATA_COMPATTAZIONE, TALOS_METADATA_COMPATTAZIONE_ANNULLATA, TALOS_METADATA_COMPATTAZIONE_FALLITA } from '@/lib/chat/compattazioneChiavi'
 import { TALOS_METADATA_RISULTATO_DELEGA } from '@/lib/harness/r4/risultatoDelegaChiave'
 import { TALOS_METADATA_APPROVAZIONE } from '@/lib/harness/r4/approvazioneChiave'
 import { TALOS_METADATA_FERMATO } from '@/lib/harness/r4/fermatoChiave'
 import { TALOS_METADATA_DOMANDA } from '@/lib/harness/r4/domandaChiave'
 import { TALOS_METADATA_PIANO } from '@/lib/harness/r4/pianoChiave'
 import TalosMobileReasoningBlock from '@/components/chat/TalosMobileReasoningBlock.vue'
-import TalosMobileSourcesChip from '@/components/chat/TalosMobileSourcesChip.vue'
+// Le fonti web compaiono solo sui messaggi che ne citano: pigre come le ricevute dei permessi (20/10/2026: il pacchetto d'avvio era a
+// 668.133 su 668.000 dopo le cure del controllo remoto; la barra le carica già così, `TalosBarraRoot.vue`).
+const TalosMobileSourcesChip = defineAsyncComponent(() => import('@/components/chat/TalosMobileSourcesChip.vue'))
 import { writeTalosClipboardText } from '@/services/clipboard'
 import { talosRelativeTime } from '@/lib/relativeTime'
 import { talosChatTextSize } from '@/lib/talosChatLayout'
@@ -194,13 +199,28 @@ function sospesaVuotaRisolta(message: TalosMobileMessageView | undefined): boole
  * ⭐⭐ P4-ter passo 2 (02/10/2026) — le righe di compattazione salvate nella storia (decisione owner «Una riga nella
  * storia»): quella col record diventa il separatore; quella «annullata» non si disegna e spegne il separatore che nomina.
  */
-interface TalosCompattazioneVista { at: string, tokenPrima: number | null, tokenDopo: number | null }
+interface TalosCompattazioneVista {
+    at: string, tokenPrima: number | null, tokenDopo: number | null
+    /** D-MO-12 (Codice su r4): il riassunto senza il modello e perché; `annullabile:false` per quella a mano. */
+    ripiego: boolean, ragione: string | null, annullabile: boolean
+}
 function compattazioneDi(message: TalosMobileMessageView): TalosCompattazioneVista | null {
     if (message.role !== 'system') return null
-    const record = (message.metadata?.[TALOS_METADATA_COMPATTAZIONE] as { record?: { at?: unknown, tokenPrima?: unknown, tokenDopo?: unknown } } | undefined)?.record
+    const voce = message.metadata?.[TALOS_METADATA_COMPATTAZIONE] as { record?: { at?: unknown, tokenPrima?: unknown, tokenDopo?: unknown }, ripiego?: unknown, ragione?: unknown, annullabile?: unknown } | undefined
+    const record = voce?.record
     if (!record || typeof record.at !== 'string') return null
     const numero = (valore: unknown) => (typeof valore === 'number' && Number.isFinite(valore) ? valore : null)
-    return { at: record.at, tokenPrima: numero(record.tokenPrima), tokenDopo: numero(record.tokenDopo) }
+    return {
+        at: record.at, tokenPrima: numero(record.tokenPrima), tokenDopo: numero(record.tokenDopo),
+        ripiego: voce?.ripiego === true, ragione: typeof voce?.ragione === 'string' ? voce.ragione : null, annullabile: voce?.annullabile !== false,
+    }
+}
+/** D-MO-12: la compattazione di r4 non riuscita («Conversazione non riassunta · <motivo>»). */
+function compattazioneFallitaDi(message: TalosMobileMessageView): { motivo: string | null, dettaglio: string | null } | null {
+    if (message.role !== 'system') return null
+    const voce = message.metadata?.[TALOS_METADATA_COMPATTAZIONE_FALLITA] as { motivo?: unknown, dettaglio?: unknown } | undefined
+    if (!voce) return null
+    return { motivo: typeof voce.motivo === 'string' ? voce.motivo : null, dettaglio: typeof voce.dettaglio === 'string' ? voce.dettaglio : null }
 }
 function annullamentoDi(message: TalosMobileMessageView): string | null {
     if (message.role !== 'system') return null
@@ -215,34 +235,83 @@ const compattazioniAnnullate = computed(() => new Set(props.messages.map(annulla
 const TalosMobileCompactionRow = defineAsyncComponent(() => import('@/components/chat/TalosMobileCompactionRow.vue'))
 const TalosMobileCompactionProgress = defineAsyncComponent(() => import('@/components/chat/TalosMobileCompactionProgress.vue'))
 
+/*
+ * ⛔ Owner 20/10/2026 (righe perse dopo le approvazioni, Pad): con TRE permessi nello stesso turno i messaggi salvati sono quattro
+ * — la pausa del primo giro, due riprese che si fermano di nuovo, la ripresa che risponde —, e ognuno porta solo i giri che ha
+ * eseguito lui. Le bolle sospese vuote e decise si nascondono, ma la risposta ereditava solo dalla precedente DIRETTA e mai le sue
+ * righe: sparivano le righe dei primi due giri e due ricevute su tre. Ora eredita la CATENA intera, ricevute, ragionamento e righe,
+ * nell'ordine; i messaggi sul disco restano quelli di prima (come i gruppi di risposta di Hermes, `response-group.tsx:45`: si
+ * unisce il contenitore, non le righe salvate).
+ *
+ * E durante una ripresa (`sending`) l'ultima sospesa la assorbe la risposta in volo: una bolla sola, non due.
+ */
 function assorbitaDallaSeguente(index: number): boolean {
-    return sospesaVuotaRisolta(props.messages[index]) && props.messages[index + 1]?.role === 'assistant'
+    if (!sospesaVuotaRisolta(props.messages[index])) return false
+    const seguente = props.messages[index + 1]
+    return seguente ? seguente.role === 'assistant' : Boolean(props.sending)
+}
+/** Le bolle sospese nascoste che questa risposta assorbe, dalla più vecchia. */
+function catenaAssorbita(index: number): TalosMobileMessageView[] {
+    const catena: TalosMobileMessageView[] = []
+    for (let indice = index - 1; indice >= 0 && assorbitaDallaSeguente(indice); indice -= 1) catena.unshift(props.messages[indice]!)
+    return catena
+}
+/** Per il `v-memo`: la riga va ridisegnata se la sua catena cambia, anche oltre la precedente diretta. */
+function firmaCatena(index: number): string {
+    return catenaAssorbita(index).map((anello) => `${anello.id}:${anello.authorizationOutcome?.length ?? 0}`).join('|')
+}
+function esitiDellaCatena(catena: readonly TalosMobileMessageView[]): { tool: string, concesso: boolean }[] {
+    return catena.flatMap((anello) => anello.authorizationOutcome ?? [])
 }
 function esitiDaMostrare(message: TalosMobileMessageView, index: number): readonly { tool: string, concesso: boolean }[] {
-    const precedente = props.messages[index - 1]
-    const ereditati = precedente && assorbitaDallaSeguente(index - 1) ? precedente.authorizationOutcome ?? [] : []
     const propri = checkpointDi(message) && !attesaViva(message) && !assorbitaDallaSeguente(index) ? message.authorizationOutcome ?? [] : []
-    return [...ereditati, ...propri]
+    return [...esitiDellaCatena(catenaAssorbita(index)), ...propri]
+}
+/** I pezzi della linea del tempo di un anello: la sua sequenza salvata, o il solo ragionamento se non ne ha. */
+function pezziDellAnello(anello: TalosMobileMessageView): unknown[] {
+    if (haSequenza(anello)) return anello.metadata.talos_sequenza as unknown[]
+    const ragionamento = anello.reasoning?.trim()
+    return ragionamento ? [{ tipo: 'ragionamento', testo: ragionamento }] : []
+}
+/**
+ * La linea del tempo da disegnare (N13), o `null` se nessuno — né la risposta né la catena che assorbe — ha giri di attrezzi:
+ * allora il messaggio si mostra come sempre. Il formato è quello del metadata: la convalida resta a `TalosMobileAttivitaDelTurno`.
+ */
+function sequenzaDaMostrare(message: TalosMobileMessageView, index: number): unknown[] | null {
+    const catena = catenaAssorbita(index)
+    if (!haSequenza(message) && !catena.some(haSequenza)) return null
+    const pezzi = catena.flatMap(pezziDellAnello)
+    if (haSequenza(message)) return [...pezzi, ...(message.metadata.talos_sequenza as unknown[])]
+    const ragionamento = message.reasoning?.trim()
+    if (ragionamento) pezzi.push({ tipo: 'ragionamento', testo: ragionamento })
+    if (message.content.trim()) pezzi.push({ tipo: 'testo', testo: message.content })
+    return pezzi
 }
 /*
  * GESTITA-RAG-01 (owner 25/09/2026, «spostarlo nella risposta»): la bolla sospesa nascosta non porta via il suo
- * «Ragionamento»: la risposta che la assorbe mostra un solo blocco, prima il passo sospeso e poi il proprio.
+ * «Ragionamento»: la risposta che la assorbe mostra un solo blocco, prima i passi sospesi e poi il proprio.
  */
 function ragionamentoDaMostrare(message: TalosMobileMessageView, index: number): string {
-    const precedente = props.messages[index - 1]
-    const ereditato = precedente && assorbitaDallaSeguente(index - 1) ? precedente.reasoning?.trim() ?? '' : ''
-    // ⭐ N13: con la sequenza salvata il ragionamento proprio sta al suo posto, giro per giro, dentro la linea del tempo.
-    const proprio = haSequenza(message) ? '' : message.reasoning?.trim() ?? ''
-    return [ereditato, proprio].filter(Boolean).join('\n\n')
+    // ⭐ N13: con una sequenza il ragionamento (anche quello della catena) sta al suo posto, giro per giro, dentro la linea del tempo.
+    if (sequenzaDaMostrare(message, index)) return ''
+    const ereditati = catenaAssorbita(index).map((anello) => anello.reasoning?.trim() ?? '')
+    return [...ereditati, message.reasoning?.trim() ?? ''].filter(Boolean).join('\n\n')
 }
+/**
+ * La risposta in volo che continua dopo «Consenti» assorbe l'ultima sospesa e la sua catena: le ricevute e le righe di prima le
+ * disegna lei, sopra quelle che stanno arrivando (`TalosMobileStreamingReply`).
+ */
+const ereditataDalVolo = computed(() => {
+    const ultimo = props.messages.length - 1
+    if (ultimo < 0 || !props.sending || !assorbitaDallaSeguente(ultimo)) return null
+    const catena = [...catenaAssorbita(ultimo), props.messages[ultimo]!]
+    return { esiti: esitiDellaCatena(catena), sequenza: catena.flatMap(pezziDellAnello) }
+})
 /** ⭐ N13 (owner 02/10, decisioni del 09/10): il messaggio porta la sequenza ordinata di ragionamento, attrezzi e testo. */
 function haSequenza(message: TalosMobileMessageView): boolean {
     return message.role === 'assistant' && Array.isArray(message.metadata?.talos_sequenza)
 }
 const TalosMobileAttivitaDelTurno = defineAsyncComponent(() => import('@/components/chat/TalosMobileAttivitaDelTurno.vue'))
-function titoloStrumento(tool: string): string {
-    return talosToolConsentCopy({ name: tool, title: tool, description: '' }, t).title
-}
 
 /**
  * ⭐⭐⭐ FASE 2 — quando compare una risposta, si ritirano le misure del
@@ -529,7 +598,7 @@ function messageStateLabel(state: string): string {
             v-for="(message, index) in messages"
             :key="message.id"
             v-message-entrance="message.state"
-            v-memo="[message, messages[index - 1]?.role, messages[index - 1]?.authorizationOutcome, messages[index - 1]?.reasoning, messages[index + 1]?.role, sending, modelLabels, messageStyle, textScale, hasOlderMessages, pendingAuthorizationIds, diagnostica, firstMemoryDisclosureMessageId, now, compattazioniAnnullate.size, azioni]"
+            v-memo="[message, messages[index - 1]?.role, messages[index - 1]?.authorizationOutcome, messages[index - 1]?.reasoning, firmaCatena(index), messages[index + 1]?.role, sending, modelLabels, messageStyle, textScale, hasOlderMessages, pendingAuthorizationIds, diagnostica, firstMemoryDisclosureMessageId, now, compattazioniAnnullate.size, azioni]"
             :data-message-id="message.id"
             :data-message-kind="message.role"
             :data-state="message.state"
@@ -547,7 +616,19 @@ function messageStateLabel(state: string): string {
                 :token-prima="compattazioneDi(message)!.tokenPrima"
                 :token-dopo="compattazioneDi(message)!.tokenDopo"
                 :annullata="compattazioniAnnullate.has(compattazioneDi(message)!.at)"
+                :ripiego="compattazioneDi(message)!.ripiego"
+                :ragione="compattazioneDi(message)!.ragione"
+                :annullabile="compattazioneDi(message)!.annullabile"
                 @annulla="emit('undoCompaction', compattazioneDi(message)!.at)"
+            />
+            <TalosMobileCompactionRow
+                v-else-if="compattazioneFallitaDi(message)"
+                :token-prima="null"
+                :token-dopo="null"
+                :annullata="false"
+                stato="non-riuscita"
+                :motivo="compattazioneFallitaDi(message)!.motivo"
+                :dettaglio="compattazioneFallitaDi(message)!.dettaglio"
             />
             <template v-else-if="annullamentoDi(message)" />
             <TalosCodiceR4RigaDiSistema v-else-if="delCodiceR4(message)" :message="message" />
@@ -693,21 +774,12 @@ function messageStateLabel(state: string): string {
                             «pending» a «risolto» senza toccare il messaggio.
                         -->
                         <div class="min-w-0 flex-1">
-                            <p
-                                v-for="(esito, posizione) in esitiDaMostrare(message, index)"
-                                :key="`${esito.tool}-${posizione}`"
-                                data-testid="talos-authorization-outcome"
-                                :data-esito="esito.concesso ? 'concesso' : 'negato'"
-                                class="mb-1.5 flex min-w-0 items-center gap-1.5 text-xs leading-5 text-[var(--talos-muted)]"
-                            >
-                                <ShieldCheck v-if="esito.concesso" class="size-3.5 shrink-0" aria-hidden="true" />
-                                <ShieldX v-else class="size-3.5 shrink-0" aria-hidden="true" />
-                                <span class="min-w-0 truncate">{{ esito.concesso ? $t('chat.permissionGranted') : $t('chat.permissionDenied') }} {{ titoloStrumento(esito.tool) }}</span>
-                            </p>
+                            <TalosMobileEsitiPermesso :esiti="esitiDaMostrare(message, index)" />
                             <TalosMobileAttivitaDelTurno
-                                v-if="haSequenza(message)"
-                                :salvata="message.metadata?.talos_sequenza"
+                                v-if="sequenzaDaMostrare(message, index)"
+                                :salvata="sequenzaDaMostrare(message, index)"
                                 :testo="message.content"
+                                :durata-ms="typeof message.metadata?.durataMs === 'number' ? message.metadata.durataMs : undefined"
                             />
                             <TalosMobileMessageContent v-else :content="message.content" line-breaks />
                             <button
@@ -891,7 +963,7 @@ function messageStateLabel(state: string): string {
 
         <!-- R1-5: the streaming tail subscribes to the store on its own — a
              token burst re-renders only that subtree, never this list. -->
-        <TalosMobileStreamingReply />
+        <TalosMobileStreamingReply :ereditata="ereditataDalVolo" />
         <TalosMobileCompactionProgress v-if="compattazioneInCorso" />
         <TalosMobileMessageEdit v-if="editTarget" v-bind="editTarget" @close="editTarget = null" />
         <span data-testid="talos-mobile-message-action-status" class="sr-only" role="status" aria-live="polite">{{ copyStatus }}</span>

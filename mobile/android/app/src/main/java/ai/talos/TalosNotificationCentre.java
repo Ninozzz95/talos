@@ -70,30 +70,63 @@ public final class TalosNotificationCentre {
     }
 
     public static void ensureChannels(Context context) {
+        ensureChannels(context, false);
+    }
+
+    /** `rinomina`: solo da `refreshNames` (contesto dell'attività, lingua dell'app); gli altri creano soltanto se manca. */
+    static void ensureChannels(Context context, boolean rinomina) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
         NotificationManager manager = context.getSystemService(NotificationManager.class);
         if (manager == null) return;
 
-        create(manager, CHANNEL_TRANSFERS, "Downloads and installs",
-                "Progress and outcome of model downloads and imports.",
-                NotificationManager.IMPORTANCE_LOW);
-        create(manager, CHANNEL_CHAT, "Replies",
-                "When an answer arrives while you are not looking at TALOS.",
-                NotificationManager.IMPORTANCE_DEFAULT);
-        create(manager, CHANNEL_JOBS, "Long jobs",
-                "Research, generation and scheduled activities.",
-                NotificationManager.IMPORTANCE_DEFAULT);
-        create(manager, CHANNEL_ATTENTION, "Needs you",
-                "Something has stopped and is waiting for your decision.",
-                NotificationManager.IMPORTANCE_HIGH);
+        create(manager, CHANNEL_TRANSFERS, context.getString(R.string.talos_canale_trasferimenti_nome),
+                context.getString(R.string.talos_canale_trasferimenti_descrizione),
+                NotificationManager.IMPORTANCE_LOW, rinomina);
+        create(manager, CHANNEL_CHAT, context.getString(R.string.talos_canale_risposte_nome),
+                context.getString(R.string.talos_canale_risposte_descrizione),
+                NotificationManager.IMPORTANCE_DEFAULT, rinomina);
+        create(manager, CHANNEL_JOBS, context.getString(R.string.talos_canale_lavori_nome),
+                context.getString(R.string.talos_canale_lavori_descrizione),
+                NotificationManager.IMPORTANCE_DEFAULT, rinomina);
+        create(manager, CHANNEL_ATTENTION, context.getString(R.string.talos_canale_attenzione_nome),
+                context.getString(R.string.talos_canale_attenzione_descrizione),
+                NotificationManager.IMPORTANCE_HIGH, rinomina);
+    }
+
+    /**
+     * I canali che esistono già prendono il nome nella lingua di adesso (N0, 21/10/2026, D-N0-6): si chiama all'avvio del ponte,
+     * che dopo un cambio di lingua riparte con l'attività. Quelli mai usati non si creano qui: nascono al primo uso.
+     */
+    public static void refreshNames(Context context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
+        NotificationManager manager = context.getSystemService(NotificationManager.class);
+        if (manager == null) return;
+        ensureChannels(context, true);
+        if (manager.getNotificationChannel(TalosDoneNotification.CHANNEL_ID) != null) TalosDoneNotification.ensureChannel(context, true);
+        if (manager.getNotificationChannel(TalosRunService.CHANNEL_ID) != null) TalosRunService.ensureChannel(context, true);
+        if (manager.getNotificationChannel(TalosTransferNotification.CHANNEL_ID) != null) TalosTransferNotification.ensureChannel(context, true);
+        if (manager.getNotificationChannel(ai.talos.parola.TalosParola.CANALE) != null) {
+            // stessa importanza con cui lo crea il servizio della parola (`TalosParola.avviaInPrimoPiano`)
+            NotificationChannel parola = new NotificationChannel(ai.talos.parola.TalosParola.CANALE,
+                    context.getString(R.string.talos_canale_parola_nome), NotificationManager.IMPORTANCE_LOW);
+            parola.setDescription(context.getString(R.string.talos_canale_parola_descrizione));
+            manager.createNotificationChannel(parola);
+        }
+        // visti sul Pad il 21/10 in italiano con l'app in inglese: i canali del controllo remoto e quello dell'accoppiamento
+        ai.talos.remoto.TalosSvegliaNotifiche.INSTANCE.rinominaCanali(context);
+        ai.talos.agent.TalosAccoppiamentoNotifica.INSTANCE.rinominaCanale(context);
+        ai.talos.aggiornamenti.TalosNotificaAggiornamento.INSTANCE.rinominaCanale(context);
     }
 
     private static void create(NotificationManager manager, String id, String name,
-                               String description, int importance) {
-        // Non si ricrea un canale che esiste: dopo la prima creazione Android
-        // ignora ogni cambio di importanza, e riscriverlo darebbe l'illusione di
-        // poterla correggere da qui. Si corregge disinstallando, e va saputo.
-        if (manager.getNotificationChannel(id) != null) return;
+                               String description, int importance, boolean rinomina) {
+        /*
+         * Con `rinomina` si ricrea anche se esiste, con la stessa importanza: per un canale che esiste Android aggiorna solo nome e
+         * descrizione («should only be changed if the locale changes», javadoc di `createNotificationChannel`) e ignora
+         * un'importanza che non sia più bassa. Prima il nome restava nella lingua del primo avvio. Cambiare importanza resta
+         * un'altra cosa: serve un id nuovo (fase N4).
+         */
+        if (!rinomina && manager.getNotificationChannel(id) != null) return;
         NotificationChannel channel = new NotificationChannel(id, name, importance);
         channel.setDescription(description);
         channel.setShowBadge(true);
@@ -110,9 +143,8 @@ public final class TalosNotificationCentre {
      * un download, cioè il difetto che stiamo togliendo.
      */
     static int idFor(String key) {
-        if (key == null || key.isEmpty()) return 4900;
-        int hash = key.hashCode();
-        return 5000 + Math.abs(hash % 100000);
+        // N0 (21/10/2026): l'intervallo sta in `TalosNotificationIds`; il vecchio ripiego 4900 era la prima attività pianificata.
+        return TalosNotificationIds.centre(key);
     }
 
     public static void post(Context context, String channel, String key,

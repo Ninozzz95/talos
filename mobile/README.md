@@ -6,11 +6,11 @@
 </p>
 
 <p align="center">
-  <strong>Your AI. Your phone. Your models. Your rules.</strong>
+  <strong>Your AI. Your device. Your models. Your rules.</strong>
 </p>
 
 <p align="center">
-  A local-first AI agent for Android that can reason, remember, research, create, and act across your phone — using a local GGUF model or the cloud model you choose.
+  A local-first AI agent for Android that can reason, remember, research, create, and act across your Android device — using a local GGUF model or the cloud model you choose.
 </p>
 
 <p align="center">
@@ -18,20 +18,20 @@
   <a href="https://github.com/Ninozzz95/talos/actions/workflows/ci.yml"><img src="https://github.com/Ninozzz95/talos/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <img src="https://img.shields.io/badge/Android-arm64--v8a-3ddc84.svg" alt="Android arm64">
   <img src="https://img.shields.io/badge/local--first-no%20TALOS%20backend-blueviolet.svg" alt="Local first">
-  <img src="https://img.shields.io/badge/tools-69-7c3aed.svg" alt="69 typed tools">
+  <img src="https://img.shields.io/badge/tools-71-7c3aed.svg" alt="71 typed tools">
 </p>
 
 ---
 
 ## Not another chat wrapper
 
-TALOS is an **agentic workspace built around the phone itself**.
+TALOS is an **agentic workspace built around the device itself**.
 
 It can use a frontier model through your own API key, an Ollama endpoint, or a GGUF model running inside the Android app. The same agent can search the web, work with documents, remember things, manage tasks and calendars, create content, inspect device state, control Android features, and act inside other apps.
 
 The harness controls those actions through:
 
-- **69 typed tools** across personal data, Library, web, creation, models and device capabilities;
+- **71 typed tools** (69 on by default) across personal data, Library, web, creation, models and device capabilities;
 - **progressive tool disclosure** instead of sending every schema on every turn;
 - explicit **`read / write / outbound` authority** with `allow / ask / deny`;
 - **postcondition verification** for observable actions;
@@ -66,7 +66,7 @@ When it finishes, every claim carries its link and the pages it read are already
 </tr>
 <tr>
 <td><b>Available over what you are doing</b><br>TALOS can surface over the current app instead of forcing a separate workflow.</td>
-<td><b>Acts on the phone</b><br>Alarms, settings, apps, media and other device capabilities are exposed as typed tools.</td>
+<td><b>Acts on the device</b><br>Alarms, settings, apps, media and other device capabilities are exposed as typed tools.</td>
 <td><b>Checks the result</b><br>Where a postcondition is observable, success depends on what actually happened.</td>
 </tr>
 </table>
@@ -83,7 +83,7 @@ When it finishes, every claim carries its link and the pages it read are already
 | **Memory** | Search, write, update and delete typed personal/project memory |
 | **Personal workspace** | Notes, tasks and calendar reads/writes |
 | **Creation** | Document creation and configured image generation |
-| **Coding agent (Codice)** | Real agent sessions on the phone: a sandboxed terminal on the device, workspace files, per-tool approvals, sub-agent delegation, automations and a review centre |
+| **Coding agent (Codice)** | Real agent sessions on the device: a sandboxed terminal on it, workspace files, per-tool approvals, sub-agent delegation, automations and a review centre |
 | **Local models** | Discover, inspect, download and run GGUF models through native llama.cpp |
 | **Cloud / self-hosted models** | OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter and Ollama |
 | **Android control** | Device status, location, torch, media, vibration, volume, alarms, apps, screenshots, settings, speech, wallpaper, wake lock |
@@ -133,7 +133,7 @@ That is also the house rule for what does **not** ship by default: Flash Attenti
 
 <img src="docs/immagini/tablet-10-huggingface-list.png" alt="Browsing Hugging Face with the fits-in-memory filter active, twelve matching models">
 
-TALOS can browse Hugging Face from the phone and filter models by what **this device** can actually hold. Each model includes a memory verdict, while publisher, licence, parameter band and popularity help make the choice explicit.
+TALOS can browse Hugging Face from the device and filter models by what **this device** can actually hold. Each model includes a memory verdict, while publisher, licence, parameter band and popularity help make the choice explicit.
 
 Opening a model splits it into three tabs — quantizations, the full model card, and the raw file list — instead of one long scroll. Every quantization is checked against your device automatically as soon as the page opens.
 
@@ -174,16 +174,16 @@ Once loaded, a local model uses the same conversation surface, tools and permiss
 
 One agent step — 2,000 tokens in, 100 out — takes **43.3 s** on that model and **35.3 s** on a Qwen2.5-3B not trained for device control. The 4B scores **71.0% on AndroidWorld**.
 
-Speculative decoding, an NPU backend and per-phase thread counts remain measured work in progress. Thermal state is part of those measurements.
+The Qualcomm NPU (Hexagon) ships in the release and runs local models on supported Snapdragon devices, next to the CPU and GPU. Speculative decoding and per-phase thread counts remain measured work in progress. Thermal state is part of those measurements.
 
 ---
 
-# Codice: the agent runs on the phone
+# Codice: the agent runs on the device
 
 Codice is the coding agent, and it is not a remote control for a computer
 somewhere else. Sessions open on the device, commands run in a sandboxed
 terminal on the device, and the files it reads and writes are the ones on the
-phone. No PC has to be awake for it to work.
+device. No PC has to be awake for it to work.
 
 What a session gives you:
 
@@ -215,7 +215,7 @@ unaffected.
 
 # The harness is the product
 
-TALOS currently exposes **69 typed tools**. With all available tools enabled, 68 definitions are offered to the model — image generation appears only when configured — weighing **51,827 bytes (~14,007 tokens)** per turn. Progressive disclosure keeps **4 tools, 1,868 bytes (~505 tokens)** in the prefix instead, which is 96% less in front of the model on every turn.
+TALOS has **71 typed tools**, 69 of them on by default (driving the screen and changing the Library context policy stay off until you turn them on). Their full definitions weigh about **52 KB (~12,700 tokens)**, so they are not all sent on every turn. Progressive disclosure keeps **4 tools, 1,873 bytes (~460 tokens)** in the prefix; a compact catalogue names every other tool, and the model gets a tool's exact definition from `tool_details` when it needs it. That is 96% less in front of the model on every turn. Local models start from 2 tools and find the rest with `tool_search`.
 
 You can reproduce the measurement:
 
@@ -246,7 +246,7 @@ npx vitest run tests/unit/tools/pesoDegliSchemi.test.ts
                       │
                       ▼
           ┌─────────────────────────┐
-          │  Library / Web / Phone  │
+          │ Library / Web / Device  │
           │  Models / Personal data │
           └────────────┬────────────┘
                        │
@@ -395,9 +395,9 @@ A future optional backend/sync architecture is intended as **replication and exe
 
 <img src="docs/immagini/tablet-15-library.png" alt="The Library on a tablet: pages saved from chats as cards with real previews and their site, one toolbar row, and a menu on every card">
 
-Everything the agent reads or saves lands in the Library with a real preview, grouped by the conversation that produced it. On a phone the same stations keep their shape:
+Everything the agent reads or saves lands in the Library with a real preview, grouped by the conversation that produced it. On a smaller screen the same stations keep their shape:
 
-<img src="docs/immagini/phone-9-notes.png" alt="Notes on a phone, in cards" width="320">
+<img src="docs/immagini/phone-9-notes.png" alt="Notes on a small screen, in cards" width="320">
 
 ---
 
@@ -407,7 +407,7 @@ Everything the agent reads or saves lands in the Library with a real preview, gr
 
 You record twelve short phrases once, on-device. TALOS builds a voice profile from them, and from then on a reply can be read back in *your* voice instead of a generic text-to-speech voice.
 
-A live waveform moves with your voice while you record, and a quiet-room check runs before the wizard starts so you know the room is actually quiet before you speak. Recordings never leave the device: they are encrypted with a key held in the phone's hardware keystore, and once the profile is built the raw audio is destroyed — what remains is the profile, not the recording.
+A live waveform moves with your voice while you record, and a quiet-room check runs before the wizard starts so you know the room is actually quiet before you speak. Recordings never leave the device: they are encrypted with a key held in the device's hardware keystore, and once the profile is built the raw audio is destroyed — what remains is the profile, not the recording.
 
 The synthesis engine is [Kyutai's Pocket TTS](https://github.com/kyutai-labs/pocket-tts) (MIT), running fully on-device through ONNX Runtime. Measured on production streaming: **-23.2 LUFS**, true peak **-0.8 dBFS**, time to first audio **449–537 ms** warm. Italian speech recognition against a 6-sentence reference set: **6/6 exact, zero word error rate**.
 
@@ -467,7 +467,7 @@ Some operations require Android system permissions, Accessibility or the optiona
 
 <img src="docs/immagini/tablet-16-code-running.png" alt="Codice on a real session, seven seconds in: Running, one step, the tool feed says a file was read and a command ran, and the context rail shows the workspace root on the device">
 
-The same session forty seconds later — four steps, zero errors, a script written and executed on the phone, and the answer:
+The same session forty seconds later — four steps, zero errors, a script written and executed on the device, and the answer:
 
 <img src="docs/immagini/tablet-17-code-done.png" alt="Codice at the end of the session: Stopped, four steps, the script top10_download.sh saved and run, and a two-sentence explanation of the result">
 
@@ -475,7 +475,7 @@ TALOS's own coding agent is under active development, on the same principles as 
 
 It already runs against real projects today — read/search/edit/test, a sandboxed shell (WSL2 first, honestly labelled `none` when no isolation is available, never a silent bluff), and an SSRF-safe page reader ported from TALOS's own on-device web-reading policy (DNS pinning, redirect revalidation, no private-network access) — driven through the same kind of typed-tool loop already shipping in the app, benchmarked against other coding agents on cost-per-solved-task rather than vibes.
 
-It now runs **on the phone itself** — the screenshot above is a real session on the tablet, not a mock-up: a model chosen live from the provider's own catalogue, seven typed tools, and a workspace root on the device. Sessions persist, and fork and resume work from the session title.
+It now runs **on the device itself** — the screenshot above is a real session on the tablet, not a mock-up: a model chosen live from the provider's own catalogue, seven typed tools, and a workspace root on the device. Sessions persist, and fork and resume work from the session title.
 
 What's still ahead: local on-device models driving a Codice session (today they answer in chat, but do not drive the agent), two providers recognised but not yet routed, and the same UI surfacing on both the desktop tooling and the mobile app instead of two implementations of the same idea.
 
@@ -612,7 +612,7 @@ targetSdk 36
 ABI arm64-v8a
 ```
 
-TALOS is actively validated on modern Android hardware, including a OnePlus phone and tablet.
+TALOS is actively validated on modern Android hardware, including two OnePlus devices of different sizes.
 
 OEM variants differ in Accessibility, background execution, lock-screen behavior and battery management, so TALOS prefers runtime capability checks over hardcoded assumptions.
 

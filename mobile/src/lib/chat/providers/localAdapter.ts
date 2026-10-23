@@ -52,15 +52,27 @@ import { talosKvBytesPerTokenOf } from '@/lib/models/engineDiagnostics'
 import { talosEngineTuning } from '@/lib/models/engineTuning'
 import type { TalosTuningKey } from '@/lib/models/tuningProfile'
 import { talosStoredTuning } from '@/services/tuningProfileStore'
-import { talosLocalBackendInUse } from '@/lib/models/localBackendChoice'
 import {
+    TALOS_WARM_PROFILES_BUDGET_MS,
+    type TalosLocalBackendKind,
+    talosBackendKindOfRegistry,
+    talosEntroIlTetto,
+    talosLocalBackendInUse,
+    talosLocalBackendKindOpen,
+    talosLocalBackendRequest,
+} from '@/lib/models/localBackendChoice'
+import {
+    type TalosLocalBackendOpenOptions,
     type TalosLocalBackendPlan,
     talosLocalBackendPlan,
 } from '@/lib/models/localBackendPlan'
 import { talosStoredLocalBackendPreference } from '@/lib/models/localBackendPreferenceStore'
 import { TALOS_APP_BUILD } from '@/lib/appBuild'
 import {
+    TALOS_CODICE_MIN_CONTEXT_TOKENS,
+    TALOS_CODICE_PROMPT_TOKENS_MINIMI,
     TALOS_LOCAL_DEFAULT_CONTEXT_TOKENS,
+    talosCodiceContextCandidates,
     talosLocalEscalatedContextTokens,
 } from '@/lib/models/localContextPolicy'
 import { talosToolsForLocalEngine } from '@/lib/tools/registry'
@@ -433,6 +445,12 @@ async function backendDiApertura(
     backends: string,
     traceId?: string,
     lavoro?: TalosFormaDelLavoro,
+    /**
+     * La famiglia su cui il modello è GIÀ aperto, o `null` se si sta per aprire da zero. Con un modello aperto restarci
+     * non costa la riapertura, ed è lo sconto che `talosSelectBestProfile` sa già fare (CR-12): senza, un vantaggio
+     * dentro il rumore farebbe rileggere i pesi.
+     */
+    attivo: TalosLocalBackendKind | null = null,
 ): Promise<TalosLocalBackendPlan | null> {
     try {
         /*
@@ -445,15 +463,29 @@ async function backendDiApertura(
         const [preferenza, fatti, profili, formato] = await Promise.all([
             talosStoredLocalBackendPreference(),
             talosLocalEngineBackendFacts(),
-            talosLocalPerformanceProfiles(path),
+            /*
+             * ⛔ Revisione del 22/10/2026 (rilievo 2): col modello GIÀ APERTO le misure si aspettano quanto nel
+             * riscaldamento, non di più. Girano sul filo unico delle qualificazioni (`qualificationWorker`), e dietro
+             * una qualificazione in corso arriverebbero dopo minuti, con la persona davanti a un modello pronto.
+             * Oltre il tetto `null`: chi l'ha aperto lo tiene com'è.
+             */
+            attivo === null
+                ? talosLocalPerformanceProfiles(path)
+                : talosEntroIlTetto(talosLocalPerformanceProfiles(path), TALOS_WARM_PROFILES_BUDGET_MS), // àncora: misure-entro-il-tetto
             talosLocalModelQuantisation(path),
         ])
+        if (profili === null) {
+            if (traceId) talosLocalTrace(traceId, `backend_profiles_late budget=${TALOS_WARM_PROFILES_BUDGET_MS} kept=open`)
+            return null
+        }
         const piano = talosLocalBackendPlan({
             preference: preferenza,
             backends,
             offloadDevices: fatti.offloadDevices,
             profiles: profili,
-            activeRegistry: null,
+            activeRegistry: attivo === null
+                ? null
+                : profili.find((p) => talosBackendKindOfRegistry(p.backendRegistry) === attivo)?.backendRegistry ?? null,
             /*
              * D-53 — non più `MAX_TOKENS` fisso: un'attesa di 1.024 token
              * diceva al selettore che ogni risposta è lunga, e premiava sempre
@@ -1101,6 +1133,94 @@ export function talosLocalFinestraPerCompattazione(modelId: string): TalosLocalF
     return finestra ? { ...finestra } : null
 }
 
+/**
+ * ⛔⛔ Pad 22/10/2026 — il modello GIÀ APERTO va tenuto solo se è sul motore che si deciderebbe adesso.
+ *
+ * LFM2.5-2.6B Q4_0, NPU misurata più veloce (lettura 1298,9 t/s contro 103,4): il riscaldamento l'aveva aperto sulla CPU,
+ * e `ensureLoaded` tornava subito perché il percorso era lo stesso. Nessuna decisione, nessuna riga `backend_decided`, e
+ * ogni giro della chat sulla CPU — anche dopo una qualifica che aveva cambiato il vincitore.
+ *
+ * PocketPal ha lo stesso «già caricato → salta» (`store/ModelStore.ts:2238-2244`) e conserva i parametri con cui il
+ * contesto vivo è stato aperto (`activeContextSettings`, `:2368`); il loro stesso commento (`:2165-2168`) dice che quel
+ * salto «oscura» `devices`/`n_gpu_layers`. Qui la domanda si fa al motore: su cosa gira adesso, e cosa si deciderebbe.
+ *
+ * Si riapre SOLO quando tutte e quattro sono vere — altrimenti si tiene il modello com'è, come prima:
+ *  1. la decisione viene da una MISURA o dalla PERSONA (un suggerimento del formato non vale una rilettura dei pesi);
+ *  2. il motore dice con certezza dove gira (`talosLocalBackendKindOpen`, mai una deduzione);
+ *  3. le due famiglie sono diverse, col costo di riapertura già messo nel conto (`attivo`, CR-12);
+ *  4. non si è già riaperto per la stessa richiesta senza che il motore cambiasse: riaprire a ogni giro costerebbe
+ *     secondi ogni volta, e un motore che ripiega ripiegherebbe di nuovo.
+ *
+ * Torna il piano con cui riaprire, o `null` per tenere il modello aperto.
+ */
+const RIAPERTURE_TENTATE = new Map<string, string>()
+
+/**
+ * ⛔ Revisione del 22/10/2026 (rilievo 1): chat e Codice tengono ciascuno le proprie riaperture tentate. Con una chiave
+ * sola per percorso la riapertura già spesa dall'una toglieva all'altra la sua, che apre con un'altra finestra.
+ */
+type TalosChiRiapre = 'chat' | 'codice'
+
+/** Solo per i test: dimentica le riaperture già tentate. */
+export function talosScordaRiaperture(): void {
+    RIAPERTURE_TENTATE.clear()
+}
+
+/** Un'apertura da zero rimette in gioco ogni riapertura già tentata per questo modello, della chat e del Codice. */
+function scordaRiapertureDi(path: string): void {
+    RIAPERTURE_TENTATE.delete(`chat:${path}`)
+    RIAPERTURE_TENTATE.delete(`codice:${path}`)
+}
+
+/** Una riapertura decisa: dove andare, e da dove si viene. */
+interface TalosRiapertura {
+    piano: TalosLocalBackendPlan
+    /** La famiglia su cui il modello girava fino a adesso. */
+    da: TalosLocalBackendKind
+    /**
+     * ⛔ Rilievo 4 (22/10/2026): le opzioni del motore di prima. `TalosLlamaPlugin.open` chiude il modello aperto PRIMA
+     * di provare il nuovo (due copie insieme = OOM sul Pad): se la riapertura fallisce, si torna qui prima di dare errore.
+     */
+    ritorno: TalosLocalBackendOpenOptions
+}
+
+function opzioniDelMotoreDiPrima(piano: TalosLocalBackendPlan, da: TalosLocalBackendKind): TalosLocalBackendOpenOptions {
+    const richiesta = talosLocalBackendRequest(da, piano.choices.find((scelta) => scelta.kind === da)?.registries ?? [])
+    // Un acceleratore senza il nome del registry sarebbe la lotteria dell'ordine delle librerie: si torna sulla CPU.
+    return richiesta.backend === null
+        ? { gpuLayers: 0 }
+        : { gpuLayers: richiesta.gpuLayers, backend: richiesta.backend }
+}
+
+async function pianoPerRiaprire(
+    chi: TalosChiRiapre,
+    path: string,
+    backends: string,
+    traceId?: string,
+    lavoro?: TalosFormaDelLavoro,
+): Promise<TalosRiapertura | null> {
+    try {
+        const attivo = talosLocalBackendKindOpen(await talosLocalEngineBackendFacts())
+        if (attivo === null) return null
+        const piano = await backendDiApertura(path, backends, traceId, lavoro, attivo)
+        if (!piano) return null
+        if (piano.decision.source !== 'measured' && piano.decision.source !== 'user') return null
+        const chiave = `${chi}:${path}` // àncora: riaperture-per-chi
+        if (piano.decision.kind === attivo) {
+            RIAPERTURE_TENTATE.delete(chiave)
+            return null
+        }
+        const richiesta = `${piano.options.gpuLayers ?? '-'}|${piano.options.backend ?? '-'}`
+        if (RIAPERTURE_TENTATE.get(chiave) === richiesta) return null // àncora: una-riapertura-sola
+        RIAPERTURE_TENTATE.set(chiave, richiesta)
+        if (traceId) talosLocalTrace(traceId, `backend_reopen from=${attivo} to=${piano.decision.kind} reason=${piano.decision.reason}`)
+        return { piano, da: attivo, ritorno: opzioniDelMotoreDiPrima(piano, attivo) }
+    } catch {
+        // Una diagnosi che non riesce non toglie alla persona il modello già aperto.
+        return null
+    }
+}
+
 async function ensureLoaded(
     path: string,
     piano: TalosPianoDiApertura = {
@@ -1112,28 +1232,58 @@ async function ensureLoaded(
 ): Promise<TalosLocalEngineStatus> {
     const status = await talosLocalEngineStatus()
     if (!status.available) throw new Error('TALOS_LOCAL_ENGINE_UNAVAILABLE')
-    if (status.loadedPath === path) return status
-    /*
-     * D13 (owner, 01/10/2026): «una copia sola». Se la prova dei motori sta
-     * girando, la persona ha scritto: la prova si interrompe e libera la
-     * memoria PRIMA che si apra il modello della chat (sul Pad due copie
-     * insieme = OOM KILL). La prova si ripete la prossima volta.
-     */
-    await talosCancelAutomaticProbe()
-    const pianoBackend = await backendDiApertura(path, status.backends, traceId, lavoro)
+    let pianoBackend: TalosLocalBackendPlan | null
+    let riapertura: TalosRiapertura | null = null
+    if (status.loadedPath === path) {
+        /*
+         * ⛔ Revisione del 22/10/2026 (rilievo 1): aperto con una finestra PIÙ GRANDE di quella che la chat chiederebbe è,
+         * di regola, il modello del Codice (r4, almeno 24k). Riaprirlo col piano della chat (4-8k) per cambiare motore lo
+         * restringerebbe sotto il giro lungo successivo del Codice (`CONTEXT_LENGTH_EXCEEDED` in
+         * `TalosMotoreOspiteServizio.giro`). Si tiene com'è: la chat ci sta comunque.
+         */
+        if ((status.contextTokens ?? 0) > piano.contextTokens) return status // àncora: chat-non-restringe-il-codice
+        // D13: anche una riapertura è un'apertura, e la prova non resta accanto — fermata PRIMA di chiedere le misure,
+        // che girano sul suo stesso filo (rilievo 2).
+        await talosCancelAutomaticProbe() // àncora: prova-ferma-prima-delle-misure
+        // Già aperto: si tiene, a meno che non giri sul motore sbagliato — vedi `pianoPerRiaprire`.
+        riapertura = await pianoPerRiaprire('chat', path, status.backends, traceId, lavoro) // àncora: riapri-sul-motore-deciso
+        if (!riapertura) return status
+        pianoBackend = riapertura.piano
+    } else {
+        /*
+         * D13 (owner, 01/10/2026): «una copia sola». Se la prova dei motori sta
+         * girando, la persona ha scritto: la prova si interrompe e libera la
+         * memoria PRIMA che si apra il modello della chat (sul Pad due copie
+         * insieme = OOM KILL). La prova si ripete la prossima volta.
+         */
+        await talosCancelAutomaticProbe()
+        // Un'apertura da zero rimette in gioco ogni riapertura già tentata per questo modello.
+        scordaRiapertureDi(path)
+        pianoBackend = await backendDiApertura(path, status.backends, traceId, lavoro)
+    }
+    const apertura = {
+        contextTokens: piano.contextTokens,
+        kvCacheType: piano.kvCacheType,
+        ...(await talosTuningFor(path)),
+    }
     try {
-        await talosLocalEngineOpenWithFallback(path, {
-            contextTokens: piano.contextTokens,
-            kvCacheType: piano.kvCacheType,
-            ...(await talosTuningFor(path)),
-            /*
-             * ⛔ DOVE far girare il modello — e va CHIESTO qui, all'unica
-             * apertura che ogni messaggio attraversa. Ultimo nello spread
-             * apposta: la scelta della persona non si lascia sovrascrivere da
-             * nessuna manopola che arrivi prima.
-             */
-            ...(pianoBackend?.options ?? {}),
-        })
+        try {
+            await talosLocalEngineOpenWithFallback(path, {
+                ...apertura,
+                /*
+                 * ⛔ DOVE far girare il modello — e va CHIESTO qui, all'unica
+                 * apertura che ogni messaggio attraversa. Ultimo nello spread
+                 * apposta: la scelta della persona non si lascia sovrascrivere da
+                 * nessuna manopola che arrivi prima.
+                 */
+                ...(pianoBackend?.options ?? {}),
+            })
+        } catch (error) {
+            // Rilievo 4: la riapertura fallita ha già chiuso il modello di prima ⇒ si torna sul suo motore, poi l'errore.
+            if (!riapertura || !(error instanceof TalosLocalEngineOpenError)) throw error
+            if (traceId) talosLocalTrace(traceId, `backend_reopen_failed stage=${error.stage} back=${riapertura.da}`)
+            await talosLocalEngineOpenWithFallback(path, { ...apertura, ...riapertura.ritorno }).catch(() => { throw error }) // àncora: chat-torna-sul-motore-di-prima
+        }
     } catch (error) {
         if (error instanceof TalosLocalEngineOpenError) throw actionableOpenFailure(error)
         throw error
@@ -1314,6 +1464,93 @@ async function pianoDiApertura(
         // leggera comunque, perché è quella che dà più margine, e il rifiuto —
         // se serve — arriva dopo l'apertura, col tetto vero.
         : { contextTokens: TALOS_LOCAL_DEFAULT_CONTEXT_TOKENS, kvCacheType: 'q8_0' }
+}
+
+export type TalosAperturaPerIlCodice =
+    | { esito: 'aperto', nCtx: number }
+    /** Su questo telefono il modello non arriva al minimo del Codice; `massimo` è quanto potrebbe, `null` se non misurato. */
+    | { esito: 'troppo-piccolo', massimo: number | null }
+    /** Il template del modello non sa chiamare attrezzi: nel Codice non potrebbe leggere né scrivere un file. */
+    | { esito: 'senza-attrezzi' }
+
+/**
+ * ⛔ CODICE COL MOTORE LOCALE — il modello della chat aperto per il Codice (owner 18-19/10/2026, minimo 24k; ledger
+ * `LEDGER-CODICE-MOTORE-LOCALE-2026-10-18.md`). Lo stesso calcolo di `pianoDiApertura` (il tetto di `localContextCeiling` sulla
+ * forma del modello e la memoria del telefono, prima `f16` poi `q8_0`) con i numeri del Codice (`talosCodiceContextCandidates`):
+ * r4 manda a ogni giro il preambolo con gli attrezzi, e una finestra da chat non lo regge.
+ *
+ * Già aperto con almeno il minimo (anche dalla chat) ⇒ si usa com'è: riaprire costa secondi e azzera la cache. La finestra che
+ * torna è quella VERA dell'apertura, ed è quella che va a r4 per la compattazione.
+ */
+export async function talosApriPerIlCodice(path: string): Promise<TalosAperturaPerIlCodice> {
+    const status = await talosLocalEngineStatus()
+    if (!status.available) throw new Error('TALOS_LOCAL_ENGINE_UNAVAILABLE')
+    // `null` = un ponte che non sa dirlo: decide il motore. Solo un «no» dichiarato ferma.
+    const capacita = await talosLocalEngineTemplateCapabilities(path)
+    if (capacita && !capacita.supportsTools) return { esito: 'senza-attrezzi' }
+    /*
+     * ⛔ Legge dell'owner «il Codice è identico alla chat» (22/10/2026): la stessa forma del lavoro e la stessa cura di
+     * `ensureLoaded`. Il prompt è il pavimento misurato di r4 (`TALOS_CODICE_PROMPT_TOKENS_MINIMI`); la risposta è lo stesso
+     * pavimento della chat senza storia (`talosStimaTokenDiRisposta` con 256), perché qui non si vede ancora nessuna risposta.
+     */
+    const lavoro: TalosFormaDelLavoro = {
+        promptTokens: TALOS_CODICE_PROMPT_TOKENS_MINIMI,
+        expectedOutputTokens: talosStimaTokenDiRisposta([], 256, MAX_TOKENS),
+    }
+    // Il Codice non ha una generazione dell'app a cui legare le righe: un id suo, `local:codice-…` in logcat.
+    const traceId = `codice-${talosNewLocalTraceId()}`
+    let pianoBackend: TalosLocalBackendPlan | null = null
+    let riapertura: TalosRiapertura | null = null
+    // D13: la prova si interrompe prima di aprire, e — come nella chat — prima di chiedere le misure, che girano sul suo
+    // stesso filo (revisione del 22/10/2026, rilievo 2).
+    await talosCancelAutomaticProbe() // àncora: codice-ferma-la-prova-prima-delle-misure
+    if (status.loadedPath === path && (status.contextTokens ?? 0) >= TALOS_CODICE_MIN_CONTEXT_TOKENS) {
+        // Già aperto con almeno il minimo: si usa com'è, a meno che non giri sul motore sbagliato (`pianoPerRiaprire`).
+        riapertura = await pianoPerRiaprire('codice', path, status.backends, traceId, lavoro) // àncora: codice-riapre-sul-motore-deciso
+        if (!riapertura) return { esito: 'aperto', nCtx: status.contextTokens as number }
+        pianoBackend = riapertura.piano
+    } else if (status.loadedPath !== path) {
+        // Come nella chat: un'apertura da zero rimette in gioco ogni riapertura già tentata per questo modello.
+        scordaRiapertureDi(path)
+    }
+    const forma = (await talosLocalEnginePlanPrompt(path, [{ role: 'user', content: '.' }], [], false))?.shape ?? null
+    const tetto = async (tipo: string) => (forma
+        ? localContextCeiling({ ...forma, kvBytesPerElement: talosKvBytesPerElement(tipo) }, { inMemoria: false })
+        : null)
+    const tetti = { f16: await tetto('f16'), q8_0: await tetto('q8_0') }
+    const aperture = talosCodiceContextCandidates(tetti)
+    pianoBackend ??= await backendDiApertura(path, status.backends, traceId, lavoro)
+    const regolazione = await talosTuningFor(path)
+    /** I gradini della finestra su un motore; `false` quando anche il minimo, con la cache leggera, è troppo adesso. */
+    const apriSu = async (motore: TalosLocalBackendOpenOptions): Promise<boolean> => {
+        for (const apertura of aperture) {
+            try {
+                await talosLocalEngineOpen(path, { ...apertura, ...regolazione, ...motore })
+                return true
+            } catch (error) {
+                if (!(error instanceof TalosLocalEngineOpenError) || error.stage !== 'context') throw error
+            }
+        }
+        return false
+    }
+    let riuscita: boolean
+    try {
+        riuscita = await apriSu(pianoBackend?.options ?? {})
+    } catch (error) {
+        if (!(error instanceof TalosLocalEngineOpenError)) throw error
+        if (!riapertura) throw actionableOpenFailure(error)
+        // Rilievo 4, come nella chat: la riapertura fallita ha già chiuso il modello di prima ⇒ si torna sul suo motore.
+        talosLocalTrace(traceId, `backend_reopen_failed stage=${error.stage} back=${riapertura.da}`)
+        riuscita = await apriSu(riapertura.ritorno).catch(() => { throw actionableOpenFailure(error) }) // àncora: codice-torna-sul-motore-di-prima
+    }
+    // Il motore nuovo non regge la finestra del Codice, quello di prima sì (era aperto con almeno il minimo): si torna lì.
+    if (!riuscita && riapertura) riuscita = await apriSu(riapertura.ritorno).catch(() => false) // àncora: codice-torna-se-la-finestra-non-ci-sta
+    // anche il minimo, con la cache leggera, è troppo per questo telefono adesso: il Codice lo dice con la stima
+    if (!riuscita) return { esito: 'troppo-piccolo', massimo: tetti.q8_0 ?? tetti.f16 }
+    // Come la chat: SCELTO non è IN USO, e dopo l'apertura si chiede al motore che cosa ha risolto.
+    if (pianoBackend) await dichiaraCosaGiraDavvero(pianoBackend, traceId)
+    const aperto = await talosLocalEngineStatus()
+    return { esito: 'aperto', nCtx: aperto.contextTokens ?? aperture[0].contextTokens }
 }
 
 /**
@@ -2156,8 +2393,13 @@ export const localAdapter: TalosMobileProviderAdapter = {
              * dichiara niente, e nel dubbio si mostra. Nascondere un modello
              * vero e' un danno che l'utente non puo' riparare; offrirne uno che
              * non parla lo dice aprendosi, con un errore che almeno si legge.
+             *
+             * ⛔ E solo GGUF (Pad, 21/10/2026): i file della dettatura sul
+             * dispositivo (`*.int8.onnx`, `tokens.txt`) non dichiarano niente e
+             * finivano sotto LOCAL come modelli di chat. Questo motore apre solo
+             * GGUF: il «nel dubbio» vale per un GGUF, non per qualunque file.
              */
-            models: files.filter((file) => file.conversational !== false).map((file) => ({
+            models: files.filter((file) => file.conversational !== false && /\.gguf$/i.test(file.name)).map((file) => ({
                 // The path is the identity. Two models can share a filename
                 // across repositories, and a name that collides would load the
                 // wrong weights without anything looking wrong.

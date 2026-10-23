@@ -1,19 +1,25 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent } from 'vue'
+import { computed, defineAsyncComponent, reactive } from 'vue'
 import { useTalosI18n } from '@/i18n'
 import TalosMobileReasoningBlock from '@/components/chat/TalosMobileReasoningBlock.vue'
 import TalosMobileRunningToolRow from '@/components/chat/TalosMobileRunningToolRow.vue'
 import TalosMobileTraceRow from '@/components/chat/TalosMobileTraceRow.vue'
+import TalosMobileGruppoAttrezzi from '@/components/chat/TalosMobileGruppoAttrezzi.vue'
 import {
+    talosBlocchiDelTurno,
     talosSegmentiDaiConfini,
     talosSequenzaDaMetadata,
+    TALOS_SOGLIA_GRUPPO_ATTREZZI,
     type TalosAttrezzoDelGiro,
     type TalosConfineDelGiro,
+    type TalosRigaDelBlocco,
+    type TalosVoceDelBlocco,
     type TalosSegmentoDelTurno,
 } from '@/lib/chat/sequenzaDelTurno'
-import { talosToolActivityLabel, talosToolIconName, TALOS_TOOL_LABEL_KEYS } from '@/lib/tools/toolLabels'
+import { talosToolActivityLabel, talosToolIconName } from '@/lib/tools/toolLabels'
 import { TALOS_TOOL_ICONS } from '@/lib/tools/toolIcons'
-import { nomeUmanoAttrezzoR4 } from '@/lib/harness/r4/agentiR4'
+import { talosParolaAttrezzo } from '@/lib/chat/parolaAttrezzo'
+import { talosElapsedLabel } from '@/composables/useTalosElapsed'
 
 /**
  * ⭐⭐⭐ N13 — il turno dell'assistente nell'ordine in cui è successo: ragionamento, righe degli attrezzi, testo, giro dopo giro.
@@ -39,17 +45,42 @@ const props = defineProps<{
     attivi?: readonly TalosAttrezzoDelGiro[]
     vivo?: boolean
     salvata?: unknown
+    /**
+     * ⛔ Owner 20/10/2026 (righe perse dopo le approvazioni): mentre scrive, la linea del tempo GIÀ salvata che viene prima dei
+     * giri in corso (la ripresa dopo «Consenti» continua la bolla sospesa). Stesso formato di `salvata`; righe mai «in corso».
+     */
+    prima?: unknown
+    /** Quanto è durato il turno finito (r4 `durataMs`): l'ultimo gruppo dice «Worked for X · N steps» (owner 22/10/2026). */
+    durataMs?: number
 }>()
 
 const TalosMobileMessageContent = defineAsyncComponent(() => import('@/components/chat/TalosMobileMessageContent.vue'))
 const { t, locale } = useTalosI18n()
 
+/** L'indice dell'ultimo blocco di passi: solo lui dice per quanto ha lavorato il turno. */
+const ultimoBloccoDiPassi = computed(() => blocchi.value.map((b) => b.tipo).lastIndexOf('attrezzi'))
+
+/** «4 steps», o a turno finito e con la durata vera «Worked for 1m 35s · 4 steps» sull'ultimo gruppo. */
+function passi(righe: readonly TalosRigaDelBlocco[], indice: number): string {
+    const quanti = t('chat.toolGroupSteps', { count: righe.length })
+    const secondi = Math.round((props.durataMs ?? 0) / 1000)
+    if (props.salvata === undefined || indice !== ultimoBloccoDiPassi.value || !talosElapsedLabel(secondi)) return quanti
+    return t('chat.toolGroupWorked', { durata: talosElapsedLabel(secondi), passi: quanti })
+}
+
 const daSalvata = computed(() => (props.salvata === undefined ? null : talosSequenzaDaMetadata(props.salvata)))
+/** La parte già salvata che precede i giri in corso: vuota se non c'è o se è storta (allora si mostra solo il giro vivo). */
+const daPrima = computed<TalosSegmentoDelTurno[]>(() => (props.prima === undefined ? [] : talosSequenzaDaMetadata(props.prima) ?? []))
 
 const segmenti = computed<TalosSegmentoDelTurno[]>(() => {
     if (props.salvata !== undefined) {
         return daSalvata.value ?? (props.testo ? [{ tipo: 'testo', testo: props.testo }] : [])
     }
+    return [...daPrima.value, ...segmentiVivi.value]
+})
+
+/** I segmenti del giro che sta arrivando (senza la parte già salvata, `prima`). */
+const segmentiVivi = computed<TalosSegmentoDelTurno[]>(() => {
     const confini = props.confini ?? []
     if (confini.length === 0) {
         // ⛔ SEQ-REG-PAD-01: un attrezzo senza nome (chiamata storta del modello) non diventa una riga vuota.
@@ -61,15 +92,9 @@ const segmenti = computed<TalosSegmentoDelTurno[]>(() => {
     return talosSegmentiDaiConfini(confini, (props.testo ?? '').slice(0, ultimo.testo), (props.ragionamento ?? '').slice(0, ultimo.ragionamento))
 })
 
-/**
- * La parola della riga: quella della chat se la chat conosce l'attrezzo; altrimenti il nome umano del desktop r4 (gli attrezzi del
- * Codice: «shell», «leggi», «delega_sottotask»…) con l'iniziale maiuscola, come `comeTitolo` (`legacy/app.js:9859` @ fc5).
- */
+/** La parola della riga (`lib/chat/parolaAttrezzo.ts`: chat, poi nome umano del Codice r4). */
 function parola(nome: string): string | undefined {
-    const chiave = TALOS_TOOL_LABEL_KEYS[nome]
-    if (chiave) return t(chiave)
-    const umano = nomeUmanoAttrezzoR4(nome, locale.value)
-    return umano ? umano.charAt(0).toLocaleUpperCase(locale.value) + umano.slice(1) : undefined
+    return talosParolaAttrezzo(nome, t, locale.value)
 }
 
 function riga(attrezzo: TalosAttrezzoDelGiro) {
@@ -82,34 +107,103 @@ function riga(attrezzo: TalosAttrezzoDelGiro) {
 /** Le righe dell'ultimo giro sono «in corso» solo mentre scrive e finché dopo di loro non è arrivato niente. */
 function inCorso(indice: number): boolean {
     if (props.salvata !== undefined) return false
+    // La parte già salvata è conclusa.
+    if (indice < daPrima.value.length) return false
     if (!(props.confini?.length)) return true
     return Boolean(props.vivo) && indice === segmenti.value.length - 1
+}
+
+/**
+ * ⛔ Owner 20/10/2026 (difetto 2): i giri di attrezzi consecutivi in un blocco solo; da `TALOS_SOGLIA_GRUPPO_ATTREZZI` righe in
+ * su il blocco è un gruppo che si apre al tocco (`TalosMobileGruppoAttrezzi`). Sotto la soglia resta tutto come prima.
+ */
+const blocchi = computed(() => talosBlocchiDelTurno(segmenti.value, inCorso))
+/** I gruppi aperti, per posizione del blocco: chiusi di serie. */
+const aperti = reactive(new Set<number>())
+
+function cambia(indice: number): void {
+    if (aperti.has(indice)) aperti.delete(indice)
+    else aperti.add(indice)
+}
+
+/** Un gruppo serve se piega qualcosa: almeno una riga conclusa. Tutte in corso (un giro solo che corre) restano righe. */
+function raggruppato(righe: readonly TalosRigaDelBlocco[]): boolean {
+    return righe.length >= TALOS_SOGLIA_GRUPPO_ATTREZZI && righe.some((voce) => !voce.inCorso)
+}
+
+/**
+ * Le righe a schermo: tutte se il gruppo è aperto (o non è un gruppo); chiuso, solo quelle ancora in corso, come la riga viva di
+ * Hermes (`ToolRunTicker`). Le chiamate in corso sono dello stesso giro e corrono insieme, ognuna col suo orologio: si vedono
+ * tutte, si piegano quelle concluse.
+ */
+function visibili(blocco: { righe: readonly TalosRigaDelBlocco[]; voci: readonly TalosVoceDelBlocco[] }, indice: number): readonly TalosVoceDelBlocco[] {
+    if (!raggruppato(blocco.righe) || aperti.has(indice)) return blocco.voci
+    // chiuso: solo gli attrezzi ancora in corso; i ragionamenti stanno dentro il gruppo (decisione owner 22/10/2026)
+    return blocco.voci.filter((voce) => voce.tipo === 'attrezzo' && voce.riga.inCorso)
+}
+
+/** La riga di riassunto: ogni attrezzo con la sua parola, contato, nell'ordine in cui è comparso («Searching the web ×2, …»). */
+function riassunto(righe: readonly TalosRigaDelBlocco[]): string {
+    const conte = new Map<string, number>()
+    for (const { attrezzo } of righe) {
+        const etichetta = talosToolActivityLabel({ name: attrezzo.name, detail: null }, parola(attrezzo.name))
+        conte.set(etichetta, (conte.get(etichetta) ?? 0) + 1)
+    }
+    return [...conte].map(([etichetta, quante]) => (quante > 1 ? `${etichetta} ×${quante}` : etichetta)).join(', ')
 }
 </script>
 
 <template>
-    <template v-for="(segmento, indice) in segmenti" :key="`${indice}-${segmento.tipo}`">
-        <TalosMobileReasoningBlock v-if="segmento.tipo === 'ragionamento'" :reasoning="segmento.testo" data-segmento="ragionamento" />
-        <div v-else-if="segmento.tipo === 'testo'" class="assistant-text" data-segmento="testo">
-            <TalosMobileMessageContent :content="segmento.testo" line-breaks />
+    <template v-for="(blocco, indice) in blocchi" :key="`${indice}-${blocco.tipo}`">
+        <TalosMobileReasoningBlock v-if="blocco.tipo === 'ragionamento'" :reasoning="blocco.testo" data-segmento="ragionamento" />
+        <div v-else-if="blocco.tipo === 'testo'" class="assistant-text" data-segmento="testo">
+            <TalosMobileMessageContent :content="blocco.testo" line-breaks />
         </div>
         <div
             v-else
             class="mb-0.5"
-            :data-testid="inCorso(indice) ? 'talos-tool-activity' : 'talos-tool-trail'"
+            :data-testid="blocco.righe.some((voce) => voce.inCorso) ? 'talos-tool-activity' : 'talos-tool-trail'"
             data-segmento="attrezzi"
         >
-            <template v-for="(attrezzo, posizione) in segmento.attrezzi" :key="`${attrezzo.name}:${attrezzo.detail ?? ''}:${posizione}`">
-                <TalosMobileRunningToolRow v-if="inCorso(indice)" :label="riga(attrezzo).label">
-                    <template #icon>
-                        <component :is="riga(attrezzo).icon" class="size-3.5" />
-                    </template>
-                </TalosMobileRunningToolRow>
-                <TalosMobileTraceRow v-else :label="riga(attrezzo).label" :interactive="false">
-                    <template #icon>
-                        <component :is="riga(attrezzo).icon" class="size-3.5" />
-                    </template>
-                </TalosMobileTraceRow>
+            <TalosMobileGruppoAttrezzi
+                v-if="raggruppato(blocco.righe)"
+                :riassunto="riassunto(blocco.righe)"
+                :passi="passi(blocco.righe, indice)"
+                :vivo="blocco.righe.some((voce) => voce.inCorso)"
+                :aperto="aperti.has(indice)"
+                @cambia="cambia(indice)"
+            >
+                <template #icon>
+                    <component :is="riga(blocco.righe[blocco.righe.length - 1]!.attrezzo).icon" class="size-3.5" />
+                </template>
+                <template v-for="(voce, posizione) in visibili(blocco, indice)" :key="`${posizione}-${voce.tipo}`">
+                    <TalosMobileReasoningBlock v-if="voce.tipo === 'ragionamento'" :reasoning="voce.testo" data-segmento="ragionamento" />
+                    <TalosMobileRunningToolRow v-else-if="voce.riga.inCorso" :label="riga(voce.riga.attrezzo).label" data-voce="attrezzo">
+                        <template #icon>
+                            <component :is="riga(voce.riga.attrezzo).icon" class="size-3.5" />
+                        </template>
+                    </TalosMobileRunningToolRow>
+                    <TalosMobileTraceRow v-else :label="riga(voce.riga.attrezzo).label" :interactive="false" data-voce="attrezzo">
+                        <template #icon>
+                            <component :is="riga(voce.riga.attrezzo).icon" class="size-3.5" />
+                        </template>
+                    </TalosMobileTraceRow>
+                </template>
+            </TalosMobileGruppoAttrezzi>
+            <template v-else>
+                <template v-for="(voce, posizione) in blocco.voci" :key="`${posizione}-${voce.tipo}`">
+                    <TalosMobileReasoningBlock v-if="voce.tipo === 'ragionamento'" :reasoning="voce.testo" data-segmento="ragionamento" />
+                    <TalosMobileRunningToolRow v-else-if="voce.riga.inCorso" :label="riga(voce.riga.attrezzo).label" data-voce="attrezzo">
+                        <template #icon>
+                            <component :is="riga(voce.riga.attrezzo).icon" class="size-3.5" />
+                        </template>
+                    </TalosMobileRunningToolRow>
+                    <TalosMobileTraceRow v-else :label="riga(voce.riga.attrezzo).label" :interactive="false" data-voce="attrezzo">
+                        <template #icon>
+                            <component :is="riga(voce.riga.attrezzo).icon" class="size-3.5" />
+                        </template>
+                    </TalosMobileTraceRow>
+                </template>
             </template>
         </div>
     </template>

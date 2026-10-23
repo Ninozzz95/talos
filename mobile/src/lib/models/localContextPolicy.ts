@@ -122,3 +122,52 @@ export function talosLocalEscalatedContextTokens(
     // quasi mai un numero tondo.
     return Math.min(Math.max(arrotondato, required), ceiling)
 }
+
+/**
+ * ⛔ CODICE COL MOTORE LOCALE — la finestra del Codice (ledger `LEDGER-CODICE-MOTORE-LOCALE-2026-10-18.md`). Il Codice manda a ogni
+ * giro il prompt di r4 con gli schemi degli attrezzi e una conversazione che cresce: 32k come obiettivo, 24k come minimo.
+ * Owner 18/10 «Sì, minimo 16k»; 19/10 «Minimo 24k + preambolo più leggero»: misurato sul Pad nel giro vero, il prompt di r4 è
+ * 18.331 token (non i ~2,9k stimati), e a 16k non entrava nemmeno il primo messaggio.
+ */
+export const TALOS_CODICE_CONTEXT_TOKENS = 32768
+export const TALOS_CODICE_MIN_CONTEXT_TOKENS = 24576
+
+/**
+ * ⛔ Quanti token LEGGE almeno il modello a ogni giro del Codice: il prompt di r4 al primo passo per `locale-ospite`, MISURATO sul
+ * Pad il 19/10/2026 col pin `1ef0d9a24` (11 attrezzi essenziali + ponte): 5.732 token, poi 5.944 → 6.397 → 6.933 nello stesso giro
+ * (ledger `LEDGER-CODICE-MOTORE-LOCALE-2026-10-18.md`). Prima dell'insieme ridotto erano 18.331.
+ *
+ * Serve alla scelta del motore (D-53: chi LEGGE veloce vince sui prompt lunghi) quando il Codice apre o tiene il modello, cioè
+ * PRIMA del giro: l'app non ha il preambolo né gli schemi degli attrezzi — li costruisce r4 —, quindi `stimaTokenMessaggi`
+ * (`lib/kernel/compattazione.ts`, ~4 caratteri per token) non ha un testo su cui contare. Un pavimento misurato, non una stima:
+ * il prompt vero di un giro solo cresce, quindi sbaglia verso «resta dove sei», mai verso una riapertura in più.
+ * ⛔ Se r4 cambia l'insieme degli attrezzi per `locale-ospite`, questo numero va rimisurato.
+ */
+export const TALOS_CODICE_PROMPT_TOKENS_MINIMI = 5732
+
+export interface TalosAperturaDelCodice {
+    contextTokens: number
+    kvCacheType: 'f16' | 'q8_0'
+}
+
+/**
+ * Le aperture da tentare, in ordine. `tetti`: quanto QUESTO telefono dà a QUESTO modello con quella cache (`localContextCeiling`,
+ * lo stesso calcolo della chat, già fermo al contesto addestrato); `null` = non misurato, e allora decide il motore.
+ * Prima `f16` (la veloce), `q8_0` solo dopo, mai `q4`.
+ * ⛔ Owner 19/10/2026 «Provare comunque, rifiutare solo se fallisce»: con la stima sotto il minimo resta UN tentativo, al minimo con
+ * la cache leggera. Sul Pad la stima dava 7k a LFM2.5 (2,98 GB «liberi» su 11,17: Android non conta la memoria che si riprende),
+ * mentre a 32k il modello si apre e risponde (misure del 18/10). Il no del motore è la misura; il rifiuto arriva da lì.
+ */
+export function talosCodiceContextCandidates(tetti: { f16: number | null, q8_0: number | null }): TalosAperturaDelCodice[] {
+    const aperture: TalosAperturaDelCodice[] = []
+    for (const kvCacheType of ['f16', 'q8_0'] as const) {
+        const tetto = tetti[kvCacheType]
+        for (const passo of [TALOS_CODICE_CONTEXT_TOKENS, TALOS_CODICE_MIN_CONTEXT_TOKENS]) {
+            const contextTokens = Math.floor((tetto === null ? passo : Math.min(passo, tetto)) / 512) * 512
+            if (contextTokens < TALOS_CODICE_MIN_CONTEXT_TOKENS) continue
+            if (aperture.some((a) => a.kvCacheType === kvCacheType && a.contextTokens === contextTokens)) continue
+            aperture.push({ contextTokens, kvCacheType })
+        }
+    }
+    return aperture.length ? aperture : [{ contextTokens: TALOS_CODICE_MIN_CONTEXT_TOKENS, kvCacheType: 'q8_0' }]
+}

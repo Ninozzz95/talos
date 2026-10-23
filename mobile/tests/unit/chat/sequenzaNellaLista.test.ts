@@ -33,10 +33,12 @@ async function lista(extra: Record<string, unknown>) {
 
 /** Le posizioni nel documento: ragionamento, righe degli attrezzi, testo. */
 function ordine(w: Awaited<ReturnType<typeof lista>>): string[] {
-    const nodi = w.element.querySelectorAll('[data-segmento]')
+    // 22/10/2026 (owner: «ragionamento dentro il gruppo»): il ragionamento sta DENTRO il contenitore degli attrezzi, quindi si leggono
+    // le righe a vista una per una (`data-voce="attrezzo"`), non i contenitori
+    const nodi = w.element.querySelectorAll('[data-segmento="ragionamento"], [data-voce="attrezzo"], [data-segmento="testo"]')
     return [...nodi].map((nodo) => {
         if (nodo.matches('[data-segmento="ragionamento"]')) return `R:${nodo.textContent?.trim().slice(0, 12)}`
-        if (nodo.matches('[data-segmento="attrezzi"]')) return `A:${nodo.textContent?.trim()}`
+        if (nodo.matches('[data-voce="attrezzo"]')) return `A:${nodo.textContent?.trim()}`
         return `T:${nodo.textContent?.trim()}`
     })
 }

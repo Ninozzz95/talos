@@ -36,6 +36,23 @@ aboutLibraries {
             '60f5592b436b0e17f4252b8b602854fe': ['io.ionic.libs:ioninappbrowser-android'],
             // SQLCipher Community Edition: licenza in stile BSD di Zetetic.
             '45546b23f3f1354cdc022f8f8e4a7bb1': ['net.zetetic:sqlcipher-android'],
+            /*
+             * JNA (il ponte Kotlin↔nativo di iroh, controllo remoto) è «LGPL-2.1-or-later OR Apache-2.0» a scelta di chi la
+             * usa (pom 5.15.0: «You can freely decide which license you want to apply»). Owner 20/10/2026: la usiamo come
+             * Apache-2.0. Il plugin unisce le licenze dichiarate e non ne toglie: la LGPL si ammette SOLO per questa libreria,
+             * e le Note legali mostrano la scelta (`LICENZE_SCELTE` in `TalosMobileSettingsLegalPanel.vue`).
+             */
+            'LGPL-2.1-or-later': ['net.java.dev.jna:jna'],
+            /*
+             * Lo scanner di Google del QR del controllo remoto (R-M3): «ML Kit Terms of Service», condizioni proprietarie di
+             * Google (developers.google.com/ml-kit/terms, lette il 20/10/2026: immagini solo sul telefono, metriche d'uso a
+             * Google, niente reverse engineering). Owner 20/10/2026: «Accetto i termini di Google, solo per lo scanner». Ammesse
+             * SOLO per le quattro librerie dello scanner; l'informativa dice delle metriche.
+             */
+            '9962f44671a86e167c028415c7e21548': [
+                'com.google.android.gms:play-services-code-scanner', 'com.google.mlkit:barcode-scanning-common',
+                'com.google.mlkit:common', 'com.google.mlkit:vision-common',
+            ],
         ]
     }
 }
@@ -823,6 +840,14 @@ android {
              */
             excludes += '**/libOpenCL.so'
         }
+        /*
+         * ⛔ CLIENT DEL CONTROLLO REMOTO (ledger LEDGER-CLIENT-REMOTO-MOBILE-2026-10-20.md): il JAR `computer.iroh:iroh:1.1.0` porta
+         * le librerie desktop dell'FFI (~72 MB, misurato il 17/10): sul telefono serve solo la NOSTRA `libiroh_ffi.so`
+         * (src/main/jniLibs/PROVENIENZA-IROH.md, rustls 0.23.46). Fuori dall'APK.
+         */
+        resources {
+            excludes += ['win32-x86-64/**', 'linux-x86-64/**', 'linux-aarch64/**', 'darwin-aarch64/**', 'darwin-x86-64/**']
+        }
     }
 }
 
@@ -861,6 +886,36 @@ dependencies {
     // P0 web-read SSRF boundary: maintained TLS/HTTP client with injectable
     // DNS so the exact validated A/AAAA set is used for the connection.
     implementation "com.squareup.okhttp3:okhttp:5.4.0"
+    /*
+     * ⛔ CLIENT DEL CONTROLLO REMOTO: iroh-ffi 1.1.0 (le classi uniffi; la .so è la nostra, vedi packaging) con JNA per Android
+     * (5.15.0 @aar, la versione del pom di iroh) e le coroutine (le chiamate di iroh sono `suspend`). NON l'AAR
+     * `iroh-android`: porterebbe la sua .so con rustls 0.23.42 (RUSTSEC-2026-0285) e Gradle terrebbe quella.
+     */
+    implementation("computer.iroh:iroh:1.1.0") { exclude group: "net.java.dev.jna", module: "jna" }
+    implementation "net.java.dev.jna:jna:5.15.0@aar"
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0"
+    // R-M3 (20/10/2026): lo scanner di Google per il QR del controllo remoto: l'interfaccia è di Play services, niente
+    // permesso della fotocamera all'app (developers.google.com/ml-kit/code-scanner).
+    implementation 'com.google.android.gms:play-services-code-scanner:16.1.0'
+    /*
+     * R-M5 (21/10/2026): la SVEGLIA del telefono. Il PC firma un Web Push con la sua VAPID; il distributore FCM incorporato di
+     * UnifiedPush lo consegna via Google Play services SENZA un progetto Firebase nostro (misura del 17/10: 11/11 in Doze ad app
+     * uccisa, mediana 691 ms; kdoc: «If your application supports VAPID, you have nothing special to do»). Il lavoro dopo la sveglia
+     * (collegarsi al PC, leggere cosa aspetta) è un job URGENTE di JobScheduler (`TalosSvegliaLavoro`), non WorkManager: questo
+     * progetto ha già scelto un solo scheduler (`TalosTaskRunPlugin`, «Perché JobScheduler e non WorkManager»).
+     */
+    // ⛔ Un tink solo. Il connettore porta `tink` 1.23.0 (Java, con protobuf-java) e l'app ha già `tink-android` 1.8.0
+    // (androidx.security-crypto): insieme sono classi doppie e la build si ferma. Il connettore usa solo `HybridDecrypt` e
+    // `subtle.{Bytes,EllipticCurves,EngineFactory,Hkdf,Random}` (il webpush lo porta dentro di sé, `apps.fixed_webpush`): firme
+    // controllate con javap tutte presenti in tink-android 1.8.0 (21/10/2026), quindi resta quello dell'app, che non cambia.
+    implementation('org.unifiedpush.android:connector:3.3.5') {
+        exclude group: 'com.google.crypto.tink', module: 'tink'
+    }
+    implementation 'org.unifiedpush.android:embedded-fcm-distributor:3.1.0'
+    // Aggiornamento automatico (22/10/2026): la firma del manifesto si verifica con `tink.subtle.Ed25519Verify`. tink-android
+    // 1.8.0 è GIÀ nell'APK (portato da androidx.security-crypto, solo a runtime): qui si dichiara la STESSA versione per
+    // compilarci contro, nessun artefatto nuovo e sempre «un tink solo».
+    implementation 'com.google.crypto.tink:tink-android:1.8.0'
     /*
      * ⛔⛔ IL MOTORE DELLA PAROLA DI ATTIVAZIONE — qui c'era sherpa-onnx.
      *

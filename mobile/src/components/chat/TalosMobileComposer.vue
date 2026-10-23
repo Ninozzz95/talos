@@ -91,6 +91,8 @@ const props = withDefaults(defineProps<{
     modelProfiles: TalosMobileModelProfileView[]
     routingProfiles?: TalosMobileRoutingProfileView[]
     selectedModelProfileId?: string | null
+    /** Il modello che il Codice sta aprendo prima di sceglierlo (22/10/2026): lo dice la sua riga del selettore. */
+    openingModelProfileId?: string | null
     selectedRoutingProfileId?: string | null
     selectedEffort: string
     thinking: boolean
@@ -113,6 +115,8 @@ const props = withDefaults(defineProps<{
     loadingRoutes?: boolean
     refreshingModels?: boolean
     discoveryProblems?: ReadonlyArray<{ message: string, detail?: string | null }>
+    /** ⛔ D-RM4-3 (Pad 20/10/2026): il foglio del modello offre il Laboratorio modelli del telefono; falso nel Codice di un PC. */
+    showModelLab?: boolean
     /**
      * ⭐⭐⭐ 2/9 — picker Planner (FASE K): additivi, mai passati da
      * ChatScreen.vue oggi — `showExecutorModel` resta falso di default,
@@ -166,9 +170,11 @@ const props = withDefaults(defineProps<{
     queueDisabledReason: '',
     routingProfiles: () => [],
     selectedModelProfileId: null,
+    openingModelProfileId: null,
     selectedRoutingProfileId: null,
     loadingModels: false,
     refreshingModels: false,
+    showModelLab: true,
     showExecutorModel: false,
     executorModelProfiles: () => [],
     selectedExecutorModelProfileId: null,
@@ -1062,6 +1068,7 @@ watch(() => [props.prompt, props.docked, dictating.value], () => {
             :model-profiles="modelProfiles"
             :routing-profiles="routingProfiles"
             :selected-model-profile-id="selectedModelProfileId"
+            :opening-model-profile-id="openingModelProfileId"
             :selected-routing-profile-id="selectedRoutingProfileId"
             :selected-effort="selectedEffort"
             :thinking="thinking"
@@ -1072,6 +1079,7 @@ watch(() => [props.prompt, props.docked, dictating.value], () => {
             :loading-routes="loadingRoutes"
             :refreshing-models="refreshingModels"
             :discovery-problems="discoveryProblems"
+            :show-model-lab="showModelLab"
             :show-executor-model="showExecutorModel"
             :executor-model-profiles="executorModelProfiles"
             :selected-executor-model-profile-id="selectedExecutorModelProfileId"

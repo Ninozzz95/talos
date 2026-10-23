@@ -39,12 +39,21 @@ const stato = vi.hoisted(() => ({
     accessi: [] as { almenoMs: number; forzaRinnovo?: boolean }[],
     guastoPiano: null as string | null,
     registrati: [] as (number | null)[],
-    chat: null as null | { profiles: { value: TalosMobileModelProfileView[] }; selectedModelId: { value: string | null }; effort: { value: string } },
+    // ⛔ CODICE COL MOTORE LOCALE: l'apertura per il Codice e l'endpoint dell'app (finti)
+    apertura: { esito: 'aperto', nCtx: 32768 } as Record<string, unknown>,
+    aperture: [] as string[],
+    // 22/10: un'apertura che resta in corso finché il test non la scioglie (il modello vero impiega secondi)
+    attesaApertura: null as null | Promise<void>,
+    ospite: { pronto: true, socketPath: '/data/user/0/ai.talos.dev/files/locale-ospite/motore.sock', chiave: 'c'.repeat(64), modello: 'gemma.gguf', nCtx: 32768 } as Record<string, unknown>,
+    // D-RM4-3 (Pad 20/10): «Aggiorna» e «Laboratorio modelli» del foglio, come nella chat
+    aggiornamenti: 0,
+    spinte: [] as unknown[],
+    chat: null as null | { profiles: { value: TalosMobileModelProfileView[] }; selectedModelId: { value: string | null }; effort: { value: string }; refreshingModels: { value: boolean } },
 }))
 vi.mock('vue-router', async () => {
     const { reactive } = await import('vue')
     const rotta = reactive({ params: stato.params })
-    return { useRoute: () => rotta, useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) }
+    return { useRoute: () => rotta, useRouter: () => ({ push: (r: unknown) => { stato.spinte.push(r) }, replace: vi.fn() }) }
 })
 vi.mock('@/lib/harness/terminalePonte', () => ({ talosR4Pronto: async () => ({ disponibile: true, acceso: true, porta: 4178, cartella: '/data/w' }) }))
 vi.mock('@/services/secureKeyStore', () => ({ getProviderKey: async (p: string) => stato.chiavi[p] ?? null }))
@@ -57,6 +66,10 @@ vi.mock('@/services/chatgptAccesso', () => ({
         },
     }),
 }))
+vi.mock('@/lib/chat/providers/localAdapter', () => ({
+    talosApriPerIlCodice: async (path: string) => { stato.aperture.push(path); if (stato.attesaApertura) await stato.attesaApertura; return stato.apertura },
+}))
+vi.mock('@/services/localEngine', () => ({ talosMotoreOspite: async () => stato.ospite }))
 vi.mock('@/services/chatgptConsumi', () => ({
     talosConsumiChatgpt: () => ({ registra: (token: number | null) => { stato.registrati.push(token) } }),
 }))
@@ -73,6 +86,7 @@ vi.mock('@/stores/chatController', async () => {
         endpoints: reactive<Record<string, string | null>>({}),
         selectedModelId: ref<string | null>(null),
         effort: ref('medium'),
+        refreshConfiguredProviders: async () => { stato.aggiornamenti += 1 },
     }
     stato.chat = chat as never
     return { useChatController: () => chat }
@@ -121,6 +135,7 @@ vi.mock('@/composables/useTalosMobileDictation', async () => {
 
 import CodiceR4Screen from '@/screens/CodiceR4Screen.vue'
 import TalosMobileComposer from '@/components/chat/TalosMobileComposer.vue'
+import TalosCodiceR4Viste from '@/components/codice/TalosCodiceR4Viste.vue'
 
 async function asciuga() { for (let i = 0; i < 5; i++) { await flushPromises(); await vi.dynamicImportSettled() } }
 async function schermata(profili: TalosMobileModelProfileView[] = [DEEPSEEK, GLM, LOCALE, PIANO]) {
@@ -148,8 +163,15 @@ afterEach(() => {
     stato.accessi = []
     stato.guastoPiano = null
     stato.registrati = []
+    stato.apertura = { esito: 'aperto', nCtx: 32768 }
+    stato.aperture = []
+    stato.attesaApertura = null
+    stato.ospite = { pronto: true, socketPath: '/data/user/0/ai.talos.dev/files/locale-ospite/motore.sock', chiave: 'c'.repeat(64), modello: 'gemma.gguf', nCtx: 32768 }
     stato.chat!.selectedModelId.value = null
     stato.chat!.effort.value = 'medium'
+    stato.chat!.refreshingModels.value = false
+    stato.aggiornamenti = 0
+    stato.spinte = []
 })
 
 describe('la scelta del modello nel Codice su r4 (K3-C)', () => {
@@ -158,9 +180,9 @@ describe('la scelta del modello nel Codice su r4 (K3-C)', () => {
         const c = compositore(w)
         expect(c.props('selectedModelProfileId')).toBe('deepseek:deepseek-v4-pro')
         expect(c.props('selectedEffort')).toBe('high')
-        // ⛔ CHATGPT NEL CODICE (owner 18/10): il piano c'è come nella chat; fuori resta solo il motore dentro l'app
-        expect((c.props('modelProfiles') as TalosMobileModelProfileView[]).map((p) => p.id)).toEqual(['deepseek:deepseek-v4-pro', 'openrouter:z-ai/glm-4.7-flash', 'chatgpt:gpt-5'])
-        expect(c.props('discoveryProblems')).toEqual([{ message: 'On-device models are not available in Code yet.' }])
+        // ⛔ CHATGPT NEL CODICE e CODICE COL MOTORE LOCALE (owner 18/10, «il Codice è identico alla chat»): tutti i profili della chat
+        expect((c.props('modelProfiles') as TalosMobileModelProfileView[]).map((p) => p.id)).toEqual(['deepseek:deepseek-v4-pro', 'openrouter:z-ai/glm-4.7-flash', 'local:gemma.gguf', 'chatgpt:gpt-5'])
+        expect(c.props('discoveryProblems')).toEqual([])
         w.unmount()
     })
 
@@ -342,5 +364,193 @@ describe('la scelta del modello nel Codice su r4 (K3-C)', () => {
         await new Promise((x) => setTimeout(x, 20))
         expect(stato.registrati).toEqual([])
         w2.unmount()
+    })
+
+    /*
+     * ⛔ CODICE COL MOTORE LOCALE (owner 18/10/2026; ledger `LEDGER-CODICE-MOTORE-LOCALE-2026-10-18.md`): il modello della chat si apre con
+     * la finestra del Codice (minimo 16k), l'app avvia l'endpoint sul socket privato e lo spinge a r4 (solo i campi del contratto), poi
+     * `/settings` con `locale-ospite:<nome del file>`. Alla scelta e prima di ogni giro, come la chiave degli altri fornitori.
+     */
+    it('CMO-13 scegliere il modello locale: apertura per il Codice, spinta dell’endpoint, poi `/settings` con `locale-ospite:`', async () => {
+        const w = await schermata()
+        compositore(w).vm.$emit('selectModelProfile', LOCALE.id)
+        await asciuga()
+        expect(stato.aperture).toEqual(['gemma.gguf'])
+        const spinta = { socketPath: '/data/user/0/ai.talos.dev/files/locale-ospite/motore.sock', chiave: 'c'.repeat(64), modello: 'gemma.gguf', nCtx: 32768, capacita: { tools: true } }
+        expect(scritte()[0]).toBe(`/api/v1/providers/locale-ospite/access ${JSON.stringify(spinta)}`)
+        expect(scritte()[1]).toMatch(new RegExp(`^/api/v1/sessions/${SESSIONE}/settings [{]"modello":"locale-ospite:gemma.gguf"`))
+        expect(scritte().some((x) => x.includes('/key'))).toBe(false)
+        expect(stato.setShell).toEqual([{ codice_model: LOCALE.id, codice_effort: expect.any(String) }])
+        w.unmount()
+    })
+
+    /*
+     * Pad 22/10/2026 16:08 (foto): dopo il tocco su un modello locale il foglio restava com'era per i secondi dell'apertura (la spunta
+     * sul modello di prima, nessun segno): la persona crede che il tocco non sia arrivato e tocca ancora. Come PocketPal
+     * (`ModelCard.tsx:594-603`) e Gallery (`ModelInitializationStatus.kt:50-80`), la riga toccata dice che il modello si sta aprendo;
+     * un secondo tocco intanto non apre una seconda volta.
+     */
+    it('CMO-13b mentre il modello locale si apre il foglio lo dice sulla riga toccata, e un secondo tocco non riapre', async () => {
+        let sciogli: () => void = () => undefined
+        stato.attesaApertura = new Promise<void>((ok) => { sciogli = ok })
+        const w = await schermata()
+        compositore(w).vm.$emit('selectModelProfile', LOCALE.id)
+        await asciuga()
+        expect(compositore(w).props('openingModelProfileId')).toBe(LOCALE.id)
+        compositore(w).vm.$emit('selectModelProfile', LOCALE.id)
+        await asciuga()
+        expect(stato.aperture).toEqual(['gemma.gguf'])
+        sciogli()
+        await asciuga()
+        expect(compositore(w).props('openingModelProfileId')).toBeNull()
+        expect(scritte().some((x) => x.includes('"modello":"locale-ospite:gemma.gguf"'))).toBe(true)
+        w.unmount()
+    })
+
+    /* Revisione avversaria 22/10, rilievo 5: durante l'apertura un invio partirebbe col modello di prima, in gara con l'apertura. */
+    it('CMO-13c mentre il modello si apre non si invia e non si accoda', async () => {
+        let sciogli: () => void = () => undefined
+        stato.attesaApertura = new Promise<void>((ok) => { sciogli = ok })
+        const w = await schermata()
+        expect(compositore(w).props('canSend')).toBe(true)
+        compositore(w).vm.$emit('selectModelProfile', LOCALE.id)
+        await asciuga()
+        expect(compositore(w).props('canSend')).toBe(false)
+        expect(compositore(w).props('canQueue')).toBe(false)
+        // anche un invio che arriva lo stesso (tastiera, evento) non parte
+        const prima = stato.richieste.length
+        compositore(w).vm.$emit('update:prompt', 'scrivi un test')
+        compositore(w).vm.$emit('send')
+        await asciuga()
+        expect(stato.richieste.slice(prima).some((r) => /\/(resume|custom)$/.test(r.percorso))).toBe(false)
+        sciogli()
+        await asciuga()
+        expect(compositore(w).props('canSend')).toBe(true)
+        w.unmount()
+    })
+
+    /* Rilievo 5, a giro vivo: «Accoda» c'è; mentre il modello scelto si apre, il testo accodato partirebbe col modello di prima. */
+    it('CMO-13e a giro vivo, mentre il modello scelto si apre, «Accoda» non c\'è', async () => {
+        const w = await schermata()
+        const flusso = stato.flussi.at(-1)!
+        ;(stato.ascoltatori.r4Pezzo ?? []).forEach((a) => a({ id: flusso.id, testo: ['data: {"type":"CUSTOM","name":"talos.fine-rigiocata","value":{}}', 'data: {"type":"RunStarted","runId":"r1","input":{}}', ''].join(String.fromCharCode(10, 10)) }))
+        await asciuga()
+        expect(compositore(w).props('canQueue')).toBe(true)
+        let sciogli: () => void = () => undefined
+        stato.attesaApertura = new Promise<void>((ok) => { sciogli = ok })
+        compositore(w).vm.$emit('selectModelProfile', LOCALE.id)
+        await asciuga()
+        expect(compositore(w).props('canQueue')).toBe(false)
+        sciogli()
+        await asciuga()
+        w.unmount()
+    })
+
+    /* Rilievo 6: l'apertura appartiene alla sua sessione; cambiando sessione il segno sparisce e la scelta vecchia non si ricorda. */
+    it('CMO-13d cambiare sessione durante l\'apertura toglie il segno e la scelta vecchia non diventa l\'ultima del Codice', async () => {
+        let sciogli: () => void = () => undefined
+        stato.attesaApertura = new Promise<void>((ok) => { sciogli = ok })
+        const w = await schermata()
+        compositore(w).vm.$emit('selectModelProfile', LOCALE.id)
+        await asciuga()
+        expect(compositore(w).props('openingModelProfileId')).toBe(LOCALE.id)
+        // la rotta reattiva del finto vue-router (scrivere su `stato.params` non sveglierebbe l'osservatore della schermata)
+        const { useRoute } = await import('vue-router')
+        useRoute().params.id = '44444444-4444-4444-8444-444444444444'
+        await asciuga()
+        expect(compositore(w).props('openingModelProfileId')).toBeNull()
+        sciogli()
+        await asciuga()
+        expect(stato.setShell).toEqual([])
+        expect(compositore(w).props('openingModelProfileId')).toBeNull()
+        w.unmount()
+    })
+
+    it('CMO-14 un modello che sul telefono non arriva a 24k: niente spinta, il modello resta quello di prima, e la riga dice perché', async () => {
+        stato.apertura = { esito: 'troppo-piccolo', massimo: 9216 }
+        const w = await schermata()
+        compositore(w).vm.$emit('selectModelProfile', LOCALE.id)
+        await asciuga()
+        expect(scritte()).toEqual([])
+        expect(compositore(w).props('selectedModelProfileId')).toBe('deepseek:deepseek-v4-pro')
+        expect(w.get('[data-testid="talos-codice-r4-errore"]').text())
+            .toBe('On this device this model cannot open with the 24k tokens of context Code needs (at most 9k). Choose a smaller model.')
+        w.unmount()
+    })
+
+    it('CMO-15 un template che non sa chiamare attrezzi: niente spinta, e la riga dice perché', async () => {
+        stato.apertura = { esito: 'senza-attrezzi' }
+        const w = await schermata()
+        compositore(w).vm.$emit('selectModelProfile', LOCALE.id)
+        await asciuga()
+        expect(scritte()).toEqual([])
+        expect(w.get('[data-testid="talos-codice-r4-errore"]').text())
+            .toBe("This model's template cannot call tools, so in Code it could not read or change files. Choose a model that supports tools.")
+        w.unmount()
+    })
+
+    it('CMO-16 l’endpoint non è pronto (il modello si è chiuso): r4 lo dimentica e la riga dice le parole del desktop', async () => {
+        stato.ospite = { pronto: false }
+        const w = await schermata()
+        compositore(w).vm.$emit('selectModelProfile', LOCALE.id)
+        await asciuga()
+        expect(scritte()).toEqual(['/api/v1/providers/locale-ospite/access/remove {}'])
+        expect(w.get('[data-testid="talos-codice-r4-errore"]').text()).toBe('No local model is open in the app: open one from the model picker.')
+        w.unmount()
+    })
+
+    it('CMO-17 prima di ogni invio col modello locale: apertura e spinta di nuovo, poi il giro', async () => {
+        stato.sessione = { modello: 'locale-ospite:gemma.gguf', reasoning: null }
+        const w = await schermata()
+        expect(compositore(w).props('selectedModelProfileId')).toBe(LOCALE.id)
+        await w.get('[data-testid="talos-composer-prompt"]').setValue('Esegui i test')
+        compositore(w).vm.$emit('send')
+        await asciuga()
+        expect(stato.aperture).toEqual(['gemma.gguf'])
+        const i = scritte().findIndex((x) => x.startsWith('/api/v1/providers/locale-ospite/access '))
+        expect(i).toBeGreaterThanOrEqual(0)
+        expect(scritte().slice(i + 1).some((x) => x.includes(`/api/v1/sessions/${SESSIONE}/`))).toBe(true)
+        w.unmount()
+    })
+
+    it('CMR-01 ⛔ D-RM4-3 (Pad 20/10, i due tasti del foglio non facevano niente): in locale «Aggiorna» e «Laboratorio modelli» come nella chat', async () => {
+        const w = await schermata()
+        // la rotella è quella della chat (la sua scoperta dei fornitori), come `ChatScreen`
+        stato.chat!.refreshingModels.value = true
+        await asciuga()
+        expect(compositore(w).props('refreshingModels')).toBe(true)
+        stato.chat!.refreshingModels.value = false
+        await w.get('[data-testid="talos-composer-model-chip"]').trigger('click')
+        await asciuga()
+        const richiestePrima = stato.richieste.length
+        await w.get('[aria-label="Refresh model catalog"]').trigger('click')
+        await asciuga()
+        expect(stato.aggiornamenti).toBe(1)
+        // in locale «Aggiorna» è la scoperta dei fornitori dell'app (quella della chat), non una lettura del r4
+        expect(stato.richieste).toHaveLength(richiestePrima)
+        await w.get('[aria-label="Open Model Lab"]').trigger('click')
+        await asciuga()
+        expect(stato.spinte).toEqual([{ name: 'settings-models' }])
+        w.unmount()
+    })
+
+    it('CMR-05 D-RM4-4: in locale la scheda Terminale non ha l\'avviso del PC', async () => {
+        const w = await schermata()
+        w.getComponent(TalosCodiceR4Viste).vm.$emit('scegli', 'terminale')
+        await asciuga()
+        expect(w.find('[data-testid="talos-codice-r4-terminale-solo-dal-pc"]').exists()).toBe(false)
+        w.unmount()
+    })
+
+    it('CMO-18 un file di modello con un nome che r4 non accetta: nessuna apertura né spinta, e la riga dice come rinominarlo', async () => {
+        const strano = profilo('local', '/data/models/gemma 3 (copia).gguf')
+        const w = await schermata([DEEPSEEK, strano])
+        compositore(w).vm.$emit('selectModelProfile', strano.id)
+        await asciuga()
+        expect(stato.aperture).toEqual([])
+        expect(scritte()).toEqual([])
+        expect(w.get('[data-testid="talos-codice-r4-errore"]').text())
+            .toBe('Code cannot use a model file named "gemma 3 (copia).gguf": rename it using only letters, numbers, dots, dashes or underscores.')
+        w.unmount()
     })
 })

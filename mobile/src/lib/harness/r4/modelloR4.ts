@@ -6,7 +6,9 @@
  *   · il ragionamento: r4 vuole `none` dove la chat dice `off` (`config.mjs` `EFFORT_AMMESSI`; `off` → 400 `REASONING_INVALID`);
  *   · la chiave: una sola, quella dell'app. Passa nel portachiavi di r4 (`POST /providers/:id/key`, cifrato con la chiave sigillata
  *     nell'archivio sicuro di Android, K2-C), mai nell'ambiente; se l'app non l'ha, la copia di r4 si toglie (owner 16/10).
- * Fuori dal Codice: il motore dentro l'app (`local`, r4 non lo raggiunge; fase «Codice col motore locale»).
+ * ⛔ CODICE COL MOTORE LOCALE (owner 18/10/2026, ledger `LEDGER-CODICE-MOTORE-LOCALE-2026-10-18.md`): il motore dentro l'app è nel
+ *   Codice come nella chat. r4 (fonte `locale-ospite`, `accesso-locale-ospite.mjs` @ 0f3f90f8e) non lo carica una seconda volta: gli
+ *   parla sul socket privato che l'app apre, con la chiave che l'app gli spinge (`spingiAccessoLocaleR4`) prima di ogni giro.
  * ⛔ CHATGPT NEL CODICE (owner 18/10/2026: «Deve selezionarli esattamente come i modelli della chat»; ledger
  *   `LEDGER-CHATGPT-NEL-CODICE-2026-10-18.md`): il piano è nel Codice come nella chat. Un solo custode, l'app: prima di ogni giro
  *   spinge a r4 il token e la sua scadenza (`spingiAccessoChatgptR4`); r4 (`TALOS_CHATGPT_CUSTODE=app`) non rinnova mai.
@@ -15,19 +17,32 @@ import type { TalosMobileModelProfileView, TalosMobileProviderId } from '@/compo
 import type { TalosR4ClientePonte } from './clienteR4'
 import erroriModello from './testi/errori-modello-r4.json'
 import erroriChatgpt from './testi/errori-chatgpt-r4.json'
+import erroriLocale from './testi/errori-locale-r4.json'
+import erroriKernelLocale from './testi/errori-kernel-locale-r4.json'
 import { testoApprovazioneR4 } from './approvazioniR4'
 
-export const FORNITORI_DEL_CODICE_R4: ReadonlySet<TalosMobileProviderId> = new Set<TalosMobileProviderId>(['openai', 'chatgpt', 'deepseek', 'anthropic', 'gemini', 'openrouter', 'ollama'])
+export const FORNITORI_DEL_CODICE_R4: ReadonlySet<TalosMobileProviderId> = new Set<TalosMobileProviderId>(['openai', 'chatgpt', 'deepseek', 'anthropic', 'gemini', 'openrouter', 'ollama', 'local'])
+
+/** La fonte di r4 per il motore dell'app (`FONTE_LOCALE_OSPITE` @ 0f3f90f8e). */
+export const FONTE_LOCALE_OSPITE_R4 = 'locale-ospite'
 
 /**
- * Le fonti che r4 riconosce davanti ai due punti (`provider-registry.mjs` `ID_DESTINAZIONE_CHAT` @ 701c6c0d2, invariato da 2161afb32, golden
- * `modello-fonti-701c6c0d2.json`). Senza, `lmstudio:finto` sembrerebbe un id OpenRouter e si sincronizzerebbe la chiave sbagliata.
+ * Le fonti che r4 riconosce davanti ai due punti (`provider-registry.mjs` `ID_DESTINAZIONE_CHAT` @ 0f3f90f8e, golden
+ * `modello-fonti-0f3f90f8e.json`; da 701c6c0d2 si aggiunge solo `locale-ospite`). Senza, `lmstudio:finto` sembrerebbe un id OpenRouter e si sincronizzerebbe la chiave sbagliata.
  */
 export const FONTI_DI_CHAT_R4: readonly string[] = Object.freeze([
     'esterno', 'openai', 'chatgpt', 'deepseek', 'kimi', 'minimax', 'qwen', 'zai', 'anthropic', 'gemini', 'openrouter', 'ollama', 'lmstudio',
     'groq', 'cerebras', 'mistral', 'together', 'fireworks', 'deepinfra', 'novita', 'nebius', 'xai', 'ollama-cloud', 'huggingface',
-    'zai-anthropic', 'minimax-anthropic', 'azure', 'bedrock', 'vertex', 'local',
+    'zai-anthropic', 'minimax-anthropic', 'azure', 'bedrock', 'vertex', 'local', 'locale-ospite',
 ])
+
+/** La grammatica di r4 per il nome di un modello locale (`FORMA_ID_MODELLO_LOCALE` @ 0f3f90f8e, senza maiuscole/minuscole). */
+const NOME_LOCALE_R4 = /^[a-z0-9][a-z0-9._-]{0,127}$/iu
+
+/** Il nome del file che r4 accetta come modello locale: fuori dalla grammatica il Codice non spinge e dice perché. */
+export function nomeLocaleValidoR4(nome: string): boolean {
+    return NOME_LOCALE_R4.test(nome)
+}
 
 /** `separaFonteModello` di r4: la fonte prima del PRIMO due punti, se r4 la conosce; altrimenti OpenRouter. */
 export function fornitoreDelModelloR4(modello: string | null | undefined): string | null {
@@ -44,6 +59,8 @@ export interface RagionamentoR4 {
 /** L'id che r4 riconosce per il profilo; `null` per un profilo che il Codice non porta. */
 export function modelloR4DelProfilo(profilo: Pick<TalosMobileModelProfileView, 'provider' | 'model'>): string | null {
     if (!FORNITORI_DEL_CODICE_R4.has(profilo.provider)) return null
+    // il profilo locale ha per id il percorso del file; al motore arriva il nome del file (`TalosLlamaPlugin.motoreOspite`)
+    if (profilo.provider === 'local') return `${FONTE_LOCALE_OSPITE_R4}:${profilo.model.split('/').pop() ?? profilo.model}`
     return profilo.provider === 'openrouter' ? profilo.model : `${profilo.provider}:${profilo.model}`
 }
 
@@ -51,10 +68,27 @@ export function modelloR4DelProfilo(profilo: Pick<TalosMobileModelProfileView, '
  * Il profilo dietro il modello della sessione. Un modello che l'app non elenca (scelto altrove, o un fornitore che la chat non ha)
  * diventa un profilo col nome che r4 gli dà: la pastiglia dice il vero invece di «Scegli modello».
  */
-export function profiloDelModelloR4(modello: string | null | undefined, profili: readonly TalosMobileModelProfileView[]): TalosMobileModelProfileView | null {
+export function profiloDelModelloR4(
+    modello: string | null | undefined,
+    profili: readonly TalosMobileModelProfileView[],
+    opzioni: { dispositivo?: boolean } = {},
+): TalosMobileModelProfileView | null {
     if (!modello) return null
-    const trovato = profili.find((p) => modelloR4DelProfilo(p) === modello)
+    const locale = fornitoreDelModelloR4(modello) === FONTE_LOCALE_OSPITE_R4
+    // il nome del file di un locale si confronta senza maiuscole, come `sincronizzaLocale` (revisione avversaria 22/10, rilievo 7)
+    const uguale = (id: string | null) => (locale ? id?.toLowerCase() === modello.toLowerCase() : id === modello)
+    const trovato = profili.find((p) => uguale(modelloR4DelProfilo(p)))
     if (trovato) return trovato
+    // un modello del dispositivo che l'app non elenca più (file eliminato, Pad 22/10/2026): resta locale, col nome del file come gli
+    // altri, invece del gruppo «locale-ospite» con l'icona ignota; `modelloR4DelProfilo` lo riporta allo stesso id di r4.
+    // ⛔ In remoto (`dispositivo: false`) il file è del PC: l'id di r4 resta intero (rilievo 8).
+    if (locale && opzioni.dispositivo !== false) {
+        const file = modello.slice(FONTE_LOCALE_OSPITE_R4.length + 1)
+        return {
+            id: `r4:${modello}`, provider: 'local', model: file, display_name: file.replace(/\.gguf$/i, ''), status: 'untested', has_secret: false,
+            effort_levels: [], supports_thinking: false, show_in_composer: true, capabilities: null, probe_ok: null,
+        }
+    }
     return {
         // la fonte come la legge r4 (`lmstudio`…): l'icona del fornitore ricade da sé su quella generica per un id che l'app non ha
         id: `r4:${modello}`, provider: fornitoreDelModelloR4(modello) as TalosMobileProviderId, model: modello, display_name: modello, status: 'untested', has_secret: true,
@@ -74,6 +108,44 @@ export function livelloDelRagionamentoR4(reasoning: unknown): string {
 
 const italiano = (lingua: string) => /^it(?:-|$)/iu.test(lingua)
 
+/** I codici del motore dell'app che r4 manda durante il giro, con la frase che il desktop gli dà (`components/errori.js` @ 0f3f90f8e). */
+const FRASI_DEL_MOTORE_OSPITE: Record<string, string> = {
+    LOCAL_ENGINE_BUSY: 'kernel.motoreOspiteOccupato',
+    LOCAL_RUNTIME_NOT_READY: 'kernel.motoreOspiteNonAperto',
+    LOCAL_MODEL_CHANGED: 'kernel.motoreOspiteCambiato',
+}
+
+/**
+ * Le frasi del kernel sul motore locale, riconosciute e tradotte come il desktop (`components/errori.js` @ c4d42649a, stesse
+ * espressioni; testi copiati in `testi/errori-kernel-locale-r4.json`):
+ * - :956 la conversazione che non entra nella finestra (`ContestoLocalePienoError`): i numeri solo se r4 li manda;
+ * - :913 il motore locale che rifiuta la richiesta anche senza attrezzi (`MotoreLocaleRifiutaError`, p.es. un template di chat
+ *   che non accetta la conversazione, SERV-26).
+ * `null` se non è una di queste frasi.
+ */
+const FRASI_DEL_KERNEL_LOCALE: ReadonlyArray<{ chiave: string; re: RegExp; numeri?: true }> = [
+    {
+        chiave: 'kernel.finestraLocale', numeri: true,
+        re: /^(?:The conversation|La conversazione)(?: \((\d+) tokens?\))? (?:does not fit in the local model’s window|non entra nella finestra del modello locale)(?: \((\d+) tokens?\))?\.$/u,
+    },
+    {
+        chiave: 'kernel.motoreLocaleRifiuta',
+        re: /^(?:The local engine did not accept this request, not even as a plain chat\.|Il motore locale non ha accettato questa richiesta, nemmeno senza gli attrezzi\.)$/u,
+    },
+]
+function fraseDelKernelLocale(messaggio: string, lingua: string): string | null {
+    const testo = String(messaggio ?? '').trim()
+    const testi = (italiano(lingua) ? erroriKernelLocale.it : erroriKernelLocale.en) as Record<string, string>
+    for (const voce of FRASI_DEL_KERNEL_LOCALE) {
+        const m = voce.re.exec(testo)
+        if (!m) continue
+        if (!voce.numeri) return testi[voce.chiave]
+        const quanti = (n: string | undefined) => (n ? testi['kernel.quantiToken'].replace('{n}', n) : '')
+        return testi[voce.chiave].replace('{conversazione}', quanti(m[1])).replace('{finestra}', quanti(m[2]))
+    }
+    return null
+}
+
 /**
  * Il motivo di un rifiuto legato al modello, come lo dice il desktop (`testoErroreServer` e `fraseChiaveMancante`, `legacy/app.js:3244`
  * @ 2161afb32): la chiave che manca ha la sua frase col nome del fornitore (`errori.CONFIG_INVALID.<motivo>`), gli altri codici la
@@ -82,11 +154,15 @@ const italiano = (lingua: string) => /^it(?:-|$)/iu.test(lingua)
  */
 export function messaggioErroreModelloR4(errore: { code: string; message: string; reason?: string; params?: Record<string, unknown> }, lingua: string): string {
     // ⛔ CHATGPT NEL CODICE: accanto, i codici del piano che r4 manda (`testi/errori-chatgpt-r4.json`)
-    const tabelle = (italiano(lingua) ? [erroriModello.it, erroriChatgpt.it] : [erroriModello.en, erroriChatgpt.en]) as Record<string, string>[]
+    // ⛔ CODICE COL MOTORE LOCALE: e quelli della fonte `locale-ospite` e del motore dell'app (`testi/errori-locale-r4.json`)
+    // ⛔ le frasi del kernel sul motore locale (Pad 22/10/2026, in inglese con l'app in italiano): le regole del desktop
+    const delKernel = fraseDelKernelLocale(errore.message, lingua)
+    if (delKernel) return delKernel
+    const tabelle = (italiano(lingua) ? [erroriModello.it, erroriChatgpt.it, erroriLocale.it] : [erroriModello.en, erroriChatgpt.en, erroriLocale.en]) as Record<string, string>[]
     const dalDizionario = (chiave: string) => tabelle.find((t) => Object.hasOwn(t, chiave))?.[chiave]
     const motivo = errore.code === 'CONFIG_INVALID' && (errore.reason === 'provider-key-missing' || errore.reason === 'provider-key-missing-named')
         ? dalDizionario(`CONFIG_INVALID.${errore.reason.replace(/-/gu, '_')}`)
-        : undefined
+        : Object.hasOwn(FRASI_DEL_MOTORE_OSPITE, errore.code) ? dalDizionario(FRASI_DEL_MOTORE_OSPITE[errore.code]) : undefined
     const frase = motivo ?? dalDizionario(`${errore.code}.message`)
     if (!frase) return errore.message
     return frase.replace(/\{(\w+)\}/gu, (tutto, k: string) => (errore.params && typeof errore.params[k] === 'string' ? String(errore.params[k]) : tutto))
@@ -127,8 +203,8 @@ export async function sincronizzaFornitoreR4(
     fornitore: string,
     { chiave, indirizzo }: { chiave: string | null; indirizzo: string | null },
 ): Promise<void> {
-    // il piano ChatGPT non ha una chiave: il suo accesso passa da `spingiAccessoChatgptR4`
-    if (!FORNITORI_DEL_CODICE_R4.has(fornitore as TalosMobileProviderId) || fornitore === 'chatgpt') return
+    // il piano ChatGPT non ha una chiave: il suo accesso passa da `spingiAccessoChatgptR4`; il motore dell'app da `spingiAccessoLocaleR4`
+    if (!FORNITORI_DEL_CODICE_R4.has(fornitore as TalosMobileProviderId) || fornitore === 'chatgpt' || fornitore === 'local') return
     const chiama = async (metodo: 'GET' | 'POST', percorso: string, corpo?: unknown): Promise<string> => {
         const r = await cliente.richiesta({ metodo, percorso, ...(corpo === undefined ? {} : { corpo: JSON.stringify(corpo) }) })
         if (r.stato < 200 || r.stato >= 300) throw rifiuto(r.stato, r.corpo)
@@ -167,6 +243,32 @@ export async function spingiAccessoChatgptR4(cliente: Pick<TalosR4ClientePonte, 
     if (r.stato < 200 || r.stato >= 300) throw rifiuto(r.stato, r.corpo)
 }
 
+export interface AccessoLocaleR4 {
+    socketPath: string
+    chiave: string
+    modello: string
+    nCtx: number
+    capacita?: { tools?: boolean; reasoning?: boolean }
+}
+
+/**
+ * ⛔ CODICE COL MOTORE LOCALE: il motore dell'app dato a r4 (`POST /api/v1/providers/locale-ospite/access`), oppure tolto
+ * (`…/access/remove`) quando nell'app non c'è un modello che il Codice può usare. Solo i campi del contratto: r4 dà 400 a ogni altro.
+ * Un rifiuto porta il codice e le parole di r4, mai la chiave.
+ */
+export async function spingiAccessoLocaleR4(cliente: Pick<TalosR4ClientePonte, 'richiesta'>, accesso: AccessoLocaleR4 | null): Promise<void> {
+    const corpo = accesso
+        ? JSON.stringify({
+            socketPath: accesso.socketPath, chiave: accesso.chiave, modello: accesso.modello, nCtx: accesso.nCtx,
+            // solo le capacità dette: una che manca r4 la tiene per «non so» (`null`), mai per un «no»
+            ...(accesso.capacita ? { capacita: Object.fromEntries(Object.entries(accesso.capacita).filter(([, v]) => typeof v === 'boolean')) } : {}),
+        })
+        : '{}'
+    const percorso = `/api/v1/providers/${FONTE_LOCALE_OSPITE_R4}/access${accesso ? '' : '/remove'}`
+    const r = await cliente.richiesta({ metodo: 'POST', percorso, corpo })
+    if (r.stato < 200 || r.stato >= 300) throw rifiuto(r.stato, r.corpo)
+}
+
 /**
  * ⛔ CHATGPT NEL CODICE: uscendo dalla chat, r4 dimentica l'accesso del piano, ma solo se è GIÀ acceso (`acceso` non lo avvia): un
  * r4 spento non ha token, e al prossimo avvio il Codice lo chiede di nuovo al custode, che non è più collegato.
@@ -183,11 +285,11 @@ export async function dimenticaAccessoChatgptR4(acceso: () => Promise<boolean>, 
 export function nomeModelloUmanoR4(id: unknown, lingua = 'en'): string {
     if (typeof id !== 'string' || !id.trim()) return ''
     const grezzo = id.trim()
-    if (!/^local:/i.test(grezzo)) {
+    if (!/^(?:local|locale-ospite):/i.test(grezzo)) {
         const senzaFonte = grezzo.replace(/^[a-z][a-z0-9-]*:(?=.)/u, '')
         return senzaFonte.replace(/^~/u, '').split('/').pop() ?? ''
     }
-    const resto = grezzo.replace(/^local:/i, '').replace(/[-_.]gguf$/i, '')
+    const resto = grezzo.replace(/^(?:local|locale-ospite):/i, '').replace(/[-_.]gguf$/i, '')
     const quant = /[-_](IQ\d\w*|Q\d(?:[-_]\d)?(?:[-_][A-Z]+)*)(?=[-_]|$)/i.exec(resto)
     const parametri = /(?:^|[-_])(\d+(?:[.,]\d+)?B)(?:[-_]A(\d+(?:[.,]\d+)?B))?(?=[-_]|$)/i.exec(resto)
     let nome = resto

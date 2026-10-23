@@ -22,7 +22,7 @@ import type { TalosMobileEffortLevel } from '@/lib/mobileEffort'
  * principale — stessa UX di ricerca, un secondo elenco invece di un
  * controllo nuovo da imparare.
  */
-defineProps<{
+withDefaults(defineProps<{
     modelProfiles: TalosMobileModelProfileView[]
     routingProfiles: TalosMobileRoutingProfileView[]
     selectedModelProfileId: string | null
@@ -39,7 +39,14 @@ defineProps<{
     showExecutorModel?: boolean
     executorModelProfiles?: TalosMobileModelProfileView[]
     selectedExecutorModelProfileId?: string | null
-}>()
+    /**
+     * ⛔ D-RM4-3 (Pad 20/10/2026): il Laboratorio modelli è del TELEFONO; il Codice di un PC non lo offre. Vero se manca: un booleano
+     * assente Vue lo legge `false`, e senza il valore di serie chi monta il foglio senza dirlo perderebbe il Laboratorio.
+     */
+    showModelLab?: boolean
+    /** Il modello che il Codice sta aprendo (22/10/2026): lo dice la sua riga del selettore. */
+    openingModelProfileId?: string | null
+}>(), { showModelLab: true, openingModelProfileId: null })
 
 const emit = defineEmits<{
     close: []
@@ -57,8 +64,10 @@ const emit = defineEmits<{
     <TalosMobileComposerSheet :title="$t('chat.modelAndReasoning')" testid="talos-model-drawer" @close="emit('close')">
         <TalosMobileComposerModelPicker
             :model-profiles="modelProfiles"
+            :show-model-lab="showModelLab"
             :routing-profiles="routingProfiles"
             :selected-model-profile-id="selectedModelProfileId"
+            :opening-model-profile-id="openingModelProfileId"
             :selected-routing-profile-id="selectedRoutingProfileId"
             :loading-models="loadingModels"
             :loading-routes="loadingRoutes"

@@ -15,12 +15,19 @@ import { talosElapsedLabel, useTalosElapsed } from '@/composables/useTalosElapse
  * The clock counts from mount, and the row is keyed by tool and argument, so
  * mount is when that call started.
  */
-defineProps<{
+const props = defineProps<{
     label: string
+    /**
+     * ⛔ Owner 20/10/2026: quanto è cresciuta la chiamata che il modello sta scrivendo («11.7 KB written»). Un orologio da solo
+     * non distingue un modello che scrive da uno fermo; la crescita sì.
+     */
+    progress?: string
 }>()
 
 const elapsed = useTalosElapsed()
-const elapsedLabel = computed(() => talosElapsedLabel(elapsed.value))
+const elapsedLabel = computed(() => (props.progress
+    ? `${props.progress}, ${talosElapsedLabel(elapsed.value)}`
+    : talosElapsedLabel(elapsed.value)))
 </script>
 
 <template>

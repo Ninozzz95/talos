@@ -50,6 +50,7 @@ import {
     talosCancelManagedModelTransfer,
     talosPauseManagedModelTransfer,
     talosResumeManagedModelTransfer,
+    talosRetainModelTransferObserver,
 } from '@/stores/modelTransfers'
 
 const props = defineProps<{
@@ -203,17 +204,49 @@ const selectedRow = computed(() => {
     // ⛔ N13-SCARICA-01 (Pad, 12/10/2026): `LFM2.5-2.6B-Q4_0.gguf` e `…-QAD-Q4_0.gguf` hanno la stessa etichetta «Q4_0»;
     // la pagina apriva la prima, NON scaricata, e diceva «Scarica Q4_0» a download finito. Senza una scelta della
     // persona si apre sulla variante già sul telefono, se c'è.
-    return rows.value.find((row) => talosVarianteGiaSulTelefono(installati.value, props.repoId, row.key))
+    // ⛔ Pad 22/10/2026: rientrando mentre Q8_0 scaricava, la pagina ripartiva su Q4_0 (già sul telefono) e la barra
+    // non si vedeva da nessuna parte. Prima della variante installata viene quella IN SCARICAMENTO.
+    return rigaInScaricamento.value // àncora: prima-la-variante-in-scaricamento
+        ?? rows.value.find((row) => talosVarianteGiaSulTelefono(installati.value, props.repoId, row.key))
         ?? rows.value[0] ?? null
+})
+
+/** Il trasferimento di questa variante, se ce n'è uno: stesso repository, stessa revisione, chiave fra i `paths`. */
+function trasferimentoDellaRiga(key: string) {
+    return (store.transfer.items ?? []).find((item) => item.repo === props.repoId
+        && item.revision === props.revision
+        && item.paths.includes(key)) ?? null
+}
+
+/**
+ * La variante che si sta scaricando (o che è in pausa a metà), nell'ordine della fila.
+ * ⛔ Revisione del 22/10/2026 (rilievo 9c): prima quella che si MUOVE. Un trasferimento fallito o in pausa più in alto
+ * nella fila nascondeva quello in corso, cioè proprio la barra che questa scelta esiste per mostrare.
+ */
+const rigaInScaricamento = computed(() => rows.value.find((row) => trasferimentoDellaRiga(row.key)?.active === true) // àncora: prima-quella-che-si-muove
+    ?? rows.value.find((row) => trasferimentoDellaRiga(row.key) !== null) ?? null)
+
+/*
+ * A download finito (o annullato) la riga sparisce, e senza una scelta della persona la pagina salterebbe sulla
+ * variante già sul telefono — Q4_0 — proprio mentre si guardava Q8_0 arrivare. Si resta su quella che si guardava.
+ * ⛔ Rilievo 9b (22/10/2026): anche quando un'ALTRA variante sta ancora scaricando — con due download, finita la prima
+ * la pagina saltava sulla seconda.
+ */
+watch(() => rigaInScaricamento.value?.key ?? null, (ora, prima) => {
+    if (prima && ora !== prima && selectedKey.value === null) selectedKey.value = prima // àncora: resta-sulla-variante-finita
 })
 
 const selectedTransfer = computed(() => {
     const row = selectedRow.value
-    if (!row) return null
-    return (store.transfer.items ?? []).find((item) => item.repo === props.repoId
-        && item.revision === props.revision
-        && item.paths.includes(row.key)) ?? null
+    return row ? trasferimentoDellaRiga(row.key) : null
 })
+
+/** Il segno di download sulla scheda della fila: fase a parole e percentuale, come il Centro download. */
+function segnoDellaRiga(key: string): { phase: string, percent: number | null, paused: boolean } | null {
+    const item = trasferimentoDellaRiga(key)
+    if (!item) return null
+    return { phase: item.phase, percent: transferPercent(item), paused: item.phase === 'paused' }
+}
 
 /*
  * ⛔ N13-SCARICA-01 (Pad, 11-12/10/2026): a download finito la pagina diceva ancora «Scarica …». Si chiede al lato
@@ -225,6 +258,14 @@ async function rileggiInstallati(): Promise<void> {
     try { installati.value = (await talosLocalInstalledModels()).models } catch { /* elenco non leggibile: resta il pulsante */ }
 }
 onMounted(() => { void rileggiInstallati() })
+/*
+ * ⛔ Pad 22/10/2026: sul tablet, dentro la stazione Impostazioni, il pulsante del Centro download non è montato, e
+ * con lui l'unico osservatore dei trasferimenti. Questa pagina mostra la barra, quindi tiene acceso lo STESSO
+ * orologio dello store (nessun secondo poller) finché è montata: riaperta mentre il nativo scarica, lo rilegge.
+ */
+let lasciaOsservatore: (() => void) | null = null
+onMounted(() => { lasciaOsservatore = talosRetainModelTransferObserver() }) // àncora: osservatore-della-pagina
+onUnmounted(() => { lasciaOsservatore?.(); lasciaOsservatore = null })
 watch(selectedTransfer, (ora, prima) => { if (prima && !ora) void rileggiInstallati() })
 const selectedInstalled = computed(() => (selectedRow.value
     ? talosVarianteGiaSulTelefono(installati.value, props.repoId, selectedRow.value.key)
@@ -605,6 +646,18 @@ async function reclaim(): Promise<void> {
                             <ShieldAlert v-else-if="rowByKey(option.value)?.warnings.flagged" class="size-[calc(var(--talos-icon-size)*0.75)] shrink-0 text-[var(--talos-danger)]" aria-hidden="true" />
                         </span>
                         <span class="font-mono text-3xs tabular-nums text-[var(--talos-muted)]">{{ rowByKey(option.value)?.size }}</span>
+                        <!-- ⛔ Pad 22/10/2026: nella fila nessun segno di quale variante si stava scaricando. Come le schede
+                             file di PocketPal, la scheda porta il proprio stato: fase a parole e percentuale. -->
+                        <span
+                            v-if="segnoDellaRiga(option.value)"
+                            :data-testid="`talos-models-rail-downloading-${option.value}`"
+                            class="flex min-w-0 items-center gap-[calc(var(--talos-space-inline)/2)] font-mono text-3xs tabular-nums text-[var(--talos-accent-text)]"
+                        >
+                            <Pause v-if="segnoDellaRiga(option.value)!.paused" class="size-[calc(var(--talos-icon-size)*0.75)] shrink-0" aria-hidden="true" />
+                            <Download v-else class="size-[calc(var(--talos-icon-size)*0.75)] shrink-0" aria-hidden="true" />
+                            <span class="truncate">{{ t(`localModels.downloadCenter.phases.${segnoDellaRiga(option.value)!.phase}`) }}</span>
+                            <span v-if="segnoDellaRiga(option.value)!.percent !== null" class="shrink-0">{{ segnoDellaRiga(option.value)!.percent }}%</span>
+                        </span>
                         <TalosModelFitBar
                             v-if="rowByKey(option.value)"
                             class="w-full"

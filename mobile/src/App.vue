@@ -2,6 +2,8 @@
 import { talosIsEphemeralSessionId } from '@/lib/chat/ephemeralSession'
 import { recentChatSessions } from '@/lib/chatListGestures'
 import { talosChatDiscardedByModeSwitch } from '@/lib/chat/modeSwitch'
+// ⛔ D-RM4-7 (Pad, 20/10/2026): il Codice del telefono e quello di un PC non sono la stessa istanza
+import { chiaveDellaVista } from '@/lib/chiaveDellaVista'
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, provide, ref, watch, type Component } from 'vue'
 import { BookMarked, BookOpen, CheckSquare, Code2, FlaskConical, MessageSquareText, Settings, StickyNote, Stethoscope } from '@lucide/vue'
 import { useRoute, useRouter, type LocationQueryRaw } from 'vue-router'
@@ -57,6 +59,7 @@ import { useTalosTabletLayout } from '@/composables/useTalosTabletLayout'
 import { useTalosSheetNav } from '@/composables/useTalosSheetNav'
 import { TALOS_TABLET_CHAT_SIDEBAR_DEFAULT, TALOS_TABLET_CHAT_SIDEBAR_MIN, TALOS_TABLET_SIDEBAR_MAX, clampTalosTabletChatSidebarWidth, clampTalosTabletSidebarWidth, talosTabletLeavesChatsRoute, talosTabletLeavesHarnessListRoute, talosTabletRailVariant, talosTabletSidebarEffectiveWidth, talosTabletStationParent } from '@/lib/tabletLayout'
 import { useLauncherIconController } from '@/services/launcherIcon'
+import { talosChiudiCassettoAggiornamento, talosSegnaleAggiornamento } from '@/lib/updates/segnaleAggiornamento'
 import { parseTalosSessionLibraryContextPolicy } from '@/lib/chat/libraryPolicy'
 const router = useRouter()
 const route = useRoute()
@@ -126,6 +129,10 @@ const TalosTabletDivider = defineAsyncComponent(
 // preview dialog (and its SVG/UI tree) loads only for a real pending decision.
 const TalosLauncherIconDialog = defineAsyncComponent(
     () => import('@/components/talos/settings/TalosLauncherIconDialog.vue'),
+)
+// Aggiornamento automatico (22/10/2026): il cassetto si carica solo quando sale; qui resta solo il segnale leggero.
+const TalosMobileUpdateSheet = defineAsyncComponent(
+    () => import('@/components/updates/TalosMobileUpdateSheet.vue'),
 )
 const sidebarEverOpened = ref(false)
 /* U-5: i 14,5 rem del mockup per la sidebar fissa del tablet stanno in `TALOS_TABLET_CHAT_SIDEBAR_DEFAULT` (tabletLayout.ts): dal 12/09 la larghezza si trascina. */
@@ -220,6 +227,18 @@ watch(() => settingsHydrated.value && settingsStore.state.security.screen_secure
     if (!settingsHydrated.value) return
     void setTalosScreenSecure(secure === true)
 })
+
+// Decisione owner 21/10/2026 («Sempre generiche col blocco»): col PIN di TALOS acceso le notifiche dal computer (R-M5) non dicono né la
+// sessione né il dettaglio, anche a schermo sbloccato. Il lavoro della sveglia gira ad app chiusa: il segno sta nel nativo, allineato a
+// ogni avvio e a ogni cambio (dopo l'idratazione, come lo schermo sicuro). Import dinamico: il remoto non entra nel grafo d'avvio.
+// Revisione R-M5a bis (9): si guarda la COPPIA, così dopo l'idratazione il valore parte sempre (anche «spento», che prima non
+// cambiava rispetto al valore di partenza e non partiva mai: un «acceso» rimasto nel nativo non si correggeva più).
+watch(() => [settingsHydrated.value, settingsStore.state.security.app_lock_enabled === true] as const, ([idratate, bloccata]) => {
+    if (!idratate) return
+    void import('@/lib/remoto/pluginRemoto')
+        .then(({ pluginRemoto }) => pluginRemoto()?.svegliaRiservata?.({ attiva: bloccata }))
+        .catch(() => undefined)
+}, { immediate: true })
 
 watch(sidebarOpen, (open) => {
     if (open) sidebarEverOpened.value = true
@@ -888,6 +907,10 @@ const SHEET_TITLE_KEY: Record<TalosMobileRouteName, string> = {
     'task-item': 'navigation.tasks',
     'note-item': 'navigation.notes',
     doctor: 'navigation.doctor',
+    // R-M3 (owner 20/10/2026): la sezione «Computer» e il dettaglio di un computer tengono il nome della sezione.
+    computer: 'navigation.computer',
+    'computer-item': 'navigation.computer',
+    'computer-codice': 'navigation.computer',
     research: 'stations.deepResearchTitle',
     // The inner research surfaces keep the station's name in the sheet header:
     // each page titles itself, and repeating that title twice on a phone spends
@@ -1023,6 +1046,7 @@ async function navigate(
  * telefono, quindi non è un caso limite: è la normalità di ogni mattina.
  */
 let staccaGuardiano: (() => void) | null = null
+let staccaAggiornamenti: (() => void) | null = null
 
 onMounted(async () => {
     /*
@@ -1032,6 +1056,18 @@ onMounted(async () => {
     void import('@/services/capabilityWatchService')
         .then((modulo) => { staccaGuardiano = modulo.talosStartCapabilityWatch() })
         .catch(() => { /* un guardiano che non parte non deve fermare l'app */ })
+
+    /*
+     * Aggiornamento automatico (owner 22/10/2026): DINAMICO come il guardiano, per lo stesso margine del grafo d'avvio. Il cassetto
+     * sale da solo solo sulla chat, a risposta finita (`avvioAggiornamenti.ts`).
+     */
+    void import('@/lib/updates/avvioAggiornamenti')
+        .then((modulo) => modulo.talosAvviaCablaggioAggiornamenti({
+            chatAlLavoro: () => chatController.chat.state.sending,
+            fuoriDallaChat: () => isStation.value,
+        }))
+        .then((stacca) => { staccaAggiornamenti = stacca })
+        .catch(() => { /* senza aggiornamento automatico l'app funziona lo stesso */ })
 
     /*
      * N15 — un accesso a ChatGPT rimasto a metà (Android ha ricreato l'app con la scheda davanti) si riprende QUI, non solo
@@ -1064,9 +1100,10 @@ onMounted(async () => {
             import('@/stores/notificationCentre'),
             import('@/services/notificationBridge'),
         ])
+        const { talosTestoDelToast } = await import('@/lib/notifications/notificationCentre')
         centro.talosOnNotificationToast((evento) => {
             toastsStore.push({
-                message: evento.body ?? evento.title,
+                message: talosTestoDelToast(evento),
                 // Chi chiede una decisione resta piu' a lungo: e' l'unico che
                 // costa qualcosa se sfugge.
                 durationMs: evento.weight === 'demanding' ? 8_000 : 4_000,
@@ -1074,6 +1111,9 @@ onMounted(async () => {
         })
         centro.talosOnNotificationAndroid((evento) => {
             void ponte.talosPostSystemNotification(evento)
+        })
+        centro.talosOnNotificationCancel((chiave) => {
+            void ponte.talosCancelSystemNotification(chiave)
         })
         const aggiornaVisibilita = () => {
             centro.talosSetAppVisible(document.visibilityState === 'visible')
@@ -1261,6 +1301,7 @@ function talosIndietro(canGoBack: boolean): 'handled' | 'history' | 'exit' {
 
 onBeforeUnmount(async () => {
     staccaGuardiano?.()
+    staccaAggiornamenti?.()
     staccaGuardiano = null
     stopNotificationRoutes?.()
     await resumeRelock?.dispose()
@@ -1314,7 +1355,7 @@ onBeforeUnmount(async () => {
         <!-- Fail-closed fallback: no upstream shadcn/reka components. -->
         <template v-if="uiFallback">
             <main class="flex-1 overflow-y-auto">
-                <RouterView />
+                <RouterView :key="chiaveDellaVista($route)" />
             </main>
             <nav :aria-label="$t('navigation.primary')" data-testid="ui-fallback" class="relative z-50 flex shrink-0 items-stretch justify-around border-t border-[var(--talos-border)] bg-[var(--talos-sidebar)]">
                 <button
@@ -1616,6 +1657,11 @@ onBeforeUnmount(async () => {
 
             <TalosNpuTermsSheet v-if="talosNpuTermsPromptOpen" @decide="talosAnswerNpuTerms" />
             <TalosLauncherIconDialog v-if="launcherIcon.state.pending" />
+            <TalosMobileUpdateSheet
+                v-if="talosSegnaleAggiornamento.aperto"
+                :chat-al-lavoro="chatController.chat.state.sending"
+                @close="talosChiudiCassettoAggiornamento()"
+            />
 
             <Transition name="station">
                 <TalosMobileToolSheet
@@ -1631,8 +1677,8 @@ onBeforeUnmount(async () => {
                     :shell-back="talosIndietro"
                     :parent-title="stationParentTitle"
                     :lock-body-scroll="stationLocksBodyScroll"
-                    :hide-chrome="stationLocksBodyScroll || activeRoute === 'codice-r4'"
-                    :fondo-a-filo="activeRoute === 'codice-r4'"
+                    :hide-chrome="stationLocksBodyScroll || activeRoute === 'codice-r4' || activeRoute === 'computer-codice'"
+                    :fondo-a-filo="activeRoute === 'codice-r4' || activeRoute === 'computer-codice'"
                     @close="navigate('chat')"
                 >
                     <RouterView v-slot="{ Component, route: renderedRoute }">
@@ -1658,7 +1704,7 @@ onBeforeUnmount(async () => {
                                 <component :is="Component" />
                             </div>
                         </Transition>
-                        <component :is="Component" v-else />
+                        <component :is="Component" v-else :key="chiaveDellaVista(renderedRoute)" />
                     </RouterView>
                 </TalosMobileToolSheet>
             </Transition>

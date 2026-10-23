@@ -16,6 +16,8 @@ const bridge = vi.hoisted(() => ({
     // della chat si chiude prima della prova.
     cancelQualification: vi.fn(),
     close: vi.fn(),
+    // ⛔ CODICE COL MOTORE LOCALE: l'endpoint del Codice sopra il modello aperto
+    motoreOspite: vi.fn(),
 }))
 
 vi.mock('@capacitor/core', () => ({
@@ -52,6 +54,7 @@ const {
     talosRunAutomaticProbe,
     talosRunProbe,
     talosWarmLocalModel,
+    talosMotoreOspite,
 } = await import('@/services/localEngine')
 const { talosT } = await import('@/i18n')
 const { useTalosMobileToasts, __resetToastsForTests } = await import('@/stores/toasts')
@@ -776,5 +779,39 @@ describe('REG-COMP-11 — lo stato del motore porta il contesto aperto', () => {
         await expect(talosLocalEngineStatus()).resolves.toMatchObject({ contextTokens: null })
         bridge.available.mockRejectedValueOnce(new Error('nessun ponte'))
         await expect(talosLocalEngineStatus()).resolves.toMatchObject({ contextTokens: null })
+    })
+})
+
+/**
+ * ⛔ CODICE COL MOTORE LOCALE (ledger `LEDGER-CODICE-MOTORE-LOCALE-2026-10-18.md`): `TalosLlamaPlugin.motoreOspite` avvia l'endpoint
+ * sul socket privato e dice dove sta, con la chiave di questo avvio e la finestra vera del modello aperto.
+ */
+describe('l’endpoint del Codice sopra il modello aperto', () => {
+    beforeEach(() => bridge.motoreOspite.mockReset())
+
+    it('LE-OSP-01 nessun modello aperto: non pronto', async () => {
+        bridge.motoreOspite.mockResolvedValue({ pronto: false })
+        await expect(talosMotoreOspite()).resolves.toEqual({ pronto: false })
+    })
+
+    it('LE-OSP-02 pronto: socket, chiave, modello e finestra, nient’altro', async () => {
+        const vero = { pronto: true, socketPath: '/data/user/0/ai.talos.dev/files/locale-ospite/motore.sock', chiave: 'a'.repeat(64), modello: 'LFM2.5-2.6B-QAD-Q4_0.gguf', nCtx: 32768 }
+        bridge.motoreOspite.mockResolvedValue({ ...vero, altro: 'x' })
+        await expect(talosMotoreOspite()).resolves.toEqual(vero)
+    })
+
+    it('LE-OSP-03 una risposta storta del ponte non diventa un accesso', async () => {
+        bridge.motoreOspite.mockResolvedValue({ pronto: true, socketPath: 'relativo.sock', chiave: 'a'.repeat(64), modello: 'm.gguf', nCtx: 32768 })
+        await expect(talosMotoreOspite()).resolves.toEqual({ pronto: false })
+        bridge.motoreOspite.mockResolvedValue({ pronto: true, socketPath: '/x.sock', chiave: '', modello: 'm.gguf', nCtx: 32768 })
+        await expect(talosMotoreOspite()).resolves.toEqual({ pronto: false })
+        bridge.motoreOspite.mockResolvedValue({ pronto: true, socketPath: '/x.sock', chiave: 'a'.repeat(64), modello: 'm.gguf', nCtx: 0 })
+        await expect(talosMotoreOspite()).resolves.toEqual({ pronto: false })
+    })
+
+    it('LE-OSP-04 il ponte che rifiuta: il codice arriva a chi chiama', async () => {
+        bridge.motoreOspite.mockRejectedValueOnce(Object.assign(new Error('TALOS_MOTORE_OSPITE_FAILED'), { code: 'TALOS_MOTORE_OSPITE_FAILED' }))
+        const preso = await talosMotoreOspite().catch((e: unknown) => e)
+        expect(preso).toMatchObject({ code: 'TALOS_MOTORE_OSPITE_FAILED' })
     })
 })

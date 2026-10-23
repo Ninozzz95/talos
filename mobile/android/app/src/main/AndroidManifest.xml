@@ -191,6 +191,17 @@
     -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
+    <!--
+        Aggiornamento automatico (22/10/2026, ledger LEDGER-AGGIORNAMENTO-AUTOMATICO-MOBILE). TALOS esce da GitHub, non da uno
+        store: per aggiornarsi installa da se' il proprio APK. REQUEST_INSTALL_PACKAGES fa comparire, la PRIMA volta, la richiesta
+        «Installa app sconosciute» per TALOS. UPDATE_PACKAGES_WITHOUT_USER_ACTION (protezione «normal», AOSP
+        core/res/AndroidManifest.xml) con USER_ACTION_NOT_REQUIRED evita la conferma alle volte successive, quando l'app aggiorna
+        se' stessa. Installa solo un APK col nostro nome di pacchetto, il nostro certificato, un versionCode piu' alto e l'impronta
+        del manifesto firmato.
+    -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <uses-permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION" />
+
     <application
         android:allowBackup="false"
         android:networkSecurityConfig="@xml/network_security_config"
@@ -203,6 +214,12 @@
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
 
+        <!-- R-M3 (20/10/2026): lo scanner di Google del QR del controllo remoto si scarica con l'app, non al primo tocco
+             (developers.google.com/ml-kit/code-scanner). -->
+        <meta-data
+            android:name="com.google.mlkit.vision.DEPENDENCIES"
+            android:value="barcode_ui" />
+
         <activity
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"
             android:name=".MainActivity"
@@ -210,6 +227,14 @@
             android:theme="@style/AppTheme.NoActionBarLaunch"
             android:launchMode="singleTask"
             android:exported="true">
+            <!-- R-M3 (20/10/2026): il collegamento del controllo remoto copiato dal PC (`talos-remote:1?pc=…&t=…`), che vale come
+                 il QR. Arriva al JS con `appUrlOpen`/`getLaunchUrl` (`src/lib/remoto/linkRemoto.ts`). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="talos-remote" />
+            </intent-filter>
             <!-- The launcher entry lives on the per-theme activity-alias list below
                  (owner 2026-07-24: launcher icon follows the active theme). MainActivity
                  itself carries no LAUNCHER category so exactly one alias is ever the
@@ -637,6 +662,39 @@
             android:exported="false"
             android:permission="android.permission.BIND_JOB_SERVICE" />
 
+        <!--
+            R-M5a (21/10/2026): la SVEGLIA dal computer accoppiato. Il servizio di UnifiedPush (`PUSH_EVENT`, come l'esempio ufficiale
+            `PushServiceImpl`) riceve il Web Push che il distributore FCM incorporato consegna (i suoi ricevitori li porta il suo AAR),
+            mostra una notifica provvisoria e programma il job urgente che si collega al PC e la sostituisce con quelle vere.
+        -->
+        <service
+            android:name="ai.talos.remoto.TalosSvegliaServizio"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="org.unifiedpush.android.connector.PUSH_EVENT" />
+            </intent-filter>
+        </service>
+        <service
+            android:name="ai.talos.remoto.TalosSvegliaLavoro"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
+
+        <!-- Aggiornamento automatico: i tre lavori (controllo, scaricamento, installazione all'uscita) e i due esiti. -->
+        <service
+            android:name="ai.talos.aggiornamenti.TalosLavoroAggiornamenti"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
+        <receiver
+            android:name="ai.talos.aggiornamenti.TalosRicevitoreInstallazione"
+            android:exported="false" />
+        <receiver
+            android:name="ai.talos.aggiornamenti.TalosRicevitorePacchettoSostituito"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
         <service
             android:name="ai.talos.TalosModelTransferService"
             android:exported="false"
@@ -746,7 +804,7 @@
             </intent-filter>
             <meta-data
             android:name="android.speech"
-            android:resource="@xml/talos_assistente" />
+            android:resource="@xml/talos_riconoscimento" />
         </service>
 
         <!--

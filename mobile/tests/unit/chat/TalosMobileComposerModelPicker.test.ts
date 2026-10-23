@@ -150,6 +150,113 @@ describe('TalosMobileComposerModelPicker', () => {
         expect(view.text()).not.toContain('untested')
     })
 
+    /*
+     * Pad 22/10/2026 (5 models × 3 versions): every local model read «On this device - not tried yet», even one used for hours.
+     * «Tried» is the connection test of a provider in the cloud (`probe_results`), which a file on the device never gets. A local
+     * model says only where it lives; a cloud model that was never tested still says so.
+     */
+    it('PICK-UNTESTED-01 a local model never reads «not tried yet», a cloud one still does', () => {
+        const view = mountPicker({
+            modelProfiles: [
+                profile({ id: 'profile-local', provider: 'local', model: '/storage/emulated/0/models/gemma.gguf', display_name: 'gemma-4-E2B-it-Q4_0', status: 'untested' }),
+                profile({ id: 'profile-openai', status: 'untested' }),
+            ],
+            routingProfiles: [],
+        })
+
+        const locale = view.get('[data-model-profile-id="profile-local"]').text()
+        expect(locale).toContain('On this device')
+        expect(locale).not.toContain('not tried yet')
+        expect(view.get('[data-model-profile-id="profile-openai"]').text()).toContain('not tried yet')
+    })
+
+    /*
+     * Pad 22/10/2026 16:07: the Code session's model was a local file deleted since. Its row (`profiloDelModelloR4`, id `r4:…`) must
+     * not claim «On this device»: it says the file is gone.
+     */
+    /*
+     * Pad 22/10/2026 16:07 (photo): the groups were headed by the raw provider id, uppercased by CSS: «LOCAL» even in Italian,
+     * «CHATGPT», «OPENROUTER». A group says where its models run: the device in the person's language, a provider by its own name.
+     */
+    it('PICK-GROUP-01 a group is headed by a name the person reads, never the raw provider id', () => {
+        const view = mountPicker({
+            modelProfiles: [
+                profile({ id: 'profile-local', provider: 'local', model: '/storage/emulated/0/models/gemma.gguf', display_name: 'gemma-4-E2B-it-Q4_0', status: 'untested' }),
+                profile({ id: 'profile-chatgpt', provider: 'chatgpt', model: 'gpt-5.5', display_name: 'GPT-5.5', status: 'healthy' }),
+            ],
+            routingProfiles: [],
+        })
+
+        expect(view.get('[data-testid="talos-model-group-local"]').text()).toContain('On this device')
+        expect(view.get('[data-testid="talos-model-group-local"]').text()).not.toMatch(/local/)
+        expect(view.get('[data-testid="talos-model-group-chatgpt"]').text()).toContain('ChatGPT')
+    })
+
+    /* Pad 22/10/2026 16:08: the Code screen opens a local model for seconds before it is chosen; the tapped row says so. */
+    it('PICK-OPENING-01 the row of the model being opened says so, is busy, and ignores taps meanwhile', async () => {
+        const view = mountPicker({
+            modelProfiles: [
+                profile({ id: 'profile-local', provider: 'local', model: '/storage/emulated/0/models/gemma.gguf', display_name: 'gemma-4-E2B-it-Q4_0', status: 'untested' }),
+                profile({ id: 'profile-openai', status: 'healthy' }),
+            ],
+            routingProfiles: [],
+            openingModelProfileId: 'profile-local',
+        })
+
+        const riga = view.get('[data-model-profile-id="profile-local"]')
+        expect(riga.text()).toContain('Opening the model…')
+        expect(riga.attributes('aria-busy')).toBe('true')
+        expect(view.get('[data-model-profile-id="profile-openai"]').attributes('aria-busy')).toBeUndefined()
+        await riga.trigger('click')
+        await view.get('[data-model-profile-id="profile-openai"]').trigger('click')
+        expect(view.emitted('selectModelProfile')).toBeUndefined()
+    })
+
+    /* Adversarial review 22/10, finding 12: the other rows ignore taps, so they say so; TalkBack hears what is happening. */
+    it('PICK-OPENING-02 while a model opens the other rows are disabled for assistive tech and a live region says why', () => {
+        const view = mountPicker({
+            modelProfiles: [
+                profile({ id: 'profile-local', provider: 'local', model: '/storage/emulated/0/models/gemma.gguf', display_name: 'gemma-4-E2B-it-Q4_0', status: 'untested' }),
+                profile({ id: 'profile-openai', status: 'healthy' }),
+            ],
+            routingProfiles: [],
+            openingModelProfileId: 'profile-local',
+        })
+
+        expect(view.get('[data-model-profile-id="profile-openai"]').attributes('aria-disabled')).toBe('true')
+        expect(view.get('[data-testid="talos-mobile-model-opening-live"]').text()).toBe('Opening the model…')
+        expect(view.get('[data-testid="talos-mobile-model-opening-live"]').attributes('aria-live')).toBe('polite')
+    })
+
+    /* Finding 13: a cloud model is not «opened» on the device; its row says the model is being switched. */
+    it('PICK-OPENING-03 a cloud model being chosen says it is switching, not opening', () => {
+        const view = mountPicker({
+            modelProfiles: [profile({ id: 'profile-openai', status: 'healthy' })],
+            routingProfiles: [],
+            openingModelProfileId: 'profile-openai',
+        })
+
+        const riga = view.get('[data-model-profile-id="profile-openai"]').text()
+        expect(riga).toContain('Switching model…')
+        expect(riga).not.toContain('Opening the model…')
+    })
+
+    it('PICK-MISSING-01 a local model the app no longer lists says it is not found on the device', () => {
+        const view = mountPicker({
+            modelProfiles: [
+                profile({ id: 'r4:locale-ospite:LFM2.5-2.6B-Q4_K_M.gguf', provider: 'local', model: 'LFM2.5-2.6B-Q4_K_M.gguf', display_name: 'LFM2.5-2.6B-Q4_K_M', status: 'untested' }),
+                profile({ id: 'profile-local', provider: 'local', model: '/storage/emulated/0/models/gemma.gguf', display_name: 'gemma-4-E2B-it-Q4_0', status: 'untested' }),
+            ],
+            routingProfiles: [],
+        })
+
+        const sparito = view.get('[data-model-profile-id="r4:locale-ospite:LFM2.5-2.6B-Q4_K_M.gguf"]').text()
+        // finding 7: the app may simply not have read its catalogue yet, so it says what it knows («not found»), not «gone»
+        expect(sparito).toContain('Not found on this device')
+        expect(sparito).not.toContain('locale-ospite')
+        expect(view.get('[data-model-profile-id="profile-local"]').text()).toContain('On this device')
+    })
+
     /** Same for a value nobody taught us to translate: jargon either way. */
     it('omits a compatibility value it cannot say in words', () => {
         const view = mountPicker({
@@ -278,5 +385,13 @@ describe('TalosMobileComposerModelPicker', () => {
         await modelLab.trigger('click')
         expect(view.emitted('refreshModels')).toHaveLength(1)
         expect(view.emitted('openModelLab')).toHaveLength(1)
+    })
+
+    it('CMR-06 D-RM4-3 (20/10/2026): Model Lab can be withheld by prop, Refresh stays; by default it is offered', async () => {
+        expect(mountPicker().find('[aria-label="Open Model Lab"]').exists()).toBe(true)
+        wrapper?.unmount()
+        const byProp = mountPicker({ showModelLab: false })
+        expect(byProp.find('[aria-label="Open Model Lab"]').exists()).toBe(false)
+        expect(byProp.find('[aria-label="Refresh model catalog"]').exists()).toBe(true)
     })
 })

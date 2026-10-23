@@ -81,6 +81,9 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(ai.talos.agent.TalosFlussoHttpPlugin.class);
         // K3-B1: il client nativo di r4 (solo 127.0.0.1, cookie messo dal nativo): vedi terminal/TalosR4ClientePlugin.kt.
         registerPlugin(ai.talos.terminal.TalosR4ClientePlugin.class);
+        // R-M2: il client del controllo remoto (iroh verso il PC accoppiato): vedi remoto/TalosRemotoPlugin.kt. La libreria
+        // nativa si carica alla prima connessione, non all'avvio (JNA la apre quando serve).
+        registerPlugin(ai.talos.remoto.TalosRemotoPlugin.class);
         { long t = android.os.SystemClock.uptimeMillis(); registerPlugin(TalosDevicePermissionsPlugin.class); long d = android.os.SystemClock.uptimeMillis() - t; if (d > 20) Log.i("TalosAvvio", "registerPlugin class: " + d + " ms"); }
         // Owner 2026-07-28: durable, user-chosen Save-As for encrypted Library
         // files. The plugin accepts only TALOS's private export staging path.
@@ -124,6 +127,8 @@ public class MainActivity extends BridgeActivity {
         // Le attivita' che si eseguono da sole. Il modello gira nel processo
         // dell'app SENZA interfaccia: chiedere qualcosa alla WebView vorrebbe
         // dire aspettare che qualcuno apra l'app, cioe' non essere automatici.
+        // Aggiornamento automatico (22/10/2026): controllo, scaricamento e installazione dell'APK firmato.
+        registerPlugin(ai.talos.aggiornamenti.TalosAggiornamentiPlugin.class);
         { long t = android.os.SystemClock.uptimeMillis(); registerPlugin(TalosTaskRunPlugin.class); long d = android.os.SystemClock.uptimeMillis() - t; if (d > 20) Log.i("TalosAvvio", "registerPlugin class: " + d + " ms"); }
         // ⛔ Il cronometro dell'avvio NATIVO. Misurato dal lato JavaScript: il
         // ponte Capacitor risponde per i primi ~170 ms, poi TACE per nove
@@ -241,6 +246,9 @@ public class MainActivity extends BridgeActivity {
      * *while-in-use*, e dal fondo non si esercita.
      *
      * ⇒ Qui, che e' il primo istante legittimo: l'app e' davanti alla persona.
+     * A0-1 (21/10/2026): il secondo e' `TalosAssistente.onReady`, quando il
+     * sistema rilega l'assistente scelto (vale l'eccezione while-in-use di chi
+     * fornisce il VoiceInteractionService); quella passa da un freno, questa no.
      */
     @Override
     public void onResume() {

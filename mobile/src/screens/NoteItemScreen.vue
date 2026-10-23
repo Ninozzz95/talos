@@ -152,6 +152,8 @@ async function exportText(): Promise<void> {
             key: `note:exported:${current.id}`,
             channel: 'jobs',
             weight: 'notable',
+            // N0, D-N0-8: il gesto è della persona ⇒ toast sì, campanella e tendina no
+            origin: 'person',
             title: t('notes.exportCopied'),
             body: current.title,
             at: Date.now(),

@@ -38,7 +38,7 @@ public class TalosRunService extends Service {
     static final String CHANNEL_ID = "talos.run";
     static final String EXTRA_TITLE = "title";
     static final String EXTRA_TEXT = "text";
-    private static final int NOTIFICATION_ID = 4711;
+    private static final int NOTIFICATION_ID = TalosNotificationIds.RUN;
 
     /**
      * ⛔ F4 (14/10/2026; ledger `LEDGER-CODICE-SENZA-PONTE-2026-10-13.md` §15) — CHI tiene acceso il servizio, per nome.
@@ -189,12 +189,17 @@ public class TalosRunService extends Service {
     }
 
     static void ensureChannel(Context context) {
+        ensureChannel(context, false);
+    }
+
+    static void ensureChannel(Context context, boolean rinomina) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
         final NotificationManager manager = context.getSystemService(NotificationManager.class);
-        if (manager == null || manager.getNotificationChannel(CHANNEL_ID) != null) return;
+        if (manager == null || (!rinomina && manager.getNotificationChannel(CHANNEL_ID) != null)) return;
+        // `rinomina` solo da `TalosNotificationCentre.refreshNames` (lingua dell'app); gli altri creano soltanto se manca (N0, D-N0-6).
         final NotificationChannel channel = new NotificationChannel(
-                CHANNEL_ID, "Work in progress", NotificationManager.IMPORTANCE_LOW);
-        channel.setDescription("Shown while TALOS is answering, searching or making a document.");
+                CHANNEL_ID, context.getString(R.string.talos_canale_in_corso_nome), NotificationManager.IMPORTANCE_LOW);
+        channel.setDescription(context.getString(R.string.talos_canale_in_corso_descrizione));
         // LOW, and no sound or vibration: this reports work, it does not
         // interrupt. A notification that buzzes for every long answer is one the
         // user turns off, and then they cannot see the work at all.

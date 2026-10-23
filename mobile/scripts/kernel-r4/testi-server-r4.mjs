@@ -6,7 +6,7 @@
  *
  * K3-C2b: anche le chiavi `doctor.*` dell'area `varie` (i testi del Doctor), filtrate per prefisso; il prefisso entra nella provenienza.
  *
- * Uso: node scripts/kernel-r4/testi-server-r4.mjs --r4 <checkout r4> --commit <sha> --uscita <file.json> [--area server|varie-doctor|processi-inspector|varie-pannello|modello-inspector|processi-scheda|kernel-prova|errori-processi|agenti-scheda|varie-attrezzi|app-risultato-delega|chat-risultato-delega|errori-punti|app-file|errori-file|app-terminale|processi-terminale|modello-viste|app-approvazione|chat-approvazione|kernel-approvazione|chat-permessi|chat-domande|errori-domande|chat-coda|agenti-coda|errori-fermato|chat-nota|errori-modello|app-allegati|app-trascrizione|errori-motivi|chat-piano|app-piano|modello-permessi|errori-piano|sezioni-automazioni|app-coordinazione|varie-fornitori|errori-sessioni|errori-chatgpt]
+ * Uso: node scripts/kernel-r4/testi-server-r4.mjs --r4 <checkout r4> --commit <sha> --uscita <file.json> [--area server|varie-doctor|processi-inspector|varie-pannello|modello-inspector|processi-scheda|kernel-prova|errori-processi|agenti-scheda|varie-attrezzi|app-risultato-delega|chat-risultato-delega|errori-punti|app-file|errori-file|app-terminale|processi-terminale|modello-viste|app-approvazione|chat-approvazione|kernel-approvazione|chat-permessi|chat-domande|errori-domande|chat-coda|agenti-coda|errori-fermato|chat-nota|errori-modello|app-allegati|app-trascrizione|errori-motivi|chat-piano|app-piano|modello-permessi|errori-piano|sezioni-automazioni|app-coordinazione|varie-fornitori|errori-sessioni|errori-chatgpt|errori-locale]
  */
 import { createHash } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
@@ -110,6 +110,9 @@ const AREE = {
     // ⛔ CHATGPT NEL CODICE (ledger `LEDGER-CHATGPT-NEL-CODICE-2026-10-18.md`): i codici del piano che r4 manda (custode, giro, rotte).
     // Quelli che nomina un posto del desktop («in Fornitori») li dice la frase del telefono (`models.chatgptErrors`), che vince.
     'errori-chatgpt': { percorso: PERCORSO_TESTI_ERRORI, prefisso: 'CHATGPT_' },
+    // ⛔ CODICE COL MOTORE LOCALE (ledger `LEDGER-CODICE-MOTORE-LOCALE-2026-10-18.md`, r4 0f3f90f8e): i rifiuti della fonte `locale-ospite`
+    // (la spinta) e del motore dell'app durante il giro (occupato, nessun modello, modello cambiato, non risponde)
+    'errori-locale': { percorso: PERCORSO_TESTI_ERRORI, prefisso: ['LOCAL_GUEST_', 'kernel.motoreOspite'] },
 }
 
 /** Un dizionario d'area di r4 a quel commit (`export default { it: {…}, en: {…} }`), letto come modulo; con `prefisso` (uno o più), solo quelle chiavi. */

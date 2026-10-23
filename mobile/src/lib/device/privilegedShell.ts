@@ -68,17 +68,17 @@ const MOTIVO: Record<string, string> = {
     // ⛔ Le chiavi tengono il vecchio nome di proposito: le installazioni gia'
     // in giro rispondono ancora cosi', e una chiave che non trova casa diventa
     // un motivo vuoto — cioe' un modello che riprova all'infinito.
-    'shizuku-not-running': 'The privileged bridge is not connected on this phone right now. Tell the user, and offer to open the bridge page in TALOS so they can pair it with the six-digit code. Do not retry.',
+    'shizuku-not-running': 'The privileged bridge is not connected on this device right now. Tell the user, and offer to open the bridge page in TALOS so they can pair it with the six-digit code. Do not retry.',
     'shizuku-not-authorised': 'The bridge is packaged but has never been paired. Offer to open the bridge page so the user can pair it once with the six-digit code shown on their own screen. Do not retry.',
-    'denied-by-system': 'The phone manufacturer refused this even through the privileged bridge. Tell the user plainly; there is nothing to retry.',
+    'denied-by-system': 'The device manufacturer refused this even through the privileged bridge. Tell the user plainly; there is nothing to retry.',
     'program-not-allowed': 'That program is not on the allowed list. This is a bug in TALOS, not something the user can fix.',
     'exec-unavailable': 'The privileged bridge cannot run commands on this build of Shizuku. Tell the user; do not retry.',
-    'not-on-this-platform': 'There is no phone to act on here.',
+    'not-on-this-platform': 'There is no device to act on here.',
     // ⛔ Non puo' piu' capitare — nessuno chiede piu' niente a Shizuku — ma la
     // chiave resta: un'app vecchia sul telefono di qualcuno la risponde ancora,
     // e un motivo senza testo e' un modello che riprova.
     'shizuku-refused': 'The privileged bridge could not run this. Tell the user plainly and offer the system panel instead. Do not retry.',
-    'solo-ponte': 'This phone routes every privileged command through the in-house bridge. It needs to be paired once with a six-digit code. Offer to open the bridge page. Do not retry.',
+    'solo-ponte': 'This device routes every privileged command through the in-house bridge. It needs to be paired once with a six-digit code. Offer to open the bridge page. Do not retry.',
 }
 
 /**

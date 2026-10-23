@@ -6,6 +6,48 @@ signed APK under [Releases](../../releases).
 
 Numbers in this file are measured on a device, not estimated.
 
+## v0.1.44
+
+TALOS now updates itself, and the on-device engine moves to llama.cpp 0.7.0.
+
+### Added
+
+- **Automatic updates.** Once a day TALOS checks for a new version, downloads it on Wi-Fi and, at a calm moment, shows an
+  "Update ready" drawer with what's new, "Restart now" and "On next launch". "On next launch" installs it when you leave
+  TALOS and nothing is working. Android asks once to let TALOS install apps; after that, updates install without further
+  prompts. Before installing, TALOS checks the Ed25519 signature of the release manifest, that the version is newer, the
+  package name, the signing certificate and the SHA-512 of the file; a file that does not match is deleted and never
+  installed. Settings > Updates shows the version, "Check now" and one switch; Wi-Fi only and notifications are under
+  "Advanced". Tested on a device: silent install with TALOS reopening, install on exit, and a tampered file discarded.
+- **Code on the device's own model.** Code can run on the model the chat has open on this device, with no network: it uses
+  the app's engine instead of loading a second copy, keeps the connection alive during long answers and counts the context
+  exactly with the engine's tokenizer.
+- **Code shows the conversation summary.** While a long conversation is summarized, a line above the composer shows the
+  progress, with Skip; a summary that falls back says why when you tap it.
+- **Notifications in both languages.** Channel names, download bars and messages follow the app language; a plan that
+  needs your approval notifies you before waiting.
+
+### Changed
+
+- The on-device engine is llama.cpp 0.7.0, on CPU, GPU and the Qualcomm NPU.
+- Tool steps and thinking fold into one group in chat and Code; a finished turn says how long TALOS worked. Tool rows stay
+  honest: a tool shows as running only while it really runs, and its row appears as soon as the model starts writing it.
+- The model picker groups models by provider and says when a model is opening or switching.
+- Every screen says "device" instead of "phone": TALOS runs on phones and tablets alike.
+- Code runs on the same engine as TALOS desktop 0.1.35.
+
+### Fixed
+
+- Only GGUF files are offered as chat models: the dictation model no longer appears in the model picker.
+- Destructive buttons are readable in every theme.
+- The English model lab no longer shows the Italian word "Automatico".
+- "hey TALOS" comes back on its own after the system restarts the assistant.
+
+### Known limitations
+
+- **Remote control of a PC is not usable yet.** The code is in this version, but it needs the desktop side, which no
+  desktop release ships yet (TALOS desktop 0.1.35 says "not available"). It will work once a desktop release includes it.
+
 ## v0.1.43
 
 Code can use your ChatGPT plan, with the same sign-in as the chat.

@@ -1,0 +1,20 @@
+{
+  "origine": {
+    "commit": "cba8f4084",
+    "percorso": "harness-ui/frontend/src/i18n/testi/errori.js",
+    "sha256": "0acfde68e38d40f5b90d859491a88dfd26a474224aff25ee708fee62294c0123",
+    "nota": "r4 della release (desktop-v0.1.35 sulla main pubblica); stesse tre frasi di c4d42649a, cambiano solo le righe inglesi (verificato il 22/10/2026)",
+    "righe": "it 709/750/752, en 1637/1678/1680",
+    "regole": "harness-ui/frontend/src/components/errori.js:913 (errori.kernel.motoreLocaleRifiuta), :956 (errori.kernel.finestraLocale)"
+  },
+  "it": {
+    "kernel.finestraLocale": "La conversazione{conversazione} non entra nella finestra del modello locale{finestra}.",
+    "kernel.quantiToken": " ({n} token)",
+    "kernel.motoreLocaleRifiuta": "Il motore locale non ha accettato questa richiesta, nemmeno senza gli attrezzi."
+  },
+  "en": {
+    "kernel.finestraLocale": "The conversation{conversazione} does not fit in the local model’s window{finestra}.",
+    "kernel.quantiToken": " ({n} tokens)",
+    "kernel.motoreLocaleRifiuta": "The local engine did not accept this request, not even as a plain chat."
+  }
+}

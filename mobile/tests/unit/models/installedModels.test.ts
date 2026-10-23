@@ -26,6 +26,18 @@ const GEMMA = model('gemma-3-4b-it-Q4_K_M.gguf', 3_100_000_000, 1_785_600_000_00
 const ALL = [PHI, QWEN, GEMMA]
 
 describe('the models already on this phone', () => {
+    /*
+     * Pad, 21/10/2026 (video shots): «Local models — Installed GGUF models» said «5 models» and listed the four files of the
+     * on-device dictation model (`*.int8.onnx`, `tokens.txt`) next to the one GGUF. They are managed (and removed) from
+     * Settings → Voice; here only GGUF models are models, and the count says so.
+     */
+    it('lists and counts only GGUF models, not the dictation model files', () => {
+        const dettatura = ['encoder.int8.onnx', 'decoder.int8.onnx', 'joiner.int8.onnx', 'tokens.txt'].map((n, i) => model(n, 1_000 + i, 1))
+        const view = talosInstalledModelsView([QWEN, ...dettatura])
+        expect(view.models.map((m) => m.name)).toEqual([QWEN.name])
+        expect(view.total).toBe(1)
+    })
+
     it('answers «which one did I just download» by default', () => {
         // Newest first, because that is the question asked right after a
         // download — and the only one the old panel could not answer at all.

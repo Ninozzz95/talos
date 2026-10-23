@@ -1,6 +1,8 @@
+diff --git a/ggml/src/ggml-opencl/ggml-opencl.cpp b/ggml/src/ggml-opencl/ggml-opencl.cpp
+index 615107d94..6c6a3af95 100644
 --- a/ggml/src/ggml-opencl/ggml-opencl.cpp
 +++ b/ggml/src/ggml-opencl/ggml-opencl.cpp
-@@ -1418,6 +1418,24 @@
+@@ -1435,6 +1435,24 @@ static cl_program build_program_from_source(ggml_backend_opencl_context * backen
      return p;
  }
  
@@ -25,7 +27,7 @@
  static cl_program build_program_from_binary(cl_context ctx, cl_device_id dev, const char* program_buffer, const std::string &compile_opts, size_t bin_size = 0) {
      cl_program p;
      char *program_log;
-@@ -6527,8 +6545,8 @@
+@@ -6595,8 +6613,8 @@ static void ggml_opencl_ensure_fa_pre_kernels(ggml_backend_opencl_context * back
      const std::string src  = ggml_opencl_fa_kernel_src(FA_VARIANT_PRE);
      const std::string opts = ggml_opencl_fa_compile_opts(backend_ctx, cfg, FA_VARIANT_PRE);
      // retry when kernel compile fails
@@ -36,7 +38,29 @@
          /*fatal=*/false, "fa prepass f16", backend_ctx->queue);
      if (!prog_pre_f16) { return; }
      cl_kernel k_kv_pad_f16  = clCreateKernel(prog_pre_f16, "flash_attn_kv_pad_f16",   &err);
-@@ -6562,8 +6580,8 @@
+@@ -6636,8 +6654,8 @@ static bool ggml_opencl_ensure_fa_f32_f16_vec_512(ggml_backend_opencl_context *
+     // Compile only vec decode and merge to stay within the Adreno compiler's memory limit.
+     const std::string opts = ggml_opencl_fa_compile_opts(backend_ctx, cfg, FA_VARIANT_F32_F16) +
+                              " -D FA_DECODE_ONLY -D FA_VEC_ONLY";
+-    cl_program prog = build_program_from_source_ex(
+-        backend_ctx->context, backend_ctx->device,
++    cl_program prog = talos_build_program_from_source_ex_cached(
++        backend_ctx,
+         ggml_opencl_fa_kernel_src(FA_VARIANT_F32_F16).c_str(), opts,
+         /*fatal=*/false, "fa f32_f16 decode512 vec", backend_ctx->queue);
+     if (!prog) {
+@@ -6708,8 +6726,8 @@ static void ggml_opencl_ensure_fa_f32_f16_mq_decode(ggml_backend_opencl_context
+                              (gqa == 8 && dk == 256 ? " -D FA_Q1_Q_REG" : "");
+     for (int nsg = nsg_max; nsg >= 1; nsg /= 2) {
+         const size_t wg = 64 * nsg;
+-        cl_program prog = build_program_from_source_ex(
+-            backend_ctx->context, backend_ctx->device, src.c_str(),
++        cl_program prog = talos_build_program_from_source_ex_cached(
++            backend_ctx, src.c_str(),
+             opts + " -D MQ_NSG_SPLIT=" + std::to_string(nsg),
+             /*fatal=*/false, "fa f32_f16 mq decode", backend_ctx->queue);
+         if (!prog) {
+@@ -6751,8 +6769,8 @@ static bool ggml_opencl_ensure_fa_f32_f16_prefill_512(ggml_backend_opencl_contex
  
      const ggml_opencl_fa_variant variant = split ? FA_VARIANT_F32_F16_SPLIT : FA_VARIANT_F32_F16;
      std::string opts = ggml_opencl_fa_compile_opts(backend_ctx, cfg, variant) + " -D FA_PREFILL_ONLY";
@@ -47,7 +71,7 @@
          ggml_opencl_fa_kernel_src(FA_VARIANT_F32_F16).c_str(), opts,
          /*fatal=*/false, split ? "fa f32_f16 prefill512 split" : "fa f32_f16 prefill512",
          backend_ctx->queue);
-@@ -6587,8 +6605,8 @@
+@@ -6776,8 +6794,8 @@ static bool ggml_opencl_ensure_fa_f32_f16_prefill_512(ggml_backend_opencl_contex
      if (split && pkimg_build && backend_ctx->fa.f32_f16_split_k_img.count(dk_dv) == 0) {
          std::string opts_img = ggml_opencl_fa_compile_opts(backend_ctx, cfg, variant) +
              " -D FA_PREFILL_ONLY -D FA_K_IMG -D FA_TILE_NAME=flash_attn_f32_f16_k_img";
@@ -58,7 +82,7 @@
              ggml_opencl_fa_kernel_src(FA_VARIANT_F32_F16).c_str(), opts_img,
              /*fatal=*/false, "fa f32_f16 prefill512 split k_img", backend_ctx->queue);
          if (prog_img) {
-@@ -6745,8 +6763,8 @@
+@@ -6934,8 +6952,8 @@ static bool ggml_opencl_ensure_fa_variant(ggml_backend_opencl_context * backend_
          case FA_VARIANT_Q4_0_SPLIT:      tag = "fa q4_0 split";      break;
          default: break;
      }
@@ -69,7 +93,7 @@
          /*fatal=*/false, tag, backend_ctx->queue);
      if (!prog) { return false; }
  
-@@ -6877,8 +6895,8 @@
+@@ -7066,8 +7084,8 @@ static bool ggml_opencl_ensure_fa_variant(ggml_backend_opencl_context * backend_
              // footprint inside the 192-thread WG cap (see fa_cl_c_gqa4 above
              // for the per-gen default).
              const std::string opts_g8 = opts + " -D MQ_GQA=8 -D MQ_NSG=3 -D MQ_NSG_SPLIT=3 -D FA_MQ_ONLY -D FA_CL_C=" + fa_cl_c_g8_val;
@@ -80,7 +104,7 @@
                  /*fatal=*/false, "fa f32_f16 MQ_GQA=8", backend_ctx->queue);
              if (prog_g8) {
                  const size_t mq_g8_required_wg = 192;  // Q1_WG_SIZE(64) * MQ_NSG_SPLIT(3)
-@@ -6949,8 +6967,8 @@
+@@ -7138,8 +7156,8 @@ static bool ggml_opencl_ensure_fa_variant(ggml_backend_opencl_context * backend_
              if (!fa_decode_only && backend_ctx->has_subgroup_shuffle &&
                  backend_ctx->fa.f32_f16_q1_vec_mq_split_c8.count({dk, dv}) == 0) {
                  const std::string opts_c8_ns2 = opts + " -D FA_MQ_ONLY -D MQ_GQA=4 -D MQ_NSG=2 -D MQ_NSG_SPLIT=2" + opts_cl_c_gqa4;
@@ -91,7 +115,7 @@
                      /*fatal=*/false, "fa f32_f16 c8 NSG2", backend_ctx->queue);
                  if (prog_c8) {
                      cl_kernel k_c8 = clCreateKernel(prog_c8, "flash_attn_f32_f16_q1_vec_mq_split_c8", &err);
-@@ -6972,8 +6990,8 @@
+@@ -7161,8 +7179,8 @@ static bool ggml_opencl_ensure_fa_variant(ggml_backend_opencl_context * backend_
              if (!fa_decode_only && backend_ctx->has_subgroup_shuffle &&
                  dk == 256 && dv == 256) {
                  const std::string opts_g8_c32 = opts + " -D FA_MQ_ONLY -D MQ_GQA=8 -D MQ_NSG=2 -D MQ_NSG_SPLIT=2 -D FA_CL_C=32";
@@ -102,7 +126,7 @@
                      /*fatal=*/false, "fa f32_f16 c32 g8 d256 NSG2", backend_ctx->queue);
                  if (prog_g8_c32) {
                      cl_kernel k_g8_c32 = clCreateKernel(prog_g8_c32, "flash_attn_f32_f16_q1_vec_mq_split_c8", &err);
-@@ -6992,8 +7010,8 @@
+@@ -7181,8 +7199,8 @@ static bool ggml_opencl_ensure_fa_variant(ggml_backend_opencl_context * backend_
              if (!fa_decode_only && backend_ctx->has_subgroup_shuffle &&
                  backend_ctx->fa.f32_f16_q1_vec_mq_split_g8_c8.count({dk, dv}) == 0) {
                  const std::string opts_g8_c8_ns2 = opts + " -D FA_MQ_ONLY -D MQ_GQA=8 -D MQ_NSG=2 -D MQ_NSG_SPLIT=2 -D FA_CL_C=" + fa_cl_c_g8_val;
@@ -113,7 +137,7 @@
                      /*fatal=*/false, "fa f32_f16 c8 g8 NSG2", backend_ctx->queue);
                  if (prog_g8_c8) {
                      cl_kernel k_g8_c8 = clCreateKernel(prog_g8_c8, "flash_attn_f32_f16_q1_vec_mq_split_c8", &err);
-@@ -7072,8 +7090,8 @@
+@@ -7261,8 +7279,8 @@ static bool ggml_opencl_ensure_fa_variant(ggml_backend_opencl_context * backend_
              auto & m_mq_split_g8 = is_q8 ? backend_ctx->fa.f32_q8_0_q1_vec_mq_split_g8
                                           : backend_ctx->fa.f32_q4_0_q1_vec_mq_split_g8;
              const std::string opts_mq_g8 = opts + " -D MQ_GQA=8 -D MQ_NSG=3 -D MQ_NSG_SPLIT=3";
@@ -124,7 +148,7 @@
                  /*fatal=*/false, is_q8 ? "fa q8_0 MQ_GQA=8" : "fa q4_0 MQ_GQA=8",
                  backend_ctx->queue);
              if (prog_mq_g8) {
-@@ -7096,8 +7114,8 @@
+@@ -7285,8 +7303,8 @@ static bool ggml_opencl_ensure_fa_variant(ggml_backend_opencl_context * backend_
                                           : backend_ctx->fa.f32_q4_0_q1_vec_mq_split_c8;
                  const std::string name_c8_gqa4 = name_q1 + "_vec_mq_split_c8";
                  const std::string opts_c8_gqa4 = opts + " -D MQ_GQA=4 -D MQ_NSG=2 -D MQ_NSG_SPLIT=2" + opts_cl_c_gqa4;
@@ -135,7 +159,7 @@
                      /*fatal=*/false, is_q8 ? "fa q8_0 c8 GQA4 NSG2" : "fa q4_0 c8 GQA4 NSG2",
                      backend_ctx->queue);
                  if (prog_c8_gqa4) {
-@@ -7117,8 +7135,8 @@
+@@ -7306,8 +7324,8 @@ static bool ggml_opencl_ensure_fa_variant(ggml_backend_opencl_context * backend_
              // Cluster-parallel q4_0 decode kernel
              if (!is_q8 && backend_ctx->has_subgroup_shuffle) {
                  const std::string opts_c8 = opts + " -D MQ_GQA=8 -D MQ_NSG=2 -D MQ_NSG_SPLIT=2";
@@ -146,7 +170,7 @@
                      /*fatal=*/false, "fa q4_0 c8 NSG2", backend_ctx->queue);
                  if (prog_c8) {
                      cl_kernel k_c8 = clCreateKernel(prog_c8, "flash_attn_f32_q4_0_q1_vec_mq_split_c8", &err);
-@@ -7229,8 +7247,8 @@
+@@ -7418,8 +7436,8 @@ static bool ggml_opencl_ensure_fa_quant_split_override(
  
      const std::string tag = std::string("fa ") + (is_q8_0 ? "q8_0" : "q4_0") +
          " split DK=" + std::to_string(dk);

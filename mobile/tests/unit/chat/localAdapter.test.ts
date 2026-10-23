@@ -113,7 +113,7 @@ const SMALL_PHONE = {
     abiSupported: true,
 }
 
-const { localAdapter, prefissoResoDi, prefissoResoDiProiettato, talosLocalFinestraPerCompattazione, talosLocalTokenDellaRichiesta } = await import('@/lib/chat/providers/localAdapter')
+const { localAdapter, prefissoResoDi, prefissoResoDiProiettato, talosApriPerIlCodice, talosLocalFinestraPerCompattazione, talosLocalTokenDellaRichiesta, talosScordaRiaperture } = await import('@/lib/chat/providers/localAdapter')
 // ⛔ La chiave si importa, non si riscrive: due stringhe uguali a mano sono
 // due stringhe che possono divergere, e il test smetterebbe di parlare del
 // codice vero senza diventare rosso.
@@ -1989,5 +1989,169 @@ describe('la scelta del backend attraversa l apertura, non resta un modulo', () 
         const opzioni = localEngine.talosLocalEngineOpenWithFallback.mock.calls[0]![1] as Record<string, unknown>
         expect(opzioni.gpuLayers).toBe(0)
         expect(opzioni).not.toHaveProperty('backend')
+    })
+
+    /*
+     * ⛔⛔ Pad 22/10/2026 — il modello GIÀ APERTO sulla CPU non si rimetteva mai sul motore misurato.
+     *
+     * LFM2.5-2.6B Q4_0: profili CPU (scrittura 26,94, lettura 103,4) e hexagon/HTP0 (25,90, 1298,9). Il riscaldamento lo
+     * aveva aperto con `gpuLayers 0`; da lì `ensureLoaded` tornava subito perché il percorso era lo stesso — nessuna
+     * decisione, nessuna riga `backend_decided`, e ogni giro della chat sulla CPU (1977 token letti in 18,9 s).
+     * Con un prompt da ~969 token e ~236 in uscita la formula dà ≈ 9,9 s all'NPU contro ≈ 18,3 s alla CPU.
+     */
+    describe('il modello già aperto sul motore sbagliato', () => {
+        const LFM = '/models/LFM2.5-2.6B-QAD-Q4_0.gguf'
+        const SULLA_CPU = { backendDevice: null, gpuLayersEffective: 0, offloadDevices: 2, threadPoolSplit: null }
+        const SULL_NPU = { backendDevice: 'HTP0', gpuLayersEffective: -1, offloadDevices: 2, threadPoolSplit: null }
+        const PROFILI_DEL_PAD = [
+            {
+                backendRegistry: 'CPU', backendDevice: null, outcome: 'CORRECT' as const,
+                ttftMs: 5_002, decodeTokPerSec: 26.94, prefillTokPerSec: 103.4, openMs: null,
+                qualificationLevel: 'Q1' as const, measuredAtMs: 1_761_100_000_000,
+            },
+            {
+                backendRegistry: 'hexagon', backendDevice: 'HTP0', outcome: 'CORRECT' as const,
+                ttftMs: 501, decodeTokPerSec: 25.90, prefillTokPerSec: 1298.9, openMs: null,
+                qualificationLevel: 'Q1' as const, measuredAtMs: 1_761_100_000_000,
+            },
+        ]
+
+        beforeEach(() => {
+            talosScordaRiaperture()
+            localEngine.talosCancelAutomaticProbe.mockClear()
+            localEngine.talosLocalEngineStatus.mockResolvedValue({
+                available: true, backends: 'CPU,OpenCL,HTP', loadedPath: LFM, shape: null, contextTokens: 4096,
+            })
+            localEngine.talosLocalEngineChatPlan.mockResolvedValue({
+                prompt: 'templated prompt', promptTokens: 969, contextTokens: 4096,
+            })
+            // Il prompt del Pad, contato PRIMA di aprire: ~969 token da leggere (D-53).
+            localEngine.talosLocalEnginePlanPrompt.mockResolvedValue({ promptTokens: 969, shape: null })
+            localEngine.talosLocalPerformanceProfiles.mockResolvedValue(PROFILI_DEL_PAD)
+            localEngine.talosLocalEngineBackendFacts.mockResolvedValue(SULLA_CPU)
+        })
+
+        it('al primo messaggio si riapre sull’NPU che la misura dà più veloce, interrompendo prima la prova', async () => {
+            await invia(LFM)
+
+            expect(localEngine.talosLocalEngineOpenWithFallback).toHaveBeenCalledTimes(1)
+            expect(localEngine.talosLocalEngineOpenWithFallback).toHaveBeenCalledWith(
+                LFM, expect.objectContaining({ gpuLayers: -1, backend: 'HTP' }),
+            )
+            // D13: la prova si interrompe PRIMA di riaprire, come per un'apertura da zero.
+            const interrompi = localEngine.talosCancelAutomaticProbe.mock.invocationCallOrder[0]
+            const apri = localEngine.talosLocalEngineOpenWithFallback.mock.invocationCallOrder[0]
+            expect(interrompi!).toBeLessThan(apri!)
+        })
+
+        it('AL CONTRARIO — già sull’NPU: si usa com’è, nessuna riapertura', async () => {
+            localEngine.talosLocalEngineBackendFacts.mockResolvedValue(SULL_NPU)
+
+            await invia(LFM)
+
+            expect(localEngine.talosLocalEngineOpenWithFallback).not.toHaveBeenCalled()
+        })
+
+        it('AL CONTRARIO — senza misure (solo il suggerimento del formato) non si riapre un modello già aperto', async () => {
+            localEngine.talosLocalPerformanceProfiles.mockResolvedValue([])
+
+            await invia(LFM)
+
+            expect(localEngine.talosLocalEngineOpenWithFallback).not.toHaveBeenCalled()
+        })
+
+        it('AL CONTRARIO — restare dove si è non costa la riapertura: un vantaggio che non la ripaga non la fa (CR-12)', async () => {
+            // Senza il conto del prompt: CPU già aperta 256/26,94 ≈ 9,5 s, NPU 0,5 s di apertura + 256/25,9 ≈ 10,4 s.
+            localEngine.talosLocalEnginePlanPrompt.mockResolvedValue(null)
+
+            await invia(LFM)
+
+            expect(localEngine.talosLocalEngineOpenWithFallback).not.toHaveBeenCalled()
+        })
+
+        it('AL CONTRARIO — una riapertura che non ha cambiato motore non si ripete a ogni messaggio', async () => {
+            // Il motore resta sulla CPU anche dopo aver chiesto l'NPU: riaprire a ogni giro costerebbe secondi ogni volta.
+            await invia(LFM)
+            await invia(LFM)
+
+            expect(localEngine.talosLocalEngineOpenWithFallback).toHaveBeenCalledTimes(1)
+        })
+
+        /*
+         * ⛔ Revisione avversaria 22/10, rilievo 1 — la chat che riapre il modello del Codice.
+         *
+         * Il Codice tiene aperto LFM a 26.624 (r4 manda a ogni giro il preambolo con gli attrezzi, minimo 24k). La chat, con
+         * lo stesso percorso, decideva di spostarlo sull'NPU e lo riapriva col SUO piano (4k): il giro lungo successivo del
+         * Codice si trovava una finestra di 4k (`CONTEXT_LENGTH_EXCEEDED` in `TalosMotoreOspiteServizio.giro`).
+         */
+        it('RIAP-CHAT-01 un modello aperto con una finestra più grande di quella della chat (il Codice) non si riapre', async () => {
+            localEngine.talosLocalEngineStatus.mockResolvedValue({
+                available: true, backends: 'CPU,OpenCL,HTP', loadedPath: LFM, shape: null, contextTokens: 26624,
+            })
+
+            await invia(LFM)
+
+            expect(localEngine.talosLocalEngineOpenWithFallback).not.toHaveBeenCalled()
+        })
+
+        it('RIAP-CHAT-02 la riapertura già tentata dalla chat non toglie al Codice la sua (chiavi distinte)', async () => {
+            // La chat (4k) chiede l'NPU e il motore resta sulla CPU: la sua riapertura è spesa.
+            await invia(LFM)
+            expect(localEngine.talosLocalEngineOpenWithFallback).toHaveBeenCalledTimes(1)
+            // Poi il Codice trova lo stesso modello a 26.624, ancora sulla CPU: la sua prima riapertura è sua.
+            localEngine.talosLocalEngineStatus.mockResolvedValue({
+                available: true, backends: 'CPU,OpenCL,HTP', loadedPath: LFM, shape: null, contextTokens: 26624,
+            })
+
+            await talosApriPerIlCodice(LFM)
+
+            expect(localEngine.talosLocalEngineOpen).toHaveBeenCalledWith(LFM, expect.objectContaining({ gpuLayers: -1, backend: 'HTP' }))
+        })
+
+        /*
+         * Rilievo 2 — `talosLocalPerformanceProfiles` gira sul filo unico `qualificationWorker`: con una qualificazione in
+         * corso la risposta arriva dopo minuti, e un modello GIÀ APERTO aspettava tutto quel tempo prima di rispondere.
+         */
+        it('RIAP-CHAT-03 misure che non arrivano entro il tetto del riscaldamento: si usa il modello aperto così com’è', async () => {
+            localEngine.talosLocalPerformanceProfiles.mockReturnValue(new Promise(() => undefined))
+
+            await invia(LFM)
+
+            expect(localEngine.talosLocalEngineOpenWithFallback).not.toHaveBeenCalled()
+            expect(localEngine.talosLocalEngineGenerate).toHaveBeenCalledTimes(1)
+        }, 4_000)
+
+        it('RIAP-CHAT-04 con il modello già aperto la prova si interrompe PRIMA di chiedere le misure', async () => {
+            await invia(LFM)
+
+            const interrompi = localEngine.talosCancelAutomaticProbe.mock.invocationCallOrder[0]
+            const misure = localEngine.talosLocalPerformanceProfiles.mock.invocationCallOrder[0]
+            expect(interrompi!).toBeLessThan(misure!)
+        })
+
+        /*
+         * Rilievo 4 — `TalosLlamaPlugin.open` chiude il modello aperto PRIMA di provare il nuovo (due copie = OOM sul Pad):
+         * una riapertura fallita sul motore deciso lasciava la persona senza modello e con un errore.
+         */
+        it('RIAP-CHAT-05 la riapertura sull’NPU fallisce: si torna sul motore di prima (la CPU) e la chat risponde', async () => {
+            localEngine.talosLocalEngineOpenWithFallback
+                .mockRejectedValueOnce(new localEngine.TalosLocalEngineOpenError('model-load'))
+                .mockResolvedValueOnce({ contextTokens: 4096 })
+
+            await invia(LFM)
+
+            expect(localEngine.talosLocalEngineOpenWithFallback).toHaveBeenCalledTimes(2)
+            const ritorno = localEngine.talosLocalEngineOpenWithFallback.mock.calls[1]![1] as Record<string, unknown>
+            expect(ritorno.gpuLayers).toBe(0)
+            expect(ritorno).not.toHaveProperty('backend')
+            expect(localEngine.talosLocalEngineGenerate).toHaveBeenCalledTimes(1)
+        })
+
+        it('RIAP-CHAT-06 AL CONTRARIO — fallisce anche il ritorno: l’errore è quello della riapertura, con la frase della chat', async () => {
+            localEngine.talosLocalEngineOpenWithFallback.mockRejectedValue(new localEngine.TalosLocalEngineOpenError('model-load'))
+
+            await expect(invia(LFM)).rejects.toMatchObject({ provider: 'local' })
+            expect(localEngine.talosLocalEngineOpenWithFallback).toHaveBeenCalledTimes(2)
+        })
     })
 })

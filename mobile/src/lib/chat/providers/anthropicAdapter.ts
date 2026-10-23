@@ -17,6 +17,7 @@ import {
 import { talosProfiloCompilato, talosRegistraProfilo } from '@/lib/tools/improntaDelProfilo'
 import { createAnthropicToolCallAccumulator, parseAnthropicToolCalls } from '@/lib/tools/wire'
 import { createTalosSseAccumulator, talosStreamText } from '@/lib/chat/providers/streamShared'
+import { talosCreaBozzeAttrezzi } from '@/lib/chat/providers/bozzeAttrezzi'
 import type { TalosMobileProviderAdapter } from '@/lib/chat/providerContracts'
 import {
     malformedProviderResponse,
@@ -517,6 +518,7 @@ export const anthropicAdapter: TalosMobileProviderAdapter = {
             ...(input.tools?.length ? { tools: attrezziDaSpedire(input.tools) } : {}),
         })
         const toolCalls = createAnthropicToolCallAccumulator()
+        const bozze = talosCreaBozzeAttrezzi(handlers.onBozzeAttrezzi)
         /**
          * Token accounting off the stream, which is the only path a chat uses.
          *
@@ -549,12 +551,21 @@ export const anthropicAdapter: TalosMobileProviderAdapter = {
             extract: (payload) => {
                 const event = JSON.parse(payload) as {
                     type?: string
+                    index?: unknown
                     delta?: { type?: string; text?: string; stop_reason?: string | null }
                     message?: { usage?: unknown }
                     usage?: unknown
                 }
                 toolCalls.push(event)
                 harvest(event)
+                // ⛔ Owner 20/10/2026: `content_block_start` tool_use porta il nome subito, `input_json_delta` la crescita.
+                const blocco = (event as { content_block?: { type?: unknown, name?: unknown } }).content_block
+                if (event.type === 'content_block_start' && blocco?.type === 'tool_use') {
+                    bozze.annota(indiceDelBlocco(event), typeof blocco.name === 'string' ? blocco.name : undefined, 0)
+                } else if (event.type === 'content_block_delta' && event.delta?.type === 'input_json_delta') {
+                    const pezzo = (event.delta as { partial_json?: unknown }).partial_json
+                    bozze.annota(indiceDelBlocco(event), undefined, typeof pezzo === 'string' ? pezzo.length : 0)
+                }
                 if (event.type === 'message_delta' && typeof event.delta?.stop_reason === 'string') motivoDiFine = event.delta.stop_reason
                 return event.type === 'content_block_delta' && event.delta?.type === 'text_delta'
                     ? event.delta.text ?? ''
@@ -629,4 +640,9 @@ export const anthropicAdapter: TalosMobileProviderAdapter = {
             ...(calls.length ? { toolCalls: calls, finishReason: 'tool_use' } : { finishReason: motivoDiFine }),
         }
     },
+}
+
+/** L'indice del blocco nel messaggio: lega i pezzi `input_json_delta` al nome di `content_block_start`. */
+function indiceDelBlocco(event: { index?: unknown }): number {
+    return typeof event.index === 'number' ? event.index : 0
 }

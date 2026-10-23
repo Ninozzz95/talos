@@ -106,7 +106,8 @@ export const TALOS_MOBILE_PROVIDERS: readonly TalosMobileProviderView[] = Object
      */
     {
         id: 'local',
-        label: 'Motore locale',
+        // il nome a schermo passa da `talosMobileProviderLabel` (catalogo en/it, 22/10/2026); questo è solo il ripiego
+        label: 'On-device engine',
         shortLabel: 'ON',
         requiresSecret: false,
         tone: 'neutral',
@@ -129,6 +130,18 @@ export function talosMobileProviderById(
     providerId: TalosMobileProviderId | string | null | undefined,
 ): TalosMobileProviderView {
     return TALOS_MOBILE_PROVIDERS.find((provider) => provider.id === providerId) ?? UNKNOWN_PROVIDER
+}
+
+/**
+ * Il nome del fornitore come lo legge la persona. ⛔ 22/10/2026 (regola dell'owner «ogni parola in inglese e italiano»): il motore
+ * del dispositivo era fisso in italiano nel registro e arrivava così anche in inglese (lettore di schermo, consenso delle immagini,
+ * filtri). I nomi dei fornitori in rete sono marchi e restano quelli.
+ */
+export function talosMobileProviderLabel(
+    providerId: TalosMobileProviderId | string | null | undefined,
+    t: (chiave: string) => string,
+): string {
+    return providerId === 'local' ? t('models.localEngineLabel') : talosMobileProviderById(providerId).label
 }
 
 export function talosMobileModelProfileIsCallable(

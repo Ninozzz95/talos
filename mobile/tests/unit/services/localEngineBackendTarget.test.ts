@@ -185,8 +185,10 @@ describe('SCELTO non è IN USO: i fatti che il nativo dichiara', () => {
 
     it('un ponte assente non solleva: risponde «non lo so»', async () => {
         bridge.available.mockRejectedValue(new Error('nessun ponte'))
+        // Revisione del 22/10/2026 (rilievo 3): anche gli strati sono «non lo so», non `0` — con `backendDevice: null`
+        // lo zero era la faccia di «gira sulla CPU» e faceva riaprire il modello per niente.
         expect(await talosLocalEngineBackendFacts()).toEqual({
-            backendDevice: null, gpuLayersEffective: 0,
+            backendDevice: null, gpuLayersEffective: null,
             offloadDevices: null, threadPoolSplit: null,
         })
     })

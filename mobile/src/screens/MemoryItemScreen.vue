@@ -164,6 +164,8 @@ async function exportText(): Promise<void> {
             key: `memory:exported:${current.id}`,
             channel: 'jobs',
             weight: 'notable',
+            // N0, D-N0-8: il gesto è della persona ⇒ toast sì, campanella e tendina no
+            origin: 'person',
             title: t('memory.exportCopied'),
             body: current.title,
             at: Date.now(),

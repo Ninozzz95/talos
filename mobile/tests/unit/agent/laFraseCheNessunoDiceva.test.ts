@@ -75,12 +75,12 @@ describe('⛔ e la frase si DICE, non resta scritta', () => {
         return dette
     }
 
-    it('⭐ quando si ferma male, TALOS lo DICE in italiano', async () => {
+    it('⭐ quando si ferma male, TALOS lo DICE nella lingua dell’app (22/10: prima solo in italiano)', async () => {
         // ⛔ È questa la riga che morde: togliendo la chiamata a
         // `talosFraseDiFine`, qui non arriva niente — che è esattamente lo
         // stato in cui il codice è vissuto finché l'owner non l'ha visto.
         const dette = await corsaMontata({ motivo: 'troppi-fallimenti' })
-        expect(dette).toContain('Ho provato due volte e non ha funzionato: mi fermo qui.')
+        expect(dette).toContain(talosFraseDiFine({ motivo: 'troppi-fallimenti' }))
     })
 
     it('e quando ha finito bene TACE: lo racconta già la risposta', async () => {
