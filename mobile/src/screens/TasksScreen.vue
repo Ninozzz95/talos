@@ -279,6 +279,8 @@ async function esporta(task: TalosLocalTask): Promise<void> {
             key: `task:exported:${task.id}`,
             channel: 'jobs',
             weight: 'notable',
+            // N0, D-N0-8: il gesto è della persona ⇒ toast sì, campanella e tendina no
+            origin: 'person',
             title: t('tasks.exportCopied'),
             body: task.title,
             at: Date.now(),
@@ -809,7 +811,7 @@ useTalosSheetTitle(() => t('navigation.tasks'))
                     type="button"
                     data-testid="talos-tasks-delete-confirm"
                     :disabled="deleting"
-                    class="min-h-12 bg-[var(--talos-danger)] text-white"
+                    class="min-h-12 border border-[var(--talos-danger-border)] bg-[var(--talos-danger-soft)] text-[var(--talos-danger)]"
                     @click="confermaEliminazione"
                 >
                     {{ t('common.delete') }}
@@ -830,7 +832,7 @@ useTalosSheetTitle(() => t('navigation.tasks'))
                 <Button
                     type="button"
                     data-testid="talos-tasks-bulk-delete-confirm"
-                    class="bg-[var(--talos-danger)] text-white"
+                    class="border border-[var(--talos-danger-border)] bg-[var(--talos-danger-soft)] text-[var(--talos-danger)]"
                     @click="eliminaSelezionate"
                 >{{ t('common.delete') }}</Button>
             </div>

@@ -98,6 +98,13 @@ public final class TalosLocalProfile {
      */
     public final double prefillTokPerSec;
     public final long openMs;
+    /**
+     * ⛔ PROB-12 (22/10/2026) — con quale metro ({@link TalosLlamaProbe#metroId()})
+     * e' stato dato il verdetto. Vuoto = una riga scritta prima di questo campo,
+     * cioe' un metro vecchio: una sua bocciatura non conta come «gia' misurato»
+     * ({@link TalosLlamaProbe#profileMissingFor}).
+     */
+    public final String metro;
 
     public TalosLocalProfile(TalosLocalProfileIdentity identity, String backendRegistry,
                               String backendDevice, TalosBackendChoice.Outcome outcome,
@@ -111,6 +118,16 @@ public final class TalosLocalProfile {
                               String backendDevice, TalosBackendChoice.Outcome outcome,
                               long ttftMs, long measuredAtMs, Level qualificationLevel,
                               double decodeTokPerSec, double prefillTokPerSec, long openMs) {
+        this(identity, backendRegistry, backendDevice, outcome, ttftMs, measuredAtMs,
+                qualificationLevel, decodeTokPerSec, prefillTokPerSec, openMs, "");
+    }
+
+    public TalosLocalProfile(TalosLocalProfileIdentity identity, String backendRegistry,
+                              String backendDevice, TalosBackendChoice.Outcome outcome,
+                              long ttftMs, long measuredAtMs, Level qualificationLevel,
+                              double decodeTokPerSec, double prefillTokPerSec, long openMs,
+                              String metro) {
+        this.metro = metro == null ? "" : metro;
         this.identity = identity;
         this.backendRegistry = backendRegistry == null ? "" : backendRegistry;
         this.backendDevice = backendDevice;

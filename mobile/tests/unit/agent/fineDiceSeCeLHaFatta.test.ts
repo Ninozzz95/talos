@@ -39,13 +39,13 @@ describe('⭐⭐⭐ «fine» dice se ce l\'ha fatta', () => {
 
     describe('la frase detta alla PERSONA', () => {
         it('⛔⛔ chi si e ARRESO non si sente dire «Fatto»', () => {
-            const detta = talosFraseDiFine(fine({ esito: 'fallito', testo: 'la pagina non si apre' }))
+            const detta = talosFraseDiFine(fine({ esito: 'fallito', testo: 'la pagina non si apre' }), 'it')
             expect(detta).not.toMatch(/fatto/i)
             expect(detta).toContain('la pagina non si apre')
         })
 
         it('e chi ce l ha fatta si sente dire Fatto', () => {
-            expect(talosFraseDiFine(fine({ esito: 'riuscito', testo: 'wifi acceso' })))
+            expect(talosFraseDiFine(fine({ esito: 'riuscito', testo: 'wifi acceso' }), 'it'))
                 .toBe('Fatto: wifi acceso')
         })
 
@@ -55,13 +55,13 @@ describe('⭐⭐⭐ «fine» dice se ce l\'ha fatta', () => {
          * senza che nessuno lo scelga — basta un modello che ignora un campo.
          */
         it('⛔⛔ e il SILENZIO non diventa «Fatto»', () => {
-            const detta = talosFraseDiFine(fine({ testo: 'ho premuto tre volte' }))
+            const detta = talosFraseDiFine(fine({ testo: 'ho premuto tre volte' }), 'it')
             expect(detta).not.toMatch(/fatto/i)
             expect(detta).toMatch(/non so dirti|mi fermo/i)
         })
 
         it('⛔ e nemmeno il silenzio SENZA testo', () => {
-            expect(talosFraseDiFine(fine())).not.toMatch(/fatto/i)
+            expect(talosFraseDiFine(fine(), 'it')).not.toMatch(/fatto/i)
         })
     })
 
@@ -123,8 +123,8 @@ describe('⭐⭐⭐ «fine» dice se ce l\'ha fatta', () => {
      * schermo o quando scade il tempo.
      */
     it('⛔ e le altre fini restano quelle di prima', () => {
-        expect(talosFraseDiFine({ motivo: 'mano-sullo-schermo', passo: 2 })).toMatch(/toccare lo schermo/i)
-        expect(talosFraseDiFine({ motivo: 'tempo-scaduto' })).toMatch(/troppo/i)
-        expect(talosFraseDiFine({ motivo: 'troppi-passi' })).toMatch(/passaggi/i)
+        expect(talosFraseDiFine({ motivo: 'mano-sullo-schermo', passo: 2 }, 'it')).toMatch(/toccare lo schermo/i)
+        expect(talosFraseDiFine({ motivo: 'tempo-scaduto' }, 'it')).toMatch(/troppo/i)
+        expect(talosFraseDiFine({ motivo: 'troppi-passi' }, 'it')).toMatch(/passaggi/i)
     })
 })

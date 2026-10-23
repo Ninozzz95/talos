@@ -13,6 +13,8 @@ import './codiceR4.css'
 const props = defineProps<{
     carica: () => Promise<HookDelProgettoR4 | null>
     fida: (id: string) => Promise<boolean>
+    /** ⛔ RA-11 (revisione avversariale R-M4, 21/10/2026): sulla sessione di un PC un hook si fida dal PC; «Fida» spento, col perché. */
+    soloDalPc?: string
 }>()
 const emit = defineEmits<{ close: [] }>()
 
@@ -64,9 +66,9 @@ onMounted(ricarica)
                         v-else
                         type="button"
                         class="talos-pressable min-h-touch shrink-0 rounded-full border border-[var(--talos-border)] px-3 text-sm text-[var(--talos-text)]"
-                        :disabled="inCorso !== null"
+                        :disabled="inCorso !== null || Boolean(soloDalPc)"
                         @click="fidati(voce.id)"
-                    >{{ inCorso === voce.id ? $t('harness.r4HookTrusting') : $t('harness.r4HookTrust') }}</button>
+                    >{{ soloDalPc || (inCorso === voce.id ? $t('harness.r4HookTrusting') : $t('harness.r4HookTrust')) }}</button>
                 </div>
             </li>
         </ul>

@@ -36,6 +36,32 @@ describe('TalosMobileProviderIcon', () => {
         expect(wrapper.find('[data-provider-fallback]').exists()).toBe(false)
     })
 
+    /*
+     * 22/10/2026 (fase «dispositivi», regola dell'owner «ogni parola in inglese e italiano»): il nome del motore del dispositivo era
+     * fisso in italiano nel registro dei fornitori («Motore locale») e il lettore di schermo lo diceva così anche in inglese.
+     */
+    it('PROV-LABEL-01 the on-device engine is named in the app language', () => {
+        const wrapper = mount(TalosMobileProviderIcon, { props: { provider: 'local' } })
+        const identity = wrapper.get('[role="img"]')
+        expect(identity.attributes('aria-label')).toBe('On-device engine')
+        expect(identity.attributes('title')).toBe('On-device engine')
+    })
+
+    it('PROV-LABEL-02 in Italian the on-device engine reads «Motore locale»', async () => {
+        const { createTalosI18n } = await import('@/i18n')
+        const { TALOS_IT_MESSAGES } = await import('@/i18n/locales/it')
+        const globale = (await createTalosI18n()).global as unknown as { mergeLocaleMessage(l: string, m: object): void, locale: { value: string } }
+        globale.mergeLocaleMessage('it', TALOS_IT_MESSAGES)
+        const prima = globale.locale.value
+        globale.locale.value = 'it'
+        try {
+            const wrapper = mount(TalosMobileProviderIcon, { props: { provider: 'local' } })
+            expect(wrapper.get('[role="img"]').attributes('aria-label')).toBe('Motore locale')
+        } finally {
+            globale.locale.value = prima
+        }
+    })
+
     it('renders a controlled fallback for unknown provider input', () => {
         const wrapper = mount(TalosMobileProviderIcon, {
             props: { provider: 'unsupported-provider' },

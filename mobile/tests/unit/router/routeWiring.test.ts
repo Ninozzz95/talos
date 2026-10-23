@@ -73,7 +73,12 @@ describe('router wiring', () => {
             // Tool Forge — mobile-first come 'harness': nessun
             // desktop_station_id nel ledger di parità (schema deliberato,
             // vedi mobileRoutes.ts).
-            'toolforge', 'settings',
+            'toolforge',
+            // R-M3 (owner 20/10/2026): la sezione «Computer» del controllo remoto e il dettaglio di un computer.
+            'computer', 'computer-item',
+            // R-M4: una sessione del PC nella schermata del Codice
+            'computer-codice',
+            'settings',
             'settings-models', 'settings-models-providers',
             'settings-models-catalog', 'settings-models-local', 'settings-models-local-repo',
             // Il controllo del telefono: sotto le Impostazioni, non fra le stazioni.
@@ -101,6 +106,8 @@ describe('router wiring', () => {
             // ELENCO-R4 (18/10/2026): la sessione r4 torna all'elenco, che ora elenca le sessioni di r4 e non rimanda più qui
             // (il giro chiuso di USCITA-R4-02 nasceva da quel rimando).
             ['codice-r4', 'harness'],
+            // R-M3: il dettaglio di un computer torna all'elenco dei computer.
+            ['computer-item', 'computer'],
         ] as const) {
             // I genitori che sono una PAGINA di dettaglio vogliono il loro
             // `:id`; le stazioni no. Scritto come regola e non come elenco di

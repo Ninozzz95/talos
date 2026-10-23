@@ -4,6 +4,7 @@ import { computed, reactive, readonly, ref, type Ref } from 'vue'
 import { talosEphemeralSessionId, talosIsEphemeralSessionId } from '@/lib/chat/ephemeralSession'
 import type { TalosTranslate } from '@/i18n/contracts'
 import type { TalosAttrezzoDelGiro, TalosConfineDelGiro } from '@/lib/chat/sequenzaDelTurno'
+import type { TalosBozzaAttrezzo } from '@/lib/chat/providerContracts'
 import { talosTranslatableErrorMessage } from '@/i18n/uiErrors'
 import type {
     TalosMobileMessageRole,
@@ -204,6 +205,8 @@ export interface TalosStreamHandlers {
      * così ragionamento, righe degli attrezzi e testo restano nell'ordine in cui sono successi, anche dopo il reload.
      */
     onToolRound?: (attrezzi: readonly TalosAttrezzoDelGiro[]) => void
+    /** ⛔ Owner 20/10/2026: gli attrezzi che il modello sta ancora scrivendo (`providerContracts.ts`). */
+    onBozzeAttrezzi?: (bozze: readonly TalosBozzaAttrezzo[]) => void
     signal?: AbortSignal
 }
 
@@ -326,6 +329,8 @@ export interface ChatState {
     streamingReasoning: string | null
     /** ⭐ N13: i confini dei giri di attrezzi della risposta che sta arrivando (`lib/chat/sequenzaDelTurno`). */
     streamingConfini: readonly TalosConfineDelGiro[] | null
+    /** ⛔ Owner 20/10/2026: le chiamate che il modello sta scrivendo adesso, prima che il giro parta. */
+    streamingBozze: readonly TalosBozzaAttrezzo[] | null
     /** Defect #4: false once the oldest message of the session is on screen. */
     hasOlderMessages: boolean
     loadingOlderMessages: boolean
@@ -743,6 +748,7 @@ export function createChatStore<Runtime = undefined>(
         sendingSessionId: null,
         streamingReasoning: null,
         streamingConfini: null,
+        streamingBozze: null,
         hasOlderMessages: false,
         loadingOlderMessages: false,
         lastError: null,
@@ -1714,6 +1720,8 @@ export function createChatStore<Runtime = undefined>(
             const handlers: TalosStreamHandlers = {
                 onChunk: (text) => {
                     streamed += text
+                    // Owner 20/10/2026, come Hermes: qualsiasi altra uscita del modello dice che la chiamata in scrittura è finita.
+                    state.streamingBozze = null
                     // Il primo carattere della risposta dice che il ragionamento
                     // è finito: quello che era trattenuto esce adesso, intero.
                     if (ritmoRagionamento.release()) state.streamingReasoning = reasoned
@@ -1723,6 +1731,7 @@ export function createChatStore<Runtime = undefined>(
                 },
                 onReasoning: (text) => {
                     reasoned += text
+                    state.streamingBozze = null
                     if (ritmoRagionamento.accept()) state.streamingReasoning = reasoned
                 },
                 onReasoningReset: () => {
@@ -1733,6 +1742,10 @@ export function createChatStore<Runtime = undefined>(
                 onToolRound: (attrezzi) => {
                     confini.push({ testo: visibile(streamed).length, ragionamento: reasoned.length, attrezzi: [...attrezzi] })
                     state.streamingConfini = [...confini]
+                    state.streamingBozze = null
+                },
+                onBozzeAttrezzi: (bozze) => {
+                    state.streamingBozze = bozze.length ? bozze : null
                 },
                 signal: abort.signal,
             }
@@ -1816,6 +1829,7 @@ export function createChatStore<Runtime = undefined>(
             state.sendingSessionId = null
             state.streamingReasoning = null
             state.streamingConfini = null
+            state.streamingBozze = null
             if (activeStreamAbort === abort) activeStreamAbort = null
             state.sending = false
         }
@@ -2014,6 +2028,7 @@ export function createChatStore<Runtime = undefined>(
             state.sendingSessionId = null
             state.streamingReasoning = null
             state.streamingConfini = null
+            state.streamingBozze = null
             activeStreamAbort = null
             state.sending = false
             void drainContinuationQueue()
@@ -2184,6 +2199,8 @@ export function createChatStore<Runtime = undefined>(
             const handlers: TalosStreamHandlers = {
                 onChunk: (text) => {
                     streamed += text
+                    // Owner 20/10/2026, come Hermes: qualsiasi altra uscita del modello dice che la chiamata in scrittura è finita.
+                    state.streamingBozze = null
                     // Il ragionamento trattenuto esce col primo carattere della
                     // risposta — vedi `reasoningGate`.
                     if (ritmoRagionamento.release()) state.streamingReasoning = reasoned
@@ -2197,6 +2214,7 @@ export function createChatStore<Runtime = undefined>(
                 },
                 onReasoning: (text) => {
                     reasoned += text
+                    state.streamingBozze = null
                     if (ritmoRagionamento.accept()) state.streamingReasoning = reasoned
                 },
                 onReasoningReset: () => {
@@ -2207,6 +2225,10 @@ export function createChatStore<Runtime = undefined>(
                 onToolRound: (attrezzi) => {
                     confini.push({ testo: visibile(streamed).length, ragionamento: reasoned.length, attrezzi: [...attrezzi] })
                     state.streamingConfini = [...confini]
+                    state.streamingBozze = null
+                },
+                onBozzeAttrezzi: (bozze) => {
+                    state.streamingBozze = bozze.length ? bozze : null
                 },
                 signal: abort.signal,
             }
@@ -2231,6 +2253,7 @@ export function createChatStore<Runtime = undefined>(
                 state.streamingText = null
                 state.streamingReasoning = null
                 state.streamingConfini = null
+                state.streamingBozze = null
                 turns = await costruisciTurni()
                 reply = await chiama(turns)
             }

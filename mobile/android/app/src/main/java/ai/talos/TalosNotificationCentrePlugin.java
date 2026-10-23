@@ -24,7 +24,7 @@ public class TalosNotificationCentrePlugin extends Plugin {
         // compaiono nelle impostazioni di sistema PRIMA che arrivi qualcosa, e
         // chi vuole zittire i download può farlo senza aspettare di esserne
         // disturbato una volta.
-        TalosNotificationCentre.ensureChannels(getContext());
+        TalosNotificationCentre.refreshNames(getContext());
     }
 
     @PluginMethod

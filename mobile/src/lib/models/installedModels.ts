@@ -91,12 +91,15 @@ export function talosInstalledModelsView(
 ): TalosInstalledModelsView {
     const needle = (options.query ?? '').trim().toLowerCase()
     const sort = options.sort ?? TALOS_INSTALLED_MODEL_SORT_DEFAULT
-    let kept = needle.length === 0 ? [...models] : models.filter((model) => matches(model, needle))
+    // Pad, 21/10/2026: the on-device dictation model (`*.int8.onnx`, `tokens.txt`) was listed and counted as «models». It is
+    // managed from Settings → Voice; here only GGUF files are models.
+    const gguf = models.filter((model) => /\.gguf$/i.test(model.name))
+    let kept = needle.length === 0 ? [...gguf] : gguf.filter((model) => matches(model, needle))
     if (typeof options.fitsWithinBytes === 'number') {
         kept = kept.filter((model) => talosInstalledModelFits(model, options.fitsWithinBytes))
     }
     kept.sort((left, right) => compare(sort, left, right))
-    return { models: kept, total: models.length }
+    return { models: kept, total: gguf.length }
 }
 
 /**

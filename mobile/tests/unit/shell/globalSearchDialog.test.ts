@@ -114,7 +114,7 @@ describe('B06 — Cerca in Talos', () => {
         ['itinerario', 'file:file', 'context', undefined],
         ['dettatura', 'setting:voice', 'settings', undefined],
         ['Modelli', 'setting:models', 'settings-models', undefined],
-        ['Controllo del telefono', 'setting:phone', 'settings-privilege', undefined],
+        ['Controllo del dispositivo', 'setting:phone', 'settings-privilege', undefined],
     ])('finds %s and opens its actual destination', async (query, id, route, entityId) => {
         const wrapper = await dialog()
         await search(query!)

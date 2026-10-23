@@ -1,8 +1,8 @@
 diff --git a/ggml/src/ggml-opencl/ggml-opencl.cpp b/ggml/src/ggml-opencl/ggml-opencl.cpp
-index b944ad7..fc578b7 100644
+index 03ded8519..615107d94 100644
 --- a/ggml/src/ggml-opencl/ggml-opencl.cpp
 +++ b/ggml/src/ggml-opencl/ggml-opencl.cpp
-@@ -647,6 +647,9 @@ struct ggml_backend_opencl_context {
+@@ -656,6 +656,9 @@ struct ggml_backend_opencl_context {
      bool kernels_loaded_moe = false;
      bool kernels_loaded_gdn = false;
      bool kernels_loaded_ssm = false;
@@ -12,7 +12,7 @@ index b944ad7..fc578b7 100644
  
      // checked between graph nodes so a caller can stop a run in progress,
      // mirroring what the Metal backend already does between command buffers.
-@@ -1839,53 +1842,8 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
+@@ -1865,53 +1868,8 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
          GGML_LOG_CONT(".");
      }
  
@@ -66,7 +66,7 @@ index b944ad7..fc578b7 100644
  
      // mul_mv_q4_0_f32_1d_8x_flat
      // This kernel does not compiler on Adreno cl compiler 38.01. Skip it for
-@@ -1928,1539 +1886,2194 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
+@@ -1954,1539 +1912,2194 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
          GGML_LOG_CONT(".");
      }
  
@@ -3027,7 +3027,7 @@ index b944ad7..fc578b7 100644
      // gemm_noshuffle_q1_0_f32
      {
  #ifdef GGML_OPENCL_EMBED_KERNELS
-@@ -3475,7 +4088,19 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
+@@ -3501,7 +4114,19 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
          CL_CHECK(clReleaseProgram(prog));
          GGML_LOG_CONT(".");
      }
@@ -3048,7 +3048,7 @@ index b944ad7..fc578b7 100644
      // gemv_noshuffle_q1_0_f32
      {
          std::string CL_gemv_compile_opts = std::string("-cl-std=") + opencl_c_std +
-@@ -3497,7 +4122,19 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
+@@ -3523,7 +4148,19 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
          CL_CHECK(clReleaseProgram(prog));
          GGML_LOG_CONT(".");
      }
@@ -3069,7 +3069,7 @@ index b944ad7..fc578b7 100644
      // gemv_noshuffle_general
      {
          std::string CL_gemv_compile_opts = std::string("-cl-std=") + opencl_c_std +
-@@ -3523,7 +4160,19 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
+@@ -3552,7 +4189,19 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
          CL_CHECK(clReleaseProgram(prog));
          GGML_LOG_CONT(".");
      }
@@ -3090,7 +3090,7 @@ index b944ad7..fc578b7 100644
      // gemv_noshuffle
      {
          // Gemv 2048, 16384
-@@ -3599,7 +4248,19 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
+@@ -3628,7 +4277,19 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
          CL_CHECK(clReleaseProgram(prog));
          GGML_LOG_CONT(".");
      }
@@ -3111,7 +3111,7 @@ index b944ad7..fc578b7 100644
      // mul_mat_Ab_Bi_8x4
      {
  #ifdef GGML_OPENCL_EMBED_KERNELS
-@@ -3614,10 +4275,19 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
+@@ -3643,10 +4304,19 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
          CL_CHECK(clReleaseProgram(prog));
          GGML_LOG_CONT(".");
      }
@@ -3135,7 +3135,7 @@ index b944ad7..fc578b7 100644
      {
          {
              std::string opts = std::string("-cl-std=") + opencl_c_std +
-@@ -3663,7 +4333,19 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
+@@ -3692,7 +4362,19 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
              }
          }
      }
@@ -3156,7 +3156,7 @@ index b944ad7..fc578b7 100644
      // gemm_noshuffle_q4_1_f32
      {
  #ifdef GGML_OPENCL_EMBED_KERNELS
-@@ -3678,7 +4360,19 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
+@@ -3707,7 +4389,19 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
          CL_CHECK(clReleaseProgram(prog));
          GGML_LOG_CONT(".");
      }
@@ -3177,7 +3177,7 @@ index b944ad7..fc578b7 100644
      // gemv_noshuffle_q4_1_f32
      {
          std::string CL_gemv_compile_opts = std::string("-cl-std=") + opencl_c_std +
-@@ -3702,38 +4396,46 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
+@@ -3731,38 +4425,46 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
          CL_CHECK(clReleaseProgram(prog));
          GGML_LOG_CONT(".");
      }
@@ -3247,7 +3247,7 @@ index b944ad7..fc578b7 100644
      // gemv_noshuffle_q5_0_f32
      {
          std::string CL_gemv_compile_opts = std::string("-cl-std=") + opencl_c_std +
-@@ -3754,7 +4456,19 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
+@@ -3783,7 +4485,19 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
          CL_CHECK(clReleaseProgram(prog));
          GGML_LOG_CONT(".");
      }
@@ -3268,7 +3268,7 @@ index b944ad7..fc578b7 100644
      // gemm_noshuffle_q5_1_f32
      {
  #ifdef GGML_OPENCL_EMBED_KERNELS
-@@ -3769,7 +4483,19 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
+@@ -3798,7 +4512,19 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
          CL_CHECK(clReleaseProgram(prog));
          GGML_LOG_CONT(".");
      }
@@ -3289,7 +3289,7 @@ index b944ad7..fc578b7 100644
      // gemv_noshuffle_q5_1_f32
      {
          std::string CL_gemv_compile_opts = std::string("-cl-std=") + opencl_c_std +
-@@ -3790,7 +4516,19 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
+@@ -3819,7 +4545,19 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
          CL_CHECK(clReleaseProgram(prog));
          GGML_LOG_CONT(".");
      }
@@ -3310,7 +3310,7 @@ index b944ad7..fc578b7 100644
      // gemm_noshuffle_iq4_nl_f32
      {
  #ifdef GGML_OPENCL_EMBED_KERNELS
-@@ -3805,37 +4543,19 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
+@@ -3834,37 +4572,19 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
          CL_CHECK(clReleaseProgram(prog));
          GGML_LOG_CONT(".");
      }
@@ -3361,7 +3361,7 @@ index b944ad7..fc578b7 100644
      // gemv_noshuffle_iq4_nl_f32
      {
          std::string CL_gemv_compile_opts = std::string("-cl-std=") + opencl_c_std +
-@@ -3858,7 +4578,19 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
+@@ -3887,7 +4607,19 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
          CL_CHECK(clReleaseProgram(prog));
          GGML_LOG_CONT(".");
      }
@@ -3382,7 +3382,7 @@ index b944ad7..fc578b7 100644
      // mul_mm_q8_0_f32_8x4
      {
  #ifdef GGML_OPENCL_EMBED_KERNELS
-@@ -3873,7 +4605,19 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
+@@ -3902,7 +4634,19 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
          CL_CHECK(clReleaseProgram(prog));
          GGML_LOG_CONT(".");
      }
@@ -3403,7 +3403,7 @@ index b944ad7..fc578b7 100644
      // gemm_noshuffle_q8_0_f32_bin
      {
          size_t bin_size = 0;
-@@ -3891,24 +4635,19 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
+@@ -3920,24 +4664,19 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
              }
          }
      }
@@ -3441,7 +3441,7 @@ index b944ad7..fc578b7 100644
      // gemv_noshuffle_general_q8_0_f32
      {
          std::string CL_gemv_compile_opts = std::string("-cl-std=") + opencl_c_std +
-@@ -3934,7 +4673,19 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
+@@ -3963,7 +4702,19 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
          CL_CHECK(clReleaseProgram(prog));
          GGML_LOG_CONT(".");
      }
@@ -3462,7 +3462,7 @@ index b944ad7..fc578b7 100644
      // gemm_noshuffle_q4_k_f32
      {
  #ifdef GGML_OPENCL_EMBED_KERNELS
-@@ -3952,90 +4703,19 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
+@@ -3981,90 +4732,19 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
          CL_CHECK(clReleaseProgram(prog));
          GGML_LOG_CONT(".");
      }
@@ -3566,7 +3566,7 @@ index b944ad7..fc578b7 100644
      // gemv_noshuffle_q4_k_f32
      {
          std::string CL_gemv_compile_opts = std::string("-cl-std=") + opencl_c_std +
-@@ -4074,7 +4754,19 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
+@@ -4106,7 +4786,19 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
          CL_CHECK(clReleaseProgram(prog));
          GGML_LOG_CONT(".");
      }
@@ -3587,7 +3587,7 @@ index b944ad7..fc578b7 100644
      // gemv_noshuffle_q4_k_f32_o4 — 4-output-per-WI variant for the long-vocab
      // q4_K lm_head/embed GEMV (shares one activation read across 4 output rows).
      {
-@@ -4095,7 +4787,19 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
+@@ -4127,7 +4819,19 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
          CL_CHECK(clReleaseProgram(prog));
          GGML_LOG_CONT(".");
      }
@@ -3608,7 +3608,7 @@ index b944ad7..fc578b7 100644
      // gemv_noshuffle_q4_k_f32_tiled — tiled-wide canonical layout, default ON
      // (opt out: GGML_OPENCL_Q4K_GEMV_TILED=0; separate convert + GEMV; weights via __global).
      {
-@@ -4114,10 +4818,19 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
+@@ -4146,10 +4850,19 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
          CL_CHECK(clReleaseProgram(prog));
          GGML_LOG_CONT(".");
      }
@@ -3632,7 +3632,7 @@ index b944ad7..fc578b7 100644
      {
          if (backend_ctx->has_vector_subgroup_broadcast) {
              std::string opts = std::string("-cl-std=") + opencl_c_std +
-@@ -4163,10 +4876,19 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
+@@ -4195,10 +4908,19 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
              }
          }
      }
@@ -3656,7 +3656,7 @@ index b944ad7..fc578b7 100644
      {
          if (backend_ctx->has_vector_subgroup_broadcast) {
              std::string opts = std::string("-cl-std=") + opencl_c_std +
-@@ -4212,10 +4934,19 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
+@@ -4244,10 +4966,19 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
              }
          }
      }
@@ -3680,7 +3680,7 @@ index b944ad7..fc578b7 100644
      {
          if (backend_ctx->has_vector_subgroup_broadcast) {
              std::string opts = std::string("-cl-std=") + opencl_c_std +
-@@ -4261,11 +4992,19 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
+@@ -4293,11 +5024,19 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
              }
          }
      }
@@ -3702,7 +3702,7 @@ index b944ad7..fc578b7 100644
      // gemv_noshuffle_q6_k_f32
      {
  #ifdef GGML_OPENCL_EMBED_KERNELS
-@@ -4300,7 +5039,19 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
+@@ -4332,7 +5071,19 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
          }
          GGML_LOG_CONT(".");
      }
@@ -3723,7 +3723,7 @@ index b944ad7..fc578b7 100644
      // gemv_noshuffle_q6_k_f32_o4 — 4-output-per-WI variant, opt-in via
      // GGML_OPENCL_Q6K_GEMV_O4=1 (~3x fewer dispatches on long-vocab lm_head).
      {
-@@ -4333,7 +5084,19 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
+@@ -4365,7 +5116,19 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
          CL_CHECK(clReleaseProgram(prog_g));
          GGML_LOG_CONT(".");
      }
@@ -3744,7 +3744,7 @@ index b944ad7..fc578b7 100644
      // gemv_noshuffle_q6_k_f32_tiled — tiled-wide canonical layout, default ON
      // (opt out: GGML_OPENCL_Q6K_GEMV_TILED=0; separate convert + GEMV; weights via __global).
      {
-@@ -4354,7 +5117,19 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
+@@ -4386,7 +5149,19 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
          CL_CHECK(clReleaseProgram(prog));
          GGML_LOG_CONT(".");
      }
@@ -3765,7 +3765,7 @@ index b944ad7..fc578b7 100644
      // gemm_noshuffle_q6_k_f32_tiled — batched (N>1) GEMM over the same tiled-wide
      // canonical layout, so batched lm_head/embed stays correct + on GPU.
      {
-@@ -4373,7 +5148,19 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
+@@ -4405,7 +5180,19 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
          CL_CHECK(clReleaseProgram(prog));
          GGML_LOG_CONT(".");
      }
@@ -3786,7 +3786,7 @@ index b944ad7..fc578b7 100644
      // gemm_noshuffle_q6_k_f32
      {
  #ifdef GGML_OPENCL_EMBED_KERNELS
-@@ -4390,7 +5177,19 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
+@@ -4422,7 +5209,19 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
          CL_CHECK((backend_ctx->kernel_gemm_noshuffle_q6_K_f32_cok = clCreateKernel(prog, "kernel_gemm_noshuffle_q6_K_f32_cok", &err), err));
          GGML_LOG_CONT(".");
      }
@@ -3807,7 +3807,7 @@ index b944ad7..fc578b7 100644
      // gemv_noshuffle_q5_k_f32
      {
          std::string CL_gemv_compile_opts = std::string("-cl-std=") + opencl_c_std +
-@@ -4414,7 +5213,19 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
+@@ -4446,7 +5245,19 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
          CL_CHECK(clReleaseProgram(prog));
          GGML_LOG_CONT(".");
      }
@@ -3828,7 +3828,7 @@ index b944ad7..fc578b7 100644
      // gemm_noshuffle_q5_k_f32
      {
  #ifdef GGML_OPENCL_EMBED_KERNELS
-@@ -4429,46 +5240,165 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
+@@ -4461,46 +5272,165 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx) {
          CL_CHECK(clReleaseProgram(prog));
          GGML_LOG_CONT(".");
      }
@@ -4032,7 +4032,7 @@ index b944ad7..fc578b7 100644
  }
  
  // TALOS 0002 (01/10/2026): load_cl_kernels compiled every program at the first
-@@ -8279,6 +9209,8 @@ static void ggml_cl_mul_mat_q4_k_glu_fused(ggml_backend_t backend, ggml_tensor *
+@@ -8473,6 +9403,8 @@ static void ggml_cl_mul_mat_q4_k_glu_fused(ggml_backend_t backend, ggml_tensor *
      GGML_ASSERT(dst && dst->extra);
  
      ggml_backend_opencl_context *backend_ctx = (ggml_backend_opencl_context *)backend->context;
@@ -4041,7 +4041,7 @@ index b944ad7..fc578b7 100644
  
      ggml_tensor_extra_cl       * extra1  = (ggml_tensor_extra_cl *)src1->extra;
      ggml_tensor_extra_cl       * extrad  = (ggml_tensor_extra_cl *)dst->extra;
-@@ -9976,6 +10908,7 @@ static cl_mem ggml_cl_create_temp_download_buffer(
+@@ -10199,6 +11131,7 @@ static cl_mem ggml_cl_create_temp_download_buffer(
  static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, ggml_tensor * tensor, const void * data, size_t offset, size_t size) {
      ggml_backend_opencl_device_context * dev_ctx = (ggml_backend_opencl_device_context *) buffer->buft->device->context;
      ggml_backend_opencl_context * backend_ctx = dev_ctx->backend_ctx;
@@ -4049,7 +4049,7 @@ index b944ad7..fc578b7 100644
  
      cl_context context = backend_ctx->context;
      cl_command_queue queue = backend_ctx->queue;
-@@ -23499,6 +24432,7 @@ static void ggml_cl_mul_mat(ggml_backend_t backend, const ggml_tensor * src0, co
+@@ -23807,6 +24740,7 @@ static void ggml_cl_mul_mat(ggml_backend_t backend, const ggml_tensor * src0, co
      const enum ggml_type src1t = src1->type;
  
      ggml_backend_opencl_context *backend_ctx = (ggml_backend_opencl_context *)backend->context;

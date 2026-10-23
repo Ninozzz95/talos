@@ -746,6 +746,8 @@ final class TalosLlamaNative {
      * passo — le chiamate ai tool — si aggiunge qui senza cambiare la firma.
      */
     static native String nativeParseReply(long handle, String reply);
+    /** Lettura PARZIALE `{content, reasoning}` per lo streaming del Codice; vedetta, senza la serratura del motore. */
+    static native String nativeParseReplyPartial(long handle, String reply);
 
     static native void nativeCancel(long handle);
 

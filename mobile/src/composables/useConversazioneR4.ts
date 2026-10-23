@@ -8,7 +8,7 @@
  * metà si butta, e r4 rimanda tutto ciò che viene dopo.
  */
 import { computed, getCurrentScope, onScopeDispose, ref, shallowRef } from 'vue'
-import { applicaEventoR4, creaConversazioneR4, leggiFlussoSse, type OpzioniEventiR4 } from '@/lib/harness/r4/eventiR4'
+import { applicaEventoR4, conRigaVivaAMano, creaConversazioneR4, leggiFlussoSse, type OpzioniEventiR4 } from '@/lib/harness/r4/eventiR4'
 import { testoDelServerR4 } from '@/lib/harness/r4/testiServerR4'
 import { applicaEventoPannelloR4, creaPannelloR4 } from '@/lib/harness/r4/pannelloR4'
 import { motivoDelRifiutoR4, type AzioneProcessoR4, type RisorsaR4 } from '@/lib/harness/r4/processiR4'
@@ -20,7 +20,7 @@ import type { TalosR4ClientePonte } from '@/lib/harness/r4/clienteR4'
 import { TALOS_METADATA_DOMANDA, type EsitoDomandaR4 } from '@/lib/harness/r4/domandaChiave'
 import { TALOS_METADATA_APPROVAZIONE, type FigliaR4 } from '@/lib/harness/r4/approvazioneChiave'
 import { statoCodaR4, type StatoCodaR4 } from '@/lib/harness/r4/codaR4'
-import type { RagionamentoR4 } from '@/lib/harness/r4/modelloR4'
+import { messaggioErroreModelloR4, type RagionamentoR4 } from '@/lib/harness/r4/modelloR4'
 import type { BollaR4 } from '@/lib/harness/r4/allegatiR4'
 import { chiDellAgenteR4, conCarteDelleFiglieR4, discendentiInAttesaR4, messaggioDellaFigliaR4, richiestaDellaFigliaR4, voceDellaFigliaR4, type CartaDellaFigliaR4, type RichiestaDellaFigliaR4 } from '@/lib/harness/r4/figlieR4'
 import type { TalosSorgenteStreaming } from '@/lib/chat/sorgenteStreaming'
@@ -65,6 +65,12 @@ export interface OpzioniConversazioneR4 {
     cliente: TalosR4ClientePonte
     /** La cartella di lavoro che r4 conosce (`statoR4Sviluppo.cartella`). */
     cartella: string
+    /**
+     * R-M4 (owner 20/10/2026 «fra le cartelle ammesse»): la sessione nuova di un PC parte da una cartella della sua allowlist, per id
+     * (`projects.list`), mai da un percorso: la prima `/sessions/custom` manda `cartellaId` al posto di `cartellaLibera` (r4 li
+     * vuole mutuamente esclusivi, `http-app.mjs:2421-2436`).
+     */
+    cartellaId?: string | null
     /** Una sessione già esistente, da riaprire; senza, la crea il primo messaggio. */
     sessioneId?: string | null
     /** Millisecondi prima del tentativo `n` di riapertura (da 1). Di serie 0,5 s, 1 s, 2 s… fino a 5 s. */
@@ -139,12 +145,15 @@ export function useConversazioneR4(opzioni: OpzioniConversazioneR4) {
     // K3 piano: la sessione di adesso (anche quella appena creata), per riconoscere i `talos.plan` suoi
     const opzioniEventi: OpzioniEventiR4 = {
         testoDelServer: (chiave, params, riserva) => testoDelServerR4(chiave, params, riserva, talosCurrentLocale()),
+        testoDelCodice: (codice, riserva) => messaggioErroreModelloR4({ code: codice, message: riserva }, talosCurrentLocale()),
         get sessioneId() { return sessioneId.value },
     }
-    const { cliente, cartella } = opzioni
+    const { cliente, cartella, cartellaId } = opzioni
     const attesa = opzioni.attesaRiapertura ?? attesaDiSerie
 
     const stato = shallowRef(creaConversazioneR4())
+    /** La compattazione chiesta a mano è in volo (la riga viva è sua: niente Salta né Ferma). */
+    const aMano = ref(false)
     /** K3-C3b-1: il pannello ▤ (Contesto e File), dagli STESSI eventi dei messaggi. */
     const statoPannello = shallowRef(creaPannelloR4())
     const sessioneId = ref<string | null>(opzioni.sessioneId ?? null)
@@ -686,7 +695,7 @@ export function useConversazioneR4(opzioni: OpzioniConversazioneR4) {
             // (`talosHarness.mjs:8209` @ fc5), e ogni `shell` tornava «No ADB device»: qui r4 gira DENTRO il telefono.
             // K3-C Scelta del modello: il modello e il ragionamento scelti per la prima (senza, decide r4)
             const esito = await postaUnInvio('/api/v1/sessions/custom', {
-                cartellaLibera: cartella, consegna,
+                ...(cartellaId ? { cartellaId } : { cartellaLibera: cartella }), consegna,
                 ...(modello.value ? { modello: modello.value } : {}), ...(ragionamento.value ? { reasoning: ragionamento.value } : {}),
                 // K3 piano: il modo e il permesso scelti dal foglio prima della sessione
                 ...(modoScelto ? { modalitaOperativa: modalita.value } : {}), ...(permessoScelto && politica.value.permessi ? { permessi: politica.value.permessi } : {}),
@@ -732,11 +741,54 @@ export function useConversazioneR4(opzioni: OpzioniConversazioneR4) {
         if (esito.ok && !flussoId) await apri()
     }
 
+    /**
+     * Ledger `LEDGER-RIGA-VIVA-CODICE-2026-10-21.md` — «Salta» della riga viva (contratto §5 e §8): `POST …/compaction/skip` senza
+     * corpo né query. `{ saltato:false }` vuol dire che in quel momento nessun riassunto era atteso; `null` che r4 non l'ha presa
+     * (sessione ignota, rete). Un controllo della PERSONA sul proprio giro: il modello non ha un attrezzo per farlo.
+     */
+    async function saltaRiassunto(): Promise<{ saltato: boolean } | null> {
+        if (!sessioneId.value) return null
+        try {
+            const r = await cliente.richiesta({ metodo: 'POST', percorso: `/api/v1/sessions/${encodeURIComponent(sessioneId.value)}/compaction/skip` })
+            if (r.stato < 200 || r.stato >= 300) return null
+            try {
+                return { saltato: (JSON.parse(r.corpo) as { data?: { saltato?: unknown } }).data?.saltato === true }
+            } catch {
+                return { saltato: false }
+            }
+        } catch {
+            return null
+        }
+    }
+
+    /** D-MO-12: «Annulla» sul separatore di una compattazione di r4 (`POST …/compaction/:at/undo`, senza corpo come il desktop). */
+    async function annullaCompattazione(at: string): Promise<boolean> {
+        if (!sessioneId.value || !at) return false
+        errore.value = null
+        try {
+            const r = await cliente.richiesta({ metodo: 'POST', percorso: `/api/v1/sessions/${encodeURIComponent(sessioneId.value)}/compaction/${encodeURIComponent(at)}/undo` })
+            if (r.stato >= 200 && r.stato < 300) return true
+            errore.value = erroreDalCorpo(r.stato, r.corpo)
+        } catch (guasto) {
+            errore.value = erroreDalGuasto(guasto)
+        }
+        return false
+    }
+
     /** K3-C1, «Compatta il contesto»: `{ compattato }` com'è andata, `null` se non è partita (errore in `errore`). */
     async function compatta(): Promise<{ compattato: boolean } | null> {
         if (!sessioneId.value) return null
         errore.value = null
-        const esito = await posta(`/api/v1/sessions/${encodeURIComponent(sessioneId.value)}/compact`, {})
+        /*
+         * Revisione avversaria (1): r4 non manda l'inizio della compattazione a mano, solo i passi `manuale` e la fine. La riga viva la
+         * apre chi chiede, prima della POST, e la chiude al ritorno (desktop `compattaConversazioneLegacy`); a mano niente Salta né Ferma.
+         */
+        aMano.value = true
+        stato.value = conRigaVivaAMano(stato.value, true)
+        const esito = await posta(`/api/v1/sessions/${encodeURIComponent(sessioneId.value)}/compact`, {}).finally(() => {
+            aMano.value = false
+            stato.value = conRigaVivaAMano(stato.value, false)
+        })
         if (!esito.ok) return null
         try {
             const dati = (JSON.parse(esito.corpo) as { data?: { compattato?: unknown } }).data
@@ -958,7 +1010,7 @@ export function useConversazioneR4(opzioni: OpzioniConversazioneR4) {
 
     return {
         sessioneId, titolo, messaggi, inCorso, inviando, errore, ultimaSequenza, storiaFinita, sorgente,
-        apri, invia, ferma, riprendi, compatta, figli, hook, fidaHook, rinomina, duplica, doctor, esporta, chiudi,
+        apri, invia, ferma, riprendi, compatta, saltaRiassunto, annullaCompattazione, figli, hook, fidaHook, rinomina, duplica, doctor, esporta, chiudi,
         pannello: computed(() => statoPannello.value), politicaCompattazione, cacheSessione, azioneProcesso, risorseProcessi, sessioni,
         albero, cercaFile, apriFile, azioneFile, politica, leggiPolitica, rispondiApprovazione, rispondiDomanda,
         coda, accoda, inviaDallaCoda, togliDallaCoda, riportaDallaCoda,
@@ -969,5 +1021,8 @@ export function useConversazioneR4(opzioni: OpzioniConversazioneR4) {
         coordinazione, impostaCoordinazione,
         pianoRichiesto: computed(() => stato.value.pianoRichiesto === true),
         revisioneDalVivo: computed(() => stato.value.revisioneDalVivo ?? null),
+        // D-MO-12: la riga viva del riassunto che il giro aspetta (`null` quando non c'è)
+        rigaViva: computed(() => stato.value.rigaViva ?? null),
+        rigaVivaAMano: computed(() => aMano.value),
     }
 }

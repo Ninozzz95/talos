@@ -81,7 +81,7 @@ describe('TalosMobileRunDetailsSheet — token, costo e tempi', () => {
 
     it('le altre tre forme del costo: gratis, stima con la data, non comunicato', async () => {
         for (const [cost, atteso] of [
-            [{ kind: 'free' }, 'Free, on this phone'],
+            [{ kind: 'free' }, 'Free, on this device'],
             [{ kind: 'estimate', usd: 0.0105, priceListDate: '2026-09-13' }, 'Estimate:'],
             [{ kind: 'unknown' }, 'Not reported by the provider'],
         ] as const) {

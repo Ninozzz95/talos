@@ -11,7 +11,11 @@ import { suUnaRigaR4 } from '@/lib/harness/r4/agentiR4'
 import type { TalosR4ClientePonte } from '@/lib/harness/r4/clienteR4'
 import erroriSessioni from '@/lib/harness/r4/testi/errori-sessioni-r4.json'
 
-export interface TalosRigaSessioneR4 { id: string; title: string; updated_at: string; stato: TalosHarnessSessionStatus }
+export interface TalosRigaSessioneR4 {
+    id: string; title: string; updated_at: string; stato: TalosHarnessSessionStatus
+    /** R-M4 Q2: il NOME della cartella della sessione (`progetto` di r4, mai un percorso), per proporre la stessa a una sessione nuova. */
+    progetto?: string
+}
 
 type ClienteElencoR4 = Pick<TalosR4ClientePonte, 'richiesta'>
 
@@ -37,6 +41,7 @@ export function righeElencoSessioniR4(voci: unknown[]): TalosRigaSessioneR4[] {
                 inAttesaApprovazione: ATTESE.some((campo) => s[campo] === true),
                 ultimoEsito: s.ultimoEsito === 'errore' || s.ultimoEsito === 'successo' ? s.ultimoEsito : null,
             },
+            ...(typeof s.progetto === 'string' && s.progetto ? { progetto: s.progetto } : {}),
         })
     }
     return righe.sort((a, b) => b.updated_at.localeCompare(a.updated_at))

@@ -707,7 +707,7 @@ function onEnrollmentCommitted(): void {
                                     type="button"
                                     size="sm"
                                     data-testid="talos-personal-voice-delete-confirm"
-                                    class="talos-pressable rounded-lg bg-[var(--talos-danger)] text-white"
+                                    class="talos-pressable rounded-lg border border-[var(--talos-danger-border)] bg-[var(--talos-danger-soft)] text-[var(--talos-danger)]"
                                     @click="confirmDelete(profile.id)"
                                 >{{ t('personalVoice.deleteForever') }}</Button>
                             </div>

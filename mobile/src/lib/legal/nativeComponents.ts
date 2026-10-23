@@ -43,5 +43,7 @@ export const TALOS_NATIVE_COMPONENTS: readonly TalosNativeComponent[] = Object.f
     { name: 'Silero VAD', version: null, license: 'MIT', source: 'https://github.com/snakers4/silero-vad', note: 'Il modello che riconosce le pause mentre detti.' },
     { name: 'NVIDIA Parakeet TDT 0.6B v3', version: null, license: 'CC-BY-4.0', source: 'https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3', note: 'Modello del riconoscimento vocale, nel formato di sherpa-onnx. Non è dentro l’app: si scarica al primo uso.' },
     { name: 'openWakeWord — melspectrogram ed embedding', version: '0.5.1', license: 'Apache-2.0 (da confermare)', source: 'https://github.com/dscripka/openWakeWord', note: 'Derivati da google/speech_embedding (Apache-2.0); il README di openWakeWord indica però CC BY-NC-SA 4.0 per tutti i modelli addestrati inclusi.' },
+    // Controllo remoto (20/10/2026): fonti e impronte in `android/app/src/main/jniLibs/PROVENIENZA-IROH.md`.
+    { name: 'iroh (iroh-ffi)', version: '1.1.0', license: 'MIT OR Apache-2.0', source: 'https://github.com/n0-computer/iroh-ffi', note: 'Il collegamento cifrato col computer per il controllo remoto. Compilato da noi con rustls 0.23.46.' },
     { name: 'Classificatore della parola «TALOS»', version: null, license: 'Apache-2.0', source: 'https://github.com/livekit/livekit-wakeword', note: 'Addestrato da noi con livekit-wakeword (Apache-2.0).' },
 ])

@@ -27,6 +27,8 @@ import { TALOS_METADATA_FERMATO, type VoceFermatoR4 } from './fermatoChiave'
 import { FRASI_SOLO_IMMAGINE_R4, bollaPerLaRigiocataR4 } from './allegatiR4'
 import { TALOS_METADATA_PIANO, type PropostaPianoR4, type VocePianoR4 } from './pianoChiave'
 import { leggiEventoPianoR4 } from './pianoEventoR4'
+import { fineMutaR4, interpretaCompattazioneR4, type CompattazioneR4, type StatoRigaVivaR4 } from './compattazioneR4'
+import { TALOS_METADATA_COMPATTAZIONE, TALOS_METADATA_COMPATTAZIONE_ANNULLATA, TALOS_METADATA_COMPATTAZIONE_FALLITA } from '@/lib/chat/compattazioneChiavi'
 
 /**
  * ⛔ K3-C3a2: come dire alla persona un testo che r4 manda con la sua chiave (`testoDelServerR4` con la lingua dell'app). Senza,
@@ -34,6 +36,11 @@ import { leggiEventoPianoR4 } from './pianoEventoR4'
  */
 export interface OpzioniEventiR4 {
     testoDelServer?: (chiave: string | null | undefined, params: unknown, riserva: string) => string
+    /**
+     * Un errore che r4 manda col solo `code` (senza `messageChiave`), detto nella lingua dell'app dal dizionario del telefono
+     * (`messaggioErroreModelloR4`); un codice sconosciuto torna la riserva. Visto sul Pad il 21/10: LOCAL_ENGINE_BUSY in inglese.
+     */
+    testoDelCodice?: (codice: string, riserva: string) => string
     /** K3 piano: la sessione di questa conversazione; un `talos.plan` di un'altra sessione non è suo (`parsePlanEvent`). */
     sessioneId?: string | null
 }
@@ -86,6 +93,10 @@ export interface ConversazioneR4 {
     pianoRichiesto?: boolean
     /** K3 piano: l'ultima revisione arrivata DAL VIVO su una carta che c'era già (l'avviso «Piano aggiornato»); `sequenza` la distingue. */
     revisioneDalVivo?: { planId: string; revision: number; sequenza: number | null }
+    /** D-MO-12: la riga viva del riassunto che il giro aspetta (inizio o ultimo passo); `null` quando non c'è. */
+    rigaViva?: StatoRigaVivaR4 | null
+    /** @internal un riassunto in sottofondo è in corso: i suoi passi non aprono la riga viva */
+    readonly inSottofondo?: boolean
 }
 
 /** I campi degli argomenti che dicono «su che cosa» lavora un attrezzo: il dettaglio della riga. */
@@ -145,33 +156,45 @@ function dettaglio(argomenti: string): string | null {
     return null
 }
 
-function attrezzo(giro: GiroInterno, id: string): TalosAttrezzoDelGiro {
+function attrezzo(giro: GiroInterno, id: string, conStato = false): TalosAttrezzoDelGiro {
     const chiamata = giro.chiamate[id]
-    return { name: chiamata.name, detail: dettaglio(chiamata.argomenti) }
+    const base = { name: chiamata.name, detail: dettaglio(chiamata.argomenti) }
+    // solo nella vista dal vivo: il salvato resta nella forma di prima
+    return conStato && chiamata.finita ? { ...base, finita: true } : base
 }
 
-function confiniDi(giro: GiroInterno): TalosConfineDelGiro[] {
-    return giro.confini.map((c) => ({ testo: c.testo, ragionamento: c.ragionamento, attrezzi: c.chiamate.map((id) => attrezzo(giro, id)) }))
+function confiniDi(giro: GiroInterno, conStato = false): TalosConfineDelGiro[] {
+    return giro.confini.map((c) => ({ testo: c.testo, ragionamento: c.ragionamento, attrezzi: c.chiamate.map((id) => attrezzo(giro, id, conStato)) }))
 }
 
 function vistaInCorso(giro: GiroInterno | null): GiroInCorsoR4 | null {
     if (!giro) return null
     const ultimo = giro.confini.at(-1)
     const attivi = ultimo ? ultimo.chiamate.filter((id) => !giro.chiamate[id].finita).map((id) => attrezzo(giro, id)) : []
-    return { testo: giro.testo, ragionamento: giro.ragionamento, confini: confiniDi(giro), attivi }
+    // ⛔ owner 22/10/2026: ogni chiamata dice se è finita, così l'ultimo confine non tiene «in corso» quelle col risultato
+    return { testo: giro.testo, ragionamento: giro.ragionamento, confini: confiniDi(giro, true), attivi }
 }
 
 function conGiro(c: ConversazioneR4, giro: GiroInterno | null, extra: Partial<ConversazioneR4> = {}): ConversazioneR4 {
     return { ...c, ...extra, giro, inCorso: vistaInCorso(giro) }
 }
 
-type EsitoDelGiro = { stato: 'persisted' | 'failed'; detto?: string | null; errore?: { code: string | null; message: string } }
+type EsitoDelGiro = {
+    stato: 'persisted' | 'failed'
+    detto?: string | null
+    errore?: { code: string | null; message: string }
+    /** L'ora di RunFinished (owner 22/10/2026: «Ha lavorato per X»); `''` se r4 non l'ha mandata. */
+    finitoAlle?: string
+}
 
 function messaggioDelGiro(giro: GiroInterno, esito: EsitoDelGiro, id: string): TalosMobileMessageView {
     const contenuto = giro.testo || esito.detto || ''
     const metadata: Record<string, unknown> = { origine: 'r4' }
     const sequenza = talosSequenzaDaSalvare(confiniDi(giro), giro.testo, giro.ragionamento, contenuto, (t) => t)
     if (sequenza) metadata[TALOS_METADATA_SEQUENZA] = sequenza
+    // quanto è durato il giro, solo con le due ore vere (mai stimato)
+    const durata = giro.at && esito.finitoAlle ? Date.parse(esito.finitoAlle) - Date.parse(giro.at) : Number.NaN
+    if (Number.isFinite(durata) && durata > 0) metadata.durataMs = durata
     if (esito.errore) metadata.errore = esito.errore
     return {
         id,
@@ -202,6 +225,72 @@ function conCartaNelGiro(c: ConversazioneR4, giro: GiroInterno | null, id: strin
     return conGiro(c, { ...giro, testo: '', ragionamento: '', messaggioId: null, confini: [], chiamate: {}, diviso: true },
         { messaggi: [...c.messaggi, parte, carta] })
 }
+
+/*
+ * ⭐ D-MO-12 (ledger `LEDGER-RIGA-VIVA-CODICE-2026-10-21.md`) — la compattazione di r4 come la disegna il desktop
+ * (`legacy/app.js:23752-23810` @ f87c8f800, `applicaEventoCompattazioneLegacy`):
+ *  · l'inizio del riassunto ATTESO apre la riga viva; quello in sottofondo no (owner 15/10: «solo il separatore»);
+ *  · un passo AGGIORNA la riga aperta e non la crea: un passo effimero arrivato dopo la fine riaccenderebbe una riga che nessuno spegne;
+ *  · la fine chiude la riga e lascia il separatore (anche quando il riassunto l'ha fatto TALOS senza il modello), la riga «non
+ *    riassunta», o niente se il riassunto ha ceduto il motore al giro che parte (contratto §8);
+ *  · l'annullamento lascia la sua riga, che spegne il separatore che nomina (la lista della chat lo fa già).
+ * Il separatore entra nel giro come le carte (`conCartaNelGiro`): la parte già detta resta un messaggio a sé, prima di lui.
+ */
+function conLaCompattazione(c: ConversazioneR4, giro: GiroInterno | null, evento: CompattazioneR4, sequenza: number | null): ConversazioneR4 {
+    if (evento.tipo === 'inizio') {
+        if (evento.motivo === 'background') return { ...c, inSottofondo: true }
+        // il riassunto in sottofondo può essere ancora in corso: il suo segno resta, la sua fine non chiuderà questa riga
+        return { ...c, rigaViva: evento }
+    }
+    if (evento.tipo === 'progresso') {
+        // ogni passo del riassunto in sottofondo porta `motivo:'background'` (`session-registry.mjs:5589`): basta quello per scartarlo
+        if (evento.motivo === 'background' || !c.rigaViva) return c
+        return { ...c, rigaViva: evento }
+    }
+    if (evento.tipo === 'annullata') {
+        const id = `compattazione-annullata:${evento.at}`
+        if (c.messaggi.some((m) => m.id === id)) return c
+        return conCartaNelGiro(c, giro, id, { [TALOS_METADATA_COMPATTAZIONE_ANNULLATA]: { at: evento.at } })
+    }
+    /*
+     * Revisione avversaria (2): la fine del riassunto in SOTTOFONDO (senza `giro`: «ceduta», o riuscita mentre la persona ha già
+     * scritto) non chiude la riga del riassunto che il giro nuovo aspetta. Spegne solo il sottofondo.
+     */
+    const delSottofondo = evento.giro === undefined && c.inSottofondo === true && c.rigaViva != null && c.rigaViva.motivo !== 'manuale'
+    const chiusa: ConversazioneR4 = delSottofondo ? { ...c, inSottofondo: false } : { ...c, rigaViva: null, inSottofondo: false }
+    if (evento.compattato && evento.at) {
+        const id = `compattazione:${evento.at}`
+        if (chiusa.messaggi.some((m) => m.id === id)) return chiusa
+        return conCartaNelGiro(chiusa, giro, id, {
+            [TALOS_METADATA_COMPATTAZIONE]: {
+                record: { at: evento.at, tokenPrima: evento.tokenPrima, tokenDopo: evento.tokenDopo },
+                ...(evento.ripiego ? { ripiego: true, ragione: evento.ragione } : {}),
+                annullabile: evento.annullabile,
+            },
+        })
+    }
+    // compattata senza `at`: è vera, ma senza identificativo non ha un separatore (né un annullo). Non si inventa.
+    if (evento.compattato || fineMutaR4(evento)) return chiusa
+    // revisione avversaria (6): la stessa fine rigiocata non raddoppia la riga (id dalla sequenza, o dal giro e dal motivo)
+    const id = `compattazione-fallita:${sequenza ?? `g${evento.giro ?? '-'}:${evento.motivo ?? ''}:${evento.dettaglio ?? ''}`}`
+    if (chiusa.messaggi.some((m) => m.id === id)) return chiusa
+    return conCartaNelGiro(chiusa, giro, id, {
+        [TALOS_METADATA_COMPATTAZIONE_FALLITA]: { motivo: evento.motivo, dettaglio: evento.dettaglio },
+    })
+}
+
+/**
+ * Revisione avversaria (1): la compattazione chiesta a mano (`POST …/compact`) non manda un `talos.compattazione {fase:'inizio'}`: r4
+ * manda solo i passi `motivo:'manuale'` e, se riesce, la fine. Come il desktop (`compattaConversazioneLegacy`), la riga la apre chi
+ * chiede, prima della POST, e la chiude al ritorno; chiudendo non si spegne una riga del giro che non è sua.
+ */
+export function conRigaVivaAMano(c: ConversazioneR4, aperta: boolean): ConversazioneR4 {
+    if (aperta) return { ...c, rigaViva: { tipo: 'inizio', motivo: 'manuale' } }
+    return c.rigaViva?.motivo === 'manuale' ? { ...c, rigaViva: null } : c
+}
+
+/** La fine del giro chiude una riga viva rimasta aperta (desktop: la barra si spegne a fine giro). */
+const senzaRigaViva = (c: ConversazioneR4): ConversazioneR4 => (c.rigaViva || c.inSottofondo ? { ...c, rigaViva: null, inSottofondo: false } : c)
 
 /** L'esito che chiude una carta (`ApprovalResolved`, `UserQuestionResolved`); una richiesta ignota non cambia niente. */
 function conEsitoDellaCarta(c: ConversazioneR4, id: string, chiave: string, esito: unknown): ConversazioneR4 {
@@ -315,7 +404,10 @@ function fermatoDaTe(c: ConversazioneR4, giro: GiroInterno, tecnico: string): Co
 function fallisci(c: ConversazioneR4, giro: GiroInterno, evento: Record<string, unknown>, opzioni: OpzioniEventiR4): ConversazioneR4 {
     const codice = testo(evento.code) || 'RUN_ERROR'
     const riserva = testo(evento.message) ?? ''
-    const detto = (opzioni.testoDelServer?.(testo(evento.messageChiave), evento.messageParams, riserva) ?? riserva).trim()
+    const chiave = testo(evento.messageChiave)
+    const detto = (chiave
+        ? opzioni.testoDelServer?.(chiave, evento.messageParams, riserva) ?? riserva
+        : evento.code ? opzioni.testoDelCodice?.(codice, riserva) ?? riserva : riserva).trim()
     // senza una frase resta il codice: la scheda della chat lo riconosce e dice la frase del suo livello
     const message = detto || codice
     const conBolla = giro.testo || giro.ragionamento || giro.confini.length
@@ -446,6 +538,8 @@ export function applicaEventoR4(c: ConversazioneR4, evento: Record<string, unkno
         case 'CUSTOM': {
             if (evento.name === 'talos.fine-rigiocata') return { ...c, storiaFinita: true }
             if (evento.name === 'talos.plan') return conIlPiano(c, giro, evento.value, opzioni.sessioneId ?? null, sequenza)
+            const compattazione = interpretaCompattazioneR4(evento.name, evento.value)
+            if (compattazione) return conLaCompattazione(c, giro, compattazione, sequenza)
             if (evento.name === 'talos.impostazioni-sessione') {
                 /* K3 piano (`legacy/app.js:21141`, `registraCambioPianoRichiesto`): il modo e il permesso dopo il sì al piano
                    (`piano-approvato`) o quando il modello chiede il Piano (`piano-richiesto-dal-modello`, a fine giro). */
@@ -472,7 +566,11 @@ export function applicaEventoR4(c: ConversazioneR4, evento: Record<string, unkno
             return giro && id && !giro.messaggioId ? conGiro(c, { ...giro, messaggioId: id }) : c
         }
         case 'TextMessageContent': {
-            const delta = testo(evento.delta)
+            const grezzo = testo(evento.delta)
+            // un avviso di r4 (es. `server.runtime.notice.noTools`) arriva come pezzo di testo con la sua chiave: si dice nella lingua
+            // dell'app (visto sul Pad il 21/10 in inglese con l'app in italiano)
+            const chiave = testo(evento.deltaChiave)
+            const delta = grezzo && chiave ? opzioni.testoDelServer?.(chiave, evento.deltaParams, grezzo) ?? grezzo : grezzo
             return giro && delta ? conGiro(c, { ...giro, testo: giro.testo + delta }) : c
         }
         case 'ReasoningMessageContent': {
@@ -503,12 +601,15 @@ export function applicaEventoR4(c: ConversazioneR4, evento: Record<string, unkno
             return conGiro(c, { ...giro, chiamate: { ...giro.chiamate, [id]: { ...giro.chiamate[id], finita: true } } })
         }
         case 'RunFinished': {
+            c = senzaRigaViva(c)
             if (!giro) return c
             const risultato = evento.result as Record<string, unknown> | undefined
             // senza l'ora d'inizio, quella della fine è meglio di niente per la risposta
-            return chiudi(c, giro.at ? giro : { ...giro, at: oraDa(evento.timestamp) }, { stato: 'persisted', detto: testo(risultato?.detto) })
+            return chiudi(c, giro.at ? giro : { ...giro, at: oraDa(evento.timestamp) },
+                { stato: 'persisted', detto: testo(risultato?.detto), ...(giro.at ? { finitoAlle: oraDa(evento.timestamp) } : {}) })
         }
         case 'RunError': {
+            c = senzaRigaViva(c)
             if (!giro) return c
             const aperto = giro.at ? giro : { ...giro, at: oraDa(evento.timestamp) }
             const fermo = fermoSuRichiesta(testo(evento.message) ?? '', testo(evento.code))

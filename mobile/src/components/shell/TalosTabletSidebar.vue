@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent } from 'vue'
+import { talosSegnaleAggiornamento } from '@/lib/updates/segnaleAggiornamento'
 import { useTalosI18n } from '@/i18n'
 import { ChevronLeft, ChevronRight, Menu } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
@@ -17,6 +18,10 @@ const ChatsScreen = defineAsyncComponent(() => import('@/screens/ChatsScreen.vue
 const HarnessScreen = defineAsyncComponent(() => import('@/screens/HarnessScreen.vue'))
 const TalosMobileNotificationBell = defineAsyncComponent(
     () => import('@/components/shell/TalosMobileNotificationBell.vue'),
+)
+// Il segnale dell'aggiornamento: pigro come il campanello, e montato solo quando c'è qualcosa da dire.
+const TalosMobileUpdateSignal = defineAsyncComponent(
+    () => import('@/components/updates/TalosMobileUpdateSignal.vue'),
 )
 const TalosMobileDownloadCenterTrigger = defineAsyncComponent(
     () => import('@/components/shell/TalosMobileDownloadCenterTrigger.vue'),
@@ -116,7 +121,7 @@ const harnessCollapsed = computed(() => props.variant === 'harness' && props.col
                 <ChevronLeft v-else aria-hidden="true" />
             </Button>
             <span v-if="!harnessCollapsed" class="talos-orbitron-brand text-sm tracking-[0.2em] text-[var(--talos-text)]">TALOS</span>
-            <div v-if="!harnessCollapsed" class="ml-auto"><TalosMobileNotificationBell />
+            <div v-if="!harnessCollapsed" class="ml-auto"><TalosMobileNotificationBell /><TalosMobileUpdateSignal v-if="talosSegnaleAggiornamento.visibile" />
             <TalosMobileDownloadCenterTrigger /></div>
         </div>
         <HarnessScreen v-if="variant === 'harness' && !harnessCollapsed" embedded class="min-h-0 flex-1" />

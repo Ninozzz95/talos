@@ -1,0 +1,8 @@
+version: 0.1.44
+files:
+  - url: TALOS-0.1.44.apk
+    sha512: giZMXKuSAsZZ0gXuTYzdpd9EVRDZB4FWdiZ4pSJXqhbdxw8S6jZ50ubdpbccGTl/hSbeAB2CfLpGrvPBqQgUlA==
+    size: 40
+path: TALOS-0.1.44.apk
+sha512: giZMXKuSAsZZ0gXuTYzdpd9EVRDZB4FWdiZ4pSJXqhbdxw8S6jZ50ubdpbccGTl/hSbeAB2CfLpGrvPBqQgUlA==
+releaseDate: '2026-10-23T10:00:00.000Z'

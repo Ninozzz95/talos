@@ -54,7 +54,7 @@ import androidx.core.app.RemoteInput
 object TalosAccoppiamentoNotifica {
 
     private const val CANALE = "talos_accoppiamento"
-    private const val ID_NOTIFICA = 4127
+    private const val ID_NOTIFICA = ai.talos.TalosNotificationIds.PAIRING
     private const val CHIAVE_CODICE = "codice"
     const val AZIONE_RISPOSTA = "ai.talos.AZIONE_CODICE_ACCOPPIAMENTO"
 
@@ -197,7 +197,7 @@ object TalosAccoppiamentoNotifica {
          * dentro Impostazioni a cercare un campo che non esiste.
          */
         if (!manager.areNotificationsEnabled()) return false
-        creaCanale(manager, titolo)
+        creaCanale(context, manager)
         if (quandoArriva != null) {
             ascoltatore = quandoArriva
             registraRicevitore(context)
@@ -263,14 +263,26 @@ object TalosAccoppiamentoNotifica {
         parole = null
     }
 
-    private fun creaCanale(manager: NotificationManager, titolo: String) {
-        if (manager.getNotificationChannel(CANALE) != null) return
+    /** Il nome del canale nella lingua di adesso, da `TalosNotificationCentre.refreshNames` (N0, 21/10). */
+    fun rinominaCanale(context: Context) {
+        val manager = context.getSystemService(NotificationManager::class.java) ?: return
+        if (manager.getNotificationChannel(CANALE) != null) creaCanale(context, manager, rinomina = true)
+    }
+
+    /*
+     * Il nome era il titolo della prima notifica, nella lingua di quel momento, e non cambiava più (visto sul Pad il 21/10: «Codice
+     * di accoppiamento» con l'app in inglese). Ora viene da `R.string`, come gli altri canali.
+     */
+    private fun creaCanale(context: Context, manager: NotificationManager, rinomina: Boolean = false) {
+        if (!rinomina && manager.getNotificationChannel(CANALE) != null) return
         /*
          * IMPORTANCE_HIGH come Shizuku: serve perche' la notifica compaia in
          * testa e il campo sia raggiungibile con una tirata sola. Senza suono,
          * pero': la persona ce l'ha in mano, non ha bisogno che le si urli.
          */
-        val canale = NotificationChannel(CANALE, titolo, NotificationManager.IMPORTANCE_HIGH)
+        val canale = NotificationChannel(CANALE, context.getString(ai.talos.R.string.talos_canale_accoppiamento_nome),
+            NotificationManager.IMPORTANCE_HIGH)
+        canale.description = context.getString(ai.talos.R.string.talos_canale_accoppiamento_descrizione)
         canale.setSound(null, null)
         canale.enableVibration(false)
         canale.setShowBadge(false)

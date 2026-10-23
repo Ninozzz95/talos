@@ -1,11 +1,16 @@
 <script setup lang="ts">
 import { defineAsyncComponent } from 'vue'
+import { talosSegnaleAggiornamento } from '@/lib/updates/segnaleAggiornamento'
 import type { TalosSessionCleanupPlan } from '@/lib/chat/sessionCleanup'
 import { ChevronLeft, Menu } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 
 const TalosMobileNotificationBell = defineAsyncComponent(
     () => import('@/components/shell/TalosMobileNotificationBell.vue'),
+)
+// Il segnale dell'aggiornamento: pigro come il campanello, e montato solo quando c'è qualcosa da dire.
+const TalosMobileUpdateSignal = defineAsyncComponent(
+    () => import('@/components/updates/TalosMobileUpdateSignal.vue'),
 )
 const TalosMobileDownloadCenterTrigger = defineAsyncComponent(
     () => import('@/components/shell/TalosMobileDownloadCenterTrigger.vue'),
@@ -181,7 +186,7 @@ const emit = defineEmits<{
             -->
             <div class="pointer-events-auto flex shrink-0 items-center">
                 <template v-if="!hideAppActions">
-                    <TalosMobileNotificationBell />
+                    <TalosMobileNotificationBell /><TalosMobileUpdateSignal v-if="talosSegnaleAggiornamento.visibile" />
                     <TalosMobileDownloadCenterTrigger />
                 </template>
                 <TalosMobileChatOptionsMenu

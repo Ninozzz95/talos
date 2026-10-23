@@ -34,6 +34,19 @@ const controller = useChatController()
  */
 const sorgente = inject(TALOS_SORGENTE_STREAMING, null) ?? talosSorgenteStreamingDellaChat(controller)
 
+/**
+ * ⛔ Owner 20/10/2026 (righe perse dopo le approvazioni, Pad): quando questa risposta è la ripresa dopo «Consenti», la lista le
+ * passa la bolla sospesa che continua e la sua catena — le ricevute dei permessi e la linea del tempo dei giri già salvati —: le
+ * disegna lei, sopra quello che sta arrivando. Prima erano due bolle, e i giri delle sospese più vecchie non si vedevano.
+ */
+const props = defineProps<{
+    ereditata?: { esiti: readonly { tool: string, concesso: boolean }[], sequenza: readonly unknown[] } | null
+}>()
+const TalosMobileEsitiPermesso = defineAsyncComponent(() => import('@/components/chat/TalosMobileEsitiPermesso.vue'))
+const esitiEreditati = computed(() => props.ereditata?.esiti ?? [])
+const sequenzaEreditata = computed(() => props.ereditata?.sequenza ?? [])
+const haEreditata = computed(() => esitiEreditati.value.length > 0 || sequenzaEreditata.value.length > 0)
+
 const streamingText = computed(() => sorgente.testo.value.slice(sorgente.confini.value.at(-1)?.testo ?? 0))
 /**
  * ⭐⭐⭐ N13 (owner 02/10/2026, decisioni del 09/10): ragionamento, righe degli attrezzi e testo nell'ordine in cui sono successi.
@@ -44,8 +57,14 @@ const streamingText = computed(() => sorgente.testo.value.slice(sorgente.confini
 const TalosMobileAttivitaDelTurno = defineAsyncComponent(() => import('@/components/chat/TalosMobileAttivitaDelTurno.vue'))
 const confini = computed(() => sorgente.confini.value)
 const attivi = computed(() => sorgente.attivi.value)
+/**
+ * ⛔ Owner 20/10/2026: gli attrezzi che il modello sta ancora scrivendo (`TalosMobileBozzeAttrezzi`). Una bozza vuol dire che il
+ * giro prima è finito: la sua riga non è più «in corso» (era «Cerco come si fa…» per 52 s).
+ */
+const TalosMobileBozzeAttrezzi = defineAsyncComponent(() => import('@/components/chat/TalosMobileBozzeAttrezzi.vue'))
+const bozze = computed(() => sorgente.bozze?.value ?? [])
 /** Le righe dell'ultimo giro sono «in corso» finché dopo di loro non arriva niente. */
-const codaVuota = computed(() => !/\S/.test(streamingText.value) && !haRagionamento.value)
+const codaVuota = computed(() => !/\S/.test(streamingText.value) && !haRagionamento.value && !bozze.value.length)
 // Defect #5: reasoning streams on its own channel, so it can appear before the
 // first letter of the answer — which is exactly when it is most useful.
 const streamingReasoning = computed(() => sorgente.ragionamento.value.slice(sorgente.confini.value.at(-1)?.ragionamento ?? 0))
@@ -422,7 +441,7 @@ onBeforeUnmount(() => {
 
 <template>
     <article
-        v-if="sending && (revealed || haRagionamento || confini.length || attivi.length)"
+        v-if="haEreditata || (sending && (revealed || haRagionamento || confini.length || attivi.length || bozze.length))"
         ref="contentHost"
         data-testid="talos-mobile-streaming"
         class="chat-message assistant-message w-full max-w-full text-[var(--talos-text)]"
@@ -434,8 +453,10 @@ onBeforeUnmount(() => {
              chips, which sat next to a borderless reasoning row and looked like
              two different features. -->
         <TalosMobileAssistantHeader working />
+        <TalosMobileEsitiPermesso v-if="esitiEreditati.length" :esiti="esitiEreditati" />
         <TalosMobileAttivitaDelTurno
-            v-if="confini.length || attivi.length"
+            v-if="confini.length || attivi.length || sequenzaEreditata.length"
+            :prima="sequenzaEreditata"
             :confini="confini"
             :testo="sorgente.testo.value"
             :ragionamento="sorgente.ragionamento.value"
@@ -453,6 +474,7 @@ onBeforeUnmount(() => {
         <div class="talos-streaming-body assistant-text">
             <TalosMobileMessageContent :content="parsedMarkdown" line-breaks />
         </div>
+        <TalosMobileBozzeAttrezzi v-if="bozze.length" :bozze="bozze" />
         <span class="sr-only" role="status" aria-live="polite">{{ $t('chat.receivingResponse') }}</span>
     </article>
     <!-- Owner 2026-07-25: while waiting there is NO container — just the mark.

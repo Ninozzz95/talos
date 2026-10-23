@@ -36,7 +36,7 @@
         schermo, e una riga che dice solo il nome dell'app non spiega a nessuno
         cosa sta per concedere. Qui si dice la CAPACITA'.
     -->
-    <string name="talos_occhio_nome">TALOS — phone control</string>
+    <string name="talos_occhio_nome">TALOS — device control</string>
     <string name="talos_occhio_descrizione">Reads the screen to recognise the open app and operate it when you ask. It does not turn on accessibility shortcuts or buttons.</string>
     <!--
         ⛔ TalosArtifactActivity, 2026-08-27: shown ONLY when the device lacks
@@ -44,4 +44,75 @@
         run with weaker isolation instead of falling back silently.
     -->
     <string name="talos_artifact_unsupported">This device\'s WebView cannot isolate this content safely, so it will not be shown.</string>
+    <!--
+        R-M5a (21/10/2026): the wake notifications from a paired computer. Title = the computer's name; on the lock screen only the
+        generic public version (owner R-M5 Q1). %1$s = the session name, %2$s = what it asks (a path, a command, the question).
+    -->
+    <string name="talos_sveglia_canale_richieste">Requests</string>
+    <string name="talos_sveglia_canale_richieste_descrizione">When a session on this computer is waiting for you: a permission, a question, a plan.</string>
+    <string name="talos_sveglia_canale_finiti">Finished work</string>
+    <string name="talos_sveglia_canale_finiti_descrizione">When a long run on this computer has finished or stopped with an error.</string>
+    <string name="talos_sveglia_provvisoria">Needs you. Checking what it needs…</string>
+    <string name="talos_sveglia_computer">Computer</string>
+    <string name="talos_sveglia_prova">Notifications from this computer work.</string>
+    <string name="talos_sveglia_sessione_senza_nome">A session</string>
+    <string name="talos_sveglia_permesso">“%1$s” needs your permission</string>
+    <string name="talos_sveglia_permesso_con">“%1$s” needs your permission: %2$s</string>
+    <string name="talos_sveglia_domanda">“%1$s” has a question for you</string>
+    <string name="talos_sveglia_domanda_con">“%1$s” asks: %2$s</string>
+    <string name="talos_sveglia_aiutante">“%1$s”: a helper agent is waiting for you</string>
+    <string name="talos_sveglia_aiutante_con">“%1$s”: a helper agent is waiting for you: %2$s</string>
+    <string name="talos_sveglia_piano">“%1$s” has a plan for you to review</string>
+    <string name="talos_sveglia_mcp">“%1$s”: an MCP server is asking you for information</string>
+    <string name="talos_sveglia_finito">“%1$s” has finished</string>
+    <string name="talos_sveglia_fallito">“%1$s”: the run stopped with an error</string>
+    <!-- With TALOS's own PIN on, the notification never says which session or what (owner 21/10/2026). -->
+    <string name="talos_sveglia_riservata_richiesta">A session needs you</string>
+    <string name="talos_sveglia_riservata_finito">A run has finished</string>
+    <string name="talos_sveglia_riservata_fallito">A run stopped with an error</string>
+    <string name="talos_sveglia_pubblica_titolo" translatable="false">TALOS</string>
+    <string name="talos_sveglia_pubblica_richiesta">A computer needs you</string>
+    <string name="talos_sveglia_pubblica_finito">Work finished on a computer</string>
+    <!-- N0 (21/10/2026), D-N0-6: i nomi dei canali come li legge Impostazioni → Notifiche -->
+    <string name="talos_canale_trasferimenti_nome">Downloads and installs</string>
+    <string name="talos_canale_trasferimenti_descrizione">Progress and outcome of model downloads and imports.</string>
+    <string name="talos_canale_risposte_nome">Replies</string>
+    <string name="talos_canale_risposte_descrizione">When an answer arrives while you are not looking at TALOS.</string>
+    <string name="talos_canale_lavori_nome">Long jobs</string>
+    <string name="talos_canale_lavori_descrizione">Research, generation and scheduled activities.</string>
+    <string name="talos_canale_attenzione_nome">Needs you</string>
+    <string name="talos_canale_attenzione_descrizione">Something has stopped and is waiting for your decision.</string>
+    <string name="talos_canale_finiti_nome">Finished work</string>
+    <string name="talos_canale_finiti_descrizione">When a research or a download you were waiting for has finished.</string>
+    <string name="talos_canale_in_corso_nome">Work in progress</string>
+    <string name="talos_canale_in_corso_descrizione">Shown while TALOS is answering, searching or making a document.</string>
+    <string name="talos_canale_download_nome">Model downloads</string>
+    <string name="talos_canale_download_descrizione">Progress while models are downloading, and how they ended.</string>
+    <string name="talos_canale_parola_nome">Listening for “hey TALOS”</string>
+    <string name="talos_canale_parola_descrizione">Shown while TALOS is waiting for the wake word.</string>
+    <string name="talos_canale_accoppiamento_nome">Pairing code</string>
+    <string name="talos_canale_accoppiamento_descrizione">The field where you type the wireless debugging pairing code.</string>
+    <string name="talos_canale_aggiornamenti_nome">App updates</string>
+    <string name="talos_canale_aggiornamenti_descrizione">When a new version of TALOS is ready, and when it has been installed.</string>
+    <string name="talos_aggiornamento_pronta_titolo">TALOS %1$s is ready</string>
+    <string name="talos_aggiornamento_pronta_testo">Open TALOS to see what\'s new and install it.</string>
+    <string name="talos_aggiornamento_fatta_titolo">TALOS updated to %1$s</string>
+    <string name="talos_aggiornamento_fatta_testo">Tap to open it.</string>
+    <string name="talos_parola_titolo">TALOS is waiting for “hey TALOS”</string>
+    <string name="talos_parola_testo">The microphone stays on until you turn it off.</string>
+    <!-- N0 (21/10/2026), D-N0-6: i testi della barra e della fine dei download -->
+    <string name="talos_download_pausa">Pause</string>
+    <string name="talos_download_mancano">%1$s left</string>
+    <string name="talos_download_fine_ok">Downloaded and verified</string>
+    <string name="talos_download_fine_cambiato">The file changed on the server: start again</string>
+    <string name="talos_download_fine_controllo">The file did not match its checksum and was removed</string>
+    <string name="talos_download_fine_sparito">The file is no longer published</string>
+    <string name="talos_download_fine_irraggiungibile">Could not reach the server: try again later</string>
+    <string name="talos_download_fine_spazio">Not enough free space</string>
+    <string name="talos_download_fine_pausa">Paused: resumes where it left off</string>
+    <string name="talos_download_fine_fermato">Stopped: %1$s</string>
+    <plurals name="talos_download_attivi">
+        <item quantity="one">%d transfer active</item>
+        <item quantity="other">%d transfers active</item>
+    </plurals>
 </resources>

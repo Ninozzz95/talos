@@ -139,7 +139,7 @@ describe('TalosMobileLocalMetricsRow — la velocità sotto la risposta locale',
         // schermo sentirebbe il titolo e non i tre numeri. Guardia contro il
         // ritorno di quell errore.
         expect(riga.attributes('aria-label')).toBeUndefined()
-        expect(riga.get('.sr-only').text()).toBe('Speed of this answer on this phone')
+        expect(riga.get('.sr-only').text()).toBe('Speed of this answer on this device')
         expect(riga.text()).toContain('9.7 tokens/sec')
     })
 

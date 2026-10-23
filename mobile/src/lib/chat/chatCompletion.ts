@@ -117,6 +117,8 @@ export function buildChatCompletion(
             ...(compatibleTools?.length ? { tools: compatibleTools } : {}),
         }
         const credential = { apiKey: context.apiKey, endpoint: context.endpoint, timeoutMs: context.timeoutMs }
+        // ⛔ Owner 20/10/2026: una richiesta nuova non ha ancora chiamate in scrittura; quelle della richiesta prima non restano a schermo.
+        stream?.onBozzeAttrezzi?.([])
 
         // F2-T4 attempt-and-fallback: try the native streaming path first; any
         // PRE-first-byte failure (CORS, HTTP error, unsupported) retries the
@@ -140,6 +142,9 @@ export function buildChatCompletion(
                     // and then failed should still fall back to the buffered
                     // transport rather than being persisted as an empty answer.
                     onReasoning: (text) => stream.onReasoning?.(text),
+                    // Owner 20/10/2026: il nome dell'attrezzo e la crescita degli argomenti. Come il ragionamento, non è testo:
+                    // non segna `sawChunk`.
+                    onBozzeAttrezzi: stream.onBozzeAttrezzi,
                     signal: stream.signal,
                 })
                 return {
@@ -177,6 +182,7 @@ export function buildChatCompletion(
                 // a lie the export would carry. It also leaves the live header
                 // up with no loader behind it.
                 stream.onReasoningReset?.()
+                stream.onBozzeAttrezzi?.([])
             }
         }
         // The buffered transport is CapacitorHttp (native — not AbortSignal-aware),

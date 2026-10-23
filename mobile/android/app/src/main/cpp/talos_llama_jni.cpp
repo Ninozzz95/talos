@@ -1221,7 +1221,7 @@ std::string talos_apply_chat_template(common_chat_templates * templates, JNIEnv 
      */
     inputs.enable_thinking = pensa;
     try {
-        return common_chat_templates_apply(templates, inputs).prompt;
+        return common_chat_templates_apply(templates, inputs).prompt.str();
     } catch (const std::exception &) {
         return {};
     }
@@ -1308,7 +1308,7 @@ static bool talos_template_spegne_il_ragionamento(common_chat_templates * templa
             messaggio.content = "ciao";
             inputs.messages = { messaggio };
             inputs.enable_thinking = pensa;
-            return common_chat_templates_apply(templates, inputs).prompt;
+            return common_chat_templates_apply(templates, inputs).prompt.str();
         };
         const std::string acceso = prompt_con(true);
         const std::string spento = prompt_con(false);
@@ -1417,6 +1417,7 @@ std::string talos_template_capabilities_json(common_chat_templates * templates) 
  *     nativeTextSoFar         text_lock suo
  *     nativeCancel            atomico
  *     nativeLastTimings       tempi_lock suo
+ *     nativeParseReplyPartial legge session->chat, che nessuno scrive durante il giro
  *
  * Sono le VEDETTE: il loro mestiere è rispondere «a che punto sei?» MENTRE la
  * generazione va avanti. Se prendessero questa serratura aspetterebbero la fine
@@ -3488,8 +3489,9 @@ Java_ai_talos_TalosLlamaNative_nativeGrammarDiagnostics(JNIEnv * env, jclass, jl
      * ⇒ Byte e nome del formato bastano a vedere una deriva; l'albero, se
      * servirà, si ricava rifacendo la stessa chiamata.
      */
-    out["parserBytes"] = (uint64_t) session->chat.parser.size();
-    out["parserHead"] = session->chat.parser.substr(0, 120);
+    // llama.cpp v0.7.0 (22/10/2026): il lettore è un `common_peg_arena` (`common/chat.h:310`), non più il suo JSON: si contano i
+    // nodi, non i byte, e la testa del testo non esiste più
+    out["parserNodi"] = (uint64_t) session->chat.parser.size();
 
     const std::string & gbnf = session->chat.grammar;
     out["grammarBytes"] = (uint64_t) gbnf.size();
@@ -3709,7 +3711,7 @@ Java_ai_talos_TalosLlamaNative_nativeApplyChatTemplate(JNIEnv * env, jclass, jlo
                session->chat.supports_thinking ? "si" : "no",
                inputs.tools.size(),
                session->chat.grammar.empty() ? "no" : (session->chat.grammar_lazy ? "pigra" : "sempre"));
-    return env->NewStringUTF(session->chat.prompt.c_str());
+    return env->NewStringUTF(session->chat.prompt.str().c_str());
 }
 
 /**
@@ -3749,12 +3751,12 @@ Java_ai_talos_TalosLlamaNative_nativeParseReply(JNIEnv * env, jclass, jlong hand
     nlohmann::ordered_json out;
     try {
         common_chat_parser_params parsing(session->chat);
-        parsing.reasoning_format = COMMON_REASONING_FORMAT_AUTO;
-        parsing.parser.load(session->chat.parser);
+        // llama.cpp v0.7.0: il ragionamento lo decide il template (`inputs.reasoning_format`), il lettore si copia com'è
+        parsing.parser = session->chat.parser;
         // `is_partial` falso: questa è la risposta finita. Lo streaming continua
         // a mostrare il testo grezzo mentre arriva, ed è corretto — è alla fine
         // che si decide che cosa era ragionamento.
-        common_chat_msg parsed = common_chat_parse(text, false, parsing);
+        common_chat_msg parsed = common_chat_parse(common_chat_input(text), false, parsing);
 
         /*
          * ââ LA CHIAMATA CHE IL PARSER LASCIAVA CADERE, e con lei la verita'.
@@ -3799,7 +3801,7 @@ Java_ai_talos_TalosLlamaNative_nativeParseReply(JNIEnv * env, jclass, jlong hand
                 if (dove == std::string::npos || dove == 0) continue;
 
                 const common_chat_msg riletto =
-                        common_chat_parse(text.substr(dove), false, parsing);
+                        common_chat_parse(common_chat_input(text.substr(dove)), false, parsing);
                 if (riletto.tool_calls.empty()) continue;
 
                 TALOS_LOGI("chiamata recuperata: il parser era inciampato su %zu byte di prefisso "
@@ -3863,6 +3865,101 @@ Java_ai_talos_TalosLlamaNative_nativeParseReply(JNIEnv * env, jclass, jlong hand
         out["content"] = text;
         out["reasoning"] = "";
         out["toolCalls"] = nlohmann::ordered_json::array();
+    }
+    return env->NewStringUTF(out.dump().c_str());
+}
+
+/**
+ * ⛔ CODICE COL MOTORE LOCALE (ledger `LEDGER-CODICE-MOTORE-LOCALE-2026-10-18.md`, emendamento «streaming senza compute_diffs»):
+ * la lettura PARZIALE di una risposta che sta ancora arrivando, per lo streaming verso r4 (`TalosMotoreOspite`). Solo testo e
+ * ragionamento: le chiamate agli attrezzi escono alla fine, da `nativeParseReply`, che ha il rimedio a llama.cpp #20260 (il parser
+ * `peg-native` che non vede una chiamata dopo del testo). Qui quel difetto farebbe passare il markup della chiamata come testo: per
+ * questo il testo si TAGLIA al primo innesco del template, e una coda che è l'inizio di un innesco (`<tool_`) si trattiene finché non
+ * si sa che cosa diventa — come fa `llama-server` con le parole d'arresto.
+ *
+ * ⛔ È una VEDETTA (vedi `g_motore`): non prende la serratura del motore, perché `nativeGenerate` la tiene per tutto il giro e la
+ * lettura serve proprio MENTRE il giro va avanti. Legge `session->chat`, che durante la generazione nessuno scrive (`chatPrompt` e
+ * `close` prendono la serratura e aspettano la fine). Il testo arriva da `nativeTextSoFar`, già tagliato a un carattere intero.
+ */
+size_t talos_utf8_intero(const std::string & testo);  // definita più sotto, con la sua storia
+
+static size_t talos_coda_di_innesco(const std::string & testo, const std::vector<common_grammar_trigger> & inneschi) {
+    size_t trattenere = 0;
+    for (const common_grammar_trigger & innesco : inneschi) {
+        const std::string & v = innesco.value;
+        if (v.empty()) continue;
+        const size_t massimo = std::min(v.size() - 1, testo.size());
+        for (size_t n = massimo; n > trattenere; --n) {
+            if (testo.compare(testo.size() - n, n, v, 0, n) == 0) {
+                trattenere = n;
+                break;
+            }
+        }
+    }
+    return trattenere;
+}
+
+JNIEXPORT jstring JNICALL
+Java_ai_talos_TalosLlamaNative_nativeParseReplyPartial(JNIEnv * env, jclass, jlong handle, jstring reply) {
+    talos_session * session = as_session(handle);
+    const std::string text = jstring_to_utf8(env, reply);
+    nlohmann::ordered_json out;
+    out["content"] = "";
+    out["reasoning"] = "";
+    if (session == nullptr || !session->chat_ready) return env->NewStringUTF(out.dump().c_str());
+    try {
+        common_chat_parser_params parsing(session->chat);
+        // llama.cpp v0.7.0: il ragionamento lo decide il template (`inputs.reasoning_format`), il lettore si copia com'è
+        parsing.parser = session->chat.parser;
+        const common_chat_msg parsed = common_chat_parse(common_chat_input(text), true, parsing);
+        std::string testo = parsed.content;
+        for (const common_grammar_trigger & innesco : session->chat.grammar_triggers) {
+            if (innesco.value.empty()) continue;
+            const size_t dove = testo.find(innesco.value);
+            if (dove != std::string::npos) testo.erase(dove);
+        }
+        testo.erase(testo.size() - talos_coda_di_innesco(testo, session->chat.grammar_triggers));
+        // un taglio può cadere a metà di un carattere: la macchina virtuale non lo perdona (`talos_utf8_intero`)
+        testo.erase(talos_utf8_intero(testo));
+        std::string ragionamento = parsed.reasoning_content;
+        ragionamento.erase(talos_utf8_intero(ragionamento));
+        out["content"] = testo;
+        out["reasoning"] = ragionamento;
+
+        /*
+         * Le chiamate IN CORSO (sessione lunga sul Pad, 21/10/2026: un `scrivi` lungo teneva r4 senza dati per più di 300 s e il
+         * guardiano dei dati chiudeva la richiesta). Come la lettura finale, si rilegge DAL primo innesco (rimedio a llama.cpp #20260),
+         * qui con `is_partial`: nome e argomenti fin dove sono arrivati. Java manda solo le aggiunte in coda e trattiene la coda
+         * incerta (`TalosMotoreOspiteFlusso.avanzaChiamate`). Una lettura che non riesce non dice niente: aspetta la prossima.
+         */
+        nlohmann::ordered_json chiamate = nlohmann::ordered_json::array();
+        try {
+            std::vector<common_chat_tool_call> trovate = parsed.tool_calls;
+            if (trovate.empty()) {
+                for (const common_grammar_trigger & innesco : session->chat.grammar_triggers) {
+                    if (innesco.value.empty()) continue;
+                    const size_t dove = text.find(innesco.value);
+                    if (dove == std::string::npos || dove == 0) continue;
+                    trovate = common_chat_parse(common_chat_input(text.substr(dove)), true, parsing).tool_calls;
+                    break;
+                }
+            }
+            for (const common_chat_tool_call & call : trovate) {
+                std::string argomenti = call.arguments;
+                argomenti.erase(talos_utf8_intero(argomenti));
+                nlohmann::ordered_json entry;
+                entry["name"] = call.name;
+                entry["arguments"] = argomenti;
+                entry["id"] = call.id;
+                chiamate.push_back(std::move(entry));
+            }
+        } catch (const std::exception & failure) {
+            TALOS_LOGI("lettura parziale delle chiamate non riuscita: %s", failure.what());
+        }
+        out["toolCalls"] = std::move(chiamate);
+    } catch (const std::exception & failure) {
+        // una lettura parziale che non riesce non dice niente: il flusso aspetta la prossima, o la finale
+        TALOS_LOGI("lettura parziale non riuscita: %s", failure.what());
     }
     return env->NewStringUTF(out.dump().c_str());
 }

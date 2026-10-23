@@ -169,7 +169,7 @@ export function createTalosPrivilegedSources(): TalosPrivilegedToolSources | nul
                 via: 'shell',
                 output: righe.length
                     ? `Last ${days} day(s), most-used first:\n${righe.join('\n')}`
-                    : 'The phone has no usage data to show.',
+                    : 'The device has no usage data to show.',
             }
         },
 

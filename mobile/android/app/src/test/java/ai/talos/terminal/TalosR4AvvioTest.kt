@@ -125,6 +125,19 @@ class TalosR4AvvioTest {
     }
 
     @Test
+    fun `R4AV-03f la cartella del motore locale e files-locale-ospite, e il chiamante non la sposta`() {
+        // ⛔ CODICE COL MOTORE LOCALE (owner 18/10/2026; fonte r4 `locale-ospite`): r4 accetta un socket solo dentro questa cartella.
+        // È quella dove `TalosMotoreOspite` apre `motore.sock` (0700), accanto a `files/codice-r4`.
+        val r = radice()
+        val d = TalosR4Avvio.disposizione(r)
+        val lavoro = File("/data/data/ai.talos.dev/files/codice/workspace")
+        val attrezzi = File("/data/data/ai.talos.dev/files/codice/bin")
+        val attesa = File(r.canonicalFile.parentFile, "locale-ospite").path
+        assertEquals(attesa, TalosR4Avvio.ambiente(d, lavoro, attrezzi, File("cache"), emptyMap())["TALOS_LOCALE_OSPITE_DIR"])
+        assertEquals(attesa, TalosR4Avvio.ambiente(d, lavoro, attrezzi, File("cache"), mapOf("TALOS_LOCALE_OSPITE_DIR" to "/sdcard"))["TALOS_LOCALE_OSPITE_DIR"])
+    }
+
+    @Test
     fun `R4AV-04 tutto sta sotto la cartella di r4, coi percorsi canonici`() {
         val r = radice()
         val d = TalosR4Avvio.disposizione(r)

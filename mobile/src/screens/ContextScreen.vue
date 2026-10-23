@@ -1768,7 +1768,7 @@ useTalosSheetTitle(() => t('library.title'))
     >
         <template #footer>
             <Button type="button" variant="outline" :disabled="actionBusy" class="min-h-12" @click="deleteOpen = false">{{ t('common.cancel') }}</Button>
-            <Button type="button" :disabled="actionBusy" class="min-h-12 bg-[var(--talos-danger)] text-white" @click="confirmDelete">{{ t('library.deleteFile') }}</Button>
+            <Button type="button" :disabled="actionBusy" class="min-h-12 border border-[var(--talos-danger-border)] bg-[var(--talos-danger-soft)] text-[var(--talos-danger)]" @click="confirmDelete">{{ t('library.deleteFile') }}</Button>
         </template>
     </TalosMobileConfirmDialog>
 
@@ -1780,7 +1780,7 @@ useTalosSheetTitle(() => t('library.title'))
     >
         <template #footer>
             <Button type="button" variant="outline" :disabled="actionBusy" class="min-h-12" @click="bulkDeleteOpen = false">{{ t('common.cancel') }}</Button>
-            <Button type="button" data-testid="talos-library-bulk-delete-confirm" :disabled="actionBusy" class="min-h-12 bg-[var(--talos-danger)] text-white" @click="confirmBulkDelete">
+            <Button type="button" data-testid="talos-library-bulk-delete-confirm" :disabled="actionBusy" class="min-h-12 border border-[var(--talos-danger-border)] bg-[var(--talos-danger-soft)] text-[var(--talos-danger)]" @click="confirmBulkDelete">
                 <LoaderCircle v-if="actionBusy" class="size-4 motion-safe:animate-spin" aria-hidden="true" />
                 {{ actionBusy ? t('chat.deleting') : t('common.delete') }}
             </Button>

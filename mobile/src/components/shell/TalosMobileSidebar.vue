@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { talosSegnaleAggiornamento } from '@/lib/updates/segnaleAggiornamento'
 import { useTalosTouchWave } from '@/composables/useTalosTouchWave'
 import { useTalosI18n } from '@/i18n'
 import {
     BookMarked, BookOpen, CheckSquare, FlaskConical, MessageSquareText,
-    Check, Code2, Cpu, MonitorSmartphone, Search, Settings, StickyNote, Stethoscope, Wrench, X,
+    Check, Code2, Cpu, Laptop, MonitorSmartphone, Search, Settings, StickyNote, Stethoscope, Wrench, X,
 } from '@lucide/vue'
 import { useRoute } from 'vue-router'
 import { Button } from '@/components/ui/button'
@@ -41,6 +42,10 @@ import {
 
 const TalosMobileNotificationBell = defineAsyncComponent(
     () => import('@/components/shell/TalosMobileNotificationBell.vue'),
+)
+// Il segnale dell'aggiornamento: pigro come il campanello, e montato solo quando c'è qualcosa da dire.
+const TalosMobileUpdateSignal = defineAsyncComponent(
+    () => import('@/components/updates/TalosMobileUpdateSignal.vue'),
 )
 const TalosMobileDownloadCenterTrigger = defineAsyncComponent(
     () => import('@/components/shell/TalosMobileDownloadCenterTrigger.vue'),
@@ -182,6 +187,8 @@ const sezioni = computed<Array<{ route: TalosMobileRouteName, key: string, icon:
     // potuto dimenticare?». La UI nuova non nasconde funzioni che ci sono.
     { route: 'toolforge', key: 'navigation.toolForge', icon: Wrench },
     ...(harnessAvailable ? [{ route: 'harness' as TalosMobileRouteName, key: 'navigation.harness', icon: Code2 }] : []),
+    // R-M3 (owner 20/10/2026: «Computer», come il mockup v5): il PC collegato per il controllo remoto, accanto al Codice.
+    { route: 'computer', key: 'navigation.computer', icon: Laptop },
 ])
 
 /**
@@ -764,7 +771,7 @@ const onda = useTalosTouchWave()
                         </span>
                         <span class="local-indicator" aria-hidden="true" />
                     </button>
-                    <TalosMobileNotificationBell />
+                    <TalosMobileNotificationBell /><TalosMobileUpdateSignal v-if="talosSegnaleAggiornamento.visibile" />
                     <TalosMobileDownloadCenterTrigger />
                 </div>
             </aside>

@@ -1,0 +1,27 @@
+{
+  "origine": {
+    "commit": "2f6c5d990543eb1ccf8e3ad69ea5d933003c0c39",
+    "percorso": "harness-ui/frontend/src/i18n/testi/errori.js",
+    "sha256": "0acfde68e38d40f5b90d859491a88dfd26a474224aff25ee708fee62294c0123",
+    "prefisso": [
+      "LOCAL_GUEST_",
+      "kernel.motoreOspite"
+    ]
+  },
+  "it": {
+    "LOCAL_GUEST_DISABLED.message": "Questo server non accetta un motore locale da un’app",
+    "LOCAL_GUEST_SOCKET_INVALID.message": "Il socket del motore locale non è valido: deve essere un socket dentro la cartella dell’app",
+    "kernel.motoreOspiteOccupato": "Il modello sul dispositivo è occupato con un altro lavoro (una risposta nella chat o un riassunto del contesto); riprova quando ha finito.",
+    "kernel.motoreOspiteNonAperto": "Nessun modello locale è aperto nell’app: aprine uno dal selettore dei modelli.",
+    "kernel.motoreOspiteCambiato": "Ora sul dispositivo è aperto un altro modello: sceglilo di nuovo nel Codice.",
+    "kernel.motoreOspiteNonRisponde": "Il motore locale dell’app non risponde."
+  },
+  "en": {
+    "LOCAL_GUEST_DISABLED.message": "This server does not take a local engine from an app",
+    "LOCAL_GUEST_SOCKET_INVALID.message": "The local engine socket is not valid: it must be a socket inside the app folder",
+    "kernel.motoreOspiteOccupato": "The on-device model is busy with another job (a chat reply or a context summary); try again when it has finished.",
+    "kernel.motoreOspiteNonAperto": "No local model is open in the app: open one from the model picker.",
+    "kernel.motoreOspiteCambiato": "Another on-device model is open now; choose it again in Code.",
+    "kernel.motoreOspiteNonRisponde": "The local engine in the app does not answer."
+  }
+}

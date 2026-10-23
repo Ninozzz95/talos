@@ -37,6 +37,8 @@ describe('Note legali', () => {
         const nativi = vista.find('[data-testid="talos-legal-native"]').text()
         expect(nativi).toContain('llama.cpp')
         expect(nativi).toContain('Node.js')
+        // il trasporto del controllo remoto, compilato da noi (`jniLibs/PROVENIENZA-IROH.md`, 20/10/2026)
+        expect(nativi).toContain('iroh')
         // Una licenza non chiarita si dice tale, non si arrotonda a «permissiva».
         expect(nativi).toContain('(da confermare)')
     })
@@ -46,6 +48,12 @@ describe('Note legali', () => {
         await vi_waitFor(() => vista.find('[data-testid="talos-legal-npm"]').exists())
         expect(vista.find('[data-testid="talos-legal-android"]').text()).toMatch(/androidx/)
         expect(vista.find('[data-testid="talos-legal-npm"]').text()).toMatch(/vue@/)
+    })
+
+    it('LEG-05 lo scanner del QR (ML Kit di Google): le Note legali dicono delle metriche d’uso che Google riceve', async () => {
+        const vista = await monta()
+        await vi_waitFor(() => vista.find('[data-testid="talos-legal-android"]').exists())
+        expect(vista.get('[data-testid="talos-legal-mlkit"]').text()).toMatch(/ML Kit/)
     })
 })
 

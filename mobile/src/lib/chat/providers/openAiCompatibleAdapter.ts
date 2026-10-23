@@ -17,6 +17,7 @@ import { talosPromptCacheKey } from '@/lib/chat/promptCache'
 import { talosModelSupportsToolCalling } from '@/lib/chat/modelToolCapabilities'
 import { talosToolsForOpenAiResponses } from '@/lib/tools/registry'
 import { talosReadOpenAiResponse, talosReadOpenAiResponsesEvent } from '@/lib/chat/providers/openAiResponses'
+import { talosCreaBozzeAttrezzi } from '@/lib/chat/providers/bozzeAttrezzi'
 import { adattaCorpoAlPiano, attesaDelLimiteDelPiano, erroreDelPiano, eventoFinaleDelFlusso } from '@/lib/chatgpt/richiesta'
 import {
     TALOS_OPENAI_REASONING_NONE,
@@ -733,6 +734,8 @@ function createOpenAiCompatibleAdapter(config: OpenAiCompatibleConfig): TalosMob
             if (config.provider === 'openai' || config.piano) {
                 const calls: Array<{ name: string, arguments: string, id: string }> = []
                 let usage: Record<string, number> | null = null
+                // ⛔ Owner 20/10/2026: il nome dell'attrezzo appena arriva, e quanto crescono gli argomenti (`bozzeAttrezzi.ts`).
+                const bozze = talosCreaBozzeAttrezzi(handlers.onBozzeAttrezzi)
                 const stream = await talosStreamText({
                     url: `${baseUrl}/responses`,
                     headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
@@ -746,6 +749,7 @@ function createOpenAiCompatibleAdapter(config: OpenAiCompatibleConfig): TalosMob
                     extract: (payload) => {
                         const read = talosReadOpenAiResponsesEvent(JSON.parse(payload))
                         if (read.kind === 'tool-call') calls.push({ ...read.call })
+                        if (read.kind === 'tool-draft') bozze.annota(read.index, read.name, read.chars)
                         if (read.kind === 'done') usage = read.usage
                         return read.kind === 'text' ? read.delta : ''
                     },
@@ -774,6 +778,8 @@ function createOpenAiCompatibleAdapter(config: OpenAiCompatibleConfig): TalosMob
             }
 
             const toolCalls = createOpenAiToolCallAccumulator()
+            // ⛔ Owner 20/10/2026: il nome dal primo `delta.tool_calls`, poi la crescita degli argomenti (`bozzeAttrezzi.ts`).
+            const bozze = talosCreaBozzeAttrezzi(handlers.onBozzeAttrezzi)
             // D-F1-2: il testo passa dal separatore; i blocchi `<tool_call>`
             // non scorrono a schermo e si raccolgono per diventare chiamate.
             const separatore = talosCreateThinkSplitter()
@@ -836,6 +842,13 @@ function createOpenAiCompatibleAdapter(config: OpenAiCompatibleConfig): TalosMob
                         usage?: Record<string, unknown> | null
                     }
                     toolCalls.push(event)
+                    for (const pezzo of (event.choices?.[0]?.delta as { tool_calls?: unknown } | undefined)?.tool_calls as Array<{ index?: unknown, function?: { name?: unknown, arguments?: unknown } }> | undefined ?? []) {
+                        bozze.annota(
+                            typeof pezzo?.index === 'number' ? pezzo.index : 0,
+                            typeof pezzo?.function?.name === 'string' ? pezzo.function.name : undefined,
+                            typeof pezzo?.function?.arguments === 'string' ? pezzo.function.arguments.length : 0,
+                        )
+                    }
                     const fine = event.choices?.[0]?.finish_reason
                     if (typeof fine === 'string' && fine) motivoDiFine = fine
                     if (callId === null && typeof event.id === 'string' && event.id) callId = event.id

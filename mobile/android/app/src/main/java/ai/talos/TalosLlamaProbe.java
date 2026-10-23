@@ -150,13 +150,20 @@ public final class TalosLlamaProbe {
      *
      * ⇒ Questa stringa e' il posto dove si dichiara un cambio di taratura che
      * il prompt non racconta. Si cambia quando cambia **come** si misura.
+     *
+     * ⛔ Cambiata il 22/10/2026 (PROB-07…12): il prompt passa dal template del
+     * modello col ragionamento spento, si giudica la risposta letta dal parser
+     * e la misura aspetta che la risposta arrivi. Il testo di {@link #PROMPT}
+     * non cambia di un carattere: per questo il cambio si dichiara qui.
      */
     private static final String TARATURA =
-            "bersaglio-nominato+abbandono-visto-2026-09-11+risposta-attesa+senza-primo-token-2026-10-01";
+            "bersaglio-nominato+abbandono-visto-2026-09-11+risposta-attesa+senza-primo-token-2026-10-01"
+            + "+template-senza-ragionamento+risposta-dal-parser-2026-10-22";
 
     public static String metroId() {
         long impronta = 1125899906842597L;
-        String materia = PROMPT + "|" + NUMERI_IN_SALITA + "|" + TOKENS + "|" + TARATURA;
+        String materia = PROMPT + "|" + NUMERI_IN_SALITA + "|" + TOKENS + "|" + RISPOSTA_GIUDICABILE_CARATTERI
+                + "|" + TARATURA;
         for (int i = 0; i < materia.length(); i += 1) {
             impronta = 31 * impronta + materia.charAt(i);
         }
@@ -394,6 +401,168 @@ public final class TalosLlamaProbe {
         return text != null && haContatoInOrdine(text);
     }
 
+    /*
+     * ⭐⭐⭐ I MODELLI CHE RAGIONANO — misurato sul Pad il 22/10/2026, llama.cpp v0.7.0.
+     *
+     * ## Il difetto
+     *
+     * Qwen3.5-2B (Q4_0, Q4_K_M, Q8_0), Granite 4.2 3B e LFM2.5-2.6B Q8_0:
+     * WRONG_ANSWER con tps 0.0 su TUTTI i motori, CPU compresa — l'NPU leggeva
+     * a 1.160-1.259 t/s e restava fuori. «Automatico» li teneva sulla CPU per
+     * sempre (`reason=unmeasured source=floor`), mentre la chat su quegli
+     * stessi modelli rispondeva bene.
+     *
+     * ## La prova che non era il motore
+     *
+     * I binari ufficiali di llama.cpp per Snapdragon, b11312 e v0.7.0, CPU e
+     * HTP0, `llama-completion -f prompt-sonda.txt -n 80 --temp 0 --seed 1
+     * -no-cnv` col prompt ESATTO di questa prova, scrivono quattro volte lo
+     * stesso testo: «<think> Thinking Process: 1. **Analyze the Request:** *
+     * Input: A list of 16 notes …». Il prompt grezzo, senza template, non
+     * spegne il ragionamento; e la misura si chiudeva a
+     * {@link TalosLlamaEngine#MEASURE_FLOOR_MS} con 32 token — dentro il
+     * ragionamento, prima della prima cifra del conteggio.
+     *
+     * ## La cura, presa da chi lo fa gia'
+     *
+     * ⛔ I banchi di velocita' non hanno il problema perche' non giudicano il
+     * testo: `llama-bench` decodifica token CASUALI (llama.cpp
+     * `tools/llama-bench/llama-bench.cpp:2181-2219`, `std::rand() % n_vocab`),
+     * PocketPal chiama lo stesso banco (`BenchmarkScreen.tsx:166`,
+     * `context.bench(pp, tg, pl, nr)`), MNN Chat riempie il prompt di un token
+     * ripetuto (`llm_session.cpp:725`). Noi giudichiamo anche la risposta — e'
+     * il cancello che ferma un driver che risponde spazzatura veloce — quindi
+     * la domanda va posta come la pone chi CONVERSA con questi modelli:
+     *
+     *  1. col template del modello e il ragionamento spento — `llama-server`
+     *     con `chat_template_kwargs.enable_thinking = false`
+     *     (`tools/server/server-common.cpp:1468-1497`), PocketPal lo manda
+     *     uguale (`src/api/openai.ts:499`); vedi {@link #promptDellaProva};
+     *  2. giudicando il CONTENUTO separato dal ragionamento dal parser del
+     *     template (`reasoning_format`, `server-common.cpp:1464`), non con una
+     *     ricerca di tag: per i template che il ragionamento non lo spengono
+     *     (LFM2.5, `thinkingCanBeDisabled = false`) — vedi {@link Lettura};
+     *  3. e non chiudendo la misura finche' la risposta non e' giudicabile —
+     *     vedi {@link #rispostaGiudicabile}. I tetti restano quelli di prima
+     *     ({@link #TOKENS}, {@link TalosLlamaEngine#RUN_TIMEOUT_MS}).
+     */
+
+    /**
+     * ⭐ Il prompt della prova, reso dal template DEL MODELLO col ragionamento
+     * spento.
+     *
+     * @param resoDalTemplate il risultato di `chatPrompt(user: PROMPT, pensa = false)`
+     *     sul motore gia' aperto — nessuna seconda lettura del GGUF. Vuoto o
+     *     null quando il file non porta un template: allora si manda il
+     *     prompt grezzo di prima, che e' cio' che un modello base si aspetta.
+     */
+    static String promptDellaProva(String resoDalTemplate) {
+        return resoDalTemplate == null || resoDalTemplate.isEmpty() ? PROMPT : resoDalTemplate;
+    }
+
+    /**
+     * ⛔ Quanti caratteri di risposta bastano per giudicarla anche quando non
+     * conta.
+     *
+     * Una risposta che conta si giudica appena ha contato. Una che non conta
+     * si giudica solo quando e' abbastanza lunga da non essere un inizio: una
+     * risposta che e' arrivata a «1\n» sta contando, e chiuderla li' la
+     * boccerebbe (PROB-09). 128 caratteri sono ~40 token d'inglese: piu' del
+     * preambolo piu' lungo che si incontri («Sure! Here are the numbers from 1
+     * to 20, one per line:» sono 55) e meno di due secondi di spazzatura su un
+     * motore rotto.
+     */
+    static final int RISPOSTA_GIUDICABILE_CARATTERI = 128;
+
+    /**
+     * ⭐ Il testo di una corsa, letto dal parser del template: che cosa il
+     * modello ha DETTO e che cosa ha PENSATO.
+     *
+     * Viene da `TalosLlamaEngine.parseReplyPartial` (il JSON `{content,
+     * reasoning}` di `nativeParseReplyPartial`): lo stesso parser che separa il
+     * ragionamento nella chat, con `is_partial` perche' in BENCHMARK il token
+     * di fine non ferma la generazione e la coda resta aperta.
+     *
+     * ⛔ Due stringhe vuote vogliono dire «il parser non sa»: nessun template
+     * applicato (`chat_ready` falso) o una lettura non riuscita. Allora vale il
+     * testo grezzo, esattamente come prima del 22/10 — PROB-10.
+     */
+    static final class Lettura {
+        final String grezzo;
+        final String contenuto;
+        final String ragionamento;
+
+        Lettura(String grezzo, String contenuto, String ragionamento) {
+            this.grezzo = grezzo == null ? "" : grezzo;
+            this.contenuto = contenuto == null ? "" : contenuto;
+            this.ragionamento = ragionamento == null ? "" : ragionamento;
+        }
+
+        /** Un JSON illeggibile o assente e' «il parser non sa»: resta il grezzo. */
+        static Lettura dalParser(String grezzo, String json) {
+            if (json == null || json.isEmpty()) return new Lettura(grezzo, "", "");
+            try {
+                org.json.JSONObject letto = new org.json.JSONObject(json);
+                return new Lettura(grezzo, letto.optString("content", ""), letto.optString("reasoning", ""));
+            } catch (org.json.JSONException illeggibile) {
+                return new Lettura(grezzo, "", "");
+            }
+        }
+
+        /** Ha ragionato e non ha ancora cominciato a rispondere. */
+        boolean staAncoraPensando() {
+            return contenuto.trim().isEmpty() && !ragionamento.trim().isEmpty();
+        }
+
+        /**
+         * Il testo su cui si giudica il compito. ⛔ Mai il ragionamento: i suoi
+         * passi numerati «1. 2. 3. 4. 5.» passerebbero per un conteggio (PROB-08).
+         */
+        String risposta() {
+            if (!contenuto.trim().isEmpty()) return contenuto;
+            if (staAncoraPensando()) return "";
+            return grezzo;
+        }
+    }
+
+    /**
+     * ⭐ La risposta si puo' gia' giudicare: ha contato, oppure e' lunga
+     * abbastanza da dire che non contera'.
+     *
+     * {@link TalosLlamaEngine#run} la chiede SOLO quando la finestra di misura
+     * e' gia' piena: non accorcia mai una misura, la allunga finche' il
+     * modello ha risposto. ⛔ Chi ragiona ancora non e' giudicabile (PROB-07):
+     * era esattamente la corsa che sul Pad diventava WRONG_ANSWER.
+     */
+    static boolean rispostaGiudicabile(Lettura lettura) {
+        if (lettura == null) return true;
+        String risposta = lettura.risposta();
+        return haContatoInOrdine(risposta) || risposta.length() >= RISPOSTA_GIUDICABILE_CARATTERI;
+    }
+
+    /**
+     * Il compito, giudicato sulla risposta e non sul ragionamento.
+     *
+     * ⛔ Un modello che a fine corsa — tetto di {@link #TOKENS} o
+     * {@link TalosLlamaEngine#RUN_TIMEOUT_MS} — sta ancora ragionando NON ha
+     * svolto il compito: risposta vuota, verdetto WRONG_ANSWER. Non e' A3-REG-01
+     * (lì nessun token era arrivato): qui il motore ha generato per tutto il
+     * budget senza mai rispondere, e ripetere la stessa corsa greedy darebbe
+     * lo stesso testo.
+     */
+    static boolean compitoSvolto(Lettura lettura) {
+        return lettura != null && haContatoInOrdine(lettura.risposta());
+    }
+
+    /** Un pezzo corto della risposta per la riga di logcat: la prova e' un testo fisso, mai della persona. */
+    static String estratto(Lettura lettura) {
+        if (lettura == null) return "-";
+        String risposta = lettura.risposta();
+        String corto = risposta.length() > 80 ? risposta.substring(0, 80) + "…" : risposta;
+        return (lettura.staAncoraPensando() ? "[pensa " + lettura.ragionamento.length() + "c] " : "")
+                + "\"" + corto.replace("\n", "\\n") + "\"";
+    }
+
     /**
      * ⛔ A3-REG-01 — una corsa senza il primo token NON è una prova.
      *
@@ -428,9 +597,91 @@ public final class TalosLlamaProbe {
             boolean lasciatoDaUnTempoScaduto = profilo.outcome == TalosBackendChoice.Outcome.FAILED
                     && profilo.ttftMs <= 0 && profilo.decodeTokPerSec <= 0;
             if (lasciatoDaUnTempoScaduto) continue;
+            /*
+             * ⛔ PROB-12 (22/10/2026) — una bocciatura data da un ALTRO metro
+             * non e' una misura di questo: Qwen3.5 bocciato dal prompt grezzo
+             * resterebbe FAILED per sempre anche dopo la cura. Le promozioni
+             * restano: i tempi si misurano come prima, e' cambiato il giudizio.
+             */
+            boolean bocciatoDaUnAltroMetro = profilo.outcome == TalosBackendChoice.Outcome.FAILED
+                    && !metroId().equals(profilo.metro);
+            if (bocciatoDaUnAltroMetro) continue;
             if (profilo.prefillTokPerSec > 0) return false;
         }
         return true;
+    }
+
+    /**
+     * ⭐ PROB-13 (22/10/2026) — questo MOTORE, per questo file, ha solo una
+     * bocciatura data da un altro metro, e va rimisurato.
+     *
+     * ## Il caso del Pad, 22/10 15:44-15:55
+     *
+     * LFM2.5-2.6B Q4_K_M, profili del metro vecchio: cpu VALID, opencl e
+     * hexagon WRONG_ANSWER. `qualifyBackend` rispondeva `already-proven`:
+     * {@link #profileMissingFor} guarda il MODELLO e la cpu valida bastava;
+     * le evidenze per dispositivo avevano gia' GPU e NPU. Le due bocciature
+     * date dal prompt grezzo non si rimisuravano mai — ed e' il caso di
+     * chiunque aggiorni l'app con profili gia' scritti.
+     *
+     * ⛔ Si rimisura solo se per quel motore NON esiste gia' un verdetto del
+     * metro di oggi, buono o cattivo: una bocciatura onesta di oggi resta
+     * duratura (nessun giro all'infinito), e una riga vecchia rimasta accanto
+     * alla nuova per un dispositivo con un altro nome non riapre niente.
+     * ⛔ Dimensione ignota (0): nel dubbio non si riparte, come in
+     * {@link #profileMissingFor}.
+     */
+    static boolean bocciaturaDaRimisurare(java.util.List<TalosLocalProfile> profiles, long modelBytes,
+                                           String backend) {
+        if (modelBytes <= 0L || backend == null) return false;
+        boolean bocciatoDaUnAltroMetro = false;
+        for (TalosLocalProfile profilo : profiles) {
+            if (profilo.identity == null || profilo.identity.modelBytes != modelBytes) continue;
+            if (!backend.equals(profilo.backendRegistry)) continue;
+            if (metroId().equals(profilo.metro)) return false;
+            if (profilo.outcome == TalosBackendChoice.Outcome.FAILED) bocciatoDaUnAltroMetro = true;
+        }
+        return bocciatoDaUnAltroMetro;
+    }
+
+    /**
+     * ⭐ PROB-15 (revisione del 22/10/2026, rilievo 11) — la stessa domanda,
+     * con i tentativi gia' fatti. Una rimisura che esce INCONCLUSIVE (calore,
+     * tempo) o che non apre non scrive righe: senza questo limite la vecchia
+     * bocciatura si rimisurava a OGNI qualificazione, compilazione OpenCL
+     * compresa. Un tentativo per metro, per file, per motore
+     * ({@link #chiaveDellaRimisura}); chi la fa girare la segna.
+     */
+    static boolean bocciaturaDaRimisurare(java.util.List<TalosLocalProfile> profiles, long modelBytes,
+                                           String backend, java.util.Set<String> giaTentate) {
+        if (giaTentate.contains(chiaveDellaRimisura(modelBytes, backend))) return false; // àncora: una-rimisura-per-metro
+        return bocciaturaDaRimisurare(profiles, modelBytes, backend);
+    }
+
+    /** Il segno di una rimisura gia' tentata: il metro dentro la chiave, cosi' un metro nuovo riapre la domanda. */
+    static String chiaveDellaRimisura(long modelBytes, String backend) {
+        return metroId() + "|" + backend + "|" + modelBytes; // àncora: metro-nella-chiave
+    }
+
+    /**
+     * ⭐ PROB-14 (revisione del 22/10/2026, rilievo 10) — QUESTO motore non ha
+     * un profilo valido per QUESTO file, con le regole di
+     * {@link #profileMissingFor} applicate alle sole righe di quel motore.
+     *
+     * Serve alla CPU: il cancello {@code cpuNeeded} guarda le evidenze del
+     * DISPOSITIVO, e quelle di un altro modello bastavano a lasciare questo
+     * senza riferimento CPU (la sua CPU era uscita INCONCLUSIVE e non aveva
+     * scritto righe, mentre la GPU si'). ⛔ Dimensione ignota (0): nel dubbio
+     * non si riparte.
+     */
+    static boolean profiloDelMotoreMancante(java.util.List<TalosLocalProfile> profiles, long modelBytes,
+                                             String backend) {
+        if (backend == null) return false;
+        java.util.List<TalosLocalProfile> delMotore = new java.util.ArrayList<>();
+        for (TalosLocalProfile profilo : profiles) {
+            if (backend.equals(profilo.backendRegistry)) delMotore.add(profilo); // àncora: solo-le-righe-del-motore
+        }
+        return profileMissingFor(delMotore, modelBytes);
     }
 
     /** Il verdetto dell'harness, tradotto nella prova che la scelta consuma. */

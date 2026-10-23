@@ -1,0 +1,14 @@
+{
+    "en": [
+        "TALOS now updates itself: it checks once a day, downloads on Wi-Fi and asks before restarting.",
+        "New local engine, llama.cpp 0.7.0, on CPU, GPU and NPU.",
+        "Thinking and tool steps fold into one group, with how long TALOS worked.",
+        "The model picker groups models by provider and shows when a model is opening."
+    ],
+    "it": [
+        "TALOS ora si aggiorna da sola: controlla una volta al giorno, scarica con il Wi-Fi e chiede prima di riavviarsi.",
+        "Nuovo motore locale, llama.cpp 0.7.0, su CPU, GPU e NPU.",
+        "Ragionamento e passi degli strumenti si raccolgono in un gruppo, con il tempo di lavoro.",
+        "La scelta del modello raggruppa i modelli per fornitore e mostra quando un modello si sta aprendo."
+    ]
+}

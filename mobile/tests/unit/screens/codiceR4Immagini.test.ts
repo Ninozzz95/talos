@@ -123,7 +123,7 @@ describe('le immagini nel Codice su r4 (K3-C Allegati A2)', () => {
         const w = await schermata()
         expect(compositore(w).props('attachmentsAvailable')).toBe(true)
         // A3: «Dalla Libreria» resta spenta nel Codice, e il perché si dice in parole semplici
-        expect(compositore(w).props('contextDisabledReason')).toBe('The Library is not connected to Code yet: attach a file from the phone or from the ▤ panel.')
+        expect(compositore(w).props('contextDisabledReason')).toBe('The Library is not connected to Code yet: attach a file from the device or from the ▤ panel.')
         compositore(w).vm.$emit('pickPhotos')
         await asciuga()
         expect(caricamenti().map((r) => JSON.parse(r.corpo!))).toEqual([{ nome: 'Foto 16-10 alle 21.00.png', dataUrl: 'data:image/png;base64,iVBORw==' }])

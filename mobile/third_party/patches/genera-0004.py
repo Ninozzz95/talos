@@ -33,7 +33,7 @@ def una(testo, ancora):
 # --- 1) le chiamate pigre (PRIMA dell'involucro, che contiene la stessa forma): `build_program_from_source_ex(<a capo + rientro>backend_ctx->context, backend_ctx->device,`
 CHIAMATA = re.compile(r'build_program_from_source_ex\((\s*)backend_ctx->context, backend_ctx->device,')
 s, n = CHIAMATA.subn(r'talos_build_program_from_source_ex_cached(\1backend_ctx,', s)
-assert n == 12, n
+assert n == 14, n
 # nessuna chiamata pigra deve restare fuori: restano la definizione e `build_program_from_source`
 assert len(re.findall(r'build_program_from_source_ex\(', s)) == 2
 

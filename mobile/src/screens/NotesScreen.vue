@@ -258,6 +258,8 @@ async function exportNote(note: TalosLocalNote): Promise<void> {
             key: `note:exported:${note.id}`,
             channel: 'jobs',
             weight: 'notable',
+            // N0, D-N0-8: il gesto è della persona ⇒ toast sì, campanella e tendina no
+            origin: 'person',
             title: t('notes.exportCopied'),
             body: note.title,
             at: Date.now(),
@@ -672,7 +674,7 @@ useTalosSheetTitle(() => t('navigation.notes'))
                     type="button"
                     data-testid="talos-notes-delete-confirm"
                     :disabled="deleting"
-                    class="min-h-12 bg-[var(--talos-danger)] text-white"
+                    class="min-h-12 border border-[var(--talos-danger-border)] bg-[var(--talos-danger-soft)] text-[var(--talos-danger)]"
                     @click="confirmDelete"
                 >
                     {{ t('common.delete') }}

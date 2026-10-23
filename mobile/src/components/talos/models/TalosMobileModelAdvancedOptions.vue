@@ -6,7 +6,7 @@ import { talosTranslatableErrorMessage } from '@/i18n/uiErrors'
 import { Plus, Trash2, Wrench } from '@lucide/vue'
 import TalosThemedSelect from '@/components/talos/ui/TalosThemedSelect.vue'
 import type { TalosMobileProviderId } from '@/components/chat/mobileChatTypes'
-import { TALOS_MOBILE_PROVIDERS, talosMobileProviderById } from '@/lib/mobileProviders'
+import { TALOS_MOBILE_PROVIDERS, talosMobileProviderLabel } from '@/lib/mobileProviders'
 import { useChatController } from '@/stores/chatController'
 
 const controller = useChatController()
@@ -20,7 +20,7 @@ const busy = ref(false)
 const error = ref('')
 const providerItems = TALOS_MOBILE_PROVIDERS
     .filter((item): item is typeof item & { id: TalosMobileProviderId } => item.id !== 'unknown' && item.configurable)
-    .map((item) => ({ value: item.id, label: item.label }))
+    .map((item) => ({ value: item.id, label: talosMobileProviderLabel(item.id, t) }))
 const manualModels = computed(() => controller.modelLabPreferences.value.manual_models)
 
 function stableManualId(providerId: TalosMobileProviderId, modelId: string): string {
@@ -132,7 +132,7 @@ async function remove(id: string): Promise<void> {
             <li v-for="entry in manualModels" :key="entry.id" class="flex min-w-0 items-center gap-[var(--talos-space-inline)] py-[var(--talos-space-inline)]">
                 <div class="min-w-0 flex-1">
                     <div class="truncate text-sm font-medium text-[var(--talos-text)]">{{ entry.display_name }}</div>
-                    <div class="truncate font-mono text-2xs text-[var(--talos-muted)]">{{ talosMobileProviderById(entry.provider).label }} / {{ entry.model }}</div>
+                    <div class="truncate font-mono text-2xs text-[var(--talos-muted)]">{{ talosMobileProviderLabel(entry.provider, t) }} / {{ entry.model }}</div>
                 </div>
                 <button type="button" :aria-label="$t('models.removeManual', { name: entry.display_name })" :disabled="busy" class="inline-flex size-[var(--talos-touch-target)] items-center justify-center rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] text-[var(--talos-muted)] disabled:opacity-50" @click="remove(entry.id)">
                     <Trash2 class="size-[var(--talos-icon-size)]" aria-hidden="true" />

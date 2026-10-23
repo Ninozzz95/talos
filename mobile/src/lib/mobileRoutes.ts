@@ -15,6 +15,10 @@ export type TalosMobileRouteName =
     // K3-B2 (15/10/2026): il Codice sul motore nuovo, solo nella build di sviluppo con r4, accanto al Codice di oggi.
     | 'codice-r4'
     | 'toolforge'
+    // R-M3 (owner 20/10/2026): i computer collegati per il controllo remoto, nome del mockup v5.
+    | 'computer' | 'computer-item'
+    // R-M4: una sessione del PC nella schermata del Codice, sul canale remoto
+    | 'computer-codice'
 
 export interface TalosMobileRoute {
     name: TalosMobileRouteName
@@ -57,6 +61,8 @@ const loadCodiceR4Screen = () => import('@/screens/CodiceR4Screen.vue').then((mo
 // generato dal modello — vedi ADR-001 nel pacchetto d'origine.
 const loadToolForgeScreen = () => import('@/screens/ToolForgeScreen.vue').then((module) => module.default)
 const loadSettingsScreen = () => import('@/screens/SettingsScreen.vue').then((module) => module.default)
+const loadComputerScreen = () => import('@/screens/ComputerScreen.vue').then((module) => module.default)
+const loadComputerItemScreen = () => import('@/screens/ComputerItemScreen.vue').then((module) => module.default)
 const loadSettingsModelsScreen = () => import('@/screens/SettingsModelsScreen.vue').then((module) => module.default)
 const loadSettingsModelsProvidersScreen = () => import('@/screens/SettingsModelsProvidersScreen.vue').then((module) => module.default)
 const loadSettingsModelsCatalogScreen = () => import('@/screens/SettingsModelsCatalogScreen.vue').then((module) => module.default)
@@ -185,6 +191,11 @@ export const TALOS_MOBILE_ROUTES: readonly TalosMobileRoute[] = Object.freeze([
     // compatible, not implemented in v1"). Stesso schema di 'harness', che
     // non è nella lista `expected_desktop_feature_ids` per lo stesso motivo.
     { name: 'toolforge', path: '/toolforge', desktop_station_id: 'tool_forge', component: loadToolForgeScreen },
+    // R-M3 (owner 20/10/2026): il controllo remoto del PC dal telefono. Sul desktop è «Telefoni collegati» (r4 `src/remoto/`).
+    { name: 'computer', path: '/computer', desktop_station_id: 'remote_control', component: loadComputerScreen },
+    { name: 'computer-item', path: '/computer/:pcId', desktop_station_id: 'remote_control', component: loadComputerItemScreen, parent: 'computer' },
+    // R-M4: la stessa schermata del Codice, col ponte remoto (`CodiceR4Screen` legge `pcId`); torna al dettaglio del computer.
+    { name: 'computer-codice', path: '/computer/:pcId/codice/:id?', desktop_station_id: 'remote_control', component: loadCodiceR4Screen, parent: 'computer-item' },
     { name: 'settings', path: '/settings', desktop_station_id: 'settings', component: loadSettingsScreen },
     { name: 'settings-models', path: '/settings/models', desktop_station_id: 'settings', component: loadSettingsModelsScreen, parent: 'settings' },
     { name: 'settings-models-providers', path: '/settings/models/providers', desktop_station_id: 'settings', component: loadSettingsModelsProvidersScreen, parent: 'settings-models' },

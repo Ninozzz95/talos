@@ -28,7 +28,7 @@
  * solo la seconda lascerebbe la persona a cercare la scheda per conto suo.
  */
 import { describe, expect, it, vi } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 
 vi.mock('@/stores/settings', () => ({
     useSettingsStore: () => ({ state: { chat_layout: { message_style: 'sections', bubble_scale: 'compact' } } }),
@@ -254,11 +254,13 @@ describe('GESTITA-01 la riga compatta al posto della bolla «gestita»', () => {
         })
     }
 
-    it('bolla vuota risolta: sparisce, e la risposta dopo dice com’è andata per ogni strumento', () => {
+    // Le ricevute sono un pezzo pigro della lista (pacchetto d'avvio, 20/10/2026): arrivano al caricamento del modulo.
+    it('bolla vuota risolta: sparisce, e la risposta dopo dice com’è andata per ogni strumento', async () => {
         const wrapper = monta([
             messaggio({ id: 'sospesa', content: '', authorizationOutcome: ESITO }),
             messaggio({ id: 'risposta', content: 'Fatto.', metadata: {} }),
         ])
+        await ricevuteCaricate()
         const sospesa = wrapper.get('[data-message-id="sospesa"]')
         expect(sospesa.classes()).toContain('hidden')
         const righe = wrapper.get('[data-message-id="risposta"]').findAll('[data-testid="talos-authorization-outcome"]')
@@ -268,8 +270,9 @@ describe('GESTITA-01 la riga compatta al posto della bolla «gestita»', () => {
         expect(wrapper.find('[data-testid="talos-authorization-pending-done"]').exists()).toBe(false)
     })
 
-    it('se il modello aveva scritto qualcosa la bolla resta, con la riga al posto di «gestita»', () => {
+    it('se il modello aveva scritto qualcosa la bolla resta, con la riga al posto di «gestita»', async () => {
         const wrapper = monta([messaggio({ id: 'sospesa', authorizationOutcome: ESITO })])
+        await ricevuteCaricate()
         const sospesa = wrapper.get('[data-message-id="sospesa"]')
         expect(sospesa.classes()).not.toContain('hidden')
         expect(sospesa.findAll('[data-testid="talos-authorization-outcome"]')).toHaveLength(2)
@@ -307,3 +310,9 @@ describe('GESTITA-01 la riga compatta al posto della bolla «gestita»', () => {
         expect(wrapper.find('[data-testid="talos-authorization-outcome"]').exists()).toBe(false)
     })
 })
+
+/** Il modulo pigro delle ricevute caricato e disegnato. */
+async function ricevuteCaricate(): Promise<void> {
+    await vi.dynamicImportSettled()
+    await flushPromises()
+}

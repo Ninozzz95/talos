@@ -77,6 +77,25 @@ describe('il catalogo della chat offre solo modelli con cui si parla', () => {
         expect(catalogo.models).toHaveLength(2)
     })
 
+    /*
+     * Visto sul Pad il 21/10/2026 (riprese del video): sotto LOCAL il selettore offriva come modelli di chat i quattro file della
+     * dettatura sul dispositivo (`encoder.int8.onnx`, `decoder.int8.onnx`, `joiner.int8.onnx`, `tokens.txt`). Non dichiarano
+     * `conversational` e passavano il filtro «nel dubbio si mostra»; ma questo motore apre solo GGUF: un file che non è GGUF non è
+     * un modello di chat, a prescindere da cosa dichiara.
+     */
+    it('⛔ non offre i file della dettatura (non GGUF)', async () => {
+        installati.models = [
+            file('LFM2.5-2.6B-QAD-Q4_0.gguf'),
+            file('encoder.int8.onnx'),
+            file('decoder.int8.onnx'),
+            file('joiner.int8.onnx'),
+            file('tokens.txt'),
+        ]
+        const { localAdapter } = await import('@/lib/chat/providers/localAdapter')
+        const catalogo = await localAdapter.listModels()
+        expect(catalogo.models.map((m) => m.displayName)).toEqual(['LFM2.5-2.6B-QAD-Q4_0'])
+    })
+
     it('e se sono TUTTI proiettori, il catalogo è vuoto invece che sbagliato', async () => {
         installati.models = [file('mmproj-F16.gguf', false)]
         const { localAdapter } = await import('@/lib/chat/providers/localAdapter')

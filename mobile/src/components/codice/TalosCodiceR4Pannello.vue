@@ -41,6 +41,11 @@ const props = defineProps<{
     azioneFile?: InstanceType<typeof TalosCodiceR4File>['$props']['azioneFile']
     /** Pad 16/10: la memoria del pannello (scheda, e lo stato della scheda File), una per sessione, tenuta dalla schermata. */
     memoria?: MemoriaPannelloR4
+    /**
+     * ⛔ RA-11 (revisione avversariale R-M4, 21/10/2026): sulla sessione di un PC l'albero della cartella e le azioni sui processi si
+     * fanno dal PC (il ponte remoto li rifiuta): la scheda File lo dice invece dell'albero, i Processi spengono le azioni col perché.
+     */
+    soloDalPc?: string
 }>()
 const emit = defineEmits<{ apriDelega: [sessionId: string]; allega: [percorsi: string[]] }>()
 const { locale } = useTalosI18n()
@@ -181,6 +186,7 @@ const agentiAttivi = computed(() => contaAgentiAttiviR4(agenti.value))
             :processi="processi"
             :azione="azioneProcesso"
             :carica-risorse="caricaRisorse"
+            :solo-dal-pc="soloDalPc"
         />
         <div v-else role="tabpanel" data-testid="talos-codice-r4-pannello-file" class="flex flex-col gap-2 py-3">
             <p class="talos-codice-r4-nota">{{ riassuntoFileR4(pannello.file, locale) }}</p>
@@ -188,8 +194,9 @@ const agentiAttivi = computed(() => contaAgentiAttiviR4(agenti.value))
             <dl v-else class="talos-codice-r4-sezione">
                 <div v-for="r in file" :key="r[0]" class="talos-codice-r4-kv" :data-file="r[0]"><dt class="font-mono">{{ r[0] }}</dt><dd>{{ r[1] }}</dd></div>
             </dl>
+            <p v-if="soloDalPc" data-testid="talos-codice-r4-file-solo-dal-pc" class="talos-codice-r4-nota" role="status">{{ $t('computer.filesOnlyFromPc') }}</p>
             <TalosCodiceR4File
-                v-if="caricaAlbero && cercaFile && apriFile"
+                v-else-if="caricaAlbero && cercaFile && apriFile"
                 :carica-albero="caricaAlbero"
                 :cerca-file="cercaFile"
                 :apri-file="apriFile"

@@ -123,7 +123,7 @@ export const TALOS_PERMISSION_ROWS: readonly TalosPermissionRow[] = [
         id: 'calendar',
         title: 'Calendar',
         kind: 'runtime',
-        purpose: 'Answering "what do I have tomorrow", and putting an appointment in when you ask. Reading and writing are two separate permissions, asked at different moments, and every single appointment TALOS writes is confirmed by you first. Nothing leaves the phone.',
+        purpose: 'Answering "what do I have tomorrow", and putting an appointment in when you ask. Reading and writing are two separate permissions, asked at different moments, and every single appointment TALOS writes is confirmed by you first. Nothing leaves the device.',
     },
     /*
      * ⭐⭐ IL CONTATORE DI GMAIL — 2026-08-14, e non è un permesso di Android.
@@ -143,7 +143,7 @@ export const TALOS_PERMISSION_ROWS: readonly TalosPermissionRow[] = [
         id: 'mailCount',
         title: 'Unread mail count',
         kind: 'runtime',
-        purpose: 'Answering "how much unread mail do I have". TALOS reads Gmail’s own counter on this phone and gets a number, per account — never the sender, the subject or the text of an email, which this route cannot reach at all. Nothing leaves the phone.',
+        purpose: 'Answering "how much unread mail do I have". TALOS reads Gmail’s own counter on this device and gets a number, per account — never the sender, the subject or the text of an email, which this route cannot reach at all. Nothing leaves the device.',
     },
     /*
      * ⛔ C'era da prima e non era elencata: `CAMERA` è dichiarata nel manifest
@@ -206,7 +206,7 @@ export const TALOS_PERMISSION_ROWS: readonly TalosPermissionRow[] = [
         id: 'background',
         title: 'Running in the background',
         kind: 'exemption',
-        purpose: 'Long tasks — a research, a model download — keep going after you leave the app or lock the screen. Without it the phone suspends TALOS within seconds and the work is lost; this is the one setting that decides it.',
+        purpose: 'Long tasks — a research, a model download — keep going after you leave the app or lock the screen. Without it the device suspends TALOS within seconds and the work is lost; this is the one setting that decides it.',
     },
     {
         id: 'network',
@@ -241,17 +241,17 @@ export const TALOS_PERMISSION_ROWS: readonly TalosPermissionRow[] = [
         id: 'notificationAccess',
         title: 'Reading your notifications',
         kind: 'special',
-        purpose: 'Telling you what arrived and replying for you. TALOS sees the notifications of every app on this phone, including their text — this is the widest window it has into your device, and it stays closed until you open it by hand in system settings.',
+        purpose: 'Telling you what arrived and replying for you. TALOS sees the notifications of every app on this device, including their text — this is the widest window it has into your device, and it stays closed until you open it by hand in system settings.',
     },
     {
         id: 'bridge',
-        title: 'Running commands on this phone',
+        title: 'Running commands on this device',
         kind: 'special',
-        purpose: 'Doing things Android does not offer apps: listing what is installed, changing system settings, reaching parts of the phone no app can. It runs with the same powers as a computer plugged in over USB. Nothing works until you pair it once with a six-digit code you read on your own screen, and every command still passes your permission gate.',
+        purpose: 'Doing things Android does not offer apps: listing what is installed, changing system settings, reaching parts of the device no app can. It runs with the same powers as a computer plugged in over USB. Nothing works until you pair it once with a six-digit code you read on your own screen, and every command still passes your permission gate.',
     },
     {
         id: 'deviceControl',
-        title: 'Controlling the phone',
+        title: 'Controlling the device',
         kind: 'none',
         purpose: 'Torch, volume, alarms, wallpaper, opening an app or a settings screen. None of these needs a permission — Android lets any app do them — so the only thing standing between a request and the action is the permission gate you control in Tools.',
     },
@@ -259,7 +259,7 @@ export const TALOS_PERMISSION_ROWS: readonly TalosPermissionRow[] = [
         id: 'localModel',
         title: 'Models that run here',
         kind: 'none',
-        purpose: 'A model downloaded onto this phone answers without the network. What you write to it never leaves the device — not to us, not to anyone — and it keeps working with the phone in flight mode.',
+        purpose: 'A model downloaded onto this device answers without the network. What you write to it never leaves the device — not to us, not to anyone — and it keeps working with the device in flight mode.',
     },
 ]
 

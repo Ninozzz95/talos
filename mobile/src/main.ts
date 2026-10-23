@@ -145,6 +145,13 @@ async function bootstrapTalosMobileApp(): Promise<void> {
         await talosAscoltaLaConsegna((sessione) => talosConsegnaLaSessione(controller, router, sessione))
     })()
 
+    /*
+     * R-M3 (20/10/2026): un collegamento `talos-remote:` aperto sul telefono porta alla sezione «Computer», che lo prende come un QR.
+     * Dopo il `mount` e con `void`, come la consegna qui sopra: non costa niente a chi apre l'app dall'icona.
+     */
+    void import('@/lib/remoto/linkRemoto').then(({ ascoltaLinkRemoti }) =>
+        ascoltaLinkRemoti(() => { void router.push({ name: 'computer' }) }))
+
     const warm = (): void => {
         void preloadTalosMobileRoutes()
             // Observable signal: the shell is interactive BEFORE this resolves, but

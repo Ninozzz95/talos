@@ -740,7 +740,7 @@ describe('ChatScreen (functional, local-first)', () => {
 
         const notice = wrapper.get('[data-testid="talos-temporary-chat-notice"]')
         // Both halves. The second is the one nobody else writes.
-        expect(notice.text()).toContain('Not saved on this phone')
+        expect(notice.text()).toContain('Not saved on this device')
         expect(notice.text()).toContain('provider still receives it')
         expect(wrapper.findComponent(TalosMobileMessageList).exists()).toBe(true)
     })

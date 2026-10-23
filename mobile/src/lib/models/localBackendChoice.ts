@@ -425,8 +425,11 @@ export interface TalosLocalBackendInUse {
 export interface TalosLocalBackendSnapshot {
     /** Il dispositivo risolto, quando un bersaglio era stato nominato. `null` altrimenti. */
     backendDevice: string | null
-    /** Gli strati CHIESTI, già azzerati dal nativo se nessun acceleratore esiste in questa build. */
-    gpuLayersEffective: number
+    /**
+     * Gli strati CHIESTI, già azzerati dal nativo se nessun acceleratore esiste in questa build. `null` = il ponte non
+     * l'ha detto: non è «zero», e quindi non è «CPU».
+     */
+    gpuLayersEffective: number | null
     /** Quanti dispositivi di offload il motore ha registrato. `null` = ponte più vecchio, non «zero». */
     offloadDevices: number | null
 }
@@ -445,4 +448,47 @@ export function talosLocalBackendInUse(
         return { requested, actual: 'cpu', fellBack: false, reason: 'match' }
     }
     return { requested, actual: null, fellBack: false, reason: 'unknown' }
+}
+
+/**
+ * ⛔ Pad 22/10/2026 — su quale famiglia gira il modello GIÀ APERTO, dai soli fatti certi della snapshot nativa.
+ *
+ * Serve a chi trova il modello aperto e deve decidere se tenerlo: senza questa domanda un modello aperto sulla CPU
+ * dal riscaldamento restava sulla CPU per tutta la conversazione, con la misura dell'NPU in mano.
+ *
+ *  - un dispositivo risolto (`backendDevice`) è una conferma: il nativo lo valorizza solo quando un bersaglio è stato
+ *    nominato e si è risolto. Il NOME del dispositivo, non quello del registry: `HTP0` per l'NPU — lo stesso criterio
+ *    di PocketPal (`utils/deviceSelection.ts`, `deviceName.startsWith('HTP')`) —, `GPUOpenCL` per la scheda grafica;
+ *  - zero strati spostati, senza dispositivo, è la CPU;
+ *  - tutto il resto è `null`, «non lo so», e chi chiede non deve riaprire su una deduzione.
+ */
+export function talosLocalBackendKindOpen(
+    snapshot: Pick<TalosLocalBackendSnapshot, 'backendDevice' | 'gpuLayersEffective'>,
+): TalosLocalBackendKind | null {
+    const dispositivo = snapshot.backendDevice?.trim() ?? ''
+    if (dispositivo !== '') return dispositivo.toUpperCase().startsWith('HTP') ? 'hexagon' : 'gpu'
+    return snapshot.gpuLayersEffective === 0 ? 'cpu' : null
+}
+
+/**
+ * ⛔⛔⛔ QUANTO SI ASPETTANO LE MISURE — la spiegazione intera sta in `services/localEngine.ts`, sopra
+ * `backendDelRiscaldamento` (la diagnosi dei 32 secondi del 10/09): `talosLocalPerformanceProfiles` gira sul filo unico
+ * `qualificationWorker`, lo stesso delle qualificazioni, e dietro una qualificazione in corso risponde dopo minuti.
+ *
+ * Vive qui, nel modulo puro, perché lo usano due chiamanti: il riscaldamento e la chat (o il Codice) che trova il modello
+ * GIÀ APERTO e si chiede se riaprirlo (revisione del 22/10/2026, rilievo 2). Oltre il tetto il modello aperto si tiene.
+ */
+export const TALOS_WARM_PROFILES_BUDGET_MS = 1_500
+
+/** Il valore, o `null` se non è arrivato entro il tetto. Non annulla niente: smette di aspettare. */
+export async function talosEntroIlTetto<T>(lavoro: Promise<T>, tettoMs: number): Promise<T | null> {
+    let sveglia: ReturnType<typeof setTimeout> | undefined
+    try {
+        return await Promise.race([
+            lavoro,
+            new Promise<null>((risolvi) => { sveglia = setTimeout(() => risolvi(null), tettoMs) }),
+        ])
+    } finally {
+        if (sveglia !== undefined) clearTimeout(sveglia)
+    }
 }

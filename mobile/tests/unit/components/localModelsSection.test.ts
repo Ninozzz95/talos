@@ -813,7 +813,7 @@ describe('the verdict', () => {
         const wrapper = await screen()
 
         expect(wrapper.get('[data-testid="talos-models-verdict"]').text()).toContain('Not enough memory')
-        expect(wrapper.text()).toContain('more memory than this phone can give')
+        expect(wrapper.text()).toContain('more memory than this device can give')
         expect(wrapper.get('[data-testid="talos-models-counteroffer"]').text()).toContain('8192')
     })
 

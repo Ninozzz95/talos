@@ -131,7 +131,8 @@ describe('the transfer job and the permissions its scheduler requires', () => {
 
     it('C45-RED-05 gives the notification a real Pause action and local-model destination', () => {
         expect(transferNotification).toContain('ACTION_PAUSE')
-        expect(transferNotification).toContain('.addAction(0, "Pause"')
+        // N0 (21/10/2026): il testo del pulsante viene da `R.string` (en + it), non più scritto nel codice
+        expect(transferNotification).toContain('.addAction(0, context.getString(R.string.talos_download_pausa)')
         expect(transferNotification).toContain('"/settings/models/local"')
         expect(transferControl).toContain('ACTION_PAUSE')
         expect(transferControl).toContain('StopCause.USER_PAUSE')

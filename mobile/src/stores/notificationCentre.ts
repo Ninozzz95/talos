@@ -60,6 +60,7 @@ type Sink = (event: TalosNotificationEvent) => void
 
 let toastSink: Sink | null = null
 let androidSink: Sink | null = null
+let cancelSink: ((key: string) => void) | null = null
 
 /** Collega il toast dentro l'app. Passare `null` lo stacca (prove, smontaggio). */
 export function talosOnNotificationToast(sink: Sink | null): void {
@@ -69,6 +70,14 @@ export function talosOnNotificationToast(sink: Sink | null): void {
 /** Collega la notifica di sistema. Assente = build senza ponte nativo, e va bene. */
 export function talosOnNotificationAndroid(sink: Sink | null): void {
     androidSink = sink
+}
+
+/**
+ * Collega il ritiro della notifica di sistema (N0, 21/10/2026, D-N0-2): una richiesta già decisa non resta in tendina.
+ * Assente = build senza ponte nativo.
+ */
+export function talosOnNotificationCancel(sink: ((key: string) => void) | null): void {
+    cancelSink = sink
 }
 
 /** Lo dice chi osserva il ciclo di vita: cambia DOVE va un evento, non se. */
@@ -101,6 +110,15 @@ export function talosNotify(event: TalosNotificationEvent): void {
         surface: state.surface,
     })
 
+    /*
+     * La stessa cosa chiedeva una decisione e adesso non più (il piano approvato, annullato o fermato): la sua notifica in
+     * tendina non è più vera. Si ritira PRIMA di un eventuale nuovo post sullo stesso id.
+     */
+    const chiedeva = state.entries.find((voce) => voce.key === event.key)?.weight === 'demanding'
+    if (chiedeva && event.weight !== 'demanding' && cancelSink) {
+        try { cancelSink(event.key) } catch { /* la tendina possiede il suo guasto */ }
+    }
+
     state.entries = talosAppendNotification(state.entries, event)
     state.unread = talosUnreadCount(state.entries)
 
@@ -126,4 +144,5 @@ export function talosResetNotificationCentre(): void {
     state.surface = null
     toastSink = null
     androidSink = null
+    cancelSink = null
 }

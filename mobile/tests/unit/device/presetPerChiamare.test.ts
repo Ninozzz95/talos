@@ -180,7 +180,7 @@ describe('i preset per chiamare TALOS', () => {
             TALOS_EN_MESSAGES.privilege.presetState.pronto,
         )
         // E il corpo dice a chi resta la decisione, e dove andare se non va.
-        expect(TALOS_IT_MESSAGES.privilege.preset.accensione.body).toContain('il telefono a decidere')
+        expect(TALOS_IT_MESSAGES.privilege.preset.accensione.body).toContain('il dispositivo a decidere')
         expect(TALOS_IT_MESSAGES.privilege.preset.accensione.body).toContain('tasti del volume')
     })
 })

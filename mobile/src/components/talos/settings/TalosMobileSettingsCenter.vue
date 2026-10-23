@@ -2,7 +2,7 @@
 import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, ref, watch, type Component } from 'vue'
 import { useTalosI18n } from '@/i18n'
 import TalosMobilePageHeader from '@/components/talos/ui/TalosMobilePageHeader.vue'
-import { Bell, Bot, BrainCircuit, ChevronRight, Globe2, Languages, Mail, Palette, Scale, Search, Settings, Shield, ShieldCheck, Smartphone, DatabaseBackup, User, Volume2, Wrench } from '@lucide/vue'
+import { Bell, Bot, BrainCircuit, ChevronRight, Download, Globe2, Languages, Mail, Palette, Scale, Search, Settings, Shield, ShieldCheck, Smartphone, DatabaseBackup, User, Volume2, Wrench } from '@lucide/vue'
 import { useTalosSheetNav } from '@/composables/useTalosSheetNav'
 import { useTalosMediaQuery } from '@/composables/useTalosMediaQuery'
 import { useTalosAccountStore } from '@/stores/account'
@@ -184,6 +184,7 @@ const ICONS: Record<TalosMobileSettingsTabId, Component> = {
     account: User,
     agent_tools: Shield,
     legal: Scale,
+    updates: Download,
     system: Settings,
 }
 
@@ -220,6 +221,8 @@ const LOCAL_PANELS: Partial<Record<TalosMobileSettingsTabId, Component>> = {
     agent_tools: TalosMobileSettingsAgentToolsPanel,
     // Pigro: porta con sé gli elenchi generati delle licenze (centinaia di KB).
     legal: defineAsyncComponent(() => import('./TalosMobileSettingsLegalPanel.vue')),
+    // Pigro: porta con sé il servizio dell'aggiornamento, che fuori da qui si carica dopo l'avvio.
+    updates: defineAsyncComponent(() => import('./TalosMobileSettingsUpdatesPanel.vue')),
 }
 
 </script>

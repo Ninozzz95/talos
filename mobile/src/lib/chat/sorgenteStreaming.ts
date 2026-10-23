@@ -7,6 +7,7 @@
  */
 import { computed, type ComputedRef, type InjectionKey } from 'vue'
 import type { TalosAttrezzoDelGiro, TalosConfineDelGiro } from '@/lib/chat/sequenzaDelTurno'
+import type { TalosBozzaAttrezzo } from '@/lib/chat/providerContracts'
 
 export interface TalosSorgenteStreaming {
     /** Vero mentre il giro di QUESTA conversazione sta arrivando. */
@@ -17,6 +18,11 @@ export interface TalosSorgenteStreaming {
     ragionamento: ComputedRef<string>
     confini: ComputedRef<readonly TalosConfineDelGiro[]>
     attivi: ComputedRef<readonly TalosAttrezzoDelGiro[]>
+    /**
+     * ⛔ Owner 20/10/2026: gli attrezzi che il modello sta ancora scrivendo (nome e crescita), prima che il giro parta.
+     * OPZIONALE: una sorgente che non li conosce (il Codice su r4) resta valida e mostra quello che mostrava.
+     */
+    bozze?: ComputedRef<readonly TalosBozzaAttrezzo[]>
 }
 
 export const TALOS_SORGENTE_STREAMING: InjectionKey<TalosSorgenteStreaming> = Symbol('talos-sorgente-streaming')
@@ -28,6 +34,7 @@ interface ControllerDellaChat {
             streamingText: string | null
             streamingReasoning: string | null
             streamingConfini: readonly TalosConfineDelGiro[] | null
+            streamingBozze?: readonly TalosBozzaAttrezzo[] | null
             streamingSessionId: string | null
         }
         activeSession: { value: { id: string } | null | undefined }
@@ -50,5 +57,6 @@ export function talosSorgenteStreamingDellaChat(controller: ControllerDellaChat)
         ragionamento: computed(() => state.streamingReasoning ?? ''),
         confini: computed(() => state.streamingConfini ?? []),
         attivi: computed(() => controller.toolActivity.value),
+        bozze: computed(() => state.streamingBozze ?? []),
     }
 }

@@ -29,6 +29,7 @@ import TalosMobileComposerSheet from '@/components/chat/TalosMobileComposerSheet
 import TalosCodiceR4Terminale from '@/components/codice/TalosCodiceR4Terminale.vue'
 import TalosCodiceR4Viste, { type VistaCodiceR4 } from '@/components/codice/TalosCodiceR4Viste.vue'
 import TalosCodiceR4Revisione from '@/components/codice/TalosCodiceR4Revisione.vue'
+import TalosCodiceR4RigaViva from '@/components/codice/TalosCodiceR4RigaViva.vue'
 import { numeroSchedaRevisioneR4 } from '@/lib/harness/r4/revisioneR4'
 // K3-C Accoda: la striscia della coda, caricata a richiesta come nella chat (la coda esiste solo quando qualcuno ha accodato)
 const TalosCodiceR4Coda = defineAsyncComponent(() => import('@/components/codice/TalosCodiceR4Coda.vue'))
@@ -43,13 +44,18 @@ import { creaMemoriaPannelloR4 } from '@/lib/harness/r4/memoriaPannelloR4'
 import { riassuntoSenzaChiedereR4, tonoPermessoR4 } from '@/lib/harness/r4/permessiR4'
 import { testoPianoR4 } from '@/lib/harness/r4/pianoR4'
 import { Keyboard } from '@capacitor/keyboard'
-import { ArrowDown, ClipboardList, ShieldCheck, X } from '@lucide/vue'
+import { ArrowDown, ClipboardList, ShieldCheck, SquareTerminal, X } from '@lucide/vue'
 import type { PluginListenerHandle } from '@capacitor/core'
 import type { TalosAzioneMessaggio } from '@/components/chat/mobileChatTypes'
 import { TALOS_SORGENTE_STREAMING, type TalosSorgenteStreaming } from '@/lib/chat/sorgenteStreaming'
 import { TALOS_CLASSE_COLONNA_CHAT } from '@/lib/chat/colonnaChat'
 import { shareTalosMessageMarkdown } from '@/lib/chat/messageShare'
-import { talosClienteR4 } from '@/lib/harness/r4/clienteR4'
+import { talosClienteR4, type TalosR4ClientePonte } from '@/lib/harness/r4/clienteR4'
+import { apriPonteRemoto } from '@/lib/remoto/sessioneRemota'
+import { idValidoDelPc } from '@/lib/remoto/ponteRemotoR4'
+import { leggiModelliDelPc, type ModelliDelPc } from '@/lib/remoto/modelliDelPc'
+import { pluginRemoto } from '@/lib/remoto/pluginRemoto'
+import { carteAperteR4, creaSegnaleVista } from '@/lib/remoto/cartaVista'
 import { TALOS_APPROVAZIONI_R4 } from '@/lib/harness/r4/approvazioniPonte'
 import { talosR4Pronto } from '@/lib/harness/terminalePonte'
 import { ROTTA_RIPIEGO_R4 } from '@/lib/harness/r4/sceltaCodiceR4'
@@ -68,9 +74,10 @@ import { getProviderKey } from '@/services/secureKeyStore'
 import { clampMobileEffortFor } from '@/lib/mobileEffort'
 import type { TalosMobileModelProfileView } from '@/components/chat/mobileChatTypes'
 import {
-    FORNITORI_DEL_CODICE_R4, MINIMO_ACCESSO_CHATGPT_R4_MS, fornitoreDelModelloR4, livelloDelRagionamentoR4, messaggioErroreModelloR4, modelloR4DelProfilo,
-    profiloDelModelloR4, ragionamentoR4, sincronizzaFornitoreR4, spingiAccessoChatgptR4,
+    FONTE_LOCALE_OSPITE_R4, FORNITORI_DEL_CODICE_R4, MINIMO_ACCESSO_CHATGPT_R4_MS, fornitoreDelModelloR4, livelloDelRagionamentoR4, messaggioErroreModelloR4,
+    modelloR4DelProfilo, nomeLocaleValidoR4, profiloDelModelloR4, ragionamentoR4, sincronizzaFornitoreR4, spingiAccessoChatgptR4, spingiAccessoLocaleR4,
 } from '@/lib/harness/r4/modelloR4'
+import { TALOS_CODICE_MIN_CONTEXT_TOKENS } from '@/lib/models/localContextPolicy'
 import { useTalosMobileToasts } from '@/stores/toasts'
 import type { TalosSorgenteEsportazione } from '@/lib/chat/sorgenteEsportazione'
 import type { FormatoEsportazioneR4 } from '@/lib/harness/r4/trascrizioneR4'
@@ -78,12 +85,35 @@ import { Button } from '@/components/ui/button'
 import { useAllegatiR4 } from '@/composables/useAllegatiR4'
 import { TALOS_BYTE_IMMAGINE } from '@/lib/chat/byteImmagine'
 import { bollaDaInviareR4, testoPerIlModelloR4 } from '@/lib/harness/r4/allegatiR4'
-import { TALOS_MOBILE_PROVIDERS } from '@/lib/mobileProviders'
+import { TALOS_MOBILE_PROVIDERS, talosMobileProviderLabel } from '@/lib/mobileProviders'
+import { talosSegnaleAggiornamento } from '@/lib/updates/segnaleAggiornamento'
 // la domanda sul consenso è quella della chat (`App.vue`), caricata solo quando serve
 const TalosMobileConfirmDialog = defineAsyncComponent(() => import('@/components/shell/TalosMobileConfirmDialog.vue'))
 
-const { t, locale } = useTalosI18n()
+const { t, tTesto, locale } = useTalosI18n()
 const route = useRoute()
+/**
+ * ⛔ R-M4 (controllo remoto, 20/10/2026): la stessa schermata sulla sessione di un PC accoppiato (`/computer/:pcId/codice/:id?`), col
+ * ponte remoto (`lib/remoto/ponteRemotoR4.ts`) al posto del client del r4 del telefono. In remoto non si spinge MAI al PC una chiave,
+ * l'accesso ChatGPT o il motore locale del telefono (`codiceR4Remoto.test.ts` REM-02): le guardie stanno nelle tre `sincronizza*`.
+ */
+const pcRemoto = typeof route.params.pcId === 'string' && route.params.pcId ? route.params.pcId : null
+/** R-M4 (owner 20/10/2026 «fra le cartelle ammesse»): la cartella del PC, per id, di una sessione nuova scelta dal dettaglio del computer. */
+const cartellaRemota = pcRemoto && idValidoDelPc(route.query?.cartella) ? route.query.cartella as string : null
+let ponteRemoto: TalosR4ClientePonte | null = null
+let chiudiPonteRemoto: (() => Promise<void>) | null = null
+let segnaVistaRemota: ((sessionId: string) => Promise<void>) | null = null
+const clienteR4 = (): TalosR4ClientePonte => ponteRemoto ?? talosClienteR4()
+/**
+ * ⛔ RA-11 (revisione avversariale R-M4, 21/10/2026; regola «no fake feature», deciso: «Solo dal computer»): in remoto ciò che il PC
+ * rifiuta al telefono (allegati, duplica, esporta, condividi, albero dei file, fidare un hook, azioni sui processi) si vede spento col
+ * perché, invece di offrirlo e fallire. Vuoto in locale: i componenti restano come prima.
+ */
+const soloDalPc = computed(() => (pcRemoto ? t('computer.onlyFromPc') : ''))
+/** La rotta di una sessione: quella del Codice, o quella del PC in remoto. */
+const rottaDellaSessione = (id?: string | null) => (pcRemoto
+    ? { name: 'computer-codice' as const, params: { pcId: pcRemoto, ...(id ? { id } : {}) } }
+    : { name: 'codice-r4' as const, ...(id ? { params: { id } } : {}) })
 const router = useRouter()
 const tabletLayout = useTalosTabletLayout()
 /**
@@ -91,6 +121,8 @@ const tabletLayout = useTalosTabletLayout()
  * sul tablet l'elenco sta nella colonna e `/harness` riaprirebbe l'ultima sessione (TAB-INDIETRO-01), quindi si esce verso la chat.
  */
 function indietro(): void {
+    // ⛔ RA-10 (revisione avversariale R-M4, 21/10/2026): in remoto «harness»/chat erano le sessioni del TELEFONO; si torna al computer
+    if (pcRemoto) { void router.push({ name: 'computer-item', params: { pcId: pcRemoto } }); return }
     void router.push(talosTabletStationParent(tabletLayout.isTablet.value, { name: 'harness' }) ?? { name: 'chat' })
 }
 /**
@@ -101,7 +133,7 @@ watch(() => talosCambiSessioniR4.value.n, () => {
     const cambio = talosCambiSessioniR4.value
     const conv = conversazione.value
     if (!conv || !cambio.id || cambio.id !== conv.sessioneId.value) return
-    if (cambio.eliminata) void router.replace({ name: 'codice-r4' })
+    if (cambio.eliminata) void router.replace(rottaDellaSessione())
     else if (cambio.nome) conv.titolo.value = cambio.nome
 })
 const settings = useSettingsStore()
@@ -186,13 +218,23 @@ const FRASI_DEL_PIANO: ReadonlySet<string> = new Set([
 ])
 const messaggi = computed(() => conversazione.value?.messaggi.value ?? [])
 const sending = computed(() => conversazione.value?.sorgente.sending.value ?? false)
+// l'aggiornamento automatico non sale e non riavvia sopra un giro che lavora (owner 22/10, 1 e «Riavvia ora»)
+watch(sending, (lavora) => { talosSegnaleAggiornamento.codiceAlLavoro = lavora }, { immediate: true })
+onBeforeUnmount(() => { talosSegnaleAggiornamento.codiceAlLavoro = false })
 const errore = computed(() => conversazione.value?.errore.value ?? null)
 // K3-C Scelta del modello: i rifiuti legati al modello (la chiave che manca, il nome, il livello) con le parole del desktop
 // ⛔ CHATGPT NEL CODICE: i codici del piano che il telefono dice già (la chat, «Modelli, sotto OpenAI») con le parole della chat;
 // gli altri (quelli di r4: custode, rotte) col dizionario del desktop
 const testoErrore = computed(() => {
     if (!errore.value) return ''
-    return FRASI_DEL_PIANO.has(errore.value.code) ? t(`models.chatgptErrors.${errore.value.code}`) : messaggioErroreModelloR4(errore.value, locale.value)
+    // ⛔ D-RM4-8 (revisione avversariale R-M4, 21/10/2026): in remoto la chiave che manca è quella del COMPUTER, e si collega dal PC
+    // («dalle impostazioni dei fornitori» sul telefono si leggeva come le impostazioni del telefono); in locale la frase del desktop
+    const { code, reason, params } = errore.value
+    if (pcRemoto && code === 'CONFIG_INVALID' && (reason === 'provider-key-missing' || reason === 'provider-key-missing-named')) {
+        return typeof params?.provider === 'string' && params.provider ? tTesto('computer.keyMissingOnPcNamed', { provider: params.provider }) : t('computer.keyMissingOnPc')
+    }
+    // ⛔ RA-08: le frasi del piano del TELEFONO («Modelli, sotto OpenAI») non valgono per il PC, che ha le sue (il dizionario del desktop)
+    return !pcRemoto && FRASI_DEL_PIANO.has(code) ? t(`models.chatgptErrors.${code}`) : messaggioErroreModelloR4(errore.value, locale.value)
 })
 
 /*
@@ -214,6 +256,37 @@ const coordinazione = computed(() => ({ ...(conversazione.value?.coordinazione.v
 const scegliCoordinazione = (accesa: boolean) => conversazione.value?.impostaCoordinazione(accesa) ?? Promise.resolve({ ok: false as const, messaggio: '' })
 /** La fascia «Piano attivo dal prossimo giro» (`PlanModeReadyNotice`): il modello ha chiesto il Piano, il giro che lo usa non è partito. */
 const pianoRichiesto = computed(() => conversazione.value?.pianoRichiesto.value === true && modalita.value === 'piano')
+/*
+ * ⭐ D-MO-12 (ledger `LEDGER-RIGA-VIVA-CODICE-2026-10-21.md`): la riga viva del riassunto che il giro aspetta, sopra il compositore
+ * (decisione dell'owner 21/10). Salta e Ferma solo per il riassunto dentro un giro: quello chiesto a mano non ha un giro da fermare.
+ */
+const rigaViva = computed(() => conversazione.value?.rigaViva.value ?? null)
+// revisione avversaria (1): «a mano» lo sa chi l'ha chiesta (il controllore), non il motivo dell'ultimo passo
+const rigaVivaConAzioni = computed(() => conversazione.value?.rigaVivaAMano.value !== true)
+const saltando = ref(false)
+async function saltaRiassunto(): Promise<void> {
+    if (saltando.value) return
+    saltando.value = true
+    const esito = await conversazione.value?.saltaRiassunto()
+    // saltato: la riga si chiude da sé alla fine del riassunto; altrimenti il pulsante torna e la persona sa perché
+    if (esito?.saltato !== true) {
+        saltando.value = false
+        toasts.push({ message: t(esito ? 'chat.compaction.live.nothingToSkip' : 'chat.compaction.live.skipFailed'), durationMs: 4000 })
+    }
+}
+// revisione avversaria (7): un riassunto NUOVO riaccende Salta anche se fine e inizio sono arrivati nello stesso pezzo del flusso
+watch(rigaViva, (riga, prima) => { if (!riga || (riga.tipo === 'inizio' && riga !== prima)) saltando.value = false })
+// revisione avversaria (5): un annullo solo per separatore anche a tocchi ravvicinati; il rifiuto lo dice la riga d'errore, una volta
+const annulliInVolo = new Set<string>()
+async function annullaCompattazione(at: string): Promise<void> {
+    if (annulliInVolo.has(at)) return
+    annulliInVolo.add(at)
+    try {
+        await conversazione.value?.annullaCompattazione(at)
+    } finally {
+        annulliInVolo.delete(at)
+    }
+}
 /**
  * L'avviso «Il piano è stato aggiornato (revisione n)» (`mostraAvvisoPiano`, `legacy/app.js:23787`): la carta del piano resta dov'è e
  * si aggiorna; dal vivo, se è fuori vista, questa riga porta lì. Si spegne quando la carta è in vista per almeno il 60 %: l'osservatore
@@ -254,6 +327,34 @@ watch(() => conversazione.value?.revisioneDalVivo.value ?? null, (r) => {
     void nextTick(osservaCartaDelPiano)
 })
 onBeforeUnmount(chiudiAvvisoPiano)
+// ⛔ RA-05 (revisione avversaria 21/10/2026): uscendo mentre il canale si apre, `chiudiPonteRemoto` non c'era ancora: il canale (e poi
+// la sessione col suo flusso) restavano accesi fino alla chiusura dell'app. Ora si segna l'uscita e chi apre dopo chiude subito.
+let smontata = false
+onBeforeUnmount(() => { smontata = true; void chiudiPonteRemoto?.() })
+
+/*
+ * ⛔ R-M5a, `device.seen` (contratto col Desktop del 21/10/2026, `cartaVista.ts`): solo nel Codice di un PC. Una carta aperta sullo
+ * schermo, con l'app visibile, si conferma al PC (che allora non sveglia per lei) e la sua notifica, se c'era, si toglie dalla tendina.
+ */
+const segnaleVista = pcRemoto ? creaSegnaleVista({
+    invia: async (sessionId, carte) => {
+        // D-RM5-4: prima il telefono (la notifica se ne va e la carta si ricorda vista), poi il PC (che può non rispondere)
+        await pluginRemoto()?.svegliaVista?.({ pcId: pcRemoto, sessionId, carte }).catch(() => undefined)
+        // revisione R-M5a bis (12): canale non ancora aperto = conferma non fatta (il segnale la ritenta)
+        if (!segnaVistaRemota) throw Object.assign(new Error('DISCONNECTED'), { code: 'DISCONNECTED' })
+        await segnaVistaRemota(sessionId)
+    },
+    visibile: () => document.visibilityState === 'visible',
+}) : null
+if (segnaleVista) {
+    // revisione R-M5a bis (8): la chiave del watch in JSON (un requestId può contenere qualunque carattere)
+    watch(() => [conversazione.value?.sessioneId.value ?? null, JSON.stringify(carteAperteR4(messaggi.value))] as const, ([id, carte]) => {
+        segnaleVista.aggiorna(id, JSON.parse(carte) as string[])
+    })
+    const allaVisibilita = () => { if (document.visibilityState === 'visible') segnaleVista.tornataVisibile(); else segnaleVista.nascosta() }
+    document.addEventListener('visibilitychange', allaVisibilita)
+    onBeforeUnmount(() => document.removeEventListener('visibilitychange', allaVisibilita))
+}
 
 /** La coda in streaming della chat legge il giro di r4 (vedi `sorgenteStreaming.ts`). */
 const sorgente: TalosSorgenteStreaming = {
@@ -292,22 +393,33 @@ const idDallaRotta = (): string | null => (typeof route.params.id === 'string' &
 
 /** Pad 16/10: la memoria del pannello ▤ (scheda, cartelle aperte, file scelti), una per sessione: la rotazione non la perde. */
 const memoriaPannello = shallowRef(creaMemoriaPannelloR4())
+/**
+ * Il profilo che si sta aprendo per il Codice (Pad 22/10/2026: secondi senza un segno, la persona ritoccava). Lo dice la riga del
+ * selettore; intanto né un'altra scelta né un invio partono (revisione avversaria 22/10, rilievo 5: l'invio aprirebbe il modello di
+ * prima in gara). Appartiene alla sua sessione (rilievo 6): `aperturaCorrente` dice di quale scelta è il segno, e cambiare sessione lo
+ * toglie.
+ */
+const modelloInApertura = ref<string | null>(null)
+let aperturaCorrente = 0
 /** Apre la conversazione di `id` (o una nuova). Quella di prima si chiude col suo scope: flusso chiuso, ascoltatori tolti. */
 async function apriSessione(id: string | null): Promise<void> {
+    aperturaCorrente += 1
+    modelloInApertura.value = null
     scope.stop()
     scope = effectScope()
     prompt.value = ''
     memoriaPannello.value = creaMemoriaPannelloR4()
     allegati.svuota()
     conversazione.value = scope.run(() => useConversazioneR4({
-        cliente: talosClienteR4(), cartella: cartellaDiLavoro, sessioneId: id,
+        cliente: clienteR4(), cartella: cartellaDiLavoro, sessioneId: id, cartellaId: id ? null : cartellaRemota,
         // K3-C Scelta del modello (owner 16/10 «alla scelta e a ogni invio»): la chiave dell'app in r4 prima di ogni giro
-        primaDiInviare: (modello) => sincronizzaFornitore(fornitoreDelModelloR4(modello)),
+        primaDiInviare: (modello) => sincronizzaFornitore(fornitoreDelModelloR4(modello), modello),
         // ⛔ CHATGPT NEL CODICE: r4 dice che il token del piano va rinnovato ⇒ il custode della chat rinnova (forzato) e si rispinge
         rinnovaAccesso: () => sincronizzaChatgpt(true),
         // ⛔ e i suoi giri nel conto del piano, come la chat (`chatController` N15): una riga per richiesta, i token sulla prima
         suConsumo: ({ richieste, token }) => {
-            if (fornitoreDelModelloR4(conversazione.value?.modello.value) !== 'chatgpt') return
+            // ⛔ RA-08 (revisione avversariale R-M4): i giri di una sessione del PC non sono del piano del TELEFONO
+            if (pcRemoto || fornitoreDelModelloR4(conversazione.value?.modello.value) !== 'chatgpt') return
             void contoDelPiano().then((conto) => {
                 for (let i = 0; i < Math.max(1, richieste); i += 1) conto.registra(i === 0 ? token : null)
             }).catch(() => undefined)
@@ -319,6 +431,37 @@ async function apriSessione(id: string | null): Promise<void> {
 
 onMounted(async () => {
     void ascoltaTastiera()
+    if (pcRemoto) {
+        // R-M4: una sessione che il PC ha già, o una nuova in una cartella scelta dal dettaglio del computer (Q2, owner 20/10)
+        if (!idDallaRotta() && !cartellaRemota) {
+            toasts.push({ message: t('computer.newSessionOnPc'), durationMs: 6000 })
+            void router.replace({ name: 'computer-item', params: { pcId: pcRemoto } })
+            return
+        }
+        // il canale di lavoro verso il PC; se non si raggiunge si torna al suo dettaglio, col perché
+        try {
+            const plugin = pluginRemoto()
+            if (!plugin) throw Object.assign(new Error('NOT_PAIRED'), { code: 'NOT_PAIRED' })
+            const aperto = await apriPonteRemoto(plugin, pcRemoto, { soloDalPc: () => t('computer.onlyFromPc') })
+            if (smontata) { await aperto.chiudi(); return }
+            ponteRemoto = aperto.ponte
+            chiudiPonteRemoto = aperto.chiudi
+            segnaVistaRemota = aperto.segnaVista
+            // ⛔ D-RM5-3 (dal Pad, 21/10/2026): una richiesta risolta altrove resta nella tendina finché il PC non sveglia di nuovo;
+            // aprendo il Codice del PC il telefono rilegge cosa aspetta davvero e toglie le notifiche che non valgono più
+            void plugin.svegliaRiallinea?.({ pcId: pcRemoto }).catch(() => undefined)
+            // i modelli del PC per il foglio, senza fermare l'apertura della sessione
+            void leggiModelliDelPc(aperto.ponte, { nessunFornitore: t('computer.noProviders'), modelliIlleggibili: t('computer.modelsUnreadable') }).then((m) => { modelliDelPc.value = m })
+        } catch {
+            fase.value = 'assente'
+            toasts.push({ message: t('computer.errors.unreachable'), durationMs: 6000 })
+            void router.replace({ name: 'computer-item', params: { pcId: pcRemoto } })
+            return
+        }
+        fase.value = 'pronta'
+        await apriSessione(idDallaRotta())
+        return
+    }
     const stato = await talosR4Pronto()
     if (!stato) {
         fase.value = 'assente'
@@ -335,7 +478,7 @@ onMounted(async () => {
 
 // La sessione appena creata entra nell'indirizzo: ricaricando si riapre la stessa conversazione.
 watch(() => conversazione.value?.sessioneId.value ?? null, (id) => {
-    if (id && route.params.id !== id) void router.replace({ name: 'codice-r4', params: { id } })
+    if (id && route.params.id !== id) void router.replace(rottaDellaSessione(id))
 })
 
 // K3-C2: una delega aperta dall'albero cambia la sessione nella rotta; la schermata la segue.
@@ -348,7 +491,7 @@ watch(() => route.params.id, () => {
 
 function apriDelega(id: string): void {
     foglio.value = null
-    void router.push({ name: 'codice-r4', params: { id } })
+    void router.push(rottaDellaSessione(id))
 }
 /** K3-C3b-2b: dalla scheda Agenti. Sul telefono il foglio del pannello si chiude (sul tablet la colonna resta). */
 /**
@@ -386,15 +529,16 @@ async function eseguiComando(comando: ComandoCodiceR4): Promise<void> {
     foglio.value = null
     const c = conversazione.value
     switch (comando) {
-        case 'nuova': void router.push({ name: 'codice-r4' }); break
+        // in remoto la cartella di una sessione nuova si sceglie dal dettaglio del computer (Q2)
+        case 'nuova': void router.push(pcRemoto ? { name: 'computer-item', params: { pcId: pcRemoto } } : rottaDellaSessione()); break
         case 'rinomina': foglio.value = 'rinomina'; break
         case 'duplica': {
             const id = await c?.duplica()
-            if (id) void router.push({ name: 'codice-r4', params: { id } })
+            if (id) void router.push(rottaDellaSessione(id))
             break
         }
         case 'riprendi': void c?.riprendi(); break
-        case 'compatta': void compattaIlContesto(); break
+        case 'compatta': confermaCompatta.value = true; break
         case 'albero': foglio.value = 'albero'; break
         case 'hook': foglio.value = 'hook'; break
         case 'doctor': foglio.value = 'doctor'; break
@@ -496,14 +640,14 @@ async function inviaDettatura(): Promise<void> {
  * modello. Il consenso delle immagini è quello della chat, col nome del fornitore del modello del Codice.
  */
 const allegati = useAllegatiR4({
-    cliente: talosClienteR4,
+    cliente: clienteR4,
     fotocamera: async () => (await import('@/services/nativeCamera')).createTalosNativeCamera(),
     selettoreFile: async () => (await import('@/services/nativeFilePicker')).createNativeFilePicker(),
     consenso: () => settings.state.shell.image_attachment_consent ?? 'ask',
     ricordaSempre: async () => { await settings.setShell({ image_attachment_consent: 'allow' }).catch(() => undefined) },
     fornitore: () => {
         const id = fornitoreDelModelloR4(conversazione.value?.modello.value)
-        return { id, nome: TALOS_MOBILE_PROVIDERS.find((p) => p.id === id)?.label ?? t('chat.imageConsentProviderUnknown') }
+        return { id, nome: TALOS_MOBILE_PROVIDERS.some((p) => p.id === id) ? talosMobileProviderLabel(id, t) : t('chat.imageConsentProviderUnknown') }
     },
     lingua: () => locale.value,
     t: (chiave) => t(chiave),
@@ -519,6 +663,7 @@ function messaggioConAllegati(scritto: string) {
 }
 
 async function invia(): Promise<void> {
+    if (modelloInApertura.value) return // il modello scelto si sta ancora aprendo (rilievo 5)
     const scritto = prompt.value
     if (!conversazione.value || (!scritto.trim() && !allegati.pronte().voci.length)) return
     if (!(await allegati.puoPartire())) return
@@ -534,7 +679,8 @@ async function invia(): Promise<void> {
  * ⛔ K3-C Scelta del modello (ledger `LEDGER-K3-MODELLO-2026-10-16.md`; owner 16/10): la stessa pastiglia e lo stesso foglio della
  * chat, coi profili che la chat ha già caricato (letti, mai cambiati: la chat aperta resta la sua). Il modello e il livello li dice
  * r4: la pastiglia cambia solo dopo che `/settings` li ha accettati (come il desktop, `legacy/app.js:7600`, e Hermes).
- *   · fuori dal Codice il motore dentro l'app: r4 non lo raggiunge, e la frase lo dice nel foglio;
+ *   · ⛔ il motore dentro l'app (owner 18/10, ledger `LEDGER-CODICE-MOTORE-LOCALE-2026-10-18.md`): il modello si apre con la finestra del
+ *     Codice (minimo 24k) e l'endpoint sul socket privato va in r4, alla scelta e prima di ogni giro (`sincronizzaLocale`);
  *   · ⛔ il piano ChatGPT (owner 18/10, ledger `LEDGER-CHATGPT-NEL-CODICE-2026-10-18.md`): come nella chat, con l'accesso della chat.
  *     Un solo custode, l'app: il token (valido almeno 10 minuti) va in r4 con la sua scadenza, alla scelta e prima di ogni giro;
  *   · la chiave è una sola, quella dell'app: passa in r4 alla scelta e prima di ogni invio; se l'app non l'ha, in r4 si toglie;
@@ -542,8 +688,15 @@ async function invia(): Promise<void> {
  *   · una sessione nuova parte dall'ultima scelta del Codice (`codice_model`, owner 23/09), la prima volta da quella della chat.
  */
 const chat = useChatController()
-const profiliDelCodice = computed(() => chat.profiles.value.filter((p) => FORNITORI_DEL_CODICE_R4.has(p.provider)))
-const profiloScelto = computed(() => profiloDelModelloR4(conversazione.value?.modello.value, profiliDelCodice.value))
+/**
+ * ⛔ R-M4c, Q1 (owner 20/10/2026 «Quelli del PC»): in remoto il foglio ha i modelli che il PC sa usare (`modelliDelPc.ts`), letti
+ * all'apertura del ponte, mai i profili del telefono; la scelta manda al PC il SUO id e il PC la conferma nella sessione.
+ */
+const modelliDelPc = shallowRef<ModelliDelPc>({ profili: [], problemi: [] })
+const profiliDelCodice = computed(() => (pcRemoto ? modelliDelPc.value.profili : chat.profiles.value.filter((p) => FORNITORI_DEL_CODICE_R4.has(p.provider))))
+const profiloScelto = computed(() => (pcRemoto
+    ? (profiliDelCodice.value.find((p) => p.model === conversazione.value?.modello.value) ?? profiloDelModelloR4(conversazione.value?.modello.value, [], { dispositivo: false }))
+    : profiloDelModelloR4(conversazione.value?.modello.value, profiliDelCodice.value)))
 const profiliNelFoglio = computed<TalosMobileModelProfileView[]>(() => (profiloScelto.value && !profiliDelCodice.value.includes(profiloScelto.value)
     ? [profiloScelto.value, ...profiliDelCodice.value] : profiliDelCodice.value))
 const livelloScelto = computed(() => livelloDelRagionamentoR4(conversazione.value?.ragionamento.value))
@@ -551,13 +704,32 @@ const livelloScelto = computed(() => livelloDelRagionamentoR4(conversazione.valu
 let contoCaricato: Promise<ReturnType<typeof import('@/services/chatgptConsumi')['talosConsumiChatgpt']>> | null = null
 const contoDelPiano = () => (contoCaricato ??= import('@/services/chatgptConsumi').then((m) => m.talosConsumiChatgpt()))
 /** Il modello della sessione è del piano ChatGPT: la pastiglia lo dice, come nella chat (`pianoChatgptInUso`). */
-const pianoInUso = computed(() => fornitoreDelModelloR4(conversazione.value?.modello.value) === 'chatgpt')
-const problemiDeiModelli = computed(() => [
-    ...chat.discoveryProblems.value,
-    ...(chat.profiles.value.some((p) => !FORNITORI_DEL_CODICE_R4.has(p.provider)) ? [{ message: t('harness.r4ModelsUnavailable') }] : []),
-])
+// ⛔ RA-08 (revisione avversariale R-M4, 21/10/2026): in remoto il piano è quello del PC, non l'account e il consumo del telefono
+const pianoInUso = computed(() => !pcRemoto && fornitoreDelModelloR4(conversazione.value?.modello.value) === 'chatgpt')
+const problemiDeiModelli = computed(() => (pcRemoto ? modelliDelPc.value.problemi : chat.discoveryProblems.value))
+/**
+ * ⛔ D-RM4-3 (Pad 20/10/2026, anche in locale): «Aggiorna» e «Laboratorio modelli» del foglio non facevano niente, la schermata non
+ * li ascoltava. In locale come la chat (`ChatScreen`: `refreshConfiguredProviders`, `settings-models`; legge «Codice identico alla
+ * chat»). In remoto «Aggiorna» rilegge i modelli DEL PC sul ponte aperto, con la sua rotella (quella del telefono non c'entra), e
+ * il Laboratorio, che è del telefono, non si offre (`showModelLab`). Test CMR-01…03.
+ */
+const rileggendoIlPc = ref(false)
+const rotellaDeiModelli = computed(() => (pcRemoto ? rileggendoIlPc.value : chat.refreshingModels.value))
+async function aggiornaModelli(): Promise<void> {
+    if (!pcRemoto) return chat.refreshConfiguredProviders()
+    const ponte = ponteRemoto
+    if (!ponte || rileggendoIlPc.value) return
+    rileggendoIlPc.value = true
+    try {
+        modelliDelPc.value = await leggiModelliDelPc(ponte, { nessunFornitore: t('computer.noProviders'), modelliIlleggibili: t('computer.modelsUnreadable') })
+    } finally {
+        rileggendoIlPc.value = false
+    }
+}
 
-async function sincronizzaFornitore(fornitore: string | null): Promise<void> {
+async function sincronizzaFornitore(fornitore: string | null, modello: string | null): Promise<void> {
+    if (pcRemoto) return // ⛔ R-M4: il PC usa le sue chiavi; quelle del telefono non partono
+    if (fornitore === FONTE_LOCALE_OSPITE_R4) return sincronizzaLocale(modello)
     if (!fornitore || !FORNITORI_DEL_CODICE_R4.has(fornitore as TalosMobileModelProfileView['provider'])) return
     if (fornitore === 'chatgpt') return sincronizzaChatgpt(false)
     const chiave = await getProviderKey(fornitore).catch(() => null)
@@ -570,6 +742,7 @@ async function sincronizzaFornitore(fornitore: string | null): Promise<void> {
  * toglie niente: il token di prima, se c'è, scade da sé.
  */
 async function sincronizzaChatgpt(forzaRinnovo: boolean): Promise<void> {
+    if (pcRemoto) return // ⛔ R-M4: l'accesso ChatGPT del telefono non va al PC
     const { talosChatgpt } = await import('@/services/chatgptAccesso')
     let accesso: { accessToken: string; scadeAlle: number }
     try {
@@ -583,6 +756,35 @@ async function sincronizzaChatgpt(forzaRinnovo: boolean): Promise<void> {
     }
     await spingiAccessoChatgptR4(talosClienteR4(), accesso)
 }
+/**
+ * ⛔ CODICE COL MOTORE LOCALE: il modello della chat aperto con la finestra del Codice (`talosApriPerIlCodice`: 32k ridotto al tetto,
+ * minimo 24k), poi l'endpoint dell'app (`talosMotoreOspite`) spinto a r4 con la finestra VERA. Un modello che non regge il Codice
+ * resta nel foglio come nella chat, e la riga dice perché; un endpoint che non c'è più (modello chiuso) r4 lo dimentica.
+ * Caricati a richiesta: il motore locale non entra nel pacchetto d'avvio.
+ */
+async function sincronizzaLocale(modello: string | null): Promise<void> {
+    if (pcRemoto) return // ⛔ R-M4: il motore locale del telefono non si offre al PC
+    const nome = modello?.slice(FONTE_LOCALE_OSPITE_R4.length + 1) ?? ''
+    const profilo = profiliDelCodice.value.find((p) => p.provider === 'local' && modelloR4DelProfilo(p)?.toLowerCase() === modello?.toLowerCase())
+    const rifiuto = (code: string, message: string) => Object.assign(new Error(message), { code })
+    const k = (n: number) => `${Math.floor(n / 1024)}k`
+    if (!nomeLocaleValidoR4(nome)) throw rifiuto('TALOS_LOCALE_NOME', t('harness.r4LocalName', { nome }))
+    const nonPronto = async () => {
+        await spingiAccessoLocaleR4(talosClienteR4(), null).catch(() => undefined)
+        return rifiuto('LOCAL_RUNTIME_NOT_READY', 'No local model is open in the app.')
+    }
+    if (!profilo) throw await nonPronto()
+    const { talosApriPerIlCodice } = await import('@/lib/chat/providers/localAdapter')
+    const apertura = await talosApriPerIlCodice(profilo.model)
+    if (apertura.esito === 'troppo-piccolo') {
+        throw rifiuto('TALOS_LOCALE_FINESTRA', t('harness.r4LocalContext', { minimo: k(TALOS_CODICE_MIN_CONTEXT_TOKENS), massimo: k(apertura.massimo ?? 0) }))
+    }
+    if (apertura.esito === 'senza-attrezzi') throw rifiuto('TALOS_LOCALE_SENZA_ATTREZZI', t('harness.r4LocalNoTools'))
+    const { talosMotoreOspite } = await import('@/services/localEngine')
+    const ospite = await talosMotoreOspite()
+    if (!ospite.pronto) throw await nonPronto()
+    await spingiAccessoLocaleR4(talosClienteR4(), { socketPath: ospite.socketPath, chiave: ospite.chiave, modello: ospite.modello, nCtx: ospite.nCtx, capacita: { tools: true } })
+}
 function rifiutoNellaRiga(guasto: unknown): void {
     const code = typeof (guasto as { code?: unknown })?.code === 'string' ? (guasto as { code: string }).code : 'TALOS_R4_FORNITORE'
     if (conversazione.value) conversazione.value.errore.value = { code, message: guasto instanceof Error ? guasto.message : String(guasto) }
@@ -591,7 +793,8 @@ function rifiutoNellaRiga(guasto: unknown): void {
 /** La sessione nuova: l'ultima scelta del Codice se r4 la può usare, altrimenti quella della chat; senza nessuna, decide r4. */
 async function sceltaPerLaSessioneNuova(): Promise<void> {
     const conv = conversazione.value
-    if (!conv || conv.sessioneId.value || conv.modello.value) return
+    // ⛔ R-M4: in remoto i profili sono quelli del TELEFONO; il modello di una sessione nuova del PC lo decide il PC (Q1, elenco del PC)
+    if (pcRemoto || !conv || conv.sessioneId.value || conv.modello.value) return
     const profili = profiliDelCodice.value
     const profilo = profili.find((p) => p.id === settings.state.shell.codice_model) ?? profili.find((p) => p.id === chat.selectedModelId.value)
     const modello = profilo ? modelloR4DelProfilo(profilo) : null
@@ -603,23 +806,38 @@ async function sceltaPerLaSessioneNuova(): Promise<void> {
 watch(() => profiliDelCodice.value.length, () => { void sceltaPerLaSessioneNuova() })
 
 async function scegliModello(id: string): Promise<void> {
+    if (modelloInApertura.value) return
     const conv = conversazione.value
     const profilo = profiliNelFoglio.value.find((p) => p.id === id)
-    const modello = profilo ? (modelloR4DelProfilo(profilo) ?? (profilo.id === `r4:${profilo.model}` ? profilo.model : null)) : null
+    // in remoto ogni profilo del foglio porta già l'id di r4 del PC (`pc:<modello>`, o quello della sessione)
+    const modello = !profilo ? null : pcRemoto ? profilo.model
+        : (modelloR4DelProfilo(profilo) ?? (profilo.id === `r4:${profilo.model}` ? profilo.model : null))
     if (!conv || !profilo || !modello) return
     const livello = profilo.effort_levels.length ? clampMobileEffortFor(profilo, livelloScelto.value) : livelloScelto.value
+    const mia = ++aperturaCorrente
+    modelloInApertura.value = profilo.id
     try {
-        await sincronizzaFornitore(fornitoreDelModelloR4(modello))
-    } catch (guasto) {
-        rifiutoNellaRiga(guasto)
-        return
+        try {
+            await sincronizzaFornitore(fornitoreDelModelloR4(modello), modello)
+        } catch (guasto) {
+            rifiutoNellaRiga(guasto)
+            return
+        }
+        if (!(await conv.impostaModello(modello, ragionamentoR4(livello)))) return
+    } finally {
+        if (aperturaCorrente === mia) modelloInApertura.value = null
     }
-    if (!(await conv.impostaModello(modello, ragionamentoR4(livello)))) return
+    // la sessione è cambiata durante l'apertura: la scelta era della conversazione di prima e non diventa l'ultima del Codice
+    if (conversazione.value !== conv) return
+    // ⛔ RA-07 (revisione avversariale R-M4, 21/10/2026): la sessione del PC tiene il suo modello; l'ultima scelta del Codice del TELEFONO
+    // (`codice_model`/`codice_effort`) non diventa un `pc:…`
+    if (pcRemoto) return
     void settings.setShell({ codice_model: profilo.id, codice_effort: livello }).catch(() => undefined)
 }
 async function scegliLivello(livello: string): Promise<void> {
     const conv = conversazione.value
     if (!conv || !(await conv.impostaRagionamento(ragionamentoR4(livello)))) return
+    if (pcRemoto) return // ⛔ RA-07: come sopra, il livello resta del PC
     void settings.setShell({ codice_effort: livello }).catch(() => undefined)
 }
 
@@ -627,7 +845,7 @@ async function scegliLivello(livello: string): Promise<void> {
  * K3-C Accoda: a giro vivo il testo va nella coda di r4 (`POST /queue`), come «Accoda» della chat (`ChatScreen` `onQueue`): il
  * campo si svuota subito; se r4 rifiuta, il testo torna nel campo e il motivo sta nella riga d'errore.
  */
-const puoAccodare = computed(() => Boolean(conversazione.value?.sessioneId.value) && sending.value)
+const puoAccodare = computed(() => Boolean(conversazione.value?.sessioneId.value) && sending.value && !modelloInApertura.value)
 async function accoda(scritto: string): Promise<void> {
     if (!conversazione.value || (!scritto.trim() && !allegati.pronte().voci.length)) return
     if (!(await allegati.puoPartire())) return
@@ -652,8 +870,14 @@ async function riportaDallaCoda(id: string): Promise<void> {
     composer.value?.focusPrompt(true)
 }
 
-/** K3-C1, «Compatta il contesto» dal menu dell'header: com'è andata lo dice un avviso; un rifiuto di r4 va nella riga d'errore. */
+/**
+ * K3-C1, «Compatta il contesto» dal menu dell'header: com'è andata lo dice un avviso; un rifiuto di r4 va nella riga d'errore.
+ * ⛔ R-M4-C1 (revisione del Desktop, 20/10/2026): prima la conferma, come la chat e come il PC («Compatta ora» chiede conferma,
+ * owner 24/09; testi del PC `chat.js:560-561`). Vale anche in locale: il Codice è identico alla chat.
+ */
+const confermaCompatta = ref(false)
 async function compattaIlContesto(): Promise<void> {
+    confermaCompatta.value = false
     const esito = await conversazione.value?.compatta()
     if (!esito) return
     toasts.push({ message: esito.compattato ? t('harness.r4Compacted') : t('harness.r4NothingToCompact'), durationMs: 4000 })
@@ -774,13 +998,14 @@ onBeforeUnmount(() => {
                 :occupato="sending"
                 @indietro="indietro"
                 @riprendi="void conversazione?.riprendi()"
-                @compatta="void compattaIlContesto()"
+                @compatta="confermaCompatta = true"
                 @dettagli="foglio = 'albero'"
                 @hook="foglio = 'hook'"
                 @doctor="foglio = 'doctor'"
                 @esporta="foglio = 'esporta'"
                 @condividi="void condividiSessione()"
                 :con-sessione="!!conversazione?.sessioneId.value"
+                :solo-dal-pc="soloDalPc"
                 @comandi="foglio = 'comandi'"
                 :pannello-aperto="pannelloAperto"
                 @pannello="pannelloAperto = !pannelloAperto"
@@ -793,6 +1018,7 @@ onBeforeUnmount(() => {
                 v-if="foglio === 'comandi'"
                 :con-sessione="!!conversazione?.sessioneId.value"
                 :occupato="sending"
+                :solo-dal-pc="soloDalPc"
                 @comando="(c) => void eseguiComando(c)"
                 @close="foglio = null"
             />
@@ -813,6 +1039,7 @@ onBeforeUnmount(() => {
                 v-if="foglio === 'hook' && conversazione"
                 :carica="conversazione.hook"
                 :fida="conversazione.fidaHook"
+                :solo-dal-pc="soloDalPc"
                 @close="foglio = null"
             />
             <TalosMobileSessionExportSheet
@@ -857,6 +1084,7 @@ onBeforeUnmount(() => {
                     :apri-file="conversazione.apriFile"
                     :azione-file="conversazione.azioneFile"
                     :sessione-id="conversazione.sessioneId.value"
+                    :solo-dal-pc="soloDalPc"
                     @apri-delega="apriDelegaDalPannello"
                     @allega="allegaAllaChat"
                     :memoria="memoriaPannello"
@@ -886,6 +1114,7 @@ onBeforeUnmount(() => {
                     :azioni="AZIONI_DEL_CODICE_R4"
                     @reuse="riutilizza"
                     @share="condividi"
+                    @undo-compaction="annullaCompattazione"
                 />
                 <div
                     v-else
@@ -940,6 +1169,17 @@ onBeforeUnmount(() => {
                             <ArrowDown class="size-4" aria-hidden="true" />
                         </button>
                     </Transition>
+                    <!-- D-MO-12: la riga viva del riassunto atteso, sopra il compositore (decisione dell'owner 21/10). La regione di stato
+                         è SEMPRE montata (revisione avversaria 8): un lettore di schermo annuncia i cambi dentro una regione che c'era già -->
+                    <span class="sr-only" role="status" data-testid="talos-codice-r4-riga-viva-annuncio">{{ rigaViva ? t('chat.compaction.live.summarizing') : '' }}</span>
+                    <TalosCodiceR4RigaViva
+                        v-if="rigaViva"
+                        :stato="rigaViva"
+                        :azioni="rigaVivaConAzioni"
+                        :saltando="saltando"
+                        @salta="saltaRiassunto"
+                        @ferma="void conversazione?.ferma()"
+                    />
                     <!-- K3 piano: la fascia del Piano chiesto dal modello (`index.template.html:623`) -->
                     <div v-if="pianoRichiesto" data-testid="talos-codice-r4-fascia-piano" class="talos-codice-r4-fascia">
                         <ClipboardList class="mt-0.5 size-4 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
@@ -983,12 +1223,14 @@ onBeforeUnmount(() => {
                         :prompt="prompt"
                         :model-profiles="profiliNelFoglio"
                         :selected-model-profile-id="profiloScelto?.id ?? null"
+                        :opening-model-profile-id="modelloInApertura"
                         :discovery-problems="problemiDeiModelli"
-                        :refreshing-models="chat.refreshingModels.value"
+                        :refreshing-models="rotellaDeiModelli"
+                        :show-model-lab="!pcRemoto"
                         :selected-effort="livelloScelto"
                         :thinking="false"
                         :docked="true"
-                        :can-send="fase === 'pronta' && !sending"
+                        :can-send="fase === 'pronta' && !sending && !modelloInApertura"
                         :sending="sending"
                         :can-queue="puoAccodare"
                         :drawer-mode="forma.drawerMode"
@@ -997,6 +1239,8 @@ onBeforeUnmount(() => {
                         :attachments="allegati.vassoio"
                         :attachment-busy="allegati.occupato.value"
                         :attachment-error="allegati.errore.value"
+                        :attachments-available="!pcRemoto"
+                        :attachment-disabled-reason="soloDalPc"
                         :context-disabled-reason="t('harness.r4LibraryLater')"
                         :dictation-supported="dettatura.visible.value"
                         :dictation-listening="dettatura.status.value === 'listening'"
@@ -1017,6 +1261,8 @@ onBeforeUnmount(() => {
                         @take-photo="void allegati.scegli('fotocamera')"
                         @remove-attachment="allegati.togli"
                         @dismiss-attachment-error="allegati.errore.value = null"
+                        @refresh-models="void aggiornaModelli()"
+                        @open-model-lab="void router.push({ name: 'settings-models' })"
                     >
                         <!-- ⛔ CHATGPT NEL CODICE: la pastiglia del piano come nella chat (`ChatScreen` N15), subito dopo il modello -->
                         <TalosMobileChatgptPastiglia v-if="pianoInUso" />
@@ -1040,13 +1286,14 @@ onBeforeUnmount(() => {
                     </TalosMobileComposer>
                 </div>
             </div>
-            <template v-if="terminaleMontato">
+            <!-- Il terminale del PC non passa dal telefono (non è nell'elenco del PC, R-M4) -->
+            <template v-if="terminaleMontato && !pcRemoto">
                 <TalosCodiceR4Terminale
                     v-if="conversazione?.sessioneId.value"
                     v-show="vista === 'terminale'"
                     :key="conversazione.sessioneId.value"
                     :sessione-id="conversazione.sessioneId.value"
-                    :cliente="talosClienteR4()"
+                    :cliente="clienteR4()"
                     class="absolute inset-0"
                 />
                 <p
@@ -1058,6 +1305,16 @@ onBeforeUnmount(() => {
                     class="py-4 text-sm text-[var(--talos-muted)]"
                 >{{ testoTerminaleR4('processi.terminal.newTabNoSession', locale) }}</p>
             </template>
+            <!-- ⛔ D-RM4-4 (Pad 20/10/2026, schermata vuota): in remoto la scheda resta, come sul PC, e dice dove si usa il terminale; centrato come la Review vuota -->
+            <div
+                v-if="pcRemoto && vista === 'terminale'"
+                data-testid="talos-codice-r4-terminale-solo-dal-pc"
+                role="status"
+                class="absolute inset-0 flex flex-col items-center justify-center gap-2 px-4 py-6 text-center"
+            >
+                <SquareTerminal class="size-6 text-[var(--talos-muted)]" aria-hidden="true" />
+                <p class="max-w-[42ch] text-sm leading-5 text-[var(--talos-muted)]">{{ t('computer.terminalOnlyFromPc') }}</p>
+            </div>
             <TalosCodiceR4Revisione
                 v-if="conversazione"
                 v-show="vista === 'revisione'"
@@ -1088,6 +1345,7 @@ onBeforeUnmount(() => {
                     :apri-file="conversazione.apriFile"
                     :azione-file="conversazione.azioneFile"
                     :sessione-id="conversazione.sessioneId.value"
+                    :solo-dal-pc="soloDalPc"
                     @apri-delega="apriDelegaDalPannello"
                     @allega="allegaAllaChat"
                     :memoria="memoriaPannello"
@@ -1095,6 +1353,20 @@ onBeforeUnmount(() => {
             </aside>
             </div>
             <TalosCodiceR4Viste v-if="!visteInTestata" v-show="!tastieraAperta" :vista="vista" forma="barra" :file-revisione="fileRevisione" @scegli="scegliVista" />
+            <TalosMobileConfirmDialog
+                v-if="confermaCompatta"
+                data-testid="talos-codice-r4-compatta-domanda"
+                :title="t('harness.r4Compact')"
+                :description="t('harness.r4CompactConfirmBody')"
+                @close="confermaCompatta = false"
+            >
+                <template #footer>
+                    <Button variant="ghost" class="min-h-12" @click="confermaCompatta = false">{{ t('common.cancel') }}</Button>
+                    <Button data-testid="talos-codice-r4-compatta-conferma" class="min-h-12" :disabled="sending" @click="void compattaIlContesto()">
+                        {{ t('harness.r4CompactConfirmYes') }}
+                    </Button>
+                </template>
+            </TalosMobileConfirmDialog>
             <TalosMobileConfirmDialog
                 v-if="allegati.domanda.value"
                 data-testid="talos-image-consent"

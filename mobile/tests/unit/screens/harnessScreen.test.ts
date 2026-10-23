@@ -594,7 +594,7 @@ describe('HarnessScreen (28/8) — real sessions, no more the five-row demo arra
             menuItem('talos-harness-action-delete').click()
             await flushPromises()
             const dialog = document.body.querySelector('[role="dialog"]')
-            expect(dialog?.textContent).toContain(`"${titolo}" will be removed from this phone.`)
+            expect(dialog?.textContent).toContain(`"${titolo}" will be removed from this device.`)
             menuItem('talos-harness-delete-confirm').click()
             await flushPromises()
             expect(w.text()).toContain("can't remove /data/x & y")

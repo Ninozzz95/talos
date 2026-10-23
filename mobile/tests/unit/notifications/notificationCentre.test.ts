@@ -4,6 +4,7 @@ import {
     talosAppendNotification,
     talosMarkNotificationsRead,
     talosRouteNotification,
+    talosTestoDelToast,
     talosUnreadCount,
     type TalosNotificationEntry,
     type TalosNotificationEvent,
@@ -303,5 +304,39 @@ describe("l'origine di un evento decide se il campanello suona", () => {
             { appVisible: false, surface: null },
         )
         expect(esito.android).toBe(true)
+    })
+})
+
+/**
+ * N0 (21/10/2026) — il numero della campanella conta solo ciò che richiama.
+ * Ledger `.claude/ragionamento/LEDGER-N0-NOTIFICHE-2026-10-21.md`, difetti D-N0-4, D-N0-8.
+ */
+describe('N0 la campanella non conta il rumore', () => {
+    it('N0-02 il ripiego «copiato» di un gesto della persona: toast sì, Android no, nasce letto (D-N0-8)', () => {
+        const copiato = evento({ key: 'note:exported:1', channel: 'jobs', weight: 'notable', origin: 'person' })
+        expect(talosRouteNotification(copiato, { appVisible: true, surface: null }))
+            .toEqual({ feed: true, toast: true, android: false })
+        expect(talosRouteNotification(copiato, { appVisible: false, surface: null }))
+            .toEqual({ feed: true, toast: false, android: false })
+        expect(talosAppendNotification([], copiato)[0].read).toBe(true)
+    })
+
+    it('N0-10 il toast di una richiesta porta il titolo, se il testo non lo dice già (revisione avversaria 5)', () => {
+        const piano = evento({ key: 'plan:1', channel: 'attention', weight: 'demanding', title: 'TALOS sta per fare 3 cose', body: 'Niente è stato ancora fatto.' })
+        expect(talosTestoDelToast(piano)).toBe('TALOS sta per fare 3 cose. Niente è stato ancora fatto.')
+        // AL CONTRARIO: il testo che contiene già il titolo resta com'è, e una notizia resta il suo testo
+        expect(talosTestoDelToast({ ...piano, title: 'Qwen', body: 'Qwen non si è scaricato' })).toBe('Qwen non si è scaricato')
+        expect(talosTestoDelToast({ ...piano, weight: 'notable' })).toBe('Niente è stato ancora fatto.')
+        expect(talosTestoDelToast({ ...piano, body: undefined })).toBe('TALOS sta per fare 3 cose')
+    })
+
+    it('N0-03 ciò che il telefono ha già detto in tendina non esce una seconda volta (D-N0-4)', () => {
+        const fine = evento({ weight: 'notable', systemPosted: true })
+        expect(talosRouteNotification(fine, { appVisible: false, surface: null }).android).toBe(false)
+        expect(talosRouteNotification({ ...fine, weight: 'demanding' }, { appVisible: false, surface: null }).android).toBe(false)
+        // il toast dentro l'app resta: la tendina non lo sostituisce
+        expect(talosRouteNotification(fine, { appVisible: true, surface: null }).toast).toBe(true)
+        // AL CONTRARIO: senza il segno esce come sempre
+        expect(talosRouteNotification(evento(), { appVisible: false, surface: null }).android).toBe(true)
     })
 })

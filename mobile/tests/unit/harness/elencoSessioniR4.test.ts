@@ -14,6 +14,12 @@ const voce = (sessionId: string, extra: Record<string, unknown> = {}) => ({
 })
 
 describe('ELENCO-R4: le righe della pagina elenco dalle sessioni di r4', () => {
+    it('ELENCO-R4-PRG R-M4 Q2: il NOME della cartella (`progetto`) passa nella riga; un valore che non è una stringa no', () => {
+        const [a, b] = righeElencoSessioniR4([voce('a', { progetto: 'r4-remoto', ultimaRispostaAlle: '2026-10-20T10:00:00.000Z' }), voce('b', { progetto: 7 })])
+        expect(a.progetto).toBe('r4-remoto')
+        expect(b).not.toHaveProperty('progetto')
+    })
+
     it('ELENCO-R4-01: solo le sessioni principali, come il desktop (niente deleghe)', () => {
         const righe = righeElencoSessioniR4([
             voce('a'),

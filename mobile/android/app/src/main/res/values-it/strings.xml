@@ -11,7 +11,73 @@
         marcati `translatable="false"` nel file predefinito, che è il posto in
         cui quella decisione si dichiara una volta sola.
     -->
-    <string name="talos_occhio_nome">TALOS — controllo del telefono</string>
+    <string name="talos_occhio_nome">TALOS — controllo del dispositivo</string>
     <string name="talos_occhio_descrizione">Legge lo schermo per capire l’app aperta e controllarla quando glielo chiedi. Non attiva scorciatoie o pulsanti di accessibilità.</string>
     <string name="talos_artifact_unsupported">La WebView di questo dispositivo non può isolare questo contenuto in sicurezza, quindi non verrà mostrato.</string>
+    <!-- R-M5a (21/10/2026): le notifiche della sveglia da un computer accoppiato. Vedi la nota in `values/strings.xml`. -->
+    <string name="talos_sveglia_canale_richieste">Richieste</string>
+    <string name="talos_sveglia_canale_richieste_descrizione">Quando una sessione su questo computer aspetta te: un permesso, una domanda, un piano.</string>
+    <string name="talos_sveglia_canale_finiti">Lavori finiti</string>
+    <string name="talos_sveglia_canale_finiti_descrizione">Quando un lavoro lungo su questo computer è finito o si è fermato per un errore.</string>
+    <string name="talos_sveglia_provvisoria">Ha bisogno di te. Guardo cosa serve…</string>
+    <string name="talos_sveglia_computer">Computer</string>
+    <string name="talos_sveglia_prova">Le notifiche da questo computer funzionano.</string>
+    <string name="talos_sveglia_sessione_senza_nome">Una sessione</string>
+    <string name="talos_sveglia_permesso">«%1$s» chiede un permesso</string>
+    <string name="talos_sveglia_permesso_con">«%1$s» chiede un permesso: %2$s</string>
+    <string name="talos_sveglia_domanda">«%1$s» ha una domanda per te</string>
+    <string name="talos_sveglia_domanda_con">«%1$s» chiede: %2$s</string>
+    <string name="talos_sveglia_aiutante">«%1$s»: un agente aiutante aspetta te</string>
+    <string name="talos_sveglia_aiutante_con">«%1$s»: un agente aiutante aspetta te: %2$s</string>
+    <string name="talos_sveglia_piano">«%1$s» ha un piano da approvare</string>
+    <string name="talos_sveglia_mcp">«%1$s»: un server MCP ti chiede un dato</string>
+    <string name="talos_sveglia_finito">«%1$s» ha finito</string>
+    <string name="talos_sveglia_fallito">«%1$s»: il lavoro si è fermato per un errore</string>
+    <string name="talos_sveglia_riservata_richiesta">Una sessione ha bisogno di te</string>
+    <string name="talos_sveglia_riservata_finito">Un lavoro è finito</string>
+    <string name="talos_sveglia_riservata_fallito">Un lavoro si è fermato per un errore</string>
+    <string name="talos_sveglia_pubblica_richiesta">Un computer ha bisogno di te</string>
+    <string name="talos_sveglia_pubblica_finito">Lavoro finito su un computer</string>
+    <!-- N0 (21/10/2026), D-N0-6: i nomi dei canali come li legge Impostazioni → Notifiche -->
+    <string name="talos_canale_trasferimenti_nome">Download e installazioni</string>
+    <string name="talos_canale_trasferimenti_descrizione">Avanzamento ed esito di download e importazioni dei modelli.</string>
+    <string name="talos_canale_risposte_nome">Risposte</string>
+    <string name="talos_canale_risposte_descrizione">Quando arriva una risposta mentre non stai guardando TALOS.</string>
+    <string name="talos_canale_lavori_nome">Lavori lunghi</string>
+    <string name="talos_canale_lavori_descrizione">Ricerche, generazioni e attività pianificate.</string>
+    <string name="talos_canale_attenzione_nome">Ha bisogno di te</string>
+    <string name="talos_canale_attenzione_descrizione">Qualcosa si è fermato e aspetta una tua decisione.</string>
+    <string name="talos_canale_finiti_nome">Lavori conclusi</string>
+    <string name="talos_canale_finiti_descrizione">Quando una ricerca o un download che aspettavi è finito.</string>
+    <string name="talos_canale_in_corso_nome">Lavoro in corso</string>
+    <string name="talos_canale_in_corso_descrizione">Si vede mentre TALOS risponde, cerca o prepara un documento.</string>
+    <string name="talos_canale_download_nome">Download dei modelli</string>
+    <string name="talos_canale_download_descrizione">Avanzamento dei modelli in download, e come sono finiti.</string>
+    <string name="talos_canale_parola_nome">In ascolto di «hey TALOS»</string>
+    <string name="talos_canale_parola_descrizione">Si vede mentre TALOS aspetta la parola di attivazione.</string>
+    <string name="talos_canale_accoppiamento_nome">Codice di accoppiamento</string>
+    <string name="talos_canale_accoppiamento_descrizione">Il campo dove scrivi il codice di accoppiamento del debug wireless.</string>
+    <string name="talos_canale_aggiornamenti_nome">Aggiornamenti dell\'app</string>
+    <string name="talos_canale_aggiornamenti_descrizione">Quando una nuova versione di TALOS è pronta, e quando è stata installata.</string>
+    <string name="talos_aggiornamento_pronta_titolo">TALOS %1$s è pronta</string>
+    <string name="talos_aggiornamento_pronta_testo">Apri TALOS per vedere le novità e installarla.</string>
+    <string name="talos_aggiornamento_fatta_titolo">TALOS aggiornata alla %1$s</string>
+    <string name="talos_aggiornamento_fatta_testo">Tocca per aprirla.</string>
+    <string name="talos_parola_titolo">TALOS aspetta «hey TALOS»</string>
+    <string name="talos_parola_testo">Il microfono resta acceso finché non lo spegni.</string>
+    <!-- N0 (21/10/2026), D-N0-6: i testi della barra e della fine dei download -->
+    <string name="talos_download_pausa">Pausa</string>
+    <string name="talos_download_mancano">mancano %1$s</string>
+    <string name="talos_download_fine_ok">Scaricato e verificato</string>
+    <string name="talos_download_fine_cambiato">Il file è cambiato sul server: ricomincia</string>
+    <string name="talos_download_fine_controllo">Il file non corrispondeva al suo controllo ed è stato tolto</string>
+    <string name="talos_download_fine_sparito">Il file non è più pubblicato</string>
+    <string name="talos_download_fine_irraggiungibile">Server non raggiungibile: riprova più tardi</string>
+    <string name="talos_download_fine_spazio">Spazio libero insufficiente</string>
+    <string name="talos_download_fine_pausa">In pausa: riprende da dove si era fermato</string>
+    <string name="talos_download_fine_fermato">Fermato: %1$s</string>
+    <plurals name="talos_download_attivi">
+        <item quantity="one">%d download in corso</item>
+        <item quantity="other">%d download in corso</item>
+    </plurals>
 </resources>

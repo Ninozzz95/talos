@@ -10,7 +10,8 @@ import ollamaLogo from '@/assets/providers/ollama.svg'
 import openaiLogo from '@/assets/providers/openai.svg?no-inline'
 import openrouterLogo from '@/assets/providers/openrouter.svg'
 import type { TalosMobileProviderId } from '@/components/chat/mobileChatTypes'
-import { talosMobileProviderById } from '@/lib/mobileProviders'
+import { talosMobileProviderById, talosMobileProviderLabel } from '@/lib/mobileProviders'
+import { useTalosI18n } from '@/i18n'
 
 const props = defineProps<{
     provider: TalosMobileProviderId | string
@@ -22,6 +23,9 @@ const props = defineProps<{
 }>()
 
 const provider = computed(() => talosMobileProviderById(props.provider))
+const { t } = useTalosI18n()
+/** Il nome a schermo e per i lettori di schermo, nella lingua dell'app (22/10/2026). */
+const nome = computed(() => talosMobileProviderLabel(props.provider, t))
 const providerLogos: Record<TalosMobileProviderId, string> = {
     anthropic: anthropicLogo,
     deepseek: deepseekLogo,
@@ -41,8 +45,8 @@ const logo = computed(() => (
 <template>
     <span
         role="img"
-        :aria-label="provider.label"
-        :title="provider.label"
+        :aria-label="nome"
+        :title="nome"
         :data-tone="provider.tone"
         :data-compatto="props.compatto ? 'true' : undefined"
         class="talos-mobile-provider-icon inline-flex shrink-0 items-center justify-center text-xs font-semibold"

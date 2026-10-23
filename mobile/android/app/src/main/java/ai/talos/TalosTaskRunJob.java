@@ -54,15 +54,6 @@ public class TalosTaskRunJob extends JobService {
      */
     private static final int MAX_TOKENS = 512;
 
-    /**
-     * Da dove partono gli identificatori delle notifiche delle attività.
-     *
-     * Distinti da ricerca (4801) e trasferimenti (4802), e distinti FRA LORO:
-     * due attività che si sovrascrivessero la notifica farebbero sparire il
-     * risultato di una delle due senza dirlo a nessuno.
-     */
-    private static final int NOTIFICATION_BASE = 4900;
-
     private final List<Thread> workers = new ArrayList<>();
 
     @Override
@@ -162,7 +153,8 @@ public class TalosTaskRunJob extends JobService {
         TalosDoneNotification.ensureChannel(context);
         TalosDoneNotification.post(
                 context,
-                NOTIFICATION_BASE + Math.abs(id.hashCode() % 1000),
+                // Distinti da ricerca e trasferimenti, e FRA LORO: l'intervallo sta in `TalosNotificationIds` (N0, D-N0-5).
+                TalosNotificationIds.task(id),
                 entry.title == null || entry.title.isEmpty() ? id : entry.title,
                 risultato.trim(),
                 // Dove porta il tocco: l'attività che l'ha prodotto. Una

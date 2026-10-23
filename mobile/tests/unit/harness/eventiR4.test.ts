@@ -81,9 +81,45 @@ describe('eventi di r4 → messaggi della chat (K3-A)', () => {
         expect(c.inCorso!.ragionamento).toContain('Devo leggere NOTA.md')
         expect(c.inCorso!.testo).toContain('## Cosa dice la nota')
         expect(c.inCorso!.confini).toHaveLength(1)
-        expect(c.inCorso!.confini[0].attrezzi).toEqual([{ name: 'leggi', detail: 'NOTA.md' }])
+        // il risultato di `leggi` è già arrivato: la chiamata lo dice (R4EV-14, owner 22/10)
+        expect(c.inCorso!.confini[0].attrezzi).toEqual([{ name: 'leggi', detail: 'NOTA.md', finita: true }])
         const soloAttrezzo = parziale.slice(0, parziale.findIndex((e) => e.type === 'ToolCallArgs') + 1)
         expect(conversazioneDaEventi(soloAttrezzo).inCorso!.attivi).toEqual([{ name: 'leggi', detail: 'NOTA.md' }])
+    })
+
+    /* Owner 22/10/2026 (foto, «che casino»): due chiamate senza testo in mezzo stanno nello stesso confine; la prima, col suo
+       risultato, è finita e lo dice; la seconda no. Nel salvato la forma resta quella di prima (niente `finita`). */
+    it('R4EV-14 nello stesso confine ogni chiamata dice se è finita', () => {
+        const eventi = [
+            { type: 'RunStarted', runId: 'g', input: { consegna: 'x' } },
+            { type: 'ToolCallStart', toolCallId: 'c1', toolCallName: 'scrivi' },
+            { type: 'ToolCallArgs', toolCallId: 'c1', delta: '{"percorso":"calcolatrice.js"}' },
+            { type: 'ToolCallResult', toolCallId: 'c1', content: 'ok', role: 'tool' },
+            { type: 'ToolCallStart', toolCallId: 'c2', toolCallName: 'shell' },
+        ]
+        const c = conversazioneDaEventi(eventi)
+        expect(c.inCorso!.confini).toHaveLength(1)
+        const [prima, seconda] = c.inCorso!.confini[0].attrezzi
+        expect(prima).toMatchObject({ name: 'scrivi', finita: true })
+        expect(seconda.name).toBe('shell')
+        expect(seconda.finita).not.toBe(true)
+    })
+
+    /* Decisione owner 22/10/2026 («Ragionamento dentro il gruppo»: a fine «Ha lavorato per X · N passi»): il messaggio del giro si
+       porta quanto è durato, dall'ora di RunStarted a quella di RunFinished (i `timestamp` di AG-UI). Senza le due ore, niente. */
+    it('R4EV-15 il giro finito sa quanto è durato', () => {
+        const t0 = Date.UTC(2026, 9, 22, 18, 0, 0)
+        const eventi = [
+            { type: 'RunStarted', runId: 'g', input: { consegna: 'x' }, timestamp: t0 },
+            { type: 'TextMessageStart', messageId: 'm', role: 'assistant' },
+            { type: 'TextMessageContent', messageId: 'm', delta: 'fatto' },
+            { type: 'TextMessageEnd', messageId: 'm' },
+            { type: 'RunFinished', runId: 'g', timestamp: t0 + 95_000 },
+        ]
+        const finito = conversazioneDaEventi(eventi).messaggi.find((m) => m.role === 'assistant')!
+        expect(finito.metadata.durataMs).toBe(95_000)
+        const senzaOre = conversazioneDaEventi(eventi.map((e) => ({ ...e, timestamp: undefined }))).messaggi.find((m) => m.role === 'assistant')!
+        expect(senzaOre.metadata.durataMs).toBeUndefined()
     })
 
     it('R4EV-06 un giro finito in errore è un messaggio «failed» col codice', () => {
@@ -174,6 +210,43 @@ describe('eventi di r4 → messaggi della chat (K3-A)', () => {
         // senza traduttore resta la frase del server, mai la chiave
         const grezza = conversazioneDaEventi([{ type: 'RunStarted', runId: 'g1', input: { consegna: 'fai' } }, erroreVero])
         expect(grezza.messaggi[1].content).toBe(erroreVero.message)
+    })
+
+    /*
+     * Visto sul Pad il 21/10 (sessione lunga col modello locale): «Errore di esecuzione LOCAL_ENGINE_BUSY — The local model is busy
+     * answering in the chat…» in INGLESE con l'app in italiano. r4 manda il RunError del motore dell'app col solo `code` e la frase
+     * inglese, senza `messageChiave`; la frase italiana il telefono ce l'ha (`testi/errori-locale-r4.json`), ma la riga non la cercava.
+     */
+    it('R4EV-12 un errore senza chiave ma con un codice che il telefono conosce si dice nella lingua dell\'app', () => {
+        const occupato = { type: 'RunError', code: 'LOCAL_ENGINE_BUSY', message: 'The local model is busy answering in the chat: one reply at a time. Try again when it has finished.' }
+        const opzioni = { testoDelCodice: (codice: string, riserva: string) => (codice === 'LOCAL_ENGINE_BUSY' ? 'FRASE DEL CODICE' : riserva) }
+        const c = conversazioneDaEventi([{ type: 'RunStarted', runId: 'g', input: { consegna: 'x' } }, occupato], opzioni)
+        expect(c.messaggi[1].content).toBe('FRASE DEL CODICE')
+        expect(c.messaggi[1].metadata.chat_error).toMatchObject({ code: 'LOCAL_ENGINE_BUSY', message: 'FRASE DEL CODICE' })
+        // la chiave del server, quando c'è, resta la prima strada
+        const conChiave = conversazioneDaEventi([{ type: 'RunStarted', runId: 'g', input: { consegna: 'x' } }, erroreVero], { ...traduciInItaliano, ...opzioni })
+        expect(conChiave.messaggi[1].content).toBe('FRASE ITALIANA')
+    })
+
+    /*
+     * Visto sul Pad il 21/10 (sessione lunga col modello locale): «This model does not use tools: this remains a chat…» in INGLESE
+     * con l'app in italiano. r4 lo manda come pezzo di testo con `deltaChiave: server.runtime.notice.noTools`; la frase italiana il
+     * telefono ce l'ha (`testi/server-r4.json`), ma il pezzo di testo non guardava la chiave.
+     */
+    it('R4EV-13 un pezzo di testo con la sua chiave si dice nella lingua dell\'app', () => {
+        const avviso = {
+            type: 'TextMessageContent', messageId: 'm1',
+            delta: 'This model does not use tools: this remains a chat. It can answer, but it cannot read files or run commands.',
+            deltaChiave: 'server.runtime.notice.noTools',
+        }
+        const opzioni = { testoDelServer: (chiave: string | null | undefined, _p: unknown, riserva: string) => (chiave === 'server.runtime.notice.noTools' ? 'FRASE ITALIANA' : riserva) }
+        let c = creaConversazioneR4()
+        for (const e of [{ type: 'RunStarted', runId: 'g', input: { consegna: 'x' } }, avviso]) c = applicaEventoR4(c, e, opzioni)
+        expect(c.inCorso!.testo).toBe('FRASE ITALIANA')
+        // AL CONTRARIO: un pezzo senza chiave resta com'è
+        let d = creaConversazioneR4()
+        for (const e of [{ type: 'RunStarted', runId: 'g', input: { consegna: 'x' } }, { type: 'TextMessageContent', delta: 'ciao' }]) d = applicaEventoR4(d, e, opzioni)
+        expect(d.inCorso!.testo).toBe('ciao')
     })
 
     it('R4EV-11 un giro fallito dopo aver scritto: la bolla resta «failed» e la riga di stato si aggiunge sotto', () => {

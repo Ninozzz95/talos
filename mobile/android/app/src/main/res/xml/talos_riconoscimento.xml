@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    A0-3 (21/10/2026): la dichiarazione del riconoscitore FINTO.
+
+    Esiste solo perché, su diverse versioni, il sistema non assegna il ruolo di
+    assistente senza un RecognitionService. Non riconosce niente: la dettatura
+    vera passa dal plugin che esiste già.
+
+    ⛔ `selectableAsDefault="false"` (AOSP 6d9979b6710e, di serie vero): il
+    sistema non lo sceglie mai da solo come riconoscitore predefinito. Prima il
+    servizio puntava all'XML dell'assistente, e su un telefono senza un
+    riconoscitore predefinito la dettatura di tutte le app poteva finire qui.
+
+    ⚠️ LIMITE (revisione avversaria del 21/10): l'attributo esiste da Android 12
+    (API 31). Su Android 8-11 (minSdk 26) viene ignorato, e su Android 11 il
+    sistema, quando TALOS prende il ruolo di assistente, scrive come
+    riconoscitore predefinito quello dichiarato dall'assistente: questo. Lì la
+    dettatura delle altre app (e di TALOS) riceverebbe ERROR_CLIENT. Su Android
+    12+ (il Pad: 16) misurato il 21/10: `voice_recognition_service` resta Google.
+    La cura per 8-11 è aperta (difetto D-A0-1 nel ledger).
+-->
+<recognition-service
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:selectableAsDefault="false" />

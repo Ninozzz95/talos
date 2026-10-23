@@ -95,6 +95,9 @@ object TalosR4Avvio {
         // ⛔ CHATGPT NEL CODICE (owner 18/10/2026, «un solo accesso»; r4 f6c6625ac `server.mjs:191`): il custode del piano è l'app, che
         // spinge il token prima di ogni giro (`POST /api/v1/providers/chatgpt/access`); r4 non rinnova mai. Dopo il chiamante.
         a["TALOS_CHATGPT_CUSTODE"] = "app"
+        // ⛔ CODICE COL MOTORE LOCALE (owner 18/10/2026; r4 `locale-ospite`): r4 accetta il socket del motore solo dentro questa
+        // cartella, quella dove `TalosMotoreOspite` apre `motore.sock` (0700), accanto a `files/codice-r4`. Dopo il chiamante.
+        a["TALOS_LOCALE_OSPITE_DIR"] = File(d.radice.parentFile, "locale-ospite").path
         // ⛔ K3-TERM T1 (16/10): il Terminale di r4 apre `$SHELL || /bin/bash` (`pty-terminal.mjs` `sceltaShell`); su Android la
         // shell è /system/bin/sh, e /bin/bash non esiste. Messa dopo il chiamante: non si sceglie da fuori.
         a["SHELL"] = "/system/bin/sh"

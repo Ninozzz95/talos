@@ -137,7 +137,19 @@ export interface TalosProviderStreamHandlers {
     onChunk: (text: string) => void
     /** Defect #5: reasoning arrives on its own channel and stays separate. */
     onReasoning?: (text: string) => void
+    /**
+     * ⛔ Owner 20/10/2026 (dal Pad, piano ChatGPT): per 52 s restava «Cerco come si fa…» mentre il modello scriveva già il
+     * documento negli argomenti della chiamata. Il NOME dell'attrezzo arriva nei primi pezzi del flusso, gli argomenti dopo: qui
+     * l'adattatore dice quali attrezzi il modello sta chiamando e quanto sono cresciuti (`providers/bozzeAttrezzi.ts`).
+     */
+    onBozzeAttrezzi?: (bozze: readonly TalosBozzaAttrezzo[]) => void
     signal?: AbortSignal
+}
+
+/** Un attrezzo che il modello sta chiamando adesso: il nome e i caratteri degli argomenti arrivati finora. */
+export interface TalosBozzaAttrezzo {
+    name: string
+    caratteri: number
 }
 
 export interface TalosMobileProviderAdapter {

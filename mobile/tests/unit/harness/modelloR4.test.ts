@@ -10,12 +10,16 @@ import {
     messaggioErroreModelloR4,
     dimenticaAccessoChatgptR4,
     livelloDelRagionamentoR4,
+    FONTE_LOCALE_OSPITE_R4,
     modelloR4DelProfilo,
     profiloDelModelloR4,
     ragionamentoR4,
     sincronizzaFornitoreR4,
     spingiAccessoChatgptR4,
     MINIMO_ACCESSO_CHATGPT_R4_MS,
+    nomeLocaleValidoR4,
+    nomeModelloUmanoR4,
+    spingiAccessoLocaleR4,
 } from '@/lib/harness/r4/modelloR4'
 
 /**
@@ -24,7 +28,7 @@ import {
  * dalla registrazione sul Pad (`modello-2161afb32.json`, chiave finta di DeepSeek poi tolta).
  */
 const FIXTURE = resolve(__dirname, '..', '..', 'fixtures', 'r4')
-const fonti = JSON.parse(readFileSync(resolve(FIXTURE, 'modello-fonti-701c6c0d2.json'), 'utf8')) as { voci: { provider: string; model: string; id: string; valido: boolean; fonte: string; modelloRemoto: string }[] }
+const fonti = JSON.parse(readFileSync(resolve(FIXTURE, 'modello-fonti-0f3f90f8e.json'), 'utf8')) as { voci: { provider: string; model: string; id: string; valido: boolean; fonte: string; modelloRemoto: string }[] }
 const vere = JSON.parse(readFileSync(resolve(FIXTURE, 'modello-2161afb32.json'), 'utf8'))
 
 const profilo = (provider: string, model: string, altro: Partial<TalosMobileModelProfileView> = {}): TalosMobileModelProfileView => ({
@@ -56,15 +60,19 @@ describe('il modello del Codice su r4 (K3-C Scelta del modello)', () => {
         for (const voce of fonti.voci) {
             const id = modelloR4DelProfilo(profilo(voce.provider, voce.model))
             expect(id).toBe(voce.id)
-            expect([voce.valido, voce.fonte, voce.modelloRemoto]).toEqual([true, voce.provider, voce.model])
+            // ⛔ CODICE COL MOTORE LOCALE (owner 18/10): il profilo `local` (id = percorso del file) è `locale-ospite:<nome del file>`
+            const locale = voce.provider === 'local'
+            expect([voce.valido, voce.fonte, voce.modelloRemoto])
+                .toEqual([true, locale ? 'locale-ospite' : voce.provider, locale ? voce.model.split('/').pop() : voce.model])
         }
-        // fuori dal Codice: il motore dentro l'app (r4 non lo raggiunge, fase «Codice col motore locale»)
-        expect(modelloR4DelProfilo(profilo('local', 'gemma.gguf'))).toBeNull()
+        expect(fonti.voci.some((v) => v.provider === 'local')).toBe(true)
+        expect(modelloR4DelProfilo(profilo('local', '/data/user/0/ai.talos.dev/files/models/gemma.gguf'))).toBe('locale-ospite:gemma.gguf')
+        expect(fornitoreDelModelloR4('locale-ospite:gemma.gguf')).toBe('locale-ospite')
         // ⛔ CHATGPT NEL CODICE (owner 18/10: «Deve selezionarli esattamente come i modelli della chat»): il piano è nel Codice, con l'id
         // che r4 riconosce (`chatgpt:<modello>`, lo stesso della prova vera K4-C sul Pad: `chatgpt:gpt-6.1-sol`)
         expect(modelloR4DelProfilo(profilo('chatgpt', 'gpt-6.1-sol'))).toBe('chatgpt:gpt-6.1-sol')
         expect(fornitoreDelModelloR4('chatgpt:gpt-6.1-sol')).toBe('chatgpt')
-        expect([...FORNITORI_DEL_CODICE_R4].sort()).toEqual(['anthropic', 'chatgpt', 'deepseek', 'gemini', 'ollama', 'openai', 'openrouter'])
+        expect([...FORNITORI_DEL_CODICE_R4].sort()).toEqual(['anthropic', 'chatgpt', 'deepseek', 'gemini', 'local', 'ollama', 'openai', 'openrouter'])
     })
 
     /*
@@ -92,6 +100,54 @@ describe('il modello del Codice su r4 (K3-C Scelta del modello)', () => {
         const ignoto = profiloDelModelloR4('lmstudio:finto', profili)!
         expect([ignoto.id, ignoto.display_name, ignoto.model]).toEqual(['r4:lmstudio:finto', 'lmstudio:finto', 'lmstudio:finto'])
         expect(profiloDelModelloR4(null, profili)).toBeNull()
+    })
+
+    /*
+     * Pad 22/10/2026 16:07 (foto): una sessione del Codice nata con un modello locale poi eliminato mostrava nel selettore il gruppo
+     * «LOCALE-OSPITE» con l'icona «?» e la riga `locale-ospite:LFM2.5-2.6B-Q4_K_M.gguf - mai provato`. È un modello del dispositivo:
+     * sta nel gruppo LOCAL, col nome del file come gli altri locali, e r4 lo riconosce ancora (stesso id, nessun doppio prefisso).
+     */
+    it('MOD-02b il modello locale della sessione che l\'app non elenca più resta un modello del dispositivo', () => {
+        const id = `${FONTE_LOCALE_OSPITE_R4}:LFM2.5-2.6B-Q4_K_M.gguf`
+        const sparito = profiloDelModelloR4(id, [])!
+        expect([sparito.provider, sparito.display_name, sparito.model]).toEqual(['local', 'LFM2.5-2.6B-Q4_K_M', 'LFM2.5-2.6B-Q4_K_M.gguf'])
+        expect(modelloR4DelProfilo(sparito)).toBe(id)
+        expect(sparito.id).toBe(`r4:${id}`)
+    })
+
+    /*
+     * Visto sul Pad il 22/10/2026 (giro 3, Qwen3.5-2B Q4_0 nel Codice, app in italiano): «LOCAL_CONTEXT_EXCEEDED — The conversation
+     * does not fit in the local model’s window.» in INGLESE. Il desktop la traduce riconoscendo la frase del kernel
+     * (`components/errori.js:956` @ ece6ab83a, `errori.kernel.finestraLocale` + `errori.kernel.quantiToken`): stessa regola, stesse
+     * parole; i numeri ci sono solo se r4 li ha.
+     */
+    it('MOD-ERR-01 la finestra piena del modello locale si dice nella lingua dell\'app, coi numeri solo se r4 li manda', () => {
+        const senza = { code: 'LOCAL_CONTEXT_EXCEEDED', message: 'The conversation does not fit in the local model’s window.' }
+        expect(messaggioErroreModelloR4(senza, 'it')).toBe('La conversazione non entra nella finestra del modello locale.')
+        expect(messaggioErroreModelloR4(senza, 'en')).toBe('The conversation does not fit in the local model’s window.')
+        const con = { code: 'LOCAL_CONTEXT_EXCEEDED', message: 'The conversation (5812 tokens) does not fit in the local model’s window (4096 tokens).' }
+        expect(messaggioErroreModelloR4(con, 'it')).toBe('La conversazione (5812 token) non entra nella finestra del modello locale (4096 token).')
+        expect(messaggioErroreModelloR4(con, 'en-GB')).toBe('The conversation (5812 tokens) does not fit in the local model’s window (4096 tokens).')
+        // AL CONTRARIO: una frase che non è quella del kernel resta com'è
+        expect(messaggioErroreModelloR4({ code: 'LOCAL_CONTEXT_EXCEEDED', message: 'qualcos\'altro' }, 'it')).toBe('qualcos\'altro')
+    })
+
+    /*
+     * Desktop 22/10/2026: il template di chat che rifiuta la conversazione (SERV-26) arriva come `LOCAL_ENGINE_REJECTED_REQUEST` con la
+     * frase inglese del kernel; il desktop la riconosce (`components/errori.js:913` @ c4d42649a, `errori.kernel.motoreLocaleRifiuta`).
+     */
+    it('MOD-ERR-02 il rifiuto del motore locale si dice nella lingua dell\'app', () => {
+        const rifiuto = { code: 'LOCAL_ENGINE_REJECTED_REQUEST', message: 'The local engine did not accept this request, not even as a plain chat.' }
+        expect(messaggioErroreModelloR4(rifiuto, 'it')).toBe('Il motore locale non ha accettato questa richiesta, nemmeno senza gli attrezzi.')
+        expect(messaggioErroreModelloR4(rifiuto, 'en')).toBe('The local engine did not accept this request, not even as a plain chat.')
+    })
+
+    /* Revisione avversaria 22/10, rilievi 7 e 8: maiuscole diverse non fanno un modello «sparito»; in remoto il file è del PC. */
+    it('MOD-02c un locale con maiuscole diverse è lo stesso profilo; in remoto l\'id di r4 resta intero', () => {
+        const locale = profilo('local', '/storage/emulated/0/models/LFM2.5-2.6B-Q4_K_M.gguf', { display_name: 'LFM2.5-2.6B-Q4_K_M' })
+        expect(profiloDelModelloR4(`${FONTE_LOCALE_OSPITE_R4}:lfm2.5-2.6b-q4_k_m.gguf`, [locale])).toBe(locale)
+        const remoto = profiloDelModelloR4(`${FONTE_LOCALE_OSPITE_R4}:x.gguf`, [], { dispositivo: false })!
+        expect([remoto.provider, remoto.model]).toEqual([FONTE_LOCALE_OSPITE_R4, `${FONTE_LOCALE_OSPITE_R4}:x.gguf`])
     })
 
     it('MOD-03 il ragionamento: «off» della chat è «none» per r4, e torna «off»; gli altri livelli passano come sono', () => {
@@ -166,6 +222,49 @@ describe('il modello del Codice su r4 (K3-C Scelta del modello)', () => {
             .toBe('L’accesso a ChatGPT va rinnovato dall’app: riprova')
         expect(messaggioErroreModelloR4({ code: 'CHATGPT_CUSTODE_NON_APP', message: 'x' }, 'en')).not.toBe('x')
         expect(messaggioErroreModelloR4({ code: 'CHATGPT_SCONOSCIUTO', message: 'x' }, 'it')).toBe('x')
+    })
+
+    /*
+     * ⛔ CODICE COL MOTORE LOCALE (ledger `LEDGER-CODICE-MOTORE-LOCALE-2026-10-18.md`, contratto r4 `accesso-locale-ospite.mjs` @ 0f3f90f8e):
+     * l'app spinge {socketPath, chiave, modello, nCtx, capacita?}, NIENT'ALTRO (r4 dà 400 a ogni altro campo); senza modello aperto si
+     * toglie (`…/access/remove {}`). Mai la chiave in un messaggio d'errore.
+     */
+    it('MOD-11 la spinta del motore dell’app: solo i campi del contratto; senza modello si toglie; un rifiuto non porta la chiave', async () => {
+        const c = cliente({}, (r) => (r.percorso.startsWith('/api/v1/providers/locale-ospite/') ? { stato: 200, corpo: '{"ok":true}' } : null))
+        const accesso = { socketPath: '/data/user/0/ai.talos.dev/files/locale-ospite/motore.sock', chiave: 'CHIAVE-SEGRETA-0123456789abcdef', modello: 'gemma.gguf', nCtx: 32768, capacita: { tools: true, reasoning: false } }
+        await spingiAccessoLocaleR4(c.ponte, { ...accesso, altro: 'x' } as never)
+        expect(c.scritte()).toEqual([{ metodo: 'POST', percorso: '/api/v1/providers/locale-ospite/access', corpo: JSON.stringify(accesso) }])
+        await spingiAccessoLocaleR4(c.ponte, null)
+        expect(c.scritte().at(-1)).toEqual({ metodo: 'POST', percorso: '/api/v1/providers/locale-ospite/access/remove', corpo: '{}' })
+        const rifiuta = cliente({}, () => ({ stato: 400, corpo: JSON.stringify({ ok: false, error: { code: 'LOCAL_GUEST_SOCKET_INVALID', message: 'The local engine socket is outside the app folder.' } }) }))
+        let preso: unknown = null
+        try { await spingiAccessoLocaleR4(rifiuta.ponte, accesso) } catch (e) { preso = e }
+        expect((preso as { code?: string }).code).toBe('LOCAL_GUEST_SOCKET_INVALID')
+        expect(String((preso as Error).message)).not.toContain('CHIAVE-SEGRETA')
+    })
+
+    it('MOD-12 il nome del modello locale: la grammatica di r4 (`FORMA_ID_MODELLO_LOCALE`, senza maiuscole/minuscole)', () => {
+        expect(nomeLocaleValidoR4('LFM2.5-2.6B-QAD-Q4_0.gguf')).toBe(true)
+        expect(nomeLocaleValidoR4('gemma 3 (copia).gguf')).toBe(false)
+        expect(nomeLocaleValidoR4('-gemma.gguf')).toBe(false)
+        expect(nomeLocaleValidoR4(`a${'b'.repeat(127)}`)).toBe(true)
+        expect(nomeLocaleValidoR4(`a${'b'.repeat(128)}`)).toBe(false)
+    })
+
+    // 21/10: «sta rispondendo nella chat» era falso quando il motore lo teneva il riassunto del contesto (giro 16 sul Pad) ⇒ frase neutra del desktop @ 2f6c5d990
+    it('MOD-13 i rifiuti del motore dell’app con le parole del desktop (`errori.js` @ 2f6c5d990), nelle due lingue', () => {
+        expect(messaggioErroreModelloR4({ code: 'LOCAL_ENGINE_BUSY', message: 'x' }, 'it')).toBe('Il modello sul dispositivo è occupato con un altro lavoro (una risposta nella chat o un riassunto del contesto); riprova quando ha finito.')
+        expect(messaggioErroreModelloR4({ code: 'LOCAL_ENGINE_BUSY', message: 'x' }, 'en')).toBe('The on-device model is busy with another job (a chat reply or a context summary); try again when it has finished.')
+        expect(messaggioErroreModelloR4({ code: 'LOCAL_RUNTIME_NOT_READY', message: 'x' }, 'en')).toBe('No local model is open in the app: open one from the model picker.')
+        expect(messaggioErroreModelloR4({ code: 'LOCAL_MODEL_CHANGED', message: 'x' }, 'it')).toBe('Ora sul dispositivo è aperto un altro modello: sceglilo di nuovo nel Codice.')
+        expect(messaggioErroreModelloR4({ code: 'LOCAL_GUEST_SOCKET_INVALID', message: 'x' }, 'en')).toBe('The local engine socket is not valid: it must be a socket inside the app folder')
+    })
+
+    it('MOD-14 il motore dell’app non ha chiave né indirizzo da sincronizzare; il nome per la persona è quello del file', async () => {
+        const c = cliente({ id: 'locale-ospite', requiresKey: false })
+        await sincronizzaFornitoreR4(c.ponte, 'locale-ospite', { chiave: null, indirizzo: null })
+        expect(c.richieste).toEqual([])
+        expect(nomeModelloUmanoR4('locale-ospite:LFM2.5-2.6B-QAD-Q4_0.gguf')).toBe(nomeModelloUmanoR4('local:LFM2.5-2.6B-QAD-Q4_0.gguf'))
     })
 
     it('MOD-10 uscendo dalla chat r4 dimentica l’accesso del piano, ma solo se è già acceso: non si accende per questo', async () => {

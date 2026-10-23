@@ -532,10 +532,35 @@ inventoried `npx cap sync android` gate is complete.
   `0xC0000135` prima di enumerare dispositivi, quindi install e launch non sono
   ancora dichiarati verdi.
 
-## llama.cpp — motore locale (aggiornato 2026-10-01)
+## llama.cpp — motore locale (aggiornato 2026-10-22)
 
 - **ADOPT DIRECTLY** `ggml-org/llama.cpp` come sottomodulo
-  `mobile/third_party/llama.cpp`, licenza MIT. Pin: tag `b11312`, commit
+  `mobile/third_party/llama.cpp`, licenza MIT. Pin: tag **`v0.7.0`** (b11669),
+  commit `620d2225c` (2026-10-21), la stessa versione del motore desktop: un
+  solo llama.cpp per tutta TALOS. Precedente: `0c1e57098` (b11312, 2026-10-01).
+- Adattamenti per v0.7.0: le tre patch OpenCL `0002`-`0004` rigenerate dai loro
+  generatori sul nuovo sorgente (14 punti di chiamata invece di 12), e il JNI
+  allineato a `common/chat.h` (`prompt.str()`, `common_chat_input`, parser
+  copiato dalla sessione). Lo stato salvato su disco passa alla versione 4
+  (`LLAMA_STATE_SEQ_VERSION`): i prefissi congelati con la versione precedente
+  vengono rifiutati e ricostruiti.
+- **Binari NPU ricompilati** dalla stessa v0.7.0 con l'Hexagon SDK 6.6.0.0
+  ufficiale (Hexagon Clang 19.0.07, NDK r27, `GGML_BACKEND_DL`). Impronte:
+  `6ac4c63f…13a1` (`libggml-hexagon.so`), `1e32e8fd…f3bc` (v73),
+  `925de297…6e86` (v75), `83187191…aae2` (v79), `c801430b…fece` (v81).
+  Il modo d'energia dell'NPU resta quello predefinito di upstream (burst).
+- Misura sul Pad (Snapdragon 8 Elite), binari pubblicati da llama.cpp,
+  b11312 contro v0.7.0, `llama-perplexity` 4×512: CPU identica (LFM2.5-2.6B
+  Q4_0 23,377; Q4_K_M 27,473), NPU corretta in tutte e due (Q4_0 23,25 →
+  23,41; Q4_K_M 26,93 → 26,65). La GPU OpenCL dei binari pubblicati si ferma
+  su LFM2.5 con l'errore OpenCL -54 in TUTTE E DUE le versioni (difetto di
+  upstream già presente, coperto nell'app dalle patch `0002`-`0004`).
+- Rollback: riportare il gitlink a `0c1e57098` insieme al JNI, alle patch e ai
+  binari NPU della b11312 (stesso commit).
+
+### Pin precedente (2026-10-01)
+
+- Pin: tag `b11312`, commit
   `0c1e57098` (2026-10-01). Precedente: `451b89bae` (b10903 + un commit di
   sola CI, 2026-09-11); nessuna patch locale (merge-base = pin).
 - Motivo dell'aggiornamento: K-quant sull'NPU Hexagon

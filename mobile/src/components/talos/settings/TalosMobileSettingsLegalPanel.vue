@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useTalosI18n } from '@/i18n'
 import { talosNpuTermsText } from '@/lib/models/npuTerms'
 import { TALOS_NATIVE_COMPONENTS } from '@/lib/legal/nativeComponents'
+import { talosLicenzeDellaLibreria } from '@/lib/legal/licenzeScelte'
 
 /**
  * ⛔ NOTE LEGALI — owner, 01/10/2026: «blocco della build e note complete».
@@ -40,7 +41,9 @@ onMounted(async () => {
             id: voce.uniqueId,
             name: voce.name,
             version: voce.artifactVersion ?? '',
-            licenses: (voce.licenses ?? []).map((k) => dati.licenses[k]?.name || k).join(', '),
+            // JNA e le altre librerie «A OR B»: la licenza che usiamo, con le offerte accanto (`lib/legal/licenzeScelte.ts`).
+            licenses: talosLicenzeDellaLibreria(voce.uniqueId, voce.licenses ?? [], dati.licenses,
+                (licence, offered) => t('legal.chosenLicense', { licence, offered })),
         }))
         .sort((a, b) => a.id.localeCompare(b.id))
 })
@@ -93,6 +96,7 @@ onMounted(async () => {
         <section v-if="android" data-testid="talos-legal-android">
             <h3 class="text-sm font-semibold text-[var(--talos-text)]">{{ t('legal.androidTitle') }}</h3>
             <p class="text-3xs text-[var(--talos-muted)]">{{ t('legal.count', { count: android.length }) }}</p>
+            <p data-testid="talos-legal-mlkit" class="mt-1 text-3xs leading-4 text-[var(--talos-muted)]">{{ t('legal.mlkitNote') }}</p>
             <ul class="mt-2 flex flex-col divide-y divide-[var(--talos-border)]">
                 <li v-for="voce in android" :key="voce.id" class="py-1.5">
                     <p class="text-xs text-[var(--talos-text)]">{{ voce.id }} <span class="text-[var(--talos-muted)]">{{ voce.version }}</span></p>

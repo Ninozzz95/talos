@@ -31,12 +31,16 @@ const harness = vi.hoisted(() => ({
     pauseTransfer: vi.fn(async () => ({ ok: true as const })),
     resumeTransfer: vi.fn(async () => ({ ok: true as const })),
     cancelTransfer: vi.fn(async () => ({ ok: true as const })),
+    // Pad 22/10/2026: l'osservatore CONDIVISO dello store, non un secondo poller.
+    releaseObserver: vi.fn(),
+    retainObserver: vi.fn(),
 }))
 
 vi.mock('@/stores/modelTransfers', () => ({
     talosPauseManagedModelTransfer: harness.pauseTransfer,
     talosResumeManagedModelTransfer: harness.resumeTransfer,
     talosCancelManagedModelTransfer: harness.cancelTransfer,
+    talosRetainModelTransferObserver: harness.retainObserver,
 }))
 
 vi.mock('@/stores/localModels', () => ({
@@ -82,6 +86,8 @@ function modelSet() {
 }
 
 beforeEach(() => {
+    harness.releaseObserver.mockClear()
+    harness.retainObserver.mockReset().mockReturnValue(harness.releaseObserver)
     harness.open.mockClear()
     harness.close.mockClear()
     harness.describe.mockClear()
@@ -130,6 +136,26 @@ describe('TalosMobileLocalRepoDetail', () => {
             wrapper.unmount()
             interval.mockRestore()
         }
+    })
+
+    /*
+     * ⛔ Pad 22/10/2026: sul tablet, dentro la stazione Impostazioni, il pulsante
+     * del Centro download non e' montato, e con lui l'unico osservatore. Una
+     * pagina riaperta mentre il nativo scarica (dopo un riavvio dell'app, per
+     * esempio) non leggeva mai lo stato: «Scarica» al posto della barra. Chi
+     * mostra la barra tiene acceso lo STESSO orologio dello store, finche' e'
+     * montata — e lo lascia quando se ne va.
+     */
+    it('tiene acceso l’osservatore condiviso dei trasferimenti finché la pagina è montata', async () => {
+        const wrapper = mount(TalosMobileLocalRepoDetail, {
+            props: { repoId: 'unsloth/a-very-long-qwen-coder-repository-name-for-mobile', revision: 'sha' },
+        })
+        await flushPromises()
+        expect(harness.retainObserver).toHaveBeenCalledTimes(1)
+        expect(harness.releaseObserver).not.toHaveBeenCalled()
+
+        wrapper.unmount()
+        expect(harness.releaseObserver).toHaveBeenCalledTimes(1)
     })
 
     it('opens the routed revision and renders one compact detail without device or body Back duplicates', async () => {
@@ -649,7 +675,10 @@ describe('TalosMobileLocalRepoDetail', () => {
             })
             await flushPromises()
 
-            expect(wrapper.get('[data-testid="talos-models-analysis-banner"]').text()).toContain('talosExamineRepo')
+            // 22/10/2026: spiega il meccanismo in parole della persona, mai col nome della funzione (I18N-CODE-01)
+            const testo = wrapper.get('[data-testid="talos-models-analysis-banner"]').text()
+            expect(testo).toContain('fits in the memory of this device')
+            expect(testo).not.toContain('talosExamineRepo')
         })
 
         it('item 3: il link a Hugging Face punta al repository vero', async () => {

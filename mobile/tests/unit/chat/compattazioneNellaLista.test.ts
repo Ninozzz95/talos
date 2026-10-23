@@ -14,7 +14,7 @@ vi.mock('@/stores/chatController', () => ({
 
 import TalosMobileMessageList from '@/components/chat/TalosMobileMessageList.vue'
 import type { TalosMobileMessageView } from '@/components/chat/mobileChatTypes'
-import { TALOS_METADATA_COMPATTAZIONE, TALOS_METADATA_COMPATTAZIONE_ANNULLATA } from '@/lib/chat/compattazioneChiavi'
+import { TALOS_METADATA_COMPATTAZIONE, TALOS_METADATA_COMPATTAZIONE_ANNULLATA, TALOS_METADATA_COMPATTAZIONE_FALLITA } from '@/lib/chat/compattazioneChiavi'
 
 /*
  * ⭐⭐ P4-ter passo 2 (02/10/2026) — la riga di compattazione salvata nella storia si disegna come separatore (non come
@@ -52,5 +52,26 @@ describe('P4-ter passo 2 — la compattazione nella lista dei messaggi', () => {
         await lista.setProps({ compattazioneInCorso: true })
         await flushPromises(); await vi.dynamicImportSettled(); await flushPromises()
         expect(lista.find('[data-testid="talos-compaction-progress"]').exists()).toBe(true)
+    })
+
+    it('CHAT-COMP-UI-06 D-MO-12 nel Codice: il separatore del ripiego col perché, la riga fallita, niente Annulla a mano', async () => {
+        const ripiego = riga('r1', 'system', '', {
+            origine: 'r4', [TALOS_METADATA_COMPATTAZIONE]: { record: { at: 'a2', tokenPrima: 31_234, tokenDopo: 9_870 }, ripiego: true, ragione: 'tempo', annullabile: true },
+        })
+        const aMano = riga('r2', 'system', '', { origine: 'r4', [TALOS_METADATA_COMPATTAZIONE]: { record: { at: 'a3', tokenPrima: 100, tokenDopo: 50 }, annullabile: false } })
+        const fallita = riga('r3', 'system', '', { origine: 'r4', [TALOS_METADATA_COMPATTAZIONE_FALLITA]: { motivo: 'vuoto', dettaglio: null } })
+        const lista = mount(TalosMobileMessageList, { props: { messages: [riga('m1', 'user', 'domanda'), ripiego, aMano, fallita], sending: false } })
+        await flushPromises(); await vi.dynamicImportSettled(); await flushPromises()
+        const righe = lista.findAll('[data-testid="talos-compaction-row"]')
+        expect(righe).toHaveLength(3)
+        expect(righe[0]!.text()).toContain('Compacted without the model (time limit) · 31.2k → 9.9k')
+        expect(righe[0]!.find('[data-testid="talos-compaction-why-toggle"]').exists()).toBe(true)
+        expect(righe[1]!.find('[data-testid="talos-compaction-undo"]').exists()).toBe(false)
+        expect(righe[2]!.text()).toBe('Conversation not summarized · the model answered with nothing')
+        expect(righe[2]!.attributes('data-failed')).toBe('true')
+        // nessun avviso di sistema grezzo al posto delle righe
+        expect(lista.find('[data-testid="talos-mobile-controlled-fault"]').exists()).toBe(false)
+        await righe[0]!.get('[data-testid="talos-compaction-undo"]').trigger('click')
+        expect(lista.emitted('undoCompaction')).toEqual([['a2']])
     })
 })

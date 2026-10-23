@@ -18,7 +18,6 @@ import {
 import { talosAnnounceLocalCatalogueChange } from '@/lib/models/localCatalogueSignal'
 import { talosNotify } from '@/stores/notificationCentre'
 import { talosT } from '@/i18n'
-import { useTalosMobileToasts } from '@/stores/toasts'
 
 export interface TalosModelTransferState {
     items: TalosTransferItem[]
@@ -88,10 +87,13 @@ function announce(prima: readonly TalosTransferItem[], dopo: readonly TalosTrans
         for (const id of [...annullati]) if (!vivi.has(id)) annullati.delete(id)
     }
     for (const avviso of avvisi) {
-        (emitTransferNotice ?? pushToast)(avviso)
         /*
-         * E la STESSA notizia entra nel registro, che e' l'unica delle tre
-         * superfici che non dimentica.
+         * La notizia entra nel registro, che e' l'unica delle tre superfici che
+         * non dimentica, e il registro fa il toast a chi guarda.
+         *
+         * N0 (21/10/2026), D-N0-3: qui c'era anche un toast diretto, e ogni
+         * avviso ne mostrava DUE. E D-N0-4: la tendina l'ha gia' detta il
+         * servizio nativo (barra, fine, guasto), quindi `systemPosted`.
          *
          * Owner 2026-08-06: «ogni funzione, tool, download, installazione deve
          * avere notifica toast E Android». Il toast qui sopra c'era gia' da
@@ -101,20 +103,7 @@ function announce(prima: readonly TalosTransferItem[], dopo: readonly TalosTrans
          * La chiave e' il MODELLO e non l'istante: un download che riferisce
          * dieci volte resta una riga sola nel registro.
          */
-        talosNotify({
-            key: `transfer:${avviso.modelName}`,
-            channel: 'transfers',
-            // Un guasto CHIEDE qualcosa: si vede anche a app aperta, perche' e'
-            // l'unico dei tre esiti in cui qualcuno deve decidere.
-            weight: avviso.kind === 'failed' ? 'demanding' : 'notable',
-            title: avviso.modelName,
-            body: talosT(avviso.kind === 'started'
-                ? 'localModels.transferStarted'
-                : avviso.kind === 'finished'
-                    ? 'localModels.transferFinished'
-                    : 'localModels.transferFailed', { model: avviso.modelName }),
-            at: Date.now(),
-        })
+        registraAvviso(avviso)
         /*
          * Un download finito e' un modello IN PIU' SUL DISCO, e chi mostra i
          * modelli deve saperlo senza che glielo si chieda.
@@ -137,37 +126,25 @@ function announce(prima: readonly TalosTransferItem[], dopo: readonly TalosTrans
     fermaPollerSeInutile()
 }
 
-/**
- * Dove finiscono le frasi.
- *
- * Le spinge lo STORE, non un ascoltatore registrato da `App.vue`. La prima
- * versione faceva il contrario, ed e' costata il tetto d'avvio: importare
- * questo store dentro `App.vue` tirava l'intero servizio di trasferimento nel
- * grafo iniziale — **601.379 byte contro 600.000**, misurato dal cancello.
- *
- * Cosi' invece il costo resta dove il codice gia' viveva: chi carica i
- * trasferimenti carica anche i loro avvisi, e chi non li apre non paga niente.
- * `toasts` e' uno store di dati, non un disegno, ed e' gia' cio' che importa
- * `chatController`.
- *
- * Resta iniettabile per i test — l'unico motivo per cui l'indirezione valeva.
- */
-let emitTransferNotice: ((notice: TalosTransferNotice) => void) | null = null
-
-export function talosOnTransferNotice(sink: ((notice: TalosTransferNotice) => void) | null): void {
-    emitTransferNotice = sink
-}
-
-function pushToast(notice: TalosTransferNotice): void {
-    const chiave = notice.kind === 'started'
-        ? 'localModels.transferStarted'
-        : notice.kind === 'finished'
-            ? 'localModels.transferFinished'
-            : 'localModels.transferFailed'
-    useTalosMobileToasts().push({
-        message: talosT(chiave, { model: notice.modelName }),
-        // Il fallimento resta piu' a lungo: e' l'unico che chiede una decisione.
-        durationMs: notice.kind === 'failed' ? 8_000 : 4_000,
+/** Un avviso di trasferimento nel registro: un toast a chi guarda, niente tendina (la dice il nativo). */
+function registraAvviso(avviso: TalosTransferNotice): void {
+    talosNotify({
+        key: `transfer:${avviso.modelName}`,
+        channel: 'transfers',
+        // Un guasto CHIEDE qualcosa: si vede anche a app aperta, perche' e'
+        // l'unico dei tre esiti in cui qualcuno deve decidere.
+        weight: avviso.kind === 'failed' ? 'demanding' : 'notable',
+        systemPosted: true,
+        // Revisione avversaria (2): l'avvio è il gesto di chi preme «Scarica» (o un'installazione che parte da sola): un toast
+        // sì, ma non un richiamo che resta nella campanella fino alla fine, e per sempre se il download si annulla.
+        ...(avviso.kind === 'started' ? { origin: 'person' as const } : {}),
+        title: avviso.modelName,
+        body: talosT(avviso.kind === 'started'
+            ? 'localModels.transferStarted'
+            : avviso.kind === 'finished'
+                ? 'localModels.transferFinished'
+                : 'localModels.transferFailed', { model: avviso.modelName }),
+        at: Date.now(),
     })
 }
 
@@ -183,16 +160,7 @@ function pushToast(notice: TalosTransferNotice): void {
  * download che finisce mentre non lo si sta fissando.
  */
 function annunciaArrivo(modelName: string): void {
-    const avviso: TalosTransferNotice = { kind: 'finished', modelName }
-    ;(emitTransferNotice ?? pushToast)(avviso)
-    talosNotify({
-        key: `transfer:${modelName}`,
-        channel: 'transfers',
-        weight: 'notable',
-        title: modelName,
-        body: talosT('localModels.transferFinished', { model: modelName }),
-        at: Date.now(),
-    })
+    registraAvviso({ kind: 'finished', modelName })
     talosAnnounceLocalCatalogueChange('transfer-finished')
 }
 
@@ -354,10 +322,19 @@ export async function talosBeginModelTransfer(request: StartRequest): Promise<Ma
      * Ed e' anche il posto giusto: partire e' un COMANDO, e chi lo esegue lo
      * sa. Il poller deve riportare solo cio' che SCOPRE.
      */
-    if (at < 0) (emitTransferNotice ?? pushToast)({
-        kind: 'started',
-        modelName: item.modelName ?? item.id,
-    })
+    if (at < 0) registraAvviso({ kind: 'started', modelName: item.modelName ?? item.id })
+    /*
+     * ⛔ Pad 22/10/2026: «Sto scaricando · 0% 0 B / 769 MB» per sempre, col file
+     * gia' finito sul disco. L'orologio lo accendeva solo chi guarda — il
+     * pulsante del Centro download nella cornice — e sul tablet, dentro la
+     * stazione Impostazioni, quella cornice non c'e'. La lettura qui sotto era
+     * l'unica, e arriva quando il nativo non ha ancora un byte.
+     *
+     * Chi lavora giustifica l'orologio (vedi `talosRetainModelTransferObserver`):
+     * si accende QUI, dove il lavoro comincia, come gia' fanno le installazioni
+     * della voce. Si spegne da solo quando non resta niente in corsa.
+     */
+    avviaPoller() // àncora: orologio-all-avvio
     await talosRefreshModelTransfer()
     return { ok: true }
 }
@@ -383,6 +360,8 @@ export async function talosResumeManagedModelTransfer(id?: string): Promise<Mana
         failure: null,
         resumable: true,
     }))
+    // Lo stesso motivo dell'avvio: una ripresa e' lavoro che ricomincia.
+    avviaPoller() // àncora: orologio-alla-ripresa
     await talosRefreshModelTransfer()
     return { ok: true }
 }

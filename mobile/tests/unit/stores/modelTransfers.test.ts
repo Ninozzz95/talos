@@ -161,6 +161,24 @@ describe('managed transfer actions', () => {
         expect(bridge.status).toHaveBeenCalled()
     })
 
+    /** N0, revisione avversaria (2): l'avvio è un gesto, non un richiamo. Toast sì, campanella no, tendina no (c'è la barra). */
+    it('N0-09 l\'avvio di un download dice un toast ma non alza la campanella', async () => {
+        const store = await import('@/stores/modelTransfers')
+        const centro = await import('@/stores/notificationCentre')
+        const toast = vi.fn()
+        centro.talosOnNotificationToast(toast)
+        centro.talosSetAppVisible(true)
+        bridge.status.mockResolvedValue({ ...(await bridge.status()), items: [] } as never)
+        await store.talosBeginModelTransfer({
+            repo: 'unsloth/Qwen3-4B-GGUF', revision: 'pinned',
+            files: [{ path: 'Qwen3-4B-Q4_K_M.gguf', bytes: 4_000, sha256: null }],
+            modelName: 'Qwen3 4B',
+        })
+        expect(toast).toHaveBeenCalledTimes(1)
+        expect(centro.talosNotifications.unread).toBe(0)
+        centro.talosResetNotificationCentre()
+    })
+
     it('delegates pause, resume and cancel without retaining a second request', async () => {
         const store = await import('@/stores/modelTransfers')
 
@@ -245,6 +263,37 @@ describe('un download finito lo dice chi lo ha fatto, non chi guardava', () => {
         release()
 
         expect(heard.filter((r) => r === 'transfer-finished')).toHaveLength(1)
+    })
+
+    /**
+     * N0 (21/10/2026), D-N0-3 e D-N0-4: un arrivo = UN toast (prima: il toast diretto e quello del registro) e niente
+     * seconda notifica in tendina, perché il servizio nativo l'ha già detta.
+     */
+    it('N0-08 un arrivo dice un toast solo, e non ripete la tendina del nativo', async () => {
+        const store = await import('@/stores/modelTransfers')
+        const centro = await import('@/stores/notificationCentre')
+        const { useTalosMobileToasts } = await import('@/stores/toasts')
+        const toasts = useTalosMobileToasts()
+        const prima = toasts.items.value.length
+        const dalRegistro = vi.fn((e: { body?: string, title: string }) => { toasts.push({ message: e.body ?? e.title, durationMs: 4_000 }) })
+        const android = vi.fn()
+        centro.talosOnNotificationToast(dalRegistro)
+        centro.talosOnNotificationAndroid(android)
+        centro.talosSetAppVisible(true)
+
+        bridge.status.mockResolvedValue(
+            statoConArrivi([{ id: 'transfer-a', modelName: 'Qwen3 4B' }]) as never)
+        await store.talosRefreshModelTransfer()
+
+        expect(toasts.items.value.length - prima).toBe(1)
+        expect(centro.talosNotifications.entries[0]).toMatchObject({ key: 'transfer:Qwen3 4B', systemPosted: true })
+
+        centro.talosSetAppVisible(false)
+        bridge.status.mockResolvedValue(
+            statoConArrivi([{ id: 'transfer-c', modelName: 'LFM2 350M' }]) as never)
+        await store.talosRefreshModelTransfer()
+        expect(android).not.toHaveBeenCalled()
+        centro.talosResetNotificationCentre()
     })
 
     /**

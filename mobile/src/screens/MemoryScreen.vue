@@ -272,6 +272,8 @@ async function exportMemory(memory: TalosLocalMemory): Promise<void> {
             key: `memory:exported:${memory.id}`,
             channel: 'jobs',
             weight: 'notable',
+            // N0, D-N0-8: il gesto è della persona ⇒ toast sì, campanella e tendina no
+            origin: 'person',
             title: t('memory.exportCopied'),
             body: memory.title,
             at: Date.now(),
@@ -668,7 +670,7 @@ useTalosSheetTitle(() => t('navigation.memory'))
                     type="button"
                     data-testid="talos-memory-delete-confirm"
                     :disabled="deleting"
-                    class="min-h-12 bg-[var(--talos-danger)] text-white"
+                    class="min-h-12 border border-[var(--talos-danger-border)] bg-[var(--talos-danger-soft)] text-[var(--talos-danger)]"
                     @click="confirmDelete"
                 >
                     {{ t('common.delete') }}

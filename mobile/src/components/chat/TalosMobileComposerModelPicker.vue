@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useTalosI18n } from '@/i18n'
-import { Check, FlaskConical, RefreshCw, WandSparkles } from '@lucide/vue'
+import { Check, FlaskConical, Loader2, RefreshCw, WandSparkles } from '@lucide/vue'
 import TalosMobileProviderIcon from '@/components/models/TalosMobileProviderIcon.vue'
 import { ChevronDown, Search } from '@lucide/vue'
 import {
@@ -12,7 +12,7 @@ import type {
     TalosMobileModelProfileView,
     TalosMobileRoutingProfileView,
 } from '@/components/chat/mobileChatTypes'
-import { talosMobileModelProfileIsCallable } from '@/lib/mobileProviders'
+import { talosMobileModelProfileIsCallable, talosMobileProviderById } from '@/lib/mobileProviders'
 
 const props = withDefaults(defineProps<{
     modelProfiles: TalosMobileModelProfileView[]
@@ -45,8 +45,19 @@ const props = withDefaults(defineProps<{
      * sempre per il catalogo principale, zero cambio lì.
      */
     modelsSectionLabel?: string
+    /**
+     * ⛔ D-RM4-3 (Pad 20/10/2026): il Codice sulla sessione di un PC non offre il Laboratorio modelli, che è quello del TELEFONO
+     * (i modelli li sceglie il PC). Vero di serie: la chat resta com'è.
+     */
+    showModelLab?: boolean
+    /**
+     * Pad 22/10/2026: the Code screen opens a local model (seconds) before it is chosen. The row being opened says so and, meanwhile,
+     * a tap on any row is ignored: a second tap would open a second time.
+     */
+    openingModelProfileId?: string | null
 }>(), {
     routingProfiles: () => [],
+    openingModelProfileId: null,
     selectedModelProfileId: null,
     selectedRoutingProfileId: null,
     loadingModels: false,
@@ -54,6 +65,7 @@ const props = withDefaults(defineProps<{
     refreshingModels: false,
     discoveryProblems: () => [],
     modelsSectionLabel: undefined,
+    showModelLab: true,
 })
 
 const emit = defineEmits<{
@@ -176,7 +188,9 @@ function modalityLabel(profile: TalosMobileModelProfileView): string | null {
  * already on the first line, so the second says where it lives.
  */
 function modelLine(profile: TalosMobileModelProfileView): string {
-    return profile.provider === 'local' ? t('chat.localModelLine') : profile.model
+    if (profile.provider !== 'local') return profile.model
+    // `r4:…` = il modello della sessione del Codice che l'app non elenca più (`profiloDelModelloR4`): il file non c'è (22/10/2026)
+    return profile.id.startsWith('r4:') ? t('chat.localModelMissingLine') : t('chat.localModelLine')
 }
 
 function detailLabel(profile: TalosMobileModelProfileView): string | null {
@@ -200,9 +214,31 @@ function statusLabel(status: string): string | null {
     return null
 }
 
-/** Second line of a model row: where it lives, then its status — only the parts that exist. */
+/**
+ * Second line of a model row: where it lives, then its status — only the parts that exist.
+ * ⛔ «untested» is the connection test of a cloud provider: a model on the device never gets one, so on the Pad (22/10/2026)
+ * every local model read «not tried yet» even after hours of use. For a local model there is nothing to say.
+ */
 function secondLine(profile: TalosMobileModelProfileView): string {
-    return [modelLine(profile), statusLabel(profile.status)].filter((part): part is string => !!part).join(' - ')
+    // un modello del dispositivo si APRE; uno in rete si cambia soltanto (revisione avversaria 22/10, rilievo 13)
+    if (profile.id === props.openingModelProfileId) return t(profile.provider === 'local' ? 'chat.modelOpening' : 'chat.modelSwitching')
+    const stato = profile.provider === 'local' && profile.status === 'untested' ? null : statusLabel(profile.status)
+    return [modelLine(profile), stato].filter((part): part is string => !!part).join(' - ')
+}
+
+/**
+ * The heading of a provider group (Pad 22/10/2026: it was the raw id, «LOCAL» even in Italian): the device in the person's language,
+ * a provider by its own name; an id the app does not know stays as it is.
+ */
+const openingLiveText = computed(() => {
+    const profilo = props.modelProfiles.find((p) => p.id === props.openingModelProfileId)
+    return profilo ? secondLine(profilo) : ''
+})
+
+function groupLabel(provider: string): string {
+    if (provider === 'local') return t('chat.localModelLine')
+    const conosciuto = talosMobileProviderById(provider)
+    return conosciuto.id === provider ? conosciuto.label : provider
 }
 
 function routingIsSelectable(profile: TalosMobileRoutingProfileView): boolean {
@@ -210,6 +246,7 @@ function routingIsSelectable(profile: TalosMobileRoutingProfileView): boolean {
 }
 
 function chooseModelProfile(profile: TalosMobileModelProfileView): void {
+    if (props.openingModelProfileId) return
     if (!talosMobileModelProfileIsCallable(profile)) return
     emit('selectModelProfile', profile.id)
 }
@@ -419,6 +456,8 @@ function onListKeydown(event: KeyboardEvent): void {
                     {{ $t('chat.noModelMatches', { query: modelQuery.trim() }) }}
                 </p>
 
+                <!-- rilievo 12: le righe ignorano i tocchi mentre un modello si apre; chi usa il lettore di schermo sente perché -->
+                <p data-testid="talos-mobile-model-opening-live" class="sr-only" aria-live="polite">{{ openingLiveText }}</p>
                 <div v-for="group in modelGroups" :key="group.provider" :data-model-group="group.provider">
                     <button
                         type="button"
@@ -429,7 +468,7 @@ function onListKeydown(event: KeyboardEvent): void {
                     >
                         <TalosMobileProviderIcon :provider="group.provider" class="size-5" />
                         <span class="text-xs font-semibold uppercase tracking-wide text-[var(--talos-muted,var(--muted-foreground))]">
-                            {{ group.provider }}
+                            {{ groupLabel(group.provider) }}
                         </span>
                         <span class="text-2xs text-[var(--talos-muted,var(--muted-foreground))]">{{ group.profiles.length }}</span>
                         <ChevronDown
@@ -448,6 +487,8 @@ function onListKeydown(event: KeyboardEvent): void {
                     data-testid="talos-mobile-model-option"
                     :data-model-profile-id="profile.id"
                     :aria-selected="profile.id === selectedModelProfileId"
+                    :aria-busy="profile.id === openingModelProfileId ? 'true' : undefined"
+                    :aria-disabled="openingModelProfileId && profile.id !== openingModelProfileId ? 'true' : undefined"
                     :disabled="!talosMobileModelProfileIsCallable(profile)"
                     class="talos-mobile-model-option flex min-h-touch w-full items-center gap-2 rounded-md border px-2.5 py-2 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring,var(--ring))] disabled:cursor-not-allowed disabled:opacity-50"
                     :data-selected="profile.id === selectedModelProfileId ? 'true' : 'false'"
@@ -465,8 +506,14 @@ function onListKeydown(event: KeyboardEvent): void {
                             class="truncate text-2xs text-[var(--talos-muted,var(--muted-foreground))]"
                         >{{ detailLabel(profile) }}</span>
                     </span>
+                    <Loader2
+                        v-if="profile.id === openingModelProfileId"
+                        data-testid="talos-mobile-model-option-opening"
+                        class="size-4 shrink-0 text-[var(--talos-accent,var(--primary))] motion-safe:animate-spin"
+                        aria-hidden="true"
+                    />
                     <Check
-                        v-if="profile.id === selectedModelProfileId"
+                        v-else-if="profile.id === selectedModelProfileId"
                         class="size-4 shrink-0 text-[var(--talos-accent,var(--primary))]"
                         aria-hidden="true"
                     />
@@ -487,6 +534,7 @@ function onListKeydown(event: KeyboardEvent): void {
                 {{ $t('chat.refresh') }}
             </button>
             <button
+                v-if="showModelLab"
                 type="button"
                 :aria-label="$t('chat.openModelLab')"
                 class="inline-flex min-h-touch items-center gap-2 rounded-md px-2.5 text-xs font-medium text-[var(--talos-text,var(--foreground))] outline-none hover:bg-[var(--talos-active,var(--accent))] focus-visible:ring-2 focus-visible:ring-[var(--talos-ring,var(--ring))]"
