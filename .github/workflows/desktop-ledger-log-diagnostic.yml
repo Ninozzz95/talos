@@ -43,7 +43,7 @@ jobs:
               print('\n'.join(str(p.relative_to(root)) for p in root.rglob('*') if p.is_file())[:15000])
               raise SystemExit('Expected launch diagnostics were not present in this immutable artifact.')
           PY
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         if: always()
         with:
           name: talos-packaged-launch-diagnostics-09f35a3
