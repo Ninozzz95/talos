@@ -115,6 +115,8 @@ import { MemoryStoreError } from '../src/memory-store.mjs';
 import { ToolForgeStoreError } from '../src/tool-forge-store.mjs';
 import { attendiScritture, leggiRegistro as leggiRegistroGrezzo, registraIntestazioneSync, registraRiga, registraRigaConfermata, registraRigaSync } from '../src/session-store.mjs';
 import { conVistaDiPrima, vistaNelFormatoDiPrima } from './aiuto/vista-journal-formato-di-prima.mjs';
+import { applicaRecord as applicaRecordCompattazione } from '../src/kernel/compattazione-desktop.mjs';
+import { riassumiPerCompattazione as riassumiPerCompattazioneReale } from '../src/agent-service.mjs';
 
 /* 26/09: una compattazione manuale riuscita risponde anche con `at` (la chiave della riga, la stessa dell'evento durevole),
    `annullabile:false` e due stime intere; il resto della forma resta quello di prima. */
@@ -131,6 +133,34 @@ function senzaStime({ at, tokenPrima, tokenDopo, ...resto }) {
  * file vero (`leggiRegistroGrezzo`).
  */
 const leggiRegistroPerAttesa = conVistaDiPrima(leggiRegistroGrezzo);
+
+/*
+ * 22/10/2026 (CLI, S2-A; owner «cura completa») — il /compact a mano non sostituisce più la storia: passa dal riassuntore dell'adapter
+ * (`riassumiPerCompattazioneFn`, come il riassunto di fine giro) e scrive un RECORD, che il giro dopo riceve come
+ * `recordCompattazioneIniziale` mentre `messaggiIniziali` resta la storia grezza. Le prove del /compact usano questi aiuti: una storia
+ * con abbastanza scambi da avere qualcosa da riassumere (gli ultimi due restano alla lettera), un riassuntore finto, e ciò che il
+ * modello vede davvero al giro dopo.
+ */
+/* 22/10/2026 (CLI, revisione 3, S2-2): un /compact che non riduce non scrive più un record — le risposte di prima hanno un corpo vero,
+   così il riassunto sostituisce qualcosa di più grande di sé (prima erano tre parole, e il «riassunto» le allungava).
+   22/10/2026 notte (verdetto della CLI, C4): il /compact paga solo se toglie qualcosa AL NETTO del riassunto atteso (il suo budget
+   d'uscita, almeno 2.000 token, mai più del tratto che riassume); con ~450 token per risposta il tratto vecchio era più piccolo di
+   qualunque riassunto vero. ~3.000 token per risposta. */
+const CORPO_DI_PRIMA = ` ${'corpo della risposta di prima '.repeat(400)}`;
+const conScambiPrima = (storia) => [
+  ...storia.filter((m) => m.role === 'system'),
+  { role: 'user', content: 'richiesta di prima' }, { role: 'assistant', content: `risposta di prima${CORPO_DI_PRIMA}` },
+  { role: 'user', content: 'seconda richiesta di prima' }, { role: 'assistant', content: `seconda risposta di prima${CORPO_DI_PRIMA}` },
+  ...storia.filter((m) => m.role !== 'system'),
+];
+const rispostaDiRiassunto = (testo) => ({ scelta: { role: 'assistant', content: testo ? `## Riassunto\n${testo}` : '' }, finishReason: 'stop', usage: null });
+const riassuntoreFinto = (testo = 'sintesi', { chiamate = null, attesa = null } = {}) => async (input) => {
+  chiamate?.push(input);
+  if (attesa) await attesa;
+  return rispostaDiRiassunto(testo);
+};
+const vistaDelGiro = (input) => applicaRecordCompattazione(input.messaggiIniziali, input.recordCompattazioneIniziale ?? null);
+const contiene = (messaggi, testo) => JSON.stringify(messaggi).includes(testo);
 import { cartellaDiProva, cartellaDiProvaAttesa } from './aiuto/cartelle-di-prova.mjs'; // DESK-TEMP-1, 23/09: la cartella nasce con la sua rimozione
 
 // Ne' avviaSessione ne' talosLavora girano MAI qui, veri o finti a metà: si
@@ -2792,20 +2822,19 @@ test('⛔ compatta() su una sessione conclusa MA SENZA messaggiFinali (talosLavo
   assert.equal(risultato.reason, 'no-conversation-to-compact');
 });
 
-test('⭐⭐⭐ compatta(): chiama compattaSessioneFn con messaggiFinali/modello/chiave, e un resume SUCCESSIVO riparte dal riassunto', async () => {
+test('⭐⭐⭐ compatta(): chiama il riassuntore col modello e la chiave della sessione, e un resume SUCCESSIVO parte dal record del riassunto', async () => {
+  /* 22/10/2026 (S2-A): il /compact scrive un record; il giro dopo riceve la storia GREZZA e il record, e il modello vede la proiezione. */
   const primoGiro = sessioneControllabile();
   const secondoGiro = sessioneControllabile();
-  const storiaFinale = [{ role: 'system', content: 's' }, { role: 'user', content: 'c' }, { role: 'assistant', content: 'fatto' }];
-  const storiaCompattata = [storiaFinale[0], storiaFinale[1], { role: 'user', content: '[riassunto]' }];
-  let inputCatturato = null;
-  const compattaSessioneFn = async (input) => { inputCatturato = input; return { compattato: true, messaggi: storiaCompattata, usage: null }; };
+  const storiaFinale = conScambiPrima([{ role: 'system', content: 's' }, { role: 'user', content: 'c' }, { role: 'assistant', content: 'fatto' }]);
+  const chiamate = [];
   let numeroChiamata = 0;
   const avviaSessioneFnCombinato = (input) => {
     numeroChiamata += 1;
     return numeroChiamata === 1 ? primoGiro.avviaSessioneFn(input) : secondoGiro.avviaSessioneFn(input);
   };
   const registro = createSessionRegistry({
-    avviaSessioneFn: avviaSessioneFnCombinato, preparaEsecuzioneFn: preparaEsecuzioneFinta, compattaSessioneFn,
+    avviaSessioneFn: avviaSessioneFnCombinato, preparaEsecuzioneFn: preparaEsecuzioneFinta, riassumiPerCompattazioneFn: riassuntoreFinto('[riassunto]', { chiamate }),
     modello: 'z-ai/glm-4.7-flash', chiave: 'segreta',
   });
   const { sessionId } = registro.avvia('task-vero');
@@ -2814,26 +2843,30 @@ test('⭐⭐⭐ compatta(): chiama compattaSessioneFn con messaggiFinali/modello
 
   const risultato = await registro.compatta(sessionId);
   /* `onProgresso` (lane CLI, 03/10/2026): il registro passa al riassuntore chi ascolta i passi della compattazione. */
-  const { onProgresso, ...argomenti } = inputCatturato;
-  assert.equal(typeof onProgresso, 'function');
-  assert.deepEqual(argomenti, { messaggiFinali: storiaFinale, modello: 'z-ai/glm-4.7-flash', chiave: 'segreta' });
-  assert.deepEqual(senzaStime(risultato), { ok: true, compattato: true, annullabile: false });
+  assert.equal(chiamate.length, 1);
+  assert.equal(typeof chiamate[0].onProgresso, 'function');
+  assert.equal(chiamate[0].modello, 'z-ai/glm-4.7-flash');
+  assert.equal(chiamate[0].chiave, 'segreta');
+  assert.deepEqual(senzaStime(risultato), { ok: true, compattato: true, annullabile: true });
 
-  // ⭐ La prova che conta: compatta() ha mutato messaggiFinali sul posto —
-  // il PROSSIMO giro (qui un resume, sulla STESSA voce) eredita il
-  // riassunto, non la storia intera.
+  // ⭐ La prova che conta: il PROSSIMO giro (qui un resume, sulla STESSA voce) vede il riassunto, non la storia intera.
   registro.resume(sessionId);
-  assert.deepEqual(secondoGiro.ultimoInput.messaggiIniziali, storiaCompattata, 'il resume riparte dal riassunto, non dalla storia intera');
+  assert.deepEqual(secondoGiro.ultimoInput.messaggiIniziali.slice(0, storiaFinale.length), storiaFinale, 'la storia grezza resta com\'era');
+  assert.equal(secondoGiro.ultimoInput.recordCompattazioneIniziale?.at, risultato.at, 'il giro parte col record del /compact');
+  const vista = vistaDelGiro(secondoGiro.ultimoInput);
+  assert.ok(contiene(vista, '[riassunto]'), 'il modello vede il riassunto');
+  /* settima revisione: col corpo vero l'uguaglianza esatta era sempre falsa (asserzione vuota); la PRIMA risposta va nel riassunto,
+     mentre «seconda risposta di prima» resta alla lettera con le ultime richieste — per questo `startsWith`, non `contiene` */
+  assert.ok(!vista.some((m) => typeof m.content === 'string' && m.content.startsWith('risposta di prima')), 'e non la parte riassunta');
 
   secondoGiro.concludi({ type: 'RunFinished', threadId: 't2', runId: 'r2' }); // pulizia
   await new Promise((r) => setImmediate(r));
 });
 
-test('⛔ verso contrario: se compattaSessioneFn torna compattato:false, un resume successivo eredita ANCORA la storia intera', async () => {
+test('⛔ verso contrario: se il riassunto non viene, un resume successivo eredita ANCORA la storia intera e nessun record', async () => {
   const primoGiro = sessioneControllabile();
   const secondoGiro = sessioneControllabile();
-  const storiaFinale = [{ role: 'system', content: 's' }, { role: 'user', content: 'c' }, { role: 'assistant', content: 'fatto' }];
-  const compattaSessioneFn = async () => ({ compattato: false, messaggi: [{ role: 'user', content: 'MAI dovrebbe finire qui' }], usage: null });
+  const storiaFinale = conScambiPrima([{ role: 'system', content: 's' }, { role: 'user', content: 'c' }, { role: 'assistant', content: 'fatto' }]);
   let numeroChiamata = 0;
   const avviaSessioneFnCombinato = (input) => {
     numeroChiamata += 1;
@@ -2844,20 +2877,21 @@ test('⛔ verso contrario: se compattaSessioneFn torna compattato:false, un resu
    *   o `organizzazione/modello`) un nome giocattolo non è più attribuibile a nessun fornitore e
    *   la compattazione lo RIFIUTA — che è il punto: un id nudo è la forma di un GGUF locale, e
    *   ripiegarlo sul cloud era il difetto. Il nome qui diventa realistico invece di allargare la
-   *   regola; ciò che questa prova misura (il resume dopo `compattato:false`) non cambia.
+   *   regola; ciò che questa prova misura (il resume dopo un riassunto che non viene) non cambia.
    */
   const registro = createSessionRegistry({
-    avviaSessioneFn: avviaSessioneFnCombinato, preparaEsecuzioneFn: preparaEsecuzioneFinta, compattaSessioneFn, modello: 'z-ai/glm-4.7-flash', chiave: 'k',
+    avviaSessioneFn: avviaSessioneFnCombinato, preparaEsecuzioneFn: preparaEsecuzioneFinta, riassumiPerCompattazioneFn: riassuntoreFinto(''), modello: 'z-ai/glm-4.7-flash', chiave: 'k',
   });
   const { sessionId } = registro.avvia('task-vero');
   primoGiro.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { esito: { messaggiFinali: storiaFinale } });
   await new Promise((r) => setImmediate(r));
 
   const risultato = await registro.compatta(sessionId);
-  assert.deepEqual(risultato, { ok: true, compattato: false, fase: 'riassunto' }); // `fase`: lane CLI, 03/10/2026
+  assert.deepEqual(risultato, { ok: true, compattato: false, fase: 'riassunto', motivo: 'vuoto' }); // `fase`: lane CLI, 03/10/2026
 
   registro.resume(sessionId);
-  assert.deepEqual(secondoGiro.ultimoInput.messaggiIniziali, storiaFinale, 'compattato:false non deve toccare messaggiFinali');
+  assert.deepEqual(secondoGiro.ultimoInput.messaggiIniziali.slice(0, storiaFinale.length), storiaFinale, 'un riassunto che non viene non tocca la storia');
+  assert.equal(secondoGiro.ultimoInput.recordCompattazioneIniziale, undefined, 'e non lascia un record');
 
   secondoGiro.concludi({ type: 'RunFinished', threadId: 't2', runId: 'r2' }); // pulizia
   await new Promise((r) => setImmediate(r));
@@ -8154,18 +8188,12 @@ function destinazioniFinte({ chiavi = {} } = {}) {
   return { visti, fetchModelloFn: () => creaFetchMultiProvider(fetchDiBase, { dipendenze }) };
 }
 
-/** La finta `compattaSessioneFn` USA il trasporto ricevuto: è ciò che fa girare la destinazione vera. */
-const compattaConIlTrasportoRicevuto = async ({ modello: modelloVisto, fetchDiRete }) => {
-  await fetchDiRete('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: modelloVisto, messages: [{ role: 'user', content: 'x' }] }),
-  });
-  return { compattato: true, messaggi: [] };
-};
+/* 22/10/2026 (S2-A): il /compact passa dal riassuntore VERO dell'adapter (`riassumiPerCompattazione`), che usa il trasporto ricevuto:
+   è ciò che fa girare la destinazione vera. Qui lo si avvolge solo per leggere il modello che riceve. */
+const riassuntoreVeroCheGuarda = (vedi) => async (argomenti) => { vedi?.(argomenti.modello); return riassumiPerCompattazioneReale(argomenti); };
 
 async function concludiConStoria(finta) {
-  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { esito: { messaggiFinali: [{ role: 'user', content: 'c' }] } });
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { esito: { messaggiFinali: conScambiPrima([{ role: 'user', content: 'c' }, { role: 'assistant', content: 'r' }]) } });
   await new Promise((r) => setImmediate(r));
 }
 
@@ -8180,7 +8208,7 @@ test('⛔⛔⛔ D3 — la compattazione usa il modello DELLA SESSIONE, non quell
     chiaveFn: () => 'chiave-finta-openrouter',
     prontoFn: () => ({ pronto: true }),
     fetchModelloFn,
-    compattaSessioneFn: async (argomenti) => { modelloVisto = argomenti.modello; return compattaConIlTrasportoRicevuto(argomenti); },
+    riassumiPerCompattazioneFn: riassuntoreVeroCheGuarda((m) => { modelloVisto = m; }),
   });
   const { sessionId } = registro.avvia('task-vero', { modelloScelto: 'deepseek:deepseek-chat' });
   await concludiConStoria(finta);
@@ -8204,7 +8232,7 @@ test('⛔⛔⛔ D3 — con il registro su un fornitore SENZA chiave, una session
   const registro = createSessionRegistry({
     avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta,
     modello: 'openai:gpt-5-mini', chiaveFn: () => '', prontoFn: () => ({ pronto: true }), fetchModelloFn,
-    compattaSessioneFn: compattaConIlTrasportoRicevuto,
+    riassumiPerCompattazioneFn: riassuntoreVeroCheGuarda(),
   });
   const { sessionId } = registro.avvia('task-vero', { modelloScelto: 'deepseek:deepseek-chat' });
   await concludiConStoria(finta);
@@ -8242,13 +8270,13 @@ test('⛔⛔⛔⛔ D3 — una sessione LOCALE non tocca NESSUN host che non sia 
     avviaSessioneFn: async ({ onEvento, modello }) => {
       modelloDelGiro = modello;
       onEvento({ type: 'RunFinished', threadId: 't', runId: 'r' });
-      return { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: [{ role: 'user', content: 'c' }, { role: 'assistant', content: 'risposta locale' }] } };
+      return { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: conScambiPrima([{ role: 'user', content: 'c' }, { role: 'assistant', content: 'risposta locale' }]) } };
     },
     preparaEsecuzioneFn: preparaEsecuzioneFinta,
     modello: 'z-ai/glm-5.3-flash', chiaveFn: () => 'chiave-finta-openrouter',
     prontoFn: () => ({ pronto: true }), fetchModelloFn,
     localRuntimes: { 'llama.cpp': {} },
-    compattaSessioneFn: async (argomenti) => { modelloVisto = argomenti.modello; return compattaConIlTrasportoRicevuto(argomenti); },
+    riassumiPerCompattazioneFn: riassuntoreVeroCheGuarda((m) => { modelloVisto = m; }),
   });
   const { sessionId } = registro.avvia('task-vero', {
     provider: 'local', runtimeId: 'llama.cpp', modelId: 'gemma-3n-e4b-it-Q4_K_M.gguf',
@@ -8289,7 +8317,7 @@ test('⛔⛔ D3 — con un modello di sessione sconosciuto la compattazione RIFI
     avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta,
     /* ⛔ Il registro HA un predefinito: è proprio quello su cui non si deve ricadere. */
     modello: 'z-ai/glm-5.3-flash', chiaveFn: () => 'k', prontoFn: () => ({ pronto: true }), fetchModelloFn,
-    compattaSessioneFn: async () => { compattaChiamata = true; return { compattato: false, messaggi: [] }; },
+    riassumiPerCompattazioneFn: async () => { compattaChiamata = true; return rispostaDiRiassunto(''); },
   });
   /* Una sessione avviata SENZA modello proprio: `voce.modello` resta vuoto. */
   const { sessionId } = registro.avvia('task-vero', { modelloScelto: '' });
@@ -8774,22 +8802,21 @@ test('RIPRESA-QUATTRO-DELEGHE — padre operativo mentre quattro runtime figli r
  }
 });
 
-test('CTX-LEGACY-RESTART-PERSISTENCE — il riassunto manuale resta nel journal e guida il resume dopo un nuovo registry', async () => {
+test('CTX-LEGACY-RESTART-PERSISTENCE — il riassunto manuale resta nel journal (un record) e guida il resume dopo un nuovo registry', async () => {
   const cartellaStore = cartellaStoreVera();
   const primoGiro = sessioneControllabile();
   const giroRipreso = sessioneControllabile();
-  const storia = [{ role: 'user', content: 'domanda originale' }, { role: 'assistant', content: 'risposta originale' }];
-  const riassunto = [{ role: 'system', content: 'Sintesi verificata' }, { role: 'user', content: 'continua' }];
+  const storia = conScambiPrima([{ role: 'user', content: 'domanda originale' }, { role: 'assistant', content: 'risposta originale' }]);
   try {
     const primo = createSessionRegistry({
-      avviaSessioneFn: primoGiro.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta,
-      compattaSessioneFn: async () => ({ compattato: true, messaggi: riassunto }),
+      avviaSessioneFn: primoGiro.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, riassumiPerCompattazioneFn: riassuntoreFinto('Sintesi verificata'),
       modello: 'z-ai/glm-5.3-flash', chiave: 'k', cartellaStore,
     });
     const { sessionId } = primo.avvia('task-vero');
     primoGiro.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { ok: true, esito: { messaggiFinali: storia } });
     await attendiRegistroSuDisco(cartellaStore, sessionId, (righe) => righe.some((riga) => riga.tipo === 'messaggi-finali'));
-    assert.deepEqual(senzaStime(await primo.compatta(sessionId)), { ok: true, compattato: true, annullabile: false });
+    const esito = await primo.compatta(sessionId);
+    assert.deepEqual(senzaStime(esito), { ok: true, compattato: true, annullabile: true });
 
     const dopoRestart = createSessionRegistry({
       avviaSessioneFn: giroRipreso.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta,
@@ -8797,9 +8824,11 @@ test('CTX-LEGACY-RESTART-PERSISTENCE — il riassunto manuale resta nel journal 
     });
     await dopoRestart.ripristina();
     assert.equal(dopoRestart.resume(sessionId, 'ancora').sessionId, sessionId);
-    assert.deepEqual(giroRipreso.ultimoInput.messaggiIniziali.slice(0, riassunto.length), riassunto);
-    const righe = vistaNelFormatoDiPrima(readFileSync(join(cartellaStore, `${sessionId}.jsonl`), 'utf8').trim().split('\n').map(JSON.parse));
-    assert.deepEqual(righe.filter((riga) => riga.tipo === 'messaggi-finali').at(-1).messaggiFinali, riassunto);
+    assert.equal(giroRipreso.ultimoInput.recordCompattazioneIniziale?.at, esito.at, 'dopo il riavvio il giro parte dal record del /compact');
+    assert.ok(contiene(vistaDelGiro(giroRipreso.ultimoInput), 'Sintesi verificata'));
+    const righe = readFileSync(join(cartellaStore, `${sessionId}.jsonl`), 'utf8').trim().split('\n').map(JSON.parse);
+    assert.equal(righe.filter((riga) => riga.tipo === 'compattazione').at(-1)?.record?.at, esito.at, 'sul disco: la riga del record');
+    assert.deepEqual(vistaNelFormatoDiPrima(righe).filter((riga) => riga.tipo === 'messaggi-finali').at(-1).messaggiFinali, storia, 'e la storia grezza intera');
   } finally {
     if (giroRipreso.chiamate) {
       giroRipreso.concludi({ type: 'RunFinished', threadId: 't2', runId: 'r2' });
@@ -8840,22 +8869,32 @@ test('CTX-LEGACY-COMPACT-MISSING-HEADER — nessun successo su un journal che il
   }
 });
 
-test('CTX-LEGACY-COMPACT-NONJSON-MESSAGE — un riassunto con buchi non diverge fra RAM e replay', async () => {
+test('CTX-LEGACY-COMPACT-NONJSON-MESSAGE — un riassunto con caratteri che il JSON deve sfuggire non diverge fra RAM e replay', async () => {
+  /* 22/10/2026 (S2-A): il /compact non riceve più una lista di messaggi dal kernel (dove poteva esserci un buco), ma un testo; il rischio
+     che resta è che la RAM e il disco divergano su ciò che il JSON sfugge. */
   const cartellaStore = cartellaStoreVera();
   const giro = sessioneControllabile();
-  const storia = [{ role: 'user', content: 'originale' }, { role: 'assistant', content: 'risposta' }];
+  const giroDopo = sessioneControllabile();
+  let numero = 0;
+  const storia = conScambiPrima([{ role: 'user', content: 'originale' }, { role: 'assistant', content: 'risposta' }]);
   try {
     const registro = createSessionRegistry({
-      avviaSessioneFn: giro.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta,
-      compattaSessioneFn: async () => ({ compattato: true, messaggi: [undefined, { role: 'user', content: 'sintesi' }] }),
+      avviaSessioneFn: (input) => (++numero === 1 ? giro.avviaSessioneFn(input) : giroDopo.avviaSessioneFn(input)), preparaEsecuzioneFn: preparaEsecuzioneFinta,
+      riassumiPerCompattazioneFn: riassuntoreFinto('righe\u2028«virgolette» "doppie" \\ e \u0000 nulla'),
       modello: 'z-ai/glm-5.3-flash', chiave: 'k', cartellaStore,
     });
     const { sessionId } = registro.avvia('task-vero');
     giro.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { ok: true, esito: { messaggiFinali: storia } });
     await attendiRegistroSuDisco(cartellaStore, sessionId, (righe) => righe.some((riga) => riga.tipo === 'messaggi-finali'));
-    assert.equal((await registro.compatta(sessionId)).code, 'SESSION_STORE_WRITE_FAILED');
-    const righe = await leggiRegistroPerAttesa({ cartellaStore, sessionId });
-    assert.deepEqual(righe.filter((riga) => riga.tipo === 'messaggi-finali').at(-1).messaggiFinali, storia);
+    assert.equal((await registro.compatta(sessionId)).compattato, true);
+    assert.equal(registro.resume(sessionId, 'dopo').sessionId, sessionId);
+    const inMemoria = giroDopo.ultimoInput.recordCompattazioneIniziale;
+    const sulDisco = (await leggiRegistroGrezzo({ cartellaStore, sessionId })).filter((riga) => riga.tipo === 'compattazione').at(-1).record;
+    assert.deepEqual(sulDisco, inMemoria, 'il record sul disco è quello in memoria, carattere per carattere');
+    assert.ok(contiene(inMemoria.riassunto, 'righe'));
+    giroDopo.concludi({ type: 'RunFinished', threadId: 't2', runId: 'r2' });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(vistaNelFormatoDiPrima(await leggiRegistroGrezzo({ cartellaStore, sessionId })).filter((riga) => riga.tipo === 'messaggi-finali').at(-1).messaggiFinali.slice(0, storia.length), storia, 'la storia grezza resta');
   } finally {
     await rimuoviCartellaStoreDopoLeScritture(cartellaStore);
   }
@@ -8865,15 +8904,14 @@ test('CTX-LEGACY-COMPACT-WRITE-FAIL-ROLLBACK — un append fallito non conferma 
   const cartellaStore = cartellaStoreVera();
   const primoGiro = sessioneControllabile();
   const giroRipreso = sessioneControllabile();
-  const storia = [{ role: 'user', content: 'storia originale' }, { role: 'assistant', content: 'risposta originale' }];
-  const riassunto = [{ role: 'system', content: 'riassunto che non deve apparire' }];
+  const storia = conScambiPrima([{ role: 'user', content: 'storia originale' }, { role: 'assistant', content: 'risposta originale' }]);
   let fallisciAppend = false;
   let chiamate = 0;
   try {
     const primo = createSessionRegistry({
       avviaSessioneFn: (input) => (++chiamate === 1 ? primoGiro.avviaSessioneFn(input) : giroRipreso.avviaSessioneFn(input)),
       preparaEsecuzioneFn: preparaEsecuzioneFinta,
-      compattaSessioneFn: async () => ({ compattato: true, messaggi: riassunto }),
+      riassumiPerCompattazioneFn: riassuntoreFinto('riassunto che non deve apparire'),
       registraRigaConfermataFn: (input) => registraRigaConfermata(input, {
         appendFileSyncFn: (path, data, options) => {
           if (fallisciAppend) throw new Error('disco non disponibile');
@@ -8889,9 +8927,12 @@ test('CTX-LEGACY-COMPACT-WRITE-FAIL-ROLLBACK — un append fallito non conferma 
     const risultato = await primo.compatta(sessionId);
     assert.equal(risultato.code, 'SESSION_STORE_WRITE_FAILED');
     assert.notEqual(risultato.ok, true);
+    assert.equal(primo.statoCompattazione(sessionId).record, null, 'nessun record in memoria');
     fallisciAppend = false;
     assert.equal(primo.resume(sessionId, 'ritenta').sessionId, sessionId);
     assert.deepEqual(giroRipreso.ultimoInput.messaggiIniziali.slice(0, storia.length), storia);
+    assert.equal(giroRipreso.ultimoInput.recordCompattazioneIniziale, undefined);
+    assert.ok(!contiene(vistaDelGiro(giroRipreso.ultimoInput), 'riassunto che non deve apparire'));
   } finally {
     fallisciAppend = false;
     if (giroRipreso.chiamate) {
@@ -8902,16 +8943,16 @@ test('CTX-LEGACY-COMPACT-WRITE-FAIL-ROLLBACK — un append fallito non conferma 
   }
 });
 
-test('CTX-LEGACY-COMPACT-WRITE-FAIL-RESTART — il replay dopo append fallito conserva la storia originale', async () => {
+test('CTX-LEGACY-COMPACT-WRITE-FAIL-RESTART — il replay dopo append fallito conserva la storia originale, senza record', async () => {
   const cartellaStore = cartellaStoreVera();
   const primoGiro = sessioneControllabile();
   const dopoRestart = sessioneControllabile();
-  const storia = [{ role: 'user', content: 'domanda originale' }, { role: 'assistant', content: 'risposta originale' }];
+  const storia = conScambiPrima([{ role: 'user', content: 'domanda originale' }, { role: 'assistant', content: 'risposta originale' }]);
   let fallisci = false;
   try {
     const primo = createSessionRegistry({
       avviaSessioneFn: primoGiro.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta,
-      compattaSessioneFn: async () => ({ compattato: true, messaggi: [{ role: 'system', content: 'riassunto scartato' }] }),
+      riassumiPerCompattazioneFn: riassuntoreFinto('riassunto scartato'),
       registraRigaConfermataFn: (input) => registraRigaConfermata(input, {
         appendFileSyncFn: (path, data, options) => {
           if (fallisci) throw new Error('disco non disponibile');
@@ -8932,6 +8973,7 @@ test('CTX-LEGACY-COMPACT-WRITE-FAIL-RESTART — il replay dopo append fallito co
     await secondo.ripristina();
     assert.equal(secondo.resume(sessionId, 'ancora').sessionId, sessionId);
     assert.deepEqual(dopoRestart.ultimoInput.messaggiIniziali.slice(0, storia.length), storia);
+    assert.equal(dopoRestart.ultimoInput.recordCompattazioneIniziale, undefined, 'il record non scritto non torna');
   } finally {
     fallisci = false;
     if (dopoRestart.chiamate) {
@@ -8944,14 +8986,13 @@ test('CTX-LEGACY-COMPACT-WRITE-FAIL-RESTART — il replay dopo append fallito co
 
 test('CTX-LEGACY-COMPACT-CONCURRENT — una seconda compact non richiama il modello né sostituisce la prima', async () => {
   const giro = sessioneControllabile();
-  const storia = [{ role: 'user', content: 'storia' }, { role: 'assistant', content: 'risposta' }];
-  const riassunto = [{ role: 'system', content: 'sintesi unica' }];
+  const storia = conScambiPrima([{ role: 'user', content: 'storia' }, { role: 'assistant', content: 'risposta' }]);
   let libera;
   const attesa = new Promise((resolve) => { libera = resolve; });
-  let chiamateModello = 0;
+  const chiamate = [];
   const registro = createSessionRegistry({
     avviaSessioneFn: giro.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta,
-    compattaSessioneFn: async () => { chiamateModello += 1; await attesa; return { compattato: true, messaggi: riassunto }; },
+    riassumiPerCompattazioneFn: riassuntoreFinto('sintesi unica', { chiamate, attesa }),
     modello: 'z-ai/glm-5.3-flash', chiave: 'k',
   });
   const { sessionId } = registro.avvia('task-vero');
@@ -8961,9 +9002,10 @@ test('CTX-LEGACY-COMPACT-CONCURRENT — una seconda compact non richiama il mode
   const seconda = registro.compatta(sessionId);
   libera();
   const [primaRisposta, secondaRisposta] = await Promise.all([prima, seconda]);
-  assert.deepEqual(senzaStime(primaRisposta), { ok: true, compattato: true, annullabile: false });
+  assert.deepEqual(senzaStime(primaRisposta), { ok: true, compattato: true, annullabile: true });
   assert.equal(secondaRisposta.code, 'SESSION_NOT_READY');
-  assert.equal(chiamateModello, 1);
+  assert.equal(chiamate.length, 1);
+  assert.equal(registro.statoCompattazione(sessionId).record.at, primaRisposta.at);
 });
 
 test('CTX-LEGACY-COMPACT-RUNNING-GUARD — una storia precedente non permette compact durante il giro vivo', async () => {
@@ -9000,11 +9042,11 @@ test('CTX-LEGACY-COMPACT-RESUME-RACE — una sintesi tardiva non vince su un nuo
   const registro = createSessionRegistry({
     avviaSessioneFn: (input) => (++chiamate === 1 ? primoGiro.avviaSessioneFn(input) : secondoGiro.avviaSessioneFn(input)),
     preparaEsecuzioneFn: preparaEsecuzioneFinta,
-    compattaSessioneFn: async () => { await attesa; return { compattato: true, messaggi: [{ role: 'system', content: 'sintesi ormai vecchia' }] }; },
+    riassumiPerCompattazioneFn: riassuntoreFinto('sintesi ormai vecchia', { attesa }),
     modello: 'z-ai/glm-5.3-flash', chiave: 'k',
   });
   const { sessionId } = registro.avvia('task-vero');
-  primoGiro.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { ok: true, esito: { messaggiFinali: [{ role: 'user', content: 'prima' }] } });
+  primoGiro.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { ok: true, esito: { messaggiFinali: conScambiPrima([{ role: 'user', content: 'prima' }, { role: 'assistant', content: 'r' }]) } });
   await new Promise((resolve) => setImmediate(resolve));
   const compattazione = registro.compatta(sessionId);
   try {
@@ -9013,6 +9055,7 @@ test('CTX-LEGACY-COMPACT-RESUME-RACE — una sintesi tardiva non vince su un nuo
     const risposta = await compattazione;
     assert.equal(risposta.code, 'SESSION_NOT_READY');
     assert.deepEqual(secondoGiro.ultimoInput.messaggiIniziali.at(-1), { role: 'user', content: 'nuovo giro' });
+    assert.equal(registro.statoCompattazione(sessionId).record, null, 'la sintesi tardiva non diventa un record');
   } finally {
     libera();
     await compattazione;
@@ -9027,7 +9070,7 @@ test('CTX-LEGACY-COMPACT-QUEUE-RESUME-RACE — un nuovo giro invalida il riassun
   const cartellaStore = cartellaStoreVera();
   const primoGiro = sessioneControllabile();
   const secondoGiro = sessioneControllabile();
-  const storia = [{ role: 'user', content: 'prima' }, { role: 'assistant', content: 'risposta' }];
+  const storia = conScambiPrima([{ role: 'user', content: 'prima' }, { role: 'assistant', content: 'risposta' }]);
   let chiamate = 0;
   let libera;
   const attesa = new Promise((resolve) => { libera = resolve; });
@@ -9037,7 +9080,7 @@ test('CTX-LEGACY-COMPACT-QUEUE-RESUME-RACE — un nuovo giro invalida il riassun
     const registro = createSessionRegistry({
       avviaSessioneFn: (input) => (++chiamate === 1 ? primoGiro.avviaSessioneFn(input) : secondoGiro.avviaSessioneFn(input)),
       preparaEsecuzioneFn: preparaEsecuzioneFinta,
-      compattaSessioneFn: async () => ({ compattato: true, messaggi: [{ role: 'system', content: 'sintesi vecchia' }] }),
+      riassumiPerCompattazioneFn: riassuntoreFinto('sintesi vecchia'),
       modello: 'z-ai/glm-5.3-flash', chiave: 'k', cartellaStore,
     });
     const { sessionId } = registro.avvia('task-vero');
@@ -9055,7 +9098,7 @@ test('CTX-LEGACY-COMPACT-QUEUE-RESUME-RACE — un nuovo giro invalida il riassun
     assert.equal(risposta.code, 'SESSION_NOT_READY');
     await scritturaPrecedente;
     const righe = await leggiRegistroPerAttesa({ cartellaStore, sessionId });
-    assert.ok(!righe.some((riga) => riga.tipo === 'messaggi-finali' && riga.messaggiFinali?.[0]?.content === 'sintesi vecchia'));
+    assert.ok(!righe.some((riga) => riga.tipo === 'compattazione'), 'nessun record della sintesi vecchia sul disco');
     assert.deepEqual(secondoGiro.ultimoInput.messaggiIniziali.slice(0, storia.length), storia);
   } finally {
     libera?.();
@@ -9072,13 +9115,12 @@ test('CTX-LEGACY-COMPACT-POST-APPEND-THROW — record completo verificato confer
   const cartellaStore = cartellaStoreVera();
   const primoGiro = sessioneControllabile();
   const giroRipreso = sessioneControllabile();
-  const storia = [{ role: 'user', content: 'prima' }, { role: 'assistant', content: 'risposta' }];
-  const riassunto = [{ role: 'system', content: 'sintesi confermata' }];
+  const storia = conScambiPrima([{ role: 'user', content: 'prima' }, { role: 'assistant', content: 'risposta' }]);
   let dopoAppend = false;
   try {
     const primo = createSessionRegistry({
       avviaSessioneFn: primoGiro.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta,
-      compattaSessioneFn: async () => ({ compattato: true, messaggi: riassunto }),
+      riassumiPerCompattazioneFn: riassuntoreFinto('sintesi confermata'),
       registraRigaConfermataFn: (input) => registraRigaConfermata(input, {
         appendFileSyncFn: (path, data, options) => {
           appendFileSync(path, data, options);
@@ -9091,11 +9133,13 @@ test('CTX-LEGACY-COMPACT-POST-APPEND-THROW — record completo verificato confer
     primoGiro.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { ok: true, esito: { messaggiFinali: storia } });
     await attendiRegistroSuDisco(cartellaStore, sessionId, (righe) => righe.some((riga) => riga.tipo === 'messaggi-finali'));
     dopoAppend = true;
-    assert.deepEqual(senzaStime(await primo.compatta(sessionId)), { ok: true, compattato: true, annullabile: false });
+    const esito = await primo.compatta(sessionId);
+    assert.deepEqual(senzaStime(esito), { ok: true, compattato: true, annullabile: true });
     const dopoRestart = createSessionRegistry({ avviaSessioneFn: giroRipreso.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'z-ai/glm-5.3-flash', chiave: 'k', cartellaStore });
     await dopoRestart.ripristina();
     assert.equal(dopoRestart.resume(sessionId, 'ancora').sessionId, sessionId);
-    assert.deepEqual(giroRipreso.ultimoInput.messaggiIniziali.slice(0, riassunto.length), riassunto);
+    assert.equal(giroRipreso.ultimoInput.recordCompattazioneIniziale?.at, esito.at);
+    assert.ok(contiene(vistaDelGiro(giroRipreso.ultimoInput), 'sintesi confermata'));
   } finally {
     if (giroRipreso.chiamate) {
       giroRipreso.concludi({ type: 'RunFinished', threadId: 't2', runId: 'r2' });
@@ -9108,12 +9152,12 @@ test('CTX-LEGACY-COMPACT-POST-APPEND-THROW — record completo verificato confer
 test('CTX-LEGACY-COMPACT-PARTIAL-APPEND-THROW — prefisso parziale non avvelena il journal per il retry', async () => {
   const cartellaStore = cartellaStoreVera();
   const giro = sessioneControllabile();
-  const storia = [{ role: 'user', content: 'prima' }, { role: 'assistant', content: 'risposta' }];
+  const storia = conScambiPrima([{ role: 'user', content: 'prima' }, { role: 'assistant', content: 'risposta' }]);
   let scriviPrefisso = false;
   try {
     const registro = createSessionRegistry({
       avviaSessioneFn: giro.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta,
-      compattaSessioneFn: async () => ({ compattato: true, messaggi: [{ role: 'system', content: 'sintesi' }] }),
+      riassumiPerCompattazioneFn: riassuntoreFinto('sintesi'),
       registraRigaConfermataFn: (input) => registraRigaConfermata(input, {
         appendFileSyncFn: (path, data, options) => {
           if (scriviPrefisso) {
@@ -9459,6 +9503,9 @@ test('CONVERSAZIONI-REGISTRO — conversation_search vede le altre sessioni, non
 const MODELLO_REV = 'z-ai/glm-4.7-flash';
 const storiaDelGiro = (n) => [{ role: 'system', content: 's' }, { role: 'user', content: `domanda ${n}` }, { role: 'assistant', content: `risposta ${n}` }];
 const riassuntoDi = (storia) => [storia[0], { role: 'user', content: `[riassunto di ${storia.at(-1).content}]` }];
+/* 22/10/2026 (S2-A): una storia del giro con qualcosa da riassumere (due scambi in più, col numero del giro dentro). */
+const storiaLungaDelGiro = (n) => [{ role: 'system', content: 's' }, { role: 'user', content: `prima ${n}` }, { role: 'assistant', content: `r prima ${n}${CORPO_DI_PRIMA}` },
+  { role: 'user', content: `seconda ${n}` }, { role: 'assistant', content: `r seconda ${n}${CORPO_DI_PRIMA}` }, ...storiaDelGiro(n).slice(1)];
 
 function registroConGiri(n, opzioni = {}) {
   const finte = Array.from({ length: n }, () => sessioneControllabile());
@@ -9468,6 +9515,8 @@ function registroConGiri(n, opzioni = {}) {
     avviaSessioneFn: (input) => finte[i++].avviaSessioneFn(input),
     preparaEsecuzioneFn: preparaEsecuzioneFinta,
     compattaSessioneFn: async ({ messaggiFinali }) => { compattate.push(messaggiFinali); return { compattato: true, messaggi: riassuntoDi(messaggiFinali), usage: null }; },
+    /* 22/10/2026 (S2-A): il /compact chiama questo; `compattate` riceve la richiesta di riassunto (ciò che si riassume) */
+    riassumiPerCompattazioneFn: async ({ messaggi }) => { compattate.push(messaggi); return rispostaDiRiassunto('[riassunto]'); },
     modello: MODELLO_REV, chiave: 'k', cartellaEsisteFn: () => true,
     ...opzioni,
   });
@@ -9479,12 +9528,13 @@ test('REV-SESSION-READY-01 — RunFinished rende la cronologia disponibile a un 
   const { sessionId } = registro.avvia('task-vero');
   let compattazione = null;
   registro.iscriviti(sessionId, (evento) => { if (evento.type === 'RunFinished') compattazione = registro.compatta(sessionId); });
-  finte[0].concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaDelGiro(1) } });
+  finte[0].concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaLungaDelGiro(1) } });
   assert.ok(compattazione, 'l\'ascoltatore ha chiesto la compattazione');
   const esito = await compattazione;
   assert.equal(esito.code, undefined, `compattazione rifiutata: ${esito.erroreAvvio}`);
-  assert.equal(esito.ok, true);
-  assert.deepEqual(compattate, [storiaDelGiro(1)], 'si compatta la cronologia del giro appena concluso');
+  assert.equal(esito.compattato, true);
+  assert.equal(compattate.length, 1);
+  assert.ok(contiene(compattate[0], 'prima 1'), 'si compatta la cronologia del giro appena concluso');
 });
 
 test('REV-SESSION-READY-02 — dal secondo giro il compact immediato compatta la cronologia NUOVA, mai quella del giro prima', async () => {
@@ -9497,11 +9547,12 @@ test('REV-SESSION-READY-02 — dal secondo giro il compact immediato compatta la
   /* In microtask, come chi fa `await` nell'ascoltatore: a quel punto `conclusa` è già vera. `iscriviti` rigioca anche il
      RunFinished del primo giro: si guarda solo quello del secondo. */
   registro.iscriviti(sessionId, (evento) => { if (evento.type === 'RunFinished' && evento.runId === 'r2') queueMicrotask(() => { compattazione = registro.compatta(sessionId); }); });
-  finte[1].concludi({ type: 'RunFinished', threadId: 't2', runId: 'r2' }, { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaDelGiro(2) } });
+  finte[1].concludi({ type: 'RunFinished', threadId: 't2', runId: 'r2' }, { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaLungaDelGiro(2) } });
   await Promise.resolve();
   const esito = await compattazione;
-  assert.equal(esito.ok, true, esito.erroreAvvio);
-  assert.deepEqual(compattate, [storiaDelGiro(2)], 'compattata la cronologia del SECONDO giro');
+  assert.equal(esito.compattato, true, esito.erroreAvvio);
+  assert.equal(compattate.length, 1);
+  assert.ok(contiene(compattate[0], 'prima 2') && !contiene(compattate[0], 'prima 1'), 'compattata la cronologia del SECONDO giro');
 });
 
 test('REV-SESSION-READY-03 — resume e forka nella finestra non usano MAI la cronologia del giro prima; dopo l\'assestamento sì, quella nuova', async () => {
@@ -9540,10 +9591,11 @@ test('REV-SESSION-READY-04 — anche dopo un RunError il compact immediato vede 
   registro.iscriviti(sessionId, (evento) => {
     if (evento.type === 'RunFinished' || evento.type === 'RunError') { finali.push(evento.type); compattazione = registro.compatta(sessionId); }
   });
-  finte[0].concludi({ type: 'RunError', message: 'fermato', code: 'fermato' }, { ok: false, esito: { comeFinita: 'fermato', detto: 'fermato', messaggiFinali: storiaDelGiro(1) } });
+  finte[0].concludi({ type: 'RunError', message: 'fermato', code: 'fermato' }, { ok: false, esito: { comeFinita: 'fermato', detto: 'fermato', messaggiFinali: storiaLungaDelGiro(1) } });
   const esito = await compattazione;
-  assert.equal(esito.ok, true, esito.erroreAvvio);
-  assert.deepEqual(compattate, [storiaDelGiro(1)]);
+  assert.equal(esito.compattato, true, esito.erroreAvvio);
+  assert.equal(compattate.length, 1);
+  assert.ok(contiene(compattate[0], 'prima 1'));
   await new Promise((r) => setImmediate(r));
   assert.deepEqual(finali, ['RunError'], 'un solo evento finale: l\'azione dell\'ascoltatore non ne genera un secondo');
 });
@@ -9573,14 +9625,15 @@ test('REV-SESSION-READY-06 — il compact immediato sopravvive al riavvio: il re
     const { sessionId } = registro.avvia('task-vero');
     let compattazione = null;
     registro.iscriviti(sessionId, (evento) => { if (evento.type === 'RunFinished') compattazione = registro.compatta(sessionId); });
-    finte[0].concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaDelGiro(1) } });
-    assert.equal((await compattazione).ok, true);
+    finte[0].concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaLungaDelGiro(1) } });
+    assert.equal((await compattazione).compattato, true);
     await attendiScritture({ cartellaStore, sessionId });
     const dopo = sessioneControllabile();
     const riavvio = createSessionRegistry({ cartellaStore, avviaSessioneFn: dopo.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: MODELLO_REV, chiave: 'k', cartellaEsisteFn: () => true });
     await riavvio.ripristina();
     assert.equal(riavvio.resume(sessionId, 'dopo il riavvio').sessionId, sessionId);
-    assert.deepEqual(dopo.ultimoInput.messaggiIniziali.slice(0, 2), riassuntoDi(storiaDelGiro(1)), 'dopo il riavvio la cronologia è quella compattata');
+    assert.ok(dopo.ultimoInput.recordCompattazioneIniziale, 'dopo il riavvio il giro parte dal record del /compact');
+    assert.ok(contiene(vistaDelGiro(dopo.ultimoInput), '[riassunto]') && !contiene(vistaDelGiro(dopo.ultimoInput), 'r prima 1'), 'e il modello vede la cronologia compattata');
     dopo.concludi({ type: 'RunFinished', threadId: 't2', runId: 'r2' }, { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: [] } });
     await attendiScritture({ cartellaStore, sessionId });
   } finally {

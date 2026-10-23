@@ -257,12 +257,20 @@ export async function avviaSessione({
   limiteUscitaToken = null,
   /* 21/10/2026 (CLI, `context.compactAtTokens`): il tetto di compattazione scelto dall'ospite, sullo stesso filo. Additivo. */
   tettoCompattazioneToken = null,
+  /* Revisione 6 della CLI (S2-2): lo scarto misurato nel giro prima, dal registro, sullo stesso filo. Additivo: assente ⇒ gli attrezzi. */
+  scartoMisurato = null,
+  /* Revisione 8 della CLI (N1): la stima degli schemi del giro che ha misurato lo scarto, dal registro, sullo stesso filo. Additivo. */
+  stimaAttrezziMisurati = null,
+  /* Revisione 7 della CLI (F6): la finestra per cui la sessione ha già detto «non entra», dal registro, sullo stesso filo. Additivo. */
+  nonEntraDetto = null,
   /* 21/10/2026 (CLI): il modello che scrive i riassunti e la sua finestra, sullo stesso filo. Additivi: assenti ⇒ la conversazione. */
   modelloRiassunto = null,
   finestraRiassuntoToken = null,
   /* 21/10/2026 (A1 + B1 dell'owner, contratto riga viva §4-§5): lo Skip della persona (un segnale per giro, dal registro) e i due
      orologi del riassunto atteso (l'ospite li cambia; assenti ⇒ quelli di serie dell'adattatore). Additivi. */
   segnaleSaltaRiassunto = null,
+  /* 22/10/2026 (revisione avversaria, C): lo Skip della compattazione in corso, riarmato dal registro; letto al momento */
+  saltaRiassuntoFn = null,
   riassuntoInattivitaMs = null,
   riassuntoTettoMs = null,
   /*
@@ -1382,10 +1390,29 @@ export async function avviaSessione({
              parola (tempo · saltato · esaurito · rifiutato) e la `classe` dell'adattatore. Prima si perdevano qui. Solo se ci sono. */
           ...(evento.ripiego === true ? { ripiego: true } : {}),
           ...(typeof evento.ragione === 'string' ? { ragione: evento.ragione } : {}),
-          ...(typeof evento.classe === 'string' ? { classe: evento.classe } : {}) }
+          ...(typeof evento.classe === 'string' ? { classe: evento.classe } : {}),
+          /* 22/10/2026 (revisione 4 della CLI, S3-2): la riga del giro nata da un record preparato altrove lo dice — `at` di quel
+             record (solo un istante ISO), `origine` ('giro' · 'fine-giro'), `tokenDopo` dopo di lui, `conResto`. Chi disegna anche la
+             riga di sottofondo non la conta due volte. Solo questi campi, validati. */
+          ...(evento.adottato && typeof evento.adottato === 'object' && typeof evento.adottato.at === 'string'
+            && /^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/u.test(evento.adottato.at) && (evento.adottato.origine === 'giro' || evento.adottato.origine === 'fine-giro')
+            ? { adottato: { at: evento.adottato.at, origine: evento.adottato.origine,
+              ...(Number.isSafeInteger(evento.adottato.tokenDopo) ? { tokenDopo: evento.adottato.tokenDopo } : {}), conResto: evento.adottato.conResto === true } }
+            : {}),
+          /* 22/10/2026 (quarta passata avversaria): la base adottata è stata applicata ma il riassunto del resto no — il perché resta nel
+             giornale della sessione (solo campi di codice, mai testo del fornitore); l'interfaccia disegna la riga «compattato» e basta. */
+          ...(evento.restoNonRiuscito && typeof evento.restoNonRiuscito === 'object' ? { restoNonRiuscito: {
+            motivo: typeof evento.restoNonRiuscito.motivo === 'string' ? evento.restoNonRiuscito.motivo.slice(0, 64) : null,
+            ...(typeof evento.restoNonRiuscito.interrottaIn === 'string' ? { interrottaIn: evento.restoNonRiuscito.interrottaIn.slice(0, 32) } : {}),
+            ...(typeof evento.restoNonRiuscito.classe === 'string' ? { classe: evento.restoNonRiuscito.classe.slice(0, 64) } : {}),
+            ...(Number.isSafeInteger(evento.restoNonRiuscito.fallimentiConsecutivi) ? { fallimentiConsecutivi: evento.restoNonRiuscito.fallimentiConsecutivi } : {}),
+          } } : {}) }
         : { fase: 'fine', giro: evento.giro, compattato: false, motivo: evento.motivo ?? null, ...(evento.interrottaIn ? { interrottaIn: evento.interrottaIn } : {}),
           ...(typeof evento.classe === 'string' ? { classe: evento.classe } : {}), // D5 b della CLI (21/10): la classe del fallimento
           ...(Number.isSafeInteger(evento.fallimentiConsecutivi) ? { fallimentiConsecutivi: evento.fallimentiConsecutivi } : {}),
+          /* Revisione 7 della CLI (F6), contratto con la CLI: «non entra» porta la finestra e il pavimento che la supera */
+          ...(Number.isSafeInteger(evento.finestra) ? { finestra: evento.finestra } : {}),
+          ...(Number.isSafeInteger(evento.pavimento) ? { pavimento: evento.pavimento } : {}),
           /* R-05 fino in fondo (12/10/2026): il codice e il «dove» (posizioni e ruolo, mai contenuto) arrivano al giornale e al
              trascritto. Nel trascritto dell'owner (36289618) la riga del ripiego era muta sulla causa. Solo se ci sono. */
           ...(typeof evento.codice === 'string' ? { codice: evento.codice } : {}),
@@ -1405,7 +1432,9 @@ export async function avviaSessione({
      */
     if (evento.tipo === 'compattazione-preparata') {
       const { tipo: _tipo, ...valore } = evento;
-      onEvento({ type: 'CUSTOM', name: 'talos.compattazione-preparata', value: valore }, { durable: true });
+      /* 22/10/2026: `onEvento` torna la promessa della scrittura durevole — qui non la si aspetta, ma un fallimento si registra */
+      Promise.resolve(onEvento({ type: 'CUSTOM', name: 'talos.compattazione-preparata', value: valore }, { durable: true }))
+        .catch((errore) => console.error('[agent-service] compaction-prepared event not saved:', errore instanceof Error ? errore.message : errore));
       return;
     }
     if (evento.tipo === 'compattazione-progresso') {
@@ -2320,7 +2349,11 @@ export async function avviaSessione({
       ...(Number.isSafeInteger(tettoCompattazioneToken) && tettoCompattazioneToken > 0 ? { tettoCompattazioneToken } : {}), // 21/10: il tetto dell'ospite
       ...(typeof modelloRiassunto === 'string' && modelloRiassunto ? { modelloRiassunto } : {}), // 21/10 (CLI): il modello dei riassunti
       ...(Number.isFinite(finestraRiassuntoToken) && finestraRiassuntoToken > 0 ? { finestraRiassuntoToken } : {}),
+      ...(Number.isFinite(scartoMisurato) && scartoMisurato >= 0 ? { scartoMisurato } : {}), // revisione 6 della CLI (S2-2)
+      ...(Number.isFinite(stimaAttrezziMisurati) && stimaAttrezziMisurati > 0 ? { stimaAttrezziMisurati } : {}), // revisione 8 della CLI (N1)
+      ...(Number.isSafeInteger(nonEntraDetto) ? { nonEntraDetto } : {}), // revisione 7 della CLI (F6)
       ...(segnaleSaltaRiassunto instanceof AbortSignal ? { segnaleSaltaRiassunto } : {}), // 21/10: lo Skip del riassunto atteso
+      ...(typeof saltaRiassuntoFn === 'function' ? { saltaRiassuntoFn } : {}), // 22/10 (C): riarmato a ogni compattazione
       ...(Number.isSafeInteger(riassuntoInattivitaMs) && riassuntoInattivitaMs > 0 ? { riassuntoInattivitaMs } : {}),
       ...(Number.isSafeInteger(riassuntoTettoMs) && riassuntoTettoMs > 0 ? { riassuntoTettoMs } : {}),
       ...(recordCompattazioneIniziale ? { recordCompattazioneIniziale } : {}), // IST-REV-00b: il turno parte già proiettato
@@ -2570,7 +2603,7 @@ export async function compattaSessione({
  *   misurato il 09/09 sul giro D1 (`runtime-owner-adapter.mjs::callContextModel`).
  * @returns {Promise<{scelta:object|null, finishReason:string|null, usage:object|null}>}
  */
-export async function riassumiPerCompattazione({ modello, chiave, messaggi, maxOutputTokens, reasoning, fetchDiRete = fetch, segnaleStop, onProgresso = null, tentativo = 1 }) {
+export async function riassumiPerCompattazione({ modello, chiave, messaggi, maxOutputTokens, reasoning, fetchDiRete = fetch, segnaleStop, onProgresso = null, tentativo = 1, tentativiMassimi, attesaRitentaMassimaMs }) {
   /* Lane CLI, 03/10/2026: con `onProgresso` il riassunto si conta mentre si scrive, come in `compattaSessione`. */
   const contatore = typeof onProgresso === 'function' ? creaContatoreRiassunto({ emetti: onProgresso, tentativo }) : null;
   const esito = await chiamaConRitenta({
@@ -2578,6 +2611,9 @@ export async function riassumiPerCompattazione({ modello, chiave, messaggi, maxO
     ...(Number.isSafeInteger(maxOutputTokens) && maxOutputTokens > 0 ? { maxOutputTokens } : {}),
     ...(reasoning ? { reasoning } : {}),
     ...(segnaleStop ? { segnaleStop } : {}),
+    /* 22/10/2026 (CLI): il riassunto ritenta come l'adapter (`TENTATIVI_RIASSUNTO`), non come un giro */
+    ...(Number.isSafeInteger(tentativiMassimi) && tentativiMassimi > 0 ? { tentativiMassimi } : {}),
+    ...(Number.isSafeInteger(attesaRitentaMassimaMs) && attesaRitentaMassimaMs >= 0 ? { attesaRitentaMassimaMs } : {}),
     ...(contatore ? { onDelta: contatore.onDelta, accettaVuota: true } : {}),
   });
   contatore?.chiudi(esito?.usage);

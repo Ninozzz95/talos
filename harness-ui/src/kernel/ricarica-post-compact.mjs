@@ -43,7 +43,55 @@ import { readFile } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
-const eseguiGitPredefinito = promisify(execFile);
+const eseguiGitGrezzo = promisify(execFile);
+
+/*
+ * ⛔ Revisione 7 della CLI (22/10/2026, F2): su Windows lo Stop non fermava git. Con il PATH abituale `git` è il LANCIATORE
+ *   `Git\cmd\git.exe`: `execFile` con `signal` (o `timeout`) uccide solo lui, e restano vivi il `git.exe` vero di mingw64 e ciò che lancia
+ *   (con `log.showSignature` acceso, gpg via `sh`) — la cartella del progetto restava aperta (EPERM su `rmSync`). La prova della revisione
+ *   6 («nessuna lettura ancora aperta») misurava la promessa, non il processo.
+ * Stato dell'arte (ricerca del 22/10/2026): su Windows non ci sono gruppi di processi e `taskkill /T` non trova più i figli di un processo
+ *   già uscito (execa, `lib/terminate/kill-descendants.js`); tree-kill chiude l'albero con `taskkill /pid PID /T /F`.
+ * ⇒ Lo Stop e il tempo scaduto chiudono PRIMA l'albero intero (finché il lanciatore è vivo), POI fanno finire la chiamata. E git non lancia
+ *   più gpg: `-c log.showSignature=false` (la firma non serve a un elenco di commit, su ogni sistema).
+ * ⛔ La chiusura dell'albero ha il suo tetto (2 s): lo Stop non aspetta mai git oltre quello.
+ */
+const erroreDiStop = () => Object.assign(new Error('The operation was aborted'), { name: 'AbortError', code: 'ABORT_ERR' });
+function chiudiAlbero(figlio) {
+  if (process.platform !== 'win32' || !Number.isInteger(figlio?.pid) || figlio.exitCode !== null) return Promise.resolve();
+  return new Promise((ok) => {
+    /* l'ambiente minimo che serve a taskkill, mai quello intero del server (cancello SPAWN-AMBIENTE-01) */
+    const minimo = Object.fromEntries(['SystemRoot', 'windir', 'PATH'].filter((k) => typeof process.env[k] === 'string').map((k) => [k, process.env[k]]));
+    try { execFile('taskkill', ['/PID', String(figlio.pid), '/T', '/F'], { windowsHide: true, timeout: 2_000, env: minimo }, () => ok()); } catch { ok(); }
+  });
+}
+/** Esportato per la prova dell'albero chiuso (revisione 7, F2); il blocco dei fatti lo usa quando nessuno inietta `eseguiGit`. */
+export async function eseguiGitPredefinito(file, args, { timeout = 0, signal = null, ...opzioni } = {}) {
+  if (signal?.aborted) throw erroreDiStop();
+  const interno = new AbortController();
+  const promessa = eseguiGitGrezzo(file, args, { ...opzioni, signal: interno.signal });
+  const figlio = promessa.child ?? null;
+  let motivo = null;
+  const chiudi = async (perche) => {
+    if (motivo) return;
+    motivo = perche;
+    await chiudiAlbero(figlio);
+    interno.abort();
+  };
+  const alloStop = () => { void chiudi('stop'); };
+  signal?.addEventListener('abort', alloStop, { once: true });
+  const timer = timeout > 0 ? setTimeout(() => { void chiudi('tempo'); }, timeout) : null;
+  try {
+    return await promessa;
+  } catch (errore) {
+    if (motivo === 'stop') throw erroreDiStop();
+    if (motivo === 'tempo') throw Object.assign(new Error(`git did not answer within ${timeout} ms`), { code: 'ETIMEDOUT' });
+    throw errore;
+  } finally {
+    if (timer) clearTimeout(timer);
+    signal?.removeEventListener('abort', alloStop);
+  }
+}
 
 /**
  * (C-b) Il recinto della sintesi: va messo SUBITO DOPO il marcatore di compattazione e PRIMA del
@@ -110,6 +158,8 @@ export async function costruisciBloccoFatti(fonti = {}, {
   ora = () => new Date(),
   leggiFile = readFile,
   eseguiGit = eseguiGitPredefinito,
+  /* Revisione 6 della CLI (S4-1): lo Stop del giro ferma anche git, e chi aspetta il blocco non aspetta più del giro */
+  segnale = null,
   caratteriMassimi = CARATTERI_BLOCCO_MASSIMI,
   commitRecenti = COMMIT_RECENTI,
   caratteriLedger = CARATTERI_LEDGER,
@@ -149,7 +199,7 @@ export async function costruisciBloccoFatti(fonti = {}, {
     righe.push('  - (no project folder declared to the compaction code)');
   } else {
     try {
-      const { stdout } = await eseguiGit('git', ['-C', cartella, 'log', '--oneline', `-${commitRecenti}`], { timeout: 5_000, windowsHide: true });
+      const { stdout } = await eseguiGit('git', ['-C', cartella, '-c', 'log.showSignature=false', 'log', '--oneline', `-${commitRecenti}`], { timeout: 5_000, windowsHide: true, ...(segnale ? { signal: segnale } : {}) });
       const visti = String(stdout ?? '').split(/\r?\n/).map((r) => unaRiga(r, 200)).filter(Boolean);
       if (visti.length === 0) righe.push(`  - (git log is empty: no commits in ${cartella})`);
       else righe.push(...visti.map((r) => `  - ${r}`));

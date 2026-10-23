@@ -125,7 +125,8 @@ export function interpretaEventoCompattazione(evento) {
       const identificativo = at(v) ?? at(v.record);
       const record = compattato && identificativo
         ? { at: identificativo, coveredThrough: Number.isSafeInteger(v.coveredThrough) ? v.coveredThrough : Number.isSafeInteger(v.record?.coveredThrough) ? v.record.coveredThrough : null, riassunto: typeof v.record?.riassunto === 'string' && v.record.riassunto ? v.record.riassunto : null,
-          /* 26/09: la via manuale (`motivo:'manuale'`) sostituisce la storia con un checkpoint senza record: `annullabile:false`. */
+          /* 26/09: la via manuale sostituiva la storia senza record (`annullabile:false`); dal 22/10 (S2-A) scrive un record ed è
+             annullabile come le altre. Il campo resta letto: le righe già scritte sul disco portano ancora `false`. */
           annullabile: v.annullabile !== false }
         : null;
       let motivo = typeof v.motivo === 'string' ? v.motivo : null, dettaglio = null;
@@ -203,6 +204,9 @@ const MOTIVI = Object.freeze({
   /* Owner 12/10/2026, «errori di compattazione non devono bloccare il flusso chat»: il motore del contesto è caduto e la richiesta
      è partita dalla compattazione semplice (`talosHarness.desktop-hotfix.mjs`, ripiego). La riga lo dice, e non ferma niente. */
   ripiego: 'chat.context.failure.fellBack',
+  /* Revisione 7 della CLI (22/10/2026, F6): la finestra non regge attrezzi e parte tenuta — nessun riassunto pagato; detto una volta per
+     finestra (il registro non lo ripete) */
+  'non-entra': 'chat.context.failure.doesNotFit',
 });
 /* Owner 12/10/2026 («Si ripara da solo»): l'archivio del motore non combaciava con la conversazione; i vecchi originali sono stati
    messi da parte e il motore è ripartito. Non è un fallimento: la riga dice che cosa è successo e che niente si è perso. */
@@ -210,7 +214,18 @@ const RIALLINEATO = 'archivio-riallineato';
 /* 21/10/2026 (6): il riassunto di sfondo messo da parte perché la persona ha scritto (`motivo:'ceduta'`, motore a posto unico). È voluto,
    non è un fallimento: nessuna riga, la barra si chiude e basta. La CLI fa lo stesso (`COMPACTION_QUIET`). */
 /* B1 (21/10/2026): `motore` chiude la riga di un riassunto che ha scritto il motore del contesto — il suo separatore lo racconta già. */
-const MOTIVI_MUTI = new Set(['ceduta', 'motore']);
+/* 22/10/2026 (revisione avversaria, B): `nulla-da-ridurre` chiude la riga che l'attesa d'emergenza aveva aperto, quando poi non c'era niente
+   da riassumere né da accorciare — nessun fallimento da raccontare. */
+/* 22/10/2026 (CLI, revisione 3, S2-2): `inefficace` — il riassunto di fine giro non riduceva e il record non si è scritto: niente è
+   cambiato, niente da raccontare. */
+const MOTIVI_MUTI = new Set(['ceduta', 'motore', 'nulla-da-ridurre', 'inefficace']);
+/** La frase della nota di un «Compatta» a mano che non ha compattato: «al-minimo» e «inefficace» hanno la loro (revisione 3 della CLI,
+    22/10/2026 — con «inefficace» il riassunto si è pagato, e la nota generica non lo diceva); ogni altro motivo, quella generica. */
+export function chiaveNotaCompactManuale(motivo) {
+  if (motivo === 'al-minimo') return 'app.contextManager.atMinimum';
+  if (motivo === 'inefficace') return 'app.contextManager.ineffective';
+  return 'app.contextManager.notSummarized';
+}
 /** Una fine non riuscita che non si racconta. */
 export function fineMuta(c) {
   return c?.tipo === 'fine' && c.compattato !== true && MOTIVI_MUTI.has(c.motivo);
@@ -418,9 +433,11 @@ export async function compattaLegacy({ fetchFn = globalThis.fetch, base = '/api/
   const compattato = corpo.compattato === true;
   /* 26/09: la rotta risponde anche con `at` (la chiave della riga, la stessa dell'evento durevole) e i numeri stimati. */
   const intero = (n) => (Number.isSafeInteger(n) && n > 0 ? n : null);
+  const testo = (x) => (typeof x === 'string' && x ? x : null);
   return compattato
     ? { compattato, at: typeof corpo.at === 'string' && corpo.at ? corpo.at : null, annullabile: corpo.annullabile !== false, tokenPrima: intero(corpo.tokenPrima), tokenDopo: intero(corpo.tokenDopo) }
-    : { compattato };
+    /* 22/10/2026: il perché di un «non compattato» (`motivo`, `codice`) arriva alla nota e alla finestra del Context Manager */
+    : { compattato, motivo: testo(corpo.motivo), codice: testo(corpo.codice) };
 }
 
 /**

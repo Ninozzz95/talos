@@ -49,7 +49,7 @@ export function creaIdentitaRemoto({ keyring, casuale = (n) => randomBytes(n), n
       const salvata = leggi('endpoint');
       if (salvata) {
         const byte = Buffer.from(salvata, 'base64url');
-        if (byte.length !== 32) throw errore('REMOTE_KEY_INVALID', 'The saved computer key is damaged: unpair the phones and reset remote control.');
+        if (byte.length !== 32) throw errore('REMOTE_KEY_INVALID', 'The saved computer key is damaged: unpair the devices and reset remote control.');
         return Uint8Array.from(byte);
       }
       const nuova = Buffer.from(casuale(32));
@@ -65,7 +65,7 @@ export function creaIdentitaRemoto({ keyring, casuale = (n) => randomBytes(n), n
         const privata = typeof v?.privateKey === 'string' ? Buffer.from(v.privateKey, 'base64url') : null;
         if (typeof v?.publicKey !== 'string' || !privata
           || Buffer.from(v.publicKey, 'base64url').length !== 65 || privata.length < 1 || privata.length > 32 || privata.every((b) => b === 0)) {
-          throw errore('REMOTE_KEY_INVALID', 'The saved notification key is damaged: unpair the phones and reset remote control.');
+          throw errore('REMOTE_KEY_INVALID', 'The saved notification key is damaged: unpair the devices and reset remote control.');
         }
         /* Revisione del 20/10 (D8): accettare una privata più corta di 32 byte è sicuro solo se, riempita, dà ANCORA la pubblica
            salvata. Una privata troncata (un byte solo) prima era «rovinata» e ora passerebbe: le sveglie fallirebbero dopo, dal
@@ -73,7 +73,7 @@ export function creaIdentitaRemoto({ keyring, casuale = (n) => randomBytes(n), n
         const piena = aSinistra(privata, 32);
         let coppiaGiusta = false;
         try { const verifica = createECDH('prime256v1'); verifica.setPrivateKey(piena); coppiaGiusta = b64url(verifica.getPublicKey()) === v.publicKey; } catch { /* fuori dalla curva: rovinata */ }
-        if (!coppiaGiusta) throw errore('REMOTE_KEY_INVALID', 'The saved notification key is damaged: unpair the phones and reset remote control.');
+        if (!coppiaGiusta) throw errore('REMOTE_KEY_INVALID', 'The saved notification key is damaged: unpair the devices and reset remote control.');
         return { publicKey: v.publicKey, privateKey: b64url(piena) };
       }
       const nuova = nuovaVapid();

@@ -15,7 +15,7 @@ import { chiamaConRitenta } from '../src/kernel/talosHarness.mjs';
 const CHIAVE = 'sec-zai-unica';
 const attesa = (ms) => new Promise((r) => { setTimeout(r, ms); });
 
-async function banco(t, rispondi) {
+async function banco(t, rispondi, { modelloSessione = null } = {}) {
   const richieste = [];
   const server = createServer(async (req, res) => {
     const pezzi = [];
@@ -35,7 +35,7 @@ async function banco(t, rispondi) {
   store.setRuntime('zai', { endpoint: `http://127.0.0.1:${server.address().port}/zai` });
   const consumi = [];
   const trasporto = creaFetchMultiProvider(fetch, {
-    providerStore: store, onConsumoFornitore: async (e) => { consumi.push(e); },
+    providerStore: store, onConsumoFornitore: async (e) => { consumi.push(e); }, modelloSessione,
     dipendenze: { leggiChiave: (p) => store.getKey(p), leggiRuntime: (p) => store.getRuntime(p) },
   });
   const opzioni = { modello: 'zai:glm-4.7-flash', chiave: 'unused-local-only', messaggi: [{ role: 'user', content: 'Continua.' }],
@@ -75,4 +75,35 @@ test('SECONDARIA-03 — una secondaria che fallisce lancia, deposita «interrott
   falliscono = false;
   await b.run();
   assert.equal(b.richieste.at(-1).chiave, CHIAVE, 'la chiave non è finita in panchina per un riassunto fallito');
+});
+
+/* Revisione 3 della CLI sulla 0.6.13 (22/10/2026, S2-1): il 429 del modello LEGGERO (il riassunto col modello proprio, o un titolo)
+   mandava in panchina la chiave unica della sessione, e il giro aspettava il Retry-After intero dietro un modello che non era il suo. */
+const limitato = (res) => { res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': '90' }); res.end(JSON.stringify({ error: { message: 'rate limited' } })); };
+
+test('S2-1-LEGGERO-01 — un 429 (Retry-After 90) del riassunto col modello leggero NON panchina la chiave della sessione: la richiesta del giro parte subito, sulla stessa chiave', async (t) => {
+  const b = await banco(t, async (res, corpo) => { if (corpo.model === 'glm-4.5-air') limitato(res); else ok(res, 'fatto'); }, { modelloSessione: 'zai:glm-4.7-flash' });
+  await assert.rejects(b.run({ secondaria: true, modelloProprio: true, modello: 'zai:glm-4.5-air', messaggi: [{ role: 'user', content: 'Riassumi.' }] }), /HTTP 429/u);
+  const leggere = b.richieste.filter((r) => r.corpo.model === 'glm-4.5-air').length;
+  assert.ok(leggere >= 1 && leggere <= 2, `la secondaria fa al massimo i SUOI due tentativi (un Retry-After oltre 30 s la ferma subito), non i dieci del giro (${leggere})`);
+  assert.ok(b.store.elencaPool('zai').every((v) => v.stato === 'disponibile'), JSON.stringify(b.store.elencaPool('zai').map((v) => v.stato)));
+  const inizio = Date.now();
+  await b.run();
+  assert.ok(Date.now() - inizio < 5_000, 'il giro non aspetta il Retry-After del modello leggero');
+  assert.equal(b.richieste.at(-1).corpo.model, 'glm-4.7-flash');
+  assert.equal(b.richieste.at(-1).chiave, CHIAVE);
+});
+
+test('S2-1-LEGGERO-02 — anche una chiamata NORMALE con un altro modello (un titolo) a chiave unica: il 429 si conta, non si panchina', async (t) => {
+  const b = await banco(t, async (res, corpo) => { if (corpo.model === 'glm-4.5-air') limitato(res); else ok(res, 'fatto'); }, { modelloSessione: 'zai:glm-4.7-flash' });
+  await assert.rejects(b.run({ modello: 'zai:glm-4.5-air', messaggi: [{ role: 'user', content: 'Titolo.' }] }), /HTTP 429/u);
+  assert.ok(b.store.elencaPool('zai').every((v) => v.stato === 'disponibile'), JSON.stringify(b.store.elencaPool('zai').map((v) => v.stato)));
+  await b.run();
+  assert.equal(b.richieste.at(-1).chiave, CHIAVE);
+});
+
+test('S2-1-LEGGERO-03 — AL CONTRARIO: con il modello della sessione la regola di prima resta (dopo i suoi ritentativi la chiave unica limitata va in panchina)', async (t) => {
+  const b = await banco(t, async (res) => { limitato(res); }, { modelloSessione: 'zai:glm-4.7-flash' });
+  await assert.rejects(b.run(), /Too much traffic at the provider/u, 'la strada del giro lancia l\'errore pubblico del traffico');
+  assert.ok(b.store.elencaPool('zai').some((v) => v.stato !== 'disponibile'), JSON.stringify(b.store.elencaPool('zai').map((v) => v.stato)));
 });

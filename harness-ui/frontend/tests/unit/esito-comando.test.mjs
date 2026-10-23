@@ -79,7 +79,7 @@ test('PO-06: senza il livello di isolamento non si inventa un posto', () => {
 test('⛔ il «dove» si legge ANCHE dall\'etichetta spiegata che scrive il kernel', () => {
   assert.equal(dovEGirato('none (cmd.exe nativo: stesso utente e stessi privilegi del processo, nessun isolamento)'), 'su Windows, senza isolamento');
   assert.equal(dovEGirato('wsl2 (namespace Linux: filesystem e processi separati)'), 'in Linux (WSL), non su Windows');
-  assert.equal(dovEGirato('adb-shell-on-device (shell sul dispositivo collegato, fuori da questa macchina)'), 'sul telefono collegato');
+  assert.equal(dovEGirato('adb-shell-on-device (shell sul dispositivo collegato, fuori da questa macchina)'), 'sul dispositivo collegato');
   /* e le forme corte restano valide: chi le scrive sono le sessioni registrate prima di oggi */
   assert.equal(dovEGirato('wsl2'), 'in Linux (WSL), non su Windows');
   assert.equal(dovEGirato('none'), 'su Windows, senza isolamento');

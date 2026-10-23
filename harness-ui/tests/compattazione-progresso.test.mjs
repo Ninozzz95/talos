@@ -264,10 +264,13 @@ function giriFinti(n) {
   let i = 0;
   return { giri, avviaSessioneFn: (input) => giri[i++].avvia(input) };
 }
+/* 22/10/2026 (S2-A): tre scambi — il /compact tiene alla lettera gli ultimi due, e con due soli non avrebbe niente da riassumere. */
 const STORIA = [
   { role: 'system', content: 's' }, { role: 'user', content: 'ciao' }, { role: 'assistant', content: 'parola '.repeat(4_000) },
   { role: 'user', content: 'continua' }, { role: 'assistant', content: 'parola '.repeat(4_000) },
+  { role: 'user', content: 'ancora' }, { role: 'assistant', content: 'breve' },
 ];
+const rispostaDiRiassunto = (testo) => ({ scelta: { role: 'assistant', content: testo ? `## Riassunto\n${testo}` : '' }, finishReason: 'stop', usage: null });
 const RIASSUNTA = [{ role: 'system', content: 's' }, { role: 'user', content: 'Riassunto: abbiamo parlato.' }];
 const righeDelJournal = (cartellaStore, sessionId) => readFileSync(join(cartellaStore, `${sessionId}.jsonl`), 'utf8').trim().split('\n').map((r) => JSON.parse(r));
 
@@ -278,11 +281,12 @@ test('CP-REGISTRO-01 — «Compatta ora»: lettura → riassunto → sostituzion
     let argomenti = null;
     const registro = createSessionRegistry({
       cartellaStore, avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'z-ai/glm-5.3-flash', chiave: 'k',
-      compattaSessioneFn: async (a) => {
+      /* 22/10/2026 (S2-A): il /compact passa dal riassuntore dell'adapter, come il riassunto di fine giro */
+      riassumiPerCompattazioneFn: async (a) => {
         argomenti = a;
         a.onProgresso({ fase: 'riassunto', tentativo: 1, tokenRiassunto: 12, stimato: true });
         a.onProgresso({ fase: 'riassunto', tentativo: 1, tokenRiassunto: 30, stimato: false });
-        return { compattato: true, messaggi: RIASSUNTA, usage: null };
+        return rispostaDiRiassunto('abbiamo parlato.');
       },
     });
     const { sessionId } = registro.avvia('task-vero');
@@ -318,14 +322,14 @@ test('CP-REGISTRO-02 — «Compatta ora» che non riassume: si ferma al riassunt
   const { giri, avviaSessioneFn } = giriFinti(1);
   const registro = createSessionRegistry({
     avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'z-ai/glm-5.3-flash', chiave: 'k',
-    compattaSessioneFn: async () => ({ compattato: false, messaggi: STORIA, usage: null }),
+    riassumiPerCompattazioneFn: async () => rispostaDiRiassunto(''),
   });
   const { sessionId } = registro.avvia('task-vero');
   giri[0].concludi({ comeFinita: 'concluso', messaggiFinali: STORIA });
   await new Promise((r) => setImmediate(r));
   const eventi = [];
   registro.iscriviti(sessionId, (e) => eventi.push(e));
-  assert.deepEqual(await registro.compatta(sessionId), { ok: true, compattato: false, fase: 'riassunto' });
+  assert.deepEqual(await registro.compatta(sessionId), { ok: true, compattato: false, fase: 'riassunto', motivo: 'vuoto' });
   assert.deepEqual(eventi.filter(ePasso).map((e) => e.value.fase), ['lettura']);
 });
 
@@ -371,14 +375,18 @@ test('CP-REGISTRO-03 — in background a fine giro: lettura → riassunto → so
 });
 
 /* D5 a della CLI (21/10/2026): quando il kernel dice PERCHÉ non ha riassunto (`motivo`, `codice`), chi ha chiesto «Compatta ora» lo riceve. */
-test('CP-REGISTRO-02b — «Compatta ora» che non riassume porta il motivo e il codice del kernel; senza, la forma resta quella di prima', async () => {
-  for (const [dalKernel, atteso] of [
-    [{ compattato: false, messaggi: STORIA, usage: null, motivo: 'vuoto', codice: 'SUMMARY_EMPTY' }, { ok: true, compattato: false, fase: 'riassunto', motivo: 'vuoto', codice: 'SUMMARY_EMPTY' }],
-    [{ compattato: false, messaggi: STORIA, usage: null, motivo: 7 }, { ok: true, compattato: false, fase: 'riassunto' }],
+test('CP-REGISTRO-02b — «Compatta ora» che non riassume dice PERCHÉ: il motivo del riassuntore, e per un errore anche il codice e il dettaglio', async () => {
+  /* 22/10/2026 (S2-A): il motivo viene dal riassuntore dell'adapter (`valutaRispostaDiRiassunto`), con lo stesso contratto che la CLI
+     legge dal kernel (D5 a, 21/10): `motivo` sempre, `codice` quando l'errore ne ha uno. */
+  for (const [riassuntore, atteso] of [
+    [async () => { throw Object.assign(new Error('fornitore giù'), { code: 'PROVIDER_DOWN' }); },
+      { ok: true, compattato: false, fase: 'riassunto', motivo: 'errore', dettaglio: 'fornitore giù', codice: 'PROVIDER_DOWN' }],
+    [async () => rispostaDiRiassunto(''), { ok: true, compattato: false, fase: 'riassunto', motivo: 'vuoto' }],
+    [async () => ({ scelta: { role: 'assistant', content: 'mezzo' }, finishReason: 'length', usage: null }), { ok: true, compattato: false, fase: 'riassunto', motivo: 'troncato' }],
   ]) {
     const { giri, avviaSessioneFn } = giriFinti(1);
     const registro = createSessionRegistry({ avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'z-ai/glm-5.3-flash', chiave: 'k',
-      compattaSessioneFn: async () => dalKernel });
+      riassumiPerCompattazioneFn: riassuntore });
     const { sessionId } = registro.avvia('task-vero');
     giri[0].concludi({ comeFinita: 'concluso', messaggiFinali: STORIA });
     await new Promise((r) => setImmediate(r));

@@ -48,7 +48,7 @@ async function giro(c, risposte, opzioni = {}) {
   return { esito: (id) => r.messaggiFinali.find((m) => m.tool_call_id === id)?.content ?? '', offerti, sistemi, domande, ospite }
 }
 const OSPITE = (nome, _argomenti, { fase }) => {
-  if (nome === 'remote_phones') return fase === 'anteprima' ? { ok: true, carta: false } : { ok: true, testo: 'Remote control is on. Paired phones: 1.' }
+  if (nome === 'remote_phones') return fase === 'anteprima' ? { ok: true, carta: false } : { ok: true, testo: 'Remote control is on. Paired devices: 1.' }
   if (fase === 'anteprima') return { ok: true, carta: true, azione: { tipo: nome } }
   return { ok: true, testo: nome === 'remote_phone_pair' ? 'The pairing QR code is now on the person\'s screen.' : 'Disconnected "Pixel".' }
 }
@@ -141,7 +141,7 @@ test('TEL-R-01 — al modello solo nome, stato, ultimo contatto e id corto: mai 
     assert.equal(typeof ospite, 'function')
     assert.deepEqual(await ospite('remote_phones', {}, { fase: 'anteprima' }), { ok: true, carta: false })
     const { testo } = await ospite('remote_phones', {}, { fase: 'esegui' })
-    assert.match(testo, /^Remote control is on\. Paired phones: 2\./u)
+    assert.match(testo, /^Remote control is on\. Paired devices: 2\./u)
     assert.match(testo, /"Pixel di Nino " · id abcd1234 · last seen 2026-10-18T14:20:00\.000Z/u, 'il carattere di controllo bidi diventa uno spazio')
     assert.match(testo, /"iPad" · id zzzz9999 · connected now/u)
     for (const segreto of ['ENDPOINT-SEGRETO', 'relay.example', 'GETTONE', '123456', 'Vecchio', 'efgh5678']) assert.equal(testo.includes(segreto), false, segreto)

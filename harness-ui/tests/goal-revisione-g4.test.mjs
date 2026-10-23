@@ -117,6 +117,7 @@ test('G4-REV-05 (S3) — «Resume» on a paused goal makes it «active» and not
   const giriPrima = b.giri.length;
   const ripreso = await b.registro.riprendiObiettivo(sessionId);
   assert.equal(ripreso.obiettivo.stato, 'attivo', 'premise: the goal is active again');
-  await dorme(400);
-  assert.ok(b.giri.length > giriPrima, 'the goal is «active» and no turn started: nobody is carrying it');
+  /* 22/10/2026: la condizione, non 400 ms fissi — sotto il carico della suite intera la ripresa (che ora aspetta davvero le scritture
+     durevoli, `return broadcast`) superava i 400 ms e la prova cadeva pur col ciclo partito */
+  await aspetta(() => b.giri.length > giriPrima, 'the goal is «active» and no turn started: nobody is carrying it');
 }));

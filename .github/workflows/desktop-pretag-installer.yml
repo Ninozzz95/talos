@@ -11,6 +11,9 @@ on:
 
 permissions:
   contents: read
+  # 22/10/2026: il binding iroh da un'altra corsa, con la sua attestazione (scarica-binding-iroh.mjs). Solo lettura.
+  actions: read
+  attestations: read
 
 jobs:
   desktop-installer:
@@ -65,6 +68,15 @@ jobs:
           npm --prefix harness-ui/frontend run build
           if ($LASTEXITCODE -ne 0) { throw 'Build frontend fallita.' }
           Copy-Item -Path harness-ui/frontend/dist/* -Destination harness-ui/public/ -Recurse -Force
+
+      # 22/10/2026 (owner: «nel repo solo l'impronta»): il binding iroh del controllo remoto dalla corsa fissata in
+      # harness-ui/native/iroh-binding.json, con l'attestazione di iroh-binding.yml e l'impronta; prepara-pacchetto si ferma senza.
+      - name: binding iroh dalla corsa fissata, attestazione e impronta
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node harness-ui/scripts/scarica-binding-iroh.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'Binding iroh non pronto.' }
 
       - name: costruisci NSIS e ZIP
         timeout-minutes: 15
