@@ -48,6 +48,8 @@ permissions:
   # fallire un passo, rende invalido l'INTERO workflow — non parte niente, e
   # l'errore parla di sintassi, non di permessi.
   artifact-metadata: write
+  # 22/10/2026: leggere l'artefatto del binding iroh da un'altra corsa (scarica-binding-iroh.mjs). Solo lettura.
+  actions: read
 
 jobs:
   apk:
@@ -594,6 +596,17 @@ jobs:
           npm --prefix harness-ui/frontend run build
           if ($LASTEXITCODE -ne 0) { throw 'Build frontend fallita.' }
           Copy-Item -Path harness-ui/frontend/dist/* -Destination harness-ui/public/ -Recurse -Force
+
+      # 22/10/2026 (owner: «nel repo solo l'impronta»): il binding iroh del controllo remoto dalla corsa fissata in
+      # harness-ui/native/iroh-binding.json, con l'attestazione di iroh-binding.yml e l'impronta; prepara-pacchetto si ferma senza.
+      # Prima dei cancelli: le prove girano con lo stesso native/ che finisce nel pacchetto.
+      - id: binding_iroh
+        name: binding iroh dalla corsa fissata, attestazione e impronta
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node harness-ui/scripts/scarica-binding-iroh.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'Binding iroh non pronto.' }
 
       - id: cancelli
         name: server, kernel, frontend e guscio Electron reale

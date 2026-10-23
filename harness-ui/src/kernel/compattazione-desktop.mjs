@@ -39,7 +39,8 @@
  *  - OpenCode `packages/core/src/session/compaction.ts:12-45`: riassunto a sezioni fisse («Keep every section, even
  *    when empty», «Preserve exact file paths… error strings»), incrementale con `<prior-summary>`.
  */
-import { stimaTokenConversazione } from './talosHarness.mjs';
+import { createHash } from 'node:crypto';
+import { stimaToken, stimaTokenConversazione } from './talosHarness.mjs';
 // ⭐ 06/10/2026 — la ricarica della memoria post-compact (opzione A + C-b, ricerca 5×5×5×5 §6.4): il
 // recinto della sintesi entra nella proiezione accanto all'indice meccanico, NELLO STESSO messaggio.
 import { PREFISSO_SINTESI_RECINTATA } from './ricarica-post-compact.mjs';
@@ -67,6 +68,16 @@ export const FRAZIONE_FINESTRA = 0.75;
 export const FRAZIONE_EMERGENZA = 0.90;
 export const MOLTIPLICATORE_EMERGENZA_SENZA_FINESTRA = 1.2;
 export const RICHIESTE_UTENTE_LETTERALI = 3;
+/* Owner 22/10/2026 («prima + ultime tre»): la PRIMA richiesta della persona resta sempre alla lettera, come Hermes protegge la
+   testa (`protect_first_n`, agent_init.py:1549). Il compito iniziale non finisce più nel riassunto dopo tre richieste nuove.
+   Con un tetto: oltre questi caratteri se ne tengono inizio e fine, e il taglio è detto nel testo (`accorciaTesto`). */
+export const PRIMA_RICHIESTA_CARATTERI_MASSIMI = 8_000;
+export const PRIMA_RICHIESTA_INIZIO = 6_000;
+export const PRIMA_RICHIESTA_FINE = 2_000;
+/* Il riassunto (dell'adapter e del registro) non ritenta come un giro: due tentativi, attesa al più 10 s (CLI 22/10, revisione 1 della
+   0.6.13: col trasporto di serie un fornitore che risponde 503 prendeva 15 richieste in 5,5 minuti per UN riassunto di fine giro). */
+export const TENTATIVI_RIASSUNTO = 2;
+export const ATTESA_RITENTA_RIASSUNTO_MS = 10_000;
 export const SCAMBI_CHIUSI_LETTERALI = 2;
 export const FILE_RILETTI_MASSIMI = 5;
 /*
@@ -209,7 +220,147 @@ export function calcolaSoglie({ tettoToken = null, finestraToken = null } = {}) 
  * lista più corta dell'ancora (è appena stata compattata) — si stima tutto e lo si dichiara.
  * Forma presa da Hermes (`website/docs/developer-guide/context-compression-and-caching.md:107-116`, «usage anchor»).
  */
-export function misuraOccupazione({ ancora = null, messaggi = [], finestraToken = null } = {}) {
+/**
+ * 22/10/2026 (revisione avversaria di 068b2c172, F1) — LA STIMA È CIECA SUI PEZZI. `stimaTokenConversazione` conta solo il testo in
+ * stringa: un messaggio a parti (testo e immagini, come li costruisce `chat-image-attachments.mjs`) vale 0. Fra due stime così, un
+ * riassunto che toglie davvero dodici immagini «cresce» (116 token stimati prima, poche centinaia dopo), e la guardia «non riduce»
+ * lo buttava: la richiesta ripartiva con tutte le immagini, e sul contesto pieno il giro moriva. ⇒ Dove la stima non vede tutto ciò
+ * che c'è, «non riduce» e «al minimo» non si giudicano: si fa come prima.
+ */
+export function stimaCiecaSuiPezzi(messaggi) {
+  return Array.isArray(messaggi) && messaggi.some((m) => m?.content != null && typeof m.content !== 'string');
+}
+
+/**
+ * 22/10/2026 (settima revisione avversaria del registro, poi revisione 4 della CLI sulla 0.6.13, S2-1) — IL RIASSUNTO CHE NON PUÒ
+ * RIDURRE NON SI PAGA. Ciò che un riassunto può togliere è ciò che sta sopra il pavimento (sistema, richieste tenute, coda già
+ * accorciata); se è meno di un riassunto minimo, il riassunto non può ridurre. Stava solo nel registro (fine giro e /compact): nel
+ * giro un messaggio grande negli ultimi scambi con poca storia vecchia pagava un riassunto a OGNI giro e lo buttava come «inefficace»
+ * (misurato dalla CLI: tre giri di fila, fino a due riassunti per giro). Una regola sola per le tre strade.
+ * `token` e `pavimento` sono due STIME dello stesso tipo (`stimaTokenConversazione`), mai il numero del fornitore contro una stima.
+ * Con immagini o pezzi nel tratto da riassumere la stima non li vede: lì è proprio il riassunto a toglierli, e si fa come prima.
+ * Stato dell'arte: Hermes `_FEASIBILITY_SKIP_MIDDLE_FRACTION` (`agent/context_compressor.py:1163-1166`) salta la chiamata quando il
+ * tratto comprimibile è sotto il 10% della soglia e c'è già stato un colpo a vuoto; qui la soglia è assoluta e vale dal primo colpo.
+ */
+export function riassuntoNonPuoRidurre(token, pavimento, mezzo, { finestraToken = null, soglia = null } = {}) {
+  return guadagnoAtteso({ prima: token, pavimentoConCornice: pavimento, mezzo, finestraToken, soglia }) <= 0;
+}
+
+/**
+ * 22/10/2026 notte (revisione 5 della CLI sulla 0.6.13, S2-1 di nuovo) — UN RIASSUNTO SI PAGA SOLO SE SERVE. Due buchi della regola
+ * qui sopra, misurati dalla CLI: (1) il pavimento NUDO non vede la cornice fissa della proiezione riassunta (marcatore, indice, blocco
+ * dei fatti, riga di recupero: 391 token stimati fuori da git, 555 dentro), e fra 257 e la cornice si pagava un riassunto che non
+ * poteva ridurre; (2) un riassunto che riduce DI POCO si pagava a ogni giro (log incollato con risposte da 1.300 caratteri: 16.163 →
+ * 15.971, poi 16.302 → 15.816, e la richiesta restava sopra l'emergenza comunque).
+ * ⇒ `pavimentoConCornice` è la proiezione col riassunto VUOTO (testa, richieste tenute, cornice, coda accorciata) e il meglio che un
+ *   riassunto può fare è scendere a lei più un riassunto minimo. Si paga se quel meglio (a) riporta sotto la `linea` che ha fatto
+ *   scattare la compattazione, oppure (b) è un passo vero: almeno il 10% della soglia.
+ * Stato dell'arte: Hermes salta la chiamata quando il tratto comprimibile è sotto il 10% della soglia
+ * (`_FEASIBILITY_SKIP_MIDDLE_FRACTION = 0.10`, `agent/context_compressor.py:1163-1166`), ma solo dopo un primo colpo a vuoto; qui la
+ * cornice vera di quel progetto e la linea della richiesta, dal primo colpo. Con immagini o pezzi la stima è cieca: si paga come prima.
+ */
+/*
+ * 22/10/2026 notte (verdetto della CLI sulla regola, ricerca su 12 concorrenti, `research-overflow-0613/REPORT.md` §0: C1, C2, C4) —
+ * DUE CORREZIONI ALLA REGOLA QUI SOPRA.
+ * C1. Il pavimento contava la cornice ma non il RIASSUNTO che il modello scriverà: chiediamo almeno `MIN_TOKEN_RIASSUNTO` d'uscita, e
+ *   con un tratto vecchio da 3.000 token il «meglio» diceva «toglie 3.000» quando toglieva al più 1.000 — la forma 15.636 → 16.045. Il
+ *   guadagno atteso è `prima − (pavimento con la cornice + S)`, con S il budget d'uscita di quel riassunto (`budgetRiassunto`), mai più
+ *   del tratto che riassume. Hermes dimensiona il budget così (`_MIN_SUMMARY_TOKENS = 2000`, `agent/context_compressor.py:820`) ma
+ *   non lo sottrae prima di pagare.
+ * C2. Via il ramo «il meglio riporta sotto la linea»: un guadagno piccolo atterra appena sotto la linea e il giro dopo si ricompatta.
+ *   Claude Code ha dovuto aggiungere un interruttore apposta («Autocompact is thrashing», tre ricariche entro tre giri, 2.1.308) e Hermes
+ *   descrive lo stesso guasto (`agent/context_compressor.py:1150-1153`). Una regola sola: si paga se e solo se il guadagno atteso è
+ *   almeno il 10% della soglia, la stessa per il giro, il riassunto preparato in anticipo e la fine del giro.
+ * C4. Il /compact a mano usa la stessa aritmetica con «guadagno > 0» (`riassuntoNonPuoRidurre`), e dopo la chiamata rifiuta comunque un
+ *   riassunto che allunga (c'era già: `motivo: 'inefficace'`).
+ *
+ * Revisione 6 della CLI (22/10/2026 notte, DO-NOT-PUBLISH su 109b7d9b0) — TRE CORREZIONI:
+ * S2-1. Niente più esenzione della «stima cieca»: un'immagine nella PRIMA richiesta (che resta alla lettera per sempre) rendeva cieco
+ *   ogni tratto vecchio e spegneva la regola per tutta la sessione (la scena gap1300 con un'immagine: 4 riassunti invece di 1). Ora
+ *   prima, pavimento e riassunto atteso si pesano COI PEZZI (`stimaConPezzi`, 1.500 token per immagine come Hermes): un'immagine tenuta
+ *   sta in prima e nel pavimento e si annulla, una nel tratto riassunto conta come guadagno. Nessun caso speciale.
+ * S3-1. Il riassunto atteso non è il budget anti-troncamento (mai sotto 2.000 token: con una finestra da 12k un tratto vecchio sotto
+ *   2.000 non poteva MAI rendere, e il /compact diceva «niente di vecchio», falso): è la dimensione ATTESA, il rapporto di Hermes
+ *   (`_SUMMARY_RATIO = 0.20`, `agent/context_compressor.py:843-846`) col tetto della finestra (5%, al più 10.000) e un pavimento piccolo
+ *   (`RIASSUNTO_ATTESO_MINIMO_TOKEN`), mai più del tratto che riassume. Il budget d'uscita chiesto al modello non cambia. Dopo la
+ *   chiamata si rifiuta solo un riassunto che NON accorcia la richiesta (revisione 7 della CLI, S4: qui c'era scritto «più lungo del
+ *   previsto», che il codice non controlla): uno più lungo del previsto ma che accorcia si usa.
+ * ⛔ N7 (revisione 9 della CLI, 23/10/2026): il 10% vale OVUNQUE, anche all'emergenza. L'esenzione «all'emergenza basta un guadagno
+ *   positivo» (`74f9caf27`, mia, mai chiesta all'owner) contraddiceva il testo che l'owner ha approvato il 22/10 per la soluzione
+ *   dell'overflow (`research-overflow-0613/REPORT.md` §4, punto 1 di `PIANO-SEZIONE-4-COMPATTAZIONE-2026-10-22.md`): «un riassunto si
+ *   paga solo se toglie davvero almeno il 10%». Misurata dalla CLI a 10.240 con ~7.300 token di schemi: 11 riassunti da ~6% ciascuno,
+ *   su richieste che entravano (9.559 su 10.240). Sotto il 10% all'emergenza la richiesta parte; se il fornitore la rifiuta, decide la
+ *   strada dell'overflow (dove la stima dice se un passo accorcia, punto 5).
+ */
+export const FRAZIONE_DELLA_SOGLIA_UTILE = 0.10;
+export const RIASSUNTO_ATTESO_MINIMO_TOKEN = 400;
+/** Quanto ci si aspetta che pesi il riassunto: un quinto del tratto (col tetto della finestra e un pavimento piccolo), mai più del tratto. */
+export function riassuntoAtteso(mezzo, { finestraToken = null, soglia = null } = {}) {
+  const token = stimaConPezzi(Array.isArray(mezzo) ? mezzo : []);
+  if (!(token > 0)) return 0;
+  const positivo = (n) => Number.isFinite(n) && n > 0;
+  const finestra = positivo(finestraToken) ? finestraToken : (positivo(soglia) ? soglia : TETTO_TOKEN_DEFAULT) / FRAZIONE_FINESTRA;
+  const tetto = Math.min(Math.floor(finestra * FRAZIONE_RIASSUNTO_SULLA_FINESTRA), TETTO_TOKEN_RIASSUNTO);
+  return Math.min(token, Math.max(RIASSUNTO_ATTESO_MINIMO_TOKEN, Math.min(Math.floor(token * FRAZIONE_RIASSUNTO_SUL_MEZZO), tetto)));
+}
+/** Ciò che il riassunto toglie, al meglio: la richiesta di adesso contro la proiezione riassunta (cornice più riassunto atteso). */
+export function guadagnoAtteso({ prima, pavimentoConCornice, mezzo, finestraToken = null, soglia = null }) {
+  return prima - (pavimentoConCornice + riassuntoAtteso(mezzo, { finestraToken, soglia }));
+}
+/*
+ * ⛔ Revisione 7 della CLI (22/10/2026, F6): con una finestra più piccola di attrezzi + sistema (8k contro ~7.300 token di 24 schemi) OGNI
+ *   giro che falliva pagava un riassunto — sul rifiuto del fornitore e all'emergenza — che non poteva far entrare niente: 18 riassunti e
+ *   19 giri falliti su 20, contro 0 riassunti della 0.6.12 con gli stessi fallimenti. Se nemmeno il pavimento con la cornice, più il
+ *   riassunto atteso, più lo scarto (attrezzi, sistema, errore della stima) entra nella finestra, nessun riassunto la farà entrare.
+ *   Vale anche sul rifiuto del fornitore: la stima decide se un passo può accorciare abbastanza, non se la conversazione entra (§4.1 del
+ *   rapporto della CLI, approvato dall'owner il 22/10). Ritorna il pavimento che non entra, o `null` (finestra ignota, o entra).
+ */
+export function pavimentoOltreLaFinestra({ pavimentoConCornice, mezzo, finestraToken = null, soglia = null, scarto = 0 }) {
+  if (!(Number.isFinite(finestraToken) && finestraToken > 0)) return null;
+  const pavimento = pavimentoConCornice + riassuntoAtteso(mezzo, { finestraToken, soglia }) + (Number.isFinite(scarto) && scarto > 0 ? Math.round(scarto) : 0);
+  return pavimento >= finestraToken ? pavimento : null;
+}
+export function riassuntoUtile({ prima, pavimentoConCornice, mezzo, soglia = null, finestraToken = null, motivo = null, scarto = 0 }) {
+  if (pavimentoOltreLaFinestra({ pavimentoConCornice, mezzo, finestraToken, soglia, scarto }) !== null) return false; // F6
+  const guadagno = guadagnoAtteso({ prima, pavimentoConCornice, mezzo, finestraToken, soglia });
+  /* `motivo` non cambia più la regola (N7): resta nella firma perché i chiamanti lo passano e il fine giro lo porta (F5).
+     Il 10% vale «non sull'overflow». Una richiesta che con lo scarto intero supera già la FINESTRA dichiarata è un overflow certo: il
+     fornitore la rifiuterebbe e la strada dell'overflow pagherebbe un passo che accorcia (punto 5). Lo stesso passo si paga PRIMA,
+     senza il 400 (N1: a 10.240 con ~7.300 token di schemi, 7 richieste rifiutate su 17 col solo 10%, 0 così). */
+  const oltreLaFinestra = Number.isFinite(finestraToken) && finestraToken > 0 && prima + (Number.isFinite(scarto) && scarto > 0 ? scarto : 0) >= finestraToken;
+  if (oltreLaFinestra) return guadagno > 0;
+  return Number.isFinite(soglia) && soglia > 0 && guadagno >= FRAZIONE_DELLA_SOGLIA_UTILE * soglia;
+}
+
+/**
+ * 22/10/2026 (seconda passata avversaria, N1): l'esenzione qui sopra era tutto-o-niente — UNA immagine da 4 byte in una sessione di
+ * solo testo spegneva la guardia «non riduce» per sempre (misurato: un riassunto che portava la richiesta da 6.288 a 23.223 token
+ * passava). Le guardie «non riduce» pesano invece i pezzi, come Hermes `estimate_messages_tokens_rough`
+ * (`agent/model_metadata.py:2403-2415`, `:2493-2540`): il testo, anche dentro i pezzi, più un costo fisso per immagine
+ * (`DEFAULT_IMAGE_TOKEN_COST = 1500`, `agent/image_token_cost.py:23`, il valore di Hermes prima della taratura sull'uso del fornitore).
+ * Prima e dopo si misurano con la stessa stima: il riassunto toglie le immagini e le sostituisce col segnaposto di testo.
+ */
+export const COSTO_IMMAGINE_TOKEN = 1_500;
+export function stimaConPezzi(messaggi) {
+  let somma = stimaTokenConversazione(Array.isArray(messaggi) ? messaggi : []);
+  for (const m of Array.isArray(messaggi) ? messaggi : []) {
+    if (!Array.isArray(m?.content)) continue;
+    for (const parte of m.content) {
+      if (TIPI_IMMAGINE.has(parte?.type)) somma += COSTO_IMMAGINE_TOKEN;
+      else if (typeof parte?.text === 'string') somma += stimaToken(parte.text);
+    }
+  }
+  return somma;
+}
+
+/*
+ * Revisione 6 della CLI (22/10/2026 notte, S2-2): la PRIMA richiesta di ogni giro si misurava senza gli schemi degli attrezzi (l'ancora
+ *   riparte vuota a ogni giro) — con 23-24 attrezzi (~7.000 token) la soglia vera diventava 0,75·finestra + 7k e l'emergenza superava la
+ *   finestra sotto i ~73k: proprio le finestre piccole e i modelli locali. `scarto`: ciò che il fornitore ha contato in più della stima
+ *   sull'ultima richiesta misurata (attrezzi, sistema, errore della stima), portato dal registro al giro dopo; senza misura, la stima
+ *   degli schemi degli attrezzi. Mai negativo: una stima che sovrastima resta com'è (il verso sicuro).
+ */
+export function misuraOccupazione({ ancora = null, messaggi = [], finestraToken = null, scarto = 0 } = {}) {
   const promptTokens = Number(ancora?.promptTokens);
   const lunghezza = Number(ancora?.lunghezza);
   const stimaAllora = Number(ancora?.stima);
@@ -219,13 +370,61 @@ export function misuraOccupazione({ ancora = null, messaggi = [], finestraToken 
    *   (22/09/2026) ha visto il contrario, 24-32× la finestra, e un ciclo infinito. Sotto un quarto della stima
    *   (nessun tokenizzatore reale sta sotto ~1 token per 16 caratteri) o sopra la finestra dichiarata ⇒ si stima.
    */
-  const plausibile = Number.isFinite(promptTokens) && promptTokens > 0
-    && (!Number.isFinite(stimaAllora) || stimaAllora <= 0 || promptTokens >= stimaAllora / 4)
-    && (!Number.isFinite(finestraToken) || finestraToken <= 0 || promptTokens <= finestraToken);
+  const plausibile = promptTokensPlausibili(promptTokens, stimaAllora, finestraToken);
   if (plausibile && Number.isInteger(lunghezza) && lunghezza >= 0 && messaggi.length >= lunghezza) {
     return { token: promptTokens + stimaTokenConversazione(messaggi.slice(lunghezza)), misura: 'fornitore' };
   }
-  return { token: stimaTokenConversazione(messaggi), misura: 'stimato' };
+  return { token: stimaTokenConversazione(messaggi) + (Number.isFinite(scarto) && scarto > 0 ? Math.round(scarto) : 0), misura: 'stimato' };
+}
+
+/** Il controllo di plausibilità del numero del fornitore, UNO per l'ancora e per lo scarto (revisione 7 della CLI, F1): sotto un quarto
+ *  della stima della stessa richiesta, o sopra la finestra dichiarata, non si crede. */
+export function promptTokensPlausibili(promptTokens, stima, finestraToken = null) {
+  return Number.isFinite(promptTokens) && promptTokens > 0
+    && (!Number.isFinite(stima) || stima <= 0 || promptTokens >= stima / 4)
+    && (!Number.isFinite(finestraToken) || finestraToken <= 0 || promptTokens <= finestraToken);
+}
+
+/*
+ * ⛔ Revisione 7 della CLI (22/10/2026, F1, S2): lo scarto misurato saltava il controllo che l'ancora ha già. Con `prompt_tokens` ×30 su
+ *   una finestra da 32k arrivavano 3 riassunti d'emergenza su una conversazione da ~9k («277.008 → 1.506»); con `prompt_tokens: 1` lo
+ *   scarto 0 prendeva il posto della stima degli attrezzi e tornava il buco S2-2 (12.208 token su 12k, poi il 400 del fornitore).
+ *   ⇒ Lo scarto nasce solo da un numero PLAUSIBILE (lo stesso controllo dell'ancora); altrimenti non c'è (`null`) e vale la stima degli
+ *   attrezzi. E ha un tetto: la metà della finestra (senza finestra dichiarata, quella implicita nella soglia, soglia / 0,75) — attrezzi e
+ *   sistema che pesano più della metà della finestra sono un caso che il fornitore stesso rifiuta, non una misura da portare avanti.
+ */
+export const FRAZIONE_SCARTO_MASSIMA_SULLA_FINESTRA = 0.5;
+/*
+ * ⛔ Revisione 7 della CLI, seconda passata (F6 ancora aperta su 08aafe959): il tetto a metà finestra cancellava proprio il caso di F6 — su
+ *   una finestra da 8k con ~7.300 token di attrezzi lo scarto VERO diventava 4.096, il pavimento «entrava», e il riassunto si pagava a ogni
+ *   giro. ⇒ Due numeri: lo scarto PLAUSIBILE intero (`scartoPlausibile`) per la domanda «può entrare?» (F6), e quello col tetto
+ *   (`scartoDaMisura`) per la misura della soglia e dell'emergenza, dove il tetto difende da un fornitore che gonfia i numeri senza uscire
+ *   dalla plausibilità.
+ */
+export function scartoPlausibile(promptTokens, stima, { finestraToken = null, soglia = null } = {}) {
+  const finestra = Number.isFinite(finestraToken) && finestraToken > 0 ? finestraToken
+    : Number.isFinite(soglia) && soglia > 0 ? soglia / FRAZIONE_FINESTRA : null;
+  return promptTokensPlausibili(promptTokens, stima, finestra) ? Math.max(0, promptTokens - stima) : null;
+}
+/* ⛔ Revisione 8 della CLI (N1, S2): il tetto non scende MAI sotto la stima degli schemi degli attrezzi del giro (`attrezzi`). Su finestre
+   da 9-11k che reggono la conversazione compattata, il tetto (5.120 a 10k) contava meno attrezzi del vero (7.338): ogni giro mandava
+   prima una richiesta oltre la finestra, prendeva il 400, pagava il riassunto e riprovava — un fornitore onesto andava peggio di uno che
+   mente. Lo scarto onesto di attrezzi e sistema si porta intero. */
+export function scartoDaMisura(promptTokens, stima, { finestraToken = null, soglia = null, attrezzi = 0 } = {}) {
+  /* senza una finestra dichiarata vale quella implicita nella soglia, ANCHE per la plausibilità: con il tetto dell'ospite (la CLI,
+     `compactAtTokens`) su un modello senza finestra in catalogo, un ×30 restava «plausibile» e diventava lo scarto. Il verso sicuro: un
+     numero vero oltre la finestra implicita si scarta, e vale la stima degli attrezzi. */
+  const finestra = Number.isFinite(finestraToken) && finestraToken > 0 ? finestraToken
+    : Number.isFinite(soglia) && soglia > 0 ? soglia / FRAZIONE_FINESTRA : null;
+  if (!promptTokensPlausibili(promptTokens, stima, finestra)) return null;
+  const scarto = Math.max(0, promptTokens - stima);
+  const minimo = Number.isFinite(attrezzi) && attrezzi > 0 ? attrezzi : 0;
+  return finestra === null ? scarto : Math.min(scarto, Math.max(Math.floor(finestra * FRAZIONE_SCARTO_MASSIMA_SULLA_FINESTRA), minimo));
+}
+
+/** La stima degli schemi degli attrezzi di una richiesta: ciò che il fornitore conta e la stima dei messaggi non vede. */
+export function stimaDegliAttrezzi(attrezzi) {
+  return Array.isArray(attrezzi) && attrezzi.length > 0 ? stimaToken(JSON.stringify(attrezzi)) : 0;
 }
 
 /**
@@ -259,9 +458,24 @@ export function riattaccaEffimeri(messaggi, effimeri) {
   return [...messaggi, ...effimeri];
 }
 
-/** Una richiesta della persona: `user` che non è un nostro riassunto. */
+/**
+ * Il testo di un contenuto: la stringa, o le parti `text` di un contenuto a parti (testo e immagini). `null` se non è né l'una né
+ * l'altro. Un contenuto di sole immagini ha testo vuoto ma resta un contenuto della persona.
+ */
+export function testoDelContenuto(content) {
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content) || content.length === 0) return null;
+  return content.filter((p) => p?.type === 'text' && typeof p.text === 'string').map((p) => p.text).join('\n');
+}
+
+/**
+ * Una richiesta della persona: `user` che non è un nostro riassunto. 22/10/2026 (CLI, S3-C): anche col contenuto a parti — una
+ * richiesta con un'immagine allegata era trattata come «non una richiesta» e finiva nel riassunto invece di restare alla lettera.
+ */
 export function eRichiestaDellaPersona(m) {
-  return m?.role === 'user' && typeof m.content === 'string' && !iniziaConMarcatoreRiassunto(m.content);
+  if (m?.role !== 'user') return false;
+  const testo = testoDelContenuto(m.content);
+  return testo !== null && !iniziaConMarcatoreRiassunto(testo);
 }
 
 /**
@@ -273,7 +487,31 @@ export function eRichiestaDellaPersona(m) {
  * Solo all'INIZIO esatto del testo: una persona che cita `[TALOS]` in mezzo a una frase resta una persona.
  */
 export function eNotaDiTalos(m) {
-  return m?.role === 'user' && typeof m.content === 'string' && (m.content.startsWith('[TALOS]') || m.content.startsWith('[TALOS:'));
+  if (m?.role !== 'user') return false;
+  const testo = testoDelContenuto(m.content);
+  return typeof testo === 'string' && (testo.startsWith('[TALOS]') || testo.startsWith('[TALOS:'));
+}
+
+/** Una prima richiesta che `accorciaTesto` ha già tagliato: il marcatore sta subito dopo l'inizio tenuto, e la lunghezza è quella di un taglio. */
+function giaAccorciata(testo) {
+  if (testo.length > PRIMA_RICHIESTA_INIZIO + PRIMA_RICHIESTA_FINE + 1_000) return false;
+  const dopo = testo.slice(PRIMA_RICHIESTA_INIZIO, PRIMA_RICHIESTA_INIZIO + 200);
+  return dopo.startsWith('\n[… ') && dopo.includes(MARCATORE_ACCORCIATO);
+}
+
+/** La prima richiesta com'entra nella proiezione: intera, o inizio e fine col taglio detto se supera il tetto (solo le parti di testo). */
+export function primaRichiestaPerLaProiezione(m) {
+  /* 22/10/2026 (revisione avversaria): una copia GIÀ accorciata non si riaccorcia alla compattazione dopo — il marcatore stesso la portava
+     oltre il tetto, e il secondo taglio dichiarava «324 characters omitted» al posto dei 42.012 veri. ⛔ Seconda revisione: la copia si
+     riconosce dal marcatore AL SUO POSTO (subito dopo l'inizio tenuto, `giaAccorciata`), non dalla frase in un punto qualsiasi — chi
+     incolla un log di TALOS nella prima richiesta la contiene, e il tetto saltava (130.073 caratteri tenuti interi in ogni proiezione). */
+  const accorcia = (testo) => (typeof testo === 'string' && testo.length > PRIMA_RICHIESTA_CARATTERI_MASSIMI && !giaAccorciata(testo)
+    ? accorciaTesto(testo, { inizio: PRIMA_RICHIESTA_INIZIO, fine: PRIMA_RICHIESTA_FINE }) : testo);
+  if (typeof m?.content === 'string') return m.content.length > PRIMA_RICHIESTA_CARATTERI_MASSIMI ? { ...m, content: accorcia(m.content) } : m;
+  if (Array.isArray(m?.content) && m.content.some((p) => p?.type === 'text' && typeof p.text === 'string' && p.text.length > PRIMA_RICHIESTA_CARATTERI_MASSIMI)) {
+    return { ...m, content: m.content.map((p) => (p?.type === 'text' ? { ...p, text: accorcia(p.text) } : p)) };
+  }
+  return m;
 }
 
 /**
@@ -287,8 +525,10 @@ export function eNotaDiTalos(m) {
  * parola per parola anche quando tutto il resto del mezzo è riassunto. Forma presa da Codex
  * (`compact.rs:60`, richieste della persona letterali dalla più recente).
  * `tagliabile:false` quando il mezzo non ha niente da riassumere.
+ * 22/10/2026 (owner, «prima + ultime tre»): la PRIMA richiesta vera, se sta nel mezzo, va in testa a `richiesteLetterali`
+ * (`primaRichiestaPerLaProiezione`: col tetto). `primaRichiesta:false` torna alla forma di prima.
  */
-export function dividiPerCompattazione(messaggi, { richiesteUtente = RICHIESTE_UTENTE_LETTERALI, scambiChiusi = SCAMBI_CHIUSI_LETTERALI } = {}) {
+export function dividiPerCompattazione(messaggi, { richiesteUtente = RICHIESTE_UTENTE_LETTERALI, scambiChiusi = SCAMBI_CHIUSI_LETTERALI, primaRichiesta = true } = {}) {
   const lista = Array.isArray(messaggi) ? messaggi : [];
   let fineTesta = 0;
   while (fineTesta < lista.length && eSistema(lista[fineTesta])) fineTesta += 1;
@@ -319,7 +559,9 @@ export function dividiPerCompattazione(messaggi, { richiesteUtente = RICHIESTE_U
   const richiestaVera = (m) => eRichiestaDellaPersona(m) && !eNotaDiTalos(m);
   const utentiInCoda = coda.filter(richiestaVera).length;
   const daTenere = Math.max(0, richiesteUtente - utentiInCoda);
-  const richiesteLetterali = daTenere === 0 ? [] : mezzo.filter(richiestaVera).slice(-daTenere);
+  const ultime = daTenere === 0 ? [] : mezzo.filter(richiestaVera).slice(-daTenere);
+  const prima = primaRichiesta ? mezzo.find(richiestaVera) : undefined;
+  const richiesteLetterali = prima && !ultime.includes(prima) ? [primaRichiestaPerLaProiezione(prima), ...ultime] : ultime;
   const tagliabile = mezzo.length >= 2 && mezzo.some((m) => m?.role !== 'user');
   return { testa, mezzo, coda, richiesteLetterali, tagliabile };
 }
@@ -482,9 +724,22 @@ function senzaIndice(m) {
   return posizione === -1 ? m : { ...m, content: m.content.slice(0, posizione).trimEnd() };
 }
 
+/*
+ * 22/10/2026 (CLI, revisione 3 della 0.6.13, domanda a): un'immagine nel tratto da riassumere partiva INTERA (`image_url`) verso il
+ *   riassuntore — un modello leggero solo testo la rifiuta, e ogni riassunto falliva. Hermes la sostituisce con un segnaposto di testo
+ *   (`agent/context_compressor.py:1425` `_replace_image_parts`, «[Attached image — stripped after compression]»). Qui lo stesso, solo
+ *   nella richiesta di riassunto: la storia e le richieste tenute alla lettera non cambiano.
+ */
+const TIPI_IMMAGINE = new Set(['image_url', 'input_image', 'image']);
+export const SEGNAPOSTO_IMMAGINE = '[Attached image — not shown to the summarizer]';
+function senzaImmagini(m) {
+  if (!Array.isArray(m?.content) || !m.content.some((p) => TIPI_IMMAGINE.has(p?.type))) return m;
+  return { ...m, content: m.content.map((p) => (TIPI_IMMAGINE.has(p?.type) ? { type: 'text', text: SEGNAPOSTO_IMMAGINE } : p)) };
+}
+
 export function costruisciRichiestaDiRiassunto({ testa = [], mezzo = [], paroleMassime = PAROLE_MASSIME_RIASSUNTO } = {}) {
   const haRiassuntoPrecedente = mezzo.some((m) => m?.role === 'user' && typeof m.content === 'string' && iniziaConMarcatoreRiassunto(m.content));
-  return [...testa, ...mezzo.map(senzaIndice), { role: 'user', content: testoRichiestaDiRiassunto({ paroleMassime, haRiassuntoPrecedente }) }];
+  return [...testa.map(senzaImmagini), ...mezzo.map(senzaIndice).map(senzaImmagini), { role: 'user', content: testoRichiestaDiRiassunto({ paroleMassime, haRiassuntoPrecedente }) }];
 }
 
 /** Una risposta del riassuntore vale solo se è testo, finito, senza chiamate di attrezzo. */
@@ -787,9 +1042,35 @@ export function riduciCodaSottoPressione(coda, { budgetToken, stima = stimaToken
  * `coveredThrough` = quanti messaggi GREZZI (senza effimeri) la proiezione copre; `riassunto` = i messaggi che li
  * sostituiscono. `tokenDopo` è sempre una stima (caratteri/4): il numero vero arriva con la risposta successiva.
  */
-export function creaRecord({ coveredThrough, riassunto, tokenPrima, tokenDopo, misura, at, modello, indice = null } = {}) {
+/*
+ * 22/10/2026 (CLI, S2-A, bloccante) — L'IMPRONTA DEL TRATTO COPERTO. Un record diceva solo «copro i primi N messaggi», e
+ * `applicaRecord` controllava solo che la storia ne avesse almeno N. Quando la storia sotto il record cambiava (il /compact a mano la
+ * sostituiva con tre messaggi e lasciava vivo il record), appena tornava a N messaggi il modello rivedeva il riassunto VECCHIO al posto
+ * di quelli nuovi, senza un avviso. Ora il record porta l'impronta del primo e dell'ultimo messaggio coperti: se non tornano, non si
+ * applica. Due messaggi e non tutto il tratto perché `applicaRecord` gira a ogni richiesta (l'adapter, :593): l'impronta intera di
+ * una storia lunga costerebbe a ogni passo, e basta a riconoscere una storia diversa.
+ */
+const improntaDiUno = (m) => createHash('sha256').update(JSON.stringify(m ?? null) ?? 'null').digest('hex').slice(0, 16);
+/* 22/10/2026 (CLI, S3-B): l'impronta INTERA del prefisso e la chiave della base di un riassunto pronto, prima interne all'adapter
+   (15/10, compattazione istantanea): ora le usa anche il registro, che passa al giro il riassunto di fine giro ancora in volo. */
+export function improntaDelPrefisso(messaggi, fino) {
+  const h = createHash('sha256');
+  for (let i = 0; i < fino; i += 1) h.update(JSON.stringify(messaggi[i] ?? null)).update('\u0000');
+  return h.digest('hex');
+}
+export function chiaveBaseDelRecord(record) {
+  return record ? `${record.at ?? ''}|${record.coveredThrough ?? ''}` : 'nessuna';
+}
+
+export function improntaDelTrattoCoperto(storia, coveredThrough) {
+  if (!Array.isArray(storia) || !Number.isInteger(coveredThrough) || coveredThrough < 1 || coveredThrough > storia.length) return null;
+  return { primo: improntaDiUno(storia[0]), ultimo: improntaDiUno(storia[coveredThrough - 1]) };
+}
+
+export function creaRecord({ coveredThrough, riassunto, tokenPrima, tokenDopo, misura, at, modello, indice = null, coperti = null } = {}) {
   if (!Number.isInteger(coveredThrough) || coveredThrough < 0) throw new TypeError('coveredThrough must be an integer ≥ 0');
   if (!Array.isArray(riassunto)) throw new TypeError('riassunto must be a list of messages');
+  const impronta = improntaDelTrattoCoperto(coperti, coveredThrough);
   return {
     schema: SCHEMA_RECORD_COMPATTAZIONE,
     coveredThrough,
@@ -810,6 +1091,7 @@ export function creaRecord({ coveredThrough, riassunto, tokenPrima, tokenDopo, m
         fileRiletti: [...(indice.fileRiletti ?? [])],
       }
       : null,
+    ...(impronta ? { impronta } : {}),
   };
 }
 
@@ -823,10 +1105,20 @@ export function eRecordValido(record) {
  * segue alla lettera. Un record che copre più di quanto la storia contenga non si applica (storia troncata o
  * record di un'altra storia): si torna la storia grezza, e chi chiama lo vede dalla lunghezza.
  * Basta l'ULTIMO record: il suo `riassunto` è già la proiezione intera al momento in cui è nato.
+ * 22/10/2026: un record con l'impronta si applica solo se il tratto coperto è ancora quello (`improntaDelTrattoCoperto`); i record di
+ * prima non la portano e si applicano come prima.
  */
+export function recordValePerLaStoria(storiaGrezza, record) {
+  const storia = Array.isArray(storiaGrezza) ? storiaGrezza : [];
+  if (!eRecordValido(record) || record.coveredThrough > storia.length) return false;
+  if (!record.impronta) return true;
+  const vera = improntaDelTrattoCoperto(storia, record.coveredThrough);
+  return !!vera && vera.primo === record.impronta.primo && vera.ultimo === record.impronta.ultimo;
+}
+
 export function applicaRecord(storiaGrezza, record) {
   const storia = Array.isArray(storiaGrezza) ? storiaGrezza : [];
-  if (!eRecordValido(record) || record.coveredThrough > storia.length) return storia;
+  if (!recordValePerLaStoria(storia, record)) return storia;
   return [...record.riassunto, ...storia.slice(record.coveredThrough)];
 }
 

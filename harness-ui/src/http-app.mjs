@@ -959,7 +959,7 @@ export const MESSAGE_BY_CODE = Object.freeze({
   PLAN_DECISION_NOT_SAVED: 'The choice on the plan was not saved: the plan is still waiting, you can try again',
   PLAN_APPROVAL_ORIGIN_FORBIDDEN: 'The choice on the plan must come from this TALOS window',
   MODE_WORKFLOW_RETIRED: 'Workflow mode no longer exists: choose Normal or Plan',
-  NOT_ALLOWED_REMOTELY: 'From the phone a new session opens only in one of the allowed folders',
+  NOT_ALLOWED_REMOTELY: 'From the device a new session opens only in one of the allowed folders',
   WORKSPACE_LAUNCH_UNAUTHORIZED: 'The local command is not authorized. Restart TALOS and try again.',
   WORKSPACE_LAUNCH_NOT_AVAILABLE: 'This link is no longer available. Use “Open folder with TALOS” again.',
   WORKSPACE_NOT_AVAILABLE: 'The folder is not available. Check that it exists and that TALOS can work in it, then try again.',
@@ -1007,18 +1007,18 @@ export const MESSAGE_BY_CODE = Object.freeze({
   LOCAL_GUEST_DISABLED: 'This server does not take a local engine from an app',
   LOCAL_GUEST_SOCKET_INVALID: 'The local engine socket is not valid: it must be a socket inside the app folder',
   REMOTE_UNAVAILABLE: 'Remote control is not available on this computer',
-  REMOTE_RELAY_NOT_CHOSEN: 'Choose how the phone reaches this computer away from home first',
+  REMOTE_RELAY_NOT_CHOSEN: 'Choose how the device reaches this computer away from home first',
   REMOTE_RELAY_INVALID: 'Enter the https address of your own server, or choose the free servers',
   REMOTE_KEYRING_MISSING: 'Remote control needs the system keyring',
-  REMOTE_KEY_INVALID: 'The remote-control key of this computer is damaged: unpair the phones and set it up again',
-  REMOTE_OFF: 'Remote control is off: turn it on from the Phones screen', // R5.12: il QR chiesto dalla chat non lo accende
-  REMOTE_TOO_MANY_PHONES: 'At most 16 phones can be connected to this computer: remove one first',
-  REMOTE_DEVICE_UNKNOWN: 'This phone is not connected to this computer',
-  REMOTE_DEVICE_BAD: 'The phone name cannot be empty',
-  REMOTE_DEVICES_UNREADABLE: 'The list of connected phones cannot be read',
-  PAIR_LOCKED: 'Too many wrong attempts: connecting a phone is paused for 15 minutes',
+  REMOTE_KEY_INVALID: 'The remote-control key of this computer is damaged: unpair the devices and set it up again',
+  REMOTE_OFF: 'Remote control is off: turn it on from the Connected devices screen', // R5.12: il QR chiesto dalla chat non lo accende
+  REMOTE_TOO_MANY_PHONES: 'At most 16 devices can be connected to this computer: remove one first',
+  REMOTE_DEVICE_UNKNOWN: 'This device is not connected to this computer',
+  REMOTE_DEVICE_BAD: 'The device name cannot be empty',
+  REMOTE_DEVICES_UNREADABLE: 'The list of connected devices cannot be read',
+  PAIR_LOCKED: 'Too many wrong attempts: connecting a device is paused for 15 minutes',
   PAIR_NOT_PENDING: 'This request expired: show a new code on this computer',
-  REMOTE_ORIGIN_FORBIDDEN: 'Phones can be connected only from the TALOS window',
+  REMOTE_ORIGIN_FORBIDDEN: 'Devices can be connected only from the TALOS window',
   RUNTIME_NOT_AVAILABLE: 'Local runtime not available',
   RUNTIME_UNREACHABLE: 'Local runtime unreachable',
   RUNTIME_OPERATION_UNSUPPORTED: 'Runtime operation not supported',
@@ -6422,7 +6422,7 @@ export function createHttpApp({
            Anche `remoto/operazioni.mjs` lo rifiuta: questo è il cancello vero, per qualunque strada arrivi la richiesta. */
         if (origine && senzaImmagini && typeof senzaImmagini === 'object'
           && (senzaImmagini.cartellaLibera !== undefined || senzaImmagini.workspaceLaunchId !== undefined)) {
-          const errore = new Error('From the phone a new session opens only in one of the allowed folders.');
+          const errore = new Error('From the device a new session opens only in one of the allowed folders.');
           errore.code = 'NOT_ALLOWED_REMOTELY';
           throw errore;
         }
@@ -7534,7 +7534,17 @@ export function createHttpApp({
         const riuscita = esito.compattato === true && typeof esito.at === 'string'
           ? { at: esito.at, annullabile: esito.annullabile !== false, tokenPrima: esito.tokenPrima ?? null, tokenDopo: esito.tokenDopo ?? null }
           : {};
-        sendJson(res, 200, successEnvelope({ compattato: esito.compattato, ...riuscita }, clock), method);
+        /* 22/10/2026 (revisione del ramo dei testi): un «non compattato» porta il suo PERCHÉ — `motivo` (niente-da-compattare ·
+           al-minimo · inefficace · errore …) e `codice` quando c'è. Prima la rotta li scartava: il telefono e la finestra del desktop
+           dicevano «niente da compattare» anche dopo un lavoro fallito o un riassunto pagato e inutile. Solo codici, mai il testo
+           dell'errore del fornitore (`dettaglio` resta nel registro). */
+        const perche = esito.compattato !== true ? {
+          ...(typeof esito.motivo === 'string' && esito.motivo ? { motivo: esito.motivo } : {}),
+          /* ripassata del 22/10: solo una FORMA di codice (`CTX_*`, `ECONNRESET`, `UND_ERR_*`…) — un `code` libero di un errore futuro non
+             porta testo a schermo */
+          ...(typeof esito.codice === 'string' && /^[A-Z0-9_]{1,64}$/u.test(esito.codice) ? { codice: esito.codice } : {}),
+        } : {};
+        sendJson(res, 200, successEnvelope({ compattato: esito.compattato, ...riuscita, ...perche }, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
         sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);

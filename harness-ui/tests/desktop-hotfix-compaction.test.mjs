@@ -12,7 +12,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
-import { talosLavora } from '../src/kernel/talosHarness.desktop-hotfix.mjs';
+import { talosLavora as talosLavoraVero } from '../src/kernel/talosHarness.desktop-hotfix.mjs';
+/* Revisione 6 della CLI (S2-2): senza uno scarto misurato la prima richiesta di un giro porta la stima degli schemi degli attrezzi (i fornitori veri li contano). Il fornitore finto di questo file risponde `prompt_tokens` = stima dei soli MESSAGGI: lo scarto che il registro misurerebbe su di lui è 0, e lo si dichiara (`scartoMisurato: 0`) invece di cambiare tutte le soglie. */
+const talosLavora = (input) => talosLavoraVero({ scartoMisurato: 0, ...input });
 import {
   MARCATORE_INDICE, MARCATORE_RIASSUNTO, MAX_TOKEN_RIASSUNTO, SCHEMA_RECORD_COMPATTAZIONE, VARIABILE_TETTO_TOKEN,
   applicaRecord,
@@ -68,7 +70,8 @@ const testoDi = (m) => (typeof m?.content === 'string' ? m.content
  * `usage.prompt_tokens` è la misura VERA della richiesta (caratteri/4 sul corpo): è il numero su cui l'adapter
  * deve decidere. `riassunto(n)` decide cosa risponde il riassuntore alla n-esima richiesta di riassunto.
  */
-function fintoFornitore({ chiamateTool = 10, attrezzo = 'leggi', argomenti = '{"percorso":"grande.txt"}', riassunto, errorePerRichiesta } = {}) {
+/* `extraPrompt`: i token che il fornitore conta in più della conversazione (gli schemi degli attrezzi), solo sulle richieste di lavoro */
+function fintoFornitore({ chiamateTool = 10, attrezzo = 'leggi', argomenti = '{"percorso":"grande.txt"}', riassunto, errorePerRichiesta, extraPrompt = 0 } = {}) {
   const corpi = [];
   let lavoro = 0;
   let riassunti = 0;
@@ -86,6 +89,7 @@ function fintoFornitore({ chiamateTool = 10, attrezzo = 'leggi', argomenti = '{"
       return Response.json({ choices: [{ message: scelta, finish_reason: fine }], usage });
     }
     lavoro += 1;
+    usage.prompt_tokens += extraPrompt;
     const errore = errorePerRichiesta?.(lavoro, body);
     if (errore) return errore;
     if (lavoro <= chiamateTool) {
@@ -278,12 +282,15 @@ test('CTX-HOTFIX-TRIAL-RAW-PREPARE — il trial riceve `messages` corretto e `or
 });
 
 test('CTX-HOTFIX-RECORD-EMITTED-AND-REPLAYABLE — record `talos.compattazione.v1` sugli eventi e sul risultato; applicaRecord rifà la proiezione', async (t) => {
-  conTetto(t, 8_000);
+  /* 22/10/2026 notte (verdetto della CLI sulla regola del riassunto, C1): un riassunto vero pesa il suo budget d'uscita (almeno 2.000
+     token) e si paga solo se toglie il 10% della soglia al netto di quello. Con 8.000 il preambolo (~3.000), la coda e il riassunto
+     atteso non lasciavano il 10%: la scena è a 12.000, con le letture in proporzione. */
+  conTetto(t, 12_000);
   const cartella = cartellaDiProva(t);
   /* C1 (09/10/2026): con 7 letture la proiezione dopo la compattazione finiva a meno di 80 token dalla soglia, e la riga di
      recupero (`RIGA_RECUPERO`, ~80 token, voluta) la riportava sopra all'ultima lettura: una seconda compattazione vera, non
      un difetto del record. Con 6 la prova resta quella di prima: UNA compattazione alla soglia, record emesso e rigiocabile. */
-  const fornitore = fintoFornitore({ chiamateTool: 6 });
+  const fornitore = fintoFornitore({ chiamateTool: 10 });
   const { esito, eventi } = await giro(t, { cartella, fornitore });
   const inizi = eventi.filter((e) => e.tipo === 'compattazione-inizio');
   const fini = eventi.filter((e) => e.tipo === 'compattazione-fine' && e.compattato);
@@ -291,11 +298,11 @@ test('CTX-HOTFIX-RECORD-EMITTED-AND-REPLAYABLE — record `talos.compattazione.v
   assert.equal(fini.length, 1);
   assert.equal(inizi[0].motivo, 'soglia');
   assert.equal(typeof inizi[0].tokenMisurati, 'number');
-  assert.equal(inizi[0].soglia, 8_000);
+  assert.equal(inizi[0].soglia, 12_000);
   const record = fini[0].record;
   assert.equal(record.schema, SCHEMA_RECORD_COMPATTAZIONE);
   assert.equal(record.misura, 'fornitore', 'il numero che ha deciso è quello del fornitore');
-  assert.ok(record.tokenPrima >= 8_000 && record.tokenDopo < record.tokenPrima, `${record.tokenPrima} → ${record.tokenDopo}`);
+  assert.ok(record.tokenPrima >= 12_000 && record.tokenDopo < record.tokenPrima, `${record.tokenPrima} → ${record.tokenDopo}`);
   assert.equal(record.modello, 'z-ai/glm-5.3-flash');
   assert.deepEqual(esito.recordDiCompattazione, [record]);
   assert.ok(esito.messaggiFinali.length > record.coveredThrough, 'la storia grezza resta intera sul risultato');
@@ -341,10 +348,13 @@ test('CTX-HOTFIX-INDEX-HAS-PATH — l indice meccanico porta un percorso preso d
 });
 
 test('CTX-HOTFIX-EMERGENCY-AFTER-FAILED-RETRY — la via normale fallita non spegne l emergenza', async (t) => {
-  conTetto(t, 8_000); // soglia 8.000, emergenza 9.600 (tetto × 1,2 senza finestra)
+  /* 22/10/2026 notte (verdetto della CLI sulla regola del riassunto, C1): un riassunto vero pesa il suo budget d'uscita (almeno 2.000
+     token) e si paga solo se toglie il 10% della soglia al netto di quello. Con 8.000 il preambolo (~3.000), la coda e il riassunto
+     atteso non lasciavano il 10%: la scena è a 12.000, con le letture in proporzione. */
+  conTetto(t, 12_000); // soglia 12.000, emergenza 14.400 (tetto × 1,2 senza finestra)
   const cartella = cartellaDiProva(t);
   const fornitore = fintoFornitore({
-    chiamateTool: 8,
+    chiamateTool: 12,
     riassunto: (n) => (n <= 2 ? { role: 'assistant', content: '' } : undefined),
   });
   const { esito, eventi } = await giro(t, { cartella, fornitore });
@@ -368,6 +378,24 @@ test('CTX-HOTFIX-INCOMPRESSIBLE-FLOOR-STOPS — un tetto sotto il pavimento inco
   assert.ok(inizi.length <= 3, `al massimo tre compattazioni, non una per richiesta: ${inizi.map((e) => e.motivo).join(',')}`);
   assert.ok(fornitore.riassuntiChiesti().length < lavoro.length / 2, `${fornitore.riassuntiChiesti().length} riassunti contro ${lavoro.length} richieste di lavoro`);
   assert.equal(esito.compattazioni, inizi.length);
+});
+
+test('CTX-HOTFIX-R8-VERDETTO-SCARTO — il verdetto «inefficace» confronta il numero del fornitore con la SOLA proiezione: con ~4.000 token di schemi che tengono la richiesta sopra il tetto, le compattazioni si fermano come davanti a un pavimento vero; AL CONTRARIO senza schemi la stessa scena compatta e scende sotto il tetto', async (t) => {
+  /* Revisione 8 della CLI (N3): `tokenDopo` ora porta lo scarto; il verdetto deve rifare la stima della proiezione, o lo scarto «vero»
+     (numero del fornitore meno la proiezione) diventa ~0 e il pavimento vero non arriva mai alla soglia: una compattazione per richiesta */
+  const corsa = async (extraPrompt) => {
+    conTetto(t, 8_000);
+    const cartella = cartellaDiProva(t);
+    const fornitore = fintoFornitore({ chiamateTool: 12, extraPrompt });
+    const { esito, eventi } = await giro(t, { cartella, fornitore, scartoMisurato: extraPrompt });
+    assert.equal(esito.comeFinita, 'concluso');
+    const lavoro = fornitore.corpi.filter((b) => !eRichiestaDiRiassunto(b));
+    return { inizi: eventi.filter((e) => e.tipo === 'compattazione-inizio').length, riassunti: fornitore.riassuntiChiesti().length, lavoro: lavoro.length };
+  };
+  const conSchemi = await corsa(4_000);
+  assert.ok(conSchemi.inizi <= 3, `al più tre compattazioni, non una per richiesta (${JSON.stringify(conSchemi)})`);
+  const senza = await corsa(0);
+  assert.ok(senza.inizi >= 1, `AL CONTRARIO: senza schemi la scena compatta (${JSON.stringify(senza)})`);
 });
 
 test('CTX-HOTFIX-TAIL-PRESSURE-STAYS-BOUNDED — letture grandi nella coda letterale non spengono la compattazione (owner 26/09, «Come Hermes»)', async (t) => {

@@ -11,7 +11,9 @@ import { join } from 'node:path';
 import test from 'node:test';
 
 process.env.TALOS_COMPACTION_TOKEN_CAP = '4000';
-const { talosLavora } = await import('../src/kernel/talosHarness.desktop-hotfix.mjs');
+const { talosLavora: talosLavoraVero } = await import('../src/kernel/talosHarness.desktop-hotfix.mjs');
+/* Revisione 6 della CLI (S2-2): senza uno scarto misurato la prima richiesta di un giro porta la stima degli schemi degli attrezzi (i fornitori veri li contano). Il fornitore finto di questo file risponde `prompt_tokens` = stima dei soli MESSAGGI: lo scarto che il registro misurerebbe su di lui è 0, e lo si dichiara (`scartoMisurato: 0`) invece di cambiare tutte le soglie. */
+const talosLavora = (input) => talosLavoraVero({ scartoMisurato: 0, ...input });
 const { stimaTokenConversazione: stima } = await import('../src/kernel/talosHarness.mjs');
 const { rimuoviCartellaDiProva } = await import('./aiuto/rimuovi-cartella-di-prova.mjs');
 
@@ -21,6 +23,9 @@ const storia = (coppie, lunghezza = 420) => Array.from({ length: coppie }, (_, i
   { role: 'assistant', content: `Risposta ${i}: ${'parola '.repeat(lunghezza / 7)}` },
 ]).flat();
 const coppiePer = (token) => { let c = 10; while (stima(storia(c + 1)) < token) c += 1; return c; };
+/* 22/10/2026 notte (verdetto della CLI sulla regola del riassunto, C1): un riassunto si prepara o si paga solo se toglie il 10% della soglia
+   al netto del riassunto atteso (il suo budget d'uscita, almeno 2.000 token). Le storie preparate in anticipo sono quindi a 3.800 (erano
+   3.450: sotto la soglia di 4.000, ma con un tratto vecchio troppo piccolo perché un riassunto vero lo riducesse). */
 
 /** Modello finto con un po' di latenza (il riassunto in sottofondo ha il tempo di arrivare), `letture` letture e poi «fatto». */
 function rete({ letture, riassunto, ritardoModello = 60 }) {
@@ -120,7 +125,7 @@ test('IST2-REV-03 — [VERDE] un riassunto pronto VECCHIO (la persona ha tolto u
   const cartella = mkdtempSync(join(tmpdir(), 'istantanea-rev2c-'));
   t.after(() => rimuoviCartellaDiProva(cartella));
   const r0 = rete({ letture: 0, riassunto: () => RIASSUNTO_BUONO(), ritardoModello: 0 });
-  const s1 = storia(coppiePer(3450));
+  const s1 = storia(coppiePer(3800));
   const uno = await talosLavora({ cartella, modello: 'z-ai/glm-5.3-flash', chiave: 'finta', task: { consegna: 'Continua.' }, messaggiIniziali: s1, compattazioneIstantanea: true, contestoDelProgetto: 'Project files:\n', fetchDiRete: r0.fn });
   const pronta = uno.compattazionePronta ?? await uno.compattazioneInPreparazione;
   assert.ok(pronta, 'premessa');

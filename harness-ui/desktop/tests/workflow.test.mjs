@@ -21,7 +21,8 @@ test('R04-PRETAG-INSTALLER — la PR prova NSIS su Windows prima del tag senza p
   const pretag = load(readFileSync(new URL('../../../.github/workflows/desktop-pretag-installer.yml', import.meta.url), 'utf8'));
   assert.ok(pretag.on.pull_request, 'Il gate deve partire su pull_request.');
   assert.equal(pretag.on.pull_request_target, undefined);
-  assert.deepEqual(pretag.permissions, { contents: 'read' });
+  // 22/10/2026: più la sola lettura dell'artefatto del binding iroh e della sua attestazione (R04-BINDING-IROH).
+  assert.deepEqual(pretag.permissions, { contents: 'read', actions: 'read', attestations: 'read' });
   const job = pretag.jobs['desktop-installer'];
   assert.equal(job['runs-on'], 'windows-latest');
   assert.equal(job.defaults.run.shell, 'pwsh');
@@ -102,7 +103,8 @@ test('R04-WINDOWS — Node 24, PowerShell, cache e cancelli prima dello staging'
 });
 
 test('R04-ATTEST — permessi invariati e actions/attest v4 identico ad apk', () => {
-  assert.deepEqual(workflow.permissions, { contents: 'write', 'id-token': 'write', attestations: 'write', 'artifact-metadata': 'write' });
+  // 22/10/2026: `actions: read` per l'artefatto del binding iroh da un'altra corsa (R04-BINDING-IROH), nient'altro.
+  assert.deepEqual(workflow.permissions, { contents: 'write', 'id-token': 'write', attestations: 'write', 'artifact-metadata': 'write', actions: 'read' });
   assert.equal(desktop.permissions, undefined);
   const attest = passi.find(p => p.uses?.startsWith('actions/attest@'));
   assert.ok(attest, 'Manca actions/attest');
@@ -113,6 +115,25 @@ test('R04-ATTEST — permessi invariati e actions/attest v4 identico ad apk', ()
   assert.ok(passi.indexOf(passo('smoke')) < passi.indexOf(attest));
   assert.ok(passi.indexOf(attest) < passi.indexOf(passo('release')));
   assert.equal(attest.if, undefined);
+});
+
+test('R04-BINDING-IROH (owner 22/10/2026, «nel repo solo l’impronta») — release e prova prima del tag scaricano il binding verificato prima di costruire', () => {
+  const pretag = load(readFileSync(new URL('../../../.github/workflows/desktop-pretag-installer.yml', import.meta.url), 'utf8'));
+  const passiPretag = pretag.jobs['desktop-installer'].steps;
+  const binding = passo('binding_iroh');
+  const bindingPretag = passiPretag.find(p => p.name === binding.name);
+  assert.ok(bindingPretag, 'Manca il binding iroh nella prova prima del tag');
+  for (const p of [binding, bindingPretag]) {
+    assert.match(p.run, /^node harness-ui\/scripts\/scarica-binding-iroh\.mjs$/m);
+    assert.match(p.run, /\$LASTEXITCODE -ne 0\) \{ throw/);
+    assert.deepEqual(p.env, { GH_TOKEN: '${{ github.token }}' });
+    assert.equal(p.if, undefined);
+  }
+  assert.ok(passi.indexOf(binding) < passi.indexOf(passo('cancelli')), 'Le prove girano con lo stesso native/ del pacchetto');
+  assert.ok(passiPretag.indexOf(bindingPretag) < passiPretag.findIndex(p => p.name === 'costruisci NSIS e ZIP'));
+  const script = readFileSync(new URL('../scripts/prepara-pacchetto.mjs', import.meta.url), 'utf8');
+  assert.match(script, /const iroh = preparaBindingIroh\(\);/);
+  assert.match(readFileSync(new URL('../scripts/verifica-nativi.mjs', import.meta.url), 'utf8'), /assert\.equal\(iroh\.da, 'pacchetto'/);
 });
 
 test('R04-ASSET — installer R-02, ZIP completo, SHA e note esplicite', () => {

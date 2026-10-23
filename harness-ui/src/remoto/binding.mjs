@@ -1,9 +1,10 @@
 /*
  * Controllo remoto — dove sta il binding Node di iroh, e il suo controllo prima di caricarlo.
  *
- * Il binding è codice NATIVO che gira dentro il server: si carica solo se la sua impronta SHA-256 è quella fissata nel repo
- * (`native/iroh/iroh.win32-x64-msvc.node.sha256`, scritta dalla nostra CI che lo compila col lock aggiornato, owner 18/10). Un
- * file diverso non si carica e il remoto dice «non disponibile».
+ * Il binding è codice NATIVO che gira dentro il server: si carica solo se la sua impronta SHA-256 è quella del suo
+ * `native/iroh/iroh.win32-x64-msvc.node.sha256` (scritto dalla nostra CI che lo compila col lock aggiornato, owner 18/10). Un
+ * file diverso non si carica e il remoto dice «non disponibile». Nel repo c'è solo il riferimento `native/iroh-binding.json`
+ * (owner 22/10): `scripts/scarica-binding-iroh.mjs` porta qui i due file dalla corsa fissata, con attestazione e impronta.
  *
  * Due posti, in ordine:
  *   1. `TALOS_IROH_BINDING` — SOLO sviluppo e prove: il percorso di un `.node` o della cartella del pacchetto npm. Nessuna

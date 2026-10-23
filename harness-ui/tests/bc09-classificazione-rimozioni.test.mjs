@@ -37,6 +37,7 @@ const CLASSE_B = new Map([
   ['tests/agent-timeline.test.mjs', 'registro con writer asincroni e server HTTP: attendere le scritture prima della rimozione, senza retry che nascondano handle aperti'],
   ['frontend/tests/browser/deleghe-diagramma-registro-vero.spec.mjs', 'browser e server HTTP reali con registro persistente (erede di ripresa-replay.spec.mjs, tolta con la vista classica il 14/10/2026): chiudere le connessioni e attendere tutti i writer prima della rimozione senza retry'],
   ['tests/acp-agent.test.mjs', 'un agente ACP esterno vive nella cartella e va chiuso (`agente.chiudi()`)'],
+  ['tests/casa-linux-u2028-22-10.test.mjs', 'il servente VERO della casa Linux è un processo figlio che legge un file nella cartella: va fermato (e aspettato) prima della rimozione'],
   ['tests/context-embedding-runtime.test.mjs', 'il runtime degli embedding lancia un processo figlio (`runtime.close()`)'],
   ['tests/context-engine-server.test.mjs', 'il servizio del contesto e un processo figlio con un socket (`stop()`)'],
   ['tests/context-runtime.test.mjs', 'runtime desktop vivi, chiusi uno per uno nel teardown'],

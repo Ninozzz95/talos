@@ -57,6 +57,54 @@ test('CTX-REG-AGENT-SERVICE-INSTANT — lo scambio istantaneo (nessun `inizio`) 
   assert.equal(fini[2].motivo, null, 'un motivo sulla fine NON istantanea non si legge: il contratto di prima');
 });
 
+test('CTX-REG-AGENT-SERVICE-ADOPTED — la riga del giro nata da un record preparato altrove porta `adottato` al giornale; AL CONTRARIO un valore che non è un istante non passa', async () => {
+  const eventi = [];
+  const record = creaRecord({ coveredThrough: 5, riassunto: [{ role: 'user', content: 'R' }], tokenPrima: 9_000, tokenDopo: 700, misura: 'fornitore', at: '2026-10-22T16:00:00.000Z', modello: 'z-ai/glm-5.3-flash' });
+  await avviaSessione({
+    cartella: '/tmp/x', task: { consegna: 'prova' }, modello: 'm', chiave: 'k',
+    onEvento: (e) => { eventi.push(e); },
+    talosLavoraFn: async ({ onGiro }) => {
+      onGiro({ giro: 1, tipo: 'compattazione-fine', compattato: true, record, istantanea: true, motivo: 'soglia',
+        adottato: { at: '2026-10-22T15:59:00.123Z', origine: 'fine-giro', tokenDopo: 1_200, conResto: true, testo: 'testo del fornitore' } });
+      onGiro({ giro: 2, tipo: 'compattazione-fine', compattato: true, record, istantanea: true, motivo: 'soglia' });
+      onGiro({ giro: 3, tipo: 'compattazione-fine', compattato: true, record, istantanea: true, motivo: 'soglia', adottato: { at: 'testo del fornitore', origine: 'giro' } });
+      onGiro({ giro: 5, tipo: 'compattazione-fine', compattato: true, record, istantanea: true, motivo: 'soglia', adottato: { at: '2026-10-22T15:59:00.123Z', origine: 'altro' } });
+      onGiro({ giro: 4, tipo: 'compattazione-preparata', fase: 'pronta', tokenPrima: 9_000, tokenDopo: 700, at: '2026-10-22T15:59:00.123Z' });
+      return { comeFinita: 'concluso', detto: 'fatto', messaggiFinali: [], recordDiCompattazione: [record] };
+    },
+  });
+  const fini = eventi.filter((e) => e.type === 'CUSTOM' && e.name === 'talos.compattazione' && e.value.fase === 'fine').map((e) => e.value);
+  assert.deepEqual(fini[0].adottato, { at: '2026-10-22T15:59:00.123Z', origine: 'fine-giro', tokenDopo: 1_200, conResto: true }, 'il segno arriva, solo coi suoi campi');
+  assert.equal(fini[1].adottato, undefined, 'senza segno non compare');
+  assert.equal(fini[2].adottato, undefined, 'un at che non è un istante non passa');
+  assert.equal(fini[3].adottato, undefined, 'un’origine che non è giro o fine-giro non passa');
+  const pronta = eventi.find((e) => e.type === 'CUSTOM' && e.name === 'talos.compattazione-preparata')?.value;
+  assert.equal(pronta?.at, '2026-10-22T15:59:00.123Z', 'e l’evento «pronta» porta l’at che il segno nomina');
+});
+
+test('CTX-REG-AGENT-SERVICE-REST-FAILED — sulla riga della base adottata il perché del resto arriva al giornale, ridotto ai campi di codice; AL CONTRARIO senza resto non compare', async () => {
+  const eventi = [];
+  const record = creaRecord({ coveredThrough: 5, riassunto: [{ role: 'user', content: 'R' }], tokenPrima: 9_000, tokenDopo: 700, misura: 'fornitore', at: '2026-10-22T15:00:00.000Z', modello: 'z-ai/glm-5.3-flash' });
+  await avviaSessione({
+    cartella: '/tmp/x', task: { consegna: 'prova' }, modello: 'm', chiave: 'k',
+    onEvento: (e) => { eventi.push(e); },
+    talosLavoraFn: async ({ onGiro }) => {
+      onGiro({ giro: 3, tipo: 'compattazione-inizio', tokenMisurati: 9_500, soglia: 8_000, motivo: 'emergenza' });
+      onGiro({ giro: 3, tipo: 'compattazione-fine', compattato: true, record, istantanea: true, motivo: 'emergenza',
+        restoNonRiuscito: { motivo: 'x'.repeat(200), interrottaIn: 'riassunto', classe: 'server_error', fallimentiConsecutivi: 2, testo: 'testo del fornitore' } });
+      onGiro({ giro: 4, tipo: 'compattazione-fine', compattato: true, record, istantanea: true, motivo: 'soglia' });
+      onGiro({ giro: 5, tipo: 'compattazione-fine', compattato: true, record, istantanea: true, motivo: 'soglia', restoNonRiuscito: 'non un oggetto' });
+      return { comeFinita: 'concluso', detto: 'fatto', messaggiFinali: [], recordDiCompattazione: [record] };
+    },
+  });
+  const fini = eventi.filter((e) => e.type === 'CUSTOM' && e.name === 'talos.compattazione' && e.value.fase === 'fine').map((e) => e.value);
+  assert.deepEqual(fini[0].restoNonRiuscito, { motivo: 'x'.repeat(64), interrottaIn: 'riassunto', classe: 'server_error', fallimentiConsecutivi: 2 },
+    'il perché arriva, tagliato, e i campi che non sono di codice restano fuori');
+  assert.equal(fini[0].compattato, true, 'la riga resta quella della base');
+  assert.equal(fini[1].restoNonRiuscito, undefined, 'senza resto non compare');
+  assert.equal(fini[2].restoNonRiuscito, undefined, 'un valore che non è un oggetto non passa');
+});
+
 test('CTX-REG-AGENT-SERVICE-SUMMARY-CALL — riassumiPerCompattazione chiama il modello SENZA attrezzi, col tetto di uscita e il ragionamento passato', async () => {
   let body = null;
   const fetchDiRete = async (_url, init) => { body = JSON.parse(init.body); return Response.json({ choices: [{ message: { role: 'assistant', content: 'SINTESI' }, finish_reason: 'stop' }], usage: { prompt_tokens: 12, completion_tokens: 3 } }); };

@@ -127,7 +127,10 @@ test('BUG5-CLASSI-FALLIMENTO — le otto classi, pure (21/10: «rifiuto», come 
 test('BUG5-EVENTI-FALLIMENTO-E-GIRO — classe e contatore sugli eventi; il 4° tentativo identico NON si paga', async (t) => {
   conTetto(t, 8_000);
   const cartella = cartellaDiProva(t);
-  const fornitore = fintoFornitore({ chiamateTool: 10, riassunto: () => ({ role: 'assistant', content: '' }) });
+  /* 22/10/2026 notte (verdetto della CLI, C1): un riassunto si tenta solo se toglie il 10% della soglia al netto del riassunto atteso
+     (almeno 2.000 token); con 10 letture, dopo il primo ripiego, la conversazione non tornava abbastanza sopra per un'entrata «esaurito».
+     Con 14 sì: la scena è la stessa, solo più lunga. */
+  const fornitore = fintoFornitore({ chiamateTool: 14, riassunto: () => ({ role: 'assistant', content: '' }) });
   const { esito, eventi } = await giro(t, { cartella, fornitore });
   assert.equal(esito.comeFinita, 'concluso', 'il giro conclude anche con il riassuntore fermo');
   const fini = eventi.filter((e) => e.tipo === 'compattazione-fine' && e.compattato === false);
@@ -273,8 +276,10 @@ test('BUG5-AZZERA-AL-SUCCESSO — un riassunto riuscito in mezzo azzera il conta
   const pavimento = 'PAVIMENTO-INCOMPRIMIBILE ' + 'p'.repeat(60_000);
   const risposte = ['', '', 'RIASSUNTO BUONINO DEL MEZZO COMPATTATO', '', ''];
   let numeroRiassunti = 0;
+  /* 22/10/2026 notte (verdetto della CLI, C1): dopo la compattazione riuscita le due nuove entrate vogliono un tratto vecchio che valga
+     il 10% della soglia al netto del riassunto atteso; con 8 letture non c'era più. Con 12 la scena è la stessa, solo più lunga. */
   const fornitore = fintoFornitore({
-    chiamateTool: 8,
+    chiamateTool: 12,
     riassunto: () => ({ role: 'assistant', content: risposte[numeroRiassunti++] ?? '' }),
   });
   const { esito, eventi } = await giro(t, { cartella, fornitore, contestoDelProgetto: pavimento });

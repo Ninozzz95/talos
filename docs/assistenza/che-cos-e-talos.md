@@ -7,7 +7,7 @@ TALOS è un agente che **deve dimostrare di aver fatto il lavoro**.
 Sono due prodotti costruiti sulle stesse regole:
 
 - **TALOS Mobile** — un agente personale per Android, che ragiona, ricorda,
-  cerca e agisce sul telefono, con un modello che gira sul telefono stesso
+  cerca e agisce sul dispositivo, con un modello che gira sul dispositivo stesso
   oppure con un modello in rete che scegli tu. Funziona senza server e senza
   account.
 - **Harness Desktop** — un agente di programmazione locale, con un terminale

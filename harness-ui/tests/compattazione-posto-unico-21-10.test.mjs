@@ -11,7 +11,9 @@ import { join } from 'node:path';
 import test from 'node:test';
 
 process.env.TALOS_COMPACTION_TOKEN_CAP = '4000';
-const { talosLavora, motoreAPostoUnico } = await import('../src/kernel/talosHarness.desktop-hotfix.mjs');
+const { talosLavora: talosLavoraVero, motoreAPostoUnico } = await import('../src/kernel/talosHarness.desktop-hotfix.mjs');
+/* Revisione 6 della CLI (S2-2): senza uno scarto misurato la prima richiesta di un giro porta la stima degli schemi degli attrezzi (i fornitori veri li contano). Il fornitore finto di questo file risponde `prompt_tokens` = stima dei soli MESSAGGI: lo scarto che il registro misurerebbe su di lui è 0, e lo si dichiara (`scartoMisurato: 0`) invece di cambiare tutte le soglie. */
+const talosLavora = (input) => talosLavoraVero({ scartoMisurato: 0, ...input });
 const { stimaTokenConversazione: stima } = await import('../src/kernel/talosHarness.mjs');
 const { rimuoviCartellaDiProva } = await import('./aiuto/rimuovi-cartella-di-prova.mjs');
 

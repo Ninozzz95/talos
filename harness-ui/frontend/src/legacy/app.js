@@ -149,7 +149,7 @@ import { aggiornaAvanzamentoContesto, aggiornaAvanzamentoLegacy, ridisegnaRigaVi
 import { montaFasciaObiettivo, aggiornaFasciaObiettivo, sceltaPer as sceltaFasciaObiettivo, ricordaScelta as ricordaSceltaFasciaObiettivo, chiaveDelloStato as chiaveDelloStatoObiettivo } from '../components/obiettivo-fascia.js'; // /goal G6, 15/10/2026: la fascia dell'obiettivo
 import { creaCartaObiettivo, comandoObiettivo, suggerisciComando, stessiControlli } from '../components/obiettivo-carta.js'; // /goal G6: la carta di conferma dei controlli e `/goal`
 import { EVENTO_MCP_AVVIO, creaRicordoAvvisiMcp, nuoviServerNonPartiti, creaNotaMcpNonPartito } from '../components/avviso-mcp.js'; // owner 17/10/2026: un server MCP che non parte si dice in chat
-import { interpretaEventoCompattazione, valutaSogliaContesto, testoRigaCompattazione, montaAvvisoContesto, aggiornaAvvisoContesto, aggiornaNotaJournalRiparato, compattaLegacy, annullaCompattazioneLegacy, saltaRiassuntoLegacy, fineMuta } from '../components/compattazione-legacy.js'; // F5, 24/09/2026: la compattazione legacy che si vede e si può fare
+import { interpretaEventoCompattazione, valutaSogliaContesto, testoRigaCompattazione, montaAvvisoContesto, aggiornaAvvisoContesto, aggiornaNotaJournalRiparato, compattaLegacy, annullaCompattazioneLegacy, saltaRiassuntoLegacy, fineMuta, chiaveNotaCompactManuale } from '../components/compattazione-legacy.js'; // F5, 24/09/2026: la compattazione legacy che si vede e si può fare
 import { aggiornaDiffReview, aggiornaSommarioSchedeReview, chiaveFileReview, creaSchedeReview, etichettaFileReview, nascondiAzioniFase3, riassuntoReviewTestata as riassuntoReviewPerTestata } from '../components/review.js'; // 05/9 Fase 2: Review — elenco dei file e diff nel disegno; 17/09 BC-75: `etichettaFileReview` è la regola del nome, e non si riscrive qui del mockup; 17/09 BC-63: le linguette sono il componente condiviso col Terminale
 import { creaStatoVuoto, suggerimentiDallaCartella } from '../components/stato-vuoto.js'; // 05/9 Fase 2: EmptyState — lo stato vuoto del mockup, dai fatti della cartella
 import { montaGuscioLaboratorio } from '../components/lab-cornice-v3.js'; // 18/09 corsia 2: il guscio a quattro schede del Laboratorio modelli — monta i comandi legacy in una scheda sola
@@ -23707,12 +23707,16 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       if (sessionId !== state.realSession.id) return { stato: esito.compattato ? 'riassunta' : 'invariata' };
       aggiornaAvanzamentoLegacy(colonna, null, { sessionId });
       /* 26/09: la rotta manuale ora risponde con `at` e numeri, e registra lo STESSO evento durevole: POST ed evento
-         aggiornano la stessa riga (chiave `at`), e il suo checkpoint non si annulla (`annullabile:false`). */
+         aggiornano la stessa riga (chiave `at`). Dal 22/10/2026 (S2-A) è un record, quindi si annulla: `annullabile` lo dice il server. */
       if (esito.compattato) {
         misuraDopoCompattazione(sessionId, esito.tokenDopo);
         aggiornaSeparatoreLegacy(colonna, { at: esito.at, stato: 'riassunta', annullabile: esito.annullabile, tokenPrima: esito.tokenPrima, tokenDopo: esito.tokenDopo }, { ...opzioniRigaLegacy(sessionId), testo: testoRigaCompattazione({ stato: 'riassunta', tokenPrima: esito.tokenPrima, tokenDopo: esito.tokenDopo }) });
-      } else appendStatusNote(tr('app.contextManager.notSummarized'), false, { meta: tr('app.contextManager.notSummarizedMeta') });
-      return { stato: esito.compattato ? 'riassunta' : 'invariata' };
+      } else {
+        /* 22/10/2026 (revisione 3 della CLI): «al-minimo» e «inefficace» hanno la loro frase — col secondo il riassunto si è pagato, e la
+           nota generica non lo diceva */
+        appendStatusNote(tr(chiaveNotaCompactManuale(esito.motivo)), false, { meta: tr('app.contextManager.notSummarizedMeta') });
+      }
+      return { stato: esito.compattato ? 'riassunta' : 'invariata', ...(esito.compattato ? {} : { motivo: esito.motivo ?? null }) };
     } catch (errore) {
       const risposta = { stato: 'errore', messaggio: errore?.message || tr('app.common.operationFailed') };
       if (sessionId !== state.realSession.id) return risposta;

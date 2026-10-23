@@ -130,9 +130,14 @@ test('G5-REV-03 (S3) — the person\'s «Check» WHILE the judge thinks: the jud
   const verifica = await b.registro.verificaObiettivo(sessionId); // «Verifica» della persona
   assert.equal(verifica?.ok, true, `premessa: la verifica della persona riesce (${JSON.stringify(verifica)?.slice(0, 160)})`);
   g.rispondi(si([{ path: 'README.md', sha256: impronta(README) }]));
-  await riposa();
+  /* 22/10/2026: si aspetta che l'obiettivo SI MUOVA (un giro nuovo, un giudizio nuovo, o non più attivo), fino al tetto di `aspetta` —
+     con la pausa fissa `riposa()` il runner Linux della CI (PR della 0.1.36) arrivava all'asserzione prima del passo dopo la «Verifica»:
+     rossa in CI, 3/3 verde in locale. Stessa cura di G4-REV-05 (c83d1e9a2). */
+  const fermo = () => { const x = stato(b, sessionId); return x.stato === 'attivo' && b.giri.length === giriPrima + 1 && b.domande.length === 1; };
+  const fino = Date.now() + 15_000;
+  while (fermo() && Date.now() < fino) await new Promise((r) => setTimeout(r, 5));
   const o = stato(b, sessionId);
-  const fermoInSilenzio = o.stato === 'attivo' && b.giri.length === giriPrima + 1 && b.domande.length === 1;
+  const fermoInSilenzio = fermo();
   assert.equal(fermoInSilenzio, false, `goal ${o.stato}, turns ${b.giri.length - giriPrima}, judge calls ${b.domande.length}: active, idle, nobody will move it`);
 }));
 

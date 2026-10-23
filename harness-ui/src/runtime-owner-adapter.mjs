@@ -58,6 +58,17 @@ const RICHIESTA_DI_RIASSUNTO = [
   '(commit, push, publish, delete) must be named VERBATIM with its identifier — the full commit hash.',
 ].join('\n');
 const GIRI_PRIMA_DI_COMPATTARE = 12;
+/**
+ * Dove va una chiamata secondaria. Di serie sul fornitore ATTIVO del giro (`effettivo`, se la catena ha già cambiato fornitore), come
+ * prima. ⛔ 22/10/2026 (CLI, revisione 3 della 0.6.13, S2-1): un riassunto sul modello LEGGERO (`modelloProprio`) va al SUO modello —
+ * dopo un cambio di fornitore finiva sul modello di riserva del giro, cioè non era più il riassunto che la persona aveva scelto.
+ */
+export function destinazioneDellaSecondaria({ effettivo = null, modello, modelloProprio = false } = {}) {
+  const iniziale = separaFonteModello(modello);
+  const proprio = { provider: iniziale.fonte, model: iniziale.modelloRemoto };
+  return modelloProprio ? proprio : (effettivo ?? proprio);
+}
+
 /** La chiamata secondaria (il riassunto preparato in sottofondo): la richiesta e UN ritentativo (IST2-REV-02, vedi `eseguiConFallback`). */
 const TENTATIVI_DELLA_SECONDARIA = 2;
 /** IST3-REV-01 (16/10): un `Retry-After: 3600` teneva il riassunto «in volo» un'ora, e all'emergenza il giro aspettava lui. Se il
@@ -1594,9 +1605,6 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
 
   const fetchMultiProvider = (url, opzioni) => invia(url, opzioni);
   fetchMultiProvider.eseguiConFallback = async (chiama, opzioni = {}) => {
-    if (modelloSessione && JSON.stringify(separaFonteModello(opzioni.modello)) !== JSON.stringify(separaFonteModello(modelloSessione))) {
-      return chiama({ fetchDiRete: fetchMultiProvider });
-    }
     /*
      * ⛔⛔ 15/10/2026 notte, giro vero sulla 4177 (glm-5.3-flash) — LA CHIAMATA SECONDARIA. La compattazione istantanea prepara il
      *   riassunto IN SOTTOFONDO mentre il giro va avanti: è per costruzione una seconda chiamata della sessione in contemporanea, e il
@@ -1613,8 +1621,7 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
        mentre il giro gli chiede le sue, e all'emergenza il giro aspetta proprio quella promessa. Un ritentativo basta a un guasto di
        passaggio; oltre, il riassunto non è pronto e il giro compatta da sé quando gli serve. */
     if (opzioni.secondaria === true) {
-      const iniziale = separaFonteModello(opzioni.modello);
-      const destinazione = effettivo ?? { provider: iniziale.fonte, model: iniziale.modelloRemoto };
+      const destinazione = destinazioneDellaSecondaria({ effettivo, modello: opzioni.modello, modelloProprio: opzioni.modelloProprio === true });
       const contesto = { guastiHttp: new Map() };
       let risultato;
       try {
@@ -1636,6 +1643,16 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
         try { await dipendenze.registraUsoDelPiano({ esito: 'completato', usage }); } catch { /* il conteggio è un di più */ }
       }
       return { ...risultato, usage, fornitoreEffettivo: destinazione.provider, modelloEffettivo: destinazione.model };
+    }
+    /* ⛔ Revisione 3 della CLI sulla 0.6.13 (22/10/2026, S2-1) — un modello DIVERSO da quello della sessione (il modello leggero del
+       riassunto, un titolo) usa la stessa chiave della sessione. Prima questa uscita stava IN TESTA: il riassunto col modello proprio
+       non arrivava mai al ramo `secondaria` qui sopra (niente tetto di due tentativi né di 30 s d'attesa), e `invia`
+       girava senza contesto, quindi un 429 a chiave unica mandava in PANCHINA la chiave della sessione per tutto il Retry-After: la
+       richiesta successiva del giro aspettava ~Retry-After + 10 s dietro un modello che non era il suo (misura della CLI, banco
+       OpenRouter a Retry-After 90). Ora: la secondaria passa prima dal suo ramo, e qui un guasto di passaggio a chiave unica si CONTA
+       e non si panchina — come per la richiesta del giro (`guastoHttp`), che decide la panchina solo dopo i suoi ritentativi. */
+    if (modelloSessione && JSON.stringify(separaFonteModello(opzioni.modello)) !== JSON.stringify(separaFonteModello(modelloSessione))) {
+      return chiama({ fetchDiRete: (url, init) => invia(url, init, { guastiHttp: new Map() }) });
     }
     if (occupato) throw new OwnerRuntimeUnavailableError('A call of this session is already in progress.', 'PROVIDER_FALLBACK_BUSY');
     occupato = true;

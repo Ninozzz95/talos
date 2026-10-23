@@ -1,0 +1,25 @@
+Third-party licences of the iroh binding (harness-ui/native/iroh/iroh.win32-x64-msvc.node)
+
+The binding is iroh-ffi 1.1.0 (n0-computer/iroh-ffi, commit 5e451092, MIT OR Apache-2.0), compiled by
+.github/workflows/iroh-binding.yml with the Cargo.lock in harness-ui/native/iroh/. It links the Rust crates
+listed below. Each licence text appears once, followed by the crates that use it.
+Generated with cargo-about 0.9.2 for x86_64-pc-windows-msvc, without build or dev dependencies.
+Cargo.lock sha256: CARGO_LOCK_SHA256
+Source code: every crate below is published on crates.io at the listed version, with its repository; this includes the
+MPL-2.0 crate (attohttpc), whose Source Code Form is available there under MPL-2.0 section 3.2.
+
+{{#each overview}}
+{{{name}}} ({{{id}}}): {{count}} crates
+{{/each}}
+
+{{#each licenses}}
+================================================================================
+{{{name}}} ({{{id}}})
+Used by:
+{{#each used_by}}
+  - {{crate.name}} {{crate.version}}{{#if crate.repository}} ({{crate.repository}}){{/if}}
+{{/each}}
+--------------------------------------------------------------------------------
+{{{text}}}
+
+{{/each}}

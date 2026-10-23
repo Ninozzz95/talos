@@ -13,7 +13,8 @@ import { join } from 'node:path';
 import test from 'node:test';
 
 import { talosLavora } from '../src/kernel/talosHarness.desktop-hotfix.mjs';
-import { MARCATORE_RIASSUNTO, VARIABILE_TETTO_TOKEN, applicaRecord, creaRecord } from '../src/kernel/compattazione-desktop.mjs';
+import { MARCATORE_RIASSUNTO, VARIABILE_TETTO_TOKEN, applicaRecord, budgetCoda, creaRecord, riduciCodaSottoPressione } from '../src/kernel/compattazione-desktop.mjs';
+import { stimaTokenConversazione } from '../src/kernel/talosHarness.mjs';
 import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 const CONSEGNA = 'CONSEGNA-ORIGINALE-MARKER: leggi grande.txt più volte e riferisci.';
@@ -128,8 +129,11 @@ test('IST-01 — il banco del tempo d\'attesa: con un riassuntore lento il giro 
 });
 
 test('IST-02 — alla soglia lo scambio è istantaneo: niente «inizio» (nessuna barra), un «fine» con istantanea; il record si rigioca uguale', async (t) => {
-  conTetto(t, 8_000);
-  const fornitore = fintoFornitore({ chiamateTool: 10, ritardoLavoroMs: 30, lavoroAspettaPronta: true });
+  /* 22/10/2026 notte (verdetto della CLI sulla regola del riassunto, C1): un riassunto vero pesa il suo budget d'uscita (almeno 2.000
+     token) e si paga solo se toglie il 10% della soglia al netto di quello. Con 8.000 il preambolo (~3.000) più le due letture della coda
+     (~2.000) più il riassunto atteso non lasciavano il 10%: la scena è a 12.000, come IST-03, IST-04 e IST-08. */
+  conTetto(t, 12_000);
+  const fornitore = fintoFornitore({ chiamateTool: 14, ritardoLavoroMs: 30, lavoroAspettaPronta: true });
   const { esito, eventi } = await giro(t, { cartella: cartellaDiProva(t), fornitore });
   assert.equal(esito.comeFinita, 'concluso');
   assert.equal(eventi.filter((e) => e.tipo === 'compattazione-inizio').length, 0, 'nessuna compattazione bloccante');
@@ -140,7 +144,7 @@ test('IST-02 — alla soglia lo scambio è istantaneo: niente «inizio» (nessun
   assert.equal(fini[0].istantanea, true);
   assert.equal(fini[0].motivo, 'soglia');
   const { record } = fini[0];
-  assert.ok(record.tokenPrima >= 8_000 && record.tokenDopo < 8_000, `${record.tokenPrima} → ${record.tokenDopo}`);
+  assert.ok(record.tokenPrima >= 12_000 && record.tokenDopo < 12_000, `${record.tokenPrima} → ${record.tokenDopo}`);
   assert.deepEqual(esito.recordDiCompattazione[0], record);
   const proiezione = applicaRecord(esito.messaggiFinali, record);
   const dopo = fornitore.lavori().find((b) => b.messages.some((m) => testoDi(m).startsWith(MARCATORE_RIASSUNTO)));
@@ -186,8 +190,11 @@ test('IST-04 — un riassunto pronto preparato su un\'altra base (la storia è s
 });
 
 test('IST-05 — un riassuntore che fallisce in sottofondo non ferma il giro, si dice (preparata, compattato:false, classe) e non si paga senza fine', async (t) => {
-  conTetto(t, 8_000);
-  const fornitore = fintoFornitore({ chiamateTool: 10, riassunto: () => ({ role: 'assistant', content: '' }) });
+  /* 22/10/2026 notte (verdetto della CLI sulla regola del riassunto, C1): un riassunto vero pesa il suo budget d'uscita (almeno 2.000
+     token) e si paga solo se toglie il 10% della soglia al netto di quello. Con 8.000 il preambolo (~3.000) più le due letture della coda
+     (~2.000) più il riassunto atteso non lasciavano il 10%: la scena è a 12.000, come IST-03, IST-04 e IST-08. */
+  conTetto(t, 12_000);
+  const fornitore = fintoFornitore({ chiamateTool: 14, riassunto: () => ({ role: 'assistant', content: '' }) });
   const { esito, eventi } = await giro(t, { cartella: cartellaDiProva(t), fornitore });
   assert.equal(esito.comeFinita, 'concluso');
   const falliti = eventi.filter((e) => e.tipo === 'compattazione-preparata' && e.compattato === false);
@@ -200,15 +207,23 @@ test('IST-05 — un riassuntore che fallisce in sottofondo non ferma il giro, si
 });
 
 test('IST-06 — all\'emergenza si ASPETTA il riassunto già in preparazione e lo si usa; mai un secondo riassunto al suo posto', async (t) => {
-  conTetto(t, 8_000); // soglia 8.000, emergenza 9.600
-  const fornitore = fintoFornitore({ chiamateTool: 10, ritardoRiassuntoMs: 300 });
+  /* 22/10/2026 notte (verdetto della CLI sulla regola del riassunto, C1): un riassunto vero pesa il suo budget d'uscita (almeno 2.000
+     token) e si paga solo se toglie il 10% della soglia al netto di quello. Con 8.000 il preambolo (~3.000) più le due letture della coda
+     (~2.000) più il riassunto atteso non lasciavano il 10%: la scena è a 12.000, come IST-03, IST-04 e IST-08. */
+  conTetto(t, 12_000); // soglia 12.000, emergenza 14.400
+  const fornitore = fintoFornitore({ chiamateTool: 14, ritardoRiassuntoMs: 300 });
   const { esito, eventi } = await giro(t, { cartella: cartellaDiProva(t), fornitore });
   assert.equal(esito.comeFinita, 'concluso');
   const fini = eventi.filter((e) => e.tipo === 'compattazione-fine' && e.compattato);
   assert.ok(fini.some((e) => e.istantanea && e.motivo === 'emergenza'), JSON.stringify(fini.map((e) => [e.motivo, e.istantanea])));
-  assert.equal(eventi.filter((e) => e.tipo === 'compattazione-inizio').length, 0, 'nessuna compattazione sincrona: è bastato aspettare quella in corso');
+  /* 22/10/2026 (revisione avversaria, B): l'attesa d'emergenza apre la riga viva PRIMA di aspettare (Stop, «Salta», tetto), quindi un
+     `compattazione-inizio` per ogni attesa c'è; ciò che non deve esserci è un riassunto pagato in più: ogni riassunto chiesto è una
+     preparazione in sottofondo, e ogni riga aperta si chiude con lo scambio istantaneo */
+  const inizi = eventi.filter((e) => e.tipo === 'compattazione-inizio');
+  assert.equal(inizi.length, fini.filter((e) => e.istantanea && e.motivo === 'emergenza').length, `una riga per attesa, chiusa dallo scambio: ${JSON.stringify(eventi.filter((e) => /compattazione-(inizio|fine)/u.test(e.tipo)).map((e) => [e.tipo, e.motivo, e.istantanea]))}`);
+  assert.equal(fornitore.riassuntiChiesti().length, esito.preparazioniDiCompattazione.preparate, 'nessun riassunto sincrono: è bastato aspettare quello in corso');
   const massima = Math.max(...fornitore.lavori().map((b) => Math.ceil(JSON.stringify(b.messages).length / 4)));
-  assert.ok(massima < 9_600 * 1.15, `nessuna richiesta molto oltre l'emergenza: ${massima}`);
+  assert.ok(massima < 14_400 * 1.15, `nessuna richiesta molto oltre l'emergenza: ${massima}`);
 });
 
 test('IST-07 — letture grandi arrivate DOPO il riassunto si accorciano allo scambio: la richiesta resta limitata (il difetto misurato il 15/10)', async (t) => {
@@ -239,4 +254,40 @@ test('IST-08 — un riassunto pronto troppo vecchio (lo scambio non riporterebbe
   assert.ok(prima.messages.some((m) => testoDi(m).includes('RIASSUNTO-NUOVO')), 'all\'emergenza se ne fa uno nuovo');
   assert.ok(eventi.some((e) => e.tipo === 'compattazione-inizio' && e.motivo === 'emergenza'), 'la compattazione nuova è quella dell’emergenza');
   assert.ok(eventi.some((e) => e.tipo === 'compattazione-fine' && e.compattato), JSON.stringify(eventi.map((e) => [e.tipo, e.motivo])));
+});
+
+/* Revisione 8 della CLI (N3, 23/10/2026): lo scambio di un riassunto pronto si misura sulla scala della richiesta, scarto compreso — se la
+   sua proiezione più lo scarto resta sopra la soglia, lo scambio da solo non basta (prima si contava la sola proiezione, e la richiesta
+   dopo lo scambio restava sopra la soglia per la misura vera) */
+test('IST-09 — lo scambio di un riassunto pronto conta lo scarto: proiezione + scarto sopra la soglia ⇒ non è uno scambio istantaneo, si dice «ancora sopra la soglia»; AL CONTRARIO senza scarto lo scambio è istantaneo', async (t) => {
+  conTetto(t, 12_000); // soglia 12.000, emergenza 14.400
+  const cartella = cartellaDiProva(t);
+  const primo = fintoFornitore({ chiamateTool: 7, testoRiassunto: 'RIASSUNTO-PRONTO' });
+  const { esito: e1 } = await giro(t, { cartella, fornitore: primo });
+  const pronta = e1.compattazionePronta ?? await e1.compattazioneInPreparazione;
+  assert.ok(pronta?.record, 'premessa: un riassunto pronto a fine giro');
+  const grande = { role: 'user', content: `seconda domanda ${'z'.repeat(20_000)}` };
+  /* lo scambio come lo misura il giro: il riassunto, più ciò che è arrivato dopo (gli esiti lunghi accorciati come nella coda) */
+  const coda = [...e1.messaggiFinali, grande].slice(pronta.record.coveredThrough);
+  const scambio = stimaTokenConversazione([...pronta.record.riassunto, ...riduciCodaSottoPressione(coda, { budgetToken: budgetCoda(12_000) }).coda]);
+  const scarto = 12_000 - scambio + 300;
+  assert.ok(scambio < 11_700 && scarto > 0, `premessa: lo scambio da solo sta sotto la soglia (${scambio}), con lo scarto (${scarto}) no`);
+  const corsa = async (scartoMisurato) => {
+    const secondo = fintoFornitore({ chiamateTool: 0, testoRiassunto: 'RIASSUNTO-NUOVO' });
+    const { eventi } = await giro(t, { cartella, fornitore: secondo, messaggiIniziali: [...e1.messaggiFinali, grande], compattazionePronta: pronta, scartoMisurato });
+    return {
+      istantanea: eventi.some((e) => e.tipo === 'compattazione-fine' && e.istantanea),
+      scartata: eventi.find((e) => e.tipo === 'compattazione-preparata' && e.fase === 'scartata')?.motivo ?? null,
+      riassunti: secondo.riassuntiChiesti().length,
+    };
+  };
+  /* N6 (revisione 9 della CLI): qui la richiesta è oltre l'emergenza, e il riassunto pronto — scartato come scambio — diventa la base e
+     BASTA per la linea d'emergenza: la riga è la base, istantanea, senza un secondo riassunto. Ciò che N3 cambia è il «perché»: la
+     preparata si dice «ancora sopra la soglia» invece di essere scambiata come se bastasse per la soglia */
+  const conScarto = await corsa(scarto);
+  assert.equal(conScarto.scartata, 'still-over-threshold', 'con lo scarto lo scambio da solo non riporta sotto la soglia, e lo si dice');
+  assert.equal(conScarto.riassunti, 0, 'e la base basta per l\'emergenza: nessun riassunto nuovo (N6)');
+  const senza = await corsa(0);
+  assert.equal(senza.istantanea, true, 'AL CONTRARIO: senza scarto lo scambio è istantaneo');
+  assert.equal(senza.scartata, null, 'e non si scarta niente');
 });

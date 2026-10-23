@@ -109,7 +109,9 @@ test('CTX-PURE-SPLIT — testa = tutti i system; coda = ultimi 2 scambi mai spez
   // già in coda ⇒ dal mezzo restano «richiesta 2» e «richiesta 3».
   assert.equal(parti.coda[0].content, 'richiesta 4');
   assert.ok(parti.coda.some((m) => m.tool_calls?.[0]?.id === 'c5') && parti.coda.some((m) => m.role === 'tool' && m.tool_call_id === 'c5'));
-  assert.deepEqual(parti.richiesteLetterali.map((m) => m.content), ['richiesta 2', 'richiesta 3']);
+  // 22/10/2026 (owner, «prima + ultime tre»): in testa anche la PRIMA richiesta, che sta nel mezzo; senza, la forma di prima.
+  assert.deepEqual(parti.richiesteLetterali.map((m) => m.content), ['richiesta 1', 'richiesta 2', 'richiesta 3']);
+  assert.deepEqual(dividiPerCompattazione(lista, { primaRichiesta: false }).richiesteLetterali.map((m) => m.content), ['richiesta 2', 'richiesta 3']);
   assert.ok(!parti.mezzo.some((m) => m.role === 'system'));
   // Nessun `tool` orfano in coda: tutti i tool della coda hanno il loro tool_calls nella coda.
   const aperti = new Set(parti.coda.flatMap((m) => (m.tool_calls ?? []).map((c) => c.id)));
@@ -264,7 +266,8 @@ test('CTX-PURE-PROJECTION-AND-RECORD — proiezione = testa + richieste letteral
   const proiezione = costruisciProiezione({ testa: parti.testa, richiesteLetterali: parti.richiesteLetterali, riassunto: 'RIASSUNTO', indice: 'INDICE', coda: parti.coda });
   assert.equal(proiezione[0].role, 'system');
   assert.equal(proiezione[1].role, 'system');
-  assert.equal(proiezione[2].content, 'richiesta 2');
+  assert.equal(proiezione[2].content, 'richiesta 1', '22/10: la prima richiesta della persona apre le richieste tenute');
+  assert.equal(proiezione[3].content, 'richiesta 2');
   const marcato = proiezione.find((m) => typeof m.content === 'string' && m.content.startsWith(MARCATORE_RIASSUNTO));
   assert.ok(marcato.content.endsWith(`RIASSUNTO\n\nINDICE\n\n${RIGA_RECUPERO}`), 'riassunto, indice, poi il puntatore di recupero (C1)');
   assert.equal(proiezione.length, 2 + parti.richiesteLetterali.length + 1 + parti.coda.length);

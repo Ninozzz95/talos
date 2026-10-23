@@ -11,6 +11,7 @@
  */
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
+import { rigaJson } from './riga-json.mjs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -50,7 +51,8 @@ export function creaCasaLinux({ distro, utente = null, node, rg, env, spawnFn = 
     attese.clear();
   };
   const scrivi = (oggetto) => {
-    try { figlio?.processo.stdin.write(`${JSON.stringify(oggetto)}\n`); return true; } catch { return false; }
+    /* 22/10/2026: `rigaJson`, non `JSON.stringify` — un testo con U+2028 spezzava la richiesta nel `readline` del servente */
+    try { figlio?.processo.stdin.write(rigaJson(oggetto)); return true; } catch { return false; }
   };
 
   /*

@@ -1717,6 +1717,26 @@ test('⭐ POST /api/v1/sessions/{id}/compact su una sessione conclusa: 200 e {co
   assert.deepEqual(corpo.data, { compattato: true });
 });
 
+test('COMPACT-PERCHE-HTTP (22/10) — un «non compattato» porta il suo motivo e il suo codice fino a chi chiama; mai il testo dell\'errore', async (t) => {
+  const sessionRegistry = registroFinto();
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+  sessionRegistry._emetti(sessionId, { type: 'RunFinished', threadId: 't1', runId: 'r1' });
+  const { base } = await listen(t, { sessionRegistry });
+  for (const esito of [
+    { ok: true, compattato: false, fase: 'riassunto', motivo: 'al-minimo' },
+    { ok: true, compattato: false, fase: 'sostituzione', motivo: 'inefficace', tokenPrima: 5000, tokenDopo: 6000 },
+    { ok: true, compattato: false, fase: 'riassunto', motivo: 'errore', codice: 'CTX_INVALID_SOURCE', dettaglio: 'testo del fornitore con dati' },
+    { ok: true, compattato: false, fase: 'riassunto', motivo: 'errore', codice: 'testo libero del fornitore', atteso: undefined },
+  ]) {
+    sessionRegistry.compatta = async () => esito;
+    const corpo = await (await fetch(`${base}/api/v1/sessions/${sessionId}/compact`, { method: 'POST' })).json();
+    assert.equal(corpo.data.compattato, false);
+    assert.equal(corpo.data.motivo, esito.motivo);
+    assert.equal(corpo.data.codice, 'atteso' in esito ? esito.atteso : esito.codice, 'solo una forma di codice passa');
+    assert.equal(JSON.stringify(corpo).includes('testo del fornitore'), false, 'il dettaglio resta nel registro');
+  }
+});
+
 test('CTX-LEGACY-COMPACT-HTTP-503 — append fallito produce 503 tipizzato, mai falso compattato:true', async (t) => {
   const sessionRegistry = registroFinto();
   const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');

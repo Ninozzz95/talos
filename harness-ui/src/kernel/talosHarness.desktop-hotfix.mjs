@@ -28,7 +28,7 @@ import * as compattazione from './compattazione-desktop.mjs';
 import * as kernel from './talosHarness.mjs';
 // ⭐ 06/10/2026 — la ricarica della memoria post-compact (opzione A, ricerca 5×5×5×5 §6.4): il blocco di
 // fatti freschi che `compattaOra` fonde nella proiezione, accanto all'indice meccanico.
-import { costruisciBloccoFatti } from './ricarica-post-compact.mjs';
+import { costruisciBloccoFatti, CARATTERI_BLOCCO_MASSIMI, MARCATORE_BLOCCO_TAGLIATO } from './ricarica-post-compact.mjs';
 import { chiamataPerChiGuarda } from './ponte-attrezzi.mjs';
 
 export * from './talosHarness.mjs';
@@ -476,8 +476,8 @@ function wrapOnGiro(original, { cartella, telemetry, calls }) {
  *   richiamare `invoke()` manda la storia compattata senza toccare il kernel (che non è di questa corsia). La forma
  *   pulita sarebbe un `prepare` richiamato dal kernel dopo l'overflow: è scritta nel rapporto F1 come debito.
  */
-const TENTATIVI_RIASSUNTO = 2;
-const ATTESA_RITENTA_RIASSUNTO_MS = 10_000;
+/* 22/10/2026: i due numeri vivono in compattazione-desktop.mjs, perché li usa anche il riassunto di fine giro del registro. */
+const { TENTATIVI_RIASSUNTO, ATTESA_RITENTA_RIASSUNTO_MS } = compattazione;
 
 /*
  * A1 (owner 21/10/2026 sera, dopo la ricerca su 12 concorrenti — `bugfixer/RICERCA-TETTO-E-VISIBILITA-RIASSUNTO-2026-10-21.md`): il
@@ -525,8 +525,17 @@ function wrapContextHooks(original, {
   cartella, modello, chiave, fetchDiRete, segnaleStop, telemetry, extraUsage, emitOnGiro,
   reasoning, soglie, recordIniziale = null, records = [], progressoAcceso = false, limiteUscitaToken = null,
   riassuntoInattivitaMs = RIASSUNTO_INATTIVITA_MS, riassuntoTettoMs = RIASSUNTO_TETTO_MS, segnaleSaltaRiassunto = null,
+  /* 22/10/2026 (revisione avversaria, C): lo Skip della compattazione IN CORSO — il registro ne arma uno nuovo a ogni compattazione che si
+     apre, e qui si legge al momento. Assente ⇒ `segnaleSaltaRiassunto`, uno per giro come prima. */
+  saltaRiassuntoFn = null,
   /* 21/10/2026 (CLI): il modello che scrive i riassunti (null ⇒ quello della conversazione) e la sua finestra (`sceltaDelRiassunto`) */
   modelloRiassunto = null, finestraRiassuntoToken = null,
+  /* Revisione 6 della CLI (S2-2): lo scarto misurato nel giro prima (dal registro); null ⇒ la stima degli attrezzi */
+  scartoMisurato = null,
+  /* Revisione 8 della CLI (N1): la stima degli schemi degli attrezzi del giro che ha misurato `scartoMisurato` (dal registro); null ⇒ ignota */
+  stimaAttrezziMisurati = null,
+  /* Revisione 7 della CLI (F6): la finestra per cui questa sessione ha già detto «non entra» (dal registro): non lo si ripete */
+  nonEntraDetto = null,
   /* ⭐ 06/10/2026 — le fonti dichiarate dall'ospite per il blocco di fatti post-compact (`input.fontiRicarica`):
    * LEDGER append-only, coda pendente, pericoli aperti. `cartella` (la cartella della sessione) resta la fonte
    * del `git log` locale; i file toccati vengono dall'indice meccanico di ogni compattazione. */
@@ -542,11 +551,36 @@ function wrapContextHooks(original, {
   istantanea = false,
 } = {}) {
   let compacted = compattazione.eRecordValido(recordIniziale) ? recordIniziale : null;
+  /*
+   * ⛔ 22/10/2026 (revisione avversaria, C): con un segnale solo per giro, dopo il primo Skip ogni richiesta successiva dello stesso giro
+   *   riceveva un segnale GIÀ interrotto: il riassunto dopo diventava «saltato» senza che nessuno l'avesse chiesto, un guasto vero del
+   *   motore più avanti non si diceva più («ripiego» taciuto) e un secondo Skip non era possibile. Il segnale giusto è quello della
+   *   compattazione che si sta aspettando ADESSO: si legge qui, al momento, da chi lo riarma (il registro).
+   */
+  const segnaleSalta = () => {
+    const corrente = typeof saltaRiassuntoFn === 'function' ? saltaRiassuntoFn() : null;
+    return corrente instanceof AbortSignal ? corrente : segnaleSaltaRiassunto;
+  };
   let compactions = 0;
   let providerRequests = 0;
   const correzioniFissate = new Map(); // L1: una correzione per esito, fissata alla prima richiesta (vedi `correggiMessaggiDesktop`)
   /* L'ancora: il numero VERO del fornitore per la lista lunga `lunghezza`; null finché non arriva una risposta. */
   let ancora = null;
+  /* Revisione 6 della CLI (S2-2): finché il giro non ha un'ancora, la stima porta lo scarto misurato nel giro prima (dal registro), o
+     — senza misura — la stima degli schemi degli attrezzi della prima richiesta. `ultimoScarto` è quello di questo giro, per il dopo. */
+  let scartoDellaStima = Number.isFinite(scartoMisurato) && scartoMisurato >= 0 ? scartoMisurato : null;
+  let ultimoScarto = null;
+  /* Revisione 7 della CLI (F4): la stima degli schemi degli attrezzi di QUESTO giro (prima richiesta). Un giro che non ha misurato niente
+     (fornitore senza `usage`, o con numeri non plausibili) restituisce lei, non lo scarto ereditato: il registro la usa nel riassunto di
+     fine giro e nel /compact, che gli schemi davanti non li hanno. */
+  let stimaAttrezziDelGiro = null;
+  const scartoCorrente = () => ultimoScarto ?? scartoDellaStima ?? 0;
+  /* Seconda passata della revisione 7 (F6): per «può entrare?» lo scarto INTERO — il più grande fra quello plausibile misurato senza tetto,
+     la stima degli attrezzi del giro e quello della misura (`scartoPlausibile`, compattazione-desktop) */
+  let ultimoScartoIntero = null;
+  let stimaAttrezziInPrepare = false;
+  const scartoPerNonEntra = () => Math.max(ultimoScartoIntero ?? 0, stimaAttrezziDelGiro ?? 0, scartoCorrente());
+  let nonEntraGiaDetto = Number.isFinite(nonEntraDetto) ? nonEntraDetto : null;
   let tentativiFallitiNelTurno = 0;
   let compattazioniInefficaci = 0;
   /* L'ultima compattazione ha trovato la coda letterale già al minimo (non rientrava nemmeno accorciata)? Solo allora
@@ -655,7 +689,13 @@ function wrapContextHooks(original, {
       ...(segnale ? { segnaleStop: segnale } : {}),
       /* l'inattività si misura sui pezzi in arrivo: solo con lo streaming acceso (il contatore), come il progresso */
       ...(contatore ? { onDelta: (evento) => { orologio?.vita(); contatore.onDelta(evento); }, accettaVuota: true } : {}),
-      ...(secondaria ? { secondaria: true } : {}),
+      /* ⛔ 22/10/2026 (CLI, revisione 3 della 0.6.13, S2-1): un riassunto su un modello DIVERSO da quello della conversazione (il leggero)
+         passava per la catena del giro: un suo 429/5xx metteva in PANCHINA la chiave della conversazione (`runtime-owner-adapter.mjs`,
+         `mettiInPanchina`, 60 s o il Retry-After intero) e la richiesta PAGATA del giro aspettava dietro — misurato dalla CLI: 104 s
+         fermi con Retry-After 90, il giro fallito dopo 167 s con Retry-After 3600, senza che il modello pagato fosse mai chiamato. Va
+         come chiamata secondaria (niente panchina, niente catena dei fornitori, un ritentativo): se fallisce, il riassunto senza
+         modello di sempre. */
+      ...(modelloScelto && modelloScelto !== modello ? { secondaria: true, modelloProprio: true } : secondaria ? { secondaria: true } : {}),
       /* 21/10/2026 (banco di stress: un riassuntore che risponde 429 o 500 teneva fermo il giro 502 s, coi 10 ritentativi di serie). Il
          riassunto non è il giro: come Hermes (`context_compressor.py:830-840`, un sovraccarico ANNULLA la compattazione e la sessione
          resta intatta) al più un ritentativo con attese brevi; il ciclo della compattazione ha già il suo secondo tentativo, e sopra
@@ -675,7 +715,17 @@ function wrapContextHooks(original, {
    * Una compattazione intera: divide, chiede il riassunto (un ritentativo immediato), costruisce proiezione e
    * record. Ritorna la proiezione nuova, o `null` se non c'è niente da riassumere o il riassuntore ha fallito.
    */
-  const preparaCompattazione = async (rawMessages, projected, { requestIndex, motivo, tokenMisurati, misura, soglia, inSottofondo = false }) => {
+  /* `conBase` (terza passata avversaria, R1): una base è già stata adottata per questa richiesta (`compattaDovuta`). Un fallimento del
+     resto NON disegna una riga sua — la riga della richiesta la chiude `annunciaCompattazione` con la compattazione che c'è stata: prima
+     la persona vedeva «inefficace» (o «errore») e subito dopo «compattato» per la stessa richiesta. */
+  /* Revisione 6 della CLI (S4-1): il blocco dei fatti avviato (git) si aspetta su OGNI uscita della preparazione — anche lo Stop e il
+     riassunto fallito, che prima lo lasciavano correre dopo il giro; con lo Stop git riceve il segnale e finisce subito. */
+  const preparaCompattazione = async (rawMessages, projected, opzioni) => {
+    const gitInVolo = { promessa: null };
+    try { return await preparaCompattazioneCorpo(rawMessages, projected, opzioni, gitInVolo); }
+    finally { if (gitInVolo.promessa) await gitInVolo.promessa.catch(() => {}); }
+  };
+  const preparaCompattazioneCorpo = async (rawMessages, projected, { requestIndex, motivo, tokenMisurati, misura, soglia, inSottofondo = false, inizioDetto = false, conBase = false }, gitInVolo) => {
     const divise = compattazione.dividiPerCompattazione(projected);
     /*
      * ⛔ Owner 26/09/2026, «Come Hermes»: la coda letterale sotto pressione si accorcia (inizio + fine degli esiti lunghi,
@@ -688,33 +738,130 @@ function wrapContextHooks(original, {
        `applicaCompattazione`, così un riassunto preparato in anticipo e mai usato non sposta il giudizio di quello in uso. */
     const pavimento = kernel.stimaTokenConversazione([...parti.testa, ...parti.richiesteLetterali, ...parti.coda]);
     const misureDelPavimento = { codaAlMinimo: pressione.alMinimo, pavimento };
-    if (!parti.tagliabile) {
-      /* Niente da riassumere e la coda già dentro il suo tetto: nessun tentativo, nessun evento, nessuna chiamata. */
-      if (pressione.ridotti === 0) return null;
+    /* 22/10/2026 (revisione 4 della CLI sulla 0.6.13, S2-1): il registro non paga un riassunto che non può ridurre
+       (`compattazione.riassuntoNonPuoRidurre`), il giro sì — un log incollato negli ultimi scambi con poca storia vecchia pagava un
+       riassunto a ogni giro e lo buttava come «inefficace». Si misura ciò che il riassunto può davvero togliere: la proiezione con la
+       coda GIÀ accorciata contro il pavimento (il risparmio della coda c'è anche senza riassunto, e non deve farne pagare uno). Non
+       vale per l'overflow: lì il fornitore ha già detto «non entra» e la stima non decide (decisione dell'owner del 21/10, ripiego). */
+    /* ⛔ Revisione 5 della CLI (22/10/2026 notte, S2-1 di nuovo): contro il pavimento NUDO restava una fascia di spreco. La proiezione
+       riassunta porta una CORNICE fissa qualunque sia il riassunto — marcatore, indice meccanico, blocco dei fatti, riga di recupero —
+       misurata dalla CLI con le sole funzioni del kernel: 391 token stimati fuori da git, 555 dentro. Con una parte riducibile fra 257
+       e la cornice il giro pagava un riassunto che non poteva ridurre (con risposte da 1.300 caratteri: quattro riassunti pagati fra
+       T3 e T6, uno buttato). ⇒ Il pavimento è la proiezione col riassunto VUOTO, coi pezzi veri di questo progetto (indice e blocco dei
+       fatti si calcolano ora e si riusano dopo il riassunto), e un riassunto deve poterla battere di almeno un riassunto minimo.
+       Hermes salta in proporzione (`_FEASIBILITY_SKIP_MIDDLE_FRACTION`, il 10% della soglia, `agent/context_compressor.py:1163-1166`)
+       e solo dopo un primo colpo a vuoto; qui la cornice vera, dal primo colpo. Con immagini o pezzi la stima è cieca: si fa come prima. */
+    const bloccoFattiPer = async (indiceDelMezzo) => {
+      const dichiarateFonti = fontiRicarica && typeof fontiRicarica === 'object' ? fontiRicarica : {};
+      try {
+        const lettura = costruisciBloccoFatti({
+          ...dichiarateFonti,
+          cartellaProgetto: dichiarateFonti.cartellaProgetto ?? cartella ?? null,
+          fileToccati: [...(Array.isArray(dichiarateFonti.fileToccati) ? dichiarateFonti.fileToccati : []), ...indiceDelMezzo.fileRiletti],
+          fatti: [
+            ...(Array.isArray(dichiarateFonti.fatti) ? dichiarateFonti.fatti : []),
+            `Compaction record ${compattazione.SCHEMA_RECORD_COMPATTAZIONE}: coveredThrough=${rawMessages.length} raw messages`,
+          ],
+        }, { segnale: segnaleStop ?? null });
+        gitInVolo.promessa = lettura;
+        return (await lettura).testo;
+      } catch { return ''; } // costruisciBloccoFatti non lancia mai: per difesa il compact continua senza blocco
+    };
+    let indice = null;
+    let bloccoFatti = null;
+    let bloccoInArrivo = null;
+    let nonPuoRidurre = false;
+    let nonEntra = null;
+    if (parti.tagliabile) indice = compattazione.indiceMeccanico(parti.mezzo, { precedente: compacted?.indice ?? null });
+    /* ⛔ Revisione 7 della CLI (F6): se il pavimento più piccolo, col riassunto atteso e lo scarto, non entra nella finestra, nessun
+       riassunto la farà entrare — nemmeno sul rifiuto del fornitore, dove la strada dell'overflow pagava un riassunto a ogni giro fallito
+       su una finestra più piccola degli attrezzi (`pavimentoOltreLaFinestra`). Niente si paga, e lo si dice una volta per finestra. */
+    /* …e anche SENZA un tratto vecchio: niente da riassumere, ma sistema, attrezzi e coda da soli non entrano — non si paga niente comunque,
+       e la persona lo deve sapere (prima il giro falliva sul rifiuto del fornitore senza una parola) */
+    nonEntra = compattazione.pavimentoOltreLaFinestra({
+      pavimentoConCornice: parti.tagliabile
+        ? compattazione.stimaConPezzi(compattazione.costruisciProiezione({ testa: parti.testa, richiesteLetterali: parti.richiesteLetterali,
+          riassunto: '', indice: indice.testo, coda: parti.coda, bloccoFatti: '', recintaSintesi: false }))
+        : compattazione.stimaConPezzi([...parti.testa, ...parti.mezzo, ...parti.coda]),
+      mezzo: parti.tagliabile ? parti.mezzo : [], finestraToken: soglie.finestraToken, soglia: soglie.soglia, scarto: scartoPerNonEntra(),
+    });
+    if (nonEntra !== null) nonPuoRidurre = true;
+    if (parti.tagliabile && motivo !== 'overflow' && !nonPuoRidurre) {
+      /* Il blocco dei fatti legge git. La sua lunghezza ha un tetto noto (`CARATTERI_BLOCCO_MASSIMI` più il marcatore di taglio) e la
+         stima conta i caratteri, quindi: inutile anche senza blocco ⇒ si salta, e git non parte; utile anche col blocco più grande
+         possibile ⇒ si paga senza aspettare git, che parte subito e finisce durante il riassunto (serve alla proiezione); solo in
+         mezzo si aspetta il blocco vero. Sotto carico l'attesa di git spostava la preparazione in sottofondo dietro l'emergenza
+         (IST-02 nella suite intera); e un git avviato per un riassunto poi saltato restava aperto nella cartella del progetto dopo
+         il giro (EPERM sulla cartella di prova nella suite intera). */
+      const pavimentoCon = (blocco) => compattazione.stimaConPezzi(compattazione.costruisciProiezione({
+        testa: parti.testa, richiesteLetterali: parti.richiesteLetterali, riassunto: '', indice: indice.testo, coda: parti.coda,
+        bloccoFatti: blocco, recintaSintesi: blocco !== '',
+      }));
+      /* una regola sola per la soglia, l'emergenza e il riassunto preparato in anticipo: il guadagno atteso, al netto della cornice e
+         del riassunto, è almeno il 10% della soglia (verdetto della CLI, C1 e C2) */
+      const utileCon = (pavimentoConCornice) => compattazione.riassuntoUtile({
+        prima: compattazione.stimaConPezzi([...parti.testa, ...parti.mezzo, ...parti.coda]), pavimentoConCornice, mezzo: parti.mezzo,
+        soglia: soglie.soglia, finestraToken: soglie.finestraToken, motivo, scarto: scartoPerNonEntra(),
+      });
+      if (!utileCon(pavimentoCon(''))) nonPuoRidurre = true;
+      else {
+        bloccoInArrivo = bloccoFattiPer(indice);
+        if (!utileCon(pavimentoCon(`${'x'.repeat(CARATTERI_BLOCCO_MASSIMI)}\n${MARCATORE_BLOCCO_TAGLIATO}`))) {
+          bloccoFatti = await bloccoInArrivo;
+          nonPuoRidurre = !utileCon(pavimentoCon(bloccoFatti));
+          /* ⛔ Revisione 8 della CLI (N1, seconda forma, trovata dalla prova che la CLI ha chiesto, 23/10/2026): il blocco dei fatti è un
+             aiuto, non il pavimento. Se è LUI a far uscire la proiezione dalla finestra (senza blocco il riassunto entra ed è utile: l'ha
+             detto il controllo qui sopra), il riassunto si fa senza blocco. Prima la richiesta partiva oltre la finestra (11.258 su 10.240
+             con ~8.000 token di schemi), il fornitore la rifiutava e la strada dell'overflow pagava lo stesso riassunto, col blocco. */
+          if (nonPuoRidurre && bloccoFatti !== '' && compattazione.pavimentoOltreLaFinestra({ pavimentoConCornice: pavimentoCon(bloccoFatti),
+            mezzo: parti.mezzo, finestraToken: soglie.finestraToken, soglia: soglie.soglia, scarto: scartoPerNonEntra() }) !== null) {
+            bloccoFatti = '';
+            nonPuoRidurre = false;
+          }
+        }
+      }
+    }
+    let nonEntraDettoOra = false;
+    if (nonEntra !== null && !inSottofondo && nonEntraGiaDetto !== soglie.finestraToken) {
+      nonEntraGiaDetto = soglie.finestraToken;
+      nonEntraDettoOra = true;
+      emitOnGiro?.({ giro: requestIndex, tipo: 'compattazione-fine', compattato: false, motivo: 'non-entra', finestra: soglie.finestraToken, pavimento: nonEntra });
+    }
+    if (!parti.tagliabile || nonPuoRidurre) {
+      /* Niente da riassumere (o niente che un riassunto possa ridurre) e la coda già dentro il suo tetto: nessun tentativo, nessun
+         evento, nessuna chiamata. */
+      if (pressione.ridotti === 0) {
+        /* 22/10/2026 (revisione avversaria, B): la riga viva aperta dall'attesa d'emergenza si chiude, muta — non c'era niente da ridurre
+           (o l'ha già chiusa «non entra», qui sopra) */
+        if (conBase) restoNonRiuscito = { motivo: 'nulla-da-ridurre' };
+        if (inizioDetto && !inSottofondo && !conBase && !nonEntraDettoOra) emitOnGiro?.({ giro: requestIndex, tipo: 'compattazione-fine', compattato: false, motivo: 'nulla-da-ridurre' });
+        return null;
+      }
       /* Niente da riassumere ma la coda si è accorciata: la proiezione nuova è deterministica, senza il riassuntore
        * (Hermes `_FEASIBILITY_SKIP_MIDDLE_FRACTION`, `:1124-1127`: «dropping alone suffices»). */
       if (!inSottofondo) {
-        emitOnGiro?.({ giro: requestIndex, tipo: 'compattazione-inizio', tokenMisurati, soglia, motivo });
+        if (!inizioDetto) emitOnGiro?.({ giro: requestIndex, tipo: 'compattazione-inizio', tokenMisurati, soglia, motivo });
         progresso(requestIndex, { fase: 'lettura', messaggi: projected.length, tokenPrima: tokenMisurati, motivo });
-      }
+      } else iniziaPreparata(requestIndex, tokenMisurati);
       const proiezioneSolaCoda = [...parti.testa, ...parti.mezzo, ...parti.coda];
       const recordSolaCoda = compattazione.creaRecord({
         coveredThrough: rawMessages.length,
         riassunto: proiezioneSolaCoda,
         tokenPrima: tokenMisurati,
-        tokenDopo: kernel.stimaTokenConversazione(proiezioneSolaCoda),
+        tokenDopo: kernel.stimaTokenConversazione(proiezioneSolaCoda) + Math.round(scartoCorrente()), // N3: la scala di tokenPrima
         misura,
         at: new Date().toISOString(),
         modello,
         indice: compacted?.indice ?? null,
+        coperti: rawMessages,
       });
       /* Nessun riassunto da contare: dalla lettura si passa alla sostituzione (le fasi vere, mai finte). */
       return { proiezione: proiezioneSolaCoda, record: recordSolaCoda, soloCoda: true, ...misureDelPavimento, budget: null };
     }
     if (!inSottofondo) {
-      emitOnGiro?.({ giro: requestIndex, tipo: 'compattazione-inizio', tokenMisurati, soglia, motivo });
+      if (!inizioDetto) emitOnGiro?.({ giro: requestIndex, tipo: 'compattazione-inizio', tokenMisurati, soglia, motivo });
       progresso(requestIndex, { fase: 'lettura', messaggi: projected.length, tokenPrima: tokenMisurati, motivo });
-    }
+    } else iniziaPreparata(requestIndex, tokenMisurati);
     /* 21/10/2026 (CLI): quale modello scrive il riassunto, e su quale finestra si misura (`sceltaDelRiassunto`); il record resta
        intestato al modello della CONVERSAZIONE (lo legge il controllo «modello cambiato» qui sopra) */
     const scelta = compattazione.sceltaDelRiassunto({
@@ -751,7 +898,7 @@ function wrapContextHooks(original, {
     const stimaLetturaMs = !inSottofondo && velocitaLetturaTokSec && scelta.modello === modello ? (kernel.stimaTokenConversazione(richiestaPer(0)) * 1000) / velocitaLetturaTokSec : null;
     const forzato = inSottofondo ? null : senzaModelloPerRichiesta?.requestIndex === requestIndex ? senzaModelloPerRichiesta.ragione
       : stimaLetturaMs !== null && stimaLetturaMs > riassuntoTettoMs ? 'stima' : null;
-    const orologio = inSottofondo || forzato ? null : creaOrologioRiassunto({ segnaleStop, segnaleSalta: segnaleSaltaRiassunto, inattivitaMs: riassuntoInattivitaMs, tettoMs: riassuntoTettoMs });
+    const orologio = inSottofondo || forzato ? null : creaOrologioRiassunto({ segnaleStop, segnaleSalta: segnaleSalta(), inattivitaMs: riassuntoInattivitaMs, tettoMs: riassuntoTettoMs });
     if (forzato) esito = { ok: false, riassunto: '', motivo: forzato, classe: forzato };
     for (let tentativo = 0; tentativo < 2 && !forzato; tentativo += 1) {
       /* ⛔ BUG-5 (05/10/2026), il GIRO DI FALLIMENTI: si pagano al massimo `FALLIMENTI_RIASSUNTO_
@@ -773,7 +920,14 @@ function wrapContextHooks(original, {
         }
       }
       catch (errore) {
-        if (segnaleStop?.aborted) { orologio?.chiudi(); throw errore; }
+        if (segnaleStop?.aborted) {
+          orologio?.chiudi();
+          /* 22/10/2026 (CLI, revisione 3, S4): uno Stop durante il riassunto atteso lasciava l'«inizio» senza la sua «fine» nel giornale,
+             e la riga viva aperta. Si chiude, muta come lo Stop dell'attesa d'emergenza. */
+          if (conBase) restoNonRiuscito = { motivo: 'interrotta', interrottaIn: 'riassunto' };
+          if (!inSottofondo && !conBase) emitOnGiro?.({ giro: requestIndex, tipo: 'compattazione-fine', compattato: false, motivo: 'interrotta', interrottaIn: 'riassunto' });
+          throw errore;
+        }
         /* A1: tetto scaduto o Skip della persona ⇒ niente secondo tentativo; sotto, il riassunto senza modello parte subito */
         if (orologio?.ragione) {
           /* il tempo scaduto è un fallimento del riassuntore (al prossimo giro di fila si va dritti al ripiego, come la pausa crescente
@@ -816,10 +970,11 @@ function wrapContextHooks(original, {
       /* ⛔ BUG-5 (05/10/2026): classe e contatore CONSECUTIVO sull'evento; un riassunto riuscito ha già azzerato. */
       /* `interrottaIn`: il passo dove si è fermata (lane CLI, 03/10/2026). Non `fase`: nell'evento `talos.compattazione`
          `fase` dice già inizio/fine. */
-      emitOnGiro?.({ giro: requestIndex, tipo: inSottofondo ? 'compattazione-preparata' : 'compattazione-fine', compattato: false, motivo: esito.motivo, classe: esito.classe ?? esito.motivo, fallimentiConsecutivi: fallimentiRiassuntoConsecutivi, interrottaIn: 'riassunto' });
+      if (conBase && !inSottofondo) restoNonRiuscito = { motivo: esito.motivo, classe: esito.classe ?? esito.motivo, fallimentiConsecutivi: fallimentiRiassuntoConsecutivi, interrottaIn: 'riassunto' };
+      if (inSottofondo || !conBase) emitOnGiro?.({ giro: requestIndex, tipo: inSottofondo ? 'compattazione-preparata' : 'compattazione-fine', compattato: false, motivo: esito.motivo, classe: esito.classe ?? esito.motivo, fallimentiConsecutivi: fallimentiRiassuntoConsecutivi, interrottaIn: 'riassunto' });
       return null;
     }
-    const indice = compattazione.indiceMeccanico(parti.mezzo, { precedente: compacted?.indice ?? null });
+    if (!indice) indice = compattazione.indiceMeccanico(parti.mezzo, { precedente: compacted?.indice ?? null });
     /* ⭐ 06/10/2026 — RICARICA POST-COMPACT (opzione A, percorso desktop): il punto naturale è l'indice
      * meccanico già generato dal codice, esteso dalle letture disco (capitolato §6.4, vincolo 3). Il blocco
      * di fatti freschi si calcola ORA, al momento del compact: git locale dalla cartella della sessione,
@@ -827,19 +982,15 @@ function wrapContextHooks(original, {
      * record `talos.compattazione.v1` come fonte ContextVersionV1 (dossier §6.1 punto 5). Fail-soft: una
      * fonte che fallisce si DICHIARA nel blocco, la compattazione continua. FUSO nella STESSA proiezione:
      * un solo cache-break, mai un messaggio separato. */
-    const dichiarateFonti = fontiRicarica && typeof fontiRicarica === 'object' ? fontiRicarica : {};
-    let bloccoFatti = '';
-    try {
-      bloccoFatti = (await costruisciBloccoFatti({
-        ...dichiarateFonti,
-        cartellaProgetto: dichiarateFonti.cartellaProgetto ?? cartella ?? null,
-        fileToccati: [...(Array.isArray(dichiarateFonti.fileToccati) ? dichiarateFonti.fileToccati : []), ...indice.fileRiletti],
-        fatti: [
-          ...(Array.isArray(dichiarateFonti.fatti) ? dichiarateFonti.fatti : []),
-          `Compaction record ${compattazione.SCHEMA_RECORD_COMPATTAZIONE}: coveredThrough=${rawMessages.length} raw messages`,
-        ],
-      })).testo;
-    } catch { /* costruisciBloccoFatti non lancia mai: qui non si arriva; per difesa il compact continua senza blocco. */ }
+    if (bloccoFatti === null) bloccoFatti = await (bloccoInArrivo ?? bloccoFattiPer(indice)); // avviato sopra per il confronto, o adesso (overflow, pezzi)
+    /* N1, seconda forma: anche dove la stima non ha deciso (il rifiuto del fornitore, i pezzi) e col riassunto VERO — se è il blocco a far
+       uscire la richiesta dalla finestra, si toglie: la persona perde un promemoria di git, non il giro */
+    if (bloccoFatti !== '' && Number.isFinite(soglie.finestraToken) && soglie.finestraToken > 0) {
+      const richiestaCon = (blocco) => compattazione.stimaConPezzi(compattazione.costruisciProiezione({ testa: parti.testa,
+        richiesteLetterali: parti.richiesteLetterali, riassunto: esito.riassunto, indice: indice.testo, coda: parti.coda, bloccoFatti: blocco,
+        recintaSintesi: blocco !== '' })) + Math.round(scartoPerNonEntra());
+      if (richiestaCon(bloccoFatti) >= soglie.finestraToken && richiestaCon('') < soglie.finestraToken) bloccoFatti = '';
+    }
     const proiezione = compattazione.costruisciProiezione({
       testa: parti.testa, richiesteLetterali: parti.richiesteLetterali, riassunto: esito.riassunto, indice: indice.testo, coda: parti.coda,
       bloccoFatti, recintaSintesi: bloccoFatti !== '',
@@ -848,37 +999,178 @@ function wrapContextHooks(original, {
       coveredThrough: rawMessages.length,
       riassunto: proiezione,
       tokenPrima: tokenMisurati,
-      tokenDopo: kernel.stimaTokenConversazione(proiezione),
+      /* N3 (revisione 8 della CLI): la stessa scala di `tokenPrima` — la richiesta che parte, attrezzi e sistema compresi. Prima «10,281 →
+         2,131» a schermo, e la richiesta vera dopo era 9.469. */
+      tokenDopo: kernel.stimaTokenConversazione(proiezione) + Math.round(scartoCorrente()),
       misura,
       at: new Date().toISOString(),
       modello,
       indice,
+      coperti: rawMessages,
     });
     return { proiezione, record, soloCoda: false, ...misureDelPavimento, budget: budget.maxOutputTokens, ...(esito.ripiego ? { ripiego: true, classe: esito.classe, ragione: esito.ragione } : {}) };
   };
 
+  /* Quarta passata avversaria (22/10/2026): con una base adottata il fallimento del resto non disegna una riga sua (R1) — ma il suo
+     PERCHÉ non deve sparire: un modello dei riassunti guasto o senza credito pagherebbe a ogni emergenza senza che nessuno lo sappia.
+     Si tiene qui e viaggia sulla riga della base (`restoNonRiuscito`): resta nel giornale della sessione, l'interfaccia non lo disegna. */
+  let restoNonRiuscito = null;
+  /** La riga «X → Y» di una compattazione applicata (separata da `applicaCompattazione` per la base adottata: vedi `compattaDovuta`). */
+  /* 22/10/2026 (revisione 4 della CLI, S3-2): quando la riga del giro nasce da un record preparato altrove porta `adottato`:
+     `{ at, origine, tokenDopo, conResto }` — l'`at` del record preparato; `origine` 'fine-giro' se era il riassunto di fine giro del
+     registro (già annunciato da lui, `motivo:'background'`) o 'giro' se l'aveva preparato un giro (mai annunciato); `tokenDopo` il
+     conto dopo quel record su questa richiesta; `conResto` se la riga copre anche il riassunto del resto. Chi disegna anche la riga
+     di sottofondo non conta due volte la stessa compattazione, senza indovinare dai numeri né tenere un elenco suo. */
+  const annunciaCompattazione = (preparata, { requestIndex, motivo, istantanea = false, resto = null, adottato = null }) => {
+    /* 22/10/2026 (CLI, revisione 4): il conto `compactions` del risultato conta le RIGHE, una per annuncio — prima contava ogni
+       applicazione, e base più resto (una riga sola) contava 2; chi riconcilia le righe viste col conto ne aggiungeva una senza numeri.
+       Tranne lo scambio del riassunto di FINE GIRO senza resto: l'ha già fatto e annunciato il registro come suo
+       (`motivo:'background'`), contarlo anche qui è lo stesso doppio conteggio di S3-2 spostato nel numero (regola concordata con la
+       CLI). Il desktop conta le compattazioni dagli eventi `talos.compattazione`, non da questo numero. */
+    if (!(adottato?.origine === 'fine-giro' && adottato.conResto !== true)) compactions += 1;
+    emitOnGiro?.({ giro: requestIndex, tipo: 'compattazione-fine', compattato: true, record: preparata.record, ...(preparata.soloCoda ? { soloCoda: true } : {}), ...(istantanea ? { istantanea: true, motivo } : {}),
+      ...(resto ? { restoNonRiuscito: resto } : {}), ...(adottato && typeof adottato === 'object' ? { adottato } : {}),
+      ...(preparata.ripiego ? { ripiego: true, classe: preparata.classe, ...(preparata.ragione ? { ragione: preparata.ragione } : {}) } : {}) }); // L1: chi guarda sa che il riassunto è del codice
+  };
   /** Applica un riassunto (appena fatto o preparato prima): da qui il giro manda la proiezione nuova. */
-  const applicaCompattazione = (preparata, { requestIndex, motivo, istantanea = false }) => {
+  const applicaCompattazione = (preparata, { requestIndex, motivo, istantanea = false, muto = false, adottato = null }) => {
     const { record } = preparata;
     ultimaCodaAlMinimo = preparata.codaAlMinimo;
     ultimoPavimentoStimato = preparata.pavimento;
     if (preparata.budget) ultimoBudgetRiassunto = preparata.budget;
     if (!istantanea) progresso(requestIndex, { fase: 'sostituzione', tokenDopo: record.tokenDopo ?? null, motivo });
     compacted = record;
-    ultimaProiezioneStimata = record.tokenDopo ?? 0;
+    /* il verdetto (`aggiornaAncora`) confronta il numero del fornitore con la SOLA stima dei messaggi: `tokenDopo` ora porta anche lo scarto
+       (N3), quindi qui si rifà la stima della proiezione */
+    ultimaProiezioneStimata = Array.isArray(record.riassunto) ? kernel.stimaTokenConversazione(record.riassunto) : (record.tokenDopo ?? 0);
     records.push(record);
-    compactions += 1;
     ancora = null;
     attendeVerdetto = true;
-    emitOnGiro?.({ giro: requestIndex, tipo: 'compattazione-fine', compattato: true, record, ...(preparata.soloCoda ? { soloCoda: true } : {}), ...(istantanea ? { istantanea: true, motivo } : {}),
-      ...(preparata.ripiego ? { ripiego: true, classe: preparata.classe, ...(preparata.ragione ? { ragione: preparata.ragione } : {}) } : {}) }); // L1: chi guarda sa che il riassunto è del codice
+    if (!muto) annunciaCompattazione(preparata, { requestIndex, motivo, istantanea, adottato });
     return preparata.proiezione;
   };
 
   /** Una compattazione intera, adesso (emergenza, overflow): prepara e applica. `null` se non c'è niente o il riassuntore ha fallito. */
   const compattaOra = async (rawMessages, projected, opzioni) => {
     const preparata = await preparaCompattazione(rawMessages, projected, opzioni);
-    return preparata ? applicaCompattazione(preparata, opzioni) : null;
+    if (!preparata) return null;
+    /* ⛔ Revisione 3 della CLI sulla 0.6.13 (22/10/2026, S2-2 nel giro) — un riassunto che NON accorcia non si applica. Misura della
+       CLI: emergenza dentro il giro 15.631 → 16.040 token, pagato e applicato (testa + richieste letterali + indice + blocco dei fatti
+       più grandi del pezzo riassunto). Il registro lo rifiutava già (`inefficace`); qui no. Come lì: si dice con `inefficace`, si
+       conta come tentativo fallito (così all'emergenza non si ripaga a ogni richiesta del giro) e la richiesta parte com'era. */
+    /* Stima contro stima, come il registro: `tokenPrima` può essere ancorato al numero del fornitore, quindi non si usa.
+       ⛔ Revisione avversaria di 068b2c172 (F1): la stima di sempre non vede immagini e pezzi (valgono 0), e un riassunto che toglieva
+       dodici immagini «cresceva». Seconda passata (N1): un'esenzione per la sessione intera spegneva la guardia con UNA immagine.
+       ⇒ Prima e dopo si pesano coi pezzi (`stimaConPezzi`, come Hermes). E sul contesto pieno (`overflow`) non si giudica: lì il giro
+       deve ripartire più leggero (owner 21/10), e scartare il riassunto lo faceva morire. */
+    if (opzioni.motivo !== 'overflow' && compattazione.stimaConPezzi(preparata.proiezione) >= compattazione.stimaConPezzi(projected)) {
+      tentativiFallitiNelTurno += 1;
+      if (opzioni.conBase) restoNonRiuscito = { motivo: 'inefficace', interrottaIn: 'sostituzione' };
+      else emitOnGiro?.({ giro: opzioni.requestIndex, tipo: 'compattazione-fine', compattato: false, motivo: 'inefficace', interrottaIn: 'sostituzione' });
+      return null;
+    }
+    return applicaCompattazione(preparata, opzioni);
+  };
+  /** 22/10/2026 (revisione avversaria, B): il riassunto in volo si aspetta al massimo fino a Stop, «Salta» o `riassuntoTettoMs`.
+      Torna 'arrivato' · 'stop' · 'saltato' · 'tempo'. La promessa in volo non si annulla: arrivata più tardi, vale per il giro dopo. */
+  const attendiInVoloConTetto = (promessa) => new Promise((risolvi) => {
+    const salta = segnaleSalta();
+    let finita = false;
+    let tetto = null;
+    const chiudi = (come) => {
+      if (finita) return;
+      finita = true;
+      clearTimeout(tetto);
+      segnaleStop?.removeEventListener?.('abort', suStop);
+      salta?.removeEventListener?.('abort', suSalta);
+      risolvi(come);
+    };
+    const suStop = () => chiudi('stop');
+    const suSalta = () => chiudi('saltato');
+    if (segnaleStop?.aborted) return chiudi('stop');
+    if (salta?.aborted) return chiudi('saltato');
+    segnaleStop?.addEventListener?.('abort', suStop, { once: true });
+    salta?.addEventListener?.('abort', suSalta, { once: true });
+    tetto = setTimeout(() => chiudi('tempo'), riassuntoTettoMs);
+    Promise.resolve(promessa).then(() => chiudi('arrivato'), () => chiudi('arrivato'));
+  });
+
+  /** Il riassunto in volo (preparato qui o EREDITATO dal giro prima, `compattazioneInArrivo`) si aspetta con la riga viva aperta.
+      Torna `{ fermato }` (Stop: la riga si chiude) · `{ proiezione }` (arrivato e valido: applicato) · `{}` (arrivato ma non vale, o
+      saltato, o scaduto: chi chiama compatta da sé, senza modello se saltato o scaduto). */
+  const aspettaInVolo = async (rawMessages, { token, misura, requestIndex, motivo, soglia }) => {
+    /*
+     * ⛔ 22/10/2026 (revisione avversaria, B): l'attesa non aveva tetto, né «Salta», né riga viva — e il riassunto in volo può essere
+     *   quello EREDITATO dal giro prima (`compattazioneInArrivo`), col segnale di Stop di QUEL giro: lo Stop di questo non lo fermava.
+     *   Misurato: con Stop e con «Salta» il giro era ancora appeso dopo 4 s, senza un evento. Owner 12/10: la compattazione non ferma
+     *   mai la chat. ⇒ La riga viva si apre PRIMA di aspettare (così «Salta» arriva al registro, `riassuntoAtteso`), e l'attesa finisce
+     *   al primo fra: riassunto arrivato · Stop · «Salta» · `riassuntoTettoMs`. Saltato o scaduto ⇒ riassunto senza modello subito,
+     *   come quando scade il riassunto del giro stesso (`senzaModelloPerRichiesta`): il modello lento non si richiama.
+     */
+    emitOnGiro?.({ giro: requestIndex, tipo: 'compattazione-inizio', tokenMisurati: token, soglia, motivo });
+    const comeFinita = await attendiInVoloConTetto(inVolo.promessa);
+    /* IST-REV-03 (bugfixer): uno Stop arrivato mentre si aspettava non apre una compattazione nuova; la riga aperta qui si chiude */
+    if (segnaleStop?.aborted) {
+      emitOnGiro?.({ giro: requestIndex, tipo: 'compattazione-fine', compattato: false, motivo: 'interrotta', interrottaIn: 'riassunto' });
+      return { fermato: true };
+    }
+    if (comeFinita === 'arrivato') {
+      const arrivato = scambioPossibile(rawMessages, { token, misura });
+      if (arrivato) return { proiezione: usaPronta(arrivato, { requestIndex, motivo }) };
+    } else senzaModelloPerRichiesta = { requestIndex, ragione: comeFinita };
+    return {};
+  };
+
+  /**
+   * La compattazione che il giro deve fare adesso (owner 22/10/2026 sera, «one-up su tutti»):
+   * 1. il riassunto in volo si aspetta SOLO se vale ancora per questa storia (`inVoloVale`, come Codex), con Stop, «Salta» e tetto, e
+   *    uno Stop lo lascia per dopo (come Claude Code: «turn aborted while awaiting — leaving entry»);
+   * 2. arrivato valido ma non sufficiente ⇒ diventa la base (`scambioPossibile` con `comeBase`), e si riassume solo il resto;
+   * 3. altrimenti come prima.
+   */
+  const compattaDovuta = async (rawMessages, projected, { token, misura, requestIndex, motivo, soglia }) => {
+    let inizioDetto = false;
+    if (inVolo && inVoloVale(rawMessages)) {
+      const atteso = await aspettaInVolo(rawMessages, { token, misura, requestIndex, motivo, soglia });
+      if (atteso.fermato) return projected;
+      if (atteso.proiezione) return atteso.proiezione;
+      inizioDetto = true;
+    }
+    let daCompattare = projected;
+    const base = pronta ? scambioPossibile(rawMessages, { token, misura, comeBase: true, attuale: projected }) : null;
+    /* Seconda passata (N3): UNA riga per richiesta. La base si applica in silenzio e la riga della compattazione sul resto va dal
+       numero di PARTENZA a quello finale («6.649 → 3.475», non due righe «6.649 → 4.012» e «4.012 → 3.475» con la prima non
+       annullabile). Se la compattazione sul resto non arriva, si annuncia la base da sola. */
+    if (base) daCompattare = usaPronta(base, { requestIndex, motivo, muto: true });
+    /*
+     * ⛔ N6 (revisione 9 della CLI, 23/10/2026): la base adottata BASTA già per la linea che ha fatto scattare questa compattazione
+     *   (`soglia` qui è quella del motivo: la linea d'emergenza all'emergenza, la soglia sul rifiuto del fornitore) ⇒ un secondo riassunto
+     *   sullo stesso punto non si paga. Con N3 lo scambio si misura scarto compreso: il riassunto di fine giro arrivato restava sopra la
+     *   SOGLIA e diventava base, e il giro ne pagava subito un altro sul resto — misurato dalla CLI a 12.288 con ~7.300 token di schemi:
+     *   17 riassunti in 20 giri contro 9, uno ogni due buttato (10.218 della base, 9.466 dopo il secondo, ancora sopra la soglia di 9.216).
+     *   Sopra la soglia e sotto l'emergenza la richiesta parte, come sempre fra le due linee: la prossima preparazione in sottofondo, o
+     *   il prossimo riassunto di fine giro, ne terrà conto.
+     */
+    if (base && kernel.stimaTokenConversazione(daCompattare) + Math.round(scartoCorrente()) < soglia) {
+      annunciaCompattazione(base, { requestIndex, motivo, istantanea: true, adottato: segnoAdottato(base, false) });
+      return daCompattare;
+    }
+    restoNonRiuscito = null;
+    let proiezione;
+    try {
+      proiezione = await compattaOra(rawMessages, daCompattare, {
+        requestIndex, motivo, tokenMisurati: token, misura, soglia, inizioDetto, conBase: Boolean(base), adottato: segnoAdottato(base, true),
+      });
+    } catch (errore) {
+      /* Quarta passata avversaria (F1): uno Stop durante il riassunto del resto risale come eccezione — la base è già applicata, e senza
+         questo la riga aperta restava senza «fine» e il record della base senza riga (niente Annulla). */
+      if (base) annunciaCompattazione(base, { requestIndex, motivo, istantanea: true, resto: restoNonRiuscito ?? { motivo: 'errore' }, adottato: segnoAdottato(base, false) });
+      throw errore;
+    }
+    /* Il resto non è arrivato: la riga della richiesta è la base, col perché del resto (il conteggio dei tentativi falliti resta: il
+       riassunto del resto è stato pagato e non ha servito, e senza il conteggio il giro lo ripagherebbe a ogni richiesta). */
+    if (base && !proiezione) annunciaCompattazione(base, { requestIndex, motivo, istantanea: true, resto: restoNonRiuscito, adottato: segnoAdottato(base, false) });
+    return proiezione ?? daCompattare;
   };
 
   /*
@@ -898,15 +1190,26 @@ function wrapContextHooks(original, {
    * ⛔ Un riassunto preparato e mai usato si paga (Codex lo dice nel suo codice: «Discarded requests still charge completed
    *   usage»): l'owner l'ha accettato, e il banco conta quelli fatti contro quelli usati.
    */
-  const improntaDelPrefisso = (messaggi, fino) => {
-    const h = createHash('sha256');
-    for (let i = 0; i < fino; i += 1) h.update(JSON.stringify(messaggi[i] ?? null)).update('\u0000');
-    return h.digest('hex');
-  };
-  const chiaveBase = () => (compacted ? `${compacted.at ?? ''}|${compacted.coveredThrough ?? ''}` : 'nessuna');
+  const { improntaDelPrefisso } = compattazione;
+  const chiaveBase = () => compattazione.chiaveBaseDelRecord(compacted);
   let pronta = compattazionePronta && compattazione.eRecordValido(compattazionePronta.record) && typeof compattazionePronta.impronta === 'string'
     ? { ...compattazionePronta, proiezione: compattazionePronta.record.riassunto, soloCoda: compattazionePronta.soloCoda === true } : null;
   let inVolo = null;
+  /*
+   * ⭐⭐ Owner 22/10/2026 sera, «one-up su tutti», dopo la ricerca nel codice dei concorrenti
+   *   (`Downloads/handoff-talos-2026-09-27/RICERCA-RIASSUNTO-IN-ARRIVO-NEL-GIRO-2026-10-22.md`):
+   *   - Codex, prima di aspettare il riassunto in volo, controlla che valga ancora (`async_compaction.rs:157-179`: versione della
+   *     storia, modello, impronta della compattazione, generazione dell'accesso) e se non vale non aspetta;
+   *   - qui la FIRMA (tratto coperto, impronta del prefisso, base del record) è nota alla partenza: dal registro per quello ereditato
+   *     (`perIlGiro.firma`), da `avviaPreparazione` per quello del giro. Senza firma (un chiamante di prima) vale come prima.
+   */
+  const firmaDelInVolo = (f) => (f && Number.isInteger(f.coveredThrough) && f.coveredThrough >= 0 && typeof f.impronta === 'string' && 'base' in f
+    ? { coveredThrough: f.coveredThrough, impronta: f.impronta, base: f.base } : null);
+  const inVoloVale = (rawMessages) => {
+    const f = inVolo?.firma;
+    if (!f) return true;
+    return f.base === chiaveBase() && rawMessages.length >= f.coveredThrough && improntaDelPrefisso(rawMessages, f.coveredThrough) === f.impronta;
+  };
   if (!pronta && compattazioneInArrivo && typeof compattazioneInArrivo.then === 'function') {
     const promessa = Promise.resolve(compattazioneInArrivo)
       .then((arrivata) => {
@@ -916,9 +1219,17 @@ function wrapContextHooks(original, {
       })
       .catch(() => null)
       .finally(() => { if (inVolo?.promessa === promessa) inVolo = null; });
-    inVolo = { promessa };
+    inVolo = { promessa, firma: firmaDelInVolo(compattazioneInArrivo.firma) };
   }
   let preparate = 0;
+  /* 22/10/2026 (sesta passata avversaria, R1): una preparazione in sottofondo si CONTA e il suo «inizio» va nel giornale solo
+     quando produce davvero qualcosa — sola coda o riassunto. Prima si contava e si annunciava alla partenza: il controllo «non può
+     ridurre» la chiude subito senza «pronta», e il giornale teneva un «inizio» per richiesta senza fine, e `preparate` contava
+     riassunti mai pagati (misurato: 3 contro 1). Il banco legge `preparate` contro `usate`. Chiamata da `preparaCompattazione`. */
+  const iniziaPreparata = (requestIndex, tokenMisurati) => {
+    preparate += 1;
+    emitOnGiro?.({ giro: requestIndex, tipo: 'compattazione-preparata', fase: 'inizio', motivo: 'precalcolo', tokenMisurati });
+  };
   let usate = 0;
   /* 16/10/2026 — il PERCHÉ un riassunto pronto non vale, per il giornale: il giro vero col tetto a 60.000 ha pagato due riassunti e
      non ne ha usato nessuno, e niente diceva perché. `null` = vale. */
@@ -939,23 +1250,36 @@ function wrapContextHooks(original, {
    *   INTERA di adesso (`coveredThrough` = lunghezza grezza), come un record «solo coda».
    * ⇒ Uno scambio che non riporta sotto la soglia non si fa: il riassunto è troppo vecchio (`null`).
    */
-  const scambioPossibile = (rawMessages, { token, misura }) => {
+  const scambioPossibile = (rawMessages, { token, misura, comeBase = false, attuale = null }) => {
     if (!prontaValida(rawMessages)) return null;
     const coda = rawMessages.slice(pronta.record.coveredThrough);
     const ridotta = coda.length ? compattazione.riduciCodaSottoPressione(coda, { budgetToken: compattazione.budgetCoda(soglie.soglia) }).coda : [];
     const proiezione = [...pronta.record.riassunto, ...ridotta];
-    const tokenDopo = kernel.stimaTokenConversazione(proiezione);
-    if (tokenDopo >= soglie.soglia) { pronta.sopraSoglia = tokenDopo; return null; }
+    const tokenDopo = kernel.stimaTokenConversazione(proiezione) + Math.round(scartoCorrente()); // N3: confrontato con la soglia come ogni misura
+    if (tokenDopo >= soglie.soglia) {
+      pronta.sopraSoglia = tokenDopo;
+      /* ⭐ One-up (owner 22/10/2026 sera): un riassunto PAGATO, valido per il suo tratto ma che da solo non riporta sotto la soglia,
+         Codex e Claude Code lo buttano e ne pagano uno da capo. Qui, quando una compattazione si fa comunque (`comeBase`), diventa la
+         BASE: si applica e si riassume solo ciò che è venuto dopo — ingresso più piccolo, quindi più veloce e meno caro. Solo se
+         accorcia davvero ciò che il giro manderebbe adesso (stima coi pezzi, `stimaConPezzi`). */
+      if (!comeBase || !Array.isArray(attuale)) return null;
+      if (compattazione.stimaConPezzi(proiezione) >= compattazione.stimaConPezzi(attuale)) return null;
+    }
     const record = compattazione.creaRecord({
       coveredThrough: rawMessages.length, riassunto: proiezione, tokenPrima: token, tokenDopo, misura,
-      at: new Date().toISOString(), modello, indice: pronta.record.indice ?? null,
+      at: new Date().toISOString(), modello, indice: pronta.record.indice ?? null, coperti: rawMessages,
     });
-    return { ...pronta, record, proiezione };
+    /* S3-2: il record dello scambio è nuovo (copre la storia di adesso, con un `at` suo) — `adottatoDa` tiene l'`at` di quello
+       preparato e da dove viene (il registro marca il suo `origine: 'fine-giro'`; senza marca l'ha preparato un giro) */
+    return { ...pronta, record, proiezione, adottatoDa: { at: pronta.record.at ?? null, origine: pronta.origine === 'fine-giro' ? 'fine-giro' : 'giro' } };
   };
-  const usaPronta = (scambio, { requestIndex, motivo }) => {
+  /** Il segno `adottato` della riga (S3-2): da dove viene il record preparato, e il conto dopo di lui su questa richiesta. */
+  const segnoAdottato = (scambio, conResto) => (scambio?.adottatoDa?.at
+    ? { ...scambio.adottatoDa, tokenDopo: scambio.record?.tokenDopo ?? null, conResto } : null);
+  const usaPronta = (scambio, { requestIndex, motivo, muto = false }) => {
     pronta = null;
     usate += 1;
-    return applicaCompattazione(scambio, { requestIndex, motivo, istantanea: true });
+    return applicaCompattazione(scambio, { requestIndex, motivo, istantanea: true, muto, adottato: segnoAdottato(scambio, false) });
   };
   const avviaPreparazione = (rawMessages, projected, { requestIndex, tokenMisurati, misura }) => {
     if (inVolo || segnaleStop?.aborted) return;
@@ -965,23 +1289,22 @@ function wrapContextHooks(original, {
     const copia = rawMessages.slice();
     const base = chiaveBase();
     const impronta = improntaDelPrefisso(copia, copia.length);
-    preparate += 1;
-    emitOnGiro?.({ giro: requestIndex, tipo: 'compattazione-preparata', fase: 'inizio', motivo: 'precalcolo', tokenMisurati });
     const promessa = preparaCompattazione(copia, projected.slice(), { requestIndex, motivo: 'precalcolo', tokenMisurati, misura, soglia: soglie.soglia, inSottofondo: true })
       .then((preparata) => {
         if (!preparata || base !== chiaveBase()) return null;
         pronta = { ...preparata, impronta, base };
-        emitOnGiro?.({ giro: requestIndex, tipo: 'compattazione-preparata', fase: 'pronta', tokenPrima: preparata.record.tokenPrima ?? null, tokenDopo: preparata.record.tokenDopo ?? null });
+        emitOnGiro?.({ giro: requestIndex, tipo: 'compattazione-preparata', fase: 'pronta', tokenPrima: preparata.record.tokenPrima ?? null, tokenDopo: preparata.record.tokenDopo ?? null,
+          at: preparata.record.at ?? null }); // S3-2: l'`at` che la riga del giro porterà come `adottato` se lo usa
         return pronta;
       })
       .catch(() => null)
       .finally(() => { if (inVolo?.promessa === promessa) inVolo = null; });
-    inVolo = { promessa };
+    inVolo = { promessa, firma: { coveredThrough: copia.length, impronta, base } };
   };
 
   const maybeCompactLegacy = async (rawMessages, requestIndex) => {
     const projected = projectLegacy(rawMessages);
-    const { token, misura } = compattazione.misuraOccupazione({ ancora, messaggi: projected, finestraToken: soglie.finestraToken });
+    const { token, misura } = compattazione.misuraOccupazione({ ancora, messaggi: projected, finestraToken: soglie.finestraToken, scarto: scartoDellaStima ?? 0 });
     const decisione = compattazione.decidiCompattazione({
       token,
       soglia: soglie.soglia,
@@ -1003,10 +1326,19 @@ function wrapContextHooks(original, {
     });
     if (!istantanea) {
       if (!decisione.scatta) return projected;
-      const subito = await compattaOra(rawMessages, projected, {
-        requestIndex, motivo: decisione.motivo, tokenMisurati: token, misura, soglia: decisione.motivo === 'emergenza' ? soglie.emergenza : soglie.soglia,
-      });
-      return subito ?? projected;
+      /* 22/10/2026 (CLI, S3-B): il riassunto di fine giro del registro ancora in volo quando il giro parte (`compattazioneInArrivo`):
+         arrivato e valido ⇒ si usa subito. */
+      const arrivato = pronta ? scambioPossibile(rawMessages, { token, misura }) : null;
+      if (arrivato) return usaPronta(arrivato, { requestIndex, motivo: decisione.motivo });
+      const sogliaDelMotivo = decisione.motivo === 'emergenza' ? soglie.emergenza : soglie.soglia;
+      /* ⛔ Revisione 3 della CLI sulla 0.6.13 (22/10/2026, b): con un riassunto ancora in volo il giro ne pagava un SECONDO (net-audit
+         della CLI, due in volo insieme al giro 5, tutti e due pagati e applicati). Owner 22/10 sera, «one-up su tutti»:
+         - sotto l'emergenza NON si aspetta e NON si paga: la richiesta parte com'è e il riassunto in volo vale per la prima richiesta
+           dopo il suo arrivo (Codex `take_ready`, Hermes «sit out» `conversation_compression.py:2740-2771`) — e nella CLI 0.6.13, senza
+           «Salta» né riga viva, un'attesa qui sarebbe uno schermo fermo;
+         - all'emergenza `compattaDovuta`: si aspetta solo se vale ancora, poi base o compattazione come prima. */
+      if (decisione.motivo !== 'emergenza' && inVolo && inVoloVale(rawMessages)) return projected;
+      return compattaDovuta(rawMessages, projected, { token, misura, requestIndex, motivo: decisione.motivo, soglia: sogliaDelMotivo });
     }
     const tentativiEsauriti = tentativiFallitiNelTurno >= 1 || compattazioniInefficaci >= 2 || inefficaciTotali >= INEFFICACI_TOTALI_MASSIME;
     /* ⭐ 15/10/2026: alla soglia (o all'emergenza) un riassunto pronto che riporta sotto la soglia si applica all'istante */
@@ -1023,18 +1355,10 @@ function wrapContextHooks(original, {
       if (token >= soglie.warningTokens && !tentativiEsauriti) avviaPreparazione(rawMessages, projected, { requestIndex, tokenMisurati: token, misura });
       return projected;
     }
-    /* emergenza: si aspetta il riassunto già in preparazione; se c'è e vale si usa, altrimenti si fa come prima */
-    if (inVolo) {
-      await inVolo.promessa;
-      /* IST-REV-03 (bugfixer): uno Stop arrivato mentre si aspettava non apre una compattazione nuova — restava un «inizio» senza «fine» */
-      if (segnaleStop?.aborted) return projected;
-      const arrivato = scambioPossibile(rawMessages, { token, misura });
-      if (arrivato) return usaPronta(arrivato, { requestIndex, motivo: decisione.motivo });
-    }
-    const proiezione = await compattaOra(rawMessages, projected, {
-      requestIndex, motivo: decisione.motivo, tokenMisurati: token, misura, soglia: decisione.motivo === 'emergenza' ? soglie.emergenza : soglie.soglia,
-    });
-    return proiezione ?? projected;
+    /* emergenza: `compattaDovuta` — il riassunto in preparazione si aspetta solo se vale ancora; valido ma non sufficiente diventa la
+       base; altrimenti si fa come prima */
+    const sogliaDelMotivo = decisione.motivo === 'emergenza' ? soglie.emergenza : soglie.soglia;
+    return compattaDovuta(rawMessages, projected, { token, misura, requestIndex, motivo: decisione.motivo, soglia: sogliaDelMotivo });
   };
 
   /** Il numero vero del fornitore diventa l'ancora della prossima misura; e giudica l'ultima compattazione. */
@@ -1042,6 +1366,13 @@ function wrapContextHooks(original, {
     const promptTokens = Number(usage?.prompt_tokens);
     if (!Number.isFinite(promptTokens) || promptTokens <= 0 || !richiestaCorrente) return;
     ancora = { promptTokens, lunghezza: richiestaCorrente.lunghezzaProiezione, stima: kernel.stimaTokenConversazione(richiestaCorrente.array) };
+    /* Revisione 7 della CLI (F1): lo stesso controllo di plausibilità dell'ancora, e il tetto (`scartoDaMisura`); un numero impossibile
+       non cambia lo scarto */
+    const scarto = compattazione.scartoDaMisura(promptTokens, ancora.stima, { finestraToken: soglie.finestraToken, soglia: soglie.soglia,
+      attrezzi: stimaAttrezziDelGiro ?? 0 }); // N1 (revisione 8): il tetto mai sotto gli attrezzi del giro
+    if (scarto !== null) ultimoScarto = scarto;
+    const intero = compattazione.scartoPlausibile(promptTokens, ancora.stima, { finestraToken: soglie.finestraToken, soglia: soglie.soglia });
+    if (intero !== null) ultimoScartoIntero = intero;
     if (attendeVerdetto) {
       /* Come Hermes `_apply_real_prompt_verdict` (`context_compressor.py:2749-2782`): l'efficacia si giudica sul
        * numero VERO della richiesta successiva, non sul numero di messaggi. */
@@ -1114,6 +1445,17 @@ function wrapContextHooks(original, {
       telemetry.mark('provider-prepare');
       const requestIndex = providerRequests;
       providerRequests += 1;
+      /* S2-2: senza uno scarto misurato, quello degli schemi degli attrezzi della prima richiesta */
+      if (stimaAttrezziDelGiro === null) stimaAttrezziDelGiro = compattazione.stimaDegliAttrezzi(payload?.tools);
+      /* N1 (revisione 8 della CLI): lo scarto ereditato è una MISURA, e vale per gli attrezzi del giro che l'ha presa. Se questo giro ne
+         manda di più (un server MCP collegato a metà sessione: migliaia di token di schemi), la differenza si aggiunge — la prima
+         richiesta non si misura con meno degli schemi che manda davvero. Uno scarto misurato più piccolo della stima degli schemi resta
+         com'è: è il fornitore che conta meno della stima, non un errore. */
+      if (stimaAttrezziInPrepare === false) {
+        stimaAttrezziInPrepare = true;
+        if (scartoDellaStima === null) scartoDellaStima = stimaAttrezziDelGiro;
+        else if (Number.isFinite(stimaAttrezziMisurati) && stimaAttrezziDelGiro > stimaAttrezziMisurati) scartoDellaStima += stimaAttrezziDelGiro - stimaAttrezziMisurati;
+      }
       /* Gli effimeri (il `system` del Piano) si staccano PRIMA di tutto: né riassunto, né archivio, né ancora. */
       const { messaggi: grezzi, effimeri } = separaEffimeri(payload.messages);
       // Correct BEFORE any context-engine projection or legacy compaction so an
@@ -1121,13 +1463,15 @@ function wrapContextHooks(original, {
       const inputMessages = correggiMessaggiDesktop(grezzi, { cartella, memoria: correzioniFissate });
       let prepared;
       let ripiego = false;
+      /* lo Skip di QUESTA richiesta (C): lo stesso segnale entra nel motore e decide, se fallisce, se è stata la persona */
+      const saltaDellaRichiesta = segnaleSalta();
       if (legacyMode) prepared = { messages: await maybeCompactLegacy(inputMessages, requestIndex) };
       else {
         try {
           /* A1 + B1 (21/10/2026): al motore il tetto del riassunto atteso, e lo Skip dentro il segnale della richiesta — così il motore
              annulla davvero il suo lavoro (su un motore a posto unico lo libera) invece di lasciarlo correre sotto il giro */
-          const segnaleRichiesta = segnaleSaltaRiassunto && payload?.signal ? AbortSignal.any([payload.signal, segnaleSaltaRiassunto])
-            : segnaleSaltaRiassunto ?? payload?.signal;
+          const segnaleRichiesta = saltaDellaRichiesta && payload?.signal ? AbortSignal.any([payload.signal, saltaDellaRichiesta])
+            : saltaDellaRichiesta ?? payload?.signal;
           prepared = await original.prepare({ ...payload, messages: inputMessages, originali: grezzi, summaryCeilingMs: riassuntoTettoMs,
             onInTurnWait: ascoltaAttesaDelMotore(requestIndex), ...(segnaleRichiesta ? { signal: segnaleRichiesta } : {}) });
           /* 12/10/2026, decisione dell'owner («Si ripara da solo»): l'archivio non combaciava, i vecchi originali sono stati messi
@@ -1144,7 +1488,7 @@ function wrapContextHooks(original, {
              che regge anche il contesto troppo grande, sotto in `infer`), e la chat lo dice una volta con una riga che non ferma
              niente. Uno Stop della persona invece resta uno Stop. L'archivio del motore non si tocca qui: la causa della
              divergenza si cura a parte (R-05). */
-          const saltato = segnaleSaltaRiassunto?.aborted === true && !segnaleStop?.aborted && !payload?.signal?.aborted;
+          const saltato = saltaDellaRichiesta?.aborted === true && !segnaleStop?.aborted && !payload?.signal?.aborted;
           if (!saltato && (segnaleStop?.aborted || payload?.signal?.aborted || errore?.name === 'AbortError')) throw errore;
           /* A1: il riassunto del motore è scaduto, è stato saltato o rifiutato ⇒ la compattazione semplice di QUESTA richiesta non
              richiama il modello (era lui il lento, o il rifiutato): riassunto senza modello, con la ragione per la riga d'esito */
@@ -1152,7 +1496,9 @@ function wrapContextHooks(original, {
             : RIASSUNTI_RIFIUTATI_DAL_MOTORE.has(errore?.code) ? 'rifiutato' : null;
           if (ragioneSenzaModello) senzaModelloPerRichiesta = { requestIndex, ragione: ragioneSenzaModello };
           ripiego = true;
-          if (!ripiegoDetto) {
+          /* 22/10/2026 (Mobile; owner «cura nella 0.1.36»): dopo «Salta il riassunto» il ripiego è una scelta della persona, non un guasto
+             del motore — la riga di «ripiego» era di troppo e contraddiceva la riga d'esito. Un guasto vero la dice come prima. */
+          if (!ripiegoDetto && ragioneSenzaModello !== 'saltato') {
             ripiegoDetto = true;
             emitOnGiro?.({ giro: requestIndex, tipo: 'compattazione-fine', compattato: false, motivo: 'ripiego', codice: errore?.code ?? null,
               /* R-05: dove la storia non combaciava (posizioni e ruolo, mai contenuto), quando chi ha fallito lo sa dire. */
@@ -1177,7 +1523,20 @@ function wrapContextHooks(original, {
        giro dopo: preparato e pagato una volta sola. `preparate`/`usate` per il banco (fatti contro usati). */
     get compattazionePronta() { return pronta ? { record: pronta.record, impronta: pronta.impronta, base: pronta.base, soloCoda: pronta.soloCoda === true } : null; },
     get compattazioneInPreparazione() { return inVolo ? inVolo.promessa.then((p) => (p ? { record: p.record, impronta: p.impronta, base: p.base, soloCoda: p.soloCoda === true } : null)) : null; },
-    get conteggioPreparazioni() { return { preparate, usate }; },
+    /* 22/10/2026 notte (revisione 5 della CLI): una preparazione in sottofondo si annuncia e si conta solo quando produce qualcosa
+       (R1), e ora DOPO aver letto la cornice (blocco dei fatti, git): può succedere dopo che il giro ha già restituito il suo
+       risultato. Il conto è quindi VIVO — chi lo legge dopo aver atteso la preparazione (`compattazioneInPreparazione`) vede il numero
+       vero, e JSON.stringify serializza il valore del momento. */
+    get conteggioPreparazioni() { return { get preparate() { return preparate; }, get usate() { return usate; } }; },
+    /* S2-2: lo scarto fra il fornitore e la stima sull'ultima richiesta misurata, per il registro (giro dopo, fine giro, /compact) */
+    /* F4 (revisione 7): senza una misura plausibile, la stima degli attrezzi di questo giro — mai lo scarto ereditato, che resterebbe
+       vecchio quando un fornitore smette di mandare `usage` */
+    get scartoMisurato() { return ultimoScarto ?? stimaAttrezziDelGiro; },
+    get nonEntraDetto() { return nonEntraGiaDetto; },
+    /* F6, seconda passata: lo scarto intero per la domanda «può entrare?» (il registro lo usa nel fine giro e nel /compact) */
+    get scartoNonEntra() { const v = Math.max(ultimoScartoIntero ?? 0, stimaAttrezziDelGiro ?? 0); return v > 0 ? v : null; },
+    /* N2 (revisione 8): la stima degli schemi che il giro ha mandato davvero, per il registro (anche dopo un riavvio, dal giornale) */
+    get stimaAttrezzi() { return stimaAttrezziDelGiro; },
   };
   const inferLegacy = async ({ signal } = {}, invoke) => {
       try {
@@ -1193,14 +1552,18 @@ function wrapContextHooks(original, {
         overflowRitentato = true;
         const { array, grezzi, effimeri, requestIndex } = richiestaCorrente;
         const projected = projectLegacy(grezzi);
-        const { token, misura } = compattazione.misuraOccupazione({ ancora, messaggi: projected, finestraToken: soglie.finestraToken });
-        /* 15/10/2026: anche qui prima il riassunto in preparazione o pronto, poi (solo se non c'è) uno nuovo */
-        if (inVolo) await inVolo.promessa;
-        const scambio = scambioPossibile(grezzi, { token, misura });
+        const { token, misura } = compattazione.misuraOccupazione({ ancora, messaggi: projected, finestraToken: soglie.finestraToken, scarto: scartoDellaStima ?? 0 });
+        /* 15/10/2026: anche qui prima il riassunto in preparazione o pronto, poi (solo se non c'è) uno nuovo.
+           ⛔ Revisione 5 della CLI (22/10/2026 notte, S2-2): qui si aspettava il riassunto in volo SENZA tetto, senza Stop, senza «Salta»
+           e senza controllarne la firma (`await inVolo.promessa`) — con un riassunto di fine giro ereditato e lento il giro restava
+           muto per minuti, e lo Stop non lo fermava. ⇒ La stessa strada dell'emergenza: uno pronto che vale si usa; altrimenti
+           `compattaDovuta` (attende solo se la firma vale, con Stop, «Salta» e tetto; poi base o compattazione, e sull'overflow il
+           ripiego senza modello). Se non riduce niente si lancia l'errore di prima: la richiesta piena non riparte uguale. */
+        const scambio = pronta ? scambioPossibile(grezzi, { token, misura }) : null;
         const proiezione = scambio
           ? usaPronta(scambio, { requestIndex, motivo: 'overflow' })
-          : await compattaOra(grezzi, projected, { requestIndex, motivo: 'overflow', tokenMisurati: token, misura, soglia: soglie.soglia });
-        if (!proiezione) throw errore;
+          : await compattaDovuta(grezzi, projected, { token, misura, requestIndex, motivo: 'overflow', soglia: soglie.soglia });
+        if (!proiezione || proiezione === projected) throw errore;
         const nuova = compattazione.riattaccaEffimeri(correggiMessaggiDesktop(proiezione, { cartella, memoria: correzioniFissate }), effimeri);
         array.splice(0, array.length, ...nuova);
         richiestaCorrente.lunghezzaProiezione = nuova.length - effimeri.length;
@@ -1251,12 +1614,12 @@ function wrapContextHooks(original, {
             emitOnGiro?.({ giro: r.requestIndex, tipo: 'compattazione-fine', compattato: false, motivo: 'ripiego', codice: secondo?.code ?? null });
           }
           const proiettata = projectLegacy(r.inputMessages);
-          const { token, misura } = compattazione.misuraOccupazione({ ancora, messaggi: proiettata, finestraToken: soglie.finestraToken });
-          if (inVolo) await inVolo.promessa;
-          const scambio = scambioPossibile(r.inputMessages, { token, misura });
+          const { token, misura } = compattazione.misuraOccupazione({ ancora, messaggi: proiettata, finestraToken: soglie.finestraToken, scarto: scartoDellaStima ?? 0 });
+          /* Revisione 5 della CLI (S2-2): la stessa attesa con firma, Stop, «Salta» e tetto della strada legacy qui sopra */
+          const scambio = pronta ? scambioPossibile(r.inputMessages, { token, misura }) : null;
           const riassunta = scambio
             ? usaPronta(scambio, { requestIndex: r.requestIndex, motivo: 'overflow' })
-            : await compattaOra(r.inputMessages, proiettata, { requestIndex: r.requestIndex, motivo: 'overflow', tokenMisurati: token, misura, soglia: soglie.soglia });
+            : await compattaDovuta(r.inputMessages, proiettata, { token, misura, requestIndex: r.requestIndex, motivo: 'overflow', soglia: soglie.soglia });
           preparata = { messages: riassunta ?? proiettata };
         }
         const nuova = compattazione.riattaccaEffimeri(correggiMessaggiDesktop(preparata?.messages ?? r.inputMessages, { cartella, memoria: correzioniFissate }), r.effimeri);
@@ -1337,9 +1700,13 @@ export async function talosLavora(input = {}) {
     riassuntoInattivitaMs: interoPositivo(input.riassuntoInattivitaMs, RIASSUNTO_INATTIVITA_MS),
     riassuntoTettoMs: interoPositivo(input.riassuntoTettoMs, RIASSUNTO_TETTO_MS),
     segnaleSaltaRiassunto: input.segnaleSaltaRiassunto instanceof AbortSignal ? input.segnaleSaltaRiassunto : null,
+    saltaRiassuntoFn: typeof input.saltaRiassuntoFn === 'function' ? input.saltaRiassuntoFn : null,
     /* 21/10/2026 (CLI): il modello dei riassunti dell'ospite e la sua finestra; assenti ⇒ quelli della conversazione */
     modelloRiassunto: typeof input.modelloRiassunto === 'string' && input.modelloRiassunto ? input.modelloRiassunto : null,
     finestraRiassuntoToken: Number.isFinite(input.finestraRiassuntoToken) && input.finestraRiassuntoToken > 0 ? input.finestraRiassuntoToken : null,
+    scartoMisurato: Number.isFinite(input.scartoMisurato) && input.scartoMisurato >= 0 ? input.scartoMisurato : null,
+    stimaAttrezziMisurati: Number.isFinite(input.stimaAttrezziMisurati) && input.stimaAttrezziMisurati > 0 ? input.stimaAttrezziMisurati : null,
+    nonEntraDetto: Number.isFinite(input.nonEntraDetto) ? input.nonEntraDetto : null,
   });
   const onDelta = wrapOnDelta(input.onDelta, telemetry);
 
@@ -1362,6 +1729,9 @@ export async function talosLavora(input = {}) {
       compattazionePronta: contextHooks.compattazionePronta,
       compattazioneInPreparazione: contextHooks.compattazioneInPreparazione,
       preparazioniDiCompattazione: contextHooks.conteggioPreparazioni,
+      scartoMisurato: contextHooks.scartoMisurato,
+      scartoNonEntra: contextHooks.scartoNonEntra,
+      stimaAttrezzi: contextHooks.stimaAttrezzi,
     };
     if (!usage) return { ...result, compattazioni, recordDiCompattazione, ...preparazione };
     return {

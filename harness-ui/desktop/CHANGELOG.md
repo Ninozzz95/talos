@@ -4,6 +4,68 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
 [SemVer](https://semver.org/): in 0.y.z anything may still change. The version lives in
 `package.json` and in the `desktop-vX.Y.Z` tag.
 
+## desktop-v0.1.36 — 2026-10-22
+
+### Added
+
+- **Remote control is usable.** The package now ships the iroh binding, downloaded from a pinned CI run whose attestation is
+  checked (signing workflow, source branch and commit) together with its SHA-256; the licences of the Rust crates inside it
+  ship next to it. Pair a device from Settings › Connected devices.
+
+### Changed
+
+- Everything you read says **devices**, not phones: the remote control screens, its messages and errors, the chat tools that
+  list, pair and revoke devices.
+- **Manual compaction works like the automatic one.** «Compact» writes a summary record over the conversation, as the
+  summary prepared at the end of a turn does: your first request is kept word for word (a very long one keeps its start and
+  its end), the last three requests too, and the compaction can be undone. Undoing while a compaction is still writing
+  stops it instead of losing the undo.
+- On the Context Engine, a manual compaction shows its progress while the engine works, and when it fails it says so with its
+  reason instead of «nothing to compact».
+
+### Fixed
+
+- A model answer that contains the characters U+2028 or U+2029 no longer breaks the session's journal: such a session could
+  not be reopened after a restart. Journals written by earlier versions read correctly again.
+- A turn never waits behind a summary prepared in the background below the emergency line: the summary is used at the first
+  request after it is written, and it is never paid twice. In an emergency the turn waits for it only if it still matches
+  the conversation, and the wait shows its line, with **Skip**, **Stop** and the time ceiling.
+- A summary that matches the conversation but is not enough on its own is kept as the starting point: only what came after
+  it is summarised, instead of paying again for the whole conversation.
+- **Skip** applies to the summary you skipped, not to the rest of the turn: a later summary in the same turn can be skipped
+  again, and a real engine failure later in the turn is still reported.
+- After **Skip**, no «fallback» line contradicts the outcome line.
+- A compaction, manual or at the end of a turn, now also shortens the long results of the last exchanges, as the one inside a
+  turn does: it never writes a summary larger than what it replaces, and above the threshold with nothing left to reduce it
+  says so instead of «nothing to compact».
+- A summary written by a separate, lighter model can no longer hold up the conversation's own key when it fails, including
+  when the provider asks it to wait.
+- A summary that would make the conversation longer is no longer applied inside a turn either. Images count toward the
+  length, so a summary that replaces images with a few lines of text is still applied.
+- A summary is paid for only when it helps: what it removes, after the summary it will write, must be at least a tenth of the
+  compaction threshold. Right after you paste a long log into a short conversation, turns no longer pay for summaries that are
+  thrown away or that save only a few tokens, and a small gain no longer brings the next compaction right back. When only the
+  last results are long, they are shortened without a summary. Images and the tools' descriptions are counted too, so a picture
+  in your first message or a model with a small window no longer throws the count off.
+- An impossible token count from a provider (far above the model's window, or near zero) no longer moves the count: it no
+  longer starts summaries on a short conversation, nor lets a small window fill up. Changing model starts the count afresh.
+- A model whose window is smaller than TALOS's tools and the part it always keeps no longer pays for a summary on every failed
+  turn: nothing is summarised, and the conversation says once that a model with a larger window is needed.
+- **Stop** during a summary also stops the `git log` behind it on Windows, with everything it started, and that log no longer
+  checks commit signatures.
+- On a small window with many tools (an MCP server, for example) a request no longer goes out too large, to be refused first
+  and summarised after: the summary happens before. The conversation's own tool count is kept across a restart.
+- A summary is paid only when it removes at least a tenth of the threshold, near the window's limit too, unless the request
+  would not fit at all; and a summary that arrives from the end of the previous turn is not paid for twice.
+- When the provider says the conversation does not fit, a summary still on its way is waited for with **Stop**, **Skip** and
+  the time ceiling, like everywhere else; before, the turn could sit silent for minutes.
+- When **Compact** does not compact, it says why: the conversation is already at its minimum, or the summary would not have
+  made it shorter.
+- **Stop** during a summary closes its line.
+- Images in a summarised stretch reach the summarizer as a short placeholder, so a text-only model can summarise it.
+- Reading a very long journal line is linear again (32 MB in tens of milliseconds instead of seconds).
+- DeepSeek prices name their source.
+
 ## desktop-v0.1.35 — 2026-10-21
 
 ### Security
