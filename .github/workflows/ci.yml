@@ -68,7 +68,7 @@ jobs:
       # c'era scritto 20, che porta npm 10 — un cancello che gira su un runtime
       # che il progetto non supporta non sta provando la stessa cosa che gira
       # sul computer di chi scrive.
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: '24.18.0'
           cache: npm
@@ -147,7 +147,7 @@ jobs:
           fi
           echo "dir=$dir" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 24
           cache: npm
@@ -269,7 +269,7 @@ jobs:
           }
 
       - if: steps.dove.outputs.ci == 'si'
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 24
           cache: npm
@@ -373,7 +373,7 @@ jobs:
           if [ -f mobile/package.json ]; then dir=mobile; else dir=.; fi
           echo "dir=$dir" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 24
           cache: npm
