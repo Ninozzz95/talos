@@ -91,7 +91,7 @@ class TalosLettoreManifestoTest {
 
     @Test
     fun `AGG-MAN-08 BOM e righe CRLF non cambiano la lettura, un file vuoto o troppo grande si rifiuta`() {
-        val crlf = ("﻿" + String(manifesto(), Charsets.UTF_8).replace("\n", "\r\n")).toByteArray(Charsets.UTF_8)
+        val crlf = ("\uFEFF" + String(manifesto(), Charsets.UTF_8).replace("\n", "\r\n")).toByteArray(Charsets.UTF_8)
         assertEquals("0.1.44", TalosLettoreManifesto.leggi(crlf).version)
         assertEquals("vuoto", rifiutato(ByteArray(0)))
         assertEquals("troppo-grande", rifiutato(ByteArray(64 * 1024 + 1) { 'a'.code.toByte() }))

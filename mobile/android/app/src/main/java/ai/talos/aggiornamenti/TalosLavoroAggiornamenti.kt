@@ -11,6 +11,7 @@ import android.app.job.JobScheduler
 import android.app.job.JobService
 import android.content.ComponentName
 import android.content.Context
+import android.os.Build
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -61,8 +62,11 @@ class TalosLavoroAggiornamenti : JobService() {
             TalosStatoAggiornamento.segnaFase(context, TalosFaseAggiornamento.FALLITA, "dimensione"); return false
         }
         val fonte = TalosControlloAggiornamenti.fonte(context) ?: return false
+        // `JobParameters.getNetwork()` esiste da Android 9 (API 28), TALOS da Android 8 (minSdk 26): prima la rete predefinita,
+        // che il runner accetta (null). Lint della CI, PR #78 del 23/10.
+        val rete = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) params.network else null
         val motivo = TalosScaricamentoAggiornamento.scarica(context, trovata.path, size, fonte.file(trovata.tag, trovata.path),
-            params.network, { stop.get() }, { _, _ -> })
+            rete, { stop.get() }, { _, _ -> })
         return when (motivo) {
             null -> {
                 TalosStatoAggiornamento.segnaFase(context, TalosFaseAggiornamento.PRONTA)
@@ -102,12 +106,15 @@ class TalosLavoroAggiornamenti : JobService() {
             val js = scheduler(context) ?: return
             val trovata = TalosStatoAggiornamento.trovata(context) ?: return
             val soloWifi = TalosStatoAggiornamento.scelte(context).soloWifi && !dallaPersona
-            js.schedule(JobInfo.Builder(SCARICA, componente(context))
+            val lavoro = JobInfo.Builder(SCARICA, componente(context))
                 .setRequiredNetworkType(if (soloWifi) JobInfo.NETWORK_TYPE_UNMETERED else JobInfo.NETWORK_TYPE_ANY)
                 .setRequiresBatteryNotLow(!dallaPersona)
-                .setEstimatedNetworkBytes(trovata.size ?: JobInfo.NETWORK_BYTES_UNKNOWN.toLong(), 0)
                 .setPersisted(true)
-                .build())
+            // la stima dei byte aiuta il sistema a scegliere quando scaricare, ma esiste solo da Android 9 (API 28): minSdk 26
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                lavoro.setEstimatedNetworkBytes(trovata.size ?: JobInfo.NETWORK_BYTES_UNKNOWN.toLong(), 0)
+            }
+            js.schedule(lavoro.build())
         }
 
         fun programmaInstallazioneAllUscita(context: Context, attesaMs: Long = ATTESA_USCITA_MS) {

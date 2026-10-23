@@ -48,7 +48,7 @@ object TalosLettoreManifesto {
     fun leggi(byte: ByteArray): TalosManifestoAggiornamento {
         if (byte.isEmpty()) throw TalosManifestoRifiutato("vuoto")
         if (byte.size > MASSIMO_BYTE) throw TalosManifestoRifiutato("troppo-grande")
-        val testo = String(byte, Charsets.UTF_8).removePrefix("﻿").replace("\r\n", "\n")
+        val testo = String(byte, Charsets.UTF_8).removePrefix("\uFEFF").replace("\r\n", "\n")
 
         val cima = mutableMapOf<String, String>()
         val file = mutableMapOf<String, String>()
