@@ -164,6 +164,21 @@ struct talos_session {
     std::vector<llama_token> cached;
 
     /**
+     * ⛔⛔ D-LOC-3 (owner 2026-10-23, Spark-X2.5-4B sul Pad) — IL PREFISSO CONGELATO CHE LA CACHE VIVA HA GIÀ.
+     *
+     * Ogni giro della chat rilegge il prefisso dal disco (`nativeLoadState`), e la rilettura SOSTITUIVA la cache viva:
+     * il giro dopo un attrezzo buttava prompt e risposta del giro prima e ripartiva dal solo prefisso. Misurato:
+     * «prompt 4069 token, 1902 riusati, 2167 nuovi», 68 s di prefill a ogni giro. Il template non c'entra: il turno N+1
+     * comincia esattamente col turno N (Spark, 480 caratteri su 480).
+     *
+     * Qui si ricorda quale prefisso (file e token) è stato scritto o letto per ultimo: se la cache viva comincia già con
+     * lui, la rilettura non serve e la cache viva resta, come fa llama.rn (`rn-completion.cpp:491-503`, il prefisso
+     * comune contro la cache VIVA).
+     */
+    std::string              prefisso_percorso;
+    std::vector<llama_token> prefisso_token;
+
+    /**
      * ⛔⛔⛔ D-45 — QUANDO RIUSARE LA KV DA' RISPOSTE SBAGLIATE, e si smette.
      *
      * Misurato sul Pad il 2026-09-10, `gemma-4-E2B-it-Q4_0` sulla GPU
@@ -5636,6 +5651,9 @@ Java_ai_talos_TalosLlamaNative_nativeSaveState(JNIEnv * env, jclass, jlong handl
         TALOS_LOGE("prefisso congelato: scrittura fallita su %s", path.c_str());
         return 0;
     }
+    // D-LOC-3: il file contiene esattamente la cache di adesso.
+    session->prefisso_percorso = path;
+    session->prefisso_token = session->cached;
     TALOS_LOGI("prefisso congelato: %zu token, %zu byte su %s",
                session->cached.size(), scritti, path.c_str());
     return (jlong) scritti;
@@ -5857,6 +5875,8 @@ Java_ai_talos_TalosLlamaNative_nativeTrimAndSaveState(JNIEnv * env, jclass, jlon
             TALOS_LOGE("pota e congela: ricostruito ma scrittura fallita su %s", path.c_str());
             return 0;
         }
+        session->prefisso_percorso = path;  // D-LOC-3
+        session->prefisso_token = session->cached;
         TALOS_LOGI("pota e congela: prefisso RICOSTRUITO, %zu token, %zu byte su %s",
                    session->cached.size(), scritti_avanti, path.c_str());
         return (jlong) scritti_avanti;
@@ -5870,6 +5890,8 @@ Java_ai_talos_TalosLlamaNative_nativeTrimAndSaveState(JNIEnv * env, jclass, jlon
         TALOS_LOGE("pota e congela: scrittura fallita su %s", path.c_str());
         return 0;
     }
+    session->prefisso_percorso = path;  // D-LOC-3
+    session->prefisso_token = session->cached;
     TALOS_LOGI("pota e congela: %zu token su %d del testo dato, %zu byte su %s",
                quanti, voluti, scritti, path.c_str());
     return (jlong) scritti;
@@ -5903,6 +5925,19 @@ Java_ai_talos_TalosLlamaNative_nativeLoadState(JNIEnv * env, jclass, jlong handl
     }
     const std::string path = jstring_to_utf8(env, pathJ);
     if (path.empty()) return 0;
+
+    /*
+     * ⛔⛔ D-LOC-3 — LA CACHE VIVA VINCE SUL DISCO (vedi `talos_session::prefisso_token`). Se la cache comincia già con
+     * il prefisso di QUESTO file ed è più lunga, rileggerlo butterebbe proprio la parte in più: il giro prima, con la
+     * sua risposta. Si tiene, e la generazione trova da sola il prefisso comune con la richiesta nuova.
+     */
+    if (!session->prefisso_token.empty() && session->prefisso_percorso == path
+        && session->cached.size() > session->prefisso_token.size()
+        && std::equal(session->prefisso_token.begin(), session->prefisso_token.end(), session->cached.begin())) {
+        TALOS_LOGI("prefisso congelato: gia' nella cache viva (%zu token), non lo rileggo: tengo %zu token",
+                   session->prefisso_token.size(), session->cached.size());
+        return (jint) session->prefisso_token.size();
+    }
 
     const size_t capienza = (size_t) llama_n_ctx(session->ctx);
 
@@ -5977,6 +6012,9 @@ Java_ai_talos_TalosLlamaNative_nativeLoadState(JNIEnv * env, jclass, jlong handl
     }
     token.resize(quanti);
     session->cached = std::move(token);
+    // D-LOC-3: da qui la cache viva comincia con questo prefisso.
+    session->prefisso_percorso = path;
+    session->prefisso_token = session->cached;
     TALOS_LOGI("prefisso congelato: %zu token ripristinati da %s (%zu byte)",
                quanti, path.c_str(), letti);
     return (jint) quanti;

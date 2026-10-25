@@ -52,7 +52,9 @@ Base VAD: `https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/`
 |---|---|---|
 | `asr/silero_vad.onnx` | 643854 | `9e2449e1087496d8d4caba907f23e0bd3f78d91fa552479bb9c23ac09cbb1fd6` |
 
-Silero VAD: licenza MIT.
+Silero VAD: licenza MIT. Upstream non dichiara una versione: le Note legali mostrano il commit fissato del testo della
+licenza, `066409f` (`snakers4/silero-vad@066409f3d9db45a30d21dfcbf9147826ffdd7052`, `scripts/licenze-native/fonti.json`;
+N1-bis, 25/10/2026).
 
 ## Il modello del riconoscimento NON è qui
 

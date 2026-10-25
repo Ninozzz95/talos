@@ -356,6 +356,11 @@ export interface TalosMobileShellPreferences {
      * outcome never is.
      */
     debug_diagnostics: boolean
+    /**
+     * J3-bis (owner 25/10/2026, «Come il desktop», decisione A14 dell'08/10): «Mostra ragionamento», SOLO VISTA. Spento, il blocco
+     * del ragionamento dice solo che il modello ragiona o ha ragionato e il testo non si apre; quanto ragiona lo decidono i livelli.
+     */
+    show_reasoning: boolean
     /** F6 — persisted tablet split-view sidebar width (px, clamped 260–480). */
     tablet_sidebar_width: number
     /** U-5 — la sidebar Calm del tablet, trascinata dal bordo (px, 232–480; 12/09). */
@@ -416,6 +421,7 @@ const DEFAULT_SHELL_PREFERENCES: TalosMobileShellPreferences = {
     ui_font_scale: TALOS_DEFAULT_FONT_SCALE,
     streaming_animation: 'typewriter',
     debug_diagnostics: false,
+    show_reasoning: true,
     tablet_sidebar_width: TALOS_TABLET_SIDEBAR_DEFAULT,
     tablet_chat_sidebar_width: TALOS_TABLET_CHAT_SIDEBAR_DEFAULT,
     tablet_harness_sidebar_collapsed: false,
@@ -518,6 +524,8 @@ function parseShellPreferences(value: unknown): TalosMobileShellPreferences {
         // Fail closed: anything unrecognised is OFF, so a corrupt preference
         // cannot start showing internals to a user who never asked.
         debug_diagnostics: record.debug_diagnostics === true,
+        // come il desktop (`boolValue(record.mostraRagionamento, true)`): solo un «false» vero lo spegne
+        show_reasoning: record.show_reasoning !== false,
         tablet_sidebar_width: clampTalosTabletSidebarWidth(record.tablet_sidebar_width),
         tablet_chat_sidebar_width: clampTalosTabletChatSidebarWidth(record.tablet_chat_sidebar_width),
         tablet_harness_sidebar_collapsed: typeof record.tablet_harness_sidebar_collapsed === 'boolean'

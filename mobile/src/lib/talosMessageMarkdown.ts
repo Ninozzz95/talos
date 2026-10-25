@@ -1,5 +1,6 @@
 import DOMPurify from 'dompurify'
 import MarkdownIt from 'markdown-it'
+import { righeDelCodice } from '@/lib/chat/bloccoDiCodice'
 
 export const MAX_TALOS_MARKDOWN_SOURCE_LENGTH = 100_000
 
@@ -31,6 +32,8 @@ export interface TalosMarkdownLabels {
     code: string
     copyCode: string
     copy: string
+    /** Il ⋯ della testata del blocco di codice (bozzetto approvato 23/10): «Download as…», «Collapse». */
+    codeMore: string
     truncatedMessage: string
 }
 
@@ -43,6 +46,7 @@ export const DEFAULT_TALOS_MARKDOWN_LABELS: Readonly<TalosMarkdownLabels> = {
     code: 'code',
     copyCode: 'Copy code',
     copy: 'Copy',
+    codeMore: 'More code actions',
     truncatedMessage: 'Message truncated for safe rendering.',
 }
 
@@ -54,8 +58,8 @@ const allowedTags = [
 const externalImageTags = [...allowedTags, 'img']
 
 const allowedAttributes = [
-    'aria-label', 'class', 'data-talos-copy-code', 'href', 'rel', 'role', 'tabindex',
-    'target', 'type',
+    'aria-haspopup', 'aria-label', 'class', 'data-info', 'data-lingua', 'data-righe', 'data-talos-code-menu',
+    'data-talos-copy-code', 'href', 'rel', 'role', 'tabindex', 'target', 'type',
 ]
 const externalImageAttributes = [...allowedAttributes, 'alt', 'decoding', 'loading', 'src']
 
@@ -106,7 +110,7 @@ function normalizeSource(source: string): string {
         .replace(/[\u061C\u200B\u200E\u200F\u202A-\u202E\u2066-\u2069]/g, '')
 }
 
-function languageClass(info: string): string {
+export function languageClass(info: string): string {
     const language = info.trim().split(/\s+/u)[0]?.toLowerCase() ?? ''
     return /^[a-z0-9_+-]{1,32}$/u.test(language) ? language : ''
 }
@@ -227,7 +231,11 @@ function createMarkdownRenderer(breaks: boolean): MarkdownIt {
         const codeClass = language ? ` class="language-${language}"` : ''
         const languageLabel = language ? md.utils.escapeHtml(language) : md.utils.escapeHtml(labels.code)
         const contents = md.utils.escapeHtml(token.content)
-        return `<div class="talos-code-block"><div class="talos-code-block-header"><span>${languageLabel}</span><button type="button" data-talos-copy-code aria-label="${md.utils.escapeHtml(labels.copyCode)}">${md.utils.escapeHtml(labels.copy)}</button></div><pre tabindex="0"><code${codeClass}>${contents}</code></pre></div>`
+        // Bozzetto approvato dall'owner il 23/10 (specifica unica col desktop): lingua · Copia · ⋯, mai più di due pulsanti. Il blocco
+        // porta lingua, riga d'apertura e righe: il menu ⋯ ci costruisce nome del file e titolo («Python code · 120 lines»).
+        const dati = ` data-lingua="${md.utils.escapeHtml(language)}" data-info="${md.utils.escapeHtml(token.info.trim())}" data-righe="${righeDelCodice(token.content)}"`
+        const menu = `<button type="button" data-talos-code-menu aria-haspopup="menu" aria-label="${md.utils.escapeHtml(labels.codeMore)}">⋯</button>`
+        return `<div class="talos-code-block"${dati}><div class="talos-code-block-header"><span>${languageLabel}</span><button type="button" data-talos-copy-code aria-label="${md.utils.escapeHtml(labels.copyCode)}">${md.utils.escapeHtml(labels.copy)}</button>${menu}</div><pre tabindex="0"><code${codeClass}>${contents}</code></pre></div>`
     }
     md.renderer.rules.link_open = (tokens, index, options, env, renderer) => {
         const token = tokens[index]!

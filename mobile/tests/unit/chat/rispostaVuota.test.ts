@@ -10,6 +10,16 @@ import { TALOS_EN_MESSAGES } from '@/i18n/locales/en'
  * richiesta produce l'elenco.
  */
 describe('la bolla vuota dopo che gli strumenti sono partiti', () => {
+    /*
+     * ⛔ ART-L-10 (Pad, vc151, 23/10): il blocco html tagliato al tetto lascia il testo vuoto e mette già la riga onesta
+     * «Un'azione si è interrotta…». Dire IN PIÙ «gli strumenti sono partiti, ma il modello non ha scritto nessuna
+     * risposta» sotto quella riga è doppio e fuorviante: il fatto è già detto.
+     */
+    it('ART-L-10 quando il fatto è già detto (chiamata interrotta), niente bolla vuota', () => {
+        expect(talosRispostaVuotaDopoStrumenti('', 1, true)).toBe(false)
+        expect(talosRispostaVuotaDopoStrumenti('', 1, false)).toBe(true)
+    })
+
     it('il caso del Pad: nessun testo e uno strumento eseguito', () => {
         expect(talosRispostaVuotaDopoStrumenti('', 1)).toBe(true)
     })

@@ -1,6 +1,8 @@
 import { TALOS_SOLLECITO_AZIONE_DICHIARATA, talosAzioneDichiarata, talosHaAgito } from '@/lib/tools/azioneDichiarata'
 import type { ChatTurn, TalosToolCall } from '@/stores/chat'
 import { chiaveDiChiamata } from '@/lib/tools/chiaveDiChiamata'
+import { talosFermataDallaLunghezza } from '@/lib/tools/tracciaAzione'
+import { talosBloccoHtml } from '@/lib/tools/bloccoHtml'
 import type {
     TalosMobileImageInputPart,
     TalosMobileInputPart,
@@ -75,9 +77,19 @@ export interface TalosAgentCompletion {
  * ⛔ Estratto perche adesso lo produce anche il preflight: due forme per la
  * stessa cosa si sarebbero disallineate alla prima aggiunta di un campo.
  */
+/** Il corpo atteso da `artifact_create` del motore locale: chi l'ha chiesto, e se il sollecito è già partito. */
+interface TalosBloccoAtteso {
+    id: string
+    titolo: string
+    tipo: 'html'
+    sollecitato: boolean
+}
+
 export interface TalosEsitoDiStrumento {
     content: string
     ok: boolean
+    /** ⭐ Owner 2026-10-23 (motore locale): l'attrezzo aspetta il suo corpo come blocco ```html nella risposta dopo. */
+    attesaBlocco?: { titolo: string, tipo: 'html' }
     /** Anything the model should LOOK at, handed over on a user turn. */
     images?: TalosMobileInputPart[]
     /** Vault bindings to keep on the final assistant message. */
@@ -235,6 +247,11 @@ export interface TalosAgentLoopOutcome extends TalosAgentCompletion {
      * non è partito nessuno strumento, e nemmeno dopo il sollecito. La vista lo dice sotto la risposta.
      */
     azioneNonEseguita?: boolean
+    /**
+     * ⛔⛔ D-LOC-1 (owner 2026-10-23): per la seconda volta nel turno la risposta si è fermata al tetto di lunghezza
+     * mentre scriveva una chiamata. Nessuna chiamata tagliata è partita, e il ciclo si è chiuso invece di ritagliare.
+     */
+    chiamataTroncata?: boolean
     /** Present when the loop yielded instead of parking a Promise in memory. */
     suspension?: {
         checkpoint: TalosAgentLoopCheckpointV1
@@ -250,6 +267,10 @@ export interface TalosAgentLoopCheckpointV1 {
      * OPZIONALE: un checkpoint salvato prima non ce l'ha, e assente vale «no».
      */
     riprovaAzioneDichiarata?: boolean
+    /** ⛔ D-LOC-1: quante risposte del turno si sono fermate al tetto dentro una chiamata. OPZIONALE: assente vale 0. */
+    chiamateTroncate?: number
+    /** ⭐ Il corpo html che `artifact_create` del motore locale aspetta. OPZIONALE: assente vale «nessuno». */
+    bloccoAtteso?: TalosBloccoAtteso
     turns: ChatTurn[]
     /** The exact provider completion to resume; null once results are durable. */
     completion: TalosAgentCompletion | null
@@ -338,10 +359,19 @@ interface MutableAgentLoopState {
     /** ⭐ P4-quinquies: UN solo sollecito per turno, mai un secondo. */
     riprovaAzioneDichiarata: boolean
     azioneNonEseguita: boolean
+    /** ⛔ D-LOC-1: risposte del turno fermate al tetto dentro una chiamata. */
+    chiamateTroncate: number
+    chiamataTroncata: boolean
+    bloccoAtteso: TalosBloccoAtteso | null
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function eUnBloccoAtteso(value: unknown): value is TalosBloccoAtteso {
+    return isRecord(value) && typeof value.id === 'string' && typeof value.titolo === 'string'
+        && value.tipo === 'html' && typeof value.sollecitato === 'boolean'
 }
 
 function isToolCall(value: unknown): value is TalosToolCall {
@@ -411,6 +441,9 @@ function assertCheckpoint(
         || (record.rounds as number) < 0
         || typeof record.stoppedByLimit !== 'boolean'
         || (record.riprovaAzioneDichiarata !== undefined && typeof record.riprovaAzioneDichiarata !== 'boolean')
+        || (record.chiamateTroncate !== undefined
+            && (!Number.isSafeInteger(record.chiamateTroncate) || (record.chiamateTroncate as number) < 0))
+        || (record.bloccoAtteso !== undefined && !eUnBloccoAtteso(record.bloccoAtteso))
         || !Array.isArray(record.messageAttachments)
         || !record.messageAttachments.every(isAttachment)
         || (record.stage === 'before_tools'
@@ -442,6 +475,8 @@ function checkpointOf(
             ? { blocchiDelFornitore: [...state.blocchiDelFornitore] }
             : {}),
         ...(state.riprovaAzioneDichiarata ? { riprovaAzioneDichiarata: true } : {}),
+        ...(state.chiamateTroncate ? { chiamateTroncate: state.chiamateTroncate } : {}),
+        ...(state.bloccoAtteso ? { bloccoAtteso: { ...state.bloccoAtteso } } : {}),
     }
 }
 
@@ -535,6 +570,7 @@ function outcomeOf(
         stoppedByLimit: state.stoppedByLimit,
         messageAttachments: state.messageAttachments,
         ...(state.azioneNonEseguita ? { azioneNonEseguita: true } : {}),
+        ...(state.chiamataTroncata ? { chiamataTroncata: true } : {}),
         ...(suspension ? { suspension } : {}),
     }
 }
@@ -641,6 +677,17 @@ const ANCORAGGIO: ChatTurn = {
         + 'for, say exactly that instead of filling the gap.',
 }
 
+/**
+ * Il risultato di una chiamata che il tetto di lunghezza ha tagliato: in inglese come ogni testo per il modello. Dice che
+ * cosa non è successo e la mossa dopo, come il Desktop (BC-11, `messaggioArgomentiAssenti`): un contenuto lungo si manda a
+ * pezzi, non tutto in un argomento.
+ */
+function risultatoDellaChiamataTroncata(call: TalosToolCall): string {
+    return `Not run: your reply hit the output limit while writing the call to ${call.name}, so its arguments may be `
+        + 'truncated and nothing was executed. Send the call again with complete arguments; if the content is long, '
+        + 'make it shorter or split it into smaller steps.'
+}
+
 async function continueTalosAgentLoop(
     state: MutableAgentLoopState,
     deps: TalosAgentLoopDeps,
@@ -655,6 +702,77 @@ async function continueTalosAgentLoop(
     for (;;) {
         const completion = state.completion
         if (!completion) throw new Error('TALOS_AGENT_LOOP_CHECKPOINT_INVALID')
+
+        /*
+         * ⭐⭐ IL CORPO DELL'ARTEFATTO DAL BLOCCO ```html (owner 2026-10-23, «Sì, solo per i locali»).
+         *
+         * `artifact_create({ title, kind })` del motore locale ha risposto «Ready…»: il documento arriva in QUESTA risposta,
+         * come blocco recintato (forma vista dal Desktop prima di scriverla; precedente: Jan, `web-app/src/lib/utils.ts:86-121`).
+         *
+         * - Chiuso (o finito senza la recinzione di chiusura): si crea con una chiamata VERA all'attrezzo, così scheda,
+         *   permessi e registro sono quelli di sempre; dal testo il blocco sparisce, al suo posto c'è la scheda.
+         * - Aperto e fermato al tetto: il documento è a metà. Nessun artefatto, e il turno si chiude con la riga onesta della
+         *   chiamata interrotta (fondamenta 1). La continuazione interna è il passo B.
+         * - Assente: UN sollecito senza strumenti; se ancora niente, l'artefatto non c'è e la vista lo dice.
+         */
+        if (state.bloccoAtteso && !resumeRequestedRound) {
+            const atteso = state.bloccoAtteso
+            const testo = completion.text ?? ''
+            const blocco = talosBloccoHtml(testo)
+            const tagliata = talosFermataDallaLunghezza(completion.finishReason)
+            if (blocco && !('aperto' in blocco && tagliata)) {
+                state.bloccoAtteso = null
+                const html = 'aperto' in blocco ? blocco.corpo : blocco.html
+                const restante = 'aperto' in blocco ? blocco.prima : blocco.senzaBlocco
+                const chiamata: TalosToolCall = {
+                    id: `${atteso.id}-corpo`,
+                    name: 'artifact_create',
+                    arguments: JSON.stringify({ title: atteso.titolo, html }),
+                }
+                const esito = await deps.execute(chiamata)
+                // ⛔ Negli eseguiti (che finiscono nel checkpoint salvato) il documento non entra: basta il titolo.
+                state.executed.push({
+                    call: { ...chiamata, arguments: JSON.stringify({ title: atteso.titolo, kind: atteso.tipo }) },
+                    ok: esito.ok,
+                })
+                for (const allegato of esito.messageAttachments ?? []) {
+                    if (messageAttachmentIds.has(allegato.id)) continue
+                    messageAttachmentIds.add(allegato.id)
+                    state.messageAttachments.push(allegato)
+                }
+                state.completion = { ...completion, text: esito.ok ? restante : testo }
+                continue
+            }
+            if (blocco && tagliata) {
+                state.bloccoAtteso = null
+                const prima = 'aperto' in blocco ? blocco.prima : ''
+                say(prima)
+                state.chiamataTroncata = true
+                return outcomeOf(state, { ...completion, text: prima })
+            }
+            if (!completion.toolCalls?.length) {
+                if (!atteso.sollecitato) {
+                    state.bloccoAtteso = { ...atteso, sollecitato: true }
+                    say(testo)
+                    state.turns = [
+                        ...state.turns,
+                        { role: 'assistant', content: testo },
+                        {
+                            role: 'user',
+                            content: `Reply now with ONLY the fenced block for "${atteso.titolo}": \`\`\`html … \`\`\` `
+                                + 'containing the complete self-contained document.',
+                        },
+                    ]
+                    state.completion = null
+                    await persistBeforeModel(state, deps)
+                    state.completion = await deps.complete(state.turns, { senzaStrumenti: true })
+                    raccogliIBlocchi(state)
+                    continue
+                }
+                state.bloccoAtteso = null
+                state.azioneNonEseguita = true
+            }
+        }
 
         if (!completion.toolCalls?.length) {
             say(completion.text)
@@ -682,6 +800,40 @@ async function continueTalosAgentLoop(
                 state.azioneNonEseguita = true
             }
             return outcomeOf(state, completion)
+        }
+
+        /*
+         * ⛔⛔ D-LOC-1 — LA CHIAMATA TAGLIATA DAL TETTO NON PARTE (owner 2026-10-23, Spark-X2.5-4B sul Pad).
+         *
+         * Ogni giro si fermava al tetto di 1024 token dentro l'HTML di `artifact_create`, il giro dopo ripartiva, e così per
+         * venti minuti. Una risposta fermata dalla lunghezza può avere argomenti a metà in QUALUNQUE chiamata: nessuna si
+         * esegue, ognuna riceve un risultato che chiede di rifarla completa (Pi, `agent-loop.ts:264-270` e :478-503). Alla
+         * SECONDA volta nel turno il ciclo si chiude senza un altro giro (Hermes, `turn_tool_validation.py:182-200`): su un
+         * modello locale ogni giro costa minuti, e ritagliare la stessa cosa non è un progresso.
+         */
+        if (!resumeRequestedRound && talosFermataDallaLunghezza(completion.finishReason)) {
+            state.chiamateTroncate += 1
+            say(completion.text)
+            if (state.chiamateTroncate >= 2) {
+                state.chiamataTroncata = true
+                return outcomeOf(state, completion)
+            }
+            state.rounds += 1
+            state.turns = [
+                ...state.turns,
+                { role: 'assistant', content: completion.text, toolCalls: completion.toolCalls },
+                ...completion.toolCalls.map((call) => ({
+                    role: 'tool' as const,
+                    content: risultatoDellaChiamataTroncata(call),
+                    toolCallId: call.id,
+                    toolName: call.name,
+                })),
+            ]
+            state.completion = null
+            await persistBeforeModel(state, deps)
+            state.completion = await deps.complete(state.turns)
+            raccogliIBlocchi(state)
+            continue
         }
 
         if (!resumeRequestedRound && state.rounds >= maxRounds) {
@@ -895,6 +1047,10 @@ async function continueTalosAgentLoop(
         runnable.forEach((call, index) => {
             const toolOutcome = outcomes[index]!
             state.executed.push({ call, ok: toolOutcome.ok })
+            // ⭐ Owner 2026-10-23: `artifact_create` del motore locale aspetta il documento nella risposta dopo.
+            if (toolOutcome.ok && toolOutcome.attesaBlocco) {
+                state.bloccoAtteso = { ...toolOutcome.attesaBlocco, id: call.id, sollecitato: false }
+            }
             if (toolOutcome.images?.length) seen.push(...toolOutcome.images)
             for (const attachment of toolOutcome.messageAttachments ?? []) {
                 if (messageAttachmentIds.has(attachment.id)) continue
@@ -966,6 +1122,9 @@ export async function runTalosAgentLoop(
         blocchiDelFornitore: [...(completion.providerBlocks ?? [])],
         riprovaAzioneDichiarata: false,
         azioneNonEseguita: false,
+        chiamateTroncate: 0,
+        chiamataTroncata: false,
+        bloccoAtteso: null,
     }, deps, false)
 }
 
@@ -994,6 +1153,9 @@ export async function resumeTalosAgentLoop(
         blocchiDelFornitore: [...(checkpoint.blocchiDelFornitore ?? [])],
         riprovaAzioneDichiarata: checkpoint.riprovaAzioneDichiarata === true,
         azioneNonEseguita: false,
+        chiamateTroncate: checkpoint.chiamateTroncate ?? 0,
+        chiamataTroncata: false,
+        bloccoAtteso: checkpoint.bloccoAtteso ? { ...checkpoint.bloccoAtteso } : null,
     }
     if (checkpoint.stage === 'before_model') {
         state.completion = await deps.complete(state.turns)

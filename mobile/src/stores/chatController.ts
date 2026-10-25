@@ -20,6 +20,7 @@ import {
     TALOS_METADATA_CHIAMATE,
     TALOS_METADATA_SCHEDE,
     TALOS_METADATA_AZIONE_NON_ESEGUITA,
+    TALOS_METADATA_CHIAMATA_TRONCATA,
     TALOS_METADATA_TRONCATA,
     talosAzioniEseguite,
     talosFermataDallaLunghezza,
@@ -4569,6 +4570,9 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                     const result = await preflightTalosToolExecution(tool, call.arguments, {
                         permissions: effectivePermissions(),
                         isToolEnabled: isEffectivelyEnabled,
+                        // ⛔ ART-L-09 (Pad, 23/10): senza, il controllo preliminare validava `artifact_create` del motore
+                        // locale con lo schema delle API e lo rifiutava («html» obbligatorio).
+                        motoreLocale: profiloLocale,
                         requestConsent: async () => 'unanswered' as const,
                         audit: registraAzione,
                         /*
@@ -4685,6 +4689,9 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                     const result = await executeTalosTool(tool, call.arguments, {
                         permissions: effectivePermissions(),
                         isToolEnabled: isEffectivelyEnabled,
+                        // ⛔ Owner 2026-10-23: il motore locale ha ricevuto il SUO contratto (`perIlMotoreLocale`), e con
+                        // quello si leggono gli argomenti. Oggi conta solo per `artifact_create`.
+                        motoreLocale: profiloLocale,
                         /*
                          * ⛔⛔ IL PIANO VALE ANCHE QUI, non solo alla barriera.
                          *
@@ -5101,7 +5108,9 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
              */
             const raw = completion.toolCallMissed
                 ? deps.translate('chat.toolCallMissed')
-                : talosRispostaVuotaDopoStrumenti(completion.text, completion.executed.length)
+                : talosRispostaVuotaDopoStrumenti(
+                    completion.text, completion.executed.length, completion.chiamataTroncata === true,
+                )
                     ? deps.translate('chat.emptyAnswerAfterTools', {
                         count: talosStrumentiPartiti(completion.executed),
                     })
@@ -5372,6 +5381,13 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                  */
                 ...(completion.azioneNonEseguita
                     ? { [TALOS_METADATA_AZIONE_NON_ESEGUITA]: true }
+                    : {}),
+                /*
+                 * ⛔⛔ D-LOC-1 (owner 2026-10-23): il ciclo si è chiuso perché una chiamata si è fermata al tetto due
+                 * volte. La vista lo dice per nome (niente è partito) e non offre «Continua», che rifarebbe il taglio.
+                 */
+                ...(completion.chiamataTroncata
+                    ? { [TALOS_METADATA_CHIAMATA_TRONCATA]: true }
                     : {}),
             }
             /**

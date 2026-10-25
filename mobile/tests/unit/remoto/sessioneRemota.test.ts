@@ -1,6 +1,20 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { apriPonteRemoto } from '@/lib/remoto/sessioneRemota'
 import type { PluginComputer } from '@/lib/remoto/computerRemoti'
+
+// Revisione del blocco 4, condizione del Desktop: il trasporto vero, con un `smonta` che a comando rifiuta (quello vero oggi non lo
+// fa, `trasportoNativo.ts:27`; la prova tiene `chiudi` sicuro anche se un giorno cambiasse).
+const guasto = vi.hoisted(() => ({ smonta: false }))
+vi.mock('@/lib/remoto/trasportoNativo', async (importOriginal) => {
+    const vero = await importOriginal<typeof import('@/lib/remoto/trasportoNativo')>()
+    return {
+        trasportoNativo: async (...a: Parameters<typeof vero.trasportoNativo>) => {
+            const t = await vero.trasportoNativo(...a)
+            return { ...t, smonta: async () => { await t.smonta(); if (guasto.smonta) throw new Error('smonta guasto') } }
+        },
+    }
+})
+beforeEach(() => { guasto.smonta = false })
 
 /**
  * ⛔ CLIENT DEL CONTROLLO REMOTO, fetta R-M4: aprire il ponte r4 verso un PC accoppiato (canale di lavoro, cliente, ponte) e chiuderlo.
@@ -103,5 +117,49 @@ describe('la sessione remota', () => {
         f.plugin.collega = vi.fn(async () => { throw Object.assign(new Error('x'), { code: 'CONNECT_FAILED' }) })
         await expect(apriPonteRemoto(f.plugin, 'pc-uno')).rejects.toMatchObject({ code: 'CONNECT_FAILED' })
         expect(f.plugin.collega).toHaveBeenCalledTimes(2)
+    })
+
+    /*
+     * ⛔ Revisione del blocco 4, condizione del Desktop prima del commit: `riepilogo` → `sessioni` cattura ogni errore, tranne il suo
+     * `finally` (`aperto.chiudi()`). Se `smonta` rifiutava, `chiudi` rifiutava, e il `Promise.all` del «Sì» dei PC doppi si fermava:
+     * nessuna voce dimenticata, nessun messaggio. `chiudi` non lancia mai, e il canale si chiude lo stesso.
+     */
+    it('SESS-CHIUDI-01 `smonta` che rifiuta: «chiudi» si risolve e il canale si chiude lo stesso', async () => {
+        const f = pluginFinto()
+        const { chiudi } = await apriPonteRemoto(f.plugin, 'pc-uno')
+        guasto.smonta = true
+        await expect(chiudi()).resolves.toBeUndefined()
+        expect(f.plugin.chiudi).toHaveBeenCalledWith({ canale: 'c9' })
+    })
+
+    it('SESS-CHIUDI-02 lo smontaggio di un canale CADUTO che rifiuta non fa rifiutare «chiudi»', async () => {
+        const f = pluginFinto()
+        const { chiudi } = await apriPonteRemoto(f.plugin, 'pc-uno')
+        guasto.smonta = true
+        f.emetti('remoto-chiuso', { canale: 'c9', motivo: 'DISCONNECTED' })
+        await expect(chiudi()).resolves.toBeUndefined()
+        expect(f.plugin.chiudi).toHaveBeenCalledWith({ canale: 'c9' })
+    })
+
+    /*
+     * Revisione del blocco 4 (J2, voce 7): il ramo «chiuso mentre si apriva» (`sessioneRemota.ts` ~53) aspettava `smonta()` senza
+     * protezione; se rifiutava, `plugin.chiudi({ canale })` non partiva e il canale appena aperto restava acceso nel nativo.
+     */
+    it('SESS-CHIUDI-03 «chiudi» durante una riapertura e `smonta` che rifiuta: il canale nuovo si chiude lo stesso, e la richiesta dice DISCONNECTED', async () => {
+        const f = pluginFinto()
+        const { ponte, chiudi } = await apriPonteRemoto(f.plugin, 'pc-uno')
+        f.emetti('remoto-chiuso', { canale: 'c9', motivo: 'DISCONNECTED' })
+        let collegato: (v: { canale: string }) => void = () => {}
+        f.plugin.collega = vi.fn(() => new Promise<{ canale: string }>((ok) => { collegato = ok }))
+        // il ponte non lancia: un guasto del filo torna come busta d'errore con il suo codice (`ponteRemotoR4.ts`, 503 per DISCONNECTED)
+        const richiesta = ponte.richiesta({ metodo: 'GET', percorso: '/api/v1/sessions' })
+        await vi.waitFor(() => { if (!(f.plugin.collega as ReturnType<typeof vi.fn>).mock.calls.length) throw new Error('non ancora') })
+        await chiudi()
+        guasto.smonta = true
+        collegato({ canale: 'c10' })
+        const esito = await richiesta
+        expect(f.plugin.chiudi).toHaveBeenCalledWith({ canale: 'c10' })
+        expect(esito.stato).toBe(503)
+        expect(JSON.parse(esito.corpo)).toMatchObject({ ok: false, error: { code: 'DISCONNECTED' } })
     })
 })

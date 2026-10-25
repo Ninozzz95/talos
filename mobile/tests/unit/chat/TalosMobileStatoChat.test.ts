@@ -17,8 +17,8 @@ import type { TalosStatoChat } from '@/lib/chat/statoChat'
  * ⛔ Le chiavi `chats.status.*` le aggiunge ai file di lingua chi li possiede in
  * questo giro: qui si FONDONO nel plugin vero, senza scrivere nei cataloghi.
  */
-const IT = { waiting: 'aspetta te', running: 'in corso', queued: 'in coda', paused: 'in pausa', failed: 'fallita', interrupted: 'interrotta', rowLabel: '{title}, {status}' }
-const EN = { waiting: 'waiting for you', running: 'in progress', queued: 'queued', paused: 'paused', failed: 'failed', interrupted: 'interrupted', rowLabel: '{title}, {status}' }
+const IT = { waiting: 'aspetta te', running: 'in corso', queued: 'in coda', paused: 'in pausa', failed: 'da riprendere', interrupted: 'interrotta', rowLabel: '{title}, {status}' }
+const EN = { waiting: 'waiting for you', running: 'in progress', queued: 'queued', paused: 'paused', failed: 'to resume', interrupted: 'interrupted', rowLabel: '{title}, {status}' }
 type Composer = { mergeLocaleMessage(locale: string, messages: object): void, locale: { value: string } }
 let lingua = 'en'
 beforeAll(async () => {
@@ -42,7 +42,7 @@ describe('TalosMobileStatoChat — l\'etichetta', () => {
         ['in-corso', 'in corso', 'vivo'],
         ['in-coda', 'in coda', 'quieto'],
         ['in-pausa', 'in pausa', 'quieto'],
-        ['fallita', 'fallita', 'pericolo'],
+        ['fallita', 'da riprendere', 'attenzione'],
         ['interrotta', 'interrotta', 'quieto'],
     ] as const)('STATO-UI-01 «%s» si scrive «%s» con tono %s, parola e non solo colore', (stato, parola, tono) => {
         const wrapper = monta(stato)
@@ -62,7 +62,7 @@ describe('TalosMobileStatoChat — l\'etichetta', () => {
 
     it('STATO-UI-03 il tono d\'attenzione usa i token esistenti, niente colori fuori palette', () => {
         expect(monta('aspetta-te').get('[data-testid="talos-chat-status"]').classes().join(' ')).toContain('var(--talos-warning)')
-        expect(monta('fallita').get('[data-testid="talos-chat-status"]').classes().join(' ')).toContain('var(--talos-danger')
+        expect(monta('fallita').get('[data-testid="talos-chat-status"]').classes().join(' ')).toContain('var(--talos-warning)')
         for (const quieto of ['in-coda', 'interrotta', 'in-corso'] as const) {
             const classi = monta(quieto).get('[data-testid="talos-chat-status"]').classes().join(' ')
             expect(classi).toContain('var(--talos-muted)')
@@ -75,7 +75,7 @@ describe('TalosMobileStatoChat — l\'etichetta', () => {
         expect(classi).toContain('border-[var(--talos-warning-border)]')
         expect(classi).toContain('bg-[var(--talos-warning-soft)]')
         expect(monta('fallita', 'pastiglia').get('[data-testid="talos-chat-status"]').classes().join(' '))
-            .toContain('bg-[var(--talos-danger-soft)]')
+            .toContain('bg-[var(--talos-warning-soft)]')
     })
 
     it('STATO-UI-06 CODA-PAUSA «in pausa» ha la sua parola nei cataloghi veri e l\'icona della pausa', async () => {
@@ -84,6 +84,43 @@ describe('TalosMobileStatoChat — l\'etichetta', () => {
         expect(TALOS_IT_MESSAGES.chats.status.paused).toBe('in pausa')
         expect(TALOS_EN_MESSAGES.chats.status.paused).toBe('paused')
         expect(monta('in-pausa').get('[data-testid="talos-chat-status"] svg').classes().join(' ')).toContain('lucide-pause')
+    })
+
+    // ⛔ Owner 23/10/2026 sera, dal Pad: «perché dice fallita, se la chat alla fine non è fallita?». L'etichetta parla dell'ULTIMO
+    // giro ma si leggeva come un giudizio sulla conversazione. Decisione: «da riprendere», cioè cosa puoi fare (dentro c'è
+    // «Riprendi»). In inglese «to resume», la radice di «Resume» come sul desktop (revisione del Desktop); l'icona di
+    // «Riprendi» e il tono di ciò che chiede qualcosa alla persona, non un allarme rosso.
+    it('STATO-UI-07 l\'ultimo giro in errore si legge «da riprendere» / «to resume», con l\'icona di Riprendi, senza rosso', async () => {
+        // i file sorgente, non l'oggetto: il `beforeAll` qui sopra fonde i suoi testi nel catalogo caricato
+        const { readFileSync } = await import('node:fs')
+        const { resolve } = await import('node:path')
+        const catalogo = (lingua: string) => readFileSync(resolve(__dirname, '..', '..', '..', 'src', 'i18n', 'locales', `${lingua}.ts`), 'utf8')
+        expect(catalogo('it')).toContain("failed: 'da riprendere',")
+        expect(catalogo('en')).toContain("failed: 'to resume',")
+        const etichetta = monta('fallita', 'pastiglia').get('[data-testid="talos-chat-status"]')
+        expect(etichetta.attributes('data-tone')).toBe('attenzione')
+        expect(etichetta.get('svg').classes().join(' ')).toContain('lucide-rotate-ccw')
+        expect(etichetta.classes().join(' ')).not.toContain('danger')
+    })
+
+    // (D) 23/10 sera, Desktop dopo la foto: nella barra stretta la parola lunga accorciava il titolo («Ciao, h…»). Sotto 360 px del
+    // contenitore dei Recenti la pastiglia tiene solo l'icona; la parola resta nel DOM per il lettore di schermo (stile
+    // solo-lettori, mai `display:none`) e NON va in un suggerimento al tocco: la riga ha già il suo tocco prolungato.
+    it('STATO-UI-08 nella barra stretta la pastiglia tiene solo l\'icona, e la parola resta per il lettore di schermo', async () => {
+        const pastiglia = monta('fallita', 'pastiglia').get('[data-testid="talos-chat-status"]')
+        expect(pastiglia.attributes('data-forma')).toBe('pastiglia')
+        expect(pastiglia.attributes('title')).toBeUndefined()
+        const parola = pastiglia.get('.talos-stato-parola')
+        expect(parola.text()).toBe('da riprendere')
+        expect(parola.attributes('aria-hidden')).toBeUndefined()
+        // la regola: container query sul contenitore dei Recenti, parola nascosta solo alla vista
+        const { readFileSync } = await import('node:fs')
+        const { resolve } = await import('node:path')
+        const sorgente = (file: string) => readFileSync(resolve(__dirname, '..', '..', '..', 'src', 'components', file), 'utf8')
+        const stato = sorgente('chat/TalosMobileStatoChat.vue')
+        expect(stato).toMatch(/@container talos-recenti \(max-width: 360px\)[^}]*\[data-forma="pastiglia"\] \.talos-stato-parola/)
+        expect(stato).not.toMatch(/\.talos-stato-parola\s*\{[^}]*display:\s*none/)
+        expect(sorgente('shell/TalosMobileSidebar.vue')).toMatch(/container:\s*talos-recenti\s*\/\s*inline-size/)
     })
 
     it('STATO-UI-05 «in corso» gira solo se il sistema non chiede meno movimento', () => {

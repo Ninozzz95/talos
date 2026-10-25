@@ -45,4 +45,14 @@ class TalosVersioneAggiornamentoTest {
         assertNull(TalosVersioneAggiornamento.dalTag("v0.1.44-rc1"))
         assertNull(TalosVersioneAggiornamento.dalTag("0.1.44"))
     }
+
+    @Test
+    fun `AGG-VER-06 il ponte della 0_1_45 legge anche il tag col prefisso mobile, come il desktop`() {
+        // owner 23/10: dalla 0.1.46 i tag sono `mobile-vX.Y.Z`; la 0.1.45 (ancora `v0.1.45`) li deve già riconoscere
+        assertEquals("0.1.46", TalosVersioneAggiornamento.dalTag("mobile-v0.1.46"))
+        assertNull(TalosVersioneAggiornamento.dalTag("mobile-v0.1.46-rc1"))
+        assertNull(TalosVersioneAggiornamento.dalTag("mobile-0.1.46"))
+        assertNull(TalosVersioneAggiornamento.dalTag("Mobile-v0.1.46"))
+        assertNull(TalosVersioneAggiornamento.dalTag("xmobile-v0.1.46"))
+    }
 }

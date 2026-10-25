@@ -292,6 +292,26 @@ describe('LOCAL-CONTEXT-PARITY-01 local chat open', () => {
     })
 
     /**
+     * ⛔⛔ TRONC-05 (D-LOC-1, owner 2026-10-23): il motore locale dice PERCHÉ si è fermato.
+     *
+     * `finishReason` era scritto a mano `'stop'`: una risposta tagliata al tetto (Spark, `producedTokens 1024` nel registro
+     * del Pad) sembrava finita, il ciclo eseguiva una chiamata a metà e la riga «Si è fermata qui» non compariva mai.
+     */
+    it('TRONC-05 al tetto di token dice length, sotto dice stop', async () => {
+        localEngine.talosLocalEngineOpenWithFallback.mockResolvedValue({ contextTokens: 4096 })
+        const credenziale = { apiKey: null, endpoint: null }
+        const trasporto = (() => { throw new Error('local must not use transport') }) as never
+
+        localEngine.talosLocalEngineGenerate.mockResolvedValue({ text: '<html><body>', tokens: 1024 })
+        const tagliata = await localAdapter.complete(input() as never, credenziale, trasporto)
+        expect(tagliata.finishReason).toBe('length')
+
+        localEngine.talosLocalEngineGenerate.mockResolvedValue({ text: 'Ciao', tokens: 3 })
+        const finita = await localAdapter.complete(input() as never, credenziale, trasporto)
+        expect(finita.finishReason).toBe('stop')
+    })
+
+    /**
      * ⛔ La cache leggera va CHIESTA — e per due giorni nessuno l'ha fatto.
      *
      * Il motore sa crearla dall'8C, collaudo e ripiego in `f16` compresi, e il

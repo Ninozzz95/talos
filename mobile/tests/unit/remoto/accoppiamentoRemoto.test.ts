@@ -48,10 +48,24 @@ describe("l'accoppiamento dal telefono", () => {
         await attesa()
         expect(codici).toEqual([{ codice, pc: { id: 'pc-uno', nome: 'Studio', programma: 'TALOS desktop' } }])
         f.arriva({ v: 1, t: 'pair.ok', dispositivo: { id: 'd1', nome: 'Pad' }, pc: { id: 'pc-uno', nome: 'Studio', programma: 'TALOS desktop', vapid: 'BBB' } })
-        await expect(giro.esito).resolves.toEqual({ pcId: 'pc-uno', nome: 'Studio', programma: 'TALOS desktop', vapid: 'BBB' })
+        await expect(giro.esito).resolves.toEqual({ pcId: 'pc-uno', nome: 'Studio', programma: 'TALOS desktop', vapid: 'BBB', effimero: false })
         // R-M5 (21/10): la VAPID del PC va al nativo, che la ricorda col PC per registrare la sveglia
         expect(f.plugin.concludiAccoppiamento).toHaveBeenCalledWith({ canale: 'c1', nome: 'Studio', vapid: 'BBB' })
         expect(f.ascolti['remoto-messaggio']).toBeUndefined()
+    })
+
+    /* Desktop f1199ace0 (24/10/2026): `pc.effimero: true` solo col portachiavi di PROVA; mai `false`, assente negli altri casi. */
+    it('ACC-07 pair.ok con pc.effimero true ⇒ esito «di prova»; un valore che non è proprio true non lo è', async () => {
+        for (const [valore, atteso] of [[true, true], ['true', false], [1, false], [undefined, false]] as const) {
+            const f = pluginFinto()
+            const giro = avviaAccoppiamento(f.plugin, QR, { nome: 'Pad', ora })
+            await salutato(f.inviati)
+            const codice = await codiceDiAccoppiamento('pc-uno', 'tel-uno', GETTONE)
+            f.arriva({ v: 1, t: 'pair.code', codice, pc: { id: 'pc-uno', nome: 'Studio' } })
+            await attesa()
+            f.arriva({ v: 1, t: 'pair.ok', pc: { nome: 'Studio', effimero: valore } })
+            expect((await giro.esito).effimero, String(valore)).toBe(atteso)
+        }
     })
 
     it('ACC-02 codice DIVERSO da quello calcolato qui ⇒ pair.cancel, canale chiuso, CODE_MISMATCH; niente si ricorda', async () => {

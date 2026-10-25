@@ -1,0 +1,270 @@
+{
+  "schema": "talos.mobile.licenze-native-fonti.v1",
+  "nota": "N1 (25/10/2026): da dove vengono i testi delle licenze dei componenti nativi e delle librerie Android. Ogni testo è la copia upstream alla versione spedita (tag o commit nell'indirizzo), con l'impronta sha256 del testo: se cambia un byte, lo script si ferma. Le chiavi di `componenti` sono i `name` di `src/lib/legal/nativeComponents.ts`.",
+  "componenti": {
+    "llama.cpp / ggml": [
+      {
+        "titolo": "LICENSE",
+        "git": {
+          "repo": "third_party/llama.cpp",
+          "rif": "HEAD",
+          "percorso": "LICENSE"
+        },
+        "sha256": "94f29bbed6a22c35b992c5c6ebf0e7c92f13b836b90f36f461c9cf2f0f1d010d"
+      }
+    ],
+    "Node.js": [
+      {
+        "titolo": "LICENSE",
+        "url": "https://raw.githubusercontent.com/nodejs/node/v24.18.0/LICENSE",
+        "sha256": "148eacf7863ef4329224a29398623077200a27194aa075569faf4a0a85566ca5"
+      }
+    ],
+    "OpenSSL": [
+      {
+        "titolo": "LICENSE.txt",
+        "url": "https://raw.githubusercontent.com/openssl/openssl/openssl-3.6.3/LICENSE.txt",
+        "sha256": "7d5450cb2d142651b8afa315b5f238efc805dad827d91ba367d8516bc9d49e7a"
+      }
+    ],
+    "ICU": [
+      {
+        "titolo": "LICENSE",
+        "url": "https://raw.githubusercontent.com/unicode-org/icu/release-78.3/LICENSE",
+        "sha256": "e55522d81edc687a341a4411e0776e54ca654e90147f354a90458aaced4116af"
+      }
+    ],
+    "SQLite": [
+      {
+        "titolo": "LICENSE.md",
+        "url": "https://raw.githubusercontent.com/sqlite/sqlite/version-3.53.4/LICENSE.md",
+        "sha256": "ee6af51062b30d532991face5164136ae6f84e265ecf8abe89dc69dac45ca1e7"
+      }
+    ],
+    "c-ares": [
+      {
+        "titolo": "LICENSE.md",
+        "url": "https://raw.githubusercontent.com/c-ares/c-ares/v1.34.8/LICENSE.md",
+        "sha256": "460f5e768fda3752ca2169a95df062578a10fb126bfd65f3b9b1a1bed2f84807"
+      }
+    ],
+    "zlib": [
+      {
+        "titolo": "LICENSE",
+        "url": "https://raw.githubusercontent.com/madler/zlib/v1.3.2/LICENSE",
+        "sha256": "e32ff4e00d9d94930537635291da39e7e612703334bf6fde8c7f1686fe8a45a2"
+      }
+    ],
+    "Android Debug Bridge (android-tools)": [
+      {
+        "titolo": "NOTICE",
+        "url": "https://android.googlesource.com/platform/packages/modules/adb/+/refs/tags/platform-tools-35.0.2/NOTICE?format=TEXT",
+        "base64": true,
+        "sha256": "9e097c628332c9f60d958f4477b5a301c95e7342c0afbc513c61b8b6145f4c40"
+      }
+    ],
+    "Abseil": [
+      {
+        "titolo": "LICENSE",
+        "url": "https://raw.githubusercontent.com/abseil/abseil-cpp/20260526.0/LICENSE",
+        "sha256": "c79a7fea0e3cac04cd43f20e7b648e5a0ff8fa5344e644b0ee09ca1162b62747"
+      }
+    ],
+    "Protocol Buffers": [
+      {
+        "titolo": "LICENSE",
+        "url": "https://raw.githubusercontent.com/protocolbuffers/protobuf/v35.1/LICENSE",
+        "sha256": "6e5e117324afd944dcf67f36cf329843bc1a92229a8cd9bb573d7a83130fea7d"
+      }
+    ],
+    "Brotli": [
+      {
+        "titolo": "LICENSE",
+        "url": "https://raw.githubusercontent.com/google/brotli/v1.2.0/LICENSE",
+        "sha256": "3d180008e36922a4e8daec11c34c7af264fed5962d07924aea928c38e8663c94"
+      }
+    ],
+    "LZ4": [
+      {
+        "titolo": "lib/LICENSE",
+        "url": "https://raw.githubusercontent.com/lz4/lz4/v1.10.0/lib/LICENSE",
+        "sha256": "8b58c446121a109ccf32edc094bba3010a3d85e4ee3702950db55e4d3e87736c"
+      }
+    ],
+    "Zstandard": [
+      {
+        "titolo": "LICENSE",
+        "url": "https://raw.githubusercontent.com/facebook/zstd/v1.5.7/LICENSE",
+        "sha256": "7055266497633c9025b777c78eb7235af13922117480ed5c674677adc381c9d8"
+      }
+    ],
+    "LLVM libc++ / OpenMP": [
+      {
+        "titolo": "libcxx/LICENSE.TXT",
+        "url": "https://android.googlesource.com/toolchain/llvm-project/+/5e96669f06077099aa41290cdb4c5e6fa0f59349/libcxx/LICENSE.TXT?format=TEXT",
+        "base64": true,
+        "sha256": "539dd7aed86e8a4f12cbdd0e6c50c189c7d74847e4fecc64ce2c6ee3a01da38b"
+      },
+      {
+        "titolo": "openmp/LICENSE.TXT",
+        "url": "https://android.googlesource.com/toolchain/llvm-project/+/5e96669f06077099aa41290cdb4c5e6fa0f59349/openmp/LICENSE.TXT?format=TEXT",
+        "base64": true,
+        "sha256": "fdad1758a9e1f9d5a81e18879b3406772115edc92c24bfa36b70c654f325e8e4"
+      }
+    ],
+    "ONNX Runtime": [
+      {
+        "titolo": "LICENSE",
+        "url": "https://raw.githubusercontent.com/microsoft/onnxruntime/v1.29.0/LICENSE",
+        "sha256": "2f07c72751aed99790b8a4869cf2311df85a860b22ded05fa22803587a48922c"
+      }
+    ],
+    "SentencePiece": [
+      {
+        "titolo": "LICENSE",
+        "url": "https://raw.githubusercontent.com/google/sentencepiece/bcd4d8c92fa667df2e560fc84291331ce355bf0e/LICENSE",
+        "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+      }
+    ],
+    "sherpa-onnx": [
+      {
+        "titolo": "LICENSE",
+        "url": "https://raw.githubusercontent.com/k2-fsa/sherpa-onnx/v1.13.8/LICENSE",
+        "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+      }
+    ],
+    "Silero VAD": [
+      {
+        "titolo": "LICENSE",
+        "url": "https://raw.githubusercontent.com/snakers4/silero-vad/066409f3d9db45a30d21dfcbf9147826ffdd7052/LICENSE",
+        "sha256": "2e63e9a38b6e8fc0c7bc37ce174caca1862870856c6daf5697cfb785e925520b"
+      }
+    ],
+    "NVIDIA Parakeet TDT 0.6B v3": [
+      {
+        "titolo": "CC BY 4.0 — legal code",
+        "url": "https://creativecommons.org/licenses/by/4.0/legalcode.txt",
+        "sha256": "9ba9550ad48438d0836ddab3da480b3b69ffa0aac7b7878b5a0039e7ab429411"
+      }
+    ],
+    "openWakeWord — melspectrogram ed embedding": [
+      {
+        "titolo": "LICENSE",
+        "url": "https://raw.githubusercontent.com/dscripka/openWakeWord/v0.5.1/LICENSE",
+        "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+      }
+    ],
+    "iroh (iroh-ffi)": [
+      {
+        "titolo": "LICENSE-MIT",
+        "git": {
+          "repo": "$IROH_FFI",
+          "rif": "v1.1.0",
+          "percorso": "LICENSE-MIT"
+        },
+        "sha256": "f169adb8124d3b005416d8485d00777c9a7bdd9099982c52a4493f9732e6d050"
+      },
+      {
+        "titolo": "LICENSE-APACHE",
+        "git": {
+          "repo": "$IROH_FFI",
+          "rif": "v1.1.0",
+          "percorso": "LICENSE-APACHE"
+        },
+        "sha256": "903131e2786f073a942fbf8fae122d9e576e4dad758c6da7f9f2ba58fd8611ab"
+      }
+    ],
+    "Classificatore della parola «TALOS»": [
+      {
+        "titolo": "livekit-wakeword LICENSE",
+        "url": "https://raw.githubusercontent.com/livekit/livekit-wakeword/cdb82b8ebc179b216e1c5bf360dbdc1ccd5288f2/LICENSE",
+        "sha256": "dc13336d128c111a6f4cfc36e21b00b210a0fdbc6d219061270596aa9fb87bd1"
+      }
+    ]
+  },
+  "rust": {
+    "nota": "I crate Rust dentro `libiroh_ffi.so`: cargo-about sul tag v1.1.0 col Cargo.lock della build (rustls 0.23.46, `jniLibs/PROVENIENZA-IROH.md`), bersaglio aarch64-linux-android.",
+    "clone": "../../TALOS-RICERCHE/prove/remoto-android-2026-10-17/iroh-ffi",
+    "tag": "v1.1.0",
+    "lockSha256": "a1f759e1299e6e31697d737341301648724a4f1d1970fcd65de68f8ddd8990d8",
+    "bersaglio": "aarch64-linux-android",
+    "cargoAbout": "0.9.2",
+    "licenzeSha256": "de046b1168d04db1f6c82df728dbb64205f327afd66a9c025f7755d8bf3f2d08"
+  },
+  "android": {
+    "perLicenza": {
+      "Apache-2.0": {
+        "titolo": "LICENSE-2.0.txt",
+        "url": "https://www.apache.org/licenses/LICENSE-2.0.txt",
+        "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+      }
+    },
+    "perLibreria": {
+      "com.microsoft.onnxruntime:onnxruntime-android": {
+        "titolo": "LICENSE",
+        "url": "https://raw.githubusercontent.com/microsoft/onnxruntime/v1.29.0/LICENSE",
+        "sha256": "2f07c72751aed99790b8a4869cf2311df85a860b22ded05fa22803587a48922c",
+        "copre": [
+          "MIT"
+        ]
+      },
+      "computer.iroh:iroh": {
+        "titolo": "LICENSE-MIT",
+        "url": "https://raw.githubusercontent.com/n0-computer/iroh-ffi/v1.1.0/LICENSE-MIT",
+        "sha256": "f169adb8124d3b005416d8485d00777c9a7bdd9099982c52a4493f9732e6d050",
+        "copre": [
+          "MIT"
+        ]
+      },
+      "androidx.camera:camera-core": {
+        "titolo": "libyuv LICENSE",
+        "url": "https://chromium.googlesource.com/libyuv/libyuv/+/47ba8e2160b71a7cf95c0720cd8944ab771e533e/LICENSE?format=TEXT",
+        "base64": true,
+        "sha256": "2b2cc1180c7e6988328ad2033b04b80117419db9c4c584918bbb3cfec7e9364f",
+        "copre": [
+          "44d1a25c593283261968a15c8cc213cd"
+        ]
+      },
+      "io.ionic.libs:ioncamera-android": {
+        "titolo": "LICENSE",
+        "url": "https://raw.githubusercontent.com/ionic-team/ion-android-camera/f802e3ed0cb948131e6f962fccea96a9a5c4fb23/LICENSE",
+        "sha256": "5eee4ddf7b28c22447e4440ab08c9344e68252ee1effc56621764268f7687c14",
+        "copre": [
+          "1b1d67650d6e3ccbf9c84584ba784a75"
+        ]
+      },
+      "io.ionic.libs:ionfilesystem-android": {
+        "titolo": "LICENSE",
+        "url": "https://raw.githubusercontent.com/ionic-team/ion-android-filesystem/1.1.0/LICENSE",
+        "sha256": "de884404585ed20280150b0768082b6004d3548aaa0d6e596d6bfa0538ab331d",
+        "copre": [
+          "e9dc079177dba0f173e0aa487fd1017f"
+        ]
+      },
+      "io.ionic.libs:iongeolocation-android": {
+        "titolo": "LICENSE",
+        "url": "https://raw.githubusercontent.com/ionic-team/IONGeolocationLib-Android/2.2.2/LICENSE",
+        "sha256": "de884404585ed20280150b0768082b6004d3548aaa0d6e596d6bfa0538ab331d",
+        "copre": [
+          "eef2cf3e5e856327421f1b82bbc36d8f"
+        ]
+      },
+      "io.ionic.libs:ioninappbrowser-android": {
+        "titolo": "LICENSE",
+        "url": "https://raw.githubusercontent.com/OutSystems/OSInAppBrowserLib-Android/1fe417febc676bac3d4b67949bd4d1af69f594c3/LICENSE",
+        "sha256": "100c130a8ec7b1fa4d059dae2b8d5a6b81e0ffe1fa173faca3decde8082c5aed",
+        "copre": [
+          "60f5592b436b0e17f4252b8b602854fe"
+        ]
+      },
+      "net.zetetic:sqlcipher-android": {
+        "titolo": "LICENSE",
+        "url": "https://raw.githubusercontent.com/sqlcipher/sqlcipher-android/v4.10.0/LICENSE",
+        "sha256": "09e4af560ce2e3c9c2aa6b564e35947b03db7d1ae345f22a32793ed46542cc14",
+        "copre": [
+          "45546b23f3f1354cdc022f8f8e4a7bb1"
+        ]
+      }
+    }
+  }
+}

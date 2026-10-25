@@ -34,7 +34,9 @@ describe('composer drawer mode (F3-T4bis)', () => {
         expect(wrapper.find('[aria-label="Add to chat"]').exists()).toBe(true)
         const chip = wrapper.get('[data-testid="talos-composer-model-chip"]')
         expect(chip.text()).toContain('Claude Opus')
-        expect(chip.text()).toContain('High')
+        // J3-bis: il livello lo dice la pillola del ragionamento, non più una parola nascosta nella pillola del modello
+        expect(chip.text()).not.toContain('High')
+        expect(wrapper.get('[data-testid="talos-composer-reasoning-pill"]').text()).toContain('High')
         expect(wrapper.find('[aria-label="Dictate"]').exists()).toBe(true)
         for (const gone of ['Choose reasoning effort', 'Attach a file', 'Improve prompt', 'Toggle extended thinking']) {
             expect(wrapper.find(`[aria-label="${gone}"]`).exists()).toBe(false)
@@ -117,7 +119,9 @@ describe('composer drawer mode (F3-T4bis)', () => {
         await wrapper.get('[data-testid="talos-composer-model-chip"]').trigger('click')
         await vi.waitFor(() => expect(wrapper.find('[data-testid="talos-model-drawer"]').exists()).toBe(true))
         expect(wrapper.find('[data-testid="talos-mobile-composer-model-picker"]').exists()).toBe(true)
-        expect(wrapper.find('[data-testid="talos-mobile-effort-picker"]').exists()).toBe(true)
+        // J3 (owner 24/10/2026): il foglio è solo «Modello»; il livello sta nella pillola del ragionamento del compositore
+        expect(wrapper.find('[data-testid="talos-mobile-effort-picker"]').exists()).toBe(false)
+        expect(wrapper.find('[data-testid="talos-composer-reasoning-pill"]').exists()).toBe(true)
     })
 
     /**

@@ -87,6 +87,28 @@ export function riassuntoSenzaChiedereR4(permesso: unknown, permessiPerAttrezzo:
     return { testo, suggerimento: righe.join('\n'), gruppi: gruppi.map((g) => g.chiave), parziali: parziali.map((g) => g.chiave), spenti: spenti.map((g) => g.chiave) }
 }
 
+/**
+ * ⭐ J3 (24/10/2026; owner, confermata dal Desktop) — NEL COMPOSITORE IL NOME BREVE DEL LIVELLO, come il desktop `chipDelPermesso`
+ * (`chat-foot.js` @ c6d1cbff2): con la pillola del ragionamento la frase di C1 («Senza chiedere: …») non ci sta più; la pillola dice il
+ * nome del livello e la frase APRE il suggerimento, seguita da quello che c'era già.
+ * ⛔ Le eccezioni per attrezzo restano a schermo («Accesso pieno · 1 eccezione», `etichettaPermessoConEccezioni` del desktop): un
+ *   `sempre` su «Solo lettura» lascia passare scritture, e il nome da solo lo nasconderebbe. La Coordinazione non è un'eccezione.
+ * ⛔ Il Piano resta «Piano: solo lettura».
+ */
+export function chipDelPermessoR4(permesso: unknown, permessiPerAttrezzo: unknown, opzioni: { modalitaOperativa?: string } = {}, lingua = 'it'): { testo: string; suggerimento: string } {
+    const riassunto = riassuntoSenzaChiedereR4(permesso, permessiPerAttrezzo, opzioni, lingua)
+    if (opzioni.modalitaOperativa === 'piano') return { testo: riassunto.testo, suggerimento: riassunto.suggerimento }
+    const regole = permessiPerAttrezzo && typeof permessiPerAttrezzo === 'object'
+        ? Object.entries(permessiPerAttrezzo).filter(([attrezzo, valore]) => valore && attrezzo !== CHIAVE_COORDINAZIONE_R4) : []
+    const base = etichettaPermessoR4(permesso, lingua)
+    const testo = regole.length === 0 ? base
+        : testoApprovazioneR4(new Intl.PluralRules(/^it(?:-|$)/iu.test(lingua) ? 'it' : 'en').select(regole.length) === 'one'
+            ? 'chat.foot.permission.exceptionsOne' : 'chat.foot.permission.exceptionsMany', lingua, { n: regole.length, base })
+    return { testo, suggerimento: testo === riassunto.testo ? riassunto.suggerimento : `${riassunto.testo}\n${riassunto.suggerimento}` }
+}
+/** `CHIAVE_COORDINAZIONE` del desktop (`components/coordinazione.js`): la sua chiave vive nella mappa per attrezzo, ma non è un'eccezione. */
+const CHIAVE_COORDINAZIONE_R4 = 'delega_sottotask'
+
 /** Il colore del rischio della pillola (decisione B11 del desktop). */
 export function tonoPermessoR4(permesso: unknown): 'danger' | 'warning' | null {
     if (permesso === 'Full access') return 'danger'

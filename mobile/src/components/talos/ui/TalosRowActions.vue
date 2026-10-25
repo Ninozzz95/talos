@@ -62,6 +62,8 @@ export interface TalosRowAction {
      */
     readonly icon?: unknown
     readonly ariaLabel?: string
+    /** Una linea sopra la voce, senza il colore del pericolo (blocchi di codice: «Collapse» sotto i «Download», 23/10). */
+    readonly separata?: boolean
 }
 
 const props = defineProps<{
@@ -86,6 +88,13 @@ const props = defineProps<{
      * https://developer.mozilla.org/en-US/docs/Web/API/HTMLDialogElement/showModal)
      */
     teleportTo?: string | HTMLElement
+    /**
+     * Blocchi di codice (bozzetto approvato il 23/10): il ⋯ nasce nell'HTML del messaggio, non qui. Con `ancora` il menu si apre
+     * su quel pulsante (posizione, fuoco al ritorno) e non disegna il suo. Senza, tutto resta com'era.
+     */
+    ancora?: HTMLElement | null
+    /** Una riga in testa al menu, non interattiva («Python code · 120 lines»). */
+    titolo?: string
 }>()
 
 const emit = defineEmits<{ (event: 'select', id: string, checked?: boolean): void }>()
@@ -112,8 +121,13 @@ const GAP = 6
 /** Enough room for the panel, or it opens upwards instead of off the screen. */
 const ESTIMATED_ROW = 44
 
+/** Il pulsante da cui il menu si apre: il suo, o l'ancora esterna dei blocchi di codice. */
+function pulsante(): HTMLElement | null {
+    return props.ancora ?? trigger.value
+}
+
 function place(): void {
-    const box = trigger.value?.getBoundingClientRect()
+    const box = pulsante()?.getBoundingClientRect()
     if (!box) return
     const needed = props.items.length * ESTIMATED_ROW + 16
     const below = window.innerHeight - box.bottom - GAP
@@ -161,6 +175,9 @@ async function show(index = 0): Promise<void> {
     // behind an open panel is how a screen reader user ends up driving a menu
     // they were never told had opened.
     await nextTick()
+    // Chiuso mentre si apriva (una voce scelta subito, un secondo Invio): il fuoco l'ha già reso `close()`; darlo a una voce
+    // che sta sparendo lo farebbe cadere sul body (BLOCCO-UI-13, 23/10, OK del Desktop).
+    if (!open.value) return
     tieniDentroLoSchermo()
     focusActive()
 }
@@ -179,7 +196,7 @@ function tieniDentroLoSchermo(): void {
     // MDN: CSSOM / Determining the dimensions of elements (2026-09-14).
     const larghezza = panel.value?.offsetWidth ?? 0
     if (larghezza <= 0) return
-    const box = trigger.value?.getBoundingClientRect()
+    const box = pulsante()?.getBoundingClientRect()
     const altezza = panel.value?.offsetHeight ?? 0
     const below = box ? window.innerHeight - box.bottom - GAP : 0
     const flipped = box ? below < altezza && box.top > below : at.value.flipped
@@ -202,7 +219,7 @@ function close(restoreFocus = true): void {
     staccaAscoltatori?.()
     // Back to where it was opened from — unless the caller is about to remove
     // the row, in which case there is nothing to return to.
-    if (restoreFocus) trigger.value?.focus()
+    if (restoreFocus) pulsante()?.focus()
 }
 
 function choose(item: TalosRowAction): void {
@@ -295,6 +312,7 @@ defineExpose({ close, show })
 
 <template>
     <button
+        v-if="props.ancora === undefined"
         ref="trigger"
         type="button"
         :data-testid="props.testId ?? 'talos-row-actions'"
@@ -347,7 +365,9 @@ defineExpose({ close, show })
                 @click.stop
                 @keydown="onMenuKey"
             >
+                <div v-if="props.titolo" data-testid="talos-row-actions-title" class="px-3 pt-2 pb-1 text-xs text-[var(--talos-muted)]">{{ props.titolo }}</div>
                 <template v-for="(item, index) in props.items" :key="item.id">
+                    <div v-if="item.separata && !item.danger && index > 0" role="separator" class="my-1 h-px bg-[var(--talos-border)]" />
                     <div
                         v-if="item.danger && index > 0"
                         class="my-1 h-px bg-[var(--talos-border)]"

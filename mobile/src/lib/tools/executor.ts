@@ -147,6 +147,11 @@ export interface TalosToolExecutionDeps {
     authorizationRequest?: TalosToolAuthorizationRequestV1
     /** Provider call id. Legacy direct callers receive a tool-local sentinel. */
     callId?: string
+    /**
+     * ⛔ Owner 2026-10-23: la chiamata viene dal MOTORE LOCALE, quindi gli argomenti si leggono col contratto che gli è
+     * stato annunciato (`TalosToolDefinition.perIlMotoreLocale`, oggi solo `artifact_create`). Assente = un fornitore API.
+     */
+    motoreLocale?: boolean
     /** Live revocation gate. It is checked again even after a schema was offered. */
     isToolEnabled(name: string): boolean
     /**
@@ -298,7 +303,7 @@ export async function preflightTalosToolExecution(
             },
         }
     }
-    const parsed = parseTalosToolCallArguments(tool, rawArguments)
+    const parsed = parseTalosToolCallArguments(tool, rawArguments, deps.motoreLocale === true)
     if (!parsed.ok) {
         // Validation comes FIRST: a tool body must never see an argument shape
         // it did not describe, and the model needs to be told what was wrong

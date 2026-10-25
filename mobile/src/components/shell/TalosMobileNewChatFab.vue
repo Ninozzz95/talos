@@ -12,6 +12,9 @@ import { Plus } from '@lucide/vue'
  * hardcoded to "New chat". Defaults keep every existing Chat call site
  * byte-identical; only a caller that passes its own strings sees anything
  * different.
+ *
+ * D-MOCK-9 (24/10/2026): «Nuova sessione su <PC>» can be long; the label
+ * wraps to two lines at most and is cut there, never a third line.
  */
 const props = withDefaults(defineProps<{
     disabled?: boolean
@@ -27,10 +30,10 @@ const emit = defineEmits<{ click: [] }>()
         data-testid="talos-new-chat-fab"
         :aria-label="props.ariaLabel ?? $t('chat.newChat')"
         :disabled="disabled"
-        class="talos-pressable inline-flex min-h-12 items-center gap-2 rounded-full bg-[var(--talos-accent,var(--primary))] px-5 text-sm font-semibold text-[var(--talos-accent-contrast,var(--primary-foreground))] shadow-[0_8px_24px_rgba(0,0,0,0.22)] outline-none transition-transform focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)] disabled:opacity-60"
+        class="talos-pressable inline-flex min-h-12 min-w-0 max-w-full items-center gap-2 rounded-full bg-[var(--talos-accent,var(--primary))] px-5 text-sm font-semibold text-[var(--talos-accent-contrast,var(--primary-foreground))] shadow-[0_8px_24px_rgba(0,0,0,0.22)] outline-none transition-transform focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)] disabled:opacity-60"
         @click="emit('click')"
     >
-        <Plus class="size-5" aria-hidden="true" />
-        {{ props.label ?? $t('chat.newChat') }}
+        <Plus class="size-5 shrink-0" aria-hidden="true" />
+        <span data-testid="talos-new-chat-fab-label" class="line-clamp-2 min-w-0 text-left">{{ props.label ?? $t('chat.newChat') }}</span>
     </button>
 </template>

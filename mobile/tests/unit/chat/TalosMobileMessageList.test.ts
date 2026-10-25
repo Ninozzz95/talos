@@ -131,7 +131,9 @@ describe('TalosMobileMessageList', () => {
         expect(wrapper.html()).not.toContain('grant-1')
         expect(wrapper.get('[data-testid="talos-mobile-controlled-fault"]').attributes('data-fault-code')).toBe('PROVIDER_HTTP_429')
         expect(wrapper.get('[data-testid="talos-mobile-message-list"]').classes()).toContain('min-w-0')
-        expect(wrapper.get('[data-testid="talos-mobile-message-list"]').classes()).toContain('overflow-x-hidden')
+        // blocchi di codice (23/10): `clip` taglia come `hidden` ma non fa del filo un contenitore di scorrimento, e la testata
+        // del blocco può restare ferma (BLOCCO-UI-14)
+        expect(wrapper.get('[data-testid="talos-mobile-message-list"]').classes()).toContain('[overflow-x:clip]')
     })
 
     it('copies a message and forwards reuse/resend/retry actions', async () => {
@@ -333,6 +335,54 @@ describe('message long-press opens the overflow menu (R2-11)', () => {
             vi.useRealTimers()
         }
         expect(document.body.querySelector('[aria-label="Reuse prompt"]')).toBeNull()
+        wrapper.unmount()
+    })
+
+    // Revisione del Desktop 23/10 sui blocchi di codice: il gesto della testata apriva ANCHE il menu del messaggio.
+    it('BLOCCO-UI-08 il tocco prolungato sulla testata di un blocco apre UN menu solo, quello del blocco', async () => {
+        const conCodice = [{ ...messages[1]!, browserActivities: [], content: '```python\nprint(1)\n```' }]
+        const wrapper = mount(TalosMobileMessageList, { props: { messages: conCodice, sending: false }, attachTo: document.body })
+        await vi.waitFor(() => {
+            if (!document.body.querySelector('[aria-label="More message actions"]')) throw new Error('overflow trigger not mounted yet')
+        }, { timeout: 10_000 })
+        vi.useFakeTimers()
+        try {
+            const etichetta = wrapper.get('.talos-code-block-header span').element
+            etichetta.dispatchEvent(new MouseEvent('pointerdown', { clientX: 50, clientY: 50, bubbles: true }))
+            await vi.advanceTimersByTimeAsync(600)
+            etichetta.dispatchEvent(new MouseEvent('pointerup', { clientX: 50, clientY: 50, bubbles: true }))
+        } finally {
+            vi.useRealTimers()
+        }
+        await flushPromises()
+        // il menu del messaggio è un FOGLIO (`talos-message-actions-sheet`), quello del blocco un menu: si contano tutti e due
+        const aperti = [
+            ...document.body.querySelectorAll<HTMLElement>('[data-testid="talos-row-actions-menu"]'),
+            ...document.body.querySelectorAll<HTMLElement>('[data-testid="talos-message-actions-sheet"]'),
+        ].filter((m) => !m.hidden)
+        expect(aperti.map((m) => m.getAttribute('data-testid'))).toEqual(['talos-row-actions-menu'])
+        expect(document.body.querySelector('[data-message-overflow-trigger]')?.getAttribute('aria-expanded')).toBe('false')
+        wrapper.unmount()
+    })
+
+    // Specifica dei blocchi (Desktop, voce 1): «un test che legge l'overflow di ogni antenato». Visto sul Pad con vc167: la
+    // testata non restava ferma perché il filo (`overflow-x-hidden`) e la bolla (`overflow-hidden`) erano contenitori di
+    // scorrimento, e lo sticky si agganciava a loro. Un solo asse hidden basta: l'altro diventa auto.
+    it('BLOCCO-UI-14 nessun antenato del blocco di codice, fino alla radice della lista, è un contenitore di scorrimento', async () => {
+        const conCodice = [{ ...messages[1]!, browserActivities: [], content: '```python\nprint(1)\n```' }]
+        const wrapper = mount(TalosMobileMessageList, { props: { messages: conCodice, sending: false }, attachTo: document.body })
+        // il Markdown è un pezzo asincrono: prima c'è il testo semplice
+        await vi.waitFor(() => wrapper.get('.talos-code-block'), { timeout: 10_000 })
+        const radice = wrapper.get('[data-testid="talos-mobile-message-list"]').element
+        const colpevoli: string[] = []
+        for (let el = wrapper.get('.talos-code-block').element.parentElement; el; el = el.parentElement) {
+            const classi = [...el.classList].filter((c) => /^overflow(-[xy])?-(hidden|auto|scroll)$/.test(c))
+            const stile = getComputedStyle(el)
+            const calcolati = [stile.overflow, stile.overflowX, stile.overflowY].filter((v) => /hidden|auto|scroll/.test(v))
+            if (classi.length || calcolati.length) colpevoli.push(`${el.getAttribute('data-testid') ?? el.className}: ${[...classi, ...calcolati].join(' ')}`)
+            if (el === radice) break
+        }
+        expect(colpevoli).toEqual([])
         wrapper.unmount()
     })
 })

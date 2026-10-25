@@ -14,6 +14,7 @@ import {
     SCHEDE_MASSIME_R4,
     TASTI_TERMINALE_R4,
     conModificatoriR4,
+    fraseErroreTerminaleR4,
     frasiAvvioFallitoR4,
     sequenzaTastoR4,
     testoTerminaleR4,
@@ -166,6 +167,8 @@ const piede = computed(() => {
     return [tr('processi.terminal.openedByYou'), cartella, stato].filter(Boolean).join(' · ')
 })
 const puoAprire = computed(() => schede.value.length < SCHEDE_MASSIME_R4)
+/** J3 (24/10/2026): l'errore del Terminale (un «+» rifiutato, il ponte che non si apre, una chiusura fallita) si vede, anche senza schede. */
+const erroreTerminale = computed(() => (t.errore.value ? fraseErroreTerminaleR4(t.errore.value, locale.value) : ''))
 
 let osservatore: ResizeObserver | null = null
 onMounted(async () => {
@@ -249,6 +252,14 @@ defineExpose({ ridimensionaAttiva })
             />
         </div>
 
+        <!-- J3: la stessa forma della riga d'errore del compositore (`talos-codice-r4-errore`), nessun disegno nuovo -->
+        <div
+            v-if="erroreTerminale"
+            role="alert"
+            data-testid="talos-codice-r4-terminale-errore"
+            :data-codice="t.errore.value"
+            class="mb-2 rounded-md border border-[var(--talos-danger-border)] bg-[var(--talos-danger-soft)] p-3 text-sm text-[var(--talos-danger)]"
+        >{{ erroreTerminale }}</div>
         <p v-if="corrente" data-testid="talos-codice-r4-terminale-piede" class="talos-codice-r4-terminale-piede" role="status">
             <span class="min-w-0 truncate">{{ piede }}</span>
             <button

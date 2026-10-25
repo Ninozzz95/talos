@@ -910,7 +910,8 @@ const SHEET_TITLE_KEY: Record<TalosMobileRouteName, string> = {
     // R-M3 (owner 20/10/2026): la sezione «Computer» e il dettaglio di un computer tengono il nome della sezione.
     computer: 'navigation.computer',
     'computer-item': 'navigation.computer',
-    'computer-codice': 'navigation.computer',
+    // D-MOCK-4: una sessione del PC sta nel Codice, come quella del dispositivo
+    'computer-codice': 'harness.r4Title',
     research: 'stations.deepResearchTitle',
     // The inner research surfaces keep the station's name in the sheet header:
     // each page titles itself, and repeating that title twice on a phone spends

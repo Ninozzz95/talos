@@ -11,12 +11,15 @@
  *
  * Caricato a richiesta dalla lista (come `TalosMobileMessageActions`): una risposta tagliata è rara, e il pezzo d'avvio
  * non deve portarla (regola dell'owner del 14/08 in `scripts/verify-initial-chunk.mjs`, passo 2).
+ *
+ * ⛔⛔ `azione` (D-LOC-1, owner 2026-10-23): la fermata è caduta DENTRO una chiamata, due volte nel turno, e il ciclo si è
+ * chiuso senza eseguirla. La frase lo dice (niente è partito) e «Continua» non c'è: rifarebbe lo stesso taglio.
  */
 import { Button } from '@/components/ui/button'
 import { CircleAlert } from '@lucide/vue'
 import { useTalosI18n } from '@/i18n'
 
-defineProps<{ mostraContinua: boolean }>()
+defineProps<{ mostraContinua: boolean, azione?: boolean }>()
 const emit = defineEmits<{ continua: [] }>()
 const { t } = useTalosI18n()
 </script>
@@ -29,10 +32,10 @@ const { t } = useTalosI18n()
             class="inline-flex max-w-full flex-wrap items-center gap-1.5 rounded-md border border-current/25 bg-black/5 px-2 py-1 text-2xs leading-4"
         >
             <CircleAlert class="size-3.5 shrink-0" aria-hidden="true" />
-            <span>{{ t('chat.stoppedAtLimit') }}</span>
+            <span>{{ azione ? t('chat.toolCallCutOff') : t('chat.stoppedAtLimit') }}</span>
         </div>
         <Button
-            v-if="mostraContinua"
+            v-if="mostraContinua && !azione"
             type="button"
             variant="outline"
             size="sm"

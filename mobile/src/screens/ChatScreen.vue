@@ -755,9 +755,30 @@ const motionSceneActive = computed(() =>
 // auto-scroll outright, ANY upward scroll detaches (no threshold race with
 // the stream), rejoining is explicit via the back-to-bottom pill.
 const chatScroll = ref<HTMLElement | null>(null)
+/** Il contenitore del contenuto della lista: osservato perché cresce durante il prefill e lo streaming (D-VIS-4). */
+const contenutoChat = ref<HTMLElement | null>(null)
+// ⛔ Revisione del Desktop (23/10): se il contenitore cambia, l'osservatore passa al nuovo (un nodo staccato non manda niente).
+watch(contenutoChat, (nuovo, vecchio) => {
+    if (!heightObserver) return
+    if (vecchio) heightObserver.unobserve(vecchio)
+    if (nuovo) heightObserver.observe(nuovo)
+})
 /** How close to the top counts as "about to need the previous page". */
 const OLDER_PAGE_TRIGGER_PX = 320
 const liveEdge = createTalosChatLiveEdge()
+/*
+ * ⛔ D-VIS-1, seconda metà (Pad, vc153, 23/10): il dito risultava giù da minuti e la lista non seguiva il documento che
+ * arrivava. Scrivere o toccare Invia non è scorrere; e la fine del tocco si ascolta sul DOCUMENTO, in cattura, contando
+ * le dita rimaste: un `touchend` che non risale fino al contenitore non lascia più il seguire appeso. Come
+ * `use-stick-to-bottom`, che tiene lo stato del puntatore a livello di documento (`useStickToBottom.ts:135-146`).
+ */
+function dalCompositore(evento: TouchEvent): boolean {
+    return evento.target instanceof Node && composerWrap.value?.contains(evento.target) === true
+}
+function fineDelTocco(evento: Event): void {
+    // Un `Event` qualunque col nome del tocco (sintetico, di prova) non ha `touches`: vale «nessun dito rimasto».
+    liveEdge.touchEnd('touches' in evento ? (evento as TouchEvent).touches.length : 0)
+}
 let pendingChatScroll: { scrollTop: number; scrollHeight: number; clientHeight: number } | null = null
 let chatScrollFrame: number | null = null
 let pendingChatScrollTask: (() => void) | null = null
@@ -1313,6 +1334,9 @@ function selectSlashCommand(commandId: TalosMobileCommandId): void {
 // piu' una superficie nella chat. Il browser locale resta per gli strumenti del modello.
 
 onMounted(async () => {
+    // Prima di ogni `await`: se la schermata si smonta mentre carica, `onBeforeUnmount` li ha già da togliere.
+    document.addEventListener('touchend', fineDelTocco, { capture: true, passive: true })
+    document.addEventListener('touchcancel', fineDelTocco, { capture: true, passive: true })
     await init()
     await entraNellAmbito()
     publishComposerHeight()
@@ -1338,9 +1362,14 @@ onMounted(async () => {
         })
         heightObserver.observe(composerWrap.value)
         if (chatScroll.value) heightObserver.observe(chatScroll.value)
+        // ⛔ D-VIS-4 (Pad, vc153): durante il prefill compaiono righe nuove (intestazione, stato) e nessuno riportava giù;
+        // il compositore le copriva. Il contenuto cresce → in fondo, se si segue (`use-stick-to-bottom` osserva lo stesso).
+        if (contenutoChat.value) heightObserver.observe(contenutoChat.value)
     }
 })
 onBeforeUnmount(() => {
+    document.removeEventListener('touchend', fineDelTocco, { capture: true })
+    document.removeEventListener('touchcancel', fineDelTocco, { capture: true })
     cancelChatScroll()
     pendingChatScroll = null
     heightObserver?.disconnect()
@@ -1396,11 +1425,9 @@ onBeforeUnmount(() => {
             :class="settings.state.shell.immersive_header ? 'pt-[calc(3.5rem+env(safe-area-inset-top))]' : ''"
             data-testid="talos-chat-scroll"
             @scroll.passive="onChatScroll"
-            @touchstart.passive="liveEdge.touchStart()"
-            @touchend.passive="liveEdge.touchEnd()"
-            @touchcancel.passive="liveEdge.touchEnd()"
+            @touchstart.passive="liveEdge.touchStart(dalCompositore($event))"
         >
-            <div class="flex min-h-full flex-col pb-[calc(var(--talos-composer-height,180px)+1.5rem)]">
+            <div ref="contenutoChat" class="flex min-h-full flex-col pb-[calc(var(--talos-composer-height,180px)+1.5rem)]">
                 <!-- Owner 12/09 20:10: la fascia «Modalità Naviga» non si mostra piu' — «levi ricerca web dalla chat». -->
 
                 <div

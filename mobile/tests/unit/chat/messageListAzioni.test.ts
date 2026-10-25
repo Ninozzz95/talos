@@ -54,19 +54,22 @@ describe('le azioni del messaggio secondo chi monta la lista (K3-B2)', () => {
             expect(w.find(`[data-testid="${id}"]`).exists(), id).toBe(false)
         expect(w.findAll('[data-testid="talos-message-copy"]')).toHaveLength(2)
         expect(w.find('[data-testid="talos-message-speak"]').exists()).toBe(true)
-        expect(await vociDelFoglio(w, 0)).toEqual(['talos-message-reuse'])
+        // owner 24/10/2026 «Come Happy»: «Seleziona testo» c'è sempre, come Copia e Ascolta
+        expect(await vociDelFoglio(w, 0)).toEqual(['talos-message-select-text', 'talos-message-reuse'])
         w.unmount()
     })
 
     it('AZM-03 nel foglio della risposta solo Condividi, niente Dettagli né Elimina', async () => {
         const w = await lista({ azioni: ['riutilizza', 'condividi'] })
-        expect(await vociDelFoglio(w, 1)).toEqual(['talos-message-share'])
+        expect(await vociDelFoglio(w, 1)).toEqual(['talos-message-select-text', 'talos-message-share'])
         w.unmount()
     })
 
-    it('AZM-04 se per un ruolo non resta nessuna voce, il pulsante «Altre azioni» non c\'è', async () => {
+    // Owner 24/10/2026 «Come Happy»: il foglio ha sempre «Seleziona testo», quindi «Altre azioni» c'è sempre; le voci di chi monta no
+    it('AZM-04 senza voci di chi monta la lista resta solo «Seleziona testo» nel foglio', async () => {
         const w = await lista({ azioni: [] })
-        expect(w.find('[data-testid="talos-message-overflow"]').exists()).toBe(false)
+        expect(w.findAll('[data-testid="talos-message-overflow"]')).toHaveLength(2)
+        expect(await vociDelFoglio(w, 0)).toEqual(['talos-message-select-text'])
         expect(w.findAll('[data-testid="talos-message-copy"]')).toHaveLength(2)
         w.unmount()
     })

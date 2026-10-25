@@ -42,6 +42,14 @@ class TalosSceltaReleaseTest {
     }
 
     @Test
+    fun `AGG-REL-06 col ponte vince la versione piu' alta, qualunque sia il prefisso, e il tag resta quello vero`() {
+        val scelta = TalosSceltaRelease.scegli(elenco(release("v0.1.45"), release("desktop-v0.1.36"), release("mobile-v0.1.46")))
+        assertEquals("mobile-v0.1.46", scelta?.tag)
+        assertEquals("0.1.46", scelta?.versione)
+        assertEquals("v0.1.45", TalosSceltaRelease.scegli(elenco(release("mobile-v0.1.44"), release("v0.1.45")))?.tag)
+    }
+
+    @Test
     fun `AGG-REL-04 elenco vuoto, senza mobile o illeggibile non sceglie niente`() {
         assertNull(TalosSceltaRelease.scegli("[]"))
         assertNull(TalosSceltaRelease.scegli(elenco(release("desktop-v0.2.0"))))

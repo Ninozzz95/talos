@@ -1240,6 +1240,21 @@ describe('immersive chrome clearance (F2 capture fix)', () => {
         const wrapper = mount(ChatScreen)
         expect(wrapper.get('[data-testid="talos-chat-scroll"]').classes()).not.toContain('pt-[calc(3.5rem+env(safe-area-inset-top))]')
     })
+
+    // Blocchi di codice (bozzetto approvato dall'owner 23/10): la testata del blocco resta ferma scorrendo (sticky), subito sotto
+    // le pillole immersive. Il margine c'è già: è il padding dello scorrimento, e Chromium misura il `top` dello sticky dal bordo
+    // interno del padding. Uno scostamento in più si SOMMA: con `--talos-code-header-top` a 3.5rem+area sicura la testata si
+    // fermava al doppio, a ~192 px (Pad, vc168, foto 25-sticky-meta). Quindi lo scorrimento non dà nessuno scostamento.
+    it('BLOCCO-STICKY-01 the sticky code header stops right below the immersive pills: the scroll padding is the only offset', () => {
+        for (const immersive_header of [true, false]) {
+            ;(mockState.settings.state as Record<string, unknown>).shell = { immersive_header }
+            const wrapper = mount(ChatScreen)
+            const scorrimento = wrapper.get('[data-testid="talos-chat-scroll"]').element as HTMLElement
+            expect(scorrimento.style.getPropertyValue('--talos-code-header-top'), String(immersive_header)).toBe('')
+            expect(scorrimento.classList.contains('pt-[calc(3.5rem+env(safe-area-inset-top))]')).toBe(immersive_header)
+            wrapper.unmount()
+        }
+    })
 })
 
 // Owner 2026-09-13 — «una bozza per ogni chat». Prima (D-F2-1) una chat senza messaggi
@@ -1469,5 +1484,26 @@ describe('N15 — la pastiglia del piano ChatGPT nel compositore', () => {
         controller.selectedModelId.value = 'chiave' as never
         await flushPromises()
         expect(wrapper.find('[data-testid="talos-chatgpt-pill"]').exists()).toBe(false)
+    })
+})
+describe('J3 — la pillola del ragionamento della Chat è quella del compositore unico', () => {
+    it('PILL-UNICA-01 (Chat) la Chat monta TalosMobileReasoningPill DENTRO TalosMobileComposer, accanto al modello, col livello della chat', async () => {
+        const { default: TalosMobileReasoningPill } = await import('@/components/chat/TalosMobileReasoningPill.vue')
+        const controller = makeController()
+        controller.profiles.value = [{
+            id: 'chiave', provider: 'openai', model: 'gpt-6', display_name: 'GPT-6', status: 'healthy', has_secret: true,
+            effort_levels: ['low', 'medium', 'high'], supports_thinking: true, show_in_composer: true, capabilities: null, probe_ok: true,
+        }] as never
+        controller.selectedModelId.value = 'chiave' as never
+        mockState.controller = controller
+        const wrapper = mount(ChatScreen)
+        await flushPromises()
+        await flushPromises()
+        const compositore = wrapper.getComponent(TalosMobileComposer)
+        const pillole = wrapper.findAllComponents(TalosMobileReasoningPill)
+        expect(pillole).toHaveLength(1)
+        expect(compositore.findComponent(TalosMobileReasoningPill).exists()).toBe(true)
+        expect(compositore.get('[data-testid="talos-composer-reasoning-pill-label"]').text()).toBe('High')
+        wrapper.unmount()
     })
 })

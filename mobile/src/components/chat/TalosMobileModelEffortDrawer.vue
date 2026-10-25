@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import TalosMobileComposerSheet from '@/components/chat/TalosMobileComposerSheet.vue'
 import TalosMobileComposerModelPicker from '@/components/chat/TalosMobileComposerModelPicker.vue'
-import TalosMobileEffortPicker from '@/components/chat/TalosMobileEffortPicker.vue'
+import TalosThemedSwitch from '@/components/talos/ui/TalosThemedSwitch.vue'
+import { useSettingsStore } from '@/stores/settings'
 import { Check } from '@lucide/vue'
 import type {
     TalosMobileModelProfileView,
     TalosMobileRoutingProfileView,
 } from '@/components/chat/mobileChatTypes'
-import type { TalosMobileEffortLevel } from '@/lib/mobileEffort'
 
 /**
  * F4-#26 — dedicated "Model & reasoning" bottom drawer: the model catalog and
@@ -21,17 +21,25 @@ import type { TalosMobileEffortLevel } from '@/lib/mobileEffort'
  * regolare). Riusa lo STESSO `TalosMobileComposerModelPicker` del catalogo
  * principale — stessa UX di ricerca, un secondo elenco invece di un
  * controllo nuovo da imparare.
+ *
+ * ⭐ J3 (24/10/2026, owner; anomalia 4 di Marco: il ragionamento finiva sotto l'elenco dei modelli, fuori dallo schermo): il foglio
+ * è solo «Modello», SENZA cursore del ragionamento — il livello sta nella pillola sua del compositore (`TalosMobileReasoningPill`),
+ * come il desktop (`c6d1cbff2`, «Model» senza cursore). Per i modelli che un livello non lo ricevono (la pillola non c'è) restano
+ * qui la riga che lo dice (`reasoningNote`, A9 `effortNotSent`) e «Ragionamento esteso», come il desktop vi tiene «Mostra
+ * ragionamento».
  */
 withDefaults(defineProps<{
     modelProfiles: TalosMobileModelProfileView[]
     routingProfiles: TalosMobileRoutingProfileView[]
     selectedModelProfileId: string | null
     selectedRoutingProfileId: string | null
-    selectedEffort: string
     thinking: boolean
-    supportsThinking: boolean
-    effortLevels: string[]
-    reasoningMandatory?: boolean
+    /** «Ragionamento esteso» qui: solo per un modello senza la pillola del ragionamento. */
+    showThinking?: boolean
+    /** La riga A9 per un modello senza la pillola; vuota = niente. */
+    reasoningNote?: string
+    /** J3-bis: «Mostra ragionamento» (sola vista) qui, per un modello senza la pillola (decisione 3 dell'owner). */
+    showReasoningSwitch?: boolean
     loadingModels?: boolean
     loadingRoutes?: boolean
     refreshingModels?: boolean
@@ -46,22 +54,23 @@ withDefaults(defineProps<{
     showModelLab?: boolean
     /** Il modello che il Codice sta aprendo (22/10/2026): lo dice la sua riga del selettore. */
     openingModelProfileId?: string | null
-}>(), { showModelLab: true, openingModelProfileId: null })
+}>(), { showModelLab: true, openingModelProfileId: null, showThinking: false, reasoningNote: '', showReasoningSwitch: false })
 
 const emit = defineEmits<{
     close: []
     selectModelProfile: [profileId: string]
     selectModelRoutingProfile: [routingProfileId: string]
-    selectEffort: [level: TalosMobileEffortLevel]
     selectThinking: [enabled: boolean]
     refreshModels: []
     openModelLab: []
     selectExecutorModelProfile: [profileId: string | null]
 }>()
+
+const settings = useSettingsStore()
 </script>
 
 <template>
-    <TalosMobileComposerSheet :title="$t('chat.modelAndReasoning')" testid="talos-model-drawer" @close="emit('close')">
+    <TalosMobileComposerSheet :title="$t('chat.modelSheetTitle')" testid="talos-model-drawer" @close="emit('close')">
         <TalosMobileComposerModelPicker
             :model-profiles="modelProfiles"
             :show-model-lab="showModelLab"
@@ -80,17 +89,38 @@ const emit = defineEmits<{
             @open-model-lab="emit('openModelLab')"
         />
 
-        <div v-if="effortLevels.length || supportsThinking" class="border-t border-[var(--talos-border)] pt-3">
-            <TalosMobileEffortPicker
-                :effort-levels="effortLevels"
-                :reasoning-mandatory="reasoningMandatory === true"
-                :selected-effort="selectedEffort"
-                :supports-thinking="supportsThinking"
-                :thinking="thinking"
-                @select-effort="emit('selectEffort', $event)"
-                @select-thinking="emit('selectThinking', $event)"
-                @request-close="emit('close')"
-            />
+        <div
+            v-if="reasoningNote || showThinking || showReasoningSwitch"
+            data-testid="talos-model-sheet-reasoning"
+            class="space-y-2 border-t border-[var(--talos-border)] pt-3"
+        >
+            <p v-if="reasoningNote" data-testid="talos-model-sheet-reasoning-note" class="px-1 text-2xs leading-4 text-[var(--talos-muted)]">
+                {{ reasoningNote }}
+            </p>
+            <div
+                v-if="showThinking"
+                class="flex min-h-touch items-center justify-between gap-3 px-1 text-sm text-[var(--talos-text)]"
+            >
+                <span class="min-w-0">{{ $t('chat.extendedThinking') }}</span>
+                <TalosThemedSwitch
+                    test-id="talos-mobile-thinking-toggle"
+                    :model-value="thinking"
+                    :aria-label="$t('chat.extendedThinking')"
+                    @update:model-value="emit('selectThinking', $event)"
+                />
+            </div>
+            <div
+                v-if="showReasoningSwitch"
+                class="flex min-h-touch items-center justify-between gap-3 px-1 text-sm text-[var(--talos-text)]"
+            >
+                <span class="min-w-0">{{ $t('chat.showReasoning') }}</span>
+                <TalosThemedSwitch
+                    test-id="talos-model-sheet-show-reasoning"
+                    :model-value="settings.state.shell.show_reasoning !== false"
+                    :aria-label="$t('chat.showReasoning')"
+                    @update:model-value="void settings.setShell({ show_reasoning: $event })"
+                />
+            </div>
         </div>
 
         <div v-if="showExecutorModel" data-testid="talos-executor-model-section" class="border-t border-[var(--talos-border)] pt-3">

@@ -44,6 +44,8 @@ const stato = vi.hoisted(() => ({
     hook: [] as unknown[],
     rispondi: null as null | ((r: { metodo: string; percorso: string; corpo?: string }) => { stato: number; corpo: string } | null),
     chat: null as null | { profiles: { value: TalosMobileModelProfileView[] }; refreshingModels: { value: boolean } },
+    // R5.13 F3: «Allega un file» sul ponte del PC (il ponte vero lo porta al PC con `file.upload.*`)
+    allega: null as null | ((o: { uri: string; nome: string; testo: boolean; sessionId?: string }) => Promise<{ tipo: string; nome: string; percorso: string; bytes: number }>),
 }))
 
 function ponteFinto(registro: { metodo: string; percorso: string; corpo?: string }[], flussi: { id: string; percorso: string }[]): TalosR4ClientePonte {
@@ -69,6 +71,10 @@ function ponteFinto(registro: { metodo: string; percorso: string; corpo?: string
             }
             return ok({ ok: true, data: {} })
         },
+        ...(registro === stato.remote ? { allegaFile: async (o: { uri: string; nome: string; testo: boolean; sessionId?: string }) => {
+            if (!stato.allega) throw Object.assign(new Error('NOT_AVAILABLE_REMOTELY'), { code: 'NOT_AVAILABLE_REMOTELY' })
+            return stato.allega(o)
+        } } : {}),
         apriFlusso: async (f) => { flussi.push(f) },
         chiudiFlusso: async () => undefined,
         apriTerminale: async () => undefined,
@@ -118,6 +124,9 @@ vi.mock('@/lib/remoto/sessioneRemota', () => ({
         return { ponte: ponteFinto(stato.remote, stato.flussiRemoti), chiudi: async () => { stato.ponteChiuso = true } }
     },
 }))
+vi.mock('@/services/nativeFilePicker', () => ({
+    createNativeFilePicker: () => ({ pickFiles: async () => [{ name: 'fattura.pdf', declaredMediaType: 'application/pdf', sizeBytes: 900_000, source: { kind: 'native-uri', uri: 'content://doc/1' } }] }),
+}))
 vi.mock('@/stores/settings', () => ({
     useSettingsStore: () => ({
         state: {
@@ -155,7 +164,7 @@ const azzera = () => {
     stato.remotoGuasto = false; stato.ponteChiuso = false; stato.accessi = 0; stato.aperture = 0; stato.chiavi = 0
     stato.aggiornamentiTelefono = 0; stato.attesaFornitori = null; stato.nuovoModelloPc = false
     stato.spinte.length = 0; stato.shellSalvate.length = 0; stato.registrati.length = 0; stato.ascoltatoriRemoti = {}
-    stato.modelloSessione = 'deepseek:deepseek-v4-pro'; stato.hook = []; stato.rispondi = null
+    stato.modelloSessione = 'deepseek:deepseek-v4-pro'; stato.hook = []; stato.rispondi = null; stato.allega = null
     for (const k of Object.keys(stato.query)) delete stato.query[k]
 }
 
@@ -188,16 +197,17 @@ describe('il Codice sulla sessione di un PC', () => {
         }
     })
 
-    it('REM-04 senza una sessione del PC e senza una cartella scelta: nessuna sessione nuova, si torna al computer e lo si dice', async () => {
+    // mockup remoto del 23/10, tavola 3: la cartella di una sessione nuova si sceglie dalla lista del Codice filtrata sul PC
+    it('REM-04 senza una sessione del PC e senza una cartella scelta: nessuna sessione nuova, si torna al Codice filtrato sul PC e lo si dice', async () => {
         azzera()
         delete stato.params.id
         const w = await schermata()
         expect(stato.remote.some((r) => r.percorso === '/api/v1/sessions/custom')).toBe(false)
-        expect(stato.sostituzioni).toContainEqual({ name: 'computer-item', params: { pcId: 'pc-uno' } })
+        expect(stato.sostituzioni).toContainEqual({ name: 'harness', query: { dove: 'pc-uno' } })
         // una cartella che non rispetta la regola degli id del PC vale come nessuna cartella
         stato.query.cartella = '../casa'
         const w2 = await schermata()
-        expect(stato.sostituzioni.filter((x) => JSON.stringify(x) === JSON.stringify({ name: 'computer-item', params: { pcId: 'pc-uno' } }))).toHaveLength(2)
+        expect(stato.sostituzioni.filter((x) => JSON.stringify(x) === JSON.stringify({ name: 'harness', query: { dove: 'pc-uno' } }))).toHaveLength(2)
         stato.params.id = SESSIONE
         w.unmount()
         w2.unmount()
@@ -210,7 +220,7 @@ describe('il Codice sulla sessione di un PC', () => {
         // in locale la sessione nuova partirebbe dalla scelta della chat: in remoto quella scelta (un profilo del telefono) non conta
         stato.chat!.selectedModelId.value = GLM.id
         const w = await schermata()
-        expect(stato.sostituzioni).not.toContainEqual({ name: 'computer-item', params: { pcId: 'pc-uno' } })
+        expect(stato.sostituzioni).not.toContainEqual({ name: 'harness', query: { dove: 'pc-uno' } })
         await w.get('[data-testid="talos-composer-prompt"]').setValue('ciao dal telefono')
         w.getComponent(TalosMobileComposer).vm.$emit('send')
         await asciuga()
@@ -225,6 +235,75 @@ describe('il Codice sulla sessione di un PC', () => {
         expect(stato.locali).toEqual([])
         stato.chat!.selectedModelId.value = null
         stato.params.id = SESSIONE
+        w.unmount()
+    })
+
+    it('REM-05b ⛔ D-F3-4 (dal Pad, 25/10): un’altra cartella scelta per la sessione nuova vale davvero, e l’errore di prima sparisce', async () => {
+        azzera()
+        delete stato.params.id
+        stato.query.cartella = 'r4-remoto'
+        stato.rispondi = (r) => (r.percorso === '/api/v1/sessions/custom' && JSON.parse(r.corpo!).cartellaId === 'r4-remoto'
+            ? { stato: 404, corpo: JSON.stringify({ ok: false, error: { code: 'FOLDER_NOT_LISTED', message: 'FOLDER_NOT_LISTED' } }) } : null)
+        const w = await schermata()
+        await w.get('[data-testid="talos-composer-prompt"]').setValue('primo tentativo')
+        w.getComponent(TalosMobileComposer).vm.$emit('send')
+        await asciuga()
+        expect(w.text()).toContain('This folder is no longer on the PC')
+        // dal foglio «Nuova sessione su …» la persona sceglie un’altra cartella: cambia solo `?cartella=`, la schermata resta la stessa
+        const { useRoute } = await import('vue-router')
+        ;(useRoute() as unknown as { query: Record<string, string> }).query.cartella = 'cartella-due'
+        await asciuga()
+        expect(w.text()).not.toContain('This folder is no longer on the PC')
+        await w.get('[data-testid="talos-composer-prompt"]').setValue('secondo tentativo')
+        w.getComponent(TalosMobileComposer).vm.$emit('send')
+        await asciuga()
+        const avvii = stato.remote.filter((r) => r.metodo === 'POST' && r.percorso === '/api/v1/sessions/custom').map((r) => JSON.parse(r.corpo!).cartellaId)
+        expect(avvii).toEqual(['r4-remoto', 'cartella-due'])
+        stato.params.id = SESSIONE
+        delete stato.query.cartella
+        w.unmount()
+    })
+
+    it('REM-05c ⛔ D-F3-3 (dal Pad, 25/10): da una sessione del PC a «Nuova sessione su …» la sessione nuova parte nella cartella scelta', async () => {
+        azzera()
+        const w = await schermata()
+        // il foglio «Nuova sessione su …» spinge `computer-codice {pcId}` senza id, con `?cartella=`: la schermata è la stessa
+        const { useRoute } = await import('vue-router')
+        const rotta = useRoute() as unknown as { params: Record<string, string>, query: Record<string, string> }
+        delete rotta.params.id
+        rotta.query.cartella = 'cartella-tre'
+        await asciuga()
+        await w.get('[data-testid="talos-composer-prompt"]').setValue('nuova qui')
+        w.getComponent(TalosMobileComposer).vm.$emit('send')
+        await asciuga()
+        const avvio = stato.remote.find((r) => r.metodo === 'POST' && r.percorso === '/api/v1/sessions/custom')
+        expect(avvio && JSON.parse(avvio.corpo!).cartellaId).toBe('cartella-tre')
+        rotta.params.id = SESSIONE
+        delete rotta.query.cartella
+        w.unmount()
+    })
+
+    it('REM-05d ⛔ revisione del blocco 9: la cartella cambiata mentre il canale si apre (prima di «pronta») vale per la sessione nuova', async () => {
+        azzera()
+        delete stato.params.id
+        stato.query.cartella = 'cartella-uno'
+        let apri: () => void = () => {}
+        stato.attesaPonte = new Promise<void>((r) => { apri = r })
+        const w = mount(CodiceR4Screen, { attachTo: document.body, global: { stubs: { teleport: true } } })
+        await asciuga()
+        const { useRoute } = await import('vue-router')
+        ;(useRoute() as unknown as { query: Record<string, string> }).query.cartella = 'cartella-due'
+        await asciuga()
+        apri()
+        stato.attesaPonte = null
+        await asciuga()
+        await w.get('[data-testid="talos-composer-prompt"]').setValue('nella seconda')
+        w.getComponent(TalosMobileComposer).vm.$emit('send')
+        await asciuga()
+        const avvio = stato.remote.find((r) => r.metodo === 'POST' && r.percorso === '/api/v1/sessions/custom')
+        expect(avvio && JSON.parse(avvio.corpo!).cartellaId).toBe('cartella-due')
+        stato.params.id = SESSIONE
+        delete stato.query.cartella
         w.unmount()
     })
 
@@ -436,21 +515,38 @@ describe('il Codice sulla sessione di un PC: revisione avversariale R-M4', () =>
         w.unmount()
     })
 
-    it('RRV-10 ⛔ RA-10: ← in remoto torna al dettaglio del computer, non all\'elenco delle sessioni del TELEFONO', async () => {
+    // ⛔ RA-10 (21/10) voleva evitare l'elenco del solo TELEFONO; dal mockup del 23/10 (tavola 3) la lista del Codice ha anche le sessioni
+    // del PC, col filtro «Dove» che la persona aveva (D-MOCK-4, Desktop (3) 24/10: «torna alla lista del Codice col filtro»)
+    it('RRV-10 ← in remoto torna alla lista del Codice (che ha anche le sessioni del PC), non alle Impostazioni del PC', async () => {
         azzera()
         const w = await schermata()
         w.getComponent(TalosCodiceR4Header).vm.$emit('indietro')
         await asciuga()
-        expect(stato.spinte).toEqual([{ name: 'computer-item', params: { pcId: 'pc-uno' } }])
+        expect(stato.spinte).toEqual([{ name: 'harness' }])
         w.unmount()
     })
 
-    it('RRV-11a ⛔ RA-11: gli allegati (file, galleria, fotocamera) si vedono spenti col perché', async () => {
+    // ⛔ RA-11 è CAMBIATA per decisione dell'owner del 25/10 (scambio di file R5.13, mockup approvato; F3, ledger del 25/10): gli
+    // allegati erano spenti finché il PC non li riceveva. Ora il PC li riceve (`file.upload.*`, contratto Parte 2 «Revision 3»): il
+    // «+» è acceso, senza il perché. Il verso contrario (un PC senza scambio di file) è RRV-11c.
+    it('RRV-11a ⛔ R5.13 F3: gli allegati (file, galleria, fotocamera) sono accesi anche sulla sessione del PC', async () => {
         azzera()
         const w = await schermata()
         const compositore = w.getComponent(TalosMobileComposer)
+        expect(compositore.props('attachmentsAvailable')).toBe(true)
+        expect(compositore.props('attachmentDisabledReason')).toBe('')
+        w.unmount()
+    })
+
+    it('RRV-11c ⛔ R5.13 F3: un PC senza scambio di file spegne gli allegati col perché in parole, mai un «+» morto', async () => {
+        azzera()
+        stato.rispondi = (r) => (r.percorso === '/api/v1/remote/file-offers'
+            ? { stato: 403, corpo: JSON.stringify({ ok: false, error: { code: 'UNKNOWN_OPERATION', message: 'UNKNOWN_OPERATION' } }) } : null)
+        const w = await schermata()
+        const compositore = w.getComponent(TalosMobileComposer)
+        expect(stato.remote.some((r) => r.metodo === 'GET' && r.percorso === '/api/v1/remote/file-offers')).toBe(true)
         expect(compositore.props('attachmentsAvailable')).toBe(false)
-        expect(compositore.props('attachmentDisabledReason')).toBe(SOLO_DAL_PC)
+        expect(compositore.props('attachmentDisabledReason')).toBe('This computer can’t receive files yet: update TALOS on the computer.')
         w.unmount()
     })
 
@@ -585,5 +681,224 @@ describe('il Codice sulla sessione di un PC: revisione avversariale R-M4', () =>
         await inviaDalCompositore(w, 'ancora')
         expect(w.get('[data-testid="talos-codice-r4-errore"]').text()).toBe('The key is missing on the computer: connect it on the PC.')
         w.unmount()
+    })
+})
+
+/**
+ * ⛔ D-MOCK-11 (dal vivo, 24/10/2026; contratto R5.12, parte 1, punti 2-3): il Codice sul PC chiede il consenso della cartella.
+ * Sessione nuova: «Conferma sul computer» finché la persona risponde sul PC. Scrittura in una sessione che c'è: «Chiedi al PC»,
+ * e su «Consenti» la bozza parte.
+ */
+describe('il consenso del PC nel Codice remoto (D-MOCK-11)', () => {
+    const ok = (d: unknown) => ({ stato: 200, corpo: JSON.stringify({ ok: true, data: d }) })
+    const IN_ATTESA = { stato: 'attesa-consenso', richiestaId: 'rq-12345678', scadeAlle: '2026-10-24T10:02:00.000Z', attesaMs: 120_000 }
+    async function scrivi(w: Awaited<ReturnType<typeof schermata>>, testo: string) {
+        await w.get('[data-testid="talos-composer-prompt"]').setValue(testo)
+        w.getComponent(TalosMobileComposer).vm.$emit('send')
+        await asciuga()
+    }
+
+    it('CONS-DISP-08 sessione nuova in una cartella non consentita: «Conferma sul computer», poi la sessione avviata dal PC', async () => {
+        azzera()
+        delete stato.params.id
+        stato.query.cartella = 'c-1'
+        let consenti: (v: unknown) => void = () => {}
+        const risposta = new Promise((fatto) => { consenti = fatto })
+        stato.rispondi = ((r: { metodo: string; percorso: string }) => {
+            if (r.percorso === '/api/v1/sessions/custom') return ok(IN_ATTESA)
+            if (r.percorso === '/api/v1/remote/consent/wait') return risposta.then((d) => ok(d))
+            return null
+        }) as typeof stato.rispondi
+        const w = await schermata()
+        await scrivi(w, 'rifai il README')
+        expect(w.get('[data-testid="talos-codice-r4-consenso"]').text()).toContain('Confirm on the computer')
+        consenti({ esito: 'consentita', sessionId: 'sess-9' })
+        await asciuga()
+        expect(w.find('[data-testid="talos-codice-r4-consenso"]').exists()).toBe(false)
+        expect(stato.flussiRemoti.some((f) => f.percorso.startsWith('/api/v1/sessions/sess-9/events'))).toBe(true)
+        stato.params.id = SESSIONE
+        w.unmount()
+    })
+
+    it('CONS-DISP-08b il PC dice di no: la frase, e il messaggio torna nel compositore', async () => {
+        azzera()
+        delete stato.params.id
+        stato.query.cartella = 'c-1'
+        stato.rispondi = ((r: { metodo: string; percorso: string }) => {
+            if (r.percorso === '/api/v1/sessions/custom') return ok(IN_ATTESA)
+            if (r.percorso === '/api/v1/remote/consent/wait') return ok({ esito: 'negata' })
+            return null
+        }) as typeof stato.rispondi
+        const w = await schermata()
+        await scrivi(w, 'rifai il README')
+        expect(w.get('[data-testid="talos-codice-r4-errore"]').text()).toBe('The PC said no for this folder')
+        expect((w.get('[data-testid="talos-composer-prompt"]').element as HTMLTextAreaElement).value).toBe('rifai il README')
+        stato.params.id = SESSIONE
+        w.unmount()
+    })
+
+    it('CONS-DISP-09 scrittura senza consenso in una sessione del PC: «Chiedi al PC», poi la bozza parte su «Consenti»', async () => {
+        azzera()
+        stato.params.id = SESSIONE // indipendente dalle prove sopra
+        let consentita = false
+        stato.rispondi = ((r: { metodo: string; percorso: string }) => {
+            if (r.percorso === `/api/v1/sessions/${SESSIONE}/resume` && !consentita) {
+                return { stato: 403, corpo: JSON.stringify({ ok: false, error: { code: 'CONSENT_REQUIRED', message: 'The computer must allow this device to write in this folder.', reason: 'consent-required', params: { cartellaId: 'c-1', nome: 'talos' } } }) }
+            }
+            if (r.percorso === '/api/v1/remote/consent/request') return ok(IN_ATTESA)
+            if (r.percorso === '/api/v1/remote/consent/wait') { consentita = true; return ok({ esito: 'consentita' }) }
+            return null
+        }) as typeof stato.rispondi
+        const w = await schermata()
+        await scrivi(w, 'aggiungi i test')
+        expect(w.get('[data-testid="talos-codice-r4-errore"]').text()).toContain('The PC must allow this device to write here')
+        await w.get('[data-testid="talos-codice-r4-consenso-chiedi"]').trigger('click')
+        await asciuga()
+        expect(JSON.parse(stato.remote.find((r) => r.percorso === '/api/v1/remote/consent/request')!.corpo!)).toEqual({ cartellaId: 'c-1' })
+        const riprese = stato.remote.filter((r) => r.percorso === `/api/v1/sessions/${SESSIONE}/resume`)
+        expect(riprese).toHaveLength(2)
+        expect(JSON.parse(riprese[1]!.corpo!).messaggio).toBe('aggiungi i test')
+        expect(w.find('[data-testid="talos-codice-r4-errore"]').exists()).toBe(false)
+        w.unmount()
+    })
+
+    it('CONS-DISP-10 ⛔ D-F3-1 (dal Pad, 25/10): un file fermato dal consenso alza «Chiedi al PC»; su «Consenti» riparte il file, il messaggio no', async () => {
+        azzera()
+        stato.params.id = SESSIONE
+        let consentita = false
+        const allegati: string[] = []
+        stato.allega = async (o) => {
+            allegati.push(String(o.sessionId))
+            if (!consentita) throw Object.assign(new Error('The computer must allow this device to write in this folder.'), { code: 'CONSENT_REQUIRED', reason: 'consent-required', params: { cartellaId: 'c-1', nome: 'talos' } })
+            return { tipo: 'file', nome: 'fattura.pdf', percorso: 'allegati/fattura.pdf', bytes: 900_000 }
+        }
+        stato.rispondi = ((r: { metodo: string; percorso: string }) => {
+            if (r.percorso === '/api/v1/remote/consent/request') return ok(IN_ATTESA)
+            if (r.percorso === '/api/v1/remote/consent/wait') { consentita = true; return ok({ esito: 'consentita' }) }
+            return null
+        }) as typeof stato.rispondi
+        const w = await schermata()
+        await w.get('[data-testid="talos-composer-prompt"]').setValue('una bozza che resta')
+        w.getComponent(TalosMobileComposer).vm.$emit('attach')
+        await asciuga()
+        expect(allegati).toEqual([SESSIONE])
+        const vassoio = () => w.getComponent(TalosMobileComposer).props('attachments') as Array<{ status: string; error: string | null }>
+        expect(vassoio()[0]).toMatchObject({ status: 'failed', error: 'File not attached · This folder needs the computer’s consent' })
+        expect(w.get('[data-testid="talos-codice-r4-errore"]').text()).toContain('The PC must allow this device to write here')
+        await w.get('[data-testid="talos-codice-r4-consenso-chiedi"]').trigger('click')
+        await asciuga()
+        expect(JSON.parse(stato.remote.find((r) => r.percorso === '/api/v1/remote/consent/request')!.corpo!)).toEqual({ cartellaId: 'c-1' })
+        expect(allegati).toEqual([SESSIONE, SESSIONE])
+        expect(vassoio()[0]).toMatchObject({ status: 'authorized', error: null })
+        // il consenso è nato dall'allegato: il messaggio resta nel compositore, nessun invio partito da solo
+        expect(stato.remote.some((r) => r.percorso === `/api/v1/sessions/${SESSIONE}/resume`)).toBe(false)
+        expect((w.get('[data-testid="talos-composer-prompt"]').element as HTMLTextAreaElement).value).toBe('una bozza che resta')
+        w.unmount()
+    })
+    it('CONS-DISP-10b ⛔ dal Pad (25/10): il PC non risponde, «Riprova», poi «Consenti»: riparte il file, il messaggio ancora no', async () => {
+        azzera()
+        stato.params.id = SESSIONE
+        let consentita = false
+        let attese = 0
+        const allegati: string[] = []
+        stato.allega = async (o) => {
+            allegati.push(String(o.sessionId))
+            if (!consentita) throw Object.assign(new Error('The computer must allow this device to write in this folder.'), { code: 'CONSENT_REQUIRED', reason: 'consent-required', params: { cartellaId: 'c-1', nome: 'talos' } })
+            return { tipo: 'file', nome: 'fattura.pdf', percorso: 'allegati/fattura.pdf', bytes: 900_000 }
+        }
+        stato.rispondi = ((r: { metodo: string; percorso: string }) => {
+            if (r.percorso === '/api/v1/remote/consent/request') return ok(IN_ATTESA)
+            if (r.percorso === '/api/v1/remote/consent/wait') {
+                attese += 1
+                if (attese === 1) return ok({ esito: 'scaduta' })
+                consentita = true
+                return ok({ esito: 'consentita' })
+            }
+            return null
+        }) as typeof stato.rispondi
+        const w = await schermata()
+        await w.get('[data-testid="talos-composer-prompt"]').setValue('una bozza che resta')
+        w.getComponent(TalosMobileComposer).vm.$emit('attach')
+        await asciuga()
+        await w.get('[data-testid="talos-codice-r4-consenso-chiedi"]').trigger('click')
+        await asciuga()
+        // scaduta: «Riprova»
+        await w.get('[data-testid="talos-codice-r4-consenso-chiedi"]').trigger('click')
+        await asciuga()
+        expect(allegati).toEqual([SESSIONE, SESSIONE])
+        expect(stato.remote.some((r) => r.percorso === `/api/v1/sessions/${SESSIONE}/resume`)).toBe(false)
+        expect((w.get('[data-testid="talos-composer-prompt"]').element as HTMLTextAreaElement).value).toBe('una bozza che resta')
+        w.unmount()
+    })
+})
+
+/**
+ * ⛔ D-MOCK-16 (dal vivo, foto 202-206, 24/10/2026): «Apri la sessione» su una cartella non consentita restava su «Avvio del Codice…»
+ * ~60 s, poi tornava alla scheda del PC senza una frase visibile; al PC nessun `session.start`. La schermata aspettava la PRIMA
+ * apertura del canale (`apriPonteRemoto`, fino a 2 × 30 s nel nativo) prima di mostrare il compositore, e a un guasto tornava a
+ * `computer-item` con un avviso di 6 s. Contratto R5.12, parte 1, punto 2: il compositore compare, il primo invio fa `session.start`,
+ * si vede «Conferma sul computer», su `consentita` la sessione si apre. Mai un ritorno muto.
+ */
+describe('una sessione nuova sul PC con il canale lento (D-MOCK-16)', () => {
+    const ok = (d: unknown) => ({ stato: 200, corpo: JSON.stringify({ ok: true, data: d }) })
+    const IN_ATTESA = { stato: 'attesa-consenso', richiestaId: 'rq-12345678', scadeAlle: '2026-10-24T10:02:00.000Z', attesaMs: 120_000 }
+
+    it('CONS-DISP-12 il compositore compare subito; il primo invio aspetta il canale, poi «Conferma sul computer» e la sessione', async () => {
+        azzera()
+        stato.remotoGuasto = false
+        delete stato.params.id
+        stato.query.cartella = 'cartella-mobile-consenso'
+        let apriCanale: () => void = () => {}
+        stato.attesaPonte = new Promise<void>((fatto) => { apriCanale = fatto })
+        let consenti: (v: unknown) => void = () => {}
+        const risposta = new Promise((fatto) => { consenti = fatto })
+        stato.rispondi = ((r: { metodo: string; percorso: string }) => {
+            if (r.percorso === '/api/v1/sessions/custom') return ok(IN_ATTESA)
+            if (r.percorso === '/api/v1/remote/consent/wait') return risposta.then((d) => ok(d))
+            return null
+        }) as typeof stato.rispondi
+        try {
+            const w = await schermata()
+            // il canale non è ancora aperto: niente «Avvio del Codice…», il compositore c'è
+            expect(w.find('[data-testid="talos-codice-r4-avvio"]').exists()).toBe(false)
+            await w.get('[data-testid="talos-composer-prompt"]').setValue('rifai il README')
+            w.getComponent(TalosMobileComposer).vm.$emit('send')
+            await asciuga()
+            expect(stato.remote.some((r) => r.percorso === '/api/v1/sessions/custom')).toBe(false)
+            apriCanale()
+            await asciuga()
+            const avvio = stato.remote.find((r) => r.percorso === '/api/v1/sessions/custom')
+            expect(JSON.parse(avvio!.corpo!)).toMatchObject({ cartellaId: 'cartella-mobile-consenso', consegna: 'rifai il README' })
+            expect(w.get('[data-testid="talos-codice-r4-consenso"]').text()).toContain('Confirm on the computer')
+            consenti({ esito: 'consentita', sessionId: 'sess-9' })
+            await asciuga()
+            expect(stato.flussiRemoti.some((f) => f.percorso.startsWith('/api/v1/sessions/sess-9/events'))).toBe(true)
+            expect(stato.sostituzioni).not.toContainEqual(expect.objectContaining({ name: 'computer-item' }))
+            expect(stato.locali).toEqual([])
+            w.unmount()
+        } finally {
+            stato.attesaPonte = null
+            stato.params.id = SESSIONE
+        }
+    })
+
+    it('CONS-DISP-12b il canale non si apre: nessun ritorno muto alla scheda del PC; la riga del compositore dice perché', async () => {
+        azzera()
+        delete stato.params.id
+        stato.query.cartella = 'cartella-mobile-consenso'
+        stato.remotoGuasto = true
+        try {
+            const w = await schermata()
+            expect(stato.sostituzioni).not.toContainEqual(expect.objectContaining({ name: 'computer-item' }))
+            await w.get('[data-testid="talos-composer-prompt"]').setValue('rifai il README')
+            w.getComponent(TalosMobileComposer).vm.$emit('send')
+            await asciuga()
+            expect(w.get('[data-testid="talos-codice-r4-errore"]').text()).toBe('The computer can’t be reached. Check that it’s on and that remote control is on.')
+            expect(stato.locali).toEqual([])
+            w.unmount()
+        } finally {
+            stato.remotoGuasto = false
+            stato.params.id = SESSIONE
+        }
     })
 })

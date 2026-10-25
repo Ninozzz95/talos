@@ -31,11 +31,16 @@ import { chiaveDiChiamata } from '@/lib/tools/chiaveDiChiamata'
 export function talosRispostaVuotaDopoStrumenti(
     testo: string,
     strumentiEseguiti: number,
+    /**
+     * ⛔ ART-L-10 (Pad, 23/10): il fatto è GIÀ detto da un'altra riga (la chiamata interrotta dal tetto): la bolla vuota
+     * sotto di lei sarebbe doppia, e fuorviante — «nessuna risposta» quando la risposta si è fermata a metà.
+     */
+    giaDetto = false,
 ): boolean {
     // ⛔ `trim`, non `length`: una risposta di soli a capo è vuota per chi la
     // guarda, ed è esattamente ciò che un modello piccolo produce quando si
     // ferma dopo il blocco della chiamata.
-    return testo.trim() === '' && strumentiEseguiti > 0
+    return !giaDetto && testo.trim() === '' && strumentiEseguiti > 0
 }
 
 /**

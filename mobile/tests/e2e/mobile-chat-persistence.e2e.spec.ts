@@ -167,7 +167,9 @@ test('persists contextual chat sessions through reload, rename, switch and activ
     await expect(page.getByTestId('talos-mobile-header-title')).toHaveText(secondTitle, { timeout: 15_000 })
     await openChatsPage()
     await expect(page.getByTestId('talos-chats-row').filter({ hasText: 'Primary evidence' })).toHaveCount(0)
-    await expect(page.getByTestId('talos-chats-row')).toHaveAttribute('data-active', 'true')
+    // owner 23/10/2026: sulla lista nessuna riga colorata, la conversazione non è a schermo (prima: data-active="true")
+    await expect(page.getByTestId('talos-chats-row')).toHaveCount(1)
+    await expect(page.getByTestId('talos-chats-row')).not.toHaveClass(/bg-\[var\(--talos-active\)\]/)
 
     expect(completions).toHaveLength(3)
     expect(localDataRequests).toEqual([])

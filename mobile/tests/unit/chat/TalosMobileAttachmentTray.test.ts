@@ -92,4 +92,26 @@ describe('TalosMobileAttachmentTray', () => {
         })
         expect(wrapper.html()).toBe('<!--v-if-->')
     })
+
+    it('R5.13 F3: a file on its way to the PC says how far it is, and a paused one says it resumes by itself', () => {
+        const sending: TalosMobileAttachmentDraft = { ...ready, id: 'draft-sending', status: 'ingesting', sizeBytes: 19_084_083, progress: { phase: 'sending', sent: 7_759_462, total: 19_084_083 } }
+        const paused: TalosMobileAttachmentDraft = { ...ready, id: 'draft-paused', status: 'ingesting', progress: { phase: 'paused', sent: 262_144, total: 421_888 } }
+        const wrapper = mount(TalosMobileAttachmentTray, { props: { items: [sending, paused], busy: true, error: null } })
+        expect(wrapper.get('[data-attachment-id="draft-sending"]').text()).toContain('Sending to the PC · 7.4 of 18.2 MB')
+        expect(wrapper.get('[data-attachment-id="draft-paused"]').text()).toContain('Paused · 256 of 412 KB · resumes when the connection is back')
+        expect(wrapper.get('[data-attachment-id="draft-paused"]').html()).not.toContain('animate-spin')
+        // dal Pad (25/10): la frase della pausa si legge intera, su due righe, mai tagliata a «ri…»
+        const riga = wrapper.get('[data-attachment-id="draft-paused"]').findAll('p').find((p) => p.text().includes('Paused'))!
+        expect(riga.classes()).toContain('line-clamp-2')
+        expect(riga.classes()).not.toContain('truncate')
+        expect(wrapper.get('[data-attachment-id="draft-sending"]').html()).toContain('animate-spin')
+    })
+
+    it('B9-3: a draft waiting for its turn says the computer is busy', () => {
+        const waiting: TalosMobileAttachmentDraft = { ...ready, id: 'draft-waiting', status: 'ingesting', progress: { phase: 'waiting', sent: 0, total: 4096 } }
+        const wrapper = mount(TalosMobileAttachmentTray, { props: { items: [waiting], busy: true, error: null } })
+        // B10-4: mentre aspetta, una frase d'attesa (non «riprova fra poco»: l'app sta già riprovando)
+        expect(wrapper.get('[data-attachment-id="draft-waiting"]').text()).toContain('The computer is busy with other files')
+        expect(wrapper.get('[data-attachment-id="draft-waiting"]').text()).not.toContain('try again')
+    })
 })

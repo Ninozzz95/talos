@@ -88,13 +88,16 @@ describe('TalosMobileComposer', () => {
         expect(view.find('[data-testid="talos-composer-agent"]').exists()).toBe(false)
         expect(view.find('[data-testid="talos-composer-browse"]').exists()).toBe(false)
 
-        await view.get('[data-testid="talos-composer-model-chip"]').trigger('click')
-        await vi.dynamicImportSettled()
-        await view.get('[data-testid="talos-mobile-thinking-toggle"]').trigger('click')
+        // J3 (owner 24/10/2026): con un livello da offrire, «Ragionamento esteso» sta nel menu della pillola del ragionamento
+        await view.get('[data-testid="talos-composer-reasoning-pill"]').trigger('click')
+        await flushPromises()
+        // J3-bis (owner «Come il desktop»): «Ragionamento esteso» segue il livello scelto nella pillola
+        for (let i = 0; i < 6; i++) { await flushPromises(); await vi.dynamicImportSettled() }
+        await view.get('[data-testid="talos-reasoning-level"][data-livello="low"]').trigger('click')
         expect(view.emitted('selectThinking')).toEqual([[true]])
 
-        // la parola del ragionamento resta per chi ascolta lo schermo
-        expect(view.get('[data-testid="talos-composer-reasoning-label"]').classes()).toContain('sr-only')
+        // J3-bis: la parola nascosta sulla pillola del modello non c'è più; il livello lo dice la pillola del ragionamento
+        expect(view.find('[data-testid="talos-composer-reasoning-label"]').exists()).toBe(false)
         expect(view.emitted('send')).toBeUndefined()
     })
 
@@ -103,9 +106,13 @@ describe('TalosMobileComposer', () => {
             thinking: false,
             modelProfiles: [{ ...modelProfiles[0], thinking_toggle: false }],
         })
+        // J3: il livello resta (pillola), l'interruttore no — né nel menu della pillola né nel foglio
+        await view.get('[data-testid="talos-composer-reasoning-pill"]').trigger('click')
+        await flushPromises()
+        expect(view.findAll('[data-testid="talos-reasoning-level"]').length).toBeGreaterThan(1)
+        expect(view.find('[data-testid="talos-reasoning-thinking"]').exists()).toBe(false)
         await view.get('[data-testid="talos-composer-model-chip"]').trigger('click')
         await vi.dynamicImportSettled()
-        expect(view.find('[data-testid="talos-mobile-effort-picker"]').exists()).toBe(true)
         expect(view.find('[data-testid="talos-mobile-thinking-toggle"]').exists()).toBe(false)
     })
 
@@ -271,15 +278,16 @@ describe('TalosMobileComposer', () => {
         // F4-#26: model + effort live in one dedicated bottom drawer.
         expect(view.get('[data-testid="talos-model-drawer"]').exists()).toBe(true)
         expect(view.get('[data-testid="talos-mobile-composer-model-picker"]').exists()).toBe(true)
-        expect(view.get('[data-testid="talos-mobile-effort-picker"]').exists()).toBe(true)
+        // J3 (owner 24/10/2026): il foglio è solo «Modello»; il livello si sceglie dalla pillola del ragionamento
+        expect(view.find('[data-testid="talos-mobile-effort-picker"]').exists()).toBe(false)
 
         await view.get('[data-model-profile-id="profile-deepseek"]').trigger('click')
         expect(view.emitted('selectModelProfile')).toEqual([['profile-deepseek']])
         expect(view.find('[data-testid="talos-model-drawer"]').exists()).toBe(true)
 
-        // And a second choice, in the same visit, which is the whole point.
-        await view.get('[role="slider"]').trigger('keydown', { key: 'End' })
-        expect(view.emitted('selectEffort')).toEqual([['high']])
+        // And a second choice in the same visit: another model, the sheet still open.
+        await view.get('[data-model-profile-id="profile-deepseek"]').trigger('click')
+        expect(view.emitted('selectModelProfile')).toHaveLength(2)
         expect(view.find('[data-testid="talos-model-drawer"]').exists()).toBe(true)
     })
 

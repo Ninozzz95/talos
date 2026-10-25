@@ -89,6 +89,11 @@ export interface TalosToolResult {
      * quindici note di cui una viene dal web è un elenco che viene dal web.
      */
     contentOrigin?: import('@/lib/tools/security').TalosContentOrigin
+    /**
+     * ⭐ L'attrezzo aspetta il suo corpo come blocco ```html nella risposta successiva (owner 2026-10-23, solo motore
+     * locale: `artifact_create` senza `html`). Il ciclo (`agentLoop.ts`) lo cattura e crea l'artefatto.
+     */
+    attesaBlocco?: { titolo: string, tipo: 'html' }
 }
 
 export interface TalosToolContext {
@@ -134,6 +139,18 @@ export interface TalosToolDefinition<Input = unknown> {
      */
     security?: TalosToolSecurity
     input: ZodType<Input>
+    /**
+     * ⛔⛔ Il contratto per il MOTORE LOCALE, quando è diverso (owner 2026-10-23, «Sì, solo per i locali»).
+     *
+     * Un modello da 4B sul dispositivo non riesce a infilare un documento intero dentro una stringa JSON: sbaglia gli
+     * escape o si ferma al tetto a metà (D-LOC-1, Spark-X2.5-4B). Per i soli locali lo schema annunciato e quello
+     * validato sono questi; OpenAI, Anthropic e Gemini continuano a vedere `input` e `description`. Lo sceglie il motore
+     * (`talosToolsForLocalEngine`, `motoreLocale` dell'esecutore), mai un elenco di fornitori.
+     */
+    perIlMotoreLocale?: {
+        input: ZodType<unknown>
+        description: string
+    }
     run(input: Input, context: TalosToolContext): Promise<TalosToolResult>
     /**
      * ⛔ La postcondizione: «l'effetto c'è davvero?», chiesta DOPO.
@@ -529,11 +546,21 @@ function senzaEsplosioni(valore: unknown): unknown {
  * lunghezza e di intervallo. Nient'altro si muove — la parita' con i provider a
  * chiave e' un vincolo, non un obiettivo, e un tool non puo' avere due
  * descrizioni a seconda di chi lo esegue.
+ *
+ * ⛔ L'UNICA eccezione è decisa dall'owner (2026-10-23, «Sì, solo per i locali»): un attrezzo che dichiara
+ * `perIlMotoreLocale` qui annuncia quel contratto. Oggi solo `artifact_create`: l'HTML esce dal JSON e arriva come blocco
+ * nella risposta, perché un 4B non regge un documento intero in una stringa (D-LOC-1).
  */
 export function talosToolsForLocalEngine(
     tools: ReadonlyArray<TalosToolDefinition<never>>,
 ): unknown[] {
-    return talosToolsForOpenAi(tools).map(senzaEsplosioni)
+    return talosToolsForOpenAi(tools.map((tool) => (tool.perIlMotoreLocale
+        ? {
+            ...tool,
+            input: tool.perIlMotoreLocale.input as ZodType<never>,
+            description: tool.perIlMotoreLocale.description,
+        }
+        : tool))).map(senzaEsplosioni)
 }
 
 /** OpenAI, DeepSeek, OpenRouter and Ollama all speak this shape. */
@@ -769,7 +796,10 @@ export type TalosToolArguments =
 export function parseTalosToolCallArguments(
     tool: TalosToolDefinition<never>,
     raw: unknown,
+    /** ⛔ Owner 2026-10-23: il motore locale valida col SUO contratto, quello che gli è stato annunciato. */
+    motoreLocale = false,
 ): TalosToolArguments {
+    const schema = motoreLocale && tool.perIlMotoreLocale ? tool.perIlMotoreLocale.input : tool.input
     let candidate: unknown = raw
     if (typeof raw === 'string') {
         const text = raw.trim()
@@ -779,8 +809,8 @@ export function parseTalosToolCallArguments(
             return { ok: false, error: 'The arguments were not valid JSON. Send a single JSON object.' }
         }
     }
-    const parsed = tool.input.safeParse(candidate)
-    if (parsed.success) return { ok: true, value: parsed.data }
+    const parsed = schema.safeParse(candidate)
+    if (parsed.success) return { ok: true, value: parsed.data as never }
     const detail = parsed.error.issues
         .map((issue) => `${issue.path.join('.') || '(root)'}: ${issue.message}`)
         .join('; ')

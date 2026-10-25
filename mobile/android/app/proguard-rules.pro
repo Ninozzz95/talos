@@ -74,6 +74,28 @@
 # requires this keep rule for R8-minimized applications.
 -keep class ai.onnxruntime.** { *; }
 
+# ⛔⛔ D-REM-R8 (telefono dell'owner, 0.1.44, 23/10/2026): il controllo remoto
+# (iroh-ffi via JNA) chiudeva l'app all'accoppiamento col PC —
+# `UnsatisfiedLinkError: Can't obtain peer field ID for class com.sun.jna.Pointer`.
+# La parte nativa di JNA cerca i campi delle sue classi PER NOME, e i binding
+# UniFFI di iroh sono strutture JNA lette per nome di campo: R8 li rinominava.
+# Regole della FAQ di JNA («JNA on Android»), nella forma con `**` usata dalle
+# librerie UniFFI (Breez SDK, Mozilla Glean). Le build di prova debug non
+# passano da R8: questo si vede SOLO in una build minificata.
+-dontwarn java.awt.*
+-keep class com.sun.jna.** { *; }
+-keep class * implements com.sun.jna.** { *; }
+-keep class computer.iroh.** { *; }
+
+# ⛔ F (24/10/2026): `computer.iroh.IrohAndroid` è nostra (copiata da upstream
+# iroh-ffi v1.1.0, `jniLibs/PROVENIENZA-IROH.md`) e la .so la cerca per NOME:
+# `Java_computer_iroh_IrohAndroid_installAndroidContext`. La riga sopra già la
+# copre; questa la nomina da sola, così chi un giorno stringe `computer.iroh.**`
+# non spegne in silenzio l'inizializzazione (si vedrebbe solo in release).
+-keep class computer.iroh.IrohAndroid {
+    native <methods>;
+}
+
 # N12 — sherpa-onnx (riconoscimento vocale locale). Il suo JNI costruisce le
 # configurazioni leggendo i campi delle classi Kotlin PER NOME (GetFieldID) e
 # crea i risultati chiamandone i costruttori: rinominate o tolte da R8, il

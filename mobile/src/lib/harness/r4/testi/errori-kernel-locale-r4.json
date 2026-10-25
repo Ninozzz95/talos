@@ -1,11 +1,11 @@
 {
   "origine": {
-    "commit": "cba8f4084",
+    "commit": "d5bed0a16",
     "percorso": "harness-ui/frontend/src/i18n/testi/errori.js",
-    "sha256": "0acfde68e38d40f5b90d859491a88dfd26a474224aff25ee708fee62294c0123",
-    "nota": "r4 della release (desktop-v0.1.35 sulla main pubblica); stesse tre frasi di c4d42649a, cambiano solo le righe inglesi (verificato il 22/10/2026)",
-    "righe": "it 709/750/752, en 1637/1678/1680",
-    "regole": "harness-ui/frontend/src/components/errori.js:913 (errori.kernel.motoreLocaleRifiuta), :956 (errori.kernel.finestraLocale)"
+    "sha256": "f982043ae2a3b064a3c9bb71b922330fe6f3820802af8918d7ba51f5fb832e8b",
+    "nota": "r4 della release (candidato desktop-v0.1.37); stesse tre frasi di cba8f4084, cambiano solo le righe (verificato il 25/10/2026)",
+    "righe": "it 716/757/759, en 1649/1690/1692",
+    "regole": "harness-ui/frontend/src/components/errori.js:913 (errori.kernel.motoreLocaleRifiuta), :958 (errori.kernel.finestraLocale)"
   },
   "it": {
     "kernel.finestraLocale": "La conversazione{conversazione} non entra nella finestra del modello locale{finestra}.",

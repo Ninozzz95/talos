@@ -412,6 +412,14 @@ const sezioneAttiva = computed<TalosMobileRouteName | null>(() => talosSidebarSe
 function attiva(route: TalosMobileRouteName): 'page' | undefined {
     return sezioneAttiva.value === route ? 'page' : undefined
 }
+/**
+ * ⛔ Owner 23/10/2026 sera, dal Pad: nel Codice restava evidenziata l'ultima chat e sembrava quella aperta. La riga dei Recenti è
+ * evidenziata SOLO se quella conversazione è sullo schermo, cioè nella sezione Chat (mobile e desktop, revisione del Desktop).
+ */
+function rigaAperta(id: string): 'page' | undefined {
+    // la rotta della conversazione, non la sezione: sulla lista `chats` la chat non è sullo schermo (vc165, 23/10)
+    return rotta.name === 'chat' && id === props.activeSessionId ? 'page' : undefined
+}
 
 /** Le ultime sei, come nel mockup (`recent.slice(0,6)`): l'elenco intero sta in «Chat». */
 const RECENTI_MASSIME = 6
@@ -707,7 +715,7 @@ const onda = useTalosTouchWave()
                                     type="button"
                                     class="recent-row talos-pressable talos-pressable-row talos-wave-host"
                                     :aria-label="$t('chat.openNamed', { title: sessionTitle(session) })"
-                                    :aria-current="session.id === props.activeSessionId ? 'page' : undefined"
+                                    :aria-current="rigaAperta(session.id)"
                                     :aria-describedby="descrizioneDellaRiga(session)"
                                     @pointerdown="onPressioneInizio(session.id, $event)"
                                     @pointermove="onPressioneMossa"
@@ -943,6 +951,8 @@ const onda = useTalosTouchWave()
     font-variant-numeric: tabular-nums;
 }
 .nav-section { margin-top: var(--talos-space-section); }
+/* (D) 23/10 sera: la larghezza dei Recenti decide se la pastiglia di stato tiene la parola (`TalosMobileStatoChat.vue`) */
+[data-testid="talos-sidebar-recents"] { container: talos-recenti / inline-size; }
 .nav-section-head {
     display: flex;
     align-items: center;

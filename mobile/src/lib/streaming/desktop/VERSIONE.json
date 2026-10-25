@@ -1,0 +1,9 @@
+{
+  "fonte": "r4 (talos-private), ramo main dopo la fusione dello streaming fluido",
+  "sha": "1164aee98",
+  "file": {
+    "markdown-in-arrivo.js": { "percorso": "harness-ui/frontend/src/components/markdown-in-arrivo.js", "sha256": "1d0405e706e938971792dd512e03c59372fc8aedf27e652eb0753bd54d634b26" },
+    "ritmo-streaming.js": { "percorso": "harness-ui/frontend/src/components/ritmo-streaming.js", "sha256": "a15e78a29913f952f9d2f5e16295f8a6ba68acef23dcb7d525bd69e7dab23532" }
+  },
+  "regola": "Copiati identici, mai modificati qui. Un aggiornamento si fa ricopiando da un nuovo SHA r4 rivisto dal Desktop e aggiornando questo file."
+}

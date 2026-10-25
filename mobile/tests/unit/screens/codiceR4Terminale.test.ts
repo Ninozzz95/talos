@@ -18,6 +18,8 @@ const DUE = '22222222-2222-4222-8222-222222222222'
 const stato = vi.hoisted(() => ({
     ascoltatori: {} as Record<string, ((d: Record<string, unknown>) => void)[]>,
     chiamate: [] as Array<[string, Record<string, unknown>]>,
+    // J3: il codice con cui il ponte rifiuta la PROSSIMA apertura (poi torna a riuscire)
+    guastoApri: null as string | null,
     risposte: {} as Record<string, Array<{ stato: number; risposta: unknown }>>,
     terminali: [] as Array<{ scritto: string; azzerato: number; dati: ((s: string) => void) | null; aperto: boolean; distrutto: boolean; modes: { applicationCursorKeysMode: boolean } }>,
 }))
@@ -37,7 +39,10 @@ vi.mock('@/lib/harness/r4/clienteR4', () => ({
         },
         apriFlusso: async () => undefined,
         chiudiFlusso: async () => undefined,
-        apriTerminale: async (o) => { stato.chiamate.push(['apri', o]) },
+        apriTerminale: async (o) => {
+            stato.chiamate.push(['apri', o])
+            if (stato.guastoApri) { const code = stato.guastoApri; stato.guastoApri = null; throw Object.assign(new Error(code), { code }) }
+        },
         scriviTerminale: async (o) => { stato.chiamate.push(['scrivi', o]) },
         ridimensionaTerminale: async (o) => { stato.chiamate.push(['ridimensiona', o]) },
         chiudiTerminale: async (o) => { stato.chiamate.push(['chiudi', o]) },
@@ -272,5 +277,38 @@ describe('il Terminale del Codice su r4 (K3-TERM T3+T4)', () => {
         expect(chiamate('chiudi')).toEqual([{ id: `term-${UNO}` }])
         expect(chiamate('richiesta').some((o) => String(o.percorso).endsWith('/close'))).toBe(false)
         expect(stato.terminali[0].distrutto).toBe(true)
+    })
+
+    /*
+     * J3 (24/10/2026; il Desktop ha dato l'OK): `useTerminaleR4().errore` non si vedeva da nessuna parte — un «+» rifiutato da r4 o un
+     * ponte che non si apre lasciavano il Terminale muto. Ora il piede lo dice, con la frase del codice e la stessa forma della riga
+     * d'errore del compositore (`talos-codice-r4-errore`).
+     */
+    it('TERM-09 «+» rifiutato da r4: la riga d’errore lo dice anche senza schede, con la forma della riga del compositore', async () => {
+        stato.risposte[`GET ${BASE}`] = [passo('elenco-vuoto')]
+        stato.risposte[`POST ${BASE}`] = [{ stato: 409, risposta: { ok: false, error: { code: 'TERMINAL_LIMIT_REACHED', message: 'limit' } } }]
+        const { w } = await schermata()
+        await apriTerminale(w)
+        expect(w.find('[data-testid="talos-codice-r4-terminale-errore"]').exists()).toBe(false)
+        await w.get('[data-testid="talos-codice-r4-terminale-nuova"]').trigger('click')
+        await asciuga()
+        const riga = w.get('[data-testid="talos-codice-r4-terminale-errore"]')
+        expect(riga.text()).toBe('Tab not opened')
+        expect(riga.attributes('role')).toBe('alert')
+        expect(riga.attributes('data-codice')).toBe('TERMINAL_LIMIT_REACHED')
+        expect(riga.classes()).toEqual(expect.arrayContaining(['rounded-md', 'border', 'p-3', 'text-sm', 'text-[var(--talos-danger)]']))
+        w.unmount()
+    })
+
+    it('TERM-10 il ponte non si apre: la riga dice di ricollegare; «Ricollega» riuscito la toglie', async () => {
+        stato.guastoApri = 'TALOS_R4_IRRAGGIUNGIBILE'
+        const { w } = await schermata()
+        await apriTerminale(w)
+        expect(w.get('[data-testid="talos-codice-r4-terminale-errore"]').text()).toBe('The terminal is not connected: tap “Reconnect”.')
+        await w.get('[data-testid="talos-codice-r4-terminale-ricollega"]').trigger('click')
+        await asciuga()
+        expect(chiamate('apri')).toHaveLength(2)
+        expect(w.find('[data-testid="talos-codice-r4-terminale-errore"]').exists()).toBe(false)
+        w.unmount()
     })
 })

@@ -554,6 +554,22 @@
 }
 .talos-composer-tools button:focus-visible { outline: 2px solid var(--talos-ring); outline-offset: 2px; }
 .talos-composer-tools .talos-plus-btn { border-radius: 50%; background: var(--talos-secondary, var(--talos-panel)); }
+/* ⛔ J3 (owner 24/10/2026, `compositore-unico-chat-codice-24-10`): la fila delle pillole non va MAI oltre due righe. Per costruzione:
+   1. riga: il modello e la pillola del ragionamento. Il nome del modello si accorcia coi puntini (il nome intero resta nel nome
+      accessibile e nel suggerimento) e la sua larghezza lascia sempre il posto alla pillola: un elemento flessibile va a capo secondo
+      la sua misura di base, che `max-width` limita (CSS Flexbox §9.3, «hypothetical main size»), quindi la pillola non scende mai.
+   2. riga: tutto il resto (permesso, pastiglia del piano, biblioteca, «Espandi»), che a 360 px ci sta (PILL-RIGHE-01; nel Codice il
+      permesso si accorcia anche lui, `codiceR4.css`).
+   Senza la pillola (il modello non riceve un livello) il modello torna com'era. */
+/* J3-bis (build vc188, tetto del foglio d'avvio): le stesse regole, compattate — una sola per i puntini, niente variabile, la
+   stanza della pillola scritta (9rem; la pillola stessa ha `max-width: 8.75rem` nel suo `style`, come «Controlla azioni degli
+   strumenti (n)», che lascia il posto a biblioteca, pastiglia del piano ~58 px ed «Espandi»). `.talos-model-chip.x` (0,2,0) viene dopo
+   `.talos-composer-tools .talos-model-chip` e ne vince il `max-width: 100%`. Le parti accorciate hanno `overflow: hidden`, quindi il
+   loro minimo automatico di elemento flessibile è già 0. */
+.talos-model-chip.has-reasoning-pill, .talos-model-chip.talos-reasoning-pill, .talos-model-chip.talos-composer-review { flex-wrap: nowrap; }
+.talos-model-chip.has-reasoning-pill { max-width: calc(100% - 9rem); }
+.talos-model-chip.talos-reasoning-pill { flex: none; }
+.has-reasoning-pill > .talos-model-chip__nome, .talos-reasoning-pill > span, .talos-composer-review__testo { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Owner 2026-09-13, dal Pad: «il pulsante microfono deve avere lo stesso border
    radius del container del composer». Quindi la variabile del contenitore, non un
    cerchio: se un preset cambia il raggio delle schede, questo lo segue da solo. */
@@ -829,6 +845,14 @@
     :focus-visible {
         outline: 2px solid var(--ring);
         outline-offset: 2px;
+    }
+    /* D-VIS-6 (Pad, 23/10): JetBrains Mono fonde `<!--` in `<!—` con le sue legature di serie. Nel codice ogni carattere
+       resta quello scritto, come in VS Code (`fontLigatures` spento di serie). */
+    code,
+    pre,
+    kbd,
+    samp {
+        font-variant-ligatures: none;
     }
     /* Owner 2026-07-25: text selection uses the ACTIVE theme's accent (tinted so
        the selected text stays readable on every preset). */

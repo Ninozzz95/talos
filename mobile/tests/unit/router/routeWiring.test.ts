@@ -108,6 +108,9 @@ describe('router wiring', () => {
             ['codice-r4', 'harness'],
             // R-M3: il dettaglio di un computer torna all'elenco dei computer.
             ['computer-item', 'computer'],
+            // ⛔ D-MOCK-4 (dal Pad, vc175, 24/10/2026; mockup remoto del 23/10, tavola 3): le sessioni del PC stanno nella lista del
+            // Codice, quindi una sessione del PC torna lì, col filtro «Dove» che aveva (`doveDelCodice.ts`), non alle Impostazioni del PC.
+            ['computer-codice', 'harness'],
         ] as const) {
             // I genitori che sono una PAGINA di dettaglio vogliono il loro
             // `:id`; le stazioni no. Scritto come regola e non come elenco di
@@ -117,6 +120,8 @@ describe('router wiring', () => {
             expect(talosMobileParentRoute(figlio, { id: 'x1' }))
                 .toEqual({ name: genitore, params: atteso })
         }
+        // D-MOCK-4: una sessione del PC è della stazione Codice (sul tablet la colonna resta la lista del Codice, la riga resta accesa)
+        expect(TALOS_MOBILE_ROUTES.find((route) => route.name === 'computer-codice')?.desktop_station_id).toBe('harness')
         const contracted = TALOS_MOBILE_ROUTES.filter((route) => SCREEN_CONTRACT[route.name])
         const components = await Promise.all(contracted.map((route) => route.component()))
         for (const [index, route] of contracted.entries()) {

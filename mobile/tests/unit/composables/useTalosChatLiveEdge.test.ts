@@ -66,6 +66,26 @@ describe('createTalosChatLiveEdge', () => {
         expect(edge.canAutoScroll()).toBe(true)
     })
 
+    /*
+     * ⛔ D-VIS-1, seconda metà (Pad, vc153, 23/10): la lista è rimasta ferma per minuti mentre il documento arrivava; il
+     * dito risultava ancora giù. Un tocco sul compositore (scrivere, Invia) non è un gesto di scorrimento: non ferma niente.
+     */
+    it('EDGE-01 un tocco sul compositore non ferma il seguire', () => {
+        const edge = createTalosChatLiveEdge()
+        edge.touchStart(true)
+        expect(edge.canAutoScroll()).toBe(true)
+    })
+
+    // ⛔ Come `TouchEvent.touches.length`: finché resta un dito giù il seguire aspetta, all'ultimo dito alzato riparte.
+    it('EDGE-02 la fine del tocco conta le dita rimaste', () => {
+        const edge = createTalosChatLiveEdge()
+        edge.touchStart()
+        edge.touchEnd(1)
+        expect(edge.canAutoScroll()).toBe(false)
+        edge.touchEnd(0)
+        expect(edge.canAutoScroll()).toBe(true)
+    })
+
     it('while the finger is down an upward drag detaches even before touchEnd', () => {
         const edge = createTalosChatLiveEdge()
         edge.onScroll(metrics(1200))

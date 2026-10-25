@@ -44,6 +44,8 @@ describe('il ponte r4 sopra il canale remoto', () => {
             ['POST', `/api/v1/sessions/${id}/plan-decision`, 'session.plan', { sessionId: 'sess:1', corpo: { a: 1 } }],
             ['POST', `/api/v1/sessions/${id}/settings`, 'session.settings', { sessionId: 'sess:1', corpo: { a: 1 } }],
             ['POST', `/api/v1/sessions/${id}/rename`, 'session.rename', { sessionId: 'sess:1', corpo: { a: 1 } }],
+            // revisione del blocco 3 (S3), owner 24/10 «Sì, uguali alle locali»: `session.delete` del PC da 9e548d7b8
+            ['POST', `/api/v1/sessions/${id}/delete`, 'session.delete', { sessionId: 'sess:1', corpo: { a: 1 } }],
             ['GET', `/api/v1/sessions/${id}/file-undo`, 'session.undo.list', { sessionId: 'sess:1' }],
             ['GET', `/api/v1/sessions/${id}/file-undo/7`, 'session.undo.preview', { sessionId: 'sess:1', turn: 7 }],
             ['POST', `/api/v1/sessions/${id}/file-undo/redo`, 'session.undo.redo', { sessionId: 'sess:1' }],

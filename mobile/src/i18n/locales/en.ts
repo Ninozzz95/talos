@@ -1,5 +1,7 @@
 export const TALOS_EN_MESSAGES = {
     common: {
+        // I18N-USO-01 (24/10/2026): `TalosMobileModelCatalog.vue` la usava e non c'era
+        loadMore: 'Load more',
         add: 'Add',
         back: 'Back',
         cancel: 'Cancel',
@@ -951,6 +953,9 @@ export const TALOS_EN_MESSAGES = {
         mediaIn: 'Media in {title}',
         thisChat: 'this chat',
         untitledChat: 'Untitled chat',
+        // owner 24/10/2026 «As Happy»: the message text in a sheet where it can be selected
+        selectText: 'Select text',
+        selectTextTitle: 'Message text',
         openNamed: 'Open chat {title}',
         renameNamed: 'Rename {title}',
         deleteNamed: 'Delete {title}',
@@ -986,6 +991,8 @@ export const TALOS_EN_MESSAGES = {
         },
         addingFile: 'Adding file',
         addFileFailed: 'Could not add file',
+        sendingToComputer: 'Sending to the PC · {sent} of {total}',
+        pausedSending: 'Paused · {sent} of {total} · resumes when the connection is back',
         attachmentModelRead: 'Model read',
         attachmentBrowserUpload: 'Browser upload',
         removeAttachment: 'Remove {name}',
@@ -1050,6 +1057,18 @@ export const TALOS_EN_MESSAGES = {
         reasoningEffortLevels: 'Reasoning effort levels',
         noReasoningSetting: 'This model runs without a reasoning setting.',
         modelAndReasoning: 'Model & reasoning',
+        // J3 (24/10/2026, owner): the model sheet is «Model» only; reasoning has its own pill in the composer (desktop c6d1cbff2)
+        modelSheetTitle: 'Model',
+        reasoningPillTitle: 'Reasoning',
+        reasoningLevel: 'Reasoning level',
+        reasoningAutoShort: 'Auto',
+        reasoningAutomatic: 'Automatic',
+        // J3-bis: desktop `app.reasoning.toggleLabel` @ c6d1cbff2 — view only
+        showReasoning: 'Show reasoning',
+        effortSentAs: 'You chose “{scelto}”: this model receives “{inviato}”.',
+        effortNotSent: 'This model receives no reasoning level: the provider decides.',
+        effortNotTaken: 'You chose “{scelto}”: this model does not take it, the provider decides.',
+        effortAutoSent: 'With no choice, this model receives “{inviato}”.',
         executorModel: 'Executor model',
         executorModelHint: 'Uses this cheaper model for routine turns; the first turn and any retry after a failure still use the model above.',
         executorModelAutomatic: 'Automatic — always use the model above',
@@ -1072,6 +1091,9 @@ export const TALOS_EN_MESSAGES = {
         imageConsentTitle: 'This image leaves the device',
         imageConsentBody: 'To show it to the model, TALOS sends it to {provider}. Everything else — chats, documents, memory — stays on this device.',
         imageConsentBodyMany: 'To show them to the model, TALOS sends them to {provider}. Everything else — chats, documents, memory — stays on this device.',
+        // D-F3-2 (dal Pad, 25/10): sulla sessione di un PC il resto sta sul computer, non sul dispositivo
+        imageConsentBodyRemote: 'To show it to the model, TALOS sends it to {provider}. Everything else — chats, documents, memory — stays on your computer.',
+        imageConsentBodyManyRemote: 'To show them to the model, TALOS sends them to {provider}. Everything else — chats, documents, memory — stays on your computer.',
         imageConsentOnce: 'Just this once',
         imageConsentAlways: 'Always',
         imageConsentNever: 'No',
@@ -1107,6 +1129,8 @@ export const TALOS_EN_MESSAGES = {
         effortMax: 'Max',
         compatibilitySupported: 'supported',
         localModelLine: 'On this device',
+        // the PC's own local models in the model sheet (Marco's anomaly 3, 24/10/2026): a group, never a configurable provider
+        computerModelLine: 'On the computer',
         // the Code screen opens the chosen local model before using it: seconds (22/10/2026)
         modelOpening: 'Opening the model…',
         // a cloud model is not opened on the device: it is switched (adversarial review 22/10, finding 13)
@@ -1148,6 +1172,8 @@ export const TALOS_EN_MESSAGES = {
         messageCopied: 'Message copied.',
         messageCopyFailed: 'Message copy failed.',
         stoppedAtLimit: 'It stopped here: it hit the maximum length.',
+        // D-LOC-1 (23/10/2026): the limit fell inside a tool call twice; the loop closed without running it.
+        toolCallCutOff: 'An action was cut off before it finished: nothing was run and nothing changed. Ask again in smaller steps.',
         // CONT (25/09/2026): the button and the message it sends use the same word.
         continueAfterLimit: 'Continue',
         actionsDone: 'Done:',
@@ -1454,11 +1480,38 @@ export const TALOS_EN_MESSAGES = {
         truncated: 'Message truncated for safe rendering.',
         codeCopied: 'Code copied.',
         codeCopyFailed: 'Code copy failed.',
+        codeIncoming: 'Incoming…',
+        // code-block mockup approved by the owner on 23/10 (one spec with the desktop): the header ⋯ menu
+        codeMore: 'More code actions',
+        codeMenuTitleOne: '{language} code · {count} line',
+        codeMenuTitleMany: '{language} code · {count} lines',
+        codeMenuTitlePlainOne: 'Code · {count} line',
+        codeMenuTitlePlainMany: 'Code · {count} lines',
+        downloadAs: 'Download as .{ext}',
+        downloadMarkdown: 'Download as Markdown (.md)',
+        downloadText: 'Download as text (.txt)',
+        collapse: 'Collapse',
+        showAllLinesOne: 'Show {count} line',
+        showAllLinesMany: 'Show all {count} lines',
+        downloadFailed: 'Could not save the file: {detail}',
     },
     // Harness UI (24/8): real route (list + session trampoline), still
     // behind the same debug-only gate as the old Settings link — see
     // services/harnessUi.ts.
     harness: {
+        // remote mockup approved on 23/10, board 3: the «Where» filter in the Code list
+        pcConsentRequired: "The computer hasn't allowed this device to write in this folder yet.",
+        // D-MOCK-15 (24/10/2026): Rename/Delete on a PC row wait for the PC (20-30 s); the dialog says so
+        pcWorking: 'On the computer…',
+        where: {
+            label: 'Where:',
+            all: 'All',
+            here: 'Here',
+            group: 'Where the sessions are',
+            pcUnreachable: 'is not answering: its sessions are not listed.',
+            pcsUnreachable: '{count} computers are not answering: their sessions are not listed.',
+        },
+        newSessionOn: 'New session on {name}',
         groups: {
             today: 'Today',
             yesterday: 'Yesterday',
@@ -1594,13 +1647,16 @@ export const TALOS_EN_MESSAGES = {
         renameFailed: "Couldn't rename the session: {detail}",
         deleteTitle: 'Delete session',
         deleteDescription: '"{title}" will be removed from this device. This cannot be undone.',
+        // D-MOCK-14 (24/10/2026): a PC row is deleted on that PC, named with its short code
+        deleteDescriptionPc: '"{title}" will be removed from the computer {name}. This cannot be undone.',
         deleteFailed: "Couldn't delete the session: {detail}",
         statusRunning: 'Running',
         statusRunningAria: 'Session still running',
         statusInterrupted: 'Interrupted',
         statusWaitingApproval: 'Waiting for approval',
         statusWaitingForYou: 'Waiting for you',
-        statusError: 'Concluded with an error',
+        // owner 23/10 evening (extended to Code by Desktop): the last turn failed and can be resumed, not a verdict
+        statusError: 'To resume',
     },
     privilege: {
         keepAlive: 'Keep it alive',
@@ -2197,6 +2253,7 @@ export const TALOS_EN_MESSAGES = {
     models: {
         // the on-device engine in the provider lists and for screen readers (22/10/2026)
         localEngineLabel: 'On-device engine',
+        unknownProvider: 'Unknown provider',
         /**
          * ⛔⛔ L'APERTURA DEL MODELLO LOCALE, DETTA — owner 10/09/2026:
          * «PocketPal carica il modello locale appena clicchi per
@@ -2561,6 +2618,9 @@ export const TALOS_EN_MESSAGES = {
         deleteSelectedDescriptionOne: '1 file will be removed from this device. Existing chat history keeps only its safe file label.',
         deleteSelectedDescriptionMany: '{count} files will be removed from this device. Existing chat history keeps only their safe file labels.',
         attachReady: '{name} is ready in the composer.',
+        // I18N-USO-01 (24/10/2026): usate da `TalosMobileChatMediaPanel.vue`, non c'erano: a un guasto si leggeva la chiave
+        attachFailed: '{name} could not be added to the composer.',
+        deleteFailed: '{name} could not be deleted.',
         deletedOne: '1 file was deleted.',
         deletedMany: '{count} files were deleted.',
         partialDelete: '{deleted} deleted, {failed} could not be removed. {detail}',
@@ -3301,7 +3361,8 @@ export const TALOS_EN_MESSAGES = {
             running: 'in progress',
             queued: 'queued',
             paused: 'paused',
-            failed: 'failed',
+            // owner 23/10 evening: what you can do (the chat has «Resume»), not a verdict on the chat; same root as «Resume»
+            failed: 'to resume',
             interrupted: 'interrupted',
             rowLabel: '{title}, {status}',
         },
@@ -3423,7 +3484,7 @@ export const TALOS_EN_MESSAGES = {
         itemSubtitle: 'A computer this device can control.',
         onlyInApp: 'Remote control works in the TALOS app for Android.',
         emptyTitle: 'No computer connected',
-        emptyHint: 'On the PC, type talos remote in the terminal, or tap the device icon in the desktop app.',
+        emptyHint: 'On the PC, open TALOS and tap the device icon, or go to Settings › Connected devices.',
         connect: 'Connect a computer',
         connecting: 'Connecting to the computer…',
         confirmTitle: 'Confirm on the computer',
@@ -3437,6 +3498,29 @@ export const TALOS_EN_MESSAGES = {
         unnamed: 'Computer',
         listLabel: 'Connected computers',
         pairedOn: 'Connected {when}',
+        // remote mockup approved on 23/10, board 1: one card per computer
+        connectShort: 'Connect',
+        offlineSeen: 'Not online · last seen {when}',
+        seenToday: 'today at {time}',
+        seenYesterday: 'yesterday at {time}',
+        seenOn: '{date} at {time}',
+        sessionsCount: 'session | sessions',
+        runningCount: '{count} running',
+        waitingCount: '{count} waiting for you | {count} waiting for you',
+        countsAt: 'as of {when}',
+        openInCodice: 'Open sessions in Code',
+        settings: 'Settings',
+        actionsFor: 'Actions for {name}',
+        // slice C, D-REM-2 (owner via Desktop 24/10): «Propose to forget»
+        oldEntriesTitle: 'Forget the old entry of {name}? | Forget the {count} old entries of {name}?',
+        oldEntriesHint: 'They have the same name and the same connection, and no longer answer. They are removed from this device only.',
+        testEntry: 'test',
+        oldEntriesList: 'The old entries',
+        oldEntriesYes: 'Yes, forget',
+        oldEntriesNo: 'No, keep them',
+        oldEntriesAnswered: '{names} answered: I didn’t forget it. | {names} answered: I didn’t forget them.',
+        // revisione del blocco 4, S4: an entry that couldn't be forgotten is said, not hidden
+        oldEntriesForgetFailed: 'Couldn’t forget {names}: it’s still in the list. | Couldn’t forget {names}: they’re still in the list.',
         status: 'Status',
         checking: 'Checking…',
         online: 'Online',
@@ -3450,7 +3534,7 @@ export const TALOS_EN_MESSAGES = {
         forgetTitle: 'Forget {name}?',
         forgetBody: 'This device will no longer be able to control it. To do it again you need a new QR code.',
         forgetConfirm: 'Forget',
-        newSessionOnPc: 'For a new session, choose the folder from the computer’s page.',
+        newSessionOnPc: 'For a new session, choose the computer’s folder: «New session on …», below.',
         newSession: 'New session',
         folders: 'Folder on the computer',
         noFolders: 'The computer has no folders open to the device. Add one on the PC.',
@@ -3461,13 +3545,36 @@ export const TALOS_EN_MESSAGES = {
         sessionsEmpty: 'No sessions on this computer yet.',
         untitledSession: 'Untitled session',
         onlyFromPc: 'Only from the computer',
+        noFileExchange: 'This computer can’t receive files yet: update TALOS on the computer.',
+        fileNeedsConsent: 'This folder needs the computer’s consent',
+        fileBusy: 'The computer is receiving too many files: try again in a moment.',
+        fileWaiting: 'The computer is busy with other files: waiting for a free slot…',
+        imageEmpty: 'The image is empty.',
+        imagesUnavailable: 'This computer can’t receive images for the model yet: update TALOS on the computer.',
         terminalOnlyFromPc: 'The terminal is used on the computer.',
         // ⛔ revisione avversariale R-M4 (21/10/2026): ciò che si fa solo dal PC lo dice (RA-11), e la chiave che manca è del PC (D-RM4-8)
         filesOnlyFromPc: 'The folder’s files are browsed on the computer.',
         processActionsOnlyFromPc: 'Stopping or managing a command is done on the computer.',
         keyMissingOnPc: 'The key is missing on the computer: connect it on the PC.',
         keyMissingOnPcNamed: 'The {provider} key is missing on the computer: connect it on the PC.',
-        forgetOffline: 'Forgotten on this device. The computer couldn’t be reached: revoke this device from the computer too.',
+        forgetOffline: '{name} forgotten on this device. The computer couldn’t be reached: revoke this device from the computer too.',
+        // D-MOCK-17 (vc184, foto 206): i titoli della scheda di un PC stavano sotto `harness:` e si leggevano le chiavi grezze
+        notificationsTitle: 'Notifications',
+        connection: 'Connection',
+        pcCode: 'Computer code',
+        // D-MOCK-11 (24/10/2026, contratto R5.12): il permesso che il PC dà al dispositivo per una cartella, chiesto da qui
+        consent: {
+            firstTime: 'The first time, the PC asks you for permission',
+            waitingTitle: 'Confirm on the computer',
+            waitingBody: 'The PC is asking whether this device can work in this folder. Answer there.',
+            ask: 'Ask the PC',
+            required: 'The PC must allow this device to write here',
+            denied: 'The PC said no for this folder',
+            expired: 'The PC didn’t answer',
+            folderNotListed: 'This folder is no longer on the PC',
+            rateLimited: 'There are already 3 requests waiting on the PC: answer them there',
+            badAnswer: 'The PC gave an answer this device doesn’t understand. Try again.',
+        },
         // R-M5a (21/10/2026): le notifiche da un computer accoppiato (owner R-M5 Q3: dopo l'accoppiamento, con «Prova la notifica»)
         notifications: {
             label: 'Notifications from this computer',
@@ -3521,6 +3628,38 @@ export const TALOS_EN_MESSAGES = {
         noText: 'The package does not include its licence text.',
         loading: 'Loading the list…',
         count: '{count} components',
+        // N1 (25/10/2026): the notes of the native components (`lib/legal/nativeComponents.ts`, `noteKey`), in both languages.
+        nativeNotes: {
+            node: 'Termux package; it includes V8 (BSD-3-Clause), libuv (MIT) and the other parts listed in its licence.',
+            sherpa: 'Local speech recognition. Its library contains its own copy of ONNX Runtime 1.28.2 (MIT), separate from the one of the wake word.',
+            silero: 'The model that detects pauses while you dictate.',
+            parakeet: 'Speech recognition model, in the sherpa-onnx format. It is not inside the app: it is downloaded on first use.',
+            openWakeWord: 'Derived from google/speech_embedding (Apache-2.0); the openWakeWord README, however, states CC BY-NC-SA 4.0 for all the included trained models.',
+            iroh: 'The encrypted connection to the computer for remote control. Built by us with rustls 0.23.46.',
+            talosWakeWord: 'Trained by us with livekit-wakeword (Apache-2.0).',
+            llvm: 'Built with clang 21.0.0 (llvm-project 5e96669) and clang 19.0.0 (97a699b), from the Android NDK packaged by Termux.',
+            sentencePiece: 'Format-compatible reader, written by us; no SentencePiece code included.',
+        },
+        // N1: the Rust crates compiled into the iroh library, below its own licence.
+        // N1-bis (25/10/2026): names and licence labels of the native components that are not proper names
+        // (`nameKey`, `licenseKey` in `lib/legal/nativeComponents.ts`), and the MPL-2.0 source link (§3.2(a)).
+        nativeNames: {
+            openWakeWord: 'openWakeWord — melspectrogram and embedding',
+            talosWakeWord: 'Classifier for the word «TALOS»',
+        },
+        licenseLabels: {
+            publicDomain: 'Public domain',
+            apache2ToConfirm: 'Apache-2.0 (to be confirmed)',
+        },
+        // REV6 (25/10/2026): licences AboutLibraries names only with a 32-hex key or a bare «License» (`TALOS_NOMI_LICENZE`).
+        licenseNames: {
+            mit: 'MIT',
+            bsd3: 'BSD-3-Clause',
+        },
+        sourceCode: 'Source code: {url}',
+        rustNotice: 'Rust components compiled into this library ({count} crates), with their licences:',
+        // N1: Android libraries under Google terms rather than a licence text (`TALOS_ANDROID_LICENZE_SENZA_TESTO`).
+        termsAt: 'These are Google terms, not a licence text shipped with the library. Read them at:',
     },
     settingsCenter: {
         allSettings: "All settings",

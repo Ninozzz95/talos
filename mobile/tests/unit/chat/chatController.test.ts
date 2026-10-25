@@ -2993,6 +2993,33 @@ describe('chatController', () => {
     })
 
     /*
+     * ⛔⛔ TRONC-07 (D-LOC-1, owner 2026-10-23): una chiamata fermata al tetto DUE volte nello stesso turno chiude il ciclo
+     * (`agentLoop.ts`), e il fatto arriva nei metadati del messaggio, da dove la vista dice «non è stato eseguito nulla».
+     */
+    it('TRONC-07 a tool call cut by the length limit twice is marked in the metadata', async () => {
+        const { deps, store, request } = makeDeps()
+        const originale = request.getMockImplementation()!
+        request.mockImplementation(async (call: { url: string }) => call.url.includes('anthropic.com/v1/messages')
+            ? {
+                status: 200,
+                data: {
+                    model: 'claude-live',
+                    content: [
+                        { type: 'text', text: 'Genero il sito.' },
+                        { type: 'tool_use', id: 'tu1', name: 'notes_create', input: { title: 'Barnes' } },
+                    ],
+                    stop_reason: 'max_tokens',
+                },
+            }
+            : originale(call as never))
+        store.set('anthropic', 'sk-ant')
+        const controller = createChatController(deps)
+        await controller.init()
+        await controller.send('Si genera l html usando apposito tool')
+        expect(controller.chat.messages.at(-1)?.metadata).toMatchObject({ stopped_at_limit: true, tool_call_cut_off: true })
+    })
+
+    /*
      * ⭐⭐ AZD-CTRL-01 — P4-quinquies (owner 02/10/2026, «Riprova, poi avviso»): il modello dice «Salvato la nota ✅» senza
      * chiamare niente, sia al primo giro sia dopo il sollecito ⇒ UN secondo giro (mai un terzo) e il fatto viaggia nei
      * metadati, da dove la vista mette la riga «Nessuno strumento è partito».

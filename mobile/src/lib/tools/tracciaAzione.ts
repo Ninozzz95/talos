@@ -543,6 +543,13 @@ export const TALOS_METADATA_SCHERMO = 'screen_context'
 export const TALOS_METADATA_TRONCATA = 'stopped_at_limit'
 
 /**
+ * ⛔⛔ D-LOC-1 (owner 2026-10-23): la risposta si è fermata al tetto MENTRE scriveva una chiamata, per la seconda volta nel
+ * turno, e il ciclo si è chiuso senza eseguirla (`agentLoop.ts`). Accanto a `stopped_at_limit`: la vista dice che
+ * un'azione si è interrotta e che non è partito nulla, e non offre «Continua». Solo `true` conta.
+ */
+export const TALOS_METADATA_CHIAMATA_TRONCATA = 'tool_call_cut_off'
+
+/**
  * ⭐⭐ P4-quinquies (owner 02/10/2026, «Riprova, poi avviso»): la risposta ha dichiarato un'azione fatta e nel turno non
  * è partito nessuno strumento, nemmeno dopo il sollecito del ciclo. Solo `true` conta; la vista mette la riga onesta.
  */

@@ -16,7 +16,7 @@ export { talosStatoDellaChat, talosStatoChatParla, TALOS_STATO_CHAT_CHIAVE, type
  *   https://www.w3.org/WAI/WCAG21/Understanding/use-of-color.html, letto il 24/09/2026).
  *   L'icona è `aria-hidden`: la parola la porta già.
  * ⛔ Tono d'attenzione SOLO per chi chiede un'azione: «aspetta te» (warning) e
- *   «fallita» (danger). «interrotta» resta quieta come sul desktop (`TONI`, dove
+ *   «da riprendere» (warning, owner 23/10 sera: prima «fallita» in rosso). «interrotta» resta quieta come sul desktop (`TONI`, dove
  *   non ha tono): si riprende scrivendo, non è un allarme.
  * ⛔ «conclusa» e «vuota» non disegnano niente: un'etichetta «conclusa» su ogni
  *   riga normale sarebbe rumore (stessa scelta dichiarata in `HarnessScreen.vue:109-114`).
@@ -27,7 +27,7 @@ export { talosStatoDellaChat, talosStatoChatParla, TALOS_STATO_CHAT_CHIAVE, type
  *     del segno «bozza», colorata solo per i due toni d'attenzione.
  */
 import { computed } from 'vue'
-import { CircleDashed, CircleX, Hourglass, LoaderCircle, Pause, ShieldQuestion } from '@lucide/vue'
+import { CircleDashed, Hourglass, LoaderCircle, Pause, RotateCcw, ShieldQuestion } from '@lucide/vue'
 import { useTalosI18n } from '@/i18n'
 import type { TalosStatoChat } from '@/lib/chat/statoChat'
 import { TALOS_STATO_CHAT_CHIAVE, talosStatoChatParla } from '@/lib/chat/statoDellaChat'
@@ -47,7 +47,8 @@ const { t } = useTalosI18n()
  *   in corso   → LoaderCircle che gira (le attese vive dell'app);
  *   in coda    → Hourglass (i giri che aspettano, `TalosResearchStatusPill.vue:40`);
  *   in pausa   → Pause (la pausa della memoria, `TalosMobileMemoryState.vue:40`) — CODA-PAUSA (25/09/2026, owner «in pausa»);
- *   fallita    → CircleX (errore, `HarnessScreen.vue:338`);
+ *   fallita    → RotateCcw, l'icona di «Riprendi» (`TalosMobileMessageActions.vue`): owner 23/10 sera, «da riprendere» dice cosa
+ *                puoi fare e non giudica la chat; tono d'attenzione come «aspetta te», niente rosso (revisione del Desktop);
  *   interrotta → CircleDashed (interrotta, `TalosResearchStatusPill.vue:34`).
  */
 const ICONE = {
@@ -55,14 +56,14 @@ const ICONE = {
     'in-corso': LoaderCircle,
     'in-coda': Hourglass,
     'in-pausa': Pause,
-    fallita: CircleX,
+    fallita: RotateCcw,
     interrotta: CircleDashed,
 } as const
 
 type Tono = 'attenzione' | 'pericolo' | 'vivo' | 'quieto'
 const TONO: Readonly<Record<keyof typeof ICONE, Tono>> = {
     'aspetta-te': 'attenzione',
-    fallita: 'pericolo',
+    fallita: 'attenzione',
     'in-corso': 'vivo',
     'in-coda': 'quieto',
     'in-pausa': 'quieto',
@@ -100,6 +101,7 @@ const parola = computed(() => t(TALOS_STATO_CHAT_CHIAVE[props.stato] ?? ''))
         data-testid="talos-chat-status"
         :data-stato="props.stato"
         :data-tone="tono"
+        :data-forma="props.forma ?? 'riga'"
         class="inline-flex min-w-0 shrink-0 items-center gap-1 whitespace-nowrap leading-none"
         :class="[
             props.forma === 'pastiglia'
@@ -115,6 +117,21 @@ const parola = computed(() => t(TALOS_STATO_CHAT_CHIAVE[props.stato] ?? ''))
             :class="props.stato === 'in-corso' ? 'text-[var(--talos-accent)] motion-safe:animate-spin' : ''"
             aria-hidden="true"
         />
-        <span>{{ parola }}</span>
+        <span class="talos-stato-parola">{{ parola }}</span>
     </span>
 </template>
+
+<style>
+/*
+ * (D) 23/10 sera, approvata dal Desktop dopo la foto: nella barra stretta la parola lunga accorciava il titolo della chat («Ciao, h…»).
+ * Sotto 360 px del contenitore dei Recenti (`TalosMobileSidebar.vue`, `container: talos-recenti / inline-size`) la pastiglia tiene
+ * solo l'icona, che ha già una forma diversa per ogni stato (WCAG 1.4.1). La parola resta nel DOM per il lettore di schermo,
+ * mai `display:none`, e non va in un suggerimento al tocco: la riga ha già il suo tocco prolungato (menu e selezione).
+ */
+@container talos-recenti (max-width: 360px) {
+    [data-testid="talos-chat-status"][data-forma="pastiglia"] .talos-stato-parola {
+        position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+    }
+    [data-testid="talos-chat-status"][data-forma="pastiglia"] { padding-inline: 0.25rem; }
+}
+</style>

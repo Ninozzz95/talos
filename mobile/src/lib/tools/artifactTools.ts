@@ -37,10 +37,44 @@ export function createTalosVisualArtifactTools(
             html: z.string().min(1).max(400_000)
                 .describe('A complete HTML document: <!doctype html><html>...</html>, with any CSS/JS inline. No external scripts, stylesheets, fonts or network calls — they will not load.'),
         }),
+        /*
+         * ⛔⛔ Owner 2026-10-23, «Sì, solo per i locali»: il motore sul dispositivo NON mette l'HTML negli argomenti. Un 4B
+         * sbaglia gli escape di un documento intero in una stringa, o si ferma al tetto a metà (D-LOC-1, Spark-X2.5-4B):
+         * qui passa titolo e tipo, e il documento arriva come blocco ```html nella risposta dopo, che il ciclo cattura
+         * (`agentLoop.ts`, `bloccoHtml.ts`). Forma vista dal Desktop prima di essere scritta; in r4 resterà identica.
+         * `kind` è un enum di un valore solo, additivo: domani `svg` senza cambiare contratto (come Jan,
+         * `web-app/src/lib/utils.ts:86-121`).
+         */
+        perIlMotoreLocale: {
+            // ⛔ `looseObject`: se il modello mette lo stesso l'HTML negli argomenti, non si butta — si usa. E `kind` ha un
+            // valore predefinito: un modello piccolo che lo dimentica non deve vedersi rifiutare la chiamata.
+            input: z.looseObject({
+                title: z.string().min(1).max(120)
+                    .describe('Short label shown on the card in chat, e.g. "Spirograph".'),
+                kind: z.enum(['html']).default('html').describe('What the visual is made of. Only "html" for now.'),
+            }),
+            description: [
+                'Start an interactive visual in the chat — a diagram, a chart, a small simulation, a page the user can touch.',
+                'Call it with only a title. Then, in your NEXT reply, write the complete self-contained HTML document as ONE fenced block that starts with ```html and ends with ```, with CSS and JS inline and no external resources. Do not put the HTML in the call.',
+                'The document runs isolated: no network, no access to TALOS data. Not for plain pictures or plain documents.',
+            ].join(' '),
+        },
         async run(input) {
+            const html = (input as { html?: string }).html
+            if (html === undefined) {
+                // Solo dal motore locale (`perIlMotoreLocale`): l'API valida `html` come obbligatorio e qui non arriva.
+                return {
+                    ok: true,
+                    content: `Ready for "${input.title}". Now reply with ONLY one fenced block: \`\`\`html … \`\`\` containing `
+                        + 'the complete self-contained document (inline CSS/JS, no external resources). Nothing before or after the block.',
+                    attesaBlocco: { titolo: input.title, tipo: 'html' as const },
+                    // ⛔ ART-L-10 (Pad, vc151): questo passo non crea niente. Senza, la vista diceva «Fatto».
+                    senzaEffetto: true,
+                }
+            }
             let result: { id: string }
             try {
-                result = await sources.create(input.title, input.html)
+                result = await sources.create(input.title, html)
             } catch (error) {
                 const detail = error instanceof Error ? error.message : String(error)
                 return {

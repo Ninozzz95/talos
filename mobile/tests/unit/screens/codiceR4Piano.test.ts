@@ -4,7 +4,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import type { TalosR4ClientePonte } from '@/lib/harness/r4/clienteR4'
-import { riassuntoSenzaChiedereR4 } from '@/lib/harness/r4/permessiR4'
+import { chipDelPermessoR4, riassuntoSenzaChiedereR4 } from '@/lib/harness/r4/permessiR4'
 import { testoPianoR4 } from '@/lib/harness/r4/pianoR4'
 import { talosCurrentLocale } from '@/i18n'
 
@@ -199,14 +199,21 @@ describe('il piano nel Codice su r4 (K3 piano)', () => {
         expect(stato.push).toEqual([{ name: 'codice-r4', params: { id: nuova } }])
     })
 
-    it('CPI-05 la pillola dice ciò che passa senza chiedere, col tono del rischio, e apre il foglio', async () => {
+    // J3 (24/10/2026; owner, confermata dal Desktop): la pillola dice il NOME BREVE del livello (desktop `chipDelPermesso` @
+    // c6d1cbff2); ciò che passa senza chiedere (C1) apre il suggerimento e resta nel nome accessibile.
+    it('CPI-05 la pillola dice il nome breve del livello, col tono del rischio; ciò che passa senza chiedere nel suggerimento; apre il foglio', async () => {
         const w = await schermata()
         await consegna(fino((d) => d.type === 'RunFinished'))
         const pillola = w.get('[data-testid="talos-codice-r4-permesso"]')
-        const atteso = riassuntoSenzaChiedereR4('Workspace write', {}, { modalitaOperativa: 'normale' }, L())
+        const c1 = riassuntoSenzaChiedereR4('Workspace write', {}, { modalitaOperativa: 'normale' }, L())
+        const atteso = chipDelPermessoR4('Workspace write', {}, { modalitaOperativa: 'normale' }, L())
         expect(pillola.text()).toBe(atteso.testo)
+        expect(atteso.testo).not.toBe(c1.testo)
+        expect(pillola.attributes('title')).toBe(atteso.suggerimento)
+        expect(pillola.attributes('title')!.startsWith(c1.testo)).toBe(true)
         expect(pillola.attributes('data-tono')).toBe('warning')
         expect(pillola.attributes('aria-label')).toContain(atteso.testo)
+        expect(pillola.attributes('aria-label')).toContain(c1.testo)
         await pillola.trigger('click')
         await asciuga()
         expect(w.find('[data-testid="talos-codice-r4-modo-foglio"]').exists()).toBe(true)

@@ -179,12 +179,16 @@ describe('ChatsScreen (F3-T3)', () => {
         expect(wrapper.text()).not.toContain('SQLITE_INTERNAL_DETAILS')
         wrapper.unmount()
     })
-    it('lists every session with the active one marked, most recent first', () => {
+    // ⛔ Owner 23/10/2026 ~23:45 (via Desktop): in OGNI elenco di chat si colora solo la chat davvero a schermo, come i
+    // Recenti, ChatGPT e Claude. Sulla lista la conversazione non è a schermo: nessuna riga colorata, nemmeno la più recente
+    // aperta. Prima questo test fissava il contrario («the active one marked»).
+    it('CHATS-EVID-01 lists every session most recent first, and colours none: the list is on screen, not a conversation', () => {
         const wrapper = mountScreen()
         const rows = wrapper.findAll('[data-testid="talos-chats-row"]')
         expect(rows).toHaveLength(2)
         expect(rows[0].text()).toContain('Streaming design')
-        expect(wrapper.get('[data-testid="talos-chats-row"][data-active="true"]').text()).toContain('Streaming design')
+        expect(wrapper.find('[data-testid="talos-chats-row"][data-active="true"]').exists()).toBe(false)
+        for (const row of rows) expect(row.classes()).not.toContain('bg-[var(--talos-active)]')
     })
 
     it('filters locally through the search field', async () => {
@@ -423,7 +427,7 @@ describe('ChatsScreen — lo stato di ogni chat (B3 / F4-B)', () => {
         const { createTalosI18n } = await import('@/i18n')
         const global = (await createTalosI18n()).global as unknown as Composer
         global.mergeLocaleMessage('it', { chats: { status: {
-            waiting: 'aspetta te', running: 'in corso', queued: 'in coda', failed: 'fallita', interrupted: 'interrotta',
+            waiting: 'aspetta te', running: 'in corso', queued: 'in coda', failed: 'da riprendere', interrupted: 'interrotta',
             rowLabel: '{title}, {status}',
         } } })
         lingua = global.locale.value
@@ -489,6 +493,7 @@ describe('ChatsScreen — lo stato di ogni chat (B3 / F4-B)', () => {
         wrapper.unmount()
     })
 
+    // owner 23/10 sera: l'ultimo giro in errore si legge «da riprendere», tono d'attenzione (non più «fallita» in rosso)
     it('CHATS-STATO-04 dal disco: fallita e interrotta; conclusa tace e la riga non cambia nome', async () => {
         const controller = mockState.controller as ReturnType<typeof makeController>
         Object.assign(controller.chat.sessions[0]!, { last_message: { role: 'system', state: 'failed', interrupted: false, model_profile_id: null } })
@@ -496,8 +501,8 @@ describe('ChatsScreen — lo stato di ogni chat (B3 / F4-B)', () => {
         const wrapper = mountScreen()
         await flushPromises()
         const { s1, s2 } = righe(wrapper)
-        expect(s1!.get('[data-testid="talos-chat-status"]').text()).toBe('fallita')
-        expect(s1!.get('[data-testid="talos-chat-status"]').attributes('data-tone')).toBe('pericolo')
+        expect(s1!.get('[data-testid="talos-chat-status"]').text()).toBe('da riprendere')
+        expect(s1!.get('[data-testid="talos-chat-status"]').attributes('data-tone')).toBe('attenzione')
         expect(s2!.find('[data-testid="talos-chat-status"]').exists()).toBe(false)
         expect(s2!.get('[data-testid="talos-chats-open"]').attributes('aria-label')).toBeUndefined()
         wrapper.unmount()
