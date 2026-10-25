@@ -21,3 +21,17 @@ test('R08-RIGA — AL CONTRARIO: niente modello, niente riga', () => {
   assert.equal(nomeModello(''), null);
   assert.equal(nomeModello(undefined), null);
 });
+
+test('B9-NOME (revisione a blocco 9, nota sulla Home e la barra) — targhe locali corte o strane: un nome pulito, mai doppio o di spazi', () => {
+  assert.equal(nomeModello('local:   '), null, 'solo spazi: niente riga');
+  assert.equal(nomeModello('local:7B'), '7B', 'non «7B · 7B»');
+  assert.equal(nomeModello('local:Q4_K_M'), 'Q4_K_M', 'non «K M»');
+  assert.equal(nomeModello('local:author-Model-Q4_K_M.gguf'), 'Model · Q4_K_M', 'la quantizzazione non resta nel nome');
+  assert.equal(nomeModello('local:Mistral-7B-Instruct-v0.3.Q4_K_M.gguf'), 'Mistral · 7B · Q4_K_M', 'anche dopo un punto');
+  /* A10-9 (blocco 10): «0-6B» è 0,6 B, non 6 B; «Llama-3-8B» resta 8 B */
+  assert.equal(nomeModello('local:Qwen-Qwen3-0-6B-GGUF-23749fef-Qwen3-0-6B-Q8-0-gguf'), 'Qwen3 · 0.6B · Q8_0');
+  assert.equal(nomeModello('local:meta-Llama-3-8B-Q4_K_M.gguf'), 'Llama 3 · 8B · Q4_K_M');
+  /* il verso contrario: i casi di sempre restano uguali */
+  assert.equal(nomeModello('local:bartowski-Qwen3-8B-Q4_K_M.gguf'), 'Qwen3 · 8B · Q4_K_M');
+  assert.equal(nomeModello('chatgpt:gpt-6-luna'), 'gpt-6-luna');
+});

@@ -136,6 +136,23 @@ test('CTX-RIALLINEATO-RIGA — owner 12/10 («Si ripara da solo»): archivio ria
   for (const testo of [en, it]) assert.doesNotMatch(testo, /non riassunta|not summarized|archivio-riallineato|CTX_|object Object/u);
 });
 
+test('CTX-FRENO-RIGA — pezzo D del §4 (23/10): il freno che tira ha una riga sua nelle due lingue — mai «freno» grezzo, mai «non riassunta»', () => {
+  /* l'evento come lo scrive l'agent-service (esempio grezzo di Z, `1b_freno_sul_filo_talos.compattazione`) */
+  const evento = interpretaEventoCompattazione({ type: 'CUSTOM', name: 'talos.compattazione', value: { fase: 'fine', giro: 0, compattato: false, motivo: 'freno', perche: 'colpi',
+    freno: { colpi: 2, mezzoAlVerdetto: 616, at: '2026-10-23T11:33:17.419Z' } } });
+  assert.equal(evento?.tipo, 'fine');
+  assert.equal(evento?.motivo, 'freno');
+  impostaLingua('en');
+  const en = testoRigaCompattazione({ stato: 'non-riuscita', motivo: evento.motivo, dettaglio: evento.dettaglio });
+  assert.equal(en, 'Automatic summaries paused · the last ones did not make the conversation shorter; /compact still runs one');
+  impostaLingua('it');
+  const it = testoRigaCompattazione({ stato: 'non-riuscita', motivo: evento.motivo, dettaglio: evento.dettaglio });
+  assert.equal(it, 'Riassunti automatici in pausa · gli ultimi non accorciavano la conversazione; /compact ne fa comunque uno');
+  for (const testo of [en, it]) assert.doesNotMatch(testo, /non riassunta|not summarized|\bfreno\b|colpi|object Object/u);
+  /* AL CONTRARIO: un motivo di fallimento vero resta «non riassunta» */
+  assert.match(testoRigaCompattazione({ stato: 'non-riuscita', motivo: 'superata' }), /^Conversazione non riassunta/u);
+});
+
 test('CTX-COMPACT-NOTA-MOTIVO (revisione 3 della CLI, 22/10) — «al-minimo» e «inefficace» hanno la loro frase, nelle due lingue; ogni altro motivo la generica', async () => {
   const { chiaveNotaCompactManuale } = await import('../../src/components/compattazione-legacy.js');
   const { t: tr } = await import('../../src/components/lingua.js');

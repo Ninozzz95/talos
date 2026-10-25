@@ -43,6 +43,7 @@ import { randomUUID } from 'node:crypto';
 
 // ⛔ Il tetto dello scarico è UNO SOLO per tutto il prodotto: vedi `leggiBytesVoce` in fondo.
 import { DIMENSIONE_MASSIMA_SCARICO } from './workspace-files.mjs';
+import { scriviAtomico } from './research-store.mjs';
 
 export class LibraryStoreError extends Error {
   constructor(message, code = 'LIBRARY_INVALID') {
@@ -287,7 +288,10 @@ export async function elencaVociConTesto({ cartella }, deps = {}) {
     }
     let testoEstratto = '';
     try {
-      testoEstratto = await readFileFn(join(cartella, CARTELLA_LIBRERIA, entry.id, NOME_FILE_CONTENUTO), 'utf8');
+      /* D-A3 (24/10): si cerca nell'ultima versione vera; il `meta.json` si rilegge solo per sapere quale è */
+      const cartellaVoce = join(cartella, CARTELLA_LIBRERIA, entry.id);
+      const meta = await leggiMeta(join(cartellaVoce, NOME_FILE_META), readFileFn, entry.id).catch(() => undefined);
+      testoEstratto = (await primoPresente(candidatiDellUltima(cartellaVoce, meta), (p) => readFileFn(p, 'utf8'), entry.id)).esito; // REV4-A1
     } catch {
       // ⛔ contenuto mancante/illeggibile: la voce resta cercabile per nome, mai un errore che blocca l'intera ricerca per una voce sola.
     }
@@ -416,11 +420,84 @@ export async function leggiVoce({ cartella, id }, deps = {}) {
   }
   let testo;
   try {
-    testo = await readFileFn(percorsoContenuto, 'utf8');
+    // D-A3: l'ultima vera, anche se `contenuto` è indietro; REV4-A1: e se il suo file manca, `contenuto`; REV5-A1: e basta
+    testo = (await primoPresenteDellUltima(cartellaVoce, meta, (p) => readFileFn(p, 'utf8'), id, deps.statFn)).esito;
   } catch (errore) {
+    if (errore instanceof LibraryStoreError) throw errore; // REV5-A1: il messaggio leggibile arriva così com'è
     throw new LibraryStoreError(`${id}: metadata presente ma contenuto illeggibile: ${errore.message}`, 'LIBRARY_READ_FAILED');
   }
   return { nome: voce.nome, mediaType: voce.mediaType, origine: voce.origine, testo };
+}
+
+/**
+ * ⛔ Revisione a blocco 3 (24/10/2026, D-A3, S3): il file dell'ULTIMA versione. Con l'elenco è `versioni/<ultima>`, la fonte di
+ * verità; `contenuto` ne è solo la copia, e dopo un'interruzione fra `meta.json` e `contenuto` resta indietro (misurato: elenco
+ * [1,2,3], `leggiVoce` dava la v2). Tutti i lettori dell'«ultima» passano da qui: lettura per il modello, scarico, ricerca.
+ * Senza elenco (le voci di prima, le immagini) resta `contenuto`.
+ *
+ * ⛔ Revisione a blocco 4 (24/10/2026, REV4-A1, S3): un file solo non basta. Se `versioni/<ultima>` manca (una sincronizzazione a
+ *   metà, un ripristino da copia, un antivirus) la voce diventava illeggibile — lettura, scarico, ricerca e perfino il prossimo
+ *   aggiornamento (ENOENT) — mentre `contenuto`, la sua copia, era lì accanto. Ora i candidati sono in fila: il file dell'ultima,
+ *   poi `contenuto`. Come Cline (`session-manifest-store.ts:286-299`, solo ENOENT si ignora e il registro lo dice).
+ *
+ * ⛔ Revisione a blocco 5 (24/10/2026, REV5-A1, S3): la fila si FERMA a `[ultima, contenuto]`. Prima proseguiva sulle versioni più
+ *   vecchie, e senza l'ultima e senza `contenuto` la v2 si leggeva come se fosse l'ultima: `artifact_update` costruiva la v4 sulla v2
+ *   e la v3 spariva in silenzio (lo diceva solo un `console.warn`; sonda REV5-A1). Un errore visibile vale più di una base sbagliata
+ *   invisibile: oltre i due file, `ultimaMancante` dice LIBRARY_READ_FAILED con la versione che c'è da ripristinare. Hermes
+ *   (`store/artifacts.ts:186-215`) «snaps back to newest» — ma lì è la SELEZIONE del pannello che torna alla più nuova esistente, non
+ *   la base di una scrittura: qui la scelta è della sessione Desktop, e una versione vecchia si legge SOLO per numero (`leggiVersione`).
+ */
+function candidatiDellUltima(cartellaVoce, meta) {
+  const elenco = Array.isArray(meta?.versioni) ? meta.versioni.filter((v) => Number.isInteger(v?.n) && v.n >= 1) : [];
+  const contenuto = join(cartellaVoce, NOME_FILE_CONTENUTO);
+  if (!elenco.length) return [contenuto];
+  return [join(cartellaVoce, CARTELLA_VERSIONI, String(elenco.at(-1).n)), contenuto];
+}
+
+/**
+ * REV5-A1 (24/10/2026): l'ultima con la sua fila; se non c'è nessuno dei due file, un LIBRARY_READ_FAILED che si capisce — quale
+ * versione manca e quale c'è da ripristinare — invece di un ENOENT su un percorso interno. Gli altri errori passano così come sono.
+ */
+async function primoPresenteDellUltima(cartellaVoce, meta, provaFn, id, statFn = fsp.stat) {
+  try {
+    return await primoPresente(candidatiDellUltima(cartellaVoce, meta), provaFn, id);
+  } catch (errore) {
+    if (errore?.code !== 'ENOENT') throw errore;
+    throw await ultimaMancante(cartellaVoce, meta, id, statFn);
+  }
+}
+
+async function ultimaMancante(cartellaVoce, meta, id, statFn) {
+  const numeri = [...new Set(versioniDiMeta(meta).map((v) => v.n))].sort((a, b) => b - a);
+  const ultima = numeri[0] ?? 1;
+  let presente = null;
+  for (const n of numeri.slice(1)) {
+    try { await statFn(join(cartellaVoce, CARTELLA_VERSIONI, String(n))); presente = n; break; } catch { /* nemmeno questa */ }
+  }
+  const messaggio = presente
+    ? `${id}: the latest version (v${ultima}) is not on disk; v${presente} is: restore it from the version history.`
+    : `${id}: the latest version (v${ultima}) is not on disk, and no older version is either.`;
+  return new LibraryStoreError(messaggio, 'LIBRARY_READ_FAILED');
+}
+
+/**
+ * REV4-A1 (24/10/2026): prova i candidati in ordine con `provaFn` (una lettura o uno `stat`). ⛔ Solo ENOENT passa al prossimo:
+ * un EIO o un EPERM restano errori, perché un disco che risponde male non è un file mancante. Nessun candidato ⇒ il primo ENOENT.
+ * Un ripiego si dice nel registro del server: è uno stato rotto che qualcuno deve poter vedere.
+ */
+async function primoPresente(candidati, provaFn, id) {
+  let primoErrore;
+  for (const [i, percorso] of candidati.entries()) {
+    try {
+      const esito = await provaFn(percorso);
+      if (i > 0) console.warn(`[library] ${id}: the file of the latest version is missing; read from ${percorso.split(/[\\/]/u).slice(-2).join('/')}`);
+      return { percorso, esito };
+    } catch (errore) {
+      if (errore?.code !== 'ENOENT') throw errore;
+      primoErrore ??= errore;
+    }
+  }
+  throw primoErrore;
 }
 
 
@@ -446,11 +523,13 @@ export async function leggiBytesVoce({ cartella, id }, deps = {}) {
   const meta = await leggiMeta(join(cartellaVoce, NOME_FILE_META), readFileFn, id);
   if (meta === undefined) return null;
   const voce = meta2voce(id, meta);
-  const percorsoContenuto = join(cartellaVoce, NOME_FILE_CONTENUTO);
+  let percorsoContenuto;
   let stat;
   try {
-    stat = await statFn(percorsoContenuto);
+    // D-A3: si scarica l'ultima vera; REV4-A1: col ripiego se il suo file manca
+    ({ percorso: percorsoContenuto, esito: stat } = await primoPresenteDellUltima(cartellaVoce, meta, (p) => statFn(p), id, statFn));
   } catch (errore) {
+    if (errore instanceof LibraryStoreError) throw errore; // REV5-A1
     // ⛔ La scheda c'è e il file no: uno stato ROTTO, non un «non trovato» — dirlo è il solo modo perché qualcuno lo ripari.
     throw new LibraryStoreError(`${id}: the entry exists, but its file does not (${errore.message})`, 'LIBRARY_READ_FAILED');
   }
@@ -536,12 +615,17 @@ export async function rinominaVoce({ cartella, id, nome }, deps = {}) {
   }
   const cartellaVoce = cartellaDellaVoce(cartella, id);
   if (!cartellaVoce) return null;
-  const meta = await leggiMeta(join(cartellaVoce, NOME_FILE_META), readFileFn, id);
-  if (meta === undefined) return null;
-  const nomePrima = meta.nome;
-  const aggiornato = { ...meta, nome: nomeSicuro, aggiornatoIl: new Date().toISOString() };
-  await writeFileFn(join(cartellaVoce, NOME_FILE_META), JSON.stringify(aggiornato, null, 2), 'utf8');
-  return { id, nomePrima, nomeDopo: nomeSicuro };
+  /* ⛔ Revisione a blocco 3 (24/10/2026, D-A1, S3): la rinomina leggeva e riscriveva `meta.json` FUORI dalla fila della voce; a
+     metà di un `artifact_update` riscriveva l'elenco VECCHIO, la versione appena nata spariva e l'aggiornamento dopo la sovrascriveva
+     (misurato: testi A, B, D — la C persa). Nella stessa fila delle versioni, legge sempre l'elenco vero. */
+  return inFilaVoce(cartellaVoce, async () => {
+    const meta = await leggiMeta(join(cartellaVoce, NOME_FILE_META), readFileFn, id);
+    if (meta === undefined) return null;
+    const nomePrima = meta.nome;
+    const aggiornato = { ...meta, nome: nomeSicuro, aggiornatoIl: new Date().toISOString() };
+    await writeFileFn(join(cartellaVoce, NOME_FILE_META), JSON.stringify(aggiornato, null, 2), 'utf8');
+    return { id, nomePrima, nomeDopo: nomeSicuro };
+  });
 }
 
 /**
@@ -556,10 +640,14 @@ export async function eliminaVoce({ cartella, id }, deps = {}) {
   const rmFn = deps.rmFn ?? fsp.rm;
   const cartellaVoce = cartellaDellaVoce(cartella, id);
   if (!cartellaVoce) return null;
-  const meta = await leggiMeta(join(cartellaVoce, NOME_FILE_META), readFileFn, id);
-  if (meta === undefined) return null;
-  await rmFn(cartellaVoce, { recursive: true, force: true });
-  return { id, nome: meta.nome };
+  /* 24/10/2026 (revisione a blocco 3, accanto a D-A1): anche l'eliminazione aspetta la fila della voce — un `artifact_update` in
+     corso finisce prima, e non trova la cartella sparita a metà (prima arrivava al modello come un errore generico ENOENT). */
+  return inFilaVoce(cartellaVoce, async () => {
+    const meta = await leggiMeta(join(cartellaVoce, NOME_FILE_META), readFileFn, id);
+    if (meta === undefined) return null;
+    await rmFn(cartellaVoce, { recursive: true, force: true });
+    return { id, nome: meta.nome };
+  });
 }
 
 /*
@@ -649,4 +737,189 @@ export async function salvaVoce({ cartella, nome, mediaType, origine = 'uploaded
     await writeFileFn(join(cartellaVoce, NOME_FILE_CONTENUTO), testo, 'utf8');
   }
   return id;
+}
+
+
+/*
+ * ⭐⭐⭐ LE VERSIONI DI UNA VOCE (owner 24/10/2026: «aggiorna la stessa», «si tengono tutte», «vedere e ripristinare»; contratto con la
+ *   CLI in `handoff/CONTRATTO-ARTIFACT-UPDATE-2026-10-24.md` §3 e §7). Le usano l'attrezzo `artifact_update`, la rotta della Libreria
+ *   e la CLI (`talos library`): una sola implementazione del formato sul disco, mai una copia.
+ *
+ *   Sul disco:
+ *   - `lib-<uuid>/contenuto` è SEMPRE l'ultima versione ⇒ ogni lettore di oggi (`leggiVoce`, `elencaVoci`, la ricerca, la carta in
+ *     chat) vede l'ultima senza cambiare niente;
+ *   - `lib-<uuid>/versioni/<n>` tiene OGNI versione, l'ultima compresa; un file di versione non si riscrive e non si cancella mai
+ *     (lo toglie solo `eliminaVoce`, con tutta la cartella);
+ *   - `meta.json.versioni = [{ n, creataIl, modello?, sessionId?, sessionNome?, ripristinoDi? }]`. Una voce SENZA elenco è alla
+ *     versione 1: nessuna migrazione, si materializza alla prima versione nuova.
+ *
+ *   L'ordine delle scritture è quello che regge un'interruzione a metà: (1) il file `versioni/<n+1>` (nuovo, non tocca niente di
+ *   esistente) → (2) `meta.json` per rinomina atomica → (3) `contenuto` per rinomina atomica. Fermati dopo (1): il file orfano si
+ *   riscrive al tentativo dopo. Fermati dopo (2): `contenuto` è indietro di una versione, e la scrittura successiva lo riallinea
+ *   PRIMA di aggiungere (`riallineaContenuto`). ⛔ Mai il contrario: copiare il vecchio contenuto dentro `versioni/<n>` DOPO aver
+ *   scritto il nuovo perderebbe una versione a ogni interruzione.
+ *
+ *   ⛔ Un lucchetto per voce, in memoria: due giri che aggiornano lo stesso artefatto non si pestano (chi viene dopo applica i suoi
+ *   `edits` all'ultima versione, non a quella che aveva letto). Fra processi diversi (app installata e server a mano) vale ciò che
+ *   vale già per `rinominaVoce`: nessuno dei due scrive la stessa voce nello stesso istante, e il peggio è una versione con lo stesso
+ *   numero riscritta — mai un contenuto principale perso.
+ */
+const CARTELLA_VERSIONI = 'versioni';
+const lucchettiVoce = new Map();
+function inFilaVoce(chiave, lavoro) {
+  const prima = lucchettiVoce.get(chiave) ?? Promise.resolve();
+  const mio = prima.then(lavoro, lavoro);
+  const coda = mio.catch(() => {});
+  lucchettiVoce.set(chiave, coda);
+  void coda.then(() => { if (lucchettiVoce.get(chiave) === coda) lucchettiVoce.delete(chiave); });
+  return mio;
+}
+
+function versioniDiMeta(meta) {
+  const elenco = Array.isArray(meta.versioni) ? meta.versioni.filter((v) => Number.isInteger(v?.n) && v.n >= 1) : [];
+  if (elenco.length) return elenco;
+  return [{
+    n: 1,
+    creataIl: typeof meta.creatoIl === 'string' ? meta.creatoIl : new Date(0).toISOString(),
+    ...(typeof meta.modello === 'string' ? { modello: meta.modello } : {}),
+    ...(typeof meta.sessionId === 'string' ? { sessionId: meta.sessionId } : {}),
+    ...(typeof meta.sessionNome === 'string' ? { sessionNome: meta.sessionNome } : {}),
+  }];
+}
+
+/** L'elenco delle versioni di una voce, dalla più vecchia alla più nuova. `null` se la voce non esiste. */
+export async function elencaVersioni({ cartella, id }, deps = {}) {
+  const readFileFn = deps.readFileFn ?? fsp.readFile;
+  const cartellaVoce = cartellaDellaVoce(cartella, id);
+  if (!cartellaVoce) return null;
+  const meta = await leggiMeta(join(cartellaVoce, NOME_FILE_META), readFileFn, id);
+  if (meta === undefined) return null;
+  return versioniDiMeta(meta).map((v) => ({ ...v }));
+}
+
+/** Il testo della versione `n`. `null` se la voce o la versione non esistono. Una voce senza elenco ha solo la versione 1. */
+export async function leggiVersione({ cartella, id, n }, deps = {}) {
+  const readFileFn = deps.readFileFn ?? fsp.readFile;
+  const cartellaVoce = cartellaDellaVoce(cartella, id);
+  if (!cartellaVoce || !Number.isInteger(n) || n < 1) return null;
+  const meta = await leggiMeta(join(cartellaVoce, NOME_FILE_META), readFileFn, id);
+  if (meta === undefined) return null;
+  const versioni = versioniDiMeta(meta);
+  const voce = versioni.find((v) => v.n === n);
+  if (!voce) return null;
+  const senzaElenco = !Array.isArray(meta.versioni) || !meta.versioni.length;
+  const contenuto = join(cartellaVoce, NOME_FILE_CONTENUTO);
+  /* REV4-A1 (24/10): l'ULTIMA, se il suo file manca, è `contenuto` (la sua copia) — come per `leggiVoce`, così il pannello delle
+     versioni e la lettura dicono la stessa cosa. Una versione più vecchia senza file resta «non c'è»: inventarla sarebbe peggio. */
+  const candidati = senzaElenco ? [contenuto]
+    : n === versioni[versioni.length - 1].n ? [join(cartellaVoce, CARTELLA_VERSIONI, String(n)), contenuto]
+      : [join(cartellaVoce, CARTELLA_VERSIONI, String(n))];
+  try {
+    const { esito: testo } = await primoPresente(candidati, (p) => readFileFn(p, 'utf8'), id);
+    return { ...voce, totale: versioni.length, nome: meta.nome, mediaType: meta.mediaType || 'text/plain', testo };
+  } catch (errore) {
+    if (errore?.code === 'ENOENT') return null;
+    throw new LibraryStoreError(`${id}: version ${n} unreadable: ${errore.message}`, 'LIBRARY_READ_FAILED');
+  }
+}
+
+/**
+ * Aggiunge una versione: `testo` (il documento intero) oppure `trasforma(testoUltimo) → testo` (gli `edits` di `artifact_update`,
+ * applicati DENTRO il lucchetto all'ultima versione vera). `nome` facoltativo rinomina la voce. Restituisce
+ * `{ id, versione, totale, nome }`, o `null` se la voce non esiste. Solo voci di testo: un'immagine non ha versioni.
+ */
+export async function aggiungiVersione({ cartella, id, testo, trasforma, nome, modello, sessionId, sessionNome, ripristinoDi }, deps = {}) {
+  const readFileFn = deps.readFileFn ?? fsp.readFile;
+  const cartellaVoce = cartellaDellaVoce(cartella, id);
+  if (!cartellaVoce) return null;
+  return inFilaVoce(cartellaVoce, async () => {
+    const percorsoMeta = join(cartellaVoce, NOME_FILE_META);
+    const meta = await leggiMeta(percorsoMeta, readFileFn, id);
+    if (meta === undefined) return null;
+    if (tipoFileLibreria(meta.mediaType) === 'image') throw new LibraryStoreError(`${id} is an image: it has no versions`, 'LIBRARY_INVALID');
+    const senzaElenco = !Array.isArray(meta.versioni) || !meta.versioni.length;
+    const versioni = versioniDiMeta(meta);
+    const ultima = versioni[versioni.length - 1];
+    const percorsoContenuto = join(cartellaVoce, NOME_FILE_CONTENUTO);
+    let testoUltimo;
+    if (senzaElenco) {
+      testoUltimo = await readFileFn(percorsoContenuto, 'utf8');
+      /* la versione 1 di una voce di prima prende il suo file, così l'elenco ha sempre un file per ogni riga */
+      await scriviAtomico(join(cartellaVoce, CARTELLA_VERSIONI, '1'), testoUltimo, deps);
+    } else {
+      /* REV4-A1 (24/10): il file dell'ultima può mancare (sincronizzazione a metà, ripristino da copia): prima dava ENOENT e la voce
+         non si aggiornava più. Si parte dal ripiego, e se è `contenuto` — la copia dell'ultima — il file della riga si rimette al
+         suo posto, come la versione 1 di una voce di prima: ogni riga dell'elenco torna ad avere un file.
+         ⛔ REV5-A1 (24/10): senza l'ultima e senza `contenuto` NON c'è base: un `trasforma` (gli `edits` di `artifact_update`) si
+         rifiuta con LIBRARY_READ_FAILED — partire da una versione più vecchia perdeva in silenzio tutto ciò che stava nell'ultima. Un
+         `testo` intero (il ripristino che il messaggio d'errore consiglia, o un documento riscritto) la base non la usa: passa, e la
+         riga dell'ultima resta senza file, come prima. */
+      const fileUltima = join(cartellaVoce, CARTELLA_VERSIONI, String(ultima.n));
+      let scelto = null;
+      try {
+        scelto = await primoPresenteDellUltima(cartellaVoce, meta, (p) => readFileFn(p, 'utf8'), id, deps.statFn);
+      } catch (errore) {
+        if (!(errore instanceof LibraryStoreError) || typeof trasforma === 'function') throw errore;
+      }
+      if (scelto) {
+        testoUltimo = scelto.esito;
+        if (scelto.percorso === percorsoContenuto) await scriviAtomico(fileUltima, testoUltimo, deps);
+        /* (3) mancata la volta prima: `contenuto` indietro ⇒ si riallinea prima di andare avanti */
+        let attuale = null;
+        try { attuale = await readFileFn(percorsoContenuto, 'utf8'); } catch { /* assente: si riscrive sotto */ }
+        if (attuale !== testoUltimo) await scriviAtomico(percorsoContenuto, testoUltimo, deps);
+      }
+    }
+    const nuovo = typeof trasforma === 'function' ? await trasforma(testoUltimo) : testo;
+    if (typeof nuovo !== 'string') throw new LibraryStoreError('A new version needs text', 'LIBRARY_INVALID');
+    const n = ultima.n + 1;
+    const adesso = new Date().toISOString();
+    const riga = {
+      n,
+      creataIl: adesso,
+      ...(typeof modello === 'string' && modello ? { modello } : {}),
+      ...(typeof sessionId === 'string' && sessionId.trim() ? { sessionId: sessionId.trim() } : {}),
+      ...(typeof sessionId === 'string' && sessionId.trim() && typeof sessionNome === 'string' && sessionNome.trim() ? { sessionNome: sessionNome.trim() } : {}),
+      ...(Number.isInteger(ripristinoDi) ? { ripristinoDi } : {}),
+    };
+    const nomeSicuro = typeof nome === 'string' ? sanificaNomeLibreria(nome) : '';
+    await scriviAtomico(join(cartellaVoce, CARTELLA_VERSIONI, String(n)), nuovo, deps);                                  // (1)
+    const metaNuovo = { ...meta, ...(nomeSicuro ? { nome: nomeSicuro } : {}), aggiornatoIl: adesso, versioni: [...versioni, riga] };
+    await scriviAtomico(percorsoMeta, JSON.stringify(metaNuovo, null, 2), deps);                                          // (2)
+    await scriviAtomico(percorsoContenuto, nuovo, deps);                                                                  // (3)
+    return { id, versione: n, totale: n, nome: metaNuovo.nome };
+  });
+}
+
+/** Ripristina la versione `n` come versione NUOVA (la storia non si riscrive). `null` se la voce o la versione non esistono. */
+export async function ripristinaVersione({ cartella, id, n, modello, sessionId, sessionNome }, deps = {}) {
+  const vecchia = await leggiVersione({ cartella, id, n }, deps);
+  if (!vecchia) return null;
+  return aggiungiVersione({ cartella, id, testo: vecchia.testo, modello, sessionId, sessionNome, ripristinoDi: n }, deps);
+}
+
+/**
+ * ⛔ Revisione a blocco 4 (24/10/2026, REV4-A2, S4): «Apri», «Mostra nella cartella» e il percorso nel dettaglio danno il file
+ * `contenuto` — il solo nome stabile della voce (`versioni/<n>` cambia a ogni versione e non ha estensione). Dopo un'interruzione
+ * fra `meta.json` e `contenuto` quel file è indietro di una versione: la Libreria diceva v3 e Word apriva la v2. Prima di
+ * consegnare il file a un programma lo si riallinea all'ultima vera, nella STESSA fila della voce (`inFilaVoce`): un aggiornamento
+ * in volo non si pesta. Restituisce `{ id, riallineato }`, `null` se la voce non c'è. Immagini e voci senza elenco: niente da fare.
+ */
+export async function riallineaContenutoVoce({ cartella, id }, deps = {}) {
+  const readFileFn = deps.readFileFn ?? fsp.readFile;
+  const cartellaVoce = cartellaDellaVoce(cartella, id);
+  if (!cartellaVoce) return null;
+  return inFilaVoce(cartellaVoce, async () => {
+    const meta = await leggiMeta(join(cartellaVoce, NOME_FILE_META), readFileFn, id);
+    if (meta === undefined) return null;
+    if (tipoFileLibreria(meta.mediaType) === 'image' || !Array.isArray(meta.versioni) || !meta.versioni.length) return { id, riallineato: false };
+    const percorsoContenuto = join(cartellaVoce, NOME_FILE_CONTENUTO);
+    const scelto = await primoPresenteDellUltima(cartellaVoce, meta, (p) => readFileFn(p, 'utf8'), id, deps.statFn); // REV5-A1
+    if (scelto.percorso === percorsoContenuto) return { id, riallineato: false };
+    let attuale = null;
+    try { attuale = await readFileFn(percorsoContenuto, 'utf8'); } catch { /* assente: si riscrive sotto */ }
+    if (attuale === scelto.esito) return { id, riallineato: false };
+    await scriviAtomico(percorsoContenuto, scelto.esito, deps);
+    return { id, riallineato: true };
+  });
 }

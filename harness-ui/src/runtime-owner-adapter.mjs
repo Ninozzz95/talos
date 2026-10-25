@@ -36,7 +36,7 @@ import { collegaSezioniAiContextHooks } from './context-provider-adapter.mjs';
 // ⭐ 06/10/2026 — la ricarica della memoria post-compact (opzione A + C-b, ricerca 5×5×5×5 §6.4): la
 // compattazione LOCALE riceve lo stesso punto di aggancio del kernel, con lo stesso blocco di fatti.
 import { PREFISSO_SINTESI_RECINTATA, costruisciBloccoFatti } from './kernel/ricarica-post-compact.mjs';
-import { classificaErroreFornitore } from './kernel/compattazione-desktop.mjs';
+import { classificaErroreFornitore, numeriDelContestoPieno } from './kernel/compattazione-desktop.mjs';
 import { rifiutoDelMotoreOspite } from './accesso-locale-ospite.mjs'; // 18/10/2026: il motore dell'app occupato o chiuso, detto per nome
 import { conUtentiUniti } from './kernel/utenti-uniti.mjs'; // riga del bugfixer 10/10: due `user` di fila, solo verso un motore locale
 // P0 · punto 7 (16/09): il failsafe di inattività e il dispatcher stanno in una porta sola.
@@ -1231,7 +1231,19 @@ function limiteNonContesto(classificazione, stato) {
   return stato === 429 && classificazione?.classe === 'contesto' ? { classe: 'traffico', transitorio: true } : classificazione;
 }
 
-function erroreFornitorePubblico(classificazione, stato = null) {
+/*
+ * ⛔ R10-2 della revisione 10 della CLI (23/10/2026, S2): il corpo del fornitore non esce mai da qui (può contenere la chiave), e con lui
+ *   se ne andavano i NUMERI del «contesto pieno» — quanti token ha contato, qual è la finestra, quanta uscita ha messo nel conto. Il
+ *   kernel li legge dalla frase (`numeriDelContestoPieno`): senza, il bersaglio era sempre il 70/50/35%, la regola N sul rifiuto non
+ *   scattava mai e nemmeno la linea certa (Z-K3). Misurato dalla CLI attraverso l'adattatore vero: `contestoPieno` sempre senza `numeri`.
+ *   ⇒ Si leggono qui, dal testo che solo questo adattatore vede, e passano come tre interi in una frase nostra, che il kernel riconosce
+ *   (`compattazione-desktop.mjs`, la prima delle `FORME_NUMERI_CONTESTO_PIENO`). Del corpo esce solo questo: tre numeri.
+ */
+const frasePienoConNumeri = (numeri) => (numeri
+  ? ` (context_length_exceeded): ${numeri.richiesti} input tokens requested, ${numeri.massimo} maximum${Number.isSafeInteger(numeri.uscita) ? `, ${numeri.uscita} output tokens` : ''}.`
+  : ' (context_length_exceeded).');
+
+function erroreFornitorePubblico(classificazione, stato = null, numeri = null) {
   const messaggi = {
     traffico: 'Too much traffic at the provider.', credenziale: 'Credential rejected by the provider.',
     accesso: stato === 401
@@ -1250,7 +1262,7 @@ function erroreFornitorePubblico(classificazione, stato = null) {
        dopo un «contesto pieno» (K8 del legacy, il guscio e il servizio del contesto: `classificaErroreFornitore`) lo riconosce anche
        dietro questo adattatore, che il corpo del fornitore non lo lascia mai passare. */
     // la classe è quella che la tabella BC-44 (`classificaErroreDiCorsa`) dava già al contesto pieno, ma senza una frase sua
-    contesto: 'The request is larger than the model context window (context_length_exceeded).',
+    contesto: `The request is larger than the model context window${frasePienoConNumeri(numeri)}`,
   };
   const e = new Error(messaggi[classificazione.classe] ?? 'The provider did not accept the request.');
   return Object.assign(e, { code: 'PROVIDER_REQUEST_ERROR', stato, ...classificazione, limitatoDalFornitore: classificazione.classe === 'traffico' });
@@ -1454,7 +1466,7 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
     contesto.rispostaAccettata = false;
     contesto.headersRitenta = {};
     contesto.scelta = scelta; contesto.fonte = fonte;
-    const segnala = async (classificatoDalTesto, headers, stato, attesaCorpo = null) => {
+    const segnala = async (classificatoDalTesto, headers, stato, attesaCorpo = null, numeri = null) => {
       /* P2 (ledger Codex 28/09, `SUBENTRO-KERNEL-P2-2026-09-28`; riportata sulla base di RETRY01-09 il 30/09 col sì
        * dell'owner). Un 401 senza chiave inviata, o un 403 con una chiave FACOLTATIVA, non dicono che una chiave è stata
        * rifiutata: diventano «accesso», non transitorio, senza avviso di chiave e senza panchina. Fonti rilette il
@@ -1463,7 +1475,7 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
       const classificazione = (stato === 401 && !scelta) || (stato === 403 && !record.chiaveObbligatoria)
         ? { classe: 'accesso', transitorio: false }
         : classificatoDalTesto;
-      contesto.errore = erroreFornitorePubblico(classificazione, stato);
+      contesto.errore = erroreFornitorePubblico(classificazione, stato, numeri); // R10-2 (i numeri ci sono solo sul contesto pieno)
       const attesa = leggiAttesaRichiestaDalFornitore(headers) ?? attesaCorpo; // G02-10: retry-after-ms vince su retry-after; BUG-25: poi la grammatica del corpo
       if (attesa !== null) {
         // Only a normalized delay leaves the adapter; never arbitrary provider headers. The milliseconds travel too.
@@ -1551,7 +1563,8 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
           if (altrove) { contesto.zaiCambiato = true; return rete(altrove, init); }
         }
         // BUG-25: gli header dicono per primi; solo se tacciono, le grammatiche di reset nel corpo (parity Hermes).
-        await segnala(classificazione, response.headers, response.status, leggiAttesaResetDalCorpo(testo));
+        await segnala(classificazione, response.headers, response.status, leggiAttesaResetDalCorpo(testo),
+          contestoPieno ? numeriDelContestoPieno({ message: testo }) : null); // R10-2: i tre numeri, mai il corpo
         return new Response(JSON.stringify({ error: { message: contesto.errore.message } }), { status: response.status, headers: { 'Content-Type': 'application/json', ...contesto.headersRitenta } });
       } catch (error) {
         if (opzioni.signal?.aborted && opzioni.signal.reason?.name !== 'TimeoutError') throw opzioni.signal.reason;
@@ -1728,7 +1741,8 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
           const incerto = error?.esitoIncerto === true || contesto.errore?.esitoIncerto === true
             || contesto.rispostaAccettata || rispostaInterrotta || Boolean(error?.parziale);
           const pulito = incerto ? erroreEsitoProviderIncerto({ ...classificazione, code: error?.code, causaDiTrasporto: error?.causaDiTrasporto ?? classificazione.causaDiTrasporto, usage: error?.usage })
-            : erroreFornitorePubblico(classificazione, error?.stato ?? contesto.errore?.stato);
+            : erroreFornitorePubblico(classificazione, error?.stato ?? contesto.errore?.stato,
+              classificazione.classe === 'contesto' ? numeriDelContestoPieno(contesto.errore ?? error) : null); // R10-2: i numeri restano
           // Keep partial text for explicit recovery; changing providers must never replay this request.
           if (error?.parziale) pulito.parziale = error.parziale;
           if (!incerto && ['guasto-fornitore', 'traffico'].includes(classificazione.classe) && contesto.scelta

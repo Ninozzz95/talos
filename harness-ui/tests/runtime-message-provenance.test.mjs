@@ -68,7 +68,15 @@ for (const [label, runtime, withContext] of [
     assertReads(requests.at(-1).messages, count);
     assertReads(result.messaggiFinali, count);
     for (const request of requests) assert.deepEqual(request.messages.filter(m => m.role === 'user').map(m => m.content), [PROMPT]);
-    for (const snapshot of captures) assertReads(snapshot, snapshot.filter(m => m.role === 'tool').length);
+    /* R13-2 (revisione 13 della CLI, 23/10/2026): nel kernel del desktop la richiesta nuova entra nell'archivio del motore solo dopo
+       la prima risposta del fornitore (un «troppo grande» scoperto al primo invio non deve lasciarla lì). Prima di quella risposta la
+       fotografia non ha turni della persona; dopo, solo la sua richiesta vera. Il kernel canonico non è toccato da quella cura. */
+    const senzaRichiesta = snapshot => label.startsWith('DESKTOP') && !snapshot.some(m => m.role === 'assistant');
+    for (const snapshot of captures) {
+      if (senzaRichiesta(snapshot)) assert.deepEqual(snapshot.filter(m => m.role === 'user'), [], 'before the first answer the request is not archived');
+      else assertReads(snapshot, snapshot.filter(m => m.role === 'tool').length);
+    }
+    if (withContext) assert.ok(captures.some(s => !senzaRichiesta(s) && s.some(m => m.role === 'user')), 'the request reaches the archive');
     for (const event of events.filter(e => e.tipo === 'tool-esito')) assert.equal(togliConfiniDati(event.content), CONTENT);
     assert.deepEqual(readdirSync(cartella), ['documento.txt']);
     assert.equal(readFileSync(join(cartella, 'documento.txt'), 'utf8'), CONTENT);

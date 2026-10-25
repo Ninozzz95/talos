@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { dettaglioUtile, statoGiri, etichettaPermesso, etichettaPermessoConEccezioni, tonoPermesso, nomeModelloUmano, fondoInVista, testoVelocitaLocale,
-  riassuntoSenzaChiedere, GRUPPI_SENZA_CHIEDERE, LIVELLO_DELLA_POLITICA, attrezzoPassaSenzaChiedere } from '../../src/components/chat-foot.js';
+  riassuntoSenzaChiedere, chipDelPermesso, GRUPPI_SENZA_CHIEDERE, LIVELLO_DELLA_POLITICA, attrezzoPassaSenzaChiedere } from '../../src/components/chat-foot.js';
 import { ATTREZZI_CON_PERMESSO_PER_ATTREZZO } from '../../../src/config.mjs';
 import { LIVELLI_DI_ACCESSO, livelloConcedeDaSolo } from '../../../src/permessi-catena.mjs';
 import { verificaPermessoScrittura } from '../../../src/kernel/talosHarness.mjs';
@@ -247,4 +247,30 @@ test('NOME-MODELLO-PREFISSO: il prefisso di un fornitore diretto non arriva a sc
     assert.equal(leggi('zai-anthropic:glm-5.3'), 'glm-5.3', 'anche un fornitore col trattino');
     assert.equal(leggi('qualcosa:'), 'qualcosa:', 'un prefisso senza niente dopo non si svuota');
   }
+});
+
+/*
+ * 24/10/2026 (owner, consigliata): nel compositore il NOME BREVE del livello; cosa passa senza chiedere (C1) apre il suggerimento.
+ * Le eccezioni per attrezzo restano a schermo; il Piano resta «Piano: solo lettura».
+ */
+test('CHIP-BREVE-01 nome breve del livello; la frase di C1 apre il suggerimento, seguita da quello di prima', () => {
+  const c = chipDelPermesso('Workspace write', {});
+  assert.equal(c.testo, 'Scrive nel progetto');
+  assert.equal(c.suggerimento, `Senza chiedere: file, comandi, documenti\n${riassuntoSenzaChiedere('Workspace write', {}).suggerimento}`);
+  assert.equal(chipDelPermesso('Full access', {}).testo, 'Accesso pieno');
+  assert.equal(chipDelPermesso('On request', {}).testo, 'Chiede prima');
+});
+test('CHIP-BREVE-02 le eccezioni per attrezzo restano a schermo (un «sempre» su Solo lettura non si nasconde)', () => {
+  const c = chipDelPermesso('Read only', { scrivi: 'sempre' });
+  assert.equal(c.testo, 'Solo lettura · 1 eccezione');
+  assert.ok(c.suggerimento.startsWith('Senza chiedere: file (solo scrittura)\n'), c.suggerimento);
+  assert.equal(chipDelPermesso('Full access', { shell: 'chiedi', prova: 'chiedi' }).testo, 'Accesso pieno · 2 eccezioni');
+  assert.equal(chipDelPermesso('Workspace write', { delega_sottotask: 'chiedi' }).testo, 'Scrive nel progetto', 'la Coordinazione non è un\'eccezione');
+});
+test('CHIP-BREVE-03 AL CONTRARIO: dove la frase di C1 è già il nome, il suggerimento non la ripete; il Piano resta com\'era', () => {
+  const ro = chipDelPermesso('Read only', {});
+  assert.equal(ro.testo, 'Solo lettura');
+  assert.equal(ro.suggerimento, riassuntoSenzaChiedere('Read only', {}).suggerimento);
+  const piano = chipDelPermesso('Full access', {}, { modalitaOperativa: 'piano' });
+  assert.deepEqual(piano, { testo: 'Piano: solo lettura', suggerimento: riassuntoSenzaChiedere('Full access', {}, { modalitaOperativa: 'piano' }).suggerimento });
 });

@@ -939,8 +939,10 @@ const MESSAGGI_DEL_KERNEL = [
   { chiave: 'errori.kernel.richiestaCostosa', re: /^(?:The estimated cost of the request exceeds the available budget\.|Il costo stimato della richiesta supera il budget disponibile\.)$/u },
   { chiave: 'errori.kernel.limiteNonSpecificato', re: /^(?:The service rejected the request because of an unspecified spending limit\.|Il servizio ha rifiutato la richiesta per un limite di spesa non specificato\.)$/u },
   { chiave: 'errori.kernel.richiestaNonAccettata', re: /^(?:The provider did not accept the request\.|Il fornitore non ha accettato la richiesta\.)$/u },
-  // F1 della CLI (16/10/2026): il contesto pieno detto dall'adattatore dei fornitori (`runtime-owner-adapter.mjs`, classe `contesto`)
-  { chiave: 'errori.kernel.contestoPienoDelFornitore', re: /^(?:The request is larger than the model context window \(context_length_exceeded\)\.|La richiesta è più grande della finestra di contesto del modello \(context_length_exceeded\)\.)$/u },
+  // F1 della CLI (16/10/2026): il contesto pieno detto dall'adattatore dei fornitori (`runtime-owner-adapter.mjs`, classe `contesto`).
+  // R10-2 (23/10/2026): coi numeri del fornitore la frase porta in coda «: N input tokens requested, M maximum[, U output tokens]» —
+  // servono al kernel, non alla carta, che resta la stessa
+  { chiave: 'errori.kernel.contestoPienoDelFornitore', re: /^(?:The request is larger than the model context window \(context_length_exceeded\)(?::\s*\d+ input tokens requested,\s*\d+ maximum(?:,\s*\d+ output tokens)?)?\.|La richiesta è più grande della finestra di contesto del modello \(context_length_exceeded\)\.)$/u },
   { chiave: 'errori.kernel.fallbackNonCollegato', re: /^(?:To continue with another provider, access, chat notices and usage recording are needed\.|Per continuare con un altro fornitore occorrono accessi, avvisi in chat e registrazione dei consumi\.)$/u },
   { chiave: 'errori.kernel.chiamataGiaInCorso', re: /^(?:A call of this session is already in progress\.|Una chiamata di questa sessione è già in corso\.)$/u },
   { chiave: 'errori.kernel.runtimeNonConfigurato', re: /^(?:The agent runtime is not configured for this installation\.|Il runtime agente non è configurato per questa installazione\.)$/u },

@@ -4,7 +4,9 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { INDIRIZZO_MENU, coloreEsadecimale, montaBarraFinestra } from '../../src/components/barra-finestra.js';
+import { CHIAVE_MENU, INDIRIZZO_MENU, coloreEsadecimale, htmlDelPulsanteMenu, montaBarraFinestra } from '../../src/components/barra-finestra.js';
+import { attributiDaTradurre, impostaLingua, linguaCorrenteDiT } from '../../src/components/lingua.js';
+import { TESTI } from '../../src/i18n/testi/index.js';
 
 /*
  * F7-1 (owner 27/09/2026) — la barra del titolo propria esiste SOLO nella finestra dell'app (Window Controls Overlay).
@@ -35,4 +37,25 @@ test('F7-BARRA-WEB-03 — la striscia è importata e montata: foglio in main.css
   assert.match(readFileSync(join(QUI, '../../src/styles/main.css'), 'utf8'), /@import '\.\/barra-finestra\.css';/u);
   assert.doesNotMatch(readFileSync(join(QUI, '../../src/legacy/app.js'), 'utf8'), /querySelector\('meta\[name="theme-color"\]'\)/u,
     'il monolite non scrive più il theme-color: uno scrittore solo');
+});
+
+/* 23/10/2026 (il sito, sulla 0.1.36 pubblica): «Menu di TALOS» era scritto nel componente, italiano anche in inglese. */
+test('F7-BARRA-LINGUA-01 — etichetta e suggerimento del menu vengono dal dizionario e seguono la lingua', () => {
+  const prima = linguaCorrenteDiT();
+  impostaLingua('en');
+  try {
+    const en = htmlDelPulsanteMenu();
+    assert.match(en, /aria-label="TALOS menu" title="TALOS menu"/u);
+    impostaLingua('it');
+    assert.match(htmlDelPulsanteMenu(), /aria-label="Menu di TALOS" title="Menu di TALOS"/u);
+    /* `applicaLingua` la riscrive al cambio di lingua: la striscia nasce prima che la lingua scelta sia applicata. */
+    const attr = /data-t-attr="([^"]+)"/u.exec(en)?.[1];
+    assert.deepEqual(attributiDaTradurre(attr), [['aria-label', CHIAVE_MENU], ['title', CHIAVE_MENU]]);
+    assert.equal(TESTI.en[CHIAVE_MENU], 'TALOS menu');
+    assert.equal(TESTI.it[CHIAVE_MENU], 'Menu di TALOS');
+  } finally {
+    impostaLingua(prima);
+  }
+  assert.doesNotMatch(readFileSync(join(QUI, '../../src/components/barra-finestra.js'), 'utf8'), /(?:aria-label|title)="[^"$]/u,
+    'niente etichetta scritta nel componente: solo dal dizionario');
 });

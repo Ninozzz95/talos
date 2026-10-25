@@ -21,6 +21,18 @@ test('CP-FRASE-REV-01 — la frase nuova del contesto pieno ha la sua carta nell
   } finally { impostaLingua('en'); }
 });
 
+test('CP-FRASE-REV-02 — R10-2: la stessa frase coi numeri del fornitore in coda ha la stessa carta, con o senza l\'uscita; AL CONTRARIO una coda diversa no', () => {
+  impostaLingua('it');
+  try {
+    for (const frase of ['The request is larger than the model context window (context_length_exceeded): 9433 input tokens requested, 8192 maximum.',
+      'The request is larger than the model context window (context_length_exceeded): 135349 input tokens requested, 131072 maximum, 64000 output tokens.']) {
+      assert.equal(spiegaErrore(frase, 'PROVIDER_REQUEST_ERROR').id, spiegaErrore(FRASE, 'PROVIDER_REQUEST_ERROR').id, frase);
+      assert.ok(messaggioDelKernelNellaLingua(frase), `resta in inglese: ${frase}`);
+    }
+    assert.equal(messaggioDelKernelNellaLingua('The request is larger than the model context window (context_length_exceeded): the provider said more.'), null);
+  } finally { impostaLingua('en'); }
+});
+
 test('CP-FRASE-REV-01-CONTROLLO — AL CONTRARIO: la frase di prima era tradotta', () => {
   impostaLingua('it');
   try { assert.equal(spiegaErrore('The provider did not accept the request.', 'PROVIDER_REQUEST_ERROR').id, 'fornitore-rifiuto'); }

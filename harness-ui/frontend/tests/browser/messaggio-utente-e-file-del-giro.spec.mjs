@@ -64,7 +64,8 @@ test('UTENTE-01 — il messaggio della persona ha la sua riga: due azioni, più 
   const messaggio = page.locator('#conversation .talos-message--user').first();
   await expect(messaggio.locator('[data-message-action]:not([data-message-action="piu"])')).toHaveCount(2);
   await expect(messaggio.locator('[data-message-action="copy"]')).toHaveAttribute('aria-label', 'Copia il tuo messaggio');
-  await expect(messaggio.locator('[data-message-action="riusa"]')).toHaveCount(1);
+  /* 24/10/2026 (owner, «Matita = modifica»): la matita in riga è «Modifica e rimanda»; «Riusa nel composer» sta nel «⋯» */
+  await expect(messaggio.locator('[data-message-action="modifica"]')).toHaveAttribute('aria-label', 'Modifica e rimanda');
   await expect(messaggio.locator('[data-message-action="piu"]')).toHaveAttribute('aria-haspopup', 'menu');
   /*
    * ⛔⛔ LA RIGA VALE IL SUO CONTENUTO. Trovato in una FOTO e poi misurato: era alta **154 px**
@@ -84,9 +85,10 @@ test('UTENTE-02 — riga e menu: intersezione vuota, unione completa, e la confe
   const messaggio = page.locator('#conversation .talos-message--user').first();
   const inRiga = await messaggio.locator('[data-message-action]:not([data-message-action="piu"])').evaluateAll((n) => n.map((b) => b.getAttribute('aria-label')));
   await messaggio.locator('[data-message-action="piu"]').click();
-  const nelMenu = await page.locator('#menuRispostaMessaggio [role="menuitem"]').allTextContents();
-  /* 18/10/2026: R5.11 «Annulla le modifiche ai file da qui» (mockup approvato) sta nel menu, prima di «Elimina»: la regola resta */
-  expect(nelMenu).toEqual(['Annulla le modifiche ai file da qui', 'Elimina il messaggio']);
+  const nelMenu = await page.locator('#menuRispostaMessaggio [role="menuitem"]').evaluateAll((nodi) => nodi.map((n) => n.getAttribute('aria-label') || n.textContent));
+  /* 18/10/2026: R5.11 «Annulla le modifiche ai file da qui» (mockup approvato) sta nel menu, prima di «Elimina»: la regola resta.
+     24/10/2026: «Riusa nel composer» è entrato nel menu per primo (la matita in riga ora modifica). */
+  expect(nelMenu).toEqual(['Riusa nel composer', 'Annulla le modifiche ai file da qui', 'Elimina il messaggio']);
   const normale = (s) => s.replace(/\s+/gu, ' ').trim().toLowerCase();
   expect(inRiga.map(normale).filter((v) => nelMenu.map(normale).includes(v)), 'intersezione vuota').toEqual([]);
   /* ⛔ La conferma non nasconde la conseguenza: se ne va anche la risposta che ne dipendeva. */
@@ -94,12 +96,13 @@ test('UTENTE-02 — riga e menu: intersezione vuota, unione completa, e la confe
   await expect(page.locator('#menuRispostaMessaggio [role="menuitem"]', { hasText: 'Confermi? Elimina anche la risposta' })).toBeVisible();
 });
 
-test('UTENTE-03 — «Riusa nel composer» riempie il composer e NON invia', async ({ page }) => {
+test('UTENTE-03 — «Riusa nel composer» (nel «⋯» dal 24/10) riempie il composer e NON invia', async ({ page }) => {
   await apriApp(page);
   await unGiro(page, { consegna: 'Scrivi le note del progetto' });
   let inviate = 0;
   await page.route('**/api/v1/sessions/**', (rotta) => { if (rotta.request().method() === 'POST') inviate += 1; return rotta.continue(); });
-  await page.locator('#conversation .talos-message--user [data-message-action="riusa"]').first().click();
+  await page.locator('#conversation .talos-message--user [data-message-action="piu"]').first().click();
+  await page.locator('#menuRispostaMessaggio [role="menuitem"][aria-label="Riusa nel composer"]').click();
   await expect(page.locator('#composerInput')).toHaveValue('Scrivi le note del progetto');
   expect(inviate, 'riusare NON è rimandare: il composer si riempie e basta').toBe(0);
 });

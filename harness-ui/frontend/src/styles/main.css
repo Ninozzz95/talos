@@ -124,3 +124,7 @@
 @import './aggiornamenti.css'; /* 01/10/2026: la banda «aggiornamento pronto» e la scheda delle Impostazioni (solo app desktop) */
 @import './remoto.css'; /* 18/10/2026: il controllo remoto (mockup v5): finestre di accoppiamento e «Telefoni collegati» */
 @import './annulla-file.css'; /* 18/10/2026: «Annulla le modifiche ai file» (R5.11, mockup approvato) */
+@import './streaming-fluido.css'; /* 22/10/2026: la dissolvenza per parola, il cursore e i turni chiusi fuori vista che non si impaginano (streaming fluido) */
+@import './pillola-ragionamento.css'; /* 24/10/2026: la pillola del ragionamento nel compositore e il suo menu (bozzetto approvato) */
+@import './rami.css'; /* 24/10/2026: «Riprova» e «Modifica e rimanda» come rami (bozzetto approvato) */
+@import './invio-file.css'; /* 24/10/2026: R5.13, mandare un file a un dispositivo (bozzetti approvati D1-D8) */

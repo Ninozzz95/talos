@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
 
+import { flussoConConfine } from './aiuto-confine.mjs';
+
 /*
  * ⭐⭐⭐ BANCO DI MISURA DELLO STREAMING — quanto costa, davvero, il percorso caldo.
  *
@@ -38,6 +40,14 @@ async function misura({ modo, turniPrima }) {
   const runtime = window.__talosHarnessUiRuntime;
   (window.__talosHarnessHost || document.documentElement).dataset.talosStreamingAnimation = modo;
   runtime.passaASessione('banco-stream', 'workspace', 'Banco', 'qwen/qwen3.8-flash', { conclusa: false, modello: 'qwen/qwen3.8-flash' });
+  /*
+   * ⛔⛔ 22/10/2026 — QUESTO BANCO NON MISURAVA NIENTE, ed era verde. Dal 07-08/10 (A1, A1-R3) una sessione aperta resta «nella
+   *   storia» (`deferHistoricalRendering`) finché il flusso non manda il confine `talos.fine-rigiocata`, e la rotta di prima
+   *   rispondeva con un corpo VUOTO: ogni delta finiva nel conto della rigiocata invece che a schermo. Misurato il 22/10: crescita
+   *   per fotogramma «339 campioni, tutti zero», in tutte e tre le modalità. Ora il confine arriva dal flusso (`flussoConConfine`)
+   *   e si aspetta che la storia sia finita prima di misurare.
+   */
+  for (let i = 0; i < 300 && runtime.realSessionState.inRigiocata !== false; i += 1) await new Promise((r) => setTimeout(r, 50));
   const generation = runtime.realSessionState.generation;
   let seq = 40000;
   const invia = (delta, id) => runtime.handleRealEvent({ type: 'TextMessageContent', messageId: id, delta, _sequenza: seq += 1 }, generation);
@@ -167,7 +177,7 @@ async function misura({ modo, turniPrima }) {
 for (const [modo, turniPrima] of [['fade', 0], ['fade', 30], ['none', 30]]) {
   test(`BANCO-STREAMING (${modo}, ${turniPrima} turni prima) — costo del percorso caldo su uno stream da 13k caratteri`, async ({ page }) => {
     test.setTimeout(180000);
-    await page.route('**/api/v1/sessions/banco-stream/events', (route) => route.fulfill({ status: 200, contentType: 'text/event-stream', body: '' }));
+    await page.route('**/api/v1/sessions/banco-stream/events', flussoConConfine);
     await apriChat(page);
     /* ⛔⛔ L'ARGOMENTO VA PASSATO COME OGGETTO, NON COME ARRAY: con l'array Playwright lo dà al
        PRIMO parametro, quindi `modo` diventava ["fade",0], la stringa risolta era "fade,0", e
@@ -180,6 +190,8 @@ for (const [modo, turniPrima] of [['fade', 0], ['fade', 30], ['none', 30]]) {
     expect(esito.caratteri, 'la scena non si è formata: il testo inviato è troppo corto').toBeGreaterThan(12000);
     expect(esito.delta, 'la scena non si è formata: nessun delta').toBeGreaterThan(200);
     expect(esito.resoCaratteri, 'niente è arrivato a schermo: lo stream non è stato reso').toBeGreaterThan(0);
+    expect(esito.percheLaModalita.deferita, 'la sessione è rimasta nella storia: i delta non sono andati a schermo mentre arrivavano').toBe(false);
+    expect(esito.crescitaCaratteri.campioni - esito.crescitaCaratteri.zeri, 'il testo non è mai cresciuto mentre arrivava: il banco non misura lo streaming').toBeGreaterThan(20);
     /* ⛔ E IL TESTO DEVE ESSERE COMPLETO: una cura che rende fluido perdendo testo non è una cura. */
     expect(esito.completo, `il testo a schermo non è completo: ${esito.resoCaratteri} caratteri resi su ~${esito.attesoCaratteri} attesi`).toBe(true);
   });

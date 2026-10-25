@@ -10,14 +10,17 @@
  * Le impostazioni stanno in un file della cartella dei dati (non sono segreti); le chiavi nel portachiavi (`identita.mjs`).
  */
 
+import { randomBytes } from 'node:crypto';
 import { promises as fsp } from 'node:fs';
-import { dirname } from 'node:path';
+import { dirname, join } from 'node:path';
 import { creaAccoppiamento } from './accoppiamento.mjs';
+import { creaCartelleDeiDispositivi } from './cartelle-dispositivi.mjs';
 import { creaElencoDispositivi, svegliaValida } from './dispositivi.mjs';
+import { creaFileDeiDispositivi } from './file-dispositivi.mjs';
 import { creaIdentitaRemoto } from './identita.mjs';
 import { creaOperazioni } from './operazioni.mjs';
 import { creaServizioRemoto } from './servizio.mjs';
-import { avviaTrasportoIroh, relaySenzaGettone } from './trasporto-iroh.mjs';
+import { analizzaIndirizzoRelay, avviaTrasportoIroh, relaySenzaGettone } from './trasporto-iroh.mjs';
 import qrcode from 'qrcode-generator';
 import webpush from 'web-push';
 import { creaSveglia } from './sveglia.mjs';
@@ -43,7 +46,12 @@ export function moduliDelQr(testo) {
 
 function relayValido(relay) {
   if (relay?.modo === 'n0') return { modo: 'n0' };
-  if (relay?.modo === 'proprio' && typeof relay.url === 'string' && relay.url.trim()) return { modo: 'proprio', url: relay.url.trim().slice(0, 500) };
+  if (relay?.modo === 'proprio' && typeof relay.url === 'string' && relay.url.trim()) {
+    const url = relay.url.trim().slice(0, 500);
+    /* D-C3 (revisione a blocco 3, 24/10/2026): la stessa regola dell'accensione, già qui — la rotta rifiuta e la carta resta aperta */
+    try { analizzaIndirizzoRelay(url); } catch { return null; }
+    return { modo: 'proprio', url };
+  }
   return null;
 }
 
@@ -51,9 +59,28 @@ function relayValido(relay) {
  * `fileImpostazioni`, `fileTelefoni`: nella cartella dei dati. `chiama`: `creaChiamataInterna`. `caricaIroh`: async → il binding,
  * o null se su questa macchina non c'è (il remoto lo dice: «non disponibile»).
  */
+/**
+ * D-3 del Mobile (25/10/2026): la sveglia per un'offerta appena registrata — solo se è nuova (`inviato`) e c'è chi sveglia; anche
+ * a un dispositivo collegato (B-2 sotto: la coda gli dà la grazia e la sua `device.seen` la toglie). Torna se ha messo in coda.
+ */
+export function svegliaPerOfferta(o, { svegliatore } = {}) {
+  /* ⛔ Revisione a blocco 7 (B-2): anche a un dispositivo COLLEGATO. «Collegato» non vuol dire «dentro quella conversazione» (l'avviso
+     `file.nuovo` va solo a chi è iscritto a quella sessione), né «visto» (un'app uccisa resta in linea ~30 s): la coda lo tratta come
+     ogni novità — grazia da collegato, poi la sveglia, a meno della sua `device.seen` per quella sessione */
+  if (o?.stato !== 'inviato' || !svegliatore || typeof o.dispositivoId !== 'string') return false;
+  svegliatore.offerta(o.dispositivoId, o.sessionId);
+  return true;
+}
+
 export function creaRemoto({
   keyring, fileImpostazioni, fileTelefoni, chiama, sessionRegistry, iscriviConRigiocata, caricaIroh, nomePc = null,
+  effimero = false, // 24/10/2026: portachiavi di prova in memoria ⇒ identità che rinasce a ogni avvio (`servizio.mjs`, `pair.ok`)
   avviaTrasporto = avviaTrasportoIroh, fs = fsp, avvisa = () => {}, inviaWebPush = (i, c, o) => webpush.sendNotification(i, c, o),
+  /* R5.12 (owner 23/10/2026 sera): le cartelle dei dispositivi col consenso del PC. Senza i due file (chi crea il remoto senza dati,
+     le prove vecchie) resta l'elenco di prima, `/api/v1/projects`. */
+  fileConsensi = null, fileSegretoCartelle = null, cartelleAmmesse = [], cartelleEscluse = [],
+  cartellaChat = null, // Parte 4 (24/10/2026): la cartella di serie della Chat dei dispositivi, nei dati di TALOS
+  chatImageStore = null, // D-5 (25/10/2026): l'archivio delle immagini della chat, lo stesso della finestra
 } = {}) {
   const identita = creaIdentitaRemoto({ keyring });
   const dispositivi = creaElencoDispositivi({ file: fileTelefoni, fs });
@@ -65,7 +92,43 @@ export function creaRemoto({
   let impostazioni = null;
   let avvio = null;
   let ultimoErrore = null;
-  const operazioniBase = creaOperazioni({ chiama, sessionRegistry, iscriviConRigiocata });
+  const cartelle = fileConsensi && fileSegretoCartelle
+    ? creaCartelleDeiDispositivi({ fileConsensi, fileSegreto: fileSegretoCartelle, sessionRegistry, cartelleAmmesse, cartelleEscluse, cartellaChat, fs })
+    : null;
+  /*
+   * R5.13 (24/10/2026 notte, contratto Parte 2): lo scambio di file, accanto alle cartelle (senza consenso non c'è) e coi suoi dati
+   *   accanto ai loro (`file-dispositivi/`: parziali, offerte, segreto degli id). Gli eventi di una sessione si leggono con la stessa
+   *   rigiocata della rotta `/events` (`iscriviti` rigioca in modo sincrono; ci si disiscrive subito): nessun accesso nuovo al registro.
+   */
+  const file = cartelle && fileSegretoCartelle
+    ? creaFileDeiDispositivi({
+      cartella: join(dirname(fileSegretoCartelle), 'file-dispositivi'), sessionRegistry,
+      salvaImmagine: chatImageStore ? (x) => chatImageStore.upload(x) : null,
+      eventiDellaSessione: (sessionId) => {
+        const eventi = [];
+        const togli = sessionRegistry?.iscriviti?.(sessionId, (evento) => { eventi.push(evento); }, 0);
+        try { togli?.(); } catch { /* niente */ }
+        return eventi;
+      },
+    })
+    : null;
+  const operazioniBase = creaOperazioni({ chiama, sessionRegistry, iscriviConRigiocata, cartelle, file });
+  /* D-3 del Mobile (25/10/2026, contratto Parte 2 «Revision 2»): un'offerta appena registrata sveglia il suo dispositivo (`f: 1`, poi
+     il dispositivo chiede `file.offers`); collegato o no (B-2, revisione a blocco 7), finché non manda `device.seen` per quella sessione */
+  file?.ascoltaOfferte((o) => { svegliaPerOfferta(o, { svegliatore }); });
+  /*
+   * R2.1 (24/10/2026, contratto Parte 1 «Revision 2»): a stream della finestra acceso il giro a tempo non c'è più, quindi i cambi che
+   *   la finestra vedeva solo rileggendo lo stato — un dispositivo che entra o esce (il pallino «in linea»), un accoppiamento in attesa
+   *   — si annunciano qui: `remote.changed {motivo}`, e la finestra rilegge `/api/v1/remote`. Solo il motivo: lo stato resta quello
+   *   della lettura, con le sue regole (il gettone del relay mai alla finestra, ecc.).
+   */
+  const ascoltatoriStato = new Set();
+  const MOTIVI_DI_CAMBIO = new Set(['telefono-collegato', 'telefono-scollegato', 'accoppiamento-in-attesa']);
+  const avvisaEAnnuncia = (a) => {
+    avvisa(a);
+    if (!MOTIVI_DI_CAMBIO.has(a?.tipo)) return;
+    for (const fn of [...ascoltatoriStato]) { try { fn({ type: 'remote.changed', motivo: a.tipo }); } catch { /* un ascoltatore che cade non ferma il servizio */ } }
+  };
   /* «Dimentica questo computer» dal telefono (contratto §12): l'unica operazione che tocca il servizio stesso. */
   const operazioni = {
     elenco: () => [...operazioniBase.elenco(), 'pc.forget', 'device.wake', 'device.wake.test', 'device.seen'],
@@ -101,6 +164,8 @@ export function creaRemoto({
            risposta e il telefono non saprebbe se il PC l'ha dimenticato. */
         const id = contesto.dispositivo.id;
         await dispositivi.revoca(id, 'telefono');
+        await cartelle?.dimentica(id); // R5.12: dimenticato, nessuna sua cartella resta consentita
+        await file?.dimenticaDispositivo(id); // R5.13: i suoi trasferimenti a metà e le sue offerte se ne vanno con lui
         contesto.dopoLaRisposta(() => servizio?.revoca(id, 'telefono'));
         return { dimenticato: true };
       }
@@ -115,14 +180,34 @@ export function creaRemoto({
     impostazioni = { acceso: dati?.acceso === true, relay: relayValido(dati?.relay) };
     return impostazioni;
   };
-  const salvaImpostazioni = async () => {
-    await fs.mkdir(dirname(fileImpostazioni), { recursive: true });
-    const temporaneo = `${fileImpostazioni}.${process.pid}.${Date.now()}.tmp`;
-    await fs.writeFile(temporaneo, JSON.stringify(impostazioni, null, 1), { encoding: 'utf8', mode: 0o600 });
-    await fs.rename(temporaneo, fileImpostazioni);
+  /* ⛔ Revisione a blocco 5 (24/10/2026, REV5-COL-2, S3): due salvataggi nello stesso millisecondo (l'«accendi» del QR e lo «spegni»)
+     avevano lo stesso nome temporaneo `<file>.<pid>.<Date.now()>.tmp`: il primo `rename` portava via il file dell'altro, lo «spegni»
+     lanciava ENOENT PRIMA di `ferma()` e il trasporto restava vivo (misurato: giri 1, 2, 4, 6, 8 di 12 della sonda REV5-COL-1). Ora i
+     salvataggi stanno in fila (una promessa sola, come `inFila` di `cartelle-dispositivi.mjs`) e ognuno scrive lo stato DI QUEL MOMENTO;
+     il nome temporaneo ha 8 byte casuali, come Hermes (`apps/desktop/electron/desktop-boot-preference.ts:66`, `randomUUID()`). */
+  let filaSalvataggi = Promise.resolve();
+  const salvaImpostazioni = () => {
+    const questo = filaSalvataggi.then(async () => {
+      await fs.mkdir(dirname(fileImpostazioni), { recursive: true });
+      const temporaneo = `${fileImpostazioni}.${process.pid}.${randomBytes(8).toString('hex')}.tmp`;
+      try {
+        await fs.writeFile(temporaneo, JSON.stringify(impostazioni, null, 1), { encoding: 'utf8', mode: 0o600 });
+        await fs.rename(temporaneo, fileImpostazioni);
+      } catch (e) { await fs.rm(temporaneo, { force: true }).catch(() => {}); throw e; }
+    });
+    filaSalvataggi = questo.catch(() => {});
+    return questo;
   };
 
+  /* ⛔ Revisione a blocco 4 (24/10/2026, REV4-C3b, S2): «spegni» mentre l'accensione era in corso azzerava `avvio`, ma l'avvio in volo
+     finiva DOPO e si installava (`trasporto = t`): stato «spento» nella finestra, PC raggiungibile dai dispositivi accoppiati (misurato:
+     acceso false, pcId 'pc-id', trasporti avviati 1, fermati 0). Ora ogni `ferma()` alza la generazione, e un avvio nato in una
+     generazione vecchia chiude il suo trasporto invece di installarlo — come Hermes (`apps/desktop/electron/backend-connection-state.ts`:
+     `invalidate()` fa `generation += 1`, e `attachProcess`/`assertCurrentAttempt` rifiutano un tentativo superato). */
+  let generazione = 0;
+  const SUPERATO = 'REMOTE_START_SUPERSEDED';
   const ferma = async () => {
+    generazione += 1;
     const t = trasporto; trasporto = null; servizio = null; avvio = null;
     fermaSveglia?.(); fermaSveglia = null; svegliatore = null;
     if (t) await t.ferma();
@@ -130,8 +215,11 @@ export function creaRemoto({
   const accendi = async () => {
     if (trasporto) return trasporto;
     if (avvio) return avvio;
-    avvio = (async () => {
+    const mia = generazione;
+    const superato = () => errore(SUPERATO, 'Remote control was turned off while it was starting.');
+    const questo = (async () => {
       const iroh = await caricaIroh();
+      if (mia !== generazione) throw superato();
       if (!iroh) throw errore('REMOTE_UNAVAILABLE', 'Remote control is not available on this computer.');
       /* Una connessione può arrivare appena l'endpoint è su, prima che il servizio esista: aspetta lui. */
       let risolviServizio;
@@ -140,7 +228,9 @@ export function creaRemoto({
         iroh, chiaveSegreta: identita.chiaveEndpoint(), relay: impostazioni.relay,
         gestisci: (c) => pronto.then((s) => s.gestisci(c)), avvisa,
       });
-      servizio = creaServizioRemoto({ pcId: t.id, nomePc, vapidPubblica: identita.vapid().publicKey, accoppiamento, dispositivi, operazioni, avvisa });
+      /* REV4-C3b: spento mentre partiva ⇒ il trasporto appena nato si chiude qui e non si installa */
+      if (mia !== generazione) { await t.ferma().catch(() => {}); throw superato(); }
+      servizio = creaServizioRemoto({ pcId: t.id, nomePc, vapidPubblica: identita.vapid().publicKey, accoppiamento, dispositivi, operazioni, avvisa: avvisaEAnnuncia, effimero: effimero === true });
       risolviServizio(servizio);
       /* La sveglia dei telefoni non collegati (contratto §E, §10): parte e si ferma col trasporto. */
       svegliatore = creaSveglia({
@@ -152,7 +242,13 @@ export function creaRemoto({
       ultimoErrore = null;
       return t;
     })();
-    try { return await avvio; } catch (e) { avvio = null; ultimoErrore = e.code ?? 'REMOTE_START_FAILED'; throw e; }
+    avvio = questo;
+    try { return await questo; } catch (e) {
+      /* un avvio superato non tocca lo stato di chi l'ha superato (un `ferma()`, o un'accensione nuova già partita) */
+      if (avvio === questo) avvio = null;
+      if (e?.code !== SUPERATO) ultimoErrore = e.code ?? 'REMOTE_START_FAILED';
+      throw e;
+    }
   };
 
   return {
@@ -170,8 +266,12 @@ export function creaRemoto({
         /* R5.9: il gettone di talos-relay resta nelle impostazioni e nel QR, mai nella finestra */
         relay: i.relay?.modo === 'proprio' ? { ...i.relay, url: relaySenzaGettone(i.relay.url) } : i.relay,
         pcId: trasporto?.id ?? null, inLinea: servizio?.inLinea() ?? [], ultimoErrore,
+        /* 24/10/2026 (contratto col Mobile, tavola 1 del bozzetto remoto): il nome del PC, accanto al suo codice breve nella finestra */
+        nomePc: typeof nomePc === 'string' && nomePc ? nomePc : null,
         telefoni: (await dispositivi.elenca()).map((v) => ({ ...v, inLinea: (servizio?.inLinea() ?? []).includes(v.id), percorso: servizio?.percorsi()[v.id] ?? null })),
         attese: accoppiamento.inAttesa(), accoppiamento: accoppiamento.stato(),
+        /* R5.12: le domande «Consenti a … di lavorare in …?» aperte, per la carta della finestra (il percorso intero solo qui) */
+        consensi: cartelle?.inAttesa() ?? [],
       };
     },
 
@@ -187,8 +287,22 @@ export function creaRemoto({
       }
       if (acceso !== undefined) i.acceso = acceso === true;
       if (i.acceso && !i.relay) throw errore('REMOTE_RELAY_NOT_CHOSEN', 'Choose how the device reaches this computer away from home first.');
-      await salvaImpostazioni();
-      if (i.acceso) await accendi(); else await ferma();
+      /* ⛔ D-C3 (revisione a blocco 3, 24/10/2026): «acceso» si salva solo se l'accensione RIESCE. Prima si salvava prima di provarci,
+         e un'accensione fallita lasciava lo stato (e l'icona dell'intestazione) a «acceso» con un errore accanto. */
+      if (i.acceso) {
+        try { await accendi(); }
+        catch (e) {
+          /* REV4-C3b: superata da uno «spegni» (o da un'accensione più nuova), lo stato è già di chi l'ha superata: non si riscrive, e
+             questa richiesta risponde con lo stato vero invece di un errore che la finestra non conosce */
+          if (e?.code === SUPERATO) return this.stato();
+          i.acceso = false; await salvaImpostazioni();
+          throw e;
+        }
+        await salvaImpostazioni();
+      } else {
+        await salvaImpostazioni();
+        await ferma();
+      }
       return this.stato();
     },
 
@@ -200,8 +314,31 @@ export function creaRemoto({
       const i = await leggiImpostazioni();
       if (!i.relay) throw errore('REMOTE_RELAY_NOT_CHOSEN', 'Choose how the device reaches this computer away from home first.');
       if (!i.acceso && soloSeAcceso) throw errore('REMOTE_OFF', 'Remote control is off: turn it on from the Connected devices screen.');
-      if (!i.acceso) { i.acceso = true; await salvaImpostazioni(); }
-      const t = await accendi();
+      /* ⛔ Revisione a blocco 4 (24/10/2026, REV4-C3a, S3): la stessa regola di D-C3 in `imposta` — «acceso» si salva solo DOPO
+         un'accensione riuscita. Prima si salvava e poi si accendeva: un'accensione fallita lasciava «acceso» con REMOTE_START_FAILED
+         accanto (e il server, al riavvio, ci riprovava da solo con `riprendi`). */
+      /* ⛔ Revisione a blocco 5 (24/10/2026, REV5-COL-1, S2): qui c'erano DUE `accendi()` — la prima, poi il salvataggio, poi la seconda
+         per il QR. Uno «spegni» arrivato fra le due chiudeva il primo trasporto, e la seconda ne avviava uno NUOVO: stato «spento»,
+         PC raggiungibile, QR mostrato (misurato: giro 7 di 12, avviati 2, fermati 1, pcId 'pc-2'). Ora un'accensione sola, riusata per
+         il QR; e prima del QR si ricontrollano la generazione presa all'inizio e «acceso»: se uno «spegni» è passato, REMOTE_OFF. */
+      const mia = generazione;
+      const spento = () => errore('REMOTE_OFF', 'Remote control was turned off while it was starting.');
+      let t;
+      if (!i.acceso) {
+        i.acceso = true;
+        try { t = await accendi(); }
+        catch (e) {
+          /* REV4-C3b: spento mentre partiva ⇒ niente QR, e lo si dice col codice che la finestra conosce già */
+          if (e?.code === SUPERATO) throw spento();
+          i.acceso = false;
+          throw e;
+        }
+        await salvaImpostazioni();
+      } else {
+        try { t = await accendi(); }
+        catch (e) { if (e?.code === SUPERATO) throw spento(); throw e; }
+      }
+      if (mia !== generazione || !i.acceso) throw spento();
       const relay = i.relay.modo === 'proprio' ? i.relay.url : t.relayDiCasa();
       const offerta = accoppiamento.apri({ pcId: t.id, relay });
       return { gettone: offerta.gettone, qr: offerta.qr, scadeAlle: offerta.scadeAlle, moduli: moduliDelQr(offerta.qr) };
@@ -214,7 +351,22 @@ export function creaRemoto({
     },
     rifiuta(id) { return servizio ? servizio.rifiuta(id) : false; },
     rinomina: (id, nome) => dispositivi.rinomina(id, nome),
-    async revoca(id) { return servizio ? servizio.revoca(id, 'pc') : dispositivi.revoca(id, 'pc'); },
+    async revoca(id) {
+      const esito = servizio ? await servizio.revoca(id, 'pc') : await dispositivi.revoca(id, 'pc');
+      await cartelle?.dimentica(id); // R5.12
+      await file?.dimenticaDispositivo(id); // R5.13
+      return esito;
+    },
+    /** R5.12: le cartelle dei dispositivi (null se questo server non le ha) — per le rotte della finestra e il cancello delle rotte */
+    cartelle,
+    /** R5.13: lo scambio di file (null senza le cartelle) — `registraOfferta`, `offerte`, `ascoltaOfferte` per l'attrezzo e la carta (corsa 2) */
+    file,
+    /** R2.1: ascolta i `remote.changed` (vedi `avvisaEAnnuncia`); torna la funzione che smette. Per lo stream della finestra. */
+    ascoltaStato(fn) {
+      if (typeof fn !== 'function') return () => {};
+      ascoltatoriStato.add(fn);
+      return () => { ascoltatoriStato.delete(fn); };
+    },
     ferma,
   };
 }

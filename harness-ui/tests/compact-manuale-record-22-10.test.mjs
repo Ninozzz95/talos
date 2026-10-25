@@ -559,3 +559,31 @@ test('R6-INIZIO-01 — fine giro nella fascia (guadagno nudo sopra zero, sotto i
   await attendi(() => compattazioni(altra).some((riga) => riga.includes('"fine"')), 'AL CONTRARIO: la fine non è arrivata');
   assert.ok(compattazioni(altra).some((riga) => riga.includes('"inizio"')), 'e il suo «inizio» c\'è');
 });
+
+/* §4.2, regola K (owner 22/10/2026): anche il riassunto di fine giro del registro accorcia le richieste vecchie della persona oltre il
+   loro budget, e le copie intere vanno nella cartella della SESSIONE (`<negozio>/incollati/<sessione>/`). Due log incollati in richieste
+   vecchie, poi due richieste brevi: il record porta i log accorciati, e i file hanno il testo intero. */
+test('K-REGISTRO-01 — fine giro del registro: le richieste vecchie lunghe si accorciano nel record e le copie intere stanno nella cartella della sessione', async (t) => {
+  const { registro, g, avvia, cartellaStore } = ambiente(t, { tetto: '8000' });
+  const sessionId = avvia();
+  const log = (n) => `Log ${n} incollato:\n${Array.from({ length: 900 }, (_, i) => `log ${n} riga ${String(i).padStart(4, '0')} ${'y'.repeat(40)}`).join('\n')}`;
+  const storia = [
+    { role: 'system', content: 'You are a coding agent' },
+    { role: 'user', content: log(1) }, { role: 'assistant', content: 'Visto il primo.' },
+    { role: 'user', content: log(2) }, { role: 'assistant', content: 'Visto il secondo.' },
+    { role: 'user', content: 'Terza richiesta: rispondi.' }, { role: 'assistant', content: 'OK' },
+    { role: 'user', content: 'Quarta richiesta: rispondi.' }, { role: 'assistant', content: 'OK' },
+  ];
+  g.tutti[0].concludi(storia);
+  await attendi(() => registro.statoCompattazione(sessionId)?.record, 'il record di fine giro non è arrivato');
+  const record = registro.statoCompattazione(sessionId).record;
+  const accorciati = record.riassunto.filter((m) => typeof m.content === 'string' && m.content.startsWith('[TALOS shortened this earlier message from the person'));
+  assert.ok(accorciati.length >= 1, `il record porta i log accorciati (${record.riassunto.map((m) => String(m.content).slice(0, 40)).join(' | ')})`);
+  for (const m of accorciati) {
+    const percorso = /saved at "([^"]+)"/u.exec(m.content)?.[1];
+    assert.ok(percorso?.startsWith(join(cartellaStore, 'incollati', sessionId)), `la copia sta nella cartella della sessione (${percorso})`);
+    const intero = readFileSync(percorso, 'utf8');
+    assert.ok(intero === log(1) || intero === log(2), 'e ha il testo intero');
+  }
+  assert.ok(!record.riassunto.some((m) => typeof m.content === 'string' && (m.content === log(1) || m.content === log(2))), 'nessun log intero resta nella proiezione');
+});

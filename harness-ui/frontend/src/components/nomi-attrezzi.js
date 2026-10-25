@@ -39,6 +39,7 @@ export const NOMI_UMANI_ATTREZZI = Object.freeze({
   naviga: 'varie.tools.name.browse',
   web_search: 'varie.tools.name.webSearch',
   artifact_create: 'varie.tools.name.artifactCreate',
+  artifact_update: 'varie.tools.name.artifactUpdate',
   document_create: 'varie.tools.name.documentCreate',
   generate_image: 'varie.tools.name.generateImage',
   delega_sottotask: 'varie.tools.name.delegateSubtask',
@@ -74,6 +75,11 @@ export const NOMI_UMANI_ATTREZZI = Object.freeze({
   remote_phones: 'varie.tools.name.remotePhones', // R5.12 (18/10/2026)
   remote_phone_pair: 'varie.tools.name.remotePhonePair',
   remote_phone_revoke: 'varie.tools.name.remotePhoneRevoke',
+  remote_phone_folders: 'varie.tools.name.remotePhoneFolders', // R5.12 (23/10/2026): le cartelle dei dispositivi
+  remote_phone_folder_allow: 'varie.tools.name.remotePhoneFolderAllow',
+  remote_phone_folder_revoke: 'varie.tools.name.remotePhoneFolderRevoke',
+  remote_control: 'varie.tools.name.remoteControl', // R5.14 (24/10/2026): accendere e spegnere il remoto dalla chat
+  remote_device_send_file: 'varie.tools.name.remoteDeviceSendFile', // R5.13 (24/10/2026): mandare un file a un dispositivo (bozzetto 3b)
   goal_update: 'varie.tools.name.goalUpdate',
   ask_parent: 'varie.tools.name.askParent',
   answer_parent_question: 'varie.tools.name.answerParentQuestion',
@@ -230,6 +236,11 @@ export const SPECIE_ATTREZZI = Object.freeze({
   delega: Object.freeze({ icona: 'i-user', uno: 'varie.tools.kind.delegation.one', molti: 'varie.tools.kind.delegation.many', breve: ['varie.tools.kind.delegation.shortOne', 'varie.tools.kind.delegation.shortMany'], fallitoUno: 'varie.tools.kind.delegation.failedOne', fallitoMolti: 'varie.tools.kind.delegation.failedMany', filtro: 'varie.tools.kind.delegation.filter' }),
 });
 
+/** R5.13 (24/10/2026): i nomi di gruppo al plurale, per gli attrezzi che si ripetono in fila (chiavi del dizionario, come sopra). */
+export const NOMI_DI_GRUPPO_ATTREZZI = Object.freeze({
+  remote_device_send_file: 'varie.tools.groupName.remoteDeviceSendFile',
+});
+
 /** L'ordine fisso delle specie nella riga: chi legge trova sempre le stesse cose nello stesso posto. */
 export const ORDINE_SPECIE = Object.freeze(Object.keys(SPECIE_ATTREZZI));
 
@@ -289,9 +300,13 @@ export function fraseSpecie(specie, n, { fallito = false, breve = false } = {}) 
     if (fallito) return tn(s.fallitoUno, s.fallitoMolti, n);
     return breve ? tn(s.breve[0], s.breve[1], n) : tn(s.uno, s.molti, n);
   }
-  const nome = nomeLeggibileAttrezzo(String(specie).replace(/^altro:/, ''));
+  const id = String(specie).replace(/^altro:/, '');
+  const nome = nomeLeggibileAttrezzo(id);
   if (fallito) return n > 1 ? t('varie.tools.other.failedMany', { name: nome, n }) : t('varie.tools.other.failedOne', { name: nome });
-  return n > 1 ? t('varie.tools.other.many', { name: nome, n }) : nome;
+  /* R5.13 (24/10/2026, punto 9 del rapporto dei bozzetti): un attrezzo col suo nome di GRUPPO al plurale («Invio di file ai dispositivi
+     ×3»); senza, il nome della voce singola ripetuto («Invio di un file a un dispositivo ×3») */
+  const gruppo = Object.prototype.hasOwnProperty.call(NOMI_DI_GRUPPO_ATTREZZI, id) ? t(NOMI_DI_GRUPPO_ATTREZZI[id]) : nome;
+  return n > 1 ? t('varie.tools.other.many', { name: gruppo, n }) : nome;
 }
 
 /** L'icona di una specie nello sprite; `i-bolt` per ciò che non ha una specie sua. */
@@ -361,6 +376,7 @@ export const DESCRIZIONI_ATTREZZI = Object.freeze({
   naviga: 'varie.tools.description.browse',
   web_search: 'varie.tools.description.webSearch',
   artifact_create: 'varie.tools.description.artifactCreate',
+  artifact_update: 'varie.tools.description.artifactUpdate',
   document_create: 'varie.tools.description.documentCreate',
   time_now: 'varie.tools.description.timeNow',
   ask_user_question: 'varie.tools.description.askUserQuestion',
@@ -391,6 +407,11 @@ export const DESCRIZIONI_ATTREZZI = Object.freeze({
   remote_phones: 'varie.tools.description.remotePhones', // R5.12 (18/10/2026)
   remote_phone_pair: 'varie.tools.description.remotePhonePair',
   remote_phone_revoke: 'varie.tools.description.remotePhoneRevoke',
+  remote_phone_folders: 'varie.tools.description.remotePhoneFolders', // R5.12 (23/10/2026): le cartelle dei dispositivi
+  remote_phone_folder_allow: 'varie.tools.description.remotePhoneFolderAllow',
+  remote_phone_folder_revoke: 'varie.tools.description.remotePhoneFolderRevoke',
+  remote_control: 'varie.tools.description.remoteControl', // R5.14 (24/10/2026)
+  remote_device_send_file: 'varie.tools.description.remoteDeviceSendFile', // R5.13 (24/10/2026)
   goal_update: 'varie.tools.description.goalUpdate',
   ask_parent: 'varie.tools.description.askParent',
   answer_parent_question: 'varie.tools.description.answerParentQuestion',

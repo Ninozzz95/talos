@@ -1,6 +1,7 @@
 import { createScope, createRevision } from '../../app/lifecycle.ts';
 import { createWorkspacePreferences } from '../../services/workspace-preferences.ts';
 import type { View } from '../../domain/navigation.ts';
+import { nomeModello } from '../../components/session-item.js'; // 25/10/2026: la riga di «Riprendi il lavoro» come quella della barra
 
 export interface SessionSummary {
   sessionId: string; taskId?: string; nome?: string; modello?: string; avviataAlle?: string;
@@ -152,7 +153,10 @@ export function createWorkspaceChrome(options: WorkspaceChromeOptions) {
         b.dataset.session = row.sessionId;
         const details = node('small', 'workspace-recent__meta');
         details.append(node('span', 'workspace-state', options.describeSession(row)));
-        if (typeof row.modello === 'string' && row.modello) { const modelLabel = node('span', ''); modelLabel.textContent = row.modello; details.append(modelLabel); }
+        /* ⛔ 25/10/2026 (foto del 4174): qui andava il modello grezzo — «chatgpt:gpt-6-luna» e la targa intera di un GGUF locale — mentre
+           la stessa sessione nella barra diceva «gpt-6-luna» e «LFM2 5 24B…». Il nome si fa in UN posto solo: `nomeModello` della barra */
+        const modelName = nomeModello(row.modello);
+        if (modelName) { const modelLabel = node('span', ''); modelLabel.textContent = modelName; details.append(modelLabel); }
         b.append(details, icon('i-chevron-right')); li.append(b); list.append(li);
       }
       recent.append(list, button('home.allSessions', () => options.navigate('dashboard'), 'talos-button talos-button--ghost', 'i-grid'));

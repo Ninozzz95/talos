@@ -290,7 +290,10 @@ test('R7-F5-01 — fine giro all\'emergenza, con la finestra nota: la stessa reg
 
 /* ---------- F6 ---------- */
 test('R7-F6-01 — una finestra più piccola di sistema + attrezzi: nessun riassunto né all\'emergenza né sul rifiuto del fornitore, «non entra» detto una volta coi numeri; AL CONTRARIO già detto per questa finestra non si ripete, per un\'altra sì', async (t) => {
-  const messaggi = [{ role: 'system', content: `${'regola '.repeat(3_400)}` }, { role: 'user', content: 'Consegna' }, ...coppie(4, 600), { role: 'user', content: 'Rispondi OK.' }];
+  /* §4.2 (pezzo B, regola N): a non entrare è la CODA (una risposta lunga già data), non la richiesta nuova — sistema, attrezzi e
+     richiesta nuova da soli stanno sotto la linea d'emergenza, così la regola N non scatta e decide F6 */
+  const messaggi = [{ role: 'system', content: `${'regola '.repeat(1_700)}` }, { role: 'user', content: 'Consegna' }, ...coppie(4, 600),
+    { role: 'user', content: 'Mostrami il log.' }, { role: 'assistant', content: `Ecco il log: ${'x'.repeat(12_000)}` }, { role: 'user', content: 'Rispondi OK.' }];
   const corsa = async (extra = {}) => {
     const f = fornitore({ rifiuta: () => true });
     const eventi = [];
@@ -377,7 +380,9 @@ test('R7-F6-05 — niente da riassumere, ma sistema + attrezzi + coda non entran
   const corsa = async (finestraToken) => {
     const f = fornitore({ rifiuta: () => true });
     const eventi = [];
-    const messaggi = [{ role: 'system', content: `${'regola '.repeat(3_400)}` }, { role: 'user', content: 'Rispondi OK.' }];
+    /* pezzo B: senza tratto vecchio, e con la richiesta nuova che da sola entra (la regola N non scatta) */
+    const messaggi = [{ role: 'system', content: `${'regola '.repeat(1_700)}` }, { role: 'user', content: 'Consegna' },
+      { role: 'assistant', content: `Ecco il log: ${'x'.repeat(12_000)}` }, { role: 'user', content: 'Rispondi OK.' }];
     let errore = null;
     try { await giro(t, { messaggiIniziali: messaggi, finestraToken, fetchDiRete: f.fetchDiRete, onGiro: (e) => eventi.push(e) }); } catch (e) { errore = e; }
     return { f, errore, nonEntra: eventi.filter((e) => e.tipo === 'compattazione-fine' && e.motivo === 'non-entra') };
@@ -388,7 +393,9 @@ test('R7-F6-05 — niente da riassumere, ma sistema + attrezzi + coda non entran
   assert.equal(piccola.nonEntra.length, 1, '«non entra» anche senza un tratto vecchio');
   assert.ok(piccola.nonEntra[0].pavimento >= 8_192);
   const grande = await corsa(64_000);
-  assert.equal(grande.nonEntra.length, 0, 'AL CONTRARIO: con una finestra che regge il pavimento non si dice');
+  /* R12-1: il fornitore finto rifiuta sempre coi numeri di una finestra da 8.192; quando non resta niente da accorciare, «non entra» si
+     dice con la finestra DEL FORNITORE (come ZK3-02). Il controllo di questa prova è F6 sulla finestra dichiarata, che regge: lì no. */
+  assert.equal(grande.nonEntra.filter((e) => e.finestra === 64_000).length, 0, 'AL CONTRARIO: con una finestra che regge il pavimento non si dice');
 });
 
 test('R7-F6-07 — gli attrezzi che pesano quasi tutta la finestra (8k, ~7.250 contati dal fornitore): il tetto dello scarto non nasconde più il «non entra» — nessun riassunto, una riga; AL CONTRARIO su una finestra che li regge il riassunto si paga', async (t) => {
@@ -428,7 +435,11 @@ test('R7-F6-07 — gli attrezzi che pesano quasi tutta la finestra (8k, ~7.250 c
   assert.ok(piccola.extra > 6_000, `premessa: il fornitore conta quasi tutta la finestra in più della stima (${piccola.extra})`);
   assert.ok(piccola.richieste >= 1, 'premessa: la prima richiesta passa, e lo scarto si misura');
   assert.equal(piccola.riassunti, 0, 'nessun riassunto: nessuno farebbe entrare la richiesta');
-  assert.equal(piccola.nonEntra.length, 1, '«non entra» detto una volta');
+  /* ⛔ R12-1 (revisione 12 della CLI): qui la richiesta va oltre la finestra di ~440 token, e ~730 di prosa nella storia possono
+     spiegarne una parte (`scartoFissoCerto`): «non entra» prima di mandare non è CERTO, e decide il fornitore. Resta il cuore della
+     prova: il tetto dello scarto non fa pagare un riassunto, e il giro finisce coi numeri del fornitore. */
+  assert.ok(piccola.nonEntra.length <= 1, '«non entra» al più una volta');
+  assert.equal(piccola.errore?.contestoPieno?.numeri?.massimo, 8_192, 'il giro finisce coi numeri del fornitore');
   const grande = await corsa(32_000);
   assert.ok(!grande.nonEntra.length, 'AL CONTRARIO: con una finestra che regge non si dice');
 });
@@ -827,4 +838,75 @@ test('R9-N7-02 — venti giri a 10.240 con ~7.300 token di schemi e risposte da 
   assert.deepEqual(errori, [], 'ogni giro finisce');
   assert.equal(f.conti.rifiuti, 0, `nessuna richiesta rifiutata (${f.conti.rifiuti})`);
   assert.ok(f.conti.riassunti <= 7, `riassunti solo quando servono (${f.conti.riassunti} in 20 giri; con l'esenzione dell'emergenza erano 11)`);
+});
+
+/* S4-1 (revisione 9 della CLI): la regola N parla quando è il MESSAGGIO a non entrare (un testo lungo, un'immagine). Una richiesta corta
+   con una cornice già oltre la linea è la finestra: lo dice «non entra» e la richiesta parte (N-S41-01, N-S41-02) */
+test('R7-F6-06 (con la regola N) — quando è una richiesta nuova LUNGA a non entrare con la cornice, decide la regola N: REQUEST_TOO_LARGE prima di ogni riassunto, e nessun «non entra»; AL CONTRARIO una richiesta corta con la cornice oltre la linea è «non entra», non «troppo grande»', async (t) => {
+  const corsa = async (sistema, richiesta) => {
+    const f = fornitore();
+    const eventi = [];
+    const messaggi = [{ role: 'system', content: sistema }, { role: 'user', content: 'Consegna' }, ...coppie(4, 600), { role: 'user', content: richiesta }];
+    let errore = null;
+    /* la cartella delle copie c'è sempre sul desktop: senza, l'allegato non partirebbe mai (F2b della revisione 9) */
+    try { await giro(t, { messaggiIniziali: messaggi, finestraToken: 8_192, fetchDiRete: f.fetchDiRete, cartellaIncollati: cartella(t), onGiro: (e) => eventi.push(e) }); } catch (e) { errore = e; }
+    return { f, eventi, errore };
+  };
+  const lunga = await corsa('You are a coding agent', `Guarda questo: ${'riga del log incollato '.repeat(1_800)}`);
+  assert.equal(lunga.errore?.code, 'REQUEST_TOO_LARGE');
+  assert.equal(lunga.errore.dati.allegabile, true, 'un testo lungo si può mandare come allegato');
+  assert.equal(lunga.f.corpi.length + lunga.f.riassunti, 0, 'niente partito, niente pagato');
+  assert.ok(!lunga.eventi.some((e) => e.motivo === 'non-entra'), 'la regola N parla prima');
+  const corta = await corsa(`${'regola '.repeat(3_400)}`, 'Rispondi OK.');
+  assert.notEqual(corta.errore?.code, 'REQUEST_TOO_LARGE', 'AL CONTRARIO: la richiesta corta non è «troppo grande»');
+  assert.equal(corta.eventi.filter((e) => e.motivo === 'non-entra').length, 1, '«non entra», una volta');
+  assert.ok(corta.f.corpi.length >= 1, 'e la richiesta parte');
+});
+
+test('R7-COMPACT-NONENTRA-01 — /compact a mano su una conversazione che non entra nella finestra: il risultato porta `nonEntra { finestra, pavimento }` ogni volta, e il giornale NON l\'evento `non-entra` (F4 della revisione 9: è della strada del giro, che lo dice al giro dopo); AL CONTRARIO con una finestra che regge niente', async (t) => {
+  const storia = [{ role: 'system', content: `${'regola '.repeat(1_700)}` }, { role: 'user', content: 'Consegna' }, ...coppie(6, 600),
+    { role: 'user', content: 'Mostrami il log.' }, { role: 'assistant', content: `Ecco il log: ${'x'.repeat(24_000)}` }];
+  const corsa = async (finestra) => {
+    const { registro, giri, avvia, assesta, cartellaStore } = registroDiProva(t, { finestraTokenFn: () => finestra });
+    const sessionId = avvia();
+    giri[0].concludi(storia, { scartoMisurato: 0 });
+    await assesta(sessionId);
+    const primo = await registro.compatta(sessionId);
+    const secondo = await registro.compatta(sessionId);
+    await assesta(sessionId);
+    const righe = readFileSync(join(cartellaStore, `${sessionId}.jsonl`), 'utf8').trim().split('\n').map((r) => JSON.parse(r));
+    const eventi = righe.filter((r) => r.type === 'CUSTOM' && r.name === 'talos.compattazione' && r.value?.motivo === 'non-entra');
+    registro.resume(sessionId, 'ancora');
+    return { primo, secondo, eventi, giroDopo: giri.at(-1).input };
+  };
+  const piccola = await corsa(8_192);
+  assert.equal(piccola.primo.ok, true, JSON.stringify(piccola.primo));
+  assert.equal(piccola.primo.nonEntra?.finestra, 8_192, `il primo risultato lo dice (${JSON.stringify(piccola.primo)})`);
+  assert.ok(piccola.primo.nonEntra.pavimento >= 8_192);
+  assert.equal(piccola.secondo.nonEntra?.finestra, 8_192, 'anche il secondo: è la risposta a quella richiesta');
+  assert.equal(piccola.eventi.length, 0, 'il /compact non scrive l\'evento: dopo un riassunto pagato faceva dire «niente riassunto»');
+  assert.notEqual(piccola.giroDopo.nonEntraDetto, 8_192, 'e il giro dopo non lo crede già detto: lo dirà lui, una volta');
+  const grande = await corsa(64_000);
+  assert.equal(grande.primo.nonEntra, undefined, 'AL CONTRARIO: con una finestra che regge, niente');
+  assert.equal(grande.eventi.length, 0);
+});
+
+test('R7-COMPACT-NONENTRA-02 — il «non entra» del /compact si misura con lo scarto INTERO della sessione (F6, seconda passata), non con quello col tetto della misura; AL CONTRARIO col solo scarto col tetto la stessa conversazione entra', async (t) => {
+  /* la cornice di sistema pesa ~8.000 token: col tetto (4.000) la conversazione entra in 16.384, con lo scarto intero (9.000) no */
+  const storia = [{ role: 'system', content: `${'regola '.repeat(4_600)}` }, { role: 'user', content: 'Consegna' }, ...coppie(2, 400),
+    { role: 'user', content: 'ultima' }, { role: 'assistant', content: 'ok' }];
+  const corsa = async (extra) => {
+    const { registro, giri, avvia, assesta } = registroDiProva(t, { finestraTokenFn: () => 16_384 });
+    const sessionId = avvia();
+    giri[0].concludi(storia, extra);
+    await assesta(sessionId);
+    return registro.compatta(sessionId);
+  };
+  const p = stima(storia);
+  assert.ok(p + 4_000 < 16_384 && p + 9_000 >= 16_384, `premessa: la conversazione (${p}) entra col tetto e non con lo scarto intero`);
+  const intero = await corsa({ scartoMisurato: 4_000, scartoNonEntra: 9_000 });
+  assert.equal(intero.ok, true, JSON.stringify(intero));
+  assert.equal(intero.nonEntra?.finestra, 16_384, `con lo scarto intero non entra (${JSON.stringify(intero)})`);
+  const colTetto = await corsa({ scartoMisurato: 4_000 });
+  assert.equal(colTetto.nonEntra, undefined, 'AL CONTRARIO: col solo scarto col tetto entra');
 });

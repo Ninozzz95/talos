@@ -55,12 +55,16 @@ async function giro({ copione, ponte = true, ...altro }) {
 
 test('PONTE-01: la divisione della lista di serie — 45 dietro il ponte, la domanda alla persona MAI, stesso oggetto a ogni giro', () => {
   const { attrezzi, differiti } = dividiPerIlPonte(LISTA_DI_SERIE);
-  assert.equal(differiti.size, ATTREZZI_DIFFERIBILI.size, 'ogni differibile è nella lista di serie');
+  assert.equal(differiti.size, [...ATTREZZI_DIFFERIBILI].filter((n) => nomi(LISTA_DI_SERIE).includes(n)).length, 'ogni differibile della lista di serie è dietro il ponte');
   assert.deepEqual(nomi(attrezzi).slice(-3), NOMI_DEL_PONTE);
   for (const n of ['ask_user_question', 'elenca', 'cerca', 'leggi', 'scrivi', 'shell', 'delega_sottotask', 'memory_write', 'memory_find']) {
     assert.ok(nomi(attrezzi).includes(n), `${n} resta davanti`);
   }
   assert.ok(!ATTREZZI_DIFFERIBILI.has('ask_user_question'), 'Hermes: l\'unica regressione è la domanda alla persona');
+  /* revisione 24/10 (riserva su PONTE-01): da quando si contano solo i differibili della lista di serie, un nome scritto male
+     nell'insieme non faceva più rosso nessuno. Ogni nome dell'insieme dev'essere un attrezzo che il kernel definisce davvero. */
+  const definiti = new Set(nomi([...ATTREZZI_OPENAI, ...ATTREZZI_ESTESI_OPENAI]));
+  assert.deepEqual([...ATTREZZI_DIFFERIBILI].filter((n) => !definiti.has(n)), [], 'nomi dietro il ponte che il kernel non definisce');
   assert.equal(dividiPerIlPonte(LISTA_DI_SERIE), dividiPerIlPonte(LISTA_DI_SERIE), 'stessa lista ⇒ stesso oggetto (richiesta uguale fra i giri)');
   assert.ok(JSON.stringify(attrezzi).length < JSON.stringify(LISTA_DI_SERIE).length * 0.55, 'almeno −45% di caratteri');
   // AL CONTRARIO: senza nessun differibile la lista torna com'è, senza ponte
@@ -246,3 +250,34 @@ test('LINGUA-TEL-01 (owner 19/10) la riga della lingua va SOLO col profilo del t
   assert.ok(!(await primoSistema(true)).includes(RIGA_LINGUA_DELLA_PERSONA))
   assert.ok(!(await primoSistema(false)).includes(RIGA_LINGUA_DELLA_PERSONA))
 })
+
+test('PONTE-24-10: owner 24/10 — annulla-modifiche e i dispositivi (con le cartelle), cablati, vanno dietro il ponte; artifact_create resta davanti', () => {
+  const NUOVI = ['file_changes_undo', 'remote_phones', 'remote_phone_pair', 'remote_phone_revoke', 'remote_phone_folders', 'remote_phone_folder_allow', 'remote_phone_folder_revoke'];
+  for (const n of NUOVI) assert.ok(ATTREZZI_DIFFERIBILI.has(n), `${n} è differibile`);
+  /* una lista come quella di una sessione col remoto acceso e l'annulla cablato: gli attrezzi veri del kernel, presi per nome */
+  const tutti = [...ATTREZZI_OPENAI, ...ATTREZZI_ESTESI_OPENAI];
+  const cablati = NUOVI.map((n) => ({ type: 'function', function: { name: n, description: n, parameters: { type: 'object', properties: {} } } }));
+  const lista = [...LISTA_DI_SERIE, ...cablati];
+  const { attrezzi, differiti } = dividiPerIlPonte(lista);
+  for (const n of NUOVI) {
+    assert.ok(differiti.has(n), `${n} dietro il ponte`);
+    assert.ok(!nomi(attrezzi).includes(n), `${n} non davanti`);
+  }
+  assert.ok(!ATTREZZI_DIFFERIBILI.has('artifact_create'));
+  if (nomi(tutti).includes('artifact_create')) assert.ok(nomi(dividiPerIlPonte([...tutti]).attrezzi).includes('artifact_create'), 'artifact_create resta davanti');
+});
+
+test('PONTE-24-10-b (chiesto dalla CLI): il catalogo del ponte nasce dagli attrezzi OFFERTI dall\'ospite, mai da ATTREZZI_DIFFERIBILI', async () => {
+  /* un ospite senza dispositivi né annulla (come la CLI, `NOT_IN_THE_CLI`): il kernel vero, ponte acceso */
+  const { richieste } = await giro({ copione: [
+    { chiamate: [['c1', 'tool_search', { queries: ['remote phone folder', 'undo file changes'] }]] },
+    { chiamate: [['c2', 'tool_describe', { names: ['remote_phones', 'file_changes_undo'] }]] },
+    { chiamate: [['c3', 'tool_call', { name: 'remote_phone_folder_allow', arguments: { phone: 'abcd1234', path: 'C:\\x' } }]] },
+  ] });
+  for (const n of ['remote_phones', 'remote_phone_folder_allow', 'file_changes_undo']) assert.ok(ATTREZZI_DIFFERIBILI.has(n));
+  const ricerca = richieste[0].tools.find((a) => a.function.name === 'tool_search').function.description;
+  assert.doesNotMatch(ricerca, /remote_phone|file_changes_undo/u, 'non elencati nella descrizione del ponte');
+  assert.doesNotMatch(esitoDi(richieste, 'c1'), /remote_phone|file_changes_undo/u, 'non trovati dalla ricerca');
+  assert.match(esitoDi(richieste, 'c2'), /^Not loaded on demand: remote_phones, file_changes_undo\./mu);
+  assert.match(esitoDi(richieste, 'c3'), /is not available in this session/u);
+});

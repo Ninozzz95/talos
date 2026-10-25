@@ -12,7 +12,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
-import { talosLavora as talosLavoraVero } from '../src/kernel/talosHarness.desktop-hotfix.mjs';
+import { RITENTATIVI_CONTESTO_PIENO_MASSIMI, talosLavora as talosLavoraVero } from '../src/kernel/talosHarness.desktop-hotfix.mjs';
 /* Revisione 6 della CLI (S2-2): senza uno scarto misurato la prima richiesta di un giro porta la stima degli schemi degli attrezzi (i fornitori veri li contano). Il fornitore finto di questo file risponde `prompt_tokens` = stima dei soli MESSAGGI: lo scarto che il registro misurerebbe su di lui è 0, e lo si dichiara (`scartoMisurato: 0`) invece di cambiare tutte le soglie. */
 const talosLavora = (input) => talosLavoraVero({ scartoMisurato: 0, ...input });
 import {
@@ -377,7 +377,12 @@ test('CTX-HOTFIX-INCOMPRESSIBLE-FLOOR-STOPS — un tetto sotto il pavimento inco
   // può passarne una in più (giudicata efficace). Mai una per richiesta.
   assert.ok(inizi.length <= 3, `al massimo tre compattazioni, non una per richiesta: ${inizi.map((e) => e.motivo).join(',')}`);
   assert.ok(fornitore.riassuntiChiesti().length < lavoro.length / 2, `${fornitore.riassuntiChiesti().length} riassunti contro ${lavoro.length} richieste di lavoro`);
-  assert.equal(esito.compattazioni, inizi.length);
+  /* F1 della revisione 9 della CLI (23/10/2026): il conto `compattazioni` dice le righe dei RIASSUNTI — la «sola coda» (passi gratuiti)
+     ha la sua riga, `soloCoda:true`, ma non è una compattazione; e la sua riga dice cosa ha accorciato */
+  const righe = eventi.filter((e) => e.tipo === 'compattazione-fine' && e.compattato === true);
+  assert.ok(righe.some((e) => e.soloCoda), `premessa: qui c'è una sola coda (${JSON.stringify(righe.map((e) => [e.soloCoda ?? false, e.ridotti ?? 0]))})`);
+  assert.equal(esito.compattazioni, righe.filter((e) => !e.soloCoda).length, JSON.stringify(righe.map((e) => [e.soloCoda ?? false, e.ridotti ?? 0, e.accorciati ?? 0])));
+  for (const r of righe.filter((e) => e.soloCoda)) assert.ok((r.ridotti ?? 0) + (r.accorciati ?? 0) + (r.immagini ?? 0) > 0, `una riga «sola coda» dice cosa ha accorciato (${JSON.stringify(r)})`);
 });
 
 test('CTX-HOTFIX-R8-VERDETTO-SCARTO — il verdetto «inefficace» confronta il numero del fornitore con la SOLA proiezione: con ~4.000 token di schemi che tengono la richiesta sopra il tetto, le compattazioni si fermano come davanti a un pavimento vero; AL CONTRARIO senza schemi la stessa scena compatta e scende sotto il tetto', async (t) => {
@@ -421,7 +426,10 @@ test('CTX-HOTFIX-TAIL-PRESSURE-STAYS-BOUNDED — letture grandi nella coda lette
   assert.ok(ultima.some((m) => testoDi(m).includes(CONSEGNA.slice(0, 30))), 'la consegna della persona resta alla lettera');
 });
 
-test('CTX-HOTFIX-OVERFLOW-RETRY-ONCE — contesto pieno dichiarato dal fornitore: UN ritentativo compattato, poi l errore passa classificato (K8)', async (t) => {
+/* Pezzo C (§4.1 del rapporto della CLI, owner 22/10 «Tutto nella 0.6.13»): prima UN ritentativo per giro e il secondo rifiuto faceva
+   fallire il giro (K8). Ora il secondo rifiuto passa allo scalino dopo, senza un riassunto pagato nuovo, e il giro finisce. Il fornitore
+   qui dice i numeri con le parti (OpenRouter): il bersaglio esce da loro, e l'uscita (64.000) non si conta come prompt. */
+test('CTX-HOTFIX-OVERFLOW-SCALINI — contesto pieno due volte nel giro: il secondo rifiuto va allo scalino dopo, nessun riassunto pagato in più, il giro finisce', async (t) => {
   conTetto(t, undefined);
   const cartella = cartellaDiProva(t);
   const overflow = () => new Response(JSON.stringify({ error: { code: 400, message: "This endpoint's maximum context length is 131072 tokens. However, you requested about 135349 tokens (60662 of text input, 10687 of tool input, 64000 in the output). Please reduce the length of either one, or use the context-compression plugin." } }), { status: 400, headers: { 'content-type': 'application/json' } });
@@ -448,16 +456,15 @@ test('CTX-HOTFIX-OVERFLOW-RETRY-ONCE — contesto pieno dichiarato dal fornitore
       fetchDiRete: fornitore.fetchDiRete, comandoProva: 'node -e 0', messaggiIniziali, onGiro: (e) => eventi.push(e),
     });
   } catch (e) { errore = e; }
-  assert.equal(esito, null, 'il secondo overflow non viene ritentato: il giro fallisce');
-  assert.ok(errore, 'l errore del fornitore arriva com è');
-  assert.match(errore.message, /HTTP 400/);
-  assert.equal(errore.classificazione, 'contesto-pieno');
-  assert.equal(fornitore.riassuntiChiesti().length, 1, 'un solo riassunto forzato');
+  assert.equal(errore, null, `il giro finisce: ${errore?.message ?? ''} ${JSON.stringify(errore?.contestoPieno ?? null)}`);
+  assert.ok(esito, 'il giro finisce');
+  assert.ok(fornitore.riassuntiChiesti().length <= 1, `al più un riassunto pagato nel giro (${fornitore.riassuntiChiesti().length})`);
   const inizi = eventi.filter((e) => e.tipo === 'compattazione-inizio');
-  assert.deepEqual(inizi.map((e) => e.motivo), ['overflow']);
+  assert.deepEqual(inizi.map((e) => e.motivo), ['overflow', 'overflow'], 'una compattazione per ciascuno dei due rifiuti');
   const lavoro = fornitore.corpi.filter((b) => !eRichiestaDiRiassunto(b));
-  assert.ok(lavoro[1].messages.some((m) => testoDi(m).startsWith(MARCATORE_RIASSUNTO)), 'il ritentativo parte con la storia compattata');
-  assert.ok(lavoro[0].messages.length > lavoro[1].messages.length);
+  const peso = (b) => JSON.stringify(b.messages).length;
+  assert.ok(peso(lavoro[1]) < peso(lavoro[0]), `il primo ritentativo è più leggero della richiesta rifiutata (${peso(lavoro[0])} → ${peso(lavoro[1])})`);
+  assert.ok(peso(lavoro[4]) < peso(lavoro[3]), `il secondo ritentativo è più leggero della sua richiesta rifiutata (${peso(lavoro[3])} → ${peso(lavoro[4])})`);
 });
 
 /*
@@ -499,7 +506,9 @@ test('CTX-HOTFIX-OVERFLOW-LOCAL — il contesto pieno del motore locale, lanciat
   assert.ok(lavoro[1].tools?.length > 0, 'e con gli attrezzi: il contesto pieno non li toglie');
 });
 
-test('CTX-HOTFIX-OVERFLOW-TWICE-IN-A-ROW — se anche il ritentativo compattato va in overflow, l errore passa classificato e non si ritenta più', async (t) => {
+/* Pezzo C: prima un ritentativo e basta; ora al più tre scalini per giro (70/50/35%), un riassunto pagato al più, ogni ritentativo più
+   leggero del precedente, mai la stessa richiesta due volte — poi l'errore passa classificato, con la diagnosi. */
+test('CTX-HOTFIX-OVERFLOW-TWICE-IN-A-ROW — se il fornitore rifiuta sempre: al più tre ritentativi sempre più leggeri, un riassunto pagato al più, poi l errore classificato con la diagnosi', async (t) => {
   conTetto(t, undefined);
   const cartella = cartellaDiProva(t);
   const overflow = () => new Response(JSON.stringify({ error: { code: 'context_length_exceeded', message: 'The maximum context length is 1000 tokens.' } }), { status: 400, headers: { 'content-type': 'application/json' } });
@@ -517,9 +526,12 @@ test('CTX-HOTFIX-OVERFLOW-TWICE-IN-A-ROW — se anche il ritentativo compattato 
   await assert.rejects(talosLavora({
     cartella, task: { consegna: CONSEGNA }, modello: 'z-ai/glm-5.3-flash', chiave: 'fixture',
     fetchDiRete: fornitore.fetchDiRete, comandoProva: 'node -e 0', messaggiIniziali,
-  }), (e) => e.classificazione === 'contesto-pieno' && /HTTP 400/.test(e.message));
-  assert.equal(fornitore.riassuntiChiesti().length, 1, 'un solo riassunto forzato');
-  assert.equal(fornitore.corpi.filter((b) => !eRichiestaDiRiassunto(b)).length, 2, 'la richiesta originale e UN ritentativo');
+  }), (e) => e.classificazione === 'contesto-pieno' && /HTTP 400/.test(e.message) && Number.isFinite(e.contestoPieno?.bersaglio));
+  assert.ok(fornitore.riassuntiChiesti().length <= 1, `al più un riassunto pagato (${fornitore.riassuntiChiesti().length})`);
+  const lavoro = fornitore.corpi.filter((b) => !eRichiestaDiRiassunto(b));
+  assert.ok(lavoro.length >= 2 && lavoro.length <= 1 + RITENTATIVI_CONTESTO_PIENO_MASSIMI, `la richiesta e da uno a tre ritentativi (${lavoro.length})`);
+  const pesi = lavoro.map((b) => JSON.stringify(b.messages).length);
+  for (let i = 1; i < pesi.length; i += 1) assert.ok(pesi[i] < pesi[i - 1], `ogni ritentativo è più leggero del precedente (${pesi.join(' → ')})`);
 });
 
 test('CTX-HOTFIX-400-NOT-OVERFLOW — un 400 senza le parole del contesto pieno NON fa partire nessun riassunto', async (t) => {

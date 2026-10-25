@@ -47,6 +47,7 @@ test('IDX-01 spento di serie: nessun endpoint finché la persona non sceglie com
   const b = banco(t); const r = b.crea();
   const s = await r.stato();
   assert.equal(s.acceso, false); assert.equal(s.sceltaFatta, false); assert.equal(s.pcId, null);
+  assert.equal(s.nomePc, 'PC di Nino', '24/10: il nome del PC nello stato, per «Questo computer · <nome> · <codice>»');
   await assert.rejects(r.apriAccoppiamento(), { code: 'REMOTE_RELAY_NOT_CHOSEN' });
   await assert.rejects(r.imposta({ acceso: true }), { code: 'REMOTE_RELAY_NOT_CHOSEN' });
   await assert.rejects(r.imposta({ relay: { modo: 'qualcosa' } }), { code: 'REMOTE_RELAY_INVALID' });

@@ -8,7 +8,9 @@
  */
 const NON_PLURALI = new Set(['is', 'was', 'has', 'its', 'this', 'as', 'us', 'yes', 'less', 'process', 'access', 'status', 'focus',
   'bonus', 'always', 'across', 'progress', 'address', 'success', 'class', 'alias', 'news', 'press', 'canvas', 'lens', 'gas', 'plus',
-  'minus', 'thus', 'ms', 's']);
+  'minus', 'thus', 'ms', 's',
+  /* R5.12 (23/10): un verbo dopo un nome di dispositivo, «{name} asks to work in this folder» — non è un numero davanti a un plurale */
+  'asks']);
 
 export function chiaviPluraleFisso(testiInglesi) {
   return Object.entries(testiInglesi)

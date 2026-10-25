@@ -65,6 +65,8 @@ import { segnalaFileCambiati } from './contesto-del-progetto.mjs'; // P-13 (10/0
  *   `applicaRecord`. Nessuna seconda implementazione: cambia solo il chiamante (decisione 5 dell'owner).
  */
 import * as compattazione from './kernel/compattazione-desktop.mjs';
+import * as richiesteVecchie from './kernel/richieste-vecchie.mjs'; // §4.2 regola K (owner 22/10/2026)
+import { CARATTERI_MINIMI_PER_ALLEGARE, CODICE_RICHIESTA_TROPPO_GRANDE, indiceRichiestaNuova } from './kernel/richiesta-troppo-grande.mjs'; // §4.2 regola N (owner 22/10/2026)
 // ⭐ 06/10/2026 — la ricarica della memoria post-compact (opzione A, ricerca 5×5×5×5 §6.4): il blocco di
 // fatti freschi fuso nella proiezione della compattazione in background (e passato al riassuntore manuale).
 import * as ricaricaPostCompact from './kernel/ricarica-post-compact.mjs';
@@ -145,6 +147,8 @@ import {
      leggerne il contenuto) e il percorso del file dentro il progetto per «mostrala nella cartella». */
   leggiBytesVoce as leggiBytesVoceLibreriaReale, rinominaVoce as rinominaVoceLibreriaReale,
   origineVoce as origineVoceLibreriaReale, percorsoContenutoVoce,
+  elencaVersioni as elencaVersioniLibreria, leggiVersione as leggiVersioneLibreria, ripristinaVersione as ripristinaVersioneLibreria, // 24/10: artefatti con versioni
+  riallineaContenutoVoce as riallineaContenutoVoceReale, // REV4-A2 (24/10): «Apri» e «Mostra nella cartella» danno l'ultima
 } from './library-store.mjs';
 import { elencaNote as elencaNoteReale, NoteStoreError } from './notes-store.mjs';
 import { elencaAttivita as elencaAttivitaReale, TaskStoreError } from './tasks-store.mjs';
@@ -444,6 +448,7 @@ import {
   eliminaSessionePersistita as eliminaSessionePersistitaReale,
   esisteSessionePersistita,
   cartellaPagineWebDi, // politica di taglio di `naviga` (owner 01/10/2026): la cartella delle pagine della sessione
+  cartellaIncollatiDi, // §4.2 regola K (owner 22/10/2026): le copie intere delle richieste vecchie accorciate per il modello
   leggiRegistro as leggiRegistroReale,
   leggiRegistroAStream as leggiRegistroAStreamReale, // F2-bis B (24/09): il replay legge A STREAM, mai l'array intero
   leggiIntestazioneSessione as leggiIntestazioneSessioneReale, // LONG-CHAT tappa B (07/10): la sola prima riga, per sapere la famiglia
@@ -461,6 +466,7 @@ export const EVENTO_SFONDO_PERSO = 'talos.sfondo-perso';
 import { leggiImpronte as leggiImpronteReale, esisteProcesso as esisteProcessoReale, esisteGruppo as esisteGruppoReale, fermaAlberoWindows, segnalaProcesso, leggiAlbero as leggiAlberoReale } from './impronta-processo.mjs'; // owner 17/10: gli orfani in sottofondo, adottati come Hermes
 import { leggiParametriElenco, leggiValoreFiltro, paginaDa, testoElenco, confrontaChiavi } from './elenco-paginato.mjs'; // C5: il contratto degli elenchi
 import { FONTE_LOCALE_OSPITE } from './accesso-locale-ospite.mjs'; // 19/10/2026: il modello locale del telefono vede solo gli essenziali
+import { puntoDelRamo } from './punto-del-ramo.mjs'; // 24/10/2026: il punto di un ramo («Riprova», «Modifica e rimanda»)
 /** Il fornitore per cui il ponte degli attrezzi differiti resta spento (owner 21/10/2026, banco C5 sotto soglia): Gemini diretto. */
 const FORNITORE_SENZA_PONTE = 'gemini';
 
@@ -491,6 +497,9 @@ const ATTREZZI_NEGATI_AI_PASSI = new Set([
   'file_changes_undo',
   // R5.12: un passo non tocca i telefoni collegati (difesa in profondità: il registro già non li offre)
   'remote_phones', 'remote_phone_pair', 'remote_phone_revoke',
+  'remote_phone_folders', 'remote_phone_folder_allow', 'remote_phone_folder_revoke', // R5.12 (owner 23/10/2026): le cartelle dei dispositivi
+  'remote_control', // R5.14 (24/10/2026): accendere e spegnere il remoto
+  'remote_device_send_file', // R5.13 (24/10/2026): mandare un file a un dispositivo
 ]);
 const UUID_LEGAME = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 const NODO_LEGAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u;
@@ -973,10 +982,51 @@ function scartoRipristinato(record, modello) {
   if (ultima.modello !== modello) return { scartoScritto, ...(attrezzi === null ? {} : { stimaAttrezzi: attrezzi }) };
   return { scartoScritto, scartoMisurato: numero(ultima.scartoMisurato), scartoNonEntra: numero(ultima.scartoNonEntra), ...(attrezzi === null ? {} : { stimaAttrezzi: attrezzi }) };
 }
+/* Pezzo D del §4 (23/10/2026): il freno dei riassunti sopravvive al riavvio — l'ultima riga `freno` del giornale (una tirata già detta
+   non si ridice: `detto` è nello stato). Senza riga, nessun freno. */
+function frenoRipristinato(record) {
+  let ultima = null;
+  for (const r of Array.isArray(record) ? record : []) if (r?.tipo === 'freno') ultima = r;
+  if (!ultima) return {};
+  const freno = compattazione.frenoValido(ultima.freno);
+  return { freno, frenoScritto: JSON.stringify(freno) };
+}
 /* F6, seconda passata della revisione 7: per «può entrare?» lo scarto INTERO dell'ultimo giro (senza il tetto della misura), mai meno di
    quello della misura */
 function scartoNonEntraDellaSessione(voce) {
   return Math.max(scartoDellaSessione(voce), Number.isFinite(voce?.scartoNonEntra) && voce.scartoNonEntra >= 0 ? voce.scartoNonEntra : 0);
+}
+
+/*
+ * §4.2, regola N (owner 22/10/2026): «Invia come allegato». La persona lo sceglie per UN testo (il giro prima si è fermato con
+ *   REQUEST_TOO_LARGE e il testo è tornato nella casella): `avviaLibero`, `resume` e `accodaMessaggio` con `allegaSeTroppoGrande`
+ *   segnano quel testo, e l'adattatore lo chiede quando la richiesta nuova non entra (`consumaDaAllegare`). Solo in memoria, come
+ *   `senzaInterfacciaNelGiro`: dopo un riavvio la persona lo sceglie di nuovo. Il testo si riconosce per inclusione (il kernel può
+ *   averci aggiunto il racconto dei comandi `!` della persona); solo testi oltre la soglia dell'allegato, quindi mai un frammento corto
+ *   che compare per caso dentro un altro messaggio. Una scelta si consuma alla prima richiesta che la usa; ne restano al più otto.
+ */
+/** R13-2: le posizioni delle richieste non inviate che la storia tiene (col motore del contesto), dal giornale della sessione. */
+function richiesteNonInviateNelMotore(voce) {
+  const eventi = Array.isArray(voce?.eventi) ? voce.eventi : [];
+  return [...new Set(eventi.filter((e) => e?.type === 'CUSTOM' && e.name === 'talos.richiesta-non-inviata' && e.value?.nelMotore === true
+    && Number.isSafeInteger(e.value.indice) && e.value.indice >= 0).map((e) => e.value.indice))];
+}
+/** La storia di inizio giro senza la sua richiesta nuova (regola N); com'è se una richiesta nuova non c'è. */
+function senzaLaRichiestaNuova(messaggi) {
+  const indice = indiceRichiestaNuova(messaggi);
+  return indice === -1 ? messaggi : messaggi.filter((_, i) => i !== indice);
+}
+function segnaDaAllegare(voce, testo) {
+  if (!voce || typeof testo !== 'string' || testo.length <= CARATTERI_MINIMI_PER_ALLEGARE) return;
+  voce.testiDaAllegare = [...(Array.isArray(voce.testiDaAllegare) ? voce.testiDaAllegare : []).filter((t) => t !== testo), testo].slice(-8);
+}
+function consumaDaAllegare(voce, testo) {
+  const lista = Array.isArray(voce?.testiDaAllegare) ? voce.testiDaAllegare : null;
+  if (!lista || typeof testo !== 'string') return false;
+  const indice = lista.findIndex((t) => testo.includes(t));
+  if (indice === -1) return false;
+  lista.splice(indice, 1);
+  return true;
 }
 
 function rifiuto(code, reason, inglese, params) {
@@ -2528,7 +2578,7 @@ const OPERATION_ID_MASSIMO = 256;
  * la lista predefinita è esportata, così chi non ha schermo la passa senza `ask_user_question` invece di copiarla a mano.
  */
 export const STRUMENTI_ESTESI_PREDEFINITI = Object.freeze([
-  'web_search', 'artifact_create', 'document_create', 'time_now', 'ask_user_question', 'present_plan', 'workflow_plan_propose', 'ask_parent',
+  'web_search', 'artifact_create', 'artifact_update', 'document_create', 'time_now', 'ask_user_question', 'present_plan', 'workflow_plan_propose', 'ask_parent',
   'answer_child_question', 'ask_child', 'list_children', 'child_control', 'answer_parent_question', 'delega_sottotask', 'generate_image',
   'library_find', 'library_read', 'library_file_origin', // C5: library_list + library_search → library_find
   'library_rename', 'library_delete', 'library_export',
@@ -2554,6 +2604,9 @@ export const STRUMENTI_ESTESI_PREDEFINITI = Object.freeze([
   'file_changes_undo',
   // R5.12 (owner 18/10/2026): i telefoni collegati — il kernel li offre solo al root e solo con `onTelefoniFn`
   'remote_phones', 'remote_phone_pair', 'remote_phone_revoke',
+  'remote_phone_folders', 'remote_phone_folder_allow', 'remote_phone_folder_revoke', // R5.12 (owner 23/10/2026): le cartelle dei dispositivi
+  'remote_control', // R5.14 (24/10/2026): accendere e spegnere il remoto
+  'remote_device_send_file', // R5.13 (owner 24/10/2026, «ogni funzione anche al modello»): mandare un file a un dispositivo
   'research_find', 'research_start', 'research_read', 'research_rename', // C5: research_list + research_search → research_find
   'research_control', 'research_delete', // C5: research_pause/resume/cancel → research_control
   /*
@@ -2593,6 +2646,21 @@ const ESITO_DELLA_FIGLIA_PER_MODELLO = Object.freeze({
 export function esitoFigliaPerModello(esito) {
   return typeof esito === 'string' && Object.hasOwn(ESITO_DELLA_FIGLIA_PER_MODELLO, esito)
     ? ESITO_DELLA_FIGLIA_PER_MODELLO[esito] : 'ended without finishing';
+}
+
+/**
+ * Il percorso dentro la cartella nell'esito di `remote_device_send_file`, in JSON, o null se è troppo lungo per starci.
+ * ⛔ Revisione a blocco 8 (B8-3): il percorso vero (B-1) non ha più il tetto di `nomeFile`; oltre ~15.800 caratteri l'esito superava i
+ *   16.000 e il kernel lo tagliava NEL MEZZO, e la finestra non mostrava né scheda né stato.
+ * ⛔ Revisione a blocco 9 (A9-1): il tetto di 2.048 rompeva il «Download» fra 2.049 e ~15.800 caratteri quando il modello aveva scritto
+ *   il percorso ASSOLUTO (senza `path` la finestra usa l'argomento, che `scaricaFile` rifiuta). Ora 12.000 caratteri JSON: il resto
+ *   dell'esito sta sotto i 1.000 (nome tagliato a 200, nome del dispositivo, id), lontano dai 16.000 del kernel.
+ */
+export const PERCORSO_ESITO_MASSIMO = 12_000;
+export function percorsoNellEsitoInvio(relativo) {
+  if (typeof relativo !== 'string') return null;
+  const json = JSON.stringify(relativo);
+  return json.length <= PERCORSO_ESITO_MASSIMO ? json : null;
 }
 
 export function createSessionRegistry({
@@ -3067,6 +3135,7 @@ export function createSessionRegistry({
      qui sopra c'era già e si riusa com'è: è la STESSA cancellazione che chiama il modello. */
   leggiBytesVoceLibreriaFn = leggiBytesVoceLibreriaReale, rinominaVoceLibreriaFn = rinominaVoceLibreriaReale,
   origineVoceLibreriaFn = origineVoceLibreriaReale,
+  riallineaContenutoVoceLibreriaFn = riallineaContenutoVoceReale,
   randomUUIDFn = randomUUID,
   /*
    * ⭐⭐⭐⭐ FASE N, nono e ultimo sistema (30/8) — Tool Forge. GLOBALE
@@ -3314,6 +3383,14 @@ export function createSessionRegistry({
   }
   /** PO-26 — la radice dei dati generati (Libreria, Ricerca) del PROGETTO di una sessione. Sempre una promessa. */
   const datiDi = (voce) => Promise.resolve().then(() => cartellaDatiProgettoFn(voce.cartellaBase ?? voce.cartella));
+  /* ⛔ Revisione a blocco 4 (24/10/2026, REV4-A2, S4): prima di passare `contenuto` a Windows («Apri», «Mostra nella cartella») lo si
+     riallinea all'ultima versione vera — dopo un'interruzione fra `meta.json` e `contenuto` era indietro di una. Un riallineamento
+     che fallisce non blocca l'azione (si apre ciò che c'è, come prima) ma si dice nel registro del server. */
+  const riallineaPrimaDiConsegnare = async (radice, voceId) => {
+    try { await riallineaContenutoVoceLibreriaFn({ cartella: radice, id: voceId }); } catch (errore) {
+      console.warn(`[library] ${voceId}: could not bring the file up to the latest version before opening it (${errore?.code || 'I/O'})`);
+    }
+  };
   const compattazioniInCorso = new Set();
   /*
    * ⭐ F3, onda 2 di F2 (24/09/2026) — le sintesi in BACKGROUND per sessione (`sessionId → { promessa, coveredThrough, at }`)
@@ -3388,9 +3465,32 @@ export function createSessionRegistry({
       return typeof valore === 'string' && valore !== modelloPerRete && formaDiModelloRiconosciuta(valore) ? valore : null;
     } catch { return null; }
   };
+  /* ⛔ R11-7 (revisione 11 della CLI, 23/10/2026): la finestra che il FORNITORE ha detto rifiutando, per lo stesso modello, vale quando il
+     catalogo non ne ha una o ne ha una più grande — come Hermes (`agent/model_metadata.py:1254-1259`,
+     `get_context_length_from_provider_error`: «Provider-reported limit LOWER than the current window», e `save_context_length` a
+     `:1137`). Prima, a finestra ignota, ogni giro mandava una richiesta che il fornitore aveva già detto di non poter accettare, e
+     «Invia come allegato» rimandava identica quella appena rifiutata. In memoria (Hermes la salva su disco): dopo un riavvio, un
+     rifiuto in più. Vale per il giro (`conCompattazione`) e per il registro (`sogliePerVoce`). */
+  /* ⛔ R12-5 (revisione 12 della CLI): un rifiuto per MODELLO — col posto unico, il rifiuto di un secondo modello cancellava quello del
+     primo, e il CHANGELOG dice «per quel modello». ⛔ R12-3: mai una finestra più piccola di una richiesta che lo STESSO modello ha già
+     accettato in questa sessione — un rifiuto strano (la CLI: TURN#4 accettato a 14.058, TURN#5 rifiutato con «massimo 12.288») stringeva
+     la sessione per sempre: tre riassunti pagati invece di uno e uno senza modello a ogni giro. Il rifiuto vale per il SUO giro (la scala
+     lo usa coi suoi numeri), non come finestra ricordata. */
+  const rifiutoRicordato = (voce, modelloPerRete) => {
+    const r = voce?.rifiutiDelFornitore instanceof Map ? voce.rifiutiDelFornitore.get(modelloPerRete) : null;
+    if (!r) return null;
+    const accettato = voce?.accettatiDalModello instanceof Map ? voce.accettatiDalModello.get(modelloPerRete) : null;
+    return Number.isFinite(accettato) && r.finestra < accettato ? null : r;
+  };
+  const finestraConRifiuto = (voce, modelloPerRete) => {
+    if (typeof modelloPerRete !== 'string' || !modelloPerRete) return null;
+    const dalCatalogo = leggiFinestraToken(modelloPerRete);
+    const dalRifiuto = rifiutoRicordato(voce, modelloPerRete)?.finestra ?? null;
+    return dalRifiuto !== null && (dalCatalogo === null || dalRifiuto < dalCatalogo) ? dalRifiuto : dalCatalogo;
+  };
   const sogliePerVoce = (voce) => {
     const modelId = modelloDiSessionePerRete(voce);
-    const windowTokens = modelId === null ? null : leggiFinestraToken(modelId);
+    const windowTokens = modelId === null ? null : finestraConRifiuto(voce, modelId);
     const cap = leggiTettoCompattazione(modelId) ?? compattazione.leggiTettoEsplicito(process.env);
     const soglie = compattazione.calcolaSoglie({ tettoToken: cap, finestraToken: windowTokens });
     const source = cap !== null && soglie.soglia === cap ? 'explicit-cap' : windowTokens !== null ? 'route-minimum' : 'fallback';
@@ -4358,7 +4458,7 @@ export function createSessionRegistry({
    */
   const ORIGINI_DI_CODA = new Set(['delega', 'workflow', 'agent-dialogue', 'sfondo']);
   function voceDiCoda(item) {
-    if (typeof item === 'string') return { id: null, testo: item, immagini: [], origine: null, childId: null, runId: null, toolCallId: null, sfondo: null, requestId: null, dialogueKind: null, bolla: null, autore: null };
+    if (typeof item === 'string') return { id: null, testo: item, immagini: [], origine: null, childId: null, runId: null, toolCallId: null, sfondo: null, requestId: null, dialogueKind: null, bolla: null, autore: null, allegaSeTroppoGrande: false };
     return {
       id: typeof item?.id === 'string' ? item.id : null,
       testo: String(item?.testo ?? ''),
@@ -4372,6 +4472,7 @@ export function createSessionRegistry({
       dialogueKind: item?.dialogueKind === 'request' || item?.dialogueKind === 'reply' ? item.dialogueKind : null,
       bolla: bollaPerLaConsegna(item?.bolla, String(item?.testo ?? '')), // C09: ciò che la persona ha scritto e i suoi chip, accanto al testo per il modello
       autore: item?.autore === 'persona' && !ORIGINI_DI_CODA.has(item?.origine) ? 'persona' : null, // owner 15/10/2026
+      allegaSeTroppoGrande: item?.allegaSeTroppoGrande === true, // §4.2, regola N: «Invia come allegato» scelto per questa voce
     };
   }
 
@@ -5630,6 +5731,11 @@ export function createSessionRegistry({
         esito = { ok: false, riassunto: '', motivo: `error: ${errore instanceof Error ? errore.message : String(errore)}`, ...(typeof errore?.code === 'string' ? { codice: errore.code } : {}) };
       }
     }
+    /* Pezzo E (§4.1): un riassunto vero arrivato (fine giro o /compact) entra nei riassunti veri della sessione, pesato col testo
+       arrivato — la sua mediana è S, il riassunto atteso, nelle unità del guadagno */
+    if (esito.ok && typeof esito.riassunto === 'string' && esito.riassunto.trim()) {
+      voce.riassuntiVeri = compattazione.conRiassuntoVero(voce.riassuntiVeri, stimaTokenConversazione([{ content: esito.riassunto.trim() }]));
+    }
     return esito;
   }
 
@@ -5669,8 +5775,12 @@ export function createSessionRegistry({
   /* F1 della revisione di 068b2c172: con immagini o pezzi nel tratto da riassumere la stima non li vede (valgono 0), quindi non dice
      che il riassunto «non può ridurre» — lì è proprio il riassunto a toglierli. 22/10/2026 (revisione 4 della CLI, S2-1): la regola
      sta in `compattazione-desktop.mjs`, una sola per il registro e per il giro. */
-  const riassuntoNonPuoRidurre = (token, pavimento, parti, soglie) => compattazione.riassuntoNonPuoRidurre(token, pavimento, parti?.mezzo,
-    { finestraToken: soglie?.finestraToken ?? null, soglia: soglie?.soglia ?? null });
+  const riassuntoNonPuoRidurre = (token, pavimento, parti, soglie, mediana = null) => compattazione.riassuntoNonPuoRidurre(token, pavimento, parti?.mezzo,
+    { finestraToken: soglie?.finestraToken ?? null, soglia: soglie?.soglia ?? null, mediana });
+  /* Pezzo E (§4.1): la mediana dei riassunti veri della sessione (S) e k — solo se misurato con lo stesso modello: un altro modello è
+     un altro tokenizzatore, e k riparte da 1 fino al suo primo numero vero */
+  const medianaDellaVoce = (voce) => compattazione.medianaRiassunti(voce?.riassuntiVeri);
+  const kDellaVoce = (voce, modello) => (voce?.fattoreK && voce.fattoreK.modello === modello && Number.isFinite(voce.fattoreK.valore) ? voce.fattoreK.valore : null);
   /* E un «inefficace» si ricorda: il riassunto di fine giro non riprova finché la proiezione non è cresciuta di un decimo.
      ⛔ Ottava passata: il ricordo è legato al RECORD vivo (`base`) — un record scritto, un /compact, un «Annulla» lo rendono vecchio, e
      ricordato per sempre spegneva i riassunti di fine giro che servivano. E un tetto: dopo due «inefficace» di fila sulla stessa base
@@ -5685,13 +5795,38 @@ export function createSessionRegistry({
     return ricordo.volte >= INEFFICACI_DI_FILA_MASSIMI || token < ricordo.token * CRESCITA_PER_RIPROVARE;
   }
 
-  function partiConCodaRidotta(proiettata, soglie) {
-    const divise = compattazione.dividiPerCompattazione(proiettata);
+  /* Pezzo D del §4 (23/10/2026): il freno dei riassunti nel giornale — una riga `freno` quando cambia, come `scarto-sessione`. Una riga
+     persa costa un freno rilasciato al prossimo riavvio, mai un errore. */
+  function scriviFreno(voce) {
+    if (!cartellaStore || !voce?.sessionId) return;
+    const valore = JSON.stringify(voce.freno ?? null);
+    if (valore === (voce.frenoScritto ?? 'null')) return;
+    voce.frenoScritto = valore;
+    Promise.resolve(registraRigaFn({ cartellaStore, sessionId: voce.sessionId, durable: true, record: { tipo: 'freno', freno: voce.freno ?? null } })).catch(() => {});
+  }
+  /* Il freno nuovo della sessione; se ha appena tirato lo dice UNA volta per armamento, col suo `at` (contratto (c) con la CLI). */
+  function aggiornaFrenoDellaSessione(voce, nuovo) {
+    const { freno, evento } = compattazione.frenoCheTira(nuovo, { at: clock().toISOString() });
+    voce.freno = freno;
+    scriviFreno(voce);
+    if (evento) broadcast(voce, { type: 'CUSTOM', name: 'talos.compattazione', value: { fase: 'fine', ...evento, at: evento.freno.at } }, { durable: true });
+  }
+
+  /* §4.2, regola K (owner 22/10/2026): le richieste vecchie della persona oltre il loro budget si accorciano per il modello PRIMA di
+     dividere — così anche le richieste tenute alla lettera (copie del mezzo) e la proiezione senza riassunto sono quelle accorciate.
+     Il piano è sincrono (il percorso di ogni copia viene dall'impronta del testo); le copie le scrive chi applica (`scriviCopieDelPiano`). */
+  const cartellaIncollatiDellaVoce = (voce) => (cartellaStore && voce?.sessionId ? cartellaIncollatiDi(cartellaStore, voce.sessionId) : null);
+  function partiConCodaRidotta(proiettata, soglie, voce = null) {
+    const piano = richiesteVecchie.pianoRichiesteVecchie(proiettata, {
+      budgetToken: richiesteVecchie.tettoRichiesteVecchie({ finestraToken: soglie.finestraToken, soglia: soglie.soglia }),
+      cartella: cartellaIncollatiDellaVoce(voce), eRichiesta: compattazione.eRichiestaVera, stima: stimaTokenConversazione,
+    });
+    const divise = compattazione.dividiPerCompattazione(piano.messaggi);
     const pressione = compattazione.riduciCodaSottoPressione(divise.coda, { budgetToken: compattazione.budgetCoda(soglie.soglia) });
     const parti = { ...divise, coda: pressione.coda };
     /* revisione 6 della CLI (S2-1): coi pezzi, come prima e il riassunto atteso — le immagini tenute si annullano */
     const pavimento = compattazione.stimaConPezzi([...parti.testa, ...parti.richiesteLetterali, ...parti.coda]);
-    return { parti, ridotti: pressione.ridotti, pavimento };
+    return { parti, ridotti: pressione.ridotti + piano.accorciati, pavimento, daSalvare: piano.daSalvare, accorciati: piano.accorciati };
   }
   /** Niente da riassumere ma la coda accorciata: la proiezione senza riassunto, come quella «solo coda» dell'adattatore. */
   const proiezioneSoloCoda = (parti) => [...parti.testa, ...parti.mezzo, ...parti.coda];
@@ -5712,12 +5847,22 @@ export function createSessionRegistry({
     const { token, misura } = compattazione.misuraOccupazione({ messaggi: proiettata, finestraToken, scarto: scartoDellaSessione(voce) });
     const decisione = compattazione.decidiCompattazione({ token, soglia: soglie.soglia, emergenza: soglie.emergenza });
     if (!decisione.scatta) return null;
-    const { parti, ridotti, pavimento } = partiConCodaRidotta(proiettata, soglie);
+    const piano = partiConCodaRidotta(proiettata, soglie, voce);
+    const { ridotti, pavimento } = piano;
+    let { parti } = piano;
     if (!parti.tagliabile && ridotti === 0) return null;
     /* il pavimento (sistema, richieste tenute e coda già accorciata) non scende sotto il conto di adesso: un riassunto non può ridurre,
        e non si paga */
-    if (parti.tagliabile && ridotti === 0 && riassuntoNonPuoRidurre(compattazione.stimaConPezzi(proiezioneSoloCoda(parti)), pavimento, parti, soglie)) return null;
+    if (parti.tagliabile && ridotti === 0 && riassuntoNonPuoRidurre(compattazione.stimaConPezzi(proiezioneSoloCoda(parti)), pavimento, parti, soglie, medianaDellaVoce(voce))) return null;
     if (inefficaceVale(voce, token)) return null;
+    /* Pezzo D del §4: il freno della sessione — riarmato se il tratto da riassumere è cresciuto del 10% della soglia o se modello o finestra
+       sono cambiati; tirato, il fine giro non paga un riassunto (resta la sola coda, se si è accorciata) */
+    const identitaFreno = { modello: perRete, finestra: finestraToken };
+    const frenoOra = compattazione.frenoDiAdesso(voce.freno, { mezzo: compattazione.mezzoDellaProiezione(proiettata), soglia: soglie.soglia, ...identitaFreno });
+    /* riarmato del tutto (null) o in parte (colpi azzerati, ricariche tenute: Z-K2); il giornale lo scrive solo se è cambiato */
+    if (JSON.stringify(compattazione.frenoValido(voce.freno)) !== JSON.stringify(frenoOra)) { voce.freno = frenoOra; scriviFreno(voce); }
+    const frenato = compattazione.frenoTirato(frenoOra);
+    if (frenato && ridotti === 0) return null;
     /* 21/10/2026 (CLI): quale modello scrive il riassunto di fine giro e su quale finestra (`sceltaDelRiassunto`); il record resta
        intestato a `perRete`, il modello della conversazione */
     const modelloRiassunto = leggiModelloRiassunto(perRete);
@@ -5760,6 +5905,7 @@ export function createSessionRegistry({
       passo({ fase: 'lettura', messaggi: proiettata.length, tokenPrima: token });
     };
     const lavoro = (async () => {
+      parti = await richiesteVecchie.scriviCopieDelPiano(parti, piano.daSalvare, cartellaIncollatiDellaVoce(voce)); // §4.2, regola K
       /* ⛔ Revisione 5 della CLI (22/10/2026 notte, S2-1): il confronto col pavimento NUDO qui sopra non vede la cornice della proiezione
          riassunta (indice, blocco dei fatti), e un riassunto che riduce di poco si pagava a ogni fine giro — a schermo il registro
          ripagava la stessa richiesta che il giro aveva appena scartato (16.609 → 16.446). La stessa regola del giro
@@ -5767,14 +5913,16 @@ export function createSessionRegistry({
          sotto la soglia o togliere almeno il 10% della soglia. Se non serve: la sola coda quando la coda si è accorciata, altrimenti
          nessun record e una fine muta. Verdetto della CLI (C1, C2): il pavimento porta anche il riassunto atteso, e la regola è una
          sola — il guadagno atteso è almeno il 10% della soglia. */
-      let senzaRiassunto = !parti.tagliabile;
-      if (parti.tagliabile) {
+      /* Pezzo D: col freno tirato solo la coda (si arriva qui solo se si è accorciata, sopra) */
+      let senzaRiassunto = !parti.tagliabile || frenato;
+      if (parti.tagliabile && !frenato) {
         const cornice = compattazione.stimaConPezzi((await proiezioneDelRiassunto({ parti, riassunto: '', precedente: voce.recordCompattazione ?? null })).proiezione);
         /* Revisione 7 della CLI (F5): col MOTIVO della decisione — all'emergenza, con la finestra nota, basta un guadagno vero (come nel
            giro); senza, il fine giro applicava sempre il 10% e su 12k 8 riassunti su 9 arrivavano dentro il giro, all'emergenza, mentre la
            persona aspettava. E lo scarto, per la regola «non entra» (F6). */
         if (!compattazione.riassuntoUtile({ prima: compattazione.stimaConPezzi(proiezioneSoloCoda(parti)), pavimentoConCornice: cornice, mezzo: parti.mezzo,
-          soglia: soglie.soglia, finestraToken: soglie.finestraToken, motivo: decisione.motivo, scarto: scartoNonEntraDellaSessione(voce) })) {
+          soglia: soglie.soglia, finestraToken: soglie.finestraToken, motivo: decisione.motivo, scarto: scartoNonEntraDellaSessione(voce),
+          mediana: medianaDellaVoce(voce), k: kDellaVoce(voce, perRete) ?? 1 })) { // pezzo E: S e k della sessione
           if (ridotti === 0) return false; // niente annunciato, niente da chiudere (S4-2)
           senzaRiassunto = true;
         }
@@ -5786,6 +5934,8 @@ export function createSessionRegistry({
       if (!esito.ok && arresto.signal.aborted && arresto.signal.reason === 'chiusura') return false;
       if (!esito.ok && arresto.signal.aborted) { await fine({ fase: 'fine', compattato: false, motivo: 'ceduta', at, interrottaIn: 'riassunto' }); return false; }
       if (!esito.ok) { await fine({ fase: 'fine', compattato: false, motivo: esito.motivo, at, interrottaIn: 'riassunto' }); return false; }
+      /* Pezzo D: un riassunto PAGATO e arrivato è una ricarica nel giro della sessione (si conta anche se poi non si scrive) */
+      if (!esito.soloCoda) aggiornaFrenoDellaSessione(voce, compattazione.ricaricaAlFreno(voce.freno, { giro: voce.versioneGiro, mezzo: compattazione.mezzoDellaProiezione(proiettata), ...identitaFreno })); // R11-4
       const { proiezione, indice } = esito.soloCoda ? { proiezione: proiezioneSoloCoda(parti), indice: voce.recordCompattazione?.indice ?? null }
         : await proiezioneDelRiassunto({ parti, riassunto: esito.riassunto, precedente: voce.recordCompattazione });
       const tokenDopo = stimaTokenConversazione(proiezione) + scartoDellaSessione(voce); // N3 (revisione 8): la scala di `token`
@@ -5795,9 +5945,11 @@ export function createSessionRegistry({
         const prima = voce.riassuntoInefficace?.base === base ? voce.riassuntoInefficace.volte : 0;
         voce.riassuntoInefficace = { token, base, volte: prima + 1 };
         await fine({ fase: 'fine', compattato: false, motivo: 'inefficace', at, interrottaIn: 'sostituzione' });
+        /* Pezzo D: un riassunto pagato che ALLUNGAVA è un colpo al freno (Hermes `record_rejected_compaction`) */
+        if (!esito.soloCoda) aggiornaFrenoDellaSessione(voce, compattazione.colpoAlFreno(voce.freno, { mezzo: compattazione.mezzoDellaProiezione(proiettata), ...identitaFreno }));
         return false;
       }
-      const record = compattazione.creaRecord({ coveredThrough, riassunto: proiezione, tokenPrima: token, tokenDopo, misura, at, modello: perRete, indice, coperti: storia });
+      const record = compattazione.creaRecord({ coveredThrough, riassunto: proiezione, tokenPrima: token, tokenDopo, misura, at, modello: perRete, indice, coperti: storia, freno: voce.freno });
       /* 22/10/2026 (revisione avversaria): anche qui il record vivo dev'essere quello con cui il riassunto è partito (un «Annulla» nel
          frattempo lo cambia) — altrimenti il record nuovo, costruito sul riassunto annullato, tornerebbe vivo */
       if (sessioni.get(sessionId) !== voce || !prefissoIntatto() || compattazione.chiaveBaseDelRecord(voce.recordCompattazione ?? null) !== baseAlVia) {
@@ -5806,8 +5958,17 @@ export function createSessionRegistry({
       }
       passo({ fase: 'sostituzione', tokenDopo: record.tokenDopo ?? null });
       const scritto = await persistiRecordCompattazione(voce, record, voce.versioneGiro ?? versioneAlVia);
+      /* Pezzo D: il primo numero vero del giro dopo giudica questo record (il verdetto del freno) — solo se è un riassunto PAGATO (F1
+         della revisione 9 della CLI: la sola coda non frena i riassunti) */
+      if (scritto && !esito.soloCoda) voce.verdettoInAttesa = true;
+      /* ⛔ R10-6 (revisione 10 della CLI): la sola coda del fine giro si annuncia COME tale, coi nomi della riga del giro (F1 della
+         revisione 9): `soloCoda`, `ridotti` (esiti d'attrezzo accorciati), `accorciati` (richieste vecchie, regola K). Prima usciva come
+         un riassunto («earlier messages summarized») per un accorciamento gratuito, anche col freno tirato. Immagini qui non se ne
+         sostituiscono: è un passo del solo rifiuto del fornitore. */
+      const soloCodaDetta = esito.soloCoda ? { soloCoda: true, ...(ridotti - piano.accorciati > 0 ? { ridotti: ridotti - piano.accorciati } : {}),
+        ...(piano.accorciati > 0 ? { accorciati: piano.accorciati } : {}) } : {};
       await fine(scritto
-        ? { fase: 'fine', compattato: true, tokenPrima: record.tokenPrima, tokenDopo: record.tokenDopo, misura: record.misura, coveredThrough, at, modello: perRete, motivo: 'background' }
+        ? { fase: 'fine', compattato: true, tokenPrima: record.tokenPrima, tokenDopo: record.tokenDopo, misura: record.misura, coveredThrough, at, modello: perRete, motivo: 'background', ...soloCodaDetta }
         : { fase: 'fine', compattato: false, motivo: 'non-salvata', at, interrottaIn: 'sostituzione' });
       return scritto;
     })().catch((errore) => { console.error(`[session-store] background compaction failed for ${sessionId}:`, errore instanceof Error ? errore.message : errore); return false; })
@@ -7569,7 +7730,28 @@ export function createSessionRegistry({
    * ⛔ `remote_phone_pair` NON apre il QR e NON accende il remoto: controlla che sia acceso e chiede la carta; il QR lo apre la
    *   finestra che ha risposto alla carta, con la rotta della schermata e `soloSeAcceso` — il gettone non passa mai dal kernel.
    */
-  async function ospiteTelefoni(nome, argomenti = {}, { fase } = {}) {
+  /*
+   * ⛔ R5.12, revisione del Desktop (23/10/2026): fra la carta e il clic il PERCORSO chiesto dal modello può cambiare destinazione
+   *   (un collegamento o una giunzione rifatti, per esempio da un comando del modello stesso in Accesso pieno), e l'esecuzione, che
+   *   ricontrolla tutto, consentirebbe una cartella diversa da quella che la persona ha visto. La difesa contro il «controllato ≠
+   *   usato» è legare l'azione all'OGGETTO controllato, non al nome (Time-of-check to time-of-use, en.wikipedia.org, letta il
+   *   23/10/2026): qui la cartella mostrata sulla carta, per chiamata (`toolCallId`, che il kernel passa a anteprima ed esecuzione).
+   */
+  const cartelleSullaCarta = new Map();
+  /* ⛔ Revisione a blocco 3 (24/10/2026, D-C1, S2): lo stato del remoto che la carta del QR ha MOSTRATO, per chiamata. Una carta nata a
+     remoto acceso non promette di accenderlo: se nel frattempo la persona lo spegne, il «sì» su quella carta non lo riaccende (prima
+     lo riaccendeva, e i dispositivi accoppiati rientravano senza che fosse scritto da nessuna parte). Il kernel chiama sempre
+     l'anteprima prima dell'esecuzione, con lo stesso `toolCallId` (`talosHarness.mjs`, ramo di `ATTREZZI_TELEFONI`). */
+  const accesoSullaCarta = new Map();
+  /* ⛔ Revisione a blocco 4 (24/10/2026, REV4-C1b, S3): senza `toolCallId` la Map non decideva e si tornava al difetto D-C1 (il sì
+     riaccendeva il remoto spento). È raggiungibile: un fornitore che non manda l'id della chiamata arriva all'ospite con
+     `toolCallId` vuoto in anteprima, carta ed esecuzione (prova TEL-REV4-C1b-KERNEL; `talosHarness.mjs`, ramo di ATTREZZI_TELEFONI:
+     `{ fase: 'anteprima', toolCallId: c.id }` e `{ fase: 'esegui', toolCallId: c.id }`; `apriPosizione` copia `pezzo.id` anche
+     se manca). Per quelle chiamate lo stato mostrato si tiene PER SESSIONE: il kernel fa anteprima → carta → esecuzione di una chiamata
+     prima di passare alla successiva, quindi l'ultima anteprima senza id della sessione è quella di questa esecuzione. */
+  const accesoSullaCartaSenzaId = new WeakMap();
+  const fileSullaCarta = new Map(); // R5.13: per chiamata, il file (e la sua versione) che la carta ha mostrato
+  async function ospiteTelefoni(nome, argomenti = {}, { fase, toolCallId } = {}, voceSessione = null) {
     const remoto = remotoFn();
     if (!remoto) return { ok: false, messaggio: 'Remote control is not available on this computer.' };
     const stato = await remoto.stato();
@@ -7586,11 +7768,67 @@ export function createSessionRegistry({
       }
       return { ok: true, testo: righe.join('\n') };
     }
+    /* R5.14 (owner 23/10/2026): «spento ⇒ si accende dalla carta col clic della persona». La carta dice se il remoto è spento e quale
+       ponte c'è; la finestra che risponde scrive PRIMA il ponte scelto (l'indirizzo di un server proprio porta un gettone: non passa
+       mai dal kernel), poi il «sì»; qui, dopo il sì, si accende. Il ponte senza indirizzo è solo il modo («n0» o «proprio»). */
+    const ponte = () => (stato.relay?.modo === 'proprio' ? 'proprio' : stato.relay?.modo === 'n0' ? 'n0' : null);
+    const accendiDopoLaCarta = async (cosa) => {
+      const ora = await remoto.stato();
+      if (ora.acceso) return null;
+      if (!ora.sceltaFatta) return { ok: false, messaggio: `The person did not choose how devices reach this computer, so remote control stays off.${cosa}` };
+      try { await remoto.imposta({ acceso: true }); }
+      catch (e) { return { ok: false, messaggio: `Remote control could not be turned on (${String(e?.code ?? e?.message ?? 'error').slice(0, 80)}).${cosa}` }; }
+      return null;
+    };
+    const comeArriva = (modo) => (modo === 'proprio' ? 'the person\'s own server' : 'the free servers by n0');
     if (nome === 'remote_phone_pair') {
       if (!stato.disponibile) return { ok: false, messaggio: 'Remote control is not available on this computer. No QR code was shown.' };
-      if (!stato.acceso || !stato.sceltaFatta) return { ok: false, messaggio: 'Remote control is off: only the person can turn it on, from the Connected devices screen. No QR code was shown.' };
-      if (fase !== 'esegui') return { ok: true, carta: true, azione: { tipo: 'remote_phone_pair', telefoni: vivi.length } };
-      return { ok: true, testo: 'The pairing QR code is now on the person\'s screen, valid once for a few minutes. The person scans it with the device and confirms the 6-digit code on this computer: you will not see the result unless you call remote_phones later.' };
+      if (fase !== 'esegui') {
+        if (toolCallId) {
+          accesoSullaCarta.set(toolCallId, Boolean(stato.acceso));
+          if (accesoSullaCarta.size > 64) accesoSullaCarta.delete(accesoSullaCarta.keys().next().value);
+        } else if (voceSessione) accesoSullaCartaSenzaId.set(voceSessione, Boolean(stato.acceso)); // REV4-C1b
+        return { ok: true, carta: true, azione: { tipo: 'remote_phone_pair', telefoni: vivi.length,
+          ...(stato.acceso ? {} : { acceso: false, ponte: ponte() }) } };
+      }
+      const mostrato = toolCallId ? accesoSullaCarta.get(toolCallId) : voceSessione ? accesoSullaCartaSenzaId.get(voceSessione) : undefined;
+      if (toolCallId) accesoSullaCarta.delete(toolCallId);
+      if (mostrato === true && !stato.acceso) {
+        return { ok: false, messaggio: 'Remote control was turned off after the card was shown, so nothing was turned on and no QR code was shown.' };
+      }
+      /* ⛔ REV4-C1a (24/10/2026, S4): una carta che non si sa più che cosa ha mostrato (uscita dalla Map da 64 dopo altre 64 anteprime)
+         NON accende: chi non può valutare nega. A remoto acceso non c'è niente da accendere, e il QR si mostra come sempre. */
+      if (mostrato === undefined && !stato.acceso) {
+        return { ok: false, messaggio: 'This card is no longer known to this computer and remote control is off, so nothing was turned on and no QR code was shown. Ask again to show a new card.' };
+      }
+      const fallito = await accendiDopoLaCarta(' No QR code was shown.');
+      if (fallito) return fallito;
+      return { ok: true, testo: `${stato.acceso ? '' : 'Remote control is now on. '}The pairing QR code is now on the person's screen, valid once for a few minutes. The person scans it with the device and confirms the 6-digit code on this computer: you will not see the result unless you call remote_phones later.` };
+    }
+    if (nome === 'remote_control') {
+      if (!stato.disponibile) return { ok: false, messaggio: 'Remote control is not available on this computer. Nothing changed.' };
+      if (typeof argomenti?.on !== 'boolean') return { ok: false, messaggio: '"on" must be true or false. Nothing changed.' };
+      if (argomenti.relay !== undefined && argomenti.relay !== 'free' && argomenti.relay !== 'own') return { ok: false, messaggio: '"relay" must be "free" or "own". Nothing changed.' };
+      const vuole = argomenti.on;
+      /* già com'è chiesto: niente carta, niente da cambiare — lo si dice */
+      if (Boolean(stato.acceso) === vuole && !(vuole && argomenti.relay && (argomenti.relay === 'own' ? 'proprio' : 'n0') !== ponte())) {
+        if (fase !== 'esegui') return { ok: true, carta: false };
+        return { ok: true, testo: `Remote control is already ${vuole ? `on (devices reach this computer through ${comeArriva(ponte())})` : 'off'}. Nothing changed.` };
+      }
+      if (fase !== 'esegui') {
+        return { ok: true, carta: true, azione: { tipo: 'remote_control', acceso: vuole, ponte: ponte(),
+          ...(vuole && argomenti.relay ? { ponteProposto: argomenti.relay === 'own' ? 'proprio' : 'n0' } : {}),
+          telefoni: vivi.length, inLinea: vivi.filter((v) => v.inLinea).length } };
+      }
+      if (!vuole) {
+        try { await remoto.imposta({ acceso: false }); }
+        catch (e) { return { ok: false, messaggio: `Remote control could not be turned off (${String(e?.code ?? e?.message ?? 'error').slice(0, 80)}).` }; }
+        return { ok: true, testo: `Remote control is off. Paired devices (${vivi.length}) cannot reach this computer until it is on again; they stay paired.` };
+      }
+      const fallito = await accendiDopoLaCarta(' Nothing changed.');
+      if (fallito) return fallito;
+      const dopo = await remoto.stato();
+      return { ok: true, testo: `Remote control is on: paired devices (${vivi.length}) can reach this computer through ${comeArriva(dopo.relay?.modo)}. To connect a new device, use remote_phone_pair.` };
     }
     if (nome === 'remote_phone_revoke') {
       const chiesto = typeof argomenti?.phone === 'string' ? argomenti.phone.trim() : '';
@@ -7603,6 +7841,179 @@ export function createSessionRegistry({
       }
       await remoto.revoca(v.id);
       return { ok: true, testo: `Disconnected ${nomeDi(v)} (id ${corto(v)}): it can no longer reach this computer. To use it again, the person pairs it anew.` };
+    }
+    /*
+     * ⭐ R5.12 (owner 23/10/2026) — le cartelle dei dispositivi dalla chat (`remoto.cartelle`, il modulo `cartelle-dispositivi.mjs`).
+     *   Al modello: nome, id e percorso delle cartelle GIÀ consentite, o di quella che chiede di consentire; mai il segreto degli id.
+     *   Consentire chiede SEMPRE la carta (il kernel non la salta in Accesso pieno); l'anteprima non scrive niente, e l'esecuzione
+     *   ricontrolla tutto (fra la carta e il clic la cartella può sparire, o essere già stata consentita dalla finestra).
+     *   Come i concorrenti: Claude Code allarga le cartelle con `/add-dir` o `additionalDirectories`, che sceglie la persona
+     *   (code.claude.com/docs/en/iam, letto il 23/10/2026); qui il modello propone e la persona decide sulla carta.
+     */
+    if (nome === 'remote_phone_folders' || nome === 'remote_phone_folder_allow' || nome === 'remote_phone_folder_revoke') {
+      const cartelle = remoto.cartelle ?? null;
+      if (!cartelle) return { ok: false, messaggio: 'Device folders are not available on this computer.' };
+      const nulla = nome === 'remote_phone_folders' ? '' : nome === 'remote_phone_folder_allow' ? ' Nothing was allowed.' : ' Nothing was revoked.';
+      const pulito = (s) => String(s ?? '').replace(/[\p{Cc}\p{Cf}]/gu, ' ');
+      const nomeCartella = (c) => JSON.stringify(pulito(c.nome).slice(0, 128));
+      const perCarta = (v) => ({ idCorto: corto(v), nome: String(v.nome || '').slice(0, 64), piattaforma: v.piattaforma ?? null, inLinea: Boolean(v.inLinea), ultimaVoltaAlle: v.ultimaVoltaAlle ?? null });
+      const chiesto = typeof argomenti?.phone === 'string' ? argomenti.phone.trim() : '';
+      let scelti = vivi;
+      if (chiesto || nome !== 'remote_phone_folders') {
+        if (!/^[A-Za-z0-9_-]{4,64}$/u.test(chiesto)) return { ok: false, messaggio: `"phone" must be the short id from remote_phones.${nulla}` };
+        scelti = vivi.filter((v) => String(v.id).startsWith(chiesto));
+        if (scelti.length !== 1) return { ok: false, messaggio: `${scelti.length ? 'More than one' : 'No'} paired device has the id "${chiesto}": call remote_phones first.${nulla}` };
+      }
+      if (nome === 'remote_phone_folders') {
+        if (fase !== 'esegui') return { ok: true, carta: false };
+        const DA = { domanda: 'asked from the device', anticipo: 'allowed in advance on this computer', chat: 'allowed from the chat' };
+        const righe = [`Remote control is ${statoAcceso}.${stato.acceso ? '' : ' Allowed folders stay saved and apply when it is on.'} Folders allowed to ${scelti.length} paired device(s):`];
+        for (const v of scelti) {
+          righe.push(`- ${nomeDi(v)} · id ${corto(v)}`);
+          const consensi = await cartelle.consensiDi(v.id);
+          if (!consensi.length) righe.push('  No folders allowed.');
+          for (const c of consensi) {
+            righe.push(`  - ${nomeCartella(c)} · folder ${c.cartellaId} · ${pulito(c.percorso)} · allowed ${c.consentitaAlle ?? 'at an unknown time'} (${DA[c.da] ?? DA.domanda})${c.esiste ? '' : ' · missing on disk'}`);
+          }
+        }
+        return { ok: true, testo: righe.join('\n') };
+      }
+      const v = scelti[0];
+      if (nome === 'remote_phone_folder_allow') {
+        const percorso = typeof argomenti?.path === 'string' ? argomenti.path.trim() : '';
+        if (!percorso) return { ok: false, messaggio: `"path" must be the full path of a folder on this computer.${nulla}` };
+        if (!percorsoAssoluto(percorso)) return { ok: false, messaggio: `"path" must be a full path, not a relative one.${nulla}` };
+        const esame = await cartelle.verifica(percorso, v.id);
+        if (esame.esito === 'inesistente') return { ok: false, messaggio: `There is no folder at ${pulito(percorso).slice(0, 500)} on this computer.${nulla}` };
+        if (esame.esito !== 'ok') return { ok: false, messaggio: `That folder belongs to TALOS and cannot be given to a device.${nulla}` };
+        if (esame.consentita) {
+          if (fase !== 'esegui') return { ok: true, carta: false };
+          return { ok: true, testo: `${nomeDi(v)} (id ${corto(v)}) can already work in ${nomeCartella(esame)} (${pulito(esame.percorso)}). Nothing was changed.` };
+        }
+        /* ⛔ 24/10 (revisione avversaria F2-1): senza id della chiamata la carta non si lega a niente, e il controllo fra carta ed
+           esecuzione si spegnerebbe in silenzio. Il kernel non inventa id: una chiamata senza id non consente niente. */
+        if (!toolCallId) return { ok: false, messaggio: `This call has no id, so it cannot be tied to the person's card.${nulla}` };
+        const sullaCarta = `${v.id}\u0000${toolCallId}`;
+        if (fase !== 'esegui') {
+          cartelleSullaCarta.set(sullaCarta, esame.cartellaId);
+          if (cartelleSullaCarta.size > 64) cartelleSullaCarta.delete(cartelleSullaCarta.keys().next().value);
+          return { ok: true, carta: true, azione: { tipo: 'remote_phone_folder_allow', telefono: perCarta(v), cartella: { cartellaId: esame.cartellaId, nome: esame.nome, percorso: esame.percorso } } };
+        }
+        const mostrata = cartelleSullaCarta.get(sullaCarta);
+        cartelleSullaCarta.delete(sullaCarta);
+        /* F2-3: nessuna carta per questa chiamata (o già usata): non è «cambiata», non c'è mai stata */
+        if (mostrata === undefined) return { ok: false, messaggio: `No card was shown to the person for this call: call remote_phone_folder_allow again.${nulla}` };
+        if (mostrata !== esame.cartellaId) {
+          return { ok: false, messaggio: `${pulito(percorso).slice(0, 500)} no longer leads to the folder shown on the card (it now leads to ${pulito(esame.percorso)}).${nulla}` };
+        }
+        try {
+          await cartelle.consentiInAnticipo(v.id, esame.percorso, { da: 'chat', attesa: esame.cartellaId });
+        } catch (e) {
+          if (e?.code === 'FOLDER_CHANGED') return { ok: false, messaggio: `${pulito(esame.percorso).slice(0, 500)} changed after the card was shown and no longer leads to the same folder.${nulla}` };
+          if (e?.code === 'FOLDER_INVALID') return { ok: false, messaggio: `There is no folder at ${pulito(esame.percorso)} on this computer anymore.${nulla}` };
+          if (e?.code === 'FOLDER_NOT_ALLOWED') return { ok: false, messaggio: `That folder belongs to TALOS and cannot be given to a device.${nulla}` };
+          throw e;
+        }
+        return { ok: true, testo: `Allowed ${nomeDi(v)} (id ${corto(v)}) to work in ${nomeCartella(esame)} (${pulito(esame.percorso)}): from the device it can read, write and run commands there until the person revokes it.` };
+      }
+      const voce = typeof argomenti?.folder === 'string' ? argomenti.folder.trim() : '';
+      if (!voce) return { ok: false, messaggio: `"folder" must be a folder id from remote_phone_folders or the full path of an allowed folder.${nulla}` };
+      const c = await cartelle.consensoDi(v.id, voce);
+      if (!c) return { ok: false, messaggio: `No folder allowed to ${nomeDi(v)} (id ${corto(v)}) matches ${JSON.stringify(pulito(voce).slice(0, 200))}: call remote_phone_folders first.${nulla}` };
+      if (fase !== 'esegui') {
+        return { ok: true, carta: true, azione: { tipo: 'remote_phone_folder_revoke', telefono: perCarta(v), cartella: { cartellaId: c.cartellaId, nome: c.nome, percorso: c.percorso } } };
+      }
+      try {
+        await cartelle.revoca(v.id, c.cartellaId);
+      } catch (e) {
+        if (e?.code === 'NOT_FOUND') return { ok: false, messaggio: `That folder is no longer allowed to ${nomeDi(v)} (id ${corto(v)}).${nulla}` };
+        throw e;
+      }
+      return { ok: true, testo: `${nomeDi(v)} (id ${corto(v)}) can no longer work in ${nomeCartella(c)} (${pulito(c.percorso)}). Sessions already open in that folder refuse its writes from now on.` };
+    }
+    /*
+     * ⭐ R5.13 (owner 24/10/2026; bozzetti approvati D1-D8) — MANDARE UN FILE A UN DISPOSITIVO dalla chat: la STESSA offerta del menu del
+     *   file nella finestra (`remoto.file.registraOfferta`, prima corsa). Solo i file della cartella della conversazione, al più 25 MiB.
+     *   D3: con più dispositivi e nessuno indicato si rifiuta con l'elenco, e la carta nomina quello scelto. D2: fuori linea si manda lo
+     *   stesso (lo riceve quando si ricollega). La carta è legata al FILE mostrato (`versione`, per chiamata), come le cartelle: un file
+     *   riscritto fra la carta e il clic non parte. Il modello riceve l'id dell'offerta: la finestra lo usa per lo stato sotto la scheda.
+     *   Hermes consegna i file con un tag `MEDIA:<percorso>` nel testo e una lista di percorsi negati (`gateway/platforms/base.py:815-822,
+     *   1216-1271`, clone del 22/10/2026): qui un attrezzo esplicito, dietro la carta, e solo dentro la cartella della conversazione.
+     */
+    if (nome === 'remote_device_send_file') {
+      const nulla = ' Nothing was sent.';
+      const file = remoto.file ?? null;
+      if (!file) return { ok: false, messaggio: 'Sending files to devices is not available on this computer.' };
+      const sessionId = voceSessione?.sessionId; // R5.13 + REV4-C1b: la voce della sessione arriva come quarto argomento
+      if (!sessionId) return { ok: false, messaggio: `This conversation has no folder to send from.${nulla}` };
+      /* ⛔ Revisione a blocco 8 (B8-9): `trim` toglie anche il BOM (U+FEFF) e gli spazi in testa, che un nome di file vero può avere
+         («﻿inizio.txt» risultava «non c'è»). Si prova prima il percorso COM'È, e solo se lì non c'è niente quello senza i bordi
+         (il modello che lascia uno spazio di troppo). Una regola sola, uguale per la carta e per l'invio. */
+      const grezzo = typeof argomenti?.path === 'string' ? argomenti.path : '';
+      const percorso = grezzo.trim();
+      if (!percorso) return { ok: false, messaggio: `"path" must be the path of a file in this conversation's folder.${nulla}` };
+      const pulito = (x) => String(x ?? '').replace(/[\p{Cc}\p{Cf}]/gu, ' ');
+      const nomeFile = (x) => JSON.stringify(pulito(x).slice(0, 200));
+      const misura = (n) => (n < 1024 ? `${n} byte${n === 1 ? '' : 's'}` : n < 1024 * 1024 ? `${(n / 1024).toFixed(1)} KB` : `${(n / (1024 * 1024)).toFixed(1)} MB`);
+      if (!vivi.length) return { ok: false, messaggio: `No device is paired with this computer: the person pairs one first (remote_phone_pair).${nulla}` };
+      const chiesto = typeof argomenti?.device === 'string' ? argomenti.device.trim() : '';
+      let v;
+      if (chiesto) {
+        if (!/^[A-Za-z0-9_-]{4,64}$/u.test(chiesto)) return { ok: false, messaggio: `"device" must be the short id from remote_phones.${nulla}` };
+        const trovati = vivi.filter((x) => String(x.id).startsWith(chiesto));
+        if (trovati.length !== 1) return { ok: false, messaggio: `${trovati.length ? 'More than one' : 'No'} paired device has the id "${chiesto}": call remote_phones first.${nulla}` };
+        v = trovati[0];
+      } else if (vivi.length === 1) v = vivi[0];
+      else {
+        const elenco = vivi.map((x) => `${nomeDi(x)} (id ${corto(x)}, ${x.inLinea ? 'online' : 'offline'})`).join(', ');
+        return { ok: false, messaggio: `There are ${vivi.length} paired devices: say which one in "device" — ${elenco}.${nulla}` };
+      }
+      let esame;
+      try {
+        if (grezzo !== percorso) {
+          try { esame = await file.esaminaOfferta({ sessionId, percorso: grezzo }); }
+          catch (e) { if (e?.code !== 'FILE_GONE' && e?.code !== 'NOT_FOUND') throw e; }
+        }
+        esame ??= await file.esaminaOfferta({ sessionId, percorso });
+      }
+      catch (e) {
+        const dove = percorsoNellEsitoInvio(e?.relativo);
+        if (e?.code === 'FILE_TOO_LARGE') return { ok: false, messaggio: `FILE_TOO_LARGE: ${nomeFile(percorso.split(/[\\/]/u).pop())} is ${misura(e.dimensione ?? 0)} (${e.dimensione ?? 0} bytes)${dove ? ` at ${dove}` : ''} and a device takes files up to 25 MB.${nulla}` }; // REV6-F3: il percorso dentro la cartella, per il «Download» della scheda
+        if (e?.motivo === 'fuori') return { ok: false, messaggio: `That file is not in this conversation's folder.${nulla}` };
+        if (e?.motivo === 'cartella') return { ok: false, messaggio: `${nomeFile(percorso)} is a folder, not a file.${nulla}` };
+        if (e?.code === 'FILE_GONE' || e?.code === 'NOT_FOUND') return { ok: false, messaggio: `There is no file at ${nomeFile(percorso)} in this conversation's folder.${nulla}` };
+        throw e;
+      }
+      if (!toolCallId) return { ok: false, messaggio: `This call has no id, so it cannot be tied to the person's card.${nulla}` };
+      const sullaCarta = `${sessionId}\u0000${toolCallId}`;
+      if (fase !== 'esegui') {
+        fileSullaCarta.set(sullaCarta, { percorso: esame.percorso, versione: esame.versione, dispositivoId: v.id });
+        if (fileSullaCarta.size > 64) fileSullaCarta.delete(fileSullaCarta.keys().next().value);
+        return { ok: true, carta: true, azione: { tipo: 'remote_device_send_file',
+          file: { nome: esame.nome, dimensione: esame.dimensione, percorso: esame.percorso },
+          telefono: { idCorto: corto(v), nome: String(v.nome || '').slice(0, 64), piattaforma: v.piattaforma ?? null, inLinea: Boolean(v.inLinea), ultimaVoltaAlle: v.ultimaVoltaAlle ?? null },
+          dispositivi: vivi.length } };
+      }
+      const mostrato = fileSullaCarta.get(sullaCarta);
+      fileSullaCarta.delete(sullaCarta);
+      if (!mostrato) return { ok: false, messaggio: `No card was shown to the person for this call: call remote_device_send_file again.${nulla}` };
+      if (mostrato.dispositivoId !== v.id || mostrato.percorso !== esame.percorso) return { ok: false, messaggio: `The file or the device is not the one shown on the card: call remote_device_send_file again.${nulla}` };
+      let fatto;
+      try { fatto = await file.registraOfferta({ sessionId, dispositivoId: v.id, percorso: esame.percorso, versioneAttesa: mostrato.versione }); }
+      catch (e) {
+        if (e?.code === 'FILE_GONE') return { ok: false, messaggio: `${nomeFile(esame.nome)} changed after the card was shown: call remote_device_send_file again to send the new version.${nulla}` };
+        if (e?.code === 'FILE_TOO_LARGE') return { ok: false, messaggio: `FILE_TOO_LARGE: ${nomeFile(esame.nome)} grew over 25 MB after the card was shown.${nulla}` };
+        throw e;
+      }
+      const dove = v.inLinea ? 'it appears in this conversation on the device, ready to download' : 'it is offline now and gets the file in this conversation when it connects again';
+      /* REV6-F3 (25/10/2026): il percorso DENTRO la cartella della conversazione, risolto qui; la finestra lo usa per la scheda
+         («Download», «Copia percorso», il lettore) anche quando il modello ha scritto il percorso assoluto */
+      /* ⛔ Revisione a blocco 7 (B-1): il percorso VERO, in JSON, mai `pulito` né tagliato a 200: un nome con ZWNJ o emoji, o un
+         percorso lungo, arrivava alla finestra diverso dal file e «Download» non lo trovava. ⛔ B8 (blocco 8): JSON scappa solo i
+         caratteri di controllo C0; RLO, C1 e U+2028 arrivano al modello come sono, come negli altri attrezzi che mostrano nomi veri */
+      const percorsoJson = percorsoNellEsitoInvio(fatto.relativo);
+      const dentroLaCartella = percorsoJson ? `, path ${percorsoJson}` : '';
+      return { ok: true, testo: `Sent ${nomeFile(fatto.nome)} (${misura(fatto.dimensione)}) to ${nomeDi(v)} (id ${corto(v)}): ${dove} (offer ${fatto.offertaId}${dentroLaCartella}).` };
     }
     return { ok: false, messaggio: `${nome} is not a devices tool.` };
   }
@@ -7747,6 +8158,10 @@ export function createSessionRegistry({
   function avviaESegui({
     sessionId = randomUUID(), taskId, cartella, task, comandoProva, messaggiIniziali,
     forkDa = null, voceEsistente = null, modelloRichiesta = null, reasoningRichiesto = null, mobile = false,
+    /* 24/10/2026 (owner: «Riprova» e «Modifica e rimanda» come RAMI; contratto CONTRATTO-RIPROVA-MODIFICA-RAMI, OK della CLI): il
+       giro prima del quale un ramo è stato tagliato. Lo passa solo `forka`: una ripresa o un reindirizzo riusano la voce com'è
+       (`const voce = voceEsistente ?? {…}` qui sotto), e il campo resta senza ripassarlo — misurato col mutante R-M4. */
+    forkPrimaDelGiro = null,
     giroNonDellaPersona = false, // 0.6.5, terza revisione: il giro riparte per un messaggio che la persona non ha scritto ora
     /* owner 15/10/2026 (difesa in profondità): il testo che la persona ha SCRITTO per questo giro, l'unico che può adottare un file.
        Assente ⇒ nessuno (ogni strada della persona lo passa in positivo: avvio, ripresa, correzione, voce di coda sua). */
@@ -7777,6 +8192,7 @@ export function createSessionRegistry({
      */
     senzaInterfaccia = false,
     senzaInterfacciaNelGiro = undefined, // CLI 16/10: «nessuno davanti» per questo giro, solo in memoria (`nessunoDavanti`)
+    allegaSeTroppoGrande = false, // §4.2, regola N: «Invia come allegato» per la consegna di questo avvio, solo in memoria
     /* /goal G5 (owner 15/10/2026) — il CONFUTATORE dell'obiettivo: `giriMassimi` (8) e i soli comandi che può far girare (quelli
        del contratto confermato dalla persona). Lo passa solo `confutaObiettivo`; ogni altra sessione `null`, come prima. */
     giriMassimi = null, soloComandiDelContratto = null,
@@ -7982,12 +8398,16 @@ export function createSessionRegistry({
       origineRichiesta,
       senzaInterfaccia: senzaInterfaccia === true, // decisione owner 30: vedi il parametro
       ...(typeof senzaInterfacciaNelGiro === 'boolean' ? { senzaInterfacciaNelGiro } : {}), // CLI 16/10: mai sul disco
+      /* §4.2, regola N: «Invia come allegato» scelto per la consegna di questo avvio (vedi `segnaDaAllegare`); solo in memoria */
+      ...(allegaSeTroppoGrande === true && typeof task?.consegna === 'string' && task.consegna.length > CARATTERI_MINIMI_PER_ALLEGARE
+        ? { testiDaAllegare: [task.consegna] } : {}),
       giriMassimi: Number.isSafeInteger(giriMassimi) && giriMassimi > 0 ? giriMassimi : null, // /goal G5: vedi il parametro
       soloComandiDelContratto: Array.isArray(soloComandiDelContratto) ? soloComandiDelContratto.filter((c) => typeof c === 'string' && c !== '') : null,
       legameWorkflow: legameWorkflowValido(legameWorkflow), // F3-32: vedi il parametro
       // G02-6: identità opaca di deduplica. Non concede alcun permesso e non cambia il workspace.
       operationId, operationSignature,
       task, comandoProva, forkDa,
+      ...(puntoDelRamo(forkPrimaDelGiro) ? { forkPrimaDelGiro } : {}), // assente, mai null: un ramo intero resta com'era (CLI 24/10)
       // 26/09, difetto (4): lo stesso nome che il ripristino le darebbe; 16/10: col «-N» se una sessione in elenco ha già quel nome.
       // 16/10 sera (owner): anche una DELEGA nasce col nome corto del suo compito (prima `null`, e la barra mostrava il compito: due
       // deleghe dello stesso compito erano gemelle), lo stesso testo di `taskDelega`.
@@ -8125,6 +8545,7 @@ export function createSessionRegistry({
           cartellaStore, sessionId,
           record: {
             tipo: 'intestazione', schema: SCHEMA_SESSIONE, sessionId, taskId, cartella, task, comandoProva, forkDa,
+            ...(puntoDelRamo(voce.forkPrimaDelGiro) ? { forkPrimaDelGiro: voce.forkPrimaDelGiro } : {}),
             avviataAlle: voce.avviataAlle, modello: voce.modello, modelloPlanner: voce.modelloPlanner,
             reasoning: voce.reasoning, mobile: voce.mobile, permessi: voce.permessi,
             modalitaOperativa: voce.modalitaOperativa,
@@ -8391,7 +8812,7 @@ export function createSessionRegistry({
       if (voce.codaInPausa) return null;
       const item = voce.codaMessaggi.shift();
       if (item == null) return null;
-      const { id: codaId, testo, immagini, origine, childId, runId, bolla, autore } = voceDiCoda(item);
+      const { id: codaId, testo, immagini, origine, childId, runId, bolla, autore, allegaSeTroppoGrande: allegaQuesta } = voceDiCoda(item);
       const registrato = broadcast(voce, {
         ...queuedMessageDelivered({ testo }),
         ...(immagini?.length ? { immagini } : {}),
@@ -8407,6 +8828,7 @@ export function createSessionRegistry({
         return null;
       }
       annunciaCoda(voce); // ⭐ 14/09: chi guarda da un'altra finestra vede la coda accorciarsi
+      if (allegaQuesta) segnaDaAllegare(voce, testo); // §4.2, regola N: consegnata a giro in corso, la scelta la segue
       /* richiesta CLI 15/10/2026: la voce che la persona ha scritto (il marchio `autore`, messo solo da accodaMessaggio) arriva al
          kernel col suo segno, e un file che nomina vale come sua richiesta anche consegnata a giro in corso */
       const contenuto = imageMessageContent(testo, immagini);
@@ -8827,6 +9249,31 @@ export function createSessionRegistry({
          aggiunge la differenza */
       ...(Number.isFinite(voce.scartoMisurato) && Number.isFinite(voce.stimaAttrezzi) && voce.stimaAttrezzi > 0 ? { stimaAttrezziMisurati: voce.stimaAttrezzi } : {}),
       ...(Number.isSafeInteger(voce.nonEntraDetto) ? { nonEntraDetto: voce.nonEntraDetto } : {}), // revisione 7 della CLI (F6)
+      /* R11-7 (revisione 11 della CLI): la finestra che il fornitore ha detto rifiutando, per lo STESSO modello — senza una finestra nota,
+         la regola N del giro dopo la usa prima di mandare (l'allegato parte subito, la richiesta rifiutata non riparte uguale) */
+      ...((rifiuto) => (rifiuto ? { rifiutoNoto: { finestra: rifiuto.finestra, scala: rifiuto.scala, impronta: rifiuto.impronta ?? null } } : {}))(
+        rifiutoRicordato(voce, modelloDiSessionePerRete(voce))), // R12-3, R12-5
+      /* R12-2: il ripiego dal motore già detto e non guarito — il giro dopo non lo ripete */
+      ...(typeof voce.ripiegoDetto === 'string' && voce.ripiegoDetto ? { ripiegoDetto: voce.ripiegoDetto } : {}),
+      /* R13-2: le richieste non inviate che la storia tiene perché il motore le ha già archiviate — dal giornale (`nelMotore`), quindi anche
+         dopo un riavvio; il kernel le mostra come una nota */
+      ...((indici) => (indici.length ? { richiesteNonInviate: indici } : {}))(richiesteNonInviateNelMotore(voce)),
+      /* Pezzo D del §4 (23/10/2026): il freno dei riassunti della sessione, il giro (per le ricariche) e — una volta sola — il verdetto in
+         attesa del record scritto a fine del giro prima: il primo numero vero di questo giro lo giudica */
+      ...(voce.freno ? { freno: voce.freno } : {}),
+      /* R10-3 (revisione 10 della CLI): la copia viva per il giro, e quella data alla partenza — a fine giro, se il registro l'ha cambiata nel
+         frattempo (il riassunto di fine giro del giro prima), le due copie si uniscono invece di sovrascriversi */
+      frenoVivo: () => voce.freno ?? null,
+      ...(() => { voce.frenoAllaPartenza = JSON.stringify(compattazione.frenoValido(voce.freno)); return {}; })(),
+      /* Pezzo E del §4: i riassunti veri della sessione e k (solo se misurato con il modello di questo giro) */
+      ...(Array.isArray(voce.riassuntiVeri) && voce.riassuntiVeri.length > 0 ? { riassuntiVeri: voce.riassuntiVeri } : {}),
+      ...(Number.isFinite(kDellaVoce(voce, voce.modello ?? null)) ? { fattoreK: kDellaVoce(voce, voce.modello ?? null) } : {}),
+      ...(Number.isSafeInteger(voce.versioneGiro) ? { versioneGiro: voce.versioneGiro } : {}),
+      ...(() => { const inAttesa = voce.verdettoInAttesa === true; voce.verdettoInAttesa = false; return inAttesa ? { verdettoInAttesa: true } : {}; })(),
+      /* §4.2, regola K (owner 22/10/2026): dove vanno le copie intere delle richieste vecchie accorciate per il modello */
+      cartellaIncollati: cartellaStore ? cartellaIncollatiDi(cartellaStore, sessionId) : null,
+      /* §4.2, regola N (owner 22/10/2026): la richiesta nuova che non entra parte come allegato solo se la persona l'ha scelto per lei */
+      allegaSeTroppoGrande: (testo) => consumaDaAllegare(voce, testo),
       /* F001b (owner 01/10/2026, «Ricerca che continua», «nella sessione, in memoria»): le ricerche che superano il tempo della
          risposta vivono qui, una lista per sessione, condivisa dai suoi giri; si fermano con Stop, eliminazione e spegnimento. */
       ricercheInCorso: (voce.ricercheInCorso ??= creaRegistroRicerche()),
@@ -8926,7 +9373,7 @@ export function createSessionRegistry({
        */
       ...(() => {
         if (typeof remotoFn !== 'function' || voce.padreId || voce.legameWorkflow || nessunoDavanti(voce)) return {};
-        return { onTelefoniFn: (nome, argomenti, opzioni) => ospiteTelefoni(nome, argomenti, opzioni) };
+        return { onTelefoniFn: (nome, argomenti, opzioni) => ospiteTelefoni(nome, argomenti, opzioni, voce) }; // REV4-C1b: la sessione; R5.13: anche la cartella della conversazione
       })(),
       /*
        * ⭐ 0.1.25 (owner 09/10/2026) — la seconda porta dei fornitori esclusi. Stesse regole delle automazioni: mai ai passi di
@@ -9076,10 +9523,11 @@ export function createSessionRegistry({
     voce.riassuntiAperti = 0;
     const conCompattazione = (opzioni) => ({
       ...opzioni,
+      sessionePerLibreria: () => ({ sessionId, sessionNome: typeof voce.nome === 'string' && voce.nome ? voce.nome : undefined }), // 24/10: artefatti con versioni
       segnaleSaltaRiassunto: voce.saltaRiassuntoControllo.signal,
       saltaRiassuntoFn: () => voce.saltaRiassuntoControllo?.signal ?? null,
       onRichiestaSpedita: (richiesta) => registraUltimaRichiesta(voce, richiesta), // C1 (10/10): la scheda Contesto
-      finestraToken: leggiFinestraToken(opzioni.modello),
+      finestraToken: finestraConRifiuto(voce, opzioni.modello), // R11-7
       ...(leggiLimiteUscita(opzioni.modello) ? { limiteUscitaToken: leggiLimiteUscita(opzioni.modello) } : {}),
       ...(leggiTettoCompattazione(opzioni.modello) ? { tettoCompattazioneToken: leggiTettoCompattazione(opzioni.modello) } : {}),
       /* 21/10/2026 (CLI): il modello dei riassunti dentro il giro, con la sua finestra (l'adattatore non ha il catalogo) */
@@ -9227,8 +9675,19 @@ export function createSessionRegistry({
        *   come prima, la storia di prima. Al PRIMO giro una storia di prima non c'è (`null`): lì si salva come quando il giro
        *   riesce, invece di lasciare al `resume` la sola ricostruzione dagli eventi, che gli attrezzi non li ha.
        */
+      /* §4.2, regola N (owner 22/10/2026): la richiesta nuova non entrava e non è partita — la storia del giro arriva SENZA di lei, e la
+         storia di inizio giro (che la ha già, in fondo) non ne è un prefisso. Vale allora la storia di prima senza la richiesta del giro:
+         è lei che la storia del giro deve estendere (dopo possono venire solo i `system` che il kernel accoda). Così la richiesta esce da
+         `messaggiFinali` e dalla rigiocata, e resta solo nel giornale degli eventi, marcata da `talos.richiesta-non-inviata`. */
+      /* ⛔ R13-2 (revisione 13 della CLI; owner 23/10/2026 via la CLI, «sì, nella 0.6.13»): col motore del contesto una richiesta mandata,
+         rifiutata e solo dopo giudicata troppo grande è già nel suo archivio, che è a sola aggiunta. Toglierla dalla storia la faceva
+         divergere al giro dopo: il motore metteva da parte l'archivio e ripagava i riassunti (`ceerr`). Allora la storia la TIENE
+         (`archiviataDalMotore`): il kernel, nei giri dopo, al suo posto mostra una nota (`richiesteNonInviate`, dal giornale). */
+      const tenutaNelMotore = risultato?.codiceErrore === CODICE_RICHIESTA_TROPPO_GRANDE && risultato?.archiviataDalMotore === true;
+      const primaDelGiroAccettata = risultato?.codiceErrore === CODICE_RICHIESTA_TROPPO_GRANDE && Array.isArray(messaggiPrimaDelGiro) && !tenutaNelMotore
+        ? senzaLaRichiestaNuova(messaggiPrimaDelGiro) : messaggiPrimaDelGiro;
       const lavoroDelGiro = !Array.isArray(messaggiRestituiti) && Array.isArray(risultato?.messaggiDelGiro)
-        && (!Array.isArray(messaggiPrimaDelGiro) || prefissoPersistito(messaggiPrimaDelGiro, risultato.messaggiDelGiro) >= 0)
+        && (!Array.isArray(primaDelGiroAccettata) || prefissoPersistito(primaDelGiroAccettata, risultato.messaggiDelGiro) >= 0)
         ? risultato.messaggiDelGiro : null;
       if (Array.isArray(messaggiRestituiti)) {
         voce.messaggiFinali = messaggiRestituiti;
@@ -9334,18 +9793,66 @@ export function createSessionRegistry({
        *   si salva; poi, a storia scritta, il registro decide da solo se riassumere in background (decisione 5).
        *   Con `integraRisultatiFigliNelloStorico` la storia la scrive un altro percorso: si aspetta comunque quel punto.
        */
-      const recordDelTurno = Array.isArray(risultato?.esito?.recordDiCompattazione) ? risultato.esito.recordDiCompattazione.at(-1) : null;
+      /* ⛔ R10-7 (revisione 10 della CLI, 23/10/2026): un giro fallito porta il record della compattazione che ha applicato e lo stato del
+         giro (`statoDelGiro`): si tengono come quelli di un giro riuscito, ma il record solo se si è tenuto il lavoro del giro e lo copre
+         (`coveredThrough` dentro la sua storia). Prima: annunciato, buttato, e ripagato al giro dopo. */
+      const statoDelGiro = risultato?.esito ?? (risultato?.ok === false && risultato?.statoDelGiro && typeof risultato.statoDelGiro === 'object' ? risultato.statoDelGiro : null);
+      const recordDelGiroFallito = !risultato?.esito && Array.isArray(lavoroDelGiro) && Array.isArray(risultato?.recordDiCompattazione) ? risultato.recordDiCompattazione.at(-1) : null;
+      const recordDelTurno = Array.isArray(risultato?.esito?.recordDiCompattazione) ? risultato.esito.recordDiCompattazione.at(-1)
+        : recordDelGiroFallito && Number.isSafeInteger(recordDelGiroFallito.coveredThrough) && recordDelGiroFallito.coveredThrough <= lavoroDelGiro.length ? recordDelGiroFallito : null;
       /* Revisione 6 della CLI (S2-2): lo scarto fra il fornitore e la stima sull'ultima richiesta misurata del giro — la misura del giro
          dopo, del riassunto di fine giro e del /compact lo porta (gli schemi degli attrezzi e il sistema che la stima dei messaggi non vede) */
-      if (Number.isFinite(risultato?.esito?.scartoMisurato) && risultato.esito.scartoMisurato >= 0) voce.scartoMisurato = risultato.esito.scartoMisurato;
-      if (Number.isFinite(risultato?.esito?.scartoNonEntra) && risultato.esito.scartoNonEntra >= 0) voce.scartoNonEntra = risultato.esito.scartoNonEntra; // F6
-      if (Number.isFinite(risultato?.esito?.stimaAttrezzi) && risultato.esito.stimaAttrezzi > 0) voce.stimaAttrezzi = risultato.esito.stimaAttrezzi; // N2
+      if (Number.isFinite(statoDelGiro?.scartoMisurato) && statoDelGiro.scartoMisurato >= 0) voce.scartoMisurato = statoDelGiro.scartoMisurato;
+      if (Number.isFinite(statoDelGiro?.scartoNonEntra) && statoDelGiro.scartoNonEntra >= 0) voce.scartoNonEntra = statoDelGiro.scartoNonEntra; // F6
+      if (Number.isFinite(statoDelGiro?.stimaAttrezzi) && statoDelGiro.stimaAttrezzi > 0) voce.stimaAttrezzi = statoDelGiro.stimaAttrezzi; // N2
+      /* R11-7: l'ultimo rifiuto coi numeri del fornitore, col modello che l'ha dato (in memoria: dopo un riavvio, un rifiuto in più) */
+      /* R12-3: prima la richiesta più grande ACCETTATA dal modello in questo giro (anche se dopo, nello stesso giro, arriva un rifiuto); poi
+         il rifiuto, ricordato per il suo modello (R12-5); se contraddice ciò che quel modello ha accettato (prima o DOPO), non vale alla lettura
+         (`rifiutoRicordato`): un controllo solo, che copre i due ordini */
+      const modelloDelGiro = modelloDiSessionePerRete(voce);
+      const accettato = statoDelGiro?.massimoAccettato;
+      if (modelloDelGiro && Number.isSafeInteger(accettato) && accettato > 0) {
+        if (!(voce.accettatiDalModello instanceof Map)) voce.accettatiDalModello = new Map();
+        if (!(voce.accettatiDalModello.get(modelloDelGiro) >= accettato)) voce.accettatiDalModello.set(modelloDelGiro, accettato);
+      }
+      const rifiuto = statoDelGiro?.rifiutoDelFornitore;
+      if (modelloDelGiro && rifiuto && Number.isSafeInteger(rifiuto.finestra) && rifiuto.finestra > 0 && Number.isFinite(rifiuto.scala) && rifiuto.scala > 0) {
+        if (!(voce.rifiutiDelFornitore instanceof Map)) voce.rifiutiDelFornitore = new Map();
+        voce.rifiutiDelFornitore.set(modelloDelGiro, { finestra: rifiuto.finestra, scala: rifiuto.scala,
+          impronta: typeof rifiuto.impronta === 'string' ? rifiuto.impronta : null });
+      }
+      /* R12-2: il ripiego detto e non guarito viaggia al giro dopo; un giro che ha visto il motore sano lo azzera */
+      if (statoDelGiro && Object.hasOwn(statoDelGiro, 'ripiegoDetto')) {
+        voce.ripiegoDetto = typeof statoDelGiro.ripiegoDetto === 'string' && statoDelGiro.ripiegoDetto ? statoDelGiro.ripiegoDetto : null;
+      }
       /* N2 (revisione 8): nel giornale solo quando cambia; una riga persa costa un ripiego al prossimo riavvio, mai un errore */
       const scartoDaScrivere = { modello: voce.modello ?? null, scartoMisurato: voce.scartoMisurato ?? null, scartoNonEntra: voce.scartoNonEntra ?? null,
         attrezzi: voce.stimaAttrezzi ?? null };
       if (cartellaStore && JSON.stringify(scartoDaScrivere) !== voce.scartoScritto && (scartoDaScrivere.scartoMisurato !== null || scartoDaScrivere.attrezzi !== null)) {
         voce.scartoScritto = JSON.stringify(scartoDaScrivere);
         Promise.resolve(registraRigaFn({ cartellaStore, sessionId, durable: true, record: { tipo: 'scarto-sessione', ...scartoDaScrivere } })).catch(() => {});
+      }
+      /* Pezzo D del §4: il freno com'è uscito dal giro (colpi, ricariche, tirata) torna alla sessione, e al giornale quando cambia */
+      /* Pezzo E del §4: i riassunti veri e k come sono usciti dal giro (k col modello che l'ha misurato) */
+      if (Array.isArray(statoDelGiro?.riassuntiVeri)) voce.riassuntiVeri = compattazione.conRiassuntoVero(statoDelGiro.riassuntiVeri, null);
+      if (Number.isFinite(statoDelGiro?.fattoreK) && statoDelGiro.fattoreK > 0) voce.fattoreK = { valore: statoDelGiro.fattoreK, modello: voce.modello ?? null };
+      if (statoDelGiro && 'freno' in statoDelGiro) {
+        const delGiro = compattazione.frenoValido(statoDelGiro.freno);
+        /* ⛔ R10-3 (revisione 10 della CLI): se il registro l'ha cambiato durante il giro, le due copie si uniscono — e se l'unione tira
+           e nessuna delle due l'ha detto, lo dice il registro, una volta. Prima la copia del giro cancellava quella del registro. */
+        /* R11-4 e R11-11: con la copia di partenza come base — le ricariche si contano (non si deduplicano) e i colpi azzerati dal giro
+           non tornano */
+        if (JSON.stringify(compattazione.frenoValido(voce.freno)) !== voce.frenoAllaPartenza) {
+          /* la base è l'ultima copia del registro che il giro ha unito (`frenoVisto`); senza, quella di partenza */
+          let base = null;
+          if (statoDelGiro.frenoVisto !== undefined) base = statoDelGiro.frenoVisto;
+          else try { base = JSON.parse(voce.frenoAllaPartenza ?? 'null'); } catch { base = null; }
+          aggiornaFrenoDellaSessione(voce, compattazione.unisciFreni(delGiro, voce.freno, base));
+        }
+        else {
+          voce.freno = delGiro;
+          scriviFreno(voce);
+        }
       }
       /* ⭐ 15/10/2026 — il riassunto pronto e non usato torna al registro, e il giro dopo lo riceve: preparato e pagato una volta sola.
          Quello ancora in preparazione a fine giro si tiene quando arriva, se intanto non è partito un altro giro. In memoria: dopo un
@@ -9366,6 +9873,15 @@ export function createSessionRegistry({
          con `attendiRiassuntoDiFineGiro` invece di leggere `inCorso:false` nella finestra prima che parta. */
       const catenaFineGiro = storiaScritta.then(async (scritta) => {
         if (recordDelTurno) await persistiRecordCompattazione(voce, recordDelTurno, versioneGiro);
+        /* R11-5 (revisione 11 della CLI): un riassunto pagato che il giro ha giudicato inutile sul record di adesso vale anche per il fine
+           giro (`inefficaceVale`): senza, il registro mandava la stessa identica richiesta e la ripagava. Dopo il record del giro, che
+           azzera il ricordo. */
+        const inefficaceDelGiro = statoDelGiro?.riassuntoInefficace;
+        if (inefficaceDelGiro && Number.isFinite(inefficaceDelGiro.token)
+          && inefficaceDelGiro.base === compattazione.chiaveBaseDelRecord(voce.recordCompattazione ?? null)) {
+          const prima = voce.riassuntoInefficace?.base === inefficaceDelGiro.base ? voce.riassuntoInefficace.volte : 0;
+          voce.riassuntoInefficace = { token: inefficaceDelGiro.token, base: inefficaceDelGiro.base, volte: prima + 1 };
+        }
         /* 21/10/2026 (CLI): il record del riassunto di fine giro lo legge solo la compattazione semplice dell'adattatore (`recordIniziale`,
            modo legacy o ripiego). Un giro che è andato col motore del contesto non lo userebbe: pagarlo a ogni giro era buttarlo. */
         if (scritta && risultato?.ok === true && riassuntoDiFineGiro !== false && hookDelContesto === null) avviaCompattazioneInBackground(voce, { versioneDelGiro: versioneGiro });
@@ -9974,6 +10490,30 @@ export function createSessionRegistry({
   }
   const detentorePubblico = (d) => ({ pid: d?.pid ?? null, etichetta: d?.etichetta ?? null, presoIl: d?.presoIl ?? null });
 
+  /*
+   * Revisione 7 della CLI, richiesta del 22/10/2026 notte: il /compact a mano su un pavimento che non entra nella finestra resta com'è
+   *   (paga se il guadagno è > 0: lo chiede la persona, e la storia più corta serve se poi cambia modello), ma il risultato DICE che il
+   *   resto non entra comunque — altrimenti «compattato» lascia credere che ora si possa continuare. `nonEntra: { finestra, pavimento }`
+   *   in ogni risultato in cui la proiezione di adesso più lo scarto della sessione è ancora ≥ della finestra dichiarata (compattato o
+   *   no; senza finestra mai). Contratto concordato con la CLI.
+   * ⛔ F4 della revisione 9 della CLI (23/10/2026): niente più l'evento durevole `non-entra` dal /compact. Su un /compact che AVEVA
+   *   riassunto (10.312 → 8.968, `nonEntra {8192, 8968}`) l'evento faceva dire alla CLI «…quindi non è stato riassunto niente», contro il
+   *   riassunto appena pagato. `nonEntra` vive solo nel risultato (il contratto); l'evento resta della strada del giro, e
+   *   `voce.nonEntraDetto` non si tocca: il primo giro dopo lo dice una volta, come sempre.
+   */
+  const conNonEntra = (compattaSenzaNonEntra) => async (sessionId) => {
+    const esito = await compattaSenzaNonEntra(sessionId);
+    if (!esito || typeof esito !== 'object' || esito.ok !== true) return esito;
+    const voce = sessioni.get(sessionId);
+    const finestra = voce ? sogliePerVoce(voce).finestraToken : null;
+    if (!voce || !(Number.isFinite(finestra) && finestra > 0) || !Array.isArray(voce.messaggiFinali)) return esito;
+    /* «può entrare?» si misura con lo scarto INTERO della sessione (F6, seconda passata della revisione 7: quello col tetto della misura
+       nascondeva gli attrezzi che pesano quasi tutta la finestra), come nel giro e nel fine giro */
+    const pavimento = compattazione.stimaConPezzi(compattazione.applicaRecord(voce.messaggiFinali, voce.recordCompattazione ?? null))
+      + scartoNonEntraDellaSessione(voce);
+    if (pavimento < finestra) return esito;
+    return { ...esito, nonEntra: { finestra, pavimento } };
+  };
   registryApi = Object.freeze({
     elencaNotePersonali: leggiNotePersonali,
     elencaAttivitaPersonali: leggiAttivitaPersonali,
@@ -10440,6 +10980,7 @@ export function createSessionRegistry({
           cartella: cartellaRipristinata, cartellaBase: intestazione.cartella, cartellaGiaScelta: intestazione.cartellaGiaScelta,
           task: intestazione.task,
           comandoProva: intestazione.comandoProva, forkDa: intestazione.forkDa,
+          ...(puntoDelRamo(intestazione.forkPrimaDelGiro) ? { forkPrimaDelGiro: intestazione.forkPrimaDelGiro } : {}),
           operationId: typeof intestazione.operationId === 'string' ? intestazione.operationId : null, // G02-6
           operationSignature: typeof intestazione.operationSignature === 'string' ? intestazione.operationSignature : null,
           avviataAlle: intestazione.avviataAlle, messaggiFinali: storiaFinaleRipristinata,
@@ -10465,6 +11006,7 @@ export function createSessionRegistry({
           origineSempre: origineSempreValida(impostazioni.origineSempre, impostazioni.permessiPerAttrezzo),
           ...impostazioniComandi,
           ...scartoRipristinato(record, impostazioni.modello), // N2 (revisione 8 della CLI): lo scarto della sessione dopo un riavvio
+          ...frenoRipristinato(record), // pezzo D del §4: il freno dei riassunti dopo un riavvio
           usavaModalitaWorkflow: impostazioni.modalitaOperativa === 'workflow',
           provider: intestazione.provider ?? 'cloud', runtimeId: intestazione.runtimeId ?? null,
           modelId: impostazioni.modelId ?? impostazioni.modello ?? null, fallbackConsent: intestazione.fallbackConsent === true,
@@ -10732,7 +11274,7 @@ export function createSessionRegistry({
      * diversi, mai sovrapposti.
      * @returns {{ok:true, posizione:number}|{erroreAvvio:string, code:string}}
      */
-    accodaMessaggio(sessionId, testo, immagini = [], { bolla = null } = {}) {
+    accodaMessaggio(sessionId, testo, immagini = [], { bolla = null, allegaSeTroppoGrande = false } = {}) {
       const voce = sessioni.get(sessionId);
       if (!voce) return rifiuto('NOT_FOUND', 'session-not-found', 'Session not found');
       if (chiuso) return rifiutoPerChiusura(); // F3 (24/09): il fence dello spegnimento, prima di ogni altro controllo
@@ -10757,7 +11299,8 @@ export function createSessionRegistry({
       const pausaPrima = voce.codaInPausa;
       /* owner 15/10/2026: `autore: 'persona'` lo mette SOLO questa porta; una voce senza il marchio (figlie, workflow, sfondo, dialogo,
          una voce di prima) non adotta mai un file, anche se la sua origine si perde */
-      voce.codaMessaggi.push({ id: randomUUID(), testo, autore: 'persona', ...(immagini.length ? { immagini } : {}), ...(bollaPerLaConsegna(bolla, testo) ? { bolla: bollaPerLaConsegna(bolla, testo) } : {}) });
+      voce.codaMessaggi.push({ id: randomUUID(), testo, autore: 'persona', ...(immagini.length ? { immagini } : {}), ...(bollaPerLaConsegna(bolla, testo) ? { bolla: bollaPerLaConsegna(bolla, testo) } : {}),
+        ...(allegaSeTroppoGrande === true ? { allegaSeTroppoGrande: true } : {}) }); // §4.2, regola N
       // ⭐ 14/09 — accodare di nuovo scioglie una pausa di prima, come in Hermes (`store/composer-queue.ts`): la persona ha ripreso a parlare.
       voce.codaInPausa = false;
       /*
@@ -10986,7 +11529,7 @@ export function createSessionRegistry({
       const indice = voce.codaMessaggi.findIndex((item) => voceDiCoda(item).id === id);
       if (indice < 0) return rifiuto('NOT_FOUND', 'queue-message-gone', 'This message is no longer in the queue');
       const item = voce.codaMessaggi[indice];
-      const { testo, immagini, origine, childId, bolla, autore } = voceDiCoda(item);
+      const { testo, immagini, origine, childId, bolla, autore, allegaSeTroppoGrande: allegaQuesta } = voceDiCoda(item);
       const consegnaCoda = {
         codaId: id,
         ...(autore ? { autore } : {}),
@@ -11000,9 +11543,10 @@ export function createSessionRegistry({
           ? this.reindirizza(sessionId, testo, {
               ...(immagini.length ? { immagini } : {}),
               ...(bolla ? { bolla } : {}),
+              ...(allegaQuesta ? { allegaSeTroppoGrande: true } : {}), // §4.2, regola N
               consegnaCoda: { ...consegnaCoda, item, indiceCoda: indice },
             })
-          : this.resume(sessionId, testo, immagini, { consegnaCoda, ...(bolla ? { bolla } : {}) });
+          : this.resume(sessionId, testo, immagini, { consegnaCoda, ...(bolla ? { bolla } : {}), ...(allegaQuesta ? { allegaSeTroppoGrande: true } : {}) });
       } catch (errore) {
         throw errore;
       }
@@ -11159,6 +11703,7 @@ export function createSessionRegistry({
          carta del piano, niente obiettivo. Solo per chi ospita il registro in processo: la rotta HTTP non lo accetta. */
       senzaInterfaccia = false,
       senzaInterfacciaNelGiro = undefined, // CLI 16/10: per questo giro, mai salvato (vedi `nessunoDavanti`)
+      allegaSeTroppoGrande = false, // §4.2, regola N (owner 22/10/2026): «Invia come allegato» per questa consegna, solo in memoria
     },
     origineRichiesta = null) { // ⭐ D-11, argomento a parte: vedi la doc su `avvia`
       if (modalitaOperativaScelta !== null && !MODALITA_OPERATIVE.includes(modalitaOperativaScelta)) return esitoModalitaNonAmmessa(modalitaOperativaScelta);
@@ -11222,6 +11767,7 @@ export function createSessionRegistry({
         ...(ferma === true ? { senzaGiro: { storia: [], verificaPronto: true } } : {}), // /goal G6: nessun giro adesso, ma la chiave c'è
         ...(senzaInterfaccia === true ? { senzaInterfaccia: true } : {}), // nessuno davanti: vedi il parametro
         ...(typeof senzaInterfacciaNelGiro === 'boolean' ? { senzaInterfacciaNelGiro } : {}), // per questo giro, mai salvato
+        ...(allegaSeTroppoGrande === true ? { allegaSeTroppoGrande: true } : {}), // §4.2, regola N
         // ⛔ 12/09 — `libero:full-access` è un NOME STORICO, non un permesso: dal 12/09 una
         // cartella scelta a mano parte con qualunque permesso (vedi la doc di questo metodo).
         // Non si rinomina perché è scritto nei .jsonl già su disco e la mappa dei nomi umani
@@ -11582,6 +12128,9 @@ export function createSessionRegistry({
          */
         modelloRichiesta: modelloRichiesta ?? originale.modello,
         forkDa: sessionIdOrigine, mobile: originale.mobile,
+        /* 24/10: il punto del taglio resta scritto (intestazione ed elenco): le frecce ‹ n / N › della finestra e del dispositivo
+           trovano i fratelli di un punto dalle righe con lo stesso `forkDa` e lo stesso `forkPrimaDelGiro`. */
+        forkPrimaDelGiro: taglio ? String(primaDelGiro) : null,
         /*
          * ⛔⛔⛔ 28/8 — trovato da un test, non da lettura: un fork crea
          * una VOCE NUOVA (mai `voceEsistente`, a differenza di resume),
@@ -11635,7 +12184,7 @@ export function createSessionRegistry({
      * @param {string} [nuovoMessaggioUtente]
      * @returns {{sessionId:string}|{erroreAvvio:string, code:string}}
      */
-    resume(sessionId, nuovoMessaggioUtente = null, immagini = [], { consegnaCoda = null, rispostaDomanda = null, notificaDelega = null, prontezzaDelega = null, onConclusioneFn = null, bolla = null, notificaObiettivo = null, senzaInterfacciaNelGiro = undefined } = {}) {
+    resume(sessionId, nuovoMessaggioUtente = null, immagini = [], { consegnaCoda = null, rispostaDomanda = null, notificaDelega = null, prontezzaDelega = null, onConclusioneFn = null, bolla = null, notificaObiettivo = null, senzaInterfacciaNelGiro = undefined, allegaSeTroppoGrande = false } = {}) {
       const voce = sessioni.get(sessionId);
       if (!voce) return rifiuto('NOT_FOUND', 'session-not-found', 'Session not found');
       if (chiuso) return rifiutoPerChiusura(); // F3 (24/09): il fence dello spegnimento, prima di ogni altro controllo
@@ -11652,6 +12201,7 @@ export function createSessionRegistry({
       // CLI 16/10: chi riprende dice se c'è qualcuno davanti in questo giro; senza, resta quello di prima (le riprese interne)
       if (typeof senzaInterfacciaNelGiro === 'boolean') voce.senzaInterfacciaNelGiro = senzaInterfacciaNelGiro;
       const haNuovoMessaggio = typeof nuovoMessaggioUtente === 'string' && nuovoMessaggioUtente.trim() !== '';
+      if (allegaSeTroppoGrande === true && haNuovoMessaggio) segnaDaAllegare(voce, nuovoMessaggioUtente); // §4.2, regola N
       if (notificaDelega) {
         const ids = notificaDelega.codaIds;
         const prefix = Array.isArray(ids) ? voce.codaMessaggi.slice(0, ids.length).map(voceDiCoda) : [];
@@ -11966,7 +12516,7 @@ export function createSessionRegistry({
       return inFinestraDiChiusura(voce);
     },
 
-    async compatta(sessionId) {
+    compatta: conNonEntra(async function compatta(sessionId) { // revisione 7 della CLI: il risultato dice se il resto non entra
       /*
        * 22/10/2026 (Mobile, dal vivo su d06f6a9d3): sul percorso del motore del contesto un lavoro FALLITO (CTX_INVALID_SOURCE dopo
        *   ~18 minuti) tornava `{ ok:true, compattato:false, error }`, e il telefono diceva «Niente da compattare». Lo stesso contratto del
@@ -12105,22 +12655,25 @@ export function createSessionRegistry({
         const proiettata = compattazione.applicaRecord(storiaIniziale, recordPrima);
         const soglie = sogliePerVoce(voce);
         const { token: tokenPrima, misura } = compattazione.misuraOccupazione({ messaggi: proiettata, finestraToken: soglie.finestraToken, scarto: scartoDellaSessione(voce) });
-        const { parti, ridotti, pavimento } = partiConCodaRidotta(proiettata, soglie);
+        const piano = partiConCodaRidotta(proiettata, soglie, voce);
+        const { ridotti, pavimento } = piano;
+        let { parti } = piano;
         /* S2-2: «niente da compattare» solo se è vero; sopra la soglia senza niente da ridurre si dice che è AL MINIMO */
         const sopraLaSoglia = tokenPrima >= soglie.soglia;
         if (!parti.tagliabile && ridotti === 0) return { ok: true, compattato: false, fase: 'riassunto', motivo: sopraLaSoglia ? 'al-minimo' : 'niente-da-compattare' };
         /* Revisione 6 della CLI (S3-1): c'è un tratto vecchio, ma un riassunto risparmierebbe poco ⇒ `poco-utile`, distinto da «niente da
            compattare» (che vuol dire: nessun tratto vecchio) e da «al minimo» (sopra la soglia senza niente da ridurre) */
         /* Revisione 7 della CLI (F3): oltre la soglia resta «al minimo» (la cura della revisione 5 l'aveva, la 6 l'aveva perso) */
-        if (parti.tagliabile && ridotti === 0 && riassuntoNonPuoRidurre(compattazione.stimaConPezzi(proiezioneSoloCoda(parti)), pavimento, parti, soglie)) return { ok: true, compattato: false, fase: 'riassunto', motivo: sopraLaSoglia ? 'al-minimo' : 'poco-utile' };
+        if (parti.tagliabile && ridotti === 0 && riassuntoNonPuoRidurre(compattazione.stimaConPezzi(proiezioneSoloCoda(parti)), pavimento, parti, soglie, medianaDellaVoce(voce))) return { ok: true, compattato: false, fase: 'riassunto', motivo: sopraLaSoglia ? 'al-minimo' : 'poco-utile' };
         /* Revisione 5 della CLI (S2-1): anche qui il pavimento con la CORNICE della proiezione riassunta. Solo «non può ridurre»: il
            /compact lo chiede la persona, e un passo piccolo ma vero lo fa (la regola del 10% è per la compattazione automatica). Verdetto
            della CLI (C4): la stessa aritmetica, cornice più riassunto atteso, con «guadagno > 0». */
+        parti = await richiesteVecchie.scriviCopieDelPiano(parti, piano.daSalvare, cartellaIncollatiDellaVoce(voce)); // §4.2, regola K
         let senzaRiassunto = !parti.tagliabile;
         if (parti.tagliabile) {
           const cornice = compattazione.stimaConPezzi((await proiezioneDelRiassunto({ parti, riassunto: '', precedente: recordPrima })).proiezione);
           if (compattazione.riassuntoNonPuoRidurre(compattazione.stimaConPezzi(proiezioneSoloCoda(parti)), cornice, parti.mezzo,
-            { finestraToken: soglie.finestraToken, soglia: soglie.soglia })) {
+            { finestraToken: soglie.finestraToken, soglia: soglie.soglia, mediana: medianaDellaVoce(voce) })) {
             if (ridotti === 0) return { ok: true, compattato: false, fase: 'riassunto', motivo: sopraLaSoglia ? 'al-minimo' : 'poco-utile' }; // F3
             senzaRiassunto = true;
           }
@@ -12156,7 +12709,8 @@ export function createSessionRegistry({
               cartellaStore, sessionId,
               record: { tipo: 'compattazione', versioneGiro: versioneIniziale, record },
               puoAccodareFn: () => snapshotValido() && recordInvariato(),
-              confermaFn: () => { voce.recordCompattazione = record; voce.riassuntoInefficace = null; },
+              /* pezzo D: il /compact della persona riarma il freno (paga perché è lei a chiederlo) */
+              confermaFn: () => { voce.recordCompattazione = record; voce.riassuntoInefficace = null; voce.freno = null; scriviFreno(voce); },
             });
             } catch (errore) {
               if (errore?.code === 'SESSION_STORE_PRECONDITION_FAILED') {
@@ -12169,7 +12723,7 @@ export function createSessionRegistry({
             }
         } else {
           if (!recordInvariato()) return { ...rifiuto('SESSION_NOT_READY', 'changed-during-summary', 'The session changed while the summary was being prepared. No history was replaced.'), fase: 'sostituzione' };
-          voce.recordCompattazione = record; voce.riassuntoInefficace = null;
+          voce.recordCompattazione = record; voce.riassuntoInefficace = null; voce.freno = null; // pezzo D: il /compact riarma il freno
         }
         /* Lo STESSO evento durevole della via automatica, con lo stesso `at` del record: «Annulla» lo trova e lo riavvolge. */
         broadcast(voce, { type: 'CUSTOM', name: 'talos.compattazione', value: { fase: 'fine', compattato: true, motivo: 'manuale', annullabile: true, at,
@@ -12178,7 +12732,7 @@ export function createSessionRegistry({
       } finally {
         compattazioniInCorso.delete(sessionId);
       }
-    },
+    }),
 
     /**
      * ⭐ Il comando diretto (`!comando` nel composer, piano §1.3-BIS.T
@@ -12582,6 +13136,49 @@ export function createSessionRegistry({
      *   col SUO codice, `LIBRARY_NOT_FOUND`, distinto dal `NOT_FOUND` della sessione inesistente:
      *   sono due 404 che dicono due cose diverse, e chi legge la risposta deve poterle distinguere.
      */
+    /*
+     * ⭐ 24/10/2026 — le VERSIONI di una voce, per la persona (owner: «vedere e ripristinare», «si tengono tutte»). Le stesse
+     *   funzioni del magazzino che usa la CLI: nessuna seconda lettura del formato sul disco.
+     */
+    async elencaVersioniLibreria(sessionId, voceId) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return rifiuto('NOT_FOUND', 'session-not-found', 'Session not found');
+      try {
+        const versioni = await elencaVersioniLibreria({ cartella: await datiDi(voce), id: voceId });
+        if (!versioni) return rifiuto('LIBRARY_NOT_FOUND', 'library-entry-not-found', 'This Library entry does not exist');
+        return { ok: true, versioni, totale: versioni.length };
+      } catch (errore) {
+        if (errore instanceof LibraryStoreError) return { erroreAvvio: errore.message, code: errore.code };
+        throw errore;
+      }
+    },
+    async scaricaVersioneLibreria(sessionId, voceId, n) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return rifiuto('NOT_FOUND', 'session-not-found', 'Session not found');
+      try {
+        const v = await leggiVersioneLibreria({ cartella: await datiDi(voce), id: voceId, n });
+        if (!v) return rifiuto('LIBRARY_NOT_FOUND', 'library-entry-not-found', 'This version does not exist');
+        return { ok: true, nome: v.nome, mediaType: v.mediaType, bytes: Buffer.from(v.testo, 'utf8'), dimensione: Buffer.byteLength(v.testo, 'utf8') };
+      } catch (errore) {
+        if (errore instanceof LibraryStoreError) return { erroreAvvio: errore.message, code: errore.code };
+        throw errore;
+      }
+    },
+    /** Ripristina = una versione NUOVA col contenuto della `n` (la storia non si riscrive). La fa la persona, da questa chat. */
+    async ripristinaVersioneLibreria(sessionId, voceId, n) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return rifiuto('NOT_FOUND', 'session-not-found', 'Session not found');
+      try {
+        const esito = await ripristinaVersioneLibreria({ cartella: await datiDi(voce), id: voceId, n,
+          sessionId, sessionNome: typeof voce.nome === 'string' && voce.nome ? voce.nome : undefined });
+        if (!esito) return rifiuto('LIBRARY_NOT_FOUND', 'library-entry-not-found', 'This version does not exist');
+        return { ok: true, ...esito };
+      } catch (errore) {
+        if (errore instanceof LibraryStoreError) return { erroreAvvio: errore.message, code: errore.code };
+        throw errore;
+      }
+    },
+
     async scaricaVoceLibreria(sessionId, voceId) {
       const voce = sessioni.get(sessionId);
       if (!voce) return rifiuto('NOT_FOUND', 'session-not-found', 'Session not found');
@@ -12665,6 +13262,7 @@ export function createSessionRegistry({
         const radice = await datiDi(voce);
         const origine = percorso ? await origineVoceLibreriaFn({ cartella: radice, id: voceId }) : null;
         if (!origine) return rifiuto('LIBRARY_NOT_FOUND', 'library-entry-not-found', 'This Library entry does not exist');
+        await riallineaPrimaDiConsegnare(radice, voceId);
         return { ok: true, ...(await apriFileConProgrammaPredefinitoFn({ cartella: radice, percorso })) };
       } catch (errore) {
         if (errore instanceof WorkspaceFileError || errore instanceof LibraryStoreError) {
@@ -12682,6 +13280,7 @@ export function createSessionRegistry({
         const radice = await datiDi(voce);
         const origine = percorso ? await origineVoceLibreriaFn({ cartella: radice, id: voceId }) : null;
         if (!origine) return rifiuto('LIBRARY_NOT_FOUND', 'library-entry-not-found', 'This Library entry does not exist');
+        await riallineaPrimaDiConsegnare(radice, voceId);
         return { ok: true, ...(await rivelaInEsploraFileFn({ cartella: radice, percorso })) };
       } catch (errore) {
         if (errore instanceof WorkspaceFileError || errore instanceof LibraryStoreError) {
@@ -13586,7 +14185,7 @@ export function createSessionRegistry({
      * riparte sullo stesso sessionId con la storia realmente restituita dal
      * kernel e il nuovo input utente.
      */
-    reindirizza(sessionId, testo, { redirectId: redirectIdRichiesto = null, immagini = [], consegnaCoda = null, bolla = null } = {}) {
+    reindirizza(sessionId, testo, { redirectId: redirectIdRichiesto = null, immagini = [], consegnaCoda = null, bolla = null, allegaSeTroppoGrande = false } = {}) {
       const voce = sessioni.get(sessionId);
       if (!voce) return rifiuto('NOT_FOUND', 'session-not-found', 'Session not found');
       const redirectId = typeof redirectIdRichiesto === 'string' && redirectIdRichiesto.length > 0
@@ -13622,6 +14221,7 @@ export function createSessionRegistry({
       if (voce.reindirizzamentoPendente?.redirectId !== redirectId) {
         return rifiuto('SESSION_NOT_READY', 'redirect-cancelled-before-start', 'The redirect was cancelled before it started');
       }
+      if (allegaSeTroppoGrande === true) segnaDaAllegare(voce, pulito); // §4.2, regola N: vale per il giro che il reindirizzamento apre
       negaApprovazionePendente(voce);
       annullaDomandaPendente(voce, 'run-cancelled', 'reindirizzamento');
       annullaElicitazioneMcp(voce, 'reindirizzamento');
@@ -14354,6 +14954,7 @@ export function createSessionRegistry({
           inizioGiroAlle: voce.inizioGiroAlle ?? null, fineGiroAlle: voce.fineGiroAlle ?? null, // 21/10: la sveglia (vedi consegnaEvento)
           conclusa: voce.conclusa,
           forkDa: voce.forkDa,
+          ...(puntoDelRamo(voce.forkPrimaDelGiro) ? { forkPrimaDelGiro: voce.forkPrimaDelGiro } : {}),
           modello: voce.modello ?? null,
           modelloPlanner: voce.modelloPlanner ?? null,
           reasoning: voce.reasoning ?? null,
@@ -14662,6 +15263,7 @@ export function createSessionRegistry({
          */
         interrotta: voce.interrotta ?? false,
         forkDa: voce.forkDa,
+        ...(puntoDelRamo(voce.forkPrimaDelGiro) ? { forkPrimaDelGiro: voce.forkPrimaDelGiro } : {}),
         modello: voce.modello ?? null,
         fallbackProviders: voce.fallbackProviders ?? [],
         cacheSessione: cacheSessioneDaEventi(voce.eventi),

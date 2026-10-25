@@ -21,7 +21,7 @@ const ERROR_CODES = new Set(['QUERY_INVALID', 'FOLDER_INVALID', 'FILE_WRITE_FAIL
 /* MOTIVI-REV-03 (bugfixer, 16/10/2026): il nome di un allegato non valido usciva «Invalid query»; ora col suo motivo, come l'albero. */
 const nomeNonValido = () => new WorkspaceFileError(FRASI_DEI_MOTIVI_DEI_FILE['file-name-invalid'], 'QUERY_INVALID', { reason: 'file-name-invalid' });
 
-function checkedName(name) {
+export function checkedName(name) {
   if (typeof name !== 'string' || !name || name.length > 240 || Buffer.byteLength(name, 'utf8') > 255
     || name.includes('/') || name.includes('\\')) {
     throw nomeNonValido();

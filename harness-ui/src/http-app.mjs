@@ -52,8 +52,9 @@ import { CustomTaskError, validaCartellaLibera } from './custom-task.mjs'; // au
 import { RUNTIME_BOOTSTRAP_SCHEMA, RUNTIME_RESOURCE_SCHEMA, parseBootstrapEnvelope } from './runtime-contract.mjs';
 import { getDiagnosticProblem, paramsPubblici, toPublicProblem } from './public-problem.mjs';
 import { createSseSession } from './http-lifecycle.mjs';
+import { eventoDiRichiesta } from './remoto/cartelle-dispositivi.mjs'; // R2.1 (24/10/2026): la carta del consenso spinta alla finestra
 import { iscriviConRigiocata } from './iscrizione-sessione.mjs';
-import { PREFISSO_ROTTE_REMOTO, ROTTE_REMOTO, creaRotteRemoto } from './remoto/rotte.mjs'; // 18/10/2026: il controllo remoto, rotte della finestra // 18/10/2026: la stessa iscrizione per la finestra e per il telefono
+import { PREFISSO_ROTTE_REMOTO, ROTTA_EVENTI_REMOTO, ROTTE_REMOTO, creaRotteRemoto } from './remoto/rotte.mjs'; // 18/10/2026: il controllo remoto, rotte della finestra // 18/10/2026: la stessa iscrizione per la finestra e per il telefono
 import { iconaDelDominio } from './favicon-proxy.mjs'; // 10/09: le favicon delle fonti, prese dal server e mai dal browser
 import { creaRegistroAttese, ritornoDaHost, scambiaCodicePerChiave } from './openrouter-oauth.mjs'; // PO-01 10/9: i conti dell'accesso a OpenRouter, puri e provabili senza rete
 import { intestazioniDellaPagina, paginaDiRitorno } from './pagina-ritorno-accesso.mjs';
@@ -81,6 +82,7 @@ import { hostAmmesso, origineDellaFinestra, rifiutoScritturaDaAltroSito } from '
    l'elenco dei formati, che serve a scrivere il motivo di un 400 senza ricopiarlo. Nessun formato,
    nessuna estensione e nessun `Content-Type` sono scritti in questo file. */
 import { FORMATI_ESPORTAZIONE, costruisciEsportazione } from './research/esportazioni.mjs';
+import { puntoDelRamo } from './punto-del-ramo.mjs'; // 24/10/2026: il fork «prima del giro» dalla finestra e dal dispositivo
 
 export const API_SCHEMA = 'talos.harness-ui.api.v1';
 
@@ -251,6 +253,8 @@ const API_ERROR_CODES = new Set([
   'MODE_WORKFLOW_RETIRED',
   /* RA-03, 20/10/2026 — dal telefono una cartella qualsiasi del PC no: solo quelle ammesse (403). */
   'NOT_ALLOWED_REMOTELY',
+  /* R5.12, 23/10/2026 — le cartelle dei dispositivi col consenso del PC (`remoto/cartelle-dispositivi.mjs`). */
+  'CONSENT_REQUIRED', 'CONSENT_NOT_PENDING', 'FOLDER_NOT_LISTED', 'FOLDER_NOT_ALLOWED', 'FOLDER_INVALID', 'REMOTE_CONSENTS_UNREADABLE',
   /* ⛔ CTX-D2, 23/09/2026 — la risposta Ask non è stata salvata: mai un 200 (vedi rispondiDomanda). */
   'QUESTION_ANSWER_NOT_SAVED',
   /* ⛔ 24/09/2026, decisioni owner 36-39 — la scelta sul piano approvabile. */
@@ -362,10 +366,12 @@ const API_ERROR_CODES = new Set([
   'REMOTE_UNAVAILABLE', 'REMOTE_RELAY_NOT_CHOSEN', 'REMOTE_RELAY_INVALID', 'REMOTE_KEYRING_MISSING', 'REMOTE_KEY_INVALID',
   'REMOTE_OFF', 'REMOTE_TOO_MANY_PHONES', 'REMOTE_DEVICE_UNKNOWN', 'REMOTE_DEVICE_BAD', 'REMOTE_DEVICES_UNREADABLE', 'PAIR_LOCKED', 'PAIR_NOT_PENDING',
   'REMOTE_ORIGIN_FORBIDDEN',
+  'FILE_GONE', // R5.13 corsa 2 (24/10/2026): un file cambiato fra il menu e l'invio
 ]);
 
 const STATUS_BY_CODE = Object.freeze({
   NOT_ALLOWED_REMOTELY: 403, // RA-03 (20/10/2026): una cartella qualsiasi del PC si sceglie solo dal PC
+  CONSENT_REQUIRED: 403, CONSENT_NOT_PENDING: 409, FOLDER_NOT_LISTED: 404, FOLDER_NOT_ALLOWED: 403, FOLDER_INVALID: 400, REMOTE_CONSENTS_UNREADABLE: 500, // R5.12
   WORKFLOW_STORE_UNAVAILABLE: 503,
   WORKFLOW_PROPOSAL_NOT_FOUND: 404,
   WORKFLOW_DEFINITION_HASH_MISMATCH: 409,
@@ -960,6 +966,12 @@ export const MESSAGE_BY_CODE = Object.freeze({
   PLAN_APPROVAL_ORIGIN_FORBIDDEN: 'The choice on the plan must come from this TALOS window',
   MODE_WORKFLOW_RETIRED: 'Workflow mode no longer exists: choose Normal or Plan',
   NOT_ALLOWED_REMOTELY: 'From the device a new session opens only in one of the allowed folders',
+  CONSENT_REQUIRED: 'The computer must allow this device to write in this folder',
+  CONSENT_NOT_PENDING: 'This request is no longer waiting',
+  FOLDER_NOT_LISTED: 'This folder is no longer on the computer',
+  FOLDER_NOT_ALLOWED: 'This folder belongs to TALOS and cannot be given to a device',
+  FOLDER_INVALID: 'This folder does not exist',
+  REMOTE_CONSENTS_UNREADABLE: 'The folders allowed to devices cannot be read',
   WORKSPACE_LAUNCH_UNAUTHORIZED: 'The local command is not authorized. Restart TALOS and try again.',
   WORKSPACE_LAUNCH_NOT_AVAILABLE: 'This link is no longer available. Use “Open folder with TALOS” again.',
   WORKSPACE_NOT_AVAILABLE: 'The folder is not available. Check that it exists and that TALOS can work in it, then try again.',
@@ -1019,6 +1031,7 @@ export const MESSAGE_BY_CODE = Object.freeze({
   PAIR_LOCKED: 'Too many wrong attempts: connecting a device is paused for 15 minutes',
   PAIR_NOT_PENDING: 'This request expired: show a new code on this computer',
   REMOTE_ORIGIN_FORBIDDEN: 'Devices can be connected only from the TALOS window',
+  FILE_GONE: 'The file changed or is no longer in this conversation', // R5.13 corsa 2 (24/10/2026)
   RUNTIME_NOT_AVAILABLE: 'Local runtime not available',
   RUNTIME_UNREACHABLE: 'Local runtime unreachable',
   RUNTIME_OPERATION_UNSUPPORTED: 'Runtime operation not supported',
@@ -1976,6 +1989,9 @@ const ROTTE_API = Object.freeze([
    *   invece di dichiarare su tutte l'unione dei metodi di tutte.
    */
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/library\/([^/]+)\/file$/, metodi: ['GET'] },
+  /* 24/10/2026 — le versioni di una voce: l'elenco (GET) e il ripristino di una (POST, crea una versione nuova). */
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/library\/([^/]+)\/versions$/, metodi: ['GET'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/library\/([^/]+)\/versions\/([^/]+)\/restore$/, metodi: ['POST'] },
   /*
    * ⭐⭐⭐⭐ 11/9, owner: «il file deve essere visualizzato renderizzato» — un PDF della Libreria
    * si guarda DENTRO TALOS. Rotta GEMELLA di `/file` e non un suo parametro: gli stessi byte
@@ -3587,6 +3603,45 @@ export function createHttpApp({
     }
 
     /*
+     * R5.12 (owner 23/10/2026 sera: «consenso anche per scriverci»): una SCRITTURA del dispositivo in una sessione — messaggio, coda,
+     *   carte, domande, piano, impostazioni, rinomina, annulla, MCP, compattazione — vuole il consenso per la cartella REALE di quella
+     *   sessione, per QUEL dispositivo (`ORIGINE_REMOTA.dispositivoId`, l'identità del canale autenticato). Leggere resta libero, e
+     *   fermare sempre ammesso (`stop`, `close`). È il cancello vero: `remoto/operazioni.mjs` controlla prima per dare al dispositivo i
+     *   parametri della cartella, qui si ricontrolla per qualunque strada arrivi la richiesta. Una revoca vale dalla scrittura dopo.
+     */
+    /* parità, punto 4 (24/10): OGNI scrittura, non solo POST — `session.message.delete` è un DELETE, e un cancello che guarda solo
+       POST lo lascerebbe passare senza consenso */
+    if (method !== 'GET' && method !== 'HEAD' && req[ORIGINE_REMOTA] && sessionRegistry) {
+      /* per segmenti, non con un'espressione: è un cancello, non una rotta (il guardiano dell'inventario legge le espressioni come rotte).
+         `/api/v1/sessions/<id>/<qualcosa>`, tranne esattamente `…/stop` e `…/close`; `/api/v1/sessions/custom` non ha il terzo pezzo. */
+      const pezzi = url.pathname.split('/');
+      /* parità remoto ↔ desktop, punto 2 (24/10/2026): fermare UN processo (`…/processes/<id>/stop`) e mettere in pausa una delega
+         (`…/delegation/pause`) sono «fermare» come `stop`: sempre ammessi, non scrivono niente nella cartella. */
+      const fermare = (pezzi.length === 6 && (pezzi[5] === 'stop' || pezzi[5] === 'close'))
+        || (pezzi.length === 8 && pezzi[5] === 'processes' && pezzi[6] !== '' && pezzi[7] === 'stop')
+        || (pezzi.length === 7 && pezzi[5] === 'delegation' && pezzi[6] === 'pause');
+      const scrittura = pezzi.length >= 6 && pezzi[1] === 'api' && pezzi[2] === 'v1' && pezzi[3] === 'sessions' && pezzi[4] !== ''
+        && !fermare;
+      const cartelleDisp = scrittura ? (remotoFn()?.cartelle ?? null) : null;
+      if (cartelleDisp) {
+        /* ⛔ Chiuso a guasto: solo una sessione che NON esiste passa (la rotta risponderà 404). Una sessione vera la cui cartella non
+           si risolve (spostata, cancellata, illeggibile) è una scrittura senza consenso verificabile, e si rifiuta. */
+        let cartella = null;
+        let inesistente = false;
+        try {
+          const w = await sessionRegistry.cartellaPerChatFile(decodeURIComponent(pezzi[4]));
+          cartella = typeof w?.cartella === 'string' && w.cartella ? w.cartella : null;
+          inesistente = w?.code === 'NOT_FOUND';
+        } catch { cartella = null; }
+        const dispositivoId = req[ORIGINE_REMOTA].dispositivoId;
+        if (!inesistente && !(cartella && typeof dispositivoId === 'string' && await cartelleDisp.consentita(dispositivoId, cartella))) {
+          sendJson(res, 403, errorEnvelope('CONSENT_REQUIRED', clock), method);
+          return;
+        }
+      }
+    }
+
+    /*
      * ⭐⭐⭐ 04/9 — W1-10, il cancello a token. Solo se il server è stato
      * avviato con un token (shell Electron): la finestra apre `/?token=<t>`,
      * riceve il cookie e viene rimandata a `/` pulita (il token non resta
@@ -4270,10 +4325,61 @@ export function createHttpApp({
      * telefoni collegati. ⛔ Le scritture solo dalla finestra di TALOS, con la stessa guardia di Piano, Workflow e automazioni: collegare
      * un telefono gli dà l'Accesso pieno (owner 14/10), e non deve poterlo fare un sito estraneo né un processo senza il gettone.
      */
+    /*
+     * ⭐ R2.1 (24/10/2026; contratto `CONTRATTO-DISPOSITIVI-CARTELLE-FILE-RISORSE-2026-10-23.md`, Parte 1, «Revision 2», AGREED col
+     *   Mobile) — lo STREAM della finestra per il controllo remoto. Owner, dopo la prova dal vivo (≈49 s dal tocco sul Pad alla carta,
+     *   fino a 20 s spesi qui perché la finestra CONTROLLAVA ogni 20 s): «È troppo tempo, bisogna renderlo più istantaneo possibile,
+     *   meglio del resto». Come Hermes (un WebSocket sempre aperto, `approval.request` come evento appena esiste:
+     *   `apps/desktop/src/api/client.ts:534-540`, `api/canonical-protocol.ts:613`) e Happy (`update` spinto, `apiSession.ts:325`), con
+     *   la busta degli stream delle sessioni (`createSseSession`: `data: <JSON con type>`, `:battito`, Nagle spento).
+     *   · all'apertura: l'istantanea delle richieste aperte (`consent.requested` per ognuna), poi `remote.changed {motivo:'connesso'}`,
+     *     che per la finestra vuol dire «istantanea finita» (niente `id:`: sono eventi effimeri, chi si ricollega riceve l'istantanea);
+     *   · poi `consent.requested` / `consent.closed` quando succedono, e `remote.changed` quando un dispositivo entra, esce o chiede di
+     *     accoppiarsi (la finestra rilegge lo stato: senza, a stream acceso il pallino «in linea» resterebbe fermo).
+     * ⛔ Porta nomi di dispositivi e percorsi interi: solo la FINESTRA di TALOS, anche se è una lettura — la guardia d'origine delle
+     *   approvazioni (stessa porta, gettone per i programmi) e mai l'origine remota. Chromium manda `Sec-Fetch-Site: same-origin` anche
+     *   sull'EventSource della stessa origine (MDN, Sec-Fetch-Site). Una risposta non-200 chiude l'EventSource SENZA ritentare (WHATWG
+     *   HTML §9.2, «fail the connection»): la finestra lo sa e lo riapre dal suo giro di ripiego.
+     */
+    if (url.pathname === ROTTA_EVENTI_REMOTO) {
+      try {
+        if (method !== 'GET' && method !== 'HEAD') { sendJson(res, 405, errorEnvelope('METHOD_NOT_ALLOWED', clock), method, { Allow: 'GET' }); return; }
+        requireNoQuery(url);
+        if (req[ORIGINE_REMOTA] || rifiutoOrigineApprovazione(req, { token })) { sendJson(res, 403, errorEnvelope('REMOTE_ORIGIN_FORBIDDEN', clock), method); return; }
+        const remoto = remotoFn();
+        const cartelleDisp = remoto?.cartelle;
+        if (typeof cartelleDisp?.ascolta !== 'function') { sendJson(res, 503, errorEnvelope('REMOTE_UNAVAILABLE', clock), method); return; }
+        const flussoRemoto = createSseSession({ response: res, headers: SECURITY_HEADERS, heartbeatMs: INTERVALLO_BATTITO_SSE_MS,
+          setIntervalFn: impostaIntervalloFn, clearIntervalFn: cancellaIntervalloFn });
+        if (method === 'HEAD') { flussoRemoto.start(); flussoRemoto.close(); res.end(); return; }
+        flussoRemoto.start();
+        /* ⛔ ascolto PRIMA dell'istantanea: una richiesta nata in mezzo arriva due volte (la finestra le tiene per id), mai zero */
+        const smetti = [cartelleDisp.ascolta((e) => { flussoRemoto.send(e); }),
+          typeof remoto.ascoltaStato === 'function' ? remoto.ascoltaStato((e) => { flussoRemoto.send(e); }) : null,
+          /* R5.13 corsa 2 (24/10/2026): lo stato di un'offerta di file (inviato, in scaricamento con la percentuale, scaricato, cambiato)
+             nel momento in cui cambia, per la riga sotto la scheda del file — come la carta del consenso, sull'evento e non al giro dopo */
+          typeof remoto.file?.ascoltaOfferte === 'function' ? remoto.file.ascoltaOfferte((offerta) => { flussoRemoto.send({ type: 'file.offer', offerta }); }) : null];
+        for (const riga of cartelleDisp.inAttesa()) flussoRemoto.send(eventoDiRichiesta(riga));
+        flussoRemoto.send({ type: 'remote.changed', motivo: 'connesso' });
+        const chiudiFlusso = () => { for (const fn of smetti) { try { fn?.(); } catch { /* già tolto */ } } flussoRemoto.close(); };
+        if (res.destroyed || res.writableEnded) chiudiFlusso(); else res.once('close', chiudiFlusso);
+      } catch (error) {
+        if (res.headersSent) { if (!res.writableEnded) res.end(); return; }
+        const normalized = normalizeError(error); sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
     if (url.pathname === PREFISSO_ROTTE_REMOTO || url.pathname.startsWith(`${PREFISSO_ROTTE_REMOTO}/`)) {
       try {
         requireNoQuery(url);
-        if (method === 'POST' && rifiutoOrigineApprovazione(req, { token })) {
+        /* R5.12 (23/10/2026 sera): un dispositivo non arriva MAI qui, nemmeno in lettura — le rotte della finestra consentono le
+           cartelle ai dispositivi e mostrano i percorsi interi. La chiamata interna porta il gettone della finestra, quindi la guardia
+           dell'origine qui sotto non lo fermerebbe: lo ferma l'origine remota, che solo `remoto/chiamata-interna.mjs` attacca. */
+        /* REV6-F4 (25/10/2026): anche la GET delle offerte porta i percorsi interi del PC, come lo stream `/api/v1/remote/events`: stessa
+           guardia d'origine anche in lettura */
+        /* niente regex di rotta qui: la rotta è di `remoto/rotte.mjs` (ROTTE_REMOTO), e il GUARDIANO dell'inventario legge le regex di questo file */
+        const letturaConPercorsi = method === 'GET' && url.pathname.startsWith(`${PREFISSO_ROTTE_REMOTO}/sessions/`) && url.pathname.endsWith('/offers');
+        if (req[ORIGINE_REMOTA] || ((method === 'POST' || letturaConPercorsi) && rifiutoOrigineApprovazione(req, { token }))) {
           sendJson(res, 403, errorEnvelope('REMOTE_ORIGIN_FORBIDDEN', clock), method);
           return;
         }
@@ -4830,7 +4936,10 @@ export function createHttpApp({
         try { sessionId = decodeURIComponent(creaPaginaMatch[1]); } catch { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
         const corpo = await leggiCorpoJson(req);
         const chiavi = Object.keys(corpo ?? {});
-        const perVoce = chiavi.length === 1 && chiavi[0] === 'voceId' && typeof corpo.voceId === 'string' && corpo.voceId !== '';
+        /* 24/10/2026: `{voceId, versione}` rende UNA versione della voce (la carta in chat resta sulla sua) */
+        const conVersione = chiavi.length === 2 && chiavi.includes('voceId') && chiavi.includes('versione')
+          && Number.isSafeInteger(corpo.versione) && corpo.versione >= 1;
+        const perVoce = (chiavi.length === 1 && chiavi[0] === 'voceId' || conVersione) && typeof corpo.voceId === 'string' && corpo.voceId !== '';
         const perPercorso = chiavi.length === 1 && chiavi[0] === 'percorso' && typeof corpo.percorso === 'string' && corpo.percorso !== '';
         if (!perVoce && !perPercorso) {
           const errore = new Error('Invalid body: expected {percorso} or {voceId}');
@@ -4840,6 +4949,7 @@ export function createHttpApp({
         const segmenti = perPercorso ? corpo.percorso.split('/') : null;
         const esito = perPercorso
           ? await sessionRegistry.leggiPagina(sessionId, segmenti)
+          : conVersione ? await sessionRegistry.scaricaVersioneLibreria(sessionId, corpo.voceId, corpo.versione)
           : await sessionRegistry.scaricaVoceLibreria(sessionId, corpo.voceId);
         if ('erroreAvvio' in esito) {
           throw erroreDelRegistro(esito);
@@ -4850,7 +4960,7 @@ export function createHttpApp({
           throw errore;
         }
         let ambito;
-        if (perVoce) ambito = { sessionId, voceId: corpo.voceId, nome: esito.nome };
+        if (perVoce) ambito = { sessionId, voceId: corpo.voceId, nome: esito.nome, ...(conVersione ? { versione: corpo.versione } : {}) };
         else {
           // il percorso nomina la pagina, o una cartella che vale il suo index.html: il prefisso è la cartella della pagina
           const ultimo = segmenti[segmenti.length - 1];
@@ -4881,7 +4991,9 @@ export function createHttpApp({
         if (ambito.voceId) {
           // una voce di Libreria non ha vicini: si serve lei, al suo nome, e nient'altro
           if (segmenti.length !== 1 || segmenti[0] !== ambito.nome) { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
-          esito = await sessionRegistry.scaricaVoceLibreria(ambito.sessionId, ambito.voceId);
+          esito = ambito.versione
+            ? await sessionRegistry.scaricaVersioneLibreria(ambito.sessionId, ambito.voceId, ambito.versione)
+            : await sessionRegistry.scaricaVoceLibreria(ambito.sessionId, ambito.voceId);
         } else {
           esito = await sessionRegistry.leggiPagina(ambito.sessionId, [...ambito.prefisso, ...segmenti]);
         }
@@ -4994,6 +5106,61 @@ export function createHttpApp({
     }
     return;
   }
+
+    /* ⭐ 24/10/2026 — le versioni di una voce di Libreria (owner: «vedere e ripristinare», «si tengono tutte»). */
+    const versioniMatch = method === 'GET' && sessionRegistry
+      ? /^\/api\/v1\/sessions\/([^/]+)\/library\/([^/]+)\/versions$/.exec(url.pathname)
+      : null;
+    if (versioniMatch) {
+      let sessionId;
+      let voceId;
+      try {
+        [sessionId, voceId] = [decodeURIComponent(versioniMatch[1]), decodeURIComponent(versioniMatch[2])];
+      } catch {
+        sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+        return;
+      }
+      try {
+        requireNoQuery(url);
+        const esito = await sessionRegistry.elencaVersioniLibreria(sessionId, voceId);
+        if ('erroreAvvio' in esito) throw erroreDelRegistro(esito);
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 200, successEnvelope({ versioni: esito.versioni, totale: esito.totale }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+    const ripristinaMatch = method === 'POST' && sessionRegistry
+      ? /^\/api\/v1\/sessions\/([^/]+)\/library\/([^/]+)\/versions\/([^/]+)\/restore$/.exec(url.pathname)
+      : null;
+    if (ripristinaMatch) {
+      let sessionId;
+      let voceId;
+      try {
+        [sessionId, voceId] = [decodeURIComponent(ripristinaMatch[1]), decodeURIComponent(ripristinaMatch[2])];
+      } catch {
+        sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+        return;
+      }
+      try {
+        requireNoQuery(url);
+        if (rifiutoOrigineApprovazione(req, { token }) === 'altra-finestra') {
+          throw Object.assign(new Error('Restore a version from this session’s TALOS window'), { code: 'PAGE_ORIGIN_FORBIDDEN' });
+        }
+        const n = /^[1-9][0-9]{0,5}$/u.test(ripristinaMatch[3]) ? Number(ripristinaMatch[3]) : null;
+        if (n === null) { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+        const esito = await sessionRegistry.ripristinaVersioneLibreria(sessionId, voceId, n);
+        if ('erroreAvvio' in esito) throw erroreDelRegistro(esito);
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 200, successEnvelope({ id: esito.id, versione: esito.versione, totale: esito.totale, nome: esito.nome }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
 
     const libreriaRinominaMatch = method === 'PATCH' && sessionRegistry
       ? /^\/api\/v1\/sessions\/([^/]+)\/library\/([^/]+)$/.exec(url.pathname)
@@ -6420,11 +6587,22 @@ export function createHttpApp({
         /* RA-03 (20/10/2026 notte): dal telefono (origine remota, attaccata solo in processo da `remoto/chiamata-interna.mjs`) una
            sessione nuova si apre solo in una cartella ammessa (`cartellaId`); `cartellaLibera` e `workspaceLaunchId` restano del PC.
            Anche `remoto/operazioni.mjs` lo rifiuta: questo è il cancello vero, per qualunque strada arrivi la richiesta. */
-        if (origine && senzaImmagini && typeof senzaImmagini === 'object'
-          && (senzaImmagini.cartellaLibera !== undefined || senzaImmagini.workspaceLaunchId !== undefined)) {
-          const errore = new Error('From the device a new session opens only in one of the allowed folders.');
-          errore.code = 'NOT_ALLOWED_REMOTELY';
-          throw errore;
+        /* R5.12 (owner 23/10/2026 sera): con le cartelle dei dispositivi accese (`remoto.cartelle`), il dispositivo arriva SOLO con la
+           cartella reale che `operazioni.mjs` ha tradotto dal suo id, e qui il consenso si ricontrolla — per QUEL dispositivo (l'identità
+           del canale, `origine.dispositivoId`), sul percorso reale di adesso. Un `cartellaId` dell'elenco vecchio non vale più dal
+           dispositivo: l'elenco vecchio senza variabile era la cartella del programma (D-REM-6). */
+        if (origine && senzaImmagini && typeof senzaImmagini === 'object') {
+          const cartelleDisp = remotoFn()?.cartelle ?? null;
+          const consentita = Boolean(cartelleDisp) && senzaImmagini.workspaceLaunchId === undefined && senzaImmagini.cartellaId === undefined
+            && typeof senzaImmagini.cartellaLibera === 'string' && typeof origine.dispositivoId === 'string'
+            && await cartelleDisp.consentita(origine.dispositivoId, senzaImmagini.cartellaLibera);
+          const vietata = senzaImmagini.cartellaLibera !== undefined || senzaImmagini.workspaceLaunchId !== undefined
+            || (Boolean(cartelleDisp) && senzaImmagini.cartellaId !== undefined);
+          if (vietata && !consentita) {
+            const errore = new Error('From the device a new session opens only in one of the allowed folders.');
+            errore.code = 'NOT_ALLOWED_REMOTELY';
+            throw errore;
+          }
         }
         const richiesta = requireCustomTaskBody(senzaImmagini);
         if (immagini.length) richiesta.immagini = immagini;
@@ -7169,13 +7347,38 @@ export function createHttpApp({
         /* REV-SESSION-READY v2 (27/09/2026): fra l'evento finale e l'assestamento la cronologia non è ancora quella del giro
            appena chiuso, e la finestra attraversa l'event loop (chiusura dei server MCP). Si aspetta — millisecondi — invece
            di ricevere «sta chiudendo il giro». Un giro ancora in corso non si aspetta: risponde il registro, come sempre. */
+        /* 24/10/2026 (owner: «Riprova» e «Modifica e rimanda» come RAMI, contratto CONTRATTO-RIPROVA-MODIFICA-RAMI): un corpo
+           facoltativo `{ primaDelGiro }` taglia il ramo subito PRIMA del messaggio della persona di quel giro (`forka` del kernel,
+           lo stesso della CLI dal 03/10) e non avvia niente: chi chiama rimanda il testo con `/resume`. Senza corpo: come sempre. */
+        const corpoFork = await leggiCorpoJson(req);
+        const chiaviFork = corpoFork && typeof corpoFork === 'object' && !Array.isArray(corpoFork) ? Object.keys(corpoFork) : null;
+        if (!chiaviFork || chiaviFork.some((k) => k !== 'primaDelGiro')
+          || (Object.hasOwn(corpoFork, 'primaDelGiro') && !puntoDelRamo(corpoFork.primaDelGiro))) {
+          throw Object.assign(new Error('The body accepts only primaDelGiro, the id of a turn.'), { code: 'QUERY_INVALID' });
+        }
+        const primaDelGiro = chiaviFork.length ? corpoFork.primaDelGiro : null;
         if (sessionRegistry.staChiudendoIlGiro?.(sessionIdOrigine)) await sessionRegistry.attendiFuoriDallaFinestra(sessionIdOrigine);
-        const esito = sessionRegistry.forka(sessionIdOrigine);
+        const esito = primaDelGiro ? sessionRegistry.forka(sessionIdOrigine, { primaDelGiro }) : sessionRegistry.forka(sessionIdOrigine);
         if ('erroreAvvio' in esito) {
+          /* il punto non si trova con certezza o sta in una parte compattata: la richiesta è giusta ma lo stato no (409), col motivo
+             del kernel — la finestra lo dice e propone il ramo dell'intera conversazione */
+          if (esito.code === 'FORK_POINT_NOT_FOUND' || esito.code === 'FORK_POINT_COMPACTED') {
+            throw erroreDelRegistro({ ...esito, code: 'SESSION_NOT_READY', reason: esito.reason ?? (esito.code === 'FORK_POINT_COMPACTED' ? 'fork-point-compacted' : 'fork-point-not-found') });
+          }
           throw erroreDelRegistro(esito);
         }
         if (req.aborted || res.destroyed) return;
-        sendJson(res, 200, successEnvelope({ sessionId: esito.sessionId }, clock), method);
+        const taglio = primaDelGiro && esito.taglio ? {
+          primaDelGiro: esito.taglio.primaDelGiro,
+          messaggio: typeof esito.taglio.messaggio === 'string' ? esito.taglio.messaggio : '',
+          /* solo ciò che serve a rimandare le immagini (l'archivio `/chat-images`): niente percorsi del PC a chi chiama */
+          ...(Array.isArray(esito.taglio.allegati) && esito.taglio.allegati.length ? {
+            allegati: esito.taglio.allegati.map((a) => Object.fromEntries(['id', 'nome', 'url', 'tipo'].filter((k) => typeof a?.[k] === 'string').map((k) => [k, a[k]]))),
+          } : {}),
+        } : null;
+        sendJson(res, 200, successEnvelope(taglio
+          ? { sessionId: esito.sessionId, forkDa: sessionIdOrigine, forkPrimaDelGiro: taglio.primaDelGiro, taglio }
+          : { sessionId: esito.sessionId }, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
         sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);

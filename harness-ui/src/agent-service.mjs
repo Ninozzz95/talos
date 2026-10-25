@@ -28,6 +28,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { createToolOutputPreview } from './kernel/tool-output-preview.mjs';
 import { NOME_EVENTO_PROGRESSO_COMPATTAZIONE, creaContatoreRiassunto } from './kernel/compattazione-desktop.mjs'; // lane CLI, 03/10/2026: compaction.progress
+import { CODICE_RICHIESTA_TROPPO_GRANDE } from './kernel/richiesta-troppo-grande.mjs'; // §4.2, regola N: la richiesta nuova che non entra
 import { delegaLimitata } from './delegation-contract.mjs';
 import { join as joinPercorso, relative as percorsoRelativo, sep as separatorePercorso } from 'node:path';
 import { motivoDaChiedere as motivoDelSegreto } from './path-policy.mjs';
@@ -57,6 +58,8 @@ import {
   impaginaVoci as impaginaVociLibreria,
   leggiBytesVoce as leggiBytesVoceReale,
   leggiVoce as leggiVoceReale,
+  aggiungiVersione as aggiungiVersioneReale,
+  elencaVersioni as elencaVersioniReale,
   origineVoce as origineVoceReale,
   rinominaVoce as rinominaVoceReale,
   trovaVoce as trovaVoceLibreria,
@@ -253,6 +256,9 @@ export async function avviaSessione({
    *   la passa resta com'era (null → tetto).
    */
   finestraToken = null,
+  /* 24/10/2026 (artefatti con versioni): da quale chat nasce un artefatto o una sua versione — `() => ({ sessionId, sessionNome })` dal
+     registro, letto al momento (una chat si rinomina). Additivo: assente ⇒ il `meta.json` resta senza sessione, come prima. */
+  sessionePerLibreria = null,
   /* 21/10/2026 (revisione avversaria S2 della compattazione): il limite d'uscita del modello, sullo stesso filo della finestra. Additivo. */
   limiteUscitaToken = null,
   /* 21/10/2026 (CLI, `context.compactAtTokens`): il tetto di compattazione scelto dall'ospite, sullo stesso filo. Additivo. */
@@ -263,6 +269,27 @@ export async function avviaSessione({
   stimaAttrezziMisurati = null,
   /* Revisione 7 della CLI (F6): la finestra per cui la sessione ha già detto «non entra», dal registro, sullo stesso filo. Additivo. */
   nonEntraDetto = null,
+  /* R11-7 (revisione 11 della CLI): la finestra e la scala dell'ultimo rifiuto del fornitore per questo modello, dal registro. Additivo. */
+  rifiutoNoto = null,
+  /* R12-2 (revisione 12 della CLI): il codice del ripiego dal motore già detto in questa sessione e non guarito, dal registro. Additivo. */
+  ripiegoDetto = null,
+  /* R13-2 (revisione 13 della CLI, 23/10/2026): le posizioni nella storia delle richieste non inviate che il motore del contesto ha già
+     archiviato (il registro le TIENE nella storia, il kernel le sostituisce con una nota). Additivo: assente ⇒ nessuna. */
+  richiesteNonInviate = null,
+  /* Pezzo D del §4 (23/10/2026): il freno dei riassunti della sessione, il suo giro e il verdetto in attesa, dal registro, sullo stesso
+     filo. Additivi: assenti ⇒ nessun freno, nessuna ricarica contata, nessun verdetto ereditato. */
+  freno = null,
+  /* R10-3 (revisione 10 della CLI): la copia del freno del registro, viva (una funzione), per il giro che la unisce alla sua */
+  frenoVivo = null,
+  versioneGiro = null,
+  verdettoInAttesa = false,
+  /* Pezzo E del §4 (23/10/2026): i riassunti veri della sessione (la loro stima, per la mediana S) e k, il fattore di sottostima, dal
+     registro, sullo stesso filo. Additivi: assenti ⇒ S stimato dal tratto e k = 1 fino al primo numero vero. */
+  riassuntiVeri = null,
+  fattoreK = null,
+  /* §4.2, regola N (owner 22/10/2026): «Invia come allegato» — `true` o una funzione del testo della richiesta (il registro), inoltrata
+     com'è. Assente ⇒ una richiesta nuova che non entra ferma il giro con REQUEST_TOO_LARGE. */
+  allegaSeTroppoGrande = false,
   /* 21/10/2026 (CLI): il modello che scrive i riassunti e la sua finestra, sullo stesso filo. Additivi: assenti ⇒ la conversazione. */
   modelloRiassunto = null,
   finestraRiassuntoToken = null,
@@ -464,6 +491,7 @@ export async function avviaSessione({
    */
   codaMessaggiFn,
   cartellaPagineWeb, // politica di taglio di `naviga` (owner 01/10/2026): la cartella delle pagine della sessione, inoltrata com'è al kernel
+  cartellaIncollati, // §4.2 regola K (owner 22/10/2026): la cartella delle copie intere delle richieste accorciate, inoltrata com'è
   ricercheInCorso, // F001b (owner 01/10/2026): il registro delle ricerche che continuano della sessione, inoltrato com'è al kernel
   preferenzeWslFn, consensiSessione, // F009 (owner 01/10/2026): preferenza utente WSL e consenso root della sessione, inoltrati tal quali al kernel
   casaLinuxSessione, // Fase B (owner 01/10/2026): la casa Linux della sessione, inoltrata com'è al kernel
@@ -618,6 +646,8 @@ export async function avviaSessione({
   elencaVociFn = elencaVociReale,
   elencaVociConTestoFn = elencaVociConTestoReale,
   leggiVoceFn = leggiVoceReale,
+  aggiungiVersioneFn = aggiungiVersioneReale,
+  elencaVersioniFn = elencaVersioniReale,
   /*
    * ⛔ 14/09 (F03 della review) — la porta BINARIA della Libreria, sorella di `leggiVoceFn`. Non è un doppione:
    * `leggiVoce` legge in utf8 tutto ciò che non è un'immagine ed è giusta così (serve al MODELLO, che vuole testo),
@@ -1378,13 +1408,31 @@ export async function avviaSessione({
       } });
       return;
     }
+    /* R13-1 (revisione 13 della CLI, 23/10/2026): un riassunto gratuito annunciato in un giro che poi è fallito non si tiene — lo stesso
+       evento dell'«Annulla» (`fase:'annullata'` con l'`at` del record), che interfaccia e CLI disegnano già; `motivo:'giro-fallito'` dice
+       che non l'ha annullato la persona. Solo un `at` ISO valido. */
+    if (evento.tipo === 'compattazione-annullata') {
+      if (typeof evento.at !== 'string' || !/^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/u.test(evento.at)) return;
+      Promise.resolve(onEvento({ type: 'CUSTOM', name: 'talos.compattazione', value: { fase: 'annullata', at: evento.at,
+        ...(Number.isSafeInteger(evento.coveredThrough) ? { coveredThrough: evento.coveredThrough } : {}), motivo: 'giro-fallito' } }, { durable: true })).catch(() => {});
+      return;
+    }
     if (evento.tipo === 'compattazione-fine') {
       const record = evento.compattato ? evento.record : null;
       onEvento({ type: 'CUSTOM', name: 'talos.compattazione', value: record
         ? { fase: 'fine', giro: evento.giro, compattato: true, tokenPrima: record.tokenPrima ?? null, tokenDopo: record.tokenDopo ?? null, misura: record.misura ?? null, coveredThrough: record.coveredThrough, at: record.at, modello: record.modello ?? null,
           /* 15/10/2026: lo scambio istantaneo non ha un `compattazione-inizio` — il motivo lo porta lui, e il giornale dice che è stato
              istantaneo (nessuna attesa). Solo se lo è: il contratto delle compattazioni di prima non cambia. */
-          motivo: motivoCompattazionePerGiro.get(evento.giro) ?? (evento.istantanea === true ? evento.motivo ?? null : null),
+          /* §4.2, regola K (contratto con la CLI, c): una riduzione SOLO gratuita che ha accorciato richieste vecchie della persona ha il
+             motivo suo, `accorciati`, e dice quante (`messaggi`): la CLI la disegna muta, il desktop come una riga sobria */
+          motivo: evento.soloCoda === true && evento.accorciati > 0 ? 'accorciati'
+            : motivoCompattazionePerGiro.get(evento.giro) ?? (evento.istantanea === true ? evento.motivo ?? null : null),
+          ...(Number.isSafeInteger(evento.accorciati) && evento.accorciati > 0 ? { messaggi: evento.accorciati } : {}),
+          /* F1 della revisione 9 della CLI (23/10/2026): la riga senza riassunto lo dice (`soloCoda`) con quanto ha accorciato — esiti
+             d'attrezzo (`ridotti`) e immagini vecchie in segnaposto (`immagini`). Senza, qui si perdevano (la lista è a campi ammessi). */
+          ...(evento.soloCoda === true ? { soloCoda: true } : {}),
+          ...(Number.isSafeInteger(evento.ridotti) && evento.ridotti > 0 ? { ridotti: evento.ridotti } : {}),
+          ...(Number.isSafeInteger(evento.immagini) && evento.immagini > 0 ? { immagini: evento.immagini } : {}),
           ...(evento.istantanea === true ? { istantanea: true } : {}),
           /* 21/10/2026 (contratto riga viva §3, e D5 b della CLI): il riassunto SENZA modello si dice — `ripiego`, la `ragione` in una
              parola (tempo · saltato · esaurito · rifiutato) e la `classe` dell'adattatore. Prima si perdevano qui. Solo se ci sono. */
@@ -1416,7 +1464,14 @@ export async function avviaSessione({
           /* R-05 fino in fondo (12/10/2026): il codice e il «dove» (posizioni e ruolo, mai contenuto) arrivano al giornale e al
              trascritto. Nel trascritto dell'owner (36289618) la riga del ripiego era muta sulla causa. Solo se ci sono. */
           ...(typeof evento.codice === 'string' ? { codice: evento.codice } : {}),
-          ...(evento.dettaglio && typeof evento.dettaglio === 'object' && !Array.isArray(evento.dettaglio) ? { dettaglio: evento.dettaglio } : {}) } });
+          ...(evento.dettaglio && typeof evento.dettaglio === 'object' && !Array.isArray(evento.dettaglio) ? { dettaglio: evento.dettaglio } : {}),
+          /* Pezzo D del §4 (contratto (c) con la CLI, 23/10): il freno che tira dice perché e lo stato con `at`, l'identità della tirata.
+             Solo questi campi, validati: senza, qui si perdevano (la lista è a campi ammessi). */
+          ...(evento.motivo === 'freno' && (evento.perche === 'colpi' || evento.perche === 'ricariche') ? { perche: evento.perche } : {}),
+          ...(evento.motivo === 'freno' && evento.freno && typeof evento.freno === 'object' && typeof evento.freno.at === 'string'
+            ? { freno: { colpi: Number.isSafeInteger(evento.freno.colpi) ? evento.freno.colpi : 0,
+              mezzoAlVerdetto: Number.isFinite(evento.freno.mezzoAlVerdetto) ? evento.freno.mezzoAlVerdetto : null, at: evento.freno.at } }
+            : {}) } });
       motivoCompattazionePerGiro.delete(evento.giro);
     }
     /*
@@ -1497,6 +1552,7 @@ export async function avviaSessione({
            `modello` solo per le voci generate, e questa lo è. Senza, il dettaglio poteva dire
            soltanto «il modello» — misurato: 14 voci su 14 sul disco dell'owner erano senza. */
         modello,
+        ...(typeof sessionePerLibreria === 'function' ? (() => { const s = sessionePerLibreria() ?? {}; return { sessionId: s.sessionId, sessionNome: s.sessionNome }; })() : {}),
         testo: html,
       });
       if (typeof voceSalvata !== 'string' || !/^lib-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(voceSalvata)) {
@@ -1506,8 +1562,63 @@ export async function avviaSessione({
     } catch (errore) {
       console.error('[artifacts] copy to Library failed:', errore instanceof Error ? errore.message : errore);
     }
-    onEvento(artifactCreated({ messageId: randomUUID(), id, titolo, voceLibreriaId }));
-    return { id };
+    onEvento(artifactCreated({ messageId: randomUUID(), id, titolo, voceLibreriaId, ...(voceLibreriaId ? { versione: 1 } : {}) }));
+    return { id, ...(voceLibreriaId ? { voceLibreriaId } : {}), ...(copiaInLibreria === false ? { salvata: false } : {}) };
+  };
+
+  /*
+   * ⭐⭐⭐ 24/10/2026 — side-channel di `artifact_update` (owner: «aggiorna la stessa», versioni tutte; contratto con la CLI in handoff
+   *   `CONTRATTO-ARTIFACT-UPDATE-2026-10-24.md`). L'artefatto è la voce di Libreria `lib-…`: la versione nuova si aggiunge con
+   *   `aggiungiVersione`, che applica gli `edits` DENTRO il lucchetto della voce all'ultima versione vera (uno dopo l'altro, tutto o
+   *   niente). Poi l'evento `ArtifactCreated` con la stessa voce e la sua versione: la carta di questo giro resta su QUESTA versione.
+   * ⛔ Sola lettura (F-015, «Artefatto sì, Libreria no»): la versione nuova si mostra e non si salva; la voce resta com'era.
+   */
+  const erroreArtefatto = (code, message) => Object.assign(new Error(message), { code });
+  const applicaModifica = (testo, { html, edits }) => {
+    if (typeof html === 'string') return html;
+    let corrente = testo;
+    edits.forEach((e, i) => {
+      const volte = corrente.split(e.old).length - 1;
+      if (volte !== 1) {
+        throw erroreArtefatto(volte === 0 ? 'EDIT_NOT_FOUND' : 'EDIT_AMBIGUOUS',
+          `Edit ${i + 1}: "${e.old.slice(0, 60)}" appears ${volte} times in the latest version (after the edits before it). Nothing was changed.`);
+      }
+      corrente = corrente.replace(e.old, () => e.new);
+    });
+    return corrente;
+  };
+  const onAggiornaArtefatto = async (id, modifica, { titolo, copiaInLibreria = true } = {}) => {
+    const cartella = await cartellaDatiDelProgetto();
+    const voce = await leggiVoceFn({ cartella, id });
+    if (!voce) throw erroreArtefatto('NOT_FOUND', `no saved artifact with id "${id}"`);
+    if (voce.origine !== 'generated' || !/^text\/html\b/u.test(voce.mediaType ?? '')) throw erroreArtefatto('NOT_AN_ARTIFACT', `"${id}" is not an artifact`);
+    const controllaPeso = (testo) => {
+      const byte = Buffer.byteLength(testo, 'utf8');
+      if (byte > ARTEFATTO_MAX_BYTE) throw erroreArtefatto('ARTIFACT_TOO_LARGE', `The new version is ${byte} bytes; the maximum is ${ARTEFATTO_MAX_BYTE}. Nothing was changed.`);
+      return testo;
+    };
+    const titoloFinale = titolo || String(voce.nome).replace(/\.html?$/iu, '');
+    if (copiaInLibreria === false) {
+      const nuovo = controllaPeso(applicaModifica(voce.testo, modifica));
+      const totale = (await elencaVersioniFn({ cartella, id }))?.length ?? 1;
+      const idMemoria = randomUUID();
+      await salvaArtefattoFn(idMemoria, nuovo);
+      onEvento(artifactCreated({ messageId: randomUUID(), id: idMemoria, titolo: titoloFinale }));
+      return { salvata: false, versione: totale, totale, titolo: titoloFinale };
+    }
+    let nuovo = null;
+    const sessione = typeof sessionePerLibreria === 'function' ? (sessionePerLibreria() ?? {}) : {};
+    const esito = await aggiungiVersioneFn({
+      cartella, id, modello,
+      sessionId: sessione.sessionId, sessionNome: sessione.sessionNome,
+      ...(titolo ? { nome: `${titolo.replace(/[\\/:*?"<>|]/g, '-').slice(0, 80)}.html` } : {}),
+      trasforma: (ultimo) => { nuovo = controllaPeso(applicaModifica(ultimo, modifica)); return nuovo; },
+    });
+    if (!esito) throw erroreArtefatto('NOT_FOUND', `no saved artifact with id "${id}"`);
+    const idMemoria = randomUUID();
+    await salvaArtefattoFn(idMemoria, nuovo);
+    onEvento(artifactCreated({ messageId: randomUUID(), id: idMemoria, titolo: titoloFinale, voceLibreriaId: id, versione: esito.versione }));
+    return { versione: esito.versione, totale: esito.totale, titolo: titoloFinale };
   };
 
   /*
@@ -2352,6 +2463,16 @@ export async function avviaSessione({
       ...(Number.isFinite(scartoMisurato) && scartoMisurato >= 0 ? { scartoMisurato } : {}), // revisione 6 della CLI (S2-2)
       ...(Number.isFinite(stimaAttrezziMisurati) && stimaAttrezziMisurati > 0 ? { stimaAttrezziMisurati } : {}), // revisione 8 della CLI (N1)
       ...(Number.isSafeInteger(nonEntraDetto) ? { nonEntraDetto } : {}), // revisione 7 della CLI (F6)
+      ...(rifiutoNoto && typeof rifiutoNoto === 'object' ? { rifiutoNoto } : {}), // R11-7
+      ...(typeof ripiegoDetto === 'string' && ripiegoDetto ? { ripiegoDetto } : {}), // R12-2
+      ...(Array.isArray(richiesteNonInviate) && richiesteNonInviate.length ? { richiesteNonInviate } : {}), // R13-2
+      ...(freno && typeof freno === 'object' ? { freno } : {}), // pezzo D del §4
+      ...(typeof frenoVivo === 'function' ? { frenoVivo } : {}), // R10-3
+      ...(Number.isSafeInteger(versioneGiro) && versioneGiro >= 0 ? { versioneGiro } : {}),
+      ...(verdettoInAttesa === true ? { verdettoInAttesa: true } : {}),
+      ...(Array.isArray(riassuntiVeri) && riassuntiVeri.length > 0 ? { riassuntiVeri } : {}), // pezzo E del §4
+      ...(Number.isFinite(fattoreK) && fattoreK > 0 ? { fattoreK } : {}),
+      ...(allegaSeTroppoGrande === true || typeof allegaSeTroppoGrande === 'function' ? { allegaSeTroppoGrande } : {}), // §4.2, regola N
       ...(segnaleSaltaRiassunto instanceof AbortSignal ? { segnaleSaltaRiassunto } : {}), // 21/10: lo Skip del riassunto atteso
       ...(typeof saltaRiassuntoFn === 'function' ? { saltaRiassuntoFn } : {}), // 22/10 (C): riarmato a ogni compattazione
       ...(Number.isSafeInteger(riassuntoInattivitaMs) && riassuntoInattivitaMs > 0 ? { riassuntoInattivitaMs } : {}),
@@ -2423,7 +2544,7 @@ export async function avviaSessione({
         await depositaCambioFornitore(evento);
       },
       onConsumoFornitore: async evento => onEvento({ type: 'CUSTOM', name: 'consumo-fornitore', value: evento }, { durable: true }),
-      strumentiEstesi, ricercaWeb, richiediRicercaFn, onArtefatto, onDocumento, onImmagine, modelloPlanner,
+      strumentiEstesi, ricercaWeb, richiediRicercaFn, onArtefatto, onAggiornaArtefatto, onDocumento, onImmagine, modelloPlanner,
       ...(ponteAcceso ? { attrezziDifferiti } : {}), // 19/10: `true` o `'essenziali'` (il modello locale del telefono), inoltrato com'è
       ...(ponteAcceso && Number.isSafeInteger(finestraPerGliAttrezzi) && finestraPerGliAttrezzi > 0 ? { finestraPerGliAttrezzi } : {}), // L1, 20/10
       // ⭐ L9 (12/09/2026) — inoltrati SENZA logica propria, come tutto il resto in questo file:
@@ -2461,6 +2582,7 @@ export async function avviaSessione({
       onForgeCrea, toolForge, eseguiToolForgeFn,
       registroLetture,
       cartellaPagineWeb,
+      cartellaIncollati,
       ricercheInCorso,
       preferenzeWslFn,
       consensiSessione,
@@ -2507,6 +2629,36 @@ export async function avviaSessione({
     const classe = typeof errore?.classe === 'string' && /^[a-z][a-z-]{0,39}$/u.test(errore.classe) ? errore.classe : undefined;
     const eventoFinale = runError({ message: messaggio, code, classe });
     if (errore?.chiave) { eventoFinale.messageChiave = errore.chiave; if (errore.params) eventoFinale.messageParams = errore.params; }
+    /*
+     * §4.2, regola N (owner 22/10/2026; contratto con la CLI): la richiesta nuova non entrava e NON è partita. Prima del RunError, un
+     *   evento durevole lo dice (`talos.richiesta-non-inviata { at, indice }`: `indice` è la posizione della richiesta nella storia grezza
+     *   del giro, sistema compreso) — la rigiocata lo ritrova, e la storia salvata del giro non ha la richiesta. I numeri stanno in alto
+     *   (`tokensRichiesta`, `tokensCornice`, `finestra`, `fonte`, `allegabile`) e in `messageParams`: la CLI li legge in tutti e due i posti.
+     */
+    /*
+     * Z-K1 (revisione della CLI su Z, 23/10/2026, misurato sulla CLI costruita col registro vero): il «contesto pieno» porta la sua
+     *   diagnosi — `contestoPieno { scalino, bersaglio, numeri?, esauriti? }`, scritta dal giro sull'errore (`riscriviPerIlContestoPieno`)
+     *   — anche sul RunError. Prima qui si perdeva: la CLI riceveva solo `classe:'contesto'` e non poteva dire «anche dopo aver accorciato
+     *   (N di M)». Solo questi campi, validati, come per REQUEST_TOO_LARGE; e `classificazione:'contesto-pieno'` in alto.
+     */
+    const pieno = errore?.contestoPieno;
+    if (pieno && typeof pieno === 'object' && !Array.isArray(pieno) && Number.isSafeInteger(pieno.scalino) && pieno.scalino >= 0) {
+      const intero = (n) => (Number.isSafeInteger(n) && n >= 0 ? n : null);
+      const n = pieno.numeri;
+      const numeri = n && typeof n === 'object' && intero(n.richiesti) !== null && intero(n.massimo) !== null
+        ? { richiesti: n.richiesti, massimo: n.massimo, uscita: intero(n.uscita) } : null;
+      eventoFinale.contestoPieno = { scalino: pieno.scalino, bersaglio: Number.isFinite(pieno.bersaglio) && pieno.bersaglio >= 0 ? Math.round(pieno.bersaglio) : null,
+        ...(numeri ? { numeri } : {}), ...(pieno.esauriti === true ? { esauriti: true } : {}) };
+      eventoFinale.classificazione = 'contesto-pieno';
+    }
+    if (code === CODICE_RICHIESTA_TROPPO_GRANDE && errore?.dati && typeof errore.dati === 'object') {
+      Object.assign(eventoFinale, errore.dati);
+      await Promise.resolve(onEvento({ type: 'CUSTOM', name: 'talos.richiesta-non-inviata',
+        value: { at: new Date().toISOString(), indice: Number.isSafeInteger(errore.indice) ? errore.indice : null,
+          /* R13-2: col motore del contesto la richiesta è già nel suo archivio e il registro la TIENE nella storia (il kernel la mostra come
+             nota): `nelMotore` lo dice, così anche dopo un riavvio il registro sa quale posizione è una richiesta non inviata. Additivo. */
+          ...(errore.archiviataDalMotore === true ? { nelMotore: true } : {}) } }, { durable: true })).catch(() => {});
+    }
     onEvento(eventoFinale);
     /*
      * ⭐⭐⭐ BC-44 (12/09/2026) — IL CODICE VIAGGIAVA SOLO NELL'EVENTO, e chi conclude legge il
@@ -2525,7 +2677,13 @@ export async function avviaSessione({
      *   registro se salvarla (solo se la storia di prima ne è il prefisso).
      */
     const messaggiDelGiro = Array.isArray(errore?.messaggiDelGiro) ? errore.messaggiDelGiro : null;
-    return { threadId, runId, ok: false, esito: null, erroreInterno: messaggio, codiceErrore: code, ...(messaggiDelGiro ? { messaggiDelGiro } : {}) };
+    /* R10-7 (revisione 10 della CLI): anche il record della compattazione applicata nel giro fallito e lo stato del giro (freno, scarto,
+       riassunti veri, k), ADDITIVI come `messaggiDelGiro` — il registro li tiene solo se tiene il lavoro del giro */
+    const recordDiCompattazione = Array.isArray(errore?.recordDiCompattazione) && errore.recordDiCompattazione.length > 0 ? errore.recordDiCompattazione : null;
+    const statoDelGiro = errore?.statoDelGiro && typeof errore.statoDelGiro === 'object' && !Array.isArray(errore.statoDelGiro) ? errore.statoDelGiro : null;
+    return { threadId, runId, ok: false, esito: null, erroreInterno: messaggio, codiceErrore: code, ...(messaggiDelGiro ? { messaggiDelGiro } : {}),
+      ...(recordDiCompattazione ? { recordDiCompattazione } : {}), ...(statoDelGiro ? { statoDelGiro } : {}),
+      ...(errore?.archiviataDalMotore === true ? { archiviataDalMotore: true } : {}) }; // R13-2: la richiesta non inviata è già nell'archivio del motore
   } finally {
     /*
      * ⭐⭐⭐ 29/8 — FASE E: un server MCP è un processo figlio VERO

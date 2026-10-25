@@ -20,7 +20,9 @@ import { expect, test } from '@playwright/test';
  *   prove di questa cartella.
  */
 
-const VOCI_ATTESE_MENU = ['Chiedi di nuovo', 'Elimina la risposta'];
+/* 24/10/2026 (owner, bozzetto dei rami): «Chiedi di nuovo» è diventato «Riprova», con una riga d'aiuto: le voci si leggono per NOME
+   accessibile (aria-label), non per testo, perché il testo della voce ora contiene anche la riga d'aiuto. */
+const VOCI_ATTESE_MENU = ['Riprova', 'Elimina la risposta'];
 
 async function apriApp(page, { tema = 'dark', larghezza = 1440, altezza = 900 } = {}) {
   await page.setViewportSize({ width: larghezza, height: altezza });
@@ -72,7 +74,7 @@ test('BC60-02 — riga e menu: intersezione VUOTA, unione COMPLETA, con Elimina'
   const inRiga = await azioniInRiga(page).evaluateAll((nodi) => nodi.map((n) => n.getAttribute('aria-label')));
   await page.locator('#conversation .talos-message:has(.assistant-copy) [data-message-action="piu"]').click();
   await expect(vociMenu(page)).toHaveCount(VOCI_ATTESE_MENU.length);
-  const nelMenu = await vociMenu(page).allTextContents();
+  const nelMenu = await vociMenu(page).evaluateAll((nodi) => nodi.map((n) => n.getAttribute('aria-label') || n.textContent));
   expect(nelMenu, 'le voci del menu, per nome').toEqual(VOCI_ATTESE_MENU);
   expect(nelMenu, 'la lista si giudica da ciò che MANCA: Elimina deve esserci').toContain('Elimina la risposta');
   /* ⛔ Intersezione: si confrontano gli insiemi, non si guarda che «ci siano voci». */
@@ -170,7 +172,7 @@ test('BC60-04 — il tasto destro sul messaggio apre LO STESSO menu', async ({ p
      quello della persona, e prendere quello avrebbe provato una superficie che non ho toccato. */
   await page.locator('#conversation .talos-message:has(.assistant-copy)').first().click({ button: 'right' });
   await expect(page.locator('#menuRispostaMessaggio')).toBeVisible();
-  expect(await vociMenu(page).allTextContents()).toEqual(VOCI_ATTESE_MENU);
+  expect(await vociMenu(page).evaluateAll((nodi) => nodi.map((n) => n.getAttribute('aria-label') || n.textContent))).toEqual(VOCI_ATTESE_MENU);
 });
 
 test('BC60-05 — Elimina chiede conferma, e la cancellazione passa dal SERVER', async ({ page }) => {

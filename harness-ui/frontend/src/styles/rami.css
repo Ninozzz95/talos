@@ -1,0 +1,35 @@
+/*
+ * 24/10/2026 — «Riprova» e «Modifica e rimanda» come RAMI (owner, bozzetto `mockup-riprova-*` approvato «Sì, così»). Solo la
+ * disposizione: menu, bolla, campo e pulsanti sono i pezzi che il prodotto ha già (`talos-context-menu`, `message-bubble`,
+ * `talos-textarea`, `talos-button`, `talos-image-card`). Colori solo dai token: chiaro e scuro vengono da soli.
+ */
+
+/* la voce del menu «⋯» con la riga d'aiuto sotto («Ramo nuovo · questa risposta resta») */
+.talos-context-menu [role=menuitem].talos-context-menu__voce-con-aiuto {
+  display: grid; justify-items: start; gap: 1px; height: auto; padding-block: 6px; text-align: left;
+}
+.talos-context-menu__voce-con-aiuto small { font-size: var(--talos-font-size-xs); font-weight: 400; color: var(--talos-muted); }
+
+/* le frecce della versione: «‹ 2 / 2 ›» nella testata del messaggio; il numero apre l'albero dei rami */
+.talos-rami-versioni {
+  display: inline-flex; align-items: center; height: 22px; margin-inline-start: 6px;
+  border: 1px solid var(--talos-border); border-radius: var(--talos-radius-pill);
+}
+.talos-rami-versioni .talos-button { height: 20px; min-width: 22px; padding: 0 4px; border-radius: var(--talos-radius-pill); }
+.talos-rami-versioni__numero { font-variant-numeric: tabular-nums; font-size: var(--talos-font-size-xs); }
+.talos-rami-versioni__indietro svg { transform: rotate(180deg); }
+
+/* la modifica in linea: la bolla diventa un campo; sotto UNA riga — la nota a sinistra, due pulsanti a destra */
+.talos-message--user .message-bubble.talos-rami-modifica {
+  display: grid; gap: 10px; padding: 10px; width: min(86%, 52rem); max-width: min(86%, 52rem);
+}
+.talos-rami-modifica .talos-textarea { min-height: 72px; resize: vertical; background: var(--talos-panel); font: inherit; line-height: inherit; }
+.talos-rami-modifica__riga { display: flex; align-items: center; gap: 8px; }
+.talos-rami-modifica__nota {
+  flex: 1; display: flex; align-items: flex-start; gap: 8px; text-align: left;
+  font-size: var(--talos-font-size-sm); color: var(--talos-muted);
+}
+.talos-rami-modifica__nota .talos-dot { margin-top: 6px; flex: none; }
+.talos-rami-modifica__immagini { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+.talos-rami-modifica__immagini .talos-image-card { position: relative; }
+.talos-rami-modifica__togli { position: absolute; top: 4px; right: 4px; }
