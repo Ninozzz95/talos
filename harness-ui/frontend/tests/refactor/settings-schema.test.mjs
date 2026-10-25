@@ -51,7 +51,7 @@ test('SET-01 infrastructure sections without legacy setting rows are searchable'
 });
 /* 23/09/2026, decisione owner — la ricerca delle parole dei fornitori porta a un posto VERO: il
    Laboratorio modelli (che ha la scheda «Provider»), mai a un vuoto e mai a una sezione tolta. */
-test('SET-01 provider words lead to the Model laboratory, never to an empty result or a removed section', () => {
+test('SET-01 provider words lead to the Model Lab, never to an empty result or a removed section', () => {
   for (const term of ['provider','chiave','api key','fornitori','openrouter','credenziali','endpoint','accessi']) {
     const trovati = searchSettings(index(),term);
     assert.ok(trovati.length > 0, `«${term}» non deve dare un risultato vuoto`);
@@ -60,7 +60,7 @@ test('SET-01 provider words lead to the Model laboratory, never to an empty resu
   }
 });
 /* 23/09/2026 — l'indirizzo vecchio si RINVIA (semantica del 301), non ricade su «Aspetto». */
-test('SET-01 the retired providers id redirects to Model laboratory → Provider tab', () => {
+test('SET-01 the retired providers id redirects to Model Lab → Provider tab', () => {
   assert.deepEqual(risolviSezioneImpostazioni('providers'), { section: 'models', labTab: 'providers' });
   assert.deepEqual(risolviSezioneImpostazioni('models'), { section: 'models', labTab: null });
   assert.deepEqual(risolviSezioneImpostazioni('appearance'), { section: 'appearance', labTab: null });

@@ -54,7 +54,7 @@ function connessione(remoteId, alpn) {
   return { pc, tel, stato, chiusa };
 }
 
-function banco(t, { operazioni = null, attesaDopoPairOkMs = 50 } = {}) {
+function banco(t, { operazioni = null, attesaDopoPairOkMs = 50, effimero = undefined } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'talos-remoto-srv-'));
   t.after(() => rimuoviCartellaDiProva(dir));
   const accoppiamento = creaAccoppiamento();
@@ -69,7 +69,8 @@ function banco(t, { operazioni = null, attesaDopoPairOkMs = 50 } = {}) {
   };
   const avvisi = [];
   // attesa dopo `pair.ok` corta: queste prove non guardano la chiusura (la guarda SRV-11)
-  const servizio = creaServizioRemoto({ pcId: PC, nomePc: 'PC di Nino', vapidPubblica: 'BPUB', accoppiamento, dispositivi, operazioni: ops, avvisa: (a) => avvisi.push(a), attesaDopoPairOkMs });
+  const servizio = creaServizioRemoto({ pcId: PC, nomePc: 'PC di Nino', vapidPubblica: 'BPUB', accoppiamento, dispositivi, operazioni: ops, avvisa: (a) => avvisi.push(a), attesaDopoPairOkMs,
+    ...(effimero !== undefined ? { effimero } : {}) });
   return { accoppiamento, dispositivi, servizio, eseguite, avvisi };
 }
 
@@ -299,4 +300,22 @@ test('SRV-12 (RA-04, Mobile 20/10) un rifiuto porta lo stato HTTP della rotta; u
   for (const op of ['c', 'd', 'e']) assert.ok(!('stato' in risposte[op]), `${op}: ${JSON.stringify(risposte[op])}`);
   c.tel.finisciScrittura();
   await fatto;
+});
+
+/* 24/10/2026 (fetta C del Mobile, PC doppi; contratto v0.3 §B): `pc.effimero` solo per un PC col portachiavi di prova; assente negli
+   altri casi (SRV-01 lo prova senza: `deepEqual` sul `pc` intero) */
+test('SRV-EFF-01 — un PC effimero lo dice in pair.code e pair.ok; uno vero no (il campo non c\'è, mai false)', async (t) => {
+  const b = banco(t, { effimero: true });
+  const { c, fatto, codice } = await accoppiaTelefono(b);
+  assert.equal(codice.pc.effimero, true);
+  await b.servizio.conferma(b.accoppiamento.inAttesa()[0].id);
+  const ok = await c.tel.ricevi();
+  assert.deepEqual(ok.pc, { id: PC, nome: 'PC di Nino', programma: 'TALOS desktop', vapid: 'BPUB', effimero: true });
+  await fatto;
+  /* AL CONTRARIO: un valore che non è `true` non accende il campo */
+  const vero = banco(t, { effimero: 'si' });
+  const due = await accoppiaTelefono(vero);
+  assert.equal(Object.hasOwn(due.codice.pc, 'effimero'), false);
+  vero.servizio.rifiuta(vero.accoppiamento.inAttesa()[0].id);
+  await due.fatto.catch(() => {});
 });

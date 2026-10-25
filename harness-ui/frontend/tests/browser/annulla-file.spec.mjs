@@ -61,11 +61,13 @@ for (const modo of ['dark', 'light']) {
       await messaggio(page).locator('[data-message-action="piu"]').click();
     }
 
+    /* 24/10/2026 sera (R-T1, revisione a blocco 4): il «⋯» del tuo messaggio ha «Riusa nel composer» per prima (owner, «Matita =
+       modifica»): la voce si cerca per NOME, non per posizione. */
     test(`ANNULLA-UI-01 — dal «⋯» del tuo messaggio: anteprima, «Includi», conferma, poi «Rifai» (${modo})`, async ({ page }, testInfo) => {
       const chiamate = await prepara(page);
       await expect(messaggio(page).locator('[data-message-action="piu"]')).toHaveAttribute('aria-label', 'Altre azioni sul tuo messaggio');
       await apriMenu(page);
-      const voce = page.locator('#menuRispostaMessaggio [role=menuitem]').first();
+      const voce = page.locator('#menuRispostaMessaggio').getByRole('menuitem', { name: 'Annulla le modifiche ai file da qui', exact: true });
       await expect(voce).toHaveText('Annulla le modifiche ai file da qui');
       await page.screenshot({ path: testInfo.outputPath(`1-menu-${modo}.png`) });
       await voce.click();
@@ -156,7 +158,7 @@ for (const modo of ['dark', 'light']) {
     test(`ANNULLA-UI-02 — al contrario: senza un punto da quel messaggio in poi, niente finestra e lo dice (${modo})`, async ({ page }) => {
       const chiamate = await prepara(page, { punti: [] });
       await apriMenu(page);
-      await page.locator('#menuRispostaMessaggio [role=menuitem]').first().click();
+      await page.locator('#menuRispostaMessaggio').getByRole('menuitem', { name: 'Annulla le modifiche ai file da qui', exact: true }).click();
       await expect(page.locator('.talos-toast').filter({ hasText: 'Da questo messaggio in poi TALOS non ha cambiato file.' })).toBeVisible();
       await expect(page.locator('dialog.td-modal[data-annulla-file]')).toHaveCount(0);
       expect(chiamate).toEqual(['GET file-undo']);
@@ -165,7 +167,7 @@ for (const modo of ['dark', 'light']) {
     test(`ANNULLA-UI-03 — al contrario: un punto senza copia dice perché (Git mancante) e non apre niente (${modo})`, async ({ page }) => {
       await prepara(page, { punti: [{ turno: 1, seqAvvio: 1, annullabile: false, motivo: 'git-assente', fuori: 0 }] });
       await apriMenu(page);
-      await page.locator('#menuRispostaMessaggio [role=menuitem]').first().click();
+      await page.locator('#menuRispostaMessaggio').getByRole('menuitem', { name: 'Annulla le modifiche ai file da qui', exact: true }).click();
       await expect(page.locator('.talos-toast').filter({ hasText: 'serve Git installato sul computer' })).toBeVisible();
       await expect(page.locator('dialog.td-modal[data-annulla-file]')).toHaveCount(0);
     });

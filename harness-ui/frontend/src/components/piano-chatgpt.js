@@ -100,7 +100,7 @@ export function montaPastigliaPiano({ pastiglia, leggiStato = null, documento: d
   function aggiorna({ modelloId = modello, stato: nuovo = stato } = {}) {
     modello = modelloId; stato = nuovo;
     const si = pianoInUso(modello, stato);
-    pastiglia.hidden = !si;
+    if (pastiglia.hidden !== !si) pastiglia.hidden = !si; // 22/10/2026: chiamata a ogni ridisegno del piede (piu' volte al secondo in un giro): si scrive solo se cambia
     if (!si) chiudi();
   }
   aggiorna();

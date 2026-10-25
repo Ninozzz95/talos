@@ -211,6 +211,10 @@ const MOTIVI = Object.freeze({
 /* Owner 12/10/2026 («Si ripara da solo»): l'archivio del motore non combaciava con la conversazione; i vecchi originali sono stati
    messi da parte e il motore è ripartito. Non è un fallimento: la riga dice che cosa è successo e che niente si è perso. */
 const RIALLINEATO = 'archivio-riallineato';
+/* §4 della CLI, pezzo D (23/10/2026): il FRENO dei riassunti automatici pagati ha tirato (`motivo:'freno'`, detto una volta per armamento).
+   Non è un fallimento: i riassunti automatici sono in pausa perché non accorciavano, i passi gratuiti continuano e il /compact riassume
+   lo stesso. Una riga sua, come quella della CLI («Automatic summaries are paused… /compact forces one»), mai la parola grezza. */
+const FRENO = 'freno';
 /* 21/10/2026 (6): il riassunto di sfondo messo da parte perché la persona ha scritto (`motivo:'ceduta'`, motore a posto unico). È voluto,
    non è un fallimento: nessuna riga, la barra si chiude e basta. La CLI fa lo stesso (`COMPACTION_QUIET`). */
 /* B1 (21/10/2026): `motore` chiude la riga di un riassunto che ha scritto il motore del contesto — il suo separatore lo racconta già. */
@@ -264,6 +268,7 @@ export function formattaTokenBreve(n) {
 export function testoRigaCompattazione({ stato, tokenPrima = null, tokenDopo = null, motivo = null, dettaglio = null, ripiego = false, ragione = null } = {}) {
   if (stato === 'annullata') return t('chat.context.row.undone');
   if (stato === 'non-riuscita' && motivo === RIALLINEATO) return t('chat.context.row.realigned');
+  if (stato === 'non-riuscita' && motivo === FRENO) return t('chat.context.row.paused');
   if (stato === 'non-riuscita') return `${t('chat.context.row.notSummarized')}${motivo ? ` · ${motivoUmano(motivo, dettaglio)}` : ''}`;
   if (ripiego === true) {
     const breve = ragioneRipiegoBreve(ragione);

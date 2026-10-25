@@ -61,6 +61,7 @@ export default {
     'shell.resizeWidth': 'Ridimensiona larghezza finestra',
     'shell.resizeHeight': 'Ridimensiona altezza finestra',
     'shell.resizeBoth': 'Ridimensiona larghezza e altezza finestra',
+    'shell.windowMenu': 'Menu di TALOS',
     // ── collegamento al server
     'connection.listStale': 'Il server non risponde: questo elenco è fermo all’ultima lettura riuscita.',
     'connection.backTitle': 'Collegato di nuovo',
@@ -251,6 +252,7 @@ export default {
     'modelPicker.catalogUnavailable': 'Catalogo OpenRouter non disponibile: {motivo}',
     'modelPicker.reasoning': 'Ragionamento',
     'modelPicker.reasoningLevel': 'Livello di ragionamento',
+    'modelPicker.autoShort': 'Auto', // 24/10/2026: nella pillola del ragionamento del compositore; il suggerimento dice «Automatico»
     'modelPicker.choose': 'Scegli il modello',
     'modelPicker.select': 'Seleziona modello',
     'modelPicker.latestVersion': 'ultima versione',
@@ -831,6 +833,8 @@ export default {
     'toolLine.webSearchGeneric': 'Ricerca web…',
     'toolLine.artifact': 'Artefatto: {titolo}',
     'toolLine.creatingArtifact': 'Creazione artefatto…',
+    'toolLine.updatingArtifact': 'Aggiornamento artefatto…',
+    'toolLine.artifactUpdated': 'Artefatto aggiornato: {titolo}',
     'toolLine.document': 'Documento: {titolo}.{formato}',
     'toolLine.creatingDocument': 'Creazione documento…',
     'toolLine.image': 'Immagine: {prompt}',
@@ -1572,6 +1576,7 @@ export default {
     'shell.resizeWidth': 'Resize window width',
     'shell.resizeHeight': 'Resize window height',
     'shell.resizeBoth': 'Resize window width and height',
+    'shell.windowMenu': 'TALOS menu',
     // ── collegamento al server
     'connection.listStale': 'The server is not responding: this list shows the last successful read.',
     'connection.backTitle': 'Connected again',
@@ -1762,6 +1767,7 @@ export default {
     'modelPicker.catalogUnavailable': 'OpenRouter catalog unavailable: {motivo}',
     'modelPicker.reasoning': 'Reasoning',
     'modelPicker.reasoningLevel': 'Reasoning level',
+    'modelPicker.autoShort': 'Auto', // 24/10/2026: in the composer's reasoning pill; the tooltip says «Automatic»
     'modelPicker.choose': 'Choose the model',
     'modelPicker.select': 'Select model',
     'modelPicker.latestVersion': 'latest version',
@@ -2342,6 +2348,8 @@ export default {
     'toolLine.webSearchGeneric': 'Web search…',
     'toolLine.artifact': 'Artifact: {titolo}',
     'toolLine.creatingArtifact': 'Creating artifact…',
+    'toolLine.updatingArtifact': 'Updating artifact…',
+    'toolLine.artifactUpdated': 'Artifact updated: {titolo}',
     'toolLine.document': 'Document: {titolo}.{formato}',
     'toolLine.creatingDocument': 'Creating document…',
     'toolLine.image': 'Image: {prompt}',

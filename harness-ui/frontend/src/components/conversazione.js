@@ -410,9 +410,12 @@ export function creaAzioniMessaggio({ ascolta = true } = {}, opzioni = {}) {
   function apri({ x, y, sorgente, conferma = null }) {
     chiudi();
     const voci = vociMenu().map((voce) => {
-      if (!voce.conferma) return [voce.testo, voce.fai, voce.abilitato !== false];
-      if (conferma === voce.testo) return [voce.conferma, voce.fai, voce.abilitato !== false];
-      return [voce.testo, () => apri({ x, y, sorgente, conferma: voce.testo }), voce.abilitato !== false];
+      const aiuto = typeof voce.aiuto === 'string' ? voce.aiuto : ''; // 24/10: la riga d'aiuto
+      if (!voce.conferma) return [voce.testo, voce.fai, voce.abilitato !== false, aiuto];
+      /* 24/10 sera (REV4-R6): anche una voce con la conferma in due tempi porta la sua riga — «Elimina la risposta» spenta in un ramo
+         dice perché («Fa parte della conversazione da cui nasce questo ramo»); prima la riga si perdeva qui */
+      if (conferma === voce.testo) return [voce.conferma, voce.fai, voce.abilitato !== false, aiuto];
+      return [voce.testo, () => apri({ x, y, sorgente, conferma: voce.testo }), voce.abilitato !== false, aiuto];
     });
     apriMenuContestuale(menu, { voci, x, y, chiudi, finestra });
     if (sorgente) sorgente.setAttribute('aria-expanded', 'true');
@@ -697,13 +700,25 @@ const copiaDiSerie = (testo) => globalThis.navigator?.clipboard?.writeText?.(tes
  */
 function scriviCodice(parti, testo, chiuso) {
   const { pre, code, chiave, evidenzia } = parti;
-  const scorrimento = pre.scrollLeft;
   const rinvia = Boolean(chiuso && chiave && parti.rinvia?.());
   if (parti.blocco) {
     if (rinvia) parti.blocco.dataset.evidenziazione = 'in-attesa';
     else delete parti.blocco.dataset.evidenziazione;
   }
   const evidenziato = chiuso && chiave && !rinvia ? evidenzia(testo, chiave) : null;
+  /*
+   * ⭐ 22/10/2026 — il codice che cresce si ACCODA. A recinto aperto lo streaming chiama a ogni fotogramma con un testo che
+   *   continua il precedente: riscrivere `textContent` rifaceva il nodo di testo intero (un recinto da 10.000 caratteri, ogni
+   *   fotogramma) e il browser doveva ri-impaginare il `<pre>` da capo. `appendData` aggiunge solo la parte nuova (DOM Living
+   *   Standard, «replace data» con offset uguale alla lunghezza): stesso testo, stesso nodo, selezione e scorrimento intatti.
+   */
+  const unicoTesto = code.childNodes?.length === 1 && code.firstChild?.nodeType === 3 ? code.firstChild : null;
+  if ((evidenziato === null || evidenziato === undefined) && unicoTesto && typeof unicoTesto.appendData === 'function'
+    && code.className === '' && testo.length > unicoTesto.data.length && testo.startsWith(unicoTesto.data)) {
+    unicoTesto.appendData(testo.slice(unicoTesto.data.length));
+    return; // accodare non sposta il `<pre>`: niente da rimettere (e leggere `scrollLeft` forzerebbe un layout a ogni fotogramma)
+  }
+  const scorrimento = pre.scrollLeft;
   if (evidenziato === null || evidenziato === undefined) {
     code.textContent = testo;
     // ⛔ Niente `language-*` se non stiamo evidenziando davvero: la classe è una dichiarazione, e
@@ -720,8 +735,11 @@ function scriviCodice(parti, testo, chiuso) {
 
 /** Il pulsante: durante lo streaming non si copia codice a metà (Streamdown, letto 09/09/2026). */
 function aggiornaBottone(bottone, chiuso) {
-  bottone.disabled = !chiuso;
-  bottone.textContent = chiuso ? t('chat.common.copy') : t('chat.code.incoming');
+  /* 22/10/2026: a recinto aperto lo streaming chiama a ogni fotogramma — si scrive solo se cambia (una scrittura uguale è
+     comunque una mutazione e un'invalidazione degli stili) */
+  if (bottone.disabled !== !chiuso) bottone.disabled = !chiuso;
+  const testo = chiuso ? t('chat.common.copy') : t('chat.code.incoming');
+  if (bottone.textContent !== testo) bottone.textContent = testo;
 }
 
 /**
@@ -820,8 +838,7 @@ export function aggiornaBloccoCodice(blocco, { testo, linguaggio, chiuso } = {})
   }
   parti.testo = nuovoTesto;
   parti.chiuso = nuovoChiuso;
-  if (nuovoChiuso) blocco.classList.remove('code-block-in-arrivo');
-  else blocco.classList.add('code-block-in-arrivo');
+  blocco.classList.toggle('code-block-in-arrivo', !nuovoChiuso); // con la forza: nessuna scrittura se non cambia
   aggiornaBottone(parti.bottone, nuovoChiuso);
   scriviCodice(parti, nuovoTesto, nuovoChiuso);
   return true;
@@ -835,9 +852,12 @@ export const ICONA_ATTREZZO = Object.freeze({
   // ⛔ BC-59 (17/09): `file_edit` scriveva sul disco e nella riga attività arrivava senza icona
   //    propria (ripiego `i-bolt`) e senza nome. Stessa icona di `scrivi`: è la stessa cosa al file.
   scrivi: 'i-code', file_edit: 'i-code', naviga: 'i-globe', web_search: 'i-globe', delega_sottotask: 'i-user',
-  memory_write: 'i-brain', artifact_create: 'i-doc', document_create: 'i-doc', generate_image: 'i-doc',
+  memory_write: 'i-brain', artifact_create: 'i-doc', artifact_update: 'i-doc', document_create: 'i-doc', generate_image: 'i-doc',
   time_now: 'i-clock', research_start: 'i-globe',
   remote_phones: 'i-phone', remote_phone_pair: 'i-phone', remote_phone_revoke: 'i-phone', // R5.12 (18/10/2026)
+  remote_phone_folders: 'i-phone', remote_phone_folder_allow: 'i-phone', remote_phone_folder_revoke: 'i-phone', // R5.12 cartelle (23/10/2026)
+  remote_device_send_file: 'i-phone', // R5.13 (24/10/2026): mandare un file a un dispositivo
+  remote_control: 'i-phone', // R5.14 (24/10/2026)
 });
 
 export function iconaAttrezzo(nome) {

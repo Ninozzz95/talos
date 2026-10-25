@@ -110,16 +110,22 @@ test('COMPOSER-SCALE-02 — AL CONTRARIO: dove lo spazio c\'è, nessuno cede (14
   /* 11/10/2026: la pillola dei giri («Invio 1», ~70 px) è uscita; la pastiglia del piano è più larga (~109 px). Misurato a 1440 con la
      colonna destra aperta (composer 690, barra 660): con lei la barra chiede ~694 px e il nome del modello si taglierebbe, quindi
      «Terminale» cede all'icona — è la scala che fa il suo lavoro (stesso limite di COMPOSER-SCALE-03: «a 1440 al più Terminale»).
-     Il verso contrario si prova dove lo spazio c'è davvero: la barra senza pastiglia. */
+     Il verso contrario si prova dove lo spazio c'è davvero: la barra senza pastiglia.
+     ⛔ 24/10/2026 — la pillola del ragionamento (owner, bozzetto approvato) aggiunge ~95 px. Misurato a 1440 con la pastiglia del
+     piano (barra 660): al gradino 1 servono ~707 px (nome del modello 80/56, permesso 115/82), quindi cede anche il permesso
+     (gradino 2), nell'ordine della scala: prima «Terminale», poi il permesso, che resta lo scudo col suo suggerimento; niente si
+     taglia. Senza la pastiglia (qui sotto) tutto resta intero a 1440. */
   const conPiano = await misura(page, 1440, { piano: true });
-  expect(Number(conPiano.scala), 'con la pastiglia del piano, a 1440 al più cede «Terminale»').toBeLessThanOrEqual(1);
-  expect(conPiano.permesso.ceduta).toBe(false);
+  expect(Number(conPiano.scala), 'con la pastiglia del piano e la pillola del ragionamento, a 1440 al più cede anche il permesso').toBeLessThanOrEqual(2);
+  if (conPiano.permesso.ceduta) expect(conPiano.terminale.ceduta, 'il permesso cede solo dopo «Terminale»').toBe(true);
   expect(conPiano.piano?.tagliata).toBe(false);
   expect(conPiano.modello.tagliata).toBe(false);
+  /* 24/10/2026: con la pillola del ragionamento, a 1440 senza pastiglia cede «Terminale» (gradino 1, riconoscibile dall'icona); il
+     permesso e il modello restano interi. Il verso «nessuno cede» si prova a 1920 (COMPOSER-SCALE-03, «1920 torna intero»). */
   const m = await misura(page, 1440, {});
-  expect(m.scala).toBe('0');
-  expect(m.terminale.ceduta).toBe(false);
+  expect(Number(m.scala)).toBeLessThanOrEqual(1);
   expect(m.permesso.ceduta).toBe(false);
+  expect(m.permesso.tagliata).toBe(false);
   expect(m.modello.tagliata).toBe(false);
   expect(c.nonGet).toBe(0);
 });

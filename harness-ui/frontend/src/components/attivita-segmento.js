@@ -188,7 +188,9 @@ export function riassuntoVoci(voci) {
     }
     if (v.stato === 'in-corso') { inCorso = v; attrezziInCorso += 1; continue; }
     if (v.stato === 'interrotto') { interrotti += 1; continue; } // 26/09: né riuscita né fallita — il giro si è fermato prima dell'esito
-    if (v.stato === 'non-eseguito') { nonEseguiti += 1; continue; } // owner 03/10/2026: una prova non eseguita, né riuscita né fallita
+    /* R5.13 corsa 2 (24/10/2026, bozzetto 4b approvato: «Sending files to devices ×3»): un invio oltre i 25 MB è «non eseguito» sulla
+       sua riga, ma nel conto del gruppo resta un invio — «· 1 prova non eseguita» direbbe una prova che non c'è (visto nella foto 4b) */
+    if (v.stato === 'non-eseguito' && v.nome !== 'remote_device_send_file') { nonEseguiti += 1; continue; } // owner 03/10/2026: una prova non eseguita, né riuscita né fallita
     if (v.stato === 'doppione') { doppioni += 1; continue; } // owner 12/10/2026: una copia identica saltata, né riuscita né fallita
     if (v.stato === 'corretta') continue; // 27/09, decisione 47: la domanda respinta non è stata posta; la riga discreta basta
     const mappa = v.stato === 'fallito' ? falliti : riusciti;

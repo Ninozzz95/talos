@@ -835,15 +835,27 @@ test('LAG-REPLAY-TEXT-32 — molti delta storici fanno un solo commit visuale fi
     const observer = new MutationObserver((records) => {
       for (const record of records) {
         if (soloFineEntrata(record, record.target.getAttribute?.('class'))) continue;
+        /* 22/10/2026: il segno `data-disegnato` (una volta per turno, dopo il suo primo disegno: `components/turni-disegnati.js`)
+           non ridisegna niente — dice solo che da lì il turno si può saltare fuori vista. Non è lavoro sul testo. */
+        if (record.type === 'attributes' && record.attributeName === 'data-disegnato') continue;
         mutations += 1;
         if (record.type === 'childList' && record.target.classList?.contains('assistant-copy') && record.addedNodes.length > 0) commitTesto += 1;
       }
     });
     observer.observe(conversation, { childList: true, subtree: true, characterData: true, attributes: true, attributeOldValue: true });
+    /*
+     * ⛔ 22/10/2026 (streaming fluido) — la prova dice «delta STORICI», e lo dichiara: la rigiocata è `deferHistoricalRendering`.
+     *   Fino al 22/10 la shell standalone forzava la modalità `none` all'avvio, e 250 delta arrivati dal vivo in un colpo davano
+     *   un commit solo anche senza rigiocata: la prova passava per il motivo sbagliato. Col ritmo di serie un dump DAL VIVO esce
+     *   rotolando (al più 260 ms, la fine entro 110: `STREAMING-FLUIDO-03`), quindi in più fotogrammi; la storia invece resta
+     *   UN commit alla sua fine, ed è questo che la prova pretende.
+     */
+    session.deferHistoricalRendering = true;
     for (let index = 0; index < 250; index += 1) {
       runtime.handleRealEvent({ type: 'TextMessageContent', messageId: 'history-message', delta: 'a', _sequenza: 20000 + index }, session.generation);
     }
     runtime.handleRealEvent({ type: 'TextMessageEnd', messageId: 'history-message', _sequenza: 20250 }, session.generation);
+    session.deferHistoricalRendering = false;
     await new Promise((resolve) => setTimeout(resolve, 100));
     observer.disconnect();
     return {
@@ -943,7 +955,11 @@ test('LAG-LIVE-TEXT-37 — il resume disattiva il differimento e mostra lo strea
     await runtime.resumeSession('Continua il controllo');
     const generation = runtime.realSessionState.generation;
     runtime.handleRealEvent({ type: 'TextMessageContent', messageId: 'live-after-resume', delta: 'Testo vivo', _sequenza: 23000 }, generation);
-    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    /* 22/10/2026 (streaming fluido): il testo vivo esce col ritmo, al più 260 ms dopo il suo arrivo — si aspetta quel limite
+       (con margine), sempre PRIMA della fine del messaggio: è questo che la prova dice («prima della fine»). */
+    const testoVivo = () => document.querySelector('.assistant-copy:last-child')?.textContent || document.querySelector('.assistant-message:last-child .assistant-copy')?.textContent || '';
+    const limite = performance.now() + 600;
+    while (!testoVivo().includes('Testo vivo') && performance.now() < limite) await new Promise((resolve) => requestAnimationFrame(resolve));
     return {
       deferredBeforeResume,
       deferredAfterResume: runtime.realSessionState.deferHistoricalRendering,
@@ -1089,9 +1105,9 @@ test('OPEN-WITH-TALOS-BROWSER-01 — il fragment apre la scelta esplicita senza 
   await expect(page.locator('#inspector-files .file-tree')).toContainText('Progetto Ω');
   await expect(page.locator('#inspector-files .file-tree')).toContainText('I file appariranno appena inizi la sessione.');
   await expect(page.locator('#inspector-files .file-tree')).not.toContainText('Nessuna cartella ancora scelta');
-  /* C1 (owner 10/10/2026): il chip dice cosa passa senza chiedere; la politica sta nel suggerimento */
-  await expect(page.locator('[data-open-sheet="permissions"] span')).toHaveText('Senza chiedere: file, comandi, documenti');
-  await expect(page.locator('[data-c="Chip"][data-open-sheet="permissions"]')).toHaveAttribute('title', /^Permesso: Scrive nel progetto/u);
+  /* 24/10/2026 (owner): nel compositore il nome breve del livello; cosa passa senza chiedere (C1, 10/10) apre il suggerimento */
+  await expect(page.locator('[data-open-sheet="permissions"] span')).toHaveText('Scrive nel progetto');
+  await expect(page.locator('[data-c="Chip"][data-open-sheet="permissions"]')).toHaveAttribute('title', /^Senza chiedere: file, comandi, documenti\nPermesso: Scrive nel progetto/u);
   await expect.poll(() => new URL(page.url()).hash).toBe('');
   await testInfo.attach('open-with-talos-1440x900.png', {
     body: await page.screenshot({ fullPage: true }), contentType: 'image/png',
@@ -1215,7 +1231,7 @@ test('SESSION-MODEL-CHANGE-RELOAD-02 — la pillola cambia solo dopo il salvatag
    * (e la pillola NO: ancora «glm-4.7-flash»), e sparisce dopo il salvataggio (~900 ms), quando la
    * pillola diventa «gemini-3.7-flash». `getByRole('dialog', { name: … })` risolve a **1**.
    */
-  await expect(page.getByRole('dialog', { name: 'Modello e ragionamento' })).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'Modello', exact: true })).toBeVisible(); // 24/10/2026: il riquadro è solo «Modello»
   await expect(pillola).toHaveText('glm-4.7-flash');
   await expect.poll(() => aggiornamenti).toEqual([{
     modello: 'google/gemini-3.7-flash',
@@ -1228,7 +1244,7 @@ test('SESSION-MODEL-CHANGE-RELOAD-02 — la pillola cambia solo dopo il salvatag
   await page.locator('[data-real-session-id="session-model-change"]').click();
   await expect(page.locator('[data-open-sheet="model"] .talos-chip__label').first()).toHaveText('gemini-3.7-flash');
   await page.locator('[data-open-sheet="model"]').click();
-  await expect(page.locator('.effort-picker-selected')).toHaveText('Medio');
+  await expect(livelloPillola(page)).toHaveText('Medio');
   const visualDir = resolve(process.cwd(), 'artifacts', 'visual-audit-2026-09-01');
   await mkdir(visualDir, { recursive: true });
   // VELO-SPEC-2: il foglio si fotografa sopra la chat vera, non sopra una chat sotto il velo (`visibility:hidden`)
@@ -1286,6 +1302,14 @@ async function scenaC05(page, { sessionId, effortIniziale, filoGemini }) {
   await page.locator('[data-open-sheet="model"]').click();
   return aggiornamenti;
 }
+/* 24/10/2026 (owner): il livello del ragionamento è la pillola del compositore (`#pillRagionamento`), non più il cursore nel riquadro
+   «Modello»: la pillola dice il livello, il suo menu la riga A9. Il riquadro aperto si chiude prima di aprire il menu. */
+const livelloPillola = (page) => page.locator('#pillRagionamento .talos-chip__label');
+async function notaPillola(page) {
+  if (await page.getByRole('dialog').count()) await page.keyboard.press('Escape');
+  await page.locator('#pillRagionamento').click();
+  return page.locator('.talos-pillola-ragionamento__nota');
+}
 /* la forma di runtime-owner-adapter.filoRagionamentoCatalogo per questa voce: none → il minimo, mai più su; senza scelta, il predefinito */
 const FILO_GEMINI = { none: 'low', minimal: 'low', low: 'low', medium: 'medium', high: 'high', xhigh: 'high', max: 'high', auto: 'medium' };
 
@@ -1298,9 +1322,9 @@ const FILO_GEMINI = { none: 'low', minimal: 'low', low: 'low', medium: 'medium',
 test('C05-SFORZO-CAMBIO-MODELLO-01 — switching to a mandatory-reasoning model keeps «Off»: the server sends the minimum, and the pill says so', async ({ page }) => {
   const aggiornamenti = await scenaC05(page, { sessionId: 'session-c05', effortIniziale: 'none', filoGemini: FILO_GEMINI });
   expect(aggiornamenti).toEqual([{ modello: 'google/gemini-3.7-flash', reasoning: { effort: 'none' } }]);
-  /* il cursore sta dove arriva il filo, e la riga dice la scelta e ciò che parte */
-  await expect(page.locator('.effort-picker-selected')).toHaveText('Basso');
-  await expect(page.locator('.effort-picker-nota')).toHaveText('Hai scelto «Off»: questo modello riceve «Basso».');
+  /* la pillola sta dove arriva il filo, e la riga del suo menu dice la scelta e ciò che parte */
+  await expect(livelloPillola(page)).toHaveText('Basso');
+  await expect(await notaPillola(page)).toHaveText('Hai scelto «Off»: questo modello riceve «Basso».');
 });
 
 /* Review C05 del desktop (Ma): «Automatico» (nessuna scelta) resta tale — mai riscritto nel predefinito del modello, che su
@@ -1308,8 +1332,9 @@ test('C05-SFORZO-CAMBIO-MODELLO-01 — switching to a mandatory-reasoning model 
 test('C05-SFORZO-CAMBIO-MODELLO-02 — «Automatico» stays «Automatico» on a mandatory model: no effort is written, and the line says what is sent', async ({ page }) => {
   const aggiornamenti = await scenaC05(page, { sessionId: 'session-c05-auto', effortIniziale: null, filoGemini: FILO_GEMINI });
   expect(aggiornamenti).toEqual([{ modello: 'google/gemini-3.7-flash', reasoning: null }]);
-  await expect(page.locator('.effort-picker-selected')).toHaveText('Automatico');
-  await expect(page.locator('.effort-picker-nota')).toHaveText('Senza una scelta questo modello riceve «Medio».');
+  await expect(livelloPillola(page)).toHaveText('Auto'); // «Automatico» per intero nel suggerimento
+  await expect(page.locator('#pillRagionamento')).toHaveAttribute('aria-label', /^Livello di ragionamento: Automatico/u);
+  await expect(await notaPillola(page)).toHaveText('Senza una scelta questo modello riceve «Medio».');
 });
 
 /* Review C05 del desktop (Mb): una scelta che la mappa del modello nuovo NON elenca non si tiene alla cieca — la riga A9 non
@@ -1319,7 +1344,7 @@ test('C05-SFORZO-CAMBIO-MODELLO-03 — a pick the new model’s map does not lis
   void xhigh;
   const aggiornamenti = await scenaC05(page, { sessionId: 'session-c05-fuori', effortIniziale: 'xhigh', filoGemini: senzaXhigh });
   expect(aggiornamenti).toEqual([{ modello: 'google/gemini-3.7-flash', reasoning: { effort: 'medium' } }]);
-  await expect(page.locator('.effort-picker-selected')).toHaveText('Medio');
+  await expect(livelloPillola(page)).toHaveText('Medio');
 });
 
 test('SESSION-MODEL-UPDATE-FAIL-01 — un server incompatibile non produce una pillola falsa', async ({ page }) => {
@@ -1352,9 +1377,9 @@ test('SESSION-MODEL-UPDATE-FAIL-01 — un server incompatibile non produce una p
   await page.locator('.talos-dialog input.sheet-input').fill('gemini-3.7-flash');
   await page.getByRole('option').filter({ hasText: 'google/gemini-3.7-flash' }).click();
   // Stessa migrazione del test precedente: `#sheetDialog` era il foglio del prototipo (0 nodi aperti).
-  await expect(page.getByRole('dialog', { name: 'Modello e ragionamento' })).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'Modello', exact: true })).toBeVisible();
   await expect(pillola).toHaveText('glm-4.7-flash');
-  await expect(page.locator('.effort-picker-selected')).toHaveText('Off');
+  await expect(livelloPillola(page)).toHaveText('Off');
   /*
    * ⛔ 18/09/2026 — `#toastRegion` è il contenitore del PROTOTIPO (`src/legacy/frammenti.html:263`,
    * `data-legacy-id="toastRegion"`, dentro `#talos-legacy`): resta vuoto. La pila vera nasce su
@@ -1891,15 +1916,20 @@ test('A11-ORDINE-SPAZIO-PRIMA — un testo di soli spazi non scavalca il ragiona
   await apriChat(page);
   await page.waitForFunction(() => window.__talosHarnessUiRuntime);
   await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 8000 });
-  const ordine = (eventi, ragionamentoId, testo) => page.evaluate(({ eventi, ragionamentoId, testo }) => {
+  const ordine = (eventi, ragionamentoId, testo) => page.evaluate(async ({ eventi, ragionamentoId, testo }) => {
     const runtime = window.__talosHarnessUiRuntime;
     const sessione = runtime.realSessionState;
     document.querySelector('#conversation')?.replaceChildren();
     sessione.sequenzeViste.clear();
     sessione.ragionamentoBubble.clear();
     for (const evento of eventi) runtime.handleRealEvent(evento, sessione.generation);
+    /* 22/10/2026 (streaming fluido): a messaggio finito il testo esce col ritmo entro 110 ms — si aspetta che sia a schermo
+       (con margine) prima di guardare l'ORDINE, che è ciò che la prova misura */
+    const cercaCopia = () => [...document.querySelectorAll('#conversation .assistant-copy')].find((nodo) => nodo.textContent.includes(testo));
+    const limite = performance.now() + 600;
+    while (!cercaCopia() && performance.now() < limite) await new Promise((resolve) => requestAnimationFrame(resolve));
     const nota = document.querySelector(`#conversation .real-reasoning-note[data-ragionamento-id="${ragionamentoId}"]`);
-    const copia = [...document.querySelectorAll('#conversation .assistant-copy')].find((nodo) => nodo.textContent.includes(testo));
+    const copia = cercaCopia();
     if (!nota || !copia) return { nota: Boolean(nota), copia: Boolean(copia), ordine: null };
     return { nota: true, copia: true, ordine: (nota.compareDocumentPosition(copia) & Node.DOCUMENT_POSITION_FOLLOWING) ? 'ragionamento-poi-testo' : 'testo-poi-ragionamento' };
   }, { eventi, ragionamentoId, testo });
@@ -2534,6 +2564,13 @@ test('lo streaming porta l’ultimo output verso il centro della conversazione',
     session.testoGrezzoMessaggi.clear();
     runtime.handleRealEvent({ type: 'TextMessageContent', messageId: 'stream-center', delta: 'Ultimo output in streaming', _sequenza: 90201 }, session.generation);
     await new Promise((resolve) => setTimeout(resolve, 100));
+    /* 22/10/2026 (streaming fluido): il pacchetto esce col ritmo, al più 260 ms dopo l'arrivo — si aspetta che sia tutto a
+       schermo (e un fotogramma per lo scorrimento che lo segue) prima di misurare DOVE sta */
+    const limite = performance.now() + 600;
+    while (!(session.messageElements.get('stream-center')?.textContent || '').includes('Ultimo output in streaming') && performance.now() < limite) {
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+    }
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     const output = session.messageElements.get('stream-center');
     if (!output) throw new Error('Messaggio streaming non montato per messageId');
     const containerRect = scroller.getBoundingClientRect();
@@ -3015,11 +3052,19 @@ test('LAG-LIVE-INCREMENTAL-40 — i blocchi già chiusi non vengono ricreati a o
     const generation = runtime.realSessionState.generation;
     const frame = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     const mid = 'inc-1';
+    /* 22/10/2026 (streaming fluido): col ritmo di serie il testo esce fino a 260 ms dopo l'arrivo. Dove la prova guarda la
+       FORMA del DOM a un punto preciso del testo, prima aspetta che lo schermo sia in pari con ciò che è arrivato. */
+    const inPari = async () => {
+      const rs = runtime.realSessionState;
+      const limite = performance.now() + 800;
+      while ((rs.renderIncrementale.get(mid)?.mostrato ?? 0) < (rs.testoGrezzoMessaggi.get(mid) || '').length && performance.now() < limite) await frame();
+      await frame();
+    };
     let seq = 31000;
     const invia = (delta) => runtime.handleRealEvent({ type: 'TextMessageContent', messageId: mid, delta, _sequenza: seq += 1 }, generation);
 
     invia('Primo paragrafo con **grassetto**.\n\n');
-    await frame();
+    await inPari();
     /*
      * ⛔⛔ 20/09/2026 — QUESTA RIGA CERCAVA `.assistant-message:last-child .assistant-copy`, E
      *   QUELLA CLASSE NON ESISTE PIÙ. La prova falliva con `Cannot read properties of null` alla
@@ -3036,12 +3081,12 @@ test('LAG-LIVE-INCREMENTAL-40 — i blocchi già chiusi non vengono ricreati a o
     const primoTag = primoNodo?.tagName || null;
 
     invia('```js\nconst a = 1;\n\nconst b = 2;\n');   // fence APERTO con una riga vuota dentro: non deve chiudere il blocco
-    await frame();
+    await inPari();
     const figliDuranteFence = copia.children.length;
     const preDuranteFence = copia.querySelector('pre')?.textContent || '';
 
     invia('```\n\n- uno\n- due\n\n');
-    await frame();
+    await inPari();
     const stessoPrimoNodo = copia.firstElementChild === primoNodo;
     const preFinale = copia.querySelector('pre');
 
@@ -3050,7 +3095,7 @@ test('LAG-LIVE-INCREMENTAL-40 — i blocchi già chiusi non vengono ricreati a o
     const stessoPre = copia.querySelector('pre') === preFinale;
 
     runtime.handleRealEvent({ type: 'TextMessageEnd', messageId: mid, _sequenza: seq += 1 }, generation);
-    await frame();
+    await inPari();
     return {
       primoTag, figliDuranteFence, preDuranteFence, stessoPrimoNodo, stessoPrimoNodoDopo40, stessoPre,
       testo: copia.textContent, ul: copia.querySelectorAll('ul').length, strong: copia.querySelectorAll('strong').length,

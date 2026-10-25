@@ -370,6 +370,23 @@ test('BC49: inventario e campi TALOS-BANCO invariati, eccetto le esenzioni dichi
       remote_phone_pair: [[], []],
       remote_phone_revoke: [['phone'], ['phone']],
     });
+    /* R5.12 (owner 23/10/2026): le cartelle dei dispositivi dalla chat, tre attrezzi estesi NUOVI fissati qui come i telefoni; nessuno
+     * nella base, le due impronte restano. */
+    Object.assign(attrezziAutomazioni, {
+      remote_phone_folders: [['phone'], []],
+      remote_phone_folder_allow: [['path', 'phone'], ['path', 'phone']],
+      remote_phone_folder_revoke: [['folder', 'phone'], ['folder', 'phone']],
+    });
+    /* R5.14 (owner 23/10/2026): accendere e spegnere il controllo remoto dalla chat — un attrezzo esteso NUOVO, fuori dalla base */
+    Object.assign(attrezziAutomazioni, { remote_control: [['on', 'relay'], ['on']] });
+    /* Artefatti con versioni (owner 24/10/2026, contratto con la CLI): `artifact_update`, attrezzo esteso NUOVO accanto ad
+     * `artifact_create`; forma fissata qui, nessuno nella base, le due impronte restano. */
+    Object.assign(attrezziAutomazioni, {
+      artifact_update: [['edits', 'html', 'id', 'titolo'], ['id']],
+    });
+    /* R5.13 (24/10/2026): mandare un file a un dispositivo — un attrezzo esteso NUOVO, fuori dalla base, fissato qui come gli altri del
+     * remoto; le due impronte restano */
+    Object.assign(attrezziAutomazioni, { remote_device_send_file: [['device', 'path'], ['path']] });
     for (const [nome, [campi, obbligatori]] of Object.entries(attrezziAutomazioni)) {
       const tool = attrezzi.map((entry) => entry.function ?? entry).find((entry) => entry.name === nome);
       if (attrezzi === ATTREZZI_OPENAI) assert.equal(tool, undefined, `${nome} non deve entrare nel banco base`);

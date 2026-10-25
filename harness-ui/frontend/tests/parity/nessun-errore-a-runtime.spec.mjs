@@ -224,18 +224,22 @@ test('RUNTIME-01: aprire la app non produce nessun errore JavaScript', async ({ 
 
 /*
  * ⛔⛔⛔ 14/09/2026 — REGRESSIONE DESKTOP 0.1.7: i delta arrivano regolari ma il testo visibile
- * resta indietro e recupera a blocchi. Questa prova NON misura quanti millisecondi impiega una
- * macchina CI: misura quanti FOTOGRAMMI servono a T4 per raggiungere T3 dopo l'ultimo delta.
+ * resta indietro e recupera a blocchi. 240 delta a ~12 ms esercitano il caso reale (provider più veloce del
+ * ritmo artificiale). L'ordine è provato confrontando il testo completo, carattere per carattere.
  *
- * 240 delta a ~12 ms esercitano il caso reale (provider più veloce del ritmo artificiale). Dopo
- * l'ultimo T3 tutto il testo è già nel frontend: nessuna animazione può trattenerlo per centinaia
- * di millisecondi. Il commit visibile deve raggiungerlo entro uno o due frame. L'ordine è provato
- * confrontando il testo completo, carattere per carattere.
- *
- * La prova vive nel browser vero e non usa clock assoluti per decidere verde/rosso: il contratto
- * è espresso in frame, così una macchina CI lenta non trasforma un backlog intenzionale in rumore.
+ * ⛔⛔⛔ 22/10/2026 — IL CONTRATTO CAMBIA DA «UN FOTOGRAMMA» A «UN LIMITE DICHIARATO», e qui sta il perché, perché questa prova
+ *   non torni a togliere il ritmo come il 29/09 (`0238eea02` tolse la cura del 20/09, verificata dall'owner, per farla tornare
+ *   verde). Fino a oggi diceva: dopo l'ultimo delta il testo intero entro UN fotogramma. Era giusta nell'INTENTO — il difetto
+ *   del 14/09 (un ritmo fisso) e quello del 20/09 (un tetto di 30 caratteri per flush, ≈ 900 car/s) avevano la stessa malattia:
+ *   un arretrato SENZA LIMITE, che con un fornitore veloce cresce per tutta la risposta e «recupera a blocchi» alla fine. Ma la
+ *   soglia proibiva ogni buffer di rivelazione, cioè proprio ciò che rende fluido un filo a pacchetti (misurato il 22/10 dal vivo:
+ *   ~35 caratteri ogni ~145 ms, 95% dei fotogrammi fermi) — e la soglia la fallirebbe anche il pavimento di 33 ms di Hermes.
+ * ⇒ Il contratto vero, provato qui: (1) niente resta indietro oltre `ritardoMaxMs` (260 ms, `components/ritmo-streaming.js`) più
+ *   due fotogrammi di misura, con un fornitore più veloce del ritmo — l'arretrato non cresce; (2) chiusa la risposta
+ *   (`TextMessageEnd`), il resto esce entro `fineMs` (110 ms) più due fotogrammi; (3) «Nessuna» resta il vecchio contratto,
+ *   UN fotogramma. I fotogrammi si misurano (CI a 60 Hz, schermo dell'owner a 165), le soglie stanno in millisecondi.
  */
-test('STREAMING-LIVE-SMOOTH-03 — cursore e dissolvenza raggiungono il DOM al frame successivo senza backlog', async ({ page }) => {
+test('STREAMING-LIVE-SMOOTH-03 — col ritmo il testo resta entro il limite dichiarato e la fine esce subito; senza ritmo, un fotogramma', async ({ page }) => {
   await page.goto(process.env.TALOS_URL_CANCELLO || 'http://127.0.0.1:4174/');
   await apriConversazioneVisibile(page);
 
@@ -245,7 +249,8 @@ test('STREAMING-LIVE-SMOOTH-03 — cursore e dissolvenza raggiungono il DOM al f
     const sessione = runtime.realSessionState;
     const conversazione = document.querySelector('#conversation');
     const esiti = [];
-    for (const [posizione, modalita] of ['typewriter', 'fade'].entries()) {
+    const casi = [['typewriter', false], ['fade', false], ['fade', true], ['none', false]];
+    for (const [posizione, [modalita, conFine]] of casi.entries()) {
       document.documentElement.dataset.talosStreamingAnimation = modalita;
       conversazione.replaceChildren();
       sessione.messageElements.clear();
@@ -256,31 +261,44 @@ test('STREAMING-LIVE-SMOOTH-03 — cursore e dissolvenza raggiungono il DOM al f
 
       const pezzi = Array.from({ length: 240 }, (_, indice) => `d${String(indice).padStart(3, '0')}:abcdef `);
       const atteso = pezzi.join('');
-      const messageId = `streaming-smooth-${modalita}${giro ? `-${giro}` : ''}`;
+      const messageId = `streaming-smooth-${modalita}${conFine ? '-fine' : ''}${giro ? `-${giro}` : ''}`;
       let ultimoT3 = null;
+      const ritardoA = []; /* il ritardo del testo a schermo, misurato a ogni delta: non deve crescere */
       for (let indice = 0; indice < pezzi.length; indice += 1) {
         ultimoT3 = performance.now();
         runtime.handleRealEvent({
           type: 'TextMessageContent', messageId, delta: pezzi[indice], _sequenza: 70000 + (posizione * 1000) + indice,
         }, sessione.generation);
+        if (indice === 60 || indice === 239) ritardoA.push({ indice, arrivato: atteso.slice(0, (indice + 1) * 11).length, t: performance.now() });
         if (indice + 1 < pezzi.length) await new Promise((resolve) => setTimeout(resolve, 12));
       }
+      if (conFine) runtime.handleRealEvent({ type: 'TextMessageEnd', messageId, _sequenza: 70000 + (posizione * 1000) + 999 }, sessione.generation);
+      const tFine = performance.now();
 
-      let frameDopoUltimoDelta = 0;
-      let t4 = null;
       const testoVisibile = () => conversazione.querySelector('.assistant-copy')?.textContent || '';
-      if (testoVisibile() === atteso) t4 = performance.now();
-      while (t4 === null && frameDopoUltimoDelta < 40) {
+      const mostrato = () => sessione.renderIncrementale?.get(messageId)?.mostrato ?? 0;
+      let frameDopoUltimoDelta = 0;
+      let t4 = testoVisibile() === atteso ? performance.now() : null;
+      const intervalli = [];
+      let ultimo = performance.now();
+      const raggiunto = {};
+      while (t4 === null && performance.now() - tFine < 1500) {
         await new Promise((resolve) => requestAnimationFrame(() => { frameDopoUltimoDelta += 1; resolve(); }));
-        if (testoVisibile() === atteso) t4 = performance.now();
+        const ora = performance.now();
+        intervalli.push(ora - ultimo);
+        ultimo = ora;
+        for (const r of ritardoA) if (raggiunto[r.indice] === undefined && mostrato() >= r.arrivato) raggiunto[r.indice] = ora - r.t;
+        if (testoVisibile() === atteso) t4 = ora;
       }
+      const fotogramma = intervalli.length ? [...intervalli].sort((a, b) => a - b)[intervalli.length >> 1] : 16.7;
 
       const log = typeof window.talosStreamingLog === 'function' ? window.talosStreamingLog() : [];
       const delta = log.filter((riga) => riga.evento === 'delta' && riga.messageId === messageId);
       const render = log.filter((riga) => riga.evento === 'render' && riga.messageId === messageId);
       esiti.push({
-        modalita, atteso, visibile: testoVisibile(), frameDopoUltimoDelta,
+        modalita, conFine, atteso, visibile: testoVisibile(), frameDopoUltimoDelta, fotogramma,
         lagFinaleMs: t4 === null || ultimoT3 === null ? null : t4 - ultimoT3,
+        dopoLaFineMs: t4 === null ? null : t4 - tFine,
         deltaRicevuti: delta.length, renderEseguiti: render.length,
         durataRenderMassimaMs: Math.max(0, ...render.map((riga) => Number(riga.durataMs) || 0)),
         renderPiuLento: render.reduce((lento, riga, indice) => ((Number(riga.durataMs) || 0) > (lento?.durataMs ?? -1) ? { indice, ...riga } : lento), null),
@@ -296,17 +314,27 @@ test('STREAMING-LIVE-SMOOTH-03 — cursore e dissolvenza raggiungono il DOM al f
    *   volte su tre («fade», 80,5 e 139,2 ms), mai prima; misurata su Linux come il runner (Chromium 1243 in WSL, 3 corse) il render
    *   più lento è 1 ms, e 4 ms con la CPU rallentata ×4 (`Emulation.setCPUThrottlingRate`). Un render lento del PRODOTTO si ripete a
    *   ogni corsa; uno scatto della macchina condivisa no. ⇒ Se un render passa i 50 ms la sequenza si rifà UNA volta, e vale la più
-   *   veloce delle due; la prima misura si stampa sempre, col render che l'ha superata. Le asserzioni in fotogrammi restano sulla prima.
+   *   veloce delle due; la prima misura si stampa sempre, col render che l'ha superata. Le asserzioni sul ritardo restano sulla prima.
    */
   const lenteAllaPrima = risultati.filter((r) => r.durataRenderMassimaMs >= 50);
   const seconda = lenteAllaPrima.length ? await misura(1) : null;
   if (seconda) console.log(`STREAMING-LIVE-SMOOTH-03 · render oltre 50 ms alla prima misura, rifatta una volta: ${JSON.stringify(lenteAllaPrima.map((r) => ({ modalita: r.modalita, ms: r.durataRenderMassimaMs, render: r.renderPiuLento })))} → ${JSON.stringify(seconda.map((r) => ({ modalita: r.modalita, ms: r.durataRenderMassimaMs })))}`);
+  console.log(`STREAMING-LIVE-SMOOTH-03 · ${JSON.stringify(risultati.map((r) => ({ modalita: r.modalita, conFine: r.conFine, lagFinaleMs: Math.round(r.lagFinaleMs), dopoLaFineMs: Math.round(r.dopoLaFineMs), fotogrammi: r.frameDopoUltimoDelta, fotogrammaMs: Math.round(r.fotogramma * 10) / 10 })))}`);
 
+  const RITARDO_MAX_MS = 260; // `RITMO_DI_SERIE.ritardoMaxMs`
+  const FINE_MS = 110; // `RITMO_DI_SERIE.fineMs`
   for (const risultato of risultati) {
+    const dueFotogrammi = 2 * risultato.fotogramma + 8;
     expect(risultato.deltaRicevuti).toBe(240);
     expect(risultato.visibile, `${risultato.modalita}: ${risultato.atteso.length - risultato.visibile.length} caratteri gia ricevuti sono ancora invisibili; ultimo render: ${JSON.stringify(risultato.ultimoRender)}`).toBe(risultato.atteso);
-    expect(risultato.frameDopoUltimoDelta, `${risultato.modalita}: T3→T4 = ${risultato.lagFinaleMs} ms; ultimo render: ${JSON.stringify(risultato.ultimoRender)}`).toBeLessThanOrEqual(1);
-    const rifatta = seconda?.find((r) => r.modalita === risultato.modalita);
+    if (risultato.modalita === 'none') {
+      expect(risultato.frameDopoUltimoDelta, `none: T3→T4 = ${risultato.lagFinaleMs} ms; senza ritmo il testo è a schermo al fotogramma dopo`).toBeLessThanOrEqual(1);
+    } else if (risultato.conFine) {
+      expect(risultato.dopoLaFineMs, `${risultato.modalita}: chiusa la risposta il resto deve uscire entro ${FINE_MS} ms (+2 fotogrammi)`).toBeLessThanOrEqual(FINE_MS + dueFotogrammi);
+    } else {
+      expect(risultato.lagFinaleMs, `${risultato.modalita}: T3→T4 = ${risultato.lagFinaleMs} ms oltre il limite dichiarato; ultimo render: ${JSON.stringify(risultato.ultimoRender)}`).toBeLessThanOrEqual(RITARDO_MAX_MS + dueFotogrammi);
+    }
+    const rifatta = seconda?.find((r) => r.modalita === risultato.modalita && r.conFine === risultato.conFine);
     const durata = Math.min(risultato.durataRenderMassimaMs, rifatta?.durataRenderMassimaMs ?? Infinity);
     expect(durata, `${risultato.modalita}: render applicativo oltre la soglia W3C di 50 ms anche rifacendo la sequenza (${risultato.durataRenderMassimaMs} poi ${rifatta?.durataRenderMassimaMs} ms; render: ${JSON.stringify(risultato.renderPiuLento)})`).toBeLessThan(50);
   }
@@ -343,7 +371,12 @@ test('STREAMING-HIDDEN-FALLBACK-019 — il testo ricevuto non aspetta un rAF sos
  * preferenze o comportamento di quella superficie: il fix live-smooth vale solo per il Desktop
  * standalone. Questo test resta nella suite Desktop e simula soltanto il contratto dell'host.
  */
-test('STREAMING-LIVE-SMOOTH-02 — 240 delta regolari raggiungono il DOM entro due frame senza backlog artificiale', async ({ page }) => {
+test('STREAMING-LIVE-SMOOTH-02 — 240 delta regolari nella modalità di serie raggiungono il DOM entro il limite dichiarato, senza arretrato che cresce', async ({ page }) => {
+  /*
+   * ⛔ 22/10/2026 — la modalità di serie della shell Desktop NON è più forzata a `none` (`src/main.js`): vale la preferenza
+   *   delle Impostazioni (di serie «Dissolvenza», col ritmo). Il contratto è quello di SMOOTH-03: niente oltre 260 ms + due
+   *   fotogrammi dall'ultimo delta (prima: «entro due fotogrammi», che proibiva qualunque buffer di rivelazione).
+   */
   await page.addInitScript(() => {
     try { localStorage.setItem('talos.harness.desktop.intro.v1', JSON.stringify({ esito: 'saltata' })); } catch { /* niente storage */ }
   });
@@ -378,12 +411,15 @@ test('STREAMING-LIVE-SMOOTH-02 — 240 delta regolari raggiungono il DOM entro d
     let t4 = null;
     const testoVisibile = () => conversazione.querySelector('.assistant-copy')?.textContent || '';
     if (testoVisibile() === atteso) t4 = performance.now();
-
-    while (t4 === null && frameDopoUltimoDelta < 40) {
+    const intervalli = [];
+    let ultimo = performance.now();
+    while (t4 === null && performance.now() - ultimoT3 < 1500) {
       await new Promise((resolve) => requestAnimationFrame(() => {
         frameDopoUltimoDelta += 1;
         resolve();
       }));
+      intervalli.push(performance.now() - ultimo);
+      ultimo = performance.now();
       if (testoVisibile() === atteso) t4 = performance.now();
     }
 
@@ -393,7 +429,9 @@ test('STREAMING-LIVE-SMOOTH-02 — 240 delta regolari raggiungono il DOM entro d
     return {
       atteso,
       visibile: testoVisibile(),
+      modalita: document.documentElement.dataset.talosStreamingAnimation,
       frameDopoUltimoDelta,
+      fotogramma: intervalli.length ? [...intervalli].sort((a, b) => a - b)[intervalli.length >> 1] : 16.7,
       ultimoT3,
       t4,
       lagFinaleMs: t4 === null || ultimoT3 === null ? null : t4 - ultimoT3,
@@ -406,7 +444,7 @@ test('STREAMING-LIVE-SMOOTH-02 — 240 delta regolari raggiungono il DOM entro d
   expect(risultato.deltaRicevuti).toBe(240);
   expect(risultato.visibile).toBe(risultato.atteso);
   expect(risultato.t4).not.toBeNull();
-  expect(risultato.frameDopoUltimoDelta, `T3→T4 = ${risultato.lagFinaleMs} ms; ultimo render: ${JSON.stringify(risultato.ultimoRender)}`).toBeLessThanOrEqual(2);
+  expect(risultato.lagFinaleMs, `${risultato.modalita}: T3→T4 = ${risultato.lagFinaleMs} ms (${risultato.frameDopoUltimoDelta} fotogrammi); ultimo render: ${JSON.stringify(risultato.ultimoRender)}`).toBeLessThanOrEqual(260 + 2 * risultato.fotogramma + 8);
 });
 
 /*

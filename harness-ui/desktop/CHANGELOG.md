@@ -4,6 +4,95 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
 [SemVer](https://semver.org/): in 0.y.z anything may still change. The version lives in
 `package.json` and in the `desktop-vX.Y.Z` tag.
 
+## desktop-v0.1.37 — 2026-10-25
+
+### Added
+
+- **Send a file from the PC to a device.** A file in the conversation has «Send to <device>» in its «⋯» menu and on right-click,
+  and the model can do the same with a card you confirm (no card in Full access). The file card then says whether it was sent,
+  is downloading, was downloaded, or changed on the PC before the download; a device that is offline gets the file when it
+  connects again. Files up to 25 MB. A file the device already downloaded and that then changed stays «Downloaded», with «Send
+  the new version» in its menu. When a send fails, the row says why in plain words; the technical text is under «Technical
+  details».
+- **Devices can work in folders of this PC.** A device asks once for a folder; you allow it from a card, and you can revoke it
+  in Settings › Connected devices or from the chat. The model can list, allow and revoke folders too, always behind a card.
+- **Turn remote control on or off from the chat.** Ask TALOS, or use the card it shows; the pairing QR can be shown in the chat.
+- **The permission card from a device appears at once.** The PC learns of a new request the moment it is made, instead of
+  checking every few seconds. After «Allow», a short line confirms it for a few seconds, with «Manage» or «Open», and stays
+  above the next card when more requests are waiting.
+- **Retry and Edit and resend keep both answers.** They start a branch instead of cutting the conversation: arrows on the point
+  where the branches split let you go back and forth, and the branch tree shows them all.
+- **A reasoning pill in the composer.** It shows the level chosen for the model («Auto» when none) and changes it in one click.
+- **Artifacts have versions.** The model updates the same artifact instead of making a new one, and each card says which
+  version it shows («v2 of 3»).
+- **Recent conversations that ended with an error say «To resume»**, not «failed»: the last turn does not judge the whole chat.
+- **A device can attach files and images to a conversation on this PC.** From the paired phone or tablet, a file goes into the
+  conversation's folder, in pieces, and an image goes to the model as the window sends it, even before the conversation starts.
+  A transfer pauses when the connection drops and resumes where it stopped, also after the PC restarts; a reply lost on the way
+  never makes a second copy; a draft removed on the device stops its upload and frees its place on the PC at once; and when the
+  PC is busy with other transfers from the same device, the device waits for a free place instead of failing.
+
+### Changed
+
+- **When the model says the conversation is too long, TALOS shortens it by what the model asked, and pays only when that helps.**
+  It reads how many tokens the provider counted and its limit when the error says so, and aims for that. It first shortens what
+  costs nothing (long tool output, old long messages, old images); it pays for a summary only if a summary can bring the
+  conversation under the limit, at most once per turn; otherwise it shortens without a summary. It tries up to three times, each
+  time lighter, never sends the same request twice, and never uses a summary that came back longer. If your newest message is
+  what does not fit, it says so and offers to send it as an attachment, without paying for anything. When the model's numbers
+  show that even the shortest version cannot fit, it stops at the first refusal and says the model's window is too small,
+  instead of replacing the conversation with an index and sending it again to be refused. The provider's numbers now reach
+  this step for every provider (before, the connection layer dropped them and TALOS fell back to fixed percentages). It says
+  the window is too small only when even a summary written without the model cannot fit, and a summary paid in a turn that
+  then fails is kept, so the next turn does not pay for it again. Your message is judged against the model's real window with
+  room for the answer, and the numbers are said as the model counts them; code or data the model counts heavier in older
+  messages no longer makes a message that fits look too large. When the model states its window while refusing, TALOS remembers
+  it for the rest of the session: the next requests are sized to it, and «Send as attachment» goes at once instead of sending
+  the refused message again. It remembers that window for each model, and never one smaller than a request the same model has
+  already accepted in the session, so a single odd refusal no longer shrinks the session for good. Code or data that the model
+  counts heavier in older messages (base64, for example) no longer makes TALOS say the window is too small when shortening those
+  messages makes the request fit; when TALOS cannot be sure, the model decides, and once the model has refused the very request
+  TALOS would send again, TALOS says the window is too small with the model's own numbers. All of this now works with the
+  context engine too (windows of 64k and more): before, a refusal there ended the turn without shortening, numbers or memory.
+  When the context engine falls back to the simple compaction turn after turn for the same reason, TALOS says so once, not every
+  turn, until the engine works again. When a pasted message is what does not fit, TALOS now says so (with «Send as attachment»)
+  even when the model counts some fixed part of every request that TALOS cannot see, instead of blaming the model's window; the
+  message's numbers now add up, room for the answer included; and a free shortening done in a turn that then fails is undone,
+  so «Nothing was summarized» stays true. With the context engine a message that was too large costs nothing on the next turn
+  either: it no longer makes the engine set its archive aside and pay its summaries again, and the model and the engine see a
+  short note in its place. A message sent as an attachment, or shortened once because it was too long, stays short in the
+  following turns instead of coming back whole. When the model has said its window while refusing, the context engine no longer
+  sends a too-long request on every turn.
+- **A refused request no longer changes your conversation.** When the model refused a request as too long and TALOS shortened it
+  to try again, the shortened copy could take the place of the real conversation in the session. Now only the request is
+  shortened, and the conversation is kept whole.
+- **TALOS stops paying for summaries that do not help.** If, after a summary, the conversation is still over the limit twice in a
+  row, or three summaries were paid within three turns, automatic summaries pause and TALOS says so once; the free shortening
+  steps go on. After the first case they come back on their own when the conversation has grown enough for a summary to remove
+  more; after three summaries in three turns only when you change model or window, or ask for one with /compact, because a
+  conversation that keeps repeating itself grows by just enough every turn. The pause survives a restart. It is said once per
+  pause even when a summary prepared at the end of the previous turn arrives while you are working, and a new pause after one
+  has lifted is said again. Shortening only old tool output at the end of a turn no longer reads as a summary. Every paid summary
+  counts, even two in the same turn; the pause is said after the summary that caused it, and nothing is paid right after it; a
+  summary that turned out useless in a turn is not paid again, identical, at its end. While summaries are paused, a conversation
+  that is certainly over the model's window is shortened without the model before it is sent, instead of waiting to be refused.
+- **A message is called too long only when it certainly is.** TALOS stops a new message before sending only when, with the system
+  prompt and tools, it is over the model's window; between nine tenths and the full window it goes, and the model decides.
+  «Send as attachment» is offered only when the attached form fits, and no copy is left behind when it does not. Chinese,
+  Japanese and Korean text is counted at about one token per character, so a long message in those languages no longer reaches
+  the model just to be refused. Shortening only old tool output no longer counts as a summary.
+- **TALOS learns how your model counts and how long its summaries are.** It compares the model's own token count with its
+  estimate, and remembers the size of the summaries it actually received in the session; it uses both to decide whether a
+  summary is worth paying, instead of fixed guesses.
+
+### Fixed
+
+- **Model names are short everywhere.** «Resume work» on the Home showed the raw model id (for example «chatgpt:gpt-6-luna» or a
+  local file's whole tag) while the sidebar showed its short name; now both show the same. Local model names are cleaner too: a
+  0.6B model no longer reads as 6B, the quantisation no longer ends up inside the name, and an empty tag shows nothing.
+- **Sending a file to a device: the outcome keeps the file's true path** (names with special characters, very long paths), so the
+  file card can find it again.
+
 ## desktop-v0.1.36 — 2026-10-22
 
 ### Added

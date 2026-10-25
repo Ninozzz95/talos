@@ -417,7 +417,14 @@ dialog.sheet-dialog :host(.talos-embedded-wide-short) .mobile-nav button.active,
 .workspace-chooser-shortcut small{ margin-top: 2px; color: var(--muted); font-size: calc(8px * var(--talos-ui-font-scale)); }
 .workspace-chooser-columns{ min-height: 0; display: grid; grid-template-columns: minmax(0, 1.22fr) minmax(360px, .78fr); }
 .workspace-chooser-browser,.workspace-chooser-settings{ min-width: 0; min-height: 0; padding: 18px; }
-.workspace-chooser-browser{ display: grid; grid-template-rows: auto auto auto auto minmax(0, 1fr) auto; gap: 10px; border-right: 1px solid var(--line); overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+/* ⛔ 23/10/2026 (misurato a 1920×1080): era una griglia a sei righe fisse, e il modulo «nuova cartella» nascosto (`display:none`)
+   esce dalla griglia: l'albero scivolava nella quarta riga (alta quanto il suo minimo, 230 px) e la riga elastica toccava a
+   «Selected folder», gonfiata a 307 px di vuoto. In colonna flessibile un figlio nascosto non sposta nessuno: cresce l'albero. */
+.workspace-chooser-browser{ display: flex; flex-direction: column; gap: 10px; border-right: 1px solid var(--line); overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.workspace-chooser-browser > *{ flex: none; }
+/* ⛔ 24/10 (revisione avversaria F1-1): `1 0 auto` faceva l'albero alto quanto TUTTE le cartelle (80 cartelle = 3252 px) e scorreva
+   la colonna intera; con base 0 l'albero prende lo spazio libero e scorre dentro di sé (resta il minimo di 230 px della sua regola). */
+.workspace-chooser-browser > .workspace-chooser-tree-frame{ flex: 1 1 0; }
 .workspace-chooser-settings{ overflow-y: auto; overscroll-behavior: contain; padding: 18px 20px 22px; scrollbar-gutter: stable; }
 .workspace-chooser-section-head h3{ margin: 5px 0 4px; color: var(--text); font-size: calc(16px * var(--talos-ui-font-scale)); font-weight: 680; }
 .workspace-chooser-section-head p{ margin: 0; color: var(--muted); font-size: calc(10px * var(--talos-ui-font-scale)); line-height: 1.45; }

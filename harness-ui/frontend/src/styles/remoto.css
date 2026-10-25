@@ -97,19 +97,88 @@
 
 /* «dal telefono “Pad di Nino”» nella testata del messaggio della persona, nel colore d'accento come nel mockup */
 .talos-message__origine { color: var(--talos-accent-text); }
-.talos-message__origine::before { content: "· "; color: var(--talos-muted); }
+/* ⛔ 24/10/2026 notte (punto 4 della revisione a blocco 5, «Free task ·from the device»): misurato sul DOM, lo spazio dopo il punto
+   NON si perdeva — c'era, ma era lo spazio del carattere proporzionale (2,8 px), mentre prima del punto c'è il `gap` della testata flex
+   (`.talos-message__head`, `gap: 9px` in `index.css:635`, che vince su `--talos-space-inline` di primitives.css): il punto si staccava da «Free task» e si attaccava a «from». Ora il punto ha dopo di
+   sé lo STESSO spazio che ha prima, con un margine invece di uno spazio nel testo (prova ORIGINE-1). */
+.talos-message__origine::before { content: "·"; margin-inline-end: 9px; color: var(--talos-muted); }
 
 /* La pillola del telefono collegato nel piede del compositore, accanto alle altre (mockup v5, «Dopo, nell'uso») */
 .talos-composer__bar .talos-remoto-pillola { flex: none; gap: 6px; white-space: nowrap; }
 .talos-composer__bar .talos-remoto-pillola .talos-dot { width: 6px; height: 6px; }
+
+/* Owner 24/10/2026 notte: la riga di conferma dopo «Consenti», al posto della carta sospesa sotto l'icona (stesso posto, stessa larghezza;
+   se ne va da sola dopo 4-5 s). I colori e il raggio sono quelli della carta (`talos-approval`), il segno di spunta nel colore del successo. */
+.talos-remoto-conferma--sospesa { position: fixed; z-index: var(--talos-z-menu); margin: 0; box-shadow: var(--talos-shadow-floating); }
+.talos-remoto-conferma {
+  display: flex; align-items: center; gap: var(--talos-space-sm);
+  padding: var(--talos-space-sm) var(--talos-space-md);
+  color: var(--talos-text); overflow: visible;
+}
+.talos-remoto-conferma__testo { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.talos-remoto-conferma__testo .i { color: var(--talos-success); flex: none; }
+.talos-remoto-conferma .talos-button { flex: none; }
+/* «Gestisci» porta qui: la riga del dispositivo si accende un momento */
+.talos-remoto-riga--evidenziata { outline: 2px solid var(--talos-accent); outline-offset: 2px; border-radius: var(--talos-radius-control); }
+@media (prefers-reduced-motion: no-preference) {
+  .talos-remoto-conferma--sospesa { animation: talos-remoto-conferma-entra 160ms ease-out; }
+  @keyframes talos-remoto-conferma-entra { from { opacity: 0; transform: translateY(-4px); } }
+}
 
 /* R5.12 (18/10/2026, mockup approvato) — i blocchi dei telefoni in chat: i pulsanti restano larghi quanto il loro testo, a sinistra
    (nel blocco a griglia si sarebbero stirati su tutta la riga, visto nelle foto della prova TEL-UI) */
 .talos-telefoni-chat { display: grid; gap: var(--talos-space-sm); }
 .talos-telefoni-chat .talos-telefoni-chat__azione { justify-self: start; align-self: flex-start; width: auto; }
 .talos-remoto-elenco.talos-telefoni-chat { margin: 0; }
+/* R5.14 (bozzetti 3 e 5 approvati il 23/10): la domanda del ponte in grassetto, attaccata alle sue due righe; nella conferma in chat
+   la scheda del dispositivo sta al centro, come nella finestra */
+.talos-telefoni-chat .talos-telefoni-chat__domanda { margin: var(--talos-space-sm) 0 0; font-weight: 600; }
+.talos-telefoni-chat .talos-remoto-scelte { margin: 0; }
+.talos-telefoni-chat__conferma .talos-remoto-telefono { align-self: center; }
+/* Revisione a blocco 3 (24/10/2026, foto contro il bozzetto 3 approvato): nella carta «accendi» il perché si chiude con la riga
+   divisoria da bordo a bordo, la domanda del ponte ha il corpo piccolo del bozzetto e sta subito sotto, la riga «Si cambia quando
+   vuoi…» è piccola e attenuata; «Non ora» è neutro (nel bozzetto non era rosso: dire di no a una carta del remoto non distrugge niente). */
+.talos-telefoni-chat[data-telefoni-accendi] > .td-prose:first-child {
+  margin: 0 calc(-1 * var(--talos-approval-gutter, 14px)); padding: 0 var(--talos-approval-gutter, 14px) var(--talos-space-sm);
+  border-bottom: 1px solid var(--talos-border);
+}
+.talos-telefoni-chat[data-telefoni-accendi] .talos-telefoni-chat__domanda { margin: 0; font-size: var(--talos-font-size-sm); }
+.talos-telefoni-chat[data-telefoni-accendi] > .td-subtle { margin: 0; font-size: 0.8125rem; }
+.talos-approval:has([data-telefoni-accendi]) .talos-approval__foot .talos-button--danger,
+[data-telefoni-accendi-persona] [data-nega] { color: var(--talos-text); }
+/* …e nella conferma delle 6 cifre «Rifiuta» resta rosso ma col bordo del bozzetto 5 */
+.talos-approval:has(.talos-telefoni-chat__conferma) .talos-approval__foot .talos-button--danger { border: 1px solid var(--talos-border-strong, var(--talos-border)); }
 
 /* 19/10/2026, foto del 4174 dopo la fusione: con l'icona del telefono la testata della barra laterale porta TRE pulsanti e l'ultimo
    sbordava di 5 px (280 su 276, misurato sul DOM a 1920, 1440 e 1024). Lo spazio fra i pezzi passa da 10 a 5 px solo in quel caso (i pulsanti finiscono a 260, dentro il margine di 14):
    20 px recuperati, nessun pulsante più piccolo; la barra a sole icone tiene i suoi 8 px (regola più specifica). */
 .talos-brand:has(.talos-remoto-icona) { gap: 5px; }
+
+/* R5.12 (owner 23/10/2026, bozzetto approvato, scena 7) — la carta del consenso, sospesa sotto l'icona «Dispositivi collegati».
+   È la carta d'approvazione della chat (`talos-approval`): qui solo la posizione e due misure del bozzetto (il perché a 14 px, la
+   riga della cartella con l'icona accanto al nome). */
+.talos-remoto-consenso--sospesa { position: fixed; z-index: var(--talos-z-menu); margin: 0; box-shadow: var(--talos-shadow-floating); }
+/* «Allow» in armamento (revisione 24/10, F1-2): visibile ma inerte finché la carta non è a schermo da un attimo */
+.talos-remoto-consenso [data-remoto-consenti][data-in-armamento] { opacity: .55; cursor: default; }
+.talos-remoto-consenso [data-remoto-consenti] { transition: opacity var(--talos-motion-fast, 120ms) ease; }
+.talos-remoto-consenso--sospesa:focus-visible { outline: var(--talos-focus-width) solid var(--talos-accent); outline-offset: 2px; }
+.talos-remoto-consenso .talos-approval__why { font-size: var(--talos-font-size-sm); }
+.talos-remoto-consenso .talos-remoto-riga { grid-template-columns: minmax(0, 1fr) auto; }
+.talos-remoto-consenso .talos-remoto-riga__nome { display: inline-flex; align-items: center; gap: 6px; }
+.talos-remoto-consenso .talos-remoto-riga__dettaglio { overflow-wrap: anywhere; }
+.talos-remoto-consenso .talos-remoto__errore { padding-top: var(--talos-space-xs); }
+
+/* Scena 8 — Impostazioni › Cartelle consentite, sotto il suo dispositivo e rientrate di 16 px; «Aggiungi cartella» largo quanto
+   il suo testo, a sinistra (in una griglia si stirerebbe su tutta la riga, come i pulsanti dei blocchi in chat del 19/10). */
+.talos-remoto-cartelle { display: grid; gap: var(--talos-space-sm); margin: 4px 0 6px 16px; }
+.talos-remoto-cartella { grid-template-columns: minmax(0, 1fr) auto; }
+.talos-remoto-cartella .talos-remoto-riga__dettaglio { overflow-wrap: anywhere; }
+.talos-remoto-cartelle > [data-remoto-aggiungi-cartella] { justify-self: start; width: auto; gap: 6px; }
+
+/* R5.12 (scena 8): «Aggiungi cartella» apre la finestra della nuova sessione in modalità «scegli» — una colonna sola (l'albero),
+   più stretta: modello e permessi non c'entrano con una cartella data a un dispositivo */
+.sheet-dialog.sheet-dialog--new-session.sheet-dialog--scelta-cartella{width:min(760px, calc(100vw - 24px))}
+.workspace-chooser-columns.workspace-chooser-columns--sola{grid-template-columns:minmax(0, 1fr)}
+.workspace-chooser-columns--sola .workspace-chooser-browser{border-right:0}
+/* un rifiuto del server accanto a «Allow this folder» è un errore, non un aiuto: lo stesso rosso degli errori del remoto */
+.workspace-chooser-help[data-errore]{color:var(--talos-danger)}

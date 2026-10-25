@@ -56,7 +56,8 @@ for (const count of [14, 200, 5000]) {
         contentType: 'application/json',
       });
 
-      for (const [route, label] of [['chat', 'Chat'], ['terminale', 'Terminale'], ['review', 'Review'], ['browser', 'Browser']]) {
+      // owner 24/10/2026 notte: in italiano la scheda è «Revisione» (punto 4 della revisione a blocco 5)
+      for (const [route, label] of [['chat', 'Chat'], ['terminale', 'Terminale'], ['review', 'Revisione'], ['browser', 'Browser']]) {
         const tab = page.locator(`#schermoChat .talos-topbar [data-vaia="${route}"]`);
         await expect(tab).toBeVisible();
         await expect(tab).toContainText(label);

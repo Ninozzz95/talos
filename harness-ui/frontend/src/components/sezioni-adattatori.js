@@ -1020,22 +1020,121 @@ export function aggiornaPaginaLibreria(schermo, voci, opzioni = {}) {
    * ⛔ Il suo menu «⋯» porta solo «Copia il testo»: le azioni sul file stanno nella riga qui sotto, e due menu con le
    *   stesse voci nello stesso pannello sono una scelta in più senza una cosa in più.
    */
-  function lettoreDellaVoce(v, doc) {
+  function lettoreDellaVoce(v, doc, versione = null) {
     const iniezione = opzioni.lettore;
     if (!iniezione || typeof iniezione.crea !== 'function' || !sessionId || !v?.id) return null;
     // la sessione nella chiave: la Libreria è per progetto, e due progetti possono avere una voce con lo stesso id e nome
-    const chiave = `${sessionId}|${v.id}|${testiVoceLibreria(v).nome}|${v?.aggiornatoIl ?? ''}`;
+    const chiave = `${sessionId}|${v.id}|${testiVoceLibreria(v).nome}|${v?.aggiornatoIl ?? ''}|${versione ?? ''}|${magazzinoFile.revisioni?.get(v.id) ?? 0}`;
     const tenuto = magazzinoFile.lettore;
     if (tenuto?.chiave === chiave) return tenuto.istanza;
     tenuto?.istanza?.distruggi?.();
     const istanza = iniezione.crea({
       doc,
-      fonte: fonteDaLibreria({ sessionId, voce: v, nome: testiVoceLibreria(v).nome }),
+      fonte: fonteDaLibreria({ sessionId, voce: v, nome: testiVoceLibreria(v).nome, ...(versione ? { versione } : {}) }),
       apriFuori: servizioVero?.apri ? () => { void apriConSistema(v); } : undefined,
     });
     istanza?.elemento?.classList?.add('td-lettore-libreria');
     magazzinoFile.lettore = istanza ? { chiave, istanza } : null;
     return istanza;
+  }
+  /*
+   * ⭐ 24/10/2026 — LE VERSIONI DI UN ARTEFATTO nel dettaglio (owner: «vedere e ripristinare», «si tengono tutte»; bozzetto
+   *   approvato). Solo per gli artefatti (HTML generati) con più di una versione: per tutto il resto il dettaglio resta
+   *   com'era («semplice a primo sguardo»). L'elenco si legge una volta per voce e data (`aggiornatoIl`: una versione nuova la
+   *   cambia); la versione che si sta guardando vive nel magazzino dello schermo, così un ridisegno non la perde.
+   * ⛔ «Ripristina» non riscrive la storia: il server aggiunge una versione nuova col contenuto scelto.
+   */
+  const versioniDi = (magazzinoFile.versioni ??= new Map());
+  const versioneVista = (magazzinoFile.versioneVista ??= new Map());
+  /* ⛔ Dopo un ripristino l'elenco NON si ricarica (`onCambiata` lo svuota e lo rilegge, e il dettaglio aperto restava quello di
+     prima: misurato il 24/10 con la prova ARTEFATTI-VERSIONI-02). Una revisione per voce, dentro le chiavi delle versioni e del
+     lettore, basta a rileggere ciò che è cambiato: l'elenco delle versioni e il contenuto, che ora è la versione ripristinata. */
+  const revisioni = (magazzinoFile.revisioni ??= new Map());
+  /* l'elemento dell'elenco non porta `mediaType` (solo `fileType`, e un HTML è un «document»): la pagina si riconosce dal nome */
+  const eArtefatto = (v) => v?.origine === 'generated' && (/\.html?$/iu.test(testiVoceLibreria(v).nome) || /^text\/html\b/u.test(v?.mediaType ?? '')) && Boolean(sessionId);
+  const chiaveVersioni = (v) => `${v.id}|${v?.aggiornatoIl ?? ''}|${revisioni.get(v.id) ?? 0}`;
+  const indirizzoVersioni = (v) => `/api/v1/sessions/${encodeURIComponent(sessionId)}/library/${encodeURIComponent(v.id)}/versions`;
+  function caricaVersioni(v) {
+    const chiave = chiaveVersioni(v);
+    if (versioniDi.has(chiave)) return;
+    versioniDi.set(chiave, { caricamento: true });
+    void (async () => {
+      try {
+        const r = await globalThis.fetch(indirizzoVersioni(v), { credentials: 'same-origin' });
+        const corpo = await r.json().catch(() => null);
+        if (!r.ok) throw new Error(corpo?.error?.message || `HTTP ${r.status}`);
+        versioniDi.set(chiave, { versioni: Array.isArray(corpo?.data?.versioni) ? corpo.data.versioni : [] });
+      } catch (errore) {
+        versioniDi.set(chiave, { errore: errore instanceof Error ? errore.message : String(errore) });
+      }
+      ridisegna();
+    })();
+  }
+  /* revisione a blocco 3 (24/10/2026, S4): «Today 10:42», «Yesterday 16:20» come il bozzetto approvato (prima la data intera, e la
+     banda andava su tre righe); più indietro, giorno e mese (l'anno solo se è un altro). `inFrase` per la banda «Stai guardando…» */
+  const quandoVersione = (iso, { inFrase = false, adesso = new Date() } = {}) => {
+    const d = new Date(iso ?? '');
+    if (!Number.isFinite(d.getTime())) return '';
+    const lingua = linguaCorrenteDiT();
+    const time = new Intl.DateTimeFormat(lingua, { hour: '2-digit', minute: '2-digit' }).format(d);
+    const ieri = new Date(adesso); ieri.setDate(ieri.getDate() - 1);
+    if (d.toDateString() === adesso.toDateString()) return traduci(inFrase ? 'sezioni.library.versions.todayInline' : 'sezioni.library.versions.today', { time });
+    if (d.toDateString() === ieri.toDateString()) return traduci(inFrase ? 'sezioni.library.versions.yesterdayInline' : 'sezioni.library.versions.yesterday', { time });
+    const date = new Intl.DateTimeFormat(lingua, { day: 'numeric', month: 'short', ...(d.getFullYear() === adesso.getFullYear() ? {} : { year: 'numeric' }), hour: '2-digit', minute: '2-digit' }).format(d);
+    return inFrase ? traduci('sezioni.library.versions.dateInline', { date }) : date;
+  };
+  function sezioneVersioni(v, doc, versioni) {
+    const vista = versioneVista.get(v.id) ?? null;
+    const ultima = versioni[versioni.length - 1]?.n;
+    const sezione = nodo(doc, 'section', 'td-lib-versioni');
+    sezione.setAttribute('aria-label', traduci('sezioni.library.versions.title'));
+    sezione.append(nodo(doc, 'h4', '', traduci('sezioni.library.versions.title')));
+    for (const ver of [...versioni].reverse()) {
+      const riga = nodo(doc, 'button', 'td-lib-versione');
+      riga.type = 'button';
+      riga.dataset.versione = String(ver.n);
+      if ((vista ?? ultima) === ver.n) riga.setAttribute('aria-current', 'true');
+      const sotto = ver.ripristinoDi ? traduci('sezioni.library.versions.restoredFrom', { n: ver.ripristinoDi })
+        : ver.sessionNome ? traduci('sezioni.library.versions.fromChat', { chat: ver.sessionNome }) : '';
+      const quando = [quandoVersione(ver.creataIl), ver.modello ? String(ver.modello).split('/').pop() : ''].filter(Boolean).join(' · ');
+      const testo = nodo(doc, 'span', '', quando);
+      if (sotto) testo.append(nodo(doc, 'small', '', sotto));
+      riga.append(nodo(doc, 'b', '', `v${ver.n}`), testo, ver.n === ultima ? nodo(doc, 'span', 'td-lib-versione-ultima', traduci('sezioni.library.versions.latest')) : nodo(doc, 'span', ''));
+      riga.addEventListener('click', () => {
+        if (ver.n === ultima) versioneVista.delete(v.id); else versioneVista.set(v.id, ver.n);
+        ridisegna();
+      });
+      sezione.append(riga);
+    }
+    return sezione;
+  }
+  function bandaVersione(v, doc, ver) {
+    const banda = nodo(doc, 'div', 'td-lib-banda');
+    banda.setAttribute('role', 'status');
+    banda.append(nodo(doc, 'span', 'talos-grow', traduci('sezioni.library.versions.looking', { n: ver.n, when: quandoVersione(ver.creataIl, { inFrase: true }) })));
+    const ripristina = nodo(doc, 'button', 'talos-button talos-button--primary talos-button--sm', traduci('sezioni.library.versions.restore'));
+    ripristina.type = 'button';
+    ripristina.dataset.azione = 'ripristina-versione';
+    ripristina.addEventListener('click', async () => {
+      ripristina.disabled = true;
+      try {
+        const r = await globalThis.fetch(`${indirizzoVersioni(v)}/${ver.n}/restore`, { method: 'POST', credentials: 'same-origin' });
+        const corpo = await r.json().catch(() => null);
+        if (!r.ok) throw new Error(corpo?.error?.message || `HTTP ${r.status}`);
+        versioneVista.delete(v.id);
+        revisioni.set(v.id, (revisioni.get(v.id) ?? 0) + 1);
+        dimenticaAnteprime(sessionId); // l'anteprima della card è quella della versione di prima
+        ridisegna();
+      } catch (errore) {
+        ripristina.disabled = false;
+        avvisa(traduci('sezioni.library.versions.restore'), traduci('sezioni.library.versions.restoreFailed', { message: errore instanceof Error ? errore.message : String(errore) }), { tono: 'errore' });
+      }
+    });
+    const torna = nodo(doc, 'button', 'talos-button talos-button--ghost talos-button--sm', traduci('sezioni.library.versions.backToLatest'));
+    torna.type = 'button';
+    torna.addEventListener('click', () => { versioneVista.delete(v.id); ridisegna(); });
+    banda.append(ripristina, torna);
+    return banda;
   }
   /*
    * ATLAS F3 (27/09/2026) — i «⋯» della card, e il tasto destro sulla card, aprono il menu della riga VERA che il
@@ -1160,12 +1259,25 @@ export function aggiornaPaginaLibreria(schermo, voci, opzioni = {}) {
       sinistra.append(nodo(doc, 'span', 'td-lib-simbolo', presentazioneFileLibreria(t.nome, v?.mediaType).estensione), nodo(doc, 'strong', '', t.nome));
       testata.append(sinistra, etichetta(origineVoceLibreria(v?.origine), v?.origine === 'generated' ? 'accent' : ''));
       const pezzi = [testata];
+      /* 24/10/2026: le versioni di un artefatto, sotto la testata (bozzetto approvato) */
+      let versioneGuardata = null;
+      if (eArtefatto(v)) {
+        const stato = versioniDi.get(chiaveVersioni(v));
+        if (!stato) caricaVersioni(v);
+        else if (stato.errore) pezzi.push(nodo(doc, 'p', 'td-subtle', traduci('sezioni.library.versions.loadFailed', { message: stato.errore })));
+        else if (stato.versioni?.length > 1) {
+          pezzi.push(sezioneVersioni(v, doc, stato.versioni));
+          const n = versioneVista.get(v.id);
+          const ver = n ? stato.versioni.find((x) => x.n === n) : null;
+          if (ver) { versioneGuardata = ver.n; pezzi.push(bandaVersione(v, doc, ver)); }
+        }
+      }
       /*
        * ⛔ IL CONTENUTO STA SOPRA LE AZIONI. Una persona apre un file per LEGGERLO: le cinque cose
        *   che gli si possono fare vengono dopo aver visto che cos'è. (Nel mockup le azioni stanno
        *   addirittura nel piede del pannello, sotto tutto — riga 6083.)
        */
-      const lettore = lettoreDellaVoce(v, doc);
+      const lettore = lettoreDellaVoce(v, doc, versioneGuardata);
       if (lettore) {
         // ATLAS F3: il contenuto è il corpo (`.doc-body`), senza titoletto — l'Atlas non ne ha uno.
         pezzi.push(lettore.elemento);

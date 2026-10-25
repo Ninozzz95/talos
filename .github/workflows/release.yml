@@ -18,10 +18,6 @@
 #     TALOS_KEY_ALIAS         il nome della chiave dentro
 #     TALOS_KEY_PASSWORD      la password della chiave
 #
-# E la chiave dell'**aggiornamento automatico** (22/10/2026, separata da quella del desktop):
-#
-#     TALOS_MOBILE_UPDATE_SIGN_KEY  Ed25519, PEM PKCS#8: firma `latest-android.yml` e `note-android.json`
-#
 # ⛔ Se mancano, il workflow **si ferma subito e lo dice**. Non produce un APK
 # non firmato: un artefatto non firmato dentro una release ha l'aria di essere
 # installabile, e non lo è — o peggio, lo è una volta sola e poi blocca ogni
@@ -401,18 +397,6 @@ jobs:
           node scripts/r4-mobile/verifica-r4-nell-apk.mjs \
             "$GITHUB_WORKSPACE/${{ steps.apk.outputs.nome }}" "$GITHUB_SHA"
 
-      # ⛔ L'aggiornamento automatico: il manifesto `latest-android.yml` (forma `latest.yml` di electron-builder, come il desktop)
-      # e le novità in due lingue `note-android.json`, firmati Ed25519. Lo script si ferma se il segreto manca, se non è il
-      # gemello della chiave pubblica dentro l'app, o se mancano le note in `note-di-rilascio/<versione>.json`: senza questi
-      # file le app installate non vedrebbero mai questa versione.
-      - name: ⛔ manifesto firmato dell'aggiornamento automatico
-        working-directory: ${{ steps.dove.outputs.dir }}
-        env:
-          TALOS_MOBILE_UPDATE_SIGN_KEY: ${{ secrets.TALOS_MOBILE_UPDATE_SIGN_KEY }}
-        run: |
-          node scripts/aggiornamento/manifesto-android.mjs \
-            "$GITHUB_WORKSPACE/${{ steps.apk.outputs.nome }}" "${{ steps.versione.outputs.nome }}" "$GITHUB_WORKSPACE"
-
       # La provenienza SLSA: lega l'artefatto al workflow, al commit e al
       # repository, con un certificato effimero su un registro di trasparenza.
       # La provenienza SLSA: lega l'artefatto al workflow, al commit e al
@@ -436,12 +420,7 @@ jobs:
 
       - uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3
         with:
-          files: |
-            ${{ steps.apk.outputs.nome }}
-            latest-android.yml
-            latest-android.yml.sig
-            note-android.json
-            note-android.json.sig
+          files: ${{ steps.apk.outputs.nome }}
           generate_release_notes: true
           # ⛔ La riga che fa la differenza fra una firma e un ornamento: il
           # comando per verificarla sta NELLA release, non in una pagina di

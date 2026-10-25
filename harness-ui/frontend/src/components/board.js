@@ -23,8 +23,9 @@ const MOTIVI = {'fine-lavoro':()=>traduci('sezioni.board.closeReason.workDone'),
  *   sorgente, e un ripiego dichiarato tiene in piedi la pagina se domani ne nasce un'altra: la riga dice
  *   che non la conosce, la pagina resta. Il test `board-stati-completi` prova il verso contrario.
  */
-const STATO = {vivo:[()=>traduci('sezioni.board.state.running'),'accent'],attesa:[()=>traduci('sezioni.board.state.waiting'),'warning'],successo:[()=>traduci('sezioni.board.state.done'),'success'],errore:[()=>traduci('sezioni.board.state.error'),'danger'],fermata:[()=>traduci('sezioni.board.state.stopped'),null],interrotto:[()=>traduci('sezioni.board.state.interrupted'),null],pendente:[()=>traduci('sezioni.board.state.new'),null],ignoto:[()=>traduci('sezioni.board.state.doneUnknownOutcome'),null]};
+const STATO = {vivo:[()=>traduci('sezioni.board.state.running'),'accent'],attesa:[()=>traduci('sezioni.board.state.waiting'),'warning'],successo:[()=>traduci('sezioni.board.state.done'),'success'],errore:[()=>traduci('sezioni.board.state.error'),'warning'],fermata:[()=>traduci('sezioni.board.state.stopped'),null],interrotto:[()=>traduci('sezioni.board.state.interrupted'),null],pendente:[()=>traduci('sezioni.board.state.new'),null],ignoto:[()=>traduci('sezioni.board.state.doneUnknownOutcome'),null]};
 export const CLASSI_STATO_BOARD = Object.keys(STATO);
+/* ⛔ owner 24/10/2026: come la barra laterale dal 23/10, l'ultimo giro finito in errore non giudica la chat — «da riprendere», ambra. */
 export function statoBoard(sessione) {
   const chiave = statoSessione(sessione).classe;
   const [etichetta,tono] = STATO[chiave] ?? [()=>traduci('sezioni.board.state.unrecognized'),null];

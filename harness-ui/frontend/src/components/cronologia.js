@@ -452,17 +452,47 @@ export function collegaCronologia(nav, conversazione, { finestra = globalThis } 
 
   // la voce attiva segue lo scorrimento: l'ultimo turno passato sopra la meta' dello schermo
   const scorrevole = contenitoreCheScorre(conversazione);
+  /*
+   * ⭐⭐ 22/10/2026 — IL SEGNAVIA NON PAGA LA CONVERSAZIONE A OGNI FOTOGRAMMA. Misurato col banco dello streaming fluido
+   *   (`tests/browser/banco-streaming-fluido.spec.mjs`, 300 turni vivi, profilo CPU durante lo stream di una risposta): questo
+   *   componente era la prima voce JavaScript del profilo. Mentre il modello scrive succedono due cose a ogni fotogramma — la
+   *   colonna cambia (il testo cresce) e lo scorrevole scorre (il seguito porta giù la vista) — e per ciascuna si rifaceva
+   *   `vociDaConversazione` (una lettura di TUTTI i turni, con quattro ricerche dentro ognuno) e, sullo scorrimento, un
+   *   `getBoundingClientRect` per OGNI turno: lavoro proporzionale alla conversazione, per fotogramma.
+   * ⇒ Tre cose, nessuna cambia ciò che la barra mostra:
+   *   1. le voci si leggono UNA volta e si tengono finché la conversazione non cambia FORMA (un turno che nasce o se ne va, un
+   *      segno di giro nella spina): il testo che cresce dentro una risposta non cambia nessuna voce (l'anteprima la legge il
+   *      fumetto, fresca, quando si apre);
+   *   2. la voce sotto la metà dello schermo si trova con una ricerca BINARIA sui turni (sono in ordine verticale): O(log n)
+   *      letture invece di n;
+   *   3. se la voce attiva non è cambiata, non si riscrive niente.
+   */
+  let vociInCache = null;
+  const vociCorrenti = () => vociInCache || (vociInCache = vociDaConversazione(conversazione));
+  const FORMA = '.talos-turn, .talos-turn-spine, .talos-turn-spine__tick, .talos-turn-spine__n, .talos-message--user';
+  const cambiaForma = (lista) => lista.some((r) => {
+    if (r.type === 'attributes') return Boolean(r.target.classList?.contains('talos-turn-spine__tick'));
+    if (r.target === conversazione || r.target.closest?.('.talos-turn-spine')) return true;
+    for (const nodi of [r.addedNodes, r.removedNodes]) {
+      for (const n of nodi) if (n.nodeType === 1 && (n.matches?.(FORMA) || n.querySelector?.(FORMA))) return true;
+    }
+    return false;
+  });
   let inCoda = false;
   const seguiScorrimento = () => {
     if (inCoda) return;
     inCoda = true;
     (finestra.requestAnimationFrame || setTimeout)(() => {
       inCoda = false;
-      const voci = vociDaConversazione(conversazione);
+      const voci = vociCorrenti();
       if (!voci.length) return;
       const meta = scorrevole.getBoundingClientRect().top + scorrevole.clientHeight / 2;
       let attiva = 0;
-      voci.forEach((v, i) => { if (v.elemento.getBoundingClientRect().top <= meta) attiva = i; });
+      for (let basso = 0, alto = voci.length - 1; basso <= alto;) {
+        const mezzo = (basso + alto) >> 1;
+        if (voci[mezzo].elemento.getBoundingClientRect().top <= meta) { attiva = mezzo; basso = mezzo + 1; } else alto = mezzo - 1;
+      }
+      if (nav.dataset.attivaVera === String(attiva)) return;
       nav.dataset.attivaVera = String(attiva);
       if (fumetto.hidden && !inMano()) aggiornaCronologia(nav, conversazione, { fuoco: attiva, voci, segui: true });
     });
@@ -483,11 +513,16 @@ export function collegaCronologia(nav, conversazione, { finestra = globalThis } 
     if (aggiornamentoInCoda !== null) return;
     aggiornamentoInCoda = (finestra.requestAnimationFrame || setTimeout)(() => {
       aggiornamentoInCoda = null;
-      aggiornaCronologia(nav, conversazione, { segui: !inMano() });
+      aggiornaCronologia(nav, conversazione, { segui: !inMano(), voci: vociCorrenti() });
     });
   };
-  const osservatore = new finestra.MutationObserver(programmaAggiornamento);
-  osservatore.observe(conversazione, { childList: true, subtree: true });
+  /* 22/10/2026: solo un cambio di FORMA rifà le voci (vedi sopra); il testo che cresce dentro una risposta passa senza costo */
+  const osservatore = new finestra.MutationObserver((lista) => {
+    if (!cambiaForma(lista)) return;
+    vociInCache = null;
+    programmaAggiornamento();
+  });
+  osservatore.observe(conversazione, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
   aggiornaCronologia(nav, conversazione);
   seguiScorrimento(); // il segnavia parte dalla posizione VERA, non dalla voce 0
   return () => {

@@ -148,6 +148,12 @@ export function cartellaPagineWebDi(cartellaStore, sessionId) {
   return join(cartellaStore, 'pagine-web', sessionId);
 }
 
+/* §4.2, regola K (owner 22/10/2026): le copie intere delle richieste vecchie accorciate per il modello, una cartella per sessione
+   accanto alle pagine web, che `leggi` apre senza chiedere e che se ne va con la sessione. */
+export function cartellaIncollatiDi(cartellaStore, sessionId) {
+  return join(cartellaStore, 'incollati', sessionId);
+}
+
 /**
  * Accoda UNA riga — mai una riscrittura del file intero (la classe di
  * bug vista in ricerca, vedi la testa del file). `record` è già serializzabile (un evento AG-UI,
@@ -829,6 +835,7 @@ export async function eliminaSessionePersistita({ cartellaStore, sessionId }, de
        *   cartella a cui punta non si svuota — NAV-STORE-02 lo prova con una giunzione vera).
        */
       await rmFn(cartellaPagineWebDi(cartellaStore, sessionId), { recursive: true, force: true, maxRetries: 3 });
+      await rmFn(cartellaIncollatiDi(cartellaStore, sessionId), { recursive: true, force: true, maxRetries: 3 });
       await unlinkFn(percorso);
     } catch (errore) {
       if (errore?.code === 'ENOENT') { liberaAffittoDiUnaEliminata(cartellaStore, sessionId); return; }

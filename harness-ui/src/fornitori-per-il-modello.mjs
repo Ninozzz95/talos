@@ -29,10 +29,10 @@ export function creaOspiteFornitori({ providerStore, slugDelFornitoreFn = null, 
   function statoChatgpt() {
     if (!accessoChatgpt) return { ok: true, testo: 'A ChatGPT account cannot be connected on this computer: the system keyring is not available.' };
     const s = accessoChatgpt.stato();
-    if (!s.collegato) return { ok: true, testo: 'No ChatGPT account is connected. The person signs in from Settings, Model laboratory, Provider, OpenAI, "Continue with ChatGPT" (ChatGPT Plus or Pro). The interface can open that screen.' };
+    if (!s.collegato) return { ok: true, testo: 'No ChatGPT account is connected. The person signs in from Settings, Model Lab, Provider, OpenAI, "Continue with ChatGPT" (ChatGPT Plus or Pro). The interface can open that screen.' };
     return { ok: true, testo: s.pianoAbilitato
       ? `A ChatGPT account is connected${s.email ? ` (${s.email})` : ''} and its plan pays requests to the ChatGPT plan models. Usage: ${s.consumi}.`
-      : `A ChatGPT account is connected${s.email ? ` (${s.email})` : ''}, but plan use was not granted: the person can enable it from Settings, Model laboratory, Provider, OpenAI.` };
+      : `A ChatGPT account is connected${s.email ? ` (${s.email})` : ''}, but plan use was not granted: the person can enable it from Settings, Model Lab, Provider, OpenAI.` };
   }
 
   const leggi = () => providerStore.getRuntime('openrouter');

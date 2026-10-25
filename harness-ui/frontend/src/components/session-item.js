@@ -39,7 +39,9 @@ const TONI = Object.freeze({
   attesa: 'warning',
   vivo: 'live',
   'in-pausa': 'warning', // C3 tappa 4: ambra, come «In pausa» nell'elenco degli agenti
-  errore: 'danger',
+  /* owner 23/10/2026 sera (mobile e desktop): l'ultimo giro finito in errore non giudica la chat — «da riprendere», ambra come
+     «aspetta te», non rosso. La chat si riprende scrivendo; il guasto resta detto nel titolo della riga (`helpError`). */
+  errore: 'warning',
   successo: 'success',
   // interrotta / ignoto / pendente: pallino senza tono, come «interrotta» nel mockup.
 });
@@ -123,6 +125,7 @@ export function statoSessione(sessione) {
   else if (classe === 'attesa' && sessione.inAttesaRichiestaMcp) aiuto = tr('processi.session.helpMcp');
   else if (classe === 'fermata') aiuto = tr('processi.session.helpStopped');
   else if (classe === 'in-pausa') aiuto = tr('processi.session.helpPaused');
+  else if (classe === 'errore' && sessione.motivoChiusura !== 'giri-finiti') aiuto = tr('processi.session.helpError');
   return { classe, testo, tono: TONI[classe] ?? null, aiuto };
 }
 
@@ -151,7 +154,8 @@ export function oraCompatta(iso, adesso = new Date()) {
  */
 export function nomeModello(modello) {
   if (typeof modello !== 'string' || modello.trim() === '') return null;
-  if (/^local:/i.test(modello.trim())) return nomeModelloUmano(modello) || modello.replace(/^local:/i, '');
+  /* ⛔ Revisione a blocco 9 (nota sulla Home): il ripiego è la targa SENZA bordi, o niente — «local:   » scriveva uno span di spazi */
+  if (/^local:/i.test(modello.trim())) return nomeModelloUmano(modello) || modello.trim().replace(/^local:/i, '').trim() || null;
   return nomeModelloUmano(modello); // una regola sola: anche il prefisso `fornitore:` se ne va (11/10/2026)
 }
 
@@ -544,9 +548,12 @@ export function creaSessionItem(sessione, opzioni = {}) {
    *   significare «guarda qui» e diventa decorazione — e la riga della sessione aperta non lo porta
    *   mai, perché quella la stai già guardando.
    */
+  /* ⛔ 24/10 (revisione avversaria, REV-R3): «aperta» e «evidenziata» sono due cose. Dal 23/10 l'evidenza (`corrente`) vale solo
+     con la chat a schermo, ma la sessione aperta resta quella che hai appena lasciato: non riceve l'alone di «ha appena risposto». */
+  const aperta = opzioni.aperta ?? opzioni.corrente;
   const quando = Date.parse(sessione.ultimaRispostaAlle ?? '');
   const adessoMs = (opzioni.adesso instanceof Date ? opzioni.adesso : new Date()).getTime();
-  if (Number.isFinite(quando) && !opzioni.corrente && adessoMs - quando <= SEGNALE_NOVITA_MS) {
+  if (Number.isFinite(quando) && !aperta && adessoMs - quando <= SEGNALE_NOVITA_MS) {
     riga.dataset.novita = 'si';
   }
 

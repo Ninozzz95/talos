@@ -78,7 +78,7 @@ for (const patch of [{isComposing:true}, {key:'Process'}, {keyCode:229}, {defaul
  * Ogni strada ora passa dalla stessa funzione, e quella funzione atterra su Laboratorio modelli →
  * scheda «Provider». Questa è la metà statica; la metà viva è `tests/browser/velo-fornitori.spec.mjs`.
  */
-test('NAV-02: every provider entry point lands on Model laboratory → Provider, never on Account or the removed velo', async () => {
+test('NAV-02: every provider entry point lands on Model Lab → Provider, never on Account or the removed velo', async () => {
   const { readFile } = await import('node:fs/promises');
   const app = await readFile(new URL('../../src/legacy/app.js', import.meta.url), 'utf8');
   const corpo = /function apriProviderDelLaboratorio\(\) \{([\s\S]*?)\n  \}/.exec(app)?.[1] ?? '';

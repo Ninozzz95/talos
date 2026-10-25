@@ -174,6 +174,26 @@ export function riassuntoSenzaChiedere(permesso, permessiPerAttrezzo, { modalita
 }
 
 /*
+ * ⭐ 24/10/2026 (owner, consigliata, dopo la pillola del ragionamento) — NEL COMPOSITORE IL NOME BREVE DEL LIVELLO.
+ *   A 1920 il compositore è largo 738 px: con la pillola del ragionamento la frase di C1 («Senza chiedere: file, comandi,
+ *   documenti», 247 px) non ci stava più, e la scala riduceva il permesso allo scudo, con spazio vuoto a destra (misurato).
+ *   Ora la pillola dice il nome breve del livello, come l'indicatore di Claude Code («accept edits on», «plan mode on»: docs
+ *   «Permission modes», lette il 24/10/2026). La frase di C1, cioè che cosa passa senza chiedere, APRE il suggerimento, seguita da
+ *   tutto quello che c'era già.
+ * ⛔ Le eccezioni per attrezzo restano a schermo («Accesso pieno · 1 eccezione», `etichettaPermessoConEccezioni`): un `sempre` su
+ *   «Solo lettura» lascia passare scritture, e il nome da solo lo nasconderebbe.
+ * ⛔ Il Piano resta «Piano: solo lettura»: è breve e dice la cosa che conta.
+ * @param {{ modalitaOperativa?: string }} [opzioni]
+ * @returns {{ testo: string, suggerimento: string }}
+ */
+export function chipDelPermesso(permesso, permessiPerAttrezzo, opzioni = {}) {
+  const riassunto = riassuntoSenzaChiedere(permesso, permessiPerAttrezzo, opzioni);
+  if (opzioni.modalitaOperativa === 'piano') return { testo: riassunto.testo, suggerimento: riassunto.suggerimento };
+  const testo = etichettaPermessoConEccezioni(permesso, permessiPerAttrezzo);
+  return { testo, suggerimento: testo === riassunto.testo ? riassunto.suggerimento : `${riassunto.testo}\n${riassunto.suggerimento}` };
+}
+
+/*
  * ⛔ 06/9, owner con lo screenshot: a schermo compariva
  * `local:bartowski-nvidia_Nemotron-Cascade-2-30B-A3B-GGUF-931b595fc71b-nvidia-Nemotron-Cascade-2-30B-A3B-Q4-0-gguf`,
  * su due righe, sia nell'intestazione del messaggio sia nella pillola del composer. La decisione H22
@@ -198,16 +218,23 @@ export function nomeModelloUmano(id) {
     return senzaFonte.replace(/^~/u, '').split('/').pop();
   }
   let resto = grezzo.replace(/^local:/i, '').replace(/[-_.]gguf$/i, '');
-  const quant = /[-_](IQ\d\w*|Q\d(?:[-_]\d)?(?:[-_][A-Z]+)*)(?=[-_]|$)/i.exec(resto);
-  const parametri = /(?:^|[-_])(\d+(?:[.,]\d+)?B)(?:[-_]A(\d+(?:[.,]\d+)?B))?(?=[-_]|$)/i.exec(resto);
-  let nome = resto;
-  if (parametri) nome = resto.slice(0, parametri.index);
+  /* anche dopo un punto: «Mistral-7B-Instruct-v0.3.Q4_K_M» */
+  const quant = /(?:^|[-_.])(IQ\d\w*|Q\d(?:[-_]\d)?(?:[-_][A-Z]+)*)(?=[-_.]|$)/i.exec(resto);
+  /* ⛔ Revisione a blocco 10 (A10-9): nelle targhe di Hugging Face il punto decimale diventa un trattino — «Qwen3-0-6B» è 0,6 B, e
+     usciva «Qwen3 0 · 6B», un modello dieci volte più grande. Solo davanti a uno ZERO il trattino è una virgola: «Llama-3-8B» è 8 B. */
+  const parametri = /(?:^|[-_])((?:0[-_]\d+|\d+(?:[.,]\d+)?)B)(?:[-_]A((?:0[-_]\d+|\d+(?:[.,]\d+)?)B))?(?=[-_]|$)/i.exec(resto);
+  if (parametri) for (const i of [1, 2]) if (parametri[i]) parametri[i] = parametri[i].replace(/^0[-_]/u, '0.');
+  /* ⛔ Revisione a blocco 9 (nota sulla Home): il nome finisce dove comincia la taglia O la quantizzazione, la prima delle due.
+     Prima si tagliava solo alla taglia: «author-Model-Q4_K_M» dava «Model Q4 K M · Q4_K_M», «Q4_K_M» da solo «K M». */
+  const fine = Math.min(parametri ? parametri.index : Infinity, quant ? quant.index : Infinity);
+  let nome = Number.isFinite(fine) ? resto.slice(0, fine) : resto;
   nome = nome.replace(/[-_](GGUF|MLX|AWQ|GPTQ)$/i, '');
   const pezzi = nome.split(/[-_]/).filter(Boolean);
   if (pezzi.length > 1) pezzi.shift(); // il primo segmento è chi ha pubblicato il file, non il modello
   // un secondo prefisso di fabbrica (nvidia_Nemotron…) sparisce solo se si ripete dentro al nome
   const pulito = pezzi.join(' ').replace(/\s+/g, ' ').trim();
-  const parti = [pulito || resto];
+  /* la targa intera solo se non c'è niente da dire: «local:7B» è «7B», non «7B · 7B» */
+  const parti = [pulito || (parametri || quant ? '' : resto)];
   if (parametri) parti.push(parametri[2] ? t('chat.foot.activeOf', { totali: parametri[1], attivi: parametri[2].replace(/^A/i, '') }) : parametri[1]);
   if (quant) parti.push(quant[1].toUpperCase().replace(/-/g, '_'));
   return parti.filter(Boolean).join(' · ');
@@ -344,7 +371,19 @@ function scrivi(el, testo) {
   if (!el) return;
   const t = testo || '';
   if (el.textContent !== t) el.textContent = t;
-  el.hidden = t === '';
+  imposta(el, 'hidden', t === '');
+}
+
+/*
+ * ⛔ 22/10/2026 (streaming fluido) — SI SCRIVE SOLO CIÒ CHE CAMBIA. Il piede si ridisegna più volte al secondo mentre un giro
+ *   corre, e ogni proprietà riflessa riscritta con lo STESSO valore (`hidden`, `disabled`, `title`, una classe tolta e rimessa,
+ *   un testo rifatto) genera comunque una mutazione e un'invalidazione degli stili. Misurato col banco dello streaming
+ *   (300 turni): ~65 riscritture a vuoto per tipo in 8 s, e `hidden` è fra i tratti di un `:has()` che guarda l'intera chat
+ *   (`index.css`, `#schermoChat:has(… :not([hidden]) …)`): ogni scrittura costava una visita della conversazione intera.
+ *   Stessa regola già applicata al segnavia l'08/10 (B2, `cronologia.js`, W3C bug 20131).
+ */
+function imposta(el, proprieta, valore) {
+  if (el && el[proprieta] !== valore) el[proprieta] = valore;
 }
 
 /**
@@ -416,7 +455,7 @@ export function aggiornaPiedeChat(piede, dati = {}) {
   // Disponibile anche a giro finito: chi legge lo storico deve poter tornare giù.
   const tornaInFondo = piede.querySelector('#chatTornaInFondo');
   if (tornaInFondo) {
-    tornaInFondo.hidden = dati.inFondo !== false;
+    imposta(tornaInFondo, 'hidden', dati.inFondo !== false);
     if (!tornaInFondo.dataset.portaInFondo) {
       tornaInFondo.dataset.portaInFondo = '1';
       tornaInFondo.addEventListener('click', () => {
@@ -450,7 +489,7 @@ export function aggiornaPiedeChat(piede, dati = {}) {
      * un toast che sparisce, e mai uno stato ambiguo «still running».
      */
     const contattoPerso = dati.attivo === true && dati.contatto === 'perso';
-    striscia.hidden = !dati.attivo || (dati.inFondo === true && !contattoPerso);
+    imposta(striscia, 'hidden', !dati.attivo || (dati.inFondo === true && !contattoPerso));
     striscia.classList.toggle('talos-status-strip--senza-contatto', contattoPerso);
     /*
      * 06/9, owner: «se ci clicchi ti deve portare in fondo giù». La striscia compare proprio quando
@@ -467,7 +506,9 @@ export function aggiornaPiedeChat(piede, dati = {}) {
       });
     }
     const cosa = striscia.querySelector('[data-run-what]');
-    if (cosa) {
+    const firmaCosa = JSON.stringify([contattoPerso, dati.cosa || '', contattoPerso ? '' : (dati.dettaglio || ''), t('chat.foot.status.working')]);
+    if (cosa && cosa.dataset.firma !== firmaCosa) {
+      cosa.dataset.firma = firmaCosa;
       cosa.replaceChildren();
       cosa.append(documentObj.createTextNode(contattoPerso ? t('chat.foot.status.connectionLost') : (dati.cosa || t('chat.foot.status.working'))));
       if (dati.dettaglio && !contattoPerso) {
@@ -493,26 +534,27 @@ export function aggiornaPiedeChat(piede, dati = {}) {
     if (ferma) {
       // ⛔ «Ferma» manda una POST al server: col server irraggiungibile non arriverebbe.
       //    Un pulsante che non può fare la sua cosa lo DICE, invece di fingere.
-      ferma.disabled = contattoPerso;
-      ferma.title = contattoPerso ? t('chat.foot.status.stopUnreachable') : '';
+      imposta(ferma, 'disabled', contattoPerso);
+      imposta(ferma, 'title', contattoPerso ? t('chat.foot.status.stopUnreachable') : '');
     }
   }
   // chip del modello e del permesso
   const modello = piede.querySelector('[data-open-sheet="model"] .talos-chip__label');
-  if (modello) modello.textContent = dati.modello || t('chat.foot.model.choose');
+  const nomeModello = dati.modello || t('chat.foot.model.choose');
+  if (modello && modello.textContent !== nomeModello) modello.textContent = nomeModello;
   // l'identificatore intero resta raggiungibile: a schermo il nome, nel suggerimento la targa
   const pillolaModello = piede.querySelector('[data-open-sheet="model"]');
-  if (pillolaModello) pillolaModello.title = dati.modelloId ? t('chat.foot.model.changeNamed', { modello: dati.modelloId }) : t('chat.foot.model.change');
+  imposta(pillolaModello, 'title', dati.modelloId ? t('chat.foot.model.changeNamed', { modello: dati.modelloId }) : t('chat.foot.model.change'));
   const permesso = piede.querySelector('[data-open-sheet="permissions"]');
   if (permesso) {
     const label = permesso.querySelector('.talos-chip__label');
-    /* C1 (owner 10/10/2026): cosa passa senza chiedere, come Cline; la politica e il resto nel suggerimento (`riassuntoSenzaChiedere`) */
-    const riassunto = riassuntoSenzaChiedere(dati.permesso, dati.permessiPerAttrezzo, { modalitaOperativa: dati.modalitaOperativa });
-    if (label) label.textContent = riassunto.testo;
-    permesso.title = riassunto.suggerimento;
-    permesso.classList.remove('talos-badge--warning', 'talos-badge--danger');
+    /* 24/10/2026 (owner): il nome breve del livello; cosa passa senza chiedere (C1, 10/10) apre il suggerimento (`chipDelPermesso`) */
+    const riassunto = chipDelPermesso(dati.permesso, dati.permessiPerAttrezzo, { modalitaOperativa: dati.modalitaOperativa });
+    if (label && label.textContent !== riassunto.testo) label.textContent = riassunto.testo;
+    imposta(permesso, 'title', riassunto.suggerimento);
     const tono = tonoPermesso(dati.permesso);
-    if (tono) permesso.classList.add(`talos-badge--${tono}`);
+    permesso.classList.toggle('talos-badge--warning', tono === 'warning'); // `toggle` con la forza non scrive se non cambia
+    permesso.classList.toggle('talos-badge--danger', tono === 'danger');
   }
   // giri e costo
   const u = testiUsage(dati.usage, { tettoGiri: dati.tettoGiri, usageSessione: dati.usageSessione });
@@ -520,9 +562,9 @@ export function aggiornaPiedeChat(piede, dati = {}) {
      stessa regola di tono (`statoGiri`, decisione B12), sta nella scheda Contesto: `inspector.js`, `rigaDellInvio`. */
   const costoChip = piede.querySelector('[data-runtime-costo]');
   if (costoChip) {
-    costoChip.hidden = !dati.costo;
+    imposta(costoChip, 'hidden', !dati.costo);
     const n = costoChip.querySelector('.talos-mono');
-    if (n && dati.costo) n.textContent = dati.costo;
+    if (n && dati.costo && n.textContent !== dati.costo) n.textContent = dati.costo;
   }
   // barra di stato
   // 06/9: al posto del tema, la velocità — ma solo con un modello locale, e solo se il numero c'è

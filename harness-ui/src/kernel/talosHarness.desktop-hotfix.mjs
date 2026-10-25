@@ -19,7 +19,7 @@
  * runtime wiring and the canonical kernel remains the benchmark source.
  */
 import { createHash } from 'node:crypto'; // 15/10/2026: l'impronta del prefisso coperto da un riassunto preparato in anticipo
-import { lstatSync, readdirSync, realpathSync } from 'node:fs';
+import { existsSync, lstatSync, readdirSync, realpathSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 
@@ -29,6 +29,8 @@ import * as kernel from './talosHarness.mjs';
 // ⭐ 06/10/2026 — la ricarica della memoria post-compact (opzione A, ricerca 5×5×5×5 §6.4): il blocco di
 // fatti freschi che `compattaOra` fonde nella proiezione, accanto all'indice meccanico.
 import { costruisciBloccoFatti, CARATTERI_BLOCCO_MASSIMI, MARCATORE_BLOCCO_TAGLIATO } from './ricarica-post-compact.mjs';
+import { FRAZIONE_RICHIESTE_VECCHIE_SULLA_FINESTRA, limitaRichiesteVecchie, nomeDellaRichiestaSalvata, richiestaAllegataPerIlModello, salvaRichiestaIntera, testoSemplice, tettoRichiesteVecchie } from './richieste-vecchie.mjs';
+import { RichiestaTroppoGrande, indiceRichiestaNuova, pesoDellaRichiestaNuova, testoAllegabile } from './richiesta-troppo-grande.mjs';
 import { chiamataPerChiGuarda } from './ponte-attrezzi.mjs';
 
 export * from './talosHarness.mjs';
@@ -40,6 +42,9 @@ export { motoreAPostoUnico } from './compattazione-desktop.mjs';
 export const DESKTOP_BLACKBOX_HOTFIX_VERSION = '2026-09-15';
 export const NO_TEST_SUITE_CODE = 'NO_TEST_SUITE_CONFIGURED';
 export const STALL_DIAGNOSTIC_EVENT = 'desktop-harness-stall';
+/* §4.1 del rapporto della CLI: sul rifiuto del fornitore, al più tre ritentativi per giro (70%, 50%, 35%; opencode `SHRINK_STEPS`,
+   Claude Code `JZ=3` sui ritentativi della compattazione), poi il giro fallisce dicendo perché. */
+export const RITENTATIVI_CONTESTO_PIENO_MASSIMI = 3;
 
 const STALL_MS_DEFAULT = 45_000;
 /* Owner 26/09/2026: la compattazione nel giro si ferma solo davanti al pavimento vero; questa è la rete se la stima del
@@ -536,10 +541,32 @@ function wrapContextHooks(original, {
   stimaAttrezziMisurati = null,
   /* Revisione 7 della CLI (F6): la finestra per cui questa sessione ha già detto «non entra» (dal registro): non lo si ripete */
   nonEntraDetto = null,
+  /* R11-7: la finestra e la scala dell'ultimo rifiuto del fornitore per questo modello (dal registro) */
+  rifiutoNoto = null,
+  /* R12-2: il codice del ripiego dal motore già detto in questa sessione e non ancora guarito (dal registro): non lo si ripete */
+  ripiegoDettoPrima = null,
+  /* R13-2: le posizioni nella storia delle richieste non inviate che il registro tiene perché il motore le ha già archiviate */
+  richiesteNonInviate = [],
+  /* Pezzo D (§4.3): il freno della sessione (dal registro), il giro della sessione (`versioneGiro`, per le ricariche) e se il primo
+     numero vero di questo giro è il verdetto di un record scritto a fine del giro prima */
+  frenoIniziale = null,
+  /* R10-3: la copia del freno del registro, viva (una funzione): un riassunto di fine giro arrivato mentre il giro lavora la cambia */
+  frenoVivo = null,
+  versioneGiro = null,
+  verdettoInAttesa = false,
+  /* Pezzo E (§4.1): i riassunti veri della sessione (la loro stima, per la mediana S) e k, il fattore di sottostima misurato (dal registro) */
+  riassuntiVeri = null,
+  fattoreK = null,
+  /* §4.2, regola N (owner 22/10/2026): «Invia come allegato». `true` per ogni richiesta nuova che non entra (la CLI senza interfaccia),
+     oppure una funzione che riceve il testo della richiesta e dice se la persona ha scelto l'allegato per QUEL testo (il registro) */
+  allegaSeTroppoGrande = false,
   /* ⭐ 06/10/2026 — le fonti dichiarate dall'ospite per il blocco di fatti post-compact (`input.fontiRicarica`):
    * LEDGER append-only, coda pendente, pericoli aperti. `cartella` (la cartella della sessione) resta la fonte
    * del `git log` locale; i file toccati vengono dall'indice meccanico di ogni compattazione. */
   fontiRicarica = null,
+  /* §4.2, regola K (owner 22/10/2026): dove vanno le copie intere delle richieste vecchie accorciate per il modello (null ⇒ l'accorciamento
+     lo dice, e il mezzo non si legge) */
+  cartellaIncollati = null,
   /* ⭐ 15/10/2026 — un riassunto preparato dal registro a fine del giro prima e non ancora usato (`{ record, impronta, base }`). */
   compattazionePronta = null,
   /* owner 15/10/2026 notte, «passa al giro dopo»: il riassunto che il giro prima stava ancora preparando (una promessa). Diventa il
@@ -582,6 +609,11 @@ function wrapContextHooks(original, {
   const scartoPerNonEntra = () => Math.max(ultimoScartoIntero ?? 0, stimaAttrezziDelGiro ?? 0, scartoCorrente());
   let nonEntraGiaDetto = Number.isFinite(nonEntraDetto) ? nonEntraDetto : null;
   let tentativiFallitiNelTurno = 0;
+  /* R11-5 (revisione 11 della CLI): l'ultimo riassunto PAGATO giudicato inutile in questo giro (allungava), col conto e il record su cui
+     è stato fatto. Va al registro: il suo riassunto di fine giro rimandava la stessa identica richiesta e la ripagava. */
+  let riassuntoInefficaceDelGiro = null;
+  /* R11-7: l'ultimo rifiuto coi numeri del fornitore in questo giro (la sua finestra e il rapporto fra il suo conto e la nostra stima) */
+  let rifiutoDelFornitore = null;
   let compattazioniInefficaci = 0;
   /* L'ultima compattazione ha trovato la coda letterale già al minimo (non rientrava nemmeno accorciata)? Solo allora
    * un verdetto «inefficace» vuol dire «pavimento incomprimibile» (owner 26/09: ci si ferma solo lì). */
@@ -596,14 +628,79 @@ function wrapContextHooks(original, {
   /* Rete di sicurezza: quante compattazioni del turno sono rimaste sopra la soglia, per QUALUNQUE ragione. */
   let inefficaciTotali = 0;
   let attendeVerdetto = false;
-  let overflowRitentato = false;
+  /* §4.1 e §4.3.1 del rapporto della CLI (pezzo C, owner 22/10 «Tutto nella 0.6.13»): sul rifiuto del fornitore, per GIRO, al più
+     `RITENTATIVI_CONTESTO_PIENO_MASSIMI` ritentativi e al più UN riassunto pagato: si paga solo al primo scalino, e il primo scalino
+     c'è una volta per giro (`ritentativi` non torna indietro). `primoRifiuto` è la stima della prima richiesta rifiutata, da cui si
+     contano gli scalini del 50% e del 35%. Prima: un ritentativo per giro, e un riassunto pagato anche quando non poteva bastare
+     (misurato dalla CLI: 15.636 → 16.045, pagato, applicato, e il ritentativo rifiutato di nuovo). */
+  const contestoPieno = { ritentativi: 0, primoRifiuto: null };
+  /* Pezzo D (§4.3): il freno della sessione, vivo nel giro (il registro lo rilegge a fine giro, `freno` qui sotto nei ganci). `verdettoDelFreno`:
+     il prossimo numero vero è il verdetto di una compattazione applicata (o del record scritto a fine del giro prima). */
+  let freno = compattazione.frenoValido(frenoIniziale);
+  let verdettoDelFreno = verdettoInAttesa === true;
+  /* ⛔ R10-3 (revisione 10 della CLI): la copia del registro cambiata mentre il giro lavora (ricarica, colpo, tirata già detta) si unisce a
+     quella del giro (`unisciFreni`) prima di ogni decisione e di ogni aggiornamento — solo quando è cambiata da quella vista l'ultima volta,
+     così i colpi azzerati qui da una lettura sotto la soglia non tornano. Senza: il giro pagava col freno già tirato dal registro, e lo
+     diceva una seconda volta con un altro `at`. */
+  let frenoVivoVisto = JSON.stringify(freno);
+  /* R11-4: la base dell'unione è l'ultima copia del registro già unita (all'inizio, quella con cui il giro è partito). E una tirata che
+     arriva DETTA dal registro mentre questo giro non l'aveva si misura da ADESSO (`mezzo`, il tratto da riassumere di questa richiesta):
+     prima il riferimento era quello del registro, più vecchio di questo giro, e il giro si riarmava per crescita e pagava 28 ms dopo
+     «in pausa» (traccia r6e della CLI: «paused» 47.220, SUMMARY#3 47.248). */
+  const conFrenoVivo = (f, { mezzo = null } = {}) => {
+    if (typeof frenoVivo !== 'function') return f;
+    let vivo;
+    try { vivo = compattazione.frenoValido(frenoVivo()); } catch { return f; }
+    const visto = JSON.stringify(vivo);
+    if (visto === frenoVivoVisto) return f;
+    let base = null;
+    try { base = JSON.parse(frenoVivoVisto); } catch { base = null; }
+    frenoVivoVisto = visto;
+    const unito = compattazione.unisciFreni(f, vivo, base);
+    const arrivaDetta = unito?.detto === true && !(compattazione.frenoTirato(f) && f?.detto === true);
+    return arrivaDetta && Number.isFinite(mezzo) && mezzo > (unito.mezzoAlVerdetto ?? -1) ? { ...unito, mezzoAlVerdetto: mezzo } : unito;
+  };
+  /* R11-9 (revisione 11 della CLI): dentro una compattazione dovuta (`compattaDovuta`) la frase del freno aspetta la riga della
+     compattazione che l'ha fatto tirare — prima «I riassunti automatici sono in pausa» arrivava PRIMA di «Contesto compattato … 27,7k →
+     17,7k» del riassunto che l'aveva causata. Fuori (verdetto, preparazione in sottofondo) si dice subito, come prima. */
+  let frasiDelFrenoInAttesa = null;
+  /** Il freno nuovo; se ha appena tirato, lo dice UNA volta (`talos.compattazione` di fine, `motivo:'freno'`, contratto (c) con la CLI). */
+  const aggiornaFreno = (nuovo, requestIndex) => {
+    const { freno: dopo, evento } = compattazione.frenoCheTira(conFrenoVivo(nuovo), { at: new Date().toISOString() });
+    freno = dopo;
+    if (!evento) return;
+    const riga = { giro: Number.isInteger(requestIndex) ? requestIndex : 0, tipo: 'compattazione-fine', ...evento };
+    if (frasiDelFrenoInAttesa) frasiDelFrenoInAttesa.push(riga);
+    else emitOnGiro?.(riga);
+  };
+  const identitaDelFreno = () => ({ modello, finestra: soglie.finestraToken });
+  /* Pezzo E (§4.1): i riassunti veri della sessione (la stima del testo arrivato; la loro mediana è S) e k, misurato a ogni numero vero
+     del giro (ereditato dal registro fino al primo). Si restituiscono nei ganci, e il registro li passa al giro dopo. */
+  let riassuntiVeriDellaSessione = compattazione.conRiassuntoVero(riassuntiVeri, null);
+  let kDellaSessione = Number.isFinite(fattoreK) ? Math.min(compattazione.FATTORE_K_MASSIMO, Math.max(1, fattoreK)) : null;
+  const misureDiE = () => ({ mediana: compattazione.medianaRiassunti(riassuntiVeriDellaSessione), k: kDellaSessione ?? 1 });
   /* ⛔ BUG-5 (05/10/2026): i fallimenti CONSECUTIVI del riassuntore in questo turno (vedi compattaOra). */
   let fallimentiRiassuntoConsecutivi = 0;
   /* La richiesta che `prepare` ha appena preparato: l'array (mutabile in posto), il grezzo e gli effimeri. */
   let richiestaCorrente = null;
   let richiestaSenzaAttesa = null; // col motore: la richiesta mandata senza aspettare il riassunto in volo (ritentativo qui sotto)
-  /* Owner 12/10/2026: il ripiego dal motore del contesto si DICE una volta per turno, non a ogni richiesta. */
+  /* R12-2 (revisione 12 della CLI): col motore sano, la richiesta di adesso — se il fornitore risponde «contesto pieno», passa alla scala
+     della compattazione semplice (`scalaDelContestoPieno`), come quando il motore cade */
+  let richiestaDelMotore = null;
+  /* Owner 12/10/2026: il ripiego dal motore del contesto si DICE una volta per turno, non a ogni richiesta.
+     ⛔ R12-2: e una volta per SESSIONE finché il motore non torna sano — la CLI l'ha misurato detto a ogni giro, sette volte di fila, col
+     motore che falliva sempre con lo stesso codice (CTX_CONTEXT_OVERFLOW a 65.536 con risposte da 8k). `ripiegoInCorso`: il codice detto
+     (in questo giro o prima) e non ancora guarito; una preparazione riuscita del motore lo azzera, e un guasto dopo si dice di nuovo. */
   let ripiegoDetto = false;
+  let ripiegoInCorso = typeof ripiegoDettoPrima === 'string' && ripiegoDettoPrima ? ripiegoDettoPrima : null;
+  const diciRipiego = (codice) => {
+    const c = typeof codice === 'string' && codice ? codice : 'unknown';
+    const gia = ripiegoDetto || ripiegoInCorso === c;
+    ripiegoInCorso = c;
+    if (gia) return false;
+    ripiegoDetto = true;
+    return true;
+  };
   const reasoningRiassunto = compattazione.reasoningPerRiassunto(reasoning, { modello });
 
   const legacyMode = original === undefined || original === null;
@@ -624,7 +721,32 @@ function wrapContextHooks(original, {
     emitOnGiro?.({ giro: 0, tipo: 'compattazione-modello-cambiato', modello, modelloPrecedente });
   }
 
-  const projectLegacy = (rawMessages) => (compacted ? compattazione.applicaRecord(rawMessages, compacted) : rawMessages);
+  /* ⛔ R13-1 (revisione 13 della CLI, 23/10/2026): una richiesta che la regola N ha mandato come allegato DOPO un accorciamento (dal secondo
+     scalino) stava ancora intera nella proiezione: il record del primo scalino fotografa le richieste tenute alla lettera, la nuova
+     compresa, e `applicaRecord` riporta quella fotografia. L'allegato non cambiava niente e il giro finiva in «non entra». La proiezione
+     porta le forme allegate del giro (`allegate`) ovunque la richiesta compaia. */
+  /* ⛔ Revisione 14 della CLI (s4 `paste-12k`, 23/10/2026): R13-3 manda al modello e al motore la forma CORTA di una richiesta vecchia di
+     cui la sessione ha la copia intera (`copieGiaSalvate`). Ma le impronte — il prefisso di un riassunto pronto o in volo, il tratto
+     coperto di un record — le calcola anche il REGISTRO, sulla storia intera. Con la forma corta dentro non combaciavano più: il riassunto
+     di fine giro, valido, non diventava la base all'emergenza, e il giro pagava un secondo riassunto che toglieva ~130 token (la regola
+     del 10% ne chiede 921). ⇒ Ogni impronta si calcola sulla storia VERA: la forma corta ricorda il suo originale e `storiaVera` lo
+     rimette al suo posto. Ciò che si manda (proiezione, modello, riassuntore) resta corto. */
+  const originaleDellaCopia = new WeakMap();
+  const storiaVera = (lista) => (Array.isArray(lista) && lista.some((m) => originaleDellaCopia.has(m))
+    ? lista.map((m) => originaleDellaCopia.get(m) ?? m) : lista);
+  const projectLegacy = (rawMessages) => {
+    const proiettati = compacted && compattazione.recordValePerLaStoria(storiaVera(rawMessages), compacted)
+      ? [...compacted.riassunto, ...rawMessages.slice(compacted.coveredThrough)] : rawMessages; // `applicaRecord`, col tratto coperto VERO
+    if (allegate.size === 0 || !Array.isArray(proiettati)) return proiettati;
+    let cambiata = false;
+    const fuori = proiettati.map((m) => {
+      const testo = compattazione.eRichiestaVera(m) ? testoSemplice(m) : null;
+      if (testo === null || !allegate.has(testo)) return m;
+      cambiata = true;
+      return allegate.get(testo);
+    });
+    return cambiata ? fuori : proiettati;
+  };
 
   /*
    * Lane CLI, 03/10/2026 — `compaction.progress`: con `progressoAcceso` la compattazione dice i suoi passi VERI su
@@ -673,7 +795,36 @@ function wrapContextHooks(original, {
     letturaPiuGrande = n;
     velocitaLetturaTokSec = (n * 1000) / ms;
   };
-  const osservaTempi = (invoke) => async (segnale) => { const esito = await invoke(segnale); registraTempi(esito?.timings); return esito; };
+  /* R12-3 (revisione 12 della CLI): la richiesta più grande che il fornitore ha ACCETTATO in questo giro (il suo prompt_tokens): il registro
+     non ricorda mai una finestra più piccola di così, perché un rifiuto che la contraddice è un rifiuto strano, non la finestra */
+  let massimoAccettato = null;
+  /* ⛔ R13-1 (revisione 13 della CLI, 23/10/2026, terza parte): «Nothing was summarized» era falso. Sul rifiuto la scala applicava il
+     riassunto SENZA modello (30.426 → 26.155, annunciato e nel giornale), il fornitore rifiutava di nuovo, il giro falliva — e il
+     registro teneva quel riassunto per il giro dopo (R10-7). Un riassunto gratuito che nessuna risposta del fornitore ha ancora
+     accettato, in un giro che fallisce, non si tiene: esce dai record del giro e si annulla nel giornale con lo stesso segnale
+     dell'«Annulla» (`fase:'annullata'`, che interfaccia e CLI sanno già disegnare). Un riassunto PAGATO resta (R10-7: ripagarlo al giro
+     dopo è proprio il costo da evitare), e resta anche il gratuito che una risposta ha confermato prima che il giro fallisse per altro.
+     `recordsConfermati`: quanti record c'erano all'ultima risposta riuscita. */
+  let recordsConfermati = records.length;
+  const recordGratuiti = new WeakSet();
+  const annullaGratuitiNonConfermati = () => {
+    let tolti = 0;
+    for (let i = records.length - 1; i >= recordsConfermati; i -= 1) {
+      if (!recordGratuiti.has(records[i])) continue;
+      const [record] = records.splice(i, 1);
+      tolti += 1;
+      emitOnGiro?.({ tipo: 'compattazione-annullata', at: record.at, coveredThrough: record.coveredThrough, motivo: 'giro-fallito' });
+    }
+    return tolti;
+  };
+  const osservaTempi = (invoke) => async (segnale) => {
+    const esito = await invoke(segnale);
+    recordsConfermati = records.length; // R13-1: il fornitore ha accettato la richiesta fatta con questi record
+    registraTempi(esito?.timings);
+    const p = Number(esito?.usage?.prompt_tokens);
+    if (Number.isSafeInteger(p) && p > 0 && !(massimoAccettato >= p)) massimoAccettato = p;
+    return esito;
+  };
   const chiediRiassunto = async (messaggiRichiesta, maxOutputTokens, contatore = null, { secondaria = false, orologio = null, modelloScelto = null } = {}) => {
     const segnale = orologio?.segnale ?? segnaleStop;
     /* 21/10/2026 (CLI): col modello del riassunto anche il ragionamento si sceglie per LUI */
@@ -725,15 +876,55 @@ function wrapContextHooks(original, {
     try { return await preparaCompattazioneCorpo(rawMessages, projected, opzioni, gitInVolo); }
     finally { if (gitInVolo.promessa) await gitInVolo.promessa.catch(() => {}); }
   };
-  const preparaCompattazioneCorpo = async (rawMessages, projected, { requestIndex, motivo, tokenMisurati, misura, soglia, inSottofondo = false, inizioDetto = false, conBase = false }, gitInVolo) => {
-    const divise = compattazione.dividiPerCompattazione(projected);
+  /* `bersaglio` (pezzo C, solo sul rifiuto del fornitore): quanto deve pesare al più la proiezione (stima coi pezzi, senza effimeri né
+     scarto); i passi gratuiti si stringono su di lui, e un riassunto si paga solo se può arrivarci. `livelloContestoPieno`: lo scalino
+     (0 = primo rifiuto del giro; dal secondo niente riassunti nuovi). */
+  const preparaCompattazioneCorpo = async (rawMessages, projected, { requestIndex, motivo, tokenMisurati, misura, soglia, inSottofondo = false, inizioDetto = false, conBase = false, bersaglio = null, livelloContestoPieno = 0, certo = null }, gitInVolo) => {
+    const sulBersaglio = motivo === 'overflow' && Number.isFinite(bersaglio);
+    /* Z-K3: la linea certa del rifiuto coi numeri (`riscriviPerIlContestoPieno`); una proiezione senza riassunto pagato che la passa non si
+       scrive, «non entra» si dice (una volta per finestra, col pavimento nella scala del fornitore) e la riga aperta si chiude */
+    const lineaCerta = sulBersaglio && certo && Number.isFinite(certo.limite) ? certo : null;
+    const oltreLaLineaCerta = (proiezione) => lineaCerta !== null && compattazione.stimaConPezzi(proiezione) > lineaCerta.limite;
+    const fermaOltreLaLineaCerta = (proiezione, { rigaAperta }) => {
+      const finestra = lineaCerta.finestra;
+      if (conBase) restoNonRiuscito = { motivo: 'non-entra' };
+      if (nonEntraGiaDetto !== finestra) {
+        nonEntraGiaDetto = finestra;
+        emitOnGiro?.({ giro: requestIndex, tipo: 'compattazione-fine', compattato: false, motivo: 'non-entra', finestra,
+          pavimento: Math.ceil((compattazione.stimaConPezzi(proiezione) + lineaCerta.parteFissa) * lineaCerta.scala) });
+      } else if (rigaAperta && !conBase) emitOnGiro?.({ giro: requestIndex, tipo: 'compattazione-fine', compattato: false, motivo: 'nulla-da-ridurre' });
+      return null;
+    };
+    /* §4.2, regola K (owner 22/10/2026, decisione presa nella sessione della CLI): le richieste vecchie della persona oltre il loro
+       budget — min(20.000 token, 15% della finestra) dalla più nuova, come Codex (`compact.rs:64`, `:715-799`) — si accorciano PRIMA
+       di dividere: inizio e fine, e il testo intero in un file della sessione che `leggi` apre senza chiedere (Codex le butta). Così
+       anche le richieste tenute alla lettera e la proiezione senza riassunto sono accorciate, e il pavimento non porta più un log
+       incollato due richieste fa. L'ultima richiesta non si tocca (regola N). */
+    /* Pezzo C: sul rifiuto del fornitore i tetti dei passi gratuiti sono quelli di sempre, stretti sul bersaglio quando è più piccolo
+       (il bersaglio fa la parte della finestra: il 15% per le richieste vecchie, la quota di Hermes per la coda) — così il secondo e il
+       terzo scalino, senza riassunti nuovi, accorciano davvero di più del primo. */
+    const tettoK = tettoRichiesteVecchie({ finestraToken: soglie.finestraToken, soglia: soglie.soglia });
+    const regolaK = await limitaRichiesteVecchie(projected, {
+      budgetToken: sulBersaglio ? Math.max(1, Math.min(tettoK, Math.floor(bersaglio * FRAZIONE_RICHIESTE_VECCHIE_SULLA_FINESTRA))) : tettoK,
+      cartella: cartellaIncollati, eRichiesta: compattazione.eRichiestaVera, stima: kernel.stimaTokenConversazione,
+    });
+    /* Pezzo C, terzo passo gratuito: le immagini vecchie (non quelle dell'ultima richiesta) diventano un segnaposto, solo sul rifiuto */
+    const immagini = sulBersaglio ? compattazione.immaginiVecchieInSegnaposto(regolaK.messaggi) : { messaggi: regolaK.messaggi, sostituite: 0 };
+    const divise = compattazione.dividiPerCompattazione(immagini.messaggi);
     /*
      * ⛔ Owner 26/09/2026, «Come Hermes»: la coda letterale sotto pressione si accorcia (inizio + fine degli esiti lunghi,
      *   doppioni tolti) PRIMA di giudicare la proiezione — altrimenti due letture grandi nella coda la tengono sopra il
      *   tetto per sempre (`compattazione-desktop.mjs`, «LA CODA LETTERALE NON È UN PAVIMENTO»).
      */
-    const pressione = compattazione.riduciCodaSottoPressione(divise.coda, { budgetToken: compattazione.budgetCoda(soglie.soglia) });
+    const pressione = compattazione.riduciCodaSottoPressione(divise.coda, {
+      budgetToken: compattazione.budgetCoda(sulBersaglio && !(Number.isFinite(soglie.soglia) && soglie.soglia > 0 && soglie.soglia <= bersaglio) ? bersaglio : soglie.soglia) });
     const parti = { ...divise, coda: pressione.coda };
+    /* Pezzo D: il freno di adesso — si riarma (null) se il tratto da riassumere è cresciuto del 10% della soglia dal verdetto, o se
+       modello o finestra sono cambiati */
+    const mezzoDiAdesso = compattazione.mezzoDellaProiezione(projected);
+    const frenoOra = compattazione.frenoDiAdesso(conFrenoVivo(freno, { mezzo: mezzoDiAdesso }), { mezzo: mezzoDiAdesso, soglia: soglie.soglia, ...identitaDelFreno() }); // R10-3, R11-4
+    freno = frenoOra; // riarmato del tutto (null) o in parte (colpi azzerati, ricariche tenute: Z-K2)
+    const frenato = compattazione.frenoTirato(frenoOra);
     /* 15/10/2026: questi numeri giudicano la compattazione APPLICATA (verdetto sul numero vero): si portano nel risultato e li fissa
        `applicaCompattazione`, così un riassunto preparato in anticipo e mai usato non sposta il giudizio di quello in uso. */
     const pavimento = kernel.stimaTokenConversazione([...parti.testa, ...parti.richiesteLetterali, ...parti.coda]);
@@ -784,9 +975,64 @@ function wrapContextHooks(original, {
           riassunto: '', indice: indice.testo, coda: parti.coda, bloccoFatti: '', recintaSintesi: false }))
         : compattazione.stimaConPezzi([...parti.testa, ...parti.mezzo, ...parti.coda]),
       mezzo: parti.tagliabile ? parti.mezzo : [], finestraToken: soglie.finestraToken, soglia: soglie.soglia, scarto: scartoPerNonEntra(),
+      mediana: misureDiE().mediana, // pezzo E
     });
     if (nonEntra !== null) nonPuoRidurre = true;
-    if (parti.tagliabile && motivo !== 'overflow' && !nonPuoRidurre) {
+    /* ⛔ Revisione 10 della CLI (23/10/2026), il pavimento di F6: conta un riassunto PAGATO (il riassunto atteso) e blocca il pagamento,
+       in silenzio. «Non entra» si DICE solo se nemmeno il riassunto senza modello (gratuito) entra con lo scarto. Misurato: il giro diceva
+       «scegli un modello con una finestra più grande», poi dopo il rifiuto il riassunto senza modello entrava e il giro riusciva — una
+       frase falsa a schermo. Senza un tratto vecchio i due pavimenti sono lo stesso.
+       ⛔ R12-1 (revisione 12 della CLI): e «non entra» si dice con la parte dello scarto che è cornice DI CERTO (`scartoFissoCerto`), non
+       con lo scarto intero — quello porta anche la storia contata più della stima, che il pavimento ha già tolto (il base64 letto al
+       giro prima: a 49.152 il giro riusciva a 35.984 e diceva «troppo piccola… circa 50.238»; detto una volta per finestra, avrebbe
+       zittito quello vero dopo). Il blocco del pagamento qui sopra resta prudente, in silenzio. */
+    const scartoCertoDiF6 = compattazione.scartoFissoCerto({ scarto: scartoPerNonEntra(), attrezzi: stimaAttrezziDelGiro ?? 0,
+      spiegabileDallaStoria: compattazione.scartoSpiegabileDallaStoria(compattazione.senzaLaRichiestaNuova(projected)) }); // R13-1
+    const nonEntraDaDire = nonEntra === null ? null : compattazione.pavimentoOltreLaFinestra({
+      pavimentoConCornice: parti.tagliabile
+        ? compattazione.stimaConPezzi(compattazione.costruisciProiezione({ testa: parti.testa, richiesteLetterali: parti.richiesteLetterali,
+          riassunto: compattazione.riassuntoDiRipiego(parti.mezzo, { classe: 'bersaglio' }), indice: indice.testo, coda: parti.coda, bloccoFatti: '', recintaSintesi: false }))
+        : compattazione.stimaConPezzi([...parti.testa, ...parti.mezzo, ...parti.coda]),
+      mezzo: [], finestraToken: soglie.finestraToken, soglia: soglie.soglia, scarto: scartoCertoDiF6,
+    });
+    /*
+     * ⭐ Pezzo C (§4.1 del rapporto della CLI, owner 22/10: «un riassunto si paga solo se toglie davvero», «sul rifiuto del fornitore la
+     *   stima decide se un passo accorcia, non se la conversazione entra»). Sul rifiuto decide il BERSAGLIO, non la soglia:
+     *   1. i passi gratuiti (coda, richieste vecchie, immagini vecchie) bastano ⇒ si riparte senza pagare niente (la strada «sola coda»);
+     *   2. altrimenti un riassunto si paga solo se il pavimento vuoto più il riassunto atteso ci arriva, al primo scalino e una volta per
+     *      giro (opencode paga a ogni rifiuto, `runner/llm.ts:265-270`; Claude Code ritenta senza misurare, rapporto §2.3-§2.4);
+     *   3. se nemmeno il miglior riassunto ci arriva, o lo scalino non ne ammette, il riassunto SENZA modello (gratuito: l'indice);
+     *   e quello che non arriva al bersaglio non parte (sotto, dopo la proiezione). F6 ha già detto «non entra» se doveva: qui non decide.
+     */
+    let forzatoDalBersaglio = null;
+    let gratuitoSulBersaglio = false;
+    if (sulBersaglio) {
+      nonPuoRidurre = false;
+      if (compattazione.stimaConPezzi([...parti.testa, ...parti.mezzo, ...parti.coda]) <= bersaglio) gratuitoSulBersaglio = true;
+      else if (parti.tagliabile) {
+        const pavimentoVuoto = compattazione.stimaConPezzi(compattazione.costruisciProiezione({ testa: parti.testa,
+          richiesteLetterali: parti.richiesteLetterali, riassunto: '', indice: indice.testo, coda: parti.coda, bloccoFatti: '', recintaSintesi: false }));
+        const puoPagare = livelloContestoPieno === 0
+          && pavimentoVuoto + compattazione.riassuntoAtteso(parti.mezzo, { finestraToken: soglie.finestraToken, soglia: soglie.soglia, mediana: misureDiE().mediana }) <= bersaglio;
+        if (!puoPagare) forzatoDalBersaglio = 'bersaglio';
+        else if (frenato) forzatoDalBersaglio = 'freno'; // pezzo D: col freno tirato nemmeno il rifiuto paga; ragione concordata con la CLI
+      }
+    }
+    /* Pezzo D: col freno tirato niente riassunti automatici pagati — alla soglia, all'emergenza, in sottofondo e sul rifiuto senza
+       bersaglio (la strada del motore del contesto); restano i passi gratuiti (la «sola coda») */
+    if (frenato && parti.tagliabile && !sulBersaglio) nonPuoRidurre = true;
+    /* ⛔ R11-6 (revisione 11 della CLI, 23/10/2026): col freno tirato, all'EMERGENZA, una richiesta che dopo i passi gratuiti resta oltre
+       la finestra DICHIARATA (stima più scarto: certo, la stessa lettura di N7 e di F2a) partiva lo stesso e aspettava il rifiuto — ogni
+       giro (TuiApp a 32.768: 37.698 e 37.809 mandati e rifiutati; 14 rifiuti in 20 giri a 10.240). Dopo il rifiuto la strada del
+       contesto pieno scriveva comunque il riassunto senza modello. Ora lo scrive PRIMA di mandare (ragione 'freno', la stessa del
+       rifiuto): stesso esito, niente pagato, una richiesta rifiutata in meno. Fra l'emergenza e la finestra decide il fornitore. */
+    if (frenato && parti.tagliabile && !sulBersaglio && !inSottofondo && motivo === 'emergenza' && Number.isFinite(soglie.finestraToken)
+      && nonEntraDaDire === null // se nemmeno lui entra, F6 l'ha già detto: scriverlo non servirebbe
+      && compattazione.stimaConPezzi([...parti.testa, ...parti.mezzo, ...parti.coda]) + Math.round(scartoCorrente()) > soglie.finestraToken) {
+      nonPuoRidurre = false;
+      forzatoDalBersaglio = 'freno';
+    }
+    if (parti.tagliabile && motivo !== 'overflow' && !nonPuoRidurre && !forzatoDalBersaglio) {
       /* Il blocco dei fatti legge git. La sua lunghezza ha un tetto noto (`CARATTERI_BLOCCO_MASSIMI` più il marcatore di taglio) e la
          stima conta i caratteri, quindi: inutile anche senza blocco ⇒ si salta, e git non parte; utile anche col blocco più grande
          possibile ⇒ si paga senza aspettare git, che parte subito e finisce durante il riassunto (serve alla proiezione); solo in
@@ -801,7 +1047,7 @@ function wrapContextHooks(original, {
          del riassunto, è almeno il 10% della soglia (verdetto della CLI, C1 e C2) */
       const utileCon = (pavimentoConCornice) => compattazione.riassuntoUtile({
         prima: compattazione.stimaConPezzi([...parti.testa, ...parti.mezzo, ...parti.coda]), pavimentoConCornice, mezzo: parti.mezzo,
-        soglia: soglie.soglia, finestraToken: soglie.finestraToken, motivo, scarto: scartoPerNonEntra(),
+        soglia: soglie.soglia, finestraToken: soglie.finestraToken, motivo, scarto: scartoPerNonEntra(), ...misureDiE(), // pezzo E: S e k
       });
       if (!utileCon(pavimentoCon(''))) nonPuoRidurre = true;
       else {
@@ -814,7 +1060,7 @@ function wrapContextHooks(original, {
              detto il controllo qui sopra), il riassunto si fa senza blocco. Prima la richiesta partiva oltre la finestra (11.258 su 10.240
              con ~8.000 token di schemi), il fornitore la rifiutava e la strada dell'overflow pagava lo stesso riassunto, col blocco. */
           if (nonPuoRidurre && bloccoFatti !== '' && compattazione.pavimentoOltreLaFinestra({ pavimentoConCornice: pavimentoCon(bloccoFatti),
-            mezzo: parti.mezzo, finestraToken: soglie.finestraToken, soglia: soglie.soglia, scarto: scartoPerNonEntra() }) !== null) {
+            mezzo: parti.mezzo, finestraToken: soglie.finestraToken, soglia: soglie.soglia, scarto: scartoPerNonEntra(), mediana: misureDiE().mediana }) !== null) {
             bloccoFatti = '';
             nonPuoRidurre = false;
           }
@@ -822,15 +1068,15 @@ function wrapContextHooks(original, {
       }
     }
     let nonEntraDettoOra = false;
-    if (nonEntra !== null && !inSottofondo && nonEntraGiaDetto !== soglie.finestraToken) {
+    if (nonEntraDaDire !== null && !inSottofondo && nonEntraGiaDetto !== soglie.finestraToken) {
       nonEntraGiaDetto = soglie.finestraToken;
       nonEntraDettoOra = true;
-      emitOnGiro?.({ giro: requestIndex, tipo: 'compattazione-fine', compattato: false, motivo: 'non-entra', finestra: soglie.finestraToken, pavimento: nonEntra });
+      emitOnGiro?.({ giro: requestIndex, tipo: 'compattazione-fine', compattato: false, motivo: 'non-entra', finestra: soglie.finestraToken, pavimento: nonEntraDaDire });
     }
-    if (!parti.tagliabile || nonPuoRidurre) {
+    if (!parti.tagliabile || nonPuoRidurre || gratuitoSulBersaglio) {
       /* Niente da riassumere (o niente che un riassunto possa ridurre) e la coda già dentro il suo tetto: nessun tentativo, nessun
          evento, nessuna chiamata. */
-      if (pressione.ridotti === 0) {
+      if (pressione.ridotti === 0 && regolaK.accorciati === 0 && immagini.sostituite === 0) {
         /* 22/10/2026 (revisione avversaria, B): la riga viva aperta dall'attesa d'emergenza si chiude, muta — non c'era niente da ridurre
            (o l'ha già chiusa «non entra», qui sopra) */
         if (conBase) restoNonRiuscito = { motivo: 'nulla-da-ridurre' };
@@ -839,11 +1085,12 @@ function wrapContextHooks(original, {
       }
       /* Niente da riassumere ma la coda si è accorciata: la proiezione nuova è deterministica, senza il riassuntore
        * (Hermes `_FEASIBILITY_SKIP_MIDDLE_FRACTION`, `:1124-1127`: «dropping alone suffices»). */
+      const proiezioneSolaCoda = [...parti.testa, ...parti.mezzo, ...parti.coda];
+      if (oltreLaLineaCerta(proiezioneSolaCoda)) return fermaOltreLaLineaCerta(proiezioneSolaCoda, { rigaAperta: inizioDetto }); // Z-K3
       if (!inSottofondo) {
         if (!inizioDetto) emitOnGiro?.({ giro: requestIndex, tipo: 'compattazione-inizio', tokenMisurati, soglia, motivo });
         progresso(requestIndex, { fase: 'lettura', messaggi: projected.length, tokenPrima: tokenMisurati, motivo });
       } else iniziaPreparata(requestIndex, tokenMisurati);
-      const proiezioneSolaCoda = [...parti.testa, ...parti.mezzo, ...parti.coda];
       const recordSolaCoda = compattazione.creaRecord({
         coveredThrough: rawMessages.length,
         riassunto: proiezioneSolaCoda,
@@ -853,10 +1100,13 @@ function wrapContextHooks(original, {
         at: new Date().toISOString(),
         modello,
         indice: compacted?.indice ?? null,
-        coperti: rawMessages,
+        coperti: storiaVera(rawMessages), // revisione 14: il tratto coperto VERO
+        freno, // pezzo D: la copia nel record (contratto (d) con la CLI)
       });
       /* Nessun riassunto da contare: dalla lettura si passa alla sostituzione (le fasi vere, mai finte). */
-      return { proiezione: proiezioneSolaCoda, record: recordSolaCoda, soloCoda: true, ...misureDelPavimento, budget: null };
+      return { proiezione: proiezioneSolaCoda, record: recordSolaCoda, soloCoda: true, ...misureDelPavimento, budget: null,
+        ...(regolaK.accorciati > 0 ? { accorciati: regolaK.accorciati } : {}),
+        ...(pressione.ridotti > 0 ? { ridotti: pressione.ridotti } : {}), ...(immagini.sostituite > 0 ? { immagini: immagini.sostituite } : {}) };
     }
     if (!inSottofondo) {
       if (!inizioDetto) emitOnGiro?.({ giro: requestIndex, tipo: 'compattazione-inizio', tokenMisurati, soglia, motivo });
@@ -896,8 +1146,9 @@ function wrapContextHooks(original, {
     /* A1, stima prima: con la velocità di lettura misurata, un riassunto che non starebbe nel tetto non si chiede nemmeno */
     /* la velocità misurata è quella del motore della CONVERSAZIONE: per un altro modello dei riassunti la stima non vale */
     const stimaLetturaMs = !inSottofondo && velocitaLetturaTokSec && scelta.modello === modello ? (kernel.stimaTokenConversazione(richiestaPer(0)) * 1000) / velocitaLetturaTokSec : null;
-    const forzato = inSottofondo ? null : senzaModelloPerRichiesta?.requestIndex === requestIndex ? senzaModelloPerRichiesta.ragione
-      : stimaLetturaMs !== null && stimaLetturaMs > riassuntoTettoMs ? 'stima' : null;
+    /* Pezzo C: sul rifiuto, quando il bersaglio non ammette un riassunto pagato, quello senza modello parte subito (ragione 'bersaglio') */
+    const forzato = inSottofondo ? null : forzatoDalBersaglio ?? (senzaModelloPerRichiesta?.requestIndex === requestIndex ? senzaModelloPerRichiesta.ragione
+      : stimaLetturaMs !== null && stimaLetturaMs > riassuntoTettoMs ? 'stima' : null);
     const orologio = inSottofondo || forzato ? null : creaOrologioRiassunto({ segnaleStop, segnaleSalta: segnaleSalta(), inattivitaMs: riassuntoInattivitaMs, tettoMs: riassuntoTettoMs });
     if (forzato) esito = { ok: false, riassunto: '', motivo: forzato, classe: forzato };
     for (let tentativo = 0; tentativo < 2 && !forzato; tentativo += 1) {
@@ -974,7 +1225,20 @@ function wrapContextHooks(original, {
       if (inSottofondo || !conBase) emitOnGiro?.({ giro: requestIndex, tipo: inSottofondo ? 'compattazione-preparata' : 'compattazione-fine', compattato: false, motivo: esito.motivo, classe: esito.classe ?? esito.motivo, fallimentiConsecutivi: fallimentiRiassuntoConsecutivi, interrottaIn: 'riassunto' });
       return null;
     }
+    /* Pezzo D: un riassunto PAGATO e arrivato è una ricarica, nel giro della sessione — anche se poi non si usa (si è pagato lo stesso).
+       Tre in tre giri tirano il freno (Claude Code, «thrashing»). Quello senza modello non si paga. */
+    /* R11-4: col tratto di adesso, come i colpi — una tirata per ricariche si misura dal riassunto che l'ha fatta tirare */
+    if (!esito.ripiego) aggiornaFreno(compattazione.ricaricaAlFreno(freno, { giro: versioneGiro, mezzo: compattazione.mezzoDellaProiezione(projected), ...identitaDelFreno() }), requestIndex);
+    /* Pezzo E: il riassunto pagato e arrivato entra nei riassunti veri della sessione, pesato col testo arrivato (le unità di G) */
+    if (!esito.ripiego) riassuntiVeriDellaSessione = compattazione.conRiassuntoVero(riassuntiVeriDellaSessione, kernel.stimaToken(String(esito.riassunto ?? '').trim()));
     if (!indice) indice = compattazione.indiceMeccanico(parti.mezzo, { precedente: compacted?.indice ?? null });
+    /* Z-K3: sul rifiuto coi numeri il riassunto senza modello che non può entrare — nemmeno senza il blocco dei fatti — non si scrive, e
+       git non parte */
+    if (esito.ripiego && lineaCerta !== null) {
+      const minima = compattazione.costruisciProiezione({ testa: parti.testa, richiesteLetterali: parti.richiesteLetterali, riassunto: esito.riassunto,
+        indice: indice.testo, coda: parti.coda, bloccoFatti: '', recintaSintesi: false });
+      if (oltreLaLineaCerta(minima)) return fermaOltreLaLineaCerta(minima, { rigaAperta: true });
+    }
     /* ⭐ 06/10/2026 — RICARICA POST-COMPACT (opzione A, percorso desktop): il punto naturale è l'indice
      * meccanico già generato dal codice, esteso dalle letture disco (capitolato §6.4, vincolo 3). Il blocco
      * di fatti freschi si calcola ORA, al momento del compact: git locale dalla cartella della sessione,
@@ -991,6 +1255,23 @@ function wrapContextHooks(original, {
         recintaSintesi: blocco !== '' })) + Math.round(scartoPerNonEntra());
       if (richiestaCon(bloccoFatti) >= soglie.finestraToken && richiestaCon('') < soglie.finestraToken) bloccoFatti = '';
     }
+    /*
+     * ⭐ Pezzo C, dopo il riassunto, sul rifiuto del fornitore:
+     *   - il blocco dei fatti è un aiuto: se è lui a portare la proiezione oltre il BERSAGLIO, si toglie (come N1 con la finestra, sopra);
+     *   - un riassunto pagato che non ci arriva, quando quello senza modello sì, lascia il posto a lui: entrare conta più di ricordare
+     *     meglio, e il riassunto pagato si è già contato (non se ne paga un altro in questo giro);
+     *   - altrimenti si applica ciò che accorcia, e decide il fornitore: il bersaglio è prudente (la riserva d'uscita) e un ritentativo
+     *     rifiutato non costa; gli scalini dopo sono al più due, senza riassunti nuovi. Uno cresciuto non si applica mai (`compattaOra`).
+     */
+    if (sulBersaglio) {
+      const pesoCon = (riassunto, blocco) => compattazione.stimaConPezzi(compattazione.costruisciProiezione({ testa: parti.testa,
+        richiesteLetterali: parti.richiesteLetterali, riassunto, indice: indice.testo, coda: parti.coda, bloccoFatti: blocco, recintaSintesi: blocco !== '' }));
+      if (bloccoFatti !== '' && pesoCon(esito.riassunto, bloccoFatti) > bersaglio) bloccoFatti = '';
+      if (!esito.ripiego && pesoCon(esito.riassunto, bloccoFatti) > bersaglio) {
+        const ripiego = compattazione.riassuntoDiRipiego(parti.mezzo, { classe: 'bersaglio' });
+        if (pesoCon(ripiego, bloccoFatti) <= bersaglio) esito = { ok: true, ripiego: true, classe: 'bersaglio', ragione: 'bersaglio', riassunto: ripiego };
+      }
+    }
     const proiezione = compattazione.costruisciProiezione({
       testa: parti.testa, richiesteLetterali: parti.richiesteLetterali, riassunto: esito.riassunto, indice: indice.testo, coda: parti.coda,
       bloccoFatti, recintaSintesi: bloccoFatti !== '',
@@ -1006,9 +1287,11 @@ function wrapContextHooks(original, {
       at: new Date().toISOString(),
       modello,
       indice,
-      coperti: rawMessages,
+      coperti: storiaVera(rawMessages), // revisione 14: il tratto coperto VERO
+      freno, // pezzo D: la copia nel record (contratto (d) con la CLI)
     });
-    return { proiezione, record, soloCoda: false, ...misureDelPavimento, budget: budget.maxOutputTokens, ...(esito.ripiego ? { ripiego: true, classe: esito.classe, ragione: esito.ragione } : {}) };
+    return { proiezione, record, soloCoda: false, ...misureDelPavimento, budget: budget.maxOutputTokens, ...(esito.ripiego ? { ripiego: true, classe: esito.classe, ragione: esito.ragione } : {}),
+      ...(regolaK.accorciati > 0 ? { accorciati: regolaK.accorciati } : {}) };
   };
 
   /* Quarta passata avversaria (22/10/2026): con una base adottata il fallimento del resto non disegna una riga sua (R1) — ma il suo
@@ -1021,19 +1304,29 @@ function wrapContextHooks(original, {
      registro (già annunciato da lui, `motivo:'background'`) o 'giro' se l'aveva preparato un giro (mai annunciato); `tokenDopo` il
      conto dopo quel record su questa richiesta; `conResto` se la riga copre anche il riassunto del resto. Chi disegna anche la riga
      di sottofondo non conta due volte la stessa compattazione, senza indovinare dai numeri né tenere un elenco suo. */
-  const annunciaCompattazione = (preparata, { requestIndex, motivo, istantanea = false, resto = null, adottato = null }) => {
+  const annunciaCompattazione = (preparata, { requestIndex, motivo, istantanea = false, resto = null, adottato = null, baseGratuita = false }) => {
     /* 22/10/2026 (CLI, revisione 4): il conto `compactions` del risultato conta le RIGHE, una per annuncio — prima contava ogni
        applicazione, e base più resto (una riga sola) contava 2; chi riconcilia le righe viste col conto ne aggiungeva una senza numeri.
        Tranne lo scambio del riassunto di FINE GIRO senza resto: l'ha già fatto e annunciato il registro come suo
        (`motivo:'background'`), contarlo anche qui è lo stesso doppio conteggio di S3-2 spostato nel numero (regola concordata con la
-       CLI). Il desktop conta le compattazioni dagli eventi `talos.compattazione`, non da questo numero. */
-    if (!(adottato?.origine === 'fine-giro' && adottato.conResto !== true)) compactions += 1;
-    emitOnGiro?.({ giro: requestIndex, tipo: 'compattazione-fine', compattato: true, record: preparata.record, ...(preparata.soloCoda ? { soloCoda: true } : {}), ...(istantanea ? { istantanea: true, motivo } : {}),
+       CLI). Il desktop conta le compattazioni dagli eventi `talos.compattazione`, non da questo numero.
+       ⛔ F1 della revisione 9 della CLI (23/10/2026): la «sola coda» non è una compattazione — niente riassunto, solo i passi gratuiti
+       (esiti d'attrezzo accorciati, richieste vecchie accorciate dalla regola K, immagini vecchie in segnaposto). Contata qui, la CLI la
+       chiamava «earlier messages summarized · 29.8k → 19.1k» con zero chiamate di riassunto. La riga resta (`soloCoda:true`) e dice
+       quanto ha accorciato: `accorciati` (regola K), `ridotti` (esiti d'attrezzo), `immagini` (segnaposto).
+       Una riga che copre una base adottata più il resto (`adottato.conResto`) è gratuita solo se lo sono tutte e due: una base col suo
+       riassunto e un resto di sola coda sono una compattazione, e `soloCoda` sulla riga vuol dire «niente riassunto in questa riga». */
+    const gratuita = preparata.soloCoda === true && (adottato?.conResto !== true || baseGratuita === true);
+    if (!gratuita && !(adottato?.origine === 'fine-giro' && adottato.conResto !== true)) compactions += 1;
+    emitOnGiro?.({ giro: requestIndex, tipo: 'compattazione-fine', compattato: true, record: preparata.record, ...(gratuita ? { soloCoda: true } : {}), ...(istantanea ? { istantanea: true, motivo } : {}),
+      ...(preparata.accorciati > 0 ? { accorciati: preparata.accorciati } : {}),
+      ...(preparata.soloCoda && preparata.ridotti > 0 ? { ridotti: preparata.ridotti } : {}),
+      ...(preparata.soloCoda && preparata.immagini > 0 ? { immagini: preparata.immagini } : {}),
       ...(resto ? { restoNonRiuscito: resto } : {}), ...(adottato && typeof adottato === 'object' ? { adottato } : {}),
       ...(preparata.ripiego ? { ripiego: true, classe: preparata.classe, ...(preparata.ragione ? { ragione: preparata.ragione } : {}) } : {}) }); // L1: chi guarda sa che il riassunto è del codice
   };
   /** Applica un riassunto (appena fatto o preparato prima): da qui il giro manda la proiezione nuova. */
-  const applicaCompattazione = (preparata, { requestIndex, motivo, istantanea = false, muto = false, adottato = null }) => {
+  const applicaCompattazione = (preparata, { requestIndex, motivo, istantanea = false, muto = false, adottato = null, baseGratuita = false }) => {
     const { record } = preparata;
     ultimaCodaAlMinimo = preparata.codaAlMinimo;
     ultimoPavimentoStimato = preparata.pavimento;
@@ -1044,9 +1337,13 @@ function wrapContextHooks(original, {
        (N3), quindi qui si rifà la stima della proiezione */
     ultimaProiezioneStimata = Array.isArray(record.riassunto) ? kernel.stimaTokenConversazione(record.riassunto) : (record.tokenDopo ?? 0);
     records.push(record);
+    if (preparata.soloCoda === true || preparata.ripiego === true) recordGratuiti.add(record); // R13-1: gratuito, da confermare
     ancora = null;
     attendeVerdetto = true;
-    if (!muto) annunciaCompattazione(preparata, { requestIndex, motivo, istantanea, adottato });
+    /* pezzo D: il prossimo numero vero giudica anche per il freno — solo dopo un riassunto PAGATO (F1 della revisione 9 della CLI: la
+       sola coda e il riassunto senza modello non sono riassunti pagati, e un loro verdetto oltre la soglia frenava i riassunti a torto) */
+    if (!preparata.soloCoda && !preparata.ripiego) verdettoDelFreno = true;
+    if (!muto) annunciaCompattazione(preparata, { requestIndex, motivo, istantanea, adottato, baseGratuita });
     return preparata.proiezione;
   };
 
@@ -1061,12 +1358,20 @@ function wrapContextHooks(original, {
     /* Stima contro stima, come il registro: `tokenPrima` può essere ancorato al numero del fornitore, quindi non si usa.
        ⛔ Revisione avversaria di 068b2c172 (F1): la stima di sempre non vede immagini e pezzi (valgono 0), e un riassunto che toglieva
        dodici immagini «cresceva». Seconda passata (N1): un'esenzione per la sessione intera spegneva la guardia con UNA immagine.
-       ⇒ Prima e dopo si pesano coi pezzi (`stimaConPezzi`, come Hermes). E sul contesto pieno (`overflow`) non si giudica: lì il giro
-       deve ripartire più leggero (owner 21/10), e scartare il riassunto lo faceva morire. */
-    if (opzioni.motivo !== 'overflow' && compattazione.stimaConPezzi(preparata.proiezione) >= compattazione.stimaConPezzi(projected)) {
+       ⇒ Prima e dopo si pesano coi pezzi (`stimaConPezzi`, come Hermes).
+       ⛔ Pezzo C (§4.1 del rapporto della CLI, «mai un riassunto cresciuto, nemmeno sul rifiuto»): prima sul contesto pieno (`overflow`)
+       non si giudicava — un riassunto cresciuto si pagava, si applicava e il ritentativo veniva rifiutato di nuovo (15.636 → 16.045,
+       `review613-5/paste-overflow.out`). Ora vale su ogni strada; sul rifiuto col bersaglio la preparazione ripiega già da sé. */
+    if (compattazione.stimaConPezzi(preparata.proiezione) >= compattazione.stimaConPezzi(projected)) {
       tentativiFallitiNelTurno += 1;
       if (opzioni.conBase) restoNonRiuscito = { motivo: 'inefficace', interrottaIn: 'sostituzione' };
       else emitOnGiro?.({ giro: opzioni.requestIndex, tipo: 'compattazione-fine', compattato: false, motivo: 'inefficace', interrottaIn: 'sostituzione' });
+      /* Pezzo D: un riassunto rifiutato perché ALLUNGAVA è un colpo (Hermes `record_rejected_compaction`), detto dopo l'«inefficace».
+         La sola coda e il riassunto senza modello non sono riassunti pagati. */
+      if (!preparata.soloCoda && !preparata.ripiego) aggiornaFreno(compattazione.colpoAlFreno(freno, { mezzo: compattazione.mezzoDellaProiezione(projected), ...identitaDelFreno() }), opzioni.requestIndex);
+      if (!preparata.soloCoda && !preparata.ripiego && Number.isFinite(opzioni.tokenMisurati)) {
+        riassuntoInefficaceDelGiro = { token: opzioni.tokenMisurati, base: compattazione.chiaveBaseDelRecord(compacted ?? null) };
+      }
       return null;
     }
     return applicaCompattazione(preparata, opzioni);
@@ -1128,7 +1433,19 @@ function wrapContextHooks(original, {
    * 2. arrivato valido ma non sufficiente ⇒ diventa la base (`scambioPossibile` con `comeBase`), e si riassume solo il resto;
    * 3. altrimenti come prima.
    */
-  const compattaDovuta = async (rawMessages, projected, { token, misura, requestIndex, motivo, soglia }) => {
+  const compattaDovuta = async (...argomenti) => {
+    const mie = frasiDelFrenoInAttesa === null;
+    if (mie) frasiDelFrenoInAttesa = [];
+    try { return await compattaDovutaAdesso(...argomenti); }
+    finally {
+      if (mie) {
+        const frasi = frasiDelFrenoInAttesa;
+        frasiDelFrenoInAttesa = null;
+        for (const riga of frasi) emitOnGiro?.(riga);
+      }
+    }
+  };
+  const compattaDovutaAdesso = async (rawMessages, projected, { token, misura, requestIndex, motivo, soglia, bersaglio = null, livelloContestoPieno = 0, certo = null }) => {
     let inizioDetto = false;
     if (inVolo && inVoloVale(rawMessages)) {
       const atteso = await aspettaInVolo(rawMessages, { token, misura, requestIndex, motivo, soglia });
@@ -1151,7 +1468,11 @@ function wrapContextHooks(original, {
      *   Sopra la soglia e sotto l'emergenza la richiesta parte, come sempre fra le due linee: la prossima preparazione in sottofondo, o
      *   il prossimo riassunto di fine giro, ne terrà conto.
      */
-    if (base && kernel.stimaTokenConversazione(daCompattare) + Math.round(scartoCorrente()) < soglia) {
+    /* Pezzo C: sul rifiuto del fornitore la base basta se arriva al BERSAGLIO (stima coi pezzi della sola proiezione) */
+    const bastaLaBase = Number.isFinite(bersaglio)
+      ? compattazione.stimaConPezzi(daCompattare) <= bersaglio
+      : kernel.stimaTokenConversazione(daCompattare) + Math.round(scartoCorrente()) < soglia;
+    if (base && bastaLaBase) {
       annunciaCompattazione(base, { requestIndex, motivo, istantanea: true, adottato: segnoAdottato(base, false) });
       return daCompattare;
     }
@@ -1160,6 +1481,8 @@ function wrapContextHooks(original, {
     try {
       proiezione = await compattaOra(rawMessages, daCompattare, {
         requestIndex, motivo, tokenMisurati: token, misura, soglia, inizioDetto, conBase: Boolean(base), adottato: segnoAdottato(base, true),
+        baseGratuita: base?.soloCoda === true, // F1: la riga di base più resto è gratuita solo se lo è anche la base
+        ...(Number.isFinite(bersaglio) ? { bersaglio, livelloContestoPieno, certo } : {}),
       });
     } catch (errore) {
       /* Quarta passata avversaria (F1): uno Stop durante il riassunto del resto risale come eccezione — la base è già applicata, e senza
@@ -1208,7 +1531,7 @@ function wrapContextHooks(original, {
   const inVoloVale = (rawMessages) => {
     const f = inVolo?.firma;
     if (!f) return true;
-    return f.base === chiaveBase() && rawMessages.length >= f.coveredThrough && improntaDelPrefisso(rawMessages, f.coveredThrough) === f.impronta;
+    return f.base === chiaveBase() && rawMessages.length >= f.coveredThrough && improntaDelPrefisso(storiaVera(rawMessages), f.coveredThrough) === f.impronta;
   };
   if (!pronta && compattazioneInArrivo && typeof compattazioneInArrivo.then === 'function') {
     const promessa = Promise.resolve(compattazioneInArrivo)
@@ -1237,7 +1560,7 @@ function wrapContextHooks(original, {
     if (!pronta) return 'none';
     if (pronta.base !== chiaveBase()) return 'base-changed';
     if (rawMessages.length < pronta.record.coveredThrough) return 'history-shorter';
-    if (improntaDelPrefisso(rawMessages, pronta.record.coveredThrough) !== pronta.impronta) return 'prefix-changed';
+    if (improntaDelPrefisso(storiaVera(rawMessages), pronta.record.coveredThrough) !== pronta.impronta) return 'prefix-changed';
     return null;
   };
   const prontaValida = (rawMessages) => perchéNonVale(rawMessages) === null;
@@ -1267,7 +1590,7 @@ function wrapContextHooks(original, {
     }
     const record = compattazione.creaRecord({
       coveredThrough: rawMessages.length, riassunto: proiezione, tokenPrima: token, tokenDopo, misura,
-      at: new Date().toISOString(), modello, indice: pronta.record.indice ?? null, coperti: rawMessages,
+      at: new Date().toISOString(), modello, indice: pronta.record.indice ?? null, coperti: storiaVera(rawMessages), freno,
     });
     /* S3-2: il record dello scambio è nuovo (copre la storia di adesso, con un `at` suo) — `adottatoDa` tiene l'`at` di quello
        preparato e da dove viene (il registro marca il suo `origine: 'fine-giro'`; senza marca l'ha preparato un giro) */
@@ -1288,7 +1611,7 @@ function wrapContextHooks(original, {
     if (scambio && scambio.record.tokenDopo < soglie.warningTokens) return;
     const copia = rawMessages.slice();
     const base = chiaveBase();
-    const impronta = improntaDelPrefisso(copia, copia.length);
+    const impronta = improntaDelPrefisso(storiaVera(copia), copia.length); // revisione 14: sulla storia VERA, come il registro
     const promessa = preparaCompattazione(copia, projected.slice(), { requestIndex, motivo: 'precalcolo', tokenMisurati, misura, soglia: soglie.soglia, inSottofondo: true })
       .then((preparata) => {
         if (!preparata || base !== chiaveBase()) return null;
@@ -1373,6 +1696,23 @@ function wrapContextHooks(original, {
     if (scarto !== null) ultimoScarto = scarto;
     const intero = compattazione.scartoPlausibile(promptTokens, ancora.stima, { finestraToken: soglie.finestraToken, soglia: soglie.soglia });
     if (intero !== null) ultimoScartoIntero = intero;
+    /* Pezzo E: k sulla stima della richiesta intera — messaggi coi pezzi (le immagini contano, come nel guadagno) più gli schemi degli
+       attrezzi del giro, che il fornitore conta e la stima dei messaggi no. Un numero impossibile (la stessa plausibilità dello scarto)
+       non è una misura. */
+    if (intero !== null) {
+      const k = compattazione.fattoreK(promptTokens, compattazione.stimaConPezzi(richiestaCorrente.array) + (stimaAttrezziDelGiro ?? 0));
+      if (k !== null) kDellaSessione = k;
+    }
+    /* Pezzo D: ogni lettura vera sotto la soglia azzera i colpi; il primo numero vero dopo una compattazione applicata ancora oltre la
+       soglia è un colpo (Hermes `_apply_real_prompt_verdict`). Il mezzo del verdetto è quello della proiezione mandata. */
+    if (promptTokens < soglie.soglia) freno = compattazione.letturaSottoLaSoglia(freno);
+    if (verdettoDelFreno) {
+      verdettoDelFreno = false;
+      /* il mezzo al verdetto è il riferimento del riarmo per crescita, anche quando il verdetto è buono */
+      const mezzo = compattazione.mezzoDellaProiezione(projectLegacy(richiestaCorrente.grezzi));
+      if (promptTokens >= soglie.soglia) aggiornaFreno(compattazione.colpoAlFreno(freno, { mezzo, ...identitaDelFreno() }), richiestaCorrente.requestIndex);
+      else if (freno) freno = { ...freno, mezzoAlVerdetto: mezzo };
+    }
     if (attendeVerdetto) {
       /* Come Hermes `_apply_real_prompt_verdict` (`context_compressor.py:2749-2782`): l'efficacia si giudica sul
        * numero VERO della richiesta successiva, non sul numero di messaggi. */
@@ -1418,6 +1758,155 @@ function wrapContextHooks(original, {
     return { messaggi: messaggi.slice(0, storiaCatturata), effimeri: messaggi.slice(storiaCatturata) };
   };
 
+  /*
+   * §4.2, REGOLA N (owner 22/10/2026; modulo `richiesta-troppo-grande.mjs`): prima di QUALUNQUE lavoro pagato della richiesta — riassunto
+   *   compreso — si guarda se sistema, attrezzi e richiesta nuova insieme superano la linea d'emergenza. Se sì il giro si ferma con
+   *   `REQUEST_TOO_LARGE` e la storia del giro senza la richiesta; se la persona ha scelto «Invia come allegato», la richiesta parte come
+   *   inizio + fine con il testo intero nel file della sessione (`cartellaIncollati`), e resta così per TUTTE le richieste del giro
+   *   (`allegate`, per testo: l'array del kernel ha sempre il testo intero, la storia grezza non si tocca).
+   */
+  const allegate = new Map();
+  const vuoleAllegato = (testo) => {
+    if (allegaSeTroppoGrande === true) return true;
+    if (typeof allegaSeTroppoGrande !== 'function') return false;
+    try { return allegaSeTroppoGrande(testo) === true; } catch { return false; }
+  };
+  /* Pezzo C: sul rifiuto del fornitore la stessa regola con la linea del BERSAGLIO (`linea`), la finestra che il fornitore ha detto
+     (`finestraDelRifiuto`, se l'ha detta) e `fonte: 'fornitore'` (contratto (a) con la CLI). Senza opzioni, la regola di sempre.
+     ⛔ F2a della revisione 9 della CLI (23/10/2026): prima del rifiuto la linea è la FINESTRA dichiarata, non l'emergenza (0,90). Fra le
+     due la richiesta può entrare: 8.982 caratteri a 10.240 partivano e avevano risposta (9.552 token), 9.012 venivano fermati come
+     «oltre la finestra» con 9.555 < 10.240 — una frase falsa su una richiesta che entrava. Solo l'oltre-finestra è CERTO (la stessa
+     lettura di N7); in mezzo decide il fornitore, e un suo rifiuto passa dalla strada del contesto pieno (pezzo C), che ha i numeri. */
+  /* R13-1 (revisione 13 della CLI, 23/10/2026): tre opzioni nuove, solo per il rifiuto coi numeri del fornitore.
+     - `corniceInPiu`: la parte della cornice che il fornitore conta oltre la stima ed è CERTA (`scartoFissoCerto` meno gli attrezzi): la
+       linea la toglieva già, ma la frase diceva la cornice senza di lei — «11.005 + 7.421 non entra in 24.000», una somma che entra;
+     - `riserva`: lo spazio per la risposta, che è ciò che porta oltre la finestra (R11-8); si dice;
+     - `forza` + `spazio`: il fornitore ha rifiutato una richiesta che non si può accorciare più, e senza la richiesta nuova il resto
+       entra — è LEI a non entrare, coi numeri suoi; `spazio` è quanto resta per lei (nella scala della stima). */
+  const regolaN = async (grezzi, effimeri, attrezzi, requestIndex, { linea = null, fonte = 'stima', finestraDelRifiuto = null, scala = 1,
+    corniceInPiu = 0, riserva = 0, forza = false, spazio = null } = {}) => {
+    const lista = allegate.size === 0 ? grezzi : grezzi.map((m) => {
+      const testo = compattazione.eRichiestaVera(m) ? testoSemplice(m) : null;
+      return testo !== null && allegate.has(testo) ? allegate.get(testo) : m;
+    });
+    const finestra = finestraDelRifiuto ?? soglie.finestraToken;
+    if (!(Number.isFinite(finestra) && finestra > 0)) return lista;
+    linea ??= finestra;
+    /* R11-2 (revisione 11 della CLI): sul rifiuto del fornitore (`fonte:'fornitore'`) i numeri si dicono nella SUA scala — la proporzione
+       fra il suo conto e la nostra stima della richiesta rifiutata, come il pavimento di Z-K3. Prima la frase diceva «come ha contato il
+       fornitore» con la nostra stima: 30.005 dove il fornitore ne contava circa 37.500. */
+    const nellaSuaScala = (n) => (scala > 0 && scala !== 1 ? Math.ceil(n * scala) : n);
+    const peso = pesoDellaRichiestaNuova(lista, { attrezzi, effimeri });
+    if (!peso || (!forza && peso.tokensCornice + peso.tokensRichiesta < linea)) return lista;
+    /*
+     * ⛔ S4-1 (revisione 9 della CLI, 23/10/2026): «troppo grande» si dice solo di un messaggio che è LUI a non far entrare. Due casi che
+     *   non lo sono, misurati dalla CLI: «hello» (2 token) su una finestra da 4.096 con ~7.255 token di attrezzi, e «Q» (3 token) su 8.192
+     *   con ~8.044 — fermati come «troppo grandi» con «Invia come allegato», che non poteva servire.
+     *   (1) La cornice da sola (sistema, attrezzi, effimeri) è già oltre la linea d'emergenza: è la FINESTRA. Lo dice «non entra», una
+     *       volta per finestra come F6, e la richiesta va al fornitore, che decide (8.047 su 8.192 può passare).
+     *   (2) Un testo corto (non allegabile): con lui o senza la cornice resta al limite, e l'allegato non aiuta — decide la strada di
+     *       sempre (compattazione, F6, fornitore).
+     *   Restano di questa regola i testi lunghi (l'allegato aiuta) e le immagini (`allegabile:false`, onesto).
+     */
+    if (!forza && peso.tokensCornice >= linea) {
+      if (nonEntraGiaDetto !== finestra) {
+        nonEntraGiaDetto = finestra;
+        emitOnGiro?.({ giro: requestIndex, tipo: 'compattazione-fine', compattato: false, motivo: 'non-entra', finestra, pavimento: nellaSuaScala(peso.tokensCornice + peso.tokensRichiesta) });
+      }
+      return lista;
+    }
+    if (testoAllegabile(lista[peso.indice]) === null && testoSemplice(lista[peso.indice]) !== null) return lista;
+    const testo = testoAllegabile(lista[peso.indice]);
+    const corniceDetta = peso.tokensCornice + Math.max(0, Number.isFinite(corniceInPiu) ? corniceInPiu : 0);
+    const rifiuta = (allegabile) => {
+      throw new RichiestaTroppoGrande({ ...peso, tokensRichiesta: nellaSuaScala(peso.tokensRichiesta), tokensCornice: nellaSuaScala(corniceDetta),
+        finestra, fonte, allegabile, messaggiDelGiro: grezzi.filter((_, i) => i !== peso.indice),
+        ...(Number.isFinite(riserva) && riserva > 0 ? { riserva: Math.round(riserva) } : {}) });
+    };
+    if (testo === null) rifiuta(false);
+    /* ⛔ F2b della revisione 9 della CLI (23/10/2026): «allegabile» si decide sulla forma allegata VERA, prima della prima risposta. Prima
+       il primo rifiuto diceva `allegabile:true` e solo il secondo, col file già scritto, scopriva che inizio + fine + nota + cornice non
+       entravano (8.192: cornice 7.302, pulsante offerto e poi fallito) — e ogni tentativo lasciava un file orfano in `incollati`. Il
+       percorso del file è l'impronta del testo (`nomeDellaRichiestaSalvata`): la forma allegata si conosce senza scriverlo. Senza una
+       cartella per il file l'allegato non può partire mai. Il file si scrive solo quando la forma allegata entra. */
+    if (typeof cartellaIncollati !== 'string' || cartellaIncollati === '') rifiuta(false);
+    const allegata = { ...lista[peso.indice], content: richiestaAllegataPerIlModello(testo, join(cartellaIncollati, nomeDellaRichiestaSalvata(testo))) };
+    /* anche come allegato non entra (la cornice da sola è troppo grande): allegare non servirebbe. R13-1: forzata dal fornitore, si
+       misura contro lo spazio che i suoi numeri lasciano alla richiesta */
+    if (Number.isFinite(spazio) ? compattazione.stimaConPezzi([allegata]) > spazio : peso.tokensCornice + compattazione.stimaConPezzi([allegata]) >= linea) rifiuta(false);
+    if (!vuoleAllegato(testo)) rifiuta(true);
+    const percorso = await salvaRichiestaIntera(cartellaIncollati, testo);
+    /* senza il file il mezzo non si potrebbe leggere: non si manda niente, e la persona ha ancora il testo nella casella */
+    if (!percorso) rifiuta(true);
+    allegate.set(testo, allegata);
+    return lista.map((m, i) => (i === peso.indice ? allegata : m));
+  };
+  /*
+   * ⛔ R13-3 (revisione 13 della CLI, 23/10/2026, S2): UNA RICHIESTA VECCHIA DI CUI LA SESSIONE HA GIÀ LA COPIA INTERA RESTA CORTA.
+   *   La forma ad allegato valeva solo per il suo giro (`allegate` è del giro): al giro dopo la storia grezza riportava il testo intero
+   *   — col motore del contesto un incollato da 600.000 caratteri mandato come allegato veniva poi riassunto INTERO a ogni giro (~152.700
+   *   token al modello leggero, SUMMARY#2–#5 di `ceatt3`), o rimandato e rifiutato (`ceatt`). Senza motore lo salvava la regola K, solo
+   *   oltre il suo budget.
+   *   ⇒ Se nella cartella degli incollati della sessione c'è la copia intera di una richiesta vecchia della persona (l'ha scritta
+   *   l'allegato, o la regola K quando l'ha accorciata: lo stesso nome, l'impronta del testo), il modello e il motore la vedono nella
+   *   forma corta, inizio + fine + percorso, da quel momento in poi. La storia grezza resta com'è (l'archivio la tiene intera). Una
+   *   richiesta grande una volta non torna intera dopo: tenerla ferma è anche ciò che lascia valida la cache del prompt del fornitore.
+   *   Mai la richiesta del giro (`indiceRichiestaNuova`: la regola N è sua).
+   */
+  const copieGiaSalvate = (lista) => {
+    if (typeof cartellaIncollati !== 'string' || cartellaIncollati === '' || !Array.isArray(lista)) return lista;
+    const nuova = indiceRichiestaNuova(lista);
+    let cambiata = false;
+    const fuori = lista.map((m, i) => {
+      if (i === nuova || !compattazione.eRichiestaVera(m)) return m;
+      const testo = testoAllegabile(m);
+      if (testo === null) return m;
+      const percorso = join(cartellaIncollati, nomeDellaRichiestaSalvata(testo));
+      if (!existsSync(percorso)) return m;
+      cambiata = true;
+      const corta = { ...m, content: richiestaAllegataPerIlModello(testo, percorso) };
+      originaleDellaCopia.set(corta, m); // revisione 14: le impronte si calcolano sull'originale (`storiaVera`)
+      return corta;
+    });
+    return cambiata ? fuori : lista;
+  };
+  /*
+   * ⛔ R13-2, seconda parte (owner 23/10/2026 via la CLI, «sì, nella 0.6.13»): una richiesta mandata, rifiutata e solo DOPO giudicata
+   *   troppo grande è già nell'archivio del motore (`prepare` l'ha presa prima dell'invio, e gli originali non si cancellano). Lì il
+   *   registro la TIENE nella storia, così l'archivio combacia; qui, in ogni proiezione dopo, al suo posto va una nota di TALOS: il
+   *   modello la legge e il motore riassume solo lei, mai il testo. Una richiesta rimandata come allegato è un messaggio nuovo, dopo.
+   */
+  const NOTA_RICHIESTA_NON_INVIATA = '[TALOS] A message the person wrote here was not sent: it was too large for this model\'s window. Its text is not part of this conversation.';
+  const noteDelleNonInviate = (lista) => {
+    if (!Array.isArray(lista) || richiesteNonInviate.length === 0) return lista;
+    let cambiata = false;
+    const fuori = lista.map((m, i) => {
+      if (!richiesteNonInviate.includes(i) || !compattazione.eRichiestaVera(m)) return m;
+      cambiata = true;
+      return { role: 'user', content: NOTA_RICHIESTA_NON_INVIATA };
+    });
+    return cambiata ? fuori : lista;
+  };
+  /* R13-2: il motore ha preso nel suo archivio la richiesta di questo giro (una `prepare` riuscita la sincronizza), e la lista GREZZA
+     che ha archiviato: se la richiesta poi non parte, è lei la storia del giro (allineata all'archivio, con ciò che il giro accoda dopo
+     la richiesta), non quella d'inizio giro */
+  let richiestaNelMotore = false;
+  let originaliNelMotore = null;
+  /* ⛔ R13-2 (revisione 13 della CLI, S2): la richiesta nuova non entra nell'archivio del motore prima che il fornitore abbia risposto
+     una volta in questo giro. L'archivio è a sola aggiunta (gli originali sono immutabili per costruzione, `originals_no_delete`): una
+     richiesta che la regola N ferma prima dell'invio, archiviata da `capture('start')`, al giro dopo non combaciava più con la storia
+     (che non la porta), e il motore metteva da parte l'archivio e ripagava tre riassunti (39.550 + 13.231 + 2.383 token, `ce-div`). La
+     archivia `prepare`, che la regola N ha già lasciato passare. Si archivia la storia di PRIMA del giro: fino alla richiesta esclusa —
+     dopo di lei possono venire solo i `system` e le note che il giro accoda (`indiceRichiestaNuova` li salta), e il registro, quando
+     la richiesta non parte, tiene proprio la storia di prima senza di lei. Togliere solo lei spostava le posizioni di chi la segue.
+     «Prima che il fornitore abbia risposto» non ha bisogno di un segno: dopo la prima risposta dietro la richiesta c'è il messaggio
+     dell'assistente, e `indiceRichiestaNuova` non la trova più (un mutante che toglieva quel segno sopravviveva: era ridondante). */
+  const senzaRichiestaNonAccettata = (messaggi) => {
+    if (!Array.isArray(messaggi)) return messaggi;
+    const i = indiceRichiestaNuova(messaggi);
+    return i >= 0 ? messaggi.slice(0, i) : messaggi;
+  };
+
   const hooks = {
     async capture(payload) {
       /* 13/10/2026 (bugfixer, review di ac8f5a362): quanto è lunga la storia VERA in questo momento. `prepare` lo usa per
@@ -1435,7 +1924,8 @@ function wrapContextHooks(original, {
        *   la richiesta dopo passa da `prepare`, che sincronizza di nuovo gli originali (recupera ciò che qui non è stato
        *   scritto), ripara o ricade, e lo dice una volta. Uno Stop resta uno Stop.
        */
-      try { return await original.capture(payload); }
+      const daArchiviare = senzaRichiestaNonAccettata(payload?.messages); // R13-2
+      try { return await original.capture(daArchiviare === payload?.messages ? payload : { ...payload, messages: daArchiviare }); }
       catch (errore) {
         if (segnaleStop?.aborted || payload?.signal?.aborted || errore?.name === 'AbortError') throw errore;
         return undefined;
@@ -1458,14 +1948,43 @@ function wrapContextHooks(original, {
       }
       /* Gli effimeri (il `system` del Piano) si staccano PRIMA di tutto: né riassunto, né archivio, né ancora. */
       const { messaggi: grezzi, effimeri } = separaEffimeri(payload.messages);
+      /* §4.2, regola N: prima di ogni compattazione e di ogni chiamata — vedi `regolaN`.
+         ⛔ R11-7 (revisione 11 della CLI, 23/10/2026): senza una finestra nota, quella che il fornitore ha detto rifiutando (nel giro prima,
+         per lo stesso modello: `rifiutoNoto`), nella sua scala. Prima «Invia come allegato» e `--attach-if-too-large` rimandavano la
+         richiesta appena rifiutata, identica, e solo al secondo rifiuto partiva l'allegato. */
+      /* La scala del rifiuto vale per intero solo per la STESSA richiesta (stessa impronta): per un'altra può venire dalla storia di
+         allora, e un fornitore che conta più della stima la farebbe sembrare più grande di quanto è — si usa al più 1, così la regola
+         ferma prima di mandare solo ciò che non entrerebbe di certo, e il resto lo decide il fornitore. */
+      let conRifiutoNoto;
+      if (rifiutoNoto) {
+        const i = indiceRichiestaNuova(grezzi);
+        const testo = i >= 0 ? testoSemplice(grezzi[i]) : null;
+        const stessa = testo !== null && typeof rifiutoNoto.impronta === 'string' && nomeDellaRichiestaSalvata(testo) === rifiutoNoto.impronta;
+        const finestraNota = Number.isFinite(soglie.finestraToken) && soglie.finestraToken > 0;
+        if (stessa || !finestraNota) {
+          const scala = stessa ? rifiutoNoto.scala : Math.min(1, rifiutoNoto.scala);
+          conRifiutoNoto = { linea: Math.floor(rifiutoNoto.finestra / scala), fonte: 'fornitore', finestraDelRifiuto: rifiutoNoto.finestra, scala };
+        }
+      }
+      const perIlModello = copieGiaSalvate(noteDelleNonInviate(await regolaN(grezzi, effimeri, payload?.tools, requestIndex, conRifiutoNoto))); // R13-2, R13-3
       // Correct BEFORE any context-engine projection or legacy compaction so an
       // ambiguous raw tool result cannot be summarized into a false statement.
-      const inputMessages = correggiMessaggiDesktop(grezzi, { cartella, memoria: correzioniFissate });
+      const inputMessages = correggiMessaggiDesktop(perIlModello, { cartella, memoria: correzioniFissate });
       let prepared;
       let ripiego = false;
       /* lo Skip di QUESTA richiesta (C): lo stesso segnale entra nel motore e decide, se fallisce, se è stata la persona */
       const saltaDellaRichiesta = segnaleSalta();
       if (legacyMode) prepared = { messages: await maybeCompactLegacy(inputMessages, requestIndex) };
+      /* ⛔ R13-4 (revisione 13 della CLI, 23/10/2026, S3): la finestra che il fornitore ha detto rifiutando (`rifiutoNoto`, R11-7) non
+         arrivava al motore, che preparava con la finestra dichiarata: un rifiuto a OGNI giro (5 in 5 da T13 in `ce-ovf`, contro 1 senza
+         motore). Quando è lei la finestra che vale (più piccola del catalogo, o il catalogo non ne ha), la richiesta passa dalla
+         compattazione semplice, che la usa (`soglie`, dal registro); il motore riprende quando il rifiuto non vale più (R12-3). Niente
+         riga: non è un guasto del motore, è il fornitore che ha detto la sua finestra. L'archivio continua a riceverla da `capture`. */
+      else if (rifiutoNoto && Number.isFinite(rifiutoNoto.finestra) && rifiutoNoto.finestra > 0
+        && !(Number.isFinite(soglie.finestraToken) && soglie.finestraToken < rifiutoNoto.finestra)) {
+        ripiego = true;
+        prepared = { messages: await maybeCompactLegacy(inputMessages, requestIndex) };
+      }
       else {
         try {
           /* A1 + B1 (21/10/2026): al motore il tetto del riassunto atteso, e lo Skip dentro il segnale della richiesta — così il motore
@@ -1480,6 +1999,9 @@ function wrapContextHooks(original, {
             const { asideId: _daParte, ...dettaglio } = prepared.riallineato;
             emitOnGiro?.({ giro: requestIndex, tipo: 'compattazione-fine', compattato: false, motivo: 'archivio-riallineato', codice: 'CTX_HISTORY_DIVERGED', dettaglio });
           }
+          ripiegoInCorso = null; // R12-2: il motore è tornato sano; un guasto dopo si dice di nuovo
+          richiestaNelMotore = true; // R13-2: da qui la richiesta del giro è nell'archivio del motore
+          originaliNelMotore = grezzi;
         }
         catch (errore) {
           /* ⛔⛔ Owner 12/10/2026, «errori di compattazione non devono bloccare il flusso chat… è una regressione grave»: dal vivo
@@ -1498,8 +2020,7 @@ function wrapContextHooks(original, {
           ripiego = true;
           /* 22/10/2026 (Mobile; owner «cura nella 0.1.36»): dopo «Salta il riassunto» il ripiego è una scelta della persona, non un guasto
              del motore — la riga di «ripiego» era di troppo e contraddiceva la riga d'esito. Un guasto vero la dice come prima. */
-          if (!ripiegoDetto && ragioneSenzaModello !== 'saltato') {
-            ripiegoDetto = true;
+          if (ragioneSenzaModello !== 'saltato' && diciRipiego(errore?.code ?? null)) {
             emitOnGiro?.({ giro: requestIndex, tipo: 'compattazione-fine', compattato: false, motivo: 'ripiego', codice: errore?.code ?? null,
               /* R-05: dove la storia non combaciava (posizioni e ruolo, mai contenuto), quando chi ha fallito lo sa dire. */
               ...(errore?.dettaglio && typeof errore.dettaglio === 'object' ? { dettaglio: errore.dettaglio } : {}) });
@@ -1508,9 +2029,16 @@ function wrapContextHooks(original, {
         }
       }
       const proiettati = correggiMessaggiDesktop(prepared?.messages ?? inputMessages, { cartella, memoria: correzioniFissate });
-      const messages = compattazione.riattaccaEffimeri(proiettati, effimeri);
-      richiestaCorrente = legacyMode || ripiego ? { array: messages, grezzi: inputMessages, effimeri, requestIndex, lunghezzaProiezione: proiettati.length } : null;
+      /* ⛔ R11-3 (revisione 11 della CLI, 23/10/2026): la lista della richiesta è SEMPRE una copia. Senza niente da correggere né da
+         proiettare era l'array della storia del kernel (`messaggi`, passato com'è quando non ci sono note in coda), e la riscrittura sul
+         rifiuto del fornitore (`array.splice`, qui sotto in `inferLegacy` e nel ritentativo del motore) sostituiva la STORIA VERA con la
+         proiezione accorciata: un giro riuscito dopo il rifiuto finiva con `messaggiFinali` accorciati e un record che puntava oltre la
+         loro fine; uno fallito portava `messaggiDelGiro` accorciati, che il registro buttava (non estendono la storia). C'era dal 24/09. */
+      const messages = [...compattazione.riattaccaEffimeri(proiettati, effimeri)];
+      richiestaCorrente = legacyMode || ripiego ? { array: messages, grezzi: inputMessages, effimeri, requestIndex, lunghezzaProiezione: proiettati.length, attrezzi: payload?.tools } : null;
       richiestaSenzaAttesa = !legacyMode && !ripiego && prepared?.sentWithoutWaiting === true ? { array: messages, payload, grezzi, inputMessages, effimeri, requestIndex } : null;
+      richiestaDelMotore = !legacyMode && !ripiego
+        ? { array: messages, grezzi: inputMessages, effimeri, requestIndex, lunghezzaProiezione: proiettati.length, attrezzi: payload?.tools } : null;
       return { ...(prepared && typeof prepared === 'object' ? prepared : {}), messages };
     },
     async captureProviderResponse(payload) {
@@ -1537,6 +2065,22 @@ function wrapContextHooks(original, {
     get scartoNonEntra() { const v = Math.max(ultimoScartoIntero ?? 0, stimaAttrezziDelGiro ?? 0); return v > 0 ? v : null; },
     /* N2 (revisione 8): la stima degli schemi che il giro ha mandato davvero, per il registro (anche dopo un riavvio, dal giornale) */
     get stimaAttrezzi() { return stimaAttrezziDelGiro; },
+    /* Pezzo D: il freno com'è a fine giro, per il registro (che lo scrive nel giornale quando cambia) */
+    get freno() { return freno; },
+    /* R11-4: l'ultima copia del registro che il giro ha unito alla sua — la base dell'unione di fine giro (le ricariche già unite non si
+       contano due volte) */
+    get frenoVisto() { try { return JSON.parse(frenoVivoVisto); } catch { return null; } },
+    get riassuntoInefficace() { return riassuntoInefficaceDelGiro; }, // R11-5
+    get rifiutoDelFornitore() { return rifiutoDelFornitore; }, // R11-7
+    get ripiegoDetto() { return ripiegoInCorso; }, // R12-2: il ripiego detto e non ancora guarito, per il giro dopo
+    get massimoAccettato() { return massimoAccettato; }, // R12-3
+    /* Pezzo E: i riassunti veri della sessione e k com'erano a fine giro (null se nessun numero vero li ha misurati) */
+    get riassuntiVeri() { return riassuntiVeriDellaSessione; },
+    get fattoreK() { return kDellaSessione; },
+    /* R13-1 (terza parte): per il giro che fallisce — vedi `recordsConfermati` */
+    annullaGratuitiNonConfermati,
+    get richiestaNelMotore() { return richiestaNelMotore; }, // R13-2
+    get originaliNelMotore() { return originaliNelMotore; }, // R13-2
   };
   const inferLegacy = async ({ signal } = {}, invoke) => {
       try {
@@ -1548,35 +2092,178 @@ function wrapContextHooks(original, {
         const classe = compattazione.classificaErroreFornitore(errore);
         if (classe !== 'contesto-pieno') throw errore;
         if (errore && typeof errore === 'object') errore.classificazione = classe;
-        if (overflowRitentato || !richiestaCorrente) throw errore;
-        overflowRitentato = true;
-        const { array, grezzi, effimeri, requestIndex } = richiestaCorrente;
-        const projected = projectLegacy(grezzi);
-        const { token, misura } = compattazione.misuraOccupazione({ ancora, messaggi: projected, finestraToken: soglie.finestraToken, scarto: scartoDellaStima ?? 0 });
-        /* 15/10/2026: anche qui prima il riassunto in preparazione o pronto, poi (solo se non c'è) uno nuovo.
-           ⛔ Revisione 5 della CLI (22/10/2026 notte, S2-2): qui si aspettava il riassunto in volo SENZA tetto, senza Stop, senza «Salta»
-           e senza controllarne la firma (`await inVolo.promessa`) — con un riassunto di fine giro ereditato e lento il giro restava
-           muto per minuti, e lo Stop non lo fermava. ⇒ La stessa strada dell'emergenza: uno pronto che vale si usa; altrimenti
-           `compattaDovuta` (attende solo se la firma vale, con Stop, «Salta» e tetto; poi base o compattazione, e sull'overflow il
-           ripiego senza modello). Se non riduce niente si lancia l'errore di prima: la richiesta piena non riparte uguale. */
-        const scambio = pronta ? scambioPossibile(grezzi, { token, misura }) : null;
-        const proiezione = scambio
-          ? usaPronta(scambio, { requestIndex, motivo: 'overflow' })
-          : await compattaDovuta(grezzi, projected, { token, misura, requestIndex, motivo: 'overflow', soglia: soglie.soglia });
-        if (!proiezione || proiezione === projected) throw errore;
-        const nuova = compattazione.riattaccaEffimeri(correggiMessaggiDesktop(proiezione, { cartella, memoria: correzioniFissate }), effimeri);
-        array.splice(0, array.length, ...nuova);
-        richiestaCorrente.lunghezzaProiezione = nuova.length - effimeri.length;
-        try {
-          const esito = await invoke(signal);
-          aggiornaAncora(esito?.usage);
-          return esito;
-        } catch (secondo) {
-          /* Anche il ritentativo può finire in overflow: passa com'è, ma classificato come il primo. */
-          if (secondo && typeof secondo === 'object' && compattazione.classificaErroreFornitore(secondo) === 'contesto-pieno') secondo.classificazione = 'contesto-pieno';
-          throw secondo;
+        if (!richiestaCorrente) throw errore;
+        return scalaDelContestoPieno(errore, signal, invoke);
+      }
+  };
+  /* Pezzo C (§4.1 del rapporto della CLI): fino a tre scalini per giro. Ognuno riscrive la richiesta verso il suo bersaglio o lascia il
+     giro fallire col rifiuto del fornitore e la diagnosi (`contestoPieno`); un nuovo rifiuto passa allo scalino dopo. Sulla richiesta
+     corrente; R12-2: anche quella del motore, che sul rifiuto ci passa (sotto, `hooks.infer`). */
+  const scalaDelContestoPieno = async (errore, signal, invoke) => {
+    let rifiuto = errore;
+    for (;;) {
+      const nuova = await riscriviPerIlContestoPieno(rifiuto, richiestaCorrente);
+      if (!nuova) throw rifiuto;
+      const { array, effimeri } = richiestaCorrente;
+      array.splice(0, array.length, ...nuova);
+      richiestaCorrente.lunghezzaProiezione = nuova.length - effimeri.length;
+      try {
+        const esito = await invoke(signal);
+        aggiornaAncora(esito?.usage);
+        return esito;
+      } catch (secondo) {
+        if (signal?.aborted || segnaleStop?.aborted) throw secondo;
+        /* anche il ritentativo può finire in overflow: classificato come il primo, e tocca allo scalino dopo */
+        if (compattazione.classificaErroreFornitore(secondo) !== 'contesto-pieno') throw secondo;
+        if (secondo && typeof secondo === 'object') secondo.classificazione = 'contesto-pieno';
+        rifiuto = secondo;
+      }
+    }
+  };
+  /*
+   * ⭐ Pezzo C — UNO SCALINO SUL RIFIUTO DEL FORNITORE (§4.1 del rapporto della CLI, owner 22/10). Torna la richiesta riscritta (proiezione
+   *   corretta + effimeri) o `null`: allora il giro fallisce col rifiuto, che porta `contestoPieno` { scalino, bersaglio, numeri?,
+   *   esauriti? } — chi lo mostra dice quanto e perché (rapporto §4.4, «anche dopo gli accorciamenti»). Mai la stessa richiesta due volte.
+   *   1. Il bersaglio: dai numeri del fornitore, o dagli scalini 70/50/35% (`bersaglioDelContestoPieno`). La parte che la compattazione
+   *      non tocca (effimeri, attrezzi e scarto della stima) si toglie dal bersaglio: resta quello della proiezione.
+   *   2. La regola N sul bersaglio: se è la richiesta NUOVA della persona a non entrare, niente si paga — `REQUEST_TOO_LARGE` con
+   *      `fonte:'fornitore'` (o l'allegato, se la persona l'ha scelto). Se è la cornice da sola, «non entra» una volta e il giro fallisce.
+   *   3. La compattazione col bersaglio (`compattaDovuta`): passi gratuiti, un riassunto pagato solo se ci arriva e solo al primo scalino,
+   *      altrimenti il riassunto senza modello. Se non cambia niente, il giro fallisce.
+   */
+  const riscriviPerIlContestoPieno = async (rifiuto, r) => {
+    const scalino = contestoPieno.ritentativi;
+    const diagnosi = (dati) => { if (rifiuto && typeof rifiuto === 'object') rifiuto.contestoPieno = { scalino, ...dati }; };
+    if (scalino >= RITENTATIVI_CONTESTO_PIENO_MASSIMI) { diagnosi({ esauriti: true }); return null; }
+    contestoPieno.ritentativi += 1;
+    const scarto = Math.round(scartoCorrente());
+    const stimaInviata = compattazione.stimaConPezzi(r.array) + scarto;
+    if (contestoPieno.primoRifiuto === null) contestoPieno.primoRifiuto = stimaInviata;
+    const numeri = compattazione.numeriDelContestoPieno(rifiuto);
+    const bersaglioRichiesta = compattazione.bersaglioDelContestoPieno({ livello: scalino, stimaInviata, stimaPrimoRifiuto: contestoPieno.primoRifiuto, numeri });
+    diagnosi({ bersaglio: bersaglioRichiesta, ...(numeri ? { numeri } : {}) });
+    /* Due parti fisse, per due domande diverse (R12-1, revisione 12 della CLI):
+       - il BERSAGLIO della proiezione è un passo prudente: porta lo scarto intero, che può essere tutto cornice vera (uno scarto di 6.000
+         token che il fornitore conta sempre, ZK3-06) — un bersaglio più alto scriverebbe una proiezione che il fornitore rifiuta, e
+         sbagliare qui costa un passo più corto del necessario;
+       - le affermazioni CERTE («non entra» sulla linea certa, «troppo grande» nella regola N) fanno FALLIRE il giro: portano solo la
+         parte dello scarto che la storia non può spiegare (`scartoFissoCerto`). Sbagliare lì costa al più un rifiuto in più. */
+    const attrezziStimati = compattazione.stimaDegliAttrezzi(r.attrezzi);
+    /* ⛔ R13-1 (revisione 13 della CLI): la storia che spiega lo scarto è quella della richiesta RIFIUTATA, senza la richiesta nuova
+       (`senzaLaRichiestaNuova`). Prima era `r.grezzi`: col messaggio nuovo dentro, e con la storia che lo scalino 0 aveva già tolto
+       dalla richiesta mandata. Dopo un accorciamento la storia rimasta è poca e non spiega più la cornice: la regola N la vede. */
+    const scartoDellaCornice = compattazione.scartoFissoCerto({ scarto, attrezzi: attrezziStimati,
+      spiegabileDallaStoria: compattazione.scartoSpiegabileDallaStoria(compattazione.senzaLaRichiestaNuova(r.array)) });
+    const parteFissa = compattazione.stimaConPezzi(r.effimeri) + scarto;
+    const parteFissaCerta = compattazione.stimaConPezzi(r.effimeri) + scartoDellaCornice;
+    const finestraDelRifiuto = numeri?.massimo ?? null;
+    /* 2. la regola N sul bersaglio (la cornice qui è quella della regola: sistema, effimeri e schemi stimati). ⛔ Solo coi NUMERI del
+       fornitore: senza, il 70% è una stima prudente di quanto togliere, non la finestra — dire «la cornice non entra» o «il tuo messaggio
+       è troppo grande» su quella base fermerebbe giri che, accorciati, entrano (la prova S2-2-OVERFLOW-TESTO-01 l'ha mostrato). */
+    const peso = numeri ? pesoDellaRichiestaNuova(r.grezzi, { attrezzi: r.attrezzi, effimeri: r.effimeri }) : null;
+    /* La regola conta gli schemi con la loro stima; il bersaglio porta invece lo SCARTO (la misura del giro, che di solito è proprio
+       quella stima, ma non sempre). Si porta il bersaglio nella scala della regola, così le due parti contano gli attrezzi allo stesso modo.
+       ⛔ R11-1 (revisione 11 della CLI, 23/10/2026, S2): dello scarto si toglie solo la parte che può essere degli ATTREZZI (al più la loro
+       stima). Lo scarto è misurato sull'ultima richiesta riuscita e comprende anche la STORIA che il fornitore conta più della stima
+       (codice, JSON, base64 negli esiti d'attrezzo): toglierlo tutto giudicava la richiesta nuova contro una linea troppo bassa, come se
+       quella storia fosse cornice fissa — e la storia è proprio ciò che la compattazione accorcia. Il caso della CLI: un file di codice
+       letto al giro 1, 106.000 caratteri di prosa al giro 2, «26.510 + 7.421 non entra in 40.000». Entrava, accorciando l'esito vecchio.
+       ⛔ R11-8: «non entra» e «troppo grande» sono affermazioni CERTE: si giudicano sulla linea certa (la finestra del fornitore meno la
+       riserva d'uscita), non sul bersaglio dello scalino, che dal secondo scalino è un passo prudente (50%, 35%) e non un limite.
+       ⛔ R12-1: «la parte degli attrezzi» è diventata `scartoFissoCerto` — la stessa per la regola e per la linea certa qui sotto. Con
+       poca storia uno scarto grande è cornice anche se gli attrezzi stimati non lo spiegano (ZK3-06), e allora conta anche qui. */
+    const nellaScalaDellaRegola = (linea) => linea - scartoDellaCornice + attrezziStimati;
+    const riserva = compattazione.riservaDelContestoPieno(numeri);
+    const lineaDellaRegola = numeri
+      ? nellaScalaDellaRegola(Math.floor((stimaInviata * Math.max(0, numeri.massimo - riserva)) / numeri.richiesti)) : null;
+    /* R11-2: i numeri che si dicono «del fornitore» stanno nella sua scala — la stessa proporzione della richiesta rifiutata (Z-K3) */
+    const scala = numeri ? numeri.richiesti / stimaInviata : 1;
+    if (numeri && Number.isSafeInteger(numeri.massimo) && numeri.massimo > 0 && scala > 0) {
+      /* R11-7: con l'impronta della richiesta nuova rifiutata — se la persona la rimanda uguale, il giro dopo sa che non entra */
+      const testoNuovo = peso ? testoSemplice(r.grezzi[peso.indice]) : null;
+      rifiutoDelFornitore = { finestra: numeri.massimo, scala, impronta: testoNuovo ? nomeDellaRichiestaSalvata(testoNuovo) : null };
+    }
+    if (peso && peso.tokensCornice >= lineaDellaRegola) {
+      const finestra = finestraDelRifiuto ?? soglie.finestraToken;
+      if (Number.isFinite(finestra) && finestra > 0 && nonEntraGiaDetto !== finestra) {
+        nonEntraGiaDetto = finestra;
+        /* Z-K3: il pavimento nella scala del FORNITORE (i numeri ci sono sempre qui), come la finestra che lo accompagna — nella scala
+           della stima un fornitore che conta il 25% in più leggeva «6.857 su 8.192: non entra». R11-8: con la riserva d'uscita, che è
+           ciò che lo porta oltre la finestra (`riserva`, additivo: chi lo dice può aggiungere «e lo spazio per la risposta») */
+        emitOnGiro?.({ giro: r.requestIndex, tipo: 'compattazione-fine', compattato: false, motivo: 'non-entra', finestra,
+          pavimento: Math.ceil((peso.tokensCornice + peso.tokensRichiesta) * scala) + riserva, riserva });
+      }
+      return null;
+    }
+    let grezzi = r.grezzi;
+    if (peso && peso.tokensCornice + peso.tokensRichiesta > lineaDellaRegola) {
+      const lista = await regolaN(r.grezzi, r.effimeri, r.attrezzi, r.requestIndex, { linea: lineaDellaRegola, fonte: 'fornitore', finestraDelRifiuto, scala,
+        corniceInPiu: Math.max(0, scartoDellaCornice - attrezziStimati), riserva }); // R13-1: la frase dice la cornice certa e la riserva
+      if (lista !== r.grezzi) {
+        grezzi = correggiMessaggiDesktop(lista, { cartella, memoria: correzioniFissate });
+        r.grezzi = grezzi;
+      }
+    }
+    /* 3. la compattazione col bersaglio. Coi numeri, un bersaglio che la parte fissa da sola supera vuol dire che niente entra; senza,
+       si accorcia tutto quello che si può (bersaglio minimo: passi gratuiti al minimo, riassunto senza modello) e decide il fornitore. */
+    const differenza = bersaglioRichiesta - parteFissa;
+    /* R12-1: «niente entra» è un'affermazione certa — la parte fissa CERTA; fra le due, bersaglio minimo e decide la linea certa */
+    if (numeri && !(bersaglioRichiesta - parteFissaCerta > 0)) return null;
+    const bersaglio = Math.max(1, differenza);
+    /* ⛔ Z-K3 (revisione 10 della CLI, 23/10/2026, finestra da 8.192): coi numeri del fornitore si sa anche la linea oltre la quale la
+       richiesta è rifiutata DI CERTO — la finestra vera senza la riserva d'uscita, nella scala della stima della richiesta rifiutata (lo
+       stesso rapporto del bersaglio); tolta la parte fissa, è la linea della proiezione. Una proiezione SENZA riassunto pagato (quello
+       senza modello, la sola coda) che la passa non si scrive e non riparte: il giro finisce al primo rifiuto, come con la cornice da
+       sola qui sopra. Prima si scriveva il riassunto senza modello (la storia diventava un indice) e si rimandava una richiesta che il
+       fornitore rifiutava di nuovo. Fra il bersaglio e questa linea decide ancora il fornitore: il bersaglio tiene la riserva d'uscita.
+       ⛔ R12-1 (revisione 12 della CLI): la linea è certa solo con la parte fissa CERTA. Con lo scarto intero, la storia contata più
+       della stima (il base64 letto al giro prima, che i passi gratuiti tolgono) restava nella parte fissa anche dopo averla tolta, e il
+       giro falliva con «non entra» a 46.738 su 40.000 — accorciato entrava a ~33.000. */
+    const certo = numeri
+      ? { limite: Math.floor((stimaInviata * numeri.massimo) / numeri.richiesti) - parteFissaCerta, finestra: numeri.massimo, parteFissa: parteFissaCerta, scala: numeri.richiesti / stimaInviata }
+      : null;
+    const projected = projectLegacy(grezzi);
+    /* ⛔ R13-5 (revisione 13 della CLI, S4): la riga della scala diceva «66.6k → 15.7k» con la richiesta mandata a 35.197 — sulla strada
+       del motore la richiesta rifiutata era la SUA proiezione, non la storia grezza che la compattazione semplice prende come base. Il
+       «prima» della riga è la richiesta che il fornitore ha rifiutato (senza gli effimeri, come la proiezione semplice). */
+    const misurata = r.dalMotore ? r.array.slice(0, r.lunghezzaProiezione) : projected;
+    const { token, misura } = compattazione.misuraOccupazione({ ancora, messaggi: misurata, finestraToken: soglie.finestraToken, scarto: scartoDellaStima ?? 0 });
+    /* 15/10/2026 e revisione 5 della CLI (S2-2): prima il riassunto in volo o pronto (con firma, Stop, «Salta» e tetto), poi la base, poi
+       la compattazione — tutto dentro `compattaDovuta`, che ora porta il bersaglio */
+    const proiezione = await compattaDovuta(grezzi, projected, { token, misura, requestIndex: r.requestIndex, motivo: 'overflow', soglia: soglie.soglia,
+      bersaglio, livelloContestoPieno: scalino, certo });
+    if (!proiezione) return null;
+    const nuova = compattazione.riattaccaEffimeri(correggiMessaggiDesktop(proiezione, { cartella, memoria: correzioniFissate }), r.effimeri);
+    /* una richiesta identica a quella rifiutata non riparte. ⛔ R12-1: e se il fornitore ha detto i numeri, ora «non entra» è CERTO —
+       ha appena rifiutato questa stessa richiesta e non resta niente da accorciare: lo si dice coi SUOI numeri (una volta per finestra).
+       Al margine (ZK3-07) la linea certa non poteva affermarlo prima di mandare; il giro finiva col solo errore. */
+    if (nuova.length === r.array.length && nuova.every((m, i) => m === r.array[i] || JSON.stringify(m) === JSON.stringify(r.array[i]))) {
+      /* ⛔ R13-1 (seconda parte): niente da accorciare e il fornitore ha rifiutato. Prima di dire «non entra», che dà la colpa alla
+         finestra, si guarda coi SUOI numeri se il resto entra senza la richiesta nuova: allora è lei a non entrare, e vale la regola N
+         (l'allegato se la persona l'ha scelto, altrimenti «troppo grande» col pulsante). Il caso che la prima parte non copre: il primo
+         giro con un incollato grande, quando lo scarto è ancora la sola stima degli attrezzi e la cornice contata in più non si conosce.
+         La richiesta nuova si conta con la proporzione della richiesta rifiutata (`scala`), come la regola N. */
+      if (numeri && Number.isFinite(numeri.richiesti) && numeri.richiesti > 0 && scala > 0) {
+        const pesoOra = pesoDellaRichiestaNuova(r.grezzi, { attrezzi: r.attrezzi, effimeri: r.effimeri });
+        const resto = pesoOra ? numeri.richiesti - pesoOra.tokensRichiesta * scala : Number.POSITIVE_INFINITY;
+        if (pesoOra && resto <= numeri.massimo - riserva) {
+          const lista = await regolaN(r.grezzi, r.effimeri, r.attrezzi, r.requestIndex, { linea: lineaDellaRegola, fonte: 'fornitore', finestraDelRifiuto, scala,
+            corniceInPiu: Math.max(0, resto / scala - pesoOra.tokensCornice), riserva, forza: true, spazio: (numeri.massimo - riserva - resto) / scala });
+          if (lista !== r.grezzi) {
+            const conAllegato = correggiMessaggiDesktop(lista, { cartella, memoria: correzioniFissate });
+            r.grezzi = conAllegato;
+            return compattazione.riattaccaEffimeri(correggiMessaggiDesktop(projectLegacy(conAllegato), { cartella, memoria: correzioniFissate }), r.effimeri);
+          }
         }
       }
+      if (numeri && Number.isSafeInteger(numeri.massimo) && numeri.massimo > 0 && Number.isFinite(numeri.richiesti) && nonEntraGiaDetto !== numeri.massimo) {
+        nonEntraGiaDetto = numeri.massimo;
+        emitOnGiro?.({ giro: r.requestIndex, tipo: 'compattazione-fine', compattato: false, motivo: 'non-entra', finestra: numeri.massimo,
+          pavimento: Math.ceil(numeri.richiesti) });
+      }
+      return null;
+    }
+    return nuova;
   };
   if (legacyMode) hooks.infer = (opzioni, invoke) => inferLegacy(opzioni, osservaTempi(invoke));
   else {
@@ -1606,11 +2293,13 @@ function wrapContextHooks(original, {
            ripartiva IDENTICA (44.056 caratteri contro 44.056). Qui il fornitore ha già detto che non entra: come K8 (`inferLegacy`)
            si ignora la soglia, si usa il riassunto pronto o in preparazione, o se ne forza uno per «overflow». */
         let preparata;
-        try { preparata = await original.prepare({ ...r.payload, messages: r.inputMessages, originali: r.grezzi, waitForInFlight: true, onInTurnWait: ascoltaAttesaDelMotore(r.requestIndex) }); }
+        try {
+          preparata = await original.prepare({ ...r.payload, messages: r.inputMessages, originali: r.grezzi, waitForInFlight: true, onInTurnWait: ascoltaAttesaDelMotore(r.requestIndex) });
+          ripiegoInCorso = null; // R12-2: il motore ha risposto
+        }
         catch (secondo) {
           if (segnaleStop?.aborted || opzioni.signal?.aborted || secondo?.name === 'AbortError') throw secondo;
-          if (!ripiegoDetto) {
-            ripiegoDetto = true;
+          if (diciRipiego(secondo?.code ?? null)) {
             emitOnGiro?.({ giro: r.requestIndex, tipo: 'compattazione-fine', compattato: false, motivo: 'ripiego', codice: secondo?.code ?? null });
           }
           const proiettata = projectLegacy(r.inputMessages);
@@ -1635,7 +2324,24 @@ function wrapContextHooks(original, {
       const invoke = osservaTempi(invokeGrezzo); // A1: ogni risposta del giro dice quanto veloce il motore legge
       if (richiestaCorrente) return inferLegacy(opzioni, invoke);
       const r = richiestaSenzaAttesa; richiestaSenzaAttesa = null;
-      return r ? inferSenzaAttesa(r, opzioni, invoke) : inferBase(opzioni, invoke);
+      const delMotore = richiestaDelMotore; richiestaDelMotore = null;
+      const prova = r ? inferSenzaAttesa(r, opzioni, invoke) : inferBase(opzioni, invoke);
+      if (!delMotore) return prova;
+      /*
+       * ⛔ R12-2 (revisione 12 della CLI, 23/10/2026, S2, owner «correggere nella 0.6.13»): col motore del contesto (finestre da 64k in
+       *   su) un «contesto pieno» del fornitore non accorciava né riprovava — `inferBase` spegne il ritentativo del servizio («lo fa il
+       *   guscio») e il guscio lo faceva solo per la richiesta mandata senza aspettare. Niente scala, niente numeri nell'errore, nessuna
+       *   finestra ricordata: misurato dalla CLI, dichiarati 131.072 e il fornitore che rifiuta oltre 30.000, ogni giro falliva da lì in
+       *   poi. ⇒ Sul rifiuto la richiesta passa alla scala della compattazione semplice, la stessa di quando il motore cade (il ripiego):
+       *   bersaglio dai numeri del fornitore, regola N, linea certa, finestra ricordata. La richiesta resta nello stesso array.
+       */
+      return prova.catch(async (errore) => {
+        if (opzioni.signal?.aborted || segnaleStop?.aborted) throw errore;
+        if (compattazione.classificaErroreFornitore(errore) !== 'contesto-pieno') throw errore;
+        if (errore && typeof errore === 'object') errore.classificazione = 'contesto-pieno';
+        richiestaCorrente = { ...delMotore, lunghezzaProiezione: delMotore.array.length - delMotore.effimeri.length, dalMotore: true }; // R13-5
+        return scalaDelContestoPieno(errore, opzioni.signal, invoke);
+      });
     };
   }
   return hooks;
@@ -1693,6 +2399,7 @@ export async function talosLavora(input = {}) {
     records,
     progressoAcceso: input.progressoCompattazione === true,
     fontiRicarica: input.fontiRicarica ?? null,
+    cartellaIncollati: typeof input.cartellaIncollati === 'string' && input.cartellaIncollati ? input.cartellaIncollati : null,
     compattazionePronta: input.compattazionePronta ?? null,
     istantanea: input.compattazioneIstantanea === true && !compattazione.motoreAPostoUnico(input.modello),
     compattazioneInArrivo: input.compattazioneInArrivo ?? null,
@@ -1707,6 +2414,20 @@ export async function talosLavora(input = {}) {
     scartoMisurato: Number.isFinite(input.scartoMisurato) && input.scartoMisurato >= 0 ? input.scartoMisurato : null,
     stimaAttrezziMisurati: Number.isFinite(input.stimaAttrezziMisurati) && input.stimaAttrezziMisurati > 0 ? input.stimaAttrezziMisurati : null,
     nonEntraDetto: Number.isFinite(input.nonEntraDetto) ? input.nonEntraDetto : null,
+    rifiutoNoto: input.rifiutoNoto && Number.isSafeInteger(input.rifiutoNoto.finestra) && input.rifiutoNoto.finestra > 0
+      && Number.isFinite(input.rifiutoNoto.scala) && input.rifiutoNoto.scala > 0
+      ? { finestra: input.rifiutoNoto.finestra, scala: input.rifiutoNoto.scala, impronta: typeof input.rifiutoNoto.impronta === 'string' ? input.rifiutoNoto.impronta : null } : null,
+    ripiegoDettoPrima: typeof input.ripiegoDetto === 'string' && input.ripiegoDetto ? input.ripiegoDetto.slice(0, 80) : null, // R12-2
+    /* Pezzo D: il freno della sessione, il suo giro e il verdetto in attesa (dal registro) */
+    frenoIniziale: compattazione.frenoValido(input.freno),
+    frenoVivo: typeof input.frenoVivo === 'function' ? input.frenoVivo : null, // R10-3
+    versioneGiro: Number.isSafeInteger(input.versioneGiro) && input.versioneGiro >= 0 ? input.versioneGiro : null,
+    verdettoInAttesa: input.verdettoInAttesa === true,
+    /* Pezzo E: i riassunti veri della sessione e k (dal registro) */
+    riassuntiVeri: Array.isArray(input.riassuntiVeri) ? input.riassuntiVeri : null,
+    fattoreK: Number.isFinite(input.fattoreK) && input.fattoreK > 0 ? input.fattoreK : null,
+    allegaSeTroppoGrande: input.allegaSeTroppoGrande === true || typeof input.allegaSeTroppoGrande === 'function' ? input.allegaSeTroppoGrande : false,
+    richiesteNonInviate: Array.isArray(input.richiesteNonInviate) ? input.richiesteNonInviate.filter((i) => Number.isSafeInteger(i) && i >= 0) : [], // R13-2
   });
   const onDelta = wrapOnDelta(input.onDelta, telemetry);
 
@@ -1732,6 +2453,14 @@ export async function talosLavora(input = {}) {
       scartoMisurato: contextHooks.scartoMisurato,
       scartoNonEntra: contextHooks.scartoNonEntra,
       stimaAttrezzi: contextHooks.stimaAttrezzi,
+      freno: contextHooks.freno, // pezzo D (§4.3)
+      frenoVisto: contextHooks.frenoVisto, // R11-4
+      riassuntoInefficace: contextHooks.riassuntoInefficace, // R11-5
+      rifiutoDelFornitore: contextHooks.rifiutoDelFornitore, // R11-7
+      ripiegoDetto: contextHooks.ripiegoDetto, // R12-2
+      massimoAccettato: contextHooks.massimoAccettato, // R12-3
+      riassuntiVeri: contextHooks.riassuntiVeri, // pezzo E (§4.1)
+      fattoreK: contextHooks.fattoreK,
     };
     if (!usage) return { ...result, compattazioni, recordDiCompattazione, ...preparazione };
     return {
@@ -1742,6 +2471,25 @@ export async function talosLavora(input = {}) {
       ...preparazione,
       fuori: `${String(result?.detto ?? '').trim()}\n${JSON.stringify({ usage })}`.trim(),
     };
+  } catch (errore) {
+    /* ⛔ R10-7 (revisione 10 della CLI, 23/10/2026): un giro che fallisce DOPO aver applicato una compattazione (annunciata, durevole, a
+       volte pagata) la buttava: il giro dopo rimandava la storia intera e ripagava lo stesso riassunto (misurato: 26.706 → 8.782 al turno
+       4, poi al turno 5 tutto di nuovo e un secondo riassunto). Come `messaggiDelGiro`, il record e lo stato del giro viaggiano con
+       l'errore; decide il registro se tenerli (solo se tiene anche il lavoro del giro). */
+    if (errore && typeof errore === 'object') {
+      contextHooks.annullaGratuitiNonConfermati?.(); // R13-1: prima di consegnare i record al registro
+      /* R13-2: una richiesta troppo grande che il motore ha già archiviato — il registro la tiene nella storia (e il giro dopo la mostra
+         come nota), invece di toglierla: l'archivio del motore è a sola aggiunta */
+      if (errore.code === 'REQUEST_TOO_LARGE' && contextHooks.richiestaNelMotore === true) {
+        errore.archiviataDalMotore = true;
+        if (Array.isArray(contextHooks.originaliNelMotore)) errore.messaggiDelGiro = [...contextHooks.originaliNelMotore];
+      }
+      if (records.length > 0) errore.recordDiCompattazione = [...records];
+      errore.statoDelGiro = { scartoMisurato: contextHooks.scartoMisurato, scartoNonEntra: contextHooks.scartoNonEntra, stimaAttrezzi: contextHooks.stimaAttrezzi,
+        freno: contextHooks.freno, frenoVisto: contextHooks.frenoVisto, riassuntoInefficace: contextHooks.riassuntoInefficace,
+        rifiutoDelFornitore: contextHooks.rifiutoDelFornitore, ripiegoDetto: contextHooks.ripiegoDetto, massimoAccettato: contextHooks.massimoAccettato, riassuntiVeri: contextHooks.riassuntiVeri, fattoreK: contextHooks.fattoreK };
+    }
+    throw errore;
   } finally {
     telemetry.close();
   }

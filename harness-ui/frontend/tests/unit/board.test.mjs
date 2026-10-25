@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { impostaLingua, t as traduciPerLaProva } from '../../src/components/lingua.js';
 import { statoBoard, tempoBoard, testiBoard, cartellaDaExport, selezionaSessioniBoard } from '../../src/components/board.js';
 
 test('B3-STATO-PRECEDENZA: attesa, interruzione, errore, esito assente', () => {
@@ -43,4 +44,23 @@ test('B3-CACHE-COPERTURA: il conteggio originale resta visibile anche senza perc
  const s={usage:{cached_tokens:74240}};
  assert.equal(testiBoard(s,{cache:{percentuale:83}}).cache,'83% · 74,2k');
  assert.equal(testiBoard(s,{}).cache,'— · 74,2k');
+});
+
+test('owner 24/10 — la Board dice «Da riprendere» in ambra per l\'ultimo giro in errore, come la barra laterale; mai «Errore» rosso', () => {
+  const s = statoBoard({ conclusa: true, ultimoEsito: 'errore' });
+  assert.equal(s.chiave, 'errore');
+  assert.equal(s.testo, 'Da riprendere');
+  assert.equal(s.tono, 'warning');
+  /* AL CONTRARIO: fermata da te resta la sua parola, senza tono */
+  assert.equal(statoBoard({ conclusa: true, ultimoEsito: 'errore', motivoChiusura: 'fermata' }).tono, null);
+});
+
+/* revisione 24/10 (D-R1, D-R3): la linguetta del filtro e la pillola dicono la STESSA parola, nelle due lingue; l'inglese ha la sua prova */
+test('owner 24/10 — linguetta del filtro e pillola: «Da riprendere» / «To resume», mai «Errore» / «Error»', (t) => {
+  t.after(() => impostaLingua('it'));
+  for (const [lingua, parola] of [['it', 'Da riprendere'], ['en', 'To resume']]) {
+    impostaLingua(lingua);
+    assert.equal(statoBoard({ conclusa: true, ultimoEsito: 'errore' }).testo, parola, lingua);
+    assert.equal(traduciPerLaProva('modello.board.error'), parola, `linguetta ${lingua}`);
+  }
 });
