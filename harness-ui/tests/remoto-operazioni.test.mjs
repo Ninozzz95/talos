@@ -77,7 +77,10 @@ test('OPS-04 elenco chiuso: operazioni fuori elenco e id di sessione che cercano
   await assert.rejects(b.operazioni.esegui('session.send', { sessionId: 's-1', corpo: [1] }, b.contesto), { code: 'BAD_MESSAGE' });
   assert.deepEqual(b.sessionRegistry.chiamate, []);
   assert.ok(!b.operazioni.elenco().some((o) => /trust|fid/i.test(o)), 'rendere fidati MCP, hook e plugin resta solo dal PC (ELENCO-AZIONI §7.3)');
-  assert.ok(Object.values(OPERAZIONI_HTTP).every((v) => typeof v.percorso === 'function' && /^(GET|POST)$/.test(v.metodo)));
+  assert.ok(Object.values(OPERAZIONI_HTTP).every((v) => typeof v.percorso === 'function' && /^(GET|POST|DELETE)$/.test(v.metodo)));
+  /* parità, punto 4 (24/10): il primo DELETE — ammesso solo dopo che il cancello del consenso del server guarda OGNI scrittura, non solo
+     POST (`http-app.mjs`); l'elenco dei DELETE è chiuso qui, e il consenso lo provano `remoto-chat-dispositivi` CHD-04 */
+  assert.deepEqual(Object.entries(OPERAZIONI_HTTP).filter(([, v]) => v.metodo === 'DELETE').map(([n]) => n), ['session.message.delete']);
 });
 
 test('OPS-05 eventi dal numero N: la storia coalescente come /events, la fine della storia, la coda, poi il presente; disiscrivere ferma', async () => {

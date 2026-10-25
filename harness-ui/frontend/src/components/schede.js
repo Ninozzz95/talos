@@ -176,10 +176,31 @@ export function apriMenuContestuale(menu, { titolo = '', voci = [], x = 0, y = 0
     intestazione.textContent = titolo;
     menu.append(intestazione);
   }
-  for (const [testo, fai, abilitato = true] of voci) {
+  for (const [indice, [testo, fai, abilitato = true, aiuto = '', extra = null]] of voci.entries()) {
     const b = documento.createElement('button');
     b.type = 'button'; b.className = 'talos-button talos-button--ghost'; b.setAttribute('role', 'menuitem');
-    b.textContent = testo; b.disabled = !abilitato;
+    b.disabled = !abilitato;
+    /* 24/10/2026 (bozzetto dei rami, owner): una voce può avere una riga d'aiuto sotto («Ramo nuovo · questa risposta resta»). Il
+       nome della voce resta il solo `testo` (aria-label); la riga è la sua descrizione. Senza aiuto, la voce è quella di sempre. */
+    if (aiuto) {
+      b.classList.add('talos-context-menu__voce-con-aiuto');
+      const nome = documento.createElement('span'); nome.textContent = testo;
+      /* R5.13 corsa 2 (24/10/2026, bozzetto 2a): `extra.tono` mette il pallino vero (`talos-dot`) davanti al nome — «● Pixel 9» */
+      if (extra?.tono) {
+        nome.className = 'talos-context-menu__nome-con-pallino';
+        const pallino = documento.createElement('span'); pallino.className = `talos-dot talos-dot--sm talos-dot--${extra.tono}`;
+        nome.prepend(pallino);
+      }
+      const riga = documento.createElement('small'); riga.textContent = aiuto; riga.id = `${menu.id || 'menu'}-aiuto-${indice}`;
+      b.append(nome, riga); b.setAttribute('aria-label', testo); b.setAttribute('aria-describedby', riga.id);
+    } else b.textContent = testo;
+    /* R5.13 corsa 2 (24/10/2026, bozzetti 1a e 1b): `extra.icona` mette l'icona dello sprite davanti alla voce («Invia a …», `i-phone`) */
+    if (extra?.icona) {
+      b.classList.add('talos-context-menu__voce-con-icona');
+      const svg = documento.createElementNS('http://www.w3.org/2000/svg', 'svg'); svg.setAttribute('class', 'i i--sm'); svg.setAttribute('aria-hidden', 'true');
+      const uso = documento.createElementNS('http://www.w3.org/2000/svg', 'use'); uso.setAttribute('href', `#${extra.icona}`); svg.append(uso);
+      b.prepend(svg);
+    }
     b.addEventListener('click', () => { chiudi(); fai(); });
     menu.append(b);
   }

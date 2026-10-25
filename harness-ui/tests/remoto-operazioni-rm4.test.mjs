@@ -52,9 +52,12 @@ test('RM4-01 ogni voce nuova va alla SUA rotta col suo metodo, e l\'id passa dal
   }
 });
 
-test('RM4-02 al contrario: ciò che §7 lascia solo dal PC NON è nell\'elenco (export, fork, delete, terminali, albero, politica, cartelle)', async () => {
+/* 24/10/2026: duplicare ed eliminare una sessione sono usciti da questo elenco — la parità remoto ↔ desktop dell'owner (23/10 sera, punto 2:
+   «coda, salta/annulla riassunto, duplica, esporta, processi, deleghe, elimina sessione») supera §7 del 20/10; le prove sono in
+   `remoto-operazioni-piccole.test.mjs`. «Esporta» resta fuori: va con lo scambio di file (R5.13), oltre il tetto di 1 MiB di un messaggio. */
+test('RM4-02 al contrario: ciò che resta solo dal PC NON è nell\'elenco (export, terminali, albero, politica, cartelle)', async () => {
   const b = banco();
-  for (const op of ['session.export', 'session.fork', 'session.delete', 'session.terminals', 'session.tree', 'session.compaction-policy',
+  for (const op of ['session.export', 'session.terminals', 'session.tree', 'session.compaction-policy',
     'workspace.browse', 'session.processes.stop', 'session.hooks.trust', 'providers.key', 'providers.runtime']) {
     await assert.rejects(b.operazioni.esegui(op, { sessionId: 's-1' }, b.contesto), { code: 'UNKNOWN_OPERATION' }, op);
   }

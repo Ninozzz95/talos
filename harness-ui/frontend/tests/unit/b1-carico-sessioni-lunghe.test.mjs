@@ -25,9 +25,12 @@ const corpo = (s, firma) => {
 
 test('B1-01 SEGNAVIA: l osservatore della conversazione MARCA, il fotogramma aggiorna (una passata per fotogramma)', () => {
   const collega = corpo(CRONOLOGIA, 'export function collegaCronologia(');
-  assert.match(collega, /new finestra\.MutationObserver\(programmaAggiornamento\)/);
+  /* 22/10/2026 (streaming fluido): l'osservatore marca solo i cambi di FORMA della conversazione (un turno che nasce o se ne va,
+     un segno di giro); il testo che cresce dentro una risposta non rifà le voci. Il disegno resta uno per fotogramma. */
+  assert.match(collega, /new finestra\.MutationObserver\(\(lista\) => \{\s*if \(!cambiaForma\(lista\)\) return;\s*vociInCache = null;\s*programmaAggiornamento\(\);/);
   assert.match(collega, /const programmaAggiornamento = \(\) => \{\s*if \(aggiornamentoInCoda !== null\) return;/);
   assert.doesNotMatch(collega, /MutationObserver\(\(\) => \{ aggiornaCronologia\(/, 'al contrario: nessun aggiornamento sincrono per lotto');
+  assert.doesNotMatch(collega, /voci\.forEach\(\(v, i\) => \{ if \(v\.elemento\.getBoundingClientRect\(\)/, 'al contrario: niente lettura di geometria per OGNI turno a ogni scorrimento');
 });
 
 test('B1-02 COLONNA: durante la storia non si ridisegna, ma il PRIMO disegno di una sessione sì, e al confine si disegna', () => {

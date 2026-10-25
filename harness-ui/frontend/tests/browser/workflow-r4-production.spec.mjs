@@ -104,6 +104,12 @@ test('R4-RETURN-NO-GATE-HITTEST: completed message actions remain clickable unde
   const down = page.locator('#chatTornaInFondo');
   // VELO-SPEC: sotto il velo il custode tiene il fondo (A1-R2): si misura e si scorre dopo che la cronologia è visibile
   await page.waitForFunction(() => !document.querySelector('#conversation')?.classList.contains('is-restoring'));
+  /* 22/10/2026 (streaming fluido): i sei giri sono arrivati DAL VIVO, e col ritmo di serie le risposte escono entro 110 ms dalla
+     loro fine — si aspetta che lo schermo sia in pari con il testo arrivato prima di misurare quanto si scorre */
+  await page.waitForFunction(() => {
+    const rs = window.__talosHarnessUiRuntime.realSessionState;
+    return [...rs.testoGrezzoMessaggi].every(([id, testo]) => (rs.renderIncrementale.get(id)?.mostrato ?? testo.length) >= testo.length);
+  });
   const max = await scroller.evaluate((node) => node.scrollHeight - node.clientHeight);
   expect(max).toBeGreaterThan(400);
   const hits = [];
@@ -295,7 +301,8 @@ test('R4-GRAPH-INITIAL-FIT-14: every agent card and the conversation card are in
   });
   expect(inspection.cards).toBe(13);
   expect(inspection.clipped, JSON.stringify(inspection)).toEqual([]);
-  for (const [route, name] of [['chat', 'Chat'], ['terminale', 'Terminale'], ['review', 'Review'], ['browser', 'Browser']]) {
+  // owner 24/10/2026 notte: in italiano la scheda è «Revisione» (punto 4 della revisione a blocco 5)
+  for (const [route, name] of [['chat', 'Chat'], ['terminale', 'Terminale'], ['review', 'Revisione'], ['browser', 'Browser']]) {
     const tab = page.locator(`#schermoChat .talos-topbar [data-vaia="${route}"]`);
     await expect(tab).toBeVisible();
     await expect(tab).toContainText(name);

@@ -1,0 +1,22 @@
+/*
+ * R5.13 corsa 2 (24/10/2026) — mandare un file a un dispositivo (bozzetti approvati D1-D8). Solo la disposizione: scheda del file,
+ * pallino, menu e carta sono i pezzi veri (`talos-file-scaricabile`, `talos-dot`, `talos-context-menu`, `creaApprovazione`). I valori
+ * sono quelli dei bozzetti (`mockup-r513.mjs`: «display:flex;align-items:center;gap:6px», margine «0 0 8px», gap 8px dell'icona).
+ * Colori solo dai token: chiaro e scuro vengono da soli.
+ */
+
+/* la riga di stato sotto «PDF · 2.4 MB»: il pallino e la frase; rosso solo per gli errori (file cambiato, troppo grande) */
+.talos-invio-file__stato { display: flex; align-items: center; gap: 6px; }
+.talos-invio-file__stato[data-tono="danger"] { color: var(--talos-danger); }
+
+/* nella carta, la scheda del file sta sopra la riga del dispositivo */
+.talos-invio-file .talos-invio-file__scheda { margin: 0 0 8px; }
+
+/* le voci del menu del file: l'icona davanti («Invia a …»), e il pallino davanti al nome del dispositivo nella scelta */
+.talos-context-menu [role=menuitem].talos-context-menu__voce-con-icona { gap: 8px; }
+.talos-context-menu__nome-con-pallino { display: flex; align-items: center; gap: 6px; }
+
+/* owner 25/10/2026 (REV6-F6): un invio fallito a parole, e il testo del motore solo sotto «Dettagli tecnici», chiuso di serie */
+.talos-invio-file__errore { margin: 0 0 6px; white-space: normal; font-family: var(--talos-font-ui); font-size: var(--talos-font-size-sm); line-height: 1.45; color: var(--talos-text); }
+.talos-invio-file__tecnico > summary { cursor: pointer; color: var(--talos-muted); font-family: var(--talos-font-ui); font-size: var(--talos-font-size-xs); }
+.talos-invio-file__tecnico > pre { margin: 6px 0 0; white-space: pre-wrap; color: var(--talos-muted); font-family: var(--talos-font-mono); font-size: 11.5px; }

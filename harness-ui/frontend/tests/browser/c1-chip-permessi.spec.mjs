@@ -1,8 +1,10 @@
 import { test, expect } from '@playwright/test';
 
 /*
- * C1 (owner 10/10/2026, AskUserQuestion «Elenco corto, come Cline») — il chip «Permessi» del compositore dice cosa passa senza
- * chiedere; la politica, ciò che chiede sempre e gli attrezzi spenti stanno nel suggerimento. Il clic apre la modale di oggi.
+ * C1 (owner 10/10/2026, AskUserQuestion «Elenco corto, come Cline») — cosa passa senza chiedere; la politica, ciò che chiede sempre e
+ * gli attrezzi spenti nel suggerimento. Il clic apre la modale di oggi.
+ * ⛔ 24/10/2026 (owner, consigliata, dopo la pillola del ragionamento): nel compositore il NOME BREVE del livello, con le eccezioni
+ * («Accesso pieno · 1 eccezione»); la frase di C1 APRE il suggerimento. Gli scenari sono gli stessi; la frase si legge nel `title`.
  * Scene aperte dal browser con le impostazioni della sessione (`passaASessione`, come all'apertura vera): il server (4177) non
  * conosce queste sessioni, e ogni richiesta non-GET si ferma e si conta.
  */
@@ -45,27 +47,32 @@ test.describe('C1 — il chip dei Permessi', () => {
   test('C1-CHIP-01 — ogni politica dice cosa passa senza chiedere; eccezioni e spenti entrano; la politica sta nel suggerimento', async ({ page }) => {
     const conto = await apri(page);
     await scena(page, 'cp-ww', 'Workspace write');
-    await expect(chip(page).locator('.talos-chip__label')).toHaveText('Senza chiedere: file, comandi, documenti');
-    await expect(chip(page)).toHaveAttribute('title', 'Permesso: Scrive nel progetto\nChiede sempre: scritture fuori dal progetto, file con segreti, azioni dopo un contenuto sospetto\nCambia il permesso');
+    await expect(chip(page).locator('.talos-chip__label')).toHaveText('Scrive nel progetto');
+    await expect(chip(page)).toHaveAttribute('title', 'Senza chiedere: file, comandi, documenti\nPermesso: Scrive nel progetto\nChiede sempre: scritture fuori dal progetto, file con segreti, azioni dopo un contenuto sospetto\nCambia il permesso');
     /* ⛔ visto nella prima foto: a 220 px il testo si tagliava e la scala riduceva il chip allo scudo anche a 1920, con 400 px
        vuoti nella barra. A 1920 la scala resta a 0 e l'etichetta si legge intera. */
     await page.evaluate(() => window.__talosHarnessUiRuntime.adattaScalaComposer());
     const misura = await chip(page).locator('.talos-chip__label').evaluate((l) => ({ scala: l.closest('.talos-composer__bar').dataset.scala ?? '0', tagliata: l.scrollWidth > l.clientWidth + 1 }));
     expect(misura).toEqual({ scala: '0', tagliata: false });
     await scena(page, 'cp-fa', 'Full access');
-    await expect(chip(page).locator('.talos-chip__label')).toHaveText('Senza chiedere: tutto');
+    await expect(chip(page).locator('.talos-chip__label')).toHaveText('Accesso pieno');
+    await expect(chip(page)).toHaveAttribute('title', /^Senza chiedere: tutto\n/u);
     await scena(page, 'cp-or', 'On request', { shell: 'sempre' });
-    await expect(chip(page).locator('.talos-chip__label')).toHaveText('Senza chiedere: comandi (tranne i test)');
+    await expect(chip(page).locator('.talos-chip__label')).toHaveText('Chiede prima · 1 eccezione');
+    await expect(chip(page)).toHaveAttribute('title', /^Senza chiedere: comandi \(tranne i test\)\n/u);
     await scena(page, 'cp-or2', 'On request');
-    await expect(chip(page).locator('.talos-chip__label')).toHaveText('Chiede tutto');
+    await expect(chip(page).locator('.talos-chip__label')).toHaveText('Chiede prima');
+    await expect(chip(page)).toHaveAttribute('title', /^Chiede tutto\n/u);
     await scena(page, 'cp-ro', 'Read only');
     await expect(chip(page).locator('.talos-chip__label')).toHaveText('Solo lettura');
     await scena(page, 'cp-nega', 'Workspace write', { shell: 'nega', prova: 'nega' });
-    await expect(chip(page).locator('.talos-chip__label')).toHaveText('Senza chiedere: file, documenti');
+    await expect(chip(page).locator('.talos-chip__label')).toHaveText('Scrive nel progetto · 2 eccezioni');
+    await expect(chip(page)).toHaveAttribute('title', /^Senza chiedere: file, documenti\n/u);
     await expect(chip(page)).toHaveAttribute('title', /Spenti: comandi/u);
     // review Y2 (owner 10/10): un gruppo a metà si scrive col nome della parte
     await scena(page, 'cp-meta', 'Full access', { shell: 'chiedi' });
-    await expect(chip(page).locator('.talos-chip__label')).toHaveText('Senza chiedere: file, comandi (solo test), documenti');
+    await expect(chip(page).locator('.talos-chip__label')).toHaveText('Accesso pieno · 1 eccezione');
+    await expect(chip(page), 'il gruppo a metà si nomina con la sua parte, nel suggerimento').toHaveAttribute('title', /^Senza chiedere: file, comandi \(solo test\), documenti\n/u);
     /* ⛔ vista nella foto, non da `toHaveText` (che legge anche un testo nascosto): con la parte nel nome l'etichetta superava il
        tetto di 340 px, la scala saltava allo stadio 2 e il chip diventava lo scudo a 1920. Il permesso deve leggersi intero; a
        cedere per primo è «Terminale» (stadio 1). */
@@ -84,7 +91,7 @@ test.describe('C1 — il chip dei Permessi', () => {
       const r = window.__talosHarnessUiRuntime;
       r.handleRealEvent({ type: 'CUSTOM', name: 'talos.impostazioni-sessione', value: { modalitaOperativa: 'normale' }, _sequenza: 901 }, r.realSessionState.generation);
     });
-    await expect(chip(page).locator('.talos-chip__label')).toHaveText('Senza chiedere: file, comandi (solo test), documenti');
+    await expect(chip(page).locator('.talos-chip__label')).toHaveText('Accesso pieno · 1 eccezione');
     // il clic apre la modale di oggi
     await chip(page).click();
     await expect(page.getByRole('dialog', { name: 'Quanto può fare TALOS qui' })).toBeVisible();
@@ -96,7 +103,8 @@ test.describe('C1 — il chip dei Permessi', () => {
   test('C1-CHIP-02 — the longest partial label is never cut, and «Terminale» yields before the permission', async ({ page }) => {
     const conto = await apri(page);
     await scena(page, 'cp-lunga', 'Workspace write', { scrivi: 'chiedi', shell: 'chiedi', generate_image: 'chiedi' });
-    await expect(chip(page).locator('.talos-chip__label')).toHaveText('Senza chiedere: file (solo modifiche), comandi (solo test), documenti (solo testi)');
+    await expect(chip(page).locator('.talos-chip__label')).toHaveText('Scrive nel progetto · 3 eccezioni');
+    await expect(chip(page)).toHaveAttribute('title', /^Senza chiedere: file \(solo modifiche\), comandi \(solo test\), documenti \(solo testi\)\n/u);
     for (const larghezza of [1024, 1440, 1920]) {
       await page.setViewportSize({ width: larghezza, height: 1080 });
       await page.evaluate(() => window.__talosHarnessUiRuntime.adattaScalaComposer());
@@ -118,11 +126,11 @@ test.describe('C1 — il chip dei Permessi', () => {
     test(`C1-CHIP-FOTO ${tema} — il compositore con il chip, 1920×1080`, async ({ page }, info) => {
       await apri(page, { tema });
       await scena(page, `cp-foto-${tema}`, 'Workspace write');
-      await expect(chip(page).locator('.talos-chip__label')).toHaveText('Senza chiedere: file, comandi, documenti');
+      await expect(chip(page).locator('.talos-chip__label')).toHaveText('Scrive nel progetto');
       const cartella = process.env.TALOS_FOTO_DIR || info.outputPath('');
       await page.screenshot({ path: `${cartella}/c1-chip-permessi-${tema}.png` });
       await scena(page, `cp-foto-fa-${tema}`, 'Full access', { shell: 'chiedi' });
-      await expect(chip(page).locator('.talos-chip__label')).toHaveText('Senza chiedere: file, comandi (solo test), documenti');
+      await expect(chip(page).locator('.talos-chip__label')).toHaveText('Accesso pieno · 1 eccezione');
       await page.screenshot({ path: `${cartella}/c1-chip-permessi-pieno-${tema}.png` });
     });
   }

@@ -55,8 +55,21 @@ export function fonteDaCartella({ sessionId, percorso, nome = null, dimensione, 
 }
 
 /** Una voce della Libreria (`{id, nome, ...}`). */
-export function fonteDaLibreria({ sessionId, voce, nome = null, dimensione, fetchFn = (...a) => globalThis.fetch(...a) }) {
+export function fonteDaLibreria({ sessionId, voce, nome = null, dimensione, versione = null, fetchFn = (...a) => globalThis.fetch(...a) }) {
   const voceId = String(voce?.id ?? '');
+  /* 24/10/2026 (artefatti con versioni): `versione` rende QUELLA versione — la pagina e il suo testo; senza, l'ultima come prima */
+  if (Number.isSafeInteger(versione) && versione >= 1) {
+    return {
+      origine: 'libreria',
+      nome: nome ?? String(voce?.nome ?? voce?.titolo ?? voceId),
+      percorso: null,
+      versione,
+      dimensione: undefined,
+      leggiByte: async () => byteDa(fetchFn, await paginaDa(fetchFn, sessionId, { voceId, versione })),
+      creaPagina: () => paginaDa(fetchFn, sessionId, { voceId, versione }),
+      indirizzoPdf: null,
+    };
+  }
   return {
     origine: 'libreria',
     nome: nome ?? String(voce?.nome ?? voce?.titolo ?? voceId),

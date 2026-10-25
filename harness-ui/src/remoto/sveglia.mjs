@@ -108,12 +108,12 @@ export function creaSveglia({
   }
 
   /** Una sveglia a un telefono: 'inviata', 'senza-iscrizione', 'dimenticata' (404/410) o 'fallita'. */
-  async function sveglia(telefono, urgenza = 'high', { prova = false } = {}) {
+  async function sveglia(telefono, urgenza = 'high', { prova = false, file = false } = {}) {
     const iscrizione = await dispositivi.iscrizione(telefono.id);
     if (!iscrizione) return 'senza-iscrizione';
     /* `p: 1` = «Prova la notifica» (revisione del Mobile, 21/10): il telefono la distingue da una sveglia vera senza segni a tempo.
        Nessun dato in più per chi trasporta la spinta: il carico è cifrato (aes128gcm) e resta senza contenuto. */
-    const carico = JSON.stringify({ v: 1, w: Buffer.from(casuale(12)).toString('base64url'), ...(prova ? { p: 1 } : {}) });
+    const carico = JSON.stringify({ v: 1, w: Buffer.from(casuale(12)).toString('base64url'), ...(prova ? { p: 1 } : {}), ...(file ? { f: 1 } : {}) });
     try {
       await invia(iscrizione, carico, {
         TTL: TTL_S, urgency: urgenza, contentEncoding: 'aes128gcm', timeout: 10_000,
@@ -157,12 +157,12 @@ export function creaSveglia({
         const q = daMandare.get(t.id);
         if (!q) continue;
         /* già confermate (anche prima che questo giro le scoprisse) */
-        for (const id of q.sessioni.keys()) if (confermata(t.id, id, giroPrimaAlle)) q.sessioni.delete(id);
+        for (const id of q.sessioni.keys()) if (confermata(t.id, id, q.nate?.get(id) ?? giroPrimaAlle)) q.sessioni.delete(id); // B-4
         if (!q.sessioni.size) { daMandare.delete(t.id); continue; }
         if (vivi.has(t.id) && ora - Math.min(...q.sessioni.values()) < GRAZIA_COLLEGATO_MS) continue; // collegato: tempo per confermare
         if (ora - (ultimaPer.get(t.id) ?? -Infinity) < SVEGLIE_MINIME_MS) continue; // tetto: resta in coda, partirà al giro buono
         daMandare.delete(t.id);
-        await sveglia(t, q.urgenza);
+        await sveglia(t, q.urgenza, { file: Boolean(q.file) });
         partite += 1;
       }
       /* revocato o senza sveglia nel frattempo: niente da mandare */
@@ -209,6 +209,25 @@ export function creaSveglia({
       const esito = await sveglia({ id }, 'high', { prova: true });
       if (esito === 'senza-iscrizione' || esito === 'dimenticata') { if (prima === undefined) ultimaPer.delete(id); else ultimaPer.set(id, prima); }
       return { esito };
+    },
+
+    /**
+     * D-3 del Mobile (25/10/2026, contratto Parte 2 «Revision 2»): il PC ha offerto un file a un dispositivo. In coda come le altre
+     * novità (stesso tetto di una ogni 10 s, stessa grazia da collegato, stessa conferma con `device.seen` di quella sessione); il
+     * carico dice solo `f: 1`, e il dispositivo chiede `file.offers`.
+     * ⛔ Revisione a blocco 7 (B-3): urgenza 'high', come TUTTE le sveglie — decisione dell'owner del 21/10 sera, in testa a questo file
+     *   (una 'normal' arriva solo nelle finestre di manutenzione della Doze, misurato dal Mobile). La «normal» di D-3 era mia.
+     * ⛔ B-4: la conferma conta solo se è arrivata DOPO la nascita dell'offerta (`nate`), non dopo il giro prima: una `device.seen` di
+     *   pochi secondi prima di un'offerta nuova la cancellava.
+     */
+    offerta(idTelefono, sessionId) {
+      if (typeof idTelefono !== 'string' || typeof sessionId !== 'string') return;
+      let q = daMandare.get(idTelefono);
+      if (!q) { q = { urgenza: 'high', sessioni: new Map() }; daMandare.set(idTelefono, q); }
+      q.file = true;
+      const ora = clock();
+      q.sessioni.set(sessionId, ora);
+      (q.nate ??= new Map()).set(sessionId, ora);
     },
 
     /** Il ritmo vero: ogni 5 s. Torna la funzione che lo ferma. */

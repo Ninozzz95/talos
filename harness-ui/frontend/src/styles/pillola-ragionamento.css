@@ -1,0 +1,15 @@
+/*
+ * 24/10/2026 — la pillola del ragionamento nel compositore e il suo menu (owner, bozzetto approvato `mockup-pillola-*`).
+ * La pillola è un `talos-badge talos-badge--lg` come quella del modello; il menu è un `talos-menu` come quello del «+»: niente
+ * grammatica nuova, solo l'intestazione col nome del modello, la riga scelta e l'interruttore in fondo.
+ */
+.talos-pillola-ragionamento__freccia{opacity:.6}
+.talos-pillola-ragionamento__menu{min-width:300px; max-width:360px}
+.talos-pillola-ragionamento__testa{display:flex; justify-content:space-between; align-items:baseline; gap:12px; padding:8px 10px 6px; font-weight:600; color:var(--talos-text)}
+.talos-pillola-ragionamento__modello{font-weight:400; color:var(--talos-muted); font-size:var(--talos-font-size-xs); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0}
+.talos-pillola-ragionamento__voce{align-items:center; justify-content:space-between}
+.talos-pillola-ragionamento__voce[aria-checked="true"]{background:var(--talos-accent-soft)}
+.talos-pillola-ragionamento__ok{color:var(--talos-accent); flex:none}
+.talos-pillola-ragionamento__nota{max-width:340px}
+.talos-pillola-ragionamento__mostra{align-items:center; justify-content:space-between; margin-top:2px; padding-top:10px; border-top:1px solid var(--talos-border-subtle); border-radius:0 0 9px 9px}
+.talos-pillola-ragionamento__mostra .talos-switch{flex:none; pointer-events:none}

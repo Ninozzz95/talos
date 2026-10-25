@@ -125,6 +125,11 @@ export function collegaTooltip(documentObj = globalThis.document, { ritardo = RI
 
   const chiudi = () => {
     if (timer) { clearTimeout(timer); timer = null; }
+    /* ⛔ 22/10/2026 (streaming fluido): chiudere una bolla GIÀ chiusa non è gratis. Questo ascolta OGNI scorrimento della pagina,
+       e mentre il modello scrive la chat scorre a ogni fotogramma: riscrivere `hidden` con lo stesso valore genera comunque una
+       mutazione (DOM, «set an attribute value»), e `hidden` è fra i tratti di un `:has()` sull'intera chat (`index.css`,
+       `#schermoChat:has(… #userQuestionDock:not([hidden]) …)`) — misurato: ricalcolo degli stili proporzionale alla conversazione. */
+    if (!bersaglio && bolla.hidden) return;
     osservaTesto?.disconnect();
     if (bersaglio) {
       bersaglio.removeAttribute('aria-describedby');

@@ -360,3 +360,82 @@ test('SEEN-08 il job (si collega, mette la notifica, chiude) non conferma: una r
   b.o.avanza(SVEGLIE_MINIME_MS);
   assert.equal(await b.s.giro(), 1, '⛔ la seconda richiesta non va persa');
 });
+
+test('SVE-OFF-01 (D-3, 25/10; B-3 del blocco 7) un file offerto a un dispositivo spento lo sveglia una volta: urgenza ALTA come tutte, carico con solo f:1', async () => {
+  const b = banco();
+  b.set([sessione({})]);
+  await b.s.giro();
+  b.s.offerta('t1', 'id-sessione-che-non-deve-uscire');
+  assert.equal(await b.s.giro(), 1);
+  assert.deepEqual(Object.keys(b.inviate[0].carico).sort(), ['f', 'v', 'w']);
+  assert.equal(b.inviate[0].carico.f, 1);
+  assert.equal(b.inviate[0].opzioni.urgency, 'high', 'decisione owner 21/10 sera: tutte high');
+  assert.ok(!JSON.stringify(b.inviate[0]).includes('id-sessione-che-non-deve-uscire'), 'nessun id di sessione in ciò che parte');
+  /* una sola: il giro dopo non la ripete */
+  b.o.avanza(SVEGLIE_MINIME_MS + 1);
+  assert.equal(await b.s.giro(), 0);
+});
+
+test('SVE-OFF-02 (D-3) l\'offerta rispetta il tetto dei 10 s e la conferma con device.seen; una richiesta della persona resta «high»', async () => {
+  const b = banco();
+  b.set([sessione({})]);
+  await b.s.giro();
+  b.s.offerta('t1', 's1');
+  b.s.visto('t1', 's1');
+  assert.equal(await b.s.giro(), 0, 'già vista: non parte');
+  b.s.offerta('t1', 's2');
+  b.set([sessione({}), sessione({ sessionId: 's3', inAttesaApprovazione: true })]);
+  assert.equal(await b.s.giro(), 1);
+  assert.equal(b.inviate[0].opzioni.urgency, 'high', 'una carta in attesa vince sulla normale');
+  assert.equal(b.inviate[0].carico.f, 1);
+});
+
+test('SVE-OFF-03 (D-3; B-2 del blocco 7) il cavo in remoto/index: ogni offerta NUOVA va in coda, anche a un dispositivo collegato', async () => {
+  const { svegliaPerOfferta } = await import('../src/remoto/index.mjs');
+  const chiamate = [];
+  const svegliatore = { offerta: (id, s) => chiamate.push([id, s]) };
+  assert.equal(svegliaPerOfferta({ stato: 'inviato', dispositivoId: 'tA', sessionId: 's1' }, { svegliatore }), true);
+  assert.equal(svegliaPerOfferta({ stato: 'inviato', dispositivoId: 'tB', sessionId: 's1' }, { svegliatore }), true, 'collegato: in coda lo stesso');
+  assert.equal(svegliaPerOfferta({ stato: 'in-scaricamento', dispositivoId: 'tA', sessionId: 's1' }, { svegliatore }), false, 'non nuova');
+  assert.equal(svegliaPerOfferta({ stato: 'inviato', dispositivoId: 'tA', sessionId: 's1' }, { svegliatore: null }), false, 'remoto spento');
+  assert.deepEqual(chiamate, [['tA', 's1'], ['tB', 's1']]);
+});
+
+test('SVE-OFF-04 (B-2) un dispositivo COLLEGATO ma fuori da quella conversazione: dopo la grazia la sveglia parte; con device.seen no', async () => {
+  const b = banco({ vivi: ['t1'] });
+  b.set([sessione({})]);
+  await b.s.giro();
+  b.s.offerta('t1', 's9');
+  assert.equal(await b.s.giro(), 0, 'collegato: prima la grazia');
+  b.o.avanza(GRAZIA_COLLEGATO_MS + 1);
+  assert.equal(await b.s.giro(), 1, 'nessuna conferma: la sveglia parte');
+  const c = banco({ vivi: ['t1'] });
+  c.set([sessione({})]);
+  await c.s.giro();
+  c.s.offerta('t1', 's9');
+  c.o.avanza(1000);
+  c.s.visto('t1', 's9');
+  c.o.avanza(GRAZIA_COLLEGATO_MS + 1);
+  assert.equal(await c.s.giro(), 0, 'vista: niente sveglia');
+});
+
+test('SVE-OFF-05 (B-4) una device.seen arrivata PRIMA dell\'offerta non la cancella', async () => {
+  const b = banco();
+  b.set([sessione({})]);
+  await b.s.giro();
+  b.o.avanza(1000);
+  b.s.visto('t1', 's1');
+  b.o.avanza(2000);
+  b.s.offerta('t1', 's1');
+  assert.equal(await b.s.giro(), 1);
+});
+
+test('SVE-OFF-06 (revisione a blocco 8, N2) il cavo di creaRemoto passa OGNI offerta alla coda, senza filtro dei collegati', async () => {
+  /* Cancello statico (il cavo è una riga dentro creaRemoto): il mutante del revisore rimetteva `inLinea` nella callback e la prova
+     sul comportamento, SVE-OFF-03, restava verde perché prova `svegliaPerOfferta` da sola */
+  const { readFileSync } = await import('node:fs');
+  const sorgente = readFileSync(new URL('../src/remoto/index.mjs', import.meta.url), 'utf8');
+  const cavi = (sorgente.match(/^\s*file\?\.ascoltaOfferte\(.*$/gmu) ?? []).map((riga) => riga.trim());
+  assert.equal(cavi.length, 1, 'un cavo solo');
+  assert.equal(cavi[0], 'file?.ascoltaOfferte((o) => { svegliaPerOfferta(o, { svegliatore }); });');
+});

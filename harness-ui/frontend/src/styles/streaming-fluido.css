@@ -1,0 +1,95 @@
+/*
+ * ⭐⭐⭐ 22/10/2026 — LO STREAMING FLUIDO: l'aspetto del testo che arriva, e il costo di una conversazione lunga.
+ *
+ * Owner, 22/10/2026: «voglio un'animazione estremamente veloce, ottimizzata, ma allo stesso tempo fluida e dinamica in base al
+ * testo dell'output, e soprattutto che in conversazioni lunghe non scatti».
+ *
+ * ⛔ PERCHÉ UN FOGLIO NUOVO. Le regole della dissolvenza per parola e del cursore erano scritte per la vecchia classe
+ *   `.assistant-message` (commit `7f17da2bf`, 02/09) e sono SPARITE nel passaggio al pacchetto modulare (06/09, `24bcc524a`):
+ *   misurato il 22/10, nessun foglio servito nomina `stream-word`. Da allora la modalità «Dissolvenza» avvolgeva le parole in
+ *   `<span class="stream-word">` a ogni fotogramma senza che nessuna regola le animasse — un costo senza effetto.
+ */
+
+/*
+ * LA DISSOLVENZA PER PAROLA (Impostazioni → Aspetto → «Dissolvenza», la scelta di serie). Il ritmo
+ * (`components/ritmo-streaming.js`) mostra il testo a velocità quasi costante; la parola appena comparsa entra col colore che
+ * sale dal trasparente in 260 ms, così il bordo del testo che avanza è morbido invece che a scatti di carattere.
+ * `animation-delay` NEGATIVO (scritto dal monolite, `avvolgiParoleRecenti`): uno span ricreato riprende da dove era, non riparte
+ * da zero.
+ * ⛔ Si anima il COLORE, non l'opacità e mai `filter: blur` (la vecchia regola lo aveva). Misurato il 22/10/2026 con la traccia
+ *   di Chrome (GPU, 165 Hz): un'animazione d'opacità su decine di span rende ognuno un candidato a strato proprio e costa circa
+ *   1 ms di «Layerize» a fotogramma; il colore resta nella pittura del testo. La forma (dissolvenza per parola, breve) è quella
+ *   di Streamdown (`animated`, `fadeIn` a 150 ms, streamdown.ai/docs/animation, letto il 22/10/2026).
+ */
+:root[data-talos-streaming-animation="fade"] .talos-message__copy .assistant-copy .stream-word {
+  animation: talos-parola-arriva 260ms cubic-bezier(.2, .6, .2, 1) both;
+}
+@keyframes talos-parola-arriva {
+  from { color: transparent; }
+}
+/* Il codice IN LINEA entra con le sue parole: tutto il chip insieme (testo, sfondo e bordo da trasparenti, sempre nella pittura).
+   Prima del 22/10 compariva a piena intensità in mezzo a parole ancora in dissolvenza (visto nelle foto del giro vero). */
+:root[data-talos-streaming-animation="fade"] .talos-message__copy .assistant-copy code.stream-code {
+  animation: talos-codice-arriva 260ms cubic-bezier(.2, .6, .2, 1) both;
+}
+@keyframes talos-codice-arriva {
+  from { color: transparent; background-color: transparent; border-color: transparent; }
+}
+
+/*
+ * IL CURSORE (Impostazioni → Aspetto → «Cursore»): una barretta in coda all'ultimo blocco, solo mentre il messaggio arriva
+ * (`is-streaming` si toglie quando lo schermo è in pari E il messaggio è finito, `renderizzaMessaggioStreamingOra`).
+ */
+:root[data-talos-streaming-animation="typewriter"] .talos-message__copy.is-streaming .assistant-copy > :is(p, h1, h2, h3, h4, h5, h6):last-child::after,
+:root[data-talos-streaming-animation="typewriter"] .talos-message__copy.is-streaming .assistant-copy > :is(ul, ol):last-child > li:last-child::after {
+  content: "";
+  display: inline-block;
+  inline-size: .5ch;
+  block-size: 1.05em;
+  margin-inline-start: 2px;
+  vertical-align: -.15em;
+  background: currentColor;
+  opacity: .55;
+  border-radius: 1px;
+  animation: talos-cursore-batte 1s steps(2, start) infinite;
+}
+@keyframes talos-cursore-batte {
+  to { visibility: hidden; }
+}
+
+/*
+ * ⛔ MOVIMENTO RIDOTTO: il testo continua ad arrivare a velocità costante (non si muove niente: compare al suo posto, e senza
+ *   ritmo tornerebbero i gradini da 35 caratteri), ma nessuna dissolvenza e un cursore fermo. «Calmo, mai fermo» (regola
+ *   dell'owner sulle animazioni, 24/09/2026). Con «Riduci il movimento» dell'app (`reduce-motion`) il monolite mostra il testo
+ *   crudo, senza ritmo: è la scelta esplicita della persona dentro TALOS.
+ */
+@media (prefers-reduced-motion: reduce) {
+  :root[data-talos-streaming-animation="fade"] .talos-message__copy .assistant-copy .stream-word,
+  :root[data-talos-streaming-animation="fade"] .talos-message__copy .assistant-copy code.stream-code { animation: none; }
+  :root[data-talos-streaming-animation="typewriter"] .talos-message__copy.is-streaming .assistant-copy > :is(p, h1, h2, h3, h4, h5, h6):last-child::after,
+  :root[data-talos-streaming-animation="typewriter"] .talos-message__copy.is-streaming .assistant-copy > :is(ul, ol):last-child > li:last-child::after { animation: none; }
+}
+
+/*
+ * ⭐⭐ LA CONVERSAZIONE LUNGA: i turni chiusi fuori vista non si impaginano, non si ricalcolano e non si dipingono.
+ *   Misurato il 22/10/2026 (banco `banco-streaming-fluido.spec.mjs`, scena «300 turni vivi», 19.835 nodi): durante lo stream di
+ *   una risposta normale il lavoro per fotogramma saliva da p95 1,8 ms (chat vuota) a 12,4 ms, con fotogrammi oltre i 20 ms —
+ *   e la traccia di Chrome lo attribuiva a ricalcolo degli stili, pre-pittura e pittura, cioè a lavoro proporzionale al DOM.
+ * ⇒ `content-visibility: auto` sui turni CHIUSI (web.dev «content-visibility», MDN; Hermes lo usa sulle righe della
+ *   conversazione, `apps/desktop/src/components/assistant-ui/thread/list.tsx:430-448`, clone `8237c7f8`).
+ * ⛔ Le due trappole che Hermes documenta, e come si evitano qui:
+ *   1. un turno «virtualizzato» prima che la sua altezza vera sia stata ricordata torna all'altezza segnaposto e fa saltare la
+ *      vista (`list.tsx:345-357`) ⇒ la coda viva NON si virtualizza (gli ultimi quattro figli della colonna: il turno che sta
+ *      scrivendo e quelli appena sopra), e `contain-intrinsic-size: auto` sta su TUTTI i turni, così il browser ne ricorda
+ *      l'altezza vera già mentre sono visibili (CSS Box Sizing 4, «last remembered size»);
+ *   2. il contenimento della pittura taglia ciò che esce dal riquadro ⇒ dentro un turno non c'è niente che debba uscirne: i
+ *      menu del messaggio vivono nel `body` (`creaAzioniMessaggio`, `radiceMenu`), e la cronologia sta fuori dalla colonna.
+ */
+#conversation > .talos-turn {
+  contain-intrinsic-size: auto 360px;
+}
+/* `data-disegnato`: il turno è già stato disegnato una volta, quindi il browser ne ricorda l'altezza vera
+   (`components/turni-disegnati.js`). Prima di quel segno si impagina per intero: mai saltato con l'altezza di stima. */
+#conversation > .talos-turn[data-disegnato]:not(:nth-last-child(-n + 4)) {
+  content-visibility: auto;
+}

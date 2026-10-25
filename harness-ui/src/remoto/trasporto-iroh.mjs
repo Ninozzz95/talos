@@ -37,15 +37,26 @@ function errore(code, message) {
   return Object.assign(new Error(message), { code });
 }
 
+/**
+ * La regola dell'indirizzo di un server proprio, in UN posto solo: un URL valido, in `https` (`http` solo verso la propria macchina,
+ * per le prove). Torna l'URL analizzato o lancia `REMOTE_RELAY_INVALID`. La usano l'accensione (`configuraRelay`) e — revisione a
+ * blocco 3, 24/10/2026, D-C3 — anche il salvataggio della scelta (`relayValido` di index.mjs): prima un indirizzo storto si salvava
+ * a remoto spento e l'errore arrivava solo all'accensione, dopo il «sì» della carta.
+ */
+export function analizzaIndirizzoRelay(url) {
+  let analizzato;
+  try { analizzato = new URL(String(url ?? '')); } catch { throw errore('REMOTE_RELAY_INVALID', 'The relay address is not a valid URL.'); }
+  /* `http:` solo verso la propria macchina (le prove): fuori casa il relay va in https */
+  const locale = ['127.0.0.1', 'localhost', '[::1]'].includes(analizzato.hostname);
+  if (analizzato.protocol !== 'https:' && !(analizzato.protocol === 'http:' && locale)) throw errore('REMOTE_RELAY_INVALID', 'The relay address must use https.');
+  return analizzato;
+}
+
 /** La modalità del relay dalla scelta della persona: `{ modo: 'n0' }` o `{ modo: 'proprio', url }`. */
 export function configuraRelay(iroh, builder, relay) {
   if (relay?.modo === 'proprio') {
     const url = String(relay.url ?? '');
-    let analizzato;
-    try { analizzato = new URL(url); } catch { throw errore('REMOTE_RELAY_INVALID', 'The relay address is not a valid URL.'); }
-    /* `http:` solo verso la propria macchina (le prove): fuori casa il relay va in https */
-    const locale = ['127.0.0.1', 'localhost', '[::1]'].includes(analizzato.hostname);
-    if (analizzato.protocol !== 'https:' && !(analizzato.protocol === 'http:' && locale)) throw errore('REMOTE_RELAY_INVALID', 'The relay address must use https.');
+    const analizzato = analizzaIndirizzoRelay(url);
     iroh.presetMinimal(builder);
     /* R5.9 (owner 18/10, «gettone nell'indirizzo»): `talos-relay` stampa `https://dominio/?token=…`. Il gettone si stacca
        dall'indirizzo e va nell'header `Authorization` (`RelayConfig.authToken` del binding), così non finisce nei registri del

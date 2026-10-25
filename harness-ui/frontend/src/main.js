@@ -39,20 +39,19 @@ montaMotoreContesto();
 montaSitiFidati();
 
 /*
- * 14/09/2026 — Desktop 0.1.7: il trasporto consegna i delta in tempo reale, ma le modalita
- * `fade`/`typewriter` del monolite trattengono volontariamente testo gia ricevuto fino a
- * 300–350 ms. Il renderer incrementale e il suo requestAnimationFrame sono gia il punto giusto
- * per coalescere SOLO il lavoro di paint: qui rendiamo quindi il live stream "none", cioe ogni
- * frame vede tutto cio che T3 ha gia ricevuto. Nessun timer, nessun typing artificiale, nessun
- * chunk sintetico; ordine e contenuto dei delta restano quelli originali.
- *
- * Il bundle puo essere ospitato anche da una superficie embedded, riconoscibile dal contratto
- * `window.__talosHarnessHost`: in quel caso la preferenza appartiene all'host e non va sovrascritta
- * da questa hotfix Desktop standalone.
+ * 14/09/2026 — Desktop 0.1.7: qui si forzava `data-talos-streaming-animation = 'none'` nella shell standalone, perché le
+ * modalità `fade`/`typewriter` del monolite trattenevano testo già ricevuto fino a 300–350 ms (un ritmo fisso più lento del
+ * fornitore: arretrato senza limite).
+ * ⛔ 22/10/2026 — TOLTO. Misurato dal vivo (giro vero, glm-5.3-flash, Chrome con GPU a 165 Hz): con `none` il testo segue i
+ *   PACCHETTI del filo (~35 caratteri ogni ~145 ms) e il 95% dei fotogrammi resta fermo — è lo «scattoso» dell'owner. E la
+ *   forzatura non reggeva nemmeno da sola: la prima volta che il monolite riapplica l'aspetto (un tema, la lingua, il modo
+ *   chiaro/scuro del sistema) la radice tornava alla preferenza salvata (`fade` di serie), quindi la modalità a schermo
+ *   dipendeva da che cosa la persona aveva toccato dopo l'avvio. Il ritmo adesso ha un ritardo massimo dichiarato
+ *   (`components/ritmo-streaming.js`, 260 ms) e la preferenza delle Impostazioni torna a valere, sempre («Cursore testo» o
+ *   «Dissolvenza»: le Impostazioni non offrono una terza scelta). Chi vuole il testo crudo, senza ritmo, ha «Riduci movimento»
+ *   (Impostazioni → Aspetto), che lo rende istantaneo. Il cancello è `STREAMING-FLUIDO-07`.
+ * Una superficie embedded (`window.__talosHarnessHost`) continua a tenere la propria preferenza, come prima.
  */
-if (!window.__talosHarnessHost) {
-  document.documentElement.dataset.talosStreamingAnimation = 'none';
-}
 
 /* TALOS-DESKTOP-FINAL-UI */
 const { initTalosDesktopBackground } = await import('./motion/desktop-background.js');

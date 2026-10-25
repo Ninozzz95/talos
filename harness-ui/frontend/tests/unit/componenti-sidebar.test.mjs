@@ -96,7 +96,7 @@ test('statoSessione: l\'ordine degli stati — attesa prima di vivo, interrotta 
   assert.equal(statoSessione({ inAttesaApprovazione: true, conclusa: false }).classe, 'attesa');
   assert.equal(statoSessione({ conclusa: false }).classe, 'vivo');
   assert.equal(statoSessione({ conclusa: true, interrotta: true, ultimoEsito: 'successo' }).classe, 'interrotto');
-  assert.equal(statoSessione({ conclusa: true, ultimoEsito: 'errore' }).testo, 'errore');
+  assert.equal(statoSessione({ conclusa: true, ultimoEsito: 'errore' }).testo, 'da riprendere'); // owner 23/10/2026: l'ultimo giro in errore non giudica la chat
   assert.equal(statoSessione({ conclusa: true, ultimoEsito: 'errore', motivoChiusura: 'giri-finiti' }).testo, 'tetto di richieste raggiunto');
   assert.equal(statoSessione({ conclusa: true, ultimoEsito: 'successo' }).tono, 'success');
 });
@@ -175,11 +175,12 @@ test('una sessione fermata dall owner dice «fermata», non «errore»', () => {
   assert.match(fermata.aiuto, /fermata tu/);
 });
 
-test('un errore VERO resta «errore» — la cura non nasconde i guasti', () => {
+test('un errore VERO resta distinto — owner 23/10: si dice «da riprendere», ambra, e il titolo dice che il giro si è fermato su un errore', () => {
   const guasto = statoSessione({ conclusa: true, interrotta: false, ultimoEsito: 'errore', motivoChiusura: 'errore' });
   assert.equal(guasto.classe, 'errore');
-  assert.equal(guasto.testo, 'errore');
-  assert.equal(guasto.tono, 'danger');
+  assert.equal(guasto.testo, 'da riprendere');
+  assert.equal(guasto.tono, 'warning');
+  assert.match(guasto.aiuto, /fermato su un errore/u, 'la cura non nasconde il guasto: lo dice il titolo della riga');
 });
 
 test('senza motivo di chiusura non si inventa niente: resta «errore»', () => {
@@ -243,4 +244,11 @@ test('statoSessione: 02/10/2026 — un server MCP che aspetta la persona fa «at
   assert.equal(s.classe, 'attesa');
   assert.equal(s.aiuto, 'Un server MCP aspetta la tua risposta nella chat: rispondi per far continuare il lavoro.');
   assert.equal(statoSessione({ inAttesaRichiestaMcp: false, conclusa: false }).classe, 'vivo', 'al contrario: senza richiesta resta viva');
+});
+
+test('REV 24/10 (R-M3) — al tetto dei giri il titolo NON dice «si è fermato su un errore»: non è un guasto', () => {
+  const tetto = statoSessione({ conclusa: true, ultimoEsito: 'errore', motivoChiusura: 'giri-finiti' });
+  assert.equal(tetto.aiuto, null);
+  /* AL CONTRARIO: un errore vero il titolo ce l'ha */
+  assert.ok(statoSessione({ conclusa: true, ultimoEsito: 'errore', motivoChiusura: 'errore' }).aiuto);
 });

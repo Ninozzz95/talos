@@ -44,6 +44,7 @@ import { stimaToken, stimaTokenConversazione } from './talosHarness.mjs';
 // ⭐ 06/10/2026 — la ricarica della memoria post-compact (opzione A + C-b, ricerca 5×5×5×5 §6.4): il
 // recinto della sintesi entra nella proiezione accanto all'indice meccanico, NELLO STESSO messaggio.
 import { PREFISSO_SINTESI_RECINTATA } from './ricarica-post-compact.mjs';
+import { MARCATORE_RICHIESTA_ACCORCIATA } from './richieste-vecchie.mjs';
 import { chiamataPerChiGuarda } from './ponte-attrezzi.mjs';
 import { oscuraFormeDiSegreto } from '../forme-di-segreto.mjs';
 
@@ -242,8 +243,8 @@ export function stimaCiecaSuiPezzi(messaggi) {
  * Stato dell'arte: Hermes `_FEASIBILITY_SKIP_MIDDLE_FRACTION` (`agent/context_compressor.py:1163-1166`) salta la chiamata quando il
  * tratto comprimibile è sotto il 10% della soglia e c'è già stato un colpo a vuoto; qui la soglia è assoluta e vale dal primo colpo.
  */
-export function riassuntoNonPuoRidurre(token, pavimento, mezzo, { finestraToken = null, soglia = null } = {}) {
-  return guadagnoAtteso({ prima: token, pavimentoConCornice: pavimento, mezzo, finestraToken, soglia }) <= 0;
+export function riassuntoNonPuoRidurre(token, pavimento, mezzo, { finestraToken = null, soglia = null, mediana = null } = {}) {
+  return guadagnoAtteso({ prima: token, pavimentoConCornice: pavimento, mezzo, finestraToken, soglia, mediana }) <= 0;
 }
 
 /**
@@ -294,18 +295,55 @@ export function riassuntoNonPuoRidurre(token, pavimento, mezzo, { finestraToken 
  */
 export const FRAZIONE_DELLA_SOGLIA_UTILE = 0.10;
 export const RIASSUNTO_ATTESO_MINIMO_TOKEN = 400;
-/** Quanto ci si aspetta che pesi il riassunto: un quinto del tratto (col tetto della finestra e un pavimento piccolo), mai più del tratto. */
-export function riassuntoAtteso(mezzo, { finestraToken = null, soglia = null } = {}) {
+
+/*
+ * ⭐ §4 della CLI, pezzo E (owner 22/10, «tutto dentro la 0.6.13»; rapporto `research-overflow-0613/REPORT.md` §4.1): le due misure della
+ *   regola del 10% al posto delle costanti.
+ *   - k, il fattore di SOTTOSTIMA: i `prompt_tokens` veri dell'ultima richiesta sulla stima di quella richiesta (messaggi più schemi degli
+ *     attrezzi), fra 1 e 4. Come cline (`sdk/packages/core/src/extensions/context/compaction.ts:328-355`, clone 21/10 c31347a0: «scale the
+ *     whole budget down by that ratio … never loosens the budget … capped so a tiny estimate cannot collapse the budget»;
+ *     `MAX_INPUT_UNDERESTIMATE_FACTOR` in `compaction-shared.ts:27`). Il guadagno G è in unità di STIMA e la soglia in token veri: un
+ *     riassunto si paga se G ≥ 0,10 × soglia / k. Mai sotto 1: una stima che conta di più non allarga niente.
+ *   - S, il riassunto atteso: la MEDIANA dei riassunti veri della sessione (le ultime nove), pesati col testo arrivato — nelle stesse
+ *     unità di G (i `completion_tokens` del fornitore contano anche il ragionamento, e sono token veri) — con lo stesso tetto della
+ *     finestra e mai più del tratto che riassume. Senza riassunti veri, la stima di prima (un quinto del tratto). Hermes dimensiona il
+ *     budget col minimo fisso (`_MIN_SUMMARY_TOKENS = 2000`, `agent/context_compressor.py:820`) e non lo impara.
+ */
+export const FATTORE_K_MASSIMO = 4;
+export const RIASSUNTI_VERI_TENUTI = 9;
+/** k dalla misura: `prompt_tokens` veri sulla stima della stessa richiesta, fra 1 e 4; `null` se non c'è una misura. */
+export function fattoreK(promptTokens, stimaRichiesta) {
+  if (!(Number.isFinite(promptTokens) && promptTokens > 0 && Number.isFinite(stimaRichiesta) && stimaRichiesta > 0)) return null;
+  return Math.min(FATTORE_K_MASSIMO, Math.max(1, promptTokens / stimaRichiesta));
+}
+const kValido = (k) => (Number.isFinite(k) ? Math.min(FATTORE_K_MASSIMO, Math.max(1, k)) : 1);
+const riassuntiValidi = (lista) => (Array.isArray(lista) ? lista.filter((n) => Number.isFinite(n) && n > 0) : []).slice(-RIASSUNTI_VERI_TENUTI);
+/** I riassunti veri della sessione con uno nuovo in fondo (le ultime nove). */
+export function conRiassuntoVero(lista, token) {
+  return riassuntiValidi([...riassuntiValidi(lista), token]);
+}
+/** La mediana dei riassunti veri (le ultime nove, solo numeri positivi); `null` se non ce n'è nessuno. */
+export function medianaRiassunti(lista) {
+  const ordinati = riassuntiValidi(lista).sort((a, b) => a - b);
+  if (ordinati.length === 0) return null;
+  const mezzo = Math.floor(ordinati.length / 2);
+  return ordinati.length % 2 === 1 ? ordinati[mezzo] : Math.round((ordinati[mezzo - 1] + ordinati[mezzo]) / 2);
+}
+
+/** Quanto ci si aspetta che pesi il riassunto: la mediana dei riassunti veri della sessione se c'è (pezzo E), altrimenti un quinto del
+    tratto (col pavimento piccolo); col tetto della finestra, mai più del tratto. */
+export function riassuntoAtteso(mezzo, { finestraToken = null, soglia = null, mediana = null } = {}) {
   const token = stimaConPezzi(Array.isArray(mezzo) ? mezzo : []);
   if (!(token > 0)) return 0;
   const positivo = (n) => Number.isFinite(n) && n > 0;
   const finestra = positivo(finestraToken) ? finestraToken : (positivo(soglia) ? soglia : TETTO_TOKEN_DEFAULT) / FRAZIONE_FINESTRA;
   const tetto = Math.min(Math.floor(finestra * FRAZIONE_RIASSUNTO_SULLA_FINESTRA), TETTO_TOKEN_RIASSUNTO);
+  if (positivo(mediana)) return Math.min(token, Math.min(Math.round(mediana), tetto));
   return Math.min(token, Math.max(RIASSUNTO_ATTESO_MINIMO_TOKEN, Math.min(Math.floor(token * FRAZIONE_RIASSUNTO_SUL_MEZZO), tetto)));
 }
 /** Ciò che il riassunto toglie, al meglio: la richiesta di adesso contro la proiezione riassunta (cornice più riassunto atteso). */
-export function guadagnoAtteso({ prima, pavimentoConCornice, mezzo, finestraToken = null, soglia = null }) {
-  return prima - (pavimentoConCornice + riassuntoAtteso(mezzo, { finestraToken, soglia }));
+export function guadagnoAtteso({ prima, pavimentoConCornice, mezzo, finestraToken = null, soglia = null, mediana = null }) {
+  return prima - (pavimentoConCornice + riassuntoAtteso(mezzo, { finestraToken, soglia, mediana }));
 }
 /*
  * ⛔ Revisione 7 della CLI (22/10/2026, F6): con una finestra più piccola di attrezzi + sistema (8k contro ~7.300 token di 24 schemi) OGNI
@@ -315,21 +353,22 @@ export function guadagnoAtteso({ prima, pavimentoConCornice, mezzo, finestraToke
  *   Vale anche sul rifiuto del fornitore: la stima decide se un passo può accorciare abbastanza, non se la conversazione entra (§4.1 del
  *   rapporto della CLI, approvato dall'owner il 22/10). Ritorna il pavimento che non entra, o `null` (finestra ignota, o entra).
  */
-export function pavimentoOltreLaFinestra({ pavimentoConCornice, mezzo, finestraToken = null, soglia = null, scarto = 0 }) {
+export function pavimentoOltreLaFinestra({ pavimentoConCornice, mezzo, finestraToken = null, soglia = null, scarto = 0, mediana = null }) {
   if (!(Number.isFinite(finestraToken) && finestraToken > 0)) return null;
-  const pavimento = pavimentoConCornice + riassuntoAtteso(mezzo, { finestraToken, soglia }) + (Number.isFinite(scarto) && scarto > 0 ? Math.round(scarto) : 0);
+  const pavimento = pavimentoConCornice + riassuntoAtteso(mezzo, { finestraToken, soglia, mediana }) + (Number.isFinite(scarto) && scarto > 0 ? Math.round(scarto) : 0);
   return pavimento >= finestraToken ? pavimento : null;
 }
-export function riassuntoUtile({ prima, pavimentoConCornice, mezzo, soglia = null, finestraToken = null, motivo = null, scarto = 0 }) {
-  if (pavimentoOltreLaFinestra({ pavimentoConCornice, mezzo, finestraToken, soglia, scarto }) !== null) return false; // F6
-  const guadagno = guadagnoAtteso({ prima, pavimentoConCornice, mezzo, finestraToken, soglia });
+export function riassuntoUtile({ prima, pavimentoConCornice, mezzo, soglia = null, finestraToken = null, motivo = null, scarto = 0, mediana = null, k = 1 }) {
+  if (pavimentoOltreLaFinestra({ pavimentoConCornice, mezzo, finestraToken, soglia, scarto, mediana }) !== null) return false; // F6
+  const guadagno = guadagnoAtteso({ prima, pavimentoConCornice, mezzo, finestraToken, soglia, mediana });
   /* `motivo` non cambia più la regola (N7): resta nella firma perché i chiamanti lo passano e il fine giro lo porta (F5).
      Il 10% vale «non sull'overflow». Una richiesta che con lo scarto intero supera già la FINESTRA dichiarata è un overflow certo: il
      fornitore la rifiuterebbe e la strada dell'overflow pagherebbe un passo che accorcia (punto 5). Lo stesso passo si paga PRIMA,
      senza il 400 (N1: a 10.240 con ~7.300 token di schemi, 7 richieste rifiutate su 17 col solo 10%, 0 così). */
   const oltreLaFinestra = Number.isFinite(finestraToken) && finestraToken > 0 && prima + (Number.isFinite(scarto) && scarto > 0 ? scarto : 0) >= finestraToken;
   if (oltreLaFinestra) return guadagno > 0;
-  return Number.isFinite(soglia) && soglia > 0 && guadagno >= FRAZIONE_DELLA_SOGLIA_UTILE * soglia;
+  /* pezzo E: il 10% della soglia (token veri) portato in unità di stima con k */
+  return Number.isFinite(soglia) && soglia > 0 && guadagno >= (FRAZIONE_DELLA_SOGLIA_UTILE * soglia) / kValido(k);
 }
 
 /**
@@ -486,6 +525,11 @@ export function eRichiestaDellaPersona(m) {
  * uscivano dalle tre tenute, e al loro posto restava tre volte la stessa riga (`tests/nota-di-talos-non-e-richiesta.test.mjs`).
  * Solo all'INIZIO esatto del testo: una persona che cita `[TALOS]` in mezzo a una frase resta una persona.
  */
+/** Una richiesta VERA della persona: non una nota del kernel. È la stessa che `dividiPerCompattazione` tiene alla lettera. */
+export function eRichiestaVera(m) {
+  return eRichiestaDellaPersona(m) && !eNotaDiTalos(m);
+}
+
 export function eNotaDiTalos(m) {
   if (m?.role !== 'user') return false;
   const testo = testoDelContenuto(m.content);
@@ -505,7 +549,10 @@ export function primaRichiestaPerLaProiezione(m) {
      oltre il tetto, e il secondo taglio dichiarava «324 characters omitted» al posto dei 42.012 veri. ⛔ Seconda revisione: la copia si
      riconosce dal marcatore AL SUO POSTO (subito dopo l'inizio tenuto, `giaAccorciata`), non dalla frase in un punto qualsiasi — chi
      incolla un log di TALOS nella prima richiesta la contiene, e il tetto saltava (130.073 caratteri tenuti interi in ogni proiezione). */
+  /* §4.2, regola K (22/10/2026 notte): una richiesta già accorciata dalla regola K (il testo intero sta nel suo file) non si riaccorcia
+     qui — il secondo taglio perderebbe l'avviso in testa e il percorso del file */
   const accorcia = (testo) => (typeof testo === 'string' && testo.length > PRIMA_RICHIESTA_CARATTERI_MASSIMI && !giaAccorciata(testo)
+    && !testo.startsWith(MARCATORE_RICHIESTA_ACCORCIATA)
     ? accorciaTesto(testo, { inizio: PRIMA_RICHIESTA_INIZIO, fine: PRIMA_RICHIESTA_FINE }) : testo);
   if (typeof m?.content === 'string') return m.content.length > PRIMA_RICHIESTA_CARATTERI_MASSIMI ? { ...m, content: accorcia(m.content) } : m;
   if (Array.isArray(m?.content) && m.content.some((p) => p?.type === 'text' && typeof p.text === 'string' && p.text.length > PRIMA_RICHIESTA_CARATTERI_MASSIMI)) {
@@ -732,9 +779,33 @@ function senzaIndice(m) {
  */
 const TIPI_IMMAGINE = new Set(['image_url', 'input_image', 'image']);
 export const SEGNAPOSTO_IMMAGINE = '[Attached image — not shown to the summarizer]';
-function senzaImmagini(m) {
+/* il segnaposto è un argomento di `immaginiCon`, non di `senzaImmagini`: quella si passa a `.map`, che le darebbe l'indice */
+function immaginiCon(m, segnaposto) {
   if (!Array.isArray(m?.content) || !m.content.some((p) => TIPI_IMMAGINE.has(p?.type))) return m;
-  return { ...m, content: m.content.map((p) => (TIPI_IMMAGINE.has(p?.type) ? { type: 'text', text: SEGNAPOSTO_IMMAGINE } : p)) };
+  return { ...m, content: m.content.map((p) => (TIPI_IMMAGINE.has(p?.type) ? { type: 'text', text: segnaposto } : p)) };
+}
+function senzaImmagini(m) { return immaginiCon(m, SEGNAPOSTO_IMMAGINE); }
+
+/*
+ * §4.1, il terzo passo gratuito sul rifiuto del fornitore (rapporto della CLI): le immagini VECCHIE diventano un segnaposto di testo,
+ *   come Hermes dopo una compressione (`agent/context_compressor.py:1425`, `_replace_image_parts`). Restano intere quelle dell'ultima
+ *   richiesta della persona: sono quelle su cui il modello sta lavorando. Solo nella proiezione: la storia non cambia. Funzione PURA;
+ *   `{ messaggi, sostituite }`.
+ */
+export const SEGNAPOSTO_IMMAGINE_VECCHIA = '[Earlier image — removed to fit the context window]';
+export function immaginiVecchieInSegnaposto(messaggi) {
+  const lista = Array.isArray(messaggi) ? messaggi : [];
+  let ultimaRichiesta = -1;
+  for (let i = lista.length - 1; i >= 0; i -= 1) if (eRichiestaVera(lista[i])) { ultimaRichiesta = i; break; }
+  let sostituite = 0;
+  const nuovi = lista.map((m, i) => {
+    if (i === ultimaRichiesta || !Array.isArray(m?.content)) return m;
+    const quante = m.content.filter((p) => TIPI_IMMAGINE.has(p?.type)).length;
+    if (quante === 0) return m;
+    sostituite += quante;
+    return immaginiCon(m, SEGNAPOSTO_IMMAGINE_VECCHIA);
+  });
+  return { messaggi: sostituite > 0 ? nuovi : lista, sostituite };
 }
 
 export function costruisciRichiestaDiRiassunto({ testa = [], mezzo = [], paroleMassime = PAROLE_MASSIME_RIASSUNTO } = {}) {
@@ -1067,7 +1138,7 @@ export function improntaDelTrattoCoperto(storia, coveredThrough) {
   return { primo: improntaDiUno(storia[0]), ultimo: improntaDiUno(storia[coveredThrough - 1]) };
 }
 
-export function creaRecord({ coveredThrough, riassunto, tokenPrima, tokenDopo, misura, at, modello, indice = null, coperti = null } = {}) {
+export function creaRecord({ coveredThrough, riassunto, tokenPrima, tokenDopo, misura, at, modello, indice = null, coperti = null, freno = null } = {}) {
   if (!Number.isInteger(coveredThrough) || coveredThrough < 0) throw new TypeError('coveredThrough must be an integer ≥ 0');
   if (!Array.isArray(riassunto)) throw new TypeError('riassunto must be a list of messages');
   const impronta = improntaDelTrattoCoperto(coperti, coveredThrough);
@@ -1092,6 +1163,9 @@ export function creaRecord({ coveredThrough, riassunto, tokenPrima, tokenDopo, m
       }
       : null,
     ...(impronta ? { impronta } : {}),
+    /* Pezzo D (contratto (d) con la CLI, facoltativo): lo stato del freno quando il record è nato. La fonte viva è la sessione (riga
+       `freno` del giornale); questa è la copia che chi legge il record trova accanto al riassunto. */
+    ...(frenoValido(freno) ? { freno: frenoValido(freno) } : {}),
   };
 }
 
@@ -1137,6 +1211,346 @@ export function classificaErroreFornitore(errore) {
   if (stato === 413) return 'contesto-pieno';
   if (PATTERN_CONTESTO_PIENO.some((p) => p.test(testo))) return 'contesto-pieno';
   return null;
+}
+
+/*
+ * ⭐ §4.1 del rapporto della CLI (owner 22/10/2026, «Tutto nella 0.6.13», punto 5: «sul rifiuto del fornitore, la stima decide se un
+ *   passo accorcia, non se la conversazione entra») — QUANTO non entra lo dice il fornitore, quando lo scrive. Le forme sono quelle che
+ *   pi riconosce (`packages/ai/src/utils/overflow.ts:9-36`, pi-mono 5ab7fe74 del 15/10, che però non ne legge i numeri) e quelle che
+ *   Hermes legge (`agent/model_metadata.py:1248-1272`, hermes-agent del 22/10: il massimo da «maximum context length is N», e il
+ *   prompt misurato dalla parentesi di OpenAI «(A in the messages, B in the completion)»); Claude Code legge «prompt is too long:
+ *   N tokens > M» (parser `l8e` del binario 2.1.308, rapporto della CLI §2.3). Il motore locale porta i due numeri nel suo errore
+ *   (`ContestoLocalePienoError`: `promptToken`, `finestraToken`).
+ * `{ richiesti, massimo, uscita }`: `richiesti` = il prompt che il fornitore ha contato, `massimo` = la sua finestra (o il suo limite
+ *   d'ingresso), `uscita` = i token d'uscita che ha messo nel conto quando lo dice. `null` se il testo non porta numeri plausibili.
+ *   Come Hermes, un massimo fuori da [1.024, 10.000.000] non è una finestra. Funzione PURA.
+ */
+const intero = (s) => Number(String(s).replace(/[,_\s]/g, ''));
+const FORME_NUMERI_CONTESTO_PIENO = [
+  /* R10-2 (revisione 10 della CLI, 23/10/2026): la frase NOSTRA dell'adattatore dei fornitori (`runtime-owner-adapter.mjs`,
+     `frasePienoConNumeri`), che non lascia passare il corpo del fornitore ma ne porta i tre numeri: «(context_length_exceeded): 9433
+     input tokens requested, 8192 maximum, 1000 output tokens». Prima: senza questa forma i numeri non arrivavano mai qui. */
+  { re: /\(context_length_exceeded\):\s*([\d,]+) input tokens requested,\s*([\d,]+) maximum(?:,\s*([\d,]+) output tokens)?/i, n: 1, m: 2, u: 3 },
+  // Anthropic, Claude Code: «prompt is too long: 213462 tokens > 200000 maximum»
+  { re: /prompt is too long:\s*([\d,]+)\s*tokens?\s*>\s*([\d,]+)/i, n: 1, m: 2 },
+  // OpenRouter con le parti (Hermes `parse_available_output_tokens_from_error`, `model_metadata.py:1304-1310`): «maximum context length is
+  // 131072 tokens. However, you requested about 135349 tokens (60662 of text input, 10687 of tool input, 64000 in the output)» — il prompt
+  // è testo + attrezzi, l'uscita si toglie dalla finestra (contarla nel prompt accorcerebbe di un terzo una richiesta che entra)
+  { re: /maximum context length is ([\d,]+)[\s\S]*?\(([\d,]+) of text input,\s*([\d,]+) of tool input,\s*([\d,]+) in the output\)/i, m: 1, n: [2, 3], u: 4 },
+  // OpenAI con la parentesi (Hermes `_COMPLETION_SPLIT_RE`): «maximum context length is 8192 tokens… (9000 in the messages, 1000 in the completion)»
+  { re: /maximum context length is ([\d,]+)[\s\S]*?\(([\d,]+)\s+(?:tokens\s+)?in (?:the messages|your prompt|the prompt)\s*[;,]\s*([\d,]+)\s+(?:tokens\s+)?(?:in|for) the completion\)/i, m: 1, n: 2, u: 3 },
+  // OpenAI, OpenRouter: «maximum context length is 131072 tokens. However, you requested about 140000 tokens» / «resulted in 9000 tokens»
+  { re: /maximum context length is ([\d,]+)[\s\S]*?(?:you requested(?: about)?|resulted in|requested)\s+([\d,]+)\s*tokens?/i, m: 1, n: 2 },
+  // compatibili OpenAI (LiteLLM, vLLM): «Input length (265330) exceeds model's maximum context length (262144)»
+  { re: /input length \(?([\d,]+)\)? exceeds (?:the )?model'?s maximum context length \(?([\d,]+)\)?/i, n: 1, m: 2 },
+  // OpenRouter/Poolside: «Input length X exceeds the maximum allowed input length of Y tokens»
+  { re: /input length \(?([\d,]+)\)? exceeds (?:the )?maximum allowed input length of ([\d,]+)/i, n: 1, m: 2 },
+  // Google: «The input token count (1196265) exceeds the maximum number of tokens allowed (1048575)»
+  { re: /input token count \(?([\d,]+)\)? exceeds the maximum number of tokens allowed \(?([\d,]+)\)?/i, n: 1, m: 2 },
+  // xAI: «maximum prompt length is 131072 but the request contains 537812 tokens»
+  { re: /maximum prompt length is ([\d,]+) but (?:the )?request contains ([\d,]+)/i, m: 1, n: 2 },
+  // Together: «The input (X tokens) is longer than the model's context length (Y tokens)»
+  { re: /input \(([\d,]+) tokens\) is longer than the model'?s context length \(([\d,]+) tokens\)/i, n: 1, m: 2 },
+  // GitHub Copilot: «prompt token count of X exceeds the limit of Y»
+  { re: /prompt token count of ([\d,]+) exceeds the limit of ([\d,]+)/i, n: 1, m: 2 },
+  // Kimi: «exceeded model token limit: X (requested: Y)»
+  { re: /exceeded model token limit:\s*([\d,]+)\s*\(requested:\s*([\d,]+)\)/i, m: 1, n: 2 },
+  // DS4: «Prompt has X tokens, but the configured context size is Y tokens»
+  { re: /prompt has ([\d,]+) tokens?, but the configured context size is ([\d,]+)/i, n: 1, m: 2 },
+  // Mistral: «Prompt contains X tokens … too large for model with Y maximum context length»
+  { re: /prompt contains ([\d,]+) tokens[\s\S]*?too large for model with ([\d,]+) maximum context length/i, n: 1, m: 2 },
+  // llama-server (`tools/server/server-task.cpp:1539-1540`, llama.cpp del 21/10): il corpo dell'errore porta `n_prompt_tokens` e `n_ctx`
+  { re: /"n_prompt_tokens"\s*:\s*(\d+)[\s\S]*?"n_ctx"\s*:\s*(\d+)/, n: 1, m: 2 },
+  { re: /"n_ctx"\s*:\s*(\d+)[\s\S]*?"n_prompt_tokens"\s*:\s*(\d+)/, m: 1, n: 2 },
+];
+const finestraPlausibile = (m) => Number.isSafeInteger(m) && m >= 1_024 && m <= 10_000_000;
+export function numeriDelContestoPieno(errore) {
+  if (!errore || typeof errore !== 'object') return null;
+  if (Number.isSafeInteger(errore.promptToken) && errore.promptToken > 0 && finestraPlausibile(errore.finestraToken)) {
+    return { richiesti: errore.promptToken, massimo: errore.finestraToken, uscita: null };
+  }
+  const testo = String(errore.message ?? '');
+  for (const forma of FORME_NUMERI_CONTESTO_PIENO) {
+    const trovato = forma.re.exec(testo);
+    if (!trovato) continue;
+    const richiesti = Array.isArray(forma.n) ? forma.n.reduce((somma, i) => somma + intero(trovato[i]), 0) : intero(trovato[forma.n]);
+    const massimo = intero(trovato[forma.m]);
+    const uscita = forma.u ? intero(trovato[forma.u]) : null;
+    if (!(Number.isSafeInteger(richiesti) && richiesti > 0) || !finestraPlausibile(massimo)) continue;
+    return { richiesti, massimo, uscita: Number.isSafeInteger(uscita) && uscita >= 0 ? uscita : null };
+  }
+  return null;
+}
+
+/*
+ * ⭐ §4.1, il BERSAGLIO sul rifiuto del fornitore (rapporto della CLI, approvato dall'owner il 22/10): la stima della richiesta da
+ *   mandare, nella scala della stima della richiesta rifiutata.
+ *   - Coi numeri del fornitore: `stimaInviata × (massimo − riserva) / richiesti` — il rapporto fra stima e conto vero si porta dietro,
+ *     così una stima sbagliata del 30% resta giusta come PROPORZIONE (stima contro stima). La riserva è l'uscita che il fornitore dice
+ *     di aver messo nel conto, altrimenti la stessa quota della nostra linea d'emergenza (il 10% della finestra).
+ *   - Senza numeri: il 70% della richiesta rifiutata (opencode `SHRINK_STEPS[0]`, `compaction.ts:95`, rapporto §2.4).
+ *   - Ai rifiuti dopo (`livello` 1 e 2): il 50% e il 35% della PRIMA richiesta rifiutata del giro (opencode), o meno se il nuovo
+ *     rifiuto porta numeri che chiedono di più.
+ *   Mai sopra il 95% della richiesta rifiutata: un rifiuto vuol dire che qualcosa va tolto. Funzione PURA.
+ */
+export const SCALINI_CONTESTO_PIENO = Object.freeze([0.70, 0.50, 0.35]);
+export const RISERVA_USCITA_SENZA_NUMERI = 0.10;
+export const QUOTA_MASSIMA_DEL_RIFIUTO = 0.95;
+/**
+ * ⛔ R12-1 (revisione 12 della CLI, 23/10/2026, S2) — la parte dello SCARTO che si può dire FISSA con certezza, per le affermazioni
+ *   certe: «non entra» (la linea certa di Z-K3, F6 all'emergenza) e «troppo grande» (la regola N).
+ *   Lo scarto è la differenza fra il conto del fornitore e la nostra stima, misurata su una richiesta intera. Dentro ci sono due cose
+ *   che la misura non separa: la cornice (schemi degli attrezzi, modello di chat, sistema contato più della stima), che resta finché
+ *   resta il giro, e la STORIA contata più della stima (base64, codice, JSON negli esiti: il fornitore della CLI conta il base64 a 1,6
+ *   caratteri per token, la nostra stima a 4), che i passi gratuiti e il riassunto tolgono insieme alla storia.
+ *   Contare tutto lo scarto come cornice faceva fallire giri che, accorciati, entravano (il caso della CLI: 21.623 di scarto di cui
+ *   ~14.800 dal base64 letto al giro prima, «non entra» a 46.738 contro una finestra di 40.000; il giro entrava a ~33.000). Contarne
+ *   solo la quota degli attrezzi (la regola N di R11-1) riapriva il caso di Z-K3 (ZK3-06): 6.000 token di cornice costante su una storia
+ *   di poche centinaia, dove il riassunto senza modello partiva e il fornitore lo rifiutava di nuovo.
+ *   ⇒ Quanto la storia può spiegare (`scartoSpiegabileDallaStoria`) dipende da COME è scritta. La stima conta l'ASCII a 4 caratteri
+ *   per token e il CJK a uno (`stimaToken`, talosHarness.mjs:248):
+ *   - il testo con gli spazi (prosa, codice, JSON indentato: almeno uno spazio ogni 12 caratteri) un tokenizzatore lo conta al più il
+ *     doppio della stima — l'italiano sta a ~1,15, il codice a ~1,3, il JSON a ~1,6 — quindi spiega al più 1 token per token stimato;
+ *   - il testo DENSO (base64, esadecimale, minificato: quasi senza spazi) arriva al quadruplo (il base64 della CLI a 2,5) — 3 per token.
+ *   Il resto dello scarto è cornice di certo; e mai meno della quota che gli attrezzi stimati spiegano. Un errore qui costa al più un
+ *   rifiuto in più, mai un giro che si poteva fare. PURE tutte e due.
+ */
+export const SCARTO_PER_TOKEN_DI_TESTO_SPAZIATO = 1;
+export const SCARTO_PER_TOKEN_DI_TESTO_DENSO = 3;
+export const QUOTA_DI_SPAZI_DEL_TESTO_SPAZIATO = 1 / 12;
+const SPAZIO = /\s/gu;
+export function scartoSpiegabileDallaStoria(messaggi) {
+  let somma = 0;
+  const conta = (testo) => {
+    if (typeof testo !== 'string' || testo === '') return;
+    const spazi = testo.match(SPAZIO)?.length ?? 0;
+    const k = spazi / testo.length >= QUOTA_DI_SPAZI_DEL_TESTO_SPAZIATO ? SCARTO_PER_TOKEN_DI_TESTO_SPAZIATO : SCARTO_PER_TOKEN_DI_TESTO_DENSO;
+    somma += k * stimaToken(testo);
+  };
+  for (const m of Array.isArray(messaggi) ? messaggi : []) {
+    if (!m || m.role === 'system') continue;
+    if (typeof m.content === 'string') conta(m.content);
+    else if (Array.isArray(m.content)) for (const parte of m.content) if (!TIPI_IMMAGINE.has(parte?.type)) conta(parte?.text);
+    for (const c of Array.isArray(m.tool_calls) ? m.tool_calls : []) conta(c?.function?.arguments);
+  }
+  return somma;
+}
+/**
+ * ⛔ R13-1 (revisione 13 della CLI, 23/10/2026, S2) — LA STORIA CHE PUÒ SPIEGARE LO SCARTO NON CONTIENE LA RICHIESTA NUOVA.
+ *   Lo scarto è misurato su una richiesta riuscita PRIMA che la persona scrivesse il messaggio nuovo: quel messaggio non c'era, e non
+ *   può spiegarne nemmeno un token. Contato nella storia (era `r.grezzi`), un incollato da 44.000 caratteri «spiegava» 11.005 token di
+ *   scarto: la cornice che il fornitore conta in più della stima (6.000, ZK3-06) restava sempre spiegabile, la regola N non scattava e
+ *   il giro finiva con «non entra» invece di «troppo grande» con «Invia come allegato» (`pdrv13 p2.json`). La richiesta nuova la regola
+ *   N la pesa già da sé, per quello che è: contarla due volte la faceva piccola due volte.
+ *   Si toglie la SOLA ultima richiesta vera della persona (`eRichiestaVera`): dopo di lei, nello stesso giro, possono venire esiti
+ *   d'attrezzo che c'erano nella richiesta misurata (la richiesta prima, nello stesso giro) e che lo scarto lo spiegano davvero.
+ */
+export function senzaLaRichiestaNuova(messaggi) {
+  const lista = Array.isArray(messaggi) ? messaggi : [];
+  const indice = lista.findLastIndex((m) => eRichiestaVera(m));
+  return indice < 0 ? lista : lista.filter((_, i) => i !== indice);
+}
+export function scartoFissoCerto({ scarto = 0, attrezzi = 0, spiegabileDallaStoria = 0 } = {}) {
+  const s = Number.isFinite(scarto) && scarto > 0 ? scarto : 0;
+  const a = Number.isFinite(attrezzi) && attrezzi > 0 ? attrezzi : 0;
+  const h = Number.isFinite(spiegabileDallaStoria) && spiegabileDallaStoria > 0 ? spiegabileDallaStoria : 0;
+  return Math.max(Math.min(s, a), s - h, 0);
+}
+/** La riserva d'uscita del rifiuto: quella che il fornitore ha detto, o il 10% della sua finestra; 0 senza numeri. */
+export function riservaDelContestoPieno(numeri) {
+  if (!numeri) return 0;
+  return Number.isFinite(numeri.uscita) && numeri.uscita > 0 ? numeri.uscita : Math.ceil(numeri.massimo * RISERVA_USCITA_SENZA_NUMERI);
+}
+
+export function bersaglioDelContestoPieno({ livello = 0, stimaInviata, stimaPrimoRifiuto = null, numeri = null } = {}) {
+  if (!(Number.isFinite(stimaInviata) && stimaInviata > 0)) return null;
+  const primo = Number.isFinite(stimaPrimoRifiuto) && stimaPrimoRifiuto > 0 ? stimaPrimoRifiuto : stimaInviata;
+  const scalino = SCALINI_CONTESTO_PIENO[Math.min(Math.max(0, livello), SCALINI_CONTESTO_PIENO.length - 1)];
+  const riserva = riservaDelContestoPieno(numeri);
+  const daiNumeri = numeri && numeri.richiesti > 0 && numeri.massimo > 0
+    ? Math.floor((stimaInviata * (numeri.massimo - riserva)) / numeri.richiesti) : null;
+  const tetto = Math.floor(stimaInviata * QUOTA_MASSIMA_DEL_RIFIUTO);
+  const bersaglio = livello <= 0
+    ? (daiNumeri !== null ? daiNumeri : Math.floor(primo * scalino))
+    : Math.min(Math.floor(primo * scalino), daiNumeri ?? Number.POSITIVE_INFINITY);
+  return Math.max(0, Math.min(bersaglio, tetto));
+}
+
+/*
+ * ⭐ §4.3 del rapporto della CLI, pezzo D (owner 22/10, punto 4 del testo approvato: «un freno contro la ripetizione»; 23/10 «Tutto nella
+ *   0.6.13»). Il FRENO dei riassunti automatici pagati, condiviso dal giro, dal fine giro e dal /compact, e salvato (riga `freno` del
+ *   giornale del registro e copia nel record).
+ *   - Un COLPO: il primo `prompt_tokens` vero dopo una compattazione applicata è ancora oltre la soglia (il verdetto di Hermes,
+ *     `_apply_real_prompt_verdict`, `agent/context_compressor.py:2749-2782`), o un riassunto rifiutato perché ALLUNGAVA (Hermes
+ *     `record_rejected_compaction`, `:2516-2523`). Una lettura vera sotto la soglia azzera i colpi.
+ *   - TIRA a `FRENO_COLPI` colpi, o con tre riassunti pagati dentro tre giri (Claude Code, «Autocompact is thrashing», tre ricariche
+ *     entro tre giri: rapporto della CLI §2.3). Tirato: niente riassunti automatici pagati; i passi gratuiti restano.
+ *   - Si RIARMA quando il tratto da riassumere cresce del 10% della soglia dal verdetto (Codex `BodyAfterPrefix`: si riprova solo se
+ *     c'è davvero di più da togliere), al cambio di modello o di finestra, e col /compact della persona.
+ *   - `at`: il momento in cui il freno ha TIRATO — l'identità dell'armamento, la stessa nell'evento e nello stato, nuova a ogni tirata
+ *     (richiesta della CLI del 23/10: dice l'avviso una volta per `at`). Prima di tirare è null.
+ *   Forma (contratto (d) con la CLI, più quattro campi additivi concordati il 23/10): `{ colpi, mezzoAlVerdetto, at, modello, finestra,
+ *   ricariche, detto }`. Funzioni PURE.
+ */
+export const FRENO_COLPI = 2;
+export const FRENO_RIARMO_FRAZIONE = 0.10;
+export const FRENO_RICARICHE = 3;
+export const FRENO_RICARICHE_GIRI = 3;
+
+/** Un freno letto da fuori (giornale, ingresso del giro, record): solo i campi noti, coi tipi giusti; altrimenti `null`. */
+export function frenoValido(freno) {
+  if (!freno || typeof freno !== 'object' || Array.isArray(freno)) return null;
+  const intero = (n) => Number.isSafeInteger(n);
+  return {
+    colpi: intero(freno.colpi) && freno.colpi >= 0 ? freno.colpi : 0,
+    mezzoAlVerdetto: Number.isFinite(freno.mezzoAlVerdetto) && freno.mezzoAlVerdetto >= 0 ? freno.mezzoAlVerdetto : null,
+    at: typeof freno.at === 'string' && freno.at ? freno.at : null,
+    modello: typeof freno.modello === 'string' && freno.modello ? freno.modello : null,
+    finestra: intero(freno.finestra) && freno.finestra > 0 ? freno.finestra : null,
+    ricariche: Array.isArray(freno.ricariche) ? freno.ricariche.filter((g) => intero(g) && g >= 0).slice(-FRENO_RICARICHE) : [],
+    detto: freno.detto === true,
+  };
+}
+
+/** Le ricariche sono rapide quando le ultime tre stanno dentro tre giri (fra la prima e la terza meno di tre giri). */
+export function ricaricheRapide(ricariche) {
+  const r = Array.isArray(ricariche) ? ricariche.filter((g) => Number.isSafeInteger(g)).slice(-FRENO_RICARICHE) : [];
+  return r.length >= FRENO_RICARICHE && r[r.length - 1] - r[0] < FRENO_RICARICHE_GIRI;
+}
+
+/** Tirato: `FRENO_COLPI` colpi, o le ricariche rapide. */
+export function frenoTirato(freno) {
+  const f = frenoValido(freno);
+  return !!f && (f.colpi >= FRENO_COLPI || ricaricheRapide(f.ricariche));
+}
+
+/**
+ * Il freno che vale adesso. `null` se si è riarmato del tutto: modello o finestra cambiati (un altro tokenizzatore, un'altra misura).
+ * Il riarmo per CRESCITA (il tratto da riassumere, `mezzo`, cresciuto del 10% della soglia dal verdetto: Codex `BodyAfterPrefix`) vale
+ * solo per un freno TIRATO per i colpi, e azzera i colpi, `at` e `detto` ma TIENE le ricariche.
+ * ⛔ Z-K2 della revisione della CLI su Z (23/10/2026), misurato sulla CLI costruita e con la traccia delle funzioni: in una ripetizione
+ *   il mezzo cresce di circa uno scambio a giro, cioè proprio del 10% della soglia che giustifica un riassunto. Il riarmo per crescita
+ *   azzerava OGNI giro anche un freno non tirato, e coi colpi le ricariche: 17 riassunti pagati in 17 giri, nessuna tirata. Quindi:
+ *   (a) un freno non tirato non si riarma: i suoi conti sono la memoria della ripetizione;
+ *   (b) un freno tirato per le RICARICHE (tre riassunti pagati in tre giri: la ripetizione stessa) non si riarma per crescita — come
+ *       l'interruttore di Claude Code («Autocompact is thrashing», 2.1.308), che non riparte da solo; solo modello, finestra o /compact;
+ *   (c) il riarmo per crescita di un freno tirato per i colpi tiene le ricariche: se la ripetizione continua, la terza tira.
+ */
+export function frenoDiAdesso(freno, { mezzo = null, soglia = null, modello = null, finestra = null } = {}) {
+  const f = frenoValido(freno);
+  if (!f) return null;
+  if (f.modello && typeof modello === 'string' && modello && f.modello !== modello) return null;
+  if (f.finestra && Number.isSafeInteger(finestra) && finestra > 0 && f.finestra !== finestra) return null;
+  if (!frenoTirato(f) || ricaricheRapide(f.ricariche)) return f;
+  if (Number.isFinite(mezzo) && f.mezzoAlVerdetto !== null && Number.isFinite(soglia) && soglia > 0
+    && mezzo - f.mezzoAlVerdetto >= FRENO_RIARMO_FRAZIONE * soglia) return { ...f, colpi: 0, at: null, detto: false };
+  return f;
+}
+
+const conIdentita = (f, { mezzo, modello, finestra }) => ({
+  ...f,
+  mezzoAlVerdetto: Number.isFinite(mezzo) && mezzo >= 0 ? mezzo : f.mezzoAlVerdetto,
+  modello: typeof modello === 'string' && modello ? modello : f.modello,
+  finestra: Number.isSafeInteger(finestra) && finestra > 0 ? finestra : f.finestra,
+});
+
+/** Un colpo. `at` resta quello di prima: lo scrive `frenoCheTira` quando il freno tira. */
+export function colpoAlFreno(freno, { mezzo = null, modello = null, finestra = null } = {}) {
+  const f = frenoValido(freno) ?? frenoValido({});
+  return conIdentita({ ...f, colpi: f.colpi + 1 }, { mezzo, modello, finestra });
+}
+
+/** Un riassunto pagato: il giro della sessione in cui è stato pagato (`versioneGiro` del registro). Senza giro noto, niente. */
+export function ricaricaAlFreno(freno, { giro, mezzo = null, modello = null, finestra = null } = {}) {
+  const f = frenoValido(freno) ?? frenoValido({});
+  if (!Number.isSafeInteger(giro) || giro < 0) return f;
+  return conIdentita({ ...f, ricariche: [...f.ricariche, giro].slice(-FRENO_RICARICHE) }, { mezzo, modello, finestra });
+}
+
+/** Una lettura vera sotto la soglia: i colpi tornano a zero. Le ricariche restano: misurano il ritmo dei riassunti, non la loro efficacia.
+    ⛔ R10-4 (revisione 10 della CLI, 23/10/2026): se così il freno non è più tirato, l'armamento finisce — `at` e `detto` si azzerano.
+    Prima restavano, e una seconda tirata (nuovi colpi) non si diceva mai: `frenoCheTira` con `detto` vero non dà l'evento. */
+export function letturaSottoLaSoglia(freno) {
+  const f = frenoValido(freno);
+  if (!f) return f;
+  const libero = f.colpi === 0 ? f : { ...f, colpi: 0 };
+  return frenoTirato(libero) || (libero.at === null && !libero.detto) ? libero : { ...libero, at: null, detto: false };
+}
+
+/**
+ * ⛔ R10-3 (revisione 10 della CLI, 23/10/2026): DUE copie dello stesso freno — quella del giro e quella del registro, che il riassunto di
+ *   fine giro del giro prima, arrivato mentre questo lavora, ha cambiato — si UNISCONO invece di sovrascriversi. Misurato dalla CLI: la
+ *   copia del giro (`colpi:1, ricariche:[13]`) cancellava quella tirata del registro (`colpi:2, ricariche:[13,14]`, detta) e si tornava a
+ *   pagare; e un turno diceva due volte «in pausa», con due `at`. ⇒ Le ricariche di tutte e due (per giro), i colpi più alti, e una tirata
+ *   già DETTA resta detta col suo `at` (un avviso per armamento). Identità diverse (modello o finestra): vale la prima, e il riarmo per
+ *   identità lo fa `frenoDiAdesso`. Funzione PURA.
+ */
+/*
+ * ⛔ R11-4 e R11-11 (revisione 11 della CLI, 23/10/2026): l'unione ha bisogno della copia da cui TUTTE E DUE sono partite (`base`: per il
+ *   registro il freno all'inizio del giro, per il giro l'ultima copia del registro che ha visto).
+ *   - Le ricariche si contano, non si deduplicano: il riassunto di fine giro del giro N-1, pagato mentre il giro N lavorava, e quello
+ *     dentro il giro N portano lo stesso numero di giro, e sono DUE riassunti pagati. Col `Set` di prima `[2,3,3]` diventava `[2,3]`: la
+ *     tirata per ricariche spariva e il giro dopo si riarmava e pagava (misurato: SUMMARY#4 dopo due «in pausa»). Ora: la base, più ciò
+ *     che ciascuna copia ha aggiunto alla base.
+ *   - I colpi: vince la copia che li ha CAMBIATI rispetto alla base. Prima vincevano i più alti, e una lettura sotto la soglia del giro
+ *     (colpi a zero) veniva annullata dai colpi vecchi del registro: freno tirato in silenzio col vecchio `at`. Se li hanno cambiati
+ *     tutte e due, i più alti.
+ *   - Il riferimento del riarmo per crescita (`mezzoAlVerdetto`): il più grande, cioè il più recente — il riarmo si misura dall'ultimo
+ *     verdetto, mai da uno più vecchio.
+ *   Senza base (`undefined`), le ricariche comuni non si possono distinguere: si uniscono come prima (per giro), e i colpi più alti. Una
+ *   base `null` è un freno che non c'era: vuoto.
+ */
+const aggiunteAllaBase = (lista, base) => {
+  const restanti = [...base];
+  const fuori = [];
+  for (const g of lista) {
+    const i = restanti.indexOf(g);
+    if (i === -1) fuori.push(g);
+    else restanti.splice(i, 1);
+  }
+  return fuori;
+};
+export function unisciFreni(proprio, altro, base = undefined) {
+  const a = frenoValido(proprio);
+  const b = frenoValido(altro);
+  if (!a || !b) return a ?? b;
+  if ((a.modello && b.modello && a.modello !== b.modello) || (a.finestra && b.finestra && a.finestra !== b.finestra)) return a;
+  const z = base === undefined ? null : frenoValido(base) ?? frenoValido({}); // `null`: si è partiti senza freno (base vuota)
+  const ricariche = z
+    ? [...z.ricariche, ...aggiunteAllaBase(a.ricariche, z.ricariche), ...aggiunteAllaBase(b.ricariche, z.ricariche)]
+    : [...new Set([...a.ricariche, ...b.ricariche])];
+  const aCambiati = !z || a.colpi !== z.colpi;
+  const bCambiati = !z || b.colpi !== z.colpi;
+  const colpi = aCambiati && !bCambiati ? a.colpi : bCambiati && !aCambiati ? b.colpi : Math.max(a.colpi, b.colpi);
+  const mezzi = [a.mezzoAlVerdetto, b.mezzoAlVerdetto].filter((m) => m !== null);
+  const unito = {
+    ...a, colpi, mezzoAlVerdetto: mezzi.length > 0 ? Math.max(...mezzi) : null,
+    modello: a.modello ?? b.modello, finestra: a.finestra ?? b.finestra,
+    ricariche: ricariche.sort((x, y) => x - y).slice(-FRENO_RICARICHE), at: null, detto: false,
+  };
+  if (!frenoTirato(unito)) return unito;
+  const detta = [a, b].find((f) => f.detto && f.at && frenoTirato(f));
+  return detta ? { ...unito, at: detta.at, detto: true } : unito;
+}
+
+/**
+ * Se il freno è tirato e non l'ha ancora detto: lo stato con `at` (l'identità dell'armamento) e `detto`, e l'evento da dare una volta
+ * (`talos.compattazione` di fine, `motivo:'freno'`, contratto (c) con la CLI). Altrimenti `{ freno, evento: null }`.
+ */
+export function frenoCheTira(freno, { at } = {}) {
+  const f = frenoValido(freno);
+  if (!f || !frenoTirato(f) || f.detto) return { freno: f, evento: null };
+  const quando = typeof at === 'string' && at ? at : new Date().toISOString();
+  return {
+    freno: { ...f, at: quando, detto: true },
+    evento: { compattato: false, motivo: 'freno', perche: f.colpi >= FRENO_COLPI ? 'colpi' : 'ricariche',
+      freno: { colpi: f.colpi, mezzoAlVerdetto: f.mezzoAlVerdetto, at: quando } },
+  };
+}
+
+/** Il tratto da riassumere di una proiezione, stimato coi pezzi: la misura del riarmo e del verdetto. */
+export function mezzoDellaProiezione(proiezione) {
+  return stimaConPezzi(dividiPerCompattazione(Array.isArray(proiezione) ? proiezione : []).mezzo);
 }
 
 /**

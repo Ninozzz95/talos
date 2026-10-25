@@ -304,11 +304,13 @@ export function stateDelta({ delta }) {
  * copia durevole: il frontend richiede una nuova pagina autorizzata alla
  * sessione, anche al replay. Nessun URL di capability nel registro.
  */
-export function artifactCreated({ messageId, id, titolo, voceLibreriaId }) {
+export function artifactCreated({ messageId, id, titolo, voceLibreriaId, versione }) {
     // Optional durable reference; old consumers/events keep their exact shape.
     // Never persist the expiring page capability or HTML in the event journal.
+    // 24/10/2026: `versione` — the Library version THIS turn produced; the card stays on it.
     return { type: 'ArtifactCreated', messageId, id, titolo,
-        ...(typeof voceLibreriaId === 'string' ? { voceLibreriaId } : {}) }
+        ...(typeof voceLibreriaId === 'string' ? { voceLibreriaId } : {}),
+        ...(typeof voceLibreriaId === 'string' && Number.isInteger(versione) && versione >= 1 ? { versione } : {}) }
 }
 
 /**

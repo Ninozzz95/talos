@@ -57,6 +57,14 @@ export const ATTREZZI_DIFFERIBILI = Object.freeze(new Set([
     'provider_exclusions_list', 'provider_exclude', 'provider_allow', 'chatgpt_account',
     'workflow_status', 'workflow_output', 'workflow_control',
     'tool_create', 'generate_image', 'process_output', 'conversation_search',
+    /* owner 24/10/2026 (domanda aperta dal 23/10): gli attrezzi nati DOPO l'insieme del 17/10 vanno dietro il ponte — annullare le
+       modifiche ai file e i dispositivi del controllo remoto con le loro cartelle (~600 token a giro quando sono cablati). Restano
+       davanti `artifact_create` e, quando arriverà, `artifact_update`: dietro il ponte il modello rifarebbe un artefatto invece di
+       aggiornarlo. */
+    'file_changes_undo',
+    'remote_phones', 'remote_phone_pair', 'remote_phone_revoke', 'remote_phone_folders', 'remote_phone_folder_allow', 'remote_phone_folder_revoke',
+    'remote_control', // R5.14 (24/10/2026): nato dopo il 17/10, come gli altri del remoto
+    'remote_device_send_file', // R5.13 (24/10/2026): mandare un file a un dispositivo, come gli altri del remoto
 ]))
 
 /*

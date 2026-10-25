@@ -1135,6 +1135,10 @@ function bancoBolleRigiocate({ restoring = false, differito = false } = {}) {
     syncRunComposerState() {}, segnaTappaLatenza() {}, mostraRisultatoDelega: () => false, mostraDialogoAgente: () => false, eDialogoAgente: () => false,
     segnaGiroNellaSpine() {}, mostraAttesaRisposta() {}, nascondiAttesaRisposta() {},
     programmaRenderAlberoReale() {}, programmaAggiornamentoElencoSessioniReali() {},
+    // 24/10/2026, rami: le frecce ‹ n / N › a storia disegnata e il giro della domanda (la finestra dei rami, non questo contratto)
+    disegnaFrecceDeiRami: async () => {}, segnaGiroDellaDomanda() {},
+    // 24/10/2026 sera (REV4-R4/R5): il testo per il modello e la bolla di ogni messaggio, per «Riprova» e «Modifica e rimanda»
+    consegnaDelMessaggio: new WeakMap(),
     // C09 (10/10/2026): la bolla della persona in rigiocata, con la funzione vera (intestazione d'esempio: nessuna nelle fixture)
     bollaRigiocata: (bolla, consegna, immagini) => bollaPerLaRigiocata({ bolla, consegna, immagini, lingue: { intestazioni: ['Attachments of this message:'], prefissiFile: ['attached file: '] } }),
   };

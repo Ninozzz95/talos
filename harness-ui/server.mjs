@@ -1250,6 +1250,19 @@ async function startServer() {
         keyring: providerKeyring,
         fileImpostazioni: percorsoDatiDesktop('remoto/impostazioni.json'),
         fileTelefoni: percorsoDatiDesktop('remoto/telefoni.json'),
+        /* R5.12 (owner 23/10/2026 sera): le cartelle dei dispositivi col consenso del PC. Consentite a tutti: solo l'elenco ESPLICITO
+           dell'amministratore (`TALOS_HARNESS_UI_PROJECT_DIRS`), mai la cartella del server che `config.mjs` usa quando l'elenco manca
+           (D-REM-6: nell'app installata è quella del programma). Mai date a un dispositivo: la cartella del server, quella
+           dell'eseguibile (l'app installata gira come TALOS.exe) e quella dei dati. */
+        fileConsensi: percorsoDatiDesktop('remoto/consensi.json'),
+        fileSegretoCartelle: percorsoDatiDesktop('remoto/segreto-cartelle'),
+        /* Parità, punto 4 (owner 23/10/2026): la Chat del dispositivo gira sul PC in una cartella di serie nei dati di TALOS, consentita
+           una volta; il nome è quello che il PC mostra sulla carta del consenso (inglese prima) */
+        cartellaChat: percorsoDatiDesktop('remoto/Chats from devices'),
+        chatImageStore, // D-5 (25/10/2026): le immagini dal dispositivo vanno al modello come quelle della finestra
+        cartelleAmmesse: (config.cartelleProgetto ?? []).filter((c) => c?.id !== 'default').map((c) => c.percorso),
+        cartelleEscluse: [fileURLToPath(new URL('./', import.meta.url)), parse(process.execPath).dir,
+          ...(process.env.TALOS_DESKTOP_DATA_DIR ? [process.env.TALOS_DESKTOP_DATA_DIR] : [])],
         chiama: creaChiamataInterna({ httpApp: app, porta: portaAscolto, gettone: config.token ?? null }),
         sessionRegistry, iscriviConRigiocata,
         caricaIroh: caricaBindingIroh,
@@ -1260,6 +1273,9 @@ async function startServer() {
           return scelto || hostname();
         })(),
         avvisa: (a) => { if (a?.tipo && !String(a.tipo).startsWith('telefono-')) console.info(`[remoto] ${a.tipo}${a.motivo ? `: ${a.motivo}` : ''}`); },
+        /* 24/10/2026 (fetta C del Mobile): un server col portachiavi di prova in memoria ha un'identità che rinasce a ogni avvio —
+           lo dice al dispositivo all'accoppiamento, che la segna «di prova» invece di accumularla come un PC vero */
+        effimero: portachiaviDiProva === true,
       });
       remoto.riprendi().catch((e) => console.warn('[remoto] non riacceso:', e?.code ?? e?.message));
     } catch (e) {

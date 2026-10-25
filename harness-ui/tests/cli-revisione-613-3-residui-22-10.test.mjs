@@ -6,7 +6,7 @@
  * Fornitore finto via `fetchDiRete`, cartelle temporanee proprie, nessuna porta.
  */
 import assert from 'node:assert/strict';
-import { writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 
@@ -171,13 +171,16 @@ test('S2-2-CONTA-01 — emergenza con riassunti che non riducono, cinque richies
   assert.ok(conti.riassunti >= 1 && conti.riassunti <= 2, `riassunti pagati ${conti.riassunti}`);
 });
 
-test('S2-2-OVERFLOW-TESTO-01 — contesto pieno, solo testo, riassunto che non riduce: il giro NON muore (sul contesto pieno la guardia non scarta)', async (t) => {
+/* Pezzo C (§4.1 del rapporto della CLI, owner 22/10 «Tutto nella 0.6.13»): prima sul contesto pieno la guardia non scartava e un
+   riassunto cresciuto si applicava. Ora non si applica MAI: al suo posto il riassunto senza modello, e il giro riparte lo stesso. */
+test('S2-2-OVERFLOW-TESTO-01 — contesto pieno, solo testo, riassunto che cresce: NON si applica, si riparte senza di lui e il giro non muore', async (t) => {
   const vecchio = process.env[compattazione.VARIABILE_TETTO_TOKEN];
   process.env[compattazione.VARIABILE_TETTO_TOKEN] = '4000';
   t.after(() => { if (vecchio === undefined) delete process.env[compattazione.VARIABILE_TETTO_TOKEN]; else process.env[compattazione.VARIABILE_TETTO_TOKEN] = vecchio; });
   const cartella = cartellaDiProva('talos-s2-2-overflow-');
   t.after(() => rimuoviCartellaDiProva(cartella));
   const conti = { modello: 0, riassunti: 0 };
+  const corpi = [];
   const fetchDiRete = async (_u, o) => {
     const corpo = JSON.parse(o.body);
     if (!corpo.tools?.length) {
@@ -185,6 +188,7 @@ test('S2-2-OVERFLOW-TESTO-01 — contesto pieno, solo testo, riassunto che non r
       return Response.json({ choices: [{ index: 0, message: { role: 'assistant', content: `## Riassunto\n${'dettaglio '.repeat(9000)}` }, finish_reason: 'stop' }], usage: { prompt_tokens: 10, completion_tokens: 10 } });
     }
     conti.modello += 1;
+    corpi.push(corpo);
     if (conti.modello === 1) return new Response(JSON.stringify({ error: { message: "This model's maximum context length is 8192 tokens (context_length_exceeded)" } }), { status: 400, headers: { 'Content-Type': 'application/json' } });
     return Response.json({ choices: [{ index: 0, message: { role: 'assistant', content: 'fatto' }, finish_reason: 'stop' }], usage: { prompt_tokens: stima(corpo.messages), completion_tokens: 1 } });
   };
@@ -192,6 +196,9 @@ test('S2-2-OVERFLOW-TESTO-01 — contesto pieno, solo testo, riassunto che non r
     messaggiIniziali: [...storia(coppiePer(3000)), { role: 'user', content: 'Continua' }], contestoDelProgetto: 'Project files:\n', fetchDiRete });
   assert.equal(r.comeFinita, 'concluso', `il giro finisce (${r.comeFinita})`);
   assert.ok(conti.modello >= 2, `ha ritentato dopo il contesto pieno (${conti.modello})`);
+  assert.ok(conti.riassunti <= 1, `al più un riassunto pagato nel giro (${conti.riassunti})`);
+  assert.ok(!JSON.stringify(corpi[1].messages).includes('dettaglio dettaglio'), 'il riassunto cresciuto NON è nella richiesta ritentata');
+  assert.ok(stima(corpi[1].messages) < stima(corpi[0].messages), `il ritento è più leggero (${stima(corpi[0].messages)} → ${stima(corpi[1].messages)})`);
 });
 
 /* Seconda passata avversaria (22/10/2026), N1: l'esenzione «stima cieca» era tutto-o-niente — UNA immagine in una sessione di solo
@@ -316,10 +323,14 @@ for (const caso of ['resto-riuscito', 'resto-inefficace', 'resto-500']) {
          fra la base e la richiesta ne fanno un tratto vecchio vero. */
       messaggiIniziali: [...uno.messaggiFinali, ...storia(4, 2_800), { role: 'user', content: `Leggi g1-g4. ${'contesto '.repeat(350)}` }],
       compattazioneInArrivo: inArrivo, contestoDelProgetto: 'Project files:\n', fetchDiRete: r1, permessi: 'Full access',
-      onGiro: (e) => { if (e?.tipo === 'compattazione-fine') fini.push({ giro: e.giro, compattato: e.compattato, motivo: e.motivo ?? null, prima: e.record?.tokenPrima ?? null, resto: e.restoNonRiuscito ?? null, adottato: e.adottato ?? null }); } });
+      onGiro: (e) => { if (e?.tipo === 'compattazione-fine') fini.push({ giro: e.giro, compattato: e.compattato, motivo: e.motivo ?? null, prima: e.record?.tokenPrima ?? null, resto: e.restoNonRiuscito ?? null, adottato: e.adottato ?? null, soloCoda: e.soloCoda === true }); } });
     const giroEmergenza = fini.find((f) => f.compattato === true)?.giro;
     assert.ok(giroEmergenza !== undefined, `premessa: c'è una compattazione (${JSON.stringify(fini)})`);
-    const dellaRichiesta = fini.filter((f) => f.giro === giroEmergenza);
+    /* Pezzo D (23/10): la riga del FRENO che tira non è una compattazione — la si dice una volta per armamento, a parte. Qui tira solo
+       col resto «inefficace» (il conto vero dopo la base è ancora oltre la soglia, e il resto allunga: due colpi). */
+    const delFreno = fini.filter((f) => f.giro === giroEmergenza && f.motivo === 'freno');
+    assert.ok(delFreno.length <= (caso === 'resto-inefficace' ? 1 : 0), `il freno al più una volta, e solo col resto che allunga (${JSON.stringify(delFreno)})`);
+    const dellaRichiesta = fini.filter((f) => f.giro === giroEmergenza && f.motivo !== 'freno');
     assert.equal(dellaRichiesta.length, 1, `una riga sola per la richiesta (${JSON.stringify(dellaRichiesta)})`);
     assert.equal(dellaRichiesta[0].compattato, true, 'e dice «compattato»: la base c\'è stata');
     assert.ok(dellaRichiesta[0].prima >= 4_800, `la riga parte dal numero della richiesta, sopra l'emergenza (${dellaRichiesta[0].prima})`);
@@ -330,12 +341,13 @@ for (const caso of ['resto-riuscito', 'resto-inefficace', 'resto-500']) {
     assert.equal(segno.origine, daFineGiro ? 'fine-giro' : 'giro', 'e da dove viene');
     assert.equal(segno.conResto, caso === 'resto-riuscito', 'e se la riga copre anche il resto');
     /* CLI, revisione 4: il conto del risultato conta le righe — base più resto è UNA compattazione per chi la legge; lo scambio del
-       riassunto di fine giro senza resto non si conta (l'ha già annunciato il registro) */
-    const contate = fini.filter((f) => f.compattato === true && !(f.adottato?.origine === 'fine-giro' && f.adottato.conResto !== true)).length;
-    assert.equal(esitoDue.compattazioni, contate, `il conto è quello delle righe (${esitoDue.compattazioni} contro ${contate})`);
+       riassunto di fine giro senza resto non si conta (l'ha già annunciato il registro); F1 della revisione 9: nemmeno la «sola coda»,
+       che non è un riassunto */
+    const contate = fini.filter((f) => f.compattato === true && !f.soloCoda && !(f.adottato?.origine === 'fine-giro' && f.adottato.conResto !== true)).length;
+    assert.equal(esitoDue.compattazioni, contate, `il conto è quello delle righe (${esitoDue.compattazioni} contro ${contate}: ${JSON.stringify(fini.map((f) => [f.compattato, f.soloCoda ?? false, f.adottato?.origine ?? null, f.adottato?.conResto ?? null, f.motivo ?? null]))})`);
     /* 22/10/2026 notte: con i quattro scambi del resto, le letture che arrivano DOPO la base possono riportare il giro sopra la soglia e
        fare una seconda compattazione legittima più avanti; il conto della richiesta della base è quello che si guarda qui */
-    const piuAvanti = fini.filter((f) => f.giro !== giroEmergenza && f.compattato === true && !(f.adottato?.origine === 'fine-giro' && f.adottato.conResto !== true)).length;
+    const piuAvanti = fini.filter((f) => f.giro !== giroEmergenza && f.compattato === true && !f.soloCoda && !(f.adottato?.origine === 'fine-giro' && f.adottato.conResto !== true)).length;
     if (caso === 'resto-500') assert.equal(esitoDue.compattazioni - piuAvanti, 0, 'la base di fine giro senza resto non si conta due volte');
     else assert.equal(esitoDue.compattazioni - piuAvanti, 1, 'una riga, una compattazione');
     assert.ok(Number.isSafeInteger(segno.tokenDopo) && segno.tokenDopo < dellaRichiesta[0].prima, `col conto dopo la base (${JSON.stringify(segno)})`);
@@ -486,7 +498,11 @@ test('S2-1-GIRO-SOLA-CODA-01 — un esito d’attrezzo enorme negli ultimi scamb
   assert.ok(fini.some((f) => f.compattato === true && f.soloCoda), `la coda si è accorciata da sola (${JSON.stringify(fini)})`);
 });
 
-test('S2-1-GIRO-OVERFLOW-01 — AL CONTRARIO: quando il fornitore dice «non entra» la stima non decide, la compattazione per overflow fa come prima', async (t) => {
+/* Pezzo C (owner 22/10, punto 1 del testo approvato: «un riassunto si paga solo se toglie davvero… nemmeno sul rifiuto del fornitore»).
+   Prima questa prova voleva il riassunto pagato anche qui; ora il rifiuto non lo giustifica più da solo: la storia vecchia sono tre
+   scambi di poche parole e la richiesta che non entra è il log appena incollato — niente può bastare, niente si paga, e la STESSA
+   richiesta non riparte. Il giro fallisce col rifiuto classificato e la diagnosi. */
+test('S2-1-GIRO-OVERFLOW-01 — AL CONTRARIO: quando il fornitore dice «non entra» e niente può bastare, non si paga un riassunto e la stessa richiesta non riparte', async (t) => {
   const vecchio = process.env[compattazione.VARIABILE_TETTO_TOKEN];
   process.env[compattazione.VARIABILE_TETTO_TOKEN] = '4000';
   t.after(() => { if (vecchio === undefined) delete process.env[compattazione.VARIABILE_TETTO_TOKEN]; else process.env[compattazione.VARIABILE_TETTO_TOKEN] = vecchio; });
@@ -503,9 +519,15 @@ test('S2-1-GIRO-OVERFLOW-01 — AL CONTRARIO: quando il fornitore dice «non ent
   const messaggi = [...[1, 2, 3].flatMap((i) => [{ role: 'user', content: `Richiesta ${i}: rispondi OK.` }, { role: 'assistant', content: 'OK' }]),
     { role: 'user', content: `Ecco un pezzo di log, rispondi OK.\n${'riga di log incollata '.repeat(300)}` }];
   assert.ok(stima(messaggi) < 4_000, `premessa: sotto la soglia, la compattazione la chiede solo il fornitore (${stima(messaggi)})`);
-  await talosLavora({ cartella, modello: 'z-ai/glm-5.3-flash', chiave: 'finta', task: { consegna: 'x' }, messaggiIniziali: messaggi, contestoDelProgetto: 'Project files:\n', fetchDiRete });
-  assert.ok(conti.modello >= 2, `premessa: il modello ha detto «non entra» e il giro ha ritentato (${JSON.stringify(conti)})`);
-  assert.ok(conti.riassunti >= 1, `sull'overflow il riassunto parte come prima (${JSON.stringify(conti)})`);
+  let errore = null;
+  try {
+    await talosLavora({ cartella, modello: 'z-ai/glm-5.3-flash', chiave: 'finta', task: { consegna: 'x' }, messaggiIniziali: messaggi, contestoDelProgetto: 'Project files:\n', fetchDiRete });
+  } catch (e) { errore = e; }
+  assert.ok(errore, 'il giro fallisce: niente poteva farla entrare');
+  assert.equal(errore.classificazione, 'contesto-pieno');
+  assert.equal(conti.riassunti, 0, `nessun riassunto pagato (${JSON.stringify(conti)})`);
+  assert.equal(conti.modello, 1, `la stessa richiesta non riparte (${JSON.stringify(conti)})`);
+  assert.ok(Number.isFinite(errore.contestoPieno?.bersaglio), `la diagnosi viaggia con l'errore (${JSON.stringify(errore.contestoPieno)})`);
 });
 
 /* Sesta passata avversaria (22/10/2026), R1: con l'istantanea accesa il giro prepara in sottofondo a ogni richiesta sopra l'80%; il
@@ -675,7 +697,11 @@ test('S2-1-GIRO-CORNICE-01 — un tratto vecchio più piccolo della cornice non 
 /* Revisione 5 della CLI (22/10/2026 notte), S2-1: la sonda `gap1300`. Il log incollato con risposte da 1.300 caratteri: col pavimento
    nudo e la soglia fissa il giro pagava 4 riassunti fra T3 e T6 — T3 buttato come «inefficace», T4 e T5 per guadagni dell'1-3% con la
    richiesta comunque sopra l'emergenza. Con `riassuntoUtile` si paga solo T6, quando il log passa nel tratto vecchio e il riassunto serve. */
-test('S2-1-GIRO-UTILE-01 — un riassunto si paga solo se serve: in sei giri col log incollato, uno solo (quando il log diventa storia vecchia)', async (t) => {
+/* §4.2, regola K (owner 22/10/2026, decisione presa nella sessione della CLI): il log incollato, quando diventa una richiesta VECCHIA
+   (al giro 4), si accorcia per il modello — inizio e fine, il testo intero nel suo file — invece di pagare un riassunto: è il caso gap1300
+   del rapporto della CLI (§4.1, «the paste is an older request, so it is shortened deterministically; the turn goes out and nothing is
+   paid»). Prima di K qui si pagava UN riassunto a T6. */
+test('S2-1-GIRO-UTILE-01 — un riassunto si paga solo se serve: in sei giri col log incollato, nessuno — al giro 4 il log, diventato vecchio, si accorcia senza modello e il testo intero resta nel suo file', async (t) => {
   const vecchio = process.env[compattazione.VARIABILE_TETTO_TOKEN];
   process.env[compattazione.VARIABILE_TETTO_TOKEN] = '8000';
   t.after(() => { if (vecchio === undefined) delete process.env[compattazione.VARIABILE_TETTO_TOKEN]; else process.env[compattazione.VARIABILE_TETTO_TOKEN] = vecchio; });
@@ -691,16 +717,26 @@ test('S2-1-GIRO-UTILE-01 — un riassunto si paga solo se serve: in sei giri col
   let messaggi = [{ role: 'user', content: 'First request: say OK.' }, { role: 'assistant', content: risposta }, { role: 'user', content: 'Second request: say OK.' }, { role: 'assistant', content: risposta },
     { role: 'user', content: `Third request: here is the build log I pasted, just say OK.\n${'2026-10-22 12:00:00 INFO pasted build log line with some words\n'.repeat(1000).slice(0, 60000)}` }];
   let record = null;
+  const cartellaIncollati = join(cartella, '.incollati-della-sessione');
   for (const [i, domanda] of ['Fourth request: say OK.', 'Fifth request: say OK.', 'Sixth request: say OK.', null].entries()) {
     const ris = await talosLavora({ cartella, modello: 'z-ai/glm-5.3-flash', chiave: 'finta', task: { consegna: 'x' }, messaggiIniziali: messaggi, contestoDelProgetto: 'Project files:\n', fetchDiRete,
-      ...(record ? { recordCompattazioneIniziale: record } : {}),
-      onGiro: (e) => { if (e?.tipo === 'compattazione-fine') conti.fini.push({ giro: i + 3, compattato: e.compattato, motivo: e.motivo ?? null }); } });
+      cartellaIncollati, ...(record ? { recordCompattazioneIniziale: record } : {}),
+      onGiro: (e) => { if (e?.tipo === 'compattazione-fine') conti.fini.push({ giro: i + 3, compattato: e.compattato, motivo: e.motivo ?? null, soloCoda: e.soloCoda === true, accorciati: e.accorciati ?? 0 }); } });
     if (ris.recordDiCompattazione?.length) record = ris.recordDiCompattazione.at(-1);
     if (domanda) messaggi = [...ris.messaggiFinali, { role: 'user', content: domanda }];
   }
-  assert.equal(conti.riassunti, 1, `un solo riassunto pagato in sei giri (${JSON.stringify(conti.fini)})`);
-  assert.deepEqual(conti.fini.filter((f) => f.compattato === true).map((f) => f.giro), [6], `ed è quello di T6, quando serve (${JSON.stringify(conti.fini)})`);
+  assert.equal(conti.riassunti, 0, `nessun riassunto pagato in sei giri (${JSON.stringify(conti.fini)})`);
+  const compattate = conti.fini.filter((f) => f.compattato === true);
+  assert.deepEqual(compattate.map((f) => [f.giro, f.soloCoda, f.accorciati]), [[4, true, 1]], `al giro 4 la sola coda, con il log accorciato (${JSON.stringify(conti.fini)})`);
   assert.equal(conti.fini.filter((f) => f.motivo === 'inefficace').length, 0, 'nessun «inefficace»');
+  /* la proiezione porta il log accorciato con l'avviso in testa e il percorso; il file ha il testo intero, byte per byte */
+  const accorciato = record.riassunto.find((m) => typeof m.content === 'string' && m.content.startsWith('[TALOS shortened this earlier message from the person'));
+  assert.ok(accorciato, 'il record porta il log accorciato');
+  const percorso = /saved at "([^"]+)"/u.exec(accorciato.content)?.[1];
+  assert.ok(percorso && percorso.startsWith(cartellaIncollati), `con il percorso del file nella cartella della sessione (${percorso})`);
+  const originale = messaggi.find((m) => typeof m.content === 'string' && m.content.startsWith('Third request:')).content;
+  assert.equal(readFileSync(percorso, 'utf8'), originale, 'e il file ha il testo intero');
+  assert.ok(accorciato.content.length < originale.length / 5, `molto più corto (${accorciato.content.length} contro ${originale.length})`);
 });
 
 test('S2-2-OVERFLOW-NIENTE-01 — sull’overflow, se la compattazione non riduce niente, la stessa richiesta piena non riparte uguale', async (t) => {

@@ -66,6 +66,98 @@ export function creaCardArtefatto({evento, sessionId, API = p => p,
       }
     })();
   }
+  /*
+   * ⭐ 24/10/2026 — ARTEFATTI CON VERSIONI (owner: «la carta di ogni giro resta sulla sua versione», bozzetto approvato).
+   *   `evento.versione` è la versione che QUESTO giro ha fatto: la carta la mostra sempre, con «vN of M» accanto al titolo. Se
+   *   poi ne è nata una più nuova, una striscia lo dice («Updated later in …») e «Show latest» mostra l'ultima nella stessa
+   *   carta (e riporta indietro). Quante versioni ci sono lo dice la Libreria; quando un'altra carta della stessa voce nasce
+   *   in questa pagina, le sorelle rileggono il conto (`talos:artefatto-versione`).
+   */
+  const versioneDelGiro = Number.isSafeInteger(evento.versione) && evento.versione >= 1 && typeof evento.voceLibreriaId === 'string'
+    ? evento.versione : null;
+  const doc = card.ownerDocument;
+  let etichettaVersione = null;
+  let avviso = null;
+  let mostraUltima = false;
+  let fonteUltima = null;
+  let fonteDelGiro = null;
+  let totaleInCornice = null; // D-A2: quante versioni c'erano quando la cornice ha caricato «l'ultima»
+  /* ⛔ Revisione a blocco 4 (24/10/2026, REV4-ART-1, S3): il gestore di «Show latest» nasce UNA volta, alla prima `disegnaVersioni`,
+     e chiudeva sull'elenco di allora: con una versione nata prima del clic ridisegnava «v5 of 5 · latest» mentre la cornice
+     ricaricava la v6. Il clic legge l'elenco dell'ULTIMO disegno, come il selettore di LibreChat (`Artifacts.tsx:598-606`) legge
+     `orderedArtifactIds` del disegno corrente. */
+  let ultimeVersioni = null;
+  async function caricaInCornice(f) {
+    const pagina = await f.creaPagina();
+    if (!paginaValida(pagina)) throw new Error(t('chat.artifact.pageReferenceInvalid'));
+    if (!viva()) return;
+    fonte = f;
+    indirizzo = API(pagina);
+    frame.src = indirizzo;
+  }
+  function disegnaVersioni(versioni) {
+    if (!versioneDelGiro || !Array.isArray(versioni) || !versioni.length) return;
+    ultimeVersioni = versioni;
+    const totale = versioni.length;
+    const ultima = versioni[totale - 1];
+    const vista = mostraUltima ? totale : versioneDelGiro;
+    /* ⛔ Revisione a blocco 3 (24/10/2026, D-A2, S3): su «Show latest», quando una sorella annunciava una versione più nuova, l'etichetta
+       diceva «v4» e la cornice mostrava ancora la v3. Se l'ultima è cambiata da quando la cornice l'ha caricata, si ricarica. */
+    if (mostraUltima && fonteUltima && totaleInCornice !== totale) {
+      totaleInCornice = totale;
+      void caricaInCornice(fonteUltima).catch((errore) => erroreVisibile(errore instanceof Error ? errore.message : t('chat.artifact.loadFailed')));
+    }
+    if (!mostraUltima) totaleInCornice = null;
+    if (!etichettaVersione) {
+      etichettaVersione = doc.createElement('span');
+      etichettaVersione.className = 'talos-artifact__versione';
+      card.querySelector('.talos-artifact__title')?.after(etichettaVersione);
+    }
+    etichettaVersione.textContent = vista === totale ? t('chat.artifact.versionLatest', { n: vista, total: totale }) : t('chat.artifact.version', { n: vista, total: totale });
+    etichettaVersione.toggleAttribute('data-ultima', vista === totale);
+    if (versioneDelGiro >= totale) { avviso?.remove(); avviso = null; return; }
+    if (!avviso) {
+      avviso = doc.createElement('div');
+      avviso.className = 'talos-artifact__avviso';
+      avviso.setAttribute('role', 'status');
+      const testo = doc.createElement('span');
+      testo.className = 'talos-grow';
+      const azione = doc.createElement('button');
+      azione.type = 'button';
+      azione.className = 'talos-button talos-button--ghost talos-button--sm';
+      azione.dataset.artefattoUltima = '';
+      azione.addEventListener('click', () => {
+        mostraUltima = !mostraUltima;
+        fonteUltima ??= fonteDaLibreria({sessionId, voce: {id: evento.voceLibreriaId}, fetchFn: (percorso, init) => fetchFn(API(percorso), init)});
+        /* l'ultima la carica `disegnaVersioni` (un posto solo, così ricarica anche quando ne nasce una nuova); la sua la si carica qui */
+        if (!mostraUltima) void caricaInCornice(fonteDelGiro).catch((errore) => erroreVisibile(errore instanceof Error ? errore.message : t('chat.artifact.loadFailed')));
+        disegnaVersioni(ultimeVersioni); // REV4-ART-1: l'elenco dell'ultimo disegno, non quello della prima chiamata
+      });
+      avviso.append(testo, azione);
+      card.querySelector('.talos-artifact__head')?.after(avviso);
+    }
+    const [testo, azione] = avviso.children;
+    testo.textContent = mostraUltima
+      ? t('chat.artifact.showingLatest', { total: totale, n: versioneDelGiro })
+      : (ultima?.sessionNome ? t('chat.artifact.updatedLaterIn', { chat: ultima.sessionNome, total: totale }) : t('chat.artifact.updatedLater', { total: totale }));
+    azione.textContent = mostraUltima ? t('chat.artifact.backToVersion', { n: versioneDelGiro }) : t('chat.artifact.showLatest');
+  }
+  async function rileggiVersioni() {
+    if (!versioneDelGiro || typeof sessionId !== 'string' || !sessionId) return;
+    try {
+      const r = await fetchFn(API(`/api/v1/sessions/${encodeURIComponent(sessionId)}/library/${encodeURIComponent(evento.voceLibreriaId)}/versions`), { credentials: 'same-origin' });
+      if (!r.ok || !viva()) return;
+      const dati = await r.json();
+      if (viva()) disegnaVersioni(dati?.data?.versioni);
+    } catch { /* l'etichetta è un di più: senza, la carta mostra comunque la sua versione */ }
+  }
+  if (versioneDelGiro) {
+    const sorella = (e) => {
+      if (!card.isConnected) { doc.removeEventListener('talos:artefatto-versione', sorella); return; }
+      if (e?.detail?.voceLibreriaId === evento.voceLibreriaId && e.detail.versione !== versioneDelGiro) void rileggiVersioni();
+    };
+    doc.addEventListener('talos:artefatto-versione', sorella);
+  }
   const pronta = (async () => {
     // The caller inserts the card synchronously after creation. Check attachment
     // after that insertion, including legacy events that need no network await.
@@ -75,8 +167,9 @@ export function creaCardArtefatto({evento, sessionId, API = p => p,
       if (Object.hasOwn(evento, 'voceLibreriaId')) {
         if (typeof evento.voceLibreriaId !== 'string' || !ID_LIBRERIA.test(evento.voceLibreriaId)
           || typeof sessionId !== 'string' || !sessionId) throw new Error(t('chat.artifact.savedReferenceInvalid'));
-        fonte = fonteDaLibreria({sessionId, voce: {id: evento.voceLibreriaId},
+        fonte = fonteDaLibreria({sessionId, voce: {id: evento.voceLibreriaId}, ...(versioneDelGiro ? {versione: versioneDelGiro} : {}),
           fetchFn: (percorso, init) => fetchFn(API(percorso), init)});
+        fonteDelGiro = fonte;
         pagina = await fonte.creaPagina();
         if (!paginaValida(pagina)) throw new Error(t('chat.artifact.pageReferenceInvalid'));
         if (!viva()) return;
@@ -92,6 +185,10 @@ export function creaCardArtefatto({evento, sessionId, API = p => p,
       frame.src = indirizzo;
       frame.hidden = false;
       apri.disabled = false;
+      if (versioneDelGiro) {
+        void rileggiVersioni();
+        doc.dispatchEvent(new (doc.defaultView?.CustomEvent ?? CustomEvent)('talos:artefatto-versione', { detail: { voceLibreriaId: evento.voceLibreriaId, versione: versioneDelGiro } }));
+      }
     } catch (errore) {
       if (!viva()) return;
       erroreVisibile(errore instanceof Error ? errore.message : t('chat.artifact.loadFailed'));

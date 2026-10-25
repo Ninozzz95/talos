@@ -46,6 +46,13 @@ export function motivoPerIlTelefono(e) {
 }
 
 export const MEMORIA_IDEMPOTENZA_MS = 10 * 60_000;
+/*
+ * R5.13 (24/10/2026 notte): le risposte che NON si ricordano. Una risposta di `file.read` porta fino a 512 KiB grezzi (~683 KiB in
+ *   base64url): ricordandole, uno scarico da 25 MiB terrebbe ~34 MiB per 10 minuti e il tetto di 512 risposte arriverebbe a ~350 MiB
+ *   per dispositivo. E non serve: rileggere lo stesso intervallo è già idempotente, e se il file è cambiato nel frattempo la risposta
+ *   giusta è `FILE_GONE`, non i byte di prima.
+ */
+export const RISPOSTE_NON_RICORDATE = Object.freeze(new Set(['file.read']));
 export const RISPOSTE_RICORDATE_MASSIME = 512;
 const N_VALIDO = /^[A-Za-z0-9_-]{8,64}$/;
 
@@ -56,6 +63,10 @@ const N_VALIDO = /^[A-Za-z0-9_-]{8,64}$/;
  */
 export function creaServizioRemoto({
   pcId, nomePc = null, programma = 'TALOS desktop', vapidPubblica = null, accoppiamento, dispositivi, operazioni, clock = () => Date.now(), avvisa = () => {},
+  /* 24/10/2026 (fetta C del Mobile, PC doppi; contratto v0.3 §B, campo aggiuntivo): `true` quando il PC gira col portachiavi di
+     PROVA in memoria — la sua identità rinasce a ogni avvio, quindi sul dispositivo diventa una voce nuova ogni volta. Il dispositivo
+     la segna «di prova» e la propone per prima da dimenticare. Assente (mai `false`) negli altri casi: le versioni vecchie non cambiano. */
+  effimero = false,
   /* Trovato dal Mobile (19/10): dopo `pair.ok` il PC chiudeva SUBITO la connessione, e una chiusura di QUIC può buttare i byte non
      ancora letti — il telefono restava senza `pair.ok` pur essendo accoppiato. Ora il PC chiude la sua scrittura (half-close) e
      aspetta che il telefono chiuda la sua, o cada, al più questo tempo. Il telefono dà 60 s di grazia dal suo lato. */
@@ -104,7 +115,7 @@ export function creaServizioRemoto({
         return connessione.chiudi(e.code ?? 'PAIR_TOKEN_INVALID');
       }
       avvisa({ tipo: 'accoppiamento-in-attesa', id: attesa.id, nome: primo.nome ?? null, codice: attesa.codice });
-      await scrivi(stream, { t: 'pair.code', codice: attesa.codice, pc: { id: pcId, nome: nomePc, programma } });
+      await scrivi(stream, { t: 'pair.code', codice: attesa.codice, pc: { id: pcId, nome: nomePc, programma, ...(effimero === true ? { effimero: true } : {}) } });
       /* Il telefono può solo annullare (o cadere): lo si ascolta mentre la persona decide sul PC. Una fine NORMALE del suo lato
          (scrive il saluto e chiude la scrittura, come fanno le sonde iroh) non è un annullamento: si aspetta la connessione. */
       let segnaFineLettura;
@@ -122,7 +133,7 @@ export function creaServizioRemoto({
       }
       /* Il telefono l'ha già registrato chi ha chiamato `conferma()` (qui sotto), PRIMA di risvegliare questa attesa. */
       const dispositivo = esito.dispositivo;
-      await scrivi(stream, { t: 'pair.ok', dispositivo: { id: dispositivo.id, nome: dispositivo.nome }, pc: { id: pcId, nome: nomePc, programma, vapid: vapidPubblica } });
+      await scrivi(stream, { t: 'pair.ok', dispositivo: { id: dispositivo.id, nome: dispositivo.nome }, pc: { id: pcId, nome: nomePc, programma, vapid: vapidPubblica, ...(effimero === true ? { effimero: true } : {}) } });
       await stream.finisci();
       /* half-close: si chiude la connessione solo quando il telefono ha chiuso il suo lato (quindi ha letto `pair.ok`) o è caduto */
       let tetto;
@@ -176,7 +187,7 @@ export function creaServizioRemoto({
                incerto» e la carta restava bloccata. Solo un intero fra 400 e 599: mai un numero che arrivi da altrove. */
             ...(Number.isInteger(e?.stato) && e.stato >= 400 && e.stato <= 599 ? { stato: e.stato } : {}) };
         }
-        ricorda(dispositivo.id, m.n, risposta);
+        if (!RISPOSTE_NON_RICORDATE.has(m.op)) ricorda(dispositivo.id, m.n, risposta);
         await scrivi(stream, risposta);
         for (const fn of dopo) { try { await fn(); } catch { /* la risposta è già partita */ } }
       }

@@ -926,6 +926,10 @@ button.talos-turn-spine__tick:focus-visible{outline:var(--talos-focus-width) sol
 .talos-artifact{margin:10px 0; overflow:hidden}
 .talos-artifact__head{display:flex; align-items:center; gap:10px; padding:8px 8px 8px 14px; border-bottom:1px solid var(--talos-border-subtle)}
 .talos-artifact__title{font-weight:600; font-size:13.5px; color:var(--talos-text)}
+/* 24/10/2026, artefatti con versioni (bozzetto approvato): «vN of M» accanto al titolo, e la striscia di chi non è l'ultima */
+.talos-artifact__versione{display:inline-flex; align-items:center; font-size:12px; color:var(--talos-muted); white-space:nowrap; font-variant-numeric:tabular-nums}
+.talos-artifact__versione[data-ultima]{color:var(--talos-text)}
+.talos-artifact__avviso{display:flex; align-items:center; gap:10px; padding:7px 8px 7px 14px; border-bottom:1px solid var(--talos-border-subtle); background:color-mix(in srgb, var(--talos-accent) 7%, transparent); font-size:12.5px; color:var(--talos-muted)}
 .talos-artifact__frame{display:block; width:100%; height:320px; border:0; background:var(--talos-window-bg)}
 .talos-artifact__frame[hidden]{display:none}
 .talos-artifact__status{margin:0; padding:10px 14px; overflow-wrap:anywhere}
@@ -1134,6 +1138,8 @@ button.talos-turn-spine__tick:focus-visible{outline:var(--talos-focus-width) sol
 }
 .talos-file-scaricabile__scarica:hover{background:var(--talos-accent-hover); color:var(--talos-window-bg)}
 .talos-file-scaricabile__scarica:focus-visible{outline:2px solid var(--talos-accent-border); outline-offset:2px}
+/* R5.13, bozzetto 1a: col menu del file aperto il «⋯» resta premuto, come l'«altro» della compattazione */
+.talos-file-scaricabile > [data-file-piu][aria-expanded="true"]{background:var(--talos-card-hover)}
 /* ⛔ Nessun bottone che finge: senza indirizzo si dice che non è disponibile, e non si offre un clic
    che fallirebbe. È la stessa regola del «mai un rimedio falso» delle note d'errore. */
 .talos-file-scaricabile__assente{flex:none; font-size:12px; color:var(--talos-muted)}

@@ -20,6 +20,10 @@ export const BYTE_MASSIMI = 1024 * 1024;
 export const CODICI = Object.freeze([
   'VERSION_UNSUPPORTED', 'NOT_PAIRED', 'PAIR_TOKEN_INVALID', 'PAIR_LOCKED', 'PAIR_REJECTED', 'PAIR_EXPIRED', 'REVOKED',
   'RATE_LIMITED', 'TOO_LARGE', 'BAD_MESSAGE', 'UNKNOWN_OPERATION', 'NOT_ALLOWED_REMOTELY', 'OPERATION_FAILED', 'WAKE_TOKEN_INVALID',
+  /* R5.13 (24/10/2026, contratto Parte 2, P2.5 e «Revision 1»): lo scambio di file. `FILE_NOT_ALLOWED` è RISERVATO e non usato finché
+     il PC non blocca nessun tipo. Uno scostamento sbagliato di `file.upload.chunk` è `BAD_MESSAGE` col motivo `offset-mismatch` e
+     `params.ricevuti` (stato 409, come tus 1.0): nessun codice in più oltre a quelli concordati. */
+  'FILE_TOO_LARGE', 'TRANSFER_UNKNOWN', 'TRANSFER_EXPIRED', 'CHECKSUM_MISMATCH', 'FILE_GONE', 'FILE_NOT_ALLOWED',
 ]);
 
 function errore(code, message) {

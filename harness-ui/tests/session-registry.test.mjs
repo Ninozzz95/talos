@@ -108,7 +108,8 @@ import { HookRegistryError } from '../src/hook-registry.mjs';
 import { McpRegistryError } from '../src/mcp-registry.mjs';
 import { SkillRegistryError } from '../src/skill-registry.mjs';
 import { PluginRegistryError } from '../src/plugin-registry.mjs';
-import { LibraryStoreError } from '../src/library-store.mjs';
+import { LibraryStoreError, salvaVoce as salvaVoceLibreriaVera, aggiungiVersione as aggiungiVersioneLibreriaVera, CARTELLA_LIBRERIA as CARTELLA_LIBRERIA_VERA } from '../src/library-store.mjs';
+import { promises as fsPromises } from 'node:fs'; // REV4-A2 (24/10): la rinomina finta che interrompe
 import { NoteStoreError } from '../src/notes-store.mjs';
 import { TaskStoreError } from '../src/tasks-store.mjs';
 import { MemoryStoreError } from '../src/memory-store.mjs';
@@ -4695,6 +4696,32 @@ test('⛔⛔ rivelaVoceLibreria: fuori da Windows si dichiara — PLATFORM_UNSUP
 
   assert.equal(esito.code, 'PLATFORM_UNSUPPORTED');
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+/* Revisione a blocco 4 (24/10/2026, REV4-A2, S4): dopo un'interruzione fra `meta.json` e `contenuto` la Libreria dice v3 e
+   `contenuto` è ancora la v2. «Apri» e «Mostra nella cartella» passano il file `contenuto`: deve avere l'ultima. Disco vero. */
+test('REV4-A2 «Apri» e «Mostra nella cartella» dopo un\'interruzione fra meta e contenuto: il file passato ha l\'ULTIMA versione', async (t) => {
+  const c = mkdtempSync(join(tmpdir(), 'talos-rev4-a2-'));
+  t.after(() => rimuoviCartellaDiProva(c));
+  const id = await salvaVoceLibreriaVera({ cartella: c, nome: 'Grafico.html', mediaType: 'text/html', origine: 'generated', testo: 'A' });
+  await aggiungiVersioneLibreriaVera({ cartella: c, id, testo: 'B' });
+  const percorsoContenuto = join(c, CARTELLA_LIBRERIA_VERA, id, 'contenuto');
+  const renameFn = async (da, a) => { if (a === percorsoContenuto) throw Object.assign(new Error('interrotto'), { code: 'EIO' }); return fsPromises.rename(da, a); };
+  await assert.rejects(aggiungiVersioneLibreriaVera({ cartella: c, id, testo: 'C' }, { renameFn, tentativiRename: 1 }), /interrotto/u);
+  assert.equal(readFileSync(percorsoContenuto, 'utf8'), 'B', 'la copia è rimasta indietro');
+  const finta = sessioneControllabile();
+  const aperti = [];
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    cartellaDatiProgettoFn: () => c,
+    apriFileConProgrammaPredefinitoFn: async ({ cartella: radice, percorso }) => { aperti.push(['apri', readFileSync(join(radice, percorso), 'utf8')]); return { aperto: true }; },
+    rivelaInEsploraFileFn: async ({ cartella: radice, percorso }) => { aperti.push(['rivela', readFileSync(join(radice, percorso), 'utf8')]); return { rivelato: true }; },
+  });
+  const { sessionId } = registro.avvia('task-vero');
+  assert.equal((await registro.apriVoceLibreria(sessionId, id)).ok, true);
+  assert.equal((await registro.rivelaVoceLibreria(sessionId, id)).ok, true);
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+  assert.deepEqual(aperti, [['apri', 'C'], ['rivela', 'C']], '⛔ prima «Apri» apriva la v2 mentre la Libreria diceva che l\'ultima è la v3');
 });
 
 test('⛔⛔ AL CONTRARIO — un errore IMPREVISTO (non un errore dichiarato) si PROPAGA, mai inghiottito', async () => {

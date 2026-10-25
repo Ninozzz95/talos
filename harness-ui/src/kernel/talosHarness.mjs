@@ -233,9 +233,23 @@ const GIRI_MASSIMI_PLANNER = 8
  */
 export const GIRI_PRIMA_DI_COMPATTARE = 8
 
-/** Stima grezza: ~4 caratteri per token, la stessa euristica della ricerca citata sopra. Non e' un conteggio esatto — serve solo a decidere SE vale la pena compattare, non a fatturare. */
+/*
+ * F6 della revisione 9 della CLI (23/10/2026): la stima a 4 caratteri per token vale per il testo ASCII. Un carattere cinese, giapponese
+ * o coreano costa circa UN token: 30.000 caratteri CJK erano stimati ~7.500 token (veri 30.000), la regola N non scattava, il fornitore
+ * rispondeva 400 e il messaggio restava nella storia a far pagare i giri dopo. E il resto del testo non ASCII (cirillico, greco, arabo)
+ * pesa 2 byte per carattere: a caratteri/4 era contato circa la metà.
+ * Come Hermes (`agent/model_metadata.py:2342-2366`, `estimate_tokens_rough`, clone 22/10/2026 8237c7f8): i punti di codice CJK/Hangul/Kana
+ * un token ciascuno, il resto ceil(byte UTF-8 / 4); l'ASCII resta caratteri/4 (stessi numeri di prima, e niente lavoro in più).
+ */
+const NON_ASCII = /[^\x00-\x7f]/
+const CJK_DENSI = /[\u1100-\u11ff\u2e80-\u9fff\ua960-\ua97f\uac00-\ud7af\uf900-\ufaff\uff00-\uffef]/g
+
+/** Stima grezza: ~4 caratteri per token per l'ASCII, la stessa euristica della ricerca citata sopra; un token per carattere CJK, byte UTF-8 / 4 per il resto. Non e' un conteggio esatto — serve solo a decidere SE vale la pena compattare, non a fatturare. */
 export function stimaToken(testo) {
-    return Math.ceil(String(testo ?? '').length / 4)
+    const s = String(testo ?? '')
+    if (!NON_ASCII.test(s)) return Math.ceil(s.length / 4)
+    const senza = s.replace(CJK_DENSI, '')
+    return (s.length - senza.length) + Math.ceil(Buffer.byteLength(senza, 'utf8') / 4)
 }
 
 /** Quanti token stima l'intera conversazione fin qui, sommando ogni messaggio. */
@@ -2869,6 +2883,29 @@ const ATTREZZI_ESTESI = [
             required: ['titolo', 'html'],
         },
     },
+    /* ⭐ owner 24/10/2026 («aggiorna la stessa», versioni tenute tutte); contratto con la CLI in handoff
+       `CONTRATTO-ARTIFACT-UPDATE-2026-10-24.md`. Davanti, accanto a `artifact_create` (owner 24/10): dietro il ponte il modello
+       rifarebbe un artefatto invece di aggiornarlo. */
+    {
+        name: 'artifact_update',
+        description: 'Changes an artifact you created earlier (a chart, a diagram, a page) instead of making a new one. The '
+            + 'conversation keeps every version; the person sees the new one and can go back. Give either the whole new '
+            + 'document in `html`, or small exact replacements in `edits`, applied one after the other.',
+        input_schema: {
+            type: 'object',
+            properties: {
+                id: { type: 'string', description: 'the id artifact_create returned (lib-…)' },
+                html: { type: 'string', description: 'the complete new HTML document (same rules as artifact_create)' },
+                edits: {
+                    type: 'array',
+                    description: 'exact replacements; each `old` must appear exactly once in the text left by the edits before it',
+                    items: { type: 'object', properties: { old: { type: 'string' }, new: { type: 'string' } }, required: ['old', 'new'] },
+                },
+                titolo: { type: 'string', description: 'a new label for the card; without it the label stays' },
+            },
+            required: ['id'],
+        },
+    },
     {
         name: 'document_create',
         description: 'Create a real document file and save it into the workspace. Use `report` for a '
@@ -4205,8 +4242,28 @@ const ATTREZZI_ESTESI = [
         name: 'remote_phone_pair',
         description: 'Show the person a QR code in the chat to pair a new device, ONLY when the person asks to connect a device. The person '
             + 'always confirms on a card first, then scans the code with the device and confirms the 6-digit code on this computer. '
-            + 'You never see the code or the link. Fails if remote control is off: only the person turns it on, from the Connected devices screen.',
+            + 'You never see the code or the link. If remote control is off, the same card asks the person to turn it on (and how devices '
+            + 'reach this computer away from home); it stays off if they say no.',
         input_schema: { type: 'object', properties: {}, required: [] },
+    },
+    /*
+     * ⭐ R5.14 (owner 23/10/2026 sera, corretto subito dopo: «ogni funzionalità… invocarla dalla chat col modello stesso») — accendere e
+     *   spegnere il controllo remoto dal modello, con la carta SEMPRE, anche in Accesso pieno (seconda tornata del 23/10: apre una porta
+     *   a un altro apparecchio). Il modello propone il ponte; l'indirizzo e il gettone di un server proprio li scrive la persona sulla
+     *   carta e non passano mai dal kernel. Claude Code: `/remote-control` lo accende la persona, con una conferma una tantum (docs
+     *   «remote-control», lette il 24/10/2026); qui il modello può chiederlo e la persona decide ogni volta.
+     */
+    {
+        name: 'remote_control',
+        description: 'Turn remote control on or off, ONLY when the person asks. On: paired devices can reach this computer and work here '
+            + 'as the person does, Full access included. Off: they cannot reach it until it is on again; they stay paired. The person '
+            + 'always confirms on a card, also in Full access. To pair a new device use remote_phone_pair instead.',
+        input_schema: { type: 'object', properties: {
+            on: { type: 'boolean', description: 'true to turn it on, false to turn it off' },
+            relay: { type: 'string', enum: ['free', 'own'], description: 'only when turning on, and only if the person said it: how devices '
+                + 'reach this computer away from home — "free" (the free servers by n0) or "own" (the person\'s own server; they enter '
+                + 'its address on the card). The person can change it on the card.' },
+        }, required: ['on'] },
     },
     {
         name: 'remote_phone_revoke',
@@ -4215,6 +4272,60 @@ const ATTREZZI_ESTESI = [
         input_schema: { type: 'object', properties: {
             phone: { type: 'string', description: 'the short id from remote_phones' },
         }, required: ['phone'] },
+    },
+    /*
+     * ⭐ R5.12 (owner 23/10/2026) — le CARTELLE dei dispositivi dalla chat: un dispositivo lavora in una cartella del PC solo col
+     *   consenso del PC (`harness-ui/src/remoto/cartelle-dispositivi.mjs`). Elencare è una lettura; consentire chiede SEMPRE sulla
+     *   carta, anche in Accesso pieno (come il QR: dà a un altro apparecchio leggere, scrivere ed eseguire qui); revocare ha la carta
+     *   tranne in Accesso pieno (come la revoca del dispositivo). Al modello solo nome, id e percorso delle cartelle GIÀ consentite
+     *   (o di quella che chiede): mai il segreto degli id, chiavi, gettoni o il codice di 6 cifre.
+     */
+    {
+        name: 'remote_phone_folders',
+        description: 'List the folders of this computer that each paired device may work in (read, write and run commands from the '
+            + 'device): folder name, folder id, full path, when and how it was allowed. Optionally for one device only. Read-only.',
+        input_schema: { type: 'object', properties: {
+            phone: { type: 'string', description: 'the short id from remote_phones; omit it to list every paired device' },
+        }, required: [] },
+    },
+    {
+        name: 'remote_phone_folder_allow',
+        description: 'Allow a paired device to work in a folder of this computer (read, write and run commands there from the device), '
+            + 'ONLY when the person asks. Use the short id from remote_phones and the full path of an existing folder. The person always '
+            + 'confirms on a card first, Full access too. The folders of TALOS itself cannot be given to a device.',
+        input_schema: { type: 'object', properties: {
+            phone: { type: 'string', description: 'the short id from remote_phones' },
+            path: { type: 'string', description: 'the full (absolute) path of the folder on this computer' },
+        }, required: ['phone', 'path'] },
+    },
+    {
+        name: 'remote_phone_folder_revoke',
+        description: 'Take back a folder from a paired device, so it can no longer work there, ONLY when the person asks. Use the short '
+            + 'id from remote_phones and the folder id (or the full path) from remote_phone_folders. The person confirms on a card, '
+            + 'except in Full access.',
+        input_schema: { type: 'object', properties: {
+            phone: { type: 'string', description: 'the short id from remote_phones' },
+            folder: { type: 'string', description: 'the folder id from remote_phone_folders, or the full path of an allowed folder' },
+        }, required: ['phone', 'folder'] },
+    },
+    /*
+     * ⭐ R5.13 (owner 24/10/2026, «ogni funzione anche al modello»; bozzetti approvati D1-D8) — MANDARE UN FILE A UN DISPOSITIVO. È
+     *   la stessa offerta del menu del file nella finestra (`remoto.file.registraOfferta`): il file compare nella conversazione sul
+     *   dispositivo, che lo scarica quando vuole. La carta come gli altri attrezzi, niente carta in Accesso pieno (owner 24/10). D3: con
+     *   più dispositivi il modello sceglie e la carta lo nomina. Solo i file della cartella della conversazione, al più 25 MiB.
+     *   Hermes consegna un file con un tag `MEDIA:<percorso>` nel testo e una lista di percorsi negati
+     *   (`gateway/platforms/base.py:815-822, 1216-1271`, clone del 22/10/2026): qui è un attrezzo esplicito, dietro la carta.
+     */
+    {
+        name: 'remote_device_send_file',
+        description: 'Send a file of this conversation to a paired device, ONLY when the person asks: it appears in this conversation on '
+            + 'the device, ready to download (a device that is offline gets it when it connects again). The file must be inside this '
+            + 'conversation\'s folder and at most 25 MiB. With more than one paired device, say which one in "device" (the short id '
+            + 'from remote_phones). The person confirms on a card, except in Full access.',
+        input_schema: { type: 'object', properties: {
+            path: { type: 'string', description: 'the file, relative to this conversation\'s folder or a full path inside it' },
+            device: { type: 'string', description: 'the short id from remote_phones; needed when more than one device is paired' },
+        }, required: ['path'] },
     },
     {
         name: 'goal_status',
@@ -4303,7 +4414,7 @@ const ATTREZZI_ESTESI = [
         name: 'chatgpt_account',
         description: 'The ChatGPT sign-in: TALOS can use the person\'s ChatGPT Plus or Pro plan to pay for requests. Call it with action '
             + '"status" whenever the person asks about ChatGPT, their ChatGPT subscription or plan, or signing in with ChatGPT. "status" says whether an account '
-            + 'is connected and whether plan use is enabled; signing in is done by the person, from Settings, Model laboratory, Provider, OpenAI, '
+            + 'is connected and whether plan use is enabled; signing in is done by the person, from Settings, Model Lab, Provider, OpenAI, '
             + '"Continue with ChatGPT" (offer to open it: the interface shows a button). action "disconnect" signs the account out; the '
             + 'person approves it on a card.',
         input_schema: { type: 'object', properties: { action: { type: 'string', enum: ['status', 'disconnect'] } }, required: ['action'] },
@@ -4375,8 +4486,9 @@ export const ATTREZZI_FORNITORI = new Set(['provider_exclusions_list', 'provider
  *   Come fanno gli altri: Claude Code bypassPermissions (docs «permissions»), Hermes yolo (`tools/approval.py:483-488`), Codex
  *   `AskForApproval::Never` (`protocol/src/protocol.rs:1003-1005`): nessuna domanda in quella modalità.
  */
-export const SENZA_CARTA_IN_ACCESSO_PIENO = new Set([...ATTREZZI_AUTOMAZIONI, 'provider_exclude', 'provider_allow', 'file_changes_undo', 'remote_phone_revoke']) // R5.11: owner 18/10, «senza carta, come la legge»
+export const SENZA_CARTA_IN_ACCESSO_PIENO = new Set([...ATTREZZI_AUTOMAZIONI, 'provider_exclude', 'provider_allow', 'file_changes_undo', 'remote_phone_revoke', 'remote_phone_folder_revoke', 'remote_device_send_file']) // R5.11: owner 18/10, «senza carta, come la legge» · R5.12 cartelle: owner 23/10 · R5.13: owner 24/10, la carta dell'invio come le altre
 // ⛔ R5.12 (owner 18/10/2026): `remote_phone_pair` NON sta qui — la carta del QR c'è sempre, anche in Accesso pieno (seconda eccezione dopo `chatgpt_account`)
+// ⛔ R5.12 (owner 23/10/2026): nemmeno `remote_phone_folder_allow` — consentire una cartella a un dispositivo chiede sempre
 
 /** Che cosa la carta avrebbe segnalato, detto nell'esito quando in Full access la carta non c'è. Vuoto se non c'era niente. */
 export function notaSenzaCarta(azione) {
@@ -4392,7 +4504,7 @@ export const ATTREZZI_OBIETTIVO = new Set(['goal_status', 'goal_create', 'goal_u
 /** R5.11 (owner 18/10/2026): annullare le modifiche ai file dalla chat, che passa da `onAnnullaFileFn`. */
 export const ATTREZZI_ANNULLA = new Set(['file_changes_undo'])
 /** R5.12 (owner 18/10/2026): i telefoni collegati dalla chat, che passano da `onTelefoniFn`. */
-export const ATTREZZI_TELEFONI = new Set(['remote_phones', 'remote_phone_pair', 'remote_phone_revoke'])
+export const ATTREZZI_TELEFONI = new Set(['remote_phones', 'remote_phone_pair', 'remote_phone_revoke', 'remote_phone_folders', 'remote_phone_folder_allow', 'remote_phone_folder_revoke', 'remote_control', 'remote_device_send_file']) // R5.12 cartelle: owner 23/10 · R5.14: remote_control · R5.13: mandare un file (24/10)
 /** 19/10/2026: la riga della lingua, solo per il profilo del modello del telefono (vedi dove si compone il primo messaggio di sistema). */
 export const RIGA_LINGUA_DELLA_PERSONA = 'Always reply in the same language the person writes in, unless they ask for another one.'
 
@@ -10970,7 +11082,7 @@ export async function verificaPermessoScrittura(azione, { livelloAccesso, modali
 // ⭐ FASE N, quinto sistema (30/8) — le 4 mutazioni Tasks si aggiungono, stesso trattamento.
 // ⭐ FASE N, sesto sistema (30/8) — le 3 mutazioni Memory si aggiungono, stesso trattamento.
 // ⭐ PO-12 (13/09/2026) — `file_edit` muta un file quanto `scrivi`: un hook che puo' bloccare l'una deve poter bloccare l'altra, altrimenti la modifica mirata sarebbe la porta di servizio della scrittura.
-const AZIONI_MUTANTI_PER_HOOK = ['scrivi', 'file_edit', 'shell', 'document_create', 'generate_image', 'library_rename', 'library_delete', 'library_export', 'library_context_policy_update', 'notes_create', 'notes_update', 'notes_delete', 'tasks_create', 'tasks_complete', 'tasks_update', 'tasks_delete', 'memory_write', 'memory_update', 'memory_delete', 'research_start', 'research_rename', 'research_pause', 'research_resume', 'research_cancel', 'research_delete', 'research_deposit', 'tool_create', 'workflow_plan_propose', 'file_changes_undo', 'remote_phone_pair', 'remote_phone_revoke']
+const AZIONI_MUTANTI_PER_HOOK = ['scrivi', 'file_edit', 'shell', 'document_create', 'generate_image', 'library_rename', 'library_delete', 'library_export', 'library_context_policy_update', 'notes_create', 'notes_update', 'notes_delete', 'tasks_create', 'tasks_complete', 'tasks_update', 'tasks_delete', 'memory_write', 'memory_update', 'memory_delete', 'research_start', 'research_rename', 'research_pause', 'research_resume', 'research_cancel', 'research_delete', 'research_deposit', 'tool_create', 'workflow_plan_propose', 'file_changes_undo', 'remote_phone_pair', 'remote_phone_revoke', 'remote_phone_folder_allow', 'remote_phone_folder_revoke', 'remote_control', 'remote_device_send_file'] // R5.13 (24/10/2026): mandare un file a un dispositivo cambia lo stato del dispositivo
 
 /*
  * ⭐⭐⭐ 29/8 — un asse DIVERSO da `AZIONI_MUTANTI_PER_HOOK` qui sopra, non lo
@@ -11578,7 +11690,10 @@ export async function talosLavora({
      */
     cacheWeb,
     onPaginaLetta,
-    onArtefatto, // (titolo, html) => {id} | Promise<{id}> — usato solo se 'artifact_create' è in strumentiEstesi
+    onArtefatto, // (titolo, html) => {id, voceLibreriaId?} | Promise<…> — usato solo se 'artifact_create' è in strumentiEstesi
+    // (id, { html } | { edits }, { titolo, copiaInLibreria }) => {id, versione, totale, titolo} — usato solo se 'artifact_update' è in strumentiEstesi;
+    // lancia con `code` (NOT_FOUND, NOT_AN_ARTIFACT, EDIT_NOT_FOUND, EDIT_AMBIGUOUS, ARTIFACT_TOO_LARGE). Contratto con la CLI, 24/10/2026.
+    onAggiornaArtefatto,
     // (spec) => {ok, esito} — usato solo se 'document_create' è in strumentiEstesi. `spec` è {format,title,body?,rows?,slides?,report?} così come li ha mandati il modello, invariati. `ok:false` porta `esito` come messaggio onesto (mai un successo inventato); `ok:true` porta `esito` come RIGA da mostrare al modello (chi implementa decide cosa dire — dimensione, verifica, dove è finito).
     onDocumento,
     // (spec) => {ok, esito} — FASE H (29/8), stesso identico contratto di onDocumento appena sopra, usato solo se 'generate_image' è in strumentiEstesi. `spec` è {prompt,shape?} così come li ha mandati il modello. Questo file non chiama MAI OpenRouter direttamente per le immagini (zero dipendenze, come document_create) — chi implementa decide quale modello (nativo/dedicato) usare e dove salva il file.
@@ -12005,6 +12120,9 @@ export async function talosLavora({
      * mobile non la passano: stessa regola di `cacheWeb`/`onPaginaLetta`).
      */
     cartellaPagineWeb = null,
+    /* §4.2, regola K (owner 22/10/2026): la cartella delle copie intere delle richieste vecchie accorciate per il modello. Si legge senza
+       chiedere come le pagine salvate (`eUnaPaginaSalvata`: file vero, un nome solo, nessun collegamento sulla strada). Assente ⇒ niente. */
+    cartellaIncollati = null,
     /*
      * ⭐ F001b (owner 01/10/2026, «Ricerca che continua») — il registro delle ricerche della SESSIONE (`ricerche-in-corso.mjs`):
      * una `cerca` che supera il tempo della risposta resta viva lì e si riprende con `continua`. Lo Stop di questo giro le
@@ -12729,8 +12847,8 @@ export async function talosLavora({
         'provider_exclusions_list',
         // /goal G6: dell'obiettivo, del Piano entra solo la lettura
         'goal_status',
-        // R5.12: dei telefoni, del Piano entra solo l'elenco
-        'remote_phones',
+        // R5.12: dei telefoni, del Piano entrano solo gli elenchi (dei dispositivi e, dal 23/10, delle loro cartelle)
+        'remote_phones', 'remote_phone_folders',
         // K3 (03/10): guardare i propri figli e fermarne uno non tocca il disco (desktop, revisione della proposta)
         // C5: `child_control` sta nel Piano per stop e pausa (non toccano il disco); la ripresa la rifiuta il ramo (riparte un lavoro)
         'list_children', 'child_control',
@@ -14052,8 +14170,9 @@ export async function talosLavora({
                        Claude Code: l'avviso di `naviga` ne dà la chiamata esatta (vedi `eUnaPaginaSalvata` per i controlli). */
                     /* 01/10/2026: un percorso di rete si decide PRIMA di qualunque contatto (vedi `controllaPercorsoDiRete`). */
                     const rifiutoRete = percorso === '' ? null : await controllaPercorsoDiRete('leggi', percorso, c.id)
-                    const paginaSalvata = !rifiutoRete && Boolean(cartellaPagineWeb) && percorso !== ''
-                        && await eUnaPaginaSalvata(cartellaPagineWeb, percorsoComeDiscoNode(cartella, percorso))
+                    const paginaSalvata = !rifiutoRete && percorso !== ''
+                        && ((Boolean(cartellaPagineWeb) && await eUnaPaginaSalvata(cartellaPagineWeb, percorsoComeDiscoNode(cartella, percorso)))
+                            || (Boolean(cartellaIncollati) && await eUnaPaginaSalvata(cartellaIncollati, percorsoComeDiscoNode(cartella, percorso))))
                     const daChiedere = rifiutoRete || percorso === '' || paginaSalvata ? null : motivoDaChiedere({ tipo: 'leggi', percorso, cartella, accessoPieno: livelloAccesso === 'accesso-pieno' })
                     const permessoLettura = daChiedere
                         ? await verificaPermessoConBarriera(
@@ -14884,7 +15003,53 @@ export async function talosLavora({
                             throw new Error('ARTIFACT_RESULT_INVALID: the saver returned no confirmed artifact id. Creation was not confirmed. Do not automatically retry this operation.')
                         }
                         erroreTool = false
-                        esito = `created: "${titolo}" (id: ${risultato.id})`
+                        /* ⭐ 24/10/2026: col riferimento della Libreria (`lib-…`) il modello può aggiornare questo artefatto anche dopo un
+                           riavvio; senza copia (sola lettura, F-015) l'id della memoria non sopravvive e lo si dice. Chi non dà
+                           `voceLibreriaId` (banco, chiamanti di prima) riceve la riga di sempre. */
+                        const salvata = typeof risultato.voceLibreriaId === 'string' && /^lib-[0-9a-f-]{36}$/iu.test(risultato.voceLibreriaId)
+                        esito = salvata
+                            ? `created: "${titolo}" (id: ${risultato.voceLibreriaId}, version 1). To change it later, call artifact_update with this id.`
+                            : (risultato.salvata === false ? `created: "${titolo}" (id: ${risultato.id}, not saved: it cannot be updated later).` : `created: "${titolo}" (id: ${risultato.id})`)
+                    }
+                }
+                else if (nome === 'artifact_update') {
+                    erroreTool = true
+                    const id = String(argomenti.id ?? '').trim()
+                    const haHtml = typeof argomenti.html === 'string'
+                    const haEdits = Array.isArray(argomenti.edits)
+                    const titoloNuovo = typeof argomenti.titolo === 'string' && argomenti.titolo.trim() ? argomenti.titolo.trim().slice(0, 120) : undefined
+                    if (typeof onAggiornaArtefatto !== 'function') {
+                        esito = 'ARTIFACT_UNAVAILABLE: artifact updates are not configured on this harness. Nothing was changed.'
+                    }
+                    else if (!/^lib-[0-9a-f-]{36}$/iu.test(id)) {
+                        esito = `NOT_FOUND: no saved artifact with id "${id.slice(0, 80)}". Nothing was changed. Use artifact_create for a new artifact.`
+                    }
+                    else if (haHtml === haEdits) {
+                        esito = 'INVALID. Give either html or edits, not both. Nothing was changed.'
+                    }
+                    else if (haHtml && !argomenti.html.trim()) {
+                        esito = 'INVALID. Empty html: nothing was changed.'
+                    }
+                    else if (haEdits && (!argomenti.edits.length || argomenti.edits.some((e) => typeof e?.old !== 'string' || !e.old || typeof e?.new !== 'string'))) {
+                        esito = 'INVALID. Each edit needs a non-empty "old" and a "new" string. Nothing was changed.'
+                    }
+                    else {
+                        try {
+                            const r = await onAggiornaArtefatto(id, haHtml ? { html: argomenti.html } : { edits: argomenti.edits.map((e) => ({ old: e.old, new: e.new })) },
+                                { titolo: titoloNuovo, copiaInLibreria: livelloAccesso !== 'lettura' })
+                            if (!r || typeof r !== 'object' || !Number.isInteger(r.versione)) throw Object.assign(new Error('the saver returned no version'), { code: 'ARTIFACT_RESULT_INVALID' })
+                            erroreTool = false
+                            esito = r.salvata === false
+                                ? `shown: "${r.titolo ?? titoloNuovo ?? ''}" (not saved: read-only session; the saved artifact stays at version ${r.totale})`
+                                : `updated: "${r.titolo ?? titoloNuovo ?? ''}" (id: ${id}, now version ${r.versione} of ${r.totale})`
+                        }
+                        catch (e) {
+                            const codice = e?.code
+                            if (codice === 'NOT_FOUND') esito = `NOT_FOUND: no saved artifact with id "${id}". Nothing was changed. Use artifact_create for a new artifact.`
+                            else if (codice === 'NOT_AN_ARTIFACT') esito = `INVALID. "${id}" is a Library file, not an artifact. Nothing was changed.`
+                            else if (codice === 'EDIT_NOT_FOUND' || codice === 'EDIT_AMBIGUOUS' || codice === 'ARTIFACT_TOO_LARGE') esito = `${codice === 'ARTIFACT_TOO_LARGE' ? 'ARTIFACT_TOO_LARGE' : 'INVALID'}. ${e.message}`
+                            else throw e
+                        }
                     }
                 }
                 else if (nome === 'document_create') {

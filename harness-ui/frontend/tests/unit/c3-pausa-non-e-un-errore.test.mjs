@@ -18,7 +18,8 @@ test('C3-PAUSA-SESSIONE — a paused child is «in pausa», amber, in the sessio
   assert.deepEqual([pausa.classe, pausa.tono, pausa.testo], ['in-pausa', 'warning', 'in pausa']);
   assert.match(pausa.aiuto, /menu della delega/u);
   const errore = statoSessione({ conclusa: true, interrotta: false, ultimoEsito: 'errore', motivoChiusura: 'errore' });
-  assert.deepEqual([errore.classe, errore.tono], ['errore', 'danger']);
+  /* owner 23/10/2026: l'errore si dice «da riprendere», ambra anche lui; pausa ed errore restano distinti per classe e parola */
+  assert.deepEqual([errore.classe, errore.tono, errore.testo], ['errore', 'warning', 'da riprendere']);
   assert.equal(statoSessione({ conclusa: true, interrotta: false, ultimoEsito: 'errore', motivoChiusura: 'fermata' }).classe, 'fermata');
 });
 

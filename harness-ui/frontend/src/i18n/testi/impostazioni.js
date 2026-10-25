@@ -325,7 +325,7 @@ export default {
     'sections.telefoni.title': 'Connected devices',
     'sections.telefoni.description': 'The devices that can control TALOS on this computer. Revoking closes the connection at once.',
     'sections.telefoni.scope': 'This computer',
-    'sections.models.title': 'Model laboratory',
+    'sections.models.title': 'Model Lab',
     'sections.models.eyebrow': 'Intelligence, under control',
     'sections.models.description': 'Choose where models run. Provider access, catalogues and runtimes have distinct states.',
     'sections.models.scope': 'Computer and providers',

@@ -12,7 +12,7 @@ import { impostaLingua } from '../../src/components/lingua.js';
 test('TUTTI-ESCLUSI-01: il codice vince sul testo grezzo; la carta porta il percorso delle impostazioni, in italiano e in inglese', () => {
   try {
     for (const [lingua, percorso, chiave] of [['it', /Impostazioni → Laboratorio modelli → Provider → OpenRouter → Configura/u, /chiave è a posto/u],
-      ['en', /Settings → Model laboratory → Provider → OpenRouter → Configure/u, /key is fine/u]]) {
+      ['en', /Settings → Model Lab → Provider → OpenRouter → Configure/u, /key is fine/u]]) {
       impostaLingua(lingua);
       for (const testo of ['', 'The provider did not accept the request.', 'HTTP 404']) {
         const s = spiegaErrore(testo, 'OPENROUTER_ALL_PROVIDERS_EXCLUDED');

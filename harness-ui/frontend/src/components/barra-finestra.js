@@ -13,7 +13,25 @@
  * ⛔ Si CREA qui e non nel template: `index.template.html` è generato dal mockup, e il generatore taglia ciò che sta prima
  *   di `.talos-shell` (vedi il commento in testa alla shell nel template).
  */
+import { t } from './lingua.js';
+
 export const INDIRIZZO_MENU = 'talos-desktop://menu';
+
+/*
+ * 23/10/2026 (il sito, sulla 0.1.36 pubblica): l'etichetta era «Menu di TALOS» scritto qui, quindi italiana anche con
+ *   l'interfaccia in inglese. Ora viene dal dizionario, e `data-t-attr` la fa riscrivere da `applicaLingua` a ogni cambio di
+ *   lingua: la striscia nasce PRIMA del monolite, quando la lingua scelta non è ancora applicata.
+ */
+export const CHIAVE_MENU = 'app.shell.windowMenu';
+
+/** Il pulsante del menu, con etichetta e suggerimento nella lingua di adesso. */
+export function htmlDelPulsanteMenu() {
+  const etichetta = t(CHIAVE_MENU);
+  return '<button type="button" class="talos-button talos-button--ghost talos-icon-button talos-barra-finestra__menu"'
+    + ` data-azione="menu-finestra" aria-label="${etichetta}" title="${etichetta}" aria-haspopup="menu"`
+    + ` data-t-attr="[aria-label]${CHIAVE_MENU};[title]${CHIAVE_MENU}">`
+    + '<svg class="i" aria-hidden="true"><use href="#i-more"/></svg></button>';
+}
 
 /** `rgb()`/`rgba(…, 1)` di getComputedStyle → `#rrggbb`; `null` per un fondo trasparente o velato. */
 export function coloreEsadecimale(colore) {
@@ -53,9 +71,7 @@ export function montaBarraFinestra({ documento = globalThis.document, finestra =
   barra.id = 'talosBarraFinestra';
   barra.className = 'talos-barra-finestra';
   barra.dataset.c = 'BarraFinestra';
-  barra.innerHTML = '<button type="button" class="talos-button talos-button--ghost talos-icon-button talos-barra-finestra__menu"'
-    + ' data-azione="menu-finestra" aria-label="Menu di TALOS" title="Menu di TALOS" aria-haspopup="menu">'
-    + '<svg class="i" aria-hidden="true"><use href="#i-more"/></svg></button>';
+  barra.innerHTML = htmlDelPulsanteMenu();
   guscio.before(barra);
   documento.documentElement.dataset.talosFinestra = 'app';
 
