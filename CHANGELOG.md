@@ -6,6 +6,46 @@ signed APK under [Releases](../../releases).
 
 Numbers in this file are measured on a device, not estimated.
 
+## v0.1.45
+
+Remote control of a PC is ready to use, and the device can send files and images to a PC session.
+
+### Added
+
+- **Remote control of a PC.** Pair a TALOS desktop with a code shown on both screens, then open its sessions in Code:
+  they appear in the session list with a "Where" filter, next to the device's own. Each paired computer has a card with
+  its sessions, its status and the last time it was seen; two computers with the same name are told apart by a short code.
+  Sessions on the PC can be renamed and deleted like local ones. A new session on the PC starts in a folder the PC allows;
+  the first time, the PC asks its owner, and the device waits and says so.
+- **Attach files and images to a PC session.** In Code on a PC session, "+" attaches files (up to 25 MB) and images. Files
+  go into the session's attachments folder on the PC; images go only to the model. Large files travel in pieces, show how
+  far they are, pause when the connection drops and resume on their own; a removed draft stops its upload. A file needs a
+  started conversation, as on the desktop; a folder the PC has not allowed yet raises "Ask the PC".
+- **Code blocks with a sticky header.** Code in chat streams in place like on the desktop, keeps its header in view, and has
+  a menu to copy, share or export the block as a file.
+- **Full licence texts.** Settings shows the complete licence of every native component, Rust crate and Android library,
+  with readable names in both languages.
+
+### Changed
+
+- One reasoning pill for Chat and Code; "Show reasoning" only changes the view.
+- On-device models: a tool call cut by the output limit is never run, tool arguments stay readable across turns, the engine
+  keeps its cache when the start of the conversation has not changed (much faster replies on long chats), and a local model
+  can hand back an HTML page from a fenced block.
+- The update check also reads releases tagged `mobile-v…`.
+- Code runs on the same engine as TALOS desktop 0.1.37.
+
+### Fixed
+
+- Pairing a PC no longer closes the app on release builds (TALOS 0.1.44 crashed here).
+- The first connection to a PC no longer stalls for about 30 seconds.
+- The chat list never colours a row; the strip above a stuck code-block header is covered.
+
+### Known limitations
+
+- **Receiving files from the PC on the device** (files the PC offers, download, open and share) comes in a later version.
+- Sending files needs TALOS desktop 0.1.37 or later; an older desktop turns "+" off and says why.
+
 ## v0.1.44
 
 TALOS now updates itself, and the on-device engine moves to llama.cpp 0.7.0.

@@ -22,6 +22,13 @@ const TalosMobileModelEffortDrawer = defineAsyncComponent(
     () => import('@/components/chat/TalosMobileModelEffortDrawer.vue'),
 )
 import TalosMobileProviderIcon from '@/components/models/TalosMobileProviderIcon.vue'
+/*
+ * ⭐ J3 (24/10/2026, owner): la pillola del ragionamento sta accanto a quella del modello, a riposo: si importa subito, come la
+ * pillola del modello. Il menu è dentro di lei e si disegna solo aperto.
+ */
+import TalosMobileReasoningPill from '@/components/chat/TalosMobileReasoningPill.vue'
+import { statoPillolaRagionamento } from '@/lib/chat/statoPillolaRagionamento'
+import type { FiloRagionamento } from '@/lib/chat/pillolaRagionamento'
 import { Button } from '@/components/ui/button'
 import type {
     TalosMobileModelProfileView,
@@ -94,8 +101,16 @@ const props = withDefaults(defineProps<{
     /** Il modello che il Codice sta aprendo prima di sceglierlo (22/10/2026): lo dice la sua riga del selettore. */
     openingModelProfileId?: string | null
     selectedRoutingProfileId?: string | null
-    selectedEffort: string
+    /** Il livello del ragionamento; `null` = nessuna scelta (la sessione del Codice senza `reasoning`): la pillola dice «Auto». */
+    selectedEffort: string | null
+    /** J3: la mappa del filo (A9) per la riga che dice che cosa parte davvero, quando chi monta il compositore ce l'ha. */
+    reasoningWire?: FiloRagionamento | null
     thinking: boolean
+    /**
+     * J3: «Ragionamento esteso» è un comando a sé (la chat: `thinking` dell'adattatore) e sta anche nel menu della pillola. Falso nel
+     * Codice, dove è lo stesso livello («off» ⇔ spento): lì vive solo nel foglio del modello, per i modelli senza pillola.
+     */
+    thinkingSeparate?: boolean
     agentToolsEnabled?: boolean
     docked?: boolean
     canSend: boolean
@@ -172,6 +187,8 @@ const props = withDefaults(defineProps<{
     selectedModelProfileId: null,
     openingModelProfileId: null,
     selectedRoutingProfileId: null,
+    reasoningWire: null,
+    thinkingSeparate: true,
     loadingModels: false,
     refreshingModels: false,
     showModelLab: true,
@@ -288,9 +305,22 @@ const plusTrigger = ref<ComponentPublicInstance | HTMLElement | null>(null)
  * che e' parola per parola cio' che l'impostazione promette.
  */
 const composerFocused = ref(false)
+/*
+ * ⛔ PILL-TOCCO-01 (J3-ter, Pad vc190 via CDP): il menu del ragionamento, aprendosi, mette il fuoco sulla sua prima voce; il
+ * `@blur` del campo spegneva `composerFocused`, il compositore tornava compatto e la fila si smontava col menu dentro. Il fuoco
+ * che resta DENTRO il compositore (pillola, menu, voci) non lo richiude, e nemmeno il menu aperto: solo un fuoco che esce davvero.
+ */
+const reasoningMenuOpen = ref(false)
+const composerRoot = ref<HTMLElement | null>(null)
+function onComposerFocusOut(e: FocusEvent): void {
+    const verso = e.relatedTarget as Node | null
+    if (verso && composerRoot.value?.contains(verso)) return
+    composerFocused.value = false
+}
 const composerCompact = computed(() => (
     props.immersiveComposer
     && !composerFocused.value
+    && !reasoningMenuOpen.value
     && !props.prompt.trim()
     && (props.attachments?.length ?? 0) === 0
     // A3-OSS-2, owner 01/10: «Riga visibile se c'è da rispondere».
@@ -446,49 +476,35 @@ const rightActionTitle = computed(() => {
 })
 const attachmentReason = computed(() => props.attachmentDisabledReason || t('chat.attachmentUnavailable'))
 const contextReason = computed(() => props.contextDisabledReason || t('chat.contextUnavailable'))
-function effortLabel(level: string): string {
-    const key = `chat.effort${level.charAt(0).toUpperCase()}${level.slice(1)}`
-    return t(key)
+/**
+ * Il nome accessibile della pillola del modello: il modello e basta. ⛔ J3-bis (25/10/2026): la parola del ragionamento che stava qui
+ * (owner 12/09, «resta per chi ascolta lo schermo») ripeteva ciò che ora dice la pillola del ragionamento, col suo nome accessibile.
+ */
+const modelChipLabel = computed(() => `${t('chat.chooseModelProfile')}: ${selectedProfile.value?.display_name ?? t('chat.chooseModel')}`)
+/**
+ * ⭐ J3 (24/10/2026, owner): il ragionamento ha la sua pillola (`TalosMobileReasoningPill`) e il foglio del modello è solo «Modello».
+ * Quando il modello un livello non lo riceve la pillola non c'è: allora il foglio dice perché (la riga A9 `effortNotSent`) e tiene
+ * «Ragionamento esteso», come il desktop tiene «Mostra ragionamento» nel riquadro del modello.
+ */
+const supportsThinking = computed(() => selectedProfile.value?.thinking_toggle ?? selectedProfile.value?.supports_thinking ?? false)
+const reasoningPill = computed(() => statoPillolaRagionamento({
+    profilo: selectedProfile.value, scelto: props.selectedEffort, filo: props.reasoningWire,
+}))
+const reasoningInModelSheet = computed(() => Boolean(selectedProfile.value) && reasoningPill.value.nascosta)
+/**
+ * J3-bis (owner «Come il desktop»): «Ragionamento esteso» non è più nel menu: quanto ragiona il modello lo dicono i livelli, e
+ * `thinking` li segue — acceso con un livello, spento con «Off». Solo dove è un comando a sé (la chat) e il fornitore lo ha.
+ */
+function onReasoningLevel(level: TalosMobileEffortLevel): void {
+    selectEffort(level)
+    const acceso = level !== 'off'
+    if (props.thinkingSeparate && supportsThinking.value && acceso !== props.thinking) emit('selectThinking', acceso)
 }
-
-/**
- * Owner 2026-07-26: on a phone the model pill shows a themed brain instead of
- * the word "reasoning"; from a tablet up it can show the words too.
- *
- * The same shape the Library chip beside it already uses — icon always, words
- * from `md:` (768px, exactly TALOS_TABLET_WIDTH_MEDIA_QUERY, so the breakpoint
- * cannot drift from the app's own idea of a tablet).
- *
- * The accessible name is the part that was already wrong. An `aria-label`
- * REPLACES an element's text, so the reasoning state was never announced even
- * while it was visible; hiding it from the eye as well would make it invisible
- * twice. It goes into the name now, and the name still leads with the model,
- * because the model is what the button is for.
- */
-/**
- * Owner 2026-07-30: the brain would not go out when extended thinking was
- * switched off.
- *
- * The cause was inherited, not introduced: `effort` defaults to 'high' and is
- * rarely set back to 'off', so a condition of "thinking OR effort is on" was
- * true almost always. The old text version hid it — it simply swapped the word
- * "Ragionamento" for "Alto" and looked busy either way.
- *
- * So the ICON means the switch the user flips, and nothing else. The words
- * still report the effort, because that dial is real too — but a light that
- * never goes out is not an indicator, it is decoration.
- */
-const reasoningWordsActive = computed(() => Boolean(
-    selectedProfile.value && (props.thinking || props.selectedEffort !== 'off'),
-))
-const reasoningLabel = computed(() => (
-    props.thinking ? t('chat.thinking') : effortLabel(props.selectedEffort)
-))
-const modelChipLabel = computed(() => {
-    const name = selectedProfile.value?.display_name ?? t('chat.chooseModel')
-    const base = `${t('chat.chooseModelProfile')}: ${name}`
-    return reasoningWordsActive.value ? `${base} · ${reasoningLabel.value}` : base
-})
+function onReasoningChosen(): void {
+    // come Hermes (`reasoning-pill.tsx:74-80`) e il desktop: dopo una scelta si torna a scrivere. Subito, col menu ancora montato
+    // (PILL-TOCCO-01): il fuoco passa da una voce al campo, dentro il compositore, e la fila non si richiude.
+    focusPrompt(true)
+}
 const rightActionDisabled = computed(() => {
     if (rightAction.value === 'send') return !canSubmit.value
     if (rightAction.value === 'mic') return !props.dictationSupported
@@ -792,11 +808,13 @@ watch(() => [props.prompt, props.docked, dictating.value], () => {
 
 <template>
     <section
+        ref="composerRoot"
         data-testid="talos-mobile-composer"
         class="talos-calm-composer"
         :class="{ 'is-compact': composerCompact, 'is-docked': docked }"
         :data-talos-composer-compact="composerCompact ? 'true' : 'false'"
         :aria-label="$t('chat.composer')"
+        @focusout="onComposerFocusOut"
     >
         <div
             v-if="slashMenuOpen"
@@ -905,7 +923,7 @@ watch(() => [props.prompt, props.docked, dictating.value], () => {
                 @input="updatePrompt"
                 @keydown="onPromptKeydown"
                 @focus="composerFocused = true"
-                @blur="composerFocused = false"
+                @blur="onComposerFocusOut"
             />
             <!-- ⛔⛔ 2026-09-13, misurato sul Pad con uiautomator: con
                  `aria-pressed` questo pulsante arrivava nell'albero di
@@ -953,21 +971,30 @@ watch(() => [props.prompt, props.docked, dictating.value], () => {
                 :aria-label="modelChipLabel" :title="modelTitle"
                 aria-haspopup="dialog" :aria-expanded="modelPickerOpen"
                 class="talos-pressable talos-model-chip min-h-touch"
+                :class="{ 'has-reasoning-pill': !reasoningPill.nascosta }"
                 @pointerdown.prevent @click="toggleModelPicker"
             >
                 <TalosMobileProviderIcon v-if="selectedProfile" :provider="selectedProfile.provider" class="size-5 shrink-0 border-0 bg-transparent" />
-                <span>{{ selectedRoute?.name ?? selectedProfile?.display_name ?? $t('chat.chooseModel') }}</span>
-                <!-- Owner 12/09 19:25: la parola del ragionamento accanto al modello
-                     doppiava la chip «Ragiona» accesa. Resta per chi ascolta lo schermo. -->
-                <span v-if="reasoningWordsActive" data-testid="talos-composer-reasoning-label" class="sr-only">{{ reasoningLabel }}</span>
+                <span class="talos-model-chip__nome">{{ selectedRoute?.name ?? selectedProfile?.display_name ?? $t('chat.chooseModel') }}</span>
             </button>
+            <!-- ⭐ J3 (owner 24/10): la pillola del ragionamento, subito dopo il modello; UNA, per Chat e Codice -->
+            <TalosMobileReasoningPill
+                :profile="selectedProfile"
+                :model-name="selectedRoute?.name ?? selectedProfile?.display_name ?? ''"
+                :selected-effort="selectedEffort"
+                :wire="reasoningWire"
+                @select-effort="onReasoningLevel"
+                @chosen="onReasoningChosen"
+                @open-change="reasoningMenuOpen = $event"
+            />
             <!-- ⛔ A3-OSS-2 (Pad, 01/10/2026): fissa in basso a destra copriva «Interrompi risposta». Owner 01/10:
                  «pillola accanto alla pill selettore modello». -->
             <button
                 v-if="toolReviewCount > 0" type="button" data-testid="talos-composer-tool-review"
-                class="talos-pressable talos-model-chip min-h-touch"
+                class="talos-pressable talos-model-chip talos-composer-review min-h-touch"
+                style="max-width: calc(100% - 3 * var(--talos-touch-target) - 2.5rem)"
                 @pointerdown.prevent @click="emit('reviewTools')"
-            >{{ $t('chat.reviewToolActions', { count: toolReviewCount }) }}</button>
+            ><span class="talos-composer-review__testo">{{ $t('chat.reviewToolActions', { count: toolReviewCount }) }}</span></button>
             <!-- Owner 2026-09-13, dal Pad: la pillola del contesto e' sola
                  icona, accanto a quella del modello. Le parole restano nel nome
                  accessibile e in sr-only: chi ascolta lo schermo sente modo e
@@ -1039,9 +1066,9 @@ watch(() => [props.prompt, props.docked, dictating.value], () => {
             :can-enhance="canRequestEnhancement"
             :enhance-reason="enhanceUnavailableReason"
             :thinking="thinking"
-            :supports-thinking="selectedProfile?.thinking_toggle ?? selectedProfile?.supports_thinking ?? false"
+            :supports-thinking="supportsThinking"
             :effort-levels="selectedProfile?.effort_levels ?? []"
-            :selected-effort="selectedEffort"
+            :selected-effort="selectedEffort ?? ''"
             :attachment-disabled-reason="attachmentReason"
             :context-disabled-reason="contextReason"
             :enhancing="enhancingPrompt || sending"
@@ -1070,11 +1097,10 @@ watch(() => [props.prompt, props.docked, dictating.value], () => {
             :selected-model-profile-id="selectedModelProfileId"
             :opening-model-profile-id="openingModelProfileId"
             :selected-routing-profile-id="selectedRoutingProfileId"
-            :selected-effort="selectedEffort"
             :thinking="thinking"
-            :supports-thinking="selectedProfile?.thinking_toggle ?? selectedProfile?.supports_thinking ?? false"
-            :effort-levels="selectedProfile?.effort_levels ?? []"
-            :reasoning-mandatory="selectedProfile?.reasoning_mandatory"
+            :show-thinking="reasoningInModelSheet && supportsThinking"
+            :reasoning-note="reasoningInModelSheet ? $t('chat.effortNotSent') : ''"
+            :show-reasoning-switch="reasoningInModelSheet"
             :loading-models="loadingModels"
             :loading-routes="loadingRoutes"
             :refreshing-models="refreshingModels"
@@ -1086,7 +1112,6 @@ watch(() => [props.prompt, props.docked, dictating.value], () => {
             @close="closeModelPicker"
             @select-model-profile="selectModelProfile"
             @select-model-routing-profile="selectRoutingProfile"
-            @select-effort="selectEffort"
             @select-thinking="emit('selectThinking', $event)"
             @refresh-models="emit('refreshModels')"
             @select-executor-model-profile="emit('selectExecutorModelProfile', $event)"

@@ -154,6 +154,11 @@ Addestrato con [`livekit-wakeword`](https://github.com/livekit/livekit-wakeword)
 (`torch 2.9.1+rocm7.2.1`, gfx1201) — senza WSL, che su questa macchina non
 espone le librerie ROCm.
 
+Versione nelle Note legali (N1-bis, 25/10/2026): `livekit-wakeword` non ha un
+tag per la versione usata, quindi si mostra il commit fissato del testo della
+licenza, `cdb82b8` (`livekit/livekit-wakeword@cdb82b8ebc179b216e1c5bf360dbdc1ccd5288f2`,
+`scripts/licenze-native/fonti.json`).
+
 ```
 20.000 clip positive + 20.000 negative + 4.800 di sfondo (più i test)
 generate  349,7 min      ← 5,8 ore, ed è il 90% del tempo

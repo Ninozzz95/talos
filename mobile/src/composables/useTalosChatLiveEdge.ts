@@ -20,8 +20,10 @@ export interface TalosChatScrollMetrics {
 export interface TalosChatLiveEdge {
     followLive: Ref<boolean>
     showPill: Ref<boolean>
-    touchStart(): void
-    touchEnd(): void
+    /** `dalCompositore`: scrivere o toccare Invia non è un gesto di scorrimento (D-VIS-1, Pad 23/10). */
+    touchStart(dalCompositore?: boolean): void
+    /** `ditaRimaste`: `TouchEvent.touches.length`, le dita ancora giù dopo questo evento. */
+    touchEnd(ditaRimaste?: number): void
     onScroll(metrics: TalosChatScrollMetrics): void
     markAutoScroll(top: number): void
     canAutoScroll(): boolean
@@ -60,8 +62,10 @@ export function createTalosChatLiveEdge(): TalosChatLiveEdge {
     return {
         followLive,
         showPill,
-        touchStart() { touchActive = true },
-        touchEnd() { touchActive = false },
+        touchStart(dalCompositore = false) {
+            if (!dalCompositore) touchActive = true
+        },
+        touchEnd(ditaRimaste = 0) { touchActive = ditaRimaste > 0 },
         onScroll,
         markAutoScroll(top: number) {
             autoScrollTarget = top

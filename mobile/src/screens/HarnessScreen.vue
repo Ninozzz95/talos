@@ -44,23 +44,37 @@
  * il server on-device è spento finché nessuna sessione specifica lo
  * stagia — chi guarda solo questa lista lo trova magari spento, e la riga
  * resta quella di sempre, mai un errore mostrato per questo.
+ *
+ * Mockup remoto approvato dall'owner il 23/10, tavola 3: le sessioni dei PC collegati stanno qui, insieme a quelle del dispositivo,
+ * col filtro «Dove» (Tutte · Qui · un PC; dal Computer si arriva con `?dove=<pcId>`). Il filtro compare solo con un PC collegato;
+ * sul telefono è un pulsante che apre la scelta, dove c'è posto le voci stanno in fila (`@container`). In «Tutte» ogni sessione del
+ * PC porta il suo nome (come t3code, `ArchivedThreadsScreen.tsx:167-178`). Un PC che non risponde lo si dice, come Claude Code
+ * («sessions on other machines may be missing»). Le righe del PC rinominano ed eliminano come le mie, sul ponte (revisione del
+ * blocco 3, owner 24/10/2026 «Sì, uguali alle locali»); il consenso della cartella lo decide il PC.
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useTalosI18n } from '@/i18n'
-import { Check, CircleAlert, CircleX, Clock, Loader2, MessageSquarePlus, X } from '@lucide/vue'
+import { Check, ChevronDown, CircleDashed, Clock, Laptop, Loader2, MessageSquarePlus, RotateCcw, X } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import TalosMobileScreen from '@/components/shell/TalosMobileScreen.vue'
 import TalosMobileNewChatFab from '@/components/shell/TalosMobileNewChatFab.vue'
 import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialog.vue'
 import TalosRowActions, { type TalosRowAction } from '@/components/talos/ui/TalosRowActions.vue'
+import TalosThemedFilter, { type TalosFilterOption } from '@/components/talos/ui/TalosThemedFilter.vue'
+import TalosNuovaSessioneSulPc from '@/components/remoto/TalosNuovaSessioneSulPc.vue'
+import { useComputerRemoti } from '@/lib/remoto/computerRemoti'
+import { MOTIVO_TROPPE_RICHIESTE, consensoRichiesto, fraseDelConsenso } from '@/lib/remoto/consensoDelPc'
+import { fraseErroreRemoto } from '@/lib/remoto/frasiRemoto'
+import { leggiRicordo, nomeConCodice, nomeECodice } from '@/lib/remoto/ricordiDelPc'
+import { doveDelCodice } from '@/lib/remoto/doveDelCodice'
 import { deleteCodiceSession, listCodiceSessions, renameCodiceSession } from '@/lib/harness/codiceSessions'
 import { fetchTalosHarnessSessionsStatus, type TalosHarnessSessionStatus } from '@/lib/harness/harnessUiSessionStatus'
 import type { TalosLocalChatSession } from '@/repositories/chatRepository'
 import { avvisaSePonteStaccato } from '@/lib/harness/avvisoPonteCodice'
 import { talosCodiceInCasa, talosR4Disponibile, talosR4Pronto } from '@/lib/harness/terminalePonte'
 import { ROTTA_RIPIEGO_R4 } from '@/lib/harness/r4/sceltaCodiceR4'
-import { eliminaSessioneR4, fraseRifiutoSessioneR4, leggiSessioniR4, rinominaSessioneR4 } from '@/lib/harness/r4/elencoSessioniR4'
+import { eliminaSessioneR4, fraseRifiutoSessioneR4, leggiSessioniR4, rinominaSessioneR4, type TalosRigaSessioneR4 } from '@/lib/harness/r4/elencoSessioniR4'
 import { annunciaCambioSessioneR4, talosCambiSessioniR4 } from '@/lib/harness/r4/avvisiSessioniR4'
 import { talosClienteR4 } from '@/lib/harness/r4/clienteR4'
 import { talosHarnessUiAvailable } from '@/services/harnessUi'
@@ -76,8 +90,15 @@ const route = useRoute()
 const { t, tTesto, locale } = useTalosI18n()
 const toasts = useTalosMobileToasts()
 
-/** Una riga dell'elenco: una sessione del Codice classico o una di r4 (`elencoSessioniR4.ts`), la pagina usa solo questi tre campi. */
-type TalosRigaElenco = Pick<TalosLocalChatSession, 'id' | 'title' | 'updated_at'>
+/**
+ * Una riga dell'elenco: una sessione del Codice classico o una di r4 (`elencoSessioniR4.ts`). Tavola 3: una sessione di un PC porta
+ * anche il suo `pcId`, il suo stato (letto sul ponte, non dal server del dispositivo) e il nome della cartella.
+ */
+type TalosRigaElenco = Pick<TalosLocalChatSession, 'id' | 'title' | 'updated_at'> & {
+    pcId?: string
+    statoPc?: TalosHarnessSessionStatus
+    progetto?: string
+}
 
 const sessions = ref<TalosRigaElenco[]>([])
 const loading = ref(true)
@@ -148,8 +169,85 @@ async function refresh(): Promise<void> {
 }
 
 function statoServer(session: TalosRigaElenco): TalosHarnessSessionStatus | undefined {
-    return serverStatus.value.get(session.id)
+    return session.pcId ? session.statoPc : serverStatus.value.get(session.id)
 }
+
+/* ── Tavola 3: le sessioni dei PC e il filtro «Dove» ─────────────────────────────────────────────────────────────────────── */
+const remoti = useComputerRemoti()
+const pcs = computed(() => remoti?.elenco.value ?? [])
+const filtroVisibile = computed(() => pcs.value.length > 0)
+type LetturaDelPc = { righe: TalosRigaSessioneR4[] } | { assente: true }
+const sessioniPc = ref<Record<string, LetturaDelPc>>({})
+let ultimaLetturaPc = 0
+
+/** Ogni PC col suo canale e il suo tetto (`riepilogo`, `computerRemoti.ts`): uno spento non ferma gli altri né la lista. */
+async function leggiPc(): Promise<void> {
+    if (!remoti) return
+    const questa = ++ultimaLetturaPc
+    await remoti.aggiorna().catch(() => undefined)
+    await Promise.all(pcs.value.map(async (pc) => {
+        const r = await remoti.riepilogo(pc.pcId)
+        if (questa !== ultimaLetturaPc) return
+        sessioniPc.value = { ...sessioniPc.value, [pc.pcId]: r.inLinea ? { righe: r.righe } : { assente: true } }
+    }))
+}
+
+/**
+ * La scelta vale subito ed è una sola per l'app (`doveDelCodice.ts`, D-MOCK-1): una rotta che porta `?dove=` la imposta, una rotta
+ * senza non la cancella. Un PC dimenticato torna a «Tutte».
+ */
+watch(() => route.query?.dove, (v) => { if (typeof v === 'string' && v) doveDelCodice.value = v }, { immediate: true })
+const dove = computed(() => {
+    const v = String(doveDelCodice.value ?? '')
+    if (v === 'qui') return 'qui'
+    return pcs.value.some((pc) => pc.pcId === v) ? v : 'tutte'
+})
+const sceltaAperta = ref(false)
+function scegliDove(valore: string): void {
+    doveDelCodice.value = valore
+    // nella colonna del tablet la rotta è quella della sessione aperta accanto: lì la scelta resta della colonna
+    if (!props.embedded && route.name === 'harness') void router.replace({ name: 'harness', query: valore === 'tutte' ? {} : { dove: valore } })
+}
+// owner 24/10/2026 «Sì, adesso»: un PC col portachiavi di prova (desktop f1199ace0) si legge «di prova» anche qui
+const diProva = computed(() => new Set(pcs.value.filter((pc) => leggiRicordo(pc.pcId).effimero).map((pc) => pc.pcId)))
+/** D-MOCK-9: il nome del PC col codice breve quando serve, senza «di prova» (per il pulsante e il dialogo della sessione nuova). */
+const nomeSenzaProva = (pcId: string) => {
+    const pc = pcs.value.find((c) => c.pcId === pcId)
+    return pc ? nomeConCodice(pc, pcs.value, t('computer.unnamed')) : t('computer.unnamed')
+}
+const nomeDelPc = (pcId: string) => {
+    const nome = nomeSenzaProva(pcId)
+    return diProva.value.has(pcId) ? `${nome} · ${t('computer.testEntry')}` : nome
+}
+const opzioniDove = computed<TalosFilterOption[]>(() => [
+    { value: 'tutte', label: t('harness.where.all'), testId: 'talos-codice-dove-tutte' },
+    { value: 'qui', label: t('harness.where.here'), testId: 'talos-codice-dove-qui' },
+    ...pcs.value.map((pc) => ({ value: pc.pcId, label: nomeDelPc(pc.pcId), testId: `talos-codice-dove-pc-${pc.pcId}` })),
+])
+const etichettaDove = computed(() => opzioniDove.value.find((o) => o.value === dove.value)?.label ?? t('harness.where.all'))
+
+const righeDeiPc = computed<TalosRigaElenco[]>(() => pcs.value.flatMap((pc) => {
+    const lettura = sessioniPc.value[pc.pcId]
+    if (!lettura || !('righe' in lettura)) return []
+    return lettura.righe.map((r) => ({
+        // D-MOCK-5 (dal Pad, vc176): senza nome la riga era la sola data; il vecchio dettaglio del computer diceva «Sessione senza titolo»
+        id: r.id, title: r.title || t('computer.untitledSession'), updated_at: r.updated_at, pcId: pc.pcId, statoPc: r.stato, ...(r.progetto ? { progetto: r.progetto } : {}),
+    }))
+}))
+const righeMostrate = computed<TalosRigaElenco[]>(() => {
+    if (!filtroVisibile.value || dove.value === 'qui') return sessions.value
+    if (dove.value === 'tutte') return [...sessions.value, ...righeDeiPc.value].sort((a, b) => b.updated_at.localeCompare(a.updated_at))
+    return righeDeiPc.value.filter((r) => r.pcId === dove.value)
+})
+/** I PC che non hanno risposto, fra quelli che il filtro mostra. */
+const pcAssenti = computed(() => pcs.value.filter((pc) => 'assente' in (sessioniPc.value[pc.pcId] ?? {})
+    && (dove.value === 'tutte' || dove.value === pc.pcId)))
+
+const nuovaSulPc = ref(false)
+const etichettaNuova = computed(() => (dove.value !== 'tutte' && dove.value !== 'qui'
+    ? tTesto('harness.newSessionOn', { name: nomeSenzaProva(dove.value) })
+    : t('harness.newSession')))
+const progettoRecenteDelPc = computed(() => righeDeiPc.value.find((r) => r.pcId === dove.value)?.progetto ?? null)
 
 /**
  * ⭐⭐⭐ 2/9 — un badge alla volta, mai due segnali insieme. Owner:
@@ -171,10 +269,12 @@ interface TalosHarnessRowBadge { kind: 'running' | 'interrupted' | 'waiting-appr
 
 function statusBadge(session: TalosRigaElenco, bucket: string): TalosHarnessRowBadge {
     const stato = statoServer(session)
+    // tavola 3: una sessione del PC è una sessione di r4, con le regole di r4
+    const r4 = suR4.value || Boolean(session.pcId)
     // ELENCO-R4-PAG-06 (Pad, 18/10): con r4 l'attesa è di qualunque tipo (approvazione, domanda, piano) e una sessione interrotta da
     // un riavvio resta non conclusa: ordine e parola del desktop (`statoSessione()`, harness-ui `app.js`: attesa, interrotta, in corso)
-    if (stato?.inAttesaApprovazione) return { kind: 'waiting-approval', label: t(suR4.value ? 'harness.statusWaitingForYou' : 'harness.statusWaitingApproval') }
-    if (suR4.value && stato?.interrotta) return { kind: 'interrupted', label: t('harness.statusInterrupted') }
+    if (stato?.inAttesaApprovazione) return { kind: 'waiting-approval', label: t(r4 ? 'harness.statusWaitingForYou' : 'harness.statusWaitingApproval') }
+    if (r4 && stato?.interrotta) return { kind: 'interrupted', label: t('harness.statusInterrupted') }
     if (stato && !stato.conclusa) return { kind: 'running', label: t('harness.statusRunning') }
     if (stato?.interrotta) return { kind: 'interrupted', label: t('harness.statusInterrupted') }
     if (stato?.ultimoEsito === 'errore') return { kind: 'error', label: t('harness.statusError') }
@@ -182,6 +282,7 @@ function statusBadge(session: TalosRigaElenco, bucket: string): TalosHarnessRowB
 }
 
 onMounted(refresh)
+onMounted(() => { void leggiPc() })
 /*
  * ⭐ 12/9 — l'avviso del collegamento vale per la SEZIONE, non per la singola
  * sessione: chi apre la lista è già dentro Codice. Lo stesso latch che vive nel
@@ -212,6 +313,8 @@ onMounted(async () => {
 watch(() => [route.name, route.params.id], () => {
     // 18/10: anche `codice-r4` (sul tablet l'elenco resta montato accanto alla sessione r4: la bozza che diventa sessione vera)
     if (route.name === 'harness' || route.name === 'harness-session' || route.name === 'codice-r4') void refresh()
+    // tavola 3: tornando all'elenco si rileggono anche i PC (una sessione nuova aperta sul PC)
+    if (route.name === 'harness') void leggiPc()
 })
 
 const relativeTimeLabels = computed(() => ({
@@ -230,9 +333,13 @@ function titoloFascia(gruppo: { bucket: string, monthKey: string | null }): stri
     return chatRowBucketTitle(gruppo, locale.value, (bucket) => t(`harness.groups.${bucket}`))
 }
 
-const fasce = computed(() => talosChatDateBuckets(sessions.value, (session) => session.updated_at, new Date()))
+const fasce = computed(() => talosChatDateBuckets(righeMostrate.value, (session) => session.updated_at, new Date()))
 
 function openSession(session: TalosRigaElenco): void {
+    if (session.pcId) {
+        void router.push({ name: 'computer-codice', params: { pcId: session.pcId, id: session.id } })
+        return
+    }
     if (suR4.value) {
         void router.push({ name: 'codice-r4', params: { id: session.id } })
         return
@@ -241,6 +348,11 @@ function openSession(session: TalosRigaElenco): void {
 }
 
 function newSession(): void {
+    // tavola 3: filtrati su un PC, la sessione nuova nasce su quel PC, nella cartella scelta
+    if (dove.value !== 'tutte' && dove.value !== 'qui') {
+        nuovaSulPc.value = true
+        return
+    }
     // Draft state, no row created yet — HarnessSessionScreen.vue creates the
     // real session lazily, on the FIRST message actually sent. Pressing
     // "New" and typing straight into a blank Codice page both end up on
@@ -254,6 +366,7 @@ function newSession(): void {
 }
 
 function isCurrentSession(session: TalosRigaElenco): boolean {
+    if (session.pcId) return route.name === 'computer-codice' && String(route.params.pcId ?? '') === session.pcId && String(route.params.id ?? '') === session.id
     if (suR4.value) return route.name === 'codice-r4' && String(route.params.id ?? '') === session.id
     return route.name === 'harness-session' && String(route.params.id ?? '') === session.id
 }
@@ -271,11 +384,74 @@ function actionErrorText(error: unknown): string {
  * conta il motivo, `fraseRifiutoSessioneR4`), e r4 che non risponde a parole, non col codice del client nativo.
  */
 function dettaglioErrore(error: unknown): string {
+    // il PC vuole il consenso per la cartella della sessione (R5.12); il suo `message` è inglese, la frase è dell'app
+    if ((error as { code?: unknown } | null)?.code === 'CONSENT_REQUIRED') return t('harness.pcConsentRequired')
     const frase = fraseRifiutoSessioneR4(error, locale.value)
     if (frase) return frase
     if (error instanceof Error && error.message === 'TALOS_R4_IRRAGGIUNGIBILE') return t('harness.r4Unreachable')
     return actionErrorText(error)
 }
+/**
+ * ⛔ D-MOCK-11 (dal vivo, 24/10/2026; contratto R5.12, parte 1, punto 3): Rinomina ed Elimina su una riga del PC in una cartella che
+ * il PC non ha ancora consentito a questo dispositivo. Mai solo l'errore: «Chiedi al PC» (`consent.request`), «Conferma sul
+ * computer» durante l'attesa, e su «Consenti» l'azione si rifà da sé. `rifai`: la stessa azione, col nome già scritto.
+ */
+interface ConsensoDelPc {
+    pcId: string
+    cartellaId: string
+    rifai: () => Promise<void>
+    fallito: (error: unknown) => string
+    fase: 'chiedi' | 'attesa' | 'negata' | 'scaduta' | 'errore'
+    code?: string
+    giro?: number
+}
+const consensoPc = ref<ConsensoDelPc | null>(null)
+let giroDelConsenso = 0
+
+/** Vero se il rifiuto è `CONSENT_REQUIRED` con la cartella da chiedere: il blocco del consenso prende il posto dell'errore. */
+function serveIlConsenso(error: unknown, voce: Omit<ConsensoDelPc, 'cartellaId' | 'fase'>): boolean {
+    const da = consensoRichiesto(error as { code?: unknown, params?: unknown } | null)
+    if (!da) return false
+    actionError.value = null
+    consensoPc.value = { ...voce, cartellaId: da.cartellaId, fase: 'chiedi' }
+    return true
+}
+
+async function chiediAlPc(): Promise<void> {
+    const c = consensoPc.value
+    if (!c || c.fase === 'attesa' || !remoti) return
+    // il giro di questa richiesta: «Annulla» (o un'altra richiesta) lo cambia; il `ref` avvolge l'oggetto, quindi niente confronti d'identità
+    const giro = ++giroDelConsenso
+    consensoPc.value = { ...c, fase: 'attesa', code: undefined, giro }
+    const ancoraMio = () => consensoPc.value?.giro === giro
+    const esito = await remoti.chiediConsensoAlPc(c.pcId, c.cartellaId, { fermato: () => !ancoraMio() })
+    if (!ancoraMio()) return // «Annulla» durante l'attesa
+    if (esito.esito === 'annullata') { consensoPc.value = null; return }
+    if (esito.esito !== 'consentita') {
+        consensoPc.value = { ...c, fase: esito.esito, ...(esito.esito === 'errore' ? { code: esito.code } : {}) }
+        return
+    }
+    consensoPc.value = null
+    try {
+        await c.rifai()
+    } catch (error) {
+        if (!serveIlConsenso(error, c)) actionError.value = c.fallito(error)
+    }
+}
+
+const testoDelConsenso = computed(() => {
+    const c = consensoPc.value
+    if (!c) return ''
+    if (c.fase === 'negata') return t('computer.consent.denied')
+    if (c.fase === 'scaduta') return t('computer.consent.expired')
+    if (c.fase === 'errore') {
+        // un `RATE_LIMITED` qui viene dalla richiesta di consenso: al più 3 in attesa sul PC
+        const code = c.code ?? 'OPERATION_FAILED'
+        return t(fraseDelConsenso({ code, reason: MOTIVO_TROPPE_RICHIESTE }) ?? fraseErroreRemoto(code) ?? 'computer.errors.generic')
+    }
+    return t('computer.consent.required')
+})
+
 /** REV-ELENCO-07: l'ultimo annuncio fatto da questa pagina, che si è già riletta da sé. */
 let mioAnnuncio = -1
 function annuncia(cambio: { id: string; nome?: string; eliminata?: boolean }): void {
@@ -318,9 +494,30 @@ function act(session: TalosRigaElenco, action: string): void {
 const renameTarget = ref<TalosRigaElenco | null>(null)
 const renameValue = ref('')
 const renameInput = ref<HTMLInputElement | null>(null)
+/** ⛔ D-MOCK-10 (4177, 24/10/2026): l'errore di un dialogo sta DENTRO il dialogo; prima stava nella lista, dietro il velo sfocato. */
+const renameError = ref<string | null>(null)
+const deleteError = ref<string | null>(null)
+/**
+ * ⛔ D-MOCK-15: sul PC Rinomina/Elimina durano 20-30 s. Il dialogo resta aperto finché il PC risponde e «Annulla» resta acceso:
+ * chiudere cambia il giro, e ciò che il PC risponde dopo non riapre niente (la lista si rilegge, così dice il vero).
+ */
+let giroAzione = 0
+function chiudiRinomina(): void {
+    giroAzione++
+    actionBusy.value = false
+    renameTarget.value = null
+    renameError.value = null
+}
+function chiudiElimina(): void {
+    giroAzione++
+    actionBusy.value = false
+    deleteTarget.value = null
+    deleteError.value = null
+}
 
 async function openRename(session: TalosRigaElenco): Promise<void> {
     actionError.value = null
+    renameError.value = null
     renameTarget.value = session
     renameValue.value = session.title
     await nextTick()
@@ -331,45 +528,96 @@ async function submitRename(): Promise<void> {
     const target = renameTarget.value
     const title = renameValue.value.trim()
     if (!target || !title || actionBusy.value) return
+    const giro = ++giroAzione
+    const mio = () => giro === giroAzione
     actionBusy.value = true
+    renameError.value = null
     try {
+        if (target.pcId && remoti) {
+            await remoti.rinominaSessione(target.pcId, target.id, title)
+            if (mio()) renameTarget.value = null
+            actionError.value = null
+            await leggiPc()
+            return
+        }
         if (suR4.value) {
             await rinominaSessioneR4(talosClienteR4(), target.id, title)
             annuncia({ id: target.id, nome: title })
         } else await renameCodiceSession(target.id, title)
-        renameTarget.value = null
+        if (mio()) renameTarget.value = null
         actionError.value = null
         await refresh()
     } catch (error) {
-        actionError.value = tTesto('harness.renameFailed', { detail: dettaglioErrore(error) })
+        // «Annulla» durante l'attesa: il dialogo non c'è più; la lista si rilegge e dice com'è andata
+        if (!mio()) { void (target.pcId ? leggiPc() : refresh()); return }
+        const pcId = target.pcId
+        if (pcId && remoti && serveIlConsenso(error, {
+            pcId,
+            rifai: async () => { await remoti.rinominaSessione(pcId, target.id, title); await leggiPc() },
+            fallito: (e) => tTesto('harness.renameFailed', { detail: dettaglioErrore(e) }),
+        })) {
+            renameTarget.value = null
+            return
+        }
+        renameError.value = tTesto('harness.renameFailed', { detail: dettaglioErrore(error) })
     } finally {
-        actionBusy.value = false
+        if (mio()) actionBusy.value = false
     }
 }
 
 const deleteTarget = ref<TalosRigaElenco | null>(null)
+/** D-MOCK-14: una riga del PC si elimina SUL PC, e la conferma lo nomina col codice breve; una del dispositivo resta «dal dispositivo». */
+const deleteDescription = computed(() => {
+    const target = deleteTarget.value
+    if (!target) return ''
+    if (!target.pcId) return tTesto('harness.deleteDescription', { title: target.title })
+    const pc = pcs.value.find((c) => c.pcId === target.pcId)
+    const name = nomeECodice({ pcId: target.pcId, nome: pc?.nome ?? null }, t('computer.unnamed'))
+    return tTesto('harness.deleteDescriptionPc', { title: target.title, name })
+})
 
 function openDelete(session: TalosRigaElenco): void {
     actionError.value = null
+    deleteError.value = null
     deleteTarget.value = session
 }
 
 async function confirmDelete(): Promise<void> {
     const target = deleteTarget.value
     if (!target || actionBusy.value) return
+    const giro = ++giroAzione
+    const mio = () => giro === giroAzione
     actionBusy.value = true
+    deleteError.value = null
     try {
+        if (target.pcId && remoti) {
+            await remoti.eliminaSessione(target.pcId, target.id)
+            if (mio()) deleteTarget.value = null
+            actionError.value = null
+            await leggiPc()
+            return
+        }
         if (suR4.value) {
             await eliminaSessioneR4(talosClienteR4(), target.id)
             annuncia({ id: target.id, eliminata: true })
         } else await deleteCodiceSession(target.id)
-        deleteTarget.value = null
+        if (mio()) deleteTarget.value = null
         actionError.value = null
         await refresh()
     } catch (error) {
-        actionError.value = tTesto('harness.deleteFailed', { detail: dettaglioErrore(error) })
+        if (!mio()) { void (target.pcId ? leggiPc() : refresh()); return }
+        const pcId = target.pcId
+        if (pcId && remoti && serveIlConsenso(error, {
+            pcId,
+            rifai: async () => { await remoti.eliminaSessione(pcId, target.id); await leggiPc() },
+            fallito: (e) => tTesto('harness.deleteFailed', { detail: dettaglioErrore(e) }),
+        })) {
+            deleteTarget.value = null
+            return
+        }
+        deleteError.value = tTesto('harness.deleteFailed', { detail: dettaglioErrore(error) })
     } finally {
-        actionBusy.value = false
+        if (mio()) actionBusy.value = false
     }
 }
 </script>
@@ -385,14 +633,74 @@ async function confirmDelete(): Promise<void> {
                 class="talos-pressable flex min-h-touch shrink-0 items-center gap-2 rounded-xl bg-[var(--talos-accent,var(--primary))] px-3 text-sm text-[var(--talos-accent-contrast,var(--primary-foreground))]"
                 @click="newSession"
             >
-                <MessageSquarePlus class="size-4" aria-hidden="true" />
-                {{ t('harness.newSession') }}
+                <MessageSquarePlus class="size-4 shrink-0" aria-hidden="true" />
+                <!-- D-MOCK-9: col nome del PC il testo va al più su due righe -->
+                <span data-testid="talos-harness-new-label" class="line-clamp-2 min-w-0 text-left">{{ etichettaNuova }}</span>
             </button>
 
+            <!-- tavola 3: «Dove». Sul telefono un pulsante che apre la scelta; dove c'è posto, le voci in fila -->
+            <div v-if="filtroVisibile" class="@container/dove px-1">
+                <div class="flex items-center justify-between gap-3">
+                    <button
+                        type="button"
+                        data-testid="talos-codice-dove"
+                        aria-controls="talos-codice-dove-scelta"
+                        :aria-expanded="sceltaAperta ? 'true' : 'false'"
+                        class="talos-pressable flex min-h-touch min-w-0 items-center gap-1.5 rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 text-sm @[34rem]/dove:hidden"
+                        @click="sceltaAperta = !sceltaAperta"
+                    >
+                        <span class="text-[var(--talos-muted)]">{{ t('harness.where.label') }}</span>
+                        <span class="truncate font-medium text-[var(--talos-text)]">{{ etichettaDove }}</span>
+                        <ChevronDown class="size-4 shrink-0 text-[var(--talos-muted)]" aria-hidden="true" />
+                    </button>
+                    <span data-testid="talos-codice-dove-count" class="shrink-0 text-xs text-[var(--talos-muted)] @[34rem]/dove:hidden">
+                        {{ righeMostrate.length }} {{ t('computer.sessionsCount', { count: righeMostrate.length }) }}
+                    </span>
+                </div>
+                <!-- un clic (o Invio) sceglie e chiude; le frecce scelgono e lasciano aperto (`TalosThemedFilter`) -->
+                <TalosThemedFilter
+                    id="talos-codice-dove-scelta"
+                    :model-value="dove"
+                    :options="opzioniDove"
+                    :group-label="t('harness.where.group')"
+                    :group-class="`${sceltaAperta ? 'flex' : 'hidden'} mt-1.5 flex-col gap-1 @[34rem]/dove:mt-0 @[34rem]/dove:flex @[34rem]/dove:flex-row @[34rem]/dove:flex-wrap`"
+                    :option-class="(scelta) => `talos-pressable min-h-touch rounded-[var(--talos-radius-control)] border px-3 text-left text-sm focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--talos-ring)] ${scelta ? 'border-[var(--talos-accent)] bg-[color-mix(in_srgb,var(--talos-accent)_14%,var(--talos-panel))] font-medium text-[var(--talos-text)]' : 'border-[var(--talos-border)] bg-[var(--talos-panel)] text-[var(--talos-muted)]'}`"
+                    @update:model-value="scegliDove"
+                    @click="sceltaAperta = false"
+                />
+                <!-- D-MOCK-3 (dal Pad, vc175): con più PC che non rispondono una riga sola, non una per PC -->
+                <div v-if="pcAssenti.length" data-testid="talos-codice-dove-assenti" role="status" class="mt-1.5 text-xs leading-5 text-[var(--talos-muted)]">
+                    <p v-if="pcAssenti.length === 1">
+                        <span class="font-medium text-[var(--talos-text)]">{{ nomeDelPc(pcAssenti[0]!.pcId) }}</span> {{ t('harness.where.pcUnreachable') }}
+                    </p>
+                    <p v-else>{{ t('harness.where.pcsUnreachable', { count: pcAssenti.length }) }}</p>
+                </div>
+            </div>
+
             <p v-if="actionError" role="alert" class="px-1 text-xs leading-5 text-[var(--talos-danger,#dc5b5b)]">{{ actionError }}</p>
+            <!-- D-MOCK-11: il permesso del PC per la cartella di una sua sessione, chiesto da qui (mai solo l'errore) -->
+            <div
+                v-if="consensoPc"
+                data-testid="talos-harness-consenso"
+                :data-fase="consensoPc.fase"
+                :role="consensoPc.fase === 'attesa' ? 'status' : 'alert'"
+                class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-surface-2)] p-3 text-sm text-[var(--talos-text)]"
+            >
+                <template v-if="consensoPc.fase === 'attesa'">
+                    <p class="flex items-center gap-2 font-medium"><Loader2 class="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> {{ t('computer.consent.waitingTitle') }}</p>
+                    <p class="mt-1 text-xs leading-5 text-[var(--talos-muted)]">{{ t('computer.consent.waitingBody') }}</p>
+                </template>
+                <p v-else>{{ testoDelConsenso }}</p>
+                <div class="mt-2 flex justify-end gap-2">
+                    <Button type="button" variant="ghost" data-testid="talos-harness-consenso-annulla" class="min-h-touch" @click="consensoPc = null">{{ t('common.cancel') }}</Button>
+                    <Button v-if="consensoPc.fase !== 'attesa'" type="button" data-testid="talos-harness-consenso-chiedi" class="min-h-touch" @click="chiediAlPc()">
+                        {{ consensoPc.fase === 'scaduta' || consensoPc.fase === 'errore' ? t('computer.retry') : t('computer.consent.ask') }}
+                    </Button>
+                </div>
+            </div>
             <p v-if="erroreElenco" role="alert" data-testid="talos-harness-list-error" class="px-1 text-xs leading-5 text-[var(--talos-danger,#dc5b5b)]">{{ erroreElenco }}</p>
 
-            <p v-if="!loading && !sessions.length && !erroreElenco" data-testid="talos-harness-empty" class="px-1 text-sm text-[var(--talos-muted)]">
+            <p v-if="!loading && !righeMostrate.length && !erroreElenco" data-testid="talos-harness-empty" class="px-1 text-sm text-[var(--talos-muted)]">
                 {{ t('harness.emptyBody') }}
             </p>
 
@@ -403,7 +711,7 @@ async function confirmDelete(): Promise<void> {
                 <div role="list" class="flex flex-col gap-0.5">
                     <div
                         v-for="session in gruppo.items"
-                        :key="session.id"
+                        :key="`${session.pcId ?? 'qui'}:${session.id}`"
                         role="listitem"
                         class="flex min-w-0 items-center gap-3 rounded-xl px-1 py-1"
                         :class="{ 'bg-[var(--talos-active)]': isCurrentSession(session) }"
@@ -424,11 +732,19 @@ async function confirmDelete(): Promise<void> {
                                 :data-harness-status="statusBadge(session, gruppo.bucket).kind"
                                 class="mt-0.5 flex items-center gap-1.5 text-xs"
                                 :class="{
-                                    'text-[var(--talos-danger,#dc5b5b)]': ['interrupted', 'error'].includes(statusBadge(session, gruppo.bucket).kind),
+                                    // 23/10 sera (Desktop): l'interrotta è quieta come in Chat e sul desktop, non un allarme rosso
+                                    // owner 23/10 sera: «da riprendere» chiede qualcosa alla persona, non è un allarme (tono d'attenzione)
+                                    'font-medium text-[var(--talos-warning)]': statusBadge(session, gruppo.bucket).kind === 'error',
                                     'font-semibold text-[var(--talos-accent)]': statusBadge(session, gruppo.bucket).kind === 'waiting-approval',
-                                    'text-[var(--talos-muted)]': !['interrupted', 'error', 'waiting-approval'].includes(statusBadge(session, gruppo.bucket).kind),
+                                    'text-[var(--talos-muted)]': !['error', 'waiting-approval'].includes(statusBadge(session, gruppo.bucket).kind),
                                 }"
                             >
+                                <!-- tavola 3: in «Tutte» la sessione del PC porta il suo nome -->
+                                <span
+                                    v-if="session.pcId && dove === 'tutte'"
+                                    data-testid="talos-harness-row-pc"
+                                    class="flex min-w-0 max-w-[45%] items-center gap-1 font-normal text-[var(--talos-muted)]"
+                                ><Laptop class="size-3 shrink-0" aria-hidden="true" /><span class="truncate">{{ nomeDelPc(session.pcId) }}</span> ·</span>
                                 <Loader2
                                     v-if="statusBadge(session, gruppo.bucket).kind === 'running'"
                                     class="size-3 shrink-0 animate-spin text-[var(--talos-accent)]"
@@ -439,17 +755,19 @@ async function confirmDelete(): Promise<void> {
                                     class="size-3 shrink-0"
                                     aria-hidden="true"
                                 />
-                                <CircleAlert
+                                <CircleDashed
                                     v-else-if="statusBadge(session, gruppo.bucket).kind === 'interrupted'"
                                     class="size-3 shrink-0"
                                     aria-hidden="true"
                                 />
-                                <CircleX
+                                <RotateCcw
                                     v-else-if="statusBadge(session, gruppo.bucket).kind === 'error'"
                                     class="size-3 shrink-0"
                                     aria-hidden="true"
                                 />
-                                {{ statusBadge(session, gruppo.bucket).label }}
+                                <!-- Pad 24/10, foto 157: l'etichetta non si restringe e non va a capo; si tronca la cartella -->
+                                <span data-testid="talos-harness-row-status-label" class="shrink-0 whitespace-nowrap">{{ statusBadge(session, gruppo.bucket).label }}</span>
+                                <span v-if="session.progetto" data-testid="talos-harness-row-folder" class="min-w-0 truncate font-normal text-[var(--talos-muted)]">· {{ session.progetto }}</span>
                             </span>
                             <span
                                 v-if="statoServer(session)?.ultimoMessaggio"
@@ -459,7 +777,7 @@ async function confirmDelete(): Promise<void> {
                         </button>
                         <div class="flex shrink-0 items-center">
                             <TalosRowActions
-                                :test-id="`talos-harness-actions-${session.id}`"
+                                :test-id="session.pcId ? `talos-harness-actions-${session.pcId}-${session.id}` : `talos-harness-actions-${session.id}`"
                                 :label="tTesto('harness.actionsFor', { title: session.title })"
                                 :items="sessionActions()"
                                 @select="(action) => act(session, action)"
@@ -476,17 +794,25 @@ async function confirmDelete(): Promise<void> {
             class="sticky bottom-0 z-20 mt-auto flex justify-end bg-gradient-to-t from-[var(--talos-background)] via-[var(--talos-background)]/85 to-transparent px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-6 landscape:pb-2 landscape:pt-3"
         >
             <TalosMobileNewChatFab
-                :label="t('harness.newSession')"
+                :label="etichettaNuova"
                 :aria-label="t('harness.newSessionAria')"
                 @click="newSession"
             />
         </div>
 
+        <TalosNuovaSessioneSulPc
+            v-if="nuovaSulPc && dove !== 'tutte' && dove !== 'qui'"
+            :pc-id="dove"
+            :nome="nomeSenzaProva(dove)"
+            :progetto-recente="progettoRecenteDelPc"
+            @chiudi="nuovaSulPc = false"
+        />
+
         <TalosMobileConfirmDialog
             v-if="renameTarget !== null"
             :title="t('harness.renameTitle')"
             :description="t('harness.renameDescription')"
-            @close="renameTarget = null"
+            @close="chiudiRinomina()"
         >
             <input
                 ref="renameInput"
@@ -496,8 +822,13 @@ async function confirmDelete(): Promise<void> {
                 class="min-h-touch w-full rounded-md border border-[var(--talos-border)] bg-[var(--talos-input,var(--talos-background))] px-3 text-sm text-[var(--talos-text)] outline-none focus:border-[var(--talos-accent)]"
                 @keydown.enter.prevent="submitRename"
             >
+            <!-- D-MOCK-15: l'attesa del PC si dice; D-MOCK-10: l'errore sta qui, non dietro il velo -->
+            <p v-if="actionBusy && renameTarget.pcId" role="status" data-testid="talos-harness-dialog-pc-working" class="flex items-center gap-2 text-xs text-[var(--talos-muted)]">
+                <Loader2 class="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> {{ t('harness.pcWorking') }}
+            </p>
+            <p v-if="renameError" role="alert" data-testid="talos-harness-dialog-error" class="text-xs leading-5 text-[var(--talos-danger,#dc5b5b)]">{{ renameError }}</p>
             <template #footer>
-                <Button type="button" variant="ghost" @click="renameTarget = null"><X class="size-4" aria-hidden="true" /> {{ t('common.cancel') }}</Button>
+                <Button type="button" variant="ghost" @click="chiudiRinomina()"><X class="size-4" aria-hidden="true" /> {{ t('common.cancel') }}</Button>
                 <Button type="button" :disabled="!renameValue.trim() || actionBusy" @click="submitRename">
                     <Check class="size-4" aria-hidden="true" /> {{ t('common.save') }}
                 </Button>
@@ -507,11 +838,16 @@ async function confirmDelete(): Promise<void> {
         <TalosMobileConfirmDialog
             v-if="deleteTarget !== null"
             :title="t('harness.deleteTitle')"
-            :description="tTesto('harness.deleteDescription', { title: deleteTarget.title })"
-            @close="actionBusy ? undefined : deleteTarget = null"
+            :description="deleteDescription"
+            @close="actionBusy && !deleteTarget.pcId ? undefined : chiudiElimina()"
         >
+            <p v-if="actionBusy && deleteTarget.pcId" role="status" data-testid="talos-harness-dialog-pc-working" class="flex items-center gap-2 text-xs text-[var(--talos-muted)]">
+                <Loader2 class="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> {{ t('harness.pcWorking') }}
+            </p>
+            <p v-if="deleteError" role="alert" data-testid="talos-harness-dialog-error" class="text-xs leading-5 text-[var(--talos-danger,#dc5b5b)]">{{ deleteError }}</p>
             <template #footer>
-                <Button type="button" variant="ghost" :disabled="actionBusy" @click="deleteTarget = null"><X class="size-4" aria-hidden="true" /> {{ t('common.cancel') }}</Button>
+                <!-- D-MOCK-15: sul PC «Annulla» resta acceso durante l'attesa; sul dispositivo l'azione è breve e si aspetta -->
+                <Button type="button" variant="ghost" :disabled="actionBusy && !deleteTarget.pcId" @click="chiudiElimina()"><X class="size-4" aria-hidden="true" /> {{ t('common.cancel') }}</Button>
                 <Button type="button" variant="destructive" data-testid="talos-harness-delete-confirm" :disabled="actionBusy" @click="confirmDelete">
                     {{ t('common.delete') }}
                 </Button>

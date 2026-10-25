@@ -237,6 +237,8 @@ const openingLiveText = computed(() => {
 
 function groupLabel(provider: string): string {
     if (provider === 'local') return t('chat.localModelLine')
+    // anomalia 3 di Marco (24/10/2026): i modelli del PC, «Sul computer» accanto a «Sul dispositivo», non l'id grezzo
+    if (provider === 'computer') return t('chat.computerModelLine')
     const conosciuto = talosMobileProviderById(provider)
     return conosciuto.id === provider ? conosciuto.label : provider
 }

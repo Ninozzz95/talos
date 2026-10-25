@@ -51,20 +51,24 @@ export function righeElencoSessioniR4(voci: unknown[]): TalosRigaSessioneR4[] {
 export class RifiutoSessioneR4 extends Error {
     readonly code: string
     readonly reason: string
-    constructor(message: string, code: string, reason: string) {
+    /** D-MOCK-11: i valori del rifiuto (il PC: `CONSENT_REQUIRED` porta `{cartellaId, nome}`, per «Chiedi al PC»). */
+    readonly params: Record<string, unknown> | undefined
+    constructor(message: string, code: string, reason: string, params?: Record<string, unknown>) {
         super(message)
         this.name = 'RifiutoSessioneR4'
         this.code = code
         this.reason = reason
+        this.params = params
     }
 }
 
 function rifiuto(stato: number, corpo: string): Error {
     try {
-        const errore = (JSON.parse(corpo) as { error?: { code?: unknown; message?: unknown; reason?: unknown } }).error
+        const errore = (JSON.parse(corpo) as { error?: { code?: unknown; message?: unknown; reason?: unknown; params?: unknown } }).error
         const code = typeof errore?.code === 'string' ? errore.code : ''
         const testo = typeof errore?.message === 'string' && errore.message ? errore.message : code
-        if (testo) return new RifiutoSessioneR4(testo, code, typeof errore?.reason === 'string' ? errore.reason : '')
+        const params = errore?.params && typeof errore.params === 'object' && !Array.isArray(errore.params) ? errore.params as Record<string, unknown> : undefined
+        if (testo) return new RifiutoSessioneR4(testo, code, typeof errore?.reason === 'string' ? errore.reason : '', params)
     } catch { /* corpo non JSON: resta lo stato */ }
     return new Error(`HTTP ${stato}`)
 }

@@ -31,6 +31,8 @@ export interface AccoppiamentoRiuscito {
     programma: string | null
     /** La chiave pubblica VAPID del PC, per la sveglia (R-M5). */
     vapid: string | null
+    /** Desktop f1199ace0 (24/10/2026): `pc.effimero: true` solo col portachiavi di prova; assente negli altri casi. */
+    effimero: boolean
 }
 
 function errore(code: string): ErroreRemoto {
@@ -101,9 +103,11 @@ export function avviaAccoppiamento(
                         if (m.codice !== atteso) { void lascia(true).then(() => fine?.(errore('CODE_MISMATCH'))); return }
                         onCodice?.({ codice: atteso, pc: (m.pc ?? { id: qr.pcId }) as ComputerDelQr })
                     } else if (m.t === 'pair.ok') {
-                        const pc = (m.pc ?? {}) as { nome?: unknown, programma?: unknown, vapid?: unknown }
+                        const pc = (m.pc ?? {}) as { nome?: unknown, programma?: unknown, vapid?: unknown, effimero?: unknown }
                         const testo = (v: unknown) => (typeof v === 'string' && v ? v : null)
-                        const riuscito = { pcId: qr.pcId, nome: testo(pc.nome), programma: testo(pc.programma), vapid: testo(pc.vapid) }
+                        const riuscito = {
+                            pcId: qr.pcId, nome: testo(pc.nome), programma: testo(pc.programma), vapid: testo(pc.vapid), effimero: pc.effimero === true,
+                        }
                         chiuso = true
                         plugin.concludiAccoppiamento({ canale, nome: riuscito.nome, vapid: riuscito.vapid })
                             .then(() => fine?.(null, riuscito), () => fine?.(errore('OPERATION_FAILED')))

@@ -463,6 +463,9 @@
    resta leggibile e si accorcia sul telefono (per intero nel nome accessibile e in cima al foglio). */
 /* Pad 17/10: a 24ch si troncava anche sul Pad orizzontale, con lo spazio libero accanto; la riga degli attrezzi va a capo da sé. */
 .talos-codice-r4-permesso__testo { display: inline-block; max-width: 40ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* J3 (owner 24/10/2026, al più due righe): sulla seconda riga del compositore il permesso lascia sempre il posto alla pastiglia del
+   piano (~58 px) e a «Espandi» (48 px), e il suo nome breve si accorcia coi puntini; il nome intero è nel suggerimento. */
+.talos-composer-tools .talos-codice-r4-permesso { min-width: 0; max-width: calc(100% - 2 * var(--talos-touch-target) - 2rem); }
 .talos-codice-r4-permesso[data-tono="warning"] .talos-codice-r4-permesso__icona { color: var(--talos-warning); }
 .talos-codice-r4-permesso[data-tono="danger"] .talos-codice-r4-permesso__icona { color: var(--talos-danger); }
 .talos-codice-r4-permesso[data-modo="piano"] .talos-codice-r4-permesso__icona { color: var(--talos-accent); }

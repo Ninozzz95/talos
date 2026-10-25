@@ -200,6 +200,33 @@ describe('la sezione «Computer»', () => {
         await expect(creaComputerRemoti(g.plugin).sessioni('pc-uno')).resolves.toEqual({ ok: false, code: 'NOT_PAIRED' })
     })
 
+    /* Revisione del blocco 3 (S3), owner 24/10 «Sì, uguali alle locali»: rinomina ed elimina una sessione del PC dalla lista del Codice. */
+    it('RCM-13 rinomina ed elimina sul ponte (session.rename, session.delete); il canale si chiude; un rifiuto del PC risale col suo codice', async () => {
+        const f = pluginFinto()
+        const richieste: Array<{ op: string, args: unknown }> = []
+        f.plugin.invia = vi.fn(async ({ canale, json }) => {
+            const m = JSON.parse(json)
+            f.inviati.push({ canale, m })
+            if (m.t !== 'req') return
+            richieste.push({ op: m.op, args: m.args })
+            const risposta = m.args?.sessionId === 'negata'
+                ? { v: 1, t: 'res', n: m.n, ok: false, code: 'CONSENT_REQUIRED', message: 'The computer must allow this device to write in this folder.',
+                    reason: 'consent-required', params: { cartellaId: 'c-1', nome: 'talos' } }
+                : { v: 1, t: 'res', n: m.n, ok: true, data: {} }
+            queueMicrotask(() => f.emetti('remoto-messaggio', { canale, json: JSON.stringify(risposta) }))
+        })
+        const c = creaComputerRemoti(f.plugin)
+        await c.rinominaSessione('pc-uno', 's1', 'Sito nuovo')
+        await c.eliminaSessione('pc-uno', 's1')
+        expect(richieste).toEqual([
+            { op: 'session.rename', args: { sessionId: 's1', corpo: { nome: 'Sito nuovo' } } },
+            { op: 'session.delete', args: { sessionId: 's1', corpo: {} } },
+        ])
+        expect((f.plugin.chiudi as ReturnType<typeof vi.fn>).mock.calls.filter(([a]) => a.canale === 'c2')).toHaveLength(2)
+        // D-MOCK-11: il rifiuto porta la cartella da chiedere fino alla lista («Chiedi al PC»)
+        await expect(c.eliminaSessione('pc-uno', 'negata')).rejects.toMatchObject({ code: 'CONSENT_REQUIRED', params: { cartellaId: 'c-1', nome: 'talos' } })
+    })
+
     it('RCM-11 R-M4 Q2: le cartelle ammesse del PC (projects.list), solo id e nome validi; il canale si chiude; un guasto torna col codice', async () => {
         const f = pluginFinto()
         f.plugin.invia = vi.fn(async ({ canale, json }) => {
@@ -212,13 +239,74 @@ describe('la sezione «Computer»', () => {
             }
         })
         const esito = await creaComputerRemoti(f.plugin).cartelle('pc-uno')
-        expect(esito).toEqual({ ok: true, cartelle: [{ id: 'r4-remoto', nome: 'r4 remoto' }] })
+        // D-MOCK-12: una forma sola; un PC vecchio dà l'allowlist, che vale come consentita (contratto, parte 1, punto 1)
+        expect(esito).toEqual({ ok: true, cartelle: [{ id: 'r4-remoto', nome: 'r4 remoto', dettaglio: null, usataAlle: null, consentita: true }] })
         expect(f.inviati.some((x) => x.m.op === 'projects.list')).toBe(true)
         expect(f.plugin.chiudi).toHaveBeenCalledWith({ canale: 'c2' })
 
         const g = pluginFinto()
         g.plugin.collega = vi.fn(async () => { throw Object.assign(new Error('x'), { code: 'NOT_PAIRED' }) })
         await expect(creaComputerRemoti(g.plugin).cartelle('pc-uno')).resolves.toEqual({ ok: false, code: 'NOT_PAIRED' })
+    })
+
+    /** Un PC finto che risponde a `op` con `data` (o col rifiuto `{code, params}`); le altre richieste con `{}`. */
+    function pcCheRisponde(risposte: Record<string, (args: Record<string, unknown>) => { data?: unknown, code?: string, params?: unknown }>) {
+        const f = pluginFinto()
+        f.plugin.invia = vi.fn(async ({ canale, json }) => {
+            const m = JSON.parse(json)
+            f.inviati.push({ canale, m })
+            if (m.t !== 'req') return
+            const r = risposte[m.op]?.(m.args) ?? { data: {} }
+            const res = r.code ? { v: 1, t: 'res', n: m.n, ok: false, code: r.code, message: r.code, ...(r.params ? { params: r.params } : {}) }
+                : { v: 1, t: 'res', n: m.n, ok: true, data: r.data }
+            queueMicrotask(() => f.emetti('remoto-messaggio', { canale, json: JSON.stringify(res) }))
+        })
+        return f
+    }
+
+    it('CART-R512-01 D-MOCK-12: un PC r5-12 manda `cartellaId`, `consentita`, `usataAlle`, `dettaglio`: il dispositivo li vede tutti', async () => {
+        const f = pcCheRisponde({ 'projects.list': () => ({ data: { items: [
+            { cartellaId: 'Ab3_x-9QkLmN0pQrStUvWxYz12345678', nome: 'talos', dettaglio: 'progetti', usataAlle: '2026-10-24T09:00:00.000Z', consentita: true },
+            { cartellaId: 'Zz9_y-8PjKlM1oPqRsTuVwXy87654321', nome: 'talos', dettaglio: 'vecchi', usataAlle: '2026-10-20T09:00:00.000Z', consentita: false },
+            { cartellaId: 'Qq1_w-7OiJkL2nOpQrStUvWx11223344', nome: 'note', usataAlle: '2026-10-19T09:00:00.000Z', consentita: false },
+        ] } }) })
+        await expect(creaComputerRemoti(f.plugin).cartelle('pc-uno')).resolves.toEqual({ ok: true, cartelle: [
+            { id: 'Ab3_x-9QkLmN0pQrStUvWxYz12345678', nome: 'talos', dettaglio: 'progetti', usataAlle: '2026-10-24T09:00:00.000Z', consentita: true },
+            { id: 'Zz9_y-8PjKlM1oPqRsTuVwXy87654321', nome: 'talos', dettaglio: 'vecchi', usataAlle: '2026-10-20T09:00:00.000Z', consentita: false },
+            { id: 'Qq1_w-7OiJkL2nOpQrStUvWx11223344', nome: 'note', dettaglio: null, usataAlle: '2026-10-19T09:00:00.000Z', consentita: false },
+        ] })
+    })
+
+    it('CART-R512-02 un id fuori dalla regola del PC non passa, né come `cartellaId` né come `id`; `consentita` non vera resta falsa', async () => {
+        const f = pcCheRisponde({ 'projects.list': () => ({ data: { items: [
+            { cartellaId: '../su', nome: 'x', consentita: true },
+            { cartellaId: 'ok-1', nome: 'buona', consentita: 'sì', dettaglio: 7, usataAlle: 12 },
+            { id: '..', nome: 'punti' },
+            { cartellaId: 'ok-2', nome: '   ' },
+        ] } }) })
+        await expect(creaComputerRemoti(f.plugin).cartelle('pc-uno')).resolves.toEqual({ ok: true, cartelle: [
+            { id: 'ok-1', nome: 'buona', dettaglio: null, usataAlle: null, consentita: false },
+        ] })
+    })
+
+    it('CONS-DISP-05 «Chiedi al PC» da una riga del PC: `consent.request`, l\'attesa, poi l\'esito; il canale si chiude sempre', async () => {
+        let attese = 0
+        const f = pcCheRisponde({
+            'consent.request': (a) => ({ data: { stato: 'attesa-consenso', richiestaId: `rq-${String(a.cartellaId)}-0001`, scadeAlle: '2026-10-24T10:02:00.000Z', attesaMs: 120_000 } }),
+            'consent.wait': () => ({ data: ++attese < 2 ? { stato: 'attesa' } : { esito: 'consentita' } }),
+        })
+        const viste: unknown[] = []
+        const esito = await creaComputerRemoti(f.plugin, { ora: () => 1_000 }).chiediConsensoAlPc('pc-uno', 'cart-1', { inAttesa: (a) => viste.push(a) })
+        expect(esito).toEqual({ esito: 'consentita', sessionId: null })
+        expect(viste).toEqual([{ richiestaId: 'rq-cart-1-0001', scadeAlle: 121_000 }])
+        expect(f.inviati.filter((x) => x.m.t === 'req').map((x) => [x.m.op, x.m.args])).toEqual([
+            ['consent.request', { cartellaId: 'cart-1' }], ['consent.wait', { richiestaId: 'rq-cart-1-0001' }], ['consent.wait', { richiestaId: 'rq-cart-1-0001' }],
+        ])
+        expect(f.plugin.chiudi).toHaveBeenCalled()
+
+        const g = pcCheRisponde({ 'consent.request': () => ({ code: 'RATE_LIMITED' }) })
+        await expect(creaComputerRemoti(g.plugin).chiediConsensoAlPc('pc-uno', 'cart-1')).resolves.toEqual({ esito: 'errore', code: 'RATE_LIMITED' })
+        expect(g.plugin.chiudi).toHaveBeenCalled()
     })
 
     it('RCM-06 dimentica: plugin, poi l\'elenco si rilegge', async () => {

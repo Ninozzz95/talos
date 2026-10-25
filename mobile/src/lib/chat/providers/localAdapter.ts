@@ -169,6 +169,27 @@ export interface TalosLocalChatMessage {
 }
 
 /**
+ * ⛔⛔ D-LOC-2 (owner 2026-10-23, Spark-X2.5-4B): gli argomenti che tornano al TEMPLATE sono sempre un oggetto JSON.
+ *
+ * llama.cpp 0.7.0, per i template con `supports_object_arguments`, rilegge ogni `arguments` della storia
+ * (`common/chat.cpp:1026-1043`, `func_args_not_string`) e su un JSON rotto LANCIA: niente prompt, e la persona vede
+ * `TALOS_LLAMA_NO_CHAT_TEMPLATE` proprio al giro che doveva correggere la chiamata (llama.cpp #22072, ancora aperto in
+ * f849095). Riprodotto sul Pad con LFM2.5, Gemma 4 E2B e Granite 4.2.
+ *
+ * Come fanno già `anthropicClient.ts:122-128`, `geminiAdapter.ts:47-53`, `ollamaAdapter.ts:41-47`, il Desktop (r4
+ * 581f1575c) e Pi (`json-parse.ts:106-127`): ciò che non è un oggetto diventa `{}`. Il risultato dell'attrezzo dice già al
+ * modello che cosa non andava; un oggetto valido passa invariato, byte per byte.
+ */
+function argomentiPerIlTemplate(argomenti: string): string {
+    try {
+        const letto: unknown = JSON.parse(argomenti)
+        return typeof letto === 'object' && letto !== null && !Array.isArray(letto) ? argomenti : '{}'
+    } catch {
+        return '{}'
+    }
+}
+
+/**
  * Turns the conversation into llama.cpp's canonical message contract.
  *
  * This used to delete every `tool` turn and every assistant `toolCalls` value
@@ -205,7 +226,7 @@ export function conversationOf(input: TalosMobileCompletionInput): TalosLocalCha
             ? turn.toolCalls.map((call) => ({
                 id: call.id,
                 type: 'function' as const,
-                function: { name: call.name, arguments: call.arguments },
+                function: { name: call.name, arguments: argomentiPerIlTemplate(call.arguments) },
             }))
             : undefined
         /*
@@ -2313,7 +2334,12 @@ async function runBody(
     return {
         text: talosSenzaProtocolloDeiTool(finale.text),
         model: input.model.id,
-        finishReason: 'stop',
+        /*
+         * ⛔⛔ D-LOC-1 (owner 2026-10-23, Spark-X2.5-4B): PERCHÉ si è fermato, non un `'stop'` scritto a mano. Al tetto
+         * (`producedTokens 1024` nel registro del Pad) l'HTML di `artifact_create` era a metà: il ciclo deve saperlo per non
+         * eseguire una chiamata tagliata, e la persona per leggere «Si è fermata qui», come coi fornitori di rete.
+         */
+        finishReason: generation.tokens >= MAX_TOKENS ? 'length' : 'stop',
         // Nello stesso campo che usano i provider di rete, quindi nello stesso
         // cassetto: il ragionamento di un modello locale non è una cosa diversa
         // dal ragionamento di Claude, e non merita una seconda superficie.

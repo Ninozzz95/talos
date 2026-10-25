@@ -141,7 +141,12 @@ export function talosMobileProviderLabel(
     providerId: TalosMobileProviderId | string | null | undefined,
     t: (chiave: string) => string,
 ): string {
-    return providerId === 'local' ? t('models.localEngineLabel') : talosMobileProviderById(providerId).label
+    if (providerId === 'local') return t('models.localEngineLabel')
+    // ⛔ anomalia 3 di Marco (24/10/2026): i modelli locali del PC (`modelliDelPc.ts`) stanno sotto `computer`, un GRUPPO e non un
+    // fornitore da configurare (Desktop, 24/10): resta fuori da TALOS_MOBILE_PROVIDERS, e il nome segue la lingua dell'app
+    if (providerId === 'computer') return t('chat.computerModelLine')
+    const conosciuto = talosMobileProviderById(providerId)
+    return conosciuto.id === 'unknown' ? t('models.unknownProvider') : conosciuto.label
 }
 
 export function talosMobileModelProfileIsCallable(

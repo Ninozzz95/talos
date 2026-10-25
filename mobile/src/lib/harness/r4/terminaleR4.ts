@@ -93,6 +93,18 @@ export function frasiAvvioFallitoR4(errore: Extract<ControlloTerminaleR4, { tipo
     return testoTerminaleR4(`app.terminal.startFailed.${chiave}`, lingua, { cartella: errore.cartella })
 }
 
+/**
+ * J3 (24/10/2026; il Desktop ha dato l'OK): la frase di `useTerminaleR4().errore`, con le parole del desktop dove le ha
+ * (`app.terminal.tabNotOpened`/`closeFailed`, `processi.terminal.tooManyTabs`, come i suoi avvisi in `legacy/app.js:16547-16597`) e la
+ * nostra per il ponte che non si apre (`mobile.nonCollegato`, che manda a «Ricollega»). Ogni altro codice di r4 è un «+» rifiutato.
+ */
+export function fraseErroreTerminaleR4(codice: string, lingua: string): string {
+    if (codice === 'troppe') return testoTerminaleR4('processi.terminal.tooManyTabs', lingua, { n: SCHEDE_MASSIME_R4 })
+    if (codice === 'TERMINAL_CLOSE_FAILED') return testoTerminaleR4('app.terminal.closeFailed', lingua)
+    if (codice === 'TALOS_R4_IRRAGGIUNGIBILE') return testoTerminaleR4('mobile.nonCollegato', lingua)
+    return testoTerminaleR4('app.terminal.tabNotOpened', lingua)
+}
+
 export interface TastoTerminaleR4 {
     id: string
     etichetta: string

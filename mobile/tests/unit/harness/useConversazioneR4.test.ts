@@ -226,6 +226,15 @@ describe('la conversazione del Codice su r4 (K3-B2)', () => {
         expect(await rotto.hook()).toBeNull()
     })
 
+    // ⛔ D-REM-10 (dal Pad, 23/10/2026, foto `pad-10`): su una bozza (nessuna sessione ancora) l'albero diceva «Caricamento non
+    // riuscito» senza che fosse partita una sola richiesta. Una sessione che non esiste non ha deleghe: elenco vuoto, nessuna richiesta.
+    it('USR4-11b su una bozza l\'albero è vuoto, non un guasto, e al PC non parte niente', async () => {
+        const c = clienteFinto(() => ({ stato: 500, corpo: 'no' }))
+        const bozza = monta({ cliente: c.ponte, cartella: '/w', attesaRiapertura: () => 0 })
+        expect(await bozza.figli()).toEqual([])
+        expect(c.richieste.filter((r) => r.percorso.endsWith('/children'))).toEqual([])
+    })
+
     it('USR4-12 Fida manda trust per quell\'hook; un rifiuto va in errore', async () => {
         const c = clienteFinto((r) => (r.percorso.includes('/hooks/rotto/')
             ? { stato: 403, corpo: '{"ok":false,"error":{"code":"HOOK_TRUST_FORBIDDEN","message":"Not allowed"}}' }

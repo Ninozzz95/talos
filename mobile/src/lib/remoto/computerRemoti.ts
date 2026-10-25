@@ -9,9 +9,11 @@ import { creaClienteRemoto } from './clienteRemoto'
 import { trasportoNativo } from './trasportoNativo'
 import { pluginRemoto } from './pluginRemoto'
 import { apriPonteRemoto, collegaConRitentativo } from './sessioneRemota'
-import { leggiSessioniR4, type TalosRigaSessioneR4 } from '@/lib/harness/r4/elencoSessioniR4'
+import { eliminaSessioneR4, leggiSessioniR4, rinominaSessioneR4, type TalosRigaSessioneR4 } from '@/lib/harness/r4/elencoSessioniR4'
 import { idValidoDelPc } from './ponteRemotoR4'
+import { attendiConsenso, chiediConsenso, type AttesaConsenso, type EsitoConsenso } from './consensoDelPc'
 import { requestTalosNotifications } from '@/services/devicePermissions'
+import { conteggiDelleSessioni, dimenticaRicordo, ricordaEffimero, ricordaProgramma, ricordaSessioni, ricordaVisto, type ConteggiSessioni } from './ricordiDelPc'
 
 export interface ComputerRicordato {
     pcId: string
@@ -21,8 +23,36 @@ export interface ComputerRicordato {
     accoppiatoAlle: number
 }
 
-/** Una cartella che il PC apre al telefono (`projects.list`): l'id da mandare a `session.start`, il nome da mostrare. */
-export interface CartellaDelPc { id: string, nome: string }
+/**
+ * Una cartella che il PC apre al dispositivo (`projects.list`): l'id da mandare a `session.start`, il nome da mostrare.
+ * ⛔ D-MOCK-12 (dal vivo, 24/10/2026): una forma sola per i due PC.
+ *   · Un PC r5-12 (contratto R5.12, parte 1, punto 1) manda `{ cartellaId, nome, dettaglio?, usataAlle, consentita }`: le recenti
+ *     del PC, `consentita` per QUESTO dispositivo, `dettaglio` (la cartella madre) solo quando due righe hanno lo stesso nome.
+ *   · Un PC più vecchio (R-M4, r4 `custom-task.mjs:84`) manda `{ id, nome }` della sua allowlist, che vale come consentita (il contratto
+ *     conta l'allowlist esplicita fra le consentite): `dettaglio` e `usataAlle` null.
+ */
+export interface CartellaDelPc {
+    id: string
+    nome: string
+    /** La cartella madre, solo per distinguere due righe con lo stesso nome; mai un percorso intero. */
+    dettaglio: string | null
+    /** ISO, l'ultima volta che il PC ci ha lavorato. */
+    usataAlle: string | null
+    /** Falsa: la prima sessione lì chiede il permesso al PC («Conferma sul computer»). */
+    consentita: boolean
+}
+
+const testoOppureNull = (v: unknown) => (typeof v === 'string' && v.trim() !== '' ? v : null)
+/** Una riga di `projects.list` nella forma unica, o null se l'id non segue la regola del PC o manca il nome. */
+function cartellaDaRiga(v: Record<string, unknown> | null | undefined): CartellaDelPc | null {
+    if (!v || typeof v.nome !== 'string' || v.nome.trim() === '') return null
+    if ('cartellaId' in v) {
+        if (!idValidoDelPc(v.cartellaId)) return null
+        return { id: v.cartellaId, nome: v.nome, dettaglio: testoOppureNull(v.dettaglio), usataAlle: testoOppureNull(v.usataAlle), consentita: v.consentita === true }
+    }
+    if (!idValidoDelPc(v.id)) return null
+    return { id: v.id, nome: v.nome, dettaglio: null, usataAlle: null, consentita: true }
+}
 
 /** R-M5a: l'iscrizione Web Push che il distributore ha dato per un PC (RFC 8291: p256dh e auth in base64url). */
 export interface IscrizioneSveglia { endpoint: string, keys: { p256dh: string, auth: string } }
@@ -115,6 +145,10 @@ export function creaComputerRemoti(plugin: PluginComputer, {
         corrente = giro
         try {
             const pc = await giro.esito
+            // fetta C, Desktop (3) 24/10: il programma (desktop o CLI) lo ricorda il dispositivo, il nativo non lo salva
+            ricordaProgramma(pc.pcId, pc.programma)
+            // owner 24/10 «Sì, adesso»: un PC col portachiavi di prova (desktop f1199ace0) si segna «di prova»
+            ricordaEffimero(pc.pcId, pc.effimero)
             fase.value = { tipo: 'fatto', pc }
             await aggiorna().catch(() => undefined)
         } catch (e) {
@@ -174,6 +208,7 @@ export function creaComputerRemoti(plugin: PluginComputer, {
                 const p = await plugin.percorso({ canale })
                 // revisione R-M5a (1): il PC risponde ⇒ un'iscrizione rimasta da mandare parte adesso
                 void plugin.svegliaRimanda?.({ pcId }).catch(() => undefined)
+                ricordaVisto(pcId, ora())
                 return { inLinea: true as const, percorso: p.tipo, rttMs: p.rttMs }
             })
         } catch (e) {
@@ -185,13 +220,67 @@ export function creaComputerRemoti(plugin: PluginComputer, {
      * R-M4: le sessioni del PC, lette sul ponte remoto con lo stesso lettore dell'elenco del Codice (`leggiSessioniR4`, un tentativo:
      * il «non ancora in ascolto» è del r4 locale). Il canale si chiude sempre; un guasto torna col codice, mai un'eccezione.
      */
-    async function sessioni(pcId: string): Promise<{ ok: true, righe: TalosRigaSessioneR4[] } | { ok: false, code: string }> {
+    /**
+     * ⛔ D-MOCK-2 (dal Pad, vc175, 24/10/2026): il collegamento nativo verso un PC spento resta aperto fino a 2 × 30 s, oltre il tetto
+     * delle schermate; ogni lettura nuova ne apriva un altro e quello verso il PC acceso finiva in coda («non risponde» anche lui).
+     * Una lettura per PC alla volta: chi la chiede mentre è in volo riceve la stessa.
+     */
+    const inVolo = new Map<string, Promise<{ ok: true, righe: TalosRigaSessioneR4[] } | { ok: false, code: string }>>()
+    function sessioni(pcId: string): Promise<{ ok: true, righe: TalosRigaSessioneR4[] } | { ok: false, code: string }> {
+        const giaInVolo = inVolo.get(pcId)
+        if (giaInVolo) return giaInVolo
+        const lettura = leggiSessioniDelPc(pcId).finally(() => { inVolo.delete(pcId) })
+        inVolo.set(pcId, lettura)
+        return lettura
+    }
+
+    async function leggiSessioniDelPc(pcId: string): Promise<{ ok: true, righe: TalosRigaSessioneR4[] } | { ok: false, code: string }> {
         let aperto: Awaited<ReturnType<typeof apriPonteRemoto>> | null = null
         try {
             aperto = await apriPonteRemoto(plugin, pcId)
-            return { ok: true, righe: await leggiSessioniR4(aperto.ponte, { tentativi: 1 }) }
+            const righe = await leggiSessioniR4(aperto.ponte, { tentativi: 1 })
+            // mockup remoto, tavola 1: gli ultimi numeri restano sul dispositivo, con l'ora della lettura
+            ricordaSessioni(pcId, conteggiDelleSessioni(righe), ora())
+            return { ok: true, righe }
         } catch (e) {
             return { ok: false, code: codiceDi(e) }
+        } finally {
+            await aperto?.chiudi()
+        }
+    }
+
+    /**
+     * Revisione del blocco 3 (S3), owner 24/10/2026 «Sì, uguali alle locali»: rinomina ed elimina una sessione del PC dalla lista del
+     * Codice, sul ponte come il Codice del PC (`session.rename`, `session.delete`). Il consenso della cartella lo decide il PC: un suo
+     * rifiuto (`CONSENT_REQUIRED`, `WORKFLOW_RUN_NOT_FINISHED`…) risale col suo codice, la lista lo dice.
+     */
+    async function conIlPonte(pcId: string, fai: (ponte: Awaited<ReturnType<typeof apriPonteRemoto>>['ponte']) => Promise<void>): Promise<void> {
+        const aperto = await apriPonteRemoto(plugin, pcId)
+        try {
+            await fai(aperto.ponte)
+        } finally {
+            await aperto.chiudi()
+        }
+    }
+    const rinominaSessione = (pcId: string, sessionId: string, nome: string) => conIlPonte(pcId, (ponte) => rinominaSessioneR4(ponte, sessionId, nome))
+    const eliminaSessione = (pcId: string, sessionId: string) => conIlPonte(pcId, (ponte) => eliminaSessioneR4(ponte, sessionId))
+
+    /**
+     * ⛔ D-MOCK-11 (contratto R5.12, parte 1, punto 3): «Chiedi al PC» dopo un `CONSENT_REQUIRED` su una riga del PC (Rinomina,
+     * Elimina). La richiesta, poi l'attesa della persona davanti al PC (`consensoDelPc.ts`); `inAttesa` fa vedere «Conferma sul
+     * computer». Il canale si chiude sempre; un rifiuto della richiesta (`FOLDER_NOT_LISTED`, `RATE_LIMITED`) torna col codice.
+     */
+    async function chiediConsensoAlPc(pcId: string, cartellaId: string, { inAttesa, fermato }: {
+        inAttesa?: (attesa: AttesaConsenso) => void, fermato?: () => boolean,
+    } = {}): Promise<EsitoConsenso | { esito: 'errore', code: string }> {
+        let aperto: Awaited<ReturnType<typeof apriPonteRemoto>> | null = null
+        try {
+            aperto = await apriPonteRemoto(plugin, pcId)
+            const attesa = await chiediConsenso(aperto.ponte, cartellaId, { ora })
+            inAttesa?.(attesa)
+            return await attendiConsenso(aperto.ponte, attesa, { ora, fermato })
+        } catch (e) {
+            return { esito: 'errore', code: codiceDi(e) }
         } finally {
             await aperto?.chiudi()
         }
@@ -201,6 +290,22 @@ export function creaComputerRemoti(plugin: PluginComputer, {
      * R-M4 Q2 (owner 20/10/2026 «fra le cartelle ammesse»): le cartelle che il PC apre al telefono (`projects.list`, r4
      * `custom-task.mjs:84`: solo id e nome, mai il percorso). Una voce con un id fuori dalla regola del PC o senza nome non passa.
      */
+    /**
+     * Mockup remoto, tavole 1 e 3: il riquadro di un PC e le sue righe nella lista del Codice. Un elenco letto = in linea, coi numeri; ogni guasto = non in linea col suo codice.
+     * Un tetto solo (`ATTESA_CONTROLLO_MS`, come in `ComputerItemScreen.vue`): un PC che non risponde non lascia il riquadro a «Controllo…».
+     */
+    async function riepilogo(pcId: string): Promise<
+        { inLinea: true, conteggi: ConteggiSessioni, righe: TalosRigaSessioneR4[] } | { inLinea: false, code: string }
+    > {
+        let tetto: ReturnType<typeof setTimeout> | undefined
+        const esito = await Promise.race([
+            sessioni(pcId),
+            new Promise<{ ok: false, code: string }>((fatto) => { tetto = setTimeout(() => fatto({ ok: false, code: 'TIMEOUT' }), ATTESA_CONTROLLO_MS) }),
+        ])
+        clearTimeout(tetto)
+        return esito.ok ? { inLinea: true, conteggi: conteggiDelleSessioni(esito.righe), righe: esito.righe } : { inLinea: false, code: esito.code }
+    }
+
     async function cartelle(pcId: string): Promise<{ ok: true, cartelle: CartellaDelPc[] } | { ok: false, code: string }> {
         let aperto: Awaited<ReturnType<typeof apriPonteRemoto>> | null = null
         try {
@@ -209,8 +314,7 @@ export function creaComputerRemoti(plugin: PluginComputer, {
             const busta = JSON.parse(r.corpo) as { ok?: boolean, data?: { items?: unknown }, error?: { code?: unknown } }
             if (!busta.ok) return { ok: false, code: typeof busta.error?.code === 'string' ? busta.error.code : 'BAD_MESSAGE' }
             const voci = Array.isArray(busta.data?.items) ? busta.data.items as Array<Record<string, unknown>> : []
-            return { ok: true, cartelle: voci.filter((v) => idValidoDelPc(v?.id) && typeof v.nome === 'string' && v.nome.trim() !== '')
-                .map((v) => ({ id: v.id as string, nome: v.nome as string })) }
+            return { ok: true, cartelle: voci.map(cartellaDaRiga).filter((c): c is CartellaDelPc => c !== null) }
         } catch (e) {
             return { ok: false, code: codiceDi(e) }
         } finally {
@@ -233,8 +337,18 @@ export function creaComputerRemoti(plugin: PluginComputer, {
         ])
         clearTimeout(tetto)
         await plugin.dimentica({ pcId })
+        dimenticaRicordo(pcId)
         await aggiorna()
         return { avvisato }
+    }
+
+    /**
+     * Fetta C, D-REM-2 (Desktop (3) 24/10, risposta 2): una voce vecchia che non risponde più si dimentica SOLO sul dispositivo. Bussare
+     * col `pc.forget` costerebbe 10 s a voce, e se quell'identità è ancora viva il PC elenca solo un dispositivo spento, innocuo.
+     */
+    async function dimenticaSoloQui(pcId: string): Promise<void> {
+        await plugin.dimentica({ pcId })
+        dimenticaRicordo(pcId)
     }
 
     /** R-M5a: lo stato delle notifiche di un PC, mai un'eccezione verso la schermata. */
@@ -314,7 +428,8 @@ export function creaComputerRemoti(plugin: PluginComputer, {
     }
 
     return {
-        elenco, fase, aggiorna, accoppia, collegaUnComputer, annulla, riposa, controlla, sessioni, cartelle, dimentica,
+        elenco, fase, aggiorna, accoppia, collegaUnComputer, annulla, riposa, controlla, sessioni, riepilogo, cartelle, dimentica, dimenticaSoloQui, rinominaSessione, eliminaSessione,
+        chiediConsensoAlPc,
         notifiche, attivaNotifiche, provaNotifica, disattivaNotifiche,
     }
 }

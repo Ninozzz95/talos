@@ -4,9 +4,14 @@
  * `talos_token` messo dal nativo: la pagina il token non lo vede mai.
  */
 import { registerPlugin } from '@capacitor/core'
+import type { StatoFileRemoto } from '@/lib/remoto/fileRemoti'
 
 export interface TalosR4ClientePonte {
-    richiesta(opzioni: { metodo: 'GET' | 'POST'; percorso: string; corpo?: string }): Promise<{ stato: number; corpo: string }>
+    /**
+     * R5.13 F3-bis (revisione del blocco 9, B9-2/B9-5): `segnale` e `onStato` li legge solo il ponte remoto, per l'immagine che va al PC
+     * (ferma l'invio di una bozza tolta; dice l'avanzamento). Al nativo locale non si passano mai.
+     */
+    richiesta(opzioni: { metodo: 'GET' | 'POST'; percorso: string; corpo?: string; segnale?: AbortSignal; onStato?: (s: StatoFileRemoto) => void }): Promise<{ stato: number; corpo: string }>
     /** Eventi: `r4Pezzo {id, testo}`, `r4Fine {id}`, `r4Errore {id, motivo}` (`motivo` = `HTTP <stato>` o il nome del guasto). */
     apriFlusso(opzioni: { id: string; percorso: string }): Promise<void>
     chiudiFlusso(opzioni: { id: string }): Promise<void>
@@ -28,8 +33,11 @@ export interface TalosR4ClientePonte {
      * K3-C Allegati A3 (owner 16/10 «L'app li scrive in allegati/»): un documento scelto (`content://`) scritto dal nativo in
      * `<cartella di lavoro>/allegati/` senza mai sovrascrivere; torna la ricevuta del desktop, col testo solo se chiesto ed entro il
      * tetto. I rifiuti portano i codici dell'helper del desktop (`QUERY_INVALID`, `PAYLOAD_LIMIT`, `FILE_EXISTS`, …).
+     *
+     * R5.13 F3: dal ponte remoto (`ponteRemotoR4.ts`) il file va alla sessione `sessionId` del PC, a pezzi; `onStato` dice l'invio e la
+     * pausa. La ricevuta remota NON ha `assoluto`: il percorso assoluto del PC non esce mai dal PC. Il nativo locale li ignora.
      */
-    allegaFile?(opzioni: { uri: string; nome: string; testo: boolean }): Promise<{ tipo: string; nome: string; percorso: string; bytes: number; assoluto: string; testo?: string }>
+    allegaFile?(opzioni: { uri: string; nome: string; testo: boolean; sessionId?: string; onStato?: (s: StatoFileRemoto) => void; segnale?: AbortSignal }): Promise<{ tipo: string; nome: string; percorso: string; bytes: number; assoluto?: string; testo?: string }>
     /** A3: un'immagine scelta come file (`content://`), letta dal nativo fino a 5 MiB, perché la pagina quei byte non li legge. */
     immagineScelta?(opzioni: { uri: string }): Promise<{ tipo: string; base64: string }>
     addListener(

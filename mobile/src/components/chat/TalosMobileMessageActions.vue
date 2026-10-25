@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent } from 'vue'
+import { defineAsyncComponent } from 'vue'
 import { Copy, Library, Pencil, RotateCcw, Square, Volume2 } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import { TALOS_AZIONI_MESSAGGIO_TUTTE, type TalosAzioneMessaggio, type TalosMobileMessageView } from '@/components/chat/mobileChatTypes'
@@ -21,13 +21,12 @@ const props = withDefaults(defineProps<{
     azioni: () => TALOS_AZIONI_MESSAGGIO_TUTTE,
 })
 const puo = (azione: TalosAzioneMessaggio): boolean => props.azioni.includes(azione)
-/** Il foglio «Altre azioni» solo se per questo ruolo gli resta almeno una voce (intersezione vuota con la riga, owner 13/09). */
-const VOCI_DEL_FOGLIO: Record<'user' | 'assistant', readonly TalosAzioneMessaggio[]> = {
-    user: ['invia-di-nuovo', 'riutilizza', 'elimina'],
-    assistant: ['condividi', 'dettagli', 'elimina'],
-}
-const foglioConVoci = computed(() => (VOCI_DEL_FOGLIO[props.message.role === 'user' ? 'user' : 'assistant']).some(puo))
+/*
+ * Il foglio «Altre azioni» compariva solo se per questo ruolo gli restava una voce (owner 13/09). Dal 24/10 («Come Happy») ha
+ * sempre «Seleziona testo», quindi c'è sempre: anche nel Codice, dove r4 non dà le altre voci.
+ */
 const emit = defineEmits<{
+    selectText: [message: TalosMobileMessageView]
     copy: [message: TalosMobileMessageView]
     edit: [message: TalosMobileMessageView]
     reuse: [message: TalosMobileMessageView]
@@ -112,7 +111,9 @@ function toggleSpeak(): void {
         <Button v-if="message.role === 'assistant' && puo('libreria')" type="button" variant="ghost" size="icon" class="min-h-touch min-w-touch" data-testid="talos-message-save" :aria-label="$t('chat.saveToLibrary')" :title="$t('chat.saveToLibrary')" @click="emit('saveToLibrary', message)">
             <Library class="size-3.5" aria-hidden="true" />
         </Button>
-        <TalosMobileMessageOverflowMenu v-if="foglioConVoci" :message="message" :busy="busy" :can-retry="canRetry" :azioni="azioni"
+        <!-- owner 24/10/2026 «Come Happy»: il foglio ha sempre «Seleziona testo», quindi c'è sempre -->
+        <TalosMobileMessageOverflowMenu :message="message" :busy="busy" :can-retry="canRetry" :azioni="azioni"
+            @select-text="emit('selectText', $event)"
             @reuse="emit('reuse', $event)" @resend="emit('resend', $event)"
             @share="emit('share', $event)" @details="emit('details', $event)" @delete="emit('delete', $event)" />
     </div>

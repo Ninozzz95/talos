@@ -8,6 +8,8 @@ import {
     CARATTERI_PER_ALLEGATO_R4, MASSIMO_FILE_R4, controllaImmagineR4, testoAllegabileR4, testoAllegatiR4, type AllegatoR4,
 } from '@/lib/harness/r4/allegatiR4'
 import type { TalosLettoreByteImmagine } from '@/lib/chat/byteImmagine'
+import { fraseErroreRemoto } from '@/lib/remoto/frasiRemoto'
+import type { StatoFileRemoto } from '@/lib/remoto/fileRemoti'
 
 /**
  * ⛔ K3-C Allegati (ledger `LEDGER-K3-ALLEGATI-2026-10-16.md`): gli allegati del Codice su r4.
@@ -29,6 +31,8 @@ export const QUANTI_ALLEGATI_R4 = 10
 const PREFISSO_R4 = 'r4:'
 /** I rifiuti del nativo `allegaFile` (i codici dell'helper del desktop) che la persona legge come «il file non si è copiato». */
 const CODICI_DELLA_COPIA = new Set(['QUERY_INVALID', 'FOLDER_INVALID', 'FILE_EXISTS', 'FILE_WRITE_FAILED'])
+/** R5.13 F3: i guasti del canale verso il PC, che hanno la frase del controllo remoto (`computer.errors.*`). */
+const CODICI_DEL_CANALE = new Set(['CONNECT_FAILED', 'DISCONNECTED', 'NOT_PAIRED', 'REVOKED'])
 
 export type RispostaConsensoR4 = 'allow' | 'once' | 'deny'
 
@@ -46,6 +50,16 @@ export interface OpzioniAllegatiR4 {
     lingua: () => string
     /** I testi della chat (`chat.imageConsentDenied`). */
     t: (chiave: string) => string
+    /**
+     * R5.13 F3: con la sessione sul PC, l'id della conversazione aperta (null se non è ancora partita). Il file va lì, a pezzi, e la
+     * ricevuta non ha `assoluto`. Assente in locale: il nativo riceve gli stessi argomenti di sempre.
+     */
+    sessione?: () => string | null
+    /**
+     * ⛔ D-F3-1 (dal Pad, 25/10; Desktop: «il tocco esplicito, come l'invio»): il PC vuole il consenso della cartella per scrivere un
+     * file. La schermata alza la stessa riga «Chiedi al PC» dell'invio; su «Consentita» chiama `riprovaDopoConsenso`.
+     */
+    suConsenso?: (guasto: { code: string; message: string; reason?: string; params?: Record<string, unknown> }) => void
 }
 
 /** I byte di un'immagine scelta: dalla galleria arrivano come Blob, dal selettore dei file li legge il nativo. */
@@ -63,14 +77,48 @@ export function useAllegatiR4(opzioni: OpzioniAllegatiR4) {
     let generazione = 0
     let prossimo = 0
     const memoria = shallowRef(new Map<string, Uint8Array>())
+    /** La frase di `puoPartire` quando un allegato era in viaggio: si toglie da sola quando l'ultimo arriva. */
+    let erroreDellAttesa: string | null = null
     /** A3: la ricevuta di ogni file della bozza (per id della bozza), con il testo se è partito col messaggio. */
     const fileDellaBozza = new Map<string, AllegatoR4>()
 
     const dice = (chiave: string, valori: Record<string, string> = {}) => testoAllegatiR4(chiave, opzioni.lingua(), valori)
-    const motivo = (guasto: unknown) => {
-        const codice = (guasto as { code?: unknown } | null)?.code
-        return typeof codice === 'string' && codice ? codice : guasto instanceof Error ? guasto.message : String(guasto)
+    /**
+     * ⛔ D-F3-1 (Desktop 25/10, «mai più un codice grezzo»): il perché di un guasto in parole. Un codice noto ha la sua frase; uno
+     * sconosciuto la frase generica; un guasto senza codice è già una frase dell'app (`dice(...)`).
+     */
+    const perché = (guasto: unknown, tipo: 'file' | 'immagine' = 'file'): string => {
+        const g = guasto as { code?: unknown; reason?: unknown } | null
+        const codice = typeof g?.code === 'string' && g.code ? g.code : null
+        // r4 risponde `QUERY_INVALID` a un'immagine che non è PNG, JPEG o WebP (`immagini-risposte-2161afb32.json`); il PC dice il motivo
+        if (g?.reason === 'image-invalid' || (tipo === 'immagine' && codice === 'QUERY_INVALID')) return dice('imageFormatBody')
+        if (g?.reason === 'image-too-large') return dice('imageTooLargeBody')
+        if (g?.reason === 'image-empty') return opzioni.t('computer.imageEmpty')
+        // B9-4: senza codice passa solo una frase dell'app (`fraseDellApp`); un TypeError o un lancio del nativo è la frase generica
+        if (!codice) return (guasto as { fraseDellApp?: unknown } | null)?.fraseDellApp === true && guasto instanceof Error ? guasto.message : opzioni.t('chat.attachmentErrors.generic')
+        if (g?.reason === 'images-unavailable') return opzioni.t('computer.imagesUnavailable')
+        if (codice === 'PAYLOAD_LIMIT' || codice === 'FILE_TOO_LARGE') return dice('fileTooLargeBody')
+        if (codice === 'FILE_NO_CONVERSATION') return dice('fileNoConversation')
+        if (codice === 'CONSENT_REQUIRED') return opzioni.t('computer.fileNeedsConsent')
+        if (codice === 'NOT_AVAILABLE_REMOTELY') return opzioni.t('computer.onlyFromPc')
+        if (codice === 'RATE_LIMITED') return opzioni.t('computer.fileBusy')
+        if (CODICI_DELLA_COPIA.has(codice)) return opzioni.t('harness.r4FileNotCopied')
+        if (CODICI_DEL_CANALE.has(codice)) return opzioni.t(fraseErroreRemoto(codice) ?? 'computer.errors.generic')
+        return opzioni.t('chat.attachmentErrors.generic')
     }
+    /** Una frase dell'app come guasto: il vassoio la mostra così com'è (B9-4). */
+    const fraseDellApp = (frase: string) => Object.assign(new Error(frase), { fraseDellApp: true })
+    /** ⛔ B9-2: l'interruttore dell'invio di ogni bozza (solo col PC): togliere la bozza o svuotare il vassoio ferma il suo invio. */
+    const interruttori = new Map<string, AbortController>()
+    const statoInVassoio = (id: string, mia: number) => (st: StatoFileRemoto) => {
+        const v = vassoio.find((x) => x.id === id)
+        if (mia !== generazione || !v || v.status !== 'ingesting') return
+        if (st.stato === 'in-invio' || st.stato === 'sul-pc') v.progress = { phase: 'sending', sent: st.fatti, total: st.totale }
+        else if (st.stato === 'pausa') v.progress = { phase: 'paused', sent: st.fatti, total: st.totale }
+        else if (st.stato === 'attesa-turno') v.progress = { phase: 'waiting', sent: 0, total: v.sizeBytes }
+    }
+    /** I file fermati dal consenso del PC: su «Consentita» ripartono da sé (`riprovaDopoConsenso`). */
+    const inAttesaDelConsenso = new Map<string, { s: TalosPickedFile; uri: string }>()
 
     function chiedi(quante: number): Promise<RispostaConsensoR4> {
         return new Promise((r) => {
@@ -101,7 +149,7 @@ export function useAllegatiR4(opzioni: OpzioniAllegatiR4) {
     const leggiDataUrl = (blob: Blob) => new Promise<string>((ok, ko) => {
         const lettore = new FileReader()
         lettore.onload = () => ok(String(lettore.result))
-        lettore.onerror = () => ko(new Error(dice('cannotReadFile')))
+        lettore.onerror = () => ko(fraseDellApp(dice('cannotReadFile')))
         lettore.readAsDataURL(blob)
     })
     const daBase64 = (base64: string) => {
@@ -117,6 +165,8 @@ export function useAllegatiR4(opzioni: OpzioniAllegatiR4) {
             sizeBytes: s.sizeBytes, status: 'ingesting', vaultFileId: null, grantId: null, bindingId: null, permissions: [], error: null,
         }
         vassoio.push(bozza)
+        // ⛔ B10-2 (revisione del blocco 10): l'interruttore nasce con la bozza, prima della lettura dei byte
+        interruttori.set(bozza.id, new AbortController())
         return bozza
     }
 
@@ -130,16 +180,26 @@ export function useAllegatiR4(opzioni: OpzioniAllegatiR4) {
                 byte = sorgente.blob.arrayBuffer().then((b) => new Uint8Array(b))
             } else {
                 const letta = await opzioni.cliente().immagineScelta?.({ uri: sorgente.uri })
-                if (!letta?.base64) throw new Error(dice('cannotReadFile'))
+                if (!letta?.base64) throw fraseDellApp(dice('cannotReadFile'))
                 dataUrl = `data:${letta.tipo || bozza.mediaType};base64,${letta.base64}`
                 byte = Promise.resolve(daBase64(letta.base64))
             }
-            const risposta = await opzioni.cliente().richiesta({ metodo: 'POST', percorso: '/api/v1/chat-images', corpo: JSON.stringify({ nome: bozza.displayName, dataUrl }) })
+            // B10-2: tolta (o vassoio svuotato) mentre si leggevano i byte: non parte nulla
+            if (mia !== generazione || !voce()) return
+            const remoto = opzioni.sessione !== undefined
+            const risposta = await opzioni.cliente().richiesta({
+                metodo: 'POST', percorso: '/api/v1/chat-images', corpo: JSON.stringify({ nome: bozza.displayName, dataUrl }),
+                // B9-2/B9-5: col PC l'immagine si ferma con la bozza e dice il suo avanzamento
+                ...(remoto ? { segnale: interruttore(bozza.id), onStato: statoInVassoio(bozza.id, mia) } : {}),
+            })
             let corpo: { ok?: boolean; data?: { id?: unknown; mimeType?: unknown; byte?: unknown }; error?: { message?: unknown } } | null = null
             try { corpo = JSON.parse(risposta.corpo) } catch { corpo = null }
             const id = typeof corpo?.data?.id === 'string' ? corpo.data.id : null
             if (risposta.stato < 200 || risposta.stato >= 300 || !corpo?.ok || !id) {
-                throw new Error(typeof corpo?.error?.message === 'string' ? corpo.error.message : `HTTP ${risposta.stato}`)
+                const e = corpo?.error as { message?: unknown; code?: unknown; reason?: unknown } | undefined
+                throw Object.assign(new Error(typeof e?.message === 'string' ? e.message : `HTTP ${risposta.stato}`), {
+                    code: typeof e?.code === 'string' ? e.code : `HTTP_${risposta.stato}`, ...(typeof e?.reason === 'string' ? { reason: e.reason } : {}),
+                })
             }
             if (mia !== generazione || !voce()) return
             // i byte appena scelti fanno subito l'anteprima della bolla, senza tornare a chiederli a r4
@@ -151,7 +211,7 @@ export function useAllegatiR4(opzioni: OpzioniAllegatiR4) {
             })
         } catch (guasto) {
             if (mia !== generazione || !voce()) return
-            Object.assign(voce()!, { status: 'failed', error: `${dice('imageFailed')} · ${guasto instanceof Error ? guasto.message : String(guasto)}` })
+            Object.assign(voce()!, { status: 'failed', error: `${dice('imageFailed')} · ${perché(guasto, 'immagine')}`, progress: null })
         }
     }
 
@@ -160,23 +220,36 @@ export function useAllegatiR4(opzioni: OpzioniAllegatiR4) {
         const voce = () => vassoio.find((v) => v.id === bozza.id)
         try {
             const allega = opzioni.cliente().allegaFile
-            if (!allega) throw new Error(dice('serverNoConfirm'))
-            const r = await allega({ uri, nome: s.name, testo: testoAllegabileR4(s.name, s.declaredMediaType) })
-            if (r?.tipo !== 'file' || typeof r.nome !== 'string' || r.percorso !== `allegati/${r.nome}` || typeof r.assoluto !== 'string'
-                || !Number.isSafeInteger(r.bytes) || r.bytes < 0 || r.bytes > MASSIMO_FILE_R4) throw new Error(dice('serverNoConfirm'))
+            if (!allega) throw fraseDellApp(dice('serverNoConfirm'))
+            const testoChiesto = testoAllegabileR4(s.name, s.declaredMediaType)
+            // R5.13 F3: col PC, la sessione e lo stato dell'invio; in locale gli argomenti di sempre
+            const remoto = opzioni.sessione !== undefined
+            const r = await allega(remoto ? {
+                uri, nome: s.name, testo: testoChiesto, ...(opzioni.sessione!() ? { sessionId: opzioni.sessione!()! } : {}),
+                onStato: statoInVassoio(bozza.id, mia), segnale: interruttore(bozza.id),
+            } : { uri, nome: s.name, testo: testoChiesto })
+            if (r?.tipo !== 'file' || typeof r.nome !== 'string' || r.percorso !== `allegati/${r.nome}` || (!remoto && typeof r.assoluto !== 'string')
+                || !Number.isSafeInteger(r.bytes) || r.bytes < 0 || r.bytes > MASSIMO_FILE_R4) throw fraseDellApp(dice('serverNoConfirm'))
             if (mia !== generazione || !voce()) return
             const testo = typeof r.testo === 'string' && r.testo.length <= CARATTERI_PER_ALLEGATO_R4 ? r.testo : null
             fileDellaBozza.set(bozza.id, {
-                tipo: 'file', nome: r.nome, percorso: r.percorso, assoluto: r.assoluto, ...(testo === null ? {} : { contenuto: testo, caratteri: testo.length }),
+                tipo: 'file', nome: r.nome, percorso: r.percorso, ...(typeof r.assoluto === 'string' ? { assoluto: r.assoluto } : {}),
+                ...(testo === null ? {} : { contenuto: testo, caratteri: testo.length }),
             })
-            Object.assign(voce()!, { status: 'authorized', displayName: r.nome, sizeBytes: r.bytes, permissions: ['model.read'] })
+            Object.assign(voce()!, { status: 'authorized', displayName: r.nome, sizeBytes: r.bytes, permissions: ['model.read'], progress: null })
         } catch (guasto) {
             if (mia !== generazione || !voce()) return
             // Pad 16/10: il perché in parole, mai il codice grezzo del nativo (come la chat)
-            const codice = motivo(guasto)
-            const perché = codice === 'PAYLOAD_LIMIT' ? dice('fileTooLargeBody')
-                : CODICI_DELLA_COPIA.has(codice) ? opzioni.t('harness.r4FileNotCopied') : codice
-            Object.assign(voce()!, { status: 'failed', error: `${dice('fileFailed')} · ${perché}` })
+            Object.assign(voce()!, { status: 'failed', error: `${dice('fileFailed')} · ${perché(guasto)}`, progress: null })
+            const g = guasto as { code?: unknown; message?: unknown; reason?: unknown; params?: unknown }
+            if (g?.code === 'CONSENT_REQUIRED') {
+                inAttesaDelConsenso.set(bozza.id, { s, uri })
+                opzioni.suConsenso?.({
+                    code: 'CONSENT_REQUIRED', message: typeof g.message === 'string' ? g.message : 'CONSENT_REQUIRED',
+                    ...(typeof g.reason === 'string' ? { reason: g.reason } : {}),
+                    ...(g.params && typeof g.params === 'object' ? { params: g.params as Record<string, unknown> } : {}),
+                })
+            }
         }
     }
 
@@ -215,20 +288,48 @@ export function useAllegatiR4(opzioni: OpzioniAllegatiR4) {
             if (immagini.length && (!(await consentito(immagini.length)) || mia !== generazione)) return
             await Promise.all(scelte.map((s) => {
                 const bozza = nuovaBozza(s)
-                if (s.source.kind === 'web-blob') return caricaImmagine(bozza, { blob: s.source.blob }, mia)
-                return immagini.includes(s) ? caricaImmagine(bozza, { uri: s.source.uri }, mia) : caricaFile(bozza, s, s.source.uri, mia)
+                const carica = s.source.kind === 'web-blob' ? caricaImmagine(bozza, { blob: s.source.blob }, mia)
+                    : immagini.includes(s) ? caricaImmagine(bozza, { uri: s.source.uri }, mia) : caricaFile(bozza, s, s.source.uri, mia)
+                return carica.finally(() => {
+                    if (mia === generazione && erroreDellAttesa && errore.value === erroreDellAttesa && !vassoio.some((v) => v.status === 'ingesting')) {
+                        errore.value = null
+                        erroreDellAttesa = null
+                    }
+                })
             }))
         } catch (guasto) {
-            if (mia === generazione) errore.value = `${dice(via === 'file' ? 'fileFailed' : 'imageFailed')} · ${motivo(guasto)}`
+            if (mia === generazione) errore.value = `${dice(via === 'file' ? 'fileFailed' : 'imageFailed')} · ${perché(guasto, via === 'file' ? 'file' : 'immagine')}`
         } finally {
             if (mia === generazione) occupato.value = false
         }
     }
 
+    /** ⛔ D-F3-1: su «Consentita» i file fermati dal consenso ripartono, una volta sola. */
+    async function riprovaDopoConsenso(): Promise<void> {
+        const mia = generazione
+        const da = [...inAttesaDelConsenso.entries()]
+        inAttesaDelConsenso.clear()
+        await Promise.all(da.map(([id, { s, uri }]) => {
+            const v = vassoio.find((x) => x.id === id)
+            if (!v || v.status !== 'failed') return Promise.resolve()
+            Object.assign(v, { status: 'ingesting', error: null, progress: null })
+            return caricaFile(v, s, uri, mia)
+        }))
+    }
+
+    /** L'interruttore di una bozza, creato al primo uso; tolto quando la bozza esce dal vassoio. */
+    function interruttore(id: string): AbortSignal {
+        // una bozza già tolta (o mai nata) ha l'interruttore scattato: il suo invio non parte
+        return interruttori.get(id)?.signal ?? AbortSignal.abort()
+    }
+
     function togli(id: string): void {
+        interruttori.get(id)?.abort()
+        interruttori.delete(id)
         const i = vassoio.findIndex((v) => v.id === id)
         if (i >= 0) vassoio.splice(i, 1)
         fileDellaBozza.delete(id)
+        inAttesaDelConsenso.delete(id)
         if (!vassoio.length) consensoDellaBozza.value = false
     }
 
@@ -249,6 +350,13 @@ export function useAllegatiR4(opzioni: OpzioniAllegatiR4) {
      * parte (il testo NON si manda senza le immagini).
      */
     async function puoPartire(): Promise<boolean> {
+        // R5.13 F3 (Desktop 25/10, «tutte e due le modalità, come la finestra»): un allegato ancora in viaggio non si perde dal
+        // messaggio; la finestra blocca l'invio (`fileUploads`/`imageUploads`) e dice `attachments.loading`. Vale anche per «Accoda».
+        if (vassoio.some((v) => v.status === 'ingesting')) {
+            erroreDellAttesa = `${dice('loading')} · ${dice('loadingBody')}`
+            errore.value = erroreDellAttesa
+            return false
+        }
         const quante = pronte().immagini.length
         return quante === 0 || consentito(quante)
     }
@@ -256,8 +364,11 @@ export function useAllegatiR4(opzioni: OpzioniAllegatiR4) {
     /** Dopo un invio partito, o cambiando sessione: il vassoio si svuota e i caricamenti a metà non entrano più. */
     function svuota(): void {
         generazione += 1
+        for (const c of interruttori.values()) c.abort()
+        interruttori.clear()
         vassoio.splice(0)
         fileDellaBozza.clear()
+        inAttesaDelConsenso.clear()
         occupato.value = false
         errore.value = null
         consensoDellaBozza.value = false
@@ -283,5 +394,5 @@ export function useAllegatiR4(opzioni: OpzioniAllegatiR4) {
         }
     }
 
-    return { vassoio, occupato, errore, domanda, rispondi, scegli, togli, pronte, puoPartire, svuota, lettore }
+    return { vassoio, occupato, errore, domanda, rispondi, scegli, togli, pronte, puoPartire, svuota, lettore, riprovaDopoConsenso }
 }

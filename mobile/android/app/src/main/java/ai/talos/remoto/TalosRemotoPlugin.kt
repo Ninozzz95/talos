@@ -6,6 +6,7 @@ import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
 import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.CapacitorPlugin
+import android.content.Context
 import android.os.Build
 import android.provider.Settings
 import com.google.mlkit.common.MlKitException
@@ -62,6 +63,14 @@ class TalosRemotoPlugin : Plugin() {
         const val ATTESA_CONCLUSIONE_MS = 60_000L
         /** Quanto si aspetta l'iscrizione del distributore dopo `register` (Play services, di solito meno di un secondo). */
         const val ATTESA_ISCRIZIONE_MS = 20_000L
+    }
+
+    /** Il contesto da cui si prende quello dell'applicazione per iroh; le prove JVM lo sostituiscono (lì non c'è il bridge). */
+    internal var contestoPerIroh: () -> Context = { context }
+
+    /** F (24/10/2026): Capacitor chiama `load` alla registrazione, prima di qualunque metodo, quindi prima di ogni Endpoint. */
+    override fun load() {
+        TalosRemotoContestoIroh.prepara(contestoPerIroh())
     }
 
     @PluginMethod

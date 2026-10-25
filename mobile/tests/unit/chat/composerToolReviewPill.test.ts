@@ -34,7 +34,10 @@ describe('A3-OSS-2 — la pillola «Controlla azioni» sta accanto al selettore 
         const wrapper = mountComposer({ toolReviewCount: 1 })
         const chip = wrapper.get('[data-testid="talos-composer-model-chip"]')
         const pillola = wrapper.get('[data-testid="talos-composer-tool-review"]')
-        expect(chip.element.nextElementSibling).toBe(pillola.element)
+        // J3 (owner 24/10/2026): subito dopo il modello viene la pillola del ragionamento; «Controlla azioni» la segue
+        const ragionamento = wrapper.get('[data-testid="talos-composer-reasoning-pill"]')
+        expect(chip.element.nextElementSibling).toBe(ragionamento.element)
+        expect(ragionamento.element.nextElementSibling).toBe(pillola.element)
         expect(pillola.text()).toBe('Review tool actions (1)')
         expect(wrapper.get('[data-talos-composer-compact]').attributes('data-talos-composer-compact')).toBe('false')
     })

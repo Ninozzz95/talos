@@ -129,6 +129,8 @@ class TalosSvegliaLavoro : JobService() {
             val daMandare = iscrizione != null && TalosSveglia.daMandare(context, pcId)
             if (!sveglia && !daMandare) { pc.chiaveTelefono.fill(0); return true }
             val nomePc = pc.nome ?: context.getString(R.string.talos_sveglia_computer)
+            // F (24/10/2026): ad app uccisa non c'è stato `TalosRemotoPlugin.load`; iroh vuole il contesto prima dell'Endpoint
+            TalosRemotoContestoIroh.prepara(context)
             val canale = try {
                 // `OrNull`: scaduto torna `null` (giro da rifare), non una cancellazione che salterebbe `jobFinished`
                 withTimeoutOrNull(TETTO_APERTURA_MS) { TalosRemotoTrasporto.apriVerso(pc) }

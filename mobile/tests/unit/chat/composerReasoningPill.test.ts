@@ -45,81 +45,33 @@ function mountComposer(overrides: Record<string, unknown> = {}) {
     })
 }
 
-describe('the reasoning state on the model pill', () => {
-    /**
-     * ⛔ Owner 2026-09-13, dal Pad: «devi eliminare il pulsante ragiona
-     * completamente, tanto ce l'abbiamo nel drawer del modello». Questo caso
-     * proteggeva il cervello DENTRO quella chip; la chip non c'e' piu', e con
-     * lei il testid dell'icona. Non l'ho cancellato: il significato da
-     * proteggere e' rimasto lo stesso e si e' spostato — lo stato del
-     * ragionamento si legge sulla PILLOLA DEL MODELLO, e la chip non deve
-     * tornare a doppiarlo.
-     */
-    it('lo stato del ragionamento vive sulla pillola del modello, e la chip non torna', () => {
-        const wrapper = mountComposer({ thinking: true })
+/*
+ * ⛔ J3-bis (25/10/2026, Desktop): la parola del ragionamento in `sr-only` sulla pillola del modello (owner 12/09) ripeteva ciò che
+ * ora dice la pillola del ragionamento, col suo nome accessibile. I significati da proteggere restano gli stessi — lo stato si legge
+ * anche senza vederlo, cambia quando cambia, e la chip «Ragiona» non torna — e si sono spostati sulla pillola sua.
+ */
+const ragionamento = (w: ReturnType<typeof mountComposer>) => w.find('[data-testid="talos-composer-reasoning-pill"]')
 
+describe('the reasoning state on its own pill (J3-bis)', () => {
+    it('lo stato del ragionamento vive sulla pillola sua; la pillola del modello non lo ripete e la chip non torna', () => {
+        const wrapper = mountComposer({ thinking: true })
         expect(wrapper.find('[data-testid="talos-composer-thinking"]').exists()).toBe(false)
-
-        const words = wrapper.get('[data-testid="talos-composer-reasoning-label"]')
-        expect(words.classes()).not.toContain('hidden')
-        expect(words.text()).toBe('Thinking')
-        // ⛔ Resta per chi ascolta lo schermo: l'occhio lo legge nel foglio del modello.
-        expect(words.classes()).toContain('sr-only')
-    })
-
-    it('says "thinking" rather than an effort level when thinking is on', () => {
-        const wrapper = mountComposer({ thinking: true })
-
-        expect(wrapper.get('[data-testid="talos-composer-reasoning-label"]').text()).toBe('Thinking')
-    })
-
-    /**
-     * The failure this prevents: on a phone the brain is the ONLY signal that
-     * reasoning is on, and an icon with `aria-hidden` inside a button whose
-     * aria-label ignores it means a screen reader user is told nothing at all.
-     */
-    it('carries the reasoning state in the accessible name, not only in pixels', () => {
-        const off = mountComposer({ selectedEffort: 'off', thinking: false })
-        const on = mountComposer({ selectedEffort: 'high', thinking: false })
-
-        const chipOf = (w: ReturnType<typeof mountComposer>) =>
-            w.get('[data-testid="talos-composer-model-chip"]').attributes('aria-label') ?? ''
-
-        expect(chipOf(on)).toContain('High')
-        expect(chipOf(off)).not.toContain('High')
-        // The model is still the subject of the button; reasoning is an addition.
-        expect(chipOf(on)).toContain('Claude Opus')
-    })
-
-    /**
-     * Owner 2026-07-30: «l'icona cervello non si disattiva se ragionamento
-     * esteso viene disattivato».
-     *
-     * The cause was inherited, not introduced: `effort` defaults to 'high' and
-     * rarely returns to 'off', so a condition of "thinking OR effort" was true
-     * almost always and the light never went out. A light that never goes out
-     * is not an indicator. The icon follows the switch the user flips; the
-     * words still report the effort, which is a real dial of its own.
-     */
-    /**
-     * ⛔ 2026-09-13: il cervello non c'e' piu' — la chip che lo conteneva e'
-     * stata tolta su ordine dell'owner perche' doppiava il drawer del modello.
-     * Il difetto che questo caso previene NON e' sparito con l'icona: era «un
-     * indicatore che non si spegne non e' un indicatore». Adesso l'indicatore
-     * e' la riga leggibile sulla pillola, e deve cambiare con l'interruttore.
-     */
-    it('la riga del ragionamento CAMBIA quando il pensiero esteso si spegne', () => {
-        const on = mountComposer({ thinking: true, selectedEffort: 'high' })
-        expect(on.get('[data-testid="talos-composer-reasoning-label"]').text()).toBe('Thinking')
-
-        const off = mountComposer({ thinking: false, selectedEffort: 'high' })
-        // Lo sforzo resta una manopola sua e vale la pena leggerlo: non e' un cervello.
-        expect(off.get('[data-testid="talos-composer-reasoning-label"]').text()).toBe('High')
-    })
-
-    it('shows nothing at all when reasoning is off', () => {
-        const wrapper = mountComposer({ selectedEffort: 'off', thinking: false })
-
         expect(wrapper.find('[data-testid="talos-composer-reasoning-label"]').exists()).toBe(false)
+        expect(ragionamento(wrapper).text()).toContain('High')
+    })
+
+    it('carries the reasoning state in the accessible name, not only in pixels', () => {
+        const on = mountComposer({ selectedEffort: 'high', thinking: false })
+        const off = mountComposer({ selectedEffort: 'off', thinking: false })
+        expect(ragionamento(on).attributes('aria-label')).toContain('High')
+        expect(ragionamento(off).attributes('aria-label')).toContain('Off')
+        // the model chip is about the model
+        expect(on.get('[data-testid="talos-composer-model-chip"]').attributes('aria-label')).toContain('Claude Opus')
+        expect(on.get('[data-testid="talos-composer-model-chip"]').attributes('aria-label')).not.toContain('High')
+    })
+
+    it('la riga del ragionamento CAMBIA quando cambia il livello', () => {
+        expect(ragionamento(mountComposer({ selectedEffort: 'high' })).text()).toContain('High')
+        expect(ragionamento(mountComposer({ selectedEffort: 'low' })).text()).toContain('Low')
     })
 })

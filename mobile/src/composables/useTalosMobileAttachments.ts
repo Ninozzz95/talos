@@ -31,6 +31,8 @@ export interface TalosMobileAttachmentDraft {
     bindingId: string | null
     permissions: readonly TalosFileAuthorityPermission[]
     error: string | null
+    /** R5.13 F3: a file on its way to a session on the computer, while it is still `ingesting`. Absent everywhere else. */
+    progress?: { phase: 'sending' | 'paused' | 'waiting'; sent: number; total: number } | null
 }
 
 /**

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { TALOS_NATIVE_COMPONENTS } from '@/lib/legal/nativeComponents'
+import { TALOS_IT_MESSAGES } from '@/i18n/locales/it'
 import { TALOS_MODELLO_PARAKEET } from '@/lib/voice/modelloParakeet'
 
 /**
@@ -43,9 +44,14 @@ describe('N12 — il riconoscimento vocale locale dentro l app', () => {
         expect(trova('sherpa-onnx')).toMatchObject({ version: '1.13.8', license: 'Apache-2.0' })
         expect(trova('Silero VAD')).toMatchObject({ license: 'MIT' })
         expect(trova('Parakeet')).toMatchObject({ license: TALOS_MODELLO_PARAKEET.licenza })
+        // N1 (25/10/2026): le note sono chiavi del catalogo, in inglese e in italiano
+        const nota = (pezzo: string) => {
+            const chiave = trova(pezzo)!.noteKey!.split('.').pop() as keyof typeof TALOS_IT_MESSAGES.legal.nativeNotes
+            return TALOS_IT_MESSAGES.legal.nativeNotes[chiave]
+        }
         // il modello non è nell'APK: lo dice
-        expect(trova('Parakeet')!.note).toMatch(/primo uso/u)
+        expect(nota('Parakeet')).toMatch(/primo uso/u)
         // il runtime ONNX dentro sherpa è un'altra copia, di un'altra versione
-        expect(trova('sherpa-onnx')!.note).toMatch(/ONNX Runtime 1\.28\.2/u)
+        expect(nota('sherpa-onnx')).toMatch(/ONNX Runtime 1\.28\.2/u)
     })
 })

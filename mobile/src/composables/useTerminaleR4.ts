@@ -37,6 +37,8 @@ export function useTerminaleR4({ sessioneId, cliente }: { sessioneId: () => stri
     const schede = ref<SchedaTerminaleR4[]>([])
     const attiva = ref<string | null>(null)
     const errore = ref<ErroreTerminaleR4 | null>(null)
+    /** J3: l'errore attuale viene dal ponte che non si è aperto (si toglie al primo collegamento riuscito). */
+    let erroreDalPonte = false
     const schermi = new Map<string, SchermoTerminaleR4>()
     const collegate = new Set<string>()
     let ascolti: Array<{ remove(): Promise<void> }> | null = null
@@ -102,13 +104,13 @@ export function useTerminaleR4({ sessioneId, cliente }: { sessioneId: () => stri
     async function nuova(): Promise<string | null> {
         const percorso = rotta()
         if (!percorso) return null
-        if (schede.value.length >= SCHEDE_MASSIME_R4) { errore.value = 'troppe'; return null }
-        errore.value = null
+        if (schede.value.length >= SCHEDE_MASSIME_R4) { errore.value = 'troppe'; erroreDalPonte = false; return null }
+        errore.value = null; erroreDalPonte = false
         const r = await cliente.richiesta({ metodo: 'POST', percorso, corpo: '{}' })
         let corpo: { ok?: boolean; data?: { terminalId?: unknown }; error?: { code?: unknown } } | null = null
         try { corpo = JSON.parse(r.corpo) } catch { /* sotto */ }
         const id = corpo?.ok && typeof corpo.data?.terminalId === 'string' ? corpo.data.terminalId : null
-        if (!id) { errore.value = typeof corpo?.error?.code === 'string' ? corpo.error.code : 'TERMINAL_TAB_NOT_OPENED'; return null }
+        if (!id) { errore.value = typeof corpo?.error?.code === 'string' ? corpo.error.code : 'TERMINAL_TAB_NOT_OPENED'; erroreDalPonte = false; return null }
         await carica()
         attiva.value = id
         return id
@@ -121,10 +123,13 @@ export function useTerminaleR4({ sessioneId, cliente }: { sessioneId: () => stri
         collegate.add(terminalId)
         try {
             await cliente.apriTerminale({ id: idPonte(terminalId), terminalId })
+            // J3: il piede mostra l'errore; un collegamento riuscito (anche da «Ricollega») toglie quello del ponte rimasto indietro
+            if (erroreDalPonte) { erroreDalPonte = false; errore.value = null }
         } catch (e) {
             collegate.delete(terminalId)
             aggiorna(terminalId, { stato: 'disconnesso' })
             errore.value = (e as { code?: string })?.code ?? 'TALOS_R4_IRRAGGIUNGIBILE'
+            erroreDalPonte = true
         }
     }
 
@@ -147,7 +152,7 @@ export function useTerminaleR4({ sessioneId, cliente }: { sessioneId: () => stri
         collegate.delete(terminalId)
         schermi.delete(terminalId)
         const r = await cliente.richiesta({ metodo: 'POST', percorso: `${percorso}/${encodeURIComponent(terminalId)}/close`, corpo: '{}' })
-        if (r.stato !== 200 && r.stato !== 404) { errore.value = 'TERMINAL_CLOSE_FAILED'; return false }
+        if (r.stato !== 200 && r.stato !== 404) { errore.value = 'TERMINAL_CLOSE_FAILED'; erroreDalPonte = false; return false }
         schede.value = schede.value.filter((s) => s.terminalId !== terminalId)
         if (attiva.value === terminalId) attiva.value = (schede.value[posizione] ?? schede.value[posizione - 1])?.terminalId ?? null
         return true

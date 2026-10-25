@@ -214,7 +214,8 @@ describe('le immagini nel Codice su r4 (K3-C Allegati A2)', () => {
         stato.rispondi = (r) => (r.percorso === '/api/v1/chat-images' ? { stato: vere.formatoSbagliato.stato, corpo: JSON.stringify(vere.formatoSbagliato.d) } : null)
         compositore(w).vm.$emit('pickPhotos')
         await asciuga()
-        expect(vassoio(w)).toMatchObject([{ status: 'failed', error: `${en['attachments.imageFailed']} · Invalid query` }])
+        // ⛔ D-F3-1 (Desktop 25/10): mai il codice né la frase inglese di r4 nel vassoio; `QUERY_INVALID` su un'immagine è il formato
+        expect(vassoio(w)).toMatchObject([{ status: 'failed', error: `${en['attachments.imageFailed']} · ${en['attachments.imageFormatBody']}` }])
         compositore(w).vm.$emit('send')
         await asciuga()
         expect(invii()).toEqual([])
@@ -223,7 +224,7 @@ describe('le immagini nel Codice su r4 (K3-C Allegati A2)', () => {
         stato.rispondi = (r) => (r.percorso === '/api/v1/chat-images' ? { stato: 500, corpo: JSON.stringify(vere.immagine1.d) } : null)
         compositore(w).vm.$emit('pickPhotos')
         await asciuga()
-        expect(vassoio(w)).toMatchObject([{ status: 'failed', error: `${en['attachments.imageFailed']} · HTTP 500` }])
+        expect(vassoio(w)).toMatchObject([{ status: 'failed', error: `${en['attachments.imageFailed']} · TALOS could not add this file.` }])
         w.unmount()
     })
 

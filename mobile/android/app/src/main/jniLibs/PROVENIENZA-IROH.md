@@ -35,3 +35,30 @@ quelle del JAR ufficiale `computer.iroh:iroh:1.1.0`: l'interfaccia è identica, 
 iroh e iroh-ffi: MIT OR Apache-2.0 (n0, Inc.). rustls: Apache-2.0 OR ISC OR MIT. JNA (5.15.0, dal pom di iroh): LGPL-2.1-or-later
 OR Apache-2.0, scelta Apache-2.0 (owner 20/10/2026), usata come libreria non modificata. Nelle Note legali: iroh in
 `src/lib/legal/nativeComponents.ts`; JNA e le classi Kotlin di iroh nell'elenco di AboutLibraries (`licenzeScelte.ts` per JNA).
+
+## Inizializzazione Android (24/10/2026)
+
+**La `.so` è INVARIATA**: stesso file, stesso SHA-256 `13c53c7deb72b132944521078352ee8e1bdd08d776cbc4281c76cfc0084785dc`, misurato
+prima e dopo questa modifica. Cambia solo chi la chiama.
+
+- **Il sintomo** (dal vivo, Pad e PJZ110): a ogni canale remoto `libiroh_ffi.so` stampava
+  `panicked at …ndk-context-0.1.1/src/lib.rs:72:30: android context was not initialized`, e ogni tanto un collegamento aspettava il
+  tetto di ~30 s.
+- **Il perché**: iroh-ffi v1.1.0 (`src/android_init.rs`) vuole il `JavaVM` e il contesto dell'applicazione in `ndk_context` prima di
+  qualunque `Endpoint` (il risolutore DNS legge `LinkProperties.getDnsServers()` via JNI). La nostra `.so` esporta già
+  `Java_computer_iroh_IrohAndroid_installAndroidContext` (`llvm-nm -D`: `0000000000740cb4 T`), ma la classe Kotlin che la chiama
+  sta solo nell'AAR `iroh-android`, che non usiamo (vedi sopra); il JAR `computer.iroh:iroh:1.1.0` non ce l'ha (controllato: 404
+  voci, nessuna `IrohAndroid`). Quindi nessuno la chiamava mai.
+- **La cura**:
+  - `android/app/src/main/java/computer/iroh/IrohAndroid.kt`: copiata **invariata** da `kotlin/android/src/main/kotlin/computer/iroh/IrohAndroid.kt`
+    del tag `v1.1.0` (`5e45109`), con in testa provenienza e licenza (MIT OR Apache-2.0, © 2025 N0, INC.). Pacchetto e nome non si
+    toccano: sono il nome del simbolo JNI.
+  - `ai.talos.remoto.TalosRemotoContestoIroh.prepara(context)`: passa il contesto dell'**applicazione** (mai l'Activity: iroh ne
+    tiene un riferimento globale per tutta la vita del processo); ogni errore (`UnsatisfiedLinkError`,
+    `ExceptionInInitializerError`) diventa un `Log.w` e il remoto va avanti come prima. Chiamata da `TalosRemotoPlugin.load()` (app
+    aperta) e da `TalosSvegliaLavoro.esegui` prima di `apriVerso` (app uccisa: lì non c'è il plugin). Il lato nativo è idempotente.
+  - `proguard-rules.pro`: `-keep class computer.iroh.IrohAndroid { native <methods>; }`, accanto a `computer.iroh.**`.
+  - Note legali: la voce «iroh (iroh-ffi)» di `src/lib/legal/nativeComponents.ts` copre anche questo file (stesso progetto, licenza,
+    fonte).
+- **Prove**: `android/app/src/test/java/ai/talos/remoto/TalosRemotoContestoIrohTest.kt` (IRA-01…06). L'effetto sui ~30 s si misura
+  sul dispositivo.

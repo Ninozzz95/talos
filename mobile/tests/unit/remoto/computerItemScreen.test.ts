@@ -2,7 +2,7 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
-import { ATTESA_CONTROLLO_MS, type PluginComputer } from '@/lib/remoto/computerRemoti'
+import type { PluginComputer } from '@/lib/remoto/computerRemoti'
 
 /**
  * ⛔ CLIENT DEL CONTROLLO REMOTO, fetta R-M3: il dettaglio di un computer collegato (mockup v5: Stato, Percorso, Collegato, «Dimentica
@@ -136,121 +136,38 @@ describe('il dettaglio di un computer', () => {
         ;(document.querySelector('[data-testid="talos-computer-forget-confirm"]') as HTMLButtonElement).click()
         await vi.waitFor(() => { if (!replace.mock.calls.length) throw new Error('ancora qui') })
         expect(plugin.dimentica).toHaveBeenCalledWith({ pcId: 'pc-uno' })
-        expect(avvisi.map((a) => a.title)).toEqual(['computer.forgetOffline'])
+        // D-MOCK-8: il titolo dice QUALE PC, col codice breve (`pc-uno` → «pc-u»)
+        expect(avvisi.map((a) => a.title)).toEqual(['computer.forgetOffline{"name":"Studio · pc-u"}'])
     })
 
-    it('CIS-06 in linea: le sessioni del PC, e una sessione si apre nella schermata del Codice sul canale remoto', async () => {
+    /*
+     * Mockup remoto approvato dall'owner il 23/10, tavola 2: le Impostazioni del PC hanno notifiche, collegamento e «Dimentica».
+     * Le prove delle sessioni (CIS-06, 10, 14) sono passate alla lista del Codice (`codiceDove.test.ts`, DOVE-05/06); quelle della
+     * cartella di una sessione nuova (CIS-07, 08, 11, 12) al componente estratto (`nuovaSessioneSulPc.test.ts`, NSP-01..04).
+     */
+    it('CIS-15 tavola 2: lo stato sotto il nome e «Apri le sessioni nel Codice», che apre il Codice filtrato su questo PC', async () => {
         const v = await monta()
-        await vi.waitFor(() => { if (!v.find('[data-testid="talos-computer-session"]').exists()) throw new Error('ancora niente') })
-        const riga = v.get('[data-testid="talos-computer-session"]')
-        expect(riga.text()).toContain('Sito vetrina')
-        await riga.trigger('click')
-        expect(push).toHaveBeenCalledWith({ name: 'computer-codice', params: { pcId: 'pc-uno', id: 's1' } })
+        expect(v.get('[data-testid="talos-computer-status"]').text()).toContain('computer.online')
+        await v.get('[data-testid="talos-computer-open-codice"]').trigger('click')
+        expect(push).toHaveBeenCalledWith({ name: 'harness', query: { dove: 'pc-uno' } })
     })
 
-    it('CIS-07 Q2 (owner 20/10 «fra le cartelle ammesse»): «Nuova sessione» mostra le cartelle del PC, preselezionata quella dell\'ultima sessione; «Apri» va al Codice con la cartella', async () => {
+    it('CIS-16 tavola 2: nel Collegamento il codice del PC, le prime 4 cifre del suo id in minuscolo', async () => {
         const v = await monta()
-        await vi.waitFor(() => { if (!v.find('[data-testid="talos-computer-new-session"]').exists()) throw new Error('ancora niente') })
-        await v.get('[data-testid="talos-computer-new-session"]').trigger('click')
-        await vi.waitFor(() => { if (!v.find('[data-testid="talos-computer-folder"]').exists()) throw new Error('ancora niente') })
-        const righe = v.findAll('[data-testid="talos-computer-folder"]')
-        expect(righe.map((x) => [x.text(), x.attributes('aria-checked')])).toEqual([['r4 remoto', 'false'], ['Altra', 'true']])
-        expect(righe.every((x) => x.attributes('role') === 'radio')).toBe(true)
-        // aperto l'elenco, «Nuova sessione» non si ripete: si apre o si annulla
+        const riga = v.get('[data-testid="talos-computer-code-short"]')
+        expect(riga.text()).toContain('computer.pcCode')
+        expect(riga.text()).toContain('pc-u')
+    })
+
+    it('CIS-17 ⛔ verso contrario, tavola 2: la sezione «Sessioni su questo computer» non c\'è più, né «Nuova sessione»', async () => {
+        const v = await monta()
+        await flushPromises()
+        expect(v.text()).not.toContain('computer.sessions')
+        expect(v.find('[data-testid="talos-computer-session"]').exists()).toBe(false)
         expect(v.find('[data-testid="talos-computer-new-session"]').exists()).toBe(false)
-        await righe[0].trigger('click')
-        expect(v.findAll('[data-testid="talos-computer-folder"]').map((x) => x.attributes('aria-checked'))).toEqual(['true', 'false'])
-        await v.get('[data-testid="talos-computer-open-session"]').trigger('click')
-        expect(push).toHaveBeenCalledWith({ name: 'computer-codice', params: { pcId: 'pc-uno' }, query: { cartella: 'r4-remoto' } })
-    })
-
-    it('CIS-08 Q2: nessuna cartella aperta al telefono ⇒ lo dice e non c\'è niente da aprire; senza una scelta «Apri» è spento', async () => {
-        cartellePc = []
-        const v = await monta()
-        await vi.waitFor(() => { if (!v.find('[data-testid="talos-computer-new-session"]').exists()) throw new Error('ancora niente') })
-        await v.get('[data-testid="talos-computer-new-session"]').trigger('click')
-        await vi.waitFor(() => { if (!v.text().includes('computer.noFolders')) throw new Error('ancora niente') })
-        expect(v.find('[data-testid="talos-computer-open-session"]').exists()).toBe(false)
-
-        cartellePc = [{ id: 'r4-remoto', nome: 'r4 remoto' }] // nessuna col nome dell'ultima sessione: niente preselezione
-        const w = await monta()
-        await vi.waitFor(() => { if (!w.find('[data-testid="talos-computer-new-session"]').exists()) throw new Error('ancora niente') })
-        await w.get('[data-testid="talos-computer-new-session"]').trigger('click')
-        await vi.waitFor(() => { if (!w.find('[data-testid="talos-computer-folder"]').exists()) throw new Error('ancora niente') })
-        expect(w.get('[data-testid="talos-computer-folder"]').attributes('aria-checked')).toBe('false')
-        expect(w.get('[data-testid="talos-computer-open-session"]').attributes('disabled')).toBeDefined()
-    })
-
-    it('CIS-09 Q2: un PC non in linea non offre una sessione nuova', async () => {
-        plugin.collega = vi.fn(async () => { throw Object.assign(new Error('x'), { code: 'CONNECT_FAILED' }) })
-        const v = await monta()
-        expect(v.find('[data-testid="talos-computer-new-session"]').exists()).toBe(false)
-    })
-
-    it('CIS-10 ⛔ RA-12: l\'elenco delle sessioni che non si legge non diventa «nessuna sessione»: lo dice, e «Riprova» lo rilegge', async () => {
-        sessioniGuaste = true
-        const v = await monta()
-        await vi.waitFor(() => { if (!v.find('[data-testid="talos-computer-sessions-error"]').exists()) throw new Error('ancora niente') })
-        expect(v.text()).not.toContain('computer.sessionsEmpty')
-        expect(v.get('[data-testid="talos-computer-sessions-error"]').text()).toContain('computer.errors.')
-        // senza un elenco vero non si apre una sessione nuova (la cartella preselezionata viene dall'elenco)
-        expect(v.find('[data-testid="talos-computer-new-session"]').exists()).toBe(false)
-        sessioniGuaste = false
-        await v.get('[data-testid="talos-computer-sessions-retry"]').trigger('click')
-        await vi.waitFor(() => { if (!v.find('[data-testid="talos-computer-session"]').exists()) throw new Error('ancora niente') })
-        expect(v.find('[data-testid="talos-computer-sessions-error"]').exists()).toBe(false)
-        expect(v.get('[data-testid="talos-computer-session"]').text()).toContain('Sito vetrina')
-    })
-
-    it('CIS-11 ⛔ RA-12: le cartelle che il PC non manda mai non lasciano «Nuova sessione» spento per sempre: dopo il tetto lo dice', async () => {
-        cartelleMute = true
-        const v = await monta()
-        await vi.waitFor(() => { if (!v.find('[data-testid="talos-computer-new-session"]').exists()) throw new Error('ancora niente') })
-        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-        try {
-            await v.get('[data-testid="talos-computer-new-session"]').trigger('click')
-            await flushPromises()
-            expect(v.get('[data-testid="talos-computer-new-session"]').attributes('disabled')).toBeDefined()
-            await vi.advanceTimersByTimeAsync(ATTESA_CONTROLLO_MS)
-            await flushPromises()
-        } finally {
-            vi.useRealTimers()
-        }
-        expect(v.text()).toContain('computer.errors.timeout')
-        expect(v.get('[data-testid="talos-computer-new-session"]').attributes('disabled')).toBeUndefined()
-    })
-
-    it('CIS-14 ⛔ RA-12: un elenco delle sessioni che il PC non manda mai, dopo il tetto lo dice con «Riprova»', async () => {
-        sessioniMute = true
-        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-        let v: Awaited<ReturnType<typeof mount>>
-        try {
-            const { default: ComputerItemScreen } = await import('@/screens/ComputerItemScreen.vue')
-            v = mount(ComputerItemScreen)
-            for (let i = 0; i < 10; i++) await flushPromises()
-            expect(v.get('[data-testid="talos-computer-status"]').text()).toContain('computer.online')
-            expect(v.find('[data-testid="talos-computer-sessions-error"]').exists()).toBe(false)
-            await vi.advanceTimersByTimeAsync(ATTESA_CONTROLLO_MS)
-            await flushPromises()
-        } finally {
-            vi.useRealTimers()
-        }
-        expect(v.get('[data-testid="talos-computer-sessions-error"]').text()).toBe('computer.errors.timeout')
-        sessioniMute = false
-        await v.get('[data-testid="talos-computer-sessions-retry"]').trigger('click')
-        await vi.waitFor(() => { if (!v.find('[data-testid="talos-computer-session"]').exists()) throw new Error('ancora niente') })
-    })
-
-    it('CIS-12 ⛔ RA-13: senza cartelle aperte al telefono c\'è «Annulla», che riporta «Nuova sessione»', async () => {
-        cartellePc = []
-        const v = await monta()
-        await vi.waitFor(() => { if (!v.find('[data-testid="talos-computer-new-session"]').exists()) throw new Error('ancora niente') })
-        await v.get('[data-testid="talos-computer-new-session"]').trigger('click')
-        await vi.waitFor(() => { if (!v.text().includes('computer.noFolders')) throw new Error('ancora niente') })
-        expect(v.find('[data-testid="talos-computer-new-session"]').exists()).toBe(false)
-        await v.get('[data-testid="talos-computer-folders-cancel"]').trigger('click')
-        expect(v.text()).not.toContain('computer.noFolders')
-        expect(v.find('[data-testid="talos-computer-new-session"]').exists()).toBe(true)
+        // nessuna lettura delle sessioni da qui: il dettaglio fa solo il ping
+        const richieste = (plugin.invia as ReturnType<typeof vi.fn>).mock.calls.map((c) => JSON.parse(c[0].json)).filter((m) => m.t === 'req')
+        expect(richieste.map((m) => m.op)).not.toContain('sessions.list')
     })
 
     it('CIS-13 ⛔ D-RM4-9: «Dimentica questo computer» ha la coppia di pericolo del tema, non il contorno grigio della variante outline', async () => {

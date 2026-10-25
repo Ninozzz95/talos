@@ -27,16 +27,19 @@ function mountComposer(profile: TalosMobileModelProfileView) {
     })
 }
 
+// J3 (owner 24/10/2026): il comando del livello è la pillola del ragionamento nel compositore, non più il cursore del foglio
 describe('TalosMobileComposer effort visibility (F3-T1)', () => {
     it('shows the effort control when the model has real effort levels', async () => {
         const wrapper = mountComposer(profileWith(['low', 'medium', 'high']))
+        expect(wrapper.find('[data-testid="talos-composer-reasoning-pill"]').exists()).toBe(true)
         await wrapper.get('[data-testid="talos-composer-model-chip"]').trigger('click')
         await vi.dynamicImportSettled()
-        expect(wrapper.find('[data-testid="talos-mobile-effort-slider"]').exists()).toBe(true)
+        expect(wrapper.find('[data-testid="talos-mobile-effort-slider"]').exists()).toBe(false)
     })
 
     it('hides the effort control entirely when the model only has off', async () => {
         const wrapper = mountComposer(profileWith(['off']))
+        expect(wrapper.find('[data-testid="talos-composer-reasoning-pill"]').exists()).toBe(false)
         await wrapper.get('[data-testid="talos-composer-model-chip"]').trigger('click')
         await vi.dynamicImportSettled()
         expect(wrapper.find('[data-testid="talos-mobile-effort-slider"]').exists()).toBe(false)

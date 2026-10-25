@@ -195,7 +195,9 @@ export const TALOS_MOBILE_ROUTES: readonly TalosMobileRoute[] = Object.freeze([
     { name: 'computer', path: '/computer', desktop_station_id: 'remote_control', component: loadComputerScreen },
     { name: 'computer-item', path: '/computer/:pcId', desktop_station_id: 'remote_control', component: loadComputerItemScreen, parent: 'computer' },
     // R-M4: la stessa schermata del Codice, col ponte remoto (`CodiceR4Screen` legge `pcId`); torna al dettaglio del computer.
-    { name: 'computer-codice', path: '/computer/:pcId/codice/:id?', desktop_station_id: 'remote_control', component: loadCodiceR4Screen, parent: 'computer-item' },
+    // ⛔ D-MOCK-4 (dal Pad, vc175, 24/10/2026; mockup remoto del 23/10, tavola 3): una sessione del PC è del Codice, non del Computer. Sul
+    // tablet la colonna resta la lista del Codice con la riga accesa; Indietro torna alla lista, col filtro «Dove» che c'era.
+    { name: 'computer-codice', path: '/computer/:pcId/codice/:id?', desktop_station_id: 'harness', component: loadCodiceR4Screen, parent: 'harness' },
     { name: 'settings', path: '/settings', desktop_station_id: 'settings', component: loadSettingsScreen },
     { name: 'settings-models', path: '/settings/models', desktop_station_id: 'settings', component: loadSettingsModelsScreen, parent: 'settings' },
     { name: 'settings-models-providers', path: '/settings/models/providers', desktop_station_id: 'settings', component: loadSettingsModelsProvidersScreen, parent: 'settings-models' },

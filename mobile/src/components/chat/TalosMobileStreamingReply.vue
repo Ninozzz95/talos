@@ -10,6 +10,11 @@ import { useTalosSmoothReveal } from '@/composables/useTalosSmoothReveal'
 import { useChatController } from '@/stores/chatController'
 import { useSettingsStore } from '@/stores/settings'
 import { TALOS_SORGENTE_STREAMING, talosSorgenteStreamingDellaChat } from '@/lib/chat/sorgenteStreaming'
+import { creaScansione } from '@/lib/streaming/desktop/markdown-in-arrivo.js'
+import { languageClass } from '@/lib/talosMessageMarkdown'
+import { aperturaDelRecinto } from '@/lib/streaming/aperturaDelRecinto'
+import { codaDaDipingere } from '@/lib/streaming/codaDaDipingere'
+import { useTalosI18n } from '@/i18n'
 
 /**
  * R1-5 — the in-flight assistant reply, isolated. This component alone
@@ -28,6 +33,7 @@ import { TALOS_SORGENTE_STREAMING, talosSorgenteStreamingDellaChat } from '@/lib
  * letter will appear.
  */
 const controller = useChatController()
+const { t } = useTalosI18n()
 /**
  * ⛔ K3-B2 (owner 15/10 «Stessi componenti della chat»): il giro che arriva viene dalla sorgente iniettata (il Codice su r4) o, di
  * serie, dalla chat, con la logica di sempre (`lib/chat/sorgenteStreaming.ts`).
@@ -241,12 +247,111 @@ function parseNow(text: string): void {
     parsedMarkdown.value = stabilizeStreamingTalosMarkdown(text)
 }
 
+// ---- il recinto aperto cresce sul posto (#24) --------------------------------
+/*
+ * ⛔ #24, owner 23/10/2026 dal Pad: «il testo lagga un casino». Misurato su vc159 (Spark che scrive una pagina HTML): frame da 39 ms
+ * continui. Causa: dentro un blocco di codice ogni riga finisce con un a capo, e un a capo nella coda faceva ripartire il parse
+ * INTERO della risposta (`syncTail`), mentre il recinto si ricostruiva col `v-html` a ogni giro: costo che cresce col file (O(n²)).
+ * Come il desktop (3cf97a30d, r4 1164aee98): la scansione dei confini stabili dei moduli copiati (`markdown-in-arrivo.js`) dice se
+ * l'ultima riga completa sta in un recinto aperto; allora il testo prima del recinto si analizza UNA volta, e il recinto è un
+ * elemento disegnato qui, con la stessa forma del renderer (`talosMessageMarkdown.ts` fence), il cui codice cresce con `appendData`.
+ * Quando il recinto si chiude, si torna al parse di sempre: un solo cambio per blocco di codice, invisibile.
+ */
+const corpo = ref<HTMLElement | null>(null)
+let scansione = creaScansione()
+let recinto: { inizio: number, host: HTMLElement, testo: Text, mostrato: string } | null = null
+
+function chiudiRecinto(): void {
+    recinto?.host.remove()
+    recinto = null
+}
+
+function disegnaRecinto(testo: string, inizio: number): void {
+    const fineApertura = testo.indexOf(NEWLINE, inizio)
+    const codice = fineApertura < 0 ? '' : testo.slice(fineApertura + 1)
+    if (!recinto || recinto.inizio !== inizio) {
+        chiudiRecinto()
+        // la lingua come la legge il blocco finale (`languageClass` del renderer): stessa etichetta e stessa classe prima e dopo
+        // la chiusura, mai «Python» che diventa «python» o «c#» che diventa «Code» (revisione del Desktop 23/10, voce 1a)
+        const lingua = languageClass(testo.slice(inizio, fineApertura < 0 ? testo.length : fineApertura).trim().replace(/^```+/, ''))
+        const host = document.createElement('div')
+        host.className = 'talos-message-block'
+        host.setAttribute('data-testid', 'talos-stream-fence')
+        const blocco = document.createElement('div')
+        blocco.className = 'talos-code-block'
+        const testa = document.createElement('div')
+        testa.className = 'talos-code-block-header'
+        const etichetta = document.createElement('span')
+        etichetta.textContent = lingua || t('messageMarkdown.code')
+        // «Copia» c'è già mentre il codice arriva, nello stesso posto del blocco finale (se comparisse solo alla chiusura sarebbe
+        // uno scatto), ma SPENTO e con «Incoming…»: niente si copia a metà in silenzio. Lo accende il blocco finale. Come il desktop
+        // (revisione del Desktop 23/10, voce 1b; bozzetto dei blocchi di codice approvato dall'owner).
+        const copia = document.createElement('button')
+        copia.type = 'button'
+        copia.disabled = true
+        copia.setAttribute('data-talos-copy-code', '')
+        copia.setAttribute('aria-label', t('messageMarkdown.copyCode'))
+        copia.textContent = t('messageMarkdown.codeIncoming')
+        // il ⋯ del bozzetto dei blocchi, spento come «Copia»: alla chiusura la testata non cambia forma
+        const altro = document.createElement('button')
+        altro.type = 'button'
+        altro.disabled = true
+        altro.setAttribute('data-talos-code-menu', '')
+        altro.setAttribute('aria-haspopup', 'menu')
+        altro.setAttribute('aria-label', t('messageMarkdown.codeMore'))
+        altro.textContent = '⋯'
+        testa.append(etichetta, copia, altro)
+        const pre = document.createElement('pre')
+        pre.tabIndex = 0
+        const code = document.createElement('code')
+        if (lingua) code.className = `language-${lingua}`
+        const nodo = document.createTextNode('')
+        // il cursore di scrittura, come nella coda a parole: FRATELLO dopo il nodo di testo, mai dentro, così `appendData` resta
+        // la via veloce e il cursore resta l'ultimo (regressione della #24 vista sul Pad, vc161, 23/10)
+        const cursore = document.createElement('span')
+        cursore.className = 'talos-stream-caret live-cursor'
+        cursore.setAttribute('data-testid', 'talos-stream-caret')
+        cursore.setAttribute('aria-hidden', 'true')
+        code.append(nodo, cursore)
+        pre.append(code)
+        blocco.append(testa, pre)
+        host.append(blocco)
+        recinto = { inizio, host, testo: nodo, mostrato: '' }
+    }
+    // Il recinto è l'ULTIMO blocco della radice del contenuto, con la forma del blocco finale (`.talos-message-block >
+    // .talos-code-block`): stessi stili, stessi margini, stessa copia, e alla chiusura nessuno scatto. Vive fuori dai `v-html`
+    // dei blocchi; finché il recinto è aperto il testo prima non cambia, quindi Vue non aggiunge blocchi dopo di lui.
+    const radice = corpo.value?.querySelector<HTMLElement>('[data-testid="talos-mobile-message-content"]')
+    if (radice && recinto.host.parentElement !== radice) radice.append(recinto.host)
+    if (codice.startsWith(recinto.mostrato)) recinto.testo.appendData(codice.slice(recinto.mostrato.length))
+    else recinto.testo.data = codice
+    recinto.mostrato = codice
+}
+
 watch(revealed, (text) => {
     if (!text) {
         if (parseThrottle !== null) clearTimeout(parseThrottle)
         parseThrottle = null
         parsedSource.value = ''
         parsedMarkdown.value = ''
+        scansione = creaScansione()
+        chiudiRecinto()
+        return
+    }
+    const apertura = aperturaDelRecinto(scansione, text)
+    if (apertura >= 0) {
+        // dentro un recinto aperto: il prima si analizza solo quando cambia, il codice cresce sul posto
+        if (parseThrottle !== null) clearTimeout(parseThrottle)
+        parseThrottle = null
+        const prima = text.slice(0, apertura)
+        if (parsedSource.value !== prima) parseNow(prima)
+        void nextTick(() => disegnaRecinto(text, apertura))
+        return
+    }
+    if (recinto) {
+        // il recinto si è chiuso: il parse di sempre lo prende, e quello disegnato a mano se ne va
+        chiudiRecinto()
+        parseNow(text)
         return
     }
     if (!parsedMarkdown.value) parseNow(text)
@@ -275,6 +380,14 @@ const tailScheduler = createTalosFrameScheduler(
 // appended into an <hr> or a <tr> are simply never painted.
 const TAIL_REFUSED = new Set(['HR', 'BR', 'IMG', 'INPUT', 'TABLE', 'THEAD', 'TBODY', 'TFOOT', 'TR', 'COL', 'COLGROUP'])
 
+/** Vero se dopo `el`, fra i suoi fratelli, c'è testo visibile (la coda esclusa). */
+function testoDopo(el: Element): boolean {
+    for (let n = el.nextSibling; n; n = n.nextSibling) {
+        if (n !== tailHost && n.nodeType === Node.TEXT_NODE && /\S/.test(n.textContent ?? '')) return true
+    }
+    return false
+}
+
 /** The deepest last block, so the tail continues the current line. */
 function tailTarget(): HTMLElement | null {
     if (cachedTailTarget !== undefined && cachedTailTarget?.isConnected) {
@@ -293,7 +406,10 @@ function tailTarget(): HTMLElement | null {
     for (;;) {
         const children = [...node.children].filter((child) => child !== tailHost)
         const last = children.at(-1) as HTMLElement | undefined
-        if (!last || TAIL_REFUSED.has(last.tagName)) {
+        // ⛔ D-VIS-9 (23/10, prova «Marco»): `children` conta solo gli ELEMENTI. Se dopo l'ultimo (un <strong>, un <code>) c'è
+        // ancora testo, la riga continua lì: scendere dentro l'elemento metteva le parole nuove in mezzo alla riga
+        // («virgoletteontenuto: ven |, virgole e a capo sono c»). La coda resta in fondo al nodo corrente.
+        if (!last || TAIL_REFUSED.has(last.tagName) || testoDopo(last)) {
             cachedTailTarget = node
             return node
         }
@@ -371,8 +487,16 @@ function appendChars(host: HTMLElement, text: string, structural = false): void 
 
 function syncTail(): void {
     if (!sending.value) return
+    // dentro un recinto aperto il codice lo disegna `disegnaRecinto`: la coda a parole non serve, e il suo «a capo» non deve
+    // far ripartire il parse intero (#24)
+    if (recinto) {
+        tailHost?.remove()
+        paintedTail = ''
+        return
+    }
     const pending = revealed.value.slice(parsedSource.value.length)
-    const tail = pending
+    // ⛔ D-VIS-9b (23/10): la coda non si attacca alla parola prima (`codaDaDipingere`)
+    const tail = codaDaDipingere(parsedSource.value, pending)
     // SF-MAJOR: everything after a newline is BLOCK syntax (`- `, `## `, `|`,
     // `---`). Painted as raw text into the previous block it shows the markers
     // and lands in the wrong container (inside the last <li>, the last <td>)
@@ -384,6 +508,17 @@ function syncTail(): void {
         return
     }
     const target = tailTarget()
+    // #24 (23/10, STREAM-RECINTO-06): un recinto appena CHIUSO è ancora l'ultimo blocco analizzato, e `tailTarget` mette la coda
+    // nel suo <code>: la frase dopo il codice compariva dentro il riquadro del codice fino al parse seguente. Se il testo analizzato
+    // ha i recinti tutti chiusi (la stessa regola di `stabilizeStreamingTalosMarkdown`), la coda è testo nuovo: la prende il parse.
+    // Limite noto e voluto (revisione del Desktop): conta le righe-recinto senza distinguere ``` da ~~~, quindi un ~~~ con dentro
+    // un ``` torna solo al parse intero; a schermo nessun difetto, solo un parse in più.
+    if (/\S/.test(tail) && target?.closest('pre') && (parsedSource.value.match(/^\s{0,3}(```|~~~)/gm)?.length ?? 0) % 2 === 0) {
+        if (parseThrottle !== null) clearTimeout(parseThrottle)
+        parseThrottle = null
+        parseNow(revealed.value)
+        return
+    }
     // BUG (found finishing Pass 2, 2/9): `lastElementChild` also matches the
     // tailHost span itself once `ensureTail` has appended it to `target` — on
     // the FOLLOWING call this read the tail's own `<span>` instead of the real
@@ -433,6 +568,7 @@ watch(parsedMarkdown, () => {
 onBeforeUnmount(() => {
     if (parseThrottle !== null) clearTimeout(parseThrottle)
     tailScheduler.cancel()
+    chiudiRecinto()
     tailHost = null
     caretEl = null
     cachedTailTarget = undefined
@@ -471,7 +607,7 @@ onBeforeUnmount(() => {
              elements — and every block would animate in at once, over text that
              was already on screen. Fading while it arrives is the effect; fading
              again once it has arrived is the bug. -->
-        <div class="talos-streaming-body assistant-text">
+        <div ref="corpo" class="talos-streaming-body assistant-text">
             <TalosMobileMessageContent :content="parsedMarkdown" line-breaks />
         </div>
         <TalosMobileBozzeAttrezzi v-if="bozze.length" :bozze="bozze" />

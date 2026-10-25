@@ -9,6 +9,7 @@ import { talosShortModelLabel } from '@/lib/models/modelLabel'
 import {
     TALOS_METADATA_AZIONI,
     TALOS_METADATA_AZIONE_NON_ESEGUITA,
+    TALOS_METADATA_CHIAMATA_TRONCATA,
     TALOS_METADATA_TRONCATA,
     talosHaAzioniDaMostrare,
 } from '@/lib/tools/tracciaAzione'
@@ -17,6 +18,7 @@ import { TALOS_TOOL_LABEL_KEYS, talosDynamicToolFallbackLabel } from '@/lib/tool
 import type { TalosAzioneMessaggio, TalosMobileMessageView } from '@/components/chat/mobileChatTypes'
 // La chat vuota non ha azioni per messaggio: arrivano con il primo messaggio.
 const TalosMobileMessageActions = defineAsyncComponent(() => import('./TalosMobileMessageActions.vue'))
+const TalosMobileComposerSheet = defineAsyncComponent(() => import('./TalosMobileComposerSheet.vue'))
 // CONT (25/09/2026): la riga «Si è fermata qui» e «Continua», a richiesta — una risposta tagliata è rara.
 const TalosMobileFermataAlLimite = defineAsyncComponent(() => import('./TalosMobileFermataAlLimite.vue'))
 // ⭐⭐ P4-quinquies: rara come la fermata al limite ⇒ a richiesta, fuori dal pezzo d'avvio.
@@ -368,6 +370,10 @@ function azioneNonEseguita(metadata: unknown): boolean {
 function siEFermataAlLimite(metadata: unknown): boolean {
     return (metadata as Record<string, unknown> | null)?.[TALOS_METADATA_TRONCATA] === true
 }
+/** ⛔⛔ D-LOC-1: la fermata è caduta dentro una chiamata, e il ciclo l'ha chiusa senza eseguirla. Solo `true` conta. */
+function chiamataTroncata(metadata: unknown): boolean {
+    return (metadata as Record<string, unknown> | null)?.[TALOS_METADATA_CHIAMATA_TRONCATA] === true
+}
 
 const PlainMessage = defineComponent({
     props: { content: { type: String, required: true } },
@@ -393,6 +399,17 @@ const copyStatus = ref('')
 const TalosMobileMessageFile = defineAsyncComponent(() => import('./TalosMobileMessageFile.vue'))
 const TalosMobileMessageEdit = defineAsyncComponent(() => import('./TalosMobileMessageEdit.vue'))
 const editTarget = ref<{ messageId: string; lastMessageId: string; hasLater: boolean } | null>(null)
+/**
+ * Owner 24/10/2026 «Come Happy» (`MarkdownView.tsx:38-63`): col dito il testo dei messaggi non si seleziona da sé (la selezione di
+ * Android arrivava insieme alle azioni, foto 97); «Seleziona testo» lo apre qui, intero, dove si seleziona liberamente.
+ */
+const testoDaSelezionare = ref<string | null>(null)
+// Owner 24/10/2026 «Testo reso, pulito» (revisione del blocco 3, S4): il foglio mostra il testo come appare, non il Markdown. Il
+// parser arriva con un import dinamico come `TalosMobileMessageContent`, che a quel punto l'ha già caricato.
+async function apriSelezione(contenuto: string): Promise<void> {
+    const { testoResoDelMarkdown } = await import('@/lib/chat/testoReso')
+    testoDaSelezionare.value = testoResoDelMarkdown(contenuto)
+}
 function editMessage(message: TalosMobileMessageView): void {
     if (props.sending) return
     const last = props.messages.at(-1)
@@ -419,7 +436,14 @@ function clearMessageHold(): void {
     messageHoldOrigin = null
 }
 
+/** Il dito o il mouse dell'ultimo gesto: il menu di sistema si ferma solo dopo un dito (col mouse resta quello del browser). */
+let ultimoPuntatore = ''
+function onMessageContextMenu(event: MouseEvent): void {
+    if (ultimoPuntatore === 'touch') event.preventDefault()
+}
+
 function onMessagePointerDown(event: PointerEvent): void {
+    ultimoPuntatore = event.pointerType
     clearMessageHold()
     if (event.target instanceof Element && event.target.closest('button, a, summary, input, textarea')) return
     messageHoldOrigin = { x: event.clientX, y: event.clientY }
@@ -576,7 +600,7 @@ function messageStateLabel(state: string): string {
 
 <template>
     <div
-        class="talos-calm-thread mx-auto flex min-w-0 w-full max-w-[820px] flex-col overflow-x-hidden px-3 py-4"
+        class="talos-calm-thread mx-auto flex min-w-0 w-full max-w-[820px] flex-col [overflow-x:clip] px-3 py-4"
         data-testid="talos-mobile-message-list"
         :data-text-scale="props.textScale ?? 'balanced'"
         :style="{ fontSize: talosChatTextSize(props.textScale) }"
@@ -610,6 +634,7 @@ function messageStateLabel(state: string): string {
             @pointerup="clearMessageHold()"
             @pointercancel="clearMessageHold()"
             @click.capture="onMessageClickCapture($event)"
+            @contextmenu="onMessageContextMenu($event)"
         >
             <TalosMobileCompactionRow
                 v-if="compattazioneDi(message)"
@@ -644,7 +669,7 @@ function messageStateLabel(state: string): string {
                     :reasoning="ragionamentoDaMostrare(message, index)"
                 />
                 <div
-                    class="talos-message-bubble min-w-0 overflow-hidden"
+                    class="talos-message-bubble min-w-0 [overflow:clip]"
                     data-testid="talos-message-surface"
                     :class="message.role === 'user' ? 'user-bubble' : ['assistant-text', { 'assistant-bubble': props.messageStyle === 'bubbles' }]"
                     :data-message-kind="message.role"
@@ -851,6 +876,7 @@ function messageStateLabel(state: string): string {
                     <TalosMobileFermataAlLimite
                         v-if="siEFermataAlLimite(message.metadata)"
                         :mostra-continua="index === messages.length - 1 && !sending"
+                        :azione="chiamataTroncata(message.metadata)"
                         @continua="emit('continueAfterLimit', message.id)"
                     />
                     <!-- ⭐⭐⭐ LE SCHEDE: lo stato con cui si può ancora
@@ -936,6 +962,7 @@ function messageStateLabel(state: string): string {
                     :busy="sending"
                     :can-retry="message.role === 'assistant' && hasPreviousUser(message.id)"
                     :azioni="azioni"
+                    @select-text="apriSelezione($event.content)"
                     @copy="copyMessage"
                     @edit="editMessage"
                     @reuse="emit('reuse', $event.id)"
@@ -966,6 +993,30 @@ function messageStateLabel(state: string): string {
         <TalosMobileStreamingReply :ereditata="ereditataDalVolo" />
         <TalosMobileCompactionProgress v-if="compattazioneInCorso" />
         <TalosMobileMessageEdit v-if="editTarget" v-bind="editTarget" @close="editTarget = null" />
+        <TalosMobileComposerSheet
+            v-if="testoDaSelezionare !== null"
+            :title="$t('chat.selectTextTitle')"
+            testid="talos-message-select-sheet"
+            @close="testoDaSelezionare = null"
+        >
+            <p
+                data-testid="talos-message-select-sheet-text"
+                class="select-text whitespace-pre-wrap break-words px-1 pb-[var(--talos-space-section)] text-[length:var(--text-md)] leading-[1.7] text-[var(--talos-text)]"
+            >{{ testoDaSelezionare }}</p>
+            <button
+                type="button"
+                data-testid="talos-message-select-sheet-close"
+                class="talos-pressable min-h-touch w-full rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] text-sm text-[var(--talos-text)]"
+                @click="testoDaSelezionare = null"
+            >{{ $t('common.close') }}</button>
+        </TalosMobileComposerSheet>
         <span data-testid="talos-mobile-message-action-status" class="sr-only" role="status" aria-live="polite">{{ copyStatus }}</span>
     </div>
 </template>
+
+<style>
+/* Owner 24/10/2026 «Come Happy»: col dito la selezione del testo sta in «Seleziona testo», non sul messaggio (due menu, foto 97). */
+@media (pointer: coarse) {
+    .talos-chat-message { -webkit-user-select: none; user-select: none; }
+}
+</style>

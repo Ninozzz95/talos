@@ -4,6 +4,13 @@ import { useTalosI18n } from '@/i18n'
 import { talosNpuTermsText } from '@/lib/models/npuTerms'
 import { TALOS_NATIVE_COMPONENTS } from '@/lib/legal/nativeComponents'
 import { talosLicenzeDellaLibreria } from '@/lib/legal/licenzeScelte'
+import {
+    TALOS_ANDROID_LICENZE_SENZA_TESTO,
+    talosTestoAndroid,
+    talosTestoCrateRust,
+    talosTestoNativo,
+    type TalosLicenzeNative,
+} from '@/lib/legal/testiLicenze'
 
 /**
  * ⛔ NOTE LEGALI — owner, 01/10/2026: «blocco della build e note complete».
@@ -15,6 +22,8 @@ import { talosLicenzeDellaLibreria } from '@/lib/legal/licenzeScelte'
  *    provenienze del repo);
  *  - le librerie Android (AboutLibraries, `src/generated/androidLicenses.json`);
  *  - le librerie dell'interfaccia (license-checker, `src/generated/npmLicenses.json`).
+ * N1 (25/10/2026): anche i nativi e le librerie Android hanno il TESTO completo della licenza, nello stesso blocco richiudibile
+ * delle voci npm (`src/generated/nativeLicenses.json`, `lib/legal/testiLicenze.ts`).
  * Gli elenchi generati si caricano solo qui: sono centinaia di KB che il
  * pacchetto d'avvio non deve portarsi dietro.
  */
@@ -26,16 +35,33 @@ const termini = computed(() => talosNpuTermsText(String(locale.value ?? 'it')))
 const terminiAperti = ref(false)
 
 const npm = ref<NpmVoce[] | null>(null)
-const android = ref<Array<{ id: string, name: string, version: string, licenses: string }> | null>(null)
+const android = ref<Array<{ id: string, name: string, version: string, licenses: string, text: string | null, termsUrl: string | null }> | null>(null)
+const nativi = ref<Record<string, string | null> | null>(null)
 const testoAperto = ref<string | null>(null)
+const apri = (chiave: string) => { testoAperto.value = testoAperto.value === chiave ? null : chiave }
 
 onMounted(async () => {
-    const [npmJson, androidJson] = await Promise.all([
+    const [npmJson, androidJson, testiJson] = await Promise.all([
         import('@/generated/npmLicenses.json'),
         import('@/generated/androidLicenses.json'),
+        import('@/generated/nativeLicenses.json'),
     ])
     npm.value = (npmJson.default as NpmVoce[])
-    const dati = androidJson.default as unknown as { libraries: AndroidVoce[], licenses: Record<string, { name?: string }> }
+    const testi = testiJson.default as unknown as TalosLicenzeNative
+    // iroh: sotto la sua licenza, gli avvisi dei crate Rust compilati nella stessa libreria (cargo-about, `fonti.json`).
+    const rust = talosTestoCrateRust(testi, (url) => t('legal.sourceCode', { url }))
+    nativi.value = Object.fromEntries(TALOS_NATIVE_COMPONENTS.map((voce) => {
+        const testo = talosTestoNativo(voce.name, testi)
+        const conRust = voce.name === 'iroh (iroh-ffi)' && testo && rust
+            ? `${testo}
+
+${t('legal.rustNotice', { count: testi.rust.crates })}
+
+${rust}`
+            : testo
+        return [voce.name, conRust]
+    }))
+    const dati = androidJson.default as unknown as { libraries: AndroidVoce[], licenses: Record<string, { name?: string, url?: string, content?: string }> }
     android.value = dati.libraries
         .map((voce) => ({
             id: voce.uniqueId,
@@ -43,7 +69,10 @@ onMounted(async () => {
             version: voce.artifactVersion ?? '',
             // JNA e le altre librerie «A OR B»: la licenza che usiamo, con le offerte accanto (`lib/legal/licenzeScelte.ts`).
             licenses: talosLicenzeDellaLibreria(voce.uniqueId, voce.licenses ?? [], dati.licenses,
-                (licence, offered) => t('legal.chosenLicense', { licence, offered })),
+                (licence, offered) => t('legal.chosenLicense', { licence, offered }), (chiave) => t(chiave)),
+            text: talosTestoAndroid(voce.uniqueId, voce.licenses ?? [], dati.licenses, testi),
+            // Condizioni di Google senza testo da ridistribuire (`TALOS_ANDROID_LICENZE_SENZA_TESTO`): l'indirizzo dove si leggono.
+            termsUrl: (voce.licenses ?? []).filter((k) => TALOS_ANDROID_LICENZE_SENZA_TESTO[k]).map((k) => dati.licenses[k]?.url).find(Boolean) ?? null,
         }))
         .sort((a, b) => a.id.localeCompare(b.id))
 })
@@ -83,10 +112,24 @@ onMounted(async () => {
             <ul class="mt-2 flex flex-col divide-y divide-[var(--talos-border)]">
                 <li v-for="voce in TALOS_NATIVE_COMPONENTS" :key="voce.name" class="py-2">
                     <p class="text-xs text-[var(--talos-text)]">
-                        {{ voce.name }} <span v-if="voce.version" class="text-[var(--talos-muted)]">{{ voce.version }}</span>
+                        {{ voce.nameKey ? t(voce.nameKey) : voce.name }} <span v-if="voce.version" class="text-[var(--talos-muted)]">{{ voce.version }}</span>
                     </p>
-                    <p class="font-mono text-3xs text-[var(--talos-muted)]">{{ voce.license }} · {{ voce.source }}</p>
-                    <p v-if="voce.note" class="text-3xs leading-4 text-[var(--talos-muted)]">{{ voce.note }}</p>
+                    <p class="font-mono text-3xs text-[var(--talos-muted)]">{{ voce.licenseKey ? t(voce.licenseKey) : voce.license }} · {{ voce.source }}</p>
+                    <p v-if="voce.noteKey" class="text-3xs leading-4 text-[var(--talos-muted)]">{{ t(voce.noteKey) }}</p>
+                    <template v-if="nativi">
+                        <button
+                            type="button"
+                            class="talos-pressable min-h-touch text-3xs font-medium text-[var(--talos-accent)] underline-offset-2 hover:underline"
+                            :data-testid="`talos-legal-native-toggle-${voce.name}`"
+                            :aria-expanded="testoAperto === `native:${voce.name}`"
+                            @click="apri(`native:${voce.name}`)"
+                        >{{ testoAperto === `native:${voce.name}` ? t('legal.hideText') : t('legal.showText') }}</button>
+                        <pre
+                            v-if="testoAperto === `native:${voce.name}`"
+                            :data-testid="`talos-legal-native-text-${voce.name}`"
+                            class="mt-1 max-h-64 overflow-auto whitespace-pre-wrap rounded-lg bg-[var(--talos-active)] p-2 font-mono text-3xs leading-4 text-[var(--talos-muted)]"
+                        >{{ nativi[voce.name] ?? t('legal.noText') }}</pre>
+                    </template>
                 </li>
             </ul>
         </section>
@@ -101,6 +144,18 @@ onMounted(async () => {
                 <li v-for="voce in android" :key="voce.id" class="py-1.5">
                     <p class="text-xs text-[var(--talos-text)]">{{ voce.id }} <span class="text-[var(--talos-muted)]">{{ voce.version }}</span></p>
                     <p class="font-mono text-3xs text-[var(--talos-muted)]">{{ voce.licenses }}</p>
+                    <button
+                        type="button"
+                        class="talos-pressable min-h-touch text-3xs font-medium text-[var(--talos-accent)] underline-offset-2 hover:underline"
+                        :data-testid="`talos-legal-android-toggle-${voce.id}`"
+                        :aria-expanded="testoAperto === `android:${voce.id}`"
+                        @click="apri(`android:${voce.id}`)"
+                    >{{ testoAperto === `android:${voce.id}` ? t('legal.hideText') : t('legal.showText') }}</button>
+                    <pre
+                        v-if="testoAperto === `android:${voce.id}`"
+                        :data-testid="`talos-legal-android-text-${voce.id}`"
+                        class="mt-1 max-h-64 overflow-auto whitespace-pre-wrap rounded-lg bg-[var(--talos-active)] p-2 font-mono text-3xs leading-4 text-[var(--talos-muted)]"
+                    >{{ voce.text ?? (voce.termsUrl ? `${t('legal.termsAt')} ${voce.termsUrl}` : t('legal.noText')) }}</pre>
                 </li>
             </ul>
         </section>
@@ -117,7 +172,7 @@ onMounted(async () => {
                         type="button"
                         class="talos-pressable min-h-touch text-3xs font-medium text-[var(--talos-accent)] underline-offset-2 hover:underline"
                         :aria-expanded="testoAperto === voce.package"
-                        @click="testoAperto = testoAperto === voce.package ? null : voce.package"
+                        @click="apri(voce.package)"
                     >{{ testoAperto === voce.package ? t('legal.hideText') : t('legal.showText') }}</button>
                     <pre
                         v-if="testoAperto === voce.package"

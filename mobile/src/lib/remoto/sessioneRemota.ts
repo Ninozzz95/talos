@@ -6,10 +6,33 @@
 import type { TalosR4ClientePonte } from '@/lib/harness/r4/clienteR4'
 import type { PluginRemoto } from './accoppiamentoRemoto'
 import { creaClienteRemoto } from './clienteRemoto'
-import { creaPonteRemotoR4 } from './ponteRemotoR4'
+import { creaPonteRemotoR4, type OpzioniFileDelPonte } from './ponteRemotoR4'
 import { trasportoNativo } from './trasportoNativo'
 
 const codiceDi = (e: unknown) => (typeof (e as { code?: unknown })?.code === 'string' ? (e as { code: string }).code : 'CONNECT_FAILED')
+
+/**
+ * R5.13 F3: l'attesa di un invio in pausa. Il canale si riapre da sé alla prima richiesta (`assicura`); qui si prova a riaprirlo
+ * con un'attesa che cresce da 1 a 15 s (come il «riprende» del mockup approvato il 25/10), finché si apre o il Codice si chiude.
+ */
+export const ATTESE_DELLA_RIPRESA_MS = Object.freeze([1000, 2000, 4000, 8000, 15000])
+export async function attendiConnessione(
+    assicura: () => Promise<unknown>,
+    chiuso: () => boolean,
+    dormi: (ms: number) => Promise<void> = (ms) => new Promise((ok) => { setTimeout(ok, ms) }),
+): Promise<void> {
+    for (let giro = 0; ; giro++) {
+        try {
+            await assicura()
+            return
+        } catch (e) {
+            // ⛔ B9-8 (revisione del blocco 9): revocato o non più accoppiato non torna da solo; la pausa finisce col suo motivo
+            const code = (e as { code?: unknown })?.code
+            if (chiuso() || code === 'NOT_PAIRED' || code === 'REVOKED') throw e
+        }
+        await dormi(ATTESE_DELLA_RIPRESA_MS[Math.min(giro, ATTESE_DELLA_RIPRESA_MS.length - 1)]!)
+    }
+}
 
 /** Dal Pad, 20/10/2026 (RCM-08): un guasto di rete intermittente (relay n0) si ritenta UNA volta; un rifiuto del PC no. */
 export async function collegaConRitentativo(plugin: PluginRemoto, pcId: string): Promise<{ canale: string }> {
@@ -24,7 +47,7 @@ export async function collegaConRitentativo(plugin: PluginRemoto, pcId: string):
 export async function apriPonteRemoto(
     plugin: PluginRemoto,
     pcId: string,
-    opzioni: { soloDalPc?: () => string } = {},
+    opzioni: { soloDalPc?: () => string, file?: Omit<OpzioniFileDelPonte, 'attendi'> } = {},
 ): Promise<{ ponte: TalosR4ClientePonte, chiudi(): Promise<void>, segnaVista(sessionId: string): Promise<void> }> {
     /*
      * ⛔ RA-01 (revisione avversaria 21/10/2026): il canale cade (rete cambiata, telefono in sospensione, PC riavviato) e prima nessuno lo
@@ -50,7 +73,8 @@ export async function apriPonteRemoto(
             throw e
         }
         if (finito) { // chiuso mentre si apriva
-            await trasporto.smonta()
+            // revisione del blocco 4 (J2): uno `smonta` che rifiuta non deve saltare la chiusura del canale appena aperto
+            await trasporto.smonta().catch(() => undefined)
             await plugin.chiudi({ canale }).catch(() => undefined)
             throw Object.assign(new Error('DISCONNECTED'), { code: 'DISCONNECTED' })
         }
@@ -58,7 +82,8 @@ export async function apriPonteRemoto(
         trasporto.onChiuso((motivo) => {
             if (aperto !== questo) return
             aperto = null
-            smontaggio = trasporto.smonta()
+            // revisione del blocco 4, condizione del Desktop: «chiudi» aspetta questo smontaggio e non deve mai lanciare
+            smontaggio = trasporto.smonta().catch(() => undefined)
             void plugin.chiudi({ canale }).catch(() => undefined) // il nativo libera il canale caduto (e azzera ciò che teneva)
             for (const cb of chiusure) cb(motivo)
         })
@@ -77,7 +102,10 @@ export async function apriPonteRemoto(
         richiesta: async (op, args) => (await assicura()).cliente.richiesta(op, args),
         iscrivi: async (sessionId, after, onEvento) => (await assicura()).cliente.iscrivi(sessionId, after, onEvento),
         onChiuso: (cb) => { chiusure.add(cb) },
-    }, opzioni)
+    }, {
+        ...(opzioni.soloDalPc ? { soloDalPc: opzioni.soloDalPc } : {}),
+        ...(opzioni.file ? { file: { ...opzioni.file, attendi: () => attendiConnessione(assicura, () => finito) } } : {}),
+    })
     return {
         ponte,
         /** R-M5a, `device.seen` (`cartaVista.ts`): la carta di quella sessione è sullo schermo; il PC non sveglia per lei. */
@@ -90,7 +118,10 @@ export async function apriPonteRemoto(
             const ora = aperto
             aperto = null
             if (ora) {
-                await ora.trasporto.smonta()
+                // ⛔ revisione del blocco 4, condizione del Desktop: «chiudi» non lancia mai. Sta nel `finally` di chi legge
+                // (`leggiSessioniDelPc`, `conIlPonte`): un guasto qui faceva rifiutare `riepilogo`, e il «Sì» dei PC doppi si fermava
+                // senza dimenticare né dire niente. E il canale si chiude lo stesso.
+                await ora.trasporto.smonta().catch(() => undefined)
                 await plugin.chiudi({ canale: ora.canale }).catch(() => undefined)
             }
         },

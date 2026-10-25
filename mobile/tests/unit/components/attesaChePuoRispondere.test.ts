@@ -31,7 +31,8 @@ import { describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 
 vi.mock('@/stores/settings', () => ({
-    useSettingsStore: () => ({ state: { chat_layout: { message_style: 'sections', bubble_scale: 'compact' } } }),
+    // J3-ter: `shell` c'è sempre nell'app vera (`settings.ts` la ricostruisce); il blocco del ragionamento legge `show_reasoning`
+    useSettingsStore: () => ({ state: { chat_layout: { message_style: 'sections', bubble_scale: 'compact' }, shell: { show_reasoning: true } } }),
 }))
 
 /*

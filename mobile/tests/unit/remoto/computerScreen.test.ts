@@ -71,6 +71,7 @@ beforeEach(async () => {
     vi.clearAllMocks()
     vi.resetModules()
     computer = []
+    localStorage.clear()
     plugin = pluginFinto()
 })
 
@@ -84,14 +85,14 @@ describe('la sezione «Computer»', () => {
         expect(v.findAll('[data-testid="talos-computer-connect"]')).toHaveLength(1)
     })
 
-    it('CSC-02 con computer: una riga per computer che apre il dettaglio', async () => {
+    it('CSC-02 con computer: un riquadro per computer, il nome apre il dettaglio (mockup remoto 23/10, tavola 1)', async () => {
         computer = [{ pcId: 'pc-uno', nome: 'Studio', relay: null, accoppiatoAlle: 1_760_000_000_000 }]
         const v = await monta()
-        const riga = v.get('[data-testid="talos-computer-row"]')
-        expect(riga.text()).toContain('Studio')
+        const riquadro = v.get('[data-testid="talos-computer-card"]')
+        expect(riquadro.text()).toContain('Studio')
         // ⛔ dal Pad, 20/10/2026: «Collegato il 20&#x2F;10» — la data passava dal `t` che fa l'escape dei parametri
-        expect(riga.text()).not.toContain('&#x')
-        await riga.trigger('click')
+        expect(riquadro.text()).not.toContain('&#x')
+        await riquadro.get('[data-testid="talos-computer-card-name"]').trigger('click')
         expect(push).toHaveBeenCalledWith({ name: 'computer-item', params: { pcId: 'pc-uno' } })
     })
 
@@ -110,7 +111,7 @@ describe('la sezione «Computer»', () => {
         expect(v.get('[data-testid="talos-computer-paired"]').text()).toContain('Studio')
         await v.get('[data-testid="talos-computer-paired-done"]').trigger('click')
         await flushPromises()
-        expect(v.get('[data-testid="talos-computer-row"]').text()).toContain('Studio')
+        expect(v.get('[data-testid="talos-computer-card"]').text()).toContain('Studio')
     })
 
     it('CSC-04 «Il numero è diverso: annulla» manda pair.cancel e torna indietro senza errori', async () => {
@@ -239,5 +240,264 @@ describe('la sezione «Computer»', () => {
         const v = await monta()
         expect(v.text()).toContain('computer.onlyInApp')
         expect(v.find('[data-testid="talos-computer-connect"]').exists()).toBe(false)
+    })
+
+    /*
+     * Fetta C del mockup remoto, D-REM-2 (owner via Desktop (3), 24/10/2026: «Proponi di dimenticare»): appena accoppiato un PC, le voci
+     * vecchie (stesso nome, stesso ponte, spente) si propongono UNA volta, con Sì e No. Niente sparisce senza il sì.
+     */
+    async function accoppiaStudio(vecchie: Array<{ pcId: string, nome: string | null, relay: string | null }>, pcOk: Record<string, unknown> = {}) {
+        plugin!.concludiAccoppiamento = vi.fn(async () => {
+            computer = [{ pcId: 'pc-uno', nome: 'Studio', relay: null, accoppiatoAlle: 2 }, ...vecchie.map((v) => ({ ...v, accoppiatoAlle: 1 }))]
+        })
+        // le voci vecchie non rispondono più; il PC nuovo sì
+        plugin!.collega = vi.fn(async ({ pcId }: { pcId: string }) => {
+            if (pcId !== 'pc-uno') throw Object.assign(new Error('x'), { code: 'UNREACHABLE' })
+            return { canale: 'c2' }
+        }) as PluginComputer['collega']
+        const v = await monta()
+        await v.get('[data-testid="talos-computer-connect"]').trigger('click')
+        await salutato()
+        const codice = await codiceDiAccoppiamento('pc-uno', 'tel-uno', GETTONE)
+        emetti('remoto-messaggio', { canale: 'c1', json: JSON.stringify({ v: 1, t: 'pair.code', codice, pc: { id: 'pc-uno', nome: 'Studio' } }) })
+        await flushPromises()
+        emetti('remoto-messaggio', { canale: 'c1', json: JSON.stringify({ v: 1, t: 'pair.ok', pc: { nome: 'Studio', ...pcOk } }) })
+        await flushPromises()
+        return v
+    }
+
+    it('DOPPI-UI-01 appena accoppiato un PC propone di dimenticare le voci vecchie; «Sì» le dimentica tutte', async () => {
+        const v = await accoppiaStudio([{ pcId: 'pc-due', nome: 'Studio', relay: null }, { pcId: 'pc-tre', nome: 'Studio', relay: null }])
+        await vi.waitFor(() => { if (!v.find('[data-testid="talos-computer-old-entries"]').exists()) throw new Error('ancora niente') })
+        expect(v.get('[data-testid="talos-computer-old-entries"]').text()).toContain('computer.oldEntriesTitle{"count":2,"name":"Studio"}')
+        expect(plugin!.dimentica).not.toHaveBeenCalled()
+        await v.get('[data-testid="talos-computer-old-entries-yes"]').trigger('click')
+        await vi.waitFor(() => { if ((plugin!.dimentica as ReturnType<typeof vi.fn>).mock.calls.length < 2) throw new Error('non ancora') })
+        expect((plugin!.dimentica as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0].pcId).sort()).toEqual(['pc-due', 'pc-tre'])
+        await flushPromises()
+        expect(v.find('[data-testid="talos-computer-old-entries"]').exists()).toBe(false)
+    }, 40_000)
+
+    it('DOPPI-UI-02 «No» non dimentica niente e la domanda non torna', async () => {
+        const v = await accoppiaStudio([{ pcId: 'pc-due', nome: 'Studio', relay: null }])
+        await vi.waitFor(() => { if (!v.find('[data-testid="talos-computer-old-entries"]').exists()) throw new Error('ancora niente') })
+        await v.get('[data-testid="talos-computer-old-entries-no"]').trigger('click')
+        await flushPromises()
+        expect(plugin!.dimentica).not.toHaveBeenCalled()
+        expect(v.find('[data-testid="talos-computer-old-entries"]').exists()).toBe(false)
+        const { domandaDoppiGiaFatta } = await import('@/lib/remoto/ricordiDelPc')
+        expect(domandaDoppiGiaFatta('pc-uno')).toBe(true)
+    }, 40_000)
+
+    it('DOPPI-UI-03 ⛔ verso contrario: senza voci vecchie (nome diverso) nessuna domanda', async () => {
+        const v = await accoppiaStudio([{ pcId: 'pc-due', nome: 'Portatile', relay: null }])
+        await vi.waitFor(() => { if (v.find('[data-computer-stato="leggo"]').exists()) throw new Error('ancora in lettura') }, { timeout: 15_000 })
+        await flushPromises()
+        expect(v.find('[data-testid="talos-computer-old-entries"]').exists()).toBe(false)
+    }, 40_000)
+
+    /* D-MOCK-6 (24/10/2026): l'owner ha detto sì a «4 voci» senza vederle; la proposta elenca ciascuna col suo codice breve. */
+    it('DOPPI-UI-06 la proposta elenca le voci vecchie col loro codice breve', async () => {
+        const v = await accoppiaStudio([{ pcId: '31ab0001', nome: 'Studio', relay: null }, { pcId: '2d3c0001', nome: 'Studio', relay: null }])
+        await vi.waitFor(() => { if (!v.find('[data-testid="talos-computer-old-entries"]').exists()) throw new Error('ancora niente') })
+        const voci = v.findAll('[data-testid="talos-computer-old-entry"]')
+        expect(voci.map((voce) => voce.attributes('data-pc-id'))).toEqual(['31ab0001', '2d3c0001'])
+        expect(voci.map((voce) => voce.text())).toEqual([expect.stringContaining('31ab'), expect.stringContaining('2d3c')])
+    }, 40_000)
+
+    /* Owner 24/10/2026 «Sì, adesso»: le voci di un PC col portachiavi di prova (desktop f1199ace0) sono segnate e vengono per prime. */
+    it('DOPPI-UI-07 una voce «di prova» è segnata ed è la prima della proposta', async () => {
+        const { ricordaEffimero } = await import('@/lib/remoto/ricordiDelPc')
+        ricordaEffimero('2d3c0001', true)
+        const v = await accoppiaStudio([{ pcId: '31ab0001', nome: 'Studio', relay: null }, { pcId: '2d3c0001', nome: 'Studio', relay: null }])
+        await vi.waitFor(() => { if (!v.find('[data-testid="talos-computer-old-entries"]').exists()) throw new Error('ancora niente') })
+        const voci = v.findAll('[data-testid="talos-computer-old-entry"]')
+        expect(voci.map((voce) => voce.attributes('data-pc-id'))).toEqual(['2d3c0001', '31ab0001'])
+        expect(voci[0]!.find('[data-testid="talos-computer-test-tag"]').exists()).toBe(true)
+        expect(voci[1]!.find('[data-testid="talos-computer-test-tag"]').exists()).toBe(false)
+    }, 40_000)
+
+    /* ⛔ D-MOCK-13, owner 24/10/2026 «No, solo un PC vero propone»: il PC «di prova» appena accoppiato non propone le voci spente. */
+    it('DOPPI-UI-12 ⛔ un PC «di prova» appena accoppiato non propone di dimenticare le voci spente col suo nome', async () => {
+        const v = await accoppiaStudio([{ pcId: '287c0001', nome: 'Studio', relay: null }], { effimero: true })
+        await vi.waitFor(() => { if (v.find('[data-computer-stato="leggo"]').exists()) throw new Error('ancora in lettura') }, { timeout: 15_000 })
+        await flushPromises()
+        expect(v.find('[data-testid="talos-computer-old-entries"]').exists()).toBe(false)
+        expect(plugin!.dimentica).not.toHaveBeenCalled()
+    }, 40_000)
+
+    it('DOPPI-UI-13 ⛔ un PC «di prova» IN LINEA non propone; un PC vero sì, con la voce di prova spenta per prima', async () => {
+        const { ricordaEffimero } = await import('@/lib/remoto/ricordiDelPc')
+        ricordaEffimero('27ba0001', true)
+        const spenti = vi.fn(async () => { throw Object.assign(new Error('x'), { code: 'UNREACHABLE' }) }) as unknown as PluginComputer['collega']
+        // il PC di prova risponde, la voce vera col suo nome è spenta: nessuna proposta
+        computer = [{ pcId: '27ba0001', nome: 'Studio', relay: null, accoppiatoAlle: 2 }, { pcId: '287c0001', nome: 'Studio', relay: null, accoppiatoAlle: 1 }]
+        plugin!.collega = spenti
+        tornaInLinea('27ba0001')
+        let v = await monta()
+        await vi.waitFor(() => { if (v.find('[data-computer-stato="leggo"]').exists()) throw new Error('ancora in lettura') }, { timeout: 15_000 })
+        await flushPromises()
+        expect(v.get('[data-testid="talos-computer-card"][data-pc-id="27ba0001"]').attributes('data-computer-stato')).toBe('inLinea')
+        expect(v.find('[data-testid="talos-computer-old-entries"]').exists()).toBe(false)
+        v.unmount()
+        // ⛔ verso contrario: un PC vero in linea propone, e la voce di prova (spenta) viene per prima
+        vi.resetModules()
+        computer = [
+            { pcId: 'b8510001', nome: 'Studio', relay: null, accoppiatoAlle: 3 },
+            { pcId: '287c0001', nome: 'Studio', relay: null, accoppiatoAlle: 1 },
+            { pcId: '27ba0001', nome: 'Studio', relay: null, accoppiatoAlle: 2 },
+        ]
+        plugin!.collega = spenti
+        tornaInLinea('b8510001')
+        v = await monta()
+        await vi.waitFor(() => { if (!v.find('[data-testid="talos-computer-old-entries"]').exists()) throw new Error('ancora niente') }, { timeout: 15_000 })
+        expect(v.findAll('[data-testid="talos-computer-old-entry"]').map((e) => e.attributes('data-pc-id'))).toEqual(['27ba0001', '287c0001'])
+    }, 40_000)
+
+    it('DOPPI-UI-08 ⛔ verso contrario: desktop accoppiato accanto alla CLI spenta dello stesso PC, nessuna proposta', async () => {
+        const { ricordaProgramma } = await import('@/lib/remoto/ricordiDelPc')
+        ricordaProgramma('pc-due', 'TALOS CLI')
+        const v = await accoppiaStudio([{ pcId: 'pc-due', nome: 'Studio', relay: null }], { programma: 'TALOS desktop' })
+        await vi.waitFor(() => { if (v.find('[data-computer-stato="leggo"]').exists()) throw new Error('ancora in lettura') }, { timeout: 15_000 })
+        await flushPromises()
+        expect(v.find('[data-testid="talos-computer-old-entries"]').exists()).toBe(false)
+    }, 40_000)
+
+    /*
+     * ⛔ Revisione del blocco 4, M-1 (S3): la proposta legge chi è in linea UNA volta; il «Sì» dimenticava le voci così com'erano allora.
+     * Una voce tornata a rispondere fra la proposta e il sì (il ledger: b851 «tornato in linea alle 13:38») si dimenticava lo stesso.
+     * Al «Sì» ogni candidata si rilegge (`riepilogo`, col suo tetto): chi risponde resta, e la schermata lo dice.
+     */
+    /** Le voci `pcIds` tornano a rispondere: il `collega` finto ora riesce e il PC risponde al ping e all'elenco delle sessioni. */
+    function tornaInLinea(...pcIds: string[]) {
+        const collega = plugin!.collega
+        plugin!.collega = vi.fn(async (a: { pcId: string }) => (pcIds.includes(a.pcId) ? { canale: `c-${a.pcId}` } : collega(a))) as PluginComputer['collega']
+        plugin!.invia = vi.fn(async ({ canale, json }: { canale: string, json: string }) => {
+            if (!pcIds.some((pcId) => canale === `c-${pcId}`)) return
+            const m = JSON.parse(json)
+            if (m.t === 'ping') queueMicrotask(() => emetti('remoto-messaggio', { canale, json: JSON.stringify({ v: 1, t: 'pong', s: m.s }) }))
+            if (m.t !== 'req') return
+            queueMicrotask(() => emetti('remoto-messaggio', { canale, json: JSON.stringify({ v: 1, t: 'res', n: m.n, ok: true, data: { items: [] } }) }))
+        }) as PluginComputer['invia']
+    }
+
+    it('DOPPI-UI-09 ⛔ una voce tornata in linea fra la proposta e il «Sì» non si dimentica, e la schermata lo dice', async () => {
+        const v = await accoppiaStudio([{ pcId: 'pc-due', nome: 'Studio', relay: null }, { pcId: 'pc-tre', nome: 'Studio', relay: null }])
+        await vi.waitFor(() => { if (!v.find('[data-testid="talos-computer-old-entries"]').exists()) throw new Error('ancora niente') })
+        expect(v.findAll('[data-testid="talos-computer-old-entry"]')).toHaveLength(2)
+        tornaInLinea('pc-due')
+        await v.get('[data-testid="talos-computer-old-entries-yes"]').trigger('click')
+        // durante il ricontrollo il «Sì» non si preme due volte
+        expect(v.get('[data-testid="talos-computer-old-entries-yes"]').attributes('disabled')).toBeDefined()
+        await vi.waitFor(() => { if (v.find('[data-testid="talos-computer-old-entries"]').exists()) throw new Error('proposta ancora aperta') }, { timeout: 15_000 })
+        await flushPromises()
+        expect((plugin!.dimentica as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0].pcId)).toEqual(['pc-tre'])
+        expect(v.get('[data-testid="talos-computer-old-entries-answered"]').text())
+            .toBe('computer.oldEntriesAnswered{"count":1,"names":"Studio · pc-d"}')
+        expect(v.get('[data-testid="talos-computer-card"][data-pc-id="pc-due"]').attributes('data-computer-stato')).toBe('inLinea')
+    }, 40_000)
+
+    it('DOPPI-UI-10 ⛔ verso contrario: se al «Sì» nessuna risponde, si dimenticano tutte e nessuna frase in più', async () => {
+        const v = await accoppiaStudio([{ pcId: 'pc-due', nome: 'Studio', relay: null }, { pcId: 'pc-tre', nome: 'Studio', relay: null }])
+        await vi.waitFor(() => { if (!v.find('[data-testid="talos-computer-old-entries"]').exists()) throw new Error('ancora niente') })
+        await v.get('[data-testid="talos-computer-old-entries-yes"]').trigger('click')
+        await vi.waitFor(() => { if (v.find('[data-testid="talos-computer-old-entries"]').exists()) throw new Error('proposta ancora aperta') }, { timeout: 15_000 })
+        await flushPromises()
+        expect((plugin!.dimentica as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0].pcId).sort()).toEqual(['pc-due', 'pc-tre'])
+        expect(v.find('[data-testid="talos-computer-old-entries-answered"]').exists()).toBe(false)
+    }, 40_000)
+
+    it('DOPPI-UI-11 se al «Sì» rispondono TUTTE: nessuna dimenticata, la frase al plurale, e la domanda si segna fatta come col «No»', async () => {
+        const v = await accoppiaStudio([{ pcId: 'pc-due', nome: 'Studio', relay: null }, { pcId: 'pc-tre', nome: 'Studio', relay: null }])
+        await vi.waitFor(() => { if (!v.find('[data-testid="talos-computer-old-entries"]').exists()) throw new Error('ancora niente') })
+        tornaInLinea('pc-due', 'pc-tre')
+        await v.get('[data-testid="talos-computer-old-entries-yes"]').trigger('click')
+        // la proposta non resta aperta per sempre: si chiude anche se non c'era niente da dimenticare
+        await vi.waitFor(() => { if (v.find('[data-testid="talos-computer-old-entries"]').exists()) throw new Error('proposta ancora aperta') }, { timeout: 15_000 })
+        await flushPromises()
+        expect(plugin!.dimentica).not.toHaveBeenCalled()
+        expect(v.get('[data-testid="talos-computer-old-entries-answered"]').text())
+            .toBe('computer.oldEntriesAnswered{"count":2,"names":"Studio · pc-d, Studio · pc-t"}')
+        const { domandaDoppiGiaFatta } = await import('@/lib/remoto/ricordiDelPc')
+        expect(domandaDoppiGiaFatta('pc-uno')).toBe(true)
+        for (const pcId of ['pc-due', 'pc-tre']) {
+            expect(v.get(`[data-testid="talos-computer-card"][data-pc-id="${pcId}"]`).attributes('data-computer-stato')).toBe('inLinea')
+        }
+    }, 40_000)
+
+    /*
+     * Revisione del blocco 4, riserve S4: `dimenticaSoloQui(...).catch(() => undefined)` taceva. Una voce che non si dimentica lo dice;
+     * se non se ne dimentica NESSUNA la domanda non si segna come fatta, e la proposta resta per riprovare.
+     */
+    function dimenticaFallisceSu(...pcIds: string[]) {
+        plugin!.dimentica = vi.fn(async ({ pcId }: { pcId: string }) => {
+            if (pcIds.includes(pcId)) throw Object.assign(new Error('x'), { code: 'STORE_FAILED' })
+            return { dimenticato: true }
+        }) as PluginComputer['dimentica']
+    }
+
+    it('DOPPI-UI-14 una voce che non si dimentica lo dice; le altre sì, e la domanda si segna fatta', async () => {
+        const v = await accoppiaStudio([{ pcId: 'pc-due', nome: 'Studio', relay: null }, { pcId: 'pc-tre', nome: 'Studio', relay: null }])
+        await vi.waitFor(() => { if (!v.find('[data-testid="talos-computer-old-entries"]').exists()) throw new Error('ancora niente') })
+        dimenticaFallisceSu('pc-tre')
+        await v.get('[data-testid="talos-computer-old-entries-yes"]').trigger('click')
+        await vi.waitFor(() => { if (!v.find('[data-testid="talos-computer-old-entries-failed"]').exists()) throw new Error('niente') }, { timeout: 15_000 })
+        expect(v.get('[data-testid="talos-computer-old-entries-failed"]').text()).toBe('computer.oldEntriesForgetFailed{"count":1,"names":"Studio · pc-t"}')
+        const { domandaDoppiGiaFatta } = await import('@/lib/remoto/ricordiDelPc')
+        expect(domandaDoppiGiaFatta('pc-uno')).toBe(true)
+        expect(v.find('[data-testid="talos-computer-old-entries"]').exists()).toBe(false)
+    }, 40_000)
+
+    it('DOPPI-UI-15 ⛔ se non se ne dimentica NESSUNA: lo dice, la domanda non si segna e la proposta resta per riprovare', async () => {
+        const v = await accoppiaStudio([{ pcId: 'pc-due', nome: 'Studio', relay: null }, { pcId: 'pc-tre', nome: 'Studio', relay: null }])
+        await vi.waitFor(() => { if (!v.find('[data-testid="talos-computer-old-entries"]').exists()) throw new Error('ancora niente') })
+        dimenticaFallisceSu('pc-due', 'pc-tre')
+        await v.get('[data-testid="talos-computer-old-entries-yes"]').trigger('click')
+        await vi.waitFor(() => { if (!v.find('[data-testid="talos-computer-old-entries-failed"]').exists()) throw new Error('niente') }, { timeout: 15_000 })
+        await flushPromises()
+        expect(v.get('[data-testid="talos-computer-old-entries-failed"]').text())
+            .toBe('computer.oldEntriesForgetFailed{"count":2,"names":"Studio · pc-d, Studio · pc-t"}')
+        const { domandaDoppiGiaFatta } = await import('@/lib/remoto/ricordiDelPc')
+        expect(domandaDoppiGiaFatta('pc-uno')).toBe(false)
+        expect(v.find('[data-testid="talos-computer-old-entries"]').exists()).toBe(true)
+        expect(v.get('[data-testid="talos-computer-old-entries-yes"]').attributes('disabled')).toBeUndefined()
+    }, 40_000)
+
+    it('CSC-EFF-01 pc.effimero di pair.ok resta sul dispositivo e il riquadro dice «di prova»; ⛔ senza, niente', async () => {
+        const v = await accoppiaStudio([], { effimero: true })
+        await v.get('[data-testid="talos-computer-paired-done"]').trigger('click')
+        await flushPromises()
+        const { leggiRicordo } = await import('@/lib/remoto/ricordiDelPc')
+        expect(leggiRicordo('pc-uno').effimero).toBe(true)
+        const scheda = v.get('[data-testid="talos-computer-card"][data-pc-id="pc-uno"]')
+        expect(scheda.get('[data-testid="talos-computer-test-tag"]').text()).toBe('computer.testEntry')
+        v.unmount()
+        localStorage.clear()
+        computer = [{ pcId: 'pc-uno', nome: 'Studio', relay: null, accoppiatoAlle: 1 }]
+        const w = await monta()
+        expect(w.find('[data-testid="talos-computer-test-tag"]').exists()).toBe(false)
+    }, 40_000)
+
+    /* Fetta C, Desktop (3) 24/10: `pc.programma` di `pair.ok` distingue il desktop dalla CLI sullo stesso PC; il riquadro lo mostra. */
+    it('CSC-PROG-01 il programma del PC arrivato con pair.ok resta sul dispositivo e compare nel riquadro', async () => {
+        const v = await monta()
+        await v.get('[data-testid="talos-computer-connect"]').trigger('click')
+        await salutato()
+        const codice = await codiceDiAccoppiamento('pc-uno', 'tel-uno', GETTONE)
+        emetti('remoto-messaggio', { canale: 'c1', json: JSON.stringify({ v: 1, t: 'pair.code', codice, pc: { id: 'pc-uno', nome: 'Studio' } }) })
+        await flushPromises()
+        emetti('remoto-messaggio', { canale: 'c1', json: JSON.stringify({ v: 1, t: 'pair.ok', pc: { nome: 'Studio', programma: 'TALOS desktop' } }) })
+        await flushPromises()
+        await v.get('[data-testid="talos-computer-paired-done"]').trigger('click')
+        await flushPromises()
+        expect(v.get('[data-testid="talos-computer-card-program"]').text()).toBe('TALOS desktop')
+        const { leggiRicordo } = await import('@/lib/remoto/ricordiDelPc')
+        expect(leggiRicordo('pc-uno').programma).toBe('TALOS desktop')
+    })
+
+    it('CSC-PROG-02 ⛔ verso contrario: un PC accoppiato prima, senza programma ricordato, non mostra niente al suo posto', async () => {
+        computer = [{ pcId: 'pc-uno', nome: 'Studio', relay: null, accoppiatoAlle: 1 }]
+        const v = await monta()
+        expect(v.find('[data-testid="talos-computer-card-program"]').exists()).toBe(false)
     })
 })

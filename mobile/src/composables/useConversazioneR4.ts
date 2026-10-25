@@ -28,6 +28,9 @@ import { messaggioErroreServerR4 } from '@/lib/harness/r4/pianoR4'
 import type { DecisionePianoR4 } from '@/lib/harness/r4/pianoChiave'
 import { CHIAVE_COORDINAZIONE_R4, catenaDellaSessioneR4, coordinazioneAccesaNellaCatenaR4 } from '@/lib/harness/r4/coordinazioneR4'
 import { annunciaCambioSessioneR4 } from '@/lib/harness/r4/avvisiSessioniR4'
+import {
+    MOTIVO_TROPPE_RICHIESTE, attendiConsenso, chiediConsenso as apriRichiestaDiConsenso, consensoRichiesto, leggiAttesaConsenso, type AttesaConsenso, type EsitoConsenso,
+} from '@/lib/remoto/consensoDelPc'
 
 export interface ErroreR4 {
     code: string
@@ -183,6 +186,13 @@ export function useConversazioneR4(opzioni: OpzioniConversazioneR4) {
     /** Dal clic su Invia al `RunStarted` (o al rifiuto): il giro non c'è ancora, ma il messaggio è partito. */
     const inviando = ref(false)
     const errore = ref<ErroreR4 | null>(null)
+    /**
+     * ⛔ D-MOCK-11 (contratto R5.12, parte 1, punti 2-3; solo sul PC): la richiesta di consenso aperta sul PC mentre la persona ci
+     * risponde («Conferma sul computer»), e la cartella dell'ultimo `CONSENT_REQUIRED`, per «Riprova» dopo «Il PC non ha risposto».
+     */
+    const attesaConsenso = ref<AttesaConsenso | null>(null)
+    let cartellaDaConsentire: { cartellaId: string, nome: string | null } | null = null
+    let annullaAttesa: (() => void) | null = null
 
     /** K3-AP3: le carte delle sotto-sessioni che chiedono alla persona; vivono nella vista (gli snapshot sono effimeri, come sul desktop). */
     const carteFiglie = shallowRef<CartaDellaFigliaR4[]>([])
@@ -574,7 +584,8 @@ export function useConversazioneR4(opzioni: OpzioniConversazioneR4) {
         if (reasoning) ragionamento.value = reasoning
         return true
     }
-    async function impostaRagionamento(reasoning: RagionamentoR4): Promise<boolean> {
+    /** `null` = nessuna scelta: r4 non manda un livello e decide il fornitore (J3-bis, «Auto»; il desktop manda lo stesso). */
+    async function impostaRagionamento(reasoning: RagionamentoR4 | null): Promise<boolean> {
         if (!sessioneId.value) {
             ragionamento.value = reasoning
             return true
@@ -701,16 +712,26 @@ export function useConversazioneR4(opzioni: OpzioniConversazioneR4) {
                 ...(modoScelto ? { modalitaOperativa: modalita.value } : {}), ...(permessoScelto && politica.value.permessi ? { permessi: politica.value.permessi } : {}),
                 ...conExtra(extra),
             })
-            const id = esito.ok ? (() => {
+            const dati = esito.ok ? (() => {
                 try {
-                    const valore = JSON.parse(esito.corpo) as { data?: { sessionId?: unknown } }
-                    return typeof valore?.data?.sessionId === 'string' ? valore.data.sessionId : null
+                    return (JSON.parse(esito.corpo) as { data?: { sessionId?: unknown } | null }).data ?? null
                 } catch {
                     return null
                 }
             })() : null
+            let id = typeof dati?.sessionId === 'string' ? dati.sessionId : null
+            // D-MOCK-11: sul PC, `RATE_LIMITED` all'avvio viene dalle richieste di consenso già in attesa (al più 3)
+            const rifiutato = errore.value as ErroreR4 | null // `posta` l'ha scritto: TS lo crede ancora null da sopra
+            if (!esito.ok && cartellaId && rifiutato?.code === 'RATE_LIMITED') errore.value = { ...rifiutato, reason: MOTIVO_TROPPE_RICHIESTE }
+            // D-MOCK-11: una cartella non ancora consentita. Il PC tiene il messaggio e avvia LUI la sessione al «Consenti».
+            const inAttesa = !id && cartellaId ? leggiAttesaConsenso(dati, Date.now()) : null
+            if (inAttesa) {
+                const fine = await aspettaIlConsenso(inAttesa)
+                id = fine.esito === 'consentita' ? fine.sessionId : null
+                if (!id && fine.esito === 'consentita') errore.value = { code: 'TALOS_R4_RISPOSTA_STORTA', message: 'the computer did not start the session' }
+            }
             if (!id) {
-                if (esito.ok) errore.value = { code: 'TALOS_R4_RISPOSTA_STORTA', message: 'r4 did not return a session' }
+                if (esito.ok && !inAttesa) errore.value = { code: 'TALOS_R4_RISPOSTA_STORTA', message: 'r4 did not return a session' }
                 inviando.value = false
                 return false
             }
@@ -725,6 +746,69 @@ export function useConversazioneR4(opzioni: OpzioniConversazioneR4) {
         }
         if (!flussoId) await apri()
         return true
+    }
+
+    /**
+     * ⛔ D-MOCK-11 (contratto R5.12, parte 1, punto 4): l'attesa della persona davanti al PC, con «Conferma sul computer» a schermo
+     * (`attesaConsenso`). `negata` e `scaduta` diventano la riga d'errore (`CONSENT_DENIED`, `CONSENT_EXPIRED`: codici del
+     * dispositivo, le frasi in `computer.consent.*`). «Annulla» (`annullaConsenso`) chiude subito l'attesa qui; sul PC la richiesta
+     * scade da sé.
+     */
+    async function aspettaIlConsenso(attesa: AttesaConsenso): Promise<EsitoConsenso | { esito: 'errore' }> {
+        attesaConsenso.value = attesa
+        let fermato = false
+        const annullata = new Promise<EsitoConsenso>((fatto) => {
+            annullaAttesa = () => { fermato = true; fatto({ esito: 'annullata' }) }
+        })
+        try {
+            const fine = await Promise.race([attendiConsenso(cliente, attesa, { fermato: () => fermato || chiuso }), annullata])
+            if (fine.esito === 'negata') errore.value = { code: 'CONSENT_DENIED', message: 'The computer said no for this folder.' }
+            if (fine.esito === 'scaduta') errore.value = { code: 'CONSENT_EXPIRED', message: 'The computer did not answer.' }
+            return fine
+        } catch (guasto) {
+            errore.value = erroreDelConsenso(guasto)
+            return { esito: 'errore' }
+        } finally {
+            fermato = true
+            annullaAttesa = null
+            attesaConsenso.value = null
+        }
+    }
+
+    function erroreDelConsenso(guasto: unknown): ErroreR4 {
+        const g = guasto as { code?: unknown, reason?: unknown, params?: unknown } | null
+        return {
+            ...erroreDalGuasto(guasto), code: typeof g?.code === 'string' ? g.code : 'DISCONNECTED',
+            ...(typeof g?.reason === 'string' ? { reason: g.reason } : {}),
+            ...(g?.params && typeof g.params === 'object' ? { params: g.params as Record<string, unknown> } : {}),
+        }
+    }
+
+    /**
+     * ⛔ D-MOCK-11 (contratto R5.12, parte 1, punto 3): «Chiedi al PC» dopo un `CONSENT_REQUIRED` (o «Riprova» dopo «Il PC non ha
+     * risposto»): `consent.request` con la cartella del rifiuto, poi la stessa attesa dell'avvio. Il PC non tiene niente per una
+     * sessione che c'è già: la bozza resta sul dispositivo, e la schermata la rimanda su `consentita`. Senza una cartella da chiedere
+     * non parte niente (`errore`).
+     */
+    async function chiediConsenso(): Promise<EsitoConsenso['esito'] | 'errore'> {
+        const da = consensoRichiesto(errore.value) ?? cartellaDaConsentire
+        if (!da || chiuso || attesaConsenso.value) return 'errore'
+        cartellaDaConsentire = da
+        errore.value = null
+        let attesa: AttesaConsenso
+        try {
+            attesa = await apriRichiestaDiConsenso(cliente, da.cartellaId)
+        } catch (guasto) {
+            errore.value = erroreDelConsenso(guasto)
+            return 'errore'
+        }
+        const fine = await aspettaIlConsenso(attesa)
+        if (fine.esito === 'consentita') cartellaDaConsentire = null
+        return fine.esito
+    }
+
+    function annullaConsenso(): void {
+        annullaAttesa?.()
     }
 
     /** Stop: lo dice r4 (`RunError`/`RunFinished` arriva dal flusso). */
@@ -859,9 +943,13 @@ export function useConversazioneR4(opzioni: OpzioniConversazioneR4) {
         return leggi('/api/v1/doctor')
     }
 
-    /** K3-C2, «Albero della sessione»: le deleghe vere (`GET /:id/children`), `null` se non si riesce a leggerle. */
+    /**
+     * K3-C2, «Albero della sessione»: le deleghe vere (`GET /:id/children`), `null` se non si riesce a leggerle.
+     * ⛔ D-REM-10 (dal Pad, 23/10/2026): una bozza non ha ancora una sessione, quindi non ha deleghe: elenco vuoto senza chiedere
+     * niente al PC. Prima tornava `null` e il foglio diceva «Caricamento non riuscito» senza che fosse partita una richiesta.
+     */
     async function figli(): Promise<FiglioR4[] | null> {
-        if (!sessioneId.value) return null
+        if (!sessioneId.value) return []
         const dati = await leggi(`/api/v1/sessions/${encodeURIComponent(sessioneId.value)}/children`)
         if (!dati || !Array.isArray(dati.figli)) return null
         return dati.figli.filter((f): f is FiglioR4 => typeof f === 'object' && f !== null && typeof (f as FiglioR4).sessionId === 'string')
@@ -1024,5 +1112,8 @@ export function useConversazioneR4(opzioni: OpzioniConversazioneR4) {
         // D-MO-12: la riga viva del riassunto che il giro aspetta (`null` quando non c'è)
         rigaViva: computed(() => stato.value.rigaViva ?? null),
         rigaVivaAMano: computed(() => aMano.value),
+        // D-MOCK-11: il consenso del PC (solo sul PC)
+        attesaConsenso, chiediConsenso, annullaConsenso,
+        consensoDaChiedere: computed(() => consensoRichiesto(errore.value)),
     }
 }

@@ -14,6 +14,11 @@ package ai.talos.voice
  * years, and only three top-level fields matter here, so this reads it by
  * hand instead of vendoring a build system for it.
  *
+ * Provenance: the format read here is the one of `google/sentencepiece` at
+ * commit `bcd4d8c92fa667df2e560fc84291331ce355bf0e` (the one pinned in
+ * `scripts/licenze-native/fonti.json`). From that project only the field
+ * numbers are used — no SentencePiece code is included.
+ *
  * Fields NOT read: `trainer_spec` (field 2) — we do not need `byte_fallback`
  * as a flag, because whether byte-fallback is usable is decided by whether
  * `<0xXX>` pieces actually exist in the vocabulary, which this class already

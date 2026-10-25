@@ -106,6 +106,16 @@ export function livelloDelRagionamentoR4(reasoning: unknown): string {
     return typeof effort === 'string' && effort !== 'none' ? effort : 'off'
 }
 
+/**
+ * J3 (24/10/2026): il livello per la pillola del ragionamento, che distingue «nessuna scelta» da «spento». Una sessione senza
+ * `reasoning` non manda niente e decide il fornitore (`null`: la pillola dice «Auto»); `none` è «off», come sopra.
+ */
+export function livelloSceltoR4(reasoning: unknown): string | null {
+    const effort = reasoning && typeof reasoning === 'object' ? (reasoning as { effort?: unknown }).effort : null
+    if (typeof effort !== 'string' || !effort) return null
+    return effort === 'none' ? 'off' : effort
+}
+
 const italiano = (lingua: string) => /^it(?:-|$)/iu.test(lingua)
 
 /** I codici del motore dell'app che r4 manda durante il giro, con la frase che il desktop gli dà (`components/errori.js` @ 0f3f90f8e). */

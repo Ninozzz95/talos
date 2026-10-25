@@ -1,7 +1,7 @@
 {
   "schema": "talos.mobile.attese-r4.v1",
-  "pin": "cba8f4084",
-  "nota": "Ogni riga è una prova di r4 che sul Pad è rossa per l'ambiente (Android, niente git/npm/ripgrep, prove scritte per Windows/WSL), letta una per una il 17/10/2026 sul giro 2 di K4 (pin 701c6c0d2), confermata uguale al pin 9f8b5fae5 (desktop 0.1.31) lo stesso giorno: 805 file, 246 rosse attese, nessuna nuova. Il cancello fallisce per una rossa NON qui e per una riga qui che adesso passa. — 18/10/2026: pin a813c2377 (desktop 0.1.33); +17 righe (14 link-vietato, 2 ripgrep-assente-cerca, 1 ctime-a-scatti, misurate sul Pad), −1 (ETICHETTA-SANDBOX ora passa). — 18/10/2026: pin f6c6625ac (desktop 0.1.34, custode ChatGPT nell'app); 0 righe nuove, −1 (IMP-10 ora passa: hash «racy» riletti come git, 81abd635a). — 19/10/2026: pin di prova 0f3f90f8e (feat/remoto-modulo, fonte locale-ospite); +18 righe confermate dal Desktop come solo-PC: 16 punti di ripristino (PDR/RIP, git vero, git-assente) e 2 file del remoto (iroh, relay: solo-pc-remoto). — 23/10/2026: pin cba8f4084 (r4 della main pubblica, desktop 0.1.35; kernel identico a d06f6a9d3): 890 file, 9.116 prove, 8.594 verdi; 10 rosse nuove, tutte d'ambiente e lette una per una: 7 del revisore dell'obiettivo con git vero (spawnSync git ENOENT, git-assente) e 3 di OpenRouter con modulePath 'C:/fixture/runtime.mjs' (OWNER_RUNTIME_PATH_INVALID, modulo-runtime-per-percorso); nessuna riga scaduta.",
+  "pin": "d5bed0a16",
+  "nota": "Ogni riga è una prova di r4 che sul Pad è rossa per l'ambiente (Android, niente git/npm/ripgrep, prove scritte per Windows/WSL), letta una per una il 17/10/2026 sul giro 2 di K4 (pin 701c6c0d2), confermata uguale al pin 9f8b5fae5 (desktop 0.1.31) lo stesso giorno: 805 file, 246 rosse attese, nessuna nuova. Il cancello fallisce per una rossa NON qui e per una riga qui che adesso passa. — 18/10/2026: pin a813c2377 (desktop 0.1.33); +17 righe (14 link-vietato, 2 ripgrep-assente-cerca, 1 ctime-a-scatti, misurate sul Pad), −1 (ETICHETTA-SANDBOX ora passa). — 18/10/2026: pin f6c6625ac (desktop 0.1.34, custode ChatGPT nell'app); 0 righe nuove, −1 (IMP-10 ora passa: hash «racy» riletti come git, 81abd635a). — 19/10/2026: pin di prova 0f3f90f8e (feat/remoto-modulo, fonte locale-ospite); +18 righe confermate dal Desktop come solo-PC: 16 punti di ripristino (PDR/RIP, git vero, git-assente) e 2 file del remoto (iroh, relay: solo-pc-remoto). — 23/10/2026: pin cba8f4084 (r4 della main pubblica, desktop 0.1.35; kernel identico a d06f6a9d3): 890 file, 9.116 prove, 8.594 verdi; 10 rosse nuove, tutte d'ambiente e lette una per una: 7 del revisore dell'obiettivo con git vero (spawnSync git ENOENT, git-assente) e 3 di OpenRouter con modulePath 'C:/fixture/runtime.mjs' (OWNER_RUNTIME_PATH_INVALID, modulo-runtime-per-percorso); nessuna riga scaduta. — 25/10/2026: pin d5bed0a16 (candidato desktop 0.1.37): 927 file, 9.598 prove, 9.061 verdi; 7 rosse nuove, tutte d'ambiente e lette una per una: 5 di binding-iroh-scarica (ENOENT harness-ui/native/iroh-binding.json e iroh-THIRD_PARTY_NOTICES.txt, file del binding iroh del desktop che la copia delle prove non porta: file-non-copiato), 1 CASA-U2028-01 (CASA_LINUX_PERCORSO «non è su un disco di Windows»: casa-linux-wsl), 1 B8-03 (ENAMETOOLONG: la prova costruisce 110 cartelle da 115 caratteri, «i percorsi lunghi sono accesi su Windows»: windows-nella-prova); nessuna riga scaduta.",
   "cause": {
     "casa-linux-wsl": "la casa Linux in WSL esiste solo sul desktop",
     "file-non-copiato": "la prova legge un file che il pacchetto delle prove non porta",
@@ -1753,6 +1753,48 @@
       "prova": "C3-VUOTO-02: un repository senza commit dà almeno le modifiche non committate",
       "esito": "fail",
       "causa": "git-assente"
+    },
+    {
+      "file": "tests/binding-iroh-scarica-22-10.test.mjs",
+      "prova": "IROH-LICENZE-01 (owner 22/10/2026) — le licenze delle crate dentro il binding: generate dal NOSTRO Cargo.lock, e il pacchetto le porta accanto al binding",
+      "esito": "fail",
+      "causa": "file-non-copiato"
+    },
+    {
+      "file": "tests/binding-iroh-scarica-22-10.test.mjs",
+      "prova": "IROH-RIF-01 — il riferimento nel repo è valido, nomina il file che il caricatore cerca, e sta FUORI da native/iroh/",
+      "esito": "fail",
+      "causa": "file-non-copiato"
+    },
+    {
+      "file": "tests/binding-iroh-scarica-22-10.test.mjs",
+      "prova": "IROH-RIF-02 — un riferimento storto si rifiuta prima di scaricare qualunque cosa",
+      "esito": "fail",
+      "causa": "file-non-copiato"
+    },
+    {
+      "file": "tests/binding-iroh-scarica-22-10.test.mjs",
+      "prova": "IROH-SCADENZA-01 — un mese prima della scadenza lo si dice; scaduto e da scaricare ci si ferma col rimedio, senza chiamare gh",
+      "esito": "fail",
+      "causa": "file-non-copiato"
+    },
+    {
+      "file": "tests/binding-iroh-scarica-22-10.test.mjs",
+      "prova": "IROH-VINCOLI-01 (revisione 22/10) — l'attestazione vincola anche ramo e commit sorgente, e niente runner ospitati in proprio",
+      "esito": "fail",
+      "causa": "file-non-copiato"
+    },
+    {
+      "file": "tests/casa-linux-u2028-22-10.test.mjs",
+      "prova": "CASA-U2028-01 — il cliente manda un testo con U+2028/U+2029 in UNA riga: il servente la legge intera e la risposta torna",
+      "esito": "fail",
+      "causa": "casa-linux-wsl"
+    },
+    {
+      "file": "tests/remoto-invio-file-attrezzo.test.mjs",
+      "prova": "B8-03 (revisione a blocco 8, tetto alzato in A9-1) oltre il tetto il percorso resta fuori dall'esito, che resta intero; FILE_TOO_LARGE porta il percorso vero",
+      "esito": "fail",
+      "causa": "windows-nella-prova"
     }
   ]
 }

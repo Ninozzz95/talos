@@ -84,6 +84,8 @@ public class MainActivity extends BridgeActivity {
         // R-M2: il client del controllo remoto (iroh verso il PC accoppiato): vedi remoto/TalosRemotoPlugin.kt. La libreria
         // nativa si carica alla prima connessione, non all'avvio (JNA la apre quando serve).
         registerPlugin(ai.talos.remoto.TalosRemotoPlugin.class);
+        // R5.13 (25/10/2026): i byte dei file scambiati col PC, letti e scritti in Kotlin (remoto/TalosRemotoFilePlugin.kt).
+        registerPlugin(ai.talos.remoto.TalosRemotoFilePlugin.class);
         { long t = android.os.SystemClock.uptimeMillis(); registerPlugin(TalosDevicePermissionsPlugin.class); long d = android.os.SystemClock.uptimeMillis() - t; if (d > 20) Log.i("TalosAvvio", "registerPlugin class: " + d + " ms"); }
         // Owner 2026-07-28: durable, user-chosen Save-As for encrypted Library
         // files. The plugin accepts only TALOS's private export staging path.

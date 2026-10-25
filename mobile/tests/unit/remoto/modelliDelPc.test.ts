@@ -80,6 +80,59 @@ describe('i modelli del PC per il selettore del telefono', () => {
         expect(profili[0].supports_thinking).toBe(true)
     })
 
+    // ⛔ D-REM-9 (dal Pad, 23/10/2026, PC 0.1.36): il piano ChatGPT del PC dice i livelli in `livelliRagionamento`
+    // (r4 `chatgpt-rotte.mjs:49,58` `modelloDelPiano`), non in `reasoning.supportedEfforts`: col solo secondo campo, luna 6 dal
+    // dispositivo non aveva il selettore del ragionamento e si poteva usare solo al livello predefinito del PC.
+    it('MDP-10 i livelli del piano ChatGPT del PC (`livelliRagionamento`) arrivano al selettore', async () => {
+        const { p } = ponte({
+            '/api/v1/providers': { items: [] },
+            '/api/v1/providers/chatgpt/models': { provider: 'chatgpt', modelli: [
+                { id: 'chatgpt:gpt-6-luna', nome: 'GPT-6-Luna', provider: 'chatgpt', livelliRagionamento: ['low', 'medium', 'high', 'xhigh'], livelloRagionamentoPredefinito: 'medium' },
+                { id: 'chatgpt:gpt-5.6-terra', nome: 'GPT-5.6-Terra', provider: 'chatgpt' },
+            ] },
+        })
+        const { profili } = await leggiModelliDelPc(p)
+        expect(profili.map((x) => [x.model, x.effort_levels, x.supports_thinking])).toEqual([
+            ['chatgpt:gpt-6-luna', ['low', 'medium', 'high', 'xhigh'], true],
+            ['chatgpt:gpt-5.6-terra', [], false],
+        ])
+    })
+
+    // Revisione del Desktop (23/10): il PC inoltra al piano solo low…max (`LIVELLI_INOLTRATI_DAL_PIANO`, r4
+    // `chatgpt-rotte.mjs:174-187`); per «none» e «minimal» non manda niente e decide il modello. Il dispositivo offre ciò che parte
+    // davvero, come la pillola del desktop.
+    it('MDP-11 per il piano ChatGPT solo i livelli che il PC inoltra: «minimal» e «none» non si offrono', async () => {
+        const { p } = ponte({
+            '/api/v1/providers': { items: [] },
+            '/api/v1/providers/chatgpt/models': { provider: 'chatgpt', modelli: [
+                { id: 'chatgpt:gpt-6-sol', nome: 'GPT-6-Sol', provider: 'chatgpt', livelliRagionamento: ['minimal', 'low', 'high'] },
+                { id: 'chatgpt:gpt-6-astra', nome: 'GPT-6-Astra', provider: 'chatgpt', livelliRagionamento: ['none', 'minimal'] },
+            ] },
+        })
+        const { profili } = await leggiModelliDelPc(p)
+        expect(profili.map((x) => [x.model, x.effort_levels, x.supports_thinking])).toEqual([
+            ['chatgpt:gpt-6-sol', ['low', 'high'], true],
+            ['chatgpt:gpt-6-astra', [], false],
+        ])
+    })
+
+    // Revisione del Desktop (23/10): l'ordine dei due campi è fissato da un test. Vince `supportedEfforts` solo se NON è vuoto; un
+    // `[]` (r4 `model-catalog.mjs:49` dà [] anche per un campo assente) non nasconde i livelli veri di `livelliRagionamento`.
+    it('MDP-12 con tutti e due i campi vince `supportedEfforts` non vuoto; uno vuoto lascia passare `livelliRagionamento`', async () => {
+        const { p } = ponte({
+            '/api/v1/providers': { items: [fornitore('anthropic', { keyConfigured: true })] },
+            '/api/v1/providers/anthropic/models': { provider: 'anthropic', modelli: [
+                { id: 'anthropic:a', nome: 'A', reasoning: { supportedEfforts: ['medium'] }, livelliRagionamento: ['low', 'high'] },
+                { id: 'anthropic:b', nome: 'B', reasoning: { supportedEfforts: [] }, livelliRagionamento: ['low', 'high'] },
+            ] },
+        })
+        const { profili } = await leggiModelliDelPc(p)
+        expect(profili.map((x) => [x.model, x.effort_levels])).toEqual([
+            ['anthropic:a', ['medium']],
+            ['anthropic:b', ['low', 'high']],
+        ])
+    })
+
     it('MDP-05 nessun modello usabile sul PC ⇒ lo si dice (il selettore non resta muto); l\'elenco dei fornitori illeggibile ⇒ idem', async () => {
         const vuoto = ponte({ '/api/v1/providers': { items: [fornitore('openai')] } })
         expect((await leggiModelliDelPc(vuoto.p)).problemi).toHaveLength(1)
@@ -105,5 +158,49 @@ describe('i modelli del PC per il selettore del telefono', () => {
         expect((await leggiModelliDelPc(rotto.p, frasi)).problemi).toEqual([{ message: 'ILLEGGIBILI' }])
         const vuoto = ponte({ '/api/v1/providers': { items: [fornitore('openai')] } })
         expect((await leggiModelliDelPc(vuoto.p, frasi)).problemi).toEqual([{ message: 'NESSUNO' }])
+    })
+
+    /**
+     * ⛔ D-REM-4 (Pad e telefono, 23/10, PC a 0.1.36 a7eb6acd2): `GET /api/v1/providers/ollama/models` risponde 404 NOT_FOUND PER
+     * PROGETTO (la rotta esiste solo per i fornitori del catalogo in UI, http-app.mjs:1832; i modelli di Ollama arrivano da
+     * `/api/v1/local-models`). Il telefono contava Ollama fra gli usabili e prendeva quel 404 per «non riesco a leggere i modelli».
+     * Un 404 di un fornitore = «nessun catalogo», non un guasto.
+     */
+    it('MDP-07 un 404 dei modelli di un fornitore non è «illeggibile»: quel fornitore non ha un catalogo', async () => {
+        const frasi = { nessunFornitore: 'NESSUNO', modelliIlleggibili: 'ILLEGGIBILI' }
+        const chieste: string[] = []
+        const p = {
+            richiesta: async ({ metodo, percorso }: { metodo: string, percorso: string }) => {
+                chieste.push(`${metodo} ${percorso}`)
+                if (percorso === '/api/v1/providers') return { stato: 200, corpo: JSON.stringify({ ok: true, data: { items: [fornitore('ollama', { requiresKey: false })] } }) }
+                if (percorso === '/api/v1/providers/ollama/models') return { stato: 404, corpo: JSON.stringify({ ok: false, error: { code: 'NOT_FOUND', message: 'Resource not found' } }) }
+                if (percorso === '/api/v1/local-models') return { stato: 200, corpo: JSON.stringify({ ok: true, data: { items: [] } }) }
+                return { stato: 409, corpo: JSON.stringify({ ok: false, error: { code: 'CHATGPT_NON_COLLEGATO', message: 'x' } }) }
+            },
+        } as unknown as TalosR4ClientePonte
+        expect((await leggiModelliDelPc(p, frasi)).problemi).toEqual([{ message: 'NESSUNO' }])
+    })
+
+    // ⛔ D-REM-4, revisione avversaria (mutante m6): il 404 vale «nessun catalogo» SOLO per il catalogo di un fornitore. Un PC che
+    // non ha nemmeno l'elenco dei fornitori (versione troppo vecchia) non si legge: «illeggibili», non «nessun fornitore».
+    it('MDP-09 un 404 dell’elenco dei fornitori resta «illeggibile»', async () => {
+        const frasi = { nessunFornitore: 'NESSUNO', modelliIlleggibili: 'ILLEGGIBILI' }
+        const p = {
+            richiesta: async () => ({ stato: 404, corpo: JSON.stringify({ ok: false, error: { code: 'NOT_FOUND', message: 'Resource not found' } }) }),
+        } as unknown as TalosR4ClientePonte
+        expect((await leggiModelliDelPc(p, frasi)).problemi).toEqual([{ message: 'ILLEGGIBILI' }])
+    })
+
+    // ⛔ D-REM-4, la forma del Desktop (23/10): quando il PC dirà `catalogo: false` (campo additivo), quel fornitore non si chiede
+    // nemmeno; senza il campo vale il 404 (MDP-07). Una richiesta in meno su un PC che serve una richiesta alla volta.
+    it('MDP-08 un fornitore che il PC dice senza catalogo non si chiede', async () => {
+        const { p, chieste } = ponte({
+            '/api/v1/providers': { items: [fornitore('ollama', { requiresKey: false, catalogo: false }), fornitore('lmstudio', { requiresKey: false })] },
+            '/api/v1/providers/lmstudio/models': { provider: 'lmstudio', modelli: [{ id: 'lmstudio:q', nome: 'Q' }] },
+        })
+        const { profili, problemi } = await leggiModelliDelPc(p)
+        expect(profili.map((x) => x.model)).toEqual(['lmstudio:q'])
+        expect(problemi).toEqual([])
+        expect(chieste).not.toContain('GET /api/v1/providers/ollama/models')
     })
 })

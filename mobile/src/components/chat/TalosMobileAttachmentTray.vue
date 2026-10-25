@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { AlertTriangle, FileText, Image, LoaderCircle, X } from '@lucide/vue'
+import { AlertTriangle, CirclePause, FileText, Image, LoaderCircle, X } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
+import { useTalosI18n } from '@/i18n'
 import type { TalosMobileAttachmentDraft } from '@/composables/useTalosMobileAttachments'
 
 defineProps<{
@@ -28,6 +29,17 @@ function formatBytes(value: number): string {
 const PERMESSI = [['model.read', 'chat.attachmentModelRead'], ['browser.upload', 'chat.attachmentBrowserUpload']] as const
 function capabilities(item: TalosMobileAttachmentDraft, t: (key: string) => string): string {
     return [formatBytes(item.sizeBytes), ...PERMESSI.filter(([p]) => item.permissions.includes(p)).map(([, k]) => t(k))].join(' · ')
+}
+
+const { locale } = useTalosI18n()
+
+/** R5.13 F3, mockup approvato il 25/10: «7,4 di 18,2 MB», l'unità una volta sola quando è la stessa; i decimali della lingua. */
+function progressParts(sent: number, total: number): { sent: string; total: string } {
+    const scale = (v: number): [number, string] => (v < 1024 ? [v, 'B'] : v < 1024 * 1024 ? [Math.round(v / 1024), 'KB'] : [v / (1024 * 1024), 'MB'])
+    const number = new Intl.NumberFormat(locale.value, { maximumFractionDigits: 1 })
+    const [s, su] = scale(sent)
+    const [t, tu] = scale(total)
+    return { sent: su === tu ? number.format(s) : `${number.format(s)} ${su}`, total: `${number.format(t)} ${tu}` }
 }
 
 function isImage(mediaType: string): boolean {
@@ -70,8 +82,13 @@ function isImage(mediaType: string): boolean {
                 role="listitem"
                 class="flex min-w-[240px] max-w-[300px] items-center gap-2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-2 py-1.5"
             >
+                <CirclePause
+                    v-if="item.status === 'ingesting' && item.progress?.phase === 'paused'"
+                    class="size-4 shrink-0 text-[var(--talos-muted)]"
+                    aria-hidden="true"
+                />
                 <LoaderCircle
-                    v-if="item.status === 'ingesting'"
+                    v-else-if="item.status === 'ingesting'"
                     class="size-4 shrink-0 motion-safe:animate-spin text-[var(--talos-accent)]"
                     aria-hidden="true"
                 />
@@ -84,12 +101,14 @@ function isImage(mediaType: string): boolean {
 
                 <div class="min-w-0 flex-1">
                     <p class="truncate text-xs font-medium text-[var(--talos-text)]">{{ item.displayName }}</p>
-                    <p class="truncate text-3xs text-[var(--talos-muted)]">
-                        <template v-if="item.status === 'ingesting'">{{ $t('chat.addingFile') }}</template>
+                    <p :class="[item.progress ? 'line-clamp-2 break-words' : 'truncate', 'text-3xs text-[var(--talos-muted)]']">
+                        <template v-if="item.status === 'ingesting' && item.progress">{{ item.progress.phase === 'waiting' ? $t('computer.fileWaiting') : $t(item.progress.phase === 'paused' ? 'chat.pausedSending' : 'chat.sendingToComputer', progressParts(item.progress.sent, item.progress.total)) }}</template>
+                        <template v-else-if="item.status === 'ingesting'">{{ $t('chat.addingFile') }}</template>
                         <template v-else-if="item.status === 'failed'">{{ $t('chat.addFileFailed') }}</template>
                         <template v-else>{{ capabilities(item, $t) }}</template>
                     </p>
-                    <p v-if="item.error" class="truncate text-3xs text-[var(--talos-danger,var(--destructive))]">
+                    <!-- D-F3-1 (dal Pad, 25/10): il perché si legge intero (due righe), mai tagliato a metà frase -->
+                    <p v-if="item.error" class="line-clamp-2 break-words text-3xs text-[var(--talos-danger,var(--destructive))]">
                         {{ item.error }}
                     </p>
                 </div>

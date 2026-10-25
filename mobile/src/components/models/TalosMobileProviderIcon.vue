@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { CircleHelp } from '@lucide/vue'
+import { CircleHelp, Laptop } from '@lucide/vue'
 // AVVIO (25/09/2026): i tre loghi più grossi escono dal pezzo d'avvio (`?no-inline`); i minuscoli restano incorporati.
 import anthropicLogo from '@/assets/providers/anthropic.svg?no-inline'
 import deepseekLogo from '@/assets/providers/deepseek.svg?no-inline'
@@ -60,6 +60,13 @@ const logo = computed(() => (
             class="rounded-sm bg-white object-contain"
             :class="props.compatto ? 'size-3.5 p-px' : 'size-5 p-0.5'"
         >
+        <!-- anomalia 3 di Marco (24/10/2026): i modelli del PC hanno il portatile, non il punto di domanda dello sconosciuto -->
+        <Laptop
+            v-else-if="props.provider === 'computer'"
+            data-provider-computer
+            aria-hidden="true"
+            :class="props.compatto ? 'size-3.5' : 'size-5'"
+        />
         <CircleHelp
             v-else
             data-provider-fallback

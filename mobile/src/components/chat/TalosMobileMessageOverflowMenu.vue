@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { CornerUpLeft, EllipsisVertical, Info, RefreshCcw, Share2, Trash2 } from '@lucide/vue'
+import { ref } from 'vue'
+import { CornerUpLeft, EllipsisVertical, Info, RefreshCcw, Share2, TextSelect, Trash2 } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import TalosMobileComposerSheet from '@/components/chat/TalosMobileComposerSheet.vue'
 import { TALOS_AZIONI_MESSAGGIO_TUTTE, type TalosAzioneMessaggio, type TalosMobileMessageView } from '@/components/chat/mobileChatTypes'
@@ -30,11 +30,9 @@ const props = withDefaults(defineProps<{
     azioni?: readonly TalosAzioneMessaggio[]
 }>(), { azioni: () => TALOS_AZIONI_MESSAGGIO_TUTTE })
 const puo = (azione: TalosAzioneMessaggio): boolean => props.azioni.includes(azione)
-/** La riga divisoria separa «Elimina» da ciò che c'è sopra: senza una delle due parti non divide niente. */
-const conVociSopra = computed(() => (props.message.role === 'user'
-    ? puo('invia-di-nuovo') || puo('riutilizza')
-    : puo('condividi') || puo('dettagli')))
 const emit = defineEmits<{
+    /** Owner 24/10/2026 «Come Happy»: il testo del messaggio in un foglio dove si seleziona (sempre, come Copia e Ascolta). */
+    selectText: [message: TalosMobileMessageView]
     reuse: [message: TalosMobileMessageView]
     resend: [message: TalosMobileMessageView]
     share: [message: TalosMobileMessageView]
@@ -44,6 +42,7 @@ const emit = defineEmits<{
 
 const open = ref(false)
 
+function pickSelectText(message: TalosMobileMessageView): void { open.value = false; emit('selectText', message) }
 function pickReuse(message: TalosMobileMessageView): void { open.value = false; emit('reuse', message) }
 function pickResend(message: TalosMobileMessageView): void { open.value = false; emit('resend', message) }
 function pickShare(message: TalosMobileMessageView): void { open.value = false; emit('share', message) }
@@ -74,6 +73,20 @@ function pickDelete(message: TalosMobileMessageView): void { open.value = false;
         @close="open = false"
     >
         <ul class="talos-message-sheet-list" role="list">
+            <!-- Owner 24/10/2026 «Come Happy» (`MarkdownView.tsx:38-63`): il tocco prolungato apre questo foglio e non più anche la
+                 selezione di Android; il testo si seleziona qui, sempre, per l'utente e per l'assistente, in Chat e nel Codice -->
+            <li>
+                <button
+                    type="button"
+                    class="talos-message-sheet-row"
+                    data-testid="talos-message-select-text"
+                    :aria-label="$t('chat.selectText')"
+                    @click="pickSelectText(message)"
+                >
+                    <TextSelect class="talos-message-sheet-icon" aria-hidden="true" />
+                    <span>{{ $t('chat.selectText') }}</span>
+                </button>
+            </li>
             <template v-if="message.role === 'user'">
                 <li v-if="puo('invia-di-nuovo')">
                     <button
@@ -128,7 +141,8 @@ function pickDelete(message: TalosMobileMessageView): void { open.value = false;
                     </button>
                 </li>
             </template>
-            <li v-if="puo('elimina') && conVociSopra" class="talos-message-sheet-rule" aria-hidden="true" />
+            <!-- «Seleziona testo» sta sempre sopra: la riga separa sempre «Elimina» -->
+            <li v-if="puo('elimina')" class="talos-message-sheet-rule" aria-hidden="true" />
             <li v-if="puo('elimina')">
                 <button
                     type="button"

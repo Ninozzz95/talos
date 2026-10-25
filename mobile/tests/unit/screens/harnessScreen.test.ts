@@ -348,6 +348,11 @@ describe('HarnessScreen (28/8) — real sessions, no more the five-row demo arra
             expect(status.getAttribute('data-harness-status')).toBe('interrupted')
             expect(status.textContent).toContain('Interrupted')
             expect(row.querySelector('.animate-spin')).toBeNull()
+            // 23/10 sera (Desktop, «stesso stato, stessa veste»): l'interrotta non è un allarme. Niente rosso, la veste quieta
+            // della Chat (`TalosMobileStatoChat`: CircleDashed, muted), come il pallino senza colore del desktop.
+            expect(status.className).not.toContain('danger')
+            expect(status.className).toContain('var(--talos-muted)')
+            expect(status.querySelector('svg')?.getAttribute('class')).toContain('lucide-circle-dashed')
         })
 
         /**
@@ -377,7 +382,12 @@ describe('HarnessScreen (28/8) — real sessions, no more the five-row demo arra
             const row = w.get('[data-harness-session-id="session-a"]').element.closest('[role="listitem"]')!
             const status = row.querySelector('[data-testid="talos-harness-row-status"]')!
             expect(status.getAttribute('data-harness-status')).toBe('error')
-            expect(status.textContent).toContain('Concluded with an error')
+            // owner 23/10 sera, esteso al Codice dal Desktop («stesso stato, stessa parola»): l'ultimo giro finito in errore si
+            // può riprendere scrivendo nella stessa sessione, quindi «To resume», l'icona di Riprendi e il tono d'attenzione, non rosso
+            expect(status.textContent?.trim()).toBe('To resume')
+            expect(status.querySelector('svg')?.getAttribute('class')).toContain('lucide-rotate-ccw')
+            expect(status.className).toContain('var(--talos-warning)')
+            expect(status.className).not.toContain('danger')
         })
 
         it('⛔ HARNESS-STATUS-PRECEDENCE-01 AL CONTRARIO: "interrotta" vince su "errore" — un crash è un tipo di interruzione', async () => {
@@ -575,7 +585,9 @@ describe('HarnessScreen (28/8) — real sessions, no more the five-row demo arra
             input!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }))
             await flushPromises()
 
-            expect(w.text()).toContain('disk full')
+            // D-MOCK-10 (24/10/2026): DENTRO il dialogo rimasto aperto, non dietro di lui nella lista sfocata
+            expect(document.body.querySelector('[role="dialog"] [data-testid="talos-harness-dialog-error"]')?.textContent).toContain('disk full')
+            expect(w.text()).not.toContain('disk full')
             w.unmount()
         })
 
@@ -597,14 +609,17 @@ describe('HarnessScreen (28/8) — real sessions, no more the five-row demo arra
             expect(dialog?.textContent).toContain(`"${titolo}" will be removed from this device.`)
             menuItem('talos-harness-delete-confirm').click()
             await flushPromises()
-            expect(w.text()).toContain("can't remove /data/x & y")
+            const nelDialogo = () => document.body.querySelector('[role="dialog"] [data-testid="talos-harness-dialog-error"]')?.textContent ?? ''
+            expect(nelDialogo()).toContain("can't remove /data/x & y")
+            ;[...document.body.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find((b) => b.textContent?.includes('Cancel'))!.click()
+            await flushPromises()
             renameCodiceSession.mockRejectedValue(new Error(`l'archivio "a/b" è pieno`))
             await openRowMenu(w, 'session-x')
             menuItem('talos-harness-action-rename').click()
             await flushPromises()
             document.body.querySelector<HTMLInputElement>('[aria-label="Session name"]')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }))
             await flushPromises()
-            expect(w.text()).toContain(`Couldn't rename the session: l'archivio "a/b" è pieno`)
+            expect(nelDialogo()).toContain(`Couldn't rename the session: l'archivio "a/b" è pieno`)
             expect(`${w.html()} ${document.body.innerHTML}`).not.toMatch(/&amp;apos;|&amp;#x2F;|&amp;quot;/u)
             w.unmount()
         })
