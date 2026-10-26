@@ -1,0 +1,12 @@
+{
+    "en": [
+        "Code with an on-device model no longer stops answering after a few minutes with \"No local model is open in the app\".",
+        "Updates download again: TALOS follows GitHub's download link, shows how far it has got and says plainly when an update cannot be fetched.",
+        "If you have 0.1.44 or 0.1.45, install this version by hand once; from here on TALOS updates itself."
+    ],
+    "it": [
+        "Il Codice con un modello sul dispositivo non smette più di rispondere dopo qualche minuto con «Nessun modello locale è aperto nell'app».",
+        "Gli aggiornamenti si scaricano di nuovo: TALOS segue il collegamento di download di GitHub, mostra a che punto è e dice chiaramente quando un aggiornamento non arriva.",
+        "Se hai la 0.1.44 o la 0.1.45, installa questa versione a mano una volta: da qui in poi TALOS si aggiorna da solo."
+    ]
+}

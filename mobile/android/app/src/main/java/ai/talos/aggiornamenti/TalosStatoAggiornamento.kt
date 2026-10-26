@@ -60,8 +60,15 @@ object TalosStatoAggiornamento {
         val j = JSONObject().put("tag", trovata.tag).put("versione", trovata.versione).put("note", trovata.note)
             .put("pagina", trovata.pagina).put("path", trovata.path).put("sha512", trovata.sha512)
         trovata.size?.let { j.put("size", it) }
-        prefs(context).edit().putString("trovata", j.toString()).putString("fase", fase.name).remove("motivo").apply()
+        prefs(context).edit().putString("trovata", j.toString()).putString("fase", fase.name).remove("motivo").remove("scaricati").apply()
     }
+
+    /**
+     * I byte dell'APK arrivati finora (D-UPD-1: prima l'avanzamento finiva in `{ _, _ -> }` e non si vedeva niente). Li scrive il
+     * lavoro di scaricamento al massimo una volta al secondo; ogni scrittura è un evento `cambio` per il pannello.
+     */
+    fun scaricati(context: Context): Long? = prefs(context).takeIf { it.contains("scaricati") }?.getLong("scaricati", 0L)
+    fun segnaScaricati(context: Context, byte: Long) = prefs(context).edit().putLong("scaricati", byte).apply()
 
     fun segnaFase(context: Context, fase: TalosFaseAggiornamento, motivo: String? = null) {
         prefs(context).edit().putString("fase", fase.name).apply {
@@ -114,7 +121,7 @@ object TalosStatoAggiornamento {
      * non l'ha installata TALOS (a mano, dal browser): nessun «Aggiornata» da dire.
      */
     fun ripulisciDopoInstallazione(context: Context, versione: String?) {
-        prefs(context).edit().remove("trovata").remove("motivo").remove("allUscita").remove("riapri").remove("rifiutato").apply {
+        prefs(context).edit().remove("trovata").remove("motivo").remove("allUscita").remove("riapri").remove("rifiutato").remove("scaricati").apply {
             if (versione == null) {
                 putString("fase", TalosFaseAggiornamento.NESSUNA.name).remove("appenaAggiornata")
             } else {

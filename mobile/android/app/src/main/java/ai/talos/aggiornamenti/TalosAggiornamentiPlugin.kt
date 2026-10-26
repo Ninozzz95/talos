@@ -115,6 +115,7 @@ class TalosAggiornamentiPlugin : Plugin() {
             .put("note", trovata?.note?.takeIf { it.isNotEmpty() }?.let { runCatching { JSObject(it) }.getOrNull() })
             .put("pagina", trovata?.pagina?.takeIf { it.isNotEmpty() })
             .put("dimensione", trovata?.size)
+            .put("scaricati", TalosStatoAggiornamento.scaricati(context))
             .put("motivo", TalosStatoAggiornamento.motivo(context))
             .put("ultimoControllo", TalosStatoAggiornamento.ultimoControllo(context).takeIf { it > 0 })
             .put("appenaAggiornata", TalosStatoAggiornamento.appenaAggiornata(context))

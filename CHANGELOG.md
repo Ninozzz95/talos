@@ -6,6 +6,24 @@ signed APK under [Releases](../../releases).
 
 Numbers in this file are measured on a device, not estimated.
 
+## v0.1.46
+
+A fix release: Code with an on-device model keeps working, and updates download again.
+
+### Fixed
+
+- **Code with an on-device model stopped answering after a few minutes.** Every turn ended with "No local model is open in
+  the app" although the model was open, until the app was restarted. The release build lost the link between Code and the
+  app's own engine; it now stays alive, and if it ever drops, the app rebuilds it on the next message. TALOS 0.1.44 and
+  0.1.45 had this; if you cannot update yet, closing and reopening the app brings the local model back for a while.
+- **Updates did not download.** The automatic update found the new version but never fetched it, because GitHub hands the
+  file over through a redirect. The app now follows it, shows how far the download has got, and says when an update cannot
+  be fetched instead of retrying in silence. Model downloads follow the same rule.
+
+### Install
+
+- If you have 0.1.44 or 0.1.45, install this version by hand once from the APK below; from here on TALOS updates itself.
+
 ## v0.1.45
 
 Remote control of a PC is ready to use, and the device can send files and images to a PC session.
@@ -44,7 +62,8 @@ Remote control of a PC is ready to use, and the device can send files and images
 ### Known limitations
 
 - **Receiving files from the PC on the device** (files the PC offers, download, open and share) comes in a later version.
-- Sending files needs TALOS desktop 0.1.37 or later; an older desktop turns "+" off and says why.
+- Sending files needs TALOS desktop 0.1.38 or later. With 0.1.37, images reach the model but other files fail on the PC;
+  an older desktop turns "+" off and says why.
 
 ## v0.1.44
 

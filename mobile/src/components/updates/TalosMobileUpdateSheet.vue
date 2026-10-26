@@ -61,7 +61,12 @@ const firmaSbagliata = computed(() => {
         || motivo === 'versione-del-tag'
 })
 
+/** D-UPD-1: lo scaricamento abbandonato per sempre (`scaricamento:<motivo del runner o del rinvio>`): il file non è mai arrivato. */
+const scaricamentoFallito = computed(() => (talosAggiornamenti.motivo ?? '').startsWith('scaricamento:'))
+
 const ragione = computed(() => {
+    // «riprova al prossimo controllo» solo se il controllo giornaliero c'è: lo programma `programmaControllo` con gli automatici
+    if (scaricamentoFallito.value) return t(talosAggiornamenti.automatici ? 'updates.reasons.download' : 'updates.reasons.downloadManual')
     switch (talosAggiornamenti.motivo) {
         case 'spazio': return t('updates.reasons.space')
         case 'conferma': return t('updates.reasons.confirm')
@@ -73,7 +78,8 @@ const ragione = computed(() => {
 const titolo = computed(() => {
     switch (stato.value) {
         case 'aggiornata': return t('updates.updatedTitle')
-        case 'fallita': return t('updates.failedTitle')
+        // owner 26/10 (b): «scartato» solo per un file arrivato e rifiutato; uno mai arrivato è «non arrivato»
+        case 'fallita': return t(scaricamentoFallito.value ? 'updates.failedDownloadTitle' : 'updates.failedTitle')
         case 'installo': return t('updates.installingTitle')
         default: return vista.value === 'permesso' ? t('updates.permissionTitle') : t('updates.readyTitle')
     }
@@ -159,7 +165,7 @@ const secondario = 'talos-pressable inline-flex min-h-touch w-full items-center 
             <template v-else-if="stato === 'fallita'">
                 <p class="flex items-start gap-2 text-base font-semibold text-[var(--talos-text)]">
                     <CircleAlert class="mt-0.5 size-5 shrink-0 text-[var(--talos-danger)]" aria-hidden="true" />
-                    {{ firmaSbagliata ? t('updates.failedSignature') : t('updates.failedOther') }}
+                    {{ firmaSbagliata ? t('updates.failedSignature') : scaricamentoFallito ? t('updates.failedDownload') : t('updates.failedOther') }}
                 </p>
                 <p data-testid="talos-update-failed-body" class="text-sm text-[var(--talos-muted)]">
                     {{ firmaSbagliata

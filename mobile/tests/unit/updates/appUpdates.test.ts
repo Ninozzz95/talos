@@ -56,4 +56,12 @@ describe('stato dell\'aggiornamento', () => {
         expect(talosAggiornamentoDaMostrare({ fase: 'IN_INSTALLAZIONE', appenaAggiornata: null })).toBe(true)
         expect(talosAggiornamentoDaMostrare({ fase: 'NESSUNA', appenaAggiornata: '0.1.44' })).toBe(true)
     })
+
+    // ⛔ D-UPD-1: l'avanzamento dello scaricamento (byte arrivati) viene dal nativo, al massimo una volta al secondo
+    it('UPD-SRV-05 i byte scaricati si copiano solo se sono un numero', () => {
+        talosApplicaStatoAggiornamenti({ fase: 'IN_SCARICAMENTO', scaricati: 41_000_000 })
+        expect(talosAggiornamenti.scaricati).toBe(41_000_000)
+        talosApplicaStatoAggiornamenti({ scaricati: '41' as never })
+        expect(talosAggiornamenti.scaricati).toBeNull()
+    })
 })
