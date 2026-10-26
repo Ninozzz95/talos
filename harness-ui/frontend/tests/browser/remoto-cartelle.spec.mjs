@@ -366,12 +366,12 @@ test('REMOTO-CARTELLE-12 — 24/10 (contratto col Mobile): «This computer · <n
   const stato = await fingi(page);
   stato.consensi = [];
   await page.route('**/api/v1/remote', (route) => route.fulfill({ json: { ok: true, data: {
-    disponibile: true, acceso: true, relay: { modo: 'n0' }, sceltaFatta: true, pcId: '31ABcdef0123456789', nomePc: 'DESKTOP-BJ9I7OU', inLinea: [],
+    disponibile: true, acceso: true, relay: { modo: 'n0' }, sceltaFatta: true, pcId: '31ABcdef0123456789', nomePc: 'DESKTOP-ESEMPIO', inLinea: [],
     telefoni: [], attese: [], accoppiamento: { sbagliati: 0 }, consensi: [],
   } } }));
   await apri(page);
   await page.locator('[data-vaia="impostazioni"]:visible').first().click();
   await page.locator('[data-settings-tab="telefoni"]').click();
   await expect(page.locator('[data-remoto-questo-pc]')).toContainText('This computer');
-  await expect(page.locator('[data-remoto-questo-pc]')).toContainText('DESKTOP-BJ9I7OU · 31ab');
+  await expect(page.locator('[data-remoto-questo-pc]')).toContainText('DESKTOP-ESEMPIO · 31ab');
 });

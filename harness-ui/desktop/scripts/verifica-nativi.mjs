@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
+import { readFileSync, rmSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
+import { Readable } from 'node:stream';
 import { pathToFileURL } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 
@@ -32,6 +34,23 @@ costruttore.relayMode(iroh.modulo.RelayMode.disabled());
 const endpoint = await costruttore.bind();
 assert.match(endpoint.id().toString(), /^[0-9a-f]{64}$/);
 await endpoint.close();
-console.log('Addon reali verificati con Electron 44.3.0: node-pty 1.1.0 (processo), keyring (caricamento), sqlite-vec 0.1.9 (query), iroh 1.1.0 (endpoint diretto).');
+/*
+ * L'helper degli allegati (25/10/2026, revisione del blocco 0.1.38): fino alla 0.1.37 il pacchetto portava l'exe senza il suo lock
+ * `.sha256`, e ogni allegato nell'app installata falliva. Qui un salvataggio VERO dal pacchetto preparato, col percorso di serie
+ * dell'helper e l'ambiente che il server ha nell'app (`child-bootstrap.mjs` toglie ELECTRON_RUN_AS_NODE prima di caricarlo): se il
+ * lock manca o non combacia, il pacchetto si ferma qui invece di arrivare all'owner.
+ */
+delete process.env.ELECTRON_RUN_AS_NODE;
+const { saveChatFile } = await import(pathToFileURL(join(backend, 'src/chat-file-upload.mjs')).href);
+/* la cartella usa-e-getta passa dalla radice scratch del prodotto (SCRATCH-CANCELLO-01), mai dalla TEMP di sistema */
+const { cartellaScratch } = await import(pathToFileURL(join(backend, 'src/scratch.mjs')).href);
+const cartellaAllegati = cartellaScratch('verifica-allegati-');
+try {
+  const salvato = await saveChatFile({ rootDir: cartellaAllegati, name: 'verifica.txt', source: Readable.from([Buffer.from('TALOS-R02-ALLEGATI')]) });
+  assert.equal(readFileSync(join(cartellaAllegati, salvato.percorso), 'utf8'), 'TALOS-R02-ALLEGATI', 'Helper degli allegati: il file salvato non torna.');
+} finally {
+  rmSync(cartellaAllegati, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+}
+console.log('Addon reali verificati con Electron 44.3.0: node-pty 1.1.0 (processo), keyring (caricamento), sqlite-vec 0.1.9 (query), iroh 1.1.0 (endpoint diretto), helper degli allegati (salvataggio vero).');
 // La shell è già uscita; node-pty mantiene il suo helper ConPTY fino all'uscita del processo host.
 process.exit(0);

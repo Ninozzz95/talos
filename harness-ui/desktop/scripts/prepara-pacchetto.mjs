@@ -52,6 +52,24 @@ export async function verificaImpronta(file, prevista) {
   return attuale;
 }
 
+/*
+ * ⛔ 25/10/2026 (prova dal vivo dal Pad sull'app 0.1.37 installata): `src/chat-file-upload.mjs` esegue l'helper degli allegati SOLO
+ * se il suo SHA256 combacia con `<exe>.sha256` accanto (BUG-20, 07/10). Il pacchetto copiava solo l'exe: nell'app installata il lock
+ * mancava, ogni allegato (dalla finestra e dai dispositivi) tentava di ricostruire l'helper senza Go e falliva, e il rilancio di
+ * `process.execPath` apriva una seconda istanza di TALOS. Il lock viaggia con l'exe, e il pacchetto si ferma se manca o non combacia.
+ */
+export async function copiaHelperDegliAllegati(origine, destinazione) {
+  const lock = join(origine, 'talos-chat-upload.exe.sha256');
+  if (!existsSync(lock)) throw new Error('native/talos-chat-upload.exe.sha256 manca: lanciare `npm run build:chat-upload` prima del pacchetto.');
+  const impronta = (await readFile(lock, 'utf8')).trim().split(/\s+/u)[0]?.toLowerCase() ?? '';
+  if (!/^[0-9a-f]{64}$/u.test(impronta)) throw new Error('native/talos-chat-upload.exe.sha256 non porta uno SHA256.');
+  await mkdir(destinazione, { recursive: true });
+  await copyFile(join(origine, 'talos-chat-upload.exe'), join(destinazione, 'talos-chat-upload.exe'));
+  await verificaImpronta(join(destinazione, 'talos-chat-upload.exe'), impronta);
+  await writeFile(join(destinazione, 'talos-chat-upload.exe.sha256'), `${impronta}  talos-chat-upload.exe\n`);
+  return impronta;
+}
+
 async function elenco(dir, prefisso = '') {
   const files = [];
   for (const voce of (await readdir(join(dir, prefisso), { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name, 'en'))) {
@@ -277,7 +295,7 @@ export async function preparaPacchetto() {
   for (const nome of ['server.mjs', 'package.json', 'package-lock.json']) await copyFile(join(root, '..', nome), join(backend, nome));
   for (const nome of ['src', 'public']) await copiaAlberoProduzione(join(root, '..', nome), join(backend, nome));
   await mkdir(join(backend, 'native'));
-  await copyFile(join(root, '../native/talos-chat-upload.exe'), join(backend, 'native/talos-chat-upload.exe'));
+  await copiaHelperDegliAllegati(join(root, '../native'), join(backend, 'native'));
   await copyFile(join(root, '../native/GO-LICENSE.txt'), join(backend, 'native/GO-LICENSE.txt'));
   await esegui(join(backend, 'native/talos-chat-upload.exe'), ['--version'], root);
   /*

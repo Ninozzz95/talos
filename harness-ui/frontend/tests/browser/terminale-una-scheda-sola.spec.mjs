@@ -1,8 +1,9 @@
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, readdirSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 
 import { expect, test } from '@playwright/test';
+import { rimuoviCartellaDiProva } from '../../../tests/aiuto/rimuovi-cartella-di-prova.mjs';
 
 /*
  * BC-62 (owner, 17/09/2026, dal vivo): «quando apro scheda terminale si apre una nuova tab terminale senza motivo».
@@ -29,7 +30,31 @@ const linguette = (page) => page.evaluate(() => [...document.querySelectorAll('.
    confine del server, facendo fallire la fixture prima di arrivare alla prova delle linguette.
    In esecuzioni normali la variabile non c'è e si conserva il comportamento storico. */
 const rootWorkspace = process.env.TALOS_HARNESS_UI_PROJECT_DIRS?.split(';')[0]?.trim() || tmpdir();
-const cartellaDiProva = (prefisso) => mkdtempSync(join(rootWorkspace, prefisso));
+/* 25/10/2026 (prova dal vivo dal Pad): le cartelle create qui finivano nella PRIMA cartella dei progetti del server di prova
+   (`TALOS-prova-remoto`) e non se ne andavano mai — decine di `<prefisso>-XXXXXX` che poi un modello leggeva come «tutti i file
+   della cartella». Ognuna si toglie a fine file. Quella che Windows tiene ancora occupata (il terminale del server di prova è
+   aperto lì dentro, e Playwright spegne il server DOPO ogni pulizia finale: `runner/tasks.ts`) la toglie la corsa dopo, insieme
+   alle altre dello stesso prefisso rimaste da più di 30 minuti. */
+const cartelleDaTogliere = [];
+const prefissiDiProva = new Set();
+const traccia = (cartella) => { cartelleDaTogliere.push(cartella); prefissiDiProva.add(basename(cartella).slice(0, -6)); return cartella; };
+const togli = (cartella) => {
+  try { rimuoviCartellaDiProva(cartella); }
+  catch (e) { console.warn(`cartella di prova rimasta: ${cartella} (${e?.code ?? e})`); }
+};
+test.afterAll(() => {
+  for (const cartella of cartelleDaTogliere.splice(0)) togli(cartella);
+  const soglia = Date.now() - 30 * 60_000;
+  let nomi = [];
+  try { nomi = readdirSync(rootWorkspace); } catch { /* radice sparita: niente da togliere */ }
+  for (const nome of nomi) {
+    /* revisione del blocco 0.1.38: solo i sei caratteri che `mkdtemp` aggiunge, mai un nome qualunque che inizi col prefisso */
+    if (![...prefissiDiProva].some((p) => nome.startsWith(p) && /^[A-Za-z0-9]{6}$/u.test(nome.slice(p.length)))) continue;
+    const cartella = join(rootWorkspace, nome);
+    try { if (statSync(cartella).isDirectory() && statSync(cartella).mtimeMs < soglia) togli(cartella); } catch { /* sparita intanto */ }
+  }
+});
+const cartellaDiProva = (prefisso) => traccia(mkdtempSync(join(rootWorkspace, prefisso)));
 
 /* ⛔ 23/09/2026 — i DUE test di questo file salvano una chiave finta: contro un server esterno (il 4174)
    non girano, perché lì la chiave è quella vera dell'owner. */

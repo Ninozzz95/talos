@@ -4,6 +4,16 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
 [SemVer](https://semver.org/): in 0.y.z anything may still change. The version lives in
 `package.json` and in the `desktop-vX.Y.Z` tag.
 
+## desktop-v0.1.38 — 2026-10-25
+
+### Fixed
+
+- **Attachments work again in the installed app.** Adding a file to a conversation, from the window or from a paired device,
+  failed with «could not copy the file into the attachments folder»: the installer shipped the small program that saves
+  attachments without the fingerprint TALOS checks before running it, so every attachment was refused, and the attempt to
+  rebuild it could open a second TALOS window. The fingerprint now ships with the program, and the package is not built
+  without it. Images sent to the model were not affected.
+
 ## desktop-v0.1.37 — 2026-10-25
 
 ### Added

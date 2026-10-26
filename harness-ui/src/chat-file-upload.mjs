@@ -87,6 +87,12 @@ async function helperVerificato(helperPath) {
     // Percorso iniettato (es. dai test): qui la ricompilazione non è legittima → fallimento onesto.
     throw new WorkspaceFileError('Upload helper not verified: SHA256 lock missing or not matching', 'FILE_WRITE_FAILED');
   }
+  /* ⛔ 25/10/2026 (app 0.1.37 installata): dove la ricostruzione non può esserci — il pacchetto non porta `scripts/` né Go, oppure
+     il server gira dentro Electron senza `ELECTRON_RUN_AS_NODE` — rilanciare `process.execPath` apriva una SECONDA istanza di
+     TALOS invece di eseguire lo script (Electron, «Environment Variables»). Lì non si lancia niente: fallimento onesto. */
+  if (!existsSync(COSTRUISCI_HELPER) || (process.versions.electron && !ambienteDellaBuildHelper().ELECTRON_RUN_AS_NODE)) {
+    throw new WorkspaceFileError('Upload helper not verified (SHA256 lock missing or not matching) and it cannot be rebuilt here', 'FILE_WRITE_FAILED');
+  }
   try {
     await new Promise((risolvi, rifiuta) => {
       const build = spawn(process.execPath, [COSTRUISCI_HELPER], { windowsHide: true, stdio: ['ignore', 'ignore', 'pipe'], env: ambienteDellaBuildHelper() });

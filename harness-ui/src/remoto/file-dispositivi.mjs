@@ -42,6 +42,8 @@ export const VITA_TRASFERIMENTO_MS = 24 * 60 * 60_000;
 export const TRASFERIMENTI_APERTI_MASSIMI = 8;
 /* B9-3: un trasferimento senza un pezzo da tanto è «fermo», e al tetto lascia il posto a uno nuovo dello stesso dispositivo */
 export const TRASFERIMENTO_FERMO_MS = 10 * 60_000;
+/* A10-4: quante volte si ritenta una rinomina caduta su EPERM/EACCES/EBUSY prima di arrendersi */
+const RINOMINA_RITENTATIVI = 2;
 const RIGHE_MASSIME = 500;
 const CARICATI_RICORDATI = 2_000;
 const OFFERTE_RICORDATE = 2_000;
@@ -101,6 +103,8 @@ export function creaFileDeiDispositivi({
   /* D-5 del Mobile (25/10/2026, contratto Parte 2 «Revision 3»): `({nome, dataUrl}) → {id, mimeType, byte}`, l'archivio delle
      immagini della chat (`chat-image-attachments.mjs`), lo stesso della finestra; senza, le immagini dal dispositivo non ci sono */
   salvaImmagine = null,
+  /* A10-4: la rinomina del salvataggio atomico, iniettabile solo per provare i suoi guasti */
+  rinomina = renameSync,
 } = {}) {
   if (typeof cartella !== 'string' || !cartella) throw errore('REMOTE_FILES_FOLDER', 'The device files need their data folder.');
   const dirTrasferimenti = join(cartella, 'trasferimenti');
@@ -111,8 +115,22 @@ export function creaFileDeiDispositivi({
   const scriviAtomicoSync = (file, testo) => {
     mkdirSync(dirname(file), { recursive: true });
     const tmp = `${file}.${process.pid}.${Date.now()}.tmp`;
-    writeFileSync(tmp, testo, { encoding: 'utf8', mode: 0o600 });
-    renameSync(tmp, file);
+    /* A10-4 (revisione 10, 25/10/2026): su Windows la rinomina cade con EPERM/EACCES/EBUSY quando un altro processo (o
+       l'antivirus) tiene aperto il file d'arrivo — misurati 4.673 EPERM su 23.692 con due processi, e 2.301 `.tmp` rimasti
+       per sempre. Come graceful-fs (ritenta la rinomina su EPERM/EACCES) e write-file-atomic (toglie il temporaneo se
+       fallisce): due ritentativi brevi, poi il temporaneo si toglie e l'errore porta un codice già concordato col Mobile (OPERATION_FAILED, `filo.mjs` CODICI). */
+    try {
+      writeFileSync(tmp, testo, { encoding: 'utf8', mode: 0o600 });
+      for (let tentativo = 0; ; tentativo += 1) {
+        try { rinomina(tmp, file); return; } catch (e) {
+          if (tentativo >= RINOMINA_RITENTATIVI || !['EPERM', 'EACCES', 'EBUSY'].includes(e?.code)) throw e;
+          Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 15 * (tentativo + 1));
+        }
+      }
+    } catch (e) {
+      try { rmSync(tmp, { force: true }); } catch { /* il temporaneo resta solo se nemmeno la rimozione riesce */ }
+      throw errore('OPERATION_FAILED', 'The device files could not be saved on this computer.', { stato: 500, reason: 'save-failed', causa: e?.code ?? null });
+    }
   };
   const leggiJsonSync = (file, vuoto) => {
     try { return JSON.parse(readFileSync(file, 'utf8')); } catch { return vuoto; }
@@ -140,8 +158,16 @@ export function creaFileDeiDispositivi({
   /* ---------- stato persistente: offerte (D2) e file caricati (per lo sha256 in `file.list`) ---------- */
   let offerte = (leggiJsonSync(fileOfferte, {}).offerte ?? []).filter((o) => o && typeof o.dispositivoId === 'string' && typeof o.sessionId === 'string' && typeof o.percorso === 'string');
   let caricati = (leggiJsonSync(fileCaricati, {}).caricati ?? []).filter((c) => c && typeof c.sessionId === 'string' && typeof c.percorso === 'string');
-  const salvaOfferte = () => scriviAtomicoSync(fileOfferte, JSON.stringify({ v: 1, offerte: offerte.slice(-OFFERTE_RICORDATE) }));
-  const salvaCaricati = () => scriviAtomicoSync(fileCaricati, JSON.stringify({ v: 1, caricati: caricati.slice(-CARICATI_RICORDATI) }));
+  /* ⛔ Revisione del debito 10 (25/10/2026 notte): i due elenchi si salvano DOPO che il fatto è già successo (il file pubblicato in
+     `allegati/`, l'offerta già in memoria). Un salvataggio fallito lì diceva al dispositivo «errore» per un file già pubblicato, il
+     ricordo dei finiti non partiva, e il dispositivo lo ricaricava: due copie (`x.txt` e `x-2.txt`), misurato dal revisore. Come
+     `ricordaCompletato`: lo stato in memoria resta quello vero, e la scrittura dopo riscrive l'elenco intero. */
+  const salvaOfferte = () => {
+    try { scriviAtomicoSync(fileOfferte, JSON.stringify({ v: 1, offerte: offerte.slice(-OFFERTE_RICORDATE) })); } catch { /* alla prossima */ }
+  };
+  const salvaCaricati = () => {
+    try { scriviAtomicoSync(fileCaricati, JSON.stringify({ v: 1, caricati: caricati.slice(-CARICATI_RICORDATI) })); } catch { /* alla prossima */ }
+  };
 
   /* Una conversazione si dice cancellata solo se QUESTO processo l'ha vista esistere e ora non c'è più: un registro che carica le
      sessioni dopo l'avvio non deve far sparire le offerte di una conversazione che c'è ancora. */
@@ -240,6 +266,10 @@ export function creaFileDeiDispositivi({
       for (const nome of readdirSync(join(dirTrasferimenti, sotto.name))) {
         if (!nome.endsWith('.json')) continue;
         const m = leggiJsonSync(join(dirTrasferimenti, sotto.name, nome), null);
+        /* A10-6 (revisione a blocco 10): un `.json` scritto da una versione PIÙ NUOVA (si è tornati indietro) non lo capiamo, ma non è
+           rovinato: non si carica e non si cancella, come fanno Checkmk e OpenClaw con lo stato di uno schema più nuovo. Lo riprende la
+           versione che l'ha scritto. */
+        if (m && typeof m === 'object' && Number.isSafeInteger(m.v) && m.v > 1) continue;
         /* ⛔ Revisione a blocco 8 (B8-1): un'immagine per il modello (D-5) non ha sessione — `sessionId: null` con `immagine: true` — e
            scartarla qui voleva dire niente ripresa dopo il riavvio e un parziale fino a 5 MiB sul disco PER SEMPRE (mai ricaricata, la
            pulizia delle 24 ore non la vedeva) */
@@ -432,24 +462,32 @@ export function creaFileDeiDispositivi({
       }
       if (typeof sha256 !== 'string' || !SHA256.test(sha256)) throw malformato('The sha256 must be 64 hexadecimal characters.');
       if (!perImmagine && !esiste(sessionId)) throw errore('NOT_FOUND', 'Session not found.', { stato: 404 });
-      await spazzaScaduti();
-      const suoi = [...aperti.values()].filter((m) => m.dispositivoId === dispositivoId);
-      if (suoi.length >= TRASFERIMENTI_APERTI_MASSIMI) {
-        /* ⛔ Revisione a blocco 9 (B9-3): il dispositivo non ricorda gli id, quindi ogni app chiusa a metà invio lascia qui trasferimenti
-           che nessuno riprenderà; al tetto di 8 ogni `begin` diceva RATE_LIMITED fino a 24 ore. Ora al tetto si libera il SUO
-           trasferimento fermo da più tempo (nessun pezzo da 10 minuti): una ripresa tardiva di quello dice TRANSFER_EXPIRED, come dopo
-           le 24 ore. Se sono tutti attivi resta RATE_LIMITED: il dispositivo aspetta il suo turno. */
-        const fermo = suoi.filter((m) => clock() - m.attivoAlle >= TRASFERIMENTO_FERMO_MS).sort((a, b) => a.attivoAlle - b.attivoAlle)[0];
-        if (!fermo) throw errore('RATE_LIMITED', 'Too many unfinished transfers from this device: finish or let some expire.', { stato: 429 });
-        await seppellisci(fermo);
-      }
-      const ora = clock();
-      const meta = { trasferimentoId: casuale(16).toString('base64url'), dispositivoId, sessionId: perImmagine ? null : sessionId, nome: nomeValido, dimensione, sha256: sha256.toLowerCase(), creatoAlle: ora, attivoAlle: ora, ricevuti: 0, ...(perImmagine ? { immagine: true } : {}) };
-      await fsp.mkdir(dirDi(dispositivoId), { recursive: true });
-      await fsp.writeFile(file(meta, 'part'), Buffer.alloc(0), { flag: 'wx', mode: 0o600 });
-      salvaMeta(meta);
-      aperti.set(chiaveT(dispositivoId, meta.trasferimentoId), meta);
-      return { trasferimentoId: meta.trasferimentoId, pezzo: PEZZO_MASSIMO, ricevuti: 0 };
+      /* ⛔ A10-2 (revisione a blocco 10): fra il conto dei posti e `aperti.set` ci sono degli `await`, e tre `begin` in parallelo
+         contavano tutti 7 e arrivavano a 10 aperti. I `begin` NUOVI dello stesso dispositivo passano uno alla volta (una fila sua,
+         diversa da quella dei singoli trasferimenti); fra dispositivi diversi niente attesa. */
+      return inFila(`\u0001nuovi\u0000${dispositivoId}`, async () => {
+        await spazzaScaduti();
+        /* `while`, non `if` (revisione del debito 10): con più di 8 già aperti — lo stato lasciato dalla corsa di A10-2 prima della cura —
+           un `begin` ne toglieva uno e ne aggiungeva uno, e il conto restava sopra il tetto */
+        const suoiAperti = () => [...aperti.values()].filter((m) => m.dispositivoId === dispositivoId);
+        for (let suoi = suoiAperti(); suoi.length >= TRASFERIMENTI_APERTI_MASSIMI; suoi = suoiAperti()) {
+          /* ⛔ Revisione a blocco 9 (B9-3): il dispositivo non ricorda gli id, quindi ogni app chiusa a metà invio lascia qui trasferimenti
+             che nessuno riprenderà; al tetto di 8 ogni `begin` diceva RATE_LIMITED fino a 24 ore. Ora al tetto si libera il SUO
+             trasferimento fermo da più tempo (nessun pezzo da 10 minuti): una ripresa tardiva di quello dice TRANSFER_EXPIRED, come dopo
+             le 24 ore. Se sono tutti attivi resta RATE_LIMITED: il dispositivo aspetta il suo turno. */
+          const fermo = suoi.filter((m) => clock() - m.attivoAlle >= TRASFERIMENTO_FERMO_MS).sort((a, b) => a.attivoAlle - b.attivoAlle)[0];
+          if (!fermo) throw errore('RATE_LIMITED', 'Too many unfinished transfers from this device: finish or let some expire.', { stato: 429 });
+          await seppellisci(fermo);
+        }
+        const ora = clock();
+        const meta = { trasferimentoId: casuale(16).toString('base64url'), dispositivoId, sessionId: perImmagine ? null : sessionId, nome: nomeValido, dimensione, sha256: sha256.toLowerCase(), creatoAlle: ora, attivoAlle: ora, ricevuti: 0, ...(perImmagine ? { immagine: true } : {}) };
+        await fsp.mkdir(dirDi(dispositivoId), { recursive: true });
+        await fsp.writeFile(file(meta, 'part'), Buffer.alloc(0), { flag: 'wx', mode: 0o600 });
+        /* A10-4: senza il suo `.json` il `.part` non lo ritrova nessuno, nemmeno al riavvio: se la scheda non si salva, via anche lui */
+        try { salvaMeta(meta); } catch (e) { await fsp.rm(file(meta, 'part'), { force: true }).catch(() => {}); throw e; }
+        aperti.set(chiaveT(dispositivoId, meta.trasferimentoId), meta);
+        return { trasferimentoId: meta.trasferimentoId, pezzo: PEZZO_MASSIMO, ricevuti: 0 };
+      });
     },
 
     /**

@@ -322,7 +322,7 @@ test('CHAT-LUNGA-P0-02 — aprire un ragionamento da ~41.000 caratteri non produ
    *   manifesta non guarda niente, quindi qui la cronologia c'è: 60 turni, come nella misura.
    * ⛔⛔⛔⛔ 16/09, SECONDO GIRO DI RIPARAZIONE — OGNI NUMERO QUI SOPRA È UN NUMERO DI MACCHINA, NON
    *   UNA PROPRIETÀ DEL DIFETTO. Tutti (118, 127, e i 183/181/158 ms che nel primo rapporto avevo
-   *   riportato come «CHAT-LUNGA-P0-02 rosso al base, 3 giri su 3») vengono da DESKTOP-BJ9I7OU,
+   *   riportato come «CHAT-LUNGA-P0-02 rosso al base, 3 giri su 3») vengono dal PC dell'owner,
    *   Chrome di canale `chrome`, il 16/09/2026. Sulla macchina del controllore, stessa sequenza e
    *   stesso giorno, il fotogramma peggiore al commit base è stato 245 e 196 ms: la DIREZIONE
    *   coincide (sopra il tetto prima della cura, sotto dopo), la CIFRA no — e una cifra scritta

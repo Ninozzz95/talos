@@ -2655,6 +2655,10 @@ export function esitoFigliaPerModello(esito) {
  * ⛔ Revisione a blocco 9 (A9-1): il tetto di 2.048 rompeva il «Download» fra 2.049 e ~15.800 caratteri quando il modello aveva scritto
  *   il percorso ASSOLUTO (senza `path` la finestra usa l'argomento, che `scaricaFile` rifiuta). Ora 12.000 caratteri JSON: il resto
  *   dell'esito sta sotto i 1.000 (nome tagliato a 200, nome del dispositivo, id), lontano dai 16.000 del kernel.
+ * ⛔ Revisione a blocco 10 (A10-3): questo tetto serve alla SCHEDA, allo stato e a «Copia percorso», NON al «Download». La rotta
+ *   `GET /sessions/:id/file` accetta al più 1.024 caratteri per valore della query (`http-app.mjs`, PAYLOAD_LIMIT → 413; con caratteri
+ *   non ASCII l'indirizzo può arrivare a 431 prima). Oltre i 1.024 il Download non funziona: limite noto e registrato, raro (Windows
+ *   senza i percorsi lunghi si ferma a 260); la cura vera è scaricare per id, non per percorso nell'indirizzo.
  */
 export const PERCORSO_ESITO_MASSIMO = 12_000;
 export function percorsoNellEsitoInvio(relativo) {

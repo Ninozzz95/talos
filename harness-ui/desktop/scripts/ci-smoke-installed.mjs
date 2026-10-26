@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
@@ -27,6 +29,12 @@ export async function provaInstallato({ executablePath, dataDir }) {
     assert.equal(percorsi.packaged, true, 'Lo smoke deve avviare il pacchetto installato.');
     assert.equal(resolve(percorsi.risorse).toLowerCase(), join(dirname(resolve(executablePath)), 'resources').toLowerCase());
     assert.equal(resolve(percorsi.dati).toLowerCase(), resolve(dataDir).toLowerCase());
+    /* 25/10/2026 (0.1.38): l'helper degli allegati gira solo col suo lock accanto; la 0.1.37 è uscita senza e nessun allegato
+       funzionava nell'app installata. L'installato deve avere il lock, e deve combaciare con l'exe. */
+    const helperInstallato = join(percorsi.risorse, 'harness-ui', 'native', 'talos-chat-upload.exe');
+    const improntaHelper = createHash('sha256').update(readFileSync(helperInstallato)).digest('hex');
+    assert.equal(readFileSync(`${helperInstallato}.sha256`, 'utf8').trim().split(/\s+/u)[0].toLowerCase(), improntaHelper, 'Lock dell\'helper degli allegati assente o diverso nell\'app installata.');
+    misure.helperAllegati = { lock: true };
     pidFiglio = await app.evaluate(() => process._getActiveHandles().find(h => h.constructor.name === 'ChildProcess')?.pid);
     assert.ok(pidFiglio, 'Backend figlio assente.');
     misure.pidFiglio = pidFiglio;

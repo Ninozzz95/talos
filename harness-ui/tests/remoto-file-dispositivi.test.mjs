@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, writeFileSync, utimesSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, writeFileSync, utimesSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -813,4 +813,113 @@ test('B10-05 (B10-1, «Revision 4») file.upload.abort toglie subito il parziale
   assert.deepEqual(await b.operazioni.esegui('file.upload.abort', { trasferimentoId: tutti[1].trasferimentoId }, altro), { ok: true });
   assert.equal((await b.file.inizia({ dispositivoId: 'dI', immagine: true, riprendi: tutti[1].trasferimentoId })).ricevuti, 0, 'di dI resta');
   await assert.rejects(b.operazioni.esegui('file.upload.abort', { trasferimentoId: '../x' }, b.contesto), rifiutaCon('BAD_MESSAGE'));
+});
+
+test('B10-06 (A10-4) una rinomina che cade su Windows si ritenta; se cade ancora il .tmp sparisce e l\'errore porta OPERATION_FAILED', async (t) => {
+  const b = banco(t); /* la prima istanza scrive il segreto con la rinomina vera */
+  const temporanei = () => readdirSync(b.cartellaDati, { recursive: true }).map(String).filter((n) => n.endsWith('.tmp'));
+  const occupato = (code) => Object.assign(new Error(`${code}: occupato`), { code });
+  const contenuto = Buffer.from('ciao dal dispositivo');
+  const apri = (f) => f.inizia({ dispositivoId: 'dA', sessionId: 's1', nome: 'a.txt', dimensione: contenuto.length, sha256: sha(contenuto) });
+
+  /* sempre EPERM: tre tentativi in tutto, poi un codice concordato e nessun temporaneo rimasto */
+  let chiamate = 0;
+  const sempre = b.crea({ rinomina: () => { chiamate += 1; throw occupato('EPERM'); } });
+  await assert.rejects(apri(sempre), rifiutaCon('OPERATION_FAILED', (e) => e.reason === 'save-failed' && e.causa === 'EPERM'));
+  assert.equal(chiamate, 3);
+  assert.deepEqual(temporanei(), []);
+  assert.deepEqual(resti(b.trasferimenti), [], 'nemmeno il .part vuoto resta senza la sua scheda');
+  assert.ok(CODICI.includes('OPERATION_FAILED'), 'il codice è già nel filo: nessun codice nuovo al Mobile');
+
+  /* EBUSY una volta sola: il ritentativo basta e il trasferimento parte */
+  let prima = true;
+  const unaVolta = b.crea({ rinomina: (da, a) => { if (prima) { prima = false; throw occupato('EBUSY'); } return renameSync(da, a); } });
+  assert.match((await apri(unaVolta)).trasferimentoId, /^[A-Za-z0-9_-]{22}$/u);
+  assert.deepEqual(temporanei(), []);
+
+  /* il verso contrario: un errore che non è «occupato» non si ritenta */
+  chiamate = 0;
+  const altro = b.crea({ rinomina: () => { chiamate += 1; throw occupato('ENOSPC'); } });
+  await assert.rejects(apri(altro), rifiutaCon('OPERATION_FAILED', (e) => e.causa === 'ENOSPC'));
+  assert.equal(chiamate, 1);
+  assert.deepEqual(temporanei(), []);
+});
+
+test('B10-07 (A10-2) dieci begin in parallelo dallo stesso dispositivo: otto aperti e due RATE_LIMITED, mai di più; un altro dispositivo ha il suo tetto', async (t) => {
+  const b = banco(t);
+  const contenuto = Buffer.from('x');
+  const apri = (dispositivoId, n) => b.file.inizia({ dispositivoId, sessionId: 's1', nome: `p${n}.txt`, dimensione: 1, sha256: sha(contenuto) });
+  const esiti = await Promise.allSettled([...Array.from({ length: 10 }, (_, n) => apri('dA', n)), apri('dB', 0)]);
+  const dA = esiti.slice(0, 10);
+  assert.equal(dA.filter((e) => e.status === 'fulfilled').length, 8);
+  assert.deepEqual(dA.filter((e) => e.status === 'rejected').map((e) => e.reason.code), ['RATE_LIMITED', 'RATE_LIMITED']);
+  assert.equal(esiti[10].status, 'fulfilled', 'il tetto è per dispositivo');
+  assert.equal(resti(b.trasferimenti).filter((n) => n.endsWith('.part')).length, 9, 'otto di dA più uno di dB, nessun parziale in più');
+});
+
+test('B10-08 (A10-6) all\'avvio: un .json di uno schema più nuovo non si carica e non si cancella; uno storto della versione 1 si toglie ancora', async (t) => {
+  const b = banco(t);
+  const contenuto = Buffer.from('y');
+  const vivo = await b.file.inizia({ dispositivoId: 'dA', sessionId: 's1', nome: 'v.txt', dimensione: 1, sha256: sha(contenuto) });
+  const dir = join(b.trasferimenti, readdirSync(b.trasferimenti)[0]);
+  const futuro = 'F'.repeat(22);
+  const storto = 'S'.repeat(22);
+  /* la forma di domani: un campo che oggi non c'è e la sessione spostata altrove — per le regole della versione 1 sarebbe «storto» */
+  writeFileSync(join(dir, `${futuro}.json`), JSON.stringify({ v: 2, trasferimentoId: futuro, dispositivoId: 'dA', destinazione: { sessione: 's1' } }));
+  writeFileSync(join(dir, `${futuro}.part`), Buffer.from('abc'));
+  writeFileSync(join(dir, `${storto}.json`), JSON.stringify({ v: 1, trasferimentoId: storto, dispositivoId: 'dA', sessionId: null }));
+  writeFileSync(join(dir, `${storto}.part`), Buffer.alloc(0));
+  const dopo = b.crea();
+  assert.equal(existsSync(join(dir, `${futuro}.json`)), true, 'lo schema più nuovo resta');
+  assert.equal(readFileSync(join(dir, `${futuro}.part`), 'utf8'), 'abc', 'e il suo parziale, intatto');
+  await assert.rejects(dopo.inizia({ dispositivoId: 'dA', sessionId: 's1', riprendi: futuro }), rifiutaCon('TRANSFER_UNKNOWN'));
+  assert.equal(existsSync(join(dir, `${storto}.json`)), false, 'il verso contrario: uno storto della versione 1 si toglie');
+  assert.equal(existsSync(join(dir, `${storto}.part`)), false);
+  assert.equal((await dopo.inizia({ dispositivoId: 'dA', sessionId: 's1', riprendi: vivo.trasferimentoId })).ricevuti, 0, 'quello buono resta');
+});
+
+test('B10-09 (revisione del debito 10) un elenco che non si salva DOPO la pubblicazione non trasforma il file pubblicato in un errore: una copia sola', { skip: senzaHelper }, async (t) => {
+  const b = banco(t);
+  const contenuto = Buffer.from('una volta sola');
+  /* solo `caricati.json` non si salva; il resto del disco funziona */
+  const f = b.crea({ rinomina: (da, a) => { if (basename(a) === 'caricati.json') throw Object.assign(new Error('EPERM'), { code: 'EPERM' }); return renameSync(da, a); } });
+  const { avvio, esito } = await caricaTutto(f, { nome: 'x.txt', contenuto });
+  assert.equal(esito.percorso, 'allegati/x.txt');
+  /* la risposta persa per strada: lo stesso `end` ridà lo stesso esito, la ripresa dice «hai già mandato tutto» */
+  assert.deepEqual(await f.fine({ dispositivoId: 'dA', trasferimentoId: avvio.trasferimentoId }), esito);
+  assert.equal((await f.inizia({ dispositivoId: 'dA', sessionId: 's1', riprendi: avvio.trasferimentoId })).ricevuti, contenuto.length);
+  assert.deepEqual(readdirSync(join(b.progetto, 'allegati')), ['x.txt'], 'nessuna seconda copia');
+  assert.ok((await f.elenco({ dispositivoId: 'dA', sessionId: 's1' })).items.some((r) => r.nome === 'x.txt'), 'e il file è nell\'elenco, dalla memoria');
+});
+
+test('B10-10 (revisione del debito 10) più di 8 trasferimenti fermi già sul disco: il primo begin riporta il conto a 8, non lo lascia sopra', async (t) => {
+  const b = banco(t);
+  const contenuto = Buffer.from('z');
+  const apri = (f, n) => f.inizia({ dispositivoId: 'dA', sessionId: 's1', nome: `q${n}.txt`, dimensione: 1, sha256: sha(contenuto) });
+  for (let n = 0; n < 8; n += 1) await apri(b.file, n);
+  const dir = join(b.trasferimenti, readdirSync(b.trasferimenti)[0]);
+  /* lo stato che la corsa di A10-2 lasciava prima della cura: due in più, copiati con id nuovi */
+  const unoVero = readdirSync(dir).find((n) => n.endsWith('.json'));
+  for (const id of ['P'.repeat(22), 'Q'.repeat(22)]) {
+    const m = JSON.parse(readFileSync(join(dir, unoVero), 'utf8'));
+    writeFileSync(join(dir, `${id}.json`), JSON.stringify({ ...m, trasferimentoId: id }));
+    writeFileSync(join(dir, `${id}.part`), Buffer.alloc(0));
+  }
+  const dopo = b.crea();
+  assert.equal(readdirSync(dir).filter((n) => n.endsWith('.part')).length, 10);
+  b.orologio.ora += 11 * 60_000; /* tutti fermi da più di 10 minuti */
+  await apri(dopo, 99);
+  assert.equal(readdirSync(dir).filter((n) => n.endsWith('.part')).length, 8, 'sette fermi rimasti più quello nuovo');
+});
+
+test('B10-11 (riserva della revisione del debito 10) fra un ritentativo della rinomina e il successivo c\'è una pausa vera, che cresce', async (t) => {
+  const b = banco(t);
+  const contenuto = Buffer.from('p');
+  const quando = [];
+  const f = b.crea({ rinomina: (da, a) => { quando.push(performance.now()); if (quando.length < 3) throw Object.assign(new Error('EBUSY'), { code: 'EBUSY' }); return renameSync(da, a); } });
+  await f.inizia({ dispositivoId: 'dA', sessionId: 's1', nome: 'p.txt', dimensione: 1, sha256: sha(contenuto) });
+  assert.equal(quando.length, 3);
+  /* 15 ms e poi 30 ms; un margine per l'orologio, mai zero */
+  assert.ok(quando[1] - quando[0] >= 10, `prima pausa ${quando[1] - quando[0]} ms`);
+  assert.ok(quando[2] - quando[1] >= 25, `seconda pausa ${quando[2] - quando[1]} ms`);
 });
