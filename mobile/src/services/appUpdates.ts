@@ -23,6 +23,8 @@ export interface TalosStatoAggiornamenti {
     note: TalosNoteAggiornamento | null
     pagina: string | null
     dimensione: number | null
+    /** Byte dell'APK arrivati finora (D-UPD-1): il nativo li aggiorna al massimo una volta al secondo. */
+    scaricati: number | null
     motivo: string | null
     ultimoControllo: number | null
     appenaAggiornata: string | null
@@ -56,6 +58,7 @@ const state = reactive<TalosStatoAggiornamenti>({
     note: null,
     pagina: null,
     dimensione: null,
+    scaricati: null,
     motivo: null,
     ultimoControllo: null,
     appenaAggiornata: null,
@@ -87,7 +90,7 @@ export function talosApplicaStatoAggiornamenti(arrivato: Partial<TalosStatoAggio
     for (const chiave of ['versione', 'pagina', 'motivo', 'appenaAggiornata'] as const) {
         if (chiave in arrivato) state[chiave] = typeof arrivato[chiave] === 'string' ? arrivato[chiave] as string : null
     }
-    for (const chiave of ['dimensione', 'ultimoControllo'] as const) {
+    for (const chiave of ['dimensione', 'scaricati', 'ultimoControllo'] as const) {
         if (chiave in arrivato) state[chiave] = typeof arrivato[chiave] === 'number' ? arrivato[chiave] as number : null
     }
     for (const chiave of ['allUscita', 'permessoConcesso', 'automatici', 'soloWifi', 'avvisami'] as const) {
@@ -176,7 +179,7 @@ export function talosAzzeraAggiornamentiPerTest(): void {
     ascolto = null
     bridge = null
     Object.assign(state, {
-        fase: 'NESSUNA', installata: '', versione: null, note: null, pagina: null, dimensione: null, motivo: null,
+        fase: 'NESSUNA', installata: '', versione: null, note: null, pagina: null, dimensione: null, scaricati: null, motivo: null,
         ultimoControllo: null, appenaAggiornata: null, allUscita: false, permessoConcesso: false, automatici: true,
         soloWifi: true, avvisami: true,
     } satisfies TalosStatoAggiornamenti)

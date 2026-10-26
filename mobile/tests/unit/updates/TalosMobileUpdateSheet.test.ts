@@ -110,6 +110,29 @@ describe('TalosMobileUpdateSheet', () => {
         expect(w.get('[data-testid="talos-update-retry"]').element.parentElement?.className).toContain('flex-col')
     })
 
+    // ⛔ D-UPD-1: uno scaricamento abbandonato per sempre (release tolta, rinvio da non seguire) diventava un giro infinito senza
+    // parole; ora è FALLITA col motivo `scaricamento:…`, e il cassetto non dice «installare» per un file mai arrivato
+    it('UPD-SHEET-09 scaricamento fallito: lo dice come scaricamento, e la versione installata resta', () => {
+        talosApplicaStatoAggiornamenti({ ...pronta, fase: 'FALLITA', motivo: 'scaricamento:gone' })
+        const w = monta()
+        expect(w.text()).toContain('The update could not be downloaded')
+        expect(w.text()).not.toContain('could not be installed')
+        // owner 26/10 (b): «scartato» solo per un file arrivato e rifiutato; uno mai arrivato «non arrivato»
+        expect(w.text()).toContain('Update didn’t arrive')
+        expect(w.text()).not.toContain('Update discarded')
+        expect(w.get('[data-testid="talos-update-failed-body"]').text())
+            .toBe('GitHub didn’t hand over the file. TALOS tries again at the next check. 0.1.43 stays on the device, untouched.')
+    })
+
+    // «riprova al prossimo controllo» è vero solo con gli aggiornamenti automatici: spenti, il controllo giornaliero non c'è
+    // (`programmaControllo`), quindi la frase dice cosa fare (revisione del Desktop, 26/10)
+    it('UPD-SHEET-10 scaricamento fallito con gli aggiornamenti automatici spenti: dice di riprovare, non promette un controllo', () => {
+        talosApplicaStatoAggiornamenti({ ...pronta, fase: 'FALLITA', motivo: 'scaricamento:gone', automatici: false })
+        const w = monta()
+        expect(w.get('[data-testid="talos-update-failed-body"]').text())
+            .toBe('GitHub didn’t hand over the file. Try again later. 0.1.43 stays on the device, untouched.')
+    })
+
     it('UPD-SHEET-07 aggiornata: lo dice una volta, e chiudendo lo segna visto', async () => {
         talosApplicaStatoAggiornamenti({ ...pronta, fase: 'AGGIORNATA', appenaAggiornata: '0.1.44', installata: '0.1.44' })
         const w = monta()

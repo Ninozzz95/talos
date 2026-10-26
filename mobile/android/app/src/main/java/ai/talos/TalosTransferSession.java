@@ -720,9 +720,20 @@ public final class TalosTransferSession {
         if (expires <= 0) return Long.MIN_VALUE;
         long serverNow = connection.getHeaderFieldDate("Date", 0L) / 1000L;
         if (serverNow <= 0) return Long.MIN_VALUE;
+        return deadlineFrom(expires, serverNow, SystemClock.elapsedRealtime());
+    }
+
+    /**
+     * The monotonic deadline of a signature that expires at `expires` (epoch s), seen at `serverNow` (epoch s).
+     *
+     * A signature that lives no longer than the runner's re-resolve margin gets NO deadline: the runner would find it
+     * "expiring" the moment it arrived and resolve again at once, forever, against the Hub. Seen live on the update
+     * download on 2026-10-26 (20 s signatures, 11,379 HEADs a minute). Its end is a 403, which re-resolves anyway.
+     */
+    static long deadlineFrom(long expires, long serverNow, long nowMs) {
         long lives = expires - serverNow;
-        if (lives <= 0) return Long.MIN_VALUE;
-        return SystemClock.elapsedRealtime() + lives * 1000L;
+        if (lives * 1000L <= TalosModelDownloadPolicy.RESOLVE_MARGIN_MS) return Long.MIN_VALUE;
+        return nowMs + lives * 1000L;
     }
 
     static long numberInQuery(String url, String key) {

@@ -117,3 +117,12 @@
 # a quando una persona non prova ad aprire Codice sul telefono.
 -keep class ai.talos.harness.TalosHarnessUiPlugin { *; }
 -keep class ai.talos.terminal.TalosTerminalPlugin { *; }
+
+# ⛔⛔ D-0146-1 (Pad, 26/10/2026): il `LocalSocket` legato del motore ospite POSSIEDE il descrittore del socket in ascolto. Era un
+# campo scritto e mai letto: R8 l'ha tolto (0.1.45 pubblicata e candidata 0.1.46), il GC lo finalizzava e chiudeva il socket, e il
+# Codice col modello locale moriva («nessun modello aperto»). La cura vera è che il campo sia LETTO (`TalosMotoreOspite.ferma`);
+# questa riga è la cintura, e `scripts/verify-release-r8-risorse.mjs` lo controlla sul mapping di ogni release.
+-keepclassmembers class ai.talos.TalosMotoreOspite {
+    android.net.LocalSocket legato;
+    android.net.LocalServerSocket server;
+}

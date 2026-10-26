@@ -41,19 +41,33 @@ const labels = computed(() => ({
 
 const pronta = computed(() => talosAggiornamenti.fase === 'PRONTA' && talosAggiornamenti.versione !== null)
 
+/** Il controllo ha trovato una versione che non è (ancora) pronta: si sta scaricando, o lo scaricamento è fallito. */
+const trovataNonPronta = computed(() =>
+    talosAggiornamenti.versione !== null && (talosAggiornamenti.fase === 'IN_SCARICAMENTO' || talosAggiornamenti.fase === 'FALLITA'))
+
 const riga = computed(() => {
     const quando = talosAggiornamenti.ultimoControllo
     if (quando === null) return t('updates.neverChecked')
     const when = talosRelativeTime(new Date(quando).toISOString(), new Date(), labels.value)
-    return pronta.value
-        ? t('updates.lastCheckReady', { when, version: talosAggiornamenti.versione ?? '' })
-        : t('updates.lastCheck', { when })
+    if (pronta.value) return t('updates.lastCheckReady', { when, version: talosAggiornamenti.versione ?? '' })
+    // ⛔ D-UPD-1 (PJZ110, 25/10): diceva «TALOS è aggiornato» mentre la 0.1.45 era trovata e non si scaricava
+    if (trovataNonPronta.value) return t('updates.lastCheckFound', { when, version: talosAggiornamenti.versione ?? '' })
+    return t('updates.lastCheck', { when })
+})
+
+/** «Scarico la X: A di B», dal primo byte arrivato alla fine (D-UPD-1: prima non si vedeva niente). */
+const avanzamento = computed(() => {
+    const { fase, versione, scaricati, dimensione } = talosAggiornamenti
+    if (fase !== 'IN_SCARICAMENTO' || versione === null || scaricati === null || dimensione === null) return ''
+    return t('updates.downloading', { version: versione, have: talosFormatBytes(scaricati), total: talosFormatBytes(dimensione) })
 })
 
 const esitoTesto = computed(() => {
     switch (esito.value) {
-        // solo mentre scarica: finito, lo dice già la riga «la X è pronta» (visto sul Pad il 22/10, UPD-SET-05)
-        case 'trovata': return talosAggiornamenti.fase === 'IN_SCARICAMENTO' ? t('updates.checkFound', { version: talosAggiornamenti.versione ?? '' }) : ''
+        // solo mentre scarica e finché l'avanzamento non c'è: finito, lo dice già la riga «la X è pronta» (visto sul Pad il
+        // 22/10, UPD-SET-05); col primo byte lo dice l'avanzamento (UPD-SET-08)
+        case 'trovata': return talosAggiornamenti.fase === 'IN_SCARICAMENTO' && !avanzamento.value
+            ? t('updates.checkFound', { version: talosAggiornamenti.versione ?? '' }) : ''
         case 'aggiornata': return t('updates.checkUpToDate')
         case 'irraggiungibile': return t('updates.checkUnreachable')
         case 'rifiutata': return t('updates.checkRejected')
@@ -85,6 +99,12 @@ const rigaInterruttore = 'flex min-h-14 cursor-pointer items-start justify-betwe
                 {{ talosAggiornamenti.installata || '—' }}
             </p>
             <p data-testid="talos-updates-last-check" class="mt-2 text-sm text-[var(--talos-muted)]">{{ riga }}</p>
+            <!-- niente role="status": cambierebbe a voce ogni secondo; la fine la dice la riga «la X è pronta» -->
+            <p
+                v-if="avanzamento"
+                data-testid="talos-updates-progress"
+                class="mt-1 text-sm tabular-nums text-[var(--talos-text)]"
+            >{{ avanzamento }}</p>
 
             <!-- Un'azione primaria sola: con una versione pronta è installarla, altrimenti controllare. -->
             <button

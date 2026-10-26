@@ -394,6 +394,16 @@ jobs:
           node scripts/verify-release-plugin-classes.mjs \
             "$GITHUB_WORKSPACE/${{ steps.apk.outputs.nome }}"
 
+      # ⛔⛔ D-0146-1 (Pad, 26/10/2026): R8 aveva tolto il campo che teneva vivo il socket del motore ospite (0.1.45 pubblicata): il GC
+      # lo chiudeva e il Codice col modello locale moriva. Ogni campo di classe che possiede una risorsa nativa (socket, descrittori,
+      # memoria JNA) deve esistere nel dex dell'APK di QUESTA release (il mapping traduce solo i nomi offuscati).
+      - name: ⛔ I campi che tengono vive le risorse native sopravvivono a R8
+        working-directory: ${{ steps.dove.outputs.dir }}
+        run: |
+          node scripts/verify-release-r8-risorse.mjs \
+            "$GITHUB_WORKSPACE/${{ steps.apk.outputs.nome }}" \
+            android/app/build/outputs/mapping/release/mapping.txt
+
       # ⛔ K4-E: e il Codice è quello su r4, al commit del tag. Un APK senza r4 aprirebbe a tutti il Codice vecchio in silenzio.
       - name: ⛔ r4 è nell'APK, al commit del tag
         working-directory: ${{ steps.dove.outputs.dir }}

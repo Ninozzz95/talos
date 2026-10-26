@@ -16,6 +16,7 @@ vi.mock('@/services/appUpdates', async (originale) => ({
 import TalosMobileSettingsUpdatesPanel from '@/components/talos/settings/TalosMobileSettingsUpdatesPanel.vue'
 import { talosApplicaStatoAggiornamenti, talosAzzeraAggiornamentiPerTest } from '@/services/appUpdates'
 import { talosSegnaleAggiornamento } from '@/lib/updates/segnaleAggiornamento'
+import { talosFormatBytes } from '@/lib/models/presentation'
 
 /*
  * Impostazioni › Aggiornamenti. Owner 22/10/2026 «semplice a primo sguardo, avanzato a richiesta»: a primo sguardo la versione,
@@ -71,6 +72,44 @@ describe('Impostazioni › Aggiornamenti', () => {
         await flushPromises()
         expect(w.find('[data-testid="talos-updates-check-result"]').exists()).toBe(false)
         expect(w.get('[data-testid="talos-updates-install"]').text()).toBe('Install 0.1.44 and restart')
+    })
+
+    // ⛔ D-UPD-1 (PJZ110, 25/10): mentre la 0.1.45 non si scaricava, il pannello diceva insieme «TALOS è aggiornato» e «la sto
+    // scaricando», e nessun avanzamento. La riga dell'ultimo controllo dice ciò che il controllo ha trovato.
+    it('UPD-SET-06 mentre scarica la riga dice la versione trovata, mai «aggiornato»', () => {
+        talosApplicaStatoAggiornamenti({ installata: '0.1.45', fase: 'IN_SCARICAMENTO', versione: '0.1.46', ultimoControllo: Date.now() })
+        const w = mount(TalosMobileSettingsUpdatesPanel)
+        expect(w.get('[data-testid="talos-updates-last-check"]').text()).toBe('Last check just now: found 0.1.46.')
+    })
+
+    it('UPD-SET-07 mentre scarica mostra quanto è arrivato, e niente prima del primo byte né a file finito', async () => {
+        talosApplicaStatoAggiornamenti({ installata: '0.1.45', fase: 'IN_SCARICAMENTO', versione: '0.1.46', dimensione: 164_110_487 })
+        const w = mount(TalosMobileSettingsUpdatesPanel)
+        expect(w.find('[data-testid="talos-updates-progress"]').exists()).toBe(false)
+        talosApplicaStatoAggiornamenti({ scaricati: 41_000_000 })
+        await flushPromises()
+        expect(w.get('[data-testid="talos-updates-progress"]').text())
+            .toBe(`Downloading 0.1.46: ${talosFormatBytes(41_000_000)} of ${talosFormatBytes(164_110_487)}`)
+        talosApplicaStatoAggiornamenti({ fase: 'PRONTA', scaricati: 164_110_487 })
+        await flushPromises()
+        expect(w.find('[data-testid="talos-updates-progress"]').exists()).toBe(false)
+    })
+
+    it('UPD-SET-08 con l\'avanzamento in vista «la sto scaricando» non si ripete', async () => {
+        azioni.controlla.mockResolvedValueOnce('trovata' as never)
+        talosApplicaStatoAggiornamenti({ installata: '0.1.45' })
+        const w = mount(TalosMobileSettingsUpdatesPanel)
+        await w.get('[data-testid="talos-updates-check"]').trigger('click')
+        talosApplicaStatoAggiornamenti({ fase: 'IN_SCARICAMENTO', versione: '0.1.46', dimensione: 164_110_487, scaricati: 1_000_000 })
+        await flushPromises()
+        expect(w.find('[data-testid="talos-updates-check-result"]').exists()).toBe(false)
+        expect(w.find('[data-testid="talos-updates-progress"]').exists()).toBe(true)
+    })
+
+    it('UPD-SET-09 scaricamento fallito: la riga dice la versione trovata, non «aggiornato»', () => {
+        talosApplicaStatoAggiornamenti({ installata: '0.1.45', fase: 'FALLITA', versione: '0.1.46', motivo: 'scaricamento:gone', ultimoControllo: Date.now() })
+        const w = mount(TalosMobileSettingsUpdatesPanel)
+        expect(w.get('[data-testid="talos-updates-last-check"]').text()).toBe('Last check just now: found 0.1.46.')
     })
 
     it('UPD-SET-04 Avanzate si apre a richiesta e mostra Wi-Fi, avviso e permesso', async () => {

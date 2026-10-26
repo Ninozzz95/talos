@@ -12,8 +12,21 @@ import android.app.job.JobService
 import android.content.ComponentName
 import android.content.Context
 import android.os.Build
+import android.os.SystemClock
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
+
+/**
+ * ⛔ D-UPD-1 (26/10/2026): quali motivi di fine dello scaricamento sono DEFINITIVI. Prima ogni motivo diverso da «finito» e «spazio»
+ * tornava «riprova» a JobScheduler, per sempre e in silenzio: la release tolta (404), i 403 che non passano nemmeno rifirmando, un
+ * rinvio da non seguire (`TalosRinvioAggiornamento`). Questi diventano FALLITA con `scaricamento:<motivo>`; rete, limiti, fermate
+ * di Android e file cambiato restano un nuovo tentativo.
+ */
+internal object TalosMotivoScaricamento {
+    private val DEFINITIVI = setOf("gone", "forbidden", "rinvio-senza-indirizzo", "rinvio-non-sicuro", "troppi-rinvii")
+
+    fun definitivo(motivo: String?): String? = motivo?.takeIf { it in DEFINITIVI }?.let { "scaricamento:$it" }
+}
 
 /**
  * I tre lavori dell'aggiornamento, con JobScheduler: il progetto ha un solo scheduler (`TalosTaskRunPlugin`, «Perché JobScheduler e
@@ -65,15 +78,27 @@ class TalosLavoroAggiornamenti : JobService() {
         // `JobParameters.getNetwork()` esiste da Android 9 (API 28), TALOS da Android 8 (minSdk 26): prima la rete predefinita,
         // che il runner accetta (null). Lint della CI, PR #78 del 23/10.
         val rete = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) params.network else null
+        // D-UPD-1: i byte arrivati vanno nello stato (il pannello mostra «Scarico la X: A di B»), al massimo una volta al secondo
+        var ultimoSegno = 0L
+        val avanzamento = { arrivati: Long, _: Long ->
+            val adesso = SystemClock.elapsedRealtime()
+            if (adesso - ultimoSegno >= AVANZAMENTO_MS) {
+                ultimoSegno = adesso
+                TalosStatoAggiornamento.segnaScaricati(context, arrivati)
+            }
+        }
         val motivo = TalosScaricamentoAggiornamento.scarica(context, trovata.path, size, fonte.file(trovata.tag, trovata.path),
-            rete, { stop.get() }, { _, _ -> })
-        return when (motivo) {
-            null -> {
+            rete, { stop.get() }, avanzamento)
+        val definitivo = TalosMotivoScaricamento.definitivo(motivo)
+        return when {
+            motivo == null -> {
                 TalosStatoAggiornamento.segnaFase(context, TalosFaseAggiornamento.PRONTA)
                 if (TalosStatoAggiornamento.scelte(context).avvisami && !inPrimoPiano(context)) TalosNotificaAggiornamento.pronta(context)
                 false
             }
-            "no-space" -> { TalosStatoAggiornamento.segnaFase(context, TalosFaseAggiornamento.FALLITA, "spazio"); false }
+            motivo == "no-space" -> { TalosStatoAggiornamento.segnaFase(context, TalosFaseAggiornamento.FALLITA, "spazio"); false }
+            // abbandonato per sempre: FALLITA col motivo, mai un nuovo giro; il prossimo controllo (o «Riprova») ricomincia
+            definitivo != null -> { TalosStatoAggiornamento.segnaFase(context, TalosFaseAggiornamento.FALLITA, definitivo); false }
             else -> true
         }
     }
@@ -86,6 +111,7 @@ class TalosLavoroAggiornamenti : JobService() {
         private const val MARGINE_MS = 6L * 60 * 60 * 1000
         private const val ATTESA_USCITA_MS = 60_000L
         private const val RIPROVA_USCITA_MS = 5L * 60 * 1000
+        private const val AVANZAMENTO_MS = 1_000L
 
         private fun scheduler(context: Context) = context.getSystemService(JobScheduler::class.java)
         private fun componente(context: Context) = ComponentName(context, TalosLavoroAggiornamenti::class.java)

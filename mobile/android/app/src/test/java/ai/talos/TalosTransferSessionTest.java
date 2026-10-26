@@ -70,6 +70,25 @@ public class TalosTransferSessionTest {
     }
 
     /**
+     * The runner re-resolves once the deadline is within RESOLVE_MARGIN_MS
+     * (five minutes). A signature that lives that long or less is "expiring"
+     * the moment it arrives, so the runner resolved again at once, with no
+     * wait, forever. Seen live on the update download on 2026-10-26 with
+     * 20-second signatures: 11,379 HEADs in a minute, zero bytes. Such a
+     * signature gets no deadline; the 403 at its end re-resolves instead.
+     */
+    @Test
+    public void aSignatureShorterThanTheResolveMarginHasNoDeadline() {
+        long margin = TalosModelDownloadPolicy.RESOLVE_MARGIN_MS / 1000L;
+        assertEquals(Long.MIN_VALUE, TalosTransferSession.deadlineFrom(1_000_300L, 1_000_000L, 5_000L));
+        assertEquals(Long.MIN_VALUE, TalosTransferSession.deadlineFrom(1_000_000L + margin, 1_000_000L, 5_000L));
+        assertEquals(5_000L + (margin + 1) * 1000L,
+                TalosTransferSession.deadlineFrom(1_000_000L + margin + 1, 1_000_000L, 5_000L));
+        assertEquals(5_000L + 3_600_000L, TalosTransferSession.deadlineFrom(1_003_600L, 1_000_000L, 5_000L));
+        assertEquals(Long.MIN_VALUE, TalosTransferSession.deadlineFrom(999_000L, 1_000_000L, 5_000L));
+    }
+
+    /**
      * A parameter that merely ENDS with the name we want is a different
      * parameter. Matching it would read somebody else's number as the deadline
      * and re-resolve on a schedule nothing agreed to.
