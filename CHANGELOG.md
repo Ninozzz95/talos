@@ -44,7 +44,8 @@ Remote control of a PC is ready to use, and the device can send files and images
 ### Known limitations
 
 - **Receiving files from the PC on the device** (files the PC offers, download, open and share) comes in a later version.
-- Sending files needs TALOS desktop 0.1.37 or later; an older desktop turns "+" off and says why.
+- Sending files needs TALOS desktop 0.1.38 or later. With 0.1.37, images reach the model but other files fail on the PC;
+  an older desktop turns "+" off and says why.
 
 ## v0.1.44
 
