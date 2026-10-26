@@ -9,11 +9,12 @@
  * ⛔ Il lettore PDF di Chromium non esiste nella shell headless di Playwright (misurato il 26/09): del PDF si prova la rotta
  *   (200, `application/pdf`, in linea) e la cornice che la punta; la foto del PDF si fa nel guscio Electron.
  */
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, readdirSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 
 import { expect, test } from '@playwright/test';
+import { rimuoviCartellaDiProva } from '../../../tests/aiuto/rimuovi-cartella-di-prova.mjs';
 
 import { immaginiDalBrowser, scriviFileDelLettore } from './fixtures/lettore-file.mjs';
 
@@ -23,6 +24,30 @@ test.skip(Boolean(process.env.TALOS_HARNESS_UI_BASE_URL?.trim()), 'crea una sess
 
 const MODELLO = 'z-ai/glm-5.3-flash';
 const rootWorkspace = process.env.TALOS_HARNESS_UI_PROJECT_DIRS?.split(';')[0]?.trim() || tmpdir();
+/* 25/10/2026 (prova dal vivo dal Pad): le cartelle create qui finivano nella PRIMA cartella dei progetti del server di prova
+   (`TALOS-prova-remoto`) e non se ne andavano mai — decine di `<prefisso>-XXXXXX` che poi un modello leggeva come «tutti i file
+   della cartella». Ognuna si toglie a fine file. Quella che Windows tiene ancora occupata (il terminale del server di prova è
+   aperto lì dentro, e Playwright spegne il server DOPO ogni pulizia finale: `runner/tasks.ts`) la toglie la corsa dopo, insieme
+   alle altre dello stesso prefisso rimaste da più di 30 minuti. */
+const cartelleDaTogliere = [];
+const prefissiDiProva = new Set();
+const traccia = (cartella) => { cartelleDaTogliere.push(cartella); prefissiDiProva.add(basename(cartella).slice(0, -6)); return cartella; };
+const togli = (cartella) => {
+  try { rimuoviCartellaDiProva(cartella); }
+  catch (e) { console.warn(`cartella di prova rimasta: ${cartella} (${e?.code ?? e})`); }
+};
+test.afterAll(() => {
+  for (const cartella of cartelleDaTogliere.splice(0)) togli(cartella);
+  const soglia = Date.now() - 30 * 60_000;
+  let nomi = [];
+  try { nomi = readdirSync(rootWorkspace); } catch { /* radice sparita: niente da togliere */ }
+  for (const nome of nomi) {
+    /* revisione del blocco 0.1.38: solo i sei caratteri che `mkdtemp` aggiunge, mai un nome qualunque che inizi col prefisso */
+    if (![...prefissiDiProva].some((p) => nome.startsWith(p) && /^[A-Za-z0-9]{6}$/u.test(nome.slice(p.length)))) continue;
+    const cartella = join(rootWorkspace, nome);
+    try { if (statSync(cartella).isDirectory() && statSync(cartella).mtimeMs < soglia) togli(cartella); } catch { /* sparita intanto */ }
+  }
+});
 let sessione = null; // { id, cartella, voci }
 
 test.beforeAll(async ({ browser, playwright, baseURL }) => {
@@ -30,7 +55,7 @@ test.beforeAll(async ({ browser, playwright, baseURL }) => {
   const pagina = await browser.newPage();
   const immagini = await immaginiDalBrowser(pagina);
   await pagina.close();
-  const cartella = mkdtempSync(join(rootWorkspace, 'f5-lettore-'));
+  const cartella = traccia(mkdtempSync(join(rootWorkspace, 'f5-lettore-')));
   const { voci } = await scriviFileDelLettore(cartella, { immagini });
   const api = await playwright.request.newContext({ baseURL });
   const chiave = await api.post('/api/v1/providers/openrouter/key', { data: { key: 'sk-f5-lettore-fixture' } });

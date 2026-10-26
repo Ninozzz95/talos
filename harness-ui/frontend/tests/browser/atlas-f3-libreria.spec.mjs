@@ -9,12 +9,13 @@
  *  · filtri veri (Q-11) nella tendina; dettaglio Atlas con testata, righe e «Copia percorso» + «Tutte le azioni».
  * La Libreria è VERA: file seminati nella cartella del progetto e letti dal server di prova (stessa via di LETTORE-*).
  */
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, readdirSync, statSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 
 import { expect, test } from '@playwright/test';
+import { rimuoviCartellaDiProva } from '../../../tests/aiuto/rimuovi-cartella-di-prova.mjs';
 
 test.use({ locale: 'it-IT' });
 test.describe.configure({ mode: 'serial' });
@@ -22,6 +23,30 @@ test.skip(Boolean(process.env.TALOS_HARNESS_UI_BASE_URL?.trim()), 'crea una sess
 
 const MODELLO = 'z-ai/glm-5.3-flash';
 const rootWorkspace = process.env.TALOS_HARNESS_UI_PROJECT_DIRS?.split(';')[0]?.trim() || tmpdir();
+/* 25/10/2026 (prova dal vivo dal Pad): le cartelle create qui finivano nella PRIMA cartella dei progetti del server di prova
+   (`TALOS-prova-remoto`) e non se ne andavano mai — decine di `<prefisso>-XXXXXX` che poi un modello leggeva come «tutti i file
+   della cartella». Ognuna si toglie a fine file. Quella che Windows tiene ancora occupata (il terminale del server di prova è
+   aperto lì dentro, e Playwright spegne il server DOPO ogni pulizia finale: `runner/tasks.ts`) la toglie la corsa dopo, insieme
+   alle altre dello stesso prefisso rimaste da più di 30 minuti. */
+const cartelleDaTogliere = [];
+const prefissiDiProva = new Set();
+const traccia = (cartella) => { cartelleDaTogliere.push(cartella); prefissiDiProva.add(basename(cartella).slice(0, -6)); return cartella; };
+const togli = (cartella) => {
+  try { rimuoviCartellaDiProva(cartella); }
+  catch (e) { console.warn(`cartella di prova rimasta: ${cartella} (${e?.code ?? e})`); }
+};
+test.afterAll(() => {
+  for (const cartella of cartelleDaTogliere.splice(0)) togli(cartella);
+  const soglia = Date.now() - 30 * 60_000;
+  let nomi = [];
+  try { nomi = readdirSync(rootWorkspace); } catch { /* radice sparita: niente da togliere */ }
+  for (const nome of nomi) {
+    /* revisione del blocco 0.1.38: solo i sei caratteri che `mkdtemp` aggiunge, mai un nome qualunque che inizi col prefisso */
+    if (![...prefissiDiProva].some((p) => nome.startsWith(p) && /^[A-Za-z0-9]{6}$/u.test(nome.slice(p.length)))) continue;
+    const cartella = join(rootWorkspace, nome);
+    try { if (statSync(cartella).isDirectory() && statSync(cartella).mtimeMs < soglia) togli(cartella); } catch { /* sparita intanto */ }
+  }
+});
 const { PNG } = createRequire(import.meta.url)('pngjs');
 /* Il PDF «Hello, world!» dell'esempio di pdf.js (`examples/learning/helloworld64.html`): una pagina vera. */
 const PDF = Buffer.from('JVBERi0xLjcKCjEgMCBvYmogICUgZW50cnkgcG9pbnQKPDwKICAvVHlwZSAvQ2F0YWxvZwogIC9QYWdlcyAyIDAgUgo+PgplbmRvYmoKCjIgMCBvYmoKPDwKICAvVHlwZSAvUGFnZXMKICAvTWVkaWFCb3ggWyAwIDAgMjAwIDIwMCBdCiAgL0NvdW50IDEKICAvS2lkcyBbIDMgMCBSIF0KPj4KZW5kb2JqCgozIDAgb2JqCjw8CiAgL1R5cGUgL1BhZ2UKICAvUGFyZW50IDIgMCBSCiAgL1Jlc291cmNlcyA8PAogICAgL0ZvbnQgPDwKICAgICAgL0YxIDQgMCBSIAogICAgPj4KICA+PgogIC9Db250ZW50cyA1IDAgUgo+PgplbmRvYmoKCjQgMCBvYmoKPDwKICAvVHlwZSAvRm9udAogIC9TdWJ0eXBlIC9UeXBlMQogIC9CYXNlRm9udCAvVGltZXMtUm9tYW4KPj4KZW5kb2JqCgo1IDAgb2JqICAlIHBhZ2UgY29udGVudAo8PAogIC9MZW5ndGggNDQKPj4Kc3RyZWFtCkJUCjcwIDUwIFRECi9GMSAxMiBUZgooSGVsbG8sIHdvcmxkISkgVGoKRVQKZW5kc3RyZWFtCmVuZG9iagoKeHJlZgowIDYKMDAwMDAwMDAwMCA2NTUzNSBmIAowMDAwMDAwMDEwIDAwMDAwIG4gCjAwMDAwMDAwNzkgMDAwMDAgbiAKMDAwMDAwMDE3MyAwMDAwMCBuIAowMDAwMDAwMzAxIDAwMDAwIG4gCjAwMDAwMDAzODAgMDAwMDAgbiAKdHJhaWxlcgo8PAogIC9TaXplIDYKICAvUm9vdCAxIDAgUgo+PgpzdGFydHhyZWYKNDkyCiUlRU9G', 'base64');
@@ -46,7 +71,7 @@ let sessione = null;
 
 test.beforeAll(async ({ playwright, baseURL }) => {
   test.setTimeout(120_000);
-  const cartella = mkdtempSync(join(rootWorkspace, 'f3-libreria-'));
+  const cartella = traccia(mkdtempSync(join(rootWorkspace, 'f3-libreria-')));
   const adesso = new Date().toISOString();
   for (const [id, nome, mediaType, origine, byte] of SEME) {
     const base = join(cartella, '.harness-ui-library', id);
