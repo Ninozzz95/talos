@@ -175,6 +175,17 @@ test('ESITO-RIFERIMENTO: la riga «[TALOS output reference…]» del server non 
   assert.equal(leggiEsitoComando('[TALOS output reference: 849de2b1-d1cf-4099-ab0c-146b601c58f0; retained 1 of 1 bytes.]\nnon è un esito').verdetto, '', 'senza testata non si tocca niente');
 });
 
+/* 27/10/2026 (segnalato dal Mobile): la forma di un comando ANCORA in sottofondo, `src/process-output-session.mjs:65` — la regex della card
+   copriva solo quella del comando finito, e questa arrivava alla persona con l'istruzione per il modello. */
+test('ESITO-RIFERIMENTO-SOTTOFONDO: anche la riga del comando ancora in sottofondo non va nella card, col tetto o senza', () => {
+  const id = '849de2b1-d1cf-4099-ab0c-146b601c58f0';
+  const recupero = ` Read retained bytes with process_output({"outputId":"${id}"}); follow nextOffset, and select stderr separately.`;
+  for (const tetto of ['', ' (the retention limit was reached)']) {
+    const testo = `exit 0 [sandbox: wsl2]\n[TALOS output reference: ${id}; the command is still running in the background: 512 bytes retained up to that point${tetto}; what it prints next goes to its output file.]${recupero}\nserver pronto`;
+    assert.equal(leggiEsitoComando(testo).output, 'server pronto', tetto || 'senza tetto');
+  }
+});
+
 test('H-04: provaSenzaSuite riconosce SOLO il NOT RUN del kernel, in testa', async () => {
   const { provaSenzaSuite } = await import('../../src/components/esito-comando.js');
   assert.equal(provaSenzaSuite('NOT RUN: NO_TEST_SUITE_CONFIGURED — no test suite found in C:/x: there is no package.json in this folder.'), true);

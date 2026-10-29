@@ -41,6 +41,8 @@ export default {
     // ── session-item.js
     'session.stateWaitingForYou': 'aspetta te',
     'session.stateRunning': 'in corso',
+    'session.stateAgentsOne': '1 agente al lavoro', // owner 29/10/2026: la chat ha risposto, i suoi agenti lavorano ancora
+    'session.stateAgentsMany': '{n} agenti al lavoro',
     'session.stateInterrupted': 'interrotta',
     'session.stateError': 'da riprendere',
     'session.helpError': 'L’ultimo giro si è fermato su un errore. Scrivi un messaggio per riprenderla da qui.',
@@ -66,6 +68,7 @@ export default {
     'session.turnOne': '{n} richiesta al modello',
     'session.turnMany': '{n} richieste al modello',
     'session.newInFolder': 'Nuova · {cartella}',
+    'session.liveFor': 'da {t}',
     'session.branch': 'ramo',
     'session.select': 'Seleziona {nome}',
     // ── terminale.js — TESTI ed ETICHETTA_STATO sono letti da src/legacy/app.js (tr(TESTI_TERMINALE.x), tr(ETICHETTA_STATO_TERMINALE[stato]))
@@ -341,7 +344,9 @@ export default {
     'output.streamEmpty': 'The stream contains no text.',
     // ── session-item.js
     'session.stateWaitingForYou': 'waiting for you',
-    'session.stateRunning': 'running',
+    'session.stateRunning': 'in progress',
+    'session.stateAgentsOne': '1 agent working', // owner 29/10/2026: the chat answered, its agents keep working
+    'session.stateAgentsMany': '{n} agents working',
     'session.stateInterrupted': 'interrupted',
     'session.stateError': 'to resume',
     'session.helpError': 'The last turn stopped on an error. Write a message to pick it up again from here.',
@@ -367,6 +372,7 @@ export default {
     'session.turnOne': '{n} model request',
     'session.turnMany': '{n} model requests',
     'session.newInFolder': 'New · {cartella}',
+    'session.liveFor': 'for {t}',
     'session.branch': 'branch',
     'session.select': 'Select {nome}',
     // ── terminale.js — TESTI ed ETICHETTA_STATO sono letti da src/legacy/app.js (tr(TESTI_TERMINALE.x), tr(ETICHETTA_STATO_TERMINALE[stato]))
@@ -385,7 +391,7 @@ export default {
     'terminal.launchedByAgent': 'Launched by the agent',
     'terminal.readOnly': 'Read only: this is where you watch the agent’s commands.',
     'terminal.agentTab': 'The agent’s commands, read only',
-    'terminal.stateRunning': 'running',
+    'terminal.stateRunning': 'in progress',
     'terminal.stateConnected': 'connected',
     'terminal.stateConnecting': 'connecting',
     'terminal.stateWaiting': 'waiting',
@@ -466,7 +472,7 @@ export default {
     'inspector.windowUndeclared': 'window not declared',
     'inspector.turnYourMessage': 'your message',
     'inspector.turnNoContact': 'no contact',
-    'inspector.turnRunning': 'running',
+    'inspector.turnRunning': 'in progress',
     'inspector.turnToolsOne': '{n} tool',
     'inspector.turnToolsMany': '{n} tools',
     'inspector.turnMessage': 'Message',
@@ -477,7 +483,7 @@ export default {
     'process.title': 'Processes',
     'process.stateQueued': 'Queued',
     'process.stateStarting': 'Starting',
-    'process.stateRunning': 'Running',
+    'process.stateRunning': 'In progress',
     'process.stateWaiting': 'Waiting',
     'process.stateAwaitingApproval': 'Waiting for your approval',
     'process.stateSucceeded': 'Succeeded',
@@ -576,7 +582,7 @@ export default {
     'agents.openConversationOf': 'Open the conversation of: {nome}',
     'agents.stateStopped': 'Stopped',
     'agents.statePaused': 'Paused',
-    'agents.stateRunning': 'Running',
+    'agents.stateRunning': 'In progress',
     'agents.stateFailed': 'Failed',
     'agents.stateDone': 'Done',
     'agents.stateWaiting': 'Waiting',

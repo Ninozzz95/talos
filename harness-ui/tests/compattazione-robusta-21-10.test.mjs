@@ -19,6 +19,7 @@ import { GIRI_PRIMA_DI_COMPATTARE, compattaConversazione, talosLavora as talosLa
 import { TETTO_USCITA_RIASSUNTO, VARIABILE_TETTO_TOKEN, eRifiutoDelTettoUscita, tettoUscitaRiassunto } from '../src/kernel/compattazione-desktop.mjs';
 import { createCompactionWindowSource } from '../src/compaction-window-source.mjs';
 import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
+import { corpoSenzaMarcatori } from './aiuto/corpo-senza-marcatori.mjs'; // 28/10: cache, punto 1
 
 const CONSEGNA = 'CONSEGNA-COMP-R: leggi grande.txt piÃ¹ volte e riferisci.';
 const PREAMBOLO = 'PREAMBOLO-PROGETTO ' + 'x'.repeat(12_000);
@@ -39,7 +40,7 @@ function conTetto(t, valore) {
 function fornitore({ chiamateTool = 10, riassunto, pieno = () => false } = {}) {
   const corpi = []; let lavoro = 0;
   const fetchDiRete = async (_url, init) => {
-    const body = JSON.parse(init.body);
+    const body = corpoSenzaMarcatori(init.body);
     corpi.push(body);
     const usage = { prompt_tokens: Math.ceil(JSON.stringify(body.messages).length / 4), completion_tokens: 5 };
     if (eRiassunto(body)) {
@@ -120,7 +121,7 @@ test('COMP-R-05 (CLI D4) nel ciclo di BASE una compattazione fallita dice perchÃ
   const corri = async (riassuntoRotto) => {
     const eventi = []; let lavoro = 0;
     const fetchDiRete = async (_url, init) => {
-      const body = JSON.parse(init.body);
+      const body = corpoSenzaMarcatori(init.body);
       const usage = { prompt_tokens: 100, completion_tokens: 5 };
       if (String(body.messages.at(-1)?.content ?? '').startsWith('Before continuing, summarize your progress')) {
         if (riassuntoRotto) return Response.json({ error: { message: 'boom' } }, { status: 400 });
@@ -148,7 +149,7 @@ test('COMP-R-05 (CLI D4) nel ciclo di BASE una compattazione fallita dice perchÃ
 function fornitoreConLimite(limite) {
   const corpi = []; let lavoro = 0; const rifiuti = [];
   const fetchDiRete = async (_url, init) => {
-    const body = JSON.parse(init.body); corpi.push(body);
+    const body = corpoSenzaMarcatori(init.body); corpi.push(body);
     const usage = { prompt_tokens: Math.ceil(JSON.stringify(body.messages).length / 4), completion_tokens: 5 };
     if (eRiassunto(body)) {
       const mt = body.max_tokens ?? body.max_completion_tokens;

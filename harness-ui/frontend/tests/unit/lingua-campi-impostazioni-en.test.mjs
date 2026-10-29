@@ -36,7 +36,7 @@ test('LINGUA-CAMPI-EN AL CONTRARIO: id, valori e limiti restano dati; ogni campo
     for (const o of c.opzioni || []) assert.doesNotMatch(String(o[1]), /^impostazioni\./u, `${c.id}/${o[0]}: mai una chiave grezza`);
   }
   assert.equal(campo('colorModeSelect').chiave, 'colorMode');
-  assert.equal(CAMPI_IMPOSTAZIONI.length, 40);
+  assert.equal(CAMPI_IMPOSTAZIONI.length, 43); // 27/10/2026: «Domande a tutta larghezza» (owner, «come Hermes»); 28/10: la lingua delle risposte; 29/10: lo Stop con agenti al lavoro
   const sorgente = readFileSync(new URL('../../src/components/impostazioni-campi.js', import.meta.url), 'utf8');
   assert.deepEqual(frasiItalianeNelSorgente(sorgente, 'impostazioni-campi.js'), []);
   assert.doesNotMatch(sorgente, /"titolo":/u, 'nessun titolo scritto nella tabella');

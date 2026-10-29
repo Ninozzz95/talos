@@ -22,6 +22,7 @@
  */
 import { spawn as spawnReale } from 'node:child_process';
 import { readFileSync as readFileReale } from 'node:fs';
+import { percorsoPowershell, percorsoTaskkill } from './taskkill-di-sistema.mjs';
 
 const PID_VALIDO = (pid) => Number.isSafeInteger(pid) && pid > 0;
 
@@ -112,7 +113,8 @@ async function leggiTabellaWindows({ spawnFn = spawnReale, attesaMassimaMs = 15_
   return new Promise((risolvi) => {
     let figlio;
     try {
-      figlio = spawnFn('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(COPIONE_TABELLA_WINDOWS, 'utf16le').toString('base64')], { windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] });
+      /* G-R5 (block 10 review, 27/10/2026): by its full path, never by name (`taskkill-di-sistema.mjs`) */
+      figlio = spawnFn(percorsoPowershell(process.env.SystemRoot), ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(COPIONE_TABELLA_WINDOWS, 'utf16le').toString('base64')], { windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] });
     } catch { risolvi(null); return; }
     let uscita = '';
     let finito = false;
@@ -179,7 +181,8 @@ export function fermaAlberoWindows(pid, { spawnFn = spawnReale } = {}) {
   return new Promise((risolvi) => {
     if (!PID_VALIDO(pid)) { risolvi(false); return; }
     let boia;
-    try { boia = spawnFn('taskkill', ['/PID', String(pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' }); } catch { risolvi(false); return; }
+    /* ⛔ J-R4 (revisione blocco 9, 27/10/2026): per percorso intero, mai per nome (`taskkill-di-sistema.mjs`) */
+    try { boia = spawnFn(percorsoTaskkill(process.env.SystemRoot), ['/PID', String(pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' }); } catch { risolvi(false); return; }
     boia.on?.('error', () => risolvi(false));
     boia.on?.('close', (codice) => risolvi(codice === 0));
   });

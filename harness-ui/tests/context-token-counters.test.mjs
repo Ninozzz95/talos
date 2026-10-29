@@ -215,3 +215,25 @@ test('CTX-COUNTER-PROVIDER-ANCHOR uses the anchored prompt_tokens for a matching
   contatore.registraAncora({ provider: selected.provider, model: selected.model, messages: storia, usage: { prompt_tokens: -1 } });
   assert.equal((await contatore.countPreparedContext({ messages: storia, tools: [], model: selected })).method, 'provider', 'un uso non valido non cancella l’ancora buona');
 });
+
+test('CTX-DESKTOP-VIEW-IMAGE il corpo contato traduce l’immagine di view_image come all’invio; il campo interno non c’è mai (owner 27/10/2026)', async () => {
+  const rif = 'd'.repeat(64);
+  const storia = [
+    { role: 'user', content: 'guarda' },
+    { role: 'assistant', content: null, tool_calls: [{ id: 'c1', type: 'function', function: { name: 'view_image', arguments: '{"path":"a.png"}' } }] },
+    { role: 'tool', tool_call_id: 'c1', content: 'Image "a.png" (10×10) is attached below.', talos_immagini: [{ riferimento: rif, mime: 'image/png', larghezza: 10, altezza: 10, percorso: 'a.png' }] },
+  ];
+  const visti = [];
+  const resolveImages = async (input) => { visti.push(structuredClone(input)); return input.map((m) => Array.isArray(m.content) ? { ...m, content: m.content.map((p) => p.type === 'image_url' ? { ...p, image_url: { url: 'data:image/png;base64,AA==' } } : p) } : m); };
+  const vedente = await buildPreparedDesktopContextRequest({ messages: storia, model: { ...model('openrouter'), requestOptions: {} } }, { resolveImages, readModelCapabilities: async () => ({ inputModalities: ['text', 'image'] }) });
+  const testo = JSON.stringify(vedente.body);
+  assert.ok(!testo.includes('talos_immagini'), 'il campo interno non arriva al conteggio');
+  assert.ok(visti[0].some((m) => m.role === 'user' && Array.isArray(m.content) && m.content.some((p) => p.image_url?.url === `/api/v1/chat-images/${rif}`)), 'l’immagine passa dal risolutore, come all’invio');
+  assert.ok(testo.includes('data:image/png;base64,AA=='));
+  const cieco = await buildPreparedDesktopContextRequest({ messages: storia, model: { ...model('openrouter'), requestOptions: {} } }, { resolveImages, readModelCapabilities: async () => ({ inputModalities: ['text'] }) });
+  assert.ok(!JSON.stringify(cieco.body).includes('talos_immagini'));
+  assert.ok(!JSON.stringify(cieco.body).includes('data:image'), 'un modello cieco non conta immagini');
+  const riassunto = await buildPreparedDesktopContextRequest({ messages: storia, model: model('openrouter') }, { readModelCapabilities: async () => { throw new Error('non serve'); } });
+  assert.ok(!JSON.stringify(riassunto.body).includes('talos_immagini'), 'nemmeno nel corpo di un riassunto');
+  assert.equal(storia[2].talos_immagini.length, 1, 'la storia non si tocca');
+});

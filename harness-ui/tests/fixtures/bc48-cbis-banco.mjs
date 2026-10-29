@@ -160,7 +160,9 @@ export async function eseguiBanco({ ordine = 'C', ricostruisci = false, osservaW
       assert.ok(res.ok, JSON.stringify(risultato));
       return risultato.data;
     };
-    const { sessionId } = await post('custom', { cartellaId: 'banco', consegna: 'Rispondi solo: uno.', permessi: 'Read only' });
+    /* 28/10/2026 sera: con la lingua scelta (non Automatica) il nucleo non aggiunge la nota sulla lingua del messaggio, che il server ora
+       riconosce anche nei messaggi scritti (`lingua-del-testo.mjs`): il banco misura il prefisso del contesto del progetto, non quella */
+    const { sessionId } = await post('custom', { cartellaId: 'banco', consegna: 'Rispondi solo: uno.', permessi: 'Read only', linguaDelleRisposte: 'it' });
     if (osservaWorkspace) fermaWatcher.push(registro.iscriviti(sessionId, () => {}));
     await attendi(() => esiti.length === 1 && registro.elenca().find(s => s.sessionId === sessionId)?.conclusa, 'fine primo turno');
     assert.equal(esiti[0].ok, true, JSON.stringify(esiti[0].erroreInterno));

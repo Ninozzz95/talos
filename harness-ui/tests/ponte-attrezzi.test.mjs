@@ -11,6 +11,7 @@ import {
 import { eventiPerRisposta } from '../src/agui-events.mjs';
 import { STRUMENTI_ESTESI_PREDEFINITI } from '../src/session-registry.mjs';
 import { consenteAttrezzoDelega } from '../src/delegation-contract.mjs';
+import { corpoSenzaMarcatori } from './aiuto/corpo-senza-marcatori.mjs'; // 28/10: cache, punto 1
 
 /*
  * ⭐ C5 ATTREZZI DIFFERITI (owner 17/10/2026: «Ponte fisso come Hermes», «Quelli che scattano su richiesta»).
@@ -25,7 +26,7 @@ function fornitore(copione) {
   const richieste = [];
   let n = 0;
   const fetchDiRete = async (_url, init) => {
-    richieste.push(JSON.parse(init.body));
+    richieste.push(corpoSenzaMarcatori(init.body));
     const passo = copione[n] ?? { content: 'fatto' };
     n += 1;
     const message = passo.chiamate
@@ -233,8 +234,8 @@ test('PONTE-15: l\'indice dei file della compattazione conta anche i file letti 
   assert.deepEqual(indiceMeccanico(storia('tool_call', { name: 'leggi', arguments: { percorso: 'src/a.mjs' } })).fileRiletti, diretto);
 });
 
-test('LINGUA-TEL-01 (owner 19/10) la riga della lingua va SOLO col profilo del telefono: col ponte di serie e spento il primo messaggio di sistema non la porta', async () => {
-  const { talosLavora, RIGA_LINGUA_DELLA_PERSONA } = await import('../src/kernel/talosHarness.mjs')
+test('LINGUA-TEL-01 (owner 19/10, SUPERATA il 28/10: «tutti i profili») la riga della lingua è nel primo messaggio di sistema col profilo del telefono, col ponte di serie e col ponte spento', async () => {
+  const { talosLavora, RIGA_LINGUA_DELLA_PERSONA, rigaLinguaDelleRisposte } = await import('../src/kernel/talosHarness.mjs')
   const { mkdtempSync } = await import('node:fs')
   const { tmpdir } = await import('node:os')
   const { join } = await import('node:path')
@@ -242,13 +243,16 @@ test('LINGUA-TEL-01 (owner 19/10) la riga della lingua va SOLO col profilo del t
     let sistema = null
     await talosLavora({
       cartella: mkdtempSync(join(tmpdir(), 'talos-lingua-')), task: { consegna: 'ciao' }, modello: 'x', chiave: 'y', attrezziDifferiti,
-      fetchDiRete: async (_u, init) => { sistema ??= JSON.parse(init.body).messages[0].content; return { ok: true, status: 200, text: async () => '', json: async () => ({ choices: [{ message: { role: 'assistant', content: 'ok' } }], usage: { prompt_tokens: 1, completion_tokens: 1 } }) } },
+      fetchDiRete: async (_u, init) => { sistema ??= corpoSenzaMarcatori(init.body).messages[0].content; return { ok: true, status: 200, text: async () => '', json: async () => ({ choices: [{ message: { role: 'assistant', content: 'ok' } }], usage: { prompt_tokens: 1, completion_tokens: 1 } }) } },
     })
     return String(sistema)
   }
-  assert.ok((await primoSistema('essenziali')).includes(RIGA_LINGUA_DELLA_PERSONA))
-  assert.ok(!(await primoSistema(true)).includes(RIGA_LINGUA_DELLA_PERSONA))
-  assert.ok(!(await primoSistema(false)).includes(RIGA_LINGUA_DELLA_PERSONA))
+  const riga = rigaLinguaDelleRisposte()
+  for (const profilo of ['essenziali', true, false]) {
+    const sistema = await primoSistema(profilo)
+    assert.ok(sistema.includes(riga), `profilo ${profilo}`)
+    assert.ok(!sistema.includes(RIGA_LINGUA_DELLA_PERSONA), 'la riga del 19/10 non si ripete accanto a quella del 28/10')
+  }
 })
 
 test('PONTE-24-10: owner 24/10 — annulla-modifiche e i dispositivi (con le cartelle), cablati, vanno dietro il ponte; artifact_create resta davanti', () => {

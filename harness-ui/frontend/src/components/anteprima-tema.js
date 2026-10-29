@@ -303,12 +303,17 @@ export function montaAnteprimaTema(contenitore, {
      `const` il riferimento sarebbe nella zona morta temporale se `aggiorna` girasse prima
      dell'assegnazione. Una funzione dichiarata è issata e non ha questo problema. */
   function etichettaComando() { return vista.inPausa?.() ? t(testi.riprendi) : t(testi.ferma); }
+  /* ⛔ 28/10/2026 (sfondo acceso di serie): `aggiorna()` scatta anche a ogni pausa dello scorrimento (classe del body), e riscriveva
+     comando, didascalia e stato uguali a prima — 14 scritture fuori dal messaggio mentre il testo scorre (STREAMING-FLUIDO-06). Si scrive
+     solo ciò che cambia. */
+  function scriviAttributo(el, nome, valore) { if (el && el.getAttribute(nome) !== valore) el.setAttribute(nome, valore); }
   function disegnaComando() {
     const fermo = Boolean(vista.inPausa?.());
-    comandoTesto.nodeValue = fermo ? t(testi.riprendi) : t(testi.ferma);
-    comando.setAttribute('aria-pressed', String(fermo));
-    comando.setAttribute('aria-label', etichettaComando());
-    comandoIcona.querySelector('use')?.setAttribute('href', fermo ? '#i-play' : '#i-stop');
+    const testo = fermo ? t(testi.riprendi) : t(testi.ferma);
+    if (comandoTesto.nodeValue !== testo) comandoTesto.nodeValue = testo;
+    scriviAttributo(comando, 'aria-pressed', String(fermo));
+    scriviAttributo(comando, 'aria-label', etichettaComando());
+    scriviAttributo(comandoIcona.querySelector('use'), 'href', fermo ? '#i-play' : '#i-stop');
   }
   comando.addEventListener('click', () => {
     vista.alterna?.();
@@ -367,11 +372,13 @@ export function montaAnteprimaTema(contenitore, {
     const scena = scenaDellAspetto(doc, scene);
     const stato = vista.aggiorna({ scena });
     const conosciuta = scene.has(scena);
-    didascalia.textContent = didascaliaDellaScena({
+    const testoDidascalia = didascaliaDellaScena({
       nome: conosciuta ? nomeDellaScena(scena) : '',
       stato: conosciuta ? stato : 'assente',
     });
-    finestra.dataset.stato = conosciuta ? stato : 'assente';
+    if (didascalia.textContent !== testoDidascalia) didascalia.textContent = testoDidascalia;
+    const statoFinestra = conosciuta ? stato : 'assente';
+    if (finestra.dataset.stato !== statoFinestra) finestra.dataset.stato = statoFinestra;
     // La lingua può cambiare sotto la colonna: il comando si ridisegna con `aggiorna()`.
     disegnaComando();
     return stato;

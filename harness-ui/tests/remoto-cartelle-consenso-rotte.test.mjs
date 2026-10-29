@@ -212,3 +212,26 @@ test('CR-09 consent.wait: solo chi ha chiesto la può attendere; un id storto è
   await b.pc('POST', `/api/v1/remote/consents/${attesa.richiestaId}/deny`, {});
   assert.deepEqual(await b.operazioni.esegui('consent.wait', { richiestaId: attesa.richiestaId }, b.contesto()), { esito: 'negata' });
 });
+
+test('CR-BLOCCO-01 owner 27/10/2026 (il nega vince): dal PC la revoca di una cartella ancora raggiungibile la blocca e lo dice; il dispositivo la vede bloccata e non ci scrive; «unblock» solo dal PC', async () => {
+  const b = banco();
+  const progetti = join(b.radice, 'progetti');
+  await b.pc('POST', `/api/v1/remote/phones/${DISP_A}/folders`, { percorso: progetti });
+  const { dati: avmDato } = await b.pc('POST', `/api/v1/remote/phones/${DISP_A}/folders`, { percorso: b.avm });
+  const id = await b.sessioneDalPc(b.avm);
+  const { dati: revoca } = await b.pc('POST', `/api/v1/remote/phones/${DISP_A}/folders/${avmDato.cartellaId}/revoke`, {});
+  assert.deepEqual({ revocata: revoca.revocata, bloccata: revoca.bloccata, tramite: revoca.tramite?.nome, stessa: revoca.stessaCartella },
+    { revocata: true, bloccata: true, tramite: 'progetti', stessa: false });
+  const riga = (await b.operazioni.esegui('projects.list', {}, b.contesto())).items.find((r) => r.nome === 'AVM');
+  assert.deepEqual({ consentita: riga.consentita, bloccata: riga.bloccata }, { consentita: false, bloccata: true }, 'the device sees it blocked, not «to ask»');
+  await assert.rejects(b.operazioni.esegui('session.send', { sessionId: id, corpo: { messaggio: 'x' } }, b.contesto()), { code: 'CONSENT_REQUIRED' });
+  const dalDispositivo = (metodo, percorso, corpo) => b.chiama({ metodo, percorso, corpo, origine: `telefono:${DISP_A}`, origineRemota: b.remota() });
+  await assert.rejects(dalDispositivo('POST', `/api/v1/remote/phones/${DISP_A}/folders/${avmDato.cartellaId}/unblock`, {}), { code: 'REMOTE_ORIGIN_FORBIDDEN' });
+  assert.equal(await b.cartelle.consentita(DISP_A, b.avm), false, '⛔ the device unblocked itself');
+  const elenco = (await b.pc('GET', `/api/v1/remote/phones/${DISP_A}/folders`)).dati.cartelle;
+  assert.deepEqual(elenco.filter((c) => c.bloccata).map((c) => c.nome), ['AVM']);
+  // AL CONTRARIO: dal PC si sblocca, una volta sola
+  assert.deepEqual((await b.pc('POST', `/api/v1/remote/phones/${DISP_A}/folders/${avmDato.cartellaId}/unblock`, {})).dati, { sbloccata: true });
+  await assert.rejects(b.pc('POST', `/api/v1/remote/phones/${DISP_A}/folders/${avmDato.cartellaId}/unblock`, {}), (e) => e.code === 'NOT_FOUND' && e.stato === 404);
+  await assert.rejects(b.pc('POST', `/api/v1/remote/phones/${DISP_A}/folders/${avmDato.cartellaId}/unblock`, { altro: 1 }), { code: 'QUERY_INVALID' });
+});

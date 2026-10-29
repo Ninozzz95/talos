@@ -37,6 +37,7 @@ import { creaTela } from './grafo/tela.js';
 import { cifra as cifraLingua, creaTempo, oraBreve, parolaDelPasso } from './grafo/tempo.js';
 import { elenco as elencoInLingua, t as tr, tn } from './lingua.js';
 import { montaPannelloRisultati } from './workflow-results-panel.js';
+import { mostraCaricamentoVivo } from './caricamento-vivo.js'; // owner 29/10/2026: oltre 2 s il caricamento diventa la riga viva
 
 /* le parole dell'attività degli agenti (deleghe, owner 13/10/2026): il nome umano di un attrezzo, mai l'id tecnico a schermo */
 const paroleAttivita = { tr, ora: oraBreve, nomeAttrezzo: nomeLeggibileAttrezzo, verbo: verboAttrezzo, iconaAttrezzo: (id) => iconaSpecie(specieAttrezzo(id)) };
@@ -424,7 +425,8 @@ export function montaGrafoWorkflow(host, {
   const ripPieno = el('div', 'gv-rip-pieno');
   const ripManiglia = el('div', 'gv-rip-maniglia');
   ripBinario.append(ripVuoti, ripPieno, ripManiglia);
-  const ripTesto = el('span', 'gv-rip-testo', tr(deleghe ? 'agenti.workflow.loadingHistoryDelegations' : 'agenti.workflow.loadingHistory'));
+  const ripTesto = el('span', 'gv-rip-testo');
+  mostraCaricamentoVivo(ripTesto, tr(deleghe ? 'agenti.workflow.loadingHistoryDelegations' : 'agenti.workflow.loadingHistory'));
   const ripVivo = bottone(tr('agenti.delegations.backToLive'), 'talos-button talos-button--secondary talos-button--sm gv-rip-vivo'); ripVivo.hidden = true;
   const ripNota = el('span', 'gv-rip-nota', tr('agenti.workflow.replayNote'));
   /* la storia non si è potuta leggere (deleghe: la cronologia del registro): si dice, e si può riprovare — non si finge una
@@ -1035,7 +1037,8 @@ export function montaGrafoWorkflow(host, {
     /* deleghe: la lettura dal server è fallita — le schede restano quelle di prima, e lo si DICE (come il pannello Agenti accanto,
        e come faceva la vista classica: «Dati non aggiornati»). Si riprova da soli a ogni battito: non c'è niente da premere. */
     const datiFermi = deleghe && !stato.carica && !stato.errore ? (client.statoDeiDati?.().errore ?? null) : null;
-    avviso.textContent = stato.carica ? tr('agenti.workflow.loading') : stato.errore ?? (datiFermi ? tr('agenti.workflow.staleData', { errore: datiFermi }) : '');
+    if (stato.carica) mostraCaricamentoVivo(avviso, tr('agenti.workflow.loading'), { chiave: `diagramma-workflow:${deleghe ? 'deleghe' : 'workflow'}` }); // si ridisegna a ogni aggiornamento
+    else avviso.textContent = stato.errore ?? (datiFermi ? tr('agenti.workflow.staleData', { errore: datiFermi }) : '');
     avviso.hidden = !stato.carica && !stato.errore && !datiFermi;
     if (datiFermi) avviso.dataset.motivo = 'dati-fermi'; else delete avviso.dataset.motivo;
     root.dataset.vista = stato.vista;

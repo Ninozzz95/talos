@@ -351,7 +351,10 @@ for (const modo of ['dark', 'light']) {
 
     async function cartaDiApprovazione(page, azione, requestId = 'app-1') {
       await manda(page, [
-        { type: 'RunStarted', input: { consegna: 'Guarda la configurazione' }, _sequenza: 1 },
+        /* owner 27/10/2026 («Sì, col permesso del giro»): la carta si spiega col permesso del SUO giro, che dal 02/09 viaggia in
+           `RunStarted.contesto`. La scena è un giro di oggi, col permesso che la prova presume; il giro SENZA permesso (sessioni di prima
+           del 02/09) è il caso di `righe-vive.spec.mjs` RV-03b. */
+        { type: 'RunStarted', input: { consegna: 'Guarda la configurazione' }, contesto: { permessi: 'On request' }, _sequenza: 1 },
         { type: 'ApprovalRequested', requestId, azione, _sequenza: 2 },
       ]);
       return page.locator('#conversation [data-c="ApprovalCard"]').first();
@@ -515,7 +518,7 @@ for (const modo of ['dark', 'light']) {
      *   `hidden` finché un costo non c'è (`costoChip.hidden = !dati.costo`), ed è lo stato in cui si
      *   trova ogni sessione appena comincia — cioè quello che l'owner vede più spesso.
      */
-    async function statoBarra(page, { piano = true, costo, conSpesa, pienaLarghezza = false }) {
+    async function statoBarra(page, { piano = true, costo, conSpesa, pienaLarghezza = false, livello = null }) {
       /*
        * ⛔ 26/09 — LA PROVA CORREVA CONTRO IL PRODOTTO. Misurato con una sonda (subito e dopo due fotogrammi, sequenza
        *   di D2 (c)): dopo un `setViewportSize` il piede della chat si ridisegna e rimette `hidden` alla pillola della
@@ -525,7 +528,7 @@ for (const modo of ['dark', 'light']) {
        *   si lascia finire il ridisegno del ridimensionamento, poi stato e misura nella STESSA battuta.
        */
       await page.evaluate(() => new Promise((ok) => requestAnimationFrame(() => requestAnimationFrame(ok))));
-      return page.evaluate(({ conPiano, c, conSpesa: cs, piena }) => {
+      return page.evaluate(({ conPiano, c, conSpesa: cs, piena, liv }) => {
         document.documentElement.classList.toggle('chat-full-width', Boolean(piena));
         const composer = document.querySelector('#composerForm');
         const pp = composer.querySelector('[data-piano-chatgpt]'); // 11/10/2026: al posto della pillola dei giri, uscita dal composer
@@ -535,6 +538,7 @@ for (const modo of ['dark', 'light']) {
         if (cs) pc.querySelector('.talos-mono').textContent = c;
         composer.querySelector('[data-open-sheet="model"] .talos-chip__label').textContent = 'glm-5.3-flash';
         composer.querySelector('[data-open-sheet="permissions"] .talos-chip__label').textContent = 'Scrive nel progetto';
+        if (liv) composer.querySelector('#pillRagionamento .talos-chip__label').textContent = liv; // un livello vero, scritto dal prodotto
         /* ⛔ 26/09 — dal difetto (3) la scala si sceglie MISURANDO (`components/scala-composer.js`), di norma un fotogramma
            dopo il cambio. Aspettarlo qui riapre la corsa col piede (vedi sopra: in due fotogrammi il piede può rimettere
            `hidden` alla spesa), e misurare senza leggerebbe uno stadio vecchio: si adatta SUBITO, nella stessa battuta. */
@@ -557,11 +561,32 @@ for (const modo of ['dark', 'light']) {
           permesso: leggi('[data-open-sheet="permissions"] .talos-chip__label'),
           terminale: leggi('#pillTerminale .talos-chip__label'),
           parolaPiano: leggi('[data-piano-chatgpt] .talos-chip__label'),
+          ragionamento: leggi('#pillRagionamento .talos-chip__label'), // owner 27/10/2026: cede insieme a «Terminale»
           barraSfonda: barra.scrollWidth > barra.clientWidth + 1,
           vuotoADestra: Math.round(composer.querySelector('.talos-composer__mic').getBoundingClientRect().left - composer.querySelector('#pillTerminale').getBoundingClientRect().right),
         };
-      }, { conPiano: piano, c: costo, conSpesa, piena: pienaLarghezza });
+      }, { conPiano: piano, c: costo, conSpesa, piena: pienaLarghezza, liv: livello });
     }
+
+    test(`D2 (d) — col livello più lungo («Molto alto»), da 1000 a 1600 px il ragionamento non resta MAI tagliato e cede solo dopo il permesso (${modo})`, async ({ page }) => {
+      /* owner 27/10/2026 (ed4493e51): la parola del ragionamento entra nella scala, gradino 3, dopo il permesso. La prova a 1440 col
+         livello di serie passava anche col codice vecchio (la parola corta non si tagliava): qui si scorre la larghezza con
+         l'etichetta più lunga che il prodotto scrive (`modelPicker.effort.xhigh`), dove la parola fuori dalla scala si tagliava. */
+      const difetti = [];
+      for (let w = 1000; w <= 1600; w += 40) {
+        await page.setViewportSize({ width: w, height: 900 });
+        const m = await statoBarra(page, { piano: true, costo: '$0,00', conSpesa: false, livello: 'Molto alto' });
+        if (!m.ragionamento) { difetti.push(`${w}: nessuna pastiglia del ragionamento`); continue; }
+        if (!(m.ragionamento.ceduta || m.ragionamento.intero)) {
+          difetti.push(`${w}: ragionamento tagliato ${m.ragionamento.larghezza}/${m.ragionamento.scroll}`);
+          await foto(page, `d2d-tagliato-${w}-${modo}.png`, '#pillRagionamento');
+        }
+        if (m.ragionamento.ceduta && !m.permesso.ceduta) difetti.push(`${w}: il ragionamento ha ceduto prima del permesso`);
+        if (!(m.permesso.ceduta || m.permesso.intero)) difetti.push(`${w}: permesso tagliato`);
+        if (m.barraSfonda) difetti.push(`${w}: la barra sborda`);
+      }
+      expect(difetti).toEqual([]);
+    });
 
     test(`D2 (a) — con la SOLA pastiglia del piano, a 1440 cede al più «Terminale»: permesso, modello e piano interi (${modo})`, async ({ page }, info) => {
       /*
@@ -574,12 +599,16 @@ for (const modo of ['dark', 'light']) {
       misura(`d2a.1440.${modo}`, m);
 
       expect(m.costoVisibile, 'la prova deve girare proprio nello stato senza spesa').toBe(false);
-      expect(m.permesso.ceduta, 'a 1440 senza spesa il permesso non ha ragione di cedere').toBe(false);
       /* 11/10/2026: con la pastiglia del piano (~109 px, più larga della vecchia «Invio 1») la barra a 1440 chiede ~694 px su 660
          (misurato): «Terminale» cede all'icona, ed è la scala giusta — il permesso e il modello restano interi, niente si taglia.
          Il verso «quando lo spazio c'è nessuno cede» è in COMPOSER-SCALE-02 (barra senza pastiglia) e in D2 (c). */
       expect(m.terminale.ceduta || m.terminale.intero, `«Terminale» tagliato: ${m.terminale.larghezza}px su ${m.terminale.scroll}`).toBe(true);
-      expect(m.permesso.intero, `«Scrive nel progetto»: ${m.permesso.larghezza}px su ${m.permesso.scroll}`).toBe(true);
+      /* ⛔ owner 27/10/2026 — CONTRATTO CAMBIATO. Dal 24/10 la barra ha la pastiglia del ragionamento, e a 1440 (composer 690 px) mancano
+         33 px (misurati) per avere modello, permesso e ragionamento interi: «permesso intero» non è più possibile senza tagliare il
+         modello. Scelta dell'owner: resta scritto il LIVELLO del ragionamento; il permesso cede allo scudo (gradino 2), mai tagliato. */
+      expect(m.ragionamento, 'premessa: la pastiglia del ragionamento è nella barra').not.toBe(null);
+      expect(m.ragionamento.intero, `il livello del ragionamento a 1440: ${m.ragionamento.larghezza}px su ${m.ragionamento.scroll}`).toBe(true);
+      expect(m.permesso.ceduta || m.permesso.intero, `«Scrive nel progetto» tagliato: ${m.permesso.larghezza}px su ${m.permesso.scroll}`).toBe(true);
       expect(m.modello.intero, `«glm-5.3-flash»: ${m.modello.larghezza}px su ${m.modello.scroll}`).toBe(true);
       expect(m.parolaPiano.intero, `«Piano ChatGPT»: ${m.parolaPiano.larghezza}px su ${m.parolaPiano.scroll}`).toBe(true);
       expect(m.barraSfonda).toBe(false);
@@ -592,6 +621,8 @@ for (const modo of ['dark', 'light']) {
       misura(`d2a.1024.${modo}`, m);
       expect(m.parolaPiano.ceduta || m.parolaPiano.intero, `«Piano ChatGPT» tagliato: ${m.parolaPiano.larghezza}px su ${m.parolaPiano.scroll}`).toBe(true);
       expect(m.barraSfonda).toBe(false);
+      /* owner 27/10/2026: la parola del ragionamento non era misurata dalla scala e poteva restare tagliata; ora cede al gradino 3, mai tagliata */
+      expect(m.ragionamento.ceduta || m.ragionamento.intero, `ragionamento tagliato a 1024: ${m.ragionamento.larghezza}px su ${m.ragionamento.scroll}`).toBe(true);
       /* ⛔ CONTRATTO CAMBIATO il 26/09 (difetto (3), foto di Ask e del Piano): qui si asseriva «senza spesa NESSUNO deve
          cedere, nemmeno a 1024», e a 1024 la barra tagliava tre etichette coi puntini («Termin…»). La regola del 17/09
          resta nel verso che conta — a 1440, dove lo spazio c'è, nessuno cede (sopra) — e qui diventa: niente tagliato,

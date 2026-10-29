@@ -18,11 +18,13 @@
  */
 
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
+import { pulisciNomeDispositivo } from './nome-dispositivo.mjs';
 
 export const ALPN_LAVORO = 'talos-remote/1';
 export const ALPN_ACCOPPIAMENTO = 'talos-remote-pair/1';
 export const ETICHETTA_CODICE = 'talos-remote-pair/v1';
 export const DURATA_OFFERTA_MS = 5 * 60_000;
+export const RICORDO_SCADUTI_MS = 10 * 60_000; // F-R1 (blocco 8): oltre la tolleranza del telefono (120 s) e uno scarto d'orologio largo
 export const OFFERTE_APERTE_MASSIME = 3;
 export const TENTATIVI_SBAGLIATI_MASSIMI = 5;
 export const BLOCCO_MS = 15 * 60_000;
@@ -51,10 +53,22 @@ export function codiceDiVerifica({ pcId, telefonoId, gettone }) {
   return String(impronta.readUInt32BE(0) % 1_000_000).padStart(6, '0');
 }
 
-/** Il testo del QR (contratto v0.3 §D). `exp` in secondi Unix. */
+/*
+ * Il relay nel QR con la codifica LEGGERA (owner 26/10/2026 notte tarda, «Sì, rimpicciolisci»; ricerca della CLI
+ * `handoff-talos-cli-2026-09-27/RICERCA-T4-QR-ALTEZZA.md` §2.4): `encodeURIComponent` scriveva `://` e ogni `/` come `%3A%2F%2F`,
+ * `%2F`. Il telefono legge il QR con `URLSearchParams` (Mobile, `filoRemoto.ts:48-52`) e il gettone con `URLDecoder`
+ * (`TalosRemotoCustodia.kt:100-102`), misurato dal Mobile il 26/10: un `+` crudo diventa uno spazio, un `&` crudo tronca il valore,
+ * un `%XX` crudo si decodifica DUE volte. ⇒ Crudi solo i caratteri non riservati (encodeURIComponent li lascia già) e `: / ? =`;
+ * `% + & #` e lo spazio restano codificati. L'andata e ritorno è una prova (ACC-QR-*), da rispecchiare sul telefono.
+ */
+export function relayNelQr(relay) {
+  return encodeURIComponent(relay).replace(/%(3A|2F|3F|3D)/giu, (_, h) => String.fromCharCode(Number.parseInt(h, 16)));
+}
+
+/** Il testo del QR (contratto v0.3 §D; `relay` facoltativo: con i server di n0 non c'è, il telefono trova il PC dal suo id). `exp` in secondi Unix. */
 export function testoDelQr({ pcId, relay, gettone, scadeAlle }) {
   const parti = [`pc=${encodeURIComponent(pcId)}`];
-  if (relay) parti.push(`relay=${encodeURIComponent(relay)}`);
+  if (relay) parti.push(`relay=${relayNelQr(relay)}`);
   parti.push(`t=${gettone}`, `exp=${Math.floor(scadeAlle / 1000)}`);
   return `talos-remote:1?${parti.join('&')}`;
 }
@@ -71,9 +85,17 @@ export function creaAccoppiamento({ clock = () => Date.now(), casuale = (n) => r
   let sbagliati = 0;
   let bloccatoFinoA = 0;
 
+  /*
+   * ⛔ Revisione del blocco 8 (F-R1): il telefono ora tollera 120 s di scarto fra gli orologi (Mobile 3171fb6fa), quindi un QR scaduto
+   *   arriva qui. Contato come gettone SBAGLIATO, al quinto bloccava gli accoppiamenti per 15 minuti e chiudeva anche il QR buono.
+   *   Un gettone che questo PC ha davvero emesso e che è solo scaduto si ricorda per RICORDO_SCADUTI_MS: risponde `PAIR_EXPIRED`
+   *   (già nel filo, `filo.mjs`) e non conta. Uno sconosciuto resta `PAIR_TOKEN_INVALID` e conta, come prima.
+   */
+  const scaduti = new Map(); // gettone → scadutoAlle
   const pulisci = () => {
     const ora = clock();
-    for (const [g, o] of offerte) if (o.scadeAlle <= ora) offerte.delete(g);
+    for (const [g, o] of offerte) if (o.scadeAlle <= ora) { offerte.delete(g); scaduti.set(g, o.scadeAlle); }
+    for (const [g, alle] of scaduti) if (alle + RICORDO_SCADUTI_MS <= ora) scaduti.delete(g);
     for (const [id, a] of attese) if (a.scadeAlle <= ora) { attese.delete(id); a.risolvi({ esito: 'scaduto' }); }
     if (bloccatoFinoA && bloccatoFinoA <= ora) { bloccatoFinoA = 0; sbagliati = 0; }
   };
@@ -120,6 +142,9 @@ export function creaAccoppiamento({ clock = () => Date.now(), casuale = (n) => r
       let trovato = null;
       for (const g of offerte.keys()) if (confronta(g, presentato)) trovato = g;
       if (!trovato) {
+        let scaduto = null;
+        for (const g of scaduti.keys()) if (confronta(g, presentato)) scaduto = g;
+        if (scaduto) { scaduti.delete(scaduto); throw errore('PAIR_EXPIRED', 'This QR code has expired: ask the computer for a new one.'); }
         sbaglia();
         if (bloccatoFinoA) bloccato();
         throw errore('PAIR_TOKEN_INVALID', 'This pairing code is unknown, already used or expired.');
@@ -129,7 +154,8 @@ export function creaAccoppiamento({ clock = () => Date.now(), casuale = (n) => r
       const id = base64url(casuale(12));
       let risolvi;
       const promessa = new Promise((r) => { risolvi = r; });
-      const testo = (v, max) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null);
+      /* E-R1 (revisione del blocco 10, 27/10/2026): il nome lo sceglie il telefono — senza caratteri di controllo né di formato */
+      const testo = (v, max) => pulisciNomeDispositivo(v, max) || null;
       attese.set(id, { telefonoId, nome: testo(nome, 64), piattaforma: testo(piattaforma, 40), sveglia, codice, scadeAlle: clock() + DURATA_ATTESA_MS, risolvi });
       return { id, codice, attendi: () => promessa };
     },

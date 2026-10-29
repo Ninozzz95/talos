@@ -25,7 +25,7 @@ export const ROTTE_REMOTO = Object.freeze([
   /* R5.12 (owner 23/10/2026 sera): la carta «Consenti a … di lavorare in …?» e le cartelle consentite di un dispositivo */
   { schema: /^\/api\/v1\/remote\/consents\/([^/]+)\/(allow|deny)$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/remote\/phones\/([^/]+)\/folders$/, metodi: ['GET', 'POST'] },
-  { schema: /^\/api\/v1\/remote\/phones\/([^/]+)\/folders\/([^/]+)\/revoke$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/remote\/phones\/([^/]+)\/folders\/([^/]+)\/(revoke|unblock)$/, metodi: ['POST'] }, // owner 27/10/2026: «unblock», il nega vince
   /* R5.13 corsa 2 (24/10/2026): le offerte di file di una conversazione — lo stato sotto la scheda, e «Invia a …» dal menu del file */
   { schema: /^\/api\/v1\/remote\/sessions\/([^/]+)\/offers$/, metodi: ['GET', 'POST'] },
 ]);
@@ -34,8 +34,8 @@ export const STATO_PER_CODICE_REMOTO = Object.freeze({
   REMOTE_UNAVAILABLE: 503, REMOTE_RELAY_NOT_CHOSEN: 409, REMOTE_RELAY_INVALID: 400, REMOTE_KEYRING_MISSING: 503, REMOTE_KEY_INVALID: 409,
   REMOTE_OFF: 409, REMOTE_TOO_MANY_PHONES: 409, REMOTE_DEVICE_UNKNOWN: 404, REMOTE_DEVICE_BAD: 400, REMOTE_DEVICES_UNREADABLE: 500,
   PAIR_LOCKED: 429, PAIR_NOT_PENDING: 409, QUERY_INVALID: 400,
-  CONSENT_NOT_PENDING: 409, FOLDER_INVALID: 400, FOLDER_NOT_ALLOWED: 403, REMOTE_CONSENTS_UNREADABLE: 500, NOT_FOUND: 404, // R5.12
-  FILE_GONE: 410, FILE_TOO_LARGE: 413, BAD_MESSAGE: 400, // R5.13 corsa 2: le offerte dalla finestra
+  CONSENT_NOT_PENDING: 409, FOLDER_INVALID: 400, FOLDER_NOT_ALLOWED: 403, FOLDER_BLOCKED: 409, REMOTE_CONSENTS_UNREADABLE: 500, NOT_FOUND: 404, // R5.12
+  FILE_GONE: 410, FILE_TOO_LARGE: 413, BAD_MESSAGE: 400, REMOTE_STORE_BUSY: 503, // E-R1: un altro processo sta scrivendo // R5.13 corsa 2: le offerte dalla finestra
 });
 
 const ID = /^[A-Za-z0-9_-]{8,64}$/;
@@ -93,13 +93,14 @@ export function creaRotteRemoto({ remoto }) {
         if (!ID.test(consenso[1]) || Object.keys(c).length) return rifiuta('QUERY_INVALID', 'Invalid consent request.');
         return { stato: 200, dati: await remoto.cartelle.rispondi(consenso[1], consenso[2] === 'allow' ? 'consentita' : 'negata') };
       }
-      const cartelle = /^\/api\/v1\/remote\/phones\/([^/]+)\/folders(?:\/([^/]+)\/revoke)?$/.exec(percorso);
+      const cartelle = /^\/api\/v1\/remote\/phones\/([^/]+)\/folders(?:\/([^/]+)\/(revoke|unblock))?$/.exec(percorso);
       if (cartelle) {
         if (!remoto.cartelle) return rifiuta('REMOTE_UNAVAILABLE', 'Device folders are not available on this computer.');
         if (!ID.test(cartelle[1])) return rifiuta('QUERY_INVALID', 'Invalid device id.');
         if (cartelle[2] !== undefined) {
           if (!/^[A-Za-z0-9_-]{16,64}$/u.test(cartelle[2]) || Object.keys(c).length) return rifiuta('QUERY_INVALID', 'Invalid folder id.');
-          return { stato: 200, dati: await remoto.cartelle.revoca(cartelle[1], cartelle[2]) };
+          /* owner 27/10/2026: «unblock» toglie solo il blocco di una cartella revocata che restava raggiungibile (il nega vince) */
+          return { stato: 200, dati: cartelle[3] === 'unblock' ? await remoto.cartelle.sblocca(cartelle[1], cartelle[2]) : await remoto.cartelle.revoca(cartelle[1], cartelle[2]) };
         }
         if (method === 'GET') return { stato: 200, dati: { cartelle: await remoto.cartelle.consensiDi(cartelle[1]) } };
         if (!soloChiavi(['percorso']) || typeof c.percorso !== 'string' || !c.percorso) return rifiuta('QUERY_INVALID', 'The body accepts only the folder path.');

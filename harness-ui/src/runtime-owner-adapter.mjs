@@ -8,6 +8,7 @@
  * funzioni pure minime per la compattazione restano qui, per mantenere il
  * comportamento già coperto dai test senza nascondere una dipendenza.
  */
+import { senzaCampoImmagini } from './kernel/immagine-da-guardare.mjs';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { isAbsolute } from 'node:path';
@@ -39,6 +40,7 @@ import { PREFISSO_SINTESI_RECINTATA, costruisciBloccoFatti } from './kernel/rica
 import { classificaErroreFornitore, numeriDelContestoPieno } from './kernel/compattazione-desktop.mjs';
 import { rifiutoDelMotoreOspite } from './accesso-locale-ospite.mjs'; // 18/10/2026: il motore dell'app occupato o chiuso, detto per nome
 import { conUtentiUniti } from './kernel/utenti-uniti.mjs'; // riga del bugfixer 10/10: due `user` di fila, solo verso un motore locale
+import { eRifiutoDelTemplate, piegaMessaggiDiSistema, sondaFormaDeiSistemi } from './kernel/sistema-piegato.mjs'; // L1 1.1, 26/10
 // P0 · punto 7 (16/09): il failsafe di inattività e il dispatcher stanno in una porta sola.
 import {
   SilenzioDelFornitoreError,
@@ -49,6 +51,23 @@ import {
 } from './generation-idle.mjs';
 
 const ENDPOINT_OPENROUTER = 'https://openrouter.ai/api/v1/chat/completions';
+/* L1 1.1 (26/10/2026): `fonte|modello` → 'libera' | 'piegata' | 'sconosciuta' (la sonda non si può fare: resta la rete reattiva). */
+const FORME_DEI_SISTEMI = new Map();
+const SONDA_DEI_SISTEMI_MS = 15_000; // `/apply-template` rende e basta, non genera: oltre, la forma resta «sconosciuta» (rete reattiva)
+/** Aspetta `promessa`, ma una richiesta fermata smette di aspettare subito, col motivo del suo segnale. */
+function aspettaOFerma(promessa, segnale) {
+  if (!segnale) return promessa;
+  segnale.throwIfAborted();
+  return new Promise((risolvi, rifiuta) => {
+    const ferma = () => rifiuta(segnale.reason);
+    segnale.addEventListener('abort', ferma, { once: true });
+    promessa.then(
+      (valore) => { segnale.removeEventListener('abort', ferma); risolvi(valore); },
+      (errore) => { segnale.removeEventListener('abort', ferma); rifiuta(errore); },
+    );
+  });
+}
+const SONDE_IN_VOLO = new Map(); // `fonte|modello` → la sonda che sta girando, condivisa da chi arriva nel frattempo
 /* ⭐ 06/10/2026 — C-a della cura post-compact (ricerca 5×5×5×5 §6.4, zero-cost): le stesse regole verbatim
  * del kernel, qui su una riga. Le richieste pendenti e le azioni irreversibili (commit/push CON hash) NON
  * si affidano al caso del riassunto (opencode `summary.txt:10-11`; prompt di codex `compact/prompt.md`). */
@@ -129,6 +148,41 @@ export const FONTI_DI_MOTORE_LOCALE = Object.freeze(new Set([...idPerWire('local
  */
 /* ⛔ BUG-7 cura2, revisore C2-2 (05/10/2026): esportato perché la prova di cablaggio (tests/bc79-2) asserisca
    l'IDENTITÀ del messaggio, non una copia fragile del suo testo. K4b: frase inglese + chiave per la persona. */
+/** L1 1.3 (26/10/2026): la riga «finestra allargata» (testo completo per chi non conosce l'evento `talos.finestra-locale`). */
+export function avvisoFinestraAllargata({ dopo }) {
+  return { testo: `Window enlarged to ${Number(dopo).toLocaleString('en-US')} tokens to fit the conversation.`, testoChiave: 'server.runtime.notice.windowEnlarged', testoParams: { n: dopo } };
+}
+/**
+ * Router mode of the local engine (owner 26/10/2026 night, decision 2): the router could not load the model and today's engine took it.
+ * The same notice shape as the others (`testo` + key + params); the reason itself goes to the log (`llama-router-supervisor.mjs`).
+ */
+export function avvisoRipiegoRouter({ modelId }) {
+  return { testo: `The router could not load ${modelId}: it runs on the standard local engine, one model at a time.`, testoChiave: 'server.runtime.notice.routerFallback', testoParams: { model: modelId } };
+}
+/**
+ * L1 1.3 — «Chiedimi» (Impostazioni → Modelli): la finestra si potrebbe allargare, ma la persona ha scelto di decidere ogni volta.
+ * ⛔ Codice SUO, non LOCAL_CONTEXT_EXCEEDED: il kernel riconosce il contesto pieno e riassumerebbe da solo (`classificaErroreFornitore`),
+ *   cioè proprio ciò che la persona ha chiesto di non fare senza di lei. Questo sale come guasto non transitorio con la sua carta
+ *   (`errori.js`, «Enlarge the window» / «Summarise»), e i numeri per dirla prima del clic.
+ */
+export class FinestraLocaleDaChiedereError extends Error {
+  constructor({ promptToken, prima, dopo, memoriaInPiu = null, modelId }) {
+    super(`The conversation (${promptToken} tokens) does not fit in the local model’s window (${prima} tokens). It can be reopened with ${dopo} tokens, or the older part can be summarised: you chose to decide each time.`);
+    this.name = 'FinestraLocaleDaChiedereError';
+    this.code = 'LOCAL_WINDOW_ASK';
+    this.classe = 'finestra-da-scegliere';
+    this.transitorio = false;
+    this.stato = 409;
+    this.promptToken = promptToken;
+    this.finestraToken = prima;
+    this.finestraProposta = dopo;
+    this.memoriaInPiu = memoriaInPiu;
+    this.modelId = modelId;
+  }
+}
+/* Una richiesta allarga UNA volta sola: se anche la finestra nuova non basta, si torna al riassunto (`compattazione-desktop.mjs`). */
+const RICHIESTE_GIA_ALLARGATE = new WeakSet();
+
 export const AVVISO_MOTORE_SENZA_ATTREZZI = Object.freeze({ testo: 'This model does not use tools: this remains a chat. It can answer, but it cannot read files or run commands.', testoChiave: 'server.runtime.notice.noTools' });
 
 /**
@@ -253,6 +307,40 @@ async function leggiDettaglioRifiuto(risposta, limite = 2_000) {
   return testo + decoder.decode();
 }
 
+/**
+ * Il corpo INTERO di una risposta d'errore, fino a `limite` byte, senza aspettare oltre `silenzioMs` fra un pezzo e l'altro.
+ * ⛔ Revisione blocco 2 (R1): la cura N1 leggeva una COPIA (`clone()`) e restituiva l'originale intatto. Ma in un `tee` la
+ *   cancellazione della copia si risolve solo quando si chiude anche l'originale, e un motore che si pianta a metà errore teneva ferma
+ *   la richiesta fino al guardiano d'inattività (30 minuti di serie); prima della cura tornava subito coi primi 2.000 byte. Ora si
+ *   legge una volta sola: l'errore torna intero se finisce, e tagliato (come prima, ma a 64 KB) se tace o è troppo lungo.
+ * @returns {Promise<{ testo: string, intero: boolean }>}
+ */
+async function leggiCorpoDErrore(risposta, { limite = 65_536, silenzioMs = 2_000 } = {}) {
+  const reader = risposta.body?.getReader();
+  if (!reader) return { testo: '', intero: true };
+  const decoder = new TextDecoder();
+  let testo = '', letti = 0, intero = false, timer;
+  try {
+    while (letti < limite) {
+      const silenzio = new Promise((risolvi) => { timer = setTimeout(() => risolvi(null), silenzioMs); });
+      const pezzo = await Promise.race([reader.read(), silenzio]);
+      clearTimeout(timer);
+      if (pezzo === null) break; // tace: si tiene ciò che è arrivato
+      if (pezzo.done) { intero = true; break; }
+      const parte = pezzo.value.subarray(0, limite - letti);
+      testo += decoder.decode(parte, { stream: true });
+      letti += parte.byteLength;
+    }
+  } catch (error) {
+    clearTimeout(timer);
+    if (error?.name === 'AbortError' || error?.name === 'TimeoutError' || error?.code === 'PROVIDER_SILENCE') throw error;
+  } finally {
+    if (!intero) reader.cancel().catch(() => {}); // non si aspetta: un corpo piantato non deve tenere ferma la risposta
+    reader.releaseLock();
+  }
+  return { testo: testo + decoder.decode(), intero };
+}
+
 function attesaEsponenziale(tentativo) {
   return Math.min(2_000, 200 * (2 ** tentativo));
 }
@@ -272,7 +360,7 @@ export async function chiamaConRitentaLocale({
     const risposta = await fetchDiRete(ENDPOINT_OPENROUTER, {
       method: 'POST',
       headers: { Authorization: `Bearer ${chiave}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: modello, messages: messaggi, tools: attrezzi, tool_choice: 'auto' }),
+      body: JSON.stringify({ model: modello, messages: senzaCampoImmagini(messaggi), tools: attrezzi, tool_choice: 'auto' }), // view_image: il campo interno non parte mai
       /*
        * ⛔ P0 · punto 7 (16/09/2026) — anche il riassuntore locale aveva i suoi 180 s scritti a mano.
        * Un riassunto è una chiamata al MODELLO come le altre: se il contesto da comprimere è enorme,
@@ -466,6 +554,32 @@ export function livelloRagionamentoSenzaSalire(chiesto, supportati) {
   if (!livelli.length) return null;
   if (chiesto === 'none') return livelloRagionamentoMinimo(livelli);
   return livelloRagionamentoPiuVicino(chiesto, livelli);
+}
+
+/*
+ * ⛔ Owner 27/10/2026 — IL RAGIONAMENTO QUANDO CAMBIA IL MODELLO, deciso UNA volta nel server per PC, dispositivo e CLI (prima il
+ *   PC teneva «Medio» su GLM 5.3 Flash che non lo ha, il dispositivo lo abbassava da sé: due risposte diverse, viste dal vivo).
+ *   Scelte dell'owner: «Come Codex, uguale ovunque», poi «Codex, ma mai più caro». Codex (`codex-rs/tui/src/app/
+ *   config_persistence.rs:1121-1134`, clone 16/10): il livello configurato resta se il modello nuovo lo supporta
+ *   (`configured_effort.filter(|effort| supported.iter().any(...))`), altrimenti il `default_reasoning_effort` del modello.
+ *   Il nostro in più: il predefinito vale solo se non costa più di quello scelto — per GLM 5.3 Flash il catalogo dichiara
+ *   `default_effort: max` — altrimenti il più vicino più debole, la regola del 24/09 qui sopra (Hermes `clamp_effort`).
+ *   «none» su un modello non obbligatorio è «spento», non un livello: resta com'è.
+ */
+export function reasoningAlCambioDiModello(reasoning, capability) {
+  const regole = capabilityReasoning(capability);
+  if (!regole || !reasoning || typeof reasoning !== 'object' || Array.isArray(reasoning)) return reasoning;
+  const effort = typeof reasoning.effort === 'string' ? reasoning.effort : null;
+  if (!effort || !SCALA_RAGIONAMENTO.includes(effort)) return reasoning;
+  if (effort === 'none' && regole.mandatory !== true) return reasoning;
+  const supportati = Array.isArray(regole.supportedEfforts)
+    ? regole.supportedEfforts.filter((l) => typeof l === 'string' && l !== 'none' && SCALA_RAGIONAMENTO.includes(l))
+    : [];
+  if (!supportati.length || supportati.includes(effort)) return reasoning;
+  const costo = (livello) => SCALA_RAGIONAMENTO.indexOf(livello);
+  const predefinito = typeof regole.defaultEffort === 'string' && supportati.includes(regole.defaultEffort) ? regole.defaultEffort : null;
+  const livello = predefinito && costo(predefinito) <= costo(effort) ? predefinito : livelloRagionamentoSenzaSalire(effort, supportati);
+  return livello ? { ...reasoning, effort: livello } : reasoning;
 }
 
 /**
@@ -845,7 +959,12 @@ function creaFetchInstradata(fetchDiRete = fetch, { risolvi = risolviDestinazion
    * variabile locale ricorderebbe per un solo giro e il 400 tornerebbe a ogni turno. Chi non la
    * passa (nessuno oggi, oltre ai test) ottiene il comportamento di prima, byte per byte.
    */
-  memoriaAttrezzi = { rifiutati: false } } = {}) {
+  memoriaAttrezzi = { rifiutati: false },
+  /* L1 1.1 (26/10/2026): la forma dei messaggi di sistema per ogni modello locale, decisa una volta dalla sonda o da un rifiuto.
+     Di serie quella del processo, come la memoria del motore: un modello si sonda una volta sola finché il server vive. */
+  formeDeiSistemi = FORME_DEI_SISTEMI,
+  /* L1 1.3, revisione blocco 5 (A-4): giro senza la persona davanti ⇒ sul rifiuto del motore locale si riassume, mai si riapre. */
+  senzaPersona = false } = {}) {
   if (!dipendenze) return fetchDiRete;
   return async function fetchMultiProvider(url, opzioni = {}) {
     let corpo = null;
@@ -890,7 +1009,12 @@ function creaFetchInstradata(fetchDiRete = fetch, { risolvi = risolviDestinazion
          coprirebbe il motivo vero con «non configurato» */
       if (erroreRisoluzione?.code !== 'LOCAL_RUNTIME_NOT_READY' || erroreRisoluzione?.ospite === true || typeof dipendenze.avviaLocale !== 'function') throw erroreRisoluzione;
       const { modelloRemoto } = separaFonteModello(corpo.model);
-      await dipendenze.avviaLocale(modelloRemoto); // ⛔ se l'avvio stesso fallisce, il SUO errore (non quello generico non acceso) arriva a chi ha chiamato
+      const avviato = await dipendenze.avviaLocale(modelloRemoto); // ⛔ se l'avvio stesso fallisce, il SUO errore (non quello generico non acceso) arriva a chi ha chiamato
+      /* Router mode (27/10/2026, decision 2): the line in the chat when today's engine took a model the router could not load. Today's
+         supervisor never says `ripiegoRouter`: with the switch OFF nothing is said. */
+      if (avviato?.ripiegoRouter?.modelId && typeof onAvviso === 'function') {
+        try { await onAvviso(avvisoRipiegoRouter(avviato.ripiegoRouter)); } catch { /* the line is news: it never stops the answer */ }
+      }
       destinazione = risolvi(corpo.model, dipendenze); // dopo un avvio riuscito questo non deve più lanciare: se lancia ancora, è un errore vero da mostrare, non da inghiottire
     }
     /*
@@ -999,7 +1123,53 @@ function creaFetchInstradata(fetchDiRete = fetch, { risolvi = risolviDestinazion
     /* Riga del bugfixer (10/10/2026): i template jinja dei motori locali (`llama-server --jinja`: Mistral, Gemma) alzano
        «Conversation roles must alternate» davanti a due `user` di fila (l'avviso C06 prima del messaggio della persona, o due
        messaggi in coda dopo un risultato). Qui, e solo qui, si uniscono — come Hermes; la storia resta com'è (`utenti-uniti.mjs`). */
-    if (motoreLocale && Array.isArray(adattata.corpo?.messages)) adattata.corpo = { ...adattata.corpo, messages: conUtentiUniti(adattata.corpo.messages) };
+    /* ⭐ L1 1.1 (owner 26/10/2026, «never break user space»; `kernel/sistema-piegato.mjs` per il perché e le misure): i system si
+       piegano SOLO per un modello il cui template li rifiuta o li perde. La sonda gira una volta per modello sul motore che lo
+       serve (`POST /apply-template`, non genera); dove non si può fare (Ollama, LM Studio, un motore dell'app senza la rotta) la
+       forma resta «sconosciuta» e copre la rete reattiva più sotto. Un errore di RETE della sonda non si ricorda: riprova al giro
+       dopo. Per ogni modello che regge i system la richiesta resta byte per byte quella di prima. */
+    const chiaveForma = `${destinazione.fonte}|${destinazione.modelloRemoto}`;
+    let formaDeiSistemi = motoreLocale ? formeDeiSistemi.get(chiaveForma) : undefined;
+    if (motoreLocale && formaDeiSistemi === undefined && Array.isArray(adattata.corpo?.messages)) {
+      /* La sonda passa da una porta SUA (`applicaTemplateLocale`/`applicaTemplateOspite`, date da `server.mjs`), non da `chiamaLocale`:
+         chi non la dà (i motori finti delle prove, un ospite più vecchio) non vede nessuna richiesta in più, e la forma resta
+         «sconosciuta» come prima di questa riga. */
+      const via = destinazione.ospite ? dipendenze.applicaTemplateOspite : destinazione.locale ? dipendenze.applicaTemplateLocale : null;
+      if (typeof via !== 'function') {
+        formeDeiSistemi.set(chiaveForma, 'sconosciuta');
+        formaDeiSistemi = 'sconosciuta';
+      } else {
+        /* ⛔ Revisione blocco 2 (R2, R3): la sonda condivisa girava col segnale della PRIMA richiesta. Fermare la seconda non la
+           fermava (aspettava la sonda della prima), e fermare la prima faceva partire la seconda senza piega (con gpt-oss: tre system
+           invece di uno, persi in silenzio). Ora la sonda ha il SUO tempo massimo, e ogni richiesta l'aspetta col PROPRIO Stop. */
+        /* Revisione avversaria 26/10: S1, due richieste insieme sullo stesso modello facevano due sonde ⇒ una sola, condivisa;
+           S2, un 503 (motore occupato) o un 5xx di passaggio si ricordava «sconosciuta» per tutto il processo ⇒ si ricorda soltanto
+           ciò che dice qualcosa sul template: la forma trovata, o una rotta che non c'è (404/405). Il resto si riprova al giro dopo. */
+        let sonda = SONDE_IN_VOLO.get(chiaveForma);
+        if (!sonda) {
+          sonda = (async () => {
+            let ricordare = true;
+            const forma = await sondaFormaDeiSistemi(async (messages, tools) => {
+              let risposta;
+              try {
+                risposta = await via({ method: 'POST', signal: AbortSignal.timeout(SONDA_DEI_SISTEMI_MS), headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages, tools }) });
+              } catch (errore) { ricordare = false; throw errore; }
+              if (risposta.ok) return { ok: true, prompt: (await risposta.json().catch(() => ({})))?.prompt };
+              const delTemplate = eRifiutoDelTemplate(await leggiDettaglioRifiuto(risposta));
+              if (!delTemplate && risposta.status !== 404 && risposta.status !== 405) ricordare = false;
+              return { ok: false, rifiutoDelTemplate: delTemplate };
+            });
+            if (forma || ricordare) formeDeiSistemi.set(chiaveForma, forma ?? 'sconosciuta');
+            return forma ?? 'sconosciuta';
+          })().finally(() => SONDE_IN_VOLO.delete(chiaveForma));
+          SONDE_IN_VOLO.set(chiaveForma, sonda);
+        }
+        formaDeiSistemi = await aspettaOFerma(sonda, opzioni.signal);
+      }
+    }
+    const conLaFormaGiusta = (messaggi, forma) => conUtentiUniti(forma === 'piegata' ? piegaMessaggiDiSistema(messaggi) : messaggi);
+    const messaggiPrimaDellaPiega = Array.isArray(adattata.corpo?.messages) ? adattata.corpo.messages : null;
+    if (motoreLocale && messaggiPrimaDellaPiega) adattata.corpo = { ...adattata.corpo, messages: conLaFormaGiusta(messaggiPrimaDellaPiega, formaDeiSistemi) };
     const portavaAttrezzi = Array.isArray(adattata.corpo?.tools) && adattata.corpo.tools.length > 0;
     const corpoSenzaAttrezzi = () => {
       const { tools: _tools, tool_choice: _toolChoice, ...resto } = adattata.corpo;
@@ -1080,15 +1250,74 @@ function creaFetchInstradata(fetchDiRete = fetch, { risolvi = risolviDestinazion
       })), destinazione.fonte);
     }
 
+    /* ⭐ L1 1.1, la rete reattiva: se il template rifiuta la richiesta (sonda impossibile, o un template che la sonda non ha
+       previsto) si riprova UNA volta piegata, e la forma si ricorda solo se quel tentativo riesce. Un altro 400/500 torna com'era,
+       col suo dettaglio, a chi lo legge sotto (contesto pieno, attrezzi rifiutati). */
+    const spedisciPiegandoSeServe = async (corpo) => {
+      const risposta = await spedisci(corpo);
+      if (!motoreLocale || formaDeiSistemi === 'piegata' || !messaggiPrimaDellaPiega || (risposta.status !== 400 && risposta.status !== 500)) return risposta;
+      /* Revisione avversaria 26/10 (N1): un errore che non viene dal template torna INTERO a chi lo legge sotto, non tagliato ai
+         2.000 byte; revisione blocco 2 (R1): letto una volta sola, senza copie (vedi `leggiCorpoDErrore`). */
+      const { testo: dettaglio } = await leggiCorpoDErrore(risposta);
+      const comEra = () => new Response(dettaglio, { status: risposta.status, statusText: risposta.statusText, headers: risposta.headers });
+      if (!eRifiutoDelTemplate(dettaglio.slice(0, 2_000))) return comEra();
+      let piegato;
+      try { piegato = JSON.stringify({ ...JSON.parse(corpo), messages: conLaFormaGiusta(messaggiPrimaDellaPiega, 'piegata') }); } catch { return comEra(); }
+      const seconda = await spedisci(piegato);
+      if (seconda.ok) { formaDeiSistemi = 'piegata'; formeDeiSistemi.set(chiaveForma, 'piegata'); }
+      return seconda;
+    };
+
+    /*
+     * ⭐ L1 1.3 (owner 26/10/2026: «allarga, poi riassume», bozzetto approvato) — la conversazione non entra nella finestra di un
+     *   modello LOCALE di questo PC: prima di lasciare che il kernel riassuma, si chiede al server di riaprire il motore con una
+     *   finestra più grande (`src/finestra-che-cresce.mjs`: massimo addestrato, memoria, motore libero, scelta della persona) e la
+     *   STESSA richiesta riparte da capo, una volta sola. La riga di stato la scrive `onAvviso` (evento `talos.finestra-locale`).
+     *   Se non si può, `null`: l'errore sale com'era e il riassunto automatico fa quello che fa oggi.
+     * ⛔ Mai il motore dell'app (`ospite`) né Ollama/LM Studio: non li riapre questo server. E chi non dà la dipendenza (la CLI, le
+     *   prove) resta byte per byte com'era.
+     */
+    const allargaERimanda = async (pieno) => {
+      if (senzaPersona || destinazione.fonte !== 'local' || destinazione.ospite || typeof dipendenze?.allargaFinestraLocale !== 'function') return null;
+      if (RICHIESTE_GIA_ALLARGATE.has(opzioni) || !Number.isSafeInteger(pieno?.promptToken) || pieno.promptToken <= 0) return null;
+      RICHIESTE_GIA_ALLARGATE.add(opzioni);
+      let esito = null;
+      /* ⛔ Revisione blocco 4 (A-6): uno Stop durante la riapertura del motore (decine di secondi su un modello grande) ferma la richiesta
+         SUBITO, col suo motivo; la riapertura finisce da sé, e il motore resta pronto per la prossima. */
+      try {
+        opzioni?.signal?.throwIfAborted(); // già fermata: nessuna riapertura
+        const riapertura = Promise.resolve(dipendenze.allargaFinestraLocale({ modelId: destinazione.modelloRemoto, servono: pieno.promptToken }));
+        riapertura.catch(() => { /* dopo uno Stop nessuno la aspetta più: un suo guasto non deve diventare un rifiuto senza gestore */ });
+        esito = await aspettaOFerma(riapertura, opzioni?.signal);
+      }
+      catch (errore) {
+        if (opzioni?.signal?.aborted) throw errore;
+        return null;
+      }
+      if (esito?.ok !== true && esito?.motivo === 'chiedi') {
+        throw new FinestraLocaleDaChiedereError({ promptToken: pieno.promptToken, prima: esito.prima, dopo: esito.dopo, memoriaInPiu: esito.memoriaInPiu, modelId: destinazione.modelloRemoto });
+      }
+      if (esito?.ok !== true) return null;
+      if (!esito.giaAllargata && typeof onAvviso === 'function') {
+        const dati = { prima: esito.prima, dopo: esito.dopo, massimo: esito.massimo ?? null, memoriaInPiu: esito.memoriaInPiu ?? null, modello: esito.nome ?? destinazione.modelloRemoto };
+        try { await onAvviso(avvisoFinestraAllargata(esito), { riga: 'finestra-locale', dati }); } catch { /* la riga è una notizia: non ferma la risposta */ }
+      }
+      return fetchMultiProvider(url, opzioni);
+    };
+
     if (motoreLocale && portavaAttrezzi && !giaSenzaAttrezzi) {
-      const prima = await spedisci(corpoRiscritto);
+      const prima = await spedisciPiegandoSeServe(corpoRiscritto);
       if (prima.status !== 400) return prima;
       /* Il grezzo si legge ORA: dopo la riprova questa risposta non serve più, e il suo corpo
          resterebbe aperto. Serve solo come dettaglio dell'errore, mai a schermo. */
       const dettaglio = await leggiDettaglioRifiuto(prima);
       // 25/09 sera: il contesto pieno non è un rifiuto degli attrezzi — nessuna riprova senza (vedi `ContestoLocalePienoError`)
       const pieno = contestoLocalePieno(dettaglio);
-      if (pieno) throw pieno;
+      if (pieno) {
+        const rimandata = await allargaERimanda(pieno);
+        if (rimandata) return rimandata;
+        throw pieno;
+      }
       const seconda = await spedisci(corpoSenzaAttrezzi());
       if (!seconda.ok) {
         const dettaglioSecondo = await leggiDettaglioRifiuto(seconda);
@@ -1107,13 +1336,17 @@ function creaFetchInstradata(fetchDiRete = fetch, { risolvi = risolviDestinazion
       if (typeof onAvviso === 'function') await onAvviso(AVVISO_MOTORE_SENZA_ATTREZZI, { ripetibile: true });
       return seconda;
     }
-    const risposta = await spedisci(corpoRiscritto);
+    const risposta = await spedisciPiegandoSeServe(corpoRiscritto);
     /* 25/09 sera: anche senza attrezzi nel corpo (o già tolti) il contesto pieno del motore locale sale col suo codice, invece
        di arrivare al kernel come un 400 qualunque che il ripiego classificherebbe «richiesta non valida». */
     if (!motoreLocale || risposta.status !== 400) return risposta;
     const dettaglio = await leggiDettaglioRifiuto(risposta);
     const pieno = contestoLocalePieno(dettaglio);
-    if (pieno) throw pieno;
+    if (pieno) {
+      const rimandata = await allargaERimanda(pieno);
+      if (rimandata) return rimandata;
+      throw pieno;
+    }
     return new Response(dettaglio, { status: risposta.status, statusText: risposta.statusText, headers: risposta.headers });
   };
 }
@@ -1157,11 +1390,16 @@ async function inviaCloudProtetta(rete, url, opzioni) {
  */
 const CONDIZIONI_PRIMA_DELLA_RETE = new Set([
   'LOCAL_RUNTIME_NOT_CONFIGURED', 'LOCAL_RUNTIME_NOT_READY',
+  /* 26/10/2026: il socket del motore dell'app non risponde (D-0146-1). Nessuna generazione è partita: nessun consumo, nessun fornitore
+     di riserva — si dice, e al prossimo invio l'app ha già rifatto il motore. */
+  'LOCAL_GUEST_UNREACHABLE',
   /* 18/10/2026: il motore dell'app è occupato dalla chat (un giro alla volta). Arriva DALLA rete del socket, ma prima di ogni
      generazione: nessun consumo, e un fornitore di riserva non è la risposta — si dice e si riprova quando la chat ha finito. */
   'LOCAL_ENGINE_BUSY',
   'LOCAL_MODEL_CHANGED', // 18/10/2026: nell'app è aperto un altro modello (409 del Mobile), si sceglie di nuovo
   'RUNTIME_PROCESS_FAILED', 'RUNTIME_OUT_OF_MEMORY', 'RUNTIME_ARCH_UNSUPPORTED', 'RUNTIME_HEALTH_TIMEOUT', 'RUNTIME_ALREADY_RUNNING', 'RUNTIME_START_CANCELLED',
+  /* 27/10/2026 (G-R6): the router mode's engine could not be stopped and nothing was loaded beside it — the memory must be freed first */
+  'RUNTIME_ROUTER_NOT_STOPPED',
   'RUNTIME_NOT_READY', 'RUNTIME_MISCONFIGURED', 'RUNTIME_INVALID',
   'PROVIDER_RUNTIME_INVALID', 'MODEL_DESTINATION_INVALID',
   'PROVIDER_ENDPOINT_NOT_CHOSEN', // owner 14/10/2026: l'indirizzo della chiave non è ancora scelto (`model-destination.mjs`)
@@ -1365,6 +1603,10 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
   sorvegliaCorpo = sorvegliaCorpoDiGenerazione,
   /* Revisione O1 (21/10/2026): la chiave d'instradamento della sessione (vedi `creaFetchInstradata`), già ridotta a impronta. */
   chiaveDiSessione = null,
+  /* L1 1.3, revisione blocco 5 (A-4; owner 26/10 notte): un giro senza la persona davanti (automazione, passo di Workflow, sotto-agente).
+     Sul rifiuto del motore locale NON si riapre e NON si chiede: si riassume come prima. Chi cresce senza la persona è il registro, alla
+     soglia, e solo se nessun'altra conversazione usa il motore. */
+  senzaPersona = false,
 } = {}) {
   const catena = validaFallbackProviders(fallbackProviders);
   /*
@@ -1376,7 +1618,7 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
    *   perché l'adattatore non riceve nessun handle di sessione. È il confine di questa riga.
    */
   const memoriaAttrezzi = { rifiutati: false };
-  if (!providerStore && !catena.length) return creaFetchInstradata(fetchDiRete, { risolvi, dipendenze, onAvviso, inattivitaGenerazioneMs, sorvegliaCorpo, memoriaAttrezzi });
+  if (!providerStore && !catena.length) return creaFetchInstradata(fetchDiRete, { risolvi, dipendenze, onAvviso, inattivitaGenerazioneMs, sorvegliaCorpo, memoriaAttrezzi, senzaPersona });
   if (!dipendenze || (catena.length && (!providerStore || typeof onCambioFornitore !== 'function' || typeof onConsumoFornitore !== 'function'))) {
     throw new OwnerRuntimeUnavailableError('To continue with another provider, access, chat notices and usage recording are needed.', 'PROVIDER_FALLBACK_NOT_CONNECTED');
   }
@@ -1396,7 +1638,7 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
        panchine, rotazione, ripieghi): non ha chiavi, e la sua strada di pagamento non si cambia mai da soli. Va diritto
        all'instradamento, e i suoi guasti tornano col codice del piano (`erroreDelPiano`) invece che riclassificati. */
     if (record?.auth?.tipo === 'oauth-pkce') {
-      try { return await conPrimoPezzo(await creaFetchInstradata(fetchDiRete, { risolvi, dipendenze, onAvviso, inattivitaGenerazioneMs, sorvegliaCorpo, memoriaAttrezzi })(url, opzioni)); }
+      try { return await conPrimoPezzo(await creaFetchInstradata(fetchDiRete, { risolvi, dipendenze, onAvviso, inattivitaGenerazioneMs, sorvegliaCorpo, memoriaAttrezzi, senzaPersona })(url, opzioni)); }
       catch (guasto) {
         const errore = erroreDelPiano(guasto);
         /* 18/10/2026, custode nell'app (`chatgpt-accesso-ospite.mjs`): un 401 vuol dire che il token spinto dall'app non vale più. r4 non
@@ -1577,7 +1819,7 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
     };
     const instradata = creaFetchInstradata(rete, { risolvi, dipendenze: {
       ...dipendenze, leggiChiave: p => p === fonte && scelta ? scelta.chiave : dipendenze.leggiChiave(p),
-    }, onAvviso, instradaOpenRouter: true, inattivitaGenerazioneMs, sorvegliaCorpo, memoriaAttrezzi, chiaveDiSessione });
+    }, onAvviso, instradaOpenRouter: true, inattivitaGenerazioneMs, sorvegliaCorpo, memoriaAttrezzi, chiaveDiSessione, senzaPersona });
     try {
       const risposta = await instradata(url, opzioni);
       /* ⛔ BUG-25 — il rifiuto-credito CON scadenza dichiarata NON si lancia come eccezione: si
@@ -1735,6 +1977,8 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
           /* ⛔ 25/09/2026 sera — e nemmeno il contesto pieno del motore locale: non è transitorio, un fornitore di riserva non
              c'entra, e mascherato da «richiesta non valida» il kernel non potrebbe più comprimere (`ContestoLocalePienoError`). */
           if (error?.code === 'LOCAL_CONTEXT_EXCEEDED') throw error;
+          // L1 1.3: la carta «Chiedimi» della finestra locale piena — la decide la persona, non un fornitore di riserva
+          if (error?.code === 'LOCAL_WINDOW_ASK') throw error;
           // riverifica del bugfixer (CP-REV-02): anche un 429 LANCIATO (gli SDK nativi) che dice «too many tokens» è traffico
           const statoLanciato = error?.stato ?? error?.statusCode;
           const classificazione = contesto.errore ?? limiteNonContesto(classificaGuasto(error, statoLanciato), Number(statoLanciato));
@@ -2065,6 +2309,8 @@ export function createOwnerRuntimeAdapter({
         /* O1: l'id della sessione non esce in chiaro verso il fornitore, solo la sua impronta (64 caratteri, sotto i 256 di OpenRouter) */
         chiaveDiSessione: typeof input?.checkpointSessionId === 'string' && input.checkpointSessionId
           ? `talos-s-${createHash('sha256').update(input.checkpointSessionId).digest('hex')}`.slice(0, 64) : null,
+        /* L1 1.3, revisione blocco 5 (A-4): automazione, passo di Workflow o sotto-agente ⇒ sul rifiuto del motore locale si riassume. */
+        senzaPersona: input?.senzaPersona === true,
       });
       const fetchConImmagini = async (url, init = {}, successiva = fetchInstradata) => {
         // BC-48 C-bis: GLM via OpenRouter usa cache implicita (fonti nel rapporto
@@ -2078,13 +2324,20 @@ export function createOwnerRuntimeAdapter({
           if (typeof corpo?.model === 'string' && separaFonteModello(corpo.model).fonte === 'openrouter'
               && /^z-ai\/glm-/.test(separaFonteModello(corpo.model).modelloRemoto) && Array.isArray(corpo.messages)) {
             let cambiato = false;
+            /* Owner 28/10/2026 (cache, punto 1): ora il nucleo mette fino a quattro marcatori, su ogni ruolo, da un'ora o da cinque minuti.
+               Si toglie SOLO il marcatore nella forma che produce il nucleo; un pezzo di testo solo torna la stringa che era. */
+            /* La forma del nucleo (`conMarcatoreDiCache`): il marcatore sta SOLO sull'ultimo pezzo, e quel pezzo è un testo o
+               un'immagine senza altri campi. Un blocco esteso, un marcatore altrove o una direttiva estesa non sono nostri e restano. */
+            const eNostro = (c) => c?.type === 'ephemeral' && (Object.keys(c).length === 1 || (Object.keys(c).length === 2 && c.ttl === '1h'));
+            const parteDelNucleo = (p) => Object.keys(p).length === 3 && ((p.type === 'text' && typeof p.text === 'string') || (p.type === 'image_url' && !!p.image_url));
             const messages = corpo.messages.map(m => {
-              const p = Array.isArray(m?.content) && m.content.length === 1 ? m.content[0] : null;
-              if (m?.role !== 'system' || p?.type !== 'text' || typeof p.text !== 'string'
-                  || Object.keys(p).length !== 3 || p.cache_control?.type !== 'ephemeral'
-                  || p.cache_control.ttl !== '1h' || Object.keys(p.cache_control).length !== 2) return m;
+              const c = m?.content;
+              const ultimo = Array.isArray(c) && c.length > 0 ? c[c.length - 1] : null;
+              if (!ultimo || typeof ultimo !== 'object' || !eNostro(ultimo.cache_control) || !parteDelNucleo(ultimo)
+                  || c.slice(0, -1).some(p => p && typeof p === 'object' && Object.hasOwn(p, 'cache_control'))) return m;
               cambiato = true;
-              return { ...m, content: p.text };
+              const { cache_control: _c, ...resto } = ultimo;
+              return { ...m, content: c.length === 1 && resto.type === 'text' ? resto.text : [...c.slice(0, -1), resto] };
             });
             if (cambiato) init = { ...init, body: JSON.stringify({ ...corpo, messages }) };
           }
@@ -2145,7 +2398,8 @@ export function createOwnerRuntimeAdapter({
       if (!FONTI_MODELLO.includes(provider) || typeof model !== 'string' || !model.trim() || !Array.isArray(messages) || !Number.isSafeInteger(maxOutputTokens) || maxOutputTokens < 1) fail('CTX_MODEL_INVALID', 'Invalid summary request.');
       if (!destinazioneModelloDeps) fail('CTX_TRANSPORT_UNAVAILABLE', 'The model transport is not connected to the compactor.');
       signal?.throwIfAborted();
-      const routed = creaFetchMultiProvider(fetchDiRete, { dipendenze: destinazioneModelloDeps });
+      /* revisione blocco 6 (A-R5): il riassunto del motore del contesto è una chiamata di servizio — mai una riapertura, mai una carta */
+      const routed = creaFetchMultiProvider(fetchDiRete, { dipendenze: destinazioneModelloDeps, senzaPersona: true });
       const key = provider === 'openrouter' ? destinazioneModelloDeps.leggiChiave?.('openrouter') : null;
       if (provider === 'openrouter' && !key) fail('CTX_TOKEN_AUTH', 'The key of the selected provider is not available.');
       /*

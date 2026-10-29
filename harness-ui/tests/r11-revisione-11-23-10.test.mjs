@@ -28,6 +28,9 @@ import { attendiScritture } from '../src/session-store.mjs';
 import { TaskCatalogError } from '../src/task-catalog.mjs';
 import { cartellaDiProva } from './aiuto/cartelle-di-prova.mjs';
 import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
+/* 28/10/2026 (riverifica del blocco 13, RIV13-1): la finta conta il TESTO di ogni messaggio, anche di uno a pezzi (marcato per la cache), che
+   prima valeva 0: spostato il marcatore, la premessa «il fornitore rifiuta» cambiava senza che il nucleo facesse niente di diverso. */
+const corpoOnesto = (corpoJson) => { const c = JSON.parse(corpoJson); return { ...c, messages: c.messages.map((m) => (Array.isArray(m.content) && m.content.every((p) => p?.type === 'text') ? { ...m, content: m.content.map((p) => p.text).join('') } : m)) }; };
 
 const MODELLO = 'z-ai/glm-5.3-flash';
 
@@ -39,7 +42,7 @@ function fornitore({ massimo = null, pesante = 0, scala = 1, conAttrezzi = true,
   const conto = (corpo) => Math.round((stima(corpo.messages) + (conAttrezzi ? compattazione.stimaDegliAttrezzi(corpo.tools) : 0)
     + corpo.messages.filter((m) => m.role === 'tool').reduce((n, m) => n + Math.round(String(m.content ?? '').length * pesante), 0)) * scala);
   const fetchDiRete = async (_u, o) => {
-    const corpo = JSON.parse(o.body);
+    const corpo = corpoOnesto(o.body);
     if (!corpo.tools?.length) {
       conti.riassunti += 1;
       return Response.json({ choices: [{ index: 0, message: { role: 'assistant', content: '## Riassunto\nbreve.' }, finish_reason: 'stop' }], usage: { prompt_tokens: 10, completion_tokens: 10 } });
@@ -92,7 +95,7 @@ test('R11-3 — la riscrittura sul rifiuto non tocca la storia del kernel: un gi
   for (const rifiutaSempre of [false, true]) {
     const base = fornitore({ massimo: 8_192 });
     const rete = rifiutaSempre ? { ...base, fetchDiRete: async (u, o) => {
-      const corpo = JSON.parse(o.body);
+      const corpo = corpoOnesto(o.body);
       if (!corpo.tools?.length) return base.fetchDiRete(u, o);
       base.conti.richieste += 1;
       return new Response(JSON.stringify({ error: { message: `This model's maximum context length is 8192 tokens. However, you requested ${Math.max(8_193, base.conto(corpo))} tokens.` } }), { status: 400, headers: { 'Content-Type': 'application/json' } });

@@ -349,7 +349,7 @@ const contienePortatoreDiShell = (c) => {
 }
 
 /* ── I segmenti, gli interpreti e i payload eseguibili (`_execution_flag_findings`) ──────────────────────────────────── */
-function* segmentiDiPrimoLivello(c) {
+export function* segmentiDiPrimoLivello(c) {
     let inizio = 0
     for (const [tipo, i, j, virg] of scansiona(c, 0, null, { commenti: true })) {
         if (tipo === 'comment' || (tipo === 'char' && virg === null && ';&|\n'.includes(c[i]))) {

@@ -83,10 +83,10 @@ export default Object.freeze({
     'Memoria e contesto': 'Memory and context', 'Sicurezza e privacy': 'Security and privacy', 'Dispositivi collegati': 'Connected devices', 'Costi e consumo': 'Cost and usage',
     // titoli delle righe
     'Animazione risposta': 'Reply animation', 'Animazioni interfaccia': 'Interface animations', 'Apertura del pulsante +': 'The “+” button opens',
-    'Bagliore': 'Glow', 'Chat a tutta larghezza': 'Full-width chat', 'Scadenza delle domande': 'Question timeout', 'Domande di TALOS': 'TALOS questions', 'Nessuna': 'None', '1 minuto': '1 minute', '5 minuti': '5 minutes', '10 minuti': '10 minutes', 'Composer': 'Composer', 'Contrasto': 'Contrast', 'Curva': 'Easing',
+    'Bagliore': 'Glow', 'Chat a tutta larghezza': 'Full-width chat', 'Domande a tutta larghezza': 'Full-width questions', 'Scadenza delle domande': 'Question timeout', 'Domande di TALOS': 'TALOS questions', 'Nessuna': 'None', '1 minuto': '1 minute', '5 minuti': '5 minutes', '10 minuti': '10 minutes', 'Stop con agenti al lavoro': 'Stop while agents are working', 'Chiedi ogni volta': 'Ask every time', 'Ferma tutto': 'Stop everything', 'Ferma solo la chat': 'Stop only the chat', 'Composer': 'Composer', 'Contrasto': 'Contrast', 'Curva': 'Easing',
     'Densità': 'Density', 'Densità delle liste': 'List density', 'Dimensione interfaccia': 'Interface size', 'Durata': 'Duration',
     'Feedback': 'Feedback', 'Finestre': 'Windows', 'Intensità': 'Intensity', 'Intensità UI': 'UI intensity',
-    'Intestazione immersiva': 'Immersive header', 'Lingua dei menu': 'Menu language', 'Messaggi': 'Messages', 'Modalità colore': 'Color mode',
+    'Intestazione immersiva': 'Immersive header', 'Lingua dei menu': 'Menu language', 'Lingua delle risposte e della dettatura': 'Reply and dictation language', 'Automatica': 'Automatic', 'Messaggi': 'Messages', 'Modalità colore': 'Color mode',
     'Navigazione': 'Navigation', 'Pannelli strumenti': 'Tool panels', 'Parallasse': 'Parallax', 'Profilo': 'Profile', 'Profondità': 'Depth',
     'Qualità': 'Quality', 'Renderer': 'Renderer', 'Riduci movimento': 'Reduce motion', 'Rispetta risparmio dati': 'Respect data saver',
     'Ritardo progressivo': 'Stagger', 'Scie': 'Trails', 'Sfondo animato': 'Animated background', 'Sfondo attivo': 'Background on',

@@ -29,6 +29,7 @@
 import { spawn as spawnReale } from 'node:child_process';
 import { readdirSync as readdirReale, readFileSync as readFileReale } from 'node:fs';
 import { availableParallelism, cpus } from 'node:os';
+import { percorsoPowershell, percorsoWsl } from './taskkill-di-sistema.mjs';
 
 const FINE = 'FINE';
 /* Windows: una riga «leggi» ⇒ una riga JSON [[pid, ppid, workingSetByte, tempoCpu100ns, natoMs], …] e poi FINE */
@@ -152,7 +153,7 @@ export function coreDellaMacchina({ cpusFn = cpus, parallelismoFn = availablePar
  * Un lettore persistente: un processo che a ogni riga sull'ingresso risponde con righe e poi «FINE». Si accende alla prima lettura, si
  * spegne dopo `spentoDopoMs` senza richieste, e una lettura che non torna entro `attesaMassimaMs` lo spegne (la prossima lo riaccende).
  */
-function creaLettorePersistente({ avvia, spentoDopoMs, attesaMassimaMs, impostaTimer, cancellaTimer }) {
+export function creaLettorePersistente({ avvia, spentoDopoMs, attesaMassimaMs, impostaTimer, cancellaTimer }) {
   let figlio = null, coda = '', raccolte = [], attese = [], timerSpegnimento = null;
   const spegni = () => {
     if (timerSpegnimento) { cancellaTimer(timerSpegnimento); timerSpegnimento = null; }
@@ -225,13 +226,14 @@ export function creaCampionatoreRisorse({
   const opzioniLettore = { spentoDopoMs, attesaMassimaMs, impostaTimer, cancellaTimer };
   const lettoreWindows = () => {
     if (!lettori.has('windows')) lettori.set('windows', creaLettorePersistente({ ...opzioniLettore,
-      avvia: () => spawnFn('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(COPIONE_WINDOWS, 'utf16le').toString('base64')], { windowsHide: true }) }));
+      /* G-R5 (block 10 review, 27/10/2026): PowerShell and WSL by their full path under SystemRoot, never by name */
+      avvia: () => spawnFn(percorsoPowershell(process.env.SystemRoot), ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(COPIONE_WINDOWS, 'utf16le').toString('base64')], { windowsHide: true }) }));
     return lettori.get('windows');
   };
   const lettoreWsl = (distro) => {
     const chiave = `wsl:${distro}`;
     if (!lettori.has(chiave)) lettori.set(chiave, creaLettorePersistente({ ...opzioniLettore,
-      avvia: () => spawnFn('wsl.exe', ['-d', distro, '-u', 'root', '--exec', 'sh', '-c', COPIONE_WSL], { windowsHide: true }) }));
+      avvia: () => spawnFn(percorsoWsl(process.env.SystemRoot), ['-d', distro, '-u', 'root', '--exec', 'sh', '-c', COPIONE_WSL], { windowsHide: true }) }));
     return lettori.get(chiave);
   };
   /* Il percento CPU fra questo campione e il precedente della stessa chiave; il primo non ce l'ha. */

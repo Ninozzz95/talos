@@ -1,0 +1,23 @@
+/*
+ * ⭐ Owner 27/10/2026 — I SERVER LOCALI (bozzetto approvato «Sì, così»: handoff mockup-server-locali-e-piano-2026-10-27, A1 e A2).
+ *   · la riga in chat è il separatore del contesto (`.talos-context-separator`) con il punto di stato e «Apri nel Browser»;
+ *   · la striscia «Server locali» sta sotto la barra dell'indirizzo della scheda Browser: una pastiglia per server.
+ *   Solo i token del tema Calm: chiaro e scuro vengono da soli.
+ */
+.talos-server-locale { margin-block: var(--talos-space-lg); }
+.talos-server-locale > .talos-context-separator { margin-block: 0; }
+.talos-server-locale .talos-context-separator > span { display: inline-flex; align-items: center; gap: var(--talos-space-xs); color: var(--talos-text); }
+.talos-server-locale[data-stato="fermato"] .talos-context-separator > span { color: var(--talos-muted); }
+.talos-server-locale__porta { font-family: var(--talos-font-mono); font-variant-numeric: tabular-nums; }
+.talos-server-locale__sotto { color: var(--talos-muted); }
+
+.talos-browser__server { display: flex; align-items: center; gap: var(--talos-space-sm); flex-wrap: wrap; padding: var(--talos-space-xs) var(--talos-space-md) 0; }
+.talos-browser__server[hidden] { display: none; }
+.talos-browser__server-etichetta { color: var(--talos-muted); font-size: var(--talos-font-size-xs); }
+.talos-server-chip { display: inline-flex; align-items: center; gap: var(--talos-space-xs); height: 28px; padding: 0 10px; border: 1px solid var(--talos-border);
+  border-radius: var(--talos-radius-pill); background: transparent; color: var(--talos-text); font-size: var(--talos-font-size-xs); cursor: pointer; }
+.talos-server-chip__porta { font-family: var(--talos-font-mono); font-variant-numeric: tabular-nums; }
+.talos-server-chip__nome { color: var(--talos-muted); }
+.talos-server-chip[data-stato="fermato"] { color: var(--talos-muted); cursor: default; border-style: dashed; }
+.talos-server-chip:not([data-stato="fermato"]):hover { border-color: var(--talos-accent); }
+.talos-server-chip:focus-visible { outline: 2px solid var(--talos-accent); outline-offset: 2px; }

@@ -4,7 +4,7 @@ import { setTimeout as wait } from 'node:timers/promises';
 import { createLlamaBinaryProbe } from './llama-binary-probe.mjs';
 import { createServer } from 'node:net';
 import { basename, dirname, isAbsolute, join } from 'node:path';
-import { createProcessPolicy } from './process-policy.mjs';
+import { createProcessPolicy, DEFAULT_ENV_ALLOWLIST } from './process-policy.mjs';
 import { mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { leggiArchitetturaGguf, readGgufHeader } from './gguf-header.mjs';
 import { RIGA_ARCHITETTURA_SCONOSCIUTA, buildDelMotore, libreriaDelMotorePresente, motoreConosceArchitettura, testoArchitetturaSconosciuta } from './motore-architetture.mjs';
@@ -222,6 +222,16 @@ export function supportaSpeculativaNgram(testoAiuto) {
   return Boolean(riga && riga[0].includes('ngram-mod'));
 }
 
+/**
+ * A2-4 (owner 26/10/2026, «Sì, subito»; Ollama `llm/llama_server.go:391`): il motore non scarica mai niente da solo — «Offline mode:
+ * forces use of cache, prevents network access» (llama.cpp `common/arg.cpp:3973-3978`).
+ * ⛔ Revisione blocco 5 (A-5): dalla VARIABILE `LLAMA_ARG_OFFLINE` (`.set_env`, stessa riga), non dall'opzione. Un binario più vecchio
+ *   morirebbe con «unknown argument» sull'opzione, e per saperlo serviva interrogare `--help` a ogni binario anche con la speculativa
+ *   spenta; la variabile invece la legge solo chi la conosce (`common/arg.cpp:787-793`, «1» è vera per `is_truthy`, `:1337`) e un
+ *   binario vecchio la ignora. Passa dall'elenco dell'ambiente della politica dei processi, che senza la toglierebbe.
+ */
+export const AMBIENTE_OFFLINE = Object.freeze({ LLAMA_ARG_OFFLINE: '1' });
+
 /** `llama-fit-params` sta nella stessa cartella di `llama-server`, con la stessa estensione. */
 export function percorsoFitter(binaryPath) {
   if (typeof binaryPath !== 'string' || binaryPath.trim() === '') return null;
@@ -315,10 +325,17 @@ export function createLlamaServerSupervisor({
    * `'auto'` = si accende se il binario la offre; `'off'` = mai.
    */
   speculativaNgram = 'auto',
+  /**
+   * Revisione blocco 4 (A-7, 26/10/2026): quanto aspettare che il processo fermato sia DAVVERO uscito prima di dire «fermo» — sennò il
+   * motore nuovo (la finestra che cresce, il cambio di modello) parte mentre il vecchio tiene ancora la sua memoria sulla scheda.
+   * Oltre, si prosegue e lo si dice nel registro.
+   */
+  attesaChiusuraMs = 5_000,
 } = {}) {
   if (typeof binaryPath !== 'string' || binaryPath.trim() === '') throw new LlamaServerSupervisorError('binaryPath is required', 'RUNTIME_MISCONFIGURED');
   if (fallbackBinaryPath !== null && (typeof fallbackBinaryPath !== 'string' || fallbackBinaryPath.trim() === '')) throw new LlamaServerSupervisorError('fallbackBinaryPath must be a non-empty string', 'RUNTIME_MISCONFIGURED');
-  const processPolicy = createProcessPolicy({ allowedExecutables: [binaryPath, ...(fallbackBinaryPath ? [fallbackBinaryPath] : [])], spawnFn: spawnImpl });
+  const processPolicy = createProcessPolicy({ allowedExecutables: [binaryPath, ...(fallbackBinaryPath ? [fallbackBinaryPath] : [])], spawnFn: spawnImpl,
+    envAllowlist: [...DEFAULT_ENV_ALLOWLIST, ...Object.keys(AMBIENTE_OFFLINE)] }); // A2-4, A-5: la variabile dell'offline arriva al motore
   const probeBinary = sondaBinario ?? createLlamaBinaryProbe({ onObservation: onProbe });
   if (typeof probeBinary !== 'function') throw new LlamaServerSupervisorError('sondaBinario must be a function', 'RUNTIME_MISCONFIGURED');
   let pendingStart = null;
@@ -375,6 +392,10 @@ export function createLlamaServerSupervisor({
   }
 
   function checkStart(operation) {
+    /* Router mode (27/10/2026): the router supervisor asks for today's per-model choices with its OWN operation (its own stop and
+       cancellation), which is never this supervisor's `pendingStart`. Only that caller passes `check`; every start of this supervisor
+       goes on as before. */
+    if (typeof operation.check === 'function') { operation.check(); return; }
     if (pendingStart !== operation || operation.controller.signal.aborted) throw cancelled();
   }
 
@@ -384,15 +405,48 @@ export function createLlamaServerSupervisor({
     await Promise.resolve().then(() => modelStore.unlock(operation.modelId)).catch(() => {});
   }
 
-  async function speculativaDisponibile(binario, operation) {
-    checkStart(operation);
-    if (speculativaNgram === 'off') return false;
+  async function aiutoDelBinario(binario, operation) {
     if (!aiutoPerBinario.has(binario)) {
       const help = await probeBinary(binario, ['--help'], 10_000, { signal: operation.controller.signal });
       checkStart(operation); // A cancelled observation must never populate the cache.
       aiutoPerBinario.set(binario, help);
     }
-    return supportaSpeculativaNgram(aiutoPerBinario.get(binario) ?? '');
+    return aiutoPerBinario.get(binario) ?? '';
+  }
+
+  async function speculativaDisponibile(binario, operation) {
+    checkStart(operation);
+    if (speculativaNgram === 'off') return false;
+    return supportaSpeculativaNgram(await aiutoDelBinario(binario, operation));
+  }
+
+  /*
+   * A-6, revisione blocco 5: il motore fermato da `stop()` e non ancora uscito. `stop()` non lo aspetta più — allo spegnimento dell'app
+   * `server.mjs` ferma i motori PRIMA del flush del registro, e il guscio uccide il server 5 s dopo l'avviso (`desktop/main.mjs:188`):
+   * un'attesa qui poteva mangiarsi le ultime scritture della conversazione. Lo aspetta invece il prossimo `start()`, perché il motore
+   * nuovo non parta con la memoria della scheda ancora presa dal vecchio (A-7).
+   */
+  let fermatoNonUscito = null;
+
+  /** A-7: il processo di `entry` è uscito (vero) o l'attesa è scaduta (falso). */
+  function aspettaChiusura(entry) {
+    if (!entry?.child || entry.closed || typeof entry.child.once !== 'function') return Promise.resolve(true);
+    return new Promise((risolvi) => {
+      const scaduta = setTimeout(() => {
+        emitLog('stderr', `[talos] the stopped engine has not exited after ${attesaChiusuraMs} ms: going on\n`);
+        risolvi(false);
+      }, attesaChiusuraMs);
+      scaduta.unref?.();
+      entry.child.once('close', () => { clearTimeout(scaduta); risolvi(true); });
+    });
+  }
+
+  /** Revisione blocco 4 (A-2): il modello è a esperti (MoE)? Dall'intestazione GGUF; se non si legge, no (strada di sempre). */
+  async function modelloAEsperti(modelPath) {
+    try {
+      const intestazione = await readGgufHeader(modelPath);
+      return Number.isSafeInteger(intestazione?.expertCount) && intestazione.expertCount > 1;
+    } catch { return false; }
   }
 
   /**
@@ -599,27 +653,12 @@ export function createLlamaServerSupervisor({
     return { variante, dispositivi: variante === motoreIniziale.variante ? [...motoreIniziale.dispositivi] : [], ripiego: null, proposta: null };
   }
 
-  async function lanciaProcesso({ modelId, modelPath, selectedPort, contextLength, finestraDiRiserva, binario, ngl, apiKey, operation }) {
-    checkStart(operation);
-    const entry = {
-      child: null,
-      operation,
-      apiKey,
-      modelId: modelId ?? null,
-      modelPath,
-      port: selectedPort,
-      baseUrl: `http://${LOOPBACK}:${selectedPort}`,
-      state: 'loading',
-      startedAt: now().toISOString(),
-      failure: null,
-      closed: false,
-      ultimeRighe: [],
-      residuoStderr: '',
-      binario,
-    };
-    current = entry;
-    operation.entry = entry;
-    state = 'loading';
+  /*
+   * Router mode (27/10/2026): today's per-model choices, in ONE place. `lanciaProcesso` uses them for its own process, and the router
+   * supervisor (`llama-router-supervisor.mjs`) uses the very same function for the model's section of the preset — the brief's «the
+   * same functions reused». Nothing changed in the choices: this is the body that sat inline in `lanciaProcesso` until today.
+   */
+  async function sceltePerIlModello({ modelPath, contextLength, finestraDiRiserva, binario, ngl, operation }) {
     const conOffload = Number.isInteger(ngl) && ngl > 0;
     /*
      * ⛔ Le domande al binario si fanno PRIMA di accenderlo, e il loro esito
@@ -661,19 +700,36 @@ export function createLlamaServerSupervisor({
         checkStart(operation);
       }
     }
-    operation.finestraNostra = finestraScelta ? finestraScelta.finestra : null; // T4: solo una finestra scelta da noi si ritenta
-    if (finestraScelta) emitLog('stderr', `[talos] context window ${finestraScelta.finestra} — ${finestraScelta.perche}\n`);
-    if (conOffload && !ngl99) emitLog('stderr', '[talos] GPU layers: chosen by --fit (a mixture-of-experts model that does not fit whole at this window)\n');
-    emitLog('stderr', `[talos] engine ${motore.variante}${motore.ripiego ? ` (fallback from ${motore.ripiego.da})` : ''}: ${binario}\n`);
-    emitLog('stderr', `[talos] KV cache ${leve.kv.tipo} — ${leve.kv.perche}\n`);
-    emitLog('stderr', `[talos] n-gram speculative decoding: ${leve.speculativa ? 'on (--spec-type ngram-mod)' : 'not offered by this binary'}\n`);
-    checkStart(operation); // Log subscribers may have requested stop synchronously.
-    entry.child = processPolicy.spawn(binario, [
-      '-m', modelPath,
-      ...(modelId ? ['--alias', modelId] : []),
-      '--host', LOOPBACK,
-      '--port', String(selectedPort),
-      '--api-key', apiKey,
+    /*
+     * ⛔ Revisione blocco 4 (A-2, 26/10/2026): una finestra DETTA (la finestra che cresce, quella ricordata, il ritorno a prima) seguiva
+     *   sempre `-ngl 99`. Sul MoE dell'owner (LFM2.5-24B sulla RX 9070 XT) la finestra di serie parte con `--fit`, che sposta esperti
+     *   sulla CPU; la stessa finestra detta, con `-ngl 99`, non entrava — e nemmeno il «ritorno a prima», che lasciava il motore SPENTO.
+     *   ⇒ La stessa regola della finestra di serie: un MoE che a QUESTA finestra non sta tutto sulla scheda lascia decidere `--fit`.
+     *   llama.cpp tiene la finestra detta («context size set by user … no change») e sposta i pesi (`common/fit.cpp:455`, b11669+).
+     *   Un modello denso resta com'era (`-ngl 99`, misura del 03/09).
+     */
+    if (!finestraScelta && conOffload && Number.isInteger(contextLength) && contextLength > 0 && leve.kv.tuttoSullaScheda === false
+      && await modelloAEsperti(modelPath)) {
+      checkStart(operation);
+      ngl99 = false;
+    }
+    return { conOffload, finestraScelta, finestra, leve, ngl99 };
+  }
+
+  /** The lines that declare the choices, in today's order (they used to be emitted inline in `lanciaProcesso`). */
+  function righeDelleScelte({ conOffload, finestraScelta, leve, ngl99 }, binario, m = motore) {
+    const righe = [];
+    if (finestraScelta) righe.push(`[talos] context window ${finestraScelta.finestra} — ${finestraScelta.perche}\n`);
+    if (conOffload && !ngl99) righe.push('[talos] GPU layers: chosen by --fit (a mixture-of-experts model that does not fit whole at this window)\n');
+    righe.push(`[talos] engine ${m.variante}${m.ripiego ? ` (fallback from ${m.ripiego.da})` : ''}: ${binario}\n`);
+    righe.push(`[talos] KV cache ${leve.kv.tipo} — ${leve.kv.perche}\n`);
+    righe.push(`[talos] n-gram speculative decoding: ${leve.speculativa ? 'on (--spec-type ngram-mod)' : 'not offered by this binary'}\n`);
+    return righe;
+  }
+
+  /** The per-model arguments, in today's order and with today's comments: from `-c` to `-np 1`. */
+  function argomentiDelModello({ finestra, conOffload, ngl99, leve }, ngl, m = motore) {
+    return [
       /*
        * ⛔⛔⛔ 03/9 — QUI NON PASSAVAMO MAI `-c`, e il 27B dell'owner non
        * partiva: senza `-c` llama.cpp alloca il contesto ADDESTRATO del modello
@@ -689,7 +745,7 @@ export function createLlamaServerSupervisor({
        * `-ngl 0 --device none` (llama.cpp b10517, common/arg.cpp: «none = don't
        * use»), così un ripiego non tenta mai un offload silenzioso.
        */
-      ...(conOffload ? (ngl99 ? ['-ngl', String(ngl)] : []) : (motore.ripiego ? ['-ngl', '0', '--device', 'none'] : [])),
+      ...(conOffload ? (ngl99 ? ['-ngl', String(ngl)] : []) : (m.ripiego ? ['-ngl', '0', '--device', 'none'] : [])),
       /*
        * ⭐⭐⭐ 3/9 + BC-13 12/09 — KV cache quantizzata SIMMETRICA con `-fa 1`
        * solo con offload (+15 % generazione, +408 % prompt, misurati); il tipo
@@ -714,10 +770,46 @@ export function createLlamaServerSupervisor({
        * forma giusta: Hermes non ci arriva perché comprime dentro il giro, mai in parallelo.
        */
       '-np', '1',
+    ];
+  }
+
+  async function lanciaProcesso({ modelId, modelPath, selectedPort, contextLength, finestraDiRiserva, binario, ngl, apiKey, operation }) {
+    checkStart(operation);
+    const entry = {
+      child: null,
+      operation,
+      apiKey,
+      modelId: modelId ?? null,
+      modelPath,
+      port: selectedPort,
+      baseUrl: `http://${LOOPBACK}:${selectedPort}`,
+      state: 'loading',
+      startedAt: now().toISOString(),
+      failure: null,
+      closed: false,
+      ultimeRighe: [],
+      residuoStderr: '',
+      binario,
+    };
+    current = entry;
+    operation.entry = entry;
+    state = 'loading';
+    const scelte = await sceltePerIlModello({ modelPath, contextLength, finestraDiRiserva, binario, ngl, operation });
+    operation.finestraNostra = scelte.finestraScelta ? scelte.finestraScelta.finestra : null; // T4: solo una finestra scelta da noi si ritenta
+    for (const riga of righeDelleScelte(scelte, binario)) emitLog('stderr', riga);
+    checkStart(operation); // Log subscribers may have requested stop synchronously.
+    entry.child = processPolicy.spawn(binario, [
+      '-m', modelPath,
+      ...(modelId ? ['--alias', modelId] : []),
+      '--host', LOOPBACK,
+      '--port', String(selectedPort),
+      '--api-key', apiKey,
+      ...argomentiDelModello(scelte, ngl),
       '--jinja',
       '--metrics',
       '--props',
-    ], { cwd: isAbsolute(binario) ? dirname(binario) : process.cwd(), shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    ], { cwd: isAbsolute(binario) ? dirname(binario) : process.cwd(), shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],
+      env: { ...AMBIENTE_OFFLINE } });
     if (!entry.child || typeof entry.child.once !== 'function') throw new LlamaServerSupervisorError('spawn did not return a child process', 'RUNTIME_PROCESS_FAILED');
     attachProcess(entry);
     /*
@@ -795,7 +887,18 @@ export function createLlamaServerSupervisor({
     };
     try {
       // A prior failed process can still own its lock; do not acquire another one.
-      if (current) { chiudi(current); await unlock(current.operation); current = null; }
+      if (current) { chiudi(current); await aspettaChiusura(current); await unlock(current.operation); current = null; }
+      /* A-6: il motore che `stop()` ha fermato senza aspettarlo deve essere uscito prima che parta questo (A-7) */
+      if (fermatoNonUscito) {
+        const vecchio = fermatoNonUscito;
+        /* revisione blocco 6 (A-R4): uno `stop()` durante questa attesa (l'app che si spegne mentre la finestra cresce) non aspetta i 5 s */
+        const annullato = new Promise((risolvi) => {
+          if (operation.controller.signal.aborted) { risolvi(); return; }
+          operation.controller.signal.addEventListener('abort', risolvi, { once: true });
+        });
+        await Promise.race([aspettaChiusura(vecchio), annullato]);
+        if (vecchio.closed && fermatoNonUscito === vecchio) fermatoNonUscito = null;
+      }
       checkStart(operation);
       const selectedPort = port ?? await portAllocator();
       checkStart(operation);
@@ -894,6 +997,7 @@ export function createLlamaServerSupervisor({
       } else if (entry) {
         if (entry.child && !entry.closed) {
           try { entry.child.kill('SIGTERM'); } catch { /* already exited */ }
+          fermatoNonUscito = entry; // A-6: non si aspetta qui (spegnimento); lo aspetta il prossimo avvio (A-7)
         }
         if (current === entry) current = null;
         await unlock(entry.operation);
@@ -912,5 +1016,40 @@ export function createLlamaServerSupervisor({
 
   /** T3: la finestra vera dell'ultima volta che QUESTO modello è stato acceso, o `undefined`. */
   const finestraNota = (modelId) => finestreViste.get(modelId);
-  return Object.freeze({ start, health, request, stop, status, subscribeLogs, finestraNota });
+
+  /*
+   * Router mode (27/10/2026, `llama-router-supervisor.mjs`). Three doors for the router supervisor, none used by this supervisor's own
+   * start/stop: with the switch OFF nobody calls them.
+   *   · `sceltePerIlRouter`: today's choices for ONE model (the same `sceltePerIlModello`, `argomentiDelModello`, `righeDelleScelte`
+   *     that `lanciaProcesso` uses), asked with the router's own cancellation. The engine is the primary one: a router never runs on
+   *     the CPU fallback binary (R-03 stays a standalone matter).
+   *   · `ricordaFinestra`: the real window the router read, remembered in the same file (T3, D3).
+   *   · `attendiUscita`: the A-7 wait for the process `stop()` did not wait for, so a router load never starts beside it (A-R4: a stop
+   *     during the wait does not wait).
+   */
+  async function sceltePerIlRouter({ modelPath, contextLength, finestraDiRiserva, signal, check } = {}) {
+    const operation = { controller: { signal: signal ?? new AbortController().signal }, check: typeof check === 'function' ? check : () => {} };
+    const scelte = await sceltePerIlModello({ modelPath, contextLength, finestraDiRiserva, binario: binaryPath, ngl: gpuLayers, operation });
+    const primario = { variante: motoreIniziale.variante, ripiego: null };
+    return {
+      argomenti: argomentiDelModello(scelte, gpuLayers, primario),
+      finestra: Number.isInteger(scelte.finestra) && scelte.finestra > 0 ? scelte.finestra : null,
+      finestraNostra: scelte.finestraScelta ? scelte.finestraScelta.finestra : null,
+      righe: righeDelleScelte(scelte, binaryPath, primario),
+    };
+  }
+
+  async function attendiUscita({ signal } = {}) {
+    const vecchio = fermatoNonUscito;
+    if (!vecchio) return true;
+    const annullato = new Promise((risolvi) => {
+      if (signal?.aborted) { risolvi(); return; }
+      signal?.addEventListener('abort', risolvi, { once: true });
+    });
+    await Promise.race([aspettaChiusura(vecchio), annullato]);
+    if (vecchio.closed && fermatoNonUscito === vecchio) fermatoNonUscito = null;
+    return vecchio.closed === true;
+  }
+
+  return Object.freeze({ start, health, request, stop, status, subscribeLogs, finestraNota, sceltePerIlRouter, ricordaFinestra, attendiUscita });
 }

@@ -129,7 +129,7 @@ function ogniSecondoPredefinito(fn) {
  *   si mette in testa e basta. Senza, la carta è quella di sempre.
  */
 export function mountUserQuestionDock({ root, composer, question, onSubmit, annuncia = false, pianifica,
-  scadenzaMs = 0, adesso = () => Date.now(), ogniSecondo = ogniSecondoPredefinito, chiChiede = null }) {
+  scadenzaMs = 0, adesso = () => Date.now(), ogniSecondo = ogniSecondoPredefinito, chiChiede = null, rendiAnteprima = null }) {
   if (!root?.ownerDocument || !composer || !question?.requestId || !Array.isArray(question.questions)
     || typeof onSubmit !== 'function') throw new TypeError('Ask dock requires a real request and submit handler');
   const doc = root.ownerDocument;
@@ -297,6 +297,52 @@ export function mountUserQuestionDock({ root, composer, question, onSubmit, annu
     if (perche) fieldset.append(make('p', 'talos-question-card__why', t('chat.question.whyItMatters', { perche })));
     const field = { id, prompt, multi: prompt.multiSelect === true, options: [], other: null, textarea: null, fieldset };
     if (Array.isArray(prompt.options) && prompt.options.length) {
+      /*
+       * ⭐ ANTEPRIMA AFFIANCATA (owner 29/10/2026, bozzetto https://claude.ai/artifact/8Xchqr6NpKmAAainYtmeuK, «la prima opzione, ma fai
+       *   attenzione a formattare documenti tipo pdf md html»). Il modello manda già `options[].preview` (02/10, per la CLI): qui la
+       *   carta si divide in due SOLO quando almeno una scelta ce l'ha — a sinistra le scelte di sempre, a destra l'anteprima della scelta
+       *   sotto il puntatore o la tastiera (di serie la consigliata). Come si disegna lo decide chi monta (`rendiAnteprima`, app.js):
+       *   Markdown e codice come in chat, un documento del progetto col lettore dei file. Senza anteprime la carta è quella di prima.
+       */
+      const conAnteprime = typeof rendiAnteprima === 'function'
+        && prompt.options.some((o) => typeof o?.preview === 'string' && o.preview.trim() !== '');
+      let contenitoreScelte = fieldset;
+      let mostraAnteprima = () => {};
+      const righeConAnteprima = [];
+      if (conAnteprime) {
+        const griglia = make('div', 'talos-question-card__con-anteprima');
+        contenitoreScelte = make('div', 'talos-question-card__scelte');
+        const pannello = make('aside', 'talos-question-card__anteprima');
+        pannello.setAttribute('aria-live', 'polite');
+        const testaAnteprima = make('p', 'talos-question-card__anteprima-testa');
+        const corpoAnteprima = make('div', 'talos-question-card__anteprima-corpo');
+        pannello.append(testaAnteprima, corpoAnteprima);
+        griglia.append(contenitoreScelte, pannello);
+        fieldset.append(griglia);
+        let mostrata = -1;
+        let smonta = null;
+        mostraAnteprima = (indice) => {
+          if (indice === mostrata) return;
+          mostrata = indice;
+          try { smonta?.(); } catch { /* un'anteprima che non sa smontarsi non ferma la carta */ }
+          smonta = null;
+          const scelta = prompt.options[indice];
+          testaAnteprima.textContent = t('chat.question.previewOf', { option: String(scelta?.label || '') });
+          corpoAnteprima.replaceChildren();
+          for (const riga of righeConAnteprima) {
+            const base = riga.className.replace(/\s*\bis-anteprima\b/gu, '');
+            riga.className = riga.dataset.indice === String(indice) ? `${base} is-anteprima` : base;
+          }
+          const testo = typeof scelta?.preview === 'string' ? scelta.preview : '';
+          if (!testo.trim()) {
+            corpoAnteprima.append(make('p', 'talos-question-card__anteprima-vuota', t('chat.question.noPreview')));
+            return;
+          }
+          try { smonta = rendiAnteprima(testo, corpoAnteprima, { doc }) || null; }
+          catch { corpoAnteprima.replaceChildren(make('pre', 'talos-question-card__anteprima-testo', testo)); }
+        };
+        queueMicrotask(() => mostraAnteprima(Math.max(0, prompt.options.findIndex((o) => o?.recommended === true))));
+      }
       for (const [numero, option] of prompt.options.entries()) {
         const label = make('label', 'sheet-toggle-row');
         const input = make('input');
@@ -334,7 +380,12 @@ export function mountUserQuestionDock({ root, composer, question, onSubmit, annu
         const tasto = make('kbd', 'talos-question-card__key', numero < 9 ? String(numero + 1) : '');
         tasto.setAttribute('aria-hidden', 'true');
         label.append(input, tasto, description);
-        fieldset.append(label);
+        label.className += ' talos-question-card__option-row';
+        label.dataset.indice = String(numero);
+        contenitoreScelte.append(label);
+        righeConAnteprima.push(label);
+        label.addEventListener('pointerenter', () => mostraAnteprima(numero));
+        input.addEventListener('focus', () => mostraAnteprima(numero));
         field.options.push(input);
         label.addEventListener('pointerdown', () => { gesto = 'puntatore'; });
         input.addEventListener('keydown', (event) => { gesto = event.key === ' ' ? 'spazio' : 'navigazione'; });

@@ -135,7 +135,9 @@ test('PARITA-02 · i conteggi sono CONTATI dal contratto, non scritti nel markup
   // La prova si regge da sola: se il contratto cambia, qui cambia l'atteso.
   // 23/09/2026: la prima partizione passa da 9 a 8 perché l'owner ha tolto «Forma del composer»
   // (ledger R4 «DESK-COMPOSER-STANDARD-2026-09-23»). Il mockup PR27 ne aveva 9: la differenza è voluta.
-  expect(attesi, 'le partizioni del contratto non sono più quelle del mockup').toEqual([8, 4, 11, 1, 1]);
+  // 28/10/2026: torna a 9 perché l'owner ha voluto «Lingua delle risposte e della dettatura» subito dopo «Lingua dei menu» (decisione «come
+  // scrivi o parli», impostazione Automatica). Una scelta nuova, non quella tolta il 23/09.
+  expect(attesi, 'le partizioni del contratto non sono più quelle del mockup').toEqual([9, 4, 11, 1, 1]);
   const letti = await page.locator('#setting-panel-appearance > [data-settings-group] [data-settings-group-count]').allTextContents();
   expect(letti).toEqual(attesi.map((n) => `${n} ${n === 1 ? 'CONTROLLO' : 'CONTROLLI'}`));
 });
@@ -393,7 +395,9 @@ test('PARITA-10 · le altre otto sezioni non hanno una testata di gruppo e si ap
   expect(testate.fuoriSenzaCarta, 'una testata fuori dall\'Aspetto che non appartiene a una carta è l\'apparato del mockup sparso altrove').toBe(0);
   expect(testate.unaPerCarta, 'ogni carta ha UNA testata, non due').toBe(true);
   // E ogni sezione si apre ancora, con la sua intestazione: la corsia non ha rubato la navigazione.
-  for (const sezione of SEZIONI_IMPOSTAZIONI.map((s) => s.id)) {
+  /* 29/10/2026: una sezione «solo nell'app» (oggi «Aggiornamenti») nel browser non esiste: la prova la salta per il SEGNO, non per nome
+     (la sua apertura la prova AGG-UI-04, con lo stato del guscio). */
+  for (const sezione of SEZIONI_IMPOSTAZIONI.filter((s) => !s.soloApp).map((s) => s.id)) {
     await page.evaluate((s) => window.__talosHarnessUiRuntime?.setSettingsSection?.(s, { persist: false }), sezione);
     const pannello = page.locator(`#setting-panel-${sezione}`);
     await expect(pannello, `la sezione ${sezione} non si apre più`).toBeVisible();

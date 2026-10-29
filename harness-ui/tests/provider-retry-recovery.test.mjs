@@ -8,6 +8,8 @@ import { tmpdir } from 'node:os';
 import { join, resolve, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
+/* 28/10/2026 (cache, punto 1): i marcatori sono una decorazione della SINGOLA richiesta e scorrono da una all'altra; il prefisso salvato si confronta senza */
+import { corpoSenzaMarcatori } from './aiuto/corpo-senza-marcatori.mjs';
 
 const partial = 'La nota è stata ricevuta; la verifica resta incompleta.';
 const frame = content => `data: ${JSON.stringify({ choices: [{ delta: { role: 'assistant', content } }] })}\n\n`;
@@ -33,7 +35,7 @@ test('RETRY08-LEGACY: current preamble is declared, persisted and not rebuilt tw
   const requests = [];
   const server = createServer(async (req, res) => {
     const chunks = []; for await (const c of req) chunks.push(c);
-    requests.push(JSON.parse(Buffer.concat(chunks)));
+    requests.push(corpoSenzaMarcatori(String(Buffer.concat(chunks))));
     res.writeHead(200, { 'Content-Type': 'text/event-stream' }); res.end(frame('Ripresa riuscita.') + end);
   });
   server.listen(0, '127.0.0.1'); await once(server, 'listening');
@@ -136,7 +138,7 @@ for (const scenario of ['SETTLED-UNKNOWN', 'CRASH-BACKOFF', 'CRASH-PARTIAL', 'CR
     const server = createServer(async (req, res) => {
       const chunks = [];
       for await (const c of req) chunks.push(c);
-      requests.push(JSON.parse(Buffer.concat(chunks)));
+      requests.push(corpoSenzaMarcatori(String(Buffer.concat(chunks))));
       responses.add(res); res.on('close', () => responses.delete(res));
       if (requests.length > beforeCrashRequests || (scenario === 'CRASH-FOLLOWUP' && requests.length === 1)) {
         res.writeHead(200, { 'Content-Type': 'text/event-stream' });

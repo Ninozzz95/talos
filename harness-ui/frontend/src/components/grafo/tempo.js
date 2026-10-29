@@ -11,6 +11,7 @@
  */
 import { formattaDurata, iconaDellaFase, STATI_PASSO, STATI_TERMINALI } from './comuni.js';
 import { linguaCorrenteDiT, t as tr } from '../lingua.js';
+import { mostraCaricamentoVivo } from '../caricamento-vivo.js'; // owner 29/10/2026: oltre 2 s il caricamento diventa la riga viva
 
 /*
  * ⛔ Gli AIUTI DI LINGUA dei grafi (owner 03/10/2026, «ogni singola parola nella app deve essere sia in inglese che in italiano»).
@@ -193,7 +194,10 @@ export function creaTempo(host, { icona, onSeleziona, onZoom, deleghe = false })
     const r = dati.cella(voce.g.phaseId, voce.indice);
     if (!r) {
       n.dataset.carica = 'true';
-      n.append(el('span', 'gv-tempo-nome gv-tempo-nome--carica', tr('agenti.timeline.loading')));
+      const carica = el('span', 'gv-tempo-nome gv-tempo-nome--carica');
+      // la cella si ridisegna: la chiave tiene il tempo dall'inizio vero del caricamento
+      mostraCaricamentoVivo(carica, tr('agenti.timeline.loading'), { chiave: `tempo:${voce.g.phaseId}:${voce.indice}` });
+      n.append(carica);
       return n;
     }
     const stato = dati.statoDi(r.nodeId) ?? r.state;

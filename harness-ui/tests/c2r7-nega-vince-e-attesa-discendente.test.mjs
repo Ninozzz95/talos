@@ -131,9 +131,13 @@ test('R7-06 HTTP: la rotta passa rispettaNega, restituisce nonUniti, e ferma le 
   assert.deepEqual(arrivateAlRegistro, [], 'le forme storte si fermano alla rotta')
   const saltato = await manda({ unisciPermessiPerAttrezzo: { shell: 'sempre' }, rispettaNega: true })
   assert.equal(saltato.status, 200, JSON.stringify(saltato.corpo))
-  assert.deepEqual(saltato.corpo.data, { updated: true, nonUniti: ['shell'] })
+  // owner 27/10/2026: la risposta porta anche la fotografia delle impostazioni (contratto §F); il resto è quello di sempre
+  const { istantanea, ...restoDellaRisposta } = saltato.corpo.data
+  assert.deepEqual(restoDellaRisposta, { updated: true, nonUniti: ['shell'] })
+  assert.equal(typeof istantanea?.versione, 'number')
   const unito = await manda({ unisciPermessiPerAttrezzo: { scrivi: 'sempre' }, rispettaNega: true })
-  assert.deepEqual(unito.corpo.data, { updated: true }, 'senza salti la risposta è quella di sempre')
+  const { istantanea: _fotografia, ...restoUnito } = unito.corpo.data // owner 27/10/2026: la fotografia sta accanto
+  assert.deepEqual(restoUnito, { updated: true }, 'senza salti la risposta è quella di sempre')
   assert.deepEqual(regoleDi(inputFiglia), { scrivi: 'sempre', shell: 'nega' })
 })
 

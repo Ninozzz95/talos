@@ -16,11 +16,19 @@ const index = () => buildSettingsIndex(CAMPI_IMPOSTAZIONI, CONTROLLI_MIGRATI, 'i
    Trentanove ID diventano QUARANTA e i controlli di lettura/scrittura da cinque diventano sei. */
 /* 18/10/2026, owner 17/10 (controllo remoto, mockup v4-v5): «Telefoni collegati» subito dopo «Sicurezza e privacy». Le destinazioni da
    nove diventano DIECI; gli ID dei controlli restano quaranta (la sezione non aggiunge preferenze, mostra i telefoni). */
-test('SET-01 preserves all ten destinations and all forty stable setting IDs', () => {
+/* 27/10/2026 (owner, «come Hermes»): «Domande a tutta larghezza» entra nella sezione Chat — quarantuno ID, e sette controlli di
+   lettura/scrittura. */
+/* 29/10/2026, owner 22/10 notte (mockup approvato col Mobile): «Aggiornamenti» diventa una sezione a sé, l'undicesima, solo nell'app
+   installata (`soloApp`); prima la scheda stava dentro «Account, Doctor e backup». Gli ID dei controlli non cambiano. */
+test('SET-01 preserves all eleven destinations and all forty-one stable setting IDs', () => {
   assert.deepEqual(Object.keys(SETTINGS_SECTIONS), SEZIONI_IMPOSTAZIONI.map(s=>s.id));
-  assert.deepEqual(Object.keys(SETTINGS_SECTIONS), ['appearance','chat','tools','memoria','privacy','telefoni','models','costi','workspace','account']);
+  assert.deepEqual(Object.keys(SETTINGS_SECTIONS), ['appearance','chat','tools','memoria','privacy','telefoni','models','costi','workspace','account','aggiornamenti']);
   assert.equal(SEZIONI_IMPOSTAZIONI.some(s=>s.id==='providers'||s.titolo==='Provider e accessi'),false,'«Provider e accessi» è stata tolta dall owner');
-  assert.equal(CAMPI_IMPOSTAZIONI.length,40);
+  /* 28/10/2026, owner (via Mobile): «Lingua delle risposte e della dettatura» subito dopo «Lingua dei menu» — con «Domande a tutta
+     larghezza» del 27/10 gli ID diventano QUARANTADUE */
+  assert.equal(CAMPI_IMPOSTAZIONI.length,43); // 29/10/2026: lo Stop con agenti al lavoro (owner)
+  assert.ok(CAMPI_IMPOSTAZIONI.some(f=>f.id==='userBubbleFullWidthToggle'),'la bolla a tutta larghezza è un’impostazione (owner 27/10/2026)');
+  assert.ok(CAMPI_IMPOSTAZIONI.some(f=>f.id==='replyLanguageSelect'),'la lingua delle risposte è un\'impostazione (owner 28/10)');
   assert.ok(CAMPI_IMPOSTAZIONI.some(f=>f.id==='askTimeoutSelect'),'la scadenza delle domande è un\'impostazione (decisione owner 35)');
   assert.equal(CAMPI_IMPOSTAZIONI.some(f=>f.id==='composerShapeSelect'),false,'la forma del composer è stata tolta dall owner');
   assert.equal(new Set(index().map(e=>e.id)).size,index().length);
@@ -30,8 +38,10 @@ test('SET-01 migrated theme controls remain search destinations, not hidden matc
   for (const id of CONTROLLI_MIGRATI) { const entry=index().find(e=>e.id===id); assert.equal(entry.studio,true,id); assert.equal(entry.section,'appearance'); }
   assert.ok(searchSettings(index(),'bilanciata').some(e=>e.id==='motionQualitySelect' && e.studio));
 });
-test('SET-01 separates six reading/writing controls without changing their values contract', () => {
-  assert.equal(CHAT_FIELDS.size,6);
+test('SET-01 separates seven reading/writing controls without changing their values contract', () => {
+  assert.equal(CHAT_FIELDS.size,8); // 29/10/2026: lo Stop con agenti al lavoro
+  assert.ok(CHAT_FIELDS.has('stopWithAgentsSelect'));
+  assert.ok(CHAT_FIELDS.has('userBubbleFullWidthToggle'));
   assert.ok(CHAT_FIELDS.has('askTimeoutSelect'));
   for (const id of CHAT_FIELDS) {
     const f=CAMPI_IMPOSTAZIONI.find(f=>f.id===id);assert.ok(f);assert.equal(sectionForField(f),'chat');assert.equal(f.sezione,'chat');

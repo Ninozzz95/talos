@@ -158,13 +158,14 @@ function motoreAPiano(piano) {
       stato.abortitoAllArrivo[n] = signal?.aborted === true;
       const cosa = piano[n] ?? 'passa';
       if (cosa === 'guasto') throw Object.assign(new Error('archivio illeggibile'), { code: 'CTX_INTERNAL' });
-      if (cosa !== 'aspetta') return { messages };
+      if (cosa !== 'aspetta' && cosa !== 'aspettaPoiTorna') return { messages };
       const job = `job-${n + 1}`;
       onInTurnWait?.({ state: 'waiting', jobId: job, ceilingMs: 600_000 });
       stato.inAttesa = true;
       try {
-        await new Promise((_, rifiuta) => {
-          const via = () => rifiuta(Object.assign(new Error('aborted'), { name: 'AbortError' }));
+        await new Promise((risolvi, rifiuta) => {
+          /* 'aspettaPoiTorna': il motore gestisce da sé l'interruzione e torna con la proiezione che ha (CLI 27/10, traccia della richiesta 9) */
+          const via = () => (cosa === 'aspettaPoiTorna' ? risolvi() : rifiuta(Object.assign(new Error('aborted'), { name: 'AbortError' })));
           if (signal?.aborted) via(); else signal?.addEventListener('abort', via, { once: true });
         });
       } finally {
@@ -185,33 +186,60 @@ function registroConRete(motore, fetchDiRete) {
   });
 }
 
-test('MOT-06 dopo uno Skip, un guasto VERO del motore più avanti nello stesso giro dice ancora «ripiego»', async () => {
+/*
+ * ⛔⛔ Owner 27/10/2026 (dal vivo, «e continua a compattare se salto da pc padre»): lo Skip vale PER TUTTO IL GIRO. Supera la regola del
+ *   22/10 (revisione C) che queste due prove fissavano — «la seconda arriva al motore col segnale intatto, e si può saltare di nuovo» —:
+ *   dal vivo voleva dire un riassunto nuovo dopo ogni domanda di un sotto-agente, da saltare ogni volta. Ora, dopo lo Skip, il motore del
+ *   contesto non si richiama più in quel giro: le richieste dopo vanno alla compattazione semplice senza modello. Il giro dopo riprova.
+ */
+test('MOT-06 dopo lo Skip il motore del contesto non si richiama più nel giro: nemmeno un suo guasto può arrivare, e nessun «ripiego»', async () => {
   const motore = motoreAPiano(['aspetta', 'guasto']);
   const registro = registroConRete(motore, reteConDueRichieste());
   const { sessionId } = registro.avvia('task-vero');
   assert.ok(await attendi(() => motore.stato.inAttesa));
   assert.deepEqual(registro.saltaRiassunto(sessionId), { saltato: true });
   assert.ok(await attendi(() => finito(registro, sessionId)));
-  assert.equal(motore.stato.chiamate, 2, 'premessa: il giro ha fatto due richieste');
-  const ripieghi = compattazioni(registro, sessionId).filter((v) => v.fase === 'fine' && v.motivo === 'ripiego');
-  assert.equal(ripieghi.length, 1, JSON.stringify(compattazioni(registro, sessionId)));
-  assert.equal(ripieghi[0].codice, 'CTX_INTERNAL');
+  assert.equal(motore.stato.chiamate, 1, `dopo lo Skip la seconda richiesta del giro non deve arrivare al motore: ${JSON.stringify(motore.stato)}`);
+  assert.deepEqual(compattazioni(registro, sessionId).filter((v) => v.fase === 'fine' && v.motivo === 'ripiego'), [], 'è stata la persona, non un guasto');
 });
 
-test('MOT-07 lo Skip vale per la compattazione che salta: la seconda arriva al motore col segnale intatto, e si può saltare di nuovo', async () => {
+test('MOT-07 un solo Skip basta per tutto il giro: niente seconda attesa del motore, niente secondo «Riassumo il contesto»', async () => {
   const motore = motoreAPiano(['aspetta', 'aspetta']);
   const registro = registroConRete(motore, reteConDueRichieste());
   const { sessionId } = registro.avvia('task-vero');
   assert.ok(await attendi(() => motore.stato.inAttesa && motore.stato.chiamate === 1));
-  assert.deepEqual(registro.saltaRiassunto(sessionId), { saltato: true }, 'primo Skip');
-  assert.ok(await attendi(() => motore.stato.inAttesa && motore.stato.chiamate === 2), `la seconda attesa: ${JSON.stringify(motore.stato)}`);
-  assert.equal(motore.stato.abortitoAllArrivo[1], false, 'la seconda richiesta NON riceve lo Skip della prima');
-  assert.deepEqual(registro.saltaRiassunto(sessionId), { saltato: true }, 'secondo Skip, sulla seconda compattazione');
-  assert.ok(await attendi(() => finito(registro, sessionId)));
+  assert.deepEqual(registro.saltaRiassunto(sessionId), { saltato: true }, 'il primo e unico Skip');
+  assert.ok(await attendi(() => finito(registro, sessionId)), 'il giro finisce senza un secondo Skip');
+  assert.equal(motore.stato.chiamate, 1, `il motore richiamato dopo lo Skip: ${JSON.stringify(motore.stato)}`);
   const v = compattazioni(registro, sessionId);
-  assert.equal(v.filter((x) => x.fase === 'inizio').length, 2, JSON.stringify(v));
-  assert.equal(v.filter((x) => x.fase === 'fine' && x.motivo === 'motore').length, 2, `ogni attesa del motore si chiude muta: ${JSON.stringify(v)}`);
-  assert.deepEqual(v.filter((x) => x.fase === 'fine' && x.motivo === 'ripiego'), [], 'due Skip, nessun guasto da raccontare');
+  assert.equal(v.filter((x) => x.fase === 'inizio').length, 1, `una sola attesa del motore nel giro: ${JSON.stringify(v)}`);
+  assert.deepEqual(v.filter((x) => x.fase === 'fine' && x.motivo === 'ripiego'), [], 'uno Skip, nessun guasto da raccontare');
+});
+
+test('MOT-11 (CLI 27/10, traccia della richiesta 9) il motore vero allo Skip RITORNA invece di lanciare: lo Skip vale lo stesso per tutto il giro', async () => {
+  const motore = motoreAPiano(['aspettaPoiTorna', 'guasto']);
+  const registro = registroConRete(motore, reteConDueRichieste());
+  const { sessionId } = registro.avvia('task-vero');
+  assert.ok(await attendi(() => motore.stato.inAttesa && motore.stato.chiamate === 1));
+  assert.deepEqual(registro.saltaRiassunto(sessionId), { saltato: true });
+  assert.ok(await attendi(() => finito(registro, sessionId)));
+  assert.equal(motore.stato.chiamate, 1, `la richiesta dopo lo Skip è tornata al motore (che lì fallisce e fa pagare la compattazione semplice): ${JSON.stringify(motore.stato)}`);
+  assert.deepEqual(compattazioni(registro, sessionId).filter((v) => v.fase === 'fine' && v.motivo === 'ripiego'), []);
+});
+
+test('MOT-10 AL CONTRARIO: il giro DOPO riprova il riassunto vero — lo Skip non spegne il motore per sempre', async () => {
+  const motore = motoreAPiano(['aspetta', 'aspetta', 'aspetta']);
+  const registro = registroConRete(motore, reteConDueRichieste());
+  const { sessionId } = registro.avvia('task-vero');
+  assert.ok(await attendi(() => motore.stato.inAttesa && motore.stato.chiamate === 1));
+  assert.deepEqual(registro.saltaRiassunto(sessionId), { saltato: true });
+  assert.ok(await attendi(() => finito(registro, sessionId)));
+  assert.equal(motore.stato.chiamate, 1, 'premessa: nel primo giro il motore non si è richiamato');
+  const ripreso = registro.resume(sessionId, 'Continua');
+  assert.ok(!ripreso?.erroreAvvio, `premessa: il giro dopo parte: ${JSON.stringify(ripreso)}`);
+  assert.ok(await attendi(() => motore.stato.chiamate === 2 && motore.stato.inAttesa), `il giro dopo deve richiamare il motore: ${JSON.stringify(motore.stato)}`);
+  assert.equal(motore.stato.abortitoAllArrivo[1], false, 'e col segnale intatto: lo Skip del giro prima non vale qui');
+  assert.deepEqual(registro.saltaRiassunto(sessionId), { saltato: true }, 'e si può saltare di nuovo, nel giro nuovo');
 });
 
 test('MOT-08 (terza revisione) una «fine» che arriva DOPO l\'«inizio» della compattazione seguente non spegne lo Skip di quella', async () => {

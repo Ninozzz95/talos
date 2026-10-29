@@ -10,6 +10,7 @@ import { azioneAggiornamenti, copioneStato, statoPerLaPagina } from './canale-ag
 import { creaCicloDiVita } from './lifecycle.mjs';
 import { leggiStatoFinestra, salvaStatoFinestra } from './window-state.mjs';
 import { coloriDellaBarra, puntoDelMenu } from './barra-finestra.mjs';
+import { copioneSegnala, etichettaSegnala } from './segnalazione.mjs'; // «Segnala un problema» (owner 29/10/2026)
 import { apribileNelBrowserDelSistema, creaAvvioFiglio, navigazioneCorniceConsentita, risolviPercorsi, scegliMotoreLocale, scegliPortaPersistente, urlIngresso, validaHandshake } from './runtime.mjs';
 import { creaRegistro } from './log.mjs';
 import { desktopProfile } from './profile.mjs';
@@ -249,7 +250,7 @@ function avviaGuscio() {
          (24 ore senza scritture): si ricrea prima di ogni figlio, o il nuovo handshake non avrebbe dove scriversi. */
       mkdirSync(cartellaHandshake, { recursive: true });
       const reportFile = join(cartellaHandshake, 'figlio-' + (++generazione) + '.json');
-      const avvio = creaAvvioFiglio({ execPath: process.execPath, percorsi, port, token, reportFile, dataDir, scratchDir: profile.scratchDir, motoreLocale, keyringScope: profile.keyringScope, installata: app.isPackaged });
+      const avvio = creaAvvioFiglio({ execPath: process.execPath, percorsi, port, token, reportFile, dataDir, scratchDir: profile.scratchDir, motoreLocale, keyringScope: profile.keyringScope, installata: app.isPackaged, versione: app.getVersion() });
       for (const avviso of avvio.avvisi) registro.scrivi(avviso); // L3-8: una variabile del kernel ereditata e ignorata si dice
       const proc = spawn(avvio.command, avvio.args, avvio.options);
       const handle = { proc, port, reportFile, generazione, terminato: false, get exitCode() { return proc.exitCode; } };
@@ -292,6 +293,13 @@ function avviaGuscio() {
     finestra.show(); finestra.focus();
   }
 
+  /* «Segnala un problema»: come gli aggiornamenti (`canale-aggiornamenti.mjs`), un copione fisso verso la pagina, nessun dato */
+  function segnalaUnProblema() {
+    if (!finestra || finestra.isDestroyed()) return;
+    portaDavanti();
+    finestra.webContents.executeJavaScript(copioneSegnala(), true).catch(() => { registro.scrivi('Segnala un problema: pagina non pronta.'); });
+  }
+
   async function cambiaMotoreLocale(preferenza) {
     if (cambioMotoreInCorso || staUscendo || preferenza === motoreLocalePreferito) return;
     cambioMotoreInCorso = true;
@@ -320,7 +328,10 @@ function avviaGuscio() {
         ...azioni().slice(0, 3), { type: 'separator' },
         { id: 'resta-vassoio', label: 'Resta nel vassoio alla chiusura', type: 'checkbox', checked: restaNelVassoio,
           click: voce => { restaNelVassoio = voce.checked; salva(); } },
-        { label: 'Apri il registro', click: apriRegistro }, { type: 'separator' }, azioni().at(-1),
+        { label: 'Apri il registro', click: apriRegistro },
+        /* «Segnala un problema» (owner 29/10/2026, la prima delle due porte): la finestra davanti, poi la pagina apre la segnalazione */
+        { id: 'segnala-problema', label: etichettaSegnala(app.getLocale()), click: segnalaUnProblema },
+        { type: 'separator' }, azioni().at(-1),
       ] },
       { label: 'Modifica', submenu: [
         { label: 'Annulla', role: 'undo' }, { label: 'Ripeti', role: 'redo' }, { type: 'separator' },

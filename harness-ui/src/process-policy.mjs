@@ -13,7 +13,7 @@ import { existsSync } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
 
-const DEFAULT_ENV_ALLOWLIST = Object.freeze([
+export const DEFAULT_ENV_ALLOWLIST = Object.freeze([
   'PATH', 'Path', 'PATHEXT', 'SystemRoot', 'WINDIR', 'COMSPEC',
   'HOME', 'USERPROFILE', 'TMP', 'TEMP', 'LANG', 'LC_ALL',
 ]);
@@ -158,6 +158,21 @@ export async function resolveApprovedExecutable({ id, configuredPath, expectedSh
   return Object.freeze({ id: id.trim(), path, sha256 });
 }
 
+/*
+ * 29/10/2026 (L-2 del kit dello stress test, riprodotto 3 su 3 e poi da me): su Windows un processo figlio che non parte — qui git con
+ *   la cartella di lavoro oltre i 260 caratteri, che `CreateProcess` rifiuta anche in forma estesa (`toNamespacedPath`, provato) — dà
+ *   ENOENT alla sua richiamata E un `read ENOTCONN` sui CANALI stdin/stdout/stderr. Nessuno li ascoltava: l'errore non gestito di uno
+ *   stream fa cadere l'INTERO server. Il fallimento resta quello di prima (la richiamata e l'evento `error` del figlio lo dicono);
+ *   qui si ascoltano solo i canali, perché un comando che non parte non sia mai la fine del server. (TAKT PR #1611: «spawnSync
+ *   fails with ENOENT once the cwd exceeds MAX_PATH»; Hirose, «spawn names the executable in every ENOENT».)
+ */
+function conCanaliAscoltati(figlio) {
+  for (const canale of [figlio?.stdin, figlio?.stdout, figlio?.stderr]) {
+    if (canale && typeof canale.on === 'function') canale.on('error', () => {});
+  }
+  return figlio;
+}
+
 /**
  * @param {{allowedExecutables?:string[], cwdRoot?:string|null, capabilities?:Record<string,string>, envAllowlist?:string[], spawnFn?:typeof spawn, execFileFn?:typeof execFile, execFileSyncFn?:typeof execFileSync}} [options]
  */
@@ -252,7 +267,7 @@ export function createProcessPolicy({
     const limit = prepared.options.captureLimitBytes;
     let child;
     try {
-      child = spawnFn(prepared.command, prepared.args, prepared.options);
+      child = conCanaliAscoltati(spawnFn(prepared.command, prepared.args, prepared.options));
     } catch (error) {
       throw new ProcessPolicyError(`Cannot start the command: ${error?.message || 'unknown error'}`, 'PROCESS_START_FAILED');
     }
@@ -324,11 +339,11 @@ export function createProcessPolicy({
   return Object.freeze({
     spawn(command, args = [], options = {}) {
       const prepared = prepare(command, args, options);
-      return spawnFn(prepared.command, prepared.args, prepared.options);
+      return conCanaliAscoltati(spawnFn(prepared.command, prepared.args, prepared.options));
     },
     execFile(command, args = [], options = {}, callback) {
       const prepared = prepare(command, args, options);
-      return execFileFn(prepared.command, prepared.args, prepared.options, callback);
+      return conCanaliAscoltati(execFileFn(prepared.command, prepared.args, prepared.options, callback));
     },
     execFileSync(command, args = [], options = {}) {
       const prepared = prepare(command, args, options);

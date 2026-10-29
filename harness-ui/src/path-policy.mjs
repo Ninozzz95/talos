@@ -1,5 +1,5 @@
 import { open, realpath } from 'node:fs/promises';
-import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { dirname, isAbsolute, join, posix, relative, resolve, sep } from 'node:path';
 
 /*
  * ⛔⛔⛔ 30/8 — questo file portava anche `createPathPolicy()`, la fabbrica
@@ -1700,4 +1700,87 @@ export async function openContainedFile(root, candidate, flags = 'r', options = 
     if (error instanceof PathPolicyError) throw error;
     throw new PathPolicyError('File not readable', 'PATH_OPEN_FAILED');
   }
+}
+
+/*
+ * ⛔⛔⛔ Owner 27/10/2026 — LE CARTELLE BLOCCATE PER UN DISPOSITIVO (contratto CONTRATTO-CARTELLE-BLOCCATE-2026-10-27, giro 2, tappa B).
+ *   Una cartella revocata a un dispositivo e ancora raggiungibile da un'altra consentita diventa BLOCCATA: nei giri che quel
+ *   dispositivo ha mandato, gli attrezzi dei file non la toccano. Il nega vince, a ogni livello (Accesso pieno compreso) e senza carta.
+ *   - Claude Code (code.claude.com/docs/en/permissions, letto il 27/10/2026): «Deny rules apply when either the requested path or the
+ *     file it resolves to matches» ⇒ si guardano TUTTI E DUE, il percorso chiesto e quello vero (giunzioni e collegamenti).
+ *   - Hermes (`agent/file_safety.py:280-305`, clone 2026-10-22): per realpath, uguale o per prefisso COL separatore
+ *     (`resolved.startswith(realpath(p) + os.sep)`): «Documenti2» non sta dentro «Documenti».
+ *   ⛔ Un percorso il cui percorso vero non si riesce a dire (un anello, un accesso negato mentre si risolve) in un giro con dei blocchi
+ *     si RIFIUTA: chiuso a guasto, mai lasciato passare.
+ *   ⛔ Nella casa Linux i percorsi sono di Linux: `/mnt/c/…` si confronta come `C:\…`, a parole (dichiarato).
+ */
+const suWindows = process.platform === 'win32';
+/*
+ * ⛔ Revisione del blocco 11, A-R1 (27/10/2026): nella casa Linux `cat /mnt/c/…/Utenti/./Documenti/segreto.txt` (e con `//`) NOMINAVA la
+ *   bloccata e usciva 0 col contenuto, perché il confronto a parole non toglieva `.`, `..` e le barre doppie; e al contrario
+ *   `…/Documenti/../libero.txt`, che esce dalla bloccata, si rifiutava. Un percorso di Linux (comincia con «/») si NORMALIZZA prima del
+ *   confronto, a parole come Codex (`codex-rs/utils/absolute-path/src/absolutize.rs:26-38`, `normalize_path`: «Component::CurDir => {}»,
+ *   «Component::ParentDir => { normalized.pop(); }») — `path.posix.normalize` fa lo stesso e unisce le barre doppie
+ *   (nodejs.org/api/path.html, letto il 27/10/2026: «resolving '..' and '.' segments and replacing multiple separators with a single
+ *   … separator. Trailing separators are preserved»: la barra in coda la toglie `perConfronto`). Si tiene solo se ne esce un
+ *   `/mnt/<lettera>`: ogni altro «/…» resta com'era, e i percorsi di Windows non passano di qui (li normalizza già `resolve`).
+ */
+function percorsoLinuxNormalizzato(grezzo) {
+  if (!grezzo.startsWith('/')) return grezzo;
+  const normale = posix.normalize(grezzo);
+  return /^\/mnt\/[A-Za-z](\/|$)/u.test(normale) ? normale : grezzo;
+}
+const perConfronto = (p) => {
+  let s = String(p).replaceAll('/', '\\');
+  const m = /^\\mnt\\([A-Za-z])(\\|$)/u.exec(s);
+  if (m) s = `${m[1]}:\\${s.slice(m[0].length)}`;
+  s = s.replace(/\\+$/u, '');
+  if (/^[A-Za-z]:$/u.test(s)) s += '\\';
+  return suWindows || m ? s.toLowerCase() : String(p).replace(/\/+$/u, '') || '/';
+};
+function dentroOUguale(percorso, radice) {
+  const p = perConfronto(percorso);
+  const r = perConfronto(radice);
+  if (p === r) return true;
+  const sep = p.includes('\\') || r.includes('\\') ? '\\' : '/';
+  return p.startsWith(r.endsWith(sep) ? r : r + sep);
+}
+
+/**
+ * La cartella bloccata che contiene `percorso` (relativo alla cartella della sessione, o assoluto): `{ radice }`, oppure
+ * `{ radice, irrisolvibile: true }` se il percorso vero non si sa dire, oppure `null`. Senza blocchi, `null` senza toccare il disco.
+ */
+export function bloccataDa(percorso, { cartella, bloccati, realpathFn = realpathSyncNativa } = {}) {
+  if (!Array.isArray(bloccati)) return null;
+  const radici = bloccati.filter((b) => typeof b === 'string' && b !== '');
+  if (radici.length === 0) return null;
+  const grezzo = percorsoLinuxNormalizzato(typeof percorso === 'string' && percorso.trim() !== '' ? percorso.trim() : '.');
+  const linux = /^\/mnt\/[A-Za-z](\/|$)/u.test(grezzo);
+  let assoluto;
+  if (linux || isAbsolute(grezzo)) assoluto = linux ? grezzo : risolvi(grezzo);
+  else if (typeof cartella === 'string' && cartella !== '') assoluto = risolvi(cartella, grezzo);
+  else return { radice: radici[0], irrisolvibile: true };
+  const perNome = radici.find((r) => dentroOUguale(assoluto, r));
+  if (perNome) return { radice: perNome };
+  if (linux) return null; // a parole soltanto, come la casa Linux fa per la rete
+  let vero;
+  try { vero = percorsoRealeAncheSeManca(assoluto, realpathFn); } catch { return { radice: radici[0], irrisolvibile: true }; }
+  const perVero = radici.find((r) => dentroOUguale(vero, r));
+  return perVero ? { radice: perVero } : null;
+}
+
+/**
+ * La cartella bloccata che un comando di shell NOMINA (`{ radice }`), o `null`. ⛔ È un innesco, non un confinamento: un comando che ci
+ * arriva senza nominarla (`grep -r` da una cartella sopra, uno script che apre i file da sé) non si ferma — Claude Code ha lo stesso
+ * limite e lo dice («they don't apply to … arbitrary subprocesses»); la cura sarebbe una sandbox. La frase per la persona lo dichiara.
+ */
+export function comandoNominaUnaBloccata(comando, { cartella, bloccati, realpathFn = realpathSyncNativa } = {}) {
+  if (!Array.isArray(bloccati) || !bloccati.some((b) => typeof b === 'string' && b !== '')) return null;
+  for (const pezzo of pezziDelComando(comando)) {
+    if (pezzo.startsWith('-') && !pezzo.includes('=')) continue;
+    if (!/[\\/.]|^[A-Za-z]:/u.test(pezzo) && !(typeof cartella === 'string' && esisteSync(risolvi(cartella, pezzo)))) continue;
+    const esito = bloccataDa(pezzo, { cartella, bloccati, realpathFn });
+    if (esito && !esito.irrisolvibile) return { radice: esito.radice };
+  }
+  return null;
 }

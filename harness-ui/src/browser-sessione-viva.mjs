@@ -331,6 +331,49 @@ export function creaGestoreBrowserVivo({
       return { ...pacchetto, url: scheda.url, errori: scheda.errori?.errori ?? [] };
     },
 
+    /** Quanti errori la scheda ha raccolto finora: chi apre una pagina li conta prima, e dopo legge solo i suoi. */
+    quantiErrori(sessionId) {
+      const raccolta = schede.get(sessionId)?.errori;
+      return raccolta?.totale ?? raccolta?.errori?.length ?? 0; // R2: tutte, non solo le prime 20
+    },
+
+    /*
+     * Owner 27/10/2026 (server locali, attrezzo `local_page`): ciò che il MODELLO vede della pagina aperta nella scheda della
+     *   conversazione — il testo, gli errori della console da `daErrore` in poi, o una foto. È la stessa scheda che la persona
+     *   guarda nel Browser. Come Cline (foto e console dopo ogni azione del suo browser) e Hermes (testo tagliato, mai intero).
+     * ⛔ Il testo di una pagina di sviluppo arriva spesso DOPO il `load` (Vite e le SPA disegnano da script): si aspetta fino a
+     *   `attesaTestoMs` che il testo ci sia e smetta di cambiare, poi si legge comunque quel che c'è.
+     */
+    async leggi(sessionId, { guarda = 'text', daErrore = 0, attesaTestoMs = 2000, pausaMs = 250 } = {}) {
+      const scheda = schedaDi(sessionId);
+      tocca(scheda);
+      const { cdp } = finestra;
+      if (guarda === 'console') {
+        /* R2: le ultime 20 della scheda, da `daErrore` (un numero del conto totale) in poi */
+        const raccolta = scheda.errori;
+        const recenti = raccolta?.recenti ?? raccolta?.errori ?? [];
+        const primo = (raccolta?.totale ?? recenti.length) - recenti.length;
+        const errori = recenti.slice(Math.max(0, (Number(daErrore) || 0) - primo));
+        return { url: scheda.url, console: errori.map((e) => `[${e.tipo}] ${e.testo}`) };
+      }
+      if (guarda === 'screenshot') {
+        const foto = await cdp.invia('Page.captureScreenshot', { format: 'png' }, scheda.cdpSessionId);
+        return { url: scheda.url, immagine: typeof foto?.data === 'string' && foto.data ? { base64: foto.data, mime: 'image/png' } : null };
+      }
+      const leggiTesto = async () => {
+        const r = await cdp.invia('Runtime.evaluate', { expression: 'document.body ? document.body.innerText : ""', returnByValue: true }, scheda.cdpSessionId);
+        return typeof r?.result?.value === 'string' ? r.result.value : '';
+      };
+      let testo = await leggiTesto();
+      for (let atteso = 0; atteso < attesaTestoMs; atteso += pausaMs) {
+        await new Promise((fatto) => { setTimeout(fatto, pausaMs); });
+        const ora = await leggiTesto();
+        if (ora && ora === testo) break;
+        testo = ora;
+      }
+      return { url: scheda.url, testo };
+    },
+
     /** Chiude la scheda di questa sessione; l'ultima porta via anche il browser. */
     async chiudi(sessionId) {
       const scheda = schede.get(sessionId);

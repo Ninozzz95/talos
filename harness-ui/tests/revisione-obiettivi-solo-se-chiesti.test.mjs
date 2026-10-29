@@ -12,6 +12,7 @@ import test from 'node:test';
 import { talosLavora } from '../src/kernel/talosHarness.mjs';
 import { conStore, conversazioneFerma, obiettivoScrittoDaUnAltroProcesso, passo, registroAGiri } from './aiuto/banco-obiettivo.mjs';
 import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
+import { corpoSenzaMarcatori } from './aiuto/corpo-senza-marcatori.mjs'; // 28/10: cache, punto 1
 
 const cartellaLibera = (t) => { const c = mkdtempSync(join(tmpdir(), 'talos-rev-obiettivi-')); t.after(() => rimuoviCartellaDiProva(c)); return c; };
 const FINE = [{ role: 'system', content: 's' }, { role: 'user', content: 'go on' }, { role: 'assistant', content: 'done' }];
@@ -89,7 +90,7 @@ async function notaDelPiano(t, { senzaInterfaccia }) {
     modalitaOperativa: ingresso.modalitaOperativa, strumentiEstesi: ingresso.strumentiEstesi, chiediDomandaFn: ingresso.chiediDomandaFn,
     ...(typeof ingresso.presentaPianoFn === 'function' ? { presentaPianoFn: ingresso.presentaPianoFn } : {}),
     ...(ingresso.nessunoDavanti === true ? { nessunoDavanti: true } : {}), // OB-REV-03 (15/10): il segno del registro, se c'è
-    fetchDiRete: async (_u, r = {}) => { try { corpi.push(JSON.parse(r.body ?? '{}')); } catch { /* */ } return new Response('data: {"choices":[{"delta":{"content":"ok"}}]}\n\ndata: [DONE]\n\n'); },
+    fetchDiRete: async (_u, r = {}) => { try { corpi.push(corpoSenzaMarcatori(r.body ?? '{}')); } catch { /* */ } return new Response('data: {"choices":[{"delta":{"content":"ok"}}]}\n\ndata: [DONE]\n\n'); },
   });
   b.giri.at(-1).concludi([]);
   const offerti = (corpi[0]?.tools ?? []).map((x) => x.function?.name);

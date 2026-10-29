@@ -25,6 +25,7 @@ import { attendiScritture } from '../src/session-store.mjs';
 import { creaFetchDelPiano } from '../src/chatgpt-richiesta.mjs';
 import { nativeProviderResponse } from '../src/native-provider-adapter.mjs';
 import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
+import { corpoSenzaMarcatori } from './aiuto/corpo-senza-marcatori.mjs'; // 28/10: cache, punto 1
 
 const sse = (pezzi) => `${pezzi.map((p) => `data: ${JSON.stringify(p)}\n\n`).join('')}data: [DONE]\n\n`;
 function rispostaChat(corpo) {
@@ -40,7 +41,7 @@ const COMPLETA = [{ type: 'response.completed', response: { id: 'r', status: 'co
 let ultimoCorpoDelPiano = null;
 async function chiaveDelPiano(corpoDelKernel) {
   let chiave = null;
-  const rete = async (_url, opzioni) => { ultimoCorpoDelPiano = JSON.parse(opzioni.body); chiave = ultimoCorpoDelPiano.prompt_cache_key ?? null;
+  const rete = async (_url, opzioni) => { ultimoCorpoDelPiano = corpoSenzaMarcatori(opzioni.body); chiave = ultimoCorpoDelPiano.prompt_cache_key ?? null;
     return new Response(sse(COMPLETA), { status: 200, headers: { 'content-type': 'text/event-stream' } }); };
   const r = await nativeProviderResponse({ provider: 'chatgpt', model: 'gpt-6-sol', apiKey: 'T', baseURL: 'https://api.openai.com/v1', fetchFn: creaFetchDelPiano(rete), body: corpoDelKernel });
   await r.text();
@@ -65,7 +66,7 @@ function banco(t, { consegna = 'Read README and summarise it.' } = {}) {
       /* il preambolo del progetto: la mappa dei file, che cambia quando il progetto cambia (qui: `mappa.versione`) */
       contestoDelProgettoFn: async ({ permesso }) => ({ testo: `Working sheet — project map v${mappa.versione}\nTurn permission: ${permesso}.\n${'src/a.js\n'.repeat(40)}` }),
       talosLavoraFn: (ri) => talosLavora({ ...ri,
-        fetchDiRete: async (_url, opzioni) => { const corpo = JSON.parse(opzioni.body); corpi.push(corpo); return rispostaChat(corpo); } }) }),
+        fetchDiRete: async (_url, opzioni) => { const corpo = corpoSenzaMarcatori(opzioni.body); corpi.push(corpo); return rispostaChat(corpo); } }) }),
   });
   t.after(async () => { try { await registro.chiudi?.(); } catch { /* già chiuso */ } try { await attendiScritture({ cartellaStore }); } catch { /* pulizia */ }
     rimuoviCartellaDiProva(cartellaStore); rimuoviCartellaDiProva(cartella); });
@@ -119,7 +120,7 @@ test('CACHE-04 CONTROLLO — su Anthropic nativo resta com\'era: tutti i messagg
   await nativeProviderResponse({
     provider: 'anthropic', model, apiKey: 'test-only-key',
     body: { messages: [{ role: 'system', content: 'Base.' }, { role: 'user', content: 'Ciao.' }, { role: 'assistant', content: 'Ciao!' }, { role: 'system', content: 'Project context update: x' }, { role: 'user', content: 'E poi?' }] },
-    fetchFn: async (_url, init) => { corpo = JSON.parse(init.body); return new Response(JSON.stringify({ id: 'msg', type: 'message', role: 'assistant', model, content: [{ type: 'text', text: 'ok' }], stop_reason: 'end_turn', stop_sequence: null, usage: { input_tokens: 5, output_tokens: 2 } }), { headers: { 'content-type': 'application/json' } }); },
+    fetchFn: async (_url, init) => { corpo = corpoSenzaMarcatori(init.body); return new Response(JSON.stringify({ id: 'msg', type: 'message', role: 'assistant', model, content: [{ type: 'text', text: 'ok' }], stop_reason: 'end_turn', stop_sequence: null, usage: { input_tokens: 5, output_tokens: 2 } }), { headers: { 'content-type': 'application/json' } }); },
   });
   assert.match(JSON.stringify(corpo.system), /Project context update/u, 'the update is still in `system` on Anthropic');
   assert.ok(corpo.messages.every((m) => m.role !== 'system'), 'no system message among the Anthropic messages');

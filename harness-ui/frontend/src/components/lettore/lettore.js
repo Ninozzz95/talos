@@ -359,7 +359,8 @@ export function creaLettore({ doc = globalThis.document, finestra = globalThis, 
   function sorgente() {
     const testo = testoMostrato();
     const lingua = stato.tipo === 'html' ? 'markup' : linguaDi(stato.estensione);
-    const blocco = typeof opzioni.bloccoCodice === 'function' ? opzioni.bloccoCodice(testo, lingua) : null;
+    /* il nome del file va al blocco: «⋯ › Scarica» salva col nome vero invece di talos-<lingua>-<data> */
+    const blocco = typeof opzioni.bloccoCodice === 'function' ? opzioni.bloccoCodice(testo, lingua, nome) : null;
     if (blocco) { blocco.classList?.add('talos-lettore__sorgente'); return blocco; }
     const pre = crea(doc, 'pre', 'talos-lettore__sorgente');
     const code = crea(doc, 'code', lingua ? `language-${lingua}` : '', testo);
@@ -427,7 +428,12 @@ export function creaLettore({ doc = globalThis.document, finestra = globalThis, 
         notaTaglio(pezzi);
       } else if (tipo === 'markdown') {
         const prosa = crea(doc, 'div', 'talos-lettore__prosa');
-        prosa.append(renderizzaMarkdown(testoMostrato(), { document: doc, bloccoCodice: opzioni.bloccoCodice }));
+        /* revisione R2 (23/10): il renderer della prosa passa (testo, lingua, chiuso, riga d'apertura); al blocco del lettore il terzo
+           posto è il NOME del file. Un recinto ```python sync.py dentro un .md si scarica col nome della sua riga d'apertura. */
+        const bloccoDellaProsa = typeof opzioni.bloccoCodice === 'function'
+          ? (testoCodice, linguaCodice, _chiuso, infoRecinto) => opzioni.bloccoCodice(testoCodice, linguaCodice, '', infoRecinto)
+          : undefined;
+        prosa.append(renderizzaMarkdown(testoMostrato(), { document: doc, bloccoCodice: bloccoDellaProsa }));
         pezzi.push(prosa);
         notaTaglio(pezzi);
       } else if (tipo === 'tabella') {

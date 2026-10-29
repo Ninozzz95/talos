@@ -26,6 +26,7 @@ import { AREE, TESTI } from '../frontend/src/i18n/testi/index.js';
 import { impostaLingua } from '../frontend/src/components/lingua.js';
 import { testoErroreServer } from '../frontend/src/components/errori.js';
 import { eFraseItaliana } from '../frontend/scripts/cancello/testi-a-schermo.mjs';
+import { vociDeiLetteraliDelServer } from './aiuto/letterali-del-server.mjs';
 
 const PARTI = ['title', 'explanation', 'action'];
 const voce = (chiave, lingua) => AREE.errori[lingua][chiave];
@@ -55,6 +56,8 @@ test('ERRORI-DIZ-01 — ogni frase del server ha la sua voce nel dizionario, con
 
 test('ERRORI-DIZ-02 — AL CONTRARIO: una voce del dizionario senza la sua frase nel server è un residuo (provata togliendo una frase dal server: DIZ-01 diventa rossa)', () => {
   const attese = new Set(tuttiIGiriDelServer().map(([chiave]) => chiave));
+  /* 27/10/2026: anche le voci il cui inglese è un letterale del server sulla riga del suo codice (canale remoto, `explanation`) */
+  for (const chiave of vociDeiLetteraliDelServer(AREE.errori.en)) attese.add(chiave);
   const residui = Object.keys(AREE.errori.en)
     .filter((chiave) => /^(?:contesto\.)?[A-Z][A-Z0-9_]*\.(?:message|title|explanation|action)$|^contestoPredefinita\./u.test(chiave))
     .filter((chiave) => !attese.has(chiave) && !['BROWSER_VIVO_ERRORE.message', 'LOCAL_REQUEST_FAILED.message', 'LOCAL_RESPONSE_INVALID.message'].includes(chiave));

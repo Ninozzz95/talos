@@ -40,7 +40,19 @@ function reducedMotion() {
     || Boolean(mediaQuery?.matches);
 }
 
+/* ⛔ 28/10/2026 (sfondo acceso di serie, owner «Acceso su tutti»): la sonda veniva riscritta ~10 volte a ogni `prepare`, e un `prepare`
+   scatta anche a ogni pausa dello scorrimento ⇒ 80 scritture di stile su uno SPAN mentre il testo scorre (STREAMING-FLUIDO-06). Il valore
+   grezzo della variabile porta già i colori dentro (`#c08b3c`, `color-mix(…)`): lo stesso grezzo dà lo stesso colore, si risolve una volta. */
+const coloriRisolti = new Map();
 function resolveColor(raw, fallback = '#888888') {
+  const chiave = `${raw || ''}\u0000${fallback}`;
+  if (coloriRisolti.has(chiave)) return coloriRisolti.get(chiave);
+  const risolto = risolviColoreConLaSonda(raw, fallback);
+  if (coloriRisolti.size > 256) coloriRisolti.clear();
+  coloriRisolti.set(chiave, risolto);
+  return risolto;
+}
+function risolviColoreConLaSonda(raw, fallback) {
   if (!colorProbe) {
     colorProbe = document.createElement('span');
     colorProbe.setAttribute('aria-hidden', 'true');
@@ -122,10 +134,24 @@ function chatHasMessages() {
   return Boolean(column.querySelector('.talos-turn, [data-c="Turn"], .message, [data-message-id]'));
 }
 
+/* ⛔ 28/10/2026: niente `getBoundingClientRect` a ogni fotogramma (RESIZE-COMPOSER: 81 letture di rettangoli e 32 di stile in 31 movimenti
+   del trascinamento, col fondo acceso). La misura viene da `prepare`, che il ResizeObserver del contenitore richiama a ogni cambio di
+   dimensione, compreso il passaggio a `display:none` (misura zero). */
 function stageVisible(stage) {
   if (document.hidden || !stage.canvas.isConnected) return false;
-  const rect = stage.canvas.getBoundingClientRect();
-  return rect.width > 1 && rect.height > 1 && !stage.canvas.closest('[hidden]');
+  return stage.width > 1 && stage.height > 1 && !stage.canvas.closest('[hidden]');
+}
+
+/* La configurazione si rilegge (stile calcolato della radice) solo quando un osservatore dice che qualcosa è cambiato, non a ogni fotogramma. */
+let configInCache = null;
+function configCorrente() {
+  configInCache ??= currentConfig();
+  return configInCache;
+}
+function dimenticaConfig() { configInCache = null; }
+
+function scriviDato(elemento, chiave, valore) {
+  if (elemento.dataset[chiave] !== valore) elemento.dataset[chiave] = valore;
 }
 
 function stageShouldAnimate(stage, config) {
@@ -155,7 +181,7 @@ function recordCost(cost) {
 function draw(stage, dt, config) {
   if (config.off) {
     stage.context.clearRect(0, 0, stage.width, stage.height);
-    stage.canvas.dataset.sceneStatus = 'off';
+    scriviDato(stage.canvas, 'sceneStatus', 'off');
     return;
   }
   const start = performance.now();
@@ -163,14 +189,15 @@ function draw(stage, dt, config) {
     if (dt > 0) stage.definition.update({ state: stage.state, input: stage.input, stepMs: dt });
     stage.context.setTransform(stage.dpr, 0, 0, stage.dpr, 0, 0);
     stage.definition.draw({ context: stage.context, state: stage.state, geometry: stage.geometry });
+    velaLaScena(stage);
     stage.draws += 1;
-    stage.canvas.dataset.scene = stage.scene;
-    stage.canvas.dataset.sceneStatus = stage.budgetStatic ? 'budget-static' : reducedMotion() ? 'reduced' : stageShouldAnimate(stage, config) ? 'animating' : 'static';
+    scriviDato(stage.canvas, 'scene', stage.scene);
+    scriviDato(stage.canvas, 'sceneStatus', stage.budgetStatic ? 'budget-static' : reducedMotion() ? 'reduced' : stageShouldAnimate(stage, config) ? 'animating' : 'static');
   } catch (error) {
     const message = String(error?.message || error);
     if (!metrics.errors.includes(message)) metrics.errors.push(message);
     stage.budgetStatic = true;
-    stage.canvas.dataset.sceneStatus = 'error';
+    scriviDato(stage.canvas, 'sceneStatus', 'error');
     stage.context.clearRect(0, 0, stage.width, stage.height);
     return;
   }
@@ -187,10 +214,54 @@ function draw(stage, dt, config) {
         prepare(stage, true);
       } else {
         stage.budgetStatic = true;
-        stage.canvas.dataset.sceneStatus = 'budget-static';
+        scriviDato(stage.canvas, 'sceneStatus', 'budget-static');
       }
     }
   }
+}
+
+/*
+ * ⛔ Owner 28/10/2026 notte, bozzetto «Forge leggibile», variante B «Corridoio velato». Accesa così com'era, la scena Forge portava nei
+ *   punti peggiori anche il testo PRINCIPALE a 2,92:1 (scuro) e 4,24:1 (chiaro) sotto la colonna della chat (W3C F83: il caso peggiore
+ *   dove sta il testo). Attenuarla soltanto non bastava al grigio secondario (3,99:1 anche a ×0,2: i grigi delle linee sono troppo vicini
+ *   al suo). Quindi due passi, dopo il disegno della scena:
+ *   - la scena resta al 70%: si toglie il 30% di ogni pixel, come moltiplicare ogni opacità per 0,7;
+ *   - nella colonna della chat se ne toglie l'85%, con 80 px di sfumatura per lato.
+ *   Misurato sul bozzetto con la scena vera: testo principale ≥ 14,1:1, secondario ≥ 5,1:1; movimento 0,9% (scuro) e 1,7% (chiaro).
+ *   Identico sul Mobile. La colonna si misura in `prepare` (ResizeObserver), mai a ogni fotogramma.
+ */
+const VELO_DELLE_SCENE = Object.freeze({ forge: Object.freeze({ opacita: 0.7, corridoio: 0.85, morbido: 80 }) });
+
+function velaLaScena(stage) {
+  const velo = VELO_DELLE_SCENE[stage.scene];
+  if (!velo) return;
+  const c = stage.context;
+  c.save();
+  c.globalCompositeOperation = 'destination-out';
+  c.fillStyle = '#000';
+  c.globalAlpha = 1 - velo.opacita;
+  c.fillRect(0, 0, stage.width, stage.height);
+  if (stage.colonna) {
+    const [x0, x1] = stage.colonna;
+    const c0 = x0 - velo.morbido, c1 = x1 + velo.morbido, largo = c1 - c0;
+    const sfumatura = c.createLinearGradient(c0, 0, c1, 0);
+    sfumatura.addColorStop(0, 'rgba(0,0,0,0)');
+    sfumatura.addColorStop(velo.morbido / largo, 'rgba(0,0,0,1)');
+    sfumatura.addColorStop(1 - velo.morbido / largo, 'rgba(0,0,0,1)');
+    sfumatura.addColorStop(1, 'rgba(0,0,0,0)');
+    c.globalAlpha = velo.corridoio;
+    c.fillStyle = sfumatura;
+    c.fillRect(c0, 0, largo, stage.height);
+  }
+  c.restore();
+}
+
+/** La colonna della chat in coordinate del canvas: dove sta il testo da proteggere. `null` per l'anteprima o senza colonna. */
+function misuraColonna(stage, rettangolo) {
+  if (stage.preview) return null;
+  const colonna = stage.parent.querySelector('.talos-conversation__column');
+  const r = colonna?.getBoundingClientRect();
+  return r && r.width > 1 ? [r.left - rettangolo.left, r.right - rettangolo.left] : null;
 }
 
 function prepare(stage, reset = false) {
@@ -198,6 +269,7 @@ function prepare(stage, reset = false) {
   const rect = stage.parent.getBoundingClientRect();
   stage.width = Math.max(1, rect.width);
   stage.height = Math.max(1, rect.height);
+  stage.colonna = misuraColonna(stage, rect);
   let dpr = Math.min(window.devicePixelRatio || 1, MAX_DPR, Math.sqrt(MAX_PIXELS / Math.max(1, stage.width * stage.height)));
   dpr = Math.max(.5, dpr);
   const pixelWidth = Math.max(1, Math.round(stage.width * dpr));
@@ -205,7 +277,7 @@ function prepare(stage, reset = false) {
   if (stage.canvas.width !== pixelWidth) stage.canvas.width = pixelWidth;
   if (stage.canvas.height !== pixelHeight) stage.canvas.height = pixelHeight;
   stage.dpr = dpr;
-  const config = currentConfig();
+  const config = configCorrente();
   const definition = SCENES.get(config.scene) || SCENES.get(DEFAULT_SCENE);
   const changed = stage.definition !== definition || stage.scene !== definition.id;
   stage.definition = definition;
@@ -224,7 +296,7 @@ function prepare(stage, reset = false) {
 function frame(now) {
   raf = 0;
   if (destroyed) return;
-  const config = currentConfig();
+  const config = configCorrente();
   const active = [...stages].filter((stage) => stageShouldAnimate(stage, config));
   if (!active.length) { lastFrame = 0; return; }
   const elapsed = lastFrame ? now - lastFrame : 1000 / TARGET_FPS;
@@ -239,10 +311,11 @@ function schedule() {
   if (raf) cancelAnimationFrame(raf);
   raf = 0;
   lastFrame = 0;
-  if (!destroyed && [...stages].some((stage) => stageShouldAnimate(stage, currentConfig()))) raf = requestAnimationFrame(frame);
+  if (!destroyed && [...stages].some((stage) => stageShouldAnimate(stage, configCorrente()))) raf = requestAnimationFrame(frame);
 }
 
 function refreshAll({ reset = false } = {}) {
+  dimenticaConfig();
   for (const stage of stages) prepare(stage, reset);
   schedule();
 }
@@ -257,6 +330,7 @@ function refreshAll({ reset = false } = {}) {
 let refreshInAttesa = 0;
 let resetInAttesa = false;
 function chiediRefresh({ reset = false } = {}) {
+  dimenticaConfig();
   resetInAttesa = resetInAttesa || reset;
   if (refreshInAttesa || destroyed) return;
   refreshInAttesa = requestAnimationFrame(() => {
@@ -285,7 +359,10 @@ function mountStage(parent, { preview = false } = {}) {
     schedule();
   }));
   resize.observe(parent);
-  stage.dispose = () => { resize.disconnect(); stages.delete(stage); canvas.remove(); schedule(); };
+  /* la colonna cambia larghezza anche senza che il contenitore cambi (Chat a tutta larghezza, pannelli): il corridoio la segue */
+  const colonna = preview ? null : parent.querySelector('.talos-conversation__column');
+  if (colonna) resize.observe(colonna);
+  stage.dispose =() => { resize.disconnect(); stages.delete(stage); canvas.remove(); schedule(); };
   prepare(stage, true);
   return stage;
 }
@@ -363,8 +440,8 @@ export function initTalosDesktopBackground() {
   mediaQuery = matchMedia('(prefers-reduced-motion: reduce)');
   const mediaHandler = () => chiediRefresh({ reset: false });
   mediaQuery.addEventListener?.('change', mediaHandler);
-  document.addEventListener('visibilitychange', schedule);
-  window.addEventListener('pageshow', schedule);
+  document.addEventListener('visibilitychange', () => { dimenticaConfig(); schedule(); });
+  window.addEventListener('pageshow', () => { dimenticaConfig(); schedule(); });
   window.addEventListener('pagehide', () => { if (raf) cancelAnimationFrame(raf); raf = 0; });
 
   const api = Object.freeze({

@@ -299,7 +299,10 @@ test('E-NONENTRA-01 — S entra nel pavimento che decide se si paga: col riassun
   const corsa = async (extra) => {
     const rete = fornitore();
     const eventi = [];
-    await giro(t, { messaggiIniziali: m, rete, finestraToken: 5_050, onGiro: (e) => { if (e?.tipo === 'compattazione-fine') eventi.push(e); }, ...extra });
+    /* 29/10/2026 (R-24/R-25): la descrizione di `cerca` è cresciuta di qualche decina di token (`continua` solo id + `pattern`,
+       `dentro` file o cartella) e la finestra stretta di questa scena stava sul bordo basso: misurato, la scena regge da 5.080 a
+       ~5.200 (prima finiva più in basso). 5.140 è il centro della banda nuova: stesso caso, non un'altra prova. */
+    await giro(t, { messaggiIniziali: m, rete, finestraToken: 5_140, onGiro: (e) => { if (e?.tipo === 'compattazione-fine') eventi.push(e); }, ...extra });
     return { riassunti: rete.conti.riassunti, nonEntra: eventi.filter((e) => e.motivo === 'non-entra').length };
   };
   assert.deepEqual(await corsa({}), { riassunti: 0, nonEntra: 0 });

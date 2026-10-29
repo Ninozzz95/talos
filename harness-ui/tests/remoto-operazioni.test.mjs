@@ -6,7 +6,7 @@ import { bollaValida } from '../src/bolla-della-persona.mjs';
 import { bollaConOrigine, origineValida } from '../src/origine-remota.mjs';
 import { createServer } from 'node:http';
 import { creaChiamataInterna } from '../src/remoto/chiamata-interna.mjs';
-import { OPERAZIONI_HTTP, creaOperazioni } from '../src/remoto/operazioni.mjs';
+import { BATTITO_REMOTO, BATTITO_REMOTO_MS, OPERAZIONI_HTTP, battitoConStato, creaOperazioni } from '../src/remoto/operazioni.mjs';
 
 /*
  * 18/10/2026 — controllo remoto, l'elenco CHIUSO delle operazioni sopra il gestore HTTP VERO (`createHttpApp`), chiamato in processo:
@@ -35,11 +35,11 @@ function registroFinto() {
   };
 }
 
-function banco() {
+function banco(opzioni = {}) {
   const sessionRegistry = registroFinto();
   const httpApp = createHttpApp({ staticHandler: async () => null, sessionRegistry });
   const chiama = creaChiamataInterna({ httpApp, porta: 4999 });
-  const operazioni = creaOperazioni({ chiama, sessionRegistry, iscriviConRigiocata });
+  const operazioni = creaOperazioni({ chiama, sessionRegistry, iscriviConRigiocata, ...opzioni });
   const iscrizioni = new Map();
   const ricevuti = [];
   const contesto = { dispositivo: { id: 'd-1', nome: 'Pad' }, iscrizioni, iscrivi: (sub, chiudi) => { iscrizioni.set(sub, chiudi); return async (data) => { ricevuti.push({ sub, data }); }; } };
@@ -77,7 +77,10 @@ test('OPS-04 elenco chiuso: operazioni fuori elenco e id di sessione che cercano
   await assert.rejects(b.operazioni.esegui('session.send', { sessionId: 's-1', corpo: [1] }, b.contesto), { code: 'BAD_MESSAGE' });
   assert.deepEqual(b.sessionRegistry.chiamate, []);
   assert.ok(!b.operazioni.elenco().some((o) => /trust|fid/i.test(o)), 'rendere fidati MCP, hook e plugin resta solo dal PC (ELENCO-AZIONI §7.3)');
-  assert.ok(Object.values(OPERAZIONI_HTTP).every((v) => typeof v.percorso === 'function' && /^(GET|POST|DELETE)$/.test(v.metodo)));
+  assert.ok(Object.values(OPERAZIONI_HTTP).every((v) => typeof v.percorso === 'function' && /^(GET|POST|PATCH|DELETE)$/.test(v.metodo)));
+  /* owner 27/10/2026 («il dispositivo cambia tutte le impostazioni»): il primo PATCH, le impostazioni del motore del contesto. Il cancello del
+     consenso del server guarda ogni metodo che non sia GET/HEAD (`http-app.mjs`), quindi anche questo; l'elenco dei PATCH è chiuso qui */
+  assert.deepEqual(Object.entries(OPERAZIONI_HTTP).filter(([, v]) => v.metodo === 'PATCH').map(([n]) => n), ['session.context.settings']);
   /* parità, punto 4 (24/10): il primo DELETE — ammesso solo dopo che il cancello del consenso del server guarda OGNI scrittura, non solo
      POST (`http-app.mjs`); l'elenco dei DELETE è chiuso qui, e il consenso lo provano `remoto-chat-dispositivi` CHD-04 */
   assert.deepEqual(Object.entries(OPERAZIONI_HTTP).filter(([, v]) => v.metodo === 'DELETE').map(([n]) => n), ['session.message.delete']);
@@ -96,6 +99,73 @@ test('OPS-05 eventi dal numero N: la storia coalescente come /events, la fine de
   b.sessionRegistry.emetti({ type: 'TextMessageContent', messageId: 'm', delta: '?', _sequenza: 6 });
   assert.equal(b.ricevuti.length, prima);
   assert.equal(b.sessionRegistry.ascoltatori.size, 0);
+});
+
+/** Un orologio finto: `ogni`/`smetti` come setInterval/clearInterval, `batti()` fa scattare i timer vivi. */
+function orologio() {
+  const vivi = new Map();
+  let n = 0;
+  return { vivi, ogni: (fn, ms) => { n += 1; vivi.set(n, { fn, ms }); return n; }, smetti: (id) => { vivi.delete(id); }, batti: () => { for (const t of [...vivi.values()]) t.fn(); } };
+}
+
+test('OPS-05b ⛔ il battito: ogni iscrizione viva riceve talos.battito ogni 15 s, senza _sequenza; finisce con l’iscrizione (Mobile 27/10)', async () => {
+  const o = orologio();
+  const b = banco({ ogni: o.ogni, smetti: o.smetti });
+  assert.equal(BATTITO_REMOTO_MS, 15_000);
+  await b.operazioni.esegui('session.events', { sessionId: 's-1', after: 4, sub: 'chat' }, b.contesto);
+  assert.deepEqual([...o.vivi.values()].map((t) => t.ms), [15_000], 'un timer per l’iscrizione, a 15 s');
+  const prima = b.ricevuti.length;
+  o.batti();
+  const battiti = b.ricevuti.slice(prima);
+  assert.deepEqual(battiti, [{ sub: 'chat', data: BATTITO_REMOTO }]);
+  assert.equal('_sequenza' in battiti[0].data, false, 'mai salvato né rigiocato: after non si muove');
+  // la stessa sub richiesta di nuovo (la «Riprova» del telefono): il timer vecchio si ferma, ne resta uno
+  await b.operazioni.esegui('session.events', { sessionId: 's-1', after: 4, sub: 'chat' }, b.contesto);
+  assert.equal(o.vivi.size, 1);
+  // disiscrivere ferma il battito
+  await b.operazioni.esegui('session.unsubscribe', { sub: 'chat' }, b.contesto);
+  assert.equal(o.vivi.size, 0);
+  const dopo = b.ricevuti.length;
+  o.batti();
+  assert.equal(b.ricevuti.length, dopo);
+  // una connessione che si chiude chiude le sue iscrizioni (servizio.mjs, finally): anche il battito
+  await b.operazioni.esegui('session.events', { sessionId: 's-1', sub: 'a' }, b.contesto);
+  await b.operazioni.esegui('session.events', { sessionId: 's-1', sub: 'b' }, b.contesto);
+  assert.equal(o.vivi.size, 2);
+  for (const chiudi of b.contesto.iscrizioni.values()) chiudi();
+  assert.equal(o.vivi.size, 0);
+});
+
+test('OPS-05d ⛔ il battito porta lo stato della SORGENTE, letto a ogni battito: ultimaSequenza e lavora dal registro (GFR B1/B2)', async () => {
+  const o = orologio();
+  const b = banco({ ogni: o.ogni, smetti: o.smetti });
+  let stato = { ultimaSequenza: 4, lavora: true };
+  b.sessionRegistry.statoPerIlBattito = (id) => (id === 's-1' ? stato : null);
+  await b.operazioni.esegui('session.events', { sessionId: 's-1', after: 4, sub: 'chat' }, b.contesto);
+  const prima = b.ricevuti.length;
+  o.batti();
+  assert.deepEqual(b.ricevuti.at(-1), { sub: 'chat', data: { type: 'CUSTOM', name: 'talos.battito', value: { ultimaSequenza: 4, lavora: true } } });
+  // il PC scrive altri eventi che il filo non porta (l'iscrizione al registro persa): il battito lo dice
+  stato = { ultimaSequenza: 9, lavora: false };
+  o.batti();
+  assert.deepEqual(b.ricevuti.at(-1).data.value, { ultimaSequenza: 9, lavora: false });
+  assert.equal(b.ricevuti.length, prima + 2);
+  assert.equal('_sequenza' in b.ricevuti.at(-1).data, false, 'mai salvato né rigiocato');
+});
+
+test('OPS-05e AL CONTRARIO: un registro senza lo stato, o che lancia, o con uno stato storto ⇒ il battito di prima, vuoto', () => {
+  assert.equal(battitoConStato(null), BATTITO_REMOTO);
+  assert.equal(battitoConStato({ ultimaSequenza: '4', lavora: true }), BATTITO_REMOTO);
+  assert.equal(battitoConStato({ ultimaSequenza: 4 }), BATTITO_REMOTO);
+});
+
+test('OPS-05c un battito su uno stream già chiuso non lancia', async () => {
+  const o = orologio();
+  const b = banco({ ogni: o.ogni, smetti: o.smetti });
+  b.contesto.iscrivi = (sub, chiudi) => { b.contesto.iscrizioni.set(sub, chiudi); return async () => { throw new Error('stream chiuso'); }; };
+  await b.operazioni.esegui('session.events', { sessionId: 's-1', after: 4, sub: 'chat' }, b.contesto);
+  assert.doesNotThrow(() => o.batti());
+  await new Promise((r) => setImmediate(r));
 });
 
 test('OPS-06 eventi di una sessione che non c\'è: NOT_FOUND, nessun ascoltatore lasciato; la stessa iscrizione due volte ne lascia una', async () => {

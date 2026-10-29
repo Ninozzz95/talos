@@ -8,7 +8,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { impostaLingua } from '../../src/components/lingua.js';
-import { descriviRigaViva, stimaBreveRigaViva, durataBreveRigaViva, aggiornaAvanzamentoLegacy, ridisegnaRigaVivaNellaLingua } from '../../src/components/context-progress.js';
+import { descriviRigaViva, stimaBreveRigaViva, durataBreveRigaViva, aggiornaAvanzamentoLegacy, ridisegnaRigaVivaNellaLingua, impostaOrologioRigaViva } from '../../src/components/context-progress.js';
 import { interpretaEventoCompattazione, testoRigaCompattazione, percheRipiego, formattaTokenBreve, saltaRiassuntoLegacy } from '../../src/components/compattazione-legacy.js';
 import { aggiornaSeparatoreLegacy, leggiVoceLegacy } from '../../src/components/context-separator.js';
 import { creaContestoTrascrizione, trascriviEventoInterno } from '../../src/components/trascrizione-eventi-interni.js';
@@ -68,7 +68,7 @@ test('RIGA-VIVA-01 — con letti/inCache/totale e la stima, la riga dice «62% �
   const it = descriviRigaViva({ fase: 'lettura', letti: 15_375, inCache: 5_952, totale: 24_798, stimaRestanteSec: 62, trascorsoMs: 192_400, tentativo: 1, tentativi: 2 });
   assert.equal(it.etichetta, 'Riassumo il contesto');
   assert.equal(it.dettaglio, '62% · ~1 min');
-  assert.equal(it.titolo, '24.798 token da leggere, 5952 già in cache · 3 min 12 s trascorsi · tentativo 1 di 2', 'in italiano le cifre a quattro non si raggruppano (CLDR, come formattaToken)');
+  assert.equal(it.titolo, '24.798 token da leggere, 5952 già in cache · 3m 12s trascorsi · tentativo 1 di 2', 'in italiano le cifre a quattro non si raggruppano (CLDR, come formattaToken)');
 });
 
 test('RIGA-VIVA-02 (verso contrario) — senza letti/totale niente percento; senza stima niente tempo; un campo storto non stampa mai undefined o NaN', () => {
@@ -118,7 +118,14 @@ test('RIGA-VIVA-04 — il tempo in breve: passi di 5 s, mai «~0 s» né «~60 s
   assert.deepEqual([0, 12_900, 192_400].map(durataBreveRigaViva), ['0s', '12s', '3m 12s']);
   assert.equal(durataBreveRigaViva(-1), '');
   impostaLingua('it');
-  assert.equal(durataBreveRigaViva(192_400), '3 min 12 s');
+  /* owner 29/10/2026 (via Mobile): «12s · 1m 4s» uguale su telefono e PC, anche in italiano */
+  assert.deepEqual([0, 12_900, 64_000, 192_400].map(durataBreveRigaViva), ['0s', '12s', '1m 4s', '3m 12s']);
+  /* revisione del blocco 12 (RV-REV-04): un giro di due ore non si legge «120m»; le ore come Codex (`fmt_elapsed_compact`) */
+  assert.equal(durataBreveRigaViva(7_206_000), '2h 0m 6s');
+  assert.equal(durataBreveRigaViva(3_600_000), '1h 0m 0s');
+  impostaLingua('en');
+  assert.equal(durataBreveRigaViva(7_206_000), '2h 0m 6s');
+  assert.equal(durataBreveRigaViva(3_599_000), '59m 59s');
 });
 
 /* ------------------------------------------------------------------ la lettura degli eventi */
@@ -295,7 +302,7 @@ test('RIGA-VIVA-13 — al cambio di lingua la riga viva si ridice subito, con l\
   assert.deepEqual([
     row.querySelector('[data-context-chat-status]').textContent, row.querySelector('[data-context-chat-eta]').textContent, row.title,
     row.querySelector('[data-riga-viva="salta"]').textContent, row.querySelector('[data-riga-viva="ferma"]').getAttribute('aria-label'),
-  ], ['Riassumo il contesto', 'scrivo · 412 token', '1 min 1 s trascorsi', 'Salta', 'Ferma il giro']);
+  ], ['Riassumo il contesto', 'scrivo · 412 token', '1m 1s trascorsi', 'Salta', 'Ferma il giro']);
   assert.equal(ridisegnaRigaVivaNellaLingua(doc.createElement('div')), false, 'senza riga, niente da fare');
 });
 
@@ -311,4 +318,50 @@ test('RIGA-VIVA-14 — Skip è POST /api/v1/sessions/:id/compaction/skip; saltat
   assert.deepEqual(await saltaRiassuntoLegacy({ fetchFn: fetchFn({ ok: true }), sessionId: 's' }), { saltato: false }, 'un campo assente non è un sì');
   await assert.rejects(saltaRiassuntoLegacy({ fetchFn: fetchFn({ ok: false, error: { code: 'X', message: 'no' } }), sessionId: 's' }), { code: 'X', message: 'no' });
   await assert.rejects(saltaRiassuntoLegacy({ fetchFn: fetchFn({ ok: true }), sessionId: '' }), { code: 'SESSIONE' });
+});
+
+/* ------------------------------------------------------------------ owner 27/10/2026: il contatore dei secondi nella riga */
+test('RIGA-VIVA-TEMPO-01 — «scrivo · 23s» visibile nella riga, e scorre ogni secondo dall’inizio detto dal server', (t) => {
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  let adesso = 1_000_000;
+  impostaOrologioRigaViva(() => adesso);
+  try {
+    impostaLingua('en');
+    const doc = creaDocumento(), colonna = doc.createElement('div');
+    const row = aggiornaAvanzamentoLegacy(colonna, { fase: 'riassunto', trascorsoMs: 23_000 }, { sessionId: 's', document: doc, onSalta: async () => ({}), onFerma: () => {} });
+    const tempo = () => row.querySelector('[data-riga-viva-tempo]').textContent;
+    assert.equal(row.querySelector('[data-context-chat-eta]').textContent, 'writing');
+    assert.equal(tempo(), '· 23s');
+    adesso += 1_000; t.mock.timers.tick(1_000);
+    assert.equal(tempo(), '· 24s', 'scorre da solo, senza un passo nuovo');
+    adesso += 60_000; t.mock.timers.tick(1_000);
+    assert.equal(tempo(), '· 1m 24s');
+    // un passo nuovo del server rimette l'inizio al suo posto (niente deriva fra i due orologi)
+    aggiornaAvanzamentoLegacy(colonna, { fase: 'riassunto', trascorsoMs: 90_000 }, { sessionId: 's', document: doc, onSalta: async () => ({}), onFerma: () => {} });
+    assert.equal(tempo(), '· 1m 30s');
+    impostaLingua('it');
+    t.mock.timers.tick(1_000);
+    assert.equal(tempo(), '· 1m 30s', 'uguale in tutte le lingue (owner 29/10/2026)');
+  } finally { impostaOrologioRigaViva(null); impostaLingua('en'); }
+});
+
+test('RIGA-VIVA-TEMPO-02 (verso contrario) — senza trascorso dal server conta dal primo passo; senza dettaglio niente «·»; riga tolta ⇒ orologio fermo', (t) => {
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  let adesso = 5_000;
+  impostaOrologioRigaViva(() => adesso);
+  try {
+    impostaLingua('en');
+    const doc = creaDocumento(), colonna = doc.createElement('div');
+    const row = aggiornaAvanzamentoLegacy(colonna, { fase: 'inizio' }, { sessionId: 's', document: doc });
+    const tempo = () => row.querySelector('[data-riga-viva-tempo]').textContent;
+    assert.equal(row.querySelector('[data-context-chat-eta]').textContent, '');
+    assert.equal(tempo(), '0s', 'senza dettaglio, il solo tempo');
+    adesso += 7_000; t.mock.timers.tick(1_000);
+    assert.equal(tempo(), '7s');
+    row.remove();
+    adesso += 7_000; t.mock.timers.tick(1_000);
+    t.mock.timers.tick(1_000);
+    assert.equal(tempo(), '7s', 'una riga tolta dalla pagina non si aggiorna più');
+    assert.equal(row._rigaVivaOrologio, null);
+  } finally { impostaOrologioRigaViva(null); }
 });

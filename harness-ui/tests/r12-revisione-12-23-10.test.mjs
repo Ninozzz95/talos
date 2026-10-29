@@ -24,7 +24,7 @@ const rifiuto = (massimo, chiesti) => new Response(JSON.stringify({ error: { mes
 function fornitore(finestraVera) {
   const conti = { richieste: 0, rifiutate: 0, riassunti: 0, mandati: [] };
   const fetchDiRete = async (_u, o) => {
-    const corpo = JSON.parse(o.body);
+    const corpo = corpoSenzaMarcatori(o.body);
     if (!corpo.tools?.length) {
       conti.riassunti += 1;
       return Response.json({ choices: [{ index: 0, message: { role: 'assistant', content: '## Riassunto\nbreve.' }, finish_reason: 'stop' }], usage: { prompt_tokens: 10, completion_tokens: 10 } });
@@ -80,7 +80,7 @@ async function attrezziDelGiro(t) {
   t.after(() => rimuoviCartellaDiProva(cartella));
   await talosLavora({ cartella, modello: 'z-ai/glm-5.3-flash', chiave: 'finta', task: { consegna: 'x' }, messaggiIniziali: [{ role: 'user', content: 'ciao' }],
     contestoDelProgetto: 'Project files:\n', permessi: 'Full access',
-    fetchDiRete: async (_u, o) => { stimati ??= compattazione.stimaDegliAttrezzi(JSON.parse(o.body).tools); return Response.json({ choices: [{ index: 0, message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }], usage: { prompt_tokens: 10, completion_tokens: 1 } }); } });
+    fetchDiRete: async (_u, o) => { stimati ??= compattazione.stimaDegliAttrezzi(corpoSenzaMarcatori(o.body).tools); return Response.json({ choices: [{ index: 0, message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }], usage: { prompt_tokens: 10, completion_tokens: 1 } }); } });
   return stimati;
 }
 
@@ -140,6 +140,7 @@ import { join } from 'node:path';
 import { createDesktopContextService } from '../src/context-desktop-service.mjs';
 import { createSqliteContextStore } from '../../context-engine/src/node/sqlite-store.mjs';
 import { createContextEngine } from '../../context-engine/src/engine.mjs';
+import { corpoSenzaMarcatori } from './aiuto/corpo-senza-marcatori.mjs'; // 28/10: cache, punto 1
 
 const contatoreDelMotore = { countPreparedContext: async ({ messages, tools, model }) => ({ schema: 'talos.context.tokens.v1', inputTokens: Math.ceil(JSON.stringify({ messages, tools }).length / 4), windowTokens: model.windowTokens, responseReserve: model.responseReserve, method: 'heuristic', exact: false, requestHash: 'a'.repeat(64), provider: model.provider, model: model.model }) };
 const MODELLO_DEL_MOTORE = { provider: 'local', model: 'test', windowTokens: 131_072, responseReserve: 2048 };
@@ -214,7 +215,7 @@ test('R12-3 nel motore — il giro riporta la richiesta più grande che il forni
   const conti = [9_000, 14_058, 11_000];
   let i = 0;
   const conUsage = { fetchDiRete: async (_u, o) => {
-    const corpo = JSON.parse(o.body);
+    const corpo = corpoSenzaMarcatori(o.body);
     if (!corpo.tools?.length) return Response.json({ choices: [{ index: 0, message: { role: 'assistant', content: 'R' }, finish_reason: 'stop' }], usage: { prompt_tokens: 10, completion_tokens: 1 } });
     const n = conti[Math.min(i, conti.length - 1)]; i += 1;
     const chiama = i < 3;

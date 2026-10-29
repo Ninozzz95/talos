@@ -61,8 +61,9 @@ test('RIP-04 (revisione D2) un segreto scritto in un comando non passa: forme di
   assert.doesNotMatch(testo, new RegExp(chiave, 'u'));
   assert.doesNotMatch(testo, /Passw0rd123|mario:/u);
   assert.match(testo, /\[redacted\]/u);
-  // al contrario: i segnaposto e la prosa restano
-  assert.equal(oscuraFormeDiSegreto('AKIAIOSFODNN7EXAMPLE e sk-your-key-here e the bearer of bad news'), 'AKIAIOSFODNN7EXAMPLE e sk-your-key-here e the bearer of bad news');
+  // al contrario: la prosa e i segnaposto senza forma di chiave restano. ⛔ Revisione D del 29/10/2026 (concordata con la CLI): il
+  // segnaposto di AWS della documentazione ORA si oscura — l'eccezione vale per domandare, non per oscurare (forme-di-segreto-oscura).
+  assert.equal(oscuraFormeDiSegreto('AKIAIOSFODNN7EXAMPLE e sk-your-key-here e the bearer of bad news'), '[redacted] e sk-your-key-here e the bearer of bad news');
   assert.equal(oscuraFormeDiSegreto('https://openrouter.ai/api/v1'), 'https://openrouter.ai/api/v1');
 });
 

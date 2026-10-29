@@ -68,7 +68,7 @@ function improntaDegliEsiti(verifica) {
 }
 /* I motivi di «non verificabile» che il MODELLO non può cambiare lavorando: rimandarlo a sistemarli spende giri per niente
    (G4-REV-04). `command-not-found` e `could-not-run` restano fuori: uno script mancante il modello può scriverlo. */
-const FUORI_DAL_MODELLO = new Set(['workspace-missing', 'workspace-not-here', 'plan-mode', 'permission-denied', 'permission-needed', 'stopped']);
+const FUORI_DAL_MODELLO = new Set(['workspace-missing', 'workspace-not-here', 'plan-mode', 'permission-denied', 'permission-needed', 'stopped', 'folder-blocked']);
 
 /**
  * C'è stato progresso fra la verifica di prima e quella di adesso? Sì se il giro ha scritto file, se un criterio ha cambiato

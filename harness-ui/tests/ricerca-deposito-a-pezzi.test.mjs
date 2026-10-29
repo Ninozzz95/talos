@@ -376,6 +376,8 @@ test('BC49: inventario e campi TALOS-BANCO invariati, eccetto le esenzioni dichi
       remote_phone_folders: [['phone'], []],
       remote_phone_folder_allow: [['path', 'phone'], ['path', 'phone']],
       remote_phone_folder_revoke: [['folder', 'phone'], ['folder', 'phone']],
+      /* owner 27/10/2026 (cartelle bloccate, giro 2, B4): sbloccare dalla chat, stessa forma di revocare */
+      remote_phone_folder_unblock: [['folder', 'phone'], ['folder', 'phone']],
     });
     /* R5.14 (owner 23/10/2026): accendere e spegnere il controllo remoto dalla chat — un attrezzo esteso NUOVO, fuori dalla base */
     Object.assign(attrezziAutomazioni, { remote_control: [['on', 'relay'], ['on']] });
@@ -387,6 +389,18 @@ test('BC49: inventario e campi TALOS-BANCO invariati, eccetto le esenzioni dichi
     /* R5.13 (24/10/2026): mandare un file a un dispositivo — un attrezzo esteso NUOVO, fuori dalla base, fissato qui come gli altri del
      * remoto; le due impronte restano */
     Object.assign(attrezziAutomazioni, { remote_device_send_file: [['device', 'path'], ['path']] });
+    /* L1 1.3 (owner 26/10/2026, «Sì, così»: la seconda porta della finestra che cresce): `local_model_window`, un attrezzo esteso
+     * NUOVO dello stesso canale dei fornitori, fuori dalla base; forma fissata qui, le due impronte restano */
+    Object.assign(attrezziAutomazioni, { local_model_window: [['action', 'tokens'], ['action']] });
+    /* Owner 27/10/2026 («Lo aggiungo adesso, piccolo, come i concorrenti»): `view_image`, un attrezzo esteso NUOVO di sola lettura, fuori
+     * dalla base (il banco non passa mai `onGuardaImmagine`); forma fissata qui come Codex (`path` obbligatorio), le due impronte restano */
+    Object.assign(attrezziAutomazioni, { view_image: [['path'], ['path']] });
+    /* «Segnala un problema» (owner 29/10/2026, contratto con la CLI): `report_problem`, un attrezzo esteso NUOVO che non scrive niente,
+     * fuori dalla base (il banco non passa mai `onSegnalazioneFn`); forma del contratto fissata qui, le due impronte restano */
+    Object.assign(attrezziAutomazioni, { report_problem: [['description', 'kind', 'title'], ['kind', 'title']] });
+    /* Owner 27/10/2026 (server locali, terza scelta; scritto il 29/10): `local_page`, un attrezzo esteso NUOVO di sola lettura, fuori
+     * dalla base (il banco non passa mai `apriPaginaLocaleFn`); forma concordata con la CLI, le due impronte restano */
+    Object.assign(attrezziAutomazioni, { local_page: [['look', 'path', 'port'], ['port']] });
     for (const [nome, [campi, obbligatori]] of Object.entries(attrezziAutomazioni)) {
       const tool = attrezzi.map((entry) => entry.function ?? entry).find((entry) => entry.name === nome);
       if (attrezzi === ATTREZZI_OPENAI) assert.equal(tool, undefined, `${nome} non deve entrare nel banco base`);
@@ -539,7 +553,10 @@ test('BC49: inventario e campi TALOS-BANCO invariati, eccetto le esenzioni dichi
          * (stringa, facoltativa, e la prosa dice da dove viene), poi si toglie dalla copia come `offset`. */
         assert.equal(schema.properties.continua.type, 'string');
         assert.equal(schema.required.includes('continua'), false, 'cerca: continua NON deve essere obbligatorio');
-        assert.match(schema.properties.continua.description, /Reference of a search still running, given by a previous cerca reply/u);
+        /* R-24 (owner 29/10/2026), esenzione dichiarata: la prosa dice che vale SOLO l'id, e `pattern` ne fissa la forma; il preambolo
+         * del banco cambia di questi pochi token (e la frase di `dentro` dice «subfolder or file», R-25), da dire confrontando campagne. */
+        assert.match(schema.properties.continua.description, /^Only the id of a search still running, given by a previous cerca reply/u);
+        assert.equal(schema.properties.continua.pattern, '^r[0-9]+$');
         assert.match(f.description, /gives a reference to pass as "continua"/u);
         delete schema.properties.continua;
         assert.equal(schema.properties.dentro.type, 'string');

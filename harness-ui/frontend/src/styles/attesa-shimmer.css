@@ -140,3 +140,6 @@ body.reduce-motion .real-reasoning-note[data-ragionamento="vivo"] > .talos-activ
  *   cambia posizione o dimensione — cioe' niente di cio' che WCAG 2.3.3 chiama «motion animation
  *   triggered by interaction».
  */
+/* Owner 29/10/2026, «Caricamenti vivi»: un «Caricamento…» oltre 2 s prende lo shimmer qui sopra (`talos-waiting__label`) e i secondi
+   accanto, come la riga dell'attesa in chat (`components/caricamento-vivo.js`). I secondi non vanno mai a capo. */
+.talos-caricamento__secondi { margin-left: .6ch; white-space: nowrap; font-variant-numeric: tabular-nums; }

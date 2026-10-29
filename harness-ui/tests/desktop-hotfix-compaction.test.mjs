@@ -20,6 +20,7 @@ import {
   applicaRecord,
 } from '../src/kernel/compattazione-desktop.mjs';
 import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
+import { corpoSenzaMarcatori } from './aiuto/corpo-senza-marcatori.mjs'; // 28/10: cache, punto 1
 
 const CONSEGNA = 'CONSEGNA-ORIGINALE-MARKER: leggi grande.txt più volte e riferisci.';
 const PREAMBOLO = 'PREAMBOLO-PROGETTO ' + 'x'.repeat(12_000);
@@ -76,7 +77,7 @@ function fintoFornitore({ chiamateTool = 10, attrezzo = 'leggi', argomenti = '{"
   let lavoro = 0;
   let riassunti = 0;
   const fetchDiRete = async (_url, init) => {
-    const body = JSON.parse(init.body);
+    const body = corpoSenzaMarcatori(init.body);
     corpi.push(body);
     const promptTokens = Math.ceil(JSON.stringify(body.messages).length / 4);
     const usage = { prompt_tokens: promptTokens, completion_tokens: 5 };

@@ -142,6 +142,7 @@ const FRASI_DEI_ROSSI = Object.freeze({
   'evidence-stale': 'chat.goal.fail.evidenceStale', 'judge-skipped': 'chat.goal.fail.judgeSkipped', 'judge-verdict-invalid': 'chat.goal.fail.judgeInvalid',
   'command-not-found': 'chat.goal.fail.commandNotFound', stopped: 'chat.goal.fail.stopped', 'could-not-run': 'chat.goal.fail.couldNotRun',
   'workspace-missing': 'chat.goal.fail.workspaceMissing', 'workspace-not-here': 'chat.goal.fail.workspaceNotHere', 'plan-mode': 'chat.goal.fail.planMode',
+  'folder-blocked': 'chat.goal.fail.folderBlocked', // revisione blocco 11 (A-R3)
 });
 
 const TIPI = Object.freeze({ comando: { icona: 'i-terminal', chiave: 'chat.goal.kind.command' }, file: { icona: 'i-file', chiave: 'chat.goal.kind.file' }, giudizio: { icona: 'i-eye', chiave: 'chat.goal.kind.judgement' } });

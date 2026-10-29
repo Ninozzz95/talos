@@ -115,6 +115,20 @@ export function createDesktopContextService({ engine, store, loadLegacy, selectL
     return pending;
   }
   async function modelFor(sessionId) { return resolveSessionModel({ sessionId, session: await readSession(sessionId) }); }
+  /*
+   * Revisione blocco 7, A-R7 (27/10/2026): subito dopo una crescita riuscita il motore può risultare per un attimo «in partenza» (un'altra
+   * conversazione ha appena chiesto di riaprirlo) e il profilo non si rilegge: l'errore usciva da `prepareForRequest` e la chat scriveva la
+   * riga del ripiego, come se il motore del contesto fosse caduto. Qualche tentativo breve prima di arrendersi; lo Stop interrompe l'attesa.
+   */
+  async function modelDopoLaCrescita(sessionId, signal, { tentativi = 6, attesaMs = 500 } = {}) {
+    for (let i = 1; ; i += 1) {
+      try { return await modelFor(sessionId); } catch (errore) {
+        if (i >= tentativi || signal?.aborted) throw errore;
+        await new Promise((risolvi) => setTimeout(risolvi, attesaMs));
+        signal?.throwIfAborted?.();
+      }
+    }
+  }
   function common(body, fields = []) {
     if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).some(k => !['expectedRevision', 'idempotencyKey', ...fields].includes(k))) fail('CTX_INVALID_INPUT', 'Invalid context request.');
     if (!Number.isSafeInteger(body.expectedRevision) || body.expectedRevision < 0 || !validId(body.idempotencyKey)) fail('CTX_INVALID_INPUT', 'The revision and the identity of the request are required.');
@@ -143,10 +157,11 @@ export function createDesktopContextService({ engine, store, loadLegacy, selectL
       return Object.freeze({
         capture: ({ messages }) => api.syncOriginals({ sessionId, messages }),
         /* 24/09 — F4, contratto con l'adapter (F1): `messages` = proiezione corretta, `originali` = grezzo. */
-        prepare: async ({ messages, originali, tools, signal, waitForInFlight, summaryCeilingMs, onInTurnWait }) => {
+        prepare: async ({ messages, originali, tools, signal, waitForInFlight, summaryCeilingMs, onInTurnWait, growWindow }) => {
           /* A1 (21/10/2026): il tetto del riassunto atteso scelto dall'ospite arriva fino al motore (`summaryCeilingMs`); B1: e chi
-             vuole sapere quando il giro aspetta un riassunto (`onInTurnWait`) */
-          const result = await api.prepare({ sessionId, messages, originali, tools, signal, waitForInFlight, summaryCeilingMs, onInTurnWait });
+             vuole sapere quando il giro aspetta un riassunto (`onInTurnWait`); L1 1.3 (revisione blocco 6): la crescita della finestra
+             locale al cancello della compressione (`growWindow`, vedi `engine.mjs` prepareForRequest) */
+          const result = await api.prepare({ sessionId, messages, originali, tools, signal, waitForInFlight, summaryCeilingMs, onInTurnWait, growWindow });
           mandataSenzaAttesa = result?.sentWithoutWaiting === true && Array.isArray(result.messages) ? { input: { messages, originali, tools }, result } : null;
           return result;
         },
@@ -373,7 +388,7 @@ export function createDesktopContextService({ engine, store, loadLegacy, selectL
      * Code (issue #26125, 16/02/2026: «The full transcript is preserved in transcript.jsonl on disk» mentre al
      * modello arrivano i «compacted summaries»): la trascrizione grezza e il contesto inviato sono due cose.
      */
-    async prepare({ sessionId, messages, originali, tools, signal, waitForInFlight = false, summaryCeilingMs, onInTurnWait }) {
+    async prepare({ sessionId, messages, originali, tools, signal, waitForInFlight = false, summaryCeilingMs, onInTurnWait, growWindow }) {
       let projection;
       if (originali !== undefined) {
         if (!Array.isArray(originali) || !Array.isArray(messages) || messages.length !== originali.length || messages.some((message, index) => message?.role !== originali[index]?.role)) fail('CTX_INVALID_INPUT', 'The request projection is not aligned with the originals (different length or roles).');
@@ -413,7 +428,12 @@ export function createDesktopContextService({ engine, store, loadLegacy, selectL
       let result;
       try { result = await engine.prepareForRequest({ sessionId, projection, tools, sessionModel: await modelFor(sessionId), signal, waitForInFlight: waitForInFlight === true,
         ...(Number.isSafeInteger(summaryCeilingMs) && summaryCeilingMs > 0 ? { summaryCeilingMs } : {}),
-        ...(typeof onInTurnWait === 'function' ? { onInTurnWait } : {}) }); }
+        ...(typeof onInTurnWait === 'function' ? { onInTurnWait } : {}),
+        /* cresciuta la finestra, il profilo si rilegge (`modelFor` ⇒ la finestra viva del motore): il motore rimisura su quella */
+        ...(typeof growWindow === 'function' ? { growWindow: async (info) => {
+          const esito = await growWindow(info);
+          return esito?.grown === true ? { ...esito, sessionModel: await modelDopoLaCrescita(sessionId, signal) } : esito;
+        } } : {}) }); }
       catch (error) {
         /* 25/09 — l'avviso «compattazione automatica in pausa» nasce anche quando la richiesta MUORE (contesto che non entra,
            riassunto rifiutato mentre si aspettava): senza questa consegna restava nella coda fino alla richiesta dopo. Una

@@ -7,6 +7,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { corpoSenzaMarcatori } from './aiuto/corpo-senza-marcatori.mjs'; // 28/10: cache, punto 1
 
 process.env.TALOS_COMPACTION_TOKEN_CAP = '4000';
 const { talosLavora: talosLavoraVero } = await import('../src/kernel/talosHarness.desktop-hotfix.mjs');
@@ -30,7 +31,7 @@ function rete({ letture = 0, riassunto }) {
   const conti = { modello: 0, riassunti: 0, promptModello: 0 };
   let fatte = 0;
   const fn = async (_u, o) => {
-    const corpo = JSON.parse(o.body);
+    const corpo = corpoSenzaMarcatori(o.body);
     if (!corpo.tools?.length) { conti.riassunti += 1; return riassunto(o); }
     conti.modello += 1;
     const usage = { prompt_tokens: stima(corpo.messages), completion_tokens: 1 };
@@ -154,7 +155,7 @@ test('IST-REV-05 — owner 15/10 notte, «passa al giro dopo»: il giro che rice
     setTimeout(() => consegna(prontaVera), 300);
     const eventi = [];
     const r1 = rete({ letture: 2, riassunto: async () => { await attesa(2_000); return RIASSUNTO(); } });
-    const lente = async (u, o) => { const corpo = JSON.parse(o.body); if (corpo.tools?.length) await attesa(250); return r1.fn(u, o); };
+    const lente = async (u, o) => { const corpo = corpoSenzaMarcatori(o.body); if (corpo.tools?.length) await attesa(250); return r1.fn(u, o); };
     await talosLavora({ cartella, modello: 'z-ai/glm-5.3-flash', chiave: 'finta', task: { consegna: 'Leggi.' }, permessi: 'Full access',
       messaggiIniziali: [...uno.messaggiFinali, { role: 'user', content: `Adesso ${'altro testo '.repeat(300)}` }],
       compattazioneIstantanea: true, ...(conInArrivo ? { compattazioneInArrivo: inArrivo } : {}), contestoDelProgetto: 'Project files:\n', fetchDiRete: lente,
@@ -289,7 +290,7 @@ async function giroAllEmergenza(t, { inArrivo: crea, coda }) {
   const inArrivo = crea(prontaVera, uno.messaggiFinali);
   const eventi = [];
   const ingressi = [];
-  const r1 = rete({ riassunto: (o) => { ingressi.push(stima(JSON.parse(o.body).messages)); return RIASSUNTO(); } });
+  const r1 = rete({ riassunto: (o) => { ingressi.push(stima(corpoSenzaMarcatori(o.body).messages)); return RIASSUNTO(); } });
   const messaggiIniziali = [...uno.messaggiFinali, { role: 'user', content: `Adesso ${coda}` }];
   assert.ok(stima(messaggiIniziali) > 4_800, `premessa: sopra l'emergenza (${stima(messaggiIniziali)})`);
   const inizio = Date.now();

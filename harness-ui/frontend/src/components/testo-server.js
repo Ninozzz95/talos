@@ -15,10 +15,18 @@
  * Non si riusa `testoErroreServer` (errori.js): quello sostituisce le parole di un ERRORE del server (codice + motivo), questo
  * dice un campo di una risposta che non è un errore.
  */
-import { FORMA_DELLA_CHIAVE, t, tn } from './lingua.js';
+import { FORMA_DELLA_CHIAVE, linguaCorrenteDiT, t, tn } from './lingua.js';
 import { TESTI } from '../i18n/testi/index.js';
 
 const esiste = (chiave) => typeof chiave === 'string' && FORMA_DELLA_CHIAVE.test(chiave) && TESTI.en[chiave] !== undefined;
+
+/*
+ * 29/10/2026 (prova ALLEGA-UI-01): «il tuo messaggio occupa circa 212000 dei 200000 token» — le QUANTITÀ di token arrivavano senza
+ *   separatore delle migliaia, mentre la carta del contesto pieno le scrive formattate (`errori.js`, `numeroLocale`). Si formattano solo i
+ *   parametri che sono quantità di token per nome (`tokens…`, `…Tokens`, `finestra`, `riserva`): una porta, un id o un anno restano com'è.
+ */
+const QUANTITA_DI_TOKEN = /^(?:tokens[A-Z]\w*|\w+Tokens|finestra|riserva)$/u;
+const numeroNellaLingua = (n) => Number(n).toLocaleString(linguaCorrenteDiT() === 'en' ? 'en-US' : 'it-IT');
 
 /** I valori della frase, con i nomi che hanno la loro chiave già detti nella lingua corrente. */
 function valoriDellaFrase(params) {
@@ -27,7 +35,9 @@ function valoriDellaFrase(params) {
   for (const [nome, valore] of Object.entries(params)) {
     if (nome.endsWith('Chiave') && nome.length > 'Chiave'.length) continue;
     const chiaveDelNome = params[`${nome}Chiave`];
-    fuori[nome] = esiste(chiaveDelNome) ? t(chiaveDelNome) : valore;
+    fuori[nome] = esiste(chiaveDelNome) ? t(chiaveDelNome)
+      : QUANTITA_DI_TOKEN.test(nome) && Number.isSafeInteger(valore) ? numeroNellaLingua(valore)
+        : valore;
   }
   return fuori;
 }

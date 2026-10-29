@@ -26,6 +26,7 @@
 import { SOGLIA_AGENTI, STATI_PASSO, conteggiFase, iconaDellaFase, percentualeFase, tonoFase } from './grafo-workflow.js';
 import { cifra, parolaDelPasso } from './grafo/tempo.js';
 import { t as tr, tn } from './lingua.js';
+import { mostraCaricamentoVivo } from './caricamento-vivo.js'; // owner 29/10/2026: oltre 2 s il caricamento diventa la riga viva
 
 export const PAGINA_RAIL = 25;
 const RILETTURA_MINIMA_MS = 1_000;
@@ -335,7 +336,8 @@ export function montaRailWorkflow(contenitore, {
     if (!stato.panoramica) {
       attenzione.replaceChildren(); attenzione.dataset.chiavi = ''; elenco.replaceChildren(); firmaElenco = null; righeVive.clear();
       totali.replaceChildren(); altri.hidden = true; vediTutto.hidden = true; togliFiltro.hidden = true;
-      esito.textContent = stato.carica ? tr('agenti.rail.loading') : stato.errore ?? '';
+      if (stato.carica) mostraCaricamentoVivo(esito, tr('agenti.rail.loading'), { chiave: 'binario-workflow' }); // si ridisegna a ogni aggiornamento
+      else esito.textContent = stato.errore ?? '';
       return;
     }
     disegnaAttenzione(); disegnaElenco(); disegnaTotali();

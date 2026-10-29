@@ -108,7 +108,10 @@ test('SETTINGS06-CONCURRENT: ordered field patches do not erase each other',asyn
   assert.deepEqual(freshProcess(b).settings,{ok:true,dove:'wsl2',comandiNellaConversazione:true});
   const changes=(await leggiRegistro({cartellaStore:b.store,sessionId:b.sessionId})).filter(r=>r.tipo==='impostazioni-comandi');
   assert.equal(changes.length,3);
-  assert.deepEqual(changes.map(r=>Object.keys(r).filter(k=>k!=='tipo')), [['doveGiranoIComandi'],['comandiNellaConversazione'],['doveGiranoIComandi']]);
+  // revisione blocco 11 (D-R2): ogni riga porta anche la versione delle impostazioni che annuncia; per il resto solo il SUO campo
+  assert.deepEqual(changes.map(r=>Object.keys(r).filter(k=>k!=='tipo'&&k!=='versioneImpostazioni')), [['doveGiranoIComandi'],['comandiNellaConversazione'],['doveGiranoIComandi']]);
+  const versioni=changes.map(r=>r.versioneImpostazioni);
+  assert.ok(versioni.every(Number.isSafeInteger)&&versioni[0]<versioni[1]&&versioni[1]<versioni[2], `le versioni nelle righe crescono nell'ordine delle scritture: ${versioni}`);
 });
 test('SETTINGS06-FALSE-NULL: explicit reset overrides older saved preferences',async t=>{
   const b=bank(t);await b.settle();

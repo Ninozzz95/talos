@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { dettaglioUtile, statoGiri, etichettaPermesso, etichettaPermessoConEccezioni, tonoPermesso, nomeModelloUmano, fondoInVista, testoVelocitaLocale,
-  riassuntoSenzaChiedere, chipDelPermesso, GRUPPI_SENZA_CHIEDERE, LIVELLO_DELLA_POLITICA, attrezzoPassaSenzaChiedere } from '../../src/components/chat-foot.js';
+  riassuntoSenzaChiedere, chipDelPermesso, GRUPPI_SENZA_CHIEDERE, LIVELLO_DELLA_POLITICA, attrezzoPassaSenzaChiedere, registraModelliLocali } from '../../src/components/chat-foot.js';
 import { ATTREZZI_CON_PERMESSO_PER_ATTREZZO } from '../../../src/config.mjs';
 import { LIVELLI_DI_ACCESSO, livelloConcedeDaSolo } from '../../../src/permessi-catena.mjs';
 import { verificaPermessoScrittura } from '../../../src/kernel/talosHarness.mjs';
@@ -273,4 +273,43 @@ test('CHIP-BREVE-03 AL CONTRARIO: dove la frase di C1 è già il nome, il sugger
   assert.equal(ro.suggerimento, riassuntoSenzaChiedere('Read only', {}).suggerimento);
   const piano = chipDelPermesso('Full access', {}, { modalitaOperativa: 'piano' });
   assert.deepEqual(piano, { testo: 'Piano: solo lettura', suggerimento: riassuntoSenzaChiedere('Full access', {}, { modalitaOperativa: 'piano' }).suggerimento });
+});
+
+/* 27/10/2026 (owner, foto del 4174): «LFM2 5 · 24B». L'id del modello locale è la targa del repo con i punti diventati trattini, e da
+   lì «2.5» non si ricostruisce (SmolLM2-1-7B è 1,7 B, Llama-3-8B è 8 B: nessuna regola sul testo distingue). Il nome vero è quello del
+   FILE nel catalogo (`files[0].path`), e lì il punto c'è. */
+test('NOME-LOCALE-01 col catalogo letto, il nome viene dal file del modello: il punto della versione resta', () => {
+  const lfm = 'local:LiquidAI-LFM2-5-24B-A2B-GGUF-0912d33141f7-LFM2-5-24B-A2B-Q4-K-M';
+  const glm = 'local:unsloth-GLM-4-7-Flash-GGUF-0d32489ecb9d-GLM-4-7-Flash-Q4-K-M';
+  const prima = nomeModelloUmano(lfm);
+  assert.equal(registraModelliLocali([
+    { id: lfm.slice(6), files: [{ path: 'LFM2.5-24B-A2B-Q4_K_M.gguf' }] },
+    { id: glm.slice(6), files: [{ path: 'GLM-4.7-Flash-Q4_K_M.gguf' }] },
+    { id: 'senza-file', files: [] },
+  ]), true, 'il catalogo nuovo cambia qualcosa: chi chiama ridisegna');
+  assert.equal(nomeModelloUmano(lfm), 'LFM2.5 · 24B (2B attivi) · Q4_K_M');
+  assert.equal(nomeModelloUmano(glm), 'GLM 4.7 Flash · Q4_K_M', 'senza il prefisso di chi pubblica: il nome del file non ce l\'ha');
+  assert.notEqual(prima, nomeModelloUmano(lfm));
+  assert.equal(registraModelliLocali([{ id: lfm.slice(6), files: [{ path: 'LFM2.5-24B-A2B-Q4_K_M.gguf' }] }]), false, 'lo stesso catalogo non chiede di ridisegnare');
+  /* AL CONTRARIO: un modello che il catalogo non conosce resta tradotto dall'id, come prima */
+  assert.equal(nomeModelloUmano('local:unsloth-Qwen3.5-35B-A3B-GGUF-abc123-Qwen3.5-35B-A3B-Q4_K_M-gguf'), 'Qwen3.5 · 35B (3B attivi) · Q4_K_M');
+});
+
+test('NOME-LOCALE-02 un modello diviso in più file dice il nome del modello, non «00001 of»', () => {
+  registraModelliLocali([{ id: 'x-Big-GGUF-1-Big', files: [{ path: 'Qwen3.5-122B-A10B-Q4_K_M-00001-of-00003.gguf' }] }]);
+  assert.equal(nomeModelloUmano('local:x-Big-GGUF-1-Big'), 'Qwen3.5 · 122B (10B attivi) · Q4_K_M');
+});
+
+test('NOME-LOCALE-03 (revisione blocco 8, G-R1) un file dal nome generico non cancella il nome che l\'id sa dire', () => {
+  registraModelliLocali([
+    { id: 'TheBloke-Llama-2-7B-GGUF-abc-llama-2-7b-q4_0', files: [{ path: 'ggml-model-q4_0.gguf' }] },
+    { id: 'microsoft-Phi-3-mini-gguf-def-phi3', files: [{ path: 'model.gguf' }] },
+    { id: 'x-Qwen3-8B-GGUF-ghi-Qwen3-8B-Q4_K_M', files: [{ path: 'Scaricato (1).gguf' }] },
+  ]);
+  assert.match(nomeModelloUmano('local:TheBloke-Llama-2-7B-GGUF-abc-llama-2-7b-q4_0'), /^Llama 2/u);
+  assert.match(nomeModelloUmano('local:microsoft-Phi-3-mini-gguf-def-phi3'), /^Phi 3 mini/u);
+  assert.doesNotMatch(nomeModelloUmano('local:x-Qwen3-8B-GGUF-ghi-Qwen3-8B-Q4_K_M'), /Scaricato/u);
+  /* AL CONTRARIO: un file con un nome vero vince ancora */
+  registraModelliLocali([{ id: 'LiquidAI-LFM2-5-1B-GGUF-x-LFM2-5-1B-Q8-0', files: [{ path: 'LFM2.5-1B-Q8_0.gguf' }] }]);
+  assert.match(nomeModelloUmano('local:LiquidAI-LFM2-5-1B-GGUF-x-LFM2-5-1B-Q8-0'), /^LFM2\.5/u);
 });

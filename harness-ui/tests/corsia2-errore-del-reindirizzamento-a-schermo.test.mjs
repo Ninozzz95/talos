@@ -150,8 +150,11 @@ test('CORSIA2-CABLAGGIO — i tre anelli sono attaccati nel monolite, e nell’O
     MONOLITE.includes('provenienzaDelGiroFinito, spiegaErrore'),
     'app.js non importa la funzione della provenienza',
   );
+  /* «Invia come allegato» (29/10/2026): il terzo argomento è diventato un oggetto che SPARGE la provenienza e aggiunge `allegabile`;
+     resta vietata la chiamata a due argomenti, e la provenienza deve essere ancora il primo pezzo del terzo */
   assert.ok(
-    MONOLITE.includes("spiegaErrore(testoDelCampo(evento, 'message'), evento.code, provenienzaDelGiroFinito("),
+    MONOLITE.includes("spiegaErrore(testoDelCampo(evento, 'message'), evento.code, provenienzaDelGiroFinito(")
+      || /spiegaErrore\(testoDelCampo\(evento, 'message'\), evento\.code, \{\s*\.\.\.provenienzaDelGiroFinito\(/u.test(MONOLITE),
     'il RunError chiama ancora spiegaErrore con DUE argomenti: la famiglia resta irraggiungibile',
   );
   assert.ok(

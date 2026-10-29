@@ -237,12 +237,18 @@ export async function diagnosi({
     };
   }
   if (Array.isArray(cartelleProgetto)) {
+    /*
+     * 29/10/2026 — ZERO CARTELLE FISSE NON È UN AVVISO. L'app installata parte senza progetto di proposito (owner: «la prima», la
+     *   schermata «Scegli una cartella»), e una sessione accetta qualunque cartella scelta nel browser (`preparaEsecuzioneLibera`,
+     *   `cartellaLibera`). Prima lo zero diventava un avviso giallo a ogni installazione nuova. `sceltaPerSessione` lo dice.
+     */
     risultato.cartelleProgetto = {
       disponibili: cartelleProgetto.length > 0,
       conteggio: cartelleProgetto.length,
+      ...(cartelleProgetto.length === 0 ? { sceltaPerSessione: true } : {}),
       ...(cartelleProgetto.length > 0
         ? frase('dettaglio', `${cartelleProgetto.length} project ${cartelleProgetto.length === 1 ? 'folder' : 'folders'} available.`, 'server.doctor.folders.available', { n: cartelleProgetto.length })
-        : frase('dettaglio', 'No project folder has been set up in the allowed list.', 'server.doctor.folders.none')),
+        : frase('dettaglio', 'No fixed project folder: you choose the folder when you start a new session.', 'server.doctor.folders.choosePerSession')),
     };
   }
   if (Array.isArray(providerRows)) {

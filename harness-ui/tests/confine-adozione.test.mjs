@@ -66,7 +66,9 @@ test('ripresa di una sessione salvata con la frase di prima: l\'eccezione arriva
     const giaRipresa = await promptDellaRipresa([...vecchia, { role: 'system', content: ECCEZIONE_ADOZIONE }], true)
     assert.equal(giaRipresa.filter((s) => s.includes(SEGNO_ECCEZIONE_ADOZIONE)).length, 1, 'una ripresa di una ripresa non la ripete')
     const spento = await promptDellaRipresa(vecchia, false)
-    assert.deepEqual(spento, [vecchia[0].content], 'spento: la storia com\'era')
+    /* 28/10/2026 (owner, la lingua delle risposte): una sessione salvata senza la regola di lingua la riceve in coda, una volta — è
+       un'altra decisione, che questa prova non guarda: qui conta che dell'adozione non arrivi niente. */
+    assert.deepEqual(spento.filter((s) => !s.startsWith('Always reply in ')), [vecchia[0].content], 'spento: la storia com\'era')
     const nuova = await promptDellaRipresa([{ role: 'system', content: `prompt di allora\n\n${ISTRUZIONE_CONFINE_DATI_CON_ADOZIONE}` }], true)
     assert.equal(nuova.filter((s) => s.includes(SEGNO_ECCEZIONE_ADOZIONE)).length, 1, 'una sessione nata con l\'eccezione non la riceve due volte')
 })

@@ -19,6 +19,7 @@ import { createSqliteContextStore } from '../../context-engine/src/node/sqlite-s
 import { createContextEngine } from '../../context-engine/src/engine.mjs';
 import { cartellaDiProva } from './aiuto/cartelle-di-prova.mjs';
 import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
+import { corpoSenzaMarcatori } from './aiuto/corpo-senza-marcatori.mjs'; // 28/10: cache, punto 1
 
 const prosa = (n) => 'Answer words. '.repeat(Math.ceil(n / 14)).slice(0, n);
 const log = (n) => '2026-10-22 12:00:00 INFO pasted build log line with some words '.repeat(Math.ceil(n / 62)).slice(0, n);
@@ -30,7 +31,7 @@ const rifiuto = (massimo, chiesti) => new Response(JSON.stringify({ error: { mes
 function fornitore(finestraVera, { cornice = 0, falliscaDopo = null } = {}) {
   const conti = { richieste: 0, rifiutate: 0, riassunti: 0, mandati: [], corpi: [] };
   const fetchDiRete = async (_u, o) => {
-    const corpo = JSON.parse(o.body);
+    const corpo = corpoSenzaMarcatori(o.body);
     if (!corpo.tools?.length) {
       conti.riassunti += 1;
       conti.corpi.push(corpo);
@@ -65,7 +66,7 @@ async function attrezziDelGiro(t) {
   t.after(() => rimuoviCartellaDiProva(cartella));
   await talosLavora({ cartella, modello: 'z-ai/glm-5.3-flash', chiave: 'finta', task: { consegna: 'x' }, messaggiIniziali: [{ role: 'user', content: 'ciao' }],
     contestoDelProgetto: 'Project files:\n', permessi: 'Full access',
-    fetchDiRete: async (_u, o) => { stimati ??= compattazione.stimaDegliAttrezzi(JSON.parse(o.body).tools); return Response.json({ choices: [{ index: 0, message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }], usage: { prompt_tokens: 10, completion_tokens: 1 } }); } });
+    fetchDiRete: async (_u, o) => { stimati ??= compattazione.stimaDegliAttrezzi(corpoSenzaMarcatori(o.body).tools); return Response.json({ choices: [{ index: 0, message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }], usage: { prompt_tokens: 10, completion_tokens: 1 } }); } });
   return stimati;
 }
 function cartelle(t) {
@@ -350,7 +351,7 @@ test('R13-3-B — un riassunto preparato dal registro sulla storia INTERA resta 
       cartellaIncollati: incollati, contestoDelProgetto: 'Project files:\n',
       onGiro: (e) => { if (e?.tipo === 'compattazione-fine') fini.push({ compattato: e.compattato === true, istantanea: e.istantanea === true, motivo: e.motivo ?? null }); },
       fetchDiRete: async (_u, o) => {
-        const corpo = JSON.parse(o.body);
+        const corpo = corpoSenzaMarcatori(o.body);
         conti.corpi.push(corpo);
         if (!corpo.tools?.length) {
           conti.riassunti += 1;
@@ -399,7 +400,7 @@ test('R13-3-C — un record salvato la cui ULTIMA richiesta coperta ha poi la su
     await talosLavora({ cartella, modello: 'z-ai/glm-5.3-flash', chiave: 'finta', task: { consegna: 'E adesso?' }, messaggiIniziali: [...storia, { role: 'user', content: 'E adesso?' }],
       recordCompattazioneIniziale: rec, cartellaIncollati: incollati, contestoDelProgetto: 'Project files:\n',
       fetchDiRete: async (_u, o) => {
-        const c = JSON.parse(o.body);
+        const c = corpoSenzaMarcatori(o.body);
         if (c.tools?.length) corpo ??= c;
         return Response.json({ choices: [{ index: 0, message: { role: 'assistant', content: 'fatto' }, finish_reason: 'stop' }], usage: { prompt_tokens: 100, completion_tokens: 1 } });
       } });
@@ -427,7 +428,7 @@ test('R13-3-D — con la copia dell\'incollato i record che il giro crea (riassu
       compattazioneIstantanea: true, cartellaIncollati: incollati, contestoDelProgetto: 'Project files:\n',
       onGiro: (e) => { if (e?.tipo === 'compattazione-fine') fini.push({ compattato: e.compattato === true, soloCoda: e.soloCoda === true }); },
       fetchDiRete: async (_u, o) => {
-        const corpo = JSON.parse(o.body);
+        const corpo = corpoSenzaMarcatori(o.body);
         if (!corpo.tools?.length) { riassunti += 1; return Response.json({ choices: [{ index: 0, message: { role: 'assistant', content: '## Riassunto\nbreve.' }, finish_reason: 'stop' }], usage: { prompt_tokens: 10, completion_tokens: 10 } }); }
         return Response.json({ choices: [{ index: 0, message: { role: 'assistant', content: 'fatto' }, finish_reason: 'stop' }], usage: { prompt_tokens: stimaConversazione(corpo.messages), completion_tokens: 1 } });
       } });

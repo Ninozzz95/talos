@@ -4,6 +4,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 import { tabellaDaRighe, sommaAlbero, sommaPerMarcatore, creaCampionatoreRisorse, COPIONE_WSL } from '../src/risorse-processi.mjs';
+import { percorsoWsl } from '../src/taskkill-di-sistema.mjs';
 
 /*
  * C1 (owner 10/10/2026, «CPU e memoria per processo, misurate da noi, solo a scheda aperta», poi «Anche WSL, adesso») —
@@ -101,7 +102,8 @@ test('C1-RIS-05 — WSL: the processes carrying the marker are summed per comman
   utime = 50; istante = 2_000;
   assert.equal((await c.misura(richiesta)).perMarcatore.get('Ubuntu:ta1').cpuPercento, 50);
   assert.equal(chiamate.length, 1, 'the reader stays open between samples');
-  assert.deepEqual(chiamate[0].slice(0, 7), ['wsl.exe', '-d', 'Ubuntu', '-u', 'root', '--exec', 'sh']);
+  // G-R5 (27/10/2026): wsl.exe by its full path under SystemRoot, never by name
+  assert.deepEqual(chiamate[0].slice(0, 7), [percorsoWsl(), '-d', 'Ubuntu', '-u', 'root', '--exec', 'sh']);
   // al contrario: un nome di distro o un marcatore che non sono i nostri non arrivano mai alla riga di comando
   const prima2 = await c.misura({ wsl: [{ distro: 'Ubuntu; rm -rf /', marcatore: 'ta1' }, { distro: 'Ubuntu', marcatore: "x' ; y" }] });
   assert.equal(prima2.perMarcatore.size, 0);

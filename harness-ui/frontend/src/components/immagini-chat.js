@@ -19,10 +19,25 @@ export function creaAnteprimaImmagine(image, { compatta = false, document: doc =
   picture.src = apiBase + image.url;
   picture.alt = image.nome;
   picture.loading = 'lazy';
+  /* 27/10/2026 (view_image, ricerca dello stesso giorno: web.dev «Image performance», debugbear «Avoid large layout shifts»): le misure
+     vere, quando si sanno, così il riquadro ha già la sua forma; la decodifica fuori dal filo principale. Dentro un pannello chiuso
+     `loading="lazy"` scarica solo quando lo si apre. */
+  picture.decoding = 'async';
+  if (Number.isSafeInteger(image.larghezza) && image.larghezza > 0 && Number.isSafeInteger(image.altezza) && image.altezza > 0) {
+    picture.width = image.larghezza;
+    picture.height = image.altezza;
+  }
   const caption = doc.createElement('span');
   caption.className = 'talos-image-card__caption';
   caption.textContent = image.nome;
   card.append(picture, caption);
+  /* Come Hermes (`fallback-vision-image.test.tsx`, «says so when the image cannot be read instead of silently dropping the preview»): se
+     l'immagine non arriva lo si dice nel riquadro, e il riquadro non apre una finestra vuota. */
+  picture.addEventListener('error', () => {
+    card.classList.add('talos-image-card--rotta');
+    card.disabled = true;
+    caption.textContent = t('chat.image.loadFailed', { nome: image.nome });
+  }, { once: true });
   card.addEventListener('click', () => {
     const dialog = doc.createElement('dialog');
     dialog.className = 'talos-image-viewer';

@@ -10,7 +10,9 @@ import { expect, test } from '@playwright/test';
 import { apri, eventoAgente, figlia, finita } from './aiuto-deleghe-diagramma.mjs';
 
 /* la tela monta solo le schede vicine alla vista: una scheda che non c'è nel DOM è fuori dalla tela */
-const dentroLaTela = async (carta) => (await carta.count()) > 0 && carta.evaluate((n) => { const r = n.getBoundingClientRect(); const c = n.closest('.gv-tela').getBoundingClientRect(); return r.left >= c.left && r.right <= c.right && r.top >= c.top && r.bottom <= c.bottom; });
+/* 28/10/2026: sotto carico la scheda può uscire dalla tela fra il conteggio e la misura (la tela smonta ciò che è lontano): allora non è
+   nella tela, e la prova lo dice invece di esplodere su closest(...) null. Una sola misura, senza attese fra le due letture. */
+const dentroLaTela = async (carta) => (await carta.count()) > 0 && carta.first().evaluate((n) => { const tela = n.closest('.gv-tela'); if (!n.isConnected || !tela) return false; const r = n.getBoundingClientRect(); const c = tela.getBoundingClientRect(); return r.left >= c.left && r.right <= c.right && r.top >= c.top && r.bottom <= c.bottom; }).catch(() => false);
 const lente = (grafo) => grafo.getByRole('button', { name: 'Cerca nel diagramma' });
 const campo = (grafo) => grafo.getByRole('searchbox', { name: 'Cerca fra agenti e lotti del diagramma' });
 

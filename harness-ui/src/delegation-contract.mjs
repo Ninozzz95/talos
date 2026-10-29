@@ -8,6 +8,7 @@ const LETTURE = new Set([
   'memory_find', 'research_find', 'research_read',
   'conversation_search', 'ask_parent', 'answer_parent_question',
   'tool_search', 'tool_describe', // C5 attrezzi differiti: il catalogo si legge; `tool_call` si giudica sull'attrezzo vero
+  'view_image', // owner 27/10/2026: guardare un'immagine è una lettura
 ]);
 
 /** Missing metadata is legacy; present but invalid metadata fails closed. */

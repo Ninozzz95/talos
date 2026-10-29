@@ -98,7 +98,7 @@ export function dettaglioTelefono(v, { lingua = 'it', ora = Date.now() } = {}) {
 export function disegnaTelefoni(contenitore, stato, {
   onRevoca, onCollega, onCambiaRelay, lingua = 'it', ora = Date.now(), document: doc = globalThis.document,
   /* R5.12: `cartelleDi[id]` = le cartelle consentite del dispositivo (array), null se non si sono lette, assente se non ancora chieste */
-  cartelleDi = null, onRevocaCartella = null, onAggiungiCartella = null,
+  cartelleDi = null, onRevocaCartella = null, onSbloccaCartella = null, onAggiungiCartella = null,
 } = {}) {
   if (!contenitore) return;
   /* Titolo e introduzione li dà già la testata della sezione (mockup: «Telefoni collegati» + la frase sulla revoca): qui niente doppioni. */
@@ -123,7 +123,7 @@ export function disegnaTelefoni(contenitore, stato, {
     riga.append(testo, statoRiga, revoca);
     elenco.append(riga);
     if (cartelleDi && Object.hasOwn(cartelleDi, v.id)) {
-      elenco.append(sezioneCartelle(doc, v, cartelleDi[v.id], { onRevocaCartella, onAggiungiCartella, lingua, ora, radiceMenu: contenitore.ownerDocument?.body ?? doc.body }));
+      elenco.append(sezioneCartelle(doc, v, cartelleDi[v.id], { onRevocaCartella, onSbloccaCartella, onAggiungiCartella, lingua, ora, radiceMenu: contenitore.ownerDocument?.body ?? doc.body }));
     }
   }
   const collega = pulsante(doc, 'primary', t(vivi.length ? 'remoto.list.connectAnother' : 'remoto.list.connectFirst'), 'remotoCollegaAltro');
@@ -363,7 +363,8 @@ function icona(doc, id, classe = 'i') {
 /** La riga di dettaglio di una cartella consentita (bozzetto: «D:\Projects\AVM · consentita oggi», «… · consentita in anticipo»). */
 export function dettaglioCartella(c, { lingua = 'it', ora = Date.now() } = {}) {
   const parti = [String(c?.percorso || c?.nome || '')];
-  if (c?.da === 'anticipo') parti.push(t('remoto.folders.inAdvance'));
+  if (c?.bloccata) parti.push(t('remoto.folders.blocked'));
+  else if (c?.da === 'anticipo') parti.push(t('remoto.folders.inAdvance'));
   else if (c?.da === 'chat') parti.push(t('remoto.folders.fromChat'));
   else {
     const ms = Date.parse(c?.consentitaAlle ?? '');
@@ -417,7 +418,7 @@ function apriMenuCartella(doc, radice, sorgente, titolo, voci) {
 }
 
 /** Scena 8: «Cartelle consentite» sotto il suo dispositivo. `cartelle`: l'elenco, o null se non si è potuto leggere. */
-function sezioneCartelle(doc, v, cartelle, { onRevocaCartella, onAggiungiCartella, lingua, ora, radiceMenu }) {
+function sezioneCartelle(doc, v, cartelle, { onRevocaCartella, onSbloccaCartella, onAggiungiCartella, lingua, ora, radiceMenu }) {
   const sez = nodo(doc, 'section', 'talos-card talos-inspector-card talos-remoto-cartelle');
   sez.dataset.remotoCartelle = v.id;
   const testa = nodo(doc, 'div', 'talos-inspector-card__head');
@@ -431,8 +432,12 @@ function sezioneCartelle(doc, v, cartelle, { onRevocaCartella, onAggiungiCartell
   for (const c of cartelle ?? []) {
     const riga = nodo(doc, 'div', 'talos-remoto-riga talos-remoto-cartella');
     riga.dataset.remotoCartella = c.cartellaId;
+    if (c.bloccata) riga.dataset.remotoBloccata = '';
     const testo = nodo(doc, 'div');
-    testo.append(nodo(doc, 'strong', 'talos-remoto-riga__nome', c.nome), nodo(doc, 'span', 'talos-remoto-riga__dettaglio talos-mono td-subtle', dettaglioCartella(c, { lingua, ora })));
+    const nome = nodo(doc, 'strong', 'talos-remoto-riga__nome', c.nome);
+    /* owner 27/10: lo stato si vede dalla forma, non solo dal testo grigio — l'etichetta di avviso accanto al nome */
+    if (c.bloccata) nome.append(' ', nodo(doc, 'span', 'talos-badge talos-badge--sm talos-badge--warning', t('remoto.folders.blockedBadge')));
+    testo.append(nome, nodo(doc, 'span', 'talos-remoto-riga__dettaglio talos-mono td-subtle', dettaglioCartella(c, { lingua, ora })));
     const altro = nodo(doc, 'button', 'talos-button talos-button--ghost talos-icon-button talos-button--sm');
     altro.type = 'button';
     altro.dataset.remotoCartellaAltro = '';
@@ -440,7 +445,10 @@ function sezioneCartelle(doc, v, cartelle, { onRevocaCartella, onAggiungiCartell
     altro.setAttribute('aria-haspopup', 'menu');
     altro.setAttribute('aria-expanded', 'false');
     altro.append(icona(doc, 'i-more'));
-    const apri = () => apriMenuCartella(doc, radiceMenu, altro, c.nome, [[t('remoto.folders.revoke'), () => onRevocaCartella?.(v, c), 'pericolo']]);
+    /* owner 27/10: una cartella bloccata non si revoca (non è consentita): si sblocca, come le azioni sorelle dal menu, senza carta */
+    const apri = () => apriMenuCartella(doc, radiceMenu, altro, c.nome, c.bloccata
+      ? [[t('remoto.folders.unblock'), () => onSbloccaCartella?.(v, c)]]
+      : [[t('remoto.folders.revoke'), () => onRevocaCartella?.(v, c), 'pericolo']]);
     altro.addEventListener('click', apri);
     riga.addEventListener('contextmenu', (e) => { e.preventDefault(); if (altro.getAttribute('aria-expanded') !== 'true') apri(); });
     riga.append(testo, altro);
@@ -495,7 +503,11 @@ export function creaCartaConsenso(doc, r, { onConsenti, onNonOra, onPiuTardi = n
     dopo.addEventListener('click', () => onPiuTardi());
     testa.append(dopo);
   }
-  const perche = nodo(doc, 'p', 'talos-approval__why assistant-copy', t('remoto.consent.why', { name: nome }));
+  /* B-R3 (revisione del blocco 10, 27/10/2026): la cartella chiesta è BLOCCATA per questo dispositivo — consentendo la si sblocca, e la
+     persona che l'aveva bloccata lo deve leggere qui, non scoprirlo dopo */
+  const perche = nodo(doc, 'p', 'talos-approval__why assistant-copy',
+    r.bloccata ? `${t('remoto.consent.why', { name: nome })} ${t('remoto.consent.blockedNote')}` : t('remoto.consent.why', { name: nome }));
+  if (r.bloccata) carta.dataset.remotoConsensoBloccata = '';
   perche.id = `remotoConsenso-${r.richiestaId}-c`;
   carta.setAttribute('aria-describedby', perche.id);
   const blocco = nodo(doc, 'div', 'talos-approval__automazione');

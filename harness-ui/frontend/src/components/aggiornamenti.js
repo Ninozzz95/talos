@@ -172,6 +172,34 @@ function creaScheda(documento) {
   };
 }
 
+/*
+ * ⭐ 29/10/2026 — «Aggiornamenti» è una SEZIONE A SÉ delle Impostazioni (owner 22/10 notte, mockup approvato col Mobile, dove sta dopo
+ *   «Backup»); prima la scheda stava in testa ad «Account, Doctor e backup». La sezione è nello schema (`features/settings/schema.ts`,
+ *   `soloApp`) ma nasce nascosta: qui, quando il guscio manda lo stato, si segna la radice, si mostra la voce e si crea il pannello
+ *   accanto a quello dell'account. Nel browser lo stato non arriva mai, e non nasce niente (AGG-UI-01).
+ */
+const SEGNO_APP_AGGIORNAMENTI = 'data-talos-app-aggiornamenti'; // lo stesso di `settings-view.ts`
+function pannelloAggiornamenti(documento) {
+  documento.documentElement.setAttribute(SEGNO_APP_AGGIORNAMENTI, '');
+  const voce = documento.getElementById('setting-tab-aggiornamenti');
+  if (voce) voce.hidden = false;
+  const opzione = documento.querySelector('#settingsSectionSelect option[value="aggiornamenti"]');
+  if (opzione) { opzione.hidden = false; opzione.disabled = false; }
+  let pannello = documento.getElementById('setting-panel-aggiornamenti');
+  if (pannello) return pannello;
+  const account = documento.getElementById('setting-panel-account');
+  if (!account) return null;
+  pannello = documento.createElement('div');
+  pannello.setAttribute('role', 'tabpanel');
+  pannello.tabIndex = 0;
+  pannello.id = 'setting-panel-aggiornamenti';
+  pannello.setAttribute('aria-labelledby', 'setting-tab-aggiornamenti');
+  pannello.dataset.settingsPanel = 'aggiornamenti';
+  pannello.hidden = documento.querySelector('[data-settings-section]')?.dataset.settingsSection !== 'aggiornamenti';
+  account.after(pannello);
+  return pannello;
+}
+
 export function montaAggiornamenti({ documento = globalThis.document, finestra = globalThis.window, adesso = () => new Date(), conferma = () => {} } = {}) {
   if (!documento || !finestra) return null;
   let stato = null; let banda = null; let scheda = null;
@@ -204,7 +232,7 @@ export function montaAggiornamenti({ documento = globalThis.document, finestra =
   }
 
   function disegnaScheda() {
-    const pannello = documento.getElementById('setting-panel-account');
+    const pannello = pannelloAggiornamenti(documento);
     if (pannello && (!scheda || !scheda.scheda.isConnected)) {
       scheda = creaScheda(documento);
       scheda.controlla.addEventListener('click', () => { scheda.controlla.disabled = true; chiedi(finestra, prendiStato(), 'controlla'); });

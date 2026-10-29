@@ -77,3 +77,22 @@ test('A13-04, al contrario — senza interfaccia le ALTRE domande restano come p
   assert.equal(registry.domandaInAttesa(sessionId)?.azione?.tipo, 'shell', 'la regola nuova vale solo per i giri in tondo')
   await registry.rispondiApprovazione(sessionId, registry.domandaInAttesa(sessionId).requestId, false)
 })
+
+/* Owner 26/10/2026 (consigliata «Niente domanda, riga informativa»): in Accesso completo i giri in tondo non chiedono. */
+test('A13-05 — in ACCESSO COMPLETO nessuna carta: no SUBITO col motivo («Full access never asks»), e il giro si chiude', CON_TEMPO, async (t) => {
+  const { registry, sessionId, input } = await scena(t, { permessiScelto: 'Full access' })
+  const t0 = Date.now()
+  const risposta = await input.chiediApprovazioneFn({ ...DOMANDA })
+  assert.ok(Date.now() - t0 < 1000, 'subito, nessuna attesa')
+  assert.equal(risposta?.approvato, false)
+  assert.match(risposta.motivo, /^Full access never asks: "leggi" returned the same result 5 times in a row .* the run stops here\. The person can continue by writing\.$/u)
+  assert.equal(registry.domandaInAttesa(sessionId), null, 'nessuna carta')
+})
+
+test('A13-06 — al contrario: in Accesso completo le ALTRE carte che chiedono per scelta restano (qui: il QR di un dispositivo)', CON_TEMPO, async (t) => {
+  const { registry, sessionId, input } = await scena(t, { permessiScelto: 'Full access' })
+  void input.chiediApprovazioneFn({ tipo: 'remote_phone_pair', toolCallId: 'c1' })
+  await new Promise((ok) => setTimeout(ok, 10))
+  assert.equal(registry.domandaInAttesa(sessionId)?.azione?.tipo, 'remote_phone_pair', 'la regola nuova vale solo per i giri in tondo')
+  await registry.rispondiApprovazione(sessionId, registry.domandaInAttesa(sessionId).requestId, false)
+})

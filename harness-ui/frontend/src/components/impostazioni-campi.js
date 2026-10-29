@@ -129,6 +129,20 @@ export const CAMPI_IMPOSTAZIONI = conTesti([
     ]
   },
   {
+    "id": "replyLanguageSelect",
+    "chiave": "replyLanguage",
+    "tipo": "select",
+    "sezione": "appearance",
+    "gruppo": "design",
+    /* owner 28/10/2026: qui solo «Automatica». Le lingue sono DATI (codici BCP 47, `lingue-delle-risposte.js`) coi nomi di
+       `Intl.DisplayNames`, messi nel selettore da `riempiLingueDelleRisposte` (app.js): non sono frasi da tradurre. */
+    "opzioni": [
+      [
+        "auto"
+      ]
+    ]
+  },
+  {
     "id": "sceneOverrideSelect",
     "chiave": "sceneOverride",
     "tipo": "select",
@@ -581,6 +595,33 @@ export const CAMPI_IMPOSTAZIONI = conTesti([
     "sezione": "chat",
     "gruppo": "chat"
   },
+  /* 27/10/2026 (owner, «come Hermes»): la bolla della persona a tutta larghezza, spenta di serie. Un gruppo suo, come la
+     scadenza delle domande: le partizioni di Aspetto restano quelle del mockup (8/4/11/1/1, PARITA-02). */
+  {
+    "id": "userBubbleFullWidthToggle",
+    "chiave": "userBubbleFullWidth",
+    "tipo": "checkbox",
+    "sezione": "chat",
+    "gruppo": "bolle"
+  },
+  {
+    "id": "stopWithAgentsSelect",
+    "chiave": "stopWithAgents",
+    "tipo": "select",
+    "sezione": "chat",
+    "gruppo": "domande",
+    "opzioni": [
+      [
+        "chiedi"
+      ],
+      [
+        "tutte"
+      ],
+      [
+        "solo-chat"
+      ]
+    ]
+  },
   {
     "id": "askTimeoutSelect",
     "chiave": "askTimeout",
@@ -626,5 +667,6 @@ export const SEZIONI_IMPOSTAZIONI = [
   { "id": "models", "gruppo": "infrastruttura" },
   { "id": "costi", "gruppo": "infrastruttura" },
   { "id": "workspace", "gruppo": "infrastruttura" },
-  { "id": "account", "gruppo": "infrastruttura" }
+  { "id": "account", "gruppo": "infrastruttura" },
+  { "id": "aggiornamenti", "gruppo": "infrastruttura", "soloApp": true } // 29/10/2026: sezione a sé, solo nell'app installata (owner 22/10)
 ].map((sezione) => Object.defineProperty(sezione, 'titolo', { enumerable: true, get: () => t(`impostazioni.sections.${sezione.id}.title`) }));

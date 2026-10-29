@@ -446,13 +446,27 @@ test('CTX-UI-OVERFLOW-ACTION-WORKS — l’errore «contesto pieno» porta un pu
   const chiamate = await contaPost(page, '**/api/v1/sessions/cl-pieno/compact', { ok: true, data: { compattato: true }, meta: {} });
   await apri(page, 'cl-pieno', [
     { type: 'RunStarted', _sequenza: 1, input: { consegna: 'Continua' } },
-    { type: 'RunError', _sequenza: 2, code: 'internal-error', message: 'HTTP 400 dopo 4 tentativi: {"error":{"code":400,"message":"request (17993 tokens) exceeds the available context size (16384 tokens), try increasing it","type":"exceed_context_size_error"}}' },
+    { type: 'RunError', _sequenza: 2, code: 'internal-error', message: 'HTTP 400 dopo 4 tentativi: {"error":{"code":400,"code":"context_length_exceeded","message":"request (17993 tokens) is over the model context (16384 tokens), try increasing it","type":"invalid_request_error"}}' },
   ], { conclusa: true });
   const nota = page.locator('#conversation .real-session-status').last();
   await expect(nota).toContainText('non entra nella finestra');
   await nota.getByRole('button', { name: 'Compatta ora' }).click();
   await expect(separatore(page)).toContainText('Conversazione compattata');
   expect(chiamate).toHaveLength(1);
+});
+
+/* 27/10/2026 — il verso opposto: la frase del motore LOCALE (la finestra è già cresciuta o il riassunto è già stato provato) non offre
+   «Compatta ora» ma «Scegli un altro modello» (revisione blocco 4 A-8, owner 26/10). */
+test('CTX-UI-OVERFLOW-LOCALE — col motore locale pieno la carta offre un altro modello, non «Compatta ora»', async ({ page }) => {
+  await apri(page, 'cl-pieno-locale', [
+    { type: 'RunStarted', _sequenza: 1, input: { consegna: 'Continua' } },
+    { type: 'RunError', _sequenza: 2, code: 'internal-error', message: 'HTTP 400 dopo 4 tentativi: {"error":{"code":400,"message":"request (17993 tokens) exceeds the available context size (16384 tokens), try increasing it","type":"exceed_context_size_error"}}' },
+  ], { conclusa: true });
+  const nota = page.locator('#conversation .real-session-status').last();
+  await expect(nota).toContainText('non entra nella finestra');
+  await expect(nota).toContainText('Servivano 17.993 token, la finestra ne tiene 16.384');
+  await expect(nota.getByRole('button', { name: 'Scegli un altro modello' })).toHaveCount(1);
+  await expect(nota.getByRole('button', { name: 'Compatta ora' })).toHaveCount(0);
 });
 
 test('CTX-UI-REPAIR-NOTICE-PERSISTENT — il journal riparato è una riga in chat, con il percorso della copia, e sopravvive alla ricarica', async ({ page }) => {
@@ -620,7 +634,7 @@ for (const modo of ['dark', 'light']) {
     await foto('4-annullato');
     await apri(page, `foto-${modo}-errore`, [
       { type: 'RunStarted', _sequenza: 1, input: { consegna: 'Continua' } },
-      { type: 'RunError', _sequenza: 2, code: 'internal-error', message: 'HTTP 400 dopo 4 tentativi: {"error":{"code":400,"message":"request (17993 tokens) exceeds the available context size (16384 tokens), try increasing it","type":"exceed_context_size_error"}}' },
+      { type: 'RunError', _sequenza: 2, code: 'internal-error', message: 'HTTP 400 dopo 4 tentativi: {"error":{"code":400,"code":"context_length_exceeded","message":"request (17993 tokens) is over the model context (16384 tokens), try increasing it","type":"invalid_request_error"}}' },
     ], { conclusa: true });
     await expect(page.locator('#conversation .real-session-status').last().getByRole('button', { name: 'Compatta ora' })).toBeVisible();
     await foto('5-errore');

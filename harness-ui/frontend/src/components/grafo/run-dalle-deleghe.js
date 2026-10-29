@@ -88,7 +88,9 @@ export function statoDelPasso(a = {}) {
      `c3-menu-delega`). Letta dopo `conclusa`, la pausa diventava «fallito» e «da controllare» nel diagramma: si legge prima. */
   if (a.esitoDelega === 'in-pausa' || a.motivoChiusura === 'in-pausa') return 'waiting_human';
   if (a.conclusa !== true) {
-    if (a.inAttesaApprovazione === true || a.inAttesaDomanda === true || a.inAttesaPiano === true || a.approvalPendingCount > 0 || a.questionPendingCount > 0) return 'waiting_human';
+    /* revisione a blocco 3 (24/10/2026, S3 vecchio): la madre la costruisce la finestra col NUMERO delle carte aperte — un numero > 0
+       vale come il `true` del server (come `grafo-agenti.js`), così il nodo radice dice «Aspetta te» e non «In corso» */
+    if (a.inAttesaApprovazione === true || (Number.isFinite(a.inAttesaApprovazione) && a.inAttesaApprovazione > 0) || a.inAttesaDomanda === true || a.inAttesaPiano === true || a.approvalPendingCount > 0 || a.questionPendingCount > 0) return 'waiting_human';
     return istante(a.avviataAlle) === null ? 'pending' : 'running';
   }
   /* ⛔ 13/10/2026, trovato portando le prove della classica: dopo un ERRORE della conversazione la scheda in cima diceva

@@ -26,8 +26,11 @@ function chatLungaMarcata() {
     storia.push({ role: 'assistant', content: null, tool_calls: [{ id: `c${i}`, type: 'function', function: { name: 'leggi', arguments: '{"percorso":"a.js"}' } }] });
     storia.push({ role: 'tool', tool_call_id: `c${i}`, content: 'x'.repeat(2000) });
   }
-  storia.push({ role: 'assistant', content: 'Done.' }, { role: 'user', content: 'And now?' }, { role: 'system', content: AGGIORNAMENTO });
-  return conMarcatoreDiCache(storia);
+  storia.push({ role: 'assistant', content: 'Done.' }, { role: 'user', content: 'And now?' });
+  /* 28/10/2026 (cache, punto 1, come Hermes): il nucleo non marca più una nota di sistema in coda — i punti vanno sul primo sistema,
+     sulla fine della testa e sugli ultimi messaggi. Un sistema a pezzi col marcatore resta però una forma che le strade native devono
+     reggere (una storia salvata, un altro ospite del nucleo): qui si costruisce com'era. */
+  return [...conMarcatoreDiCache(storia), { role: 'system', content: [{ type: 'text', text: AGGIORNAMENTO, cache_control: { type: 'ephemeral', ttl: '1h' } }] }];
 }
 
 async function richiesta(provider, messaggi) {
@@ -42,7 +45,8 @@ const pezziText = (input) => input.flatMap((v) => (Array.isArray(v.content) ? v.
 
 test('SAS-01 — piano ChatGPT: l\'aggiornamento marcato dal kernel arriva come testo, nessun pezzo `text` nella richiesta', async () => {
   const messaggi = chatLungaMarcata();
-  assert.ok(Array.isArray(messaggi.at(-1).content) && messaggi.at(-1).content[0].cache_control, 'premessa: il kernel ha marcato l\'aggiornamento in coda (chat oltre la soglia)');
+  assert.ok(Array.isArray(messaggi.at(-1).content) && messaggi.at(-1).content[0].cache_control, 'premessa: l\'aggiornamento in coda è un sistema a pezzi col marcatore');
+  assert.ok(messaggi.some((m) => m.role === 'user' && Array.isArray(m.content) && m.content.at(-1).cache_control), 'premessa: il nucleo ha marcato anche l\'ultima domanda');
   const { input } = await richiesta('chatgpt', messaggi);
   assert.deepEqual(pezziText(input), [], 'a plan request carries a content part of type `text`: the service answers 400 invalid_value');
   const ultimo = input.at(-1);
@@ -97,4 +101,13 @@ test('SAS-04 — Gemini: le istruzioni di sistema sono testo, mai un array dentr
 test('SAS-05 AL CONTRARIO — un pezzo che non è testo in un sistema si ferma, non si scarta in silenzio', () => {
   assert.throws(() => toNativeMessages([{ role: 'system', content: [{ type: 'image_url', image_url: { url: 'data:image/png;base64,AAAA' } }] }, { role: 'user', content: 'x' }], { provider: 'chatgpt', model: 'm' }),
     /Content not supported by the provider: image_url/u);
+});
+
+test('SAS-06 — (cache, punto 1) un risultato d\'attrezzo marcato dal nucleo arriva alle strade native come il suo TESTO, mai come JSON dei pezzi', () => {
+  const messaggi = [{ role: 'user', content: 'x' }, { role: 'assistant', content: null, tool_calls: [{ id: 'c1', type: 'function', function: { name: 'leggi', arguments: '{}' } }] },
+    { role: 'tool', tool_call_id: 'c1', content: [{ type: 'text', text: 'contenuto del file', cache_control: { type: 'ephemeral' } }] }];
+  for (const provider of ['chatgpt', 'anthropic', 'gemini']) {
+    const nativi = toNativeMessages(messaggi, { provider, model: 'm' });
+    assert.equal(nativi.at(-1).content[0].output.value, 'contenuto del file', provider);
+  }
 });

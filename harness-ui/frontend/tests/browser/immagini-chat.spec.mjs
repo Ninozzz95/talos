@@ -94,7 +94,9 @@ test('NATIVE-UI-02 la scheda del fornitore diretto cerca e salva il modello scel
   await page.getByRole('option',{name:/Gemini Flash gemini:gemini-3.8-flash/}).click();
   await expect.poll(()=>saved?.modello).toBe('gemini:gemini-3.8-flash');
   await expect(pillola, 'il modello salvato è quello diretto: lo dice il suggerimento').toHaveAttribute('title', 'Cambia modello · gemini:gemini-3.8-flash');
-  await expect(page.getByRole('button',{name:'Gemini · gemini-3.8-flash',exact:true}), 'a schermo il nome del modello CON la sua origine diretta (L3-10)').toBeVisible();
+  /* owner 28/10/2026 (parità col Mobile): nella pillola SOLO il nome; l'origine diretta la dice il LOGO della via d'accesso (supera L3-10) */
+  await expect(page.getByRole('button',{name:'gemini-3.8-flash',exact:true}), 'a schermo solo il nome del modello').toBeVisible();
+  await expect(pillola.locator(':scope > [data-via-del-modello="gemini"]'), 'e il logo della via diretta').toHaveCount(1);
   await expect(page.getByRole('button',{name:'gemini:gemini-3.8-flash',exact:true}), 'mai il prefisso d’instradamento grezzo').toHaveCount(0);
 });
 

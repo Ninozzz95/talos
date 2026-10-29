@@ -20,14 +20,15 @@ function banco({ telefoni = [{ id: 't1', sveglia: true, revocatoAlle: null }], v
   let sessioni = [];
   const inviate = [];
   const dimenticate = [];
+  const avvisi = [];
   let risposta = async () => ({ statusCode: 201 });
   const iscrizione = { endpoint: 'https://fcm.googleapis.com/fcm/send/x', keys: { p256dh: 'p', auth: 'a' } };
   const s = creaSveglia({
-    elenca: () => sessioni, inLinea: () => vivi, vapid, clock: o.clock,
+    elenca: () => sessioni, inLinea: () => vivi, vapid, clock: o.clock, avvisa: (a) => avvisi.push(a),
     dispositivi: { elenca: async () => telefoni, iscrizione: async () => iscrizione, aggiornaSveglia: async (id, v) => { dimenticate.push([id, v]); } },
     invia: async (isc, carico, opzioni) => { inviate.push({ isc, carico: JSON.parse(carico), opzioni }); return risposta(); },
   });
-  return { s, o, inviate, dimenticate, set: (x) => { sessioni = x; }, rispondi: (f) => { risposta = f; } };
+  return { s, o, inviate, dimenticate, avvisi, telefoni, set: (x) => { sessioni = x; }, rispondi: (f) => { risposta = f; } };
 }
 const sessione = (extra) => ({ sessionId: 's1', conclusa: false, avviataAlle: new Date(ORA).toISOString(), ...extra });
 
@@ -438,4 +439,152 @@ test('SVE-OFF-06 (revisione a blocco 8, N2) il cavo di creaRemoto passa OGNI off
   const cavi = (sorgente.match(/^\s*file\?\.ascoltaOfferte\(.*$/gmu) ?? []).map((riga) => riga.trim());
   assert.equal(cavi.length, 1, 'un cavo solo');
   assert.equal(cavi[0], 'file?.ascoltaOfferte((o) => { svegliaPerOfferta(o, { svegliatore }); });');
+});
+
+/*
+ * «Telefono avvisato» (contratto con la CLI, 26/10/2026, T5): la CLI scrive «avvisato il telefono» sotto una carta in attesa quando
+ *   l'ultima sveglia ACCETTATA per un telefono contiene quella sessione ed è arrivata dopo la carta. Il PC ricorda solo l'ultima per
+ *   telefono, in memoria; gli id restano sul PC (il carico della spinta non cambia, SVE-01).
+ */
+test('SVE-T5-01 una sveglia accettata si ricorda (telefono, quando, quali sessioni) e si annuncia; il carico resta {v, w}', async () => {
+  const b = banco();
+  b.set([sessione({}), sessione({ sessionId: 's2' })]);
+  await b.s.giro();
+  b.o.avanza(1000);
+  b.set([sessione({ inAttesaApprovazione: true }), sessione({ sessionId: 's2', inAttesaDomanda: true })]);
+  assert.equal(await b.s.giro(), 1);
+  const alle = ORA + 1000;
+  /* B-R2 (CLI, 27/10): una riga per (telefono, sessione), un annuncio per sessione */
+  assert.deepEqual(b.s.ultimeSveglie(), [{ telefono: 't1', sessione: 's1', alle }, { telefono: 't1', sessione: 's2', alle }]);
+  assert.deepEqual(b.avvisi.filter((a) => a.tipo === 'sveglia-inviata'), [
+    { tipo: 'sveglia-inviata', id: 't1', sessione: 's1', alle }, { tipo: 'sveglia-inviata', id: 't1', sessione: 's2', alle }]);
+  assert.deepEqual(Object.keys(b.inviate[0].carico).sort(), ['v', 'w'], 'nessun id nel carico');
+  /* ⛔ B-R2: la sveglia dopo, per un'ALTRA sessione, NON cancella quelle ancora in attesa (prima sostituiva: s1 e s2 perdevano «avvisato») */
+  b.o.avanza(SVEGLIE_MINIME_MS + 1);
+  b.set([sessione({ inAttesaApprovazione: true }), sessione({ sessionId: 's2', inAttesaDomanda: true }), sessione({ sessionId: 's3', inAttesaPiano: true })]);
+  assert.equal(await b.s.giro(), 1);
+  assert.deepEqual(b.s.ultimeSveglie().map((x) => x.sessione), ['s1', 's2', 's3']);
+});
+
+test('SVE-T5-06 (revisione blocco 7, B-R2) una sessione che smette di aspettare perde il suo «avvisato», le altre no; al massimo 8 per telefono', async () => {
+  const b = banco();
+  b.set([sessione({}), sessione({ sessionId: 's2' })]);
+  await b.s.giro();
+  b.set([sessione({ inAttesaApprovazione: true }), sessione({ sessionId: 's2' })]);
+  assert.equal(await b.s.giro(), 1);
+  b.o.avanza(SVEGLIE_MINIME_MS + 1);
+  b.set([sessione({ inAttesaApprovazione: true }), sessione({ sessionId: 's2', inAttesaDomanda: true })]);
+  assert.equal(await b.s.giro(), 1);
+  assert.deepEqual(b.s.ultimeSveglie().map((x) => x.sessione), ['s1', 's2'], 'la sveglia per s2 non toglie s1, ancora in attesa');
+  /* s1 ha la risposta (da qualunque parte: lo stato della sessione è uno solo) ⇒ al giro dopo il suo record va via */
+  b.set([sessione({}), sessione({ sessionId: 's2', inAttesaDomanda: true })]);
+  await b.s.giro();
+  assert.deepEqual(b.s.ultimeSveglie().map((x) => x.sessione), ['s2']);
+  /* una sessione che sparisce dall'elenco, uguale */
+  b.set([sessione({})]);
+  await b.s.giro();
+  assert.deepEqual(b.s.ultimeSveglie(), []);
+  /* il tetto: dieci sessioni avvisate una dopo l'altra, restano le ultime 8 */
+  const dieci = Array.from({ length: 10 }, (_, i) => `q${i}`);
+  const attese = [];
+  for (const id of dieci) {
+    b.o.avanza(SVEGLIE_MINIME_MS + 1);
+    attese.push(sessione({ sessionId: id, inAttesaDomanda: true }));
+    b.set([sessione({}), ...attese]);
+    assert.equal(await b.s.giro(), 1, `premessa: sveglia per ${id}`);
+  }
+  assert.deepEqual(b.s.ultimeSveglie().map((x) => x.sessione), dieci.slice(2));
+});
+
+test('SVE-T5-02 AL CONTRARIO: una sveglia rifiutata (passeggera o 410), «Prova la notifica» e un telefono senza iscrizione non si ricordano', async () => {
+  const b = banco();
+  b.set([sessione({})]);
+  await b.s.giro();
+  b.rispondi(async () => { throw Object.assign(new Error('boom'), { statusCode: 503 }); });
+  b.set([sessione({ inAttesaApprovazione: true })]);
+  assert.equal(await b.s.giro(), 1, 'premessa: è partita');
+  assert.deepEqual(b.s.ultimeSveglie(), [], 'rifiutata dal servizio: non avvisato');
+  b.rispondi(async () => ({ statusCode: 201 }));
+  b.o.avanza(SVEGLIE_MINIME_MS + 1);
+  assert.equal((await b.s.svegliaOra('t1')).esito, 'inviata', 'premessa: la prova è partita');
+  assert.deepEqual(b.s.ultimeSveglie(), [], 'la prova della notifica non avvisa di nessuna carta');
+  assert.equal(b.avvisi.filter((a) => a.tipo === 'sveglia-inviata').length, 0);
+});
+
+test('SVE-T5-03 un telefono revocato (dimentica, o revocato nell\'elenco al giro dopo) non ha più sveglie da raccontare', async () => {
+  const b = banco({ telefoni: [{ id: 't1', sveglia: true, revocatoAlle: null }, { id: 't2', sveglia: true, revocatoAlle: null }] });
+  b.set([sessione({})]);
+  await b.s.giro();
+  b.set([sessione({ inAttesaApprovazione: true })]);
+  assert.equal(await b.s.giro(), 2);
+  assert.deepEqual(b.s.ultimeSveglie().map((x) => x.telefono).sort(), ['t1', 't2']);
+  b.s.dimentica('t1');
+  assert.deepEqual(b.s.ultimeSveglie().map((x) => x.telefono), ['t2'], 'dimentica: subito');
+  b.telefoni[1].revocatoAlle = ORA;
+  await b.s.giro();
+  assert.deepEqual(b.s.ultimeSveglie(), [], 'revocato nell\'elenco: via al giro dopo');
+});
+
+test('SVE-T5-04 un file offerto a un dispositivo spento: la sveglia parte, ma NON è una carta che aspetta, quindi nessun «avvisato» (revisione blocco 8)', async () => {
+  const b = banco();
+  b.set([sessione({})]);
+  await b.s.giro();
+  b.s.offerta('t1', 's9');
+  assert.equal(await b.s.giro(), 1, 'la sveglia per il file parte come prima');
+  assert.deepEqual(b.s.ultimeSveglie(), [], 'un file offerto non è una carta in attesa: niente «avviso mandato»');
+});
+
+/* Revisione del blocco 8 (27/10/2026), H-R1: carta 1 → risposta → carta 2 dentro UN giro di 5 s. Ai due sguardi la sessione «aspetta»;
+   l'età dell'approvazione nell'elenco (`inAttesaApprovazioneDaMs`, BUG-8 t1) dice che la carta è un'altra. */
+test('SVE-T5-07 (blocco 8, H-R1) un\'approvazione NUOVA dentro lo stesso giro: il record vecchio va via e si sveglia di nuovo', async () => {
+  const b = banco();
+  b.set([sessione({})]);
+  await b.s.giro();
+  b.set([sessione({ inAttesaApprovazione: true, inAttesaApprovazioneDaMs: 0 })]);
+  assert.equal(await b.s.giro(), 1, 'premessa: sveglia per la carta 1');
+  const primaAlle = b.s.ultimeSveglie()[0].alle;
+  b.o.avanza(SVEGLIE_MINIME_MS + 1);
+  /* fra i due sguardi: risposta alla carta 1 e carta 2 nata 3 s fa */
+  b.set([sessione({ inAttesaApprovazione: true, inAttesaApprovazioneDaMs: 3_000 })]);
+  assert.equal(await b.s.giro(), 1, 'la carta 2 sveglia il telefono');
+  const righe = b.s.ultimeSveglie();
+  assert.equal(righe.length, 1);
+  assert.ok(righe[0].alle > primaAlle, '«avvisato» è quello della carta 2, non ereditato dalla 1');
+  /* AL CONTRARIO: la STESSA approvazione vista più tardi (età cresciuta di quanto è passato) non sveglia di nuovo */
+  b.o.avanza(5_000);
+  b.set([sessione({ inAttesaApprovazione: true, inAttesaApprovazioneDaMs: 8_000 })]);
+  assert.equal(await b.s.giro(), 0, 'stessa carta: nessuna sveglia in più');
+});
+
+test('SVE-T5-08 (blocco 8, H-R2..R4) le fini dei giri lunghi non lasciano «avvisato»; il tetto conta solo le carte; un annuncio per record tenuto', async () => {
+  const b = banco();
+  const ferme = Array.from({ length: 8 }, (_, i) => sessione({ sessionId: `f${i}` }));
+  b.set([sessione({}), ...ferme]);
+  await b.s.giro();
+  b.set([sessione({ inAttesaApprovazione: true }), ...ferme]);
+  assert.equal(await b.s.giro(), 1, 'premessa: la carta di s1');
+  /* otto giri lunghi finiscono: sveglia sì, «avvisato» no, e s1 resta */
+  b.o.avanza(SVEGLIE_MINIME_MS + 1);
+  b.set([sessione({ inAttesaApprovazione: true }), ...ferme.map((f) => ({ ...f, conclusa: true, ultimoEsito: 'successo', inizioGiroAlle: iso(ORA - GIRO_LUNGO_MS - 1_000), fineGiroAlle: iso(ORA) }))]);
+  assert.equal(await b.s.giro(), 1, 'la sveglia per le fini parte');
+  assert.deepEqual(b.s.ultimeSveglie().map((x) => x.sessione), ['s1'], 'H-R2/H-R3: le fini non sono carte, e non spingono fuori s1');
+  /* H-R4: venti carte in una sveglia ⇒ otto record, otto annunci (non venti) */
+  const venti = Array.from({ length: 20 }, (_, i) => sessione({ sessionId: `q${i}` }));
+  b.set([sessione({}), ...venti]); await b.s.giro();
+  const annunciPrima = b.avvisi.filter((a) => a.tipo === 'sveglia-inviata').length;
+  b.o.avanza(SVEGLIE_MINIME_MS + 1);
+  b.set([sessione({}), ...venti.map((q) => ({ ...q, inAttesaDomanda: true }))]);
+  assert.equal(await b.s.giro(), 1);
+  assert.equal(b.s.ultimeSveglie().length, 8, 'il tetto');
+  assert.equal(b.avvisi.filter((a) => a.tipo === 'sveglia-inviata').length - annunciPrima, 8, 'un annuncio per record tenuto, non per ogni carta');
+});
+
+test('SVE-T5-05 il cavo in remoto/index: le sveglie annunciate fanno rileggere lo stato, lo stato le dice coi nomi e senza i revocati', async () => {
+  const { readFileSync } = await import('node:fs');
+  const sorgente = readFileSync(new URL('../src/remoto/index.mjs', import.meta.url), 'utf8');
+  assert.match(sorgente, /MOTIVI_DI_CAMBIO = new Set\(\[[^\]]*'sveglia-inviata'[^\]]*\]\)/u, 'la sveglia partita è un motivo di cambio');
+  assert.match(sorgente, /vapid: identita\.vapid\(\), invia: inviaWebPush, avvisa: avvisaEAnnuncia,/u, 'la sveglia avvisa passando dall\'annuncio');
+  assert.equal((sorgente.match(/svegliatore\?\.dimentica\(id\)/gu) ?? []).length, 2, 'le due revoche (dal telefono e dal PC) dimenticano le sveglie');
+  assert.match(sorgente, /sveglie: \(svegliatore\?\.ultimeSveglie\(\) \?\? \[\]\)\.flatMap/u, 'lo stato le espone');
+  assert.match(sorgente, /elenco\.find\(\(x\) => x\.id === s\.telefono && !x\.revocatoAlle\)/u, 'mai le sveglie di un telefono revocato');
 });

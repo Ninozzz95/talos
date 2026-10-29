@@ -21,6 +21,23 @@ export const DURATA_MASSIMA_RICERCA_MS = 10 * 60_000
 export const BYTE_MASSIMI_RICERCA = 32 * 1024 * 1024
 export const CONSERVA_DOPO_LA_FINE_MS = 10 * 60_000
 
+/*
+ * ⛔ R-24 (Performance 29/10/2026, corsa H-bloccate r1; owner 29/10 sera, OK della CLI): il modello copiava la forma di una chiamata
+ *   precedente (`dentro` + `offset:0` + `continua`) e la parola da cercare scivolava in `continua` — «rifiutoAnticipato», «testo»,
+ *   «a», «x»: nove NOT FOUND di fila, e nel suo ragionamento «I'm stuck in a loop adding `continua`». Gli id veri nascono solo qui,
+ *   `r` + intero. ⇒ Vale come riferimento SOLO la forma `^r\d+$` (spazi intorno tolti, `R3` come `r3`); ogni altro valore non è mai
+ *   un riferimento, e `cercaNelProgetto` decide che cosa farne. Nessun concorrente mette un riferimento testuale libero nello stesso
+ *   schema della domanda: Codex lo tiene in un attrezzo a parte e numerico (`shell_spec.rs:110-150`), Claude Code anche (TaskOutput).
+ */
+export const FORMA_DEL_RIFERIMENTO = /^r\d+$/iu
+
+/** L'id di una ricerca scritto in `continua` (`'r3'`), oppure `null` se quel valore non ha la forma di un riferimento. */
+export function riferimentoDiRicerca(valore) {
+    if (typeof valore !== 'string') return null
+    const pulito = valore.trim()
+    return FORMA_DEL_RIFERIMENTO.test(pulito) ? pulito.toLowerCase() : null
+}
+
 /**
  * Il registro di UNA sessione. `voce` (registra) è ciò che il kernel sa della ricerca: `ferma(motivo)` per fermarla, e
  * `finita` (una promessa che si risolve quando il processo è uscito). Il registro non legge l'uscita: la tiene il kernel.
@@ -57,6 +74,8 @@ export function creaRegistroRicerche({
             return id
         },
         prendi: (id) => (typeof id === 'string' ? voci.get(id) ?? null : null),
+        /** R-24: le ricerche che la sessione tiene ancora (vive o finite da poco), dalla più recente, per dirle a chi ne chiede una sconosciuta. */
+        elenco: () => [...voci.values()].reverse().map((v) => ({ id: v.id, stato: v.stato, tipo: v.tipo ?? null, parametri: v.parametri ?? {} })),
         /** Stop della sessione, eliminazione, spegnimento: ogni ricerca ancora viva si ferma. */
         fermaTutte(motivo = 'fermata') {
             for (const v of inCorso()) v.ferma(motivo)
