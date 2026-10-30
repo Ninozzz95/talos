@@ -55,9 +55,11 @@ test('RV-02 a running process shows the live dot and a ticking duration from its
     { type: 'ToolCallArgs', toolCallId: 'c1', delta: JSON.stringify({ comando: 'npm test', descrizione: 'Run the suite' }), _sequenza: 3 },
   ]);
   await page.locator('[data-rail="processi"]').first().click();
-  const durata = page.locator('.talos-process__misura[data-viva] .talos-process__durata-viva').first();
+  /* pannello v2 (29/10/2026): la riga del comando vivo ha l'orologio a lato (`[data-dal]`, `durataBreveRigaViva`) e l'anello che gira
+     sul suo segno (`.pn-segno[data-vivo]`) */
+  const durata = page.locator('#railProcessi .pn-riga [data-dal]').first();
   await expect(durata).toHaveText(/^1m 1[2-3]s$/u);
-  await expect(page.locator('.talos-process__misura[data-viva] .talos-dot--live')).toHaveCount(1);
+  await expect(page.locator('#railProcessi .pn-segno[data-vivo]')).toHaveCount(1);
   await expect(durata).toHaveText(/^1m 1[4-9]s$/u, { timeout: 5_000 });
 });
 

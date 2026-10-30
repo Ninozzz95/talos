@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { apriPiegaContesto, righeIndice } from '../fixtures/pannello-contesto-prove.mjs'; // pannello v2: le righe di oggi stanno in pieghe
 import pixelmatch from 'pixelmatch';
 import { PNG } from 'pngjs';
 import { mkdir } from 'node:fs/promises';
@@ -1042,6 +1043,7 @@ test('cold start does not expose invented runtime telemetry', async ({ page }) =
   }
   const finestra = page.locator('#railContesto');
   await expect(finestra).toBeVisible();
+  await apriPiegaContesto(page, 'dettagli-finestra');
   await expect(finestra.locator('.talos-kv__k').filter({ hasText: 'Conversazione' }).locator('..').locator('.talos-kv__v')).toHaveText('—');
   await expect(finestra.locator('.talos-kv__k').filter({ hasText: 'Riusato dalla cache' }).locator('..').locator('.talos-kv__v')).toHaveText('non misurato');
   await expect(page.locator('[data-runtime-usage]')).toHaveCount(0);
@@ -1082,6 +1084,9 @@ test('OPEN-WITH-TALOS-BROWSER-01 — il fragment apre la scelta esplicita senza 
   await page.setViewportSize({ width: 1440, height: 900 });
   const launchId = 'A'.repeat(32);
   let corpoAvvio = null;
+  /* 30/10/2026: dal 29/10 (6365ef55c, regola dell'owner «nessun modello predefinito») il primo messaggio senza modello si ferma e apre la
+     scelta del modello: la prova sceglie un modello prima, come farebbe una persona */
+  await page.addInitScript(() => { try { localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({ version: 1, chat: { model: 'z-ai/glm-5.3-flash' } })); } catch {} });
   await page.route(`**/api/v1/workspace-launches/${launchId}`, async (route) => route.fulfill({
     status: 200,
     contentType: 'application/json',
@@ -1219,7 +1224,7 @@ test('SESSION-MODEL-CHANGE-RELOAD-02 — la pillola cambia solo dopo il salvatag
   await expect(pillola).toHaveText('glm-4.7-flash');
   await page.locator('[data-open-sheet="model"]').click();
   await page.locator('.talos-dialog input.sheet-input').fill('gemini-3.7-flash');
-  await page.getByRole('option').filter({ hasText: 'google/gemini-3.7-flash' }).click();
+  await page.getByRole('option').filter({ hasText: 'google/gemini-3.7-flash' }).dblclick(); // 29/10/2026: nel velo un clic segna, il doppio clic sceglie (bozzetto approvato)
   /*
    * ⛔ 18/09/2026 — qui c'era `#sheetDialog`, che è il `<dialog class="sheet-dialog">` del
    * PROTOTIPO: esiste ancora ma con `open:false` («Contesto · Capability»), quindi l'asserzione
@@ -1296,7 +1301,7 @@ async function scenaC05(page, { sessionId, effortIniziale, filoGemini }) {
   await expect(pillola).toHaveText('glm-4.7-flash');
   await page.locator('[data-open-sheet="model"]').click();
   await page.locator('.talos-dialog input.sheet-input').fill('gemini-3.7-flash');
-  await page.getByRole('option').filter({ hasText: 'google/gemini-3.7-flash' }).click();
+  await page.getByRole('option').filter({ hasText: 'google/gemini-3.7-flash' }).dblclick(); // 29/10/2026: nel velo un clic segna, il doppio clic sceglie (bozzetto approvato)
   await expect.poll(() => aggiornamenti.length).toBe(1);
   await expect(pillola).toHaveText('gemini-3.7-flash');
   await page.locator('[data-open-sheet="model"]').click();
@@ -1375,7 +1380,7 @@ test('SESSION-MODEL-UPDATE-FAIL-01 — un server incompatibile non produce una p
   const pillola = page.locator('[data-open-sheet="model"] .talos-chip__label').first();
   await page.locator('[data-open-sheet="model"]').click();
   await page.locator('.talos-dialog input.sheet-input').fill('gemini-3.7-flash');
-  await page.getByRole('option').filter({ hasText: 'google/gemini-3.7-flash' }).click();
+  await page.getByRole('option').filter({ hasText: 'google/gemini-3.7-flash' }).dblclick(); // 29/10/2026: nel velo un clic segna, il doppio clic sceglie (bozzetto approvato)
   // Stessa migrazione del test precedente: `#sheetDialog` era il foglio del prototipo (0 nodi aperti).
   await expect(page.getByRole('dialog', { name: 'Modello', exact: true })).toBeVisible();
   await expect(pillola).toHaveText('glm-4.7-flash');
@@ -2409,7 +2414,7 @@ test('TOOL-DESCRIPTION-LIFECYCLE-04 — la descrizione del modello resta nella s
   expect(result.sameNode).toBe(true);
   expect(result.during).toBe('Verifica la configurazione del server…');
   expect(result.final).toBe('Verifica la configurazione del server');
-  expect(result.detail).toContain('comando: node --test tests/config.test.mjs');
+  expect(result.detail).toContain('command: node --test tests/config.test.mjs'); // 27/10 (7ff037772, parità Mobile T8): i nomi degli argomenti parlano la lingua dell'interfaccia, e questa prova gira in inglese
   expect(result.detail).not.toContain('descrizione:');
   expect(result.batch).toBe('1 command'); // 26/09: le parole del segmento (D1), tradotte come il segmento (questa prova gira in inglese)
   await page.screenshot({ path: 'artifacts/tool-description-1440x900.png', fullPage: true });

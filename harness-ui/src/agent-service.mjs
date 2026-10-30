@@ -284,6 +284,7 @@ export async function avviaSessione({
   rifiutoNoto = null,
   /* R12-2 (revisione 12 della CLI): il codice del ripiego dal motore già detto in questa sessione e non guarito, dal registro. Additivo. */
   ripiegoDetto = null,
+  controlloSpentoDetto = null, // CONTRATTO-CONTROLLO-SPENTO (29/10/2026): il controllo delle scritture spento già detto
   /* R13-2 (revisione 13 della CLI, 23/10/2026): le posizioni nella storia delle richieste non inviate che il motore del contesto ha già
      archiviato (il registro le TIENE nella storia, il kernel le sostituisce con una nota). Additivo: assente ⇒ nessuna. */
   richiesteNonInviate = null,
@@ -1329,6 +1330,14 @@ export async function avviaSessione({
       if (toolCallId) ricevuteToolPerId.set(toolCallId, ricevuta);
       return;
     }
+    /* CONTRATTO-CONTROLLO-SPENTO (owner 29/10/2026 notte, «una volta per chat»): il controllo delle scritture non ha potuto giudicare.
+       Durevole: PC, telefono e CLI disegnano la nota leggera da QUESTO evento (codice chiuso), anche alla rigiocata. */
+    if (evento.tipo === 'controllo-spento') {
+      return onEvento({ type: 'CUSTOM', name: 'talos.controllo-spento', value: {
+        schema: 'talos.controllo-spento.v1', threadId, runId, giro: evento.giro, codice: evento.codice, perche: evento.perche,
+        ...(typeof evento.percorso === 'string' && evento.percorso ? { percorso: evento.percorso } : {}),
+      } }, { durable: true });
+    }
     if (evento.tipo === 'provider-retry') {
       return onEvento({ type: 'CUSTOM', name: 'talos.provider-retry', value: {
         schema: 'talos.provider-retry.v1', threadId, runId,
@@ -1345,6 +1354,13 @@ export async function avviaSessione({
            il fornitore non ha mandato nemmeno gli header). Senza questa riga il campo si perdeva qui, e il banner diceva «si è
            interrotta» per una risposta mai cominciata. Solo il valore conosciuto, solo sul canale incerto. */
         ...(evento.canale === 'esito-incerto' && evento.causa === 'nessuna-prima-risposta' ? { causa: evento.causa } : {}),
+        /* CONTRATTO-R30-R31 (30/10/2026, condizioni della CLI): il tetto d'uscita si dice con campi STRUTTURATI, senza stato HTTP né
+           attesa (la CLI e lo schermo leggono il canale, mai il testo); il motivo è uno dei tre conosciuti */
+        ...(evento.canale === 'tetto-uscita' ? { canale: 'tetto-uscita',
+          ...(['solo-ragionamento', 'chiamata-tagliata', 'credito'].includes(evento.motivo) ? { motivo: evento.motivo } : {}),
+          ...(Number.isSafeInteger(evento.tettoNuovo) ? { tettoNuovo: evento.tettoNuovo } : {}),
+          ...(typeof evento.ragionamento?.a === 'string' ? { ragionamento: { da: typeof evento.ragionamento.da === 'string' ? evento.ragionamento.da : null, a: evento.ragionamento.a } } : {}),
+          costoDiNuovo: evento.costoDiNuovo === true } : {}),
       } });
     }
     /* Decisione 14 (owner 08/10/2026 sera): chi ha servito il giro. Un evento persistito, così la testata della risposta lo dice
@@ -2502,6 +2518,7 @@ export async function avviaSessione({
       ...(segnalePausa ? { segnalePausa } : {}), // C3 tappa 4: la pausa di una delega
       finestraToken, /* ⛔ BUG-5 (05/10/2026): inoltrata al kernel — la soglia diventa 0,75 della finestra VERA del modello */
       ...(limiteUscitaToken ? { limiteUscitaToken } : {}), // 21/10: il tetto d'uscita del riassunto (`tettoUscitaRiassunto`)
+      ...(limiteUscitaToken ? { limiteUscitaDelModello: limiteUscitaToken } : {}), // CONTRATTO-R30-R31: e quello del giro
       ...(Number.isSafeInteger(tettoCompattazioneToken) && tettoCompattazioneToken > 0 ? { tettoCompattazioneToken } : {}), // 21/10: il tetto dell'ospite
       ...(finestraLocale && typeof finestraLocale === 'object' ? { finestraLocale } : {}), // L1 1.3 (A-3, A-4): la finestra viva del modello locale
       ...(senzaPersona === true ? { senzaPersona: true } : {}), // revisione blocco 5 (A-4): all'adattatore, sul rifiuto si riassume
@@ -2514,6 +2531,7 @@ export async function avviaSessione({
       ...(Number.isSafeInteger(nonEntraDetto) ? { nonEntraDetto } : {}), // revisione 7 della CLI (F6)
       ...(rifiutoNoto && typeof rifiutoNoto === 'object' ? { rifiutoNoto } : {}), // R11-7
       ...(typeof ripiegoDetto === 'string' && ripiegoDetto ? { ripiegoDetto } : {}), // R12-2
+      ...(typeof controlloSpentoDetto === 'string' && controlloSpentoDetto ? { controlloSpentoDetto } : {}), // CONTRATTO-CONTROLLO-SPENTO
       ...(Array.isArray(richiesteNonInviate) && richiesteNonInviate.length ? { richiesteNonInviate } : {}), // R13-2
       ...(freno && typeof freno === 'object' ? { freno } : {}), // pezzo D del §4
       ...(typeof frenoVivo === 'function' ? { frenoVivo } : {}), // R10-3

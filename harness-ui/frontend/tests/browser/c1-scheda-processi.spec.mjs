@@ -85,7 +85,10 @@ async function apri(page, { tema = 'dark', larghezza = 1920, altezza = 1080, att
   await expect(riga(page, 'p-test')).toBeVisible();
   return conto;
 }
-const riga = (page, id) => page.locator(`#railProcessi .talos-process[data-processo="${id}"]`);
+/* pannello v2 (29/10/2026): la riga è `.pn-riga` con la chiave del comando; la misura a lato è `.pn-lato__su .pn-mono` */
+const riga = (page, id) => page.locator(`#railProcessi .pn-riga[data-chiave="${id}"]`);
+const misura = (page, id) => riga(page, id).locator(':scope > .pn-lato .pn-lato__su > .pn-mono').first();
+const apriMenuRiga = async (page, id) => { await riga(page, id).hover(); await riga(page, id).locator('[data-controllo="menu-riga"]').click(); };
 const menu = (page) => page.locator('.ft-actions-menu');
 /** Come se il server avesse scritto l'evento: entra dalla stessa porta degli eventi veri. */
 async function evento(page, e) {
@@ -98,10 +101,12 @@ async function evento(page, e) {
 test.describe('C1 — la scheda Processi', () => {
   test('C1-PROC-01 — CPU e memoria dei comandi vivi, lette solo a scheda aperta; «—» se il comando non è stato misurato', async ({ page }) => {
     const conto = await apri(page);
-    await expect(riga(page, 'p-test').locator('.talos-process__risorse')).toHaveText('CPU 38% · 412 MB', { timeout: 5_000 });
-    await expect(riga(page, 'p-dev').locator('.talos-process__risorse')).toHaveText('CPU 1,2% · 98 MB');
-    await expect(riga(page, 'p-build').locator('.talos-process__risorse')).toHaveText('CPU —');
-    await expect(riga(page, 'p-git').locator('.talos-process__risorse')).toBeHidden();
+    await expect(misura(page, 'p-test')).toHaveText('38% · 412 MB', { timeout: 5_000 });
+    await expect(misura(page, 'p-dev')).toHaveText('1,2% · 98 MB');
+    /* non misurato: nessun numero (v2: a lato resta la durata viva, mai una percentuale inventata) */
+    await expect(misura(page, 'p-build')).not.toContainText('%');
+    await page.locator('#railProcessi [data-controllo="ambito-tutti"]').click(); // v2: i finiti stanno nell'ambito «Tutti»
+    await expect(riga(page, 'p-git'), 'un comando finito non porta CPU né memoria').not.toContainText('MB');
     await expect.poll(() => conto.risorse, { timeout: 4_000 }).toBeGreaterThanOrEqual(2); // la seconda dopo 1,5 s: la CPU è una differenza
     // ⛔ al contrario: con un'altra scheda aperta non si legge più niente
     await page.locator('#railTabs [data-rail="contesto"]').click();
@@ -117,27 +122,30 @@ test.describe('C1 — la scheda Processi', () => {
 
   test('C1-PROC-02 — il «⋯» e il tasto destro aprono la stessa lista; Ferma ferma QUEL comando; Togli toglie e la riga sparisce', async ({ page }) => {
     const conto = await apri(page);
-    await riga(page, 'p-test').locator('.talos-process__azioni').click();
+    await page.locator('#railProcessi [data-controllo="ambito-tutti"]').click(); // v2: i finiti stanno nell'ambito «Tutti»
+    await apriMenuRiga(page, 'p-test');
     await expect(menu(page)).toBeVisible();
-    await expect(menu(page).locator('[role="menuitem"]')).toHaveText(['Manda in sfondo', 'Ferma questo comando']);
+    /* v2: in più «Mostra l'uscita» (P-11); stesse azioni di oggi, con le parole del pannello */
+    await expect(menu(page).locator('[role="menuitem"]')).toHaveText(["Mostra l'uscita", 'Manda in sottofondo', 'Ferma']);
     await page.keyboard.press('Escape');
     await expect(menu(page)).toHaveCount(0);
     // ⛔ col giro VIVO, Esc chiudeva il velo sbagliato: apriva «fermo il giro?» e lasciava il menu aperto
     await expect(page.locator('#veloFermaGiro')).toBeHidden();
     // ⛔ un menu aperto sopra un altro: il vecchio non deve più rubare il fuoco al primo clic che segue
-    await riga(page, 'p-test').locator('.talos-process__azioni').click();
-    await riga(page, 'p-git').click({ button: 'right' });
+    await apriMenuRiga(page, 'p-test');
+    /* v2: il menu aperto copre la riga di sotto (la scheda è più fitta): il tasto destro arriva alla riga come lo manda il browser */
+    await riga(page, 'p-git').dispatchEvent('contextmenu', { button: 2, bubbles: true, cancelable: true });
     await expect(menu(page)).toHaveCount(1);
-    await expect(menu(page).locator('[role="menuitem"]')).toHaveText(["Togli dall'elenco"]);
+    await expect(menu(page).locator('[role="menuitem"]')).toHaveText(["Mostra l'uscita", "Togli dall'elenco"]);
     await page.locator('#conversation').click({ position: { x: 20, y: 20 } });
     await expect(menu(page)).toHaveCount(0);
-    expect(await page.evaluate(() => document.activeElement?.classList.contains('talos-process__azioni'))).toBe(false);
+    expect(await page.evaluate(() => document.activeElement?.dataset?.controllo === 'menu-riga')).toBe(false);
     await riga(page, 'p-build').click({ button: 'right' });
-    await menu(page).getByRole('menuitem', { name: 'Ferma questo comando' }).click();
+    await menu(page).getByRole('menuitem', { name: 'Ferma', exact: true }).click();
     await expect.poll(() => conto.ferma).toEqual(['p-build']);
-    await expect(riga(page, 'p-build').locator('.talos-process__avviso-ferma')).toHaveText('Fermo il comando…');
+    await expect(riga(page, 'p-build').locator('.pn-esito')).toHaveText(/Lo fermo…|Fermato/u);
     await riga(page, 'p-git').click({ button: 'right' });
-    await expect(menu(page).locator('[role="menuitem"]')).toHaveText(["Togli dall'elenco"]);
+    await expect(menu(page).locator('[role="menuitem"]')).toHaveText(["Mostra l'uscita", "Togli dall'elenco"]);
     await menu(page).getByRole('menuitem', { name: "Togli dall'elenco" }).click();
     await expect.poll(() => conto.togli).toEqual(['p-git']);
     await expect(riga(page, 'p-git')).toBeVisible(); // resta finché il server non lo scrive
@@ -146,18 +154,20 @@ test.describe('C1 — la scheda Processi', () => {
     expect(conto.altreScritture).toEqual([]);
   });
 
-  test('C1-PROC-03 — la sezione «In sfondo» sopra «Altri comandi»; «Ferma tutti» chiede conferma e ferma i tre vivi', async ({ page }) => {
+  /* pannello v2: «In sfondo» di oggi sta fra gli «Accesi» (col suo stato «In sottofondo»); «Ferma tutti quelli accesi» sta nel «⋯» della
+     testa e chiede conferma SOTTO la testa (le conferme del pannello non sono modali: decisione owner 2) */
+  test('C1-PROC-03 — il comando in sottofondo sta fra gli accesi; «Ferma tutti» chiede conferma e ferma i tre vivi', async ({ page }) => {
     const conto = await apri(page);
-    const sezione = page.locator('#railProcessi .talos-process-sezione');
-    await expect(sezione.locator('.talos-process-sezione__titolo')).toHaveText('In sfondo');
-    await expect(sezione.locator('.talos-process')).toHaveCount(1);
-    await expect(sezione.locator('.talos-process')).toHaveAttribute('data-processo', 'p-dev');
-    await expect(page.locator('#railProcessi > .talos-process-sezione__titolo')).toHaveText('Altri comandi');
-    await page.locator('#railProcessi .talos-process-ferma-tutti').click();
-    const dialogo = page.locator('dialog[open], [role="dialog"]').filter({ hasText: 'Fermare tutti i comandi?' }).last();
-    await expect(dialogo).toContainText('Fermare i 3 comandi in corso adesso?');
+    const accesi = page.locator('#railProcessi [data-sezione="accesi"]');
+    await expect(accesi.locator('.pn-riga[data-chiave="p-dev"]')).toBeVisible();
+    await expect(accesi.locator('.pn-riga[data-chiave="p-dev"] .pn-segno')).toHaveAttribute('aria-label', 'In sfondo');
+    await expect(page.locator('#railProcessi [data-sezione="finiti"]'), 'l’ambito di serie mostra gli accesi').toHaveCount(0);
+    await page.locator('#railProcessi [data-controllo="menu-testa"]').click();
+    await menu(page).getByRole('menuitem', { name: 'Ferma tutti quelli accesi' }).click();
+    const dialogo = page.locator('#railProcessi .pn-conferma--testa');
+    await expect(dialogo).toContainText('Fermare 3 comandi accesi?');
     expect(conto.ferma).toEqual([]);
-    await dialogo.locator('.talos-button--danger').click();
+    await dialogo.locator('[data-controllo="conferma-si"]').click();
     await expect.poll(() => [...conto.ferma].sort()).toEqual(['p-build', 'p-dev', 'p-test']);
     expect(conto.altreScritture).toEqual([]);
   });
@@ -175,7 +185,7 @@ test.describe('C1 — la scheda Processi', () => {
     /* misurato il 10/10: con la cura B legge 3 ms dopo la risposta di A; senza, 1.919 ms dopo, quando un ridisegno qualunque
        capita (e col parcheggio B1 può non capitare mai) */
     expect(conto.tB - conto.tA, 'B reads right after the discarded answer of A').toBeLessThan(500);
-    await expect(riga(page, 'p-watch').locator('.talos-process__risorse')).toHaveText('CPU 3,5% · 50 MB');
+    await expect(misura(page, 'p-watch')).toHaveText('3,5% · 50 MB');
     await expect(riga(page, 'p-test')).toHaveCount(0); // niente della sessione di prima
     expect(conto.altreScritture).toEqual([]);
   });
@@ -202,7 +212,9 @@ test.describe('C1 — la scheda Processi', () => {
     test(`C06-PROC-FERMATO ${tema} — uno sfondato fermato dalla persona è «Annullato», senza codice`, async ({ page }, info) => {
       const conto = await apri(page, { tema });
       await evento(page, { type: 'CUSTOM', name: 'talos.processo-sfondo', value: { toolCallId: 'p-dev', esito: 'fallito', codice: 1, segnale: null, finitoAlle: '2026-10-10T10:00:05.000Z', fermatoDallaPersona: true, comando: 'npm run dev' } });
-      await expect(riga(page, 'p-dev').locator('.talos-process__stato')).toHaveText('Annullato');
+      await page.locator('#railProcessi [data-controllo="ambito-tutti"]').click(); // v2: un comando finito sta fra i «Finiti»
+      await expect(riga(page, 'p-dev').locator('.pn-segno')).toHaveAttribute('aria-label', 'Annullato');
+      await expect(riga(page, 'p-dev').locator('.pn-badge')).toHaveText('Annullato');
       await expect(riga(page, 'p-dev')).not.toContainText('uscita 1');
       expect(conto.altreScritture).toEqual([]);
       await page.screenshot({ path: `${process.env.TALOS_FOTO_DIR || info.outputPath('')}/C06-PROC-FERMATO-${tema}.png` });
@@ -212,21 +224,23 @@ test.describe('C1 — la scheda Processi', () => {
   test('C06-PROC-FERMATO-AL-CONTRARIO — la stessa uscita 1 senza la persona resta «Non riuscito · uscita 1»', async ({ page }) => {
     await apri(page);
     await evento(page, { type: 'CUSTOM', name: 'talos.processo-sfondo', value: { toolCallId: 'p-dev', esito: 'fallito', codice: 1, segnale: null, finitoAlle: '2026-10-10T10:00:05.000Z' } });
-    await expect(riga(page, 'p-dev').locator('.talos-process__stato')).toHaveText('Non riuscito');
+    await page.locator('#railProcessi [data-controllo="ambito-tutti"]').click();
+    await expect(riga(page, 'p-dev').locator('.pn-segno')).toHaveAttribute('aria-label', 'Non riuscito');
     await expect(riga(page, 'p-dev')).toContainText('uscita 1');
   });
 
   for (const tema of ['light', 'dark']) {
     test(`C1-PROC-FOTO ${tema} — la scheda col menu aperto e la conferma di «Ferma tutti», 1920×1080`, async ({ page }, info) => {
       await apri(page, { tema });
-      await expect(riga(page, 'p-test').locator('.talos-process__risorse')).toHaveText(/CPU 38%/u, { timeout: 5_000 });
+      await expect(misura(page, 'p-test')).toHaveText(/38%/u, { timeout: 5_000 });
       const cartella = process.env.TALOS_FOTO_DIR || info.outputPath('');
-      await riga(page, 'p-test').locator('.talos-process__azioni').click();
+      await apriMenuRiga(page, 'p-test');
       await expect(menu(page)).toBeVisible();
       await page.screenshot({ path: `${cartella}/c1-processi-menu-${tema}.png` });
       await page.keyboard.press('Escape');
-      await page.locator('#railProcessi .talos-process-ferma-tutti').click();
-      await expect(page.locator('dialog[open], [role="dialog"]').filter({ hasText: 'Fermare tutti i comandi?' }).last()).toBeVisible();
+      await page.locator('#railProcessi [data-controllo="menu-testa"]').click();
+      await menu(page).getByRole('menuitem', { name: 'Ferma tutti quelli accesi' }).click();
+      await expect(page.locator('#railProcessi .pn-conferma--testa')).toBeVisible();
       await page.screenshot({ path: `${cartella}/c1-processi-ferma-tutti-${tema}.png` });
     });
   }

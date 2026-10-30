@@ -32,11 +32,16 @@ test('REV5-C1 «Consenti» con l\'avvio in corso mentre scade: due chiusure cont
   const [riga] = await b.cartelle.elenco('D1');
   let finisciAvvio;
   const avviate = [];
-  const avvio = () => new Promise((ok) => { finisciAvvio = () => { avviate.push('s1'); ok('s1'); }; });
+  /* 30/10/2026: rossa a intermittenza sulla CI pubblica (run 41022417182 e 41029502490, «finisciAvvio is not a function»): `rispondi`
+     carica e salva i consensi su disco, sotto il lucchetto fra processi, PRIMA di chiamare `avvio`, e su un runner lento 20 ms fissi
+     non bastavano. Si aspetta la chiamata vera. */
+  let avvioChiamato;
+  const chiamato = new Promise((ok) => { avvioChiamato = ok; });
+  const avvio = () => new Promise((ok) => { finisciAvvio = () => { avviate.push('s1'); ok('s1'); }; avvioChiamato(); });
   const r = await b.cartelle.chiedi({ dispositivoId: 'D1', nomeDispositivo: 'Pad', cartellaId: riga.cartellaId, avvio });
   ora += ATTESA_CONSENSO_MS - 500; // «Consenti» premuto a 1:59,5
   const risposta = b.cartelle.rispondi(r.richiestaId, 'consentita');
-  await new Promise((x) => setTimeout(x, 20));
+  await chiamato; // il PC sta avviando la sessione
   ora += 1000; // l'avvio della sessione dura più di mezzo secondo: la scadenza arriva mentre gira
   // la scadenza la nota chiunque legga: il timer (nuovo) o la lettura della finestra (di prima)
   const timer = programmati.find((p) => !p.tolto);

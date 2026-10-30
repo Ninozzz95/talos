@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { test, expect } from '@playwright/test';
+import { apriPiegaContesto, righeIndice } from '../fixtures/pannello-contesto-prove.mjs'; // pannello v2: le righe di oggi stanno in pieghe
 
 import { SCENE_ATTIVITA } from '../../lab/fixtures/attivita-compatta.js';
 
@@ -139,6 +140,7 @@ test.describe('R4 segmento compatto — prodotto', () => {
       await page.setViewportSize({ width: larghezza, height: larghezza === 1920 ? 1080 : 900 });
       const c = await apri(page, { tema, cache: { percentuale: 85, giriMisurati: 1286 } });
       await scena(page, 'breve', `cache${larghezza}`);
+      await apriPiegaContesto(page, 'dettagli-finestra');
       const riga = page.locator('#railContesto .talos-kv').filter({ has: page.locator('.talos-kv__k', { hasText: 'Riusato dalla cache' }) });
       await expect(riga.locator('.talos-kv__v'), 'la premessa: il valore lungo').toHaveText('85 % · su 1286 richieste al modello');
       const misure = await riga.evaluate((n) => {
@@ -541,6 +543,8 @@ test.describe('R4 segmento compatto — prodotto', () => {
     expect(respiri.a.every((x) => x >= 16 && x <= 20), JSON.stringify(respiri)).toBe(true);
     expect(respiri.b.every((x) => x >= 16 && x <= 20), JSON.stringify(respiri)).toBe(true);
     expect(respiri.a.length + respiri.b.length).toBe(10);
+    /* pannello v2: una scheda nascosta non si ridisegna (si segna sporca e si disegna quando si apre): si apre il Contesto */
+    await page.locator('#railTabs [data-rail="contesto"]').click();
     await expect(page.locator('#inspectorPanel')).toContainText('Indice dei giri');
   });
 });

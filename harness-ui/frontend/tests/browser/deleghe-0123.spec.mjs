@@ -125,6 +125,8 @@ test.describe('Delega rifiutata e resoconto della figlia', () => {
       await page.getByRole('tab', { name: 'Agenti' }).first().click();
       const scheda = page.locator(`[data-session-id="${FIGLIA}"], [data-agente-id="${FIGLIA}"], [data-sessione-figlia="${FIGLIA}"]`).first();
       await scheda.click();
+      /* pannello v2 (29/10/2026): il clic apre il dettaglio nella riga; la panoramica dell'agente (col suo resoconto) è dietro «Apri la conversazione» */
+      await scheda.getByRole('button', { name: 'Apri la conversazione' }).click();
       const panoramica = page.locator('[data-c="PannelloFiglia"]');
       await expect(panoramica, 'premessa: il dettaglio della figlia è aperto').toContainText('Rileggi il README');
       const sezione = panoramica.locator('.talos-agente__compito').filter({ hasText: 'Che cosa ha riportato' });

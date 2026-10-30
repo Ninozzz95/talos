@@ -31,6 +31,9 @@ import { limiteCheAgisce, percheDelLimite, ripartizioneSulLimite, compattazioniD
    nostro), non si stampa come stringa troncata. Vedi `components/comando-shell.js`. */
 import { ICONA_FAMIGLIA, analizzaComando, disegnaComando, iconaComando, NOME_FAMIGLIA } from './comando-shell.js';
 import { durataBreveRigaViva } from './durata-breve.js'; // owner 27/10/2026: la durata che scorre, nella stessa forma della riga viva
+import { disegnaAgenti as disegnaAgentiV2 } from './pannello/agenti.js'; // pannello di destra v2 (owner 29/10/2026): la scheda Agenti approvata
+import { disegnaContesto as disegnaContestoV2 } from './pannello/contesto.js'; // pannello v2: la scheda Contesto (storia nel tempo, indice dei giri che porta al giro)
+import { disegnaProcessiV2 } from './pannello/processi.js'; // pannello v2: la scheda Processi (pagine al posto del tetto di 40)
 
 /* ⛔ Numeri e orari nella LINGUA CORRENTE, risolti quando si disegna: un formato creato al caricamento resterebbe italiano. */
 const localeNumeri = () => (linguaCorrenteDiT() === 'en' ? 'en-US' : 'it-IT');
@@ -1881,8 +1884,13 @@ export function statoProcesso(p = {}) {
   return STATI_PROCESSO[p?.stato] ? p.stato : (p?.stato === 'ok' ? 'riuscito' : p?.stato === 'errore' ? 'fallito' : 'in-corso');
 }
 
+/* ⭐ Owner 29/10/2026 sera (opzione consigliata, parità col telefono): il numero accanto ad «Agenti» conta TUTTI gli agenti vivi —
+   né conclusi né interrotti, COMPRESI quelli che aspettano un permesso: lo stesso insieme che lo Stop ferma. Supera la regola del
+   20/09 qui sotto (solo `in-corso`); il pallino ambra per chi aspetta te resta (`contoAgenti`, pannello/agenti.js). Una delega in
+   pausa o senza stato noto non è contata. */
+const AGENTI_VIVI = new Set(['in-corso', 'attesa']);
 export function contaAgentiAttivi(agenti = []) {
-  return (Array.isArray(agenti) ? agenti : []).filter((a) => statoDelega(a) === 'in-corso').length;
+  return (Array.isArray(agenti) ? agenti : []).filter((a) => AGENTI_VIVI.has(statoDelega(a))).length;
 }
 /*
  * ⛔ A6 (07/10/2026) — il badge conta ciò che GIRA: fuori `in-consenso` (un comando che aspetta il consenso non è ancora
@@ -2068,7 +2076,24 @@ export function aggiornaInspector(inspector, dati = {}, { document: d = globalTh
    * dell'owner: la query rendeva `null` e il ramo non si accendeva più — codice morto che sembrava
    * vivo. Il titolo della sessione vive dove serve: nella testata della CHAT e nella riga scelta.
    */
-  if (!schedaDaSaltare(inspector, inspector.querySelector('#railContesto'), 'contesto')) {
+  /* ⭐ Pannello v2 (owner 29/10/2026, MAPPA §0.3): con la scheda nuova passata dall'app la disegna `pannello/contesto.js` al posto delle
+     card (la card «Ambiente» è passata alla scheda Git, «Dettagli del repository», decisione owner 1); senza, le card di prima. */
+  const railContesto = inspector.querySelector('#railContesto');
+  if (railContesto && dati.pannello?.contesto && !schedaDaSaltare(inspector, railContesto, 'contesto')) {
+    /* ⛔ Niente perso (MAPPA §0, coordinatore 29/10): le righe di oggi delle card «Finestra del contesto» (in uso misurato o stimato,
+       prima della compattazione, riuso della cache, il PERCHÉ del limite) e «Compattazioni» (l'ultima, dopo l'ultima, le tue richieste
+       alla lettera, i fatti protetti, l'indice tenuto, il livello 1 di questa richiesta) vanno nella scheda v2 in due pieghe chiuse,
+       con le stesse funzioni e le stesse parole. */
+    const sc = dati.schedaContesto ?? null;
+    const limite = limiteCheAgisce({ budget: sc?.budget ?? null, politica: sc?.politica ?? null });
+    const f = righeFinestraSulLimite({ usage: dati.usage, ripartizione: sc?.ripartizione ?? null, limite, cacheSessione: dati.cacheSessione, storiaInCaricamento: dati.storiaInCaricamento === true })
+      ?? righeFinestra(dati.usage, dati.finestra, dati.ripartizione, dati.cacheSessione, { storiaInCaricamento: dati.storiaInCaricamento === true });
+    const dettagli = {
+      finestra: Array.isArray(f?.righe) ? f.righe : [], perche: f?.perche || '',
+      compattazioni: righeCompattazioni({ motore: sc?.motore ?? null, legacy: sc?.legacy ?? null, recordLegacy: sc?.recordLegacy ?? null, level1: sc?.level1 ?? null, richiestaVista: Boolean(sc?.ripartizione) }),
+    };
+    disegnaContestoV2(railContesto, { ...(dati.pannello.contesto.dati ?? {}), dettagli }, dati.pannello.contesto.azioni ?? {});
+  } else if (!dati.pannello?.contesto && !schedaDaSaltare(inspector, railContesto, 'contesto')) {
     const cards = inspector.querySelectorAll('#railContesto [data-c="InspectorCard"], #railContesto [data-c="TurnIndex"]');
     const [ambiente, finestra, indice] = cards;
     riempiCard(d, ambiente, righeAmbiente(dati.contesto));
@@ -2112,7 +2137,10 @@ export function aggiornaInspector(inspector, dati = {}, { document: d = globalTh
      `legacy/app.js`), che la aggiorna da sé; qui non si ridisegnano le deleghe classiche sopra di lui. */
   const deleghe = inspector.querySelector('#railDeleghe') || agenti;
   if (agenti && (!dati.agentiDelWorkflow || deleghe !== agenti) && !schedaDaSaltare(inspector, agenti, 'agenti')) {
-    disegnaAgenti(d, deleghe, dati.agenti, dati.azioniAgenti || {});
+    /* ⭐ Pannello v2 (owner 29/10/2026): quando l'app passa la scheda Agenti nuova la disegna `pannello/agenti.js` (variante A del
+       27/10, conferma di «Ferma» nella riga, «Rispondi» alla carta in chat); senza, il disegno di prima (chi chiama da solo). */
+    if (dati.pannello?.agenti) disegnaAgentiV2(deleghe, dati.pannello.agenti.dati ?? {}, dati.pannello.agenti.azioni ?? {});
+    else disegnaAgenti(d, deleghe, dati.agenti, dati.azioniAgenti || {});
   }
   const processi = inspector.querySelector('#railProcessi');
   if (schedaDaSaltare(inspector, processi, 'processi')) return;
@@ -2123,7 +2151,10 @@ export function aggiornaInspector(inspector, dati = {}, { document: d = globalTh
    *   inserisce le righe nuove, aggiorna in loco quelle che cambiano e toglie quelle sparite.
    *   Selezione, filtro, dettaglio aperto e scorrimento sopravvivono a un evento nuovo.
    */
-  if (processi) disegnaProcessi(d, processi, Array.isArray(dati.processi) ? dati.processi : [], { ...(dati.azioniProcessi ? { azioni: dati.azioniProcessi } : {}), risorse: dati.risorseProcessi ?? null });
+  /* ⭐ Pannello v2 (owner 29/10/2026): con la scheda nuova passata dall'app la disegna `pannello/processi.js` (ridisegno intero che
+     conserva scorrimento, fuoco, righe aperte e ricerca; coalescato su un fotogramma come qui sopra); senza, quella di prima. */
+  if (processi && dati.pannello?.processi) disegnaProcessiV2(processi, dati.pannello.processi.dati ?? {}, dati.pannello.processi.azioni ?? {});
+  else if (processi) disegnaProcessi(d, processi, Array.isArray(dati.processi) ? dati.processi : [], { ...(dati.azioniProcessi ? { azioni: dati.azioniProcessi } : {}), risorse: dati.risorseProcessi ?? null });
 }
 
 /** I processi dagli eventi degli attrezzi del monolite (`eventiAttrezzi`), con i tempi misurati alla ricezione. */

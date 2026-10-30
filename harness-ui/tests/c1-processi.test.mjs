@@ -121,9 +121,10 @@ test('PROC-C1-03 (registro + HTTP veri): le risorse dei comandi vivi, per toolCa
     const dati = (await r.json()).data
     assert.equal(dati.metodo, 'cim')
     assert.deepEqual(dati.processi, [
-        { toolCallId: 'c7', cpuPercento: 12.5, memoriaByte: 150_000_000, processi: 3 },
-        { toolCallId: 'c8', cpuPercento: null, memoriaByte: null, processi: null },
-        { toolCallId: 'c10', cpuPercento: 3, memoriaByte: 9_000_000, processi: 4 },
+        /* P-05 (pannello v2, 29/10/2026): ogni voce porta anche `porte`; il campionatore finto non le misura ⇒ null, mai [] inventato */
+        { toolCallId: 'c7', cpuPercento: 12.5, memoriaByte: 150_000_000, processi: 3, porte: null },
+        { toolCallId: 'c8', cpuPercento: null, memoriaByte: null, processi: null, porte: null },
+        { toolCallId: 'c10', cpuPercento: 3, memoriaByte: 9_000_000, processi: 4, porte: null },
     ])
     assert.deepEqual(chieste, [{ pid: [4242], wsl: [{ distro: 'Ubuntu', marcatore: 'tabc' }] }], 'only what is known is sampled')
     sgancia()

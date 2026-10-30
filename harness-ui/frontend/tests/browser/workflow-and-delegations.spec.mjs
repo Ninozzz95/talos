@@ -23,7 +23,8 @@ test('WF-MIXED-GRAPHS: workflow then ordinary delegation keeps both diagrams rea
   await rail.getByRole('tab', { name: 'Deleghe' }).click();
   await expect(rail.locator(`[data-sessione-figlia="${FIGLIA_ID}"]`)).toBeVisible();
   await rail.locator(`[data-sessione-figlia="${FIGLIA_ID}"]`).click();
-  await page.getByRole('button', { name: 'Apri questo agente nel diagramma' }).click();
+  // pannello v2 (29/10/2026): la riga si apre sul posto e il suo dettaglio porta «Mostra nel diagramma»
+  await rail.locator(`[data-sessione-figlia="${FIGLIA_ID}"] [data-controllo="mostra-diagramma"]`).click();
 
   const grafo = page.locator('#schermoChat > [data-c="GrafoAgenti"]');
   // 12/10/2026: le deleghe stanno sul diagramma del Workflow — la scheda dell'agente porta la sua sessione ed è quella selezionata

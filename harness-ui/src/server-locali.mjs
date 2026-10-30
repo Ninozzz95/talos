@@ -20,7 +20,7 @@
  */
 
 import { readdirSync, readFileSync, readlinkSync } from 'node:fs';
-import { creaLettorePersistente, MARCATORE_VALIDO, tabellaDaRighe } from './risorse-processi.mjs';
+import { creaLettorePersistente, MARCATORE_VALIDO, portePerPidDaProc, tabellaDaRighe } from './risorse-processi.mjs';
 import { percorsoPowershell, percorsoWsl } from './taskkill-di-sistema.mjs';
 
 const ANSI = /[\u001b\u009b][[\]()#;?]*(?:(?:(?:;[-a-zA-Z\d/#&.:=?%@~_]+)*|[a-zA-Z\d]+(?:;[-a-zA-Z\d/#&.:=?%@~_]*)*)?\u0007|(?:\d{1,4}(?:;\d{0,4})*)?[\dA-PR-TZcf-nq-uy=><~])/gu;
@@ -264,21 +264,8 @@ export function porteWslPerMarcatore(righe) {
  * @returns {Map<number, number[]|null>} `null` = la radice non c'è più
  */
 export function porteLinuxPerRadice({ readdirSync: leggiCartella, readFileSync: leggiFile, readlinkSync: leggiLink }, radici) {
-  const ascolto = new Map(); // inode → porta
-  let letto = false;
-  for (const nome of ['/proc/net/tcp', '/proc/net/tcp6']) {
-    let testo;
-    try { testo = leggiFile(nome, 'utf8'); letto = true; } catch { continue; }
-    for (const riga of String(testo).split('\n').slice(1)) {
-      const c = riga.trim().split(/\s+/u);
-      if (c.length < 10 || c[3] !== '0A' || !/^\d+$/u.test(c[9]) || c[9] === '0') continue;
-      const esadecimale = c[1].split(':').pop();
-      if (!/^[0-9A-Fa-f]{1,4}$/u.test(esadecimale ?? '')) continue;
-      const porta = Number.parseInt(esadecimale, 16);
-      if (portaValida(porta)) ascolto.set(c[9], porta);
-    }
-  }
-  if (!letto) throw new Error('/proc/net/tcp is not readable');
+  /* La lettura di `/proc/net/tcp{,6}` e dei socket dei processi è UNA sola, condivisa con la scheda Processi (P-05,
+     `risorse-processi.mjs` `portePerPidDaProc`): qui si aggiunge solo l'albero di ogni radice. */
   const righe = [];
   for (const nome of leggiCartella('/proc')) {
     if (!/^\d+$/u.test(nome)) continue;
@@ -290,21 +277,14 @@ export function porteLinuxPerRadice({ readdirSync: leggiCartella, readFileSync: 
     righe.push([Number(nome), Number(campi[1]), 0, 0, Number(campi[19])]);
   }
   const tabella = tabellaDaRighe(righe);
+  const alberi = new Map(radici.map((radice) => [radice, pidDellAlbero(tabella, radice)]));
+  const perPid = portePerPidDaProc([...new Set([...alberi.values()].flatMap((a) => [...a]))], { readFileSync: leggiFile, readdirSync: leggiCartella, readlinkSync: leggiLink });
+  if (perPid === null) throw new Error('/proc/net/tcp is not readable');
   const esito = new Map();
-  for (const radice of radici) {
-    const albero = pidDellAlbero(tabella, radice);
+  for (const [radice, albero] of alberi) {
     if (!albero.size) { esito.set(radice, null); continue; }
     const porte = new Set();
-    for (const pid of albero) {
-      let fd;
-      try { fd = leggiCartella(`/proc/${pid}/fd`); } catch { continue; } // finito nel frattempo, o non nostro
-      for (const voce of fd) {
-        let link;
-        try { link = String(leggiLink(`/proc/${pid}/fd/${voce}`)); } catch { continue; }
-        const inode = /^socket:\[(\d+)\]$/u.exec(link)?.[1];
-        if (inode && ascolto.has(inode)) porte.add(ascolto.get(inode));
-      }
-    }
+    for (const pid of albero) for (const porta of perPid.get(pid) ?? []) if (portaValida(porta)) porte.add(porta);
     esito.set(radice, [...porte].sort((a, b) => a - b));
   }
   return esito;

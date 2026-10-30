@@ -9,7 +9,7 @@
  */
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { writeFileSync } from 'node:fs';
+import { existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { talosLavora } from '../src/kernel/talosHarness.mjs';
 import { cartellaDiProva } from './aiuto/cartelle-di-prova.mjs';
@@ -101,4 +101,28 @@ test('giri in tondo R2: in a real turn, the same `shell cat` five times asks the
   const cat = ['shell', { comando: 'echo rules' }];
   const { domande } = await giro({ piano: [cat, cat, cat, cat, cat, cat] });
   assert.equal(domande.filter((d) => d.tipo === 'giri-in-tondo').length, 1);
+});
+
+/*
+ * 30/10/2026, CodeMode step 0 (`eseguiChiamata`): the giri-in-tondo stop LEAVES the loop of calls (`return 'ferma'`, before a
+ *   `break`). No test watched it: the mutant that said 'avanti' survived the whole suite. Here the 5th answer carries TWO calls,
+ *   the 5th identical read and then a write: after the stop the write must not run.
+ */
+test('giri in tondo: after the stop, the other calls of the same answer are not run (the file is not written)', async () => {
+  const cartella = cartellaDiProva('talos-giri-in-tondo-');
+  writeFileSync(join(cartella, 'AGENTS.md'), 'rules\n');
+  const una = (i) => risposta({ tool_calls: [{ index: 0, id: `call_${i}`, type: 'function', function: { name: 'leggi', arguments: JSON.stringify({ percorso: 'AGENTS.md' }) } }] }, 'tool_calls');
+  const due = risposta({ tool_calls: [
+    { index: 0, id: 'call_5', type: 'function', function: { name: 'leggi', arguments: JSON.stringify({ percorso: 'AGENTS.md' }) } },
+    { index: 1, id: 'call_6', type: 'function', function: { name: 'scrivi', arguments: JSON.stringify({ percorso: 'dopo-il-fermo.txt', contenuto: 'x' }) } },
+  ] }, 'tool_calls');
+  let n = 0;
+  const esito = await talosLavora({
+    cartella, task: { consegna: 'work' }, modello: 'x', chiave: 'y', livelloAccesso: 'Full access', guardiaGiriInTondo: true,
+    onDelta: () => {},
+    chiediApprovazioneFn: async () => false,
+    fetchDiRete: async () => { n += 1; return n <= 4 ? una(n) : n === 5 ? due : risposta({ content: 'done' }, 'stop'); },
+  });
+  assert.equal(esito.comeFinita, 'ripetizione', 'premise: the 5th identical read stopped the turn');
+  assert.equal(existsSync(join(cartella, 'dopo-il-fermo.txt')), false, 'the write that came after the stop must not run');
 });

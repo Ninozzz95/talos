@@ -12,6 +12,17 @@ function valoreRetry(evento) {
      un giro perso senza effetti) NON ha uno HTTP status: il suo motivo arriva nel campo `motivo` e il
      primo tentativo è 1 (il canale HTTP parte da 2 perché il primo giro non è un «ritenta»). */
   const incerto = v.canale === 'esito-incerto';
+  /* CONTRATTO-R30-R31 (30/10/2026): il tetto d'uscita — un rinvio SUBITO, senza stato HTTP né attesa; si chiude col suo `fine` */
+  const tetto = v?.canale === 'tetto-uscita';
+  if (tetto) {
+    if (v.schema !== 'talos.provider-retry.v1' || ![v.runId, v.threadId, v.requestId].every(id) || !['invio', 'fine'].includes(v.fase)
+      || !Number.isSafeInteger(v.tentativo) || v.tentativo < 1 || !Number.isSafeInteger(v.tentativiMassimi) || v.tentativiMassimi < v.tentativo
+      || (v.httpStatus !== undefined && v.httpStatus !== null)) return null;
+    return { requestId: v.requestId, runId: v.runId, threadId: v.threadId, fase: v.fase, tentativo: v.tentativo, tentativiMassimi: v.tentativiMassimi,
+      canale: 'tetto-uscita', retryAt: null, motivo: ['solo-ragionamento', 'chiamata-tagliata', 'credito'].includes(v.motivo) ? v.motivo : null,
+      tettoNuovo: Number.isSafeInteger(v.tettoNuovo) ? v.tettoNuovo : null,
+      ragionamento: typeof v.ragionamento?.a === 'string' ? v.ragionamento.a : null, costoDiNuovo: v.costoDiNuovo === true };
+  }
   if (!v || v.schema !== 'talos.provider-retry.v1'
     || ![v.runId, v.threadId, v.requestId].every(id)
     || !['attesa', 'invio', 'fine'].includes(v.fase)
@@ -61,6 +72,15 @@ export function testoRetry(retry, ora = Date.now(), en) {
   const voce = (chiave, parametri) => (en === undefined ? t(`chat.retry.${chiave}`, parametri)
     : interpola(TESTI[en ? 'en' : 'it'][`chat.retry.${chiave}`], parametri));
   const numero = voce('attempt', { attempt: retry.tentativo, max: retry.tentativiMassimi });
+  /* CONTRATTO-R30-R31: il limite di risposta raggiunto — che cosa cambia nel nuovo invio, e se si paga di nuovo (un motore locale no) */
+  if (retry.canale === 'tetto-uscita') {
+    const livelli = { medium: 'level.medium', low: 'level.low', high: 'level.high', xhigh: 'level.xhigh' };
+    const cosa = retry.ragionamento && livelli[retry.ragionamento]
+      ? voce('outputCap.lowerReasoning', { level: voce(`outputCap.${livelli[retry.ragionamento]}`) })
+      : voce(Number(retry.tettoNuovo) === 1 ? 'outputCap.higherCapOne' : 'outputCap.higherCapMany', { tokens: Number(retry.tettoNuovo ?? 0).toLocaleString(en === undefined ? undefined : en ? 'en-US' : 'it-IT') });
+    const perche = voce(retry.motivo === 'chiamata-tagliata' ? 'outputCap.whyTool' : retry.motivo === 'credito' ? 'outputCap.whyCredit' : 'outputCap.whyReasoning');
+    return { titolo: voce('outputCap.title'), motivo: `${perche} ${cosa}${retry.costoDiNuovo ? ` ${voce('outputCap.mayCost')}` : ''} ${numero}.`, tempo: voce('inProgress') };
+  }
   /* R1 (BUG-16): il canale «esito-incerto» dice il SUO motivo, senza «stato null» — non c'è nessuno status HTTP da citare. */
   const incerto = retry.canale === 'esito-incerto';
   const motivo = incerto ? voce(retry.causa === 'nessuna-prima-risposta' ? 'reason.noFirstResponse' : 'reason.outcomeUnknown')

@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { apriPiegaContesto, righeIndice } from '../fixtures/pannello-contesto-prove.mjs'; // pannello v2: le righe di oggi stanno in pieghe
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:net';
 import { mkdtemp, mkdir, writeFile, readFile } from 'node:fs/promises';
@@ -164,6 +165,7 @@ test('CTX-UI-DESKTOP-ROUNDTRIP pulsante, SQLite e replay della chat vera', async
     await page.locator('#railTabs [data-rail="contesto"]').click();
     const finestra = page.locator('#railContesto');
     await expect(finestra).toBeVisible();
+    await apriPiegaContesto(page, 'dettagli-finestra');
     /* C1 (10/10/2026): con una misura del motore la colonna parla del limite che agisce, e la riga si chiama «In uso (misurato)»
        (prima, senza limite noto, «Conversazione»): si cerca l'una o l'altra, la regola resta — dopo il riavvio il consumo c'è. */
     await expect(finestra.locator('.talos-kv__k').filter({ hasText: /^(Conversazione|In uso \(misurato\))$/ }).locator('..').locator('.talos-kv__v'), 'CTX-UI-USAGE-CLOSED-RELOAD').toContainText('2k');

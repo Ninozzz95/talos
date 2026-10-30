@@ -1,6 +1,7 @@
 import { etichettaSeparatoreContesto } from './context-separator.js';
 import { fineMuta, interpretaEventoCompattazione, testoRigaCompattazione } from './compattazione-legacy.js';
 import { EVENTO_MCP_AVVIO, motivoMcp, nuoviServerNonPartiti } from './avviso-mcp.js';
+import { leggiControlloSpento, testiControlloSpento } from './avviso-controllo-spento.js';
 import { t } from './lingua.js';
 import { suUnaRiga } from './testo-a-schermo.js';
 
@@ -75,6 +76,9 @@ export function trascriviEventoInterno(evento, contesto = creaContestoTrascrizio
   /* 18/10/2026 (dal ramo scartato `feat/mcp-avvio-in-chat`, adattato all'evento fuso): un server MCP che non è partito, con le parole
      della nota in chat e solo quando la chat la mostra (`nuoviServerNonPartiti`, lo stesso ricordo); un giro in cui niente cambia
      resta fuori come la contabilità. Il motivo sta fra parentesi: in un documento da leggere dopo è l'unica traccia del perché. */
+  /* owner 29/10/2026: il controllo delle scritture spento — la stessa riga che la chat mostra */
+  const controlloSpento = leggiControlloSpento(evento);
+  if (controlloSpento) return { testo: testiControlloSpento(controlloSpento).riga };
   if (evento.name === EVENTO_MCP_AVVIO) {
     if (!Array.isArray(evento.value?.esiti)) return null;
     const nuovi = nuoviServerNonPartiti(contesto.ricordoMcp, 'trascritto', evento.value);

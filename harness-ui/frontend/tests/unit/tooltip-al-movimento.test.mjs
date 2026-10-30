@@ -105,3 +105,27 @@ test('TIP-MOV-05 le maniglie dei dialoghi portano l attributo (dialoghi.js)', ()
   const collega = sorgente.slice(sorgente.indexOf('export function collegaRidimensionamentoDialoghi('));
   assert.match(collega.slice(0, 2500), /h\.setAttribute\('data-tip-al-movimento', ''\);/);
 });
+
+test('TIP-MOV-05 (30/10) dopo un tasto, un elemento ridisegnato sotto il puntatore FERMO non ruba la bolla aperta dal fuoco; il primo movimento sì', async () => {
+  const b = banco();
+  const sotto = elemento({ title: 'Apri diagramma' });
+  b.manda('keydown', {}, { key: 'ArrowRight' });
+  b.manda('pointerover', sotto);
+  await unGiro();
+  assert.equal(b.bolla.hidden, true, 'solo pointerover dopo un tasto: niente bolla');
+  b.manda('pointermove', sotto);
+  await unGiro();
+  assert.equal(b.bolla.hidden, false, 'una mano vera sul mouse la apre');
+  assert.equal(b.testo.textContent, 'Apri diagramma');
+  b.stacca();
+});
+
+test('TIP-MOV-06 al contrario: senza tasti di mezzo (solo mouse) il passaggio apre come prima', async () => {
+  const b = banco();
+  const sotto = elemento({ title: 'Apri diagramma' });
+  b.manda('pointerdown', sotto);
+  b.manda('pointerover', sotto);
+  await unGiro();
+  assert.equal(b.bolla.hidden, false);
+  b.stacca();
+});

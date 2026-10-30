@@ -762,6 +762,24 @@ const REGOLE = [
    * ⛔ Il rimedio «a pezzi» compare SOLO col motivo `MALFORMED_FUNCTION_CALL`, la causa nota (googleapis/js-genai #1619:
    *   un file intero in un argomento): senza quel motivo non lo sappiamo, e non lo si dice.
    */
+  /* CONTRATTO-R30-R31 (owner 30/10/2026): il limite di risposta esaurito anche dopo la scala del nucleo; il caso viene dal codice e
+     dalla frase del nucleo (la chiamata tagliata dice «tool call»), mai indovinato */
+  {
+    id: 'tetto-uscita-esaurito',
+    riconosce: (_t, codice) => codice === 'PROVIDER_OUTPUT_CAP_EXHAUSTED',
+    spiega: (tecnico) => {
+      const attrezzo = /tool call/u.test(tecnico ?? '');
+      return {
+        cosa: t(attrezzo ? 'errori.turno.tettoUscita.cosaAttrezzo' : 'errori.turno.tettoUscita.cosaRagionamento'),
+        perche: t('errori.turno.tettoUscita.perche'),
+        rimedi: [
+          ...(attrezzo ? [t('errori.turno.tettoUscita.rimedioFile')] : []),
+          t('errori.turno.tettoUscita.rimedioRagionamento'),
+          t('errori.turno.tettoUscita.rimedioAltroModello'),
+        ],
+      };
+    },
+  },
   {
     id: 'risposta-vuota-dopo-tentativi',
     riconosce: (t, codice) => codice === 'PROVIDER_EMPTY_RESPONSE' || /ha risposto senza testo né attrezzi|answered with neither text nor tools/u.test(t),

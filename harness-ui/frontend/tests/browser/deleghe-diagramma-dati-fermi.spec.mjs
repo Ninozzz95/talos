@@ -62,7 +62,8 @@ test('DELEGHE-FERMI-03 — una conversazione di cui non si è MAI letto niente: 
   await attendiFineStoria(page);
   await expect(grafo).toHaveCount(0);
   await page.locator('#railTabs [data-rail="agenti"]').click();
-  await expect(page.locator('#railAgenti').getByRole('status')).toContainText('Dati non aggiornati');
+  /* pannello v2 (29/10/2026): la riga di stato del pannello è quella del kit, «Non aggiornati: <motivo>» con «Riprova» accanto */
+  await expect(page.locator('#railAgenti').getByRole('status')).toContainText('Non aggiornati: Lettura non disponibile');
   await page.locator('#railAgenti').getByRole('button', { name: /diagram/iu }).first().click();
   const vuoto = page.locator('#schermoChat > [data-c="GrafoAgenti"]');
   await expect(vuoto).toHaveAttribute('data-vuoto', 'true');

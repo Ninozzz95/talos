@@ -132,12 +132,18 @@ test('MODEL-PICKER-02 — i modelli locali SI SCELGONO, col prefisso di fonte', 
    * riscrive dicendo cosa presidia ADESSO — e resta scritto che cosa
    * presidiava prima, perché il motivo di allora era buono.
    */
+  /*
+   * ⭐ 29/10/2026 — selettore rifatto dal bozzetto approvato: `renderListaLocali` non c'è più come elenco a parte. Una riga locale
+   *   è una VOCE (`voceDiLocale`, valore col prefisso `local:`) disegnata dalla STESSA `rigaModello` delle altre fonti — prima era
+   *   un bottone «come le altre», ora è un'opzione come le altre. La prova dal vivo è SEL-BOZZ-12 (browser).
+   */
   const app = await source('frontend/src/legacy/app.js');
-  const inizio = app.indexOf('function renderListaLocali()');
+  const inizio = app.indexOf('function voceDiLocale(modello)');
   const corpo = app.slice(inizio, app.indexOf('\n    function ', inizio + 1));
   assert.ok(inizio > 0);
   assert.match(corpo, /const valore = `local:\$\{modello\.id\}`;/u, 'il valore scelto deve portare il prefisso di fonte concordato');
-  assert.match(corpo, /createElement\('button'\)/u, 'la riga locale è un bottone come le altre');
+  assert.match(app, /modelliLocali\.map\(voceDiLocale\)/u, 'i locali diventano voci del selettore');
+  assert.match(app, /pezzi\.push\(\.\.\.gruppi\[0\]\[1\]\.map\(rigaModello\)\)/u, 'la riga locale è una riga come le altre');
 });
 
 test('MODEL-PICKER-03 — AL CONTRARIO: la nota non promette un\'attesa che il codice non impone più', async () => {
@@ -191,12 +197,13 @@ test('MODEL-PICKER-04 — scegliere un modello locale a META\' CHAT lo scrive su
    * scelto, e RunStarted.contesto.modello lo conferma — nessun "impostazioni
    * cambiate fuori da questa scheda" spurio.
    */
+  /* ⭐ 29/10/2026: la scelta di OGNI fonte passa da `applica(voce)`; per un locale la scrittura porta solo il modello, come prima. */
   const app = await source('frontend/src/legacy/app.js');
-  const inizio = app.indexOf('function renderListaLocali()');
-  const fine = app.indexOf('\n    function ', inizio + 1);
+  const inizio = app.indexOf('async function applica(voce)');
+  const fine = app.indexOf('\n    async function ', inizio + 1);
   const corpo = app.slice(inizio, fine);
   assert.ok(inizio > 0);
-  assert.match(corpo, /await sincronizzaImpostazioniSessione\(\{ modello: valore \}\)/u, 'il click locale deve scrivere sul registro sessione, non solo su state.model');
+  assert.match(corpo, /await sincronizzaImpostazioniSessione\(voce\.locale\s*\? \{ modello: valore \}/u, 'il click locale deve scrivere sul registro sessione, non solo su state.model');
   assert.match(corpo, /aggiornaModelloPrincipale && sincronizzaSessione && state\.realSession\.id/u, 'stesso guard del ramo remoto: niente sync su un picker che non ne ha bisogno (es. Laboratorio modelli)');
   assert.match(corpo, /aggiornaPillolaModello\(\)/u, 'la pillola del composer deve aggiornarsi, non solo il trigger dentro il foglio');
 });

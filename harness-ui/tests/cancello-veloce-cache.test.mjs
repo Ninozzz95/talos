@@ -162,19 +162,21 @@ test('CANC-A0-02 al contrario: un JavaScript con @ts-check, o un TypeScript nel 
   assert.match(ts.perche, /inventata/u);
 });
 
-test('CANC-A2-06 TETTO DELLA MEMORIA: oltre 2 MiB di sorgenti niente cache (esito di sempre); due cartelle che insieme lo superano ⇒ se ne tiene una', async () => {
+test('CANC-A2-06 TETTO DELLA MEMORIA: oltre il tetto di questa macchina (2 MiB sul PC, 512 KiB su Android) niente cache (esito di sempre); due cartelle che insieme lo superano ⇒ se ne tiene una', async () => {
   svuotaCacheCancello();
   const lib = await libreriaStandard(leggiLibreriaStandardTs);
   const pieno = (cartella, kb) => [{ percorso: `${cartella}/grande.ts`, testo: `export const g = 1;\n/*${'x'.repeat(kb * 1024)}*/\n` }];
-  const grande = pieno('a', 2100);
+  /* le misure vengono dal tetto della macchina (Mobile 29/10: sul Pad il tetto è 512 KiB e 1200 KiB non stavano più sotto) */
+  const tettoKib = tettoCancello() / 1024;
+  const grande = pieno('a', tettoKib + 52);
   const dopoGrande = [...grande, { percorso: 'a/n.ts', testo: 'export const n = inventata;\n' }];
   const esito = await cancelloSemantico(grande, dopoGrande, lib);
   assert.deepEqual(esito, await cancelloSemantico(grande, dopoGrande, lib, { freddo: true }));
   assert.equal(esito.stato, 'assente');
   assert.equal(statoCacheCancello().costruttori, 0, 'oltre il tetto non si tiene niente');
   svuotaCacheCancello();
-  const uno = pieno('b', 1200);
-  const due = pieno('c', 1200);
+  const uno = pieno('b', Math.floor(tettoKib * 0.6));
+  const due = pieno('c', Math.floor(tettoKib * 0.6));
   await cancelloSemantico(uno, [...uno, { percorso: 'b/x.ts', testo: 'export const x = 1;\n' }], lib);
   assert.equal(statoCacheCancello().costruttori, 1);
   await cancelloSemantico(due, [...due, { percorso: 'c/x.ts', testo: 'export const x = 1;\n' }], lib);
@@ -233,6 +235,63 @@ test('CANC-A2-07 dopo 10 minuti senza scritture la memoria si rende da sola (il 
   assert.equal(statoCacheCancello().costruttori, 1, 'prima dei 10 minuti resta');
   t.mock.timers.tick(61_000);
   assert.deepEqual(statoCacheCancello(), { sorgenti: 0, costruttori: 0, risultati: 0 });
+});
+
+/* ── A3: progetti MISTI. Il programma parte dai file controllabili e dagli script globali; i moduli JavaScript entrano solo se
+   importati. Il calcolo `freddo` resta il programma intero di sempre: ogni prova lo confronta. ── */
+function progettoMisto() {
+  const s = [];
+  for (let i = 0; i < 40; i++) s.push({ percorso: `lib/j${i}.mjs`, testo: `export function j${i}(x) { return x + ${i}; }\n` });
+  for (let i = 0; i < 20; i++) s.push({ percorso: `alt/rumore${i}.mjs`, testo: `export const r${i} = nonDefinita${i}();\n` }); // JS non controllato: mai una diagnosi
+  s.push({ percorso: 'globali.js', testo: 'function aiutoGlobale(x) { return x * 2; }\nvar CONFIG_GLOBALE = { a: 1 };\n' }); // uno SCRIPT
+  for (let i = 0; i < 10; i++) {
+    s.push({ percorso: `src/t${i}.ts`, testo: `import { j${i} } from "../lib/j${i}.mjs";\nexport const t${i}: number = j${i}(aiutoGlobale(${i})) + CONFIG_GLOBALE.a;\n` });
+  }
+  s.push({ percorso: 'src/verificato.js', testo: `// @ts-check\nimport { j1 } from "../lib/j1.mjs";\nexport const v = j1(2);\n` });
+  return s;
+}
+function modificaMista(r, s) {
+  const i = Math.floor(r() * 10);
+  const tipo = Math.floor(r() * 8);
+  if (tipo === 0) return conFile(s, `lib/j${i}.mjs`, `export function altro${i}(x) { return x; }\n`); // toglie l'export che un .ts importa
+  if (tipo === 1) return conFile(s, 'globali.js', 'var CONFIG_GLOBALE = { a: 1 };\n'); // toglie una funzione globale
+  if (tipo === 2) return conFile(s, 'globali.js', 'function aiutoGlobale(x) { return x * 2; }\nvar CONFIG_GLOBALE = { a: 1 };\n'); // la rimette
+  if (tipo === 3) return conFile(s, `src/t${i}.ts`, `export const t${i}: number = inventata${i};\n`);
+  if (tipo === 4) return conFile(s, `alt/rumore${i}.mjs`, `export const r${i} = ancoraNonDefinita();\n`); // rumore: nessun effetto
+  if (tipo === 5) return conFile(s, 'globali.js', 'export function aiutoGlobale(x) { return x; }\n'); // lo script diventa un modulo: i globali spariscono
+  if (tipo === 6) return conFile(s, 'src/verificato.js', `// @ts-check\nexport const v = nessuno${i}();\n`);
+  return conFile(s, `lib/j${i}.mjs`, `export function j${i}(x) { return x - ${i}; }\n`);
+}
+
+test('CANC-A3-01 EQUIVALENZA SUI PROGETTI MISTI: 3 × 50 scritture casuali (export tolti, globali tolti e rimessi, uno script che diventa modulo, rumore JS) danno l\'esito del programma intero', async () => {
+  const lib = await libreriaStandard(leggiLibreriaStandardTs);
+  for (const seme of [3, 17, 2029]) {
+    svuotaCacheCancello();
+    const r = casuale(seme);
+    let stato = progettoMisto();
+    for (let k = 0; k < 50; k++) {
+      const dopo = modificaMista(r, stato);
+      const caldo = await cancelloSemantico(stato, dopo, lib);
+      const freddo = await cancelloSemantico(stato, dopo, lib, { freddo: true });
+      assert.deepEqual(caldo, freddo, `seme ${seme}, scrittura ${k}: il programma ridotto cambia l'esito`);
+      if (caldo.stato === 'presente' || r() < 0.3) stato = dopo;
+    }
+  }
+});
+
+test('CANC-A3-02 i moduli JavaScript che nessuno importa non entrano nel programma; gli script globali e gli importati sì', async () => {
+  svuotaCacheCancello();
+  const lib = await libreriaStandard(leggiLibreriaStandardTs);
+  const base = progettoMisto();
+  const dopo = conFile(base, 'src/t3.ts', 'import { j3 } from "../lib/j3.mjs";\nexport const t3: number = j3(aiutoGlobale(3));\n');
+  assert.equal((await cancelloSemantico(base, dopo, lib)).stato, 'presente', 'il globale dello script si vede da TypeScript');
+  const tenuto = statoCacheCancello();
+  assert.equal(tenuto.costruttori, 1);
+  assert.ok(tenuto.sorgenti < base.length, `dentro il programma ${tenuto.sorgenti} file (librerie comprese), nella cartella ${base.length}: i 20 rumori restano fuori`);
+  const senzaGlobale = conFile(dopo, 'globali.js', 'var CONFIG_GLOBALE = { a: 1 };\n');
+  const esito = await cancelloSemantico(dopo, senzaGlobale, lib);
+  assert.equal(esito.stato, 'assente');
+  assert.match(esito.perche, /aiutoGlobale/u, 'togliere una funzione da uno script globale rompe chi la usa');
 });
 
 test('CANC-A2-05 nessun timer: dopo una scrittura il processo esce da solo (talos -p è un processo breve)', () => {

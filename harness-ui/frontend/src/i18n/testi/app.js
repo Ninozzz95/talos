@@ -235,8 +235,6 @@ export default {
     'doctor.checksDone': 'Controlli disponibili completati; leggi le note per le verifiche non eseguite.',
     'doctor.unavailableWith': 'Doctor non disponibile: {motivo}',
     // ── scelta del modello
-    'modelPicker.searchPlaceholder': 'Cerca modello o provider…',
-    'modelPicker.sourcesLabel': 'Dove cercare il modello',
     'modelPicker.keyNotConnected': '{nome}: chiave non collegata',
     'modelPicker.localCount': '{n} modelli · su questo computer',
     'modelPicker.installed': 'Modelli installati',
@@ -1911,8 +1909,6 @@ export default {
     'doctor.checksDone': 'Available checks completed; read the notes for the checks that were not run.',
     'doctor.unavailableWith': 'Doctor unavailable: {motivo}',
     // ── scelta del modello
-    'modelPicker.searchPlaceholder': 'Search model or provider…',
-    'modelPicker.sourcesLabel': 'Where to find the model',
     'modelPicker.keyNotConnected': '{nome}: key not connected',
     'modelPicker.localCount': '{n} models · on this computer',
     'modelPicker.installed': 'Installed models',

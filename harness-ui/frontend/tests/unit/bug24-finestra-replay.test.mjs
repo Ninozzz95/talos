@@ -1116,6 +1116,8 @@ function bancoBolleRigiocate({ restoring = false, differito = false } = {}) {
     EVENTO_MCP_AVVIO: 'talos.mcp-avvio', avvisiMcpDetti: new Map(), nuoviServerNonPartiti: () => [], creaNotaMcpNonPartito: () => null,
     // L1 1.3 (26/10/2026): la riga della finestra del modello locale allargata da sola, disegnata dal gestore degli eventi
     EVENTO_FINESTRA_LOCALE: 'talos.finestra-locale', aggiornaRigaFinestraLocale: () => null,
+    // 29/10/2026 (owner, CONTRATTO-CONTROLLO-SPENTO): la riga del controllo delle scritture spento, nello stesso gestore
+    leggiControlloSpento: () => null, aggiornaRigaControlloSpento: () => null,
     aggiornaAvvisoSogliaContesto() {}, accendiRagionamentiApertiDopoLaStoria() {},
     disegnaTestiRimastiNellaStoria: () => { counts.testiRimasti = (counts.testiRimasti ?? 0) + 1; }, // TESTO-PERSO: il testo rimasto indietro, al confine
     aggiornaRiassuntoSegmento() {}, disegnaFasciaPianoRichiesto() {},

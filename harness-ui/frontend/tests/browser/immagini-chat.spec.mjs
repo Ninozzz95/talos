@@ -92,6 +92,10 @@ test('NATIVE-UI-02 la scheda del fornitore diretto cerca e salva il modello scel
   await page.getByRole('tab',{name:/^Gemini/}).click();
   await page.getByRole('searchbox').fill('gemini');
   await page.getByRole('option',{name:/Gemini Flash gemini:gemini-3.8-flash/}).click();
+  /* ⛔ AGGIORNATA il 29/10/2026 — il difetto era della PROVA: nel selettore nuovo (bozzetto approvato dall'owner, «Sì, implementala»)
+     un clic SEGNA il modello e il pulsante del piede lo APPLICA (SEL-BOZZ-06); il doppio clic sceglie e chiude. Si preme il pulsante
+     per il suo attributo, non per la parola (che cambia con la lingua). */
+  await page.locator('#veloModello .talos-dialog__footer [data-chiudi="veloModello"]').click();
   await expect.poll(()=>saved?.modello).toBe('gemini:gemini-3.8-flash');
   await expect(pillola, 'il modello salvato è quello diretto: lo dice il suggerimento').toHaveAttribute('title', 'Cambia modello · gemini:gemini-3.8-flash');
   /* owner 28/10/2026 (parità col Mobile): nella pillola SOLO il nome; l'origine diretta la dice il LOGO della via d'accesso (supera L3-10) */

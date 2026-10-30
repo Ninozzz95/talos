@@ -130,7 +130,8 @@ test('RIV-T3-01 — «Apri questo agente nel diagramma» dal pannello su un agen
   // il pannello divide gli agenti per richiesta: quella passata è chiusa, la persona la apre e sceglie «c»
   await page.locator('#railAgenti').getByRole('button', { name: /Prima richiesta/u }).click();
   await page.locator('#railAgenti [data-sessione-figlia="c"]').click();
-  await page.locator('[data-c="DettaglioAgente"]').getByRole('button', { name: 'Apri questo agente nel diagramma' }).click();
+  /* pannello v2 (29/10/2026): il clic sulla riga apre il dettaglio NELLA riga; «Apri questo agente nel diagramma» è il suo «Mostra nel diagramma» (stessa azione: apriDiagramma({ figlia, tipo: 'deleghe' })) */
+  await page.locator('#railAgenti [data-sessione-figlia="c"]').getByRole('button', { name: 'Mostra nel diagramma' }).click();
   const dopo = page.locator('#schermoChat > [data-c="GrafoAgenti"]');
   await expect(dopo).toBeVisible();
   await page.waitForTimeout(1200);

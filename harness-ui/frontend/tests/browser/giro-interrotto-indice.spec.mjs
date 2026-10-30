@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { apriPiegaContesto, righeIndice } from '../fixtures/pannello-contesto-prove.mjs'; // pannello v2: le righe di oggi stanno in pieghe
 
 /*
  * Difetto (2) delle foto di Ask e del Piano (24/09): nell'Indice dei giri il giro interrotto dal riavvio del server restava
@@ -58,6 +59,7 @@ async function apri(page, sessione) {
   // VELO-SPEC-2 (08/10/2026, bugfixer): `toContainText` legge anche una chat sotto il velo (`visibility:hidden`): la foto aspetta che si tolga
   await page.waitForFunction(() => !document.querySelector('#conversation')?.classList.contains('is-restoring'));
   await page.locator('#railTabs [data-rail="contesto"]').click();
+  await apriPiegaContesto(page, 'giri'); // pannello v2: l'Indice dei giri è una piega, chiusa di serie
   return contatore;
 }
 

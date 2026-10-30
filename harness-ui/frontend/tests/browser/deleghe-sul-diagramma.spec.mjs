@@ -154,21 +154,25 @@ test('DELEGHE-DIAGRAMMA-10 — una richiesta alla volta: di serie le deleghe del
   await expect(grafo.locator(':scope > header')).toContainText('2 agenti in 1 lotto');
   await expect(grafo.locator(':scope > header')).toContainText('0 di 2 terminati');
   // il pannello Agenti fa lo stesso: la richiesta in corso aperta in cima, la passata ripiegata sotto col suo titolo e il suo conto
+  /* pannello v2 (29/10/2026): la richiesta in corso è la TESTA della scheda («Questa richiesta · ora», il suo testo, il suo conto),
+     le passate stanno sotto in una piega tratteggiata col loro titolo e conto */
   const pannello = page.locator('#railAgenti');
-  await expect(pannello.locator('.talos-agenti-richiesta')).toHaveCount(2);
-  await expect(pannello.locator('.talos-agenti-richiesta').nth(0)).toContainText('Questa richiesta · Ora aggiungi le prove');
-  await expect(pannello.locator('.talos-agenti-richiesta').nth(0)).toHaveAttribute('aria-expanded', 'true');
-  await expect(pannello.locator('.talos-agenti-richiesta').nth(1)).toContainText('Sistema i listini');
-  await expect(pannello.locator('.talos-agenti-richiesta').nth(1)).toContainText('2 agenti · tutti finiti');
-  await expect(pannello.locator('.talos-agenti-richiesta').nth(1)).toHaveAttribute('aria-expanded', 'false');
+  await expect(pannello.locator('.pn-testa')).toContainText('Ora aggiungi le prove');
+  await expect(pannello.locator('.pn-testa .pn-quando')).toContainText('Questa richiesta');
+  const passata = pannello.locator('.pn-piega__testa');
+  await expect(passata).toHaveCount(1);
+  await expect(passata).toContainText('Sistema i listini');
+  await expect(passata).toContainText('2 agenti · tutti finiti');
+  await expect(passata).toHaveAttribute('aria-expanded', 'false');
   await expect(pannello.locator('[data-sessione-figlia]')).toHaveCount(2);
   await expect(pannello.locator('[data-sessione-figlia="a"]')).toHaveCount(0);
-  await pannello.locator('.talos-agenti-richiesta').nth(1).click();
+  await passata.click();
   await expect(pannello.locator('[data-sessione-figlia="a"]')).toBeVisible();
   await expect(pannello.locator('[data-sessione-figlia]')).toHaveCount(4);
-  // AL CONTRARIO: una ricerca apre anche la richiesta ripiegata (chi cerca un agente non sa in quale richiesta stava)
-  await pannello.locator('.talos-agenti-richiesta').nth(1).click();
+  // AL CONTRARIO: una ricerca trova anche nella richiesta ripiegata (chi cerca un agente non sa in quale richiesta stava)
+  await passata.click();
   await expect(pannello.locator('[data-sessione-figlia="a"]')).toHaveCount(0);
+  await pannello.locator('[data-controllo="apri-cerca"]').click();
   await pannello.getByRole('searchbox').fill('Compito a');
   await expect(pannello.locator('[data-sessione-figlia="a"]')).toBeVisible();
   await pannello.getByRole('searchbox').fill('');

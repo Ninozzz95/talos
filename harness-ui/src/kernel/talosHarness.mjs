@@ -5667,6 +5667,85 @@ export function erroreRispostaVuota(vuota, tentativi) {
     return Object.assign(new Error(frase), { code: 'PROVIDER_EMPTY_RESPONSE', classe: 'risposta-vuota', transitorio: false })
 }
 
+/*
+ * ⛔⛔ 30/10/2026 notte — IL TETTO D'USCITA MANGIATO DAL RAGIONAMENTO O DA UNA CHIAMATA LUNGA (CONTRATTO-R30-R31, owner: «Riprova da
+ *   solo, poi chiede» + «Tutte e due, poi chiede» + «Ordine secondo il caso»; OK della CLI). Campagna di base di Performance (GLM-5.3-flash,
+ *   ragionamento alto, 36 corse): le DUE morti dal lato del fornitore erano entrambe il tetto dei 16.384 token — una risposta di solo
+ *   ragionamento ×4 (~65.000 token pagati per niente), e un `shell` tagliato a metà argomenti (che BUG-16 non rimanda: una chiamata era
+ *   annunciata). Nessuna rete interrotta in 36 corse.
+ * ⇒ Come Hermes (`agent/turn_truncation.py`, clone 10-22): un taglio per il tetto SENZA niente di usabile non si ripete identico.
+ *   (a) solo ragionamento: PRIMA il ragionamento un livello più basso per quella richiesta (`_ephemeral_reasoning_off`, :317-319),
+ *       poi il tetto più alto; (b) chiamata tagliata e mai partita: PRIMA il tetto più alto (`boosted_output_cap`, :382-397, e
+ *       `_retry_truncated_tool_call`), poi il ragionamento. Al massimo DUE passi (l'owner), ognuno detto (`provider-retry`,
+ *       canale `tetto-uscita`, campi strutturati per la CLI), poi un errore chiaro. Il ragionamento abbassato non si salva mai.
+ */
+export const CODICE_TETTO_USCITA_ESAURITO = 'PROVIDER_OUTPUT_CAP_EXHAUSTED'
+export const PASSI_TETTO_USCITA_MASSIMI = 2
+export const TETTO_USCITA_DI_SERIE = 32_000
+/** I codici con cui un giro può finire dal lato del fornitore: la CLI li percorre per controllare che ognuno abbia le sue parole. */
+export const CODICI_ERRORE_DEL_GIRO = Object.freeze(['PROVIDER_EMPTY_RESPONSE', 'PROVIDER_OUTCOME_UNKNOWN', 'PROVIDER_OUTCOME_UNKNOWN_ESAURITO',
+    CODICE_TETTO_USCITA_ESAURITO])
+const LIVELLI_DI_RAGIONAMENTO = Object.freeze(['max', 'xhigh', 'high', 'medium', 'low'])
+
+/** Il taglio è del tetto: `length` (o il motivo nativo), oppure i token usciti sono arrivati al tetto inviato (GLM manda un errore). */
+export function tagliatoDalTetto({ finishReason = null, nativeFinishReason = null, usage = null, tettoInviato = null } = {}) {
+    if (finishReason === 'length') return true
+    if (typeof nativeFinishReason === 'string' && /^(?:length|max_tokens|max_output_tokens)$/iu.test(nativeFinishReason)) return true
+    const usciti = Number(usage?.completion_tokens)
+    return Number.isSafeInteger(tettoInviato) && tettoInviato > 0 && Number.isFinite(usciti) && usciti >= tettoInviato
+}
+/** Il ragionamento un livello più basso (solo per sforzo), o `null` se è già basso o non si sa abbassare. */
+export function ragionamentoPiuBasso(ragionamento) {
+    const livello = typeof ragionamento?.effort === 'string' ? ragionamento.effort : null
+    const i = livello === null ? -1 : LIVELLI_DI_RAGIONAMENTO.indexOf(livello)
+    if (i < 0 || i >= LIVELLI_DI_RAGIONAMENTO.length - 1) return null
+    return { ...ragionamento, effort: LIVELLI_DI_RAGIONAMENTO[i + 1] }
+}
+/** Il tetto dopo: il doppio, almeno quello di serie, mai sopra il limite del modello; `null` se non sale. */
+export function tettoPiuAlto(tettoInviato, limiteDelModello = null) {
+    const base = Number.isSafeInteger(tettoInviato) && tettoInviato > 0 ? tettoInviato : TETTO_USCITA_DI_SERIE
+    let alto = Math.max(base * 2, TETTO_USCITA_DI_SERIE)
+    if (Number.isSafeInteger(limiteDelModello) && limiteDelModello > 0) alto = Math.min(alto, limiteDelModello)
+    return alto > base ? alto : null
+}
+/** Lo spazio vero per la risposta: la finestra meno il prompt di quella chiamata, con 256 token di margine; `null` se non si sa. */
+export function spazioPerLaRisposta(finestraToken, usage) {
+    const prompt = Number(usage?.prompt_tokens)
+    if (!Number.isSafeInteger(finestraToken) || finestraToken <= 0 || !Number.isFinite(prompt) || prompt < 0) return null
+    return Math.max(0, Math.floor(finestraToken - prompt - 256))
+}
+/**
+ * Il prossimo passo della scala, nell'ordine del caso; `null` se nessuno è possibile o i passi sono finiti.
+ * ⛔ Owner 30/10 notte (proposta del Mobile): su un motore LOCALE il ragionamento scende sempre per primo (lì conta il tempo: sul Pad
+ *   4.000 token in più sono 6-11 minuti), e per TUTTI il tetto sale solo dentro lo spazio vero della finestra, e solo se guadagna almeno
+ *   la metà: un tetto più alto dove il prompt riempie già la finestra diventa un contesto pieno o un taglio del motore, non una risposta.
+ */
+export function prossimoPassoDelTetto({ caso, fatti = [], tettoInviato = null, limiteDelModello = null, ragionamento = null, locale = false, spazio = null } = {}) {
+    if (fatti.length >= PASSI_TETTO_USCITA_MASSIMI) return null
+    const ordine = caso === 'attrezzo' && !locale ? ['tetto', 'ragionamento'] : ['ragionamento', 'tetto']
+    const base = Number.isSafeInteger(tettoInviato) && tettoInviato > 0 ? tettoInviato : TETTO_USCITA_DI_SERIE
+    for (const tipo of ordine) {
+        if (fatti.includes(tipo)) continue
+        if (tipo === 'tetto') {
+            let tetto = tettoPiuAlto(tettoInviato, limiteDelModello)
+            if (tetto !== null && Number.isSafeInteger(spazio)) tetto = Math.min(tetto, spazio)
+            if (tetto !== null && tetto >= base * 1.5) return { tipo, tetto }
+        }
+        else { const piuBasso = ragionamentoPiuBasso(ragionamento); if (piuBasso !== null) return { tipo, ragionamento: piuBasso } }
+    }
+    return null
+}
+/** L'errore di fine scala: che cosa è successo, che cosa si è provato, che cosa fare. */
+export function erroreTettoUscitaEsaurito(caso, passi = []) {
+    const provati = passi.length === 0 ? 'nothing could be changed automatically'
+        : `after ${passi.map((p) => (p === 'tetto' ? 'a higher answer limit' : 'a lower reasoning effort')).join(' and ')}`
+    const frase = caso === 'attrezzo'
+        ? `The model's tool call was cut by the answer limit before it was complete, so the tool did not run (${provati}). Write long scripts to a file in smaller pieces, lower the reasoning effort, or choose a model with a larger output limit.`
+        : `The model spent its whole answer limit on reasoning and returned neither text nor tools (${provati}). Lower the reasoning effort or choose a model with a larger output limit.`
+    return Object.assign(new Error(frase), { code: CODICE_TETTO_USCITA_ESAURITO, classe: 'tetto-uscita', transitorio: false, ritentabile: true,
+        chiave: caso === 'attrezzo' ? 'server.providerOutcome.outputCapTool' : 'server.providerOutcome.outputCapReasoning', casoDelTetto: caso, passiDelTetto: [...passi] })
+}
+
 /**
  * ⛔⛔ 25/09/2026 notte — IL LAVORO DEL GIRO RESTA, PER QUALUNQUE ERRORE (decisione owner «sì, sempre, come Hermes»). Nella
  *   sessione `c15ba17c…` il giro fallito ha buttato dalla memoria del modello otto attrezzi, tre ricerche pagate comprese, e il
@@ -10102,7 +10181,10 @@ export async function leggiLibreriaStandardTs(nome, { cartellaFissa = CARTELLA_L
  *   semantico restano lette da Windows: sono gli stessi file, e misurato il 01/10 su 232 sorgenti (6 MB) da Windows costano
  *   35-40 ms, dalla casa ~600 ms file per file e ~470 ms in un colpo solo dentro Linux — mezzo secondo in più a ogni scrittura.
  */
-export async function premessaDellaScrittura(radice, percorso, contenuto, { leggiPrima = null } = {}) {
+/* CONTRATTO-CONTROLLO-SPENTO (29/10/2026): perché il controllo delle scritture non ha potuto giudicare — una lista CHIUSA, così ogni
+   schermo sceglie le sue parole dal codice e il testo inglese del server resta sotto «Testo del server». */
+export const CODICI_CONTROLLO_SPENTO = Object.freeze(['compilatore-assente', 'libreria-assente', 'errore-interno'])
+export async function premessaDellaScrittura(radice, percorso, contenuto, { leggiPrima = null, cancello = cancelloSemantico } = {}) {
     /*
      * ⛔ R-28 di Performance (29/10/2026 notte; owner: «cancello veloce», contratto con la CLI, A1): un file che il cancello non sa
      *   giudicare (fuori da ESTENSIONI_SORGENTE: .txt, .md, .json…) non cambia NESSUN sorgente, quindi il prima e il dopo del cancello
@@ -10155,15 +10237,22 @@ export async function premessaDellaScrittura(radice, percorso, contenuto, { legg
             ? prima.map((s) => (s.percorso === percorso ? { ...s, testo: contenuto } : s))
             : [...prima, { percorso, testo: contenuto }]
 
-        const esito = await cancelloSemantico(prima, dopo, await libreriaStandard(leggiLibreriaStandardTs))
+        let libreria
+        try { libreria = await libreriaStandard(leggiLibreriaStandardTs) } catch (e) { throw Object.assign(e instanceof Error ? e : new Error(String(e)), { codiceCancello: 'libreria-assente' }) }
+        const esito = await cancello(prima, dopo, libreria)
         if (esito.stato === 'assente') {
             return { stato: 'assente', perche: esito.perche ?? 'it introduces a reference that does not exist', esisteva }
         }
-        return { stato: esito.stato, esisteva, contenutoPrima }
+        /*
+         * ⛔ Mobile, 29/10/2026 (sonda sul Pad): sul telefono il compilatore non c'è, il cancello dice «ignoto» col suo motivo e qui il
+         *   motivo si perdeva: una scrittura sbagliata passava «written» senza una parola, e nessuno vedeva che il cancello era spento.
+         *   L'«ignoto» non blocca (come sempre), ma porta il suo `perche`.
+         */
+        return { stato: esito.stato, esisteva, contenutoPrima, ...(esito.stato === 'ignoto' && esito.perche ? { perche: esito.perche, codice: CODICI_CONTROLLO_SPENTO.includes(esito.codice) ? esito.codice : 'errore-interno' } : {}) }
     }
     catch (rotta) {
         // ⛔ Un kernel che si rompe non autorizza e non vieta: dichiara IGNOTO.
-        return { stato: 'ignoto', perche: rotta instanceof Error ? rotta.message : String(rotta) }
+        return { stato: 'ignoto', perche: rotta instanceof Error ? rotta.message : String(rotta), codice: CODICI_CONTROLLO_SPENTO.includes(rotta?.codiceCancello) ? rotta.codiceCancello : 'errore-interno' }
     }
 }
 
@@ -12333,6 +12422,16 @@ export async function talosLavora({
     /* R12-2 nel nucleo nativo (owner 29/10/2026 sera, «una volta per chat»): il codice del ripiego già detto e non ancora guarito, che il
        registro ricorda fra un giro e l'altro (`voce.ripiegoDetto`, lo stesso filo del guscio desktop); torna in `esito.ripiegoDetto`. */
     ripiegoDetto = null,
+    /* Owner 29/10/2026 notte («una volta per chat», CONTRATTO-CONTROLLO-SPENTO): il motivo del controllo delle scritture spento già detto
+       in questa conversazione (i primi 80 caratteri del `perche`), dal registro; torna in `esito.controlloSpentoDetto`. */
+    controlloSpentoDetto = null,
+    /* Per le prove (come `fetchDiRete`): il cancello delle scritture al posto di `cancelloSemantico` (CONTRATTO-CONTROLLO-SPENTO §6). */
+    cancelloDelleScritture = null,
+    /* CONTRATTO-R30-R31 (30/10/2026): il limite d'uscita del modello dal catalogo (minimo fra gli endpoint), se noto: il tetto non lo supera */
+    limiteUscitaDelModello = null,
+    /* CONTRATTO-R30-R31 (Mobile): la finestra del modello, la stessa che il registro passa all'involucro; serve solo allo spazio vero per
+       la risposta quando il tetto deve salire. `null` = non si sa (il tetto sale fino al limite del modello) */
+    finestraToken = null,
     /* Owner 28/10/2026 (cache, punto 1): un passo di Workflow, una delega o un'automazione — la macchina detta il ritmo (vedi
        `marcatoreDiCachePer`). Lo passa già il servizio (revisione blocco 5, A-4); qui lo legge anche il nucleo. */
     senzaPersona = false,
@@ -14207,6 +14306,36 @@ export async function talosLavora({
     /* ⛔ 25/09/2026 notte — la scala della RISPOSTA VUOTA (vedi `decidiRispostaVuota`): la spinta una volta per giro, i
        ritentativi e le firme si azzerano a ogni risposta che porta qualcosa. */
     let statoVuote = { spintaFatta: false, ritentativi: 0, tentativi: [] }
+    /* CONTRATTO-R30-R31: la scala del tetto d'uscita (vive finché una risposta usabile non arriva) e il tetto davvero inviato */
+    let scalaTetto = null
+    let tettoInviatoDelGiro = null
+    let giroDelTetto = 0 // il giro corrente, per gli eventi della scala (aggiornato all'inizio di ogni giro)
+    const motoreLocale = typeof modello === 'string' && /^(?:locale-ospite|local):/u.test(modello) // come `motoreAPostoUnico`
+    const passoDelTetto = (caso, usageDelTaglio = null) => {
+        if (!scalaTetto) scalaTetto = { caso, passi: [], ultimo: null, tetto: null, ragionamento: undefined, tettoPrima: null, requestId: null }
+        const da = ragionamentoDelGiro()
+        const passo = prossimoPassoDelTetto({ caso, fatti: scalaTetto.passi, tettoInviato: tettoInviatoDelGiro, limiteDelModello, ragionamento: da,
+            locale: motoreLocale, spazio: spazioPerLaRisposta(finestraToken, usageDelTaglio) })
+        if (!passo) return false
+        scalaTetto.passi.push(passo.tipo)
+        scalaTetto.ultimo = passo.tipo
+        if (passo.tipo === 'tetto') { scalaTetto.tettoPrima = tettoInviatoDelGiro; scalaTetto.tetto = passo.tetto }
+        else scalaTetto.ragionamento = passo.ragionamento
+        scalaTetto.requestId = randomUUID()
+        const tettoNuovo = Number.isSafeInteger(scalaTetto.tetto) ? scalaTetto.tetto : tettoInviatoDelGiro
+        onGiro?.({ giro: giroDelTetto, tipo: 'provider-retry', fase: 'invio', canale: 'tetto-uscita', requestId: scalaTetto.requestId, modello,
+            tentativo: scalaTetto.passi.length, tentativiMassimi: PASSI_TETTO_USCITA_MASSIMI, tettoNuovo: Number.isSafeInteger(tettoNuovo) ? tettoNuovo : null,
+            ...(passo.tipo === 'ragionamento' ? { ragionamento: { da: da?.effort ?? null, a: passo.ragionamento.effort } } : {}),
+            costoDiNuovo: !motoreLocale, motivo: caso === 'attrezzo' ? 'chiamata-tagliata' : 'solo-ragionamento' }) // un motore locale non si paga
+        return true
+    }
+    const limiteDelModello = Number.isSafeInteger(limiteUscitaDelModello) && limiteUscitaDelModello > 0 ? limiteUscitaDelModello : null
+    const ragionamentoDelGiro = () => (scalaTetto?.ragionamento !== undefined ? scalaTetto.ragionamento : reasoning)
+    const tettoDaInviare = (riserva) => {
+        if (Number.isSafeInteger(scalaTetto?.tetto)) return scalaTetto.tetto
+        if (!Number.isSafeInteger(riserva) || riserva <= 0) return riserva
+        return limiteDelModello !== null ? Math.min(riserva, limiteDelModello) : riserva
+    }
     /*
      * ⭐⭐⭐ IL CONTO DEI TOKEN, SOMMATO SUI GIRI.
      *
@@ -14283,6 +14412,26 @@ export async function talosLavora({
      *   giro con un archivio che resta rotto. Guarito = una `capture` riuscita.
      */
     let ripiegoInCorso = typeof ripiegoDetto === 'string' && ripiegoDetto ? ripiegoDetto.slice(0, 80) : null
+    /*
+     * ⛔ Owner 29/10/2026 notte (CONTRATTO-CONTROLLO-SPENTO, OK di CLI e Mobile): quando il cancello delle scritture non sa giudicare
+     *   («ignoto» col suo motivo: sul telefono manca il compilatore) la scrittura passa come sempre, ma si DICE una volta per chat:
+     *   l'evento `controllo-spento` (codice chiuso, motivo, percorso relativo al progetto) e una frase in fondo al risultato di quella
+     *   scrittura. Stesso motivo ⇒ non si ripete; una scrittura giudicata davvero (presente/assente) lo azzera, come R12-2.
+     */
+    let controlloSpentoInCorso = typeof controlloSpentoDetto === 'string' && controlloSpentoDetto ? controlloSpentoDetto.slice(0, 80) : null
+    const notaDelControllo = (premessa, percorsoScritto, giroCorrente) => {
+        if (premessa?.stato === 'presente' || premessa?.stato === 'assente') { controlloSpentoInCorso = null; return '' }
+        if (premessa?.stato !== 'ignoto' || typeof premessa.perche !== 'string' || !premessa.perche) return ''
+        const chiave = premessa.perche.slice(0, 80)
+        if (controlloSpentoInCorso === chiave) return ''
+        controlloSpentoInCorso = chiave
+        const assoluto = resolve(cartella, String(percorsoScritto ?? ''))
+        const relativo = relative(cartella, assoluto).split(sep).join('/')
+        const dentro = relativo && !relativo.startsWith('..') && !isAbsolute(relativo)
+        onGiro?.({ giro: giroCorrente, tipo: 'controllo-spento', codice: premessa.codice, // già nella lista chiusa: lo normalizza premessaDellaScrittura in tutte e due le uscite
+            perche: premessa.perche, ...(dentro ? { percorso: relativo } : {}) })
+        return `\n\nNote: the reference check is unavailable here (${premessa.perche}), so this write was not checked for names, imports or members that do not exist. Verify them yourself.`
+    }
     const catturaSenzaFermare = async (reason, giroCorrente = 0) => {
         try {
             await contextHooks?.capture?.({ messages: messaggi, reason })
@@ -14331,6 +14480,7 @@ export async function talosLavora({
     /* OWN-01: stesso principio, budget a parte (SENZA_PRIMA_RISPOSTA_RITENTABILI_MASSIMI), azzerato dalla stessa consegna. */
     let senzaPrimaRispostaDelGiro = 0
     for (let giro = 0; giro < giriMassimiEffettivi; giro++) {
+        giroDelTetto = giro // CONTRATTO-R30-R31: gli eventi della scala portano il giro
         /*
          * ⛔ PRIMA di contare il giro come usato: un giro fermato qui non ha
          * chiamato nessuno, non deve figurare come "usato" nel conteggio che
@@ -14531,7 +14681,7 @@ export async function talosLavora({
                 modello, chiave, conImmaginiDegliAttrezzi(conArgomentiVuotiComeOggetto(withoutEchoedMarker(preparedContext?.messages ?? messaggiDelGiro)),
                     { vedeImmagini, contenutoImmagini: imageMessageContent }), fetchDiRete,
                 onDelta ? (e) => onDelta({ giro, ...e }) : undefined,
-                reasoning, attrezziVersoIlModello(), signal, preparedContext?.measurement?.responseReserve,
+                ragionamentoDelGiro(), attrezziVersoIlModello(), signal, (tettoInviatoDelGiro = tettoDaInviare(preparedContext?.measurement?.responseReserve)) ?? undefined,
                 onDelta ? osservaChiamataCompleta : undefined,
                 onGiro ? evento => onGiro({ giro, tipo: 'provider-retry', ...evento }) : undefined,
                 attesaRitentaMassimaMs,
@@ -14584,6 +14734,15 @@ export async function talosLavora({
                     : `before the request was sent, at round ${giro + 1}`
                 break
             }
+            /* CONTRATTO-R30-R31 (CLI): un 402 subito dopo un tetto ALZATO è il credito controllato su max_tokens × prezzo — si torna una volta
+               al tetto di prima invece di far fallire il giro. Mai dopo un passo che ha solo abbassato il ragionamento. */
+            if (rotta?.stato === 402 && scalaTetto?.ultimo === 'tetto' && !scalaTetto.scesoDopo402 && Number.isSafeInteger(scalaTetto.tettoPrima)) {
+                scalaTetto.tetto = scalaTetto.tettoPrima
+                scalaTetto.scesoDopo402 = true
+                onGiro?.({ giro, tipo: 'provider-retry', fase: 'invio', canale: 'tetto-uscita', requestId: randomUUID(), modello,
+                    tentativo: scalaTetto.passi.length, tentativiMassimi: PASSI_TETTO_USCITA_MASSIMI, tettoNuovo: scalaTetto.tetto, costoDiNuovo: !motoreLocale, motivo: 'credito' })
+                continue
+            }
             /*
              * ⛔ 21/10/2026 (revisione del lotto, misurato col kernel e l'adattatore nativo veri): una FINESTRA PIENA a metà flusso
              *   (Anthropic `model_context_window_exceeded`, che l'adattatore nativo dà come errore col marcatore `context_length_exceeded`)
@@ -14610,6 +14769,13 @@ export async function talosLavora({
                 /* Niente di visibile (solo ragionamento, o una chiamata a metà già chiusa): nella storia non entra niente,
                    ma a schermo il ragionamento di questo tentativo si chiude, o resterebbe aperto per sempre. */
                 else onGiro?.({ giro, tipo: 'risposta', risposta: { role: 'assistant', content: '' } })
+            }
+            /* CONTRATTO-R30-R31, caso (b): una chiamata annunciata e tagliata dal TETTO (GLM manda un errore al tetto: lo dicono i token usciti),
+               senza testo e senza niente partito — la sua carta è già «annullata» (`tool-annullato`), il rinvio non ha effetti doppi. */
+            if (parziale && !(typeof parziale.content === 'string' && parziale.content.trim()) && parziale.chiamateInCorso === true
+                && partiteNelloStream.size === 0 && tagliatoDalTetto({ usage: rotta?.usage, tettoInviato: tettoInviatoDelGiro })) {
+                if (passoDelTetto('attrezzo', rotta?.usage)) continue
+                throw erroreTettoUscitaEsaurito('attrezzo', scalaTetto?.passi ?? [])
             }
             /* ⛔ F-ENG-4: il fornitore è rimasto muto DOPO aver consegnato testo, e nessun attrezzo è partito né annunciato: il testo
                è già in storia (qui sopra), il modello riceve la nota e continua (CONTINUAZIONI_MASSIME). Senza testo decide BUG-16. */
@@ -14732,6 +14898,11 @@ export async function talosLavora({
             // a schermo il ragionamento di questo tentativo si chiude, o resterebbe aperto per sempre (come la ripresa del 24/09)
             onGiro?.({ giro, tipo: 'risposta', risposta: { role: 'assistant', content: '' }, ...(usage ? { usage } : {}), ...(conto.giri > 0 ? { totali: { ...conto } } : {}) })
             // «dopo gli attrezzi» come Hermes: un esito di attrezzo fra gli ultimi cinque messaggi (`turn_empty_response.py:193`)
+            /* CONTRATTO-R30-R31, caso (a): vuota PERCHÉ il tetto se l'è mangiato il ragionamento — non si ripete la stessa richiesta */
+            if (tagliatoDalTetto({ finishReason: vuota.finishReason, nativeFinishReason: vuota.nativeFinishReason, usage, tettoInviato: tettoInviatoDelGiro })) {
+                if (passoDelTetto('ragionamento', usage)) continue
+                throw erroreTettoUscitaEsaurito('ragionamento', scalaTetto?.passi ?? [])
+            }
             const dopoAttrezzi = messaggi.slice(-5).some((m) => m?.role === 'tool')
             const decisione = decidiRispostaVuota(statoVuote, { vuota, usage, dopoAttrezzi })
             if (decisione.azione === 'spinta') {
@@ -14799,6 +14970,21 @@ export async function talosLavora({
                 c.function.arguments = '{}'
                 if (c.id) argomentiTroncati.add(c.id)
             }
+        }
+        /* CONTRATTO-R30-R31, caso (b) col fine normale: argomenti tagliati dal tetto, nessun testo, niente partito — la chiamata NON parte
+           con `{}`: si annulla a schermo (prima del rinvio, la CLI ne ha bisogno) e si rimanda con la scala */
+        if (argomentiTroncati.size > 0 && !String(risposta.content ?? '').trim() && partiteNelloStream.size === 0
+            && tagliatoDalTetto({ finishReason, nativeFinishReason, usage, tettoInviato: tettoInviatoDelGiro })) {
+            for (const [indice, chiamata] of (risposta.tool_calls ?? []).entries()) onDelta?.({ giro, tipo: 'tool-annullato', indice, toolCallId: chiamata.id, nome: chiamata.function?.name, motivo: '⛔ The answer limit cut this tool call before it was complete: this tool did not run.' })
+            onGiro?.({ giro, tipo: 'risposta', risposta: { role: 'assistant', content: '' }, ...(usage ? { usage } : {}), ...(conto.giri > 0 ? { totali: { ...conto } } : {}) })
+            if (passoDelTetto('attrezzo', usage)) continue
+            throw erroreTettoUscitaEsaurito('attrezzo', scalaTetto?.passi ?? [])
+        }
+        /* una risposta usabile chiude la scala: il ragionamento torna quello della sessione, e la riga del ritento si chiude */
+        if (scalaTetto) {
+            onGiro?.({ giro, tipo: 'provider-retry', fase: 'fine', canale: 'tetto-uscita', requestId: scalaTetto.requestId, modello,
+                tentativo: Math.max(1, scalaTetto.passi.length), tentativiMassimi: PASSI_TETTO_USCITA_MASSIMI, tettoNuovo: tettoInviatoDelGiro ?? null, costoDiNuovo: !motoreLocale })
+            scalaTetto = null
         }
         messaggi.push(risposta)
         await catturaSenzaFermare('response', giro)
@@ -14913,7 +15099,14 @@ export async function talosLavora({
 
         let fermatoDentroIlGiro = false
         let notaAliasDellaChiamata = null // L1: «"/Desktop/x" was read as "x"», testo di TALOS in testa all'esito
-        for (const c of chiamate) {
+        /*
+         * ⭐ Passo 0 del CodeMode (owner 30/10/2026, «passo 0, poi prototipo e prove»; contratto CONTRATTO-ESEGUI-CHIAMATA-2026-10-30):
+         *   il corpo del ciclo delle chiamate, INTERNO al giro e identico a prima, così uno script lo può chiamare per ogni sua chiamata
+         *   (permessi, Piano, ganci, foto, cancello, ricevute: lo stesso codice). I due `break` del ciclo sono diventati `return 'ferma'`.
+         * ⛔ Una chiamata alla volta: lo stato «di questa chiamata» (`sospettoDellaChiamata`, `senzaCartaDellaChiamata`, `rifiutoDellaChiamata`,
+         *   `notaAliasDellaChiamata`) vive fuori da qui e lo scrivono anche funzioni condivise (`avvolgiEsterno`).
+         */
+        const eseguiChiamata = async (c) => {
             sospettoDellaChiamata = null // F-027: il segno della scheda è di QUESTA chiamata
             senzaCartaDellaChiamata = null
             rifiutoDellaChiamata = null
@@ -14926,7 +15119,7 @@ export async function talosLavora({
              * significava 398 esecuzioni da portare a termine DOPO che
              * l'utente aveva già premuto «Ferma».
              */
-            if (segnaleStop?.aborted) { fermatoDentroIlGiro = true; break }
+            if (segnaleStop?.aborted) { fermatoDentroIlGiro = true; return 'ferma' }
             let nomeChiamato = c.function?.name
             let argomenti = {}
             try { argomenti = JSON.parse(c.function?.arguments || '{}') } catch { /* vuoto */ }
@@ -15526,6 +15719,7 @@ export async function talosLavora({
                     esitoPermessoPerRicevuta = permesso
                     let contenutoRealmenteScritto = null
                     let premessaFuAssente = false
+                    let notaControllo = '' // CONTRATTO-CONTROLLO-SPENTO
                     // ⭐⭐⭐ 29/8 — hoisted come gli altri due sopra: la funzione
                     // pura sotto vuole leggerlo, e vive fuori da entrambi i rami.
                     let postcondizioneScrivi = 'nessuna'
@@ -15571,7 +15765,8 @@ export async function talosLavora({
                          * il file cambi: dopo sarebbe una diagnosi, non un
                          * cancello.
                          */
-                        const p = await premessaDellaScrittura(cartella, percorso, contenutoProiettato, { leggiPrima: inCasaLinux() ? discoRemoto.leggi : null })
+                        const p = await premessaDellaScrittura(cartella, percorso, contenutoProiettato, { leggiPrima: inCasaLinux() ? discoRemoto.leggi : null, ...(cancelloDelleScritture ? { cancello: cancelloDelleScritture } : {}) })
+                        notaControllo = notaDelControllo(p, percorso, giro)
                         if (p.stato === 'assente') {
                             premesseNegate++
                             premessaFuAssente = true
@@ -15675,6 +15870,7 @@ export async function talosLavora({
                      * sul disco, quindi una ricevuta sarebbe il record di un'operazione che non c'e'
                      * stata. Stessa scelta gia' presa per il blocco del pre-hook poche righe sopra.
                      */
+                    if (notaControllo && typeof esito === 'string') esito += notaControllo
                     ricevutaEmessa = true
                     {
                         const ricevuta = creaRicevutaOperazione({
@@ -15809,6 +16005,7 @@ export async function talosLavora({
                                 esitoPermessoPerRicevuta = permesso
                                 let contenutoRealmenteScritto = null
                                 let premessaFuAssente = false
+                                let notaControllo = '' // CONTRATTO-CONTROLLO-SPENTO
                                 let postcondizioneModifica = 'nessuna'
                                 let erroreModifica = null
                                 let percorsoCambiatoModifica = false
@@ -15831,7 +16028,8 @@ export async function talosLavora({
                                         + 'Read the file again before editing it.'
                                 }
                                 else {
-                                    const premessa = await premessaDellaScrittura(cartella, percorso, sostituzione.testo, { leggiPrima: inCasaLinux() ? discoRemoto.leggi : null })
+                                    const premessa = await premessaDellaScrittura(cartella, percorso, sostituzione.testo, { leggiPrima: inCasaLinux() ? discoRemoto.leggi : null, ...(cancelloDelleScritture ? { cancello: cancelloDelleScritture } : {}) })
+                                    notaControllo = notaDelControllo(premessa, percorso, giro)
                                     if (premessa.stato === 'assente') {
                                         premesseNegate++
                                         premessaFuAssente = true
@@ -15880,6 +16078,7 @@ export async function talosLavora({
                                         }
                                     }
                                 }
+                                if (notaControllo && typeof esito === 'string') esito += notaControllo
                                 ricevutaEmessa = true
                                 {
                                     const ricevuta = creaRicevutaOperazione({
@@ -18113,7 +18312,11 @@ export async function talosLavora({
                 /* view_image (contratto 27/10/2026, punto 8): l'immagine guardata, per la miniatura nella riga — riferimento, formato e misure,
                    mai i byte; lo stesso evento arriva al dispositivo collegato */
                 ...(immaginiDellaChiamata && !notaRipetizione ? { immagini: immaginiDellaChiamata.map(({ riferimento, mime, larghezza, altezza }) => ({ riferimento, mime, larghezza, altezza })) } : {}) })
-            if (fermatoPerGiriInTondo) break
+            if (fermatoPerGiriInTondo) return 'ferma'
+            return 'avanti'
+        }
+        for (const c of chiamate) {
+            if ((await eseguiChiamata(c)) === 'ferma') break
         }
 
         /* Giri in tondo: la persona (o nessuno) ha detto di fermarsi. Le chiamate rimaste hanno comunque il loro esito: la
@@ -18336,6 +18539,7 @@ export async function talosLavora({
     return {
         /* R12-2 nel nucleo nativo: solo con il motore del contesto, come il guscio (il registro lo legge con `Object.hasOwn`) */
         ...(typeof contextHooks?.capture === 'function' ? { ripiegoDetto: ripiegoInCorso } : {}),
+        controlloSpentoDetto: controlloSpentoInCorso, // CONTRATTO-CONTROLLO-SPENTO: il registro lo ricorda e lo scrive nel giornale
         detto: ultimoTesto,
         fuori: conConto,
         /* ⭐⭐⭐ Piano procedi-col-generare-un-snoopy-neumann.md, Fase 3 —

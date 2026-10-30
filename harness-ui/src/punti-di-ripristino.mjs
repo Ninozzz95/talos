@@ -139,6 +139,19 @@ export function creaPuntiDiRipristino({
   const fatti = new Set(); // `${sessione}:${turno}` già fotografati (o rinunciati) in questo processo
   const inSospeso = new Map(); // progetto → percorsi assoluti che un attrezzo sta scrivendo
   let versioneGit = null; // null = da misurare; { ok, motivo }
+  /* PERF 29/10/2026: `${sessione}:${turno}` → la foto partita all'inizio del giro ({ progetto, esito }), finché la prima scrittura non
+     la prende. Un turno senza scritture la lascia qui e non diventa un punto; il turno dopo della stessa sessione la scavalca. */
+  const anticipate = new Map();
+
+  /**
+   * Il file è cambiato (o è nato) da quando la foto è partita? Un file che non c'è, no: la foto dice già che mancava. I 10 ms: su
+   * Windows la data di un file scritto PRIMA di `Date.now()` esce fino a 1,2 ms dopo (misurato, due orologi diversi); e ciò che cambia
+   * nei primi 10 ms la foto lo vede lo stesso, perché `add -A` legge i file solo dopo almeno due processi git.
+   */
+  async function cambiatoDopo(assoluto, dalle) {
+    const st = await fsp.stat(assoluto).catch(() => null);
+    return Boolean(st) && Math.max(st.mtimeMs, st.ctimeMs) > dalle + 10;
+  }
 
   function inFila(store, lavoro) {
     const prima = code.get(store) ?? Promise.resolve();
@@ -193,13 +206,19 @@ export function creaPuntiDiRipristino({
     return (versioneGit = (a > GIT_MINIMO[0] || (a === GIT_MINIMO[0] && b >= GIT_MINIMO[1])) ? { ok: true } : { ok: false, motivo: 'git-vecchio' });
   }
 
-  async function prepara(progetto) {
+  /* PERF 29/10/2026: le cartelle e l'archivio si preparano in due passi, perché fra i due si misura git. Prima `init --bare` partiva
+     a ogni turno anche senza git (Mobile, (g)): falliva, avvisava, e al turno dopo ci riprovava. */
+  async function preparaCartelle(progetto) {
     const store = await cartellaDelloStore(progetto);
-    const repo = join(store, 'repo');
     await fsp.mkdir(join(store, 'indici'), { recursive: true });
     await fsp.mkdir(join(store, 'sessioni'), { recursive: true });
     /* la configurazione «vuota» è un file vero: Git per Windows rifiuta `\\.\nul` («unable to access … Invalid argument», misurato) */
     await fsp.writeFile(join(store, 'config-vuota'), '', { flag: 'a' });
+    return store;
+  }
+
+  async function preparaArchivio(store, progetto) {
+    const repo = join(store, 'repo');
     try { await fsp.access(join(repo, 'HEAD')); } catch {
       await gitOk(store, progetto, ['init', '--bare', '--quiet', repo], { cwd: store, senzaArchivio: true });
       await fsp.mkdir(join(repo, 'info'), { recursive: true });
@@ -207,15 +226,28 @@ export function creaPuntiDiRipristino({
       await fsp.writeFile(join(repo, 'info', 'attributes'), ATTRIBUTI, 'utf8');
       await gitOk(store, progetto, ['config', 'gc.auto', '0'], { cwd: store });
     }
-    return store;
   }
 
   const indiceDi = (store, nome) => join(store, 'indici', `${process.pid}-${nome}.index`);
 
   /** Mette nell'indice lo stato di adesso del progetto, senza i file oltre il tetto (torna quali ha tolto). */
   async function fotografaNellIndice(store, progetto, indice, base) {
-    await fsp.rm(indice, { force: true });
-    if (base) await gitOk(store, progetto, ['read-tree', base], { indice });
+    /*
+     * PERF 29/10/2026 (sessione Talos performance, revisione del Desktop) — l'indice resta fra una foto e l'altra e si riallinea alla base
+     * con `read-tree -m`: la fusione a un albero tiene le date di ogni voce uguale alla base, così `add -A` rilegge solo i file cambiati.
+     * Prima l'indice si cancellava e `read-tree` senza `-m` perdeva tutte le date ⇒ ogni foto rileggeva l'intero progetto (Hermes fa lo
+     * stesso, `checkpoint_manager.py` `_take`). Il «racy git» (un file cambiato nello stesso istante in cui l'indice è stato scritto) lo
+     * copre git da sé e le prove lo cercano (IDX-03). Un indice che git non accetta si butta e si rifà come prima.
+     * ⛔ Limite dichiarato, lo stesso di `git status`/`git diff` (accettato dal Desktop il 29/10): un file riscritto con la STESSA misura e
+     *   con la data riportata a un secondo PIÙ VECCHIO non si vede. Provato: data vecchia di 10 s ⇒ cambio perso (prima di questa leva la
+     *   rilettura completa lo prendeva). Succede con `cp -p`, `rsync -t` o unzip solo se anche la misura coincide; editor, scritture di
+     *   TALOS, `git checkout` e npm mettono sempre la data di adesso.
+     */
+    if (!base) await fsp.rm(indice, { force: true });
+    else if ((await git(store, progetto, ['read-tree', '-m', base], { indice })).codice !== 0) {
+      await fsp.rm(indice, { force: true });
+      await gitOk(store, progetto, ['read-tree', base], { indice });
+    }
     await gitOk(store, progetto, ['add', '-A', '--ignore-errors'], { indice });
     const cambiati = pezziZ(await gitOk(store, progetto, base
       ? ['diff', '--cached', '--name-only', '--no-renames', '-z', base]
@@ -282,6 +314,40 @@ export function creaPuntiDiRipristino({
     await scriviAtomico(f, JSON.stringify(s, null, 1));
   }
 
+  /** Revisione del Desktop 29/10: i file che qualcun altro ha cambiato durante il turno, prima che TALOS li riscrivesse. */
+  async function annotaAltri(store, sessionId, turno, rel, motivo) {
+    const f = fileSessione(store, sessionId);
+    const s = await leggiJson(f, { punti: [] });
+    const p = (s.punti ?? []).findLast((x) => x.turno === turno) ?? null;
+    if (!p) return;
+    p.altri = { ...(p.altri ?? {}), [rel]: motivo };
+    await scriviAtomico(f, JSON.stringify(s, null, 1));
+  }
+
+  /*
+   * PERF 29/10/2026, revisione del Desktop — con la foto in anticipo la finestra fra la foto e la scrittura copre anche il tempo in cui
+   * il modello pensa (anche minuti). Se la persona cambia X in quel tempo e poi TALOS lo modifica (la modifica della persona finisce DENTRO
+   * la versione di TALOS), annullare rimetterebbe la X di inizio turno e la modifica della persona sparirebbe in silenzio. ⇒ A OGNI
+   * scrittura del turno, PRIMA che l'attrezzo scriva: X già scritto da TALOS in questo turno ⇒ cambiato da altri se l'impronta di adesso
+   * non è quella registrata; mai scritto ⇒ cambiato da altri se la sua data è dopo l'inizio della foto. `persona` se nel turno non è
+   * girata la shell; con la shell non si sa chi è stato (`non-di-talos`, la scelta prudente). Annullare li salta e lo dice.
+   */
+  const turni = new Map(); // `${sessione}:${turno}` → { progetto, dalle, scritti: Set(rel), shell }
+  function turnoDi(chiave, progetto, dalle) {
+    turni.delete(chiave);
+    while (turni.size >= 500) turni.delete(turni.keys().next().value);
+    const t = { progetto, dalle, scritti: new Set(), shell: false };
+    turni.set(chiave, t);
+    return t;
+  }
+  async function cambiatoDaAltri(t, progetto, rel, assoluto) {
+    if (!t.scritti.has(rel)) return cambiatoDopo(assoluto, t.dalle);
+    const store = await cartellaDelloStore(progetto);
+    const voce = (await leggiJson(fileRegistro(store), {}))[rel];
+    if (!voce) return cambiatoDopo(assoluto, t.dalle); // la scrittura di TALOS non è arrivata in fondo: conta la data
+    return (await improntaDelFile(assoluto)) !== voce.sha256;
+  }
+
   const valida = (sessionId) => typeof sessionId === 'string' && ID_SESSIONE.test(sessionId);
 
   return {
@@ -292,6 +358,37 @@ export function creaPuntiDiRipristino({
     gitPresente() { return versioneGit ? versioneGit.ok : null; },
     /** La misura di git, fatta una volta (il server la lancia all'avvio). `cartella`: una cartella che esiste, per il cwd. */
     async misuraGit(cartella) { return gitDisponibile(cartella, cartella); },
+    /**
+     * PERF 29/10/2026 (owner, sessione Talos performance) — la foto del turno parte all'INIZIO del giro, mentre il modello pensa, e la
+     * prima scrittura la trova fatta: su un progetto grande erano ~5,2 s di git davanti alla prima scrittura (micro-scrittura, modello
+     * finto). OpenCode `packages/core/src/session/runner/step.ts:74-76`: «The start snapshot only has to exist before local tools
+     * run… captured while the provider request is in flight instead of delaying it». Sincrona e mai un'eccezione: chi la chiama non la
+     * aspetta (la catena d'avvio della sessione è sincrona, P-13). `pronta` serve alle prove.
+     */
+    anticipa({ sessionId, turno, progetto } = {}) {
+      const niente = { pronta: Promise.resolve(false) };
+      if (!valida(sessionId) || !Number.isSafeInteger(turno) || typeof progetto !== 'string' || !progetto) return niente;
+      if (versioneGit && !versioneGit.ok) return niente;
+      if (cartellaTroppoLarga(progetto)) return niente;
+      const chiave = `${sessionId}:${turno}`;
+      if (fatti.has(chiave)) return niente;
+      const gia = anticipate.get(chiave);
+      if (gia) return { pronta: gia.esito.then(() => true) };
+      for (const k of anticipate.keys()) if (k.startsWith(`${sessionId}:`)) anticipate.delete(k);
+      while (anticipate.size >= 200) anticipate.delete(anticipate.keys().next().value);
+      const dalle = Date.now(); // orologio vero: si confronta con le date dei file
+      const esito = (async () => {
+        const store = await preparaCartelle(progetto);
+        return inFila(store, async () => {
+          const disp = await gitDisponibile(store, progetto);
+          if (!disp.ok) return { motivo: disp.motivo };
+          await preparaArchivio(store, progetto);
+          return { foto: await scatta(store, progetto, `TALOS: before turn ${turno} of ${sessionId}`), dalle };
+        });
+      })().catch((e) => ({ motivo: e?.motivo ?? 'git' }));
+      anticipate.set(chiave, { progetto, esito });
+      return { pronta: esito.then(() => true) };
+    },
     /**
      * Prima di un attrezzo che scrive (`scrivi`, `file_edit`, `shell`): la foto del turno, una volta sola. `turno` è il numero
      * del turno della persona nella conversazione RADICE (le figlie scrivono dentro il turno della madre). Mai un'eccezione.
@@ -307,14 +404,37 @@ export function creaPuntiDiRipristino({
       }
       const chiave = `${sessionId}:${turno}`;
       const giaFatto = fatti.has(chiave);
-      if (giaFatto && !(assoluto && relativoAlProgetto(progetto, assoluto) === null)) return { fatto: false, motivo: 'gia-fatto' };
+      const rel = assoluto ? relativoAlProgetto(progetto, assoluto) : null;
+      if (giaFatto && !(assoluto && rel === null)) {
+        const t = turni.get(chiave);
+        if (t?.progetto === progetto) {
+          if (!assoluto) t.shell = true;
+          else {
+            const altro = await cambiatoDaAltri(t, progetto, rel, assoluto).catch(() => false);
+            t.scritti.add(rel);
+            if (altro) {
+              const motivo = t.shell ? 'non-di-talos' : 'persona';
+              cartellaDelloStore(progetto).then((store) => inFila(store, () => annotaAltri(store, sessionId, turno, rel, motivo)))
+                .catch((e) => avvisa({ tipo: 'registro', motivo: e?.message }));
+            }
+          }
+        }
+        return { fatto: false, motivo: 'gia-fatto' };
+      }
       if (!giaFatto) {
         fatti.add(chiave);
         if (fatti.size > 5_000) fatti.delete(fatti.values().next().value); // i turni crescono: i più vecchi non tornano
+        const t = turnoDi(chiave, progetto, Date.now()); // prima della foto: la data è al più presto quella vera, mai dopo
+        if (!assoluto) t.shell = true;
+        else if (rel !== null) t.scritti.add(rel);
       }
       if (cartellaTroppoLarga(progetto)) return { fatto: false, motivo: 'cartella-troppo-larga' };
+      /* la foto in anticipo di questo turno, se c'è e se è dello stesso progetto: si aspetta (può essere ancora in corso) */
+      const anticipo = giaFatto ? null : anticipate.get(chiave);
+      if (anticipo) anticipate.delete(chiave);
+      const pronto = anticipo && anticipo.progetto === progetto ? await anticipo.esito : null;
       let store;
-      try { store = await prepara(progetto); } catch (e) { avvisa({ tipo: 'store', motivo: e?.message }); return { fatto: false, motivo: 'store' }; }
+      try { store = await preparaCartelle(progetto); } catch (e) { avvisa({ tipo: 'store', motivo: e?.message }); return { fatto: false, motivo: 'store' }; }
       return inFila(store, async () => {
         if (giaFatto) { // solo per dire che una scrittura è uscita dal progetto
           await annotaFuori(store, sessionId, turno, assoluto).catch(() => {});
@@ -329,7 +449,21 @@ export function creaPuntiDiRipristino({
           await annotaPunto(store, progetto, sessionId, { chiave: `t${turno}`, turno, ...seq, commit: null, motivo: disp.motivo, alle, fuori }).catch(() => {});
           return { fatto: false, motivo: disp.motivo };
         }
+        /* il file da scrivere cambiato DOPO l'inizio della foto (la persona, un altro programma): la foto non lo ha com'è adesso, se ne
+           scatta una nuova come prima del 29/10. Per gli altri file la finestra in più è quella fra l'inizio del giro e la prima
+           scrittura (OpenCode fa lo stesso, `step.ts:74-76`), e il ripristino resta quello sicuro: rimette solo ciò che TALOS ha scritto. */
+        const fresca = pronto?.foto && !(assoluto && await cambiatoDopo(assoluto, pronto.dalle));
+        if (fresca) {
+          const t = turni.get(chiave);
+          if (t) t.dalle = Math.min(t.dalle, pronto.dalle); // la foto è di inizio giro: da lì si guarda chi altro cambia i file
+          const { commit, grandi } = pronto.foto;
+          try {
+            await annotaPunto(store, progetto, sessionId, { chiave: `t${turno}`, turno, ...seq, commit, alle, fuori, ...(grandi.length ? { grandi: grandi.slice(0, 50) } : {}) });
+            return { fatto: true, commit };
+          } catch { /* sotto: la foto si rifà nel modo di sempre */ }
+        }
         try {
+          await preparaArchivio(store, progetto);
           const { commit, grandi } = await scatta(store, progetto, `TALOS: before turn ${turno} of ${sessionId}`);
           await annotaPunto(store, progetto, sessionId, { chiave: `t${turno}`, turno, ...seq, commit, alle, fuori, ...(grandi.length ? { grandi: grandi.slice(0, 50) } : {}) });
           return { fatto: true, commit };
@@ -421,7 +555,9 @@ export function creaPuntiDiRipristino({
         const scelti = new Set((Array.isArray(includi) ? includi : []).filter((x) => typeof x === 'string'));
         const extra = piano.salta.filter((s) => scelti.has(s.percorso)).map((s) => s.percorso);
         const bersagli = [...piano.ripristina.map((r) => r.percorso), ...extra];
-        if (!bersagli.length) return { ok: true, ripristinati: [], saltati: piano.salta.map((s) => s.percorso), fuori: piano.fuori };
+        /* `durante`: i saltati perché cambiati da qualcun altro mentre il turno lavorava (chi chiama lo dice per nome) */
+        const durante = piano.salta.filter((s) => s.durante && !scelti.has(s.percorso)).map((s) => s.percorso);
+        if (!bersagli.length) return { ok: true, ripristinati: [], saltati: piano.salta.map((s) => s.percorso), durante, fuori: piano.fuori };
         /* una foto PRIMA: l'annullamento si può annullare (Hermes, «pre-rollback snapshot») */
         const prima = await scatta(store, progetto, `TALOS: before undoing to turn ${piano.turno} of ${sessionId}`).catch(() => null);
         const daRimettere = [];
@@ -455,6 +591,7 @@ export function creaPuntiDiRipristino({
           ripristinati: [...daRimettere, ...tolti],
           nonTolti: daTogliere.filter((r) => !tolti.includes(r)),
           saltati: piano.salta.filter((s) => !scelti.has(s.percorso)).map((s) => s.percorso),
+          durante,
           fuori: piano.fuori,
         };
       });
@@ -514,7 +651,11 @@ export function creaPuntiDiRipristino({
     },
 
     /** Per le prove e per lo spegnimento: aspetta che ogni archivio abbia finito. */
-    async fermo() { await Promise.all([...code.values()]); },
+    async fermo() {
+      /* le foto in anticipo prima: una può non essere ancora in fila (aspetta la cartella dello store) */
+      await Promise.all([...anticipate.values()].map((a) => a.esito));
+      await Promise.all([...code.values()]);
+    },
   };
 
   async function pianifica(store, progetto, sessionId, turno, { conDiff }) {
@@ -531,9 +672,12 @@ export function creaPuntiDiRipristino({
     const cambiati = [];
     for (let i = 0; i + 1 < righe.length; i += 2) cambiati.push({ stato: righe[i][0], percorso: righe[i + 1] });
     const reg = await leggiJson(fileRegistro(store), {});
+    /* cambiati da qualcun altro durante un turno, prima che TALOS li riscrivesse (`annotaAltri`): la versione di TALOS li contiene */
+    const altri = Object.assign({}, ...punti.map((p) => (p.altri && typeof p.altri === 'object' ? p.altri : {})));
     const ripristina = [];
     const salta = [];
     for (const c of cambiati) {
+      if (Object.hasOwn(altri, c.percorso)) { salta.push({ ...c, motivo: altri[c.percorso] === 'persona' ? 'persona' : 'non-di-talos', durante: true }); continue; }
       const voce = reg[c.percorso];
       if (!voce) { salta.push({ ...c, motivo: 'non-di-talos' }); continue; }
       const adesso = await improntaDelFile(join(progetto, c.percorso));

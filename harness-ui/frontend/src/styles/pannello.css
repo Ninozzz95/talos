@@ -1,0 +1,338 @@
+/*
+ * PANNELLO DI DESTRA v2 — un foglio solo, tutto dentro `.talos-pannello`. Solo i token del tema (`var(--talos-*)`): chiaro e
+ * scuro li dà il tema, qui non c'è un colore scritto a mano. Il disegno è quello del bozzetto v1 (29/10/2026), che riprende la
+ * scheda Agenti approvata il 27/10 (variante A, `scena/variante-a.css`).
+ * ⛔ Movimento ridotto (owner 24/09: «calmo, mai fermo»): l'anello che gira diventa un respiro lento, lo scheletro non luccica.
+ */
+
+.talos-pannello {
+  container-type: inline-size;
+  container-name: pannello;
+  --pn-riga-pad: 7px;
+  font-family: var(--talos-font-ui);
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--talos-text);
+  min-width: 0;
+}
+.talos-pannello *, .talos-pannello *::before, .talos-pannello *::after { box-sizing: border-box; }
+
+/* ── toni: un posto solo (scena/comune.css del 27/10) ── */
+.talos-pannello [data-tono="ok"] { --pn-t: var(--talos-success); --pn-ts: var(--talos-success-soft); --pn-tb: var(--talos-success-border); }
+.talos-pannello [data-tono="corso"] { --pn-t: var(--talos-accent); --pn-ts: var(--talos-accent-soft); --pn-tb: var(--talos-accent-border); }
+.talos-pannello [data-tono="neutro"] { --pn-t: var(--talos-muted); --pn-ts: var(--talos-panel-soft); --pn-tb: var(--talos-border); }
+.talos-pannello [data-tono="avviso"] { --pn-t: var(--talos-warning); --pn-ts: var(--talos-warning-soft); --pn-tb: var(--talos-warning-border); }
+.talos-pannello [data-tono="errore"] { --pn-t: var(--talos-danger); --pn-ts: var(--talos-danger-soft); --pn-tb: var(--talos-danger-border); }
+
+/* ── piccoli pezzi ── */
+.talos-pannello .pn-tronca { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.talos-pannello .pn-mono { font-family: var(--talos-font-mono); font-size: 11px; font-variant-numeric: tabular-nums; color: var(--talos-muted); white-space: nowrap; }
+.talos-pannello .pn-code { display: inline-block; vertical-align: middle; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--talos-font-mono); font-size: 11.5px; padding: 1px 6px; border-radius: 5px; background: var(--talos-panel-soft); border: 1px solid var(--talos-border-subtle); color: var(--talos-text); }
+.talos-pannello .pn-ib { display: inline-grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--talos-muted); cursor: pointer; flex: none; }
+.talos-pannello .pn-ib:hover, .talos-pannello .pn-ib[aria-expanded="true"], .talos-pannello .pn-ib[aria-pressed="true"] { background: var(--talos-card-hover); color: var(--talos-text); border-color: var(--talos-border-subtle); }
+.talos-pannello .pn-ib .i { width: 15px; height: 15px; }
+.talos-pannello .i { width: 14px; height: 14px; flex: none; fill: none; stroke: currentColor; }
+.talos-pannello .pn-bottone { white-space: nowrap; }
+.talos-pannello .pn-bottone .i { width: 13px; height: 13px; }
+.talos-pannello .pn-link { padding: 0; border: 0; background: none; color: var(--talos-accent-text, var(--talos-accent)); font: inherit; font-size: 12px; cursor: pointer; text-align: left; }
+.talos-pannello .pn-link:hover { text-decoration: underline; }
+.talos-pannello .pn-nota { margin: 2px 12px 8px; color: var(--talos-muted); font-size: 11.5px; }
+.talos-pannello .pn-cresci { flex: 1; }
+.talos-pannello :focus-visible { outline: 2px solid var(--talos-accent); outline-offset: 1px; }
+
+/* ── la testa: la STESSA in tutte e cinque (quando · titolo · conto con «da guardare») ── */
+.talos-pannello .pn-testa { position: sticky; top: 0; z-index: 2; padding: 12px 12px 10px; background: var(--talos-panel); border-bottom: 1px solid var(--talos-border-subtle); }
+.talos-pannello .pn-testa__riga { display: flex; align-items: flex-start; gap: 6px; }
+.talos-pannello .pn-testa__titolo { flex: 1; min-width: 0; }
+.talos-pannello .pn-quando { display: block; font-size: 11.5px; color: var(--talos-muted); margin-bottom: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.talos-pannello .pn-quando--ramo { display: flex; align-items: center; gap: 5px; }
+.talos-pannello .pn-quando--ramo .i { width: 12px; height: 12px; }
+.talos-pannello .pn-grande { font-size: 15px; font-weight: 600; line-height: 1.3; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.talos-pannello .pn-conto { display: block; margin-top: 6px; font-size: 12px; color: var(--talos-muted); overflow-wrap: anywhere; }
+.talos-pannello .pn-conto b, .talos-pannello .pn-tono-avviso { font-weight: 600; color: var(--talos-warning); }
+.talos-pannello .pn-azione-rapida { margin-top: 2px; }
+.talos-pannello .pn-testa__sotto { margin-top: 8px; display: flex; flex-direction: column; gap: 8px; }
+.talos-pannello .pn-motivo { margin: 0; font-size: 11.5px; color: var(--talos-muted); }
+
+/* l'ambito: segmenti quando c'è spazio, un menu quando la colonna è stretta (Hermes `scope-row.tsx:15-18`) */
+.talos-pannello .pn-ambito { margin-top: 10px; }
+.talos-pannello .pn-ambito__segmenti { display: flex; gap: 2px; padding: 3px; border-radius: 9px; background: var(--talos-panel-soft); border: 1px solid var(--talos-border-subtle); }
+.talos-pannello .pn-ambito__segmenti button { flex: 1 1 0; min-width: 0; height: 24px; padding: 0 4px; border: 0; border-radius: 6px; background: transparent; color: var(--talos-muted); font: inherit; font-size: 11.5px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.talos-pannello .pn-ambito__segmenti button:hover { color: var(--talos-text); }
+.talos-pannello .pn-ambito__segmenti button[aria-pressed="true"] { background: var(--talos-card); color: var(--talos-text); box-shadow: inset 0 0 0 1px var(--talos-border-subtle); }
+.talos-pannello .pn-ambito__segmenti .pn-mono { font-size: 10.5px; }
+.talos-pannello .pn-ambito__menu { display: none; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--talos-border); background: var(--talos-card); color: var(--talos-text); font: inherit; font-size: 12px; cursor: pointer; max-width: 100%; }
+.talos-pannello .pn-ambito__menu .i { width: 12px; height: 12px; color: var(--talos-muted); }
+@container pannello (max-width: 290px) { /* 29/10: la colonna di serie (340) mostra i segmenti come il bozzetto approvato (foto-niente-perso/processi-dark.png); il menu resta per la colonna stretta (300) */
+  .talos-pannello .pn-ambito__segmenti { display: none; }
+  .talos-pannello .pn-ambito__menu { display: inline-flex; }
+  .talos-pannello .pn-lato .pn-mono { font-size: 10.5px; }
+  .talos-pannello .pn-sotto__modello { display: none; }
+}
+
+/* la ricerca, a richiesta */
+.talos-pannello .pn-cerca { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+.talos-pannello .pn-cerca__campo { width: 100%; height: 30px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--talos-border); background: var(--talos-card-subtle, var(--talos-card)); color: var(--talos-text); font: inherit; font-size: 12px; }
+.talos-pannello .pn-cerca__campo:focus { outline: 2px solid var(--talos-accent); outline-offset: -1px; }
+.talos-pannello .pn-cerca__conto { align-self: flex-start; }
+.talos-pannello .pn-chips { display: flex; flex-wrap: nowrap; gap: 4px; overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain; } /* una riga sola che scorre, mai a capo (TACCUINO-FILTRI, 09/10) */
+.talos-pannello .pn-chips::-webkit-scrollbar { display: none; }
+.talos-pannello .pn-chips[data-taglio="dopo"] { mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent); }
+.talos-pannello .pn-chips[data-taglio="prima"] { mask-image: linear-gradient(to left, #000 calc(100% - 24px), transparent); }
+.talos-pannello .pn-chips[data-taglio="entrambi"] { mask-image: linear-gradient(to right, transparent, #000 24px, #000 calc(100% - 24px), transparent); }
+.talos-pannello .pn-chip { flex: none; }
+.talos-pannello .pn-chip { display: inline-flex; align-items: center; gap: 4px; height: 22px; max-width: 100%; padding: 0 8px; border-radius: var(--talos-radius-pill, 999px); border: 1px solid var(--talos-border); background: var(--talos-card); color: var(--talos-text); font: inherit; font-size: 11.5px; cursor: pointer; white-space: nowrap; }
+.talos-pannello .pn-chip[aria-pressed="true"] { background: var(--talos-accent-soft); border-color: var(--talos-accent-border); }
+.talos-pannello .pn-chip .pn-mono { font-size: 10.5px; }
+.talos-pannello .pn-chip--porta { margin-top: 4px; }
+.talos-pannello .pn-chip--porta .i { width: 12px; height: 12px; color: var(--talos-muted); }
+.talos-pannello .pn-sotto > .pn-code { max-width: 100%; }
+.talos-pannello .pn-chip__verde { width: 6px; height: 6px; border-radius: 50%; background: var(--talos-success); flex: none; }
+
+/* ── sezioni ── */
+.talos-pannello .pn-sezione { padding: 10px 8px 4px; }
+.talos-pannello .pn-sezione + .pn-sezione { border-top: 1px solid var(--talos-border-subtle); }
+.talos-pannello .pn-sezione__titolo { display: flex; align-items: center; gap: 6px; margin: 0 4px 4px; font-size: 11.5px; font-weight: 600; color: var(--talos-muted); }
+.talos-pannello .pn-sezione--attenzione .pn-sezione__titolo { color: var(--talos-warning); }
+.talos-pannello .pn-elenco { position: relative; display: flex; flex-direction: column; }
+.talos-pannello .pn-sezione[data-spina] .pn-elenco::before { content: ""; position: absolute; left: 17px; top: 18px; bottom: 18px; width: 1px; background: var(--talos-border); }
+
+/* ── la riga ── */
+.talos-pannello .pn-riga { position: relative; display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; column-gap: 9px; align-items: start; padding: var(--pn-riga-pad) 6px var(--pn-riga-pad) 7px; border-radius: 9px; cursor: pointer; outline-offset: -2px; }
+.talos-pannello .pn-riga:hover { background: var(--talos-card-hover); }
+.talos-pannello .pn-riga[aria-expanded="true"]:not(.pn-riga--albero) { background: var(--talos-card); box-shadow: inset 0 0 0 1px var(--talos-border); cursor: default; }
+.talos-pannello .pn-riga--figlio { margin-left: 22px; }
+.talos-pannello .pn-riga--figlio::before { content: ""; position: absolute; left: -12px; top: 6px; width: 10px; height: 10px; border-left: 1px solid var(--talos-border); border-bottom: 1px solid var(--talos-border); border-bottom-left-radius: 6px; }
+.talos-pannello .pn-riga--attenuata { opacity: .62; }
+.talos-pannello .pn-riga--albero { --pn-riga-pad: 4px; margin-left: calc(var(--pn-livello, 0) * 14px); grid-template-columns: 18px minmax(0, 1fr) auto; }
+.talos-pannello .pn-riga--albero .pn-segno { background: transparent; box-shadow: none; width: 18px; height: 18px; }
+.talos-pannello .pn-sezione--attenzione .pn-riga { background: var(--pn-ts); box-shadow: inset 2px 0 0 var(--pn-t); border-radius: 4px 9px 9px 4px; margin-bottom: 4px; }
+.talos-pannello .pn-sezione--attenzione .pn-riga[aria-expanded="true"] { box-shadow: inset 2px 0 0 var(--pn-t), inset 0 0 0 1px var(--pn-tb); }
+
+.talos-pannello .pn-segno { position: relative; z-index: 1; display: inline-grid; place-items: center; width: 20px; height: 20px; margin-top: 1px; border-radius: 50%; flex: none; color: var(--pn-t); background: var(--pn-ts); box-shadow: inset 0 0 0 1px var(--pn-tb); }
+.talos-pannello .pn-segno .i { width: 11px; height: 11px; }
+.talos-pannello .pn-segno__lettera { font-family: var(--talos-font-mono); font-size: 10.5px; font-weight: 600; line-height: 1; }
+.talos-pannello .pn-segno[data-vivo]::after { content: ""; position: absolute; inset: -3px; border-radius: 50%; border: 1.5px solid transparent; border-top-color: var(--talos-accent); animation: pn-giro 1.4s linear infinite; }
+@keyframes pn-giro { to { transform: rotate(360deg); } }
+@keyframes pn-respiro { 50% { opacity: .35; } }
+
+.talos-pannello .pn-mezzo { min-width: 0; }
+.talos-pannello .pn-nome { display: flex; align-items: baseline; gap: 6px; min-width: 0; font-size: 13px; font-weight: 600; line-height: 1.3; }
+.talos-pannello .pn-nome--file { font-weight: 500; }
+.talos-pannello .pn-nome--file > .pn-tronca:first-child { font-family: var(--talos-font-mono); font-size: 12px; flex: 0 1 auto; }
+.talos-pannello .pn-nome__cartella { font-family: var(--talos-font-mono); font-size: 11px; font-weight: 400; color: var(--talos-muted); flex: 1 1 0; }
+.talos-pannello .pn-sotto { display: flex; margin-top: 2px; font-size: 12px; color: var(--talos-muted); min-width: 0; }
+/* una riga sola: quando non ci sta si accorcia PRIMA il modello, poi l'attività (RAPPORTO 27/10, difetto curato 3) */
+.talos-pannello .pn-sotto__blocco { display: flex; flex-direction: column; gap: 3px; min-width: 0; width: 100%; }
+.talos-pannello .pn-sotto__righe { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.talos-pannello .pn-sotto__righe > .pn-tronca { flex: 0 1 auto; }
+.talos-pannello .pn-sotto__righe > .pn-sotto__attivita { flex: 0 1 auto; min-width: 4ch; }
+.talos-pannello .pn-sotto__righe > .pn-code { flex: 0 1 auto; min-width: 6ch; }
+.talos-pannello .pn-sotto__righe > .pn-sotto__modello { flex: 0 1000 auto; min-width: 0; }
+.talos-pannello .pn-sotto__avviso { display: flex; align-items: center; gap: 4px; color: var(--talos-warning); min-width: 0; }
+.talos-pannello .pn-sotto__avviso .i { width: 12px; height: 12px; }
+.talos-pannello .pn-vivo-testo { color: var(--talos-text); }
+.talos-pannello .pn-perche { margin-top: 3px; font-size: 12px; color: var(--talos-text); overflow-wrap: anywhere; }
+.talos-pannello .pn-perche__corpo { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+.talos-pannello .pn-perche__corpo > .pn-code { max-width: 100%; }
+.talos-pannello .pn-consiglio { flex-basis: 100%; color: var(--talos-text); }
+.talos-pannello .pn-lato { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; min-height: 20px; }
+.talos-pannello .pn-lato__su { display: flex; align-items: center; gap: 2px; }
+.talos-pannello .pn-lato .pn-ib { width: 22px; height: 22px; visibility: hidden; }
+.talos-pannello .pn-ib-spazio { display: inline-block; width: 22px; flex: none; }
+.talos-pannello .pn-riga:hover .pn-ib, .talos-pannello .pn-riga[aria-expanded="true"] .pn-ib, .talos-pannello .pn-riga:focus-within .pn-ib, .talos-pannello .pn-lato .pn-ib[aria-expanded="true"] { visibility: visible; }
+@media (hover: none) { .talos-pannello .pn-lato .pn-ib { visibility: visible; } }
+.talos-pannello .pn-azione { grid-column: 2 / 4; display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
+
+/* l'esito e la conferma, nella riga o sotto la testa */
+.talos-pannello .pn-esito { grid-column: 2 / 4; display: flex; align-items: center; gap: 6px; margin-top: 7px; font-size: 12px; color: var(--talos-muted); }
+.talos-pannello .pn-esito .i { width: 13px; height: 13px; }
+.talos-pannello .pn-esito--ok { color: var(--talos-success); }
+.talos-pannello .pn-esito--errore { color: var(--talos-danger); }
+.talos-pannello .pn-esito--in-corso .i { animation: pn-respiro 1.6s ease-in-out infinite; }
+.talos-pannello .pn-conferma { grid-column: 2 / 4; display: flex; flex-direction: column; gap: 4px; margin-top: 8px; padding: 9px 10px; border-radius: 8px; border: 1px solid var(--talos-border); background: var(--talos-card); font-size: 12px; cursor: default; }
+.talos-pannello .pn-conferma > span { color: var(--talos-muted); }
+.talos-pannello .pn-conferma__tasti { display: flex; gap: 6px; margin-top: 4px; }
+.talos-pannello .pn-blocco-testa { padding: 8px 12px 0; display: flex; flex-direction: column; gap: 6px; }
+.talos-pannello .pn-blocco-testa .pn-esito, .talos-pannello .pn-blocco-testa .pn-conferma { margin-top: 0; }
+
+/* il dettaglio sul posto */
+.talos-pannello .pn-dettaglio { grid-column: 2 / 4; margin-top: 8px; cursor: default; font-size: 12px; }
+.talos-pannello .pn-dettaglio__corpo { display: flex; flex-direction: column; gap: 9px; min-width: 0; }
+.talos-pannello .pn-compito { margin: 0; color: var(--talos-text); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.talos-pannello .pn-compito--intero { display: block; }
+/* owner 29/10/2026 notte: il resoconto dell'agente nel dettaglio; l'etichetta è quella delle sezioni del pannello */
+.talos-pannello .pn-resoconto { color: var(--talos-text); overflow-wrap: anywhere; }
+.talos-pannello .pn-resoconto .pn-sezione__titolo { margin: 0 0 2px; }
+.talos-pannello .pn-resoconto > :last-child { margin-bottom: 0; }
+.talos-pannello .pn-fatti { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 3px 10px; margin: 0; }
+.talos-pannello .pn-fatti dt { color: var(--talos-muted); white-space: nowrap; }
+.talos-pannello .pn-fatti dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.talos-pannello .pn-conti { font-size: 11px; }
+.talos-pannello .pn-file-agente, .talos-pannello .pn-passi { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 3px; }
+.talos-pannello .pn-file-agente li, .talos-pannello .pn-passi li { display: flex; align-items: center; gap: 6px; min-width: 0; font-family: var(--talos-font-mono); font-size: 11px; }
+.talos-pannello .pn-segnofile { flex: none; font-family: var(--talos-font-ui); font-size: 10.5px; padding: 0 5px; border-radius: 4px; background: var(--talos-panel-soft); color: var(--talos-muted); }
+.talos-pannello .pn-segnofile--creato { color: var(--talos-success); background: var(--talos-success-soft); }
+.talos-pannello .pn-segnofile--modificato { color: var(--talos-accent-text, var(--talos-accent)); background: var(--talos-accent-soft); }
+.talos-pannello .pn-altri { color: var(--talos-muted); font-family: var(--talos-font-ui); }
+.talos-pannello .pn-piede { display: flex; flex-wrap: wrap; gap: 6px; }
+.talos-pannello .pn-comando { margin: 0; padding: 7px 9px; border-radius: 7px; background: var(--talos-code-bg, var(--talos-panel-soft)); border: 1px solid var(--talos-border-subtle); font-family: var(--talos-font-mono); font-size: 11.5px; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 9.5em; overflow: auto; }
+
+/* le barre del tempo (variante B): tutti gli agenti della richiesta su un asse comune */
+.talos-pannello .pn-binari { display: flex; flex-direction: column; gap: 4px; padding: 7px 8px 5px; border-radius: 7px; background: var(--talos-panel-soft); border: 1px solid var(--talos-border-subtle); }
+.talos-pannello .pn-binari__pista { position: relative; display: flex; flex-direction: column; gap: 3px; }
+.talos-pannello .pn-binario { position: relative; height: 5px; }
+.talos-pannello .pn-binario__barra { position: absolute; top: 0; height: 5px; min-width: 3px; border-radius: 3px; background: color-mix(in srgb, var(--talos-muted) 45%, transparent); }
+.talos-pannello .pn-binario--scelto { height: 9px; }
+.talos-pannello .pn-binario--scelto .pn-binario__barra { height: 9px; border-radius: 4px; background: var(--pn-t); }
+.talos-pannello .pn-binario__tacca { position: absolute; top: -2px; width: 1.5px; height: 13px; background: var(--talos-panel); opacity: .9; }
+.talos-pannello .pn-binari__ora { position: absolute; top: -3px; bottom: -3px; width: 0; margin-left: -1px; border-left: 1px dashed var(--talos-danger); }
+.talos-pannello .pn-binari__asse { display: flex; justify-content: space-between; }
+.talos-pannello .pn-binari__asse .pn-mono { font-size: 9.5px; }
+
+/* la piega tratteggiata */
+.talos-pannello .pn-piega { margin: 8px; }
+.talos-pannello .pn-piega__testa { display: flex; align-items: center; gap: 8px; width: 100%; padding: 9px 10px; border: 1px dashed var(--talos-border); border-radius: 10px; color: var(--talos-text); background: transparent; font: inherit; text-align: left; cursor: pointer; min-width: 0; }
+.talos-pannello .pn-piega__testa:hover { background: var(--talos-card-hover); }
+.talos-pannello .pn-piega__testa > .i { width: 14px; height: 14px; color: var(--talos-muted); transition: transform var(--talos-motion-duration-disclosure, .12s); }
+.talos-pannello .pn-piega__testa[aria-expanded="true"] > .i { transform: rotate(90deg); }
+.talos-pannello .pn-piega__testi { display: flex; flex-direction: column; min-width: 0; }
+.talos-pannello .pn-piega__testi b { font-weight: 600; font-size: 12.5px; }
+.talos-pannello .pn-piega__testi small { color: var(--talos-muted); font-size: 11.5px; }
+.talos-pannello .pn-piega__corpo { padding: 6px 0 0 14px; display: flex; flex-direction: column; }
+
+/* vuoto, scheletro, avviso */
+.talos-pannello .pn-vuoto { margin: 16px 12px; padding: 14px; border: 1px dashed var(--talos-border); border-radius: 10px; text-align: center; color: var(--talos-muted); font-size: 12.5px; }
+.talos-pannello .pn-vuoto p { margin: 0 0 10px; }
+.talos-pannello .pn-vuoto p:last-child { margin: 0; }
+.talos-pannello .pn-scheletro { display: flex; flex-direction: column; gap: 10px; padding: 14px 12px; opacity: 0; animation: pn-appari .2s ease-out .35s forwards; }
+.talos-pannello .pn-scheletro span { height: 14px; border-radius: 6px; background: var(--talos-panel-soft); }
+.talos-pannello .pn-scheletro span:nth-child(1) { width: 70%; height: 18px; }
+.talos-pannello .pn-scheletro span:nth-child(odd) { width: 86%; }
+@keyframes pn-appari { to { opacity: 1; } }
+.talos-pannello .pn-avviso { display: flex; align-items: center; gap: 8px; margin: 8px 12px 0; padding: 8px 10px; border-radius: 8px; background: var(--talos-warning-soft); border: 1px solid var(--talos-warning-border); color: var(--talos-text); font-size: 12px; }
+.talos-pannello .pn-avviso .i { color: var(--talos-warning); }
+.talos-pannello .pn-avviso > span { flex: 1; min-width: 0; }
+.talos-pannello .pn-altri-box { display: flex; justify-content: center; padding: 6px 12px 12px; }
+
+/* misure a lato */
+.talos-pannello .pn-diff { font-family: var(--talos-font-mono); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.talos-pannello .pn-diff__piu { color: var(--talos-success); }
+.talos-pannello .pn-diff__meno { color: var(--talos-danger); }
+.talos-pannello .pn-badge { display: inline-flex; align-items: center; height: 18px; padding: 0 6px; border-radius: 5px; font-family: var(--talos-font-mono); font-size: 10.5px; white-space: nowrap; background: var(--pn-ts); color: var(--pn-t); box-shadow: inset 0 0 0 1px var(--pn-tb); }
+.talos-pannello .pn-scintilla { width: 54px; height: 16px; }
+.talos-pannello .pn-scintilla polyline { fill: none; stroke: var(--talos-accent); stroke-width: 1.4; stroke-linejoin: round; }
+.talos-pannello .pn-marchio { font-size: 10.5px; padding: 0 5px; border-radius: 4px; white-space: nowrap; }
+.talos-pannello .pn-marchio--scritto { color: var(--talos-accent-text, var(--talos-accent)); background: var(--talos-accent-soft); }
+.talos-pannello .pn-marchio--letto { color: var(--talos-muted); background: var(--talos-panel-soft); }
+.talos-pannello .pn-marchio--dentro { font-family: var(--talos-font-mono); color: var(--talos-accent-text, var(--talos-accent)); background: var(--talos-accent-soft); border-radius: 999px; min-width: 18px; text-align: center; }
+
+/* il contesto: barre per categoria e grafico nel tempo */
+.talos-pannello .pn-barretta { flex-basis: 100%; height: 4px; border-radius: 2px; background: var(--talos-border-subtle); overflow: hidden; margin-top: 2px; }
+.talos-pannello .pn-barretta > span, .talos-pannello .pn-barra-finestra > span { display: block; height: 100%; background: var(--talos-muted); }
+.talos-pannello span[data-categoria="conversation"] { background: var(--talos-accent); }
+.talos-pannello span[data-categoria="tools"] { background: var(--talos-info, var(--talos-muted)); }
+.talos-pannello span[data-categoria="mcp"] { background: var(--talos-warning); }
+.talos-pannello span[data-categoria="memory"] { background: var(--talos-success); }
+.talos-pannello .pn-barra-finestra { display: flex; height: 8px; border-radius: 4px; background: var(--talos-border-subtle); overflow: hidden; }
+.talos-pannello .pn-grafico { padding: 10px 12px 4px; border-bottom: 1px solid var(--talos-border-subtle); }
+.talos-pannello .pn-grafico svg { width: 100%; height: 96px; display: block; overflow: visible; border-radius: 4px; }
+.talos-pannello .pn-grafico svg:focus-visible { outline: 2px solid var(--talos-accent); outline-offset: 2px; }
+.talos-pannello .pn-grafico__area { fill: var(--talos-accent-soft); }
+.talos-pannello .pn-grafico__linea { fill: none; stroke: var(--talos-accent); stroke-width: 1.5; stroke-linejoin: round; }
+.talos-pannello .pn-grafico__soglia { stroke: var(--talos-warning); stroke-dasharray: 3 3; stroke-width: 1; }
+.talos-pannello .pn-grafico__taglio { stroke: var(--talos-muted); stroke-dasharray: 2 2; stroke-width: 1; }
+.talos-pannello .pn-grafico__cursore { stroke: var(--talos-border-strong, var(--talos-border)); stroke-width: 1; }
+.talos-pannello .pn-grafico__punto { fill: var(--talos-panel); stroke: var(--talos-accent); stroke-width: 1.5; }
+.talos-pannello .pn-grafico text { font-family: var(--talos-font-mono); font-size: 9.5px; fill: var(--talos-muted); }
+.talos-pannello .pn-grafico__legenda { min-height: 16px; margin-top: 4px; font-size: 11px; color: var(--talos-muted); overflow-wrap: anywhere; }
+.talos-pannello .pn-grafico--barra { padding-top: 12px; }
+
+/* il compositore del commit, sotto la testa della scheda Git */
+.talos-pannello .pn-commit { display: flex; flex-direction: column; gap: 6px; padding: 8px; border-radius: 9px; border: 1px solid var(--talos-border); background: var(--talos-card); }
+.talos-pannello .pn-commit__messaggio { width: 100%; min-height: 48px; max-height: 160px; resize: vertical; padding: 6px 8px; border-radius: 7px; border: 1px solid var(--talos-border-subtle); background: var(--talos-card-subtle, var(--talos-panel)); color: var(--talos-text); font: inherit; font-size: 12.5px; }
+.talos-pannello .pn-commit__tasti { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.talos-pannello .pn-commit .pn-nota { margin: 0; }
+.talos-pannello .pn-commit__destra { display: flex; gap: 6px; margin-left: auto; }
+
+/* ── il conto sull'intestazione della scheda (fuori da `.talos-pannello`: vive nel pulsante della scheda) ── */
+.pn-contatore { display: inline-flex; align-items: center; gap: 3px; margin-left: -2px; vertical-align: middle; }
+.pn-contatore__n { font-family: var(--talos-font-mono); font-size: 10.5px; font-variant-numeric: tabular-nums; color: var(--talos-muted); }
+.pn-contatore__punto { width: 6px; height: 6px; border-radius: 50%; background: var(--talos-warning); flex: none; }
+.pn-anello { flex: none; }
+.pn-contatore .pn-anello circle, .pn-anello circle { fill: none; stroke-width: 2; }
+.pn-anello .pn-anello__fondo { stroke: var(--talos-border); }
+.pn-anello .pn-anello__pieno { stroke: var(--talos-accent); stroke-linecap: round; transform: rotate(-90deg); transform-origin: 50% 50%; transition: stroke-dasharray .4s ease; }
+.pn-anello[data-tono="avviso"] .pn-anello__pieno { stroke: var(--talos-warning); }
+
+/* ── movimento ridotto: calmo, mai fermo (owner 24/09) ── */
+@media (prefers-reduced-motion: reduce) {
+  .talos-pannello .pn-segno[data-vivo]::after { animation: pn-respiro 2.4s ease-in-out infinite; border-color: var(--talos-accent-border); }
+  .talos-pannello .pn-scheletro { animation-duration: .01s; }
+  .talos-pannello .pn-piega__testa > .i, .pn-anello .pn-anello__pieno { transition: none; }
+}
+body.reduce-motion .talos-pannello .pn-segno[data-vivo]::after { animation: pn-respiro 2.4s ease-in-out infinite; border-color: var(--talos-accent-border); }
+
+/* ═══ AGGIUNTE sopra le schede di oggi (owner 29/10 sera: File e Git restano identiche, il nuovo si aggiunge) ═══ */
+
+/* File (b): il segno leggero sulle righe dell'albero — un badge di al più due caratteri o un'icona, come FileDecoration di VS Code */
+.pn-segno-albero { flex: none; display: inline-grid; place-items: center; color: var(--talos-muted); opacity: .85; }
+.pn-segno-albero .i { width: 12px; height: 12px; }
+.pn-segno-albero--attenzione { color: var(--talos-warning); opacity: 1; }
+.pn-segno-albero--conto { min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px; font-family: var(--talos-font-mono); font-size: 10px; background: var(--talos-accent-soft); color: var(--talos-accent-text, var(--talos-accent)); opacity: 1; }
+/* File (c): «Richiede attenzione» in una striscia sola, sopra l'albero */
+.pn-striscia-attenzione { display: flex; align-items: center; gap: 6px; margin: 6px 0 4px; padding: 5px 8px; border-radius: var(--talos-radius-control, 8px); background: var(--talos-warning-soft); border: 1px solid var(--talos-warning-border); color: var(--talos-text); font-size: var(--talos-font-size-xs, 12px); min-width: 0; }
+.pn-striscia-attenzione > .i { width: 13px; height: 13px; color: var(--talos-warning); flex: none; }
+.pn-striscia-attenzione > .pn-tronca { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pn-striscia-attenzione__vedi { flex: none; padding: 0 2px; border: 0; background: none; color: var(--talos-text); font: inherit; font-weight: 600; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.pn-file-sottotitolo { margin: 6px 0 2px; }
+.pn-risultato { width: 100%; border: 0; background: transparent; color: inherit; font: inherit; text-align: start; }
+.pn-risultato__cartella { flex: none; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--talos-muted); font-size: var(--talos-font-size-xs, 11px); }
+#inspector-files .pn-sezione { padding-inline: 0; }
+
+/* Git (1)(2): i +/− e «di chi è», attenuati, a destra della cartella (che ha già flex:1) */
+.pn-git-chi { flex: none; max-width: 38%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--talos-muted); font-size: var(--talos-font-size-xs, 11px); opacity: .85; }
+.pn-git-diff { flex: none; display: inline-flex; gap: 4px; font-family: var(--talos-font-mono); font-size: 10.5px; font-variant-numeric: tabular-nums; opacity: .8; }
+.pn-git-diff__piu { color: var(--talos-success); }
+.pn-git-diff__meno { color: var(--talos-danger); }
+/* Git (3): «Dettagli del repository», un gruppo come gli altri della scheda */
+.pn-git-dettagli__corpo { padding: 2px 4px 6px 22px; }
+
+/* ⭐ 29/10 sera, seconda passata: sul robot di OGGI (`.talos-file-row__agente`, legacy/app.js:19882) l'unica aggiunta è il tono
+   d'attenzione quando due hanno scritto lo stesso file (la frase lo dice nel suggerimento). Vince anche su `is-al-lavoro`. */
+#railFile .talos-file-row__agente.pn-agente-collisione { color: var(--talos-warning); }
+
+/* ═══ 29/10 sera, terza passata: TUTTO A PAGINE E COMPRIMIBILE, e ogni scheda sta nello schermo ═══
+   La piega di una sezione usa il pulsante delle card del Contesto (`.talos-inspector-card__comprimi`, index.css:2034-2038: la
+   freccia ruota di 90° da aperta); la barra delle pagine è quella della scheda Agenti (`.talos-agenti-pagine`, grafo-agenti.css:16),
+   qui più bassa perché ce n'è una per sezione. */
+.talos-pannello .pn-sezione__titolo .pn-sezione__comprimi { flex: 1 1 auto; min-width: 0; padding: 2px 0; color: inherit; font-size: inherit; font-weight: inherit; }
+.talos-pannello .pn-sezione__comprimi > .i { flex: none; width: 13px; height: 13px; transition: rotate var(--talos-motion-duration-fast, .12s) var(--talos-motion-ease, ease); }
+.talos-pannello .pn-sezione__comprimi .pn-mono { margin-left: 2px; }
+.talos-pannello .pn-sezione[data-chiusa] { padding-bottom: 6px; }
+.talos-pannello .pn-sezione[data-chiusa] .pn-sezione__titolo { margin-bottom: 0; }
+.talos-file-modificati .talos-inspector-card__head .talos-inspector-card__comprimi > .i { flex: none; width: 13px; height: 13px; }
+.pn-pagine.talos-agenti-pagine { padding: 4px 4px 2px; border-top: 1px dashed var(--talos-border-subtle); }
+.pn-pagine.talos-agenti-pagine .talos-button { min-height: 24px; padding-block: 0; }
+.pn-pagine.talos-agenti-pagine button:disabled { opacity: .45; cursor: default; }
+/* fuori dalla pagina: il nodo resta al suo posto (albero, gruppi di Git), non si vede e non si raggiunge */
+.pn-fuori-pagina { display: none !important; }
+@media (prefers-reduced-motion: reduce) { .talos-pannello .pn-sezione__comprimi > .i { transition: none; } }
+
+/* ⭐ 29/10 sera (revisione D): quando la fila delle schede non entra, cedono i NUMERI aggiunti (comune.js, `adattaFilaSchede`),
+   mai i nomi né le regole della fila di oggi. */
+.talos-tabs__list[data-pn-conti="senza-numeri"] .pn-contatore__n { display: none; }
+.talos-tabs__list[data-pn-conti="senza-conti"] .pn-contatore { display: none; }
+.talos-pannello .pn-riga[data-evidenziata="true"] { background: var(--talos-accent-soft); box-shadow: inset 2px 0 0 var(--talos-accent); } /* l'agente che il diagramma indica (evidenziaAgenteNelPannello) */
+
+/* processi (owner 29/10 sera): il tipo del comando nell'icona, chi l'ha lanciato scritto accanto al comando; cede prima il comando */
+.talos-pannello .pn-sotto__comando { display: flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; }
+.talos-pannello .pn-sotto__comando > .pn-code { flex: 0 1 auto; min-width: 4ch; }
+.talos-pannello .pn-sotto__chi { flex: 0 0 auto; white-space: nowrap; color: var(--talos-muted); }
+
+/* file (alternativa minima, 29/10): la striscia «scritti da due» sopra l'albero di oggi, una riga col suo «Vedi» */
+.pn-file-striscia { display: flex; align-items: center; gap: 8px; margin: 6px 0; padding: 6px 10px; min-width: 0; }
+.pn-file-striscia > .pn-tronca { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pn-file-striscia > button { flex: none; }
+/* file (b), owner 29/10 sera: il conto dei toccati sta sulla cartella CHIUSA; aperta, lo dicono le righe di dentro */
+#railFile .ft-node[aria-expanded="true"] > .ft-row > .pn-segno-albero--conto { display: none; }

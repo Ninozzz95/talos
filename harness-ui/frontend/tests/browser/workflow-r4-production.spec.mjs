@@ -280,7 +280,8 @@ test('R4-GRAPH-INITIAL-FIT-14: every agent card and the conversation card are in
   await attendiFineStoria(page);
   await page.locator('#railTabs [data-rail="agenti"]').click();
   await expect(page.locator('#railAgenti [data-c="AgentRow"]')).toHaveCount(13);
-  await page.locator('#railAgenti').getByRole('button', { name: 'Apri visuale diagramma' }).click();
+  /* pannello v2 (29/10/2026): la porta del diagramma è l'icona della testa della scheda Agenti («Apri diagramma», kit) */
+  await page.locator('#railAgenti [data-controllo="apri-diagramma"]').click();
   const graph = page.locator('#schermoChat > [data-c="GrafoAgenti"]');
   await expect(graph).toHaveAttribute('data-sorgente', 'deleghe');
   await expect(graph.locator('[data-sessione]')).toHaveCount(13);
@@ -334,16 +335,23 @@ test('R4-RAIL-5000-BOUNDED: 200 logical agents remain reachable with bounded row
   const rows = page.locator('#railAgenti [data-c="AgentRow"]');
   await expect(rows.first()).toBeVisible();
   expect(await rows.count()).toBeLessThanOrEqual(50);
-  await expect(page.locator('#railAgenti')).toContainText('199 di 199 agenti');
+  /* pannello v2 (29/10/2026): la testa dice «199 agenti · 199 di 199 terminati»; le righe si dividono per stato e ogni sezione ha la
+     sua barra delle pagine, la cui misura segue lo spazio (non più 25 fisse): qui tutti terminati ⇒ UNA sezione, UNA barra */
+  await expect(page.locator('#railAgenti')).toContainText('199 agenti');
+  await expect(page.locator('#railAgenti')).toContainText('199 di 199 terminati');
   await expect(page.locator('#railAgenti [role="status"]')).toHaveCount(1);
+  const pagina1 = (await page.locator('#railAgenti [role="status"]').innerText()).trim();
+  const perPagina = Number(/^1–(\d+) di 199$/u.exec(pagina1)?.[1]);
+  expect(perPagina, `la prima pagina: ${pagina1}`).toBeGreaterThan(0);
   // 24/09/2026: la pila dei toast siede sul fondo della barra destra (decisione owner) e intercettava questo clic.
   await chiudiToastAperti(page);
   await page.locator('#railAgenti').getByRole('button', { name: 'Pagina successiva' }).click();
-  await expect(page.locator('#railAgenti')).toContainText('Agente 26');
-  await page.locator('#railAgenti').getByRole('searchbox', { name: 'Cerca agenti' }).fill('Agente 199');
+  await expect(page.locator('#railAgenti')).toContainText(`Agente ${perPagina + 1}`);
+  await page.locator('#railAgenti [data-controllo="apri-cerca"]').click(); // la ricerca sta dietro «Cerca e filtra» della testa
+  await page.locator('#railAgenti').getByRole('searchbox').fill('Agente 199');
   await expect(rows).toHaveCount(1);
   await expect(rows.first()).toContainText('Agente 199');
-  await page.locator('#railAgenti').getByRole('button', { name: 'Apri visuale diagramma' }).click();
+  await page.locator('#railAgenti [data-controllo="apri-diagramma"]').click();
   const graph = page.locator('#schermoChat > [data-c="GrafoAgenti"]');
   await expect(graph).toBeVisible();
   await expect(graph).toHaveAttribute('data-sorgente', 'deleghe');
@@ -361,8 +369,10 @@ test('R4-RAIL-5000-BOUNDED: 200 logical agents remain reachable with bounded row
 for (const [lingua, attesi] of [
   /* ⛔ 09/10/2026 (bugfixer): dal 03/10 (fase della lingua) anche le PAROLE seguono la lingua, non solo i numeri — l'atteso inglese
      era rimasto «4,999 di 4,999 agenti». Frasi misurate sul prodotto il 09/10 (agents.countAllLevels, family.done, …). */
-  ['it', { rail: '4.999 di 4.999 agenti · tutti i livelli', pagina: '1–25 di 4.999', grafo: '4.999 agenti in 1 lotto', terminati: '3.999 di 4.999 terminati', diagramma: 'Apri visuale diagramma' }],
-  ['en', { rail: '4,999 of 4,999 agents · all levels', pagina: '1–25 of 4,999', grafo: '4,999 agents in 1 batch', terminati: '3,999 of 4,999 finished', diagramma: 'Open diagram view' }],
+  /* pannello v2 (29/10/2026): la testa della scheda dice «4.999 agenti · 3.999 di 4.999 terminati», e ogni sezione per stato ha la sua
+     barra («… di 1.000» in corso, «… di 3.999» terminati); le parole sono del kit, i NUMERI raggruppati restano la regola */
+  ['it', { rail: '4.999 agenti', pagina: ' di 3.999', paginaInCorso: ' di 1.000', grafo: '4.999 agenti in 1 lotto', terminati: '3.999 di 4.999 terminati', diagramma: 'Apri visuale diagramma' }],
+  ['en', { rail: '4,999 agents', pagina: ' of 3,999', paginaInCorso: ' of 1,000', grafo: '4,999 agents in 1 batch', terminati: '3,999 of 4,999 finished', diagramma: 'Open diagram view' }],
 ]) {
   test(`R4-COUNT-LOCALE-5000: rail and graph group thousands in the active language (${lingua})`, async ({ page }) => {
     test.setTimeout(120_000);
@@ -393,9 +403,11 @@ for (const [lingua, attesi] of [
     ));
     await attendiFineStoria(page);
     await page.locator('#railTabs [data-rail="agenti"]').click();
-    await expect(page.locator('#railAgenti [role="status"]')).toHaveText(attesi.rail, { timeout: 30_000 });
-    await expect(page.locator('#railAgenti .talos-agenti-pagine')).toContainText(attesi.pagina);
-    await page.locator('#railAgenti').getByRole('button', { name: attesi.diagramma }).click();
+    await expect(page.locator('#railAgenti')).toContainText(attesi.rail, { timeout: 30_000 });
+    await expect(page.locator('#railAgenti')).toContainText(attesi.terminati);
+    await expect(page.locator('#railAgenti .talos-agenti-pagine').filter({ hasText: attesi.pagina })).toHaveCount(1);
+    await expect(page.locator('#railAgenti .talos-agenti-pagine').filter({ hasText: attesi.paginaInCorso })).toHaveCount(1);
+    await page.locator('#railAgenti [data-controllo="apri-diagramma"]').click();
     const graph = page.locator('#schermoChat > [data-c="GrafoAgenti"]');
     await expect(graph).toHaveAttribute('data-sorgente', 'deleghe', { timeout: 30_000 });
     const testata = graph.locator('.talos-wfg__cima'); const lotto = graph.locator('.gv-testa').first();
@@ -404,7 +416,7 @@ for (const [lingua, attesi] of [
     await expect(lotto).toContainText(attesi.terminati);
     // Nessun numero di quattro o più cifre senza separatore dove si scrivono dei CONTI: testata, testa del lotto, barra della
     // riproduzione, rail. (I nomi sulle schede sono dati — «Agente 1001» — e a 4.999 agenti la tela si apre dove si lavora.)
-    const testo = [await testata.innerText(), await lotto.innerText(), await graph.locator('.gv-rip').innerText(), await page.locator('#railAgenti [role="status"]').innerText(), await page.locator('#railAgenti .talos-agenti-pagine').innerText()].join('\n');
+    const testo = [await testata.innerText(), await lotto.innerText(), await graph.locator('.gv-rip').innerText(), (await page.locator('#railAgenti [role="status"]').allInnerTexts()).join('\n'), await page.locator('#railAgenti .pn-testa').innerText(), (await page.locator('#railAgenti .pn-sezione__comprimi, #railAgenti .pn-sezione > header').allInnerTexts()).join(' ')].join('\n');
     expect(testo.match(/(?<![\d.,])\d{4,}(?![\d.,])/g) ?? [], testo.slice(0, 400)).toEqual([]);
   });
 }

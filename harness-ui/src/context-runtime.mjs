@@ -76,7 +76,9 @@ export async function resolveDesktopDefaultProfile({ provider, model, finestraFn
     finestra = Number.isSafeInteger(dalCatalogo) && dalCatalogo > 0 ? Math.min(dalCatalogo, massima) : massima;
   }
   /* 21/10/2026: un motore a posto unico (motore dell'app, motore del PC con `-np 1`) non riceve riassunti in sottofondo durante il giro */
-  return { provider, model, windowTokens: finestra, responseReserve: Math.min(16_384, Math.floor(finestra / 8)),
+  /* CONTRATTO-R30-R31 (owner 30/10/2026): 32.000 come Claude Code (era 16.384, che GLM col ragionamento alto si mangiava tutto); sotto una
+     finestra di 131.072 non cambia niente (un ottavo della finestra), e il nucleo non supera il limite d'uscita del modello */
+  return { provider, model, windowTokens: finestra, responseReserve: Math.min(32_000, Math.floor(finestra / 8)),
     ...(provider === 'local' || provider === 'locale-ospite' ? { singleSlot: true } : {}) };
 }
 

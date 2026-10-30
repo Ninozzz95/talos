@@ -222,6 +222,10 @@ export const OPERAZIONI_HTTP = Object.freeze({
   'providers.list': { metodo: 'GET', percorso: () => '/api/v1/providers', filtra: fornitoriRidotti },
   'provider.models': { metodo: 'GET', percorso: (a) => `/api/v1/providers/${idFornitore(a)}/models`, filtra: modelliPerIlTelefono },
   'local-models.list': { metodo: 'GET', percorso: () => '/api/v1/local-models', filtra: modelliLocaliPerIlTelefono },
+  /* owner 29/10/2026: preferiti e usati di recente dei modelli, gli stessi del PC (contratto CONTRATTO-PREFERITI-MODELLI-2026-10-29.md);
+     il corpo lo controlla la rotta, come per le altre scritture */
+  'models.preferences': { metodo: 'GET', percorso: () => '/api/v1/model-preferences' },
+  'models.preferences.update': { metodo: 'POST', percorso: () => '/api/v1/model-preferences', corpo: corpoOggetto },
 });
 
 export const OPERAZIONI_EVENTI = Object.freeze(['session.events', 'session.unsubscribe']);

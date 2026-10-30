@@ -177,60 +177,84 @@ for (const modo of ['dark', 'light']) {
 
     const apriScheda = (page, quale) => page.locator(`#railTabs [data-rail="${quale}"]`).click();
 
-    test(`P0E-PROCESSI — ogni riga dice comando, famiglia e stato; il tetto morde sul DOM (${modo})`, async ({ page }, info) => {
+    /*
+     * ⭐ PANNELLO v2 (owner 29/10/2026, kit approvato P-13): il tetto di 40 + «Carica altri» è diventato la barra delle pagine. Gli
+     *   stessi confini di prima, sulla forma nuova:
+     *   · il tetto morde ancora sul DOM: con 120 comandi in pagina ci sono le righe di UNA pagina, mai 120, e i nodi restano pochi;
+     *   · la riga dice il nome (la descrizione, o il comando quando non c'è) e la parola dello stato; il comando resta nel DOM;
+     *   · le pagine portano a tutti i 120 («… di 120», Successiva);
+     *   · un evento NUOVO non azzera la ricerca.
+     * ⭐ La «famiglia» del comando resta (owner 29/10 sera, via coordinatore: «il tipo nell'icona, chi l'ha lanciato nelle parole»):
+     *   `data-famiglia` sulla riga e l'icona della famiglia nel segno.
+     */
+    test(`P0E-PROCESSI — ogni riga dice nome e stato; il tetto morde sul DOM e le pagine portano a tutti (${modo})`, async ({ page }, info) => {
       await manda(page, [{ type: 'RunStarted', input: { consegna: 'Controlla il progetto' }, _sequenza: 1 }, ...eventiAttrezzi(120)]);
       await apriScheda(page, 'processi');
 
       const rail = page.locator('#railProcessi');
       const righe = rail.locator('[data-c="ProcessRow"]');
-      /* ⛔ Il tetto è sul DOM: 40 righe, non 120. Se qualcuno lo togliesse, questa riga diventa rossa. */
-      await expect(righe).toHaveCount(40);
+      await rail.locator('[data-controllo="ambito-tutti"]').click();
+      await expect(righe.first()).toBeVisible();
+      const quante = await righe.count();
+      /* ⛔ Il tetto è sul DOM: una pagina, non 120. Se qualcuno lo togliesse, questa riga diventa rossa. */
+      expect(quante, `righe nel DOM con 120 comandi: ${quante}`).toBeLessThanOrEqual(40);
+      expect(quante).toBeGreaterThan(0);
       const nodiScheda = await rail.evaluate((n) => n.querySelectorAll('*').length);
       expect(nodiScheda, `nodi della scheda con 120 comandi: ${nodiScheda}`).toBeLessThan(1200);
 
-      /* La riga più recente: icona di famiglia, la PROPRIA testata, stato con la sua PAROLA.
-         ⛔⛔ 20/09/2026 — QUESTA RIGA ASSERIVA IL REQUISITO VECCHIO: `toBeVisible()` sul comando a
-           segmenti. L'owner l'ha cambiato dalla foto del suo pannello — «i comandi occupano uno spazio
-           enorme … mantieni solo la descrizione del comando e non il comando in sé» — e la riga
-           chiusa mostra ora la descrizione del modello, col comando nel solo dettaglio.
-         ⛔ L'asserzione non è indebolita, è RISCRITTA SUL REQUISITO: la riga deve mostrare **la
-           descrizione o il comando**, e **mai nessuno dei due** (una riga vuota) né **tutti e due**
-           (lo spazio doppio che l'owner ha contestato). E il comando resta nel DOM: non si perde una
-           funzione, si smette di disegnarla. */
       const prima = righe.first();
-      const titoloVisibile = await prima.locator('.talos-process__titolo').isVisible().catch(() => false);
-      const comandoVisibile = await prima.locator('.talos-process__cmd').isVisible().catch(() => false);
-      expect(titoloVisibile || comandoVisibile, 'la riga non mostra né la descrizione né il comando: è una riga vuota').toBe(true);
-      expect(titoloVisibile && comandoVisibile, 'la riga mostra sia la descrizione sia il comando: lo spazio è doppio').toBe(false);
-      expect(await prima.locator('.talos-process__cmd').count(), 'il comando non è più nel DOM: una funzione persa').toBe(1);
-      await expect(prima.locator('.talos-process__stato-testo')).not.toHaveText('');
-      const famiglie = await righe.evaluateAll((n) => [...new Set(n.map((x) => x.dataset.famiglia))].sort());
-      expect(famiglie.length, `famiglie riconosciute a schermo: ${famiglie.join(', ')}`).toBeGreaterThan(3);
+      await expect(prima.locator('.pn-nome')).not.toHaveText('');
+      await expect(prima.locator('.pn-segno')).not.toHaveAttribute('aria-label', '');
 
-      /* «Carica altri» c'è, dice quanti, e ne aggiunge altri quaranta. */
-      const altri = rail.locator('.talos-process-altri');
-      await expect(altri).toContainText('Carica altri');
-      await expect(altri).toContainText('120');
-      await altri.click();
-      await expect(righe).toHaveCount(80);
+      /* le pagine dicono quanti sono e portano agli altri */
+      /* ogni sezione ha le sue pagine: i 110 finiti nella loro barra, e il segmento «Tutti» dice 120 */
+      await expect(rail.locator('[data-controllo="ambito-tutti"]')).toContainText('120');
+      const barra = rail.locator('[data-pager="finiti"]');
+      await expect(barra).toContainText('110');
+      const primaFinita = rail.locator('[data-c="ProcessRow"][data-pagina="finiti"]').first();
+      /* i 110 comandi finiti hanno lasciato i loro avvisi in basso a destra, sopra la barra delle pagine: si chiudono come farebbe la
+         persona (Esc sulla regione degli avvisi non c'è: si svuota), poi si sfoglia. Dubbio riportato all'owner: gli avvisi coprono le pagine. */
+      await page.evaluate(() => document.querySelector('#regioneToast')?.replaceChildren());
+      const primoNome = await primaFinita.getAttribute('data-chiave');
+      await barra.locator('[data-controllo^="pagina-dopo-"]').click();
+      await expect(primaFinita).not.toHaveAttribute('data-chiave', primoNome);
+      await barra.locator('[data-controllo^="pagina-prima-"]').click();
+      await expect(primaFinita).toHaveAttribute('data-chiave', primoNome);
 
-      /* Il dettaglio si apre SENZA ridisegnare la scheda: la card resta la stessa. */
-      const identita = await prima.evaluate((n) => { n.dataset.marcaDiProva = 'io'; return n.dataset.marcaDiProva; });
-      expect(identita).toBe('io');
-      await prima.locator('.talos-process__apri').click();
-      await expect(prima.locator('.talos-process__dettaglio')).toBeVisible();
-      await expect(prima.locator('.talos-process__dettaglio')).toContainText('Cartella');
+      /* la riga si apre sul posto, col comando intero */
+      await righe.first().click();
+      await expect(righe.first()).toHaveAttribute('aria-expanded', 'true');
+      await expect(righe.first().locator('.pn-comando')).not.toHaveText('');
 
-      /* ⛔ Un evento NUOVO non deve azzerare né il filtro, né il dettaglio aperto, né la selezione. */
-      await rail.locator('.talos-process-filtro__campo').fill('git');
-      await expect(righe.first().locator('.talos-cmd__eseguibile').first()).toHaveText('git');
-      const quanteConFiltro = await righe.count();
+      /* ⛔ Un evento NUOVO non deve azzerare la ricerca (la riga aperta che resta aperta: PNPR-06). */
+      await rail.locator('[data-controllo="apri-cerca"]').click();
+      await rail.locator('[data-controllo="campo-cerca"]').fill('git');
+      await expect(righe.first()).toContainText('git');
+      const quanteConFiltro = await rail.evaluate((n) => n.querySelector('[data-pager]')?.textContent ?? '');
+      const conti = async () => rail.evaluate((n) => [...n.querySelectorAll('[data-pager] [role="status"]')].map((x) => x.textContent).join('|') || String(n.querySelectorAll('[data-c="ProcessRow"]').length));
+      const prima2 = await conti();
       await manda(page, [{ type: 'ToolCallStart', toolCallId: 'nuovo-1', toolCallName: 'shell', _sequenza: 9000 }, { type: 'ToolCallArgs', toolCallId: 'nuovo-1', delta: JSON.stringify({ comando: 'git push --force-with-lease' }), _sequenza: 9001 }]);
-      await expect(rail.locator('.talos-process-filtro__campo')).toHaveValue('git');
-      await expect(righe).toHaveCount(quanteConFiltro + 1);
+      await expect(rail.locator('[data-controllo="campo-cerca"]')).toHaveValue('git');
+      await expect(rail.locator('.pn-riga[data-chiave="nuovo-1"]')).toHaveCount(1);
+      expect(await conti(), `il conto filtrato non è cresciuto (prima: ${prima2}; ${quanteConFiltro})`).not.toBe(prima2);
 
-      misura(`processi.nodiScheda.120comandi.${modo}`, nodiScheda);
+      /* le famiglie sulle prime pagine (una pagina ne mostra poche): si sfoglia e si raccoglie, senza la ricerca */
+      await rail.locator('[data-controllo="campo-cerca"]').fill('');
+      await expect(rail.locator('[data-c="ProcessRow"]').filter({ hasNotText: 'git' }).first()).toBeVisible();
+      const viste = new Map();
+      for (let pagina = 0; pagina < 6; pagina += 1) {
+        for (const [f, i] of await righe.evaluateAll((n) => n.map((x) => [x.dataset.famiglia, x.querySelector('.pn-segno use')?.getAttribute('href')]))) viste.set(f, i);
+        const dopo = rail.locator('[data-pager="finiti"] [data-controllo^="pagina-dopo-"]');
+        if (!(await dopo.isEnabled().catch(() => false))) break;
+        await dopo.click();
+      }
+      const famiglie = [...viste.keys()].sort();
+      expect(famiglie.length, `famiglie riconosciute a schermo: ${famiglie.join(', ')}`).toBeGreaterThan(3);
+      /* un attributo giusto non è un'icona giusta (inspector.js:1121): il segno DISEGNA la famiglia */
+      const icone = [...new Set(viste.values())];
+      expect(icone.length, `icone diverse a schermo: ${icone.join(', ')}`).toBeGreaterThan(3);
       misura(`processi.famiglie.${modo}`, famiglie);
+      misura(`processi.nodiScheda.120comandi.${modo}`, nodiScheda);
       await info.attach(`processi-${modo}.png`, { body: await foto(page, `processi-${modo}.png`), contentType: 'image/png' });
     });
 
@@ -264,6 +288,7 @@ for (const modo of ['dark', 'light']) {
 
       const t0 = Date.now();
       await card.click();
+      await card.locator('[data-controllo="apri-conversazione"]').click(); // pannello v2: la riga si apre sul posto, la conversazione col suo pulsante
       /* PO-30 fetta 2 (18/09/2026): la card apre il DETTAGLIO dell'agente, sulla Panoramica; la conversazione è la sua quarta
          sezione. Il tempo «clic → pannello» si misura sul dettaglio; il contenuto della conversazione si guarda nella sua sezione. */
       await expect(page.locator('[data-c="DettaglioAgente"]')).toBeVisible();
@@ -340,6 +365,7 @@ for (const modo of ['dark', 'light']) {
       for (const scheda of ['processi', 'agenti', 'file', 'contesto', 'processi']) await apriScheda(page, scheda);
       await apriScheda(page, 'agenti');
       await page.locator('#railAgenti [data-c="AgentRow"]').click();
+      await page.locator('#railAgenti [data-c="AgentRow"]').locator('[data-controllo="apri-conversazione"]').click(); // pannello v2
       await expect(page.locator('[data-c="DettaglioAgente"]')).toBeVisible();
       await apriScheda(page, 'file');
       const m = await page.evaluate(() => { const f = document.querySelector('[data-c="PannelloFiglia"]'); const r = f.getBoundingClientRect(); const file = document.querySelector('#railFile')?.getBoundingClientRect(); return { figliaVisibile: r.height > 0 && getComputedStyle(f).display !== 'none', altezzaFiglia: Math.round(r.height), schedaFileAlta: file ? Math.round(file.height) : null, scelta: document.querySelector('#railTabs [aria-selected="true"]')?.dataset.rail }; });

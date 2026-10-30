@@ -23,7 +23,11 @@ const FILE_SOGLIE = new URL('../../scripts/cancello/lingua-pseudo-soglie.json', 
 const VISTE = ['home', 'dashboard', 'projects', 'library', 'notes', 'tasks', 'memory', 'research', 'automations', 'forge', 'settings'];
 const MARCHIO_E_ID = [/^TALOS$/u, /^[\w.-]+\/[\w.:-]+$/u, /^[a-z0-9]+(?:[-.][a-z0-9]+)+$/u];
 const VISTE_SESSIONE = ['sessione-chat', 'sessione-review', 'sessione-browser', 'dialogo-new', 'dialogo-permissions', 'dialogo-shortcuts'];
-const CONTENUTO = ['#conversation p', '.talos-message__who', '.talos-message__meta', '#railContesto .talos-kv__k', '#workspaceChooserTree', '#workspaceChooser strong', 'kbd', '.talos-approval__why'].join(', ');
+/* 30/10/2026: anche il «Testo del server» di una nota d'errore (`.talos-system-note__grezzo`, conversazione.js e
+   avviso-controllo-spento.js) è contenuto: sono le parole del server così come sono arrivate, sotto la frase già tradotta. La prova
+   lo contava quando la prima sessione del server di prova era una conversazione finita in errore (la chiave finta di un'altra
+   prova): dipendeva dall'ordine dei file, non dall'interfaccia. */
+const CONTENUTO = ['#conversation p', '.talos-message__who', '.talos-message__meta', '#railContesto .talos-kv__k', '#workspaceChooserTree', '#workspaceChooser strong', 'kbd', '.talos-approval__why', '.talos-system-note__grezzo'].join(', ');
 const NOMI_PROPRI = [/^GitHub$/u, /^Windows$/u, /^Linux \(WSL2\)$/u];
 
 /** I testi visibili senza il segno della pseudo-lingua, tolti quelli della persona. Gira nella pagina. */

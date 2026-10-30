@@ -55,10 +55,12 @@ async function apri(page, id, { tema = 'dark' } = {}) {
   await page.evaluate((s) => window.__talosHarnessUiRuntime.passaASessione(s, 'workspace', 'Orfani', 'prova/modello', { conclusa: false, interrotta: true, modello: 'prova/modello' }), id);
   await page.waitForFunction(() => window.__talosHarnessUiRuntime.realSessionState.inRigiocata === false, null, { timeout: 15_000 });
   await page.locator('#railTabs [data-rail="processi"]').click();
+  await page.locator('#railProcessi [data-controllo="ambito-tutti"]').click(); // v2: un comando non più seguito sta fra i finiti, l'ambito di serie mostra gli accesi
   await expect(riga(page)).toBeVisible();
   return conto;
 }
-const riga = (page) => page.locator('#railProcessi .talos-process[data-processo="p-orf"]');
+/* pannello v2 (29/10/2026): la riga è `.pn-riga` con la chiave del comando; lo stato in `data-stato` e nella parola del segno */
+const riga = (page) => page.locator('#railProcessi .pn-riga[data-chiave="p-orf"]');
 const menu = (page) => page.locator('.ft-actions-menu');
 async function evento(page, e) {
   await page.evaluate((ev) => { const r = window.__talosHarnessUiRuntime; r.handleRealEvent({ ...ev, _sequenza: 1000 + Math.floor(performance.now()) }, r.realSessionState.generation); }, e);
@@ -68,10 +70,10 @@ test.describe('Orfani ripresi — la scheda Processi', () => {
   test('ORF-UI-B01 — ripreso dal server di adesso: «In sfondo» con «Ferma questo comando», e «Ferma» chiede lo stop di QUEL comando', async ({ page }) => {
     const conto = await apri(page, 'sp-orfani-a');
     await expect(riga(page)).toHaveAttribute('data-stato', 'in-sfondo');
-    await expect(riga(page)).toContainText('In sfondo');
+    await expect(riga(page).locator('.pn-segno')).toHaveAttribute('aria-label', 'In sfondo');
     await riga(page).click({ button: 'right' });
-    await expect(menu(page).locator('[role="menuitem"]')).toHaveText(['Ferma questo comando']);
-    await menu(page).getByRole('menuitem', { name: 'Ferma questo comando' }).click();
+    await expect(menu(page).locator('[role="menuitem"]')).toHaveText(["Mostra l'uscita", 'Ferma']);
+    await menu(page).getByRole('menuitem', { name: 'Ferma', exact: true }).click();
     await expect.poll(() => conto.ferma).toEqual(['p-orf']);
     await evento(page, { type: 'CUSTOM', name: 'talos.processo-sfondo', value: { toolCallId: 'p-orf', esito: 'terminato', codice: null, segnale: 'SIGTERM', finitoAlle: '2026-10-17T10:01:00.000Z', fermatoDallaPersona: true, comando: 'sleep 600' } });
     await expect(riga(page)).toHaveAttribute('data-stato', 'annullato');
@@ -80,23 +82,25 @@ test.describe('Orfani ripresi — la scheda Processi', () => {
 
   test('ORF-UI-B02 — AL CONTRARIO: senza adozione resta «Non più seguito», e il menu non offre «Ferma»', async ({ page }) => {
     const conto = await apri(page, 'sp-orfani-b');
+    await page.locator('#railProcessi [data-controllo="ambito-tutti"]').click(); // v2: un comando non più seguito sta fra i finiti
     await expect(riga(page)).toHaveAttribute('data-stato', 'perso');
     await expect(riga(page)).toContainText('Non più seguito');
     await riga(page).click({ button: 'right' });
-    await expect(menu(page).locator('[role="menuitem"]')).toHaveText(["Togli dall'elenco"]);
+    await expect(menu(page).locator('[role="menuitem"]')).toHaveText(["Mostra l'uscita", "Togli dall'elenco"]);
     expect(conto.ferma).toEqual([]);
   });
 
   test('ORF-UI-B03 — il ripreso uscito da solo dice «Finito (esito non noto)»; foto in tema scuro e chiaro', async ({ page }, info) => {
     for (const tema of ['dark', 'light']) {
       await apri(page, 'sp-orfani-a', { tema });
-      await riga(page).locator('.talos-process__apri').click();
-      const dettaglio = riga(page).locator('.talos-process__dettaglio');
+      await riga(page).click(); // v2: la riga si apre sul posto
+      const dettaglio = riga(page).locator('.pn-dettaglio');
       await expect(dettaglio).toBeVisible();
       await expect(dettaglio).toContainText('Ripreso dopo un riavvio');
       await expect(dettaglio).toContainText('4242');
       await page.locator('#railProcessi').screenshot({ path: info.outputPath(`orfano-ripreso-${tema}.png`) });
       await evento(page, { type: 'CUSTOM', name: 'talos.processo-sfondo', value: { toolCallId: 'p-orf', esito: 'terminato', codice: null, segnale: null, finitoAlle: '2026-10-17T10:01:00.000Z', esitoIgnoto: true } });
+      await page.locator('#railProcessi [data-controllo="ambito-tutti"]').click();
       await expect(riga(page)).toHaveAttribute('data-stato', 'finito-ignoto');
       await expect(riga(page)).toContainText('Finito (esito non noto)');
       await page.locator('#railProcessi').screenshot({ path: info.outputPath(`orfano-finito-${tema}.png`) });

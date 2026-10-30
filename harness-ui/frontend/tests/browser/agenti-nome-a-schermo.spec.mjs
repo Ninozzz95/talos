@@ -38,6 +38,7 @@ test('AGENTI-NOME-02 — nel dettaglio dell’agente (pannello): nome, consegna 
   const { grafo } = await apri(page, scena());
   await grafo.getByRole('button', { name: 'Torna alla chat', exact: true }).click();
   await page.locator('#railAgenti [data-sessione-figlia="a"]').click();
+  await page.locator('#railAgenti [data-sessione-figlia="a"]').locator('[data-controllo="apri-conversazione"]').click(); // pannello v2: la conversazione col pulsante del dettaglio
   const dettaglio = page.locator('[data-c="DettaglioAgente"]');
   await expect(dettaglio).toBeVisible();
   const visti = await dettaglio.evaluate((n) => ({ testo: n.innerText, titoli: [...n.querySelectorAll('[title]')].map((x) => x.getAttribute('title')).join('|') }));

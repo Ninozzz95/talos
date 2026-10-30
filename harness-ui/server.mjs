@@ -68,6 +68,7 @@ import { creaProntoFn } from './src/sessione-pronta.mjs';
 import { createDesktopContextRuntime, resolveDesktopContextProfile, resolveDesktopDefaultProfile } from './src/context-runtime.mjs';
 import { createImpostazioniContesto, giroUsaIlMotore } from './src/impostazioni-contesto.mjs';
 import { createImpostazioniComandi } from './src/impostazioni-comandi.mjs'; // owner 27/10/2026: dove girano i comandi, di serie
+import { createPreferenzeModelli } from './src/preferenze-modelli.mjs'; // owner 29/10/2026: preferiti e recenti dei modelli
 import { createContextTokenCounter, buildPreparedDesktopContextRequest, credenzialeDelContatore } from './src/context-token-counters.mjs';
 import { createChatImageStore } from './src/chat-image-attachments.mjs';
 import { creaGuardaImmagine, ridimensionatoreDisponibile } from './src/guarda-immagine-ospite.mjs';
@@ -786,6 +787,7 @@ async function startServer() {
   /* Owner 27/10/2026 («Di serie nelle Impostazioni + per conversazione»): dove girano i comandi delle conversazioni NUOVE, accanto
      alla preferenza di WSL. Si legge alla nascita e si timbra sulla conversazione, come il motore del contesto. */
   const impostazioniComandi = createImpostazioniComandi({ file: percorsoDatiDesktop('.impostazioni-comandi.json') });
+  const preferenzeModelli = createPreferenzeModelli({ file: percorsoDatiDesktop('.preferenze-modelli.json') });
   /* 18/10/2026 — il controllo remoto nasce DOPO il gestore HTTP (chiama le stesse rotte in processo) e dopo il legame alla porta:
      il gestore e il registro (R5.12, gli attrezzi dei telefoni) lo raggiungono attraverso una funzione, e fino ad allora le sue
      rotte rispondono «non disponibile». Dichiarato QUI, prima del registro, perché la sua funzione non cada nella zona morta. */
@@ -1256,6 +1258,7 @@ async function startServer() {
        e si salva lo stesso, e «Allarga» risponde LOCAL_RUNTIME_NOT_CONFIGURED (27/10, prima era un 500 a ogni apertura delle Impostazioni) */
     finestraPiena: finestraCheCresce ?? creaSceltaFinestraPiena({ cartella: percorsoDatiDesktop('.local-models/') }),
     impostazioniComandi, // owner 27/10: GET/POST /api/v1/command-settings
+    preferenzeModelli, // owner 29/10/2026: GET/POST /api/v1/model-preferences
     // ⭐ 10/09: le favicon delle fonti, prese dal server una volta sola e tenute qui accanto alle sessioni.
     cartellaFavicon: percorsoDatiDesktop('.favicon-cache/'),
     /*

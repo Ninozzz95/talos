@@ -336,11 +336,11 @@ export async function apriRailDellaScena(page, scena, { modello = null } = {}) {
 
 /**
  * Apre il diagramma dalla sua porta vera nel rail Agenti: con un workflow è il rail v2 («Apri diagramma», F3-50, decisione
- * owner 19), senza è il rail classico («Apri visuale diagramma»).
+ * owner 19), senza è la scheda Agenti del pannello v2 (l'icona «Apri diagramma» della sua testa, 29/10/2026).
  */
 export async function apriDiagrammaDellaScena(page, scena, { vuota = false, modello } = {}) {
   const rail = await apriRailDellaScena(page, scena, modello ? { modello } : {});
-  if (vuota) await rail.getByRole('button', { name: 'Apri visuale diagramma' }).click();
+  if (vuota) await rail.locator('[data-controllo="apri-diagramma"]').click();
   else await rail.locator('[data-c="WorkflowRail"]').getByRole('button', { name: 'Apri diagramma', exact: true }).click();
   const grafo = page.locator('#schermoChat > [data-c="GrafoAgenti"]');
   await grafo.waitFor();

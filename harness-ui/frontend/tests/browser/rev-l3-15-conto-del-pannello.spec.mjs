@@ -21,13 +21,15 @@ const SCENA = () => [
 test('REV-L3-15-01 — la testata del pannello Agenti conta i terminati come il diagramma: un fermato è terminato, un fallito è terminato e da guardare', async ({ page }) => {
   const errori = []; page.on('pageerror', (e) => errori.push(e.message));
   const { grafo, scritture } = await apri(page, SCENA(), { richieste: RICHIESTE });
-  const conti = page.locator('#railAgenti .talos-agenti-richiesta .talos-agenti-richiesta__conto');
-  await expect(conti).toHaveCount(2);
+  /* pannello v2 (29/10/2026): il conto della richiesta di adesso sta nella testa della scheda, le passate in una piega col loro conto */
+  const adesso = page.locator('#railAgenti .pn-testa .pn-conto');
+  const passate = page.locator('#railAgenti .pn-piega__testi small');
+  await expect(passate).toHaveCount(1);
   // la richiesta di adesso: due su due finiti, uno da controllare — come il diagramma
   await expect(grafo.locator(':scope > header')).toContainText('2 di 2 terminati');
-  await expect(conti.nth(0)).toHaveText('2 agenti · tutti finiti · 1 da guardare');
+  await expect(adesso).toHaveText('2 agenti · 2 di 2 terminati · 1 da guardare');
   // la richiesta passata: il fermato è terminato (prima della cura: «1 di 2 terminati»)
-  await expect(conti.nth(1)).toHaveText('2 agenti · tutti finiti');
+  await expect(passate.nth(0)).toHaveText('2 agenti · tutti finiti');
   expect(errori).toEqual([]);
   expect(scritture).toEqual([]);
 });

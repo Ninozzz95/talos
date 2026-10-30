@@ -324,6 +324,7 @@ for (const modo of ['light', 'dark']) {
       await expect(righe, 'premessa: le figlie sono arrivate').toHaveCount(3);
       const fatti = page.locator('[data-c="DettaglioAgente"] .talos-agente__fatti');
       await righe.filter({ hasText: 'sistema la guardia' }).click();
+      await righe.filter({ hasText: 'sistema la guardia' }).locator('[data-controllo="apri-conversazione"]').click(); // pannello v2
       await expect(fatti).toContainText('Come è partito');
       await expect(fatti).toContainText('Da solo (Coordinazione)');
       await foto(page, `c2b-segno-01-dettaglio-${modo}.png`);

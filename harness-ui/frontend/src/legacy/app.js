@@ -25,7 +25,8 @@ import { creaBloccoAccendiRemoto, sceltaDelPonte, mostraErroreNelBlocco, testiCa
 import { creaBloccoElencoTelefoni, creaBloccoQrInChat, creaBloccoRemotoSpento, creaBloccoCartaRevoca, testiCartaRevoca, creaBloccoCartaQr, testiCartaQr, segnaRevocaSenzaCarta, nomeDallEsitoRevoca, chiudiQr, creaBloccoCartaCartella, testiCartaCartella, nomiDallEsitoRevocaCartella } from '../components/telefoni-chat.js'; // R5.12: i telefoni collegati dalla chat (mockup approvato 18/10) // 18/10/2026: «Annulla le modifiche ai file» (R5.11, mockup approvato)
 import { montaClicSuiLink } from '../components/conferma-link.js'; // 11/10/2026: i link della chat, col clic che chiede conferma
 import { sitiFidatiDellApp, destinazioneDeiLinkDellApp } from '../components/link-esterni.js';
-import { PROVIDER_DIRETTI, eFonteDiretta, fontiDelSelettore, modelliDellaFonte, fraseVuotoDiretto, senzaChiave, fornitoriConCatalogo, aggiornaTestoModelloSelettore, nomeFornitore } from '../components/fonti-modelli.js'; // BC-12 (11/09): «Diretti» si spezza in una scheda per fornitore // P-C (12/09): un motore locale non ha chiave da collegare
+import { PROVIDER_DIRETTI, eFonteDiretta, fontiDelSelettore, modelliDellaFonte, fraseVuotoDiretto, senzaChiave, fornitoriConCatalogo, descrizioneModelloSelettore, nomeFornitore } from '../components/fonti-modelli.js';
+import { FILTRI_CAPACITA, ORDINI, MASSIMO_PREFERITI, MASSIMO_RECENTI, capacitaDelModello, formattaContesto, formattaPrezzo, prezzoInUscita, nomeAutore, nomeBreve as nomeBreveModello, passaFiltri, ordinaModelli, gruppiPerAutore, aggiornaRecenti, normalizzaListaModelli, etichettaFiltro } from '../components/selettore-modelli.js'; // 29/10/2026: il selettore dei modelli rifatto dal bozzetto approvato // BC-12 (11/09): «Diretti» si spezza in una scheda per fornitore // P-C (12/09): un motore locale non ha chiave da collegare
 import { statoAvvioSessione } from '../components/avvio-sessione.js'; // BC-14 (11/09): «Avvia» non mente più sul perché è fermo
 import { nomeLeggibileSessione, identitaSessione, aggiornaSessionItem, titoloDalPrimoMessaggio, nomeConSuffisso, limitaCampoAGrafemi } from '../components/session-item.js'; // N1 (10/09): la riga della sessione viva cambia sul posto · BC-36/37 (12/09): nome e permesso da UNA fonte sola
 import { collegaScia, aggiornaTutteLeScie } from '../components/range-scia.js';
@@ -163,6 +164,7 @@ import { aggiornaAvanzamentoContesto, aggiornaAvanzamentoLegacy, ridisegnaRigaVi
 import { montaFasciaObiettivo, aggiornaFasciaObiettivo, sceltaPer as sceltaFasciaObiettivo, ricordaScelta as ricordaSceltaFasciaObiettivo, chiaveDelloStato as chiaveDelloStatoObiettivo } from '../components/obiettivo-fascia.js'; // /goal G6, 15/10/2026: la fascia dell'obiettivo
 import { creaCartaObiettivo, comandoObiettivo, stessiControlli } from '../components/obiettivo-carta.js'; // /goal G6: la carta di conferma dei controlli e `/goal`
 import { EVENTO_MCP_AVVIO, creaRicordoAvvisiMcp, nuoviServerNonPartiti, creaNotaMcpNonPartito } from '../components/avviso-mcp.js'; // owner 17/10/2026: un server MCP che non parte si dice in chat
+import { leggiControlloSpento, aggiornaRigaControlloSpento } from '../components/avviso-controllo-spento.js'; // owner 29/10/2026: il controllo delle scritture spento, una volta per chat
 import { interpretaEventoCompattazione, valutaSogliaContesto, testoRigaCompattazione, montaAvvisoContesto, aggiornaAvvisoContesto, aggiornaNotaJournalRiparato, compattaLegacy, annullaCompattazioneLegacy, saltaRiassuntoLegacy, fineMuta, chiaveNotaCompactManuale } from '../components/compattazione-legacy.js'; // F5, 24/09/2026: la compattazione legacy che si vede e si può fare
 import { aggiornaDiffReview, aggiornaSommarioSchedeReview, chiaveFileReview, creaSchedeReview, etichettaFileReview, nascondiAzioniFase3, riassuntoReviewTestata as riassuntoReviewPerTestata } from '../components/review.js'; // 05/9 Fase 2: Review — elenco dei file e diff nel disegno; 17/09 BC-75: `etichettaFileReview` è la regola del nome, e non si riscrive qui del mockup; 17/09 BC-63: le linguette sono il componente condiviso col Terminale
 import { creaStatoVuoto, suggerimentiDallaCartella } from '../components/stato-vuoto.js'; // 05/9 Fase 2: EmptyState — lo stato vuoto del mockup, dai fatti della cartella
@@ -174,6 +176,13 @@ import { decidiStop, apriMenuStop } from '../components/menu-stop.js'; // owner 
 import { tieniInVistaScheda } from '../components/schede.js'; // 26/09 F6-1: la fila della colonna destra scorre, e la scheda attiva resta in vista
 import { impostaNomiNoti, scriviNomeConNumero } from '../components/nome-con-numero.js'; // 15/10/2026 (owner): il «-2» di un doppione resta in vista
 import { creaPillolaRagionamento, livelliDaMostrare, statoDelLivello } from '../components/pillola-ragionamento.js'; // 24/10/2026 (owner): la pillola del ragionamento nel compositore
+import { contatore as contatoreScheda } from '../components/pannello/comune.js'; // pannello v2 (29/10/2026): il numero e il pallino «da guardare» sulle schede della colonna
+import { contoAgenti } from '../components/pannello/agenti.js';
+import { contoProcessi } from '../components/pannello/processi.js';
+import { osservaSchedaGit, contoGit } from '../components/pannello/git.js';
+import { contoContesto } from '../components/pannello/contesto.js';
+import { disegnaToccati, strisciaCollisioni, contoFile, modelloFile, VISTE as VISTE_FILE_V2 } from '../components/pannello/file.js';
+import { testoRiusoCache } from '../components/consumo-sessione.js';
 import { aggiornaTopbar, impostaConteggioScheda } from '../components/topbar.js'; // 05/9 Fase 2: Topbar — titolo, percorso e conteggi delle schede dai dati; 20/09: lo stesso scrittore di badge serve le schede della colonna destra
 import { aggiornaWorkspaceFooter, fornitoreDelModello, testiPiede as testiPiedeWorkspace } from '../components/workspace-footer.js'; // 05/9 Fase 2: WorkspaceFooter — il piede della sidebar dice cartella, tema e chi serve il modello // 05/9 Fase 2: SessionItem — la riga della sidebar è un componente del mockup // 19/09 FASE 3: `fornitoreDelModello` serve alla banda del laboratorio, che deve dire «Locale» o «Cloud»
 const avvisiMcpDetti = creaRicordoAvvisiMcp(); // owner 17/10/2026: i server MCP non partiti già detti, per sessione
@@ -545,6 +554,8 @@ const avvisiMcpDetti = creaRicordoAvvisiMcp(); // owner 17/10/2026: i server MCP
       carteDelleFiglie: new Map(),
       // C2-Q (08/10/2026): le carte delle DOMANDE delle figlie disegnate qui (nel dock delle domande); le chiude lo snapshot, come sopra
       domandeDelleFiglie: new Map(),
+      /* pannello v2 (A-07, 29/10/2026): che cosa chiede ogni figlia che aspetta — childId → { comando } | { testo }, letto da `/pending` dove nasce la carta */
+      motiviAttesaFiglie: new Map(),
       domandePendenti: new Map(),
       richiesteMcpPendenti: new Map(), // 02/10/2026: le richieste dei server MCP che aspettano la persona
       /** ⭐⭐⭐ 28/8 — la radice ASSOLUTA della sessione corrente (da RunStarted→contesto.cartella, la STESSA stringa già mostrata in "Root" nel Context Rail) — serve per calcolare il percorso assoluto di una sottocartella quando l'owner sceglie "Imposta come radice" nel menu dell'albero. `null` finché nessun RunStarted è mai arrivato. */
@@ -3055,12 +3066,18 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       const b = barraDestra.getBoundingClientRect();
       const margine = 12;
       const altezzaVista = document.documentElement.clientHeight;
+      /* ⭐ pannello v2, owner 29/10/2026 sera: la pila non copre la barra delle pagine del pannello. Se la barra più in basso della
+         scheda a schermo sta nella metà bassa della colonna, la pila sale sopra di lei (e si accorcia di conseguenza); altrimenti
+         siede sul fondo come prima. Si rimisura anche quando la colonna si ridisegna (`disegnaInspectorAdesso`). */
+      let fondo = Math.round(b.bottom);
+      const barrePagine = [...barraDestra.querySelectorAll('[data-pager]')].filter(visibileDavvero).map((n) => n.getBoundingClientRect()).filter((r) => r.top >= b.top + b.height / 2 && r.bottom <= b.bottom + 1);
+      if (barrePagine.length) fondo = Math.min(fondo, Math.round(Math.min(...barrePagine.map((r) => r.top))));
       applicaCollocazioneToast(toastRegion, {
         modo: 'barra-destra',
         left: Math.round(b.left + margine),
         width: Math.max(0, Math.round(b.width - margine * 2)),
-        bottom: Math.max(margine, Math.round(altezzaVista - b.bottom + margine)),
-        maxHeight: Math.max(0, Math.round(b.height - margine * 2)),
+        bottom: Math.max(margine, Math.round(altezzaVista - fondo + margine)),
+        maxHeight: Math.max(0, Math.round(fondo - b.top - margine * 2)),
       });
       mostraSchedaPiuRecente();
       return;
@@ -6926,6 +6943,11 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     if (state.realSession.id !== sessionId || state.realSession.generation !== generation) { programmaRisorseProcessi(); return; }
     risorseProcessi.letture += 1;
     state.realSession.risorseProcessi = mappa;
+    /* pannello v2, P-04: il mini-grafico della CPU dell'ultimo minuto (12 letture da 5 s); un comando che non c'è più se ne va */
+    const storia = state.realSession.storiaCpu instanceof Map ? state.realSession.storiaCpu : new Map();
+    for (const id of [...storia.keys()]) if (!mappa?.has(id)) storia.delete(id);
+    for (const [id, r] of mappa ?? []) if (Number.isFinite(r?.cpuPercento)) storia.set(id, [...(storia.get(id) ?? []), r.cpuPercento].slice(-12));
+    state.realSession.storiaCpu = storia;
     aggiornaInspectorDaStato(); // il disegno rimette in fila la lettura seguente (`programmaRisorseProcessi`)
   }
 
@@ -8155,7 +8177,63 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     return mappa && typeof mappa === 'object' ? mappa : null;
   }
 
-  function creaModelPicker({ valoreIniziale = '', apriSubito = false, alSelezionato, etichettaVuota = tr('app.modelPicker.select'), aggiornaModelloPrincipale = true, sincronizzaSessione = false } = {}) {
+  /*
+   * Owner 29/10/2026 (domanda 2 del selettore): PREFERITI E USATI DI RECENTE STANNO SUL SERVER, uguali su PC e dispositivo
+   *   (`GET/POST /api/v1/model-preferences`, contratto `CONTRATTO-PREFERITI-MODELLI-2026-10-29.md`). Qui la copia della finestra,
+   *   la lettura e la migrazione, una volta sola, delle liste che fino a oggi stavano nelle impostazioni locali
+   *   (`chat.modelliPreferiti`, `chat.modelliRecenti`): si mandano con `importa` (un'unione: ripeterla non cambia niente) e, riuscita
+   *   la scrittura, si svuotano. Se non riesce restano dove sono e si riprova alla prossima apertura.
+   */
+  const preferenzeModelli = { preferiti: [], recenti: [] };
+  let letturaPreferenzeModelli = null;
+  function applicaStatoPreferenzeModelli(dati) {
+    if (Array.isArray(dati?.preferiti) && Array.isArray(dati?.recenti)) {
+      preferenzeModelli.preferiti = [...dati.preferiti];
+      preferenzeModelli.recenti = [...dati.recenti];
+    }
+    return preferenzeModelli;
+  }
+  function leggiPreferenzeModelli({ forza = false } = {}) {
+    if (letturaPreferenzeModelli && !forza) return letturaPreferenzeModelli;
+    const lettura = (async () => {
+      applicaStatoPreferenzeModelli(await apiGet('/api/v1/model-preferences'));
+      const locali = leggiImpostazioniDesktop().chat || {};
+      const preferiti = locali.modelliPreferiti ?? [];
+      const recenti = locali.modelliRecenti ?? [];
+      if (preferiti.length || recenti.length) {
+        applicaStatoPreferenzeModelli(await apiPost('/api/v1/model-preferences', { azione: 'importa', preferiti, recenti }));
+        const documento = leggiImpostazioniDesktop();
+        documento.chat = { ...documento.chat, modelliPreferiti: [], modelliRecenti: [] };
+        salvaImpostazioniDesktop(documento);
+      }
+      return preferenzeModelli;
+    })();
+    letturaPreferenzeModelli = lettura.catch(() => preferenzeModelli);
+    return lettura;
+  }
+  async function scriviPreferenzaModello(azione) {
+    return applicaStatoPreferenzeModelli(await apiPost('/api/v1/model-preferences', azione));
+  }
+
+  /*
+   * ⭐⭐⭐ 29/10/2026 — IL SELETTORE DEI MODELLI RIFATTO DAL BOZZETTO APPROVATO DALL'OWNER («velocità supersonica»; bozzetto
+   *   `bozzetto-modelli/index.html`, pubblicato su claude.ai/artifact/YCCe4Aktz2uVwMgS6d5oJE). Cosa porta:
+   *   · in testata il modello IN USO (nome · contesto · $ingresso → $uscita), montato nella testata del velo da `montaSceltaModelloIn`;
+   *   · la ricerca con Ctrl K, i filtri per capacità (ragiona, vede le immagini, usa gli attrezzi, gratis, contesto 200k+) e l'ordine;
+   *   · le fonti in COLONNA (pallino collegato, conto, «—» senza chiave), in riga che scorre quando il selettore è stretto;
+   *   · Preferiti (stella, anche col tasto F) e Usati di recente (gli ultimi cinque scelti) in cima, fuori da una ricerca — salvati
+   *     SUL SERVER (`/api/v1/model-preferences`, owner 29/10/2026), gli stessi sul PC e sul dispositivo;
+   *   · gruppi per autore col nome umano (mai in maiuscolo), chiusi tranne quello in uso;
+   *   · righe con le icone delle capacità, il contesto, il prezzo d'ingresso E d'uscita, la stella al passaggio;
+   *   · ↑ ↓ e Invio, doppio clic = scegli e chiudi; nel velo (`conConferma`) il clic SEGNA la scelta e «Fatto» la applica;
+   *   · stati vuoti con un'azione: Locali → Laboratorio modelli, fornitore non collegato → collega la chiave, nessun risultato →
+   *     azzera ricerca e filtri.
+   *   Le parti pure (capacità, filtri, ordine, formati, nomi degli autori, le due liste) stanno in `components/selettore-modelli.js`.
+   * ⛔ Niente di prima è tolto: schede delle fonti coi conti e il «chiave non collegata», ricerca su id/nome/autore, gruppi che si
+   *   aprono e chiudono, i dettagli models.dev dei diretti (ora nel suggerimento della riga), i tre stati della scheda Locali, la
+   *   riga in uso al centro (owner 28/10), la scelta sincronizzata col server prima di cambiare la pillola, Aggiorna e il conto.
+   */
+  function creaModelPicker({ valoreIniziale = '', apriSubito = false, alSelezionato, etichettaVuota = tr('app.modelPicker.select'), aggiornaModelloPrincipale = true, sincronizzaSessione = false, conConferma = false, alLasciare = null } = {}) {
     const wrap = document.createElement('div');
     wrap.className = 'model-picker';
 
@@ -8173,9 +8251,21 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
 
     const panel = document.createElement('div');
     panel.className = 'model-picker-panel';
+    panel.dataset.forma = apriSubito ? 'pieno' : 'tendina';
     panel.hidden = true;
-    panel.setAttribute('role', 'listbox');
 
+    /* il modello in uso, per la testata del velo (bozzetto: «In use» accanto al titolo) */
+    const inUsoEl = document.createElement('div');
+    inUsoEl.className = 'model-picker-in-use';
+    inUsoEl.title = tr('modello.modelPicker.inUseTitle');
+    const inUsoPallino = document.createElement('span');
+    inUsoPallino.className = 'model-picker-in-use-dot';
+    inUsoPallino.setAttribute('aria-hidden', 'true');
+    const inUsoTesto = document.createElement('strong');
+    inUsoEl.append(inUsoPallino, textElement('span', '', tr('modello.modelPicker.inUse')), inUsoTesto);
+
+    const barra = document.createElement('div');
+    barra.className = 'model-picker-bar';
     const searchLabel = document.createElement('label');
     searchLabel.className = 'model-picker-search';
     const searchIconSpan = document.createElement('span');
@@ -8183,11 +8273,54 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     const searchInput = document.createElement('input');
     searchInput.type = 'search';
     searchInput.className = 'sheet-input';
-    searchInput.placeholder = tr('app.modelPicker.searchPlaceholder');
-    searchLabel.append(searchIconSpan, searchInput);
+    searchInput.autocomplete = 'off';
+    searchInput.placeholder = tr('modello.modelPicker.searchPlaceholder');
+    searchInput.setAttribute('aria-keyshortcuts', suApple() ? 'Meta+K' : 'Control+K');
+    const tastoCerca = document.createElement('kbd');
+    tastoCerca.className = 'talos-kbd';
+    tastoCerca.textContent = etichettaTasto('mod+K');
+    searchLabel.append(searchIconSpan, searchInput, tastoCerca);
+
+    const filtriEl = document.createElement('div');
+    filtriEl.className = 'model-picker-filters';
+    filtriEl.setAttribute('role', 'group');
+    filtriEl.setAttribute('aria-label', tr('modello.modelPicker.filtersLabel'));
+    const ICONA_FILTRO = { ragiona: 'i-bulb', vede: 'i-eye', attrezzi: 'i-wrench', gratis: 'i-gift', contesto: 'i-lines' };
+    const filtriAccesi = new Set();
+    const chip = FILTRI_CAPACITA.map((f) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'talos-filtro model-picker-chip';
+      b.dataset.filtro = f;
+      b.setAttribute('aria-pressed', 'false');
+      b.innerHTML = icon(ICONA_FILTRO[f]);
+      b.append(document.createTextNode(etichettaFiltro(f)));
+      b.addEventListener('click', () => {
+        if (filtriAccesi.has(f)) filtriAccesi.delete(f); else filtriAccesi.add(f);
+        b.setAttribute('aria-pressed', String(filtriAccesi.has(f)));
+        renderLista();
+      });
+      return b;
+    });
+    const ordinaEl = document.createElement('label');
+    ordinaEl.className = 'model-picker-sort';
+    const ordinaSelect = document.createElement('select');
+    ordinaSelect.className = 'talos-select talos-select--sm';
+    for (const o of ORDINI) {
+      const opzione = document.createElement('option');
+      opzione.value = o;
+      opzione.textContent = tr(`modello.modelPicker.sort.${o}`);
+      ordinaSelect.append(opzione);
+    }
+    ordinaEl.append(textElement('span', '', tr('modello.modelPicker.sortLabel')), ordinaSelect);
+    filtriEl.append(...chip, ordinaEl);
+    barra.append(searchLabel, filtriEl);
 
     const listEl = document.createElement('div');
     listEl.className = 'model-picker-list';
+    listEl.setAttribute('role', 'listbox');
+    listEl.setAttribute('aria-label', tr('modello.modelPicker.modelAndReasoning'));
+    listEl.tabIndex = -1;
 
     const footer = document.createElement('div');
     footer.className = 'model-picker-footer';
@@ -8202,103 +8335,62 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     footer.append(refreshBtn, metaSpan);
 
     /*
-     * ⭐⭐⭐ 03/9 — owner: «nel model selector i modelli non sono raggruppati
-     * per provider (openrouter, openai, locali etc), consiglio delle tab per
-     * switchare».
-     *
-     * ## Cosa ho MISURATO prima di costruire, e come cambia il progetto
-     *
-     * Il raggruppamento c'era già — ma sull'asse sbagliato. Il campo
-     * `provider` di questo catalogo è l'AUTORE del modello, non la via
-     * d'accesso: 424 modelli in **51 gruppi** (openai 91, qwen 53, google 45,
-     * anthropic 31…), e tutti e 424 passano da OpenRouter. Quindi «OpenRouter
-     * contro OpenAI» oggi non è una scelta: i modelli OpenAI di questa lista
-     * SONO via OpenRouter.
-     *
-     * ⭐ Ricerca 03/9 (Apple HIG via eleken.co/blog-posts/tabs-ux): oltre sei
-     * schede l'utente si perde — 51 famiglie non sono schede, e restano
-     * gruppi richiudibili. Le FONTI sì: sono due.
-     * ⭐ E lo stato dell'arte non ce l'ha nemmeno per famiglia: manca ancora
-     * il raggruppamento dei modelli per fornitore.
-     *
-     * ## Perché la scheda «Locali» non fa scegliere niente
-     *
-     * ⛔ `config.mjs` dice che il kernel della chat chiama SEMPRE
-     * `openrouter.ai/api/v1/chat/completions`. Un modello locale messo qui
-     * come selezionabile sarebbe un pulsante che non fa quello che promette —
-     * lo stesso difetto di «APERTA non è FATTA». La scheda quindi esiste,
-     * risponde alla domanda vera («dove sono i miei modelli locali?») e
-     * dichiara il limite invece di nasconderlo.
+     * ⭐⭐⭐ 03/9 — owner: «nel model selector i modelli non sono raggruppati per provider (openrouter, openai, locali etc),
+     * consiglio delle tab per switchare». Il campo `provider` del catalogo OpenRouter è l'AUTORE del modello (424 modelli in 51
+     * gruppi, misurati il 03/9): le FONTI sono la via d'accesso e stanno nelle schede, gli autori nei gruppi richiudibili.
+     * ⭐⭐⭐ BC-12, 11/09/2026 — «Diretti» sono tre schede, una per fornitore (il perché in `components/fonti-modelli.js`).
+     * ⭐ 29/10/2026 (bozzetto approvato): le schede stanno in una COLONNA a sinistra, col titolo «Dove gira», e niente va a capo.
+     *   La striscia resta il `tablist` di sempre (`.model-picker-sources`, figli diretti `.model-picker-source[role="tab"]`: lo
+     *   cerca `portaInVistaFonteSelettore` di fonti-modelli.js), solo orientata in verticale; a selettore stretto torna una riga
+     *   che scorre (il bozzetto a 720 px), regola per contenitore in `styles/selettore-modelli.css`.
      */
-    /*
-     * ⭐⭐⭐ BC-12, 11/09/2026 — «Diretti» NON È PIÙ UNA SCHEDA: sono tre.
-     *
-     * Owner: «diretti deve diventare per provider, quindi una tab dedicata per gemini openai e
-     * anthropic». Il perché, le misure e la ricerca sul codice di Hermes e opencode stanno nella
-     * testata di `components/fonti-modelli.js`: qui c'è solo il montaggio.
-     *
-     * ⛔ Misurato sul banco PRIMA di cambiare (11/09, server mio sulla 4188): la striscia delle
-     *   fonti è larga 410 px a 1440 e 397 a 1024, e le tre schede di allora ne occupavano 271. Le
-     *   cinque di adesso ne vogliono 508: SFONDA di un centinaio di pixel a tutte e due le misure.
-     *
-     * ⛔ PRIMO TENTATIVO SBAGLIATO, tenuto scritto perché è la lezione: avevo messo
-     *   `overflow-x:auto` come fa il sistema di design per le sue liste di schede
-     *   (`.talos-review__schede .talos-tabs__list`). La foto l'ha bocciato subito — in una colonna
-     *   flex un `overflow-x` non `visible` fa diventare `auto` anche `overflow-y`, la striscia si è
-     *   lasciata schiacciare dal pannello e le etichette sono uscite TAGLIATE a metà altezza; e la
-     *   quinta scheda restava comunque fuori, dietro una barra di scorrimento che su Windows non si
-     *   vede finché non ci passi sopra. Una scheda che non si vede non aiuta a scegliere dove
-     *   guardare, che è l'unico motivo per cui le schede esistono.
-     * ⇒ Va a capo. Due righe di schede, tutte e cinque visibili insieme, niente da scoprire
-     *   scorrendo. `flex-wrap:wrap` è la stessa risposta che il sistema di design dà per le sue
-     *   schede a pillola (`.talos-tabs--pills .talos-tabs__list`, `styles/index.css`), quindi è il
-     *   suo linguaggio, non uno nuovo. E `flex-shrink:0` sulla striscia perché il pannello non la
-     *   comprima di nuovo.
-     * ✅ 11/9, SERA — DEBITO PAGATO, e le tre righe in linea sono SPARITE da qui. Stanno in
-     *   `styles/foglio-monolite.css:486` (`.model-picker-sources{flex-wrap:wrap; flex-shrink:0;
-     *   row-gap:2px}`), messe dalla corsia degli stili nel pomeriggio. Finché restavano anche qui
-     *   VINCEVANO loro — uno stile in linea pesa 1-0-0-0 e batte qualunque regola del foglio (MDN
-     *   «Specificity», letto l'11/09/2026) — quindi il foglio era scritto e inerte: una regola che
-     *   non si applica non si puo' nemmeno cambiare. Tolte, misurando che il pixel non si muove
-     *   (prova al contrario: rimesse a runtime, stessa geometria).
-     */
+    const colonnaFonti = document.createElement('div');
+    colonnaFonti.className = 'model-picker-sources-col';
     const fonti = document.createElement('div');
     fonti.className = 'model-picker-sources';
     fonti.setAttribute('role', 'tablist');
-    fonti.setAttribute('aria-label', tr('app.modelPicker.sourcesLabel'));
+    fonti.setAttribute('aria-orientation', 'vertical');
+    fonti.setAttribute('aria-label', tr('modello.modelPicker.sourcesLabel'));
+    colonnaFonti.append(textElement('p', 'model-picker-sources-title', tr('modello.modelPicker.sourcesTitle')), fonti);
     listEl.id = `modelPickerLista-${Math.random().toString(36).slice(2, 10)}`; // serve alle schede per `aria-controls`
-    panel.append(fonti, searchLabel, listEl, footer);
+    const corpo = document.createElement('div');
+    corpo.className = 'model-picker-body';
+    corpo.append(colonnaFonti, listEl);
+    panel.append(barra, corpo, footer);
     wrap.append(trigger, panel);
 
     let modelliCache = null;
     let modelliLocali = null;
-    /* ⛔ BC-13, trovato provando la cura AL VERSO CONTRARIO: col disco illeggibile il vecchio
-       `catch` scriveva `modelliLocali = []`, e la scheda diceva «Nessun modello installato» —
-       cioè dichiarava un FATTO che nessuno aveva accertato. Gli stati sono TRE (non letto ·
-       letto, zero · non leggibile) e vogliono tre frasi: qui vive la terza. */
+    /* ⛔ BC-13, trovato provando la cura AL VERSO CONTRARIO: col disco illeggibile il vecchio `catch` scriveva `modelliLocali = []`,
+       e la scheda diceva «Nessun modello installato» — cioè dichiarava un FATTO che nessuno aveva accertato. Gli stati sono TRE
+       (non letto · letto, zero · non leggibile) e vogliono tre frasi: qui vive la terza. */
     let erroreLocali = null;
-    /*
-     * ⛔ Non più UNA lista piatta e un array di errori: una mappa per fornitore, dove `null`
-     *   significa «chiave non collegata» e `[]` significa «letto, zero modelli». Erano due stati
-     *   indistinguibili e il pannello diceva a tutti la stessa frase.
-     */
+    /* ⛔ Una mappa per fornitore, dove `null` significa «chiave non collegata» e `[]` significa «letto, zero modelli». */
     let modelliDiretti = null;
     let erroriDiretti = {};
     let fonteScelta = 'openrouter';
     let valoreScelto = valoreIniziale;
+    /* nel velo il clic SEGNA un modello e «Fatto» lo applica (bozzetto: «Closed without changing the model» con Esc o ✕) */
+    let inSospeso = null;
     let aperto = false;
     let caricato = false;
     const gruppiAperti = new Set();
+    /* le sezioni aperte di serie (Preferiti, Usati di recente, Risultati) che la persona ha chiuso a mano */
+    const sezioniChiuse = new Set();
+    /* ogni riga disegnata almeno una volta, per valore: «Fatto» e Invio applicano anche una scelta fatta in un'altra scheda */
+    const vociPerValore = new Map();
     /*
      * Owner 28/10/2026 (dal Mobile, «quando apro il selettore non vedo selezionato e centrato il modello in uso»; sul 4174 lo stesso):
      *   all'apertura la riga del modello in uso va al CENTRO della lista. Come Hermes (`apps/desktop/src/app/shell/model-catalog-menu.tsx`,
      *   copia del 22/10: la riga attiva è quella in uso, righe 516-533, e si porta in vista, riga 669), ma al centro, accordato col Mobile.
-     *   Si muove solo `listEl`, che scorre da sé (`.model-picker-list{overflow-y:auto}`): `scrollIntoView` sposterebbe anche il foglio
-     *   e la pagina. Una volta per apertura (`daCentrare`): le ridisegnate dopo (la ricerca, un gruppo aperto a mano) non tirano la lista.
-     *   Nessuna animazione: è un posto di partenza, non un movimento.
+     *   Si muove solo `listEl`, che scorre da sé: `scrollIntoView` sposterebbe anche il foglio e la pagina. Una volta per apertura
+     *   (`daCentrare`): le ridisegnate dopo (la ricerca, un gruppo aperto a mano) non tirano la lista. Nessuna animazione.
+     * ⭐ 29/10/2026: con Preferiti e Usati di recente in cima la riga in uso può comparire due volte; si centra l'ULTIMA copia, quella
+     *   nel gruppo del suo autore (come il bozzetto).
      */
     let gruppoInUsoAperto = false;
     let daCentrare = true;
+    let centrataA = null; // dove la centratura ha lasciato la lista: se è ancora lì, la persona non l'ha mossa
     let tentativiDiCentratura = 0;
     function centraRigaInUso() {
       if (!daCentrare || panel.hidden) return;
@@ -8306,16 +8398,48 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
          fotogramma dopo, al più dieci volte (un selettore mai attaccato non gira per sempre). */
       if (!listEl.isConnected) { if (tentativiDiCentratura++ < 10) requestAnimationFrame(centraRigaInUso); return; }
       tentativiDiCentratura = 0;
-      const riga = listEl.querySelector('.model-picker-option[aria-selected="true"]');
+      const riga = [...listEl.querySelectorAll('.model-picker-option[aria-selected="true"]')].pop();
       if (!riga) return;
       daCentrare = false;
       const lista = listEl.getBoundingClientRect();
       const posto = riga.getBoundingClientRect();
       listEl.scrollTop += (posto.top - lista.top) - (lista.height - posto.height) / 2;
+      centrataA = listEl.scrollTop;
+    }
+
+    /* ── le due liste della persona, SUL SERVER (owner 29/10/2026): la copia della finestra è `preferenzeModelli` ── */
+    const listePersona = () => preferenzeModelli;
+    /*
+     * La stella cambia SUBITO a schermo e torna indietro se il server rifiuta (il 51° preferito, il server giù), con l'avviso del
+     * codice. Ridisegna dallo stato che il server restituisce: un altro dispositivo può avere scritto nel frattempo.
+     */
+    async function cambiaPreferito(valore, { sullaStella = true } = {}) {
+      const prima = { preferiti: [...preferenzeModelli.preferiti], recenti: [...preferenzeModelli.recenti] };
+      const attivo = !prima.preferiti.includes(valore);
+      preferenzeModelli.preferiti = attivo ? [...prima.preferiti, valore] : prima.preferiti.filter((x) => x !== valore);
+      ridisegnaTenendoIlPosto(valore, sullaStella);
+      try {
+        await scriviPreferenzaModello({ azione: 'preferito', modello: valore, attivo });
+      } catch (error) {
+        preferenzeModelli.preferiti = prima.preferiti;
+        toast(tr('modello.modelPicker.favouriteNotSaved'), error?.message || '');
+      }
+      if (listEl.isConnected) ridisegnaTenendoIlPosto(valore, sullaStella);
     }
 
     function aggiornaTriggerLabel() {
       triggerLabel.textContent = valoreScelto || etichettaVuota;
+    }
+    /** «In uso»: nome · contesto · $ingresso → $uscita, dal catalogo quando c'è; altrimenti il nome umano dell'id. */
+    function aggiornaInUso() {
+      const voce = vociPerValore.get(valoreScelto) || voceDaCataloghi(valoreScelto);
+      if (!valoreScelto) { inUsoTesto.textContent = etichettaVuota; return; }
+      if (!voce || voce.locale) { inUsoTesto.textContent = voce?.nome || nomeModelloUmano(valoreScelto) || valoreScelto; return; }
+      const pezzi = [voce.nome];
+      if (Number.isFinite(voce.modello.contextLength)) pezzi.push(formattaContesto(voce.modello.contextLength));
+      const prezzo = prezzoInUscita(voce.modello);
+      if (prezzo) pezzi.push(prezzo.testo);
+      inUsoTesto.textContent = pezzi.join(' · ');
     }
 
     /** Il catalogo della scheda aperta: `null` finché non è stato letto (≠ «vuoto»). */
@@ -8323,21 +8447,39 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       return modelliDellaFonte(fonteScelta, { openrouter: modelliCache, locali: modelliLocali, diretti: modelliDiretti });
     }
 
-    function filtraModelli(query) {
-      const catalogo = catalogoCorrente();
-      if (!catalogo) return [];
-      const q = query.trim().toLowerCase();
-      if (!q) return catalogo;
-      return catalogo.filter((m) => m.id.toLowerCase().includes(q) || m.nome.toLowerCase().includes(q) || m.provider.toLowerCase().includes(q));
+    /** Una riga del selettore, uguale per ogni fonte: il valore che si sceglie, il nome, la riga piccola e il modello del catalogo. */
+    function voceDiModello(modello) {
+      const voce = {
+        valore: modello.id, modello, locale: false, autore: modello.provider || '',
+        nome: nomeBreveModello(modello),
+        sotto: modello.alias ? `${modello.id} · ${tr('app.modelPicker.latestVersion')}` : modello.id, // ⭐ 27/8: «è un alias fluttuante» resta visibile
+        /* P-E/P-F (12/09): i diretti arrivano da models.dev con contesto, prezzi, cache e capacità: tutto resta, nel suggerimento */
+        titolo: ['models.dev', 'riserva'].includes(modello.catalogo?.fonte) ? `${modello.nome || modello.id}\n${descrizioneModelloSelettore(modello)}` : `${modello.nome || modello.id}\n${modello.id}`,
+      };
+      vociPerValore.set(voce.valore, voce);
+      return voce;
     }
-
-    function raggruppaPerProvider(modelli) {
-      const mappa = new Map();
-      for (const m of modelli) {
-        if (!mappa.has(m.provider)) mappa.set(m.provider, []);
-        mappa.get(m.provider).push(m);
-      }
-      return [...mappa.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+    /*
+     * ⛔ CB-16-bis, owner 08/9: per un modello locale si stampava la chiave del runtime (102 caratteri per il Nemotron Cascade).
+     *   Il nome viene da `nomeModelloUmano` (components/chat-foot.js), l'identificatore intero sta nel suggerimento.
+     */
+    function voceDiLocale(modello) {
+      const valore = `local:${modello.id}`;
+      const voce = {
+        valore, modello, locale: true, autore: '',
+        nome: nomeModelloUmano(valore) || modello.name || modello.id,
+        sotto: tr('app.modelPicker.onThisComputer', { dimensione: formattaByteModelLab(Number(modello.bytes || 0)), stato: modello.state === 'ready' ? '' : ` · ${modello.state}` }),
+        titolo: modello.id,
+      };
+      vociPerValore.set(valore, voce);
+      return voce;
+    }
+    function voceDaCataloghi(valore) {
+      if (!valore) return null;
+      if (valore.startsWith('local:')) { const m = modelliLocali?.find((x) => `local:${x.id}` === valore); return m ? voceDiLocale(m) : null; }
+      const tutti = [...(modelliCache || []), ...Object.values(modelliDiretti || {}).flatMap((l) => (Array.isArray(l) ? l : []))];
+      const m = tutti.find((x) => x.id === valore);
+      return m ? voceDiModello(m) : null;
     }
 
     /** Porta la scheda scelta a schermo, ridisegnando striscia ed elenco. */
@@ -8351,16 +8493,10 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     }
 
     /**
-     * Ridisegna la striscia delle fonti: conti veri, mai un numero fisso.
-     *
-     * ⭐ Tastiera secondo il pattern «Tabs» delle ARIA Authoring Practices (w3.org/WAI/ARIA/apg,
-     *   letto l'11/09/2026): una sola fermata di Tab dentro la striscia (tabindex mobile), le
-     *   frecce ← → scorrono le schede e girano agli estremi, Home/End saltano ai capi. Con tre
-     *   schede si poteva far finta di niente; con cinque, tabulare cinque volte per uscire dalla
-     *   striscia è una tassa che il pattern esiste per togliere.
-     * ⛔ La freccia SPOSTA e SCEGLIE insieme (attivazione automatica): qui cambiare scheda non
-     *   costa niente — sono elenchi già in memoria — e l'APG la consiglia proprio quando il
-     *   contenuto è già pronto.
+     * Ridisegna la colonna delle fonti: conti veri, mai un numero fisso; «—» quando la chiave manca.
+     * ⭐ Tastiera secondo il pattern «Tabs» delle ARIA Authoring Practices (w3.org/WAI/ARIA/apg, letto l'11/09/2026): una sola
+     *   fermata di Tab (tabindex mobile), le frecce scorrono e girano agli estremi, Home/End ai capi. Con la colonna verticale
+     *   valgono ↑ ↓ (aria-orientation), e restano ← → per chi le aveva imparate. La freccia SPOSTA e SCEGLIE insieme.
      */
     function renderFonti() {
       const voci = fontiDelSelettore({ openrouter: modelliCache, locali: modelliLocali, diretti: modelliDiretti });
@@ -8374,14 +8510,17 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
         bottone.setAttribute('aria-controls', listEl.id);
         const attiva = voce.id === fonteScelta;
         bottone.setAttribute('aria-selected', String(attiva));
-        bottone.tabIndex = attiva ? 0 : -1; // tabindex mobile: la striscia è UNA fermata sola
+        bottone.tabIndex = attiva ? 0 : -1; // tabindex mobile: la colonna è UNA fermata sola
         bottone.classList.toggle('active', attiva);
-        /* ⛔ Non si stringono: una scheda schiacciata perde l'etichetta invece del posto. La regola
-           (`flex:0 0 auto`) sta in `styles/foglio-monolite.css:487`, su `.model-picker-source`:
-           qui c'era la copia in linea che la scavalcava, tolta l'11/9. */
-        bottone.append(textElement('span', '', voce.etichetta));
+        const pallino = document.createElement('span');
+        pallino.className = 'model-picker-source-dot';
+        pallino.dataset.collegato = String(voce.collegato);
+        pallino.setAttribute('aria-hidden', 'true'); // il nome della scheda resta «OpenRouter 6», non «Connected OpenRouter 6»: lo stato lo dice il suggerimento
+        pallino.title = tr(voce.collegato ? 'modello.modelPicker.connected' : 'modello.modelPicker.notConnected');
+        bottone.append(pallino, textElement('span', 'model-picker-source-name', voce.etichetta));
         if (Number.isFinite(voce.conto)) bottone.append(textElement('span', 'model-picker-source-count', String(voce.conto)));
-        // Senza chiave non c'è un conteggio da dare: si dice perché, invece di stampare uno zero falso.
+        // Senza chiave non c'è un conteggio da dare: un trattino, e il perché nel suggerimento, mai uno zero falso.
+        else if (!voce.collegato) bottone.append(textElement('span', 'model-picker-source-count', '—'));
         if (!voce.collegato) bottone.title = tr('app.modelPicker.keyNotConnected', { nome: voce.etichetta });
         bottone.addEventListener('click', () => scegliFonte(voce.id));
         return bottone;
@@ -8393,229 +8532,174 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       const schede = [...fonti.querySelectorAll('[role="tab"]')];
       const indice = schede.indexOf(document.activeElement);
       if (indice < 0) return;
-      const passo = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
+      const passo = ['ArrowDown', 'ArrowRight'].includes(event.key) ? 1 : ['ArrowUp', 'ArrowLeft'].includes(event.key) ? -1 : 0;
       let prossima = null;
       if (passo) prossima = schede[(indice + passo + schede.length) % schede.length];
       else if (event.key === 'Home') prossima = schede[0];
       else if (event.key === 'End') prossima = schede.at(-1);
       if (!prossima) return;
       event.preventDefault();
+      event.stopPropagation(); // le frecce delle schede non muovono anche le righe dell'elenco
       const id = prossima.dataset.pickerSource;
       scegliFonte(id);
       // renderFonti() ha appena rifatto i bottoni: il fuoco va su quello NUOVO, non sul morto.
       fonti.querySelector(`[data-picker-source="${id}"]`)?.focus();
     });
 
-    /**
-     * La scheda «Locali»: cosa c'è sul disco, e perché non si può ancora
-     * sceglierlo qui. ⛔ Nessuna riga cliccabile: un elenco che sembra
-     * selezionabile e non lo è mente col gesto, non con le parole.
-     */
-    /**
-     * ⭐⭐⭐ 03/9, SECONDA STESURA — ora i modelli locali SI SCELGONO.
-     *
-     * ⛔ La prima versione, scritta stamattina, li mostrava come righe morte
-     * con la nota «la chat parla solo con OpenRouter, non ancora qui». Era
-     * vero quando l'ho scritta ed è diventato FALSO nel giro di un'ora, con
-     * l'instradamento multi-provider: una spiegazione corretta che invecchia
-     * è peggio di nessuna spiegazione, perché convince a non riprovare.
-     *
-     * ⇒ La riga è un bottone come le altre e vale `local:<id>`, il prefisso
-     * di fonte concordato. L'unica differenza vera resta detta: senza il
-     * motore acceso la generazione non parte, e QUELLO si dice qui invece di
-     * lasciarlo scoprire a metà di una risposta.
-     */
-    function renderListaLocali() {
-      /*
-       * ⛔ Trovato guardando BC-12 dal vivo, e vero anche PRIMA: questa funzione tornava senza
-       *   toccare il piede, così la riga sotto l'elenco continuava a raccontare la scheda che
-       *   avevi lasciato — «71 modelli · OpenAI» sopra due modelli locali. Prima diceva
-       *   «OpenRouter» e passava inosservato; con le schede per fornitore nomina un fornitore
-       *   sbagliato, che è la stessa bugia ma leggibile. Il piede parla della scheda APERTA.
-       */
-      metaSpan.textContent = modelliLocali ? tr('app.modelPicker.localCount', { n: modelliLocali.length }) : tr('app.modelPicker.installed');
-      const pezzi = [];
-      pezzi.push(textElement('p', 'model-picker-source-note', tr('app.modelPicker.localNote')));
-      if (erroreLocali) {
-        // ⛔ «non ho potuto leggere» non è «non ce n'è»: la prima si riprova, la seconda no.
-        pezzi.push(textElement('p', 'board-empty', tr('app.modelPicker.installedUnreadable', { motivo: erroreLocali })));
-      } else if (!modelliLocali) {
-        pezzi.push(textElement('p', 'board-empty', tr('app.modelPicker.installedReading')));
-      } else if (modelliLocali.length === 0) {
-        pezzi.push(textElement('p', 'board-empty', tr('app.modelPicker.noInstalled')));
-      } else {
-        for (const modello of modelliLocali) {
-          const valore = `local:${modello.id}`;
-          const opt = document.createElement('button');
-          opt.type = 'button';
-          opt.className = 'sheet-option model-picker-option';
-          opt.setAttribute('role', 'option');
-          opt.setAttribute('aria-selected', String(valore === valoreScelto));
-          if (valore === valoreScelto) opt.classList.add('active');
-          opt.dataset.modelPickerLocal = valore;
-          const iconWrap = document.createElement('span');
-          iconWrap.className = 'sheet-icon';
-          iconWrap.innerHTML = icon('i-brain');
-          const textWrap = document.createElement('span');
-          /*
-           * ⛔ CB-16-bis, owner 08/9 con lo screenshot: qui si stampava `modello.name || modello.id`,
-           * cioè la chiave del runtime — 102 caratteri per il Nemotron Cascade, che il manifest dei
-           * modelli locali non accompagna con nessun `name`. Una targa non è un nome, e a schermo
-           * spingeva la riga fuori dal pannello.
-           * ⛔ La traduzione esisteva già dal 06/9 (`nomeModelloUmano`, components/chat-foot.js) ed era
-           * chiamata in UN SOLO posto: questo elenco era l'unico che mostra modelli locali senza usarla.
-           * Scriverne una seconda qui sarebbe stato il debito che questo progetto ha già pagato più
-           * volte — due funzioni per lo stesso lavoro che divergono al primo formato nuovo.
-           * L'identificatore intero non si perde: sta nel suggerimento del puntatore, dove chi ne ha
-           * bisogno (un percorso, una segnalazione) lo ritrova per intero.
-           */
-          textWrap.append(textElement('strong', '', nomeModelloUmano(valore) || modello.name || modello.id));
-          textWrap.append(textElement('small', '', tr('app.modelPicker.onThisComputer', { dimensione: formattaByteModelLab(Number(modello.bytes || 0)), stato: modello.state === 'ready' ? '' : ` · ${modello.state}` })));
-          opt.title = modello.id;
-          opt.append(iconWrap, textWrap);
-          /*
-           * ⛔⛔⛔ 03/9 — trovato dal vivo verificando l'avvio automatico a
-           * metà chat (owner: "verifica... anche a metà strada in una chat
-           * già iniziata"): questo handler NON chiamava mai
-           * sincronizzaImpostazioniSessione come fa invece il ramo remoto
-           * (renderLista, poco sopra). Risultato misurato: click sul
-           * modello locale, la pillola del composer restava su quello
-           * remoto, e al Send il server eseguiva ANCORA col modello
-           * vecchio (RunStarted.contesto.modello confermava deepseek, non
-           * il locale scelto) — corretto solo a posteriori dalla nota
-           * "Impostazioni cambiate fuori da questa scheda", che è onesta
-           * ma fuorviante: non era un'altra scheda, era questo stesso
-           * click mai arrivato al server. Stessa disciplina del ramo
-           * remoto: il server è la fonte di verità, la pillola non
-           * promette un modello che il registro non ha ancora accettato.
-           */
-          opt.addEventListener('click', async () => {
-            const applicaScelta = () => {
-              valoreScelto = valore;
-              if (aggiornaModelloPrincipale) { state.model = valore; aggiornaPiedeSidebar(); } // 05/9 Fase 2: WorkspaceFooter
-              aggiornaTriggerLabel();
-              if (aggiornaModelloPrincipale) {
-                aggiornaPillolaModello();
-                salvaPreferenzeChatDesktop();
-              }
-              chiudi();
-              if (typeof alSelezionato === 'function') alSelezionato(valore);
-            };
-
-            if (aggiornaModelloPrincipale && sincronizzaSessione && state.realSession.id) {
-              if (panel.getAttribute('aria-busy') === 'true') return;
-              panel.setAttribute('aria-busy', 'true');
-              opt.disabled = true;
-              try {
-                await sincronizzaImpostazioniSessione({ modello: valore });
-                applicaScelta();
-              } catch {
-                valoreScelto = state.model || '';
-                aggiornaTriggerLabel();
-                renderLista();
-              } finally {
-                panel.removeAttribute('aria-busy');
-                opt.disabled = false;
-              }
-              return;
-            }
-            applicaScelta();
-          });
-          pezzi.push(opt);
-        }
-      }
-      listEl.replaceChildren(...pezzi);
-      centraRigaInUso();
-    }
+    /** Il valore segnato a schermo: quello in sospeso nel velo, altrimenti quello in uso. */
+    const valoreSegnato = () => inSospeso ?? valoreScelto;
 
     /**
-     * Una riga di modello, uguale in tutte le schede che parlano con la rete.
-     *
-     * ⛔ Prima viveva DENTRO il ciclo dei gruppi di OpenRouter. Le schede dei fornitori diretti non
-     *   hanno gruppi — dentro «Anthropic» tutti i modelli sono di Anthropic, e un'intestazione di
-     *   gruppo sola sopra l'elenco è rumore — quindi servivano le stesse righe fuori da quel ciclo.
-     *   Copiarle sarebbe stata la seconda funzione che fa lo stesso lavoro: il debito che questo
-     *   file ha già pagato (vedi la nota CB-16-bis su `nomeModelloUmano` poco sopra). Estratta.
+     * Una riga di modello, uguale in tutte le schede (bozzetto: nome e id, «Gratis», le tre capacità, contesto, $in → $out, stella).
+     * ⛔ La riga è un `div role="option"` e non più un bottone: dentro c'è la stella, e un bottone dentro un bottone non esiste.
      */
-    function rigaModello(modello) {
-      const opt = document.createElement('button');
-      opt.type = 'button';
-      opt.className = 'sheet-option model-picker-option';
+    function rigaModello(voce) {
+      const opt = document.createElement('div');
+      opt.className = 'model-picker-option';
       opt.setAttribute('role', 'option');
-      opt.setAttribute('aria-selected', String(modello.id === valoreScelto));
-      if (modello.id === valoreScelto) opt.classList.add('active');
-      const iconWrap = document.createElement('span');
-      iconWrap.className = 'sheet-icon';
-      iconWrap.innerHTML = icon('i-brain');
-      const textWrap = document.createElement('span');
-      if (['models.dev', 'riserva'].includes(modello.catalogo?.fonte)) { // P-F (12/09): anche l'elenco di riserva porta il suo motivo sotto ogni modello
-        /* P-E (12/09, Astra): i diretti arrivano da models.dev con contesto, prezzo per milione e capacità già in italiano. */
-        aggiornaTestoModelloSelettore(textWrap, modello);
-      } else {
-        const dettagli = [];
-        if (modello.alias) dettagli.push(tr('app.modelPicker.latestVersion')); // ⭐ 27/8 — il gruppo è già quello giusto (senza ~), l'informazione "è un alias fluttuante" resta comunque visibile qui
-        if (modello.contextLength) dettagli.push(`${Math.round(modello.contextLength / 1000)}k ctx`);
-        if (modello.prezzoPrompt) dettagli.push(`$${(Number(modello.prezzoPrompt) * 1_000_000).toFixed(2)}/M in`);
-        textWrap.append(
-          textElement('strong', '', modello.nome),
-          textElement('small', '', dettagli.length ? `${modello.id} · ${dettagli.join(' · ')}` : modello.id),
-        );
+      opt.tabIndex = -1;
+      opt.dataset.modelValue = voce.valore;
+      if (voce.locale) opt.dataset.modelPickerLocal = voce.valore;
+      const segnata = voce.valore === valoreSegnato();
+      opt.setAttribute('aria-selected', String(segnata));
+      opt.classList.toggle('active', segnata);
+      opt.title = voce.titolo;
+      const nome = document.createElement('span');
+      nome.className = 'model-picker-option-name';
+      nome.append(textElement('strong', '', voce.nome), textElement('small', '', voce.sotto));
+      const capacita = voce.locale ? {} : capacitaDelModello(voce.modello);
+      const gratis = document.createElement('span');
+      gratis.className = 'model-picker-option-free';
+      if (capacita.gratis) gratis.append(textElement('span', 'model-picker-free', tr('modello.modelPicker.filter.gratis')));
+      const caps = document.createElement('span');
+      caps.className = 'model-picker-option-caps';
+      for (const c of ['ragiona', 'vede', 'attrezzi']) {
+        const s = document.createElement('span');
+        s.dataset.capacita = c;
+        s.dataset.ha = String(Boolean(capacita[c]));
+        s.innerHTML = icon(ICONA_FILTRO[c]);
+        if (capacita[c]) s.title = etichettaFiltro(c);
+        caps.append(s);
       }
-      opt.append(iconWrap, textWrap);
-      if (modello.id === valoreScelto) {
-        const checkSpan = document.createElement('span');
-        checkSpan.innerHTML = icon('i-check');
-        opt.appendChild(checkSpan);
-      }
-      opt.addEventListener('click', async () => {
-        const effortAlClick = state.effort;
-        const prossimoEffort = aggiornaModelloPrincipale
-          ? effortCompatibilePerModello(modello, effortAlClick)
-          : effortAlClick;
-        const applicaScelta = () => {
-          valoreScelto = modello.id;
-          if (aggiornaModelloPrincipale) {
-            state.model = modello.id; aggiornaPiedeSidebar(); // 05/9 Fase 2: WorkspaceFooter
-            // Se l'owner ha mosso lo slider mentre il salvataggio era in
-            // corso, la sua scelta più recente è già accodata e vince.
-            if (state.effort === effortAlClick) state.effort = prossimoEffort;
-          }
-          aggiornaTriggerLabel();
-          if (aggiornaModelloPrincipale) {
-            aggiornaPillolaModello();
-            salvaPreferenzeChatDesktop();
-          }
-          chiudi();
-          alSelezionato?.(modello.id);
-        };
-
-        // Su una sessione esistente il server è la fonte di verità. La
-        // pillola non deve promettere un modello che il registro non ha
-        // ancora accettato: mantiene il valore corrente finché la
-        // scrittura durevole non è conclusa e resta aperta su errore.
-        if (aggiornaModelloPrincipale && sincronizzaSessione && state.realSession.id) {
-          if (panel.getAttribute('aria-busy') === 'true') return;
-          panel.setAttribute('aria-busy', 'true');
-          opt.disabled = true;
-          try {
-            await sincronizzaImpostazioniSessione({
-              modello: modello.id,
-              reasoning: prossimoEffort ? { effort: prossimoEffort } : null,
-            });
-            applicaScelta();
-          } catch {
-            valoreScelto = state.model || '';
-            aggiornaTriggerLabel();
-            renderLista();
-          } finally {
-            panel.removeAttribute('aria-busy');
-            opt.disabled = false;
-          }
+      const ctx = textElement('span', 'model-picker-option-ctx', voce.locale && !Number.isFinite(voce.modello.contextLength) ? '' : formattaContesto(voce.modello.contextLength));
+      ctx.title = tr('modello.modelPicker.ctxTitle');
+      const prezzo = document.createElement('span');
+      prezzo.className = 'model-picker-option-price';
+      prezzo.title = tr('modello.modelPicker.priceTitle');
+      const p = voce.locale ? null : prezzoInUscita(voce.modello);
+      if (capacita.gratis) prezzo.textContent = '—';
+      else if (p) prezzo.append(textElement('b', '', `$${formattaPrezzo(p.ingresso)}`), document.createTextNode(` → $${formattaPrezzo(p.uscita)}`));
+      const preferito = listePersona().preferiti.includes(voce.valore);
+      const stella = document.createElement('button');
+      stella.type = 'button';
+      stella.className = 'model-picker-star';
+      stella.tabIndex = -1;
+      stella.setAttribute('aria-pressed', String(preferito));
+      stella.setAttribute('aria-label', tr(preferito ? 'modello.modelPicker.removeFavourite' : 'modello.modelPicker.addFavourite'));
+      stella.title = `${stella.getAttribute('aria-label')}\n${tr('modello.modelPicker.starShortcut')}`;
+      stella.setAttribute('aria-keyshortcuts', 'F');
+      stella.innerHTML = icon('i-star');
+      opt.append(nome, gratis, caps, ctx, prezzo, stella);
+      opt.addEventListener('click', (event) => {
+        if (event.target.closest('.model-picker-star')) {
+          event.stopPropagation();
+          cambiaPreferito(voce.valore); // ridisegna da sé, subito e alla risposta del server
           return;
         }
-        applicaScelta();
+        if (opt.getAttribute('aria-disabled') === 'true') return;
+        if (conConferma) { segna(voce.valore); opt.focus({ preventScroll: true }); return; }
+        applica(voce);
+      });
+      opt.addEventListener('dblclick', (event) => {
+        if (event.target.closest('.model-picker-star') || !conConferma) return;
+        applica(voce);
       });
       return opt;
+    }
+
+    /** Ridisegna l'elenco senza spostarlo, e rimette il fuoco sulla stessa riga (o sulla sua stella). */
+    function ridisegnaTenendoIlPosto(valore, sullaStella = false) {
+      const sopra = listEl.scrollTop;
+      renderLista();
+      listEl.scrollTop = sopra;
+      const righe = [...listEl.querySelectorAll('.model-picker-option')].filter((r) => r.dataset.modelValue === valore);
+      const riga = righe.at(-1);
+      (sullaStella ? riga?.querySelector('.model-picker-star') : riga)?.focus({ preventScroll: true });
+    }
+
+    /** Nel velo: il clic segna, senza ridisegnare (lo scorrimento e il fuoco restano dove sono). */
+    function segna(valore) {
+      inSospeso = valore === valoreScelto ? null : valore;
+      for (const r of listEl.querySelectorAll('.model-picker-option')) {
+        const si = r.dataset.modelValue === valoreSegnato();
+        r.setAttribute('aria-selected', String(si));
+        r.classList.toggle('active', si);
+      }
+    }
+
+    /*
+     * La scelta vera. Su una sessione esistente il server è la fonte di verità: la pillola non promette un modello che il registro
+     * non ha ancora accettato (mantiene il valore corrente finché la scrittura durevole non è conclusa, e resta aperta su errore).
+     * ⛔⛔⛔ 03/9 — anche il modello LOCALE passa da `sincronizzaImpostazioniSessione` (prima non ci passava e il server eseguiva
+     *   col modello vecchio); per lui lo sforzo non si tocca, come prima.
+     */
+    async function applica(voce) {
+      const valore = voce.valore;
+      const effortAlClick = state.effort;
+      const prossimoEffort = aggiornaModelloPrincipale && !voce.locale ? effortCompatibilePerModello(voce.modello, effortAlClick) : effortAlClick;
+      const applicaScelta = () => {
+        valoreScelto = valore;
+        inSospeso = null;
+        if (aggiornaModelloPrincipale) {
+          state.model = valore; aggiornaPiedeSidebar(); // 05/9 Fase 2: WorkspaceFooter
+          // Se l'owner ha mosso lo slider mentre il salvataggio era in corso, la sua scelta più recente è già accodata e vince.
+          if (!voce.locale && state.effort === effortAlClick) state.effort = prossimoEffort;
+        }
+        /* gli Usati di recente stanno sul server: la copia cambia subito, la scrittura non trattiene la scelta (se non riesce, il server
+           tiene i suoi e alla prossima apertura il selettore li rilegge) */
+        preferenzeModelli.recenti = aggiornaRecenti(preferenzeModelli.recenti, valore);
+        scriviPreferenzaModello({ azione: 'usato', modello: valore }).catch(() => {});
+        aggiornaTriggerLabel();
+        aggiornaInUso();
+        if (aggiornaModelloPrincipale) {
+          aggiornaPillolaModello();
+          salvaPreferenzeChatDesktop();
+        }
+        chiudi();
+        alSelezionato?.(valore);
+      };
+      if (aggiornaModelloPrincipale && sincronizzaSessione && state.realSession.id) {
+        if (panel.getAttribute('aria-busy') === 'true') return false;
+        panel.setAttribute('aria-busy', 'true');
+        const righe = [...listEl.querySelectorAll('.model-picker-option')].filter((r) => r.dataset.modelValue === valore);
+        righe.forEach((r) => r.setAttribute('aria-disabled', 'true'));
+        try {
+          await sincronizzaImpostazioniSessione(voce.locale
+            ? { modello: valore }
+            : { modello: valore, reasoning: prossimoEffort ? { effort: prossimoEffort } : null });
+          applicaScelta();
+          return true;
+        } catch {
+          valoreScelto = state.model || '';
+          inSospeso = null;
+          aggiornaTriggerLabel();
+          renderLista();
+          return false;
+        } finally {
+          panel.removeAttribute('aria-busy');
+          righe.forEach((r) => r.removeAttribute('aria-disabled'));
+        }
+      }
+      applicaScelta();
+      return true;
+    }
+
+    /** «Fatto» del velo: applica la scelta in sospeso, se c'è. `true` quando non resta niente da applicare. */
+    async function conferma() {
+      if (!inSospeso || inSospeso === valoreScelto) { inSospeso = null; return true; }
+      const voce = vociPerValore.get(inSospeso) || voceDaCataloghi(inSospeso);
+      if (!voce) { inSospeso = null; return true; }
+      return applica(voce);
     }
 
     /** La riga del piede: quanti modelli e da dove. Niente numeri quando il catalogo non c'è. */
@@ -8627,75 +8711,173 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       return tr('app.modelPicker.catalogLine', { n: catalogo.length, dove });
     }
 
+    /** Uno stato vuoto col passo successivo (bozzetto): titolo, una frase, un pulsante. */
+    function statoVuoto(titolo, testo, azione, alClic) {
+      const v = document.createElement('div');
+      v.className = 'model-picker-empty';
+      v.append(textElement('h3', '', titolo), textElement('p', '', testo));
+      if (azione) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'talos-button talos-button--secondary talos-button--sm';
+        b.textContent = azione;
+        b.addEventListener('click', alClic);
+        v.append(b);
+      }
+      return v;
+    }
+    /** Le azioni degli stati vuoti portano altrove: prima si chiude ciò che contiene il selettore (il velo, il foglio, la tendina). */
+    function vaiAltrove(azione) {
+      chiudi();
+      if (typeof alLasciare === 'function') alLasciare();
+      azione();
+    }
+    function apriLaboratorioModelli() {
+      setView('settings', { dallInizio: true });
+      setSettingsSection('models');
+      setModelLabSection('huggingface');
+      portaInVistaIlLaboratorio();
+    }
+    function azzeraRicercaEFiltri() {
+      searchInput.value = '';
+      filtriAccesi.clear();
+      for (const b of chip) b.setAttribute('aria-pressed', 'false');
+      ordinaSelect.value = 'autore';
+      renderLista();
+      searchInput.focus();
+    }
+
+    /** Una sezione richiudibile: testata (`.model-picker-group-header`, aria-expanded) e, se aperta, le sue righe. */
+    function sezione({ chiave, titolo, voci, icona = null, apertaDiSerie, perAutore = null }) {
+      const gruppo = document.createElement('div');
+      gruppo.className = 'model-picker-group';
+      gruppo.setAttribute('role', 'group');
+      gruppo.dataset.sezione = chiave;
+      const aperta = apertaDiSerie ? !sezioniChiuse.has(chiave) : gruppiAperti.has(perAutore ?? chiave);
+      const header = document.createElement('button');
+      header.type = 'button';
+      header.className = 'model-picker-group-header';
+      header.id = `${listEl.id}-${chiave.replace(/[^a-z0-9-]/giu, '_')}`;
+      header.setAttribute('aria-expanded', String(aperta));
+      gruppo.setAttribute('aria-labelledby', header.id);
+      if (icona) {
+        const i = document.createElement('span');
+        i.className = 'model-picker-group-icon';
+        i.innerHTML = icon(icona);
+        header.append(i);
+      }
+      header.append(
+        textElement('span', 'model-picker-group-name', titolo),
+        textElement('span', 'model-picker-group-count', String(voci.length)),
+      );
+      const groupChevron = document.createElement('span');
+      groupChevron.className = 'model-picker-group-chevron';
+      groupChevron.innerHTML = icon('i-chevron');
+      header.append(groupChevron);
+      header.addEventListener('click', () => {
+        if (apertaDiSerie) { if (sezioniChiuse.has(chiave)) sezioniChiuse.delete(chiave); else sezioniChiuse.add(chiave); }
+        else { const k = perAutore ?? chiave; if (gruppiAperti.has(k)) gruppiAperti.delete(k); else gruppiAperti.add(k); }
+        const sopra = listEl.scrollTop;
+        renderLista();
+        listEl.scrollTop = sopra;
+        listEl.querySelector(`#${CSS.escape(header.id)}`)?.focus({ preventScroll: true });
+      });
+      gruppo.append(header);
+      if (aperta) gruppo.append(...voci.map(rigaModello));
+      return gruppo;
+    }
+
+    /** L'elenco della scheda aperta: stati vuoti, Preferiti e Usati di recente in cima, poi gli autori (o i Risultati). */
     function renderLista() {
-      if (fonteScelta === 'locali') { renderListaLocali(); return; }
+      const locali = fonteScelta === 'locali';
       const diretta = eFonteDiretta(fonteScelta);
       const catalogo = catalogoCorrente();
-      metaSpan.textContent = etichettaPiede(catalogo);
-      if (!catalogo) {
-        /* ⛔ «Non ancora letto» e «vuoto» non sono la stessa cosa, e per un fornitore diretto ci
-           sono TRE motivi diversi per essere vuoto: `fraseVuotoDiretto` li distingue. */
+      /*
+       * ⛔ Trovato guardando BC-12 dal vivo: il piede parla della scheda APERTA, mai di quella che hai lasciato.
+       */
+      metaSpan.textContent = locali
+        ? (modelliLocali ? tr('app.modelPicker.localCount', { n: modelliLocali.length }) : tr('app.modelPicker.installed'))
+        : etichettaPiede(catalogo);
+      const etichettaFonte = PROVIDER_DIRETTI.find((p) => p.id === fonteScelta)?.etichetta || fonteScelta;
+      if (locali) {
+        // ⛔ «non ho potuto leggere» non è «non ce n'è»: la prima si riprova, la seconda no.
+        if (erroreLocali) { listEl.replaceChildren(textElement('p', 'board-empty', tr('app.modelPicker.installedUnreadable', { motivo: erroreLocali }))); return; }
+        if (!modelliLocali) { listEl.replaceChildren(textElement('p', 'board-empty', tr('app.modelPicker.installedReading'))); return; }
+        if (modelliLocali.length === 0) {
+          listEl.replaceChildren(statoVuoto(tr('modello.modelPicker.localEmptyTitle'), tr('modello.modelPicker.localEmptyText'),
+            tr('modello.modelPicker.openModelsLab'), () => vaiAltrove(apriLaboratorioModelli)));
+          return;
+        }
+      } else if (!catalogo) {
+        /* ⛔ «Non ancora letto» e «vuoto» non sono la stessa cosa, e per un fornitore diretto ci sono TRE motivi diversi per essere
+           vuoto: `fraseVuotoDiretto` li distingue. Senza chiave, il passo successivo è un pulsante, non solo una frase. */
+        if (diretta && modelliDiretti && !Array.isArray(modelliDiretti[fonteScelta]) && !erroriDiretti[fonteScelta]) {
+          listEl.replaceChildren(senzaChiave(fonteScelta)
+            ? statoVuoto(tr('modello.modelPicker.localEngineTitle', { nome: etichettaFonte }), fraseVuotoDiretto(fonteScelta, { diretti: modelliDiretti, errori: erroriDiretti }),
+              tr('app.common.refresh'), () => carica({ forza: true }))
+            : statoVuoto(tr('modello.modelPicker.notConnectedTitle', { nome: etichettaFonte }), tr('modello.modelPicker.notConnectedText', { nome: etichettaFonte }),
+              tr('modello.modelPicker.connectKey', { nome: etichettaFonte }), () => vaiAltrove(() => apriConfigurazioneDelFornitore(fonteScelta))));
+          return;
+        }
         listEl.replaceChildren(textElement('p', 'board-empty', diretta
           ? fraseVuotoDiretto(fonteScelta, { diretti: modelliDiretti, errori: erroriDiretti })
           : tr('app.modelPicker.catalogLoading')));
         return;
       }
+      const tutte = locali ? modelliLocali.map(voceDiLocale) : catalogo.map(voceDiModello);
       const query = searchInput.value;
-      const filtrati = filtraModelli(query);
-      if (filtrati.length === 0) {
-        listEl.replaceChildren(textElement('p', 'board-empty', query.trim()
-          ? tr('app.modelPicker.noMatch', { ricerca: query.trim() })
-          : diretta
+      const ordine = ordinaSelect.value;
+      const filtrate = tutte.filter((v) => passaFiltri(v.locale ? { ...v.modello, nome: v.nome, id: v.modello.id } : v.modello, { query, filtri: filtriAccesi }));
+      const cercando = query.trim() !== '' || filtriAccesi.size > 0 || ordine !== 'autore';
+      if (filtrate.length === 0) {
+        if (query.trim() || filtriAccesi.size) {
+          listEl.replaceChildren(statoVuoto(tr('modello.modelPicker.noMatchTitle'), tr('modello.modelPicker.noMatchText'),
+            tr('modello.modelPicker.clearFilters'), azzeraRicercaEFiltri));
+        } else if (diretta && senzaChiave(fonteScelta)) {
+          listEl.replaceChildren(statoVuoto(tr('modello.modelPicker.localEngineTitle', { nome: etichettaFonte }), tr('modello.modelPicker.localEngineText', { nome: etichettaFonte }),
+            tr('app.common.refresh'), () => carica({ forza: true })));
+        } else {
+          listEl.replaceChildren(textElement('p', 'board-empty', diretta
             ? fraseVuotoDiretto(fonteScelta, { diretti: modelliDiretti, errori: erroriDiretti })
             : tr('app.modelPicker.noModels')));
+        }
         return;
       }
-      const cercando = query.trim() !== '';
       const pezzi = [];
-      // Un errore che riguarda ANCHE una scheda con dei modelli dentro (catalogo parziale) si dice
-      // sopra l'elenco: chi guarda deve sapere che quello che vede potrebbe non essere tutto.
+      if (locali) pezzi.push(textElement('p', 'model-picker-source-note', tr('app.modelPicker.localNote')));
+      // Un errore che riguarda ANCHE una scheda con dei modelli dentro (catalogo parziale) si dice sopra l'elenco.
       if (diretta && erroriDiretti[fonteScelta]) pezzi.push(textElement('p', 'model-picker-source-note', erroriDiretti[fonteScelta]));
-      /*
-       * ⭐ BC-12 — dentro la scheda di un fornitore l'elenco è PIATTO: il gruppo per fornitore è la
-       *   scheda stessa, e ripeterlo dentro sarebbe un solo accordion sopra tutto, cioè un gesto in
-       *   più per niente. Su OpenRouter i gruppi restano: lì il campo `provider` è l'AUTORE del
-       *   modello — 51 famiglie, misurate il 03/9 — che è un asse diverso dalla via d'accesso.
-       */
-      if (diretta) {
-        pezzi.push(...filtrati.map(rigaModello));
-        listEl.replaceChildren(...pezzi);
-        centraRigaInUso();
-        return;
-      }
-      /* owner 28/10/2026 (dal Mobile; foto del 4174: gruppi tutti chiusi, il modello in uso invisibile): alla prima lista con dentro il
-         modello in uso si apre il gruppo del suo autore. UNA volta: se poi la persona lo chiude, resta chiuso. */
-      if (!gruppoInUsoAperto && !cercando) {
-        const inUso = filtrati.find((m) => m.id === valoreScelto);
-        if (inUso) { gruppiAperti.add(inUso.provider); gruppoInUsoAperto = true; }
-      }
-      for (const [provider, modelli] of raggruppaPerProvider(filtrati)) {
-        const aprireGruppo = cercando || gruppiAperti.has(provider);
-        const header = document.createElement('button');
-        header.type = 'button';
-        header.className = 'model-picker-group-header';
-        header.setAttribute('aria-expanded', String(aprireGruppo));
-        const nameSpan = document.createElement('span');
-        nameSpan.className = 'model-picker-group-name';
-        nameSpan.textContent = provider;
-        const countSpan = document.createElement('span');
-        countSpan.className = 'model-picker-group-count';
-        countSpan.textContent = String(modelli.length);
-        const groupChevron = document.createElement('span');
-        groupChevron.className = 'model-picker-group-chevron';
-        groupChevron.innerHTML = icon('i-chevron');
-        header.append(nameSpan, countSpan, groupChevron);
-        header.addEventListener('click', () => {
-          if (gruppiAperti.has(provider)) gruppiAperti.delete(provider); else gruppiAperti.add(provider);
-          renderLista();
-        });
-        pezzi.push(header);
-        if (!aprireGruppo) continue;
-        pezzi.push(...modelli.map(rigaModello));
+      const ordinate = ordinaModelli(filtrate.map((v) => ({ ...v.modello, nome: v.nome, id: v.valore, __voce: v })), cercando ? ordine : 'nome').map((m) => m.__voce);
+      if (cercando) {
+        pezzi.push(sezione({ chiave: 'risultati', apertaDiSerie: true, voci: ordinate,
+          titolo: query.trim() ? tr('modello.modelPicker.resultsFor', { q: query.trim() }) : tr('modello.modelPicker.results') }));
+      } else {
+        const { preferiti, recenti } = listePersona();
+        const perValore = new Map(ordinate.map((v) => [v.valore, v]));
+        const pref = preferiti.map((x) => perValore.get(x)).filter(Boolean);
+        const rec = recenti.map((x) => perValore.get(x)).filter((v) => v && !preferiti.includes(v.valore));
+        if (pref.length) pezzi.push(sezione({ chiave: 'preferiti', titolo: tr('modello.modelPicker.favourites'), voci: pref, icona: 'i-star', apertaDiSerie: true }));
+        if (rec.length) pezzi.push(sezione({ chiave: 'recenti', titolo: tr('modello.modelPicker.recent'), voci: rec, icona: 'i-clock', apertaDiSerie: true }));
+        const gruppi = locali ? [['', ordinate]] : gruppiPerAutore(ordinate.map((v) => ({ ...v.modello, provider: v.autore, __voce: v }))).map(([a, ms]) => [a, ms.map((m) => m.__voce)]);
+        /*
+         * ⭐ BC-12 — dentro la scheda di un fornitore (e nei Locali) l'elenco è PIATTO: con un autore solo, un'intestazione sopra
+         *   l'elenco è un gesto in più per niente. Su OpenRouter i gruppi restano (51 autori, misurati il 03/9).
+         * owner 28/10/2026 (dal Mobile; foto del 4174: gruppi tutti chiusi, il modello in uso invisibile): alla prima lista con dentro
+         *   il modello in uso si apre il gruppo del suo autore. UNA volta: se poi la persona lo chiude, resta chiuso.
+         */
+        if (gruppi.length === 1) {
+          if (pezzi.length > (locali ? 1 : 0) + (diretta && erroriDiretti[fonteScelta] ? 1 : 0)) {
+            pezzi.push(sezione({ chiave: 'tutti', titolo: locali ? tr('app.modelPicker.installed') : (nomeAutore(gruppi[0][0]) || etichettaFonte), voci: gruppi[0][1], apertaDiSerie: true }));
+          } else pezzi.push(...gruppi[0][1].map(rigaModello));
+        } else {
+          if (!gruppoInUsoAperto) {
+            const inUso = ordinate.find((v) => v.valore === valoreScelto);
+            if (inUso) { gruppiAperti.add(inUso.autore); gruppoInUsoAperto = true; }
+          }
+          for (const [autore, voci] of gruppi) {
+            pezzi.push(sezione({ chiave: `g-${autore || 'altro'}`, perAutore: autore, titolo: nomeAutore(autore) || autore || '—', voci, apertaDiSerie: false }));
+          }
+        }
       }
       listEl.replaceChildren(...pezzi);
       centraRigaInUso();
@@ -8703,24 +8885,16 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
 
     /**
      * I cataloghi dei tre fornitori con API diretta, uno per scheda.
-     *
-     * ⛔ Prima tornava UNA lista sola, la somma dei tre, e gli errori erano un array di frasi
-     *   appiccicate: da lì non si poteva ricavare né un conteggio per scheda né quale fornitore
-     *   avesse davvero un problema. Ora ogni fornitore ha la sua casella, e le tre risposte
-     *   possibili restano distinte fino allo schermo:
-     *     `null` = chiave non collegata · `[]` = letto, zero modelli · `[…]` = i suoi modelli.
-     * ⛔ Un fornitore che fallisce non porta giù gli altri: `Promise.all` su richieste che non
-     *   lanciano mai (il `catch` è dentro). Se cade la chiamata all'elenco dei provider, allora sì
-     *   che non si sa niente di nessuno — e si dice, senza inventare tre elenchi vuoti.
+     * ⛔ Ogni fornitore ha la sua casella: `null` = chiave non collegata · `[]` = letto, zero modelli · `[…]` = i suoi modelli.
+     * ⛔ Un fornitore che fallisce non porta giù gli altri: `Promise.all` su richieste che non lanciano mai (il `catch` è dentro).
+     *   Se cade la chiamata all'elenco dei provider, allora sì che non si sa niente di nessuno — e si dice.
      */
     async function caricaDiretti() {
       erroriDiretti = {};
       try {
         const dati = await apiGet('/api/v1/providers');
         const elenco = dati.items || dati.providers || [];
-        /* ⛔ 12/09, P-C: «ha la chiave» non e piu la sola condizione per avere un catalogo. LM
-           Studio gira su questo computer e non ne chiede nessuna: con il filtro di prima la sua
-           scheda sarebbe rimasta vuota per sempre, cioe il difetto che P-C esiste per togliere. */
+        /* ⛔ 12/09, P-C: LM Studio gira su questo computer e non chiede nessuna chiave. */
         /* 11/10/2026: il piano ChatGPT non sta fra le chiavi; il suo stato si legge a parte (un guasto qui non porta giù gli altri) */
         const pianoChatgpt = await apiGet('/api/v1/auth/chatgpt/stato').catch(() => null);
         const conChiave = fornitoriConCatalogo(elenco, { pianoChatgpt });
@@ -8736,68 +8910,32 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
         for (const { id } of PROVIDER_DIRETTI) erroriDiretti[id] = e.message;
       }
       renderFonti();
+      aggiornaInUso();
       if (eFonteDiretta(fonteScelta)) renderLista();
     }
 
     /**
-     * ⭐⭐⭐ BC-13 — i modelli che girano su QUESTO computer si leggono dal disco, non dalla rete.
-     *
-     * Estratta dal corpo di `carica()`, dove viveva DOPO l'`await` del catalogo OpenRouter. La
-     * misura e il perché stanno nel commento di `carica()`, qui sotto.
-     * ⛔ Non lancia mai: chi la chiama la fa partire e va per la sua strada.
+     * ⭐⭐⭐ BC-13 — i modelli che girano su QUESTO computer si leggono dal disco, non dalla rete. ⛔ Non lancia mai.
      */
     function caricaLocali() {
       return apiGet('/api/v1/local-models')
         .then((locali) => { modelliLocali = Array.isArray(locali?.items) ? locali.items : []; erroreLocali = null; if (registraModelliLocali(modelliLocali)) aggiornaPiedeChatDaStato(); })
         .catch((e) => { modelliLocali = null; erroreLocali = e?.message || tr('app.modelPicker.readFailed'); })
-        .finally(() => { renderFonti(); if (fonteScelta === 'locali') renderListaLocali(); });
+        .finally(() => { renderFonti(); aggiornaInUso(); if (fonteScelta === 'locali') renderLista(); });
     }
 
     /*
-     * ⭐⭐⭐ BC-13, 11/09/2026 — I LOCALI NON ASPETTANO LA RETE.
-     *
-     * Prima le due richieste che NON parlano con OpenRouter — `/api/v1/local-models` (il disco) e
-     * `caricaDiretti()` (Anthropic/Gemini/OpenAI) — stavano DENTRO il `try`, DOPO
-     * `await apiGet('/api/v1/models')`. Misurato nella app vera (banco mio su porta privata,
-     * sonda `bc13-prima.mjs`, Playwright, catalogo intercettato):
-     *
-     *   | catalogo OpenRouter    | quando compare il conteggio della scheda «Locali»   |
-     *   | ---------------------- | -------------------------------------------------- |
-     *   | caldo                  | 123 ms                                              |
-     *   | lento (2 s simulati)   | **2.034 ms** — aspettava una chiamata che non usa   |
-     *   | IRRAGGIUNGIBILE        | **mai**, e la striscia delle schede restava VUOTA    |
-     *
-     *   Il terzo caso è il difetto vero, e non è lentezza: è ASSENZA. Si entrava nel `catch`,
-     *   `renderFonti()` non veniva mai chiamata, e i modelli installati su questo computer — che
-     *   non hanno bisogno di rete né per essere elencati né per rispondere — sparivano proprio nel
-     *   momento in cui sono l'unica cosa che funziona.
-     *
-     * ⇒ Le richieste indipendenti partono INSIEME, e la striscia si disegna subito.
-     *   Ricerca 11/09/2026: leapcell.io «Handling Multiple API Requests with Promise.all and
-     *   Promise.allSettled», julesblom.com «Running Promises In Parallel», rishibakshi «How to
-     *   Prevent the Waterfall Effect in Data Fetching» — richieste indipendenti non si mettono in
-     *   fila, e il fallimento di una non spegne i pannelli delle altre: ognuna porta il proprio
-     *   stato d'errore nel proprio riquadro.
-     * ⭐ Il concorrente di riferimento dice la stessa cosa dal lato del prodotto: in Hermes Agent
-     *   il locale è una via a sé — «Hermes con un modello locale via LM Studio, Ollama o llama.cpp
-     *   funziona completamente offline: servono la rete la ricerca web e il browser, non l'agente»
-     *   (hermes-agent.ai/blog/best-local-models-for-hermes-2026 e agentos.guide/best-local-model-
-     *   for-hermes-agent, letti l'11/09/2026). Un elenco locale che muore col catalogo di rete
-     *   rompe esattamente quella promessa.
-     * ⭐ E la stessa forma il MOBILE ce l'ha già: `AVM/mobile/src/stores/chatController.ts:5516`
-     *   chiede tutti i fornitori in parallelo, ognuno col proprio stato d'errore (letto l'11/09/2026
-     *   in sola lettura — nessuna ownership su mobile).
+     * ⭐⭐⭐ BC-13, 11/09/2026 — I LOCALI NON ASPETTANO LA RETE. Prima `/api/v1/local-models` e `caricaDiretti()` partivano DOPO
+     *   `await apiGet('/api/v1/models')`: misurato, con OpenRouter lento il conto dei Locali arrivava a 2.034 ms invece di 123, e con
+     *   OpenRouter IRRAGGIUNGIBILE la striscia delle schede restava VUOTA. ⇒ Le richieste indipendenti partono INSIEME, e la colonna
+     *   si disegna subito. Ricerca 11/09/2026: leapcell.io (Promise.all/allSettled), julesblom.com, rishibakshi («waterfall»); Hermes
+     *   Agent tiene il locale come via a sé, che funziona senza rete.
      */
     async function carica({ forza = false } = {}) {
-      /*
-       * ⛔ Partono per prime, SEMPRE — anche quando la scheda aperta è quella di un fornitore
-       *   diretto — perché la striscia mostra il conteggio di tutte e cinque le schede, non solo
-       *   di quella aperta.
-       */
       const localiInVolo = caricaLocali();
       const direttiInVolo = caricaDiretti();
-      /* La striscia esiste da SUBITO, prima di qualunque risposta: cinque schede senza conteggio
-         sono onestà, una striscia vuota si legge come una app rotta. */
+      /* La colonna esiste da SUBITO, prima di qualunque risposta: schede senza conteggio sono onestà, una colonna vuota si legge come
+         una app rotta. */
       renderFonti();
       if (eFonteDiretta(fonteScelta)) { await direttiInVolo; return; }
       if (fonteScelta === 'locali') await localiInVolo;
@@ -8806,13 +8944,12 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
         const dati = await apiGet(`/api/v1/models${forza ? '?forza=1' : ''}`);
         modelliCache = dati.modelli;
         caricato = true;
-        metaSpan.textContent = dati.daCache ? tr('app.modelPicker.catalogCountCached', { n: dati.modelli.length }) : tr('app.modelPicker.catalogCount', { n: dati.modelli.length });
         renderFonti();
         renderLista();
+        aggiornaInUso();
+        if (fonteScelta === 'openrouter') metaSpan.textContent = dati.daCache ? tr('app.modelPicker.catalogCountCached', { n: dati.modelli.length }) : tr('app.modelPicker.catalogCount', { n: dati.modelli.length });
       } catch (error) {
-        /* ⛔ Il guasto è di UNA scheda e va detto DENTRO quella scheda. Prima questa riga
-           sovrascriveva l'elenco qualunque fosse la scheda aperta: con «Locali» davanti agli occhi
-           si leggeva «Catalogo non disponibile», cioè un fornitore accusato al posto di un altro. */
+        /* ⛔ Il guasto è di UNA scheda e va detto DENTRO quella scheda, mai sopra un'altra. */
         renderFonti();
         if (fonteScelta === 'openrouter') {
           listEl.replaceChildren(textElement('p', 'board-empty', tr('app.modelPicker.catalogUnavailable', { motivo: error.message })));
@@ -8826,9 +8963,21 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       panel.hidden = false;
       trigger.setAttribute('aria-expanded', 'true');
       daCentrare = true; // owner 28/10: la riga in uso al centro, a ogni apertura
+      centrataA = null;
       if (!caricato) carica();
       else renderLista();
       window.setTimeout(() => searchInput.focus(), 0);
+      /* owner 29/10/2026: Preferiti e Recenti si rileggono dal server a ogni apertura (un altro dispositivo può averli cambiati). Se
+         cambiano si ridisegna; la riga in uso torna al centro solo se la persona non ha ancora mosso la lista. */
+      const primaDellaLettura = JSON.stringify(preferenzeModelli);
+      leggiPreferenzeModelli({ forza: true }).then(() => {
+        if (!aperto || JSON.stringify(preferenzeModelli) === primaDellaLettura) return;
+        const ferma = centrataA === null || listEl.scrollTop === centrataA;
+        const sopra = listEl.scrollTop;
+        if (ferma) daCentrare = true;
+        renderLista();
+        if (!ferma) listEl.scrollTop = sopra;
+      }).catch(() => {});
     }
     function chiudi() {
       aperto = false;
@@ -8838,8 +8987,24 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
 
     trigger.addEventListener('click', () => { if (aperto) chiudi(); else apri(); });
     searchInput.addEventListener('input', renderLista);
+    ordinaSelect.addEventListener('change', renderLista);
     refreshBtn.addEventListener('click', (event) => { event.preventDefault(); carica({ forza: true }); });
+    /** Le righe scorribili con le frecce: la lista sola si muove, mai il foglio o la pagina. */
+    function portaInVista(riga) {
+      const l = listEl.getBoundingClientRect();
+      const r = riga.getBoundingClientRect();
+      const testata = riga.parentElement?.querySelector(':scope > .model-picker-group-header')?.offsetHeight || 0; // la testata appiccicata copre
+      if (r.top < l.top + testata) listEl.scrollTop -= (l.top + testata) - r.top;
+      else if (r.bottom > l.bottom) listEl.scrollTop += r.bottom - l.bottom;
+    }
     panel.addEventListener('keydown', (event) => {
+      // Ctrl K (⌘K su Apple): dentro il selettore porta alla ricerca, e la palette dei comandi non si apre sotto.
+      if ((suApple() ? event.metaKey : event.ctrlKey) && !event.altKey && !event.shiftKey && String(event.key).toLowerCase() === 'k') {
+        event.preventDefault();
+        searchInput.focus();
+        searchInput.select();
+        return;
+      }
       // In the standalone model sheet this panel IS the surface, and its trigger is hidden.
       // Escape belongs to the enclosing modal; only a real dropdown consumes it locally.
       if (event.key === 'Escape' && !apriSubito) {
@@ -8847,57 +9012,68 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
         event.stopPropagation();
         chiudi();
         trigger.focus();
+        return;
+      }
+      const riga = event.target.closest?.('.model-picker-option');
+      const dallaRicerca = event.target === searchInput;
+      if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && (riga || dallaRicerca)) {
+        const righe = [...listEl.querySelectorAll('.model-picker-option')];
+        if (!righe.length || (dallaRicerca && event.key === 'ArrowUp')) return;
+        event.preventDefault();
+        const i = riga ? righe.indexOf(riga) : -1;
+        if (riga && event.key === 'ArrowUp' && i === 0) { searchInput.focus(); return; }
+        const prossima = righe[Math.max(0, Math.min(righe.length - 1, i + (event.key === 'ArrowDown' ? 1 : -1)))];
+        prossima.focus({ preventScroll: true });
+        portaInVista(prossima);
+        return;
+      }
+      if (riga && event.target === riga && event.key === 'Enter') {
+        event.preventDefault();
+        const voce = vociPerValore.get(riga.dataset.modelValue);
+        if (voce) applica(voce);
+        return;
+      }
+      /* owner 29/10/2026 (domanda 7): F sulla riga a fuoco mette o toglie la stella; il fuoco resta sulla riga */
+      if (riga && event.target === riga && !event.ctrlKey && !event.metaKey && !event.altKey && String(event.key).toLowerCase() === 'f') {
+        event.preventDefault();
+        cambiaPreferito(riga.dataset.modelValue, { sullaStella: false });
+        return;
+      }
+      if (riga && event.target === riga && event.key === ' ' && conConferma) {
+        event.preventDefault();
+        segna(riga.dataset.modelValue);
       }
     });
     function onDocumentClick(event) {
       if (!wrap.isConnected) { document.removeEventListener('click', onDocumentClick); return; }
-      // ⛔ NON wrap.contains(event.target): l'header di un gruppo, quando cliccato,
-      // chiama renderLista() nel PROPRIO handler (bubble-phase) PRIMA che questo
-      // ascoltatore su document veda l'evento — renderLista() fa
-      // listEl.replaceChildren(...), che STACCA dal DOM il bottone appena cliccato.
-      // contains() su un nodo staccato torna sempre false, quindi il click veniva
-      // letto come "fuori dal pannello" e chiudeva tutto (bug reale, riprodotto e
-      // diagnosticato dal vivo con un log mirato). composedPath() torna il percorso
-      // REALE dell'evento al momento del dispatch, prima di ogni mutazione del DOM —
-      // resta corretto anche se il target viene staccato mentre l'evento sta ancora
-      // salendo verso document.
+      // ⛔ NON wrap.contains(event.target): un clic su una testata di gruppo ridisegna l'elenco nel PROPRIO gestore e stacca il
+      // bottone cliccato prima che questo ascoltatore lo veda; `composedPath()` è il percorso REALE al momento del clic.
       if (aperto && !event.composedPath().includes(wrap)) chiudi();
     }
     /*
-     * ⛔⛔⛔ 27/8, trovato provando `apriSubito` dal vivo: se questo
-     * ascoltatore si registra SUBITO, e `creaModelPicker()` viene chiamata
-     * dentro il gestore di click di UN ALTRO bottone (la pillola del
-     * composer, che apre il foglio nello stesso click), lo stesso identico
-     * evento click — ancora in fase di bubbling — raggiunge `document`
-     * DOPO essersi registrato: `onDocumentClick` lo vede, `wrap` non
-     * contiene quel bottone (è un elemento diverso), e chiude il pannello
-     * un istante dopo averlo aperto. `setTimeout(...,0)` rimanda la
-     * registrazione al giro di eventi successivo — lo stesso pattern
-     * usato ovunque per "click fuori per chiudere".
-     */
-    /*
-     * ⛔⛔ 06/9, owner: «quando clicco lo slider ragionamento il selettore modello sparisce». Riprodotto:
-     * nel foglio «Modello» il picker è montato con `apriSubito` (il trigger è nascosto, il pannello È il
-     * foglio) e sotto di lui vivono il cursore del ragionamento e l'interruttore del ragionamento (allora
-     * «Mostra ragionamento», dal 13/09 «Apri il ragionamento mentre scrive»):
-     * cliccarli è un clic FUORI da `wrap`, quindi il pannello si chiudeva e restava un foglio vuoto,
-     * senza modo di riaprirlo. Il «clic fuori chiude» ha senso solo quando il picker è una tendina fra
-     * altri campi («Nuova sessione»): con `apriSubito` non si registra proprio.
+     * ⛔⛔⛔ 27/8: registrato SUBITO, il clic che apre il foglio (la pillola del compositore) arriverebbe qui e lo chiuderebbe un
+     *   istante dopo: si registra al giro di eventi successivo.
+     * ⛔⛔ 06/9, owner: «quando clicco lo slider ragionamento il selettore modello sparisce» — con `apriSubito` il «clic fuori chiude»
+     *   non si registra proprio: il picker È il foglio.
      */
     if (!apriSubito) window.setTimeout(() => document.addEventListener('click', onDocumentClick), 0);
 
     aggiornaTriggerLabel();
+    aggiornaInUso();
     /*
-     * ⭐⭐⭐ 27/8, owner: "quando clicco la pillola del modello si deve
-     * riaprire lo stesso componente della selezione del modello" — la
-     * pillola apre un FOGLIO il cui unico scopo è scegliere un modello:
-     * il trigger collassato (utile in "Nuova sessione", un campo fra
-     * altri) sarebbe qui un secondo click ridondante. `apriSubito`
-     * nasconde il trigger e tiene il pannello sempre aperto — stesso
-     * componente, stessa lista vera, montaggio diverso.
+     * ⭐⭐⭐ 27/8, owner: "quando clicco la pillola del modello si deve riaprire lo stesso componente della selezione del modello" —
+     * `apriSubito` nasconde il trigger e tiene il pannello sempre aperto: stesso componente, stessa lista vera, montaggio diverso.
      */
     if (apriSubito) { trigger.hidden = true; apri(); }
-    return { elemento: wrap, getValore: () => valoreScelto };
+    return {
+      elemento: wrap,
+      getValore: () => valoreScelto,
+      inUso: inUsoEl,
+      piede: footer,
+      conferma,
+      haUnaSceltaInSospeso: () => Boolean(inSospeso && inSospeso !== valoreScelto),
+      cerca: () => { searchInput.focus(); searchInput.select(); },
+    };
   }
 
   /*
@@ -10178,6 +10354,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
           apriSubito: true,
           sincronizzaSessione: true,
           alSelezionato: () => closeEmbeddedDialog(sheetDialog),
+          alLasciare: () => closeEmbeddedDialog(sheetDialog), // 29/10/2026: gli stati vuoti portano altrove (Laboratorio, chiave)
         });
         /*
          * ⭐⭐⭐ 28/8, owner: "nella pill del modello metti lo slider
@@ -11380,15 +11557,55 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
   function montaSceltaModelloIn(radice) {
     const mount = $('#veloModelloMontaggio', radice) || $('#modelPickerMount', radice);
     if (!mount) return;
+    const nelVelo = radice?.id === 'veloModello';
+    const chiudiLaSuperficie = () => { if (nelVelo) chiudiVeloMockup('veloModello'); else closeEmbeddedDialog(sheetDialog); };
     const picker = creaModelPicker({
       valoreIniziale: state.model || '',
       apriSubito: true,
       sincronizzaSessione: true,
-      alSelezionato: () => { if (radice?.id === 'veloModello') chiudiVeloMockup('veloModello'); else closeEmbeddedDialog(sheetDialog); },
+      /* 29/10/2026 (bozzetto approvato): nel velo il clic segna il modello e «Fatto» lo applica; Esc e ✕ chiudono senza cambiarlo */
+      conConferma: nelVelo,
+      alSelezionato: chiudiLaSuperficie,
+      alLasciare: chiudiLaSuperficie,
     });
+    if (nelVelo) montaTestataEPiedeDelSelettore(radice, picker);
     /* ⛔ 24/10/2026 (owner): il livello è la pillola del compositore; qui resta solo «Mostra ragionamento», e solo coi modelli
        senza ragionamento regolabile (dove la pillola non c'è) */
     mount.replaceChildren(picker.elemento, ...(pillolaRagionamentoVisibile() ? [] : [rigaMostraRagionamento({ classeRiga: 'talos-setting', classeEtichetta: 'talos-setting__label' })]));
+  }
+
+  /*
+   * 29/10/2026 (bozzetto del selettore approvato): nel velo «Modello» il modello IN USO sta in testata accanto al titolo, e Aggiorna
+   *   col conto dei modelli sta nel piede accanto alla nota e a «Fatto». «Fatto» applica la scelta segnata (sincronizzata col server
+   *   come sempre); se la scrittura fallisce il velo resta aperto. Ctrl K porta alla ricerca da qualunque punto del velo.
+   * ⛔ Il velo si rimonta a ogni apertura: testata e piede si svuotano dei pezzi del montaggio di prima, e gli ascoltatori del velo
+   *   si mettono una volta sola e parlano col selettore CORRENTE.
+   */
+  let selettoreDelVelo = null;
+  function montaTestataEPiedeDelSelettore(radice, picker) {
+    selettoreDelVelo = picker;
+    const finestra = radice.querySelector('.talos-dialog');
+    const titolo = radice.querySelector('.talos-dialog__header .talos-grow');
+    const piede = radice.querySelector('.talos-dialog__footer');
+    radice.querySelectorAll('.talos-dialog__header .model-picker-in-use, .talos-dialog__footer .model-picker-footer').forEach((n) => n.remove());
+    titolo?.append(picker.inUso);
+    piede?.prepend(picker.piede);
+    if (finestra && !finestra.dataset.selettoreCollegato) {
+      finestra.dataset.selettoreCollegato = 'true';
+      finestra.addEventListener('keydown', (event) => {
+        if ((suApple() ? event.metaKey : event.ctrlKey) && !event.altKey && !event.shiftKey && String(event.key).toLowerCase() === 'k') {
+          event.preventDefault();
+          selettoreDelVelo?.cerca();
+        }
+      });
+      const fatto = piede?.querySelector('[data-chiudi="veloModello"]');
+      fatto?.addEventListener('click', async (event) => {
+        if (!selettoreDelVelo?.haUnaSceltaInSospeso()) return; // niente da applicare: «Fatto» chiude come sempre
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        await selettoreDelVelo.conferma(); // riuscita ⇒ il selettore chiude il velo da sé (`alSelezionato`)
+      });
+    }
   }
 
   /** «Mostra ragionamento» come riga del riquadro «Modello» (A14, owner 08/10): stesso interruttore, stesso stato, due vesti. */
@@ -12331,12 +12548,21 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
         if (pendente.tipo === 'domanda') {
           // C2-Q: la domanda della figlia alla persona, nella carta delle domande con la riga «chi chiede»
           if (state.realSession.domandeDelleFiglie.get(pendente.requestId)?.isConnected) return;
+          const domandaVera = Array.isArray(pendente.questions) ? pendente.questions.find((q) => typeof q?.question === 'string' && q.question.trim())?.question : null;
+          if (domandaVera) state.realSession.motiviAttesaFiglie.set(childId, { testo: domandaVera.trim() }); // pannello v2, A-07
+          aggiornaInspectorDaStato(); // il perché arriva al pannello senza aspettare un altro evento
           const scheda = appendUserQuestionCard(pendente.requestId, Array.isArray(pendente.questions) ? pendente.questions : [],
             { figlia: { sessionId: childId, chi: nomeDellAgente(agente ?? agentiInDiretta.get(childId)) || null } });
           if (scheda) state.realSession.domandeDelleFiglie.set(pendente.requestId, scheda);
           segnalaRigaSessioneViva(); // C2-R7: la riga di questa sessione dice «aspetta te»
           return;
         }
+        /* pannello v2 (A-07): il perché della riga «Richiede attenzione» — il comando vero, o la frase della carta */
+        const azioneF = pendente.azione;
+        state.realSession.motiviAttesaFiglie.set(childId, typeof azioneF?.comando === 'string' && azioneF.comando.trim()
+          ? { comando: azioneF.comando.trim() }
+          : { testo: [descriviAzioneApprovazione(azioneF), azioneF?.percorso].filter(Boolean).join(' · ') });
+        aggiornaInspectorDaStato(); // il perché arriva al pannello senza aspettare un altro evento
         const carta = appendApprovalCard(pendente.requestId, pendente.azione,
           { sessionId: childId, chi: nomeDellAgente(agente ?? agentiInDiretta.get(childId)) || null, perAttrezzo: pendente.perAttrezzo ?? null, politica: pendente.politica ?? null });
         state.realSession.carteDelleFiglie.set(pendente.requestId, carta);
@@ -12353,6 +12579,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     // come `ApprovalResolved` per le carte di questa sessione: l'unico punto che finalizza, con l'esito vero
     segnaEsitoApprovazione(carta, { approvato: esito.approvato, altrove: !carta._rispostaDataQui?.(esito), ambito: esito.ambito });
     state.realSession.carteDelleFiglie.delete(requestId);
+    if (carta?.dataset?.figlia) state.realSession.motiviAttesaFiglie?.delete(carta.dataset.figlia); // pannello v2, A-07
     segnalaRigaSessioneViva(); // C2-R7: e torna come prima, se nessun'altra aspetta
   }
   /* C2-Q: come `chiudiCartaDellaFiglia`, per la carta delle domande — l'unico punto che la finalizza, con l'esito vero. Le risposte
@@ -12361,6 +12588,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     const scheda = state.realSession.domandeDelleFiglie.get(requestId);
     if (!scheda) return;
     state.realSession.domandeDelleFiglie.delete(requestId);
+    if (scheda?.dataset?.figlia) state.realSession.motiviAttesaFiglie?.delete(scheda.dataset.figlia); // pannello v2, A-07
     segnalaRigaSessioneViva(); // C2-R7: e torna come prima, se nessun'altra aspetta
     const daQui = Boolean(scheda._rispostaDataQui?.(esito));
     const tentata = daQui ? scheda._rispostaTentata?.() : null;
@@ -12553,6 +12781,10 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
   var agenteEvidenziato = null; // var: lo legge anche il disegno del pannello, che può girare prima di questa riga (niente zona morta)
   function evidenziaAgenteNelPannello(sessionId) {
     agenteEvidenziato = sessionId || null;
+    aggiornaInspectorDaStato(); // pannello v2: il disegno porta l'evidenza (`dati.evidenziato`), così un ridisegno della scheda non la perde
+    applicaEvidenzaAgente();
+  }
+  function applicaEvidenzaAgente() {
     for (const card of document.querySelectorAll('#railAgenti [data-sessione-figlia]')) {
       const sua = card.dataset.sessioneFiglia === agenteEvidenziato;
       if (sua) { card.dataset.evidenziata = 'true'; card.setAttribute('aria-current', 'true'); card.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
@@ -12560,6 +12792,16 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     }
   }
   /* Pannello → diagramma: a diagramma delle deleghe aperto, una scheda del pannello porta il diagramma su quell'agente. */
+  /** Pannello v2: la riga scelta porta il diagramma delle deleghe GIÀ APERTO sul suo agente (come `apriAgenteDalPannello`), e niente
+   *  altro — la conversazione dell'agente si apre col suo pulsante del dettaglio, non con un clic sulla riga. */
+  function seguiNelDiagramma(figlia) {
+    if (!(grafoWorkflow && grafoWorkflowChiave === `${state.realSession.id}|deleghe` && figlia?.sessionId)) return;
+    void (async () => {
+      const passo = await clientDeleghe?.nodoDellaSessione(figlia.sessionId).catch(() => null);
+      if (passo && grafoWorkflow) { grafoWorkflow.vai({ passo }); return; }
+      if (grafoWorkflow) await grafoWorkflow.vaiAllAgente?.(figlia.sessionId).catch(() => false);
+    })();
+  }
   function apriAgenteDalPannello(figlia) {
     if (grafoWorkflow && grafoWorkflowChiave === `${state.realSession.id}|deleghe` && figlia?.sessionId) {
       void (async () => {
@@ -12761,11 +13003,54 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
   }
 
   /**
+   * Pausa · Riprendi · Riprova di una delega (`POST …/delegation/:azione`), e Ferma (`POST …/stop`), nella forma delle azioni
+   * che scrivono (`{ ok, messaggio }`, come `fermaProcesso`): il menu ne fa un avviso, il pannello v2 le scrive nella riga.
+   */
+  async function controlloDelega(figlia, azione) {
+    try {
+      await apiPost(`/api/v1/sessions/${encodeURIComponent(figlia.sessionId)}/delegation/${azione}`, {});
+      void caricaFigliSessione();
+      return { ok: true };
+    } catch (errore) {
+      return { ok: false, messaggio: errore?.message || tr('app.delegations.controlFailed') };
+    }
+  }
+  async function fermaDelega(figlia) {
+    try {
+      /* ⛔ coordinatore 29/10 sera: con `{}` il registro ferma SOLO la figlia, e le nipoti continuano a lavorare (e a pagare), mentre
+         lo stop_child del modello ferma il ramo intero. ⇒ `figlie: 'tutte'` = la figlia e le sue discendenti, dalla più profonda, senza
+         risvegli (lo stesso contratto del Mobile; rotta `requireStopBody` di r4, `{redirectId?, figlie?: 'tutte' | 'nessuna'}`). */
+      await apiPost(`/api/v1/sessions/${encodeURIComponent(figlia.sessionId)}/stop`, { figlie: 'tutte' });
+      void caricaFigliSessione();
+      return { ok: true };
+    } catch (errore) {
+      return { ok: false, messaggio: errore?.message || tr('app.delegations.stopFailed') };
+    }
+  }
+  /**
+   * ⭐ Pannello v2, decisione owner 3 (29/10/2026): «Rispondi» porta alla carta del permesso (o della domanda) della figlia, già
+   * disegnata nella chat del padre (C2, 07/10). ⛔ Se il rigioco l'ha smontata (BUG-24) o non è mai arrivata, si rilegge da
+   * `/pending` e si rimonta PRIMA di scorrere; se la figlia non aspetta più niente, lo si dice invece di fingere.
+   */
+  async function portaAllaCartaDellaFiglia(figlia) {
+    const childId = figlia?.sessionId;
+    if (typeof childId !== 'string') return { ok: false, messaggio: tr('pannello.agenti.cartaNonTrovata') };
+    const cerca = () => [...state.realSession.carteDelleFiglie.values(), ...state.realSession.domandeDelleFiglie.values()]
+      .find((c) => c?.isConnected && c.dataset?.figlia === childId) || null;
+    let carta = cerca();
+    if (!carta) { await leggiDomandaDellaFiglia(childId, figlia); carta = cerca(); }
+    if (!carta) return { ok: false, messaggio: tr('pannello.agenti.cartaNonTrovata') };
+    carta.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    (carta.querySelector('button:not([disabled])') ?? carta).focus?.({ preventScroll: true });
+    return { ok: true, testo: tr('pannello.agenti.cartaInVista') };
+  }
+
+  /**
    * Il menu di una delega: tasto destro sulla card. ⛔ Le voci si costruiscono ADESSO, non alla
    * nascita della card: fra il disegno e il clic destro la delega può essere finita, e un menu che
    * offre «Ferma» su una delega già conclusa è un pulsante che mente.
    */
-  function menuDellaDelega(figlia, dove) {
+  function menuDellaDelega(figlia, dove, { chiediFerma = null } = {}) {
     const viva = figlia?.conclusa !== true && figlia?.interrotta !== true;
     const voci = [
       { chiave: 'apri', etichetta: tr('app.delegations.menu.openConversation'), icona: 'i-doc', aziona: () => apriConversazioneFiglia(figlia) },
@@ -12804,13 +13089,9 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
        Titolo corto; nel corpo il nome corto, tagliato come nella scheda, e che cosa succede adesso. */
     const nomeCorto = tronca(nomeDellAgente(figlia) || tr('app.delegations.agentFallback'), 60);
     const controllo = async (azione, riuscito) => {
-      try {
-        await apiPost(`/api/v1/sessions/${encodeURIComponent(figlia.sessionId)}/delegation/${azione}`, {});
-        toast(tr(`app.delegations.${riuscito}`), tr(`app.delegations.${riuscito}Body`, { nome: nomeCorto }));
-        void caricaFigliSessione();
-      } catch (errore) {
-        toast(tr('app.delegations.controlFailed'), errore.message);
-      }
+      const esito = await controlloDelega(figlia, azione);
+      if (esito.ok) toast(tr(`app.delegations.${riuscito}`), tr(`app.delegations.${riuscito}Body`, { nome: nomeCorto }));
+      else toast(tr('app.delegations.controlFailed'), esito.messaggio);
     };
     if (viva) voci.push({ chiave: 'pausa', etichetta: tr('app.delegations.menu.pause'), icona: 'i-pausa', aziona: () => controllo('pause', 'paused') });
     if (inPausa) voci.push({ chiave: 'riprendi', etichetta: tr('app.delegations.menu.resume'), icona: 'i-play', aziona: () => controllo('resume', 'resumed') });
@@ -12823,6 +13104,8 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
         pericolo: true,
         separaPrima: true,
         aziona: () => {
+          /* ⭐ Pannello v2, decisione owner 2 (29/10/2026): dalla riga della scheda Agenti la conferma sta NELLA RIGA. */
+          if (typeof chiediFerma === 'function') { chiediFerma(); return; }
           // ⛔ 11/09 lotto G: niente `window.confirm` sincrono — la conferma è una modale nostra.
           confermaModale({
             titolo: tr('app.delegations.stopTitle'),
@@ -12830,13 +13113,9 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
             conseguenza: tr('app.delegations.menu.stopConsequence'),
             etichettaConferma: tr('app.delegations.menu.stopConfirm'),
             onConferma: async () => {
-              try {
-                await apiPost(`/api/v1/sessions/${encodeURIComponent(figlia.sessionId)}/stop`, {});
-                toast(tr('app.delegations.stopped'), nomeDellAgente(figlia) || tr('app.delegations.stoppedBody'));
-                void caricaFigliSessione();
-              } catch (errore) {
-                toast(tr('app.delegations.stopFailed'), errore.message);
-              }
+              const esito = await fermaDelega(figlia);
+              if (esito.ok) toast(tr('app.delegations.stopped'), nomeDellAgente(figlia) || tr('app.delegations.stoppedBody'));
+              else toast(tr('app.delegations.stopFailed'), esito.messaggio);
             },
           });
         },
@@ -12989,8 +13268,11 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
          `disegnaAgenti` la lascia statica, e non promette niente che non può mantenere. */
       azioniAgenti: { onApri: apriAgenteDalPannello, onMenu: menuDellaDelega, onGrafo: state.realSession.id ? (figlia) => apriDiagramma({ figlia, tipo: 'deleghe' }) : null, sessionId: state.realSession.id, errore: figliErrore },
       agentiDelWorkflow: Boolean(railWorkflow), // F3-50: la scheda è del rail v2
+      /* ⭐ PANNELLO DI DESTRA v2 (owner 29/10/2026, kit approvato): le schede che passano ai moduli `components/pannello/*`. Ogni voce
+         porta i DATI che la scheda legge e le AZIONI che esistono già nell'app (MAPPA §3); niente fetch nei moduli. */
+      pannello: { agenti: datiPannelloAgenti(agenti), processi: datiPannelloProcessi(processi), contesto: ultimoContestoPannello = datiPannelloContesto(finestra, state.realSession.id ? { giri: Number.isFinite(Number(state.realSession.usage?.giri)) ? Number(state.realSession.usage.giri) : null, tetto: state.realSession.tettoGiriDichiarato } : null) },
     });
-    if (agenteEvidenziato) evidenziaAgenteNelPannello(agenteEvidenziato); // il pannello si ridisegna a ogni rilettura: l'evidenza resta
+    if (agenteEvidenziato) applicaEvidenzaAgente(); // il pannello si ridisegna a ogni rilettura: l'evidenza resta
     /*
      * ⛔⛔ I NUMERI SULLE SCHEDE «AGENTI» E «PROCESSI» — owner, 20/09/2026.
      *
@@ -13011,11 +13293,28 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     const schede = inspector.querySelector('#railTabs');
     if (schede) {
       // F3-50: con un workflow il numero sono i suoi passi al lavoro, come la lista che si apre cliccandolo
-      impostaConteggioScheda(schede.querySelector('[data-rail="agenti"]'), railWorkflowAttivi + contaAgentiAttivi(agenti));
-      impostaConteggioScheda(schede.querySelector('[data-rail="processi"]'), contaProcessiAttivi(processi));
+      /* ⭐ Pannello v2: il NUMERO resta quello di oggi (gli agenti IN CORSO, owner 20/09 — chi aspetta non lo tiene in vita), e in
+         più il pallino ambra se qualcuno ti aspetta o è da guardare, col perché nel titolo della scheda. */
+      const numeroAgenti = railWorkflowAttivi + contaAgentiAttivi(agenti);
+      contatoreScheda(schede.querySelector('[data-rail="agenti"]'), { ...contoAgenti({ agenti }), numero: numeroAgenti || null });
+      /* pannello v2: il numero di oggi (`contaProcessiAttivi`), più il pallino se un comando sembra fermo o aspetta il consenso */
+      contatoreScheda(schede.querySelector('[data-rail="processi"]'), { ...contoProcessi({ processi }), numero: contaProcessiAttivi(processi) || null });
+      /* ⭐ pannello v2, passo 7 (MAPPA §0 #23 e §3.5): l'anello della finestra sul Contesto (ambra dall'85%), i file toccati dalla
+         richiesta sul File (il pallino se due hanno scritto lo stesso file), i file da salvare sul Git (il pallino coi conflitti; solo
+         quando lo stato letto è di QUESTA sessione — senza, nessun numero). A colonna stretta cedono i numeri, mai i nomi. */
+      contatoreScheda(schede.querySelector('[data-rail="contesto"]'), state.realSession.id && ultimoContestoPannello ? contoContesto(ultimoContestoPannello.dati) : {});
+      contatoreScheda(schede.querySelector('[data-rail="file"]'), state.realSession.id ? contoFile(datiAggiunteFile()) : {});
+      const git = githubCtx();
+      contatoreScheda(schede.querySelector('[data-rail="github"]'), state.realSession.id && git.statoDellaSessione === state.realSession.id && git.ultimoStato ? contoGit({ stato: git.ultimoStato }) : {});
+      leggiStatoGitPerIlConto(); // owner 29/10 sera: il numero subito all'apertura della chat, una lettura leggera sola
       tieniInVistaScheda(schede.querySelector('[aria-selected="true"]')); // un numero che cresce può spingerla fuori
     }
     programmaRisorseProcessi(processi.filter((p) => STATI_MISURABILI.has(p.stato)).length); // C1: solo a scheda aperta e con righe vive
+    /* pannello v2: le aggiunte della scheda Git (chi ha scritto, «Dettagli del repository») seguono i dati della colonna, a scheda aperta */
+    const git = $('#railGithub');
+    if (git && git.hidden !== true) git.__pnPagine?.ridisegna?.();
+    if ($('#railFile') && $('#railFile').hidden !== true) aggiornaAggiunteFile(); // pannello v2: striscia e viste dei toccati
+    if (toastRegion?.childElementCount) misuraPilaToast(); // pannello v2: la pila resta sopra la barra delle pagine anche quando cambia
   }
 
   /*
@@ -13024,6 +13323,102 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
    * sessione»): qui si leggono una volta all'apertura della sessione e a ogni fine giro, e finiscono
    * nella colonna. Mai un'invenzione: senza deleghe resta lo stato vuoto.
    */
+  /** Pannello v2, scheda Agenti: i dati (MAPPA A-01…A-18) e le azioni dell'app (`menuDellaDelega`, `controlloDelega`, `fermaDelega`,
+   *  `portaAllaCartaDellaFiglia`, `preparaCommentoNelComposer`, `caricaFigliSessione`). */
+  function datiPannelloAgenti(agenti) {
+    const vera = Boolean(state.realSession.id);
+    return {
+      dati: {
+        agenti,
+        domande: Object.fromEntries(state.realSession.motiviAttesaFiglie ?? []),
+        errore: figliErrore || null,
+        inCaricamento: storiaDellaSessioneInCaricamento(),
+        evidenziato: agenteEvidenziato,
+        sessione: state.realSession.id ?? null,
+      },
+      azioni: {
+        apri: apriConversazioneFiglia, // «Apri la conversazione» del dettaglio: la conversazione dell'agente (anche a diagramma aperto)
+        seleziona: seguiNelDiagramma,
+        menu: (figlia, dove, extra) => menuDellaDelega(figlia, dove, extra),
+        apriDiagramma: vera ? (figlia) => apriDiagramma({ figlia, tipo: 'deleghe' }) : null,
+        riprova: vera ? (figlia) => controlloDelega(figlia, 'retry') : null,
+        ferma: vera ? fermaDelega : null,
+        rispondi: vera ? portaAllaCartaDellaFiglia : null,
+        scriviNelComposer: vera ? preparaCommentoNelComposer : null,
+        ricarica: vera ? () => caricaFigliSessione() : null,
+        apriMenu: (voci, dove) => apriMenuAzioniLibreria(voci, dove),
+      },
+    };
+  }
+
+  /** Pannello v2, scheda Contesto (MAPPA C-01…C-13): gli stessi dati delle card di oggi, più la storia (C-05) e il giro raggiungibile
+   *  (C-11). Le azioni sono quelle della scheda di oggi (`compactSession`, «Vedi la richiesta», «Cosa ha tenuto», l'esportazione,
+   *  l'albero dei rami, le impostazioni dei server MCP). */
+  var ultimoContestoPannello = null; // `var`: la colonna può disegnarsi prima che questa riga giri (nessuna zona morta del `let`); il conto sulla scheda Contesto legge gli stessi dati della scheda (MAPPA §5, «numeri sulle schede»)
+  function datiPannelloContesto(finestra, invio) {
+    const vera = Boolean(state.realSession.id);
+    return {
+      dati: {
+        usage: finestra.perInspector.usage,
+        schedaContesto: datiSchedaContesto(),
+        giri: giriPerInspector(),
+        invio: storiaDellaSessioneInCaricamento() ? null : invio, // A1-bis 5: durante la storia il numero di un invio INTERMEDIO non va a schermo
+        cacheTesto: vera && state.realSession.cacheSessione ? testoRiusoCache(state.realSession.cacheSessione) : null,
+        modello: vera ? String(state.model || '').split('/').pop() || null : null,
+        storiaContesto: vera ? state.realSession.storiaContesto ?? [] : [],
+        storiaInCaricamento: storiaDellaSessioneInCaricamento(),
+        sessione: state.realSession.id ?? null,
+      },
+      azioni: vera ? {
+        riassumi: () => compactSession(),
+        vediRichiesta: () => { void vediRichiestaSpedita(); },
+        cosaHaTenuto: () => mostraCosaHaTenuto(),
+        esporta: () => { void esportaTrascrizioneSessione('markdown'); },
+        apriAlberoRami: () => openSheet('sessionTree'),
+        gestisciMcp: () => { setView('settings'); setSettingsSection('tools'); },
+        vaiAlGiro: (n) => vaiAlGiroNellaChat(n),
+        apriMenu: (voci, dove) => apriMenuAzioniLibreria(voci, dove),
+      } : { apriMenu: (voci, dove) => apriMenuAzioniLibreria(voci, dove) },
+    };
+  }
+  /** C-11: porta la chat al giro `n` (il numero della spine, `.talos-turn-spine__n`). Un giro non montato (finestra del rigioco) non c'è
+   *  a schermo: si dice, non si inventa uno scorrimento. */
+  function vaiAlGiroNellaChat(n) {
+    const numero = [...document.querySelectorAll('#conversation .talos-turn-spine__n')].find((x) => Number(x.textContent) === Number(n));
+    const turno = numero?.closest('.talos-turn');
+    if (!turno) { toast(tr('pannello.contesto.vaiAlGiro'), tr('pannello.contesto.giroNonInVista', { n })); return false; }
+    turno.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    return true;
+  }
+
+  /** Pannello v2, scheda Processi (MAPPA P-01…P-13): i comandi, CPU e memoria con la loro storia (P-04), le porte in ascolto (P-05,
+   *  dal server), e le azioni che esistono già (`fermaProcesso`, `sfondaProcesso`, `togliProcesso`, `apriNelBrowserVivo`). */
+  function datiPannelloProcessi(processi) {
+    const vera = Boolean(state.realSession.id);
+    const risorse = vera ? state.realSession.risorseProcessi ?? null : null;
+    const porte = new Map();
+    if (risorse instanceof Map) for (const [id, r] of risorse) if (Array.isArray(r?.porte) && r.porte.length) porte.set(String(id), r.porte.map((porta) => ({ porta, url: `http://localhost:${porta}/` })));
+    return {
+      dati: { processi, risorse, storiaCpu: vera ? state.realSession.storiaCpu ?? null : null, porte, sessione: state.realSession.id ?? null, inCaricamento: storiaDellaSessioneInCaricamento() },
+      azioni: vera ? {
+        ferma: fermaProcesso, sfonda: sfondaProcesso, togli: togliProcesso,
+        mostraUscita: mostraUscitaDelComando,
+        apriNelBrowser: (url) => apriNelBrowserVivo({ url }),
+        apriTerminale: () => $('#pillTerminale')?.click(),
+        apriMenu: (voci, dove) => apriMenuAzioniLibreria(voci, dove),
+      } : { apriMenu: (voci, dove) => apriMenuAzioniLibreria(voci, dove) },
+    };
+  }
+  /** P-11: «Mostra l'uscita» porta alla card del comando in chat e la apre (il lettore dell'uscita vive lì, `creaLettoreOutput`).
+   *  Se la card non è montata (finestra del rigioco, BUG-24) si apre il Terminale, dove stanno le uscite dei comandi (PO-10). */
+  function mostraUscitaDelComando(p) {
+    const info = state.realSession.toolCallNomi.get(p?.id);
+    const card = info?.article?.isConnected ? info.article : null;
+    if (!card) { $('#pillTerminale')?.click(); return; }
+    if (info.detail && 'open' in info.detail) info.detail.open = true;
+    card.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }
+
   let letturaFigliInCorso = null;
   function caricaFigliSessione() {
     void aggiornaRailWorkflow(); // F3-50: stessi momenti, stessa sessione
@@ -19991,10 +20386,13 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
    *   dall'ultimo commit». ⇒ la lettera si vede, il significato intero sta nel titolo e nel nome accessibile.
    *   Un solo posto la scrive: prima la riga nuova portava la parola e l'aggiornamento successivo no.
    */
-  function scriviStatoRigaAlbero(segno, stato) {
+  function scriviStatoRigaAlbero(segno, stato, percorso = null) {
     segno.className = `ft-status-dot ft-${stato} talos-file-row__state`;
     segno.textContent = stato === 'new' ? 'A' : 'M';
-    const frase = stato === 'new' ? tr('app.files.createdHere') : tr('app.files.modifiedHere');
+    /* ⭐ pannello v2 (b), owner 29/10/2026 sera: in più il giro in cui la conversazione l'ha scritto («… · giro 12»), anche a chi ascolta */
+    const giro = percorso ? state.realSession.reviewFiles?.get?.(percorso)?.giro : null;
+    const base = stato === 'new' ? tr('app.files.createdHere') : tr('app.files.modifiedHere');
+    const frase = Number.isFinite(giro) && giro > 0 ? `${base} · ${tr('pannello.file.giro', { n: giro })}` : base;
     segno.title = frase;
     segno.setAttribute('aria-label', frase);
     segno.setAttribute('role', 'img');
@@ -20043,8 +20441,37 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     const frase = alLavoro.length > 0
       ? tr(alLavoro.some((x) => x.scritto) ? 'app.files.agentEditing' : 'app.files.agentReading', { chi: chi(alLavoro) })
       : tr('app.files.agentTouched', { chi: chi(agenti) });
-    segno.title = frase;
-    segno.setAttribute('aria-label', frase);
+    /* ⭐ pannello v2 (b), owner 29/10/2026 sera: se due hanno scritto lo stesso file (la conversazione e un agente, due agenti, o una
+       collisione detta dal server) il segno prende il tono d'attenzione e la frase lo dice in coda — le parole di oggi restano. */
+    const toccato = toccatiDellaConversazione().get(percorsoCompleto);
+    const collisione = Boolean(toccato?.collisione);
+    segno.classList.toggle('pn-agente-collisione', collisione);
+    const fraseIntera = collisione ? `${frase} ${tr('pannello.file.segnoCollisione', { chi: elencoNellaLingua(toccato.scrittoDa) })}` : frase;
+    segno.title = fraseIntera;
+    segno.setAttribute('aria-label', fraseIntera);
+  }
+
+  /* chi ha toccato cosa, una volta per giro dell'albero: l'albero chiama per ogni riga, e i dati si ricalcolano solo al giro dopo */
+  let toccatiMemo = null;
+  function toccatiDellaConversazione() {
+    if (!toccatiMemo) { toccatiMemo = modelloFile(datiAggiunteFile(), 'conversazione').perPercorso; setTimeout(() => { toccatiMemo = null; }, 0); }
+    return toccatiMemo;
+  }
+  /** (b3) Sulla cartella CHIUSA, quanti file toccati ci sono dentro (`propagate` di VS Code, FileDecoration): si nasconde aperta. */
+  function scriviContoCartellaAlbero(row, percorsoCartella, perPercorso) {
+    let conto = $('.pn-segno-albero--conto', row);
+    const n = [...perPercorso.keys()].filter((x) => x.startsWith(`${percorsoCartella}/`)).length;
+    if (!n) { conto?.remove(); return; }
+    if (!conto) {
+      conto = document.createElement('span');
+      conto.className = 'pn-segno-albero pn-segno-albero--conto';
+      conto.setAttribute('role', 'img');
+      row.insertBefore(conto, $('.ft-actions-btn', row));
+    }
+    conto.textContent = String(n);
+    const frase = trn('pannello.file.dentroToccatiOne', 'pannello.file.dentroToccatiMany', n);
+    conto.title = frase;
+    conto.setAttribute('aria-label', frase);
   }
 
   /*
@@ -20284,7 +20711,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       const dove = voce.percorso.includes('/') ? voce.percorso.slice(0, voce.percorso.lastIndexOf('/')) : '';
       riga.append(icona, textElement('span', 'talos-file-row__name', voce.nome), textElement('span', 'talos-file-risultato__dove talos-muted', dove));
       const stato = voce.cartella ? null : statoFileAlbero(voce.percorso);
-      if (stato) { const segno = document.createElement('span'); scriviStatoRigaAlbero(segno, stato); riga.appendChild(segno); }
+      if (stato) { const segno = document.createElement('span'); scriviStatoRigaAlbero(segno, stato, voce.percorso); riga.appendChild(segno); }
       riga.title = voce.percorso;
       return riga;
     }));
@@ -20311,8 +20738,63 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     await rivelaERivelaRigaAlbero(percorso); // poi la seleziona e la porta in vista
   }
 
-  const VISTE_FILE = Object.freeze({ get tutti() { return tr('app.files.viewAll'); }, get modificati() { return tr('app.files.viewModified'); } });
-  function vistaFileScelta() { return $('#fileVista')?.dataset.vista === 'modificati' ? 'modificati' : 'tutti'; }
+  /* ⭐ pannello v2 (owner 29/10/2026, MAPPA §0.1 #18, alternativa minima): SOTTO le due viste di oggi, «Toccati in questa richiesta» e
+     «Toccati in questa conversazione» (le righe v2 del kit: chi ha scritto o letto, in quale giro, collisioni). Le due di oggi restano
+     identiche, coi loro id. */
+  const VISTE_FILE = Object.freeze({
+    get tutti() { return tr('app.files.viewAll'); }, get modificati() { return tr('app.files.viewModified'); },
+    get richiesta() { return tr('pannello.file.vistaRichiesta'); }, get conversazione() { return tr('pannello.file.vistaConversazione'); },
+  });
+  function vistaFileScelta() { const v = $('#fileVista')?.dataset.vista; return v && Object.hasOwn(VISTE_FILE, v) ? v : 'tutti'; }
+  /** Il contenitore delle viste in più, accanto a `#fileModificati` (nasce la prima volta che serve). */
+  function contenitoreToccati() {
+    let c = $('#fileToccati');
+    const modificati = $('#fileModificati');
+    if (!c && modificati) { c = document.createElement('div'); c.id = 'fileToccati'; c.className = 'talos-file-toccati'; c.hidden = true; modificati.after(c); }
+    return c;
+  }
+  /** Pannello v2, scheda File: chi ha scritto o letto cosa (MAPPA F-01…F-05). Tutto letto adesso, della sessione a schermo. */
+  function datiAggiunteFile() {
+    const vera = Boolean(state.realSession.id);
+    if (!vera) return { scritti: [], letti: [], agenti: [], richiesta: null, sessione: null };
+    const scritti = [...(state.realSession.reviewFiles?.values?.() || [])].map((v) => { const c = contaDiff(v); return { path: v.path, giro: v.giro ?? null, nuovo: v.nuovo === true, aggiunte: c.aggiunte, rimozioni: c.rimozioni }; });
+    /* F-04: i file LETTI dalla conversazione, dagli eventi degli attrezzi che la colonna tiene già (`leggi` col suo `percorso`) */
+    const avvii = new Map(); const argomenti = new Map();
+    for (const e of state.realSession.eventiAttrezzi || []) {
+      if (e.type === 'ToolCallStart' && e.toolCallName === 'leggi') avvii.set(e.toolCallId, e.giro ?? null);
+      else if (e.type === 'ToolCallArgs' && avvii.has(e.toolCallId)) argomenti.set(e.toolCallId, (argomenti.get(e.toolCallId) || '') + (e.delta || ''));
+    }
+    const letti = [];
+    for (const [id, giro] of avvii) {
+      let percorso = null;
+      try { percorso = JSON.parse(argomenti.get(id) || '{}')?.percorso ?? null; } catch { percorso = null; }
+      if (typeof percorso === 'string' && percorso) letti.push({ path: percorso.replace(/\\/gu, '/').replace(/^\.\//u, ''), giro });
+    }
+    /* F-05: «di questa richiesta» = dal giro in corso. ⛔ Il kit proponeva il numero dell'Indice dei giri (`giriPerInspector`), ma
+       quello conta anche i messaggi della persona, mentre il giro di `reviewFiles` e degli attrezzi è `runCount`: due numerazioni
+       diverse. Si confronta la stessa grandezza. */
+    const giroOra = Number.isSafeInteger(state.realSession.runCount) && state.realSession.runCount > 0 ? state.realSession.runCount : null;
+    return { scritti, letti, agenti: agentiPerInspector(), richiesta: giroOra ? { giroDa: giroOra, at: null } : null, sessione: state.realSession.id };
+  }
+  function azioniAggiunteFile() {
+    return {
+      apriFile: (percorso, nome) => { void apriFileAlbero(percorso, nome); },
+      vediDifferenze: (percorso) => { setView('diff'); renderReviewFile(`real:${percorso}`); },
+      scegliVista: (id) => { const b = $('#fileVista'); if (b) b.dataset.vista = id; aggiornaVistaFile(); },
+      apriMenu: (voci, dove) => apriMenuAzioniLibreria(voci, dove),
+    };
+  }
+  /** Le aggiunte della scheda File seguono i dati della colonna: la striscia delle collisioni e, se scelta, la vista dei toccati. */
+  function aggiornaAggiunteFile() {
+    const albero = $('#alberoFile');
+    if (!albero) return;
+    const dati = datiAggiunteFile();
+    const vecchia = $('#fileStriscia');
+    const nuova = strisciaCollisioni(document, dati, () => azioniAggiunteFile().scegliVista('richiesta'));
+    if (nuova) { nuova.id = 'fileStriscia'; if (vecchia) vecchia.replaceWith(nuova); else albero.before(nuova); } else vecchia?.remove();
+    const vista = vistaFileScelta();
+    if (vista === 'richiesta' || vista === 'conversazione') disegnaToccati(contenitoreToccati(), dati, azioniAggiunteFile(), vista);
+  }
   function aggiornaVistaFile() {
     const vista = vistaFileScelta();
     const albero = $('#alberoFile');
@@ -20320,6 +20802,9 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     const campo = $('#fileTreeFilter')?.closest('.talos-field');
     if (albero) albero.hidden = vista !== 'tutti';
     if (modificati) modificati.hidden = vista !== 'modificati';
+    const toccati = contenitoreToccati();
+    if (toccati) toccati.hidden = vista !== 'richiesta' && vista !== 'conversazione';
+    if (toccati && !toccati.hidden) disegnaToccati(toccati, datiAggiunteFile(), azioniAggiunteFile(), vista);
     if (campo) campo.hidden = vista !== 'tutti'; // la ricerca lavora sull'albero: fuori dall'albero non cercherebbe niente
     const nome = $('#fileVistaNome');
     if (nome) nome.textContent = VISTE_FILE[vista];
@@ -20328,6 +20813,10 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     if (vista === 'modificati') {
       const n = state.realSession.reviewFiles instanceof Map ? state.realSession.reviewFiles.size : 0;
       conteggio.textContent = n === 0 ? '' : trn('app.files.countOne', 'app.files.countMany', n);
+    } else if (vista === 'richiesta' || vista === 'conversazione') {
+      const n = toccati ? toccati.querySelectorAll('.pn-riga').length : 0;
+      conteggio.textContent = n === 0 ? '' : trn('app.files.countOne', 'app.files.countMany', n);
+      conteggio.title = '';
     } else {
       const n = albero ? albero.querySelectorAll('.ft-node:not([aria-expanded])').length : 0;
       conteggio.textContent = n === 0 ? '' : tr('app.files.visibleCount', { n: n });
@@ -20340,7 +20829,8 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       etichetta: tr('app.files.filterLabel'),
       posizionamento: { ancoraEl: ancora },
       voci: Object.entries(VISTE_FILE).map(([id, etichetta]) => ({
-        icona: id === scelta ? 'i-check' : (id === 'tutti' ? 'i-folder' : 'i-file'),
+        icona: id === scelta ? 'i-check' : (VISTE_FILE_V2.find((v) => v.id === id)?.icona ?? 'i-file'),
+        separaPrima: id === 'richiesta', // le due viste in più stanno SOTTO quelle di oggi
         etichetta,
         azione: () => { const b = $('#fileVista'); if (b) b.dataset.vista = id; aggiornaVistaFile(); },
       })),
@@ -20753,6 +21243,9 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       permissions: permessiAmmessi.includes(record.permissions) ? record.permissions : DESKTOP_CHAT_DEFAULTS.permissions,
       modalitaOperativa: normalizzaModoDiLavoro(record.modalitaOperativa),
       permessiPerAttrezzo: override,
+      /* 29/10/2026 (bozzetto del selettore dei modelli approvato): la stella e gli ultimi cinque scelti, nelle preferenze della app */
+      modelliPreferiti: normalizzaListaModelli(record.modelliPreferiti, MASSIMO_PREFERITI),
+      modelliRecenti: normalizzaListaModelli(record.modelliRecenti, MASSIMO_RECENTI),
     };
   }
   function normalizzaWorkspaces(value) {
@@ -20823,6 +21316,9 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       // C2b: il predefinito delle sessioni nuove non porta Coordinazione (owner, «spenta di serie»)
       permessiPerAttrezzo: mappaPerUnaSessioneNuova(state.permessiPerAttrezzo),
       autonomiaScelta: state.autonomiaScelta,
+      // 29/10/2026: le due liste del selettore dei modelli non vivono in `state`: si portano avanti dal documento, o un salvataggio le cancellerebbe
+      modelliPreferiti: documento.chat.modelliPreferiti,
+      modelliRecenti: documento.chat.modelliRecenti,
     });
     salvaImpostazioniDesktop(documento);
   }
@@ -21333,7 +21829,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     const stato = !cartella ? statoFileAlbero(percorsoCompleto) : null;
     if (stato) {
       const dot = document.createElement('span');
-      scriviStatoRigaAlbero(dot, stato);
+      scriviStatoRigaAlbero(dot, stato, percorsoCompleto);
       row.appendChild(dot);
     }
     const percorsoPerAgenti = cartella ? null : percorsoCompleto;
@@ -21365,6 +21861,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       row.appendChild(azioniBtn);
     }
     if (percorsoPerAgenti) scriviSegnoAgentiRiga(row, percorsoPerAgenti); // dopo il «⋯», così il segno gli si mette DAVANTI
+    if (cartella) scriviContoCartellaAlbero(row, percorsoCompleto, toccatiDellaConversazione()); // pannello v2 (b)
     /*
      * ⭐⭐⭐ 28/8, owner: "voglio abilitare il tasto destro del mouse a
      * livello globale dato che siamo nel desktop, per esempio tasto
@@ -21953,7 +22450,59 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       avvisa: (titolo, testo) => toast(titolo, testo),
       onSchermoIntero: diffGithubASchermoIntero,
     });
+    /* ⭐ Pannello v2 (owner 29/10/2026, MAPPA §5 e §0.2): la scheda di oggi resta IDENTICA (scheda-github.js non si tocca); dopo
+       ogni suo disegno un osservatore aggiunge sopra i +/− di ogni file (G-05), di chi è la modifica, «Dettagli del repository»
+       (la card Ambiente del Contesto, decisione owner 1), le pieghe ricordate e le pagine dei gruppi */
+    ctx.smettiGit = osservaSchedaGit(radice, datiAggiunteGit);
     return ctx.scheda;
+  }
+
+  /*
+   * ⭐ Owner 29/10/2026 sera (opzione consigliata): il numero sulla scheda Git c'è SUBITO quando la chat si apre, senza aprire la
+   *   scheda: UNA lettura leggera dello stato (`GET …/git/status`) in sottofondo, una volta per sessione e cartella, nessun giro a
+   *   ritmo. Poi lo aggiornano le letture che la scheda fa già quando è aperta. Un repository che non c'è (o una lettura fallita) non
+   *   si ritenta e non porta numeri.
+   */
+  const lettureGitPerIlConto = new Set();
+  function leggiStatoGitPerIlConto() {
+    const id = state.realSession.id;
+    if (!id || state.realSession.inRigiocata) return;
+    const ctx = githubCtx();
+    if (ctx.statoDellaSessione === id) return;
+    /* la scheda aperta (o una sua lettura in volo) legge da sé: una seconda lettura sarebbe un doppione (C34-04) */
+    if (ctx.inVolo || schedaGithubVisibile()) return;
+    const chiave = `${id}|${state.realSession.cartellaAssoluta || state.realSession.contesto?.cartella || ''}`;
+    if (lettureGitPerIlConto.has(chiave)) return;
+    lettureGitPerIlConto.add(chiave);
+    /* la stessa lettura la riusa la scheda se la persona la apre subito dopo (`caricaSchedaGithub`): due GET identici a un soffio
+       l'uno dall'altro sono uno solo, come il `dedupingInterval` di SWR (2 s di serie). GITHUB-10 e C34-04: «una lettura sola». */
+    const promessa = apiGet(percorsoGitSessione(id, 'status'));
+    ctx.letturaLeggera = { id, alle: Date.now(), promessa };
+    promessa.then((dati) => {
+      /* la persona è passata a un'altra chat mentre leggevamo: il dato non si usa, e tornando ci si riprova (la chiave si libera) */
+      if (state.realSession.id !== id) { lettureGitPerIlConto.delete(chiave); return; }
+      if (ctx.statoDellaSessione === id) return; // la scheda ha già letto da sé
+      ctx.ultimoStato = dati;
+      ctx.statoDellaSessione = id;
+      aggiornaInspectorDaStato();
+    }).catch(() => { /* niente repository o lettura fallita: nessun numero, nessun nuovo tentativo */ });
+  }
+
+  /** Pannello v2, scheda Git: le aggiunte sopra la scheda di oggi (git.js). Tutto letto adesso, della sessione a schermo. */
+  function datiAggiunteGit() {
+    const ctx = githubCtx();
+    const vera = Boolean(state.realSession.id);
+    const stato = vera && ctx.statoDellaSessione === state.realSession.id ? ctx.ultimoStato ?? null : null;
+    const conti = new Map();
+    for (const v of Array.isArray(stato?.voci) ? stato.voci : []) {
+      if (Number.isFinite(v?.aggiunte) || Number.isFinite(v?.rimozioni)) conti.set(v.percorso, { aggiunte: v.aggiunte ?? null, rimozioni: v.rimozioni ?? null });
+    }
+    return {
+      stato, conti,
+      ambiente: vera ? state.realSession.contesto ?? null : null,
+      scritti: vera ? [...(state.realSession.reviewFiles?.values?.() ?? [])].map((f) => ({ path: String(f.path ?? '').replace(/\\/gu, '/').replace(/^\.\//u, ''), giro: f.giro })) : [],
+      agenti: vera ? agentiPerInspector() : [],
+    };
   }
 
   async function caricaSchedaGithub() {
@@ -21963,18 +22512,24 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     const id = state.realSession.id;
     ctx.sporca = false;
     // la scheda è una sola: cambiata la sessione, ciò che era dell'altra (messaggio, richiesta in riga, modalità modifica…) non resta
-    if (ctx.sessioneMostrata !== id) { ctx.sessioneMostrata = id; scheda.cambiaSessione(); }
+    if (ctx.sessioneMostrata !== id) { ctx.sessioneMostrata = id; ctx.ultimoStato = null; scheda.cambiaSessione(); }
     if (!id) { scheda.mostraErrore(tr('app.files.changesNoSession')); return; }
     if (ctx.inVolo) { ctx.ancora = true; return; }
     ctx.inVolo = true;
+    /* la lettura leggera dell'apertura (pannello v2), se è di questa sessione e di meno di 2 s fa: si usa quella, una volta sola */
+    const leggera = ctx.letturaLeggera?.id === id && Date.now() - ctx.letturaLeggera.alle < 2000 ? ctx.letturaLeggera.promessa : null;
+    ctx.letturaLeggera = null;
     try {
       const [dati, ramo, messiDaParte, sincronizzazione] = await Promise.all([
-        apiGet(percorsoGitSessione(id, 'status')),
+        leggera ?? apiGet(percorsoGitSessione(id, 'status')),
         apiGet(percorsoGitSessione(id, 'branch')).catch(() => null),
         apiGet(percorsoGitSessione(id, 'stashes')).catch(() => null), // F6-1 passo 3; se non si legge, resta l'elenco di prima
         apiGet(percorsoGitSessione(id, 'sync')).catch(() => null), // F6-2: remoti, ↓ ↑, ultimo recupero — sola lettura, niente rete
       ]);
       if (state.realSession.id !== id) return; // la sessione è cambiata mentre si leggeva: la risposta non è più sua
+      ctx.ultimoStato = dati; // pannello v2: i +/− (G-05) e il conto «file da salvare» sulla scheda
+      ctx.statoDellaSessione = id;
+      aggiornaInspectorDaStato(); // pannello v2, passo 7: il conto «file da salvare» sulla scheda Git segue lo stato appena letto
       scheda.mostraStato({ ...dati, ramo: ramo?.ramo ?? null, staccata: ramo?.staccata === true, ...(Array.isArray(messiDaParte?.accantonati) ? { accantonati: messiDaParte.accantonati } : {}), ...(sincronizzazione && typeof sincronizzazione === 'object' ? { sincronizzazione } : {}) });
     } catch (errore) {
       if (state.realSession.id !== id) return;
@@ -22655,14 +23210,16 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
   function aggiornaPuntiniStatoAlbero() {
     const ul = $('#inspector-files .ft-tree');
     if (!ul) return;
+    const toccati = toccatiDellaConversazione();
     for (const li of ul.querySelectorAll('.ft-node')) {
-      if (li.hasAttribute('aria-expanded')) continue; // solo file, mai cartelle
+      /* le cartelle: solo il loro conto dei toccati (pannello v2, b) */
+      if (li.hasAttribute('aria-expanded')) { const r = $(':scope > .ft-row', li); if (r) scriviContoCartellaAlbero(r, li.dataset.percorso, toccati); continue; }
       const row = $(':scope > .ft-row', li);
       const stato = statoFileAlbero(li.dataset.percorso);
       let dot = $('.ft-status-dot', row);
       if (stato) {
         if (!dot) { dot = document.createElement('span'); row.insertBefore(dot, $('.ft-actions-btn', row)); }
-        scriviStatoRigaAlbero(dot, stato);
+        scriviStatoRigaAlbero(dot, stato, li.dataset.percorso);
       } else if (dot) {
         dot.remove();
       }
@@ -23022,6 +23579,14 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     if (evento.type === 'CUSTOM' && evento.name === EVENTO_FINESTRA_LOCALE) {
       const colonna = colonnaConversazione(ROOT());
       if (colonna && state.realSession.id) aggiornaRigaFinestraLocale(colonna, evento.value, { sessionId: state.realSession.id, document, inserisci: inserisciRigaCompattazione });
+      return;
+    }
+    /* Owner 29/10/2026 notte (CONTRATTO-CONTROLLO-SPENTO, bozzetto approvato «Riga leggera»): il controllo delle scritture non ha potuto
+       giudicare — la stessa riga della finestra allargata, nello stesso posto. «Una volta» lo decide il server; qui una riga per evento. */
+    const controlloSpento = leggiControlloSpento(evento);
+    if (controlloSpento) {
+      const colonna = colonnaConversazione(ROOT());
+      if (colonna && state.realSession.id) aggiornaRigaControlloSpento(colonna, controlloSpento, { sessionId: state.realSession.id, document, inserisci: inserisciRigaCompattazione });
       return;
     }
     /* owner 17/10/2026 («Avviso in chat + stato in Estensioni»): un server MCP che non parte, detto una volta finché l'esito non cambia */
@@ -24986,6 +25551,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       state.realSession.comandiInVolo = new Set(); // A4-bis: i comandi in volo sono della sessione che si guarda
       state.realSession.eventiAttrezzi = []; // O-02 — la diagnosi dei giri parla della sessione che si sta guardando, mai di quella prima
       state.realSession.risorseProcessi = null; // C1: CPU e memoria sono dei comandi di QUESTA sessione; la lettura riparte da capo
+      state.realSession.storiaCpu = null; // pannello v2, P-04: anche la storia della CPU
       risorseProcessi.letture = 0;
       state.realSession.usciteAgente = new Map(); // PO-10: le uscite dei comandi sono della sessione a schermo
       programmaSchedeAgente(); // PO-10: le schede agente della sessione di prima se ne vanno, quelle di questa si ricostruiscono
@@ -24995,6 +25561,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       for (const scheda of state.realSession.domandePendenti?.values() || []) scheda?._dockController?.destroy();
       for (const scheda of state.realSession.domandeDelleFiglie?.values() || []) scheda?._dockController?.destroy(); // C2-Q
       state.realSession.domandeDelleFiglie = new Map(); // C2-Q: tornano da `leggiFigliSessione`, come le carte di permesso
+      state.realSession.motiviAttesaFiglie = new Map(); // pannello v2 (A-07): le domande delle figlie sono della sessione a schermo
       const questionDock = $('#userQuestionDock');
       if (questionDock) {
         questionDock.replaceChildren();
@@ -25620,6 +26187,16 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
        «used = max(0, getattr(compressor, "last_prompt_tokens", 0) or 0)», clone 65ad529). `completion_tokens: 0` tiene la forma
        di `usage` che colonna e Context Manager leggono (`inspector.js`, `contesto.js`): sommano, e la somma è il prompt. */
     state.realSession.ultimaRichiesta = { prompt_tokens: prompt, completion_tokens: 0 };
+    /* ⭐ pannello v2, C-05: il contesto NEL TEMPO — un punto per giro (l'ultima richiesta del giro vince), dalla stessa misura del
+       titolo («B come Hermes», 09/10). Rigiocato anche alla riapertura, come la misura. */
+    const giroOra = Number.isSafeInteger(state.realSession.runCount) ? state.realSession.runCount : null;
+    if (giroOra !== null) {
+      const storia = Array.isArray(state.realSession.storiaContesto) ? state.realSession.storiaContesto : (state.realSession.storiaContesto = []);
+      const at = Number.isFinite(Date.parse(valore?.at ?? '')) ? Date.parse(valore.at) : null;
+      const ultimo = storia.at(-1);
+      if (ultimo && ultimo.giro === giroOra) { ultimo.token = prompt; if (at !== null) ultimo.at = at; }
+      else { storia.push({ giro: giroOra, at, token: prompt }); if (storia.length > 2000) storia.splice(0, storia.length - 2000); }
+    }
     const id = state.realSession.id;
     const salvata = id ? compattazioneLegacy.ultimaMisura.get(id) : null;
     if (salvata) compattazioneLegacy.ultimaMisura.set(id, { ...salvata, tokenMisurati: prompt });
@@ -25872,7 +26449,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       const diSfondoSopraUnGiro = !Number.isSafeInteger(c.giro) && compattazioneLegacy.rigaDelGiro.has(sessionId);
       if (!diSfondoSopraUnGiro) { compattazioneLegacy.rigaDelGiro.delete(sessionId); aggiornaAvanzamentoLegacy(colonna, null, { sessionId }); }
       if (c.compattato) misuraDopoCompattazione(sessionId, c.tokenDopo); // 26/09: la misura di prima non vale più (Pi, Hermes)
-      if (c.compattato) contaCompattazioneLegacy({ at: c.record?.at ?? null, tokenPrima: c.tokenPrima ?? null, tokenDopo: c.tokenDopo ?? null });
+      if (c.compattato) contaCompattazioneLegacy({ at: c.record?.at ?? null, tokenPrima: c.tokenPrima ?? null, tokenDopo: c.tokenDopo ?? null, conModello: c.record ? c.ripiego !== true : null });
       if (c.compattato && c.record) {
         aggiornaSeparatoreLegacy(colonna, { at: c.record.at, stato: 'riassunta', annullabile: c.record.annullabile, tokenPrima: c.tokenPrima, tokenDopo: c.tokenDopo, riassunto: typeof c.record.riassunto === 'string' ? c.record.riassunto : null, ripiego: c.ripiego === true, ragione: c.ragione ?? null }, { ...opzioniRigaLegacy(sessionId), testo: testoRigaCompattazione({ stato: 'riassunta', tokenPrima: c.tokenPrima, tokenDopo: c.tokenDopo, ripiego: c.ripiego === true, ragione: c.ragione ?? null }) });
       } else if (c.compattato) {
@@ -25917,7 +26494,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     };
   }
   function azzeraSchedaContesto() {
-    Object.assign(state.realSession, { richiestaDelGiro: null, politicaContesto: null, compattazioniLegacy: null, recordCompattazioneLegacy: null });
+    Object.assign(state.realSession, { richiestaDelGiro: null, politicaContesto: null, compattazioniLegacy: null, recordCompattazioneLegacy: null, storiaContesto: [] });
   }
   function applicaRichiestaDelGiro(valore) {
     if (!valore || typeof valore !== 'object') return;
@@ -25927,6 +26504,11 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
   function contaCompattazioneLegacy(ultima) {
     const t = (state.realSession.compattazioniLegacy ??= { numero: 0, ultima: null });
     t.numero += 1; t.ultima = ultima;
+    /* pannello v2, C-05/C-09: il riassunto segna il punto del suo giro nel grafico (prima → dopo; col modello o rapido) */
+    const punto = Array.isArray(state.realSession.storiaContesto) ? state.realSession.storiaContesto.at(-1) : null;
+    if (punto && Number.isFinite(ultima?.tokenPrima) && Number.isFinite(ultima?.tokenDopo)) {
+      punto.compattazione = { prima: ultima.tokenPrima, dopo: ultima.tokenDopo, conModello: typeof ultima.conModello === 'boolean' ? ultima.conModello : null };
+    }
     if (!state.realSession.inRigiocata) void caricaDatiSchedaContesto(); // il record nuovo (riassunto e indice)
     aggiornaInspectorDaStato();
   }
@@ -25957,7 +26539,8 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     const si = await apriConfermaRun(document, { titolo: tr('processi.inspector.compactConfirmTitle'), testo: tr('processi.inspector.compactConfirmBody'), conferma: tr('processi.inspector.compactConfirmAction'), opener: $('#contestoAltro') });
     if (si) await compactSession();
   });
-  $('#contestoRichiesta')?.addEventListener('click', async () => {
+  $('#contestoRichiesta')?.addEventListener('click', () => { void vediRichiestaSpedita(); });
+  async function vediRichiestaSpedita() {
     const sessionId = state.realSession.id;
     if (!sessionId) return;
     let ultima = null;
@@ -25965,13 +26548,14 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     catch (errore) { toast(tr('processi.inspector.sentRequestTitle'), messaggioErroreUtente(errore, tr('processi.inspector.sentRequestFailed'))); return; }
     if (sessionId !== state.realSession.id) return;
     apriModaleScheda(tr('processi.inspector.sentRequestTitle'), nodiRichiestaInviata(document, ultima, { ora: dataEOra }), { document, ampia: true });
-  });
+  }
   $('#contestoEsporta')?.addEventListener('click', () => { void esportaTrascrizioneSessione('markdown'); });
-  $('#compattazioniTenuto')?.addEventListener('click', () => {
+  $('#compattazioniTenuto')?.addEventListener('click', () => mostraCosaHaTenuto());
+  function mostraCosaHaTenuto() {
     const d = datiSchedaContesto();
     const tenuto = cosaHaTenuto({ activeVersion: d?.motore?.activeVersion ?? null, facts: d?.motore?.facts ?? [], recordLegacy: d?.recordLegacy ?? null });
     apriModaleScheda(tr('processi.inspector.keptTitle'), nodiCosaHaTenuto(document, tenuto), { document, ampia: true });
-  });
+  }
 
   const ATTESE_RILETTURA_POLITICA_MS = [2000, 6000, 18000];
   const riletturePolitica = new Map(); // sessionId → { tentativi, timer }
@@ -28246,9 +28830,9 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     );
     rightHead.querySelector('h3').id = 'workspaceChooserSettingsTitle';
 
-    const modelPicker = creaModelPicker({ valoreIniziale: state.model || '', aggiornaModelloPrincipale: false });
+    const modelPicker = creaModelPicker({ valoreIniziale: state.model || '', aggiornaModelloPrincipale: false, alLasciare: () => closeEmbeddedDialog(sheetDialog) });
     const effortPicker = creaEffortPicker({ valoreIniziale: state.effort, livelliAmmessi: livelliEffortDelModello() }); // BUG-7: livelli del modello
-    const plannerPicker = creaModelPicker({ valoreIniziale: '', etichettaVuota: tr('app.common.none'), aggiornaModelloPrincipale: false });
+    const plannerPicker = creaModelPicker({ valoreIniziale: '', etichettaVuota: tr('app.common.none'), aggiornaModelloPrincipale: false, alLasciare: () => closeEmbeddedDialog(sheetDialog) });
 
     const modelSection = document.createElement('div');
     modelSection.className = 'workspace-chooser-setting-group';

@@ -180,7 +180,8 @@ const riga = (page, percorso, gruppo) => page.locator(`#railGithub .talos-github
 for (const tema of ['dark', 'light']) {
   test(`GITHUB-01 — la scheda dopo File: ramo, base dichiarata, i gruppi coi conteggi e le lettere (${tema})`, async ({ page }) => {
     const { contatore } = await preparaPagina(page, { tema });
-    const schede = await page.locator('#railTabs [role="tab"]').allTextContents();
+    /* il nome della scheda, senza il suo numero: dal 29/10 (owner, pannello v2) la scheda Git ha il numero già all'apertura della chat */
+    const schede = await page.locator('#railTabs [role="tab"]').evaluateAll((tabs) => tabs.map((t) => { const c = t.cloneNode(true); c.querySelector('.pn-contatore')?.remove(); return c.textContent; }));
     expect(schede.map((s) => s.trim()).slice(0, 3)).toEqual(['Contesto', 'File', 'Git']); // A22 (owner 09/10): la scheda si chiama Git
     await expect(page.locator('#railGithub .talos-github__testa')).toContainText('lavoro/f6');
     await expect(page.locator('#railGithub .talos-github__base')).toHaveText('Confronto con l’ultimo commit abc1234 — Primo commit');
@@ -1021,9 +1022,18 @@ function storiaDivergente(f) {
 
 /** «Commit recenti» si apre da tastiera: il toast di riconnessione del banco finto può coprire il titolo (vedi GITHUB-P3-FOTO). */
 async function apriStoria(page) {
+  /* pannello v2 (owner 29/10/2026: «il grafo dei commit si divide fra le pagine»): queste prove guardano la GEOMETRIA del grafo su
+     tutti i suoi commit, che a 900 px d'altezza ora stanno su due pagine. La finestra si alza perché stiano su una; le pagine del
+     grafo hanno la loro prova (`pannello-git.spec.mjs`, PNGIT-B05). */
+  const vista = page.viewportSize();
+  if (vista && vista.height < 1600) await page.setViewportSize({ width: vista.width, height: 1600 });
   const titolo = page.locator('#railGithub .talos-github-gruppo[data-gruppo="storia"] .talos-github-gruppo__titolo');
-  await titolo.focus();
-  await page.keyboard.press('Enter');
+  /* pannello v2: la piega si RICORDA (owner 29/10): ricaricata la pagina, «Commit recenti» aperta prima è già aperta — Invio la chiuderebbe */
+  await page.waitForTimeout(100);
+  if ((await titolo.getAttribute('aria-expanded')) !== 'true') {
+    await titolo.focus();
+    await page.keyboard.press('Enter');
+  }
   await expect(titolo).toHaveAttribute('aria-expanded', 'true');
 }
 const righeStoria = (page) => page.locator('#railGithub .talos-github-gruppo[data-gruppo="storia"] .talos-github-riga');

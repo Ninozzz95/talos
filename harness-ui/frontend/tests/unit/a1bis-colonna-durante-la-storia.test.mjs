@@ -67,7 +67,8 @@ test('A1BIS-02 CACHE: durante la storia la misura assente è «—», non «non 
 
 test('A1BIS-03 APP: la colonna riceve lo stato della storia dalla sessione vera', () => {
   const app = readFileSync(new URL('../../src/legacy/app.js', import.meta.url), 'utf8');
-  assert.equal(app.split('storiaInCaricamento: storiaDellaSessioneInCaricamento(),').length - 1, 2, 'colonna e piede');
+  /* pannello v2 (29/10/2026): anche la scheda Contesto nuova riceve lo stato della storia (`datiPannelloContesto`) */
+  assert.equal(app.split('storiaInCaricamento: storiaDellaSessioneInCaricamento(),').length - 1, 3, 'colonna, piede e scheda Contesto v2');
   assert.match(app, /function storiaDellaSessioneInCaricamento\(\) \{\n\s+return Boolean\(state\.realSession\.id\) && state\.realSession\.inRigiocata === true;/);
 });
 
