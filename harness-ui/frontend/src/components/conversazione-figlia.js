@@ -573,7 +573,7 @@ export function montaConversazioneFiglia(contenitore, {
    * ⛔ `chiuso` arriva dal renderer: un recinto ancora aperto (lo streaming è a metà) non si
    *   evidenzia e non si lascia copiare, perché sarebbe codice a metà.
    */
-  const recinto = (testoCodice, linguaggio, chiuso) => creaBloccoCodice({ testo: testoCodice, linguaggio, chiuso: chiuso !== false }, { document: d });
+  const recinto = (testoCodice, linguaggio, chiuso, info = '') => creaBloccoCodice({ testo: testoCodice, linguaggio, chiuso: chiuso !== false, info }, { document: d });
 
   /**
    * Rende il markdown DENTRO un contenitore che resta lo stesso nodo.

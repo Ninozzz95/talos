@@ -56,13 +56,13 @@ test('DELEGHE-PAROLE-01 — sulle schede: «In corso», «Concluso», «Interrot
   expect(errori).toEqual([]);
 });
 
-test('DELEGHE-PAROLE-02 — in inglese: «Running», «Done», «Stopped», «Failed»; nessun «Cancelled» nel diagramma delle deleghe', async ({ page }) => {
+test('DELEGHE-PAROLE-02 — in inglese: «In progress» (owner 29/10/2026), «Done», «Stopped», «Failed»; nessun «Cancelled» nel diagramma delle deleghe', async ({ page }) => {
   const { grafo } = await apri(page, scena(), { lingua: 'en' });
-  await expect(pill(grafo, 'a')).toHaveText('Running');
+  await expect(pill(grafo, 'a')).toHaveText('In progress');
   await expect(pill(grafo, 'b')).toHaveText('Done');
   await expect(pill(grafo, 'c')).toHaveText('Stopped');
   await expect(pill(grafo, 'd')).toHaveText('Failed');
-  await expect(grafo.locator('.gv-sessione .talos-wfg__pill')).toHaveText('Running');
+  await expect(grafo.locator('.gv-sessione .talos-wfg__pill')).toHaveText('In progress');
   await expect(grafo.locator('.gv-segmenti').first()).toHaveAttribute('aria-label', /Stopped 1/u);
   const letto = await tuttoCioCheSiLegge(grafo);
   expect(letto).not.toMatch(/Cancelled/u);

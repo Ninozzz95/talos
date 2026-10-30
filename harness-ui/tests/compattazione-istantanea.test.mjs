@@ -16,6 +16,7 @@ import { talosLavora } from '../src/kernel/talosHarness.desktop-hotfix.mjs';
 import { MARCATORE_RIASSUNTO, VARIABILE_TETTO_TOKEN, applicaRecord, budgetCoda, creaRecord, riduciCodaSottoPressione } from '../src/kernel/compattazione-desktop.mjs';
 import { stimaTokenConversazione } from '../src/kernel/talosHarness.mjs';
 import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
+import { corpoSenzaMarcatori } from './aiuto/corpo-senza-marcatori.mjs'; // 28/10: cache, punto 1
 
 const CONSEGNA = 'CONSEGNA-ORIGINALE-MARKER: leggi grande.txt più volte e riferisci.';
 const PREAMBOLO = 'PREAMBOLO-PROGETTO ' + 'x'.repeat(12_000);
@@ -45,7 +46,7 @@ const attesa = (ms) => new Promise((r) => setTimeout(r, ms));
  * Il fornitore finto del banco della compattazione, con in più `ritardoRiassuntoMs` (un riassuntore lento, come quelli veri: il
  * cookbook di Anthropic misura 41 s) e l'ora di ogni richiesta, per misurare quanto il giro ASPETTA.
  */
-function fintoFornitore({ chiamateTool = 10, riassunto, ritardoRiassuntoMs = 0, ritardoLavoroMs = 0, testoRiassunto = 'RIASSUNTO', lavoroAspettaPronta = false } = {}) {
+function fintoFornitore({ chiamateTool = 10, riassunto, ritardoRiassuntoMs = 0, ritardoLavoroMs = 0, testoRiassunto = 'RIASSUNTO', lavoroAspettaPronta = false, riassuntoAspettaEmergenza = false } = {}) {
   const corpi = [];
   const ore = [];
   let lavoro = 0;
@@ -60,9 +61,20 @@ function fintoFornitore({ chiamateTool = 10, riassunto, ritardoRiassuntoMs = 0, 
    */
   let attesaPronta = null;
   let liberaPronta = () => {};
-  const suEvento = (e) => { if (e?.tipo === 'compattazione-preparata' && e.fase === 'pronta') { liberaPronta(); attesaPronta = null; } };
+  /*
+   * IST-06 era rossa 1 volta nella suite intera della candidata 14 (28/10/2026), verde 5 su 5 da sola: sotto carico le 14 letture
+   * duravano più dei 300 ms del riassunto, che arrivava PRONTO prima dell'emergenza ⇒ scambio senza attesa e senza riga (giusto, ma non
+   * la scena della prova). Con `riassuntoAspettaEmergenza` il riassunto risponde solo quando il kernel apre la riga d'attesa
+   * (`compattazione-inizio`): la scena «all'emergenza il riassunto è ancora in preparazione» senza dipendere dall'orologio. Rete di 5 s.
+   */
+  let liberaRiassunto = () => {};
+  const attesaEmergenza = riassuntoAspettaEmergenza ? new Promise((r) => { liberaRiassunto = r; setTimeout(r, 5_000).unref?.(); }) : null;
+  const suEvento = (e) => {
+    if (e?.tipo === 'compattazione-preparata' && e.fase === 'pronta') { liberaPronta(); attesaPronta = null; }
+    if (e?.tipo === 'compattazione-inizio') liberaRiassunto();
+  };
   const fetchDiRete = async (_url, init) => {
-    const body = JSON.parse(init.body);
+    const body = corpoSenzaMarcatori(init.body);
     corpi.push(body);
     const promptTokens = Math.ceil(JSON.stringify(body.messages).length / 4);
     const usage = { prompt_tokens: promptTokens, completion_tokens: 5 };
@@ -72,6 +84,7 @@ function fintoFornitore({ chiamateTool = 10, riassunto, ritardoRiassuntoMs = 0, 
       riassuntiInVolo += 1;
       try {
         if (ritardoRiassuntoMs) await attesa(ritardoRiassuntoMs);
+        if (attesaEmergenza) await attesaEmergenza;
         const dato = riassunto?.(riassunti);
         const scelta = dato?.message ?? dato ?? { role: 'assistant', content: `${testoRiassunto} ${riassunti}: ho letto grande.txt più volte.` };
         const fine = dato?.finish_reason ?? (scelta.tool_calls ? 'tool_calls' : 'stop');
@@ -211,7 +224,7 @@ test('IST-06 — all\'emergenza si ASPETTA il riassunto già in preparazione e l
      token) e si paga solo se toglie il 10% della soglia al netto di quello. Con 8.000 il preambolo (~3.000) più le due letture della coda
      (~2.000) più il riassunto atteso non lasciavano il 10%: la scena è a 12.000, come IST-03, IST-04 e IST-08. */
   conTetto(t, 12_000); // soglia 12.000, emergenza 14.400
-  const fornitore = fintoFornitore({ chiamateTool: 14, ritardoRiassuntoMs: 300 });
+  const fornitore = fintoFornitore({ chiamateTool: 14, ritardoRiassuntoMs: 300, riassuntoAspettaEmergenza: true });
   const { esito, eventi } = await giro(t, { cartella: cartellaDiProva(t), fornitore });
   assert.equal(esito.comeFinita, 'concluso');
   const fini = eventi.filter((e) => e.tipo === 'compattazione-fine' && e.compattato);

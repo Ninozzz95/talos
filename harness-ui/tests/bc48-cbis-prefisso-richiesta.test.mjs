@@ -139,7 +139,11 @@ test('BC48-CBIS-PERIMETRO: conserva altri modelli, immagini e blocchi estesi', a
     ['GLM contenuto misto', 'z-ai/glm-5.3-flash', 'system', [marcato, { type: 'image_url', image_url: { url: 'https://example.invalid/finta.png' } }]],
     ['GLM blocco esteso', 'z-ai/glm-5.3-flash', 'system', [{ ...marcato, dettaglio: 'da preservare' }]],
     ['GLM direttiva estesa', 'z-ai/glm-5.3-flash', 'system', [{ ...marcato, cache_control: { ...marcato.cache_control, scope: 'da preservare' } }]],
-    ['GLM messaggio utente', 'z-ai/glm-5.3-flash', 'user', [marcato]],
+    /* 28/10/2026 (cache, punto 1): ora il nucleo marca anche i messaggi della persona, e la cache implicita di GLM vuole lo stesso
+       ritorno alla stringa che il sistema già aveva */
+    ['GLM messaggio utente', 'z-ai/glm-5.3-flash', 'user', [marcato], 'Preambolo stabile'],
+    ['GLM ultimo pezzo marcato (5 minuti)', 'z-ai/glm-5.3-flash', 'user', [{ type: 'text', text: 'Guarda' }, { type: 'image_url', image_url: { url: 'data:image/png;base64,AA' }, cache_control: { type: 'ephemeral' } }], [{ type: 'text', text: 'Guarda' }, { type: 'image_url', image_url: { url: 'data:image/png;base64,AA' } }]],
+    ['GLM risultato di un attrezzo', 'z-ai/glm-5.3-flash', 'tool', [{ ...marcato, cache_control: { type: 'ephemeral' } }], 'Preambolo stabile'],
     ['OpenRouter Claude', 'anthropic/claude-sonnet-4.6', 'system', [marcato]],
     ['Z.AI diretto', 'zai:glm-5.3', 'system', [marcato]],
   ];

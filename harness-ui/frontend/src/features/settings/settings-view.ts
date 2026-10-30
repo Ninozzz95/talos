@@ -45,6 +45,16 @@ function iconaSprite(sprite: string, className: string): SVGElement {
   svg.append(use);
   return svg;
 }
+/*
+ * 29/10/2026 — una sezione «solo nell'app» (`soloApp`, oggi «Aggiornamenti») esiste solo quando il guscio ha mandato il suo stato:
+ *   `components/aggiornamenti.js` marca la radice con `data-talos-app-aggiornamenti`. Nel browser (il 4174) la voce resta nascosta, e la
+ *   ricerca non porta a una pagina vuota.
+ */
+export const SEGNO_APP_AGGIORNAMENTI = 'data-talos-app-aggiornamenti';
+function sezioneVisibile(id: SettingsSection): boolean {
+  return !SETTINGS_SECTIONS[id]?.soloApp || document.documentElement.hasAttribute(SEGNO_APP_AGGIORNAMENTI);
+}
+
 function iconaSezione(id: SettingsSection): SVGElement {
   const sprite = SETTINGS_SECTIONS[id]?.icon ?? 'settings';
   return iconaSprite(SPRITE_SEZIONE[sprite] ?? sprite, 'talos-nav-item__icon');
@@ -371,6 +381,7 @@ export function createSettingsView(screen: HTMLElement, options: SettingsViewOpt
      */
     button.append(iconaSezione(id), node('span', 'talos-nav-item__label')); buttons.set(id, button); list.append(button);
     const item = node('option'); item.value = id; mobile.append(item);
+    if (!sezioneVisibile(id)) { button.hidden = true; item.hidden = true; item.disabled = true; }
     button.addEventListener('click', () => choose(id), { signal });
   }
   const heading = node('header', 'settings-section-heading'); heading.dataset.settingsChrome = '';
@@ -651,7 +662,8 @@ export function createSettingsView(screen: HTMLElement, options: SettingsViewOpt
     return button;
   }
   /** L'indice è lo stesso della ricerca in pagina: una sola fonte, due porte. */
-  const risultati = (termine: string) => searchSettings(buildSettingsIndex(options.fields, options.studioIds, options.language(), options.translate), termine);
+  const risultati = (termine: string) => searchSettings(buildSettingsIndex(options.fields, options.studioIds, options.language(), options.translate), termine)
+    .filter((voce) => sezioneVisibile(voce.section)); // una sezione «solo nell'app» non si trova nel browser
 
   function disegnaPalette() {
     /* ⛔ 09/10/2026 (bugfixer, foto del 4174) — a campo VUOTO la palette diceva «0 risultati · Nessuna impostazione trovata»

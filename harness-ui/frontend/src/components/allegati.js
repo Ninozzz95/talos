@@ -163,12 +163,57 @@ export function generePerLoSchermo(allegato) {
   return t('chat.attachments.genre.file');
 }
 
+/*
+ * Owner 26/10/2026: «dalla chat il file ordini dal pad si deve poter aprire se ci clicco sopra, come qualunque altro file». Hermes
+ * lascia inerti i chip dei file nei messaggi inviati (`directive-text.tsx:524-536`: si attivano solo sessioni e link): qui si aprono nel
+ * lettore, come dall'albero dei file.
+ * ⛔ Revisione del blocco (26/10, A-F1/A-F2): un file della chat sta nella cartella di PARTENZA della sessione (`cartellaPerChatFile`,
+ *   `session-registry.mjs`), che non è sempre la radice dei permessi (Accesso pieno da un progetto: radice = il disco); e la radice
+ *   può cambiare a sessione aperta. ⇒ Il chip ricorda la DESTINAZIONE (assoluta quando si sa la base) e il percorso relativo si calcola
+ *   AL CLIC, contro la radice di quel momento.
+ */
+const normaPercorso = (p) => String(p ?? '').trim().replace(/\\/gu, '/').replace(/^(?:\.\/)+/u, '');
+const eAssoluto = (p) => /^(?:[A-Za-z]:\/|\/)/u.test(p);
+const segmentiSani = (rel) => Boolean(rel) && !rel.startsWith('~') && !/^[A-Za-z]:/u.test(rel)
+  && !rel.split('/').some((s) => s === '..' || s === '.' || s === '');
+
+/** Dove sta il file di un allegato: un assoluto (dato, o la base + il relativo), un relativo nudo se la base non si sa, o '' (etichetta). */
+export function destinazioneAllegato(allegato, { base = '' } = {}) {
+  if (!allegato || allegato.daBrowser) return '';
+  const p = normaPercorso(allegato.assoluto || allegato.percorso);
+  if (!p || p.startsWith('//')) return '';
+  if (eAssoluto(p)) return segmentiSani(p.replace(/^(?:[A-Za-z]:)?\//u, '')) ? p : '';
+  if (!segmentiSani(p)) return '';
+  const b = normaPercorso(base).replace(/\/+$/u, '');
+  return b && eAssoluto(`${b}/`) ? `${b}/${p}` : p;
+}
+
+/** Il percorso dentro la radice di ADESSO con cui il lettore apre la destinazione, o '' se ne sta fuori (maiuscole indifferenti solo su Windows). */
+export function relativoNellaRadice(destinazione, radice = '') {
+  const d = normaPercorso(destinazione);
+  if (!d) return '';
+  if (!eAssoluto(d)) return segmentiSani(d) ? d : '';
+  const r = normaPercorso(radice).replace(/\/+$/u, '');
+  if (!r) return '';
+  const windows = /^[A-Za-z]:/u.test(d);
+  const dentro = windows ? d.toLowerCase().startsWith(`${r.toLowerCase()}/`) : d.startsWith(`${r}/`);
+  if (!dentro) return '';
+  const rel = d.slice(r.length + 1);
+  return segmentiSani(rel) ? rel : '';
+}
+
+/** Comodità per le prove: il relativo con cui si aprirebbe adesso (base = radice se non detta). */
+export function percorsoApribile(allegato, radice = '', base = '') {
+  return relativoNellaRadice(destinazioneAllegato(allegato, { base: base || radice }), radice);
+}
+
 /**
  * La riga corta di un allegato per il chip sotto la bolla: genere, nome, e quanto pesa.
  * ⛔ Per una pagina il «nome» è il suo dominio, non l'URL intero: un chip che porta 90 caratteri di
  *    URL rifà, in piccolo, il difetto che stiamo curando.
+ * `apribile` = la destinazione del file, se oggi sta dentro la radice (o la radice non si sa ancora): il clic la riporta relativa.
  */
-export function chipAllegato(allegato, modello = '') {
+export function chipAllegato(allegato, modello = '', { radice = '', base = '' } = {}) {
   if (!allegato) return null;
   const genere = generePerLoSchermo(allegato);
   let nome;
@@ -179,10 +224,12 @@ export function chipAllegato(allegato, modello = '') {
     nome = nomeBreveAllegato(allegato.percorso || allegato.nome, 32);
   }
   const { etichetta } = costoAllegato(allegato, modello);
-  return { genere, nome, costo: etichetta, titolo: allegato.percorso || allegato.nome || '' };
+  const destinazione = destinazioneAllegato(allegato, { base: base || radice });
+  const apribile = destinazione && (!radice || relativoNellaRadice(destinazione, radice)) ? destinazione : '';
+  return { genere, nome, costo: etichetta, titolo: allegato.percorso || allegato.nome || '', apribile };
 }
 
 /** I chip di un messaggio, nell'ordine in cui sono stati allegati. */
-export function chipDegliAllegati(allegati, modello = '') {
-  return (Array.isArray(allegati) ? allegati : []).map((a) => chipAllegato(a, modello)).filter(Boolean);
+export function chipDegliAllegati(allegati, modello = '', opzioni = {}) {
+  return (Array.isArray(allegati) ? allegati : []).map((a) => chipAllegato(a, modello, opzioni)).filter(Boolean);
 }

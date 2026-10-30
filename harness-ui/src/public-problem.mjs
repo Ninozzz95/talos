@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { STATUS_CODES } from 'node:http';
 import { FRASI_DEI_MOTIVI_DEI_FILE } from './motivi-dei-file.mjs';
 
 const diagnostics = new Map();
@@ -40,6 +41,8 @@ export const MESSAGES = Object.freeze({
   MODE_WORKFLOW_RETIRED: { title: 'Mode no longer available', explanation: 'Workflow mode has been removed: you now work in Normal or Plan, and Workflow is a tool the model uses when needed.', action: 'Choose Normal or Plan and try again.' },
   RUNTIME_UNREACHABLE: { title: 'Local service unreachable', explanation: 'The local service did not respond.', action: 'Check in Doctor that it is running and try again.' },
   PATH_NOT_ALLOWED: { title: 'Path not allowed', explanation: 'The chosen path is outside the authorized area.', action: 'Choose a folder inside the open project.' },
+  /* Anteprima nelle domande (owner 29/10/2026): un file indicato dal modello che `leggi` chiederebbe prima di aprire */
+  PREVIEW_FILE_SECRET: { title: 'File kept out of the preview', explanation: 'This file may hold a secret, so previews do not show it.', action: 'Open it yourself from the Files tab if you need it.' },
   PROCESS_POLICY_REJECTED: { title: 'Operation blocked for safety', explanation: 'The requested command is not covered by the current permissions.', action: 'Check the session permission and try again only if you recognize the command.' },
   /*
    * ⛔ 07/9, O-49 — senza una voce qui la busta portava la copia di INTERNAL_ERROR:
@@ -137,7 +140,9 @@ function safeDiagnosticDetail(error) {
    (`rifiutoObiettivo` e `impostaObiettivo` in `session-registry.mjs`: otto frasi corte, nessun percorso, nessun identificatore).
    G2: i due codici del contratto (`rifiutoContratto` e `cambioDiContratto`: venti frasi; i soli valori sono un numero di
    posizione, un tetto e il simbolo di un operatore di shell — mai il comando né il percorso che la persona ha scritto). */
-const MESSAGGIO_GIA_PER_LA_PERSONA = new Set(['SESSION_NOT_READY', 'GOAL_TEXT_INVALID', 'GOAL_STATE_CONFLICT', 'GOAL_NOT_ALLOWED', 'GOAL_CONTRACT_INVALID', 'GOAL_CONTRACT_NEEDS_CONFIRMATION']);
+const MESSAGGIO_GIA_PER_LA_PERSONA = new Set(['SESSION_NOT_READY', 'GOAL_TEXT_INVALID', 'GOAL_STATE_CONFLICT', 'GOAL_NOT_ALLOWED', 'GOAL_CONTRACT_INVALID', 'GOAL_CONTRACT_NEEDS_CONFIRMATION',
+  /* 27/10/2026 (revisione del blocco 10, B-R2): QUALE cartella bloccata e QUALE elenco occupato li dice il modulo delle cartelle */
+  'FOLDER_BLOCKED', 'REMOTE_STORE_BUSY']);
 /* REV-GOAL-06: codici condivisi da più operazioni, la cui frase vera la scrive il registro insieme al MOTIVO (`goal-not-saved`,
    `fork-not-saved`…). Senza motivo (un guasto del disco lanciato altrove) resta la copia del codice. */
 const MESSAGGIO_PER_LA_PERSONA_CON_MOTIVO = new Set(['SESSION_STORE_WRITE_FAILED']);
@@ -177,11 +182,26 @@ export function paramsPubblici(error) {
   return Object.keys(fuori).length > 0 ? fuori : null;
 }
 
-export function toPublicProblem(error, { requestId = '', operation = '' } = {}) {
+/*
+ * ⛔ 27/10/2026 (revisione del blocco 10, A-R1 = D-R1, curata per classe) — la copia NEUTRA di un codice dichiarato che non ha una voce
+ *   qui sopra. Prima ricadeva su INTERNAL_ERROR: 282 codici su 330 (misurato) portavano «An unexpected problem occurred» e «Open Doctor,
+ *   copy the reference», cioè dicevano «guasto del server» a una chiave mancante, a un consenso negato, a un nome non valido. Chi chiama
+ *   (`errorEnvelope`) passa la frase pubblica del codice: quella diventa la spiegazione, e l'azione dice di fare ciò che la frase dice.
+ *   Solo un codice senza frase (o un errore interno vero) manda a Doctor.
+ *   ⭐ Come RFC 9457 (rfc-editor.org/rfc/rfc9457, letta il 27/10/2026): per un tipo generico il titolo «SHOULD be the same as the
+ *   recommended HTTP status phrase for that code» (§4.2.1), e non cambia fra un'occorrenza e l'altra (§3.1.3); la spiegazione «ought to
+ *   focus on helping the client correct the problem, rather than giving debugging information» (§3.1.4) — è la frase del codice.
+ */
+export const COPIA_NEUTRA = Object.freeze({ title: 'Request not completed', action: 'Do what the message says, then try again.' });
+
+export function toPublicProblem(error, { requestId = '', operation = '', messaggioDelCodice = '', statoDelCodice = 0 } = {}) {
   const code = safeCode(error);
-  const copy = MESSAGES[code] ?? MESSAGES.INTERNAL_ERROR;
+  const neutra = code !== 'INTERNAL_ERROR' && typeof messaggioDelCodice === 'string' && messaggioDelCodice.trim() !== ''
+    ? { ...COPIA_NEUTRA, title: STATUS_CODES[statoDelCodice] ?? COPIA_NEUTRA.title, explanation: messaggioDelCodice.trim() } : null;
+  const copy = MESSAGES[code] ?? neutra ?? MESSAGES.INTERNAL_ERROR;
   const doctorReference = referenceFor(code, requestId, operation);
   diagnostics.set(doctorReference, Object.freeze({ code, operation: String(operation || 'operation'), requestId: String(requestId || ''), detail: safeDiagnosticDetail(error) }));
+  ricordaCodice(code);
   /* MOTIVI-REV-02 (bugfixer, 16/10/2026): per i motivi dei file si pubblica la frase della TABELLA, mai il `message` dell'errore — la
      protezione non dipende più da come l'errore è stato costruito. */
   const dellaTabella = typeof error?.reason === 'string' && Object.hasOwn(FRASI_DEI_MOTIVI_DEI_FILE, error.reason) ? FRASI_DEI_MOTIVI_DEI_FILE[error.reason] : '';
@@ -198,6 +218,22 @@ export function logDiagnosticProblem(error, { requestId = '', operation = '', lo
   const code = safeCode(error);
   try { logger?.warn?.(`[${publicProblem.doctorReference}] ${operation || 'operation'} (${code})`); } catch { /* un logger guasto non cambia l’esito dell’operazione */ }
   return publicProblem.doctorReference;
+}
+
+/*
+ * «Segnala un problema» (owner 29/10/2026: «codici degli ultimi errori con l'ora, solo il codice, mai il messaggio intero») — gli ultimi
+ *   codici d'errore che questo server ha dato alla persona, con l'ora. Una lista corta a parte (non la mappa dei riferimenti, che resta
+ *   com'è): al più 20 voci, le più vecchie escono.
+ */
+const CODICI_RECENTI_MASSIMI = 20;
+const codiciRecenti = [];
+function ricordaCodice(code) {
+  codiciRecenti.push({ codice: code, alle: new Date().toISOString() });
+  if (codiciRecenti.length > CODICI_RECENTI_MASSIMI) codiciRecenti.splice(0, codiciRecenti.length - CODICI_RECENTI_MASSIMI);
+}
+/** Gli ultimi codici (dal più recente), `{codice, alle}`. */
+export function codiciDiagnosticiRecenti(quanti = 5) {
+  return codiciRecenti.slice(-quanti).reverse().map((voce) => ({ ...voce }));
 }
 
 export function getDiagnosticProblem(reference) {

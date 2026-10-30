@@ -6,6 +6,7 @@ import test from 'node:test';
 
 import { comeSonoFinitiIGiri, compattaConversazione, talosLavora } from '../src/kernel/talosHarness.mjs';
 import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
+import { corpoSenzaMarcatori } from './aiuto/corpo-senza-marcatori.mjs'; // 28/10: cache, punto 1
 
 test('CTX-LEGACY-FINAL-ANSWER-AT-CAP — completed final turn is not reported as exhausted', () => {
   assert.deepEqual(
@@ -175,7 +176,7 @@ async function provaTurnoDopoRiassuntoFallito(t, erroreHttp) {
   const requests = [];
   const fetchDiRete = async (_url, options) => {
     calls += 1;
-    requests.push(JSON.parse(options.body));
+    requests.push(corpoSenzaMarcatori(options.body));
     if (calls <= 8) {
       return Response.json({
         choices: [{ message: { role: 'assistant', content: '', tool_calls: [{

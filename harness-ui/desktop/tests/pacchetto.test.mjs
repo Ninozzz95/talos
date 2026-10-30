@@ -115,6 +115,27 @@ test('R02-PDFJS — PDF.js sfoltito a ~5 MB, il canvas nativo fuori, keyring den
   await assert.rejects(sfoltisciPdfjs(join(tmpdir(), 'talos-r02-niente-', 'node_modules')), /pdfjs-dist assente/, 'senza PDF.js il pacchetto si ferma');
 });
 
+test('R02-ELD (M 28/10/2026 notte): nel pacchetto resta il solo dizionario che il server carica, e ELD riconosce ancora; senza extrasmall il pacchetto si ferma', async () => {
+  const { cpSync, readdirSync, existsSync: esiste } = await import('node:fs');
+  const { fileURLToPath, pathToFileURL } = await import('node:url');
+  const { sfoltisciEld, ELD_DIZIONARI_DA_TOGLIERE } = await import('../scripts/prepara-pacchetto.mjs');
+  /* `eld` non esporta il suo package.json (`exports` ha solo «.»): la cartella si prende da node_modules del server */
+  const sorgente = fileURLToPath(new URL('../../node_modules/eld', import.meta.url));
+  const nodeModules = join(mkdtempSync(join(tmpdir(), 'talos-r02-eld-')), 'node_modules');
+  cpSync(sorgente, join(nodeModules, 'eld'), { recursive: true });
+  await sfoltisciEld(nodeModules);
+  const ngrams = join(nodeModules, 'eld', 'src', 'ngrams');
+  assert.deepEqual(readdirSync(ngrams), ['extrasmall.js']);
+  for (const f of ELD_DIZIONARI_DA_TOGLIERE) assert.equal(esiste(join(ngrams, f)), false, f);
+  const { eld } = await import(pathToFileURL(join(nodeModules, 'eld', 'src', 'entries', 'dynamic.js')).href);
+  const r = eld.newInstance(); await r.load('extrasmall');
+  assert.equal(r.detect('leggi il file e dimmi perché il test fallisce').language, 'it');
+  await assert.rejects(sfoltisciEld(join(tmpdir(), 'talos-r02-niente-eld', 'node_modules')), /extrasmall/u, 'senza il dizionario il pacchetto si ferma');
+  /* la preparazione vera la chiama (il pacchetto intero si prova ai cancelli della release con `prepara`; qui la guardia sul sorgente) */
+  const script = readFileSync(fileURLToPath(new URL('../scripts/prepara-pacchetto.mjs', import.meta.url)), 'utf8');
+  assert.match(script, /\n {2}await sfoltisciEld\(join\(backend, 'node_modules'\)\);/u, 'la preparazione del pacchetto sfoltisce eld');
+});
+
 test('R02-SFOLTISCI (owner 11/10/2026, aggiornamento lento): via ciò che a runtime non si carica, restano codice, licenze e il binario Windows x64', async () => {
   const nm = mkdtempSync(join(tmpdir(), 'talos-r02-sfoltisci-'));
   const scrivi = (relativo, testo = 'x') => { const p = join(nm, ...relativo.split('/')); mkdirSync(join(p, '..'), { recursive: true }); writeFileSync(p, testo); };

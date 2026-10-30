@@ -1,0 +1,197 @@
+/*
+ * ⭐ 27/10/2026 — LE BOLLE DELLA PERSONA COME HERMES (owner, con la foto di Hermes desktop):
+ *   1. la domanda resta in cima mentre si legge la sua risposta, per tutti e senza impostazione;
+ *   2. un'impostazione (spenta di serie) per la bolla a tutta larghezza.
+ *   Lo script che sceglie QUALE domanda è appiccicata (una sola alla volta) è `components/domanda-appiccicata.js`: lì il perché.
+ *
+ * ⛔ Qui niente cambia l'impaginazione. La posizione appiccicata si impagina come quella relativa (la scatola resta al suo posto
+ *   nel flusso), e tutto ciò che la domanda ferma in cima fa in più — il fondo, il taglio a quattro righe, la sfumatura, il
+ *   pulsante — è PITTURA: `background`, `clip-path`, `mask-image`, `visibility`, un pulsante assoluto. Così lo scorrimento che
+ *   segue il fondo, l'ancoraggio, la riserva sotto la conversazione e la finestra di replay non vedono nessuna differenza.
+ */
+
+:root {
+  /* `.talos-conversation` ha 8 px di padding in alto (`index.css:489`): a `top:0` sopra la domanda resterebbe la fessura da cui si
+     vede passare il testo — è la stessa misura della barra del blocco di codice (`index.css:1307-1309`, `top:-8px`). Altri 12 px
+     tolgono il respiro alto del messaggio (18 px, `index.css:634`): la testa resta a 6 px dal bordo, come la bolla di Hermes a
+     `--sticky-human-top: 0.23rem` (`styles.css:539`). */
+  --talos-domanda-cima: -20px;
+  /* sopra le barre ferme dei blocchi di codice (z-index 1) e ogni contenuto dei turni (il massimo trovato nella chat è 3,
+     `.talos-chat-return__button`, che sta FUORI dallo scorrevole); sotto menu, veli e suggerimenti, che vivono nel body (z 60). */
+  --talos-domanda-z: 4;
+}
+
+/* La domanda corrente (una sola, la sceglie lo script) si ferma in cima finché il suo turno è a schermo. */
+#conversation > .talos-turn[data-domanda-corrente] {
+  position: sticky;
+  top: var(--talos-domanda-cima);
+  z-index: var(--talos-domanda-z);
+}
+/* ⛔ La scatola del turno fermo è alta quanto tutta la domanda, anche dove la fascia la taglia: senza questa riga, sotto la fascia
+   il turno (trasparente, ma sopra la risposta) si prendeva i clic e la selezione del testo della risposta — misurato da BOLLE-01 con
+   `elementFromPoint`. La scatola lascia passare; i figli (messaggio tagliato, pulsante) prendono i loro clic, e solo dove si vedono
+   (`clip-path` taglia anche il bersaglio dei clic; galleria e chip nascosti con `visibility`). */
+#conversation > .talos-turn[data-domanda-corrente] { pointer-events: none; }
+#conversation > .talos-turn[data-domanda-corrente] > * { pointer-events: auto; }
+/* La domanda che arriva da sotto scorre SOPRA quella ferma e le prende il posto: stesso strato, dopo nel documento. Il suo messaggio
+   ha il fondo pieno del tema: senza, la sua testa («TU 20:02 · Follow-up») si stampava SOPRA il testo della domanda ferma (foto
+   `03-passaggio-di-consegne`, prima versione). Al suo posto nel flusso quel fondo è il colore della pagina e non si vede; con la
+   scena animata accesa è un riquadro del colore del tema, come la fascia, la testata e il compositore (`aspetto.css:211-215`). */
+#conversation > .talos-turn[data-domanda-successiva] {
+  position: relative;
+  z-index: var(--talos-domanda-z);
+}
+/* Owner 28/10/2026 (revisione del blocco 12, BOLLE-REV-01, «Fondo solo quando serve»): il fondo pieno solo mentre la successiva passa
+   DAVVERO sopra la fascia della ferma (`data-domanda-sopra`, lo scrive `osservaSopra` nello script). Prima valeva sempre: un rettangolo
+   largo quanto la colonna tagliava la scena animata anche quando la successiva scorreva al suo posto senza coprire niente. */
+#conversation > .talos-turn[data-domanda-successiva][data-domanda-sopra] > .talos-message--user {
+  background: var(--talos-background);
+}
+/* Mentre la si modifica in linea la domanda torna nel flusso: il campo cresce e non deve coprire la conversazione (Hermes lo
+   tiene appiccicato e sblocca il taglio, `styles.css:1888-1891`; qui il campo è più alto della bolla e sta meglio al suo posto). */
+#conversation > .talos-turn[data-domanda-corrente]:has(.talos-rami-modifica) {
+  position: relative;
+}
+/* WCAG 2.2 SC 2.4.11 «Focus Not Obscured»: lo `scroll-padding-top` dello scorrevole, alto quanto la fascia, lo scrive lo script
+   (`misura`) solo mentre c'è una domanda corrente; perché qui non salta come in `index.css:1045-1048`, lo dice il commento là. */
+
+/* Il pulsante «Domanda intera»: esiste solo nella domanda corrente tagliata, e si vede solo quando è ferma in cima. Sta nel
+   messaggio (che diventa il suo riferimento: nessun figlio del messaggio è posizionato, misurato il 27/10), sopra l'ultima riga
+   sfumata, al bordo destro della bolla. */
+#conversation > .talos-turn[data-domanda-corrente] > .talos-message--user {
+  position: relative;
+}
+.talos-domanda-intera {
+  display: none;
+  position: absolute;
+  right: 10px;
+  top: calc(var(--talos-domanda-vista, 0px) - 8px - 30px);
+  gap: 6px;
+  align-items: center;
+  box-shadow: var(--talos-shadow-card);
+}
+
+@supports (container-type: scroll-state) {
+  #conversation > .talos-turn[data-domanda-corrente] {
+    container-type: scroll-state;
+  }
+  /*
+   * «Ferma in cima» lo dice il browser (developer.chrome.com, «CSS scroll-state queries», Chrome 133+, letto il 27/10/2026), non
+   * lo script: una domanda arrivata in cima ma ancora al suo posto nel flusso resta intera; solo quella SPOSTATA si taglia.
+   */
+  @container scroll-state(stuck: top) {
+    /* la fascia: il fondo del tema (lo stesso di testata e composer sopra la scena, `aspetto.css:211-215`) dalla testa alla bolla
+       tagliata. Opaca: la bolla d'oro velato (`--talos-accent-soft`, 14% d'accento) sopra il fondo pieno si legge come al suo
+       posto, e il testo che scorre sotto non trapela. */
+    .talos-turn[data-domanda-corrente] > .talos-message--user {
+      background: var(--talos-background);
+      clip-path: inset(0 0 max(0px, calc(100% - var(--talos-domanda-vista, 100%))) 0);
+    }
+    /* sotto la bolla: le azioni (trasparenti finché non ci passi sopra), la galleria e i chip se ne vanno con la risposta, come gli
+       allegati di Hermes che stanno FUORI dal contenitore appiccicato (`user-message.tsx:478-483`) */
+    .talos-turn[data-domanda-corrente] > :is(.talos-image-gallery, .talos-allegati-chip) {
+      visibility: hidden;
+    }
+    /* il bordo basso della fascia sfuma in 12 px invece di tagliare a metà le lettere che le scorrono sotto (foto
+       `02-domanda-lunga-tagliata`, prima versione). Lo pseudo-elemento del contenitore interroga il contenitore (developer.chrome.com,
+       «CSS scroll-state queries»): esiste solo quando la domanda è davvero ferma. Non prende clic. */
+    .talos-turn[data-domanda-corrente]::after {
+      content: '';
+      position: absolute;
+      top: var(--talos-domanda-vista, 0px);
+      left: 0;
+      width: var(--talos-domanda-larghezza, 100%); /* quanto il messaggio, cioè quanto la fascia (lo misura lo script) */
+      height: 12px;
+      background: linear-gradient(to bottom, var(--talos-background), transparent);
+      pointer-events: none;
+    }
+    /* la bolla lunga sfuma sulle ultime righe, solo quando è DAVVERO tagliata (Hermes sfuma da 2 righe in su anche quando non
+       taglia niente, `user-message.tsx:402`: qui la sfumatura dice «c'è altro», e lo dice solo se è vero) */
+    .talos-turn[data-domanda-corrente][data-domanda-lunga] .talos-domanda-corpo {
+      -webkit-mask-image: linear-gradient(to bottom, #000 calc(var(--talos-domanda-corpo) - 32px), transparent var(--talos-domanda-corpo));
+      mask-image: linear-gradient(to bottom, #000 calc(var(--talos-domanda-corpo) - 32px), transparent var(--talos-domanda-corpo));
+    }
+    .talos-turn[data-domanda-corrente][data-domanda-lunga] .talos-domanda-intera {
+      display: inline-flex;
+    }
+    /* il fuoco da tastiera dentro la domanda (le sue azioni, un link) toglie il taglio: ciò che ha il fuoco si vede sempre */
+    .talos-turn[data-domanda-corrente]:has(.talos-message--user :focus-visible) > .talos-message--user {
+      clip-path: none;
+    }
+    .talos-turn[data-domanda-corrente]:has(.talos-message--user :focus-visible) .talos-domanda-corpo {
+      -webkit-mask-image: none;
+      mask-image: none;
+    }
+    /*
+     * Owner 28/10/2026 (revisione del blocco 12, BOLLE-REV-02, «Come Hermes»): le azioni della domanda ferma (copia, modifica, «⋯»)
+     *   stavano sotto la fascia, tagliate, e un clic lì arrivava alla risposta. Hermes alza il taglio della bolla ferma col mouse e
+     *   col fuoco (`user-message.tsx:356-358`, «the clamp lifts on hover / focus») e mostra le azioni sopra la bolla (`:577`). Qui le
+     *   azioni stanno già sotto la bolla, quindi basta alzare il taglio: passandoci col mouse la domanda si legge intera, sul fondo del
+     *   tema, e le azioni si toccano. Il taglio ritaglia anche il bersaglio dei clic, quindi si alza solo passando sulla parte visibile.
+     *   Un attimo d'attesa (120 ms, solo all'ingresso) perché un mouse che attraversa la cima della chat non la faccia lampeggiare.
+     */
+    .talos-turn[data-domanda-corrente] > .talos-message--user {
+      transition: clip-path 0s linear 0s;
+    }
+    /* `inset(0)` e non `none`: da `inset(…)` a `none` non si interpola, e l'attesa non varrebbe. Il pulsante «Domanda intera» non
+       sparisce (porta la domanda al suo posto): scende sotto il testo, qui sotto. */
+    .talos-turn[data-domanda-corrente]:is(:hover, :focus-within) > .talos-message--user {
+      clip-path: inset(0 0 0 0);
+      transition-delay: 120ms;
+    }
+    /* la sfumatura dell'ultima riga se ne va INSIEME al taglio: proprietà discreta, quindi `allow-discrete` (Chrome 117+) */
+    .talos-turn[data-domanda-corrente] .talos-domanda-corpo {
+      transition: mask-image 0s linear 0s, -webkit-mask-image 0s linear 0s;
+      transition-behavior: allow-discrete;
+    }
+    .talos-turn[data-domanda-corrente]:is(:hover, :focus-within) .talos-domanda-corpo {
+      -webkit-mask-image: none;
+      mask-image: none;
+      transition-delay: 120ms;
+    }
+    .talos-turn[data-domanda-corrente]:is(:hover, :focus-within)::after {
+      display: none;
+    }
+    /*
+     * Foto della candidata sul 4174 (28/10/2026): con la domanda intera il pulsante restava sopra la quarta riga e copriva due parole.
+     *   Ora scende DOPO il testo, come «Show more» quando il contenuto è aperto (carbondesignsystem.com, «Overflow content», letto il
+     *   28/10/2026: il controllo segue il contenuto, non lo copre): nella riga delle azioni, che a sinistra è vuota (copia, modifica e
+     *   «⋯» stanno a destra), allineato al bordo sinistro della bolla. Le due misure le scrive lo script; senza, il fondo del messaggio.
+     *   Si sposta con lo stesso attimo d'attesa del taglio, e torna su subito quando il puntatore se ne va.
+     */
+    .talos-turn[data-domanda-corrente]:is(:hover, :focus-within) .talos-domanda-intera {
+      top: var(--talos-domanda-azioni-centro, calc(100% - 20px));
+      left: var(--talos-domanda-bolla-sinistra, 10px);
+      right: auto;
+      translate: 0 -50%;
+      transition: top 0s linear 120ms, left 0s linear 120ms, right 0s linear 120ms, translate 0s linear 120ms;
+      transition-behavior: allow-discrete;
+    }
+  }
+}
+
+/* Le barre ferme dei blocchi di codice si fermano SOTTO la fascia della domanda ferma (lo spostamento lo scrive lo script nei soli
+   turni della risposta: `segnaRisposta`). Senza domanda ferma la variabile non c'è e la regola dà `-8px`, come `index.css:1309`. */
+.talos-conversation .code-block .code-block-head {
+  top: calc(-8px + var(--talos-domanda-fascia, 0px));
+}
+
+@media print {
+  #conversation > .talos-turn:is([data-domanda-corrente], [data-domanda-successiva]) { position: static; }
+  .talos-domanda-intera { display: none !important; }
+}
+
+/*
+ * ⭐ 2. LA BOLLA A TUTTA LARGHEZZA (impostazione «Domande a tutta larghezza», spenta di serie). Come Hermes, la domanda è un
+ *   riquadro largo quanto la colonna di lettura (`user-message.tsx:54`, `w-[calc(100%+2rem)]`, e `:77`, `w-full … max-w-full`).
+ * ⛔ Spenta, non cambia un pixel: ogni regola qui sotto vive sotto `:root.user-bubble-full-width`.
+ * ⛔ Gli angoli restano quelli della casa (la codina in basso a destra, `index.css:663`): il riquadro largo è di Hermes, il
+ *   linguaggio visivo resta di TALOS.
+ */
+:root.user-bubble-full-width .talos-message--user .talos-message__body,
+:root.user-bubble-full-width .talos-message--user .talos-message__body--comando,
+:root.user-bubble-full-width .talos-message--user .message-bubble.talos-rami-modifica {
+  width: 100%;
+  max-width: 100%;
+  margin-left: 0;
+}

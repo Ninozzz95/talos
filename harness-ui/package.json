@@ -26,6 +26,7 @@
     "canonicalize": "5.1.0",
     "croner": "10.0.1",
     "docx": "9.5.1",
+    "eld": "2.1.0",
     "eventsource-parser": "4.1.0",
     "iconv-lite": "0.7.3",
     "jszip": "3.10.1",

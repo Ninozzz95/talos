@@ -1358,7 +1358,7 @@ export function montaSchedaModello(contenitore, {
       document: doc,
       // ⛔ Il recinto di codice è quello della chat: barra del linguaggio, «Copia», evidenziazione.
       //   La firma del renderer è `(testo, linguaggio, chiuso)` (`markdown.js:137`).
-      bloccoCodice: (testo, linguaggio, chiuso) => creaBloccoCodice({ testo, linguaggio, chiuso }, { document: doc }),
+      bloccoCodice: (testo, linguaggio, chiuso, info = '') => creaBloccoCodice({ testo, linguaggio, chiuso, info }, { document: doc }),
       /*
        * ⛔ QUESTE DUE RIGHE SONO LA CURA, e si accendono SOLO QUI — owner, 18/09/2026: «la scheda
        *   del modello di Hugging Face deve essere formattata in HTML».

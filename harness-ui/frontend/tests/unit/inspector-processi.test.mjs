@@ -27,6 +27,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { impostaLingua } from '../../src/components/lingua.js';
 
 import {
   STATI_PROCESSO,
@@ -35,6 +36,7 @@ import {
   processiDagliEventi,
   uscitaDaTestoAttrezzo,
   TETTO_PROCESSI,
+  impostaOrologioProcessi,
 } from '../../src/components/inspector.js';
 
 /* ──────────────────────────────────────────────────────────── DOM finto ─── */
@@ -943,4 +945,43 @@ test('PROC-FILTRO-STATO-04 — ciclo di vita: a lista vuota la riga va via col f
   ]);
   assert.equal(bottoneDi(rail, 'tutti').getAttribute('aria-pressed'), 'true', 'la scelta riparte da «tutti»');
   assert.equal(carte(rail).length, 2, 'e tutte le righe sono a schermo');
+});
+
+/* ═══════════════════════════════════════ owner 27/10/2026: la durata che scorre sui processi vivi ═══ */
+
+test('PROC-VIVO-01 — un processo in corso: pallino vivo e durata che scorre dall’avvio vero; finito, torna la misura di sempre', (t) => {
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  let adesso = 2_000_000;
+  impostaOrologioProcessi(() => adesso);
+  impostaLingua('en');
+  try {
+    const d = documentoFinto();
+    const rail = d.createElement('div');
+    const vivo = datiProcesso({ id: 'v', comando: 'npm test', stato: 'in-corso', giro: 1, avviatoA: adesso - 72_000 });
+    disegnaProcessi(d, rail, [vivo]);
+    const misura = () => conClasse(carte(rail)[0], 'talos-process__misura')[0];
+    const durata = () => conClasse(carte(rail)[0], 'talos-process__durata-viva')[0]?.textContent;
+    assert.equal(misura().dataset.viva, '', 'la misura è viva');
+    assert.equal(conClasse(misura(), 'talos-dot--live').length, 1, 'col pallino vivo');
+    assert.equal(durata(), '1m 12s');
+    adesso += 1_000; t.mock.timers.tick(1_000);
+    assert.equal(durata(), '1m 13s', 'scorre da sola, senza un evento nuovo');
+    // finito: niente pallino, la misura misurata dal server
+    disegnaProcessi(d, rail, [datiProcesso({ id: 'v', comando: 'npm test', stato: 'riuscito', giro: 1, avviatoA: adesso - 73_000, durataMs: 73_000, uscita: 0 })]);
+    assert.equal(misura().dataset.viva, undefined);
+    assert.equal(conClasse(misura(), 'talos-dot--live').length, 0);
+    assert.match(misura().textContent, /73/u);
+  } finally { impostaOrologioProcessi(null); }
+});
+
+test('PROC-VIVO-02 (verso contrario) — un processo vivo SENZA istante d’avvio non inventa una durata; nessun vivo ⇒ orologio spento', (t) => {
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  impostaLingua('en');
+  const d = documentoFinto();
+  const rail = d.createElement('div');
+  disegnaProcessi(d, rail, [datiProcesso({ id: 'x', comando: 'npm test', stato: 'in-corso', giro: 1 })]);
+  const misura = conClasse(carte(rail)[0], 'talos-process__misura')[0];
+  assert.equal(misura.dataset.viva, undefined, 'senza avvio niente contatore');
+  assert.equal(conClasse(carte(rail)[0], 'talos-process__durata-viva').length, 0);
+  assert.equal(rail.__processi?.orologioVive ?? null, null, 'nessuna riga viva con un avvio: nessun orologio');
 });

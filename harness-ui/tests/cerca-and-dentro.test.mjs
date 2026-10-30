@@ -110,7 +110,7 @@ test('⭐⭐⭐ T-13-04 — `dentro` a una cartella che NON ESISTE: REFUSED ones
     const cartella = cartellaDiProva(t, 'talos-t13-sconosciuta-');
     writeFileSync(join(cartella, 'a.mjs'), 'TOKEN_SCONOSCIUTA_V4\n');
     const esito = await cercaNelProgetto(discoVero(cartella), { testo: 'TOKEN_SCONOSCIUTA_V4', dentro: 'cartella-che-non-esiste' }, { radice: cartella });
-    assert.match(esito, /REFUSED|is not a folder/u,
+    assert.match(esito, /is not a file or folder of this workspace/u, // R-25 (29/10): «file or folder», `dentro` accetta anche un file
         '⛔ prima della cura rispondeva «no file matches»: il modello leggeva «la parola non c\'è» dove la cartella non c\'era');
 });
 

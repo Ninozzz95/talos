@@ -16,6 +16,9 @@ import { randomBytes } from 'node:crypto';
 import { isIP } from 'node:net';
 import { promises as fsp } from 'node:fs';
 import { dirname } from 'node:path';
+import { firmaDelFile } from './firma-file.mjs';
+import { pulisciNomeDispositivo } from './nome-dispositivo.mjs';
+import { creaLucchettoFraProcessi } from '../lucchetto-fra-processi.mjs';
 
 export const TELEFONI_MASSIMI = 16; // contratto §13
 const VERSIONE = 1;
@@ -76,8 +79,9 @@ function normalizza(voce) {
   return {
     id: voce.id,
     endpointId: voce.endpointId,
-    nome: typeof voce.nome === 'string' && voce.nome ? voce.nome : null,
-    piattaforma: typeof voce.piattaforma === 'string' && voce.piattaforma ? voce.piattaforma.slice(0, 40) : null,
+    /* E-R1 (27/10/2026): anche i nomi salvati PRIMA della pulizia escono puliti */
+    nome: pulisciNomeDispositivo(voce.nome) || null,
+    piattaforma: pulisciNomeDispositivo(voce.piattaforma, 40) || null,
     collegatoAlle: Number.isFinite(voce.collegatoAlle) ? voce.collegatoAlle : null,
     ultimaVoltaAlle: Number.isFinite(voce.ultimaVoltaAlle) ? voce.ultimaVoltaAlle : null,
     sveglia,
@@ -92,13 +96,29 @@ export function vocePubblica(v) {
     sveglia: Boolean(v.sveglia), revocatoAlle: v.revocatoAlle, revocatoDa: v.revocatoDa };
 }
 
-export function creaElencoDispositivi({ file, fs = fsp, clock = () => Date.now(), casuale = (n) => randomBytes(n) } = {}) {
+export function creaElencoDispositivi({ file, fs = fsp, clock = () => Date.now(), casuale = (n) => randomBytes(n), lucchetto = null } = {}) {
   if (typeof file !== 'string' || !file) throw errore('REMOTE_DEVICES_FILE', 'The paired devices need a data file.');
+  /* Revisione blocco 9 (E-R1, 27/10/2026): la CLI revocava un telefono mentre la finestra segnava «visto», e il telefono tornava ammesso
+     20 volte su 20. Un lavoro alla volta fra i processi, come Hermes (`gateway/pairing.py:376-388`); con un fs finto nessun lucchetto. */
+  const conLucchetto = typeof lucchetto === 'function' ? lucchetto
+    : fs === fsp ? creaLucchettoFraProcessi({ file: `${file}.lock`, attesaMs: 10_000, scadenzaMs: 30_000,
+      codice: 'REMOTE_STORE_BUSY', messaggio: 'Another TALOS window is changing the paired devices: try again in a moment.' })
+      : (lavoro) => lavoro();
   let voci = null;
   let coda = Promise.resolve();
+  /*
+   * 27/10/2026 — il file si rilegge quando CAMBIA sul disco (impronta dello stat, `firmaDelFile`), come Hermes `gateway/pairing.py:397-415`.
+   *   La finestra e `talos remote` (CLI) scrivono lo stesso file: con una lettura sola per processo, un telefono revocato dall'altro
+   *   restava ammesso qui, e la nostra scrittura dopo lo rimetteva in vita.
+   * ⛔ Mai DURANTE una scrittura (`inScrittura`): l'elenco che la scrittura sta cambiando non si sostituisce, o la modifica si perde.
+   *   La rilettura per chi scrive avviene all'inizio di ogni lavoro in fila, prima di guardare l'elenco.
+   */
+  let firmaLetta = null;
+  let inScrittura = 0;
 
-  const carica = async () => {
-    if (voci) return voci;
+  const leggi = async () => {
+    const firma = await firmaDelFile(fs, file);
+    if (voci && firma !== null && firma === firmaLetta) return voci;
     let grezzo = null;
     try { grezzo = await fs.readFile(file, 'utf8'); } catch (e) { if (e?.code !== 'ENOENT') throw e; }
     let dati = null;
@@ -106,18 +126,28 @@ export function creaElencoDispositivi({ file, fs = fsp, clock = () => Date.now()
       try { dati = JSON.parse(grezzo); } catch { throw errore('REMOTE_DEVICES_UNREADABLE', 'The list of paired devices cannot be read.'); }
     }
     /* Un file illeggibile NON si legge come vuoto: vorrebbe dire ammettere nessuno, ma anche riscriverlo e perdere le revoche. */
+    if (voci && inScrittura > 0) return voci; // una scrittura è cominciata mentre si leggeva: vince lei
     voci = Array.isArray(dati?.dispositivi) ? dati.dispositivi.map(normalizza).filter(Boolean) : [];
+    firmaLetta = firma;
     return voci;
   };
+  /* un fs finto senza `stat` (prove vecchie) resta come prima: una lettura sola */
+  const carica = async () => (voci && (inScrittura > 0 || typeof fs.stat !== 'function') ? voci : leggi());
   const salva = async () => {
     await fs.mkdir(dirname(file), { recursive: true });
-    const temporaneo = `${file}.${process.pid}.${Date.now()}.tmp`;
+    const temporaneo = `${file}.${process.pid}.${randomBytes(8).toString('hex')}.tmp`; // due scritture nello stesso ms non si pestano (REV5-COL-2)
     await fs.writeFile(temporaneo, JSON.stringify({ v: VERSIONE, dispositivi: voci }, null, 1), { encoding: 'utf8', mode: 0o600 });
     await fs.rename(temporaneo, file);
+    firmaLetta = await firmaDelFile(fs, file); // il file ora è il nostro: nessuna rilettura per una scrittura propria
   };
-  /* Una scrittura alla volta: due conferme ravvicinate non si pestano. */
+  /* Una scrittura alla volta: due conferme ravvicinate non si pestano. Prima di ogni lavoro, l'elenco com'è ADESSO sul disco. */
   const inFila = (lavoro) => {
-    const prossimo = coda.then(lavoro, lavoro);
+    const esegui = () => conLucchetto(async () => {
+      if (typeof fs.stat === 'function') await leggi();
+      inScrittura += 1;
+      try { return await lavoro(); } finally { inScrittura -= 1; }
+    });
+    const prossimo = coda.then(esegui, esegui);
     coda = prossimo.catch(() => {});
     return prossimo;
   };
@@ -158,7 +188,7 @@ export function creaElencoDispositivi({ file, fs = fsp, clock = () => Date.now()
         await carica();
         const v = voci.find((x) => x.id === id);
         if (!v) throw errore('REMOTE_DEVICE_UNKNOWN', 'This device is not paired.');
-        const pulito = String(nome ?? '').trim().slice(0, 64);
+        const pulito = pulisciNomeDispositivo(String(nome ?? '')); // E-R1 (27/10/2026)
         if (!pulito) throw errore('REMOTE_DEVICE_BAD', 'The name cannot be empty.');
         v.nome = pulito;
         await salva();

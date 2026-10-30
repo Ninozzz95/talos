@@ -46,6 +46,7 @@ import { mkdirSync, existsSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 
 import { ambienteSenzaVariabiliDelServer } from './ambiente-solo-server.mjs';
+import { percorsoTaskkill } from './taskkill-di-sistema.mjs';
 import { urlAmmesso } from './browser-frame.mjs';
 
 /** Tetto d'attesa della riga «DevTools listening on …»: oltre, errore parlante. */
@@ -440,12 +441,14 @@ function creaChiusura(processo, terminaAlbero, graziaMs = GRAZIA_CHIUSURA_MS) {
  * Su Windows i figli di Chrome (renderer, GPU, utility) NON muoiono col padre:
  * si uccide l'albero con `taskkill /T /F`. Altrove basta il segnale al gruppo.
  */
-function terminaAlberoDiSistema(processo) {
+export function terminaAlberoDiSistema(processo) {
   const pid = processo?.pid;
   if (!pid) return false;
   if (process.platform === 'win32') {
     return new Promise((r) => {
-      execFile('taskkill', ['/PID', String(pid), '/T', '/F'], { windowsHide: true, env: ambienteSenzaVariabiliDelServer() }, () => r(true));
+      /* ⛔ J-R4 (revisione blocco 9, 27/10/2026): per percorso intero, mai per nome — un taskkill.exe nella cartella corrente o nel PATH
+         del server girava al posto di quello di sistema (`taskkill-di-sistema.mjs`) */
+      execFile(percorsoTaskkill(process.env.SystemRoot), ['/PID', String(pid), '/T', '/F'], { windowsHide: true, env: ambienteSenzaVariabiliDelServer() }, () => r(true));
     });
   }
   try { processo.kill('SIGTERM'); } catch { /* già morto */ }

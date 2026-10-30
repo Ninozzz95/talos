@@ -57,6 +57,7 @@
       "firma-aggiornamenti.mjs",
       "aggiornamenti.mjs",
       "canale-aggiornamenti.mjs",
+      "segnalazione.mjs",
       "fonte-aggiornamenti.mjs",
       "package.json",
       "assets/talos.png",

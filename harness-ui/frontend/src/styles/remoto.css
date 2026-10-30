@@ -102,6 +102,10 @@
    (`.talos-message__head`, `gap: 9px` in `index.css:635`, che vince su `--talos-space-inline` di primitives.css): il punto si staccava da «Free task» e si attaccava a «from». Ora il punto ha dopo di
    sé lo STESSO spazio che ha prima, con un margine invece di uno spazio nel testo (prova ORIGINE-1). */
 .talos-message__origine::before { content: "·"; margin-inline-end: 9px; color: var(--talos-muted); }
+/* §4.2, regola N (bozzetto «Invia come allegato», 29/10): «· Non inviato» nella stessa testata, nel tono d'attenzione, e la bolla attenuata */
+.talos-message__stato { color: var(--talos-warning); }
+.talos-message__stato::before { content: "·"; margin-inline-end: 9px; color: var(--talos-muted); }
+.talos-message--non-inviato .message-bubble { opacity: .6; }
 
 /* La pillola del telefono collegato nel piede del compositore, accanto alle altre (mockup v5, «Dopo, nell'uso») */
 .talos-composer__bar .talos-remoto-pillola { flex: none; gap: 6px; white-space: nowrap; }

@@ -1,4 +1,4 @@
-import { t, linguaCorrenteDiT } from './lingua.js';
+import { t, tn, linguaCorrenteDiT } from './lingua.js';
 import { percheRipiego } from './compattazione-legacy.js';
 
 /*
@@ -175,4 +175,61 @@ export function alternaRiassuntoLegacy(row, { document: doc = row?.ownerDocument
   blocco.textContent = testo;
   row.append(blocco);
   return true;
+}
+
+/*
+ * ⭐ L1 1.3 (owner 26/10/2026: «più user friendly, che non blocca il flusso», bozzetto approvato «Sì, così») — LA FINESTRA CHE CRESCE.
+ *   Dall'evento durevole `talos.finestra-locale` (`agent-service.mjs`): il motore locale di questo PC è stato riaperto con una
+ *   finestra più grande e la conversazione è andata avanti. Una riga sola, lo STESSO separatore di «Contesto compattato», e un
+ *   «Dettagli» che apre UNA riga sotto (modello, da quanto a quanto, memoria in più, «la scelta resta»): semplice a primo sguardo,
+ *   il resto a richiesta. Chiave = `at` dell'evento: la rigiocata della storia non la raddoppia.
+ */
+export const EVENTO_FINESTRA_LOCALE = 'talos.finestra-locale';
+
+const conNumeri = (n) => (Number.isFinite(Number(n)) ? Number(n).toLocaleString(linguaCorrenteDiT() === 'en' ? 'en-US' : 'it-IT') : '?');
+/** «24,576 tokens» / «24.576 token»: il numero con la sua unità, al plurale giusto (LINGUA-7). */
+export const conToken = (n) => tn('chat.context.separator.tokensOne', 'chat.context.separator.tokensMany', Number(n), { n: conNumeri(n) });
+
+/** Le parole della riga e dei dettagli, senza DOM (anche per l'esportazione della conversazione). */
+export function testiFinestraLocale(valore) {
+  const gb = Number(valore?.memoriaInPiu) > 0 ? Math.max(0.1, Math.round(Number(valore.memoriaInPiu) / 1e8) / 10) : null;
+  return {
+    riga: t('chat.context.separator.windowEnlarged', { finestra: conToken(valore?.dopo) }),
+    dettagli: t('chat.context.separator.windowDetails', {
+      modello: typeof valore?.modello === 'string' && valore.modello ? valore.modello : '?',
+      dopo: conToken(valore?.dopo), prima: conToken(valore?.prima),
+      memoria: gb === null ? '' : t('chat.context.separator.windowMemory', { gb: gb.toLocaleString(linguaCorrenteDiT() === 'en' ? 'en-US' : 'it-IT') }),
+    }),
+  };
+}
+
+export function aggiornaRigaFinestraLocale(container, valore, { sessionId, document: doc = container?.ownerDocument ?? globalThis.document, inserisci = null } = {}) {
+  if (!container || !sessionId || !valore || !Number.isFinite(Number(valore.dopo))) return null;
+  const chiave = `${sessionId}|${typeof valore.at === 'string' ? valore.at : String(valore.dopo)}`;
+  for (const nodo of container.querySelectorAll('[data-finestra-locale]')) if (nodo.dataset.finestraLocale === chiave) return nodo;
+  const testi = testiFinestraLocale(valore);
+  const gruppo = doc.createElement('div');
+  gruppo.className = 'talos-window-note';
+  gruppo.dataset.finestraLocale = chiave; gruppo.dataset.contextSession = sessionId;
+  const row = doc.createElement('div');
+  row.className = 'talos-context-separator talos-context-separator--window';
+  row.setAttribute('role', 'group'); row.setAttribute('aria-label', testi.riga);
+  const span = doc.createElement('span'); span.textContent = testi.riga;
+  const dettagli = doc.createElement('p');
+  dettagli.className = 'talos-window-note__details'; dettagli.textContent = testi.dettagli; dettagli.hidden = true;
+  dettagli.id = `finestra-${Math.abs([...chiave].reduce((h, c) => ((h << 5) - h + c.charCodeAt(0)) | 0, 0)).toString(36)}`;
+  const button = doc.createElement('button');
+  button.type = 'button'; button.className = 'talos-button talos-button--ghost talos-button--sm';
+  button.textContent = t('chat.context.separator.details');
+  button.setAttribute('aria-expanded', 'false'); button.setAttribute('aria-controls', dettagli.id);
+  button.addEventListener('click', () => {
+    const apri = dettagli.hidden;
+    dettagli.hidden = !apri;
+    button.setAttribute('aria-expanded', String(apri));
+    button.textContent = t(apri ? 'chat.context.separator.hide' : 'chat.context.separator.details');
+  });
+  row.append(span, button);
+  gruppo.append(row, dettagli);
+  if (typeof inserisci === 'function') inserisci(gruppo); else container.append(gruppo);
+  return gruppo;
 }

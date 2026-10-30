@@ -428,7 +428,7 @@ export function createContextEngine({ store, model, tokenCounter, retrieval, emb
       return job;
     },
     /** `projection`: la storia corretta, allineata 1:1 ai record (vedi `checkProjection`); `messages` resta il controllo d'archivio di prima. */
-    async prepareForRequest({ sessionId, messages, projection, tools = [], sessionModel, signal, waitForInFlight = false, summaryCeilingMs, onInTurnWait }) {
+    async prepareForRequest({ sessionId, messages, projection, tools = [], sessionModel, signal, waitForInFlight = false, summaryCeilingMs, onInTurnWait, growWindow }) {
       /* A1: il riassunto atteso nel giro gara col suo tetto; allo scadere si annulla e il giro riceve CTX_COMPACTION_TIMEOUT */
       const tettoNelGiro = Number.isSafeInteger(summaryCeilingMs) && summaryCeilingMs > 0 ? summaryCeilingMs : inTurnSummaryCeilingMs;
       /* B1 (21/10/2026, revisione del Mobile): chi ospita il motore sa QUANDO il giro aspetta un riassunto — `waiting` all'inizio
@@ -541,7 +541,35 @@ export function createContextEngine({ store, model, tokenCounter, retrieval, emb
          è comunque un fatto vero, ed è quello che la modale deve poter mostrare. */
       const record = m => store.recordMeasurement({ sessionId, revision: snapshot.revision, measuredAt: clock(), measurement: m });
       await record(measurement);
-      const budget = budgetFor(measurement, snapshot.settings);
+      let budget = budgetFor(measurement, snapshot.settings);
+      /*
+       * L1 1.3 (owner 26/10/2026 notte, «col motore del contesto acceso si allarga anche lì prima di riassumere, provato col motore vero»;
+       * revisione del blocco 6, A-R1..A-R3): al CANCELLO della compressione chi ospita può allargare la finestra del motore locale PRIMA del
+       * riassunto, come Hermes (`agent/turn_preflight.py:96-112`: sulla pressione della richiesta che partirebbe, «grow the context window
+       * before compressing», poi ricalibra e non comprime). La pressione è la NOSTRA proiezione misurata — col riassunto già pubblicato e
+       * le uscite già tolte — mai la storia grezza dell'ospite: la prima cura la misurava lì, e dopo un riassunto chiedeva di crescere (o la
+       * carta) per una conversazione che qui ne pesava un ventesimo. Il cancello è quello del riassunto DENTRO il giro: la richiesta non
+       * entra (su un motore a posto unico, il solo in cui il motore riassume).
+       * `growWindow({ inputTokens, windowTokens, inputLimit })` risponde:
+       *   · `{ grown: true, sessionModel }` ⇒ il profilo con la finestra nuova: si rimisura e si decide di nuovo;
+       *   · `{ sendAsIs: true }` ⇒ «Chiedimi»: niente riassunto senza la persona. La richiesta parte com'è e il rifiuto del motore porta la
+       *     carta coi numeri di QUESTA proiezione (la stessa regola della compattazione semplice);
+       *   · altro ⇒ come prima (il riassunto).
+       * Assente (la CLI, i modelli in cloud) ⇒ byte per byte com'era.
+       */
+      if (typeof growWindow === 'function' && snapshot.settings.auto && !budget.fits) {
+        const crescita = await growWindow({ inputTokens: measurement.inputTokens, windowTokens: budget.windowTokens, inputLimit: budget.inputLimit });
+        signal?.throwIfAborted();
+        if (crescita?.sendAsIs === true) {
+          return { messages: prepared, measurement, versionId: snapshot.activeVersion?.id ?? null, ...(toolOutputsCleared ? { toolOutputsCleared } : {}), ...(level1 ? { level1 } : {}), overWindow: true, waiting: false };
+        }
+        if (crescita?.grown === true && crescita.sessionModel) {
+          sessionModel = crescita.sessionModel;
+          ({ prepared, measurement, cleared: toolOutputsCleared, level1 = null } = await project(snapshot, overlay(records, projection)));
+          await record(measurement);
+          budget = budgetFor(measurement, snapshot.settings);
+        }
+      }
       let job; let compactionCooling = null; let senzaAttesa = false;
       /* 21/10/2026: su un motore a posto unico (`sessionModel.singleSlot`) il riassunto di sottofondo occuperebbe il motore mentre il giro
          ha una richiesta in volo (dal vivo sul Pad: 409 LOCAL_ENGINE_BUSY e giro in errore). Lì si compatta solo quando la richiesta non

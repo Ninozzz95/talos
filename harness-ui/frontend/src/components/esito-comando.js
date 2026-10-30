@@ -160,7 +160,9 @@ function separaLeRigheDelModello(grezzo) {
  * ⛔ Si toglie SOLO la forma esatta e solo in testa all'output: un output che parlasse di «TALOS output reference» più
  *   sotto resta com'è. La riga della conservazione FALLITA («[TALOS output retention failed …]») resta: dice una cosa vera.
  */
-const RIFERIMENTO_OUTPUT = /^\[TALOS output reference: [0-9a-f-]{36}; retained \d+ of \d+ bytes(?:; the retention limit was reached)?\.\](?: Read retained bytes with process_output\(\{"outputId":"[0-9a-f-]{36}"\}\); follow nextOffset, and select stderr separately\.)?(?:\n|$)/u;
+/* 27/10/2026 (segnalato dal Mobile): anche la forma del comando ANCORA in sottofondo (`src/process-output-session.mjs:65`), che arrivava
+   alla persona con l'istruzione per il modello. */
+const RIFERIMENTO_OUTPUT = /^\[TALOS output reference: [0-9a-f-]{36}; (?:retained \d+ of \d+ bytes(?:; the retention limit was reached)?|the command is still running in the background: \d+ bytes retained up to that point(?: \(the retention limit was reached\))?; what it prints next goes to its output file)\.\](?: Read retained bytes with process_output\(\{"outputId":"[0-9a-f-]{36}"\}\); follow nextOffset, and select stderr separately\.)?(?:\n|$)/u;
 function senzaRiferimentoOutput(output) {
   return output.replace(RIFERIMENTO_OUTPUT, () => '');
 }

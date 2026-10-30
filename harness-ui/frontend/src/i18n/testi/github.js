@@ -468,7 +468,7 @@ export default {
     'pullRequest.form.commitsMany': '{n} commits compared with {base}',
     'pullRequest.form.commitsOrMore': '{n} or more commits compared with {base}',
     'pullRequest.outcome.failed': 'failed',
-    'pullRequest.outcome.running': 'running',
+    'pullRequest.outcome.running': 'in progress',
     'pullRequest.outcome.cancelled': 'cancelled',
     'pullRequest.outcome.passed': 'passed',
     'pullRequest.outcome.skipped': 'skipped',

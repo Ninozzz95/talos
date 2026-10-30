@@ -11487,3 +11487,55 @@ test('K3B-REGISTRY-02 — senza lingua dichiarata il giro non la porta (resta l\
   assert.equal(registro.impostaLinguaInterfaccia('assente', 'en').code, 'NOT_FOUND');
   finta.concludi({ type: 'RunFinished' }, { ok: true, esito: { detto: 'done', comeFinita: 'concluso', messaggiFinali: [] } });
 });
+
+test('LINGUA-REGISTRY-01 — owner 28/10: la lingua delle risposte arriva al primo giro, resta alla ripresa, cambia dal giro dopo; «auto» la toglie', async () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneLiberaFn: preparaEsecuzioneLiberaFinta, cartelleProgetto: [{ id: '0', percorso: '/tmp/progetto', nome: 'progetto' }], modello: 'm', chiave: 'k' });
+  const fine = () => finta.concludi({ type: 'RunFinished' }, { ok: true, esito: { detto: 'done', comeFinita: 'concluso', messaggiFinali: [{ role: 'user', content: 'Guarda' }, { role: 'assistant', content: 'fatto' }] } });
+  const { sessionId } = registro.avviaLibero({ cartellaId: '0', consegna: 'Guarda', linguaDelleRisposte: 'fa' });
+  assert.equal(finta.ultimoInput.linguaDelleRisposte, 'fa', 'il primo giro la sa già');
+  fine(); await new Promise(resolve => setImmediate(resolve));
+  assert.equal(registro.resume(sessionId, 'ancora').sessionId, sessionId);
+  assert.equal(finta.ultimoInput.linguaDelleRisposte, 'fa', 'la ripresa la conserva');
+  fine(); await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(registro.impostaLinguaDelleRisposte(sessionId, 'it'), { aggiornata: true });
+  assert.equal(registro.resume(sessionId, 'e ora').sessionId, sessionId);
+  assert.equal(finta.ultimoInput.linguaDelleRisposte, 'it', 'un cambio vale dal giro dopo');
+  fine(); await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(registro.impostaLinguaDelleRisposte(sessionId, 'auto'), { aggiornata: true });
+  assert.equal(registro.resume(sessionId, 'e adesso').sessionId, sessionId);
+  assert.equal('linguaDelleRisposte' in finta.ultimoInput, false, '«auto» = Automatica: il giro non porta nessuna lingua');
+  fine(); await new Promise(resolve => setImmediate(resolve));
+  for (const cattiva of ['persiano', '', null, 'fa\nx']) assert.equal(registro.impostaLinguaDelleRisposte(sessionId, cattiva).code, 'QUERY_INVALID', JSON.stringify(cattiva));
+  assert.equal(registro.impostaLinguaDelleRisposte('assente', 'fa').code, 'NOT_FOUND');
+});
+
+test('LINGUA-MSG-REGISTRY-01 — owner 28/10: la lingua del messaggio vale per QUEL giro: un messaggio nuovo senza lingua la toglie, mai sul disco', async () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneLiberaFn: preparaEsecuzioneLiberaFinta, cartelleProgetto: [{ id: '0', percorso: '/tmp/progetto', nome: 'progetto' }], modello: 'm', chiave: 'k' });
+  const fine = () => finta.concludi({ type: 'RunFinished' }, { ok: true, esito: { detto: 'done', comeFinita: 'concluso', messaggiFinali: [{ role: 'user', content: 'Guarda' }, { role: 'assistant', content: 'fatto' }] } });
+  const { sessionId } = registro.avviaLibero({ cartellaId: '0', consegna: 'Schau', linguaDelMessaggio: 'de' });
+  assert.equal(finta.ultimoInput.linguaDelMessaggio, 'de', 'il primo giro la sa già');
+  fine(); await new Promise(resolve => setImmediate(resolve));
+  assert.equal(registro.resume(sessionId, 'Mira', [], { linguaDelMessaggio: 'es' }).sessionId, sessionId);
+  assert.equal(finta.ultimoInput.linguaDelMessaggio, 'es', 'il messaggio nuovo porta la sua');
+  fine(); await new Promise(resolve => setImmediate(resolve));
+  assert.equal(registro.resume(sessionId, 'scritto a mano').sessionId, sessionId);
+  assert.equal('linguaDelMessaggio' in finta.ultimoInput, false, 'un messaggio nuovo senza lingua non eredita quella di prima');
+  fine(); await new Promise(resolve => setImmediate(resolve));
+  const { sessionId: altra } = registro.avviaLibero({ cartellaId: '0', consegna: 'senza' });
+  assert.equal('linguaDelMessaggio' in finta.ultimoInput, false, 'avvio senza lingua: nessuna');
+  assert.ok(altra);
+});
+
+test('CACHE-RICOMINCIATA-REGISTRY-01 — owner 28/10 (cache, punto 2): lo stato della cache di un giro arriva al giro dopo, solo in memoria', async () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneLiberaFn: preparaEsecuzioneLiberaFinta, cartelleProgetto: [{ id: '0', percorso: '/tmp/progetto', nome: 'progetto' }], modello: 'm', chiave: 'k' });
+  const stato = { modello: 'm', attrezzi: 'a', nomiAttrezzi: ['leggi'], sistema: 's', messaggi: ['h1'], tokenDaCache: 3_000, at: 5, durataMs: 3_600_000 };
+  const { sessionId } = registro.avviaLibero({ cartellaId: '0', consegna: 'Guarda' });
+  assert.equal('statoCachePrecedente' in finta.ultimoInput, false, 'il primo giro non ha con chi confrontarsi');
+  finta.concludi({ type: 'RunFinished' }, { ok: true, esito: { detto: 'done', comeFinita: 'concluso', statoCache: stato, messaggiFinali: [{ role: 'user', content: 'Guarda' }, { role: 'assistant', content: 'fatto' }] } });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(registro.resume(sessionId, 'ancora').sessionId, sessionId);
+  assert.deepEqual(finta.ultimoInput.statoCachePrecedente, stato);
+});

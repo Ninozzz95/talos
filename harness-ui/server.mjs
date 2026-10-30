@@ -50,6 +50,7 @@ import { createHfHubClient } from './src/hf-hub-client.mjs';
 import { createHfDirectTransfer } from './src/hf-direct-transfer.mjs';
 import { fetchAllowedHfImage } from './src/hf-image-proxy.mjs';
 import { createLlamaServerSupervisor, finestraDelMotoreLocale } from './src/llama-server-supervisor.mjs';
+import { createLlamaRouterSupervisor } from './src/llama-router-supervisor.mjs';
 import { motoreConosceArchitettura } from './src/motore-architetture.mjs';
 import { createLlamaServerRuntime } from './src/local-runtime-llama-server.mjs';
 import { createProviderProbe, CATALOGHI_DIRETTI } from './src/provider-probe.mjs';
@@ -59,23 +60,30 @@ import { createProviderCredentialStore } from './src/provider-credential-store.m
 import { leggiScopePortachiavi, avvolgiAdattatoreKeyring, creaAdattatorePortachiavi, leggiPortachiaviDiProva } from './src/adattatore-keyring.mjs';
 import { migraChiaviLegacySuDesktop } from './src/migrazione-chiavi.mjs';
 import { createGeneratedImageStore } from './src/generated-image-store.mjs';
-import { createOwnerRuntimeAdapter, creaFetchMultiProvider } from './src/runtime-owner-adapter.mjs';
+import { createOwnerRuntimeAdapter, creaFetchMultiProvider, reasoningAlCambioDiModello } from './src/runtime-owner-adapter.mjs';
+import { creaLettorePorte } from './src/server-locali.mjs';
+import { spawn as spawnServerLocali } from 'node:child_process';
 /* ⛔ CLI-REQ-05: «di CHI è questo modello, e ha una chiave utilizzabile ADESSO» — la regola e le sue prove stanno lì. */
 import { creaProntoFn } from './src/sessione-pronta.mjs';
 import { createDesktopContextRuntime, resolveDesktopContextProfile, resolveDesktopDefaultProfile } from './src/context-runtime.mjs';
 import { createImpostazioniContesto, giroUsaIlMotore } from './src/impostazioni-contesto.mjs';
+import { createImpostazioniComandi } from './src/impostazioni-comandi.mjs'; // owner 27/10/2026: dove girano i comandi, di serie
 import { createContextTokenCounter, buildPreparedDesktopContextRequest, credenzialeDelContatore } from './src/context-token-counters.mjs';
 import { createChatImageStore } from './src/chat-image-attachments.mjs';
+import { creaGuardaImmagine, ridimensionatoreDisponibile } from './src/guarda-immagine-ospite.mjs';
+import { apriPaginaLocaleSeCeIlBrowser } from './src/pagina-locale-ospite.mjs'; // owner 27/10/2026, local_page
+import { baseImmaginiOpenRouter } from './src/image-generator.mjs'; // L-1 del kit: le immagini all'indirizzo di OpenRouter scelto
 import { avviaSessione } from './src/agent-service.mjs';
 import { RUNTIME_BOOTSTRAP_SCHEMA, RUNTIME_RESOURCE_SCHEMA } from './src/runtime-contract.mjs';
 import { applicaTempiDelServer, closeRuntimeResources } from './src/http-lifecycle.mjs';
 import { leggiInattivitaGenerazioneMs } from './src/generation-idle.mjs';
 import { createWorkspaceLaunchStore } from './src/workspace-launch-store.mjs';
 import { cartelleConsigliate } from './src/frequent-dirs.mjs';
-import { createWorkspaceBrowser } from './src/workspace-browser.mjs';
+import { createWorkspaceBrowser, elencaDischi } from './src/workspace-browser.mjs';
 import { WebSocket } from 'ws'; // 07/9: il canale di controllo verso il Chromium pilotato (CDP parla WebSocket)
 import { creaGestoreBrowserVivo } from './src/browser-sessione-viva.mjs'; // 07/9: il Chromium di sistema pilotato dal server
 import { createLocalRuntimeProbe } from './src/local-runtime-probe.mjs';
+import { creaFinestraCheCresce, creaSceltaFinestraPiena } from './src/finestra-che-cresce.mjs';
 import { readGgufHeader } from './src/gguf-header.mjs';
 import { join, parse, isAbsolute } from 'node:path';
 import { CARTELLA_PROGETTI, creaCartellaDatiProgetto } from './src/cartella-dati-progetto.mjs';
@@ -90,11 +98,13 @@ import { creaLucchettoRinnovoChatgpt, fileLucchettoRinnovoChatgpt } from './src/
 import { accessoConUso, creaRegistroUsoChatgpt } from './src/chatgpt-uso.mjs';
 import { creaCatalogoChatgpt, creaRotteChatgpt } from './src/chatgpt-rotte.mjs';
 import { creaAccessoLocaleOspite, finestraDelModelloOspite } from './src/accesso-locale-ospite.mjs';
-import { hostname } from 'node:os';
+import { homedir, hostname } from 'node:os';
 import { creaRemoto } from './src/remoto/index.mjs'; // 18/10/2026: il controllo remoto, lato PC
 import { caricaBindingIroh } from './src/remoto/binding.mjs';
 import { creaChiamataInterna } from './src/remoto/chiamata-interna.mjs';
+import { creaLettoreBloccate } from './src/remoto/lettore-bloccate.mjs'; // owner 27/10/2026: le cartelle bloccate per un dispositivo, dal file
 import { iscriviConRigiocata } from './src/iscrizione-sessione.mjs';
+import { segnalazioneAccesaDallAmbiente } from './src/segnalazione-problema.mjs'; // «Segnala un problema»: l'interruttore positivo (revisione D, F4)
 
 /** ⛔ Stessi tre nomi loopback validati in config.mjs (`LOOPBACK_HOSTS`, non esportato — costante minuscola e stabile, duplicarla qui è più semplice che aggiungere un export per tre stringhe). Un browser può presentarsi con uno qualunque dei tre alias anche se il server è bindato su un altro. */
 const ALIAS_LOOPBACK = ['127.0.0.1', '::1', 'localhost'];
@@ -302,13 +312,20 @@ async function startServer() {
       const dispositivi = [...stdout.matchAll(/^\s{2,}(\S+\d*):\s*(.+?)\s*$/gmu)].map((m) => m[2].replace(/\s+\(\d+ MiB,.*\)$/u, ''));
       const haDispositivo = dispositivi.length > 0 && !/\(none\)/u.test(stdout);
       if (haDispositivo) console.log('[runtime] backend GPU rilevato dal binario llama-server:', stdout.trim().split(/\r?\n/u).slice(1).join(' | '));
-      return { gpuLayers: haDispositivo ? 99 : 0, dispositivi: haDispositivo ? dispositivi : [] };
+      /* Router mode (27/10/2026, decision 1): the devices' total memory, as the binary measures it («Vulkan0: NAME (16304 MiB, 15419 MiB
+         free)»); only the router reads it, to decide how many models stay loaded together. */
+      const memoriaMiB = haDispositivo ? [...stdout.matchAll(/^\s{2,}\S+\d*:.*\((\d+) MiB,/gmu)].map((m) => Number(m[1])) : [];
+      return { gpuLayers: haDispositivo ? 99 : 0, dispositivi: haDispositivo ? dispositivi : [], memoriaMiB };
     } catch {
       return { gpuLayers: 0, dispositivi: [] }; // ⛔ se non si riesce a chiedere, non si dà per scontato
     }
   }
 
   let supervisoreLocale = null;
+  /* Router mode (27/10/2026): the router and its children go down with the server (null with the switch OFF: nothing changes) */
+  let chiudiRouterLocale = null;
+  /* L1 1.3 (26/10/2026): la finestra che cresce — nasce col supervisore, più sotto (`src/finestra-che-cresce.mjs`) */
+  let finestraCheCresce = null;
   let contextRuntime = null;
 
   const chatImageStore = createChatImageStore({ rootDir: percorsoDatiDesktop('.chat-images/') });
@@ -317,6 +334,19 @@ async function startServer() {
       const { modelli } = await modelCatalog.ottieni();
       return modelli.find(modello => modello.id === modelId) ?? null;
     } catch { return null; }
+  };
+  /*
+   * Owner 27/10/2026 — «guarda immagine» (`view_image`): l'ospite legge, riduce e mette nello store delle immagini della chat; chi vede
+   *   immagini lo dice il catalogo (OpenRouter e gli altri: `inputModalities`; il piano ChatGPT: il suo elenco, `input_modalities` di
+   *   OpenAI, `chatgpt-rotte.mjs:50`). Non si sa ⇒ `null` ⇒ l'attrezzo non si offre (contratto con la CLI).
+   */
+  const guardaImmagineFn = creaGuardaImmagine({ chatImageStore, ridimensionaFn: await ridimensionatoreDisponibile() });
+  const vedeImmaginiFn = async (modelId) => {
+    const id = String(modelId ?? '');
+    const modalita = id.startsWith('chatgpt:')
+      ? (catalogoChatgpt ? (await catalogoChatgpt.elenca().catch(() => null))?.find?.(m => m.id === id)?.inputModalities : null)
+      : (await readModelCapabilities(id))?.inputModalities;
+    return Array.isArray(modalita) && modalita.length ? modalita.includes('image') : null;
   };
   /*
    * ⭐⭐⭐ 03/9 — da qui passano i modelli che NON sono di OpenRouter.
@@ -337,6 +367,10 @@ async function startServer() {
     // 18/10/2026: il motore dell'app che ospita r4 — pronto se ha aperto QUEL modello; spedisce l'accesso, che ha socket e chiave
     ospitePronto: (modello) => accessoLocaleOspite.pronto(modello),
     chiamaLocaleOspite: (percorso, opzioni) => accessoLocaleOspite.chiama(percorso, opzioni),
+    /* L1 1.1 (26/10/2026): la sonda della forma dei messaggi di sistema (`kernel/sistema-piegato.mjs`) — rende il template senza
+       generare. Il motore dell'app avrà la rotta dal Mobile; finché non c'è risponde 404 e resta la rete reattiva. */
+    applicaTemplateOspite: (opzioni) => accessoLocaleOspite.chiama('/apply-template', opzioni),
+    applicaTemplateLocale: (opzioni) => supervisoreLocale.request('/apply-template', opzioni),
     // 11/10/2026: il token del piano ChatGPT, preso (e rinnovato) un attimo prima di ogni invio. Mai la chiave API al suo posto.
     leggiTokenDelPiano: async () => {
       if (!accessoChatgpt) throw Object.assign(new Error('A ChatGPT account cannot be connected on this computer.'), { code: 'CHATGPT_NON_DISPONIBILE' });
@@ -365,7 +399,15 @@ async function startServer() {
      * `localRuntimes['llama.cpp']` è `undefined` e l'errore che risale è
      * quello vero — "non configurato", non un silenzio.
      */
-    avviaLocale: (modelId) => {
+    /* L1 1.3 (26/10/2026): la finestra di un modello locale di questo PC si allarga da sola quando la conversazione non ci sta più
+       (se il massimo addestrato e la memoria lo reggono). Solo il supervisore di questo PC: il motore dell'app e Ollama/LM Studio no. */
+    allargaFinestraLocale: (richiesta) => (finestraCheCresce ? finestraCheCresce.allarga(richiesta) : Promise.resolve({ ok: false, motivo: 'motore-non-configurato' })),
+    avviaLocale: async (modelId) => {
+      /* Durante un allargamento il motore è giù per pochi secondi: chi arriva aspetta che torni, invece di chiedere un secondo avvio
+         (RUNTIME_ALREADY_RUNNING) */
+      await finestraCheCresce?.attendi();
+      const ora = supervisoreLocale?.status?.();
+      if (ora?.state === 'ready' && ora.modelId === modelId) return ora;
       const runtime = localRuntimes['llama.cpp'];
       if (!runtime) { const errore = new Error('Il motore locale non è configurato su questo server.'); errore.code = 'LOCAL_RUNTIME_NOT_CONFIGURED'; throw errore; }
       return runtime.load(modelId);
@@ -446,14 +488,14 @@ async function startServer() {
      * quello che Windows racconta sulla VRAM (tronca a 32 bit: riportava 4 GB
      * per una scheda da 16).
      */
-    const { gpuLayers, dispositivi } = await rilevaMotore(config.llamaServerPath);
+    const { gpuLayers, dispositivi, memoriaMiB } = await rilevaMotore(config.llamaServerPath);
     /*
      * R-03, 13/09 — la riserva CPU (`TALOS_LLAMA_SERVER_FALLBACK_PATH`, messa dal guscio
      * quando sceglie Vulkan) e la descrizione del motore entrano nel supervisore: se la
      * scheda manca o si perde durante il caricamento, il modello riparte sul processore
      * una volta sola e lo stato dichiara (`motore.ripiego`).
      */
-    const supervisor = resumeDiagnostics.wrapSupervisor(createLlamaServerSupervisor(resumeDiagnostics.supervisorOptions({
+    const motoreDiOggi = createLlamaServerSupervisor(resumeDiagnostics.supervisorOptions({
       binaryPath: config.llamaServerPath,
       fallbackBinaryPath: config.llamaServerFallbackPath && config.llamaServerFallbackPath !== config.llamaServerPath ? config.llamaServerFallbackPath : null,
       motore: { variante: gpuLayers > 0 ? 'vulkan' : 'cpu', dispositivi },
@@ -461,13 +503,64 @@ async function startServer() {
       gpuLayers,
       // L1 (20/10/2026): le finestre vere dei modelli già accesi, fra un avvio dell'app e l'altro (accanto ai modelli, file piccolo)
       finestreFile: percorsoDatiDesktop('.local-models/finestre-viste.json'),
-    })));
+    }));
+    /*
+     * Router mode of the local engine (owner 26/10/2026 night; `src/llama-router-supervisor.mjs`). Behind `TALOS_LOCAL_ROUTER=1`, OFF by
+     * default (decision 3): with it OFF the supervisor is exactly today's one. With it ON the router takes every load, and today's engine
+     * stays inside it for the per-model choices and as the fallback for a model the router cannot load (decision 2).
+     */
+    const supervisor = resumeDiagnostics.wrapSupervisor(config.motoreLocaleRouter ? createLlamaRouterSupervisor(resumeDiagnostics.supervisorOptions({
+      binaryPath: config.llamaServerPath,
+      standalone: motoreDiOggi,
+      modelStore: localModelStore,
+      /* one file per server process: the installed app and the 4174 can share the data folder, never this file */
+      presetFile: percorsoDatiDesktop(`.local-runtime-router/presets-${process.pid}.ini`),
+      /* one section per installed model, with the start options today's `load` would give it (below, `opzioniDiAvvio`) */
+      modelliInstallati: async () => {
+        const voci = [];
+        for (const manifest of await localModelStore.list()) {
+          const file = manifest?.state === 'ready' ? manifest.files?.[0] : null;
+          if (!file) continue;
+          const modelPath = join(percorsoDatiDesktop('.local-models/'), manifest.path, file.path);
+          voci.push({ modelId: manifest.id, modelPath, opzioni: await opzioniDiAvvio(manifest.id, modelPath) });
+        }
+        return voci;
+      },
+      /* decision 1: the memory the models share. With the card, its total minus Hermes' margin (`hardware.py:35-36, 537-542`: the larger
+         of 2 GiB and 9%); without, the RAM minus 20% (`hardware.py:413-418`). Unknown ⇒ null ⇒ one model at a time, as today. */
+      memoriaUtilizzabile: async () => {
+        if (gpuLayers > 0) {
+          const totale = (memoriaMiB ?? []).reduce((somma, mib) => somma + mib, 0) * 2 ** 20;
+          return totale > 0 ? Math.max(0, totale - Math.max(2 * 2 ** 30, Math.floor(totale * 0.09))) : null;
+        }
+        const ram = Number((await misuraCapacitaMacchina({ storagePath: config.publicDir }).catch(() => null))?.memory?.totalBytes);
+        return Number.isFinite(ram) && ram > 0 ? Math.floor(ram * 0.8) : null;
+      },
+      ...(Number.isSafeInteger(Number(process.env.TALOS_LOCAL_ROUTER_IDLE_SECONDS)) && Number(process.env.TALOS_LOCAL_ROUTER_IDLE_SECONDS) > 0
+        ? { dormiDopoSecondi: Number(process.env.TALOS_LOCAL_ROUTER_IDLE_SECONDS) } : {}),
+    })) : motoreDiOggi);
+    if (config.motoreLocaleRouter) chiudiRouterLocale = () => supervisor.chiudi();
     // ⛔ Registrato SUBITO dopo la creazione: è l'unico punto in cui il
     // legame tardivo di sopra si chiude davvero. Senza questa riga i modelli
     // locali resterebbero irraggiungibili con un messaggio che dice
     // «il motore non è acceso» anche quando lo è.
     supervisoreLocale = supervisor;
     const llama = resumeDiagnostics.wrapRuntime(createLlamaServerRuntime({ supervisor }));
+    finestraCheCresce = creaFinestraCheCresce({
+      supervisor,
+      /* `riapri`: l'avvio di sempre (`localRuntimes['llama.cpp'].load`, qui sotto) — il ritorno a com'era quando la finestra nuova non
+         entra (revisione blocco 4, A-2); si legge alla chiamata, quando `localRuntimes` è già pieno */
+      motore: { load: (opzioni) => llama.load(opzioni), unload: () => llama.unload(), riapri: (modelId) => localRuntimes['llama.cpp'].load(modelId) },
+      modello: async (modelId) => {
+        const manifest = await localModelStore.inspect(modelId);
+        const file = manifest?.state === 'ready' ? manifest.files?.[0] : null;
+        return file ? { modelPath: join(percorsoDatiDesktop('.local-models/'), manifest.path, file.path), nome: manifest.repo ?? modelId } : null;
+      },
+      leggiIntestazione: (percorso) => readGgufHeader(percorso),
+      misuraMacchina: () => misuraCapacitaMacchina({ storagePath: config.publicDir }),
+      gpuLayers,
+      cartella: percorsoDatiDesktop('.local-models/'),
+    });
     localRuntimes['llama.cpp'] = {
       detect: async () => {
         const s = supervisor.status();
@@ -501,55 +594,17 @@ async function startServer() {
         const radiceModelli = percorsoDatiDesktop('.local-models/');
         const modelPath = join(radiceModelli, manifest.path, file.path);
         let contextLength = Number.isInteger(opzioni.contextLength) && opzioni.contextLength > 0 ? opzioni.contextLength : null;
+        /* L1 1.3: la finestra allargata l'ultima volta si riprende al prossimo avvio. Se oggi non entra più (altri programmi hanno preso
+           la memoria), si dimentica e si torna alla scelta di sempre, qui sotto. */
+        if (contextLength === null && finestraCheCresce) {
+          /* revisione blocco 4 (A-5): una finestra ricordata che non parte più si dimentica per QUALUNQUE guasto, non solo la memoria
+             della scheda (`conLaPreferita`, provato in finestra-che-cresce.test.mjs) */
+          const conRicordata = await finestraCheCresce.conLaPreferita(modelId, (preferita) => llama.load({ modelId, modelPath, contextLength: preferita }));
+          if (conRicordata.avviato) return conRicordata.esito;
+          if (conRicordata.dimenticata) { try { await llama.unload(); } catch { /* già spento */ } }
+        }
         if (contextLength === null) {
-          try {
-            const header = await readGgufHeader(modelPath);
-            const macchina = await misuraCapacitaMacchina({ storagePath: config.publicDir });
-            const liberi = Number(macchina?.memory?.freeBytes);
-            const perToken = Number(header?.kvCacheBytesPerToken);
-            if (Number.isFinite(liberi) && Number.isFinite(perToken) && perToken > 0) {
-              /*
-               * ⛔⛔ I PESI NON SI SOTTRAGGONO. La prima stesura calcolava
-               * `(liberi - pesi) * 0.5` e sul 27B dava 7.157 token: la
-               * richiesta di apertura ne vuole 8.314 (prompt di sistema più 43
-               * attrezzi), quindi la sessione moriva subito con
-               * «request exceeds the available context size».
-               *
-               * MISURATO: lo stesso modello con `-c 32768` parte e resta
-               * pronto. Il motivo è che llama.cpp mappa i pesi dal disco
-               * (mmap): il sistema li pagina su richiesta e NON occupano la
-               * memoria libera. Quella se la prende la cache del contesto, e
-               * basta contare quella.
-               *
-               * ⛔ E il pavimento non è 4.096: sotto gli 8.192 una sessione
-               * agentica non ha spazio nemmeno per la propria apertura, e
-               * partirebbe solo per fallire al primo messaggio.
-               */
-              const possibili = Math.floor((liberi * 0.6) / perToken);
-              const tetto = header.trainedContext || possibili;
-              contextLength = Math.max(8_192, Math.min(tetto, possibili));
-              /*
-               * ⛔⛔ CON LA GPU IL BUDGET E' UN ALTRO: la cache finisce in
-               * VRAM, non nella RAM di sistema, e su questa scheda sono 15,4
-               * GB contro un modello da 15,7. Il calcolo qui sopra guarda la
-               * RAM e dava 58.739 token: il caricamento moriva.
-               *
-               * MISURATO sulla RX 9070 XT: `-ngl 99 -c 8192` carica in 15
-               * secondi e genera a 7,7 token/s su un 27B, in italiano
-               * corretto. Lasciando decidere a llama.cpp (`common_fit_params`,
-               * che si adatta alla memoria libera del dispositivo) il modello
-               * parte ma il contesto scende a 4.096 — meno degli 8.314 che
-               * l'apertura di una sessione agentica richiede, quindi la
-               * sessione morirebbe al primo messaggio.
-               * ⇒ Con la GPU si resta in una banda misurata e prudente.
-               */
-              if (gpuLayers > 0) contextLength = Math.max(8_192, Math.min(tetto, 16_384));
-            }
-          } catch {
-            /* ⛔ Se non si riesce a misurare non si inventa un numero grande:
-               si resta su un contesto piccolo e sicuro, che almeno parte. */
-            contextLength = 8_192;
-          }
+          contextLength = await bandaDelCaricatore(modelPath);
           /* L1-d, revisione del 20/10 (T1): con la scheda la finestra la decide il SUPERVISORE (pavimento di 64K se ci sta, vedi
              `finestraDiSerie`): questa banda gli arriva come RISERVA, per i modelli densi che non ci stanno e per un fitter muto —
              cioè resta esattamente quello che succedeva prima. Senza scheda si decide qui, come sempre. */
@@ -562,6 +617,69 @@ async function startServer() {
       cancel: (requestId) => llama.cancel(requestId),
       health: () => llama.health(),
     };
+    /*
+     * The loader's band, moved here unchanged from `load` above (router mode, 27/10/2026: the router gives every installed model the
+     * options `load` would give it, `opzioniDiAvvio`). Same reads, same order, same answer: null when it cannot measure, 8.192 on error.
+     */
+    async function bandaDelCaricatore(modelPath) {
+      let contextLength = null;
+      try {
+        const header = await readGgufHeader(modelPath);
+        const macchina = await misuraCapacitaMacchina({ storagePath: config.publicDir });
+        const liberi = Number(macchina?.memory?.freeBytes);
+        const perToken = Number(header?.kvCacheBytesPerToken);
+        if (Number.isFinite(liberi) && Number.isFinite(perToken) && perToken > 0) {
+          /*
+           * ⛔⛔ I PESI NON SI SOTTRAGGONO. La prima stesura calcolava
+           * `(liberi - pesi) * 0.5` e sul 27B dava 7.157 token: la
+           * richiesta di apertura ne vuole 8.314 (prompt di sistema più 43
+           * attrezzi), quindi la sessione moriva subito con
+           * «request exceeds the available context size».
+           *
+           * MISURATO: lo stesso modello con `-c 32768` parte e resta
+           * pronto. Il motivo è che llama.cpp mappa i pesi dal disco
+           * (mmap): il sistema li pagina su richiesta e NON occupano la
+           * memoria libera. Quella se la prende la cache del contesto, e
+           * basta contare quella.
+           *
+           * ⛔ E il pavimento non è 4.096: sotto gli 8.192 una sessione
+           * agentica non ha spazio nemmeno per la propria apertura, e
+           * partirebbe solo per fallire al primo messaggio.
+           */
+          const possibili = Math.floor((liberi * 0.6) / perToken);
+          const tetto = header.trainedContext || possibili;
+          contextLength = Math.max(8_192, Math.min(tetto, possibili));
+          /*
+           * ⛔⛔ CON LA GPU IL BUDGET E' UN ALTRO: la cache finisce in
+           * VRAM, non nella RAM di sistema, e su questa scheda sono 15,4
+           * GB contro un modello da 15,7. Il calcolo qui sopra guarda la
+           * RAM e dava 58.739 token: il caricamento moriva.
+           *
+           * MISURATO sulla RX 9070 XT: `-ngl 99 -c 8192` carica in 15
+           * secondi e genera a 7,7 token/s su un 27B, in italiano
+           * corretto. Lasciando decidere a llama.cpp (`common_fit_params`,
+           * che si adatta alla memoria libera del dispositivo) il modello
+           * parte ma il contesto scende a 4.096 — meno degli 8.314 che
+           * l'apertura di una sessione agentica richiede, quindi la
+           * sessione morirebbe al primo messaggio.
+           * ⇒ Con la GPU si resta in una banda misurata e prudente.
+           */
+          if (gpuLayers > 0) contextLength = Math.max(8_192, Math.min(tetto, 16_384));
+        }
+      } catch {
+        /* ⛔ Se non si riesce a misurare non si inventa un numero grande:
+           si resta su un contesto piccolo e sicuro, che almeno parte. */
+        contextLength = 8_192;
+      }
+      return contextLength;
+    }
+    /** Router mode: the start options today's `load(modelId)` gives a model with no window asked (remembered window first, then the band). */
+    async function opzioniDiAvvio(modelId, modelPath) {
+      const preferita = finestraCheCresce ? await finestraCheCresce.finestraPreferita(modelId).catch(() => null) : null;
+      if (preferita) return { contextLength: preferita };
+      const banda = await bandaDelCaricatore(modelPath);
+      return gpuLayers > 0 ? { finestraDiRiserva: banda ?? 8_192 } : { contextLength: banda ?? 8_192 };
+    }
     localRuntimeProbe = createLocalRuntimeProbe({
       runtime: llama,
       modelStore: localModelStore,
@@ -665,6 +783,9 @@ async function startServer() {
     ? createImpostazioniContesto({ file: join(config.cartellaStore, 'context', 'impostazioni-contesto.json') })
     : null;
   const motoreContestoAttivo = Boolean(config.contextTrial || impostazioniContesto);
+  /* Owner 27/10/2026 («Di serie nelle Impostazioni + per conversazione»): dove girano i comandi delle conversazioni NUOVE, accanto
+     alla preferenza di WSL. Si legge alla nascita e si timbra sulla conversazione, come il motore del contesto. */
+  const impostazioniComandi = createImpostazioniComandi({ file: percorsoDatiDesktop('.impostazioni-comandi.json') });
   /* 18/10/2026 — il controllo remoto nasce DOPO il gestore HTTP (chiama le stesse rotte in processo) e dopo il legame alla porta:
      il gestore e il registro (R5.12, gli attrezzi dei telefoni) lo raggiungono attraverso una funzione, e fino ad allora le sue
      rotte rispondono «non disponibile». Dichiarato QUI, prima del registro, perché la sua funzione non cada nella zona morta. */
@@ -678,13 +799,41 @@ async function startServer() {
   void puntiDiRipristino.misuraGit(process.cwd()).catch(() => {});
   const sessionRegistry = resumeDiagnostics.wrapRegistry(createSessionRegistry(resumeDiagnostics.registryOptions({
     processOutputStoreFn,
+    guardaImmagineFn, vedeImmaginiFn, // owner 27/10/2026, view_image
+    /* owner 27/10/2026, local_page: registro e browser vivo nascono più sotto, per questo passano come funzioni */
+    /* Mobile 29/10/2026: solo dove c'è un Chromium da pilotare (sul telefono no, e l'attrezzo non si offre) */
+    apriPaginaLocaleFn: apriPaginaLocaleSeCeIlBrowser({ registroFn: () => sessionRegistry, browserVivoFn: () => browserVivo, chatImageStore }),
     remotoFn: () => remoto, // R5.12 (owner 18/10/2026): elenca, apre il QR, revoca — dalla chat
+    /* «Segnala un problema» (owner 29/10/2026, due porte): la bozza dalla chat (`report_problem`). Solo dove chi ospita il server lo
+       ACCENDE (`TALOS_SEGNALAZIONE_PROBLEMA=on`: il guscio desktop e lo script del 4174; revisione D, F4) e mai col server dell'app del
+       telefono (`TALOS_LOCALE_OSPITE_DIR`) — contratto del 29/10, «CLI e telefono non cambiano». */
+    segnalazione: segnalazioneAccesaDallAmbiente(process.env),
     repositoryFn: () => servizioGit, // C-3 (owner 21/10/2026): lo stato del repository per il confutatore del /goal
     cartellaDatiProgettoFn: cartellaDatiProgetto,
     /* R5.11 (owner 18/10/2026, «Come Hermes, PC e telefono»): «Annulla le modifiche ai file». L'archivio git ombra di ogni progetto
        sta nella sua cartella dati (PO-26), mai nel progetto; un guasto non ferma mai un giro (`src/punti-di-ripristino.mjs`). */
     puntiDiRipristino,
     finestraTokenFn: finestraDallaRoute,
+    // owner 27/10/2026: i server locali di npm run dev nella scheda Browser — le porte in ascolto dei comandi della conversazione
+    lettorePorteServerLocali: creaLettorePorte({ spawnFn: spawnServerLocali }),
+    // owner 27/10/2026: il ragionamento al cambio di modello, «Codex, ma mai più caro», col catalogo vero
+    reasoningAlCambioDiModelloFn: async (reasoning, modello) => reasoningAlCambioDiModello(reasoning, await readModelCapabilities(modello)),
+    /* L1 1.3, revisione blocco 4 (A-3, A-4; owner A1-1 26/10/2026): alla soglia del riassunto la finestra del modello locale di questo PC
+       si allarga invece di riassumere. Solo `local:` del supervisore (`finestraCheCresce` esiste solo col motore configurato: sul
+       telefono, dove `local:` è il motore dell'app, non c'è); si legge alla chiamata, quando il supervisore è già nato. */
+    finestraLocaleFn: (modelloPerRete) => {
+      if (!finestraCheCresce || typeof modelloPerRete !== 'string' || !modelloPerRete.startsWith('local:')) return null;
+      const modelId = modelloPerRete.slice('local:'.length);
+      return {
+        puoCrescere: ({ senzaPersona = false } = {}) => finestraCheCresce.puoCrescere(modelId, { senzaPersona }),
+        cresci: ({ servono, senzaPersona = false }) => finestraCheCresce.allarga({ modelId, servono, proattiva: true, senzaPersona }),
+        /* revisione blocco 5 (A-2): la finestra del motore ADESSO, se è pronto con questo modello — vince su un rifiuto ricordato più piccolo */
+        viva: () => {
+          const ora = supervisoreLocale?.status?.();
+          return ora?.state === 'ready' && ora.modelId === modelId && Number.isSafeInteger(ora.windowTokens) ? ora.windowTokens : null;
+        },
+      };
+    },
     /* 21/10/2026: il limite d'uscita del modello per il tetto del riassunto (solo le route OpenRouter lo dichiarano negli endpoint) */
     limiteUscitaFn: (modello) => compactionWindowSource.getUscita(typeof modello === 'string' && modello.startsWith('openrouter:') ? modello.slice('openrouter:'.length) : modello),
     /* owner 14/10/2026 (anche per il desktop, confermato in sessione): una domanda SCADUTA non ferma il giro; il modello riceve
@@ -695,6 +844,7 @@ async function startServer() {
        sezioni. Il registro resta spento di serie per chi lo importa (la CLI decide da sé). `TALOS_ATTREZZI_DIFFERITI=0` lo spegne. */
     attrezziDifferiti: process.env.TALOS_ATTREZZI_DIFFERITI !== '0',
     ...(impostazioniContesto ? { motoreContestoPerNuoveFn: () => impostazioniContesto.motorePerUnaConversazioneNuova() } : {}),
+    doveComandiPerNuoveFn: () => impostazioniComandi.dovePerUnaConversazioneNuova(), // owner 27/10: Impostazioni → Strumenti
     contextHooksFn: motoreContestoAttivo ? input => contextRuntime?.service.createKernelHooks(input) : undefined,
     // C1 review Y1: lo stesso criterio di `politicaAbilitazione`/`enabledSessionIds` qui sotto, ma sincrono, PRIMA dei ganci
     giroUsaIlMotoreFn: giroUsaIlMotore({ trialSessionIds: config.contextTrial?.sessionIds ?? null }),
@@ -765,6 +915,7 @@ async function startServer() {
     prontoFn: creaProntoFn({ providerStore, chiaveApi: ignoraSemiAmbiente ? null : config.chiaveApi }),
     obiettiviNellaChat: config.obiettiviNellaChat === true, // /goal: la seconda porta dell'obiettivo, solo dove c'è la sua superficie
     compattazioneIstantanea: config.compattazioneIstantanea === true, // 15/10/2026: il riassunto pronto prima della soglia
+    riassuntoSicuroPerCache: config.riassuntoSicuroPerCache === true, // 28/10/2026, cache punto 4: spento di serie
     /*
      * ⛔⛔⛔ CLI-REQ-05, punto 2 e 3 — LA STESSA DESTINAZIONE CHE USA UN GIRO NORMALE.
      * Senza questa, la compattazione e il giudice della ricerca partivano con una `fetch` nuda, e
@@ -772,12 +923,17 @@ async function startServer() {
      * sessione DeepSeek se ne andava lì. `destinazioneModelloDeps` è la stessa che sceglie
      * fornitore, indirizzo e chiave per ogni turno — una fonte sola, non una seconda copia.
      */
-    fetchModelloFn: () => creaFetchMultiProvider(fetch, { dipendenze: destinazioneModelloDeps }),
+    /* revisione blocco 6 (A-R5): riassunti, /compact e giudice sono chiamate di servizio — sul rifiuto del motore locale non lo riaprono e
+       non chiedono una carta che nessuno vede (la crescita la decide il giro, nel registro e nel kernel) */
+    fetchModelloFn: () => creaFetchMultiProvider(fetch, { dipendenze: destinazioneModelloDeps, senzaPersona: true }),
     cartelleProgetto: config.cartelleProgetto,
     taskCatalogProvider,
     ricercaWeb: config.ricercaWeb, // seme dell'ambiente: resta per compatibilità, ma è ricercaWebFn a valere a ogni giro
     ricercaWebFn,
     preferenzeWslFn: () => preferenzeWslStore.leggi(), // F009: letta a ogni comando, come ricercaWebFn
+    /* owner 27/10/2026: le cartelle bloccate per un dispositivo, lette dallo STESSO file che scrive il coordinatore del remoto
+       (`cartelle-dispositivi.mjs`: accanto a `consensi.json`) — contratto CONTRATTO-CARTELLE-BLOCCATE-2026-10-27, giro 2 */
+    bloccateDelDispositivoFn: creaLettoreBloccate({ fileBloccate: percorsoDatiDesktop('remoto/cartelle-bloccate.json') }),
     casaLinux: casaLinux.pronta ? { node: casaLinux.node, rg: casaLinux.rg } : null, // Fase B: la casa Linux di ogni sessione
     // ⭐⭐⭐ 29/8 — FASE D, firma Ed25519 delle ricevute. Stesso principio di
     // ricercaWeb: undefined quando non configurata (vedi config.mjs), le
@@ -786,6 +942,8 @@ async function startServer() {
     // ⭐⭐⭐ 29/8 — FASE H, generate_image. A differenza di ricercaWeb: SEMPRE
     // definita (config.mjs, parseImmagine — un default reale, mai undefined).
     immagine: config.immagine,
+    /* L-1 del kit (owner 29/10/2026 sera): le immagini vanno all'indirizzo di OpenRouter scelto, come la chat; letto a ogni immagine */
+    baseImmaginiFn: () => baseImmaginiOpenRouter(providerStore.getRuntime('openrouter')),
     persistGeneratedImageFn: generatedImageStore.persistGeneratedImage,
     removeGeneratedImageFn: generatedImageStore.removeGeneratedImage,
     localRuntimes,
@@ -927,7 +1085,8 @@ async function startServer() {
     }
   }
   const workspaceBrowser = createWorkspaceBrowser({
-    rootDir: parse(process.cwd()).root,
+    rootDir: parse(process.cwd()).root, // il ripiego, se l'elenco dei dischi non trovasse niente
+    rootsFn: () => elencaDischi(), // owner 29/10/2026: tutti i dischi, non solo quello del server
     projectDirectories: config.cartelleProgetto,
     recommendedDirectoriesFn: () => cartelleConsigliate({ sessionRegistry }),
   });
@@ -958,7 +1117,7 @@ async function startServer() {
   }));
   /* ⭐ 0.1.25 (owner 09/10/2026) — la seconda porta dei fornitori esclusi: elencare libero, escludere e riammettere con la carta.
      Come le automazioni, il registro offre gli attrezzi `provider_*` solo da qui in poi; la CLI non lo chiama. */
-  sessionRegistry.collegaFornitori(creaOspiteFornitori({ providerStore, slugDelFornitoreFn: (q) => slugDelFornitore(q), accessoChatgpt }));
+  sessionRegistry.collegaFornitori(creaOspiteFornitori({ providerStore, slugDelFornitoreFn: (q) => slugDelFornitore(q), accessoChatgpt, finestraLocale: finestraCheCresce })); // L1 1.3: local_model_window
   /*
    * ⭐⭐⭐ 27/8 — owner: "un picker per il modello, dropdown stilizzato
    * (l'abbiamo già fatto nel mobile)". Il catalogo VERO di OpenRouter
@@ -1028,7 +1187,9 @@ async function startServer() {
      *   l'id scelto dal server, uno per finestra (owner, la sera stessa); questa è la loro cartella. Un id inventato riceve 403.
      */
     // 16/10/2026: la cartella dei terminali senza sessione, che nascono solo dalla rotta POST /api/v1/terminals (id del server)
-    cartellaStandalone: config.cartelleProgetto[0]?.percorso ?? process.cwd(),
+    /* 29/10/2026: senza un progetto (l'app installata parte senza) la cartella dell'utente, mai quella del programma (`process.cwd()` è
+       `…\Programs\TALOS\resources` nel pacchetto) */
+    cartellaStandalone: config.cartelleProgetto[0]?.percorso ?? homedir(),
   });
 
   /*
@@ -1050,8 +1211,19 @@ async function startServer() {
   /* F6-3 (27/09): il servizio git serve anche alle PR (`gh-service` legge ramo, remoti e bozza da qui): uno solo, per entrambi. */
   const servizioGit = creaServizioGit({ cartellaDiSessione: (sessionId) => sessionRegistry.cartellaDi(sessionId) });
 
+  /* «Segnala un problema» (owner 29/10/2026): la versione dell'app per la diagnostica. L'app installata la riceve dal guscio
+     (`TALOS_DESKTOP_VERSION`, `desktop/runtime.mjs`); da sorgente (il 4174) è quella di `desktop/package.json`, detta «da sorgente». */
+  const versioneDesktopFn = () => {
+    const dalGuscio = process.env.TALOS_DESKTOP_VERSION;
+    if (typeof dalGuscio === 'string' && dalGuscio.trim()) return { versione: dalGuscio.trim(), installata: true };
+    try { return { versione: JSON.parse(readFileSync(new URL('./desktop/package.json', import.meta.url), 'utf8')).version ?? null, installata: false }; }
+    catch { return { versione: null, installata: false }; }
+  };
+
   const app = createHttpApp({
     remotoFn: () => remoto,
+    versioneDesktopFn, // «Segnala un problema» (owner 29/10/2026): la versione dell'app nella diagnostica
+    riconosciLinguaScritta: config.riconosciLinguaScritta !== false, // M 28/10/2026 notte: spento nel profilo del dispositivo
     // /goal G2c (14/10/2026): la proposta dei criteri adatta il ragionamento al catalogo del modello, come i giri
     modelCapabilityFn: readModelCapabilities,
     /*
@@ -1080,6 +1252,10 @@ async function startServer() {
     registraLimitiDelPianoFn: (voce) => usoChatgpt.registraLimiti(voce),
     contextService: contextRuntime?.service,
     impostazioniContesto, // C1: «Motore del contesto» in Impostazioni → Contesto
+    /* L1 1.3: la scelta «quando la finestra di un modello locale si riempie». Senza motore (nessun binario) resta la sola scelta: si legge
+       e si salva lo stesso, e «Allarga» risponde LOCAL_RUNTIME_NOT_CONFIGURED (27/10, prima era un 500 a ogni apertura delle Impostazioni) */
+    finestraPiena: finestraCheCresce ?? creaSceltaFinestraPiena({ cartella: percorsoDatiDesktop('.local-models/') }),
+    impostazioniComandi, // owner 27/10: GET/POST /api/v1/command-settings
     // ⭐ 10/09: le favicon delle fonti, prese dal server una volta sola e tenute qui accanto alle sessioni.
     cartellaFavicon: percorsoDatiDesktop('.favicon-cache/'),
     /*
@@ -1335,6 +1511,7 @@ async function startServer() {
         ...(workflowStoreAltro ? [{ close: () => workflowStoreAltro.close() }] : []),
         ...(contextRuntime ? [{ close: () => contextRuntime.close() }] : []),
         ...Object.values(localRuntimes).map((runtime) => ({ close: () => typeof runtime?.unload === 'function' ? runtime.unload() : undefined })),
+        ...(chiudiRouterLocale ? [{ close: () => chiudiRouterLocale() }] : []), // router mode: the router and its children, the whole tree
       ],
       logger: console,
     });
@@ -1485,5 +1662,11 @@ if (direct) {
     console.error('Harness UI non avviabile: controlla configurazione e file locali');
     console.error('[avvio] causa reale:', error instanceof Error ? (error.stack || error.message) : error);
     process.exitCode = 1;
+    /* 29/10/2026: `exitCode` da solo non basta — timer e sorveglianze già aperti tenevano vivo il processo, e sul 4174 cinque avvii
+       falliti («porta in uso») erano ancora lì ore dopo. Si esce dal richiamo di una scrittura su stderr, quando le righe sopra
+       sono già passate (doc Node «A note on process I/O»: su Unix le pipe sono asincrone, `process.exit()` le può troncare); il
+       timer è la riserva e non tiene vivo niente. */
+    process.stderr.write('', () => process.exit(1));
+    setTimeout(() => process.exit(1), 2000).unref();
   });
 }

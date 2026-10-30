@@ -171,11 +171,23 @@ export function conteggio(n) {
   return numero.format(v);
 }
 
+/*
+ * 28/10/2026 sera (trovato confrontando col Mobile): «mmproj-F16.gguf» diventava una variante «F16» in cima, e la preselezione poteva cadere su
+ * di lui. Regola del motore che poi carica il file, llama.cpp `common/download.cpp:617-623` (tabella `sidecars`) e `:668-690`
+ * (`gguf_filename_is_model`), commit f849095 del 21/10/2026: un .gguf è un MODELLO solo se il NOME del file (senza cartelle) non contiene
+ * «imatrix» né la parola di un file di servizio. Owner 28/10 sera: maiuscole e minuscole si ignorano (llama.cpp le guarda), uguale sul Mobile.
+ */
+const PAROLE_DEI_FILE_DI_SERVIZIO = Object.freeze(['imatrix', 'mmproj', 'mtp-', 'dflash-', 'eagle3-', 'dspark-']);
+export function eFileDiModello(percorso = '') {
+  const nome = String(percorso).split('/').pop().toLowerCase();
+  return nome.endsWith('.gguf') && !PAROLE_DEI_FILE_DI_SERVIZIO.some((parola) => nome.includes(parola));
+}
+
 /** Le varianti: i file `-00001-of-00003.gguf` di uno stesso set stanno insieme. */
 export function gruppiVarianti(files = []) {
   const gruppi = new Map();
   for (const f of files) {
-    if (!/\.gguf$/i.test(f.path || '')) continue;
+    if (!eFileDiModello(f.path || '')) continue;
     const chiave = f.path.replace(/-\d{5}-of-\d{5}(?=\.gguf$)/iu, '');
     const g = gruppi.get(chiave) || []; g.push(f); gruppi.set(chiave, g);
   }

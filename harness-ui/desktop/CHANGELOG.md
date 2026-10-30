@@ -4,6 +4,15 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
 [SemVer](https://semver.org/): in 0.y.z anything may still change. The version lives in
 `package.json` and in the `desktop-vX.Y.Z` tag.
 
+## Unreleased
+
+### Added
+
+- **Long code stays easy to copy and save.** In the chat, the bar of a code block (language, Copy and «⋯») stays pinned at the
+  top while you scroll through the code, and leaves with the block. «⋯», or a right-click on the bar, downloads the code as a
+  file of its language, as Markdown or as plain text, named after the file the model wrote in the block (otherwise
+  `talos-<language>-<date>`), and collapses a block longer than 40 lines. Copy and «⋯» wait until the block has fully arrived.
+
 ## desktop-v0.1.38 — 2026-10-25
 
 ### Fixed

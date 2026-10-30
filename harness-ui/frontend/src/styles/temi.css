@@ -193,8 +193,13 @@
  * Ricerca 11/09/2026 prima di scrivere: webability.io «Color Contrast for Accessibility: WCAG Guide
  * (2026)» e achecks.org «Gradients: Accessible Colour Contrasts with Gradient Backgrounds» — su un
  * fondo che varia si campiona nel punto di contrasto PIÙ BASSO sotto il testo, non un colore solo.
+ *
+ * ⛔ 28/10/2026 sera — `#5a5c62` (rgb 90 92 98), altri OTTO punti, decisione dell'owner con lo sfondo Calm B «Respiro e luce» acceso di
+ *   serie: sul fondo pieno il tenue era a 4,88:1, e la scena (luce, alone, linee) nel punto peggiore lo portava a 4,14:1. Con questo
+ *   valore il caso peggiore misurato sotto la colonna della chat (W3C F83, 11 foto lungo una traversata della luce, 1920×1080 e
+ *   915×412) torna sopra 4,5:1. Stessa tinta; uguale sul mobile.
  */
-:root[data-talos-theme="calm"][data-theme="light"] { --talos-muted: #62646a; }
+:root[data-talos-theme="calm"][data-theme="light"] { --talos-muted: #5a5c62; }
 
 /* ---------- 3. Il chiaro: neutri dal tema, accento SCURITO ----------
    ⛔ I neutri seguono il mobile (sezione 1-ter). L'ACCENTO no, e la ragione e' misurabile: in chiaro

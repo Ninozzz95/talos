@@ -3,7 +3,7 @@ import { LINGUA_PSEUDO, linguaCorrenteDiT, t } from '../../components/lingua.js'
 import { TESTI } from '../../i18n/testi/index.js';
 export type SettingsLanguage = 'it' | 'en';
 export type LocalText = Readonly<{ it: string; en: string; chiave: string }>;
-export type SettingsSection = 'appearance' | 'chat' | 'tools' | 'memoria' | 'privacy' | 'telefoni' | 'models' | 'costi' | 'workspace' | 'account';
+export type SettingsSection = 'appearance' | 'chat' | 'tools' | 'memoria' | 'privacy' | 'telefoni' | 'models' | 'costi' | 'workspace' | 'account' | 'aggiornamenti';
 export interface LegacySettingField {
   id: string; chiave: string; titolo: string; sezione: string; gruppo: string; tipo: string;
   opzioni?: readonly (readonly string[])[]; min?: number; max?: number; unita?: string;
@@ -27,10 +27,10 @@ const text = (chiave: string): LocalText => Object.freeze({
 });
 /** Lo stesso testo a due lingue, per chi compone le Impostazioni fuori da questo file (`settings-view.ts`). */
 export const localTextKey = text;
-export const SETTINGS_SECTIONS: Readonly<Record<SettingsSection, { title: LocalText; eyebrow?: LocalText; description: LocalText; scope: LocalText; icon: string; keywords: string }>> = {
+export const SETTINGS_SECTIONS: Readonly<Record<SettingsSection, { title: LocalText; eyebrow?: LocalText; description: LocalText; scope: LocalText; icon: string; keywords: string; soloApp?: boolean }>> = {
   appearance: { title: text('impostazioni.sections.appearance.title'), eyebrow: text('impostazioni.sections.appearance.eyebrow'), description: text('impostazioni.sections.appearance.description'), scope: text('impostazioni.sections.appearance.scope'), icon: 'image', keywords: /* lingua: termini di ricerca scritti apposta nelle due lingue */ 'theme colore color font animation animazioni accessibilità accessibility' },
   chat: { title: text('impostazioni.sections.chat.title'), description: text('impostazioni.sections.chat.description'), scope: text('impostazioni.sections.chat.scope'), icon: 'chat', keywords: 'message messaggi invio enter input text testo font composer' },
-  tools: { title: text('impostazioni.sections.tools.title'), description: text('impostazioni.sections.tools.description'), scope: text('impostazioni.sections.tools.scope'), icon: 'sliders', keywords: 'tools permissions permessi policy search ricerca web duckduckgo tavily brave chiave key' },
+  tools: { title: text('impostazioni.sections.tools.title'), description: text('impostazioni.sections.tools.description'), scope: text('impostazioni.sections.tools.scope'), icon: 'sliders', keywords: 'tools permissions permessi policy search ricerca web duckduckgo tavily brave chiave key commands comandi shell terminal terminale wsl linux windows' },
   memoria: { title: text('impostazioni.sections.memoria.title'), description: text('impostazioni.sections.memoria.description'), scope: text('impostazioni.sections.memoria.scope'), icon: 'brain', keywords: 'memory contesto context tokens token memoria finestra compaction' },
   privacy: { title: text('impostazioni.sections.privacy.title'), description: text('impostazioni.sections.privacy.description'), scope: text('impostazioni.sections.privacy.scope'), icon: 'shield', keywords: 'privacy security sicurezza dati data export esporta import importa backup reset ripristina' },
   /* 18/10/2026 — «Telefoni collegati» subito dopo «Sicurezza e privacy» (owner 17/10, mockup v4-v5 del controllo remoto). */
@@ -47,6 +47,9 @@ export const SETTINGS_SECTIONS: Readonly<Record<SettingsSection, { title: LocalT
   costi: { title: text('impostazioni.sections.costi.title'), description: text('impostazioni.sections.costi.description'), scope: text('impostazioni.sections.costi.scope'), icon: 'chart', keywords: 'cost costi prezzo price token usage consumo billing spesa' },
   workspace: { title: text('impostazioni.sections.workspace.title'), description: text('impostazioni.sections.workspace.description'), scope: text('impostazioni.sections.workspace.scope'), icon: 'folder', keywords: 'folder directory cartella file project progetto workspace path percorso' },
   account: { title: text('impostazioni.sections.account.title'), description: text('impostazioni.sections.account.description'), scope: text('impostazioni.sections.account.scope'), icon: 'activity', keywords: 'account doctor diagnostica diagnostic backup recovery recupero configurazione' },
+  /* 29/10/2026 — «Aggiornamenti» come sezione a sé (owner 22/10 notte, mockup approvato col Mobile: là sta dopo «Backup»). Esiste
+     SOLO nell'app installata: lo stato lo manda il guscio (`components/aggiornamenti.js`), e nel browser la voce resta nascosta. */
+  aggiornamenti: { title: text('impostazioni.sections.aggiornamenti.title'), description: text('impostazioni.sections.aggiornamenti.description'), scope: text('impostazioni.sections.aggiornamenti.scope'), icon: 'download', keywords: 'aggiornamenti updates update versione version release installa install controlla check automatici automatic', soloApp: true },
 };
 /*
  * ⛔ 23/09/2026 — GLI INDIRIZZI RITIRATI, e dove portano adesso. Owner: «Provider e accessi» tolta
@@ -68,7 +71,7 @@ export function risolviSezioneImpostazioni(id: unknown): { section: SettingsSect
   const ritirata = Object.hasOwn(SEZIONI_RITIRATE, chiave) ? SEZIONI_RITIRATE[chiave] : undefined;
   return ritirata ? { section: ritirata.section, labTab: ritirata.labTab } : null;
 }
-export const CHAT_FIELDS = new Set(['chatFontScaleSelect', 'composerPlusSelect', 'messageStyleSelect', 'streamingAnimationSelect', 'chatFullWidthToggle', 'askTimeoutSelect']);
+export const CHAT_FIELDS = new Set(['chatFontScaleSelect', 'composerPlusSelect', 'messageStyleSelect', 'streamingAnimationSelect', 'chatFullWidthToggle', 'askTimeoutSelect', 'userBubbleFullWidthToggle', 'stopWithAgentsSelect']);
 export function sectionForField(field: LegacySettingField): SettingsSection {
   if (CHAT_FIELDS.has(field.id)) return 'chat';
   return Object.hasOwn(SETTINGS_SECTIONS, field.sezione) ? field.sezione as SettingsSection : 'appearance';
@@ -78,11 +81,13 @@ export const FIELD_HELP: Readonly<Record<string, LocalText>> = {
   colorModeSelect: text('impostazioni.fieldHelp.colorModeSelect'),
   uiDensitySelect: text('impostazioni.fieldHelp.uiDensitySelect'),
   uiLanguageSelect: text('impostazioni.fieldHelp.uiLanguageSelect'),
+  replyLanguageSelect: text('impostazioni.fieldHelp.replyLanguageSelect'), // owner 28/10/2026
   sceneOverrideSelect: text('impostazioni.fieldHelp.sceneOverrideSelect'),
   uiFontScaleSelect: text('impostazioni.fieldHelp.uiFontScaleSelect'),
   chatFontScaleSelect: text('impostazioni.fieldHelp.chatFontScaleSelect'),
   // 24/09/2026, decisione owner 35.
   askTimeoutSelect: text('impostazioni.fieldHelp.askTimeoutSelect'),
+  stopWithAgentsSelect: text('impostazioni.fieldHelp.stopWithAgentsSelect'), // owner 29/10/2026: lo Stop con agenti al lavoro
   composerPlusSelect: text('impostazioni.fieldHelp.composerPlusSelect'),
   messageStyleSelect: text('impostazioni.fieldHelp.messageStyleSelect'),
   streamingAnimationSelect: text('impostazioni.fieldHelp.streamingAnimationSelect'),
@@ -115,6 +120,7 @@ export const FIELD_HELP: Readonly<Record<string, LocalText>> = {
   motionFeedbackToggle: text('impostazioni.fieldHelp.motionFeedbackToggle'),
   immersiveHeaderToggle: text('impostazioni.fieldHelp.immersiveHeaderToggle'),
   chatFullWidthToggle: text('impostazioni.fieldHelp.chatFullWidthToggle'),
+  userBubbleFullWidthToggle: text('impostazioni.fieldHelp.userBubbleFullWidthToggle'), // 27/10/2026: la bolla a tutta larghezza
 };
 export function normalizeSearch(value: unknown): string {
   return String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('it').trim();

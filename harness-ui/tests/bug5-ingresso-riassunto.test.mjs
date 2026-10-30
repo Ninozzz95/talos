@@ -19,6 +19,7 @@ import {
 } from '../src/kernel/compattazione-desktop.mjs';
 import { avviaSessione } from '../src/agent-service.mjs';
 import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
+import { corpoSenzaMarcatori } from './aiuto/corpo-senza-marcatori.mjs'; // 28/10: cache, punto 1
 
 const CONSEGNA = 'CONSEGNA-BUG5: leggi grande.txt più volte e riferisci.';
 const PREAMBOLO = 'PREAMBOLO-PROGETTO ' + 'x'.repeat(12_000);
@@ -48,7 +49,7 @@ function fintoFornitore({ chiamateTool = 10, riassunto } = {}) {
   const corpi = [];
   let lavoro = 0;
   const fetchDiRete = async (_url, init) => {
-    const body = JSON.parse(init.body);
+    const body = corpoSenzaMarcatori(init.body);
     corpi.push(body);
     const usage = { prompt_tokens: Math.ceil(JSON.stringify(body.messages).length / 4), completion_tokens: 5 };
     if (eRichiestaDiRiassunto(body)) {
@@ -225,7 +226,7 @@ test('BUG5-GIRO-CHIUSO-K8 — a contatore pieno il ritentativo overflow NON cras
   let lavoro = 0;
   let riassuntiPagati = 0;
   const fetchDiRete = async (_url, init) => {
-    const body = JSON.parse(init.body);
+    const body = corpoSenzaMarcatori(init.body);
     corpi.push(body);
     const usage = { prompt_tokens: Math.ceil(JSON.stringify(body.messages).length / 4), completion_tokens: 5 };
     if (eRichiestaDiRiassunto(body)) {

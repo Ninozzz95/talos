@@ -5,9 +5,10 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
 import {
-  BLOCCO_MS, DURATA_OFFERTA_MS, OFFERTE_APERTE_MASSIME, TENTATIVI_SBAGLIATI_MASSIMI, codiceDiVerifica, creaAccoppiamento, testoDelQr,
+  BLOCCO_MS, DURATA_OFFERTA_MS, OFFERTE_APERTE_MASSIME, TENTATIVI_SBAGLIATI_MASSIMI, codiceDiVerifica, creaAccoppiamento, relayNelQr, testoDelQr,
 } from '../src/remoto/accoppiamento.mjs';
 import { TELEFONI_MASSIMI, creaElencoDispositivi } from '../src/remoto/dispositivi.mjs';
+import { moduliDelQr } from '../src/remoto/index.mjs';
 import { BYTE_MASSIMI, codifica, creaLettore } from '../src/remoto/filo.mjs';
 
 /*
@@ -39,7 +40,7 @@ const VETTORE = '645739'; // calcolato a parte con Python (hashlib), non col mod
 test('ACC-02 il gettone vale UNA volta: la seconda presentazione è rifiutata', () => {
   const o = orologio(); const acc = creaAccoppiamento({ clock: o.clock, casuale });
   const { gettone, qr } = acc.apri({ pcId: PC, relay: 'https://relay.example' });
-  assert.match(qr, /^talos-remote:1\?pc=.+&relay=https%3A%2F%2Frelay\.example&t=.+&exp=\d+$/);
+  assert.match(qr, /^talos-remote:1\?pc=.+&relay=https:\/\/relay\.example&t=.+&exp=\d+$/);
   const p = acc.presenta({ gettone, pcId: PC, telefonoId: TEL, nome: 'Pad di Nino' });
   assert.equal(p.codice, codiceDiVerifica({ pcId: PC, telefonoId: TEL, gettone }));
   assert.throws(() => acc.presenta({ gettone, pcId: PC, telefonoId: ALTRO }), { code: 'PAIR_TOKEN_INVALID' });
@@ -52,7 +53,8 @@ test('ACC-03 il gettone scade dopo 5 minuti, non prima', () => {
   assert.ok(acc.presenta({ gettone: a.gettone, pcId: PC, telefonoId: TEL }).codice);
   const b = acc.apri({ pcId: PC });
   o.avanza(DURATA_OFFERTA_MS);
-  assert.throws(() => acc.presenta({ gettone: b.gettone, pcId: PC, telefonoId: TEL }), { code: 'PAIR_TOKEN_INVALID' });
+  /* revisione blocco 8 (F-R1): un gettone di questo PC solo scaduto si dice «scaduto», non «sconosciuto» (e non conta verso il blocco) */
+  assert.throws(() => acc.presenta({ gettone: b.gettone, pcId: PC, telefonoId: TEL }), { code: 'PAIR_EXPIRED' });
 });
 
 test('ACC-04 al più 3 offerte aperte: la quarta chiude la più vecchia', () => {
@@ -188,4 +190,73 @@ test('FILO-03 versione sconosciuta, JSON rotto e messaggio senza tipo sono error
   assert.throws(() => creaLettore().aggiungi(grezzo('{"v":1')), { code: 'BAD_MESSAGE' });
   assert.throws(() => creaLettore().aggiungi(grezzo('{"v":1}')), { code: 'BAD_MESSAGE' });
   assert.throws(() => creaLettore().aggiungi(grezzo('[1]')), { code: 'BAD_MESSAGE' });
+});
+
+/*
+ * Il QR più piccolo (owner 26/10/2026 notte tarda, «Sì, rimpicciolisci»). Il relay nel QR con la codifica leggera: crudi i caratteri
+ *   non riservati e `: / ? =`, codificati `% + & #` e lo spazio — il telefono legge con `URLSearchParams` (`filoRemoto.ts:48-52`) e il
+ *   gettone con `URLDecoder` (`TalosRemotoCustodia.kt:100-102`): misurato dal Mobile, un `+` crudo diventa spazio, un `&` crudo tronca,
+ *   un `%XX` crudo si decodifica due volte. Queste prove sono il riferimento che il Mobile rispecchia sul telefono.
+ */
+const leggiComeIlTelefono = (qr) => new URLSearchParams(qr.slice(qr.indexOf('?') + 1));
+const RELAY_DIFFICILI = [
+  'https://relay.example',
+  'https://euc1-1.relay.n0.example/',
+  'https://relay.casa-di-nino.example/?token=segreto-43',
+  'https://relay.example/talos/?token=a+b/c%2Fd&e=1#frammento',
+  'https://relay.example/?token=con spazio+più%25e&x=y=z?w',
+];
+
+test('ACC-QR-01 andata e ritorno: il relay letto come lo legge il telefono è byte per byte quello di partenza, e gli altri campi restano', () => {
+  for (const relay of RELAY_DIFFICILI) {
+    const qr = testoDelQr({ pcId: 'a'.repeat(64), relay, gettone: 'AbC-_9'.repeat(4).slice(0, 22), scadeAlle: 1_761_500_000_000 });
+    const letto = leggiComeIlTelefono(qr);
+    assert.equal(letto.get('relay'), relay, `relay: ${relay} → ${qr}`);
+    assert.equal(letto.get('pc'), 'a'.repeat(64));
+    assert.equal(letto.get('t'), 'AbC-_9'.repeat(4).slice(0, 22));
+    assert.equal(letto.get('exp'), '1761500000');
+  }
+});
+
+test('ACC-QR-02 i caratteri che il telefono leggerebbe male restano codificati: niente + & # o spazio crudi, ogni % è un %XX', () => {
+  for (const relay of RELAY_DIFFICILI) {
+    const pezzo = relayNelQr(relay);
+    assert.doesNotMatch(pezzo, /[+&# ]/u, `crudo pericoloso in ${pezzo}`);
+    assert.doesNotMatch(pezzo, /%(?![0-9A-F]{2})/u, `un % che non apre un %XX in ${pezzo}`);
+    assert.match(pezzo, /^https:\/\//u, 'i : e le / restano crudi (il guadagno)');
+  }
+  assert.equal(relayNelQr('https://r.example/?token=a%2Fb'), 'https://r.example/?token=a%252Fb', 'un %XX del gettone si codifica: il telefono lo decodifica una volta sola');
+});
+
+test('ACC-QR-03 la codifica leggera accorcia: «://» e le «/» crude, 8 caratteri in meno sul relay di casa di n0', () => {
+  const relay = 'https://euc1-1.relay.n0.example/';
+  assert.equal(encodeURIComponent(relay).length - relayNelQr(relay).length, 8);
+});
+
+test('ACC-QR-04 correzione d\'errore L: il QR di n0 (id di 64 caratteri, nessun relay) ha 41 moduli per lato — con M erano 45', () => {
+  const qr = testoDelQr({ pcId: 'f'.repeat(64), gettone: 'x'.repeat(22), scadeAlle: 1_761_500_000_000 });
+  assert.equal(qr.length, 122, 'premessa: il testo misurato dalla CLI');
+  assert.equal(moduliDelQr(qr).lato, 41);
+});
+
+/* Revisione del blocco 8 (27/10/2026), F-R1: con la tolleranza di 120 s del telefono un QR scaduto arriva al PC. Prima contava come
+   gettone sbagliato e al quinto bloccava gli accoppiamenti 15 minuti, chiudendo anche il QR buono. */
+test('ACC-SCADUTO-01 (blocco 8, F-R1) un QR scaduto emesso da questo PC risponde PAIR_EXPIRED e non conta; uno sconosciuto conta ancora', async () => {
+  const { creaAccoppiamento, DURATA_OFFERTA_MS, RICORDO_SCADUTI_MS } = await import('../src/remoto/accoppiamento.mjs');
+  let ora = Date.parse('2026-10-27T10:00:00.000Z');
+  let n = 0;
+  const acc = creaAccoppiamento({ clock: () => ora, casuale: (k) => Buffer.alloc(k, (n += 1) % 250) });
+  const pc = 'p'.repeat(64);
+  const vecchi = Array.from({ length: 6 }, () => acc.apri({ pcId: pc }).gettone).slice(-3);
+  ora += DURATA_OFFERTA_MS + 1_000;
+  const buono = acc.apri({ pcId: pc }).gettone;
+  for (const g of vecchi) {
+    assert.throws(() => acc.presenta({ gettone: g, pcId: pc, telefonoId: 't'.repeat(64) }), { code: 'PAIR_EXPIRED' });
+  }
+  assert.throws(() => acc.presenta({ gettone: vecchi[0], pcId: pc, telefonoId: 't'.repeat(64) }), { code: 'PAIR_TOKEN_INVALID' }, 'un gettone scaduto si dice una volta, poi è sconosciuto');
+  assert.ok(acc.presenta({ gettone: buono, pcId: pc, telefonoId: 't'.repeat(64) }).codice, 'il QR buono funziona ancora: nessun blocco');
+  /* AL CONTRARIO: dopo RICORDO_SCADUTI_MS un gettone scaduto torna sconosciuto, e gli sconosciuti contano verso il blocco */
+  const tardi = acc.apri({ pcId: pc }).gettone;
+  ora += DURATA_OFFERTA_MS + RICORDO_SCADUTI_MS + 1_000;
+  assert.throws(() => acc.presenta({ gettone: tardi, pcId: pc, telefonoId: 't'.repeat(64) }), { code: 'PAIR_TOKEN_INVALID' });
 });

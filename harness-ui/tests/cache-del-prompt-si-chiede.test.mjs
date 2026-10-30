@@ -74,7 +74,10 @@ test('⭐⭐⭐ la richiesta porta il marcatore SUL BLOCCO di sistema, col TTL d
   }
 });
 
-test('⛔ il marcatore va sull\'ULTIMO blocco di sistema, e gli altri messaggi non si toccano', () => {
+/* 28/10/2026 (cache, punto 1, come Hermes): non più UN marcatore sull'ultimo sistema, ma fino a quattro — il primo sistema, la fine della
+   testa e gli ultimi messaggi — ciascuno solo se il prefisso fino a lì supera la soglia. Le prove dei casi nuovi stanno in
+   `cache-piu-punti-28-10.test.mjs`. */
+test('⛔ il sistema lungo della testa prende il marcatore, quello corto no, e l\'ultima domanda (oltre la soglia) anche', () => {
   const messaggi = [
     { role: 'system', content: 'istruzioni' },
     { role: 'system', content: PREAMBOLO_GRANDE },
@@ -85,7 +88,7 @@ test('⛔ il marcatore va sull\'ULTIMO blocco di sistema, e gli altri messaggi n
   assert.equal(fuori[0].content, 'istruzioni', 'il primo sistema resta una stringa');
   assert.ok(Array.isArray(fuori[1].content), 'l\'ultimo sistema diventa multi-parte');
   assert.equal(fuori[1].content[0].text, PREAMBOLO_GRANDE);
-  assert.equal(fuori[2].content, 'ciao', 'i messaggi dell\'utente non si toccano');
+  assert.deepEqual(fuori[2].content, [{ type: 'text', text: 'ciao', cache_control: { type: 'ephemeral', ttl: '1h' } }], 'l\'ultima domanda sta oltre la soglia: prende il suo punto');
   /* ⛔ E l'originale non è stato mutato: la conversazione su disco deve restare di stringhe, o
      resume, fork, banco e test si troverebbero davanti a un formato che non hanno mai visto. */
   assert.equal(messaggi[1].content, PREAMBOLO_GRANDE, 'l\'array di partenza non si muta');
@@ -105,6 +108,7 @@ test('⛔⛔ AL CONTRARIO — senza un messaggio di sistema non si inventa nient
    *   elenca. È anche la ragione per cui i tre test del kernel che leggono il corpo della prima
    *   richiesta sono tornati veri da soli, invece di essere «aggiustati».
    */
-  const corto = [{ role: 'system', content: 'x'.repeat(CARATTERI_MINIMI_PER_CACHE - 1) }, { role: 'user', content: 'ciao' }];
+  /* 28/10/2026: la soglia vale per il prefisso fino a OGNI punto, domanda compresa */
+  const corto = [{ role: 'system', content: 'x'.repeat(CARATTERI_MINIMI_PER_CACHE - 10) }, { role: 'user', content: 'ciao' }];
   assert.deepEqual(conMarcatoreDiCache(corto), corto);
 });

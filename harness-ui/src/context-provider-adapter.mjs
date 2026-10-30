@@ -1,4 +1,5 @@
 // AVM owns canonical messages. The existing pinned SDK adapter owns wire formats.
+import { senzaCampoImmagini } from './kernel/immagine-da-guardare.mjs';
 import { ID_NATIVI_SDK } from './provider-registry.mjs';
 import { creaIniettoreSezioni } from './sezioni-istruzioni.mjs';
 import { healEchoedMarker } from './eco-del-marcatore.mjs';
@@ -129,8 +130,10 @@ export function prepareProviderContext({ messages, provider, model, reset = fals
 }
 
 /** Compile through the same public SDK API as inference, stopping before I/O. */
-export async function buildPreparedProviderRequest({ messages, tools = [], model, signal, requestOptions = {} } = {}) {
+export async function buildPreparedProviderRequest({ messages: storia, tools = [], model, signal, requestOptions = {} } = {}) {
   signal?.throwIfAborted();
+  /* view_image (owner 27/10/2026): il campo interno delle immagini non parte mai, nemmeno dalla compattazione nativa o da un conteggio */
+  const messages = senzaCampoImmagini(storia);
   if (!identity(model) || !Array.isArray(tools)) fail('CTX_PROVIDER_CONTEXT_INVALID', 'A target model and tool list are required.');
   const allowed = ['reasoning_effort', 'reasoning', 'tool_choice', 'max_tokens', 'max_completion_tokens', 'temperature', 'top_p', 'stop'];
   if (!requestOptions || typeof requestOptions !== 'object' || Array.isArray(requestOptions) || Object.keys(requestOptions).some(key => !allowed.includes(key))) fail('CTX_PROVIDER_CONTEXT_INVALID', 'Only supported nonsecret request options may be compiled.');

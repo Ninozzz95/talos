@@ -32,6 +32,11 @@ import { senzaPercorsiAssoluti } from './operazioni.mjs';
  */
 const MOTIVO_VALIDO = /^[A-Za-z0-9_.:-]{1,80}$/u;
 const CHIAVE_VALIDA = /^[A-Za-z0-9_]{1,40}$/u;
+/* Mobile 27/10/2026: la frase precisa del rifiuto (`explanation`), ripulita come i parametri: niente percorsi assoluti, 240 caratteri al più. */
+export function spiegazionePerIlTelefono(e) {
+  if (typeof e?.explanation !== 'string' || e.explanation.trim() === '') return {};
+  return { explanation: senzaPercorsiAssoluti(e.explanation).slice(0, 240) };
+}
 export function motivoPerIlTelefono(e) {
   if (typeof e?.reason !== 'string' || !MOTIVO_VALIDO.test(e.reason)) return {};
   const params = {};
@@ -62,7 +67,7 @@ const N_VALIDO = /^[A-Za-z0-9_-]{8,64}$/;
  * `operazioni`: { esegui(op, args, contesto) → Promise<data> } — l'elenco CHIUSO (`operazioni.mjs`); lancia `UNKNOWN_OPERATION`.
  */
 export function creaServizioRemoto({
-  pcId, nomePc = null, programma = 'TALOS desktop', vapidPubblica = null, accoppiamento, dispositivi, operazioni, clock = () => Date.now(), avvisa = () => {},
+  pcId, nomePc = null, programma: programmaChiesto = 'TALOS desktop', vapidPubblica = null, accoppiamento, dispositivi, operazioni, clock = () => Date.now(), avvisa = () => {},
   /* 24/10/2026 (fetta C del Mobile, PC doppi; contratto v0.3 §B, campo aggiuntivo): `true` quando il PC gira col portachiavi di
      PROVA in memoria — la sua identità rinasce a ogni avvio, quindi sul dispositivo diventa una voce nuova ogni volta. Il dispositivo
      la segna «di prova» e la propone per prima da dimenticare. Assente (mai `false`) negli altri casi: le versioni vecchie non cambiano. */
@@ -71,7 +76,16 @@ export function creaServizioRemoto({
      ancora letti — il telefono restava senza `pair.ok` pur essendo accoppiato. Ora il PC chiude la sua scrittura (half-close) e
      aspetta che il telefono chiuda la sua, o cada, al più questo tempo. Il telefono dà 60 s di grazia dal suo lato. */
   attesaDopoPairOkMs = 15_000,
+  /* 26/10/2026 (CLI 0.6.15, contratto `spazio` concordato con CLI e Mobile): le capacità che QUESTO programma dichiara al telefono
+     (per esempio 'spazio-worktree'). Il telefono mostra una scelta solo a un PC che la dichiara. Vuoto (di serie) ⇒ il campo non c'è,
+     né in `pair.code`/`pair.ok` né in `pc.info`: i PC di oggi non cambiano. */
+  capacita = [],
 } = {}) {
+  /* Revisione blocco 2 (N4): un `programma` vuoto o non stringa (anche `null`, che il valore di serie non copre) arrivava così al
+     telefono. Si dice sempre un nome. */
+  const programma = typeof programmaChiesto === 'string' && programmaChiesto.trim() !== '' ? programmaChiesto.trim().slice(0, 60) : 'TALOS desktop';
+  const capacitaDichiarate = Object.freeze([...new Set((Array.isArray(capacita) ? capacita : []).filter((c) => typeof c === 'string' && /^[a-z0-9-]{1,40}$/u.test(c)))]);
+  const conCapacita = capacitaDichiarate.length ? { capacita: capacitaDichiarate } : {};
   /** id del dispositivo → Set di connessioni vive */
   const vive = new Map();
   /** id del dispositivo → Map n → { quando, risposta } */
@@ -111,11 +125,13 @@ export function creaServizioRemoto({
       try {
         attesa = accoppiamento.presenta({ gettone: primo.gettone, pcId, telefonoId: remoteId, nome: primo.nome, piattaforma: primo.piattaforma, sveglia: primo.sveglia ?? null });
       } catch (e) {
-        await scrivi(stream, messaggioDiErrore(e.code === 'PAIR_LOCKED' ? 'PAIR_LOCKED' : 'PAIR_TOKEN_INVALID', { retryAfterMs: e.retryAfterMs }));
+        /* Revisione blocco 9 (B-R1): anche PAIR_EXPIRED arriva al telefono com'è («QR scaduto, chiedine uno nuovo»); prima ogni altro errore
+           diventava PAIR_TOKEN_INVALID («codice sconosciuto») e solo il motivo di chiusura diceva la verità. */
+        await scrivi(stream, messaggioDiErrore(['PAIR_LOCKED', 'PAIR_EXPIRED'].includes(e.code) ? e.code : 'PAIR_TOKEN_INVALID', { retryAfterMs: e.retryAfterMs }));
         return connessione.chiudi(e.code ?? 'PAIR_TOKEN_INVALID');
       }
       avvisa({ tipo: 'accoppiamento-in-attesa', id: attesa.id, nome: primo.nome ?? null, codice: attesa.codice });
-      await scrivi(stream, { t: 'pair.code', codice: attesa.codice, pc: { id: pcId, nome: nomePc, programma, ...(effimero === true ? { effimero: true } : {}) } });
+      await scrivi(stream, { t: 'pair.code', codice: attesa.codice, pc: { id: pcId, nome: nomePc, programma, ...(effimero === true ? { effimero: true } : {}), ...conCapacita } });
       /* Il telefono può solo annullare (o cadere): lo si ascolta mentre la persona decide sul PC. Una fine NORMALE del suo lato
          (scrive il saluto e chiude la scrittura, come fanno le sonde iroh) non è un annullamento: si aspetta la connessione. */
       let segnaFineLettura;
@@ -133,7 +149,7 @@ export function creaServizioRemoto({
       }
       /* Il telefono l'ha già registrato chi ha chiamato `conferma()` (qui sotto), PRIMA di risvegliare questa attesa. */
       const dispositivo = esito.dispositivo;
-      await scrivi(stream, { t: 'pair.ok', dispositivo: { id: dispositivo.id, nome: dispositivo.nome }, pc: { id: pcId, nome: nomePc, programma, vapid: vapidPubblica, ...(effimero === true ? { effimero: true } : {}) } });
+      await scrivi(stream, { t: 'pair.ok', dispositivo: { id: dispositivo.id, nome: dispositivo.nome }, pc: { id: pcId, nome: nomePc, programma, vapid: vapidPubblica, ...(effimero === true ? { effimero: true } : {}), ...conCapacita } });
       await stream.finisci();
       /* half-close: si chiude la connessione solo quando il telefono ha chiuso il suo lato (quindi ha letto `pair.ok`) o è caduto */
       let tetto;
@@ -173,7 +189,12 @@ export function creaServizioRemoto({
         /* Ciò che deve succedere DOPO che il telefono ha la risposta (chiudere la connessione dopo «Dimentica questo computer»). */
         const dopo = [];
         try {
-          const data = await operazioni.esegui(m.op, m.args ?? {}, {
+          /* 26/10/2026 (Mobile, contratto `spazio`): un PC già accoppiato e poi aggiornato dice chi è e che cosa sa fare anche alla
+             RICONNESSIONE, non solo in `pair.code`/`pair.ok`. Sola lettura, dal servizio stesso (non è una rotta HTTP). Un PC più vecchio
+             risponde UNKNOWN_OPERATION, che il telefono legge come «nessuna capacità». */
+          const data = m.op === 'pc.info'
+            ? { id: pcId, nome: nomePc, programma, ...(effimero === true ? { effimero: true } : {}), ...conCapacita }
+            : await operazioni.esegui(m.op, m.args ?? {}, {
             dispositivo, n: m.n, iscrizioni, dopoLaRisposta: (fn) => { dopo.push(fn); },
             /* un'iscrizione agli eventi: `emetti` manda sullo stesso stream; `fine` la chiude quando si chiude la connessione */
             iscrivi: (sub, chiudi) => { iscrizioni.set(sub, chiudi); return (data) => scrivi(stream, { t: 'evt', sub, data }); },
@@ -182,6 +203,7 @@ export function creaServizioRemoto({
         } catch (e) {
           risposta = { t: 'res', n: m.n, ok: false, code: typeof e?.code === 'string' ? e.code : 'OPERATION_FAILED', message: String(e?.message ?? '').slice(0, 300),
             ...motivoPerIlTelefono(e), // D-RM4-5: il telefono sceglie la frase giusta dal motivo, come la finestra del PC
+            ...spiegazionePerIlTelefono(e), // Mobile 27/10/2026: la frase precisa, come la vede la finestra del PC
             /* RA-04 (Mobile, 20/10/2026): lo stato HTTP della rotta, quando c'è. Senza, il telefono lo ricavava dal codice e per i codici
                che non conosce metteva 500: una risposta rifiutata per validazione (400/422) o non più attuale (409) diventava «esito
                incerto» e la carta restava bloccata. Solo un intero fra 400 e 599: mai un numero che arrivi da altrove. */

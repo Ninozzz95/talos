@@ -19,6 +19,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import test from 'node:test';
 import {applicaSostituzione, messaggioSostituzioneRifiutata, talosLavora} from '../src/kernel/talosHarness.mjs';
+import {creaRegistroRicerche} from '../src/kernel/ricerche-in-corso.mjs';
 import {rimuoviCartellaDiProva} from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 function cartella(t) {
@@ -27,9 +28,10 @@ function cartella(t) {
   return c;
 }
 const chiama = (id, nome, argomenti) => ({id, type: 'function', function: {name: nome, arguments: JSON.stringify(argomenti)}});
-async function giro(c, chiamate) {
+async function giro(c, chiamate, altro = {}) {
   let n = 0;
   const r = await talosLavora({
+    ...altro,
     cartella: c, task: {consegna: 'modifica'}, modello: 'x', chiave: 'y', livelloAccesso: 'accesso-pieno',
     chiediApprovazioneFn: async () => true,
     fetchDiRete: async () => ({ok: true, status: 200, text: async () => '', json: async () => ({
@@ -61,11 +63,11 @@ test('H05-GIA-APPLICATA-CONTRARIO: un new_string corto (sotto 8 caratteri) non b
   assert.match(esitoDi('x = 1\n', 'x = 2', 'x = 1'), /^NOT FOUND\./u);
 });
 
-test('H05-CRLF: il file ha \\r\\n e old_string \\n — si dice, con le righe dove il testo c\'è', () => {
+test('H05-CRLF (riscritta per R-23, owner 29/10/2026): il file ha \\r\\n e old_string \\n — la modifica si applica, senza frasi sugli a capo', () => {
   const contenuto = 'riga uno\r\nfunction f() {\r\n  return 1\r\n}\r\n';
-  const e = esitoDi(contenuto, 'function f() {\n  return 1\n}', 'function f() {\n  return 2\n}');
-  assert.match(e, /^NOT FOUND\./u);
-  assert.match(e, /The text IS in the file at lines 2-4, but the file uses CRLF line endings \(\\r\\n\) and `old_string` uses LF \(\\n\)/u);
+  const e = applicaSostituzione(contenuto, 'function f() {\n  return 1\n}', 'function f() {\n  return 2\n}');
+  assert.equal(e.ok, true, 'prima di R-23: NOT FOUND con «send it with \\r\\n»');
+  assert.equal(e.testo, 'riga uno\r\nfunction f() {\r\n  return 2\r\n}\r\n');
 });
 
 test('H05-VIRGOLETTE: curve nel file, dritte in old_string — si dice', () => {
@@ -110,13 +112,19 @@ test('H05-NIENTE-DI-VICINO: un testo che non somiglia a niente non inventa righe
   assert.doesNotMatch(e, /Closest text|IS in the file/u);
 });
 
-test('H05-MAI-APPLICATA: anche quando la differenza è solo di a capo, il file NON cambia (owner: niente approssimati)', async (t) => {
+test('H05-MAI-APPLICATA (riscritta per R-23, owner 29/10/2026): la sola differenza di a capo si applica, una di rientro MAI', async (t) => {
   const c = cartella(t);
-  const prima = 'uno\r\ndue\r\n';
-  writeFileSync(join(c, 'f.txt'), prima);
-  const esito = await giro(c, [chiama('e', 'file_edit', {percorso: 'f.txt', old_string: 'uno\ndue', new_string: 'tre'})]);
-  assert.match(esito('e'), /^NOT FOUND\./u);
-  assert.equal(readFileSync(join(c, 'f.txt'), 'utf8'), prima);
+  writeFileSync(join(c, 'f.txt'), 'uno\r\ndue\r\n');
+  const prima = 'uno\r\n  due\r\n';
+  writeFileSync(join(c, 'g.txt'), prima);
+  const esito = await giro(c, [
+    chiama('e', 'file_edit', {percorso: 'f.txt', old_string: 'uno\ndue', new_string: 'tre'}),
+    chiama('s', 'file_edit', {percorso: 'g.txt', old_string: 'uno\ndue', new_string: 'tre'}),
+  ]);
+  assert.match(esito('e'), /^edited: f\.txt/u, 'eccezione dell\'owner del 29/10: solo gli a capo');
+  assert.equal(readFileSync(join(c, 'f.txt'), 'utf8'), 'tre\r\n');
+  assert.match(esito('s'), /^NOT FOUND\./u, 'niente approssimati oltre gli a capo');
+  assert.equal(readFileSync(join(c, 'g.txt'), 'utf8'), prima);
 });
 
 test('H05-SICUREZZA-RESTA-REFUSED: il permesso negato e il file binario restano REFUSED', async (t) => {
@@ -129,12 +137,21 @@ test('H05-SICUREZZA-RESTA-REFUSED: il permesso negato e il file binario restano 
 test('H05-CERCA: gli argomenti sbagliati sono INVALID, ciò che non c\'è è NOT FOUND', async (t) => {
   const c = cartella(t);
   writeFileSync(join(c, 'a.txt'), 'ciao');
+  // il registro delle ricerche della sessione, con una ricerca viva finta (r1)
+  const ricercheInCorso = creaRegistroRicerche();
+  ricercheInCorso.registra({finita: new Promise(() => {}), ferma() {}, uscita: () => '', tipo: 'testo', parametri: {testo: 'ago', chiaveNome: ''}});
   const esito = await giro(c, [
     chiama('o', 'cerca', {testo: 'ciao', offset: -1}),
     chiama('d', 'cerca', {testo: 'ciao', dentro: 'non-esiste'}),
     chiama('k', 'cerca', {continua: 'ricerca-che-non-c-e'}),
-  ]);
+    chiama('r', 'cerca', {continua: 'r99'}),
+  ], {ricercheInCorso});
   assert.match(esito('o'), /^INVALID\. "offset" must be a non-negative safe integer/u);
-  assert.match(esito('d'), /^NOT FOUND\. "non-esiste" is not a folder of this workspace\./u);
-  assert.match(esito('k'), /^NOT FOUND\. /u);
+  assert.match(esito('d'), /^NOT FOUND\. "non-esiste" is not a file or folder of this workspace\./u);
+  // R-24 (owner 29/10/2026), riscritta apposta: un valore che non ha la forma r<numero> non è un riferimento — si cerca come testo, con la nota
+  assert.match(esito('k'), /(?:^|\n)NOTE: "continua" was "ricerca-che-non-c-e", which is not a search id \(those look like "r1"\), so it was searched as "testo"\./u);
+  assert.doesNotMatch(esito('k'), /NOT FOUND\. There is no search/u);
+  // e al contrario: un id ben formato ma sconosciuto resta NOT FOUND, con le ricerche della sessione e la loro domanda
+  assert.match(esito('r'), /^NOT FOUND\. There is no search "r99" in this session: .* Searches kept in this session: r1 for testo "ago" \(running\); continue one of them with its id\./u);
+  assert.doesNotMatch(esito('r'), /searched as "testo"/u);
 });

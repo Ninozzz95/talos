@@ -134,7 +134,7 @@ test('F009-UI-04: la carta della conferma di root vale per la sessione — due a
   const risposte = [];
   await page.route('**/api/v1/sessions/f009-*/approve', (rotta) => { risposte.push(rotta.request().postDataJSON()); return rotta.fulfill({ json: { ok: true, data: { ok: true } } }); });
   await apriApp(page);
-  const frase = 'Questo comando gira in Linux (WSL, Ubuntu) come root, e con i permessi di questa sessione nessuno lo approva: può cambiare tutto il sistema Linux e scrivere sui dischi di Windows. Se lo confermi, vale per tutta la sessione.';
+  const frase = 'Questo comando girerebbe in Linux (WSL, Ubuntu) come root. Con i permessi di questa sessione i comandi partono senza chiedere, ma come root può cambiare tutto il sistema Linux e scrivere sui dischi di Windows. Se confermi, per il resto di questa sessione i comandi in Linux (WSL, Ubuntu) potranno girare come root senza chiederlo di nuovo.';
   await page.evaluate((frase) => {
     const runtime = window.__talosHarnessUiRuntime;
     runtime.passaASessione('f009-uno', 'workspace', 'F009 conferma', 'qwen/qwen3.8-flash', { conclusa: false, modello: 'qwen/qwen3.8-flash' });
@@ -188,8 +188,8 @@ test('F009-UI-06: l esito di un comando dice «in Linux (WSL) come root»', asyn
 /* K4b (11/10/2026, visto sul server di prova della 0.1.26: la carta inglese diceva «Questo comando gira in Linux…») — il kernel manda
    la frase inglese con chiave e valori; la carta la dice nella lingua dell'interfaccia. */
 for (const [lingua, attesa] of [
-  ['en', "This command runs in Linux (WSL, Ubuntu) as root, and with this session's permissions nobody approves it: it can change the whole Linux system and write to the Windows disks. If you confirm it, it applies to the whole session."],
-  ['it', 'Questo comando gira in Linux (WSL, Ubuntu) come root, e con i permessi di questa sessione nessuno lo approva: può cambiare tutto il sistema Linux e scrivere sui dischi di Windows. Se lo confermi, vale per tutta la sessione.'],
+  ['en', "This command would run in Linux (WSL, Ubuntu) as root. With this session's permissions commands run without asking, but as root it can change the whole Linux system and write to the Windows disks. If you confirm, commands in Linux (WSL, Ubuntu) can run as root for the rest of this session without asking again."],
+  ['it', 'Questo comando girerebbe in Linux (WSL, Ubuntu) come root. Con i permessi di questa sessione i comandi partono senza chiedere, ma come root può cambiare tutto il sistema Linux e scrivere sui dischi di Windows. Se confermi, per il resto di questa sessione i comandi in Linux (WSL, Ubuntu) potranno girare come root senza chiederlo di nuovo.'],
 ]) {
   test(`F009-UI-08 (${lingua}): la ragione della carta di root si dice nella lingua dell'interfaccia, dalla chiave del kernel`, async ({ page }) => {
     const fermate = await guardia(page);
@@ -202,7 +202,7 @@ for (const [lingua, attesa] of [
       runtime.handleRealEvent({ type: 'RunStarted', input: { consegna: 'List the files' }, contesto: { cartella: 'C:\\progetti\\AVM', modello: 'qwen/qwen3.8-flash' }, _sequenza: 1 }, generazione);
       // l'evento com'è col kernel nuovo: frase inglese (riserva), chiave e valori
       runtime.handleRealEvent({ type: 'ApprovalRequested', requestId: 'f009-k4b-1', azione: { tipo: 'shell', toolCallId: 'c1', comando: 'ls -la', wslRoot: { distro: 'Ubuntu', utente: 'root',
-        frase: "This command runs in Linux (WSL, Ubuntu) as root, and with this session's permissions nobody approves it: it can change the whole Linux system and write to the Windows disks. If you confirm it, it applies to the whole session.",
+        frase: "This command would run in Linux (WSL, Ubuntu) as root. With this session's permissions commands run without asking, but as root it can change the whole Linux system and write to the Windows disks. If you confirm, commands in Linux (WSL, Ubuntu) can run as root for the rest of this session without asking again.",
         fraseChiave: 'server.approval.wslRoot.user', fraseParams: { linux: 'Linux (WSL, Ubuntu)', utente: 'root' } } }, _sequenza: 2 }, generazione);
     });
     const scheda = page.locator('#conversation [data-c="ApprovalCard"]').first();

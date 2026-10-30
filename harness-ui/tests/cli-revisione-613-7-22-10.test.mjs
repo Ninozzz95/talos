@@ -30,6 +30,7 @@ import { attendiScritture } from '../src/session-store.mjs';
 import { TaskCatalogError } from '../src/task-catalog.mjs';
 import { cartellaDiProva } from './aiuto/cartelle-di-prova.mjs';
 import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
+import { corpoSenzaMarcatori } from './aiuto/corpo-senza-marcatori.mjs'; // 28/10: cache, punto 1
 
 function cartella(t, nome = 'talos-r7-') {
   const c = realpathSync.native(mkdtempSync(join(tmpdir(), nome)));
@@ -56,7 +57,7 @@ function fornitore({ prompt = (corpo) => stima(corpo.messages), rifiuta = () => 
   const corpi = [];
   let riassunti = 0;
   const fetchDiRete = async (_u, o) => {
-    const corpo = JSON.parse(o.body);
+    const corpo = corpoSenzaMarcatori(o.body);
     if (!corpo.tools?.length) {
       riassunti += 1;
       return Response.json({ choices: [{ index: 0, message: { role: 'assistant', content: '## Riassunto\nfatto' }, finish_reason: 'stop' }], usage: { prompt_tokens: 10, completion_tokens: 5 } });
@@ -411,7 +412,7 @@ test('R7-F6-07 — gli attrezzi che pesano quasi tutta la finestra (8k, ~7.250 c
     let richieste = 0;
     let extra = null;
     const fetchDiRete = async (_u, o) => {
-      const corpo = JSON.parse(o.body);
+      const corpo = corpoSenzaMarcatori(o.body);
       if (!corpo.tools?.length) { riassunti += 1; return Response.json({ choices: [{ index: 0, message: { role: 'assistant', content: '## Riassunto\nfatto' }, finish_reason: 'stop' }], usage: { prompt_tokens: 10, completion_tokens: 5 } }); }
       extra ??= 8_150 - stima(corpo.messages);
       const prompt = stima(corpo.messages) + extra;
@@ -451,7 +452,7 @@ test('R7-F6-08 — il giro restituisce DUE scarti: quello della misura col tetto
   const r = await talosLavora({ cartella: cartella(t), modello: 'z-ai/glm-5.3-flash', chiave: 'finta', task: { consegna: 'x' }, messaggiIniziali: messaggi,
     contestoDelProgetto: 'Project files:\n', finestraToken: 8_192,
     fetchDiRete: async (_u, o) => {
-      const corpo = JSON.parse(o.body);
+      const corpo = corpoSenzaMarcatori(o.body);
       extra ??= 8_150 - stima(corpo.messages);
       return Response.json({ choices: [{ index: 0, message: { role: 'assistant', content: 'OK' }, finish_reason: 'stop' }], usage: { prompt_tokens: stima(corpo.messages) + extra, completion_tokens: 1 } });
     } });
@@ -481,7 +482,7 @@ const ATTREZZI_PESANTI = Array.from({ length: 17 }, (_, i) => ({
 function fornitoreOnesto(finestra, { risposta = 'OK' } = {}) {
   const conti = { richieste: 0, rifiuti: 0, riassunti: 0, schemi: null };
   const fetchDiRete = async (_u, o) => {
-    const corpo = JSON.parse(o.body);
+    const corpo = corpoSenzaMarcatori(o.body);
     if (!corpo.tools?.length) {
       conti.riassunti += 1;
       return Response.json({ choices: [{ index: 0, message: { role: 'assistant', content: '## Riassunto\nfatto' }, finish_reason: 'stop' }], usage: { prompt_tokens: 10, completion_tokens: 5 } });
@@ -512,7 +513,7 @@ test('R8-N1-01 — schemi pesanti e fornitore onesto: lo scarto ereditato è sta
   /* AL CONTRARIO: lo stesso scarto misurato con GLI STESSI attrezzi è il numero del fornitore (conta meno della stima): niente si paga */
   let riassunti = 0;
   const conta = async (_u, o) => {
-    const corpo = JSON.parse(o.body);
+    const corpo = corpoSenzaMarcatori(o.body);
     if (!corpo.tools?.length) { riassunti += 1; return Response.json({ choices: [{ index: 0, message: { role: 'assistant', content: '## Riassunto\nfatto' }, finish_reason: 'stop' }] }); }
     return Response.json({ choices: [{ index: 0, message: { role: 'assistant', content: 'OK' }, finish_reason: 'stop' }], usage: { prompt_tokens: stima(corpo.messages) + base, completion_tokens: 1 } });
   };
@@ -555,7 +556,7 @@ test('R8-N1-04 — il blocco dei fatti non fa mai uscire la richiesta dalla fine
   const corsa = async (caratteriDelRiassunto) => {
     const visti = [];
     const fetchDiRete = async (_u, o) => {
-      const corpo = JSON.parse(o.body);
+      const corpo = corpoSenzaMarcatori(o.body);
       if (!corpo.tools?.length) return Response.json({ choices: [{ index: 0, message: { role: 'assistant', content: `## Riassunto\n${'parola '.repeat(caratteriDelRiassunto / 7)}` }, finish_reason: 'stop' }], usage: { prompt_tokens: 10, completion_tokens: 5 } });
       visti.push(corpo);
       return Response.json({ choices: [{ index: 0, message: { role: 'assistant', content: 'OK' }, finish_reason: 'stop' }], usage: { prompt_tokens: stima(corpo.messages) + compattazione.stimaDegliAttrezzi(corpo.tools), completion_tokens: 1 } });
@@ -705,7 +706,7 @@ test('R8-N3-02 — anche il record di «sola coda» del giro porta lo scarto in 
   let riassunti = 0;
   let schemi = null;
   const fetchDiRete = async (_u, o) => {
-    const corpo = JSON.parse(o.body);
+    const corpo = corpoSenzaMarcatori(o.body);
     if (!corpo.tools?.length) { riassunti += 1; return Response.json({ choices: [{ index: 0, message: { role: 'assistant', content: '## Riassunto\nfatto' }, finish_reason: 'stop' }] }); }
     schemi ??= compattazione.stimaDegliAttrezzi(corpo.tools);
     return Response.json({ choices: [{ index: 0, message: { role: 'assistant', content: 'OK' }, finish_reason: 'stop' }], usage: { prompt_tokens: stima(corpo.messages) + 1_000, completion_tokens: 1 } });
@@ -753,7 +754,7 @@ test('R9-N6-01 — all\'emergenza il riassunto di fine giro arrivato, adottato c
   while (stima(coppieDi(n + 1)) < 3_450) n += 1; // oltre l'80% della soglia (si prepara), sotto la soglia (il giro 1 non compatta)
   const coppieLunghe = coppieDi(n);
   const r0 = async (_u, o) => {
-    const corpo = JSON.parse(o.body);
+    const corpo = corpoSenzaMarcatori(o.body);
     if (!corpo.tools?.length) return testo('## Riassunto\nRIASSUNTO-DI-FINE-GIRO');
     return Response.json({ choices: [{ index: 0, message: { role: 'assistant', content: 'fatto' }, finish_reason: 'stop' }], usage: { prompt_tokens: stima(corpo.messages), completion_tokens: 1 } });
   };
@@ -771,7 +772,7 @@ test('R9-N6-01 — all\'emergenza il riassunto di fine giro arrivato, adottato c
     let riassunti = 0;
     const primi = [];
     const r1 = async (_u, o) => {
-      const corpo = JSON.parse(o.body);
+      const corpo = corpoSenzaMarcatori(o.body);
       if (!corpo.tools?.length) { riassunti += 1; return testo('## Riassunto\nSECONDO-RIASSUNTO'); }
       primi.push(corpo);
       return Response.json({ choices: [{ index: 0, message: { role: 'assistant', content: 'fatto' }, finish_reason: 'stop' }], usage: { prompt_tokens: stima(corpo.messages) + scarto, completion_tokens: 1 } });

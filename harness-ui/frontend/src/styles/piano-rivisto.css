@@ -1,0 +1,45 @@
+/*
+ * ⭐ Owner 27/10/2026, «gravissima» — IL PIANO RIVISTO IN FONDO (bozzetto B approvato, «Sì, così»;
+ *   handoff `mockup-server-locali-e-piano-2026-10-27`, B1 e B2). Logica in `components/piano-rivisto.js`.
+ *   - la revisione superata è UNA riga al suo posto («Piano · revisione 1 · sostituito dalla revisione 2, più in basso · Rileggi»);
+ *   - la revisione nuova porta «Cosa è cambiato»: le righe aggiunte evidenziate, le tolte barrate al loro posto.
+ *   Misure e colori sono quelli del bozzetto (`.bz-piano-chiuso`, `.bz-diff-add`, `.bz-diff-del`, `.bz-cambiato`).
+ */
+.talos-piano-sostituito {
+  max-width: 860px;
+  margin: 18px 0 10px;
+  border: 1px solid var(--talos-border);
+  border-radius: var(--talos-radius-card, 12px);
+  color: var(--talos-muted);
+  font-size: var(--talos-font-size-xs);
+}
+.talos-piano-sostituito__testa {
+  display: flex;
+  align-items: center;
+  gap: var(--talos-space-sm);
+  padding: 8px 12px;
+}
+.talos-piano-sostituito__testa strong { color: var(--talos-text); font-weight: 600; }
+.talos-piano-sostituito__testa .talos-grow { flex: 1; }
+/* riaperta per rileggerla: la scheda dentro la riga, senza le scelte (si decide sulla revisione corrente) */
+.talos-piano-sostituito__scheda { padding: 0 12px 12px; font-size: var(--talos-font-size-md, 16px); color: var(--talos-text); }
+.talos-piano-sostituito__scheda .talos-plan-artifact__choices,
+.talos-piano-sostituito__scheda .talos-plan-artifact__footer { display: none; }
+
+.talos-piano-cambiato {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--talos-space-sm);
+  margin: 6px 0 2px;
+  color: var(--talos-muted);
+  font-size: var(--talos-font-size-xs);
+}
+.talos-piano-con-differenze .talos-piano-diff-add {
+  background: color-mix(in srgb, var(--talos-success) 14%, transparent);
+  border-radius: 4px;
+  padding: 0 4px;
+}
+.talos-piano-diff-del { color: var(--talos-muted); text-decoration: line-through; }
+/* «Nascondi le differenze»: il piano pulito, senza le tolte */
+[data-c="PlanArtifact"]:not(.talos-piano-con-differenze) .talos-piano-diff-del { display: none; }

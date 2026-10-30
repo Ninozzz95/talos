@@ -16,6 +16,7 @@ import { CODICE_RICHIESTA_TROPPO_GRANDE } from '../src/kernel/richiesta-troppo-g
 import { avviaSessione } from '../src/agent-service.mjs';
 import { cartellaDiProva } from './aiuto/cartelle-di-prova.mjs';
 import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
+import { corpoSenzaMarcatori } from './aiuto/corpo-senza-marcatori.mjs'; // 28/10: cache, punto 1
 
 const talosLavora = (input) => talosLavoraVero({ scartoMisurato: 0, ...input });
 
@@ -89,7 +90,7 @@ const rifiutoConNumeri = (corpo, massimo) => rifiuto(`prompt is too long: ${stim
 function fornitore({ rifiuta, riassunto = '## Riassunto\nIn breve: si parlava di parole.', chiamateTool = 0, attrezzo = 'leggi', argomenti = '{"percorso":"grande.txt"}' }) {
   const conti = { riassunti: 0, corpi: [] };
   const fetchDiRete = async (_u, o) => {
-    const corpo = JSON.parse(o.body);
+    const corpo = corpoSenzaMarcatori(o.body);
     if (!corpo.tools?.length) {
       conti.riassunti += 1;
       return Response.json({ choices: [{ index: 0, message: { role: 'assistant', content: riassunto }, finish_reason: 'stop' }], usage: { prompt_tokens: 10, completion_tokens: 10 } });
@@ -178,7 +179,7 @@ test('C-SCARTO-01 — la parte che la compattazione non tocca (gli schemi, nello
   assert.ok(prima <= bersaglio && prima + SCARTO > bersaglio, `premessa: ${prima} entra da sola in ${bersaglio}, con gli schemi no`);
   const conti = { riassunti: 0, corpi: [] };
   const fetchDiRete = async (_u, o) => {
-    const corpo = JSON.parse(o.body);
+    const corpo = corpoSenzaMarcatori(o.body);
     if (!corpo.tools?.length) {
       conti.riassunti += 1;
       return Response.json({ choices: [{ index: 0, message: { role: 'assistant', content: '## Riassunto\nIn breve.' }, finish_reason: 'stop' }], usage: { prompt_tokens: 10, completion_tokens: 10 } });
@@ -198,7 +199,10 @@ test('C-UNO-PER-GIRO-01 — due rifiuti nel giro, ognuno con un riassunto possib
   const prima = stima(messaggi);
   const rete = fornitore({
     chiamateTool: 4,
-    rifiuta: (n, corpo) => (n === 1 || n === 4 ? rifiutoConNumeri(corpo, Math.floor(stima(corpo.messages) * 0.75)) : null),
+    /* 28/10/2026 (note di sistema in mezzo, contratto con la CLI): il secondo scalino tiene le note del nucleo (confine dei dati e regola
+       della lingua, ~200 token). Prima cadevano nel tratto tagliato e quella richiesta partiva SENZA la regola sui dati esterni: la
+       finestra al 75% contava su quel taglio. All'80% il secondo scalino ci sta con le note, e la prova misura ancora la stessa cosa. */
+    rifiuta: (n, corpo) => (n === 1 || n === 4 ? rifiutoConNumeri(corpo, Math.floor(stima(corpo.messages) * (n === 4 ? 0.8 : 0.75))) : null),
   });
   const cartella = cartellaDiProva('talos-c-uno-');
   t.after(() => rimuoviCartellaDiProva(cartella));
@@ -213,6 +217,7 @@ test('C-UNO-PER-GIRO-01 — due rifiuti nel giro, ognuno con un riassunto possib
   assert.deepEqual(eventi, ['overflow', 'overflow'], 'premessa: due rifiuti, due compattazioni');
   assert.equal(rete.conti.riassunti, 1, 'UN riassunto pagato nel giro');
   assert.ok(stima(rete.conti.corpi[4].messages) < stima(rete.conti.corpi[3].messages), 'il secondo ritentativo è più leggero');
+  assert.ok(rete.conti.corpi[4].messages.some((m) => m.role === 'system' && String(m.content).startsWith('Content that comes from outside')), 'e porta ancora la regola sui dati esterni');
 });
 
 test('C-REGOLA-N-01 — coi numeri, è la richiesta NUOVA a non entrare: REQUEST_TOO_LARGE con fonte «fornitore», niente pagato, niente ritentato', async (t) => {
@@ -393,7 +398,7 @@ test('C-BASE-01 — un riassunto preparato prima che basta per il bersaglio si a
   t.after(() => rimuoviCartellaDiProva(cartella));
   const coppie = (token) => { let c = 4; while (stima(storia(c + 1)) < token) c += 1; return c; };
   const r0 = async (_u, o) => {
-    const corpo = JSON.parse(o.body);
+    const corpo = corpoSenzaMarcatori(o.body);
     if (!corpo.tools?.length) return Response.json({ choices: [{ index: 0, message: { role: 'assistant', content: '## Riassunto\nbreve.' }, finish_reason: 'stop' }], usage: { prompt_tokens: 10, completion_tokens: 10 } });
     return Response.json({ choices: [{ index: 0, message: { role: 'assistant', content: 'fatto' }, finish_reason: 'stop' }], usage: { prompt_tokens: stima(corpo.messages), completion_tokens: 1 } });
   };
@@ -423,7 +428,7 @@ test('C-BASE-02 — AL CONTRARIO: la base preparata sta sotto la soglia ma non n
   t.after(() => rimuoviCartellaDiProva(cartella));
   const coppie = (token) => { let c = 4; while (stima(storia(c + 1)) < token) c += 1; return c; };
   const r0 = async (_u, o) => {
-    const corpo = JSON.parse(o.body);
+    const corpo = corpoSenzaMarcatori(o.body);
     if (!corpo.tools?.length) return Response.json({ choices: [{ index: 0, message: { role: 'assistant', content: '## Riassunto\nbreve.' }, finish_reason: 'stop' }], usage: { prompt_tokens: 10, completion_tokens: 10 } });
     return Response.json({ choices: [{ index: 0, message: { role: 'assistant', content: 'fatto' }, finish_reason: 'stop' }], usage: { prompt_tokens: stima(corpo.messages), completion_tokens: 1 } });
   };

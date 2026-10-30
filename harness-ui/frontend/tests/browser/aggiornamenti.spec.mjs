@@ -30,17 +30,25 @@ async function apri(page, tema = 'dark', lingua = 'it', sessioni = []) {
   await page.waitForFunction(() => Boolean(window.__talosHarnessUiRuntime));
   return fermate;
 }
-const apriSezioneAccount = async (page) => {
+/* 29/10/2026 (owner 22/10 notte): «Aggiornamenti» è una sezione a sé, che nasce solo quando il guscio manda lo stato. */
+const apriSezioneAggiornamenti = async (page) => {
   await page.evaluate(() => document.querySelector('[data-vaia="impostazioni"], [data-view="settings"]')?.click());
-  await page.locator('#setting-tab-account').click();
+  await page.locator('#setting-tab-aggiornamenti').click();
 };
 const manda = (page, stato) => page.evaluate((copione) => { (0, eval)(copione); }, copioneStato(stato));
 const aperture = (page) => page.evaluate(() => window.__aperture);
 
-test('AGG-UI-01: nel browser non arriva niente dal guscio, e non nasce niente', async ({ page }) => {
+test('AGG-UI-01: nel browser non arriva niente dal guscio, e non nasce niente — nemmeno la voce delle Impostazioni, né nella ricerca', async ({ page }) => {
   await apri(page);
   await expect(page.locator('#talosBandaAggiornamento')).toHaveCount(0);
   await expect(page.locator('[data-settings-card="account-aggiornamenti"]')).toHaveCount(0);
+  await page.evaluate(() => document.querySelector('[data-vaia="impostazioni"], [data-view="settings"]')?.click());
+  await expect(page.locator('#setting-tab-account')).toBeVisible();
+  await expect(page.locator('#setting-tab-aggiornamenti')).toBeHidden();
+  await expect(page.locator('#setting-panel-aggiornamenti')).toHaveCount(0);
+  expect(await page.evaluate(() => [...document.querySelectorAll('#settingsSectionSelect option')].filter((o) => !o.hidden).map((o) => o.value))).not.toContain('aggiornamenti');
+  await page.locator('#settingsSearch').fill('aggiornamenti');
+  await expect(page.locator('[data-settings-result]')).toHaveCount(0);
 });
 
 test('AGG-UI-02: la banda dice che è pronto, sta sotto la barra, e i suoi tre comandi rispondono al guscio col gettone', async ({ page }) => {
@@ -74,17 +82,24 @@ test('AGG-UI-03: con l interruttore spento la banda non promette l installazione
   await expect(page.locator('#talosBandaAggiornamento')).toBeHidden();
 });
 
-test('AGG-UI-04: la scheda in testa ad «Account, Doctor e backup» — versione, ultimo controllo, «Controlla ora», interruttore', async ({ page }) => {
+test('AGG-UI-04: la sezione «Aggiornamenti» a sé — versione, ultimo controllo, «Controlla ora», interruttore', async ({ page }) => {
   await apri(page);
   await manda(page, statoPerLaPagina({ versioneAttuale: '0.1.20', stato: 'aggiornato', automatici: true, ultimoControllo: { quando: new Date().toISOString(), esito: 'aggiornato', errore: null } }, { attivo: true, gettone: GETTONE }));
   const scheda = page.locator('[data-settings-card="account-aggiornamenti"]');
   await expect(scheda).toHaveCount(1);
-  await apriSezioneAccount(page);
-  expect(await page.evaluate(() => document.querySelector('#setting-panel-account').firstElementChild?.dataset.settingsCard)).toBe('account-aggiornamenti');
-  /* La testata è la stessa della carta sorella («Configurazione e diagnostica»): stessa forma, stesso stile. */
-  const forma = await page.evaluate(() => [...document.querySelectorAll('#setting-panel-account > [data-settings-card]')].map((c) => {
+  await apriSezioneAggiornamenti(page);
+  await expect(page.locator('#setting-panel-aggiornamenti')).toBeVisible();
+  await expect(page.locator('#setting-panel-account')).toBeHidden();
+  expect(await page.evaluate(() => document.querySelector('#setting-panel-aggiornamenti').firstElementChild?.dataset.settingsCard)).toBe('account-aggiornamenti');
+  expect(await page.evaluate(() => document.querySelector('#setting-panel-account [data-settings-card="account-aggiornamenti"]')), 'non più dentro «Account»').toBeNull();
+  await expect(page.locator('[data-settings-heading]')).toHaveText('Aggiornamenti');
+  /* La testata è la stessa della carta sorella («Configurazione e diagnostica», ora nell'altra sezione): stessa forma, stesso stile. */
+  const forma = await page.evaluate(() => ['#setting-panel-aggiornamenti', '#setting-panel-account'].map((s) => document.querySelector(`${s} > [data-settings-card]`)).map((c) => {
+    if (!c) return null; const pannello = c.parentElement; const nascosto = pannello.hidden; pannello.hidden = false;
     const h = c.querySelector(':scope > [data-settings-group-head] > .settings-group__title'); const p = c.querySelector(':scope > p');
-    return h && p ? [getComputedStyle(h).fontSize, getComputedStyle(h).fontWeight, getComputedStyle(p).color, getComputedStyle(p).fontSize] : null;
+    const misura = h && p ? [getComputedStyle(h).fontSize, getComputedStyle(h).fontWeight, getComputedStyle(p).color, getComputedStyle(p).fontSize] : null;
+    pannello.hidden = nascosto;
+    return misura;
   }));
   expect(forma.length).toBe(2);
   /* Prima foto del 01/10: la descrizione di questa carta mostrava quella della sorella (`static-copy.ts` prendeva «la prima carta»). */
@@ -125,7 +140,7 @@ test('AGG-UI-06: in inglese banda e scheda parlano inglese', async ({ page }) =>
   await manda(page, PRONTO);
   await expect(page.locator('.talos-banda-aggiornamento__testo')).toHaveText('TALOS 0.1.21 is ready. It installs when you close the app.');
   await expect(page.locator('#talosBandaAggiornamento button')).toHaveText(['What’s new', 'Restart now', '']);
-  await apriSezioneAccount(page);
+  await apriSezioneAggiornamenti(page);
   const scheda = page.locator('[data-settings-card="account-aggiornamenti"]');
   await expect(scheda.locator('.settings-group__title')).toHaveText('Updates');
   await expect(scheda.locator('[data-aggiornamenti-etichetta]')).toHaveText('Automatic updates');
@@ -161,7 +176,7 @@ test('AGG-UI-08: AL CONTRARIO — sessioni concluse o interrotte non contano: si
 test('AGG-UI-09: in inglese, con due sessioni al lavoro, dalla scheda delle Impostazioni', async ({ page }) => {
   await apri(page, 'dark', 'en', [sessione('a', { conclusa: false }), sessione('b', { conclusa: false })]);
   await manda(page, PRONTO);
-  await apriSezioneAccount(page);
+  await apriSezioneAggiornamenti(page);
   await page.locator('[data-settings-card="account-aggiornamenti"]').getByRole('button', { name: 'Restart now' }).click();
   const modale = page.getByRole('dialog');
   await expect(modale).toContainText('Restart TALOS now?');
@@ -181,7 +196,7 @@ test('AGG-UI-10: banda e scheda insieme — un riavvio solo, e i due pulsanti re
     return r.fulfill({ json: { ok: true, data: { items: [] } } });
   });
   await manda(page, PRONTO);
-  await apriSezioneAccount(page);
+  await apriSezioneAggiornamenti(page);
   const dellaBanda = page.locator('#talosBandaAggiornamento').getByRole('button', { name: 'Riavvia ora' });
   const dellaScheda = page.locator('[data-settings-card="account-aggiornamenti"]').getByRole('button', { name: 'Riavvia ora' });
   await dellaBanda.click();
@@ -203,7 +218,7 @@ for (const [tema, lingua] of [['light', 'it'], ['dark', 'it'], ['dark', 'en']]) 
     await manda(page, PRONTO);
     await page.waitForTimeout(300);
     await page.screenshot({ path: `${CARTELLA_FOTO}/aggiornamenti-banda-${tema}-${lingua}.png` });
-    await apriSezioneAccount(page);
+    await apriSezioneAggiornamenti(page);
     await page.waitForTimeout(400);
     await page.screenshot({ path: `${CARTELLA_FOTO}/aggiornamenti-scheda-${tema}-${lingua}.png` });
   });

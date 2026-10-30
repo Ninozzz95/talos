@@ -250,7 +250,7 @@ for (const larghezza of [1440, 390]) {
 
 for (const larghezza of [1024, 1440]) for (const tema of ['dark', 'light']) {
  test(`RIPRESA-AGENTI-DISCENDENTI / SIDEBAR-DESTRA-MOCKUP ${larghezza} ${tema}`, async ({page}, info) => {
-  const figli = Array.from({length:4}, (_,i) => ({...FIGLIE[0], sessionId:`po30d-padre-${i}`, padreId:'po30d-uno', taskCorto:`Modulo ${i}`, task:`Compito modulo ${i}`, conclusa:i>1, inAttesaApprovazione:i===1?1:0, ultimoEsito:i===3?'errore':'ok'}));
+  const figli = Array.from({length:4}, (_,i) => ({...FIGLIE[0], sessionId:`po30d-padre-${i}`, padreId:'po30d-uno', taskCorto:`Modulo ${i}`, task:`Compito modulo ${i}`, conclusa:i>1, inAttesaApprovazione:i===1 /* 24/10: il server manda un vero/falso (`session-registry.mjs`, `Boolean(voce.approvazionePendente)`), non un numero */, ultimoEsito:i===3?'errore':'ok'}));
   const nipoti = figli.map((p,i)=>({...FIGLIE[1],sessionId:`po30d-nipote-${i}`,padreId:p.sessionId,taskCorto:`Verifica ${i}`}));
   const estraneo={...FIGLIE[0],sessionId:'po30d-estraneo',padreId:'altra-sessione',taskCorto:'Non appartiene'};
   await page.route(u=>u.pathname==='/api/v1/sessions',r=>r.fulfill({json:{ok:true,data:{items:[{sessionId:'po30d-uno',nome:'PO30D',conclusa:false},...figli,...nipoti,estraneo]}}}));

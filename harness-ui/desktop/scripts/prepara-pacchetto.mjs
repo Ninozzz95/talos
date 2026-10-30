@@ -203,6 +203,18 @@ export async function sfoltisciPdfjs(nodeModules) {
   for (const f of PDFJS_DA_TENERE) if (!existsSync(join(pdfjs, f))) throw new Error(`pdfjs-dist sfoltito senza ${f}`);
 }
 
+/*
+ * M 28/10/2026 notte (accordo con il Mobile): ELD, il riconoscitore della lingua dei messaggi scritti (`src/lingua-del-testo.mjs`), porta
+ *   QUATTRO dizionari (extrasmall 0,9 MB, small 1,6, medium 2,0, large 4,3: 8,8 MB in tutto) e il server ne carica uno solo,
+ *   `load('extrasmall')`. Misurato il 28/10: con i soli `extrasmall.js` il pacchetto pesa 1,02 MB e riconosce come prima.
+ */
+export const ELD_DIZIONARI_DA_TOGLIERE = Object.freeze(['small.js', 'medium.js', 'large.js']);
+export async function sfoltisciEld(nodeModules) {
+  const ngrams = join(nodeModules, 'eld', 'src', 'ngrams');
+  if (!existsSync(join(ngrams, 'extrasmall.js'))) throw new Error('eld senza il dizionario extrasmall: la lingua dei messaggi scritti non si riconoscerebbe.');
+  for (const f of ELD_DIZIONARI_DA_TOGLIERE) await rm(join(ngrams, f), { force: true });
+}
+
 async function copiaAlberoProduzione(sorgente, destinazione) {
   if (lstatSync(sorgente).isSymbolicLink()) throw new Error(`Radice sorgente collegata non ammessa: ${sorgente}`);
   for (const nome of await elenco(sorgente)) {
@@ -315,6 +327,7 @@ export async function preparaPacchetto() {
   await copiaAssistenza({ sorgente: join(root, '../..', 'docs/assistenza'), destinazione: join(staging, 'docs/assistenza') });
   await dipendenzeProduzione(backend);
   await sfoltisciPdfjs(join(backend, 'node_modules')); // F-001: ~5 MB invece di ~72 (owner 02/10)
+  await sfoltisciEld(join(backend, 'node_modules')); // M 28/10: un dizionario solo, ~1 MB invece di 8,8
   const sfoltiti = await sfoltisciDipendenze(join(backend, 'node_modules')); // owner 11/10: meno file, aggiornamento più veloce
   // dopo lo sfoltimento: quei `.d.ts` sono dati che il kernel legge, non dichiarazioni da buttare
   const libTs = await copiaLibreriaTypescript({ sorgente: join(root, '..', 'node_modules', 'typescript'), destinazione: join(backend, 'node_modules', 'typescript') });

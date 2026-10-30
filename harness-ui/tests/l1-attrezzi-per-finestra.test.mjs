@@ -3,8 +3,8 @@
  * `local:` del PC il registro passa la finestra al kernel (`finestraPerGliAttrezzi`): se gli attrezzi davanti pesano più del 15% della
  * finestra, davanti restano gli undici essenziali e il resto va dietro il ponte; l'elenco del ponte si riduce come in Hermes
  * (`tools/tool_search.py:208-212`, `listing_token_budget`: min(4000, 5% della finestra); `tool_search_catalog.py:261-268`: pieno →
- * soli nomi → niente). Il verso contrario: senza finestra (cloud, CLI, banco) la richiesta resta byte per byte quella di prima, e la
- * riga della lingua resta solo del telefono (owner 20/10, «Solo per il modello del telefono»).
+ * soli nomi → niente). Il verso contrario: senza finestra (cloud, CLI, banco) la richiesta resta byte per byte quella di prima. La
+ * riga della lingua è in tutti i profili dal 28/10 (owner: supera il 19-20/10 «Solo per il modello del telefono»).
  */
 import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync } from 'node:fs';
@@ -13,7 +13,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 
 import { ATTREZZI_ESSENZIALI_LOCALI, NOME_RICERCA_ATTREZZI, elencoDelPonteEntro, pesoInToken } from '../src/kernel/ponte-attrezzi.mjs';
-import { talosLavora } from '../src/kernel/talosHarness.mjs';
+import { talosLavora, rigaLinguaDelleRisposte } from '../src/kernel/talosHarness.mjs';
 import { STRUMENTI_ESTESI_PREDEFINITI } from '../src/session-registry.mjs';
 import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
@@ -59,7 +59,8 @@ test('APF-02 finestra piccola (16K): davanti SOLO gli essenziali e il ponte; l\'
   assert.ok(nomi(r).includes(NOME_RICERCA_ATTREZZI), 'il resto si raggiunge dal ponte');
   const ricerca = r.tools.find((a) => a.function.name === NOME_RICERCA_ATTREZZI).function.description;
   assert.ok(pesoInToken(ricerca) <= Math.min(4_000, 16_384 * 0.05) + 400, `la descrizione del ponte pesa ${pesoInToken(ricerca)} token`);
-  assert.ok(!r.messages.some((m) => m.role === 'system' && /same language as the user|SAME language/iu.test(String(m.content))), 'la riga della lingua resta del telefono');
+  /* 28/10 (owner, «tutti i profili»): la riga della lingua c'è anche qui, una volta sola, nel primo messaggio di sistema */
+  assert.equal(r.messages.filter((m) => m.role === 'system' && String(typeof m.content === 'string' ? m.content : JSON.stringify(m.content)).includes(rigaLinguaDelleRisposte())).length, 1, 'la riga della lingua, una volta');
 });
 
 test('APF-03 al contrario: finestra grande (1M) o nessuna finestra ⇒ la divisione di sempre, byte per byte', async (t) => {

@@ -40,13 +40,15 @@
  *    when empty», «Preserve exact file paths… error strings»), incrementale con `<prior-summary>`.
  */
 import { createHash } from 'node:crypto';
-import { stimaToken, stimaTokenConversazione } from './talosHarness.mjs';
+import { stimaToken, stimaTokenConversazione, INIZIO_RIGA_LINGUA, INIZIO_CAMBIO_LINGUA, INIZIO_NOTA_LINGUA_DEL_MESSAGGIO } from './talosHarness.mjs';
+import { SEGNO_NOTA_DOVE } from './dove-sei.mjs';
 // ⭐ 06/10/2026 — la ricarica della memoria post-compact (opzione A + C-b, ricerca 5×5×5×5 §6.4): il
 // recinto della sintesi entra nella proiezione accanto all'indice meccanico, NELLO STESSO messaggio.
 import { PREFISSO_SINTESI_RECINTATA } from './ricarica-post-compact.mjs';
 import { MARCATORE_RICHIESTA_ACCORCIATA } from './richieste-vecchie.mjs';
 import { chiamataPerChiGuarda } from './ponte-attrezzi.mjs';
 import { oscuraFormeDiSegreto } from '../forme-di-segreto.mjs';
+import { CAMPO_IMMAGINI } from './immagine-da-guardare.mjs';
 
 export const SCHEMA_RECORD_COMPATTAZIONE = 'talos.compattazione.v1';
 
@@ -380,8 +382,18 @@ export function riassuntoUtile({ prima, pavimentoConCornice, mezzo, soglia = nul
  * Prima e dopo si misurano con la stessa stima: il riassunto toglie le immagini e le sostituisce col segnaposto di testo.
  */
 export const COSTO_IMMAGINE_TOKEN = 1_500;
+/*
+ * view_image (27/10/2026): l'immagine che il modello ha guardato vive nella storia come campo INTERNO del messaggio `tool`
+ *   (`talos_immagini`) e diventa un'immagine vera solo all'invio (`conImmaginiDegliAttrezzi`): le stime la contavano zero, e la soglia
+ *   scattava tardi proprio nelle sessioni che guardano molte immagini. Stesso costo fisso dei pezzi (Hermes 1.500), un'immagine per voce.
+ */
+export function costoImmaginiGuardate(messaggi) {
+  let n = 0;
+  for (const m of Array.isArray(messaggi) ? messaggi : []) if (m?.role === 'tool' && Array.isArray(m[CAMPO_IMMAGINI])) n += m[CAMPO_IMMAGINI].length;
+  return n * COSTO_IMMAGINE_TOKEN;
+}
 export function stimaConPezzi(messaggi) {
-  let somma = stimaTokenConversazione(Array.isArray(messaggi) ? messaggi : []);
+  let somma = stimaTokenConversazione(Array.isArray(messaggi) ? messaggi : []) + costoImmaginiGuardate(messaggi);
   for (const m of Array.isArray(messaggi) ? messaggi : []) {
     if (!Array.isArray(m?.content)) continue;
     for (const parte of m.content) {
@@ -411,9 +423,9 @@ export function misuraOccupazione({ ancora = null, messaggi = [], finestraToken 
    */
   const plausibile = promptTokensPlausibili(promptTokens, stimaAllora, finestraToken);
   if (plausibile && Number.isInteger(lunghezza) && lunghezza >= 0 && messaggi.length >= lunghezza) {
-    return { token: promptTokens + stimaTokenConversazione(messaggi.slice(lunghezza)), misura: 'fornitore' };
+    return { token: promptTokens + stimaTokenConversazione(messaggi.slice(lunghezza)) + costoImmaginiGuardate(messaggi.slice(lunghezza)), misura: 'fornitore' }; // view_image: le immagini guardate dopo l'ancora
   }
-  return { token: stimaTokenConversazione(messaggi) + (Number.isFinite(scarto) && scarto > 0 ? Math.round(scarto) : 0), misura: 'stimato' };
+  return { token: stimaTokenConversazione(messaggi) + costoImmaginiGuardate(messaggi) + (Number.isFinite(scarto) && scarto > 0 ? Math.round(scarto) : 0), misura: 'stimato' };
 }
 
 /** Il controllo di plausibilità del numero del fornitore, UNO per l'ancora e per lo scarto (revisione 7 della CLI, F1): sotto un quarto
@@ -599,8 +611,12 @@ export function dividiPerCompattazione(messaggi, { richiesteUtente = RICHIESTE_U
       if (vistiScambi === scambiChiusi) { taglio = i; break; }
     }
   }
-  const mezzo = corpo.slice(0, taglio);
-  const coda = corpo.slice(taglio);
+  /* 28/10/2026, contratto con la CLI (sua proposta): le note di sistema del nucleo appese a metà storia (confine dei dati, lingua, «dove
+     sei», Ask, piano) non si riassumono e non contano nel guadagno — il giro dopo il nucleo le rimetterebbe, e il guadagno era in parte
+     finto. Vanno in testa alla coda tenuta alla lettera (così ogni strada che costruisce la proiezione le porta e il record le
+     conserva); la testa resta com'è, per la cache del prefisso. */
+  const { mezzo, noteTenute } = separaNoteDiSistema(corpo.slice(0, taglio), corpo.slice(taglio));
+  const coda = [...noteTenute, ...corpo.slice(taglio)];
 
   /* 13/10/2026: le note del kernel non contano fra le richieste della persona, né in coda né nel mezzo (`eNotaDiTalos`). */
   const richiestaVera = (m) => eRichiestaDellaPersona(m) && !eNotaDiTalos(m);
@@ -610,7 +626,58 @@ export function dividiPerCompattazione(messaggi, { richiesteUtente = RICHIESTE_U
   const prima = primaRichiesta ? mezzo.find(richiestaVera) : undefined;
   const richiesteLetterali = prima && !ultime.includes(prima) ? [primaRichiestaPerLaProiezione(prima), ...ultime] : ultime;
   const tagliabile = mezzo.length >= 2 && mezzo.some((m) => m?.role !== 'user');
-  return { testa, mezzo, coda, richiesteLetterali, tagliabile };
+  return { testa, mezzo, coda, richiesteLetterali, tagliabile, fineTratto: fineTesta + taglio };
+}
+
+/* R13-B (revisione avversaria del blocco 13, 28/10): l'aggiornamento del contesto del progetto («the following REPLACES the working
+   sheet, project instructions and folder map…», `contesto-del-progetto.mjs` `aggiornamentoInCoda`) arriva a ogni cambio del preambolo
+   con la mappa INTERA: tenuto alla lettera ogni volta, la coda cresceva di una mappa per giro e la compattazione smetteva di liberare
+   spazio. Di quel tipo, come delle note del planner (una per giro), vale solo l'ultima. Le marche stanno qui e non si importano: il
+   nucleo è condiviso con la CLI e il Mobile, e non tira dentro il preambolo del server; una prova le lega a quelle del server. */
+export const MARCHE_NOTA_DEL_PROGETTO = Object.freeze(['Project context update:', 'Aggiornamento del contesto del progetto:', 'Working sheet — '])
+export const MARCA_NOTA_DEL_PLANNER = "[Piano dell'architetto — "
+/** Il tipo di una nota del nucleo che SI SOSTITUISCE (di ciascun tipo vale solo l'ultima), o `null`. */
+function tipoDiNotaSostituibile(testo) {
+  if (MARCHE_NOTA_DEL_PROGETTO.some((marca) => testo.startsWith(marca))) return 'progetto';
+  if (testo.startsWith(MARCA_NOTA_DEL_PLANNER)) return 'planner';
+  if (testo.startsWith(SEGNO_NOTA_DOVE)) return 'dove';
+  if (testo.startsWith(INIZIO_RIGA_LINGUA) || testo.startsWith(INIZIO_CAMBIO_LINGUA)) return 'lingua';
+  if (testo.startsWith(INIZIO_NOTA_LINGUA_DEL_MESSAGGIO)) return 'lingua-del-messaggio';
+  if (testo.startsWith('[Environment of the connected device]')) return 'dispositivo';
+  return null;
+}
+
+/**
+ * Toglie dal mezzo i messaggi `system` e dice quali tenere: delle note che si sostituiscono l'ultima di ciascun tipo, delle altre una
+ * copia sola; nessuna che la coda abbia già (per tipo o per testo identico). Nel loro ordine.
+ */
+export function separaNoteDiSistema(mezzo, coda = []) {
+  /* CLI 28/10: lo stesso lettore del nucleo, così una nota a blocchi ([{type:'text',…}], com'è dopo un marcatore di cache) si riconosce */
+  const testoDi = (m) => testoDelContenuto(m?.content) ?? JSON.stringify(m?.content ?? '');
+  const tipiVisti = new Set();
+  const testiVisti = new Set();
+  for (const m of coda) {
+    if (m?.role !== 'system') continue;
+    const testo = testoDi(m);
+    testiVisti.add(testo);
+    const tipo = tipoDiNotaSostituibile(testo);
+    if (tipo) tipiVisti.add(tipo);
+  }
+  const tenuteAlContrario = [];
+  for (let i = mezzo.length - 1; i >= 0; i -= 1) {
+    const m = mezzo[i];
+    if (m?.role !== 'system') continue;
+    const testo = testoDi(m);
+    const tipo = tipoDiNotaSostituibile(testo);
+    /* R13-A2: la nota sulla lingua dell'ULTIMO messaggio vale per il suo giro (oggi la porta solo la richiesta). Una salvata nella storia
+       da una versione di prima descrive un messaggio vecchio: non si tiene, o la coda la metterebbe davanti agli ultimi scambi. */
+    if (tipo === 'lingua-del-messaggio') continue;
+    if (testiVisti.has(testo) || (tipo && tipiVisti.has(tipo))) continue;
+    testiVisti.add(testo);
+    if (tipo) tipiVisti.add(tipo);
+    tenuteAlContrario.push(m);
+  }
+  return { mezzo: mezzo.filter((m) => m?.role !== 'system'), noteTenute: tenuteAlContrario.reverse() };
 }
 
 function percorsiDaArgomenti(argomenti) {
@@ -811,6 +878,39 @@ export function immaginiVecchieInSegnaposto(messaggi) {
 export function costruisciRichiestaDiRiassunto({ testa = [], mezzo = [], paroleMassime = PAROLE_MASSIME_RIASSUNTO } = {}) {
   const haRiassuntoPrecedente = mezzo.some((m) => m?.role === 'user' && typeof m.content === 'string' && iniziaConMarcatoreRiassunto(m.content));
   return [...testa.map(senzaImmagini), ...mezzo.map(senzaIndice).map(senzaImmagini), { role: 'user', content: testoRichiestaDiRiassunto({ paroleMassime, haRiassuntoPrecedente }) }];
+}
+
+/*
+ * Owner 28/10/2026 (cache dei prompt, punto 4; contratto con la CLI e le sue quattro correzioni): IL RIASSUNTO CHE RILEGGE LA CACHE.
+ *   La richiesta di riassunto di sopra cambia il prefisso della conversazione al primo byte che conta: niente attrezzi, l'indice tolto,
+ *   le immagini in segnaposto ⇒ il fornitore riscrive da capo tutto ciò che ha già in cache. Claude Code fa il contrario, e lo dice
+ *   («When we run compaction, we use the *exact same* system prompt, user context, system context, and tool definitions as the parent
+ *   conversation. We prepend the parent's conversation messages, then append the compaction prompt as a new user message at the end»,
+ *   claude.com/blog «Lessons from building Claude Code: prompt caching is everything», letto il 28/10/2026); Codex lo stesso
+ *   (`codex-rs/core/src/compact.rs:277-322`, copia del 16/10: la storia clonata, la richiesta in coda, le stesse istruzioni di base).
+ *   Hermes no (`agent/context_compressor.py:3809`, un solo `user` col testo), ed è il caso che il blog chiama «ingenuo».
+ * ⇒ Qui testa e tratto partono COME SONO (stessi oggetti: immagini e indice compresi, il modello della conversazione li ha già visti),
+ *   la domanda in coda comincia IDENTICA a quella di sempre (vincolo della CLI: i suoi finti riconoscono il riassunto da lì), e chi
+ *   chiama manda gli STESSI attrezzi dell'ultima richiesta della conversazione.
+ * ⛔ Correzione 2 della CLI: se la forma intera — attrezzi compresi, che oggi l'ingresso del riassunto non conta perché non partono — non
+ *   entra nel tetto d'ingresso di oggi, torna `null` e si usa la forma di sempre. Mai un 400 «contesto pieno» sul riassunto, e mai un
+ *   taglio che, spostando il prefisso, pagherebbe gli attrezzi in più senza rileggere niente.
+ * ⛔ Correzione 1 (lo stesso modello) e l'interruttore spento finché il banco non misura quante volte il modello chiama un attrezzo invece
+ *   di riassumere (correzione 4) sono di chi chiama. Funzione PURA.
+ */
+/* il campo che `view_image` mette sul suo esito (`immagine-da-guardare.mjs:98`, CAMPO_IMMAGINI): letto per nome, perché questo ramo nasce
+   prima di view_image e alla fusione i due nomi convivono */
+const CAMPO_DELLE_IMMAGINI_GUARDATE = 'talos_immagini';
+export function richiestaDiRiassuntoSicuraPerCache({ testa = [], mezzo = [], prefissoInviato = null, paroleMassime = PAROLE_MASSIME_RIASSUNTO, attrezzi = null, finestraToken = null, maxOutputTokens = 0 } = {}) {
+  if (!Array.isArray(attrezzi) || attrezzi.length === 0) return null;
+  /* RIV14b-C1: il prefisso COME INVIATO (note di sistema a metà storia comprese, richieste vecchie non accorciate); RIV14b-C3: un esito di
+     view_image diventa al filo un messaggio d'immagine che questa strada non ricostruisce ⇒ la forma di sempre */
+  const davanti = Array.isArray(prefissoInviato) ? prefissoInviato : [...testa, ...mezzo];
+  if (davanti.some((m) => m && typeof m === 'object' && Object.hasOwn(m, CAMPO_DELLE_IMMAGINI_GUARDATE))) return null;
+  const haRiassuntoPrecedente = davanti.some((m) => m?.role === 'user' && typeof m.content === 'string' && iniziaConMarcatoreRiassunto(m.content));
+  const richiesta = [...davanti, { role: 'user', content: testoRichiestaDiRiassunto({ paroleMassime, haRiassuntoPrecedente }) }];
+  const totale = richiesta.reduce((somma, m) => somma + misuraPerRiassunto(m), 0) + JSON.stringify(attrezzi).length;
+  return totale <= caratteriIngressoPerFinestra({ finestraToken, maxOutputTokens }) ? richiesta : null;
 }
 
 /** Una risposta del riassuntore vale solo se è testo, finito, senza chiamate di attrezzo. */

@@ -597,7 +597,7 @@ function scrittura(schermo, { schema, lista, opzioni, ridisegna }) {
      * ⛔ ATLAS F2 (24/09/2026) — NON DEPLOYABILE fino a review avversaria e valutazione owner sul 4174.
      *   `nellaTesta`: il pulsante va nella testata della PAGINA, a destra del titolo, piccolo e primario — dove lo mette
      *   l'Atlas (`source/atlas.js:146` `pageHeader`, e :148 `button('Nuova nota','new-note','','primary tiny','plus')`).
-     *   Lo chiede solo la nota; Memoria e Attività restano nella barra in alto finché la loro famiglia non si porta.
+     *   Owner 29/10/2026 («A · come Note», una testata per tutte le sezioni): anche Memoria e Attività, non più nella barra in alto.
      *   Stesso gestore, stesso stato spento a modulo aperto: cambia il posto e la taglia, non il comportamento.
      */
     /*
@@ -784,6 +784,7 @@ export function aggiornaPaginaMemoria(schermo, memorie, opzioni = {}) {
     icona: 'brain',
     famiglia: 'td-memory',
     sostantivo: 'ricordo',
+    nuovaNellaTesta: true, // owner 29/10/2026 («A · come Note»): «Nuovo ricordo» a destra del titolo, come «Nuova nota»
     voci: scrivi.vociConBozza(),
     stato: { errore: opzioni.errore || null, caricamento: Boolean(opzioni.caricamento) },
     caricando: traduci('sezioni.memory.loading'),
@@ -854,6 +855,7 @@ export function aggiornaPaginaAttivita(schermo, attivita, opzioni = {}) {
     icona: 'check-sq',
     famiglia: 'td-task',
     sostantivo: 'attività',
+    nuovaNellaTesta: true, // owner 29/10/2026 («A · come Note»): «Nuova attività» a destra del titolo, come «Nuova nota»
     voci: scrivi.vociConBozza(),
     stato: { errore: opzioni.errore || null, caricamento: Boolean(opzioni.caricamento) },
     caricando: traduci('sezioni.tasks.loading'),

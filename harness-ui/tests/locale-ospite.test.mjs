@@ -143,7 +143,9 @@ test('LOS-02 la spedizione sul socket: la chiave la mette l\'accesso (sopra ogni
   await assert.rejects(a.chiama('/v1/chat/completions', { body: '{}' }), { code: 'LOCAL_RUNTIME_NOT_READY' });
   const morto = creaAccessoLocaleOspite({ cartella: m.cartella, fs: FS_SOCKET });
   await morto.ricevi(valido(`${m.socketPath}-spento`));
-  await assert.rejects(morto.chiama('/v1/chat/completions', { body: '{}' }), (e) => e.code === 'LOCAL_RUNTIME_NOT_READY' && !e.message.includes(CHIAVE));
+  /* 26/10/2026 (D-0146-1): un socket che non risponde ha il suo codice, non «nessun modello aperto» (che era falso col modello aperto) */
+  await assert.rejects(morto.chiama('/v1/chat/completions', { body: '{}' }), (e) => e.code === 'LOCAL_GUEST_UNREACHABLE' && !e.message.includes(CHIAVE)
+    && /did not answer: send the message again/u.test(e.message));
   assert.deepEqual(fuori, [], 'nessuna uscita in rete');
 });
 
@@ -269,8 +271,8 @@ test('LOS-07 il modello del telefono vede davanti SOLO gli undici essenziali e i
   /* il resto non è sparito: è dietro il ponte, nell'elenco dei nomi che porta tool_search */
   const ricerca = m.richieste[0].corpo.tools.find((a) => a.function?.name === 'tool_search');
   assert.match(ricerca.function.description, /notes_create/u);
-  /* owner 19/10, «Solo per il modello del telefono»: la riga della lingua c'è col profilo del telefono */
-  assert.match(JSON.stringify(m.richieste[0].corpo.messages[0]), /Always reply in the same language the person writes in/u);
+  /* owner 19/10, poi 28/10 («tutti i profili»): la riga della lingua c'è col profilo del telefono, nella forma del 28/10 */
+  assert.match(JSON.stringify(m.richieste[0].corpo.messages[0]), /Always reply in the same language the person writes or speaks in/u);
   assert.ok(JSON.stringify(m.richieste[0].corpo.tools).length < 20_000, `schemi troppo pesanti: ${JSON.stringify(m.richieste[0].corpo.tools).length} caratteri`);
 
   /* al contrario: col modello a chiave il registro passa il ponte di serie (spento sul PC), non gli essenziali */
@@ -391,6 +393,23 @@ test('LOS-10 il contesto pieno DOPO la coda (pacchetto SSE): UNA richiesta, clas
   assert.equal(classificaErroreFornitore({ message: ultimo.message, code: ultimo.code }), 'contesto-pieno', 'chi ritenta lo riconosce come contesto pieno');
   assert.equal(JSON.stringify(eventi).includes('This model does not use tools'), false);
   assert.deepEqual(fuori, []);
+});
+
+/* 26/10/2026 (D-0146-1 del Mobile): il socket del motore dell'app morto (R8 nelle 0.1.44/0.1.45) diceva «nessun modello aperto» */
+test('LOS-14 il socket del motore dell\'app non risponde: il giro finisce col SUO codice e la sua frase, nessun reinvio, nessuna uscita in rete', async (t) => {
+  const m = await accendiMotore(t, () => ({ json: { choices: [{ message: { role: 'assistant', content: 'mai' } }] } }));
+  const accesso = creaAccessoLocaleOspite({ cartella: m.cartella, fs: FS_SOCKET });
+  await accesso.ricevi(valido(`${m.socketPath}-morto`));
+  const registro = registroCol(accesso, cartellaDiProva(t));
+  t.after(() => { for (const s of registro.elenca()) registro.ferma(s.sessionId); });
+  const { sessionId } = registro.avvia('task-vero', { modelloScelto: 'locale-ospite:lfm2.5-2.6b-q4_0.gguf' });
+  const eventi = await attendiFine(registro, sessionId);
+  const ultimo = eventi.at(-1);
+  assert.equal(ultimo.type, 'RunError', JSON.stringify(ultimo));
+  assert.equal(ultimo.code, 'LOCAL_GUEST_UNREACHABLE', JSON.stringify(ultimo));
+  assert.match(ultimo.message, /^The on-device engine in the app did not answer: send the message again, the app reopens it\.$/u);
+  assert.equal(m.richieste.length, 0, 'il motore vero non ha ricevuto niente');
+  assert.deepEqual(fuori, [], 'nessun fornitore di riserva');
 });
 
 test('LOS-11 al contrario: un pacchetto d’errore con un altro codice NON diventa contesto pieno', async (t) => {

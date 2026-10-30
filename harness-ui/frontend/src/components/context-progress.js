@@ -217,21 +217,10 @@ function scriviSeCambia(nodo, testo) {
  *    `color-mix(in srgb, <token> N%, transparent)`, la forma del suo esempio «Adding transparency».
  *  · WCAG 2.2 (W3C Recommendation, edizione del 12/12/2024), 2.5.3 «Label in Name»: il nome accessibile dei pulsanti CONTIENE la parola visibile («Skip the summary…» per «Skip»).
  */
-const MINUTO_S = 60;
-/** I secondi rimasti in breve, come il mockup («~1 min», «~40 s»): passi di 5 s, mai «~0 s» e mai «~60 s». */
-export function stimaBreveRigaViva(secondi) {
-  if (!Number.isSafeInteger(secondi) || secondi < 1) return '';
-  const arrotondati = Math.max(5, Math.round(secondi / 5) * 5);
-  if (arrotondati < MINUTO_S) return t('chat.context.live.etaSeconds', { n: arrotondati });
-  return t('chat.context.live.etaMinutes', { n: Math.max(1, Math.round(secondi / MINUTO_S)) });
-}
-/** Il tempo trascorso in breve («3m 12s», in italiano «3 min 12 s»). */
-export function durataBreveRigaViva(ms) {
-  if (!Number.isSafeInteger(ms) || ms < 0) return '';
-  const tutti = Math.floor(ms / 1000);
-  if (tutti < MINUTO_S) return t('chat.context.live.durationSeconds', { s: tutti });
-  return t('chat.context.live.durationMinutes', { m: Math.floor(tutti / MINUTO_S), s: tutti % MINUTO_S });
-}
+/* 28/10/2026 sera: le due durate brevi vivono in `durata-breve.js` (dipende solo dalla lingua), così chi le usa non si tira dietro il
+   compattatore; qui si riesportano per chi le importa già da questo modulo. */
+import { stimaBreveRigaViva, durataBreveRigaViva } from './durata-breve.js';
+export { stimaBreveRigaViva, durataBreveRigaViva };
 const interoPositivo = (v) => Number.isSafeInteger(v) && v >= 0;
 const numeroLocale = (n) => new Intl.NumberFormat(linguaCorrenteDiT() === 'en' ? 'en-US' : 'it-IT').format(n);
 const MOTIVO_NEL_TITOLO = Object.freeze({ overflow: 'chat.context.progress.overflow', emergenza: 'chat.context.progress.emergency' });
@@ -287,6 +276,34 @@ export function descriviRigaViva(stato) {
 
 const percentoCss = (x) => `${Math.round(Math.min(100, Math.max(0, x)) * 100) / 100}%`;
 
+/** L'orologio della riga viva (1 s, come il ragionamento): si sostituisce nelle prove. */
+let adessoRigaViva = () => Date.now();
+export function impostaOrologioRigaViva(fn) { adessoRigaViva = typeof fn === 'function' ? fn : () => Date.now(); }
+/**
+ * Il tempo trascorso, che scorre. L'inizio viene dal server (`trascorsoMs` di ogni passo: «adesso − trascorso»), così una riga
+ * rimontata o riaperta non riparte da zero; senza, dal primo passo visto. Un solo orologio per riga; si ferma da sé quando la riga
+ * non è più nella pagina.
+ */
+function segnaTempoRigaViva(row, stato, conDettaglio) {
+  const tempo = row.querySelector('[data-riga-viva-tempo]');
+  if (!tempo) return;
+  const ora = adessoRigaViva();
+  if (Number.isSafeInteger(stato?.trascorsoMs) && stato.trascorsoMs >= 0) row._rigaVivaInizio = ora - stato.trascorsoMs;
+  else if (!Number.isFinite(row._rigaVivaInizio)) row._rigaVivaInizio = ora;
+  row._rigaVivaConDettaglio = conDettaglio;
+  const segna = () => {
+    const durata = durataBreveRigaViva(Math.max(0, Math.floor(adessoRigaViva() - row._rigaVivaInizio)));
+    scriviSeCambia(tempo, durata ? (row._rigaVivaConDettaglio ? `· ${durata}` : durata) : '');
+  };
+  segna();
+  if (row._rigaVivaOrologio) return;
+  row._rigaVivaOrologio = globalThis.setInterval(() => {
+    if (row.isConnected === false) { globalThis.clearInterval(row._rigaVivaOrologio); row._rigaVivaOrologio = null; return; }
+    segna();
+  }, 1000);
+  row._rigaVivaOrologio?.unref?.(); // in Node (le prove) l'orologio non tiene vivo il processo; nel browser è un numero
+}
+
 /** Disegna lo stato nella riga già montata. Separata dal montaggio: la usa anche il ridisegno al cambio di lingua. */
 function disegnaRigaViva(row, stato) {
   const vista = descriviRigaViva(stato);
@@ -297,6 +314,7 @@ function disegnaRigaViva(row, stato) {
   if (typeof stato?.fase === 'string' && stato.fase) row.dataset.compattazioneFase = stato.fase;
   scriviSeCambia(row.querySelector('[data-context-chat-status]'), vista.etichetta);
   scriviSeCambia(row.querySelector('[data-context-chat-eta]'), vista.dettaglio);
+  segnaTempoRigaViva(row, stato, vista.dettaglio !== '');
   if (vista.titolo) { if (row.title !== vista.titolo) row.title = vista.titolo; } else row.removeAttribute('title');
 
   const salta = row.querySelector('[data-riga-viva="salta"]'), ferma = row.querySelector('[data-riga-viva="ferma"]');
@@ -342,7 +360,10 @@ export function aggiornaAvanzamentoLegacy(container, stato, { sessionId, inseris
     const testo = doc.createElement('span'); testo.dataset.contextChatText = '';
     const status = doc.createElement('span'); status.dataset.contextChatStatus = ''; status.setAttribute('role', 'status');
     const dettaglio = doc.createElement('span'); dettaglio.dataset.contextChatEta = ''; dettaglio.setAttribute('aria-live', 'off');
-    testo.append(status, dettaglio);
+    /* Owner 27/10/2026 («ogni riga in corso animata e col contatore dei secondi», bozzetto approvato): il tempo trascorso visibile nella
+       riga, non più solo nel suggerimento — «scrivo · 23s», come «Ragionamento… 29s». Non si annuncia secondo per secondo. */
+    const tempo = doc.createElement('span'); tempo.className = 'talos-mono talos-measure'; tempo.dataset.rigaVivaTempo = ''; tempo.setAttribute('aria-hidden', 'true');
+    testo.append(status, dettaglio, tempo);
     const azioni = doc.createElement('span'); azioni.className = 'talos-riga-viva__azioni'; azioni.dataset.rigaVivaAzioni = '';
     const salta = doc.createElement('button'); salta.type = 'button'; salta.className = 'talos-riga-viva__azione talos-riga-viva__azione--forte'; salta.dataset.rigaViva = 'salta';
     const ferma = doc.createElement('button'); ferma.type = 'button'; ferma.className = 'talos-riga-viva__azione'; ferma.dataset.rigaViva = 'ferma';

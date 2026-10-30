@@ -30,6 +30,7 @@ import { limiteCheAgisce, percheDelLimite, ripartizioneSulLimite, compattazioniD
 /* ⛔ 16/09, P0-E punto 9: la riga di comando si LEGGE (parser vendorizzato dietro un adattatore
    nostro), non si stampa come stringa troncata. Vedi `components/comando-shell.js`. */
 import { ICONA_FAMIGLIA, analizzaComando, disegnaComando, iconaComando, NOME_FAMIGLIA } from './comando-shell.js';
+import { durataBreveRigaViva } from './durata-breve.js'; // owner 27/10/2026: la durata che scorre, nella stessa forma della riga viva
 
 /* ⛔ Numeri e orari nella LINGUA CORRENTE, risolti quando si disegna: un formato creato al caricamento resterebbe italiano. */
 const localeNumeri = () => (linguaCorrenteDiT() === 'en' ? 'en-US' : 'it-IT');
@@ -562,6 +563,8 @@ export function datiProcesso(p = {}) {
     misura,
     fermo,
     quando,
+    /* owner 27/10/2026 (righe vive): da quando gira — l'istante d'avvio vero, mai il montaggio della riga */
+    avviatoA: Number.isFinite(p.avviatoA) ? p.avviatoA : null,
     cartella,
     pid: '—',
     uscita: Number.isFinite(p.uscita) ? p.uscita : null,
@@ -1044,6 +1047,29 @@ function creaRiga(d, p, scheda, contenitore) {
   return riga;
 }
 
+/** La durata di un processo vivo, da `avviatoA` ad adesso, nella forma della riga viva («1m 12s» / «1 min 12 s»). */
+let adessoProcessi = () => Date.now();
+export function impostaOrologioProcessi(fn) { adessoProcessi = typeof fn === 'function' ? fn : () => Date.now(); }
+function segnaDurataViva(riga) {
+  if (!riga.durataVivaEl || !Number.isFinite(riga.avviatoA)) return;
+  const testo = durataBreveRigaViva(Math.max(0, Math.floor(adessoProcessi() - riga.avviatoA)));
+  if (riga.durataVivaEl.textContent !== testo) riga.durataVivaEl.textContent = testo;
+}
+/** Un orologio solo per la scheda (1 s, come il ragionamento): acceso con almeno una riga viva, spento senza, o a scheda tolta. */
+function orologioDurateVive(scheda, contenitore) {
+  const vive = [...scheda.righe.values()].some((r) => Number.isFinite(r.avviatoA));
+  if (vive && !scheda.orologioVive) {
+    // si ferma a scheda TOLTA dalla pagina: solo se c'era (una scheda mai attaccata, come nelle prove, non è «tolta»)
+    const eraNellaPagina = contenitore?.isConnected === true;
+    scheda.orologioVive = globalThis.setInterval(() => {
+      const ancora = [...scheda.righe.values()].filter((r) => Number.isFinite(r.avviatoA));
+      if ((eraNellaPagina && contenitore?.isConnected === false) || ancora.length === 0) { globalThis.clearInterval(scheda.orologioVive); scheda.orologioVive = null; return; }
+      for (const r of ancora) segnaDurataViva(r);
+    }, 1000);
+    scheda.orologioVive?.unref?.(); // in Node (le prove) non tiene vivo il processo
+  } else if (!vive && scheda.orologioVive) { globalThis.clearInterval(scheda.orologioVive); scheda.orologioVive = null; }
+}
+
 function aggiornaRiga(d, riga, p, scheda) {
   const m = riga.mostrato;
   riga.card.dataset.stato = p.stato;
@@ -1107,7 +1133,26 @@ function aggiornaRiga(d, riga, p, scheda) {
   }
   if (!m || m.chi !== p.chi) riga.chiEl.textContent = p.chi;
   if (!m || m.quando !== p.quando) riga.oraEl.textContent = p.quando === '\u2014' ? '' : p.quando;
-  if (!m || m.misura !== p.misura) riga.misuraEl.textContent = p.misura;
+  /*
+   * ⛔ Owner 27/10/2026 («ogni riga in corso animata e col contatore dei secondi», bozzetto approvato): un processo vivo mostrava solo
+   *   l'ora d'avvio, e una riga ferma sembra bloccata. Ora: il pallino vivo e la durata che scorre (`segnaDurataViva`, un orologio solo
+   *   per la scheda). Finito, torna la misura di sempre (durata misurata, uscita).
+   */
+  if (p.vivo && Number.isFinite(p.avviatoA)) {
+    riga.avviatoA = p.avviatoA;
+    if (riga.misuraEl.dataset.viva === undefined) {
+      riga.misuraEl.dataset.viva = '';
+      const pallino = el(d, 'span', 'talos-dot talos-dot--live');
+      pallino.setAttribute('aria-hidden', 'true');
+      riga.durataVivaEl = el(d, 'span', 'talos-process__durata-viva');
+      riga.misuraEl.replaceChildren(pallino, riga.durataVivaEl);
+    }
+    segnaDurataViva(riga);
+  } else {
+    riga.avviatoA = null;
+    if (riga.misuraEl.dataset.viva !== undefined) { delete riga.misuraEl.dataset.viva; riga.durataVivaEl = null; riga.misuraEl.textContent = p.misura; }
+    else if (!m || m.misura !== p.misura) riga.misuraEl.textContent = p.misura;
+  }
   const risorse = testoRisorse(p, scheda.risorse);
   if ((!m || m.risorse !== risorse) && (risorse || riga.risorseEl)) {
     const nodo = risorseDellaRiga(d, riga);
@@ -1271,6 +1316,7 @@ export function disegnaProcessi(d, contenitore, lista, opzioni = {}) {
   };
   posa(visibiliSfondo, scheda.listaSfondo);
   posa(visibiliAltri, scheda.zona);
+  orologioDurateVive(scheda, contenitore);
   scheda.sezioneSfondo.hidden = visibiliSfondo.length === 0;
   scheda.titoloAltri.hidden = visibiliSfondo.length === 0 || visibiliAltri.length === 0;
   /* «Ferma tutti»: sui comandi vivi di TUTTA la scheda (non solo quelli filtrati), e solo se sono più di uno. */

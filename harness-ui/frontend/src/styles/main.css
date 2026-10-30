@@ -11,6 +11,8 @@
 @import './fascia-modo.css'; /* F3-12, 24/09/2026: la fascia del modo Workflow tolto, sopra il composer */
 @import './avviso-piano.css'; /* D4, 24/09/2026: l'avviso «Piano aggiornato» sopra il composer */
 @import './compattazione-legacy.css'; /* F5, 24/09/2026: avviso «contesto quasi pieno», barra e riga della compattazione legacy */
+@import './server-locali.css'; /* owner 27/10/2026: la riga «Server pronto» in chat e la striscia «Server locali» nel Browser */
+@import './piano-rivisto.css'; /* owner 27/10/2026: la revisione nuova del piano in fondo, la vecchia chiusa in una riga */
 @import './obiettivo-fascia.css'; /* /goal G6, 15/10/2026: la fascia dell'obiettivo sopra il compositore */
 @import './obiettivo-carta.css'; /* /goal G6, 15/10/2026: la carta di conferma dei controlli e il suggerimento di /goal */
 @import './terminale-basso.css'; /* PO-09: il terminale in split orizzontale in basso */
@@ -124,7 +126,9 @@
 @import './aggiornamenti.css'; /* 01/10/2026: la banda «aggiornamento pronto» e la scheda delle Impostazioni (solo app desktop) */
 @import './remoto.css'; /* 18/10/2026: il controllo remoto (mockup v5): finestre di accoppiamento e «Telefoni collegati» */
 @import './annulla-file.css'; /* 18/10/2026: «Annulla le modifiche ai file» (R5.11, mockup approvato) */
+@import './segnala-problema.css'; /* 29/10/2026: «Segnala un problema» (bozzetto approvato) */
 @import './streaming-fluido.css'; /* 22/10/2026: la dissolvenza per parola, il cursore e i turni chiusi fuori vista che non si impaginano (streaming fluido) */
 @import './pillola-ragionamento.css'; /* 24/10/2026: la pillola del ragionamento nel compositore e il suo menu (bozzetto approvato) */
 @import './rami.css'; /* 24/10/2026: «Riprova» e «Modifica e rimanda» come rami (bozzetto approvato) */
 @import './invio-file.css'; /* 24/10/2026: R5.13, mandare un file a un dispositivo (bozzetti approvati D1-D8) */
+@import './domanda-appiccicata.css'; /* 27/10/2026: la domanda ferma in cima mentre si legge la sua risposta, e la bolla a tutta larghezza (come Hermes) */

@@ -62,9 +62,12 @@ export const ATTREZZI_DIFFERIBILI = Object.freeze(new Set([
        davanti `artifact_create` e, quando arriverà, `artifact_update`: dietro il ponte il modello rifarebbe un artefatto invece di
        aggiornarlo. */
     'file_changes_undo',
-    'remote_phones', 'remote_phone_pair', 'remote_phone_revoke', 'remote_phone_folders', 'remote_phone_folder_allow', 'remote_phone_folder_revoke',
+    'remote_phones', 'remote_phone_pair', 'remote_phone_revoke', 'remote_phone_folders', 'remote_phone_folder_allow', 'remote_phone_folder_revoke', 'remote_phone_folder_unblock',
     'remote_control', // R5.14 (24/10/2026): nato dopo il 17/10, come gli altri del remoto
     'remote_device_send_file', // R5.13 (24/10/2026): mandare un file a un dispositivo, come gli altri del remoto
+    'view_image', // owner 27/10/2026: nato dopo il 17/10, come gli altri (regola del 24/10)
+    'report_problem', // «Segnala un problema» (29/10/2026): nato dopo il 17/10, dietro il ponte come gli altri (regola del 24/10)
+    'local_page', // owner 27/10/2026 (server locali), scritto il 29/10: nato dopo il 17/10, come gli altri (regola del 24/10)
 ]))
 
 /*

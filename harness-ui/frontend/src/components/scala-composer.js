@@ -17,18 +17,38 @@
  *   non si rifà se niente è cambiato.
  */
 
-/** Gli stadi: 0 tutto intero · 1 «Terminale» solo icona · 2 anche il permesso e «Sessione» solo icona · 3 anche il piano ChatGPT
-    solo puntino (11/10/2026: cede per ultimo, è la frase che OpenAI chiede di mostrare). */
-export const STADIO_MASSIMO = 3;
+/** Gli stadi: 0 tutto intero · 1 «Terminale» solo icona · 2 anche il permesso e «Sessione» solo icona · 3 anche il ragionamento
+    solo cervello (owner 27/10/2026: il suo livello resta scritto più a lungo del permesso) · 4 anche il piano ChatGPT solo puntino
+    (11/10/2026: cede per ultimo, è la frase che OpenAI chiede di mostrare). */
+export const STADIO_MASSIMO = 4;
 
 const ETICHETTE_MISURATE = ['[data-open-sheet="model"] .talos-chip__label', '[data-open-sheet="permissions"] .talos-chip__label', '#pillTerminale .talos-chip__label',
-  '[data-piano-chatgpt] .talos-chip__label']; // 11/10/2026: la pastiglia del piano ChatGPT cede per ultima, al gradino 3 (resta il puntino)
+  '[data-piano-chatgpt] .talos-chip__label', // 11/10/2026: la pastiglia del piano ChatGPT cede per ultima, all'ultimo gradino (resta il puntino)
+  '#pillRagionamento .talos-chip__label']; // owner 27/10/2026: il ragionamento cede al gradino 3, dopo il permesso
 
-/** Vero se l'etichetta si vede ma non ci sta intera. Un'etichetta ceduta (resa per la sola voce) non è tagliata. */
+/** Un 64° di pixel: l'unità con cui Chromium impagina (LayoutUnit). Sotto, il testo non tocca il bordo e i puntini non compaiono. */
+const MARGINE_SOTTOPIXEL = 1 / 64;
+
+/**
+ * Vero se l'etichetta si vede ma non ci sta intera. Un'etichetta ceduta (resa per la sola voce) non è tagliata.
+ * ⛔ 29/10/2026 — la vecchia misura (`scrollWidth > clientWidth + 1`) lasciava passare i tagli di un pixel: a 1400 px «Molto alto»
+ *   stava 61 su 60 e si leggeva «Molto al…» (prova D2 (d), foto). `scrollWidth` e `clientWidth` sono interi arrotondati e non vedono
+ *   un taglio di una frazione di pixel (Mozilla bug 1250824; CSSWG, «text-overflow» 2019): con `text-overflow: ellipsis` basta
+ *   quella frazione per i puntini. ⇒ Si confronta la larghezza VERA del testo (un Range, al sottopixel) col riquadro del contenuto.
+ *   Nessuna tolleranza sul tetto: la tolleranza vale solo in salita.
+ */
 export function etichettaTagliata(el, win = globalThis) {
   if (!el || !el.isConnected || el.getClientRects().length === 0) return false;
-  if (win.getComputedStyle(el).position === 'absolute') return false;
-  return el.scrollWidth > el.clientWidth + 1;
+  const st = win.getComputedStyle(el);
+  if (st.position === 'absolute') return false;
+  if (el.scrollWidth > el.clientWidth) return true;
+  const range = el.ownerDocument?.createRange?.();
+  if (!range || typeof range.getBoundingClientRect !== 'function') return false;
+  range.selectNodeContents(el);
+  const testo = range.getBoundingClientRect().width;
+  const px = (v) => Number.parseFloat(v) || 0;
+  const riquadro = el.getBoundingClientRect().width - px(st.paddingLeft) - px(st.paddingRight) - px(st.borderLeftWidth) - px(st.borderRightWidth);
+  return testo > riquadro + MARGINE_SOTTOPIXEL;
 }
 
 /** Porta la barra al primo stadio in cui nessuna etichetta è tagliata; torna lo stadio scelto. */

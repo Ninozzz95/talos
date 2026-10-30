@@ -12,6 +12,7 @@ import {createHttpApp} from '../src/http-app.mjs';
 import {rimuoviCartellaDiProva} from './aiuto/rimuovi-cartella-di-prova.mjs';
 import {talosLavora} from '../src/kernel/talosHarness.mjs';
 import {createSessionRegistry} from '../src/session-registry.mjs';
+import { corpoSenzaMarcatori } from './aiuto/corpo-senza-marcatori.mjs'; // 28/10: cache, punto 1
 const outputId='15743007-0583-4e50-b99a-a77e33d97115';
 
 test('OUTPUT15-KERNEL-MISSING: retained output is an offered read tool and reaches its session reader', async () => {
@@ -21,7 +22,7 @@ test('OUTPUT15-KERNEL-MISSING: retained output is an offered read tool and reach
     _giriMassimiInterno:3,onGiro:e=>events.push(e),
     readProcessOutputFn:async args=>{reads++;assert.equal(args.outputId,outputId);return 'PAGINA15 completa';},
     fetchDiRete:async (_url,init)=>{
-      const request=JSON.parse(init.body);offered??=request.tools;
+      const request=corpoSenzaMarcatori(init.body);offered??=request.tools;
       const message=calls++===0?{role:'assistant',content:'',tool_calls:[{id:'read15',type:'function',function:{name:'process_output',arguments:JSON.stringify({outputId})}}]}:{role:'assistant',content:'Letto.'};
       return Response.json({choices:[{message,finish_reason:message.tool_calls?'tool_calls':'stop'}]});
     },
@@ -42,7 +43,7 @@ for(const mode of ['piano','child','unavailable'])test(`OUTPUT15-ROLE-${mode}: o
     modello:'fixture',chiave:'fixture',messaggiIniziali:[{role:'user',content:'Leggi.'}],strumentiEstesi:['process_output'],livelloAccesso:'lettura',
     modalitaOperativa:mode==='piano'?'piano':'normale',agentRole:mode==='child'?'child':'root',_giriMassimiInterno:3,onGiro:e=>events.push(e),
     ...(mode==='unavailable'?{}:{readProcessOutputFn:async()=>{reads++;return'PAGE15';}}),
-    fetchDiRete:async(_url,init)=>{offered??=JSON.parse(init.body).tools;const message=calls++===0?{role:'assistant',content:'',tool_calls:[{id:'read15',type:'function',function:{name:'process_output',arguments:JSON.stringify({outputId})}}]}:{role:'assistant',content:'Fine.'};return Response.json({choices:[{message,finish_reason:message.tool_calls?'tool_calls':'stop'}]});},
+    fetchDiRete:async(_url,init)=>{offered??=corpoSenzaMarcatori(init.body).tools;const message=calls++===0?{role:'assistant',content:'',tool_calls:[{id:'read15',type:'function',function:{name:'process_output',arguments:JSON.stringify({outputId})}}]}:{role:'assistant',content:'Fine.'};return Response.json({choices:[{message,finish_reason:message.tool_calls?'tool_calls':'stop'}]});},
   });
   assert.equal(reads,mode==='unavailable'?0:1);assert.equal(offered.some(t=>t.function.name==='process_output'),mode!=='unavailable');
   assert.equal(events.find(e=>e.tipo==='tool-esito').isError,mode==='unavailable');
@@ -64,7 +65,7 @@ test('OUTPUT15-REAL: real session/process -> reference -> tool read -> HTTP -> r
   store=await createProcessOutputStore({databasePath,maxOutputBytes:1000000});
   let calls=0,retainedId,readContent,shellCalls=0,delayedStore;
   const fetchFixture=async(_url,init)=>{
-    const request=JSON.parse(init.body);let tool;
+    const request=corpoSenzaMarcatori(init.body);let tool;
     if(calls===0){shellCalls++;tool={name:'shell',arguments:JSON.stringify({comando:command})};}
     if(calls===1){
       const result=request.messages.filter(m=>m.role==='tool').at(-1).content;

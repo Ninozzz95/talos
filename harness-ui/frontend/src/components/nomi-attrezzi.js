@@ -42,6 +42,8 @@ export const NOMI_UMANI_ATTREZZI = Object.freeze({
   artifact_update: 'varie.tools.name.artifactUpdate',
   document_create: 'varie.tools.name.documentCreate',
   generate_image: 'varie.tools.name.generateImage',
+  view_image: 'varie.tools.name.viewImage', // owner 27/10/2026
+  local_page: 'varie.tools.name.localPage', // owner 27/10/2026 (server locali)
   delega_sottotask: 'varie.tools.name.delegateSubtask',
   time_now: 'varie.tools.name.timeNow',
   ask_user_question: 'varie.tools.name.askUserQuestion',
@@ -68,16 +70,19 @@ export const NOMI_UMANI_ATTREZZI = Object.freeze({
   provider_exclude: 'varie.tools.name.providerExclude',
   provider_allow: 'varie.tools.name.providerAllow',
   chatgpt_account: 'varie.tools.name.chatgptAccount',
+  local_model_window: 'varie.tools.name.localModelWindow', // L1 1.3 (26/10/2026)
   // /goal G6 (owner 15/10/2026): la seconda porta dell'obiettivo
   goal_status: 'varie.tools.name.goalStatus',
   goal_create: 'varie.tools.name.goalCreate',
   file_changes_undo: 'varie.tools.name.fileChangesUndo', // R5.11 (18/10/2026)
+  report_problem: 'varie.tools.name.reportProblem', // 29/10/2026: «Segnala un problema»
   remote_phones: 'varie.tools.name.remotePhones', // R5.12 (18/10/2026)
   remote_phone_pair: 'varie.tools.name.remotePhonePair',
   remote_phone_revoke: 'varie.tools.name.remotePhoneRevoke',
   remote_phone_folders: 'varie.tools.name.remotePhoneFolders', // R5.12 (23/10/2026): le cartelle dei dispositivi
   remote_phone_folder_allow: 'varie.tools.name.remotePhoneFolderAllow',
   remote_phone_folder_revoke: 'varie.tools.name.remotePhoneFolderRevoke',
+  remote_phone_folder_unblock: 'varie.tools.name.remotePhoneFolderUnblock', // owner 27/10/2026
   remote_control: 'varie.tools.name.remoteControl', // R5.14 (24/10/2026): accendere e spegnere il remoto dalla chat
   remote_device_send_file: 'varie.tools.name.remoteDeviceSendFile', // R5.13 (24/10/2026): mandare un file a un dispositivo (bozzetto 3b)
   goal_update: 'varie.tools.name.goalUpdate',
@@ -401,15 +406,18 @@ export const DESCRIZIONI_ATTREZZI = Object.freeze({
   provider_exclude: 'varie.tools.description.providerExclude',
   provider_allow: 'varie.tools.description.providerAllow',
   chatgpt_account: 'varie.tools.description.chatgptAccount',
+  local_model_window: 'varie.tools.description.localModelWindow', // L1 1.3 (26/10/2026)
   goal_status: 'varie.tools.description.goalStatus',
   goal_create: 'varie.tools.description.goalCreate',
   file_changes_undo: 'varie.tools.description.fileChangesUndo', // R5.11 (18/10/2026)
+  report_problem: 'varie.tools.description.reportProblem', // 29/10/2026: «Segnala un problema»
   remote_phones: 'varie.tools.description.remotePhones', // R5.12 (18/10/2026)
   remote_phone_pair: 'varie.tools.description.remotePhonePair',
   remote_phone_revoke: 'varie.tools.description.remotePhoneRevoke',
   remote_phone_folders: 'varie.tools.description.remotePhoneFolders', // R5.12 (23/10/2026): le cartelle dei dispositivi
   remote_phone_folder_allow: 'varie.tools.description.remotePhoneFolderAllow',
   remote_phone_folder_revoke: 'varie.tools.description.remotePhoneFolderRevoke',
+  remote_phone_folder_unblock: 'varie.tools.description.remotePhoneFolderUnblock', // owner 27/10/2026
   remote_control: 'varie.tools.description.remoteControl', // R5.14 (24/10/2026)
   remote_device_send_file: 'varie.tools.description.remoteDeviceSendFile', // R5.13 (24/10/2026)
   goal_update: 'varie.tools.description.goalUpdate',
@@ -424,6 +432,8 @@ export const DESCRIZIONI_ATTREZZI = Object.freeze({
   answer_child_question: 'varie.tools.description.answerChildQuestion',
   delega_sottotask: 'varie.tools.description.delegateSubtask',
   generate_image: 'varie.tools.description.generateImage',
+  view_image: 'varie.tools.description.viewImage', // owner 27/10/2026
+  local_page: 'varie.tools.description.localPage', // owner 27/10/2026 (server locali)
   library_list: 'varie.tools.description.libraryList',
   library_search: 'varie.tools.description.librarySearch',
   library_find: 'varie.tools.description.libraryFind',

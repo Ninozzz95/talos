@@ -49,6 +49,19 @@ export function decodificaCursore(cursore, { attrezzo, filtri }) {
   return { ok: true, chiave: dentro.s };
 }
 
+/*
+ * R-01 (Performance 29/10/2026, glm-5.3-flash su un compito vero; OK della CLI): un modello ha passato la PAROLA «undefined» come
+ *   cursore. I cursori sono generati e opachi: nessuno vale «undefined», «null» o soli spazi. Valgono come assenti — la prima pagina —
+ *   e una nota lo dice (MCP con un cursore non valido: lo dice, non finge che l'elenco manchi). La stringa vuota resta assente in
+ *   silenzio, com'era. Usato da tutti gli elenchi: `leggiParametriElenco`, `parametriDiElenca`, il freno delle pagine, `cerca`.
+ */
+export function cursoreSegnaposto(valore) {
+  return typeof valore === 'string' && valore !== '' && (valore.trim() === '' || /^(undefined|null)$/iu.test(valore.trim()));
+}
+export function notaCursoreSegnaposto(valore, campo = 'cursor') {
+  return `${campo} ${JSON.stringify(valore)} is not a cursor, so it was ignored: this is the first page. Use only the next_cursor a previous page gave you.`;
+}
+
 /** Confronta due chiavi (array di numeri o stringhe) in ordine lessicografico. */
 export function confrontaChiavi(a, b) {
   for (let i = 0; i < Math.max(a.length, b.length); i += 1) {
@@ -84,7 +97,8 @@ export function leggiParametriElenco(argomenti = {}, { limitePredefinito = LIMIT
     if (argomenti?.sort !== undefined) note.push(`sort "${argomenti.sort}" is unknown: used "${ordinePredefinito}". Valid: ${ordini.join(', ')}.`);
     ordine = ordinePredefinito;
   }
-  const cursore = typeof argomenti?.cursor === 'string' && argomenti.cursor !== '' ? argomenti.cursor : null;
+  let cursore = typeof argomenti?.cursor === 'string' && argomenti.cursor !== '' ? argomenti.cursor : null;
+  if (cursoreSegnaposto(cursore)) { note.push(notaCursoreSegnaposto(cursore)); cursore = null; } // R-01
   return { limite, formato, ordine, cursore, note };
 }
 

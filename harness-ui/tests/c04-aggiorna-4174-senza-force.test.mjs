@@ -126,3 +126,20 @@ test('C04-05: un gettone vuoto si nomina come vuoto, prima della build', { skip:
   assert.match(uscita, /il gettone di spegnimento in .* e' vuoto: chi ascolta sulla \d+ non si puo' fermare in modo gentile/u);
   assert.doesNotMatch(uscita, /costruisco il frontend/u);
 });
+
+/*
+ * C04-07 (29/10/2026): su questo PC il socket del 4174 torna con `State` vuoto (0), e `-State Listen` non lo vedeva: lo script
+ * avviava un server nuovo che moriva su «porta in uso» e diceva «riavviato» perché rispondeva quello VECCHIO. Due cose fisse:
+ * nessuna riga eseguita cerca chi ascolta con `-State Listen` (passa tutto da `Get-InAscolto`), e «riavviato» si dice solo dopo
+ * aver visto che sulla porta c'è il processo appena avviato, con quel controllo FUORI dal `try` che inghiotte gli errori.
+ */
+test('C04-07: chi ascolta si cerca dalla forma del socket, e «riavviato» vuole il processo appena avviato sulla porta', () => {
+  const eseguite = sorgente.split('\n').filter((riga) => !/^\s*#/u.test(riga));
+  assert.deepEqual(eseguite.filter((riga) => /-State Listen/u.test(riga)), []);
+  assert.ok(eseguite.filter((riga) => /Get-InAscolto \$Porta/u.test(riga)).length >= 4, 'i quattro punti che cercano chi ascolta');
+  assert.match(sorgente, /\$avviato = Start-Process[\s\S]*?-PassThru/u);
+  const controllo = sorgente.indexOf('risponde un ALTRO processo');
+  const ultimoTry = sorgente.lastIndexOf('try { $risponde');
+  assert.ok(controllo > ultimoTry && ultimoTry > 0, 'il controllo del processo sta dopo il try della salute, non dentro');
+  assert.ok(sorgente.indexOf('$avviato.HasExited') > 0, 'un server che esce subito si dice col suo log');
+});

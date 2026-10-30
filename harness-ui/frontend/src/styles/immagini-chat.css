@@ -19,3 +19,9 @@
 .talos-image-viewer__header button{padding:6px 12px;border:1px solid var(--talos-border);border-radius:7px;background:var(--talos-panel-soft);color:var(--talos-text);cursor:pointer}
 .talos-image-viewer>img{display:block;max-height:calc(92dvh - 64px);width:100%;object-fit:contain;padding:12px}
 @media(max-width:480px){.talos-image-card{width:200px}.talos-image-card--compact{width:112px}.talos-image-card img{height:136px}.talos-image-card--compact img{height:72px}}
+
+/* 27/10/2026 (view_image): un'immagine che non arriva lo dice, e il riquadro non si apre; la miniatura nel corpo di una riga d'attività */
+.talos-image-card--rotta{cursor:default}
+.talos-image-card--rotta img{visibility:hidden}
+.talos-image-card--rotta .talos-image-card__caption{color:var(--talos-danger)}
+.talos-tool-row__immagine{margin-top:8px}

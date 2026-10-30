@@ -27,6 +27,7 @@ harness-ui/.tasks-store/
 harness-ui/.memory-store/
 harness-ui/.tool-forge-store/
 harness-ui/.local-runtime/
+harness-ui/.local-runtime-router/
 harness-ui/.local-models/
 harness-ui/.generated-images/
 harness-ui/.chat-images/

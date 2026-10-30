@@ -547,6 +547,7 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
     conservaNota: $(schermo, '[data-action="conservaNotaBrowser"]'), chiudiNota: $(schermo, '[data-action="chiudiNotaBrowser"]'),
     bloccatoTesto: $(schermo, '#browserBloccato p.talos-muted'),
     annotazioni: $(schermo, '#browserAnnotazioni'),
+    serverLocali: $(schermo, '#browserServerLocali'), // owner 27/10/2026
     modi: [...schermo.querySelectorAll('[data-browser-modo]')], // 06/9 O-28: Pagina / Testo dell'agente
   };
   /*
@@ -580,7 +581,46 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
     schede: [], attiva: null, note: {}, richiesta: null, annotazioni: {}, annotaAttivo: false,
     modoPredefinito: modoIniziale === 'testo' ? 'testo' : 'pagina',
     modi: {}, modiChiesti: {}, riaperte: new Set(), riposate: new Set(), nonCaricate: new Set(),
+    serverLocali: [], // owner 27/10/2026: [{ porta, origine, framework, stato }] della conversazione
   };
+  /*
+   * ⭐ Owner 27/10/2026 — la striscia «Server locali» (bozzetto A2 approvato): una pastiglia per server, porta in cifre fisse e nome del
+   *   framework; un pronto si apre nella scheda viva (la stessa `azioni.apri` della barra dell'indirizzo), un fermato resta visibile
+   *   e spento. Nessuna apertura da sola (decisione dell'owner): solo al clic.
+   */
+  function renderizzaServerLocali() {
+    const box = el.serverLocali;
+    if (!box) return;
+    const lista = Array.isArray(stato.serverLocali) ? stato.serverLocali : [];
+    box.hidden = lista.length === 0;
+    if (!lista.length) { box.replaceChildren(); return; }
+    const etichetta = document.createElement('span');
+    etichetta.className = 'talos-browser__server-etichetta';
+    etichetta.textContent = t('modello.browser.localServers');
+    const pastiglie = lista.map((s) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'talos-server-chip';
+      b.dataset.stato = s.stato;
+      b.dataset.porta = String(s.porta);
+      const pronto = s.stato === 'pronto';
+      const punto = document.createElement('span');
+      punto.className = pronto ? 'talos-dot talos-dot--success' : 'talos-dot';
+      punto.setAttribute('aria-hidden', 'true');
+      const porta = document.createElement('span');
+      porta.className = 'talos-server-chip__porta';
+      porta.textContent = `localhost:${s.porta}`;
+      const nome = document.createElement('span');
+      nome.className = 'talos-server-chip__nome';
+      nome.textContent = pronto ? (s.framework || '') : t('modello.browser.serverStopped');
+      b.append(punto, porta, ...(nome.textContent ? [nome] : []));
+      b.title = pronto ? t('modello.browser.openLocalServer', { indirizzo: `localhost:${s.porta}` }) : t('modello.browser.serverStoppedLong', { indirizzo: `localhost:${s.porta}` });
+      if (pronto) b.addEventListener('click', () => azioni.apri?.(`http://localhost:${s.porta}/`));
+      else b.disabled = true;
+      return b;
+    });
+    box.replaceChildren(etichetta, ...pastiglie);
+  }
   /** Il modo di UNA scheda: quello scelto per lei, o il predefinito — mai quello della scheda di prima. */
   const modoDi = (id) => (id && stato.modi[id]) || stato.modoPredefinito;
   const impostaModo = (id, m) => { if (id) stato.modi[id] = m; };
@@ -1280,6 +1320,7 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
   return {
     /** @param {{schede?:Array, attiva?:string|null, note?:object, richiesta?:object|null}} nuovo */
     aggiorna(nuovo) {
+      if (nuovo && Array.isArray(nuovo.serverLocali)) { stato.serverLocali = nuovo.serverLocali; renderizzaServerLocali(); } // owner 27/10/2026
       /*
        * ⛔⛔⛔ 11/09/2026, owner: «quando faccio una ricerca web nel browser integrato, navigando
        *   nelle schede mi appare la visuale codice sorgente. Voglio che di default ci sia sempre

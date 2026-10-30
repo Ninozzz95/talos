@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import { spawn } from 'node:child_process'
 import { eseguiComando, conIntestazioneDiTaglio, uscitaUtile, uccidiAlberoDelProcesso } from '../src/kernel/talosHarness.mjs'
 import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs'
+import { percorsoTaskkill } from '../src/taskkill-di-sistema.mjs'
 
 const NODE = process.execPath
 
@@ -119,7 +120,8 @@ test('F-007-PID-RIUSATO: un figlio già uscito non si uccide per PID; uno vivo s
     try {
         await new Promise((ok) => vivo.once('spawn', ok))
         assert.equal(uccidiAlberoDelProcesso(vivo, { spawnFn: spia }), true)
-        if (process.platform === 'win32') assert.deepEqual(lanciate, [`taskkill /PID ${vivo.pid} /T /F`])
+        // G-R5 (27/10/2026): per percorso intero, mai per nome
+        if (process.platform === 'win32') assert.deepEqual(lanciate, [`${percorsoTaskkill(process.env.SystemRoot)} /PID ${vivo.pid} /T /F`])
     } finally {
         vivo.kill()
     }

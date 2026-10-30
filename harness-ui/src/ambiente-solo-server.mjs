@@ -62,6 +62,27 @@ export const VARIABILI_SOLO_DEL_SERVER = Object.freeze([
    * QUALUNQUE programma Electron lanciato da lì.
    */
   'ELECTRON_RUN_AS_NODE',
+  /*
+   * «Segnala un problema» (29/10/2026): non è un segreto, è la versione dell'app che il guscio dice al SUO server per la diagnostica
+   *   della segnalazione (`desktop/runtime.mjs`). Ereditata, un TALOS da sorgente lanciato dal terminale dell'app direbbe nella
+   *   diagnostica la versione dell'app installata: falso. Si toglie.
+   */
+  'TALOS_DESKTOP_VERSION',
+  /* Revisione D (F4): l'interruttore della seconda porta di «Segnala un problema». Ereditato, un TALOS lanciato dal terminale dell'app
+     (un Pad attaccato, una prova) si accenderebbe senza che chi lo ospita l'abbia chiesto. Si toglie. */
+  'TALOS_SEGNALAZIONE_PROBLEMA',
+  /*
+   * ⛔ 29/10/2026 — DUE NOMI CHE LA GUARDIA NON VEDEVA. Un commento fra la virgola e il nome dentro `Object.assign(ambiente, {…})`
+   *   li nascondeva a CLI-REQ-04 (a) (trovato dall'agente della revisione D; il secondo l'avevo appena scritto io così). Ora la
+   *   guardia toglie i commenti prima di leggere, e i due nomi sono decisi qui:
+   * - `TALOS_HARNESS_UI_KEYRING_SCOPE` (`desktop` o `desktop-preview`) sceglie lo spazio di nomi del portachiavi dell'app installata,
+   *   «mai condiviso con il server da sorgente» (`runtime.mjs`). Ereditato, un TALOS lanciato dal terminale dell'app leggerebbe le
+   *   chiavi dell'app. Si toglie.
+   * - `TALOS_HARNESS_UI_DEFAULT_PROJECT` (`none`) dice al server dell'app di partire senza progetto. Ereditato, un TALOS da sorgente
+   *   lanciato dal terminale partirebbe anche lui senza il suo progetto, senza che nessuno l'abbia scelto. Si toglie.
+   */
+  'TALOS_HARNESS_UI_KEYRING_SCOPE',
+  'TALOS_HARNESS_UI_DEFAULT_PROJECT',
 ]);
 
 /*

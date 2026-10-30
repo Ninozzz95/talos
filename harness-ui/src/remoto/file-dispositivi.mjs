@@ -34,6 +34,7 @@ import { createReadStream, mkdirSync, readdirSync, readFileSync, realpathSync, r
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 
 import { MAX_CHAT_FILE_BYTES, checkedName, saveChatFile } from '../chat-file-upload.mjs';
+import { bloccataDa } from '../path-policy.mjs';
 import { CHAT_IMAGE_MAX_BYTES } from '../chat-image-attachments.mjs';
 
 export const PEZZO_MASSIMO = 512 * 1024;
@@ -105,8 +106,18 @@ export function creaFileDeiDispositivi({
   salvaImmagine = null,
   /* A10-4: la rinomina del salvataggio atomico, iniettabile solo per provare i suoi guasti */
   rinomina = renameSync,
+  /* Revisione blocco 11 (A-R2): `async (dispositivoId) => string[]`, le cartelle bloccate per quel dispositivo. Un file dentro una di
+     loro non si offre, non si elenca e non si legge per LUI. Senza (prove vecchie), nessun blocco. */
+  bloccateDi = null,
 } = {}) {
   if (typeof cartella !== 'string' || !cartella) throw errore('REMOTE_FILES_FOLDER', 'The device files need their data folder.');
+  /** La cartella bloccata per `dispositivoId` che contiene `reale`, o null. Un elenco che non si legge chiude a guasto (bloccato). */
+  async function bloccataPerIlDispositivo(dispositivoId, reale) {
+    if (typeof bloccateDi !== 'function' || typeof dispositivoId !== 'string' || !dispositivoId) return null;
+    let bloccati;
+    try { bloccati = await bloccateDi(dispositivoId); } catch { return { radice: null, illeggibile: true }; }
+    return Array.isArray(bloccati) && bloccati.length ? bloccataDa(reale, { bloccati }) : null;
+  }
   const dirTrasferimenti = join(cartella, 'trasferimenti');
   const fileOfferte = join(cartella, 'offerte.json');
   const fileCaricati = join(cartella, 'caricati.json');
@@ -592,7 +603,9 @@ export function creaFileDeiDispositivi({
 
     /** P2.2 `file.list`: le righe che il dispositivo può vedere, senza percorsi. */
     async elenco({ dispositivoId, sessionId } = {}) {
-      const righe = await righeInterne(dispositivoId, sessionId);
+      const tutte = await righeInterne(dispositivoId, sessionId);
+      const righe = [];
+      for (const r of tutte) if (!(await bloccataPerIlDispositivo(dispositivoId, r.reale))) righe.push(r); // A-R2
       ricordoRighe.set(`${dispositivoId}\0${sessionId}`, { righe });
       const items = [];
       for (const r of righe) {
@@ -615,6 +628,7 @@ export function creaFileDeiDispositivi({
       if (typeof fileId !== 'string' || !ID_FILE.test(fileId)) throw sparito();
       const riga = await rigaPerLettura(dispositivoId, sessionId, fileId);
       if (!riga || riga.versione !== versione) throw sparito();
+      if (await bloccataPerIlDispositivo(dispositivoId, riga.reale)) throw sparito(); // A-R2: per lui il file non c'è
       const fh = await fsp.open(riga.reale, 'r').catch(() => { throw sparito(); });
       let letti; let st; let dati;
       try {
@@ -655,7 +669,7 @@ export function creaFileDeiDispositivi({
      * sua `versione`, che l'esecuzione rilega con `versioneAttesa`). Errori col `motivo` che l'ospite traduce in parole per il modello:
      * `fuori` (non nella cartella della conversazione), `assente`, `cartella`; più FILE_TOO_LARGE.
      */
-    async esaminaOfferta({ sessionId, percorso } = {}) {
+    async esaminaOfferta({ sessionId, percorso, dispositivoId = null } = {}) {
       if (!esiste(sessionId)) throw errore('NOT_FOUND', 'Session not found.', { stato: 404 });
       const base = await cartellaDellaSessione(sessionId);
       if (!base || typeof percorso !== 'string' || !percorso) throw Object.assign(sparito(), { motivo: 'assente' });
@@ -669,6 +683,8 @@ export function creaFileDeiDispositivi({
       if (st.isDirectory()) throw Object.assign(sparito(), { motivo: 'cartella' });
       if (!st.isFile()) throw Object.assign(sparito(), { motivo: 'assente' });
       if (st.size > MAX_CHAT_FILE_BYTES) throw Object.assign(troppoGrande(), { dimensione: st.size, relativo: relativoDi(reale, base) });
+      const bloccata = await bloccataPerIlDispositivo(dispositivoId, reale); // A-R2
+      if (bloccata) throw Object.assign(sparito(), { motivo: 'bloccata', radice: bloccata.radice ?? null });
       return { percorso: reale, relativo: relativoDi(reale, base), nome: basename(reale), dimensione: st.size, versione: versioneDi(reale, st) };
     },
 
@@ -683,6 +699,8 @@ export function creaFileDeiDispositivi({
       try { st = statSync(reale); } catch { throw sparito(); }
       if (!st.isFile()) throw sparito();
       if (st.size > MAX_CHAT_FILE_BYTES) throw troppoGrande();
+      const bloccata = await bloccataPerIlDispositivo(dispositivoId, reale); // A-R2: anche fra la carta e l'invio
+      if (bloccata) throw Object.assign(sparito(), { motivo: 'bloccata', radice: bloccata.radice ?? null });
       /* R5.13 corsa 2: la carta ha mostrato QUESTA versione; se il file è cambiato dopo, non si manda quello che la persona non ha visto
          (lo stesso «controllato ≠ usato» delle cartelle, legato all'oggetto e non al nome) */
       if (versioneAttesa !== null && versioneDi(reale, st) !== versioneAttesa) throw Object.assign(sparito(), { motivo: 'cambiato' });

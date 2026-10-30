@@ -398,7 +398,7 @@ for (const modo of ['light', 'dark']) {
       await expect(carta(page).locator('.talos-approval__foot button')).toHaveText(['Consenti una volta', 'Per questa sessione', 'Nega']);
     });
 
-    const FRASE_ROOT = 'Questo comando gira in Linux (WSL, Ubuntu) come root, e con i permessi di questa sessione nessuno lo approva.';
+    const FRASE_ROOT = 'Questo comando girerebbe in Linux (WSL, Ubuntu) come root.';
     test('C2-CARTA-11 — DUE RAMI: senza la politica restano le frasi VERE del kernel (qui la root in WSL)', async ({ page }) => {
       await prepara(page, { pending: PENDENTE({ wslRoot: { distro: 'Ubuntu', utente: 'root', frase: FRASE_ROOT } }, null) });
       await manda(page, [agenti(IN_ATTESA)]);

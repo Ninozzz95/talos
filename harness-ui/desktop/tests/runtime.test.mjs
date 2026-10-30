@@ -245,3 +245,20 @@ test('LINK-APRI-FUORI: un indirizzo https qualunque va nel browser del sistema; 
     'https://', '', null, undefined, 42, 'non un indirizzo',
   ]) assert.equal(apribileNelBrowserDelSistema(no), false, String(no));
 });
+
+/* «Segnala un problema» (owner 29/10/2026): il guscio passa al server la versione dell'app per la diagnostica, e solo se ha la forma di
+   una versione; una variabile ereditata col nome giusto ma senza il valore del guscio non passa (la versione la dice solo il guscio). */
+test('SEGNALA-VERSIONE — la versione dell\'app arriva al figlio in TALOS_DESKTOP_VERSION, solo con la forma di una versione', () => {
+  const base = { execPath: resolve('Electron.exe'), percorsi: percorsiR03, port: 49152, token: 'a'.repeat(64), dataDir: resolve('profilo') };
+  assert.equal(creaAvvioFiglio({ ...base, env: {}, versione: '0.1.38' }).options.env.TALOS_DESKTOP_VERSION, '0.1.38');
+  assert.equal(creaAvvioFiglio({ ...base, env: { TALOS_DESKTOP_VERSION: '9.9.9' } }).options.env.TALOS_DESKTOP_VERSION, undefined);
+  assert.equal(creaAvvioFiglio({ ...base, env: {}, versione: 'C:/Users/x' }).options.env.TALOS_DESKTOP_VERSION, undefined);
+});
+
+/* Revisione D del 29/10/2026 (F4): l'interruttore POSITIVO della seconda porta di «Segnala un problema» lo mette il guscio, sempre, accanto
+   alla cartella dei dati; una variabile ereditata con un altro valore non vale (si riscrive «on»). */
+test('SEGNALA-INTERRUTTORE — il figlio del guscio ha TALOS_SEGNALAZIONE_PROBLEMA=on', () => {
+  const base = { execPath: resolve('Electron.exe'), percorsi: percorsiR03, port: 49152, token: 'a'.repeat(64), dataDir: resolve('profilo') };
+  assert.equal(creaAvvioFiglio({ ...base, env: {} }).options.env.TALOS_SEGNALAZIONE_PROBLEMA, 'on');
+  assert.equal(creaAvvioFiglio({ ...base, env: { TALOS_SEGNALAZIONE_PROBLEMA: 'off' } }).options.env.TALOS_SEGNALAZIONE_PROBLEMA, 'on');
+});

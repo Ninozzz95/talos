@@ -450,7 +450,9 @@ dialog.sheet-dialog :host(.talos-embedded-wide-short) .mobile-nav button.active,
 .workspace-chooser-new-folder-status{ grid-column: 1 / -1; min-height: 0; color: var(--muted); font-size: calc(9px * var(--talos-ui-font-scale)); }
 .workspace-chooser-new-folder-status:empty{ display: none; }
 .workspace-chooser-tree-frame{ min-height: 230px; overflow: auto; overscroll-behavior: contain; border: 1px solid var(--line); border-radius: 11px; background: var(--surface); padding: 6px; scrollbar-gutter: stable; }
-.workspace-chooser-tree{ display: grid; gap: 2px; }
+/* 29/10/2026: `align-content` di serie in una griglia vale `stretch` (MDN «align-content», «normal»): con poche cartelle e il
+   `min-height: 180px` qui sotto le righe si allungavano fino a 89 px l'una. Le righe stanno in cima, alla loro altezza. */
+.workspace-chooser-tree{ display: grid; gap: 2px; align-content: start; }
 .workspace-chooser-tree[aria-busy="true"]{ opacity: .64; }
 .workspace-chooser-tree-row{ width: 100%; min-height: 38px; display: grid; grid-template-columns: 18px 20px minmax(0,1fr) auto; align-items: center; gap: 7px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--text-2); padding: 0 8px; text-align: left; cursor: default; transition: background var(--motion-hover) var(--motion-ease), border-color var(--motion-hover) var(--motion-ease); }
 .workspace-chooser-tree-row[aria-level="2"]{ padding-left: 22px; }

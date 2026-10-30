@@ -39,6 +39,9 @@ export const FORME_DI_SEGRETO = Object.freeze([
   confinata('gsk_[A-Za-z0-9]{20,255}'), // Groq
   confinata('(?:sk|rk)_(?:live|test)_[A-Za-z0-9]{10,255}'), // Stripe
   confinata('xai-[A-Za-z0-9]{30,255}'), // xAI
+  /* Revisione D del 29/10/2026 («Segnala un problema», concordata con la CLI): la chiave di Z.AI — 32 esadecimali, un punto, 16-64
+     caratteri (la usiamo noi). Confinata e col tetto, come le altre. */
+  confinata('[0-9a-f]{32}\\.[A-Za-z0-9]{16,64}'), // Z.AI
 ]);
 /* Le chiavi d'ESEMPIO della documentazione, che stanno proprio nei file d'esempio: la chiave d'accesso di AWS
    (docs.aws.amazon.com, «AKIAIOSFODNN7EXAMPLE») e il token d'esempio di jwt.io. Non sono chiavi vere: non fanno chiedere. */
@@ -49,15 +52,34 @@ const eUnSegnapostoNoto = (trovato) => SEGNAPOSTO_NOTI.includes(trovato) || trov
 /*
  * Revisione del 20/10/2026 (D2, ripiego del riassunto): le stesse forme, OSCURATE nel testo invece che solo riconosciute — come
  *   Hermes passa il suo ripiego in `_redact_compaction_text` (`agent/context_compressor.py:3709`). In più le credenziali dentro un
- *   indirizzo (`https://utente:password@…`). I segnaposto noti restano: non sono chiavi.
+ *   indirizzo (`https://utente:password@…`).
+ * ⛔ Revisione D del 29/10/2026 («Segnala un problema», concordata con la CLI), tre cure misurate forma per forma
+ *   (`tests/forme-di-segreto-oscura.test.mjs`):
+ *   1. i segnaposto della documentazione SI OSCURANO: l'eccezione serve a non DOMANDARE su un file d'esempio
+ *      (`formaDiSegretoNelTesto`, sotto, la tiene); per oscurare non costa niente, e in una pagina pubblica un segnaposto non si
+ *      distingue da una chiave vera. `AKIAIOSFODNN7EXAMPLE` passava intero, da solo e dopo `AWS_ACCESS_KEY_ID=`. La CLI non lo esclude
+ *      (`redact.ts`, SECRET_VALUE_PATTERNS);
+ *   2. il blocco PEM si toglie INTERO, anche tagliato prima della riga END: prima si toglieva la sola riga BEGIN e il corpo base64
+ *      restava. Le due forme sono quelle della CLI (`redact.ts`, le prime due di SECRET_VALUE_PATTERNS);
+ *   3. il valore dopo un NOME di segreto (`OPENROUTER_API_KEY=…`, `export X_TOKEN='…'`, `db-password: …`): ogni identificatore che
+ *      FINISCE col nome di un segreto; «key» da sola solo attaccata a un prefisso con `_` o `-` (la prosa «the key: Enter» resta). ⛔ I
+ *      contatori restano leggibili (`MAX_TOKENS=4096`, `total_tokens: 1234`): un `tokens` al PLURALE è un contatore, come COUNTER_KEY
+ *      della CLI (`redact.ts:3`). Solo qui: per DOMANDARE la regola sul nome non vale (vedi il «Limite DICHIARATO» in testa).
  */
 export const SEGRETO_OSCURATO = '[redacted]';
+const BLOCCHI_PEM = Object.freeze([
+  new RegExp(`${DASH5}BEGIN ${ETICHETTA_PRIVATA}${DASH5}(?:(?!${DASH5})[\\s\\S]){0,16384}${DASH5}END ${ETICHETTA_PRIVATA}${DASH5}`, 'gu'),
+  /* ⛔ ogni riga del corpo deve FINIRE lì (`(?=\r?\n|$)`): senza, la prima parola della riga dopo il blocco tagliato («il resto…»)
+     passava per base64 e spariva. La CLI ha la stessa forma senza il confine: da riportare a lei. */
+  new RegExp(`${DASH5}BEGIN ${ETICHETTA_PRIVATA}${DASH5}(?:\\r?\\n(?:[A-Za-z0-9+/=]{1,128}|[A-Za-z][A-Za-z-]{0,31}: [^\\r\\n]{0,128})(?=\\r?\\n|$)){0,1024}`, 'gu'),
+]);
+export const VALORE_DOPO_UN_NOME_DI_SEGRETO = /(?<![A-Za-z0-9])((?:(?:[A-Za-z0-9]+[_-])*(?:api[_-]?key|access[_-]?token|auth[_-]?token|token|secret|password|passwd|pwd)|(?:[A-Za-z0-9]+[_-])+key)\s*[:=]\s*)("[^"]*"|'[^']*'|[^\s;,]+)/giu;
 export function oscuraFormeDiSegreto(testo) {
   if (typeof testo !== 'string' || testo === '') return testo;
   let fuori = testo;
-  for (const forma of FORME_DI_SEGRETO) {
-    fuori = fuori.replace(new RegExp(forma.source, `${forma.flags}g`), (trovato) => (eUnSegnapostoNoto(trovato) ? trovato : SEGRETO_OSCURATO));
-  }
+  for (const blocco of BLOCCHI_PEM) fuori = fuori.replace(blocco, SEGRETO_OSCURATO);
+  for (const forma of FORME_DI_SEGRETO) fuori = fuori.replace(new RegExp(forma.source, `${forma.flags}g`), SEGRETO_OSCURATO);
+  fuori = fuori.replace(VALORE_DOPO_UN_NOME_DI_SEGRETO, (_tutto, nome, valore) => (valore === SEGRETO_OSCURATO ? `${nome}${valore}` : `${nome}${SEGRETO_OSCURATO}`));
   return fuori.replace(/(\b[a-z][a-z0-9+.-]{1,20}:\/\/)[^\s/@:"']{1,256}:[^\s/@"']{1,256}@/giu, `$1${SEGRETO_OSCURATO}@`);
 }
 

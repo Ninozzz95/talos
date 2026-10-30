@@ -272,7 +272,8 @@ test('S2-2-FIRMA-PREPARAZIONE-01 — all\'emergenza il giro non aspetta la SUA p
   };
   const inizio = Date.now();
   await talosLavora({ cartella, modello: 'z-ai/glm-5.3-flash', chiave: 'finta', task: { consegna: 'x' },
-    messaggiIniziali: [...uno.messaggiFinali, { role: 'user', content: `Leggi f1 e f2. ${'contesto '.repeat(60)}` }],
+    /* 28/10: 45 e non 60 — la scena sta su un confine di token (base: buona fino a 70, cade da 75; con la riga di lingua fra 57 e 63) */
+    messaggiIniziali: [...uno.messaggiFinali, { role: 'user', content: `Leggi f1 e f2. ${'contesto '.repeat(45)}` }],
     compattazioneIstantanea: true, compattazionePronta: pronta, contestoDelProgetto: 'Project files:\n', fetchDiRete: r1, permessi: 'Full access' });
   assert.ok(riassunti >= 1, 'premessa: la preparazione è partita');
   assert.ok(Date.now() - inizio < 1_500, `il giro non ha aspettato la preparazione che non vale più (${Date.now() - inizio} ms; prima ~3.051)`);

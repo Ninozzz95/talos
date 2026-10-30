@@ -33,7 +33,8 @@ on:
     # ⛔⛔ 07/9 — DUE PRODOTTI, DUE PREFISSI. Prima c'era solo `v*`, che è il tag del MOBILE: un tag
     # per il desktop avrebbe svegliato il job dell'APK, che avrebbe provato a firmare un artefatto
     # che quel tag non descrive. I due prefissi si dichiarano qui e ogni job guarda il proprio.
-    tags: ['v*', 'desktop-v*']
+    # ⛔ 27/10/2026, owner: dalla 0.1.47 il mobile si tagga `mobile-vX.Y.Z` (come `desktop-v…`); `v*` resta per i tag già usciti.
+    tags: ['v*', 'mobile-v*', 'desktop-v*']
 
 # ⛔ `attestations: write` è ciò che permette la firma di provenienza; `contents:
 # write` serve a creare la release. Nient'altro: un token che può più di quanto
@@ -53,8 +54,8 @@ permissions:
 
 jobs:
   apk:
-    # ⛔ solo i tag del mobile: `desktop-v0.1.0` non è una release Android.
-    if: startsWith(github.ref_name, 'v')
+    # ⛔ solo i tag del mobile (`v…` fino alla 0.1.46, `mobile-v…` dalla 0.1.47): `desktop-v0.1.0` non è una release Android.
+    if: startsWith(github.ref_name, 'v') || startsWith(github.ref_name, 'mobile-v')
     runs-on: ubuntu-latest
     steps:
       # ⛔ `submodules: recursive` — senza, `third_party/llama.cpp` arriva come
@@ -89,7 +90,13 @@ jobs:
       - id: versione
         name: la versione la decide il tag
         run: |
-          nome="${GITHUB_REF_NAME#v}"
+          # `mobile-v0.1.47` e `v0.1.46` danno tutti e due il numero nudo; un tag che non finisce in X.Y.Z non parte.
+          nome="${GITHUB_REF_NAME#mobile-}"
+          nome="${nome#v}"
+          if ! printf '%s' "$nome" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::Il tag ${GITHUB_REF_NAME} non porta una versione X.Y.Z (atteso mobile-vX.Y.Z)"
+            exit 1
+          fi
           echo "nome=$nome" >> "$GITHUB_OUTPUT"
           echo "codice=${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
           echo "release $nome (versionCode ${GITHUB_RUN_NUMBER})"
@@ -448,6 +455,9 @@ jobs:
         with:
           # owner 23/10/2026: il titolo come quello del desktop («TALOS Desktop <tag>»), ora che le due release stanno nello stesso repo
           name: TALOS Mobile ${{ github.ref_name }}
+          # Desktop e mobile escono nello stesso repo: la release mobile non prende la «Latest» del repository, che resta al
+          # desktop. Il mobile legge l'elenco delle release, mai `/releases/latest` (`TalosFonteAggiornamenti`): per lui non cambia.
+          make_latest: false
           files: |
             ${{ steps.apk.outputs.nome }}
             latest-android.yml

@@ -40,3 +40,17 @@ test('DOCTOR-REV-FE-02 [REGGE] — cartelle: 1 al singolare e 2 al plurale nelle
   assert.match(righeDi(controlliDoctor({ ...base, cartelleProgetto: cartelle(2) }), 'cartelle'), /2 project folders available\./u);
   impostaLingua('it');
 });
+
+test('DOCTOR-CARTELLE-PER-SESSIONE-01 — zero cartelle fisse con la scelta a ogni sessione è verde, nelle due lingue; senza il segno resta un avviso', () => {
+  const perSessione = { disponibili: false, conteggio: 0, sceltaPerSessione: true, dettaglio: 'No fixed project folder: you choose the folder when you start a new session.', dettaglioChiave: 'server.doctor.folders.choosePerSession' };
+  const controllo = (dati) => controlliDoctor({ ...base, cartelleProgetto: dati }).find((c) => c.id === 'cartelle');
+  impostaLingua('it');
+  assert.equal(controllo(perSessione).gravita, 'success');
+  assert.match(controllo(perSessione).righe.join(' | '), /La scegli a ogni sessione\. \| Nessuna cartella fissa: la scegli quando avvii una nuova sessione\./u);
+  impostaLingua('en');
+  assert.match(controllo(perSessione).righe.join(' | '), /Chosen for each session\. \| No fixed project folder: you choose the folder when you start a new session\./u);
+  /* AL CONTRARIO: un server di prima (zero, senza il segno) resta un avviso, e il segno con cartelle presenti non cambia il conteggio */
+  assert.equal(controllo({ disponibili: false, conteggio: 0, dettaglio: 'No project folder has been set up in the allowed list.' }).gravita, 'warning');
+  assert.match(controllo({ ...cartelle(2), sceltaPerSessione: true }).righe.join(' | '), /2 folders allowed\./u);
+  impostaLingua('it');
+});

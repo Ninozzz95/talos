@@ -50,7 +50,14 @@ export function toNativeMessages(messages, { provider, model }) {
     if (message.role === 'tool') {
       const toolName = toolNames.get(message.tool_call_id);
       if (!toolName) throw new Error('Tool result without a matching call.');
-      return { role: 'tool', content: [{ type: 'tool-result', toolCallId: message.tool_call_id, toolName, output: { type: 'text', value: typeof message.content === 'string' ? message.content : JSON.stringify(message.content) } }] };
+      /* owner 28/10/2026 (cache, punto 1): il nucleo può mettere il marcatore anche su un risultato d'attrezzo, che diventa `[{type:'text',
+         text, cache_control}]`. Il suo TESTO è il risultato: prima qui partiva il JSON dei pezzi. */
+      const testi = Array.isArray(message.content) && message.content.length > 0 && message.content.every(p => p?.type === 'text' && typeof p.text === 'string')
+        ? message.content.map(p => p.text).join('') : null;
+      /* RIV14-3 (28/10/2026): con Anthropic vero il punto del nucleo passa come opzione del messaggio (`@ai-sdk/anthropic` la legge sull'ultima
+         parte, dist/index.js:2608-2611 e :2773-2779): prima qui cadeva, e di quattro punti all'SDK arrivavano solo i due del sistema */
+      const puntoTool = anthropic && Array.isArray(message.content) ? message.content.at(-1)?.cache_control : null;
+      return { role: 'tool', content: [{ type: 'tool-result', toolCallId: message.tool_call_id, toolName, output: { type: 'text', value: typeof message.content === 'string' ? message.content : testi ?? JSON.stringify(message.content) } }], ...(puntoTool ? { providerOptions: { anthropic: { cacheControl: { ...puntoTool } } } } : {}) };
     }
     const state = message.talos_provider_state;
     if (message.role === 'assistant' && state?.version === 1 && state.provider === provider && state.model === model && Array.isArray(state.content)) {
@@ -67,7 +74,8 @@ export function toNativeMessages(messages, { provider, model }) {
       } else throw new Error(`Content not supported by the provider: ${part.type}`);
     }
     for (const call of message.tool_calls ?? []) content.push({ type: 'tool-call', toolCallId: call.id, toolName: call.function.name, input: argomentiVuoti(call.function.arguments) ? {} : JSON.parse(call.function.arguments) });
-    return { role: message.role, content };
+    const punto = anthropic && Array.isArray(message.content) ? message.content.at(-1)?.cache_control : null; // RIV14-3
+    return { role: message.role, content, ...(punto ? { providerOptions: { anthropic: { cacheControl: { ...punto } } } } : {}) };
   });
 }
 

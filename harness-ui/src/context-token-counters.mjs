@@ -2,6 +2,8 @@ import { createHash } from 'node:crypto';
 import { buildPreparedProviderRequest } from './context-provider-adapter.mjs';
 import { adattaRichiestaConDescrizioneComando, normalizzaReasoningPerModello } from './runtime-owner-adapter.mjs';
 import { ID_NATIVI_SDK, REGISTRO_FORNITORI } from './provider-registry.mjs';
+import { imageMessageContent } from './chat-image-attachments.mjs';
+import { conImmaginiDegliAttrezzi, senzaCampoImmagini } from './kernel/immagine-da-guardare.mjs';
 
 const fail = (code, message) => { throw Object.assign(new Error(message), { code }); };
 /* ⛔ 12/09 — P-A: era il decimo dei tredici elenchi, tre indirizzi ricopiati a mano. Se uno
@@ -16,6 +18,14 @@ export async function buildPreparedDesktopContextRequest({ messages, tools = [],
   signal?.throwIfAborted();
   const chat = Object.hasOwn(model, 'requestOptions');
   let preparedMessages = structuredClone(messages);
+  /* view_image (owner 27/10/2026, CLI punto 1): il corpo CONTATO è il corpo SPEDITO — l'immagine guardata si traduce come all'invio del
+     nucleo (`conImmaginiDegliAttrezzi`), così si conta; un modello che il catalogo dice cieco la riceve come nota, un catalogo che non
+     sa conta l'immagine (meglio contare un po' di più che sfondare la finestra). Un riassunto non porta immagini: solo il campo via. */
+  if (chat) {
+    const capacita = await Promise.resolve(readModelCapabilities?.(model.model)).catch(() => null);
+    const vede = Array.isArray(capacita?.inputModalities) && capacita.inputModalities.length ? capacita.inputModalities.includes('image') : true;
+    preparedMessages = conImmaginiDegliAttrezzi(preparedMessages, { vedeImmagini: vede, contenutoImmagini: imageMessageContent });
+  } else preparedMessages = senzaCampoImmagini(preparedMessages);
   if (chat && resolveImages) preparedMessages = await resolveImages(preparedMessages);
   signal?.throwIfAborted();
   let preparedTools = structuredClone(tools);
