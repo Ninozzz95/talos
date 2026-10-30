@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { apriPiegaContesto } from '../fixtures/pannello-contesto-prove.mjs';
 
 /*
  * C1 (owner 10/10/2026) — la scheda Contesto della colonna destra, sulle decisioni dell'owner (AskUserQuestion, tutte «Recommended»):
@@ -72,6 +73,8 @@ async function apri(page, chiave, { tema = 'dark', larghezza = 1920, altezza = 1
     const percorso = new URL(req.url()).pathname;
     const m = percorso.match(/\/api\/v1\/sessions\/sc-(\w+)-[a-z0-9]+\/([\w-]+)$/);
     if (impostazioni && req.method() === 'POST' && /\/settings$/.test(percorso)) return impostazioni(route); // il cambio di modello, contato da chi chiama
+    /* 29/10/2026 (owner): scegliere un modello lo mette fra gli Usati di recente, SUL SERVER — scrittura legittima, risposta finta */
+    if (impostazioni && req.method() === 'POST' && percorso === '/api/v1/model-preferences') return route.fulfill({ json: busta({ preferiti: [], recenti: [] }) });
     if (req.method() !== 'GET') { contatore.nonGet += 1; contatore.scritture = [...(contatore.scritture ?? []), percorso]; return route.abort(); }
     // il Context Manager legge anche le versioni del motore (`listContextVersions`)
     const v = percorso.match(/\/api\/v1\/sessions\/(sc-motore-[a-z0-9]+)\/context\/versions$/);
@@ -107,22 +110,31 @@ async function apri(page, chiave, { tema = 'dark', larghezza = 1920, altezza = 1
   return contatore;
 }
 
-const finestra = (page) => page.locator('#railContesto [data-c="InspectorCard"]').filter({ hasText: 'Finestra del contesto' });
+/* pannello v2 (owner 29/10/2026): le righe di oggi delle card «Finestra del contesto» e «Compattazioni» stanno in due pieghe della
+   scheda v2 (chiuse di serie, si ricordano), con le stesse parole; il limite che agisce sta nel conto della testa («98k di 150k»). */
+const finestra = (page) => page.locator('#railContesto .pn-piega').filter({ has: page.locator('[data-controllo="piega-dettagli-finestra"]') });
+const compattazioni = (page) => page.locator('#railContesto .pn-piega').filter({ has: page.locator('[data-controllo="piega-dettagli-compattazioni"]') });
+const contoTesta = (page) => page.locator('#railContesto .pn-testa .pn-conto');
+async function menuTesta(page, voce) {
+  await page.locator('#railContesto [data-controllo="menu-testa"]').click();
+  await page.locator('.ft-actions-menu [role="menuitem"]', { hasText: voce }).click();
+}
 const riga = (card, etichetta) => card.locator('.talos-kv').filter({ has: card.page().locator('.talos-kv__k', { hasText: etichetta }) }).locator('.talos-kv__v');
 
 test.describe('C1 — la scheda Contesto', () => {
-  test('C1-SCHEDA-01 legacy — il limite che agisce (150k, 75% della finestra), la barra della richiesta vera, le compattazioni', async ({ page }) => {
+  test('C1-SCHEDA-01 legacy — il limite che agisce (150k, 75% della finestra), le categorie della richiesta vera, le compattazioni', async ({ page }) => {
     const c = await apri(page, 'legacy');
+    await expect(contoTesta(page)).toContainText('150k', { timeout: 10_000 });
+    await expect(page.locator('#railContesto [data-sezione="categorie"]')).toBeVisible(); // al posto della barra: una riga per categoria
+    await apriPiegaContesto(page, 'dettagli-finestra');
     const f = finestra(page);
-    await expect(f.locator('.talos-inspector-card__head > span')).toHaveText('150k', { timeout: 10_000 });
     await expect(f.locator('[data-contesto-perche]')).toContainText('75%');
-    await expect(f.locator('#contestoSchedaBarra')).toBeVisible();
-    await expect(f.locator('#contestoSchedaBarra .talos-contesto__fetta')).toHaveCount(6);
     await expect(riga(f, 'Attrezzi MCP')).toHaveText('2,4k · 1,6%');
     await expect(riga(f, 'Attrezzi MCP')).toHaveClass(/talos-measure--estimate/);
     await expect(riga(f, 'In uso (misurato)')).toContainText('98');
     await expect(riga(f, 'Prima della compattazione')).toContainText('52');
-    const comp = page.locator('#contestoCompattazioni');
+    await apriPiegaContesto(page, 'dettagli-compattazioni');
+    const comp = compattazioni(page);
     await expect(riga(comp, 'Compattazioni')).toHaveText('1');
     await expect(riga(comp, "Dopo l'ultima")).toContainText('151k → 18k');
     await expect(riga(comp, 'In questa richiesta')).toContainText('3 messe da parte · 1 accorciate');
@@ -130,47 +142,45 @@ test.describe('C1 — la scheda Contesto', () => {
     expect(c.nonGet).toBe(0);
   });
 
-  test('C1-SCHEDA-02 legacy — «Mostra la richiesta inviata» e «Mostra cosa ha tenuto» aprono le finestre coi dati veri', async ({ page }) => {
+  test('C1-SCHEDA-02 legacy — «Vedi la richiesta spedita» e «Cosa ha tenuto» (dal «⋯» della testa) aprono le finestre coi dati veri', async ({ page }) => {
     const c = await apri(page, 'legacy');
-    await page.locator('#contestoAltro').click();
-    await page.locator('#contestoRichiesta').click();
+    await menuTesta(page, 'Vedi la richiesta spedita');
     const modale = page.locator('dialog[open], [role="dialog"]').filter({ hasText: 'La richiesta inviata al modello' }).last();
     await expect(modale).toContainText('You are TALOS, a coding agent.');
     await expect(modale).toContainText('→ read_file({"path":"src/cache.mjs"})');
     await expect(modale).toContainText('[immagine non mostrata]');
     await expect(modale).toContainText('mcp__github__search');
     await page.keyboard.press('Escape');
-    await page.locator('#compattazioniAltro').click();
-    await page.locator('#compattazioniTenuto').click();
+    await menuTesta(page, 'Cosa ha tenuto');
     const tenuto = page.locator('dialog[open], [role="dialog"]').filter({ hasText: 'Cosa ha tenuto la compattazione' }).last();
     await expect(tenuto).toContainText('Riassunto legacy: cache preparata.');
     await expect(tenuto).toContainText('src/cache.mjs');
     expect(c.nonGet).toBe(0);
   });
 
-  test('C1-SCHEDA-03 — «Compatta ora…» chiede conferma, e annullando non parte niente', async ({ page }) => {
+  /* pannello v2: la conferma sta NELLA testa della scheda, non in una modale (le conferme del pannello, decisione owner 2) */
+  test('C1-SCHEDA-03 — «Riassumi adesso» chiede conferma, e annullando non parte niente', async ({ page }) => {
     const c = await apri(page, 'legacy');
-    await page.locator('#contestoAltro').click();
-    await page.locator('#contestoCompatta').click();
-    const conferma = page.locator('dialog[open], [role="dialog"], [role="alertdialog"]').filter({ hasText: 'Compattare adesso la conversazione?' }).last();
-    await expect(conferma).toBeVisible();
-    await page.keyboard.press('Escape');
-    await expect(conferma).toBeHidden();
+    await menuTesta(page, 'Riassumi adesso');
+    const conferma = page.locator('#railContesto .pn-conferma--testa');
+    await expect(conferma).toContainText('Riassumere adesso la conversazione?');
+    await conferma.locator('[data-controllo="conferma-no"]').click();
+    await expect(conferma).toHaveCount(0);
     await page.waitForTimeout(300);
     expect(c.nonGet).toBe(0);
   });
 
   test('C1-SCHEDA-04 motore — il limite è il budget del motore (130k), e «cosa ha tenuto» viene dai CAMPI della versione', async ({ page }) => {
     const c = await apri(page, 'motore');
-    const f = finestra(page);
-    await expect(f.locator('.talos-inspector-card__head > span')).toHaveText('130,2k', { timeout: 10_000 });
-    await expect(f.locator('[data-contesto-perche]')).toContainText('motore del contesto');
-    const comp = page.locator('#contestoCompattazioni');
+    await expect(contoTesta(page)).toContainText('130,2k', { timeout: 10_000 });
+    await apriPiegaContesto(page, 'dettagli-finestra');
+    await expect(finestra(page).locator('[data-contesto-perche]')).toContainText('motore del contesto');
+    await apriPiegaContesto(page, 'dettagli-compattazioni');
+    const comp = compattazioni(page);
     await expect(riga(comp, 'Compattazioni')).toHaveText('1');
     await expect(riga(comp, 'Le tue richieste alla lettera')).toHaveText('2 di 3');
     await expect(riga(comp, 'Fatti protetti')).toHaveText('1');
-    await page.locator('#compattazioniAltro').click();
-    await page.locator('#compattazioniTenuto').click();
+    await menuTesta(page, 'Cosa ha tenuto');
     const tenuto = page.locator('dialog[open], [role="dialog"]').filter({ hasText: 'Cosa ha tenuto la compattazione' }).last();
     await expect(tenuto).toContainText('Non toccare i file di rilascio');
     await expect(tenuto).toContainText('Il progetto usa pnpm');
@@ -179,75 +189,52 @@ test.describe('C1 — la scheda Contesto', () => {
     expect(c.nonGet).toBe(0);
   });
 
-  /* Owner 10/10/2026: «collassabili, compresse di default con dettagli minimi dentro la versione compressa, e scrollabili se superano
-     l'altezza della pagina»; la scelta di chi apre si ricorda (AskUserQuestion, «Sì, ricordata»). */
-  test('C1-SCHEDA-05 — le quattro card nascono compresse con i dettagli minimi, e una aperta resta aperta dopo il ricaricamento', async ({ page }) => {
+  /* Owner 10/10/2026: «compresse di default con dettagli minimi», la scelta di chi apre si ricorda. Nel v2 le pieghe nascono chiuse
+     col loro sotto-titolo (il perché del limite, «2 giri · 1 messaggio»), e una aperta resta aperta dopo il ricaricamento. La card
+     «Ambiente» non è più qui: è in Git, «Dettagli del repository» (decisione owner 1). */
+  test('C1-SCHEDA-05 — le pieghe nascono chiuse coi dettagli minimi, e una aperta resta aperta dopo il ricaricamento', async ({ page }) => {
     const c = await apri(page, 'legacy');
-    const card = (k) => page.locator(`#railContesto [data-comprimibile="${k}"]`);
-    for (const k of ['ambiente', 'finestra', 'compattazioni', 'giri']) {
-      await expect(card(k)).toHaveAttribute('data-compressa', '');
-      await expect(card(k).locator('.talos-inspector-card__comprimi')).toHaveAttribute('aria-expanded', 'false');
-      await expect(card(k).locator('.talos-kv').first()).toBeHidden();
-      if (k !== 'ambiente') await expect(card(k).locator('[data-anteprima]')).toBeVisible();
-    }
-    await expect(card('ambiente').locator('[data-anteprima]')).toHaveText(''); // la scena non ha ramo: niente, non un «—»
-    await expect(card('finestra').locator('[data-anteprima]')).toHaveText('98k / 150k');
-    await expect(card('finestra').locator('#contestoSchedaBarra')).toBeVisible(); // la barra è il dettaglio minimo della Finestra
-    await expect(card('finestra').locator('#contestoAltro')).toBeVisible(); // le azioni restano fuori dal pulsante
-    await expect(card('compattazioni').locator('[data-anteprima]')).toHaveText(/^1 · /);
-    // owner 10/10/2026: le due grandezze col loro nome (prima «3 giri» sommava i giri di TALOS e il messaggio della persona)
-    await expect(card('giri').locator('[data-anteprima]')).toHaveText('2 giri · 1 messaggio');
-    // si apre: le righe compaiono, l'anteprima sparisce (lo dicono le righe)
-    await card('finestra').locator('.talos-inspector-card__comprimi').click();
-    await expect(card('finestra')).not.toHaveAttribute('data-compressa', '');
-    await expect(card('finestra').locator('.talos-inspector-card__comprimi')).toHaveAttribute('aria-expanded', 'true');
-    await expect(card('finestra').locator('.talos-kv').first()).toBeVisible();
-    await expect(card('finestra').locator('[data-anteprima]')).toBeHidden();
-    // si richiude, e si riapre
-    await card('finestra').locator('.talos-inspector-card__comprimi').click();
-    await expect(card('finestra')).toHaveAttribute('data-compressa', '');
-    await card('finestra').locator('.talos-inspector-card__comprimi').click();
+    const piega = (k) => page.locator(`#railContesto [data-controllo="piega-${k}"]`);
+    for (const k of ['dettagli-finestra', 'dettagli-compattazioni', 'giri']) await expect(piega(k)).toHaveAttribute('aria-expanded', 'false');
+    await expect(page.locator('#railContesto .talos-kv')).toHaveCount(0);
+    await expect(piega('giri')).toContainText('2 giri · 1 messaggio');
+    await expect(piega('dettagli-finestra')).toContainText('75%');
+    await expect(page.locator('#railContesto [data-comprimibile="ambiente"]')).toHaveCount(0);
+    await piega('dettagli-finestra').click();
+    await expect(piega('dettagli-finestra')).toHaveAttribute('aria-expanded', 'true');
+    await expect(finestra(page).locator('.talos-kv').first()).toBeVisible();
+    await piega('dettagli-finestra').click();
+    await expect(piega('dettagli-finestra')).toHaveAttribute('aria-expanded', 'false');
+    await piega('dettagli-finestra').click();
     expect(c.nonGet).toBe(0);
-    // ricaricando resta aperta, le altre restano compresse (la colonna può non essere a schermo: si leggono gli attributi)
     await page.reload();
     await page.waitForFunction(() => window.__talosHarnessUiRuntime);
-    await expect(card('finestra')).not.toHaveAttribute('data-compressa', '');
-    await expect(card('finestra').locator('.talos-inspector-card__comprimi')).toHaveAttribute('aria-expanded', 'true');
-    await expect(card('ambiente')).toHaveAttribute('data-compressa', '');
+    await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 10_000 });
+    await page.evaluate(({ id, modello }) => window.__talosHarnessUiRuntime.passaASessione(id, 'workspace', 'Scheda del contesto', modello, { conclusa: true, modello }), { id: 'sc-legacy-a1', modello: MODELLO });
+    await page.waitForFunction(() => window.__talosHarnessUiRuntime.realSessionState.inRigiocata === false, null, { timeout: 15_000 });
+    await page.locator('#railTabs [data-rail="contesto"]').click();
+    await expect(piega('dettagli-finestra')).toHaveAttribute('aria-expanded', 'true');
+    await expect(piega('dettagli-compattazioni')).toHaveAttribute('aria-expanded', 'false');
   });
 
   /* ⛔ Visto sul 4174 il 10/10, su una sessione vera da 200 giri: «417,4k / 750k» in 82 px su 86 — l'ultima cifra tagliata (un
      numero tagliato è un numero sbagliato, BC-58). Le scene di prova avevano «98k / 150k», che ci stava. Il numero non cede mai:
      se manca spazio cede il titolo, coi puntini, e il titolo intero resta nel suggerimento. */
-  test('C1-SCHEDA-09 — a long numeric preview is never cut; the title yields first, with its full text as a tooltip', async ({ page }) => {
+  /* ⛔ Visto sul 4174 il 10/10: «417,4k / 750k» tagliato. Nel v2 il numero sta nel conto della testa, che VA A CAPO e non taglia mai. */
+  test('C1-SCHEDA-09 — a long number in the header count is never cut', async ({ page }) => {
     const c = await apri(page, 'legacy');
-    const card = page.locator('#railContesto [data-comprimibile="finestra"]');
-    await expect(card).toHaveAttribute('data-compressa', '');
-    for (const valore of ['417,4k / 750k', '1,24M / 1,5M']) {
-      const m = await card.evaluate((el, v) => {
-        const a = el.querySelector('[data-anteprima]');
-        a.textContent = v; // la misura riguarda il CSS della testata, qualunque sia il numero che arriva
-        const titolo = el.querySelector('.talos-inspector-card__comprimi b');
-        return { anteprimaTagliata: a.scrollWidth > a.clientWidth + 1, larghezza: a.clientWidth, serve: a.scrollWidth, titoloSuggerimento: titolo.getAttribute('title') };
+    await expect(contoTesta(page)).toContainText('150k', { timeout: 10_000 });
+    for (const valore of ['417,4k di 750k prima del riassunto', '1,24M di 1,5M prima del riassunto · 12 riassunti · questo invio: 23 di 24']) {
+      const m = await contoTesta(page).evaluate((el, v) => {
+        el.textContent = v;
+        return { tagliato: el.scrollWidth > el.clientWidth + 1, alto: el.getBoundingClientRect().height };
       }, valore);
-      expect(m.anteprimaTagliata, `${valore}: ${m.serve}px needed, ${m.larghezza}px given`).toBe(false);
-      expect(m.titoloSuggerimento).toBe('Finestra del contesto');
+      expect(m.tagliato, `${valore}: ${JSON.stringify(m)}`).toBe(false);
     }
-    // al contrario: un NOME lungo (il ramo) cede lui coi puntini, e il titolo «Ambiente» resta leggibile intero
-    const ambiente = await page.locator('#railContesto [data-comprimibile="ambiente"]').evaluate((el) => {
-      const a = el.querySelector('[data-anteprima]');
-      a.textContent = 'feature/a-very-long-branch-name-that-goes-on-and-on-without-end';
-      const t = el.querySelector('.talos-inspector-card__comprimi b');
-      return { titoloTagliato: t.scrollWidth > t.clientWidth + 1, anteprimaCede: a.scrollWidth > a.clientWidth + 1 };
-    });
-    expect(ambiente).toEqual({ titoloTagliato: false, anteprimaCede: true });
     expect(c.nonGet).toBe(0);
   });
 
-  /* ⛔ Visto sul 4174 il 10/10 sera, subito dopo un riavvio: `GET /compaction-policy` risponde col RIPIEGO (fonte `fallback`, 200k)
-     finché il server non ha letto le rotte del fornitore, e la scheda scriveva «417,4k / 200k» come il limite vero — poi, a pagina
-     ricaricata, «/ 750k». Come Hermes («the fallback is never cached», `agent/model_metadata.py:255`): il ripiego si dichiara
-     («~») e si rilegge da solo, senza che la persona ricarichi. */
+  /* ⛔ Visto sul 4174 il 10/10 sera: il limite di RIPIEGO del server scritto come quello vero. Si dichiara con «~» e si rilegge da solo. */
   test('C1-SCHEDA-10 — a fallback limit is marked «~» and re-read until the real one arrives, without a reload', async ({ page }) => {
     let letture = 0;
     const c = await apri(page, 'legacy', { politica: (route) => {
@@ -256,30 +243,26 @@ test.describe('C1 — la scheda Contesto', () => {
         ? { windowTokens: null, triggerTokens: 200_000, warningTokens: 160_000, source: 'fallback' }
         : { windowTokens: 1_000_000, triggerTokens: 750_000, warningTokens: 600_000, source: 'route-minimum' }) });
     } });
-    const anteprima = page.locator('#railContesto [data-comprimibile="finestra"] [data-anteprima]');
-    await expect(anteprima).toHaveText('98k / ~200k');
-    await expect(anteprima).toHaveText('98k / 750k', { timeout: 15_000 });
+    await expect(contoTesta(page)).toContainText('~200k');
+    await expect(contoTesta(page)).toContainText('750k', { timeout: 15_000 });
+    await expect(contoTesta(page)).not.toContainText('~');
     const viste = letture;
-    // al contrario: con la politica vera non si rilegge più
     await page.waitForTimeout(4000);
     expect(letture).toBe(viste);
     expect(c.nonGet).toBe(0);
   });
 
-  test('C1-SCHEDA-06 — una card più alta della pagina scorre da sola, con la testata sempre in vista', async ({ page }) => {
+  /* pannello v2 (owner 29/10/2026: «ogni sezione a pagine, la scheda sta nello schermo»): l'indice più alto della pagina non scorre più
+     dentro la sua card — va a pagine, e la colonna non scorre. Stesso confine di prima: 40 giri si raggiungono tutti, la testa resta. */
+  test('C1-SCHEDA-06 — un indice più alto della pagina va a pagine: la colonna non scorre e i 40 giri si raggiungono', async ({ page }) => {
     await apri(page, 'lunga');
-    const giri = page.locator('#railContesto [data-comprimibile="giri"]');
-    await giri.locator('.talos-inspector-card__comprimi').click();
-    await expect.poll(() => giri.locator('.talos-kv').count()).toBeGreaterThanOrEqual(40);
-    const m = await giri.evaluate((n) => ({ alta: n.scrollHeight, vista: n.clientHeight, pagina: window.innerHeight, overflow: getComputedStyle(n).overflowY }));
-    expect(m.overflow).toBe('auto');
-    expect(m.vista).toBeLessThan(m.pagina);
-    expect(m.alta).toBeGreaterThan(m.vista);
-    await giri.evaluate((n) => { n.scrollTop = n.scrollHeight; });
-    const testa = giri.locator('.talos-inspector-card__head');
-    const [rc, rt] = await Promise.all([giri.boundingBox(), testa.boundingBox()]);
-    expect(Math.abs(rt.y - rc.y)).toBeLessThan(2); // in cima alla card anche in fondo allo scorrimento
-    await expect(giri.locator('.talos-inspector-card__comprimi')).toBeInViewport();
+    await apriPiegaContesto(page, 'giri');
+    const barra = page.locator('#railContesto [data-pager="piega-giri"]');
+    await expect(barra).toBeVisible();
+    await expect(barra).toContainText('di 41'); // 40 giri di TALOS + il primo messaggio della persona
+    const m = await page.locator('#railContesto').evaluate((n) => ({ alta: n.scrollHeight, vista: n.clientHeight }));
+    expect(m.alta, JSON.stringify(m)).toBeLessThanOrEqual(m.vista + 1);
+    await expect(page.locator('#railContesto [data-controllo="piega-giri"]')).toBeInViewport();
   });
 
   /* Review del bugfixer (Y2): una «fine» e poi un «annullata» DAL VIVO fanno partire due letture di `compaction-state`; la più
@@ -297,8 +280,7 @@ test.describe('C1 — la scheda Contesto', () => {
     const c = await apri(page, 'ordine', { dopo, stato });
     await expect.poll(() => chiamate, { timeout: 10_000 }).toBeGreaterThanOrEqual(3);
     await page.waitForTimeout(2_000); // le due lente hanno risposto, DOPO la veloce
-    await page.locator('#compattazioniAltro').click();
-    await page.locator('#compattazioniTenuto').click();
+    await menuTesta(page, 'Cosa ha tenuto');
     const tenuto = page.locator('dialog[open], [role="dialog"]').filter({ hasText: 'Cosa ha tenuto la compattazione' }).last();
     await expect(tenuto).toContainText('NUOVO');
     await expect(tenuto).not.toContainText('VECCHIO');
@@ -326,14 +308,12 @@ test.describe('C1 — la scheda Contesto', () => {
       return route.fulfill({ json: busta({ updated: true }) });
     };
     const c = await apri(page, 'motore', { impostazioni, modelli: catalogo, motore });
-    const f = finestra(page);
-    await f.locator('.talos-inspector-card__comprimi').click();
-    await expect(f.locator('.talos-inspector-card__head > span')).toHaveText('130,2k', { timeout: 10_000 });
+    await expect(contoTesta(page)).toContainText('130,2k', { timeout: 10_000 });
     await page.locator('[data-open-sheet="model"]').click();
     await page.locator('.talos-dialog input.sheet-input').fill('finestra-grande');
-    await page.getByRole('option').filter({ hasText: 'prova/finestra-grande' }).click();
+    await page.getByRole('option').filter({ hasText: 'prova/finestra-grande' }).dblclick(); // 29/10/2026: nel velo un clic segna, il doppio clic sceglie
     await expect.poll(() => scritture.map((w) => w.modello)).toEqual(['prova/finestra-grande']);
-    await expect(f.locator('.talos-inspector-card__head > span')).toHaveText('688,5k', { timeout: 5_000 });
+    await expect(contoTesta(page)).toContainText('688,5k', { timeout: 5_000 });
     expect(c.nonGet).toBe(0);
   });
 
@@ -510,11 +490,10 @@ test.describe('C1 — la scheda Contesto', () => {
 
   /* Review del bugfixer (punto 3): la testata sticky ha un fondo pieno sopra il gradiente della card; foto di una card SCORSA. */
   for (const tema of ['dark', 'light']) {
-    test(`C1-SCHEDA-FOTO card scorsa ${tema} 1920`, async ({ page }) => {
+    test(`C1-SCHEDA-FOTO indice a pagine ${tema} 1920`, async ({ page }) => {
       await apri(page, 'lunga', { tema });
-      const giri = page.locator('#railContesto [data-comprimibile="giri"]');
-      await giri.locator('.talos-inspector-card__comprimi').click();
-      await giri.evaluate((n) => { n.scrollTop = Math.floor(n.scrollHeight / 2); });
+      await apriPiegaContesto(page, 'giri'); // pannello v2: l'indice va a pagine; la foto mostra la seconda
+      await page.locator('#railContesto [data-controllo="pagina-dopo-piega-giri"]').click();
       await page.waitForTimeout(300);
       await page.screenshot({ path: `artifacts/c1-scheda-contesto-scorsa-1920-${tema}.png` });
     });
@@ -526,8 +505,8 @@ test.describe('C1 — la scheda Contesto', () => {
         await apri(page, scena, { tema });
         await page.waitForTimeout(500);
         await page.screenshot({ path: `artifacts/c1-scheda-contesto-${scena}-1920-${tema}-compresse.png` });
-        for (const k of ['finestra', 'compattazioni']) await page.locator(`#railContesto [data-comprimibile="${k}"] .talos-inspector-card__comprimi`).click();
-        await expect(page.locator('#contestoCompattazioni .talos-kv').first()).toBeVisible();
+        for (const k of ['dettagli-finestra', 'dettagli-compattazioni']) await apriPiegaContesto(page, k);
+        await expect(compattazioni(page).locator('.talos-kv').first()).toBeVisible();
         await page.waitForTimeout(400);
         await page.screenshot({ path: `artifacts/c1-scheda-contesto-${scena}-1920-${tema}.png` });
       });

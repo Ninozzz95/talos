@@ -62,7 +62,9 @@ test('C1-SERIE-04: the default profile follows the catalog window, never above c
   assert.equal((await p('grande/un-milione')).windowTokens, 266_667, 'a 1M model is presented at cap/0.75: the engine triggers near the legacy cap');
   assert.equal((await p('sconosciuto/x')).windowTokens, 266_667, 'unknown window: the prudential one');
   assert.equal((await p('grande/un-milione', { TALOS_COMPACTION_TOKEN_CAP: '600000' })).windowTokens, 800_000, 'the explicit cap moves it');
-  assert.equal((await p('grande/un-milione')).responseReserve, 16_384);
+  /* CONTRATTO-R30-R31 (owner 30/10/2026): la riserva per la risposta arriva a 32.000 (era 16.384) — un ottavo della finestra sotto */
+  assert.equal((await p('grande/un-milione')).responseReserve, 32_000);
+  assert.equal((await p('z-ai/glm-5.3-flash')).responseReserve, 25_000, 'un ottavo dei 200.000 di GLM');
   const locale = (stato) => resolveDesktopDefaultProfile({ provider: 'local', model: 'gemma', finestraFn, readLocalRuntime: async () => stato });
   assert.equal((await locale({ state: 'ready', modelId: 'gemma', windowTokens: 8192 })).windowTokens, 8192);
   await assert.rejects(() => locale({ state: 'ready', modelId: 'altro', windowTokens: 8192 }), { code: 'CTX_RUNTIME_PROFILE_MISMATCH' });

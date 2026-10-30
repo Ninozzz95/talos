@@ -184,3 +184,72 @@ test('C1-RIS-07 — WSL, for real: a marked busy command inside the distro is fo
   }
   assert.ok(COPIONE_WSL.includes('TALOS_CMD_ID='));
 });
+
+/*
+ * ⭐ P-05 (pannello v2, owner 29/10/2026) — le PORTE IN ASCOLTO dell'albero di un comando. ⛔ Su questa macchina
+ *   `-State Listen` ha mentito (78 socket in ascolto con State 0, misurato il 29/10): si prova sul dato vero, e al contrario.
+ */
+import { portePerPid, portePerPidDaProc, pidDellAlbero } from '../src/risorse-processi.mjs';
+
+test('P05-01 — la riga PORTE del lettore di Windows: coppie [pid, porta], una coppia sola, righe rotte e porte fuori misura', () => {
+  assert.deepEqual([...portePerPid('PORTE [[10,5173],[10,5174],[11,8080]]').get(10)], [5173, 5174]);
+  assert.deepEqual([...portePerPid('PORTE [12,3000]').get(12)], [3000], 'ConvertTo-Json appiattisce una coppia sola');
+  assert.equal(portePerPid('PORTE [[0,80],[5,0],[6,70000],["x",1]]').size, 0, 'pid e porte non validi si scartano');
+  assert.equal(portePerPid('PORTE {rotta'), null, 'illeggibile = non misurato (null), mai «nessuna porta» inventato');
+  assert.equal(portePerPid(undefined), null, 'senza riga PORTE (lettore vecchio) = non misurato');
+  assert.equal(portePerPid('PORTE []').size, 0, 'misurato e vuoto: nessuna porta');
+});
+
+test('P05-02 — Linux: stato 0A di /proc/net/tcp{,6} e gli inode nei fd dei PID chiesti; una connessione aperta (01) non è un ascolto', () => {
+  const tcp = '  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n'
+    + '   0: 0100007F:1435 00000000:0000 0A 00000000:00000000 00:00000000 00000000  1000        0 111 1 0 100 0 0 10 0\n'
+    + '   1: 0100007F:C350 0100007F:1435 01 00000000:00000000 00:00000000 00000000  1000        0 222 1 0 100 0 0 10 0\n';
+  const tcp6 = '  sl  local_address remote_address st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n'
+    + '   0: 00000000000000000000000000000000:1F90 00000000000000000000000000000000:0000 0A 00000000:00000000 00:00000000 00000000  1000        0 333 1 0 100 0 0 10 0\n';
+  const fd = { 10: ['3', '4'], 11: ['5'], 12: ['6'] };
+  const link = { '/proc/10/fd/3': 'socket:[111]', '/proc/10/fd/4': 'pipe:[9]', '/proc/11/fd/5': 'socket:[222]', '/proc/12/fd/6': 'socket:[333]' };
+  const fsFinto = {
+    readFileSync: (p) => ({ '/proc/net/tcp': tcp, '/proc/net/tcp6': tcp6 }[p] ?? (() => { throw new Error('ENOENT'); })()),
+    readdirSync: (p) => fd[/\/proc\/(\d+)\/fd/u.exec(p)?.[1]] ?? (() => { throw new Error('ENOENT'); })(),
+    readlinkSync: (p) => link[p] ?? (() => { throw new Error('ENOENT'); })(),
+  };
+  const m = portePerPidDaProc(new Set([10, 11, 12, 99]), fsFinto);
+  assert.deepEqual([...m.get(10)], [5173]);
+  assert.equal(m.has(11), false, 'AL CONTRARIO: la connessione stabilita (01) del client non è una porta in ascolto');
+  assert.deepEqual([...m.get(12)], [8080], 'anche IPv6');
+});
+
+test('P05-03 — l’albero: le porte dei discendenti salgono al comando che li ha lanciati', () => {
+  const t = tabellaDaRighe([[100, 1, 1, 1, 1000], [101, 100, 1, 1, 1010], [200, 1, 1, 1, 1000]]);
+  assert.deepEqual([...pidDellAlbero(t, 100)].sort(), [100, 101]);
+  assert.equal(pidDellAlbero(t, 999), null);
+});
+
+test('P05-04 — sul dato VERO (Windows): un server in ascolto ha la sua porta; AL CONTRARIO un client connesso no, e un socket solo legato (Bound) nemmeno', { skip: process.platform === 'win32' ? false : 'solo Windows', timeout: 90_000 }, async () => {
+  const server = spawn(process.execPath, ['-e', "const s=require('net').createServer(()=>{}).listen(0,'127.0.0.1',()=>{console.log(s.address().port)});setTimeout(()=>{},60000)"], { windowsHide: true });
+  const porta = await new Promise((risolvi, rifiuta) => { server.stdout.once('data', (b) => risolvi(Number(String(b).trim()))); server.once('error', rifiuta); });
+  const client = spawn(process.execPath, ['-e', `const c=require('net').connect(${porta},'127.0.0.1',()=>console.log(c.localPort));setTimeout(()=>{},60000)`], { windowsHide: true });
+  const portaClient = await new Promise((risolvi) => client.stdout.once('data', (b) => risolvi(Number(String(b).trim()))));
+  const c = creaCampionatoreRisorse({ spentoDopoMs: 60_000, attesaMassimaMs: 45_000 });
+  try {
+    const m = await c.misura({ pid: [server.pid, client.pid] });
+    assert.ok(Array.isArray(m.perPid.get(server.pid)?.porte), 'le porte sono misurate (non null)');
+    assert.ok(m.perPid.get(server.pid).porte.includes(porta), `il server ascolta su ${porta}: ${JSON.stringify(m.perPid.get(server.pid).porte)}`);
+    assert.ok(!m.perPid.get(client.pid).porte.includes(portaClient), `AL CONTRARIO: la porta locale ${portaClient} del client non è un ascolto`);
+    assert.deepEqual(m.perPid.get(client.pid).porte, [], 'il client non ascolta niente');
+    /* un server legato a 0.0.0.0 senza connessioni: lo stesso stato 0 del fantasma del client, e QUESTO è un ascolto */
+    const largo = spawn(process.execPath, ['-e', "const s=require('net').createServer(()=>{}).listen(0,'0.0.0.0',()=>{console.log(s.address().port)});setTimeout(()=>{},60000)"], { windowsHide: true });
+    try {
+      const portaLarga = await new Promise((risolvi) => largo.stdout.once('data', (x) => risolvi(Number(String(x).trim()))));
+      const m2 = await c.misura({ pid: [largo.pid] });
+      assert.ok(m2.perPid.get(largo.pid).porte.includes(portaLarga), `il server su 0.0.0.0 ascolta su ${portaLarga}: ${JSON.stringify(m2.perPid.get(largo.pid).porte)}`);
+    } finally { largo.kill(); }
+  } finally {
+    server.kill(); client.kill(); c.chiudi();
+  }
+});
+
+test('P05-05 — AL CONTRARIO: senza /proc/net/tcp leggibile le porte NON sono misurate (null), non «nessuna porta»', () => {
+  const rotto = { readFileSync: () => { throw new Error('EACCES'); }, readdirSync: () => [], readlinkSync: () => '' };
+  assert.equal(portePerPidDaProc(new Set([1]), rotto), null);
+});

@@ -26,7 +26,8 @@ test('AND-01 — su Android CPU e memoria si leggono da /proc come su Linux (`me
   assert.equal(c.metodo, 'proc');
   const { metodo, perPid } = await c.misura({ pid: [10] });
   assert.equal(metodo, 'proc');
-  assert.deepEqual(perPid.get(10), { cpuPercento: null, memoriaByte: 500 * 4096, processi: 2 });
+  /* P-05 (29/10/2026): senza /proc/net/tcp leggibile le porte non sono misurate (null), non «nessuna» */
+  assert.deepEqual(perPid.get(10), { cpuPercento: null, memoriaByte: 500 * 4096, processi: 2, porte: null });
   c.chiudi();
   // dove non si sa misurare resta onesto: niente metodo, niente numeri
   assert.equal(creaCampionatoreRisorse({ piattaforma: 'aix' }).metodo, null);

@@ -248,6 +248,26 @@ export function normalizzaPercorso(cartella, percorso) {
  * @param {string} testo uscita grezza, già decodificata una volta sola
  * @returns {Array<{x:string,y:string,percorsoRepo:string,daRepo:string|null}>}
  */
+/**
+ * ⭐ G-05 (pannello v2, owner 29/10/2026) — `git diff HEAD --numstat -z` in `percorsoRepo → { aggiunte, rimozioni }`. Forma (git-scm
+ * «diff-format», `--numstat -z`, letto il 29/10/2026): «aggiunte TAB rimozioni TAB percorso NUL»; per un rinomino il percorso è vuoto
+ * e seguono «vecchio NUL nuovo NUL». Un file binario porta «-» e «-»: niente numeri (null), mai «+0».
+ */
+export function analizzaNumstat(testo) {
+  const conti = new Map();
+  const pezzi = String(testo ?? '').split('\0');
+  for (let i = 0; i < pezzi.length; i += 1) {
+    const m = /^(-|\d+)\t(-|\d+)\t(.*)$/su.exec(pezzi[i].replace(/^\n/u, ''));
+    if (!m) continue;
+    let percorso = m[3];
+    if (percorso === '') { percorso = pezzi[i + 2] ?? ''; i += 2; } // rinomino: vecchio, nuovo
+    if (!percorso) continue;
+    const num = (x) => (x === '-' ? null : Number(x));
+    conti.set(percorso, { aggiunte: num(m[1]), rimozioni: num(m[2]) });
+  }
+  return conti;
+}
+
 export function analizzaStatoPorcelain(testo) {
   if (typeof testo !== 'string') throw new GitServiceError('git output not readable', 'GIT_COMMAND_FAILED');
   const campi = testo.split('\0');
@@ -581,6 +601,18 @@ export function creaServizioGit({
       conflitti: voci.filter((v) => v.conflitto).length,
     };
     const base = await baseInterna(cartella);
+    /* ⭐ G-05: i +/− di ogni file tracciato contro HEAD (preparato + non preparato). Un repository senza commit non ha HEAD: niente
+       numeri, e una lettura fallita nemmeno — la scheda resta com'è, senza inventare. I nuovi (`??`) restano senza numeri. */
+    if (voci.some((v) => v.tipo !== 'nonTracciato')) {
+      try {
+        const diff = await git(cartella, ['diff', 'HEAD', '--numstat', '-z', '--', '.']);
+        const conti = analizzaNumstat(diff.stdout);
+        for (const v of voci) {
+          const c = conti.get(v.percorsoRepo);
+          if (c && v.tipo !== 'nonTracciato') { v.aggiunte = c.aggiunte; v.rimozioni = c.rimozioni; }
+        }
+      } catch { /* HEAD assente o lettura fallita: nessun numero */ }
+    }
     const area = await areaPreparata(cartella, dove, base);
     /* ⭐ F6-1: la base dichiarata, l'impronta da rimandare col commit, e QUANTI file preparati stanno fuori dalla sessione (i nomi
        no: sono fuori dal vocabolario della sessione, e la scheda non li deve mostrare — deve solo sapere che il commit è fermo). */

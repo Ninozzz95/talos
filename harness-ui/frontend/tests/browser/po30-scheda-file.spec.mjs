@@ -80,9 +80,9 @@ test('PO30-FILE-02 — la lettera di stato: «M» e «A», col significato inter
   await page.locator('#alberoFile .ft-row-folder', { hasText: 'tests' }).click();
   const stato = (nome) => page.locator('#alberoFile .ft-row', { hasText: nome }).locator('.talos-file-row__state');
   await expect(stato('registro.mjs')).toHaveText('M');
-  await expect(stato('registro.mjs')).toHaveAttribute('aria-label', 'Modificato in questa sessione');
+  await expect(stato('registro.mjs')).toHaveAttribute('aria-label', 'Modificato in questa sessione · giro 1'); // pannello v2 (b), owner 29/10 sera: in più il giro
   await expect(stato('registro.test.mjs')).toHaveText('A');
-  await expect(stato('registro.test.mjs')).toHaveAttribute('title', 'Creato in questa sessione');
+  await expect(stato('registro.test.mjs')).toHaveAttribute('title', 'Creato in questa sessione · giro 1');
   await expect(stato('rotte.mjs'), 'un file non toccato non porta nessuna lettera').toHaveCount(0);
   const alta = await page.locator('#alberoFile .ft-row', { hasText: 'rotte.mjs' }).evaluate((n) => Math.round(n.getBoundingClientRect().height));
   expect(alta, 'la riga del laboratorio è alta 36 px').toBe(36);

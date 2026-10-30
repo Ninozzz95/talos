@@ -107,3 +107,18 @@ test('MOTIVI-FILE-05 — per un motivo dei file si pubblica la frase della TABEL
   const pulita = Object.assign(new Error('The session is not ready: start a new one'), { code: 'SESSION_NOT_READY' });
   assert.equal(toPublicProblem(pulita).explanation, 'The session is not ready: start a new one');
 });
+
+test('ALBERO-ORDINE-01 (30/10/2026) i numeri nei nomi in ordine naturale, cartelle in testa', async () => {
+  const voci = [{ nome: 'relazione-10.txt' }, { nome: 'relazione-2.txt' }, { nome: 'relazione-1.txt' }, { nome: 'sub-10', cartella: true }, { nome: 'sub-9', cartella: true }, { nome: 'Alfa.txt' }];
+  const albero = await leggiAlberoWorkspace({ cartella: process.cwd(), percorso: '' }, { discoNodeFn: () => ({ elenca: async () => voci }) });
+  assert.deepEqual(albero.map((v) => v.nome), ['sub-9', 'sub-10', 'Alfa.txt', 'relazione-1.txt', 'relazione-2.txt', 'relazione-10.txt']);
+});
+
+test('ALBERO-ORDINE-02 (Mobile) maiuscole e accenti alla pari, spareggio sul nome esatto: l\'ordine è totale e stabile', async () => {
+  const voci = [{ nome: 'b.txt' }, { nome: 'B.txt' }, { nome: 'a.txt' }, { nome: 'Ä.txt' }];
+  const leggi = (lista) => leggiAlberoWorkspace({ cartella: process.cwd(), percorso: '' }, { discoNodeFn: () => ({ elenca: async () => lista }) });
+  const uno = (await leggi(voci)).map((v) => v.nome);
+  const due = (await leggi([...voci].reverse())).map((v) => v.nome);
+  assert.deepEqual(uno, due, 'lo stesso ordine qualunque sia l\'ordine del disco');
+  assert.deepEqual(uno, ['a.txt', 'Ä.txt', 'B.txt', 'b.txt']);
+});

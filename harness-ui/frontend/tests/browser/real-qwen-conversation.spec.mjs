@@ -13,7 +13,7 @@ async function scegliModello(page, modelId) {
   await search.fill(modelId);
   const option = page.getByRole('option').filter({ hasText: modelId }).first();
   await expect(option).toBeVisible();
-  await option.click();
+  await option.dblclick(); // 29/10/2026: nel velo «Model» un clic segna, il doppio clic sceglie e chiude
   await expect(page.locator('#sheetDialog')).not.toBeVisible();
   await expect(page.locator('[data-open-sheet="model"] span').first()).toHaveText(modelId);
 }

@@ -4,6 +4,7 @@ import { basename, join } from 'node:path';
 import { expect, test } from '@playwright/test';
 import { rimuoviCartellaDiProva } from '../../../tests/aiuto/rimuovi-cartella-di-prova.mjs';
 import { aggiungiVersione, elencaVersioni, salvaVoce } from '../../../src/library-store.mjs';
+import { CARTELLA_PROGETTI, nomeCartellaProgetto, percorsoCanonico } from '../../../src/cartella-dati-progetto.mjs';
 
 /*
  * 24/10/2026 — ARTEFATTI CON VERSIONI (owner: «aggiorna la stessa», «la carta di ogni giro resta sulla sua versione», «vedere e
@@ -67,10 +68,16 @@ async function apri(page) {
   await page.waitForFunction(() => window.__talosHarnessUiRuntime);
   return nonGet;
 }
-/* la voce si semina con le funzioni del magazzino; sul server di prova la Libreria di una sessione a cartella libera sta lì
-   (così l'ha trovata anche il bozzetto del 24/10) — se non fosse così, la prova lo dice e salta invece di mentire */
+/* la voce si semina con le funzioni del magazzino, nella cartella dove il server tiene la Libreria del progetto: quella dei dati
+   dell'app (PO-26, `<dati>/.workspaces/<nome>-<impronta>/`), calcolata con le funzioni del server (`cartella-dati-progetto.mjs`).
+   30/10/2026: prima si seminava nel progetto e contava che il server, alla PRIMA lettura, ve la spostasse; da quando la foto del
+   turno parte all'avvio del giro (perf/foto-in-anticipo) il progetto si tocca già all'avvio, lo spostamento avviene prima della
+   semina e la voce restava dove il server non guarda più. Il server di prova ha i dati in `TALOS_PW_STORE_ISOLATO`
+   (`playwright.config.mjs`, `TALOS_DESKTOP_DATA_DIR`). */
 async function semina() {
-  const base = cartella;
+  const dati = process.env.TALOS_PW_STORE_ISOLATO;
+  expect(dati, 'la prova vuole il server di prova con la sua cartella dati').toBeTruthy();
+  const base = join(dati, CARTELLA_PROGETTI, nomeCartellaProgetto(await percorsoCanonico(cartella)));
   voce = await salvaVoce({ cartella: base, nome: 'Sales by month.html', mediaType: 'text/html', origine: 'generated', modello: MODELLO, sessionId: sessione, sessionNome: 'Sales report', testo: pagina('v1', '#334') });
   await aggiungiVersione({ cartella: base, id: voce, testo: pagina('v2', '#363'), modello: MODELLO, sessionId: sessione, sessionNome: 'Sales report' });
   await aggiungiVersione({ cartella: base, id: voce, testo: pagina('v3', '#633'), modello: MODELLO, sessionId: 'altra', sessionNome: 'Q2 planning' });

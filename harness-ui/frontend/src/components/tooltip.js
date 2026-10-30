@@ -189,7 +189,10 @@ export function collegaTooltip(documentObj = globalThis.document, { ritardo = RI
     if (alFuoco && bersaglio && elemento !== bersaglio && !bolla.contains(evento.target)) chiudi();
     if (!elemento || elemento === bersaglio) return;
     if (alFuoco && !daTastiera(evento.target)) return; // (1) il fuoco restituito da un clic non apre niente
-    if (!alFuoco && elemento.hasAttribute?.(ATTRIBUTO_AL_MOVIMENTO)) { inAttesaDiMovimento = elemento; return; } // (4)
+    /* (5) 30/10/2026 (candidata UI, DELEGHE-DECISIONI-15): dopo un tasto, un `pointerover` senza movimento è un elemento ridisegnato
+       sotto il puntatore FERMO (il pannello degli agenti rifà la riga a ogni secondo), non una mano sul mouse: con `modalita`
+       «keyboard» si aspetta il primo movimento, come (4) e come Radix (`onPointerMove`). Chi usa solo il mouse non cambia niente. */
+    if (!alFuoco && (modalita === 'keyboard' || elemento.hasAttribute?.(ATTRIBUTO_AL_MOVIMENTO))) { inAttesaDiMovimento = elemento; return; } // (4) (5)
     programma(elemento);
   };
   const suMovimento = (evento) => {

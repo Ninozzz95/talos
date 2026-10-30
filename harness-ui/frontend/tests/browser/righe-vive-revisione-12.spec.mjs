@@ -143,9 +143,13 @@ test('RV-REV-05 with reduced motion the live dot of a running process calms down
     { type: 'ToolCallArgs', toolCallId: 'c1', delta: JSON.stringify({ comando: 'npm test', descrizione: 'Run the suite' }), _sequenza: 3 },
   ]);
   await page.locator('[data-rail="processi"]').first().click();
-  const pallino = page.locator('.talos-process__misura[data-viva] .talos-dot--live').first();
+  /* pannello v2 (29/10/2026): il segno vivo è l'anello del comando (`.pn-segno[data-vivo]`, disegnato col suo ::after): le animazioni
+     si leggono con `subtree: true`, che porta anche quelle dei pseudo-elementi */
+  const pallino = page.locator('#railProcessi .pn-segno[data-vivo]').first();
   await expect(pallino).toBeVisible();
-  const animazioni = await pallino.evaluate((el) => el.getAnimations().map((a) => ({ nome: a.animationName, stato: a.playState })));
-  console.log('RV-REV-05', JSON.stringify(animazioni));
-  expect(animazioni.filter((a) => a.stato === 'running').length, 'calm, never frozen').toBeGreaterThan(0);
+  /* la scheda si ridisegna quando arrivano dati: un segno letto un attimo prima di essere sostituito è staccato e non ha animazioni.
+     Si rilegge finché quello A SCHERMO risponde (rosso vero se l'anello resta fermo: nessun giro lo farebbe ripartire) */
+  const leggi = () => pallino.evaluate((el) => el.isConnected ? el.getAnimations({ subtree: true }).map((a) => ({ nome: a.animationName, stato: a.playState })) : null);
+  await expect.poll(async () => ((await leggi()) ?? []).filter((a) => a.stato === 'running').length, { message: 'calm, never frozen' }).toBeGreaterThan(0);
+  console.log('RV-REV-05', JSON.stringify(await leggi()));
 });

@@ -36,7 +36,8 @@ test('TERZA-MEMORIA-01 — dal pannello «Apri questo agente nel diagramma» con
   await grafo.locator('.talos-wfg__torna').click();
   await expect(grafo).toHaveCount(0);
   await page.locator('#railAgenti [data-sessione-figlia="a"]').click();
-  await page.locator('[data-c="DettaglioAgente"]').getByRole('button', { name: 'Apri questo agente nel diagramma' }).click();
+  /* pannello v2 (29/10/2026): il clic sulla riga apre il dettaglio NELLA riga; «Apri questo agente nel diagramma» è il suo «Mostra nel diagramma» (stessa azione: apriDiagramma({ figlia, tipo: 'deleghe' })) */
+  await page.locator('#railAgenti [data-sessione-figlia="a"]').getByRole('button', { name: 'Mostra nel diagramma' }).click();
   const dopo = page.locator('#schermoChat > [data-c="GrafoAgenti"]');
   await expect(dopo).toBeVisible();
   await expect(nomeNelDettaglio(dopo), 'un dettaglio si è aperto').toBeVisible();
@@ -208,7 +209,8 @@ test('TERZA-MEMORIA-07 [REGGE] — Workflow e deleghe della STESSA conversazione
   const rail = await apriRailDellaScena(page, scenaWf);
   await rail.getByRole('tab', { name: 'Deleghe' }).click();
   await rail.locator('[data-sessione-figlia="m1"]').click();
-  await page.getByRole('button', { name: 'Apri questo agente nel diagramma' }).click();
+  /* pannello v2 (29/10/2026): il clic sulla riga apre il dettaglio NELLA riga; «Apri questo agente nel diagramma» è il suo «Mostra nel diagramma» (stessa azione: apriDiagramma({ figlia, tipo: 'deleghe' })) */
+  await rail.locator('[data-sessione-figlia="m1"]').getByRole('button', { name: 'Mostra nel diagramma' }).click();
   const grafo = page.locator('#schermoChat > [data-c="GrafoAgenti"]');
   await expect(grafo).toHaveAttribute('data-sorgente', 'deleghe');
   await expect(grafo.locator('[data-sessione]')).toHaveCount(3);

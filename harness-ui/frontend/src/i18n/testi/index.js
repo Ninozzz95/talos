@@ -30,9 +30,10 @@ import server from './server.js'; // 03/10/2026, corsia K4a: i testi che il serv
 import remoto from './remoto.js'; // 18/10/2026: il controllo remoto dalla finestra del desktop
 import annulla from './annulla.js'; // 18/10/2026: «Annulla le modifiche ai file» (R5.11)
 import segnala from './segnala.js'; // 29/10/2026: «Segnala un problema»
+import pannello from './pannello.js'; // 29/10/2026: il pannello di destra v2 (inglese in pannello.en.js, italiano in pannello.it.js)
 
 /** Le aree registrate: per aggiungerne una si importa qui il suo file. */
-export const AREE = Object.freeze({ kernel, app, chat, agenti, processi, modelli, sezioni, github, varie, errori, comandi, home, impostazioni, modello, server, remoto, annulla, segnala });
+export const AREE = Object.freeze({ kernel, app, chat, agenti, processi, modelli, sezioni, github, varie, errori, comandi, home, impostazioni, modello, server, remoto, annulla, segnala, pannello });
 
 function appiattisci(lingua) {
   const fuori = {};

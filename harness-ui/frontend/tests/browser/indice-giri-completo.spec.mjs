@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { righeIndice, apriPiegaContesto } from '../fixtures/pannello-contesto-prove.mjs';
 
 /*
  * ⛔ A16 (bugfixer, 08/10/2026) — L'INDICE DEI GIRI DI UNA CHAT LUNGA ELENCA TUTTI I GIRI, E NON SI RIFÀ A OGNI DISEGNO.
@@ -56,17 +57,18 @@ async function passaA(page, chiave, attesa) {
   await page.evaluate(() => new Promise((fatto) => requestAnimationFrame(() => requestAnimationFrame(fatto))));
 }
 
-const indice = (page) => page.evaluate(() => {
-  const card = document.querySelector('#railContesto [data-c="TurnIndex"]');
-  const chiavi = [...card.querySelectorAll(':scope > .talos-kv > .talos-kv__k')].map((k) => k.textContent);
-  return {
-    righe: chiavi.length,
-    numeri: chiavi.map((k) => Number.parseInt(k, 10)),
-    testi: [...card.childNodes].filter((n) => n.nodeType === 3).length,
+/* pannello v2 (owner 29/10/2026): l'Indice dei giri è una piega a pagine (il più recente in cima, come il bozzetto). Le righe si
+   raccolgono pagina per pagina; i numeri si guardano in ordine, perché la prova chiede «dal primo, senza buchi». */
+const indice = async (page) => {
+  const testi = await righeIndice(page);
+  const numeri = testi.map((k) => Number.parseInt(k, 10)).sort((a, b) => a - b);
+  const resto = await page.evaluate(() => ({
     montati: document.querySelectorAll('#conversation > .talos-turn').length,
     precedenti: Boolean(document.querySelector('.talos-mostra-precedenti:not([hidden])')),
-  };
-});
+    nodi: document.querySelector('#railContesto [data-c="TurnIndex"]')?.querySelectorAll('*').length ?? 0,
+  }));
+  return { righe: testi.length, numeri, testi: resto.nodi, ...resto };
+};
 
 test.describe('Indice dei giri completo nelle chat lunghe (A16)', () => {
   test('A16-INDICE-01 — con la finestra che smonta i giri vecchi, l\'indice li elenca tutti, dal primo, senza buchi', async ({ page }) => {
@@ -90,8 +92,9 @@ test.describe('Indice dei giri completo nelle chat lunghe (A16)', () => {
     const c = await apri(page);
     await passaA(page, 'lunga', `Risposta ${GIRI}:`);
     const primo = await indice(page);
+    await apriPiegaContesto(page, 'giri');
     const record = await page.evaluate(async () => {
-      const card = document.querySelector('#railContesto [data-c="TurnIndex"]');
+      const card = document.querySelector('#railContesto');
       let n = 0;
       const oss = new MutationObserver((l) => { n += l.length; });
       oss.observe(card, { childList: true, subtree: true, characterData: true });
@@ -108,7 +111,7 @@ test.describe('Indice dei giri completo nelle chat lunghe (A16)', () => {
     await passaA(page, 'lunga', `Risposta ${GIRI}:`);
     const ritorno = await indice(page);
     expect(ritorno.righe).toBe(primo.righe);
-    expect(ritorno.testi, 'gli a-capo restano uno per riga, non si sommano').toBe(primo.testi);
+    expect(ritorno.testi, 'i nodi dell’indice restano gli stessi, non si sommano').toBe(primo.testi);
     expect(c.nonGet).toBe(0);
   });
 });

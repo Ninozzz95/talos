@@ -134,6 +134,11 @@ test('WORKSPACE-CHOOSER-NO-MUTATION-17 — il chooser non espone azioni distrutt
 
 test('WORKSPACE-CHOOSER-SUBMIT-10 — una cartella allowlisted conserva cartellaId e non invia il percorso libero', async ({ page }) => {
   let body = null;
+  /* 30/10/2026: dal 29/10 (6365ef55c, regola dell'owner «nessun modello predefinito») il primo messaggio senza modello si ferma e apre la
+     scelta del modello: la prova sceglie un modello prima, come farebbe una persona */
+  await page.evaluate(() => localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({ version: 1, chat: { model: 'z-ai/glm-5.3-flash' } })));
+  await page.reload();
+  await page.locator('#newSessionBtn').click();
   await page.route('**/api/v1/sessions/custom', async (route) => {
     body = route.request().postDataJSON();
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(envelope({ sessionId: 'session-workspace-chooser' })) });

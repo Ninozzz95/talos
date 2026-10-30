@@ -8024,6 +8024,20 @@ export function createSessionRegistry({
     const da = radice && progettoRadice === progetto ? radice : voce;
     return { progetto, sessionId: da.sessionId, turno: da.versioneGiro ?? 0, seqAvvio: da.sequenzaUltimoRunStarted ?? null };
   }
+  /**
+   * PERF 29/10/2026 (owner, sessione Talos performance) — la foto del turno parte all'avvio del giro, mentre il modello pensa
+   *   (`punti-di-ripristino.mjs`, `anticipa`): la prima scrittura la trova fatta. ⛔ Niente await: la catena d'avvio è sincrona (P-13).
+   *   Non parte dove il giro non può scrivere (sola lettura, ricerca, modalità piano): lì sarebbe solo git che gira per niente.
+   */
+  function anticipaLaFoto(voce) {
+    try {
+      if (typeof puntiDiRipristino?.anticipa !== 'function' || puntiDiRipristino.gitPresente?.() === false) return;
+      if (typeof voce.cartellaBase !== 'string' && typeof voce.cartella !== 'string') return;
+      if (voce.permessi === 'Read only' || voce.permessi === 'Research' || voce.modalitaOperativa === 'piano') return;
+      const { progetto, sessionId, turno } = doveVaIlPunto(voce);
+      puntiDiRipristino.anticipa({ sessionId, turno, progetto });
+    } catch { /* un servizio di supporto non ferma mai il giro (owner 12/10) */ }
+  }
   async function puntoDiRipristinoPer(voce, evento) {
     try {
       if (typeof voce.cartellaBase !== 'string' && typeof voce.cartella !== 'string') return;
@@ -8079,6 +8093,8 @@ export function createSessionRegistry({
     if (!r?.ok) return { ok: false, messaggio: `The files were not put back (${r?.motivo ?? 'unknown'}).` };
     const righe = [`Put back as they were before that message: ${r.ripristinati.length ? r.ripristinati.join(', ') : 'no file'}.`];
     if (r.saltati?.length) righe.push(`Left as they are (changed by the person or by a command): ${r.saltati.join(', ')}.`);
+    /* PERF 29/10, revisione del Desktop: chi ha cambiato un file MENTRE il turno lavorava si dice per nome, non si confonde col dopo */
+    if (r.durante?.length) righe.push(`Changed by someone else during that turn, so left as they are: ${r.durante.join(', ')}.`);
     if (r.nonTolti?.length) righe.push(`Could not be removed: ${r.nonTolti.join(', ')}.`);
     if (r.fuori?.length) righe.push(`Written outside the project folder, not undone: ${r.fuori.length} file(s).`);
     righe.push('The person can redo it from the app.');
@@ -8983,6 +8999,7 @@ export function createSessionRegistry({
      * bug silenzioso.
      */
     voce.sessionId = sessionId;
+    anticipaLaFoto(voce); // qui e non dove nasce `versioneGiro`: prima di questa riga una sessione nuova non ha ancora il suo id
     if (cartellaStore && voceNuova) {
       try {
         registraIntestazioneSyncFn({
@@ -9719,6 +9736,8 @@ export function createSessionRegistry({
         rifiutoRicordato(voce, modelloDiSessionePerRete(voce))), // R12-3, R12-5
       /* R12-2: il ripiego dal motore già detto e non guarito — il giro dopo non lo ripete */
       ...(typeof voce.ripiegoDetto === 'string' && voce.ripiegoDetto ? { ripiegoDetto: voce.ripiegoDetto } : {}),
+      /* CONTRATTO-CONTROLLO-SPENTO: il controllo delle scritture spento già detto — il giro dopo non lo ripete */
+      ...(typeof voce.controlloSpentoDetto === 'string' && voce.controlloSpentoDetto ? { controlloSpentoDetto: voce.controlloSpentoDetto } : {}),
       /* R13-2: le richieste non inviate che la storia tiene perché il motore le ha già archiviate — dal giornale (`nelMotore`), quindi anche
          dopo un riavvio; il kernel le mostra come una nota */
       ...((indici) => (indici.length ? { richiesteNonInviate: indici } : {}))(richiesteNonInviateNelMotore(voce)),
@@ -10306,8 +10325,23 @@ export function createSessionRegistry({
           impronta: typeof rifiuto.impronta === 'string' ? rifiuto.impronta : null });
       }
       /* R12-2: il ripiego detto e non guarito viaggia al giro dopo; un giro che ha visto il motore sano lo azzera */
+      const avvisiPrima = JSON.stringify([voce.ripiegoDetto ?? null, voce.controlloSpentoDetto ?? null]);
       if (statoDelGiro && Object.hasOwn(statoDelGiro, 'ripiegoDetto')) {
         voce.ripiegoDetto = typeof statoDelGiro.ripiegoDetto === 'string' && statoDelGiro.ripiegoDetto ? statoDelGiro.ripiegoDetto : null;
+      }
+      if (statoDelGiro && Object.hasOwn(statoDelGiro, 'controlloSpentoDetto')) {
+        voce.controlloSpentoDetto = typeof statoDelGiro.controlloSpentoDetto === 'string' && statoDelGiro.controlloSpentoDetto ? statoDelGiro.controlloSpentoDetto : null;
+      }
+      /* CONTRATTO-CONTROLLO-SPENTO (richiesta della CLI): i due «già detto» nel GIORNALE, solo quando cambiano — ogni `talos` è un
+         processo nuovo e una chat ripresa si ricostruisce dal giornale; senza questa riga l'avviso tornerebbe a ogni riavvio. */
+      if (cartellaStore && JSON.stringify([voce.ripiegoDetto ?? null, voce.controlloSpentoDetto ?? null]) !== avvisiPrima) {
+        const riga = { tipo: 'stato-avvisi', ripiegoDetto: voce.ripiegoDetto ?? null, controlloSpentoDetto: voce.controlloSpentoDetto ?? null };
+        /* CLI, 29/10: chiamata NELLO STESSO TICK, come lo scarto qui sotto — `registraRiga` mette la riga nella coda del file prima del suo
+           primo await, e `chiudi()` svuota quella coda: un microtask di ritardo la lascerebbe fuori da una chiusura già partita (`talos -p`). */
+        try {
+          Promise.resolve(registraRigaFn({ cartellaStore, sessionId: voce.sessionId, durable: true, record: riga }))
+            .catch(() => { /* una riga persa costa un avviso ripetuto al prossimo riavvio, mai un errore */ });
+        } catch { /* idem, se la scrittura si rifiuta subito */ }
       }
       /* N2 (revisione 8): nel giornale solo quando cambia; una riga persa costa un ripiego al prossimo riavvio, mai un errore */
       const scartoDaScrivere = { modello: voce.modello ?? null, scartoMisurato: voce.scartoMisurato ?? null, scartoNonEntra: voce.scartoNonEntra ?? null,
@@ -11309,6 +11343,8 @@ export function createSessionRegistry({
         const impostazioniRecord = record.filter((r) => r.tipo === 'impostazioni-sessione').at(-1) ?? null;
         // C2b R2 (nota 1): il totale degli avvii da soli dell'albero, sulla radice — l'ultima riga vince, come le impostazioni
         const avviiDaSoloRecord = record.filter((r) => r.tipo === 'avvii-da-solo' && Number.isSafeInteger(r.totale) && r.totale >= 0).at(-1) ?? null;
+        // CONTRATTO-CONTROLLO-SPENTO: i due «già detto» (ripiego, controllo delle scritture spento) — l'ultima riga vince
+        const avvisiRecord = record.filter((r) => r.tipo === 'stato-avvisi').at(-1) ?? null;
         /* /goal G1 (14/10/2026): l'obiettivo com'è sul giornale. Al riavvio di QUESTO processo quello attivo torna in pausa
            (`alRipristino`, in memoria: il giornale non si tocca all'avvio); una ricarica per l'affitto lo lascia com'è, perché
            l'ha scritto adesso un altro processo vivo. */
@@ -11510,6 +11546,8 @@ export function createSessionRegistry({
           approvazionePendente: null, domandaPendente: null, reindirizzamentoPendente: null, redirectAnnullati: new Set(), padreId: intestazione.padreId, profonditaDelega: intestazione.profonditaDelega,
           avvioDelega: intestazione.avvioDelega === 'da-solo' || intestazione.avvioDelega === 'consentito' ? intestazione.avvioDelega : null, // C2b
           avviiDaSoloTotali: avviiDaSoloRecord?.totale ?? 0, // C2b R2: vedi `avviiDaSoloNellAlbero`
+          ripiegoDetto: typeof avvisiRecord?.ripiegoDetto === 'string' && avvisiRecord.ripiegoDetto ? avvisiRecord.ripiegoDetto.slice(0, 80) : null,
+          controlloSpentoDetto: typeof avvisiRecord?.controlloSpentoDetto === 'string' && avvisiRecord.controlloSpentoDetto ? avvisiRecord.controlloSpentoDetto.slice(0, 80) : null,
           obiettivo: perRicarica ? obiettivoSulGiornale.obiettivo : obiettivoAlRipristino(obiettivoSulGiornale.obiettivo, { adesso: new Date().toISOString() }), // /goal G1
           obiettivoSulGiornale: impronteDellObiettivo(obiettivoSulGiornale.obiettivo), // REV-GOAL-07: la riga com'è, prima della pausa derivata
           senzaInterfaccia: intestazione.senzaInterfaccia === true, // decisione owner 30

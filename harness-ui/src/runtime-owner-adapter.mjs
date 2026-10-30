@@ -1352,6 +1352,11 @@ function creaFetchInstradata(fetchDiRete = fetch, { risolvi = risolviDestinazion
 }
 
 // P-K — errori upstream non attendibili: il testo non deve attraversare il confine pubblico.
+/** CONTRATTO-R30-R31 (Performance, 30/10/2026): il max_tokens inviato in QUESTA chiamata, additivo nel conto dei consumi. */
+function tettoInviatoNelConsumo(contesto) {
+  return Number.isSafeInteger(contesto?.maxTokensInviato) ? { maxTokensInviato: contesto.maxTokensInviato } : {};
+}
+
 async function inviaCloudProtetta(rete, url, opzioni) {
   let risposta;
   try { risposta = await rete(url, opzioni); }
@@ -1631,6 +1636,8 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
     let corpo;
     try { corpo = typeof opzioni.body === 'string' ? JSON.parse(opzioni.body) : null; } catch { /* altre fetch intatte */ }
     if (!corpo || typeof corpo.model !== 'string' || !String(url).includes('/chat/completions')) return fetchDiRete(url, opzioni);
+    // CONTRATTO-R30-R31 (Performance): il max_tokens davvero inviato, per il conto di questa chiamata
+    if (contesto && typeof contesto === 'object' && Number.isSafeInteger(corpo.max_tokens)) contesto.maxTokensInviato = corpo.max_tokens;
     opzioni.signal?.throwIfAborted();
     const { fonte, modelloRemoto } = separaFonteModello(corpo.model);
     const record = REGISTRO_FORNITORI[fonte];
@@ -1886,14 +1893,14 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
           const fermato = Boolean(opzioni.segnaleStop?.aborted || error?.fermatoSuRichiesta || error?.name === 'AbortError');
           const usage = fermato ? null : consumoPubblico(error?.usage);
           try {
-            await onConsumoFornitore({ tipo: 'consumo-fornitore', ...destinazione, usage, costoDichiarato: usage?.cost ?? null, esito: fermato ? 'fermato' : 'interrotto' });
+            await onConsumoFornitore({ tipo: 'consumo-fornitore', ...destinazione, ...tettoInviatoNelConsumo(contesto), usage, costoDichiarato: usage?.cost ?? null, esito: fermato ? 'fermato' : 'interrotto' });
           } catch { /* il deposito non copre l'errore vero */ }
         }
         throw error;
       }
       const usage = consumoPubblico(risultato?.usage);
       const costoDichiarato = typeof usage?.cost === 'number' && Number.isFinite(usage.cost) && usage.cost >= 0 ? usage.cost : null;
-      if (typeof onConsumoFornitore === 'function') await onConsumoFornitore({ tipo: 'consumo-fornitore', ...destinazione, usage, costoDichiarato, esito: 'completato' });
+      if (typeof onConsumoFornitore === 'function') await onConsumoFornitore({ tipo: 'consumo-fornitore', ...destinazione, ...tettoInviatoNelConsumo(contesto), usage, costoDichiarato, esito: 'completato' });
       if (REGISTRO_FORNITORI[destinazione.provider]?.auth?.tipo === 'oauth-pkce' && typeof dipendenze?.registraUsoDelPiano === 'function') {
         try { await dipendenze.registraUsoDelPiano({ esito: 'completato', usage }); } catch { /* il conteggio è un di più */ }
       }
@@ -1938,7 +1945,7 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
              *   fallisce non deve coprire lo stop.
              */
             if (contesto.scelta && typeof onConsumoFornitore === 'function') {
-              try { await onConsumoFornitore({ tipo: 'consumo-fornitore', ...destinazione, usage: null, costoDichiarato: null, esito: 'fermato' }); } catch { /* lo stop resta lo stop */ }
+              try { await onConsumoFornitore({ tipo: 'consumo-fornitore', ...destinazione, ...tettoInviatoNelConsumo(contesto), usage: null, costoDichiarato: null, esito: 'fermato' }); } catch { /* lo stop resta lo stop */ }
             }
             throw error;
           }
@@ -2008,7 +2015,7 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
             providerStore.mettiInPanchina(destinazione.provider, contesto.scelta.impronta, { classe: 'credito', headers: new Headers(contesto.headersRitenta) });
           }
           const usage = consumoPubblico(pulito.usage);
-          if (typeof onConsumoFornitore === 'function') await onConsumoFornitore({ tipo: 'consumo-fornitore', ...destinazione, usage, costoDichiarato: usage?.cost ?? null, esito: classificazione.classe === 'traffico' ? 'traffico' : 'interrotto' });
+          if (typeof onConsumoFornitore === 'function') await onConsumoFornitore({ tipo: 'consumo-fornitore', ...destinazione, ...tettoInviatoNelConsumo(contesto), usage, costoDichiarato: usage?.cost ?? null, esito: classificazione.classe === 'traffico' ? 'traffico' : 'interrotto' });
           // BUG-25: la scadenza dichiarata dal fornitore viaggia con l'errore onesto (scheda quota, bottone «riprendi»).
           if (Number.isFinite(error?.retryAfterMs)) pulito.retryAfterMs = error.retryAfterMs;
           else if (contesto.creditoDichiarato === true && contesto.headersRitenta['Retry-After-Ms']) pulito.retryAfterMs = Number(contesto.headersRitenta['Retry-After-Ms']);
@@ -2032,7 +2039,7 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
         // Un errore nel deposito della prova non deve provocare un'altra chiamata pagabile.
         const usage = consumoPubblico(risultato?.usage);
         const costoDichiarato = typeof usage?.cost === 'number' && Number.isFinite(usage.cost) && usage.cost >= 0 ? usage.cost : null;
-        if (typeof onConsumoFornitore === 'function') await onConsumoFornitore({ tipo: 'consumo-fornitore', ...destinazione, usage, costoDichiarato, esito: 'completato' });
+        if (typeof onConsumoFornitore === 'function') await onConsumoFornitore({ tipo: 'consumo-fornitore', ...destinazione, ...tettoInviatoNelConsumo(contesto), usage, costoDichiarato, esito: 'completato' });
         /* 11/10/2026 — il conteggio nostro del piano ChatGPT (`chatgpt-uso.mjs`): una riga per richiesta COMPLETATA col piano, coi
            soli token. Mai il token d'accesso, mai il testo. Un guasto del registro non tocca la risposta già arrivata. */
         if (REGISTRO_FORNITORI[destinazione.provider]?.auth?.tipo === 'oauth-pkce' && typeof dipendenze?.registraUsoDelPiano === 'function') {

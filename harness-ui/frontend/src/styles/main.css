@@ -132,3 +132,5 @@
 @import './rami.css'; /* 24/10/2026: «Riprova» e «Modifica e rimanda» come rami (bozzetto approvato) */
 @import './invio-file.css'; /* 24/10/2026: R5.13, mandare un file a un dispositivo (bozzetti approvati D1-D8) */
 @import './domanda-appiccicata.css'; /* 27/10/2026: la domanda ferma in cima mentre si legge la sua risposta, e la bolla a tutta larghezza (come Hermes) */
+@import './pannello.css'; /* 29/10/2026: il pannello di destra v2 (Contesto · File · Git · Agenti · Processi), tutto dentro .talos-pannello */
+@import './selettore-modelli.css'; /* 29/10/2026: il selettore dei modelli rifatto dal bozzetto approvato (fonti in colonna, filtri, preferiti, prezzi) */

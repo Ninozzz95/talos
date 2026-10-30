@@ -309,6 +309,7 @@ const API_ERROR_CODES = new Set([
   'WSL_STORE_UNAVAILABLE', // F009 (01/10/2026): la preferenza dell'utente di WSL
   'CONTEXT_SETTINGS_UNAVAILABLE', // C1 (09/10/2026): l'interruttore del motore del contesto
   'COMMAND_SETTINGS_UNAVAILABLE', // owner 27/10/2026: dove girano i comandi, di serie
+  'MODEL_PREFERENCES_UNAVAILABLE', 'MODEL_FAVOURITES_FULL', // owner 29/10/2026: preferiti e recenti dei modelli, sul server
   'LOCAL_RUNTIME_NOT_CONFIGURED', // 27/10/2026: «Allarga la finestra» senza motore locale (prima un 500)
   // ⭐ 04/9, W1-10 — token di loopback della shell Electron: /api/* senza il cookie talos_token.
   'AUTH_REQUIRED',
@@ -725,6 +726,8 @@ const STATUS_BY_CODE = Object.freeze({
   WSL_STORE_UNAVAILABLE: 503,
   CONTEXT_SETTINGS_UNAVAILABLE: 503,
   COMMAND_SETTINGS_UNAVAILABLE: 503,
+  MODEL_PREFERENCES_UNAVAILABLE: 503,
+  MODEL_FAVOURITES_FULL: 409,
   LOCAL_RUNTIME_NOT_CONFIGURED: 503,
   SEARCH_NOT_READY: 409,
   SEARCH_BLOCKED: 502,
@@ -837,6 +840,8 @@ export const MESSAGE_BY_CODE = Object.freeze({
   WSL_STORE_UNAVAILABLE: 'WSL preferences not available',
   CONTEXT_SETTINGS_UNAVAILABLE: 'Context engine settings not available',
   COMMAND_SETTINGS_UNAVAILABLE: 'The default for where commands run is not available',
+  MODEL_PREFERENCES_UNAVAILABLE: 'Favourite and recent models are not available',
+  MODEL_FAVOURITES_FULL: 'There are already 50 favourite models: remove one before adding another',
   LOCAL_RUNTIME_NOT_CONFIGURED: 'The local engine is not installed on this computer',
   SEARCH_NOT_READY: 'The search source is not ready',
   SEARCH_BLOCKED: 'The search source rejected the request',
@@ -2034,6 +2039,7 @@ const ROTTE_API = Object.freeze([
   { schema: '/api/v1/local-engine/window/enlarge', metodi: ['POST'] }, // L1 1.3: «Enlarge the window» chiesto dalla persona // L1 1.3 (26/10/2026): quando la finestra di un modello locale si riempie // C1 (09/10/2026): l'interruttore del motore del contesto
   { schema: '/api/v1/context-settings', metodi: ['GET', 'POST'] }, // C1 (09/10/2026): l'interruttore del motore del contesto
   { schema: '/api/v1/command-settings', metodi: ['GET', 'POST'] }, // owner 27/10/2026: dove girano i comandi, di serie
+  { schema: '/api/v1/model-preferences', metodi: ['GET', 'POST'] }, // owner 29/10/2026: preferiti e recenti dei modelli, PC e dispositivo
   { schema: '/api/v1/sessions', metodi: ['GET', 'POST'] },
   { schema: '/api/v1/assistenza', metodi: ['POST'] },
   { schema: '/api/v1/automations', metodi: ['GET', 'POST'] },
@@ -3389,6 +3395,7 @@ export function createHttpApp({
   /* M 28/10/2026 notte: il riconoscitore della lingua dei messaggi scritti (ELD); spento nel profilo del dispositivo (`linguaScrittaDellaRichiesta`) */
   riconosciLinguaScritta = true,
   impostazioniComandi = null, // owner 27/10/2026: dove girano i comandi delle conversazioni nuove
+  preferenzeModelli = null, // owner 29/10/2026: preferiti e usati di recente del selettore dei modelli (preferenze-modelli.mjs)
   cartellaAssistenza = CARTELLA_ASSISTENZA_PREDEFINITA, cercaAssistenzaFn = cercaAssistenza,
   // ⭐ 04/9, W1-10 — token di loopback (config.token): quando c'è, /api/* vuole il cookie talos_token; `GET /?token=<t>` lo imposta e rimanda a `/`.
   token = null,
@@ -6135,6 +6142,24 @@ export function createHttpApp({
      * Owner 27/10/2026 — dove girano i comandi delle conversazioni NUOVE: null (automatico), 'windows' o 'wsl2'. Stessa disciplina
      * del motore del contesto: corpo col SOLO campo atteso, errori con codice dichiarato, risposta con lo stato salvato.
      */
+    /*
+     * Owner 29/10/2026 — PREFERITI E USATI DI RECENTE DEI MODELLI, uguali su PC e dispositivo (contratto
+     * `CONTRATTO-PREFERITI-MODELLI-2026-10-29.md`). Scritture ad AZIONI (stella, usato, importa), validate da
+     * `preferenze-modelli.mjs`; la risposta è lo stato intero, da cui chi scrive ridisegna.
+     */
+    if (method === 'POST' && url.pathname === '/api/v1/model-preferences') {
+      try {
+        requireNoQuery(url);
+        if (!preferenzeModelli) { const error = new Error('Model preferences not configured'); error.code = 'MODEL_PREFERENCES_UNAVAILABLE'; throw error; }
+        const body = await leggiCorpoJson(req, 16 * 1024);
+        sendJson(res, 200, successEnvelope(await preferenzeModelli.applica(body), clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
     if (method === 'POST' && url.pathname === '/api/v1/command-settings') {
       try {
         requireNoQuery(url);
@@ -7318,7 +7343,7 @@ export function createHttpApp({
      * ⭐ C1 (owner 10/10/2026, «CPU e memoria per processo, misurate da noi, solo a scheda aperta») — le risorse dei comandi VIVI di
      *   una sessione. La scheda Processi la chiede ogni 5 s solo mentre è aperta e ha righe vive; il campionatore (un PowerShell
      *   persistente su Windows, uno `sh` per distro in WSL, /proc su Linux: `risorse-processi.mjs`) si accende alla prima richiesta e si spegne da solo dopo 30 s
-     *   senza. Sola lettura. ⇒ `{ metodo, misuratoAlle, processi: [{ toolCallId, cpuPercento|null, memoriaByte|null, processi|null }] }`.
+     *   senza. Sola lettura. ⇒ `{ metodo, misuratoAlle, processi: [{ toolCallId, cpuPercento|null, memoriaByte|null, processi|null, porte|null }] }`.
      */
     /* ⭐ Owner 27/10/2026: i server locali della conversazione per la striscia «Server locali» della scheda Browser. Sola lettura. */
     const serverLocaliMatch = method === 'GET' && sessionRegistry && typeof sessionRegistry.serverLocali === 'function'
@@ -7359,7 +7384,8 @@ export function createHttpApp({
           metodo, misuratoAlle: clock().toISOString(),
           processi: elenco.map(({ toolCallId, pid, wsl }) => {
             const m = wsl ? perMarcatore?.get(`${wsl.distro}:${wsl.marcatore}`) ?? null : pid === null ? null : perPid?.get(pid) ?? null;
-            return { toolCallId, cpuPercento: m?.cpuPercento ?? null, memoriaByte: m?.memoriaByte ?? null, processi: m?.processi ?? null };
+            /* P-05 (pannello v2): le porte in ascolto dell'albero del comando; `null` = non misurate (WSL, lettura fallita) */
+            return { toolCallId, cpuPercento: m?.cpuPercento ?? null, memoriaByte: m?.memoriaByte ?? null, processi: m?.processi ?? null, porte: Array.isArray(m?.porte) ? m.porte : null };
           }),
         }, clock), method);
       } catch (error) {
@@ -9146,6 +9172,11 @@ export function createHttpApp({
         requireNoQuery(url);
         if (!finestraPiena) { const error = new Error('Local engine not configured'); error.code = 'LOCAL_RUNTIME_NOT_CONFIGURED'; throw error; }
         data = { scelta: await finestraPiena.scelta() };
+      } else if (url.pathname === '/api/v1/model-preferences') {
+        /* Owner 29/10/2026 — i preferiti e gli usati di recente del selettore dei modelli. */
+        requireNoQuery(url);
+        if (!preferenzeModelli) { const error = new Error('Model preferences not configured'); error.code = 'MODEL_PREFERENCES_UNAVAILABLE'; throw error; }
+        data = await preferenzeModelli.leggi();
       } else if (url.pathname === '/api/v1/command-settings') {
         /* Owner 27/10 — Impostazioni → Strumenti e permessi, «Dove girano i comandi»: la scelta di serie. */
         requireNoQuery(url);

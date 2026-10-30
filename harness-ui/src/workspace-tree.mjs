@@ -47,6 +47,13 @@ export class WorkspaceTreeError extends Error {
  * @param {Function} [deps.discoNodeFn] — SOLO per compatibilità/test; il default è l'adapter locale
  * @returns {Promise<Array<{nome:string, cartella:boolean}>>} cartelle prima, poi file, ciascuno alfabetico
  */
+/* Mobile, 30/10/2026: lo STESSO confronto sul PC e sul Pad (lingua fissa, numeri naturali, maiuscole e accenti alla pari), e uno spareggio sul
+   nome esatto — l'ordine è totale e stabile fra un aggiornamento e l'altro, nessuna riga che salta */
+const COLLATORE_DEI_NOMI = new Intl.Collator('en', { numeric: true, sensitivity: 'base' });
+function confrontaNomi(a, b) {
+  return COLLATORE_DEI_NOMI.compare(a, b) || (a < b ? -1 : a > b ? 1 : 0);
+}
+
 export async function leggiAlberoWorkspace({ cartella, percorso = '' }, { discoNodeFn } = {}) {
   if (typeof percorso !== 'string' || percorso.includes('\0') || isAbsolute(percorso)) {
     throw new WorkspaceTreeError('path-invalid');
@@ -69,5 +76,7 @@ export async function leggiAlberoWorkspace({ cartella, percorso = '' }, { discoN
 
   return voci
     .map((v) => ({ nome: v.nome, cartella: Boolean(v.cartella) }))
-    .sort((a, b) => (a.cartella === b.cartella ? a.nome.localeCompare(b.nome, 'en') : a.cartella ? -1 : 1));
+    /* 30/10/2026 (prova della candidata sul 4174: «relazione-2» veniva dopo «relazione-19»): i numeri nei nomi in ordine NATURALE
+       (relazione-2 prima di relazione-10); le cartelle restano in testa */
+    .sort((a, b) => (a.cartella === b.cartella ? confrontaNomi(a.nome, b.nome) : a.cartella ? -1 : 1));
 }

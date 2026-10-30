@@ -23,6 +23,8 @@ function discoNode(o) {
   // Le autorizzazioni appartengono al kernel chiamante, prima della scrittura.
   const dentro = (percorso) => percorso ? resolve(radice, percorso) : radice;
   return {
+    /* R-28 (29/10/2026): la chiave della cartella, perché `fontiDaDisco` possa ricordare ciò che ha già letto (vedi `lettureRicordate`) */
+    chiave: resolve(radice),
     async elenca(cartella) {
       const voci = await readdir(dentro(cartella), { withFileTypes: true });
       return Promise.all(voci.map(async (v) => {
@@ -32,14 +34,17 @@ function discoNode(o) {
         if (v.isSymbolicLink() && await collegamentoVersoLaRete(join(dentro(cartella), v.name))) return { nome: v.name, cartella: false, byte: 0, rete: true };
         const cartellaVera = v.isDirectory();
         let byte = 0;
+        let mtimeMs = null;
         if (!cartellaVera) {
           try {
-            byte = (await stat(join(dentro(cartella), v.name))).size;
+            const s = await stat(join(dentro(cartella), v.name));
+            byte = s.size;
+            mtimeMs = s.mtimeMs;
           } catch {
             byte = 0;
           }
         }
-        return { nome: v.name, cartella: cartellaVera, byte };
+        return { nome: v.name, cartella: cartellaVera, byte, mtimeMs };
       }));
     },
     async leggi(percorso) {
@@ -78,7 +83,14 @@ function discoNode(o) {
 const ESTENSIONI_SORGENTE = Object.freeze([".mjs", ".js", ".cjs", ".jsx", ".ts", ".tsx", ".mts", ".cts"]);
 let compilatore = null;
 async function caricaCompilatore() {
-  if (!compilatore) compilatore = (await import("typescript")).default ?? await import("typescript");
+  if (!compilatore) {
+    try {
+      compilatore = (await import("typescript")).default ?? await import("typescript");
+    } catch (e) {
+      /* CONTRATTO-CONTROLLO-SPENTO (29/10/2026): sul telefono il pacchetto non porta il compilatore; il codice lo dice a chi lo mostra */
+      throw Object.assign(e instanceof Error ? e : new Error(String(e)), { codiceCancello: "compilatore-assente" });
+    }
+  }
   return compilatore;
 }
 function estensioneDi(nome) {
@@ -279,6 +291,40 @@ const CARTELLE_SALTATE = /* @__PURE__ */ new Set([
 ]);
 const TETTO_BYTE = 8 * 1024 * 1024;
 const TETTO_FILE = 1500;
+/*
+ * R-28 (29/10/2026 notte; misura della Performance su una copia di harness-ui, 1.414 file JavaScript: un file_edit su un .mjs costava
+ *   270-400 ms senza che il compilatore partisse mai, quasi tutto lettura dei file e due espressioni regolari su ogni sorgente). Ogni
+ *   scrittura rileggeva TUTTO lo spazio di lavoro. Ora `leggiSpazio` ricorda il testo di ogni file per (dimensione, data di modifica)
+ *   e rilegge solo ciò che è cambiato: la visita delle cartelle con `stat` resta, la lettura no.
+ * ⛔ La regola di git per i file «racy» (Documentation/technical/racy-git.txt): un file la cui data di modifica cade troppo vicino
+ *   alla lettura può essere stato riscritto dopo senza cambiare data né dimensione ⇒ quel file si rilegge sempre. «Troppo vicino» è
+ *   3 secondi, non 1 (revisione della CLI, 29/10/2026): FAT32 ed exFAT (chiavette, schede SD usate come cartella di lavoro) tengono
+ *   la data a passi di 2 secondi arrotondati in basso, e le condivisioni di rete o `\\wsl.localhost` possono avere l'orologio un
+ *   po' indietro rispetto al nostro. Il limite che resta è quello di `git status`: un file riscritto con la STESSA dimensione e la
+ *   data rimessa a mano INDIETRO.
+ * Solo per i dischi che dicono la loro cartella (`discoNode`); due cartelle al più; tutto si svuota dopo 10 minuti senza letture
+ * (timer `unref`: un processo breve esce lo stesso). Al più `TETTO_BYTE` per cartella, quindi ~16 MB in tutto.
+ */
+const lettureRicordate = /* @__PURE__ */ new Map();
+let svegliaLetture = null;
+const ATTESA_DATA_INCERTA_MS = 3e3;
+function lettureDellaCartella(chiave) {
+  if (typeof chiave !== "string" || !chiave) return null;
+  let tabella = lettureRicordate.get(chiave);
+  if (tabella) lettureRicordate.delete(chiave);
+  else tabella = /* @__PURE__ */ new Map();
+  lettureRicordate.set(chiave, tabella);
+  while (lettureRicordate.size > 2) lettureRicordate.delete(lettureRicordate.keys().next().value);
+  if (svegliaLetture) clearTimeout(svegliaLetture);
+  svegliaLetture = setTimeout(() => { lettureRicordate.clear(); svegliaLetture = null; }, 10 * 60 * 1e3);
+  svegliaLetture.unref?.();
+  return tabella;
+}
+function dimenticaLetture() {
+  lettureRicordate.clear();
+  if (svegliaLetture) clearTimeout(svegliaLetture);
+  svegliaLetture = null;
+}
 function fontiDaDisco(disco, opzioni = {}) {
   const tettoByte = opzioni.tettoByte ?? TETTO_BYTE;
   const tettoFile = opzioni.tettoFile ?? TETTO_FILE;
@@ -289,6 +335,8 @@ function fontiDaDisco(disco, opzioni = {}) {
       const sorgenti = [];
       let byte = 0;
       let elenco = "completo";
+      const ricordate = lettureDellaCartella(disco.chiave);
+      const viste = /* @__PURE__ */ new Set();
       const scendi = async (cartella) => {
         if (elenco !== "completo") return;
         let voci;
@@ -317,14 +365,25 @@ function fontiDaDisco(disco, opzioni = {}) {
             return;
           }
           byte += voce.byte;
+          const nota = ricordate?.get(percorso);
+          viste.add(percorso);
+          if (nota && Number.isFinite(voce.mtimeMs) && nota.byte === voce.byte && nota.mtimeMs === voce.mtimeMs && voce.mtimeMs < nota.lettoAlle - ATTESA_DATA_INCERTA_MS) {
+            sorgenti.push({ percorso, testo: nota.testo });
+            continue;
+          }
+          const lettoAlle = Date.now();
           try {
-            sorgenti.push({ percorso, testo: await disco.leggi(percorso) });
+            const testo = await disco.leggi(percorso);
+            sorgenti.push({ percorso, testo });
+            if (ricordate && Number.isFinite(voce.mtimeMs)) ricordate.set(percorso, { byte: voce.byte, mtimeMs: voce.mtimeMs, lettoAlle, testo });
           } catch {
             sorgenti.push({ percorso, testo: null });
+            ricordate?.delete(percorso);
           }
         }
       };
       await scendi("");
+      if (ricordate && elenco === "completo") for (const p of ricordate.keys()) if (!viste.has(p)) ricordate.delete(p);
       ultimoLetto = new Map(sorgenti.map((s) => [s.percorso, s.testo]));
       return { sorgenti, elenco };
     },
@@ -407,11 +466,25 @@ function hostInMemoria(ts, file, libreria) {
   };
 }
 const SOPPRESSIONI = /@ts-(ignore|expect-error|nocheck)\b/g;
+/*
+ * R-28 (29/10/2026 notte): le due domande che il cancello fa a OGNI sorgente (quante soppressioni, chiede il controllo?) costavano due
+ *   espressioni regolari su tutto lo spazio a ogni scrittura (~65 ms su 1.400 file). Le risposte si ricordano per percorso finché il
+ *   testo è lo stesso: fra il prima e il dopo cambia un file solo, e fra due scritture quasi niente.
+ */
+const domandeSulFile = /* @__PURE__ */ new Map();
+function domandeDi(percorso, testo) {
+  const nota = domandeSulFile.get(percorso);
+  if (nota && nota.testo === testo) return nota;
+  const nuova = { testo, soppressioni: testo.match(SOPPRESSIONI)?.length ?? 0, chiedeIlControllo: CHIEDE_IL_CONTROLLO.test(testo) };
+  if (domandeSulFile.size >= 4 * TETTO_FILE) domandeSulFile.clear();
+  domandeSulFile.set(percorso, nuova);
+  return nuova;
+}
 function contaSoppressioni(sorgenti) {
   const per = /* @__PURE__ */ new Map();
   for (const { percorso, testo } of sorgenti) {
     if (testo === null) continue;
-    const quante = testo.match(SOPPRESSIONI)?.length ?? 0;
+    const quante = domandeDi(percorso, testo).soppressioni;
     if (quante > 0) per.set(percorso, quante);
   }
   return per;
@@ -490,15 +563,24 @@ function tettoCancello({ ambiente = process.env, piattaforma = process.platform 
 }
 const INATTIVITA_CANCELLO_MS = 10 * 60 * 1e3;
 const STATI_RICORDATI = 32;
-const cacheCancello = { sorgenti: /* @__PURE__ */ new Map(), costruttori: [], risultati: /* @__PURE__ */ new Map(), ultimoUso: 0, libreria: null, sveglia: null };
+const cacheCancello = { sorgenti: /* @__PURE__ */ new Map(), costruttori: [], moduli: /* @__PURE__ */ new Map(), risultati: /* @__PURE__ */ new Map(), ultimoUso: 0, libreria: null, sveglia: null };
 let codaCancello = Promise.resolve();
 const hashTesto = (t) => createHash("sha1").update(t).digest("hex");
+/* Tutto: il compilatore E le letture del disco (le prove, e chi vuole ripartire da zero). */
 function svuotaCacheCancello() {
+  domandeSulFile.clear();
+  dimenticaLetture();
+  svuotaCompilatore();
+}
+/* Solo il lavoro del compilatore: una libreria diversa o 10 minuti fermi non rendono vecchio il testo letto dal disco, che ha la sua
+   regola (dimensione, data) e il suo timer. Trovato dalla prova su disco vero CANC-IO-05: la prima scrittura buttava via le letture. */
+function svuotaCompilatore() {
   if (cacheCancello.sveglia) clearTimeout(cacheCancello.sveglia);
   cacheCancello.sveglia = null;
   cacheCancello.sorgenti.clear();
   cacheCancello.costruttori = [];
   cacheCancello.risultati.clear();
+  cacheCancello.moduli = /* @__PURE__ */ new Map();
   cacheCancello.libreria = null;
 }
 function statoCacheCancello() {
@@ -507,22 +589,20 @@ function statoCacheCancello() {
 async function riferimentiNonRisoltiVeloce(sorgenti, libreria) {
   const ts = await caricaCompilatore();
   const file = /* @__PURE__ */ new Map();
-  let byte = 0;
   for (const { percorso, testo } of sorgenti) {
     if (testo === null) continue;
     if (!ESTENSIONI_SORGENTE.includes(estensioneDi(percorso))) continue;
     file.set(nomeInterno(percorso), testo);
-    byte += testo.length;
   }
   if (file.size === 0) return [];
   const tetto = tettoCancello();
-  if (tetto === 0 || byte > tetto) return riferimentiNonRisolti(sorgenti, libreria);
+  if (tetto === 0) return riferimentiNonRisolti(sorgenti, libreria);
   const ora = Date.now();
-  if (ora - cacheCancello.ultimoUso > INATTIVITA_CANCELLO_MS || cacheCancello.libreria !== libreria) svuotaCacheCancello();
+  if (ora - cacheCancello.ultimoUso > INATTIVITA_CANCELLO_MS || cacheCancello.libreria !== libreria) svuotaCompilatore();
   cacheCancello.ultimoUso = ora;
   cacheCancello.libreria = libreria;
   if (cacheCancello.sveglia) clearTimeout(cacheCancello.sveglia);
-  cacheCancello.sveglia = setTimeout(svuotaCacheCancello, INATTIVITA_CANCELLO_MS);
+  cacheCancello.sveglia = setTimeout(svuotaCompilatore, INATTIVITA_CANCELLO_MS);
   cacheCancello.sveglia.unref?.();
   const versioni = /* @__PURE__ */ new Map();
   for (const [nome, testo] of file) versioni.set(nome, hashTesto(testo));
@@ -547,7 +627,32 @@ async function riferimentiNonRisoltiVeloce(sorgenti, libreria) {
     }
     return sf;
   };
-  const nomi = [...file.keys()];
+  /*
+   * R-28, A3 (29/10/2026 notte; misura della Performance: su una copia di harness-ui un file_edit su un .mjs costava 270-400 ms, perché
+   *   14 file TypeScript e 2 JavaScript con @ts-check tenevano acceso il compilatore e i sorgenti, quasi tutti JavaScript, superavano
+   *   il tetto: ogni scrittura rifaceva il programma intero). Il programma parte SOLO da ciò che può dare una diagnosi o cambiarla:
+   *   i file controllabili e gli «script» JavaScript (senza import/export: le loro dichiarazioni sono globali e un TypeScript le
+   *   vede). Gli altri moduli JavaScript entrano solo se qualcuno li importa, come fa il compilatore con `allowJs`. Le diagnosi si
+   *   leggono solo dai file di partenza: gli altri, con `checkJs: false`, non ne danno. La prova di equivalenza (CANC-A3-*) lo
+   *   confronta col programma intero di prima, che resta il calcolo `freddo`.
+   */
+  const moduli = /* @__PURE__ */ new Map();
+  const nomi = [];
+  let controllabili = 0;
+  for (const [nome, testo] of file) {
+    const chiave = `${nome}\0${versioni.get(nome)}`;
+    const daControllare = ESTENSIONI_TS.includes(estensioneDi(nome)) || CHIEDE_IL_CONTROLLO.test(testo);
+    if (daControllare) { controllabili++; nomi.push(nome); continue; }
+    let modulo = cacheCancello.moduli.get(chiave);
+    if (modulo === void 0) modulo = ts.isExternalModule(ts.createSourceFile(nome, testo, ts.ScriptTarget.Latest, false, genereDi(ts, nome)));
+    moduli.set(chiave, modulo);
+    if (!modulo) nomi.push(nome);
+  }
+  cacheCancello.moduli = moduli;
+  if (controllabili === 0) {
+    cacheCancello.risultati.set(chiaveStato, []);
+    return [];
+  }
   let scelto = null;
   let migliore = 0;
   for (const c of cacheCancello.costruttori) {
@@ -575,9 +680,13 @@ async function riferimentiNonRisoltiVeloce(sorgenti, libreria) {
   }
   /* il costruttore usato come base si consuma (TypeScript lo «rilascia»): al suo posto il nuovo; al più due insiemi di file (due
      cartelle), e il secondo solo se i due insiemi stanno sotto il tetto della memoria */
-  const tenuti = [{ nomi: new Set(nomi), costruttore, byte }];
+  /* il tetto si misura sul programma che si TIENE (i file di partenza più ciò che importano), non su tutta la cartella; oltre il
+     tetto l'esito si usa e il programma no */
+  let byteProgramma = 0;
+  for (const sf of program.getSourceFiles()) if (file.has(sf.fileName)) byteProgramma += sf.text.length;
+  const tenuti = byteProgramma <= tetto ? [{ nomi: new Set(nomi), costruttore, byte: byteProgramma }] : [];
   const altro = cacheCancello.costruttori.find((c) => c !== scelto);
-  if (altro && altro.byte + byte <= tetto) tenuti.push(altro);
+  if (altro && altro.byte + (tenuti[0]?.byte ?? 0) <= tetto) tenuti.push(altro);
   cacheCancello.costruttori = tenuti;
   /* restano in memoria solo i file che i costruttori tenuti usano ancora: le versioni vecchie se ne vanno */
   const vivi = /* @__PURE__ */ new Set();
@@ -600,7 +709,7 @@ function haFileControllabili(sorgenti) {
     if (testo === null) continue;
     const estensione = estensioneDi(percorso);
     if (ESTENSIONI_TS.includes(estensione)) return true;
-    if (ESTENSIONI_SORGENTE.includes(estensione) && CHIEDE_IL_CONTROLLO.test(testo)) return true;
+    if (ESTENSIONI_SORGENTE.includes(estensione) && domandeDi(percorso, testo).chiedeIlControllo) return true;
   }
   return false;
 }
@@ -630,6 +739,7 @@ async function cancelloSemantico(prima, dopo, libreria, { freddo = false } = {})
     return {
       stato: "ignoto",
       perche: `the semantic guard could not run (${errore instanceof Error ? errore.message.slice(0, 80) : "errore"})`,
+      codice: errore?.codiceCancello ?? "errore-interno",
       fatto
     };
   }

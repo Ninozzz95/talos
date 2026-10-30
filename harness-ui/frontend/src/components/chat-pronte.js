@@ -30,13 +30,14 @@ export const CAMPI_DELLA_CHAT = Object.freeze([
   'approvazioniPendenti', 'attesaAperturaSequenza', 'attesaBubble', 'batchAttivo', 'browserIndice', 'browserPagine',
   'cachePromptPrecedenti', 'cacheSessione', 'carteDelleFiglie', 'cartellaAssoluta', 'cartellaBase', 'codaInPausa', 'codaMessaggi',
   'comandiInVolo', 'currentRunModel', 'domandeDelleFiglie', 'domandePendenti', 'durateRagionamento', 'eventiAttrezzi',
+  'motiviAttesaFiglie', // pannello v2 (29/10/2026): che cosa chiede ogni figlia che aspetta — vive con le sue carte
   'eventiUsageContesto', 'fileSelezionati', 'followUpBubbleInAttesa', 'messageElements', 'previewProjectId',
   'previewWorkspaceName', 'prossimoOrdineAttivita', 'ragionamentoBubble', 'redirectInvalidatedIds', 'redirectPendingId',
   'redirectRequestInFlight', 'redirectRequestIntentId', 'renderIncrementale', 'reviewFiles', 'richieste', 'richiesteMcpPendenti', 'runCount',
   'segmentoAttivo', 'sequenzeViste', 'taskBubbleMostrata', 'testoGrezzoMessaggi', 'tettoGiriDichiarato', 'treeCache', 'treeOpen',
   'treeUiRestored', 'ultimaRichiesta', 'ultimoBatchChiuso', 'usage', 'usageEsecuzioniPrecedenti', 'usageSessione', 'usciteAgente',
   // `azzeraSchedaContesto` (C1, sessione desktop): la scheda Contesto della chat
-  'richiestaDelGiro', 'politicaContesto', 'compattazioniLegacy', 'recordCompattazioneLegacy',
+  'richiestaDelGiro', 'politicaContesto', 'compattazioniLegacy', 'recordCompattazioneLegacy', 'storiaContesto', // pannello v2, C-05: il contesto nel tempo
   // /goal G6 (15/10/2026): la fascia dell'obiettivo; il flusso lo ridice all'apertura, qui per non farla sparire e riapparire
   'obiettivo', 'obiettivoTetti',
   /* ⛔ E quelli che il reset NON tocca ma la RIGIOCATA riscrive (il `RunStarted`, i comandi della persona, gli esiti degli attrezzi):
@@ -47,7 +48,7 @@ export const CAMPI_DELLA_CHAT = Object.freeze([
 export const CAMPI_DELL_APERTURA = Object.freeze(['generation', 'id', 'eventSource', 'deferHistoricalRendering', 'taskId', 'treeWorkspaceKey', 'figli']);
 /* Misure VIVE, azzerate al cambio di chat e rilette da sole (sessione desktop, 10/10: «la prima lettura riparte da sola»): non si
    parcheggiano, al ritorno restano azzerate. */
-export const CAMPI_VIVI = Object.freeze(['risorseProcessi']);
+export const CAMPI_VIVI = Object.freeze(['risorseProcessi', 'storiaCpu']); // pannello v2, P-04: la storia della CPU si rilegge come le risorse
 
 const vuota = (x) => x == null || (typeof x.size === 'number' ? x.size === 0 : Array.isArray(x) ? x.length === 0 : false);
 

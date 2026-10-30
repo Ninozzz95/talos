@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { apriPiegaContesto, righeIndice } from '../fixtures/pannello-contesto-prove.mjs'; // pannello v2: le righe di oggi stanno in pieghe
 
 /*
  * ⛔ Owner, 26/09/2026, con la foto: «avviso spunta anche dopo compattazione». Sotto «Conversazione riassunta» restava
@@ -81,6 +82,7 @@ test.describe('Avviso di soglia e colonna del contesto — la misura è l\'ultim
     const c = await apri(page, 'somma');
     await expect(avviso(page)).toBeHidden();
     await page.locator('#railTabs [data-rail="contesto"]').click();
+    await apriPiegaContesto(page, 'dettagli-finestra');
     const conversazione = page.locator('#railContesto .talos-kv__k').filter({ hasText: 'Conversazione' }).locator('..').locator('.talos-kv__v');
     /* 09/10/2026, owner («B come hermes»): la colonna misura il SOLO prompt dell'ultima chiamata (52.947), la risposta (647) non si
        somma più — prima diceva «53,6k» mentre l'avviso leggeva il prompt: due numeri per lo stesso contesto. */

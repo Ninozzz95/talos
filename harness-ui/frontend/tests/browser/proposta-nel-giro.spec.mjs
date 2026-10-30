@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { apriPiegaContesto, righeIndice } from '../fixtures/pannello-contesto-prove.mjs'; // pannello v2: le righe di oggi stanno in pieghe
 
 /*
  * I due difetti del giro vero GLM del 25/09 sul 4174 (fase Workflow UI), riverificati il 26/09 prima della cura:
@@ -61,6 +62,7 @@ async function apri(page, chiave) {
   await expect(page.locator('#conversation')).toContainText('Fatto il passo della proposta.', { timeout: 10_000 });
   await page.locator('#railTabs [data-rail="contesto"]').click();
   await expect(page.locator('#railContesto')).toBeVisible();
+  await apriPiegaContesto(page, 'giri'); // pannello v2: l'Indice dei giri è una piega, chiusa di serie
   return contatore;
 }
 

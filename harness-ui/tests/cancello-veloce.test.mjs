@@ -48,3 +48,19 @@ test('CANC-A1-02 AL CONTRARIO: un sorgente con un riferimento inventato resta «
   assert.equal(nuovo.esisteva, false);
   assert.equal(nuovo.contenutoPrima, null);
 });
+
+test('CANC-IGN-01 (Mobile 29/10) un cancello che non sa giudicare dice PERCHÉ: l\'«ignoto» porta il suo motivo; il «presente» no', async () => {
+  const cartella = mkdtempSync(join(tmpdir(), 'talos-ignoto-'));
+  try {
+    const ignoto = await premessaDellaScrittura(cartella, 'src/x.ts', 'export const z: number = inventata;\n', {
+      cancello: async () => ({ stato: 'ignoto', perche: 'the semantic guard could not run (Cannot find package typescript)', fatto: {} }),
+    });
+    assert.equal(ignoto.stato, 'ignoto');
+    assert.match(ignoto.perche, /could not run \(Cannot find package typescript\)/u, 'sul telefono il compilatore manca: il motivo deve arrivare');
+    const presente = await premessaDellaScrittura(cartella, 'src/y.ts', 'export const y = 1;\n', { cancello: async () => ({ stato: 'presente', fatto: {} }) });
+    assert.equal(presente.stato, 'presente');
+    assert.equal(Object.hasOwn(presente, 'perche'), false);
+  } finally {
+    rimuoviCartellaDiProva(cartella);
+  }
+});

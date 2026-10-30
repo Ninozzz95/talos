@@ -8,6 +8,7 @@ import { expect, test } from '@playwright/test';
  * Owner 28/10/2026 (dal Mobile: «quando apro il selettore modelli non vedo selezionato e centrato il modello in uso»; foto in sola lettura
  *   del 4174 lo stesso giorno: scheda OpenRouter giusta, ma tutti i gruppi per autore CHIUSI e il modello in uso invisibile). All'apertura:
  *   il gruppo dell'autore in uso si apre, la riga in uso è segnata e sta AL CENTRO della lista; si muove solo la lista, mai il foglio.
+ * 29/10/2026 (selettore rifatto dal bozzetto approvato): i gruppi portano il nome umano dell'autore («m-ai» → «M Ai»), mai la sigla.
  * Forme del server copiate da `pillola-sforzo.spec.mjs` (catalogo di `GET /api/v1/models`); ogni scrittura si ferma e si conta.
  */
 const FOTO = path.resolve(fileURLToPath(new URL('../../artifacts/selettore-modello-in-vista/', import.meta.url)));
@@ -69,7 +70,7 @@ for (const modo of ['light', 'dark']) {
       await page.locator('[data-open-sheet="model"]').click();
       await expect(rigaInUso(page)).toHaveCount(1);
       await expect(rigaInUso(page)).toContainText('GLM 5.3 Flash');
-      await expect(foglio(page).locator('.model-picker-group-header', { hasText: 'm-ai' })).toHaveAttribute('aria-expanded', 'true');
+      await expect(foglio(page).locator('.model-picker-group-header', { hasText: 'M Ai' })).toHaveAttribute('aria-expanded', 'true');
       await expect(foglio(page).locator('.model-picker-group-header[aria-expanded="true"]')).toHaveCount(1); // solo il suo, non tutti
       await expect.poll(() => scartoDalCentro(page)).toBeLessThan(30);
       expect(await lista(page).evaluate((l) => l.scrollTop), 'la lista è scesa fino a lui').toBeGreaterThan(200);
@@ -83,9 +84,9 @@ for (const modo of ['light', 'dark']) {
       await apri(page, { modo });
       await page.locator('[data-open-sheet="model"]').click();
       await expect.poll(() => scartoDalCentro(page)).toBeLessThan(30);
-      const testata = foglio(page).locator('.model-picker-group-header', { hasText: 'm-ai' });
+      const testata = foglio(page).locator('.model-picker-group-header', { hasText: 'M Ai' });
       await testata.click();
-      await expect(foglio(page).locator('.model-picker-group-header', { hasText: 'm-ai' })).toHaveAttribute('aria-expanded', 'false');
+      await expect(foglio(page).locator('.model-picker-group-header', { hasText: 'M Ai' })).toHaveAttribute('aria-expanded', 'false');
       await expect(rigaInUso(page)).toHaveCount(0);
       await lista(page).evaluate((l) => { l.scrollTop = 0; });
       await foglio(page).locator('.model-picker-search input').fill('autore-0');
@@ -97,8 +98,8 @@ for (const modo of ['light', 'dark']) {
       await page.locator('[data-open-sheet="model"]').click();
       await expect.poll(() => scartoDalCentro(page)).toBeLessThan(30);
       await lista(page).evaluate((l) => { l.scrollTop = 0; });
-      await foglio(page).locator('.model-picker-group-header', { hasText: 'a-autore-00' }).click();
-      await expect(foglio(page).locator('.model-picker-group-header', { hasText: 'a-autore-00' })).toHaveAttribute('aria-expanded', 'true');
+      await foglio(page).locator('.model-picker-group-header', { hasText: 'A Autore 00' }).click();
+      await expect(foglio(page).locator('.model-picker-group-header', { hasText: 'A Autore 00' })).toHaveAttribute('aria-expanded', 'true');
       await expect(rigaInUso(page)).toHaveCount(1);
       expect(await lista(page).evaluate((l) => l.scrollTop), 'un ridisegno dopo l\'apertura non tira la lista').toBe(0);
     });

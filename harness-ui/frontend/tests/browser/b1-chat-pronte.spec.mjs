@@ -55,10 +55,19 @@ const apri = async (page, id, { conclusa = true } = {}) => {
   await page.waitForFunction(() => window.__talosHarnessUiRuntime.realSessionState.inRigiocata === false, null, { timeout: 10_000 });
   await expect(page.locator('#conversation')).not.toHaveClass(/\bis-restoring\b/u);
 };
-/* la colonna senza ciò che cambia fra due disegni dello stesso contenuto (id generati, stili) */
+/* la colonna senza ciò che cambia fra due disegni dello stesso contenuto (id generati, stili) — e, dal 30/10/2026, senza lo stato
+   di VISTA che segue lo scorrimento: la domanda appiccicata in cima (`data-domanda-corrente`, `talos-domanda-corpo`,
+   domanda-appiccicata.js, 27-28/10) e la tacca del giro visibile (`talos-turn-spine__tick--visibile`, conversazione.js:146). La
+   chat tenuta pronta torna com'era guardata, il disegno appena fatto non li ha ancora: la prova era rossa per questo, misurato
+   (l'unica differenza fra i due HTML erano questi tre segni). Il contenuto resta confrontato per intero. */
 const colonna = (page) => page.evaluate(() => {
   const c = document.querySelector('#conversation').cloneNode(true);
-  for (const n of c.querySelectorAll('*')) { n.removeAttribute('style'); n.removeAttribute('id'); }
+  for (const n of c.querySelectorAll('*')) {
+    n.removeAttribute('style'); n.removeAttribute('id');
+    n.removeAttribute('data-domanda-corrente'); n.removeAttribute('data-domanda-lunga');
+    n.classList.remove('talos-domanda-corpo', 'talos-turn-spine__tick--visibile');
+    if (n.getAttribute('class') === '') n.removeAttribute('class');
+  }
   return c.innerHTML.replace(/\s+/gu, ' ');
 });
 const pronte = (page) => page.evaluate(() => window.__talosHarnessUiRuntime.chatPronte());

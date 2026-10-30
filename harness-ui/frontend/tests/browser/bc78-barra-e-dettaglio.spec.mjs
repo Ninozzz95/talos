@@ -82,7 +82,9 @@ for (const [larghezza, altezza] of [[1024, 800], [1440, 900]]) {
        * ⛔ E il verso opposto si prova da sé: se a 1440 la barra tornasse a tagliare una riga a metà,
        *   l'asserzione «intera» diventerebbe rossa.
        */
-      if (!misura.scorrevole) {
+      /* 30/10/2026: fino a 40 px nascosti non c'è nessuna riga sotto il taglio, solo lo spazio in coda dell'elenco
+         (`.talos-sidebar__sessions { padding-bottom: 40px }`, mockup-sidebar.css): vale la stessa promessa di quando non sborda. */
+      if (!misura.scorrevole || misura.quantoResta <= 40) {
         const ultima = await page.evaluate(() => {
           const barra = document.querySelector('.talos-sidebar');
           const piede = barra.querySelector('.talos-sidebar__foot');
@@ -103,6 +105,32 @@ for (const [larghezza, altezza] of [[1024, 800], [1440, 900]]) {
       /* La striscia sta DENTRO LA RAMPA sopra il piede (a 30 px dalla sua cima): lì il velo lascia
          ancora vedere cosa sta scorrendo sotto. */
       const striscia = { x: misura.rett.x, y: misura.bordoPiede - 34, width: misura.rett.w, height: 10 };
+      /* 30/10/2026: «in cima» voleva dire scrollTop 0, e lì sotto la rampa poteva capitare il VUOTO fra due voci (misurato: con
+         30 conversazioni la barra in cima finisce su «Doctor» e uno spazio, e la striscia era identica a quella in fondo pur
+         funzionando la sfumatura: foto in `scratchpad/sonda-bc78-*`). Rossa o verde secondo quante sessioni aveva il server di
+         prova. ⇒ Prima della foto si scorre quanto basta perché il TESTO di una riga attraversi la striscia. La prova morde ancora
+         dove deve: se sopra il piede la rampa coprisse tutto (opaca o fissa), la riga sotto non si vedrebbe e le due foto
+         tornerebbero identiche. */
+      const posata = await page.evaluate((y) => {
+        const b = document.querySelector('.talos-sidebar');
+        const massimo = b.scrollHeight - b.clientHeight;
+        /* ogni testo visibile della barra fuori dal piede e dalla testata appiccicata: la riga, non la sua classe */
+        const testi = [];
+        const w = document.createTreeWalker(b, NodeFilter.SHOW_TEXT);
+        for (let t = w.nextNode(); t; t = w.nextNode()) {
+          if (!t.data.trim() || t.parentElement.closest('.talos-sidebar__foot, .talos-sidebar__actions')) continue;
+          const g = document.createRange(); g.selectNodeContents(t);
+          const r = g.getBoundingClientRect();
+          if (r.height > 0) testi.push(r);
+        }
+        for (const r of testi) {
+          const scorri = Math.round(b.scrollTop + r.top + r.height / 2 - (y + 5));
+          if (scorri >= 0 && scorri <= massimo - 12) { b.scrollTop = scorri; return { scorri, massimo }; }
+        }
+        return null;
+      }, striscia.y);
+      expect(posata, 'nessuna riga da far passare sotto la rampa prima del fondo: la scena non si è formata').not.toBeNull();
+      await page.waitForTimeout(150);
       const inCima = await page.screenshot({ clip: striscia });
       await page.evaluate(() => { const b = document.querySelector('.talos-sidebar'); b.scrollTop = b.scrollHeight; });
       await page.waitForTimeout(150);
@@ -306,13 +334,26 @@ const MISURA_PIEDE = `(() => {
    *   rossa. Misurato dalla review: con \`.talos-brand{opacity:0}\` le otto prove restavano verdi e
    *   la barra perdeva il marchio.
    */
-  const info = [...barra.children].map((n) => {
+  /*
+   * 30/10/2026: la posizione NEL FLUSSO, letta togliendo per un istante l'appiccicato ai figli che ce l'hanno e rimettendolo subito.
+   *   Lo sticky trasla il riquadro senza spostare il flusso: con molte conversazioni la barra scorre oltre l'altezza del marchio
+   *   (88 px), la testata dei pulsanti resta ferma in cima e i suoi rettangoli davano +88 e -88 — un buco che non c'era, rosso o
+   *   verde secondo quante sessioni aveva il server di prova. Gli spazi fra i figli sono una misura del flusso, e si leggono qui.
+   *   (Niente apici inversi in questo commento: chiuderebbero la stringa della sonda.)
+   */
+  const appiccicati = [...barra.children].filter((n) => getComputedStyle(n).position === 'sticky');
+  const stiliPrima = appiccicati.map((n) => n.style.position);
+  for (const n of appiccicati) n.style.position = 'static';
+  const flusso = [...barra.children].map((n) => { const b = n.getBoundingClientRect(); return { top: arrotonda(b.top - rb.top), bottom: arrotonda(b.bottom - rb.top) }; });
+  appiccicati.forEach((n, i) => { n.style.position = stiliPrima[i]; });
+  const info = [...barra.children].map((n, i) => {
     const s = getComputedStyle(n);
     const b = n.getBoundingClientRect();
     return {
       id: n.id || n.dataset.c || n.className.split(' ')[0],
       display: s.display, visibilita: s.visibility, opacita: s.opacity, posizione: s.position,
       top: arrotonda(b.top - rb.top), bottom: arrotonda(b.bottom - rb.top), altezza: Math.round(b.height),
+      flussoTop: flusso[i].top, flussoBottom: flusso[i].bottom,
     };
   });
   /* I figli che il layout dispone davvero: fuori quelli spenti, e fuori il ridimensionatore, che
@@ -349,13 +390,13 @@ const MISURA_PIEDE = `(() => {
     }
   }
   const spazi = [];
-  for (let i = 1; i < figli.length; i++) spazi.push({ fra: figli[i - 1].id + ' -> ' + figli[i].id, spazio: arrotonda(figli[i].top - figli[i - 1].bottom) });
+  for (let i = 1; i < figli.length; i++) spazi.push({ fra: figli[i - 1].id + ' -> ' + figli[i].id, spazio: arrotonda(figli[i].flussoTop - figli[i - 1].flussoBottom) });
   return {
     scorrevole: barra.scrollHeight > barra.clientHeight + 1,
     quantoResta: Math.round(barra.scrollHeight - barra.clientHeight),
     barraFondo: Math.round(fondo),
     piedeFondo: Math.round(rp.bottom),
-    scarto: Math.round(rp.bottom - fondo),
+    scarto: Math.round(rp.bottom - fondo) + 0, // 30/10/2026: «+ 0» fa di -0 uno 0 — Math.round(-0.3) vale -0, e toBe usa Object.is
     piedeAltezza: Math.round(rp.height),
     posizione: sp.position,
     margine: sp.marginTop,

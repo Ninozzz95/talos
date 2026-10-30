@@ -50,8 +50,9 @@ const testo = (page, rail) => page.locator(`#railTabs [data-rail="${rail}"]`).ev
 /** Le etichette che la riga di un processo disegna quando è VIVA (vedi `STATI_PROCESSO`). */
 const ETICHETTE_VIVE = ['In coda', 'In avvio', 'In corso', 'In attesa'];
 /** Quante righe della lista Processi si dichiarano VIVE, lette dall'etichetta DIPINTA. */
-const righeVive = (page) => page.locator('#railProcessi .talos-process__stato-testo').evaluateAll(
-  (nodi, vive) => nodi.filter((n) => vive.includes((n.textContent || '').trim())).length,
+/* pannello v2 (29/10/2026): l'etichetta dipinta dello stato è la parola del segno (`aria-label`), come la legge chi ascolta */
+const righeVive = (page) => page.locator('#railProcessi .pn-riga .pn-segno').evaluateAll(
+  (nodi, vive) => nodi.filter((n) => vive.includes((n.getAttribute('aria-label') || '').trim())).length,
   ETICHETTE_VIVE,
 );
 
@@ -92,7 +93,7 @@ async function scena(page, { tema = 'dark', larghezza = 1440, altezza = 900 } = 
    *   ⇒ Qui il badge **è** il segnale che i dati sono arrivati: `FIGLIE` ha un agente in corso, e
    *     finché il numero non compare la scena non è pronta.
    */
-  await expect(badge(page, 'agenti'), 'la scena non si è formata: le figlie non sono arrivate, o il badge non si scrive').toHaveText('1', { timeout: 10_000 });
+  await expect(badge(page, 'agenti'), 'la scena non si è formata: le figlie non sono arrivate, o il badge non si scrive').toHaveText('2', { timeout: 10_000 }); // owner 29/10 sera: in corso + in attesa
 }
 
 const mandaAgente = (page, agent) => page.evaluate((a) => {
@@ -118,36 +119,41 @@ const mandaProcesso = (page, { id, fase, comando = 'git status --short' }) => pa
 
 test.use({ locale: 'it-IT' });
 
-test("BADGE-AGENTI — il numero è quello degli ATTIVI, ed è vero anche a scheda chiusa", async ({ page }) => {
+/* ⭐ Owner 29/10/2026 sera (opzione consigliata, parità col telefono): il numero conta TUTTI gli agenti VIVI — in corso E in attesa di
+   un permesso, lo stesso insieme che lo Stop ferma; non i conclusi né gli interrotti. Supera la regola del 20/09 («solo in corso»): col
+   conto vecchio questa prova diventa rossa al punto 1 (direbbe 1). Il pallino ambra di chi aspetta te resta. */
+test("BADGE-AGENTI — il numero è quello degli agenti VIVI (in corso e in attesa), ed è vero anche a scheda chiusa", async ({ page }) => {
   await scena(page);
-  /* 1. Tre agenti: uno in corso, uno concluso, uno FERMO IN ATTESA. Il badge dice 1 — non 2, non 3. */
-  await expect(badge(page, 'agenti'), "il badge della scheda Agenti non dice il numero degli agenti IN CORSO (né l'attesa né le concluse contano)").toHaveText('1');
+  /* 1. Tre agenti: uno in corso, uno concluso, uno FERMO IN ATTESA di un permesso. Il badge dice 2 — l'attesa conta, la conclusa no. */
+  await expect(badge(page, 'agenti'), 'il badge della scheda Agenti non conta gli agenti vivi (in corso + in attesa)').toHaveText('2');
+  await expect(page.locator('#railTabs [data-rail="agenti"] .pn-contatore__punto'), 'il pallino di chi aspetta te resta').toHaveCount(1);
   await expect(page.locator('#railTabs [data-rail="contesto"]'), 'la scena deve nascere con le schede CHIUSE').toHaveAttribute('aria-selected', 'true');
 
   /* 2. ⭐ ARRIVA UN SECONDO AGENTE, e la scheda resta CHIUSA: il numero deve cambiare lo stesso. */
   await mandaAgente(page, { ...FIGLIE[0], sessionId: 'bdg-c', taskCorto: 'secondo agente in corso' });
-  await expect(badge(page, 'agenti'), 'il badge non si aggiorna mentre la scheda è chiusa: non è «in tempo reale», è «aggiornato quando lo guardi»').toHaveText('2');
+  await expect(badge(page, 'agenti'), 'il badge non si aggiorna mentre la scheda è chiusa: non è «in tempo reale», è «aggiornato quando lo guardi»').toHaveText('3');
   await expect(page.locator('#railTabs [data-rail="agenti"]')).toHaveAttribute('aria-selected', 'false');
 
   /* 3. Il numero e la LISTA dicono la stessa cosa: aprendo la scheda, il filtro «Attivi» ne mostra 2,
         e l'agente in attesa sta nel SUO filtro — sono due cose separate, e il badge conta la prima. */
+  /* ⭐ Pannello v2 (29/10/2026): le righe sono `.pn-riga`, e i filtri di oggi («Attivi» = «In corso», «In attesa» = «Aspettano
+     te») stanno nella ricerca della testa (chip `filtro-in-corso` / `filtro-attesa`): stesso confine, nuova casa. */
   await page.locator('#railTabs [data-rail="agenti"]').click();
-  await expect(page.locator('#railAgenti [data-c="AgentRow"]')).toHaveCount(4);
-  await page.locator('#railAgenti').getByRole('button', { name: 'Attivi' }).click();
-  await expect(page.locator('#railAgenti [data-c="AgentRow"]'), 'il badge dice un numero che la lista «Attivi» non mostra').toHaveCount(2);
-  await page.locator('#railAgenti').getByRole('button', { name: 'In attesa' }).click();
-  await expect(page.locator('#railAgenti [data-c="AgentRow"]'), 'l\'agente in attesa non è nel suo filtro: la scena non prova il confine').toHaveCount(1);
+  await expect(page.locator('#railAgenti .pn-riga')).toHaveCount(4);
+  await page.locator('#railAgenti [data-controllo="apri-cerca"]').click();
+  await page.locator('#railAgenti [data-controllo="filtro-in-corso"]').click();
+  await expect(page.locator('#railAgenti .pn-riga'), 'gli agenti in corso').toHaveCount(2);
+  await page.locator('#railAgenti [data-controllo="filtro-attesa"]').click();
+  await expect(page.locator('#railAgenti .pn-riga'), 'più quello in attesa: 2 + 1 = il numero sulla scheda').toHaveCount(1);
 
   /* 4. Uno dei due finisce: il badge scende a 1, sempre senza riaprire niente. */
   await page.locator('#railTabs [data-rail="contesto"]').click();
   await mandaAgente(page, { ...FIGLIE[0], sessionId: 'bdg-c', taskCorto: 'secondo agente in corso', conclusa: true, ultimoEsito: 'ok' });
-  await expect(badge(page, 'agenti')).toHaveText('1');
+  await expect(badge(page, 'agenti')).toHaveText('2');
 
-  /* 5. E quando non c'è più NESSUN agente in corso il badge SPARISCE — anche se uno è ancora in
-        attesa: «in attesa» non è «attivo», ed è il confine che questa prova difende. */
+  /* 5. Finito anche l'ultimo in corso, l'agente IN ATTESA tiene il numero: è vivo, lo Stop lo fermerebbe. */
   await mandaAgente(page, { ...FIGLIE[0], sessionId: 'bdg-a', taskCorto: 'leggi il registro', conclusa: true, ultimoEsito: 'ok' });
-  await expect(badge(page, 'agenti'), 'a zero agenti IN CORSO il badge deve SPARIRE — e l\'agente in attesa non lo tiene in vita').toHaveCount(0);
-  expect(await testo(page, 'agenti'), 'togliendo il badge resta uno spazio di troppo nell\'etichetta').toBe('Agenti');
+  await expect(badge(page, 'agenti'), 'l\'agente in attesa è vivo e si conta').toHaveText('1');
 });
 
 test('BADGE-PROCESSI — conta i processi VIVI, e si aggiorna a scheda chiusa', async ({ page }) => {
@@ -178,6 +184,7 @@ test('BADGE-PROCESSI — conta i processi VIVI, e si aggiorna a scheda chiusa', 
    *   vede.
    */
   await page.locator('#railTabs [data-rail="processi"]').click();
+  await page.locator('#railProcessi [data-controllo="ambito-tutti"]').click(); // v2: i finiti sono nell'ambito «Tutti»
   await expect(page.locator('#railProcessi [data-c="ProcessRow"]')).toHaveCount(3);
   expect(await righeVive(page), 'il badge dice 1 processo vivo e la lista ne disegna un altro numero: i due non leggono lo stesso criterio').toBe(1);
 });
@@ -189,7 +196,7 @@ for (const tema of ['dark', 'light']) {
       /* Due badge ACCESI insieme: è il caso peggiore per la larghezza, ed è il caso vero. */
       await mandaAgente(page, { ...FIGLIE[0], sessionId: 'bdg-c', taskCorto: 'secondo agente' });
       await mandaProcesso(page, { id: 'bdg-p1', fase: 'inizio' });
-      await expect(badge(page, 'agenti')).toHaveText('2');
+      await expect(badge(page, 'agenti')).toHaveText('3');
       await expect(badge(page, 'processi')).toHaveText('1');
 
       const m = await page.locator('#railTabs').evaluate((n) => ({
@@ -213,7 +220,7 @@ for (const tema of ['dark', 'light']) {
       /* 2. ⛔ E IL NUMERO NON MANGIA L'ETICHETTA: dentro la scheda si legge la parola E il numero. */
       // 26/09/2026 — F6-1 (decisioni dell'owner su F6): la quinta scheda «GitHub», subito dopo File. Ci stanno tutte e cinque grazie
       // al margine di 6 px delle schede (owner, stesso giorno, seconda risposta coi numeri giusti: «margine 6 px + scorrimento»).
-      expect(m.schede.map((s) => s.testo)).toEqual(['Contesto', 'File', 'Git', 'Agenti 2', 'Processi 1']);
+      expect(m.schede.map((s) => s.testo)).toEqual(['Contesto', 'File', 'Git', 'Agenti 3', 'Processi 1']);
     });
   }
 }

@@ -27,11 +27,27 @@
  *   niente. Una lettura fallita non inventa numeri.
  */
 import { spawn as spawnReale } from 'node:child_process';
-import { readdirSync as readdirReale, readFileSync as readFileReale } from 'node:fs';
+import { readdirSync as readdirReale, readFileSync as readFileReale, readlinkSync as readlinkReale } from 'node:fs';
 import { availableParallelism, cpus } from 'node:os';
 import { percorsoPowershell, percorsoWsl } from './taskkill-di-sistema.mjs';
 
 const FINE = 'FINE';
+/*
+ * ⭐ P-05 (pannello v2, owner 29/10/2026) — le PORTE IN ASCOLTO dell'albero di un comando, nello stesso campione della CPU, per il
+ *   chip «localhost:5173 · Apri nel Browser» della scheda Processi. Windows: `Get-NetTCPConnection` (Microsoft Learn, letto il
+ *   29/10/2026), filtrato su `OwningProcess` ⇒ `[[pid, porta], …]` sulla riga «PORTE».
+ * ⛔ `-State Listen` su questa macchina ha MENTITO (memoria del 29/10 «riavviato = il PID nuovo sulla porta»): misurato il 29/10,
+ *   78 socket in ascolto riportano `State` = 0 (vuoto) e nessuno «Listen»; il 4174 dell'owner è fra loro. Si prende quindi lo
+ *   stato 2 (Listen) OPPURE lo stato 0 con il remoto «0.0.0.0»/«::» e porta remota 0. ⛔ AL CONTRARIO: i socket «Bound» (100) e
+ *   «Closed» (1) hanno anche loro il remoto 0.0.0.0 e porta 0, e NON sono in ascolto: lo stato li esclude. ⛔⛔ E un CLIENT
+ *   connesso lascia qui un fantasma: stato 0, locale 0.0.0.0 sulla SUA porta d'uscita, accanto alla sua riga «Established» (misurato
+ *   il 29/10 dalla prova P05-04, che era rossa). ⇒ Uno stato 0 su 0.0.0.0/:: vale solo se lo stesso PID non ha una connessione
+ *   stabilita su quella porta; uno stato 0 su un indirizzo preciso (127.0.0.1: il 4174) vale sempre. Limite dichiarato: un server
+ *   legato a 0.0.0.0 CON connessioni aperte non mostra la porta (nessun numero inventato, mai uno sbagliato). Prove P05-* in
+ *   `c1-risorse-processi.test.mjs`). Linux: `/proc/net/tcp{,6}` stato `0A` e gli inode dei socket in `/proc/<pid>/fd`.
+ *   WSL: non misurato (le porte di una distro non sono del PID di Windows) ⇒ `null`, nessun numero inventato.
+ */
+const PORTE = 'PORTE';
 /* Windows: una riga «leggi» ⇒ una riga JSON [[pid, ppid, workingSetByte, tempoCpu100ns, natoMs], …] e poi FINE */
 const COPIONE_WINDOWS = `$ErrorActionPreference = 'SilentlyContinue'
 while ($null -ne ($r = [Console]::In.ReadLine())) {
@@ -39,6 +55,10 @@ while ($null -ne ($r = [Console]::In.ReadLine())) {
     ,@([long]$_.ProcessId, [long]$_.ParentProcessId, [long]$_.WorkingSetSize, ([long]$_.KernelModeTime + [long]$_.UserModeTime), $(if ($_.CreationDate) { [long]($_.CreationDate.ToFileTimeUtc() / 10000) } else { 0 }))
   })
   [Console]::Out.WriteLine((ConvertTo-Json -InputObject $righe -Compress -Depth 3))
+  $tutte = @(Get-NetTCPConnection -ErrorAction SilentlyContinue)
+  $stabilite = @{}; foreach ($c in $tutte) { if ([int]$c.State -eq 5) { $stabilite["$($c.OwningProcess):$($c.LocalPort)"] = 1 } }
+  $porte = @($tutte | Where-Object { $_.RemotePort -eq 0 -and ([int]$_.State -eq 2 -or ([int]$_.State -eq 0 -and ($_.RemoteAddress -eq '0.0.0.0' -or $_.RemoteAddress -eq '::') -and (($_.LocalAddress -ne '0.0.0.0' -and $_.LocalAddress -ne '::') -or -not $stabilite.ContainsKey("$($_.OwningProcess):$($_.LocalPort)")))) } | ForEach-Object { ,@([long]$_.OwningProcess, [long]$_.LocalPort) })
+  [Console]::Out.WriteLine('${PORTE} ' + (ConvertTo-Json -InputObject $porte -Compress -Depth 3))
   [Console]::Out.WriteLine('${FINE}')
   [Console]::Out.Flush()
 }`;
@@ -73,6 +93,15 @@ export function tabellaDaRighe(righe) {
  * @returns {{ processi:number, memoria:number, cpu100ns:number }|null} `null` se la radice non c'è più
  */
 export function sommaAlbero(tabella, radice) {
+  const visti = pidDellAlbero(tabella, radice);
+  if (!visti) return null;
+  let memoria = 0, cpu100ns = 0;
+  for (const pid of visti) { const r = tabella.get(pid); memoria += r.memoria; cpu100ns += r.cpu100ns; }
+  return { processi: visti.size, memoria, cpu100ns };
+}
+
+/** I PID dell'albero di `radice` (lei e i discendenti, senza i PID riusati), o `null` se la radice non c'è più. */
+export function pidDellAlbero(tabella, radice) {
   if (!tabella.get(radice)) return null;
   const figli = new Map();
   for (const [pid, r] of tabella) {
@@ -82,11 +111,9 @@ export function sommaAlbero(tabella, radice) {
   }
   const visti = new Set([radice]);
   const coda = [radice];
-  let memoria = 0, cpu100ns = 0;
   while (coda.length) {
     const pid = coda.shift();
     const r = tabella.get(pid);
-    memoria += r.memoria; cpu100ns += r.cpu100ns;
     for (const f of figli.get(pid) ?? []) {
       if (visti.has(f)) continue;
       const rf = tabella.get(f);
@@ -94,7 +121,57 @@ export function sommaAlbero(tabella, radice) {
       visti.add(f); coda.push(f);
     }
   }
-  return { processi: visti.size, memoria, cpu100ns };
+  return visti;
+}
+
+/** La riga «PORTE [[pid, porta], …]» del lettore di Windows in `pid → Set(porte)`. Una riga illeggibile = nessuna porta nota (null). */
+export function portePerPid(riga) {
+  if (typeof riga !== 'string' || !riga.startsWith(`${PORTE} `)) return null;
+  let coppie;
+  try { coppie = JSON.parse(riga.slice(PORTE.length + 1)); } catch { return null; }
+  /* ConvertTo-Json di una sola coppia la appiattisce in [pid, porta]: si rimette in lista */
+  if (Array.isArray(coppie) && coppie.length === 2 && coppie.every((x) => typeof x === 'number')) coppie = [coppie];
+  const mappa = new Map();
+  for (const c of Array.isArray(coppie) ? coppie : []) {
+    if (!Array.isArray(c) || c.length < 2) continue;
+    const [pid, porta] = c.map(Number);
+    if (!Number.isSafeInteger(pid) || pid <= 0 || !Number.isSafeInteger(porta) || porta <= 0 || porta > 65535) continue;
+    if (!mappa.has(pid)) mappa.set(pid, new Set());
+    mappa.get(pid).add(porta);
+  }
+  return mappa;
+}
+
+/** Linux: le porte in ascolto (stato `0A`) di `/proc/net/tcp{,6}` e i PID che ne tengono il socket, solo per i PID chiesti. */
+export function portePerPidDaProc(pids, { readFileSync, readdirSync, readlinkSync }) {
+  const perInode = new Map();
+  let letti = 0;
+  for (const file of ['/proc/net/tcp', '/proc/net/tcp6']) {
+    let testo = '';
+    try { testo = readFileSync(file, 'utf8'); letti += 1; } catch { continue; }
+    for (const riga of testo.split('\n').slice(1)) {
+      const c = riga.trim().split(/\s+/u);
+      if (c.length < 10 || c[3] !== '0A') continue;
+      const porta = Number.parseInt(c[1].split(':')[1] ?? '', 16);
+      if (Number.isSafeInteger(porta) && porta > 0) perInode.set(c[9], porta);
+    }
+  }
+  if (!letti) return null; // nessuna tabella leggibile: porte NON misurate (null), non «nessuna porta»
+  const mappa = new Map();
+  if (!perInode.size) return mappa;
+  for (const pid of pids) {
+    let fd = [];
+    try { fd = readdirSync(`/proc/${pid}/fd`); } catch { continue; }
+    for (const n of fd) {
+      let dove = '';
+      try { dove = readlinkSync(`/proc/${pid}/fd/${n}`); } catch { continue; }
+      const m = /^socket:\[(\d+)\]$/u.exec(dove);
+      if (!m || !perInode.has(m[1])) continue;
+      if (!mappa.has(pid)) mappa.set(pid, new Set());
+      mappa.get(pid).add(perInode.get(m[1]));
+    }
+  }
+  return mappa;
 }
 
 /**
@@ -211,6 +288,7 @@ export function creaCampionatoreRisorse({
   spawnFn = spawnReale,
   readdirSync = readdirReale,
   readFileSync = readFileReale,
+  readlinkSync = readlinkReale,
   ora = () => Date.now(),
   core = coreDellaMacchina(),
   spentoDopoMs = 30_000,
@@ -263,15 +341,25 @@ export function creaCampionatoreRisorse({
       if (chiuso) return { metodo, perPid, perMarcatore };
       if (radici.length && metodo) {
         let tabella = null;
+        let porte = null; // P-05: pid → Set(porte); null = non misurate (nessun numero inventato)
         try {
-          tabella = metodo === 'cim' ? tabellaDaRighe(JSON.parse((await lettoreWindows().leggi()).join(''))) : tabellaDaRighe(righeDaProc({ readdirSync, readFileSync }));
+          if (metodo === 'cim') {
+            const righe = await lettoreWindows().leggi();
+            porte = portePerPid(righe.find((r) => r.startsWith(`${PORTE} `)));
+            tabella = tabellaDaRighe(JSON.parse(righe.filter((r) => !r.startsWith(`${PORTE} `)).join('')));
+          } else tabella = tabellaDaRighe(righeDaProc({ readdirSync, readFileSync }));
         } catch { tabella = null; } // una lettura fallita non inventa numeri: «—»
         const adesso = ora();
+        const alberi = new Map(radici.map((p) => [p, tabella ? pidDellAlbero(tabella, p) : null]));
+        if (tabella && metodo === 'proc') {
+          try { porte = portePerPidDaProc(new Set([...alberi.values()].filter(Boolean).flatMap((v) => [...v])), { readFileSync, readdirSync, readlinkSync }); } catch { porte = null; }
+        }
         for (const p of radici) {
           const albero = tabella ? sommaAlbero(tabella, p) : null;
           if (!albero) continue;
           vive.add(`pid:${p}`);
-          perPid.set(p, { cpuPercento: cpuDa(`pid:${p}`, albero.cpu100ns, adesso), memoriaByte: albero.memoria, processi: albero.processi });
+          const suePorte = porte ? [...new Set([...alberi.get(p)].flatMap((x) => [...(porte.get(x) ?? [])]))].sort((a, b) => a - b) : null;
+          perPid.set(p, { cpuPercento: cpuDa(`pid:${p}`, albero.cpu100ns, adesso), memoriaByte: albero.memoria, processi: albero.processi, porte: suePorte });
         }
       }
       if (marcati.length && piattaforma === 'win32') {

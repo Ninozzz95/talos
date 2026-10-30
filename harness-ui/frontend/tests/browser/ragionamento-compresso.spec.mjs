@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { apriPiegaContesto } from '../fixtures/pannello-contesto-prove.mjs'; // pannello v2: l'Indice dei giri è una piega
 
 /*
  * ⛔⛔ IL RAGIONAMENTO SI COMPRIME, NON SPARISCE — provato sul pacchetto SERVITO, nei DUE temi, con le foto.
@@ -366,6 +367,7 @@ for (const modo of ['dark', 'light']) {
         { type: 'RunFinished', outcome: { type: 'success' }, _sequenza: 17 },
       ]);
       await expect(page.locator('#conversation .talos-turn[data-turno="talos"] .talos-turn-spine__n')).toHaveCount(2);
+      await apriPiegaContesto(page, 'giri');
       await expect(page.locator('#inspectorPanel')).toContainText('1 file letto');
       /* ⛔ 26/09 (foto dell'owner): l'Indice dei giri legge la testa del gruppo, e diceva ancora «1 ricerca completata»
          mentre il segmento parla per specie (D1 del 24/09: niente «completate»). Le parole ora sono UNE, `fraseSpecie`. */

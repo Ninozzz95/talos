@@ -55,7 +55,8 @@ async function scena(page, { larghezza = 1440, altezza = 900, tema = 'dark', fig
   await page.locator('#railTabs [data-rail="agenti"]').click();
   await expect(page.locator('#railAgenti [data-c="AgentRow"]').first(), 'la scena non si è formata: le figlie non sono arrivate alla scheda Agenti').toBeVisible({ timeout: 10_000 });
 }
-const apri = (page, quale = 0) => page.locator('#railAgenti [data-c="AgentRow"]').nth(quale).click();
+/* pannello v2 (29/10/2026): la riga si apre sul posto, la conversazione dell'agente col pulsante del suo dettaglio */
+const apri = async (page, quale = 0) => { const r = page.locator('#railAgenti [data-c="AgentRow"]').nth(quale); if ((await r.getAttribute('aria-expanded')) !== 'true') await r.click(); await r.locator('[data-controllo="apri-conversazione"]').click(); };
 const dettaglio = (page) => page.locator('[data-c="DettaglioAgente"]');
 
 test('PO30-AGENTE-01 — si apre sulla Panoramica: compito intero, fatti veri in parole umane, niente righe vuote', async ({ page }) => {
@@ -86,7 +87,7 @@ const IGNOTA = { ...FIGLIE[1], sessionId: 'po30d-figlia-i', taskCorto: 'stato pe
 
 test('TACCUINO-AGENTE-FERMATO — una figlia fermata dalla persona: «Interrotto» nel dettaglio come nell’elenco, mai «Non riuscito»', async ({ page }) => {
   await scena(page, { figlie: [FERMATA] });
-  await expect(page.locator('#railAgenti [data-c="AgentRow"]').first()).toContainText('Interrotta');
+  await expect(page.locator('#railAgenti [data-c="AgentRow"]').first(), 'pannello v2: la parola di stato del prodotto («Interrotto», come il diagramma, owner 14/10)').toContainText('Interrotto');
   await apri(page);
   const stato = dettaglio(page).locator('.talos-agente__chi [role="status"]');
   await expect(stato).toHaveText('Interrotto');
@@ -98,8 +99,10 @@ test('TACCUINO-AGENTE-FERMATO — una figlia fermata dalla persona: «Interrotto
    (Hermes `pane-tab.tsx`/`fade-scroll.tsx`), e la rotella verticale la fa scorrere finché c'è qualcosa da mostrare. */
 test('TACCUINO-FILTRI — i filtri degli agenti stanno su UNA riga anche stretti e coi filtri rari; se non ci stanno scorrono e lo dicono', async ({ page }) => {
   await scena(page, { larghezza: 1024, altezza: 800, figlie: [...FIGLIE, FERMATA, IGNOTA] });
-  const riga = page.locator('#railAgenti .talos-agenti-stati');
-  await expect(riga.locator('button[data-stato="interrotta"]'), 'la premessa: il filtro raro c’è').toBeVisible();
+  /* pannello v2 (29/10/2026): i filtri stanno nella ricerca della testa (`.pn-chips`); il filtro raro «Interrotti» è `filtro-fermati` */
+  await page.locator('#railAgenti [data-controllo="apri-cerca"]').click();
+  const riga = page.locator('#railAgenti .pn-chips');
+  await expect(riga.locator('[data-controllo="filtro-fermati"]'), 'la premessa: il filtro raro c’è').toBeVisible();
   const m = await riga.evaluate((r) => ({ cime: [...new Set([...r.querySelectorAll('button')].filter((b) => !b.hidden).map((b) => b.offsetTop))],
     client: r.clientWidth, scroll: r.scrollWidth, taglio: r.dataset.taglio }));
   expect(m.cime, `una riga sola: cime dei bottoni ${JSON.stringify(m.cime)}`).toHaveLength(1);
@@ -123,13 +126,13 @@ test('TACCUINO-FILTRI — i filtri degli agenti stanno su UNA riga anche stretti
 test('C3-AGENTE-NOTA — «no change made» is said on a concluded agent, never as a failure', async ({ page }) => {
   const figlie = [FIGLIE[0], { ...FIGLIE[1], notaDelega: 'nessuna-modifica', verdettoDelega: 'strutturato' }];
   await scena(page, { figlie });
-  await page.locator('#railAgenti [data-c="AgentRow"]').filter({ hasText: 'controlla i test' }).click();
+  { const r = page.locator('#railAgenti [data-c="AgentRow"]').filter({ hasText: 'controlla i test' }); await r.click(); await r.locator('[data-controllo="apri-conversazione"]').click(); }
   const d = dettaglio(page);
   await expect(d.locator('.talos-agente__chi [role="status"]')).toHaveText('Concluso');
   await expect(d.locator('[data-nota-delega="nessuna-modifica"]')).toHaveText('Nessuna modifica fatta: questo agente poteva modificare i file ma non ne ha scritto nessuno. Controlla se una modifica serviva.');
   // al contrario: la figlia senza nota non la mostra (scena di nuovo: col dettaglio aperto l'elenco è coperto)
   await scena(page, { figlie });
-  await page.locator('#railAgenti [data-c="AgentRow"]').filter({ hasText: 'leggi il registro' }).click();
+  { const r = page.locator('#railAgenti [data-c="AgentRow"]').filter({ hasText: 'leggi il registro' }); await r.click(); await r.locator('[data-controllo="apri-conversazione"]').click(); }
   await expect(dettaglio(page).locator('.talos-agente__nome')).toHaveText('leggi il registro e correggi la guardia');
   await expect(dettaglio(page).locator('[data-nota-delega]')).toHaveCount(0);
 });
@@ -196,7 +199,7 @@ for (const [larghezza, altezza] of [[1440, 900], [1024, 800]]) {
 
 test('RIPRESA-AGENTI-EVENTO — nuova delega e strumenti arrivano senza uscire dalla chat',async({page})=>{
  await scena(page);
- await page.locator('#railAgenti').getByRole('button',{name:'Apri visuale diagramma'}).click();
+ await page.locator('#railAgenti [data-controllo="apri-diagramma"]').click();
  const grafo=page.locator('#schermoChat > [data-c="GrafoAgenti"]');await expect(grafo.locator('[data-sessione]')).toHaveCount(2);
  const nuovo={...FIGLIE[0],sessionId:'po30d-live',padreId:'po30d-uno',taskCorto:'Agente arrivato in diretta',attivita:{chiamate:1,file:[],attrezzoCorrente:'shell',passi:[]}};
  await page.route('**/api/v1/sessions/po30d-uno/children',r=>r.fulfill({json:{ok:true,data:{figli:[...FIGLIE,nuovo]}}}));
@@ -258,20 +261,25 @@ for (const larghezza of [1024, 1440]) for (const tema of ['dark', 'light']) {
   await scena(page,{larghezza,tema,figlie:figli});
   const rail=page.locator('#railAgenti'),rows=rail.locator('[data-c="AgentRow"]');
   await expect(rows).toHaveCount(8);await expect(rail).not.toContainText('Non appartiene');
-  for (const [name,count] of [['Attivi',1],['In attesa',1],['Errori',1],['Terminati',5],['Tutti',8]]) {
-   const button=rail.getByRole('button',{name,exact:true});await button.focus();await page.keyboard.press('Enter');
-   await expect(button).toHaveAttribute('aria-pressed','true');await expect(rows).toHaveCount(count);
+  /* pannello v2 (29/10/2026): i filtri di oggi stanno nella ricerca della testa; stessi confini (Attivi = In corso, Terminati = Conclusi) */
+  await rail.locator('[data-controllo="apri-cerca"]').click();
+  for (const [filtro,count] of [['in-corso',1],['attesa',1],['errori',1],['conclusi',5],['tutti',8]]) {
+   const button=rail.locator(`[data-controllo="filtro-${filtro}"]`);await button.focus();await page.keyboard.press('Enter');
+   await expect(rail.locator(`[data-controllo="filtro-${filtro}"]`)).toHaveAttribute('aria-pressed','true');await expect(rows).toHaveCount(count);
   }
-  const cerca=rail.getByRole('searchbox',{name:'Cerca agenti'});await cerca.fill('Verifica');await expect(rows).toHaveCount(4);
+  const cerca=rail.getByRole('searchbox');await cerca.fill('Verifica');await expect(rows).toHaveCount(4);
   await page.evaluate(()=>window.__talosHarnessUiRuntime.realSessionState.eventSource.onopen());
   await expect(cerca).toHaveValue('Verifica');await expect(rows).toHaveCount(4);await cerca.fill('');
+  await expect(rows).toHaveCount(8); // la ricerca vuota ridisegna al fotogramma dopo: prima si leggerebbe la prima riga del filtro (nipote-0)
+  /* pannello v2: dopo la riconnessione l'ordine può cambiare (chi chiede attenzione sale in cima); il fuoco resta sulla STESSA riga */
+  const chiaveFuoco=await rows.first().getAttribute('data-chiave');
   await rows.first().focus();await page.evaluate(()=>window.__talosHarnessUiRuntime.realSessionState.eventSource.onopen());
-  await expect(rows.first()).toBeFocused();
-  await expect(rows.first().locator('.talos-agenti-icona')).toBeVisible();
-  await expect(rows.first().locator('.talos-agenti-icona svg')).toHaveCSS('fill','none');
+  await expect(rail.locator(`[data-c="AgentRow"][data-chiave="${chiaveFuoco}"]`)).toBeFocused();
+  await expect(rows.first().locator('.pn-segno')).toBeVisible();
+  await expect(rows.first().locator('.pn-segno svg')).toHaveCSS('fill','none');
   expect(await rows.first().evaluate(n=>n.getBoundingClientRect().height)).toBeLessThan(165);
   await page.screenshot({path:info.outputPath('sidebar-elenco.png'),fullPage:true});
-  await rail.getByRole('button',{name:'Apri visuale diagramma'}).click();
+  await rail.locator('[data-controllo="apri-diagramma"]').click();
   const grafo=page.locator('#schermoChat > [data-c="GrafoAgenti"]');await expect(grafo).toHaveAttribute('data-sorgente','deleghe');
   // quattro agenti e i loro quattro nipoti: tutti nel diagramma (un lotto della conversazione, quattro degli agenti); l'estraneo no
   await expect(grafo.locator('.talos-wfg__cima')).toContainText('8 agenti in 5 lotti');
@@ -279,13 +287,13 @@ for (const larghezza of [1024, 1440]) for (const tema of ['dark', 'light']) {
   // A 1024 il pannello destro è un overlay: torna alla chat per aprirlo dal comando reale.
   await grafo.locator('.talos-wfg__torna').click();
   if(!(await rail.isVisible())) await page.locator('.talos-screen:not([hidden]) [data-azione="dettagli"]').first().click();
-  await rows.filter({hasText:'Verifica 0'}).click();await expect(dettaglio(page).locator('.talos-agente__nome')).toHaveText('Verifica 0');
+  { const r=rows.filter({hasText:'Verifica 0'}); if((await r.getAttribute('aria-expanded'))!=='true') await r.click(); await r.locator('[data-controllo="apri-conversazione"]').click(); } await expect(dettaglio(page).locator('.talos-agente__nome')).toHaveText('Verifica 0');
   nipoti[0]={...nipoti[0],attivita:{...nipoti[0].attivita,chiamate:42}};
   await page.evaluate(()=>window.__talosHarnessUiRuntime.realSessionState.eventSource.onopen());
   await expect(dettaglio(page).locator('.talos-kv').filter({hasText:'Attrezzi usati'})).toContainText('42');
   await page.screenshot({path:info.outputPath('sidebar-nipote.png'),fullPage:true});
   await dettaglio(page).getByRole('button',{name:'Tutti gli agenti',exact:true}).click();
-  await rail.getByRole('button',{name:'Apri visuale diagramma'}).click();
+  await rail.locator('[data-controllo="apri-diagramma"]').click();
   await page.route('**/api/v1/sessions/po30d-padre-0/children',r=>r.fulfill({status:503,json:{ok:false,error:{message:'Lettura nipote temporaneamente offline'}}}));
   // il diagramma nuovo non ha «Aggiorna»: rilegge da solo; qui la rilettura la porta la riconnessione del flusso
   await page.evaluate(()=>window.__talosHarnessUiRuntime.realSessionState.eventSource.onopen());await expect(grafo.locator('.talos-wfg__avviso')).toContainText('Dati non aggiornati',{timeout:9000});
@@ -301,16 +309,19 @@ for (const larghezza of [1024, 1440]) for (const tema of ['dark', 'light']) {
 
 test('RIPRESA-AGENTI-STATO-IGNOTO — dati incompleti non diventano agenti attivi',async({page})=>{
  const {conclusa,...ignoto}=FIGLIE[0];await scena(page,{figlie:[ignoto]});const rail=page.locator('#railAgenti');
- await expect(rail.locator('[data-c="AgentRow"]')).toHaveAttribute('data-stato','ignoto');
+ /* pannello v2: lo stato non noto è `unknown` (oggi `ignoto`), con la stessa parola e il suo filtro raro */
+ await expect(rail.locator('[data-c="AgentRow"]')).toHaveAttribute('data-stato','unknown');
  await expect(rail.locator('[data-c="AgentRow"]')).toContainText('Stato non disponibile');
- await rail.getByRole('button',{name:'Attivi',exact:true}).click();await expect(rail.locator('[data-c="AgentRow"]')).toHaveCount(0);
- await rail.getByRole('button',{name:'Non disponibili',exact:true}).click();await expect(rail.locator('[data-c="AgentRow"]')).toHaveCount(1);
+ await rail.locator('[data-controllo="apri-cerca"]').click();
+ await expect(rail.locator('[data-controllo="filtro-in-corso"]'), 'nessun agente «in corso»: il filtro non compare nemmeno').toHaveCount(0);
+ await rail.locator('[data-controllo="filtro-ignoti"]').click();await expect(rail.locator('[data-c="AgentRow"]')).toHaveCount(1);
+ await expect(page.locator('#railTabs [data-rail="agenti"] .talos-tabs__count'), 'dati incompleti non diventano un agente attivo nel numero').toHaveCount(0);
 });
 
 
 test('RIPRESA-AGENTI-LETTURA-LENTA — riletture sovrapposte non si accumulano e non invalidano lo stato',async({page})=>{
  test.setTimeout(45_000);
- await scena(page);await page.locator('#railAgenti').getByRole('button',{name:'Apri visuale diagramma'}).click();
+ await scena(page);await page.locator('#railAgenti [data-controllo="apri-diagramma"]').click();
  const g=page.locator('#schermoChat > [data-c="GrafoAgenti"]');await expect(g.locator('[data-sessione]')).toHaveCount(2);
  let richieste=0,release;const gate=new Promise(r=>release=r);
  await page.route('**/api/v1/sessions/po30d-uno/children',async r=>{richieste++;await gate;await r.fulfill({json:{ok:true,data:{figli:FIGLIE.map(a=>({...a,conclusa:true,esitoDelega:'concluso'}))}}})});
@@ -323,9 +334,13 @@ test('RIPRESA-AGENTI-LETTURA-LENTA — riletture sovrapposte non si accumulano e
 });
 
 
+/* pannello v2: il conto sta nella testa, che NON è una regione viva; le sole regioni vive sono la barra delle pagine e gli esiti.
+   Con due agenti non c'è nessuna delle due: una rilettura invariata non deve farne nascere una (che si annuncerebbe). */
 test('RIPRESA-AGENTI-ANNUNCI — refresh invariato non riannuncia il conteggio',async({page})=>{
- await scena(page);await page.locator('#railAgenti [role="status"]').evaluate(n=>{
-  window.__annunci=0;window.__observerAnnunci=new MutationObserver(()=>window.__annunci++);window.__observerAnnunci.observe(n,{childList:true,characterData:true,subtree:true});
+ await scena(page);
+ await expect(page.locator('#railAgenti [role="status"], #railAgenti [aria-live]')).toHaveCount(0);
+ await page.locator('#railAgenti').evaluate(n=>{
+  window.__annunci=0;window.__observerAnnunci=new MutationObserver((m)=>{for(const r of m)for(const x of r.addedNodes)if(x.nodeType===1&&(x.matches('[role="status"],[aria-live]')||x.querySelector('[role="status"],[aria-live]')))window.__annunci++;});window.__observerAnnunci.observe(n,{childList:true,subtree:true});
  });
  const risposta=page.waitForResponse(r=>r.url().includes('/po30d-uno/children'));
  await page.evaluate(()=>window.__talosHarnessUiRuntime.realSessionState.eventSource.onopen());await risposta;

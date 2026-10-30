@@ -284,13 +284,17 @@ for (const modo of ['dark', 'light']) {
       ]);
 
       await page.locator('#railTabs [data-rail="processi"]').click();
+      /* pannello v2 (29/10/2026): i tre comandi sono finiti, e l'ambito di serie mostra gli accesi: si guardano tutti */
+      await page.locator('#railProcessi [data-controllo="ambito-tutti"]').click();
       const righe = page.locator('#railProcessi [data-c="ProcessRow"]');
       await expect(righe).toHaveCount(3);
 
+      /* v2: il comando è il nome della riga (`.pn-nome`, senza descrizione); a lato il badge dell'uscita; la durata sta nel dettaglio */
       const lette = await righe.evaluateAll((nodi) => nodi.map((n) => ({
-        comando: n.querySelector('.talos-process__cmd')?.textContent?.trim() || '',
+        comando: n.querySelector('.pn-nome')?.textContent?.trim() || '',
         famiglia: n.dataset.famiglia,
-        misura: n.querySelector('.talos-process__misura')?.textContent?.trim() || '',
+        icona: n.querySelector('.pn-segno use')?.getAttribute('href') || '',
+        misura: n.textContent?.trim() || '',
       })));
       misura(`oss1.righeAschermo.${modo}`, lette);
 
@@ -298,13 +302,13 @@ for (const modo of ['dark', 'light']) {
       const prova = lette.find((r) => r.comando.includes('npm test'));
       const rigiocata = lette.find((r) => r.comando.includes('git status'));
 
-      /* 1. il comando eseguito porta la durata del SERVER */
+      /* 1. il comando eseguito porta la durata del SERVER (v2: nel dettaglio, più sotto) */
       expect(shell, 'la riga dello shell eseguito non c’è').toBeTruthy();
-      expect(shell.misura).toContain('18,1 s');
 
-      /* 2. `prova` è una riga di processo, col comando preso dal risultato e la famiglia «prove» */
+      /* 2. `prova` è una riga di processo, col comando preso dal risultato e la famiglia «prove» (owner 29/10 sera: il TIPO nell'icona) */
       expect(prova, '`prova` non è diventata una riga di processo').toBeTruthy();
       expect(prova.famiglia).toBe('test');
+      expect(prova.icona, 'l’icona della riga è quella della famiglia «prove»').toBe('#i-check-sq');
       /* ⛔ Non eseguita: nessuna durata inventata. «uscita 127» sì, «0 s» mai. */
       expect(prova.misura, `la riga della prova rifiutata diceva: «${prova.misura}»`).not.toMatch(/\b0 s\b/u);
       expect(prova.misura).toContain('127');
@@ -315,8 +319,8 @@ for (const modo of ['dark', 'light']) {
 
       /* E la CARTELLA arriva fino al dettaglio, in forma Windows come la manda il server. */
       const rigaShell = righe.filter({ hasText: 'npm run build' }).first();
-      await rigaShell.locator('.talos-process__apri').click();
-      const dettaglio = rigaShell.locator('.talos-process__dettaglio');
+      await rigaShell.click(); // v2: la riga si apre sul posto
+      const dettaglio = rigaShell.locator('.pn-dettaglio');
       await expect(dettaglio).toBeVisible();
       const testoDettaglio = await dettaglio.innerText();
       misura(`oss2.dettaglio.${modo}`, testoDettaglio.replace(/\n+/gu, ' | ').slice(0, 240));
